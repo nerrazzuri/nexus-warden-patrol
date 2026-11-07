@@ -39,7 +39,9 @@ beforeEach(() => {
     }
     if (url.startsWith("/api/accounts")) return Promise.resolve(json({ accounts }));
     if (url.startsWith("/api/audit")) {
-      return Promise.resolve(json({ audit: [{ id: 1, at: NOW - 60_000, actor: "gina", actor_role: "guard", action: "POST /api/mode", target: "armed", status: 200 }] }));
+      return Promise.resolve(json({ audit: [{ id: 1, at: NOW - 60_000, actor: "gina", actor_role: "guard", action: "POST /api/mode", target: "armed", status: 200 },
+        { id: 2, at: NOW - 30_000, actor: "gina", actor_role: "guard", action: "POST /api/robots/A/goto", target: "A", status: 403 },
+        { id: 3, at: NOW - 20_000, actor: "gina", actor_role: "guard", action: "POST /api/weird/thing", target: "", status: 200 }] }));
     }
     return Promise.resolve(json({}, 404));
   }) as typeof fetch);
@@ -128,6 +130,12 @@ describe("用户页", () => {
     await waitFor(() => expect(tr(c, "gina")).not.toBeNull());
     fireEvent.click(tr(c, "gina").querySelector(".user-name")!);
     await waitFor(() => expect(c.querySelector(".user-audit")!.textContent).toContain("切换布防模式"));
+    // P1-66:写成功 / 被拒绝;认不得的写「其他操作」,不露接口路径
+    const au = c.querySelector(".user-audit")!;
+    expect(au.querySelectorAll('[data-result="refused"]').length).toBe(1);
+    expect(au.querySelectorAll('[data-result="ok"]').length).toBe(2);
+    expect(au.textContent).toContain("其他操作");
+    expect(au.textContent).not.toContain("/api/");
   });
 
   it("删人要确认", async () => {

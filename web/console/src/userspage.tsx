@@ -46,10 +46,16 @@ const ACTIONS: [RegExp, string][] = [
   [/^POST \/api\/accounts\/engineer$/, "actEngineer"], [/^POST \/api\/accounts/, "actAccounts"],
   [/^POST \/api\/lists\/authorizations/, "actAuthz"], [/^POST \/api\/arming\//, "actSchedule"],
   [/^POST \/api\/shift-notes$/, "actNote"], [/^POST \/api\/routes/, "actRoutes"], [/^POST \/api\/(zones|nav-zones|maps)/, "actMaps"],
+  // P1-66:常见的再多认几个;认不得的写「其他操作」,原话放悬停里
+  [/^POST \/api\/robots\/[^/]+\/(home|standby)\/return$/, "actReturn"], [/^POST \/api\/robots\/[^/]+\/abort$/, "actAbort"],
+  [/^POST \/api\/robots\/[^/]+\/resume$/, "actResume"], [/^POST \/api\/robots\/[^/]+\/posture$/, "actPosture"],
+  [/^POST \/api\/robots\/[^/]+\/relocalize/, "actLocate"], [/^POST \/api\/robots/, "actRobots"],
+  [/^POST \/api\/admin\/maps/, "actMaps"], [/^POST \/api\/(standby|cameras|layout|guard-routes)/, "actLayout"],
+  [/^POST \/api\/(releases|system)/, "actSystem"], [/^POST \/api\/me/, "actMe"],
 ];
 export function actionText(a: string): string {
   const hit = ACTIONS.find(([re]) => re.test(a));
-  return hit ? t(hit[1] as Parameters<typeof t>[0]) : a;
+  return hit ? t(hit[1] as Parameters<typeof t>[0]) : /^(POST|PUT|DELETE|PATCH) \/api\//.test(a) ? t("actOther") : a;
 }
 
 function useAccounts(say: Say): [Account[], () => void, (a: Account[]) => void] {
@@ -220,7 +226,9 @@ function UserAudit({ name, account, onClose }: { name: string; account?: Account
           {rows.slice(0, 200).map((r) => (
             <li key={r.id} class={r.status >= 400 ? "bad" : undefined}>
               <time class="mono small">{day(r.at)} {hms(r.at)}</time>
-              <span>{actionText(r.action)}</span>
+              <span title={r.action}>{actionText(r.action)}</span>
+              {r.status >= 400 ? <span class="tag bad" data-result="refused">{t("auditRefused")}</span>
+                : r.status >= 200 ? <span class="tag ok" data-result="ok">{t("auditOk")}</span> : null}
               {r.target && <span class="muted small">{r.target}</span>}
               {r.actor_role === "engineer" && <span class="tag">{t("roleEngineer")}</span>}
             </li>

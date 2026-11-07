@@ -1209,3 +1209,7 @@ input.invalid { border-color: var(--c-error); }
   .ly-main .routeside { max-height: calc(100vh - 220px); overflow-y: auto; }
 }
 .routeside .route-acts { position: sticky; bottom: 0; background: var(--c-surface); padding: 8px 0; z-index: 1; }
+/* P1-66:活动日志的结果 */
+.user-audit li.bad { color: inherit; }
+.user-audit .tag.bad { background: var(--c-errorSoft); color: var(--c-error); }
+.user-audit .tag.ok { background: var(--c-surfaceVariant); color: var(--c-textSecondary); }
