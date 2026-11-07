@@ -39,6 +39,8 @@ function KpiCards({ cur, prev }: { cur: Kpis; prev?: Kpis }) {
                     {d == null ? t("kpiNoPrev") : d.d === 0 ? t("kpiFlat")
                       : t(x.k === "response_s" ? "kpiDeltaSec" : "kpiDeltaPts", { a: d.d > 0 ? "↑" : "↓", n: Math.abs(d.d) })}
                   </span>
+                  {/* P1-71:完成率是怎么算出来的(0% 时看得出是派了没走完) */}
+                  {x.k === "patrol_completion" && <span class="kpi-sub small muted">{t("kpiSentDone", { a: cur.patrols_sent, b: cur.patrols_done })}</span>}
                 </div>
               );
             })}
@@ -88,6 +90,10 @@ export function ReportsPage({ now }: { now: number }) {
   const [failed, setFailed] = useState(false);
   void lang.value;
   const p = reportRange(kind, now, from, to);
+  // P1-72:自定义日期错在哪一格就标哪一格
+  const badFrom = kind === "custom" && !p && (!from || (!!to && from > to));
+  const badTo = kind === "custom" && !p && !badFrom;
+  const rangeMsg = !from ? t("rsNeedFrom") : !to ? t("rsNeedTo") : from > to ? t("rsFromAfterTo") : t("rsTooLong");
   const key = p ? `${p.since}-${p.until}` : "";
   const d = matches(got, p) ? got : null;
 
@@ -120,12 +126,16 @@ export function ReportsPage({ now }: { now: number }) {
         </div>
         {kind === "custom" && (
           <>
-            <label class="field">{t("from")}<input name="from" type="date" value={from} onInput={(e) => setFrom(e.currentTarget.value)} /></label>
-            <label class="field">{t("to")}<input name="to" type="date" value={to} onInput={(e) => setTo(e.currentTarget.value)} /></label>
+            <label class="field">{t("from")}<input name="from" type="date" value={from} aria-invalid={badFrom || undefined}
+              class={badFrom ? "invalid" : undefined} onInput={(e) => setFrom(e.currentTarget.value)} />
+              {badFrom && <span class="error small">{rangeMsg}</span>}</label>
+            <label class="field">{t("to")}<input name="to" type="date" value={to} aria-invalid={badTo || undefined}
+              class={badTo ? "invalid" : undefined} onInput={(e) => setTo(e.currentTarget.value)} />
+              {badTo && <span class="error small">{rangeMsg}</span>}</label>
           </>
         )}
       </div>
-      {!p ? <p class="error">{t("rsTooLong")}</p> : (
+      {!p ? (kind === "custom" ? null : <p class="error">{t("rsTooLong")}</p>) : (
         <p class="muted">{t("rsRange", { a: ymd(p.since), b: ymd(p.until - 1) })}</p>
       )}
       {p && failed && <p class="error">{t("repFailed")}</p>}
@@ -139,6 +149,7 @@ export function ReportsPage({ now }: { now: number }) {
             <div class="stat"><span class="stat-n">{d.totals.false_alarms}</span><span class="stat-l">{t("rsFalse")}</span></div>
             <div class="stat"><span class="stat-n">{d.totals.robot_problems}</span><span class="stat-l">{t("rsProblems")}</span></div>
           </div>
+          <p class="rep-ymax small muted">{t("rsYMax", { n: max })}</p>
           <div class="rep-chart" role="img" aria-label={t("rsChart")}>
             {d.days.map((x) => {
               const all = x.patrols + x.incidents + x.robot_problems;
@@ -160,7 +171,7 @@ export function ReportsPage({ now }: { now: number }) {
             <span><i class="seg-pat" /> {t("rsPatrols")}</span> <span><i class="seg-inc" /> {t("rsIncidents")}</span> <span><i class="seg-help" /> {t("rsProblems")}</span>
           </p>
           <h2>{t("rsEvents")}</h2>
-          {d.events.length === 0 ? <p class="muted">{t("rsNoEvents")}</p> : (
+          {d.events.length === 0 ? <p class="muted">{t(d.totals.patrols > 0 ? "rsNoEventsButPatrols" : "rsNoEvents", { n: d.totals.patrols })}</p> : (
             <table class="grid rep-events">
               <thead><tr><th>{t("colTime")}</th><th>{t("robotsShort")}</th><th>{t("rsWhat")}</th><th>{t("rsVerdict")}</th></tr></thead>
               <tbody>

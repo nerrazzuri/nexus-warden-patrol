@@ -151,3 +151,17 @@ describe("W60 关键指标", () => {
     expect(old.querySelector(".kpi")).toBeNull();
   });
 });
+
+describe("网页易用性第 1 轮 P1-72", () => {
+  it("自定义日期:开始晚于结束,错标在开始那一格旁边", async () => {
+    const { container: c } = page();
+    const custom = await waitFor(() => { const b = Array.from(c.querySelectorAll(".seg button")).find((x) => x.textContent === "自定义"); expect(b).toBeTruthy(); return b as HTMLElement; });
+    fireEvent.click(custom);
+    fireEvent.input(c.querySelector('input[name="from"]')!, { target: { value: "2026-10-05" } });
+    fireEvent.input(c.querySelector('input[name="to"]')!, { target: { value: "2026-10-01" } });
+    const from = c.querySelector('input[name="from"]') as HTMLInputElement;
+    expect(from.getAttribute("aria-invalid")).toBe("true");
+    expect(from.parentElement!.textContent).toContain("开始日期晚于结束日期");
+    expect(c.querySelector('input[name="to"]')!.getAttribute("aria-invalid")).toBeNull();
+  });
+});
