@@ -27,7 +27,7 @@ from nexwar_site.permissions import MANAGE
 
 _ROUTE = re.compile(r"^/api/admin/maps(?:/(rollback)|/([^/]{1,64})/([^/]{1,64})/"
                     r"(note|publish|delete|diff|diff\.png|noise|denoise|edit|display|basemap|quality|"
-                    r"adopt-routes))?$")
+                    r"adopt-routes|layout))?$")
 MAX_ROBOTS = 32
 
 
@@ -64,6 +64,10 @@ def handle(h: Any, method: str, path: str, user: Any) -> None:
             from nexwar_site.map_wizard import read_quality
             adm.ref(map_id, version)
             return h._send_json(200, read_quality(adm.cat, map_id, version))
+        if what == "layout":                      # 第 2 轮 N4:这一版上画了多少布置
+            if method != "GET":
+                raise HttpError(404, f"没有 {method} {path}")
+            return h._send_json(200, adm.layout_counts(map_id, version))
         if what == "noise":
             if method != "GET":
                 raise HttpError(404, f"没有 {method} {path}")

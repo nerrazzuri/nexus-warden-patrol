@@ -379,3 +379,19 @@ def test_第2轮_N4_另存新版本_防区_出口线_藏匿点_防区路线_路�
     assert [x["zone"] for x in a.areas.list(MAP[0], MAP[1])] == ["东区"]
     assert len(marks.list(MAP[0], MAP[1])) == 2
     assert d["layout_copied"] == {"areas": 1, "marks": 2, "posts": 1, "net_nodes": 2}
+
+
+def test_第2轮_N4_布置计数_发布弹窗拿来比(站点):
+    from nexwar_site.api import map_marks
+
+    s = 站点
+    tok = _登(s)
+    s.api.areas.set(MAP[0], MAP[1], "东区", [[0.5, 0.5], [3.0, 0.5], [3.0, 1.5], [0.5, 1.5]],
+                    by="t")
+    map_marks(s.api).set(MAP[0], MAP[1], {"kind": "hide", "name": "柱后",
+                                          "points": [[2.5, 1.0]]}, by="t")
+    code, d = s.req("GET", f"{ADM}/layout", token=tok)
+    assert code == 200, d
+    assert d["areas"] == 1 and d["hides"] == 1 and d["exits"] == 0
+    assert set(d) >= {"posts", "net_nodes", "nogo", "cameras", "standby", "proposal"}
+    assert s.req("GET", f"{ADM}/layout", token=_登(s, "gina"))[0] == 403

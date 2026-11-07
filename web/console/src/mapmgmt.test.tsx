@@ -180,6 +180,39 @@ describe("发布", () => {
     expect(calls.some((x) => x.path.endsWith("/adopt-routes"))).toBe(false);
   });
 
+  it("第 2 轮 N4:还有机器人留在旧版、不在这次发布里 → 默认不搬,点名谁会没路线", async () => {
+    overview.maps[0].versions[0] = { ...overview.maps[0].versions[0], source: "edit" };
+    overview.robots.push(dog("D", { online: false, loaded: { map_id: "estate", version: "2" } }));
+    routes["GET /api/routes"] = () => json({ routes: [{ id: "night", map_id: "estate", map_version: "2" }] });
+    const { container: c, getByLabelText } = mount();
+    await waitFor(() => getByLabelText("estate:3"));
+    fireEvent.click(getByLabelText("estate:3").querySelector(".btn.primary") as HTMLElement);
+    const dialog = await waitFor(() => c.querySelector("dialog") as HTMLDialogElement);
+    const warn = await waitFor(() => { const w = dialog.querySelector(".mm-lost"); expect(w).not.toBeNull(); return w as HTMLElement; });
+    const box = warn.querySelector("input") as HTMLInputElement;
+    expect(box.checked).toBe(false);
+    fireEvent.click(box);
+    expect(warn.querySelector("[data-left-behind]")?.textContent).toContain("D");
+  });
+
+  it("第 2 轮 N4:列出旧版有、新版没有的布置;带过来待核的说要去核", async () => {
+    const zero = { areas: 0, exits: 0, hides: 0, posts: 0, net_nodes: 0, nogo: 0, cameras: 0, standby: 0, proposal: false };
+    routes["GET /api/admin/maps/estate/2/layout"] = () => json({ ...zero, areas: 2, exits: 1, net_nodes: 5, nogo: 3, cameras: 1 });
+    routes["GET /api/admin/maps/estate/3/layout"] = () => json({ ...zero, proposal: true });
+    routes["GET /api/admin/maps/estate/1/layout"] = () => json(zero);
+    const { container: c, getByLabelText } = mount();
+    await waitFor(() => getByLabelText("estate:3"));
+    fireEvent.click(getByLabelText("estate:3").querySelector(".btn.primary") as HTMLElement);
+    const dialog = await waitFor(() => c.querySelector("dialog") as HTMLDialogElement);
+    const miss = await waitFor(() => { const w = dialog.querySelector(".mm-missing"); expect(w).not.toBeNull(); return w as HTMLElement; });
+    expect(miss.textContent).toContain("v2");
+    expect(miss.textContent).toContain("2 zones");
+    expect(miss.textContent).toContain("1 exit line");
+    expect(miss.textContent).toContain("road network");
+    expect(miss.textContent).toContain("1 camera");
+    expect(miss.textContent).toContain("Check and keep them on the Zones page");
+  });
+
   it("只列在线又能换图的机器人;选了才能发;结果一只一行(成功和拒绝分开)", async () => {
     routes["POST /api/admin/maps/estate/3/publish"] = (b) => json({ results: [
       { robot_id: "A", ok: true, state: "pending", reason: "" },
