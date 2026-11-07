@@ -113,6 +113,8 @@ export function AccessPage({ say, now }: { say: Say; now: number }) {
 function Visitor({ mode, zones, say, onDone }: { mode: ModeView | null; zones: string[]; say: Say; onDone: () => void }) {
   const [picked, setPicked] = useState<string[]>([]);
   const [hours, setHours] = useState(4);
+  // 网页易用性第 1 轮 P0-09:原来没有防区也能一键临时撤防 4 小时,不确认
+  const [ask, setAsk] = useState(false);
   if (!mode) return null;
   const on = mode.mode === "visitor";
   async function set(body: Record<string, unknown>) {
@@ -150,9 +152,15 @@ function Visitor({ mode, zones, say, onDone }: { mode: ModeView | null; zones: s
                 {VISITOR_HOURS.map((h) => <option key={h} value={String(h)}>{t("accHours", { n: h })}</option>)}
               </select>
             </label>
-            <button type="button" class="btn primary" onClick={() => void set({ mode: "visitor", zones: picked, minutes: hours * 60 })}>{t("accVisitorStart")}</button>
+            <button type="button" class="btn primary" disabled={picked.length === 0} onClick={() => setAsk(true)}>{t("accVisitorStart")}</button>
           </div>
+          {zones.length === 0 ? <p class="muted small">{t("accVisitorNoZones")} <a href="#/admin/layout">{t("accVisitorAddZones")}</a></p>
+            : picked.length === 0 && <p class="muted small">{t("accVisitorPick")}</p>}
         </>
+      )}
+      {ask && (
+        <Confirm text={t("accVisitorAsk", { z: picked.join("、"), n: hours, t: hm(Date.now() + hours * 3_600_000) })} yes={t("accVisitorStart")}
+          onNo={() => setAsk(false)} onYes={() => { setAsk(false); void set({ mode: "visitor", zones: picked, minutes: hours * 60 }); }} />
       )}
     </section>
   );

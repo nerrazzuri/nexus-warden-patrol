@@ -17,7 +17,8 @@ beforeEach(() => {
   lang.value = "zh";
   posted = [];
   schedule = { enabled: true, slots: [{ zone: "", day: 0, start: "22:00", end: "24:00" }], exceptions: [], today: [] };
-  mode = { mode: "armed", label: "按时间表:布防", source: "schedule", state: "armed", next_change_ms: at(22), manual_until_ms: null,
+  // 中午 12 点:时间表(周一 22–24 点)此刻是撤防
+  mode = { mode: "home", label: "按时间表:撤防", source: "schedule", state: "disarmed", next_change_ms: at(22), manual_until_ms: null,
     zones: [{ zone: "北区", armed: true, home_armed: true }] };
   setFetch(((url: string, init?: RequestInit) => {
     if (init?.method === "POST") {
@@ -185,6 +186,40 @@ describe("布防时间页", () => {
     fireEvent.click(btn(document.querySelector(".modal")!, "布防"));
     await waitFor(() => expect(posted.filter((p) => p.url === "/api/mode").map((p) => p.body.mode)).toEqual(["home", "armed"]));
     expect(now().querySelector('a[href="#/admin/access"]')!.textContent).toContain("临时撤防");
+  });
+
+  describe("网页易用性第 1 轮 P0-08:存下去立刻撤防 / 布防,先确认", () => {
+    it("现在布防着,新日程此刻没有布防时段:先说会马上撤防,确认了才存", async () => {
+      mode = { ...mode, mode: "armed", state: "armed" };
+      schedule = { ...schedule, slots: [] , enabled: false };
+      const { container: c } = page();
+      await waitFor(() => expect(c.querySelector(".arm-who")?.textContent).toContain("22:00"));
+      await new Promise((ok) => setTimeout(ok, 20));
+      fireEvent.click(c.querySelector("#arm-enabled")!);
+      drag(row(c, 2).querySelector(".armtrack")!, 600, 720);
+      fireEvent.click(c.querySelector(".arm-save")!);
+      await waitFor(() => expect(c.ownerDocument.querySelector(".modal")?.textContent).toContain("全站会马上撤防"));
+      expect(posted.some((p) => p.url === "/api/arming/schedule")).toBe(false);
+      fireEvent.click(btn(c.ownerDocument.querySelector(".modal")!, "保存"));
+      await waitFor(() => expect(posted.some((p) => p.url === "/api/arming/schedule")).toBe(true));
+    });
+
+    it("此刻正落在新画的布防时段里:先说会马上布防", async () => {
+      const { container: c } = page();
+      await waitFor(() => expect(row(c, 0).querySelector(".armblock")).not.toBeNull());
+      drag(row(c, 0).querySelector(".armtrack")!, 600, 780);
+      fireEvent.click(c.querySelector(".arm-save")!);
+      await waitFor(() => expect(c.ownerDocument.querySelector(".modal")?.textContent).toContain("全站会马上布防"));
+    });
+
+    it("一段都没有还勾着使用:说整周撤防", async () => {
+      const { container: c } = page();
+      await waitFor(() => expect(row(c, 0).querySelector(".armblock")).not.toBeNull());
+      fireEvent.click(row(c, 0).querySelector(".armblock")!);
+      fireEvent.click(btn(c, "删除此时段"));
+      fireEvent.click(c.querySelector(".arm-save")!);
+      await waitFor(() => expect(c.ownerDocument.querySelector(".modal")?.textContent).toContain("整周都是撤防"));
+    });
   });
 });
 
