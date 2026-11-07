@@ -102,7 +102,8 @@ export function RobotsPage({ say, now, units = [], readOnly = false, role = "adm
         <h1>{t("robots")}</h1>
         {!readOnly && <button type="button" class="btn primary push" onClick={() => setAdding(true)}>{t("addRobot")}</button>}
       </div>
-      <p class="muted lead">{t("robotsLead")}</p>
+      {/* P1-30:经理只看,说明不提改名、解绑 */}
+      <p class="muted lead">{t(readOnly ? "robotsLeadView" : "robotsLead")}</p>
       {!readOnly && pending.length > 0 && (
         <section class="panel bind-pending" aria-label={t("bindPending")}>
           <h2>{t("bindPending")}</h2>
@@ -318,7 +319,7 @@ function Controls({ r, u, role, say, onChanged }: { r: RobotCard; u?: UnitInfo; 
       {patrol && (
         <div class="rd-name">
           <label class="rd-label" for={`rd-route-${r.robot_id}`}>{t("rdRoute")}</label>
-          {routes !== null && routes.length === 0 ? <p class="muted small">{t("rdNoRoutes")}</p> : (
+          {routes !== null && routes.length === 0 ? <p class="muted small">{t(isOwnerLike(role) ? "rdNoRoutes" : "rdNoRoutesAsk")}</p> : (
             <div class="rd-inline">
               <select id={`rd-route-${r.robot_id}`} name="route" value={pick} onChange={(e) => setPick(e.currentTarget.value)}>
                 <option value="">{t("rdPickRoute")}</option>

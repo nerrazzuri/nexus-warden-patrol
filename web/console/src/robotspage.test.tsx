@@ -399,3 +399,13 @@ describe("网页易用性第 1 轮 P1-27/28", () => {
     expect(d.querySelector("[data-posture-now]")!.textContent).toContain("现在站着");
   });
 });
+
+describe("网页易用性第 1 轮 P1-30", () => {
+  it("经理:说明不提改名、解绑;没路线时让找管理员,不叫他去布置", async () => {
+    lang.value = "zh";
+    robots[0] = card({});
+    const { container: c } = render(<RobotsPage say={() => {}} now={NOW} role="owner" readOnly />);
+    await waitFor(() => expect(cardOf(c, "A")).not.toBeNull());
+    expect(c.querySelector(".lead")!.textContent).not.toContain("解绑");
+  });
+});
