@@ -64,9 +64,10 @@ export function navFor(role: string): NavSection[] {
 export function navLabel(page: Page): { section: Key; page: Key } | null {
   for (const g of NAV_SECTIONS) {
     const x = g.items.find((i) => i.id === page);
-    if (x) return { section: g.id === "advanced" ? "navSystem" : g.key, page: x.key };
+    // P2-19:标题里的组名跟侧栏一样(地图管理在「高级」下面,不再写「系统」)
+    if (x) return { section: g.key, page: x.key };
   }
-  return page === "admin/mapedit" ? { section: "navSystem", page: "tabMapMgmt" } : null;
+  return page === "admin/mapedit" ? { section: "navAdvanced", page: "tabMapMgmt" } : null;
 }
 /** 改版前的地址(书签、手机分享的链接)。 */
 const LEGACY: Record<string, Page> = {

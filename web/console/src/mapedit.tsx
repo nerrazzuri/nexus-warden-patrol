@@ -163,6 +163,20 @@ function Editor({ say, target, Canvas }: { say: Say; target: Target; Canvas?: Fu
   const strokeW = (w: number) => (meta ? w / meta.m_per_px : 2);
   const bm = now?.display.basemap;
 
+  // P2-19:Ctrl+Z 撤销、Ctrl+Y / Ctrl+Shift+Z 重做(在输入框里打字时不管)
+  useEffect(() => {
+    const key = (e: KeyboardEvent) => {
+      if (!(e.ctrlKey || e.metaKey)) return;
+      const tag = (e.target as HTMLElement | null)?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+      const k = e.key.toLowerCase();
+      if (k === "y" || (k === "z" && e.shiftKey)) { e.preventDefault(); setHist((h) => (h && h.future.length ? redo(h) : h)); }
+      else if (k === "z") { e.preventDefault(); setHist((h) => (h && h.past.length ? undo(h) : h)); }
+    };
+    window.addEventListener("keydown", key);
+    return () => window.removeEventListener("keydown", key);
+  }, []);
+
   return (
     <section class="mapedit" data-ready={ready ? "1" : undefined}>
       <div class="panel-head">
@@ -222,6 +236,7 @@ function Editor({ say, target, Canvas }: { say: Say; target: Target; Canvas?: Fu
               {shape !== "rect" && (
                 <label class="field">{t("meWidth", { w: width.toFixed(1) })}
                   <input name="width" type="range" min={0.1} max={1} step={0.1} value={width} onInput={(e) => setWidth(Number(e.currentTarget.value))} />
+                  <span class="range-ends muted small" aria-hidden="true"><span>0.1 m</span><span>1.0 m</span></span>
                 </label>
               )}
               <p class="muted small">{t(shape === "stroke" ? "meStrokeHint" : shape === "line" ? "meLineHint" : "meRectHint")}</p>
@@ -251,6 +266,7 @@ function Editor({ say, target, Canvas }: { say: Say; target: Target; Canvas?: Fu
               <label class="field">{t("meRotateDeg", { d: Math.round(now.display.rotate_deg ?? meta?.rotation_deg ?? 0) })}
                 <input name="rotate" type="range" min={-180} max={180} step={1} value={now.display.rotate_deg ?? meta?.rotation_deg ?? 0}
                   onChange={(e) => { const v = Number(e.currentTarget.value); change((s) => ({ ...s, display: { ...s.display, rotate_deg: v } })); }} />
+                <span class="range-ends muted small" aria-hidden="true"><span>-180°</span><span>0°</span><span>180°</span></span>
               </label>
               <button type="button" class="btn sm" onClick={() => change((s) => ({ ...s, display: { ...s.display, rotate_deg: null } }))}>{t("meRotateAuto")}</button>
               <p class="muted small">{t("meRotateHint")}</p>

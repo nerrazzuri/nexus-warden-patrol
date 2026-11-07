@@ -117,7 +117,7 @@ describe("新外壳", () => {
     location.hash = "#/admin/system";
     const a = render(<Console me={me("admin")} onOut={() => {}} />);
     expect(a.container.querySelector('.sidenav a[href="#/admin/system"]')!.getAttribute("aria-current")).toBe("page");
-    expect(a.container.querySelector(".topbar .pagetitle")!.textContent).toBe("系统系统");
+    expect(a.container.querySelector(".topbar .pagetitle")!.textContent).toBe("高级系统");   // P2-19:组名跟侧栏一样
   });
 
   it("工程师看得到管理、看不到用户", () => {
