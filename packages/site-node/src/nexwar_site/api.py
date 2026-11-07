@@ -3911,7 +3911,10 @@ class _Handler(TlsHandlerMixin):
             robots = {rid: ((c.capabilities.tasks.get("release_install") or {}).get("current")
                             if c.capabilities is not None else None)
                       for rid, c in self.site.dispatcher.clients.items()}
-            return self._send_json(200, {"releases": cat.list(), "robots": robots})
+            # 网页易用性 P1-78:哪台报过「能退回上一版」,不能的网页就不给那个按钮(原来点了才说不支持)
+            rollback = {rid: c.capabilities is not None and "release_rollback" in c.capabilities.tasks
+                        for rid, c in self.site.dispatcher.clients.items()}
+            return self._send_json(200, {"releases": cat.list(), "robots": robots, "rollback": rollback})
         m = _RELCMD.match(path)
         if m is None or method != "POST":
             raise HttpError(404, f"没有 {method} {path}")

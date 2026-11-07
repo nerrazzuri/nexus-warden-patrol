@@ -93,6 +93,10 @@ describe("机器人远程运维", () => {
     const { container: c } = render(<RobotOps robotId="A" tasks={ALL} say={() => {}} />);
     fireEvent.change(c.querySelector('select[aria-label="服务"]')!, { target: { value: "nexwar_localizer" } });
     fireEvent.click(btn(c, "重启服务"));
+    expect(posted).toEqual([]);                                                   // P1-74:先确认
+    const m = c.ownerDocument.querySelector(".modal") as HTMLElement;
+    expect(m.textContent).toContain("nexwar_localizer");
+    fireEvent.click(Array.from(m.querySelectorAll("button")).find((b) => b.textContent === "重启服务")!);
     await waitFor(() => expect(posted[0]).toMatchObject({ url: "/api/robots/A/ops/restart", body: { unit: "nexwar_localizer" } }));
   });
 });
