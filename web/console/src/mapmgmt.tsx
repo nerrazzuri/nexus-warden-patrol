@@ -108,7 +108,7 @@ export function activationText(a: Activation, nowMs: number = Date.now()): strin
 export function MapManagePage({ say, pollMs = 5000 }: { say: Say; pollMs?: number }) {
   const [data, setData] = useState<Overview | null>(null);
   const [err, setErr] = useState("");
-  const [publish, setPublish] = useState<{ map_id: string; version: string; unusable?: string; source?: string } | null>(null);
+  const [publish, setPublish] = useState<{ map_id: string; version: string; unusable?: string; source?: string; zonesOk?: boolean | null } | null>(null);
   const [deleting, setDeleting] = useState<{ map_id: string; version: string; back: string[]; latest: boolean } | null>(null);
   const [rolling, setRolling] = useState<Dog | null>(null);
   const [pick, setPick] = useState<string[]>([]);
@@ -198,7 +198,7 @@ export function MapManagePage({ say, pollMs = 5000 }: { say: Say; pollMs?: numbe
                     return on ? [...rest, key].slice(-2) : rest;
                   })}
                   onNote={(n) => void saveNote(m.map_id, v.version, n)}
-                  onPublish={() => setPublish({ map_id: m.map_id, version: v.version, unusable: v.unusable ?? "", source: v.source })}
+                  onPublish={() => setPublish({ map_id: m.map_id, version: v.version, unusable: v.unusable ?? "", source: v.source, zonesOk: v.counts.zones_confirmed })}
                   onDelete={() => setDeleting({ map_id: m.map_id, version: v.version, back: v.previous_on, latest: v.latest })}
                   onNoise={() => setNoise({ map_id: m.map_id, version: v.version })}
                 />
@@ -322,6 +322,8 @@ function VersionCard(p: {
         <div class="mm-notebox">
           <input type="text" aria-label={tr(`Note for v${v.version}`, `v${v.version} 的备注`)} value={note} maxLength={200}
             placeholder={tr("Note (what changed, why)", "备注(改了什么、为什么)")} onInput={(e) => setDraft(e.currentTarget.value)} />
+          {/* P1-49:写到多少字了(最多 200,多了打不进去) */}
+          <span class={note.length >= 200 ? "bad small mono" : "muted small mono"}>{note.length}/200</span>
           <button type="button" class="btn sm" disabled={note.trim() === v.note} onClick={() => p.onNote(note)}>{tr("Save note", "保存备注")}</button>
         </div>
         {b ? (
@@ -378,7 +380,7 @@ function lostRoutes(target: { map_id: string; version: string }, dogs: Dog[], ch
   return [...froms.values()];
 }
 
-export function PublishDialog({ target, dogs, onClose }: { target: { map_id: string; version: string; unusable?: string; source?: string }; dogs: Dog[]; onClose: () => void }) {
+export function PublishDialog({ target, dogs, onClose }: { target: { map_id: string; version: string; unusable?: string; source?: string; zonesOk?: boolean | null }; dogs: Dog[]; onClose: () => void }) {
   const [routes, setRoutes] = useState<{ id: string; map_id: string; map_version: string }[]>([]);
   useEffect(() => {
     api<{ routes: { id: string; map_id: string; map_version: string }[] }>("GET", `/api/routes?map_id=${enc(target.map_id)}`)
@@ -390,7 +392,11 @@ export function PublishDialog({ target, dogs, onClose }: { target: { map_id: str
   // 11-05 现场第 10 条:缺定位文件的版本,带定位器的机器人收了也会拒 —— 不让勾
   const noLoc = (d: Dog) => !!target.unusable && d.running?.confirms === "localizer";
   const eligible = dogs.filter((d) => d.online && d.can_activate && !noLoc(d));
-  const [chosen, setChosen] = useState<string[]>([]);
+  // P1-46:默认勾上在线、能换图、还没用这一版的
+  const [chosen, setChosen] = useState<string[]>(() => eligible
+    .filter((d) => !(d.loaded && d.loaded.map_id === target.map_id && d.loaded.version === target.version)).map((d) => d.robot_id));
+  // P1-45:禁行区没确认的版本站点会拒;先说、给去确认的入口,不让白输密码
+  const zonesBad = target.zonesOk === false;
   const [noHome, setNoHome] = useState(false);
   const [pw, setPw] = useState("");
   const [busy, setBusy] = useState(false);
@@ -469,9 +475,14 @@ export function PublishDialog({ target, dogs, onClose }: { target: { map_id: str
               ) : <p class="muted">{tr("This is a different map: redraw the routes on it.", "这是另一张图:要在新图上重画路线。")}</p>}
             </div>
           ))}
-          <label class="checks">
-            <span><input type="checkbox" checked={noHome} onChange={(e) => setNoHome(e.currentTarget.checked)} /> {tr("Publish even if a robot has no home origin on this version", "机器人在这一版上没有原点也照发")}</span>
-          </label>
+          <fieldset class="checks mm-options">
+            <legend>{tr("Options", "选项")}</legend>
+            <label><input type="checkbox" checked={noHome} onChange={(e) => setNoHome(e.currentTarget.checked)} /> {tr("Publish even if a robot has no home origin on this version", "机器人在这一版上没有原点也照发")}</label>
+          </fieldset>
+          {zonesBad && (
+            <p class="warn small" role="alert">{tr(`The no-go zones of v${target.version} are not confirmed yet; robots will refuse it. `, `v${target.version} 的禁行区还没确认,机器人会拒收。`)}
+              <a href="#/admin/layout?tab=nogo" onClick={onClose}>{tr(`Confirm them in Setup → No-go (pick v${target.version})`, `去「设置 → 禁行区」确认(选 v${target.version})`)}</a></p>
+          )}
           <p class="muted small">{tr("Each robot switches on its own: it downloads, waits until idle, loads, and (if it has a localizer) waits for the localizer to accept the map. A robot the localizer rejects goes back to its previous map.", "每台机器人各自换:下载、等空闲、载入,有定位器的还要等定位器收下新图;定位器不收的,机器人会退回原来那张。")}</p>
           {/* W44 第四期(设计 §5.2 第 4 条):换图要再输一次密码 */}
           <label class="field">{tr("Your password (switching maps matters)", "你的密码(换图要紧,再输一次)")}
@@ -480,7 +491,7 @@ export function PublishDialog({ target, dogs, onClose }: { target: { map_id: str
           {err && <p class="error" role="alert">{err}</p>}
           <div class="row end">
             <button type="button" class="btn" onClick={onClose}>{tr("Cancel", "取消")}</button>
-            <button type="button" class="btn primary" disabled={busy || chosen.length === 0 || !pw} onClick={() => void go()}>{tr("Publish", "发布")}</button>
+            <button type="button" class="btn primary" disabled={busy || chosen.length === 0 || !pw || zonesBad} title={chosen.length === 0 ? tr("Tick at least one robot", "至少勾一台机器人") : !pw ? tr("Enter your password", "输入你的密码") : undefined} onClick={() => void go()}>{tr("Publish", "发布")}</button>
           </div>
         </>
       )}
