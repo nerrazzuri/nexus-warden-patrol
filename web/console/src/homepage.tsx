@@ -59,19 +59,24 @@ export function HomePage(props: {
         <section class="panel home-todo">
           <h2>{t("homeTodo")}</h2>
           <ul class="plain">
-            {todo.map((a) => {
+            {groupTodo(todo).map((g) => {
+              const a = g[0];
               const adv = advice(a.kind);
+              const robots = [...new Set(g.map((x) => x.robot).filter((r) => r && r !== "site"))];
               return (
-                <li key={a.key} class={`todo ${a.level}`}>
+                <li key={a.key} class={`todo ${a.level}`} data-kind={a.kind} data-n={g.length}>
                   <div class="todo-body">
                     <b>{adv ? t(adv.say) : alertTitle(lang.value, a.kind, a.title)}</b>
-                    {a.detail && <span class="muted small">{a.detail}</span>}
+                    {robots.length > 0 && <span class="small">{t("homeTodoRobots", { r: robots.join(", ") })}</span>}
+                    {/* P2-44:站点原话(带文件路径的技术说明)收起来,要看再点开 */}
+                    {a.detail && (adv ? <details class="todo-detail small"><summary>{t("homeTodoDetail")}</summary><span class="muted">{a.detail}</span></details>
+                      : <span class="muted small">{a.detail}</span>)}
                     <span>{t(adv ? adv.todo : "advCallEngineer")}</span>
                   </div>
                   <div class="todo-acts">
                     {adv?.go ? <a class="btn sm" href={`#/${adv.go}`}>{t("homeGo")}</a>
-                      : a.acked_ms == null && <button type="button" class="btn sm" onClick={() => props.onAck(a)}>{t("noticeAck")}</button>}
-                    <button type="button" class="btn sm primary" onClick={() => props.onDone(a)}>{t("noticeDone")}</button>
+                      : g.some((x) => x.acked_ms == null) && <button type="button" class="btn sm" onClick={() => g.forEach((x) => x.acked_ms == null && props.onAck(x))}>{t("noticeAck")}</button>}
+                    <button type="button" class="btn sm primary" onClick={() => g.forEach((x) => props.onDone(x))}>{t("noticeDone")}</button>
                   </div>
                 </li>
               );
@@ -160,4 +165,15 @@ function compare(a: number, b: number | undefined): string {
   if (a > b) return t("homeMore", { n: a - b });
   if (a < b) return t("homeLess", { n: b - a });
   return t("homeSame");
+}
+
+/** P2-44:同一种提醒(说法一样、只是机器人不同)合成一条;顺序按第一次出现。 */
+export function groupTodo(list: Alert[]): Alert[][] {
+  const m = new Map<string, Alert[]>();
+  for (const a of list) {
+    const k = advice(a.kind) ? `adv:${advice(a.kind)!.say}` : `kind:${a.kind}:${a.title}`;
+    const g = m.get(k);
+    if (g) g.push(a); else m.set(k, [a]);
+  }
+  return [...m.values()];
 }
