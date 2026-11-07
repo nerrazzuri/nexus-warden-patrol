@@ -237,3 +237,14 @@ describe("布防时间页", () => {
   });
 });
 
+
+describe("网页易用性第 1 轮 P1-59", () => {
+  it("单击不拖:说要按住拖;有图例", async () => {
+    const { container: c } = page();
+    await waitFor(() => expect(row(c, 0).querySelectorAll(".armblock").length).toBe(1));
+    expect(c.querySelector("[data-arm-legend]")!.textContent).toContain("布防");
+    drag(row(c, 1).querySelector(".armtrack")!, 600, 605);
+    await waitFor(() => expect(c.querySelector("[data-arm-hint]")!.textContent).toContain("按住拖动"));
+    expect(row(c, 1).querySelectorAll(".armblock").length).toBe(0);
+  });
+});

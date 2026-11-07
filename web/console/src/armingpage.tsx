@@ -56,6 +56,7 @@ export function ArmingPage({ say, now, role = "admin" }: { say: Say; now: number
   const [perZone, setPerZone] = useState(false);
   const [zone, setZone] = useState("");
   const [sel, setSel] = useState<{ day: number; start: number } | null>(null);
+  const [gridHint, setGridHint] = useState<string | null>(null);
   const [copyFrom, setCopyFrom] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
   const [switching, setSwitching] = useState<"armed" | "home" | null>(null);
@@ -183,10 +184,20 @@ export function ArmingPage({ say, now, role = "admin" }: { say: Say; now: number
       ) : (perZone && zone === "") ? <p class="muted">{t("armPickZone")}</p> : (
         <>
           <WeekGrid slots={slots.filter((x) => x.zone === editing)} sel={sel}
-            onAdd={(day, a, b) => setSlots(addBlock(slots, editing, day, a, b))}
+            onAdd={(day, a, b) => {
+              // P1-59:单击(拖得太短)没加上 → 说要按住拖;跟已有的连上了 → 说合并了
+              const n = addBlock(slots, editing, day, a, b);
+              if (n === slots) { setGridHint(t("armDragHint")); return; }
+              setGridHint(n.length < slots.length + 1 ? t("armMerged") : null);
+              setSlots(n);
+            }}
             onPick={(day, start) => setSel({ day, start })}
             onEdge={(day, start, edge, to) => { const n = moveEdge(slots, editing, day, start, edge, to); setSlots(n); }}
             onCopy={(day) => setCopyFrom(day)} />
+          <p class="arm-legend small muted" data-arm-legend="1">
+            <i class="arm-sw" aria-hidden="true" /> {t("armLegendArmed")} · {t("armLegendHow")}
+          </p>
+          {gridHint && <p class="small warn" role="status" data-arm-hint="1">{gridHint}</p>}
           {sel && (
             <div class="arm-selected row">
               <span>{t(DAY_KEYS[sel.day])} {minutesText(sel.start)}–{minutesText(slots.find((x) => x.zone === editing && x.day === sel.day && x.start === sel.start)?.end ?? sel.start)}</span>
