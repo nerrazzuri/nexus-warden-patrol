@@ -15,15 +15,18 @@ let posts: { url: string; body: unknown }[] = [];
 let nearest: { status: number; body: unknown } = { status: 200, body: { robot_id: "A", path_m: 30, eta_s: 60 } };
 const OK = { command_id: "c1", ack: { command_id: "c1", result: "accepted" } };
 let patrolReply: { status: number; body: unknown } = { status: 200, body: OK };
+let checkReply: unknown = { errors: [] };
 
 beforeEach(() => {
   lang.value = "zh";
   posts = [];
   nearest = { status: 200, body: { robot_id: "A", path_m: 30, eta_s: 60 } };
   patrolReply = { status: 200, body: OK };
+  checkReply = { errors: [] };
   vi.stubGlobal("IntersectionObserver", undefined);
   setFetch(((url: string, init?: RequestInit) => {
     if (init?.method === "POST") {
+      if (url === "/api/route-check") return Promise.resolve(json(checkReply));   // P1-16 落点就查,不算派单
       posts.push({ url, body: JSON.parse(String(init.body ?? "{}")) });
       if (url.endsWith("/patrol")) return Promise.resolve(json(patrolReply.body, patrolReply.status));
       return Promise.resolve(json(OK));
@@ -73,7 +76,7 @@ describe("保安的临时路线", () => {
     fireEvent.click(btn(c, "开始")!);
     await waitFor(() => expect(posts.length).toBe(1));
     expect(posts[0]).toEqual({ url: "/api/robots/B/patrol", body: { points: [{ x: 1, y: 2 }, { x: 3, y: 4 }], map_id: "m", map_version: "1" } });
-    await waitFor(() => expect(sent).toHaveBeenCalled());
+    await waitFor(() => expect(sent).toHaveBeenCalledWith("B"));
   });
 
   it("走不到的点说是第几个", async () => {
@@ -83,6 +86,15 @@ describe("保安的临时路线", () => {
     fireEvent.click(btn(c, "开始")!);
     await waitFor(() => expect(c.textContent).toContain("第 2 个点"));
     expect(c.textContent).toContain("在障碍或禁行区里");
+  });
+
+  it("P1-16:落点就查,不用等按「开始」", async () => {
+    checkReply = { errors: [{ index: 0, name: "P1", problem: "在墙里" }] };
+    const { container: c } = render(<TempRoutePanel map={MAP} points={[[1, 2], [3, 4]]} robots={["A"]}
+      onUndo={() => {}} onCancel={() => {}} onSent={() => {}} say={() => {}} />);
+    await waitFor(() => expect(c.textContent).toContain("第 1 个点"), { timeout: 2000 });
+    expect(c.textContent).toContain("在墙里");
+    expect(posts).toEqual([]);
   });
 
   it("没点点不能开始", () => {
