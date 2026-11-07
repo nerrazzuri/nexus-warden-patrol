@@ -8,6 +8,7 @@ library;
 import 'package:flutter/foundation.dart';
 
 import '../l10n.dart';
+import 'robot_events.dart' show navCodeText;
 
 /// 到点提醒开没开。
 final ValueNotifier<bool> arrivalAlerts = ValueNotifier<bool>(false);
@@ -27,7 +28,11 @@ ArrivalNote? arrivalNote(Map<String, dynamic> frame) {
   if (ev is! Map) return null;
   final d = ev['data'] is Map ? ev['data'] as Map : const <String, dynamic>{};
   final robot = '${frame['robot_id'] ?? ''}';
-  String why(Object? r) => r == null || '$r'.isEmpty ? '' : tr(': $r', '：$r');
+  String why(Object? r) {
+    final c = navCodeText(d['code']);
+    if (c != null) return tr(': ${c.$1} (${c.$2})', '：${c.$1}（${c.$2}）');
+    return r == null || '$r'.isEmpty ? '' : tr(': $r', '：$r');
+  }
   switch (ev['kind']) {
     case 'patrol_waypoint':
       final i = d['index'];

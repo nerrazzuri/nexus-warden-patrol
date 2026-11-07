@@ -108,10 +108,13 @@ class _SiteRobotPageState extends State<SiteRobotPage> {
     final d = e['data'];
     final tid = d is Map ? '${d['task_id'] ?? ''}' : '';
     final why = d is Map ? '${d['reason'] ?? ''}' : '';
+    final code = navCodeText(d is Map ? d['code'] : null);
     final fix = why.contains('未标原点')
         ? tr(' Drive the robot to the dock, set its position, then tap "Mark origin here".',
             '把机器人开到充电桩前，设好位置后点「在这儿标原点」。')
-        : '';
+        : code != null
+            ? tr(' ${code.$2}.', '${code.$2}。')
+            : '';
     setState(() => _msg = tr('Task $tid did not run: $why.$fix', '任务 $tid 没走成：$why。$fix'));
     unawaited(_reload());
   }

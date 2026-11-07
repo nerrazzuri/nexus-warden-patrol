@@ -36,6 +36,24 @@ void main() {
         'C40221 已到达 P1（第 1 个）');
   });
 
+  test('导航 V1 原因码：没到写「怎么回事 + 该做什么」，码不认识就照旧', () {
+    final bad = arrivalNote(_ev('patrol_waypoint', <String, dynamic>{
+      'index': 2, 'total': 5, 'name': 'P3', 'ok': false, 'note': '终点被障碍盖住', 'code': 'goal_occupied'
+    }))!;
+    expect(bad.text, 'C40221 未到达 P3（3/5）：目标点被东西占住（把东西挪开后再派一次）');
+    final f = arrivalNote(_ev('task_failed', <String, dynamic>{
+      'reason': '2 个航点未到达', 'code': 'localization_unreliable'
+    }))!;
+    expect(f.text, 'C40221 任务失败：定位不可信,不敢走（重新定位）');
+    expect(arrivalNote(_ev('patrol_waypoint', <String, dynamic>{
+      'name': 'P1', 'ok': false, 'note': '被挡', 'code': 'made_up'
+    }))!.text, 'C40221 未到达 P1：被挡');
+    appLang.value = AppLang.en;
+    expect(arrivalNote(_ev('patrol_waypoint', <String, dynamic>{
+      'name': 'P1', 'ok': false, 'note': '被挡', 'code': 'route_too_narrow'
+    }))!.text, 'C40221 missed P1: Route too narrow to pass (Change the route, or mark this passage impassable on the map)');
+  });
+
   test('任务结束也提醒；别的事件、别的帧不管', () {
     expect(arrivalNote(_ev('task_done', <String, dynamic>{'task_id': 't1'}))!.text, 'C40221 任务完成');
     final f = arrivalNote(_ev('task_failed', <String, dynamic>{'task_id': 't1', 'reason': '定位丢失'}))!;
