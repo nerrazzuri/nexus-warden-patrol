@@ -51,6 +51,7 @@ function Editor({ say, target, Canvas }: { say: Say; target: Target; Canvas?: Fu
   const [hist, setHist] = useState<History | null>(null);
   // P1-53:一打开不默认选橡皮擦(点图就擦掉了);先选工具
   const [tool, setTool] = useState<Tool | null>(null);
+  const [result, setResult] = useState(false);
   const [shape, setShape] = useState<Shape>("stroke");
   const [width, setWidth] = useState(0.3);
   const [pts, setPts] = useState<Pt[]>([]);
@@ -175,7 +176,7 @@ function Editor({ say, target, Canvas }: { say: Say; target: Target; Canvas?: Fu
       {stale && <div class="ly-conflict" role="alert">{t("meStale")}</div>}
       {loadErr && <div class="ly-conflict me-loaderr" role="alert">{t("meLoadErr")}</div>}
       <div class="ly-tab">
-        <div class="me-canvas">
+        <div class={result ? "me-canvas result" : "me-canvas"}>
           <Map
             drawing={need > 0}
             onPick={need > 0 ? pick : undefined}
@@ -196,6 +197,13 @@ function Editor({ say, target, Canvas }: { say: Say; target: Target; Canvas?: Fu
                   : <polyline key={i} class={`me-op ${o.op}`} points={polyPx(meta, o.points.length > 1 ? o.points : [o.points[0], o.points[0]])} stroke-width={strokeW(o.width_m)} />)}
               {pts.length > 0 && <polyline class="draft-line" points={polyPx(meta, pts)} />}
             </> : null} />
+          {/* P1-52:图例;能切到「擦完的样子」(擦的画成空地、加的画成墙) */}
+          <div class="me-legend small" data-me-legend="1">
+            <span><i class="me-sw erase" aria-hidden="true" />{t("meLegErase")}</span>
+            <span><i class="me-sw obstacle" aria-hidden="true" />{t("meLegObstacle")}</span>
+            <span><i class="me-sw terrain" aria-hidden="true" />{t("meLegTerrain")}</span>
+            <label class="push"><input type="checkbox" name="me-result" checked={result} onChange={(e) => setResult(e.currentTarget.checked)} /> {t("meShowResult")}</label>
+          </div>
         </div>
         <div class="ly-side">
           <div class="me-tools" role="toolbar" aria-label={t("meTools")}>
