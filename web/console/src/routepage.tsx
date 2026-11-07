@@ -473,7 +473,7 @@ export function RoutesPage({ say, embed, kind = "patrol" }: { say: Say; embed?: 
                   <PointForm p={selPoint} names={pts.map((x) => x.name)} idx={pi} plain={!!embed} onChange={(patch) => change(patchPoint(pts, pi, patch), true)}
                     onActions={(p2) => change(pts.map((x, k) => (k === pi ? p2 : x)), true)} />
                 ) : pts.length > 0 && <p class="muted small">{rt("pointSelectHint")}</p>}
-                <div class="row">
+                <div class="row route-acts">
                   {!embed && <button type="button" class="btn primary" disabled={!canSave} onClick={() => void save()}>{rt("routeSave")}</button>}
                   <button type="button" class="btn" disabled={!dirty} onClick={() => (draft.isNew ? setDraft(null) : orig && edit(orig))}>{rt("routeDiscard")}</button>
                   {!draft.isNew && <button type="button" class="btn stop" onClick={() => setRemoving(true)}>{rt("routeDelete")}</button>}
