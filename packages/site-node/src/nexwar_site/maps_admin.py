@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import json
 import logging
+import shutil
 from typing import Any
 
 from nexwar_contract.errors import ContractError
@@ -365,6 +366,7 @@ class MapAdmin:
             shutil.rmtree(tmp, ignore_errors=True)
         from nexwar_site.standby import copy_homes
         homes = copy_homes(self.db, map_id, version, new)
+        self._copy_display(map_id, version, new, by=by)
         return {"map_id": map_id, "from": version, "version": new, "cleaned": len(specks),
                 "cells": px, "homes_copied": homes}
 
@@ -410,8 +412,41 @@ class MapAdmin:
             shutil.rmtree(tmp, ignore_errors=True)
         from nexwar_site.standby import copy_homes
         homes = copy_homes(self.db, map_id, version, new)
+        self._copy_display(map_id, version, new, by=by)
         return {"map_id": map_id, "from": version, "version": new, **stats,
                 "homes_copied": homes, "by": by}
+
+    def _copy_display(self, map_id: str, old: str, new: str, *, by: str) -> None:
+        """网页易用性第 1 轮 P0-13:另存(编辑、清噪点)出来的新版本跟原版同一个坐标系,显示设置
+        (摆正角度、底图、命名区域、特殊地面)和底图文件一起带过去;特殊地面要放慢的照样落成限速区。"""
+        disp = getattr(self.site, "map_display", None)
+        if disp is None:
+            return
+        body = disp.get(map_id, old)
+        if not (body.get("regions") or body.get("terrain") or body.get("basemap")
+                or body.get("rotate_deg") is not None):
+            return
+        home = getattr(self.site, "home", None)
+        if home is not None and body.get("basemap"):
+            src, dst = home / "map-display" / map_id / old, home / "map-display" / map_id / new
+            if src.is_dir():
+                dst.mkdir(parents=True, exist_ok=True)
+                for f in src.iterdir():
+                    if f.is_file():
+                        shutil.copy2(f, dst / f.name)
+        body = disp.put(map_id, new, body, by=by)
+        zones = getattr(self.site, "zones", None)
+        if zones is None:
+            return
+        from nexwar_site.map_display import slow_zones
+        slow = slow_zones(body)
+        if slow:
+            cur = zones.current(map_id, new)
+            try:
+                zones.put(map_id, new, [z.to_wire() for z in cur.zones] + slow,
+                          base_revision=cur.revision, by=by)
+            except Exception:  # noqa: BLE001 —— 限速区落不下不挡另存;打开显示设置再存一次会补
+                log.warning("另存的新版本 %s:%s 特殊地面限速区没落下", map_id, new, exc_info=True)
 
     def _next_version(self, map_id: str, version: str) -> str:
         """新版本号:这个地图号下都是数字就取最大的加一;不然 ``<版本>-dn<n>``。"""

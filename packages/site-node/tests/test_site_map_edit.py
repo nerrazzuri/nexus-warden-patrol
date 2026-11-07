@@ -291,3 +291,25 @@ def test_外审R4_写不出来接口回400不是500(站点, monkeypatch):
     monkeypatch.setattr(me, "apply_ops", 写不出)
     code, d = s.req("POST", f"{ADM}/edit", {"digest": dg, "ops": ERASE}, token=tok)
     assert code == 400 and "改不了" in d["error"]
+
+
+def test_网页P0_13_另存新版本_区域_特殊地面_底图都跟过去(站点):
+    """网页易用性第 1 轮 P0-13:另存新版本以后,命名区域、特殊地面、底图都没了(显示设置只存在原版本
+    上,底图文件也在原版本目录里)。站点另存时一起复制过去;清噪点出来的版本也一样。"""
+    s = 站点
+    tok = _登(s)
+    assert _传(s, tok, b"\x89PNG\r\n\x1a\n" + b"0" * 100, "image/png")[0] == 200
+    body = {"rotate_deg": 5, "basemap": {"file": "basemap.png", "x": 0, "y": 0, "scale": 0.05,
+                                        "rotate_deg": 0, "opacity": 0.5},
+            "regions": [{"name": "A区", "polygon": [[0, 0], [2, 0], [2, 2], [0, 2]]}],
+            "terrain": [{"id": "t-1", "kind": "grass", "polygon": [[5, 0], [7, 0], [7, 2], [5, 2]]}]}
+    code, d = s.req("POST", f"{ADM}/display", body, token=tok)
+    assert code == 200, d
+    want = s.req("GET", f"{ADM}/display", token=tok)[1]
+    dg = s.req("GET", f"{ADM}/noise", token=tok)[1]["digest"]
+    code, d = s.req("POST", f"{ADM}/edit", {"digest": dg, "ops": ERASE}, token=tok)
+    assert code == 200, d
+    nv = f"/api/admin/maps/{MAP[0]}/{d['version']}"
+    got = s.req("GET", f"{nv}/display", token=tok)[1]
+    assert got == want
+    assert (s.api.home / "map-display" / MAP[0] / d["version"] / "basemap.png").is_file()
