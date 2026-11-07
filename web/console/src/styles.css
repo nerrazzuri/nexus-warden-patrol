@@ -562,8 +562,10 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--c-primary); }
 
 /* W44 画面位:前摄像头大、后摄像头小窗(点了互换)、顶上状态栏;断流停在最后一帧、变灰、写已断几秒 */
 .well.lostfeed .frozen { display: block; opacity: 1; filter: grayscale(1) brightness(0.55); }
-.well .lost { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); max-width: 90%; padding: 8px 14px; border-radius: var(--r-r8);
-  background: var(--c-scrim); color: var(--c-onScrim); font-size: 15px; font-weight: 600; text-align: center; }
+/* 网页易用性 P1-11:断流提示是角落里的一行,不盖住画面中间 */
+.well .lost { position: absolute; left: 8px; top: 34px; max-width: calc(100% - 16px); padding: 3px 10px; border-radius: var(--r-r8);
+  background: var(--c-scrim); color: var(--c-onScrim); font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.slot-main .well .lost { top: 56px; }
 .well.main, .well.pip { aspect-ratio: auto; width: 100%; height: 100%; }
 /* 画面位、实况卡片顶上有状态栏:画面框自带的「A 前 时间」不显示;小窗里什么字都不写,断流只变灰 */
 .well.main .osd.top, .well.main .osd.bottom .osd-btn, .well.pip .osd, .well.pip .lost { display: none; }
@@ -581,6 +583,8 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--c-primary); }
 .slot-name { font-size: 20px; font-weight: 700; }
 .slot-mid { display: flex; gap: 16px; margin: 0 auto; padding: 3px 14px; border-radius: 999px; background: rgba(0, 0, 0, 0.45); font-size: 15px; }
 .slot-mid:empty { display: none; }
+/* P1-10:画面自己的「● 实时」抬到底栏(任务 · 电量 · 定位)上面,不跟电量叠在一起 */
+.slot-main .well.main .osd.bottom { bottom: 40px; }
 .slot-foot { position: absolute; left: 0; right: 0; bottom: 0; display: flex; flex-wrap: wrap; gap: 4px 14px; padding: 8px 14px;
   background: var(--c-scrim); color: var(--c-onScrim); font-size: 14px; font-weight: 500; pointer-events: none; }
 .slot-pip ~ .slot-foot { right: calc(28% + 24px); border-top-right-radius: var(--r-r8); }
