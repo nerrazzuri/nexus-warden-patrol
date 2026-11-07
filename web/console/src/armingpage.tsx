@@ -2,7 +2,7 @@
 // 全部防区一样,或者每个防区单独设;例外日期(节假日、出远门);交班时间、多久没巡过;一个「保存」存整份。
 // 星期、日子、时区都由站点算(站点时区),网页只画站点回来的。
 import { useEffect, useRef, useState } from "preact/hooks";
-import { canSchedule, isOwnerLike } from "./model";
+import { canArm, canDisarm, canSchedule, isOwnerLike } from "./model";
 import { GuardPanel } from "./armguard";
 import { DevicesPanel } from "./devicespanel";
 import { api, ApiError, enc } from "./api";
@@ -137,6 +137,8 @@ export function ArmingPage({ say, now, role = "admin" }: { say: Say; now: number
             <div class="seg" role="group" aria-label={t("homeSwitch")}>
               {(["armed", "home"] as const).map((m) => (
                 <button key={m} type="button" aria-pressed={mode.source !== "schedule" && mode.mode === m}
+                  disabled={m === "armed" ? !canArm(role) : !canDisarm(role)}
+                  title={m !== "armed" && !canDisarm(role) ? t("armNoDisarm") : undefined}
                   onClick={() => setSwitching(m)}>{t(m === "armed" ? "modeArmed" : "modeHome")}</button>
               ))}
             </div>
