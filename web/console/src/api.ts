@@ -1,4 +1,5 @@
 // 站点接口(商业化 B1)。网页靠 HttpOnly cookie 认人(脚本拿不到令牌);改东西的请求带 X-Nexwar-Web 头防跨站伪造。
+import { t } from "./i18n";
 
 export class ApiError extends Error {
   constructor(
@@ -9,6 +10,13 @@ export class ApiError extends Error {
   ) {
     super(message);
   }
+}
+
+/** 站点回的错:没权限(站点标了 reason=forbidden)用界面自己的话(P1-80,英文界面不夹中文);别的照站点原话。 */
+function errorText(status: number, data: unknown): string {
+  const d = data as { error?: string; reason?: string };
+  if (status === 403 && d.reason === "forbidden") return t("noPermission");
+  return d.error ?? `HTTP ${status}`;
 }
 
 export type Fetch = typeof fetch;
@@ -56,7 +64,7 @@ export async function api<T = unknown>(method: "GET" | "POST", path: string, bod
     data = {};                                       // 正文不是 JSON(老接口、空回包):照旧当空的
   }
   if (!resp.ok) {
-    const msg = (data as { error?: string }).error ?? `HTTP ${resp.status}`;
+    const msg = errorText(resp.status, data);
     if (resp.status >= 500 && onServerError.cb) onServerError.cb(method, path, resp.status, msg);
     // 登录本身、开页时问「我是谁」的 401 不算「过期」:只有用着用着被踢才回登录页并提示
     if (resp.status === 401 && path !== "/api/login" && path !== "/api/me") onUnauthorized.cb();
@@ -88,7 +96,7 @@ export async function apiUpload<T = unknown>(path: string, file: Blob, headers: 
   }
   if (!resp.ok) {
     if (resp.status === 401) onUnauthorized.cb();
-    throw new ApiError(resp.status, (data as { error?: string }).error ?? `HTTP ${resp.status}`, data);
+    throw new ApiError(resp.status, errorText(resp.status, data), data);
   }
   return data as T;
 }

@@ -218,3 +218,11 @@ def test_Principal能复制能pickle_加账号必须给角色(tmp_path):
     with pytest.raises(TypeError):
         Accounts(db, now_ms=wall).add("x", PW)          # 不给角色不许默认成 admin
     db.close()
+
+
+def test_网页P1_80_没权限的报错用界面上的角色名_不带内部权限名(站点):
+    s = 站点
+    vic = _登(s, "vic")
+    code, d = s.req("POST", "/api/robots/A/abort", {"task_id": "x"}, token=vic)
+    assert code == 403 and d["reason"] == "forbidden", d
+    assert "只读" in d["error"] and "viewer" not in d["error"] and "dispatch" not in d["error"], d

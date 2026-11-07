@@ -579,9 +579,14 @@ class _Handler(TlsHandlerMixin):
         self._actor = name
         return name
 
+    #: 界面上的角色名(网页易用性 P1-80:报错不带内部权限名、角色用界面上的叫法)。
+    ROLE_NAMES = {"admin": "管理员", "engineer": "工程师", "guard": "保安", "owner": "经理", "viewer": "只读"}
+
     def _need(self, user, perm: str) -> None:
         if not allowed(getattr(user, "role", ""), perm):
-            raise HttpError(403, f"{getattr(user, 'role', '?')} 没有 {perm} 权限")
+            role = getattr(user, "role", "")
+            raise HttpError(403, f"你的账号（{self.ROLE_NAMES.get(role, role or '未登录')}）不能做这件事",
+                            extra={"reason": "forbidden", "need": perm})
 
     def _send_json(self, status: int, body: Any) -> None:
         self._status = status
