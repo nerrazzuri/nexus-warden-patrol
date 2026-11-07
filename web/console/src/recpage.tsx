@@ -46,7 +46,19 @@ export function canExport(role: string): boolean {
 }
 
 export function RecordingsPage(props: { robots: string[]; role: string; now: number; robot: string | null; at: number | null; say: (s: string) => void; camsOf?: (robot: string) => Cam[] }) {
-  const [robot, setRobot] = useState(props.robot && props.robots.includes(props.robot) ? props.robot : props.robots[0] ?? "");
+  // P1-29:解绑了的机器人(不在 props.robots 里)只要还有录像也列出来,标「已解绑」;从报警点进来的照样能看
+  const [robot, setRobot] = useState(props.robot || props.robots[0] || "");
+  const [past, setPast] = useState<string[]>([]);
+  useEffect(() => {
+    api<{ robots?: string[] }>("GET", "/api/recordings?limit=1")
+      .then((d) => {
+        const gone = (d.robots ?? []).filter((r) => !props.robots.includes(r));
+        setPast(gone);
+        setRobot((cur) => cur || gone[0] || "");
+      })
+      .catch(() => {});
+  }, [props.robots.join(",")]);
+  const allRobots = [...props.robots, ...past.filter((r) => !props.robots.includes(r))];
   const [cam, setCam] = useState<Cam>("front");
   // 这台机器人有哪几路(W40:装了热像的多一路);换到没有这一路的就回到前面那路
   const cams = props.camsOf?.(robot) ?? CAMS;
@@ -205,7 +217,7 @@ export function RecordingsPage(props: { robots: string[]; role: string; now: num
 
   const total = range ? covered(sp, range.since, range.until) : 0;
   const kept = (rows ?? []).filter((r) => r.keep).length;
-  const ls = range ? lanes(props.robots, allRows, alerts, range, segS) : [];
+  const ls = range ? lanes(allRobots, allRows, alerts, range, segS) : [];
   return (
     <div class="recpage">
       <div class="recbar">
@@ -222,8 +234,11 @@ export function RecordingsPage(props: { robots: string[]; role: string; now: num
             }} />
         </label>
         <div class="seg recrobots" role="group" aria-label={t("recRobot")}>
-          {props.robots.map((r) => (
-            <button key={r} type="button" aria-pressed={r === robot} onClick={() => switchTo(r, cur && head != null ? head : null)}>{nameOf(r)}</button>
+          {allRobots.map((r) => (
+            <button key={r} type="button" aria-pressed={r === robot} data-unbound={props.robots.includes(r) ? undefined : "1"}
+              onClick={() => switchTo(r, cur && head != null ? head : null)}>
+              {nameOf(r)}{props.robots.includes(r) ? "" : ` · ${t("recUnbound")}`}
+            </button>
           ))}
         </div>
         <div class="seg" role="group" aria-label={t("recCamera")}>
