@@ -1347,3 +1347,10 @@ input[type="date"]:not(.field input) { height: 36px; padding: 0 8px; border-radi
 /* P2-23:趋势图的坐标轴 */
 .spark-axis { stroke: var(--c-outline); stroke-width: 1; }
 .spark-tick { fill: var(--c-textMuted); font-size: 10px; }
+/* P2-33:「派机器人去看」卡片放到地图上方,不盖住图例和「全图」按钮 */
+.golook { top: 88px; bottom: auto; }
+@media (max-width: 720px) { .golook { left: 16px; right: 16px; width: auto; } }
+/* P2-37:放藏匿点第二步:提示醒目,第一个点外面画一圈 */
+.ly-step { font-weight: 600; color: var(--c-brand); }
+.ly-step-hint { font-weight: 600; }
+.draft-ring { fill: none; stroke: var(--c-brand); stroke-width: 2; stroke-dasharray: 4 3; }

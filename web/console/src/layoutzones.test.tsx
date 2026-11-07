@@ -104,6 +104,7 @@ describe("布置 → 防区:出口线、易藏点(W74 三期)", () => {
     fireEvent.click(btn(c, "标易藏点"));
     fireEvent.click(c.querySelector(".pick")!);
     expect(c.querySelector(".ly-marks")!.textContent).toContain("再点它朝哪看");
+    expect(c.querySelector(".ly-marks .ly-step")).not.toBeNull();   // P2-37:第二步醒目
     fireEvent.click(c.querySelector(".pick")!);
     fireEvent.input(document.querySelector('.modal input[name="mark"]')!, { target: { value: "楼梯间" } });
     fireEvent.submit(document.querySelector(".modal form")!);

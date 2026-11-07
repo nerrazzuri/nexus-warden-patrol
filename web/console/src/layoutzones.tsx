@@ -129,6 +129,9 @@ export function ZonesTab(p: TabProps) {
         areas={areas.map((a) => ({ name: a.zone, pts: a.points, kind: "zone" as const, hot: a.zone === sel }))}
         drawing={!!draft || !!placing || !!markDraft}
         onPick={pick}
+        // P2-37:放藏匿点第二步,在地图上明说「再点它朝哪看」
+        overlay={markDraft?.kind === "hide" && markDraft.pts.length === 1
+          ? <p class="routepick-hint ly-step-hint" data-hide-step2="1">{t("lyHideStep2")}</p> : undefined}
         world={draft && draft.length > 0 ? <polyline points={polyPx(p.meta, draft)} class="draft-line" /> : null}
         marks={(s) => <>
           {!draft && areas.map((a) => {
@@ -161,6 +164,7 @@ export function ZonesTab(p: TabProps) {
             );
           })}
           {markDraft?.pts.map(([x, y], i) => { const [sx, sy] = s.map(x, y); return <circle key={`d${i}`} cx={sx} cy={sy} r={5} class="draft-pt" />; })}
+          {markDraft?.kind === "hide" && markDraft.pts.length === 1 && (() => { const [sx, sy] = s.map(...markDraft.pts[0]); return <circle cx={sx} cy={sy} r={14} class="draft-ring" />; })()}
           {draft?.map(([x, y], i) => { const [sx, sy] = s.map(x, y); return <circle key={i} cx={sx} cy={sy} r={5} class="draft-pt" />; })}
           {!draft && !placing && !markDraft && cur?.points.map(([x, y], i) => {
             const [sx, sy] = s.map(x, y);
@@ -278,7 +282,7 @@ function MarksBox({ marks, draft, busy, onStart, onCancel, onRemove }: {
       <p class="muted small">{t("lyMarksHint")}</p>
       {draft ? (
         <div class="row wrap">
-          <span class="muted small" role="status">{hint}</span>
+          <span class={draft.kind === "hide" && draft.pts.length === 1 ? "ly-step small" : "muted small"} role="status">{hint}</span>
           <button type="button" class="btn sm" onClick={onCancel}>{t("cancel")}</button>
         </div>
       ) : (
