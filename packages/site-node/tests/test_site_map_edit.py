@@ -314,3 +314,25 @@ def test_网页P0_13_另存新版本_区域_特殊地面_底图都跟过去(站�
     got = s.req("GET", f"{nv}/display", token=tok)[1]
     assert got == want
     assert (s.api.home / "map-display" / MAP[0] / d["version"] / "basemap.png").is_file()
+
+
+def test_第2轮_底图上传后同一条连接上的下一个请求照常(站点):
+    """网页易用性第 2 轮(P0-13 残留 / P1-54):底图用 rfile.read 读体、没记账,收尾的 _drain
+    以为体还没读又去读,把同一条 keep-alive 连接上的下一个请求吞了 —— 上传底图后另存,区域、
+    特殊地面、底图全丢,页面停在旧版本也不报错。"""
+    import http.client
+
+    s = 站点
+    tok = _登(s)
+    host, port = s.api.httpd.server_address[:2]
+    conn = http.client.HTTPConnection(host, port, timeout=5)
+    body = b"\x89PNG\r\n\x1a\n" + b"0" * 100
+    conn.request("POST", f"{ADM}/basemap", body=body,
+                 headers={"Authorization": f"Bearer {tok}", "Content-Type": "image/png"})
+    r1 = conn.getresponse()
+    assert r1.status == 200 and json.loads(r1.read())["file"] == "basemap.png"
+    conn.request("GET", "/api/robots", headers={"Authorization": f"Bearer {tok}"})
+    r2 = conn.getresponse()
+    assert r2.status == 200, r2.read()
+    assert "robots" in json.loads(r2.read())
+    conn.close()

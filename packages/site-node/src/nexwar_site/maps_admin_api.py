@@ -222,7 +222,7 @@ def _basemap(h: Any, adm: MapAdmin, method: str, map_id: str, version: str) -> N
         raise HttpError(400, "Content-Length 不是数") from exc
     if not 0 < n <= MAX_BASEMAP:
         raise HttpError(413, "底图最大 8 MB")
-    data = h.rfile.read(n)
+    data = h._read(n)                 # 第 2 轮:记着读了多少,不然 _drain 再读一遍、吞掉同连接的下一个请求
     magic = b"\x89PNG" if ext == "png" else b"\xff\xd8"
     if not data.startswith(magic):
         raise HttpError(400, "文件不是 PNG / JPEG")
