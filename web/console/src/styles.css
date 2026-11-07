@@ -70,7 +70,7 @@ a { color: var(--c-tertiary); }
 }
 .btn:hover:not(:disabled) { background: var(--c-surfaceVariant); }
 .btn.sm { height: 32px; padding: 0 12px; font-size: 13px; }
-.btn:disabled { color: var(--c-textMuted); background: transparent; border-color: var(--c-outline); cursor: default; opacity: 0.7; }
+.btn:disabled { color: var(--c-textMuted); background: transparent; border-color: var(--c-outline); cursor: default; }
 .btn.primary { background: var(--c-brand); color: var(--c-onBrand); border-color: var(--c-brand); font-weight: 700; }
 .btn.primary:hover:not(:disabled) { background: var(--c-brand); opacity: 0.9; }
 .btn.primary:disabled { background: var(--c-surfaceVariant); color: var(--c-textMuted); border-color: var(--c-surfaceVariant); opacity: 1; }
