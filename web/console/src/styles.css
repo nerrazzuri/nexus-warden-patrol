@@ -1204,3 +1204,8 @@ input.invalid { border-color: var(--c-error); }
   input[type="checkbox"], input[type="radio"] { width: 22px; height: 22px; }
   label:has(> input[type="checkbox"]), label:has(> input[type="radio"]) { min-height: 44px; display: inline-flex; align-items: center; gap: 8px; }
 }
+/* P1-41:路线编辑面板自己滚动,放弃 / 删除那一行贴在面板底部(不用滚到页面最下面) */
+@media (min-width: 900px) {
+  .ly-main .routeside { max-height: calc(100vh - 220px); overflow-y: auto; }
+}
+.routeside .route-acts { position: sticky; bottom: 0; background: var(--c-surface); padding: 8px 0; z-index: 1; }
