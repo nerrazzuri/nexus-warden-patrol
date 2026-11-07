@@ -146,7 +146,8 @@ export function SiteMap(props: {
     const { px, py } = toPx(meta, pose.x, pose.y);
     return onMap(meta, px, py, 20) ? [{ u, px, py, yaw: pose.yaw }] : [];
   });
-  const legend: LegendKey[] = [...(bots.length ? ["robot" as const] : []), ...(pins.length ? ["alarm" as const] : [])];
+  // P2-15:机器人、报警两项一直在图例里(没有的时候也说清是什么样子)
+  const legend: LegendKey[] = ["robot", "alarm"];
 
   return (
     <div class="mapbox" {...pose.wrapProps}>

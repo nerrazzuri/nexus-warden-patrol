@@ -1336,3 +1336,6 @@ input[type="date"]:not(.field input) { height: 36px; padding: 0 8px; border-radi
 .ticks { cursor: pointer; }
 .tl-tracks { touch-action: pan-y; user-select: none; }
 .rec-jump { position: relative; } .rec-jump .error { position: absolute; left: 0; top: 100%; white-space: nowrap; font-weight: 400; }
+/* P2-15:虚拟墙换成橙色,跟红色禁区分开;禁区写名字 */
+.vwall-line { stroke: var(--c-warning); }
+.nogo-name { fill: var(--c-error); paint-order: stroke; stroke: var(--c-surface); stroke-width: 3px; font-weight: 600; text-anchor: middle; dominant-baseline: middle; pointer-events: none; }
