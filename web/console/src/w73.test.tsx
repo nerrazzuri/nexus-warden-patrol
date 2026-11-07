@@ -88,6 +88,8 @@ describe("布置 → 防区路线", () => {
     await waitFor(() => expect(c.querySelectorAll(".pointlist li").length).toBe(2));
     expect(c.textContent).toContain("生成了 2 个点");
     expect(c.textContent).toContain("西区：没放点");
+    // P1-40:有防区没放点 → 给「去设待命点」入口
+    expect(c.querySelector("[data-gen-standby]")!.getAttribute("href")).toBe("#/admin/layout?tab=standby");
     await waitFor(() => expect(save).not.toBeNull());
     await save!();
     const body = posted.find((p) => p.url === "/api/routes/night-guard")!.body;

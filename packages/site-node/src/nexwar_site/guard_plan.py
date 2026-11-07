@@ -216,7 +216,7 @@ class ZonePosts:
             # 没有规划栅格:按定位可靠那一关挑网格上的点(粗一点)
             if inside(near[0], near[1], poly) and not self._usable(map_id, version, *near, None):
                 return near, ""
-            return None, "此版本地图没有规划栅格,无法自动选点"
+            return None, "这张地图还不能自动选点，请在地图上手动点路线"
         cm = g.cm
         inpoly = costmap.polygon_mask(tuple((p[0], p[1]) for p in poly), cm.shape,
                                       float(cm.res), cm.origin)
@@ -229,9 +229,10 @@ class ZonePosts:
                                          float(cm.res), cm.origin) & g.free).any():
                 return None, "防区里没有机器人站得下的地方"
             if g.no_starts:
-                return None, ("防区跟地图上最大的那片可走区域不连着(还没设待命点):"
-                              "设一个待命点,或者把防区圈到连得上的地方")
-            return None, "防区里站得下的地方从待命点、原点都走不到"
+                # 网页易用性 P1-40:说人话,告诉怎么办
+                return None, ("机器人走不到这个防区：还没设待命点。"
+                              "先在「待命点」里设一个，或者把防区画到机器人走得到的地方")
+            return None, "机器人从待命点、原点都走不到这个防区里，把防区画到机器人走得到的地方"
         res = float(cm.res)
         xs = cm.origin[0] + (cc + 0.5) * res
         ys = cm.origin[1] + (rr + 0.5) * res
