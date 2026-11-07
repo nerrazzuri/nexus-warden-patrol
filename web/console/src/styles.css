@@ -1319,7 +1319,6 @@ input[type="file"]::file-selector-button {
 /* P2-27:顶栏时钟小一点 */
 .topbar .clock { font-size: 14px; line-height: 20px; font-weight: 500; color: var(--c-textMuted); white-space: nowrap; }
 .topbar .clock-date { margin-right: 2px; }
-@media (max-width: 720px) { .topbar .clock-date { display: none; } }
 /* P2-32:断流时画面的替代文字不画出来(读屏照样能读),免得压在状态标上 */
 .well img.feed { color: transparent; font-size: 0; }
 /* P2-40:缩略图占位 */
