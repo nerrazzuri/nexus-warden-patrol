@@ -58,7 +58,13 @@ def overview(dispatcher: Any, db: Any, *, now_ms: int, tz: tzinfo) -> list[dict[
                    "title": r["title"] or "", "first_ms": r["first_ms"],
                    "resolved_ms": r["resolved_ms"], "resolved_by": r["resolved_by"] or ""}
                   for r in mine if r["first_ms"] >= since][:RECENT_MAX]
-        out.append({"robot_id": rid, "name": names.get(rid, ""), "revoked": rec.revoked,
+        # 网页易用性 P1-23:连上过没有(刚登记、等激活的不是「离线故障」)。站点重启后还没新状态的,
+        # 看它以前报过事件、回过执没有
+        seen = fresh or (getattr(c, "status_live_at", None) is not None if c is not None else False) \
+            or bool(db.query("SELECT 1 FROM events WHERE robot_id=? LIMIT 1", (rid,))) \
+            or bool(db.query("SELECT 1 FROM commands WHERE robot_id=? AND ack_result IS NOT NULL "
+                             "AND ack_result NOT IN ('expired', 'timeout') LIMIT 1", (rid,)))
+        out.append({"robot_id": rid, "name": names.get(rid, ""), "revoked": rec.revoked, "ever_seen": seen,
                     "expires_at": rec.expires_at, "online": fresh,
                     "battery_pct": battery_pct(c, fresh=fresh),
                     "manual_only": reg.manual_only(rid) is not None,

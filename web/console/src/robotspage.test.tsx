@@ -370,3 +370,15 @@ describe("W71 Nav2 没起来", () => {
     expect(btn(d, "恢复")).toBeUndefined();
   });
 });
+
+describe("网页易用性第 1 轮 P1-23", () => {
+  it("还没连上过的:灰的「还没连上(等激活)」,不是红的离线", async () => {
+    robots = [card({ robot_id: "N", online: false, ever_seen: false, battery_pct: null }), card({ robot_id: "B", online: false, ever_seen: true })];
+    const { container: c } = page();
+    await waitFor(() => expect(c.querySelector('[data-robot="N"]')).not.toBeNull());
+    const n = c.querySelector('[data-robot="N"] .fleet-state')!;
+    expect(n.textContent).toContain("还没连上");
+    expect(n.querySelector(".tone-error")).toBeNull();
+    expect(c.querySelector('[data-robot="B"] .fleet-state .tone-error')).not.toBeNull();
+  });
+});

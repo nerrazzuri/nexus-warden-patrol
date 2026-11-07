@@ -28,7 +28,7 @@ export interface RobotCard {
   agent: string | null; compat: string; manual_only: boolean;
   wifi?: Wifi | null;
   /** W72 详情:老站点没有这些。 */
-  patrols_7d?: number; aborts_7d?: number; last_patrol_ms?: number | null; last_seen_ms?: number | null;
+  patrols_7d?: number; aborts_7d?: number; last_patrol_ms?: number | null; last_seen_ms?: number | null; ever_seen?: boolean;
   storage?: { used_ratio: number; backlog_files: number; oldest_backlog_s: number | null } | null;
   map?: { id: string; version: string | null; match: boolean | null } | null;
   devices?: { id: string; state: string }[];
@@ -137,7 +137,9 @@ export function RobotsPage({ say, now, units = [], readOnly = false, role = "adm
                   <span class="robot-name">{label(r)}</span>
                   {r.name && <small class="muted mono">{r.robot_id}</small>}
                   <span class="fleet-state">
-                    {!r.online ? <span class="state tone-error">{t("st_offline")}</span>
+                    {/* P1-23:刚登记、还没连上过的不是故障:灰的「等它连上」,不是红的「离线」 */}
+                    {!r.online && r.ever_seen === false ? <span class="state">{t("fleetNeverSeen")}</span>
+                      : !r.online ? <span class="state tone-error">{t("st_offline")}</span>
                       : warn ? <span class="state tone-warning"><Shape kind="P2" />{t("fleetAttention")}</span>
                       : <span class="state tone-success">{t("online")}</span>}
                   </span>
