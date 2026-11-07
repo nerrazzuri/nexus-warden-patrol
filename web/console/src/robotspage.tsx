@@ -528,7 +528,7 @@ function AddRobot({ onClose, onDone, say }: { onClose: () => void; onDone: (id: 
       const d = await api<{ code: string; hours: number }>("POST", "/api/admin/robots", { robot_id: id, days });
       onDone(id, d.code, d.hours);
     } catch (x) {
-      if (x instanceof ApiError && x.status === 409 && x.message.includes("旧连接")) say(t("robotIdOldConn", { id }));
+      if (x instanceof ApiError && x.status === 409 && String((x.data as { error?: string } | undefined)?.error ?? x.message).includes("旧连接")) say(t("robotIdOldConn", { id }));
       else if (x instanceof ApiError && x.status === 409) say(t("robotIdTaken", { id }));
       else say(errText(x));
     } finally {

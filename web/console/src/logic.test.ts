@@ -291,7 +291,7 @@ describe("api", () => {
     const cb = vi.fn();
     onUnauthorized.cb = cb;
     setFetch(async () => new Response(JSON.stringify({ error: "没登录" }), { status: 401 }));
-    await expect(api("GET", "/api/robots")).rejects.toMatchObject({ status: 401, message: "没登录" });
+    await expect(api("GET", "/api/robots")).rejects.toMatchObject({ status: 401, message: "Please sign in again." });
     expect(cb).toHaveBeenCalledTimes(1);
     await expect(api("POST", "/api/login", {})).rejects.toBeInstanceOf(ApiError);
     await expect(api("GET", "/api/me")).rejects.toBeInstanceOf(ApiError);

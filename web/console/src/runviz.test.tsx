@@ -260,7 +260,7 @@ describe("定位历史页", () => {
     setFetch((async () => json({ error: "站点忙" }, 500)) as never);
     const { container: c } = render(<LocHistoryPage robots={["A"]} now={1_700_000_000_000} />);
     await waitFor(() => expect(c.querySelector("[role=alert]")).not.toBeNull());
-    expect(c.querySelector("[role=alert]")!.textContent).toContain("站点忙");
+    expect(c.querySelector("[role=alert]")!.textContent).toContain("站点忙");   // 认不出的:英文一句 + 站点原话
     expect(c.textContent).not.toContain("No localization problems");
   });
 });
@@ -367,7 +367,7 @@ describe("摄像头登记", () => {
     fireEvent.input(f[4], { target: { value: "z" } });
     fireEvent.submit(document.querySelector(".camform")!);
     await waitFor(() => expect(document.querySelector(".camform [role=alert]")).not.toBeNull());
-    expect(document.querySelector(".camform [role=alert]")!.textContent).toContain("地址里不要带账号口令");
+    expect(document.querySelector(".camform [role=alert]")!.textContent).toContain("Don't put the account or password in the address");
   });
 });
 
