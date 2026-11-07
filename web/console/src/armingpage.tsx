@@ -57,6 +57,7 @@ export function ArmingPage({ say, now, role = "admin" }: { say: Say; now: number
   const [zone, setZone] = useState("");
   const [sel, setSel] = useState<{ day: number; start: number } | null>(null);
   const [gridHint, setGridHint] = useState<string | null>(null);
+  const [sec, setSec] = useState<"times" | "guard" | "devices">("times");
   const [copyFrom, setCopyFrom] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
   const [switching, setSwitching] = useState<"armed" | "home" | null>(null);
@@ -120,14 +121,34 @@ export function ArmingPage({ say, now, role = "admin" }: { say: Say; now: number
     }
   }
 
+  // P1-57:一页三块,分标签:布防时间(顶上「保存」管这块)、守卫值勤(自己存)、报警设备(马上存)
+  const tabs = (
+    <div class="ly-tabs arm-tabs" role="tablist">
+      {(["times", "guard", "devices"] as const).map((x) => (
+        <button key={x} type="button" role="tab" aria-selected={sec === x} data-arm-tab={x}
+          onClick={() => setSec(x)}>{t(x === "times" ? "armTabTimes" : x === "guard" ? "armTabGuard" : "armTabDevices")}</button>
+      ))}
+    </div>
+  );
+  if (sec !== "times") {
+    return (
+      <section class="arming">
+        <div class="panel-head"><h1>{t("tabArming")}</h1></div>
+        {tabs}
+        {dirty && <p class="arm-dirty" role="status">{t("armDirtyOther")}</p>}
+        {sec === "guard" ? <GuardPanel say={say} now={now} canEdit={canSchedule(role)} /> : <DevicesPanel say={say} canEdit={isOwnerLike(role)} />}
+      </section>
+    );
+  }
   return (
     <section class="arming">
       <div class="panel-head">
         <h1>{t("tabArming")}</h1>
+        {dirty && <span class="ly-dirty small" role="status">{t("armDirty")}</span>}
         <button type="button" class="btn primary push arm-save" disabled={busy || !dirty} onClick={trySave}>{t("save")}</button>
       </div>
+      {tabs}
       <p class="muted lead">{t("armLead")}</p>
-      {dirty && <p class="arm-dirty" role="status">{t("armDirty")}</p>}
       {/* W72(用户 11-03):在网页上要能直接布防 / 撤防,不用翻到「系统状态」页去找 */}
       <section class="panel arm-now">
         <div class="arm-now-text">
@@ -217,9 +238,6 @@ export function ArmingPage({ say, now, role = "admin" }: { say: Say; now: number
       <Exceptions list={exceptions} say={say} onChange={setExceptions} />
       {role === "owner" && <p class="muted small">{t("armOwnerNote")}</p>}
 
-      {/* W73 第二期:布防时谁去巡、每圈隔多久、预报、此刻、值守记录(方案单独保存) */}
-      <GuardPanel say={say} now={now} canEdit={canSchedule(role)} />
-      <DevicesPanel say={say} canEdit={isOwnerLike(role)} />
 
       {canDuty && <section class="panel arm-duty">
         <h2>{t("armDutyTitle")}</h2>

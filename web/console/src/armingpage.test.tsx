@@ -172,9 +172,9 @@ describe("布防时间页", () => {
   it("没存离开有提示", async () => {
     const { container: c } = page();
     await waitFor(() => expect(row(c, 0).querySelector(".armblock")).not.toBeNull());
-    expect(c.querySelector(".arm-dirty")).toBeNull();
+    expect(c.querySelector(".ly-dirty")).toBeNull();
     drag(row(c, 3).querySelector(".armtrack")!, 60, 120);
-    expect(c.querySelector(".arm-dirty")).not.toBeNull();
+    expect(c.querySelector(".ly-dirty")).not.toBeNull();
     const ev = new Event("beforeunload", { cancelable: true });
     window.dispatchEvent(ev);
     expect(ev.defaultPrevented).toBe(true);
@@ -246,5 +246,17 @@ describe("网页易用性第 1 轮 P1-59", () => {
     drag(row(c, 1).querySelector(".armtrack")!, 600, 605);
     await waitFor(() => expect(c.querySelector("[data-arm-hint]")!.textContent).toContain("按住拖动"));
     expect(row(c, 1).querySelectorAll(".armblock").length).toBe(0);
+  });
+});
+
+describe("网页易用性第 1 轮 P1-57", () => {
+  it("分三个标签:布防时间有顶上保存,另外两个没有", async () => {
+    const { container: c } = page();
+    await waitFor(() => expect(row(c, 0).querySelector(".armblock")).not.toBeNull());
+    expect(c.querySelector(".arm-save")).not.toBeNull();
+    expect(c.querySelector(".arm-guard")).toBeNull();
+    fireEvent.click(c.querySelector('[data-arm-tab="guard"]')!);
+    expect(c.querySelector(".arm-save")).toBeNull();
+    expect(c.querySelector(".armgrid")).toBeNull();
   });
 });
