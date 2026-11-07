@@ -214,3 +214,15 @@ describe("网页易用性第 1 轮 P1-36", () => {
     expect(closesLoop(meta, pts.slice(0, 2), 20, 20)).toBe(false);
   });
 });
+
+describe("网页易用性第 1 轮 P1-44", () => {
+  it("历史摘要按界面语言拼;老站点没 facts 用站点给的", async () => {
+    const { historySummary } = await import("./layoutpage");
+    const row = { id: 1, kind: "nogo", item: "", by: "a", at_ms: 0, note: "", summary: "2 块:门、库" };
+    lang.value = "en";
+    expect(historySummary("nogo", { ...row, facts: { n: 2, names: ["门", "库"] } })).toBe("2 areas: 门, 库");
+    expect(historySummary("route", { ...row, facts: { n: 0, names: [], deleted: true } })).toBe("deleted");
+    expect(historySummary("nogo", row)).toBe("2 块:门、库");
+    lang.value = "zh";
+  });
+});

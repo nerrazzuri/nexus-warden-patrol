@@ -228,3 +228,11 @@ def test_外审R3_退回带的图和层对不上_拒绝不动(站点):
         code, d = s.req("POST", f"/api/layout/history/{old['id']}/restore", body, token=tok)
         assert code == 409, (exp, d)
     assert len(_hist(s, tok, "zones")) == 2                # 没退
+
+
+def test_网页P1_44_摘要原料_网页按语言拼():
+    from nexwar_site.layout_history import facts
+    assert facts("nogo", [{"label": "门"}, {"id": "z2"}]) == {"n": 2, "names": ["门", "z2"]}
+    assert facts("route", None) == {"n": 0, "names": [], "deleted": True}
+    assert facts("route", {"waypoints": [1, 2, 3]})["n"] == 3
+    assert facts("cameras", [{}, {}])["n"] == 2
