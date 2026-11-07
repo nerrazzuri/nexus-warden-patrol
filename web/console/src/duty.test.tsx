@@ -234,3 +234,33 @@ describe("值班页的状态条", () => {
     expect(rows[0].textContent).toContain("80%");
   });
 });
+
+describe("网页易用性第 1 轮 P0-02 / P0-06:不该说一切正常的时候", () => {
+  it("连不上站点:写状态未知,不写一切正常", () => {
+    const { container: c } = render(<DutyPage units={[unit("A", "idle")]} alerts={[]} now={1000} role="guard" stale
+      say={vi.fn()} refresh={vi.fn(async () => {})} onZoom={() => {}} />);
+    expect(c.textContent).toContain("状态未知");
+    expect(c.textContent).not.toContain("一切正常");
+  });
+
+  it("全部急停后:写几台已停止,保安能全部恢复(先确认)", async () => {
+    const held = (id: string) => unit(id, "manual", { robot: { robot_id: id, active: true, fresh: true, revoked: false,
+      held: { by: "gina" }, status: { online: true, last_seen: 0 } } as never });
+    const r = page([], [held("A"), held("B"), unit("C", "idle")]);
+    expect(r.container.textContent).toContain("2 台已停止");
+    expect(r.container.textContent).not.toContain("一切正常");
+    fireEvent.click(btn(r.container, "全部恢复")!);
+    expect(posts).toEqual([]);
+    fireEvent.click(btn(r.container.ownerDocument.querySelector(".modal")!, "全部恢复")!);
+    await waitFor(() => expect(posts.map((p) => p.url).sort()).toEqual(["/api/robots/A/resume", "/api/robots/B/resume"]));
+    await waitFor(() => expect(r.say).toHaveBeenCalledWith("已恢复 2 台机器人。"));
+  });
+
+  it("只读账号看得到已停止,没有恢复按钮", () => {
+    const h = unit("A", "manual", { robot: { robot_id: "A", active: true, fresh: true, revoked: false, held: { by: "x" },
+      status: { online: true, last_seen: 0 } } as never });
+    const { container: c } = render(<DutyPage units={[h]} alerts={[]} now={1000} role="viewer" say={vi.fn()} refresh={vi.fn(async () => {})} onZoom={() => {}} />);
+    expect(c.textContent).toContain("1 台已停止");
+    expect(btn(c, "全部恢复")).toBeUndefined();
+  });
+});

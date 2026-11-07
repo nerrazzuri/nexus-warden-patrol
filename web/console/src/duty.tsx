@@ -9,6 +9,7 @@ import { hm, nameOf } from "./data";
 import { modeLabel } from "./armingpage";
 import { Shape } from "./icons";
 import { AlertDetail } from "./alertdetail";
+import { Confirm } from "./dialogs";
 import { alertHeadline, canHandleAlerts } from "./alertinfo";
 import { guardAlarms, pickSlots, rankUnits, type SlotPick } from "./dutyrank";
 import { t } from "./i18n";
@@ -16,7 +17,7 @@ import { StateText, type UnitInfo } from "./live";
 import type { CanvasArea } from "./mapcanvas";
 import { SiteMap } from "./mappage";
 import { pointInPolygon } from "./mapview";
-import type { Alert, Mode } from "./model";
+import { canDispatch, type Alert, type Mode } from "./model";
 import { VideoSlot, type Scene } from "./slot";
 import { TodayPatrols } from "./todaypatrols";
 
@@ -37,6 +38,8 @@ export function DutyPage(props: {
   onZoom: (robot: string) => void;
   /** 布防状态(一切正常那一行写上);没有就不写。 */
   mode?: Mode | null;
+  /** 跟站点断了 / 数据过期(P0-02):不能说「一切正常」。 */
+  stale?: boolean;
 }) {
   const [pins, setPins] = useState<[string | null, string | null]>([null, null]);
   // 网页易用性第 1 轮 P0-04/05:点一条警报看详情,关警报要选结论
@@ -108,6 +111,16 @@ export function DutyPage(props: {
   };
 
   const online = props.units.filter((u) => u.state !== "offline").length;
+  // P0-06:「全部急停」以后每台都叫停着,要人恢复;不是「一切正常」
+  const held = props.units.filter((u) => u.robot.held != null);
+  const [askResume, setAskResume] = useState(false);
+  async function resumeAll() {
+    setAskResume(false);
+    const res = await Promise.allSettled(held.map((u) => api("POST", `/api/robots/${enc(u.robot.robot_id)}/resume`, {})));
+    const bad = res.filter((r) => r.status === "rejected").length;
+    props.say(bad ? t("failed", { why: `${bad}/${held.length}` }) : t("dutyResumed", { n: held.length }));
+    await props.refresh();
+  }
   return (
     <div class="duty">
       {top ? (
@@ -132,6 +145,24 @@ export function DutyPage(props: {
             )}
             <button type="button" class="btn onsolid ghost" onClick={() => setDetail(top.key)}>{t(can && !mustArrive(top) ? "dutyDetailClose" : "dutyDetail")}</button>
           </div>
+        </div>
+      ) : props.stale ? (
+        <p class="allclear unknown" role="status">
+          <i class="dot" aria-hidden="true" /><b>{t("dutyUnknown")}</b>
+          <span>{t("dutyUnknownSub")}</span>
+        </p>
+      ) : held.length > 0 ? (
+        <div class="banner p2" role="status">
+          <Shape kind="P2" />
+          <div class="banner-text">
+            <b>{t("dutyHeld", { n: held.length })}</b>
+            <span>{held.map((u) => nameOf(u.robot.robot_id)).join("、")} · {t("dutyHeldSub")}</span>
+          </div>
+          {canDispatch(props.role) && (
+            <div class="banner-acts">
+              <button type="button" class="btn onsolid" onClick={() => setAskResume(true)}>{t("dutyResumeAll")}</button>
+            </div>
+          )}
         </div>
       ) : (
         <p class="allclear" role="status">
@@ -191,6 +222,9 @@ export function DutyPage(props: {
         </ul>
         <TodayPatrols />
       </section>
+      {askResume && (
+        <Confirm text={t("dutyResumeAsk", { n: held.length })} yes={t("dutyResumeAll")} onNo={() => setAskResume(false)} onYes={resumeAll} />
+      )}
       {shown && (
         <AlertDetail a={shown} role={props.role} now={props.now} units={props.units} onClose={() => setDetail(null)}
           refresh={props.refresh} say={props.say} onFindPose={(r) => { setFinding(r); setSelected(r); }} />

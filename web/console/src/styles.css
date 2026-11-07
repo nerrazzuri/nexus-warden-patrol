@@ -603,6 +603,8 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--c-primary); }
 .allclear { margin: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 16px; padding: 4px 2px; font-size: 14px; color: var(--c-textSecondary); }
 .allclear b { color: var(--c-text); font-weight: 600; }
 .allclear .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--c-success); margin-right: -8px; }
+.allclear.unknown .dot { background: var(--c-warning); }
+.allclear.unknown b { color: var(--c-warning); }
 .alarmlist { list-style: none; margin: 0; padding: 0; overflow: auto; }
 .alarmlist li { display: flex; align-items: flex-start; gap: 10px; padding: 12px 16px; border-bottom: 1px solid var(--c-outline); }
 .alarmlist li.p1 { background: var(--c-errorSoft); }
