@@ -147,7 +147,7 @@ export function Console({ me, onOut }: { me: Me; onOut: (note?: string) => void 
           if (note) return onOut(note);
           try { await api("POST", "/api/logout", {}); } finally { onOut(); }
         }} />
-      {help && <HelpDialog role={me.role} onClose={() => setHelp(false)} />}
+      {help && <HelpDialog role={me.role} page={route.page} onClose={() => setHelp(false)} />}
       {stale && (
         <div class="stalebar" role="alert">
           <Shape kind="P2" />

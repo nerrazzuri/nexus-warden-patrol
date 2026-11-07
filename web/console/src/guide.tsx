@@ -98,8 +98,17 @@ const FAQ: [Key, Key, string[] | null][] = [
   ["fqStart", "fqStartA", ["admin", "engineer"]],
 ];
 
+/** P1-68:帮助跟着当前页:先说这一页是干什么的。 */
+const PAGE_HELP: Record<string, Key> = {
+  duty: "hpDuty", live: "hpLive", map: "hpMap", alarms: "hpAlarms", recordings: "hpRecordings",
+  "admin/robots": "hpRobots", "admin/layout": "hpLayout", "admin/arming": "hpArming", "admin/access": "hpAccess",
+  "admin/users": "hpUsers", "admin/reports": "hpReports", "admin/home": "hpHome", "admin/maps": "hpMaps",
+  "admin/localization": "hpLoc", "admin/diag": "hpDiag", "admin/upgrade": "hpUpgrade", "admin/system": "hpSystem",
+};
+
 /** 使用教程 + 常见问题(一个对话框,两段)。第一次登录自动打开,关的时候记下看过了。 */
-export function HelpDialog({ role, onClose }: { role: string; onClose: () => void }) {
+export function HelpDialog({ role, onClose, page }: { role: string; onClose: () => void; page?: string }) {
+  const here = page ? PAGE_HELP[page] : undefined;
   const [tab, setTab] = useState<"tour" | "faq">("tour");
   const [i, setI] = useState(0);
   const steps = STEPS[role] ?? STEPS.viewer;
@@ -114,6 +123,7 @@ export function HelpDialog({ role, onClose }: { role: string; onClose: () => voi
           <button type="button" aria-pressed={tab === "tour"} onClick={() => setTab("tour")}>{t("helpTour")}</button>
           <button type="button" aria-pressed={tab === "faq"} onClick={() => setTab("faq")}>{t("helpFaq")}</button>
         </div>
+        {here && <div class="help-here" data-help-here="1"><b>{t("helpHere")}</b><p>{t(here)}</p></div>}
         {tab === "tour" ? (
           <div class="help-step">
             <p class="muted small">{i + 1} / {steps.length}</p>
