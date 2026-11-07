@@ -227,7 +227,7 @@ export function SideNav(props: { me: Me; page: Page; alarms: number | null; noti
     <aside class="sidenav">
       <div class="sidenav-brand">
         <BrandMark />
-        <span class="sidenav-site" title={props.me.site_name}>{props.me.site_name}</span>
+        <span class="sidenav-site" title={props.me.site_name}>{t("sideSite", { n: props.me.site_name })}</span>
       </div>
       <button type="button" class="btn sm nav-toggle" aria-expanded={menu} aria-controls="mainnav" onClick={() => setMenu(!menu)}>
         ☰ {t("navMenu")}{props.alarms ? <span class="badge alarm mono">{props.alarms}</span> : null}

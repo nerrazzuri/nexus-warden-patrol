@@ -191,7 +191,8 @@ export function ArmingPage({ say, now, role = "admin" }: { say: Say; now: number
       </div>
       {perZone && (
         <div class="arm-zones chips">
-          {zones.length === 0 && <span class="muted small">{t("armNoZones")}</span>}
+          {/* P2-43:没有防区只说一句,给去画的入口 */}
+          {zones.length === 0 && <span class="muted small">{t("armNoZones")} <a href="#/admin/layout?tab=zones">{t("armGoDrawZones")}</a></span>}
           {zones.map((z) => (
             <button key={z} type="button" class="chip" aria-pressed={zone === z} onClick={() => { setZone(z); setSel(null); }}>{z}</button>
           ))}
@@ -202,7 +203,7 @@ export function ArmingPage({ say, now, role = "admin" }: { say: Say; now: number
           <p>{t("armFollowsAll", { z: zone })}</p>
           <button type="button" class="btn" onClick={() => setSlots(copyZone(slots, "", zone))}>{t("armOwnZone")}</button>
         </div>
-      ) : (perZone && zone === "") ? <p class="muted">{t("armPickZone")}</p> : (
+      ) : (perZone && zone === "") ? (zones.length > 0 ? <p class="muted">{t("armPickZone")}</p> : null) : (
         <>
           <WeekGrid slots={slots.filter((x) => x.zone === editing)} sel={sel}
             onAdd={(day, a, b) => {
