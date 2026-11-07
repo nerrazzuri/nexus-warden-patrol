@@ -25,6 +25,9 @@ const en = {
   sendChecking: "Sent to {id}. Checking that it can start…",
   sendStarted: "{id} is on its way",
   sendRefused: "{id} did not start: {why}. {act}",
+  pfFailed: "Pre-departure check failed: {why}",
+  batteryTurned: "battery low, it turned back",
+  noReason: "reason not given — see Alarms",
   markHome: "Mark origin here",
   markHomeAsk: "Mark where {id} stands now as its origin on this map? The origin is where it returns and swaps batteries. Make sure it is localized (green) and standing at the right spot.",
   markHomeDone: "Origin marked for {id}",
@@ -51,6 +54,9 @@ const zh: Record<AKey, string> = {
   sendChecking: "已发给 {id}，正在确认它能出发…",
   sendStarted: "{id} 已出发",
   sendRefused: "{id} 没有出发：{why}。{act}",
+  pfFailed: "出发前检查未通过：{why}",
+  batteryTurned: "电量不足，中途返回",
+  noReason: "没有写原因，去报警记录看",
   markHome: "在这儿标原点",
   markHomeAsk: "把 {id} 现在站的位置标成这张地图上的原点？原点是它返航、换电池的地方。请确认它定位良好（绿色）并站在正确的位置。",
   markHomeDone: "已给 {id} 标好原点",
@@ -78,6 +84,20 @@ const PREFLIGHT: Record<string, [AKey, AKey]> = {
 function preflightKeys(a: Alert): [AKey, AKey] {
   const c = (a.context as { check?: string } | undefined)?.check;
   return (c && PREFLIGHT[c]) || ["pfOther", "pfOtherDo"];
+}
+
+/** 网页易用性 P1-14:站点给的巡逻失败原因(机器人上的原话,常带检查项名、括号里的细节)翻成人话;
+ *  认不出的原样给(悬停看全文)。 */
+export function plainReason(raw: string): string {
+  const pf = /起飞前检查未通过[:：]\s*([a-z_]+)/.exec(raw);
+  if (pf) return at("pfFailed", { why: at((PREFLIGHT[pf[1]] ?? ["pfOther"])[0]) });
+  if (/电量\s*[\d.]+%\s*低于中止线/.test(raw)) return at("batteryTurned");
+  return raw;
+}
+
+/** 没走完却没写原因的(P1-14):说去哪儿看。 */
+export function missingReason(): string {
+  return at("noReason");
 }
 
 /** 警报标题:按种类的固定标题;出发前检查没过的再接上是哪一项。 */

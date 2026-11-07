@@ -143,3 +143,14 @@ describe("定位页标原点", () => {
     expect(btn(c, "在这儿标原点")).toBeUndefined();
   });
 });
+
+describe("P1-14 今日巡逻的原因说人话", () => {
+  it("出发前检查、半路没电翻成人话,认不出的原样", async () => {
+    const { plainReason } = await import("./alertinfo");
+    expect(plainReason("起飞前检查未通过: home(地图 'mall' 未标原点,先去标一个换电位); battery(...)")).toBe("出发前检查未通过：地图还未标原点");
+    expect(plainReason("电量 22% 低于中止线 25%")).toBe("电量不足，中途返回");
+    expect(plainReason("到点没有能派的机器人")).toBe("到点没有能派的机器人");
+    lang.value = "en";
+    expect(plainReason("起飞前检查未通过: localized(定位当前是 Lost)")).toBe("Pre-departure check failed: localization is not settled");
+  });
+});

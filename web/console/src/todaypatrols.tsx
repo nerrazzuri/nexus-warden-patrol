@@ -1,5 +1,6 @@
 // 今天的巡逻(W53):日程的每一轮和临时巡逻按时间排,一行一趟。值班页左下角。站点 GET /api/patrols/today。
 import { useEffect, useState } from "preact/hooks";
+import { missingReason, plainReason } from "./alertinfo";
 import { api } from "./api";
 import { hm } from "./data";
 import { t, type Key } from "./i18n";
@@ -61,7 +62,8 @@ export function TodayPatrols() {
               <span class="mono">{siteHm(x.at_ms, off)}</span>
               <span class="today-what">
                 {[x.kind === "adhoc" ? t("tdAdhoc") : "", x.label, x.robot, x.kind === "adhoc" ? x.by : ""].filter(Boolean).join(" · ")}
-                {x.reason && <span class="muted small"> · {x.reason}</span>}
+                {x.reason ? <span class="muted small"> · {plainReason(x.reason)}</span>
+                  : (x.state === "failed" || x.state === "missed") && <span class="muted small"> · {missingReason()}</span>}
               </span>
               <span class={`tdchip ${tone}`}>{label}</span>
             </li>
