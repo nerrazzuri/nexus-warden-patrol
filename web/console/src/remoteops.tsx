@@ -7,6 +7,7 @@ import { useEffect, useState } from "preact/hooks";
 import { useLoad } from "./admin";
 import { api, apiUpload, ApiError, enc } from "./api";
 import { ConfirmPassword } from "./confirmpw";
+import { Confirm } from "./dialogs";
 import { hms } from "./data";
 import { t, type Key } from "./i18n";
 
@@ -48,6 +49,7 @@ export function RobotOps({ robotId, tasks, say }: { robotId: string; tasks: stri
   const [hours, setHours] = useState(6);
   const [svc, setSvc] = useState("nexwar_agent");
   const [rebooting, setRebooting] = useState(false);
+  const [restarting, setRestarting] = useState(false);
   const [clean, setClean] = useState<{ items: Record<string, { bytes: number | null; detail?: string[] }> } | null>(null);
   const [busy, setBusy] = useState(false);
   const [sets, setSets] = useState<Settings | null>(null);
@@ -90,8 +92,12 @@ export function RobotOps({ robotId, tasks, say }: { robotId: string; tasks: stri
               {RESTARTABLE.map((u) => <option key={u} value={u}>{u}</option>)}
             </select>
             <button type="button" class="btn" disabled={busy}
-              onClick={() => void run(() => api("POST", `${base}/restart`, { unit: svc }), t("opsRestarted", { u: svc }))}>{t("opsRestart")}</button>
+              onClick={() => setRestarting(true)}>{t("opsRestart")}</button>
           </span>
+        )}
+        {restarting && (
+          <Confirm text={t("opsRestartAsk", { u: svc, id: robotId })} yes={t("opsRestart")} danger onNo={() => setRestarting(false)}
+            onYes={() => { setRestarting(false); void run(() => api("POST", `${base}/restart`, { unit: svc }), t("opsRestarted", { u: svc })); }} />
         )}
         {has("ops_reboot") && <button type="button" class="btn danger" disabled={busy} onClick={() => setRebooting(true)}>{t("opsReboot")}</button>}
         {has("ops_debug") && (

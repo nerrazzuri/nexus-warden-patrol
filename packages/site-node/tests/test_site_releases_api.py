@@ -296,3 +296,13 @@ def test_站点当前任务包是新格式_新版要的也够_过(站点, tmp_pa
     _能查(s)
     got = {c["name"]: c for c in _查(s, alice)[1]["checks"]}
     assert got["schema"]["ok"], got["schema"]
+
+
+def test_网页P1_78_报出哪台能退回上一版_不支持的网页就不给按钮(站点):
+    s = 站点
+    tok = _登(s, "alice")
+    _等(lambda: s.disp.clients["A"].capabilities is not None
+        and "release_rollback" in s.disp.clients["A"].capabilities.tasks)
+    assert s.req("GET", "/api/releases", token=tok)[1]["rollback"] == {"A": True}
+    s.disp.clients["A"].capabilities.tasks.pop("release_rollback")
+    assert s.req("GET", "/api/releases", token=tok)[1]["rollback"] == {"A": False}

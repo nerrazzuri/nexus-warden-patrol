@@ -5,6 +5,7 @@ import { useState } from "preact/hooks";
 import { useLoad, clientTooOld, type ClientRow } from "./admin";
 import { api, apiUpload, ApiError, enc } from "./api";
 import { ConfirmPassword } from "./confirmpw";
+import { Confirm } from "./dialogs";
 import { hm, nameOf } from "./data";
 import { t } from "./i18n";
 import { AppPackages, SiteUpdate } from "./remoteops";
@@ -18,11 +19,12 @@ function errText(e: unknown): string {
 }
 
 export function UpgradePage({ say }: { say: Say }) {
-  const [rel, reload] = useLoad<{ releases: Release[]; robots: Record<string, string | null> }>("/api/releases");
+  const [rel, reload] = useLoad<{ releases: Release[]; robots: Record<string, string | null>; rollback?: Record<string, boolean> }>("/api/releases");
   const [versions] = useLoad<Versions>("/api/versions");
   const [file, setFile] = useState<File | null>(null);
   const [asking, setAsking] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [backing, setBacking] = useState<string | null>(null);
 
   const act = async (robot: string, body: Record<string, unknown>, msg: string) => {
     try {
@@ -44,10 +46,18 @@ export function UpgradePage({ say }: { say: Say }) {
         {Object.entries(rel?.robots ?? {}).map(([rid, cur]) => (
           <div key={rid} class="sys-row" data-robot={rid}>
             <span class="muted">{nameOf(rid)}</span><b class="mono">{cur ?? "—"}</b>
-            <button type="button" class="btn sm push" onClick={() => void act(rid, { action: "rollback" }, t("upRolledBack", { id: nameOf(rid) }))}>{t("upRollback")}</button>
+            {/* P1-78:先确认;站点说这台不能退(老代理)就不给按钮 */}
+            {rel?.rollback?.[rid] !== false
+              ? <button type="button" class="btn sm push" onClick={() => setBacking(rid)}>{t("upRollback")}</button>
+              : <span class="muted small push">{t("upNoRollback")}</span>}
           </div>
         ))}
       </section>
+      {backing && (
+        <Confirm text={t("upRollbackAsk", { id: nameOf(backing) })} yes={t("upRollback")} danger
+          onNo={() => setBacking(null)}
+          onYes={() => { const rid = backing; setBacking(null); void act(rid, { action: "rollback" }, t("upRolledBack", { id: nameOf(rid) })); }} />
+      )}
       <SiteUpdate say={say} />
       <AppPackages say={say} />
       <section class="panel up-get">
