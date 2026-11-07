@@ -1324,3 +1324,9 @@ input[type="file"]::file-selector-button {
 .well img.feed { color: transparent; font-size: 0; }
 /* P2-40:缩略图占位 */
 .mm-thumb-none { width: 120px; height: 120px; display: grid; place-items: center; border-radius: var(--r-r8); background: var(--c-surfaceVariant); color: var(--c-textMuted); font-size: 12px; flex: none; }
+/* P2-09:地图「显示」勾选框大一点、整行都能点,字不压框 */
+.layers { grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); }
+.layers label { min-height: 32px; min-width: 0; overflow-wrap: anywhere; }
+.layers input[type="checkbox"] { width: 18px; height: 18px; flex: none; margin: 0; }
+/* P2-10:单独放的日期框跟别的控件一个样 */
+input[type="date"]:not(.field input) { height: 36px; padding: 0 8px; border-radius: var(--r-r8); border: 1px solid var(--c-textMuted); background: var(--c-surface); color: var(--c-text); font: inherit; font-size: 14px; color-scheme: light dark; }

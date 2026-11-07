@@ -24,6 +24,7 @@ let posted: unknown[] = [];
 let duty: unknown = null;
 
 beforeEach(() => {
+  for (const k of ["nexwar.alarms.scope", "nexwar.alarms.kinds", "nexwar.alarms.open"]) localStorage.removeItem(k);
   lang.value = "zh";
   alerts = [];
   truncated = false;
@@ -173,5 +174,22 @@ describe("网页易用性第 1 轮 P1-20 交班留言", () => {
     const { container: c } = render(<AlarmLogPage now={NOW} role="guard" me="wang" />);
     await waitFor(() => expect(c.textContent).toContain("上一班留言"));
     expect(Array.from(c.querySelectorAll("button")).some((b) => b.textContent === "修改")).toBe(false);
+  });
+});
+
+describe("网页易用性第 1 轮 P2-10", () => {
+  it("种类能多选;刷新后筛选还在", async () => {
+    const first = render(<AlarmLogPage now={NOW} role="guard" />);
+    const chip = (c: Element, k: string) => c.querySelector(`[data-kind="${k}"]`) as HTMLButtonElement;
+    fireEvent.click(chip(first.container, "intrusion"));
+    fireEvent.click(chip(first.container, "help"));
+    expect(chip(first.container, "intrusion").getAttribute("aria-pressed")).toBe("true");
+    expect(chip(first.container, "help").getAttribute("aria-pressed")).toBe("true");
+    expect(chip(first.container, "all").getAttribute("aria-pressed")).toBe("false");
+    cleanup();
+    const again = render(<AlarmLogPage now={NOW} role="guard" />);
+    expect(chip(again.container, "help").getAttribute("aria-pressed")).toBe("true");
+    fireEvent.click(chip(again.container, "all"));
+    expect(chip(again.container, "help").getAttribute("aria-pressed")).toBe("false");
   });
 });

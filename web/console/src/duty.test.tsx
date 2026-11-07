@@ -264,3 +264,16 @@ describe("网页易用性第 1 轮 P0-02 / P0-06:不该说一切正常的时候"
     expect(btn(c, "全部恢复")).toBeUndefined();
   });
 });
+
+describe("网页易用性第 1 轮 P2-08", () => {
+  it("钉住的那一路刷新后还在", () => {
+    localStorage.removeItem("nexwar.duty.pins");
+    const { container: c } = page([]);
+    fireEvent.click(c.querySelector(".slot-pin")!);
+    expect(c.querySelector(".slot-pin")!.getAttribute("aria-pressed")).toBe("true");
+    cleanup();
+    const { container: d } = page([]);
+    expect(d.querySelector(".slot-pin")!.getAttribute("aria-pressed")).toBe("true");
+    localStorage.removeItem("nexwar.duty.pins");
+  });
+});

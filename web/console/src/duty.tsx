@@ -41,7 +41,13 @@ export function DutyPage(props: {
   /** 跟站点断了 / 数据过期(P0-02):不能说「一切正常」。 */
   stale?: boolean;
 }) {
-  const [pins, setPins] = useState<[string | null, string | null]>([null, null]);
+  // P2-08:钉住的两路记在这台浏览器上,刷新不丢
+  const [pins, setPinsRaw] = useState<[string | null, string | null]>(loadPins);
+  const setPins = (f: (p: [string | null, string | null]) => [string | null, string | null]) => setPinsRaw((p) => {
+    const n = f(p);
+    try { localStorage.setItem(PINS_KEY, JSON.stringify(n)); } catch { /* 隐私模式:不记 */ }
+    return n;
+  });
   // 网页易用性第 1 轮 P0-04/05:点一条警报看详情,关警报要选结论
   const [detail, setDetail] = useState<string | null>(null);
   const [finding, setFinding] = useState<string | null>(null);
@@ -236,4 +242,13 @@ export function DutyPage(props: {
 /** 区域换没换(名字和点一样就算没换,不重画)。 */
 function sameAreas(a: CanvasArea[], b: CanvasArea[]): boolean {
   return a.length === b.length && a.every((x, i) => x.name === b[i].name && JSON.stringify(x.pts) === JSON.stringify(b[i].pts));
+}
+
+const PINS_KEY = "nexwar.duty.pins";
+function loadPins(): [string | null, string | null] {
+  try {
+    const v = JSON.parse(localStorage.getItem(PINS_KEY) ?? "null");
+    if (Array.isArray(v) && v.length === 2 && v.every((x) => x === null || typeof x === "string")) return [v[0], v[1]];
+  } catch { /* 读不到就不钉 */ }
+  return [null, null];
 }
