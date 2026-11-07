@@ -439,6 +439,8 @@ export function RoutesPage({ say, embed, kind = "patrol" }: { say: Say; embed?: 
                 {wholeProblems.map((p, i) => <p key={i} class="small bad">{p.problem}</p>)}
                 {[...warns.values()].map((w, i) => <p key={`w${i}`} class="small warn" data-route-warn={i}>{w}</p>)}
                 {genNotes.map((n, i) => <p key={`g${i}`} class="muted small" data-gen-note={i}>{n}</p>)}
+                {/* P1-40:有防区没生成出点(多半是没设待命点)→ 给入口 */}
+                {genNotes.length > 1 && embed && <p class="small"><a href="#/admin/layout?tab=standby" data-gen-standby="1">{rt("guardGoStandby")}</a></p>}
                 {draft && pts.length > 1 && (eta && !dirty ? (
                   <p class="small route-eta" data-eta-total="1" title={rt("etaBasis", { v: eta.speed_mps })}>
                     {rt("etaTotal", { t: clock(eta.total_s) })}{eta.basis === "straight" && <span class="muted"> · {rt("etaStraight")}</span>}
