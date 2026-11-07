@@ -194,7 +194,33 @@ describe("机器人页", () => {
     expect(m.textContent).toContain("扫描机器人贴纸");
     expect(m.querySelector("form")).toBeNull();
     fireEvent.click(btn(m, "工程师：用开通码手动添加"));
-    expect(document.querySelector(".modal form")!.textContent).toContain("provision --code");
+    const f = document.querySelector(".modal form")!;
+    expect(f.querySelector("details")!.textContent).toContain("provision --code");     // P1-24:命令行收在「高级」里
+    expect(f.querySelector("p.muted")!.textContent).not.toContain("sudo");
+    // P1-25:格式写在框下面,填错标红、不提交
+    const input = f.querySelector("input") as HTMLInputElement;
+    expect(f.textContent).toContain("最多 64 个");
+    fireEvent.input(input, { target: { value: "D1 07" } });
+    expect(f.querySelector("#robot-id-rule")!.className).toContain("error");
+    fireEvent.submit(f);
+    expect(posted.some((p) => p.url === "/api/admin/robots")).toBe(false);
+  });
+
+  it("P1-26 / P1-05:切自动派遣、重出开通码先确认,说清是什么意思", async () => {
+    const { container: c } = page();
+    await waitFor(() => expect(cardOf(c, "A")).not.toBeNull());
+    fireEvent.click(cardOf(c, "A"));
+    const d = c.querySelector(".robot-detail")!;
+    const toggle = btn(d, "仅限手动") ?? btn(d, "允许自动派遣");
+    fireEvent.click(toggle);
+    expect(posted.some((p) => p.url.endsWith("/service"))).toBe(false);
+    const m = document.querySelector(".modal")!;
+    expect(m.textContent).toMatch(/报警|排程/);
+    fireEvent.click(btn(m, toggle.textContent!.trim()));
+    await waitFor(() => expect(posted.some((p) => p.url === "/api/robots/A/service")).toBe(true));
+    fireEvent.click(btn(d, "重新生成开通码") ?? Array.from(d.querySelectorAll("button")).find((b) => b.textContent?.includes("开通码"))!);
+    expect(posted.some((p) => p.url.endsWith("/code"))).toBe(false);
+    expect(document.querySelector(".modal")!.textContent).toContain("旧码会立刻作废");
   });
 
   it("保安页用起的名字", () => {
