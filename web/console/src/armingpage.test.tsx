@@ -260,3 +260,15 @@ describe("网页易用性第 1 轮 P1-57", () => {
     expect(c.querySelector(".armgrid")).toBeNull();
   });
 });
+
+describe("网页易用性第 1 轮 P2-20", () => {
+  it("打开日程却没有时段:当场提醒", async () => {
+    schedule = { ...schedule, slots: [], enabled: false };
+    const { container: c } = page();
+    await waitFor(() => expect(c.querySelector("#arm-enabled")).not.toBeNull());
+    await new Promise((ok) => setTimeout(ok, 20));
+    expect(c.querySelector("[data-arm-noslots]")).toBeNull();
+    fireEvent.click(c.querySelector("#arm-enabled")!);
+    expect(c.querySelector("[data-arm-noslots]")!.textContent).toContain("全天都会是撤防");
+  });
+});

@@ -180,10 +180,12 @@ export function ArmingPage({ say, now, role = "admin" }: { say: Say; now: number
           }} />
       )}
 
-      <label class="switch">
+      {/* P2-20:大一点的开关;打开了却一个时段都没有(= 全天撤防)当场说(存的时候还会再确认) */}
+      <label class="switch arm-enabled">
         <input id="arm-enabled" type="checkbox" checked={enabled} onChange={(e) => setEnabled(e.currentTarget.checked)} />
         {t("armEnabled")}
       </label>
+      {enabled && slots.length === 0 && <p class="arm-dirty" role="status" data-arm-noslots="1">{t("armEnableNeedSlots")}</p>}
 
       <div class="seg arm-scope" role="group" aria-label={t("armScope")}>
         <button type="button" aria-pressed={!perZone} onClick={() => { setPerZone(false); setZone(""); setSel(null); }}>{t("armAllSame")}</button>
@@ -353,6 +355,13 @@ function CopyTo({ from, onCopy, onClose }: { from: number; onCopy: (days: number
   return (
     <div class="arm-copyto panel">
       <p>{t("armCopyFrom", { d: t(DAY_KEYS[from]) })}</p>
+      {/* P2-20:一下勾上工作日 / 周末 / 其余全部 */}
+      <div class="row wrap arm-copy-quick">
+        {([["armCopyWeekdays", [0, 1, 2, 3, 4]], ["armCopyWeekend", [5, 6]], ["armCopyAll", [0, 1, 2, 3, 4, 5, 6]]] as [Key, number[]][]).map(([k, ds]) => (
+          <button key={k} type="button" class="btn sm" data-copy-quick={k}
+            onClick={() => setDays([...new Set([...days, ...ds.filter((d) => d !== from)])])}>{t(k)}</button>
+        ))}
+      </div>
       <div class="row wrap">
         {DAY_KEYS.map((k, i) => i === from ? null : (
           <label key={k}><input type="checkbox" value={String(i)} checked={days.includes(i)}
