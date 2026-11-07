@@ -369,8 +369,9 @@ class MapAdmin:
         from nexwar_site.standby import copy_homes
         homes = copy_homes(self.db, map_id, version, new)
         self._copy_display(map_id, version, new, by=by)
+        layout = self._copy_layout(map_id, version, new, by=by)
         return {"map_id": map_id, "from": version, "version": new, "cleaned": len(specks),
-                "cells": px, "homes_copied": homes}
+                "cells": px, "homes_copied": homes, "layout_copied": layout}
 
     def edit(self, map_id: str, version: str, *, digest: Any, ops: Any, note: Any,
              by: str) -> dict[str, Any]:
@@ -415,8 +416,61 @@ class MapAdmin:
         from nexwar_site.standby import copy_homes
         homes = copy_homes(self.db, map_id, version, new)
         self._copy_display(map_id, version, new, by=by)
+        layout = self._copy_layout(map_id, version, new, by=by)
         return {"map_id": map_id, "from": version, "version": new, **stats,
-                "homes_copied": homes, "by": by}
+                "homes_copied": homes, "layout_copied": layout, "by": by}
+
+    def _copy_layout(self, map_id: str, old: str, new: str, *, by: str) -> dict[str, int]:
+        """网页易用性第 2 轮 N4:另存的新版本跟原版同一个坐标系(只换了栅格),防区、出口线、藏匿点、
+        人挪过的防区查看点 / 值守位、路网照抄过去 —— 原来新版本上全是空的,换过去就没了也不说。
+        原版照旧(还在原版上的机器人不受影响)。走各表自己的模块写(表的归属规矩);某一条在新图上
+        不合法(比如值守位被新画的障碍盖住)就跳过,那一条回到站点自动算的。禁行区、待命点、拦截点
+        照旧走 R2「带过来要人核」,巡逻路线、摄像头 id 唯一、只能搬,在发布时问。"""
+        got = {"areas": 0, "marks": 0, "posts": 0, "net_nodes": 0}
+        site = self.site
+        areas = getattr(site, "areas", None)
+        if areas is None:
+            return got
+        for a in areas.list(map_id, old):
+            try:
+                areas.set(map_id, new, a["zone"], a["points"], by=by)
+                got["areas"] += 1
+            except Exception:
+                log.warning("另存 %s:%s 抄防区 %s 没成", map_id, new, a["zone"], exc_info=True)
+        from nexwar_site.api import map_marks, zone_posts
+        marks = map_marks(site)
+        if marks is not None:
+            for m in marks.list(map_id, old):
+                try:
+                    marks.set(map_id, new, {k: m[k] for k in ("kind", "name", "points", "yaw")
+                                            if k in m}, by=by)
+                    got["marks"] += 1
+                except Exception:
+                    log.warning("另存 %s:%s 抄标注 %s 没成", map_id, new, m.get("name"),
+                                exc_info=True)
+        posts = zone_posts(site)
+        if posts is not None:
+            for p in posts.view(map_id, old):
+                if p.get("auto"):
+                    continue                 # 自动算的:新版本上照样自动算
+                try:
+                    posts.set(map_id, new, p["zone"], view=p["view"], watch=p["watch"], by=by)
+                    got["posts"] += 1
+                except Exception:
+                    log.warning("另存 %s:%s 抄防区 %s 的值守位没成", map_id, new, p["zone"],
+                                exc_info=True)
+        nets = getattr(site, "route_nets", None)
+        if nets is not None:
+            net = nets.get(map_id, old)
+            if net.nodes:
+                w = net.to_wire()
+                try:
+                    nets.put(map_id, new, {"base_revision": 0, "nodes": w["nodes"],
+                                           "edges": w["edges"]}, by=by)
+                    got["net_nodes"] = len(net.nodes)
+                except Exception:
+                    log.warning("另存 %s:%s 抄路网没成", map_id, new, exc_info=True)
+        return got
 
     def _copy_display(self, map_id: str, old: str, new: str, *, by: str) -> None:
         """网页易用性第 1 轮 P0-13:另存(编辑、清噪点)出来的新版本跟原版同一个坐标系,显示设置
