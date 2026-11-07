@@ -364,8 +364,25 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--c-primary); }
 
 /* 窄屏(B0:< 720 一列;前后两路仍并排) */
 @media (max-width: 720px) {
+  .usermenu > .who .who-initial { display: inline-flex; width: 28px; height: 28px; border-radius: 50%; align-items: center; justify-content: center;
+    background: var(--c-surfaceVariant); font-weight: 700; }
   .topbar { position: static; }
-  .who { display: none; }
+  /* P0-16:用户菜单不藏,只缩成首字圆头像;菜单贴屏幕右边、不出屏 */
+  .usermenu > .who .who-name { display: none; }
+  .topbar .usermenu > .who { padding: 0; width: 36px; }
+  .usermenu .menu { position: fixed; left: 12px; right: 12px; top: 64px; min-width: 0; max-height: calc(100dvh - 80px); overflow-y: auto; }
+  .console .sidenav .nav-toggle { display: inline-flex; margin-left: auto; }
+  .sidenav-nav:not(.open) { display: none; }
+  .sidenav-nav.open { width: 100%; flex-direction: column; }
+  .sidenav-nav.open .navgroup { flex-direction: column; align-items: stretch; }
+  .sidenav-nav.open a { min-height: 44px; }
+  /* 用户表、开户申请:一行一张卡,操作按钮折行,不出屏 */
+  .users-table { display: block; overflow: visible; }
+  .users-table thead { display: none; }
+  .users-table tbody, .users-table tr, .users-table td { display: block; }
+  .users-table tr { border-top: 1px solid var(--c-outline); padding: 8px 0; }
+  .users-table td, .users-table th:first-child, .users-table td:first-child { border: 0; padding: 4px 12px; }
+  .users-table td.actions { display: flex; }
   .page { padding: 12px; }
   .alarm-title { font-size: 18px; }
   .queue-body { max-height: 40vh; }
@@ -524,6 +541,8 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--c-primary); }
 .usermenu { position: relative; }
 .usermenu > .who { height: 36px; padding: 0 10px; border: 1px solid transparent; border-radius: var(--r-r8); background: transparent; cursor: pointer; color: var(--c-text); }
 .usermenu > .who:hover { background: var(--c-surfaceVariant); }
+.who-initial { display: none; }
+.sidenav .nav-toggle { display: none; align-items: center; gap: 6px; }
 .menu { position: absolute; right: 0; top: calc(100% + 6px); z-index: 20; min-width: 280px; padding: 8px; display: flex; flex-direction: column; gap: 4px;
   background: var(--c-surface); border: 1px solid var(--c-outline); border-radius: var(--r-r12); box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3); }
 .menu-head { display: flex; flex-direction: column; gap: 2px; padding: 6px 8px 10px; border-bottom: 1px solid var(--c-outline); }
@@ -624,7 +643,9 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--c-primary); }
 @media (max-width: 1100px) {
   .duty { grid-template-columns: minmax(0, 1fr); grid-template-rows: none; grid-template-areas: "sit" "alarms" "map" "video" "robots"; }
   .duty-mapcard { min-height: 360px; }
-  .duty-slots { grid-template-columns: 1fr; }
+  .duty-slots { grid-template-columns: 1fr; flex: none; }
+  /* P0-17:一列时画面位里面全是绝对定位,没给高就是 0 —— 按画面比例撑开 */
+  .duty-slots > .slot { aspect-ratio: 16 / 9; min-height: 180px; }
 }
 
 /* W44 实况页:2×2,每张卡片前后两路左右并排;超过 4 台往下翻(卡片高 = 顶栏以下的一半) */

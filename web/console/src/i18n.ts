@@ -176,6 +176,8 @@ const en = {
   modeArmConfirm: "Arm the site? Robots raise P1 when they see a person.",
   /** 设置页弹窗里的确定(P0-12):只放进草稿,真正存要点右上角的「保存」。 */
   dlgApply: "Done",
+  userMenu: "Account menu",
+  navMenu: "Menu",
   leaveUnsaved: "This page has changes that are not saved. Leave without saving? The changes will be lost.",
   leaveUnsavedYes: "Leave without saving",
   stopAll: "Stop all",
@@ -1481,6 +1483,8 @@ const zh: Partial<Record<Key, string>> = {
   modeVisitorConfirm: "切换为「临时撤防」？选中的防区 4 小时内不报「发现人员」。",
   modeArmConfirm: "确认布防？四足机器人发现人员即报 P1。",
   dlgApply: "完成",
+  userMenu: "账号菜单",
+  navMenu: "菜单",
   leaveUnsaved: "此页有未保存的改动。不保存就离开？改动将丢失。",
   leaveUnsavedYes: "不保存，离开",
   stopAll: "全部急停",

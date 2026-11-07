@@ -311,7 +311,7 @@ export function Requests({ say, onDone }: { say: Say; onDone: () => void }) {
   return (
     <section class="panel requests" aria-label={t("reqTitle")}>
       <h2>{t("reqTitle")}</h2>
-      <table class="grid">
+      <table class="grid users-table">
         <tbody>
           {rows.map((r) => (
             <tr key={r.id} data-req={r.id}>
