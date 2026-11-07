@@ -334,12 +334,15 @@ function polyArea(pts: Pt[]): number {
 
 function NameZone({ taken, onClose, onSave, initial = "" }: { taken: string[]; onClose: () => void; onSave: (name: string) => void; initial?: string }) {
   const [name, setName] = useState(initial);
+  const [tried, setTried] = useState(false);
   const dup = taken.includes(name.trim());
   return (
     <Modal label={t("lyDrawDone")} onClose={onClose}>
-      <form class="form" onSubmit={(e) => { e.preventDefault(); if (name.trim()) onSave(name.trim()); }}>
+      <form class="form" noValidate onSubmit={(e) => { e.preventDefault(); setTried(true); if (name.trim()) onSave(name.trim()); }}>
         <label class="field">{t("zoneName")}<input name="zone" value={name} maxLength={128} required autoFocus onInput={(e) => setName(e.currentTarget.value)} /></label>
-        <p class="muted small">{dup ? t("lyZoneReplace") : t("zoneNameHint")}</p>
+        {/* P2-36:空着点保存要说一声(原来弹窗只是不关) */}
+        {tried && !name.trim() ? <p class="error small" role="alert">{t("nameRequired")}</p>
+          : <p class="muted small">{dup ? t("lyZoneReplace") : t("zoneNameHint")}</p>}
         <div class="row end">
           <button type="button" class="btn" onClick={onClose}>{t("cancel")}</button>
           <button type="submit" class="btn primary">{t("dlgApply")}</button>

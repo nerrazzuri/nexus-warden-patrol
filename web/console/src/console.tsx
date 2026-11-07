@@ -31,7 +31,7 @@ import { editTarget, MapEditPage } from "./mapedit";
 import { AccessPage } from "./accesspage";
 import { LayoutPage } from "./layoutpage";
 import { LAYOUT_TABS } from "./layouttabs";
-import { isAdminPage, loadThemePref, pageAllowed, pinFor, readRoute, saveThemePref, SideNav, TopBar, type Page, type ThemePref } from "./shell";
+import { isAdminPage, loadThemePref, navLabel, pageAllowed, pinFor, readRoute, saveThemePref, SideNav, TopBar, type Page, type ThemePref } from "./shell";
 import { pinScheme, systemIsDark } from "./theme";
 
 const TASK: Record<string, Key> = { patrol: "st_patrolling", goto: "st_patrolling", standby: "st_returning" };
@@ -136,6 +136,8 @@ export function Console({ me, onOut }: { me: Me; onOut: (note?: string) => void 
   const fill = route.page === "duty" || route.page === "map" || route.page === "admin/layout" || route.page === "admin/mapedit";
   return (
     <div class={fill ? "console fill" : "console"}>
+      {/* P2-01:「跳到内容」是第一个焦点;不改地址(地址是页面路由) */}
+      <a class="skip" href="#main" onClick={(e) => { e.preventDefault(); document.getElementById("main")?.focus(); }}>{t("skipToContent")}</a>
       <SideNav me={me} page={route.page} alarms={stale ? null : guardAlarms} notices={admin ? notices : 0} />
       <div class="workspace">
       <TopBar me={me} page={route.page} mode={data?.mode ?? null} alarms={stale ? null : guardAlarms} now={now}
@@ -145,7 +147,8 @@ export function Console({ me, onOut }: { me: Me; onOut: (note?: string) => void 
         onSignOut={async (note?: string) => {
           // 改完密码站点已经让旧会话失效:不再调 logout(会 401),直接回登录页带上说明
           if (note) return onOut(note);
-          try { await api("POST", "/api/logout", {}); } finally { onOut(); }
+          // P2-22:退出后地址不再停在原来那一页
+          try { await api("POST", "/api/logout", {}); } finally { history.replaceState(null, "", location.pathname + location.search); onOut(); }
         }} />
       {help && <HelpDialog role={me.role} page={route.page} onClose={() => setHelp(false)} />}
       {stale && (
@@ -155,7 +158,11 @@ export function Console({ me, onOut }: { me: Me; onOut: (note?: string) => void 
         </div>
       )}
 
-      <main class="page" id="main" data-page={route.page}>
+      <main class="page" id="main" tabIndex={-1} data-page={route.page}>
+        {/* P2-02:值班这几页本身没有大标题,给读屏一个 */}
+        {(["duty", "live", "map", "alarms", "recordings"] as Page[]).includes(route.page) && navLabel(route.page) && (
+          <h1 class="sr-only">{t(navLabel(route.page)!.page)}</h1>
+        )}
         {route.page === "duty" && (
           <DutyPage units={units} alerts={alerts} now={now} role={me.role} say={say} refresh={refresh} mode={data?.mode ?? null} stale={stale}
             onZoom={(id) => setPending({ kind: "cam", robot: id, cam: "front" })} />
