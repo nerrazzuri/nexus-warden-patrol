@@ -111,12 +111,19 @@ export function NogoTab(p: TabProps) {
             <button type="button" class="btn sm primary" disabled={pts.length < minPts} onClick={() => setForm(true)}>{t("lyDrawDone")}</button>
           </div>
         ) : (
-          <div class="row wrap">
-            <button type="button" class="btn" onClick={() => { setDraw("nogo"); setPts([]); }}>{t("drawNoGo")}</button>
-            <button type="button" class="btn" onClick={() => { setDraw("wall"); setPts([]); }}>{t("drawVWall")}</button>
-            <button type="button" class="btn" onClick={() => { setDraw("slow"); setPts([]); }}>{t("drawSlow")}</button>
-            <button type="button" class="btn" onClick={() => { setDraw("ignore"); setPts([]); }}>{t("drawIgnore")}</button>
-            <button type="button" class="btn" onClick={() => { setDraw("erase"); setPts([]); }}>{t("drawErase")}</button>
+          // P1-33/38:分两组 —— 管机器人怎么走的、管人员检测的(忽略区不是「机器人不进」);「不可通行」写明不是删禁行区
+          <div class="nogo-groups">
+            <p class="small muted">{t("nogoGroupMove")}</p>
+            <div class="row wrap">
+              <button type="button" class="btn" onClick={() => { setDraw("nogo"); setPts([]); }}>{t("drawNoGo")}</button>
+              <button type="button" class="btn" onClick={() => { setDraw("wall"); setPts([]); }}>{t("drawVWall")}</button>
+              <button type="button" class="btn" onClick={() => { setDraw("slow"); setPts([]); }}>{t("drawSlow")}</button>
+              <button type="button" class="btn" title={t("drawEraseTip")} onClick={() => { setDraw("erase"); setPts([]); }}>{t("drawErase")}</button>
+            </div>
+            <p class="small muted">{t("nogoGroupPeople")}</p>
+            <div class="row wrap">
+              <button type="button" class="btn" onClick={() => { setDraw("ignore"); setPts([]); }}>{t("drawIgnore")}</button>
+            </div>
           </div>
         )}
         <p class="muted small">{t("lyNogoHint")}</p>
