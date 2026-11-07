@@ -11,7 +11,7 @@ import { siteHm } from "./todaypatrols";
 import { Modal } from "./dialogs";
 import { alertTitle, lang, refusalText, t, type Key } from "./i18n";
 import type { UnitInfo } from "./live";
-import { ENGINEERING_LAYERS, etaNext, LAYERS, layersFor, loadLayers, saveLayers, mapPins, mapTodo, olderOpen, shiftStart, staleAfter, staleCells, tonightEvents, zoneDecor,
+import { ENGINEERING_LAYERS, etaNext, LAYERS, layersFor, loadLayers, saveLayers, labelRows, mapPins, mapTodo, olderOpen, shiftStart, staleAfter, staleCells, tonightEvents, zoneDecor,
   type AuthzRow, type Cell, type Layer, type ModeView } from "./maplayers";
 import { fanPath } from "./layoutpage";
 import { MapCanvas, type CanvasArea, type LegendKey, type Screen } from "./mapcanvas";
@@ -186,8 +186,12 @@ export function SiteMap(props: {
                     </g>
                   );
                 })}
-                {bots.map(({ u, px, py, yaw }) => {
+                {(() => {
+                  const rows = labelRows(bots.map((b) => s.px(b.px, b.py)), BOT_R * 4);
+                  const step = (LABEL_PX + 2) * (props.eta ? 2 : 1);
+                  return bots.map(({ u, px, py, yaw }, i) => {
                   const [x, y] = s.px(px, py);
+                  const dy = rows[i] * step;
                   // 朝向:在预览上往 yaw 走一小段,跟着图一起变换,再在屏上取定长
                   const e = heading(px, py, yaw, 10);
                   const [ex, ey] = s.px(e.hx, e.hy);
@@ -199,15 +203,16 @@ export function SiteMap(props: {
                     <g key={u.robot.robot_id} class={`bot ${a ?? "ok"}${on ? " on" : ""}`} onClick={(e) => { e.stopPropagation(); props.onSelect(u.robot.robot_id); }}>
                       <line x1={x} y1={y} x2={x + ((ex - x) / n) * len} y2={y + ((ey - y) / n) * len} class="bot-head" />
                       <circle cx={x} cy={y} r={BOT_R} class="bot-dot" />
-                      <text x={x} y={y + BOT_R + LABEL_PX + 2} class="bot-label" font-size={LABEL_PX}>{nameOf(u.robot.robot_id)}</text>
+                      <text x={x} y={y + dy + BOT_R + LABEL_PX + 2} class="bot-label" font-size={LABEL_PX}>{nameOf(u.robot.robot_id)}</text>
                       {props.eta && etaOf(u) != null && (
-                        <text x={x} y={y + BOT_R + LABEL_PX * 2 + 4} class="bot-label eta" font-size={LABEL_PX - 1}>
+                        <text x={x} y={y + dy + BOT_R + LABEL_PX * 2 + 4} class="bot-label eta" font-size={LABEL_PX - 1}>
                           {t("etaNextMin", { n: Math.max(1, Math.round(etaOf(u)! / 60)) })}
                         </text>
                       )}
                     </g>
                   );
-                })}
+                  });
+                })()}
               </>
             )} />
         )}
