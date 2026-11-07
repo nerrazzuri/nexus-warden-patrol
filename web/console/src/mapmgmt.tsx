@@ -517,6 +517,8 @@ export function DiffDialog({ target, onClose }: { target: { map_id: string; a: s
   const [err, setErr] = useState("");
   const gen = useRef(0);
   const q = `/api/admin/maps/${enc(target.map_id)}/${enc(target.a)}/diff`;
+  // P1-48:说明里的 A、B 换成版本号(机器人也叫 A、B,容易看混)
+  const vn = (x: string) => x.replace(/\bA\b/g, `v${target.a}`).replace(/\bB\b/g, `v${target.b}`);
   useEffect(() => {
     const my = ++gen.current;
     setStats(null);
@@ -526,7 +528,7 @@ export function DiffDialog({ target, onClose }: { target: { map_id: string; a: s
       .catch((e) => { if (my === gen.current) setErr(errText(e)); });
   }, [q, target.b]);
   return (
-    <Modal wide label={tr(`Compare v${target.a} (A) and v${target.b} (B)`, `对比 v${target.a}(A)和 v${target.b}(B)`)} onClose={onClose}>
+    <Modal wide label={tr(`Compare v${target.a} with v${target.b}`, `对比 v${target.a} 和 v${target.b}`)} onClose={onClose}>
       {err && <p class="error" role="alert">{err}</p>}
       {!stats && !err && <p class="muted">{tr("Rendering…", "正在画…")}</p>}
       {stats && (
@@ -534,18 +536,21 @@ export function DiffDialog({ target, onClose }: { target: { map_id: string; a: s
           <p class="mm-caveat" role="note">{stats.caveat}</p>
           {stats.likely_misaligned && (
             <p class="mm-misaligned bad" role="alert">
-              {tr(`Only ${Math.round((stats.alignment ?? 0) * 100)}% of A's wall cells have a wall of B next to them: these two versions are very likely NOT in the same coordinate frame. The picture below is not meaningful.`,
-                `A 的墙只有 ${Math.round((stats.alignment ?? 0) * 100)}% 在 B 里也有墙:这两版很可能不在同一个坐标系里,下面的图没有意义。`)}
+              {vn(tr(`Only ${Math.round((stats.alignment ?? 0) * 100)}% of A's wall cells have a wall of B next to them: these two versions are very likely NOT in the same coordinate frame. The picture below is not meaningful.`,
+                `A 的墙只有 ${Math.round((stats.alignment ?? 0) * 100)}% 在 B 里也有墙:这两版很可能不在同一个坐标系里,下面的图没有意义。`))}
             </p>
           )}
           {stats.frames_json_same === false && <p class="small bad">{tr("The two versions have different frames.json (lidar mounting / frame conventions).", "两版的 frames.json 不一样(雷达装法、坐标约定)。")}</p>}
           {stats.frames_json_same === true && <p class="small muted">{tr("Same frames.json in both (a good sign, not a proof).", "两版的 frames.json 一样(是好兆头,不是证明)。")}</p>}
-          {!stats.same_resolution && <p class="small muted">{tr("Different resolutions: B was resampled to the finer grid.", "分辨率不同:按较细的重采。")}</p>}
-          <img class="mm-diffimg" alt={tr("Difference image", "差异图")} src={`${q}.png?with=${enc(target.b)}`} />
+          {!stats.same_resolution && <p class="small muted">{vn(tr("Different resolutions: B was resampled to the finer grid.", "分辨率不同:按较细的重采。"))}</p>}
+          {/* P1-48:点图在新标签页看原图(能放大) */}
+          <a href={`${q}.png?with=${enc(target.b)}`} target="_blank" rel="noopener" title={tr("Open full size", "看原图")}>
+            <img class="mm-diffimg" alt={tr("Difference image", "差异图")} src={`${q}.png?with=${enc(target.b)}`} />
+          </a>
           <ul class="mm-legend small">
             {LEGEND.map(([k, en, zh]) => (
               <li key={k}>
-                <span class="mm-sw" style={{ background: stats.colors[k] }} aria-hidden="true" /> {tr(en, zh)}
+                <span class="mm-sw" style={{ background: stats.colors[k] }} aria-hidden="true" /> {vn(tr(en, zh))}
                 <span class="muted"> · {stats.area_m2[k]?.toFixed(1)} m²</span>
               </li>
             ))}

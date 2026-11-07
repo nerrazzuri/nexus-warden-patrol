@@ -330,7 +330,7 @@ describe("对比", () => {
     expect(c.querySelector(".mm-misaligned")).toBeNull();
     expect((c.querySelector(".mm-diffimg") as HTMLImageElement).getAttribute("src")).toBe("/api/admin/maps/estate/3/diff.png?with=1");
     expect(c.querySelectorAll(".mm-legend li").length).toBe(6);
-    expect(c.querySelector(".mm-legend")!.textContent).toContain("Wall only in A");
+    expect(c.querySelector(".mm-legend")!.textContent).toContain("Wall only in v3");    // P1-48:用版本号,不叫 A、B
     expect(calls.find((x) => x.path.includes("/diff?"))?.path).toBe("/api/admin/maps/estate/3/diff?with=1");
   });
 
