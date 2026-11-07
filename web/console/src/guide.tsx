@@ -16,10 +16,11 @@ export const WEB_TOUR = 1;
 const ITEM: Record<string, [Key, Key, string]> = {
   robots: ["suRobots", "suRobotsHint", "#/admin/robots"],
   map: ["suMap", "suMapHint", "#/admin/maps"],
-  zones: ["suZones", "suZonesHint", "#/admin/layout"],
-  standby: ["suStandby", "suStandbyHint", "#/admin/layout"],
-  routes: ["suRoutes", "suRoutesHint", "#/admin/layout"],
-  schedule: ["suSchedule", "suScheduleHint", "#/admin/layout"],
+  // P1-75:直接到那一项的标签页(原来都落在第一个「防区」标签)
+  zones: ["suZones", "suZonesHint", "#/admin/layout?tab=nogo"],
+  standby: ["suStandby", "suStandbyHint", "#/admin/layout?tab=standby"],
+  routes: ["suRoutes", "suRoutesHint", "#/admin/layout?tab=routes"],
+  schedule: ["suSchedule", "suScheduleHint", "#/admin/layout?tab=routes"],
   arming: ["suArming", "suArmingHint", "#/admin/arming"],
   accounts: ["suAccounts", "suAccountsHint", "#/admin/users"],
   push: ["suPush", "suPushHint", ""],
@@ -59,7 +60,11 @@ export function SetupChecklist() {
             return (
               <li key={x.id} data-item={x.id} class={x.done ? "done" : x.skipped ? "skipped" : undefined}>
                 <span class="setup-mark" aria-hidden="true">{x.done ? "✓" : x.skipped ? "–" : "○"}</span>
-                <span class="setup-text"><b>{t(name)}</b>{!x.done && <span class="muted small">{t(hint)}</span>}</span>
+                <span class="setup-text"><b>{t(name)}</b>{!x.done && <span class="muted small">{x.skipped ? t("suSkippedNote") : t(hint)}</span>}</span>
+                {/* P1-75:跳过的能撤销 */}
+                {!x.done && x.skipped && (
+                  <button type="button" class="btn sm" onClick={() => void patch({ skip: (guide?.skip ?? []).filter((s) => s !== x.id) })}>{t("suUnskip")}</button>
+                )}
                 {!x.done && !x.skipped && (
                   <>
                     <button type="button" class="btn sm" onClick={() => void patch({ skip: [...(guide?.skip ?? []), x.id] })}>{t("suSkip")}</button>
