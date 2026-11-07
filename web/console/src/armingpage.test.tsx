@@ -34,6 +34,9 @@ beforeEach(() => {
     if (url.startsWith("/api/arming/schedule")) return Promise.resolve(json(schedule));
     if (url.startsWith("/api/duty-settings")) return Promise.resolve(json({ shift_hours: [7, 19], stale_hours: 2 }));
     if (url.startsWith("/api/mode")) return Promise.resolve(json(mode));
+    if (url.startsWith("/api/routes")) return Promise.resolve(json({ revision: 1, timezone: "Asia/Kuala_Lumpur",
+      routes: [{ id: "night", waypoints: [] }, { id: "day", waypoints: [] }],
+      schedules: [{ id: "n22", mission: "night", at: "22:00", days: ["mon"], window_min: 30, on_missed: "skip", revision: 1 }] }));
     return Promise.resolve(json({}, 404));
   }) as typeof fetch);
 });
@@ -270,5 +273,16 @@ describe("网页易用性第 1 轮 P2-20", () => {
     expect(c.querySelector("[data-arm-noslots]")).toBeNull();
     fireEvent.click(c.querySelector("#arm-enabled")!);
     expect(c.querySelector("[data-arm-noslots]")!.textContent).toContain("全天都会是撤防");
+  });
+});
+
+describe("网页易用性第 1 轮 P2-39", () => {
+  it("经理在布防页「巡逻日程」里给路线排日程(网页上也能排)", async () => {
+    const { container: c } = render(<ArmingPage say={() => {}} now={at(12)} role="owner" />);
+    fireEvent.click(c.querySelector('[data-arm-tab="patrols"]')!);
+    await waitFor(() => expect(c.querySelector('.arm-patrols select[name="route"]')).not.toBeNull());
+    expect(c.querySelector(".arm-patrols")!.textContent).toContain("22:00");
+    fireEvent.change(c.querySelector('.arm-patrols select[name="route"]')!, { target: { value: "day" } });
+    await waitFor(() => expect(c.querySelector(".arm-patrols")!.textContent).not.toContain("22:00"));
   });
 });

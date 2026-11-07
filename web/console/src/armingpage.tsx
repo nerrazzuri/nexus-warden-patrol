@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "preact/hooks";
 import { canArm, canDisarm, canSchedule, isOwnerLike } from "./model";
 import { GuardPanel } from "./armguard";
 import { DevicesPanel } from "./devicespanel";
+import { PatrolSchedules } from "./routepage";
 import { api, ApiError, enc } from "./api";
 import { addBlock, armedAt, copyDay, fromWire, minutesText, moveEdge, removeBlock, toWire, type Slot, type WireSlot } from "./armgrid";
 import { hm, type DutySettings } from "./data";
@@ -57,7 +58,7 @@ export function ArmingPage({ say, now, role = "admin" }: { say: Say; now: number
   const [zone, setZone] = useState("");
   const [sel, setSel] = useState<{ day: number; start: number } | null>(null);
   const [gridHint, setGridHint] = useState<string | null>(null);
-  const [sec, setSec] = useState<"times" | "guard" | "devices">("times");
+  const [sec, setSec] = useState<"times" | "patrols" | "guard" | "devices">("times");
   const [copyFrom, setCopyFrom] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
   const [switching, setSwitching] = useState<"armed" | "home" | null>(null);
@@ -124,9 +125,9 @@ export function ArmingPage({ say, now, role = "admin" }: { say: Say; now: number
   // P1-57:一页三块,分标签:布防时间(顶上「保存」管这块)、守卫值勤(自己存)、报警设备(马上存)
   const tabs = (
     <div class="ly-tabs arm-tabs" role="tablist">
-      {(["times", "guard", "devices"] as const).map((x) => (
+      {(["times", "patrols", "guard", "devices"] as const).map((x) => (
         <button key={x} type="button" role="tab" aria-selected={sec === x} data-arm-tab={x}
-          onClick={() => setSec(x)}>{t(x === "times" ? "armTabTimes" : x === "guard" ? "armTabGuard" : "armTabDevices")}</button>
+          onClick={() => setSec(x)}>{t(x === "times" ? "armTabTimes" : x === "patrols" ? "armTabPatrols" : x === "guard" ? "armTabGuard" : "armTabDevices")}</button>
       ))}
     </div>
   );
@@ -136,7 +137,8 @@ export function ArmingPage({ say, now, role = "admin" }: { say: Say; now: number
         <div class="panel-head"><h1>{t("tabArming")}</h1></div>
         {tabs}
         {dirty && <p class="arm-dirty" role="status">{t("armDirtyOther")}</p>}
-        {sec === "guard" ? <GuardPanel say={say} now={now} canEdit={canSchedule(role)} /> : <DevicesPanel say={say} canEdit={isOwnerLike(role)} />}
+        {sec === "patrols" ? <PatrolSchedules say={say} canEdit={canSchedule(role)} />
+          : sec === "guard" ? <GuardPanel say={say} now={now} canEdit={canSchedule(role)} /> : <DevicesPanel say={say} canEdit={isOwnerLike(role)} />}
       </section>
     );
   }
