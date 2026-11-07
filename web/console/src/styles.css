@@ -1236,3 +1236,8 @@ input[type="file"]::file-selector-button {
   height: 36px; padding: 0 14px; margin-right: 10px; border-radius: var(--r-r8); border: 1px solid var(--c-outline);
   background: var(--c-surface); color: var(--c-text); font: inherit; font-weight: 600; cursor: pointer;
 }
+/* P1-59:时间轴图例 */
+.arm-legend { margin: 4px 0 0; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.arm-sw { display: inline-block; width: 18px; height: 10px; border-radius: 3px; background: var(--c-success); }
+/* P1-58:布防页的保存按钮滚动时一直在 */
+.arming > .panel-head { position: sticky; top: 60px; z-index: 4; background: var(--c-bg); padding: 8px 0; }
