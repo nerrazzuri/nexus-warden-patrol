@@ -97,6 +97,8 @@ def handle(h: Any, method: str, path: str, user: Any) -> None:
             h._audit_detail = {"from": src, "moved": moved}
             return h._send_json(200, {"moved": moved})
         if what == "delete":
+            if h._via_cookie:
+                h._confirm(user, d)          # 网页易用性 P1-47:跟发布一样,网页上删版本要再输密码
             out = adm.delete(map_id, version, confirm_rollback=d.get("confirm_rollback") is True)
             h._audit_detail = out
             return h._send_json(200, out)
@@ -234,6 +236,8 @@ def _basemap(h: Any, adm: MapAdmin, method: str, map_id: str, version: str) -> N
 
 def _rollback(h: Any, adm: MapAdmin, user: Any) -> None:
     d = h._body()
+    if h._via_cookie:
+        h._confirm(user, d)                  # 网页易用性 P1-47:跟发布一样再输密码
     rid = d.get("robot_id")
     if not isinstance(rid, str) or not SAFE_ID.match(rid) or rid not in set(adm.robot_ids()):
         raise AdminError(404, "机器人不存在")

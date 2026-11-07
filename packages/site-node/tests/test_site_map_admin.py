@@ -441,3 +441,17 @@ def test_网页P0_14_发布时把旧版上的路线搬到新版(站点):
     assert [r["id"] for r in d["routes"]] == ["r1"]
     assert s.req("POST", f"/api/admin/maps/{MAP[0]}/99/adopt-routes", {"from": "7"},
                  token=alice)[0] == 404
+
+
+def test_网页P1_47_网页上删版本_退回上一版跟发布一样要再输密码(站点):
+    """网页易用性第 1 轮 P1-47:发布要再输密码,写着「不能恢复」的删除和退回反而不要。网页(cookie)上三样一致。"""
+    s = 站点
+    from test_site_zones import _网页
+    web = _网页(s)
+    _等(lambda: _rc(s) is not None)
+    code, d = web(f"/api/admin/maps/{MAP[0]}/9/delete", {})
+    assert code == 403 and "密码" in d["error"], d
+    code, d = web("/api/admin/maps/rollback", {"robot_id": "A"})
+    assert code == 403 and "密码" in d["error"], d
+    code, d = web(f"/api/admin/maps/{MAP[0]}/9/delete", {"confirm_password": PW})
+    assert code == 200, d
