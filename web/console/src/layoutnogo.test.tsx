@@ -70,10 +70,11 @@ describe("布置 → 禁行区", () => {
     const yes = btn(document.querySelector(".modal")!, "确认");
     expect(yes.disabled).toBe(true);
     fireEvent.click(document.querySelector('.modal input[name="sure"]')!);
+    // P1-32:密码就在同一个框里;没输密码还不能点
+    expect(btn(document.querySelector(".modal")!, "确认").disabled).toBe(true);
+    fireEvent.input(document.querySelector('.modal input[type="password"]')!, { target: { value: "my-own-password" } });
+    expect(document.querySelectorAll(".modal").length).toBe(1);
     fireEvent.click(btn(document.querySelector(".modal")!, "确认"));
-    await waitFor(() => expect(document.querySelector("form.confirm-pw")).not.toBeNull());
-    fireEvent.input(document.querySelector('form.confirm-pw input[type="password"]')!, { target: { value: "my-own-password" } });
-    fireEvent.submit(document.querySelector("form.confirm-pw")!);
     await waitFor(() => expect(posted.find((p) => p.url === "/api/maps/home/3/zones/confirm")?.body).toEqual(
       { revision: 3, confirm: true, empty_ok: true, confirm_password: "my-own-password" }));
   });

@@ -6,7 +6,6 @@
 // 人员忽略区(W41,机器人在里面看见人不报)、抹掉区(机器人永远不去、画图时抹成没建图)也在这里画。
 import { useEffect, useState } from "preact/hooks";
 import { api, ApiError } from "./api";
-import { ConfirmPassword } from "./confirmpw";
 import { Confirm, Modal } from "./dialogs";
 import { t } from "./i18n";
 import { closesLoop, polyPx, toMap, type NavZones, type TabProps } from "./layoutpage";
@@ -40,7 +39,7 @@ export function NogoTab(p: TabProps) {
   const [pts, setPts] = useState<Pt[]>([]);
   const [form, setForm] = useState(false);
   const [removing, setRemoving] = useState<Draft | null>(null);
-  const [confirming, setConfirming] = useState<"ask" | "pw" | null>(null);
+  const [confirming, setConfirming] = useState<"ask" | null>(null);
   const [behind, setBehind] = useState<string[]>([]);
 
   const changed = JSON.stringify(zones) !== JSON.stringify(nav?.zones ?? []);
@@ -156,28 +155,40 @@ export function NogoTab(p: TabProps) {
         <Confirm text={t("lyNogoRemoveAsk", { label: removing.label || removing.id })} yes={t("remove")} danger onNo={() => setRemoving(null)}
           onYes={() => { const z = removing; setRemoving(null); setZones(zones.filter((o) => o.id !== z.id)); }} />
       )}
+      {/* P1-32:勾「我确认」和输密码在同一个对话框里(原来是两个) */}
       {confirming === "ask" && (
-        <SureDialog onNo={() => setConfirming(null)} onYes={() => {
-          if (held.length > 0) setConfirming("pw");
-          else void confirm().catch((e) => p.say(t("failed", { why: e instanceof ApiError ? e.message : String(e) })));
-        }} />
+        <SureDialog needPw={held.length > 0} onNo={() => setConfirming(null)} onYes={(pw) => confirm(pw)} />
       )}
-      {confirming === "pw" && <ConfirmPassword title={t("navConfirmBtn")} onClose={() => setConfirming(null)} onConfirm={(pw) => confirm(pw)} />}
     </div>
   );
 }
 
-/** 确认那一句(人话):勾上才能确认。 */
-function SureDialog({ onYes, onNo }: { onYes: () => void; onNo: () => void }) {
+/** 确认那一句(人话):勾上才能确认;删了、缩了禁行区(``needPw``)就在同一个框里再输密码。 */
+function SureDialog({ onYes, onNo, needPw }: { onYes: (pw?: string) => Promise<void>; onNo: () => void; needPw: boolean }) {
   const [sure, setSure] = useState(false);
+  const [pw, setPw] = useState("");
+  const [err, setErr] = useState("");
+  const [busy, setBusy] = useState(false);
+  const go = async () => {
+    setBusy(true);
+    setErr("");
+    try { await onYes(needPw ? pw : undefined); } catch (e) { setErr(t("failed", { why: e instanceof ApiError ? e.message : String(e) })); } finally { setBusy(false); }
+  };
   return (
     <Modal label={t("navConfirmBtn")} onClose={onNo}>
-      <p>{t("lyNogoConfirmLead")}</p>
-      <label class="field-check"><input type="checkbox" name="sure" checked={sure} onChange={(e) => setSure(e.currentTarget.checked)} />{t("lyNogoSure")}</label>
-      <div class="row end">
-        <button type="button" class="btn" onClick={onNo}>{t("cancel")}</button>
-        <button type="button" class="btn primary" disabled={!sure} onClick={onYes}>{t("lyConfirm")}</button>
-      </div>
+      <form onSubmit={(e) => { e.preventDefault(); if (sure && (!needPw || pw)) void go(); }}>
+        <p>{t("lyNogoConfirmLead")}</p>
+        <label class="field-check"><input type="checkbox" name="sure" checked={sure} onChange={(e) => setSure(e.currentTarget.checked)} />{t("lyNogoSure")}</label>
+        {needPw && (
+          <label class="field">{t("lyNogoPw")}<input type="password" name="confirm_pw" autoComplete="current-password" value={pw}
+            onInput={(e) => setPw(e.currentTarget.value)} /></label>
+        )}
+        {err && <p class="error small" role="alert">{err}</p>}
+        <div class="row end">
+          <button type="button" class="btn" onClick={onNo}>{t("cancel")}</button>
+          <button type="submit" class="btn primary" disabled={!sure || (needPw && !pw) || busy}>{t("lyConfirm")}</button>
+        </div>
+      </form>
     </Modal>
   );
 }
