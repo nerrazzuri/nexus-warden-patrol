@@ -1360,3 +1360,7 @@ input[type="date"]:not(.field input) { height: 36px; padding: 0 8px; border-radi
 }
 .duty-map .maplegend { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: thin; }
 .rn-edge.bad { stroke: var(--c-error); stroke-dasharray: 6 4; }
+/* P2-08:总览机器人一行右边「详情」 */
+.duty-list > li { display: flex; align-items: stretch; gap: 6px; }
+.duty-list > li > .duty-row { flex: 1; min-width: 0; }
+.duty-row-more { align-self: center; flex: none; }

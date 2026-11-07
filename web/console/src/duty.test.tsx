@@ -277,3 +277,13 @@ describe("网页易用性第 1 轮 P2-08", () => {
     localStorage.removeItem("nexwar.duty.pins");
   });
 });
+
+describe("网页易用性第 1 轮 P2-08 详情", () => {
+  it("每台一行有「详情」:保安去地图找它,管理员去机器人页打开它", () => {
+    const { container: c } = page([]);
+    expect(c.querySelector('[data-robot-more="A"]')!.getAttribute("href")).toBe("#/map?robot=A");
+    cleanup();
+    const { container: d } = render(<DutyPage units={[unit("A", "idle")]} alerts={[]} now={1000} role="admin" say={vi.fn()} refresh={vi.fn(async () => {})} onZoom={() => {}} />);
+    expect(d.querySelector('[data-robot-more="A"]')!.getAttribute("href")).toBe("#/admin/robots?robot=A");
+  });
+});

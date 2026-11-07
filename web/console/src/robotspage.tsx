@@ -65,11 +65,12 @@ function problemText(p: RobotCard["problems"][number]): string {
 }
 
 /** ``readOnly``(W60):经理只看 —— 没有添加、批准加入、改名、改派单方式、开通码、解绑、确认换 WiFi。 */
-export function RobotsPage({ say, now, units = [], readOnly = false, role = "admin" }: {
-  say: Say; now: number; units?: UnitInfo[]; readOnly?: boolean; role?: string;
+export function RobotsPage({ say, now, units = [], readOnly = false, role = "admin", robot = null }: {
+  say: Say; now: number; units?: UnitInfo[]; readOnly?: boolean; role?: string; robot?: string | null;
 }) {
   const [rows, setRows] = useState<RobotCard[] | null>(null);
-  const [open, setOpen] = useState<string | null>(null);
+  // P2-08:从总览点「详情」带着 ?robot= 进来,直接打开那一台
+  const [open, setOpen] = useState<string | null>(robot);
   const [adding, setAdding] = useState(false);
   const [code, setCode] = useState<{ id: string; code: string; hours: number } | null>(null);
   const [pending, setPending] = useState<BindReq[]>([]);
