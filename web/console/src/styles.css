@@ -1213,3 +1213,15 @@ input.invalid { border-color: var(--c-error); }
 .user-audit li.bad { color: inherit; }
 .user-audit .tag.bad { background: var(--c-errorSoft); color: var(--c-error); }
 .user-audit .tag.ok { background: var(--c-surfaceVariant); color: var(--c-textSecondary); }
+/* P1-85:矮屏(1280×720 这类)侧栏排紧,展开「高级」也基本放得下 */
+@media (min-width: 900px) and (max-height: 820px) {
+  .sidenav { gap: 10px; padding: 12px 10px; }
+  .sidenav a { min-height: 30px; }
+  .sidenav-brand { gap: 4px; }
+}
+/* P1-82:手机上页面标题占一整行,时钟、?、账号、全部停止在第二行,全部停止固定在最右 */
+@media (max-width: 720px) {
+  .topbar { padding: 6px 12px; }
+  .topbar > .pagetitle, .topbar > h1 { flex-basis: 100%; }
+  .topbar > .btn.stop { order: 10; margin-left: auto; }
+}
