@@ -1188,3 +1188,19 @@ details.ops > summary { cursor: pointer; font-weight: 600; padding: 6px 0; }
 input.invalid { border-color: var(--c-error); }
 .kpi-sub { display: block; }
 .ly-dirty { padding: 4px 10px; border-radius: 8px; background: var(--c-warningSoft); color: var(--c-text); font-weight: 600; }
+
+/* P1-70:导出 PDF(浏览器打印)用 A4;顶栏、侧栏、各种按钮都不打 */
+@media print {
+  @page { size: A4; margin: 12mm; }
+  .topbar, .sidenav, .btn, button, .stop { display: none !important; }
+}
+/* P1-22:录像控制栏分组整体换行 */
+.recctl-grp { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+/* P1-83:手机上布防例外一行放不下就换行 */
+@media (max-width: 720px) { .arm-ex li.row { flex-wrap: wrap; } }
+/* P1-84:触屏上可点的地方至少 44px(戴手套也点得中) */
+@media (pointer: coarse) {
+  .btn, .sidenav a, .seg button, .alarmcount, .lang button { min-height: 44px; }
+  input[type="checkbox"], input[type="radio"] { width: 22px; height: 22px; }
+  label:has(> input[type="checkbox"]), label:has(> input[type="radio"]) { min-height: 44px; display: inline-flex; align-items: center; gap: 8px; }
+}
