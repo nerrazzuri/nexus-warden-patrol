@@ -209,6 +209,9 @@ export function SideNav(props: { me: Me; page: Page; alarms: number | null; noti
     || props.page === "admin/mapedit";
   const [open, setOpen] = useState(inAdvanced);
   useEffect(() => { if (inAdvanced) setOpen(true); }, [inAdvanced]);
+  // P0-16:手机上导航收在「菜单」按钮里(宽屏这个按钮不显示,导航一直在);点了哪页就收起
+  const [menu, setMenu] = useState(false);
+  useEffect(() => setMenu(false), [props.page]);
   const badge = (b: "alarms" | "notices" | undefined) => {
     const n = b === "alarms" ? props.alarms : b === "notices" ? props.notices : null;
     return n ? <span class={b === "alarms" ? "badge alarm mono" : "badge mono"}>{n}</span> : null;
@@ -219,7 +222,10 @@ export function SideNav(props: { me: Me; page: Page; alarms: number | null; noti
         <BrandMark />
         <span class="sidenav-site" title={props.me.site_name}>{props.me.site_name}</span>
       </div>
-      <nav class="sidenav-nav" aria-label={t("mainNav")}>
+      <button type="button" class="btn sm nav-toggle" aria-expanded={menu} aria-controls="mainnav" onClick={() => setMenu(!menu)}>
+        ☰ {t("navMenu")}{props.alarms ? <span class="badge alarm mono">{props.alarms}</span> : null}
+      </button>
+      <nav id="mainnav" class={menu ? "sidenav-nav open" : "sidenav-nav"} aria-label={t("mainNav")}>
         {groups.map((g) => {
           const shown = !g.fold || open;
           return (
@@ -265,8 +271,10 @@ function UserMenu(props: { me: Me; pref: ThemePref; onPref: (p: ThemePref) => vo
   ];
   return (
     <div class="usermenu" ref={box}>
-      <button type="button" class="who" aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen(!open)}>
-        {props.me.display_name || props.me.name} ▾
+      {/* 网页易用性第 1 轮 P0-16:窄屏只剩一个圆头像(首字),菜单还在:退出、语言、改密码都从这里 */}
+      <button type="button" class="who" aria-haspopup="menu" aria-expanded={open} aria-label={t("userMenu")} onClick={() => setOpen(!open)}>
+        <span class="who-initial" aria-hidden="true">{(props.me.display_name || props.me.name).slice(0, 1).toUpperCase()}</span>
+        <span class="who-name">{props.me.display_name || props.me.name} ▾</span>
       </button>
       {open && (
         <div class="menu" role="menu">
