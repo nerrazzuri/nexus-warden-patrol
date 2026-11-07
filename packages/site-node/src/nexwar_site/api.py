@@ -1331,6 +1331,9 @@ class _Handler(TlsHandlerMixin):
             self._need(user, PATROL)              # W53:经理也能派巡逻(别的派单不能)
         else:
             self._need(user, DISPATCH)
+        if action is not None and method == "POST" and disp.registry.get(robot_id) is None:
+            # 网页易用性 P2-25:没登记过的机器人先回 404(原来先查请求体,回 400 / 409)
+            raise HttpError(404, f"没有登记过 {robot_id}")
         if action is None:
             if method != "GET":
                 raise HttpError(405, "只支持 GET")

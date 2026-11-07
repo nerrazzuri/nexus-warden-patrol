@@ -345,7 +345,8 @@ export function RoutesPage({ say, embed, kind = "patrol" }: { say: Say; embed?: 
   return (
     <div class={embed ? "routes-embed" : "admin"}>
       <section class={embed ? undefined : "panel"}>
-        <div class="panel-head" hidden={!!embed}>
+        {/* P2-14:嵌在「布置」里不要这一栏(原来用 hidden,被 .panel-head 的 flex 盖掉,出了两个地图版本框) */}
+        {!embed && <div class="panel-head">
           <h1>{rt("routesTitle")}</h1>
           <label class="field-inline">{rt("routesMap")}
             <select value={sel ? `${sel.map_id}\u0000${sel.version}` : ""} onChange={(e) => {
@@ -358,11 +359,11 @@ export function RoutesPage({ say, embed, kind = "patrol" }: { say: Say; embed?: 
           </label>
           <span class="push" />
           {dirty && <span class="muted small" role="status">{rt("routeUnsaved")}</span>}
-        </div>
+        </div>}
         <div class="routesplit">
           <div class="routemap" ref={root} onClickCapture={(e) => swallowClick(guard.current, e)}>
             {!sel || !meta ? <p class="empty">{t("noMap")}</p> : (
-              <MapLike meta={meta} raster={`${base}/preview.png`} label={rt("routesTitle")}
+              <MapLike meta={meta} raster={`${base}/preview.png`} label={guardKind ? rt("guardTitle") : rt("routesTitle")}
                 drawing={!!draft} onPick={draft ? pick : undefined}
                 overlay={!draft && routes.length > 0 ? <p class="routepick-hint small" data-route-hint="1">{rt("routePickHint")}</p> : undefined}
                 world={<>
@@ -407,7 +408,7 @@ export function RoutesPage({ say, embed, kind = "patrol" }: { say: Say; embed?: 
             {guardKind && <p class="muted small">{rt("guardOnlyArmed")}</p>}
             {genOpen && sel && <GuardGenerate map={sel} taken={routes.map((r) => r.id)} say={say} onDone={fromGenerated} onClose={() => setGenOpen(false)} />}
             {routes.length === 0 && <p class="muted small">{guardKind ? rt("guardNone") : rt("routesNone")}</p>}
-            <ul class="routelist" aria-label={rt("routesTitle")}>
+            <ul class="routelist" aria-label={guardKind ? rt("guardTitle") : rt("routesTitle")}>
               {routes.map((r) => {
                 const n = schedCount(r.id);
                 return (
@@ -611,12 +612,12 @@ function PointForm({ p, idx, names, plain, onChange, onActions }: {
       <label class="field">{rt("pointDwell")}
         <input type="number" min="0" step="1" value={dwellOf(p)} onInput={(e) => { const v = num(e.currentTarget.value); if (v !== null && v >= 0) onActions(setDwell(p, v)); }} />
       </label>
-      <label class="wide"><input type="checkbox" checked={hasAction(p, "photo", "front")} onChange={() => onActions(toggleAction(p, { type: "photo", camera: "front" }))} /> {rt("pointPhotoFront")}</label>
-      <label class="wide"><input type="checkbox" checked={hasAction(p, "photo", "back")} onChange={() => onActions(toggleAction(p, { type: "photo", camera: "back" }))} /> {rt("pointPhotoBack")}</label>
-      <label class="wide"><input type="checkbox" checked={hasAction(p, "light")} onChange={() => onActions(toggleAction(p, { type: "light", on: true }))} /> {rt("pointLight")}</label>
+      <label class="wide field-check"><input type="checkbox" checked={hasAction(p, "photo", "front")} onChange={() => onActions(toggleAction(p, { type: "photo", camera: "front" }))} /> {rt("pointPhotoFront")}</label>
+      <label class="wide field-check"><input type="checkbox" checked={hasAction(p, "photo", "back")} onChange={() => onActions(toggleAction(p, { type: "photo", camera: "back" }))} /> {rt("pointPhotoBack")}</label>
+      <label class="wide field-check"><input type="checkbox" checked={hasAction(p, "light")} onChange={() => onActions(toggleAction(p, { type: "light", on: true }))} /> {rt("pointLight")}</label>
       {/* 设计 §2.4:拍热像、量温度要等热像实物接上(契约的拍照现在只认前、后两路) */}
-      <label class="wide muted" data-thermal="photo"><input type="checkbox" disabled /> {rt("pointThermal")} <span class="small">· {rt("thermalLater")}</span></label>
-      <label class="wide muted" data-thermal="temp"><input type="checkbox" disabled /> {rt("pointTemp")} <span class="small">· {rt("thermalLater")}</span></label>
+      <label class="wide field-check muted" data-thermal="photo"><input type="checkbox" disabled /> {rt("pointThermal")} <span class="small">· {rt("thermalLater")}</span></label>
+      <label class="wide field-check muted" data-thermal="temp"><input type="checkbox" disabled /> {rt("pointTemp")} <span class="small">· {rt("thermalLater")}</span></label>
       <label class="field wide">{rt("pointCheck")}
         <input value={p.check ?? ""} maxLength={500} onInput={(e) => { const v = e.currentTarget.value; const { check: _c, ...rest } = p; onActions(v ? { ...rest, check: v } : rest); }} />
       </label>
