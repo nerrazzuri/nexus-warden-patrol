@@ -16,6 +16,8 @@ export interface Me {
 export function App() {
   const [me, setMe] = useState<Me | null | undefined>(undefined);
   const [expired, setExpired] = useState(false);
+  // P1-67:改完密码回登录页时写「密码已改,用新密码登录」,不写「会话已过期」
+  const [note, setNote] = useState<string | null>(null);
 
   useEffect(() => {
     onUnauthorized.cb = () => {
@@ -35,11 +37,13 @@ export function App() {
     return (
       <Login
         expired={expired}
+        note={note}
         onIn={(m) => {
           setExpired(false);
+          setNote(null);
           setMe(m);
         }}
       />
     );
-  return <Console me={me} onOut={() => setMe(null)} />;
+  return <Console me={me} onOut={(n) => { setNote(n ?? null); setExpired(false); setMe(null); }} />;
 }

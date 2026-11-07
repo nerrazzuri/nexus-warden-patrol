@@ -4,7 +4,7 @@ import type { Me } from "./app";
 import { t } from "./i18n";
 import { LangSwitch } from "./langswitch";
 
-export function Login({ onIn, expired }: { onIn: (m: Me) => void; expired: boolean }) {
+export function Login({ onIn, expired, note }: { onIn: (m: Me) => void; expired: boolean; note?: string | null }) {
   const [name, setName] = useState("");
   const [pw, setPw] = useState("");
   const [busy, setBusy] = useState(false);
@@ -32,7 +32,7 @@ export function Login({ onIn, expired }: { onIn: (m: Me) => void; expired: boole
       <form class="login-card" onSubmit={submit}>
         <div class="brand"><span class="mark">NW</span><span>{t("appName")}</span></div>
         <h1>{t("dutyConsole")}</h1>
-        {expired && <p class="note" role="status">{t("sessionExpired")}</p>}
+        {note ? <p class="note" role="status">{note}</p> : expired && <p class="note" role="status">{t("sessionExpired")}</p>}
         <label>
           {t("account")}
           <input autocomplete="username" value={name} onInput={(e) => setName(e.currentTarget.value)} required />

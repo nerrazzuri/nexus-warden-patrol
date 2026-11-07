@@ -6,7 +6,7 @@ import { useEffect, useRef, useState } from "preact/hooks";
 import { api, ApiError } from "./api";
 import type { Me } from "./app";
 import { modeLabel } from "./armingpage";
-import { Modal } from "./dialogs";
+import { Confirm, Modal } from "./dialogs";
 import { hm } from "./data";
 import { lang, setLang, t, type Key } from "./i18n";
 import { Icon } from "./icons";
@@ -156,7 +156,7 @@ export function TopBar(props: {
   pref: ThemePref;
   onPref: (p: ThemePref) => void;
   onStop: () => void;
-  onSignOut: () => void;
+  onSignOut: (note?: string) => void;
   onSay: (s: string) => void;
   /** 「?」:使用教程、常见问题(W53)。 */
   onHelp?: () => void;
@@ -181,9 +181,16 @@ export function TopBar(props: {
   );
 }
 
+/** 浏览器标签标题(网页易用性第 1 轮 P1-04):「页名 · Nexus Warden」,开好几个标签也分得清;跟着语言换。 */
+export function tabTitle(page: Page): string {
+  const l = navLabel(page);
+  return l ? `${t(l.page)} · Nexus Warden` : "Nexus Warden";
+}
+
 /** 顶栏左边:组名(小字)+ 页名。 */
 function PageTitle({ page }: { page: Page }) {
   const l = navLabel(page);
+  useEffect(() => { document.title = tabTitle(page); }, [page, lang.value]);
   return (
     <div class="pagetitle">
       {l && <span class="pagetitle-sec">{t(l.section)}</span>}
@@ -254,7 +261,7 @@ function ArmState({ mode }: { mode: Mode }) {
   return <span class={`armstate ${mode.source === "schedule" ? (mode.state === "armed" ? "armed" : "home") : mode.mode}`}><i class="dot" aria-hidden="true" />{text}</span>;
 }
 
-function UserMenu(props: { me: Me; pref: ThemePref; onPref: (p: ThemePref) => void; onSignOut: () => void; onSay: (s: string) => void }) {
+function UserMenu(props: { me: Me; pref: ThemePref; onPref: (p: ThemePref) => void; onSignOut: (note?: string) => void; onSay: (s: string) => void }) {
   const [open, setOpen] = useState(false);
   const [pw, setPw] = useState(false);
   const box = useRef<HTMLDivElement>(null);
@@ -299,23 +306,34 @@ function UserMenu(props: { me: Me; pref: ThemePref; onPref: (p: ThemePref) => vo
           </div>
           <button type="button" class="menu-item" role="menuitem" onClick={() => { setOpen(false); setPw(true); }}>{t("changePassword")}</button>
           <a class="menu-item" role="menuitem" href="/assets/third-party-notices.txt" target="_blank" rel="noopener noreferrer" onClick={() => setOpen(false)}>{t("thirdParty")}</a>
-          <button type="button" class="menu-item" role="menuitem" onClick={props.onSignOut}><Icon name="logout" />{t("signOut")}</button>
+          <button type="button" class="menu-item" role="menuitem" onClick={() => props.onSignOut()}><Icon name="logout" />{t("signOut")}</button>
         </div>
       )}
-      {pw && <OwnPassword onClose={() => setPw(false)} onDone={() => { setPw(false); props.onSay(t("pwDone")); }} />}
+      {pw && <OwnPassword onClose={() => setPw(false)} onDone={() => { setPw(false); props.onSignOut(t("pwDoneRelogin")); }} />}
     </div>
   );
 }
+
+/** 密码至少几个字符(站点 accounts.MIN_PASSWORD)。 */
+const PW_MIN = 10;
 
 function OwnPassword({ onClose, onDone }: { onClose: () => void; onDone: () => void }) {
   const [old, setOld] = useState("");
   const [neu, setNeu] = useState("");
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
+  const [ask, setAsk] = useState(false);
   async function save(e: Event) {
     e.preventDefault();
-    setBusy(true);
     setErr("");
+    // P1-67:规则先写出来、当场查(站点也查);新旧一样不改;改之前确认(改完要重新登录)
+    if (neu.length < PW_MIN) return setErr(t("pwRule", { n: PW_MIN }));
+    if (neu === old) return setErr(t("pwSame"));
+    setAsk(true);
+  }
+  async function commit() {
+    setAsk(false);
+    setBusy(true);
     try {
       await api("POST", "/api/me/password", { old, new: neu });
       onDone();
@@ -330,9 +348,11 @@ function OwnPassword({ onClose, onDone }: { onClose: () => void; onDone: () => v
       <form class="field" onSubmit={save}>
         <label>{t("pwOld")}<input type="password" autoComplete="current-password" value={old} onInput={(e) => setOld((e.target as HTMLInputElement).value)} /></label>
         <label>{t("pwNew")}<input type="password" autoComplete="new-password" value={neu} onInput={(e) => setNeu((e.target as HTMLInputElement).value)} /></label>
+        <span class="muted small">{t("pwRule", { n: PW_MIN })}</span>
         {err && <p class="error">{err}</p>}
         <div class="row end"><button type="submit" class="btn primary" disabled={busy || !old || !neu}>{t("pwSave")}</button></div>
       </form>
+      {ask && <Confirm text={t("pwAsk")} yes={t("pwSave")} onNo={() => setAsk(false)} onYes={() => void commit()} />}
     </Modal>
   );
 }

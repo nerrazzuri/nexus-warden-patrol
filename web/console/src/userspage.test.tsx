@@ -80,13 +80,16 @@ describe("用户页", () => {
     fireEvent.click(btn(c, "给工程师开临时账号"));
     fireEvent.input(document.querySelector('form.eng-form input[name="display"]')!, { target: { value: "王工" } });
     fireEvent.click(document.querySelector('form.eng-form input[value="24"]')!);
+    const vpn = document.querySelector('form.eng-form input[name="vpn"]') as HTMLInputElement;
+    expect(vpn.checked).toBe(false);                                              // P1-65:默认不勾
+    fireEvent.click(vpn);
     fireEvent.submit(document.querySelector("form.eng-form")!);
     await waitFor(() => expect(document.querySelector("form.confirm-pw")).not.toBeNull());
     fireEvent.input(document.querySelector('form.confirm-pw input[type="password"]')!, { target: { value: "my-own-password" } });
     fireEvent.submit(document.querySelector("form.confirm-pw")!);
     await waitFor(() => expect(document.body.textContent).toContain("s3cret-once-only"));
     expect(posted.find((p) => p.url === "/api/accounts/engineer")!.body).toEqual({ display_name: "王工", hours: 24, vpn: true, confirm_password: "my-own-password" });
-    expect(document.body.textContent).toContain("10.77.0.200");                    // W55:默认同时发 VPN 配置
+    expect(document.body.textContent).toContain("10.77.0.200");                    // W55:勾了就同时发 VPN 配置
     expect(document.querySelector('a[download="nexwar_eng-20261027-1200.conf"]')).not.toBeNull();
     expect(document.body.textContent).toContain("eng-20261027-1200");
     expect(document.body.textContent).toContain("关闭后无法再查看");
@@ -115,6 +118,8 @@ describe("用户页", () => {
     expect(r.querySelector("select")).toBeNull();
     expect(btn(r, "重设密码")).toBeUndefined();
     fireEvent.click(btn(r, "提前关闭"));
+    expect(posted.find((p) => p.url === "/api/accounts/eng-20261027-0900")).toBeUndefined();   // P1-05:先确认
+    fireEvent.click(btn(c.ownerDocument.querySelector(".modal")!, "提前关闭"));
     await waitFor(() => expect(posted.find((p) => p.url === "/api/accounts/eng-20261027-0900")?.body).toEqual({ disabled: true }));
   });
 
@@ -133,5 +138,28 @@ describe("用户页", () => {
     fireEvent.click(btn(document.querySelector(".modal, [role=dialog]")!, "删除"));
     await waitFor(() => expect(posted.map((p) => p.url)).toContain("/api/accounts/gina/remove"));
     await waitFor(() => expect(c.querySelector('tr[data-name="gina"]')).toBeNull());
+  });
+});
+
+
+describe("网页易用性第 1 轮 P1-05 / P1-63 / P1-64", () => {
+  it("改角色先确认(升管理员写清后果),停用先确认;新增用户能选只读", async () => {
+    const { container: c } = page();
+    await waitFor(() => expect(tr(c, "gina")).not.toBeNull());
+    const sel = tr(c, "gina").querySelector("select") as HTMLSelectElement;
+    fireEvent.change(sel, { target: { value: "admin" } });
+    expect(posted.some((p) => p.url === "/api/accounts/gina")).toBe(false);
+    const m = c.ownerDocument.querySelector(".modal")!;
+    expect(m.textContent).toContain("管理员能增删用户");
+    fireEvent.click(btn(m, "改角色"));
+    await waitFor(() => expect(posted.find((p) => p.url === "/api/accounts/gina")?.body).toEqual({ role: "admin" }));
+    posted.length = 0;
+    fireEvent.click(btn(tr(c, "gina"), "停用"));
+    expect(posted.length).toBe(0);
+    fireEvent.click(btn(c.ownerDocument.querySelector(".modal")!, "停用"));
+    await waitFor(() => expect(posted.find((p) => p.url === "/api/accounts/gina")?.body).toEqual({ disabled: true }));
+    fireEvent.click(btn(c, "添加用户"));
+    const opts = Array.from(c.ownerDocument.querySelectorAll(".modal select option")).map((o) => (o as HTMLOptionElement).value);
+    expect(opts).toContain("viewer");
   });
 });

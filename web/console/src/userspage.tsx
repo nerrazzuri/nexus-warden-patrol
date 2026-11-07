@@ -70,6 +70,8 @@ export function UsersPage({ me, say, now }: { me: string; say: Say; now: number 
   const [resetFor, setResetFor] = useState<string | null>(null);
   const [removing, setRemoving] = useState<Account | null>(null);
   const [who, setWho] = useState<string | null>(null);
+  // P1-05 / P1-63:改角色、停用、提前关工程师账号都先确认
+  const [ask, setAsk] = useState<{ text: string; yes: string; danger?: boolean; go: () => void } | null>(null);
 
   const change = async (name: string, body: Record<string, unknown>, msg = t("saved")) => {
     try {
@@ -91,6 +93,7 @@ export function UsersPage({ me, say, now }: { me: string; say: Say; now: number 
       </div>
       <p class="muted lead">{t("usersLead")}</p>
       <Requests say={say} onDone={reload} />
+      {ask && <Confirm text={ask.text} yes={ask.yes} danger={ask.danger} onNo={() => setAsk(null)} onYes={() => { const g = ask.go; setAsk(null); g(); }} />}
       <div class={who ? "users-split" : undefined}>
         <table class="grid users-table">
           <thead><tr><th>{t("name")}</th><th>{t("role")}</th><th>{t("lastLogin")}</th><th>{t("status")}</th><th>{t("colActions")}</th></tr></thead>
@@ -107,7 +110,12 @@ export function UsersPage({ me, say, now }: { me: string; say: Say; now: number 
                   </td>
                   <td>
                     {isEng || self ? t(roleLabel(a.role)) : (
-                      <select aria-label={`${t("role")} ${a.name}`} value={a.role} onChange={(e) => void change(a.name, { role: e.currentTarget.value })}>
+                      <select aria-label={`${t("role")} ${a.name}`} value={a.role} onChange={(e) => {
+                        const r = e.currentTarget.value;
+                        e.currentTarget.value = a.role;           // 确认了才改
+                        setAsk({ text: t(r === "admin" ? "roleAskAdmin" : "roleAsk", { who: a.display_name || a.name, role: t(roleLabel(r)) }),
+                          yes: t("roleAskYes"), danger: r === "admin", go: () => void change(a.name, { role: r }, t("roleChanged", { who: a.display_name || a.name, role: t(roleLabel(r)) })) });
+                      }}>
                         {ROLES.map((r) => <option key={r} value={r}>{t(roleLabel(r))}</option>)}
                       </select>
                     )}
@@ -120,12 +128,15 @@ export function UsersPage({ me, say, now }: { me: string; say: Say; now: number 
                   <td class="actions">
                     {isEng ? (
                       <>
-                        {!off && <button type="button" class="btn sm" onClick={() => void change(a.name, { disabled: true }, t("engClosed"))}>{t("engClose")}</button>}
+                        {!off && <button type="button" class="btn sm" onClick={() => setAsk({ text: t("engCloseAsk", { who: a.display_name || a.name }), yes: t("engClose"), danger: true,
+                          go: () => void change(a.name, { disabled: true }, t("engClosed")) })}>{t("engClose")}</button>}
                         <button type="button" class="btn sm" onClick={() => setRemoving(a)}>{t("remove")}</button>
                       </>
                     ) : !self && (
                       <>
-                        <button type="button" class="btn sm" onClick={() => void change(a.name, { disabled: !a.disabled })}>{a.disabled ? t("enable") : t("disable")}</button>
+                        <button type="button" class="btn sm" onClick={() => (a.disabled ? void change(a.name, { disabled: false }, t("userEnabled", { who: a.display_name || a.name }))
+                          : setAsk({ text: t("disableAsk", { who: a.display_name || a.name }), yes: t("disable"), danger: true,
+                            go: () => void change(a.name, { disabled: true }, t("userDisabled", { who: a.display_name || a.name })) }))}>{a.disabled ? t("enable") : t("disable")}</button>
                         <button type="button" class="btn sm" onClick={() => setResetFor(a.name)}>{t("resetPassword")}</button>
                         <button type="button" class="btn sm" onClick={() => setRemoving(a)}>{t("remove")}</button>
                       </>
@@ -223,7 +234,7 @@ function UserAudit({ name, account, onClose }: { name: string; account?: Account
 function EngineerForm({ onClose, onNext }: { onClose: () => void; onNext: (display: string, hours: number, vpn: boolean) => void }) {
   const [display, setDisplay] = useState("");
   const [hours, setHours] = useState(4);
-  const [vpn, setVpn] = useState(true);
+  const [vpn, setVpn] = useState(false);          // P1-65:多数站点没装 VPN,默认不勾
   return (
     <Modal label={t("engOpen")} onClose={onClose}>
       <form class="form eng-form" onSubmit={(e) => { e.preventDefault(); if (display.trim()) onNext(display.trim(), hours, vpn); }}>
@@ -267,7 +278,7 @@ function AddUser({ onClose, onDone, say }: { onClose: () => void; onDone: () => 
         <label class="field">{t("accountName")}<input value={name} pattern="[A-Za-z0-9._\-]{1,64}" required autocomplete="off" onInput={(e) => setName(e.currentTarget.value)} /></label>
         <label class="field">{t("role")}
           <select value={role} onChange={(e) => setRole(e.currentTarget.value)}>
-            {(["guard", "owner", "admin"] as const).map((r) => <option key={r} value={r}>{t(roleLabel(r))}</option>)}
+            {(["guard", "owner", "viewer", "admin"] as const).map((r) => <option key={r} value={r}>{t(roleLabel(r))}</option>)}
           </select>
         </label>
         <label class="field">{t("newPassword")}<input type="password" minLength={10} required autocomplete="new-password" value={pw} onInput={(e) => setPw(e.currentTarget.value)} /></label>
