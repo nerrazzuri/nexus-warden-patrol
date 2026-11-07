@@ -240,7 +240,9 @@ function Spark({ pts }: { pts: Metric[] }) {
 }
 
 export function SiteMetrics() {
-  const since = Date.now() - 30 * 86_400_000;
+  // 网页易用性第 1 轮 P0-19:起点只算一次。每次重画都用 Date.now() 算,网址就变,页面每秒重画一次就
+  // 每秒重新拉(实测 5 秒约 100 次)。
+  const [since] = useState(() => Math.floor((Date.now() - 30 * 86_400_000) / 60_000) * 60_000);
   const [m] = useLoad<{ metrics: Metric[] }>(`/api/metrics?since=${since}`);
   const rows = m?.metrics ?? [];
   return (
