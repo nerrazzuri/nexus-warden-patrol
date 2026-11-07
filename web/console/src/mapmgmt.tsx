@@ -398,14 +398,44 @@ function lostRoutes(target: { map_id: string; version: string }, dogs: Dog[], ch
   return [...froms.values()];
 }
 
+/** 第 2 轮 N4:一版上画了多少布置(``GET …/layout``)。 */
+export interface LayoutCounts { areas: number; exits: number; hides: number; posts: number; net_nodes: number; nogo: number; cameras: number; standby: number; proposal: boolean }
+
+/** 第 2 轮 N4:``from`` 上有、``to`` 上没有的布置,一项一句。禁区、待命点在 ``to`` 有待核建议时另说。 */
+export function missingLayout(from: LayoutCounts, to: LayoutCounts): { text: string; review: boolean }[] {
+  const out: { text: string; review: boolean }[] = [];
+  const n = (k: keyof LayoutCounts) => (from[k] as number) > 0 && (to[k] as number) === 0;
+  const pl = (c: number, one: string, many: string) => `${c} ${c === 1 ? one : many}`;
+  if (n("areas")) out.push({ text: tr(pl(from.areas, "zone", "zones"), `${from.areas} 个防区`), review: false });
+  if (n("exits")) out.push({ text: tr(pl(from.exits, "exit line", "exit lines"), `${from.exits} 条出口线`), review: false });
+  if (n("hides")) out.push({ text: tr(pl(from.hides, "hiding spot", "hiding spots"), `${from.hides} 个藏匿点`), review: false });
+  if (n("posts")) out.push({ text: tr(pl(from.posts, "adjusted zone post", "adjusted zone posts"), `${from.posts} 个调过的防区查看点 / 值守位`), review: false });
+  if (n("net_nodes")) out.push({ text: tr("the road network", "路网"), review: false });
+  if (n("cameras")) out.push({ text: tr(pl(from.cameras, "camera", "cameras"), `${from.cameras} 个摄像头位置`), review: false });
+  if (n("nogo")) out.push({ text: tr(pl(from.nogo, "no-go zone", "no-go zones"), `${from.nogo} 个禁区`), review: to.proposal });
+  if (n("standby")) out.push({ text: tr(pl(from.standby, "standby point", "standby points"), `${from.standby} 个待命点`), review: to.proposal });
+  return out;
+}
+
 export function PublishDialog({ target, dogs, onClose }: { target: { map_id: string; version: string; unusable?: string; source?: string; zonesOk?: boolean | null }; dogs: Dog[]; onClose: () => void }) {
   const [routes, setRoutes] = useState<{ id: string; map_id: string; map_version: string }[]>([]);
   useEffect(() => {
     api<{ routes: { id: string; map_id: string; map_version: string }[] }>("GET", `/api/routes?map_id=${enc(target.map_id)}`)
       .then((d) => setRoutes(d.routes ?? [])).catch(() => setRoutes([]));
   }, [target.map_id]);
-  // 编辑、清噪点出来的版本跟原来同一个坐标系:默认一起搬
-  const [carry, setCarry] = useState(target.source === "edit" || target.source === "denoise");
+  // 编辑、清噪点出来的版本跟原来同一个坐标系:默认一起搬 —— 第 2 轮 N4:是「搬」不是「抄」,
+  // 还有机器人留在旧版、不在这次发布里时,搬走它们就没路线了:那时默认不搬
+  const sameFrame = target.source === "edit" || target.source === "denoise";
+  const leftBehind = (from: string, picked: string[]) => dogs.filter((d) => !picked.includes(d.robot_id) && d.loaded
+    && d.loaded.map_id === target.map_id && d.loaded.version === from).map((d) => d.robot_id);
+  const [carry, setCarry] = useState(() => {
+    if (!sameFrame) return false;
+    const picked = dogs.filter((d) => d.online && d.can_activate && !(target.unusable && d.running?.confirms === "localizer")
+      && !(d.loaded && d.loaded.map_id === target.map_id && d.loaded.version === target.version)).map((d) => d.robot_id);
+    const froms = new Set(dogs.filter((d) => picked.includes(d.robot_id) && d.loaded?.map_id === target.map_id).map((d) => d.loaded!.version));
+    return [...froms].every((v) => leftBehind(v, picked).length === 0);
+  });
+  const [layouts, setLayouts] = useState<Record<string, LayoutCounts>>({});
   const [moved, setMoved] = useState<string[] | null>(null);
   // 11-05 现场第 10 条:缺定位文件的版本,带定位器的机器人收了也会拒 —— 不让勾
   const noLoc = (d: Dog) => !!target.unusable && d.running?.confirms === "localizer";
@@ -413,6 +443,15 @@ export function PublishDialog({ target, dogs, onClose }: { target: { map_id: str
   // P1-46:默认勾上在线、能换图、还没用这一版的
   const [chosen, setChosen] = useState<string[]>(() => eligible
     .filter((d) => !(d.loaded && d.loaded.map_id === target.map_id && d.loaded.version === target.version)).map((d) => d.robot_id));
+  const fromVersions = Array.from(new Set(dogs.filter((d) => chosen.includes(d.robot_id) && d.loaded?.map_id === target.map_id
+    && d.loaded.version !== target.version).map((d) => d.loaded!.version))).sort();
+  useEffect(() => {
+    for (const v of [target.version, ...fromVersions]) {
+      if (layouts[v]) continue;
+      api<LayoutCounts>("GET", `/api/admin/maps/${enc(target.map_id)}/${enc(v)}/layout`)
+        .then((d) => setLayouts((o) => ({ ...o, [v]: d }))).catch(() => { /* 查不到:不列 */ });
+    }
+  }, [target.map_id, target.version, fromVersions.join(",")]);
   // P1-45:禁行区没确认的版本站点会拒;先说、给去确认的入口,不让白输密码
   const zonesBad = target.zonesOk === false;
   const [noHome, setNoHome] = useState(false);
@@ -487,12 +526,33 @@ export function PublishDialog({ target, dogs, onClose }: { target: { map_id: str
               <p>{tr(`${l.ids.length} patrol route(s) are drawn on ${l.same ? "v" : ""}${l.from} (${l.ids.join(", ")}). After switching to v${target.version} they cannot run, and today's patrols that use them stop.`,
                 `${l.same ? "v" : ""}${l.from} 上画着 ${l.ids.length} 条巡逻路线(${l.ids.join("、")})。换到 v${target.version} 以后它们不能跑,今日计划里用到它们的巡逻也会停。`)}</p>
               {l.same ? (
-                <label><input type="checkbox" checked={carry} onChange={(e) => setCarry(e.currentTarget.checked)} />{" "}
-                  {tr(`Move these routes to v${target.version} too (only if v${target.version} was edited or cleaned from v${l.from}: same coordinates)`,
-                    `把这些路线也搬到 v${target.version}(只在 v${target.version} 是从 v${l.from} 编辑、清噪点出来的时候勾:坐标一样)`)}</label>
+                <>
+                  <label><input type="checkbox" checked={carry} onChange={(e) => setCarry(e.currentTarget.checked)} />{" "}
+                    {tr(`Move these routes to v${target.version} too (only if v${target.version} was edited or cleaned from v${l.from}: same coordinates)`,
+                      `把这些路线也搬到 v${target.version}(只在 v${target.version} 是从 v${l.from} 编辑、清噪点出来的时候勾:坐标一样)`)}</label>
+                  {carry && leftBehind(l.from, chosen).length > 0 && (
+                    <p data-left-behind class="warn">{tr(`${leftBehind(l.from, chosen).join(", ")} stay on v${l.from} (not in this publish). Moving takes the routes off v${l.from}, so they would have no routes.`,
+                      `${leftBehind(l.from, chosen).join("、")} 还在 v${l.from} 上、不在这次发布里。路线是搬走不是复制,搬了它们就没有这些路线了。`)}</p>
+                  )}
+                </>
               ) : <p class="muted">{tr("This is a different map: redraw the routes on it.", "这是另一张图:要在新图上重画路线。")}</p>}
             </div>
           ))}
+          {fromVersions.map((v) => {
+            const from = layouts[v], to = layouts[target.version];
+            if (!from || !to) return null;
+            const miss = missingLayout(from, to);
+            if (miss.length === 0) return null;
+            const plain = miss.filter((m) => !m.review), review = miss.filter((m) => m.review);
+            return (
+              <div key={`miss-${v}`} class="warn small mm-missing">
+                {plain.length > 0 && <p>{tr(`On v${v} but not on v${target.version}: ${plain.map((m) => m.text).join(", ")}. After switching they do nothing on these robots — draw them again on v${target.version}.`,
+                  `v${v} 上有、v${target.version} 上没有:${plain.map((m) => m.text).join("、")}。换过去以后这些在这几台机器人上都不起作用,要在 v${target.version} 上重画。`)}</p>}
+                {review.length > 0 && <p>{tr(`${review.map((m) => m.text).join(", ")} were carried over from an earlier version but are not in effect yet. Check and keep them on the Zones page.`,
+                  `${review.map((m) => m.text).join("、")}已从上一版带过来,还没生效:要到「区域」页逐个核对、留下。`)}</p>}
+              </div>
+            );
+          })}
           <fieldset class="checks mm-options">
             <legend>{tr("Options", "选项")}</legend>
             <label><input type="checkbox" checked={noHome} onChange={(e) => setNoHome(e.currentTarget.checked)} /> {tr("Publish even if a robot has no home origin on this version", "机器人在这一版上没有原点也照发")}</label>

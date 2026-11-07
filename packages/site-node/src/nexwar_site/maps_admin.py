@@ -420,6 +420,44 @@ class MapAdmin:
         return {"map_id": map_id, "from": version, "version": new, **stats,
                 "homes_copied": homes, "layout_copied": layout, "by": by}
 
+    def layout_counts(self, map_id: str, version: str) -> dict[str, Any]:
+        """网页易用性第 2 轮 N4:这一版上画了多少布置(发布弹窗跟机器人现在用的那一版比,
+        列出换过去会缺的)。``proposal``:R2 带过来、还没核的建议有没有。只读。"""
+        map_id, version = self._names(map_id, version)
+        site = self.site
+        out: dict[str, Any] = {"areas": 0, "exits": 0, "hides": 0, "posts": 0, "net_nodes": 0,
+                               "nogo": 0, "cameras": 0, "standby": 0, "proposal": False}
+        areas = getattr(site, "areas", None)
+        if areas is not None:
+            out["areas"] = len(areas.list(map_id, version))
+        from nexwar_site.api import map_marks, zone_posts
+        marks = map_marks(site)
+        if marks is not None:
+            ms = marks.list(map_id, version)
+            out["exits"] = sum(m["kind"] == "exit" for m in ms)
+            out["hides"] = sum(m["kind"] == "hide" for m in ms)
+        posts = zone_posts(site)
+        if posts is not None:
+            out["posts"] = sum(not p.get("auto") for p in posts.view(map_id, version))
+        nets = getattr(site, "route_nets", None)
+        if nets is not None:
+            out["net_nodes"] = len(nets.get(map_id, version).nodes)
+        zones = getattr(site, "zones", None)
+        if zones is not None:
+            out["nogo"] = len(zones.current(map_id, version).zones)
+            try:
+                out["proposal"] = zones.proposal(map_id, version) is not None
+            except Exception:  # noqa: BLE001 —— 老库没有建议表:当没有
+                out["proposal"] = False
+        devices = getattr(site, "devices", None)
+        if devices is not None:
+            out["cameras"] = sum(d.get("map_id") == map_id and d.get("map_version") == version
+                                 for d in devices.list())
+        out["standby"] = self.db.query(
+            "SELECT COUNT(*) AS n FROM standby_points WHERE map_id=? AND map_version=?",
+            (map_id, version))[0]["n"]
+        return out
+
     def _copy_layout(self, map_id: str, old: str, new: str, *, by: str) -> dict[str, int]:
         """网页易用性第 2 轮 N4:另存的新版本跟原版同一个坐标系(只换了栅格),防区、出口线、藏匿点、
         人挪过的防区查看点 / 值守位、路网照抄过去 —— 原来新版本上全是空的,换过去就没了也不说。
