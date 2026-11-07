@@ -1330,3 +1330,9 @@ input[type="file"]::file-selector-button {
 .layers input[type="checkbox"] { width: 18px; height: 18px; flex: none; margin: 0; }
 /* P2-10:单独放的日期框跟别的控件一个样 */
 input[type="date"]:not(.field input) { height: 36px; padding: 0 8px; border-radius: var(--r-r8); border: 1px solid var(--c-textMuted); background: var(--c-surface); color: var(--c-text); font: inherit; font-size: 14px; color-scheme: light dark; }
+/* P2-26:窄屏刻度隔着显示 */
+@media (max-width: 768px) { .ticks span.m2 { display: none; } }
+@media (max-width: 480px) { .ticks span.m4 { display: none; } }
+.ticks { cursor: pointer; }
+.tl-tracks { touch-action: pan-y; user-select: none; }
+.rec-jump { position: relative; } .rec-jump .error { position: absolute; left: 0; top: 100%; white-space: nowrap; font-weight: 400; }

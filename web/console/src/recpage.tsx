@@ -26,6 +26,8 @@ import {
   poseAt,
   prevSegment,
   segmentAt,
+  panView,
+  segBox,
   spans,
   viewSpan,
   type Recording,
@@ -218,20 +220,25 @@ export function RecordingsPage(props: { robots: string[]; role: string; now: num
   const total = range ? covered(sp, range.since, range.until) : 0;
   const kept = (rows ?? []).filter((r) => r.keep).length;
   const ls = range ? lanes(allRobots, allRows, alerts, range, segS) : [];
+  const [jumpBad, setJumpBad] = useState(false);
   return (
     <div class="recpage">
       <div class="recbar">
         <label>{t("recDate")}
           <input type="date" value={date} max={dateInput(props.now)} onChange={(e) => setDate((e.target as HTMLInputElement).value)} />
         </label>
-        <label>{t("recJump")}
+        <label class="rec-jump">{t("recJump")}
           <input type="text" class="mono hhmm wide" inputMode="numeric" maxLength={8} placeholder="HH:MM:SS" disabled={!rows || !range}
+            aria-invalid={jumpBad || undefined}
+            onInput={() => setJumpBad(false)}
             onKeyDown={(e) => {
               if (e.key !== "Enter") return;
               const s = clockSeconds((e.target as HTMLInputElement).value);
-              if (s == null) props.say(t("recBadTime"));
-              else if (range && rows) play(rows, range.since + s * 1000);
+              setJumpBad(s == null);
+              if (s != null && range && rows) play(rows, range.since + s * 1000);
             }} />
+          {/* P2-11:时间写错了就在框下面说 */}
+          {jumpBad && <small class="error" role="alert" data-jump-bad="1">{t("recBadTime")}</small>}
         </label>
         <div class="seg recrobots" role="group" aria-label={t("recRobot")}>
           {allRobots.map((r) => (
@@ -385,6 +392,8 @@ function Timeline(props: {
 }) {
   const { view } = props;
   const w = view.until - view.since;
+  const drag = useRef<{ x: number; view: { since: number; until: number }; width: number } | null>(null);
+  const dragged = useRef(false);
   const pct = (ms: number) => ((ms - view.since) / w) * 100;
   const timeAt = (e: MouseEvent | WheelEvent, el: Element) => {
     const box = el.getBoundingClientRect();
@@ -396,7 +405,21 @@ function Timeline(props: {
   for (let x = Math.ceil(view.since / stepMs) * stepMs; x <= view.until; x += stepMs) ticks.push(x);
   return (
     <div class="tl" data-span={String(w)}>
-      <div class="tl-tracks" onWheel={(e) => {
+      <div class="tl-tracks" onPointerDown={(e) => {
+        // P2-11:按住左右拖 = 平移(放大以后才有用);拖过了就不算点
+        const track = (e.currentTarget as Element).querySelector(".track");
+        drag.current = { x: e.clientX, view, width: track?.getBoundingClientRect().width ?? 0 };
+        dragged.current = false;
+      }} onPointerMove={(e) => {
+        const d = drag.current;
+        if (!d || d.width <= 0 || (e.buttons & 1) === 0) return;
+        const dx = e.clientX - d.x;
+        if (Math.abs(dx) < 4 && !dragged.current) return;
+        dragged.current = true;
+        props.onView(panView(props.day, d.view, dx / d.width));
+      }} onPointerUp={() => { drag.current = null; window.setTimeout(() => { dragged.current = false; }, 0); }}
+      onPointerLeave={() => { drag.current = null; }}
+      onWheel={(e) => {
         e.preventDefault();
         const at = timeAt(e, e.currentTarget as Element);
         props.onView(viewSpan(props.day, view, at, e.deltaY < 0 ? 0.5 : 2));
@@ -404,10 +427,11 @@ function Timeline(props: {
         {props.lanes.map((l) => (
           <div key={l.robot} class={l.robot === props.robot ? "lane on" : "lane"}>
             <b role="button" tabIndex={0} onClick={() => props.onPick(l.robot, props.head ?? props.day.since)}>{nameOf(l.robot)}</b>
-            <div class="track" onClick={(e) => props.onPick(l.robot, timeAt(e, e.currentTarget as Element))}>
-              {l.segs.filter(([a, b]) => b > view.since && a < view.until).map(([a, b]) => (
-                <span key={a} class="seg-rec" style={{ left: `${Math.max(0, pct(a))}%`, width: `${Math.max(0.2, pct(Math.min(b, view.until)) - Math.max(0, pct(a)))}%` }} />
-              ))}
+            <div class="track" onClick={(e) => { if (!dragged.current) props.onPick(l.robot, timeAt(e, e.currentTarget as Element)); }}>
+              {l.segs.filter(([a, b]) => b > view.since && a < view.until).map(([a, b]) => {
+                const bx = segBox(a, b, view);
+                return <span key={a} class="seg-rec" style={{ left: `${bx.left}%`, width: `${Math.min(bx.width, 100 - bx.left)}%` }} />;
+              })}
               {l.marks.filter((k) => k.t >= view.since && k.t < view.until).map((k) => (
                 <span key={k.t} class={`mk ${k.kind}`} style={{ left: `${pct(k.t)}%` }} />
               ))}
@@ -418,8 +442,16 @@ function Timeline(props: {
           <div class="tl-head" style={{ left: `calc(70px + (100% - 70px) * ${pct(props.head) / 100})` }}><span>{hms(props.head)}</span></div>
         )}
       </div>
-      <div class="ticks mono" aria-hidden="true">
-        {ticks.map((x) => <span key={x} style={{ left: `calc(70px + (100% - 70px) * ${pct(x) / 100})` }}>{hms(x).slice(0, 5)}</span>)}
+      {/* P2-26:刻度多时窄屏隔一个 / 隔三个显示;P2-11:点刻度那一条也能跳到那个时间 */}
+      <div class="ticks mono" aria-hidden="true" onClick={(e) => {
+        const box = (e.currentTarget as Element).getBoundingClientRect();
+        const inner = box.width - 70;
+        if (inner <= 0) return;
+        const f = Math.min(1, Math.max(0, (e.clientX - box.left - 70) / inner));
+        props.onPick(props.robot, view.since + f * w);
+      }}>
+        {ticks.map((x, i) => <span key={x} class={ticks.length > 12 ? `${i % 2 ? "m2" : ""}${i % 4 ? " m4" : ""}` : undefined}
+          style={{ left: `calc(70px + (100% - 70px) * ${pct(x) / 100})` }}>{hms(x).slice(0, 5)}</span>)}
       </div>
       <div class="lg muted small">
         <span><i class="k rec" />{t("recLegendRec")}</span>
