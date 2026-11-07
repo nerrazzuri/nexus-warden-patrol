@@ -25,6 +25,8 @@ export interface Version {
   source: string;
   note: string;
   size_bytes: number;
+  /** P1-87:登记了、站点盘上却没有的文件(老站点没有这一项)。 */
+  missing?: string[];
   latest: boolean;
   build: Build | null;
   counts: { zones: number; nogo: number; slow: number; zones_rev: number; zones_confirmed: boolean | null; standby: number; intercepts: number };
@@ -313,6 +315,12 @@ function VersionCard(p: {
           {v.latest && <span class="mm-tag">{tr("latest", "最新")}</span>}
           <span class="muted small"> · {when(v.created_ms)} · {v.source} · {mb(v.size_bytes)}</span>
         </h3>
+        {(v.missing ?? []).length > 0 && (
+          <p class="error small" role="alert" data-missing="1">
+            {tr(`Map files could not be read (${(v.missing ?? []).length} missing). Upload this version again or delete it.`,
+              `地图文件读取失败（缺 ${(v.missing ?? []).length} 个文件）。重新上传这一版，或者删掉它。`)}
+          </p>
+        )}
         <div class="mm-notebox">
           <input type="text" aria-label={tr(`Note for v${v.version}`, `v${v.version} 的备注`)} value={note} maxLength={200}
             placeholder={tr("Note (what changed, why)", "备注(改了什么、为什么)")} onInput={(e) => setDraft(e.currentTarget.value)} />

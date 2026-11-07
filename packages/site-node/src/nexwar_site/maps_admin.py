@@ -202,6 +202,8 @@ class MapAdmin:
                     "version": m["version"], "created_ms": m["created_ms"], "source": m["source"],
                     "note": m.get("note") or "",
                     "size_bytes": sum(int(f.get("size", 0)) for f in m["files"]),
+                    # P1-87:登记了、盘上却没有的文件(空 = 齐全)
+                    "missing": m.get("missing", []),
                     "latest": i == 0, "build": cat.build_info(map_id, m["version"]),
                     "quality": read_quality(cat, map_id, m["version"]),
                     "counts": {"zones": len(zs.zones) if zs else 0,
