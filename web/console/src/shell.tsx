@@ -258,7 +258,8 @@ function ArmState({ mode }: { mode: Mode }) {
   const text = mode.source === "schedule" ? modeLabel(mode) : mode.mode === "armed" ? t("armArmed")
     : mode.mode === "home" ? t("armHome")
     : t("armVisitor", { t: mode.until_ms ? hm(mode.until_ms) : "—" });
-  return <span class={`armstate ${mode.source === "schedule" ? (mode.state === "armed" ? "armed" : "home") : mode.mode}`}><i class="dot" aria-hidden="true" />{text}</span>;
+  // P1-79:只显示;悬停说去哪儿切、谁能切(保安能布防、不能撤防 —— 站点同一条规矩)
+  return <span class={`armstate ${mode.source === "schedule" ? (mode.state === "armed" ? "armed" : "home") : mode.mode}`} title={t("armStateTip")}><i class="dot" aria-hidden="true" />{text}</span>;
 }
 
 function UserMenu(props: { me: Me; pref: ThemePref; onPref: (p: ThemePref) => void; onSignOut: (note?: string) => void; onSay: (s: string) => void }) {
