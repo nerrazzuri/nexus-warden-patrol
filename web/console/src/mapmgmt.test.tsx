@@ -127,6 +127,44 @@ describe("备注", () => {
 });
 
 describe("发布", () => {
+  it("P0-14:换图前说出旧版上的路线会停;编辑出来的版本默认一起搬,发完调 adopt-routes", async () => {
+    overview.maps[0].versions[0] = { ...overview.maps[0].versions[0], source: "edit" };
+    routes["GET /api/routes"] = () => json({ routes: [{ id: "night", map_id: "estate", map_version: "2" }, { id: "x", map_id: "estate", map_version: "3" }] });
+    routes["POST /api/admin/maps/estate/3/publish"] = () => json({ results: [{ robot_id: "A", ok: true, state: "pending", reason: "" }] });
+    routes["POST /api/admin/maps/estate/3/adopt-routes"] = () => json({ moved: ["night"] });
+    const { container: c, getByLabelText } = mount();
+    await waitFor(() => getByLabelText("estate:3"));
+    fireEvent.click(getByLabelText("estate:3").querySelector(".btn.primary") as HTMLElement);
+    const dialog = await waitFor(() => c.querySelector("dialog") as HTMLDialogElement);
+    const boxes = Array.from(dialog.querySelectorAll("fieldset input[type=checkbox]")) as HTMLInputElement[];
+    fireEvent.click(boxes[0]);                                                    // A 现在用 2
+    const warn = await waitFor(() => dialog.querySelector(".mm-lost") as HTMLElement);
+    expect(warn.textContent).toContain("night");
+    expect(warn.textContent).not.toContain("x,");
+    expect((warn.querySelector("input") as HTMLInputElement).checked).toBe(true);
+    fireEvent.input(dialog.querySelector('input[name="confirm_pw"]') as HTMLElement, { target: { value: "pw" } });
+    fireEvent.click(Array.from(dialog.querySelectorAll("button")).find((b) => b.textContent === "Publish") as HTMLElement);
+    await waitFor(() => expect(calls.some((x) => x.path.endsWith("/adopt-routes"))).toBe(true));
+    expect(calls.find((x) => x.path.endsWith("/adopt-routes"))?.body).toEqual({ from: "2" });
+    await waitFor(() => expect(dialog.textContent).toContain("Patrol routes moved to v3: night"));
+  });
+
+  it("P0-14:不是编辑出来的版本默认不搬,发完提示路线要重画", async () => {
+    routes["GET /api/routes"] = () => json({ routes: [{ id: "night", map_id: "estate", map_version: "2" }] });
+    routes["POST /api/admin/maps/estate/3/publish"] = () => json({ results: [{ robot_id: "A", ok: true, state: "pending", reason: "" }] });
+    const { container: c, getByLabelText } = mount();
+    await waitFor(() => getByLabelText("estate:3"));
+    fireEvent.click(getByLabelText("estate:3").querySelector(".btn.primary") as HTMLElement);
+    const dialog = await waitFor(() => c.querySelector("dialog") as HTMLDialogElement);
+    fireEvent.click(dialog.querySelector("fieldset input[type=checkbox]") as HTMLElement);
+    const warn = await waitFor(() => dialog.querySelector(".mm-lost") as HTMLElement);
+    expect((warn.querySelector("input") as HTMLInputElement).checked).toBe(false);
+    fireEvent.input(dialog.querySelector('input[name="confirm_pw"]') as HTMLElement, { target: { value: "pw" } });
+    fireEvent.click(Array.from(dialog.querySelectorAll("button")).find((b) => b.textContent === "Publish") as HTMLElement);
+    await waitFor(() => expect(dialog.textContent).toContain("will not run until you redraw or move them"));
+    expect(calls.some((x) => x.path.endsWith("/adopt-routes"))).toBe(false);
+  });
+
   it("只列在线又能换图的机器人;选了才能发;结果一只一行(成功和拒绝分开)", async () => {
     routes["POST /api/admin/maps/estate/3/publish"] = (b) => json({ results: [
       { robot_id: "A", ok: true, state: "pending", reason: "" },

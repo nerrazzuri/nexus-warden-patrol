@@ -377,6 +377,33 @@ class RouteStore:
                     raise RouteError("改了以后跟布防值守撞了:" + ";".join(got))
         return self.get(route_id)
 
+    def move_to_version(self, map_id: str, from_version: str, to_version: str, *,
+                        by: str) -> list[str]:
+        """网页易用性第 1 轮 P0-14:把 ``from_version`` 上的路线都搬到 ``to_version``(同一个坐标系的
+        新版本:从旧版编辑、清噪点出来的)。各条修订号加一;回搬了哪几条。目标版本站点上没有抛
+        :class:`RouteError`。点走不走得通不在这里拦:搬过去以后路线页照常逐点标出问题。"""
+        if self.maps is not None:
+            try:
+                self.maps.get(map_id, to_version)
+            except Exception as exc:  # noqa: BLE001 —— MapError
+                raise RouteError(f"站点上没有 {map_id}:{to_version}") from exc
+        now = self._now()
+        moved: list[str] = []
+        with self.db.tx() as tx:
+            rows = tx.execute("SELECT route_id, definition FROM routes WHERE map_id=? AND "
+                              "map_version=? ORDER BY route_id",
+                              (map_id, from_version)).fetchall()
+            for r in rows:
+                d = json.loads(r["definition"])
+                d["map_version"] = to_version
+                tx.execute("UPDATE routes SET map_version=?, definition=?, revision=revision+1, "
+                           "updated_ms=?, updated_by=? WHERE route_id=?",
+                           (to_version, _json(d), now, by, r["route_id"]))
+                moved.append(r["route_id"])
+            if moved:
+                self._touch(tx, by, now)
+        return moved
+
     def delete_route(self, route_id: str, *, base_revision: Any, by: str) -> None:
         base = self._base(base_revision)
         now = self._now()

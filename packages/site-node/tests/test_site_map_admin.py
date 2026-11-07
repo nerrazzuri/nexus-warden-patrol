@@ -423,3 +423,21 @@ def test_现场10_不带定位器的机器人_缺定位文件照发(站点):
     _確认(s, alice, "9")
     code, d = _publish(s, alice, "9")
     assert code == 200 and d["results"][0]["state"] != "refused", d
+
+
+def test_网页P0_14_发布时把旧版上的路线搬到新版(站点):
+    s = 站点
+    alice, gina = _登(s, "alice"), _登(s, "gina")
+    pts = [{"name": "门", "x": 1.0, "y": 1.0, "yaw": 0.0}]
+    code, d = s.req("POST", "/api/routes/r1", {"map_id": MAP[0], "map_version": "7", "waypoints": pts,
+                                              "base_revision": 0}, token=alice)
+    assert code == 200, d
+    url = f"/api/admin/maps/{MAP[0]}/8/adopt-routes"
+    assert s.req("POST", url, {"from": "7"}, token=gina)[0] == 403
+    assert s.req("POST", url, {}, token=alice)[0] == 400
+    code, d = s.req("POST", url, {"from": "7"}, token=alice)
+    assert code == 200 and d["moved"] == ["r1"], d
+    code, d = s.req("GET", f"/api/routes?map_id={MAP[0]}&map_version=8", token=alice)
+    assert [r["id"] for r in d["routes"]] == ["r1"]
+    assert s.req("POST", f"/api/admin/maps/{MAP[0]}/99/adopt-routes", {"from": "7"},
+                 token=alice)[0] == 404

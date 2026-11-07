@@ -108,7 +108,7 @@ export function activationText(a: Activation, nowMs: number = Date.now()): strin
 export function MapManagePage({ say, pollMs = 5000 }: { say: Say; pollMs?: number }) {
   const [data, setData] = useState<Overview | null>(null);
   const [err, setErr] = useState("");
-  const [publish, setPublish] = useState<{ map_id: string; version: string; unusable?: string } | null>(null);
+  const [publish, setPublish] = useState<{ map_id: string; version: string; unusable?: string; source?: string } | null>(null);
   const [deleting, setDeleting] = useState<{ map_id: string; version: string; back: string[]; latest: boolean } | null>(null);
   const [rolling, setRolling] = useState<Dog | null>(null);
   const [pick, setPick] = useState<string[]>([]);
@@ -198,7 +198,7 @@ export function MapManagePage({ say, pollMs = 5000 }: { say: Say; pollMs?: numbe
                     return on ? [...rest, key].slice(-2) : rest;
                   })}
                   onNote={(n) => void saveNote(m.map_id, v.version, n)}
-                  onPublish={() => setPublish({ map_id: m.map_id, version: v.version, unusable: v.unusable ?? "" })}
+                  onPublish={() => setPublish({ map_id: m.map_id, version: v.version, unusable: v.unusable ?? "", source: v.source })}
                   onDelete={() => setDeleting({ map_id: m.map_id, version: v.version, back: v.previous_on, latest: v.latest })}
                   onNoise={() => setNoise({ map_id: m.map_id, version: v.version })}
                 />
@@ -363,7 +363,30 @@ function VersionCard(p: {
 
 // ------------------------------------------------------------------ 发布
 
-export function PublishDialog({ target, dogs, onClose }: { target: { map_id: string; version: string; unusable?: string }; dogs: Dog[]; onClose: () => void }) {
+/** 换图要丢的路线(P0-14):选中的机器人现在用的版本上画的路线,换到 ``target`` 以后都用不了。 */
+function lostRoutes(target: { map_id: string; version: string }, dogs: Dog[], chosen: string[],
+  routes: { id: string; map_id: string; map_version: string }[]): { from: string; same: boolean; ids: string[] }[] {
+  const froms = new Map<string, { from: string; same: boolean; ids: string[] }>();
+  for (const d of dogs) {
+    if (!chosen.includes(d.robot_id) || !d.loaded) continue;
+    if (d.loaded.map_id === target.map_id && d.loaded.version === target.version) continue;
+    const key = `${d.loaded.map_id}\u0000${d.loaded.version}`;
+    if (froms.has(key)) continue;
+    const ids = routes.filter((r) => r.map_id === d.loaded!.map_id && r.map_version === d.loaded!.version).map((r) => r.id);
+    if (ids.length) froms.set(key, { from: d.loaded.map_id === target.map_id ? d.loaded.version : `${d.loaded.map_id}:${d.loaded.version}`, same: d.loaded.map_id === target.map_id, ids });
+  }
+  return [...froms.values()];
+}
+
+export function PublishDialog({ target, dogs, onClose }: { target: { map_id: string; version: string; unusable?: string; source?: string }; dogs: Dog[]; onClose: () => void }) {
+  const [routes, setRoutes] = useState<{ id: string; map_id: string; map_version: string }[]>([]);
+  useEffect(() => {
+    api<{ routes: { id: string; map_id: string; map_version: string }[] }>("GET", `/api/routes?map_id=${enc(target.map_id)}`)
+      .then((d) => setRoutes(d.routes ?? [])).catch(() => setRoutes([]));
+  }, [target.map_id]);
+  // 编辑、清噪点出来的版本跟原来同一个坐标系:默认一起搬
+  const [carry, setCarry] = useState(target.source === "edit" || target.source === "denoise");
+  const [moved, setMoved] = useState<string[] | null>(null);
   // 11-05 现场第 10 条:缺定位文件的版本,带定位器的机器人收了也会拒 —— 不让勾
   const noLoc = (d: Dog) => !!target.unusable && d.running?.confirms === "localizer";
   const eligible = dogs.filter((d) => d.online && d.can_activate && !noLoc(d));
@@ -377,8 +400,19 @@ export function PublishDialog({ target, dogs, onClose }: { target: { map_id: str
     setBusy(true);
     setErr("");
     try {
+      const lost = lostRoutes(target, dogs, chosen, routes);
       const r = await api<{ results: PublishResult[] }>("POST", `/api/admin/maps/${enc(target.map_id)}/${enc(target.version)}/publish`, { robots: chosen, without_home: noHome, confirm_password: pw });
       setResults(r.results);
+      if (carry && r.results.some((x) => x.ok)) {
+        const got: string[] = [];
+        for (const l of lost.filter((x) => x.same)) {
+          try {
+            const m = await api<{ moved: string[] }>("POST", `/api/admin/maps/${enc(target.map_id)}/${enc(target.version)}/adopt-routes`, { from: l.from });
+            got.push(...m.moved);
+          } catch { /* 搬不了:结果里照样提示这些路线要重画 */ }
+        }
+        setMoved(got);
+      }
     } catch (e) {
       setErr(e instanceof ApiError && e.status === 403 ? tr("Wrong password.", "密码不对。") : errText(e));
       setPw("");
@@ -397,6 +431,11 @@ export function PublishDialog({ target, dogs, onClose }: { target: { map_id: str
               </li>
             ))}
           </ul>
+          {moved && moved.length > 0 && <p class="small">{tr(`Patrol routes moved to v${target.version}: ${moved.join(", ")}. Check them on the Routes page.`, `已把巡逻路线搬到 v${target.version}:${moved.join("、")}。请到「路线」页核对一遍。`)}</p>}
+          {!moved && lostRoutes(target, dogs, chosen, routes).length > 0 && (
+            <p class="warn small">{tr(`Patrol routes drawn on the old version are not on v${target.version}; today's patrols that use them will not run until you redraw or move them.`,
+              `旧版本上画的巡逻路线不在 v${target.version} 上;用到它们的今日巡逻不会跑,要重画或搬过来。`)}</p>
+          )}
           <div class="row end"><button type="button" class="btn primary" onClick={onClose}>{tr("Close", "关闭")}</button></div>
         </>
       ) : (
@@ -419,6 +458,17 @@ export function PublishDialog({ target, dogs, onClose }: { target: { map_id: str
             })}
           </fieldset>
           {eligible.length === 0 && dogs.length > 0 && <p class="muted small">{tr("No robot is online and able to switch maps.", "没有在线、又能换图的机器人。")}</p>}
+          {lostRoutes(target, dogs, chosen, routes).map((l) => (
+            <div key={l.from} class="warn small mm-lost">
+              <p>{tr(`${l.ids.length} patrol route(s) are drawn on ${l.same ? "v" : ""}${l.from} (${l.ids.join(", ")}). After switching to v${target.version} they cannot run, and today's patrols that use them stop.`,
+                `${l.same ? "v" : ""}${l.from} 上画着 ${l.ids.length} 条巡逻路线(${l.ids.join("、")})。换到 v${target.version} 以后它们不能跑,今日计划里用到它们的巡逻也会停。`)}</p>
+              {l.same ? (
+                <label><input type="checkbox" checked={carry} onChange={(e) => setCarry(e.currentTarget.checked)} />{" "}
+                  {tr(`Move these routes to v${target.version} too (only if v${target.version} was edited or cleaned from v${l.from}: same coordinates)`,
+                    `把这些路线也搬到 v${target.version}(只在 v${target.version} 是从 v${l.from} 编辑、清噪点出来的时候勾:坐标一样)`)}</label>
+              ) : <p class="muted">{tr("This is a different map: redraw the routes on it.", "这是另一张图:要在新图上重画路线。")}</p>}
+            </div>
+          ))}
           <label class="checks">
             <span><input type="checkbox" checked={noHome} onChange={(e) => setNoHome(e.currentTarget.checked)} /> {tr("Publish even if a robot has no home origin on this version", "机器人在这一版上没有原点也照发")}</span>
           </label>

@@ -26,7 +26,8 @@ from nexwar_site.maps_admin import AdminError, MapAdmin
 from nexwar_site.permissions import MANAGE
 
 _ROUTE = re.compile(r"^/api/admin/maps(?:/(rollback)|/([^/]{1,64})/([^/]{1,64})/"
-                    r"(note|publish|delete|diff|diff\.png|noise|denoise|edit|display|basemap|quality))?$")
+                    r"(note|publish|delete|diff|diff\.png|noise|denoise|edit|display|basemap|quality|"
+                    r"adopt-routes))?$")
 MAX_ROBOTS = 32
 
 
@@ -79,6 +80,22 @@ def handle(h: Any, method: str, path: str, user: Any) -> None:
             note = adm.set_note(map_id, version, d.get("note"))
             h._audit_detail = {"note": note}
             return h._send_json(200, {"ok": True, "note": note})
+        if what == "adopt-routes":
+            # 网页易用性第 1 轮 P0-14:换到同一坐标系的新版本时,把旧版上的路线一起搬过来
+            src = d.get("from")
+            if not isinstance(src, str) or not src or src == version:
+                raise HttpError(400, "from 要写从哪一版搬(不能是这一版本身)")
+            routes = getattr(h.site, "routes", None)
+            if routes is None:
+                raise HttpError(409, "站点没有路线库")
+            adm.ref(map_id, version)
+            from nexwar_site.routes import RouteError
+            try:
+                moved = routes.move_to_version(map_id, src, version, by=str(user))
+            except RouteError as exc:
+                raise HttpError(409, str(exc)) from exc
+            h._audit_detail = {"from": src, "moved": moved}
+            return h._send_json(200, {"moved": moved})
         if what == "delete":
             out = adm.delete(map_id, version, confirm_rollback=d.get("confirm_rollback") is True)
             h._audit_detail = out
