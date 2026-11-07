@@ -49,7 +49,8 @@ function Editor({ say, target, Canvas }: { say: Say; target: Target; Canvas?: Fu
   const [meta, setMeta] = useState<PreviewMeta | null>(null);
   const [digest, setDigest] = useState("");
   const [hist, setHist] = useState<History | null>(null);
-  const [tool, setTool] = useState<Tool>("erase");
+  // P1-53:一打开不默认选橡皮擦(点图就擦掉了);先选工具
+  const [tool, setTool] = useState<Tool | null>(null);
   const [shape, setShape] = useState<Shape>("stroke");
   const [width, setWidth] = useState(0.3);
   const [pts, setPts] = useState<Pt[]>([]);
@@ -131,7 +132,9 @@ function Editor({ say, target, Canvas }: { say: Say; target: Target; Canvas?: Fu
       // 等回包的时候换了图:人确认过的这一次照样存完(显示设置跟着它的新版本),只是不跳、不碰新的那个
       await api("POST", `${vb}/display`, display);
       say(version === target.version ? t("saved") : t("meSavedAs", { v: version }));
-      if (alive.current) location.hash = `#/admin/mapedit?map=${enc(target.map_id)}&version=${enc(version)}`;
+      // 存好了就不算没存(P0-12 的离开提醒不该再问);另存出新版本就跳过去(P1-55)
+      if (alive.current) setHist(start(display));
+      if (alive.current && version !== target.version) location.hash = `#/admin/mapedit?map=${enc(target.map_id)}&version=${enc(version)}`;
     } catch (e) {
       if (!alive.current) return;
       if (e instanceof ApiError && e.status === 409) setStale(true);
@@ -227,6 +230,7 @@ function Editor({ say, target, Canvas }: { say: Say; target: Target; Canvas?: Fu
             </label>
           )}
           {(tool === "region" || tool === "terrain") && <p class="muted small">{t("mePolyHint")}</p>}
+          {tool === null && <p class="muted small">{t("mePickTool")}</p>}
           {pts.length > 0 && (
             <div class="row wrap">
               <span class="muted small">{t(grid ? "meStrokePts" : "drawHint", { n: pts.length })}</span>
@@ -249,7 +253,8 @@ function Editor({ say, target, Canvas }: { say: Say; target: Target; Canvas?: Fu
               <input type="file" name="basemap" accept="image/png,image/jpeg" onChange={(e) => { const f = e.currentTarget.files?.[0]; if (f) void upload(f); }} />
               {bm && (["x", "y", "scale", "rotate_deg", "opacity"] as const).map((k) => (
                 <label key={k} class="field">{t(`meBm_${k}` as Key)}
-                  <input type="number" name={`bm_${k}`} step={k === "opacity" ? 0.1 : k === "scale" ? 0.001 : 0.5} value={bm[k]}
+                  <input type="number" name={`bm_${k}`} step={k === "opacity" ? 0.1 : k === "scale" ? 0.001 : 0.5}
+                    value={Number(bm[k].toFixed(k === "scale" ? 4 : 2))}
                     onChange={(e) => { const v = Number(e.currentTarget.value); change((s) => ({ ...s, display: { ...s.display, basemap: s.display.basemap ? { ...s.display.basemap, [k]: v } : null } })); }} />
                 </label>
               ))}

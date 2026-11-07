@@ -46,6 +46,7 @@ describe("地图编辑器", () => {
   it("橡皮擦一笔,另存前列出面积要确认,发出去的点和粗细对", async () => {
     const { container: c } = page();
     await waitFor(() => expect(c.querySelector('.mapedit[data-ready]')).not.toBeNull());
+    fireEvent.click(c.querySelector('[data-tool="erase"]')!);                // P1-53:不默认选工具
     fireEvent.click(c.querySelector(".pick")!);
     fireEvent.click(c.querySelector(".pick")!);
     fireEvent.click(btn(c, "完成绘制"));
@@ -66,6 +67,7 @@ describe("地图编辑器", () => {
     const Seq = (o: OwnLayer) => <div class="fakemap"><button type="button" class="pick" onClick={() => { const [x, y] = seq[i++ % seq.length]; o.onPick?.(x, y); }}>pick</button><svg>{o.world}</svg></div>;
     const { container: c } = render(<MapEditPage say={() => {}} target={{ map_id: "home", version: "3" }} Canvas={Seq} />);
     await waitFor(() => expect(c.querySelector('.mapedit[data-ready]')).not.toBeNull());
+    fireEvent.click(c.querySelector('[data-tool="erase"]')!);                // P1-53:不默认选工具
     for (let k = 0; k < seq.length; k++) fireEvent.click(c.querySelector(".pick")!);
     fireEvent.click(btn(c, "完成绘制"));
     expect(c.querySelector("polygon.me-op.loop.erase")).not.toBeNull();
@@ -75,6 +77,7 @@ describe("地图编辑器", () => {
   it("方框两个对角就画完", async () => {
     const { container: c } = page();
     await waitFor(() => expect(c.querySelector('.mapedit[data-ready]')).not.toBeNull());
+    fireEvent.click(c.querySelector('[data-tool="erase"]')!);                // P1-53:不默认选工具
     fireEvent.click(c.querySelector('[data-tool="obstacle"]')!);
     fireEvent.click(btn(c, "方框"));
     fireEvent.click(c.querySelector(".pick")!);
@@ -85,6 +88,7 @@ describe("地图编辑器", () => {
   it("特殊地面:楼梯默认放慢 0.3", async () => {
     const { container: c } = page();
     await waitFor(() => expect(c.querySelector('.mapedit[data-ready]')).not.toBeNull());
+    fireEvent.click(c.querySelector('[data-tool="erase"]')!);                // P1-53:不默认选工具
     fireEvent.click(c.querySelector('[data-tool="terrain"]')!);
     for (let i = 0; i < 3; i++) fireEvent.click(c.querySelector(".pick")!);
     fireEvent.click(btn(c, "完成绘制"));
@@ -94,6 +98,7 @@ describe("地图编辑器", () => {
   it("摆正只改显示:不另存新版本,只存显示设置", async () => {
     const { container: c } = page();
     await waitFor(() => expect(c.querySelector('.mapedit[data-ready]')).not.toBeNull());
+    fireEvent.click(c.querySelector('[data-tool="erase"]')!);                // P1-53:不默认选工具
     fireEvent.click(c.querySelector('[data-tool="rotate"]')!);
     fireEvent.change(c.querySelector('input[name="rotate"]')!, { target: { value: "12" } });
     fireEvent.click(c.querySelector(".me-save")!);
@@ -106,6 +111,7 @@ describe("地图编辑器", () => {
     editReply = 409;
     const { container: c } = page();
     await waitFor(() => expect(c.querySelector('.mapedit[data-ready]')).not.toBeNull());
+    fireEvent.click(c.querySelector('[data-tool="erase"]')!);                // P1-53:不默认选工具
     fireEvent.click(c.querySelector(".pick")!);
     fireEvent.click(btn(c, "完成绘制"));
     fireEvent.click(c.querySelector(".me-save")!);
@@ -124,6 +130,7 @@ describe("地图编辑器", () => {
     }) as typeof fetch);
     const ui = render(<MapEditPage say={() => {}} target={{ map_id: "A", version: "1" }} Canvas={Fake} />);
     await waitFor(() => expect(ui.container.querySelector(".mapedit[data-ready]")).not.toBeNull());
+    fireEvent.click(ui.container.querySelector('[data-tool="erase"]')!);
     fireEvent.click(ui.container.querySelector(".pick")!);
     fireEvent.click(btn(ui.container, "完成绘制"));
     expect((ui.container.querySelector(".me-save") as HTMLButtonElement).disabled).toBe(false);
@@ -135,6 +142,7 @@ describe("地图编辑器", () => {
     expect(ui.container.querySelector(".me-op")).toBeNull();
     resolveB(json({ rotate_deg: null, basemap: null, regions: [], terrain: [] }));
     await waitFor(() => expect(ui.container.querySelector(".mapedit[data-ready]")).not.toBeNull());
+    fireEvent.click(ui.container.querySelector('[data-tool="erase"]')!);
     expect((ui.container.querySelector(".me-save") as HTMLButtonElement).disabled).toBe(true);   // B 上什么都没画
     expect(posted).toEqual([]);
   });
@@ -167,6 +175,7 @@ describe("地图编辑器", () => {
     }) as typeof fetch);
     const ui = render(<MapEditPage say={() => {}} target={{ map_id: "A", version: "1" }} Canvas={Fake} />);
     await waitFor(() => expect(ui.container.querySelector(".mapedit[data-ready]")).not.toBeNull());
+    fireEvent.click(ui.container.querySelector('[data-tool="erase"]')!);
     fireEvent.click(ui.container.querySelector(".pick")!);
     fireEvent.click(btn(ui.container, "完成绘制"));
     fireEvent.click(ui.container.querySelector(".me-save")!);
@@ -185,6 +194,8 @@ describe("地图编辑器", () => {
   it("实测查出的用词:橡皮擦一笔写「已点 N 个点」,不写「点出各个角」", async () => {
     const { container: c } = page();
     await waitFor(() => expect(c.querySelector(".mapedit[data-ready]")).not.toBeNull());
+    expect(c.textContent).toContain("先在上面选一个工具");                          // P1-53
+    fireEvent.click(c.querySelector('[data-tool="erase"]')!);
     fireEvent.click(c.querySelector(".pick")!);
     expect(c.textContent).toContain("已选 1 个点");
     expect(c.textContent).not.toContain("各个角");
