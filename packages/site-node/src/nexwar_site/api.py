@@ -788,7 +788,7 @@ class _Handler(TlsHandlerMixin):
                 self._need(user, MANAGE)
                 return self._import_bundle(user)
             if path in ("/api/routes", "/api/route-timezone", "/api/route-export",
-                        "/api/guard-routes/generate") \
+                        "/api/guard-routes/generate", "/api/route-check") \
                     or _ROUTE.match(path) or _ROUTE_SCHED.match(path):
                 return self._routes(method, path, user)
             if path == "/api/deterrence" or _DETER.match(path):
@@ -2539,6 +2539,12 @@ class _Handler(TlsHandlerMixin):
             d = self._body()
             if path == "/api/guard-routes/generate":
                 return self._guard_generate(d, user)
+            if path == "/api/route-check":
+                # 网页易用性 P1-39:画的时候就查(跟存路线同一套逐点检查,不存、不进历史);
+                # 查成了不进操作记录(一会儿一次),出错的照样记
+                errs = store.check_points(d)
+                self._skip_audit = True
+                return self._send_json(200, {"errors": errs})
             if mr is not None and mr.group(2) == "/eta":
                 raise HttpError(405, "此接口只能 GET")
             if path == "/api/route-timezone":

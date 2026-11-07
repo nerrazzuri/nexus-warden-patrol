@@ -282,6 +282,22 @@ class RouteStore:
                             "problem": f"{a.name} 到 {b.name} 走不通(被墙或禁行区隔开)"})
         return out
 
+    def check_points(self, body: dict[str, Any]) -> list[dict[str, Any]]:
+        """网页易用性 P1-39:只做逐点检查(穿墙、在禁行区里、没扫到的地方),不存。
+        地图、版本、点本身不合格的照样 ``RouteError``。"""
+        version = body.get("map_version")
+        if not isinstance(version, str) or not version:
+            raise RouteError("map_version 必填(字符串)")
+        try:
+            m = parse_mission({"mission": "check", "map_id": body.get("map_id"),
+                               "map_version": version,
+                               "waypoints": _wire_waypoints(body.get("waypoints"))})
+        except (MissionError, ValueError) as exc:
+            raise RouteError(str(exc)) from exc
+        if len(m.waypoints) > MAX_WAYPOINTS:
+            raise RouteError(f"一条路线最多 {MAX_WAYPOINTS} 个点")
+        return self.problems(m.map_id, m.map_version, m.waypoints)
+
     def _validate_route(self, route_id: str, body: dict[str, Any]) -> Mission:
         return self.build_mission(route_id, body)
 
