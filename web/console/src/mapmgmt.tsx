@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "preact/hooks";
 import { api, ApiError, enc } from "./api";
 import { ConfirmPassword } from "./confirmpw";
+import { nameOf } from "./data";
 import { Modal } from "./dialogs";
 import { lang } from "./i18n";
 import "./mapmgmt.css";
@@ -19,6 +20,17 @@ export interface Build {
   loop_closure: { used: boolean; closures: number | null; why: string | null };
   handedness: { verdict: string | null; why: string | null };
 }
+/** P1-50:版本来源说人话(原来直接显示 denoise、edit,看着像作者名)。 */
+export function sourceText(src: string): string {
+  // 站点登记的来源:import / edit / denoise,机器人传上来的是机器人编号
+  const m: Record<string, [string, string]> = {
+    import: ["imported", "导入的"], edit: ["edited in the map editor", "地图编辑器改出来的"],
+    denoise: ["cleaned up (noise removed)", "去噪出来的"],
+  };
+  const hit = m[src];
+  return hit ? tr(hit[0], hit[1]) : tr(`built by robot ${nameOf(src)}`, `机器人 ${nameOf(src)} 建的`);
+}
+
 export interface Version {
   version: string;
   created_ms: number;
@@ -313,7 +325,7 @@ function VersionCard(p: {
         <h3>
           <span class="mono">v{v.version}</span>
           {v.latest && <span class="mm-tag">{tr("latest", "最新")}</span>}
-          <span class="muted small"> · {when(v.created_ms)} · {v.source} · {mb(v.size_bytes)}</span>
+          <span class="muted small"> · {when(v.created_ms)} · {sourceText(v.source)} · {mb(v.size_bytes)}</span>
         </h3>
         {(v.missing ?? []).length > 0 && (
           <p class="error small" role="alert" data-missing="1">
@@ -328,7 +340,10 @@ function VersionCard(p: {
           <span class={note.length >= 200 ? "bad small mono" : "muted small mono"}>{note.length}/200</span>
           <button type="button" class="btn sm" disabled={note.trim() === v.note} onClick={() => p.onNote(note)}>{tr("Save note", "保存备注")}</button>
         </div>
+        {/* P1-50:镜像警告留在外面;建图器、帧数、回环这些技术信息收起来 */}
+        {b?.handedness.verdict === "mirrored" && <p class="bad small">{tr("Mirrored map — do not publish", "这一版镜像了 —— 别发布")}</p>}
         {b ? (
+          <details class="mm-tech"><summary class="small muted">{tr("Technical details", "技术信息")}</summary>
           <p class="mm-build small">
             <span>{tr("Source", "来源")}: <b>{b.source ?? "—"}</b></span>
             <span>{tr("Builder", "建图器")}: {b.builder ?? "—"}{b.frames != null ? ` · ${b.frames} ${tr("frames", "帧")}` : ""}</span>
@@ -337,7 +352,8 @@ function VersionCard(p: {
               {tr("Handedness check", "手性核对")}: {b.handedness.verdict ?? "—"}{b.handedness.verdict === "mirrored" ? tr(" — MIRRORED, do not publish", " —— 镜像了,别发布") : ""}
             </span>
           </p>
-        ) : <p class="muted small">{tr("No build record (imported version).", "没有建图记录(导入的版本)。")}</p>}
+          </details>
+        ) : null}
         <p class="small mm-counts">
           <span>{tr("Zones", "区域")} {v.counts.zones} <span class="muted">({v.counts.nogo} {tr("no-go", "禁行")}, {v.counts.slow} {tr("slow", "限速")})</span>
             {v.counts.zones_confirmed === false && <span class="bad"> · {tr("not confirmed", "没确认")}</span>}</span>

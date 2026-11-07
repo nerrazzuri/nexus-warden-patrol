@@ -96,7 +96,9 @@ describe("总览", () => {
     expect((getByLabelText("Note for v3") as HTMLInputElement).value).toBe("after loop closure");
     expect(getByLabelText("estate:2").textContent).toContain("Loaded on");
     expect(getByLabelText("estate:2").textContent).toContain("Rollback target of");
-    expect(getByLabelText("estate:1").textContent).toContain("No build record");
+    // P1-50:技术信息收在「技术信息」里;没有建图记录的不再写一行技术话;来源说人话
+    expect(v3.querySelector("details.mm-tech .mm-build")).not.toBeNull();
+    expect(getByLabelText("estate:1").querySelector("details.mm-tech")).toBeNull();
     expect((getByLabelText("estate:3").querySelector("img") as HTMLImageElement).getAttribute("src")).toBe("/api/maps/estate/3/preview.png");
   });
 
