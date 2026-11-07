@@ -336,3 +336,46 @@ def test_第2轮_底图上传后同一条连接上的下一个请求照常(站�
     assert r2.status == 200, r2.read()
     assert "robots" in json.loads(r2.read())
     conn.close()
+
+
+def test_第2轮_N4_另存新版本_防区_出口线_藏匿点_防区路线_路网都复制过去_原版不动(站点):
+    """网页易用性第 2 轮 N4(P0-14 残留):编辑、清噪点另存的新版本跟原版同一个坐标系,原来只带了
+    显示设置 —— 防区、出口线、藏匿点、路网、人挪过的防区查看点 / 值守位在新版本上全是空的。
+    另存时复制过去(原版照旧,还在原版上的机器人不受影响)。"""
+    from nexwar_site.api import map_marks, zone_posts
+
+    s = 站点
+    tok = _登(s)
+    a = s.api
+    sq = [[0.5, 0.5], [3.0, 0.5], [3.0, 1.5], [0.5, 1.5]]
+    a.areas.set(MAP[0], MAP[1], "东区", sq, by="t")
+    marks = map_marks(a)
+    marks.set(MAP[0], MAP[1], {"kind": "exit", "name": "东门", "points": [[1, 0.6], [2, 0.6]]},
+              by="t")
+    marks.set(MAP[0], MAP[1], {"kind": "hide", "name": "柱后", "points": [[2.5, 1.0]]}, by="t")
+    posts = zone_posts(a)
+    auto = next(p for p in posts.view(MAP[0], MAP[1]) if p["zone"] == "东区")
+    if auto["view"] and auto["watch"]:
+        posts.set(MAP[0], MAP[1], "东区", view=auto["view"], watch=auto["watch"], by="t")
+    nets = a.route_nets
+    if nets is not None:
+        nets.put(MAP[0], MAP[1], {"base_revision": 0,
+                                  "nodes": [{"id": "n1", "x": 1.0, "y": 1.0},
+                                            {"id": "n2", "x": 2.0, "y": 1.0}],
+                                  "edges": [["n1", "n2"]]}, by="t")
+    dg = s.req("GET", f"{ADM}/noise", token=tok)[1]["digest"]
+    code, d = s.req("POST", f"{ADM}/edit", {"digest": dg, "ops": ERASE}, token=tok)
+    assert code == 200, d
+    nv = d["version"]
+    assert [x["zone"] for x in a.areas.list(MAP[0], nv)] == ["东区"]
+    got = marks.list(MAP[0], nv)
+    assert sorted((m["kind"], m["name"]) for m in got) == [("exit", "东门"), ("hide", "柱后")]
+    assert {m["id"] for m in got}.isdisjoint({m["id"] for m in marks.list(MAP[0], MAP[1])})
+    if auto["view"] and auto["watch"]:
+        assert next(p for p in posts.view(MAP[0], nv) if p["zone"] == "东区")["auto"] is False
+    if nets is not None:
+        assert len(nets.get(MAP[0], nv).nodes) == 2
+    # 原版不动
+    assert [x["zone"] for x in a.areas.list(MAP[0], MAP[1])] == ["东区"]
+    assert len(marks.list(MAP[0], MAP[1])) == 2
+    assert d["layout_copied"] == {"areas": 1, "marks": 2, "posts": 1, "net_nodes": 2}
