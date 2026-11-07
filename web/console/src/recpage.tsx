@@ -272,7 +272,9 @@ export function RecordingsPage(props: { robots: string[]; role: string; now: num
             )}
             {shown && !broken && <div class="osd bottom recosd"><span class="osd-status">{t("recorded")}{shown.keep ? ` · ${t("recKept")}` : ""}</span></div>}
           </div>
+          {/* P1-22:分两组,各组整体换行(上一段 / 下一段不会被拆开);没有的按钮不占位 */}
           <div class="recctl">
+            <div class="recctl-grp">
             <button type="button" class="btn sm" disabled={!shown}
               onClick={() => { const v = video.current; if (v) { if (v.paused) void v.play().catch(() => {}); else v.pause(); } }}>{t("recPlayPause")}</button>
             <div class="seg" role="group" aria-label={t("recSpeed")}>
@@ -285,7 +287,8 @@ export function RecordingsPage(props: { robots: string[]; role: string; now: num
             <button type="button" class="btn sm" disabled={!rows || head == null} onClick={() => rows && head != null && play(rows, head + 10_000)}>{t("recTenS")} ⏩</button>
             <button type="button" class="btn sm" disabled={!shown || !prevSegment(rows ?? [], shown)} onClick={() => shown && step(prevSegment(rows ?? [], shown))}>{t("recPrev")}</button>
             <button type="button" class="btn sm" disabled={!shown || !nextSegment(rows ?? [], shown)} onClick={() => shown && step(nextSegment(rows ?? [], shown))}>{t("recNext")}</button>
-            <span class="push" />
+            </div>
+            <div class="recctl-grp push">
             <button type="button" class="btn sm" disabled={!shown} onClick={snap}>{t("recSnap")}</button>
             {canExport(props.role) && shown && (
               <a class="btn sm" href={`/api/recordings/${shown.id}/video`} download={`${robot}-${cam}-${shown.start_ms}.mp4`}>{t("recExport")}</a>
@@ -296,6 +299,7 @@ export function RecordingsPage(props: { robots: string[]; role: string; now: num
                 {shown?.keep ? t("recUnkeep") : t("recKeep")}
               </button>
             )}
+            </div>
           </div>
         </div>
         <RecMap robot={robot} track={track} head={head} onSeek={(ms) => rows && play(rows, ms)} />
