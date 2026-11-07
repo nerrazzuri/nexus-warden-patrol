@@ -124,13 +124,26 @@ describe("布防时间页", () => {
   it("加例外", async () => {
     const { container: c } = page();
     await waitFor(() => expect(c.querySelector(".arm-ex")).not.toBeNull());
-    fireEvent.input(c.querySelector('.arm-ex input[name="first"]')!, { target: { value: "2026-10-30" } });
-    fireEvent.input(c.querySelector('.arm-ex input[name="last"]')!, { target: { value: "2026-11-02" } });
+    fireEvent.input(c.querySelector('.arm-ex input[name="first"]')!, { target: { value: "2099-10-30" } });
+    fireEvent.input(c.querySelector('.arm-ex input[name="last"]')!, { target: { value: "2099-11-02" } });
     fireEvent.input(c.querySelector('.arm-ex input[name="note"]')!, { target: { value: "出远门" } });
     fireEvent.click(btn(c, "添加例外"));
     await waitFor(() => expect(posted.find((p) => p.url === "/api/arming/exceptions")?.body).toEqual(
-      { first_day: "2026-10-30", last_day: "2026-11-02", state: "armed", note: "出远门" }));
+      { first_day: "2099-10-30", last_day: "2099-11-02", state: "armed", note: "出远门" }));
     await waitFor(() => expect(c.querySelector(".arm-ex")!.textContent).toContain("出远门"));
+  });
+
+  it("P1-60:过去的日子、结束早于开始,当场说,不发", async () => {
+    const { container: c } = page();
+    await waitFor(() => expect(c.querySelector(".arm-ex")).not.toBeNull());
+    fireEvent.input(c.querySelector('.arm-ex input[name="first"]')!, { target: { value: "2020-01-01" } });
+    expect(c.querySelector(".arm-ex")!.textContent).toContain("开始日期已经过去了");
+    expect(btn(c, "添加例外").disabled).toBe(true);
+    fireEvent.input(c.querySelector('.arm-ex input[name="first"]')!, { target: { value: "2099-05-02" } });
+    fireEvent.input(c.querySelector('.arm-ex input[name="last"]')!, { target: { value: "2099-05-01" } });
+    expect(c.querySelector(".arm-ex")!.textContent).toContain("结束日期早于开始日期");
+    expect(btn(c, "添加例外").disabled).toBe(true);
+    expect(posted.some((p) => p.url === "/api/arming/exceptions")).toBe(false);
   });
 
   it("改交班时间", async () => {

@@ -11,6 +11,7 @@ import { hm, type DutySettings } from "./data";
 import { t, type Key } from "./i18n";
 import { Confirm } from "./dialogs";
 import { useUnsaved } from "./unsaved";
+import { dateInput } from "./recordings";
 
 type Say = (s: string) => void;
 interface Exception { id: number; first_day: string; last_day: string; state: "armed" | "disarmed"; note: string }
@@ -340,7 +341,11 @@ function Exceptions({ list, say, onChange }: { list: Exception[]; say: Say; onCh
   const [last, setLast] = useState("");
   const [state, setState] = useState<"armed" | "disarmed">("armed");
   const [note, setNote] = useState("");
+  // P1-60:当场查 —— 不能早于今天、结束不能早于开始;错就写在这一行下面,不弹框
+  const today = dateInput(Date.now());
+  const exErr = first && first < today ? t("armExPast") : first && last && last < first ? t("armExOrder") : "";
   async function add() {
+    if (exErr) return;
     try {
       const d = await api<Schedule>("POST", "/api/arming/exceptions", { first_day: first, last_day: last || first, state, note });
       onChange(d.exceptions ?? []);
@@ -374,8 +379,8 @@ function Exceptions({ list, say, onChange }: { list: Exception[]; say: Say; onCh
         </ul>
       )}
       <div class="row wrap">
-        <label class="field">{t("from")}<input name="first" type="date" value={first} onInput={(e) => setFirst(e.currentTarget.value)} /></label>
-        <label class="field">{t("to")}<input name="last" type="date" value={last} onInput={(e) => setLast(e.currentTarget.value)} /></label>
+        <label class="field">{t("from")}<input name="first" type="date" min={today} value={first} onInput={(e) => setFirst(e.currentTarget.value)} /></label>
+        <label class="field">{t("to")}<input name="last" type="date" min={first || today} value={last} onInput={(e) => setLast(e.currentTarget.value)} /></label>
         <label class="field">{t("armExState")}
           <select name="state" value={state} onChange={(e) => setState(e.currentTarget.value as "armed" | "disarmed")}>
             <option value="armed">{t("armExArmed")}</option>
@@ -383,8 +388,9 @@ function Exceptions({ list, say, onChange }: { list: Exception[]; say: Say; onCh
           </select>
         </label>
         <label class="field">{t("note")}<input name="note" maxLength={200} value={note} onInput={(e) => setNote(e.currentTarget.value)} /></label>
-        <button type="button" class="btn" disabled={!first} onClick={() => void add()}>{t("armExAdd")}</button>
+        <button type="button" class="btn" disabled={!first || !!exErr} onClick={() => void add()}>{t("armExAdd")}</button>
       </div>
+      {exErr && <p class="error small" role="alert">{exErr}</p>}
     </section>
   );
 }

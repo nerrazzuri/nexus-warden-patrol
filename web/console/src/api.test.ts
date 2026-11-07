@@ -7,7 +7,7 @@ describe("网页易用性第 1 轮 P1-80 没权限", () => {
     lang.value = "en";
     setFetch((() => Promise.resolve(new Response(JSON.stringify({ error: "你的账号（保安）不能做这件事", reason: "forbidden", need: "set_mode" }),
       { status: 403, headers: { "Content-Type": "application/json" } }))) as typeof fetch);
-    const e = await api("POST", "/api/mode", {}).catch((x) => x);
+    const e = (await api("POST", "/api/mode", {}).catch((x: unknown) => x)) as Error;
     expect(e).toBeInstanceOf(ApiError);
     expect(e.message).toBe("Your account is not allowed to do this. Ask an administrator.");
     expect(e.message).not.toContain("set_mode");
