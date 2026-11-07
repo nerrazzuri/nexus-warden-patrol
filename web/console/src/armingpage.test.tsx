@@ -237,6 +237,40 @@ describe("布防时间页", () => {
       fireEvent.click(c.querySelector(".arm-save")!);
       await waitFor(() => expect(c.ownerDocument.querySelector(".modal")?.textContent).toContain("整周都是撤防"));
     });
+
+    // 第 2 轮 N1:手动布防、日程关着,打开日程一存就按日程接管 —— 原来 source==="manual" 直接不确认
+    it("手动布防、日程关着:新日程此刻不布防 → 也要先说会马上撤防", async () => {
+      mode = { ...mode, mode: "armed", label: "布防", source: "manual", state: "armed", manual_until_ms: null };
+      schedule = { ...schedule, slots: [], enabled: false };
+      const { container: c } = page();
+      await new Promise((ok) => setTimeout(ok, 20));
+      fireEvent.click(c.querySelector("#arm-enabled")!);
+      drag(row(c, 2).querySelector(".armtrack")!, 600, 720);
+      fireEvent.click(c.querySelector(".arm-save")!);
+      await waitFor(() => expect(c.ownerDocument.querySelector(".modal")?.textContent).toContain("全站会马上撤防"));
+      expect(posted.some((p) => p.url === "/api/arming/schedule")).toBe(false);
+    });
+
+    it("手动布防、日程关着:勾上使用但一段都没画 → 说整周撤防", async () => {
+      mode = { ...mode, mode: "armed", label: "布防", source: "manual", state: "armed", manual_until_ms: null };
+      schedule = { ...schedule, slots: [], enabled: false };
+      const { container: c } = page();
+      await new Promise((ok) => setTimeout(ok, 20));
+      fireEvent.click(c.querySelector("#arm-enabled")!);
+      fireEvent.click(c.querySelector(".arm-save")!);
+      await waitFor(() => expect(c.ownerDocument.querySelector(".modal")?.textContent).toContain("整周都是撤防"));
+      expect(posted.some((p) => p.url === "/api/arming/schedule")).toBe(false);
+    });
+
+    it("日程开着、手动切换还管着(到下一个变化点):改日程此刻不变,不用确认", async () => {
+      mode = { ...mode, mode: "armed", label: "布防", source: "manual", state: "armed", manual_until_ms: at(22) };
+      const { container: c } = page();
+      await waitFor(() => expect(row(c, 0).querySelector(".armblock")).not.toBeNull());
+      drag(row(c, 2).querySelector(".armtrack")!, 600, 720);
+      fireEvent.click(c.querySelector(".arm-save")!);
+      await waitFor(() => expect(posted.some((p) => p.url === "/api/arming/schedule")).toBe(true));
+      expect(c.ownerDocument.querySelector(".modal")).toBeNull();
+    });
   });
 });
 

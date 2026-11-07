@@ -91,8 +91,11 @@ export function ArmingPage({ say, now, role = "admin" }: { say: Say; now: number
   // P0-08:存下去立刻生效 —— 跟现在的布防状态不一样就先确认(原来只画一段、一存全站就撤防了,没有任何提示)
   const [askSave, setAskSave] = useState<string | null>(null);
   function effectNow(): string | null {
-    if (!mode || mode.source === "manual") return null;
-    const nowArmed = mode.source === "schedule" ? mode.state === "armed" || mode.state === "partial" : mode.mode === "armed";
+    if (!mode) return null;
+    // 第 2 轮 N1:日程开着时手动切换管到下一个变化点(manual_until_ms),这期间存日程此刻不变;
+    // 日程原来关着,手动状态没有期限 —— 一打开日程保存,站点马上按日程走,跟按日程时一样要先确认
+    if (mode.source === "manual" && mode.manual_until_ms && loaded?.enabled && enabled) return null;
+    const nowArmed = mode.source === "schedule" ? mode.state === "armed" || mode.state === "partial" : mode.mode !== "home";
     const willArm = enabled && armedAt(slots, "", new Date(now));
     if (!enabled && loaded?.enabled) return t("armSaveOff");
     if (enabled && slots.length === 0) return t("armSaveEmpty");
