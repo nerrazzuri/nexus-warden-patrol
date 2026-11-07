@@ -429,8 +429,8 @@ def test_网页P0_14_发布时把旧版上的路线搬到新版(站点):
     s = 站点
     alice, gina = _登(s, "alice"), _登(s, "gina")
     pts = [{"name": "门", "x": 1.0, "y": 1.0, "yaw": 0.0}]
-    code, d = s.req("POST", "/api/routes/r1", {"map_id": MAP[0], "map_version": "7", "waypoints": pts,
-                                              "base_revision": 0}, token=alice)
+    code, d = s.req("POST", "/api/routes/r1", {"map_id": MAP[0], "map_version": "7",
+                                              "waypoints": pts, "base_revision": 0}, token=alice)
     assert code == 200, d
     url = f"/api/admin/maps/{MAP[0]}/8/adopt-routes"
     assert s.req("POST", url, {"from": "7"}, token=gina)[0] == 403
@@ -444,7 +444,8 @@ def test_网页P0_14_发布时把旧版上的路线搬到新版(站点):
 
 
 def test_网页P1_47_网页上删版本_退回上一版跟发布一样要再输密码(站点):
-    """网页易用性第 1 轮 P1-47:发布要再输密码,写着「不能恢复」的删除和退回反而不要。网页(cookie)上三样一致。"""
+    """网页易用性第 1 轮 P1-47:发布要再输密码,写着「不能恢复」的删除和退回反而不要。
+    网页(cookie)上三样一致。"""
     s = 站点
     from test_site_zones import _网页
     web = _网页(s)

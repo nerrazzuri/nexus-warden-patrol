@@ -94,7 +94,8 @@ def test_接口_我的向导记录谁都能写_清单只给管理员(tmp_path):
 def test_网页P1_87_登记了图但文件丢了_地图那一项不算做完(tmp_path):
     db = SiteDB(tmp_path / "s.db")
     with db.tx() as c:
-        c.execute("INSERT INTO maps(map_id, version, source, created_ms, files) VALUES ('m','1','import',0,'[]')")
+        c.execute("INSERT INTO maps(map_id, version, source, created_ms, files) "
+                  "VALUES ('m','1','import',0,'[]')")
     d = 假派遣器({})
     assert _项(setup_view(db, d))["map"]["done"]              # 没接地图库(老调用方):照旧按登记算
     d.maps = SimpleNamespace(usable=lambda: False)

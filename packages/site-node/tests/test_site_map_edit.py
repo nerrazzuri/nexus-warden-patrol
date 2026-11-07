@@ -302,7 +302,8 @@ def test_网页P0_13_另存新版本_区域_特殊地面_底图都跟过去(站�
     body = {"rotate_deg": 5, "basemap": {"file": "basemap.png", "x": 0, "y": 0, "scale": 0.05,
                                         "rotate_deg": 0, "opacity": 0.5},
             "regions": [{"name": "A区", "polygon": [[0, 0], [2, 0], [2, 2], [0, 2]]}],
-            "terrain": [{"id": "t-1", "kind": "grass", "polygon": [[5, 0], [7, 0], [7, 2], [5, 2]]}]}
+            "terrain": [{"id": "t-1", "kind": "grass",
+                         "polygon": [[5, 0], [7, 0], [7, 2], [5, 2]]}]}
     code, d = s.req("POST", f"{ADM}/display", body, token=tok)
     assert code == 200, d
     want = s.req("GET", f"{ADM}/display", token=tok)[1]

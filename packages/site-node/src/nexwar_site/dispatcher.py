@@ -247,7 +247,8 @@ class Dispatcher:
             return
         c = DispatchClient(self._t, Topics(site_id=self.site_id, robot_id=robot_id),
                            now_ms=self._now)
-        live = lambda rid=robot_id: self.clients.get(rid) is c        # noqa: E731(P0-10)
+        def live(rid: str = robot_id) -> bool:                      # P0-10:摘掉的客户端不再收
+            return self.clients.get(rid) is c
         c.on_status(lambda s, rid=robot_id: live() and self._on_status(rid, s))
         c.on_event(lambda e, rid=robot_id: live() and self._on_event(rid, e))
         c.on_telemetry(lambda t, rid=robot_id: live() and self._on_telemetry(rid, t))

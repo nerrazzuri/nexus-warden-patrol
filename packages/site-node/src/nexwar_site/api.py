@@ -584,12 +584,14 @@ class _Handler(TlsHandlerMixin):
         return name
 
     #: 界面上的角色名(网页易用性 P1-80:报错不带内部权限名、角色用界面上的叫法)。
-    ROLE_NAMES = {"admin": "管理员", "engineer": "工程师", "guard": "保安", "owner": "经理", "viewer": "只读"}
+    ROLE_NAMES = {"admin": "管理员", "engineer": "工程师", "guard": "保安", "owner": "经理",
+                  "viewer": "只读"}
 
     def _need(self, user, perm: str) -> None:
         if not allowed(getattr(user, "role", ""), perm):
             role = getattr(user, "role", "")
-            raise HttpError(403, f"你的账号（{self.ROLE_NAMES.get(role, role or '未登录')}）不能做这件事",
+            who = self.ROLE_NAMES.get(role, role or "未登录")
+            raise HttpError(403, f"你的账号（{who}）不能做这件事",
                             extra={"reason": "forbidden", "need": perm})
 
     def _send_json(self, status: int, body: Any) -> None:
@@ -1849,8 +1851,9 @@ class _Handler(TlsHandlerMixin):
                     raise HttpError(400, "证书有效天数要是 1–3650 的整数")
                 self._audit_target, self._audit_detail = rid, {"days": days}
                 if rid in self.site.open_revoked:
-                    raise HttpError(409, f"{rid} 解绑后旧连接可能还开着(消息服务器还没重启):重启消息服务器"
-                                         "(systemctl restart nexwar_mosquitto)后才能重新登记同一编号",
+                    raise HttpError(409, f"{rid} 解绑后旧连接可能还开着(消息服务器还没重启):"
+                                         "重启消息服务器(systemctl restart nexwar_mosquitto)"
+                                         "后才能重新登记同一编号",
                                     extra={"reason": "old_connection_open"})
                 site_main.cmd_enroll(home, rid, days)
                 code = site_main.cmd_enroll_code(home, rid, d.get("host") or None, 24.0,
@@ -3923,9 +3926,11 @@ class _Handler(TlsHandlerMixin):
                             if c.capabilities is not None else None)
                       for rid, c in self.site.dispatcher.clients.items()}
             # 网页易用性 P1-78:哪台报过「能退回上一版」,不能的网页就不给那个按钮(原来点了才说不支持)
-            rollback = {rid: c.capabilities is not None and "release_rollback" in c.capabilities.tasks
+            rollback = {rid: (c.capabilities is not None
+                              and "release_rollback" in c.capabilities.tasks)
                         for rid, c in self.site.dispatcher.clients.items()}
-            return self._send_json(200, {"releases": cat.list(), "robots": robots, "rollback": rollback})
+            return self._send_json(200, {"releases": cat.list(), "robots": robots,
+                                         "rollback": rollback})
         m = _RELCMD.match(path)
         if m is None or method != "POST":
             raise HttpError(404, f"没有 {method} {path}")

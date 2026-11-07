@@ -218,8 +218,8 @@ class MapCatalog:
         for r in self.db.query("SELECT * FROM maps ORDER BY map_id, created_ms DESC"):
             d = _row(r)
             base = self.root / d["map_id"] / d["version"]
-            d["missing"] = [str(f.get("name", "")) for f in d["files"]
-                            if isinstance(f, dict) and not (base / str(f.get("name", ""))).is_file()]
+            names = [str(f.get("name", "")) for f in d["files"] if isinstance(f, dict)]
+            d["missing"] = [n for n in names if not (base / n).is_file()]
             out.append(d)
         return out
 
@@ -681,7 +681,8 @@ class MapCatalog:
                 os.replace(d, gone)                  # 先挪开再登记:登记行没了,目录不会悬着
             with self.db.tx() as c:
                 c.execute("DELETE FROM maps WHERE map_id=? AND version=?", (map_id, version))
-                # 网页易用性第 1 轮 P0-15:删掉的版本号记下来,以后不再发(机器人上可能还缓存着同名的旧文件)
+                # 网页易用性第 1 轮 P0-15:删掉的版本号记下来,以后不再发
+                # (机器人上可能还缓存着同名的旧文件)
                 retired = self._retired_all(c)
                 retired.setdefault(map_id, [])
                 if version not in retired[map_id]:

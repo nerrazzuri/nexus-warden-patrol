@@ -16,7 +16,7 @@ from nexwar_site.tlsserve import TlsThreadingServer
 class _Slow(BaseHTTPRequestHandler):
     hold = threading.Event()
 
-    def do_GET(self):  # noqa: N802
+    def do_GET(self):
         self.hold.wait(5)
         self.send_response(200)
         self.send_header("Content-Length", "2")
@@ -48,7 +48,8 @@ def test_同一地址同时开40条长连接_都能接上():
             socks.append(c)
         _Slow.hold.set()
         got = [c.recv(64) for c in socks]
-        assert all(g.startswith(b"HTTP/1.0 200") or g.startswith(b"HTTP/1.1 200") for g in got), got[:3]
+        ok = (b"HTTP/1.0 200", b"HTTP/1.1 200")
+        assert all(g.startswith(ok) for g in got), got[:3]
     finally:
         _Slow.hold.set()
         for c in socks:

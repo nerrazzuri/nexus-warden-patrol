@@ -1279,7 +1279,7 @@ const en = {
   // W55 远程运维
   download: "Download",
   unknown: "Unknown",
-  bundleHours: "Time range",
+  bundleHours: "Support bundle covers the last",
   opsTitle: "Remote maintenance",
   opsUnsupported: "This robot does not support remote maintenance yet (update its software).",
   opsDiag: "Diagnostics snapshot",
@@ -2660,7 +2660,7 @@ const zh: Partial<Record<Key, string>> = {
   // W55 远程运维
   download: "下载",
   unknown: "未知",
-  bundleHours: "时间段",
+  bundleHours: "支持包包含最近",
   opsTitle: "远程运维",
   opsUnsupported: "此机器人暂不支持远程运维（请先升级机器人软件）。",
   opsDiag: "诊断快照",
