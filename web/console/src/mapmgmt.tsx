@@ -2,7 +2,8 @@
 // 后端见 packages/site-node/src/nexwar_site/maps_admin*.py;文字走本文件里的 tr(英, 中),不碰 i18n.ts。
 import { useCallback, useEffect, useRef, useState } from "preact/hooks";
 import { api, ApiError, enc } from "./api";
-import { Confirm, Modal } from "./dialogs";
+import { ConfirmPassword } from "./confirmpw";
+import { Modal } from "./dialogs";
 import { lang } from "./i18n";
 import "./mapmgmt.css";
 import { toPx, type PreviewMeta } from "./mapview";
@@ -145,27 +146,20 @@ export function MapManagePage({ say, pollMs = 5000 }: { say: Say; pollMs?: numbe
     void load();
   }
 
-  async function doDelete(t: { map_id: string; version: string; back: string[] }) {
+  // P1-47:删除、退回跟发布一样再输密码(对话框里写清后果);密码错对话框不关
+  async function doDelete(t: { map_id: string; version: string; back: string[] }, pw: string) {
+    const r = await api<{ freed_bytes: number }>("POST", `/api/admin/maps/${enc(t.map_id)}/${enc(t.version)}/delete`,
+      { confirm_password: pw, ...(t.back.length > 0 ? { confirm_rollback: true } : {}) });
     setDeleting(null);
-    try {
-      const r = await api<{ freed_bytes: number }>("POST", `/api/admin/maps/${enc(t.map_id)}/${enc(t.version)}/delete`,
-        t.back.length > 0 ? { confirm_rollback: true } : {});
-      say(tr(`Deleted ${t.map_id}:${t.version} (freed ${mb(r.freed_bytes)})`, `已删除 ${t.map_id}:${t.version}(腾出 ${mb(r.freed_bytes)})`));
-      setPick((p) => p.filter((v) => v !== t.version));
-    } catch (e) {
-      say(errText(e));
-    }
+    say(tr(`Deleted ${t.map_id}:${t.version} (freed ${mb(r.freed_bytes)})`, `已删除 ${t.map_id}:${t.version}(腾出 ${mb(r.freed_bytes)})`));
+    setPick((p) => p.filter((v) => v !== t.version));
     void load();
   }
 
-  async function doRollback(d: Dog) {
+  async function doRollback(d: Dog, pw: string) {
+    const r = await api<{ result: PublishResult }>("POST", "/api/admin/maps/rollback", { robot_id: d.robot_id, without_home: true, confirm_password: pw });
     setRolling(null);
-    try {
-      const r = await api<{ result: PublishResult }>("POST", "/api/admin/maps/rollback", { robot_id: d.robot_id, without_home: true });
-      say(r.result.ok ? tr(`${d.robot_id}: rolling back…`, `${d.robot_id}:正在退回…`) : `${d.robot_id}: ${r.result.reason}`);
-    } catch (e) {
-      say(errText(e));
-    }
+    say(r.result.ok ? tr(`${d.robot_id}: rolling back…`, `${d.robot_id}:正在退回…`) : `${d.robot_id}: ${r.result.reason}`);
     void load();
   }
 
@@ -244,7 +238,7 @@ export function MapManagePage({ say, pollMs = 5000 }: { say: Say; pollMs?: numbe
         <PublishDialog target={publish} dogs={robots} onClose={() => { setPublish(null); void load(); }} />
       )}
       {deleting && (
-        <Confirm danger yes={tr("Delete", "删除")} onNo={() => setDeleting(null)} onYes={() => void doDelete(deleting)}
+        <ConfirmPassword title={tr("Delete version", "删除版本")} onClose={() => setDeleting(null)} onConfirm={(pw) => doDelete(deleting, pw)}
           text={[
             tr(`Delete ${deleting.map_id}:${deleting.version}? Its files, zones, standby and intercept points are removed. This cannot be undone; the version number will not be used again.`,
               `删除 ${deleting.map_id}:${deleting.version}?它的文件、区域、待命点、拦截点都会删掉,不能恢复;这个版本号以后不再使用。`),
@@ -254,7 +248,7 @@ export function MapManagePage({ say, pollMs = 5000 }: { say: Say; pollMs?: numbe
           ].filter(Boolean).join(" ")} />
       )}
       {rolling && rolling.rollback && (
-        <Confirm yes={tr("Roll back", "退回")} onNo={() => setRolling(null)} onYes={() => void doRollback(rolling)}
+        <ConfirmPassword title={tr("Roll back", "退回上一版")} onClose={() => setRolling(null)} onConfirm={(pw) => doRollback(rolling, pw)}
           text={tr(`Roll ${rolling.robot_id} back to ${rolling.rollback.map_id}:${rolling.rollback.version}? `, `把 ${rolling.robot_id} 退回到 ${rolling.rollback.map_id}:${rolling.rollback.version}?`)
             + (rolling.rollback.local
               ? tr("The robot still has it locally — nothing is downloaded.", "机器人本地还留着这一版,不用重新下载。")

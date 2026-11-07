@@ -76,6 +76,12 @@ beforeEach(() => {
 });
 afterEach(() => cleanup());
 
+/** P1-47:删除、退回要再输密码。 */
+function typePw(dialog: HTMLElement) {
+  fireEvent.input(dialog.querySelector('input[type="password"]') as HTMLElement, { target: { value: "pw" } });
+  fireEvent.submit(dialog.querySelector("form") as HTMLFormElement);
+}
+
 describe("总览", () => {
   it("每个版本:备注、构建信息、数量、哪几台机器人在用;最新一版标出来", async () => {
     const { container: c, getByLabelText } = mount();
@@ -251,9 +257,9 @@ describe("回退", () => {
     fireEvent.click(buttons[0]);
     const dialog = await waitFor(() => c.querySelector("dialog") as HTMLDialogElement);
     expect(dialog.textContent).toContain("nothing is downloaded");
-    fireEvent.click(Array.from(dialog.querySelectorAll("button")).find((b) => b.textContent === "Roll back") as HTMLElement);
+    typePw(dialog);
     await waitFor(() => expect(say).toHaveBeenCalledWith("A: rolling back…"));
-    expect(calls.find((x) => x.path === "/api/admin/maps/rollback")?.body).toEqual({ robot_id: "A", without_home: true });
+    expect(calls.find((x) => x.path === "/api/admin/maps/rollback")?.body).toEqual({ robot_id: "A", without_home: true, confirm_password: "pw" });
   });
 
   it("机器人上没留的上一版:确认文字说会重新下载", async () => {
@@ -279,7 +285,7 @@ describe("删除", () => {
     fireEvent.click(del("1"));
     const dialog = await waitFor(() => c.querySelector("dialog") as HTMLDialogElement);
     expect(dialog.textContent).toContain("cannot be undone");
-    fireEvent.click(Array.from(dialog.querySelectorAll("button")).find((b) => b.textContent === "Delete") as HTMLElement);
+    typePw(dialog);
     await waitFor(() => expect(say).toHaveBeenCalledWith("Deleted estate:1 (freed 13 MB)"));
   });
 
@@ -289,8 +295,8 @@ describe("删除", () => {
     await waitFor(() => getByLabelText("estate:1"));
     fireEvent.click(Array.from(getByLabelText("estate:1").querySelectorAll("button")).find((b) => b.textContent === "Delete") as HTMLElement);
     const dialog = await waitFor(() => c.querySelector("dialog") as HTMLDialogElement);
-    fireEvent.click(Array.from(dialog.querySelectorAll("button")).find((b) => b.textContent === "Delete") as HTMLElement);
-    await waitFor(() => expect(say).toHaveBeenCalledWith("Failed: estate:1 还有机器人在用(A)"));
+    typePw(dialog);
+    await waitFor(() => expect(dialog.textContent).toContain("estate:1 还有机器人在用(A)"));   // 错写在对话框里,能再试
   });
 });
 
@@ -408,8 +414,8 @@ describe("W41 清噪点", () => {
     fireEvent.click(del);
     const dialog = await waitFor(() => c.querySelector("dialog") as HTMLDialogElement);
     expect(dialog.textContent).toContain("cannot roll back to it");
-    fireEvent.click(Array.from(dialog.querySelectorAll("button")).find((b) => b.textContent === "Delete") as HTMLElement);
-    await waitFor(() => expect(body).toEqual({ confirm_rollback: true }));
+    typePw(dialog);
+    await waitFor(() => expect(body).toEqual({ confirm_password: "pw", confirm_rollback: true }));
   });
 
   it("红圈画在图上;点一个留着它;清掉其余的、另存新版,带上看过的那份摘要", async () => {
