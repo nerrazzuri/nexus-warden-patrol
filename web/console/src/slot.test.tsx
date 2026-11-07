@@ -60,9 +60,11 @@ describe("画面位", () => {
     vi.spyOn(Date, "now").mockReturnValue(t0);
     const r = render(<VideoSlot u={unit()} now={t0} pinned={false} onPin={() => {}} onZoom={() => {}} />);
     fireEvent.error(r.container.querySelector(".slot-main img.feed")!);
+    r.rerender(<VideoSlot u={unit()} now={t0 + 1000} pinned={false} onPin={() => {}} onZoom={() => {}} />);
+    expect(r.container.querySelector(".slot-main .lost")!.textContent).toContain("画面刚断");   // P1-11:不写「0 秒」
     r.rerender(<VideoSlot u={unit()} now={t0 + 5000} pinned={false} onPin={() => {}} onZoom={() => {}} />);
     const lost = r.container.querySelector(".slot-main .lost")!;
-    expect(lost.textContent).toContain("画面中断");
+    expect(lost.textContent).toContain("画面已中断");
     expect(lost.textContent).toContain("23:10:00");
     expect(lost.textContent).toContain("已中断 5 秒");
   });
@@ -125,7 +127,7 @@ describe("外审R6 报警现场断流", () => {
     r.rerender(slot(t0 + 15000));
     expect(subscribed()).not.toContain("/api/cameras/cam3/live");  // 断着:这一路退订了
     const lost = r.container.querySelector(".slot-main .lost")!;
-    expect(lost.textContent).toContain("画面中断");
+    expect(lost.textContent).toContain("画面已中断");
     expect(lost.textContent).toContain("23:10:00");
     expect(lost.textContent).toContain("已中断 15 秒");
     await vi.advanceTimersByTimeAsync(3100);

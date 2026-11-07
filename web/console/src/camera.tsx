@@ -179,9 +179,12 @@ export function CameraWell(props: { robot: string; cam: Cam; forceLive?: boolean
           onError={() => lose(Date.now())} />
       )}
       {lostAt != null && (
-        <div class="lost" role="status">
-          {t("feedLost", { t: hms(lostAt), s: Math.max(0, Math.round((props.now - lostAt) / 1000)) })}
-          {why && <div class="lost-why">{why}</div>}
+        // P1-11:角落里一行,停在最后一帧;刚断不写「0 秒」;站点给的原因(常是技术原话)放到悬停里
+        <div class="lost" role="status" title={why || undefined}>
+          {(() => {
+            const s = Math.max(0, Math.round((props.now - lostAt) / 1000));
+            return s < 3 ? t("feedLostNow", { t: hms(lostAt) }) : t("feedLost", { t: hms(lostAt), s });
+          })()}
         </div>
       )}
       <div class="osd top">
