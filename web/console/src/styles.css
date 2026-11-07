@@ -1225,3 +1225,14 @@ input.invalid { border-color: var(--c-error); }
   .topbar > .pagetitle, .topbar > h1 { flex-basis: 100%; }
   .topbar > .btn.stop { order: 10; margin-left: auto; }
 }
+/* P1-09:输入框、文件选择框统一样子(:where 不加权重,各处原有的样式照样优先) */
+:where(input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="range"]):not([type="color"])), :where(textarea) {
+  min-height: 36px; padding: 0 8px; border-radius: var(--r-r8); border: 1px solid var(--c-textMuted);
+  background: var(--c-surface); color: var(--c-text); font: inherit; font-size: 14px; box-sizing: border-box;
+}
+:where(textarea) { padding: 8px; }
+input[type="file"] { font: inherit; font-size: 14px; color: var(--c-textSecondary); }
+input[type="file"]::file-selector-button {
+  height: 36px; padding: 0 14px; margin-right: 10px; border-radius: var(--r-r8); border: 1px solid var(--c-outline);
+  background: var(--c-surface); color: var(--c-text); font: inherit; font-weight: 600; cursor: pointer;
+}
