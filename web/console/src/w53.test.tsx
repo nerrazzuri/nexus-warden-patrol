@@ -133,3 +133,10 @@ describe("W53 网页", () => {
     expect(pageAllowed("admin/layout", "owner")).toBe(false);
   });
 });
+
+describe("网页易用性第 1 轮 P1-68", () => {
+  it("帮助先说当前这一页是干什么的", () => {
+    const { container: c } = render(<HelpDialog role="admin" page="admin/arming" onClose={() => {}} />, { container: document.body });
+    expect(c.querySelector("[data-help-here]")!.textContent).toContain("布防");
+  });
+});

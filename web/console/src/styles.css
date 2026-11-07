@@ -1253,3 +1253,5 @@ input[type="file"]::file-selector-button {
 .me-canvas.result polygon.me-op.erase:not(.loop) { fill: #fefefe; }
 .me-canvas.result .me-op.obstacle { stroke: #000; }
 .me-canvas.result polygon.me-op.obstacle:not(.loop) { fill: #000; }
+.help-here { padding: 10px 12px; border-radius: 8px; background: var(--c-surfaceVariant); margin-bottom: 8px; }
+.help-here p { margin: 4px 0 0; }
