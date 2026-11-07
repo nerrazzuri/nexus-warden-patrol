@@ -8,9 +8,10 @@ import { api, ApiError, enc } from "./api";
 import { hm, nameOf } from "./data";
 import { modeLabel } from "./armingpage";
 import { Shape } from "./icons";
-import { Confirm } from "./dialogs";
+import { AlertDetail } from "./alertdetail";
+import { alertHeadline, canHandleAlerts } from "./alertinfo";
 import { guardAlarms, pickSlots, rankUnits, type SlotPick } from "./dutyrank";
-import { alertTitle, lang, t } from "./i18n";
+import { t } from "./i18n";
 import { StateText, type UnitInfo } from "./live";
 import type { CanvasArea } from "./mapcanvas";
 import { SiteMap } from "./mappage";
@@ -38,7 +39,8 @@ export function DutyPage(props: {
   mode?: Mode | null;
 }) {
   const [pins, setPins] = useState<[string | null, string | null]>([null, null]);
-  const [confirmFalse, setConfirmFalse] = useState<Alert | null>(null);
+  // 网页易用性第 1 轮 P0-04/05:点一条警报看详情,关警报要选结论
+  const [detail, setDetail] = useState<string | null>(null);
   const [finding, setFinding] = useState<string | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
   const [areas, setAreas] = useState<CanvasArea[]>([]);
@@ -75,8 +77,9 @@ export function DutyPage(props: {
     await props.refresh();
   }
   const ack = (a: Alert) => post(`/api/alerts/${enc(a.key)}/ack`, {});
-  const resolve = (a: Alert, verdict: string) => post(`/api/alerts/${enc(a.key)}/resolve`, { verdict });
   const arrive = (a: Alert) => post(`/api/alerts/${enc(a.key)}/arrive`, {});
+  const can = canHandleAlerts(props.role);
+  const shown = detail ? props.alerts.find((a) => a.key === detail) ?? null : null;
   /** W74:看见人那一类要保安点过「已到场」才能关(站点也这么拦)。 */
   const mustArrive = (a: Alert) => ARRIVE.has(a.kind) && a.context?.arrived_ms == null;
 
@@ -111,7 +114,7 @@ export function DutyPage(props: {
         <div class={top.level === "P1" ? "banner" : "banner p2"} role="alert">
           <Shape kind={top.level === "P1" ? "P1" : "P2"} />
           <div class="banner-text">
-            <b>{alertTitle(lang.value, top.kind, top.title)}</b>
+            <b>{alertHeadline(top)}</b>
             <span>{[top.context?.zone ?? (top.context?.where ? t("atWhere", { w: top.context.where }) : ""), hm(top.first_ms)].filter(Boolean).join(" · ")}</span>
             {top.context?.lost_ms != null && <span class="banner-who">{t("dutyLost")}</span>}
             {top.context?.follow === "follow" && <span class="banner-who">{t("dutyFollowing")}</span>}
@@ -122,19 +125,12 @@ export function DutyPage(props: {
             {alarms.length > 1 && <span class="banner-more">{t("dutyMore", { n: alarms.length - 1 })}</span>}
           </div>
           <div class="banner-acts">
-            {top.acked_ms == null && <button type="button" class="btn onsolid" onClick={() => ack(top)}>{t("dutyTake")}</button>}
-            {mustArrive(top) && <button type="button" class="btn onsolid" onClick={() => arrive(top)}>{t("dutyArrive")}</button>}
-            {LOST.has(top.kind) && (
+            {can && top.acked_ms == null && <button type="button" class="btn onsolid" onClick={() => ack(top)}>{t("dutyTake")}</button>}
+            {can && mustArrive(top) && <button type="button" class="btn onsolid" onClick={() => arrive(top)}>{t("dutyArrive")}</button>}
+            {can && LOST.has(top.kind) && (
               <button type="button" class="btn onsolid" onClick={() => { setFinding(top.robot); setSelected(top.robot); }}>{t("dutyFindPose")}</button>
             )}
-            {mustArrive(top) ? null : top.audience === "intrusion" ? (
-              <>
-                <button type="button" class="btn onsolid" onClick={() => resolve(top, "intruder")}>{t("dutyIntruder")}</button>
-                <button type="button" class="btn onsolid" onClick={() => setConfirmFalse(top)}>{t("dutyFalse")}</button>
-              </>
-            ) : (
-              <button type="button" class="btn onsolid" onClick={() => resolve(top, "handled")}>{t("dutyHandled")}</button>
-            )}
+            <button type="button" class="btn onsolid ghost" onClick={() => setDetail(top.key)}>{t(can && !mustArrive(top) ? "dutyDetailClose" : "dutyDetail")}</button>
           </div>
         </div>
       ) : (
@@ -161,8 +157,8 @@ export function DutyPage(props: {
           {alarms.map((a) => (
             <li key={a.key} class={a.level === "P1" ? "p1" : "p2"}>
               <Shape kind={a.level === "P1" ? "P1" : "P2"} />
-              <button type="button" class="alarmlist-main" onClick={() => setSelected(a.robot)}>
-                <b>{alertTitle(lang.value, a.kind, a.title)}</b>
+              <button type="button" class="alarmlist-main" onClick={() => { setSelected(a.robot); setDetail(a.key); }}>
+                <b>{alertHeadline(a)}</b>
                 <span class="muted small">{[a.context?.zone ?? (a.context?.where ?? ""), nameOf(a.robot)].filter(Boolean).join(" · ")}</span>
               </button>
               <span class="mono small alarmlist-t">{a.level} · {hm(a.first_ms)}</span>
@@ -195,9 +191,9 @@ export function DutyPage(props: {
         </ul>
         <TodayPatrols />
       </section>
-      {confirmFalse && (
-        <Confirm text={t("dutyFalseConfirm")} yes={t("dutyFalseYes")} onNo={() => setConfirmFalse(null)}
-          onYes={() => { const a = confirmFalse; setConfirmFalse(null); void resolve(a, "false_alarm"); }} />
+      {shown && (
+        <AlertDetail a={shown} role={props.role} now={props.now} units={props.units} onClose={() => setDetail(null)}
+          refresh={props.refresh} say={props.say} onFindPose={(r) => { setFinding(r); setSelected(r); }} />
       )}
     </div>
   );

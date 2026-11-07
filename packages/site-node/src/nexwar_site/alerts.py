@@ -62,6 +62,10 @@ class AlertNotFound(KeyError):
 #: ``raise_alert`` 会抛 ``KeyError`` —— 这是设计,不是缺陷。
 #: W44:解决时人下的结论 —— 确认有人、误报、处理好了(报警记录页、报表用)。
 VERDICTS: tuple[str, ...] = ("intruder", "false_alarm", "handled")
+#: 网页易用性第 1 轮 P0-04:处置后这么久(毫秒)内能撤销(点错了),过了就只能看记录。
+REOPEN_MS = 10 * 60_000
+#: 处置备注最长多少字。
+NOTE_MAX = 200
 
 LEVEL_OF: dict[str, Level] = {
     # P1:立刻动身。狗动不了、狗倒了、狗失控、控制权没了 —— 这些事拖到"今
@@ -76,6 +80,8 @@ LEVEL_OF: dict[str, Level] = {
     # 驱离中的狗无路可退(W25,决策 40):人逼近、四周都退不了,原地站定等人。
     "deter_cornered": Level.P1,
     "battery_abort": Level.P1,
+    # 网页易用性第 1 轮 P0-01:起飞前检查拒单,狗没出发(没标原点、定位没稳……)。要人改配置,不是急事。
+    "preflight_refused": Level.P2,
     # 不是因为没电的整趟中止(关节过温、导航反复失败……)。**跟
     # ``battery_abort`` 分成两个 kind,不合并**:两条告警要让人做的事不一
     # 样 —— 没电是"去把狗抱回来充电",别的中止是"去看它到底怎么了",而
@@ -513,7 +519,8 @@ class AlertBook:
         self._by_key[key] = alert
         return alert
 
-    def resolve(self, key: str, *, who: str = "", verdict: str = "", now_ms: int) -> Alert:
+    def resolve(self, key: str, *, who: str = "", verdict: str = "", now_ms: int,
+                note: str = "") -> Alert:
         """这件事没了。只改 ``resolved_by``/``resolved_ms``,**不碰
         ``acked_by``/``acked_ms``** —— 解决了不等于确认过,"没人看见"是这个
         模块要暴露出来的事实,不是要替调用方悄悄圆过去的细节。
@@ -527,7 +534,25 @@ class AlertBook:
         existing = self._by_key.get(key)
         if existing is None:
             raise AlertNotFound(key)
-        alert = replace(existing, resolved_by=who, resolved_ms=now_ms, verdict=verdict)
+        ctx = {**existing.context, "note": note[:NOTE_MAX]} if note else existing.context
+        alert = replace(existing, resolved_by=who, resolved_ms=now_ms, verdict=verdict,
+                        context=ctx)
+        self._spill(alert)
+        self._by_key[key] = alert
+        return alert
+
+    def reopen(self, key: str, *, now_ms: int) -> Alert:
+        """撤销处置(网页易用性第 1 轮 P0-04,点错了):``REOPEN_MS`` 内回到待处理,结论、备注清掉。
+        确认过的人留着。过了时限、本来就没关:``ValueError``。"""
+        existing = self._by_key.get(key)
+        if existing is None:
+            raise AlertNotFound(key)
+        if existing.resolved_ms is None:
+            raise ValueError("这条还没处理,不用撤销")
+        if now_ms - existing.resolved_ms > REOPEN_MS:
+            raise ValueError(f"处理超过 {REOPEN_MS // 60_000} 分钟了,不能撤销")
+        ctx = {k: v for k, v in existing.context.items() if k != "note"}
+        alert = replace(existing, resolved_by="", resolved_ms=None, verdict="", context=ctx)
         self._spill(alert)
         self._by_key[key] = alert
         return alert

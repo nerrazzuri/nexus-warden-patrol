@@ -17,6 +17,7 @@
 from __future__ import annotations
 
 import json
+import re
 import logging
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -99,6 +100,33 @@ _OFFLINE_KINDS = ("robot_offline", "robot_offline_idle")
 def _hit(text: str, words: tuple[str, ...]) -> bool:
     low = text.lower()
     return any(w in low for w in words)
+
+
+#: 狗上起飞前检查拒单时的理由开头(``engine/machine.py`` 的 ``_preflight_reason``)。
+PREFLIGHT_PREFIX = "起飞前检查未通过"
+#: 起飞前检查的各项 → (人话, 该做什么)。按顺序取第一个失败的:没标原点时电量项也会失败(算不出出发线),
+#: 原点排在电量前面。
+_PREFLIGHT_ITEMS: tuple[tuple[str, str, str], ...] = (
+    ("home", "地图还未标原点",
+     "让机器人在这张地图上定好位,在手机或网页的定位页点「在这儿标原点」"),
+    ("localized", "定位还未稳定", "到定位页帮它重新定位,定好后再派"),
+    ("device_ready", "机器人还未就绪(控制权或急停)", "看急停是否按下、控制权是否在站点手里"),
+    ("nav_ready", "导航还未就绪", "等一分钟再派;一直不好就在诊断页看导航"),
+    ("battery", "电量不够出发", "先去充电或换电池"),
+    ("storage", "机器人存储空间不足", "到诊断页清理空间"),
+    ("removable", "机器人存储设备有问题", "到诊断页看存储"),
+)
+
+
+def _preflight(reason: str) -> tuple[str, str, str] | None:
+    """起飞前检查拒单 → (哪一项, 标题后半, 该做什么);不是这种失败 → ``None``。"""
+    if not reason.startswith(PREFLIGHT_PREFIX):
+        return None
+    failed = re.findall(r"([a-z_]+)\(", reason)
+    for name, title, act in _PREFLIGHT_ITEMS:
+        if name in failed:
+            return name, title, act
+    return "other", "原因见详情", "看详情里的原文"
 
 
 #: 定位变差、打滑(W29):先报 P2,这么多秒还没恢复再报 P1。
@@ -515,7 +543,16 @@ class SiteAlertSources:
             # 站点自己派的回待命点那一趟(回程巡检)失败,狗停在半路;标题别说「整趟中止」
             # (W00c6b 内审)。
             back = str(tid).startswith(STANDBY_PREFIX)
-            if _hit(reason, BATTERY_WORDS):
+            pre = _preflight(reason)
+            if pre is not None:
+                # 网页易用性第 1 轮 P0-01:出发前就被拒,狗没动。没标原点时电量那一项也跟着失败
+                # (算不出出发线),只认「电量」二字会报成 P1「电量不足」,把人往错的方向支。
+                item, title, act = pre
+                self.desk.raise_alert(kind="preflight_refused", robot=rid,
+                                      title=f"出发前检查未通过:{title}",
+                                      detail=f"{act};原文:{reason}"[:400],
+                                      context={"check": item})
+            elif _hit(reason, BATTERY_WORDS):
                 self.desk.raise_alert(kind="battery_abort", robot=rid,
                                       title="电量不足,回待命点停在半路" if back
                                       else "电量不足,整趟中止", detail=reason)

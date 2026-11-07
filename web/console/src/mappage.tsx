@@ -4,6 +4,7 @@ import type { ComponentChildren } from "preact";
 // 地图本身(转正、全图、缩放平移、区域名、图例、比例尺、平面图)在 mapcanvas.tsx;狗和报警点画在屏上坐标里
 // (大小不跟着缩放变),位置用跟底图同一个变换算。
 import { useEffect, useMemo, useState } from "preact/hooks";
+import { reportStart } from "./alertinfo";
 import { api, ApiError, enc } from "./api";
 import { hm, nameOf, useDutySettings } from "./data";
 import { siteHm } from "./todaypatrols";
@@ -463,10 +464,13 @@ export function GoLookCard(props: { map: { map_id: string; version: string }; at
     const p = props.units.find((u) => u.robot.robot_id === id)?.robot.loc?.pose;
     const yaw = (p ? yawToward(p.x, p.y, x, y) : null) ?? 0;
     try {
+      const sentAt = Date.now();
       const r = await api<CommandReply>("POST", `/api/robots/${enc(id)}/goto`,
         { target: { map_id: props.map.map_id, map_version: props.map.version, frame_id: "map", x, y, yaw } });
       const no = notAccepted(r);
-      props.say(no ?? t("lookSent", { id }));
+      // 网页易用性第 1 轮 P0-03:收下 ≠ 出发了(出发前检查在后头),确认完再说
+      if (no) props.say(no);
+      else void reportStart(nameOf(id), sentAt, props.say, { robot: id });
       props.onClose();
     } catch (e) {
       setWhy(e instanceof ApiError ? e.message : String(e));
@@ -511,6 +515,7 @@ export function TempRoutePanel(props: {
     setBusy(true);
     setErrs([]);
     try {
+      const sentAt = Date.now();
       const r = await api<CommandReply & { queued?: boolean; start_after_ms?: number; because?: string; utc_offset_min?: number }>(
         "POST", `/api/robots/${enc(robot)}/patrol`,
         { points: props.points.map(([x, y]) => ({ x, y })), map_id: props.map.map_id, map_version: props.map.version });
@@ -522,7 +527,7 @@ export function TempRoutePanel(props: {
       }
       const no = notAccepted(r);
       if (no) setErrs([no]);
-      else { props.say(t("trSent", { id: robot })); props.onSent(); }
+      else { void reportStart(nameOf(robot), sentAt, props.say, { robot }); props.onSent(); }
     } catch (e) {
       const list = e instanceof ApiError ? (e.data as { errors?: { index: number | null; problem: string }[] } | undefined)?.errors : undefined;
       setErrs(list && list.length

@@ -2,12 +2,15 @@
 // 每台一行:绿「知道自己在哪」/ 黄「不太确定」/ 红「迷路了」/ 灰「不知道」(离线、没报)。「帮它找位置」:在地图上把它拖到
 // 实际站的地方、拖箭头指朝向(跟值班页同一套:SiteMap 的选点、Relocalize.human)。数字、历史收在「详细」里。
 import { useState } from "preact/hooks";
+import { at } from "./alertinfo";
+import { api, ApiError, enc } from "./api";
 import { nameOf } from "./data";
+import { Confirm } from "./dialogs";
 import { t, type Key } from "./i18n";
 import type { UnitInfo } from "./live";
 import { LocHistoryPage } from "./locpage";
 import { SiteMap } from "./mappage";
-import type { Alert, Robot } from "./model";
+import { isOwnerLike, type Alert, type Robot } from "./model";
 
 export type LocLevel = "ok" | "unsure" | "lost" | "unknown";
 const LOST_KINDS = new Set(["loc_lost_paused", "loc_lost_idle"]);
@@ -29,6 +32,18 @@ const TEXT: Record<LocLevel, Key> = { ok: "locOk", unsure: "locUnsure", lost: "l
 export function LocPage(props: { units: UnitInfo[]; alerts: Alert[]; now: number; role: string }) {
   const [finding, setFinding] = useState<string | null>(null);
   const [selected, setSelected] = useState<string | null>(props.units[0]?.robot.robot_id ?? null);
+  // 网页易用性第 1 轮 P0-01:没标原点派不出去,以前只有手机能标
+  const [homeAsk, setHomeAsk] = useState<string | null>(null);
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  async function markHome(id: string) {
+    setMsg(null);
+    try {
+      await api("POST", `/api/robots/${enc(id)}/home/here`, {});
+      setMsg({ ok: true, text: at("markHomeDone", { id: nameOf(id) }) });
+    } catch (e) {
+      setMsg({ ok: false, text: at("markHomeFail", { why: e instanceof ApiError ? e.message : String(e) }) });
+    }
+  }
   return (
     <section class="advloc">
       <h1>{t("tabLocalization")}</h1>
@@ -56,17 +71,25 @@ export function LocPage(props: { units: UnitInfo[]; alerts: Alert[]; now: number
                       {finding === id ? t("cancel") : t("dutyFindPose")}
                     </button>
                   )}
+                  {lv === "ok" && isOwnerLike(props.role) && (
+                    <button type="button" class="btn sm" onClick={() => setHomeAsk(id)}>{at("markHome")}</button>
+                  )}
                 </li>
               );
             })}
           </ul>
           {finding && <p class="muted small">{t("locFindHow")}</p>}
+          {msg && <p class={msg.ok ? "muted small" : "error"} role="status">{msg.text}</p>}
         </div>
       </div>
       <details class="loc-detail">
         <summary>{t("locDetails")}</summary>
         <LocHistoryPage robots={props.units.map((u) => u.robot.robot_id)} now={props.now} />
       </details>
+      {homeAsk && (
+        <Confirm text={at("markHomeAsk", { id: nameOf(homeAsk) })} yes={at("markHome")} onNo={() => setHomeAsk(null)}
+          onYes={() => { const id = homeAsk; setHomeAsk(null); void markHome(id); }} />
+      )}
     </section>
   );
 }

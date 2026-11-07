@@ -108,13 +108,14 @@ describe("报警记录页", () => {
     expect(c.querySelector(".it .res")!.textContent).toContain("21:49");
   });
 
-  it("没处理的写还没处理、按钮去处理;处理了的看录像", async () => {
+  it("没处理的写还没处理、按钮打开详情(P0-05);处理了的看录像", async () => {
     alerts = [alert({ key: "a" }), alert({ key: "b", first_ms: at(20, 0), resolved_ms: at(20, 1), verdict: "intruder" })];
     const { container: c } = page();
     await waitFor(() => expect(rows(c).length).toBe(2));
     const [open, done] = rows(c);
     expect(open.querySelector(".res")!.textContent).toContain("未处理");
-    expect(open.querySelector("a.btn")!.getAttribute("href")).toBe("#/duty");
+    fireEvent.click(open.querySelector("button.btn")!);
+    expect(c.ownerDocument.querySelector(".alertdetail")).not.toBeNull();
     expect(done.querySelector("a.btn")!.getAttribute("href")).toContain("#/recordings?robot=A&t=");
   });
 

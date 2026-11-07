@@ -21,12 +21,12 @@
     "zh": "驱离时机器人被逼至角落"
   },
   "battery_abort": {
-    "en": "Low battery, stopped on the way back",
-    "zh": "电量不足，回程中途停止"
+    "en": "Low battery, run stopped",
+    "zh": "电量不足，任务中止"
   },
   "run_abort": {
-    "en": "Could not return, stopped on the way",
-    "zh": "未能返回待命点，中途停止"
+    "en": "Run stopped before finishing",
+    "zh": "任务中途中止"
   },
   "archive_failed": {
     "en": "Patrol record could not be saved",
@@ -359,5 +359,9 @@
   "guard_prep": {
     "en": "Charge before arming",
     "zh": "布防前先补能"
+  },
+  "preflight_refused": {
+    "en": "Pre-departure check failed, robot did not leave",
+    "zh": "出发前检查未通过，机器人未出发"
   }
 }

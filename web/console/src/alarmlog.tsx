@@ -2,10 +2,12 @@
 // 下班前可以给下一班留话。筛选:本班 / 今天 / 选日期 × 全部 / 有人闯入 / 机器人需要帮忙 / 机器人掉线 × 只看没处理的。
 // 每行:抓拍(录像那一刻的一帧)、时间、什么事、结论和谁处理的、看录像 / 去处理。技术类(给管理员的)不列。
 import { useEffect, useState } from "preact/hooks";
+import { AlertDetail } from "./alertdetail";
+import { alertHeadline } from "./alertinfo";
 import { AlertTestBar } from "./alerttest";
 import { api, ApiError } from "./api";
 import { hm, useDutySettings } from "./data";
-import { alertTitle, lang, t, type Key } from "./i18n";
+import { t, type Key } from "./i18n";
 import { shiftStart } from "./maplayers";
 import { verdictText } from "./mappage";
 import { forGuard, type Alert } from "./model";
@@ -31,15 +33,16 @@ export function AlarmLogPage(props: { now: number; role: string }) {
   const [date, setDate] = useState(dateInput(props.now));
   const [kind, setKind] = useState<Kind>("all");
   const [openOnly, setOpenOnly] = useState(false);
+  const [detail, setDetail] = useState<string | null>(null);
+  const [said, setSaid] = useState("");
 
+  const pull = () => api<{ alerts: Alert[]; truncated?: boolean }>("GET", `/api/alerts?all=1&limit=${LIMIT}`)
+    .then((d) => { setAlerts(d.alerts ?? []); setTruncated(!!d.truncated); })
+    .catch(() => setAlerts((a) => a ?? []));
   useEffect(() => {
-    let live = true;
-    const pull = () => api<{ alerts: Alert[]; truncated?: boolean }>("GET", `/api/alerts?all=1&limit=${LIMIT}`)
-      .then((d) => { if (live) { setAlerts(d.alerts ?? []); setTruncated(!!d.truncated); } })
-      .catch(() => live && setAlerts((a) => a ?? []));
     void pull();
     const id = window.setInterval(pull, 30_000);
-    return () => { live = false; window.clearInterval(id); };
+    return () => window.clearInterval(id);
   }, []);
   const pullNote = () => api<{ latest: Note | null }>("GET", "/api/shift-notes").then((d) => setNote(d.latest ?? null)).catch(() => {});
   useEffect(() => { void pullNote(); }, []);
@@ -107,13 +110,18 @@ export function AlarmLogPage(props: { now: number; role: string }) {
       <div class="list">
         {alerts == null && <p class="empty">{t("loading")}</p>}
         {alerts != null && shown.length === 0 && <p class="empty">{t("alNone")}</p>}
-        {shown.map((a) => <Row key={a.key} a={a} />)}
+        {shown.map((a) => <Row key={a.key} a={a} onOpen={() => setDetail(a.key)} />)}
       </div>
+      {said && <p class="muted small" role="status">{said}</p>}
+      {detail && alerts?.find((a) => a.key === detail) && (
+        <AlertDetail a={alerts.find((a) => a.key === detail)!} role={props.role} now={props.now} units={[]}
+          onClose={() => setDetail(null)} refresh={pull} say={setSaid} />
+      )}
     </div>
   );
 }
 
-function Row({ a }: { a: Alert }) {
+function Row({ a, onOpen }: { a: Alert; onOpen: () => void }) {
   const [bad, setBad] = useState(false);
   const open = a.resolved_ms == null;
   const site = a.robot === "site" || a.robot.includes(":");
@@ -126,7 +134,7 @@ function Row({ a }: { a: Alert }) {
       )}
       <time class="mono">{hm(a.first_ms)}</time>
       <div class="what">
-        <h5 class={tone}>{alertTitle(lang.value, a.kind, a.title)}</h5>
+        <h5 class={tone}><button type="button" class="linkish" onClick={onOpen}>{alertHeadline(a)}</button></h5>
         {(a.detail || a.context?.where) && <p>{[a.context?.where && !a.context?.zone ? t("atWhere", { w: a.context.where }) : "", a.detail].filter(Boolean).join(" · ")}</p>}
       </div>
       <div class="res">
@@ -134,7 +142,8 @@ function Row({ a }: { a: Alert }) {
         {!open && <small>{[a.resolved_by, a.resolved_ms ? hm(a.resolved_ms) : ""].filter(Boolean).join(" · ")}</small>}
       </div>
       <div>
-        {open ? <a class="btn sm primary" href="#/duty">{t("alGoHandle")}</a> : <a class="btn sm" href={recordingLink(a)}>{t("alSeeRec")}</a>}
+        {open ? <button type="button" class="btn sm primary" onClick={onOpen}>{t("alGoHandle")}</button>
+          : <a class="btn sm" href={recordingLink(a)}>{t("alSeeRec")}</a>}
       </div>
     </div>
   );

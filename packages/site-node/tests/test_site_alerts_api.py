@@ -226,3 +226,26 @@ def test_W74_看见人_没到场关不了409说清楚_点了已到场再关(站�
     assert code == 200 and d["alert"]["resolved_by"] == "gina"
     audit = s.req("GET", "/api/audit", token=alice)[1]["audit"]
     assert any(r["actor"] == "gina" and "/arrive" in r["action"] for r in audit)
+
+
+def test_网页P0_04_处置带备注_十分钟内能撤销_过了不行(站点):
+    """网页易用性第 1 轮 P0-04:「已处理」一点就关,不能写备注、不能撤销。"""
+    s = 站点
+    gina = _登(s, "gina")
+    async def 报():
+        s.desk.raise_alert(kind="stuck", robot="A", title="卡住了")
+    s.loop.call(报)
+    a = _等(lambda: _告警(s, gina, "stuck"))
+    code, d = s.req("POST", f"/api/alerts/{_键(a)}/resolve",
+                    {"verdict": "false_alarm", "note": "风吹倒的纸箱"}, token=gina)
+    assert code == 200 and d["alert"]["verdict"] == "false_alarm"
+    assert d["alert"]["context"]["note"] == "风吹倒的纸箱"
+    code, d = s.req("POST", f"/api/alerts/{_键(a)}/reopen", {}, token=gina)
+    assert code == 200 and d["alert"]["resolved_ms"] is None and d["alert"]["verdict"] == ""
+    assert _告警(s, gina, "stuck") is not None, "撤销后回到待处理"
+    code, d = s.req("POST", f"/api/alerts/{_键(a)}/resolve", {"note": 5}, token=gina)
+    assert code == 400, "备注要是字符串"
+    code, d = s.req("POST", f"/api/alerts/{_键(a)}/resolve", {"verdict": "handled"}, token=gina)
+    s.desk._now = lambda: d["alert"]["resolved_ms"] + 11 * 60_000
+    code, d = s.req("POST", f"/api/alerts/{_键(a)}/reopen", {}, token=gina)
+    assert code == 400 and "10 分钟" in d["error"], d
