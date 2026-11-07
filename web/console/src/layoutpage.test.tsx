@@ -199,3 +199,15 @@ describe("布置外框", () => {
     expect(location.hash).toBe("#/admin/layout?tab=nogo");
   });
 });
+
+describe("网页易用性第 1 轮 P1-36", () => {
+  it("点回第一个点(半米内)就是闭合;不到三个点不算", async () => {
+    const { closesLoop } = await import("./layoutpage");
+    const meta = { width: 200, height: 100, m_per_px: 0.05, left_x: 0, top_y: 5 } as never;
+    const pts: [number, number][] = [[1, 4], [3, 4], [3, 2]];
+    expect(closesLoop(meta, pts, 20, 20)).toBe(true);          // (1,4) 在像素 (20,20)
+    expect(closesLoop(meta, pts, 28, 20)).toBe(true);          // 0.4 m 外
+    expect(closesLoop(meta, pts, 40, 20)).toBe(false);         // 1 m 外
+    expect(closesLoop(meta, pts.slice(0, 2), 20, 20)).toBe(false);
+  });
+});
