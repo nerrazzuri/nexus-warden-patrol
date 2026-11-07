@@ -292,7 +292,10 @@ export function SiteOps({ say }: { say: Say }) {
               .catch((e) => say(t("failed", { why: why(e) })))
               .finally(() => setBusy(false));
           }}>{t("sysPushTest")}</button>
-          <button type="button" class="btn danger" disabled={!backup?.dest} onClick={() => setAsk("restore")}>{t("sysRestore")}</button>
+          {/* P1-76:灰着要说原因 */}
+          <button type="button" class="btn danger" disabled={!backup?.dest} title={!backup?.dest ? t("sysRestoreNoDest") : undefined}
+            onClick={() => setAsk("restore")}>{t("sysRestore")}</button>
+          {!backup?.dest && <span class="muted small">{t("sysRestoreNoDest")}</span>}
         </div>
       </section>
       <section class="panel sys-vpn">

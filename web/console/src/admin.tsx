@@ -89,6 +89,8 @@ export function pairChoices(origin: string, lan: string[]): string[] {
   return out;
 }
 
+const PAIR_URL = /^https:\/\/[A-Za-z0-9.\-\[\]:]+(:\d{1,5})?\/?$/;
+
 export function PairPhone() {
   const [url, setUrl] = useState(window.location.origin);
   const [asked, setAsked] = useState(isLoopbackOrigin(window.location.origin) ? "" : window.location.origin);
@@ -116,6 +118,20 @@ export function PairPhone() {
     return () => { live = false; };
   }, [asked]);
   const g = pair ? qrGrid(pair.code) : null;
+  // P1-76:地址当场查(https://主机[:端口]);配对码能复制
+  const urlOk = PAIR_URL.test(url.trim());
+  const [copied, setCopied] = useState(false);
+  async function copyCode() {
+    if (!pair) return;
+    try {
+      await navigator.clipboard.writeText(pair.code);
+      setCopied(true);
+    } catch {
+      const sel = window.getSelection();
+      const dd = document.querySelector("[data-pair-code]");
+      if (sel && dd) { const r = document.createRange(); r.selectNodeContents(dd); sel.removeAllRanges(); sel.addRange(r); }
+    }
+  }
   return (
     <section class="panel">
       <div class="panel-head"><h2>{t("pairTitle")}</h2></div>
@@ -147,14 +163,22 @@ export function PairPhone() {
               <span>{t("pairUrl")}</span>
               <input type="url" value={url} onInput={(e) => setUrl((e.target as HTMLInputElement).value)} spellcheck={false} autocomplete="off" />
             </label>
-            <button type="submit" class="btn" disabled={url.trim() === asked}>{t("pairUpdate")}</button>
+            <button type="submit" class="btn" disabled={url.trim() === asked || !urlOk}>{t("pairUpdate")}</button>
           </form>
+          {!urlOk && url.trim() !== "" && <p class="error small">{t("pairBadUrl")}</p>}
+          {err && urlOk && <p class="error small" role="alert">{err}</p>}
           {pair && (
             <dl class="kv">
               <dt>{t("pairSite")}</dt><dd>{pair.name}</dd>
               <dt>{t("pairFingerprint")}</dt><dd class="mono small wrap">{pair.fingerprint}</dd>
-              <dt>{t("pairCode")}</dt><dd class="mono small wrap">{pair.code}</dd>
+              <dt>{t("pairCode")}</dt><dd class="mono small wrap" data-pair-code="1">{pair.code}</dd>
             </dl>
+          )}
+          {pair && (
+            <div class="row">
+              <button type="button" class="btn sm" onClick={() => void copyCode()}>{t("copy")}</button>
+              {copied && <span class="small" role="status">{t("copied")}</span>}
+            </div>
           )}
           <p class="muted small">{t("pairNoSecret")}</p>
         </div>
