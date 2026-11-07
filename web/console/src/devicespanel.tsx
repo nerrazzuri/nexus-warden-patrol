@@ -9,7 +9,7 @@ export interface Device { id: string; kind: string; map_id: string; map_version:
 
 const en = {
   dTitle: "Alarm devices by position",
-  dLead: "Door contacts and alarm panels: put them on the map; the site works out where a robot should go and which zone it is in. Each device gets its own signed callback. Cameras: place them under Layout → Cameras.",
+  dLead: "Door contacts and alarm panels: put them on the map; the site works out where a robot should go and which zone it is in. Each device gets its own signed callback. Cameras: place them under Setup → Cameras.",
   dNone: "No devices yet.",
   dId: "Device ID", dKind: "Type", dMap: "Map", dVer: "Version", dX: "x (m)", dY: "y (m)",
   kContact: "Door contact", kAlarm: "Alarm panel", kOther: "Other",
