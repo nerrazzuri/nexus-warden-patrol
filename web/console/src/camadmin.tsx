@@ -105,7 +105,8 @@ export function CamerasPanel({ say }: { say: Say }) {
   );
 }
 
-export function CameraForm({ initial, onClose, onSaved, say }: { initial: CamRow | null; onClose: () => void; onSaved: (w: CamWarning[], zone: string) => void; say: Say }) {
+/** ``zones``:已有的防区(P1-42:从里面挑,也能填新的)。 */
+export function CameraForm({ initial, onClose, onSaved, say, zones = [] }: { initial: CamRow | null; onClose: () => void; onSaved: (w: CamWarning[], zone: string) => void; say: Say; zones?: string[] }) {
   const edit = initial !== null;
   const [name, setName] = useState(initial?.name ?? "");
   const [onvif, setOnvif] = useState(initial?.onvif_url ?? "");
@@ -142,12 +143,14 @@ export function CameraForm({ initial, onClose, onSaved, say }: { initial: CamRow
         </label>
         <label class="field">{L("ONVIF address (camera or NVR)", "ONVIF 地址(摄像头或 NVR)")}
           <input value={onvif} required placeholder="http://192.168.1.50" autocomplete="off" onInput={(e) => setOnvif(e.currentTarget.value)} />
+          <span class="muted small">{L("The camera's management address, usually http:// plus its IP. The site reads its alarms through it.",
+            "摄像头的管理地址,一般是 http:// 加摄像头的 IP。站点通过它收摄像头的报警。")}</span>
         </label>
         <label class="field">{L("Account", "账号")}
           <input value={user} autocomplete="off" onInput={(e) => setUser(e.currentTarget.value)} />
         </label>
         {edit && initial?.has_password && (
-          <label class="field row">
+          <label class="field-check">
             <input type="checkbox" checked={changePw} onChange={(e) => setChangePw(e.currentTarget.checked)} />
             {L("Change the password", "换口令")}
           </label>
@@ -158,12 +161,16 @@ export function CameraForm({ initial, onClose, onSaved, say }: { initial: CamRow
           </label>
         )}
         <label class="field">{L("Zone (the camera's intrusions count as this zone)", "防区(这台摄像头报的入侵算这个防区)")}
-          <input value={zone} required autocomplete="off" onInput={(e) => setZone(e.currentTarget.value)} />
+          <input name="zone" value={zone} required autocomplete="off" list="cam-zones" onInput={(e) => setZone(e.currentTarget.value)} />
+          <datalist id="cam-zones">{zones.map((z) => <option key={z} value={z} />)}</datalist>
+          {zones.length > 0 && <span class="muted small">{L("Pick one of your zones, or type a new name.", "从已有的防区里选,也可以填新的名字。")}</span>}
         </label>
         <label class="field">{L("RTSP address for live view (optional)", "看画面的 RTSP 地址(可选)")}
           <input value={rtsp} placeholder="rtsp://192.168.1.50/stream1" autocomplete="off" onInput={(e) => setRtsp(e.currentTarget.value)} />
+          <span class="muted small">{L("The video address for watching it live; it is in the camera's manual or settings page.",
+            "看实时画面用的视频地址,在摄像头说明书或设置页里能找到。")}</span>
         </label>
-        <label class="field row">
+        <label class="field-check">
           <input type="checkbox" checked={motion} onChange={(e) => setMotion(e.currentTarget.checked)} />
           {L("Plain motion also counts as intrusion (more false alarms: shadows, headlights)", "普通「画面动了」也算入侵(树影、车灯会多误报)")}
         </label>
