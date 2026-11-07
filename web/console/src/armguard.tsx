@@ -26,7 +26,7 @@ interface LogRow { at_ms: number; robot_id: string; kind: string; zone: string; 
 const en = {
   gTitle: "Guard duty",
   gLead: "While armed, robots run these zone routes lap after lap. Between laps they stand at a zone's watch post. Disarmed zones are skipped.",
-  gNoRoutes: "No zone routes yet. Make one on Site layout → Zone routes (it can be generated from your zones).",
+  gNoRoutes: "No zone routes yet. Make one on Setup → Zone routes (it can be generated from your zones).",
   gEmpty: "No guard duty set up: robots do not patrol on their own while armed.",
   gRoute: "Zone route",
   gRobot: "Robot",
@@ -105,7 +105,7 @@ type GKey = keyof typeof en;
 const zh: Record<GKey, string> = {
   gTitle: "布防值守",
   gLead: "布防着的时候，机器人按这里配的防区路线一圈圈跑；两圈之间站到防区的值守位上盯着。撤防的防区跳过。",
-  gNoRoutes: "还没有防区路线。在「场地布置 → 防区路线」里建一条（可以按防区自动生成）。",
+  gNoRoutes: "还没有防区路线。在「布置 → 防区路线」里建一条（可以按防区自动生成）。",
   gEmpty: "还没配值守：布防时机器人不会自己出去巡。",
   gRoute: "防区路线",
   gRobot: "机器人",
