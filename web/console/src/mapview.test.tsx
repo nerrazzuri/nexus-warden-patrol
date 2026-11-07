@@ -516,7 +516,7 @@ describe("防区页:在转过的图上点着画多边形,存下去的点 = 想�
       fireEvent.click(svg, { clientX: RECT.left + sx, clientY: RECT.top + sy });
       await tick();
     }
-    expect(r.container.textContent).toContain(`(${WANT.length} so far)`);
+    expect(r.container.textContent).toContain(`(${WANT.length} so far`);
     fireEvent.click(r.getByText("Finish zone"));
     await tick();
     fireEvent.input(r.container.ownerDocument.querySelector("dialog input")!, { target: { value: "Yard" } });
@@ -683,7 +683,7 @@ describe("防区页:抹掉一块(导航区域 erase),点出来的地图点原样
         fireEvent.click(svg, { clientX: RECT.left + sx, clientY: RECT.top + sy });
         await tick();
       }
-      expect(r.container.textContent).toContain(`(${WANT.length} so far)`);
+      expect(r.container.textContent).toContain(`(${WANT.length} so far`);
       expect(r.container.querySelector("polyline.draft-line.erase")).not.toBeNull();
       const before = s.previews();
       fireEvent.click(r.getByText("Erase this region"));
@@ -704,7 +704,7 @@ describe("防区页:抹掉一块(导航区域 erase),点出来的地图点原样
         expect(Math.abs(y - WANT[i][1]), `y${i}`).toBeLessThan(1e-6);
       });
       await waitFor(() => expect(s.previews()).toBeGreaterThan(before));   // 重新取预览:平面图地址变了
-      await waitFor(() => expect(r.container.querySelector(".erased-list")!.textContent).toContain("Erased"));
+      await waitFor(() => expect(r.container.querySelector(".erased-list")!.textContent).toContain("Impassable"));
     });
   }
 
