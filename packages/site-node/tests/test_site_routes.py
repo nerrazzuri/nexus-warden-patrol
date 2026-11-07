@@ -678,3 +678,23 @@ def test_现场15_35_没有栅格的老版本不提醒(台):
     r = 台.store.put_route("r", body(version="old", pts=[pt("a", 0.1, 0.1), pt("b", 0.2, 0.1)]),
                            by="a")
     assert r["warnings"] == []
+
+
+def test_网页P0_14_路线搬到新版本_定义里的版本一起改_修订号加一(台):
+    """网页易用性第 1 轮 P0-14:换成新版本后路线全「没了」(路线绑在旧版本上)。同一个坐标系的新版本
+    (从旧版编辑、清噪点出来的)可以把旧版上的路线一起搬过去。"""
+    s = 台.store
+    s.put_route("a", body("old"), by="x")
+    s.put_route("b", body("old"), by="x")
+    s.put_route("c", body("wide"), by="x")
+    moved = s.move_to_version("house", "old", "wide", by="gina")
+    assert moved == ["a", "b"]
+    assert [r["id"] for r in s.view("house", "wide")["routes"]] == ["a", "b", "c"]
+    assert s.view("house", "old")["routes"] == []
+    a = s.get("a")
+    assert a["map_version"] == "wide" and a["revision"] == 2
+    assert json.loads(台.db.query("SELECT definition FROM routes WHERE route_id='a'")[0]
+                      ["definition"])["map_version"] == "wide"
+    assert s.move_to_version("house", "old", "wide", by="gina") == []
+    with pytest.raises(RouteError):
+        s.move_to_version("house", "wide", "nope", by="gina")
