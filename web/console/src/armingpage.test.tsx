@@ -79,6 +79,7 @@ describe("布防时间页", () => {
     const { container: c } = render(<ArmingPage say={() => {}} now={at(12)} role="owner" />);
     await waitFor(() => expect(row(c, 0).querySelector(".armblock")).not.toBeNull());
     expect(c.querySelector(".arm-duty")).toBeNull();
+    expect(c.textContent).toContain("由管理员修改");                             // P1-61:说清哪块不能改
     drag(row(c, 1).querySelector(".armtrack")!, 600, 720);
     fireEvent.click(c.querySelector(".arm-save")!);
     await waitFor(() => expect(posted.some((p) => p.url === "/api/arming/schedule")).toBe(true));

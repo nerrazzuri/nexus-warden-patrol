@@ -2,7 +2,7 @@
 // 摄像头不在这里：在「布置 → 摄像头」放到图上就行（ONVIF 订阅，站点按它的位置、朝向算查看点）。
 import { useEffect, useState } from "preact/hooks";
 import { api, ApiError } from "./api";
-import { lang, type Lang } from "./i18n";
+import { lang, t, type Lang } from "./i18n";
 
 export interface Device { id: string; kind: string; map_id: string; map_version: string; x: number; y: number; yaw: number;
   view_x: number; view_y: number; zone: string; note: string; source: string }
@@ -63,6 +63,8 @@ export function DevicesPanel({ canEdit, say }: { canEdit: boolean; say: (s: stri
     <section class="card devices-panel">
       <h2>{dt("dTitle")}</h2>
       <p class="muted small">{dt("dLead")}</p>
+      {/* 网页易用性 P1-61:只看不能改的要说为什么 */}
+      {!canEdit && <p class="small readonly-note">{t("adminOnlyNote")}</p>}
       {list.length === 0 ? <p class="muted">{dt("dNone")}</p> : (
         <ul class="plain">
           {list.map((d) => (
