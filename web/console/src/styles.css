@@ -1286,3 +1286,16 @@ input[type="file"]::file-selector-button {
 .lw-card .well .osd.bottom { bottom: 36px; }
 .lw-grid[data-n="2"] .lw-pair .well:first-child .osd.bottom { bottom: 0; }
 @media (max-width: 900px) { .lw-pair .well:first-child .osd.bottom { bottom: 0; } }
+/* 网页易用性第 1 轮 P2 小项 */
+/* P2-16:列表里名字和「默认」标签分开 */
+.ly-list li > .tag { margin-left: 8px; }
+/* P2-28:侧栏能拿到焦点时看得见(滚动框;框画在里面,不被裁) */
+.sidenav:focus-visible { outline: 2px solid var(--c-focus); outline-offset: -2px; }
+/* P2-34/35:列表名字好点中;按钮不被长名字挤到下一行 */
+.ly-list .linklike { min-height: 36px; padding: 6px 4px; text-align: left; }
+.ly-list li.row { flex-wrap: nowrap; align-items: center; }
+.ly-list li.row > span { min-width: 0; flex: 1 1 auto; overflow-wrap: anywhere; }
+.ly-list li.row > .btn { flex: none; white-space: nowrap; }
+/* P2-42:布防时巡逻那块正文不贴边 */
+.arm-guard { padding-bottom: 12px; }
+.arm-guard > :not(.panel-head) { margin-left: 16px; margin-right: 16px; }
