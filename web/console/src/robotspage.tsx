@@ -6,7 +6,7 @@
 // 照片位这一期放图标;电池健康机器人还不报,不显示。
 // W60 卡片分层:第一层名字、状态、在做什么、电量;第二层定位、网络、今天几趟;出了毛病才多一条琥珀色提示
 // (正常时安静,不写「正常」)。在做什么、定位从值班的实时数据来(units),概况接口没有。
-import { useCallback, useEffect, useState } from "preact/hooks";
+import { useCallback, useEffect, useRef, useState } from "preact/hooks";
 import { api, ApiError, enc } from "./api";
 import { ConfirmPassword } from "./confirmpw";
 import { hm, robotNames } from "./data";
@@ -335,7 +335,9 @@ function Controls({ r, role, say, onChanged }: { r: RobotCard; role: string; say
           onClick={() => setAskHome(true)}>{t("rdAbortHome")}</button>}
         {dispatch && <button type="button" class="btn sm" disabled={busy || off}
           onClick={() => void send(() => api("POST", path("relocalize"), { global: true }), t("rdSent", { id, what: t("rdAutoLoc") }))}>{t("rdAutoLoc")}</button>}
-        {patrol && <button type="button" class="btn sm rd-danger" disabled={busy} onClick={() => void abort()}>{t("rdAbort")}</button>}
+        {/* P1-28:站点说了它空闲(task 是 null)就灰掉;没带这一项的老站点照旧能点(点了现问) */}
+        {patrol && <button type="button" class="btn sm rd-danger" disabled={busy || r.task === null}
+          title={r.task === null ? t("rdIdle") : undefined} onClick={() => void abort()}>{t("rdAbort")}</button>}
       </div>
       {err && <p class="error small" role="alert">{err}</p>}
       {canTeleop(role) && (r.postures ?? []).length > 0 && (
@@ -378,6 +380,7 @@ function RobotDetail({ r, u, now, role, say, onChanged, onCode, onClose, readOnl
 }) {
   const [name, setName] = useState(r.name);
   const [unbind, setUnbind] = useState<"ask" | "pw" | null>(null);
+  const [ask, setAsk] = useState<{ text: string; yes: string; go: () => void } | null>(null);
   useEffect(() => setName(r.name), [r.robot_id, r.name]);
   const act: Act = async (fn, msg) => {
     try {
@@ -460,17 +463,23 @@ function RobotDetail({ r, u, now, role, say, onChanged, onCode, onClose, readOnl
             </div>
           </form>
           <div class="rd-actions">
-            <button type="button" class="btn sm" onClick={() => void act(() => api("POST", `/api/robots/${enc(r.robot_id)}/service`, { manual_only: !r.manual_only }))}>
+            {/* P1-26 / P1-05:切派遣方式、重出开通码都先确认,说清是什么意思 */}
+            <button type="button" class="btn sm" onClick={() => setAsk({
+              text: t(r.manual_only ? "setAutoAsk" : "setManualAsk", { id: label(r) }), yes: r.manual_only ? t("setAuto") : t("setManual"),
+              go: () => void act(() => api("POST", `/api/robots/${enc(r.robot_id)}/service`, { manual_only: !r.manual_only }),
+                t(r.manual_only ? "setAutoDone" : "setManualDone", { id: label(r) })) })}>
               {r.manual_only ? t("setAuto") : t("setManual")}
             </button>
-            <button type="button" class="btn sm" onClick={() => void act(async () => {
-              const d = await api<{ code: string; hours: number }>("POST", `/api/admin/robots/${enc(r.robot_id)}/code`, {});
-              onCode({ id: r.robot_id, code: d.code, hours: d.hours });
-            })}>{t("newCode")}</button>
+            <button type="button" class="btn sm" onClick={() => setAsk({ text: t("newCodeAsk", { id: label(r) }), yes: t("newCode"),
+              go: () => void act(async () => {
+                const d = await api<{ code: string; hours: number }>("POST", `/api/admin/robots/${enc(r.robot_id)}/code`, {});
+                onCode({ id: r.robot_id, code: d.code, hours: d.hours });
+              }) })}>{t("newCode")}</button>
             <button type="button" class="btn sm rd-danger" onClick={() => setUnbind("ask")}>{t("robotUnbind")}</button>
           </div>
         </section>
       )}
+      {ask && <Confirm text={ask.text} yes={ask.yes} onNo={() => setAsk(null)} onYes={() => { const g = ask.go; setAsk(null); g(); }} />}
       {unbind === "ask" && (
         <Confirm text={t("robotUnbindConfirm", { id: label(r) })} yes={t("robotUnbind")} danger onNo={() => setUnbind(null)} onYes={() => setUnbind("pw")} />
       )}
@@ -491,19 +500,27 @@ function RobotDetail({ r, u, now, role, say, onChanged, onCode, onClose, readOnl
   );
 }
 
+/** 机器人编号(站点 ca.SAFE_ID)。 */
+const ROBOT_ID = /^[A-Za-z0-9._-]{1,64}$/;
+
 function AddRobot({ onClose, onDone, say }: { onClose: () => void; onDone: (id: string, code: string, hours: number) => void; say: Say }) {
   const [id, setId] = useState("");
   const [days, setDays] = useState(365);
   const [busy, setBusy] = useState(false);
   const [manual, setManual] = useState(false);
+  // P1-25:格式在框下面写明、自己查(不靠浏览器原生提示);重复编号说「已存在,先解绑」
+  const idBad = id !== "" && !ROBOT_ID.test(id);
   async function submit(e: Event) {
     e.preventDefault();
+    if (!ROBOT_ID.test(id)) return;
     setBusy(true);
     try {
       const d = await api<{ code: string; hours: number }>("POST", "/api/admin/robots", { robot_id: id, days });
       onDone(id, d.code, d.hours);
     } catch (x) {
-      say(errText(x));
+      if (x instanceof ApiError && x.status === 409 && x.message.includes("旧连接")) say(t("robotIdOldConn", { id }));
+      else if (x instanceof ApiError && x.status === 409) say(t("robotIdTaken", { id }));
+      else say(errText(x));
     } finally {
       setBusy(false);
     }
@@ -519,7 +536,9 @@ function AddRobot({ onClose, onDone, say }: { onClose: () => void; onDone: (id: 
       )}
       {manual && <form class="form" onSubmit={submit}>
         <p class="muted small">{t("addRobotHint")}</p>
-        <label class="field">{t("robotId")}<input value={id} pattern="[A-Za-z0-9._\-]{1,64}" required autocomplete="off" onInput={(e) => setId(e.currentTarget.value)} /></label>
+        <label class="field">{t("robotId")}<input value={id} required autocomplete="off" aria-describedby="robot-id-rule" onInput={(e) => setId(e.currentTarget.value)} />
+          <span id="robot-id-rule" class={idBad ? "error small" : "muted small"}>{t("robotIdRule")}</span></label>
+        <details class="small"><summary>{t("addRobotCmdTitle")}</summary><p class="mono">{t("addRobotCmd")}</p></details>
         <label class="field">{t("certDays")}<input type="number" min={1} max={3650} value={days} onInput={(e) => setDays(Number(e.currentTarget.value))} /></label>
         <div class="row end">
           <button type="button" class="btn" onClick={onClose}>{t("cancel")}</button>
@@ -531,12 +550,27 @@ function AddRobot({ onClose, onDone, say }: { onClose: () => void; onDone: (id: 
 }
 
 function CodeDialog({ id, code, hours, onClose, say }: { id: string; code: string; hours: number; onClose: () => void; say: Say }) {
+  // P1-24:复制要有反馈;http 下没有剪贴板接口,退回选中 + execCommand
+  const box = useRef<HTMLInputElement>(null);
+  const [copied, setCopied] = useState(false);
+  async function copy() {
+    try {
+      if (navigator.clipboard) await navigator.clipboard.writeText(code);
+      else { box.current?.select(); document.execCommand("copy"); }
+      setCopied(true);
+      say(t("copied"));
+    } catch {
+      box.current?.select();
+      say(t("copyManual"));
+    }
+  }
   return (
     <Modal label={t("activationCode", { id })} onClose={onClose}>
       <p class="muted small">{t("codeHint", { h: hours })}</p>
-      <textarea class="codebox mono" readOnly rows={4} value={code} onFocus={(e) => e.currentTarget.select()} aria-label={t("activationCode", { id })} />
+      <input class="codebox mono" readOnly value={code} ref={box} onFocus={(e) => e.currentTarget.select()} aria-label={t("activationCode", { id })} />
+      {copied && <p class="small" role="status">{t("copied")}</p>}
       <div class="row end">
-        <button type="button" class="btn" onClick={() => { void navigator.clipboard?.writeText(code).then(() => say(t("copied"))); }}>{t("copy")}</button>
+        <button type="button" class="btn" onClick={() => void copy()}>{t("copy")}</button>
         <button type="button" class="btn primary" onClick={onClose}>{t("close")}</button>
       </div>
     </Modal>
