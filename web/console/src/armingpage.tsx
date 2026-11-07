@@ -6,7 +6,7 @@ import { canSchedule, isOwnerLike } from "./model";
 import { GuardPanel } from "./armguard";
 import { DevicesPanel } from "./devicespanel";
 import { api, ApiError, enc } from "./api";
-import { addBlock, copyDay, fromWire, minutesText, moveEdge, removeBlock, toWire, type Slot, type WireSlot } from "./armgrid";
+import { addBlock, armedAt, copyDay, fromWire, minutesText, moveEdge, removeBlock, toWire, type Slot, type WireSlot } from "./armgrid";
 import { hm, type DutySettings } from "./data";
 import { t, type Key } from "./i18n";
 import { Confirm } from "./dialogs";
@@ -88,7 +88,26 @@ export function ArmingPage({ say, now, role = "admin" }: { say: Say; now: number
   const ownSlots = slots.some((x) => x.zone === editing);
   const followsAll = perZone && zone !== "" && !ownSlots;
 
+  // P0-08:存下去立刻生效 —— 跟现在的布防状态不一样就先确认(原来只画一段、一存全站就撤防了,没有任何提示)
+  const [askSave, setAskSave] = useState<string | null>(null);
+  function effectNow(): string | null {
+    if (!mode || mode.source === "manual") return null;
+    const nowArmed = mode.source === "schedule" ? mode.state === "armed" || mode.state === "partial" : mode.mode === "armed";
+    const willArm = enabled && armedAt(slots, "", new Date(now));
+    if (!enabled && loaded?.enabled) return t("armSaveOff");
+    if (enabled && slots.length === 0) return t("armSaveEmpty");
+    if (enabled && nowArmed && !willArm) return t("armSaveDisarm");
+    if (enabled && !nowArmed && willArm) return t("armSaveArm");
+    return null;
+  }
+  function trySave() {
+    const e = effectNow();
+    if (e) setAskSave(e);
+    else void save();
+  }
+
   async function save() {
+    setAskSave(null);
     setBusy(true);
     try {
       await api("POST", "/api/arming/schedule", { enabled, slots: toWire(slots) });
@@ -107,7 +126,7 @@ export function ArmingPage({ say, now, role = "admin" }: { say: Say; now: number
     <section class="arming">
       <div class="panel-head">
         <h1>{t("tabArming")}</h1>
-        <button type="button" class="btn primary push arm-save" disabled={busy || !dirty} onClick={save}>{t("save")}</button>
+        <button type="button" class="btn primary push arm-save" disabled={busy || !dirty} onClick={trySave}>{t("save")}</button>
       </div>
       <p class="muted lead">{t("armLead")}</p>
       {dirty && <p class="arm-dirty" role="status">{t("armDirty")}</p>}
@@ -129,6 +148,7 @@ export function ArmingPage({ say, now, role = "admin" }: { say: Say; now: number
           </div>
         )}
       </section>
+      {askSave && <Confirm text={askSave} yes={t("save")} onNo={() => setAskSave(null)} onYes={() => void save()} />}
       {switching && (
         <Confirm text={t(switching === "armed" ? "modeArmConfirm" : "modeHomeConfirm")}
           yes={t(switching === "armed" ? "modeArmed" : "modeHome")} onNo={() => setSwitching(null)}

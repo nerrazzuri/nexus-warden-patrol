@@ -92,7 +92,18 @@ describe("授权和临时撤防页", () => {
     fireEvent.click(c.querySelector('.acc-visitor input[value="北区"]')!);
     fireEvent.change(c.querySelector('.acc-visitor select[name="hours"]')!, { target: { value: "2" } });
     fireEvent.click(btn(c, "开始临时撤防"));
+    expect(posted.find((p) => p.url === "/api/mode")).toBeUndefined();
+    const m = c.ownerDocument.querySelector(".modal")!;
+    expect(m.textContent).toContain("临时撤防 北区，2 小时");
+    fireEvent.click(btn(m, "开始临时撤防"));
     await waitFor(() => expect(posted.find((p) => p.url === "/api/mode")?.body).toEqual({ mode: "visitor", zones: ["北区"], minutes: 120 }));
+  });
+
+  it("网页易用性第 1 轮 P0-09:没选防区不能开始", async () => {
+    const { container: c } = page();
+    await waitFor(() => expect(c.querySelector(".acc-visitor")!.textContent).toContain("北区"));
+    expect(btn(c, "开始临时撤防").disabled).toBe(true);
+    expect(c.querySelector(".acc-visitor")!.textContent).toContain("至少选一个防区");
   });
 
   it("临时撤防开着写到几点、能现在结束", async () => {

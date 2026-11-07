@@ -47,7 +47,7 @@ export function HomePage(props: {
   const todayAuthz = authz.filter((a) => a.on_today);
   const m = props.mode;
   const modes: { m: Mode["mode"]; key: Key }[] = [
-    { m: "armed", key: "modeArmed" }, { m: "home", key: "modeHome" }, { m: "visitor", key: "modeVisitor" },
+    { m: "armed", key: "modeArmed" }, { m: "home", key: "modeHome" },
   ];
 
   return (
@@ -118,6 +118,8 @@ export function HomePage(props: {
                     onClick={() => props.onMode(x.m)}>{t(x.key)}</button>
                 ))}
               </div>
+              {/* P0-09:临时撤防要选防区,在授权页做(这里原来一点就整站临时撤防,确认框却说「选中的防区」) */}
+              <a class={m.mode === "visitor" ? "btn sm on" : "btn sm"} href="#/admin/access">{t("armNowVisitor")}</a>
             </div>
           )}
         </div>
