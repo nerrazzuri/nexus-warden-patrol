@@ -56,3 +56,32 @@ def test_同一地址同时开40条长连接_都能接上():
             c.close()
         s.shutdown()
         s.server_close()
+
+
+class _Slow2(_Slow):
+    hold = threading.Event()
+
+
+def test_第2轮_同一台电脑开10个浏览器会话_120条长连接_都能接上():
+    """网页易用性第 2 轮:6 个测试组在同一台电脑上各开 4–10 个浏览器会话,64 条就满了,后来的
+    (包括样式表)被直接关掉,整页没有样式。每个浏览器对一个站点最多 6 条普通连接,加事件流和
+    实时画面,10 个会话一百条上下。"""
+    s = TlsThreadingServer(("127.0.0.1", 0), _Slow2, ctx=None)
+    t = threading.Thread(target=s.serve_forever, daemon=True)
+    t.start()
+    socks = []
+    try:
+        for _ in range(120):
+            c = socket.create_connection(s.server_address, timeout=5)
+            c.sendall(b"GET / HTTP/1.1\r\nHost: x\r\n\r\n")
+            socks.append(c)
+        _Slow2.hold.set()
+        got = [c.recv(64) for c in socks]
+        ok = (b"HTTP/1.0 200", b"HTTP/1.1 200")
+        assert all(g.startswith(ok) for g in got), sum(not g.startswith(ok) for g in got)
+    finally:
+        _Slow2.hold.set()
+        for c in socks:
+            c.close()
+        s.shutdown()
+        s.server_close()
