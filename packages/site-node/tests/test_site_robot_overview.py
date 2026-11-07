@@ -255,3 +255,15 @@ def test_W72_概览_老狗老站点缺的都是空的(台):
     assert (r["patrols_7d"], r["aborts_7d"], r["last_patrol_ms"]) == (0, 0, None)
     assert r["storage"] is None and r["map"] is None and r["devices"] == []
     assert r["last_seen_ms"] is None and r["held"] is None
+
+
+def test_网页P1_23_刚登记还没连上过的_标出没连上过_不当离线故障(台):
+    d, db = 台
+    d.registry.enroll("B", fingerprint="sha256:b", issued_at=0, expires_at=NOW + 10**9)
+    rows = {r["robot_id"]: r for r in overview(d, db, now_ms=NOW, tz=KL)}
+    assert rows["B"]["online"] is False and rows["B"]["ever_seen"] is False
+    assert rows["A"]["ever_seen"] is True
+    d.registry.enroll("C", fingerprint="sha256:c", issued_at=0, expires_at=NOW + 10**9)
+    _cmd(db, 9, NOW - 1000, robot="C")                     # 站点重启后还没新状态,但回过执:连上过
+    rows = {r["robot_id"]: r for r in overview(d, db, now_ms=NOW, tz=KL)}
+    assert rows["C"]["ever_seen"] is True
