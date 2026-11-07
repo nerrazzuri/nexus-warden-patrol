@@ -201,3 +201,14 @@ describe("地图编辑器", () => {
     expect(c.textContent).not.toContain("各个角");
   });
 });
+
+describe("网页易用性第 1 轮 P1-52", () => {
+  it("有图例;勾「看改完的样子」画布换成结果样式", async () => {
+    const { container: c } = page();
+    await waitFor(() => expect(c.querySelector('.mapedit[data-ready]')).not.toBeNull());
+    expect(c.querySelector("[data-me-legend]")!.textContent).toContain("擦掉");
+    expect(c.querySelector(".me-canvas.result")).toBeNull();
+    fireEvent.click(c.querySelector('input[name="me-result"]')!);
+    expect(c.querySelector(".me-canvas.result")).not.toBeNull();
+  });
+});

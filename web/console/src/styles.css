@@ -1241,3 +1241,15 @@ input[type="file"]::file-selector-button {
 .arm-sw { display: inline-block; width: 18px; height: 10px; border-radius: 3px; background: var(--c-success); }
 /* P1-58:布防页的保存按钮滚动时一直在 */
 .arming > .panel-head { position: sticky; top: 60px; z-index: 4; background: var(--c-bg); padding: 8px 0; }
+/* P1-52:编辑器图例、「看改完的样子」 */
+.me-legend { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; margin-top: 6px; }
+.me-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.me-sw { display: inline-block; width: 16px; height: 10px; border-radius: 2px; }
+.me-sw.erase { background: var(--c-success); opacity: .75; }
+.me-sw.obstacle { background: var(--c-brand); opacity: .75; }
+.me-sw.terrain { background: var(--c-warning); opacity: .4; border: 1px dashed var(--c-warning); }
+.me-canvas.result .me-op { opacity: 1; }
+.me-canvas.result .me-op.erase { stroke: #fefefe; }
+.me-canvas.result polygon.me-op.erase:not(.loop) { fill: #fefefe; }
+.me-canvas.result .me-op.obstacle { stroke: #000; }
+.me-canvas.result polygon.me-op.obstacle:not(.loop) { fill: #000; }
