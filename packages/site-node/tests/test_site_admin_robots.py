@@ -81,3 +81,24 @@ def test_只有管理员_坏参数400(台):
     assert s.req("POST", "/api/admin/robots", {"robot_id": "../x"}, token=tok)[0] == 400
     assert s.req("POST", "/api/admin/robots", {"robot_id": "Y", "days": 0}, token=tok)[0] == 400
     assert s.req("GET", "/api/admin/robots", token=tok)[0] == 405
+
+
+def test_网页P0_10_解绑后broker没重启_同一编号不能重新登记(台):
+    """旧证书的连接还开着(broker 要重启才读吊销名单):这时候重新登记同一编号,旧连接会被当成新狗,
+    不用激活就上线。broker 重启成功了才放行。"""
+    s, home = 台
+    tok = s.login()
+    s.req("POST", "/api/admin/robots", {"robot_id": "D1-09"}, token=tok)
+    s.api.broker_restart = lambda: False
+    code, d = s.req("POST", "/api/admin/robots/D1-09/revoke", {"confirm_password": PW}, token=tok)
+    assert code == 200 and d.get("old_connection_open") is True, d
+    code, d = s.req("POST", "/api/admin/robots", {"robot_id": "D1-09"}, token=tok)
+    assert code == 409 and "旧连接" in d["error"], d
+    s.req("POST", "/api/admin/robots", {"robot_id": "D1-10"}, token=tok)
+    s.api.broker_restart = lambda: True
+    code, d = s.req("POST", "/api/admin/robots/D1-10/revoke", {"confirm_password": PW}, token=tok)
+    assert code == 200 and not d.get("old_connection_open"), d
+    code, d = s.req("POST", "/api/admin/robots", {"robot_id": "D1-10"}, token=tok)
+    assert code == 200, d
+    code, d = s.req("POST", "/api/admin/robots", {"robot_id": "D1-09"}, token=tok)
+    assert code == 200, "broker 重启过一次,之前吊销的也都断了"

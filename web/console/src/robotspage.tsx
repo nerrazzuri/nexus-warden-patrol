@@ -477,9 +477,11 @@ function RobotDetail({ r, u, now, role, say, onChanged, onCode, onClose, readOnl
       {unbind === "pw" && (
         <ConfirmPassword title={t("robotUnbind")} onClose={() => setUnbind(null)}
           onConfirm={async (pw) => {
-            const d = await api<{ robot_wipe?: string }>("POST", `/api/admin/robots/${enc(r.robot_id)}/revoke`, { confirm_password: pw });
+            const d = await api<{ robot_wipe?: string; old_connection_open?: boolean }>("POST", `/api/admin/robots/${enc(r.robot_id)}/revoke`, { confirm_password: pw });
             setUnbind(null);
-            say(t(d.robot_wipe === "sent" ? "robotUnbound" : "robotUnboundOffline", { id: label(r) }));
+            // 网页易用性第 1 轮 P0-10:如实说 —— 老版本不认远程清除;消息服务器没重启时旧连接还开着
+            const wipe = d.robot_wipe === "sent" ? "robotUnbound" : d.robot_wipe === "unsupported" ? "robotUnboundNoWipe" : "robotUnboundOffline";
+            say([t(wipe, { id: label(r) }), d.old_connection_open ? t("robotUnboundOpen") : ""].filter(Boolean).join(" "));
             onClose();
             onChanged();
           }} />

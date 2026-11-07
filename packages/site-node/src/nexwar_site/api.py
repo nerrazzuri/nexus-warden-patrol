@@ -295,6 +295,8 @@ class SiteApi:
         self.account_requests: Any = None
         #: W42:解绑后重启 broker(让它重读吊销名单);站点主程序接上,回做没做到。
         self.broker_restart: Callable[[], bool] | None = None
+        #: 解绑了、消息服务器还没重启的编号(P0-10):这期间旧证书的连接还开着,不许重新登记同一编号。
+        self.open_revoked: set[str] = set()
         #: 网页值班台的静态文件目录(商业化 B1;None = 包里带的 web/,测试换成别的)。
         self.web_dir: Path | None = None
         #: 给人看的站点名(商业化 B1,网页顶栏;站点主程序从 site.json 接)。
@@ -1837,6 +1839,10 @@ class _Handler(TlsHandlerMixin):
                 if not isinstance(days, int) or isinstance(days, bool) or not 1 <= days <= 3650:
                     raise HttpError(400, "证书有效天数要是 1–3650 的整数")
                 self._audit_target, self._audit_detail = rid, {"days": days}
+                if rid in self.site.open_revoked:
+                    raise HttpError(409, f"{rid} 解绑后旧连接可能还开着(消息服务器还没重启):重启消息服务器"
+                                         "(systemctl restart nexwar_mosquitto)后才能重新登记同一编号",
+                                    extra={"reason": "old_connection_open"})
                 site_main.cmd_enroll(home, rid, days)
                 code = site_main.cmd_enroll_code(home, rid, d.get("host") or None, 24.0,
                                                  api_port=self._api_port())
@@ -1861,6 +1867,15 @@ class _Handler(TlsHandlerMixin):
             restart = self.site.broker_restart
             if restart is None or not restart():
                 out["broker_restart"] = "systemctl restart nexwar_mosquitto"
+                # P0-10:旧证书的连接还开着;同一编号重新登记会把它当成新狗(不用激活就上线)
+                self.site.open_revoked.add(rid)
+                out["old_connection_open"] = True
+            else:
+                self.site.open_revoked.clear()          # 重启过,之前吊销的连接也都断了
+            try:
+                self.site.loop.call(lambda: self.site.dispatcher.sync_robots())
+            except Exception:                          # 摘不掉也不影响吊销本身;定期同步会再摘
+                log.warning("解绑后摘机器人客户端失败", exc_info=True)
             return self._send_json(200, out)
         except site_main.SiteError as exc:
             msg = str(exc)

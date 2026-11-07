@@ -234,6 +234,12 @@ class Dispatcher:
             if not r.revoked and r.robot_id not in self.clients:
                 await self.add_robot(r.robot_id)
                 added.append(r.robot_id)
+            elif r.revoked and r.robot_id in self.clients:
+                # 网页易用性第 1 轮 P0-10:吊销了就摘掉。broker 要重启才读吊销名单,这之前旧证书的
+                # 连接还在发状态,站点照收的话网页上一直显示在线。订阅撤不掉(传输层没有退订),
+                # 回调按「还是不是登记着的那个客户端」认,摘掉以后旧回调都不算数。
+                self.clients.pop(r.robot_id, None)
+                self._attached_at.pop(r.robot_id, None)
         return added
 
     async def add_robot(self, robot_id: str) -> None:
@@ -241,10 +247,11 @@ class Dispatcher:
             return
         c = DispatchClient(self._t, Topics(site_id=self.site_id, robot_id=robot_id),
                            now_ms=self._now)
-        c.on_status(lambda s, rid=robot_id: self._on_status(rid, s))
-        c.on_event(lambda e, rid=robot_id: self._on_event(rid, e))
-        c.on_telemetry(lambda t, rid=robot_id: self._on_telemetry(rid, t))
-        c.on_reconcile(lambda r, rid=robot_id: self._on_reconcile(rid, r))
+        live = lambda rid=robot_id: self.clients.get(rid) is c        # noqa: E731(P0-10)
+        c.on_status(lambda s, rid=robot_id: live() and self._on_status(rid, s))
+        c.on_event(lambda e, rid=robot_id: live() and self._on_event(rid, e))
+        c.on_telemetry(lambda t, rid=robot_id: live() and self._on_telemetry(rid, t))
+        c.on_reconcile(lambda r, rid=robot_id: live() and self._on_reconcile(rid, r))
         c.on_ack(self._record_ack)          # 包括等的人超时走了之后才到的回执
         self.clients[robot_id] = c
         self._attached_at[robot_id] = self._now()
