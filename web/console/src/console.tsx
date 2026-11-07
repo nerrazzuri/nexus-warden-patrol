@@ -137,7 +137,7 @@ export function Console({ me, onOut }: { me: Me; onOut: () => void }) {
 
       <main class="page" id="main" data-page={route.page}>
         {route.page === "duty" && (
-          <DutyPage units={units} alerts={alerts} now={now} role={me.role} say={say} refresh={refresh} mode={data?.mode ?? null}
+          <DutyPage units={units} alerts={alerts} now={now} role={me.role} say={say} refresh={refresh} mode={data?.mode ?? null} stale={stale}
             onZoom={(id) => setPending({ kind: "cam", robot: id, cam: "front" })} />
         )}
         {route.page === "live" && (
