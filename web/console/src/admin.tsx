@@ -55,6 +55,18 @@ export function clientTooOld(c: ClientRow, minAppLevel: number | undefined): boo
   return c.kind === "app" && c.api_level != null && minAppLevel != null && c.api_level < minAppLevel;
 }
 
+/** P2-24:同一个账号、同一种客户端、同一版本(同一台设备的多次登录)合成一行,记最近一次、几次登录。 */
+export function groupClients(rows: ClientRow[]): (ClientRow & { n: number })[] {
+  const m = new Map<string, ClientRow & { n: number }>();
+  for (const c of rows) {
+    const k = [c.name, c.kind, c.version ?? "", c.platform ?? "", c.api_level ?? ""].join("\u0000");
+    const g = m.get(k);
+    if (!g) m.set(k, { ...c, n: 1 });
+    else { g.n += 1; g.last_used = Math.max(g.last_used, c.last_used); }
+  }
+  return [...m.values()].sort((a, b) => b.last_used - a.last_used);
+}
+
 // ------------------------------------------------------------------ 系统
 
 

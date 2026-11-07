@@ -1344,3 +1344,6 @@ input[type="date"]:not(.field input) { height: 36px; padding: 0 8px; border-radi
 .arm-enabled { min-height: 36px; display: inline-flex; align-items: center; gap: 8px; font-weight: 600; cursor: pointer; }
 .arm-enabled input[type="checkbox"] { width: 20px; height: 20px; margin: 0; }
 .arm-patrols-body { padding: 0 16px 16px; }
+/* P2-23:趋势图的坐标轴 */
+.spark-axis { stroke: var(--c-outline); stroke-width: 1; }
+.spark-tick { fill: var(--c-textMuted); font-size: 10px; }

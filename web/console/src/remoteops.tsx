@@ -10,7 +10,7 @@ import { api, apiUpload, ApiError, enc } from "./api";
 import { ConfirmPassword } from "./confirmpw";
 import { Confirm } from "./dialogs";
 import { hms } from "./data";
-import { t, type Key } from "./i18n";
+import { lang, t, type Key } from "./i18n";
 
 type Say = (s: string) => void;
 const why = (e: unknown) => (e instanceof ApiError ? e.message : String(e));
@@ -233,14 +233,24 @@ const METRICS: { key: string; label: Key }[] = [
   { key: "alerts_open_P1", label: "mtP1" },
 ];
 
-function Spark({ pts }: { pts: Metric[] }) {
+/** P2-23:带坐标轴的小趋势图:左边最高、最低值,底下起止日期。 */
+const metricText = (key: string, v: number) => (key === "site_disk_free" ? `${Math.round(v * 100)}%` : String(Math.round(v * 100) / 100));
+
+function Spark({ pts, fmt }: { pts: Metric[]; fmt: (v: number) => string }) {
   if (pts.length < 2) return <span class="muted small">—</span>;
   const xs = pts.map((p) => p.ts), ys = pts.map((p) => p.value);
   const x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys);
-  const w = 320, h = 48;
-  const d = pts.map((p, i) => `${i ? "L" : "M"}${(((p.ts - x0) / (x1 - x0 || 1)) * w).toFixed(1)},${(h - ((p.value - y0) / (y1 - y0 || 1)) * h).toFixed(1)}`).join(" ");
+  const L = 44, B = 16, w = 320, h = 48;
+  const d = pts.map((p, i) => `${i ? "L" : "M"}${(L + ((p.ts - x0) / (x1 - x0 || 1)) * w).toFixed(1)},${(4 + h - ((p.value - y0) / (y1 - y0 || 1)) * h).toFixed(1)}`).join(" ");
+  const day = (ms: number) => new Date(ms).toLocaleDateString(lang.value === "zh" ? "zh-CN" : "en-GB", { month: "numeric", day: "numeric" });
   return (
-    <svg class="spark" viewBox={`0 0 ${w} ${h}`} width={w} height={h} role="img" aria-label={`${y0}–${y1}`}>
+    <svg class="spark" viewBox={`0 0 ${L + w + 4} ${h + B + 8}`} width={L + w + 4} height={h + B + 8} role="img"
+      aria-label={`${fmt(y0)}–${fmt(y1)}, ${day(x0)}–${day(x1)}`}>
+      <path d={`M${L},4V${h + 4}H${L + w}`} class="spark-axis" fill="none" />
+      <text x={L - 4} y={10} class="spark-tick" text-anchor="end" data-y="max">{fmt(y1)}</text>
+      <text x={L - 4} y={h + 4} class="spark-tick" text-anchor="end" data-y="min">{fmt(y0)}</text>
+      <text x={L} y={h + B + 4} class="spark-tick" data-x="start">{day(x0)}</text>
+      <text x={L + w} y={h + B + 4} class="spark-tick" text-anchor="end" data-x="end">{day(x1)}</text>
       <path d={d} fill="none" stroke="currentColor" stroke-width="1.5" />
     </svg>
   );
@@ -261,8 +271,8 @@ export function SiteMetrics() {
         return (
           <div key={key} class="sys-row metric" data-metric={key}>
             <span class="muted">{t(label)}</span>
-            <Spark pts={pts} />
-            <b>{last == null ? "—" : key === "site_disk_free" ? `${Math.round(last * 100)}%` : String(Math.round(last * 100) / 100)}</b>
+            <Spark pts={pts} fmt={(v) => metricText(key, v)} />
+            <b>{last == null ? "—" : metricText(key, last)}</b>
           </div>
         );
       })}
