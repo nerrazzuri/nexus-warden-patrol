@@ -62,7 +62,7 @@ describe("让最近的机器人过去看看", () => {
   it("没有能派的说清楚", async () => {
     nearest = { status: 404, body: { error: "这张图上没有能派的机器人" } };
     const { container: c } = render(<GoLookCard map={MAP} at={[3, 4]} units={[unitA]} onClose={() => {}} say={() => {}} />);
-    await waitFor(() => expect(c.textContent).toContain("此地图上没有可派的机器人"));
+    await waitFor(() => expect(c.textContent).toContain("这张地图上现在没有能派的机器人。要在线、在这张地图上定好位"));
     expect(btn(c, "派出")).toBeUndefined();
   });
 });
