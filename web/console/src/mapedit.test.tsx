@@ -212,3 +212,19 @@ describe("网页易用性第 1 轮 P1-52", () => {
     expect(c.querySelector(".me-canvas.result")).not.toBeNull();
   });
 });
+
+describe("网页易用性第 1 轮 P2-19", () => {
+  it("Ctrl+Z 撤销、Ctrl+Y 重做", async () => {
+    const { container: c } = page();
+    await waitFor(() => expect(c.querySelector('.mapedit[data-ready]')).not.toBeNull());
+    fireEvent.click(c.querySelector('[data-tool="obstacle"]')!);
+    fireEvent.click(btn(c, "方框"));
+    fireEvent.click(c.querySelector(".pick")!);
+    fireEvent.click(c.querySelector(".pick")!);
+    expect(c.querySelector("polygon.me-op.obstacle")).not.toBeNull();
+    fireEvent.keyDown(window, { key: "z", ctrlKey: true });
+    await waitFor(() => expect(c.querySelector("polygon.me-op.obstacle")).toBeNull());
+    fireEvent.keyDown(window, { key: "y", ctrlKey: true });
+    await waitFor(() => expect(c.querySelector("polygon.me-op.obstacle")).not.toBeNull());
+  });
+});

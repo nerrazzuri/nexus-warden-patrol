@@ -1339,3 +1339,4 @@ input[type="date"]:not(.field input) { height: 36px; padding: 0 8px; border-radi
 /* P2-15:虚拟墙换成橙色,跟红色禁区分开;禁区写名字 */
 .vwall-line { stroke: var(--c-warning); }
 .nogo-name { fill: var(--c-error); paint-order: stroke; stroke: var(--c-surface); stroke-width: 3px; font-weight: 600; text-anchor: middle; dominant-baseline: middle; pointer-events: none; }
+.range-ends { display: flex; justify-content: space-between; font-weight: 400; }
