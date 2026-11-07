@@ -31,7 +31,8 @@ export function LiveWall(props: { units: UnitInfo[]; alerts: Alert[]; now: numbe
         </div>
       )}
       {ranked.length === 0 && <p class="empty">{t("dutyNoRobots")}</p>}
-      <div class="lw-grid">
+      {/* P1-15:一两台机器人时画面占满整屏高(原来固定半屏高,下半屏空着) */}
+      <div class="lw-grid" data-n={Math.min(ranked.length, 3)}>
         {ranked.map((u) => {
           const id = u.robot.robot_id;
           const has = robotCams(u.robot).includes("thermal");

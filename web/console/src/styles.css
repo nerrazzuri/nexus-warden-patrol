@@ -1258,3 +1258,17 @@ input[type="file"]::file-selector-button {
 /* P1-16:派出去的临时路线(淡一点,走过的轨迹画在上面) */
 .temp-route.sent { opacity: .55; }
 .temp-pt.sent circle { opacity: .7; }
+/* P1-15:一两台机器人时画面按可用高度放大;放大看在手机上占满全屏(原来比墙上还小) */
+.lw-grid[data-n="1"] { grid-template-columns: 1fr; grid-auto-rows: calc(100vh - 56px - 32px - 52px); }
+.lw-grid[data-n="2"] { grid-auto-rows: calc(100vh - 56px - 32px - 52px); }
+.lw-grid[data-n="1"] .lw-pair .well, .lw-grid[data-n="2"] .lw-pair .well { aspect-ratio: auto; }
+.modal.fullcam .full .well { aspect-ratio: auto; height: min(calc(100dvh - 170px), calc((min(1100px, 100vw - 32px) - 40px) * 9 / 16)); }
+@media (max-width: 900px) {
+  .lw-grid[data-n="1"], .lw-grid[data-n="2"] { grid-template-columns: 1fr; grid-auto-rows: minmax(260px, calc((100dvh - 150px) / var(--lw-rows, 1))); }
+  .lw-grid[data-n="2"] { --lw-rows: 2; }
+}
+@media (max-width: 720px), (max-height: 520px) {
+  .modal.fullcam { width: 100vw; max-width: 100vw; height: 100dvh; max-height: 100dvh; margin: 0; padding: 8px; border-radius: 0; }
+  .modal.fullcam .full { margin-top: 6px; }
+  .modal.fullcam .full .well { height: calc(100dvh - 110px); }
+}

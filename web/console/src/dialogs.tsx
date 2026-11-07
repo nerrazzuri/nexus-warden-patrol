@@ -3,14 +3,14 @@ import { useEffect, useRef, useState } from "preact/hooks";
 import { t } from "./i18n";
 import { Icon } from "./icons";
 
-export function Modal({ label, onClose, wide, children }: { label: string; onClose: () => void; wide?: boolean; children: ComponentChildren }) {
+export function Modal({ label, onClose, wide, children, cls }: { label: string; onClose: () => void; wide?: boolean; children: ComponentChildren; cls?: string }) {
   const ref = useRef<HTMLDialogElement>(null);
   useEffect(() => {
     const d = ref.current;
     if (d && !d.open) d.showModal();
   }, []);
   return (
-    <dialog ref={ref} class={wide ? "modal wide" : "modal"} aria-label={label}
+    <dialog ref={ref} class={`${wide ? "modal wide" : "modal"}${cls ? ` ${cls}` : ""}`} aria-label={label}
       onCancel={(e) => { e.preventDefault(); onClose(); }}>
       <div class="modal-head">
         <h2>{label}</h2>
