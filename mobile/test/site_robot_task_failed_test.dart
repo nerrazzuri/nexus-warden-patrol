@@ -1,5 +1,6 @@
 // POC 11-05：派了巡检，机器人起飞前检查没过（比如地图未标原点）—— 站点已经收下了，原因是机器人后来报的
 // `task_failed`。单机器人页要说原因、说怎么办，不能只是「没动」。
+import 'package:nexwar_patrol/l10n.dart';
 import 'package:nexwar_patrol/ui/site_page.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -24,5 +25,22 @@ void main() {
     expect(find.textContaining('未标原点'), findsOneWidget);
     expect(find.textContaining('设好位置后点「在这儿标原点」'), findsOneWidget, reason: '说怎么办');
     await t.pumpWidget(Container());
+  });
+
+  testWidgets('导航 V1：任务失败带原因码，单机器人页说该做什么', (t) async {
+    appLang.value = AppLang.zh;
+    final api = FakeApi('admin');
+    await t.pumpWidget(MaterialApp(home: SiteRobotPage(api: api, robotId: 'A')));
+    await t.pumpAndSettle();
+    api.sse.add(<String, dynamic>{'kind': 'event', 'robot_id': 'A', 'event': <String, dynamic>{
+      'kind': 'task_failed',
+      'data': <String, dynamic>{'task_id': 'patrol-2', 'reason': '1 个航点未到达(P3):目标点离墙太近',
+        'code': 'goal_too_close_to_wall'}}});
+    await t.pump();
+    await t.pump();
+    expect(find.textContaining('目标点离墙太近'), findsOneWidget);
+    expect(find.textContaining('把这个航点往空处挪一点'), findsOneWidget, reason: '按码说怎么办');
+    await t.pumpWidget(Container());
+    appLang.value = AppLang.en;
   });
 }

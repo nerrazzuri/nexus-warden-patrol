@@ -118,13 +118,33 @@ def alerts_dart(catalog: dict) -> str:
     return "\n".join(lines) + "\n"
 
 
+def nav_codes_dart() -> str:
+    """导航 V1 第 5 节的失败原因码(单一来源 ``nexwar_contract.navcodes``)
+    → 手机按码写说明和处理建议。"""
+    src = ROOT / "packages" / "contract" / "src"
+    if str(src) not in sys.path:
+        sys.path.insert(0, str(src))
+    from nexwar_contract.navcodes import FAIL_CODES
+    lines = [HEADER,
+             "/// 导航失败原因码:``(英文, 中文, 英文处理建议, 中文处理建议)``。",
+             "/// 来源 ``nexwar_contract.navcodes``。",
+             "const Map<String, (String, String, String, String)> navFailCodes ="
+             " <String, (String, String, String, String)>{"]
+    for code, c in FAIL_CODES.items():
+        lines.append(f"  {_dart_str(code)}: ({_dart_str(c.en)}, {_dart_str(c.zh)},")
+        lines.append(f"      {_dart_str(c.action_en)}, {_dart_str(c.action_zh)}),")
+    lines.append("};")
+    return "\n".join(lines) + "\n"
+
+
 def generate() -> dict[Path, str]:
     tokens = json.loads((ROOT / "design" / "tokens.json").read_text(encoding="utf-8"))
     catalog = json.loads((ROOT / "design" / "i18n" / "alerts.json").read_text(encoding="utf-8"))
     mobile = json.loads((ROOT / "design" / "mobile.json").read_text(encoding="utf-8"))
     return {OUT / "tokens.g.dart": tokens_dart(tokens),
             OUT / "nw_tokens.g.dart": nw_tokens_dart(mobile),
-            OUT / "alert_titles.g.dart": alerts_dart(catalog)}
+            OUT / "alert_titles.g.dart": alerts_dart(catalog),
+            OUT / "nav_codes.g.dart": nav_codes_dart()}
 
 
 def main() -> int:

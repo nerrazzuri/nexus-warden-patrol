@@ -6,6 +6,7 @@
 library;
 
 import '../design/alert_titles.g.dart';
+import '../design/nav_codes.g.dart';
 import '../l10n.dart';
 
 String? _title(String kind) => switch (kind) {
@@ -64,6 +65,13 @@ String robotEventTitle(String kind, [Map<String, dynamic>? data]) {
 
 final RegExp _code = RegExp(r'^[a-z_]+$');
 
+/// 导航 V1 原因码 → 「怎么回事」「该做什么」两句(当前语言);码不认识是 null。
+(String, String)? navCodeText(Object? code) {
+  final c = code is String ? navFailCodes[code] : null;
+  if (c == null) return null;
+  return (tr(c.$1, c.$2), tr(c.$3, c.$4));
+}
+
 /// 事件说明：只挑人读得懂的字段，挑不出来是空串。
 String robotEventDetail(String kind, Map<String, dynamic> data) {
   final parts = <String>[];
@@ -79,6 +87,8 @@ String robotEventDetail(String kind, Map<String, dynamic> data) {
   if (kind == 'patrol_waypoint' && data['ok'] is bool) {
     parts.add(data['ok'] == true ? tr('Arrived', '已到达') : tr('missed', '未到达'));
   }
+  final why = navCodeText(data['code']);
+  if (why != null) parts.addAll(<String>[why.$1, why.$2]);
   final dist = data['distance_m'];
   if (dist is num) parts.add(tr('${dist.toStringAsFixed(1)} m remaining', '剩余 ${dist.toStringAsFixed(1)} 米'));
   for (final k in const <String>['reason', 'why', 'note', 'message', 'error', 'detail']) {
