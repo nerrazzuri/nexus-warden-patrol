@@ -1197,6 +1197,7 @@ input.invalid { border-color: var(--c-error); }
 }
 /* P1-22:录像控制栏分组整体换行 */
 .recctl-grp { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.recctl-pair { display: inline-flex; flex-wrap: nowrap; gap: 8px; }
 /* P1-83:手机上布防例外一行放不下就换行 */
 @media (max-width: 720px) { .arm-ex li.row { flex-wrap: wrap; } }
 /* P1-84:触屏上可点的地方至少 44px(戴手套也点得中) */
@@ -1207,7 +1208,9 @@ input.invalid { border-color: var(--c-error); }
 }
 /* P1-41:路线编辑面板自己滚动,放弃 / 删除那一行贴在面板底部(不用滚到页面最下面) */
 @media (min-width: 900px) {
-  .ly-main .routeside { max-height: calc(100vh - 220px); overflow-y: auto; }
+  /* 第 2 轮:跟「.console.fill .routeside { max-height: 100% }」一样重,打包后那条在后面盖掉了这条
+     (父级不限高,100% 等于不限) —— 写得更具体 */
+  .console .ly-main .routesplit > .routeside { max-height: calc(100vh - 220px); overflow-y: auto; }
 }
 .routeside .route-acts { position: sticky; bottom: 0; background: var(--c-surface); padding: 8px 0; z-index: 1; }
 /* P1-66:活动日志的结果 */
@@ -1219,6 +1222,9 @@ input.invalid { border-color: var(--c-error); }
   .sidenav { gap: 10px; padding: 12px 10px; }
   .sidenav a { min-height: 30px; }
   .sidenav-brand { gap: 4px; }
+  /* 第 2 轮:组之间 18px、组名的上下留白也收紧(1280×720 展开「高级」原来还差 108px) */
+  .sidenav-nav { gap: 6px; }
+  .navgroup-title { padding-top: 2px; padding-bottom: 2px; min-height: 0; }
 }
 /* P1-82:手机上页面标题占一整行,时钟、?、账号、全部停止在第二行,全部停止固定在最右 */
 @media (max-width: 720px) {
@@ -1313,6 +1319,10 @@ input[type="file"]::file-selector-button {
 .routeside-head h2 { flex: 1 1 auto; min-width: 0; }
 /* P2-41:表单里下拉框跟输入框一样高,标签在同一条线上 */
 .field select { height: 44px; }
+/* 第 2 轮 P1-83:「.wrap」原来只管长字断行(overflow-wrap),「row wrap」的行其实从来不换行 ——
+   手机上布防例外那一行把下拉框压成 18px、备注和「添加」挤到卡片外面 */
+.row.wrap { flex-wrap: wrap; }
+.arm-ex .row.wrap > .field { flex: 1 1 150px; min-width: 0; }
 .row.wrap > .field { justify-content: flex-start; }
 .row.wrap:has(> .field) { align-items: flex-end; }
 .todo-detail summary { cursor: pointer; color: var(--c-textMuted); }

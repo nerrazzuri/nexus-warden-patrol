@@ -10,7 +10,7 @@ import { Confirm, Modal } from "./dialogs";
 import { hm } from "./data";
 import { lang, setLang, t, type Key } from "./i18n";
 import { Icon } from "./icons";
-import { canDispatch, isOwnerLike, type Mode } from "./model";
+import { canArm, canDispatch, isOwnerLike, type Mode } from "./model";
 
 export type GuardPage = "duty" | "live" | "map" | "recordings" | "alarms";
 /** 「管理」各页(W44 第二期,设计 §5):常用 = 现场概况、布防时间、授权和临时撤防、用户、机器人、报表;
@@ -165,7 +165,7 @@ export function TopBar(props: {
   return (
     <header class="topbar">
       <PageTitle page={props.page} />
-      {props.mode && <ArmState mode={props.mode} />}
+      {props.mode && <ArmState mode={props.mode} role={props.me.role} />}
       <a href="#/alarms" class={props.alarms ? "alarmcount on" : "alarmcount"} aria-live="polite">
         {t("alarmCount", { n: props.alarms == null ? "?" : props.alarms })}
       </a>
@@ -223,6 +223,10 @@ export function SideNav(props: { me: Me; page: Page; alarms: number | null; noti
   // P0-16:手机上导航收在「菜单」按钮里(宽屏这个按钮不显示,导航一直在);点了哪页就收起
   const [menu, setMenu] = useState(false);
   useEffect(() => setMenu(false), [props.page]);
+  // 第 2 轮 P1-85:矮屏上侧栏要自己滚,当前这一页在侧栏里要看得见
+  useEffect(() => {
+    document.querySelector<HTMLElement>('.sidenav a[aria-current="page"]')?.scrollIntoView?.({ block: "nearest" });
+  }, [props.page, open]);
   const badge = (b: "alarms" | "notices" | undefined) => {
     const n = b === "alarms" ? props.alarms : b === "notices" ? props.notices : null;
     return n ? <span class={b === "alarms" ? "badge alarm mono" : "badge mono"}>{n}</span> : null;
@@ -258,12 +262,12 @@ export function SideNav(props: { me: Me; page: Page; alarms: number | null; noti
 }
 
 /** 布防状态:只显示(设计 §4.0,用户说的),切模式在别处。 */
-function ArmState({ mode }: { mode: Mode }) {
+function ArmState({ mode, role }: { mode: Mode; role: string }) {
   const text = mode.source === "schedule" ? modeLabel(mode) : mode.mode === "armed" ? t("armArmed")
     : mode.mode === "home" ? t("armHome")
     : t("armVisitor", { t: mode.until_ms ? hm(mode.until_ms) : "—" });
   // P1-79:只显示;悬停说去哪儿切、谁能切(保安能布防、不能撤防 —— 站点同一条规矩)
-  return <span class={`armstate ${mode.source === "schedule" ? (mode.state === "armed" ? "armed" : "home") : mode.mode}`} title={t("armStateTip")}><i class="dot" aria-hidden="true" />{text}</span>;
+  return <span class={`armstate ${mode.source === "schedule" ? (mode.state === "armed" ? "armed" : "home") : mode.mode}`} title={t(pageAllowed("admin/arming", role) ? "armStateTip" : canArm(role) ? "armStateTipGuard" : "armStateTipViewer")}><i class="dot" aria-hidden="true" />{text}</span>;
 }
 
 function UserMenu(props: { me: Me; pref: ThemePref; onPref: (p: ThemePref) => void; onSignOut: (note?: string) => void; onSay: (s: string) => void }) {
