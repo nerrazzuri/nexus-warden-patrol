@@ -233,12 +233,6 @@ export function MapCanvas(props: {
                 {(z.kind === "nogo" || z.kind === "erase") && <title>{navZoneTip(z)}</title>}
               </polygon>
             ))}
-            {/* P2-15:禁区上写名字(字号跟着图的大小,缩放时一起变) */}
-            {zones.filter((z) => z.kind === "nogo" && !z.wall && z.polygon.length >= 3 && (z.label || z.id)).map((z) => {
-              const c = toPx(meta, z.polygon.reduce((s, p) => s + p[0], 0) / z.polygon.length, z.polygon.reduce((s, p) => s + p[1], 0) / z.polygon.length);
-              return <text key={`n:${z.id}`} x={c.px} y={c.py} class="nogo-name" data-nogo-name={z.id}
-                style={{ fontSize: `${Math.max(8, Math.round(Math.max(meta.width, meta.height) / 70))}px` }}>{z.label || z.id}</text>;
-            })}
             {zones.filter((z) => Array.isArray(z.wall) && z.wall.length >= 2).map((z) => (
               <polyline key={`w:${z.id}`} points={polyAttr(meta, z.wall!)} class={z.hard ? "vwall-line hard" : "vwall-line"} data-vwall={z.id}>
                 <title>{navZoneTip(z)}</title>
@@ -250,6 +244,13 @@ export function MapCanvas(props: {
             {props.world}
           </g>
           <g class="map-marks">
+            {/* P2-15:禁区上写名字(屏上的字,跟区域名一样:正的、不跟着缩放;屏上放不下就不写) */}
+            {zones.filter((z) => z.kind === "nogo" && !z.wall && z.polygon.length >= 3 && (z.label || z.id)).map((z) => {
+              const text = z.label || z.id;
+              const at = placeLabel(z.polygon.map(([x, y]) => screen.map(x, y)), text, 12, obstacles);
+              if (!at) return null;
+              return <text key={`n:${z.id}`} x={at[0]} y={at[1]} class="nogo-name" data-nogo-name={z.id} font-size={12} dominant-baseline="central">{text}</text>;
+            })}
             {areas.map((a, i) => {
               const font = a.kind === "zone" ? 14 : 13;
               const text = a.label ?? a.name;

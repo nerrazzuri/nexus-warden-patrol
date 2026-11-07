@@ -373,12 +373,12 @@ describe("平面图:有 plan 就画它(拉到预览的宽高坐标里),没有用
   });
 });
 
-describe("图例只列图上真有的东西", () => {
+describe("图例只列图上真有的东西(P2-15 起机器人、报警两项一直列)", () => {
   it("只有底图:地面、墙、没建到的", async () => {
     installScreenCTM();
     const { container: c } = mapPage(META, { units: [unit(robot("A", null))] });
     await ready(c);
-    expect(legend(c)).toEqual(["floor", "wall", "unknown"]);
+    expect(legend(c)).toEqual(["floor", "wall", "unknown", "robot", "alarm"]);   // P2-15:机器人、报警一直列
   });
   it("禁行区、区域、机器人、报警点都有:都列;没有限速区就不列限速区", async () => {
     installScreenCTM();
@@ -390,7 +390,7 @@ describe("图例只列图上真有的东西", () => {
     installScreenCTM();
     const { container: c } = mapPage({ ...META, zones: [{ ...NOGO, id: "s", kind: "slow" }] }, { units: [unit(robot("A", null))] });
     await ready(c);
-    expect(legend(c)).toEqual(["floor", "wall", "unknown", "slow"]);
+    expect(legend(c)).toEqual(["floor", "wall", "unknown", "slow", "robot", "alarm"]);
   });
   it("中文", async () => {
     installScreenCTM();
@@ -605,7 +605,7 @@ describe("看到过、机器人没走过 + 抹掉区:图例只在有的时候列
     installScreenCTM();
     const { container: c } = mapPage({ ...META, seen: true, zones: [NOGO, ERASE] }, { units: [unit(robot("A", null))] });
     await ready(c);
-    expect(legend(c)).toEqual(["floor", "wall", "seen", "unknown", "nogo", "erase"]);
+    expect(legend(c)).toEqual(["floor", "wall", "seen", "unknown", "nogo", "erase", "robot", "alarm"]);
     const e = c.querySelector("g.map-world polygon.erase-area")!;
     expect(e).not.toBeNull();
     expect(e.querySelector("title")!.textContent).toBe("Erased region Junk: robots never go there");
