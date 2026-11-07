@@ -32,7 +32,8 @@ beforeEach(() => {
       const robot = u.searchParams.get("robot");
       const cam = u.searchParams.get("camera");
       const all = [rec(1, "A", "front", at), rec(2, "A", "back", at), rec(3, "B", "front", at + 600_000)];
-      return Promise.resolve(json({ segment_s: 60, recordings: all.filter((r) => (!robot || r.robot_id === robot) && (!cam || r.camera === cam)) }));
+      return Promise.resolve(json({ segment_s: 60, robots: ["A", "B", "OLD"],
+        recordings: all.filter((r) => (!robot || r.robot_id === robot) && (!cam || r.camera === cam)) }));
     }
     return Promise.resolve(json({}, 404));
   }) as typeof fetch);
@@ -53,6 +54,13 @@ describe("录像页", () => {
     const chips = Array.from(c.querySelectorAll(".recrobots button"));
     expect(chips.map((b) => b.textContent)).toEqual(["A", "B"]);
     expect(chips[0].getAttribute("aria-pressed")).toBe("true");
+  });
+
+  it("P1-29:解绑了还有录像的也列出来,标「已解绑」", async () => {
+    const { container: c } = page();
+    await waitFor(() => expect(c.querySelector('.recrobots button[data-unbound="1"]')).not.toBeNull());
+    expect(c.querySelector('.recrobots button[data-unbound="1"]')!.textContent).toBe("OLD · 已解绑");
+    expect(c.querySelectorAll(".recrobots button").length).toBe(3);
   });
 
   it("大画面放选的那一路,小窗放另一路(同一刻)", async () => {

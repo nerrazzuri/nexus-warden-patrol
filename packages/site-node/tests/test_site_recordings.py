@@ -118,6 +118,7 @@ def test_接口_谁都能看能放_值班的人能标留着(站点):
     code, d = s.req("GET", f"/api/recordings?robot=A&since={T0 + 10_000}&until={T0 + 20_000}",
                     token=olga)
     assert code == 200 and d["segment_s"] == 60
+    assert d["robots"] == ["A"]          # P1-29:有录像的机器人(解绑了也列着)
     [r] = d["recordings"]
     host, port = s.api.httpd.server_address[:2]
     req = urllib.request.Request(f"http://{host}:{port}/api/recordings/{r['id']}/video",

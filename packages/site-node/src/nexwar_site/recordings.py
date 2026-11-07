@@ -189,6 +189,11 @@ class RecordingStore:
         args.append(max(1, min(limit, 5000)))
         return [dict(r) for r in self.db.query(q, tuple(args))]
 
+    def robots(self) -> list[str]:
+        """有录像的机器人(网页易用性 P1-29:解绑了的历史录像也要找得到)。"""
+        return [str(r["robot_id"]) for r in self.db.query(
+            "SELECT DISTINCT robot_id FROM recordings WHERE sealed=0 ORDER BY robot_id")]
+
     def covering(self, robot_id: str, camera: str, t_ms: int) -> dict[str, Any] | None:
         """W44:盖住 ``t_ms`` 那一刻的那一段(开头 ≤ t < 开头 + 一段);重叠时取开头晚的。"""
         rows = self.db.query(

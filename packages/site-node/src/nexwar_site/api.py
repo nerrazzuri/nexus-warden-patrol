@@ -4286,7 +4286,8 @@ class _Handler(TlsHandlerMixin):
             rows = store.list(robot_id=(q.get("robot") or [None])[0],
                               camera=(q.get("camera") or [None])[0], since_ms=num("since"),
                               until_ms=num("until"), limit=num("limit") or 500)
-            return self._send_json(200, {"recordings": rows, "segment_s": SEGMENT_S})
+            return self._send_json(200, {"recordings": rows, "segment_s": SEGMENT_S,
+                                         "robots": store.robots()})
         if path == "/api/recordings/frame":
             return self._rec_frame(method, store, user)
         m = _REC.match(path)
