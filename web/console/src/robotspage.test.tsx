@@ -382,3 +382,20 @@ describe("网页易用性第 1 轮 P1-23", () => {
     expect(c.querySelector('[data-robot="B"] .fleet-state .tone-error')).not.toBeNull();
   });
 });
+
+describe("网页易用性第 1 轮 P1-27/28", () => {
+  it("不能自己找位置的:自动定位灰掉、写原因;报了站没站着就写当前姿态", async () => {
+    lang.value = "zh";
+    robots[0] = card({ postures: ["stand", "lie"], task: null });
+    const u = { robot: { robot_id: "A", active: true, fresh: true, revoked: false, held: null,
+      status: { online: true, last_seen: 0, ready: { motion: true } }, capabilities: { tasks: {} } },
+      state: "idle", battery: 90, task: "" } as unknown as UnitInfo;
+    const { container: c } = render(<RobotsPage say={() => {}} now={NOW} role="guard" units={[u]} />);
+    await waitFor(() => expect(cardOf(c, "A")).not.toBeNull());
+    fireEvent.click(cardOf(c, "A"));
+    const d = c.querySelector(".robot-detail")!;
+    expect(btn(d, "自动定位").disabled).toBe(true);
+    expect(d.querySelector(".rd-why")!.textContent).toContain("不能自己找位置");
+    expect(d.querySelector("[data-posture-now]")!.textContent).toContain("现在站着");
+  });
+});

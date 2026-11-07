@@ -76,7 +76,8 @@ export interface Robot {
   status?: {
     online: boolean;
     last_seen: number;
-    ready?: { estop_clear?: boolean };
+    /** ``motion``:站着、能收速度命令(趴下、蹲下、没起来都是 false)。 */
+    ready?: { estop_clear?: boolean; motion?: boolean };
     task?: { kind: string; state: string } | null;
   } | null;
   capabilities?: {
