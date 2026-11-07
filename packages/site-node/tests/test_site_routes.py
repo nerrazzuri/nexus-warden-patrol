@@ -565,9 +565,15 @@ def test_接口_只查不存_逐点问题照报_不存不进审计(站点):
     assert s.req("POST", "/api/route-check", {"map_id": MAP[0], "waypoints": GOOD},
                  token=alice)[0] == 400
     assert s.req("GET", "/api/routes", token=alice)[1]["routes"] == []
+    # P1-16:保安的临时路线(只给 x、y)也能查,同一套逐点问题;点数不对 400
+    tmp = {"map_id": MAP[0], "map_version": MAP[1],
+           "points": [{"x": 4.0, "y": 0.5}, {"x": 1.0, "y": 2.0}]}
+    code, d = s.req("POST", "/api/route-check", tmp, token=gina)
+    assert code == 200 and [e["index"] for e in d["errors"]] == [0], d
+    assert s.req("POST", "/api/route-check", {**tmp, "points": []}, token=gina)[0] == 400
     # 查成功的不进操作记录(画的时候一会儿一次);被拒、出错的照样记
     rows = s.db.query("SELECT status FROM audit WHERE action='POST /api/route-check'")
-    assert sorted(r["status"] for r in rows) == [400, 403], rows
+    assert sorted(r["status"] for r in rows) == [400, 400, 403], rows
 
 
 def test_接口_导入有摘要_导出落在站点目录_再导入收得下(站点, tmp_path):

@@ -239,6 +239,8 @@ export function MapPage(props: {
   const [shown, setShown] = useState<{ map: { map_id: string; version: string } | null; meta: PreviewMeta | null }>({ map: null, meta: null });
   const [look, setLook] = useState<{ at: Pt; map: { map_id: string; version: string } } | null>(null);
   const [route, setRoute] = useState<Pt[] | null>(null);
+  // P1-16:派出去的临时路线留在图上(哪台在走);走过的地方由「路线」图层的轨迹画出
+  const [sentRoute, setSentRoute] = useState<{ robot: string; pts: Pt[] } | null>(null);
   const [cells, setCells] = useState<{ cell_m: number; cells: Cell[] } | null>(null);
   const [authz, setAuthz] = useState<AuthzRow[]>([]);
   const [recent, setRecent] = useState<Alert[]>([]);
@@ -335,6 +337,10 @@ export function MapPage(props: {
             {route && route.length > 1 && (
               <polyline class="temp-route" points={route.map(([x, y]) => { const p = toPx(meta, x, y); return `${p.px},${p.py}`; }).join(" ")} />
             )}
+            {!route && sentRoute && sentRoute.pts.length > 1 && (
+              <polyline class="temp-route sent" data-sent-route={sentRoute.robot}
+                points={sentRoute.pts.map(([x, y]) => { const p = toPx(meta, x, y); return `${p.px},${p.py}`; }).join(" ")} />
+            )}
           </>
         )}
         extraMarks={(s) => (
@@ -355,9 +361,9 @@ export function MapPage(props: {
                 </g>
               )];
             })}
-            {route && route.map(([mx, my], i) => {
+            {(route ?? sentRoute?.pts ?? []).map(([mx, my], i) => {
               const [x, y] = s.map(mx, my);
-              return <g key={`tr:${i}`} class="temp-pt"><circle cx={x} cy={y} r="9" /><text x={x} y={y + 4}>{i + 1}</text></g>;
+              return <g key={`tr:${i}`} class={route ? "temp-pt" : "temp-pt sent"}><circle cx={x} cy={y} r="9" /><text x={x} y={y + 4}>{i + 1}</text></g>;
             })}
           </>
         )} />
@@ -400,7 +406,17 @@ export function MapPage(props: {
         {events.length > 0 && <a class="small" href="#/alarms">{t("mapAllShift", { n: events.length })}</a>}
         {route ? (
           shown.map && <TempRoutePanel map={shown.map} points={route} robots={robotsHere} say={say}
-            onUndo={() => setRoute(route.slice(0, -1))} onCancel={() => setRoute(null)} onSent={() => setRoute(null)} />
+            onUndo={() => setRoute(route.slice(0, -1))} onCancel={() => setRoute(null)}
+            onSent={(robot) => {
+              setSentRoute({ robot, pts: route });
+              if (!on("route")) flip("route");            // 看得到它走到哪了
+              setRoute(null);
+            }} />
+        ) : sentRoute ? (
+          <div class="tip" data-sent-tip="1">
+            <p>{t("trSentShown", { id: nameOf(sentRoute.robot) })}</p>
+            <button type="button" class="btn sm" onClick={() => setSentRoute(null)}>{t("trSentHide")}</button>
+          </div>
         ) : canPatrol(props.role ?? "") && (
           <div class="tip">
             <p>{t("mapTip")}</p>
@@ -504,6 +520,9 @@ export function GoLookCard(props: { map: { map_id: string; version: string }; at
   );
 }
 
+/** P1-16:落点后多久去站点查一次。 */
+export const TEMP_CHECK_MS = 400;
+
 /** 保安的临时路线(设计 §4.3,用户选的):按顺序点几个点、选一台、开始;走一趟就没了,不存。 */
 export function TempRoutePanel(props: {
   map: { map_id: string; version: string };
@@ -511,12 +530,27 @@ export function TempRoutePanel(props: {
   robots: string[];
   onUndo: () => void;
   onCancel: () => void;
-  onSent: () => void;
+  onSent: (robot: string) => void;
   say: (s: string) => void;
 }) {
   const [robot, setRobot] = useState<string | null>(props.robots[0] ?? null);
   const [errs, setErrs] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
+  const pointText = (list: { index: number | null; problem: string }[]) =>
+    list.map((x) => (x.index == null ? x.problem : t("trBadPoint", { n: x.index + 1, why: x.problem })));
+  // P1-16:点一下就查(穿墙、在禁行区里、没扫到的地方),不用等按「开始」
+  const key = JSON.stringify(props.points);
+  useEffect(() => {
+    if (props.points.length === 0) { setErrs([]); return; }
+    let live = true;
+    const id = window.setTimeout(() => {
+      api<{ errors: { index: number | null; problem: string }[] }>("POST", "/api/route-check",
+        { points: props.points.map(([x, y]) => ({ x, y })), map_id: props.map.map_id, map_version: props.map.version })
+        .then((d) => { if (live) setErrs(pointText(d.errors ?? [])); })
+        .catch(() => { /* 老站点没有这个接口:按「开始」时照样查 */ });
+    }, TEMP_CHECK_MS);
+    return () => { live = false; window.clearTimeout(id); };
+  }, [key, props.map.map_id, props.map.version]);
   async function go() {
     if (!robot) return;
     setBusy(true);
@@ -529,17 +563,15 @@ export function TempRoutePanel(props: {
       // W53:撞上日程就排到后面(日程优先),说排到几点
       if (r.queued) {
         props.say(t("trQueued", { id: robot, at: siteHm(r.start_after_ms ?? 0, r.utc_offset_min), why: r.because ?? "" }));
-        props.onSent();
+        props.onSent(robot);
         return;
       }
       const no = notAccepted(r);
       if (no) setErrs([no]);
-      else { void reportStart(nameOf(robot), sentAt, props.say, { robot }); props.onSent(); }
+      else { void reportStart(nameOf(robot), sentAt, props.say, { robot }); props.onSent(robot); }
     } catch (e) {
       const list = e instanceof ApiError ? (e.data as { errors?: { index: number | null; problem: string }[] } | undefined)?.errors : undefined;
-      setErrs(list && list.length
-        ? list.map((x) => (x.index == null ? x.problem : t("trBadPoint", { n: x.index + 1, why: x.problem })))
-        : [e instanceof ApiError ? refusalText(e.message, e.data) : String(e)]);
+      setErrs(list && list.length ? pointText(list) : [e instanceof ApiError ? refusalText(e.message, e.data) : String(e)]);
     } finally {
       setBusy(false);
     }

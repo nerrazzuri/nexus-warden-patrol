@@ -1467,6 +1467,19 @@ class _Handler(TlsHandlerMixin):
             raise HttpError(400, f"points 要是 1–{TEMP_ROUTE_MAX} 个点")
         if self.site.routes is None:
             raise HttpError(404, "此站点未启用路线库")
+        flat = self._temp_waypoints(pts)
+        name = f"temp-{self.site._now()}"
+        body = {"map_id": d.get("map_id"), "map_version": d.get("map_version"), "waypoints": flat}
+        try:
+            return self.site.routes.build_mission(name, body)
+        except RouteError as exc:
+            raise HttpError(400, str(exc), extra={"errors": exc.errors}) from exc
+
+    @staticmethod
+    def _temp_waypoints(pts: Any) -> list[dict[str, Any]]:
+        """临时路线的点 → 路线点(``P1``…;朝向:每个点朝下一个点,最后一个跟前一个一样)。"""
+        if not isinstance(pts, list) or not 1 <= len(pts) <= TEMP_ROUTE_MAX:
+            raise HttpError(400, f"points 要是 1–{TEMP_ROUTE_MAX} 个点")
         flat: list[dict[str, Any]] = []
         for i, p in enumerate(pts):
             q = p if isinstance(p, dict) else {}
@@ -1480,12 +1493,7 @@ class _Handler(TlsHandlerMixin):
                                        float(b["x"]) - float(a["x"])) if a and b else 0.0)
             except (TypeError, ValueError):
                 p["yaw"] = 0.0                            # 点不成形:下面逐点报
-        name = f"temp-{self.site._now()}"
-        body = {"map_id": d.get("map_id"), "map_version": d.get("map_version"), "waypoints": flat}
-        try:
-            return self.site.routes.build_mission(name, body)
-        except RouteError as exc:
-            raise HttpError(400, str(exc), extra={"errors": exc.errors}) from exc
+        return flat
 
     def _nearest(self, method: str, user) -> None:
         """让最近的机器人过去看看(W44):``GET ?map_id=&map_version=&x=&y=`` → 谁、多少米、约几秒。
@@ -2509,7 +2517,10 @@ class _Handler(TlsHandlerMixin):
         mr, ms = _ROUTE.match(path), _ROUTE_SCHED.match(path)
         read = method == "GET"
         # W53:日程(``/api/route-schedules``)经理也能改;路线、时区、导出还是 manage
-        self._need(user, VIEW if read else SCHEDULE if ms is not None else MANAGE)
+        # P1-16:只查不存的 /api/route-check:临时路线(``points``)能派巡逻的就能查,
+        # 路线库的点要 manage(下面再查)
+        self._need(user, VIEW if read else SCHEDULE if ms is not None
+                   else PATROL if path == "/api/route-check" else MANAGE)
         try:
             if read:
                 if path == "/api/routes":
@@ -2542,7 +2553,13 @@ class _Handler(TlsHandlerMixin):
             if path == "/api/route-check":
                 # 网页易用性 P1-39:画的时候就查(跟存路线同一套逐点检查,不存、不进历史);
                 # 查成了不进操作记录(一会儿一次),出错的照样记
-                errs = store.check_points(d)
+                if "points" in d:
+                    errs = store.check_points({
+                        "map_id": d.get("map_id"), "map_version": d.get("map_version"),
+                        "waypoints": self._temp_waypoints(d.get("points"))})
+                else:
+                    self._need(user, MANAGE)
+                    errs = store.check_points(d)
                 self._skip_audit = True
                 return self._send_json(200, {"errors": errs})
             if mr is not None and mr.group(2) == "/eta":

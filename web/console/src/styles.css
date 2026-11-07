@@ -1255,3 +1255,6 @@ input[type="file"]::file-selector-button {
 .me-canvas.result polygon.me-op.obstacle:not(.loop) { fill: #000; }
 .help-here { padding: 10px 12px; border-radius: 8px; background: var(--c-surfaceVariant); margin-bottom: 8px; }
 .help-here p { margin: 4px 0 0; }
+/* P1-16:派出去的临时路线(淡一点,走过的轨迹画在上面) */
+.temp-route.sent { opacity: .55; }
+.temp-pt.sent circle { opacity: .7; }
