@@ -51,6 +51,9 @@ def _stamp(paths: tuple[Path, ...]) -> tuple | None:
         return None
 
 
+#: 删掉过的版本号(site_settings 里一个 JSON:{地图号: [版本, …]})。
+RETIRED_KEY = "map_retired_versions"
+
 class MapError(ValueError):
     """这张图登记不了 / 找不到。"""
 
@@ -633,6 +636,21 @@ class MapCatalog:
                 "res_m": grid.get("res") if isinstance(grid.get("res"), (int, float)) else None,
                 "size_px": grid.get("size") if isinstance(grid.get("size"), list) else None}
 
+    @staticmethod
+    def _retired_all(c: Any) -> dict[str, list[str]]:
+        row = c.execute("SELECT value FROM site_settings WHERE key=?", (RETIRED_KEY,)).fetchone()
+        try:
+            d = json.loads(row[0]) if row else {}
+        except (TypeError, ValueError):
+            d = {}
+        return d if isinstance(d, dict) else {}
+
+    def retired(self, map_id: str) -> set[str]:
+        """这个地图号下删掉过的版本号(P0-15):新版本号要绕开它们。"""
+        with self.db.tx() as c:
+            v = self._retired_all(c).get(map_id, [])
+        return {x for x in v if isinstance(x, str)}
+
     def delete(self, map_id: str, version: str) -> int:
         """删掉这一版:文件、登记行,缓存里的预览也清。回删掉多少字节。**不查**有没有狗在用、是不是
         最新(那是管理页的规矩,在 ``maps_admin``);没有这一版 :class:`MapError`。"""
@@ -652,6 +670,13 @@ class MapCatalog:
                 os.replace(d, gone)                  # 先挪开再登记:登记行没了,目录不会悬着
             with self.db.tx() as c:
                 c.execute("DELETE FROM maps WHERE map_id=? AND version=?", (map_id, version))
+                # 网页易用性第 1 轮 P0-15:删掉的版本号记下来,以后不再发(机器人上可能还缓存着同名的旧文件)
+                retired = self._retired_all(c)
+                retired.setdefault(map_id, [])
+                if version not in retired[map_id]:
+                    retired[map_id].append(version)
+                c.execute("INSERT INTO site_settings(key, value) VALUES (?, ?) ON CONFLICT(key) "
+                          "DO UPDATE SET value=excluded.value", (RETIRED_KEY, json.dumps(retired)))
             shutil.rmtree(gone, ignore_errors=True)
             try:
                 d.parent.rmdir()                     # 这个地图号下没别的版本了:空目录也删

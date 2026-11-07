@@ -209,8 +209,6 @@ def test_删除_有狗在用拒_最新一版拒_旧的删得掉_文件和挂着�
     assert dele("7", gina)[0] == 403
     code, d = dele("7")                                   # 狗开机加载的就是 7
     assert code == 409 and d["reason"] == "in_use" and d["robots"] == ["A"]
-    code, d = dele("9")
-    assert code == 409 and d["reason"] == "latest"
     assert dele("99")[0] == 404
     _確认(s, alice, "8")
     assert _publish(s, alice, "8")[1]["results"][0]["ok"]
@@ -238,6 +236,35 @@ def test_删除_有狗在用拒_最新一版拒_旧的删得掉_文件和挂着�
     assert row["target"] == f"{MAP[0]}:7" and "freed_bytes" in row["detail"]
     code, d = dele("8")                                   # 8 现在是退回目标
     assert code == 409 and d["reason"] == "rollback_target" and d["robots"] == ["A"], d
+
+
+def test_网页P0_15_最新一版没人用也能删_版本号不再用_退回目标确认了能删(站点, tmp_path):
+    """网页易用性第 1 轮 P0-15:最新一版、退回目标都删不掉,总会剩一个删不掉的版本。
+    现在:没机器人在用的最新一版能删(删掉的号以后不再发);退回目标要明说「知道它退不回去了」才删,
+    删完退回按钮不再指向它。"""
+    s = 站点
+    alice = _登(s, "alice")
+    _等(lambda: _rc(s) is not None)
+    def dele(v, body=None):
+        return s.req("POST", f"/api/admin/maps/{MAP[0]}/{v}/delete", body or {}, token=alice)
+
+    code, d = dele("9")                                   # 最新一版,没人用
+    assert code == 200, d
+    assert [m["version"] for m in s.maps.list() if m["map_id"] == MAP[0]] == ["8", "7"]
+    from nexwar_site.maps_admin import MapAdmin
+    assert MapAdmin(s.api)._next_version(MAP[0], "8") == "10", "删掉的 9 不再发"
+    put_version(s, tmp_path, "10")
+    for v in ("8", "10"):
+        _確认(s, alice, v)
+        assert _publish(s, alice, v)[1]["results"][0]["ok"]
+        _wait_loaded(s, v)
+    _等(lambda: _rc(s).get("previous") == [MAP[0], "8"])
+    code, d = dele("8")
+    assert code == 409 and d["reason"] == "rollback_target"
+    code, d = dele("8", {"confirm_rollback": True})
+    assert code == 200, d
+    code, d = s.req("GET", "/api/admin/maps", token=alice)
+    assert d["robots"][0]["rollback"] is None, "退回按钮不再指向删掉的版本"
 
 
 def test_删除_正在换过去的那一版也拒(站点):

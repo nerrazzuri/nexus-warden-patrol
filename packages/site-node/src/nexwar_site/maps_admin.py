@@ -416,6 +416,7 @@ class MapAdmin:
     def _next_version(self, map_id: str, version: str) -> str:
         """新版本号:这个地图号下都是数字就取最大的加一;不然 ``<版本>-dn<n>``。"""
         have = [m["version"] for m in self.cat.list() if m["map_id"] == map_id]
+        have += sorted(self.cat.retired(map_id))         # P0-15:删掉过的号不再发
         if have and all(v.isdigit() for v in have):
             return str(max(int(v) for v in have) + 1)
         n = 1
@@ -423,10 +424,11 @@ class MapAdmin:
             n += 1
         return f"{version}-dn{n}"
 
-    def delete(self, map_id: str, version: str) -> dict[str, Any]:
-        """删掉一个旧版本(文件 + 登记 + 挂在它上面的区域、待命点、拦截点、原点)。**拒绝**:有狗在用、
-        这个地图号下最新的一版、有狗的换图正在路上要换到它、是哪只狗的「退回目标」(W41:
-        2026-10-26 现场误删了 v2,狗要退回去就没处退了)。"""
+    def delete(self, map_id: str, version: str, *, confirm_rollback: bool = False
+               ) -> dict[str, Any]:
+        """删掉一个版本(文件 + 登记 + 挂在它上面的区域、待命点、拦截点、原点)。**拒绝**:有狗在用、
+        有狗的换图正在路上要换到它;是哪只狗的「退回目标」(W41:2026-10-26 现场误删了 v2,狗要退回去
+        就没处退了)要 ``confirm_rollback`` 才删。删掉的版本号不再发(P0-15)。"""
         from nexwar_site.maps import MapError
         map_id, version = self._names(map_id, version)
         rows = [m for m in self.cat.list() if m["map_id"] == map_id]
@@ -438,16 +440,14 @@ class MapAdmin:
             raise AdminError(409, f"{map_id}:{version} 还有机器人在用({who}):"
                                   "先让它们换到别的版本再删",
                              reason="in_use", robots=users)
-        if rows[0]["version"] == version:
-            raise AdminError(409, f"{map_id}:{version} 是 {map_id} 的最新一版,不能删(删旧的)",
-                             reason="latest")
+        # 网页易用性第 1 轮 P0-15:最新一版没人用也能删(号记下来不再发);退回目标要明说才删
         if (map_id, version) in self._pending_targets():
             raise AdminError(409, f"有机器人正在换到 {map_id}:{version},"
                                   "等换完再说", reason="pending")
         back = [rid for rid in self.robot_ids()
                 if (t := self.rollback_target(rid)) is not None
                 and (t["map_id"], t["version"]) == (map_id, version)]
-        if back:
+        if back and not confirm_rollback:
             who = "、".join(back)
             raise AdminError(409, f"{map_id}:{version} 是 {who} 的退回目标"
                                   "(机器人上留着、出事能一键退回去):先让机器人换到别的版本、"

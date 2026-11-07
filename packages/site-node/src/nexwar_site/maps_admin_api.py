@@ -80,7 +80,7 @@ def handle(h: Any, method: str, path: str, user: Any) -> None:
             h._audit_detail = {"note": note}
             return h._send_json(200, {"ok": True, "note": note})
         if what == "delete":
-            out = adm.delete(map_id, version)
+            out = adm.delete(map_id, version, confirm_rollback=d.get("confirm_rollback") is True)
             h._audit_detail = out
             return h._send_json(200, out)
         if what == "edit":

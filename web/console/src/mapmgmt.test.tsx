@@ -217,13 +217,12 @@ describe("回退", () => {
 });
 
 describe("删除", () => {
-  it("有机器人在用、最新一版:按钮灰着带原因;旧版本:确认后删,提示腾出多少", async () => {
+  it("有机器人在用:按钮灰着带原因;最新一版也能删(P0-15);旧版本:确认后删,提示腾出多少", async () => {
     routes["POST /api/admin/maps/estate/1/delete"] = () => json({ deleted: "estate:1", freed_bytes: 12_500_000 });
     const { container: c, getByLabelText } = mount();
     await waitFor(() => getByLabelText("estate:3"));
     const del = (v: string) => Array.from(getByLabelText(`estate:${v}`).querySelectorAll("button")).find((b) => b.textContent === "Delete") as HTMLButtonElement;
-    expect(del("3").disabled).toBe(true);
-    expect(del("3").title).toContain("Latest version");
+    expect(del("3").disabled).toBe(false);
     expect(del("2").disabled).toBe(true);
     expect(del("2").title).toContain("A robot is using");
     expect(del("1").disabled).toBe(false);
@@ -348,13 +347,19 @@ describe("换图状态和运行配置的文字", () => {
 });
 
 describe("W41 清噪点", () => {
-  it("是退回目标的版本:删除按钮灰着带原因", async () => {
+  it("是退回目标的版本(P0-15):能删,确认框说退不回去了,发 confirm_rollback", async () => {
     overview.maps[0].versions[2] = ver("1", { previous_on: ["A"] });
-    const { getByLabelText } = mount();
+    let body: unknown = null;
+    routes["POST /api/admin/maps/estate/1/delete"] = (b: unknown) => { body = b; return json({ deleted: "estate:1", freed_bytes: 1 }); };
+    const { container: c, getByLabelText } = mount();
     await waitFor(() => getByLabelText("estate:1"));
     const del = Array.from(getByLabelText("estate:1").querySelectorAll("button")).find((b) => b.textContent === "Delete") as HTMLButtonElement;
-    expect(del.disabled).toBe(true);
-    expect(del.title).toContain("roll back");
+    expect(del.disabled).toBe(false);
+    fireEvent.click(del);
+    const dialog = await waitFor(() => c.querySelector("dialog") as HTMLDialogElement);
+    expect(dialog.textContent).toContain("cannot roll back to it");
+    fireEvent.click(Array.from(dialog.querySelectorAll("button")).find((b) => b.textContent === "Delete") as HTMLElement);
+    await waitFor(() => expect(body).toEqual({ confirm_rollback: true }));
   });
 
   it("红圈画在图上;点一个留着它;清掉其余的、另存新版,带上看过的那份摘要", async () => {
