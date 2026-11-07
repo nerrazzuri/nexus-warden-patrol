@@ -162,3 +162,18 @@ export function viewSpan(day: { since: number; until: number }, cur: { since: nu
   since = Math.min(day.until - w, Math.max(day.since, since));
   return { since, until: since + w };
 }
+
+/** P2-11:拖时间轴平移:往右拖(dx>0)看更早;不出这一天。 */
+export function panView(day: { since: number; until: number }, cur: { since: number; until: number }, dxFrac: number): { since: number; until: number } {
+  const w = cur.until - cur.since;
+  const since = Math.min(day.until - w, Math.max(day.since, cur.since - dxFrac * w));
+  return { since, until: since + w };
+}
+
+/** 录像色块在可见窗口里的左边、宽度(百分比),右边不出界(P2-11)。 */
+export function segBox(a: number, b: number, view: { since: number; until: number }): { left: number; width: number } {
+  const w = view.until - view.since;
+  const left = Math.max(0, ((a - view.since) / w) * 100);
+  const right = Math.min(100, ((Math.min(b, view.until) - view.since) / w) * 100);
+  return { left: Math.min(left, 99.8), width: Math.max(0.2, right - left) };
+}

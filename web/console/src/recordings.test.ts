@@ -1,7 +1,7 @@
 // W44 录像页(设计 §4.4):那一刻机器人在哪、点轨迹跳到它经过那里的时刻、时间轴每台一行带报警记号。
 import { describe, expect, it } from "vitest";
 import type { Alert } from "./model";
-import { lanes, MAX_GAP_MS, nearestTime, poseAt, viewSpan, type TrackPt } from "./recordings";
+import { lanes, MAX_GAP_MS, nearestTime, panView, poseAt, segBox, viewSpan, type TrackPt } from "./recordings";
 
 const pt = (t: number, x: number, y: number, map = "m", version = "1"): TrackPt => ({ t, x, y, map_id: map, map_version: version });
 
@@ -65,5 +65,21 @@ describe("时间轴拉宽拉窄", () => {
     expect(viewSpan(day, { since: 1000, until: 2000 + 300_000 }, 0, 1000)).toEqual(day);
     expect(viewSpan(day, day, 0, 0.1)).toEqual({ since: 0, until: 8_640_000 });
     expect(viewSpan(day, day, 86_400_000, 0.1)).toEqual({ since: 77_760_000, until: 86_400_000 });
+  });
+});
+
+describe("网页易用性第 1 轮 P2-11", () => {
+  const day = { since: 0, until: 86_400_000 };
+  it("拖动平移:往右拖看更早,不出这一天", () => {
+    const v = { since: 36_000_000, until: 39_600_000 };          // 10:00–11:00
+    expect(panView(day, v, 0.5)).toEqual({ since: 34_200_000, until: 37_800_000 });
+    expect(panView(day, v, 100)).toEqual({ since: 0, until: 3_600_000 });
+    expect(panView(day, v, -100)).toEqual({ since: 82_800_000, until: 86_400_000 });
+  });
+  it("色块右边不出界", () => {
+    const v = { since: 0, until: 1000 };
+    const b = segBox(999.5, 5000, v);
+    expect(b.left + b.width).toBeLessThanOrEqual(100.0001);
+    expect(segBox(-100, 500, v)).toEqual({ left: 0, width: 50 });
   });
 });
