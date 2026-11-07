@@ -6,8 +6,10 @@ import { App } from "./app";
 import { installErrorLog } from "./errlog";
 import { lang, setLang } from "./i18n";
 import { followSystem } from "./theme";
+import { installValidity } from "./validity";
 
 followSystem();
 installErrorLog();
+installValidity();
 setLang(lang.value);
 render(<App />, document.getElementById("app")!);
