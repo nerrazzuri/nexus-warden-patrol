@@ -202,7 +202,7 @@ export function Console({ me, onOut }: { me: Me; onOut: (note?: string) => void 
         {route.page === "map" && (
           <MapPage units={units} p1={p1} now={now} role={me.role} selected={route.robot ?? firstP1?.robot ?? null}
             onSelect={(id) => go("map", id)}
-            onVideo={(id) => go("duty", id)} mode={data?.mode ?? null} say={say}
+            onVideo={(id) => go("duty", id)} mode={data?.mode ?? null} say={say} stale={stale}
             onArm={() => setPending({ kind: "mode", mode: "armed" })} />
         )}
       </main>

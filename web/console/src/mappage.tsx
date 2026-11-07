@@ -83,6 +83,10 @@ export function SiteMap(props: {
   eta?: boolean;
   /** 现在画的是哪张图(页面按它去拉轨迹覆盖、待命点)。 */
   onMapShown?: (map: { map_id: string; version: string } | null, meta: PreviewMeta | null) => void;
+  /** 连不上站点(没有机器人数据时不说「没有地图」)。 */
+  stale?: boolean;
+  /** 预览拉不到隔多久再拉(毫秒;测试里调小)。 */
+  retryMs?: number;
 }) {
   const sel = props.units.find((u) => u.robot.robot_id === props.selected) ?? props.units[0];
   // 底图跟着选中的狗(外审 W39-I2:原来总是第一只有图的狗,选中的狗可能在另一张图上);选中的狗没报图
@@ -91,18 +95,26 @@ export function SiteMap(props: {
   const which = selMap ?? props.units.map((u) => robotMap(u.robot)).find((m) => m) ?? null;
   const key = which ? `${which.map_id}/${which.version}` : "";
   // 预览、区域记着是哪张图的:换图以后才回来的旧回包不认
-  const [got, setGot] = useState<{ key: string; meta: PreviewMeta | null; areas: { zone: string; points: Pt[] }[] }>({ key: "", meta: null, areas: [] });
+  const [got, setGot] = useState<{ key: string; meta: PreviewMeta | null; areas: { zone: string; points: Pt[] }[]; failed?: boolean }>({ key: "", meta: null, areas: [] });
+  // 第 2 轮:预览拉不到(断线)不能当成「没有地图」—— 记着失败了,按 retryMs 再拉,拉到为止
+  const [retry, setRetry] = useState(0);
   useEffect(() => {
     if (!which) return;
     let live = true;
     const base = `/api/maps/${enc(which.map_id)}/${enc(which.version)}`;
+    let timer = 0;
     api<PreviewMeta>("GET", `${base}/preview`).then((m) => live && setGot((g) => ({ key, meta: m, areas: g.key === key ? g.areas : [] })))
-      .catch(() => live && setGot((g) => ({ key, meta: null, areas: g.key === key ? g.areas : [] })));
-    api<{ areas: { zone: string; points: Pt[] }[] }>("GET", `${base}/areas`).then((d) => live && setGot((g) => ({ key, meta: g.key === key ? g.meta : null, areas: d.areas })))
+      .catch(() => {
+        if (!live) return;
+        setGot((g) => ({ key, meta: g.key === key ? g.meta : null, areas: g.key === key ? g.areas : [], failed: true }));
+        timer = window.setTimeout(() => setRetry((n) => n + 1), props.retryMs ?? 5_000);
+      });
+    api<{ areas: { zone: string; points: Pt[] }[] }>("GET", `${base}/areas`).then((d) => live && setGot((g) => ({ ...g, key, meta: g.key === key ? g.meta : null, areas: d.areas })))
       .catch(() => {});
-    return () => { live = false; };
-  }, [key]);
+    return () => { live = false; window.clearTimeout(timer); };
+  }, [key, retry]);
   const meta = got.key === key ? got.meta : null;
+  const loadFailed = got.key === key && !!got.failed && !meta;
   // 没载入时也用同一个空列表:每次给新的 [] 会让回报区域的效果每次渲染都触发,页面跟着重画,停不下来
   const areas = got.key === key ? got.areas : NO_AREAS;
   const onAreas = props.onAreas;
@@ -152,7 +164,8 @@ export function SiteMap(props: {
   return (
     <div class="mapbox" {...pose.wrapProps}>
         {!which || !meta ? (
-          <p class="empty">{t("noMap")}</p>
+          <p class={loadFailed || (!which && props.stale) ? "empty warn" : "empty"} role="status">
+            {t(loadFailed || (!which && props.stale) ? "loadRetry" : "noMap")}</p>
         ) : (
           <MapCanvas meta={meta} raster={`/api/maps/${enc(which.map_id)}/${enc(which.version)}/preview.png`} label={t("mapAria")}
             areas={mapAreas(meta, areas).map((a) => {
@@ -233,6 +246,8 @@ export function MapPage(props: {
   /** 保安的「全部布防」(设计 §11 第 14 条):模式不是布防时才有。 */
   onArm: () => void;
   say?: (s: string) => void;
+  /** 连不上站点(第 2 轮:没有数据时不说「没有地图」)。 */
+  stale?: boolean;
 }) {
   const say = props.say ?? (() => {});
   const duty = useDutySettings();
@@ -313,7 +328,7 @@ export function MapPage(props: {
 
   return (
     <div class="mappage">
-      <SiteMap units={props.units} p1={props.p1} now={props.now} selected={props.selected} onSelect={props.onSelect} role={props.role}
+      <SiteMap units={props.units} p1={props.p1} now={props.now} selected={props.selected} onSelect={props.onSelect} role={props.role} stale={props.stale}
         episodes={on("loc")} navZones={on("nogo")} route={on("route")} eta={on("route")}
         areaDecor={on("zones") ? (n) => zoneDecor(n, props.mode, authz) : (n) => ({ label: n, tone: "armed" })}
         onMapShown={(map, meta) => setShown({ map, meta })}

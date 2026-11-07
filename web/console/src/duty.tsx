@@ -181,7 +181,7 @@ export function DutyPage(props: {
       <section class="dcard duty-mapcard" aria-label={t("tabMap")}>
         <h2 class="dcard-h">{t("tabMap")}</h2>
         <div class="duty-map">
-          <SiteMap units={props.units} p1={alarms.filter((a) => a.level === "P1")} now={props.now} role={props.role}
+          <SiteMap units={props.units} p1={alarms.filter((a) => a.level === "P1")} now={props.now} role={props.role} stale={props.stale}
             selected={finding ?? selected ?? slots[0]?.robot ?? null} onSelect={setSelected} hot={hot} episodes={false}
             hint={finding ? t("dutyFindHint", { id: finding }) : null} pick={!!finding}
             onAreas={(a) => setAreas((old) => (sameAreas(old, a) ? old : a))} />
@@ -190,7 +190,7 @@ export function DutyPage(props: {
       </section>
       <section class="dcard duty-alarms" aria-label={t("dutyAlarmsTitle")}>
         <h2 class="dcard-h">{t("dutyAlarmsTitle")}<span class="mono muted push">{alarms.length}</span></h2>
-        {alarms.length === 0 && <p class="muted dcard-empty">{t("dutyNoAlarms")}</p>}
+        {alarms.length === 0 && <p class={props.stale ? "warn dcard-empty" : "muted dcard-empty"}>{t(props.stale ? "dutyStaleAlarms" : "dutyNoAlarms")}</p>}
         <ul class="alarmlist">
           {alarms.map((a) => (
             <li key={a.key} class={a.level === "P1" ? "p1" : "p2"}>
@@ -214,7 +214,7 @@ export function DutyPage(props: {
       <section class="dcard duty-left" aria-label={t("robots")}>
         <h2 class="dcard-h">{t("robots")}</h2>
         <ul class="duty-list" aria-label={t("robots")}>
-          {ranked.length === 0 && <li class="muted">{t("dutyNoRobots")}</li>}
+          {ranked.length === 0 && <li class={props.stale ? "warn" : "muted"}>{t(props.stale ? "dutyStaleRobots" : "dutyNoRobots")}</li>}
           {ranked.map((u) => (
             <li key={u.robot.robot_id}>
               <button type="button" class={selected === u.robot.robot_id ? "duty-row on" : "duty-row"}
