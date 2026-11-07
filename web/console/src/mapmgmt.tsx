@@ -618,11 +618,24 @@ export function NoiseDialog({ target, onClose, onDone }: {
               {list.specks.map((s) => {
                 const p = toPx(meta, s.x, s.y);
                 const kept = skip.has(s.id);
-                return <circle key={s.id} data-speck={s.id} data-kept={kept ? "1" : "0"} cx={p.px} cy={p.py} r={6}
-                  fill="none" stroke={kept ? "#888" : "#e53935"} stroke-width={2} stroke-dasharray={kept ? "3 2" : undefined}
+                // 网页易用性第 1 轮 P0-11:原来只有 2 像素的圈线能点(fill=none),大图缩小以后几乎点不中;
+                // 整个圈都能点,圈按图的大小放大;下面另有一张清单可以逐个勾
+                const r = Math.max(6, Math.round(Math.max(meta.width, meta.height) / 60));
+                return <circle key={s.id} data-speck={s.id} data-kept={kept ? "1" : "0"} cx={p.px} cy={p.py} r={r}
+                  fill="transparent" pointer-events="all" stroke={kept ? "#888" : "#e53935"} stroke-width={Math.max(2, r / 4)} stroke-dasharray={kept ? "3 2" : undefined}
                   style={{ cursor: "pointer" }} onClick={() => toggle(s.id)}><title>{`#${s.id} (${s.x}, ${s.y}) · ${s.px}`}</title></circle>;
               })}
             </svg>
+          )}
+          {list.specks.length > 0 && (
+            <ul class="mm-specks plain">
+              {list.specks.map((s) => (
+                <li key={s.id}>
+                  <label><input type="checkbox" data-keep={s.id} checked={skip.has(s.id)} onChange={() => toggle(s.id)} />{" "}
+                    {tr(`Keep #${s.id} at (${s.x}, ${s.y})`, `留着 #${s.id}(${s.x}, ${s.y})`)}</label>
+                </li>
+              ))}
+            </ul>
           )}
         </div>
       )}

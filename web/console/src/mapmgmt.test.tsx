@@ -410,8 +410,17 @@ describe("W41 清噪点", () => {
     fireEvent.click(Array.from(getByLabelText("estate:1").querySelectorAll("button")).find((b) => b.textContent === "Clean noise…") as HTMLElement);
     await waitFor(() => expect(c.querySelectorAll("circle[data-speck]").length).toBe(3));
     fireEvent.load(c.querySelector(".mm-noiseimg image")!);   // 复查 N3:底图加载好了才许清
-    fireEvent.click(c.querySelector('circle[data-speck="2"]') as Element);
+    // P0-11:整个圈都能点(不是只有圈线),圈按图的大小放大
+    const circle = c.querySelector('circle[data-speck="2"]') as Element;
+    expect(circle.getAttribute("pointer-events")).toBe("all");
+    expect(circle.getAttribute("fill")).toBe("transparent");
+    expect(Number(circle.getAttribute("r"))).toBeGreaterThanOrEqual(6);
+    fireEvent.click(circle);
     expect(c.querySelector('circle[data-speck="2"]')!.getAttribute("data-kept")).toBe("1");
+    expect((c.querySelector('input[data-keep="2"]') as HTMLInputElement).checked).toBe(true);
+    fireEvent.click(c.querySelector('input[data-keep="3"]') as HTMLElement);       // 清单里勾也行
+    expect(c.querySelector('circle[data-speck="3"]')!.getAttribute("data-kept")).toBe("1");
+    fireEvent.click(c.querySelector('input[data-keep="3"]') as HTMLElement);
     const go = c.querySelector("[data-denoise]") as HTMLButtonElement;
     expect(go.textContent).toContain("Clean 2 spots");
     fireEvent.click(go);
