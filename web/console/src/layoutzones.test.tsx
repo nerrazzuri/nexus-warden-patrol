@@ -120,3 +120,24 @@ describe("布置 → 防区:出口线、易藏点(W74 三期)", () => {
     expect(posted.find((p) => p.body.mark_id)?.body).toEqual({ mark_id: "m1", remove: true });
   });
 });
+
+describe("网页易用性第 1 轮 P1-31", () => {
+  it("点图上的防区就选中它;改名后存:删旧名、存新名,摄像头跟着改", async () => {
+    const d2: LayerData = { ...data, areas: [...data.areas, { zone: "南区", points: [[0, 6], [4, 6], [4, 10], [0, 10]] }] };
+    const { container: c } = render(<ZonesTab {...props()} data={d2} />);
+    fireEvent.click(c.querySelector(".pick")!);                  // 点在 (1,8):南区里
+    expect(c.querySelector(".ly-detail h3")!.textContent).toBe("南区");
+    fireEvent.click(btn(c, "北区"));
+    fireEvent.click(c.querySelector("[data-rename]")!);
+    const inp = document.querySelector('.modal input[name="zone"]') as HTMLInputElement;
+    expect(inp.value).toBe("北区");
+    fireEvent.input(inp, { target: { value: "北区新" } });
+    fireEvent.submit(document.querySelector(".modal form")!);
+    expect(c.querySelector(".ly-detail h3")!.textContent).toBe("北区新");
+    await save!();
+    const areaPosts = posted.filter((p) => p.url === "/api/maps/home/3/areas").map((p) => p.body);
+    expect(areaPosts).toContainEqual({ zone: "北区", remove: true });
+    expect(areaPosts).toContainEqual({ zone: "北区新", points: [[1, 1], [5, 1], [5, 5]] });
+    expect(posted.find((p) => p.url === "/api/admin/cameras")?.body).toMatchObject({ name: "cam2", zone: "北区新" });
+  });
+});

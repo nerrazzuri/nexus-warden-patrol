@@ -1272,3 +1272,7 @@ input[type="file"]::file-selector-button {
   .modal.fullcam .full { margin-top: 6px; }
   .modal.fullcam .full .well { height: calc(100dvh - 110px); }
 }
+/* P1-31:选中区域的顶点,能拖 */
+.vtx-handle { fill: var(--c-surface); stroke: var(--c-brand); stroke-width: 2.5; cursor: grab; pointer-events: all; touch-action: none; }
+.vtx-handle:active { cursor: grabbing; }
+.slow-area.sel, .ignore-area.sel, .erase-area.sel, .nogo-area.sel { stroke: var(--c-brand); stroke-width: 3; vector-effect: non-scaling-stroke; }
