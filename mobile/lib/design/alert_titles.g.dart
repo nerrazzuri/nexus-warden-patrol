@@ -7,8 +7,8 @@ const Map<String, (String, String)> alertTitles = <String, (String, String)>{
   'intrusion_unanswered': ('Intrusion not answered', '入侵无人处理'),
   'intrusion_person': ('Intruder confirmed', '确认有人入侵'),
   'deter_cornered': ('Robot cornered during deterrence', '驱离时机器人被逼至角落'),
-  'battery_abort': ('Low battery, stopped on the way back', '电量不足，回程中途停止'),
-  'run_abort': ('Could not return, stopped on the way', '未能返回待命点，中途停止'),
+  'battery_abort': ('Low battery, run stopped', '电量不足，任务中止'),
+  'run_abort': ('Run stopped before finishing', '任务中途中止'),
   'archive_failed': ('Patrol record could not be saved', '巡逻记录保存失败'),
   'fallen': ('Robot fell over', '机器人跌倒'),
   'loc_lost_paused': ('Localization lost, needs someone on site', '定位丢失，需现场处理'),
@@ -92,4 +92,5 @@ const Map<String, (String, String)> alertTitles = <String, (String, String)>{
   'swap_overdue': ('Battery swap overdue', '换电超时未处理'),
   'swap_stuck': ('Battery out but robot still moving', '拔着电池机器人还在走'),
   'guard_prep': ('Charge before arming', '布防前先补能'),
+  'preflight_refused': ('Pre-departure check failed, robot did not leave', '出发前检查未通过，机器人未出发'),
 };
