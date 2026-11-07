@@ -53,10 +53,24 @@ describe("值班页的报警横幅", () => {
     expect(c.querySelector(".banner")!.textContent).toContain("在A区");
   });
 
-  it("确认有人发 intruder", async () => {
+  // 网页易用性第 1 轮 P0-04:关警报不能一点就关 —— 横幅上点「详情 / 关闭」,在详情里选结论、可写备注才关
+  const closeVia = async (c: Element, verdict: string, note = "") => {
+    fireEvent.click(btn(c.querySelector(".banner")!, "详情 / 关闭")!);
+    const m = c.ownerDocument.querySelector(".alertdetail")!;
+    expect(posts).toEqual([]);
+    const go = btn(m, "关闭报警")!;
+    expect(go.disabled).toBe(true);
+    fireEvent.click(btn(m, verdict)!);
+    if (note) fireEvent.input(m.querySelector("input")!, { target: { value: note } });
+    fireEvent.click(btn(m, "关闭报警")!);
+  };
+
+  it("横幅上没有一点就关的按钮;在详情里选「确认有人」才发 intruder", async () => {
     const { container: c } = page([alert({})]);
-    fireEvent.click(btn(c.querySelector(".banner")!, "确认有人")!);
-    await waitFor(() => expect(posts).toContainEqual({ url: "/api/alerts/k1/resolve", body: { verdict: "intruder" } }));
+    expect(btn(c.querySelector(".banner")!, "确认有人")).toBeUndefined();
+    expect(btn(c.querySelector(".banner")!, "已处理")).toBeUndefined();
+    await closeVia(c, "确认有人");
+    await waitFor(() => expect(posts).toContainEqual({ url: "/api/alerts/k1/resolve", body: { verdict: "intruder", note: "" } }));
   });
 
   it("我来处理 = 确认收到", async () => {
@@ -65,30 +79,49 @@ describe("值班页的报警横幅", () => {
     await waitFor(() => expect(posts).toContainEqual({ url: "/api/alerts/k1/ack", body: {} }));
   });
 
-  it("误报要先确认", async () => {
+  it("误报带备注", async () => {
     const { container: c } = page([alert({})]);
-    fireEvent.click(btn(c.querySelector(".banner")!, "误报")!);
-    expect(posts).toEqual([]);
-    fireEvent.click(btn(c.querySelector(".modal")!, "误报")!);
-    await waitFor(() => expect(posts).toContainEqual({ url: "/api/alerts/k1/resolve", body: { verdict: "false_alarm" } }));
+    await closeVia(c, "误报", "风吹倒的纸箱");
+    await waitFor(() => expect(posts).toContainEqual({ url: "/api/alerts/k1/resolve", body: { verdict: "false_alarm", note: "风吹倒的纸箱" } }));
   });
 
-  it("机器人需要帮忙的,第二个按钮是处理好了", async () => {
+  it("机器人需要帮忙的:结论是处理好了、误报,没有确认有人", async () => {
     const { container: c } = page([alert({ kind: "stuck", audience: "help", title: "A 被挡住了" })]);
-    expect(btn(c.querySelector(".banner")!, "确认有人")).toBeUndefined();
-    fireEvent.click(btn(c.querySelector(".banner")!, "已处理")!);
-    await waitFor(() => expect(posts).toContainEqual({ url: "/api/alerts/k1/resolve", body: { verdict: "handled" } }));
+    fireEvent.click(btn(c.querySelector(".banner")!, "详情 / 关闭")!);
+    const m = c.ownerDocument.querySelector(".alertdetail")!;
+    expect(btn(m, "确认有人")).toBeUndefined();
+    fireEvent.click(btn(m, "已处理")!);
+    fireEvent.click(btn(m, "关闭报警")!);
+    await waitFor(() => expect(posts).toContainEqual({ url: "/api/alerts/k1/resolve", body: { verdict: "handled", note: "" } }));
   });
 
-  it("别人处理掉了_横幅消失", async () => {
+  it("别人处理掉了:说一次、刷新、详情关掉", async () => {
     resolveStatus = 404;
     const r = page([alert({})]);
-    fireEvent.click(btn(r.container.querySelector(".banner")!, "确认有人")!);
-    await waitFor(() => expect(r.say).toHaveBeenCalledWith("已有人处理"));
+    await closeVia(r.container, "确认有人");
+    await waitFor(() => expect(r.say).toHaveBeenCalledWith("这条报警已被别人处理。"));
     expect(r.say).toHaveBeenCalledTimes(1);
     expect(r.refresh).toHaveBeenCalled();
     r.rerender(<DutyPage units={[unit("A", "patrolling")]} alerts={[]} now={2000} role="guard" say={r.say} refresh={r.refresh} onZoom={() => {}} />);
     expect(r.container.querySelector(".banner")).toBeNull();
+    expect(r.container.ownerDocument.querySelector(".alertdetail")).toBeNull();
+  });
+
+  it("P0-20:只读账号横幅上只有详情,没有处理按钮", () => {
+    const { container: c } = render(<DutyPage units={[unit("A", "patrolling")]} alerts={[alert({})]} now={2000} role="viewer"
+      say={vi.fn()} refresh={vi.fn(async () => {})} onZoom={() => {}} />);
+    const b = c.querySelector(".banner")!;
+    expect(btn(b, "我来处理")).toBeUndefined();
+    fireEvent.click(btn(b, "详情")!);
+    const m = c.ownerDocument.querySelector(".alertdetail")!;
+    expect(btn(m, "关闭报警")).toBeUndefined();
+    expect(m.textContent).toContain("你的账号只能查看报警");
+  });
+
+  it("P0-05:点待处理列表里的一条打开详情", () => {
+    const { container: c } = page([alert({})]);
+    fireEvent.click(c.querySelector(".alarmlist-main")!);
+    expect(c.ownerDocument.querySelector(".alertdetail")).not.toBeNull();
   });
 
   it("技术类不出横幅", () => {
@@ -129,13 +162,15 @@ describe("W74 看见人:到场才能关", () => {
     await waitFor(() => expect(posts).toContainEqual({ url: "/api/alerts/p1/arrive", body: {} }));
   });
 
-  it("到场了:写谁到场,能确认有人、误报", () => {
+  it("到场了:写谁到场,详情里能选确认有人、误报", () => {
     const { container: c } = page([seen({ arrived_by: "张三", arrived_ms: 900 })]);
     const b = c.querySelector(".banner")!;
     expect(b.textContent).toContain("张三 已到场");
     expect(btn(b, "已到场")).toBeUndefined();
-    expect(btn(b, "确认有人")).toBeDefined();
-    expect(btn(b, "误报")).toBeDefined();
+    fireEvent.click(btn(b, "详情 / 关闭")!);
+    const m = c.ownerDocument.querySelector(".alertdetail")!;
+    expect(btn(m, "确认有人")).toBeDefined();
+    expect(btn(m, "误报")).toBeDefined();
   });
 
   it("去向不明写在横幅上", () => {

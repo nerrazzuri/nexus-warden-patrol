@@ -187,12 +187,16 @@ class AlertDesk:
     def ack(self, key: str, *, who: str) -> Alert:
         return self.book.ack(key, who=who, now_ms=self._now())
 
-    def resolve(self, key: str, *, who: str, verdict: str = "") -> Alert:
+    def resolve(self, key: str, *, who: str, verdict: str = "", note: str = "") -> Alert:
         a = self.book.get(key)
         if a is not None and a.kind in ARRIVAL_KINDS and a.resolved_ms is None \
                 and a.context.get("arrived_ms") is None:
             raise ArrivalNeeded("要保安先到场:到了现场点「已到场」,再处置完成或标误报")
-        return self.book.resolve(key, who=who, verdict=verdict, now_ms=self._now())
+        return self.book.resolve(key, who=who, verdict=verdict, now_ms=self._now(), note=note)
+
+    def reopen(self, key: str) -> Alert:
+        """撤销处置(点错了,``alerts.REOPEN_MS`` 内)。"""
+        return self.book.reopen(key, now_ms=self._now())
 
     def arrive(self, key: str, *, who: str) -> Alert:
         return self.book.arrive(key, who=who, now_ms=self._now())

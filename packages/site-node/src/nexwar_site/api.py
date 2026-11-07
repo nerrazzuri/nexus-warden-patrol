@@ -116,7 +116,7 @@ _ROBOT_WIFI = re.compile(r"^/api/robots/([^/]{1,64})/wifi$")
 #: ``GET /api/alerts?all=1&limit=`` 的上限。
 ALERTS_LIMIT_MAX = 2000
 #: 告警键 ``robot/kind#seq`` 里有 ``/`` 与 ``#``:客户端整个键编码成一段(``%2F``、``%23``)。
-_ALERT = re.compile(r"^/api/alerts/([^/]{1,256})/(ack|arrive|resolve|shelve|unshelve)$")
+_ALERT = re.compile(r"^/api/alerts/([^/]{1,256})/(ack|arrive|resolve|reopen|shelve|unshelve)$")
 #: W00c5c:``/api/robots/<id>/teleop``(WebSocket)与 ``/api/robots/<id>/halt``。
 _TELEOP = re.compile(r"^/api/robots/([^/]{1,64})/"
                      r"(teleop|halt|resume|supervise|relocalize|home/here|deter|service|posture)$")
@@ -990,6 +990,9 @@ class _Handler(TlsHandlerMixin):
                 a = self.site.loop.call(lambda: _sync(self.site.alerts.unshelve, key))
             elif m.group(2) == "ack":
                 a = self.site.loop.call(lambda: _sync(self.site.alerts.ack, key, who=str(user)))
+            elif m.group(2) == "reopen":
+                # 网页易用性第 1 轮 P0-04:点错了「已处理」,10 分钟内撤销
+                a = self.site.loop.call(lambda: _sync(self.site.alerts.reopen, key))
             elif m.group(2) == "arrive":
                 # W74:保安到场(看见人的那几种要先到场才能关);到场人取登录账号
                 a = self.site.loop.call(lambda: _sync(self.site.alerts.arrive, key, who=str(user)))
@@ -998,9 +1001,14 @@ class _Handler(TlsHandlerMixin):
                 verdict = d.get("verdict", "")
                 if not isinstance(verdict, str):
                     raise HttpError(400, "verdict 要是字符串")
-                self._audit_detail = {"verdict": verdict}
+                note = d.get("note", "")
+                if not isinstance(note, str):
+                    raise HttpError(400, "note 要是字符串")
+                note = note.strip()
+                self._audit_detail = {"verdict": verdict, "note": note[:200]}
                 a = self.site.loop.call(
-                    lambda: _sync(self.site.alerts.resolve, key, who=str(user), verdict=verdict))
+                    lambda: _sync(self.site.alerts.resolve, key, who=str(user), verdict=verdict,
+                                  note=note))
         except AlertNotFound as exc:
             raise HttpError(404, "没有此条告警") from exc
         except ArrivalNeeded as exc:
