@@ -1187,3 +1187,4 @@ details.ops > summary { cursor: pointer; font-weight: 600; padding: 6px 0; }
 /* 网页易用性 P1-72:填错的那一格 */
 input.invalid { border-color: var(--c-error); }
 .kpi-sub { display: block; }
+.ly-dirty { padding: 4px 10px; border-radius: 8px; background: var(--c-warningSoft); color: var(--c-text); font-weight: 600; }
