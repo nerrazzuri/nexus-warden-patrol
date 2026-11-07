@@ -71,6 +71,19 @@ export function olderOpen(alerts: Alert[], since: number): number {
   return alerts.filter((a) => a.first_ms < since && a.resolved_ms == null && forGuard(a)).length;
 }
 
+/** P1-12:屏上挨得近(< ``near`` 像素)的机器人,名字往下错开几行;返回每个点排第几行(0 = 不挪)。 */
+export function labelRows(pts: [number, number][], near: number): number[] {
+  const rows: number[] = [];
+  pts.forEach(([x, y], i) => {
+    const used = new Set<number>();
+    for (let j = 0; j < i; j++) if (Math.hypot(pts[j][0] - x, pts[j][1] - y) < near) used.add(rows[j]);
+    let r = 0;
+    while (used.has(r)) r++;
+    rows.push(r);
+  });
+  return rows;
+}
+
 /** W72:地图上的事件标记 —— 只留本班入侵类(在哪儿出的事,解决了也值得看)和还没处理的。 */
 export function mapPins(alerts: Alert[], since: number): Alert[] {
   return tonightEvents(alerts, since).filter((a) => a.resolved_ms == null || a.audience === "intrusion");
