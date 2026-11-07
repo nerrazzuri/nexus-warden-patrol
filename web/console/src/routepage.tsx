@@ -44,6 +44,8 @@ interface MapRow { map_id: string; version: string; note: string }
 
 export const NAME_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
 const DAYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"] as const;
+/** P1-39:点改完多久去站点查一次(拖点时不用每一下都查)。 */
+export const CHECK_DELAY_MS = 600;
 const PT_R = 11;
 const HANDLE_PX = 30;
 
@@ -178,6 +180,20 @@ export function RoutesPage({ say, embed, kind = "patrol" }: { say: Say; embed?: 
     setProblems([]);
     setConflict(false);
   }
+  // P1-39:改了点就让站点查一遍(跟存的时候同一套:穿墙、在禁行区里、走不通),当场标红;不存
+  const checkGen = useRef(0);
+  const pointsKey = draft ? JSON.stringify(draft.points) : "";
+  useEffect(() => {
+    if (!draft || !sel || draft.points.length === 0 || !dirty) return;
+    const my = ++checkGen.current;
+    const id = window.setTimeout(() => {
+      api<{ errors: PointProblem[] }>("POST", "/api/route-check", { map_id: sel.map_id, map_version: sel.version, waypoints: draft.points })
+        .then((d) => { if (my === checkGen.current) setProblems(d.errors ?? []); })
+        .catch(() => { /* 老站点没有这个接口:存的时候照样会查 */ });
+    }, CHECK_DELAY_MS);
+    return () => window.clearTimeout(id);
+  }, [pointsKey, sel?.map_id, sel?.version]);
+
   function change(points: RoutePoint[], keepProblems = false) {
     setDraft((d) => (d ? { ...d, points } : d));
     if (!keepProblems) setProblems([]);

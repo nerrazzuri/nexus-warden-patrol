@@ -146,7 +146,8 @@ async function drag(el: Element, from: { clientX: number; clientY: number }, to:
 const MAPS = { maps: [{ map_id: "m1", version: "1", note: "", created_ms: 0, source: "" }] };
 
 type Posted = { path: string; body: any };
-function routesApi(opts: { meta: PreviewMeta; routes?: any[]; timezone?: string | null; schedules?: any[]; post?: (path: string, body: any) => Response | undefined }) {
+function routesApi(opts: { meta: PreviewMeta; routes?: any[]; timezone?: string | null; schedules?: any[]; post?: (path: string, body: any) => Response | undefined;
+  check?: (body: any) => Response }) {
   const posted: Posted[] = [];
   const view = () => ({ revision: 3, timezone: opts.timezone ?? null, routes: opts.routes ?? [], schedules: opts.schedules ?? [] });
   setFetch((async (url: RequestInfo | URL, init?: RequestInit) => {
@@ -156,6 +157,7 @@ function routesApi(opts: { meta: PreviewMeta; routes?: any[]; timezone?: string 
     if (u.includes("/api/routes?")) return json(view());
     if (init?.method === "POST") {
       const body = JSON.parse(String(init.body));
+      if (u.endsWith("/api/route-check")) return opts.check ? opts.check(body) : json({ errors: [] });   // P1-39 画的时候查,不算存
       posted.push({ path: u, body });
       const custom = opts.post?.(u, body);
       if (custom) return custom;
@@ -302,6 +304,29 @@ describe("路线页:站点的回答", () => {
     fireEvent.click(r.getByText("Save route"));
     await waitFor(() => expect(posted.length).toBe(2));
     await waitFor(() => expect(r.container.querySelectorAll("[data-point].bad").length).toBe(0));
+  });
+
+  it("P1-39:画的时候就查,不用等存:错的点当场标红,改好了红的消掉", async () => {
+    installScreenCTM();
+    const checks: any[] = [];
+    let bad = true;
+    routesApi({ meta: META, routes: [ROUTE], check: (body) => {
+      checks.push(body);
+      return json({ errors: bad ? [{ index: 3, name: "P4", problem: "P4 在禁行区里" }] : [] });
+    } });
+    const r = render(<RoutesPage say={() => {}} />);
+    await ready(r.container);
+    await waitFor(() => expect(r.getByText("loop")).toBeTruthy());
+    fireEvent.click(r.getByText("loop"));
+    await tick();
+    fireEvent.click(r.container.querySelector("svg.map")!, clientOf(r.container, META, 5, 5));
+    await waitFor(() => expect(r.container.querySelectorAll("[data-point].bad").length).toBe(1), { timeout: 2000 });
+    expect(checks[0]).toMatchObject({ map_id: "m1", map_version: "1" });
+    expect(checks[0].waypoints.length).toBe(4);
+    expect(r.container.textContent).toContain("P4 在禁行区里");
+    bad = false;
+    fireEvent.click(r.container.querySelector("svg.map")!, clientOf(r.container, META, 6, 6));
+    await waitFor(() => expect(r.container.querySelectorAll("[data-point].bad").length).toBe(0), { timeout: 2000 });
   });
 
   it("存下了、但有点要原地转又贴墙(11-05 现场第 15、35 条):黄字提醒、点标出来,不挡存", async () => {
@@ -464,7 +489,7 @@ describe("路线页:站点的回答", () => {
     await waitFor(() => expect(r.getByText("n1")).toBeTruthy());
     expect(r.queryByText("n2")).toBeNull();
     fireEvent.input(r.container.querySelector('.form input[maxlength="64"]')!, { target: { value: "dawn" } });
-    fireEvent.input(r.container.querySelector('input[type="time"]')!, { target: { value: "05:30" } });
+    fireEvent.input(r.container.querySelector('input[name="at"]')!, { target: { value: "05:30" } });
     fireEvent.click(r.getByText("Add schedule"));
     await waitFor(() => expect(posted.length).toBe(1));
     expect(posted[0].path).toContain("/api/route-schedules/dawn");
