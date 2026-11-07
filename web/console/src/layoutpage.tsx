@@ -319,7 +319,22 @@ function dimMarks(tab: LayoutTab, d: LayerData, s: Screen): ComponentChildren {
   });
 }
 
-interface HistoryRow { id: number; kind: string; item: string; by: string; at_ms: number; note: string; summary?: string }
+interface HistoryRow {
+  id: number; kind: string; item: string; by: string; at_ms: number; note: string; summary?: string;
+  /** P1-44:摘要原料(老站点没有,退回用站点拼好的中文 ``summary``)。 */
+  facts?: { n: number; names: string[]; deleted?: boolean };
+}
+
+/** P1-44:历史摘要按界面语言拼。 */
+export function historySummary(kind: string, r: HistoryRow): string {
+  const f = r.facts;
+  if (!f) return r.summary ?? "";
+  if (f.deleted) return t("lyHsDeleted");
+  const names = f.names.length ? `: ${f.names.join(", ")}` : "";
+  const key = kind === "route" ? "lyHsPoints" : kind === "zones" ? "lyHsZones" : kind === "nogo" ? "lyHsAreas"
+    : kind === "standby" ? "lyHsStandby" : kind === "cameras" ? "lyHsCameras" : null;
+  return key ? `${t(key, { n: f.n })}${kind === "route" || kind === "cameras" ? "" : names}` : r.summary ?? "";
+}
 
 /** 历史抽屉。外审 R3:一个抽屉只管一个「哪一层 + 哪张图哪一版」(上面按这个 key 重建,换了就整个换掉,
  *  旧的列表、确认框跟着没了);晚到的回包按代次不认;退回请求带上这三样,站点对不上就拒绝。 */
@@ -353,7 +368,7 @@ function HistoryDrawer({ kind, map, say, onRestored, onClose }: {
                 <time class="mono small">{new Date(r.at_ms).toLocaleDateString("sv-SE")} {hm(r.at_ms)}</time> <b>{r.by}</b>
                 {r.item && <span class="muted small"> · {r.item}</span>}
                 {r.note.startsWith("restored") && <span class="tag">{t("lyRestoredTag")}</span>}
-                {r.summary && <div class="muted small">{r.summary}</div>}
+                {(r.facts || r.summary) && <div class="muted small">{historySummary(kind, r)}</div>}
               </div>
               {i > 0 && <button type="button" class="btn sm" onClick={() => setRestoring(r)}>{t("lyRestore")}</button>}
               {i === 0 && <span class="muted small">{t("lyCurrent")}</span>}
