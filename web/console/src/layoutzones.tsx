@@ -7,7 +7,7 @@ import { api } from "./api";
 import { Confirm, Modal } from "./dialogs";
 import { clickGuard, startDrag, swallowClick } from "./dragpt";
 import { t } from "./i18n";
-import { polyPx, toMap, type Area, type CamRow, type MapMark, type TabProps, type ZonePost } from "./layoutpage";
+import { closesLoop, polyPx, toMap, type Area, type CamRow, type MapMark, type TabProps, type ZonePost } from "./layoutpage";
 import type { Pt } from "./mapview";
 import { PoseMarker } from "./posemarker";
 import { clientToMap, handleAt, yawToward } from "./routes";
@@ -75,7 +75,11 @@ export function ZonesTab(p: TabProps) {
   };
   function pick(px: number, py: number) {
     if (markDraft) { setMarkDraft({ ...markDraft, pts: [...markDraft.pts, toMap(p.meta, px, py)] }); return; }
-    if (draft) { setDraft((d) => (d ? [...d, toMap(p.meta, px, py)] : d)); return; }
+    if (draft) {
+      if (closesLoop(p.meta, draft, px, py)) { setNaming(true); return; }       // P1-36
+      setDraft((d) => (d ? [...d, toMap(p.meta, px, py)] : d));
+      return;
+    }
     if (!cur || !placing) return;
     const [x, y] = toMap(p.meta, px, py);
     const base = pairOf(cur.zone) ?? { view: { x, y }, watch: { x, y, yaw: 0 } };
@@ -266,7 +270,7 @@ function NameMark({ onClose, onSave }: { onClose: () => void; onSave: (name: str
   return (
     <Modal label={t("lyMarks")} onClose={onClose}>
       <form class="form" onSubmit={(e) => { e.preventDefault(); if (name.trim()) onSave(name.trim()); }}>
-        <label class="field">{t("lyMarkName")}<input name="mark" value={name} maxLength={40} required onInput={(e) => setName(e.currentTarget.value)} /></label>
+        <label class="field">{t("lyMarkName")}<input name="mark" value={name} maxLength={40} required autoFocus onInput={(e) => setName(e.currentTarget.value)} /></label>
         <div class="row end">
           <button type="button" class="btn" onClick={onClose}>{t("cancel")}</button>
           <button type="submit" class="btn primary">{t("dlgApply")}</button>
@@ -287,7 +291,7 @@ function NameZone({ taken, onClose, onSave }: { taken: string[]; onClose: () => 
   return (
     <Modal label={t("lyDrawDone")} onClose={onClose}>
       <form class="form" onSubmit={(e) => { e.preventDefault(); if (name.trim()) onSave(name.trim()); }}>
-        <label class="field">{t("zoneName")}<input name="zone" value={name} maxLength={128} required onInput={(e) => setName(e.currentTarget.value)} /></label>
+        <label class="field">{t("zoneName")}<input name="zone" value={name} maxLength={128} required autoFocus onInput={(e) => setName(e.currentTarget.value)} /></label>
         <p class="muted small">{dup ? t("lyZoneReplace") : t("zoneNameHint")}</p>
         <div class="row end">
           <button type="button" class="btn" onClick={onClose}>{t("cancel")}</button>

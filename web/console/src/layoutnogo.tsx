@@ -9,7 +9,7 @@ import { api, ApiError } from "./api";
 import { ConfirmPassword } from "./confirmpw";
 import { Confirm, Modal } from "./dialogs";
 import { t } from "./i18n";
-import { polyPx, toMap, type NavZones, type TabProps } from "./layoutpage";
+import { closesLoop, polyPx, toMap, type NavZones, type TabProps } from "./layoutpage";
 import type { NavZone, Pt } from "./mapview";
 
 type Draw = "nogo" | "wall" | "slow" | "ignore" | "erase";
@@ -82,7 +82,10 @@ export function NogoTab(p: TabProps) {
     <div class="ly-tab">
       <p.Map
         drawing={!!draw}
-        onPick={draw ? (px, py) => setPts((d) => [...d, toMap(p.meta, px, py)]) : undefined}
+        onPick={draw ? (px, py) => {
+          if (draw !== "wall" && closesLoop(p.meta, pts, px, py)) { setForm(true); return; }
+          setPts((d) => [...d, toMap(p.meta, px, py)]);
+        } : undefined}
         world={<>
           {shown.map((z) => z.wall
             ? <polyline key={z.id} points={polyPx(p.meta, z.wall)} class="nogo-line" />
@@ -177,14 +180,17 @@ function NogoForm({ kind, onClose, onSave }: { kind: Draw; onClose: () => void; 
     label: kind === "wall" ? t("legendVWall") : kind === "slow" ? t("legendSlow") : kind === "ignore" ? t("legendIgnore") : kind === "erase" ? t("eraseLabel") : t("legendNoGo"),
     hard: false, speed: 0.3, temp: false, days: 3,
   });
-  const ok = f.label.trim().length > 0 && f.label.trim().length <= 64 && (kind !== "slow" || (f.speed > 0 && f.speed <= 5));
+  // P1-37:限速 0.1–5 m/s,跟输入框的 min/max 一个口径(原来 0.05 也能存);范围写在框下面
+  const speedOk = f.speed >= 0.1 && f.speed <= 5;
+  const ok = f.label.trim().length > 0 && f.label.trim().length <= 64 && (kind !== "slow" || speedOk);
   return (
     <Modal label={kind === "wall" ? t("navFormTitleVWall") : kind === "slow" ? t("navFormTitleSlow") : kind === "ignore" ? t("navFormTitleIgnore") : kind === "erase" ? t("drawErase") : t("navFormTitleNoGo")} onClose={onClose}>
       <form class="form" onSubmit={(e) => { e.preventDefault(); if (ok) onSave(f); }}>
-        <label class="field">{t("navName")}<input name="label" value={f.label} maxLength={64} onInput={(e) => setF({ ...f, label: e.currentTarget.value })} /></label>
+        <label class="field">{t("navName")}<input name="label" value={f.label} maxLength={64} autoFocus onInput={(e) => setF({ ...f, label: e.currentTarget.value })} /></label>
         {kind === "slow" ? (
-          <label class="field">{t("navSpeed")}<input type="number" min={0.1} max={5} step={0.1} value={f.speed}
-            onInput={(e) => setF({ ...f, speed: Number(e.currentTarget.value) })} /></label>
+          <label class="field">{t("navSpeed")}<input type="number" name="speed" min={0.1} max={5} step={0.1} value={f.speed}
+            onInput={(e) => setF({ ...f, speed: Number(e.currentTarget.value) })} />
+            <span class={speedOk ? "muted small" : "error small"}>{t("navSpeedRange")}</span></label>
         ) : kind === "ignore" || kind === "erase" ? null : (
           <label class="field-check"><input type="checkbox" name="hard" checked={f.hard} onChange={(e) => setF({ ...f, hard: e.currentTarget.checked })} />{t("navHard")}</label>
         )}

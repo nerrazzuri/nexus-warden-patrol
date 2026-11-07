@@ -77,6 +77,14 @@ export function toMap(meta: PreviewMeta, px: number, py: number): Pt {
   return [Math.round((meta.left_x + px * meta.m_per_px) * 100) / 100, Math.round((meta.top_y - py * meta.m_per_px) * 100) / 100];
 }
 
+/** P1-36:画多边形时点回第一个点(半米以内,至少 8 个像素)就是闭合了,不再多加一个点。 */
+export function closesLoop(meta: PreviewMeta, pts: Pt[], px: number, py: number): boolean {
+  if (pts.length < 3) return false;
+  const f = toPx(meta, pts[0][0], pts[0][1]);
+  const tol = Math.max(8, 0.5 / meta.m_per_px);
+  return Math.hypot(f.px - px, f.py - py) <= tol;
+}
+
 export function polyPx(meta: PreviewMeta, pts: Pt[]): string {
   return pts.map(([x, y]) => { const p = toPx(meta, x, y); return `${p.px},${p.py}`; }).join(" ");
 }
