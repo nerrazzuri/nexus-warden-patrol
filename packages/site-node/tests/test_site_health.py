@@ -214,3 +214,26 @@ def test_工单9_续签了还没换到狗上_按狗报的在用证书算到期_�
     assert t.h.checks()["certs"]["ok"]
     caps.tasks.pop("tls")                                             # 老代理不报:看站点的包
     assert t.h.checks()["certs"]["ok"]
+
+
+def test_网页P1_73_服务日志空的写明_带站点最近日志_按时间段取(台, tmp_path, monkeypatch):
+    import logging
+
+    import nexwar_site.health as h
+    t = 台
+    rec = h.RecentLog()
+    monkeypatch.setattr(h, "RECENT", rec)
+    old = logging.LogRecord("nexwar_site", logging.INFO, "", 0, "老的一条", None, None)
+    old.created = NOW / 1000 - 3 * 3600
+    rec.emit(old)
+    new = logging.LogRecord("nexwar_site", logging.INFO, "", 0, "新的一条 Bearer tok-SECRET-9",
+                            None, None)
+    new.created = NOW / 1000 - 60
+    rec.emit(new)
+    out = support_bundle(tmp_path / "b.tar.gz", home=t.home, db=t.db, health=t.h, now_ms=NOW,
+                         hours=1, journal=lambda unit, hours: "-- No entries --\n")
+    with tarfile.open(out) as tar:
+        files = {n.split("/", 1)[1]: tar.extractfile(n).read().decode() for n in tar.getnames()}
+    assert "没有 nexwar_site 的系统服务日志" in files["logs/nexwar_site.log"]
+    recent = files["logs/site-recent.log"]
+    assert "新的一条" in recent and "老的一条" not in recent and "tok-SECRET-9" not in recent

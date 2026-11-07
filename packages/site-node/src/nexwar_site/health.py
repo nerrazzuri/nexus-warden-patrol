@@ -338,6 +338,39 @@ def _journal(unit: str, hours: int) -> str:
     return got.stdout
 
 
+class RecentLog(logging.Handler):
+    """网页易用性 P1-73:站点进程自己留最近的日志(带时刻),诊断包里放一份 ——
+    站点不是按系统服务跑(演示站、直接起的)时 journalctl 是空的,有这份才看得到东西。"""
+
+    def __init__(self, keep: int = 5000) -> None:
+        super().__init__(level=logging.INFO)
+        import collections
+        self.rows: collections.deque[tuple[float, str]] = collections.deque(maxlen=keep)
+        self.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s %(message)s"))
+
+    def emit(self, record: logging.LogRecord) -> None:
+        try:
+            self.rows.append((record.created, self.format(record)))
+        except Exception:  # noqa: BLE001 —— 记日志不能把站点弄崩
+            pass
+
+    def text(self, hours: int, now_s: float) -> str:
+        since = now_s - hours * 3600
+        return "".join(line + "\n" for at, line in list(self.rows) if at >= since)
+
+
+#: 站点进程里装上的那一个(main 起站点时装;没装 = None,诊断包里就不放这份)。
+RECENT: RecentLog | None = None
+
+
+def install_recent_log() -> RecentLog:
+    global RECENT
+    if RECENT is None:
+        RECENT = RecentLog()
+        logging.getLogger().addHandler(RECENT)
+    return RECENT
+
+
 #: 诊断包里带日志的站点主机服务(W55:加 VPN、对时)。
 BUNDLE_UNITS = ("nexwar_site", "nexwar_mosquitto", "wg-quick@nexwar", "chrony", "nexwar_ops")
 
@@ -404,7 +437,13 @@ def support_bundle(out: Path, *, home: Path, db: Any, health: HealthDesk | None,
             w.writerow([r["ts"], r["key"], r["value"]])
         files["metrics.csv"] = buf.getvalue().encode()
     for unit in BUNDLE_UNITS:
-        files[f"logs/{unit}.log"] = redact_text(journal(unit, hours)).encode()
+        got = journal(unit, hours)
+        if not got.strip() or got.strip() == "-- No entries --":
+            got = (f"(最近 {hours} 小时没有 {unit} 的系统服务日志。站点不是按系统服务运行时,"
+                   "站点自己的日志见 logs/site-recent.log)\n")
+        files[f"logs/{unit}.log"] = redact_text(got).encode()
+    if RECENT is not None:
+        files["logs/site-recent.log"] = redact_text(RECENT.text(hours, now_ms / 1000)).encode()
     win = now_ms - hours * 3_600_000
     for name, sql in (
             ("events.json", "SELECT robot_id, kind, data, stamp, received_at FROM events "

@@ -43,8 +43,10 @@ export function DiagPage({ say }: { say: (s: string) => void }) {
     <section class="advdiag">
       <div class="panel-head">
         <h1>{t("tabDiag")}</h1>
+        {/* P1-73:时间段只管下载的支持包(下面的检查都是此刻的状态),写在旁边 */}
         <span class="push row">
-          <select aria-label={t("bundleHours")} value={String(hours)} onChange={(e) => setHours(Number(e.currentTarget.value))}>
+          <label class="small muted" for="diag-hours">{t("bundleHours")}</label>
+          <select id="diag-hours" value={String(hours)} onChange={(e) => setHours(Number(e.currentTarget.value))}>
             {[6, 24, 72, 168].map((h) => <option key={h} value={String(h)}>{t("opsHours", { n: h })}</option>)}
           </select>
           <a class="btn" href={`/api/support-bundle?hours=${hours}`} download="nexwar_support.tar.gz">{t("supportBundle")}</a>

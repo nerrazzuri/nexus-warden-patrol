@@ -1698,6 +1698,8 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: Sequence[str] | None = None) -> int:
     logging.basicConfig(level=logging.INFO,
                         format="%(asctime)s %(levelname)s %(name)s %(message)s")
+    from nexwar_site.health import install_recent_log
+    install_recent_log()                 # 网页 P1-73:诊断包里带站点最近的日志
     args = build_parser().parse_args(argv)
     home: Path = args.home
     try:

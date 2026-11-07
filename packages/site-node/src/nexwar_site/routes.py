@@ -385,7 +385,7 @@ class RouteStore:
         if self.maps is not None:
             try:
                 self.maps.get(map_id, to_version)
-            except Exception as exc:  # noqa: BLE001 —— MapError
+            except Exception as exc:
                 raise RouteError(f"站点上没有 {map_id}:{to_version}") from exc
         now = self._now()
         moved: list[str] = []

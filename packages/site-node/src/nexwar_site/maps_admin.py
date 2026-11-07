@@ -447,7 +447,7 @@ class MapAdmin:
             try:
                 zones.put(map_id, new, [z.to_wire() for z in cur.zones] + slow,
                           base_revision=cur.revision, by=by)
-            except Exception:  # noqa: BLE001 —— 限速区落不下不挡另存;打开显示设置再存一次会补
+            except Exception:
                 log.warning("另存的新版本 %s:%s 特殊地面限速区没落下", map_id, new, exc_info=True)
 
     def _next_version(self, map_id: str, version: str) -> str:
