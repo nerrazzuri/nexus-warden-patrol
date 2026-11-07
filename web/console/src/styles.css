@@ -1178,3 +1178,9 @@ details.ops > summary { cursor: pointer; font-weight: 600; padding: 6px 0; }
 .device-form { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
 .device-form input { width: 9em; }
 .device-secret { word-break: break-all; font-family: var(--font-mono, monospace); font-size: 0.9em; }
+
+/* 网页易用性 P1-19:演练条幅里文字和按钮分开、按钮之间留空 */
+.alert-test .at-on { gap: 8px 16px; align-items: center; }
+.alert-test .at-acts { gap: 8px; margin-left: auto; }
+.alert-test .at-off summary { cursor: pointer; color: var(--c-textSecondary); }
+.alert-test .at-off .row { gap: 8px; align-items: center; }
