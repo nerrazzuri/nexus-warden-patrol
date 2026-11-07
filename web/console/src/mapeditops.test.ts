@@ -51,3 +51,22 @@ describe("W61 画笔首尾接上就是圈(跟站点 map_edit.closed_loop 同一�
     expect(areaOf(loop)).toBeLessThan(3.2);
   });
 });
+
+describe("网页易用性第 1 轮 P2-19 摆正后的方框", () => {
+  it("转了 -4° 显示:屏幕上看是正的方框(四条边跟屏幕横竖平行),首尾相接", async () => {
+    const { screenRect } = await import("./mapeditops");
+    const { worldMatrix, applyMat } = await import("./mapview");
+    const meta = { width: 100, height: 100, m_per_px: 0.1, left_x: 0, top_y: 10, rotation_deg: -4 } as never;
+    const M = worldMatrix(meta, { k: 1, cx: 50, cy: 50 } as never);
+    const scr = ([x, y]: [number, number]) => applyMat(M, (x - 0) / 0.1, (10 - y) / 0.1);
+    const pts = screenRect([2, 3], [6, 7], -4);
+    expect(pts.length).toBe(5);
+    expect(pts[4]).toEqual(pts[0]);
+    const s = pts.map((p) => scr(p as [number, number]));
+    expect(Math.abs(s[0][1] - s[1][1])).toBeLessThan(0.05);    // 上边水平
+    expect(Math.abs(s[1][0] - s[2][0])).toBeLessThan(0.05);    // 右边竖直
+    expect(Math.abs(s[2][1] - s[3][1])).toBeLessThan(0.05);
+    expect(Math.abs(s[3][0] - s[0][0])).toBeLessThan(0.05);
+    expect(screenRect([2, 3], [6, 7], 0).slice(0, 4)).toEqual([[2, 3], [6, 3], [6, 7], [2, 7]]);
+  });
+});

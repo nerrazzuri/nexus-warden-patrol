@@ -11,7 +11,7 @@ import { Confirm } from "./dialogs";
 import { t, type Key } from "./i18n";
 import { polyPx, toMap, type OwnLayer } from "./layoutpage";
 import { MapCanvas } from "./mapcanvas";
-import { apply, closedLoop, type Display, type GridOp, type History, newTerrain, redo, start, summary, type TerrainKind, undo } from "./mapeditops";
+import { apply, closedLoop, type Display, type GridOp, type History, newTerrain, redo, screenRect, start, summary, type TerrainKind, undo } from "./mapeditops";
 import type { PreviewMeta, Pt } from "./mapview";
 
 type Say = (s: string) => void;
@@ -93,7 +93,13 @@ function Editor({ say, target, Canvas }: { say: Say; target: Target; Canvas?: Fu
 
   function finish(points = pts) {
     if (grid) {
-      const op: GridOp = { op: tool as GridOp["op"], shape, points, width_m: width };
+      // P2-19:摆正转了角度时,方框按屏幕上看到的方向画(原来按地图坐标轴,屏幕上是斜的);
+      // 交给站点的是首尾相接的一笔,站点把圈里整块擦 / 加(W61)
+      const rot = now?.display.rotate_deg ?? meta?.rotation_deg ?? 0;
+      const tilted = shape === "rect" && points.length === 2 && Math.abs(rot % 90) > 0.5;
+      const op: GridOp = tilted
+        ? { op: tool as GridOp["op"], shape: "stroke", points: screenRect(points[0], points[1], rot), width_m: 0.1 }
+        : { op: tool as GridOp["op"], shape, points, width_m: width };
       change((s) => ({ ...s, ops: [...s.ops, op] }));
     } else if (tool === "region" && name.trim()) {
       const n = name.trim();
