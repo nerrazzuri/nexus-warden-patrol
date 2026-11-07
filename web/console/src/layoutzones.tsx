@@ -8,7 +8,7 @@ import { Confirm, Modal } from "./dialogs";
 import { clickGuard, startDrag, swallowClick } from "./dragpt";
 import { t } from "./i18n";
 import { closesLoop, polyPx, toMap, type Area, type CamRow, type MapMark, type TabProps, type ZonePost } from "./layoutpage";
-import type { Pt } from "./mapview";
+import { pointInPolygon, type Pt } from "./mapview";
 import { PoseMarker } from "./posemarker";
 import { clientToMap, handleAt, yawToward } from "./routes";
 
@@ -21,6 +21,8 @@ export function ZonesTab(p: TabProps) {
   const [camZone, setCamZone] = useState<Record<string, string>>(() => Object.fromEntries(p.data.cameras.map((c) => [c.name, c.zone])));
   const [draft, setDraft] = useState<Pt[] | null>(null);
   const [naming, setNaming] = useState(false);
+  // P1-31:改已有防区的名字
+  const [renaming, setRenaming] = useState(false);
   const [sel, setSel] = useState<string | null>(null);
   const [removing, setRemoving] = useState<string | null>(null);
   // W73:挪过的查看点、值守位(没存);null = 恢复自动
@@ -80,11 +82,36 @@ export function ZonesTab(p: TabProps) {
       setDraft((d) => (d ? [...d, toMap(p.meta, px, py)] : d));
       return;
     }
-    if (!cur || !placing) return;
+    if (!cur || !placing) {
+      // P1-31:点图上的防区就选中它(最小的那块优先:套在里面的小块也点得到)
+      const at = toMap(p.meta, px, py);
+      const hit = areas.filter((a) => a.points.length >= 3 && pointInPolygon(at, a.points))
+        .sort((a, b) => polyArea(a.points) - polyArea(b.points))[0];
+      if (hit) { setSel(hit.zone); setPlacing(null); }
+      return;
+    }
     const [x, y] = toMap(p.meta, px, py);
     const base = pairOf(cur.zone) ?? { view: { x, y }, watch: { x, y, yaw: 0 } };
     setPostEdit({ ...postEdit, [cur.zone]: placing === "view" ? { ...base, view: { x, y } } : { ...base, watch: { ...base.watch, x, y } } });
     setPlacing(null);
+  }
+  // P1-31:拖选中防区的顶点
+  const dragVertex = (z: string, i: number) => (e: PointerEvent) => {
+    startDrag(e, guard.current, (cx, cy) => {
+      const m = clientToMap(root.current, p.meta, cx, cy);
+      if (!m) return;
+      setAreas((all) => all.map((a) => (a.zone === z ? { ...a, points: a.points.map((q, j) => (j === i ? [m[0], m[1]] as Pt : q)) } : a)));
+    });
+  };
+  function rename(to: string) {
+    if (!cur || to === cur.zone) { setRenaming(false); return; }
+    const from = cur.zone;
+    setAreas(areas.filter((a) => a.zone !== to).map((a) => (a.zone === from ? { ...a, zone: to } : a)));
+    // 归这个防区的摄像头跟着改名
+    setCamZone(Object.fromEntries(Object.entries(camZone).map(([c, z]) => [c, z === from ? to : z])));
+    if (from in postEdit) { const { [from]: pe, ...rest } = postEdit; setPostEdit({ ...rest, [to]: pe }); }
+    setSel(to);
+    setRenaming(false);
   }
   const turn = (z: string) => (e: PointerEvent) => {
     startDrag(e, guard.current, (cx, cy) => {
@@ -101,7 +128,7 @@ export function ZonesTab(p: TabProps) {
       <p.Map
         areas={areas.map((a) => ({ name: a.zone, pts: a.points, kind: "zone" as const, hot: a.zone === sel }))}
         drawing={!!draft || !!placing || !!markDraft}
-        onPick={draft || placing || markDraft ? pick : undefined}
+        onPick={pick}
         world={draft && draft.length > 0 ? <polyline points={polyPx(p.meta, draft)} class="draft-line" /> : null}
         marks={(s) => <>
           {!draft && areas.map((a) => {
@@ -135,6 +162,10 @@ export function ZonesTab(p: TabProps) {
           })}
           {markDraft?.pts.map(([x, y], i) => { const [sx, sy] = s.map(x, y); return <circle key={`d${i}`} cx={sx} cy={sy} r={5} class="draft-pt" />; })}
           {draft?.map(([x, y], i) => { const [sx, sy] = s.map(x, y); return <circle key={i} cx={sx} cy={sy} r={5} class="draft-pt" />; })}
+          {!draft && !placing && !markDraft && cur?.points.map(([x, y], i) => {
+            const [sx, sy] = s.map(x, y);
+            return <circle key={`v${i}`} cx={sx} cy={sy} r={7} class="vtx-handle" data-vtx={i} onPointerDown={dragVertex(cur.zone, i)}><title>{t("lyDragVertex")}</title></circle>;
+          })}
         </>} />
       </div>
       <div class="ly-side">
@@ -160,7 +191,9 @@ export function ZonesTab(p: TabProps) {
           onRemove={(i) => setMarks(marks.filter((_, j) => j !== i))} />
         {cur && (
           <section class="panel ly-detail">
-            <h3>{cur.zone}</h3>
+            <div class="row"><h3>{cur.zone}</h3>
+              <button type="button" class="btn sm push" data-rename="1" onClick={() => setRenaming(true)}>{t("lyRename")}</button></div>
+            <p class="muted small">{t("lyDragVertex")}</p>
             <fieldset class="checks zone-cams">
               <legend>{t("lyZoneCams")}</legend>
               {p.data.cameras.length === 0 && <span class="muted small">{t("lyNoCams")}</span>}
@@ -199,6 +232,9 @@ export function ZonesTab(p: TabProps) {
       {naming && draft && (
         <NameZone taken={areas.map((a) => a.zone)} onClose={() => setNaming(false)}
           onSave={(name) => { setAreas([...areas.filter((a) => a.zone !== name), { zone: name, points: draft }]); setDraft(null); setNaming(false); setSel(name); }} />
+      )}
+      {renaming && cur && (
+        <NameZone initial={cur.zone} taken={areas.map((a) => a.zone).filter((z) => z !== cur.zone)} onClose={() => setRenaming(false)} onSave={rename} />
       )}
       {removing && (
         <Confirm text={t("removeZoneConfirm", { zone: removing })} yes={t("remove")} danger onNo={() => setRemoving(null)}
@@ -285,8 +321,19 @@ function camBody(c: CamRow, zone: string): Record<string, unknown> {
   return { name: c.name, zone, edit: true, onvif_url: c.onvif_url, rtsp_url: c.rtsp_url ?? "", username: c.username ?? "", motion: !!c.motion };
 }
 
-function NameZone({ taken, onClose, onSave }: { taken: string[]; onClose: () => void; onSave: (name: string) => void }) {
-  const [name, setName] = useState("");
+/** 多边形面积(选点在哪块里时,小的优先)。 */
+function polyArea(pts: Pt[]): number {
+  let s = 0;
+  for (let i = 0; i < pts.length; i++) {
+    const [x1, y1] = pts[i];
+    const [x2, y2] = pts[(i + 1) % pts.length];
+    s += x1 * y2 - x2 * y1;
+  }
+  return Math.abs(s) / 2;
+}
+
+function NameZone({ taken, onClose, onSave, initial = "" }: { taken: string[]; onClose: () => void; onSave: (name: string) => void; initial?: string }) {
+  const [name, setName] = useState(initial);
   const dup = taken.includes(name.trim());
   return (
     <Modal label={t("lyDrawDone")} onClose={onClose}>

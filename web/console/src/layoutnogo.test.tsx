@@ -123,3 +123,20 @@ describe("布置 → 禁行区", () => {
     expect(c.querySelector(".nogo-status")!.textContent).not.toContain("删掉");
   });
 });
+
+describe("网页易用性第 1 轮 P1-31", () => {
+  it("点图上的区域选中它,能改名,存的时候带新名字", async () => {
+    const big = { ...POOL, id: "n2", label: "花园", polygon: [[0, 6], [4, 6], [4, 10], [0, 10]] as [number, number][] };
+    const { container: c } = render(<NogoTab {...props(nav({ zones: [POOL, big] }))} />);
+    fireEvent.click(c.querySelector(".pick")!);                  // (1,8) 在花园里
+    expect(c.querySelector('[data-pick-zone="n2"]')!.className).toContain("on");
+    fireEvent.click(c.querySelector("[data-rename]")!);
+    const inp = document.querySelector('.modal input[name="label"]') as HTMLInputElement;
+    expect(inp.value).toBe("花园");
+    fireEvent.input(inp, { target: { value: "后花园" } });
+    fireEvent.submit(document.querySelector(".modal form")!);
+    await save!();
+    const body = posted.find((x) => x.url === "/api/maps/home/3/zones")!.body as { zones: { id: string; label: string }[] };
+    expect(body.zones.find((z) => z.id === "n2")!.label).toBe("后花园");
+  });
+});

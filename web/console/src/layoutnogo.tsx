@@ -4,12 +4,14 @@
 // - 机器人还没收到在生效的那一份:写「等机器人确认中」。
 // 改的先记在页面上,外框「保存」整份存(带打开时看到的修订号;别人改过回 409,外框说「刚才有人改过」)。
 // 人员忽略区(W41,机器人在里面看见人不报)、抹掉区(机器人永远不去、画图时抹成没建图)也在这里画。
-import { useEffect, useState } from "preact/hooks";
+import { useEffect, useRef, useState } from "preact/hooks";
 import { api, ApiError } from "./api";
 import { Confirm, Modal } from "./dialogs";
+import { clickGuard, startDrag, swallowClick } from "./dragpt";
 import { t } from "./i18n";
 import { closesLoop, polyPx, toMap, type NavZones, type TabProps } from "./layoutpage";
-import type { NavZone, Pt } from "./mapview";
+import { pointInPolygon, type NavZone, type Pt } from "./mapview";
+import { clientToMap } from "./routes";
 
 type Draw = "nogo" | "wall" | "slow" | "ignore" | "erase";
 interface Form { label: string; hard: boolean; speed: number; temp: boolean; days: number }
@@ -41,6 +43,11 @@ export function NogoTab(p: TabProps) {
   const [removing, setRemoving] = useState<Draft | null>(null);
   const [confirming, setConfirming] = useState<"ask" | null>(null);
   const [behind, setBehind] = useState<string[]>([]);
+  // P1-31:选中一个已画好的(点图上或点列表),能拖顶点、改名
+  const [sel, setSel] = useState<string | null>(null);
+  const [renaming, setRenaming] = useState(false);
+  const root = useRef<HTMLDivElement>(null);
+  const guard = useRef(clickGuard());
 
   const changed = JSON.stringify(zones) !== JSON.stringify(nav?.zones ?? []);
   useEffect(() => p.setDirty(changed), [changed]);
@@ -77,22 +84,46 @@ export function NogoTab(p: TabProps) {
     await p.reload("nav");
   }
 
+  const cur = zones.find((z) => z.id === sel) ?? null;
+  const curPts = cur ? (cur.wall ?? cur.polygon) : [];
+  const dragVertex = (id: string, i: number) => (e: PointerEvent) => {
+    startDrag(e, guard.current, (cx, cy) => {
+      const m = clientToMap(root.current, p.meta, cx, cy);
+      if (!m) return;
+      const at: Pt = [m[0], m[1]];
+      setZones((all) => all.map((z) => (z.id !== id ? z : z.wall
+        ? { ...z, wall: z.wall.map((q, j) => (j === i ? at : q)) }
+        : { ...z, polygon: z.polygon.map((q, j) => (j === i ? at : q)) })));
+    });
+  };
   return (
     <div class="ly-tab">
+      <div ref={root} onClickCapture={(e) => swallowClick(guard.current, e)}>
       <p.Map
         drawing={!!draw}
         onPick={draw ? (px, py) => {
           if (draw !== "wall" && closesLoop(p.meta, pts, px, py)) { setForm(true); return; }
           setPts((d) => [...d, toMap(p.meta, px, py)]);
-        } : undefined}
+        } : (px, py) => {
+          const at = toMap(p.meta, px, py);
+          const hit = zones.find((z) => !z.wall && z.polygon.length >= 3 && pointInPolygon(at, z.polygon));
+          if (hit) setSel(hit.id);
+        }}
         world={<>
           {shown.map((z) => z.wall
             ? <polyline key={z.id} points={polyPx(p.meta, z.wall)} class="nogo-line" />
-            : <polygon key={z.id} points={polyPx(p.meta, z.polygon)} class={z.kind === "slow" ? "slow-area" : z.kind === "ignore" ? "ignore-area" : z.kind === "erase" ? "erase-area" : z.hard ? "nogo-area hard" : "nogo-area"} />)}
+            : <polygon key={z.id} points={polyPx(p.meta, z.polygon)} class={`${z.kind === "slow" ? "slow-area" : z.kind === "ignore" ? "ignore-area" : z.kind === "erase" ? "erase-area" : z.hard ? "nogo-area hard" : "nogo-area"}${z.id === sel ? " sel" : ""}`} />)}
           {held.map((z) => <polygon key={`held-${z.id}`} points={polyPx(p.meta, z.polygon)} class="nogo-area held" />)}
           {pts.length > 0 && <polyline points={polyPx(p.meta, pts)} class={draw === "wall" ? "draft-line vwall" : "draft-line"} />}
         </>}
-        marks={(s) => pts.map(([x, y], i) => { const [sx, sy] = s.map(x, y); return <circle key={i} cx={sx} cy={sy} r={5} class="draft-pt" />; })} />
+        marks={(s) => <>
+          {pts.map(([x, y], i) => { const [sx, sy] = s.map(x, y); return <circle key={i} cx={sx} cy={sy} r={5} class="draft-pt" />; })}
+          {!draw && cur && curPts.map(([x, y], i) => {
+            const [sx, sy] = s.map(x, y);
+            return <circle key={`v${i}`} cx={sx} cy={sy} r={7} class="vtx-handle" data-vtx={i} onPointerDown={dragVertex(cur.id, i)}><title>{t("lyDragVertex")}</title></circle>;
+          })}
+        </>} />
+      </div>
       <div class="ly-side">
         <div class="nogo-status">
           {!nav ? <p class="muted">…</p> : current && held.length === 0
@@ -130,12 +161,19 @@ export function NogoTab(p: TabProps) {
           {shown.length === 0 && <li class="muted small">{t("noNavZones")}</li>}
           {shown.map((z) => (
             <li key={z.id} class="row">
-              <span><b>{z.label || z.id}</b> <span class="muted small">{nogoLine(z)}</span></span>
-              <button type="button" class="btn sm push" onClick={() => setRemoving(z)}>{t("remove")}</button>
+              <span><button type="button" class={z.id === sel ? "linklike on" : "linklike"} data-pick-zone={z.id}
+                onClick={() => setSel(z.id === sel ? null : z.id)}><b>{z.label || z.id}</b></button> <span class="muted small">{nogoLine(z)}</span></span>
+              {z.id === sel && <button type="button" class="btn sm push" data-rename="1" onClick={() => setRenaming(true)}>{t("lyRename")}</button>}
+              <button type="button" class={z.id === sel ? "btn sm" : "btn sm push"} onClick={() => setRemoving(z)}>{t("remove")}</button>
             </li>
           ))}
+          {cur && <li class="muted small">{t("lyDragVertex")}</li>}
         </ul>
       </div>
+      {renaming && cur && (
+        <RenameNogo initial={cur.label} onClose={() => setRenaming(false)}
+          onSave={(label) => { setZones(zones.map((z) => (z.id === cur.id ? { ...z, label } : z))); setRenaming(false); }} />
+      )}
       {form && draw && (
         <NogoForm kind={draw} onClose={() => setForm(false)} onSave={(f) => {
           let id = `${draw === "wall" ? "w" : draw === "slow" ? "s" : draw === "ignore" ? "i" : draw === "erase" ? "e" : "n"}${(nav?.revision ?? 0) + 1}`;
@@ -160,6 +198,22 @@ export function NogoTab(p: TabProps) {
         <SureDialog needPw={held.length > 0} onNo={() => setConfirming(null)} onYes={(pw) => confirm(pw)} />
       )}
     </div>
+  );
+}
+
+function RenameNogo({ initial, onClose, onSave }: { initial: string; onClose: () => void; onSave: (label: string) => void }) {
+  const [v, setV] = useState(initial);
+  const ok = v.trim().length > 0 && v.trim().length <= 64;
+  return (
+    <Modal label={t("lyRename")} onClose={onClose}>
+      <form class="form" onSubmit={(e) => { e.preventDefault(); if (ok) onSave(v.trim()); }}>
+        <label class="field">{t("navName")}<input name="label" value={v} maxLength={64} autoFocus onInput={(e) => setV(e.currentTarget.value)} /></label>
+        <div class="row end">
+          <button type="button" class="btn" onClick={onClose}>{t("cancel")}</button>
+          <button type="submit" class="btn primary" disabled={!ok}>{t("dlgApply")}</button>
+        </div>
+      </form>
+    </Modal>
   );
 }
 
