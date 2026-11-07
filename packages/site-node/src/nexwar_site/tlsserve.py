@@ -24,13 +24,17 @@ HANDSHAKE_TIMEOUT_S = 10.0
 
 class TlsThreadingServer(ThreadingHTTPServer):
     daemon_threads = True
+    #: 监听队列(网页易用性第 1 轮 P0-18):标准库默认 5,浏览器一开页面并发十几个请求,排不上的被拒,
+    #: 页面变成没有样式的 HTML。
+    request_queue_size = 128
 
     def __init__(self, addr, handler, *, ctx: ssl.SSLContext | None,
-                 max_connections: int = 128, max_per_ip: int = 16) -> None:
+                 max_connections: int = 256, max_per_ip: int = 64) -> None:
         self.ctx = ctx
         #: 同时开着的连接上限(W00c5d 内部评审):一条连接一个线程,不设上限的话一串慢连接就能把
         #: 站点主机的线程、内存吃光。**每个来源地址另有一个上限**:不然谁都能拿一串空连接把位子
-        #: 占满,手机的停车、狗的上传全进不来。超了的连接直接关掉。
+        #: 占满,手机的停车、狗的上传全进不来。超了的连接直接关掉。每个地址 64 条(P0-18,原来 16):
+        #: 一个值班台开两三个标签,每个标签一条事件流加两三路实时画面,16 条就满了。
         self._slots = threading.BoundedSemaphore(max_connections)
         self._per_ip: dict[str, int] = {}
         self._per_ip_max = max_per_ip
