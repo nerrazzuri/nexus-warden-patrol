@@ -269,10 +269,11 @@ def test_网页手机发的goto目标没带schema_站点补上_照样派(站点)
     assert code == 200 and d["ack"]["result"] == "accepted", d
 
 
-def test_派遣条件不满足回409带理由(站点):
+def test_没登记的机器人派遣回404带理由(站点):
+    """网页易用性 P2-25:没登记的机器人是「找不到」(404,跟视频一致),不是「条件不满足」(409)。"""
     tok = 站点.login()
     code, d = 站点.req("POST", "/api/robots/ghost/goto", {"target": target(1.0)}, token=tok)
-    assert code == 409 and "没有登记" in d["error"]
+    assert code == 404 and "没有登记" in d["error"]
 
 
 def test_请求体坏_超限_参数不对(站点):
