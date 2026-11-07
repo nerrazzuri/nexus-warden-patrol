@@ -1359,3 +1359,4 @@ input[type="date"]:not(.field input) { height: 36px; padding: 0 8px; border-radi
   .duty { grid-template-rows: auto minmax(320px, 1.5fr) minmax(240px, 1fr); }
 }
 .duty-map .maplegend { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: thin; }
+.rn-edge.bad { stroke: var(--c-error); stroke-dasharray: 6 4; }

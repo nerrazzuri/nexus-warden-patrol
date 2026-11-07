@@ -44,6 +44,11 @@ export interface LayerData {
   standby: StandbyPt[]; cameras: CamRow[]; robots: string[];
 }
 
+/** 标签的保存函数抛这个 = 人在确认框里点了取消:不存、不报错(P2-17)。 */
+export class SaveCancelled extends Error {
+  constructor() { super("cancelled"); }
+}
+
 export interface TabProps {
   map: MapRow;
   base: string;
@@ -204,6 +209,7 @@ export function LayoutPage({ say, robots, tabs }: { say: Say; robots: string[]; 
       setGen((g) => g + 1);
       say(t("saved"));
     } catch (e) {
+      if (e instanceof SaveCancelled) return;
       if (e instanceof ApiError && e.status === 409) setConflict(true);
       else say(errText(e));
     } finally {

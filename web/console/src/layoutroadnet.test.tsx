@@ -16,6 +16,7 @@ let save: (() => Promise<void>) | null;
 let net: Record<string, unknown>;
 let status: number;
 beforeEach(() => {
+  window.confirm = () => true;   // P2-17:存之前会问(孤立点、穿墙);默认点「确定」
   lang.value = "zh";
   posted = [];
   save = null;
@@ -105,5 +106,33 @@ describe("布置 → 路网", () => {
     net = { map_id: "home", map_version: "3", revision: 0, nodes: [], edges: [], length_m: 0 };
     const { container: c } = render(<RoadnetTab {...props()} />);
     await waitFor(() => expect(c.querySelector(".ly-side")!.textContent).toContain("此地图尚无路网"));
+  });
+});
+
+describe("网页易用性第 1 轮 P2-17", () => {
+  it("穿过虚拟墙的连线标出来;有孤立点、穿墙时存之前要确认", async () => {
+    const { saveWarning, wallCrossings } = await import("./layoutroadnet");
+    const nodes = [{ id: "P1", x: 0, y: 0 }, { id: "P2", x: 4, y: 0 }, { id: "P3", x: 0, y: 3 }];
+    const wall: [number, number][][] = [[[2, -1], [2, 1]]];
+    expect(wallCrossings(nodes, [["P1", "P2"], ["P1", "P3"]], wall)).toEqual(["P1-P2"]);
+    expect(wallCrossings(nodes, [["P1", "P3"]], wall)).toEqual([]);
+    expect(saveWarning([], [])).toBeNull();
+    expect(saveWarning(["P3"], ["P1-P2"])).toContain("虚拟墙");
+  });
+});
+
+describe("网页易用性第 1 轮 P2-17 存之前确认", () => {
+  it("有孤立点:点「取消」就不存", async () => {
+    const asked: string[] = [];
+    window.confirm = (m?: string) => { asked.push(String(m)); return false; };
+    const { container: c } = render(<RoadnetTab {...props()} />);
+    await waitFor(() => expect(node(c, "P2")).not.toBeNull());
+    fireEvent.click(btn(c, "添加节点"));
+    fireEvent.click(c.querySelector(".pick1")!);
+    fireEvent.click(btn(c, "完成添加"));
+    const { SaveCancelled } = await import("./layoutpage");
+    await expect(save!()).rejects.toBeInstanceOf(SaveCancelled);
+    expect(asked[0]).toContain("未连接的节点：P3");
+    expect(posted.filter((p) => p.url === URL)).toEqual([]);
   });
 });

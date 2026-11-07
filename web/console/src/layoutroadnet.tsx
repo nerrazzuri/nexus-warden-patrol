@@ -5,7 +5,7 @@ import { useEffect, useRef, useState } from "preact/hooks";
 import { api } from "./api";
 import { clickGuard, startDrag, swallowClick } from "./dragpt";
 import { t } from "./i18n";
-import { toMap, type TabProps } from "./layoutpage";
+import { SaveCancelled, toMap, type TabProps } from "./layoutpage";
 import { clientToMap } from "./routes";
 
 export interface RnNode { id: string; x: number; y: number }
@@ -30,6 +30,34 @@ export function nextId(nodes: RnNode[]): string {
 export function lonely(nodes: RnNode[], edges: Edge[]): string[] {
   const used = new Set(edges.flat());
   return nodes.filter((x) => !used.has(x.id)).map((x) => x.id);
+}
+
+type P2 = [number, number];
+/** 两条线段相交(端点碰上也算)。 */
+function cross(a: P2, b: P2, c: P2, d: P2): boolean {
+  const o = (p: P2, q: P2, r: P2) => Math.sign((q[0] - p[0]) * (r[1] - p[1]) - (q[1] - p[1]) * (r[0] - p[0]));
+  const on = (p: P2, q: P2, r: P2) => Math.min(p[0], q[0]) <= r[0] && r[0] <= Math.max(p[0], q[0]) && Math.min(p[1], q[1]) <= r[1] && r[1] <= Math.max(p[1], q[1]);
+  const o1 = o(a, b, c), o2 = o(a, b, d), o3 = o(c, d, a), o4 = o(c, d, b);
+  if (o1 !== o2 && o3 !== o4) return true;
+  return (o1 === 0 && on(a, b, c)) || (o2 === 0 && on(a, b, d)) || (o3 === 0 && on(c, d, a)) || (o4 === 0 && on(c, d, b));
+}
+
+/** P2-17:穿过虚拟墙的连线("a-b" 形式)。 */
+export function wallCrossings(nodes: RnNode[], edges: Edge[], walls: P2[][]): string[] {
+  const by = new Map(nodes.map((x) => [x.id, x]));
+  return edges.filter(([a, b]) => {
+    const p = by.get(a), q = by.get(b);
+    if (!p || !q) return false;
+    return walls.some((w) => w.some((pt, i) => i > 0 && cross([p.x, p.y], [q.x, q.y], w[i - 1], pt)));
+  }).map(([a, b]) => `${a}-${b}`);
+}
+
+/** 存之前要确认的事(孤立点、穿墙线);没有就 null。 */
+export function saveWarning(alone: string[], bad: string[]): string | null {
+  const parts: string[] = [];
+  if (alone.length) parts.push(t("lyRnLonely", { ids: alone.join("、") }));
+  if (bad.length) parts.push(t("lyRnCrossWall", { ids: bad.join("、") }));
+  return parts.length ? `${parts.join("\n")}\n\n${t("lyRnSaveAnyway")}` : null;
 }
 
 function lengthM(nodes: RnNode[], edges: Edge[]): number {
@@ -64,11 +92,15 @@ export function RoadnetTab(p: TabProps) {
     return () => { live = false; };
   }, [url]);
 
+  const walls = (p.data.nav?.zones ?? []).filter((z) => Array.isArray(z.wall) && z.wall.length >= 2).map((z) => z.wall as P2[]);
   const changed = loaded !== null && (JSON.stringify(nodes) !== JSON.stringify(loaded.nodes) || JSON.stringify(edges) !== JSON.stringify(loaded.edges));
   useEffect(() => p.setDirty(changed), [changed]);
   useEffect(() => {
     if (loaded === null) return;
     p.registerSave(async () => {
+      // P2-17:有孤立点、有线穿墙,存之前再问一次
+      const warn = saveWarning(lonely(nodes, edges), wallCrossings(nodes, edges, walls));
+      if (warn && !window.confirm(warn)) throw new SaveCancelled();
       const d = await api<RouteNet>("POST", url, { nodes, edges, base_revision: loaded.revision });
       const net = { revision: d.revision, nodes: d.nodes ?? nodes, edges: (d.edges ?? edges) as Edge[] };
       setLoaded(net);
@@ -76,7 +108,7 @@ export function RoadnetTab(p: TabProps) {
       setEdges(net.edges);
     });
     return () => p.registerSave(null);
-  }, [nodes, edges, loaded]);
+  }, [nodes, edges, loaded, p.data.nav]);
 
   function pick(px: number, py: number) {
     if (!adding) return;
@@ -112,6 +144,7 @@ export function RoadnetTab(p: TabProps) {
 
   const by = new Map(nodes.map((x) => [x.id, x]));
   const alone = lonely(nodes, edges);
+  const bad = wallCrossings(nodes, edges, walls);
   const cur = sel !== null ? by.get(sel) ?? null : null;
   return (
     <div class="ly-tab">
@@ -125,7 +158,7 @@ export function RoadnetTab(p: TabProps) {
               if (!pa || !pb) return null;
               const [x1, y1] = s.map(pa.x, pa.y);
               const [x2, y2] = s.map(pb.x, pb.y);
-              return <line key={`${a}-${b}`} class="rn-edge" x1={x1} y1={y1} x2={x2} y2={y2} />;
+              return <line key={`${a}-${b}`} class={bad.includes(`${a}-${b}`) ? "rn-edge bad" : "rn-edge"} data-rn-edge={`${a}-${b}`} x1={x1} y1={y1} x2={x2} y2={y2} />;
             })}
             {nodes.map((n) => {
               const [x, y] = s.map(n.x, n.y);
@@ -150,6 +183,7 @@ export function RoadnetTab(p: TabProps) {
           <p class="small">{t("lyRnStats", { nodes: String(nodes.length), edges: String(edges.length), len: lengthM(nodes, edges).toFixed(1) })}</p>
         )}
         {alone.length > 0 && <p class="small warn">{t("lyRnLonely", { ids: alone.join("、") })}</p>}
+        {bad.length > 0 && <p class="small bad" data-rn-cross="1">{t("lyRnCrossWall", { ids: bad.join("、") })}</p>}
         {cur && (
           <section class="panel ly-detail">
             <h3>{cur.id}</h3>
