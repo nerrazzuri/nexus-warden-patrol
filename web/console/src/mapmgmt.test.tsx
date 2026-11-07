@@ -100,6 +100,13 @@ describe("总览", () => {
     expect((getByLabelText("estate:3").querySelector("img") as HTMLImageElement).getAttribute("src")).toBe("/api/maps/estate/3/preview.png");
   });
 
+  it("P1-87:地图文件丢了的版本写「读取失败」", async () => {
+    overview.maps[0].versions[1].missing = ["map.pgm"];
+    const { getByLabelText } = mount();
+    await waitFor(() => expect(getByLabelText("estate:2").querySelector("[data-missing]")).not.toBeNull());
+    expect(getByLabelText("estate:3").querySelector("[data-missing]")).toBeNull();
+  });
+
   it("镜像的版本用红字警告", async () => {
     overview.maps[0].versions[0].build!.handedness = { verdict: "mirrored", why: null };
     const { container: c } = mount();

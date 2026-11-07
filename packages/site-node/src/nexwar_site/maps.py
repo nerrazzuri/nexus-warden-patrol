@@ -213,8 +213,19 @@ class MapCatalog:
     # ------------------------------------------------------------ 查
 
     def list(self) -> list[dict[str, Any]]:
-        return [_row(r) for r in self.db.query(
-            "SELECT * FROM maps ORDER BY map_id, created_ms DESC")]
+        """网页易用性 P1-87:每一版带 ``missing``(登记了、盘上却缺的文件名;都在 = 空)。"""
+        out = []
+        for r in self.db.query("SELECT * FROM maps ORDER BY map_id, created_ms DESC"):
+            d = _row(r)
+            base = self.root / d["map_id"] / d["version"]
+            d["missing"] = [str(f.get("name", "")) for f in d["files"]
+                            if isinstance(f, dict) and not (base / str(f.get("name", ""))).is_file()]
+            out.append(d)
+        return out
+
+    def usable(self) -> bool:
+        """有至少一版地图文件齐全(开站清单的「地图」用;登记了文件却丢了不算)。"""
+        return any(not d["missing"] for d in self.list())
 
     def get(self, map_id: str, version: str) -> MapRef:
         rows = self.db.query("SELECT files FROM maps WHERE map_id=? AND version=?",
