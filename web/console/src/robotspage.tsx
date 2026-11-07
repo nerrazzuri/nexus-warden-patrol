@@ -12,7 +12,7 @@ import { ConfirmPassword } from "./confirmpw";
 import { hm, robotNames } from "./data";
 import { Confirm, Modal } from "./dialogs";
 import { alertTitle, lang, refusalText, t, type Key } from "./i18n";
-import { autoResolved, canDispatch, canPatrol, canTeleop, isOwnerLike } from "./model";
+import { autoResolved, canDispatch, canFindPose, canPatrol, canTeleop, isOwnerLike } from "./model";
 import { notAccepted, type CommandReply } from "./posepick";
 import { siteHm } from "./todaypatrols";
 import { Shape } from "./icons";
@@ -254,7 +254,7 @@ type Act = (fn: () => Promise<unknown>, msg?: string) => Promise<void>;
 
 /** W72(用户 11-03):手机上有的操作网页也要 —— 选路线开始巡逻、回待命点、停止当前任务、自动定位、叫停后恢复。
  * 权限跟手机一样:派巡逻、停止 = 能派单的 + 经理;回待命点、自动定位、恢复 = 能派单的(经理不能让它再动)。 */
-function Controls({ r, role, say, onChanged }: { r: RobotCard; role: string; say: Say; onChanged: () => void }) {
+function Controls({ r, u, role, say, onChanged }: { r: RobotCard; u?: UnitInfo; role: string; say: Say; onChanged: () => void }) {
   const [routes, setRoutes] = useState<string[] | null>(null);
   const [pick, setPick] = useState("");
   const [busy, setBusy] = useState(false);
@@ -299,6 +299,11 @@ function Controls({ r, role, say, onChanged }: { r: RobotCard; role: string; say
     return api("POST", path("abort"), { task_id: tid });
   }, t("rdSent", { id, what: t("rdAbort") }));
   const off = !r.online;
+  // P1-27:点了也做不成的先灰掉、把原因写在按钮下面(不是点了才报红字)
+  const findable = u ? canFindPose(u.robot) : true;
+  const why = off ? null : r.task ? t("rdHomeBusy") : !findable ? t("rdNoAutoLoc") : null;
+  // P1-28:当前姿态(状态里的 ready.motion:站着能走 = true;老站点、没报 = 不写)
+  const motion = u?.robot.status?.ready?.motion;
   return (
     <section class="rd-sec rd-control">
       <h3 class="rd-h">{t("rdControl")}</h3>
@@ -335,16 +340,18 @@ function Controls({ r, role, say, onChanged }: { r: RobotCard; role: string; say
           onClick={() => void send(() => api("POST", path("home/return"), {}), t("rdSent", { id, what: t("rdHome") }))}>{t("rdHome")}</button>}
         {dispatch && r.task && <button type="button" class="btn sm rd-danger" disabled={busy || off}
           onClick={() => setAskHome(true)}>{t("rdAbortHome")}</button>}
-        {dispatch && <button type="button" class="btn sm" disabled={busy || off}
+        {dispatch && <button type="button" class="btn sm" disabled={busy || off || !findable}
+          title={!findable ? t("rdNoAutoLoc") : undefined}
           onClick={() => void send(() => api("POST", path("relocalize"), { global: true }), t("rdSent", { id, what: t("rdAutoLoc") }))}>{t("rdAutoLoc")}</button>}
         {/* P1-28:站点说了它空闲(task 是 null)就灰掉;没带这一项的老站点照旧能点(点了现问) */}
         {patrol && <button type="button" class="btn sm rd-danger" disabled={busy || r.task === null}
           title={r.task === null ? t("rdIdle") : undefined} onClick={() => void abort()}>{t("rdAbort")}</button>}
       </div>
+      {dispatch && why && <p class="muted small rd-why">{why}</p>}
       {err && <p class="error small" role="alert">{err}</p>}
       {canTeleop(role) && (r.postures ?? []).length > 0 && (
         <div class="rd-name rd-posture">
-          <span class="rd-label">{t("rdPosture")}</span>
+          <span class="rd-label">{t("rdPosture")}{motion !== undefined && r.online && <span class="muted small" data-posture-now="1"> · {motion ? t("rdNowStanding") : t("rdNowDown")}</span>}</span>
           <div class="rd-actions">
             {(r.postures ?? []).map((m) => (
               <button key={m} type="button" class="btn sm" disabled={busy || off || !!r.task || !!r.held}
@@ -418,7 +425,7 @@ function RobotDetail({ r, u, now, role, say, onChanged, onCode, onClose, readOnl
         </dl>
         {devices.length > 0 && <p class="note small">{devices.map(problemText).join(" · ")}</p>}
       </section>
-      {(canPatrol(role) || isOwnerLike(role)) && !r.revoked && <Controls r={r} role={role} say={say} onChanged={onChanged} />}
+      {(canPatrol(role) || isOwnerLike(role)) && !r.revoked && <Controls r={r} u={u} role={role} say={say} onChanged={onChanged} />}
       <section class="rd-sec">
         <h3 class="rd-h">{t("rdPatrol")}</h3>
         <dl class="rd-facts">
