@@ -158,3 +158,20 @@ describe("报警记录页", () => {
     expect(c.querySelector(".note textarea")).toBeNull();
   });
 });
+
+describe("网页易用性第 1 轮 P1-20 交班留言", () => {
+  it("自己写的不叫「上一班留言」,能修改(原文放回框里)", async () => {
+    note = { id: 9, at_ms: NOW, author: "wang", text: "东门锁坏了" };
+    const { container: c } = render(<AlarmLogPage now={NOW} role="guard" me="wang" />);
+    await waitFor(() => expect(c.textContent).toContain("你写的留言"));
+    expect(c.textContent).not.toContain("上一班留言");
+    fireEvent.click(Array.from(c.querySelectorAll("button")).find((b) => b.textContent === "修改")!);
+    expect((c.querySelector(".note-write textarea") as HTMLTextAreaElement).value).toBe("东门锁坏了");
+  });
+  it("别人写的照旧是上一班留言,没有修改", async () => {
+    note = { id: 9, at_ms: NOW, author: "li", text: "x" };
+    const { container: c } = render(<AlarmLogPage now={NOW} role="guard" me="wang" />);
+    await waitFor(() => expect(c.textContent).toContain("上一班留言"));
+    expect(Array.from(c.querySelectorAll("button")).some((b) => b.textContent === "修改")).toBe(false);
+  });
+});

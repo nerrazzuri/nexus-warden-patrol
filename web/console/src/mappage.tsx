@@ -11,7 +11,7 @@ import { siteHm } from "./todaypatrols";
 import { Modal } from "./dialogs";
 import { alertTitle, lang, refusalText, t, type Key } from "./i18n";
 import type { UnitInfo } from "./live";
-import { ENGINEERING_LAYERS, etaNext, LAYERS, layersFor, loadLayers, saveLayers, mapPins, mapTodo, shiftStart, staleAfter, staleCells, tonightEvents, zoneDecor,
+import { ENGINEERING_LAYERS, etaNext, LAYERS, layersFor, loadLayers, saveLayers, mapPins, mapTodo, olderOpen, shiftStart, staleAfter, staleCells, tonightEvents, zoneDecor,
   type AuthzRow, type Cell, type Layer, type ModeView } from "./maplayers";
 import { fanPath } from "./layoutpage";
 import { MapCanvas, type CanvasArea, type LegendKey, type Screen } from "./mapcanvas";
@@ -295,6 +295,7 @@ export function MapPage(props: {
   const events = tonightEvents(recent, since);
   const pins = mapPins(recent, since);
   const todo = mapTodo(recent, since);
+  const older = olderOpen(recent, since);
   const stale = cells ? staleCells(cells.cells, props.now, staleAfter(duty.stale_hours)) : [];
   const onThisMap = (u: UnitInfo) => { const m = robotMap(u.robot); return !!(m && shown.map && m.map_id === shown.map.map_id && m.version === shown.map.version); };
   const robotsHere = props.units.filter((u) => u.state !== "offline" && onThisMap(u)).map((u) => u.robot.robot_id);
@@ -377,7 +378,8 @@ export function MapPage(props: {
         )}
         {/* W72(用户 11-03):侧栏只列还要人处理的,最多几条;已解决、自动恢复的去报警记录看 */}
         <h3>{t("mapTodoN", { n: todo.length })}</h3>
-        {todo.length === 0 ? <p class="muted small">{t("mapTodoNone")}</p> : (
+        {older > 0 && <p class="small"><a href="#/alarms">{t("mapTodoOlder", { n: older })}</a></p>}
+        {todo.length === 0 ? <p class="muted small">{t(older > 0 ? "mapTodoNoneShift" : "mapTodoNone")}</p> : (
           <ul class="evlist">
             {todo.map((a) => (
               <li key={a.key}>

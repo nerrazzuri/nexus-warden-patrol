@@ -163,7 +163,7 @@ export function Console({ me, onOut }: { me: Me; onOut: (note?: string) => void 
         {route.page === "live" && (
           <LiveWall units={units} alerts={alerts} now={now} onZoom={(id) => setPending({ kind: "cam", robot: id, cam: "front" })} />
         )}
-        {route.page === "alarms" && <AlarmLogPage now={now} role={me.role} />}
+        {route.page === "alarms" && <AlarmLogPage now={now} role={me.role} me={me.name} />}
         {!pageAllowed(route.page, me.role) && <p class="empty noaccess" role="alert">{t("noAccess")}</p>}
         {isAdminPage(route.page) && pageAllowed(route.page, me.role) && (
           <div class="adminwrap">

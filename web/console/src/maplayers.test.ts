@@ -1,7 +1,7 @@
 // W44 地图页的图层规则(设计 §4.3):多久没巡过、今晚的事、本班从几点算、下一个巡检点几分钟到、防区标签。
 import { beforeEach, describe, expect, it } from "vitest";
 import { lang } from "./i18n";
-import { DEFAULT_LAYERS, ENGINEERING_LAYERS, etaNext, layersFor, type Layer, MAP_TODO_MAX, mapPins, mapTodo, shiftStart, staleAfter, staleCells, STALE_AFTER_MS, tonightEvents, zoneDecor } from "./maplayers";
+import { DEFAULT_LAYERS, ENGINEERING_LAYERS, etaNext, layersFor, type Layer, MAP_TODO_MAX, mapPins, mapTodo, olderOpen, shiftStart, staleAfter, staleCells, STALE_AFTER_MS, tonightEvents, zoneDecor } from "./maplayers";
 import type { Alert } from "./model";
 
 beforeEach(() => {
@@ -60,6 +60,16 @@ describe("W72 地图侧栏只列要人处理的", () => {
     expect(mapTodo(a, 50).map((x) => x.key)).toEqual(["p1", "p2"]);
     const many = Array.from({ length: 20 }, (_, i) => alert({ key: `k${i}`, first_ms: 100 + i }));
     expect(mapTodo(many, 50)).toHaveLength(MAP_TODO_MAX);
+  });
+  it("P1-17:本班以前还没处理的单独数出来(侧栏写一句、链到报警记录)", () => {
+    const a = [
+      alert({ key: "old", first_ms: 10 }),
+      alert({ key: "old-done", first_ms: 20, resolved_ms: 30 }),
+      alert({ key: "old-own", first_ms: 20, audience: "owner" }),
+      alert({ key: "now", first_ms: 60 }),
+    ];
+    expect(olderOpen(a, 50)).toBe(1);
+    expect(mapTodo(a, 50).map((x) => x.key)).toEqual(["now"]);
   });
   it("地图上的标记_只留入侵类和还没处理的", () => {
     const a = [
