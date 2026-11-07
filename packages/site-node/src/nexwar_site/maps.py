@@ -675,8 +675,9 @@ class MapCatalog:
                 retired.setdefault(map_id, [])
                 if version not in retired[map_id]:
                     retired[map_id].append(version)
-                c.execute("INSERT INTO site_settings(key, value) VALUES (?, ?) ON CONFLICT(key) "
-                          "DO UPDATE SET value=excluded.value", (RETIRED_KEY, json.dumps(retired)))
+                # 那张表的 SQL 只在 site_settings.py(数据访问层边界),同一个事务里写
+                from nexwar_site.site_settings import SiteSettings
+                SiteSettings.put_in(c, RETIRED_KEY, retired)
             shutil.rmtree(gone, ignore_errors=True)
             try:
                 d.parent.rmdir()                     # 这个地图号下没别的版本了:空目录也删
