@@ -1299,3 +1299,12 @@ input[type="file"]::file-selector-button {
 /* P2-42:布防时巡逻那块正文不贴边 */
 .arm-guard { padding-bottom: 12px; }
 .arm-guard > :not(.panel-head) { margin-left: 16px; margin-right: 16px; }
+#main:focus { outline: none; }
+/* P2-04/06:登录错误行占位;显示密码按钮 */
+.login-err { min-height: 20px; margin: 0; }
+.login .pw-row { display: flex; gap: 8px; align-items: center; }
+.login .pw-row input { flex: 1; min-width: 0; }
+/* P2-22:菜单里的主题、语言按钮不换行 */
+.usermenu .menu .seg button { white-space: nowrap; }
+.usermenu .menu .seg { flex-wrap: wrap; }
+.notices { max-height: 65vh; overflow: auto; white-space: pre-wrap; font-size: 12px; line-height: 1.5; background: var(--c-surfaceVariant); padding: 12px; border-radius: var(--r-r8); }

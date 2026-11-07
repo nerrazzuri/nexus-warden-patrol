@@ -163,7 +163,6 @@ export function TopBar(props: {
 }) {
   return (
     <header class="topbar">
-      <a class="skip" href="#main">Skip to content</a>
       <PageTitle page={props.page} />
       {props.mode && <ArmState mode={props.mode} />}
       <a href="#/alarms" class={props.alarms ? "alarmcount on" : "alarmcount"} aria-live="polite">
@@ -265,14 +264,23 @@ function ArmState({ mode }: { mode: Mode }) {
 function UserMenu(props: { me: Me; pref: ThemePref; onPref: (p: ThemePref) => void; onSignOut: (note?: string) => void; onSay: (s: string) => void }) {
   const [open, setOpen] = useState(false);
   const [pw, setPw] = useState(false);
+  // undefined = 没开;"" = 读着;null = 读不到
+  const [notices, setNotices] = useState<string | null | undefined>(undefined);
   const box = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (!open) return;
     const off = (e: MouseEvent) => {
       if (box.current && !box.current.contains(e.target as Node)) setOpen(false);
     };
+    // P2-22:Esc 关菜单,焦点回到按钮
+    const esc = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      setOpen(false);
+      box.current?.querySelector<HTMLButtonElement>("button.who")?.focus();
+    };
     document.addEventListener("mousedown", off);
-    return () => document.removeEventListener("mousedown", off);
+    document.addEventListener("keydown", esc);
+    return () => { document.removeEventListener("mousedown", off); document.removeEventListener("keydown", esc); };
   }, [open]);
   const looks: { v: ThemePref; key: Key }[] = [
     { v: "auto", key: "lookAuto" }, { v: "system", key: "lookSystem" }, { v: "dark", key: "lookDark" }, { v: "light", key: "lookLight" },
@@ -306,9 +314,21 @@ function UserMenu(props: { me: Me; pref: ThemePref; onPref: (p: ThemePref) => vo
             </div>
           </div>
           <button type="button" class="menu-item" role="menuitem" onClick={() => { setOpen(false); setPw(true); }}>{t("changePassword")}</button>
-          <a class="menu-item" role="menuitem" href="/assets/third-party-notices.txt" target="_blank" rel="noopener noreferrer" onClick={() => setOpen(false)}>{t("thirdParty")}</a>
+          {/* P2-22:第三方声明在对话框里看(原来是开一个原始 txt) */}
+          <button type="button" class="menu-item" role="menuitem" onClick={() => {
+            setOpen(false);
+            setNotices("");
+            fetch("/assets/third-party-notices.txt").then((r) => (r.ok ? r.text() : Promise.reject(new Error(String(r.status)))))
+              .then(setNotices).catch(() => setNotices(null));
+          }}>{t("thirdParty")}</button>
           <button type="button" class="menu-item" role="menuitem" onClick={() => props.onSignOut()}><Icon name="logout" />{t("signOut")}</button>
         </div>
+      )}
+      {notices !== undefined && (
+        <Modal label={t("thirdParty")} wide onClose={() => setNotices(undefined)}>
+          {notices === null ? <p class="error">{t("noticesFailed")}</p>
+            : <pre class="notices" data-notices="1">{notices || "…"}</pre>}
+        </Modal>
       )}
       {pw && <OwnPassword onClose={() => setPw(false)} onDone={() => { setPw(false); props.onSignOut(t("pwDoneRelogin")); }} />}
     </div>

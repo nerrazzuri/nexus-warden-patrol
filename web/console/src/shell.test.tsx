@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 // W44 第一期:新外壳(顶栏、路由、主题、管理员的临时提醒页)。真的把 Console 渲染出来看。
 import { cleanup, fireEvent, render, waitFor } from "@testing-library/preact";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { setFetch } from "./api";
 import type { Me } from "./app";
 import { Console } from "./console";
@@ -150,14 +150,17 @@ describe("新外壳", () => {
     expect(Array.from(bar.querySelectorAll("button")).some((b) => b.textContent === "EN")).toBe(true);
   });
 
-  it("W58 用户菜单里能打开第三方软件声明(新窗口)", () => {
+  it("W58 用户菜单里能打开第三方软件声明(P2-22:在对话框里看)", async () => {
+    const urls: string[] = [];
+    vi.stubGlobal("fetch", (u: string) => { urls.push(u); return Promise.resolve(new Response("MIT License\nfoo", { status: 200 })); });
     const c = render(<Console me={me("guard")} onOut={() => {}} />);
     const bar = c.container.querySelector(".topbar")!;
     fireEvent.click(bar.querySelector(".usermenu > button")!);
-    const a = Array.from(bar.querySelectorAll("a")).find((x) => x.textContent === "第三方软件声明")!;
-    expect(a.getAttribute("href")).toBe("/assets/third-party-notices.txt");
-    expect(a.getAttribute("target")).toBe("_blank");
-    expect(a.getAttribute("rel")).toContain("noopener");
+    const b = Array.from(bar.querySelectorAll("button")).find((x) => x.textContent === "第三方软件声明")!;
+    fireEvent.click(b);
+    await waitFor(() => expect(document.querySelector("[data-notices]")!.textContent).toContain("MIT License"));
+    expect(urls).toContain("/assets/third-party-notices.txt");
+    vi.unstubAllGlobals();
   });
 
   it("布防状态只显示,不能点", async () => {

@@ -464,13 +464,16 @@ function RobotDetail({ r, u, now, role, say, onChanged, onCode, onClose, readOnl
       {!readOnly && (
         <section class="rd-sec">
           <h3 class="rd-h">{t("rdManage")}</h3>
-          <form class="rd-name" onSubmit={(e) => { e.preventDefault(); void act(() => api("POST", `/api/admin/robots/${enc(r.robot_id)}/name`, { name }), t("saved")); }}>
+          <form class="rd-name" onSubmit={(e) => { e.preventDefault(); void act(() => api("POST", `/api/admin/robots/${enc(r.robot_id)}/name`, { name: name.trim() }),
+            name.trim() ? t("saved") : t("robotNameCleared", { id: r.robot_id })); }}>
             <label class="rd-label" for={`rd-name-${r.robot_id}`}>{t("robotName")}</label>
             <div class="rd-inline">
               <input id={`rd-name-${r.robot_id}`} name="name" value={name} maxLength={32} placeholder={r.robot_id}
                 onInput={(e) => setName(e.currentTarget.value)} />
               <button type="submit" class="btn sm" disabled={name === r.name}>{t("robotNameSave")}</button>
             </div>
+            {/* P2-12:写明最多几个字(原来超了悄悄截掉) */}
+            <small class={name.length >= 32 ? "warn-text" : "muted"} data-name-count="1">{t("robotNameCount", { n: name.length, max: 32 })}</small>
           </form>
           <div class="rd-actions">
             {/* P1-26 / P1-05:切派遣方式、重出开通码都先确认,说清是什么意思 */}

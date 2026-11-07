@@ -141,3 +141,15 @@ describe("网页易用性第 1 轮 P1-31", () => {
     expect(posted.find((p) => p.url === "/api/admin/cameras")?.body).toMatchObject({ name: "cam2", zone: "北区新" });
   });
 });
+
+describe("网页易用性第 1 轮 P2-36", () => {
+  it("名字空着点保存:说「请输入名字」", () => {
+    const { container: c } = render(<ZonesTab {...props()} />);
+    fireEvent.click(btn(c, "绘制防区"));
+    for (let i = 0; i < 3; i++) fireEvent.click(c.querySelector(".pick")!);
+    fireEvent.click(btn(c, "完成绘制"));
+    fireEvent.input(document.querySelector('.modal input[name="zone"]')!, { target: { value: "   " } });
+    fireEvent.submit(document.querySelector(".modal form")!);
+    expect(document.querySelector(".modal [role=alert]")!.textContent).toBe("请输入名字。");
+  });
+});
