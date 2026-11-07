@@ -3162,6 +3162,13 @@ class _Handler(TlsHandlerMixin):
         self._need(user, MAINTAIN)
         what = path.removeprefix("/api/system/")
         priv = self.site.priv
+        if what == "caps":
+            # 网页易用性 P1-06:做不到的按钮先灰着、写原因(不用点了才说)
+            if method != "GET":
+                raise HttpError(405, "只支持 GET")
+            return self._send_json(200, {
+                "priv": priv is not None,
+                "push": bool(self.site.push is not None and self.site.push.senders)})
         if what == "push-test":
             if method != "POST":
                 raise HttpError(405, "只支持 POST")

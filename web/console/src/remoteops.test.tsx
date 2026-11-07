@@ -12,8 +12,10 @@ const json = (body: unknown, status = 200) => new Response(JSON.stringify(body),
 let posted: { url: string; body: unknown; headers: Record<string, string> }[];
 let got: string[];
 
+let caps: { priv: boolean; push: boolean } = { priv: true, push: true };
 beforeEach(() => {
   lang.value = "zh";
+  caps = { priv: true, push: true };
   posted = [];
   got = [];
   setFetch(((url: string, init?: RequestInit) => {
@@ -36,6 +38,7 @@ beforeEach(() => {
         choices: { NEXWAR_PERSONS: ["bridge", "none"], NEXWAR_OBS_PERMIT: ["0", "1"], NEXWAR_MAX_FRACTION: ["0.5", "0.7", "1.0"], NEXWAR_VENDOR_PAUSE: ["0", "1"] } }));
     }
     if (url.startsWith("/api/robots/A/ops/journal")) return Promise.resolve(json({ unit: "nexwar_agent", text: "line1\nline2", truncated: true }));
+    if (url === "/api/system/caps") return Promise.resolve(json(caps));
     if (url === "/api/system/vpn") {
       return Promise.resolve(json({ ready: true, peers: [{ name: "eng-1", kind: "engineer", address: "10.77.0.200", public: "K", expires_ms: 1 }],
         status: { up: true, peers: [{ public_key: "K", latest_handshake: 0 }] } }));
@@ -136,6 +139,13 @@ describe("站点运维", () => {
     fireEvent.input(document.querySelector('form.confirm-pw input[type="password"]')!, { target: { value: "pw" } });
     fireEvent.submit(document.querySelector("form.confirm-pw")!);
     await waitFor(() => expect(posted[0]).toMatchObject({ url: "/api/system/restart", body: { confirm_password: "pw" } }));
+  });
+  it("P1-06:没装系统助手、没配推送:按钮先灰着、写原因", async () => {
+    caps = { priv: false, push: false };
+    const { container: c } = render(<SiteOps say={() => {}} />);
+    await waitFor(() => expect(c.querySelector('[data-why="priv"]')).not.toBeNull());
+    expect(btn(c, "重启站点服务").disabled).toBe(true);
+    expect(c.querySelector('[data-why="push"]')).not.toBeNull();
   });
   it("App 安装包连签名清单一起传", async () => {
     const { container: c } = render(<AppPackages say={() => {}} />);

@@ -273,7 +273,13 @@ export function SiteMetrics() {
 interface Peer { name: string; kind: string; address: string; public: string; expires_ms?: number | null }
 interface WgPeer { public_key: string; latest_handshake: number }
 
+/** P1-06:站点做不做得到(装没装特权执行器、配没配推送);老站点没有这个接口 = 不知道,按钮照旧能点。 */
+interface Caps { priv?: boolean; push?: boolean }
+
 export function SiteOps({ say }: { say: Say }) {
+  const [caps] = useLoad<Caps>("/api/system/caps");
+  const noPriv = caps?.priv === false;
+  const noPush = caps?.push === false;
   const [vpn] = useLoad<{ ready: boolean; peers: Peer[]; status?: { up?: boolean; peers?: WgPeer[]; error?: string } }>("/api/system/vpn");
   const [backup] = useLoad<{ last_ok_ms?: number | null; last_verify_ms?: number | null; dest?: string | null }>("/api/system/backups");
   const [ask, setAsk] = useState<"restart" | "restore" | null>(null);
@@ -285,8 +291,8 @@ export function SiteOps({ say }: { say: Say }) {
         <h2>{t("sysOps")}</h2>
         <p class="muted small">{t("sysOpsHint")}</p>
         <div class="row-wrap">
-          <button type="button" class="btn" onClick={() => setAsk("restart")}>{t("sysRestart")}</button>
-          <button type="button" class="btn" disabled={busy} onClick={() => {
+          <button type="button" class="btn" disabled={noPriv} title={noPriv ? t("sysNoPriv") : undefined} onClick={() => setAsk("restart")}>{t("sysRestart")}</button>
+          <button type="button" class="btn" disabled={busy || noPush} title={noPush ? t("sysNoPush") : undefined} onClick={() => {
             setBusy(true);
             api<{ sent: number; errors: string[] }>("POST", "/api/system/push-test", {})
               .then((r) => say(r.errors.length ? t("failed", { why: r.errors.join(";") }) : t("sysPushSent", { n: r.sent })))
@@ -298,6 +304,8 @@ export function SiteOps({ say }: { say: Say }) {
             onClick={() => setAsk("restore")}>{t("sysRestore")}</button>
           {!backup?.dest && <span class="muted small">{t("sysRestoreNoDest")}</span>}
         </div>
+        {noPriv && <p class="muted small" data-why="priv">{t("sysNoPriv")}</p>}
+        {noPush && <p class="muted small" data-why="push">{t("sysNoPush")}</p>}
       </section>
       <section class="panel sys-vpn">
         <h2>{t("sysNet")}</h2>
@@ -339,6 +347,8 @@ interface LastOp { last: null | { id: string; by: string; at_ms: number; result?
 
 export function SiteUpdate({ say }: { say: Say }) {
   const [last, reload] = useLoad<LastOp>("/api/system/update");
+  const [caps] = useLoad<Caps>("/api/system/caps");
+  const noPriv = caps?.priv === false;
   const [file, setFile] = useState<File | null>(null);
   const [bad, setBad] = useState<string | null>(null);
   const [ask, setAsk] = useState(false);
@@ -362,8 +372,9 @@ export function SiteUpdate({ say }: { say: Say }) {
       <div class="row-wrap">
         <input type="file" accept=".tar.gz,application/gzip" aria-label={t("upSiteFile")}
           onChange={(e) => { const f = e.currentTarget.files?.[0] ?? null; setFile(f); setBad(null); if (f) void pkgProblem(f).then(setBad); }} />
-        <button type="button" class="btn primary" disabled={!file || !!bad} onClick={() => setAsk(true)}>{t("upSiteGo")}</button>
+        <button type="button" class="btn primary" disabled={!file || !!bad || noPriv} onClick={() => setAsk(true)}>{t("upSiteGo")}</button>
       </div>
+      {noPriv && <p class="muted small" data-why="priv">{t("sysNoPriv")}</p>}
       {bad && <p class="error small" role="alert">{bad}</p>}
       {ask && file && (
         <ConfirmPassword title={t("upSiteConfirm")} onClose={() => setAsk(false)}
