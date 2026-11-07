@@ -150,7 +150,7 @@ export function UsersPage({ me, say, now }: { me: string; say: Say; now: number 
         {who && <UserAudit name={who} account={rows.find((r) => r.name === who)} onClose={() => setWho(null)} />}
       </div>
 
-      {adding && <AddUser onClose={() => setAdding(false)} say={say} onDone={() => { setAdding(false); say(t("saved")); reload(); }} />}
+      {adding && <AddUser onClose={() => setAdding(false)} say={say} onDone={() => { setAdding(false); say(t("userAddedMsg")); reload(); }} />}
       {eng === "form" && <EngineerForm onClose={() => setEng(null)} onNext={(display, hours, vpn) => setEng({ display, hours, vpn })} />}
       {eng && eng !== "form" && (
         <ConfirmPassword title={t("engOpen")} onClose={() => setEng(null)}
@@ -195,7 +195,7 @@ export function UsersPage({ me, say, now }: { me: string; say: Say; now: number 
             const a = removing;
             setRemoving(null);
             api<{ accounts: Account[] }>("POST", `/api/accounts/${enc(a.name)}/remove`, {})
-              .then((d) => { setRows(d.accounts ?? []); if (who === a.name) setWho(null); say(t("saved")); })
+              .then((d) => { setRows(d.accounts ?? []); if (who === a.name) setWho(null); say(t("userRemovedMsg", { name: a.display_name || a.name })); })
               .catch((e) => say(errText(e)));
           }} />
       )}
