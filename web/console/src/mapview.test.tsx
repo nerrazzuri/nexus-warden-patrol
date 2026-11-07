@@ -672,8 +672,8 @@ describe("防区页:抹掉一块(导航区域 erase),点出来的地图点原样
       const s = site(meta, [OLD], 4);
       const r = render(<MapsZonesPage say={() => {}} />);
       await ready(r.container);
-      await waitFor(() => expect((r.getByText("Erase a region") as HTMLButtonElement).disabled).toBe(false));
-      fireEvent.click(r.getByText("Erase a region"));
+      await waitFor(() => expect((r.getByText("Mark impassable") as HTMLButtonElement).disabled).toBe(false));
+      fireEvent.click(r.getByText("Mark impassable"));
       await tick();
       const m = worldOf(r.container);
       const svg = r.container.querySelector("svg.map")!;
