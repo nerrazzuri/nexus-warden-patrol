@@ -136,9 +136,9 @@ describe("发布", () => {
     await waitFor(() => getByLabelText("estate:3"));
     fireEvent.click(getByLabelText("estate:3").querySelector(".btn.primary") as HTMLElement);
     const dialog = await waitFor(() => c.querySelector("dialog") as HTMLDialogElement);
-    const boxes = Array.from(dialog.querySelectorAll("fieldset input[type=checkbox]")) as HTMLInputElement[];
-    fireEvent.click(boxes[0]);                                                    // A 现在用 2
-    const warn = await waitFor(() => dialog.querySelector(".mm-lost") as HTMLElement);
+    const boxes = Array.from(dialog.querySelectorAll("fieldset:not(.mm-options) input[type=checkbox]")) as HTMLInputElement[];
+    expect(boxes[0].checked).toBe(true);                                          // P1-46:在线的默认勾上(A 现在用 2)
+    const warn = await waitFor(() => { const w = dialog.querySelector(".mm-lost"); expect(w).not.toBeNull(); return w as HTMLElement; });
     expect(warn.textContent).toContain("night");
     expect(warn.textContent).not.toContain("x,");
     expect((warn.querySelector("input") as HTMLInputElement).checked).toBe(true);
@@ -156,8 +156,8 @@ describe("发布", () => {
     await waitFor(() => getByLabelText("estate:3"));
     fireEvent.click(getByLabelText("estate:3").querySelector(".btn.primary") as HTMLElement);
     const dialog = await waitFor(() => c.querySelector("dialog") as HTMLDialogElement);
-    fireEvent.click(dialog.querySelector("fieldset input[type=checkbox]") as HTMLElement);
-    const warn = await waitFor(() => dialog.querySelector(".mm-lost") as HTMLElement);
+    expect((dialog.querySelector("fieldset:not(.mm-options) input[type=checkbox]") as HTMLInputElement).checked).toBe(true);
+    const warn = await waitFor(() => { const w = dialog.querySelector(".mm-lost"); expect(w).not.toBeNull(); return w as HTMLElement; });
     expect((warn.querySelector("input") as HTMLInputElement).checked).toBe(false);
     fireEvent.input(dialog.querySelector('input[name="confirm_pw"]') as HTMLElement, { target: { value: "pw" } });
     fireEvent.click(Array.from(dialog.querySelectorAll("button")).find((b) => b.textContent === "Publish") as HTMLElement);
@@ -178,13 +178,13 @@ describe("发布", () => {
       expect(d).not.toBeNull();
       return d as HTMLDialogElement;
     });
-    const boxes = Array.from(dialog.querySelectorAll("fieldset input[type=checkbox]")) as HTMLInputElement[];
+    const boxes = Array.from(dialog.querySelectorAll("fieldset:not(.mm-options) input[type=checkbox]")) as HTMLInputElement[];
     expect(boxes.map((b) => b.disabled)).toEqual([false, false, true]);          // C 不在线
     const publish = Array.from(dialog.querySelectorAll("button")).find((b) => b.textContent === "Publish") as HTMLButtonElement;
     expect(publish.disabled).toBe(true);
-    fireEvent.click(boxes[0]);
-    fireEvent.click(boxes[1]);
-    fireEvent.click(dialog.querySelector("label.checks input[type=checkbox]") as HTMLElement);
+    expect(boxes.map((b) => b.checked)).toEqual([true, true, false]);           // P1-46:在线、能换图的默认勾上
+    
+    fireEvent.click(dialog.querySelector(".mm-options input[type=checkbox]") as HTMLElement);
     expect(publish.disabled).toBe(true);                                          // 还没输密码
     fireEvent.input(dialog.querySelector('input[name="confirm_pw"]') as HTMLElement, { target: { value: "my-own-password" } });
     fireEvent.click(publish);
@@ -210,9 +210,21 @@ describe("发布", () => {
     expect(getByLabelText("estate:2").textContent).not.toContain("用不了");
     fireEvent.click(getByLabelText("estate:3").querySelector(".btn.primary") as HTMLElement);
     const dialog = await waitFor(() => c.querySelector("dialog") as HTMLDialogElement);
-    const boxes = Array.from(dialog.querySelectorAll("fieldset input[type=checkbox]")) as HTMLInputElement[];
+    const boxes = Array.from(dialog.querySelectorAll("fieldset:not(.mm-options) input[type=checkbox]")) as HTMLInputElement[];
     expect(boxes.map((b) => b.disabled)).toEqual([true, false, true]);           // A 带定位器、C 不在线
     expect(dialog.textContent).toContain("缺定位文件");
+  });
+
+  it("P1-45:禁行区没确认的版本,发布前就说、给去确认的入口,发布按钮灰着", async () => {
+    overview.maps[0].versions[0] = { ...overview.maps[0].versions[0], counts: { ...overview.maps[0].versions[0].counts, zones_confirmed: false } };
+    const { container: c, getByLabelText } = mount();
+    await waitFor(() => getByLabelText("estate:3"));
+    fireEvent.click(getByLabelText("estate:3").querySelector(".btn.primary") as HTMLElement);
+    const dialog = await waitFor(() => c.querySelector("dialog") as HTMLDialogElement);
+    fireEvent.input(dialog.querySelector('input[name="confirm_pw"]') as HTMLElement, { target: { value: "pw" } });
+    expect(dialog.textContent).toContain("not confirmed");
+    expect((dialog.querySelector('a[href="#/admin/layout?tab=nogo"]'))).not.toBeNull();
+    expect((Array.from(dialog.querySelectorAll("button")).find((b) => b.textContent === "Publish") as HTMLButtonElement).disabled).toBe(true);
   });
 
   it("发布整个请求失败:对话框里显示错误,还能再试", async () => {
@@ -221,7 +233,7 @@ describe("发布", () => {
     await waitFor(() => getByLabelText("estate:3"));
     fireEvent.click(getByLabelText("estate:3").querySelector(".btn.primary") as HTMLElement);
     const dialog = await waitFor(() => c.querySelector("dialog") as HTMLDialogElement);
-    fireEvent.click(dialog.querySelector("fieldset input[type=checkbox]") as HTMLElement);
+    
     fireEvent.input(dialog.querySelector('input[name="confirm_pw"]') as HTMLElement, { target: { value: "pw" } });
     fireEvent.click(Array.from(dialog.querySelectorAll("button")).find((b) => b.textContent === "Publish") as HTMLElement);
     await waitFor(() => expect(dialog.textContent).toContain("boom"));
