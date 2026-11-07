@@ -97,7 +97,7 @@ export function AccessPage({ say, now }: { say: Say; now: number }) {
         </table>
       </section>
 
-      {adding && <AddAuthz zones={zones} onClose={() => setAdding(false)} say={say} onDone={() => { setAdding(false); void load(); say(t("saved")); }} />}
+      {adding && <AddAuthz zones={zones} onClose={() => setAdding(false)} say={say} onDone={() => { setAdding(false); void load(); say(t("authzAddedMsg")); }} />}
       {ending && (
         <Confirm text={t("accEndConfirm", { name: ending.name })} yes={t("accEndYes")} onNo={() => setEnding(null)}
           onYes={() => { const a = ending; setEnding(null); void post(`/api/lists/authorizations/${enc(String(a.id))}/end`, {}); }} />

@@ -154,7 +154,7 @@ export function ArmingPage({ say, now, role = "admin" }: { say: Say; now: number
           onYes={() => {
             const m = switching;
             setSwitching(null);
-            api("POST", "/api/mode", { mode: m }).then(() => say(t("saved"))).catch((e) => say(errText(e))).finally(() => void loadMode());
+            api("POST", "/api/mode", { mode: m }).then(() => say(t(m === "armed" ? "modeNowArmed" : "modeNowHome"))).catch((e) => say(errText(e))).finally(() => void loadMode());
           }} />
       )}
 
