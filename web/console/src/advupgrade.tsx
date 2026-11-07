@@ -1,6 +1,7 @@
 // 高级 → 软件升级(W44 第四期,设计 §5.3「软件升级」):现在的版本(站点、每台机器人);上传公司给的升级包(再输一次密码,
 // 站点照旧核签名和指纹);在线下载等站点联网(W45)。每台机器人:下载到机器人、换成这一版(现在 / 等它在充电、空闲时)、
 // 退回上一版。谁还在用老 App 也在这一页。
+import { pkgProblem } from "./pkgcheck";
 import { useState } from "preact/hooks";
 import { useLoad, clientTooOld, type ClientRow } from "./admin";
 import { api, apiUpload, ApiError, enc } from "./api";
@@ -22,6 +23,7 @@ export function UpgradePage({ say }: { say: Say }) {
   const [rel, reload] = useLoad<{ releases: Release[]; robots: Record<string, string | null>; rollback?: Record<string, boolean> }>("/api/releases");
   const [versions] = useLoad<Versions>("/api/versions");
   const [file, setFile] = useState<File | null>(null);
+  const [bad, setBad] = useState<string | null>(null);
   const [asking, setAsking] = useState(false);
   const [busy, setBusy] = useState(false);
   const [backing, setBacking] = useState<string | null>(null);
@@ -63,8 +65,10 @@ export function UpgradePage({ say }: { say: Say }) {
       <section class="panel up-get">
         <h2>{t("upGet")}</h2>
         <div class="row wrap">
-          <input type="file" name="pkg" accept=".tar.gz,.tgz,application/gzip" onChange={(e) => setFile(e.currentTarget.files?.[0] ?? null)} />
-          <button type="button" class="btn primary" disabled={!file || busy} onClick={() => setAsking(true)}>{t("upUpload")}</button>
+          <input type="file" name="pkg" accept=".tar.gz,.tgz,application/gzip"
+            onChange={(e) => { const f = e.currentTarget.files?.[0] ?? null; setFile(f); setBad(null); if (f) void pkgProblem(f).then(setBad); }} />
+          <button type="button" class="btn primary" disabled={!file || busy || !!bad} onClick={() => setAsking(true)}>{t("upUpload")}</button>
+          {bad && <p class="error small" role="alert">{bad}</p>}
         </div>
         <p class="muted small">{t("upUploadHint")}</p>
         <div class="row"><button type="button" class="btn" disabled>{t("upOnline")}</button><span class="muted small">{t("upOnlineLater")}</span></div>

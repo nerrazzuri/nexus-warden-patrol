@@ -3,6 +3,7 @@
 // - SiteOps:系统页 —— 重启站点、测试推送、备份与恢复、VPN 状态、运行指标曲线。
 // - SiteUpdate、AppPackages:软件升级页 —— 升级站点(公司签名的包)、App 安装包(站点分发给手机)。
 // 只给管理员、工程师(站点按 maintain 权限挡);要命的(重启整机、重启站点、恢复备份、升级站点)再输一次密码。
+import { pkgProblem } from "./pkgcheck";
 import { useEffect, useState } from "preact/hooks";
 import { useLoad } from "./admin";
 import { api, apiUpload, ApiError, enc } from "./api";
@@ -339,6 +340,7 @@ interface LastOp { last: null | { id: string; by: string; at_ms: number; result?
 export function SiteUpdate({ say }: { say: Say }) {
   const [last, reload] = useLoad<LastOp>("/api/system/update");
   const [file, setFile] = useState<File | null>(null);
+  const [bad, setBad] = useState<string | null>(null);
   const [ask, setAsk] = useState(false);
   useEffect(() => {
     if (!last?.last || last.last.result) return;
@@ -359,9 +361,10 @@ export function SiteUpdate({ say }: { say: Say }) {
       )}
       <div class="row-wrap">
         <input type="file" accept=".tar.gz,application/gzip" aria-label={t("upSiteFile")}
-          onChange={(e) => setFile(e.currentTarget.files?.[0] ?? null)} />
-        <button type="button" class="btn primary" disabled={!file} onClick={() => setAsk(true)}>{t("upSiteGo")}</button>
+          onChange={(e) => { const f = e.currentTarget.files?.[0] ?? null; setFile(f); setBad(null); if (f) void pkgProblem(f).then(setBad); }} />
+        <button type="button" class="btn primary" disabled={!file || !!bad} onClick={() => setAsk(true)}>{t("upSiteGo")}</button>
       </div>
+      {bad && <p class="error small" role="alert">{bad}</p>}
       {ask && file && (
         <ConfirmPassword title={t("upSiteConfirm")} onClose={() => setAsk(false)}
           onConfirm={async (pw) => {

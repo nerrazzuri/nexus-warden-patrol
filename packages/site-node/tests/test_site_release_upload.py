@@ -349,3 +349,16 @@ def test_外审复查R3_老版本迁移留下的半截_重开自己补回来(tmp
         assert db.query("SELECT name FROM sqlite_master WHERE name='release_queue_64'") == []
     finally:
         db.close()
+
+
+def test_网页P1_77_选错文件先说文件不对_不用先输对密码(站点, tmp_path):
+    s = 站点
+    code, got = _传(s, _登(s), b"not a tarball", pw="wrong-wrong-wrong")
+    assert code == 400 and "不是升级包" in got["error"] and "release.json" not in got["error"]
+    buf = io.BytesIO()
+    with tarfile.open(fileobj=buf, mode="w:gz") as tf:
+        info = tarfile.TarInfo("x/readme.txt")
+        info.size = 2
+        tf.addfile(info, io.BytesIO(b"hi"))
+    code, got = _传(s, _登(s), buf.getvalue(), pw="wrong-wrong-wrong")
+    assert code == 400 and "不是机器人升级包" in got["error"]

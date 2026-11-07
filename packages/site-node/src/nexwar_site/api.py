@@ -88,6 +88,10 @@ from nexwar_site.tlsserve import TlsHandlerMixin, TlsThreadingServer
 log = logging.getLogger(__name__)
 
 MAX_BODY = 64 * 1024
+#: 网页易用性 P1-77:升级包不对时说人话(不提文件里的东西叫什么)。
+NOT_PKG = "选的文件不是升级包，打不开。请选我们给的 .tar.gz 升级文件。"
+NOT_SITE_PKG = "选的文件不是站点升级包（可能选成了机器人升级包）。"
+NOT_ROBOT_PKG = "选的文件不是机器人升级包（可能选成了站点升级包）。"
 SSE_HEARTBEAT_S = 15.0
 #: 一个请求(含读请求头)多久没动静就断:慢速攻击(slowloris)不能一直占着线程。
 REQUEST_TIMEOUT_S = 30.0
@@ -3246,19 +3250,21 @@ class _Handler(TlsHandlerMixin):
                     raise HttpError(400, "文件未传完")
                 fh.write(chunk)
                 left -= len(chunk)
+        # 网页易用性 P1-77:先看文件对不对,再核密码(选错文件不用白输密码)
+        import tarfile
+        try:
+            with tarfile.open(dest, "r:gz") as tf:
+                if not any(m.name.endswith("/release.json") for m in tf.getmembers()):
+                    dest.unlink(missing_ok=True)
+                    raise HttpError(400, NOT_SITE_PKG)
+        except (tarfile.TarError, OSError, EOFError) as exc:
+            dest.unlink(missing_ok=True)
+            raise HttpError(400, NOT_PKG) from exc
         try:
             self._confirm(user, {"confirm_password": self.headers.get("X-Nexwar-Confirm") or ""})
         except HttpError:
             dest.unlink(missing_ok=True)
             raise
-        import tarfile
-        try:
-            with tarfile.open(dest, "r:gz") as tf:
-                if not any(m.name.endswith("/release.json") for m in tf.getmembers()):
-                    raise HttpError(400, "这不是站点升级包(里面没有 release.json)")
-        except (tarfile.TarError, OSError, EOFError) as exc:
-            dest.unlink(missing_ok=True)
-            raise HttpError(400, "这不是升级包(打不开)") from exc
         return name
 
     def _app_update(self, method: str, path: str, user) -> None:
@@ -4007,6 +4013,14 @@ class _Handler(TlsHandlerMixin):
                         raise HttpError(400, "文件未传完")
                     fh.write(chunk)
                     left -= len(chunk)
+            # 网页易用性 P1-77:先看文件对不对(只读目录,不解开),再核密码 —— 选错文件不用白输密码
+            try:
+                with tarfile.open(raw, "r:gz") as tf:
+                    names = [Path(m.name) for m in tf.getmembers()]
+            except (tarfile.TarError, OSError, EOFError) as exc:
+                raise HttpError(400, NOT_PKG) from exc
+            if not any(len(p.parts) == 2 and p.name == "release.json" for p in names):
+                raise HttpError(400, NOT_ROBOT_PKG)
             # 先收完再验密码:没读完就回 403,浏览器那边多半只看到「连接断了」,看不到「密码不对」
             self._confirm(user, {"confirm_password": self.headers.get("X-Nexwar-Confirm") or ""})
             out = tmp / "x"
@@ -4021,10 +4035,10 @@ class _Handler(TlsHandlerMixin):
                     tf.extractall(out, **({"filter": "data"} if hasattr(tarfile, "data_filter")
                                           else {}))
             except (tarfile.TarError, OSError, EOFError) as exc:
-                raise HttpError(400, "这不是升级包(打不开)") from exc
+                raise HttpError(400, NOT_PKG) from exc
             tops = [p for p in out.iterdir() if (p / "release.json").is_file()]
             if len(tops) != 1:
-                raise HttpError(400, "这不是升级包(里面没有 release.json)")
+                raise HttpError(400, NOT_ROBOT_PKG)
             note = str(self.headers.get("X-Release-Note") or "")[:200]
             self._audit_target = tops[0].name
             try:

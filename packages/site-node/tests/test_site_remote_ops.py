@@ -146,6 +146,9 @@ def test_站点升级包_收下要密码_交给执行器(站点):
     assert code == 403 and not list((s.api.home / "updates").glob("*.tar.gz"))
     code, d = _upload(s, "/api/system/update", b"junk", {"X-Nexwar-Confirm": PW}, alice)
     assert code == 400
+    # 网页 P1-77:文件不对先说文件不对(密码错也一样),话里不提 release.json
+    code, d = _upload(s, "/api/system/update", b"junk", {"X-Nexwar-Confirm": "bad"}, alice)
+    assert code == 400 and "不是升级包" in d["error"] and "release.json" not in d["error"]
     code, d = _upload(s, "/api/system/update", pkg, {"X-Nexwar-Confirm": PW}, alice)
     assert code == 202, d
     (action, args), = s.api.priv.calls
