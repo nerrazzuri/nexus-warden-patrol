@@ -72,5 +72,19 @@ describe("告警测试模式", () => {
     const { container: c2 } = render(<AlertTestBar role="guard" onCleared={() => {}} />);
     await waitFor(() => expect(c2.querySelector('[data-alert-test="on"]')).toBeTruthy());
     expect(c2.querySelectorAll("button").length).toBe(0);
+    expect(c2.textContent).toContain("照常处理即可");                         // P1-21:只读、保安看一句人话
+  });
+
+  it("P1-18/19:没开时收着、写清用途;开着时「只结束」在前,删记录的不是醒目的红按钮", async () => {
+    const { container: c } = render(<AlertTestBar role="admin" onCleared={() => {}} />);
+    await waitFor(() => expect(c.querySelector("details.at-off")).not.toBeNull());
+    expect(c.textContent).toContain("不会自己造报警");
+    cleanup();
+    mode = { active: true, until_ms: Date.now() + 60_000, by: "alice" };
+    const { container: c2 } = render(<AlertTestBar role="admin" onCleared={() => {}} />);
+    await waitFor(() => expect(c2.querySelector('[data-alert-test="on"]')).toBeTruthy());
+    const bs = Array.from(c2.querySelectorAll("button"));
+    expect(bs[0].textContent).toBe("结束测试（保留记录）");
+    expect(c2.querySelector("button.stop")).toBeNull();
   });
 });

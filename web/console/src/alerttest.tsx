@@ -45,22 +45,29 @@ export function AlertTestBar({ role, onCleared, pollMs = ALERT_TEST_POLL_MS }:
   };
   if (!mode || (!active && !admin)) return null;
   return (
-    <div class={active ? "note warn alert-test" : "alert-test row"} data-alert-test={active ? "on" : "off"}>
+    <div class={active ? "note warn alert-test" : "alert-test"} data-alert-test={active ? "on" : "off"}>
+      {/* 网页易用性 P1-18/19/21:没开时收起来、说清用途;开着时只读账号只看一句话;删记录的不做成最醒目的 */}
       {active ? (
-        <>
-          <span>{t("atOn", { at: hm(mode.until_ms ?? 0), by: mode.by })}</span>
-          {admin && <button type="button" class="btn sm stop" onClick={() => setAsk(true)}>{t("atEndClear")}</button>}
-          {admin && <button type="button" class="btn sm" onClick={() => void post({ action: "end", clear: false })}>{t("atEndKeep")}</button>}
-        </>
+        <div class="row wrap at-on">
+          <span>{admin ? t("atOn", { at: hm(mode.until_ms ?? 0), by: mode.by }) : t("atOnView", { at: hm(mode.until_ms ?? 0) })}</span>
+          {admin && <span class="row at-acts">
+            <button type="button" class="btn sm" onClick={() => void post({ action: "end", clear: false })}>{t("atEndKeep")}</button>
+            <button type="button" class="btn sm ghost" onClick={() => setAsk(true)}>{t("atEndClear")}</button>
+          </span>}
+        </div>
       ) : (
-        <>
+        <details class="at-off">
+          <summary class="small">{t("atTitle")}</summary>
+          <p class="muted small">{t("atWhat")}</p>
+          <div class="row">
           <label class="field-inline small">{t("atLen")}
             <select name="minutes" value={String(mins)} onChange={(e) => setMins(Number(e.currentTarget.value))}>
               {[15, 30, 60, 120].map((m) => <option key={m} value={String(m)}>{t("atMin", { n: m })}</option>)}
             </select>
           </label>
           <button type="button" class="btn sm" onClick={() => void post({ action: "start", minutes: mins })}>{t("atStart")}</button>
-        </>
+          </div>
+        </details>
       )}
       {msg && <span class="small" role="status">{msg}</span>}
       {ask && <Confirm text={t("atEndClearAsk")} yes={t("atEndClear")} danger onNo={() => setAsk(false)}
