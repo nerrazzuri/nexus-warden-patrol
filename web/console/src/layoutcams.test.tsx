@@ -81,3 +81,15 @@ describe("布置 → 摄像头", () => {
     expect(said.join(" ")).toContain("没在任何一张图上画多边形");
   });
 });
+
+describe("网页易用性第 1 轮 P1-42/43", () => {
+  it("防区能从已有的里挑;写明摄像头改了马上存", async () => {
+    setFetch((() => Promise.resolve(json({}))) as typeof fetch);
+    const base = props([cam({})]);
+    const r = render(<CamerasTab {...base} data={{ ...base.data, areas: [{ zone: "东区", points: [] }, { zone: "西区", points: [] }] }} />);
+    expect(r.container.textContent).toContain("马上就保存");
+    fireEvent.click(btn(r.container, "添加摄像头"));
+    const opts = Array.from(document.querySelectorAll(".modal datalist option")).map((o) => (o as HTMLOptionElement).value);
+    expect(opts).toEqual(["东区", "西区"]);
+  });
+});
