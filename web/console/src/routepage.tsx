@@ -657,7 +657,9 @@ function SchedulePanel({ route, view, schedules, say, reload }: {
             void call(`/api/route-schedules/${enc(id.trim())}`, { mission: route, at, days, window_min: win, on_missed: missed, base_revision: 0 }, rt("schedSaved"));
           }}>
             <label class="field">{rt("schedId")}<input value={id} maxLength={64} onInput={(e) => setId(e.currentTarget.value)} /></label>
-            <label class="field">{rt("schedAt")}<input type="time" value={at} onInput={(e) => setAt(e.currentTarget.value)} /></label>
+            {/* P1-03:时间一律 24 小时制(浏览器的时间框可能按系统显示成上午 / 下午) */}
+            <label class="field">{rt("schedAt")}<input name="at" type="text" inputMode="numeric" pattern="([01][0-9]|2[0-3]):[0-5][0-9]" placeholder="21:00"
+              maxLength={5} value={at} onInput={(e) => setAt(e.currentTarget.value)} /></label>
             <fieldset class="checks row-wrap">
               <legend>{rt("schedDays")}</legend>
               {DAYS.map((d) => (

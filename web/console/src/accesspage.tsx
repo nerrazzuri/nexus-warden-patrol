@@ -166,6 +166,9 @@ function Visitor({ mode, zones, say, onDone }: { mode: ModeView | null; zones: s
   );
 }
 
+/** P1-03:授权日期不能选过去的。 */
+const todayYmd = () => new Date().toLocaleDateString("sv-SE");
+
 /** P1-62:时间用 24 小时制,半小时一档(浏览器的时间框按系统设置可能显示成上午/下午)。 */
 const HALF_HOURS = Array.from({ length: 48 }, (_, i) => `${String(Math.floor(i / 2)).padStart(2, "0")}:${i % 2 ? "30" : "00"}`);
 
@@ -223,14 +226,14 @@ function AddAuthz({ zones, onClose, onDone, say }: { zones: string[]; onClose: (
             ))}
           </fieldset>
         ) : (
-          <label class="field">{t("accOnDay")}<input name="date" type="date" value={date} required onInput={(e) => setDate(e.currentTarget.value)} /></label>
+          <label class="field">{t("accOnDay")}<input name="date" type="date" value={date} min={todayYmd()} required onInput={(e) => setDate(e.currentTarget.value)} /></label>
         )}
         <div class="row">
           <label class="field">{t("from")}<select name="start" value={start} onChange={(e) => setStart(e.currentTarget.value)}>{HALF_HOURS.map((h) => <option key={h} value={h}>{h}</option>)}</select></label>
           <label class="field">{t("to")}<select name="end" value={end} onChange={(e) => setEnd(e.currentTarget.value)}>{HALF_HOURS.map((h) => <option key={h} value={h}>{h}</option>)}</select></label>
         </div>
         <p class="muted small">{t("overnightHint")}</p>
-        {repeat && <label class="field">{t("validUntil")} ({t("optional")})<input type="date" value={until} onInput={(e) => setUntil(e.currentTarget.value)} /></label>}
+        {repeat && <label class="field">{t("validUntil")} ({t("optional")})<input type="date" value={until} min={todayYmd()} onInput={(e) => setUntil(e.currentTarget.value)} /></label>}
         <label class="field">{t("note")} ({t("optional")})<input value={note} maxLength={200} onInput={(e) => setNote(e.currentTarget.value)} /></label>
         <div class="row end">
           <button type="button" class="btn" onClick={onClose}>{t("cancel")}</button>

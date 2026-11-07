@@ -126,10 +126,10 @@ export function ReportsPage({ now }: { now: number }) {
         </div>
         {kind === "custom" && (
           <>
-            <label class="field">{t("from")}<input name="from" type="date" value={from} aria-invalid={badFrom || undefined}
+            <label class="field">{t("from")}<input name="from" type="date" value={from} max={ymd(now)} aria-invalid={badFrom || undefined}
               class={badFrom ? "invalid" : undefined} onInput={(e) => setFrom(e.currentTarget.value)} />
               {badFrom && <span class="error small">{rangeMsg}</span>}</label>
-            <label class="field">{t("to")}<input name="to" type="date" value={to} aria-invalid={badTo || undefined}
+            <label class="field">{t("to")}<input name="to" type="date" value={to} max={ymd(now)} aria-invalid={badTo || undefined}
               class={badTo ? "invalid" : undefined} onInput={(e) => setTo(e.currentTarget.value)} />
               {badTo && <span class="error small">{rangeMsg}</span>}</label>
           </>
