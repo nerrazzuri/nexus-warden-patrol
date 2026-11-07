@@ -625,6 +625,36 @@ function PointForm({ p, idx, names, plain, onChange, onActions }: {
   );
 }
 
+/** P2-39:经理在网页上排巡逻日程(布防页的「巡逻日程」标签):挑一条路线,下面是跟路线页同一个排程面板。
+ *  路线本身(画点、改名)还是管理员在「布置」里改。 */
+export function PatrolSchedules({ say, canEdit }: { say: Say; canEdit: boolean }) {
+  const [view, setView] = useState<RouteView | null>(null);
+  const [route, setRoute] = useState("");
+  const load = useCallback(() => api<RouteView>("GET", "/api/routes?kind=patrol")
+    .then((v) => { setView(v); setRoute((r) => r || v.routes[0]?.id || ""); })
+    .catch((e) => { setView(null); say(errText(e)); }), []);
+  useEffect(() => { void load(); }, [load]);
+  if (!view) return <p class="muted">{t("loading")}</p>;
+  if (view.routes.length === 0) return <p class="muted" data-no-routes="1">{rt("routesNone")}</p>;
+  const count = (id: string) => view.schedules.filter((s) => s.mission === id).length;
+  return (
+    <section class="panel arm-patrols">
+      <div class="panel-head">
+        <h2>{rt("routeSchedules")}</h2>
+        <label class="field-inline">{rt("schedRoute")}
+          <select name="route" value={route} onChange={(e) => setRoute(e.currentTarget.value)}>
+            {view.routes.map((r) => <option key={r.id} value={r.id}>{r.id}{count(r.id) ? ` (${count(r.id)})` : ""}</option>)}
+          </select>
+        </label>
+      </div>
+      <div class="arm-patrols-body">
+        {canEdit ? <SchedulePanel key={route} route={route} view={view} schedules={view.schedules.filter((s) => s.mission === route)} say={say} reload={load} />
+          : <p class="muted small">{rt("schedReadOnly")}</p>}
+      </div>
+    </section>
+  );
+}
+
 function SchedulePanel({ route, view, schedules, say, reload }: {
   route: string; view: RouteView | null; schedules: RouteSchedule[]; say: Say; reload: () => Promise<void>;
 }) {
