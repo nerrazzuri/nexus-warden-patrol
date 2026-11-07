@@ -164,6 +164,11 @@ describe("运行指标", () => {
   it("站点磁盘剩余是比例:显示百分比", async () => {
     const { container: c } = render(<SiteMetrics />);
     await waitFor(() => expect(c.querySelector('[data-metric="site_disk_free"] b')!.textContent).toBe("20%"));
+    // P2-23:有坐标轴:最高、最低值,起止日期
+    const row = c.querySelector('[data-metric="site_disk_free"]')!;
+    expect(row.querySelector('[data-y="max"]')!.textContent).toBe("31%");
+    expect(row.querySelector('[data-y="min"]')!.textContent).toBe("20%");
+    expect(row.querySelector('[data-x="start"]')!.textContent).not.toBe("");
   });
 });
 

@@ -34,3 +34,16 @@ describe("P1-78 退回上一版", () => {
     await waitFor(() => expect(posts).toContainEqual({ url: "/api/robots/A/release", body: { action: "rollback" } }));
   });
 });
+
+describe("网页易用性第 1 轮 P2-24", () => {
+  it("同一个账号同一个 App 版本的多次登录合成一行,写登录过几次", async () => {
+    const { groupClients } = await import("./admin");
+    const g = groupClients([
+      { name: "gina", kind: "app", version: "1.0.0", platform: "android", last_used: 10 },
+      { name: "gina", kind: "app", version: "1.0.0", platform: "android", last_used: 30 },
+      { name: "gina", kind: "web", last_used: 20 },
+      { name: "olga", kind: "app", version: "1.0.0", platform: "android", last_used: 5 },
+    ]);
+    expect(g.map((x) => [x.name, x.kind, x.n, x.last_used])).toEqual([["gina", "app", 2, 30], ["gina", "web", 1, 20], ["olga", "app", 1, 5]]);
+  });
+});

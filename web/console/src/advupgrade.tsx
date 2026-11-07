@@ -3,7 +3,7 @@
 // 退回上一版。谁还在用老 App 也在这一页。
 import { pkgProblem } from "./pkgcheck";
 import { useState } from "preact/hooks";
-import { useLoad, clientTooOld, type ClientRow } from "./admin";
+import { useLoad, clientTooOld, groupClients, type ClientRow } from "./admin";
 import { api, apiUpload, ApiError, enc } from "./api";
 import { ConfirmPassword } from "./confirmpw";
 import { Confirm } from "./dialogs";
@@ -99,9 +99,11 @@ export function UpgradePage({ say }: { say: Say }) {
         <p class="muted small">{t("clientsHint")}</p>
         <ul class="plain">
           {(versions?.clients ?? []).length === 0 && <li class="muted small">{t("clientsNone")}</li>}
-          {(versions?.clients ?? []).map((c, i) => (
-            <li key={i}>
+          {groupClients(versions?.clients ?? []).map((c, i) => (
+            <li key={i} data-client={c.name}>
               <b>{c.name}</b> {c.kind === "web" ? t("clientWeb") : `${t("clientApp")} ${c.version ?? "?"}`}
+              {c.platform && <span class="muted small"> · {c.platform}</span>}
+              {c.n > 1 && <span class="muted small" data-client-n={c.n}> · {t("clientLogins", { n: c.n })}</span>}
               {clientTooOld(c, versions?.site.min_app_level) && <span class="tag">{t("clientOld")}</span>}
               <span class="muted small mono"> {hm(c.last_used)}</span>
             </li>
