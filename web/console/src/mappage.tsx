@@ -119,7 +119,7 @@ export function SiteMap(props: {
   const pose = usePosePick({ meta, map: which ? { map_id: which.map_id, version: which.version } : null,
     robotId: sel?.robot.robot_id ?? null, robotMap: selMap,
     robotAt: sel && onThisMap(sel) ? sel.robot.loc?.pose ?? null : null, role: props.role ?? "",
-    canFind: canFindPose(sel?.robot) });
+    canFind: canFindPose(sel?.robot), locate: props.pick === true });
   // 运行可视化:规划路径、轨迹、被挡位置(2 s 一拉),近 7 天定位出过问题的地方
   const viz = useRunViz(!!which);
   const vizRobots = which ? vizOnMap(viz, which.map_id, which.version) : [];
