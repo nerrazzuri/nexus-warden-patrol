@@ -112,10 +112,9 @@ export function HelpDialog({ role, onClose, page }: { role: string; onClose: () 
   const [tab, setTab] = useState<"tour" | "faq">("tour");
   const [i, setI] = useState(0);
   const steps = STEPS[role] ?? STEPS.viewer;
-  const close = () => {
-    void api("POST", "/api/me/guide", { web_tour: WEB_TOUR }).catch(() => {});
-    onClose();
-  };
+  // P2-46:一打开就记「看过了」(原来关的时候才记:开着就退出、刷新,下次登录又弹)
+  useEffect(() => { void api("POST", "/api/me/guide", { web_tour: WEB_TOUR }).catch(() => {}); }, []);
+  const close = onClose;
   return (
     <Modal label={t("helpTitle")} onClose={close}>
       <div class="help">

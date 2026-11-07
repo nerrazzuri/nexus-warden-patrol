@@ -168,7 +168,11 @@ export function TopBar(props: {
       <a href="#/alarms" class={props.alarms ? "alarmcount on" : "alarmcount"} aria-live="polite">
         {t("alarmCount", { n: props.alarms == null ? "?" : props.alarms })}
       </a>
-      <span class="clock mono">{new Date(props.now).toLocaleTimeString("en-GB", { hour12: false })}</span>
+      {/* P2-27:小一点,带上日期(值夜班跨零点看得清是哪天) */}
+      <span class="clock mono" title={new Date(props.now).toLocaleDateString(lang.value === "zh" ? "zh-CN" : "en-GB", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}>
+        <span class="clock-date">{new Date(props.now).toLocaleDateString(lang.value === "zh" ? "zh-CN" : "en-GB", { month: "numeric", day: "numeric" })}</span>{" "}
+        {new Date(props.now).toLocaleTimeString("en-GB", { hour12: false, hour: "2-digit", minute: "2-digit" })}
+      </span>
       {props.onHelp && (
         <button type="button" class="btn sm help-btn" aria-label={t("helpTitle")} title={t("helpTitle")} onClick={props.onHelp}>?</button>
       )}

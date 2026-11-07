@@ -98,6 +98,8 @@ describe("W53 网页", () => {
     let closed = false;
     const { container: c } = render(<HelpDialog role="guard" onClose={() => { closed = true; }} />, { container: document.body });
     expect(c.textContent).toContain("1 / 5");
+    // P2-46:一打开就记下(还没点「完成」)
+    await waitFor(() => expect(posted.some((p) => p.url === "/api/me/guide" && p.body.web_tour === WEB_TOUR)).toBe(true));
     for (let i = 0; i < 4; i++) fireEvent.click(btn(c, "下一步"));
     fireEvent.click(btn(c, "完成"));
     expect(closed).toBe(true);

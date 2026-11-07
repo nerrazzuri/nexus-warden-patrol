@@ -320,7 +320,7 @@ function VersionCard(p: {
   const b = v.build;
   return (
     <article class="mm-ver" aria-label={`${p.map_id}:${v.version}`}>
-      <img class="mm-thumb" src={v.thumbnail} alt="" loading="lazy" width={120} height={120} />
+      <MapThumb src={v.thumbnail} />
       <div class="mm-body">
         <h3>
           <span class="mono">v{v.version}</span>
@@ -681,4 +681,11 @@ export function NoiseDialog({ target, onClose, onDone }: {
       </div>
     </Modal>
   );
+}
+
+/** P2-40:缩略图读不到时显示占位,不出破图图标。 */
+function MapThumb({ src }: { src?: string | null }) {
+  const [bad, setBad] = useState(false);
+  if (!src || bad) return <div class="mm-thumb mm-thumb-none" data-thumb-none="1" aria-hidden="true">{tr("No preview", "无预览")}</div>;
+  return <img class="mm-thumb" src={src} alt="" loading="lazy" width={120} height={120} onError={() => setBad(true)} />;
 }
