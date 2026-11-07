@@ -104,8 +104,9 @@ a { color: var(--c-tertiary); }
 .error { margin: 0; color: var(--c-error); }
 
 /* 外框(W60):左侧导航 + 右边(顶栏 + 页面)。窄屏(< 900)侧栏变成顶上一条,横着排。 */
-.console { min-height: 100vh; display: grid; grid-template-columns: 232px minmax(0, 1fr); }
-.workspace { min-width: 0; display: flex; flex-direction: column; }
+/* P1-08:页面比一屏长时侧栏底色要一直到底(侧栏本身是一屏高、粘在顶上):外框底色用侧栏色,右边盖回页面色 */
+.console { min-height: 100vh; display: grid; grid-template-columns: 232px minmax(0, 1fr); background: var(--c-sidebar); }
+.workspace { min-width: 0; display: flex; flex-direction: column; background: var(--c-bg); }
 .sidenav { background: var(--c-sidebar); border-right: 1px solid var(--c-outline); padding: 20px 12px; display: flex; flex-direction: column; gap: 20px;
   position: sticky; top: 0; height: 100vh; height: 100dvh; overflow-y: auto; }
 .sidenav-brand { display: flex; flex-direction: column; gap: 10px; padding: 0 8px; }

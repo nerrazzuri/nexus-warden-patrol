@@ -42,7 +42,7 @@ type Pending =
   | { kind: "cam"; robot: string; cam: Cam }
   | null;
 
-export function Console({ me, onOut }: { me: Me; onOut: () => void }) {
+export function Console({ me, onOut }: { me: Me; onOut: (note?: string) => void }) {
   const [data, refresh, conn] = useSiteData();
   const now = useNow();
   // B 阶段外审 I5:拿不到新数据时,旧的照显示但标明过期 —— 不能把旧的「在线、没有报警」当成现在
@@ -142,7 +142,11 @@ export function Console({ me, onOut }: { me: Me; onOut: () => void }) {
         pref={pref} onPref={(p) => { saveThemePref(p); setPref(p); }}
         onStop={() => setPending({ kind: "stop" })} onSay={say}
         onHelp={() => setHelp(true)}
-        onSignOut={async () => { try { await api("POST", "/api/logout", {}); } finally { onOut(); } }} />
+        onSignOut={async (note?: string) => {
+          // 改完密码站点已经让旧会话失效:不再调 logout(会 401),直接回登录页带上说明
+          if (note) return onOut(note);
+          try { await api("POST", "/api/logout", {}); } finally { onOut(); }
+        }} />
       {help && <HelpDialog role={me.role} onClose={() => setHelp(false)} />}
       {stale && (
         <div class="stalebar" role="alert">
