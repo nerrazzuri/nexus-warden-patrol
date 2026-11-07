@@ -109,7 +109,7 @@ export function MapManagePage({ say, pollMs = 5000 }: { say: Say; pollMs?: numbe
   const [data, setData] = useState<Overview | null>(null);
   const [err, setErr] = useState("");
   const [publish, setPublish] = useState<{ map_id: string; version: string; unusable?: string } | null>(null);
-  const [deleting, setDeleting] = useState<{ map_id: string; version: string } | null>(null);
+  const [deleting, setDeleting] = useState<{ map_id: string; version: string; back: string[]; latest: boolean } | null>(null);
   const [rolling, setRolling] = useState<Dog | null>(null);
   const [pick, setPick] = useState<string[]>([]);
   const [diff, setDiff] = useState<{ map_id: string; a: string; b: string } | null>(null);
@@ -145,10 +145,11 @@ export function MapManagePage({ say, pollMs = 5000 }: { say: Say; pollMs?: numbe
     void load();
   }
 
-  async function doDelete(t: { map_id: string; version: string }) {
+  async function doDelete(t: { map_id: string; version: string; back: string[] }) {
     setDeleting(null);
     try {
-      const r = await api<{ freed_bytes: number }>("POST", `/api/admin/maps/${enc(t.map_id)}/${enc(t.version)}/delete`, {});
+      const r = await api<{ freed_bytes: number }>("POST", `/api/admin/maps/${enc(t.map_id)}/${enc(t.version)}/delete`,
+        t.back.length > 0 ? { confirm_rollback: true } : {});
       say(tr(`Deleted ${t.map_id}:${t.version} (freed ${mb(r.freed_bytes)})`, `已删除 ${t.map_id}:${t.version}(腾出 ${mb(r.freed_bytes)})`));
       setPick((p) => p.filter((v) => v !== t.version));
     } catch (e) {
@@ -198,7 +199,7 @@ export function MapManagePage({ say, pollMs = 5000 }: { say: Say; pollMs?: numbe
                   })}
                   onNote={(n) => void saveNote(m.map_id, v.version, n)}
                   onPublish={() => setPublish({ map_id: m.map_id, version: v.version, unusable: v.unusable ?? "" })}
-                  onDelete={() => setDeleting({ map_id: m.map_id, version: v.version })}
+                  onDelete={() => setDeleting({ map_id: m.map_id, version: v.version, back: v.previous_on, latest: v.latest })}
                   onNoise={() => setNoise({ map_id: m.map_id, version: v.version })}
                 />
               ))}
@@ -244,8 +245,13 @@ export function MapManagePage({ say, pollMs = 5000 }: { say: Say; pollMs?: numbe
       )}
       {deleting && (
         <Confirm danger yes={tr("Delete", "删除")} onNo={() => setDeleting(null)} onYes={() => void doDelete(deleting)}
-          text={tr(`Delete ${deleting.map_id}:${deleting.version}? Its files, zones, standby and intercept points are removed. This cannot be undone. Do not reuse the version name.`,
-            `删除 ${deleting.map_id}:${deleting.version}?它的文件、区域、待命点、拦截点都会删掉,不能恢复。以后别再用这个版本号。`)} />
+          text={[
+            tr(`Delete ${deleting.map_id}:${deleting.version}? Its files, zones, standby and intercept points are removed. This cannot be undone; the version number will not be used again.`,
+              `删除 ${deleting.map_id}:${deleting.version}?它的文件、区域、待命点、拦截点都会删掉,不能恢复;这个版本号以后不再使用。`),
+            deleting.back.length > 0 ? tr(`${deleting.back.join(", ")} would roll back to this version; after deleting, they cannot roll back to it.`,
+              `${deleting.back.join("、")} 出问题时会退回这一版;删掉以后就退不回这一版了。`) : "",
+            deleting.latest ? tr("This is the newest version of this map.", "这是这张图最新的一版。") : "",
+          ].filter(Boolean).join(" ")} />
       )}
       {rolling && rolling.rollback && (
         <Confirm yes={tr("Roll back", "退回")} onNo={() => setRolling(null)} onYes={() => void doRollback(rolling)}
@@ -301,8 +307,8 @@ function VersionCard(p: {
   const [draft, setDraft] = useState<string | null>(null);
   const note = draft ?? v.note;
   const inUse = v.loaded_on.length > 0;
-  const whyNot = inUse ? tr("A robot is using this version", "有机器人在用这一版") : v.latest ? tr("Latest version of this map", "这张图的最新一版")
-    : v.previous_on.length > 0 ? tr("A robot would roll back to this version", "是机器人的退回目标") : "";
+  // 网页易用性第 1 轮 P0-15:只有正在用的不能删;最新一版、退回目标都能删(确认框里说清后果)
+  const whyNot = inUse ? tr("A robot is using this version", "有机器人在用这一版") : "";
   const b = v.build;
   return (
     <article class="mm-ver" aria-label={`${p.map_id}:${v.version}`}>

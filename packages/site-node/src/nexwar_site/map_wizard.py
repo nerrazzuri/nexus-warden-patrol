@@ -197,7 +197,9 @@ class MapWizard:
     # ---- 改
 
     def _taken(self, map_id: str, tried: list[str]) -> set[str]:
-        return {m["version"] for m in self.cat.list() if m["map_id"] == map_id} | set(tried)
+        retired = self.cat.retired(map_id) if hasattr(self.cat, "retired") else set()
+        return ({m["version"] for m in self.cat.list() if m["map_id"] == map_id} | set(tried)
+                | retired)                               # P0-15:删掉过的号不再发
 
     def _alloc(self, map_id: str, tried: list[str]) -> str:
         taken = self._taken(map_id, tried)
