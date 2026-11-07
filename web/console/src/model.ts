@@ -222,6 +222,11 @@ export function canArm(role: string): boolean {
   return isOwnerLike(role) || role === "guard" || role === "owner";
 }
 
+/** 切到留守 / 临时撤防(站点 SET_MODE,网页易用性第 1 轮 P0-20):撤防是经理、管理员的决定,保安只能布防。 */
+export function canDisarm(role: string): boolean {
+  return isOwnerLike(role) || role === "owner";
+}
+
 /** 异常状态(着色、带形状);别的都是中性(ISA-101)。 */
 export function abnormal(s: RobotState): "p1" | "p2" | null {
   if (s === "deterring" || s === "estop" || s === "fell") return "p1";
