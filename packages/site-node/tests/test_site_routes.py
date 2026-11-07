@@ -551,6 +551,14 @@ def test_接口_错误码_400带逐点_409冲突_审计(站点):
     assert (row["target"], row["status"]) == ("night", 400)
 
 
+def test_P2_25_没登记的机器人发指令回404(站点):
+    s = 站点
+    alice = _登(s, "alice")
+    for act, body in (("goto", {"x": 1}), ("abort", {}), ("patrol", {"mission_id": "x"})):
+        code, d = s.req("POST", f"/api/robots/GHOST/{act}", body, token=alice)
+        assert code == 404 and "GHOST" in d["error"], (act, code, d)
+
+
 def test_接口_只查不存_逐点问题照报_不存不进审计(站点):
     """网页易用性 P1-39:画的时候就查;跟存路线同一套逐点检查。"""
     s = 站点

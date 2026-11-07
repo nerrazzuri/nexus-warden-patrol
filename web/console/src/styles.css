@@ -1308,3 +1308,10 @@ input[type="file"]::file-selector-button {
 .usermenu .menu .seg button { white-space: nowrap; }
 .usermenu .menu .seg { flex-wrap: wrap; }
 .notices { max-height: 65vh; overflow: auto; white-space: pre-wrap; font-size: 12px; line-height: 1.5; background: var(--c-surfaceVariant); padding: 12px; border-radius: var(--r-r8); }
+/* P2-14:路线侧栏标题和按钮放不下就换行,按钮不出界 */
+.routeside-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.routeside-head h2 { flex: 1 1 auto; min-width: 0; }
+/* P2-41:表单里下拉框跟输入框一样高,标签在同一条线上 */
+.field select { height: 44px; }
+.row.wrap > .field { justify-content: flex-start; }
+.row.wrap:has(> .field) { align-items: flex-end; }

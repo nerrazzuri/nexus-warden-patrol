@@ -81,7 +81,7 @@ describe("布置 → 巡逻路线", () => {
     expect(c.textContent).not.toContain("x（米）");
     expect(c.querySelectorAll("[data-thermal] input[disabled]").length).toBe(2);
     expect(c.textContent).toContain("热像到货后开放");
-    expect(c.querySelector(".panel-head")!.hasAttribute("hidden")).toBe(true);
+    expect(c.querySelector(".panel-head")).toBeNull();   // P2-14:嵌着时不出路线页自己那一栏(只有一个地图版本框)
   });
 
   it("实测查出:点「看最新的」标签整个重建以后,刚才那条路线还开着(不退回列表)", async () => {
