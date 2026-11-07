@@ -560,7 +560,7 @@ describe("地图页:点一点去这里 / 设位置,发出去的就是点的坐�
     fireEvent.click(r.container.querySelector("svg.map")!, clientOf(r.container, META, 1, 1));
     await tick();
     fireEvent.click(r.getByText("Go here"));
-    await waitFor(() => expect(r.container.querySelector("[data-pose-msg]")!.textContent).toContain("A 要人现场监护:先在手机上打开监护"));
+    await waitFor(() => expect(r.container.querySelector("[data-pose-msg]")!.textContent).toContain("needs someone supervising on site"));
   });
 
   it("设位置:先弹确认(写着 x、y、朝向),确认后发 relocalize,x/y/yaw 就是点的;取消不发", async () => {

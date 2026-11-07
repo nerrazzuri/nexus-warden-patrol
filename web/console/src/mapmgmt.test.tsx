@@ -305,7 +305,7 @@ describe("删除", () => {
     fireEvent.click(Array.from(getByLabelText("estate:1").querySelectorAll("button")).find((b) => b.textContent === "Delete") as HTMLElement);
     const dialog = await waitFor(() => c.querySelector("dialog") as HTMLDialogElement);
     typePw(dialog);
-    await waitFor(() => expect(dialog.textContent).toContain("estate:1 还有机器人在用(A)"));   // 错写在对话框里,能再试
+    await waitFor(() => expect(dialog.textContent).toContain("Robots are still using this map version (A)"));   // 错写在对话框里,能再试
   });
 });
 
@@ -467,6 +467,6 @@ describe("W41 清噪点", () => {
     fireEvent.load(c.querySelector(".mm-noiseimg image")!);   // 复查 N3:底图加载好了才许清
     await waitFor(() => expect((c.querySelector("[data-denoise]") as HTMLButtonElement).disabled).toBe(false));
     fireEvent.click(c.querySelector("[data-denoise]") as HTMLElement);
-    await waitFor(() => expect(c.querySelector('[role="alert"]')?.textContent).toContain("换了"));
+    await waitFor(() => expect(c.querySelector('[role="alert"]')?.textContent).toContain("changed after you opened it"));
   });
 });

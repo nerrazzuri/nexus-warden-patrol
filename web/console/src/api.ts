@@ -1,5 +1,6 @@
 // 站点接口(商业化 B1)。网页靠 HttpOnly cookie 认人(脚本拿不到令牌);改东西的请求带 X-Nexwar-Web 头防跨站伪造。
-import { t } from "./i18n";
+import { lang, t } from "./i18n";
+import { englishError } from "./srverr";
 
 export class ApiError extends Error {
   constructor(
@@ -14,9 +15,12 @@ export class ApiError extends Error {
 
 /** 站点回的错:没权限(站点标了 reason=forbidden)用界面自己的话(P1-80,英文界面不夹中文);别的照站点原话。 */
 function errorText(status: number, data: unknown): string {
-  const d = data as { error?: string; reason?: string };
+  const d = data as { error?: string; reason?: string; reason_en?: string };
   if (status === 403 && d.reason === "forbidden") return t("noPermission");
-  return d.error ?? `HTTP ${status}`;
+  const msg = d.error ?? `HTTP ${status}`;
+  // P1-01:英文界面不夹中文原话(原话还在 data.error 里)
+  if (lang.value === "en") return typeof d.reason_en === "string" && d.reason_en ? d.reason_en : englishError(status, msg);
+  return msg;
 }
 
 export type Fetch = typeof fetch;
