@@ -269,7 +269,7 @@ function NameMark({ onClose, onSave }: { onClose: () => void; onSave: (name: str
         <label class="field">{t("lyMarkName")}<input name="mark" value={name} maxLength={40} required onInput={(e) => setName(e.currentTarget.value)} /></label>
         <div class="row end">
           <button type="button" class="btn" onClick={onClose}>{t("cancel")}</button>
-          <button type="submit" class="btn primary">{t("save")}</button>
+          <button type="submit" class="btn primary">{t("dlgApply")}</button>
         </div>
       </form>
     </Modal>
@@ -291,7 +291,7 @@ function NameZone({ taken, onClose, onSave }: { taken: string[]; onClose: () => 
         <p class="muted small">{dup ? t("lyZoneReplace") : t("zoneNameHint")}</p>
         <div class="row end">
           <button type="button" class="btn" onClick={onClose}>{t("cancel")}</button>
-          <button type="submit" class="btn primary">{t("save")}</button>
+          <button type="submit" class="btn primary">{t("dlgApply")}</button>
         </div>
       </form>
     </Modal>

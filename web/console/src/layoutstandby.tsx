@@ -151,7 +151,7 @@ function AddStandby({ robots, taken, onClose, onSave }: { robots: string[]; take
         <p class={dup ? "small bad" : "muted small"}>{dup ? t("lyStandbyDup") : t("lyStandbyNameHint")}</p>
         <div class="row end">
           <button type="button" class="btn" onClick={onClose}>{t("cancel")}</button>
-          <button type="submit" class="btn primary" disabled={!ok}>{t("save")}</button>
+          <button type="submit" class="btn primary" disabled={!ok}>{t("dlgApply")}</button>
         </div>
       </form>
     </Modal>

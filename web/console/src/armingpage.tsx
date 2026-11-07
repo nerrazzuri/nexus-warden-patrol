@@ -10,6 +10,7 @@ import { addBlock, armedAt, copyDay, fromWire, minutesText, moveEdge, removeBloc
 import { hm, type DutySettings } from "./data";
 import { t, type Key } from "./i18n";
 import { Confirm } from "./dialogs";
+import { useUnsaved } from "./unsaved";
 
 type Say = (s: string) => void;
 interface Exception { id: number; first_day: string; last_day: string; state: "armed" | "disarmed"; note: string }
@@ -76,12 +77,7 @@ export function ArmingPage({ say, now, role = "admin" }: { say: Say; now: number
 
   const dirty = loaded != null && (loaded.enabled !== enabled || JSON.stringify(loaded.slots) !== JSON.stringify(slots)
     || JSON.stringify(loaded.duty) !== JSON.stringify(duty));
-  useEffect(() => {
-    if (!dirty) return;
-    const warn = (e: Event) => { e.preventDefault(); (e as BeforeUnloadEvent).returnValue = ""; };
-    window.addEventListener("beforeunload", warn);
-    return () => window.removeEventListener("beforeunload", warn);
-  }, [dirty]);
+  useUnsaved("arming", dirty);
 
   const zones = Array.from(new Set([...(mode?.zones ?? []).map((z) => z.zone), ...slots.filter((x) => x.zone).map((x) => x.zone)])).sort();
   const editing = perZone ? zone : "";
