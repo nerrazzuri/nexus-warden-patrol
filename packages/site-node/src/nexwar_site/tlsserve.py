@@ -29,12 +29,13 @@ class TlsThreadingServer(ThreadingHTTPServer):
     request_queue_size = 128
 
     def __init__(self, addr, handler, *, ctx: ssl.SSLContext | None,
-                 max_connections: int = 256, max_per_ip: int = 64) -> None:
+                 max_connections: int = 512, max_per_ip: int = 160) -> None:
         self.ctx = ctx
         #: 同时开着的连接上限(W00c5d 内部评审):一条连接一个线程,不设上限的话一串慢连接就能把
         #: 站点主机的线程、内存吃光。**每个来源地址另有一个上限**:不然谁都能拿一串空连接把位子
-        #: 占满,手机的停车、狗的上传全进不来。超了的连接直接关掉。每个地址 64 条(P0-18,原来 16):
-        #: 一个值班台开两三个标签,每个标签一条事件流加两三路实时画面,16 条就满了。
+        #: 占满,手机的停车、狗的上传全进不来。超了的连接直接关掉。每个地址 160 条、总共 512 条
+        #: (P0-18 原来 16 → 64;第 2 轮:同一台电脑开 4–10 个浏览器会话,每个会话最多 6 条普通连接
+        #: 加事件流、实时画面,空闲的还要挂 30 秒,64 条就满了,样式表被关掉、整页没样式)。
         self._slots = threading.BoundedSemaphore(max_connections)
         self._per_ip: dict[str, int] = {}
         self._per_ip_max = max_per_ip
