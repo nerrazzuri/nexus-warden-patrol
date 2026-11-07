@@ -19,7 +19,9 @@ const BRAND: Record<Scheme, { brandSoft: string; onBrand: string; brandText: str
 function webExtras(p: Palette, s: Scheme): Palette {
   const b = BRAND[s];
   return { well: "#000000", mapBg: p.surfaceVariant, brand: p.tertiary, focus: p.tertiary, ...b,
-    sidebar: s === "dark" ? "#0F1218" : "#ECEEF1" };
+    sidebar: s === "dark" ? "#0F1218" : "#ECEEF1",
+    // 网页易用性 P2-29:浅色下浅灰字放在灰底、侧栏上只有 3.7–4.1:1;网页用深一点的灰(≥ 4.7:1)
+    ...(s === "light" ? { textMuted: "#5F626A" } : {}) };
 }
 
 /** 深色下底图反亮度的那个 a(CSS invert(a))。 */
