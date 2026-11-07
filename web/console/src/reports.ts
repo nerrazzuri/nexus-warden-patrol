@@ -206,6 +206,23 @@ export function kpiDelta(k: KpiKey, cur: Kpis | undefined, prev: Kpis | undefine
   return { d, tone: better ? "good" : "bad" };
 }
 
+/** 网页易用性第 1 轮 P1-69:导出的表格先按天写巡逻、事件、误报、机器人毛病(原来只导事件,
+ *  一周只有巡逻没有事件时只剩一行表头),空一行再列事件。 */
+export function reportCsv(d: Summary, title: (r: SummaryEvent) => string, verdict: (v: string) => string,
+  who: (r: SummaryEvent) => string = (r) => r.robot): string {
+  const days = csv(["day", "patrols", "incidents", "false_alarms", "robot_problems"],
+    d.days.map((x) => [x.day, x.patrols, x.incidents, x.false_alarms, x.robot_problems]));
+  const ev = eventsCsv(d.events, title, verdict, who).replace(/^\uFEFF/, "");
+  return `${days}\r\n${ev}`;
+}
+
+/** 导出文件名(P1-69):看得懂的起止日子,``report-2026-11-02_to_2026-11-08.csv``(止那天算在里面)。 */
+export function reportFileName(sinceMs: number, untilMs: number): string {
+  const a = stamp(sinceMs).slice(0, 10);
+  const b = stamp(untilMs - 1).slice(0, 10);
+  return a === b ? `report-${a}.csv` : `report-${a}_to_${b}.csv`;
+}
+
 export function eventsCsv(rows: SummaryEvent[], title: (r: SummaryEvent) => string, verdict: (v: string) => string,
   who: (r: SummaryEvent) => string = (r) => r.robot): string {
   return csv(["time", "robot", "what", "verdict", "by"], rows.map((r) => [stamp(r.first_ms), who(r), title(r), verdict(r.verdict), r.resolved_by]));

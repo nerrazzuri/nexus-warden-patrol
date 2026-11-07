@@ -6,7 +6,7 @@ import { useEffect, useState } from "preact/hooks";
 import { api } from "./api";
 import { hm, nameOf } from "./data";
 import { alertTitle, DICTS, lang, t, type Key } from "./i18n";
-import { eventsCsv, fileTag, kpiDelta, matches, reportRange, type KpiKey, type Kpis, type ReportKind, type Summary, type SummaryEvent } from "./reports";
+import { kpiDelta, matches, reportCsv, reportFileName, reportRange, type KpiKey, type Kpis, type ReportKind, type Summary, type SummaryEvent } from "./reports";
 
 /** W60 关键指标分两组:安防运营、系统可靠性。 */
 const KPI_GROUPS: { key: Key; items: { k: KpiKey; key: Key }[] }[] = [
@@ -109,8 +109,8 @@ export function ReportsPage({ now }: { now: number }) {
     <section class="reports">
       <div class="panel-head noprint">
         <h1>{t("tabReports")}</h1>
-        <button type="button" class="btn push" disabled={!d} onClick={() => d && save(`report-${fileTag(d.since_ms, d.until_ms)}.csv`,
-          eventsCsv(d.events, (r) => title(r.kind, r.title), (v) => verdictText(v) || v, who))}>{t("rsCsv")}</button>
+        <button type="button" class="btn push" disabled={!d} onClick={() => d && save(reportFileName(d.since_ms, d.until_ms),
+          reportCsv(d, (r) => title(r.kind, r.title), (v) => verdictText(v) || v, who))}>{t("rsCsv")}</button>
         <button type="button" class="btn primary" disabled={!d} onClick={() => window.print()}>{t("rsPdf")}</button>
       </div>
       <h1 class="only-print">{t("tabReports")}</h1>

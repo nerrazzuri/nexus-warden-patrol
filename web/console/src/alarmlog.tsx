@@ -23,7 +23,7 @@ function canNote(role: string): boolean {
   return role === "admin" || role === "engineer" || role === "guard" || role === "owner";
 }
 
-export function AlarmLogPage(props: { now: number; role: string }) {
+export function AlarmLogPage(props: { now: number; role: string; me?: string }) {
   const [alerts, setAlerts] = useState<Alert[] | null>(null);
   const [truncated, setTruncated] = useState(false);
   const [note, setNote] = useState<Note | null>(null);
@@ -82,8 +82,12 @@ export function AlarmLogPage(props: { now: number; role: string }) {
         <div class="box o"><b>{inShift.filter((a) => a.resolved_ms == null).length}</b><span>{t("alSumOpen")}</span></div>
         <div class="box r"><b>{inShift.filter((a) => a.audience === "intrusion").length}</b><span>{t("alSumIntrusion")}</span></div>
         <div class="note">
-          <h4>{note ? t("alNoteFrom", { who: note.author, t: hm(note.at_ms) }) : t("alNoteNone")}</h4>
+          {/* P1-20:自己刚写的不叫「上一班留言」;能改(再发一条顶替,先把原文放进框里) */}
+          <h4>{note ? t(note.author === props.me ? "alNoteMine" : "alNoteFrom", { who: note.author, t: hm(note.at_ms) }) : t("alNoteNone")}</h4>
           {note && <p>{note.text}</p>}
+          {note && note.author === props.me && canNote(props.role) && !draft && (
+            <button type="button" class="btn sm" onClick={() => setDraft(note.text)}>{t("alNoteEdit")}</button>
+          )}
           {canNote(props.role) && (
             <div class="note-write">
               <textarea rows={2} maxLength={500} placeholder={t("alNoteHint")} value={draft}

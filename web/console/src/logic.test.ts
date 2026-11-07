@@ -444,3 +444,18 @@ describe("W71 今天的巡逻:跳过几个点也算完成", () => {
     expect(stateOf("done")[1]).toBe("ok");
   });
 });
+
+describe("网页易用性第 1 轮 P1-69 报表导出", () => {
+  it("只有巡逻没有事件:表格里有按天的巡逻数,不只剩表头;文件名是起止日子", async () => {
+    const { reportCsv, reportFileName } = await import("./reports");
+    const since = new Date(2026, 10, 2).getTime(), until = new Date(2026, 10, 9).getTime();
+    const d = { since_ms: since, until_ms: until, totals: { patrols: 1, incidents: 0, false_alarms: 0, robot_problems: 0 },
+      days: [{ day: "2026-11-02", patrols: 1, incidents: 0, false_alarms: 0, robot_problems: 0 }], events: [], truncated: false };
+    const text = reportCsv(d, () => "", (v) => v);
+    expect(text.startsWith("﻿")).toBe(true);
+    expect(text.split("﻿").length).toBe(2);                     // 只有开头一个 BOM
+    expect(text).toContain("2026-11-02,1,0,0,0");
+    expect(text).toContain("time,robot,what,verdict,by");
+    expect(reportFileName(since, until)).toBe("report-2026-11-02_to_2026-11-08.csv");
+  });
+});
