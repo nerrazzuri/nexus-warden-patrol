@@ -1,10 +1,11 @@
 // 值班台外框(W44 第一期;W60 改版):左侧导航 + 顶栏(shell.tsx)+ 站点数据 + 各页 + 共用的对话框。
 // 值班五页:总览、实况、地图、报警记录、录像;管理、系统各页按角色给(没权限的不列)。全站深色。
-import { useEffect, useMemo, useState } from "preact/hooks";
+import { useEffect, useMemo, useRef, useState } from "preact/hooks";
 import { api, ApiError, enc } from "./api";
 import type { Me } from "./app";
 import type { Cam } from "./camera";
 import { hms, isStale, useNow, useSiteData } from "./data";
+import { anyUnsaved, dropUnsaved } from "./unsaved";
 import { Confirm } from "./dialogs";
 import { lang, t, type Key } from "./i18n";
 import { Shape } from "./icons";
@@ -53,8 +54,23 @@ export function Console({ me, onOut }: { me: Me; onOut: () => void }) {
   const [help, setHelp] = useState(() => me.guide != null && (me.guide.web_tour ?? 0) < WEB_TOUR);
   void lang.value; // 换语言整页重画
 
+  // 网页易用性第 1 轮 P0-12:有没存的改动,换页前先问;不走就把地址改回来
+  const [leave, setLeave] = useState<string | null>(null);
+  const shownHash = useRef(location.hash);
+  const shownPage = useRef(route.page);
+  shownPage.current = route.page;
   useEffect(() => {
-    const on = () => setRoute(readRoute());
+    const on = () => {
+      const r = readRoute();
+      if (anyUnsaved() && r.page !== shownPage.current) {
+        const want = location.hash;
+        history.replaceState(null, "", shownHash.current || "#/");
+        setLeave(want);
+        return;
+      }
+      shownHash.current = location.hash;
+      setRoute(r);
+    };
     window.addEventListener("hashchange", on);
     return () => window.removeEventListener("hashchange", on);
   }, []);
@@ -186,6 +202,10 @@ export function Console({ me, onOut }: { me: Me; onOut: () => void }) {
           yes={t(pending.mode === "armed" ? "modeArmed" : pending.mode === "home" ? "modeHome" : "modeVisitor")}
           onNo={() => setPending(null)}
           onYes={() => { const m = pending.mode; setPending(null); void act(() => api("POST", "/api/mode", { mode: m })); }} />
+      )}
+      {leave != null && (
+        <Confirm text={t("leaveUnsaved")} yes={t("leaveUnsavedYes")} danger onNo={() => setLeave(null)}
+          onYes={() => { const h = leave; setLeave(null); dropUnsaved(); location.hash = h; }} />
       )}
       {pending?.kind === "stop" && (
         <Confirm text={t("stopAllConfirm", { n: online.length })} yes={t("stopAll")} danger onNo={() => setPending(null)} onYes={stopAll} />

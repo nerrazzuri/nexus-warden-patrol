@@ -198,7 +198,7 @@ function NogoForm({ kind, onClose, onSave }: { kind: Draw; onClose: () => void; 
         )}
         <div class="row end">
           <button type="button" class="btn" onClick={onClose}>{t("cancel")}</button>
-          <button type="submit" class="btn primary" disabled={!ok}>{t("save")}</button>
+          <button type="submit" class="btn primary" disabled={!ok}>{t("dlgApply")}</button>
         </div>
       </form>
     </Modal>

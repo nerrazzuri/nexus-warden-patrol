@@ -3,6 +3,7 @@
 // - 区域命名、特殊地面(楼梯、台阶、斜坡默认放慢,草地、碎石路只标出来)、摆正(只转显示)、底图(只是显示):跟着版本存。
 // - 撤销、重做;「另存」之前列出这一次擦了多少、画了多少,确认才存。虚拟墙、禁行区、限速区去「布置 → 禁行区」。
 // 清噪点在「地图」页每一版的「清噪点…」里(那一页外审过,自己另存一版)。
+import { useUnsaved } from "./unsaved";
 import type { FunctionComponent } from "preact";
 import { useEffect, useRef, useState } from "preact/hooks";
 import { api, apiUpload, ApiError, enc } from "./api";
@@ -82,6 +83,7 @@ function Editor({ say, target, Canvas }: { say: Say; target: Target; Canvas?: Fu
   const ready = !!meta && !!digest && !!hist && !loadErr;
   const now = hist?.now;
   const dirty = !!hist && hist.past.length > 0;
+  useUnsaved("mapedit", dirty);
   const sum = now ? summary(now) : { erased: 0, obstacle: 0 };
   const change = (f: Parameters<typeof apply>[1]) => setHist((h) => (h ? apply(h, f) : h));
   const grid = tool === "erase" || tool === "obstacle";
