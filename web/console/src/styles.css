@@ -1354,3 +1354,8 @@ input[type="date"]:not(.field input) { height: 36px; padding: 0 8px; border-radi
 .ly-step { font-weight: 600; color: var(--c-brand); }
 .ly-step-hint { font-weight: 600; }
 .draft-ring { fill: none; stroke: var(--c-brand); stroke-width: 2; stroke-dasharray: 4 3; }
+/* P2-31:总览地图那一行高一点;图例只占一行(放不下就横着滑),不折成两行压地图 */
+@media (min-width: 1101px) {
+  .duty { grid-template-rows: auto minmax(320px, 1.5fr) minmax(240px, 1fr); }
+}
+.duty-map .maplegend { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: thin; }
