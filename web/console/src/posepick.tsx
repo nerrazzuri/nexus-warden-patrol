@@ -45,6 +45,8 @@ export function usePosePick(o: {
   role: string;
   /** W41:目标狗能「自动找位置」(能力 ``relocalize.global``)。 */
   canFind?: boolean;
+  /** 网页易用性 P1-56:在「帮它定位」里 —— 主按钮是「在这里设位置」,不给「去这里」(误点就把狗派走了)。 */
+  locate?: boolean;
 }): PosePick {
   const ctx = pickContext(o.robotId, o.map, o.robotMap);
   const [picked, setPicked] = useState<{ pose: Pose; ctx: string } | null>(null);
@@ -154,8 +156,8 @@ export function usePosePick(o: {
         {pose && !o.robotId && <p class="muted small">{rt("poseNoRobot")}</p>}
         {pose && o.robotId && wrongMap && <p class="small warn" data-pose-wrongmap="1">{rt("poseWrongMap", { robot: o.robotId })}</p>}
         {(pose || msg) && <div class="row">
-          <button type="button" class="btn primary sm" disabled={!pose || !o.robotId || !o.map || wrongMap || busy} onClick={go}>{rt("poseGo")}</button>
-          <button type="button" class="btn sm" disabled={!pose || !o.robotId || !o.map || wrongMap || busy} onClick={() => setAsking(true)}>{rt("poseSet")}</button>
+          {!o.locate && <button type="button" class="btn primary sm" disabled={!pose || !o.robotId || !o.map || wrongMap || busy} onClick={go}>{rt("poseGo")}</button>}
+          <button type="button" class={o.locate ? "btn primary sm" : "btn sm"} disabled={!pose || !o.robotId || !o.map || wrongMap || busy} onClick={() => setAsking(true)}>{rt("poseSet")}</button>
           <button type="button" class="btn sm" disabled={!pose} onClick={() => { setPose(null); setMsg(""); }}>{rt("poseClear")}</button>
         </div>}
         {msg && <p class="small" role="status" data-pose-msg="1">{msg}</p>}

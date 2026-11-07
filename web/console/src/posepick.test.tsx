@@ -211,3 +211,17 @@ it("W41 自动找位置:机器人认不出就把原因给人看", async () => {
   fireEvent.click([...document.querySelectorAll("dialog button")].find((b) => b.textContent === "Find position automatically")!);
   await waitFor(() => expect(r.container.querySelector("[data-pose-msg]")?.textContent).toContain("差不多像"));
 });
+
+it("网页易用性 P1-56:帮它定位时主按钮是「在这里设位置」,没有「去这里」", async () => {
+  mapFetch();
+  function Locate() {
+    const pick = usePosePick({ meta, map: MA, robotId: "A", robotMap: MA, role: "admin", locate: true });
+    return <><button onClick={() => pick.onPick?.(300, 100)}>pick</button>{pick.panel}</>;
+  }
+  const r = render(<Locate />);
+  fireEvent.click(r.getByText("pick"));
+  await waitFor(() => expect(r.container.querySelector("[data-pose-text]")).not.toBeNull());
+  const primary = r.container.querySelector("[data-posebar] .btn.primary") as HTMLButtonElement;
+  expect(primary.textContent).toBe("Set position here");
+  expect([...r.container.querySelectorAll("[data-posebar] button")].some((b) => b.textContent === "Go here")).toBe(false);
+});
