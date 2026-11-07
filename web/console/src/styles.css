@@ -1340,3 +1340,6 @@ input[type="date"]:not(.field input) { height: 36px; padding: 0 8px; border-radi
 .vwall-line { stroke: var(--c-warning); }
 .nogo-name { fill: var(--c-error); paint-order: stroke; stroke: var(--c-surface); stroke-width: 3px; font-weight: 600; text-anchor: middle; dominant-baseline: middle; pointer-events: none; }
 .range-ends { display: flex; justify-content: space-between; font-weight: 400; }
+/* P2-20:「使用此日程」开关大一点 */
+.arm-enabled { min-height: 36px; display: inline-flex; align-items: center; gap: 8px; font-weight: 600; cursor: pointer; }
+.arm-enabled input[type="checkbox"] { width: 20px; height: 20px; margin: 0; }
