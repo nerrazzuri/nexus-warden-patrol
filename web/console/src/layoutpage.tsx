@@ -246,6 +246,8 @@ export function LayoutPage({ say, robots, tabs }: { say: Say; robots: string[]; 
         </label>
         <span class="push" />
         {HISTORY_KIND[tab] && <button type="button" class="btn" onClick={() => setHistory(!history)} aria-pressed={history}>{t("lyHistory")}</button>}
+        {/* P1-34:「没保存」写在保存按钮旁边,不另起一行把地图往下推 */}
+        {dirty && <span class="ly-dirty small" role="status">{t("armDirty")}</span>}
         <button type="button" class="btn primary ly-save" disabled={!dirty || busy} onClick={() => void save()}>{t("save")}</button>
       </div>
       <p class="muted lead">{t("lyLead")}</p>
@@ -260,7 +262,6 @@ export function LayoutPage({ say, robots, tabs }: { say: Say; robots: string[]; 
           <button type="button" class="btn sm" onClick={() => { setConflict(false); setDirty(false); setGen((g) => g + 1); void reload(); }}>{t("lyLatest")}</button>
         </div>
       )}
-      {dirty && <p class="arm-dirty" role="status">{t("armDirty")}</p>}
       <div class={history ? "ly-body with-history" : "ly-body"}>
         <div class="ly-main">
           {sel && meta && Tab ? (

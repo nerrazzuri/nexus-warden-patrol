@@ -89,6 +89,9 @@ describe("布置外框", () => {
     // 存完标签按新数据重开:再改一次照样能存
     fireEvent.click(btn(c, "改"));
     expect((c.querySelector(".ly-save") as HTMLButtonElement).disabled).toBe(false);
+    // P1-34:「未保存」在保存按钮那一行,不另起一行
+    expect(c.querySelector(".ly-save")!.parentElement!.querySelector(".ly-dirty")).not.toBeNull();
+    expect(c.querySelector("p.arm-dirty")).toBeNull();
   });
 
   it("切标签先问没存的", async () => {
