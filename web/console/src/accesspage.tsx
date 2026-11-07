@@ -166,9 +166,13 @@ function Visitor({ mode, zones, say, onDone }: { mode: ModeView | null; zones: s
   );
 }
 
+/** P1-62:时间用 24 小时制,半小时一档(浏览器的时间框按系统设置可能显示成上午/下午)。 */
+const HALF_HOURS = Array.from({ length: 48 }, (_, i) => `${String(Math.floor(i / 2)).padStart(2, "0")}:${i % 2 ? "30" : "00"}`);
+
 function AddAuthz({ zones, onClose, onDone, say }: { zones: string[]; onClose: () => void; onDone: () => void; say: Say }) {
   const [name, setName] = useState("");
-  const [site, setSite] = useState(zones.length === 0);
+  // P1-62:有防区时不默认「全站」(全站授权期间全站有人报警降级),要人自己选;没防区时只有全站,写明为什么
+  const [site, setSite] = useState<boolean | null>(zones.length === 0 ? true : null);
   const [picked, setPicked] = useState<string[]>([]);
   const [repeat, setRepeat] = useState(true);
   const [days, setDays] = useState(0b0011111);
@@ -179,6 +183,7 @@ function AddAuthz({ zones, onClose, onDone, say }: { zones: string[]; onClose: (
   const [note, setNote] = useState("");
   async function submit(e: Event) {
     e.preventDefault();
+    if (site === null || (site === false && picked.length === 0)) return;     // 回车提交也一样:没选范围不发
     let d = days;
     let untilMs: number | null = until ? new Date(`${until}T23:59:59`).getTime() : null;
     if (!repeat) {
@@ -200,9 +205,11 @@ function AddAuthz({ zones, onClose, onDone, say }: { zones: string[]; onClose: (
         <label class="field">{t("who")}<input name="who" value={name} maxLength={64} required placeholder={t("whoPlaceholder")} onInput={(e) => setName(e.currentTarget.value)} /></label>
         <fieldset class="checks">
           <legend>{t("where")}</legend>
-          <label><input type="radio" name="scope" checked={site} onChange={() => setSite(true)} /> {t("wholeSite")}</label>
-          <label><input type="radio" name="scope" checked={!site} disabled={zones.length === 0} onChange={() => setSite(false)} /> {t("someZones")}</label>
-          {!site && zones.map((z) => (
+          <label><input type="radio" name="scope" checked={site === true} onChange={() => setSite(true)} /> {t("wholeSite")}
+            <span class="muted small"> — {t("wholeSiteWarn")}</span></label>
+          <label><input type="radio" name="scope" checked={site === false} disabled={zones.length === 0} onChange={() => setSite(false)} /> {t("someZones")}
+            {zones.length === 0 && <span class="muted small"> — {t("noZonesYet")}</span>}</label>
+          {site === false && zones.map((z) => (
             <label key={z} class="indent"><input type="checkbox" checked={picked.includes(z)}
               onChange={(e) => setPicked(e.currentTarget.checked ? [...picked, z] : picked.filter((x) => x !== z))} /> {z}</label>
           ))}
@@ -219,15 +226,15 @@ function AddAuthz({ zones, onClose, onDone, say }: { zones: string[]; onClose: (
           <label class="field">{t("accOnDay")}<input name="date" type="date" value={date} required onInput={(e) => setDate(e.currentTarget.value)} /></label>
         )}
         <div class="row">
-          <label class="field">{t("from")}<input type="time" value={start} required onInput={(e) => setStart(e.currentTarget.value)} /></label>
-          <label class="field">{t("to")}<input type="time" value={end} required onInput={(e) => setEnd(e.currentTarget.value)} /></label>
+          <label class="field">{t("from")}<select name="start" value={start} onChange={(e) => setStart(e.currentTarget.value)}>{HALF_HOURS.map((h) => <option key={h} value={h}>{h}</option>)}</select></label>
+          <label class="field">{t("to")}<select name="end" value={end} onChange={(e) => setEnd(e.currentTarget.value)}>{HALF_HOURS.map((h) => <option key={h} value={h}>{h}</option>)}</select></label>
         </div>
         <p class="muted small">{t("overnightHint")}</p>
         {repeat && <label class="field">{t("validUntil")} ({t("optional")})<input type="date" value={until} onInput={(e) => setUntil(e.currentTarget.value)} /></label>}
         <label class="field">{t("note")} ({t("optional")})<input value={note} maxLength={200} onInput={(e) => setNote(e.currentTarget.value)} /></label>
         <div class="row end">
           <button type="button" class="btn" onClick={onClose}>{t("cancel")}</button>
-          <button type="submit" class="btn primary" disabled={!name.trim() || (repeat && days === 0) || (!repeat && !date) || (!site && picked.length === 0)}>{t("addAuthorization")}</button>
+          <button type="submit" class="btn primary" disabled={!name.trim() || (repeat && days === 0) || (!repeat && !date) || site === null || (site === false && picked.length === 0)}>{t("addAuthorization")}</button>
         </div>
       </form>
     </Modal>
