@@ -9,6 +9,7 @@ import { lang } from "./i18n";
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
 beforeEach(() => {
   lang.value = "zh";
+  localStorage.removeItem("nexwar.rebuild.done");
   setFetch(((url: string) => {
     if (url === "/api/admin/maps") {
       return Promise.resolve(json({ now_ms: 0, maps: [{ map_id: "home", versions: [{ version: "3", note: "", created_ms: 1, source: "", has_raster: true, latest: true, previous_on: [], thumbnail: "", build: null,
@@ -32,5 +33,20 @@ describe("高级 → 地图", () => {
   it("每版有编辑", async () => {
     const { container: c } = render(<AdvMapsPage say={() => {}} />);
     await waitFor(() => expect(c.querySelector('a[href="#/admin/mapedit?map=home&version=3"]')).not.toBeNull());
+  });
+});
+
+describe("网页易用性第 1 轮 P2-18", () => {
+  it("最后一步有「全部完成」;刷新后进度还在;能从头开始", () => {
+    const { container: c } = render(<AdvMapsPage say={() => {}} />);
+    fireEvent.click(Array.from(c.querySelectorAll("button")).find((b) => b.textContent?.startsWith("重新建图"))!);
+    for (let i = 0; i < 2; i++) fireEvent.click(c.querySelector(".rb-steps li.now button")!);
+    cleanup();
+    const { container: d } = render(<AdvMapsPage say={() => {}} />);
+    expect(d.querySelectorAll(".rb-steps li.done").length).toBe(2);           // 刷新不丢,而且还展开着
+    for (let i = 0; i < 3; i++) fireEvent.click(d.querySelector(".rb-steps li.now button")!);
+    expect(d.querySelector(".rb-finished")!.textContent).toContain("重新建图完成");
+    fireEvent.click(Array.from(d.querySelectorAll(".rb-finished button")).find((b) => b.textContent === "从头开始")!);
+    expect(d.querySelector(".rb-steps li.now")!.textContent).toContain("起点");
   });
 });
