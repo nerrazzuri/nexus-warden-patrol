@@ -305,10 +305,15 @@ export function RecordingsPage(props: { robots: string[]; role: string; now: num
                   onClick={() => { setSpeed(s); if (video.current) video.current.playbackRate = s; }}>{s}×</button>
               ))}
             </div>
+            {/* 第 2 轮 P1-22:一对一对不拆开(1366、1440 宽时「下一段」原来单独掉到第二行) */}
+            <span class="recctl-pair">
             <button type="button" class="btn sm" disabled={!rows || head == null} onClick={() => rows && head != null && play(rows, head - 10_000)}>⏪ {t("recTenS")}</button>
             <button type="button" class="btn sm" disabled={!rows || head == null} onClick={() => rows && head != null && play(rows, head + 10_000)}>{t("recTenS")} ⏩</button>
+            </span>
+            <span class="recctl-pair">
             <button type="button" class="btn sm" disabled={!shown || !prevSegment(rows ?? [], shown)} onClick={() => shown && step(prevSegment(rows ?? [], shown))}>{t("recPrev")}</button>
             <button type="button" class="btn sm" disabled={!shown || !nextSegment(rows ?? [], shown)} onClick={() => shown && step(nextSegment(rows ?? [], shown))}>{t("recNext")}</button>
+            </span>
             </div>
             <div class="recctl-grp push">
             <button type="button" class="btn sm" disabled={!shown} onClick={snap}>{t("recSnap")}</button>

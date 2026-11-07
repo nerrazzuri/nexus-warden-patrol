@@ -7,7 +7,7 @@ import type { Me } from "./app";
 import { Console } from "./console";
 import { lang } from "./i18n";
 import type { Alert } from "./model";
-import { pageAllowed, pageScheme, readRoute, roleLabel, schemeFor } from "./shell";
+import { pageAllowed, pageScheme, readRoute, roleLabel, schemeFor, TopBar } from "./shell";
 import { applyTheme } from "./theme";
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
@@ -200,5 +200,23 @@ describe("新外壳", () => {
     cleanup();
     const g = render(<Console me={me("guard")} onOut={() => {}} />);
     expect(g.container.querySelector(".home")).toBeNull();
+  });
+});
+
+
+describe("第 2 轮 P1-79:顶栏布防状态的悬停按角色说", () => {
+  const mode = { mode: "armed", label: "布防", source: "manual", state: "armed" } as never;
+  const tip = (role: string) => {
+    const r = render(<TopBar me={me(role)} page="duty" mode={mode} alarms={0} now={0} pref="system" onPref={() => {}} onStop={() => {}} onSignOut={() => {}} onSay={() => {}} />);
+    const s = r.container.querySelector(".armstate")!.getAttribute("title") ?? "";
+    cleanup();
+    return s;
+  };
+  it("管理员说去布防时间页;保安说去地图页的全部布防、不能撤防;只看的说只能看", () => {
+    lang.value = "zh";
+    expect(tip("admin")).toContain("布防时间");
+    expect(tip("guard")).toContain("全部布防");
+    expect(tip("guard")).not.toContain("「布防时间」页切换");
+    expect(tip("viewer")).toContain("只能看");
   });
 });
