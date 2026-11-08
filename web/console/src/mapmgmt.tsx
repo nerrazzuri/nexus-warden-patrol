@@ -107,8 +107,10 @@ export function activationText(a: Activation, nowMs: number = Date.now()): strin
   switch (a.state) {
     case "pending": {
       // W71(用户 11-03:「下发到机器人的时候需要有个提示」):站点发了多少就写多少
-      const d = a.download;
-      if (!d) return tr("Sent — waiting for the robot to start downloading", "已发出，等机器人开始下载");
+      // 第 4 轮 maps N2:下载记录比这次发的还早(回滚到机器人上已有的版本,不用下)—— 不拿上次的时间算「多久没下」
+      const d = a.download && a.download.at_ms >= a.at_ms ? a.download : null;
+      if (!d) return a.download ? tr(`Switching to ${a.version}…`, `正在换到 ${a.version}…`)
+        : tr("Sent — waiting for the robot to start downloading", "已发出，等机器人开始下载");
       const idle = Math.round((nowMs - d.at_ms) / 1000);
       const got = `${mb(d.bytes)} / ${mb(d.total)}`;
       if (idle > 15) return tr(`Downloaded ${got}; nothing sent for ${idle} s — loading, or the link is down`, `已下载 ${got}；${idle} 秒没再下 —— 在载入，或者网断了`);
@@ -266,8 +268,8 @@ export function MapManagePage({ say, pollMs = 5000 }: { say: Say; pollMs?: numbe
       {deleting && (
         <ConfirmPassword title={tr("Delete version", "删除版本")} onClose={() => setDeleting(null)} onConfirm={(pw) => doDelete(deleting, pw)}
           text={[
-            tr(`Delete ${deleting.map_id}:${deleting.version}? Its files, zones, standby and intercept points are removed. This cannot be undone; the version number will not be used again.`,
-              `删除 ${deleting.map_id}:${deleting.version}？它的文件、区域、待命点、拦截点都会删掉，不能恢复；这个版本号以后不再使用。`),
+            tr(`Delete ${deleting.map_id}:${deleting.version}? Its files, no-go areas, security zones, exit lines, hiding spots, standby and intercept points are removed. This cannot be undone; the version number will not be used again.`,
+              `删除 ${deleting.map_id}:${deleting.version}？它的文件、禁行区、防区、出口线、藏匿点、待命点、拦截点都会删掉，不能恢复；这个版本号以后不再使用。`),
             deleting.back.length > 0 ? tr(`${deleting.back.join(", ")} would roll back to this version; after deleting, they cannot roll back to it.`,
               `${deleting.back.join("、")} 出问题时会退回这一版；删掉以后就退不回这一版了。`) : "",
             deleting.latest ? tr("This is the newest version of this map.", "这是这张图最新的一版。") : "",
@@ -432,7 +434,15 @@ export function routeCount(patrol: number, guard: number): string {
 }
 
 /** 第 2 轮 N4:一版上画了多少布置(``GET …/layout``)。 */
-export interface LayoutCounts { areas: number; exits: number; hides: number; posts: number; net_nodes: number; nogo: number; cameras: number; standby: number; proposal: boolean }
+export interface LayoutCounts { areas: number; exits: number; hides: number; posts: number; net_nodes: number; nogo: number; cameras: number; standby: number; proposal: boolean;
+  /** 第 4 轮 maps N4:按名字比、区域分种类、带过来待核的是哪几个(老站点没有就照旧按数量比)。 */
+  names?: { areas: string[]; nogo: string[]; standby: string[] }; kinds?: Record<string, string>;
+  proposed?: { nogo: string[]; standby: string[] } }
+
+const ZONE_KIND: Record<string, [string, string, string]> = {
+  nogo: ["no-go area", "no-go areas", "个禁行区"], slow: ["slow zone", "slow zones", "个限速区"],
+  erase: ["impassable area", "impassable areas", "个不可通行区"], ignore: ["person-ignore zone", "person-ignore zones", "个忽略人区"],
+};
 
 /** 第 2 轮 N4:``from`` 上有、``to`` 上没有的布置,一项一句。禁区、待命点在 ``to`` 有待核建议时另说。 */
 export function missingLayout(from: LayoutCounts, to: LayoutCounts): { text: string; review: boolean }[] {
@@ -444,12 +454,35 @@ export function missingLayout(from: LayoutCounts, to: LayoutCounts): { text: str
     const en = `${a} ${a === 1 ? one : many}`;
     out.push({ text: b === 0 ? tr(en, `${a} ${unit}`) : tr(`${a - b} of ${en}`, `${a} ${unit}里的 ${a - b} 个`), review });
   };
-  item("areas", "zone", "zones", "个防区");
+  if (from.names && to.names) {
+    const gone = from.names.areas.filter((z) => !to.names!.areas.includes(z));
+    if (gone.length) out.push({ text: tr(`${gone.length} of ${from.areas} zone${from.areas === 1 ? "" : "s"} (${gone.join(", ")})`,
+      `${from.areas} 个防区里的 ${gone.length} 个（${gone.join("、")}）`), review: false });
+  } else item("areas", "zone", "zones", "个防区");
   item("exits", "exit line", "exit lines", "条出口线");
   item("hides", "hiding spot", "hiding spots", "个藏匿点");
   item("posts", "adjusted zone post", "adjusted zone posts", "个调过的防区查看点 / 值守位");
   if (from.net_nodes > 0 && to.net_nodes === 0) out.push({ text: tr("the road network", "路网"), review: false });
   item("cameras", "camera", "cameras", "个摄像头位置");
+  if (from.names && to.names) {
+    // 第 4 轮 maps N4:按名字比;只有带过来待核的那几个算「还没生效」,别的少了就是被删了
+    const prop = to.proposed ?? { nogo: [], standby: [] };
+    const gone = from.names.nogo.filter((id) => !to.names!.nogo.includes(id));
+    const kinds = { ...(to.kinds ?? {}), ...(from.kinds ?? {}) };
+    for (const review of [false, true]) {
+      const ids = gone.filter((id) => prop.nogo.includes(id) === review);
+      for (const [k, [one, many, unit]] of Object.entries(ZONE_KIND)) {
+        const of = ids.filter((id) => (kinds[id] ?? "nogo") === k);
+        if (of.length) out.push({ text: tr(`${of.length} ${of.length === 1 ? one : many} (${of.join(", ")})`, `${of.length} ${unit}（${of.join("、")}）`), review });
+      }
+    }
+    const sb = from.names.standby.filter((x) => !to.names!.standby.includes(x));
+    for (const review of [false, true]) {
+      const of = sb.filter((x) => prop.standby.includes(x) === review);
+      if (of.length) out.push({ text: tr(`${of.length} standby point${of.length === 1 ? "" : "s"} (${of.join(", ")})`, `${of.length} 个待命点（${of.join("、")}）`), review });
+    }
+    return out;
+  }
   item("nogo", "no-go zone", "no-go zones", "个禁区", to.proposal);
   item("standby", "standby point", "standby points", "个待命点", to.proposal);
   return out;

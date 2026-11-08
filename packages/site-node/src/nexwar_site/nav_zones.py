@@ -422,7 +422,18 @@ class NavZones:
     # ------------------------------------------------------------ R2:新版本带过来的建议
 
     def _previous(self, map_id: str, version: str) -> Any:
-        """站点目录里这一版之前的那一版(按登记时刻);这一版不在目录里、是第一版 → ``None``。"""
+        """站点目录里这一版之前的那一版(按登记时刻);这一版不在目录里、是第一版 → ``None``。
+        第 4 轮 maps N1:编辑、去噪另存的版本记着来源(建议表的 from_version),按来源,不按时间。"""
+        try:
+            src = self.db.query("SELECT from_version FROM nav_zone_proposals WHERE map_id=? AND "
+                                "map_version=?", (map_id, version))
+            if src:
+                rows = self.db.query("SELECT version, files FROM maps WHERE map_id=? AND version=?",
+                                     (map_id, src[0]["from_version"]))
+                if rows:
+                    return rows[0]
+        except Exception:  # noqa: BLE001 —— 老库没有建议表:按时间
+            pass
         try:
             me = self.db.query("SELECT rowid AS k, created_ms FROM maps WHERE map_id=? AND "
                                "version=?", (map_id, version))

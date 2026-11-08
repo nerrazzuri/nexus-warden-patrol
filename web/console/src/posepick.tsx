@@ -191,6 +191,8 @@ export function usePosePick(o: {
           <button type="button" class={o.locate ? "btn primary sm" : "btn sm"} disabled={!pose || !o.robotId || !o.map || wrongMap || busy || (!!settling && !settled && !timedOut)} onClick={() => setAsking(true)}>{rt("poseSet")}</button>
           <button type="button" class="btn sm" disabled={!pose} onClick={() => { setPose(null); setMsg(""); }}>{rt("poseClear")}</button>
         </div>}
+        {/* 第 4 轮 P1-56:等机器人回执时写一句,不只是按钮变灰 */}
+        {busy && !msg && !settling && <p class="small muted" role="status" data-pose-busy="1">{rt("poseSending", { robot: o.robotId ?? "" })}</p>}
         {msg && !settling && <p class="small" role="status" data-pose-msg="1">{msg}</p>}
         {settling && (
           <p class={timedOut ? "small warn" : settled ? "small ok-text" : "small"} role="status" data-pose-progress={settled ? "done" : timedOut ? "timeout" : "wait"}>
