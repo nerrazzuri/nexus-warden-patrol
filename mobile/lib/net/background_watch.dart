@@ -51,6 +51,14 @@ class ChannelBackgroundWatch implements BackgroundWatch {
   Future<bool> running() async => supported && (await _ch.invokeMethod<bool>('running') ?? false);
 }
 
+/// 手机 App 测试 M01：底部导航的页面按返回键 = 把 App 退到后台（像按 Home 键），不退出登录、后台值守接着跑。
+Future<void> moveAppToBackground() async {
+  if (!Platform.isAndroid) return;
+  try {
+    await const MethodChannel('nexwar/watch').invokeMethod<bool>('background');
+  } catch (_) {}
+}
+
 /// 后台值守开关的状态（W55：开关从机器人栏顶上挪到「设置」页）。机器人栏（`SiteRobotsPage`）一直活着，管真正的
 /// 开、停（进站点自动开，离开站点就停）；设置页看它、点它。
 class WatchControl extends ChangeNotifier {

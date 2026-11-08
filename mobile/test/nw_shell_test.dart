@@ -240,9 +240,39 @@ void main() {
       expect(find.text('进'), findsOneWidget);
     });
 
-    testWidgets('从站点列表登录进来就是外壳；返回 = 离开站点（注销）', (t) async {
+    testWidgets('手机 App 测试 M01：系统返回键不退出登录——别的栏回值守页，值守页退到后台；没有返回箭头', (t) async {
       _size(t);
       final api = FakeApi('admin');
+      var toBack = 0;
+      await t.pumpWidget(MaterialApp(
+          home: Builder(
+              builder: (c) => TextButton(
+                  onPressed: () => Navigator.push<String>(
+                      c,
+                      MaterialPageRoute<String>(
+                          builder: (_) => NwShell(api: api, ring: () {}, toBackground: () async => toBack++))),
+                  child: const Text('进')))));
+      await t.tap(find.text('进'));
+      await t.pumpAndSettle();
+      for (final k in [NwShell.dogsKey, NwShell.mapKey, NwShell.historyKey, NwShell.adminKey]) {
+        await _tab(t, k);
+        expect(find.byType(BackButton), findsNothing, reason: '$k 不该有返回箭头');
+        await t.binding.handlePopRoute();
+        await t.pumpAndSettle();
+        expect(find.byType(NwShell), findsOneWidget, reason: '$k');
+        expect(find.byType(SiteDutyPage), findsOneWidget, reason: '$k 按返回回值守页');
+      }
+      expect(toBack, 0);
+      await t.binding.handlePopRoute();
+      await t.pumpAndSettle();
+      expect(find.byType(NwShell), findsOneWidget);
+      expect(toBack, 1, reason: '值守页按返回：退到后台');
+      expect(api.pushLog, isNot(contains('logout')));
+    });
+
+    testWidgets('从站点列表登录进来就是外壳；「退出站点」确认之后才离开（注销）', (t) async {
+      _size(t, const Size(400, 1400));
+      final api = FakeApi('guard');
       final store = MemorySiteStore([
         SiteEntry(name: '庄园', url: 'https://h:1', fingerprint: 'ab' * 32, username: 'gina')
       ]);
@@ -257,7 +287,16 @@ void main() {
       expect(find.byType(NwBottomNav), findsOneWidget);
       await _tab(t, NwShell.dogsKey);
       expect(find.text('庄园'), findsOneWidget, reason: '站点名交给了机器人列表（W53：页头不再印角色代号）');
-      await t.pageBack();
+      await _tab(t, NwShell.moreKey);
+      await t.tap(find.byKey(MeTab.leaveKey));
+      await t.pumpAndSettle();
+      await t.tap(find.text('取消'));
+      await t.pumpAndSettle();
+      expect(find.byType(NwShell), findsOneWidget, reason: '取消就留下');
+      await t.tap(find.byKey(MeTab.leaveKey));
+      await t.pumpAndSettle();
+      expect(find.textContaining('收不到这个站点的报警'), findsOneWidget);
+      await t.tap(find.byKey(leaveConfirmKey));
       await t.pumpAndSettle();
       expect(find.byType(NwShell), findsNothing);
       expect(api.pushLog, contains('logout'));
