@@ -5,7 +5,7 @@ import { siteStr, byText } from "./sitetext";
 import { useEffect, useState } from "preact/hooks";
 import { useStored } from "./stored";
 import { AlertDetail } from "./alertdetail";
-import { alertHeadline } from "./alertinfo";
+import { alertHeadline, canHandleAlerts } from "./alertinfo";
 import { AlertTestBar } from "./alerttest";
 import { api, ApiError } from "./api";
 import { hm, useDutySettings } from "./data";
@@ -121,7 +121,7 @@ export function AlarmLogPage(props: { now: number; role: string; me?: string }) 
       <div class="list">
         {alerts == null && <p class="empty">{t("loading")}</p>}
         {alerts != null && shown.length === 0 && <p class="empty">{t("alNone")}</p>}
-        {shown.map((a) => <Row key={a.key} a={a} onOpen={() => setDetail(a.key)} />)}
+        {shown.map((a) => <Row key={a.key} a={a} canHandle={canHandleAlerts(props.role)} onOpen={() => setDetail(a.key)} />)}
       </div>
       {said && <p class="muted small" role="status">{said}</p>}
       {detail && alerts?.find((a) => a.key === detail) && (
@@ -132,7 +132,7 @@ export function AlarmLogPage(props: { now: number; role: string; me?: string }) 
   );
 }
 
-function Row({ a, onOpen }: { a: Alert; onOpen: () => void }) {
+function Row({ a, onOpen, canHandle }: { a: Alert; onOpen: () => void; canHandle: boolean }) {
   const [bad, setBad] = useState(false);
   const open = a.resolved_ms == null;
   const site = a.robot === "site" || a.robot.includes(":");
@@ -153,7 +153,8 @@ function Row({ a, onOpen }: { a: Alert; onOpen: () => void }) {
         {!open && <small>{[byText(a.resolved_by), a.resolved_ms ? hm(a.resolved_ms) : ""].filter(Boolean).join(" · ")}</small>}
       </div>
       <div>
-        {open ? <button type="button" class="btn sm primary" onClick={onOpen}>{t("alGoHandle")}</button>
+        {/* 第 2 轮 P0-20:只读账号处理不了,按钮就叫「详情」、不用蓝色主按钮 */}
+        {open ? <button type="button" class={canHandle ? "btn sm primary" : "btn sm"} onClick={onOpen}>{t(canHandle ? "alGoHandle" : "alDetails")}</button>
           : <a class="btn sm" href={recordingLink(a)}>{t("alSeeRec")}</a>}
       </div>
     </div>

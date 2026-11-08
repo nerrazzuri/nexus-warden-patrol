@@ -88,12 +88,22 @@ def test_网页P0_10_解绑后broker没重启_同一编号不能重新登记(台
     不用激活就上线。broker 重启成功了才放行。"""
     s, home = 台
     tok = s.login()
-    s.req("POST", "/api/admin/robots", {"robot_id": "D1-09"}, token=tok)
+    code, d9 = s.req("POST", "/api/admin/robots", {"robot_id": "D1-09"}, token=tok)
+    # 第 2 轮 N5:领过开通码(拿到了证书)才可能有旧连接
+    from nexwar_site.db import SiteDB
+    db = SiteDB(home / "site.db")
+    try:
+        provision.claim(db, home, "D1-09", provision.decode(d9["code"])["t"],
+                        now_ms=site_main.wall_ms())
+    finally:
+        db.close()
     s.api.broker_restart = lambda: False
     code, d = s.req("POST", "/api/admin/robots/D1-09/revoke", {"confirm_password": PW}, token=tok)
     assert code == 200 and d.get("old_connection_open") is True, d
     code, d = s.req("POST", "/api/admin/robots", {"robot_id": "D1-09"}, token=tok)
     assert code == 409 and "旧连接" in d["error"], d
+    # 第 2 轮 N4:机器人页要常驻提示,不能只靠一闪而过的 toast
+    assert s.req("GET", "/api/robots/overview", token=tok)[1]["open_revoked"] == ["D1-09"]
     s.req("POST", "/api/admin/robots", {"robot_id": "D1-10"}, token=tok)
     s.api.broker_restart = lambda: True
     code, d = s.req("POST", "/api/admin/robots/D1-10/revoke", {"confirm_password": PW}, token=tok)
@@ -102,3 +112,14 @@ def test_网页P0_10_解绑后broker没重启_同一编号不能重新登记(台
     assert code == 200, d
     code, d = s.req("POST", "/api/admin/robots", {"robot_id": "D1-09"}, token=tok)
     assert code == 200, "broker 重启过一次,之前吊销的也都断了"
+
+
+def test_网页第2轮_N5_从没领过开通码的机器人_解绑后马上能重新登记(台):
+    s, home = 台
+    tok = s.login()
+    s.req("POST", "/api/admin/robots", {"robot_id": "T9"}, token=tok)
+    s.api.broker_restart = lambda: False
+    code, d = s.req("POST", "/api/admin/robots/T9/revoke", {"confirm_password": PW}, token=tok)
+    assert code == 200 and not d.get("old_connection_open"), d
+    code, d = s.req("POST", "/api/admin/robots", {"robot_id": "T9"}, token=tok)
+    assert code == 200, d
