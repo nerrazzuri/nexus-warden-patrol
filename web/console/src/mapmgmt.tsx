@@ -391,17 +391,25 @@ function VersionCard(p: {
 
 /** 换图要丢的路线(P0-14):选中的机器人现在用的版本上画的路线,换到 ``target`` 以后都用不了。 */
 function lostRoutes(target: { map_id: string; version: string }, dogs: Dog[], chosen: string[],
-  routes: { id: string; map_id: string; map_version: string }[]): { from: string; same: boolean; ids: string[] }[] {
-  const froms = new Map<string, { from: string; same: boolean; ids: string[] }>();
+  routes: { id: string; map_id: string; map_version: string; kind?: string }[]): { from: string; same: boolean; ids: string[]; guard: number }[] {
+  const froms = new Map<string, { from: string; same: boolean; ids: string[]; guard: number }>();
   for (const d of dogs) {
     if (!chosen.includes(d.robot_id) || !d.loaded) continue;
     if (d.loaded.map_id === target.map_id && d.loaded.version === target.version) continue;
     const key = `${d.loaded.map_id}\u0000${d.loaded.version}`;
     if (froms.has(key)) continue;
-    const ids = routes.filter((r) => r.map_id === d.loaded!.map_id && r.map_version === d.loaded!.version).map((r) => r.id);
-    if (ids.length) froms.set(key, { from: d.loaded.map_id === target.map_id ? d.loaded.version : `${d.loaded.map_id}:${d.loaded.version}`, same: d.loaded.map_id === target.map_id, ids });
+    const on = routes.filter((r) => r.map_id === d.loaded!.map_id && r.map_version === d.loaded!.version);
+    const ids = on.map((r) => r.id);
+    if (ids.length) froms.set(key, { from: d.loaded.map_id === target.map_id ? d.loaded.version : `${d.loaded.map_id}:${d.loaded.version}`, same: d.loaded.map_id === target.map_id, ids, guard: on.filter((r) => r.kind === "guard").length });
   }
   return [...froms.values()];
+}
+
+/** 几条巡逻路线、几条防区路线(第 2 轮 P0-14:英文单复数写对)。 */
+export function routeCount(patrol: number, guard: number): string {
+  const en = [patrol ? `${patrol} patrol route${patrol === 1 ? "" : "s"}` : "", guard ? `${guard} zone route${guard === 1 ? "" : "s"}` : ""].filter(Boolean).join(" and ");
+  const zh = [patrol ? `${patrol} 条巡逻路线` : "", guard ? `${guard} 条防区路线` : ""].filter(Boolean).join("、");
+  return tr(en, zh);
 }
 
 /** 第 2 轮 N4:一版上画了多少布置(``GET …/layout``)。 */
@@ -424,9 +432,9 @@ export function missingLayout(from: LayoutCounts, to: LayoutCounts): { text: str
 }
 
 export function PublishDialog({ target, dogs, onClose }: { target: { map_id: string; version: string; unusable?: string; source?: string; zonesOk?: boolean | null }; dogs: Dog[]; onClose: () => void }) {
-  const [routes, setRoutes] = useState<{ id: string; map_id: string; map_version: string }[]>([]);
+  const [routes, setRoutes] = useState<{ id: string; map_id: string; map_version: string; kind?: string }[]>([]);
   useEffect(() => {
-    api<{ routes: { id: string; map_id: string; map_version: string }[] }>("GET", `/api/routes?map_id=${enc(target.map_id)}`)
+    api<{ routes: { id: string; map_id: string; map_version: string; kind?: string }[] }>("GET", `/api/routes?map_id=${enc(target.map_id)}`)
       .then((d) => setRoutes(d.routes ?? [])).catch(() => setRoutes([]));
   }, [target.map_id]);
   // 编辑、清噪点出来的版本跟原来同一个坐标系:默认一起搬 —— 第 2 轮 N4:是「搬」不是「抄」,
@@ -529,8 +537,9 @@ export function PublishDialog({ target, dogs, onClose }: { target: { map_id: str
           {eligible.length === 0 && dogs.length > 0 && <p class="muted small">{tr("No robot is online and able to switch maps.", "没有在线、又能换图的机器人。")}</p>}
           {lostRoutes(target, dogs, chosen, routes).map((l) => (
             <div key={l.from} class="warn small mm-lost">
-              <p>{tr(`${l.ids.length} patrol route(s) are drawn on ${l.same ? "v" : ""}${l.from} (${l.ids.join(", ")}). After switching to v${target.version} they cannot run, and today's patrols that use them stop.`,
-                `${l.same ? "v" : ""}${l.from} 上画着 ${l.ids.length} 条巡逻路线(${l.ids.join("、")})。换到 v${target.version} 以后它们不能跑,今日计划里用到它们的巡逻也会停。`)}</p>
+              {/* 第 2 轮 P0-14:巡逻路线、防区路线分开数,不写「route(s)」 */}
+              <p>{tr(`${routeCount(l.ids.length - l.guard, l.guard)} ${l.ids.length === 1 ? "is" : "are"} drawn on ${l.same ? "v" : ""}${l.from} (${l.ids.join(", ")}). After switching to v${target.version} ${l.ids.length === 1 ? "it cannot" : "they cannot"} run, and today's patrols that use ${l.ids.length === 1 ? "it" : "them"} stop.`,
+                `${l.same ? "v" : ""}${l.from} 上画着 ${routeCount(l.ids.length - l.guard, l.guard)}(${l.ids.join("、")})。换到 v${target.version} 以后它们不能跑,今日计划里用到它们的巡逻也会停。`)}</p>
               {l.same ? (
                 <>
                   <label><input type="checkbox" checked={carry} onChange={(e) => setCarry(e.currentTarget.checked)} />{" "}
