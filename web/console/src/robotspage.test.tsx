@@ -213,7 +213,7 @@ describe("机器人页", () => {
     await waitFor(() => expect(cardOf(c, "A")).not.toBeNull());
     fireEvent.click(cardOf(c, "A"));
     const d = c.querySelector(".robot-detail")!;
-    const toggle = btn(d, "仅限手动") ?? btn(d, "允许自动派遣");
+    const toggle = btn(d, "改为仅限手动") ?? btn(d, "允许自动派遣");
     fireEvent.click(toggle);
     expect(posted.some((p) => p.url.endsWith("/service"))).toBe(false);
     const m = document.querySelector(".modal")!;

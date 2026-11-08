@@ -9,6 +9,7 @@ import { api, ApiError } from "./api";
 import { Confirm, Modal } from "./dialogs";
 import { clickGuard, startDrag, swallowClick } from "./dragpt";
 import { t } from "./i18n";
+import { siteKnown } from "./sitetext";
 import { closesLoop, polyPx, toMap, type NavZones, type TabProps } from "./layoutpage";
 import { pointInPolygon, type NavZone, type Pt } from "./mapview";
 import { clientToMap } from "./routes";
@@ -128,10 +129,13 @@ export function NogoTab(p: TabProps) {
         <div class="nogo-status">
           {!nav ? <p class="muted">…</p> : current && held.length === 0
             ? <p class="ok-text">{t("lyNogoLive")}</p>
-            : held.length > 0 ? <p class="warn-text">{t("lyNogoWaitYou", { names: held.map((z) => z.label || z.id).join("、") })}</p>
+            : held.length > 0 ? <p class="warn-text">{t("lyNogoWaitYou", { names: held.map((z) => siteKnown(z.label) || z.id).join("、") })}</p>
             : <p class="warn-text">{t("lyNogoNeverConfirmed")}</p>}
           {behind.length > 0 && <p class="warn-text">{t("lyNogoWaitRobot", { ids: behind.join("、") })}</p>}
           {nav && !current && !changed && <button type="button" class="btn sm primary" onClick={() => setConfirming("ask")}>{t("navConfirmBtn")}</button>}
+          {/* 第 2 轮 maps N12:从发布对话框跳来的,确认完给「回去发布」 */}
+          {current && typeof location !== "undefined" && /[?&]from=publish\b/.test(location.hash)
+            && <a class="btn sm" href="#/admin/maps" data-back-publish="1">{t("lyNogoBackPublish")}</a>}
         </div>
         {draw ? (
           <div class="row wrap">
@@ -165,7 +169,7 @@ export function NogoTab(p: TabProps) {
           {shown.map((z) => (
             <li key={z.id} class="row">
               <span><button type="button" class={z.id === sel ? "linklike on" : "linklike"} data-pick-zone={z.id}
-                onClick={() => setSel(z.id === sel ? null : z.id)}><b>{z.label || z.id}</b></button> <span class="muted small">{nogoLine(z)}</span></span>
+                onClick={() => setSel(z.id === sel ? null : z.id)}><b>{siteKnown(z.label) || z.id}</b></button> <span class="muted small">{nogoLine(z)}</span></span>
               {z.id === sel && <button type="button" class="btn sm push" data-rename="1" onClick={() => setRenaming(true)}>{t("lyRename")}</button>}
               <button type="button" class={z.id === sel ? "btn sm" : "btn sm push"} onClick={() => setRemoving(z)}>{t("remove")}</button>
             </li>
@@ -193,7 +197,7 @@ export function NogoTab(p: TabProps) {
         }} />
       )}
       {removing && (
-        <Confirm text={t("lyNogoRemoveAsk", { label: removing.label || removing.id })} yes={t("remove")} danger onNo={() => setRemoving(null)}
+        <Confirm text={t("lyNogoRemoveAsk", { label: siteKnown(removing.label) || removing.id })} yes={t("remove")} danger onNo={() => setRemoving(null)}
           onYes={() => { const z = removing; setRemoving(null); setZones(zones.filter((o) => o.id !== z.id)); }} />
       )}
       {/* P1-32:勾「我确认」和输密码在同一个对话框里(原来是两个) */}

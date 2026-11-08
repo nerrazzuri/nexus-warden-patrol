@@ -45,7 +45,7 @@ describe("网页易用性第 1 轮 P2-18", () => {
     const { container: d } = render(<AdvMapsPage say={() => {}} />);
     expect(d.querySelectorAll(".rb-steps li.done").length).toBe(2);           // 刷新不丢,而且还展开着
     for (let i = 0; i < 3; i++) fireEvent.click(d.querySelector(".rb-steps li.now button")!);
-    expect(d.querySelector(".rb-finished")!.textContent).toContain("重新建图完成");
+    expect(d.querySelector(".rb-finished")!.textContent).toContain("步骤都勾完了");
     fireEvent.click(Array.from(d.querySelectorAll(".rb-finished button")).find((b) => b.textContent === "从头开始")!);
     expect(d.querySelector(".rb-steps li.now")!.textContent).toContain("起点");
   });

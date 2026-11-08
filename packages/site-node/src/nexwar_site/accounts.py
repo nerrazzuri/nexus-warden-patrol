@@ -75,6 +75,10 @@ class LockedOut(AuthError):
     pass
 
 
+class AccountDisabled(AuthError):
+    """口令对、账号却停用 / 过期了(复测 admin N8):只有知道口令的人才看得到这句,不多漏什么。"""
+
+
 class Principal(str):
     """已认证的账号名,带着角色。是 ``str`` 的子类:老调用(当成名字用)不受影响。"""
 
@@ -416,11 +420,14 @@ class Accounts:
         salt, stored = (rows[0]["salt"], rows[0]["pw_hash"]) if rows else (_DUMMY_SALT, b"")
         with self._hash_slots:
             digest = _hash(password or "", salt)
-        # 停用的账号跟错口令同一个说法:不告诉外人「有这个账号但停用了」。
-        ok = hmac.compare_digest(digest, stored) and bool(rows) and not rows[0]["disabled"] \
-            and (rows[0]["expires_ms"] is None or now < rows[0]["expires_ms"])
-        if not ok:
+        # 口令不对:一律「账号或密码错误」(不告诉外人有没有这个账号)。口令对了才说停用 / 过期了 ——
+        # 原来也说「账号或密码错误」,人以为记错口令,反复去重置(复测 admin N8)。
+        if not (hmac.compare_digest(digest, stored) and bool(rows)):
             raise AuthError("账号或密码错误")
+        if rows[0]["disabled"]:
+            raise AccountDisabled("这个账号已停用,请找管理员")
+        if rows[0]["expires_ms"] is not None and now >= rows[0]["expires_ms"]:
+            raise AccountDisabled("这个账号已过期,请找管理员")
         with self._lock:
             # 成功:这个名字的失败计数与锁都清掉(占位的那次也算不上失败)。
             self._fails.pop(name, None)

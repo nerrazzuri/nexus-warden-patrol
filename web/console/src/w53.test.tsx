@@ -142,3 +142,11 @@ describe("网页易用性第 1 轮 P1-68", () => {
     expect(c.querySelector("[data-help-here]")!.textContent).toContain("布防");
   });
 });
+
+describe("第 2 轮 admin N11", () => {
+  it("没权限的页:帮助说给谁用、找管理员,不介绍这页功能", () => {
+    const { container: c } = render(<HelpDialog role="viewer" page="admin/robots" noAccess="管理员" onClose={() => {}} />, { container: document.body });
+    expect(c.querySelector("[data-help-here]")).toBeNull();
+    expect(c.querySelector("[data-help-noaccess]")!.textContent).toContain("给「管理员」用");
+  });
+});

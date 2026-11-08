@@ -107,7 +107,9 @@ const PAGE_HELP: Record<string, Key> = {
 };
 
 /** 使用教程 + 常见问题(一个对话框,两段)。第一次登录自动打开,关的时候记下看过了。 */
-export function HelpDialog({ role, onClose, page }: { role: string; onClose: () => void; page?: string }) {
+export function HelpDialog({ role, onClose, page, noAccess }: { role: string; onClose: () => void; page?: string;
+  /** 第 2 轮 admin N11 / P1-68:这个账号打不开这一页 —— 帮助说要谁来用,不介绍这页的功能。值是能用的角色名。 */
+  noAccess?: string }) {
   const here = page ? PAGE_HELP[page] : undefined;
   const [tab, setTab] = useState<"tour" | "faq">("tour");
   const [i, setI] = useState(0);
@@ -122,7 +124,9 @@ export function HelpDialog({ role, onClose, page }: { role: string; onClose: () 
           <button type="button" aria-pressed={tab === "tour"} onClick={() => setTab("tour")}>{t("helpTour")}</button>
           <button type="button" aria-pressed={tab === "faq"} onClick={() => setTab("faq")}>{t("helpFaq")}</button>
         </div>
-        {here && <div class="help-here" data-help-here="1"><b>{t("helpHere")}</b><p>{t(here)}</p></div>}
+        {noAccess != null
+          ? <div class="help-here" data-help-noaccess="1"><b>{t("helpHere")}</b><p>{t("helpNoAccess", { who: noAccess })}</p></div>
+          : here && <div class="help-here" data-help-here="1"><b>{t("helpHere")}</b><p>{t(here)}</p></div>}
         {tab === "tour" ? (
           <div class="help-step">
             <p class="muted small">{i + 1} / {steps.length}</p>

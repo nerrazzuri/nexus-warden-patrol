@@ -249,7 +249,7 @@ export function MapManagePage({ say, pollMs = 5000 }: { say: Say; pollMs?: numbe
                   <td class="actions">
                     <button type="button" class="btn sm" disabled={!d.rollback} onClick={() => setRolling(d)}
                       title={d.rollback ? "" : tr("No previous version known for this robot", "不知道这台机器人的上一版")}>
-                      {tr("Roll back", "退回上一版")}{d.rollback ? ` → ${d.rollback.version}` : ""}
+                      {rollLabel(d)}
                     </button>
                   </td>
                 </tr>
@@ -273,7 +273,7 @@ export function MapManagePage({ say, pollMs = 5000 }: { say: Say; pollMs?: numbe
           ].filter(Boolean).join(" ")} />
       )}
       {rolling && rolling.rollback && (
-        <ConfirmPassword title={tr("Roll back", "退回上一版")} onClose={() => setRolling(null)} onConfirm={(pw) => doRollback(rolling, pw)}
+        <ConfirmPassword title={rollLabel(rolling)} onClose={() => setRolling(null)} onConfirm={(pw) => doRollback(rolling, pw)}
           text={tr(`Roll ${rolling.robot_id} back to ${rolling.rollback.map_id}:${rolling.rollback.version}? `, `把 ${rolling.robot_id} 退回到 ${rolling.rollback.map_id}:${rolling.rollback.version}?`)
             + (rolling.rollback.local
               ? tr("The robot still has it locally — nothing is downloaded.", "机器人本地还留着这一版,不用重新下载。")
@@ -377,7 +377,9 @@ function VersionCard(p: {
           </details>
         ) : null}
         <p class="small mm-counts">
-          <span>{tr("Zones", "区域")} {v.counts.zones} <span class="muted">({v.counts.nogo} {tr("no-go", "禁行")}, {v.counts.slow} {tr("slow", "限速")})</span>
+          <span>{tr("Zones", "区域")} {v.counts.zones} <span class="muted">({v.counts.nogo} {tr("no-go", "禁行")}, {v.counts.slow} {tr("slow", "限速")}
+            {/* 第 2 轮 maps N11:括号里加起来要等于总数 —— 剩下的是标记不可通行、忽略区 */}
+            {v.counts.zones - v.counts.nogo - v.counts.slow > 0 && <span data-zone-other="1">, {v.counts.zones - v.counts.nogo - v.counts.slow} {tr("impassable / ignore", "不可通行 / 忽略区")}</span>})</span>
             {v.counts.zones_confirmed === false && <span class="bad"> · {tr("not confirmed", "没确认")}</span>}</span>
           <span>{tr("Standby points", "待命点")} {v.counts.standby}</span>
           <span>{tr("Intercept points", "拦截点")} {v.counts.intercepts}</span>
@@ -590,7 +592,7 @@ export function PublishDialog({ target, dogs, onClose }: { target: { map_id: str
           </fieldset>
           {zonesBad && (
             <p class="warn small" role="alert">{tr(`The no-go zones of v${target.version} are not confirmed yet; robots will refuse it. `, `v${target.version} 的禁行区还没确认,机器人会拒收。`)}
-              <a href="#/admin/layout?tab=nogo" onClick={onClose}>{tr(`Confirm them in Setup → No-go (pick v${target.version})`, `去「设置 → 禁行区」确认(选 v${target.version})`)}</a></p>
+              <a href={`#/admin/layout?tab=nogo&map=${encodeURIComponent(target.map_id)}&version=${encodeURIComponent(target.version)}&from=publish`} onClick={onClose}>{tr(`Confirm them in Setup → No-go (opens v${target.version})`, `去「设置 → 禁行区」确认(直接打开 v${target.version})`)}</a></p>
           )}
           <p class="muted small">{tr("Each robot switches on its own: it downloads, waits until idle, loads, and (if it has a localizer) waits for the localizer to accept the map. A robot the localizer rejects goes back to its previous map.", "每台机器人各自换:下载、等空闲、载入,有定位器的还要等定位器收下新图;定位器不收的,机器人会退回原来那张。")}</p>
           {/* W44 第四期(设计 §5.2 第 4 条):换图要再输一次密码 */}
@@ -784,4 +786,12 @@ function MapThumb({ src }: { src?: string | null }) {
   const [bad, setBad] = useState(false);
   if (!src || bad) return <div class="mm-thumb mm-thumb-none" data-thumb-none="1" aria-hidden="true">{tr("No preview", "无预览")}</div>;
   return <img class="mm-thumb" src={src} alt="" loading="lazy" width={120} height={120} onError={() => setBad(true)} />;
+}
+
+/** 第 2 轮 maps N9:「上一版」可能比现在的新(刚退回过):那就写「换回 v12」,不写「退回 → 12」。 */
+export function rollLabel(d: Pick<Dog, "loaded" | "rollback">): string {
+  const r = d.rollback;
+  if (!r) return tr("Roll back", "退回上一版");
+  const newer = d.loaded && d.loaded.map_id === r.map_id && Number(r.version) > Number(d.loaded.version);
+  return newer ? tr(`Switch back to v${r.version}`, `换回 v${r.version}`) : tr(`Roll back to v${r.version}`, `退回到 v${r.version}`);
 }

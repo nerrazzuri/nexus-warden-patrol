@@ -10,6 +10,7 @@
 import type { ComponentChildren } from "preact";
 import { useLayoutEffect, useRef, useState } from "preact/hooks";
 import { t, type Key } from "./i18n";
+import { siteKnown } from "./sitetext";
 import {
   applyMat,
   clampView,
@@ -261,7 +262,7 @@ export function MapCanvas(props: {
           <g class="map-marks">
             {/* P2-15:禁区上写名字(屏上的字,跟区域名一样:正的、不跟着缩放;屏上放不下就不写) */}
             {zones.filter((z) => z.kind === "nogo" && !z.wall && z.polygon.length >= 3 && (z.label || z.id)).map((z) => {
-              const text = z.label || z.id;
+              const text = siteKnown(z.label) || z.id;
               const at = placeLabel(z.polygon.map(([x, y]) => screen.map(x, y)), text, 12, obstacles);
               if (!at) return null;
               return <text key={`n:${z.id}`} x={at[0]} y={at[1]} class="nogo-name" data-nogo-name={z.id} font-size={12} dominant-baseline="central">{text}</text>;
@@ -303,7 +304,7 @@ export function MapCanvas(props: {
 
 /** 悬停在禁行区、抹掉区上看到的那句话:名字、是不是硬禁区(决策 65)、临时区什么时候到期(决策 66)。 */
 export function navZoneTip(z: NavZone): string {
-  const name = z.label || z.id;
+  const name = siteKnown(z.label) || z.id;
   const base = z.wall
     ? (z.hard ? t("hardVWallTip", { label: name }) : t("vwallTip", { label: name }))
     : z.kind === "erase"

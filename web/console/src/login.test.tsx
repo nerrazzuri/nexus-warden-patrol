@@ -9,6 +9,18 @@ import { Login } from "./login";
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
 afterEach(() => { cleanup(); lang.value = "zh"; });
 
+describe("第 2 轮 admin N8", () => {
+  it("站点说 disabled:写账号已停用,不写密码错", async () => {
+    setFetch((async () => json({ error: "这个账号已停用,请找管理员", disabled: true }, 401)) as never);
+    const { container: c } = render(<Login onIn={() => {}} expired={false} />);
+    const [name, pw] = Array.from(c.querySelectorAll("input"));
+    fireEvent.input(name, { target: { value: "r2" } });
+    fireEvent.input(pw, { target: { value: "pw" } });
+    fireEvent.submit(c.querySelector("form")!);
+    await waitFor(() => expect(c.querySelector(".login-err")!.textContent).toMatch(/已停用|disabled/));
+  });
+});
+
 describe("登录页", () => {
   it("账号首尾空格不算;错了提示跟着语言换;能显示密码", async () => {
     const sent: unknown[] = [];

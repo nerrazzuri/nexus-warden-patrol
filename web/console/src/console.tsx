@@ -31,7 +31,7 @@ import { editTarget, MapEditPage } from "./mapedit";
 import { AccessPage } from "./accesspage";
 import { LayoutPage } from "./layoutpage";
 import { LAYOUT_TABS } from "./layouttabs";
-import { isAdminPage, loadThemePref, navLabel, pageAllowed, pinFor, readRoute, saveThemePref, SideNav, TopBar, type Page, type ThemePref } from "./shell";
+import { isAdminPage, loadThemePref, navLabel, pageAllowed, pinFor, readRoute, roleLabel, saveThemePref, SideNav, TopBar, type Page, type ThemePref } from "./shell";
 import { pinScheme, systemIsDark } from "./theme";
 
 const TASK: Record<string, Key> = { patrol: "st_patrolling", goto: "st_patrolling", standby: "st_returning" };
@@ -150,7 +150,9 @@ export function Console({ me, onOut }: { me: Me; onOut: (note?: string) => void 
           // P2-22:退出后地址不再停在原来那一页
           try { await api("POST", "/api/logout", {}); } finally { history.replaceState(null, "", location.pathname + location.search); onOut(); }
         }} />
-      {help && <HelpDialog role={me.role} page={route.page} onClose={() => setHelp(false)} />}
+      {help && <HelpDialog role={me.role} page={route.page} onClose={() => setHelp(false)}
+        noAccess={pageAllowed(route.page, me.role) ? undefined
+          : (["guard", "owner", "admin"] as const).filter((r) => pageAllowed(route.page, r)).map((r) => t(roleLabel(r))).join(" / ")} />}
       {stale && (
         <div class="stalebar" role="alert">
           <Shape kind="P2" />

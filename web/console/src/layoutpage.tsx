@@ -135,7 +135,10 @@ export function LayoutPage({ say, robots, tabs }: { say: Say; robots: string[]; 
   useEffect(() => {
     api<{ maps: MapRow[] }>("GET", "/api/maps").then((d) => {
       setMaps(d.maps ?? []);
-      setSel((s) => s ?? d.maps.find((m) => m.active) ?? d.maps[d.maps.length - 1] ?? null);
+      // 第 2 轮 maps N12:地址里带了 map、version(从发布对话框「去确认」跳来)就先选那一版
+      const q = new URLSearchParams((typeof location === "undefined" ? "" : location.hash).split("?")[1] ?? "");
+      const want = d.maps.find((m) => m.map_id === q.get("map") && m.version === q.get("version"));
+      setSel((s) => s ?? want ?? d.maps.find((m) => m.active) ?? d.maps[d.maps.length - 1] ?? null);
     }).catch((e) => say(errText(e)));
   }, []);
   const base = sel ? `/api/maps/${enc(sel.map_id)}/${enc(sel.version)}` : "";

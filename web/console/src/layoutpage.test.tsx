@@ -251,3 +251,21 @@ describe("网页易用性第 2 轮 P1-44", () => {
     expect(ofKind(old, "guard").length).toBe(3);
   });
 });
+
+describe("第 2 轮 maps N12:地址带 map、version 就先选那一版", () => {
+  it("#/admin/layout?tab=nogo&map=B&version=1 → 选中 B:1", async () => {
+    setFetch(((url: string) => {
+      if (url === "/api/maps") return Promise.resolve(json({ maps: [{ map_id: "A", version: "1", active: true }, { map_id: "B", version: "1", active: false }] }));
+      if (url.endsWith("/preview")) return Promise.resolve(json(META));
+      if (url.endsWith("/areas")) return Promise.resolve(json({ areas: [] }));
+      if (url.endsWith("/zones")) return Promise.resolve(json({ revision: 0, zones: [] }));
+      if (url.startsWith("/api/routes")) return Promise.resolve(json({ routes: [] }));
+      if (url.startsWith("/api/admin/cameras")) return Promise.resolve(json({ cameras: [] }));
+      return Promise.resolve(json({}, 404));
+    }) as typeof fetch);
+    location.hash = "#/admin/layout?tab=nogo&map=B&version=1&from=publish";
+    const { container: c } = page();
+    await waitFor(() => expect((c.querySelector("select") as HTMLSelectElement | null)?.value).toBe("B\u00001"));
+    location.hash = "";
+  });
+});

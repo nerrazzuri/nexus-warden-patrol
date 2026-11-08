@@ -34,7 +34,8 @@ a { color: var(--c-tertiary); }
 .boot { min-height: 100vh; }
 :focus-visible { outline: 2px solid var(--c-focus); outline-offset: 2px; }
 .skip { position: absolute; left: -9999px; }
-.skip:focus { left: 16px; top: 8px; z-index: 10; background: var(--c-surface); color: var(--c-text); padding: 4px 8px; border-radius: var(--r-r8); }
+/* 第 2 轮 admin N10:原来底色跟侧栏差不多,压在 logo 字上看不清 —— 用品牌色实底、加阴影、盖在最上面 */
+.skip:focus { left: 12px; top: 8px; z-index: 1000; background: var(--c-brand); color: var(--c-onBrand); padding: 8px 14px; border-radius: var(--r-r8); box-shadow: 0 2px 8px rgba(0,0,0,.35); font-weight: 600; text-decoration: none; }
 
 /* 优先级三重编码:形状 + 颜色 + 文字 */
 .shape { flex: none; }
@@ -1402,3 +1403,7 @@ input[type="date"]:not(.field input) { height: 36px; padding: 0 8px; border-radi
 /* 第 2 轮 setup N9:布置里选中的防区用选中蓝,不借报警红;N8:出口线、藏匿点换成第三色,不跟禁区同色 */
 .sec-area.sel, .sec-area.quiet.sel { fill: var(--c-brand); fill-opacity: 0.2; stroke: var(--c-brand); stroke-width: 2.5; }
 .mark-name { fill: var(--c-mark); font-size: 12px; font-weight: 600; paint-order: stroke; stroke: var(--c-surface); stroke-width: 3px; pointer-events: none; }
+/* 第 2 轮 maps N7:特殊地面那一行名字不挤成一字一行;限速框窄一点 */
+.me-terr-row { flex-wrap: wrap; gap: 6px; }
+.me-terr-row .me-tname { white-space: nowrap; flex: 0 0 auto; }
+.me-terr-row .me-slow { width: 5em; }
