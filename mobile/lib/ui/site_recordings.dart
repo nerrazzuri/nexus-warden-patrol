@@ -118,6 +118,7 @@ class SiteRecordingsPage extends StatefulWidget {
 
   /// 一屏看多长（分钟）。
   static const int windowMin = 30;
+  static const Key dataOkKey = Key('rec-data-ok');
 
   @override
   State<SiteRecordingsPage> createState() => _SiteRecordingsPageState();
@@ -187,17 +188,39 @@ class _SiteRecordingsPageState extends State<SiteRecordingsPage> {
     unawaited(_load());
   }
 
+  bool _dataOk = false;
+
   Future<void> _play(Map<String, dynamic> r) async {
     final id = (r['id'] as num).toInt();
+    final mb = ((r['bytes'] as num? ?? 0) / 1048576).toStringAsFixed(1);
+    // M34：一段好几 MB，用手机流量看先说一声（这一页问一次）
+    if (!_dataOk && (r['bytes'] as num? ?? 0) > 2 * 1048576) {
+      final ok = await showDialog<bool>(
+          context: context,
+          builder: (c) => AlertDialog(
+                title: Text(tr('Each clip is about $mb MB', '每段约 $mb MB')),
+                content: Text(tr('On mobile data this uses that much data per minute of video. Continue?',
+                    '用手机流量看，每看一分钟就用这么多流量。继续吗？')),
+                actions: [
+                  TextButton(onPressed: () => Navigator.pop(c, false), child: Text(tr('Cancel', '取消'))),
+                  FilledButton(
+                      key: SiteRecordingsPage.dataOkKey,
+                      onPressed: () => Navigator.pop(c, true),
+                      child: Text(tr('Play', '播放'))),
+                ],
+              ));
+      if (ok != true || !mounted) return;
+      _dataOk = true;
+    }
     setState(() {
       _busyId = id;
-      _msg = tr('Downloading…', '下载中…');
+      _msg = tr('Downloading $mb MB…', '下载中（$mb MB）…');
     });
     try {
       final bytes = await widget.api.recordingBytes(id);
       if (!mounted) return;
       setState(() => _msg = '');
-      await widget.player.play(context, bytes, '${r['camera']} · ${clipTime((r['start_ms'] as num).toInt())}');
+      await widget.player.play(context, bytes, '${cameraName('${r['camera']}')} · ${clipTime((r['start_ms'] as num).toInt())}');
     } on SiteError catch (e) {
       if (mounted) setState(() => _msg = tr("Can't download: $e", '下载失败：$e'));
     } on Exception catch (e) {
@@ -231,9 +254,10 @@ class _SiteRecordingsPageState extends State<SiteRecordingsPage> {
     return Scaffold(
       appBar: AppBar(title: Text(tr('${widget.robotId} · Recordings', '${widget.robotId} · 录像')), actions: [
         TextButton(key: SiteRecordingsPage.olderKey, onPressed: () => _shift(-SiteRecordingsPage.windowMin),
-            child: Text(tr('← Earlier', '← 更早'))),
+            // 手机 App 测试 M34：说一次翻多久
+            child: Text(tr('← 30 min', '← 早 30 分钟'))),
         TextButton(key: SiteRecordingsPage.newerKey, onPressed: () => _shift(SiteRecordingsPage.windowMin),
-            child: Text(tr('Later →', '更晚 →'))),
+            child: Text(tr('30 min →', '晚 30 分钟 →'))),
       ]),
       body: ListView(padding: const EdgeInsets.all(Nw.s16), children: [
         // 按相机筛：全部 / 前 / 后（/ 热像）
@@ -280,7 +304,7 @@ class _SiteRecordingsPageState extends State<SiteRecordingsPage> {
                     leading: _busyId == (r['id'] as num).toInt()
                         ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2))
                         : const Icon(Icons.play_circle_outline_rounded),
-                    title: Text('${clipTime((r['start_ms'] as num).toInt())} · ${r['camera']}'),
+                    title: Text('${clipTime((r['start_ms'] as num).toInt())} · ${cameraName('${r['camera']}')}'),
                     subtitle: Text('${((r['bytes'] as num) / 1048576).toStringAsFixed(1)} MB'
                         '${r['keep'] == 1 ? tr(' · kept', ' · 已保留') : ''}'),
                     selected: around != null &&

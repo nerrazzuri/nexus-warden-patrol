@@ -609,6 +609,7 @@ class _SiteLoginPageState extends State<SiteLoginPage> {
                                   autocorrect: false,
                                   enableSuggestions: false,
                                   error: error != null && !_notPassword,
+                                  textInputAction: TextInputAction.go,
                                   onSubmitted: (_) => _submit()),
                               if (error != null) ...[
                                 const SizedBox(height: Nw.s16),
