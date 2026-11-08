@@ -24,6 +24,7 @@ import '../design/tokens.g.dart' show D1Motion;
 import '../l10n.dart';
 import '../model/alert.dart';
 import '../net/site_client.dart';
+import '../net/site_text.dart';
 import 'map_view.dart' show loadMapPicture;
 import 'nw/nw_button.dart';
 import 'nw/nw_p2_duty.dart';
@@ -659,7 +660,7 @@ class _SiteAlertScenePageState extends State<SiteAlertScenePage> {
     final rows = <(int, String)>[
       (
         _a.firstMs,
-        [alertTitle(_a.kind, _a.title), if (_a.detail.isNotEmpty && appLang.value == AppLang.zh) _a.detail]
+        [alertTitle(_a.kind, _a.title), if (_a.detail.isNotEmpty && appLang.value == AppLang.zh) siteText(_a.detail)]
             .join(' · ')
       ),
       if (_a.count > 1 && _a.lastMs > _a.firstMs)
@@ -743,8 +744,8 @@ class _SiteAlertScenePageState extends State<SiteAlertScenePage> {
     final small = NwText.bodySmall.copyWith(color: Nw.of(context).text);
     return [
       if (appLang.value != AppLang.zh && _a.detail.isNotEmpty)
-        // 站点给的原因是中文：英文界面也摆出来（比没有强），放在细节里
-        Text(_a.detail, style: small),
+        // 手机 App 测试 M05：站点给的原因按语言翻（以前是中文原文「原文:起飞前检查未通过…」）
+        Text(siteText(_a.detail), style: small),
       if (ctx['zone'] != null) Text(tr('Zone: ${ctx['zone']}', '防区：${ctx['zone']}'), style: small),
       if (point != null)
         Text(

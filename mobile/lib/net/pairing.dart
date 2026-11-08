@@ -38,8 +38,8 @@ PairingInfo decodePairing(String raw) {
   if (code.startsWith(robotCodePrefix)) {
     throw PairingException(
       tr(
-        "That's a robot activation code, not a site code. Use the code on the console's System page.",
-        '这是机器人的开通码，不是站点的配对码。请用值班台「系统」页上的码。',
+        "That's a robot activation code, not a site code. Use the site code on the console's System page.",
+        '这是机器人的开通码，不是站点码。请用值班台「系统」页上的站点码。',
       ),
     );
   }

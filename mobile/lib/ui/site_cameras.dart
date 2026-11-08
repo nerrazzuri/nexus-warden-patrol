@@ -100,8 +100,8 @@ class _SiteCamerasPageState extends State<SiteCamerasPage> {
                 NwCard(
                     child: Text(
                         tr(
-                            'No cameras yet. Register one on the site host with nexwar_site camera-add.',
-                            '暂无摄像头。请在站点主机上用 nexwar_site camera-add 登记。'),
+                            'No cameras yet. An engineer registers them on the site host.',
+                            '暂无摄像头。摄像头由工程师在站点主机上登记。'),
                         style: NwText.bodyMedium.copyWith(color: nw.textSecondary))),
               if (_rows.isNotEmpty)
                 NwListCard(children: [

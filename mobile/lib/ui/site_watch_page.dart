@@ -25,6 +25,7 @@ import '../l10n.dart';
 import '../model/alert.dart';
 import '../model/site_watch.dart';
 import '../net/site_client.dart';
+import '../net/site_text.dart';
 import 'nw/nw_button.dart';
 import 'nw/nw_p2_duty.dart';
 import 'nw/nw_theme.dart';
@@ -214,7 +215,7 @@ class _SiteWatchPageState extends State<SiteWatchPage> {
     // 竖屏的手机一行摆不下「标题 + 两个按钮」（按钮会把标题挤成一个字一行）：按钮放到下面一行。
     return LayoutBuilder(builder: (context, box) {
       final narrow = box.maxWidth < 520;
-      final text = [if (a.detail.isNotEmpty) a.detail, state].join('\n');
+      final text = [if (a.detail.isNotEmpty) siteText(a.detail), state].join('\n');
       final sub = Text(text, style: NwText.bodyMedium.copyWith(color: p1 ? c.text : c.textSecondary));
       return Padding(
           padding: const EdgeInsets.only(bottom: Nw.s8),

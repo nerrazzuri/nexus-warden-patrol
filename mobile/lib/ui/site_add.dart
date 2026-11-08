@@ -157,8 +157,8 @@ class _SiteAddPageState extends State<SiteAddPage> {
                 children: [
                   Text(
                     tr(
-                      'The site code is on the duty console under Admin → System → "Add this site to the phone app".',
-                      '配对码位于值班台「管理 → 系统 →「把这个站点加到手机 App」」。',
+                      'The site code is on the duty console: System page → "Add this site to the phone app".',
+                      '站点码在值班台「系统」页的「把这个站点加到手机 App」里。',
                     ),
                     style: NwText.bodySmall.copyWith(color: c.textSecondary),
                   ),
@@ -202,7 +202,7 @@ class _SiteAddPageState extends State<SiteAddPage> {
                     controller: _url,
                     keyboardType: TextInputType.url,
                     autocorrect: false,
-                    label: tr('Address (https://…:8443)', '地址（https://…:8443）'),
+                    label: tr('Full site address, with port (https://…)', '站点的完整地址，含端口（https://…）'),
                   ),
                   gap,
                   NwField(
@@ -214,8 +214,8 @@ class _SiteAddPageState extends State<SiteAddPage> {
                     maxLines: 3,
                     mono: true,
                     label: tr(
-                      'Certificate fingerprint (nexwar_site fingerprint)',
-                      '证书指纹（nexwar_site fingerprint）',
+                      'Certificate fingerprint (shown next to the site code on the console)',
+                      '证书指纹（值班台上站点码旁边有）',
                     ),
                   ),
                   const SizedBox(height: Nw.s24),
