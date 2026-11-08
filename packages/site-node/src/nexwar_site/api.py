@@ -970,7 +970,11 @@ class _Handler(TlsHandlerMixin):
             clear = d.get("clear", False)
             if not isinstance(clear, bool):
                 raise HttpError(400, "clear 要是 true/false")
-            n = self.site.loop.call(lambda: _sync(desk.end_test, clear=clear))
+            keep = d.get("keep", [])
+            if not isinstance(keep, list) or not all(isinstance(k, str) for k in keep):
+                raise HttpError(400, "keep 要是报警编号的列表")
+            n = self.site.loop.call(lambda: _sync(desk.end_test, clear=clear,
+                                                  keep=frozenset(keep)))
             self._audit_detail = {"action": "end", "clear": clear, "cleared": n}
             return self._send_json(200, {**self.site.loop.call(lambda: _sync(view)), "cleared": n})
         raise HttpError(400, "action 要是 start 或 end")
@@ -1411,6 +1415,14 @@ class _Handler(TlsHandlerMixin):
             wire, label = self._patrol_wire(d)
             if not d.get("points"):
                 self._audit_detail = {"mission": label}
+            else:
+                # 第 4 轮 r3-duty-N3:派单时站点也查走不走得到第 1 个点(原来只在网页上查,
+                # 落点后马上按「开始」就绕过去了,机器人当场跳过、三次后成 P1)
+                errs = self._reach_first(robot_id, d.get("map_id"), d.get("map_version"),
+                                         d.get("points"))
+                if errs:
+                    raise HttpError(400, f"第 1 个点:{errs[0]['problem']}",
+                                    extra={"errors": errs, "reason": "unreachable"})
             desk = self._adhoc()
             result = self.site.dispatch(lambda: desk.submit(robot_id, wire, label=label,
                                                             by=str(user)))
@@ -1582,6 +1594,18 @@ class _Handler(TlsHandlerMixin):
         reach = getattr(self.site.incidents, "reach", None)
         if not cands:
             raise HttpError(404, "此地图上没有能派的机器人", extra={"excluded": sorted(skip)})
+        # 第 4 轮 duty N3:这张图上没标原点的出不了发(起飞前检查会拒),不推荐
+        try:
+            homed = {r["robot_id"] for r in disp.db.query(
+                "SELECT robot_id FROM homes WHERE map_id=? AND map_version=?", (map_id, version))}
+        except Exception:  # noqa: BLE001 —— 老库没有原点表:不筛
+            homed = {c[0] for c in cands}
+        no_home = sorted(c[0] for c in cands if c[0] not in homed)
+        cands = [c for c in cands if c[0] in homed]
+        if not cands:
+            raise HttpError(404, f"能派的机器人在这张图上都没标原点,出不了发:{'、'.join(no_home)}",
+                            extra={"reason": "no_home", "robots": no_home,
+                                   "excluded": sorted(skip)})
         if reach is None:
             raise HttpError(404, "站点没有此地图的规划栅格,无法确定最近的机器人")
         from nexwar_site.nearest import nearest

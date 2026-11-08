@@ -124,3 +124,27 @@ describe("第 4 轮 P1-77 升级包被拒", () => {
     expect(siteText("此版本已存在").text).toBe("This version is already on the site.");
   });
 });
+
+describe("第 4 轮 r3-duty-N3 派单时站点拒", () => {
+  it("第 1 个点走不到", () => {
+    expect(siteText("第 1 个点:B 从现在的位置走不到这个点(被墙或禁行区隔开)").text)
+      .toBe("Point 1: B cannot get to this point from where it is now (a wall or no-go area is in between)");
+  });
+});
+
+describe("第 4 轮 r3-duty-N7 摄像头掉线详情", () => {
+  it("写摄像头名、防区、怎么办", () => {
+    expect(siteText("摄像头 gate(防区 东区)连不上,这一路的入侵现在收不到;看看摄像头的电源和网线").text)
+      .toBe("Camera gate (zone 东区) cannot be reached, so intrusions from it are not received now. Check its power and network cable.");
+  });
+});
+
+describe("第 4 轮 r2-duty-N7 点位没到", () => {
+  it("跳过一次和连续几趟分开说;详情翻出建议", async () => {
+    const { alertTitle } = await import("./i18n");
+    expect(alertTitle("en", "stuck", "点位 P2 连续 3 趟未到达:路可能被堵住了")).toBe("Waypoint P2 not reached 3 runs in a row");
+    expect(alertTitle("en", "stuck", "点位 P2 未到达,已跳过")).toBe("Waypoint P2 skipped");
+    expect(siteText("到场看看,或者改路线;到达一次后自动解除").text).toBe("Go and look, or change the route. Clears itself once the point is reached.");
+    expect(siteText("巡逻继续,只做记录").text).toBe("The patrol went on; this is only a record.");
+  });
+});

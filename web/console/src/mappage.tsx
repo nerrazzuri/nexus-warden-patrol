@@ -10,7 +10,7 @@ import { api, ApiError, enc } from "./api";
 import { hm, nameOf, useDutySettings } from "./data";
 import { siteHm } from "./todaypatrols";
 import { Modal } from "./dialogs";
-import { alertTitle, lang, refusalText, t, type Key } from "./i18n";
+import { alertTitle, joinList, lang, refusalText, t, type Key } from "./i18n";
 import { pageAllowed } from "./shell";
 import { locText, type UnitInfo } from "./live";
 import { ENGINEERING_LAYERS, etaNext, LAYERS, layersFor, loadLayers, saveLayers, labelRows, mapPins, mapTodo, olderOpen, shiftStart, staleAfter, staleCells, tonightEvents, zoneDecor,
@@ -268,7 +268,7 @@ export function MapPage(props: {
   const [route, setRoute] = useState<Pt[] | null>(null);
   // P1-16:派出去的临时路线留在图上(哪台在走);走过的地方由「路线」图层的轨迹画出
   // 第 2 轮 duty N2:派出后跟着出发检查的结果走 —— 被拒了侧栏写没出发、为什么,不再说「正在走」
-  const [sentRoute, setSentRoute] = useState<{ robot: string; pts: Pt[]; refused?: string } | null>(null);
+  const [sentRoute, setSentRoute] = useState<{ robot: string; pts: Pt[]; refused?: string; at?: number } | null>(null);
   const [cells, setCells] = useState<{ cell_m: number; cells: Cell[] } | null>(null);
   const [authz, setAuthz] = useState<AuthzRow[]>([]);
   const [recent, setRecent] = useState<Alert[]>([]);
@@ -290,14 +290,15 @@ export function MapPage(props: {
   };
   const mapKey = shown.map ? `${shown.map.map_id}/${shown.map.version}` : "";
 
-  // 本班出的事(含已处理的):30 秒一拉
+  // 本班出的事(含已处理的):30 秒一拉;第 4 轮 duty N4:顶栏的报警一变(推过来的)马上再拉,不等 30 秒
+  const p1Key = props.p1.map((a) => `${a.key}:${a.count ?? 1}:${a.resolved_ms ?? ""}`).join(",");
   useEffect(() => {
     let live = true;
     const pull = () => api<{ alerts: Alert[] }>("GET", "/api/alerts?all=1&limit=200").then((d) => live && setRecent(d.alerts ?? [])).catch(() => {});
     void pull();
     const id = window.setInterval(pull, 30_000);
     return () => { live = false; window.clearInterval(id); };
-  }, []);
+  }, [p1Key]);
   useEffect(() => {
     let live = true;
     api<{ authorizations: AuthzRow[] }>("GET", "/api/lists/authorizations").then((d) => live && setAuthz(d.authorizations ?? [])).catch(() => {});
@@ -442,7 +443,7 @@ export function MapPage(props: {
           shown.map && <TempRoutePanel canFix={pageAllowed("admin/localization", props.role ?? "")} map={shown.map} points={route} robots={robotsHere} say={say}
             onUndo={() => setRoute(route.slice(0, -1))} onCancel={() => setRoute(null)}
             onSent={(robot, check) => {
-              setSentRoute({ robot, pts: route });
+              setSentRoute({ robot, pts: route, at: Date.now() });
               if (!on("route")) flip("route");            // 看得到它走到哪了
               setRoute(null);
               void check?.then((r) => {
@@ -452,6 +453,11 @@ export function MapPage(props: {
         ) : sentRoute ? (
           <div class={sentRoute.refused ? "tip warn" : "tip"} data-sent-tip={sentRoute.refused ? "refused" : "1"}>
             <p>{sentRoute.refused ? t("trSentRefused", { id: nameOf(sentRoute.robot), why: sentRoute.refused }) : t("trSentShown", { id: nameOf(sentRoute.robot) })}</p>
+            {/* 第 4 轮 r3-duty-N3:派出以后跳过了点,侧栏说一声(原来一直写「在临时路线上」) */}
+            {!sentRoute.refused && (() => {
+              const sk = recent.filter((a) => a.robot === sentRoute.robot && a.resolved_by === "site:skipped" && a.first_ms >= (sentRoute.at ?? 0) - 5_000);
+              return sk.length > 0 ? <p class="warn-text small" data-sent-skipped="1">{t("trSentSkipped", { id: nameOf(sentRoute.robot), why: siteStr(sk[0].detail || sk[0].title) })}</p> : null;
+            })()}
             <button type="button" class="btn sm" onClick={() => setSentRoute(null)}>{t("trSentHide")}</button>
           </div>
         ) : canPatrol(props.role ?? "") && (
@@ -473,6 +479,8 @@ export function MapPage(props: {
 
 /** 结论说成人话(报警记录页也用)。 */
 export function verdictText(a: Alert): string {
+  // 第 4 轮 duty N5:跳过一次的点没到过,不是「自己恢复了」
+  if (a.resolved_by === "site:skipped") return t("vSkipped");
   if (autoResolved(a)) return t("vAuto");
   return a.verdict === "intruder" ? t("vIntruder") : a.verdict === "false_alarm" ? t("vFalse") : a.verdict === "handled" ? t("vHandled") : t("vDone");
 }
@@ -514,7 +522,10 @@ export function GoLookCard(props: { map: { map_id: string; version: string }; at
       .then((d) => live && setGot(d))
       .catch((e) => {
         if (!live) return;
-        if (e instanceof ApiError && e.status === 404) setGot("none");
+        // 第 4 轮 duty N3:能派的都没标原点(出不了发)—— 说是哪几台、怎么办
+        const d = e instanceof ApiError ? e.data as { reason?: string; robots?: string[] } | undefined : undefined;
+        if (e instanceof ApiError && e.status === 404 && d?.reason === "no_home") { setGot("error"); setWhy(t("lookNoHome", { ids: joinList((d.robots ?? []).map(nameOf)) })); }
+        else if (e instanceof ApiError && e.status === 404) setGot("none");
         else { setGot("error"); setWhy(e instanceof ApiError ? e.message : String(e)); }
       });
     return () => { live = false; };

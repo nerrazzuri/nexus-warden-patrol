@@ -141,7 +141,8 @@ export const GUARD_AUDIENCES = new Set(["intrusion", "fire", "help", "offline"])
 /** W72:这条是站点自己解决的(情况恢复了、短暂中断只记录),不是人处理的。 */
 export function autoResolved(a: Pick<Alert, "resolved_ms" | "resolved_by" | "verdict">): boolean {
   const by = a.resolved_by ?? "";
-  return a.resolved_ms != null && !a.verdict && (by.startsWith("site:") || by === "system");
+  // 第 4 轮 r3-duty-N7:站点关的也有写「站点:」开头的(摄像头连上了 / 已删除)
+  return a.resolved_ms != null && !a.verdict && (/^(site|站点)[:：]/.test(by) || by === "system");
 }
 
 /** 这条告警给不给保安看。老站点不报 audience 的一律算给保安(宁可多看)。 */

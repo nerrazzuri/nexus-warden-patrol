@@ -241,7 +241,8 @@ export function RecordingsPage(props: { robots: string[]; role: string; now: num
 
   const total = range ? covered(sp, range.since, range.until) : 0;
   const kept = (rows ?? []).filter((r) => r.keep).length;
-  const ls = range ? lanes(allRobots, allRows, alerts, range, segS) : [];
+  // 第 4 轮 duty N6:这一天没录像、也没报警的机器人不占一行(选中的那台留着)
+  const ls = range ? lanes(allRobots, allRows, alerts, range, segS).filter((l) => l.segs.length || l.marks.length || l.robot === robot) : [];
   const [jumpBad, setJumpBad] = useState(false);
   return (
     <div class="recpage">
@@ -316,7 +317,7 @@ export function RecordingsPage(props: { robots: string[]; role: string; now: num
               <div class="recpip">
                 <video ref={pip} key={pipSeg.rec.id} src={`/api/recordings/${pipSeg.rec.id}/video`} muted autoplay playsInline
                   aria-label={camLabel(robot, pipCam)}
-                  onLoadedMetadata={(e) => { (e.currentTarget as HTMLVideoElement).currentTime = pipSeg.offsetS; }} />
+                  onLoadedMetadata={(e) => { const v = e.currentTarget as HTMLVideoElement; v.currentTime = pipSeg.offsetS; v.playbackRate = speed; }} />
               </div>
             )}
             {shown && !broken && <div class="osd bottom recosd"><span class="osd-status">{t("recorded")}{shown.keep ? ` · ${t("recKept")}` : ""}</span></div>}
@@ -329,7 +330,8 @@ export function RecordingsPage(props: { robots: string[]; role: string; now: num
             <div class="seg" role="group" aria-label={t("recSpeed")}>
               {SPEEDS.map((s) => (
                 <button key={s} type="button" aria-pressed={s === speed}
-                  onClick={() => { setSpeed(s); if (video.current) video.current.playbackRate = s; }}>{s}×</button>
+                  // 第 4 轮 duty N7:画中画跟着一起变速(原来 4× 时它还是 1×,总落后一两秒)
+                  onClick={() => { setSpeed(s); if (video.current) video.current.playbackRate = s; if (pip.current) pip.current.playbackRate = s; }}>{s}×</button>
               ))}
             </div>
             {/* 第 2 轮 P1-22:一对一对不拆开(1366、1440 宽时「下一段」原来单独掉到第二行) */}
@@ -472,7 +474,7 @@ function Timeline(props: {
       }}>
         {props.lanes.map((l) => (
           <div key={l.robot} class={l.robot === props.robot ? "lane on" : "lane"}>
-            <b role="button" tabIndex={0} onClick={() => props.onPick(l.robot, props.head ?? props.day.since)}>{nameOf(l.robot)}</b>
+            <b role="button" tabIndex={0} title={nameOf(l.robot)} onClick={() => props.onPick(l.robot, props.head ?? props.day.since)}>{nameOf(l.robot)}</b>
             <div class="track" onClick={(e) => { if (!dragged.current) props.onPick(l.robot, timeAt(e, e.currentTarget as Element)); }}>
               {l.segs.filter(([a, b]) => b > view.since && a < view.until).map(([a, b]) => {
                 const bx = segBox(a, b, view);

@@ -51,7 +51,7 @@ describe("告警测试模式", () => {
     fireEvent.click(btn(dlg, "结束演练并删掉演练报警"));
     // 第 2 轮 P1-19:不写条数(站点数的含保安看不到的记录)
     await waitFor(() => expect(c.textContent).toContain("演练报警都已删掉"));
-    expect(posted[1]).toEqual({ action: "end", clear: true });
+    expect(posted[1]).toEqual({ action: "end", clear: true, keep: [] });
     expect(cleared).toBe(1);
   });
 

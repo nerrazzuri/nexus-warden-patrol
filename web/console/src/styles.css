@@ -1609,3 +1609,9 @@ input[type="file"] { max-width: 100%; min-width: 0; }            /* 上传按钮
 .sw-camfan { fill: var(--c-primary); fill-opacity: .25; }
 /* 第 4 轮 r2-config-N3:「添加日程」按钮不拉成一整条 */
 .sched-form > .sched-add { justify-self: start; align-self: flex-start; width: auto; }
+/* 第 4 轮 r2-duty-N9:报警详情里「派机器人去」的确认卡放在弹窗里,不浮到右上角压横幅 */
+.modal .golook { position: static; width: auto; margin-top: 12px; box-shadow: none; }
+/* 第 4 轮 duty N6:时间轴左列的名字一行截断(悬停看全名);选机器人的按钮也不被长名字撑宽 */
+.lane { grid-template-columns: 96px 1fr; }
+.lane > b { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; padding-right: 6px; }
+.recrobots button { max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
