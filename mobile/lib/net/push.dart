@@ -23,6 +23,7 @@ import 'package:jpush_flutter/jpush_flutter.dart';
 import 'package:jpush_flutter/jpush_interface.dart';
 
 import '../l10n.dart';
+import 'site_client.dart' show SiteError;
 
 abstract class PushRegistrar {
   bool get supported;
@@ -202,6 +203,13 @@ class PushSession {
           _registered.add(id);
           pending.remove(r);
         } catch (e) {
+          // 手机 App 测试 M11：站点根本没开推送（404）就直说、不再重试；以前显示「未就绪（推送注册失败：…）」
+          if (e is SiteError && e.status == 404) {
+            reason = tr("This site has no push notifications set up. Alarms reach this phone only through background watch.",
+                '这个站点没有配置推送。报警只能靠「后台值守」送到这台手机。');
+            state.value = PushState.waiting;
+            return;
+          }
           why = tr('Push registration failed: $e. Retrying later', '推送注册失败：$e，稍后自动重试');
         }
         if (_stopped) return;

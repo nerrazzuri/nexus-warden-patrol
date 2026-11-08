@@ -184,7 +184,7 @@ class _AppSettingsPageState extends State<AppSettingsPage> {
                         subtitle: Text(
                             st == PushState.ready
                                 ? tr('Ready', '已就绪')
-                                : tr('Not ready (${push.reason})', '未就绪（${push.reason}）'),
+                                : push.reason,
                             style: sub()),
                       )),
             ValueListenableBuilder<bool>(
