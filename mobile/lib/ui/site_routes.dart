@@ -282,7 +282,7 @@ class _SiteRoutesPageState extends State<SiteRoutesPage> {
                                       style: NwText.titleSmall.copyWith(color: c.text, fontWeight: FontWeight.w700)),
                                   nwGap4,
                                   Text(
-                                      tr('${(r['waypoints'] as List? ?? const []).length} points · revision ${r['revision']}',
+                                      tr('${(r['waypoints'] as List? ?? const []).length} points · version ${r['revision']}',
                                           '${(r['waypoints'] as List? ?? const []).length} 个点 · 第 ${r['revision']} 版'),
                                       style: sub),
                                 ])),
@@ -326,6 +326,7 @@ class SiteRouteEditorPage extends StatefulWidget {
   static const Key saveKey = Key('route-save');
   static const Key deleteKey = Key('route-delete');
   static const Key deleteOkKey = Key('route-delete-ok');
+  static const Key deleteWarnKey = Key('route-delete-warn');
   static const Key sendKey = Key('route-send');
   static const Key addModeKey = Key('route-mode-add');
   static const Key moveModeKey = Key('route-mode-move');
@@ -497,7 +498,7 @@ class _SiteRouteEditorPageState extends State<SiteRouteEditorPage> {
           if (x is Map && x['index'] is num) _warns[(x['index'] as num).toInt()] = '${x['warning']}';
         }
         _busy = false;
-        _msg = tr('Route saved (revision $_revision)', '路线已保存（第 $_revision 版）');
+        _msg = tr('Route saved (version $_revision)', '路线已保存（第 $_revision 版）');
       });
     } on SiteError catch (e) {
       if (!mounted) return;
@@ -537,11 +538,28 @@ class _SiteRouteEditorPageState extends State<SiteRouteEditorPage> {
   }
 
   Future<void> _delete() async {
+    // 手机 App 测试 M36：有机器人正在跑这条路线就先说（删了那一趟会被中止）
+    var running = <String>[];
+    try {
+      final t = await widget.api.patrolsToday();
+      running = [
+        for (final it in (t['items'] as List? ?? const []).whereType<Map>())
+          if (it['state'] == 'running' && it['label'] == _id && '${it['robot'] ?? ''}'.isNotEmpty) '${it['robot']}',
+      ];
+    } on Object {
+      // 读不到今天的巡逻：照旧问
+    }
+    if (!mounted) return;
     final ok = await showDialog<bool>(
         context: context,
         builder: (c) => AlertDialog(
               title: Text(tr('Delete route $_id?', '删除路线 $_id？')),
-              content: Text(tr('Schedules that use it must be removed first.', '请先删除使用此路线的排程。')),
+              content: Text([
+                if (running.isNotEmpty)
+                  tr('${running.join(', ')} is on this route right now. Deleting it stops that run.',
+                      '${running.join('、')} 正在跑这条路线，删掉它会让这一趟停下。'),
+                tr('Schedules that use it must be removed first.', '请先删除使用此路线的排程。'),
+              ].join('\n\n'), key: SiteRouteEditorPage.deleteWarnKey),
               actions: [
                 TextButton(onPressed: () => Navigator.pop(c, false), child: Text(tr('Cancel', '取消'))),
                 FilledButton(

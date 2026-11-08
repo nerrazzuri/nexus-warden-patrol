@@ -310,6 +310,17 @@ void main() {
     expect(api.calls, contains('deleteRoute loop base=3'));
   });
 
+  testWidgets('手机 App 测试 M36：有机器人正在跑这条路线，删之前说删了会让它停下', (t) async {
+    final api = RoutesApi('admin')
+      ..today = <String, dynamic>{'date': '2026-11-08', 'utc_offset_min': 480, 'items': [
+        {'at_ms': 1, 'kind': 'schedule', 'label': 'loop', 'robot': 'B', 'state': 'running'},
+      ]};
+    await _open(t, api, route: _route('loop', [[-3.29, 6.1]]));
+    await _reveal(t, SiteRouteEditorPage.deleteKey);
+    await _tapKey(t, SiteRouteEditorPage.deleteKey);
+    expect(find.textContaining('B is on this route right now'), findsOneWidget);
+  });
+
   testWidgets('保安：能看、能派，不能改（没有加点 / 存 / 删）；派的是站点上存着的那一条', (t) async {
     final api = RoutesApi('guard');
     await _open(t, api, route: _route('loop', [[-3.29, 6.1], [-1.5, 8.4]]));

@@ -448,9 +448,18 @@ class _RobotAddPageState extends State<RobotAddPage> with _StickerScan<RobotAddP
     final waiting = st != null && st['state'] == 'pending' && st['phase'] == 'waiting';
     return _Frame(title: tr('Add robot', '添加机器人'), children: [
       Text(tr(
-          'At the robot: scan the payload sticker, choose the robot\'s WiFi and enter the password, then approve it on the site.',
-          '在机器人旁：扫描上装贴纸，选择机器人要连接的 WiFi 并输入密码，然后在站点上批准。'),
+          'At the robot: scan the QR sticker on the robot, choose the WiFi it should use and enter the password.',
+          '在机器人旁：扫机器人身上的二维码贴纸，选它要连的 WiFi、输入密码。'),
           style: NwText.bodySmall.copyWith(color: c.textSecondary)),
+      // 手机 App 测试 M31：保安、经理也能配网，但最后要管理员批准：一开始就说
+      if (!(widget.api.session?.canManageRobots ?? false)) ...[
+        _gap,
+        NwNotice(
+            key: const Key('add-needs-admin'),
+            tone: NwTone.info,
+            text: tr('After this, an administrator must approve the robot on the site before it can work.',
+                '配好以后，要管理员在站点上批准，机器人才能用。')),
+      ],
       _gap,
       if (s == null) scanButton(),
       if (s != null && st == null) ...[
