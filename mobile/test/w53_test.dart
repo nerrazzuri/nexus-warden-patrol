@@ -107,6 +107,20 @@ void main() {
       expect(find.byKey(stopFailedKey), findsNothing);
     });
 
+    testWidgets('手机 App 测试 M09：开始、结束巡逻这类日常记录不算「其他未处理」；顶上写 P1 几条、在线几台', (t) async {
+      Map<String, dynamic> row(String kind, String level) => <String, dynamic>{
+            'key': 'A/$kind#1', 'level': level, 'kind': kind, 'robot': 'A', 'title': 't', 'detail': '',
+            'first_ms': 1, 'last_ms': 1, 'count': 1, 'acked_by': '', 'acked_ms': null, 'resolved_ms': null,
+            'escalated': 0, 'channel': 'screen',
+          };
+      final api = FakeApi('guard')
+        ..alertRows = [row('run_start', 'P3'), row('run_done', 'P2'), row('adhoc_patrol', 'P2'), row('stuck', 'P2')];
+      await _duty(t, api);
+      expect(find.text('其他未处理 1 条'), findsOneWidget);
+      expect(find.textContaining('P1：无'), findsOneWidget);
+      expect(find.byKey(SiteDutyPage.safetyKey), findsOneWidget);
+    });
+
     testWidgets('今天的巡逻：一行一趟；排队中的临时巡逻派的人能取消', (t) async {
       final api = FakeApi('guard')
         ..session = const SiteSession('t', 'gina', 'guard')

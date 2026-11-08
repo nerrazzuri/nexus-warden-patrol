@@ -97,6 +97,7 @@ class SiteDutyPage extends StatefulWidget {
   static const Key detailKey = Key('duty-detail');
   static const Key resumeKey = Key('duty-resume');
   static const Key othersKey = Key('duty-others');
+  static const Key safetyKey = Key('duty-safety');
   static const Key noRobotsKey = Key('duty-no-robots');
   static const Key todayKey = Key('duty-today');
   static const Key noMapKey = Key('duty-no-map');
@@ -732,7 +733,10 @@ class _SiteDutyPageState extends State<SiteDutyPage> {
   @override
   Widget build(BuildContext context) {
     final c = Nw.of(context);
-    final others = _alerts.where((a) => a.level != 'P1' && a.resolvedMs == null).length;
+    // 手机 App 测试 M09：日常记录不算报警
+    final others = _alerts.where((a) => a.level != 'P1' && alertNeedsAttention(a)).length;
+    final p1Open = _alerts.where((a) => a.level == 'P1' && a.resolvedMs == null).length;
+    final online = _robots.where(robotOnline).length;
     final hasRobot = _sel != null && _selRobot != null;
     return Scaffold(
       body: Column(children: [
@@ -764,6 +768,20 @@ class _SiteDutyPageState extends State<SiteDutyPage> {
                 nwGap8,
               ],
               if (_error != null) ...[NwNotice(text: _error!, tone: NwTone.error), nwGap8],
+              // 手机 App 测试 M09：「现在安不安全」放在最上面：P1 有几条、机器人在线几台（以前藏在「其他」后面）
+              if (_robotsKnown)
+                Padding(
+                  key: SiteDutyPage.safetyKey,
+                  padding: const EdgeInsets.only(bottom: Nw.s8),
+                  child: Text(
+                      [
+                        p1Open == 0 ? tr('P1: none', 'P1：无') : tr('P1: $p1Open open', 'P1：$p1Open 条没处理'),
+                        tr('Robots online $online/${_robots.length}', '机器人在线 $online/${_robots.length}'),
+                      ].join(' · '),
+                      style: NwText.labelLarge.copyWith(
+                          color: p1Open > 0 || online < _robots.length ? c.error : c.textSecondary,
+                          fontWeight: FontWeight.w600)),
+                ),
               _modeRow(c),
               ..._p1(c),
               ..._noMap(c),
@@ -810,7 +828,10 @@ class _SiteDutyPageState extends State<SiteDutyPage> {
                     decoration: BoxDecoration(border: Border(top: BorderSide(color: c.outline))),
                     child: Row(children: [
                       Expanded(
-                          child: Text(tr('$others other open alarm(s)', '其他未处理 $others 条'),
+                          child: Text(
+                              others == 1
+                                  ? tr('1 other open alarm', '其他未处理 1 条')
+                                  : tr('$others other open alarms', '其他未处理 $others 条'),
                               style: NwText.bodyMedium.copyWith(color: c.text))),
                       Icon(Icons.chevron_right_rounded, color: c.textSecondary),
                     ]),

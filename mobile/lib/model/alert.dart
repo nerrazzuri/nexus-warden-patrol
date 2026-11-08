@@ -188,3 +188,12 @@ const Set<String> _maybeFalseKinds = {
 
 bool alertCanBeFalse(Alert a) =>
     a.audience == 'intrusion' || a.audience == 'fire' || _maybeFalseKinds.contains(a.kind);
+
+/// 手机 App 测试 M09：日常记录（开始、结束巡逻，派了临时巡逻，授权的人在场）不算「没处理的报警」。
+const Set<String> routineAlertKinds = {
+  'run_start', 'run_done', 'adhoc_patrol', 'adhoc_queue', 'authorized_person',
+};
+
+/// 算不算一条要人处理的报警（还开着、不是日常记录、不是 P3 记录）。
+bool alertNeedsAttention(Alert a) =>
+    a.resolvedMs == null && a.level != 'P3' && !routineAlertKinds.contains(a.kind);
