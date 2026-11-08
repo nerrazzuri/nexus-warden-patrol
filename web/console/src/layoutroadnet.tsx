@@ -52,12 +52,15 @@ export function wallCrossings(nodes: RnNode[], edges: Edge[], walls: P2[][]): st
   }).map(([a, b]) => `${a}-${b}`);
 }
 
-/** 存之前要确认的事(孤立点、穿墙线);没有就 null。 */
-export function saveWarning(alone: string[], bad: string[]): string | null {
-  const parts: string[] = [];
-  if (alone.length) parts.push(t("lyRnLonely", { ids: alone.join("、") }));
-  if (bad.length) parts.push(t("lyRnCrossWall", { ids: bad.join("、") }));
-  return parts.length ? `${parts.join("\n")}\n\n${t("lyRnSaveAnyway")}` : null;
+/** 存之前要确认的事(孤立点);没有就 null。
+ *  第 2 轮 setup N1:穿墙线站点一定拒,不再问「还是要保存吗」—— 用 ``saveBlock`` 直接说不能存。 */
+export function saveWarning(alone: string[]): string | null {
+  return alone.length ? `${t("lyRnLonely", { ids: alone.join("、") })}\n\n${t("lyRnSaveAnyway")}` : null;
+}
+
+/** 站点一定不收的(连线穿过虚拟墙):说哪几条、怎么办;没有就 null。 */
+export function saveBlock(bad: string[]): string | null {
+  return bad.length ? t("lyRnCrossBlock", { ids: bad.join("、") }) : null;
 }
 
 function lengthM(nodes: RnNode[], edges: Edge[]): number {
@@ -98,8 +101,10 @@ export function RoadnetTab(p: TabProps) {
   useEffect(() => {
     if (loaded === null) return;
     p.registerSave(async () => {
-      // P2-17:有孤立点、有线穿墙,存之前再问一次
-      const warn = saveWarning(lonely(nodes, edges), wallCrossings(nodes, edges, walls));
+      // 第 2 轮 setup N1:穿墙线站点一定拒 —— 直接说不能存;孤立点能存,再问一次
+      const block = saveBlock(wallCrossings(nodes, edges, walls));
+      if (block) { p.say(block); throw new SaveCancelled(); }
+      const warn = saveWarning(lonely(nodes, edges));
       if (warn && !window.confirm(warn)) throw new SaveCancelled();
       const d = await api<RouteNet>("POST", url, { nodes, edges, base_revision: loaded.revision });
       const net = { revision: d.revision, nodes: d.nodes ?? nodes, edges: (d.edges ?? edges) as Edge[] };
@@ -110,6 +115,14 @@ export function RoadnetTab(p: TabProps) {
     return () => p.registerSave(null);
   }, [nodes, edges, loaded, p.data.nav]);
 
+  // 第 2 轮 setup N6:Esc 取消选中(原来选上就取消不了,接着点别的点必然连上)
+  useEffect(() => {
+    if (sel === null) return;
+    const key = (e: KeyboardEvent) => { if (e.key === "Escape") setSel(null); };
+    window.addEventListener("keydown", key);
+    return () => window.removeEventListener("keydown", key);
+  }, [sel]);
+
   function pick(px: number, py: number) {
     if (!adding) return;
     const [x, y] = toMap(p.meta, px, py);
@@ -119,7 +132,8 @@ export function RoadnetTab(p: TabProps) {
 
   /** 点一个点:没选中的先选中;已经选中另一个就把两个连上(连着就断开),再选中这一个接着连。 */
   function tapNode(id: string) {
-    if (sel === null || sel === id) {
+    if (sel === id) { setSel(null); return; }        // 第 2 轮 setup N6:再点一次自己 = 取消选中
+    if (sel === null) {
       setSel(id);
       return;
     }
@@ -151,7 +165,7 @@ export function RoadnetTab(p: TabProps) {
       <div ref={root} onClickCapture={(e) => swallowClick(guard.current, e)}>
         <p.Map
           drawing={adding}
-          onPick={adding ? pick : undefined}
+          onPick={adding ? pick : sel !== null ? () => setSel(null) : undefined}
           marks={(s) => <>
             {edges.map(([a, b]) => {
               const pa = by.get(a), pb = by.get(b);
@@ -188,7 +202,10 @@ export function RoadnetTab(p: TabProps) {
           <section class="panel ly-detail">
             <h3>{cur.id}</h3>
             <p class="muted small">{t("lyRnSelHint")}</p>
-            <div class="row end"><button type="button" class="btn sm" onClick={() => removeNode(cur.id)}>{t("lyRnRemovePoint")}</button></div>
+            <div class="row end">
+              <button type="button" class="btn sm" data-rn-deselect="1" onClick={() => setSel(null)}>{t("lyRnDeselect")}</button>
+              <button type="button" class="btn sm" onClick={() => removeNode(cur.id)}>{t("lyRnRemovePoint")}</button>
+            </div>
           </section>
         )}
       </div>

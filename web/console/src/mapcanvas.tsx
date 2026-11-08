@@ -37,6 +37,8 @@ export interface CanvasArea {
   kind: "area" | "zone";
   /** 报警的防区:标红(W44)。 */
   hot?: boolean;
+  /** 布置里选中的那一块:蓝色(蓝色只表示选中;第 2 轮 setup N9,原来借了报警的红色)。 */
+  sel?: boolean;
   /** 图上写的字(不给 = 名字);W44 地图页写「主楼 · 布防」。 */
   label?: string;
   /** 布防绿色实框、撤防灰色虚框(W44 地图页的防区和布防图层)。 */
@@ -252,7 +254,7 @@ export function MapCanvas(props: {
               </polyline>
             ))}
             {areas.map((a, i) => (
-              <polygon key={`${i}:${a.kind}:${a.name}`} points={polyAttr(meta, a.pts)} class={`${a.kind === "zone" ? "sec-area" : "sec-area quiet"}${a.tone ? ` ${a.tone}` : ""}${a.hot ? " hot" : ""}`} />
+              <polygon key={`${i}:${a.kind}:${a.name}`} points={polyAttr(meta, a.pts)} class={`${a.kind === "zone" ? "sec-area" : "sec-area quiet"}${a.tone ? ` ${a.tone}` : ""}${a.hot ? " hot" : ""}${a.sel ? " sel" : ""}`} data-area={a.name} />
             ))}
             {props.world}
           </g>

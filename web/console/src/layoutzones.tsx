@@ -106,7 +106,8 @@ export function ZonesTab(p: TabProps) {
   function rename(to: string) {
     if (!cur || to === cur.zone) { setRenaming(false); return; }
     const from = cur.zone;
-    setAreas(areas.filter((a) => a.zone !== to).map((a) => (a.zone === from ? { ...a, zone: to } : a)));
+    if (areas.some((a) => a.zone === to)) return;          // 第 2 轮 setup N2:不吞掉同名的另一个防区
+    setAreas(areas.map((a) => (a.zone === from ? { ...a, zone: to } : a)));
     // 归这个防区的摄像头跟着改名
     setCamZone(Object.fromEntries(Object.entries(camZone).map(([c, z]) => [c, z === from ? to : z])));
     if (from in postEdit) { const { [from]: pe, ...rest } = postEdit; setPostEdit({ ...rest, [to]: pe }); }
@@ -126,7 +127,7 @@ export function ZonesTab(p: TabProps) {
     <div class="ly-tab">
       <div ref={root} onClickCapture={(e) => swallowClick(guard.current, e)}>
       <p.Map
-        areas={areas.map((a) => ({ name: a.zone, pts: a.points, kind: "zone" as const, hot: a.zone === sel }))}
+        areas={areas.map((a) => ({ name: a.zone, pts: a.points, kind: "zone" as const, sel: a.zone === sel }))}
         drawing={!!draft || !!placing || !!markDraft}
         onPick={pick}
         // P2-37:放藏匿点第二步,在地图上明说「再点它朝哪看」
@@ -154,13 +155,22 @@ export function ZonesTab(p: TabProps) {
           {marks.map((m, i) => {
             if (m.kind === "exit") {
               const [[ax, ay], [bx, by]] = m.points.map(([x, y]) => s.map(x, y));
-              return <line key={`m${i}`} x1={ax} y1={ay} x2={bx} y2={by} class="mark-exit" data-mark="exit"><title>{`${m.name} · ${t("lyMarkExit")}`}</title></line>;
+              // 第 2 轮 setup N8:图上写名字
+              return (
+                <g key={`m${i}`}>
+                  <line x1={ax} y1={ay} x2={bx} y2={by} class="mark-exit" data-mark="exit"><title>{`${m.name} · ${t("lyMarkExit")}`}</title></line>
+                  <text x={(ax + bx) / 2 + 6} y={(ay + by) / 2 - 6} class="mark-name" data-mark-name={m.name}>{m.name}</text>
+                </g>
+              );
             }
             const h = handleAt(p.meta, s, m.points[0][0], m.points[0][1], m.yaw, 16);
             return (
-              <PoseMarker key={`m${i}`} x={h.x} y={h.y} hx={h.hx} hy={h.hy} r={6} label="" class="mark-hide" attrs={{ "data-mark": "hide" } as Record<string, unknown>}>
-                <title>{`${m.name} · ${t("lyMarkHide")}`}</title>
-              </PoseMarker>
+              <g key={`m${i}`}>
+                <PoseMarker x={h.x} y={h.y} hx={h.hx} hy={h.hy} r={6} label="" class="mark-hide" attrs={{ "data-mark": "hide" } as Record<string, unknown>}>
+                  <title>{`${m.name} · ${t("lyMarkHide")}`}</title>
+                </PoseMarker>
+                <text x={h.x + 9} y={h.y - 9} class="mark-name" data-mark-name={m.name}>{m.name}</text>
+              </g>
             );
           })}
           {markDraft?.pts.map(([x, y], i) => { const [sx, sy] = s.map(x, y); return <circle key={`d${i}`} cx={sx} cy={sy} r={5} class="draft-pt" />; })}
@@ -238,7 +248,7 @@ export function ZonesTab(p: TabProps) {
           onSave={(name) => { setAreas([...areas.filter((a) => a.zone !== name), { zone: name, points: draft }]); setDraft(null); setNaming(false); setSel(name); }} />
       )}
       {renaming && cur && (
-        <NameZone initial={cur.zone} taken={areas.map((a) => a.zone).filter((z) => z !== cur.zone)} onClose={() => setRenaming(false)} onSave={rename} />
+        <NameZone initial={cur.zone} taken={areas.map((a) => a.zone).filter((z) => z !== cur.zone)} onClose={() => setRenaming(false)} onSave={rename} rename />
       )}
       {removing && (
         <Confirm text={t("removeZoneConfirm", { zone: removing })} yes={t("remove")} danger onNo={() => setRemoving(null)}
@@ -336,20 +346,25 @@ function polyArea(pts: Pt[]): number {
   return Math.abs(s) / 2;
 }
 
-function NameZone({ taken, onClose, onSave, initial = "" }: { taken: string[]; onClose: () => void; onSave: (name: string) => void; initial?: string }) {
+function NameZone({ taken, onClose, onSave, initial = "", rename = false }: {
+  taken: string[]; onClose: () => void; onSave: (name: string) => void; initial?: string; rename?: boolean;
+}) {
   const [name, setName] = useState(initial);
   const [tried, setTried] = useState(false);
   const dup = taken.includes(name.trim());
+  // 第 2 轮 setup N2:改名改成已有的防区名不许(原来会悄悄删掉那个防区);新画的同名照旧是「换掉」并写明
+  const blocked = rename && dup;
   return (
-    <Modal label={t("lyDrawDone")} onClose={onClose}>
-      <form class="form" noValidate onSubmit={(e) => { e.preventDefault(); setTried(true); if (name.trim()) onSave(name.trim()); }}>
+    <Modal label={t(rename ? "lyRenameZone" : "lyDrawDone")} onClose={onClose}>
+      <form class="form" noValidate onSubmit={(e) => { e.preventDefault(); setTried(true); if (name.trim() && !blocked) onSave(name.trim()); }}>
         <label class="field">{t("zoneName")}<input name="zone" value={name} maxLength={128} required autoFocus onInput={(e) => setName(e.currentTarget.value)} /></label>
         {/* P2-36:空着点保存要说一声(原来弹窗只是不关) */}
         {tried && !name.trim() ? <p class="error small" role="alert">{t("nameRequired")}</p>
+          : blocked ? <p class="error small" role="alert" data-zone-taken="1">{t("lyZoneNameTaken", { z: name.trim() })}</p>
           : <p class="muted small">{dup ? t("lyZoneReplace") : t("zoneNameHint")}</p>}
         <div class="row end">
           <button type="button" class="btn" onClick={onClose}>{t("cancel")}</button>
-          <button type="submit" class="btn primary">{t("dlgApply")}</button>
+          <button type="submit" class="btn primary" disabled={blocked}>{t("dlgApply")}</button>
         </div>
       </form>
     </Modal>

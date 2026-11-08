@@ -67,8 +67,7 @@ describe("布置 → 路网", () => {
     fireEvent.click(btn(c, "完成添加"));
     expect(c.querySelector(".ly-side")!.textContent).toContain("未连接的节点：P3、P4");
     fireEvent.click(node(c, "P2"));
-    fireEvent.click(node(c, "P3"));                       // 先后点两个点:连上
-    fireEvent.click(node(c, "P3"));
+    fireEvent.click(node(c, "P3"));                       // 先后点两个点:连上(P3 接着选中)
     fireEvent.click(node(c, "P4"));
     await save!();
     const body = posted.find((p) => p.url === URL)!.body;
@@ -91,6 +90,34 @@ describe("布置 → 路网", () => {
     const body = posted.find((p) => p.url === URL)!.body;
     expect(body.nodes).toEqual([{ id: "P2", x: 5, y: 1 }]);
     expect(body.edges).toEqual([]);
+  });
+
+  it("第 2 轮 setup N6:再点自己、点空白、按 Esc、点「取消选中」都能取消,之后点别的点不会连上", async () => {
+    const { container: c } = render(<RoadnetTab {...props()} />);
+    await waitFor(() => expect(node(c, "P2")).not.toBeNull());
+    const on = () => c.querySelector(".rn-node.on")?.getAttribute("data-rn-node") ?? null;
+    fireEvent.click(node(c, "P1")); expect(on()).toBe("P1");
+    fireEvent.click(node(c, "P1")); expect(on()).toBeNull();
+    fireEvent.click(node(c, "P1")); fireEvent.click(c.querySelector(".pick1")!); expect(on()).toBeNull();
+    fireEvent.click(node(c, "P1")); fireEvent.keyDown(window, { key: "Escape" }); expect(on()).toBeNull();
+    fireEvent.click(node(c, "P1")); fireEvent.click(c.querySelector("[data-rn-deselect]")!); expect(on()).toBeNull();
+    fireEvent.click(node(c, "P2"));
+    expect(c.querySelector(".ly-side")!.textContent).toContain("1 条线");   // 没有误连 / 误断
+  });
+
+  it("第 2 轮 setup N1:有穿墙线时存:不弹确认,直接说不能存", async () => {
+    const said: string[] = [];
+    let asked = 0;
+    window.confirm = () => { asked++; return true; };
+    const d = { ...data, nav: { ...(data.nav ?? {}), zones: [{ name: "墙", wall: [[3, -5], [3, 5]] }] } } as never;
+    render(<RoadnetTab {...props()} data={d} say={(m: string) => said.push(m)} />);
+    await waitFor(() => expect(document.querySelector("[data-rn-cross]")).not.toBeNull());
+    await waitFor(() => expect(save).not.toBeNull());
+    const { SaveCancelled } = await import("./layoutpage");
+    await expect(save!()).rejects.toBeInstanceOf(SaveCancelled);
+    expect(asked).toBe(0);
+    expect(said[0]).toContain("不能保存");
+    expect(posted.filter((p) => p.url === URL)).toEqual([]);
   });
 
   it("别人改过:存的时候抛出来(外框说刚才有人改过)", async () => {
@@ -116,8 +143,17 @@ describe("网页易用性第 1 轮 P2-17", () => {
     const wall: [number, number][][] = [[[2, -1], [2, 1]]];
     expect(wallCrossings(nodes, [["P1", "P2"], ["P1", "P3"]], wall)).toEqual(["P1-P2"]);
     expect(wallCrossings(nodes, [["P1", "P3"]], wall)).toEqual([]);
-    expect(saveWarning([], [])).toBeNull();
-    expect(saveWarning(["P3"], ["P1-P2"])).toContain("虚拟墙");
+    expect(saveWarning([])).toBeNull();
+    expect(saveWarning(["P3"])).toContain("还是要保存吗");
+  });
+
+  it("第 2 轮 setup N1:穿墙线不问「还是要保存吗」,直接说不能存、怎么办", async () => {
+    const { saveBlock } = await import("./layoutroadnet");
+    expect(saveBlock([])).toBeNull();
+    const m = saveBlock(["P1-P2"])!;
+    expect(m).toContain("不能保存");
+    expect(m).toContain("P1-P2");
+    expect(m).not.toContain("还是要保存吗");
   });
 });
 

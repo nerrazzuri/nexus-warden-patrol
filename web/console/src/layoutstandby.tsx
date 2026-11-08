@@ -138,6 +138,8 @@ function AddStandby({ robots, taken, onClose, onSave }: { robots: string[]; take
   const [robot, setRobot] = useState(robots[0] ?? "");
   const [name, setName] = useState("");
   const dup = taken.some((x) => x.robot_id === robot && x.name === name.trim());
+  // 第 2 轮 setup N13:名字不合规(中文、空格……)写出来,不只是「完成」变灰
+  const badName = name.trim() !== "" && !NAME_RE.test(name.trim());
   const ok = !!robot && NAME_RE.test(name.trim()) && !dup;
   return (
     <Modal label={t("lyAddStandby")} onClose={onClose}>
@@ -147,8 +149,10 @@ function AddStandby({ robots, taken, onClose, onSave }: { robots: string[]; take
             {robots.map((r) => <option key={r} value={r}>{r}</option>)}
           </select>
         </label>
-        <label class="field">{t("lyStandbyName")}<input name="name" value={name} maxLength={64} onInput={(e) => setName(e.currentTarget.value)} /></label>
-        <p class={dup ? "small bad" : "muted small"}>{dup ? t("lyStandbyDup") : t("lyStandbyNameHint")}</p>
+        <label class="field">{t("lyStandbyName")}<input name="name" value={name} maxLength={64} autoFocus
+          aria-invalid={badName || dup || undefined} onInput={(e) => setName(e.currentTarget.value)} /></label>
+        <p class={dup || badName ? "small bad" : "muted small"} role={dup || badName ? "alert" : undefined} data-sb-name-bad={badName || undefined}>
+          {dup ? t("lyStandbyDup") : badName ? t("lyStandbyNameBad") : t("lyStandbyNameHint")}</p>
         <div class="row end">
           <button type="button" class="btn" onClick={onClose}>{t("cancel")}</button>
           <button type="submit" class="btn primary" disabled={!ok}>{t("dlgApply")}</button>

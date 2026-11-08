@@ -532,7 +532,8 @@ function GuardGenerate({ map, taken, say, onDone, onClose }: {
   onDone: (id: string, points: RoutePoint[], problems: PointProblem[], notes: string[], standby?: boolean) => void; onClose: () => void;
 }) {
   const [zones, setZones] = useState<GenZone[] | null>(null);
-  const [name, setName] = useState("");
+  // 第 2 轮 setup N14:给个默认名(guard-1、guard-2…第一个没用过的),不用先手填
+  const [name, setName] = useState(() => { let n = 1; while (taken.includes(`guard-${n}`)) n++; return `guard-${n}`; });
   const [spacing, setSpacing] = useState(6);
   const [busy, setBusy] = useState(false);
   useEffect(() => {
@@ -545,6 +546,9 @@ function GuardGenerate({ map, taken, say, onDone, onClose }: {
   const picked = (zones ?? []).filter((z) => z.on);
   const dup = taken.includes(name.trim());
   const ok = picked.length > 0 && NAME_RE.test(name.trim()) && !dup && !busy;
+  // 「生成」灰着时说为什么
+  const why = busy || zones === null || zones.length === 0 ? "" : !name.trim() ? rt("guardGenNeedName")
+    : !NAME_RE.test(name.trim()) || dup ? rt("guardGenFixName") : picked.length === 0 ? rt("guardGenNeedZone") : "";
   async function go() {
     setBusy(true);
     try {
@@ -596,6 +600,7 @@ function GuardGenerate({ map, taken, say, onDone, onClose }: {
         <button type="button" class="btn sm" onClick={onClose}>{t("cancel")}</button>
         <button type="submit" class="btn sm primary" disabled={!ok}>{rt("guardGenGo")}</button>
       </div>
+      {why && <p class="small muted" data-gen-why="1">{why}</p>}
     </form>
   );
 }

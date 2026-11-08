@@ -100,6 +100,22 @@ describe("布置 → 防区路线", () => {
   });
 });
 
+describe("第 2 轮 setup N14:按防区生成有默认名;灰着说为什么", () => {
+  it("默认 guard-1;清空名字、全不勾都写原因", async () => {
+    const { container: c } = render(<GuardRoutesTab {...base()} />);
+    fireEvent.click(await waitFor(() => btn(c, "按防区生成")));
+    await waitFor(() => expect(c.querySelector('[data-gen-zone="东区"]')).not.toBeNull());
+    const inp = c.querySelector('.guard-gen input[aria-label="路线名"]') as HTMLInputElement;
+    expect(inp.value).toMatch(/^guard-\d+$/);
+    expect(c.querySelector("[data-gen-why]")).toBeNull();
+    fireEvent.input(inp, { target: { value: "" } });
+    expect(c.querySelector("[data-gen-why]")!.textContent).toBe("先填路线名。");
+    fireEvent.input(inp, { target: { value: "g1" } });
+    for (const z of ["东区", "西区"]) fireEvent.click(c.querySelector(`[data-gen-zone="${z}"] input[type="checkbox"]`)!);
+    expect(c.querySelector("[data-gen-why]")!.textContent).toBe("至少勾一个防区。");
+  });
+});
+
 describe("第 2 轮 P1-40:按防区生成没放上点", () => {
   async function gen(note: string, en = false) {
     if (en) lang.value = "en";
