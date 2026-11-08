@@ -29,6 +29,8 @@ export interface RobotCard {
   agent: string | null; compat: string; manual_only: boolean;
   wifi?: Wifi | null;
   /** W72 详情:老站点没有这些。 */
+  /** 第 2 轮 N2:当前地图那一版有没有原点(没报地图 = null)、有没有默认待命点。老站点没有。 */
+  home_set?: boolean | null; standby_set?: boolean;
   patrols_7d?: number; aborts_7d?: number; last_patrol_ms?: number | null; last_seen_ms?: number | null; ever_seen?: boolean;
   storage?: { used_ratio: number; backlog_files: number; oldest_backlog_s: number | null } | null;
   map?: { id: string; version: string | null; match: boolean | null } | null;
@@ -313,6 +315,9 @@ function Controls({ r, u, role, say, onChanged }: { r: RobotCard; u?: UnitInfo; 
   const why = off ? null : r.task ? t("rdHomeBusy") : !findable ? t("rdNoAutoLoc") : null;
   // P1-28:当前姿态(状态里的 ready.motion:站着能走 = true;老站点、没报 = 不写)
   const motion = u?.robot.status?.ready?.motion;
+  // 第 2 轮 N2:没原点、没默认待命点的先灰掉,写原因、给去处理的链接(不是点了才报红字)
+  const noHome = r.home_set === false;
+  const noStandby = r.standby_set === false;
   return (
     <section class="rd-sec rd-control">
       <h3 class="rd-h">{t("rdControl")}</h3>
@@ -341,10 +346,16 @@ function Controls({ r, u, role, say, onChanged }: { r: RobotCard; u?: UnitInfo; 
           )}
         </div>
       )}
+      {dispatch && !off && (noHome || noStandby) && (
+        <ul class="plain rd-why small muted">
+          {noHome && <li>{t("rdNoHome")} {isOwnerLike(role) && <a href="#/admin/localization">{t("rdNoHomeGo")}</a>}</li>}
+          {noStandby && <li>{t("rdNoStandby")} {isOwnerLike(role) && <a href="#/admin/layout?tab=standby">{t("rdNoStandbyGo")}</a>}</li>}
+        </ul>
+      )}
       <div class="rd-actions">
-        {dispatch && <button type="button" class="btn sm" disabled={busy || off}
+        {dispatch && <button type="button" class="btn sm" disabled={busy || off || noStandby}
           onClick={() => void send(() => api("POST", path("standby/return"), {}), t("rdSent", { id, what: t("rdReturn") }))}>{t("rdReturn")}</button>}
-        {dispatch && <button type="button" class="btn sm" disabled={busy || off || !!r.task}
+        {dispatch && <button type="button" class="btn sm" disabled={busy || off || !!r.task || noHome}
           title={r.task ? t("rdHomeBusy") : undefined}
           onClick={() => void send(() => api("POST", path("home/return"), {}), t("rdSent", { id, what: t("rdHome") }))}>{t("rdHome")}</button>}
         {dispatch && r.task && <button type="button" class="btn sm rd-danger" disabled={busy || off}

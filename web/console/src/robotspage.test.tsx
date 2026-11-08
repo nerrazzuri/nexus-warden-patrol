@@ -444,3 +444,28 @@ describe("第 2 轮 P0-10 / N4:解绑说实话,后续步骤常驻", () => {
     expect(c.querySelector("[data-open-revoked]")!.textContent).toContain("重启消息服务");
   });
 });
+
+describe("第 2 轮 N2:回原点、回待命点做不成的先灰掉", () => {
+  it("没原点:回原点灰掉、写原因、给去定位页的链接;没待命点:回待命点灰掉、给去设置待命点的链接", async () => {
+    robots = [card({ home_set: false, standby_set: false })];
+    const { container: c } = page();
+    await waitFor(() => expect(cardOf(c, "A")).not.toBeNull());
+    fireEvent.click(cardOf(c, "A"));
+    const d = c.querySelector(".robot-detail")!;
+    await waitFor(() => expect(btn(d, "回原点")).toBeTruthy());
+    expect(btn(d, "回原点").disabled).toBe(true);
+    expect(btn(d, "回待命点").disabled).toBe(true);
+    expect(d.querySelector('a[href="#/admin/localization"]')).not.toBeNull();
+    expect(d.querySelector('a[href="#/admin/layout?tab=standby"]')).not.toBeNull();
+  });
+  it("都有:照常能点", async () => {
+    robots = [card({ home_set: true, standby_set: true })];
+    const { container: c } = page();
+    await waitFor(() => expect(cardOf(c, "A")).not.toBeNull());
+    fireEvent.click(cardOf(c, "A"));
+    const d = c.querySelector(".robot-detail")!;
+    await waitFor(() => expect(btn(d, "回原点")).toBeTruthy());
+    expect(btn(d, "回原点").disabled).toBe(false);
+    expect(btn(d, "回待命点").disabled).toBe(false);
+  });
+});

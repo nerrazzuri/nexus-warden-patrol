@@ -267,3 +267,22 @@ def test_网页P1_23_刚登记还没连上过的_标出没连上过_不当离线
     _cmd(db, 9, NOW - 1000, robot="C")                     # 站点重启后还没新状态,但回过执:连上过
     rows = {r["robot_id"]: r for r in overview(d, db, now_ms=NOW, tz=KL)}
     assert rows["C"]["ever_seen"] is True
+
+
+def test_网页第2轮_N2_原点和默认待命点有没有_回原点回待命点的按钮提前灰掉(台):
+    d, db = 台
+    assert _one(d, db)["home_set"] is None, "没报地图 = 不知道"
+    d.clients["A"].capabilities.tasks["patrol"] = {"map_id": "m", "map_version": "2"}
+    r = _one(d, db)
+    assert r["home_set"] is False and r["standby_set"] is False
+    with db.tx() as c:
+        c.execute("INSERT INTO homes(robot_id, map_id, map_version, name, x, y, yaw) "
+                  "VALUES ('A','m','1','h',0,0,0)")
+    assert _one(d, db)["home_set"] is False, "别的版本的原点不算"
+    with db.tx() as c:
+        c.execute("INSERT INTO homes(robot_id, map_id, map_version, name, x, y, yaw) "
+                  "VALUES ('A','m','2','h',0,0,0)")
+        c.execute("INSERT INTO standby_points(robot_id, name, map_id, x, y, yaw, is_default) "
+                  "VALUES ('A','s','m',0,0,0,1)")
+    r = _one(d, db)
+    assert r["home_set"] is True and r["standby_set"] is True
