@@ -49,7 +49,8 @@ describe("告警测试模式", () => {
     expect(posted.length).toBe(1);
     const dlg = await waitFor(() => { const x = document.querySelector("dialog"); expect(x).toBeTruthy(); return x!; });
     fireEvent.click(btn(dlg, "结束测试并清掉"));
-    await waitFor(() => expect(c.textContent).toContain("删掉 3 条测试告警"));
+    // 第 2 轮 P1-19:不写条数(站点数的含保安看不到的记录)
+    await waitFor(() => expect(c.textContent).toContain("测试告警都已删掉"));
     expect(posted[1]).toEqual({ action: "end", clear: true });
     expect(cleared).toBe(1);
   });

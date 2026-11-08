@@ -429,14 +429,17 @@ function RobotDetail({ r, u, now, role, say, onChanged, onCode, onClose, readOnl
       <div class="panel-head">
         <h2>{label(r)}</h2>
         {r.name && <small class="muted mono">{r.robot_id}</small>}
-        {r.online ? <span class="state tone-success">{t("online")}</span> : <span class="state tone-error">{t("st_offline")}</span>}
+        {/* 第 2 轮 P1-23:刚登记、还没连上过的,详情顶上跟卡片一样写「还没连上」,不是红色离线 */}
+        {r.online ? <span class="state tone-success">{t("online")}</span>
+          : r.ever_seen === false ? <span class="state">{t("fleetNeverSeen")}</span>
+          : <span class="state tone-error">{t("st_offline")}</span>}
         <button type="button" class="btn sm push" onClick={onClose}>{t("close")}</button>
       </div>
       <section class="rd-sec">
         <h3 class="rd-h">{t("rdNow")}</h3>
         <dl class="rd-facts">
           <div><dt>{t("rdState")}</dt><dd>{u && r.online ? <><StateText s={u.state} stale={u.stale} />{u.task && <small class="muted"> {u.task}</small>}</>
-            : r.online ? t("online") : t("st_offline")}</dd></div>
+            : r.online ? t("online") : r.ever_seen === false ? t("fleetNeverSeen") : t("st_offline")}</dd></div>
           {fact("fleetBattery", r.battery_pct == null ? "—" : `${r.battery_pct}%`, true)}
           {fact("fleetLoc", `${loc ? t(loc) : "—"}${u?.robot.loc?.localizer ? ` · ${u.robot.loc.localizer}` : ""}`)}
           {fact("wifiLabel", r.wifi ? `${r.wifi.ssid || "—"} · ${t(`link_${r.wifi.link}` as Key)}` : "—")}
@@ -583,7 +586,7 @@ function AddRobot({ onClose, onDone, say }: { onClose: () => void; onDone: (id: 
 
 function CodeDialog({ id, code, hours, onClose, say }: { id: string; code: string; hours: number; onClose: () => void; say: Say }) {
   // P1-24:复制要有反馈;http 下没有剪贴板接口,退回选中 + execCommand
-  const box = useRef<HTMLInputElement>(null);
+  const box = useRef<HTMLTextAreaElement>(null);
   const [copied, setCopied] = useState(false);
   async function copy() {
     try {
@@ -599,7 +602,8 @@ function CodeDialog({ id, code, hours, onClose, say }: { id: string; code: strin
   return (
     <Modal label={t("activationCode", { id })} onClose={onClose}>
       <p class="muted small">{t("codeHint", { h: hours })}</p>
-      <input class="codebox mono" readOnly value={code} ref={box} onFocus={(e) => e.currentTarget.select()} aria-label={t("activationCode", { id })} />
+      {/* 第 2 轮 P1-24:多行框,码全看得见(原来单行要横着滚) */}
+      <textarea class="codebox mono" readOnly rows={4} value={code} ref={box} onFocus={(e) => e.currentTarget.select()} aria-label={t("activationCode", { id })} />
       {copied && <p class="small" role="status">{t("copied")}</p>}
       <div class="row end">
         <button type="button" class="btn" onClick={() => void copy()}>{t("copy")}</button>

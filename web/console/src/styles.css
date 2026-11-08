@@ -399,6 +399,10 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--c-primary); }
 @media (min-width: 721px) {
   .console.fill { height: 100vh; height: 100dvh; }
   .console.fill > .page { min-height: 0; overflow: auto; }
+  /* 第 2 轮 P1-08 / N15:主区包了一层 .workspace 以后上面那条对不上了,矮屏(1280×720)内容把整页撑高、
+     侧栏底色只到第一屏。工作区限在一屏高,页面自己滚 */
+  .console.fill > .workspace { min-height: 0; height: 100vh; height: 100dvh; }
+  .console.fill > .workspace > .page { min-height: 0; overflow: auto; }
   .console.fill .mappage { flex-wrap: nowrap; min-height: 0; }
   .console.fill .mapwrap { min-height: 200px; }
   .console.fill .sidebar { overflow-y: auto; }
@@ -1373,3 +1377,10 @@ input[type="date"]:not(.field input) { height: 36px; padding: 0 8px; border-radi
 .duty-list > li { display: flex; align-items: stretch; gap: 6px; }
 .duty-list > li > .duty-row { flex: 1; min-width: 0; }
 .duty-row-more { align-self: center; flex: none; }
+/* 第 2 轮 P1-28 / admin N7:红色按钮禁用后看着跟能点一样 —— 跟别的禁用按钮一样变灰 */
+.btn.danger:disabled, .btn.stop:disabled, .rd-actions .rd-danger:disabled, .btn.rd-danger:disabled {
+  color: var(--c-textMuted); background: transparent; border-color: var(--c-outline); opacity: 0.7; }
+/* 第 2 轮 P1-10:画面底栏一行放不下就截(…),不折成两行压住「● 实时」 */
+.slot-foot { flex-wrap: nowrap; overflow: hidden; white-space: nowrap; }
+.slot-foot > span { flex: none; }
+.slot-foot > span:last-child { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }

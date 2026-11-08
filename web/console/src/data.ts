@@ -125,6 +125,12 @@ export function usePageVisible(): boolean {
   return v;
 }
 
+/** 月-日(第 2 轮 P1-03 / admin N13:中英文都写 11-08,不写会被读反的 08/11)。 */
+export function md(ms: number): string {
+  const d = new Date(ms);
+  return `${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
 export function hms(ms: number): string {
   return new Date(ms).toLocaleTimeString("en-GB", { hour12: false });
 }

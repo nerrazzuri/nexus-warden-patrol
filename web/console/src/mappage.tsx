@@ -552,18 +552,20 @@ export function TempRoutePanel(props: {
 }) {
   const [robot, setRobot] = useState<string | null>(props.robots[0] ?? null);
   const [errs, setErrs] = useState<string[]>([]);
+  // 第 2 轮 P1-16:落点检查查出问题的点(改点以前「开始」灰掉;按了站点也只会回 400、看着没反应)
+  const [bad, setBad] = useState(0);
   const [busy, setBusy] = useState(false);
   const pointText = (list: { index: number | null; problem: string }[]) =>
     list.map((x) => (x.index == null ? siteStr(x.problem) : t("trBadPoint", { n: x.index + 1, why: siteStr(x.problem) })));
   // P1-16:点一下就查(穿墙、在禁行区里、没扫到的地方),不用等按「开始」
   const key = JSON.stringify(props.points);
   useEffect(() => {
-    if (props.points.length === 0) { setErrs([]); return; }
+    if (props.points.length === 0) { setErrs([]); setBad(0); return; }
     let live = true;
     const id = window.setTimeout(() => {
       api<{ errors: { index: number | null; problem: string }[] }>("POST", "/api/route-check",
         { points: props.points.map(([x, y]) => ({ x, y })), map_id: props.map.map_id, map_version: props.map.version })
-        .then((d) => { if (live) setErrs(pointText(d.errors ?? [])); })
+        .then((d) => { if (live) { setErrs(pointText(d.errors ?? [])); setBad((d.errors ?? []).length); } })
         .catch(() => { /* 老站点没有这个接口:按「开始」时照样查 */ });
     }, TEMP_CHECK_MS);
     return () => { live = false; window.clearTimeout(id); };
@@ -602,11 +604,12 @@ export function TempRoutePanel(props: {
           <button key={id} type="button" aria-pressed={robot === id} onClick={() => setRobot(id)}>{id}</button>
         ))}
       </div>
-      {errs.map((e) => <p key={e} class="error">{e}</p>)}
+      {errs.map((e) => <p key={e} class="error" role="alert">{e}</p>)}
+      {bad > 0 && <p class="muted small" data-fix-points="1">{t("trFixPoints")}</p>}
       <div class="row">
         <button type="button" class="btn sm" disabled={props.points.length === 0} onClick={props.onUndo}>{t("trUndo")}</button>
         <button type="button" class="btn sm" onClick={props.onCancel}>{t("cancel")}</button>
-        <button type="button" class="btn sm primary push" disabled={busy || !robot || props.points.length === 0} onClick={go}>{t("trGo")}</button>
+        <button type="button" class="btn sm primary push" disabled={busy || !robot || props.points.length === 0 || bad > 0} onClick={go}>{t("trGo")}</button>
       </div>
     </div>
   );

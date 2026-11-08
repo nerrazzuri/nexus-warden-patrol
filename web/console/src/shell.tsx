@@ -7,7 +7,7 @@ import { api, ApiError } from "./api";
 import type { Me } from "./app";
 import { modeLabel } from "./armingpage";
 import { Confirm, Modal } from "./dialogs";
-import { hm } from "./data";
+import { hm, md } from "./data";
 import { lang, setLang, t, type Key } from "./i18n";
 import { Icon } from "./icons";
 import { canArm, canDispatch, isOwnerLike, type Mode } from "./model";
@@ -171,7 +171,7 @@ export function TopBar(props: {
       </a>
       {/* P2-27:小一点,带上日期(值夜班跨零点看得清是哪天) */}
       <span class="clock mono" title={new Date(props.now).toLocaleDateString(lang.value === "zh" ? "zh-CN" : "en-GB", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}>
-        <span class="clock-date">{new Date(props.now).toLocaleDateString(lang.value === "zh" ? "zh-CN" : "en-GB", { month: "numeric", day: "numeric" })}</span>{" "}
+        <span class="clock-date">{md(props.now)}</span>{" "}
         {new Date(props.now).toLocaleTimeString("en-GB", { hour12: false, hour: "2-digit", minute: "2-digit" })}
       </span>
       {props.onHelp && (

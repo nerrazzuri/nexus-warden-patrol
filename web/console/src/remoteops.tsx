@@ -9,8 +9,8 @@ import { useLoad } from "./admin";
 import { api, apiUpload, ApiError, enc } from "./api";
 import { ConfirmPassword } from "./confirmpw";
 import { Confirm } from "./dialogs";
-import { hms } from "./data";
-import { lang, t, type Key } from "./i18n";
+import { hms, md } from "./data";
+import { t, type Key } from "./i18n";
 
 type Say = (s: string) => void;
 const why = (e: unknown) => (e instanceof ApiError ? e.message : String(e));
@@ -242,7 +242,7 @@ function Spark({ pts, fmt }: { pts: Metric[]; fmt: (v: number) => string }) {
   const x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys);
   const L = 44, B = 16, w = 320, h = 48;
   const d = pts.map((p, i) => `${i ? "L" : "M"}${(L + ((p.ts - x0) / (x1 - x0 || 1)) * w).toFixed(1)},${(4 + h - ((p.value - y0) / (y1 - y0 || 1)) * h).toFixed(1)}`).join(" ");
-  const day = (ms: number) => new Date(ms).toLocaleDateString(lang.value === "zh" ? "zh-CN" : "en-GB", { month: "numeric", day: "numeric" });
+  const day = md;
   return (
     <svg class="spark" viewBox={`0 0 ${L + w + 4} ${h + B + 8}`} width={L + w + 4} height={h + B + 8} role="img"
       aria-label={`${fmt(y0)}–${fmt(y1)}, ${day(x0)}–${day(x1)}`}>
