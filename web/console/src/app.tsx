@@ -4,6 +4,8 @@ import { Console } from "./console";
 import type { Guide } from "./guide";
 import { t } from "./i18n";
 import { Login } from "./login";
+import { BrandMark, loadThemePref, pinFor } from "./shell";
+import { pinScheme, systemIsDark } from "./theme";
 
 export interface Me {
   name: string;
@@ -42,9 +44,14 @@ export function App() {
     return () => { alive = false; if (timer) clearTimeout(timer); };
   }, []);
 
+  // 第 4 轮 admin N3:登录前(启动、连不上、登录页)也按用户选的外观上色(默认深色),不先白一下
+  useEffect(() => {
+    if (!me) pinScheme(pinFor("duty", loadThemePref(), systemIsDark()));
+  }, [me]);
+
   if (me === undefined) {
     return down
-      ? <div class="boot boot-down" role="alert" data-site-down="1"><p>{t("bootDown")}</p></div>
+      ? <div class="boot boot-down" role="alert" data-site-down="1"><BrandMark /><p>{t("bootDown")}</p></div>
       : <div class="boot" aria-busy="true"><p class="boot-wait muted">{t("loading")}</p></div>;
   }
   if (me === null)

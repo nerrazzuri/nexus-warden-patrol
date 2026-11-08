@@ -4,7 +4,7 @@
 import { useEffect, useState } from "preact/hooks";
 import { useLoad } from "./admin";
 import { nameOf } from "./data";
-import { t, type Key } from "./i18n";
+import { lang, t, type Key } from "./i18n";
 import type { Robot } from "./model";
 import { RobotOps } from "./remoteops";
 import { checkText, SiteSpan } from "./sitetext";
@@ -62,7 +62,7 @@ export function DiagPage({ say }: { say: (s: string) => void }) {
               <li key={k} class={c.ok ? "chk ok" : "chk bad"} data-check={k}>
                 <span class="mark" aria-hidden="true">{c.ok ? "✓" : "✕"}</span>
                 <b>{CHECK[k] ? t(CHECK[k]) : k}</b>
-                {c.detail && <span class="muted small" title={c.detail}>{checkText(c)}</span>}
+                {c.detail && <span class="muted small" title={lang.value === "en" ? undefined : c.detail}>{checkText(c)}</span>}
               </li>
             ))}
           </ul>

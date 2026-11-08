@@ -317,3 +317,30 @@ describe("第 2 轮 layout N14", () => {
     expect(main.querySelector("img.feed")!.className).not.toContain("pending");
   });
 });
+
+describe("第 4 轮 admin N4 看的人满了", () => {
+  it("站点回 429:画面上写人数上限,不写「正在重连」,也不只放悬停里", async () => {
+    const { setSocketFactory } = await import("./videomux");
+    let sock: { onopen: ((e: unknown) => void) | null; onmessage: ((e: { data: unknown }) => void) | null; readyState: number } | null = null;
+    setSocketFactory(() => {
+      const s = { binaryType: "blob", readyState: 0, onopen: null, onmessage: null, onclose: null, onerror: null,
+        send() {}, close() { s.readyState = 3; } } as unknown as typeof sock & { send(): void; close(): void };
+      sock = s;
+      return s as never;
+    });
+    try {
+      const r = render(<VideoSlot u={unit()} now={Date.now()} pinned={false} onPin={() => {}} onZoom={() => {}} />);
+      sock!.readyState = 1;
+      sock!.onopen?.({});
+      sock!.onmessage?.({ data: JSON.stringify({ kind: "error", id: "/api/robots/A/video/front", status: 429,
+        message: "A 的 front 已有 6 个人在看了,最多 6 个 —— 关掉一个再开" }) });
+      await new Promise((ok) => setTimeout(ok, 0));
+      const lost = r.container.querySelector(".slot-main .lost")!;
+      expect(lost.getAttribute("data-cam-full")).toBe("1");
+      expect(lost.textContent).toContain("6/6");
+      expect(r.container.querySelector(".slot-main .osd.bottom")!.textContent).toContain("看的人满了");
+    } finally {
+      setSocketFactory(null);
+    }
+  });
+});

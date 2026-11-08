@@ -34,6 +34,19 @@ from nexwar_site.alert_sources import SITE
 
 log = logging.getLogger(__name__)
 
+_KEY_EN = {"secrets": "password encryption key", "backup": "backup encryption key",
+           "evidence": "evidence encryption key"}
+
+
+def _key_problem_en(problem: str) -> str:
+    for zh, en in (("没有这把密钥", "missing"), ("无法读取", "cannot be read"),
+                   ("长度错误", "wrong length"), ("是空的", "empty"),
+                   ("权限过宽", "readable by other users")):
+        if problem.startswith(zh):
+            return en
+    return "problem"
+
+
 #: 证书剩不到这么多天报 P2。
 CERT_WARN_DAYS = 30
 #: 盘剩不到这么多(比例)报 P2;探活也算不好。
@@ -232,8 +245,14 @@ class HealthDesk:
                                       if worst is not None else "No certificates")}
         if self._keys is not None:
             bad = [f"{r['name']}:{r['problem']}" for r in self._keys() if r["problem"]]
-            out["keys"] = {"ok": not bad, "detail": ";".join(bad)[:300] or "站点密钥都在、权限对",
-                           "detail_en": f"{len(bad)} site key(s) have a problem" if bad
+            out["keys"] = {"ok": not bad,
+                           "detail": ";".join(bad)[:300] or "站点密钥都在、权限对",
+                           # 第 4 轮 admin P1-01:英文也写出是哪几把(原来只有中文悬停里有)
+                           "detail_en": ("Site key problem: " + ", ".join(
+                               f"{_KEY_EN.get(r['name'], r['name'])} "
+                               f"({_key_problem_en(r['problem'])})"
+                               for r in self._keys() if r["problem"])
+                               ) if bad
                            else "Site keys present, permissions correct"}
         lanes = self._lanes() if self._lanes is not None else {}
         stuck = [n for n, t0 in lanes.items() if self._mono() - t0 > LANE_STUCK_S]

@@ -52,6 +52,16 @@ def _terminal(db: Any, robot: str, task_id: str) -> tuple[str, int, str, int] | 
     return _TERMINAL[rows[0]["kind"]], int(rows[0]["received_at"]), why, skipped
 
 
+def _stopped_by(db: Any, robot: str, start_ms: int, end_ms: int) -> str:
+    """第 4 轮 admin N7:被叫停的那趟是谁叫停的 —— 这一趟里最后一条停车 / 撤销命令的发令人
+    (派单的人不一定是叫停的人)。找不到就空串。"""
+    rows = db.query(
+        "SELECT issued_by FROM commands WHERE robot_id=? AND kind IN ('halt','abort') "
+        "AND issued_at BETWEEN ? AND ? ORDER BY issued_at DESC LIMIT 1",
+        (robot, start_ms, end_ms + 5_000))
+    return str(rows[0]["issued_by"]) if rows else ""
+
+
 def today_view(db: Any, *, now_ms: int, adhoc: Any = None) -> dict[str, Any]:
     act = active_bundle(db)
     tz = act.schedule.tz() if act is not None else site_tz(db)
@@ -72,6 +82,9 @@ def today_view(db: Any, *, now_ms: int, adhoc: Any = None) -> dict[str, Any]:
     if adhoc is not None:
         for r in adhoc.between(a_ms, b_ms):
             items.append(_adhoc_item(db, r, now_ms))
+    for it in items:
+        if it["state"] == "aborted" and it.get("robot") and it.get("end_ms"):
+            it["stopped_by"] = _stopped_by(db, it["robot"], int(it["at_ms"]), int(it["end_ms"]))
     items.sort(key=lambda x: (x["at_ms"], x["label"]))
     first = next((it for it in items if it["state"] == "later"), None)
     if first is not None:

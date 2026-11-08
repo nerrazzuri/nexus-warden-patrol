@@ -906,7 +906,7 @@ p.warn { color: var(--c-text); background: var(--c-warningSoft); padding: 8px 12
 .rd-inline input:focus-visible { outline: 0; border: 2px solid var(--c-focus); padding: 0 11px; }
 .rd-inline .btn { height: 36px; }
 .rd-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
-.rd-actions .rd-danger { margin-left: auto; color: var(--c-error); border-color: var(--c-error); background: transparent; }
+.rd-actions .rd-danger { color: var(--c-error); border-color: var(--c-error); background: transparent; }
 .rd-actions .rd-danger:hover:not(:disabled) { background: var(--c-errorSoft); }
 .rd-h { margin: 0; font-size: 15px; line-height: 20px; font-weight: 600; }
 .rd-group { display: flex; flex-direction: column; gap: 6px; }
@@ -1499,7 +1499,7 @@ input[type="file"] { max-width: 100%; min-width: 0; }            /* 上传按钮
 .duty-left .duty-list { flex: none; overflow: visible; }
 .duty-left .today { flex: none; max-height: none; overflow: visible; }
 /* 第 3 轮 admin N6:连不上站点时的启动页 */
-.boot-down { display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 16px; color: var(--c-textSecondary); text-align: center; }
+.boot-down { display: flex; flex-direction: column; gap: 16px; align-items: center; justify-content: center; min-height: 100vh; padding: 16px; color: var(--c-textSecondary); text-align: center; }
 /* 第 3 轮 duty N8:没有图片时不放一块黑的空缩略图(位置留着,列对齐) */
 .it .shot.none { background: none; }
 .it .res .al-note { color: var(--c-textSecondary); font-style: italic; }
@@ -1563,3 +1563,14 @@ input[type="file"] { max-width: 100%; min-width: 0; }            /* 上传按钮
 .codebox { field-sizing: content; min-height: 6lh; }
 /* 第 3 轮 P1-66:活动记录跟面板标题一样留边距 */
 .user-audit ul.plain, .user-audit > p { padding: 12px 16px; }
+/* 第 4 轮 P1-66:活动记录每行时间一列、内容一列,换行对齐 */
+.user-audit li { display: grid; grid-template-columns: 9.5em 1fr; column-gap: 10px; align-items: baseline; }
+.user-audit .audit-body { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: baseline; min-width: 0; }
+/* 第 4 轮 admin N1:起了名字的机器人卡片:名字 + 编号一行,状态第二行;编号不在连字符处折 */
+.fleet-head.named { flex-wrap: wrap; row-gap: 2px; }
+.fleet-head .fleet-id { white-space: nowrap; flex: none; }
+.fleet-head.named .fleet-state { flex-basis: 100%; margin-left: 0; }
+.fleet-head.named .robot-name { flex: 0 1 auto; }
+/* 第 4 轮 admin N2:提示做成 popover(最上层);去掉浏览器给 popover 的默认框和居中 */
+.toast[popover] { inset: auto; left: 50%; bottom: 56px; margin: 0; border: 0; padding: 0; background: transparent; color: inherit; overflow: visible; }
+.toast[popover]:not(:empty) { padding: 10px 16px; background: var(--c-text); color: var(--c-bg); }

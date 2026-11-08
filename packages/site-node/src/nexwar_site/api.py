@@ -681,6 +681,8 @@ class _Handler(TlsHandlerMixin):
             if method == "POST" and path == "/api/me/guide":
                 from nexwar_site.setup import GuideError, write_guide
                 self._need(user, VIEW)
+                # 第 4 轮 admin P1-66:翻帮助、收起清单只是个人界面状态,不进活动记录
+                self._skip_audit = True
                 try:
                     return self._send_json(200, write_guide(self.site.accounts, str(user),
                                                             self._body()))
@@ -2121,6 +2123,11 @@ class _Handler(TlsHandlerMixin):
             else:
                 eid = int(_ARM_EX.match(path).group(1))
                 self._audit_target = f"exception/{eid}"
+                # 第 4 轮 admin P1-66:删的是哪几天,活动记录里写出来
+                old = next((e for e in sch.exceptions() if e["id"] == eid), None)
+                if old:
+                    self._audit_detail = {k: old.get(k) for k in ("first_day", "last_day", "state")}
+                    self._audit_detail["removed"] = True
                 if not sch.remove_exception(eid):
                     raise HttpError(404, "没有这一条例外")
         except ScheduleError as exc:

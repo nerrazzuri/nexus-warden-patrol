@@ -108,6 +108,7 @@ export function CameraWell(props: { robot: string; cam: Cam; forceLive?: boolean
 
   // 工单 5(2026-10-28):画面起不来时站点知道为什么(比如钟差太大、推流命令被拒),写出来
   const [why, setWhy] = useState("");
+  const [full, setFull] = useState<string | null>(null);
   const healthUrl = props.feed ? props.feed.health : `/api/robots/${enc(props.robot)}/video/health`;
   useEffect(() => {
     if (!streaming || noHealth) return;
@@ -161,14 +162,17 @@ export function CameraWell(props: { robot: string; cam: Cam; forceLive?: boolean
   const label = props.feed ? props.feed.label : camLabel(props.robot, props.cam);
   const stream = props.feed ? props.feed.src : `/api/robots/${enc(props.robot)}/video/${props.cam}`;
   const frame = useVideoFrame(stream, streaming && !broken, props.variant === "pip" ? PIP_FPS : MAIN_FPS, nonce,
-    (_status, message) => {
+    (status, message) => {
       if (message) setWhy(message);
+      // 第 4 轮 admin N4:看的人满了(429)不是坏了 —— 画面上直接写人数上限
+      const m = status === 429 ? /已有 (\d+) ?个人在看了.*最多 (\d+)/.exec(message ?? "") : null;
+      setFull(status === 429 ? (m ? `${m[1]}/${m[2]}` : "?") : null);
       lose(Date.now());
     });
   // 断过、重连了但第一帧还没到:还是「正在重连」,不写「实时」(真浏览器上查出来的)
   const retrying = broken || (lostAt != null && !started);
   // 第 2 轮 layout N14:第一帧到之前写「连接中」,不写「实时」;图片也先藏着(不露浏览器的破图图标)
-  const status = retrying ? t("reconnecting") : streaming ? (started ? t("live") : t("connecting"))
+  const status = retrying && full ? t("camFullShort") : retrying ? t("reconnecting") : streaming ? (started ? t("live") : t("connecting"))
     : pausedAt ? t("pausedAt", { t: hms(pausedAt) }) : t("noFeed");
   const cls = `${streaming ? "well" : "well paused"}${lostAt != null ? " lostfeed" : ""}${props.variant ? ` ${props.variant}` : ""}`;
   return (
@@ -176,13 +180,13 @@ export function CameraWell(props: { robot: string; cam: Cam; forceLive?: boolean
       <canvas ref={frozen} class="frozen" aria-hidden="true" />
       {streaming && !broken && (
         <img ref={img} class={`${props.feed ? "feed scene" : "feed"}${started ? "" : " pending"}`} src={frame ?? undefined} data-src={stream} alt={label}
-          onLoad={() => setStarted(true)}
+          onLoad={() => { setStarted(true); setFull(null); }}
           onError={() => lose(Date.now())} />
       )}
       {lostAt != null && (
         // P1-11:角落里一行,停在最后一帧;刚断不写「0 秒」;站点给的原因(常是技术原话)放到悬停里
-        <div class="lost" role="status" title={why || undefined}>
-          {(() => {
+        <div class="lost" role="status" title={full ? undefined : why || undefined} data-cam-full={full ? "1" : undefined}>
+          {full ? t("camFull", { n: full }) : (() => {
             const s = Math.max(0, Math.round((props.now - lostAt) / 1000));
             return s < 3 ? t("feedLostNow", { t: hms(lostAt) }) : t("feedLost", { t: hms(lostAt), s });
           })()}

@@ -43,6 +43,8 @@ type Pending =
   | { kind: "cam"; robot: string; cam: Cam }
   | null;
 
+
+const CAN_POPOVER = typeof HTMLElement !== "undefined" && "showPopover" in HTMLElement.prototype;
 export function Console({ me, onOut }: { me: Me; onOut: (note?: string) => void }) {
   const [data, refresh, conn] = useSiteData();
   const now = useNow();
@@ -51,6 +53,16 @@ export function Console({ me, onOut }: { me: Me; onOut: (note?: string) => void 
   const [route, setRoute] = useState(readRoute);
   const [pending, setPending] = useState<Pending>(null);
   const [toast, setToast] = useState("");
+  // 第 4 轮 admin N2:提示放到浏览器最上层,开着弹窗时也不被遮罩压暗(每次重新显示,排到弹窗上面)
+  const toastRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = toastRef.current as (HTMLDivElement & { showPopover?: () => void; hidePopover?: () => void }) | null;
+    if (!el || !CAN_POPOVER) return;
+    try {
+      if (el.matches(":popover-open")) el.hidePopover?.();
+      if (toast) el.showPopover?.();
+    } catch { /* 不支持就照旧 */ }
+  }, [toast]);
   // 第 2 轮 duty N8:提示上能带一个按钮(比如关掉报警后的「撤销」)
   const [toastAct, setToastAct] = useState<ToastAction | null>(null);
   // W53:第一次登录(这个账号没看过当前版本的网页教程)自动打开;老站点不带 guide 就不弹
@@ -236,7 +248,7 @@ export function Console({ me, onOut }: { me: Me; onOut: (note?: string) => void 
       )}
       {pending?.kind === "cam" && <FullCamera robot={pending.robot} cam={pending.cam} now={now} onClose={() => setPending(null)}
         cams={robotCams(units.find((u) => u.robot.robot_id === pending.robot)?.robot)} />}
-      <div class="toast" role="status" aria-live="polite">{toast}
+      <div class="toast" role="status" aria-live="polite" ref={toastRef} {...(CAN_POPOVER ? { popover: "manual" } : {})}>{toast}
         {toast && toastAct && <button type="button" class="btn sm toast-act" data-toast-act="1"
           onClick={() => { const a = toastAct; setToast(""); setToastAct(null); a.run(); }}>{toastAct.label}</button>}</div>
     </div>
