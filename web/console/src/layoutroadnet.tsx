@@ -4,7 +4,7 @@
 import { useEffect, useRef, useState } from "preact/hooks";
 import { api } from "./api";
 import { clickGuard, startDrag, swallowClick } from "./dragpt";
-import { t, joinList } from "./i18n";
+import { joinList, lang, t } from "./i18n";
 import { SaveCancelled, toMap, type TabProps } from "./layoutpage";
 import { clientToMap } from "./routes";
 
@@ -194,7 +194,9 @@ export function RoadnetTab(p: TabProps) {
         {problem && <p class="small bad">{problem}</p>}
         {loaded !== null && nodes.length === 0 && <p class="muted small">{t("lyRnEmpty")}</p>}
         {nodes.length > 0 && (
-          <p class="small">{t("lyRnStats", { nodes: String(nodes.length), edges: String(edges.length), len: lengthM(nodes, edges).toFixed(1) })}</p>
+          <p class="small">{/* 第 4 轮 setup r3-N7:单复数(「1 links」) */}
+            {t("lyRnStats", { nodes: String(nodes.length), edges: String(edges.length), len: lengthM(nodes, edges).toFixed(1),
+              pts: lang.value === "en" && nodes.length === 1 ? "point" : "points", lks: lang.value === "en" && edges.length === 1 ? "link" : "links" })}</p>
         )}
         {alone.length > 0 && <p class="small warn">{t("lyRnLonely", { ids: joinList(alone) })}</p>}
         {bad.length > 0 && <p class="small bad" data-rn-cross="1">{t("lyRnCrossWall", { ids: joinList(bad) })}</p>}

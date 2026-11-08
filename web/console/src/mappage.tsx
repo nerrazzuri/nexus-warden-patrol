@@ -221,7 +221,11 @@ export function SiteMap(props: {
                   const a = abnormal(u.state);
                   const on = u.robot.robot_id === sel?.robot.robot_id;
                   return (
-                    <g key={u.robot.robot_id} class={`bot ${a ?? "ok"}${on ? " on" : ""}`} onClick={(e) => { e.stopPropagation(); props.onSelect(u.robot.robot_id); }}>
+                    <g key={u.robot.robot_id} class={`bot ${a ?? "ok"}${on ? " on" : ""}`} onClick={(e) => {
+                      // 第 4 轮 maps N3:点已选中的这台本身 = 在它身上选点(帮它定位时最自然的点法),交给地图
+                      if (on && pose.onPick && props.pick !== false && !props.onPickMap) return;
+                      e.stopPropagation(); props.onSelect(u.robot.robot_id);
+                    }}>
                       <line x1={x} y1={y} x2={x + ((ex - x) / n) * len} y2={y + ((ey - y) / n) * len} class="bot-head" />
                       <circle cx={x} cy={y} r={BOT_R} class="bot-dot" />
                       <text x={x} y={y + dy + BOT_R + LABEL_PX + 2} class="bot-label" font-size={LABEL_PX}>{nameOf(u.robot.robot_id)}</text>

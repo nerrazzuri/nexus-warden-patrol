@@ -13,11 +13,12 @@ describe("摄像头名字规则", () => {
     render(<CameraForm initial={null} onClose={() => {}} onSaved={() => {}} say={() => {}} />);
     const rule = document.querySelector("[data-name-rule]")!;
     expect(rule.textContent).toContain("不能有空格、中文");
-    expect(rule.className).not.toContain("bad");
+    expect(rule.className).not.toContain("error");
     const inp = document.querySelector(".camform input") as HTMLInputElement;
     fireEvent.input(inp, { target: { value: "大门" } });
-    expect(document.querySelector("[data-name-rule]")!.className).toContain("bad");
+    expect(document.querySelector("[data-name-rule]")!.className).toContain("error");
+    expect(document.querySelector("input[aria-invalid=true]")).not.toBeNull();   // 第 4 轮:框也变红
     fireEvent.input(inp, { target: { value: "gate-1" } });
-    expect(document.querySelector("[data-name-rule]")!.className).not.toContain("bad");
+    expect(document.querySelector("[data-name-rule]")!.className).not.toContain("error");
   });
 });

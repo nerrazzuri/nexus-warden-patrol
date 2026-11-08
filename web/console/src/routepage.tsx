@@ -175,6 +175,10 @@ export function RoutesPage({ say, embed, kind = "patrol" }: { say: Say; embed?: 
     setGenNotes([points.length ? rt("guardGenDone", { n: points.length }) : rt("guardGenNone"), ...notes]);
     setGenStandby(standby);
   }
+  // 第 4 轮 setup N4:点「+ 新建路线」后光标进名字框(autoFocus 只在页面第一次载入时管用)
+  const nameBox = useRef<HTMLInputElement>(null);
+  const isNew = !!draft?.isNew;
+  useEffect(() => { if (isNew) nameBox.current?.focus(); }, [isNew]);
   function startNew() {
     // 新建:右侧栏换成编辑页,名字在编辑页顶上填(2026-10-15 用户:原来名字框夹在路线列表和点位列表中间)
     nextEdit();
@@ -449,7 +453,7 @@ export function RoutesPage({ say, embed, kind = "patrol" }: { say: Say; embed?: 
                 {draft.isNew ? (
                   <label class="routename">
                     <span class="small">{rt("routeName")}</span>
-                    <input aria-label={rt("routeName")} placeholder={rt("routeName")} value={draft.id} maxLength={64} autoFocus
+                    <input aria-label={rt("routeName")} placeholder={rt("routeName")} value={draft.id} maxLength={64} ref={nameBox}
                       onInput={(e) => { const id = e.currentTarget.value.trim(); setDraft((d) => (d ? { ...d, id } : d)); }} />
                     <span class={`small${nameTaken || (draft.id && !NAME_RE.test(draft.id)) ? " bad" : " muted"}`}>
                       {nameTaken ? rt("routeNameTaken") : rt("routeNameHint")}

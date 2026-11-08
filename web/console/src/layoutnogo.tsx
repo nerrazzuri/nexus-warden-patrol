@@ -161,6 +161,8 @@ export function NogoTab(p: TabProps) {
           {!nav ? <p class="muted">…</p> : current && held.length === 0
             ? <p class="ok-text">{t("lyNogoLive")}</p>
             : held.length > 0 ? <p class="warn-text">{t("lyNogoWaitYou", { names: joinList(held.map((z) => siteKnown(z.label) || z.id)) })}</p>
+            // 第 4 轮 maps N1:另存出来的版本已经抄了来源版本的区域 —— 说「已有 n 个,核一下再确认」,不说「去画」
+            : (nav.zones?.length ?? 0) > 0 ? <p class="warn-text" data-nogo-copied="1">{t("lyNogoCopiedCheck", { n: nav.zones.length })}</p>
             : <p class="warn-text">{t("lyNogoNeverConfirmed")}</p>}
           {behind.length > 0 && <p class="warn-text">{t("lyNogoWaitRobot", { ids: joinList(behind) })}</p>}
           {prop && (
@@ -210,7 +212,7 @@ export function NogoTab(p: TabProps) {
         <ul class="plain ly-list">
           {shown.length === 0 && <li class="muted small">{t("noNavZones")}</li>}
           {shown.map((z) => (
-            <li key={z.id} class="row">
+            <li key={z.id} class={z.id === sel ? "row on" : "row"}>
               <span><button type="button" class={z.id === sel ? "linklike on" : "linklike"} data-pick-zone={z.id}
                 onClick={() => setSel(z.id === sel ? null : z.id)}><b>{siteKnown(z.label) || z.id}</b></button> <span class="muted small nowrap">{nogoLine(z)}</span></span>
               {z.id === sel && <button type="button" class="btn sm push" data-rename="1" onClick={() => setRenaming(true)}>{t("lyRename")}</button>}

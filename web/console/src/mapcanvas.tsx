@@ -50,12 +50,12 @@ export interface CanvasArea {
 /** 图例超过这么多项就收成按钮。 */
 const LEGEND_INLINE = 6;
 
-export type LegendKey = "floor" | "wall" | "seen" | "unknown" | "nogo" | "hard" | "vwall" | "erase" | "slow" | "ignore" | "area" | "zone" | "region" | "ref" | "exit" | "hide" | "robot" | "alarm";
-const LEGEND_ORDER: LegendKey[] = ["floor", "wall", "seen", "unknown", "nogo", "hard", "vwall", "erase", "slow", "ignore", "area", "zone", "region", "ref", "exit", "hide", "robot", "alarm"];
+export type LegendKey = "floor" | "wall" | "seen" | "unknown" | "nogo" | "hard" | "vwall" | "erase" | "slow" | "ignore" | "area" | "zone" | "region" | "ref" | "exit" | "hide" | "standby" | "camera" | "robot" | "alarm";
+const LEGEND_ORDER: LegendKey[] = ["floor", "wall", "seen", "unknown", "nogo", "hard", "vwall", "erase", "slow", "ignore", "area", "zone", "region", "ref", "exit", "hide", "standby", "camera", "robot", "alarm"];
 const LEGEND_TEXT: Record<LegendKey, Key> = {
   floor: "legendFloor", wall: "legendWall", seen: "legendSeen", unknown: "legendUnknown", nogo: "legendNoGo",
   hard: "hardNoGoLegend", vwall: "legendVWall", erase: "legendErase", slow: "legendSlow", ignore: "legendIgnore",
-  area: "legendArea", zone: "legendZone", region: "legendRegion", ref: "legendZoneRef", exit: "legendExit", hide: "legendHide", robot: "legendRobot", alarm: "legendAlarm",
+  area: "legendArea", zone: "legendZone", region: "legendRegion", ref: "legendZoneRef", exit: "legendExit", hide: "legendHide", standby: "legendStandby", camera: "legendCamera", robot: "legendRobot", alarm: "legendAlarm",
 };
 
 /** 底图的灰度(站点 map_preview:空地 254、墙 0、看到过 232、未知 205;平面图:地面白、墙深灰、看到过是
@@ -344,6 +344,9 @@ function Swatch({ k, plan }: { k: LegendKey; plan: boolean }) {
   else if (k === "exit") body = <path d="M1 6L15 6" class="mark-exit" />;
   else if (k === "hide") body = <circle cx="8" cy="6" r="4" class="sw-hide" />;
   else if (k === "robot") body = <circle cx="8" cy="6" r="5" class="sw-robot" />;
+  // 第 4 轮 setup N3:待命点、摄像头标签的图例里有本标签的图标
+  else if (k === "standby") body = <circle cx="8" cy="6" r="5" class="sw-standby" />;
+  else if (k === "camera") body = <><path d="M8 6L15 1.5V10.5Z" class="sw-camfan" /><circle cx="6" cy="6" r="4" class="sw-cam" /></>;
   else body = <path d="M8 0.5l5.5 5.5-5.5 5.5-5.5-5.5z" class="sw-alarm" />;
   return <svg class="sw" width="16" height="12" viewBox="0 0 16 12" aria-hidden="true">{body}</svg>;
 }

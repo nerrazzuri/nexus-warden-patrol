@@ -76,3 +76,20 @@ describe("布置 → 待命点", () => {
     expect(posted.find((p) => p.url === "/api/robots/A/standby")?.body).toEqual({ name: "dock", remove: true });
   });
 });
+
+describe("第 4 轮 maps N1 / setup P0-14", () => {
+  it("从上一版带过来的待命点列出来,留下后存到这一版", async () => {
+    const nav = { revision: 1, zones: [], proposal: { from_version: "2", zones: [],
+      standby: [{ robot_id: "B", name: "home", x: 5, y: 5, yaw: 0, default: true }, { robot_id: "A", name: "dock", x: 1, y: 1, yaw: 0 }] } };
+    const p = { ...props(), data: { ...data, nav: nav as unknown as LayerData["nav"] } };
+    const { container: c } = render(<StandbyTab {...p} />);
+    const box = c.querySelector("[data-carried-standby]")!;
+    expect(box.getAttribute("data-carried-standby")).toBe("1");          // A · dock 这一版已经有了,不再列
+    expect(box.textContent).toContain("从版本 2 带过来 1 个待命点");
+    fireEvent.click(box.querySelector('[data-keep="B/home"]')!);
+    expect(c.querySelector("[data-carried-standby]")).toBeNull();
+    await save!();
+    await waitFor(() => expect(posted.find((x) => x.url === "/api/robots/B/standby")?.body)
+      .toMatchObject({ name: "home", map_version: "3", x: 5, y: 5, default: true }));
+  });
+});

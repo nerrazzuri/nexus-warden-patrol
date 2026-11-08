@@ -12,6 +12,7 @@ import { NAME_RE } from "./routepage";
 import { clientToMap, handleAt, yawToward } from "./routes";
 
 const key = (p: { robot_id: string; name: string }) => `${p.robot_id}/${p.name}`;
+interface Carried { robot_id: string; name: string; x: number; y: number; yaw: number; default?: boolean }
 interface Charger { robot_id: string; map_id: string; map_version: string; x: number; y: number }
 
 export function StandbyTab(p: TabProps) {
@@ -27,6 +28,12 @@ export function StandbyTab(p: TabProps) {
     api<{ chargers: Charger[] }>("GET", "/api/chargers").then((d) => setChargers((d.chargers ?? [])
       .filter((c) => c.map_id === p.map.map_id && c.map_version === p.map.version))).catch(() => setChargers([]));
   }, []);
+  // 第 4 轮 setup N1:站点的待命点后到(机器人列表晚到、重新取过),本地没改过就跟上,不当成「没保存」
+  const seen = useRef(p.data.standby);
+  useEffect(() => {
+    if (JSON.stringify(pts) === JSON.stringify(seen.current)) setPts(p.data.standby);
+    seen.current = p.data.standby;
+  }, [p.data.standby]);
   const changed = JSON.stringify(pts) !== JSON.stringify(p.data.standby);
   useEffect(() => p.setDirty(changed), [changed]);
   useEffect(() => {
@@ -47,6 +54,17 @@ export function StandbyTab(p: TabProps) {
     });
     return () => p.registerSave(null);
   }, [pts]);
+
+  // 第 4 轮 maps N1 / setup P0-14:从上一版带过来的待命点(待核建议)列在这里,核过位置一个个留下或全留下,再保存
+  const prop = p.data.nav?.proposal;
+  const carried = ((prop?.standby ?? []) as Carried[])
+    .filter((c) => p.data.robots.includes(c.robot_id) && !pts.some((x) => key(x) === key(c)));
+  const keep = (cs: Carried[]) => {
+    const add = cs.map((c): StandbyPt => ({ robot_id: c.robot_id, name: c.name, x: c.x, y: c.y, yaw: c.yaw,
+      map_id: p.map.map_id, map_version: p.map.version, default: !!c.default && !pts.some((x) => x.robot_id === c.robot_id && x.default) }));
+    setPts([...pts, ...add]);
+    if (add.length === 1) setSel(key(add[0]));
+  };
 
   const patch = (k: string, f: Partial<StandbyPt>) => setPts((all) => all.map((x) => (key(x) === k ? { ...x, ...f } : x)));
   const cur = pts.find((x) => key(x) === sel) ?? null;
@@ -74,6 +92,7 @@ export function StandbyTab(p: TabProps) {
     <div class="ly-tab">
       <div ref={root} onClickCapture={(e) => swallowClick(guard.current, e)}>
         <p.Map
+          legend={["standby"]}
           drawing={adding === "pick" || !!cur}
           onPick={adding === "pick" || cur ? pick : undefined}
           marks={(s) => <>
@@ -97,6 +116,21 @@ export function StandbyTab(p: TabProps) {
         {p.data.robots.length === 0 && <span class="muted small" data-why-no-add="1">{t("lyStandbyNoRobots")}</span>}
         {adding === "pick" && <p class="muted small">{t("lyAddStandbyHint")} <button type="button" class="link" onClick={() => setAdding(null)}>{t("cancel")}</button></p>}
         <p class="muted small">{t("lyStandbyHint")}</p>
+        {carried.length > 0 && (
+          <section class="note warn ly-carried" data-carried-standby={carried.length}>
+            <p>{t("lyStandbyCarried", { n: carried.length, v: prop?.from_version ?? "" })}</p>
+            <p class="small muted">{t("lyStandbyCarriedHint")}</p>
+            <ul class="plain">
+              {carried.map((c) => (
+                <li key={key(c)} class="row">
+                  <span>{c.robot_id} · {c.name}{c.default ? ` · ${t("lyDefault")}` : ""}</span>
+                  <button type="button" class="btn sm push" data-keep={key(c)} onClick={() => keep([c])}>{t("lyKeep")}</button>
+                </li>
+              ))}
+            </ul>
+            {carried.length > 1 && <button type="button" class="btn sm" data-keep-all="1" onClick={() => keep(carried)}>{t("lyKeepAll")}</button>}
+          </section>
+        )}
         <ul class="plain ly-list">
           {pts.length === 0 && <li class="muted small">{t("lyNoStandby")}</li>}
           {pts.map((x) => (

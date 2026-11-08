@@ -61,6 +61,7 @@ export function CamerasTab(p: TabProps) {
     <div class="ly-tab">
       <div ref={root} onClickCapture={(e) => swallowClick(guard.current, e)}>
         <p.Map
+          legend={["camera"]}
           drawing={placing}
           onPick={cur && (placing || here(curPl)) ? (px, py) => { const [x, y] = toMap(p.meta, px, py); setPl(cur.name, { x, y }); setPlacing(false); } : undefined}
           world={<>{shown.map((c) => <path key={c.name} class={c.name === sel ? "cam-fan on" : "cam-fan"} d={fanPath(p.meta, c.placement as Placement)} />)}</>}

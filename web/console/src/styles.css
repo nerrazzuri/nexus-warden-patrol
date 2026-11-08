@@ -1594,3 +1594,16 @@ input[type="file"] { max-width: 100%; min-width: 0; }            /* 上传按钮
 @media (min-width: 721px) and (max-width: 1100px) {
   .duty-slots { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
+/* 第 4 轮 setup r3-N5:输入框不合规则时变红(规则文字也红) */
+.field input[aria-invalid="true"] { border-color: var(--c-error); }
+/* 第 4 轮 setup r3-N9:选中的禁行区:名字和种类一行不折,改名 / 删除放到下一行 */
+.ly-list li.row.on { flex-wrap: wrap; row-gap: 6px; }
+.ly-list li.row.on > span:first-child { flex-basis: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ly-list li.row.on > .btn.push { margin-left: 0; }
+/* 第 4 轮 setup N6:历史里的时间不被「恢复」按钮挤成两行 */
+.ly-history li > div { min-width: 0; flex: 1 1 auto; }
+.ly-history li time { white-space: nowrap; }
+.ly-history li > .btn, .ly-history li > .muted.small { flex: none; }
+.sw-standby { fill: var(--c-surface); stroke: var(--c-text); stroke-width: 1.5; }
+.sw-cam { fill: var(--c-primary); }
+.sw-camfan { fill: var(--c-primary); fill-opacity: .25; }

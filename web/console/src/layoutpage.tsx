@@ -146,6 +146,8 @@ export function LayoutPage({ say, robots, tabs }: { say: Say; robots: string[]; 
     }).catch((e) => say(errText(e)));
   }, []);
   const base = sel ? `/api/maps/${enc(sel.map_id)}/${enc(sel.version)}` : "";
+  const robotsRef = useRef(robots);
+  robotsRef.current = robots;
   const cur = useRef(base);
   cur.current = base;
 
@@ -154,6 +156,7 @@ export function LayoutPage({ say, robots, tabs }: { say: Say; robots: string[]; 
     const b = base;
     const want = (x: keyof LayerData) => !k || k === x;
     const q = `map_id=${enc(sel.map_id)}&map_version=${enc(sel.version)}`;
+    const rk = robots.join(",");
     const [areaRes, nav, routes, guardRoutes, standby, cameras] = await Promise.all([
       want("areas") || want("posts") || want("marks")
         ? api<{ areas: Area[]; posts?: ZonePost[]; marks?: MapMark[] }>("GET", `${b}/areas`).catch(() => null) : null,
@@ -167,12 +170,15 @@ export function LayoutPage({ say, robots, tabs }: { say: Say; robots: string[]; 
     ]);
     if (cur.current !== b) return;
     const areaWant = want("areas") || want("posts") || want("marks");
+    // 第 4 轮 setup r3-N1:按旧的(空的)机器人列表取的那次晚回来,不能把后来按新列表取到的待命点、机器人盖成空
+    const staleRobots = rk !== robotsRef.current.join(",");
     setData((o) => ({
       areas: areaRes?.areas ?? (areaWant ? [] : o.areas), posts: areaRes?.posts ?? (areaWant ? [] : o.posts),
       marks: areaRes?.marks ?? (areaWant ? [] : o.marks),
       nav: want("nav") ? nav : o.nav, routes: routes ?? (want("routes") ? [] : o.routes),
       guardRoutes: guardRoutes ?? (want("guardRoutes") ? [] : o.guardRoutes),
-      standby: standby ?? (want("standby") ? [] : o.standby), cameras: cameras ?? (want("cameras") ? [] : o.cameras), robots,
+      standby: staleRobots ? o.standby : standby ?? (want("standby") ? [] : o.standby),
+      cameras: cameras ?? (want("cameras") ? [] : o.cameras), robots: robotsRef.current,
     }));
     if (want("nav")) api<PreviewMeta>("GET", `${b}/preview`).then((m) => { if (cur.current === b) setMeta(m); }).catch(() => {});
   }, [base, robots.join(",")]);

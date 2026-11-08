@@ -426,6 +426,11 @@ def test_第2轮_N4_布置计数_发布弹窗拿来比(站点):
     assert code == 200, d
     assert d["areas"] == 1 and d["hides"] == 1 and d["exits"] == 0
     assert set(d) >= {"posts", "net_nodes", "nogo", "cameras", "standby", "proposal"}
+    # 第 4 轮 maps N4:按名字比、区域分种类、待核的是哪几个
+    assert d["names"]["areas"] == ["东区"]
+    assert set(d["names"]) == {"areas", "nogo", "standby"}
+    assert set(d["proposed"]) == {"nogo", "standby"}
+    assert isinstance(d["kinds"], dict)
     assert s.req("GET", f"{ADM}/layout", token=_登(s, "gina"))[0] == 403
     # 第 3 轮 r2-setup-N4:放在图上的摄像头也算
     before = d["cameras"]

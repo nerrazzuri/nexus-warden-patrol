@@ -444,10 +444,13 @@ describe("换图状态和运行配置的文字", () => {
   it("各个状态的说法;老代理的成功标出没等定位器", () => {
     expect(activationText(act("pending"))).toBe("Sent — waiting for the robot to start downloading");
     // W71:等机器人换的时候带下载进度
-    expect(activationText(act("pending", { download: { bytes: 61e6, total: 145e6, at_ms: 1000 } }), 3000))
+    expect(activationText(act("pending", { at_ms: 500, download: { bytes: 61e6, total: 145e6, at_ms: 1000 } }), 3000))
       .toBe("Downloading 61 MB / 145 MB");
-    expect(activationText(act("pending", { download: { bytes: 145e6, total: 145e6, at_ms: 1000 } }), 31000))
+    expect(activationText(act("pending", { at_ms: 500, download: { bytes: 145e6, total: 145e6, at_ms: 1000 } }), 31000))
       .toMatch(/nothing sent for 30 s/);
+    // 第 4 轮 maps N2:回滚到已有的版本,下载记录是上一次的 —— 不算「多久没下」
+    expect(activationText(act("pending", { at_ms: 700_000, download: { bytes: 145e6, total: 145e6, at_ms: 1000 } }), 702_000))
+      .toBe("Switching to 2…");
     expect(activationText(act("confirmed", { confirmed: "localizer" }))).toBe("Confirmed by the localizer");
     expect(activationText(act("confirmed", { confirmed: "load" }))).toContain("no localizer");
     expect(activationText(act("confirmed", { confirmed: "legacy" }))).toContain("did not wait for the localizer");
@@ -584,5 +587,24 @@ describe("第 3 轮 maps N4", () => {
     expect(got.map((m) => m.text)).toEqual(["2 of 3 no-go zones"]);
     lang.value = "zh";
     expect(missingLayout({ ...base, nogo: 3 }, { ...base, nogo: 1 })[0].text).toBe("3 个禁区里的 2 个");
+  });
+});
+
+describe("第 4 轮 maps N4", () => {
+  it("按名字比、分种类;删掉的和带过来待核的分开说", async () => {
+    const { missingLayout } = await import("./mapmgmt");
+    const base = { areas: 0, exits: 0, hides: 0, posts: 0, net_nodes: 0, nogo: 0, cameras: 0, standby: 0, proposal: false };
+    lang.value = "en";
+    const from = { ...base, nogo: 3, standby: 1, names: { areas: [], nogo: ["Wall", "Slow", "Keep"], standby: ["B/home"] },
+      kinds: { Wall: "nogo", Slow: "slow", Keep: "nogo" } };
+    // 新版本上 Keep 留着、多了 V8Only;少了 Wall(删了)和 Slow(删了);待命点带过来待核
+    const to = { ...base, nogo: 2, proposal: true, names: { areas: [], nogo: ["Keep", "V8Only"], standby: [] },
+      kinds: { Keep: "nogo", V8Only: "nogo" }, proposed: { nogo: [], standby: ["B/home"] } };
+    const got = missingLayout(from, to);
+    expect(got).toEqual([
+      { text: "1 no-go area (Wall)", review: false },
+      { text: "1 slow zone (Slow)", review: false },
+      { text: "1 standby point (B/home)", review: true },
+    ]);
   });
 });

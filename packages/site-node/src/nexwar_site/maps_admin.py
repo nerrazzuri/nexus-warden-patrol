@@ -426,10 +426,18 @@ class MapAdmin:
         map_id, version = self._names(map_id, version)
         site = self.site
         out: dict[str, Any] = {"areas": 0, "exits": 0, "hides": 0, "posts": 0, "net_nodes": 0,
-                               "nogo": 0, "cameras": 0, "standby": 0, "proposal": False}
+                               "nogo": 0, "cameras": 0, "standby": 0, "proposal": False,
+                               # 第 4 轮 maps N4:按名字比(只比数量时少两个、多一个只报「少一个」),
+                               # 区域分种类;带过来待核的是哪几个
+                               # (只有这些算「还没生效」,别的少了就是删了)
+                               "names": {"areas": [], "nogo": [], "standby": []},
+                               "kinds": {},
+                               "proposed": {"nogo": [], "standby": []}}
         areas = getattr(site, "areas", None)
         if areas is not None:
-            out["areas"] = len(areas.list(map_id, version))
+            al = areas.list(map_id, version)
+            out["areas"] = len(al)
+            out["names"]["areas"] = [a["zone"] for a in al]
         from nexwar_site.api import map_marks, zone_posts
         marks = map_marks(site)
         if marks is not None:
@@ -444,11 +452,23 @@ class MapAdmin:
             out["net_nodes"] = len(nets.get(map_id, version).nodes)
         zones = getattr(site, "zones", None)
         if zones is not None:
-            out["nogo"] = len(zones.current(map_id, version).zones)
+            zs = zones.current(map_id, version).zones
+            out["nogo"] = len(zs)
+            out["names"]["nogo"] = [z.id for z in zs]
+            out["kinds"] = {z.id: z.kind for z in zs}
             try:
-                out["proposal"] = zones.proposal(map_id, version) is not None
+                prop = zones.proposal(map_id, version)
             except Exception:  # noqa: BLE001 —— 老库没有建议表:当没有
-                out["proposal"] = False
+                prop = None
+            out["proposal"] = prop is not None
+            if prop:
+                out["proposed"] = {
+                    "nogo": [z.get("id") for z in prop.get("zones", []) if isinstance(z, dict)],
+                    "standby": [f"{p['robot_id']}/{p['name']}" for p in prop.get("standby", [])
+                                if isinstance(p, dict)]}
+                for z in prop.get("zones", []):
+                    if isinstance(z, dict) and z.get("id"):
+                        out["kinds"].setdefault(z["id"], z.get("kind", "nogo"))
         devices = getattr(site, "devices", None)
         if devices is not None:
             out["cameras"] = sum(d.get("map_id") == map_id and d.get("map_version") == version
@@ -460,9 +480,10 @@ class MapAdmin:
                 (map_id, version))[0]["n"]
         except Exception:  # noqa: BLE001 —— 老库没有摄像头表:不加
             pass
-        out["standby"] = self.db.query(
-            "SELECT COUNT(*) AS n FROM standby_points WHERE map_id=? AND map_version=?",
-            (map_id, version))[0]["n"]
+        sb = self.db.query("SELECT robot_id, name FROM standby_points "
+                           "WHERE map_id=? AND map_version=?", (map_id, version))
+        out["standby"] = len(sb)
+        out["names"]["standby"] = [f"{r['robot_id']}/{r['name']}" for r in sb]
         return out
 
     def _copy_layout(self, map_id: str, old: str, new: str, *, by: str) -> dict[str, int]:

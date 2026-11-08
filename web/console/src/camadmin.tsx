@@ -144,7 +144,7 @@ export function CameraForm({ initial, onClose, onSaved, say, zones = [] }: { ini
           <input value={name} readOnly={edit} required pattern="[A-Za-z0-9._\-]{1,64}" autocomplete="off" aria-invalid={nameBad || undefined}
             onInvalid={(e) => { e.preventDefault(); setTried(true); }} onInput={(e) => setName(e.currentTarget.value)} />
           {/* 第 3 轮 setup N5:规则写在框下面(跟待命点、路线一样),不合规则变红,不靠浏览器自带的气泡 */}
-          {!edit && <span class={nameBad ? "small bad" : "muted small"} data-name-rule="1">{L("Letters, digits, . _ - only (no spaces or Chinese), up to 64. Where it is goes in the zone below.",
+          {!edit && <span class={nameBad ? "small error" : "muted small"} data-name-rule="1">{L("Letters, digits, . _ - only (no spaces or Chinese), up to 64. Put where it is in the zone field below.",
             "只能用英文字母、数字和 . _ -（不能有空格、中文），最多 64 个。位置写在下面的防区里。")}</span>}
         </label>
         <label class="field">{L("ONVIF address (camera or NVR)", "ONVIF 地址（摄像头或 NVR）")}
