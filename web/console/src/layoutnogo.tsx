@@ -11,6 +11,7 @@ import { clickGuard, startDrag, swallowClick } from "./dragpt";
 import { t, joinList } from "./i18n";
 import { siteKnown } from "./sitetext";
 import { closesLoop, polyPx, toMap, type NavZones, type TabProps } from "./layoutpage";
+import type { LegendKey } from "./mapcanvas";
 import { pointInPolygon, type NavZone, type Pt } from "./mapview";
 import { clientToMap } from "./routes";
 
@@ -101,6 +102,8 @@ export function NogoTab(p: TabProps) {
     <div class="ly-tab">
       <div ref={root} onClickCapture={(e) => swallowClick(guard.current, e)}>
       <p.Map
+        legend={[...new Set(shown.map((z): LegendKey => (z.wall ? "vwall" : z.kind === "slow" ? "slow" : z.kind === "ignore" ? "ignore"
+          : z.kind === "erase" ? "erase" : z.hard ? "hard" : "nogo")))]}
         drawing={!!draw}
         onPick={draw ? (px, py) => {
           if (draw !== "wall" && closesLoop(p.meta, pts, px, py)) { setForm(true); return; }
@@ -112,12 +115,22 @@ export function NogoTab(p: TabProps) {
         }}
         world={<>
           {shown.map((z) => z.wall
-            ? <polyline key={z.id} points={polyPx(p.meta, z.wall)} class="nogo-line" />
+            ? <polyline key={z.id} points={polyPx(p.meta, z.wall)} class={`nogo-line vwall-line${z.hard ? " hard" : ""}`} data-nogo-wall={z.id} />
             : <polygon key={z.id} points={polyPx(p.meta, z.polygon)} class={`${z.kind === "slow" ? "slow-area" : z.kind === "ignore" ? "ignore-area" : z.kind === "erase" ? "erase-area" : z.hard ? "nogo-area hard" : "nogo-area"}${z.id === sel ? " sel" : ""}`} />)}
           {held.map((z) => <polygon key={`held-${z.id}`} points={polyPx(p.meta, z.polygon)} class="nogo-area held" />)}
           {pts.length > 0 && <polyline points={polyPx(p.meta, pts)} class={draw === "wall" ? "draft-line vwall" : "draft-line"} />}
         </>}
         marks={(s) => <>
+          {/* 第 2 轮 P2-15:禁区、限速区、虚拟墙写名字(原来只有颜色,分不清哪块是哪块) */}
+          {shown.map((z) => {
+            const ring = z.wall ?? z.polygon;
+            if (!ring || ring.length === 0) return null;
+            const cx = ring.reduce((a, q) => a + q[0], 0) / ring.length;
+            const cy = ring.reduce((a, q) => a + q[1], 0) / ring.length;
+            const [sx, sy] = s.map(cx, cy);
+            const name = siteKnown(z.label) || z.id;
+            return <text key={`n:${z.id}`} x={sx} y={sy} class="nogo-name" data-nogo-name={z.id}>{name}</text>;
+          })}
           {pts.map(([x, y], i) => { const [sx, sy] = s.map(x, y); return <circle key={i} cx={sx} cy={sy} r={5} class="draft-pt" />; })}
           {!draw && cur && curPts.map(([x, y], i) => {
             const [sx, sy] = s.map(x, y);

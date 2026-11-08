@@ -1477,3 +1477,5 @@ input[type="file"] { max-width: 100%; min-width: 0; }            /* 上传按钮
   .grid td.actions { display: table-cell; }
   .grid td.actions > * + * { margin-left: 6px; }
 }
+/* 第 2 轮 P2-15:设置页禁行区标签里的虚拟墙也是橙色(原来这里单独画成红色,跟禁区同色);画墙时的草稿线一样 */
+.nogo-line.vwall-line, .draft-line.vwall { stroke: var(--c-warning); }

@@ -34,7 +34,12 @@ beforeEach(() => {
 afterEach(cleanup);
 
 const nav = (o: Partial<NavZones> = {}): NavZones => ({ revision: 2, zones: [POOL], confirmed: { revision: 2, by: "olga", at_ms: 1, current: true, how: "confirm" }, held: [], ...o });
-const FakeMap = (o: OwnLayer) => <div class="fakemap"><button type="button" class="pick" onClick={() => o.onPick?.(10, 20)}>pick</button></div>;
+const FakeMap = (o: OwnLayer) => (
+  <div class="fakemap" data-legend={(o.legend ?? []).join(",")}>
+    <button type="button" class="pick" onClick={() => o.onPick?.(10, 20)}>pick</button>
+    <svg>{o.world}{o.marks?.({ map: (x: number, y: number) => [x, y], px: (x: number, y: number) => [x, y], k: 1 })}</svg>
+  </div>
+);
 const props = (n: NavZones): TabProps => ({
   map: { map_id: "home", version: "3", note: "" }, base: "/api/maps/home/3", meta: META,
   data: { areas: [], nav: n, routes: [], guardRoutes: [], posts: [], standby: [], cameras: [], robots: ["A"] } as LayerData, say: () => {},
@@ -48,6 +53,15 @@ function draw(c: Element, kind: string, n: number) {
 }
 
 describe("布置 → 禁行区", () => {
+  it("第 2 轮 P2-15:禁区、虚拟墙在图上写名字;虚拟墙不是红色那一类;图例补上画了的种类", () => {
+    const WALL = { id: "w1", kind: "nogo", label: "围栏", polygon: [], wall: [[1, 1], [4, 1]] as [number, number][] };
+    const { container: c } = render(<NogoTab {...props(nav({ zones: [POOL, WALL] as never }))} />);
+    expect(c.querySelector('[data-nogo-name="n1"]')!.textContent).toBe("泳池");
+    expect(c.querySelector('[data-nogo-name="w1"]')!.textContent).toBe("围栏");
+    expect(c.querySelector('[data-nogo-wall="w1"]')!.getAttribute("class")).toContain("vwall-line");
+    expect(c.querySelector(".fakemap")!.getAttribute("data-legend")!.split(",").sort()).toEqual(["nogo", "vwall"]);
+  });
+
   it("画禁行区_收紧当场生效", async () => {
     const { container: c } = render(<NogoTab {...props(nav())} />);
     draw(c, "画禁行区", 3);
