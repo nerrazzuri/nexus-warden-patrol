@@ -470,6 +470,8 @@ class _SiteWatchPageState extends State<SiteWatchPage> {
             key: SiteWatchPage.headerKey,
             overline: tr('Nexus Warden', 'Nexus Warden'),
             title: widget.title ?? tr('Duty', '值守'),
+            // 手机 App 测试 M09：从值守页点进来的（推进来的一页）要能返回
+            leading: Navigator.canPop(context) ? const BackButton() : null,
             compact: MediaQuery.sizeOf(context).height < SiteWatchPage.compactBelow),
         Expanded(
           // 宽屏（桌面版、值守大屏，W15）：告警一栏、每台狗一栏并排，一眼都看得见；窄的照旧一栏往下排。
