@@ -101,6 +101,16 @@ describe("授权和临时撤防页", () => {
     await waitFor(() => expect(posted.find((p) => p.url === "/api/mode")?.body).toEqual({ mode: "visitor", zones: ["北区"], minutes: 120 }));
   });
 
+  it("第 2 轮 config N8:开始后说撤了哪儿、到几点,不只「已保存」", async () => {
+    const said: string[] = [];
+    const { container: c } = render(<AccessPage say={(s: string) => said.push(s)} now={at(10)} />);
+    await waitFor(() => expect(c.querySelector(".acc-visitor")!.textContent).toContain("北区"));
+    fireEvent.click(c.querySelector('.acc-visitor input[value="北区"]')!);
+    fireEvent.click(btn(c, "开始临时撤防"));
+    fireEvent.click(btn(c.ownerDocument.querySelector(".modal")!, "开始临时撤防"));
+    await waitFor(() => expect(said.some((x) => x.startsWith("已临时撤防：北区，到 "))).toBe(true));
+  });
+
   it("网页易用性第 1 轮 P0-09:没选防区不能开始", async () => {
     const { container: c } = page();
     await waitFor(() => expect(c.querySelector(".acc-visitor")!.textContent).toContain("北区"));

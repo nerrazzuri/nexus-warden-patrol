@@ -676,21 +676,28 @@ function SchedulePanel({ route, view, schedules, say, reload }: {
   route: string; view: RouteView | null; schedules: RouteSchedule[]; say: Say; reload: () => Promise<void>;
 }) {
   const [tz, setTz] = useState("");
-  const [id, setId] = useState("");
+  // 第 2 轮 config N2 / N3:编号自动给(路线名-1、-2…第一个没用过的);用过的当场说,不等站点回「有人先改过」
+  const all = view?.schedules ?? [];
+  const nextId = () => { let n = 1; while (all.some((x) => x.id === `${route}-${n}`)) n++; return `${route}-${n}`; };
+  const [id, setId] = useState(nextId);
   const [at, setAt] = useState("22:00");
   const [days, setDays] = useState<string[]>([...DAYS]);
   const [win, setWin] = useState(30);
   const [missed, setMissed] = useState<"skip" | "run_late" | "alarm">("skip");
   const [removing, setRemoving] = useState<RouteSchedule | null>(null);
-  const call = async (path: string, body: unknown, done: string) => {
+  const call = async (path: string, body: unknown, done: string): Promise<boolean> => {
     try {
       await api("POST", path, body);
       say(done);
       await reload();
+      return true;
     } catch (e) {
       say(errText(e));
+      return false;
     }
   };
+  const idTaken = all.some((x) => x.id === id.trim());
+  const sameTime = schedules.some((x) => x.at === at && x.days.some((d) => days.includes(d)));
   return (
     <>
       <h2>{rt("routeSchedules")}</h2>
@@ -706,7 +713,7 @@ function SchedulePanel({ route, view, schedules, say, reload }: {
         <>
           {view && <p class="muted small">{rt("schedTimezone")}: <span class="mono">{view.timezone}</span></p>}
           {schedules.length === 0 && <p class="muted small">{rt("routeNoSchedules")}</p>}
-          <ul>
+          <ul class="sched-list">
             {schedules.map((s) => (
               <li key={s.id}>
                 <span class="strong">{s.id}</span>
@@ -716,11 +723,14 @@ function SchedulePanel({ route, view, schedules, say, reload }: {
               </li>
             ))}
           </ul>
-          <form class="form" onSubmit={(e) => {
+          <form class="form sched-form" onSubmit={(e) => {
             e.preventDefault();
-            void call(`/api/route-schedules/${enc(id.trim())}`, { mission: route, at, days, window_min: win, on_missed: missed, base_revision: 0 }, rt("schedSaved"));
+            if (idTaken) return;
+            void call(`/api/route-schedules/${enc(id.trim())}`, { mission: route, at, days, window_min: win, on_missed: missed, base_revision: 0 }, rt("schedSaved"))
+              .then((ok) => { if (ok) setId(nextId()); });          // 加好了换下一个编号,不留着旧的
           }}>
-            <label class="field">{rt("schedId")}<input value={id} maxLength={64} onInput={(e) => setId(e.currentTarget.value)} /></label>
+            <label class="field">{rt("schedId")}<input value={id} maxLength={64} aria-invalid={idTaken || undefined} onInput={(e) => setId(e.currentTarget.value)} />
+              {idTaken && <span class="error small" role="alert" data-sched-dup="1">{rt("schedIdTaken")}</span>}</label>
             {/* P1-03:时间一律 24 小时制(浏览器的时间框可能按系统显示成上午 / 下午) */}
             <label class="field">{rt("schedAt")}<input name="at" type="text" inputMode="numeric" pattern="([01][0-9]|2[0-3]):[0-5][0-9]" placeholder="21:00"
               maxLength={5} value={at} onInput={(e) => setAt(e.currentTarget.value)} /></label>
@@ -740,13 +750,14 @@ function SchedulePanel({ route, view, schedules, say, reload }: {
               </select>
             </label>
             <p class="muted small">{rt("schedNote")}</p>
-            <button type="submit" class="btn sm" disabled={!NAME_RE.test(id.trim()) || days.length === 0 || !(win >= 1)}>{rt("schedAdd")}</button>
+            {sameTime && <p class="warn small" data-sched-same="1">{rt("schedSameTime", { at })}</p>}
+            <button type="submit" class="btn sm" disabled={!NAME_RE.test(id.trim()) || idTaken || days.length === 0 || !(win >= 1)}>{rt("schedAdd")}</button>
           </form>
         </>
       )}
       {removing && (
         <Confirm text={`${rt("schedRemove")}: ${removing.id}`} yes={rt("schedRemove")} danger onNo={() => setRemoving(null)}
-          onYes={() => { const s = removing; setRemoving(null); void call(`/api/route-schedules/${enc(s.id)}/delete`, { base_revision: s.revision }, t("saved")); }} />
+          onYes={() => { const s = removing; setRemoving(null); void call(`/api/route-schedules/${enc(s.id)}/delete`, { base_revision: s.revision }, rt("schedRemoved", { id: s.id })); }} />
       )}
     </>
   );

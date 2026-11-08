@@ -1415,3 +1415,7 @@ input[type="date"]:not(.field input) { height: 36px; padding: 0 8px; border-radi
 .toast .toast-act { margin-left: 12px; background: var(--c-bg); color: var(--c-text); }
 /* 第 2 轮 duty N7:报警详情头部「P1 · 时间 · 机器人 · 位置」原来没样式,挤成「P1Raised 02:18Robot: B」 */
 .ad-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 14px; margin: 0 0 8px; }
+/* 第 2 轮 config N10:「.field input」给了文件框一个 44px 的边框盒子,别处的文件框没有 —— 文件框统一不要外框 */
+.field input[type="file"] { height: auto; padding: 0; border: 0; background: none; }
+.field input[type="file"]:focus-visible { padding: 0; border: 0; outline: 2px solid var(--c-focus); outline-offset: 2px; }
+input[type="file"]:disabled { opacity: 0.6; cursor: not-allowed; }

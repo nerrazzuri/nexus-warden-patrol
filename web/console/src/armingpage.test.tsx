@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 // W44 第二期 布防时间页(设计 §5.1):一周七行色块、全部一样 / 每个防区单独设、例外、交班时间、保存、没存提醒、谁说了算。
 import { cleanup, fireEvent, render, waitFor } from "@testing-library/preact";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { setFetch } from "./api";
 import { ArmingPage } from "./armingpage";
 import { lang } from "./i18n";
@@ -101,7 +101,10 @@ describe("布防时间页", () => {
   it("复制到别的天", async () => {
     const { container: c } = page();
     await waitFor(() => expect(row(c, 0).querySelector(".armblock")).not.toBeNull());
+    const seen = vi.fn();
+    (HTMLElement.prototype as unknown as { scrollIntoView: () => void }).scrollIntoView = seen;
     fireEvent.click(row(c, 0).querySelector(".arm-copy")!);
+    await waitFor(() => expect(seen).toHaveBeenCalled());               // 第 2 轮 config N7:滚到看得见
     fireEvent.click(c.querySelector('.arm-copyto input[value="1"]')!);
     fireEvent.click(c.querySelector('.arm-copyto input[value="2"]')!);
     fireEvent.click(btn(c, "复制"));
@@ -332,5 +335,13 @@ describe("网页易用性第 1 轮 P2-39", () => {
     expect(c.querySelector(".arm-patrols")!.textContent).toContain("22:00");
     fireEvent.change(c.querySelector('.arm-patrols select[name="route"]')!, { target: { value: "day" } });
     await waitFor(() => expect(c.querySelector(".arm-patrols")!.textContent).not.toContain("22:00"));
+  });
+});
+
+describe("第 2 轮 config N4", () => {
+  it("经理:没有「临时撤防…」入口(那页打不开),写由管理员设置", async () => {
+    const { container: c } = render(<ArmingPage say={() => {}} now={Date.now()} role="owner" />);
+    await waitFor(() => expect(c.querySelector("[data-no-visitor]")).not.toBeNull());
+    expect(c.querySelector('a[href="#/admin/access"]')).toBeNull();
   });
 });
