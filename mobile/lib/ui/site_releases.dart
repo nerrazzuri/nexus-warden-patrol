@@ -214,7 +214,7 @@ class _SiteReleasesPageState extends State<SiteReleasesPage> {
                               Text(e.key, style: NwText.titleMedium.copyWith(color: nw.text, fontWeight: FontWeight.w700)),
                               nwGap4,
                               Text(
-                                  '${e.value ?? tr('Unknown (not reported: the robot is offline, or does not support releases from the site)', '未知（机器人未上报：离线或不支持站点下发版本）')}',
+                                  '${e.value ?? tr('Version not reported. This robot software does not report it, so it cannot be updated from here.', '没报版本：这台机器人的软件不报自己的版本，所以不能从这里升级。')}',
                                   style: NwText.bodyMedium.copyWith(color: nw.textSecondary)),
                               // 狗没报在跑哪一版 = 没报发布能力（或者不在线）：按了也是 unsupported，不给按钮。
                               if (admin && e.value != null) ...[

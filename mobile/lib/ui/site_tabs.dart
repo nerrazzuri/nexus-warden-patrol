@@ -430,7 +430,7 @@ class _AdminHomeTabState extends State<AdminHomeTab> {
                       entryKey: AdminHomeTab.entryKey('accounts'),
                       icon: Icons.people_alt_rounded,
                       title: tr('Accounts', '账号'),
-                      hint: tr('Approve applications, change roles, disable accounts.', '审批申请、修改权限、停用账号。'),
+                      hint: tr('Approve account applications. Roles and disabling are on the web console.', '审批账号申请。改权限、停用账号请到网页值班台。'),
                       onTap: () => _push(context, AccountsPage(api: api))),
                 _Entry(
                     entryKey: AdminHomeTab.entryKey('health'),
