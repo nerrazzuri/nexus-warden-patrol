@@ -53,7 +53,9 @@ def facts(kind: str, body: Any) -> dict[str, Any]:
     if body is None:
         return {"n": 0, "names": [], "deleted": kind == "route"}
     if kind == "route":
-        return {"n": len(body.get("waypoints") or []), "names": []}
+        # 网页易用性第 2 轮 P1-44:巡逻路线、防区路线共用一种历史,带上是哪种,网页按页签分开列
+        return {"n": len(body.get("waypoints") or []), "names": [],
+                "route_kind": str(body.get("kind") or "patrol")}
     if kind == "zones":
         return {"n": len(body), "names": [str(a["zone"]) for a in body][:20]}
     if kind == "nogo":

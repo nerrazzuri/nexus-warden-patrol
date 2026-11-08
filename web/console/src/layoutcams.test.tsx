@@ -87,7 +87,9 @@ describe("网页易用性第 1 轮 P1-42/43", () => {
     setFetch((() => Promise.resolve(json({}))) as typeof fetch);
     const base = props([cam({})]);
     const r = render(<CamerasTab {...base} data={{ ...base.data, areas: [{ zone: "东区", points: [] }, { zone: "西区", points: [] }] }} />);
-    expect(r.container.textContent).toContain("马上就保存");
+    // 第 2 轮 P1-43:表单马上存,地图上的摆放要按「保存」,两样都写清
+    expect(r.container.textContent).toContain("会马上保存");
+    expect(r.container.textContent).toContain("要按顶上「保存」");
     fireEvent.click(btn(r.container, "添加摄像头"));
     const opts = Array.from(document.querySelectorAll(".modal datalist option")).map((o) => (o as HTMLOptionElement).value);
     expect(opts).toEqual(["东区", "西区"]);

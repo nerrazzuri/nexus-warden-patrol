@@ -277,7 +277,8 @@ export function LayoutPage({ say, robots, tabs }: { say: Say; robots: string[]; 
           ) : !sel ? <p class="empty">{t("noMap")}</p> : null}
         </div>
         {history && sel && HISTORY_KIND[tab] && (
-          <HistoryDrawer key={`${HISTORY_KIND[tab]}|${tab === "cameras" ? "" : base}`} kind={HISTORY_KIND[tab]!} map={tab === "cameras" ? null : sel} say={say}
+          <HistoryDrawer key={`${tab}|${tab === "cameras" ? "" : base}`} kind={HISTORY_KIND[tab]!} map={tab === "cameras" ? null : sel} say={say}
+            routeKind={tab === "guard" ? "guard" : tab === "routes" ? "patrol" : undefined}
             onRestored={() => { setDirty(false); setGen((g) => g + 1); void reload(); }} onClose={() => setHistory(false)} />
         )}
       </div>
@@ -329,7 +330,7 @@ function dimMarks(tab: LayoutTab, d: LayerData, s: Screen): ComponentChildren {
 interface HistoryRow {
   id: number; kind: string; item: string; by: string; at_ms: number; note: string; summary?: string;
   /** P1-44:摘要原料(老站点没有,退回用站点拼好的中文 ``summary``)。 */
-  facts?: { n: number; names: string[]; deleted?: boolean };
+  facts?: { n: number; names: string[]; deleted?: boolean; route_kind?: string };
 }
 
 /** P1-44:历史摘要按界面语言拼。 */
@@ -340,13 +341,24 @@ export function historySummary(kind: string, r: HistoryRow): string {
   const names = f.names.length ? `: ${f.names.join(", ")}` : "";
   const key = kind === "route" ? "lyHsPoints" : kind === "zones" ? "lyHsZones" : kind === "nogo" ? "lyHsAreas"
     : kind === "standby" ? "lyHsStandby" : kind === "cameras" ? "lyHsCameras" : null;
-  return key ? `${t(key, { n: f.n })}${kind === "route" || kind === "cameras" ? "" : names}` : r.summary ?? "";
+  // 第 2 轮 P1-44:1 个用单数(不写 1 zones)
+  const one: Record<string, Key> = { lyHsPoints: "lyHsPoint1", lyHsZones: "lyHsZone1", lyHsAreas: "lyHsArea1", lyHsStandby: "lyHsStandby1", lyHsCameras: "lyHsCamera1" };
+  return key ? `${f.n === 1 ? t(one[key]) : t(key, { n: f.n })}${kind === "route" || kind === "cameras" ? "" : names}` : r.summary ?? "";
+}
+
+/** 第 2 轮 P1-44:巡逻路线、防区路线的历史分开列。删除那一条没带类型,按同名路线早先的类型算;
+ *  老站点(都没带类型)全列。 */
+export function ofKind(rows: HistoryRow[], routeKind?: string): HistoryRow[] {
+  if (!routeKind) return rows;
+  const known = new Map<string, string>();
+  for (const r of rows) if (r.facts?.route_kind && !known.has(r.item)) known.set(r.item, r.facts.route_kind);
+  return rows.filter((r) => (known.get(r.item) ?? routeKind) === routeKind);
 }
 
 /** 历史抽屉。外审 R3:一个抽屉只管一个「哪一层 + 哪张图哪一版」(上面按这个 key 重建,换了就整个换掉,
  *  旧的列表、确认框跟着没了);晚到的回包按代次不认;退回请求带上这三样,站点对不上就拒绝。 */
-function HistoryDrawer({ kind, map, say, onRestored, onClose }: {
-  kind: string; map: MapRow | null; say: Say; onRestored: () => void; onClose: () => void;
+function HistoryDrawer({ kind, map, say, onRestored, onClose, routeKind }: {
+  kind: string; map: MapRow | null; say: Say; onRestored: () => void; onClose: () => void; routeKind?: string;
 }) {
   const [rows, setRows] = useState<HistoryRow[] | null>(null);
   const [restoring, setRestoring] = useState<HistoryRow | null>(null);
@@ -357,7 +369,7 @@ function HistoryDrawer({ kind, map, say, onRestored, onClose }: {
     setRows(null);
     const q = `kind=${enc(expect.kind)}&map_id=${enc(expect.map_id)}&version=${enc(expect.version)}`;
     api<{ history: HistoryRow[] }>("GET", `/api/layout/history?${q}`)
-      .then((d) => { if (my === gen.current) setRows(d.history ?? []); })
+      .then((d) => { if (my === gen.current) setRows(ofKind(d.history ?? [], routeKind)); })
       .catch(() => { if (my === gen.current) setRows([]); });
   };
   useEffect(() => { load(); return () => { gen.current += 1; }; }, []);

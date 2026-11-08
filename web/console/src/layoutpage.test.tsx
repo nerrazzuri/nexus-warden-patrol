@@ -226,3 +226,28 @@ describe("网页易用性第 1 轮 P1-44", () => {
     lang.value = "zh";
   });
 });
+
+describe("网页易用性第 2 轮 P1-44", () => {
+  const row = { id: 1, kind: "route", item: "a", by: "x", at_ms: 0, note: "" };
+  it("1 个用单数", async () => {
+    const { historySummary } = await import("./layoutpage");
+    lang.value = "en";
+    expect(historySummary("zones", { ...row, kind: "zones", facts: { n: 1, names: ["East"] } })).toBe("1 zone: East");
+    expect(historySummary("standby", { ...row, kind: "standby", facts: { n: 1, names: ["S1"] } })).toBe("1 standby point: S1");
+    expect(historySummary("cameras", { ...row, kind: "cameras", facts: { n: 1, names: [] } })).toBe("1 camera");
+    expect(historySummary("zones", { ...row, kind: "zones", facts: { n: 2, names: [] } })).toBe("2 zones");
+    lang.value = "zh";
+  });
+  it("巡逻路线、防区路线的历史分开;删除那条按同名早先的类型;老站点全列", async () => {
+    const { ofKind } = await import("./layoutpage");
+    const rows = [
+      { ...row, id: 4, item: "g1", facts: { n: 0, names: [], deleted: true } },
+      { ...row, id: 3, item: "g1", facts: { n: 3, names: [], route_kind: "guard" } },
+      { ...row, id: 2, item: "p1", facts: { n: 5, names: [], route_kind: "patrol" } },
+    ];
+    expect(ofKind(rows, "guard").map((r) => r.id)).toEqual([4, 3]);
+    expect(ofKind(rows, "patrol").map((r) => r.id)).toEqual([2]);
+    const old = rows.map((r) => ({ ...r, facts: { n: 1, names: [] } }));
+    expect(ofKind(old, "guard").length).toBe(3);
+  });
+});

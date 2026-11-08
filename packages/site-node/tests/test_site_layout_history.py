@@ -236,3 +236,9 @@ def test_网页P1_44_摘要原料_网页按语言拼():
     assert facts("route", None) == {"n": 0, "names": [], "deleted": True}
     assert facts("route", {"waypoints": [1, 2, 3]})["n"] == 3
     assert facts("cameras", [{}, {}])["n"] == 2
+
+
+def test_网页第2轮_P1_44_路线历史带巡逻还是防区():
+    from nexwar_site.layout_history import facts
+    assert facts("route", {"waypoints": [1], "kind": "guard"})["route_kind"] == "guard"
+    assert facts("route", {"waypoints": [1]})["route_kind"] == "patrol"
