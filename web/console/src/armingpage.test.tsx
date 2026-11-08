@@ -3,6 +3,7 @@
 import { cleanup, fireEvent, render, waitFor } from "@testing-library/preact";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { setFetch } from "./api";
+import { armedAt, fromWire, type WireSlot } from "./armgrid";
 import { ArmingPage } from "./armingpage";
 import { lang } from "./i18n";
 
@@ -29,6 +30,7 @@ beforeEach(() => {
         return Promise.resolve(json(schedule));
       }
       if (url === "/api/arming/schedule") return Promise.resolve(json({ ...schedule, ...body }));
+      if (url === "/api/arming/schedule/preview") return Promise.resolve(json(fakePreview(body)));
       return Promise.resolve(json(body));
     }
     if (url.startsWith("/api/arming/schedule")) return Promise.resolve(json(schedule));
@@ -41,6 +43,22 @@ beforeEach(() => {
   }) as typeof fetch);
 });
 afterEach(cleanup);
+
+/** 假站点的预演:照草稿日程算此刻(12 点)每个防区(真站点按站点的钟,见 modes.preview)。 */
+function fakePreview(body: { enabled: boolean; slots: WireSlot[] }) {
+  type Z = { zone: string; armed?: boolean; home_armed?: boolean };
+  const m = mode as { state: string; source: string; mode: string; manual_until_ms?: number | null; zones?: Z[] };
+  const fix = (z: Z) => ({ ...z, armed: m.source !== "schedule" ? z.armed : m.state === "armed" ? true : m.state === "disarmed" ? false : z.armed });
+  const before = { ...m, zones: (m.zones ?? []).map(fix) };
+  if (!body.enabled || (m.source === "manual" && m.manual_until_ms && schedule.enabled)) return { before, after: before };
+  const sl = fromWire(body.slots), now = new Date(at(12));
+  const names = Array.from(new Set([...(m.zones ?? []).map((z) => z.zone), ...body.slots.filter((x) => x.zone).map((x) => x.zone)]));
+  const zones = names.map((zone) => ({ zone, armed: armedAt(sl, zone, now) }));
+  const def = armedAt(sl, "", now);
+  const parts = [...zones.map((z) => z.armed), def];
+  const state = parts.every(Boolean) ? "armed" : parts.some(Boolean) ? "partial" : "disarmed";
+  return { before, after: { mode: state === "armed" ? "armed" : "home", source: "schedule", state, zones, default_armed: def } };
+}
 
 const page = () => render(<ArmingPage say={() => {}} now={at(12)} />);
 const row = (c: Element, day: number) => c.querySelector(`.armrow[data-day="${day}"]`)!;
@@ -285,7 +303,7 @@ describe("布防时间页", () => {
       await new Promise((ok) => setTimeout(ok, 20));
       fireEvent.click(c.querySelector("#arm-enabled")!);
       fireEvent.click(c.querySelector(".arm-save")!);
-      await waitFor(() => expect(c.ownerDocument.querySelector(".modal")?.textContent).toContain("马上改成「留守」"));
+      await waitFor(() => expect(c.ownerDocument.querySelector(".modal")?.textContent).toContain("这些外围防区会马上布防：北区"));
     });
 
     it("第 3 轮 config N2:手动留守(外围布防)、日程关着,新日程此刻不布防 → 要确认会撤防", async () => {
@@ -399,5 +417,50 @@ describe("第 2 轮 config N4", () => {
     const { container: c } = render(<ArmingPage say={() => {}} now={Date.now()} role="owner" />);
     await waitFor(() => expect(c.querySelector("[data-no-visitor]")).not.toBeNull());
     expect(c.querySelector('a[href="#/admin/access"]')).toBeNull();
+  });
+});
+
+describe("第 4 轮 config N1 / N2:保存前问站点此刻会变成什么", () => {
+  it("只给一个防区单独设、此刻那个防区会布防:列出防区再确认(原来只看「全部防区」那份,不问)", async () => {
+    const { container: c } = page();
+    await waitFor(() => expect(row(c, 0).querySelector(".armblock")).not.toBeNull());
+    fireEvent.click(btn(c, "每个防区单独设"));
+    fireEvent.click(btn(c, "北区"));
+    fireEvent.click(btn(c, "单独设这个防区"));
+    drag(row(c, 0).querySelector(".armtrack")!, 600, 840);        // 北区星期一 10–14 点,此刻 12 点
+    fireEvent.click(c.querySelector(".arm-save")!);
+    await waitFor(() => expect(c.ownerDocument.querySelector(".modal")?.textContent).toContain("北区：撤防 → 布防"));
+    expect(posted.some((p) => p.url === "/api/arming/schedule/preview")).toBe(true);
+    expect(posted.some((p) => p.url === "/api/arming/schedule")).toBe(false);
+  });
+
+  it("previewChanges:逐个防区列出,其余地方单列;全站一样就说全站", async () => {
+    const { previewChanges } = await import("./armingpage");
+    const before = { mode: "armed", source: "schedule" as const, state: "armed", default_armed: true,
+      zones: [{ zone: "东区", armed: true }, { zone: "北区", armed: true }] };
+    expect(previewChanges(before, before)).toBeNull();
+    const after = { ...before, state: "partial", zones: [{ zone: "东区", armed: false }, { zone: "北区", armed: true }] };
+    expect(previewChanges(before, after)).toBe("存下立刻生效：东区：布防 → 撤防。仍要保存？");
+    const off = { ...before, state: "disarmed", default_armed: false, zones: [{ zone: "东区", armed: false }, { zone: "北区", armed: false }] };
+    expect(previewChanges(before, off)).toContain("全站会马上撤防");
+    lang.value = "en";
+    const def = { ...before, state: "partial", default_armed: false };
+    expect(previewChanges(before, def)).toBe("Saving takes effect right away: everywhere else armed → disarmed. Save anyway?");
+    lang.value = "zh";
+  });
+});
+
+describe("第 4 轮 config N3:删今天的例外", () => {
+  it("日程开着、今天有全天撤防:确认框写全站会马上布防;日程关着说不起作用", async () => {
+    const today = new Date();
+    const d = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+    schedule = { ...schedule, slots: [{ zone: "", day: 0, start: "00:00", end: "24:00" }, ...[1, 2, 3, 4, 5, 6].map((day) => ({ zone: "", day, start: "00:00", end: "24:00" }))],
+      exceptions: [{ id: 7, first_day: d, last_day: d, state: "disarmed", note: "" }] };
+    mode = { ...mode, state: "disarmed" };
+    const { container: c } = page();
+    await waitFor(() => expect(c.querySelector(".arm-ex li")).not.toBeNull());
+    fireEvent.click(btn(c.querySelector(".arm-ex")!, "删除"));
+    await waitFor(() => expect(c.ownerDocument.querySelector(".modal")?.textContent).toContain("全站会马上布防"));
+    expect(posted.find((p) => p.url === "/api/arming/schedule/preview")?.body.skip_exception).toBe(7);
   });
 });

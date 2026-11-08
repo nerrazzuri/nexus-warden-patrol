@@ -108,6 +108,10 @@ const RULES: Rule[] = [
   [/^清单里的文件名错误$/, () => "A file name in the package list is wrong."],
   // 第 4 轮 admin P1-01:活动日志里还是兜底文字的三类
   [/^(\S+) 已登记且未吊销/, (m) => `${m[1]} already exists. Unbind it first to add it again.`],
+  // 第 4 轮 P1-77:升级包被拒的几种原因(原来翻成通用句「Check what you entered」,人又回去查密码)
+  [/^升级包的签名不匹配/, () => "The package's signature does not match: it was not released by us. Ask us for the correct upgrade file."],
+  [/^升级包已损坏/, () => "The package is damaged (its files do not match its list). Download it again."],
+  [/^此版本已存在/, () => "This version is already on the site."],
   [/^(\d+) 处不能用$/, (m) => `${m[1]} point${m[1] === "1" ? "" : "s"} cannot be used`],
   [/^(\S+) 的钟差未知/, (m) => `${m[1]} has not reported its clock recently (just connected, or no telemetry in the last minute). Wait a moment and try again.`],
   [/^(\S+) 的钟差 ([+-]?\d+) 秒/, (m) => `${m[1]}'s clock is ${m[2]} s off from the site. Sync its time with the site host first.`],

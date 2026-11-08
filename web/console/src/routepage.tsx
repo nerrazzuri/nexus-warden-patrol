@@ -6,7 +6,7 @@ import { useCallback, useEffect, useRef, useState } from "preact/hooks";
 import { api, ApiError, enc } from "./api";
 import { Confirm } from "./dialogs";
 import { startDrag, clickGuard, swallowClick } from "./dragpt";
-import { t } from "./i18n";
+import { t, type Key } from "./i18n";
 import { SaveCancelled, type OwnLayer } from "./layoutpage";
 import { MapCanvas } from "./mapcanvas";
 import { PoseMarker } from "./posemarker";
@@ -669,15 +669,15 @@ export function PatrolSchedules({ say, canEdit }: { say: Say; canEdit: boolean }
         </label>
       </div>
       <div class="arm-patrols-body">
-        {canEdit ? <SchedulePanel key={route} route={route} view={view} schedules={view.schedules.filter((s) => s.mission === route)} say={say} reload={load} />
+        {canEdit ? <SchedulePanel key={route} inPanel route={route} view={view} schedules={view.schedules.filter((s) => s.mission === route)} say={say} reload={load} />
           : <p class="muted small">{rt("schedReadOnly")}</p>}
       </div>
     </section>
   );
 }
 
-function SchedulePanel({ route, view, schedules, say, reload }: {
-  route: string; view: RouteView | null; schedules: RouteSchedule[]; say: Say; reload: () => Promise<void>;
+function SchedulePanel({ route, view, schedules, say, reload, inPanel }: {
+  route: string; view: RouteView | null; schedules: RouteSchedule[]; say: Say; reload: () => Promise<void>; inPanel?: boolean;
 }) {
   const [tz, setTz] = useState("");
   // 第 2 轮 config N2 / N3:编号自动给(路线名-1、-2…第一个没用过的);用过的当场说,不等站点回「有人先改过」
@@ -709,7 +709,8 @@ function SchedulePanel({ route, view, schedules, say, reload }: {
   const sameTime = schedules.some((x) => x.at === at && x.days.some((d) => days.includes(d)));
   return (
     <>
-      <h2>{rt("routeSchedules")}</h2>
+      {/* 第 4 轮 r2-config-N3:放在「巡逻日程」面板里时面板已有标题,不再标一次 */}
+      {!inPanel && <h2>{rt("routeSchedules")}</h2>}
       {view && view.timezone === null ? (
         <form class="row" onSubmit={(e) => { e.preventDefault(); void call("/api/route-timezone", { timezone: tz.trim() }, t("saved")); }}>
           <label class="field">{rt("schedTimezone")}
@@ -727,7 +728,7 @@ function SchedulePanel({ route, view, schedules, say, reload }: {
               <li key={s.id}>
                 <span class="strong">{s.id}</span>
                 <span class="mono small">{s.at}</span>
-                <span class="muted small">{s.days.join(" ")}</span>
+                <span class="muted small">{s.days.map((d) => t(d as Key)).join(" ")}</span>
                 <button type="button" class="link push" aria-label={`${rt("schedRemove")} ${s.id}`} onClick={() => setRemoving(s)}>{t("remove")}</button>
               </li>
             ))}
@@ -736,7 +737,8 @@ function SchedulePanel({ route, view, schedules, say, reload }: {
             e.preventDefault();
             if (idTaken) return;
             void call(`/api/route-schedules/${enc(id.trim())}`, { mission: route, at, days, window_min: win, on_missed: missed, base_revision: 0 }, rt("schedSaved"))
-              .then((ok) => { if (ok) setAutoId(true); });          // 加好了换下一个编号(列表刷新后挑),不留着旧的
+              // 加好了换下一个编号(列表刷新后挑),不留着旧的;第 4 轮 r3-config-N6:开始时间也清掉(不然黄字「这个时间已有」指的就是刚加的)
+              .then((ok) => { if (ok) { setAutoId(true); setAt(""); } });
           }}>
             <label class="field">{rt("schedId")}<input value={id} maxLength={64} aria-invalid={idTaken || undefined} onInput={(e) => { setAutoId(false); setId(e.currentTarget.value); }} />
               {idTaken && <span class="error small" role="alert" data-sched-dup="1">{rt("schedIdTaken")}</span>}</label>
@@ -760,7 +762,7 @@ function SchedulePanel({ route, view, schedules, say, reload }: {
             </label>
             <p class="muted small">{rt("schedNote")}</p>
             {sameTime && <p class="warn small" data-sched-same="1">{rt("schedSameTime", { at })}</p>}
-            <button type="submit" class="btn sm" disabled={!NAME_RE.test(id.trim()) || idTaken || days.length === 0 || !(win >= 1)}>{rt("schedAdd")}</button>
+            <button type="submit" class="btn sm sched-add" disabled={!NAME_RE.test(id.trim()) || idTaken || days.length === 0 || !(win >= 1) || !/^([01][0-9]|2[0-3]):[0-5][0-9]$/.test(at)}>{rt("schedAdd")}</button>
           </form>
         </>
       )}

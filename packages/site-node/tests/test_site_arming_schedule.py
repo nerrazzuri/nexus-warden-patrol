@@ -407,3 +407,52 @@ def test_外审复查R1_判这一处布不布防时插进一次关时间表_要�
     box[0].join(5)
     monkeypatch.undo()
     assert 台.armed("gate") == (True, "armed")          # 整份新的:回到手动布防
+
+
+def test_第4轮_config_N1_N2_保存前预演_按站点的钟逐个防区(tmp_path):
+    """原来网页按浏览器的钟、只看「全部防区」那一份,决定要不要确认:只改一个防区不问,浏览器时区不同
+    算错。现在站点照这份没存的日程算此刻每个防区布不布防,不写库。"""
+    s = 站(tmp_path)
+    try:
+        s.api.arming = ArmingDesk(s.db, now_ms=lambda: kl(*MON, 12))
+        s.api.arming.schedule = ArmingSchedule(s.db, now_ms=lambda: kl(*MON, 12), tz=lambda: KL)
+        alice = s.login()
+        whole = [slot(0, "00:00", "24:00")]
+        assert s.req("POST", "/api/arming/schedule", {"enabled": True, "slots": whole},
+                     token=alice)[0] == 200
+        # 东区单独排:星期一 20:00 才布防 → 此刻(吉隆坡 12:00)东区撤防,别的照旧
+        draft = {"enabled": True, "slots": whole + [slot(0, "20:00", "24:00", zone="东区")]}
+        code, d = s.req("POST", "/api/arming/schedule/preview", draft, token=alice)
+        assert code == 200, d
+        after = {z["zone"]: z["armed"] for z in d["after"]["zones"]}
+        assert after == {"东区": False} and d["after"]["default_armed"] is True
+        assert d["before"]["state"] == "armed" and d["after"]["state"] == "partial"
+        # 只读:日程没变
+        assert s.req("GET", "/api/arming/schedule", token=alice)[1]["slots"] == [
+            {"zone": "", "day": 0, "start": "00:00", "end": "24:00"}]
+        bad = {"enabled": True, "slots": [slot(0, "23:00", "22:00")]}
+        assert s.req("POST", "/api/arming/schedule/preview", bad, token=alice)[0] == 400
+    finally:
+        s.close()
+
+
+def test_第4轮_config_N4_今天有例外_下一个变化在明天0点(台):
+    sch = 台.schedule
+    sch.put({"enabled": True, "slots": [slot(0, "13:00", "14:00")]}, by="alice")
+    assert sch.next_boundary(台.clock.t) == kl(*MON, 13)
+    sch.add_exception({"first_day": "2026-10-26", "last_day": "2026-10-26", "state": "armed"},
+                      by="alice")
+    assert sch.next_boundary(台.clock.t) == kl(2026, 10, 27)
+
+
+def test_第4轮_config_N3_预演删掉今天的例外(台):
+    sch = 台.schedule
+    sch.put({"enabled": True, "slots": [slot(0, "00:00", "24:00")]}, by="alice")
+    eid = sch.add_exception({"first_day": "2026-10-26", "last_day": "2026-10-26",
+                             "state": "disarmed"}, by="alice")
+    d = {"enabled": True, "slots": [slot(0, "00:00", "24:00")]}
+    assert 台.preview(d)["after"]["state"] == "disarmed"
+    assert 台.preview(d | {"skip_exception": eid})["after"]["state"] == "armed"
+    assert 台.view()["timezone"] == "Asia/Kuala_Lumpur"
+    with pytest.raises(ScheduleError):
+        台.preview(d | {"skip_exception": "x"})
