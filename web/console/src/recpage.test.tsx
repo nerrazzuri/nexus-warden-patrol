@@ -117,3 +117,18 @@ describe("录像页", () => {
     expect(btn(c, "⏪ 10 秒")).toBeDefined();
   });
 });
+
+describe("第 3 轮 duty N4", () => {
+  it("保安看到找管理员导出;管理员能按时间段导出,文件名是可读的日期时间", async () => {
+    const g = page("guard");
+    await waitFor(() => expect(g.container.querySelector("video.feed")).not.toBeNull());
+    expect(g.container.querySelector("[data-export-ask]")!.textContent).toContain("找管理员");
+    cleanup();
+    const a = page("admin");
+    await waitFor(() => expect(a.container.querySelector("[data-clip] a")).not.toBeNull());
+    expect(a.container.querySelector("[data-clip] a")!.getAttribute("href")).toMatch(/^\/api\/recordings\/clip\?robot=A&camera=front&since=\d+&until=\d+$/);
+    await waitFor(() => expect(a.container.querySelector('a[href$="/video"]')).not.toBeNull());
+    const dl = Array.from(a.container.querySelectorAll("a")).map((x) => (x as HTMLAnchorElement).download || x.getAttribute("download") || "");
+    expect(dl.some((d) => /^A-front-\d{4}-\d{2}-\d{2}-\d{6}\.mp4$/.test(d))).toBe(true);
+  });
+});

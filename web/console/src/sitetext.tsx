@@ -93,6 +93,7 @@ const RULES: Rule[] = [
   [/^防区里站得下的地方离建图时走过的路都太远/, () => "every spot in the zone is too far from where the robot went while mapping (it would not locate itself reliably)"],
   [/^(\S+) 到 (\S+) 走不通[(（]被墙或禁行区隔开[)）]$/, (m) => `No way from ${m[1]} to ${m[2]} (a wall or no-go area is in between)`],
   [/^点要有数字的 x、y/, () => "each point needs numeric x and y (and optionally yaw)"],
+  [/^(\S+) 从现在的位置走不到这个点/, (m) => `${m[1]} cannot get to this point from where it is now (a wall or no-go area is in between)`],
   // 第 3 轮 admin N4:诊断页、活动日志、报警里常见的几句
   [/^(?:站点盘)?(?:还|只)?剩\s*([\d.]+)\s*(GB|MB|%)$/, (m) => `${m[1]}${m[2] === "%" ? "%" : ` ${m[2]}`} free`],
   [/^没有登记过 (\S+)$/, (m) => `${m[1]} is not registered on this site`],

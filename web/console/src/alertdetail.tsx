@@ -1,6 +1,7 @@
 // 警报详情(网页易用性第 1 轮 P0-04 / P0-05):点一条警报看怎么回事、在哪、该做什么,在这里接手、派机器人、
 // 看录像;关警报要先选结论(有人 / 误报 / 处理好了),可以写备注;点错了 10 分钟内能撤销。
 // 只读账号只看,不显示处理按钮(P0-20)。
+import { pageAllowed } from "./shell";
 import { SiteSpan, siteText, byText } from "./sitetext";
 import { useState } from "preact/hooks";
 import { alertAdvice, alertHeadline, canHandleAlerts } from "./alertinfo";
@@ -10,7 +11,7 @@ import { Modal } from "./dialogs";
 import { lang, t, type Lang } from "./i18n";
 import { GoLookCard, verdictText } from "./mappage";
 import type { UnitInfo } from "./live";
-import { canDispatch, type Alert } from "./model";
+import { autoResolved, canDispatch, type Alert } from "./model";
 import { recordingLink } from "./recordings";
 
 const en = {
@@ -178,12 +179,14 @@ export function AlertDetail(props: {
           {open && pose && canDispatch(props.role) && !sending && (
             <button type="button" class="btn sm" onClick={() => setSending(true)}>{dt("dSend")}</button>
           )}
-          {!open && can && a.resolved_ms != null && props.now - a.resolved_ms < REOPEN_MS && (
+          {/* 第 3 轮 duty N7:站点自己关的(摄像头删了之类)不给撤销 */}
+          {!open && can && a.resolved_ms != null && props.now - a.resolved_ms < REOPEN_MS && !autoResolved(a) && (
             <button type="button" class="btn sm" disabled={busy} onClick={() => post("reopen", {}, dt("dUndone"))}>{dt("dUndo")}</button>
           )}
         </div>
         {sending && pose && (
-          <GoLookCard map={{ map_id: pose.map_id, version: pose.map_version }} at={[pose.x, pose.y]} units={props.units}
+          <GoLookCard canFix={pageAllowed("admin/localization", props.role)} map={{ map_id: pose.map_id, version: pose.map_version }} at={[pose.x, pose.y]} units={props.units}
+            exclude={a.robot && a.robot !== "site" && !a.robot.includes(":") ? a.robot : undefined}
             onClose={() => setSending(false)} say={props.say} />
         )}
         {open && can && !mustArrive && (

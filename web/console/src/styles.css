@@ -1500,3 +1500,11 @@ input[type="file"] { max-width: 100%; min-width: 0; }            /* 上传按钮
 .duty-left .today { flex: none; max-height: none; overflow: visible; }
 /* 第 3 轮 admin N6:连不上站点时的启动页 */
 .boot-down { display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 16px; color: var(--c-textSecondary); text-align: center; }
+/* 第 3 轮 duty N8:没有图片时不放一块黑的空缩略图(位置留着,列对齐) */
+.it .shot.none { background: none; }
+.it .res .al-note { color: var(--c-textSecondary); font-style: italic; }
+/* 第 3 轮 duty N9:手机上录像页的地图只剩约 40px(图例、提示占了 4:3 框的大半):框按内容长,地图本身按宽给高 */
+@media (max-width: 720px) {
+  .rmap { aspect-ratio: auto; min-height: 0; }
+  .rmap .mapwrap { flex: none; height: max(240px, 70vw); }
+}

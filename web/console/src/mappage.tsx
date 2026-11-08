@@ -11,6 +11,7 @@ import { hm, nameOf, useDutySettings } from "./data";
 import { siteHm } from "./todaypatrols";
 import { Modal } from "./dialogs";
 import { alertTitle, lang, refusalText, t, type Key } from "./i18n";
+import { pageAllowed } from "./shell";
 import { locText, type UnitInfo } from "./live";
 import { ENGINEERING_LAYERS, etaNext, LAYERS, layersFor, loadLayers, saveLayers, labelRows, mapPins, mapTodo, olderOpen, shiftStart, staleAfter, staleCells, tonightEvents, zoneDecor,
   type AuthzRow, type Cell, type Layer, type ModeView } from "./maplayers";
@@ -425,7 +426,7 @@ export function MapPage(props: {
                 <button type="button" class="evrow" onClick={() => toRec(a)}>
                   <time class="mono">{hm(a.first_ms)}</time>
                   <span class={`ev-what ${a.audience ?? ""}`}>{alertTitle(lang.value, a.kind, a.title)}</span>
-                  <small class="muted">{t("evOpen")} · {t("evToRec")}</small>
+                  <small class="muted">{t("evOpen")}{a.robot && a.robot !== "site" && !a.robot.includes(":") ? ` · ${t("evToRec")}` : ""}</small>
                 </button>
               </li>
             ))}
@@ -433,14 +434,14 @@ export function MapPage(props: {
         )}
         {events.length > 0 && <a class="small" href="#/alarms">{t("mapAllShift", { n: events.length })}</a>}
         {route ? (
-          shown.map && <TempRoutePanel map={shown.map} points={route} robots={robotsHere} say={say}
+          shown.map && <TempRoutePanel canFix={pageAllowed("admin/localization", props.role ?? "")} map={shown.map} points={route} robots={robotsHere} say={say}
             onUndo={() => setRoute(route.slice(0, -1))} onCancel={() => setRoute(null)}
             onSent={(robot, check) => {
               setSentRoute({ robot, pts: route });
               if (!on("route")) flip("route");            // 看得到它走到哪了
               setRoute(null);
               void check?.then((r) => {
-                if (r.state === "refused") setSentRoute((s) => (s && s.robot === robot ? { ...s, refused: [r.why, r.act].filter(Boolean).join(" ") } : s));
+                if (r.state === "refused") setSentRoute((s) => (s && s.robot === robot ? { ...s, refused: joinWhyAct(r.why, r.act) } : s));
               });
             }} />
         ) : sentRoute ? (
@@ -455,7 +456,7 @@ export function MapPage(props: {
           </div>
         )}
       </aside>
-      {look && <GoLookCard map={look.map} at={look.at} units={props.units} say={say} onClose={() => setLook(null)} />}
+      {look && <GoLookCard canFix={pageAllowed("admin/localization", props.role ?? "")} map={look.map} at={look.at} units={props.units} say={say} onClose={() => setLook(null)} />}
       {liveCam && (
         <Modal label={liveCam} onClose={() => setLiveCam(null)} wide>
           <img class="cam-live" alt={liveCam} src={`/api/cameras/${enc(liveCam)}/live`} />
@@ -496,7 +497,7 @@ export function camMarks(s: Screen, cams: PlacedCam[], open: (name: string) => v
   });
 }
 
-export function GoLookCard(props: { map: { map_id: string; version: string }; at: Pt; units: UnitInfo[]; onClose: () => void; say: (s: string) => void }) {
+export function GoLookCard(props: { map: { map_id: string; version: string }; at: Pt; units: UnitInfo[]; onClose: () => void; say: (s: string) => void; canFix?: boolean; exclude?: string }) {
   const [got, setGot] = useState<{ robot_id: string; eta_s: number } | null | "none" | "error">(null);
   const [why, setWhy] = useState("");
   const [busy, setBusy] = useState(false);
@@ -504,7 +505,7 @@ export function GoLookCard(props: { map: { map_id: string; version: string }; at
   useEffect(() => {
     let live = true;
     api<{ robot_id: string; eta_s: number }>("GET",
-      `/api/robots/nearest?map_id=${enc(props.map.map_id)}&map_version=${enc(props.map.version)}&x=${x}&y=${y}`)
+      `/api/robots/nearest?map_id=${enc(props.map.map_id)}&map_version=${enc(props.map.version)}&x=${x}&y=${y}${props.exclude ? `&exclude=${enc(props.exclude)}` : ""}`)
       .then((d) => live && setGot(d))
       .catch((e) => {
         if (!live) return;
@@ -512,7 +513,7 @@ export function GoLookCard(props: { map: { map_id: string; version: string }; at
         else { setGot("error"); setWhy(e instanceof ApiError ? e.message : String(e)); }
       });
     return () => { live = false; };
-  }, [x, y, props.map.map_id, props.map.version]);
+  }, [x, y, props.map.map_id, props.map.version, props.exclude]);
   async function send(id: string) {
     setBusy(true);
     const p = props.units.find((u) => u.robot.robot_id === id)?.robot.loc?.pose;
@@ -524,7 +525,7 @@ export function GoLookCard(props: { map: { map_id: string; version: string }; at
       const no = notAccepted(r);
       // 网页易用性第 1 轮 P0-03:收下 ≠ 出发了(出发前检查在后头),确认完再说
       if (no) props.say(no);
-      else void reportStart(nameOf(id), sentAt, props.say, { robot: id });
+      else void reportStart(nameOf(id), sentAt, props.say, { robot: id, canFix: props.canFix });
       props.onClose();
     } catch (e) {
       setWhy(e instanceof ApiError ? e.message : String(e));
@@ -535,7 +536,7 @@ export function GoLookCard(props: { map: { map_id: string; version: string }; at
   return (
     <div class="golook" role="dialog" aria-label={t("lookTitle")}>
       {got === null && <p class="muted">{t("lookAsking")}</p>}
-      {got === "none" && <p>{t("lookNone")}</p>}
+      {got === "none" && <p>{props.exclude ? t("lookOnlySelf", { id: nameOf(props.exclude) }) : t("lookNone")}</p>}
       {got === "error" && <p class="error">{why}</p>}
       {got && typeof got === "object" && (
         <p>{t("lookWho", { id: nameOf(got.robot_id), n: Math.max(1, Math.round(got.eta_s / 60)) })}</p>
@@ -556,6 +557,7 @@ export const TEMP_CHECK_MS = 400;
 
 /** 保安的临时路线(设计 §4.3,用户选的):按顺序点几个点、选一台、开始;走一趟就没了,不存。 */
 export function TempRoutePanel(props: {
+  canFix?: boolean;
   map: { map_id: string; version: string };
   points: Pt[];
   robots: string[];
@@ -579,12 +581,12 @@ export function TempRoutePanel(props: {
     let live = true;
     const id = window.setTimeout(() => {
       api<{ errors: { index: number | null; problem: string }[] }>("POST", "/api/route-check",
-        { points: props.points.map(([x, y]) => ({ x, y })), map_id: props.map.map_id, map_version: props.map.version })
+        { points: props.points.map(([x, y]) => ({ x, y })), map_id: props.map.map_id, map_version: props.map.version, ...(robot ? { robot } : {}) })
         .then((d) => { if (live) { setErrs(pointText(d.errors ?? [])); setBad((d.errors ?? []).length); } })
         .catch(() => { /* 老站点没有这个接口:按「开始」时照样查 */ });
     }, TEMP_CHECK_MS);
     return () => { live = false; window.clearTimeout(id); };
-  }, [key, props.map.map_id, props.map.version]);
+  }, [key, props.map.map_id, props.map.version, robot]);
   async function go() {
     if (!robot) return;
     setBusy(true);
@@ -602,7 +604,7 @@ export function TempRoutePanel(props: {
       }
       const no = notAccepted(r);
       if (no) setErrs([no]);
-      else props.onSent(robot, reportStart(nameOf(robot), sentAt, props.say, { robot }));
+      else props.onSent(robot, reportStart(nameOf(robot), sentAt, props.say, { robot, canFix: props.canFix }));
     } catch (e) {
       const list = e instanceof ApiError ? (e.data as { errors?: { index: number | null; problem: string }[] } | undefined)?.errors : undefined;
       setErrs(list && list.length ? pointText(list) : [e instanceof ApiError ? refusalText(e.message, e.data) : String(e)]);
@@ -628,4 +630,11 @@ export function TempRoutePanel(props: {
       </div>
     </div>
   );
+}
+
+/** 第 3 轮 duty N1:原因和办法之间补句号(原来拼成「…no origin yet Localize the robot…」)。 */
+export function joinWhyAct(why: string, act: string): string {
+  if (!act) return why;
+  const zh = lang.value === "zh";
+  return /[.。!！?？]$/.test(why) ? `${why}${zh ? "" : " "}${act}` : `${why}${zh ? "。" : ". "}${act}`;
 }

@@ -152,6 +152,7 @@ def byte_range(header: str | None, size: int) -> tuple[int, int] | None | bool:
 
 
 #: 连续录像(W18):一段 ``/api/recordings/<id>/video``、标留着 ``/api/recordings/<id>/keep``。
+CLIP_MAX_MS = 60 * 60_000      # 第 3 轮 duty N4:按时间段导出录像,一次最长 60 分钟
 _REC = re.compile(r"^/api/recordings/(\d{1,12})/(video|keep)$")
 #: 充电桩(W13):``/api/chargers/<robot_id>``。
 _CHARGER = re.compile(r"^/api/chargers/([^/]{1,128})$")
@@ -833,7 +834,8 @@ class _Handler(TlsHandlerMixin):
                 return self._runs(method, path, user)
             if path in ("/api/reports/daily", "/api/reports/summary"):
                 return self._report(method, user, path)
-            if path in ("/api/recordings", "/api/recordings/frame") or _REC.match(path):
+            if path in ("/api/recordings", "/api/recordings/frame", "/api/recordings/clip") \
+                    or _REC.match(path):
                 return self._recordings(method, path, user)
             from nexwar_site import api_runviz
             if api_runviz.handles(path):               # 运营可视化:路径轨迹、定位历史、摄像头登记
@@ -1512,6 +1514,28 @@ class _Handler(TlsHandlerMixin):
                 p["yaw"] = 0.0                            # 点不成形:下面逐点报
         return flat
 
+    def _reach_first(self, robot: str, map_id: Any, version: Any, points: Any
+                     ) -> list[dict[str, Any]]:
+        """第 3 轮 duty N3:机器人从现在的位置走不走得到临时路线的第 1 个点(原来只查点本身,
+        派出后提示「已出发」,其实当场 goal_blocked 跳过)。
+        拿不到位姿、不在这张图上、没有规划栅格的不查。"""
+        reach = getattr(self.site.incidents, "reach", None)
+        c = self.site.dispatcher.clients.get(robot)
+        t = c.telemetry if c is not None else None
+        if reach is None or t is None or t.pose is None or not isinstance(points, list) \
+                or not points or not isinstance(points[0], dict):
+            return []
+        if t.pose.map_id != map_id or t.pose.map_version != version:
+            return []
+        try:
+            x, y = float(points[0]["x"]), float(points[0]["y"])
+        except (KeyError, TypeError, ValueError):
+            return []
+        if reach.path_m(map_id, version, (float(t.pose.x), float(t.pose.y)), (x, y)) is None:
+            why = f"{robot} 从现在的位置走不到这个点(被墙或禁行区隔开)"
+            return [{"index": 0, "problem": why}]
+        return []
+
     def _nearest(self, method: str, user) -> None:
         """让最近的机器人过去看看(W44):``GET ?map_id=&map_version=&x=&y=`` → 谁、多少米、约几秒。
         候选:在线、数据新鲜、没被手动接管、不在驱离、加载的就是这一版图、有可信位姿。"""
@@ -1544,11 +1568,13 @@ class _Handler(TlsHandlerMixin):
                 out.append((rid, t.pose.map_id, t.pose.map_version,
                             float(t.pose.x), float(t.pose.y)))
             return out
+        # 第 3 轮 duty N2:``exclude`` = 出事要人帮的那台(报警是它报的),不派它自己去看自己
+        skip = set((q.get("exclude") or [""])[0].split(",")) - {""}
         cands = [c for c in self.site.loop.call(lambda: _sync(gather))
-                 if c[1] == map_id and c[2] == version]
+                 if c[1] == map_id and c[2] == version and c[0] not in skip]
         reach = getattr(self.site.incidents, "reach", None)
         if not cands:
-            raise HttpError(404, "此地图上没有能派的机器人")
+            raise HttpError(404, "此地图上没有能派的机器人", extra={"excluded": sorted(skip)})
         if reach is None:
             raise HttpError(404, "站点没有此地图的规划栅格,无法确定最近的机器人")
         from nexwar_site.nearest import nearest
@@ -2590,6 +2616,9 @@ class _Handler(TlsHandlerMixin):
                     errs = store.check_points({
                         "map_id": d.get("map_id"), "map_version": d.get("map_version"),
                         "waypoints": self._temp_waypoints(d.get("points"))})
+                    if not errs and isinstance(d.get("robot"), str):
+                        errs = self._reach_first(d["robot"], d.get("map_id"), d.get("map_version"),
+                                                 d.get("points"))
                 else:
                     self._need(user, MANAGE)
                     errs = store.check_points(d)
@@ -4354,6 +4383,8 @@ class _Handler(TlsHandlerMixin):
                                          "robots": store.robots()})
         if path == "/api/recordings/frame":
             return self._rec_frame(method, store, user)
+        if path == "/api/recordings/clip":
+            return self._rec_clip(method, store, user)
         m = _REC.match(path)
         assert m is not None
         rid, what = int(m.group(1)), m.group(2)
@@ -4378,6 +4409,52 @@ class _Handler(TlsHandlerMixin):
             raise HttpError(400, "要 keep: true/false")
         self._audit_detail = {"keep": body["keep"]}
         return self._send_json(200, {"recording": store.set_keep(rid, body["keep"])})
+
+    def _rec_clip(self, method: str, store, user) -> None:
+        """第 3 轮 duty N4:按时间段导出(原来一次只能下 1 分钟一段,10 分钟证据要点 10 次)。
+        ``GET ?robot=&camera=&since=&until=``(毫秒,最长 60 分钟)→ 一个 zip,里面每段一个 mp4,
+        文件名「机器人-摄像头-日期-时分秒.mp4」(站点本地时区)。只给能导出证据的(管理员)。"""
+        import tempfile
+        import zipfile
+        if method != "GET":
+            raise HttpError(405, "只收 GET")
+        self._need(user, EXPORT)
+        q = parse_qs(self.path.split("?", 1)[1] if "?" in self.path else "")
+        robot = (q.get("robot") or [""])[0]
+        camera = (q.get("camera") or [""])[0]
+        if not SAFE_ID.match(robot) or not SAFE_ID.match(camera):
+            raise HttpError(400, "要 robot、camera")
+        try:
+            since, until = int((q.get("since") or [""])[0]), int((q.get("until") or [""])[0])
+        except ValueError as exc:
+            raise HttpError(400, "since、until 要是毫秒整数") from exc
+        if until <= since or until - since > CLIP_MAX_MS:
+            raise HttpError(400, f"时间段要在 0–{CLIP_MAX_MS // 60_000} 分钟之间")
+        rows = [r for r in store.list(robot_id=robot, camera=camera, since_ms=since,
+                                      until_ms=until, limit=500)
+                if store.path(r).is_file()]
+        if not rows:
+            raise HttpError(404, "这段时间没有录像")
+        rows.sort(key=lambda r: r["start_ms"])
+        self._audit_view(f"recording-clip/{robot}/{camera}/{since}-{until}", action="DOWNLOAD")
+        with tempfile.TemporaryFile() as tmp:
+            with zipfile.ZipFile(tmp, "w", zipfile.ZIP_STORED) as z:
+                for r in rows:
+                    stamp = time.strftime("%Y-%m-%d-%H%M%S", time.localtime(r["start_ms"] / 1000))
+                    z.write(store.path(r), f"{robot}-{camera}-{stamp}.mp4")
+            size = tmp.tell()
+            tmp.seek(0)
+            first = time.strftime("%Y-%m-%d-%H%M", time.localtime(since / 1000))
+            self._status = 200
+            self.send_response(200)
+            self.send_header("Content-Type", "application/zip")
+            self.send_header("Content-Length", str(size))
+            self.send_header("Content-Disposition",
+                             f'attachment; filename="{robot}-{camera}-{first}.zip"')
+            self.send_header("Cache-Control", "no-store")
+            self.end_headers()
+            while chunk := tmp.read(1 << 16):
+                self.wfile.write(chunk)
 
     def _audit_view(self, target: str, *, action: str = "VIEW") -> None:
         """看了、下载了证据(W30,PDPA):记审计。同一个人看同一样东西 10 分钟内只记一次(放录像、

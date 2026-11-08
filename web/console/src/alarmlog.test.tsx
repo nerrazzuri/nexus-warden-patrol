@@ -208,3 +208,16 @@ describe("第 2 轮 P0-20:只读账号", () => {
     expect((rows(g.container)[0].querySelector("div:last-child .btn") as HTMLElement).textContent).toBe("去处理");
   });
 });
+
+describe("第 3 轮 duty N8", () => {
+  it("有人接手的写谁在处理;处理完的带备注", async () => {
+    alerts = [
+      alert({ key: "a", resolved_ms: null, acked_by: "gina" }),
+      alert({ key: "b", resolved_ms: NOW - 1000, resolved_by: "gina", verdict: "handled", context: { note: "门没锁好" } } as Partial<Alert>),
+    ];
+    const { container: c } = page();
+    await waitFor(() => expect(c.querySelectorAll(".it").length).toBe(2));
+    expect(c.textContent).toContain("gina");
+    expect(c.querySelector('[data-note]')!.textContent).toBe("门没锁好");
+  });
+});
