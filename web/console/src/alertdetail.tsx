@@ -35,6 +35,7 @@ const en = {
   dClosed: "Closed: {v} · {who} · {t}",
   dUndo: "Undo close",
   dUndone: "Alarm reopened",
+  dClosedUndo: "Alarm closed. You can undo until {t}.",
   dGone: "This alarm was already handled by someone else.",
   dReadOnly: "Your account can only view alarms.",
 };
@@ -61,6 +62,7 @@ const zh: Record<DKey, string> = {
   dClosed: "已关闭：{v} · {who} · {t}",
   dUndo: "撤销关闭",
   dUndone: "报警已重新打开",
+  dClosedUndo: "报警已关闭。{t} 前可以撤销。",
   dGone: "这条报警已被别人处理。",
   dReadOnly: "你的账号只能查看报警。",
 };
@@ -73,6 +75,9 @@ function dt(key: DKey, vars?: Record<string, string | number>): string {
 
 /** 处理后这么久内能撤销(站点 alerts.REOPEN_MS)。 */
 export const REOPEN_MS = 10 * 60_000;
+
+/** 提示条上的一个按钮(第 2 轮 duty N8)。 */
+export interface ToastAction { label: string; run: () => void }
 /** 要先到场才能关的(站点 alert_store.ARRIVAL_KINDS)。 */
 const ARRIVE = new Set(["dog_sees_person"]);
 const LOST = new Set(["loc_lost_paused", "loc_lost_idle"]);
@@ -93,7 +98,7 @@ export function AlertDetail(props: {
   units: UnitInfo[];
   onClose: () => void;
   refresh: () => Promise<void>;
-  say: (s: string) => void;
+  say: (s: string, act?: ToastAction) => void;
   onFindPose?: (robot: string) => void;
 }) {
   const a = props.a;
@@ -115,7 +120,14 @@ export function AlertDetail(props: {
     setErr("");
     try {
       await api("POST", `/api/alerts/${enc(a.key)}/${action}`, body);
-      if (after) props.say(after);
+      // 第 2 轮 duty N8:关掉以后提示写能撤销到几点,带「撤销」按钮(原来要去报警记录里找)
+      if (action === "resolve") {
+        const key = a.key, refresh = props.refresh, say = props.say;
+        say(dt("dClosedUndo", { t: hm(Date.now() + REOPEN_MS) }), { label: dt("dUndo"), run: () => {
+          void api("POST", `/api/alerts/${enc(key)}/reopen`, {}).then(() => { say(dt("dUndone")); return refresh(); })
+            .catch((e) => say(e instanceof ApiError ? e.message : String(e)));
+        } });
+      } else if (after) props.say(after);
       await props.refresh();
       if (action === "resolve") props.onClose();
     } catch (e) {

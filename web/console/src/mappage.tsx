@@ -5,7 +5,7 @@ import type { ComponentChildren } from "preact";
 // (大小不跟着缩放变),位置用跟底图同一个变换算。
 import { siteStr } from "./sitetext";
 import { useEffect, useMemo, useState } from "preact/hooks";
-import { reportStart } from "./alertinfo";
+import { reportStart, type StartCheck } from "./alertinfo";
 import { api, ApiError, enc } from "./api";
 import { hm, nameOf, useDutySettings } from "./data";
 import { siteHm } from "./todaypatrols";
@@ -262,7 +262,8 @@ export function MapPage(props: {
   const [look, setLook] = useState<{ at: Pt; map: { map_id: string; version: string } } | null>(null);
   const [route, setRoute] = useState<Pt[] | null>(null);
   // P1-16:派出去的临时路线留在图上(哪台在走);走过的地方由「路线」图层的轨迹画出
-  const [sentRoute, setSentRoute] = useState<{ robot: string; pts: Pt[] } | null>(null);
+  // 第 2 轮 duty N2:派出后跟着出发检查的结果走 —— 被拒了侧栏写没出发、为什么,不再说「正在走」
+  const [sentRoute, setSentRoute] = useState<{ robot: string; pts: Pt[]; refused?: string } | null>(null);
   const [cells, setCells] = useState<{ cell_m: number; cells: Cell[] } | null>(null);
   const [authz, setAuthz] = useState<AuthzRow[]>([]);
   const [recent, setRecent] = useState<Alert[]>([]);
@@ -359,7 +360,7 @@ export function MapPage(props: {
             {route && route.length > 1 && (
               <polyline class="temp-route" points={route.map(([x, y]) => { const p = toPx(meta, x, y); return `${p.px},${p.py}`; }).join(" ")} />
             )}
-            {!route && sentRoute && sentRoute.pts.length > 1 && (
+            {!route && sentRoute && !sentRoute.refused && sentRoute.pts.length > 1 && (
               <polyline class="temp-route sent" data-sent-route={sentRoute.robot}
                 points={sentRoute.pts.map(([x, y]) => { const p = toPx(meta, x, y); return `${p.px},${p.py}`; }).join(" ")} />
             )}
@@ -429,14 +430,17 @@ export function MapPage(props: {
         {route ? (
           shown.map && <TempRoutePanel map={shown.map} points={route} robots={robotsHere} say={say}
             onUndo={() => setRoute(route.slice(0, -1))} onCancel={() => setRoute(null)}
-            onSent={(robot) => {
+            onSent={(robot, check) => {
               setSentRoute({ robot, pts: route });
               if (!on("route")) flip("route");            // 看得到它走到哪了
               setRoute(null);
+              void check?.then((r) => {
+                if (r.state === "refused") setSentRoute((s) => (s && s.robot === robot ? { ...s, refused: [r.why, r.act].filter(Boolean).join(" ") } : s));
+              });
             }} />
         ) : sentRoute ? (
-          <div class="tip" data-sent-tip="1">
-            <p>{t("trSentShown", { id: nameOf(sentRoute.robot) })}</p>
+          <div class={sentRoute.refused ? "tip warn" : "tip"} data-sent-tip={sentRoute.refused ? "refused" : "1"}>
+            <p>{sentRoute.refused ? t("trSentRefused", { id: nameOf(sentRoute.robot), why: sentRoute.refused }) : t("trSentShown", { id: nameOf(sentRoute.robot) })}</p>
             <button type="button" class="btn sm" onClick={() => setSentRoute(null)}>{t("trSentHide")}</button>
           </div>
         ) : canPatrol(props.role ?? "") && (
@@ -552,7 +556,8 @@ export function TempRoutePanel(props: {
   robots: string[];
   onUndo: () => void;
   onCancel: () => void;
-  onSent: (robot: string) => void;
+  /** ``check``:出发检查的结果(排进日程的没有)。 */
+  onSent: (robot: string, check?: Promise<StartCheck>) => void;
   say: (s: string) => void;
 }) {
   const [robot, setRobot] = useState<string | null>(props.robots[0] ?? null);
@@ -592,7 +597,7 @@ export function TempRoutePanel(props: {
       }
       const no = notAccepted(r);
       if (no) setErrs([no]);
-      else { void reportStart(nameOf(robot), sentAt, props.say, { robot }); props.onSent(robot); }
+      else props.onSent(robot, reportStart(nameOf(robot), sentAt, props.say, { robot }));
     } catch (e) {
       const list = e instanceof ApiError ? (e.data as { errors?: { index: number | null; problem: string }[] } | undefined)?.errors : undefined;
       setErrs(list && list.length ? pointText(list) : [e instanceof ApiError ? refusalText(e.message, e.data) : String(e)]);

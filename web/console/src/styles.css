@@ -723,7 +723,7 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--c-primary); }
 .track { position: relative; height: 14px; border-radius: 3px; background: var(--c-surfaceVariant); cursor: pointer; }
 .seg-rec { position: absolute; top: 0; bottom: 0; border-radius: 2px; background: var(--c-textMuted); }
 .lane.on .seg-rec { background: var(--c-tertiary); }
-.mk { position: absolute; top: -4px; width: 3px; height: 22px; border-radius: 2px; transform: translateX(-1px); }
+.mk { position: absolute; top: -4px; width: 3px; max-width: 3px; height: 22px; border-radius: 2px; transform: translateX(-1px); }
 .mk.alarm { background: var(--c-error); }
 .mk.help { background: var(--c-warning); }
 .tl-head { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--c-text); pointer-events: none; }
@@ -1105,8 +1105,9 @@ polygon.me-op.loop.obstacle { stroke: var(--c-brand); }
 .setup-list li.done { opacity: .7; }
 .setup-mark { width: 18px; text-align: center; color: var(--c-success); }
 .setup-text { flex: 1; display: flex; flex-direction: column; }
-.help { display: flex; flex-direction: column; gap: 12px; width: min(480px, 80vw); max-width: 100%; box-sizing: border-box; }
-.help .seg { align-self: flex-start; }
+/* 第 2 轮 duty N5:原来写 .help,时间轴「需要帮助」标记(class="mk help")也套上了 480px 宽 */
+div.help:not(.mk) { display: flex; flex-direction: column; gap: 12px; width: min(480px, 80vw); max-width: 100%; box-sizing: border-box; }
+div.help:not(.mk) .seg { align-self: flex-start; }
 .help-step p { margin: 6px 0; line-height: 1.6; }
 .help-faq details { border-bottom: 1px solid var(--c-outline); padding: 6px 0; }
 .help-faq summary { cursor: pointer; font-weight: 600; }
@@ -1407,3 +1408,10 @@ input[type="date"]:not(.field input) { height: 36px; padding: 0 8px; border-radi
 .me-terr-row { flex-wrap: wrap; gap: 6px; }
 .me-terr-row .me-tname { white-space: nowrap; flex: 0 0 auto; }
 .me-terr-row .me-slow { width: 5em; }
+/* 第 2 轮 duty N10 / N11:顶栏「n 台已叫停」(哪页都看得见);连不上时布防状态变灰 */
+.heldchip { display: inline-flex; align-items: center; padding: 2px 10px; border-radius: 999px; background: var(--c-warningSoft); color: var(--c-warning); font-weight: 600; text-decoration: none; white-space: nowrap; }
+.armstate.stale { color: var(--c-textMuted); }
+.armstate.stale .dot { background: var(--c-textMuted); }
+.toast .toast-act { margin-left: 12px; background: var(--c-bg); color: var(--c-text); }
+/* 第 2 轮 duty N7:报警详情头部「P1 · 时间 · 机器人 · 位置」原来没样式,挤成「P1Raised 02:18Robot: B」 */
+.ad-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 14px; margin: 0 0 8px; }

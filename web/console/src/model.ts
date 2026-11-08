@@ -231,7 +231,7 @@ export function canDisarm(role: string): boolean {
 /** 异常状态(着色、带形状);别的都是中性(ISA-101)。 */
 export function abnormal(s: RobotState): "p1" | "p2" | null {
   if (s === "deterring" || s === "estop" || s === "fell") return "p1";
-  if (s === "offline") return "p2";
+  if (s === "offline" || s === "manual") return "p2";      // 第 2 轮 duty N10:叫停了算异常
   return null;
 }
 

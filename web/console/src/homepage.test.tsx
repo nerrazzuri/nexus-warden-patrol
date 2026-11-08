@@ -64,6 +64,11 @@ describe("现场概况", () => {
     expect(c.querySelector(".home-todo")).toBeNull();
   });
 
+  it("第 2 轮 duty N6:P3 通知不进「需要你处理」", () => {
+    const { container: c } = page([alert({ key: "n1", level: "P3", kind: "patrol_started", title: "巡逻开始" })], mode, {});
+    expect(c.querySelector(".home-todo")).toBeNull();
+  });
+
   it("证书提醒写人话和该做什么,能处理", async () => {
     const done = vi.fn();
     const { container: c } = page([alert({ key: "c1" })], mode, { done });

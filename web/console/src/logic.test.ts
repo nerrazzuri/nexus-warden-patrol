@@ -336,10 +336,11 @@ describe("报警状态与队列(ISA-18.2)", () => {
     expect(w.rest.map((x) => x.robot_id)).toEqual(["D1-1", "D1-2"]);
   });
   it("正常状态不着色,异常的分 P1/P2", () => {
-    for (const s of ["patrolling", "returning", "charging", "idle", "manual"] as const) expect(abnormal(s)).toBeNull();
+    for (const s of ["patrolling", "returning", "charging", "idle"] as const) expect(abnormal(s)).toBeNull();
     expect(abnormal("deterring")).toBe("p1");
     expect(abnormal("fell")).toBe("p1");
     expect(abnormal("offline")).toBe("p2");
+    expect(abnormal("manual")).toBe("p2");            // 第 2 轮 duty N10:叫停了、等人点恢复,不是正常
   });
   it("翻倒压过任务;时长格式", () => {
     const robot: Robot = fx("site_robots").robots[0];

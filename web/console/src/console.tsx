@@ -1,6 +1,7 @@
 // 值班台外框(W44 第一期;W60 改版):左侧导航 + 顶栏(shell.tsx)+ 站点数据 + 各页 + 共用的对话框。
 // 值班五页:总览、实况、地图、报警记录、录像;管理、系统各页按角色给(没权限的不列)。全站深色。
 import { useEffect, useMemo, useRef, useState } from "preact/hooks";
+import type { ToastAction } from "./alertdetail";
 import { api, ApiError, enc } from "./api";
 import type { Me } from "./app";
 import type { Cam } from "./camera";
@@ -50,6 +51,8 @@ export function Console({ me, onOut }: { me: Me; onOut: (note?: string) => void 
   const [route, setRoute] = useState(readRoute);
   const [pending, setPending] = useState<Pending>(null);
   const [toast, setToast] = useState("");
+  // 第 2 轮 duty N8:提示上能带一个按钮(比如关掉报警后的「撤销」)
+  const [toastAct, setToastAct] = useState<ToastAction | null>(null);
   // W53:第一次登录(这个账号没看过当前版本的网页教程)自动打开;老站点不带 guide 就不弹
   const [help, setHelp] = useState(() => me.guide != null && (me.guide.web_tour ?? 0) < WEB_TOUR);
   void lang.value; // 换语言整页重画
@@ -83,9 +86,15 @@ export function Console({ me, onOut }: { me: Me; onOut: (note?: string) => void 
     location.hash = `#/${page}${robot ? `?robot=${encodeURIComponent(robot)}` : ""}`;
   };
 
-  const say = (s: string) => {
+  // 第 2 轮 duty N2:新提示换掉旧的计时(原来上一条的 6 秒计时会把下一条提前清掉,中间空着);长的多留一会儿
+  const toastTimer = useRef(0);
+  const say = (s: string, act?: ToastAction) => {
     setToast(s);
-    window.setTimeout(() => setToast(""), 6000);
+    setToastAct(act ?? null);
+    window.clearTimeout(toastTimer.current);
+    // 带按钮的多留一会儿(要来得及点)
+    toastTimer.current = window.setTimeout(() => { setToast(""); setToastAct(null); },
+      act ? 20_000 : Math.min(15_000, Math.max(6000, s.length * 90)));
   };
   const act = async (fn: () => Promise<unknown>) => {
     try {
@@ -142,7 +151,8 @@ export function Console({ me, onOut }: { me: Me; onOut: (note?: string) => void 
       <div class="workspace">
       <TopBar me={me} page={route.page} mode={data?.mode ?? null} alarms={stale ? null : guardAlarms} now={now}
         pref={pref} onPref={(p) => { saveThemePref(p); setPref(p); }}
-        onStop={() => setPending({ kind: "stop" })} onSay={say}
+        onStop={() => setPending({ kind: "stop" })} onSay={say} stale={stale}
+        held={units.filter((u) => u.robot.held != null).length}
         onHelp={() => setHelp(true)}
         onSignOut={async (note?: string) => {
           // 改完密码站点已经让旧会话失效:不再调 logout(会 401),直接回登录页带上说明
@@ -225,7 +235,9 @@ export function Console({ me, onOut }: { me: Me; onOut: (note?: string) => void 
       )}
       {pending?.kind === "cam" && <FullCamera robot={pending.robot} cam={pending.cam} now={now} onClose={() => setPending(null)}
         cams={robotCams(units.find((u) => u.robot.robot_id === pending.robot)?.robot)} />}
-      <div class="toast" role="status" aria-live="polite">{toast}</div>
+      <div class="toast" role="status" aria-live="polite">{toast}
+        {toast && toastAct && <button type="button" class="btn sm toast-act" data-toast-act="1"
+          onClick={() => { const a = toastAct; setToast(""); setToastAct(null); a.run(); }}>{toastAct.label}</button>}</div>
     </div>
   );
 }

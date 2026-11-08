@@ -232,3 +232,25 @@ describe("第 2 轮 P1-03:顶栏日期不会读反", () => {
     }
   });
 });
+
+describe("第 2 轮 duty N10 / N11:顶栏", () => {
+  const mode = { mode: "armed", label: "布防", source: "manual", state: "armed" } as never;
+  const bar = (o: { page?: string; held?: number; stale?: boolean }) => render(<TopBar me={me("guard")} page={(o.page ?? "map") as never} mode={mode} alarms={0} now={0}
+    pref="system" onPref={() => {}} onStop={() => {}} onSignOut={() => {}} onSay={() => {}} held={o.held} stale={o.stale} />).container;
+  it("有叫停的:别的页也显示「n 台已叫停 · 去恢复」,点了去总览;总览本页不重复", () => {
+    lang.value = "zh";
+    const c = bar({ held: 2 });
+    expect(c.querySelector("[data-held-chip]")!.textContent).toBe("2 台已叫停 · 去恢复");
+    expect(c.querySelector("[data-held-chip]")!.getAttribute("href")).toBe("#/duty");
+    cleanup();
+    expect(bar({ held: 2, page: "duty" }).querySelector("[data-held-chip]")).toBeNull();
+    cleanup();
+    expect(bar({ held: 0 }).querySelector("[data-held-chip]")).toBeNull();
+  });
+  it("连不上:布防状态变灰、写最后已知", () => {
+    lang.value = "zh";
+    const a = bar({ stale: true }).querySelector(".armstate")!;
+    expect(a.className).toContain("stale");
+    expect(a.textContent).toContain("最后已知");
+  });
+});

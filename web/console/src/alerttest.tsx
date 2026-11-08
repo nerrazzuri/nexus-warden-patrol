@@ -50,7 +50,7 @@ export function AlertTestBar({ role, onCleared, pollMs = ALERT_TEST_POLL_MS }:
       {/* 网页易用性 P1-18/19/21:没开时收起来、说清用途;开着时只读账号只看一句话;删记录的不做成最醒目的 */}
       {active ? (
         <div class="row wrap at-on">
-          <span>{admin ? t("atOn", { at: hm(mode.until_ms ?? 0), by: mode.by }) : t("atOnView", { at: hm(mode.until_ms ?? 0) })}</span>
+          <span>{admin ? t("atOn", { at: hm(mode.until_ms ?? 0), by: mode.by }) : t(role !== "viewer" ? "atOnView" : "atOnViewer", { at: hm(mode.until_ms ?? 0) })}</span>
           {admin && <span class="row at-acts">
             <button type="button" class="btn sm" onClick={() => void post({ action: "end", clear: false })}>{t("atEndKeep")}</button>
             <button type="button" class="btn sm ghost" onClick={() => setAsk(true)}>{t("atEndClear")}</button>

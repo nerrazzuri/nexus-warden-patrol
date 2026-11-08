@@ -41,16 +41,16 @@ describe("告警测试模式", () => {
   it("管理员开 30 分钟 → 条幅写到几点;结束并清掉先确认,说删了几条", async () => {
     let cleared = 0;
     const { container: c } = render(<AlertTestBar role="admin" onCleared={() => cleared++} />);
-    await waitFor(() => expect(btn(c, "开始告警测试")).toBeTruthy());
-    fireEvent.click(btn(c, "开始告警测试"));
+    await waitFor(() => expect(btn(c, "开始报警演练")).toBeTruthy());
+    fireEvent.click(btn(c, "开始报警演练"));
     await waitFor(() => expect(c.querySelector('[data-alert-test="on"]')?.textContent).toContain(`到 ${endHm()} 结束`));
     expect(posted).toEqual([{ action: "start", minutes: 30 }]);
-    fireEvent.click(btn(c, "结束测试并清掉"));
+    fireEvent.click(btn(c, "结束演练并删掉演练报警"));
     expect(posted.length).toBe(1);
     const dlg = await waitFor(() => { const x = document.querySelector("dialog"); expect(x).toBeTruthy(); return x!; });
-    fireEvent.click(btn(dlg, "结束测试并清掉"));
+    fireEvent.click(btn(dlg, "结束演练并删掉演练报警"));
     // 第 2 轮 P1-19:不写条数(站点数的含保安看不到的记录)
-    await waitFor(() => expect(c.textContent).toContain("测试告警都已删掉"));
+    await waitFor(() => expect(c.textContent).toContain("演练报警都已删掉"));
     expect(posted[1]).toEqual({ action: "end", clear: true });
     expect(cleared).toBe(1);
   });
@@ -74,6 +74,12 @@ describe("告警测试模式", () => {
     await waitFor(() => expect(c2.querySelector('[data-alert-test="on"]')).toBeTruthy());
     expect(c2.querySelectorAll("button").length).toBe(0);
     expect(c2.textContent).toContain("照常处理即可");                         // P1-21:只读、保安看一句人话
+    cleanup();
+    // 第 2 轮 duty N12:只读账号不能处理,不写「照常处理」
+    const { container: c3 } = render(<AlertTestBar role="viewer" onCleared={() => {}} />);
+    await waitFor(() => expect(c3.querySelector('[data-alert-test="on"]')).toBeTruthy());
+    expect(c3.textContent).toContain("你不用做什么");
+    expect(c3.textContent).not.toContain("照常处理");
   });
 
   it("P1-18/19:没开时收着、写清用途;开着时「只结束」在前,删记录的不是醒目的红按钮", async () => {
@@ -85,7 +91,8 @@ describe("告警测试模式", () => {
     const { container: c2 } = render(<AlertTestBar role="admin" onCleared={() => {}} />);
     await waitFor(() => expect(c2.querySelector('[data-alert-test="on"]')).toBeTruthy());
     const bs = Array.from(c2.querySelectorAll("button"));
-    expect(bs[0].textContent).toBe("结束测试（保留记录）");
+    expect(bs[0].textContent).toBe("结束演练（保留记录）");
     expect(c2.querySelector("button.stop")).toBeNull();
   });
 });
+

@@ -157,6 +157,9 @@ export function TopBar(props: {
   pref: ThemePref;
   onPref: (p: ThemePref) => void;
   onStop: () => void;
+  /** 第 2 轮 duty N10:有几台被叫停、等人点恢复(哪一页都看得见,点了去总览恢复)。 */
+  held?: number;
+  stale?: boolean;
   onSignOut: (note?: string) => void;
   onSay: (s: string) => void;
   /** 「?」:使用教程、常见问题(W53)。 */
@@ -165,7 +168,10 @@ export function TopBar(props: {
   return (
     <header class="topbar">
       <PageTitle page={props.page} />
-      {props.mode && <ArmState mode={props.mode} role={props.me.role} />}
+      {props.mode && <ArmState mode={props.mode} role={props.me.role} stale={props.stale} />}
+      {!!props.held && props.page !== "duty" && (
+        <a href="#/duty" class="heldchip" data-held-chip="1">{t("topHeld", { n: props.held })}</a>
+      )}
       <a href="#/alarms" class={props.alarms ? "alarmcount on" : "alarmcount"} aria-live="polite">
         {t("alarmCount", { n: props.alarms == null ? "?" : props.alarms })}
       </a>
@@ -262,12 +268,15 @@ export function SideNav(props: { me: Me; page: Page; alarms: number | null; noti
 }
 
 /** 布防状态:只显示(设计 §4.0,用户说的),切模式在别处。 */
-function ArmState({ mode, role }: { mode: Mode; role: string }) {
+function ArmState({ mode, role, stale }: { mode: Mode; role: string; stale?: boolean }) {
   const text = mode.source === "schedule" ? modeLabel(mode) : mode.mode === "armed" ? t("armArmed")
     : mode.mode === "home" ? t("armHome")
     : t("armVisitor", { t: mode.until_ms ? hm(mode.until_ms) : "—" });
   // P1-79:只显示;悬停说去哪儿切、谁能切(保安能布防、不能撤防 —— 站点同一条规矩)
-  return <span class={`armstate ${mode.source === "schedule" ? (mode.state === "armed" ? "armed" : "home") : mode.mode}`} title={t(pageAllowed("admin/arming", role) ? "armStateTip" : canArm(role) ? "armStateTipGuard" : "armStateTipViewer")}><i class="dot" aria-hidden="true" />{text}</span>;
+  // 第 2 轮 duty N11:连不上站点时变灰、写「最后已知」,不像一切正常
+  const cls = stale ? "stale" : mode.source === "schedule" ? (mode.state === "armed" ? "armed" : "home") : mode.mode;
+  const tip = t(pageAllowed("admin/arming", role) ? "armStateTip" : canArm(role) ? "armStateTipGuard" : "armStateTipViewer");
+  return <span class={`armstate ${cls}`} data-stale={stale || undefined} title={stale ? t("armStaleTip") : tip}><i class="dot" aria-hidden="true" />{stale ? t("lastKnown", { s: text }) : text}</span>;
 }
 
 function UserMenu(props: { me: Me; pref: ThemePref; onPref: (p: ThemePref) => void; onSignOut: (note?: string) => void; onSay: (s: string) => void }) {
