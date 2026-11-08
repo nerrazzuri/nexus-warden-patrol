@@ -302,3 +302,16 @@ describe("W44 复查 M3 401 正文读到一半断了", () => {
     expect(calls).toEqual([1]);
   });
 });
+
+describe("第 2 轮 layout N14", () => {
+  it("第一帧到之前写「连接中」、图片藏着;到了才写「实时」", () => {
+    lang.value = "zh";
+    const { container: c } = render(<VideoSlot u={unit()} now={0} pinned={false} onPin={() => {}} onZoom={() => {}} />);
+    const main = c.querySelector(".well")!;
+    expect(main.querySelector(".osd-status")!.textContent).toContain("连接中");
+    expect(main.querySelector("img.feed")!.className).toContain("pending");
+    fireEvent.load(main.querySelector("img.feed")!);
+    expect(main.querySelector(".osd-status")!.textContent).toContain("实时");
+    expect(main.querySelector("img.feed")!.className).not.toContain("pending");
+  });
+});

@@ -167,14 +167,15 @@ export function CameraWell(props: { robot: string; cam: Cam; forceLive?: boolean
     });
   // 断过、重连了但第一帧还没到:还是「正在重连」,不写「实时」(真浏览器上查出来的)
   const retrying = broken || (lostAt != null && !started);
-  const status = retrying ? t("reconnecting") : streaming ? t("live")
+  // 第 2 轮 layout N14:第一帧到之前写「连接中」,不写「实时」;图片也先藏着(不露浏览器的破图图标)
+  const status = retrying ? t("reconnecting") : streaming ? (started ? t("live") : t("connecting"))
     : pausedAt ? t("pausedAt", { t: hms(pausedAt) }) : t("noFeed");
   const cls = `${streaming ? "well" : "well paused"}${lostAt != null ? " lostfeed" : ""}${props.variant ? ` ${props.variant}` : ""}`;
   return (
     <div ref={box} class={cls} title={!streaming ? t("pausedHint") : undefined}>
       <canvas ref={frozen} class="frozen" aria-hidden="true" />
       {streaming && !broken && (
-        <img ref={img} class={props.feed ? "feed scene" : "feed"} src={frame ?? undefined} data-src={stream} alt={label}
+        <img ref={img} class={`${props.feed ? "feed scene" : "feed"}${started ? "" : " pending"}`} src={frame ?? undefined} data-src={stream} alt={label}
           onLoad={() => setStarted(true)}
           onError={() => lose(Date.now())} />
       )}
@@ -192,7 +193,7 @@ export function CameraWell(props: { robot: string; cam: Cam; forceLive?: boolean
         <span>{hms(streaming ? props.now : pausedAt ?? props.now)}</span>
       </div>
       <div class="osd bottom">
-        <span class="osd-status">{streaming && !retrying && <span class="livedot" aria-hidden="true" />}{props.feed ? `${label} · ` : ""}{status}</span>
+        <span class="osd-status">{streaming && !retrying && started && <span class="livedot" aria-hidden="true" />}{props.feed ? `${label} · ` : ""}{status}</span>
         {props.onOpen && (
           <button type="button" class="osd-btn" onClick={props.onOpen} aria-label={`${t("fullScreen")}: ${label}`}>{t("fullScreen")}</button>
         )}

@@ -129,7 +129,7 @@ export function UsersPage({ me, say, now }: { me: string; say: Say; now: number 
                     <button type="button" class="linklike user-name" onClick={() => setWho(a.name)}>{a.display_name || a.name}</button>
                     <div class="muted small mono">{a.name}</div>
                   </td>
-                  <td>
+                  <td data-label={t("role")}>
                     {isEng || self ? t(roleLabel(a.role)) : (
                       <select aria-label={`${t("role")} ${a.name}`} value={a.role} onChange={(e) => {
                         const r = e.currentTarget.value;
@@ -141,8 +141,8 @@ export function UsersPage({ me, say, now }: { me: string; say: Say; now: number 
                       </select>
                     )}
                   </td>
-                  <td>{lastLoginText(a.last_login_ms, now)}</td>
-                  <td>
+                  <td data-label={t("lastLogin")}>{lastLoginText(a.last_login_ms, now)}</td>
+                  <td data-label={t("status")}>
                     {isEng && !off && a.expires_ms ? leftText(a.expires_ms, now)
                       : a.expired ? t("engExpired") : a.disabled ? t("disabled") : t("active")}
                   </td>
