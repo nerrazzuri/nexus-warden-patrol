@@ -45,6 +45,9 @@ class Alert {
   final String level;
 
   final String kind;
+
+  /// 给谁看（站点 `alert_audience.py`）：`intrusion` / `fire` / `help` / `offline` / `owner`；老站点没有 = 空。
+  final String audience;
   final String robot;
   final String title;
   final String detail;
@@ -99,12 +102,14 @@ class Alert {
     required this.escalated,
     required this.channel,
     this.context = const <String, dynamic>{},
+    this.audience = '',
   });
 
   factory Alert.fromWire(Map<String, dynamic> m) => Alert(
         key: (m['key'] as String?) ?? '',
         level: (m['level'] as String?) ?? '',
         kind: (m['kind'] as String?) ?? '',
+        audience: (m['audience'] as String?) ?? '',
         robot: (m['robot'] as String?) ?? '',
         title: (m['title'] as String?) ?? '',
         detail: (m['detail'] as String?) ?? '',
@@ -171,3 +176,15 @@ List<Alert> alertsFromWire(Map<String, dynamic> m) {
             '告警数据中有无效条目（${a.runtimeType}）')),
   ];
 }
+
+/// 手机 App 测试 M04：这条告警可能是误报吗（给不给「误报」按钮）。有人闯入、起火类，和几种靠传感器判断的
+/// （倒了、被撞、镜头被挡、卡住）可能是误报；机器人故障、派单被拒、掉线、账号申请这些是真事。
+/// 老站点不报 `audience` 时按 kind 猜：看见人、入侵类算可能误报。
+const Set<String> _maybeFalseKinds = {
+  'fallen', 'force_flipped', 'force_bump', 'lens_blocked', 'stuck', 'nav_blocked',
+  'intrusion', 'intrusion_unanswered', 'intrusion_person', 'dog_sees_person', 'person_left',
+  'force_lifted', 'force_covered',
+};
+
+bool alertCanBeFalse(Alert a) =>
+    a.audience == 'intrusion' || a.audience == 'fire' || _maybeFalseKinds.contains(a.kind);

@@ -608,8 +608,8 @@ class FakeApi implements SiteApi {
     return _acked(key);
   }
   @override
-  Future<Map<String, dynamic>> resolveAlert(String key) async {
-    calls.add('resolve $key');
+  Future<Map<String, dynamic>> resolveAlert(String key, {String verdict = ''}) async {
+    calls.add(verdict.isEmpty ? 'resolve $key' : 'resolve $key $verdict');
     return _acked(key);
   }
   @override

@@ -757,7 +757,8 @@ abstract class SiteApi {
   /// 告警测试模式（POC）：`{active, until_ms, by}`。谁都能看；开、结束在网页上（管理员）。
   Future<Map<String, dynamic>> alertTest();
   Future<Map<String, dynamic>> ackAlert(String key);
-  Future<Map<String, dynamic>> resolveAlert(String key);
+  /// [verdict]：`false_alarm` / `handled` / `intruder`（W44 结论，站点统计误报用）；空 = 不写结论。
+  Future<Map<String, dynamic>> resolveAlert(String key, {String verdict = ''});
 
   /// W74：保安到场了（看见人那一类要先到场才能关）。
   Future<Map<String, dynamic>> arriveAlert(String key);
@@ -1375,8 +1376,10 @@ class SiteClient implements SiteApi {
       'POST', '/api/alerts/${Uri.encodeComponent(key)}/ack', <String, dynamic>{}));
 
   @override
-  Future<Map<String, dynamic>> resolveAlert(String key) async => _map(await _send(
-      'POST', '/api/alerts/${Uri.encodeComponent(key)}/resolve', <String, dynamic>{}));
+  Future<Map<String, dynamic>> resolveAlert(String key, {String verdict = ''}) async => _map(await _send(
+      'POST',
+      '/api/alerts/${Uri.encodeComponent(key)}/resolve',
+      <String, dynamic>{if (verdict.isNotEmpty) 'verdict': verdict}));
 
   @override
   Future<Map<String, dynamic>> arriveAlert(String key) async => _map(await _send(

@@ -170,6 +170,10 @@ class _SiteAlertScenePageState extends State<SiteAlertScenePage> {
 
   /// W74：看见人那一类要保安点过「已到场」才能处置完成 / 标误报（站点也这么拦）。
   bool get _needsArrive => _a.kind == 'dog_sees_person';
+
+  /// 手机 App 测试 M04：「误报」只给可能误报的（有人闯入、起火类，和几种传感器判断）；机器人故障、
+  /// 派单被拒、掉线、账号申请这些是真事，只给「已处理」，不然误报统计就乱了。
+  bool get _canBeFalse => alertCanBeFalse(_a);
   (String, int)? _arrivedHere;
   bool get _arrived => _a.context['arrived_ms'] != null || _arrivedHere != null;
   bool get _flashing => _a.level == 'P1' && _open && !_acked;
@@ -346,18 +350,18 @@ class _SiteAlertScenePageState extends State<SiteAlertScenePage> {
     final ok = await showDialog<bool>(
         context: context,
         builder: (c) => AlertDialog(
-              content: Text(tr('Close this alarm as handled?', '处置完成，关闭此告警？')),
+              content: Text(tr('Close this alarm as handled?', '已处理，关闭此告警？')),
               actions: [
                 TextButton(onPressed: () => Navigator.pop(c, false), child: Text(tr('Cancel', '取消'))),
                 FilledButton(
                     key: SiteAlertScenePage.doneGoKey,
                     onPressed: () => Navigator.pop(c, true),
-                    child: Text(tr('Handled', '处置完成'))),
+                    child: Text(tr('Handled', '已处理'))),
               ],
             ));
     if (ok != true || !mounted || gen != _gen) return;
     try {
-      await widget.api.resolveAlert(key);
+      await widget.api.resolveAlert(key, verdict: 'handled');
       if (mounted && gen == _gen) Navigator.pop(context);
     } on SiteError catch (e) {
       if (mounted && gen == _gen) setState(() => _msg = tr('Not closed: $e', '关闭失败：$e'));
@@ -385,7 +389,7 @@ class _SiteAlertScenePageState extends State<SiteAlertScenePage> {
     // 问的是那一条：这一页换了告警，这次的「是」不算数
     if (ok != true || !mounted || gen != _gen) return;
     try {
-      await widget.api.resolveAlert(key);
+      await widget.api.resolveAlert(key, verdict: 'false_alarm');
       if (mounted && gen == _gen) Navigator.pop(context);
     } on SiteError catch (e) {
       if (mounted && gen == _gen) setState(() => _msg = tr('Not closed: $e', '关闭失败：$e'));
@@ -604,7 +608,7 @@ class _SiteAlertScenePageState extends State<SiteAlertScenePage> {
     // 新鲜的才按它的状态摆；只剩旧快照时不猜警笛开没开，让人能再要求一次（没在驱离了站点会说）
     final d = _d;
     final sound = tr('Sound siren (level $sirenLevel)', '开警笛（第 $sirenLevel 级）');
-    Widget second;
+    Widget? second;
     if (d != null && dispatch) {
       second = switch (sirenState(d)) {
         SirenState.on => _big(SiteAlertScenePage.sirenKey, tr('Siren is on', '警笛已开'), null),
@@ -619,39 +623,32 @@ class _SiteAlertScenePageState extends State<SiteAlertScenePage> {
     } else if (_a.kind == 'dog_sees_person' && _isRobot && dispatch) {
       second = _big(SiteAlertScenePage.deterKey, tr('Deter here', '就地驱离'), _deterHere);
     } else {
-      second = _big(null, tr('Siren: not available', '警笛：暂不可用'), null);
+      second = null; // 手机 App 测试 M10：用不了的按钮收起来，不摆灰的占位
     }
     final first = _big(SiteAlertScenePage.ackKey, tr("I'll handle it", '我来处理'),
         handle && _open && !_acked ? _ack : null,
         primary: true);
     final canClose = !_needsArrive || _arrived;
-    final third = _big(SiteAlertScenePage.falseKey, tr('False alarm', '误报'),
-        handle && _open && canClose ? _falseAlarm : null);
-    // W74 看见人：第四个位置是「已到场」→「处置完成」（到场了才能关）；别的告警还是对讲占位
+    final third = _canBeFalse
+        ? _big(SiteAlertScenePage.falseKey, tr('False alarm', '误报'), handle && _open && canClose ? _falseAlarm : null)
+        : null;
+    // W74 看见人：「已到场」→「处置完成」（到场了才能关）；手机 App 测试 M04：别的告警都能直接「已处理」
     final Widget fourth;
-    if (!_needsArrive) {
-      fourth = _big(null, tr('Talk: not available', '对讲：暂不支持'), null);
-    } else if (!_arrived) {
+    if (_needsArrive && !_arrived) {
       fourth = _big(SiteAlertScenePage.arriveKey, tr("I'm on site", '已到场'), handle && _open ? _arrive : null);
     } else {
-      fourth = _big(SiteAlertScenePage.doneKey, tr('Handled', '处置完成'), handle && _open ? _done : null);
+      fourth = _big(SiteAlertScenePage.doneKey, tr('Handled', '已处理'), handle && _open ? _done : null);
     }
+    final all = <Widget>[first, ?second, ?third, fourth];
     const gap = SizedBox(width: Nw.s8);
-    if (oneRow) {
-      return Row(children: [
-        Expanded(child: first),
-        gap,
-        Expanded(child: second),
-        gap,
-        Expanded(child: third),
-        gap,
-        Expanded(child: fourth),
-      ]);
-    }
+    Widget row(List<Widget> xs) => Row(children: [
+          for (var i = 0; i < xs.length; i++) ...[if (i > 0) gap, Expanded(child: xs[i])],
+        ]);
+    if (oneRow || all.length <= 2) return row(all);
     return Column(mainAxisSize: MainAxisSize.min, children: [
-      Row(children: [Expanded(child: first), gap, Expanded(child: second)]),
+      row(all.sublist(0, 2)),
       const SizedBox(height: Nw.s8),
-      Row(children: [Expanded(child: third), gap, Expanded(child: fourth)]),
+      row(all.sublist(2)),
     ]);
   }
 

@@ -383,7 +383,7 @@ void main() {
       await t.pumpAndSettle();
       await t.tap(find.byKey(SiteAlertScenePage.falseGoKey));
       await t.pumpAndSettle();
-      expect(api.calls, contains('resolve A/dog_sees_person#1'));
+      expect(api.calls, contains('resolve A/dog_sees_person#1 false_alarm'));
       expect(find.byType(SiteAlertScenePage), findsNothing, reason: '关了就回上一页');
     });
 
@@ -688,7 +688,7 @@ void main() {
       await t.pumpAndSettle();
       await t.tap(find.byKey(SiteAlertScenePage.falseGoKey));
       await t.pumpAndSettle();
-      expect(api.calls.where((c) => c.startsWith('resolve')), ['resolve B/dog_sees_person#7']);
+      expect(api.calls.where((c) => c.startsWith('resolve')), ['resolve B/dog_sees_person#7 false_alarm']);
     });
 
     testWidgets('I3 上一条的开警笛回包迟到：不写到换上来的这一条上', (t) async {
