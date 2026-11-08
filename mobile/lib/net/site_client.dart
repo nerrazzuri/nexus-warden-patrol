@@ -30,11 +30,24 @@ class SiteError implements Exception {
 
   /// 站点回的整个错误体（除了 `error` 还可能带别的字段，比如标原点的 `name_taken`、`data`）。
   final Map<String, dynamic> body;
-  const SiteError(this.status, this.message, {this.body = const <String, dynamic>{}});
+
+  /// 状态 0（没拿到站点的回答）时是哪一种：`cert` 证书变了、`tls` 别的握手失败、`timeout`、`net` 连不上、
+  /// `dropped` 连接中途断了；空 = 站点回了话（手机 App 测试 M03：证书变了跟连不上分开说）。
+  final String kind;
+  const SiteError(this.status, this.message, {this.body = const <String, dynamic>{}, this.kind = ''});
+
+  /// 站点证书跟手机记的指纹对不上（站点重装、重签了证书，或者有人冒充站点）。
+  bool get certChanged => kind == 'cert';
 
   @override
   String toString() => status == 0 ? message : tr('$message ($status)', '$message（$status）');
 }
+
+/// 站点证书变了时给人看的话（手机 App 测试 M03）。
+String get certChangedText => tr(
+    "The site's certificate has changed. If an administrator just reinstalled the site, ask them for the new site code. "
+        "If nobody changed the site, don't sign in.",
+    '站点证书变了。如果管理员刚重装过站点，请向他要新的站点码；如果没人动过站点，先不要登录。');
 
 /// 证书的 SHA-256（DER），小写十六进制、不带冒号。跟 `nexwar_site fingerprint` 同一个算法。
 /// 边下边算指纹（App 安装包）：只留最后那一个结果。
@@ -1079,19 +1092,19 @@ class SiteClient implements SiteApi {
       rethrow;
     } on HandshakeException catch (e) {
       final seen = lastSeenFingerprint;
-      throw SiteError(
-          0,
-          seen != null && seen != fingerprint
-              ? tr('Site certificate fingerprint does not match: got $seen', '站点证书指纹不匹配：实际为 $seen')
-              : tr('TLS handshake with the site failed: $e', '与站点的加密连接失败：$e'));
+      if (seen != null && seen != fingerprint) {
+        // 手机 App 测试 M03：说人话，指纹原文收进 body（「详情」里看）
+        throw SiteError(0, certChangedText, body: <String, dynamic>{'seen': seen}, kind: 'cert');
+      }
+      throw SiteError(0, tr('TLS handshake with the site failed: $e', '与站点的加密连接失败：$e'), kind: 'tls');
     } on TimeoutException {
-      throw SiteError(0, tr('No reply from the site (timed out)', '站点无响应（超时）'));
+      throw SiteError(0, tr('No reply from the site (timed out)', '站点无响应（超时）'), kind: 'timeout');
     } on SocketException catch (e) {
-      throw SiteError(0, tr("Can't reach the site: ${e.message}", '无法连接站点：${e.message}'));
+      throw SiteError(0, tr("Can't reach the site: ${e.message}", '无法连接站点：${e.message}'), kind: 'net');
     } on HttpException catch (e) {
       throw SiteError(0, tr(
           'Connection to the site dropped: ${e.message}',
-          '跟站点的连接断了：${e.message}'));
+          '跟站点的连接断了：${e.message}'), kind: 'dropped');
     }
   }
 
@@ -1710,7 +1723,11 @@ class SiteClient implements SiteApi {
       throw SiteError(0, tr("Can't reach the site: ${e.message}", '无法连接站点：${e.message}'));
     } on HandshakeException {
       io.close(force: true);
-      throw SiteError(0, tr('Site certificate does not match', '站点证书不匹配'));
+      final seen = lastSeenFingerprint;
+      if (seen != null && seen != fingerprint) {
+        throw SiteError(0, certChangedText, body: <String, dynamic>{'seen': seen}, kind: 'cert');
+      }
+      throw SiteError(0, tr('Site certificate does not match', '站点证书不匹配'), kind: 'tls');
     } on TimeoutException {
       io.close(force: true);
       throw SiteError(0, tr('Timed out connecting to the site', '连站点超时'));

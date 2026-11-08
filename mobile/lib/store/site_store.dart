@@ -32,10 +32,10 @@ class SiteEntry {
     return copyWith(url: u, alts: rest);
   }
 
-  SiteEntry copyWith({String? url, String? username, List<String>? alts}) => SiteEntry(
+  SiteEntry copyWith({String? url, String? username, List<String>? alts, String? fingerprint}) => SiteEntry(
       name: name,
       url: url ?? this.url,
-      fingerprint: fingerprint,
+      fingerprint: fingerprint ?? this.fingerprint,
       username: username ?? this.username,
       alts: alts ?? this.alts);
 

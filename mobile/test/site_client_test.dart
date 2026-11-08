@@ -31,13 +31,15 @@ void main() {
     c.close();
   });
 
-  test('指纹不对就断开，报出实际指纹', () async {
+  test('指纹不对就断开，说证书变了（M03），实际指纹留在详情里', () async {
     final c = SiteClient(site.url, 'ab' * 32);
     await expectLater(
         c.login('alice', 'x'),
         throwsA(isA<SiteError>()
             .having((e) => e.status, 'status', 0)
-            .having((e) => e.message, 'message', contains(testCertFingerprint()))));
+            .having((e) => e.certChanged, 'certChanged', isTrue)
+            .having((e) => e.message, 'message', contains('站点证书变了'))
+            .having((e) => e.body['seen'], 'seen', testCertFingerprint())));
     expect(site.received, isEmpty, reason: '口令一个字节都不许发出去');
     c.close();
   });
@@ -184,7 +186,9 @@ void main() {
       // 握手：指纹对不上
       final tls = await fails(SiteClient(site.url, 'cd' * 32));
       expect(tls, isA<SiteError>());
-      expect('$tls', contains('指纹不匹配'));
+      expect('$tls', contains('站点证书变了'), reason: '手机 App 测试 M03：说人话');
+      expect((tls as SiteError).certChanged, isTrue);
+      expect(tls.body['seen'], testCertFingerprint(), reason: '指纹原文留着给「详情」');
       // 超时：站点一直不回
       site.hang.add('/api/support-bundle');
       final slow = await fails(SiteClient(site.url, testCertFingerprint(), timeout: const Duration(milliseconds: 300)));

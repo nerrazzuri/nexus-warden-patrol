@@ -78,8 +78,13 @@ class FakeApi implements SiteApi {
   StreamController<Map<String, dynamic>> sse = StreamController.broadcast();
   int eventsOpened = 0;
 
+  /// 给了就登录时扔它（证书变了、连不上）。
+  SiteError? loginError;
   @override
-  Future<SiteSession> login(String n, String p) async => session!;
+  Future<SiteSession> login(String n, String p) async {
+    if (loginError != null) throw loginError!;
+    return session!;
+  }
   /// 站点体检（C-B4）：给了就用它；[healthError] 给了就抛。诊断包同理。
   Map<String, dynamic> healthBody = <String, dynamic>{
     'ok': true, 'critical_ok': true, 'version': '1.4.0', 'now_ms': 1,
