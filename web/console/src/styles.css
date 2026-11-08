@@ -1462,3 +1462,9 @@ input[type="file"] { max-width: 100%; min-width: 0; }            /* 上传按钮
 .duty-list > li { border-bottom: 1px solid var(--c-outline); padding-right: 12px; }
 .duty-list > li > .duty-row { border-bottom: 0; }
 .duty-left .today { border: 0; border-top: 1px solid var(--c-outline); border-radius: 0; background: none; padding: 10px 16px; flex: none; }
+/* 第 2 轮 setup N15 / N5 */
+.ly-dirty.hold { visibility: hidden; }
+.field-inline select { max-width: min(28em, 60vw); min-width: 0; text-overflow: ellipsis; }
+/* 第 2 轮 duty N9:地图上点的位置 */
+.look-mark circle { fill: none; stroke: var(--c-brand); stroke-width: 2.5; }
+.look-mark circle.dot { fill: var(--c-brand); stroke: none; }

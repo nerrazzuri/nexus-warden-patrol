@@ -13,7 +13,7 @@ import { AlertDetail } from "./alertdetail";
 import { Confirm } from "./dialogs";
 import { alertHeadline, canHandleAlerts } from "./alertinfo";
 import { guardAlarms, pickSlots, rankUnits, type SlotPick } from "./dutyrank";
-import { t } from "./i18n";
+import { t, joinList } from "./i18n";
 import { StateText, type UnitInfo } from "./live";
 import type { CanvasArea } from "./mapcanvas";
 import { SiteMap } from "./mappage";
@@ -164,7 +164,7 @@ export function DutyPage(props: {
           <Shape kind="P2" />
           <div class="banner-text">
             <b>{t("dutyHeld", { n: held.length })}</b>
-            <span>{held.map((u) => nameOf(u.robot.robot_id)).join("、")} · {t("dutyHeldSub")}</span>
+            <span>{joinList(held.map((u) => nameOf(u.robot.robot_id)))} · {t("dutyHeldSub")}</span>
           </div>
           {canDispatch(props.role) && (
             <div class="banner-acts">

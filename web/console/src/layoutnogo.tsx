@@ -8,7 +8,7 @@ import { useEffect, useRef, useState } from "preact/hooks";
 import { api, ApiError } from "./api";
 import { Confirm, Modal } from "./dialogs";
 import { clickGuard, startDrag, swallowClick } from "./dragpt";
-import { t } from "./i18n";
+import { t, joinList } from "./i18n";
 import { siteKnown } from "./sitetext";
 import { closesLoop, polyPx, toMap, type NavZones, type TabProps } from "./layoutpage";
 import { pointInPolygon, type NavZone, type Pt } from "./mapview";
@@ -129,9 +129,9 @@ export function NogoTab(p: TabProps) {
         <div class="nogo-status">
           {!nav ? <p class="muted">…</p> : current && held.length === 0
             ? <p class="ok-text">{t("lyNogoLive")}</p>
-            : held.length > 0 ? <p class="warn-text">{t("lyNogoWaitYou", { names: held.map((z) => siteKnown(z.label) || z.id).join("、") })}</p>
+            : held.length > 0 ? <p class="warn-text">{t("lyNogoWaitYou", { names: joinList(held.map((z) => siteKnown(z.label) || z.id)) })}</p>
             : <p class="warn-text">{t("lyNogoNeverConfirmed")}</p>}
-          {behind.length > 0 && <p class="warn-text">{t("lyNogoWaitRobot", { ids: behind.join("、") })}</p>}
+          {behind.length > 0 && <p class="warn-text">{t("lyNogoWaitRobot", { ids: joinList(behind) })}</p>}
           {nav && !current && !changed && <button type="button" class="btn sm primary" onClick={() => setConfirming("ask")}>{t("navConfirmBtn")}</button>}
           {/* 第 2 轮 maps N12:从发布对话框跳来的,确认完给「回去发布」 */}
           {current && typeof location !== "undefined" && /[?&]from=publish\b/.test(location.hash)
