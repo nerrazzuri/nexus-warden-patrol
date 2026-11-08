@@ -250,6 +250,7 @@ class PracticeAlarmPage extends StatefulWidget {
   static const Key takeKey = Key('practice-take');
   static Key outcomeKey(String o) => Key('practice-$o');
   static const Key doneKey = Key('practice-done');
+  static const Key realKey = Key('practice-real-advice');
 
   @override
   State<PracticeAlarmPage> createState() => _PracticeAlarmPageState();
@@ -257,6 +258,7 @@ class PracticeAlarmPage extends StatefulWidget {
 
 class _PracticeAlarmPageState extends State<PracticeAlarmPage> {
   int _step = 0;
+  String? _outcome;
 
   @override
   Widget build(BuildContext context) {
@@ -322,7 +324,10 @@ class _PracticeAlarmPageState extends State<PracticeAlarmPage> {
                 buttonKey: PracticeAlarmPage.outcomeKey(o),
                 variant: NwButtonVariant.outline,
                 label: label,
-                onPressed: () => setState(() => _step = 3)),
+                onPressed: () => setState(() {
+                      _outcome = o;
+                      _step = 3;
+                    })),
         ]),
       ]),
       // 3：好了
@@ -331,6 +336,16 @@ class _PracticeAlarmPageState extends State<PracticeAlarmPage> {
         nwGap8,
         Text(tr("Practice complete. Handle real alarms the same way.", '演练完成。实际报警按同样步骤处理。'),
             textAlign: TextAlign.center, style: NwText.titleSmall.copyWith(color: c.text)),
+        // 手机 App 测试 M24：选了「真有人」要教真有人时怎么办
+        if (_outcome == 'real') ...[
+          nwGap8,
+          Text(
+              tr('If someone is really there: keep yourself safe, do not confront them alone. Call the police or your security team, '
+                      'keep the live video open, and tell them where the robot saw the person.',
+                  '真有人时：先顾自己安全，别一个人去拦。打报警电话或通知安保队，开着实时画面，告诉他们机器人在哪儿看到的人。'),
+              key: PracticeAlarmPage.realKey,
+              style: NwText.bodyMedium.copyWith(color: c.text)),
+        ],
         nwGap8,
         NwButton(label: tr('Back', '返回'), onPressed: () => Navigator.pop(context)),
       ]),
@@ -363,8 +378,8 @@ List<_Faq> _faqs() => [
           tr('A read-only account can watch the snapshot, live video and map, but cannot handle alarms. Call the guard on duty.',
               '只读账号能看抓拍、实时画面和地图，处理不了报警。请联系值班保安。')),
       _Faq({'guard', 'owner', 'admin', 'engineer'}, tr('How to handle an alarm', '收到报警如何处理'),
-          tr('Tap the red bar → check the snapshot and live video → tap "I\'ll handle it". If someone is there, go to the site or call security; then record Real intrusion / False alarm / Handled.',
-              '点红条 → 查看抓拍和实时画面 → 点「我来处理」。确认有人时到现场或通知安保；处理后记录结论：真实入侵 / 误报 / 已处理。')),
+          tr('Tap the red bar → check the snapshot and live video → tap "I\'ll handle it". If someone is there, go to the site with a colleague or call the police; then record Real intrusion / False alarm / Handled.',
+              '点红条 → 查看抓拍和实时画面 → 点「我来处理」。确认有人时叫上同事到现场或报警；处理后记录结论：真实入侵 / 误报 / 已处理。')),
       _Faq({'guard', 'owner', 'admin', 'engineer'}, tr('How to stop a robot immediately', '如何立即停止机器人'),
           tr('Duty page → Stop. The robot stops where it is and is not dispatched again until someone taps Resume. The emergency stop on the robot always works.',
               '值守页 →「叫停」。机器人原地停止，点「恢复」后才会再被派出。机器人上的急停按钮随时可用。')),

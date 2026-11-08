@@ -73,7 +73,7 @@ String mapSwitchText(Map<String, dynamic> a, {required int nowMs, double? rateBp
     case 'confirmed':
       return a['confirmed'] == 'localizer'
           ? tr('Switched; localizer confirmed', '已换好，定位已确认')
-          : tr('Switched (loaded)', '已换好（已载入）');
+          : tr('Switched. The robot is using this map now.', '已换好，机器人正在用这张图。');
     case 'failed':
       return tr('Not switched${reason.isEmpty ? '' : ': $reason'}', '没换成${reason.isEmpty ? '' : '：$reason'}');
     default:
@@ -342,7 +342,7 @@ class _MapManagePageState extends State<MapManagePage> {
           if (ov == null && _err.isEmpty) const Padding(padding: EdgeInsets.all(Nw.s24), child: Center(child: CircularProgressIndicator())),
           for (final m in maps) ...[
             const SizedBox(height: Nw.s16),
-            NwSectionLabel(tr('${m['map_id']} · ${(m['versions'] as List? ?? const []).length} version(s)',
+            NwSectionLabel(tr('${m['map_id']} · ${(m['versions'] as List? ?? const []).length == 1 ? '1 version' : '${(m['versions'] as List? ?? const []).length} versions'}',
                 '${m['map_id']} · ${(m['versions'] as List? ?? const []).length} 个版本')),
             nwGap8,
             for (final v in (m['versions'] as List? ?? const []))

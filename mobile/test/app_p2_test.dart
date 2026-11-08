@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:nexwar_patrol/model/alert.dart';
 import 'package:nexwar_patrol/net/site_client.dart';
 import 'package:nexwar_patrol/store/site_store.dart';
+import 'package:nexwar_patrol/ui/guide.dart';
 import 'package:nexwar_patrol/ui/site_add.dart';
 import 'package:nexwar_patrol/ui/nw/nw_p3_robots.dart';
 import 'package:nexwar_patrol/ui/site_alert_scene.dart';
@@ -66,5 +67,25 @@ void main() {
     await t.pumpAndSettle(const Duration(seconds: 6));
     expect(find.byKey(SiteAddPage.errorKey), findsOneWidget);
     expect(find.textContaining('已经在列表里'), findsOneWidget);
+  });
+
+  testWidgets('M24：练习报警选了「真有人」，教真有人时怎么办；选误报不说', (t) async {
+    t.view.physicalSize = const Size(400, 900);
+    t.view.devicePixelRatio = 1;
+    addTearDown(t.view.reset);
+    for (final (o, want) in [('real', findsOneWidget), ('false', findsNothing)]) {
+      await t.pumpWidget(Container());
+      await t.pumpWidget(const MaterialApp(home: PracticeAlarmPage()));
+      await t.pumpAndSettle();
+      await t.tap(find.byKey(PracticeAlarmPage.respondKey));
+      await t.pumpAndSettle();
+      await t.ensureVisible(find.byKey(PracticeAlarmPage.takeKey));
+      await t.tap(find.byKey(PracticeAlarmPage.takeKey));
+      await t.pumpAndSettle();
+      await t.ensureVisible(find.byKey(PracticeAlarmPage.outcomeKey(o)));
+      await t.tap(find.byKey(PracticeAlarmPage.outcomeKey(o)));
+      await t.pumpAndSettle();
+      expect(find.byKey(PracticeAlarmPage.realKey), want, reason: o);
+    }
   });
 }
