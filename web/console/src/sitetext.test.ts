@@ -65,7 +65,7 @@ describe("站点原文翻成英文", () => {
     expect(checkText({ ok: true, detail: "库能写", detail_en: "Database is writable" })).toBe("Database is writable");
     expect(checkText({ ok: true, detail: "账号 x" })).toBe("Account x");
     lang.value = "zh";
-    expect(checkText({ ok: true, detail: "库能写", detail_en: "Database is writable" })).toBe("库能写");
+    expect(checkText({ ok: true, detail: "库能写", detail_en: "Database is writable" })).toBe("数据库正常");
   });
 });
 
@@ -90,5 +90,29 @@ describe("第 3 轮 admin N4", () => {
     expect(siteText("摄像头 gate 无法连接(防区 北区)").text).toBe("Camera gate cannot be reached (zone 北区)");
     expect(siteStr("某个没见过的中文原因")).not.toMatch(/see details/);
     expect(siteText("某个没见过的中文原因").text).toMatch(/see details/);
+  });
+});
+
+describe("第 3 轮 zh N9", () => {
+  it("中文界面:挨着汉字的半角标点换全角;时间、地址、地图号不动", async () => {
+    const { zhPunct } = await import("./sitetext");
+    expect(zhPunct("未配置备份:站点主机损坏将导致数据丢失")).toBe("未配置备份：站点主机损坏将导致数据丢失");
+    expect(zhPunct("新登记:确认之前只许手动派")).toBe("新登记：确认之前只许手动派");
+    expect(zhPunct("区域 0 (0 禁行, 0 限速)")).toBe("区域 0 (0 禁行，0 限速)");
+    expect(zhPunct("不能派(地图 home:3 没确认),10:30 再试")).toBe("不能派（地图 home:3 没确认），10:30 再试");
+    expect(zhPunct("见 http://a.b")).toBe("见 http://a.b");
+    expect(zhPunct("Battery 12%")).toBe("Battery 12%");
+  });
+});
+
+describe("第 3 轮 zh N10 / N11 体检说人话", () => {
+  it("开发者口吻、密钥名换掉", async () => {
+    const { checkText } = await import("./sitetext");
+    lang.value = "zh";
+    expect(checkText({ ok: true, detail: "库能写" })).toBe("数据库正常");
+    expect(checkText({ ok: true, detail: "事件循环 0.6 秒前转过" })).toBe("站点程序运行正常");
+    expect(checkText({ ok: true, detail: "后台道都在转" })).toBe("后台任务都在运行");
+    expect(checkText({ ok: false, detail: "secrets:没有这把密钥;backup:权限太宽" })).toBe("密码加密密钥：没有这把密钥；备份加密密钥：权限太宽");
+    expect(checkText({ ok: false, detail: "未配置推送(site.json 的 push)" })).toBe("还没设置手机推送");
   });
 });

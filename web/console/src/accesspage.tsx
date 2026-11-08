@@ -209,7 +209,7 @@ function AddAuthz({ zones, onClose, onDone, say }: { zones: string[]; onClose: (
         <label class="field">{t("who")}<input name="who" value={name} maxLength={64} required placeholder={t("whoPlaceholder")} onInput={(e) => setName(e.currentTarget.value)} /></label>
         <fieldset class="checks">
           <legend>{t("where")}</legend>
-          <label><input type="radio" name="scope" checked={site === true} onChange={() => setSite(true)} /> {t("wholeSite")}
+          <label><input type="radio" name="scope" checked={site === true} onChange={() => setSite(true)} /> <span class="nowrap">{t("wholeSite")}</span>
             <span class="muted small"> — {t("wholeSiteWarn")}</span></label>
           <label><input type="radio" name="scope" checked={site === false} disabled={zones.length === 0} onChange={() => setSite(false)} /> {t("someZones")}
             {zones.length === 0 && <span class="muted small"> — {t("noZonesYet")}</span>}</label>

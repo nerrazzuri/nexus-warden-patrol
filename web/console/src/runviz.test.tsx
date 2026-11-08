@@ -166,7 +166,7 @@ describe("每台机器人下面的定位和被挡", () => {
     expect(locState(null)).toBe("unknown");
     expect(locLine(null)).toBe("Localization: not reported");
     lang.value = "zh";
-    expect(locLine(robot("A").loc)).toBe("定位:点云匹配,偏差约 0.1 m");
+    expect(locLine(robot("A").loc)).toBe("定位：点云匹配，偏差约 0.1 m");
   });
 
   it("RunInfo:变差标橙、丢了标红带形状;被挡写「被挡 N 秒:原因」;重规划写次数和原因", () => {
@@ -204,9 +204,9 @@ describe("每台机器人下面的定位和被挡", () => {
     expect(replanText({ why: "???", n: 1, at_ms: 0 })).toContain("off the route");
     expect(replanText({ why: "preview", n: 1, at_ms: 0 })).toBe("Re-planned 1× (obstacle seen ahead, going around early)");
     lang.value = "zh";
-    expect(blockedText(VIZ.robots.A.blocked!)).toBe("被挡 12 秒:前方 0.4 m 有挡");
-    expect(replanText({ why: "near_nogo", n: 3, at_ms: 0 })).toBe("重规划 3 次(离禁行区太近)");
-    expect(replanText({ why: "preview", n: 1, at_ms: 0 })).toBe("重规划 1 次(前方有障碍,提前绕)");
+    expect(blockedText(VIZ.robots.A.blocked!)).toBe("被挡 12 秒：前方 0.4 m 有挡");
+    expect(replanText({ why: "near_nogo", n: 3, at_ms: 0 })).toBe("重规划 3 次（离禁行区太近）");
+    expect(replanText({ why: "preview", n: 1, at_ms: 0 })).toBe("重规划 1 次（前方有障碍，提前绕）");
   });
 });
 

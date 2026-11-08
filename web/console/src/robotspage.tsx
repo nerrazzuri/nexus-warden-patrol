@@ -472,7 +472,7 @@ function RobotDetail({ r, u, now, role, say, onChanged, onCode, onClose, readOnl
           <h3 class="rd-h">{t("rdDevices")}</h3>
           <ul class="rd-devs">
             {r.devices!.map((x) => (
-              <li key={x.id} class={`dev-${x.state}`}><span class="mono">{x.id}</span><span>{t(`dev_${x.state}` as Key)}</span></li>
+              <li key={x.id} class={`dev-${x.state}`} title={x.id}><span>{devName(x.id)}</span><span>{t(`dev_${x.state}` as Key)}</span></li>
             ))}
           </ul>
         </section>
@@ -679,4 +679,17 @@ function BindApprove({ req, onClose, onDone }: { req: BindReq; onClose: () => vo
 /** 第 2 轮 admin N15:「1 patrol」不写「1 patrols」。 */
 function patrolsN(n: number | null | undefined): string {
   return t(n === 1 ? "fleetPatrols1" : "fleetPatrols", { n: n ?? 0 });
+}
+
+/** 第 3 轮 zh N10:机器人设备的内部编号(disk、camera:front、link:wifi、rtk)换成人话,原编号放悬停。 */
+export function devName(id: string): string {
+  const zh = lang.value === "zh";
+  const [k, sub] = id.split(":", 2);
+  if (k === "disk") return zh ? "存储盘" : "Storage";
+  if (k === "rtk") return zh ? "RTK 定位" : "RTK positioning";
+  if (k === "board") return zh ? "主板" : "Board";
+  if (k === "lidar") return zh ? "激光雷达" : "Lidar";
+  if (k === "camera") return zh ? `摄像头 ${sub === "front" ? "前" : sub === "back" ? "后" : sub}` : `Camera ${sub}`;
+  if (k === "link") return zh ? `网络 ${sub}` : `Network ${sub}`;
+  return id;
 }

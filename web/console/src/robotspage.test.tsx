@@ -191,7 +191,7 @@ describe("机器人页", () => {
   it("W42 添加:说明用手机扫贴纸,工程师的开通码收在按钮后面", async () => {
     const { container: c } = page();
     await waitFor(() => expect(cardOf(c, "A")).not.toBeNull());
-    fireEvent.click(btn(c, "添加四足机器人"));
+    fireEvent.click(btn(c, "添加机器人"));
     const m = document.querySelector(".modal")!;
     expect(m.textContent).toContain("扫描机器人贴纸");
     expect(m.querySelector("form")).toBeNull();
@@ -249,7 +249,7 @@ describe("W71 Nav2 没起来", () => {
     robots = [card({ problems: [{ nav2: "Nav2 转接节点未连接" }] })];
     const { container: c } = page();
     await waitFor(() => expect(cardOf(c, "A")?.querySelector(".fleet-warn")).toBeTruthy());
-    expect(cardOf(c, "A").querySelector(".fleet-warn")!.textContent).toContain("Nav2 不可用(退回自带规划):Nav2 转接节点未连接");
+    expect(cardOf(c, "A").querySelector(".fleet-warn")!.textContent).toContain("Nav2 不可用（退回自带规划）：Nav2 转接节点未连接");
   });
 
   it("W72 详情:现在、巡逻统计、地图、设备、登记、手动原因", async () => {
@@ -262,7 +262,7 @@ describe("W71 Nav2 没起来", () => {
     fireEvent.click(cardOf(c, "A"));
     const d = c.querySelector(".robot-detail")!.textContent!;
     for (const s of ["现在", "最后联系", "已用 42%", "待传 3 个", "近 7 天", "12 趟", "1 次", "estate-1 v7", "与站点不一致",
-      "lidar", "camera:thermal", "故障", "先试跑", "Estate"]) expect(d).toContain(s);
+      "激光雷达", "摄像头 thermal", "故障", "先试跑", "Estate"]) expect(d).toContain(s);
   });
 
   it("W72 控制:选路线开始巡逻、回待命点、停止当前任务(现问站点在跑哪一趟)", async () => {
