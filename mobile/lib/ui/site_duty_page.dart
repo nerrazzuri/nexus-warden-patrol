@@ -40,6 +40,7 @@ import 'site_teleop.dart';
 import 'site_video.dart';
 import 'site_watch_page.dart';
 import 'site_weather.dart';
+import 'stop_failed.dart';
 
 /// 每个站点上次选的哪台（这一次打开 App 里记着；按站点地址分）。
 final Map<String, String> _picked = <String, String>{};
@@ -292,10 +293,16 @@ class _SiteDutyPageState extends State<SiteDutyPage> {
         _say(tr('The robot isn\'t running a task', '机器人当前无任务'));
         return;
       }
-      await widget.api.abort(id, tid);
-      _say(tr('Stopped', '已叫停'));
-    } on SiteError catch (e) {
-      _say(tr('Stop failed: ${refusalText(e)}', '叫停失败：${refusalText(e)}'));
+      final r = await widget.api.abort(id, tid);
+      final ack = r['ack'];
+      if (ack is Map && ack['result'] != 'accepted' && ack['result'] != 'duplicate') {
+        if (mounted) await showStopFailed(context, robot: id, error: ackReasonText('${ack['reason'] ?? ack['result']}'));
+      } else {
+        _say(tr('Stopped', '已叫停'));
+      }
+    } catch (e) {
+      // 手机 App 测试 M02：失败要醒目、不自动消失，叫人按机身急停
+      if (mounted) await showStopFailed(context, robot: id, error: e);
     }
     unawaited(_reload());
   }
