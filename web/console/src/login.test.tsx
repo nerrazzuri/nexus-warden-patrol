@@ -31,8 +31,13 @@ describe("登录页", () => {
     expect(c.querySelector(".login-err")).not.toBeNull();          // 错误行先占着位置
     fireEvent.input(name, { target: { value: "  olga " } });
     fireEvent.input(pw, { target: { value: "pw" } });
+    // 用户 11-09:「显示」是密码框里的眼睛图标(没有字),读屏有名字
+    expect(c.querySelector(".pw-row .pw-show svg")).toBeTruthy();
+    expect(c.querySelector(".pw-show")!.textContent).toBe("");
+    expect(c.querySelector(".pw-show")!.getAttribute("aria-label")).toBe("Show");
     fireEvent.click(c.querySelector(".pw-show")!);
     expect(pw.getAttribute("type")).toBe("text");
+    expect(c.querySelector(".pw-show")!.getAttribute("aria-label")).toBe("Hide");
     fireEvent.submit(c.querySelector("form")!);
     await waitFor(() => expect(c.querySelector(".login-err")!.textContent).not.toBe(""));
     expect((sent[0] as { name: string }).name).toBe("olga");
