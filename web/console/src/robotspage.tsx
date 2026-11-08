@@ -70,6 +70,8 @@ export function RobotsPage({ say, now, units = [], readOnly = false, role = "adm
   say: Say; now: number; units?: UnitInfo[]; readOnly?: boolean; role?: string; robot?: string | null;
 }) {
   const [rows, setRows] = useState<RobotCard[] | null>(null);
+  // 第 2 轮 N4:解绑了、消息服务还没重启的编号(常驻提示)
+  const [openRevoked, setOpenRevoked] = useState<string[]>([]);
   // P2-08:从总览点「详情」带着 ?robot= 进来,直接打开那一台
   const [open, setOpen] = useState<string | null>(robot);
   const [adding, setAdding] = useState(false);
@@ -83,8 +85,9 @@ export function RobotsPage({ say, now, units = [], readOnly = false, role = "adm
     api<{ requests: BindReq[] }>("GET", "/api/admin/bind").then((d) => setPending(d.requests ?? [])).catch(() => setPending([]));
   }, []);
   const load = useCallback(() => {
-    api<{ robots: RobotCard[] }>("GET", "/api/robots/overview")
+    api<{ robots: RobotCard[]; open_revoked?: string[] }>("GET", "/api/robots/overview")
       .then((d) => {
+        setOpenRevoked(d.open_revoked ?? []);
         const list = (d.robots ?? []).filter((r) => !r.revoked);
         setRows(list);
         robotNames.value = { ...robotNames.value, ...Object.fromEntries(list.filter((r) => r.name).map((r) => [r.robot_id, r.name])) };
@@ -106,6 +109,9 @@ export function RobotsPage({ say, now, units = [], readOnly = false, role = "adm
       </div>
       {/* P1-30:经理只看,说明不提改名、解绑 */}
       <p class="muted lead">{t(readOnly ? "robotsLeadView" : "robotsLead")}</p>
+      {!readOnly && openRevoked.length > 0 && (
+        <p class="warn" role="status" data-open-revoked="1">{t("robotsOpenRevoked", { ids: openRevoked.join(", ") })}</p>
+      )}
       {!readOnly && pending.length > 0 && (
         <section class="panel bind-pending" aria-label={t("bindPending")}>
           <h2>{t("bindPending")}</h2>
@@ -496,7 +502,7 @@ function RobotDetail({ r, u, now, role, say, onChanged, onCode, onClose, readOnl
       )}
       {ask && <Confirm text={ask.text} yes={ask.yes} onNo={() => setAsk(null)} onYes={() => { const g = ask.go; setAsk(null); g(); }} />}
       {unbind === "ask" && (
-        <Confirm text={t("robotUnbindConfirm", { id: label(r) })} yes={t("robotUnbind")} danger onNo={() => setUnbind(null)} onYes={() => setUnbind("pw")} />
+        <Confirm text={t(r.online ? "robotUnbindConfirm" : r.ever_seen === false ? "robotUnbindConfirmNever" : "robotUnbindConfirmOffline", { id: label(r) })} yes={t("robotUnbind")} danger onNo={() => setUnbind(null)} onYes={() => setUnbind("pw")} />
       )}
       {unbind === "pw" && (
         <ConfirmPassword title={t("robotUnbind")} onClose={() => setUnbind(null)}

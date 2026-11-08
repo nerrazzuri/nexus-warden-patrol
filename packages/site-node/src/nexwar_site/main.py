@@ -192,6 +192,17 @@ def cmd_enroll_code(home: Path, robot_id: str, host: str | None, hours: float, *
         db.close()
 
 
+def cert_ever_claimed(home: Path, robot_id: str) -> bool:
+    """这只狗领过开通码(拿到过证书)没有(网页易用性第 2 轮 N5)。出过码却一直没领 → ``False``;
+    没出过码(命令行登记、证书包手工拷过去)不知道 → 按领过算。"""
+    db = SiteDB(home / "site.db")
+    try:
+        rows = db.query("SELECT used_ms FROM enroll_claims WHERE robot_id=?", (robot_id,))
+    finally:
+        db.close()
+    return not rows or rows[0]["used_ms"] is not None
+
+
 def cmd_enroll(home: Path, robot_id: str, days: int) -> Path:
     cfg = _load(home)
     ca = SiteCA(home / "ca")

@@ -193,3 +193,18 @@ describe("网页易用性第 1 轮 P2-10", () => {
     expect(chip(again.container, "help").getAttribute("aria-pressed")).toBe("false");
   });
 });
+
+describe("第 2 轮 P0-20:只读账号", () => {
+  it("没处理的报警旁边是「详情」,不是蓝色的「去处理」;保安照样「去处理」", async () => {
+    alerts = [alert({ key: "a1" })];
+    const v = render(<AlarmLogPage now={NOW} role="viewer" />);
+    await waitFor(() => expect(rows(v.container).length).toBe(1));
+    const btn = rows(v.container)[0].querySelector("div:last-child .btn") as HTMLElement;
+    expect(btn.textContent).toBe("详情");
+    expect(btn.classList.contains("primary")).toBe(false);
+    cleanup();
+    const g = render(<AlarmLogPage now={NOW} role="guard" />);
+    await waitFor(() => expect(rows(g.container).length).toBe(1));
+    expect((rows(g.container)[0].querySelector("div:last-child .btn") as HTMLElement).textContent).toBe("去处理");
+  });
+});

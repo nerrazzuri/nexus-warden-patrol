@@ -20,6 +20,7 @@ let posted: { url: string; body: Record<string, unknown> }[];
 let pending: Record<string, unknown>[];
 let said: string[];
 let task: string | null;
+let openRevoked: string[] = [];
 
 beforeEach(() => {
   lang.value = "zh";
@@ -27,6 +28,7 @@ beforeEach(() => {
   said = [];
   pending = [];
   task = null;
+  openRevoked = [];
   robotNames.value = {};
   robots = [card({}), card({ robot_id: "B", online: false, battery_pct: null, patrols_today: 0,
     problems: [{ key: "B/stuck#1", kind: "stuck", first_ms: NOW - 60_000 }, { device: "front_camera", state: "offline" }],
@@ -45,7 +47,7 @@ beforeEach(() => {
       }
       return Promise.resolve(json({ robots }));
     }
-    if (url.startsWith("/api/robots/overview")) return Promise.resolve(json({ robots }));
+    if (url.startsWith("/api/robots/overview")) return Promise.resolve(json({ robots, open_revoked: openRevoked }));
     if (url === "/api/schedule") return Promise.resolve(json({ missions: ["east-loop", "west-loop"] }));
     if (url === "/api/robots/A") return Promise.resolve(json({ robot_id: "A", status: { online: true, task: task ? { task_id: task, kind: "patrol", state: "running" } : null } }));
     if (url === "/api/admin/bind") return Promise.resolve(json({ requests: pending }));
@@ -407,5 +409,38 @@ describe("网页易用性第 1 轮 P1-30", () => {
     const { container: c } = render(<RobotsPage say={() => {}} now={NOW} role="owner" readOnly />);
     await waitFor(() => expect(cardOf(c, "A")).not.toBeNull());
     expect(c.querySelector(".lead")!.textContent).not.toContain("解绑");
+  });
+});
+
+
+describe("第 2 轮 P0-10 / N4:解绑说实话,后续步骤常驻", () => {
+  const ask = async (id: string) => {
+    const { container: c } = page();
+    await waitFor(() => expect(cardOf(c, id)).not.toBeNull());
+    fireEvent.click(cardOf(c, id));
+    fireEvent.click(btn(c.querySelector(".robot-detail")!, "解绑"));
+    return document.querySelector(".modal")!.textContent ?? "";
+  };
+  it("在线:现在就清;录像已经在站点上的留着", async () => {
+    const txt = await ask("A");
+    expect(txt).toContain("现在就清除");
+    expect(txt).toContain("站点上已有的录像不删");
+  });
+  it("离线:下次连上才清,证书现在作废", async () => {
+    const txt = await ask("B");
+    expect(txt).toContain("下次连上站点时");
+    expect(txt).not.toContain("现在就清除");
+  });
+  it("从没连上过:没有东西要清", async () => {
+    robots = [card({ robot_id: "T9", online: false, ever_seen: false })];
+    const txt = await ask("T9");
+    expect(txt).toContain("从没连上过");
+  });
+  it("消息服务没重启的:机器人页常驻一条,写要重启、才能重新添加", async () => {
+    openRevoked = ["T7"];
+    const { container: c } = page();
+    await waitFor(() => expect(c.querySelector("[data-open-revoked]")).not.toBeNull());
+    expect(c.querySelector("[data-open-revoked]")!.textContent).toContain("T7");
+    expect(c.querySelector("[data-open-revoked]")!.textContent).toContain("重启消息服务");
   });
 });

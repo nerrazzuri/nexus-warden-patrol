@@ -739,8 +739,10 @@ class _Handler(TlsHandlerMixin):
                 from nexwar_site.robot_overview import overview
                 from nexwar_site.sitetime import site_tz
                 disp = self.site.dispatcher
+                # 第 2 轮 N4:解绑了、消息服务没重启(旧连接可能还开着)的编号 —— 机器人页常驻提示
                 return self._send_json(200, {"robots": overview(
-                    disp, disp.db, now_ms=self.site._now(), tz=site_tz(disp.db))})
+                    disp, disp.db, now_ms=self.site._now(), tz=site_tz(disp.db)),
+                    "open_revoked": sorted(self.site.open_revoked)})
             if method == "GET" and path == "/api/events":
                 self._need(user, VIEW)
                 return self._sse()
@@ -1884,6 +1886,8 @@ class _Handler(TlsHandlerMixin):
                                                  api_port=self._api_port())
                 return self._send_json(200, {"robot_id": rid, "code": code, "hours": hours})
             wiped = self._unbind_robot(rid, user)
+            # 第 2 轮 N5:吊销会删掉旧码,先看领没领过;从没领过证书的狗不可能有旧连接
+            had_cert = site_main.cert_ever_claimed(home, rid) or wiped == "sent"
             summary = site_main.cmd_revoke(home, rid)
             out = {"robot_id": rid, "summary": summary, "robot_wipe": wiped}
             # 吊销进了 CRL,broker 重启才读:站点自己重启它(systemd 拉起来);做不到才叫人去重启
@@ -1891,8 +1895,9 @@ class _Handler(TlsHandlerMixin):
             if restart is None or not restart():
                 out["broker_restart"] = "systemctl restart nexwar_mosquitto"
                 # P0-10:旧证书的连接还开着;同一编号重新登记会把它当成新狗(不用激活就上线)
-                self.site.open_revoked.add(rid)
-                out["old_connection_open"] = True
+                if had_cert:
+                    self.site.open_revoked.add(rid)
+                    out["old_connection_open"] = True
             else:
                 self.site.open_revoked.clear()          # 重启过,之前吊销的连接也都断了
             try:
