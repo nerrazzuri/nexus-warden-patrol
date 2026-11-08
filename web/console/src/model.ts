@@ -121,6 +121,8 @@ export interface Summary {
 
 export interface Mode {
   mode: "armed" | "home" | "visitor";
+  /** 站点时区(IANA 名,站点 modes.view);顶栏的钟按它走(第 5 轮)。 */
+  timezone?: string | null;
   /** 临时撤防到几点(站点 modes.view)。 */
   until_ms?: number | null;
   /** 每个防区此刻布没布防(站点 modes.view)。 */

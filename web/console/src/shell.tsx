@@ -7,7 +7,7 @@ import { api, ApiError } from "./api";
 import type { Me } from "./app";
 import { modeLabel } from "./armingpage";
 import { Confirm, Modal } from "./dialogs";
-import { hm, md } from "./data";
+import { hm, siteClock } from "./data";
 import { lang, setLang, t, type Key } from "./i18n";
 import { Icon } from "./icons";
 import { canArm, canDispatch, isOwnerLike, type Mode } from "./model";
@@ -177,9 +177,13 @@ export function TopBar(props: {
         {t("alarmCount", { n: props.alarms == null ? "?" : props.alarms })}
       </a>
       {/* P2-27:小一点,带上日期(值夜班跨零点看得清是哪天) */}
-      <span class="clock mono" title={new Date(props.now).toLocaleDateString(lang.value === "zh" ? "zh-CN" : "en-GB", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}>
-        <span class="clock-date">{md(props.now)}</span>{" "}
-        {new Date(props.now).toLocaleTimeString("en-GB", { hour12: false, hour: "2-digit", minute: "2-digit" })}
+      <span class="clock mono" data-tz={props.mode?.timezone ?? ""} title={(() => {
+        const o: Intl.DateTimeFormatOptions = { weekday: "long", year: "numeric", month: "long", day: "numeric" };
+        const loc = lang.value === "zh" ? "zh-CN" : "en-GB";
+        try { return new Date(props.now).toLocaleDateString(loc, props.mode?.timezone ? { ...o, timeZone: props.mode.timezone } : o); } catch { return new Date(props.now).toLocaleDateString(loc, o); }
+      })()}>
+        <span class="clock-date">{siteClock(props.now, props.mode?.timezone).md}</span>{" "}
+        {siteClock(props.now, props.mode?.timezone).hm}
       </span>
       {props.onHelp && (
         <button type="button" class="btn sm help-btn" aria-label={t("helpTitle")} title={t("helpTitle")} onClick={props.onHelp}>?</button>

@@ -136,15 +136,29 @@ export function LayoutPage({ say, robots, tabs }: { say: Say; robots: string[]; 
   const [gen, setGen] = useState(0);
   const saveFn = useRef<(() => Promise<void>) | null>(null);
 
+  // 第 5 轮 r5-layout-N1:断线时进来(或者读地图目录失败)不当成「没有地图」;每 5 秒再读,连上了马上再读
+  const [mapsFailed, setMapsFailed] = useState(false);
+  const [mapsTry, setMapsTry] = useState(0);
+  const down = siteDown.value;
+  useEffect(() => { if (!down && mapsFailed) setMapsTry((n) => n + 1); }, [down]);
+  useEffect(() => {
+    if (!mapsFailed) return;
+    const h = setTimeout(() => setMapsTry((n) => n + 1), 5000);
+    return () => clearTimeout(h);
+  }, [mapsFailed, mapsTry]);
   useEffect(() => {
     api<{ maps: MapRow[] }>("GET", "/api/maps").then((d) => {
+      setMapsFailed(false);
       setMaps(d.maps ?? []);
       // 第 2 轮 maps N12:地址里带了 map、version(从发布对话框「去确认」跳来)就先选那一版
       const q = new URLSearchParams((typeof location === "undefined" ? "" : location.hash).split("?")[1] ?? "");
       const want = d.maps.find((m) => m.map_id === q.get("map") && m.version === q.get("version"));
       setSel((s) => s ?? want ?? d.maps.find((m) => m.active) ?? d.maps[d.maps.length - 1] ?? null);
-    }).catch((e) => say(errText(e)));
-  }, []);
+    }).catch((e) => {
+      if (mapsTry === 0) say(errText(e));
+      setMapsFailed(true);
+    });
+  }, [mapsTry]);
   const base = sel ? `/api/maps/${enc(sel.map_id)}/${enc(sel.version)}` : "";
   const robotsRef = useRef(robots);
   robotsRef.current = robots;
@@ -256,7 +270,7 @@ export function LayoutPage({ say, robots, tabs }: { say: Say; robots: string[]; 
           {own.marks?.(s)}
         </>} />
     </div>
-  ) : <p class="empty">{t(siteDown.value ? "loadRetry" : "noMap")}</p>), [meta, sel, tab, data, base]);
+  ) : <p class="empty">{t(siteDown.value || mapsFailed ? "loadRetry" : "noMap")}</p>), [meta, sel, tab, data, base, mapsFailed]);
 
   const Tab = tabs[tab];
   return (
@@ -298,7 +312,7 @@ export function LayoutPage({ say, robots, tabs }: { say: Say; robots: string[]; 
           {sel && meta && Tab ? (
             <Tab key={`${tab}|${base}|${gen}`} map={sel} base={base} meta={meta} data={data} reload={reload} say={say} Map={Map}
               setDirty={setDirty} registerSave={(fn) => { saveFn.current = fn; }} />
-          ) : !sel ? <p class="empty">{t(siteDown.value ? "loadRetry" : "noMap")}</p> : null}
+          ) : !sel ? <p class="empty">{t(siteDown.value || mapsFailed ? "loadRetry" : "noMap")}</p> : null}
         </div>
         {history && sel && HISTORY_KIND[tab] && (
           <HistoryDrawer key={`${tab}|${tab === "cameras" ? "" : base}`} kind={HISTORY_KIND[tab]!} map={tab === "cameras" ? null : sel} say={say}

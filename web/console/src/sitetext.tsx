@@ -185,15 +185,35 @@ export function zhPunct(src: string): string {
     .replace(new RegExp(`(${H}|）);\\s?`, "g"), "$1；");
 }
 
+/** 第 5 轮 P1-01:系统页上还露着的三种站点原文(中文界面也不该露):「…;原文:机器人原话」只说该做什么、
+ *  证据公钥路径、账号申请的「账号 wangxm」。原文放悬停。 */
+const ZH_SYS: [RegExp, (m: RegExpMatchArray) => string][] = [
+  [/^([\s\S]+?)[;；]\s*原文[:：][\s\S]*$/, (m) => m[1]],
+  [/^机器人上没有站点的证据公钥[\s\S]*$/, () => "机器人上缺少站点的证据公钥：照片、录像没加密，人脸补拍也关了。请工程师把证书包里的证据公钥装到机器人上，再重启机器人程序。"],
+  [/^账号 ([A-Za-z0-9._-]+)$/, (m) => `申请的登录名：${m[1]}`],
+];
+
 export function siteText(s: string | null | undefined): SiteText {
   const src = s ?? "";
-  if (lang.value !== "en") return { text: zhPunct(zhRobot(src)) };
+  if (lang.value !== "en") {
+    for (const [re, f] of ZH_SYS) {
+      const m = src.match(re);
+      if (m) return { text: zhPunct(zhRobot(f(m))), raw: src };
+    }
+    return { text: zhPunct(zhRobot(src)) };
+  }
   return siteTextEn(src);
 }
 
 /** 不看界面语言,一律翻成英文(报错那边自己判断过语言)。 */
 export function siteTextEn(src: string): SiteText {
   if (!CJK.test(src)) return { text: src };
+  // 第 5 轮 P1-01
+  if (/^机器人上没有站点的证据公钥/.test(src)) {
+    return { text: "The robot is missing the site's evidence key: photos and video are stored unencrypted and face snapshots are off. An engineer installs the evidence key from the certificate pack on the robot and restarts the robot software.", raw: src };
+  }
+  const why = /^([\s\S]+?)[;；]\s*原文[:：][\s\S]*$/.exec(src);
+  if (why) return { ...siteTextEn(why[1]), raw: src };
   const out = tr(src);
   if (!out.includes(UNK)) return { text: out };
   return { text: out === UNK ? FALLBACK : out.split(UNK).join("see details"), raw: src };

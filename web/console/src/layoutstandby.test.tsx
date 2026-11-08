@@ -86,6 +86,7 @@ describe("第 4 轮 maps N1 / setup P0-14", () => {
     const box = c.querySelector("[data-carried-standby]")!;
     expect(box.getAttribute("data-carried-standby")).toBe("1");          // A · dock 这一版已经有了,不再列
     expect(box.textContent).toContain("从版本 2 带过来 1 个待命点");
+    expect(box.querySelector("[data-carried-move]")!.textContent).toContain("从版本 2 挪到版本");
     fireEvent.click(box.querySelector('[data-keep="B/home"]')!);
     expect(c.querySelector("[data-carried-standby]")).toBeNull();
     await save!();

@@ -132,6 +132,18 @@ export function usePageVisible(): boolean {
 }
 
 /** 月-日(第 2 轮 P1-03 / admin N13:中英文都写 11-08,不写会被读反的 08/11)。 */
+/** 第 5 轮:顶栏的钟按站点时区(浏览器在别的时区时也对得上值班表);认不出就按浏览器的。 */
+export function siteClock(ms: number, tz?: string | null): { md: string; hm: string } {
+  if (tz) {
+    try {
+      const p = Object.fromEntries(new Intl.DateTimeFormat("en-GB", { timeZone: tz, month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23" })
+        .formatToParts(ms).map((x) => [x.type, x.value]));
+      return { md: `${p.month}-${p.day}`, hm: `${p.hour}:${p.minute}` };
+    } catch { /* 认不出的时区 */ }
+  }
+  return { md: md(ms), hm: new Date(ms).toLocaleTimeString("en-GB", { hour12: false, hour: "2-digit", minute: "2-digit" }) };
+}
+
 export function md(ms: number): string {
   const d = new Date(ms);
   return `${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
