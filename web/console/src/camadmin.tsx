@@ -109,6 +109,8 @@ export function CamerasPanel({ say }: { say: Say }) {
 export function CameraForm({ initial, onClose, onSaved, say, zones = [] }: { initial: CamRow | null; onClose: () => void; onSaved: (w: CamWarning[], zone: string) => void; say: Say; zones?: string[] }) {
   const edit = initial !== null;
   const [name, setName] = useState(initial?.name ?? "");
+  const [tried, setTried] = useState(false);
+  const nameBad = (tried || name.length > 0) && !/^[A-Za-z0-9._-]{1,64}$/.test(name);
   const [onvif, setOnvif] = useState(initial?.onvif_url ?? "");
   const [user, setUser] = useState(initial?.username ?? "");
   const [pw, setPw] = useState("");
@@ -139,7 +141,11 @@ export function CameraForm({ initial, onClose, onSaved, say, zones = [] }: { ini
     <Modal label={edit ? L("Edit camera {n}", "改摄像头 {n}", { n: name }) : L("Add camera", "添加摄像头")} onClose={() => { setPw(""); onClose(); }}>
       <form class="form camform" onSubmit={submit}>
         <label class="field">{L("Name", "名字")}
-          <input value={name} readOnly={edit} required pattern="[A-Za-z0-9._\-]{1,64}" autocomplete="off" onInput={(e) => setName(e.currentTarget.value)} />
+          <input value={name} readOnly={edit} required pattern="[A-Za-z0-9._\-]{1,64}" autocomplete="off" aria-invalid={nameBad || undefined}
+            onInvalid={(e) => { e.preventDefault(); setTried(true); }} onInput={(e) => setName(e.currentTarget.value)} />
+          {/* 第 3 轮 setup N5:规则写在框下面(跟待命点、路线一样),不合规则变红,不靠浏览器自带的气泡 */}
+          {!edit && <span class={nameBad ? "small bad" : "muted small"} data-name-rule="1">{L("Letters, digits, . _ - only (no spaces or Chinese), up to 64. Where it is goes in the zone below.",
+            "只能用英文字母、数字和 . _ -(不能有空格、中文),最多 64 个。位置写在下面的防区里。")}</span>}
         </label>
         <label class="field">{L("ONVIF address (camera or NVR)", "ONVIF 地址(摄像头或 NVR)")}
           <input value={onvif} required placeholder="http://192.168.1.50" autocomplete="off" onInput={(e) => setOnvif(e.currentTarget.value)} />

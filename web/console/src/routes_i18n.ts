@@ -33,7 +33,8 @@ const en = {
   routesNone: "No routes on this map version yet.",
   routesShowOthers: "Also show the other routes (dashed)",
   routePickHint: "Choose a route from the list to see it on the map.",
-  routeSchedN: "{n} schedule(s)",
+  routeSchedN: "{n} schedules",
+  routeSchedN1: "1 schedule",
   routePointsN: "{n} points",
   routeUnboundTag: "no map version",
   routeNewBtn: "+ New route",
@@ -73,7 +74,8 @@ const en = {
   pointPhotoBack: "Photo (back)",
   pointLight: "Light on",
   pointSelectHint: "Select a point to edit its heading and actions.",
-  routeProblems: "{n} problem(s) — fix the red points and save again",
+  routeProblems: "{n} problems — fix the red points and save again",
+  routeProblems1: "1 problem — fix the red point and save again",
   routeConflict: "Someone else changed this route. Reload it (your edits will be lost).",
   routeReload: "Reload",
   schedRoute: "Route",
@@ -153,6 +155,7 @@ const zh: Record<RKey, string> = {
   routesShowOthers: "同时显示其他路线（虚线）",
   routePickHint: "在右边的列表里选一条路线，图上只显示它。",
   routeSchedN: "{n} 个排程",
+  routeSchedN1: "1 个排程",
   routePointsN: "{n} 个点",
   routeUnboundTag: "没绑地图版本",
   routeNewBtn: "+ 新建路线",
@@ -193,6 +196,7 @@ const zh: Record<RKey, string> = {
   pointLight: "开灯",
   pointSelectHint: "选中一个点，才能改它的朝向和动作。",
   routeProblems: "{n} 处有问题 —— 改好红色的点再保存",
+  routeProblems1: "1 处有问题 —— 改好红色的点再保存",
   routeConflict: "别人改过这条路线了。重新拉取（你的修改会丢）。",
   routeReload: "重新拉取",
   schedRoute: "路线",
@@ -241,7 +245,9 @@ const zh: Record<RKey, string> = {
 export const RDICTS: Record<Lang, Record<RKey, string>> = { en, zh };
 
 export function rt(key: RKey, vars?: Record<string, string | number>): string {
-  let s = RDICTS[lang.value][key] ?? en[key];
+  // 第 3 轮 setup N7:n 是 1 时有「…1」写法就用它(英文单数),不写「(s)」
+  const one = vars?.n === 1 ? (RDICTS[lang.value] as Record<string, string>)[`${key}1`] : undefined;
+  let s = one ?? RDICTS[lang.value][key] ?? en[key];
   if (vars) for (const [k, v] of Object.entries(vars)) s = s.split(`{${k}}`).join(String(v));
   return s;
 }

@@ -427,3 +427,10 @@ def test_第2轮_N4_布置计数_发布弹窗拿来比(站点):
     assert d["areas"] == 1 and d["hides"] == 1 and d["exits"] == 0
     assert set(d) >= {"posts", "net_nodes", "nogo", "cameras", "standby", "proposal"}
     assert s.req("GET", f"{ADM}/layout", token=_登(s, "gina"))[0] == 403
+    # 第 3 轮 r2-setup-N4:放在图上的摄像头也算
+    before = d["cameras"]
+    with s.api.dispatcher.db.tx() as tx:
+        tx.execute("INSERT INTO cameras(name, onvif_url, zone, added_ms, map_id, map_version, "
+                   "x, y, yaw) VALUES ('gate', 'http://1.2.3.4', '东区', 1, ?, ?, 1.0, 1.0, 0)",
+                   MAP)
+    assert s.req("GET", f"{ADM}/layout", token=tok)[1]["cameras"] == before + 1

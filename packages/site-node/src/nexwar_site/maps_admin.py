@@ -453,6 +453,13 @@ class MapAdmin:
         if devices is not None:
             out["cameras"] = sum(d.get("map_id") == map_id and d.get("map_version") == version
                                  for d in devices.list())
+        # 第 3 轮 r2-setup-N4:放在图上的摄像头(cameras 表的位置)也算(原来只数了 devices)
+        try:
+            out["cameras"] += self.db.query(
+                "SELECT COUNT(*) AS n FROM cameras WHERE map_id=? AND map_version=?",
+                (map_id, version))[0]["n"]
+        except Exception:  # noqa: BLE001 —— 老库没有摄像头表:不加
+            pass
         out["standby"] = self.db.query(
             "SELECT COUNT(*) AS n FROM standby_points WHERE map_id=? AND map_version=?",
             (map_id, version))[0]["n"]

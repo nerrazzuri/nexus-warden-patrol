@@ -205,7 +205,8 @@ const en = {
   rdIdle: "It has no task running.",
   mePickTool: "Pick a tool above to start editing.",
   navSpeedRange: "Between 0.1 and 5 m/s.",
-  mapTodoOlder: "{n} older alarm(s) from before this shift are still open — see Alarms",
+  mapTodoOlder: "{n} older alarms from before this shift are still open — see Alarms",
+  mapTodoOlder1: "1 older alarm from before this shift is still open — see Alarms",
   mapTodoNoneShift: "Nothing new this shift.",
   alNoteMine: "Your note ({t}) — the next shift will see it",
   alNoteEdit: "Edit",
@@ -386,6 +387,11 @@ const en = {
   recClipExport: "Export from here",
   recGapJump: "No recording at {a}. Playing from {b}.",
   recGapSkip: "No recording from {a} to {b}. Skipped ahead.",
+  lyNogoNameTaken: "There is already an area called “{z}” here. Choose another name.",
+  legendRegion: "Named area",
+  legendZoneRef: "Security zone (shown for reference)",
+  legendExit: "Exit line",
+  legendHide: "Hiding spot",
   leaveUnsaved: "This page has changes that are not saved. Leave without saving? The changes will be lost.",
   leaveUnsavedYes: "Leave without saving",
   stopAll: "Stop all",
@@ -439,7 +445,8 @@ const en = {
   falseAlarmYes: "Mark as false alarm",
   talkNA: "Talk: not available yet",
   deterOn: "Deterrence level {n} on.",
-  persons: "{n} person(s), nearest {m} m",
+  persons: "{n} people, nearest {m} m",
+  persons1: "1 person, {m} m away",
   nearestTo: "nearest person {m} m from {id}",
   st_patrolling: "Patrolling",
   st_deterring: "Deterring",
@@ -1492,7 +1499,8 @@ const en = {
   sysRestartConfirm: "Restart site services?",
   sysRestarting: "Site restarting; refresh in about a minute.",
   sysPushTest: "Send test push",
-  sysPushSent: "Test push sent to {n} phone(s)",
+  sysPushSent: "Test push sent to {n} phones",
+  sysPushSent1: "Test push sent to 1 phone",
   sysRestore: "Restore latest backup",
   sysRestoreConfirm: "Restore the latest backup? Data changed after it is lost.",
   sysRestoring: "Restoring; the site restarts when done.",
@@ -1908,6 +1916,11 @@ const zh: Partial<Record<Key, string>> = {
   recClipExport: "从这里起导出",
   recGapJump: "{a} 没有录像，已从 {b} 开始放。",
   recGapSkip: "{a} 到 {b} 没有录像，已跳过。",
+  lyNogoNameTaken: "这里已经有叫「{z}」的区域了，换个名字。",
+  legendRegion: "命名区域",
+  legendZoneRef: "防区（参考，淡显）",
+  legendExit: "出口线",
+  legendHide: "易藏点",
   leaveUnsaved: "此页有未保存的改动。不保存就离开？改动将丢失。",
   leaveUnsavedYes: "不保存，离开",
   stopAll: "全部急停",
@@ -3086,7 +3099,9 @@ export function setLang(l: Lang): void {
 }
 
 export function tr(l: Lang, key: Key, vars?: Record<string, string | number>): string {
-  let s = DICTS[l][key] ?? en[key];
+  // 第 3 轮 setup N7:n 是 1 时有「…1」写法就用它(英文单数)
+  const one = vars?.n === 1 ? (DICTS[l] as Record<string, string>)[`${key}1`] : undefined;
+  let s = one ?? DICTS[l][key] ?? en[key];
   if (vars) for (const [k, v] of Object.entries(vars)) s = s.split(`{${k}}`).join(String(v));
   return s;
 }

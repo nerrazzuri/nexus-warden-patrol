@@ -168,3 +168,25 @@ describe("网页易用性第 1 轮 P1-31", () => {
     expect(body.zones.find((z) => z.id === "n2")!.label).toBe("后花园");
   });
 });
+
+describe("第 3 轮 setup N8", () => {
+  it("改成跟别的禁区同名:说重名,不能点完成", () => {
+    const big = { ...POOL, id: "n2", label: "花园", polygon: [[0, 6], [4, 6], [4, 10], [0, 10]] as [number, number][] };
+    const { container: c } = render(<NogoTab {...props(nav({ zones: [POOL, big] }))} />);
+    fireEvent.click(c.querySelector('[data-pick-zone="n2"]')!);
+    fireEvent.click(c.querySelector("[data-rename]")!);
+    const inp = document.querySelector('.modal input[name="label"]') as HTMLInputElement;
+    fireEvent.input(inp, { target: { value: POOL.label } });
+    expect(document.querySelector(".modal [data-dup]")).not.toBeNull();
+    expect((document.querySelector('.modal button[type="submit"]') as HTMLButtonElement).disabled).toBe(true);
+  });
+});
+
+describe("第 3 轮 setup N3", () => {
+  it("墙、装不下名字的区域:名字写在上边外面;装得下写中间", async () => {
+    const { nameSpot } = await import("./layoutnogo");
+    expect(nameSpot([[100, 100], [160, 100]], "测试虚拟墙", true)).toEqual([130, 90]);
+    expect(nameSpot([[0, 0], [30, 0], [30, 30], [0, 30]], "测试禁区名字", false)).toEqual([15, -10]);
+    expect(nameSpot([[0, 0], [300, 0], [300, 100], [0, 100]], "泳池", false)).toEqual([150, 50]);
+  });
+});

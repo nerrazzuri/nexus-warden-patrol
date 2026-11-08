@@ -27,6 +27,7 @@ const en = {
   pfOther: "see the details",
   pfOtherDo: "Read the site's details below.",
   sendChecking: "Sent to {id}. Checking that it can start…",
+  sendStillChecking: "Still checking that {id} can start…",
   sendStarted: "{id} is on its way",
   sendRefused: "{id} did not start: {why}. {act}",
   pfFailed: "Pre-departure check failed: {why}",
@@ -59,6 +60,7 @@ const zh: Record<AKey, string> = {
   pfOther: "原因见详情",
   pfOtherDo: "看下面站点给的详情。",
   sendChecking: "已发给 {id}，正在确认它能出发…",
+  sendStillChecking: "还在确认 {id} 能不能出发…",
   sendStarted: "{id} 已出发",
   sendRefused: "{id} 没有出发：{why}。{act}",
   pfFailed: "出发前检查未通过：{why}",
@@ -136,7 +138,7 @@ export type StartCheck = { state: "started" } | { state: "refused"; why: string;
 /** 派出后盯一会儿(P0-03):这台在 ``sentAt`` 以后出了「出发前检查未通过」就是被拒;
  *  盯完都没有就算出发了。站点问不通(断线)就是 ``unknown``,别说出发了。 */
 export async function watchStart(id: string, sentAt: number,
-  o: { tries?: number; gapMs?: number; sleep?: (ms: number) => Promise<void>; robot?: string; canFix?: boolean } = {}): Promise<StartCheck> {
+  o: { tries?: number; gapMs?: number; sleep?: (ms: number) => Promise<void>; robot?: string; canFix?: boolean; onTick?: (i: number) => void } = {}): Promise<StartCheck> {
   const rid = o.robot ?? id;
   const tries = o.tries ?? 8;
   const gap = o.gapMs ?? 1500;
@@ -144,6 +146,7 @@ export async function watchStart(id: string, sentAt: number,
   let reached = false;
   for (let i = 0; i < tries; i++) {
     await sleep(gap);
+    o.onTick?.(i);
     try {
       const d = await api<{ alerts: Alert[] }>("GET", `/api/alerts?all=1&limit=50`);
       reached = true;
@@ -166,7 +169,8 @@ export async function watchStart(id: string, sentAt: number,
 export async function reportStart(id: string, sentAt: number, say: (s: string) => void,
   o?: Parameters<typeof watchStart>[2]): Promise<StartCheck> {
   say(at("sendChecking", { id }));
-  const r = await watchStart(id, sentAt, o);
+  // 第 2 轮 duty N2 残留(第 3 轮):提示 6 秒就消失,确认要十来秒;中间再说一次,别空着
+  const r = await watchStart(id, sentAt, { ...o, onTick: (i) => { if (i % 3 === 2) say(at("sendStillChecking", { id })); } });
   if (r.state === "refused") say(at("sendRefused", { id, why: r.why, act: r.act }));
   else if (r.state === "started") say(at("sendStarted", { id }));
   return r;

@@ -200,3 +200,12 @@ describe("第 3 轮 duty N1", () => {
     expect(joinWhyAct("地图还未标原点", "请管理员标原点。")).toBe("地图还未标原点。请管理员标原点。");
   });
 });
+
+describe("第 2 轮 duty N2 残留", () => {
+  it("确认期间中途再说一次「还在确认」", async () => {
+    listed = [];
+    const say = vi.fn();
+    await reportStart("A", Date.now(), say, { sleep: now, tries: 6 });
+    expect(say.mock.calls.map((c) => c[0])).toContain("还在确认 A 能不能出发…");
+  });
+});
