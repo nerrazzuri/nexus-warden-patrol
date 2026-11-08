@@ -1151,54 +1151,21 @@ void main() {
     expect(busy.calls, ['home A abort']);
   });
 
-  testWidgets('POC 姿态：报了才有；先选再确认才发；有任务在跑直接说先停；经理没有', (t) async {
-    Map<String, dynamic> withPosture(Map<String, dynamic> v, {bool idle = true}) {
+  testWidgets('用户 11-08：机器人页没有单独的「姿态…」，遥控那格写「遥控 · 姿态」；经理没有', (t) async {
+    Map<String, dynamic> withPosture(Map<String, dynamic> v) {
       final out = jsonDecode(jsonEncode(v)) as Map<String, dynamic>;
       ((out['capabilities'] as Map)['tasks'] as Map)['posture'] = {'modes': ['stand', 'lie', 'crawl']};
-      if (idle) (out['status'] as Map)['task'] = null;
+      (out['status'] as Map)['task'] = null;
       return out;
     }
     final api = FakeApi('guard', robotView: withPosture(busyView()));
     await openRobot(t, api);
-    await t.ensureVisible(find.byKey(const Key('btn-posture')));
-    await t.tap(find.byKey(const Key('btn-posture')));
-    await t.pumpAndSettle();
-    expect(find.byKey(const Key('posture-crawl')), findsOneWidget);
-    await t.tap(find.byKey(const Key('posture-lie')));
-    await t.pumpAndSettle();
-    expect(api.calls, isEmpty, reason: '还没确认，不发');
-    expect(find.textContaining('旁边没有人'), findsOneWidget);
-    await t.tap(find.byKey(const Key('posture-confirm')));
-    await t.pumpAndSettle();
-    expect(api.calls, ['posture A lie']);
-
-    // 换一套假站点前先把页面清掉（不然上一台的详情页还盖在上面）
-    await t.pumpWidget(Container());
-    final busy = FakeApi('guard', robotView: withPosture(busyView(), idle: false));
-    await openRobot(t, busy);
-    await t.ensureVisible(find.byKey(const Key('btn-posture')));
-    await t.tap(find.byKey(const Key('btn-posture')));
-    await t.pumpAndSettle();
-    expect(find.byKey(const Key('posture-lie')), findsNothing);
-    expect(find.textContaining('先停止它再换姿态'), findsOneWidget);
-    expect(busy.calls, isEmpty);
-
-    await t.pumpWidget(Container());
-    final heldView = withPosture(busyView());
-    heldView['held'] = <String, dynamic>{'by': 'bob', 'at_ms': 1};
-    final held = FakeApi('guard', robotView: heldView);
-    await openRobot(t, held);
-    await t.ensureVisible(find.byKey(const Key('btn-posture')));
-    await t.tap(find.byKey(const Key('btn-posture')));
-    await t.pumpAndSettle();
-    expect(find.byKey(const Key('posture-lie')), findsNothing);
-    expect(find.textContaining('先点「恢复」再换姿态'), findsOneWidget);
-    expect(held.calls, isEmpty);
-
+    expect(find.byKey(const Key('btn-posture')), findsNothing);
+    expect(find.text('遥控 · 姿态'), findsOneWidget);
     await t.pumpWidget(Container());
     final owner = FakeApi('owner', robotView: withPosture(busyView()));
     await openRobot(t, owner);
-    expect(find.byKey(const Key('btn-posture')), findsNothing);
+    expect(find.byKey(const Key('btn-teleop')), findsNothing);
   });
 
   testWidgets('保安：能派巡检、回待命点、叫停', (t) async {

@@ -159,7 +159,7 @@ void main() {
       await t.pump();
       await t.pump();
       expect(t.takeException(), isNull);
-      for (final k in [SiteTeleopPage.inSightKey, SiteTeleopPage.postureKey('crawl'),
+      for (final k in [SiteTeleopPage.inSightKey, SiteTeleopPage.postureMenuKey, SiteTeleopPage.speedSliderKey,
           SiteTeleopPage.zoneKey, SiteTeleopPage.statusKey, SiteTeleopPage.stopKey]) {
         final r = t.getRect(find.byKey(k));
         expect(r.bottom, lessThanOrEqualTo(_h), reason: '$k');
