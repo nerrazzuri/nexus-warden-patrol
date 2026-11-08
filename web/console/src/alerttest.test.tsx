@@ -2,7 +2,7 @@
 // POC 第 8 项:告警测试模式条幅 —— 管理员开、结束并清掉(先确认);保安只看得到条幅。
 import { cleanup, fireEvent, render, waitFor } from "@testing-library/preact";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { AlertTestBar } from "./alerttest";
+import { AlertTestBar, DrillNote } from "./alerttest";
 import { setFetch } from "./api";
 import { alertTitle, lang } from "./i18n";
 
@@ -114,3 +114,18 @@ describe("第 3 轮 duty N10", () => {
     expect(document.querySelector(".confirm-text")!.textContent).toContain("2 条");
   });
 });
+
+describe("第 5 轮:总览页也看得到演练", () => {
+  it("开着时有一句、带去报警记录的链接;没开没有", async () => {
+    mode = { active: true, until_ms: END_AT, by: "alice" };
+    const { container: c } = render(<DrillNote />);
+    await waitFor(() => expect(c.querySelector("[data-drill-note]")).toBeTruthy());
+    expect(c.querySelector("[data-drill-note] a")!.getAttribute("href")).toBe("#/alarms");
+    cleanup();
+    mode = { active: false, until_ms: null, by: "" };
+    const r = render(<DrillNote />);
+    await new Promise((res) => setTimeout(res, 20));
+    expect(r.container.querySelector("[data-drill-note]")).toBeNull();
+  });
+});
+

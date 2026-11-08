@@ -13,6 +13,7 @@ import { whoText } from "./armingpage";
 import type { Authz } from "./accesspage";
 import { hm } from "./data";
 import { alertTitle, lang, t, type Key, joinList } from "./i18n";
+import { DrillNote } from "./alerttest";
 import { SetupChecklist } from "./guide";
 import { Icon } from "./icons";
 import { forGuard, type Alert, type Mode } from "./model";
@@ -56,6 +57,7 @@ export function HomePage(props: {
   return (
     <section class="homepage">
       <h1>{t("tabHome")}</h1>
+      <DrillNote />
       <SetupChecklist />
 
       {todo.length > 0 && (
