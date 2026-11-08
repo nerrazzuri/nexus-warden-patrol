@@ -150,6 +150,7 @@ class NwShell extends StatefulWidget {
   static const Key camerasKey = Key('open-cameras');
   static const Key routesKey = Key('open-routes');
   static const Key weatherKey = Key('open-weather');
+  static const Key p1BarKey = Key('shell-p1-bar');
 
   @override
   State<NwShell> createState() => _NwShellState();
@@ -164,6 +165,9 @@ class _NwShellState extends State<NwShell> {
 
   /// 后台值守开关（机器人栏管开停，设置页显示、点它）。
   final WatchControl _watchCtl = WatchControl();
+
+  /// 还开着的 P1（机器人栏一直连着站点、记着它）：值守页以外每一栏顶上红条（手机 App 测试 M17）。
+  final ValueNotifier<Map<String, String>> _openP1 = ValueNotifier(const <String, String>{});
 
   /// 上手导览（W53 §8.2）：这一次进站点查过没有；「使用教程」要再走一遍。
   bool _tourChecked = false;
@@ -198,6 +202,7 @@ class _NwShellState extends State<NwShell> {
     unawaited(ErrorLog.instance.flush());
     ErrorLog.instance.detach(widget.api);
     _watchCtl.dispose();
+    _openP1.dispose();
     replayTour = null;
     super.dispose();
   }
@@ -273,7 +278,14 @@ class _NwShellState extends State<NwShell> {
         push: widget.push,
         updater: widget.updater,
         child: Scaffold(
-      body: IndexedStack(index: _tab == _dogs ? 0 : 1, sizing: StackFit.expand, children: [
+      body: Column(children: [
+        if (_tab != 0)
+          ValueListenableBuilder<Map<String, String>>(
+              valueListenable: _openP1,
+              builder: (context, p1, _) => p1.isEmpty
+                  ? const SizedBox.shrink()
+                  : _P1Bar(titles: p1.values.toList(), onTap: () => setState(() => _tab = 0))),
+        Expanded(child: IndexedStack(index: _tab == _dogs ? 0 : 1, sizing: StackFit.expand, children: [
         SiteRobotsPage(
             api: widget.api,
             title: widget.title,
@@ -282,15 +294,55 @@ class _NwShellState extends State<NwShell> {
             entry: widget.entry,
             push: widget.push,
             ringEvery: widget.ringEvery,
-            control: _watchCtl),
+            control: _watchCtl,
+            openP1: _openP1),
         if (_tab == _dogs)
           const SizedBox.shrink()
         else
           KeyedSubtree(key: ValueKey<int>(_tab), child: _page(_tab)),
+      ])),
       ]),
       bottomNavigationBar:
           NwBottomNav(items: items, index: _tab, onTap: (i) => setState(() => _tab = i)),
     )));
+  }
+}
+
+/// 值守页以外每一栏顶上的红条：有 P1 还开着。点了回值守页（P1 卡在那里）。
+class _P1Bar extends StatelessWidget {
+  final List<String> titles;
+  final VoidCallback onTap;
+  const _P1Bar({required this.titles, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final c = Nw.of(context);
+    final text = titles.length == 1
+        ? tr('P1: ${titles.first}. Tap to handle', 'P1：${titles.first}，点这里处理')
+        : tr('${titles.length} P1 alarms open. Tap to handle', '${titles.length} 条 P1 没处理，点这里处理');
+    return Material(
+      key: NwShell.p1BarKey,
+      color: c.error,
+      child: InkWell(
+        onTap: onTap,
+        child: SafeArea(
+          bottom: false,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: Nw.s16, vertical: Nw.s8),
+            child: Row(children: [
+              Icon(Icons.warning_rounded, color: c.onError, size: 20),
+              const SizedBox(width: Nw.s8),
+              Expanded(
+                  child: Text(text,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: NwText.labelLarge.copyWith(color: c.onError, fontWeight: FontWeight.w700))),
+              Icon(Icons.chevron_right_rounded, color: c.onError),
+            ]),
+          ),
+        ),
+      ),
+    );
   }
 }
 

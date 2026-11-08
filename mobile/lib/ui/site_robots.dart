@@ -46,6 +46,9 @@ class SiteRobotsPage extends StatefulWidget {
 
   /// 后台值守开关的状态（W55：开关在「设置」页）；不给就自己建一个。
   final WatchControl? control;
+
+  /// 还开着的 P1（键 → 标题），外壳拿它在每一栏顶上画红条（手机 App 测试 M17）。
+  final ValueNotifier<Map<String, String>>? openP1;
   const SiteRobotsPage(
       {super.key,
       required this.api,
@@ -55,7 +58,8 @@ class SiteRobotsPage extends StatefulWidget {
       this.entry,
       this.push,
       this.ringEvery = const Duration(seconds: 4),
-      this.control});
+      this.control,
+      this.openP1});
 
   static const Key addKey = Key('robot-add');
 
@@ -146,6 +150,10 @@ class _SiteRobotsPageState extends State<SiteRobotsPage> {
   Future<void> _ringIfPending() async {
     try {
       final rows = await widget.api.alerts();
+      widget.openP1?.value = {
+        for (final a in rows)
+          if (a.level == 'P1' && a.resolvedMs == null) a.key: alertTitle(a.kind, a.title),
+      };
       final pending = rows.where((a) =>
           !_viewer && a.channel == 'sound' && a.ackedMs == null && a.resolvedMs == null);
       if (_disposed) return;
@@ -228,6 +236,17 @@ class _SiteRobotsPageState extends State<SiteRobotsPage> {
 
   void _track(Map<String, dynamic> a) {
     final key = '${a['key']}';
+    final p1 = widget.openP1;
+    if (p1 != null) {
+      final open = a['level'] == 'P1' && a['resolved_ms'] == null;
+      final now = Map<String, String>.of(p1.value);
+      if (open) {
+        now[key] = alertTitle('${a['kind']}', '${a['title']}');
+      } else {
+        now.remove(key);
+      }
+      p1.value = now;
+    }
     final want = !_viewer && a['channel'] == 'sound' && a['acked_ms'] == null && a['resolved_ms'] == null;
     if (want) {
       _ringing.add(key);
