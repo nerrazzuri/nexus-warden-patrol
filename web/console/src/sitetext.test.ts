@@ -112,7 +112,7 @@ describe("第 3 轮 zh N10 / N11 体检说人话", () => {
     expect(checkText({ ok: true, detail: "库能写" })).toBe("数据库正常");
     expect(checkText({ ok: true, detail: "事件循环 0.6 秒前转过" })).toBe("站点程序运行正常");
     expect(checkText({ ok: true, detail: "后台道都在转" })).toBe("后台任务都在运行");
-    expect(checkText({ ok: false, detail: "secrets:没有这把密钥;backup:权限太宽" })).toBe("密码加密密钥：没有这把密钥；备份加密密钥：权限太宽");
+    expect(checkText({ ok: false, detail: "secrets:没有这把密钥;backup:权限太宽" })).toBe("密码加密密钥：密钥文件缺失；备份加密密钥：文件权限太宽（别的用户也能读）");
     expect(checkText({ ok: false, detail: "未配置推送(site.json 的 push)" })).toBe("还没设置手机推送");
   });
 });
@@ -146,5 +146,16 @@ describe("第 4 轮 r2-duty-N7 点位没到", () => {
     expect(alertTitle("en", "stuck", "点位 P2 未到达,已跳过")).toBe("Waypoint P2 skipped");
     expect(siteText("到场看看,或者改路线;到达一次后自动解除").text).toBe("Go and look, or change the route. Clears itself once the point is reached.");
     expect(siteText("巡逻继续,只做记录").text).toBe("The patrol went on; this is only a record.");
+  });
+});
+
+describe("第 4 轮 zh N1 / N3:中文界面也说人话", () => {
+  it("导航被拒、出发前检查", () => {
+    lang.value = "zh";
+    expect(siteText("跳过 1 个点(P2):导航拒了: goto 被设备拒绝: 规划失败(goal_blocked):终点在障碍、禁行区里或贴得太近").text)
+      .toBe("跳过 1 个点（P2）：去不了这个点：终点在障碍物、禁行区里或离得太近");
+    expect(siteText("起飞前检查未通过: home(地图 'estate-1' 未标原点,先去标一个换电位); battery(电量 99.4%,但算不出出发线:此地图的原点不可用(见 home 项))").text)
+      .toBe("出发前检查未通过：地图还没标原点；算不出返航要留的电量（地图没有可用的原点）");
+    expect(siteText("东区巡逻").text).toBe("东区巡逻");
   });
 });

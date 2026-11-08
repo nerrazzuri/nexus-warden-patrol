@@ -6,7 +6,7 @@
 // 照片位这一期放图标;电池健康机器人还不报,不显示。
 // W60 卡片分层:第一层名字、状态、在做什么、电量;第二层定位、网络、今天几趟;出了毛病才多一条琥珀色提示
 // (正常时安静,不写「正常」)。在做什么、定位从值班的实时数据来(units),概况接口没有。
-import { siteKnown } from "./sitetext";
+import { siteKnown, siteStr } from "./sitetext";
 import { useCallback, useEffect, useRef, useState } from "preact/hooks";
 import { api, ApiError, enc } from "./api";
 import { ConfirmPassword } from "./confirmpw";
@@ -34,7 +34,7 @@ export interface RobotCard {
   patrols_7d?: number; aborts_7d?: number; last_patrol_ms?: number | null; last_seen_ms?: number | null; ever_seen?: boolean;
   storage?: { used_ratio: number; backlog_files: number; oldest_backlog_s: number | null } | null;
   map?: { id: string; version: string | null; match: boolean | null } | null;
-  devices?: { id: string; state: string }[];
+  devices?: { id: string; state: string; detail?: string }[];
   enrolled_at?: number | null; manual_note?: string; held?: { by: string; at_ms: number } | null;
   /** POC:能换哪几种姿态、正在跑的任务(老站点没有)。 */
   postures?: Posture[]; task?: string | null;
@@ -475,7 +475,7 @@ function RobotDetail({ r, u, now, role, say, onChanged, onCode, onClose, readOnl
           <h3 class="rd-h">{t("rdDevices")}</h3>
           <ul class="rd-devs">
             {r.devices!.map((x) => (
-              <li key={x.id} class={`dev-${x.state}`} title={x.id}><span>{devName(x.id)}</span><span>{t(`dev_${x.state}` as Key)}</span></li>
+              <li key={x.id} class={`dev-${x.state}`} title={x.detail ? siteStr(x.detail) : undefined}><span>{devName(x.id)}</span><span>{t(`dev_${x.state}` as Key)}</span></li>
             ))}
           </ul>
         </section>

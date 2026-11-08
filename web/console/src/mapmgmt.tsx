@@ -293,7 +293,7 @@ function ActivationCell({ a }: { a: Activation }) {
   return (
     <span class={`mm-act ${a.state}`}>
       <b>{a.map_id}:{a.version}</b> · <span data-state={a.state}>{activationText(a)}</span>
-      <span class="muted small"> · {a.by} {when(a.at_ms)}</span>
+      <span class="muted small vmeta"><span>{a.by} {when(a.at_ms)}</span></span>
     </span>
   );
 }
@@ -344,7 +344,8 @@ function VersionCard(p: {
         <h3>
           <span class="mono">v{v.version}</span>
           {v.latest && <span class="mm-tag">{tr("latest", "最新")}</span>}
-          <span class="muted small"> · {when(v.created_ms)} · {sourceText(v.source)} · {mb(v.size_bytes)}</span>
+          {/* 第 4 轮 zh r3-N15:窄屏折行时不以「·」开头,「149 MB」不断开 */}
+          <span class="muted small vmeta"><span>{when(v.created_ms)}</span><span>{sourceText(v.source)}</span><span class="nowrap">{mb(v.size_bytes)}</span></span>
         </h3>
         {(v.missing ?? []).length > 0 && (
           <p class="error small" role="alert" data-missing="1">
@@ -370,11 +371,12 @@ function VersionCard(p: {
         {b ? (
           <details class="mm-tech"><summary class="small muted">{tr("Technical details", "技术信息")}</summary>
           <p class="mm-build small">
-            <span>{tr("Source", "来源")}: <b>{b.source ?? "—"}</b></span>
+            {/* 第 4 轮 zh r3-N10:「bag:raw-bag」说人话;「手性核对：ok」写成「方向核对：正常」 */}
+            <span>{tr("Source", "来源")}{tr(": ", "：")}<b>{typeof b.source === "string" && b.source.startsWith("bag:") ? tr(`recording ${b.source.slice(4)}`, `录制包 ${b.source.slice(4)}`) : b.source ?? "—"}</b></span>
             <span>{tr("Builder", "建图器")}{tr(": ", "：")}{b.builder ?? "—"}{b.frames != null ? ` · ${b.frames} ${tr("frames", "帧")}` : ""}</span>
             <span>{tr("Loop closure", "回环")}{tr(": ", "：")}{b.loop_closure.used ? tr(`used (${b.loop_closure.closures ?? "?"})`, `用了（${b.loop_closure.closures ?? "?"} 处）`) : tr("not used", "没用") + (b.loop_closure.why ? ` (${b.loop_closure.why})` : "")}</span>
             <span class={b.handedness.verdict === "mirrored" ? "bad" : undefined}>
-              {tr("Handedness check", "手性核对")}{tr(": ", "：")}{b.handedness.verdict ?? "—"}{b.handedness.verdict === "mirrored" ? tr(" — MIRRORED, do not publish", " —— 镜像了，别发布") : ""}
+              {tr("Mirror check", "方向核对（有没有镜像）")}{tr(": ", "：")}{b.handedness.verdict === "ok" ? tr("OK", "正常") : b.handedness.verdict ?? "—"}{b.handedness.verdict === "mirrored" ? tr(" — MIRRORED, do not publish", " —— 镜像了，别发布") : ""}
             </span>
           </p>
           </details>

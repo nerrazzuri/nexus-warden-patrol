@@ -3,6 +3,7 @@
 // 侧栏写点数、线数、总长和没连上线的点。外框「保存」整份存(带看到的修订号,别人改过回 409)。
 import { useEffect, useRef, useState } from "preact/hooks";
 import { api } from "./api";
+import { Confirm } from "./dialogs";
 import { clickGuard, startDrag, swallowClick } from "./dragpt";
 import { joinList, lang, t } from "./i18n";
 import { SaveCancelled, toMap, type TabProps } from "./layoutpage";
@@ -95,6 +96,7 @@ export function RoadnetTab(p: TabProps) {
     return () => { live = false; };
   }, [url]);
 
+  const [ask, setAsk] = useState<{ text: string; ok: (yes: boolean) => void } | null>(null);
   const walls = (p.data.nav?.zones ?? []).filter((z) => Array.isArray(z.wall) && z.wall.length >= 2).map((z) => z.wall as P2[]);
   const changed = loaded !== null && (JSON.stringify(nodes) !== JSON.stringify(loaded.nodes) || JSON.stringify(edges) !== JSON.stringify(loaded.edges));
   useEffect(() => p.setDirty(changed), [changed]);
@@ -105,7 +107,8 @@ export function RoadnetTab(p: TabProps) {
       const block = saveBlock(wallCrossings(nodes, edges, walls));
       if (block) { p.say(block); throw new SaveCancelled(); }
       const warn = saveWarning(lonely(nodes, edges));
-      if (warn && !window.confirm(warn)) throw new SaveCancelled();
+      // 第 4 轮 setup P2-17:站内的确认框(原来是浏览器自带的 confirm)
+      if (warn && !(await new Promise<boolean>((ok) => setAsk({ text: warn, ok })))) throw new SaveCancelled();
       const d = await api<RouteNet>("POST", url, { nodes, edges, base_revision: loaded.revision });
       const net = { revision: d.revision, nodes: d.nodes ?? nodes, edges: (d.edges ?? edges) as Edge[] };
       setLoaded(net);
@@ -211,6 +214,7 @@ export function RoadnetTab(p: TabProps) {
           </section>
         )}
       </div>
+      {ask && <Confirm text={ask.text} yes={t("lySaveAnyway")} onNo={() => { ask.ok(false); setAsk(null); }} onYes={() => { ask.ok(true); setAsk(null); }} />}
     </div>
   );
 }
