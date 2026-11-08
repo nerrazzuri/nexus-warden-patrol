@@ -232,6 +232,7 @@ CREATE TABLE IF NOT EXISTS alerts (
     shelved_reason TEXT NOT NULL DEFAULT ''
 );
 CREATE INDEX IF NOT EXISTS alerts_last ON alerts(last_ms);
+CREATE INDEX IF NOT EXISTS audit_at ON audit(at);
 -- W21 复查:站点起来时按种类取每台机器人最近一条事件(上装故障的全集),不扫整张事件表。
 CREATE INDEX IF NOT EXISTS events_kind ON events(kind, robot_id, received_at);
 CREATE TABLE IF NOT EXISTS teleop_leases (

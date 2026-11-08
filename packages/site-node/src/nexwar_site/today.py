@@ -62,11 +62,17 @@ def _stopped_by(db: Any, robot: str, start_ms: int, end_ms: int) -> str:
     return str(rows[0]["issued_by"]) if rows else ""
 
 
-def today_view(db: Any, *, now_ms: int, adhoc: Any = None) -> dict[str, Any]:
+def today_view(db: Any, *, now_ms: int, adhoc: Any = None,
+               day: str | None = None) -> dict[str, Any]:
+    """今天(或 ``day`` = ``YYYY-MM-DD`` 那天,站点时区)的每一趟巡逻。往天的按现在这份日程排轮次,
+    跑了的、没跑的照库里的记录写(liang-d5 第 5 轮前:往天的巡逻在网页上查不到)。"""
     act = active_bundle(db)
     tz = act.schedule.tz() if act is not None else site_tz(db)
     now = datetime.fromtimestamp(now_ms / 1000, tz=tz)
     start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    if day is not None:
+        d = datetime.strptime(day, "%Y-%m-%d")
+        start = datetime(d.year, d.month, d.day, tzinfo=tz)
     end = start + timedelta(days=1) - timedelta(milliseconds=1)
     a_ms, b_ms = int(start.timestamp() * 1000), int(end.timestamp() * 1000)
     items: list[dict[str, Any]] = []

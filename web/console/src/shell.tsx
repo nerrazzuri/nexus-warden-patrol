@@ -18,6 +18,7 @@ export type GuardPage = "duty" | "live" | "map" | "recordings" | "alarms";
 export type AdminPage =
   | "admin/home" | "admin/arming" | "admin/access" | "admin/users" | "admin/robots" | "admin/reports"
   | "admin/layout" | "admin/maps" | "admin/localization" | "admin/diag" | "admin/upgrade" | "admin/system"
+  | "admin/activity"
   | "admin/mapedit";
 export type Page = GuardPage | AdminPage;
 
@@ -41,7 +42,7 @@ export const NAV_SECTIONS: NavSection[] = [
     { id: "admin/access", key: "tabAccess" }, { id: "admin/users", key: "tabUsers" },
   ] },
   { id: "system", key: "navSystem", items: [
-    { id: "admin/reports", key: "tabReports" }, { id: "admin/home", key: "tabHome", badge: "notices" },
+    { id: "admin/reports", key: "tabReports" }, { id: "admin/activity", key: "tabActivity" }, { id: "admin/home", key: "tabHome", badge: "notices" },
   ] },
   { id: "advanced", key: "navAdvanced", fold: true, items: [
     { id: "admin/maps", key: "tabMapMgmt" }, { id: "admin/localization", key: "tabLocalization" }, { id: "admin/diag", key: "tabDiag" },

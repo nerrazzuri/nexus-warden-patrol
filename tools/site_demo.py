@@ -116,6 +116,120 @@ def _seed_recordings(home: Path, work: Path, minutes: int,
         db.close()
 
 
+def _seed_history(home: Path, days: int, robots: list[str], *, big_day: int = 12) -> dict[str, int]:
+    """liang-d5 第 5 轮前:预先放过去 ``days`` 天的报警、临时巡逻、活动记录、交班留言(站点没起来时
+    直接写库),好测「某一天发生了什么、怎么查」。``big_day`` 天前那天放 600 多条报警(超过一页)。
+    时刻按 Asia/Kuala_Lumpur(演示站点后面设的就是这个时区)。固定随机种子,每次一样。"""
+    import json
+    import random
+    from datetime import datetime, timedelta
+    from zoneinfo import ZoneInfo
+
+    from nexwar_site.alerts import LEVEL_OF
+    from nexwar_site.db import SiteDB
+    rnd = random.Random(7)
+    tz = ZoneInfo("Asia/Kuala_Lumpur")
+    today = datetime.now(tz).replace(hour=0, minute=0, second=0, microsecond=0)
+    zones = ("东区", "北门", "停车场", "仓库")
+    routes = ("东区巡逻", "周界一圈", "停车场")
+    ends = [("task_done", ""), ("task_aborted", "halt"), ("task_failed", "第 2 个点被挡住了")]
+    db = SiteDB(home / "site.db")
+    seq: dict[str, int] = {}
+    n = {"alerts": 0, "patrols": 0, "audit": 0, "notes": 0}
+    a_cols = ("key, level, kind, robot, title, detail, first_ms, last_ms, count, acked_by, "
+              "acked_ms, resolved_by, resolved_ms, escalated, context, verdict")
+    q_cols = ("id, robot, mission, label, by, created_ms, not_before_ms, estimate_s, state, "
+              "task_id, started_ms, ended_ms, note")
+
+    def ms(d: datetime) -> int:
+        return int(d.timestamp() * 1000)
+
+    def alert(c, kind: str, robot: str, title: str, at: datetime, who: str,
+              verdict: str, ctx: dict | None = None) -> None:
+        grp = f"{robot}/{kind}"
+        seq[grp] = seq.get(grp, 1000) + 1          # 1000 起:不跟站点自己往后编的号撞
+        first = ms(at)
+        done = first + rnd.randint(2, 25) * 60_000
+        c.execute(f"INSERT INTO alerts({a_cols}) VALUES ({','.join('?' * 16)})",
+                  (f"{grp}#{seq[grp]}", LEVEL_OF[kind].value, kind, robot, title, "", first,
+                   first + 30_000, 1, who, first + 60_000, who, done, 0,
+                   json.dumps(ctx or {}, ensure_ascii=False), verdict))
+        n["alerts"] += 1
+
+    def audit(c, at: datetime, who: str, action: str, target: str = "") -> None:
+        c.execute("INSERT INTO audit(at, actor, action, target, status, detail, remote) "
+                  "VALUES (?,?,?,?,?,?,?)",
+                  (ms(at), who, action, target, 200, "{}", "192.168.5.20"))
+        n["audit"] += 1
+
+    def one_day(c, back: int) -> None:
+        d0 = today - timedelta(days=back)
+
+        def at(h: int, m: int = 0, s: int = 0) -> datetime:
+            return d0 + timedelta(hours=h, minutes=m, seconds=s)
+        guard = "gina" if back % 2 else "olga"
+        # 活动:早晚交班登录、晚上布防、早上撤防
+        for h, who in ((7, "gina"), (19, "gina"), (9, "olga")):
+            audit(c, at(h, rnd.randint(0, 9)), f"login:{who}", "POST /api/login")
+        audit(c, at(22, 0, 5), guard, "POST /api/mode", "armed")
+        audit(c, at(6, 30), guard, "POST /api/mode", "disarmed")
+        # 临时巡逻:每天 2–4 趟,大多跑完,偶尔被叫停、失败
+        for i in range(rnd.randint(2, 4)):
+            robot = rnd.choice(robots)
+            start = at(rnd.choice((8, 13, 20, 23)), rnd.randint(0, 50))
+            end = start + timedelta(minutes=rnd.randint(12, 35))
+            tid = f"adhoc-hist-{back}-{i}"
+            kind, why = rnd.choices(ends, weights=(8, 1, 1))[0]
+            c.execute(f"INSERT INTO adhoc_queue({q_cols}) VALUES ({','.join('?' * 13)})",
+                      (f"hist-{back}-{i}", robot, "loop", rnd.choice(routes), guard,
+                       ms(start) - 60_000, ms(start), 1200, "started", tid, ms(start), ms(end), ""))
+            c.execute("INSERT INTO events(robot_id, boot_id, seq, event_id, kind, data, stamp, "
+                      "received_at) VALUES (?,?,?,?,?,?,?,?)",
+                      (robot, "hist", back * 10 + i, tid, kind,
+                       json.dumps({"task_id": tid, "reason": why}, ensure_ascii=False),
+                       ms(end), ms(end)))
+            audit(c, start - timedelta(seconds=40), guard, f"POST /api/robots/{robot}/patrol",
+                  robot)
+            if kind == "task_aborted":
+                audit(c, end, guard, f"POST /api/robots/{robot}/halt", robot)
+            n["patrols"] += 1
+        # 报警:夜里几条有人闯入,偶尔卡住、掉线
+        for _ in range(rnd.randint(2, 6)):
+            z = rnd.choice(zones)
+            t0 = at(rnd.choice((0, 1, 2, 3, 21, 22, 23)), rnd.randint(0, 59), rnd.randint(0, 59))
+            v = rnd.choice(("intruder", "false_alarm", "false_alarm"))
+            alert(c, "intrusion", "site", f"{z} 有人闯入", t0, guard, v, {"zone": z})
+            audit(c, t0 + timedelta(minutes=3), guard, "POST /api/alerts/x/resolve", z)
+        if rnd.random() < 0.5:
+            alert(c, "stuck", rnd.choice(robots), "点位 P2 未到达,已跳过",
+                  at(13, rnd.randint(0, 59)), guard, "handled")
+        if rnd.random() < 0.3:
+            r = rnd.choice(robots)
+            alert(c, "robot_offline", r, f"{r} 掉线", at(16, rnd.randint(0, 59)), guard, "handled")
+        if back == big_day:
+            # 那天夜里一路摄像头坏了乱报:640 条,几乎全是误报(超过报警记录一页 500 条)
+            for i in range(640):
+                t0 = at(0, 30) + timedelta(seconds=20 * i)
+                alert(c, "intrusion", "site", "仓库 有人闯入", t0, "gina", "false_alarm",
+                      {"zone": "仓库", "camera": "wh-2"})
+        notes = ((7, "gina", "夜班正常,东区一次误报已关。"),
+                 (19, "olga", "白天正常,停车场有施工车辆进出。"))
+        for h, who, text in notes:
+            if back == big_day:
+                text = "仓库摄像头 wh-2 夜里乱报 600 多条,已报修。"
+            c.execute("INSERT INTO shift_notes(at_ms, author, text) VALUES (?,?,?)",
+                      (ms(at(h, 5)), who, text))
+            n["notes"] += 1
+
+    try:
+        with db.tx() as c:
+            for back in range(days, 0, -1):
+                one_day(c, back)
+    finally:
+        db.close()
+    return n
+
+
 def _patrol(*args: str) -> str:
     r = subprocess.run([sys.executable, "-m", "nexwar_patrol.cli", *args], capture_output=True,
                        text=True, timeout=120, env=ENV)
@@ -316,6 +430,8 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--backup", action="store_true",
                     help="开备份(备份目录、口令密钥、备份密钥都放在 --dir 下面,不碰 /etc):"
                          "试备份、解开备份、演练、托管包用")
+    ap.add_argument("--history-days", type=int, default=0, metavar="N",
+                    help="预先放过去 N 天的报警、临时巡逻、活动、交班留言(12 天前 640 条报警)")
     ap.add_argument("--recordings", type=int, default=0, metavar="N",
                     help="往站点里放 N 分钟的假录像(要 ffmpeg;看值班台的录像页用)")
     ap.add_argument("--unbound", type=int, default=0, choices=range(0, 5), metavar="N",
@@ -413,6 +529,11 @@ def _setup_rest(a, home: Path, names: list[str]) -> str:
     fp = _site(home, "fingerprint").strip()
     if a.recordings > 0:
         _seed_recordings(home, a.dir, a.recordings, a.video_dir)
+    if a.history_days > 0:
+        got = _seed_history(home, a.history_days, names)
+        print(f"  历史数据:过去 {a.history_days} 天,报警 {got['alerts']} 条、"
+              f"临时巡逻 {got['patrols']} 趟、活动 {got['audit']} 条、"
+              f"交班留言 {got['notes']} 条", flush=True)
     return fp
 
 

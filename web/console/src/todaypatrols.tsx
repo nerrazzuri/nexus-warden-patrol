@@ -43,23 +43,33 @@ export function stateOf(s: string, skipped = 0): [string, string] {
 export function TodayPatrols({ retryMs = 5_000 }: { retryMs?: number } = {}) {
   const [items, setItems] = useState<TodayItem[] | null>(null);
   const [off, setOff] = useState<number | null>(null);
+  // liang-d5 第 5 轮前:往天的每一趟也能查(选个日期;空 = 今天)
+  const [day, setDay] = useState("");
+  const [today, setToday] = useState("");
   // 第 2 轮:拉不到不能当成「今天没有巡逻」;拉不到的时候按 retryMs 重拉,拉到了回到 30 秒一次
   const [failed, setFailed] = useState(false);
   useEffect(() => {
     let live = true;
     let timer = 0;
-    const load = () => api<{ items: TodayItem[]; utc_offset_min?: number }>("GET", "/api/patrols/today")
-      .then((d) => { if (live) { setItems(d.items ?? []); setOff(d.utc_offset_min ?? null); setFailed(false); } return true; })
+    setItems(null);
+    const load = () => api<{ items: TodayItem[]; utc_offset_min?: number; date?: string }>("GET", day ? `/api/patrols/day?date=${day}` : "/api/patrols/today")
+      .then((d) => { if (live) { setItems(d.items ?? []); setOff(d.utc_offset_min ?? null); setFailed(false); if (!day && d.date) setToday(d.date); } return true; })
       .catch(() => { if (live) setFailed(true); return false; })
       .then((ok) => { if (live) timer = window.setTimeout(load, ok ? 30_000 : retryMs); });
     void load();
     return () => { live = false; window.clearTimeout(timer); };
-  }, []);
+  }, [day]);
+  const past = day !== "" && day !== today;
   return (
     <section class="today" aria-label={t("tdTitle")}>
-      <h3 class="today-h">{t("tdTitle")}</h3>
+      <h3 class="today-h row">
+        <span>{past ? t("tdTitleDay", { d: day }) : t("tdTitle")}</span>
+        <input type="date" class="push small" aria-label={t("tdPickDay")} title={t("tdPickDay")} value={day || today}
+          max={today || undefined} onChange={(e) => setDay(e.currentTarget.value === today ? "" : e.currentTarget.value)} />
+        {past && <button type="button" class="btn sm" onClick={() => setDay("")}>{t("alToday")}</button>}
+      </h3>
       {failed && <p class="warn small" role="status">{t("loadRetry")}</p>}
-      {!failed && items != null && items.length === 0 && <p class="muted small">{t("tdNone")}</p>}
+      {!failed && items != null && items.length === 0 && <p class="muted small">{t(past ? "tdNoneDay" : "tdNone")}</p>}
       <ul class="today-list">
         {(items ?? []).map((x, i) => {
           const [label, tone] = stateOf(x.state, x.skipped ?? 0);

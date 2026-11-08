@@ -12,7 +12,7 @@ import { siteStr } from "./sitetext";
 
 type Say = (s: string) => void;
 interface Account { name: string; role: string; disabled: boolean; display_name: string; expires_ms: number | null; last_login_ms: number | null; expired: boolean }
-interface AuditRow { id: number; at: number; actor: string; actor_role?: string | null; action: string; target: string; status: number;
+export interface AuditRow { id: number; at: number; actor: string; actor_role?: string | null; action: string; target: string; status: number;
   detail?: { error?: string; role?: string; disabled?: boolean; password_reset?: boolean; display_name?: string;
     first_day?: string; last_day?: string } }
 
@@ -61,7 +61,7 @@ const ACTIONS: [RegExp, string][] = [
   [/^(POST|DELETE) \/api\/arming\/exceptions/, "actArmExceptionAdd"],
   // 第 4 轮 P1-66:巡逻日程真正的接口是 route-schedules;遥控速度
   [/^POST \/api\/route-schedules/, "actPatrolSched"], [/^POST \/api\/teleop-speeds/, "actTeleopSpeeds"],
-  [/^login/, "actLogin"], [/^POST \/api\/logout/, "actLogout"], [/^POST \/api\/mode$/, "actMode"],
+  [/^login/, "actLogin"], [/^POST \/api\/login$/, "actLogin"], [/^POST \/api\/logout/, "actLogout"], [/^POST \/api\/mode$/, "actMode"],
   [/^POST \/api\/alerts\/.+\/resolve$/, "actResolve"], [/^POST \/api\/alerts\/.+\/ack$/, "actAck"], [/^POST \/api\/alerts\/.+\/arrive$/, "actArrive"],
   [/^POST \/api\/robots\/[^/]+\/(goto|patrol)$/, "actDispatch"], [/^POST \/api\/robots\/[^/]+\/halt$/, "actHalt"],
   [/^POST \/api\/accounts\/engineer$/, "actEngineer"], [/^POST \/api\/accounts/, "actAccounts"],
@@ -259,6 +259,25 @@ export function UsersPage({ me, say, now }: { me: string; say: Say; now: number 
   );
 }
 
+/** 活动记录的一行(用户页「他做过什么」、全站活动日志共用)。``who``:行里写上是谁做的。 */
+export function AuditLine({ r, who }: { r: AuditRow; who?: boolean }) {
+  return (
+    <li class={r.status >= 400 ? "bad" : undefined} data-audit={r.id}>
+      <time class="mono small">{day(r.at)} {hms(r.at)}</time>
+      <div class="audit-body">
+      {who && <b class="audit-who">{r.actor}</b>}
+      <span title={r.action}>{actionText(r.action)}</span>
+      {r.status >= 400 ? <span class="tag bad" data-result="refused">{t("auditRefused")}</span>
+        : r.status >= 200 ? <span class="tag ok" data-result="ok">{t("auditOk")}</span> : null}
+      {r.target && <span class="muted small" title={r.target}>{targetText(r.target)}</span>}
+      {r.actor_role === "engineer" && <span class="tag">{t("roleEngineer")}</span>}
+      {r.status < 400 && changeText(r.detail) && <span class="small muted" data-change="1">{changeText(r.detail)}</span>}
+      {r.status >= 400 && r.detail?.error && <span class="small audit-why" data-why="1" title={r.detail.error}>{siteStr(r.detail.error)}</span>}
+      </div>
+    </li>
+  );
+}
+
 function UserAudit({ name, account, onClose }: { name: string; account?: Account; onClose: () => void }) {
   const [rows, setRows] = useState<AuditRow[] | null>(null);
   useEffect(() => {
@@ -273,20 +292,7 @@ function UserAudit({ name, account, onClose }: { name: string; account?: Account
       </div>
       {rows == null ? <p class="muted">…</p> : rows.length === 0 ? <p class="muted">{t("userDidNone")}</p> : (
         <ul class="plain">
-          {rows.slice(0, 200).map((r) => (
-            <li key={r.id} class={r.status >= 400 ? "bad" : undefined}>
-              <time class="mono small">{day(r.at)} {hms(r.at)}</time>
-              <div class="audit-body">
-              <span title={r.action}>{actionText(r.action)}</span>
-              {r.status >= 400 ? <span class="tag bad" data-result="refused">{t("auditRefused")}</span>
-                : r.status >= 200 ? <span class="tag ok" data-result="ok">{t("auditOk")}</span> : null}
-              {r.target && <span class="muted small" title={r.target}>{targetText(r.target)}</span>}
-              {r.actor_role === "engineer" && <span class="tag">{t("roleEngineer")}</span>}
-              {r.status < 400 && changeText(r.detail) && <span class="small muted" data-change="1">{changeText(r.detail)}</span>}
-              {r.status >= 400 && r.detail?.error && <span class="small audit-why" data-why="1" title={r.detail.error}>{siteStr(r.detail.error)}</span>}
-              </div>
-            </li>
-          ))}
+          {rows.slice(0, 200).map((r) => <AuditLine key={r.id} r={r} />)}
         </ul>
       )}
     </aside>

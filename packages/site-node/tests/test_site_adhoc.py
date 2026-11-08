@@ -511,3 +511,17 @@ def test_网页第4轮_admin_N7_被叫停的那趟_写出是谁叫停的(台):
                    毫秒(22, 10)))
     item = today_view(t.db, now_ms=t.now["t"])["items"][0]
     assert item["state"] == "aborted" and item["stopped_by"] == "olga"
+
+
+def test_往天的巡逻_按日期查_那天跑了的照记录写(台):
+    """liang-d5 第 5 轮前:往天每一趟(谁派的、跑没跑完)网页上要能查到。"""
+    t = 台
+    t.now["t"] = 毫秒(23, 0) + 2 * 86_400_000          # 两天以后
+    with t.db.tx() as c:
+        c.execute("INSERT INTO schedule_runs(entry_id, scheduled_ms, outcome, robot_id, task_id, "
+                  "decided_at) VALUES ('nightly', ?, 'started', 'A', 'sched-1', ?)",
+                  (毫秒(22, 0), 毫秒(22, 0)))
+    v = today_view(t.db, now_ms=t.now["t"], day="2027-03-15")
+    assert v["date"] == "2027-03-15"
+    assert [(x["kind"], x["robot"]) for x in v["items"]] == [("schedule", "A")]
+    assert today_view(t.db, now_ms=t.now["t"])["date"] == "2027-03-17"
