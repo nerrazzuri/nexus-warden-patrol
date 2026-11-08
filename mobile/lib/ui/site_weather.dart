@@ -210,12 +210,13 @@ class _SiteWeatherPageState extends State<SiteWeatherPage> {
           ]),
           nwGap16,
           Wrap(spacing: Nw.s8, runSpacing: Nw.s8, children: [
+            // 手机 App 测试 M40：现在是哪种天气，那个按钮实心带勾，别的描边
             for (final c in const ['normal', 'rain', 'storm'])
               NwButton(
                   buttonKey: SiteWeatherPage.setKey(c),
-                  variant: NwButtonVariant.secondary,
+                  variant: _w?['condition'] == c ? NwButtonVariant.primary : NwButtonVariant.outline,
                   onPressed: () => _set(c),
-                  icon: weatherIcon(c),
+                  icon: _w?['condition'] == c ? Icons.check_rounded : weatherIcon(c),
                   label: _names[c]!),
             NwButton(
                 buttonKey: SiteWeatherPage.setKey('auto'),

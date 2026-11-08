@@ -61,6 +61,7 @@ class AppSettingsPage extends StatefulWidget {
   static const Key checkUpdateKey = Key('app-check-update');
   static const Key licensesKey = Key('app-licenses');
   static const Key unbindKey = Key('engineer-unbind');
+  static const Key engineerKey = Key('engineer-tools');
   static const Key arrivalKey = Key('arrival-alerts');
 
   @override
@@ -135,6 +136,8 @@ class _AppSettingsPageState extends State<AppSettingsPage> {
           ListTile(
             leading: const Icon(Icons.language_rounded),
             title: Text(tr('Language', '语言')),
+            // 手机 App 测试 M40：整行都能点（以前只有右边的下拉能点）
+            onTap: () => _setLang(appLang.value == AppLang.zh ? AppLang.en : AppLang.zh),
             trailing: DropdownButton<AppLang>(
                 key: AppSettingsPage.langKey,
                 value: appLang.value,
@@ -237,7 +240,14 @@ class _AppSettingsPageState extends State<AppSettingsPage> {
           nwGap16,
           NwSectionLabel(tr('Engineer tools', '工程师工具')),
           nwGap8,
+          // 手机 App 测试 M23：没登录的人随手能看到「解绑机器人」—— 收起来，展开前说清楚是给谁用的
           NwListCard(children: [
+            ExpansionTile(
+              key: AppSettingsPage.engineerKey,
+              leading: const Icon(Icons.engineering_outlined),
+              title: Text(tr('For installation engineers', '安装工程师专用')),
+              subtitle: Text(tr('Only when the site is lost. Not needed in daily use.', '只在站点坏了时用，平常用不到。'), style: sub()),
+              children: [
             ListTile(
               key: AppSettingsPage.unbindKey,
               leading: const Icon(Icons.build_circle_outlined),
@@ -246,6 +256,7 @@ class _AppSettingsPageState extends State<AppSettingsPage> {
               onTap: () => Navigator.push(
                   context, MaterialPageRoute<void>(builder: (_) => const EngineerUnbindPage())),
             ),
+              ]),
           ]),
         ],
       ]),
