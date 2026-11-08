@@ -75,6 +75,9 @@ def site_version() -> str:
     return PRODUCT_VERSION
 
 
+#: 英文界面(网页易用性第 2 轮 P1-01):检查说明带一份英文 ``detail_en``。
+NOT_WIRED_EN = "Not connected (command-line run)"
+
 class HealthDesk:
     def __init__(self, db: Any, *, home: Path, now_ms: Callable[[], int],
                  dispatcher: Any = None, backup: Any = None, push: Any = None,
@@ -149,22 +152,31 @@ class HealthDesk:
         try:
             with self.db.tx() as c:
                 c.execute("INSERT OR REPLACE INTO meta VALUES ('health_ping', ?)", (str(now),))
-            out["db"] = {"ok": True, "detail": "库能写"}
+            out["db"] = {"ok": True, "detail": "库能写", "detail_en": "Database is writable"}
         except Exception as exc:  # noqa: BLE001
-            out["db"] = {"ok": False, "detail": f"库无法写入:{exc}"[:200]}
+            out["db"] = {"ok": False, "detail": f"库无法写入:{exc}"[:200],
+                         "detail_en": f"Cannot write to the database: {exc}"[:200]}
         lag = self._loop_lag() if self._loop_lag is not None else None
-        out["loop"] = ({"ok": True, "detail": "未接入(命令行)"} if lag is None else
+        out["loop"] = ({"ok": True, "detail": "未接入(命令行)", "detail_en": NOT_WIRED_EN}
+                       if lag is None else
                        {"ok": lag < LOOP_STUCK_S, "value": round(lag, 2),
                         "detail": f"事件循环 {lag:.1f} 秒前转过"
-                                  + ("" if lag < LOOP_STUCK_S else ":卡住")})
+                                  + ("" if lag < LOOP_STUCK_S else ":卡住"),
+                        "detail_en": f"Event loop last ran {lag:.1f} s ago"
+                                     + ("" if lag < LOOP_STUCK_S else ": stuck")})
         t = getattr(self.dispatcher, "_t", None) if self.dispatcher is not None else None
         conn = getattr(t, "connected", None)
-        out["broker"] = ({"ok": True, "detail": "未接入(命令行)"} if conn is None else
-                         {"ok": bool(conn), "detail": "连着 MQTT" if conn else "MQTT 已断开"})
+        out["broker"] = ({"ok": True, "detail": "未接入(命令行)", "detail_en": NOT_WIRED_EN}
+                         if conn is None else
+                         {"ok": bool(conn), "detail": "连着 MQTT" if conn else "MQTT 已断开",
+                          "detail_en": "Connected to the message broker" if conn
+                          else "Message broker disconnected"})
         free = self._free(self.home)
-        out["disk"] = ({"ok": False, "detail": "无法测量站点盘"} if free is None else
+        out["disk"] = ({"ok": False, "detail": "无法测量站点盘",
+                        "detail_en": "Cannot measure the site disk"} if free is None else
                        {"ok": free >= DISK_LOW, "value": round(free, 3),
-                        "detail": f"站点盘还剩 {free:.0%}"})
+                        "detail": f"站点盘还剩 {free:.0%}",
+                        "detail_en": f"Site disk {free:.0%} free"})
         dest = getattr(self.backup, "dest", None) if self.backup is not None else None
         if dest is not None:
             bfree = self._free(Path(dest))
@@ -176,19 +188,27 @@ class HealthDesk:
                              "detail": "备份盘" + (f"还剩 {bfree:.0%}" if bfree is not None
                                                    else "无法测量")
                              + (";备份已过期" if st.get("stale") else "")
-                             + (";上次校验未通过" if ver and not ver.get("ok") else "")}
+                             + (";上次校验未通过" if ver and not ver.get("ok") else ""),
+                             "detail_en": "Backup disk "
+                             + (f"{bfree:.0%} free" if bfree is not None else "cannot be measured")
+                             + ("; backup is out of date" if st.get("stale") else "")
+                             + ("; last check failed" if ver and not ver.get("ok") else "")}
         else:
-            out["backup"] = {"ok": False, "detail": "未配置备份:站点主机损坏将导致数据丢失"}
+            out["backup"] = {"ok": False, "detail": "未配置备份:站点主机损坏将导致数据丢失",
+                             "detail_en": "No backup set up: if the site computer fails, "
+                                          "data will be lost"}
         if self.push is not None:
             v = self.push.view()
             out["push"] = {"ok": bool(v["configured"]) and not v["error"],
-                           "detail": (v["error"] or self._push_detail(v))}
+                           "detail": (v["error"] or self._push_detail(v)),
+                           "detail_en": self._push_detail_en(v)}
         if self.dispatcher is not None:
             clients = getattr(self.dispatcher, "clients", {})
             online = [rid for rid, c in clients.items()
                       if c.status is not None and c.status.online]
             out["robots"] = {"ok": True, "value": len(online),
-                             "detail": f"{len(online)}/{len(clients)} 台机器人在线"}
+                             "detail": f"{len(online)}/{len(clients)} 台机器人在线",
+                             "detail_en": f"{len(online)}/{len(clients)} robots online"}
         soon, worst = [], None
         for who, end in self._certs():
             if end is None:
@@ -205,14 +225,22 @@ class HealthDesk:
                                if who.startswith("机器人") else ""))
         out["certs"] = {"ok": not soon, "value": None if worst is None else round(worst, 1),
                         "detail": ";".join(soon)[:300] or (f"证书最近的还有 {worst:.0f} 天到期"
-                                                          if worst is not None else "没有证书")}
+                                                          if worst is not None else "没有证书"),
+                        "detail_en": (f"{len(soon)} certificate(s) need attention — "
+                                      "use “Renew certificates now” below" if soon else
+                                      f"Next certificate expires in {worst:.0f} days"
+                                      if worst is not None else "No certificates")}
         if self._keys is not None:
             bad = [f"{r['name']}:{r['problem']}" for r in self._keys() if r["problem"]]
-            out["keys"] = {"ok": not bad, "detail": ";".join(bad)[:300] or "站点密钥都在、权限对"}
+            out["keys"] = {"ok": not bad, "detail": ";".join(bad)[:300] or "站点密钥都在、权限对",
+                           "detail_en": f"{len(bad)} site key(s) have a problem" if bad
+                           else "Site keys present, permissions correct"}
         lanes = self._lanes() if self._lanes is not None else {}
         stuck = [n for n, t0 in lanes.items() if self._mono() - t0 > LANE_STUCK_S]
         out["lanes"] = {"ok": not stuck,
-                        "detail": ("卡住:" + "、".join(stuck)) if stuck else "后台道都在转"}
+                        "detail": ("卡住:" + "、".join(stuck)) if stuck else "后台道都在转",
+                        "detail_en": ("Stuck: " + ", ".join(stuck)) if stuck
+                        else "Background workers running"}
         return out
 
     @staticmethod
@@ -224,6 +252,19 @@ class HealthDesk:
             text += f";其中 {v['devices_unreachable']} 台登记的通道站点未配置,无法接收"
         if v["why_off"]:
             text += f";{v['why_off']}"
+        return text
+
+    @staticmethod
+    def _push_detail_en(v: dict[str, Any]) -> str:
+        if v["error"]:
+            return "Push notifications have an error"
+        if not v["configured"]:
+            return "Push notifications are not set up"
+        text = (f"Push set up ({', '.join(v.get('providers') or [])}), "
+                f"{v['devices']} phone(s) registered")
+        if v.get("devices_unreachable"):
+            text += (f"; {v['devices_unreachable']} of them use a channel this site "
+                     "has not set up and cannot receive")
         return text
 
     def healthz(self) -> tuple[bool, dict[str, Any]]:

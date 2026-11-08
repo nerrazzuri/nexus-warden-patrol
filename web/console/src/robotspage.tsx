@@ -6,6 +6,7 @@
 // 照片位这一期放图标;电池健康机器人还不报,不显示。
 // W60 卡片分层:第一层名字、状态、在做什么、电量;第二层定位、网络、今天几趟;出了毛病才多一条琥珀色提示
 // (正常时安静,不写「正常」)。在做什么、定位从值班的实时数据来(units),概况接口没有。
+import { siteKnown } from "./sitetext";
 import { useCallback, useEffect, useRef, useState } from "preact/hooks";
 import { api, ApiError, enc } from "./api";
 import { ConfirmPassword } from "./confirmpw";
@@ -458,7 +459,7 @@ function RobotDetail({ r, u, now, role, say, onChanged, onCode, onClose, readOnl
           {fact("certExpires", r.expires_at ? day(r.expires_at) : "—", true)}
           {r.enrolled_at != null && fact("rdEnrolled", day(r.enrolled_at), true)}
           <div><dt>{t("dispatchMode")}</dt><dd>{r.manual_only ? t("manualOnly") : t("autoDispatch")}
-            {r.manual_only && r.manual_note && <small class="muted"> · {r.manual_note}</small>}</dd></div>
+            {r.manual_only && r.manual_note && <small class="muted"> · {siteKnown(r.manual_note)}</small>}</dd></div>
         </dl>
       </section>
       {!readOnly && r.wifi?.change && <section class="rd-sec"><WifiChange id={r.robot_id} ch={r.wifi.change} act={act} /></section>}

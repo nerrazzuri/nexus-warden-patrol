@@ -7,8 +7,9 @@ import { nameOf } from "./data";
 import { t, type Key } from "./i18n";
 import type { Robot } from "./model";
 import { RobotOps } from "./remoteops";
+import { checkText, SiteSpan } from "./sitetext";
 
-interface Health { ok: boolean; version: string; checks: Record<string, { ok: boolean; detail?: string }> }
+interface Health { ok: boolean; version: string; checks: Record<string, { ok: boolean; detail?: string; detail_en?: string }> }
 type DevRobot = Robot & { devices?: { items: { id: string; state: string; detail?: string }[]; stale?: boolean } | null };
 
 const CHECK: Record<string, Key> = {
@@ -61,7 +62,7 @@ export function DiagPage({ say }: { say: (s: string) => void }) {
               <li key={k} class={c.ok ? "chk ok" : "chk bad"} data-check={k}>
                 <span class="mark" aria-hidden="true">{c.ok ? "✓" : "✕"}</span>
                 <b>{CHECK[k] ? t(CHECK[k]) : k}</b>
-                {c.detail && <span class="muted small">{c.detail}</span>}
+                {c.detail && <span class="muted small" title={c.detail}>{checkText(c)}</span>}
               </li>
             ))}
           </ul>
@@ -76,7 +77,7 @@ export function DiagPage({ say }: { say: (s: string) => void }) {
               <li key={d.id} class={d.state === "online" ? "chk ok" : d.state === "degraded" ? "chk warn" : "chk bad"}>
                 <span class="mark" aria-hidden="true">{d.state === "online" ? "✓" : d.state === "degraded" ? "!" : "✕"}</span>
                 <b>{deviceText(d.id)}</b>
-                {d.detail && <span class="muted small">{d.detail}</span>}
+                {d.detail && <SiteSpan class="muted small" s={d.detail} />}
               </li>
             ))}
             {!r.devices && <li class="muted small">{t("diagNoDevices")}</li>}

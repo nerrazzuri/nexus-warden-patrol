@@ -1,6 +1,7 @@
 // 报警记录页(W44 第一期,设计 §4.5)。上面:本班出的事、还没处理、有人闯入三个数,上一班留的话(谁、几点),
 // 下班前可以给下一班留话。筛选:本班 / 今天 / 选日期 × 全部 / 有人闯入 / 机器人需要帮忙 / 机器人掉线 × 只看没处理的。
 // 每行:抓拍(录像那一刻的一帧)、时间、什么事、结论和谁处理的、看录像 / 去处理。技术类(给管理员的)不列。
+import { siteStr, byText } from "./sitetext";
 import { useEffect, useState } from "preact/hooks";
 import { useStored } from "./stored";
 import { AlertDetail } from "./alertdetail";
@@ -145,11 +146,11 @@ function Row({ a, onOpen }: { a: Alert; onOpen: () => void }) {
       <time class="mono">{hm(a.first_ms)}</time>
       <div class="what">
         <h5 class={tone}><button type="button" class="linkish" onClick={onOpen}>{alertHeadline(a)}</button></h5>
-        {(a.detail || a.context?.where) && <p>{[a.context?.where && !a.context?.zone ? t("atWhere", { w: a.context.where }) : "", a.detail].filter(Boolean).join(" · ")}</p>}
+        {(a.detail || a.context?.where) && <p>{[a.context?.where && !a.context?.zone ? t("atWhere", { w: a.context.where }) : "", a.detail ? siteStr(a.detail) : ""].filter(Boolean).join(" · ")}</p>}
       </div>
       <div class="res">
         {open ? t("evOpen") : verdictText(a)}
-        {!open && <small>{[a.resolved_by, a.resolved_ms ? hm(a.resolved_ms) : ""].filter(Boolean).join(" · ")}</small>}
+        {!open && <small>{[byText(a.resolved_by), a.resolved_ms ? hm(a.resolved_ms) : ""].filter(Boolean).join(" · ")}</small>}
       </div>
       <div>
         {open ? <button type="button" class="btn sm primary" onClick={onOpen}>{t("alGoHandle")}</button>

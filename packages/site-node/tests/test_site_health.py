@@ -237,3 +237,17 @@ def test_网页P1_73_服务日志空的写明_带站点最近日志_按时间段
     assert "没有 nexwar_site 的系统服务日志" in files["logs/nexwar_site.log"]
     recent = files["logs/site-recent.log"]
     assert "新的一条" in recent and "老的一条" not in recent and "tok-SECRET-9" not in recent
+
+
+def test_网页第2轮_P1_01_每项检查都带英文说明_不夹中文(台):
+    import re
+    t = 台
+    for setup in (lambda: None, lambda: (t.free.__setitem__(0, 5), t.lag.__setitem__(0, 9.0),
+                                         t.ends.__setitem__("robot.crt", NOW + 10 * DAY))):
+        setup()
+        c = t.h.checks()
+        for k, v in c.items():
+            assert v.get("detail_en"), k
+            assert not re.search(r"[㐀-鿿]", v["detail_en"]), (k, v["detail_en"])
+    assert c["disk"]["detail_en"] == "Site disk 5% free"
+    assert "Renew certificates now" in c["certs"]["detail_en"]

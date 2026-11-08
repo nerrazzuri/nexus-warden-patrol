@@ -3,6 +3,7 @@
 // 存的是整份导航区域(带改之前看到的修订号,跟手机一样);加一块是收紧、当场生效,删一块是放宽、要重新确认。
 // 2026-10-15(用户「只能画防区感觉不太够」):网页也能画禁行区、限速区、**虚拟墙**(画一条线,站点存成约 0.3 m 宽的
 // 禁行带,规则跟禁行区一样),列出狗守的区域、删、确认这一版(从上一版带过来的建议还是在手机上核)。
+import { siteKnown } from "./sitetext";
 import { useCallback, useEffect, useRef, useState } from "preact/hooks";
 import { api, ApiError, enc } from "./api";
 import { Confirm, Modal } from "./dialogs";
@@ -341,7 +342,7 @@ export function MapsZonesPage({ say }: { say: Say }) {
             <ul class="erased-list">
               {erased.map((z) => (
                 <li key={z.id}>
-                  <span class="strong">{z.label || z.id}</span>
+                  <span class="strong">{siteKnown(z.label) || z.id}</span>
                   <span class="muted small">{t("points", { n: z.polygon.length })}</span>
                   <button type="button" class="link push" onClick={() => setUnerasing(z)}>{t("remove")}</button>
                 </li>
@@ -433,7 +434,7 @@ function NavPanel({ nav, list, onRemove, onConfirm }: {
       <ul class="navzone-list">
         {list.map((z) => (
           <li key={z.id} data-navzone={z.id}>
-            <span class="strong">{z.label || z.id}</span>
+            <span class="strong">{siteKnown(z.label) || z.id}</span>
             <span class="muted small">{navZoneLine(z)}</span>
             <button type="button" class="link push" onClick={() => onRemove(z)}>{t("remove")}</button>
           </li>

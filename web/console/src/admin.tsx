@@ -1,5 +1,6 @@
 // 管理页共用的小件(W44 起):读一次的 useLoad、设备一格、App 版本太老、手机扫码添加站点。各页在 adv*.tsx、
 // userspage.tsx、robotspage.tsx、layout*.tsx。
+import { siteStr } from "./sitetext";
 import { useCallback, useEffect, useState } from "preact/hooks";
 import { api, ApiError, enc } from "./api";
 import { t, type Key } from "./i18n";
@@ -42,7 +43,7 @@ export interface DeviceItem { id: string; state: "online" | "offline" | "degrade
 export function deviceSummary(d: AdminRobot["devices"]): { tone: "success" | "warning" | "error"; text: string; title: string } | null {
   if (!d || !Array.isArray(d.items) || d.items.length === 0) return null;
   const bad = d.items.filter((x) => x.state !== "online");
-  const title = bad.map((x) => `${x.id}: ${t(`dev_${x.state}` as Key)}${x.detail ? ` · ${x.detail}` : ""}`).join("\n");
+  const title = bad.map((x) => `${x.id}: ${t(`dev_${x.state}` as Key)}${x.detail ? ` · ${siteStr(x.detail)}` : ""}`).join("\n");
   if (d.stale) return { tone: "warning", text: t("devStale"), title };
   if (!bad.length) return { tone: "success", text: t("devAllOk"), title: "" };
   return { tone: bad.some((x) => x.state === "error" || x.state === "offline") ? "error" : "warning",

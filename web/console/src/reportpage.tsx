@@ -2,6 +2,7 @@
 // 四个大数字(巡了多少趟、出了几次事、误报几次、机器人出问题几次),按天柱状图,事件列表(点一下看录像)。
 // 导出 PDF = 浏览器打印(打印样式只留标题、时间段、四个数、柱子、事件表);导出表格 = 事件的 CSV。
 // 数是站点按站点时区数的,网页不凑;读到的那一份只在它就是现在选的那一段时才显示、才能导出(外审 I2 同一条规矩)。
+import { byText } from "./sitetext";
 import { useEffect, useState } from "preact/hooks";
 import { api } from "./api";
 import { hm, nameOf } from "./data";
@@ -181,7 +182,7 @@ export function ReportsPage({ now }: { now: number }) {
                     <td class="mono">{ymd(e.first_ms).slice(5)} {hm(e.first_ms)}</td>
                     <td>{who(e)}</td>
                     <td>{title(e.kind, e.title)}</td>
-                    <td>{e.verdict ? verdictText(e.verdict) : "—"}{e.resolved_by ? ` · ${e.resolved_by}` : ""}</td>
+                    <td>{e.verdict ? verdictText(e.verdict) : "—"}{e.resolved_by ? ` · ${byText(e.resolved_by)}` : ""}</td>
                   </tr>
                 ))}
               </tbody>

@@ -3,6 +3,7 @@
 // 没事时只有一行安静的「一切正常」(W60 约束:正常状态要安静,不放大绿条)。
 // 下面四块:地图、待处理报警、现场画面(两个位,按紧急程度自动挑,可以钉住)、机器人(每台一条 + 今日巡逻)。
 // 保安只看四类事(有人闯入、起火或过热、机器人需要帮忙、机器人掉线);技术类不在这里。
+import { byText } from "./sitetext";
 import { useEffect, useMemo, useState } from "preact/hooks";
 import { api, ApiError, enc } from "./api";
 import { hm, nameOf } from "./data";
@@ -141,7 +142,7 @@ export function DutyPage(props: {
             {top.context?.follow !== "follow" && top.context?.person?.where && <span class="banner-who">{t("dutyLastAt", { w: top.context.person.where })}</span>}
             {top.context?.arrived_by ? <span class="banner-who">{t("dutyArrived", { who: top.context.arrived_by })}</span>
               : mustArrive(top) ? <span class="banner-who">{t("dutyArriveFirst")}</span>
-              : top.acked_ms != null && top.acked_by && <span class="banner-who">{t("dutyTakenBy", { who: top.acked_by })}</span>}
+              : top.acked_ms != null && top.acked_by && <span class="banner-who">{t("dutyTakenBy", { who: byText(top.acked_by) })}</span>}
             {alarms.length > 1 && <span class="banner-more">{t("dutyMore", { n: alarms.length - 1 })}</span>}
           </div>
           <div class="banner-acts">

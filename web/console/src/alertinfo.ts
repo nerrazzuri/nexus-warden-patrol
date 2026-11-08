@@ -4,6 +4,7 @@
 import { api, ApiError } from "./api";
 import { alertTitle, lang, type Lang } from "./i18n";
 import type { Alert } from "./model";
+import { siteStr } from "./sitetext";
 
 const en = {
   pfHome: "the map has no origin yet",
@@ -92,7 +93,8 @@ export function plainReason(raw: string): string {
   const pf = /起飞前检查未通过[:：]\s*([a-z_]+)/.exec(raw);
   if (pf) return at("pfFailed", { why: at((PREFLIGHT[pf[1]] ?? ["pfOther"])[0]) });
   if (/电量\s*[\d.]+%\s*低于中止线/.test(raw)) return at("batteryTurned");
-  return raw;
+  // 第 2 轮 P1-01:英文界面别的原因也翻(中文界面原样)
+  return siteStr(raw);
 }
 
 /** 没走完却没写原因的(P1-14):说去哪儿看。 */

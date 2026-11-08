@@ -7,14 +7,16 @@ import type { Me } from "./app";
 import { hms } from "./data";
 import { t, type Key } from "./i18n";
 import { SiteMetrics, SiteOps } from "./remoteops";
+import { checkText } from "./sitetext";
 
-interface Health { ok: boolean; version: string; checks: Record<string, { ok: boolean; detail?: string }> }
+type Check = { ok: boolean; detail?: string; detail_en?: string };
+interface Health { ok: boolean; version: string; checks: Record<string, Check> }
 
-function Row({ k, check }: { k: Key; check?: { ok: boolean; detail?: string } }) {
+function Row({ k, check }: { k: Key; check?: Check }) {
   return (
     <div class={check && !check.ok ? "sys-row bad" : "sys-row"}>
       <span class="muted">{t(k)}</span>
-      <b>{check ? (check.detail || (check.ok ? t("sysOk") : t("checkFail"))) : "—"}</b>
+      <b>{check ? (checkText(check) || (check.ok ? t("sysOk") : t("checkFail"))) : "—"}</b>
     </div>
   );
 }

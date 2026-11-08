@@ -1,6 +1,8 @@
 // 网页易用性第 1 轮 P1-01:英文界面不夹站点的中文原话。站点回的错是中文时,按常见的几种翻成英文;
 // 认不出的按错误类型说一句英文,后面括号里带站点原话(里面常有该怎么办,丢了反而更难办)。
 // 站点带了 reason_en / reason=forbidden 的,api.ts 先用那个。
+import { siteTextEn } from "./sitetext";
+
 const CJK = /[㐀-鿿]/;
 
 /** 有西文细节(机器人回的英文原因)就接在后面;是中文就不接。 */
@@ -51,11 +53,15 @@ const BY_STATUS: Record<number, string> = {
 /** 英文界面:站点的中文错误原话 → 英文。不是中文的原样返回。 */
 export function englishError(status: number, msg: string): string {
   if (!CJK.test(msg)) return msg;
+  // 第 2 轮 P1-01:先按站点原文的通用规则翻(回家没原点、没待命点、账号已存在、导航被拒……)
+  const g = siteTextEn(msg);
+  if (!g.raw) return g.text;
   for (const [re, f] of PATTERNS) {
     const m = msg.match(re);
     if (m) return f(m);
   }
   const base = status >= 500 ? "The site hit an error. Try again; if it keeps happening, download a support bundle under Diagnostics."
     : BY_STATUS[status] ?? "The site refused this.";
-  return `${base} (site message: ${msg})`;
+  // 第 2 轮 P1-01:认不出的不再把中文原话接在后面(原话在 ApiError.data.error 里)
+  return base;
 }

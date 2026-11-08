@@ -1,6 +1,7 @@
 // 警报详情(网页易用性第 1 轮 P0-04 / P0-05):点一条警报看怎么回事、在哪、该做什么,在这里接手、派机器人、
 // 看录像;关警报要先选结论(有人 / 误报 / 处理好了),可以写备注;点错了 10 分钟内能撤销。
 // 只读账号只看,不显示处理按钮(P0-20)。
+import { SiteSpan, siteText, byText } from "./sitetext";
 import { useState } from "preact/hooks";
 import { alertAdvice, alertHeadline, canHandleAlerts } from "./alertinfo";
 import { api, ApiError, enc } from "./api";
@@ -131,16 +132,16 @@ export function AlertDetail(props: {
           {!site && <span>{dt("dRobot")}: <b>{nameOf(a.robot)}</b></span>}
           {where && <span>{dt("dWhere")}: <b>{where}</b></span>}
         </p>
-        {open && <p class="muted small">{a.acked_by ? dt("dTaken", { who: a.acked_by }) : dt("dNotTaken")}</p>}
+        {open && <p class="muted small">{a.acked_by ? dt("dTaken", { who: byText(a.acked_by) }) : dt("dNotTaken")}</p>}
         {advice && (
           <div class="ad-do"><h3>{dt("dDo")}</h3><p>{advice}</p></div>
         )}
         {a.detail && (
-          <div class="ad-site"><h3>{dt("dSite")}</h3><p class="small">{a.detail}</p></div>
+          <div class="ad-site"><h3>{dt("dSite")}</h3><p class="small"><SiteSpan s={a.detail} /></p>{siteText(a.detail).raw && <details class="techdetail"><summary>{lang.value === "zh" ? "技术详情" : "Technical details"}</summary><p class="small mono">{a.detail}</p></details>}</div>
         )}
         {!open && (
           <p class="ad-closed">
-            {dt("dClosed", { v: verdictText(a), who: a.resolved_by || "—", t: a.resolved_ms ? hm(a.resolved_ms) : "" })}
+            {dt("dClosed", { v: verdictText(a), who: byText(a.resolved_by) || "—", t: a.resolved_ms ? hm(a.resolved_ms) : "" })}
             {a.context && (a.context as { note?: string }).note && <><br /><span class="muted">{(a.context as { note?: string }).note}</span></>}
           </p>
         )}
