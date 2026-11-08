@@ -149,7 +149,7 @@ export function RobotsPage({ say, now, units = [], readOnly = false, role = "adm
                   {r.name && <small class="muted mono">{r.robot_id}</small>}
                   <span class="fleet-state">
                     {/* P1-23:刚登记、还没连上过的不是故障:灰的「等它连上」,不是红的「离线」 */}
-                    {!r.online && r.ever_seen === false ? <span class="state">{t("fleetNeverSeen")}</span>
+                    {!r.online && r.ever_seen === false ? <span class="state" title={t("fleetNeverSeen")}>{t("fleetNeverSeenShort")}</span>
                       : !r.online ? <span class="state tone-error">{t("st_offline")}</span>
                       : warn ? <span class="state tone-warning"><Shape kind="P2" />{t("fleetAttention")}</span>
                       : <span class="state tone-success">{t("online")}</span>}
@@ -424,8 +424,17 @@ function RobotDetail({ r, u, now, role, say, onChanged, onCode, onClose, readOnl
   const devices = r.problems.filter((p) => "device" in p);
   const loc = locText(u);
   const fact = (k: Key, v: string, mono = false) => <div><dt>{t(k)}</dt><dd class={mono ? "mono" : undefined}>{v}</dd></div>;
+  // 第 3 轮 admin N5:换一台时回到顶上(原来留着上一台的滚动位置,从中间开始看,以为还在看上一台)
+  const aside = useRef<HTMLElement>(null);
+  useEffect(() => {
+    const el = aside.current;
+    if (!el) return;
+    el.scrollTop = 0;
+    const top = el.getBoundingClientRect().top;
+    if (top < 0 && typeof window !== "undefined") window.scrollBy?.(0, top - 8);
+  }, [r.robot_id]);
   return (
-    <aside class="panel robot-detail" aria-label={label(r)}>
+    <aside class="panel robot-detail" aria-label={label(r)} ref={aside}>
       <div class="panel-head">
         <h2>{label(r)}</h2>
         {r.name && <small class="muted mono">{r.robot_id}</small>}

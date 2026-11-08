@@ -34,8 +34,17 @@ const lc = (s: string): string => (s && /^[A-Z][a-z]/.test(s) ? s[0].toLowerCase
 const plural = (n: string, one: string, many: string): string => (n === "1" ? one : many);
 
 function preflightList(s: string): string {
-  const names = [...new Set([...s.matchAll(/([a-z_]+)[(（]/g)].map((m) => m[1]))];
-  const known = names.map((n) => PREFLIGHT[n]).filter(Boolean);
+  // 第 3 轮 admin N3:按每一项括号里的原因翻,不只看名字(battery 不一定是电量低:可能是没原点算不出出发线)
+  const items = [...s.matchAll(/([a-z_]+)[(（]([^)）]*)[)）]?/g)];
+  const seen = new Set<string>();
+  const known: string[] = [];
+  for (const [, n, why] of items) {
+    if (seen.has(n)) continue;
+    seen.add(n);
+    const txt = n === "battery" && /原点|出发线/.test(why ?? "") && !/低于/.test(why ?? "")
+      ? "the turn-back battery level cannot be worked out (the map has no usable origin)" : PREFLIGHT[n];
+    if (txt) known.push(txt);
+  }
   return known.length ? known.join("; ") : UNK;
 }
 
@@ -84,6 +93,11 @@ const RULES: Rule[] = [
   [/^防区里站得下的地方离建图时走过的路都太远/, () => "every spot in the zone is too far from where the robot went while mapping (it would not locate itself reliably)"],
   [/^(\S+) 到 (\S+) 走不通[(（]被墙或禁行区隔开[)）]$/, (m) => `No way from ${m[1]} to ${m[2]} (a wall or no-go area is in between)`],
   [/^点要有数字的 x、y/, () => "each point needs numeric x and y (and optionally yaw)"],
+  // 第 3 轮 admin N4:诊断页、活动日志、报警里常见的几句
+  [/^(?:站点盘)?(?:还|只)?剩\s*([\d.]+)\s*(GB|MB|%)$/, (m) => `${m[1]}${m[2] === "%" ? "%" : ` ${m[2]}`} free`],
+  [/^没有登记过 (\S+)$/, (m) => `${m[1]} is not registered on this site`],
+  [/^摄像头 (\S+) 无法连接[(（]防区 ([^)）]+)[)）]$/, (m) => `Camera ${m[1]} cannot be reached (zone ${m[2]})`],
+  [/^(\S+) 无法连接[:：]/, (m) => `${m[1]} cannot be reached`],
   // 站点的拒绝原因
   [/^(?:账号 )?(\S+) 已存在$/, (m) => `“${m[1]}” already exists.`],
   [/^账号 (\S+)$/, (m) => `Account ${m[1]}`],
@@ -121,10 +135,14 @@ export function siteTextEn(src: string): SiteText {
   return { text: out === UNK ? FALLBACK : out.split(UNK).join("see details"), raw: src };
 }
 
-/** 只要文字(悬停用不上的地方,比如 toast)。 */
+/** 只要文字(悬停用不上的地方,比如 toast、活动日志)。第 3 轮 admin N4:这里没有悬停,不写「see details」
+ *  (点不开,是死路),写清是中文原文、换成中文界面能看。 */
 export function siteStr(s: string | null | undefined): string {
-  return siteText(s).text;
+  const v = siteText(s);
+  if (!v.raw) return v.text;
+  return v.text === FALLBACK ? NO_HOVER : v.text.split("see details").join("(in Chinese)");
 }
+const NO_HOVER = "Site message in Chinese (switch the language to 中文 to read it)";
 
 /** 人也可能写的(路线名、版本备注、区域名、手动派的说明):英文界面只翻认得的站点自动文字,
  *  认不得的原样(人写的中文不能被换成「见详情」)。 */

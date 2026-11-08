@@ -107,6 +107,9 @@ export function HomePage(props: {
                   </li>
                 ))}
               </ul>
+            ) : m?.source === "schedule" ? (
+              // 第 3 轮(admin 顺带):此刻按日程走,但今天的时段还没拿到 —— 不说「没有日程」,跟上面那句打架
+              <p class="muted"><a href="#/admin/arming">{t("homeSeeSchedule")}</a></p>
             ) : (
               <p class="muted">{t("homeNoSchedule")} <a href="#/admin/arming">{t("homeSetSchedule")}</a></p>
             )}

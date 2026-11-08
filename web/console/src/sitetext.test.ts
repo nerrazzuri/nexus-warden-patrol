@@ -1,7 +1,7 @@
 // 网页易用性第 2 轮 P1-01(N1 / N3 / N5 / N8):英文界面不夹站点、机器人生成的中文原文。
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { lang } from "./i18n";
-import { checkText, siteKnown, siteText } from "./sitetext";
+import { checkText, siteKnown, siteStr, siteText } from "./sitetext";
 
 const CJK = /[㐀-鿿]/;
 beforeEach(() => { lang.value = "en"; });
@@ -25,6 +25,12 @@ describe("站点原文翻成英文", () => {
   it("起飞前检查:按检查项说人话", () => {
     expect(siteText("起飞前检查未通过: home(地图 'estate-1' 未标原点,先去标一个换电位); battery(算不出)").text)
       .toBe("Pre-departure check failed: the map has no origin yet; battery too low to start");
+  });
+
+  it("第 3 轮 admin N3:battery 那一项按原因翻:没原点算不出出发线 ≠ 电量低", () => {
+    expect(siteText("起飞前检查未通过: home(地图 'm' 未标原点); battery(电量 98.8%,但算不出出发线:此地图的原点不可用)").text)
+      .toBe("Pre-departure check failed: the map has no origin yet; the turn-back battery level cannot be worked out (the map has no usable origin)");
+    expect(siteText("起飞前检查未通过: battery(电量 12% 低于出发线 30%)").text).toBe("Pre-departure check failed: battery too low to start");
   });
 
   it("系统状态卡:「该做什么;原文:…」只留该做什么", () => {
@@ -74,5 +80,15 @@ describe("人也可能写的字段(siteKnown)", () => {
 describe("清噪点的版本备注", () => {
   it("翻成英文", () => {
     expect(siteKnown("从 7 清了 332 处零星噪点(746 格)")).toBe("Noise cleanup of version 7: removed 332 specks (746 cells)");
+  });
+});
+
+describe("第 3 轮 admin N4", () => {
+  it("常见几句翻出来;没悬停的地方不写 see details", () => {
+    expect(siteText("剩 64 GB").text).toBe("64 GB free");
+    expect(siteText("没有登记过 T31").text).toBe("T31 is not registered on this site");
+    expect(siteText("摄像头 gate 无法连接(防区 北区)").text).toBe("Camera gate cannot be reached (zone 北区)");
+    expect(siteStr("某个没见过的中文原因")).not.toMatch(/see details/);
+    expect(siteText("某个没见过的中文原因").text).toMatch(/see details/);
   });
 });

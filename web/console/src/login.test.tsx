@@ -53,3 +53,21 @@ describe("第 2 轮 P1-04:登录页标题", () => {
     r.unmount();
   });
 });
+
+describe("第 3 轮 admin N6 / N8", () => {
+  it("N8:登录页一挂上就聚焦账号框(退出登录回来也一样)", async () => {
+    setFetch((async () => json({}, 404)) as never);
+    const { container: c } = render(<Login onIn={() => {}} expired={false} />);
+    expect(document.activeElement).toBe(c.querySelector('input[autocomplete="username"]'));
+  });
+
+  it("N6:/api/me 网络错误不显示登录页,写连不上、正在重试;401 才是登录页", async () => {
+    const { App } = await import("./app");
+    let n = 0;
+    setFetch((async () => { n++; if (n === 1) throw new TypeError("Failed to fetch"); return json({ error: "x" }, 401); }) as never);
+    const { container: c } = render(<App />);
+    await waitFor(() => expect(c.querySelector("[data-site-down]")).not.toBeNull());
+    expect(c.querySelector("form")).toBeNull();
+    await waitFor(() => expect(c.querySelector("form")).not.toBeNull(), { timeout: 5000 });
+  });
+});
