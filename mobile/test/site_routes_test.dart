@@ -357,6 +357,31 @@ void main() {
     expect(find.byKey(SiteRouteEditorPage.pointKey(2)), findsOneWidget);
   });
 
+  testWidgets('手机 App 测试 M19：路线名边输边说哪里不对，对话框不关、字不丢；改对了才能建', (t) async {
+    final api = RoutesApi('admin');
+    await t.binding.setSurfaceSize(const Size(900, 700));
+    addTearDown(() => t.binding.setSurfaceSize(null));
+    await t.pumpWidget(MaterialApp(home: SiteRoutesPage(api: api)));
+    await t.pumpAndSettle();
+    await t.tap(find.byKey(SiteRoutesPage.newKey));
+    await t.pumpAndSettle();
+    await t.enterText(find.byKey(const Key('route-new-name')), 'App test route');
+    await t.pump();
+    expect(find.textContaining('No spaces'), findsOneWidget);
+    await t.tap(find.byKey(const Key('route-new-go')));
+    await t.pump();
+    expect(find.byKey(const Key('route-new-name')), findsOneWidget, reason: '对话框还开着');
+    expect(find.text('App test route'), findsOneWidget, reason: '字没丢');
+    await t.enterText(find.byKey(const Key('route-new-name')), 'loop');
+    await t.pump();
+    expect(find.text('A route with this name already exists'), findsOneWidget);
+    await t.enterText(find.byKey(const Key('route-new-name')), 'App-test-route');
+    await t.pump();
+    await t.tap(find.byKey(const Key('route-new-go')));
+    await t.pumpAndSettle();
+    expect(find.byType(SiteRouteEditorPage), findsOneWidget);
+  });
+
   testWidgets('路线列表：管理员 / 保安没有「新路线」；没有路线时说没有', (t) async {
     final api = RoutesApi('guard')..routesBody = <String, dynamic>{'revision': 1, 'routes': <dynamic>[], 'schedules': <dynamic>[]};
     await t.pumpWidget(MaterialApp(home: SiteRoutesPage(api: api)));
