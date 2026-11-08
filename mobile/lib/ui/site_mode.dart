@@ -30,6 +30,7 @@ class SiteModePage extends StatefulWidget {
   static const Key homeKey = Key('mode-home');
   static const Key visitorKey = Key('mode-visitor');
   static const Key msgKey = Key('mode-msg');
+  static const Key leaveArmedKey = Key('mode-leave-armed');
 
   @override
   State<SiteModePage> createState() => _SiteModePageState();
@@ -109,6 +110,36 @@ class _SiteModePageState extends State<SiteModePage> {
     if (mounted) setState(() => _msg = msg);
   }
 
+  /// 从布防切出去之前问一句（M07：以前不确认，只提示「切换为留守：完成」）。
+  Future<bool> _leaveArmed(String now) async {
+    if (now != 'armed') return true;
+    final ok = await showDialog<bool>(
+        context: context,
+        builder: (c) => AlertDialog(
+              content: Text(tr(
+                  'Leave Armed? Zones that are disarmed in Stay stop dispatching robots and ringing.',
+                  '退出布防？「留守时撤防」的防区发生入侵时，不派机器人、不响铃。')),
+              actions: [
+                TextButton(onPressed: () => Navigator.pop(c, false), child: Text(tr('Cancel', '取消'))),
+                FilledButton(
+                    key: SiteModePage.leaveArmedKey,
+                    onPressed: () => Navigator.pop(c, true),
+                    child: Text(tr('Leave Armed', '退出布防'))),
+              ],
+            ));
+    return ok == true && mounted;
+  }
+
+  Future<void> _toHome(String now) async {
+    if (!await _leaveArmed(now)) return;
+    await _run(() => widget.api.setMode('home'), tr('Switch to Stay', '切换为留守'));
+  }
+
+  Future<void> _visitorAsk(String now) async {
+    if (!await _leaveArmed(now)) return;
+    await _visitor();
+  }
+
   List<Map<String, dynamic>> get _zones =>
       ((_mode?['zones'] as List?) ?? const []).whereType<Map>().map((z) => z.cast<String, dynamic>()).toList();
 
@@ -121,9 +152,11 @@ class _SiteModePageState extends State<SiteModePage> {
       builder: (c) => StatefulBuilder(
         builder: (c, set) => AlertDialog(
           scrollable: true, // 横屏
-          title: Text(tr('Temp disarm: which zones to disarm in addition to Stay?',
-              '临时撤防：在「留守」基础上，还要撤防哪些防区？')),
+          title: Text(tr('Temporary disarm', '临时撤防')),
           content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+            // 手机 App 测试 M07：原来标题一长句、超出右边；说明挪到正文
+            Text(tr('Works like Stay. Also disarm these zones for a while:', '跟「留守」一样，另外再撤防这些防区一段时间：')),
+            const SizedBox(height: Nw.s8),
             if (zones.isEmpty) Text(tr('No zones yet (disarms as in Stay only)', '暂无防区（仅按「留守」撤防）')),
             Wrap(spacing: 6, children: [
               for (final z in zones)
@@ -134,7 +167,7 @@ class _SiteModePageState extends State<SiteModePage> {
                   onSelected: (v) => set(() => v ? picked.add(z) : picked.remove(z)),
                 ),
             ]),
-            Row(children: [
+            Wrap(crossAxisAlignment: WrapCrossAlignment.center, children: [
               Text(tr('Duration: ', '时长：')),
               DropdownButton<int>(
                 key: const Key('visitor-hours'),
@@ -196,28 +229,38 @@ class _SiteModePageState extends State<SiteModePage> {
                       style: NwText.bodyMedium.copyWith(color: c.textSecondary)),
                 )),
             const SizedBox(height: Nw.s8),
-            // 三个模式按钮铺满一行（不带图标；「临时撤防」字长，稍宽）。
-            Row(children: [
-              if (canArm)
-                Expanded(flex: 4, child: NwButton(
-                    buttonKey: SiteModePage.armKey,
-                    onPressed: m['mode'] == 'armed' ? null : () => _run(() => widget.api.setMode('armed'), tr('Switch to Armed', '切换为布防')),
-                    label: tr('Armed', '布防'))),
-              if (canSet) ...[
-                if (canArm) const SizedBox(width: Nw.s8),
-                Expanded(flex: 4, child: NwButton(
-                    buttonKey: SiteModePage.homeKey,
-                    variant: NwButtonVariant.outline,
-                    onPressed: m['mode'] == 'home' ? null : () => _run(() => widget.api.setMode('home'), tr('Switch to Stay', '切换为留守')),
-                    label: tr('Stay', '留守'))),
-                const SizedBox(width: Nw.s8),
-                Expanded(flex: 5, child: NwButton(
-                    buttonKey: SiteModePage.visitorKey,
-                    variant: NwButtonVariant.outline,
-                    onPressed: _visitor,
-                    label: tr('Temp disarm', '临时撤防'))),
-              ],
-            ]),
+            // 手机 App 测试 M07：当前模式用选中样式（实心 + 打勾），别的是普通描边按钮（以前当前的是灰的、
+            // 没选中的「布防」反而实心高亮）。窄屏竖着排，字不截断。从布防切到留守、临时撤防要确认。
+            LayoutBuilder(builder: (context, box) {
+              final now = '${m['mode']}';
+              Widget btn(Key key, String mode, String label, VoidCallback go) => NwButton(
+                  buttonKey: key,
+                  variant: now == mode ? NwButtonVariant.primary : NwButtonVariant.outline,
+                  icon: now == mode ? Icons.check_rounded : null,
+                  fullWidth: true,
+                  onPressed: now == mode && mode != 'visitor' ? () {} : go,
+                  label: label);
+              final buttons = <Widget>[
+                if (canArm)
+                  btn(SiteModePage.armKey, 'armed', tr('Armed', '布防'),
+                      () => _run(() => widget.api.setMode('armed'), tr('Switch to Armed', '切换为布防'))),
+                if (canSet) ...[
+                  btn(SiteModePage.homeKey, 'home', tr('Stay', '留守'), () => _toHome(now)),
+                  btn(SiteModePage.visitorKey, 'visitor', tr('Temp disarm', '临时撤防'), () => _visitorAsk(now)),
+                ],
+              ];
+              if (box.maxWidth < 420) {
+                return Column(children: [
+                  for (var i = 0; i < buttons.length; i++) ...[if (i > 0) const SizedBox(height: Nw.s8), buttons[i]],
+                ]);
+              }
+              return Row(children: [
+                for (var i = 0; i < buttons.length; i++) ...[
+                  if (i > 0) const SizedBox(width: Nw.s8),
+                  Expanded(child: buttons[i]),
+                ],
+              ]);
+            }),
             if (!canSet)
               Padding(
                   padding: const EdgeInsets.only(top: Nw.s8),
