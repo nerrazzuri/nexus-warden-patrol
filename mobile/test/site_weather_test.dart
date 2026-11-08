@@ -57,6 +57,15 @@ void main() {
     expect(find.byKey(SiteWeatherPage.setKey('storm')), findsNothing);
   });
 
+  testWidgets('手机 App 测试 M40：现在的天气那个按钮带勾', (t) async {
+    await t.pumpWidget(MaterialApp(home: SiteWeatherPage(api: FakeApi('guard'))));
+    await t.pumpAndSettle();
+    expect(find.descendant(of: find.byKey(SiteWeatherPage.setKey('rain')), matching: find.byIcon(Icons.check_rounded)),
+        findsOneWidget);
+    expect(find.descendant(of: find.byKey(SiteWeatherPage.setKey('storm')), matching: find.byIcon(Icons.check_rounded)),
+        findsNothing);
+  });
+
   testWidgets('站点推了天气：首页当场换', (t) async {
     final api = FakeApi('owner');
     await _home(t, api);
