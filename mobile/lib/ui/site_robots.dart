@@ -84,9 +84,10 @@ class _SiteRobotsPageState extends State<SiteRobotsPage> {
     if (widget.watch.supported && widget.entry != null) _ctl.bind(_bgToggle);
     _reload();
     _listen();
-    // 后台值守（决策 30）：登录进来就开
+    // 后台值守（决策 30）：登录进来就开。只读账号不自动开（手机 App 测试 M15：响铃档会一直响，他又确认不了），
+    // 要的话在设置页自己开
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) unawaited(_bgStart());
+      if (mounted && !_viewer) unawaited(_bgStart());
     });
   }
 
@@ -146,7 +147,7 @@ class _SiteRobotsPageState extends State<SiteRobotsPage> {
     try {
       final rows = await widget.api.alerts();
       final pending = rows.where((a) =>
-          a.channel == 'sound' && a.ackedMs == null && a.resolvedMs == null);
+          !_viewer && a.channel == 'sound' && a.ackedMs == null && a.resolvedMs == null);
       if (_disposed) return;
       _ringing
         ..clear()
@@ -222,9 +223,12 @@ class _SiteRobotsPageState extends State<SiteRobotsPage> {
   final Set<String> _ringing = <String>{};
   Timer? _bell;
 
+  /// 只读账号：响一声提醒，不一直响（他确认不了，M15）。
+  bool get _viewer => widget.api.session?.isViewer ?? false;
+
   void _track(Map<String, dynamic> a) {
     final key = '${a['key']}';
-    final want = a['channel'] == 'sound' && a['acked_ms'] == null && a['resolved_ms'] == null;
+    final want = !_viewer && a['channel'] == 'sound' && a['acked_ms'] == null && a['resolved_ms'] == null;
     if (want) {
       _ringing.add(key);
     } else {
