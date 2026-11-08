@@ -1,4 +1,4 @@
-import { useEffect, useState } from "preact/hooks";
+import { useEffect, useRef, useState } from "preact/hooks";
 import { api, ApiError } from "./api";
 import type { Me } from "./app";
 import { lang, t, type Key } from "./i18n";
@@ -13,6 +13,9 @@ export function Login({ onIn, expired, note }: { onIn: (m: Me) => void; expired:
   const [show, setShow] = useState(false);
   // 第 2 轮 P1-04 / admin N14:登录页的标签页标题跟着语言变;退出登录回到这里也不停在上一页的标题
   useEffect(() => { document.title = `${t("signIn")} · Nexus Warden`; }, [lang.value]);
+  // 第 3 轮 admin N8:autofocus 只在整页第一次加载时管用,退出登录回到这里要自己聚焦账号框
+  const nameBox = useRef<HTMLInputElement>(null);
+  useEffect(() => { nameBox.current?.focus(); }, []);
 
   async function submit(e: Event) {
     e.preventDefault();
@@ -41,7 +44,7 @@ export function Login({ onIn, expired, note }: { onIn: (m: Me) => void; expired:
         {note ? <p class="note" role="status">{note}</p> : expired && <p class="note" role="status">{t("sessionExpired")}</p>}
         <label>
           {t("account")}
-          <input autocomplete="username" autoFocus value={name} onInput={(e) => setName(e.currentTarget.value)} required />
+          <input ref={nameBox} autocomplete="username" autoFocus value={name} onInput={(e) => setName(e.currentTarget.value)} required />
         </label>
         <label>
           {t("password")}

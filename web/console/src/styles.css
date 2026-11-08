@@ -1498,3 +1498,5 @@ input[type="file"] { max-width: 100%; min-width: 0; }            /* 上传按钮
 .duty-left { overflow-y: auto; }
 .duty-left .duty-list { flex: none; overflow: visible; }
 .duty-left .today { flex: none; max-height: none; overflow: visible; }
+/* 第 3 轮 admin N6:连不上站点时的启动页 */
+.boot-down { display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 16px; color: var(--c-textSecondary); text-align: center; }

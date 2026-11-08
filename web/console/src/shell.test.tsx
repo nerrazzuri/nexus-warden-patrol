@@ -268,3 +268,18 @@ describe("第 2 轮 layout N11:手机菜单", () => {
     expect(c.querySelector("#mainnav")!.className).not.toContain("open");
   });
 });
+
+describe("第 3 轮 admin N1", () => {
+  it("换页时不对侧栏链接调 scrollIntoView(会把第一下 Tab 的起点挪走)", () => {
+    const spy = vi.fn();
+    const old = HTMLElement.prototype.scrollIntoView;
+    HTMLElement.prototype.scrollIntoView = spy;
+    try {
+      const me = { name: "alice", role: "admin" } as Me;
+      render(<SideNav me={me} page="admin/users" alarms={0} notices={0} />);
+      expect(spy).not.toHaveBeenCalled();
+    } finally {
+      HTMLElement.prototype.scrollIntoView = old;
+    }
+  });
+});

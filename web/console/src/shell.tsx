@@ -240,8 +240,11 @@ export function SideNav(props: { me: Me; page: Page; alarms: number | null; noti
     return () => { window.removeEventListener("keydown", key); window.removeEventListener("pointerdown", down); };
   }, [menu]);
   // 第 2 轮 P1-85:矮屏上侧栏要自己滚,当前这一页在侧栏里要看得见
+  // 第 3 轮 admin N1:不对链接调 scrollIntoView(Chrome 会把「下一个 Tab 从哪开始」挪到它,第一下 Tab 就跳过了
+  // 「跳到内容」和当前项),只滚侧栏里能滚的那一层
   useEffect(() => {
-    document.querySelector<HTMLElement>('.sidenav a[aria-current="page"]')?.scrollIntoView?.({ block: "nearest" });
+    const a = document.querySelector<HTMLElement>('.sidenav a[aria-current="page"]');
+    if (a) revealInScroller(a);
   }, [props.page, open]);
   const badge = (b: "alarms" | "notices" | undefined) => {
     const n = b === "alarms" ? props.alarms : b === "notices" ? props.notices : null;
@@ -311,7 +314,8 @@ function UserMenu(props: { me: Me; pref: ThemePref; onPref: (p: ThemePref) => vo
     return () => { document.removeEventListener("mousedown", off); document.removeEventListener("keydown", esc); };
   }, [open]);
   const looks: { v: ThemePref; key: Key }[] = [
-    { v: "auto", key: "lookAuto" }, { v: "system", key: "lookSystem" }, { v: "dark", key: "lookDark" }, { v: "light", key: "lookLight" },
+    // 第 3 轮 admin N9:「默认(深色)」跟「深色」一样,只留三个,深色标出是默认
+    { v: "system", key: "lookSystem" }, { v: "dark", key: "lookDarkDefault" }, { v: "light", key: "lookLight" },
   ];
   return (
     <div class="usermenu" ref={box}>
@@ -337,7 +341,7 @@ function UserMenu(props: { me: Me; pref: ThemePref; onPref: (p: ThemePref) => vo
             <span class="muted small">{t("menuLook")}</span>
             <div class="seg" role="group" aria-label={t("menuLook")}>
               {looks.map((l) => (
-                <button key={l.v} type="button" aria-pressed={props.pref === l.v} onClick={() => props.onPref(l.v)}>{t(l.key)}</button>
+                <button key={l.v} type="button" aria-pressed={(props.pref === "auto" ? "dark" : props.pref) === l.v} onClick={() => props.onPref(l.v)}>{t(l.key)}</button>
               ))}
             </div>
           </div>
@@ -404,4 +408,14 @@ function OwnPassword({ onClose, onDone }: { onClose: () => void; onDone: () => v
       {ask && <Confirm text={t("pwAsk")} yes={t("pwSave")} onNo={() => setAsk(false)} onYes={() => void commit()} />}
     </Modal>
   );
+}
+
+/** 把 ``el`` 滚进离它最近的、能竖着滚的祖先里看得见的地方;只改那一层的 scrollTop,不动焦点起点。 */
+export function revealInScroller(el: HTMLElement): void {
+  let box = el.parentElement;
+  while (box && !(box.scrollHeight > box.clientHeight && /auto|scroll/.test(getComputedStyle(box).overflowY))) box = box.parentElement;
+  if (!box) return;
+  const r = el.getBoundingClientRect(), b = box.getBoundingClientRect();
+  if (r.top < b.top) box.scrollTop -= b.top - r.top;
+  else if (r.bottom > b.bottom) box.scrollTop += r.bottom - b.bottom;
 }

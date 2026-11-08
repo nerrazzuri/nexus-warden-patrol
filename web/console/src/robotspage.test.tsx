@@ -379,7 +379,8 @@ describe("网页易用性第 1 轮 P1-23", () => {
     const { container: c } = page();
     await waitFor(() => expect(c.querySelector('[data-robot="N"]')).not.toBeNull());
     const n = c.querySelector('[data-robot="N"] .fleet-state')!;
-    expect(n.textContent).toContain("还没连上");
+    expect(n.textContent).toContain("未激活");                         // 第 3 轮 admin N2:卡片上短一点,编号不被挤掉
+    expect(n.querySelector(".state")!.getAttribute("title")).toContain("还没连上");
     expect(n.querySelector(".tone-error")).toBeNull();
     expect(c.querySelector('[data-robot="B"] .fleet-state .tone-error')).not.toBeNull();
   });
