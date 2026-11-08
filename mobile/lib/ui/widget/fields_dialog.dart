@@ -12,7 +12,11 @@ class DialogField {
   final Key? key;
   final String label;
   final String initial;
-  const DialogField(this.label, {this.key, this.initial = ''});
+
+  /// 边输边查（手机 App 测试 M19）：回出错的话（null = 没问题）。有错时字段下面标红、确认按钮灰着，
+  /// 对话框不关、输的字不丢。
+  final String? Function(String text)? check;
+  const DialogField(this.label, {this.key, this.initial = '', this.check});
 }
 
 /// 按确认返回每一栏去掉首尾空白的字；取消返回 null。
@@ -55,6 +59,18 @@ class _FieldsDialogState extends State<_FieldsDialog> {
     super.dispose();
   }
 
+  /// 第 [i] 栏的错（空着不算错，确认按钮另外灰着）。
+  String? _error(int i) {
+    final t = _ctl[i].text.trim();
+    final check = widget.fields[i].check;
+    return t.isEmpty || check == null ? null : check(t);
+  }
+
+  bool get _ok => [
+        for (var i = 0; i < _ctl.length; i++)
+          widget.fields[i].check == null || (_ctl[i].text.trim().isNotEmpty && _error(i) == null),
+      ].every((v) => v);
+
   @override
   Widget build(BuildContext context) {
     final nw = Nw.of(context);
@@ -72,15 +88,19 @@ class _FieldsDialogState extends State<_FieldsDialog> {
               child: TextField(
                   key: widget.fields[i].key,
                   controller: _ctl[i],
+                  onChanged: (_) => setState(() {}),
                   style: NwText.bodyMedium.copyWith(color: nw.text),
-                  decoration: InputDecoration(labelText: widget.fields[i].label))),
+                  decoration: InputDecoration(
+                      labelText: widget.fields[i].label,
+                      errorMaxLines: 3,
+                      errorText: _error(i)))),
       ]),
       actions: [
         NwButton(
             variant: NwButtonVariant.ghost, onPressed: () => Navigator.pop(context), label: tr('Cancel', '取消')),
         NwButton(
             buttonKey: widget.confirmKey,
-            onPressed: () => Navigator.pop(context, [for (final c in _ctl) c.text.trim()]),
+            onPressed: _ok ? () => Navigator.pop(context, [for (final c in _ctl) c.text.trim()]) : null,
             label: widget.confirm),
       ],
     );

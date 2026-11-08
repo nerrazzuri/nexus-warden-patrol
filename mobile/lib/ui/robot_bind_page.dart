@@ -28,7 +28,7 @@ typedef BindLinkFactory = RobotBindLink Function(RobotSticker sticker);
 RobotBindLink defaultBindLink(RobotSticker s) => RobotHotspot(s);
 
 Future<String?> scanRobotCode(BuildContext context) =>
-    Navigator.push<String>(context, MaterialPageRoute<String>(builder: (_) => const SiteScanPage()));
+    Navigator.push<String>(context, MaterialPageRoute<String>(builder: (_) => const SiteScanPage(robot: true)));
 
 /// 机器人配网服务报的「在干什么」→ 给人看的一行。
 String bindPhaseText(Map<String, dynamic> st) {

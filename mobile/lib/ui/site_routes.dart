@@ -17,6 +17,7 @@ import 'package:flutter/material.dart';
 
 import '../l10n.dart';
 import '../net/site_client.dart';
+import '../net/site_text.dart';
 import 'map_view.dart';
 import 'nw/nw_button.dart';
 import 'nw/nw_map_raster.dart';
@@ -192,29 +193,30 @@ class _SiteRoutesPageState extends State<SiteRoutesPage> {
     if (mounted) await _loadRoutes();
   }
 
+  /// 路线名哪里不对（手机 App 测试 M19：边输边说，对话框不关）。null = 能用。
+  String? routeNameProblem(String name) {
+    if (RegExp(r'\s').hasMatch(name)) {
+      return tr('No spaces: use - or _ instead (e.g. App-test-route)', '不能有空格：用 - 或 _ 代替（例如 east-gate）');
+    }
+    if (!routeNameRe.hasMatch(name)) {
+      return tr('Only letters, digits and . _ - (start with a letter or digit, up to 64)',
+          '只能用字母、数字和 . _ -（字母或数字开头，最多 64 个）');
+    }
+    if (_routes.any((r) => r['id'] == name)) return tr('A route with this name already exists', '路线名已存在');
+    return null;
+  }
+
   Future<void> _new() async {
     final got = await showFieldsDialog(context,
         title: tr('New route', '新路线'),
         fields: [
           DialogField(tr('Route name (letters, digits, . _ -)', '路线名（字母、数字、. _ -）'),
-              key: const Key('route-new-name'))
+              key: const Key('route-new-name'), check: routeNameProblem)
         ],
         confirm: tr('Create', '创建'),
         confirmKey: const Key('route-new-go'));
     if (got == null || !mounted) return;
-    final name = got[0].trim();
-    if (!routeNameRe.hasMatch(name)) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text(tr('Route name: letters, digits, . _ - only (1–64 characters)',
-              '路线名只能包含字母、数字和 . _ -（1–64 个字符）'))));
-      return;
-    }
-    if (_routes.any((r) => r['id'] == name)) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(tr('A route with this name already exists', '路线名已存在'))));
-      return;
-    }
-    await _open(newName: name);
+    await _open(newName: got[0].trim());
   }
 
   @override
@@ -506,7 +508,12 @@ class _SiteRouteEditorPageState extends State<SiteRouteEditorPage> {
           if (x is Map && x['index'] is num) _problems[(x['index'] as num).toInt()] = '${x['problem']}';
         }
         if (_problems.isNotEmpty) _sel = _problems.keys.first;
-        _msg = tr('Not saved: ${e.message}', '保存失败：${e.message}');
+        // 手机 App 测试 M19：说是哪几个点、按界面语言说（以前「Not saved: 1 处不能用」）
+        final which = (_problems.keys.toList()..sort()).map((i) => '${i + 1}').join(', ');
+        _msg = _problems.isEmpty
+            ? tr('Not saved: ${siteText(e.message)}', '保存失败：${e.message}')
+            : tr('Not saved: point $which cannot be used (marked red, reason listed below)',
+                '保存失败：第 $which 个点不能用（标红了，原因在下面）');
       });
     }
   }
