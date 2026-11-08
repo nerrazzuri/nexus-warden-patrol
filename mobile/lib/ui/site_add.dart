@@ -6,8 +6,11 @@
 /// 2026-10-14 按设计稿重做（P1）：换成新设计系统的页头、按钮、输入框；流程和每一栏没变。
 library;
 
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../l10n.dart';
 import '../net/pairing.dart';
@@ -29,7 +32,11 @@ bool get canScanCodes =>
 class SiteAddPage extends StatefulWidget {
   /// 不给：按平台（手机上开相机，桌面版没有「扫码」按钮）。
   final CodeScanner? scanner;
-  const SiteAddPage({super.key, this.scanner});
+  /// 列表里已有的站点（M22：同一个站点不加第二次）。
+  final List<SiteEntry> existing;
+  const SiteAddPage({super.key, this.scanner, this.existing = const []});
+
+  static const Key errorKey = Key('site-add-error');
 
   @override
   State<SiteAddPage> createState() => _SiteAddPageState();
@@ -39,6 +46,7 @@ class _SiteAddPageState extends State<SiteAddPage> {
   final _name = TextEditingController();
   final _url = TextEditingController(text: 'https://');
   final _fp = TextEditingController();
+  String? _err;
 
   /// 表单里这三样是从配对码来的（提示人去核对）。
   bool _fromCode = false;
@@ -78,6 +86,11 @@ class _SiteAddPageState extends State<SiteAddPage> {
 
   Future<void> _paste() async {
     final code = TextEditingController();
+    // 手机 App 测试 M21：剪贴板里就是站点码就先填进框里（以前要长按 → 粘贴），点「用这个码」就行
+    unawaited(Clipboard.getData(Clipboard.kTextPlain).then((d) {
+      final t = d?.text?.trim() ?? '';
+      if (t.startsWith(pairingPrefix) && code.text.isEmpty) code.text = t;
+    }, onError: (Object _) {}));
     final ok = await showDialog<bool>(
       context: context,
       builder: (c) {
@@ -118,9 +131,19 @@ class _SiteAddPageState extends State<SiteAddPage> {
   }
 
   void _save() {
-    final bad = checkSiteEntry(_url.text, _fp.text);
-    if (bad != null || _name.text.trim().isEmpty) {
-      _say(tr('Not saved: ${bad ?? 'enter a name'}', '未保存：${bad ?? '请填写名称'}'));
+    var bad = checkSiteEntry(_url.text, _fp.text);
+    if (bad == null && _name.text.trim().isEmpty) bad = tr('enter a name', '请填写名称');
+    final fp = normalizeFingerprint(_fp.text);
+    if (bad == null) {
+      for (final e in widget.existing) {
+        if (e.url == _url.text.trim() && e.fingerprint == fp) {
+          bad = tr('this site is already in the list as "${e.name}"', '这个站点已经在列表里了（叫「${e.name}」）');
+        }
+      }
+    }
+    if (bad != null) {
+      // M22：原因留在页面上（以前只闪一下）
+      setState(() => _err = tr('Not saved: $bad', '未保存：$bad'));
       return;
     }
     Navigator.pop(
@@ -218,6 +241,10 @@ class _SiteAddPageState extends State<SiteAddPage> {
                       '证书指纹（值班台上站点码旁边有）',
                     ),
                   ),
+                  if (_err != null) ...[
+                    gap,
+                    NwNotice(key: SiteAddPage.errorKey, tone: NwTone.error, text: _err!),
+                  ],
                   const SizedBox(height: Nw.s24),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.end,

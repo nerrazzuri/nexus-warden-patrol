@@ -114,6 +114,9 @@ void main() {
       expect(store.sites.length, 2, reason: '只是打开菜单');
       await t.tap(find.byKey(const Key('site-remove-别院')));
       await t.pumpAndSettle();
+      expect(store.sites.length, 2, reason: 'M22：先问一句');
+      await t.tap(find.byKey(SiteListPage.removeOkKey));
+      await t.pumpAndSettle();
       expect(store.sites.map((s) => s.name), ['庄园']);
       expect(find.text('别院'), findsNothing);
       expect(find.byType(SiteLoginPage), findsNothing, reason: '点菜单不算点卡片');

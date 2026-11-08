@@ -52,6 +52,7 @@ class SiteListPage extends StatefulWidget {
 
   /// 右上角齿轮：设置（W55，语言、工程师工具、App 版本）。
   static const Key settingsKey = Key('open-settings');
+  static const Key removeOkKey = Key('site-remove-ok');
 
   @override
   State<SiteListPage> createState() => _SiteListPageState();
@@ -77,6 +78,22 @@ class _SiteListPageState extends State<SiteListPage> {
   }
 
   Future<void> _remove(SiteEntry s) async {
+    // 手机 App 测试 M22：以前一点就删、不能撤销
+    final ok = await showDialog<bool>(
+        context: context,
+        builder: (c) => AlertDialog(
+              title: Text(tr('Remove ${s.name} from this phone?', '从这台手机上删掉「${s.name}」？')),
+              content: Text(tr('The site itself is not affected. To add it back you need its site code again.',
+                  '站点本身不受影响。要再加回来，得重新扫或粘贴它的站点码。')),
+              actions: [
+                TextButton(onPressed: () => Navigator.pop(c, false), child: Text(tr('Cancel', '取消'))),
+                FilledButton(
+                    key: SiteListPage.removeOkKey,
+                    onPressed: () => Navigator.pop(c, true),
+                    child: Text(tr('Remove', '删除'))),
+              ],
+            ));
+    if (ok != true || !mounted) return;
     final next = [..._sites]..remove(s);
     await widget.store.save(next);
     if (mounted) setState(() => _sites = next);
@@ -101,7 +118,7 @@ class _SiteListPageState extends State<SiteListPage> {
                         controller: ctl,
                         minLines: 2,
                         maxLines: 5,
-                        decoration: InputDecoration(hintText: 'https://192.168.1.10:8443', errorText: err)),
+                        decoration: InputDecoration(hintText: tr('https://address:port', 'https://地址:端口'), errorText: err)),
                   ])),
                   actions: [
                     TextButton(onPressed: () => Navigator.pop(ctx), child: Text(tr('Cancel', '取消'))),
@@ -195,11 +212,15 @@ class _SiteListPageState extends State<SiteListPage> {
   /// 添加站点（App V2）：扫码、粘贴配对码或手填，都在 `SiteAddPage`；这里只管存。
   Future<void> _add() async {
     final entry = await Navigator.push<SiteEntry>(context,
-        MaterialPageRoute<SiteEntry>(builder: (_) => SiteAddPage(scanner: widget.scanner)));
+        MaterialPageRoute<SiteEntry>(builder: (_) => SiteAddPage(scanner: widget.scanner, existing: _sites)));
     if (entry == null || !mounted) return;
-    final next = [..._sites, entry];
+    // M21：新加的放最上面（以前在最底下只露半张），并说一声
+    final next = [entry, ..._sites];
     await widget.store.save(next);
-    if (mounted) setState(() => _sites = next);
+    if (!mounted) return;
+    setState(() => _sites = next);
+    ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(tr('Added ${entry.name}. Tap it to sign in.', '已添加「${entry.name}」，点它登录。'))));
   }
 
   Future<void> _open(SiteEntry s) async {
