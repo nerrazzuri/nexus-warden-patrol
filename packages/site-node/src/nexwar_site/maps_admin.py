@@ -360,7 +360,7 @@ class MapAdmin:
             (tmp / image).write_bytes(dn.clean(data, meta, specks))
             px = sum(s["px"] for s in specks)
             try:
-                self.cat.import_dir(tmp, map_id=map_id, version=new, source="denoise",
+                self.cat.import_dir(tmp, map_id=map_id, version=new, source=f"denoise:{by}",
                                     note=f"从 {version} 清了 {len(specks)} 处零星噪点({px} 格)")
             except MapError as exc:
                 raise AdminError(409, str(exc)) from exc
@@ -405,7 +405,7 @@ class MapAdmin:
                 shutil.copy2(src / f.name, tmp / f.name)
             (tmp / image).write_bytes(new_pgm)
             try:
-                self.cat.import_dir(tmp, map_id=map_id, version=new, source="edit",
+                self.cat.import_dir(tmp, map_id=map_id, version=new, source=f"edit:{by}",
                                     note=text or (f"从 {version} 编辑:擦了 "
                                                   f"{stats['erased_m2']} 平方米、画了 "
                                                   f"{stats['obstacle_m2']} 平方米障碍"))

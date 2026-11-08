@@ -115,6 +115,8 @@ export function MapCanvas(props: {
   drawing?: boolean;
   /** 点了图(不是拖):点的那一处的预览像素。 */
   onPick?: (px: number, py: number) => void;
+  /** 第 2 轮 P1-53:给了就按住拖出方框(起点、当前点,预览像素;松手 done),不平移地图。 */
+  onDragRect?: (a: [number, number], b: [number, number], done: boolean) => void;
   /** 浮在地图上的东西(比如「去这里」小卡片),放在图框里、不占图下面的高。 */
   overlay?: ComponentChildren;
   /** 图例那一行里多加的项(页面自己画的图层,比如规划路径、轨迹),跟底图图例排一行。 */
@@ -170,6 +172,12 @@ export function MapCanvas(props: {
       setDragging(true);
       try { svg.current?.setPointerCapture(e.pointerId); } catch { /* 拿不到也能拖 */ }
     }
+    if (props.onDragRect) {
+      const a = fromClient(world.current, d.x, d.y);
+      const b = fromClient(world.current, e.clientX, e.clientY);
+      if (a && b) props.onDragRect(a, b, false);
+      return;
+    }
     const a = fromClient(svg.current, d.x, d.y);
     const b = fromClient(svg.current, e.clientX, e.clientY);
     if (a && b) setView({ k: d.v.k, cx: d.v.cx + b[0] - a[0], cy: d.v.cy + b[1] - a[1] });
@@ -179,6 +187,11 @@ export function MapCanvas(props: {
     if (!d || d.id !== e.pointerId) return;
     // 拖过:接下来那一下 click 不算点(不选狗、不加角)
     if (d.moved && e.type === "pointerup") dragged.current = true;
+    if (d.moved && props.onDragRect) {
+      const a = fromClient(world.current, d.x, d.y);
+      const b = fromClient(world.current, e.clientX, e.clientY);
+      if (a && b) props.onDragRect(a, b, e.type === "pointerup");
+    }
     drag.current = null;
     setDragging(false);
   }

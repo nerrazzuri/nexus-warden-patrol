@@ -1260,10 +1260,10 @@ input[type="file"]::file-selector-button {
 .me-sw.obstacle { background: var(--c-brand); opacity: .75; }
 .me-sw.terrain { background: var(--c-warning); opacity: .4; border: 1px dashed var(--c-warning); }
 .me-canvas.result .me-op { opacity: 1; }
-.me-canvas.result .me-op.erase { stroke: #fefefe; }
-.me-canvas.result polygon.me-op.erase:not(.loop) { fill: #fefefe; }
-.me-canvas.result .me-op.obstacle { stroke: #000; }
-.me-canvas.result polygon.me-op.obstacle:not(.loop) { fill: #000; }
+.me-canvas.result .me-op.erase { stroke: var(--map-free, #fefefe); }
+.me-canvas.result polygon.me-op.erase:not(.loop) { fill: var(--map-free, #fefefe); }
+.me-canvas.result .me-op.obstacle { stroke: var(--map-wall, #000); }
+.me-canvas.result polygon.me-op.obstacle:not(.loop) { fill: var(--map-wall, #000); }
 .help-here { padding: 10px 12px; border-radius: 8px; background: var(--c-surfaceVariant); margin-bottom: 8px; }
 .help-here p { margin: 4px 0 0; }
 /* P1-16:派出去的临时路线(淡一点,走过的轨迹画在上面) */
@@ -1384,3 +1384,4 @@ input[type="date"]:not(.field input) { height: 36px; padding: 0 8px; border-radi
 .slot-foot { flex-wrap: nowrap; overflow: hidden; white-space: nowrap; }
 .slot-foot > span { flex: none; }
 .slot-foot > span:last-child { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.me-newver { margin: 0 0 8px; padding: 8px 12px; border: 1px solid var(--c-outline); border-radius: var(--r-r8); background: var(--c-surface); }

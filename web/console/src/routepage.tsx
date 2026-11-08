@@ -39,6 +39,7 @@ import {
 } from "./routes";
 import { rt } from "./routes_i18n";
 import { siteKnown, siteStr } from "./sitetext";
+import { clip } from "./data";
 
 type Say = (s: string) => void;
 interface MapRow { map_id: string; version: string; note: string }
@@ -363,7 +364,7 @@ export function RoutesPage({ say, embed, kind = "patrol" }: { say: Say; embed?: 
               const [m, v] = e.currentTarget.value.split("\u0000");
               setSel(maps.find((x) => x.map_id === m && x.version === v) ?? null);
             }}>
-              {maps.map((m) => <option key={`${m.map_id}:${m.version}`} value={`${m.map_id}\u0000${m.version}`}>{m.map_id} · v{m.version}{m.note ? ` · ${m.note}` : ""}</option>)}
+              {maps.map((m) => <option key={`${m.map_id}:${m.version}`} value={`${m.map_id}\u0000${m.version}`}>{m.map_id} · v{m.version}{m.note ? ` · ${clip(siteKnown(m.note))}` : ""}</option>)}
             </select>
           </label>
           <span class="push" />

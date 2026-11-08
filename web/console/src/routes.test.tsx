@@ -297,8 +297,9 @@ describe("路线页:站点的回答", () => {
     await tick();
     fireEvent.click(r.getByText("Save route"));
     await waitFor(() => expect(r.container.querySelectorAll("[data-point].bad").length).toBe(2));
-    expect(r.container.textContent).toContain("b 在图上不是可通行的地方");
-    expect(r.container.textContent).toContain("c 离建图时走过的地方");
+    // 第 2 轮 P1-39:英文界面按英文说原因
+    expect(r.container.textContent).toContain("b is not a walkable spot");
+    expect(r.container.textContent).not.toContain("在图上不是可通行的地方");
     expect(posted[0].body.base_revision).toBe(4);
     fail = false;
     fireEvent.click(r.getByText("Save route"));
@@ -312,7 +313,7 @@ describe("路线页:站点的回答", () => {
     let bad = true;
     routesApi({ meta: META, routes: [ROUTE], check: (body) => {
       checks.push(body);
-      return json({ errors: bad ? [{ index: 3, name: "P4", problem: "P4 在禁行区里" }] : [] });
+      return json({ errors: bad ? [{ index: 3, name: "P4", problem: "P4 在图上不是可通行的地方(墙、障碍或未扫到)" }] : [] });
     } });
     const r = render(<RoutesPage say={() => {}} />);
     await ready(r.container);
@@ -323,7 +324,7 @@ describe("路线页:站点的回答", () => {
     await waitFor(() => expect(r.container.querySelectorAll("[data-point].bad").length).toBe(1), { timeout: 2000 });
     expect(checks[0]).toMatchObject({ map_id: "m1", map_version: "1" });
     expect(checks[0].waypoints.length).toBe(4);
-    expect(r.container.textContent).toContain("P4 在禁行区里");
+    expect(r.container.textContent).toContain("P4 is not a walkable spot");
     bad = false;
     fireEvent.click(r.container.querySelector("svg.map")!, clientOf(r.container, META, 6, 6));
     await waitFor(() => expect(r.container.querySelectorAll("[data-point].bad").length).toBe(0), { timeout: 2000 });

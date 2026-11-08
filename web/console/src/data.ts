@@ -138,3 +138,8 @@ export function hms(ms: number): string {
 export function hm(ms: number): string {
   return hms(ms).slice(0, 5);
 }
+
+/** 第 2 轮 P1-49:下拉框里的长备注截短(全文在地图管理页),不然把下拉框撑到几千像素宽。 */
+export function clip(s: string, n = 40): string {
+  return s.length > n ? `${s.slice(0, n - 1)}…` : s;
+}

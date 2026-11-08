@@ -608,7 +608,7 @@ describe("看到过、机器人没走过 + 抹掉区:图例只在有的时候列
     expect(legend(c)).toEqual(["floor", "wall", "seen", "unknown", "nogo", "erase", "robot", "alarm"]);
     const e = c.querySelector("g.map-world polygon.erase-area")!;
     expect(e).not.toBeNull();
-    expect(e.querySelector("title")!.textContent).toBe("Erased region Junk: robots never go there");
+    expect(e.querySelector("title")!.textContent).toBe("Impassable area Junk: robots never go there");
     expect(c.querySelectorAll("g.map-world polygon.nogo-area").length).toBe(1);
   });
   it("中文图例", async () => {
@@ -617,7 +617,7 @@ describe("看到过、机器人没走过 + 抹掉区:图例只在有的时候列
     const { container: c } = mapPage({ ...META, seen: true, zones: [ERASE] }, { units: [unit(robot("A", null))] });
     await ready(c);
     const text = c.querySelector(".maplegend")!.textContent!;
-    for (const w of ["已扫描，机器人未到达", "已抹除（机器人不进入）"]) expect(text).toContain(w);
+    for (const w of ["已扫描，机器人未到达", "不可通行（机器人不进入）"]) expect(text).toContain(w);
   });
   it("刚打开就按有内容的范围放;「全图」也回到它", async () => {
     installScreenCTM();
@@ -686,11 +686,11 @@ describe("防区页:抹掉一块(导航区域 erase),点出来的地图点原样
       expect(r.container.textContent).toContain(`(${WANT.length} so far`);
       expect(r.container.querySelector("polyline.draft-line.erase")).not.toBeNull();
       const before = s.previews();
-      fireEvent.click(r.getByText("Erase this region"));
+      fireEvent.click(r.getByText("Mark this area impassable"));
       await tick();
       const dialog = r.container.ownerDocument.querySelector("dialog")!;
       expect(dialog.textContent).toContain("Robots never enter it");
-      fireEvent.click([...dialog.querySelectorAll("button")].find((b) => b.textContent === "Erase this region")!);
+      fireEvent.click([...dialog.querySelectorAll("button")].find((b) => b.textContent === "Mark this area impassable")!);
       await waitFor(() => expect(s.posted.length).toBe(1));
       const got = s.posted[0];
       expect(got.base_revision).toBe(4);

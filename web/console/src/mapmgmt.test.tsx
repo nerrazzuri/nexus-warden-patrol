@@ -125,6 +125,14 @@ describe("总览", () => {
 });
 
 describe("备注", () => {
+  it("第 2 轮 P1-49:粘贴太长被截,说一声", async () => {
+    const { getByLabelText, container: c } = mount();
+    await waitFor(() => getByLabelText("Note for v2"));
+    fireEvent.paste(getByLabelText("Note for v2"), { clipboardData: { getData: () => "x".repeat(300) } });
+    await waitFor(() => expect(c.querySelector("[data-note-cut]")).not.toBeNull());
+    expect(c.querySelector("[data-note-cut]")!.textContent).toContain("200");
+  });
+
   it("改了才能存;存的时候带整段文字,存完重新拉", async () => {
     routes["POST /api/admin/maps/estate/2/note"] = () => json({ ok: true, note: "kept" });
     const { getByLabelText, getAllByText } = mount();
@@ -441,7 +449,23 @@ describe("换图状态和运行配置的文字", () => {
     expect(rows[0].textContent).toContain("Old agent: only the zone revision is compared");
     expect(rows[1].textContent).toContain("Map ✗");
     expect(rows[1].textContent).toContain("old agent: revision only");
-    expect(rows[1].textContent).toContain("night · abc123");
+    // 第 2 轮 P1-50:任务编号、哈希不摆在表里,悬停看
+    expect(rows[1].textContent).not.toContain("abc123");
+    expect(rows[1].querySelector('[title="night · abc123"]')).not.toBeNull();
+  });
+});
+
+describe("第 2 轮 P1-50:版本来源写操作人", () => {
+  it("编辑、清噪点、命令行导入带人;机器人建的写机器人", async () => {
+    const { sourceText } = await import("./mapmgmt");
+    lang.value = "en";
+    expect(sourceText("edit:alice")).toBe("edited by alice in the map editor");
+    expect(sourceText("denoise:bob")).toBe("noise cleaned up by bob");
+    expect(sourceText("cli:liang")).toBe("imported by liang (command line)");
+    expect(sourceText("edit")).toBe("edited in the map editor");
+    expect(sourceText("A")).toContain("built by robot");
+    lang.value = "zh";
+    expect(sourceText("denoise:bob")).toBe("bob 清的噪点");
   });
 });
 

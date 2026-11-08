@@ -185,6 +185,7 @@ export function DutyPage(props: {
           <SiteMap units={props.units} p1={alarms.filter((a) => a.level === "P1")} now={props.now} role={props.role} stale={props.stale}
             selected={finding ?? selected ?? slots[0]?.robot ?? null} onSelect={setSelected} hot={hot} episodes={false}
             hint={finding ? t("dutyFindHint", { id: finding }) : null} pick={!!finding}
+            onLocated={(id) => { setFinding(null); props.say(t("locDoneMsg", { id: nameOf(id) })); }}
             onAreas={(a) => setAreas((old) => (sameAreas(old, a) ? old : a))} />
           {finding && <p class="sr-only">{t("dutyFindHint", { id: finding })}</p>}
         </div>

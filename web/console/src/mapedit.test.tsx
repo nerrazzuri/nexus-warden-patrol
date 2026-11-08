@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 // W44 第四期 地图编辑器:橡皮擦一笔发出去的点和粗细、另存前列出面积要确认、特殊地面楼梯默认放慢、摆正只改显示、
 // 栅格换了说有人改过、只改显示的不另存新版本。
-import { cleanup, fireEvent, render, waitFor } from "@testing-library/preact";
+import { act, cleanup, fireEvent, render, waitFor } from "@testing-library/preact";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { setFetch } from "./api";
 import { lang } from "./i18n";
@@ -34,13 +34,22 @@ beforeEach(() => {
 afterEach(cleanup);
 
 const Fake = (o: OwnLayer) => <div class="fakemap"><button type="button" class="pick" onClick={() => o.onPick?.(40, 30)}>pick</button><svg>{o.world}</svg></div>;
-const page = () => render(<MapEditPage say={() => {}} target={{ map_id: "home", version: "3" }} Canvas={Fake} />);
+let said: string[] = [];
+const page = () => { said = []; return render(<MapEditPage say={(m: string) => said.push(m)} target={{ map_id: "home", version: "3" }} Canvas={Fake} />); };
 const btn = (root: Element, text: string) => Array.from(root.querySelectorAll("button")).find((b) => b.textContent?.trim() === text) as HTMLButtonElement;
 
 describe("地图编辑器", () => {
   it("地址里拿图和版本", () => {
     expect(editTarget("#/admin/mapedit?map=home&version=3")).toEqual({ map_id: "home", version: "3" });
     expect(editTarget("#/admin/mapedit")).toBeNull();
+    expect(editTarget("#/admin/mapedit?map=home&version=4&from=3")).toEqual({ map_id: "home", version: "4", from: "3" });
+  });
+
+  it("第 2 轮 P1-55:另存出来的新版本页顶上给「去发布」入口", async () => {
+    const { container: c } = render(<MapEditPage say={() => {}} target={{ map_id: "home", version: "4", from: "3" }} Canvas={Fake} />);
+    await waitFor(() => expect(c.querySelector("[data-publish-link]")).not.toBeNull());
+    expect(c.querySelector("[data-publish-link] a")!.getAttribute("href")).toBe("#/admin/maps");
+    expect(c.querySelector("[data-publish-link]")!.textContent).toContain("第 3 版");
   });
 
   it("橡皮擦一笔,另存前列出面积要确认,发出去的点和粗细对", async () => {
@@ -59,6 +68,9 @@ describe("地图编辑器", () => {
     expect(b.digest).toBe("abc");
     expect(b.ops).toEqual([{ op: "erase", shape: "stroke", points: [[4, 7], [4, 7]], width_m: 0.3 }]);
     await waitFor(() => expect(posted.some((p) => p.url === "/api/admin/maps/home/4/display")).toBe(true));
+    // 第 2 轮 P1-55:提示里报站点算的实际面积;跳到新版本时带上从哪版来的
+    await waitFor(() => expect(said.join(" ")).toContain("实际擦掉 1 平方米"));
+    expect(location.hash).toContain("&from=3");
   });
 
   it("W61 画笔首尾接上:预览里圈内填满(跟站点一样整块擦)", async () => {
@@ -83,6 +95,23 @@ describe("地图编辑器", () => {
     fireEvent.click(c.querySelector(".pick")!);
     fireEvent.click(c.querySelector(".pick")!);
     expect(c.querySelector("polygon.me-op.obstacle")).not.toBeNull();
+  });
+
+  it("第 2 轮 P1-53:方框按住拖着画 —— 拖的时候先出虚框,松手才算", async () => {
+    let drag: OwnLayer["onDragRect"];
+    const D = (o: OwnLayer) => { drag = o.onDragRect; return <div class="fakemap"><svg>{o.world}</svg></div>; };
+    const { container: c } = render(<MapEditPage say={() => {}} target={{ map_id: "home", version: "3" }} Canvas={D} />);
+    await waitFor(() => expect(c.querySelector('.mapedit[data-ready]')).not.toBeNull());
+    fireEvent.click(c.querySelector('[data-tool="erase"]')!);
+    expect(drag).toBeUndefined();                                           // 画笔:拖还是平移
+    fireEvent.click(btn(c, "方框"));
+    await waitFor(() => expect(drag).toBeDefined());
+    act(() => drag!([10, 10], [50, 40], false));
+    await waitFor(() => expect(c.querySelector("[data-drag-rect]")).not.toBeNull());
+    expect(c.querySelector("polygon.me-op.erase")).toBeNull();
+    act(() => drag!([10, 10], [50, 40], true));
+    await waitFor(() => expect(c.querySelector("polygon.me-op.erase")).not.toBeNull());
+    expect(c.querySelector("[data-drag-rect]")).toBeNull();
   });
 
   it("特殊地面:楼梯默认放慢 0.3", async () => {

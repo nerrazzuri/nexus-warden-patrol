@@ -52,7 +52,8 @@ export function LocPage(props: { units: UnitInfo[]; alerts: Alert[]; now: number
         <div>
           <SiteMap units={props.units} p1={[]} now={props.now} role={props.role} episodes={false}
             selected={finding ?? selected} onSelect={setSelected} pick={!!finding}
-            hint={finding ? t("dutyFindHint", { id: nameOf(finding) }) : null} />
+            hint={finding ? t("dutyFindHint", { id: nameOf(finding) }) : null}
+            onLocated={(id) => { setFinding(null); setMsg({ ok: true, text: t("locDoneMsg", { id: nameOf(id) }) }); }} />
         </div>
         <div class="ly-side">
           <ul class="plain ly-list">

@@ -4,6 +4,7 @@
 // 2026-10-15(用户「只能画防区感觉不太够」):网页也能画禁行区、限速区、**虚拟墙**(画一条线,站点存成约 0.3 m 宽的
 // 禁行带,规则跟禁行区一样),列出狗守的区域、删、确认这一版(从上一版带过来的建议还是在手机上核)。
 import { siteKnown } from "./sitetext";
+import { clip } from "./data";
 import { useCallback, useEffect, useRef, useState } from "preact/hooks";
 import { api, ApiError, enc } from "./api";
 import { Confirm, Modal } from "./dialogs";
@@ -271,7 +272,7 @@ export function MapsZonesPage({ say }: { say: Say }) {
               const [m, v] = e.currentTarget.value.split("\u0000");
               setSel(maps.find((x) => x.map_id === m && x.version === v) ?? null);
             }}>
-              {maps.map((m) => <option key={`${m.map_id}:${m.version}`} value={`${m.map_id}\u0000${m.version}`}>{m.map_id} · v{m.version}{m.note ? ` · ${m.note}` : ""}</option>)}
+              {maps.map((m) => <option key={`${m.map_id}:${m.version}`} value={`${m.map_id}\u0000${m.version}`}>{m.map_id} · v{m.version}{m.note ? ` · ${clip(siteKnown(m.note))}` : ""}</option>)}
             </select>
           </label>
           <span class="push" />

@@ -135,7 +135,10 @@ export function NogoTab(p: TabProps) {
         </div>
         {draw ? (
           <div class="row wrap">
-            <span class="muted small">{draw === "wall" ? t("vwallDrawHint", { n: pts.length, w: 0.3 }) : t("navDrawHint", { n: pts.length })}</span>
+            <span class="muted small">{draw === "wall" ? t("vwallDrawHint", { n: pts.length, w: 0.3 })
+              : draw === "erase" ? t("eraseDrawHint", { n: pts.length }) : t("navDrawHint", { n: pts.length })}</span>
+            {/* 第 2 轮 P1-51:「不会删已画的禁行区」原来只在悬停提示里,触屏看不到 */}
+            {draw === "erase" && <span class="muted small" data-erase-tip="1">{t("drawEraseTip")}</span>}
             <button type="button" class="btn sm" disabled={!pts.length} onClick={() => setPts(pts.slice(0, -1))}>{t("undoPoint")}</button>
             <button type="button" class="btn sm" onClick={() => { setDraw(null); setPts([]); }}>{t("cancel")}</button>
             <button type="button" class="btn sm primary" disabled={pts.length < minPts} onClick={() => setForm(true)}>{t("lyDrawDone")}</button>
