@@ -455,9 +455,12 @@ void main() {
     await t.pump();
     await t.pump(const Duration(seconds: 10));
     expect(api2.teleopCalls, 1, reason: '有人按了停：不自己再要');
+    // 手机 App 测试 M12：按的是「解除叫停并继续遥控」：先解除叫停，再要遥控
+    expect(find.text('解除叫停并继续遥控'), findsOneWidget);
     await t.tap(find.byKey(SiteTeleopPage.resumeKey));
     await t.pump();
     await t.pump();
+    expect(api2.calls, contains('resume A'));
     expect(api2.teleopCalls, 2);
     await t.pumpWidget(Container());
   });

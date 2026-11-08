@@ -324,10 +324,24 @@ class _SiteTeleopPageState extends State<SiteTeleopPage> with WidgetsBindingObse
   }
 
   /// 「继续遥控」、自己再要：丢掉结束了的那条连接，重新要一次（拿到之前杆是灰的；拿到后要重新按下）。
+  /// 按了停车（这一屏的或站点叫停）之后：站点把机器人记成「叫停」，不先解除就拿不到遥控（手机 App 测试 M12）。
+  bool get _heldStop => _endReason == 'stopped_here' || _endReason == 'halt';
+
   Future<void> _resume() async {
     _retryTimer?.cancel();
     _retryTimer = null;
     if (!mounted || !_ended) return;
+    if (_heldStop) {
+      try {
+        await widget.api.resume(widget.robotId);
+      } on SiteError catch (e) {
+        if (mounted) {
+          setState(() => _status = tr("Can't release the stop: ${refusalText(e)}", '解除叫停没成功：${refusalText(e)}'));
+        }
+        return;
+      }
+      if (!mounted) return;
+    }
     unawaited(_sub?.cancel());
     _sub = null;
     final old = _link;
@@ -713,7 +727,9 @@ class _SiteTeleopPageState extends State<SiteTeleopPage> with WidgetsBindingObse
                                   key: SiteTeleopPage.resumeKey,
                                   onPressed: _resume,
                                   icon: const Icon(Icons.replay_rounded),
-                                  label: Text(tr('Resume remote control', '继续遥控')),
+                                  label: Text(_heldStop
+                                      ? tr('Release stop and continue', '解除叫停并继续遥控')
+                                      : tr('Resume remote control', '继续遥控')),
                                 ),
                               ),
                             ),

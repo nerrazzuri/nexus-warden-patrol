@@ -89,7 +89,13 @@ class _PatrolSheetState extends State<_PatrolSheet> {
     unawaited(_load());
   }
 
+  /// 被叫停了（手机 App 测试 M13）：派之前就说，不等点了才被拒。
+  Map? _held;
+
   Future<void> _load() async {
+    unawaited(widget.api.robot(widget.robotId).then((v) {
+      if (mounted && v['held'] is Map) setState(() => _held = v['held'] as Map);
+    }, onError: (Object _) {}));
     try {
       final s = await widget.api.schedule();
       final rs = (s['missions'] as List? ?? const []).map((e) => '$e').toList();
@@ -185,6 +191,15 @@ class _PatrolSheetState extends State<_PatrolSheet> {
           Text(tr('Dispatch ${widget.robotId} on patrol', '派 ${widget.robotId} 巡逻'),
               style: NwText.titleMedium.copyWith(color: c.text, fontWeight: FontWeight.w700)),
           nwGap8,
+          if (_held != null) ...[
+            NwNotice(
+                key: const Key('patrol-held'),
+                tone: NwTone.warning,
+                text: tr(
+                    '${widget.robotId} was stopped by ${_held!['by']}. It won\'t go until a guard or administrator taps Resume.',
+                    '${widget.robotId} 已被 ${_held!['by']} 叫停。保安或管理员点「恢复」之前，它不会出发。')),
+            nwGap8,
+          ],
           if (_error != null)
             NwNotice(text: _error!, tone: NwTone.error)
           else if (rs == null)
@@ -249,7 +264,7 @@ class _PatrolSheetState extends State<_PatrolSheet> {
                 child: NwButton(
                     buttonKey: _PatrolSheet.sendKey,
                     label: queued ? tr('Queue it', '排队派出') : tr('Send', '派出'),
-                    onPressed: _pick == null || _busy ? null : _send)),
+                    onPressed: _pick == null || _busy || _held != null ? null : _send)),
           ]),
         ]),
       ),
