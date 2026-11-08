@@ -8,6 +8,10 @@ export function Modal({ label, onClose, wide, children, cls }: { label: string; 
   useEffect(() => {
     const d = ref.current;
     if (d && !d.open) d.showModal();
+    // 第 2 轮 setup N12:有要填的就把焦点放在第一个框(标了 autofocus 的优先),不停在右上角关闭按钮上
+    const f = d?.querySelector<HTMLElement>("[autofocus]")
+      ?? d?.querySelector<HTMLElement>(":scope > :not(.modal-head) :is(input:not([type=hidden]):not([type=checkbox]):not([type=radio]):not([disabled]), select:not([disabled]), textarea:not([disabled]))");
+    f?.focus();
   }, []);
   return (
     <dialog ref={ref} class={`${wide ? "modal wide" : "modal"}${cls ? ` ${cls}` : ""}`} aria-label={label}

@@ -56,6 +56,17 @@ describe("布置 → 待命点", () => {
     expect(posted.some((p) => p.url === "/api/robots/A/standby")).toBe(false);
   });
 
+  it("第 2 轮 setup N12 / N13:弹窗焦点在名字框;填中文写明为什么不行", async () => {
+    const { container: c } = render(<StandbyTab {...props()} />);
+    fireEvent.click(btn(c, "添加待命点"));
+    fireEvent.click(c.querySelector(".pick")!);
+    const inp = document.querySelector('.modal input[name="name"]') as HTMLInputElement;
+    expect(document.activeElement).toBe(inp);
+    fireEvent.input(inp, { target: { value: "门口" } });
+    expect(document.querySelector("[data-sb-name-bad]")!.textContent).toContain("不能有空格、中文");
+    expect((document.querySelector('.modal button[type="submit"]') as HTMLButtonElement).disabled).toBe(true);
+  });
+
   it("删要确认", async () => {
     const { container: c } = render(<StandbyTab {...props()} />);
     fireEvent.click(btn(c, "A · dock"));
