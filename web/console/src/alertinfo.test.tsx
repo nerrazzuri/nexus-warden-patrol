@@ -209,3 +209,31 @@ describe("第 2 轮 duty N2 残留", () => {
     expect(say.mock.calls.map((c) => c[0])).toContain("还在确认 A 能不能出发…");
   });
 });
+
+describe("导航 V1 第 5 节:报警详情按原因码写「怎么回事 + 该做什么」", () => {
+  const show = (a: Alert) => render(
+    <AlertDetail a={a} role="guard" now={20_000} units={[]} onClose={() => {}} refresh={async () => {}} say={() => {}} />);
+
+  it("认得的码:中文写原因和处理建议;切英文跟着换", () => {
+    const a = alert({ kind: "stuck", title: "点位 P4 未到达,已跳过", detail: "终点贴墙", context: { code: "goal_too_close_to_wall" } as never });
+    const { container: c } = show(a);
+    const box = c.ownerDocument.querySelector("[data-nav-code]")!;
+    expect(box.getAttribute("data-nav-code")).toBe("goal_too_close_to_wall");
+    expect(box.textContent).toContain("目标点贴墙,站不下或转不开");
+    expect(box.textContent).toContain("把这个航点往空处挪一点");
+    cleanup();
+    lang.value = "en";
+    const { container: e } = show(a);
+    const boxEn = e.ownerDocument.querySelector("[data-nav-code]")!;
+    expect(boxEn.textContent).toContain("Goal too close to a wall");
+    expect(boxEn.textContent).toContain("Move the waypoint into open space");
+  });
+
+  it("没有码、码不认识:不出这一块", () => {
+    for (const ctx of [undefined, { code: "made_up" }]) {
+      const { container: c } = show(alert({ kind: "stuck", context: ctx as never }));
+      expect(c.ownerDocument.querySelector("[data-nav-code]")).toBeNull();
+      cleanup();
+    }
+  });
+});
