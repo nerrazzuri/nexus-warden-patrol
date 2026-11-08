@@ -269,3 +269,18 @@ describe("第 2 轮 maps N12:地址带 map、version 就先选那一版", () => 
     location.hash = "";
   });
 });
+
+describe("第 3 轮 setup N1", () => {
+  it("机器人列表比地图版本晚到:到了以后重新取待命点", async () => {
+    let seen: TabProps | null = null;
+    const Spy = (p: TabProps) => { seen = p; return <div class="spy">{p.data.standby.length}</div>; };
+    location.hash = "#/admin/layout?tab=standby";
+    const r = render(<LayoutPage say={() => {}} robots={[]} tabs={{ ...TABS, standby: Spy }} />);
+    await waitFor(() => expect(r.container.querySelector(".spy")).not.toBeNull());
+    await new Promise((ok) => setTimeout(ok, 20));
+    expect(seen!.data.standby.length).toBe(0);
+    r.rerender(<LayoutPage say={() => {}} robots={["A"]} tabs={{ ...TABS, standby: Spy }} />);
+    await waitFor(() => expect(seen!.data.standby.length).toBe(1));
+    expect(seen!.data.robots).toEqual(["A"]);
+  });
+});

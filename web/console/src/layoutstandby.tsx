@@ -94,6 +94,7 @@ export function StandbyTab(p: TabProps) {
       </div>
       <div class="ly-side">
         <button type="button" class="btn primary" disabled={p.data.robots.length === 0} onClick={() => { setAdding("pick"); setSel(null); }}>{t("lyAddStandby")}</button>
+        {p.data.robots.length === 0 && <span class="muted small" data-why-no-add="1">{t("lyStandbyNoRobots")}</span>}
         {adding === "pick" && <p class="muted small">{t("lyAddStandbyHint")} <button type="button" class="link" onClick={() => setAdding(null)}>{t("cancel")}</button></p>}
         <p class="muted small">{t("lyStandbyHint")}</p>
         <ul class="plain ly-list">

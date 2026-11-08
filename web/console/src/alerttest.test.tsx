@@ -96,3 +96,15 @@ describe("告警测试模式", () => {
   });
 });
 
+
+describe("第 3 轮 duty N10", () => {
+  it("结束并删掉:确认框写共几条、列出标题", async () => {
+    mode = { active: true, until_ms: END_AT, by: "alice", alarms: [{ key: "k1", title: "测试：卡住了" }, { key: "k2", title: "测试：看见人" }] };
+    const { container: c } = render(<AlertTestBar role="admin" onCleared={() => {}} />);
+    await waitFor(() => expect(c.querySelector('[data-alert-test="on"]')).not.toBeNull());
+    fireEvent.click(btn(c, "结束演练并删掉演练报警"));
+    const list = await waitFor(() => { const l = document.querySelector("[data-drill-list]"); expect(l).not.toBeNull(); return l!; });
+    expect(list.querySelectorAll("li").length).toBe(2);
+    expect(document.querySelector(".confirm-text")!.textContent).toContain("2 条");
+  });
+});

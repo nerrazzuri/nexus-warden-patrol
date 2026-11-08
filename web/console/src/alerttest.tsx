@@ -3,10 +3,10 @@
 import { useEffect, useState } from "preact/hooks";
 import { api, ApiError } from "./api";
 import { Confirm } from "./dialogs";
-import { t } from "./i18n";
+import { alertTitle, lang, t } from "./i18n";
 import { isOwnerLike } from "./model";
 
-interface Mode { active: boolean; until_ms: number | null; by: string }
+interface Mode { active: boolean; until_ms: number | null; by: string; alarms?: { key: string; title: string }[] }
 const hm = (ms: number) => { const d = new Date(ms); return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`; };
 
 /** 条幅多久重新问一次站点(外审 r1 #10:别的管理员开了、结束了,这边也要跟着变)。 */
@@ -71,8 +71,14 @@ export function AlertTestBar({ role, onCleared, pollMs = ALERT_TEST_POLL_MS }:
         </details>
       )}
       {msg && <span class="small" role="status">{msg}</span>}
-      {ask && <Confirm text={t("atEndClearAsk")} yes={t("atEndClear")} danger onNo={() => setAsk(false)}
-        onYes={() => { setAsk(false); void post({ action: "end", clear: true }); }} />}
+      {/* 第 3 轮 duty N10:列出要删哪几条、共几条(摄像头掉线、站点自己的毛病不算演练,不删) */}
+      {ask && <Confirm text={t("atEndClearList", { n: mode.alarms?.length ?? 0 })} yes={t("atEndClear")} danger onNo={() => setAsk(false)}
+        onYes={() => { setAsk(false); void post({ action: "end", clear: true }); }}>
+        {(mode.alarms?.length ?? 0) > 0 && <ul class="plain small at-list" data-drill-list="1">
+          {mode.alarms!.slice(0, 20).map((a) => <li key={a.key}>{alertTitle(lang.value, "", a.title)}</li>)}
+          {mode.alarms!.length > 20 && <li class="muted">{t("atMore", { n: mode.alarms!.length - 20 })}</li>}
+        </ul>}
+      </Confirm>}
     </div>
   );
 }

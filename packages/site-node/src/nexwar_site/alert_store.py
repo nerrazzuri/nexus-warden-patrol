@@ -23,6 +23,22 @@ log = logging.getLogger(__name__)
 #: 告警测试模式(POC):最长多少分钟;标题前缀。
 TEST_MAX_MIN = 120
 TEST_PREFIX = "测试："
+#: 第 3 轮 duty N10:演练期间这些照样是真报警(设备、站点自己的毛病,不是练习时触发的):
+#: 不打测试标记、结束演练时不会被删。
+NOT_DRILL_KINDS = frozenset({
+    "cctv_offline", "clock_skew", "cert_renew_failed", "push_failed", "board_hot", "board_overheat",
+    "schedule_died", "incident_flood", "wifi_change", "map_integrity", "evidence_seal_failed",
+    "evidence_plain", "evidence_unopened", "purged_incoming_stuck", "upload_backlog",
+    "upload_refused", "force_config_bad",
+})
+
+
+def drillable(robot: str, kind: str) -> bool:
+    """演练期间这条报警算不算演练的(打「测试：」、能一键删)。"""
+    if robot == "site" or kind in NOT_DRILL_KINDS:
+        return False
+    return not (kind.endswith("_failed") or kind.endswith("_offline")
+                or kind.startswith(("recording_", "archive_")))
 #: 开张时内存里读回多少条最近的(已解决的也算);未解决的全读回。
 RESTORE_RECENT = 200
 
@@ -128,6 +144,13 @@ class AlertDesk:
         SiteSettings(self.db).put("alert_test", mode)
         return mode
 
+    def test_alarms(self) -> list[dict[str, Any]]:
+        """带测试标记、还在库里的报警(结束演练删之前给人看删哪些)。"""
+        rows = self.db.query("SELECT key, title FROM alerts "
+                             "WHERE json_extract(context, '$.test') = 1 "
+                             "ORDER BY rowid DESC LIMIT 200")
+        return [{"key": r["key"], "title": r["title"]} for r in rows]
+
     def end_test(self, *, clear: bool) -> int:
         """结束测试;``clear`` 就删掉所有带测试标记的告警(没标记的不动)。回删了几条。"""
         from nexwar_site.site_settings import SiteSettings
@@ -158,7 +181,7 @@ class AlertDesk:
     def raise_alert(self, *, kind: str, robot: str, title: str, detail: str = "",
                     context: dict[str, Any] | None = None, merge: bool = True,
                     record: str = "") -> Alert:
-        if self.test_mode() is not None:
+        if self.test_mode() is not None and drillable(robot, kind):
             # POC 告警测试模式:打标记、标题前加「测试」;不合进真告警(清掉时别把真的一起删了)
             cur = self.book.absorbing(robot, kind, now_ms=self._now())
             if cur is not None and not cur.context.get("test"):

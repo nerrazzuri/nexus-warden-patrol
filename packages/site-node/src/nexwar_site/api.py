@@ -936,8 +936,11 @@ class _Handler(TlsHandlerMixin):
 
         def view() -> dict[str, Any]:
             m = desk.test_mode()
-            return {"active": m is not None, "until_ms": (m or {}).get("until_ms"),
-                    "by": (m or {}).get("by", "")}
+            out = {"active": m is not None, "until_ms": (m or {}).get("until_ms"),
+                   "by": (m or {}).get("by", "")}
+            if m is not None:
+                out["alarms"] = desk.test_alarms()        # 第 3 轮 duty N10:删之前列出来
+            return out
         if method == "GET":
             self._need(user, VIEW)
             return self._send_json(200, self.site.loop.call(lambda: _sync(view)))
