@@ -77,6 +77,11 @@ class SiteDutyPage extends StatefulWidget {
   static const Key modeKey = Key('duty-mode');
   /// 11-05 现场第 36 条：连不上站点主机的横幅。
   static const Key siteDownKey = Key('duty-site-down');
+
+  /// 手机 App 测试 M03：站点证书变了的横幅；机器人、今天的巡逻读不到时的「未知」。
+  static const Key certChangedKey = Key('duty-cert-changed');
+  static const Key unknownKey = Key('duty-robots-unknown');
+  static const Key todayUnknownKey = Key('duty-today-unknown');
   static const Key modeChangeKey = Key('duty-mode-change');
   static Key p1Key(String key) => Key('duty-p1-$key');
   static Key chipKey(String id) => Key('duty-chip-$id');
@@ -131,6 +136,14 @@ class _SiteDutyPageState extends State<SiteDutyPage> {
   DateTime? _downSince;
   bool _downNow = false;
   String? _errNow;
+
+  /// 手机 App 测试 M03：连不上的原因是站点证书变了（跟「站点关了、网不通」分开说）。
+  bool _cert = false;
+  bool _certNow = false;
+
+  /// 机器人列表、今天的巡逻读到过没有：没读到过不能说「没有」，只能说「不知道」。
+  bool _robotsKnown = false;
+  bool _todayKnown = false;
   StreamSubscription<Map<String, dynamic>>? _sub;
   Timer? _debounce;
   Timer? _poll;
@@ -174,6 +187,7 @@ class _SiteDutyPageState extends State<SiteDutyPage> {
     } on SiteError catch (e) {
       if (e.status == 0) {
         _downNow = true;
+        if (e.certChanged) _certNow = true;
       } else if (e.status != 404) {
         _errNow = refusalText(e);
       }
@@ -185,6 +199,7 @@ class _SiteDutyPageState extends State<SiteDutyPage> {
 
   Future<void> _reload() async {
     _downNow = false;
+    _certNow = false;
     _errNow = null;
     final got = await Future.wait<Object?>([
       _try(widget.api.robots),
@@ -199,7 +214,10 @@ class _SiteDutyPageState extends State<SiteDutyPage> {
     setState(() {
       // 11-05 现场第 36 条：这一轮都连上了就清掉旧的错误、横幅
       _downSince = _downNow ? (_downSince ?? DateTime.now()) : null;
+      _cert = _downNow && _certNow;
       _error = _errNow;
+      if (got[0] is List) _robotsKnown = true;
+      if (got[2] is Map) _todayKnown = true;
       _robots = robots;
       if (got[1] is List) _alerts = (got[1] as List).cast<Alert>();
       if (got[2] is Map) {
@@ -234,7 +252,10 @@ class _SiteDutyPageState extends State<SiteDutyPage> {
     } on SiteError catch (e) {
       if (!mounted) return;
       if (e.status == 0) {
-        setState(() => _downSince ??= DateTime.now());
+        setState(() {
+          _downSince ??= DateTime.now();
+          if (e.certChanged) _cert = true;
+        });
       } else if (e.status != 404) {
         setState(() => _error = refusalText(e));
       }
@@ -723,7 +744,16 @@ class _SiteDutyPageState extends State<SiteDutyPage> {
           child: RefreshIndicator(
             onRefresh: _reload,
             child: ListView(padding: const EdgeInsets.all(Nw.s16), children: [
-              if (_downSince != null) ...[
+              if (_downSince != null && _cert) ...[
+                NwNotice(
+                    key: SiteDutyPage.certChangedKey,
+                    tone: NwTone.error,
+                    icon: Icons.gpp_bad_rounded,
+                    text: tr(
+                        "$certChangedText Robot status here is out of date and alerts won't arrive. To update the code: leave this site, then on the site card tap ⋮ → Update site code.",
+                        '$certChangedText这里机器人的状态是旧的，报警也收不到。更新站点码：退出这个站点，在站点卡片上点 ⋮ →「更新站点码」。')),
+                nwGap8,
+              ] else if (_downSince != null) ...[
                 NwNotice(
                     key: SiteDutyPage.siteDownKey,
                     tone: NwTone.error,
@@ -739,6 +769,12 @@ class _SiteDutyPageState extends State<SiteDutyPage> {
               ..._noMap(c),
               if (!_loaded)
                 const Padding(padding: EdgeInsets.all(Nw.s24), child: Center(child: CircularProgressIndicator()))
+              else if (!hasRobot && !_robotsKnown)
+                NwNotice(
+                    key: SiteDutyPage.unknownKey,
+                    tone: NwTone.warning,
+                    text: tr("Status unknown: the robot list couldn't be read from the site.",
+                        '状态未知：读不到站点上的机器人列表。'))
               else if (!hasRobot)
                 NwNotice(
                     key: SiteDutyPage.noRobotsKey,
@@ -759,7 +795,11 @@ class _SiteDutyPageState extends State<SiteDutyPage> {
                   key: _t.today,
                   child: KeyedSubtree(
                       key: SiteDutyPage.todayKey,
-                      child: TodayPatrolList(api: widget.api, items: _today, onChanged: _reload, offsetMin: _offsetMin))),
+                      child: _todayKnown || _downSince == null
+                          ? TodayPatrolList(api: widget.api, items: _today, onChanged: _reload, offsetMin: _offsetMin)
+                          : Text(tr("Unknown: today's patrols couldn't be read from the site.", '未知：读不到站点上今天的巡逻。'),
+                              key: SiteDutyPage.todayUnknownKey,
+                              style: NwText.bodyMedium.copyWith(color: c.textSecondary)))),
               if (others > 0) ...[
                 nwGap8,
                 InkWell(

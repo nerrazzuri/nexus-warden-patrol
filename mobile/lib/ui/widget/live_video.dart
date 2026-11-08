@@ -307,6 +307,9 @@ class _LiveVideoState extends State<LiveVideo> {
   HttpClient? _io;
   Uint8List? _frame;
   bool _live = false;
+
+  /// 手机 App 测试 M03：站点说过这台在不在线没有。没说过（站点连不上、证书变了）不能写「站点显示离线」。
+  bool _heard = false;
   String _trouble = '';
 
   /// 第几条流。
@@ -401,6 +404,10 @@ class _LiveVideoState extends State<LiveVideo> {
   }
 
   void _onHealth(VideoHealth h) {
+    if (!_heard) {
+      _heard = true;
+      if (mounted) setState(() {});
+    }
     final bool on = h.online[widget.camera] ?? false;
     if (on == _live) return; // 只在翻面的那一下动连接
     _live = on;
@@ -590,6 +597,7 @@ class _LiveVideoState extends State<LiveVideo> {
       // 新的这条还没说过话。拿旧狗的结论顶着就会去开一条新狗上的流，
       // 而那台狗在不在线这一头根本还不知道。
       _live = false;
+      _heard = false;
     }
     _shut();
     _frame = null;
@@ -631,6 +639,12 @@ class _LiveVideoState extends State<LiveVideo> {
               ? tr('Waiting for the first frame. If it persists, the video has not started',
                   '等待首帧画面。持续出现说明视频未启动')
               : _trouble);
+    }
+    if (!_heard) {
+      return _panel(
+          tr('${widget.camera}: no video', '${widget.camera} 没有画面'),
+          tr("No video status from the site yet. If this stays, the phone can't read from the site",
+              '还没收到站点的画面状态。一直这样说明手机读不到站点的数据'));
     }
     return _panel(
         tr('${widget.camera}: no video', '${widget.camera} 没有画面'),

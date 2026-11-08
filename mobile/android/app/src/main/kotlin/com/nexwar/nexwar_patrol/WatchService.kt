@@ -51,6 +51,7 @@ class WatchService : Service() {
         const val ACTION_DISMISSED = "com.nexwar.watch.DISMISSED"
         const val PREFS = "nexwar_watch"
         private const val TAG = "D1MaxWatch"
+        private const val CERT_MISMATCH = "证书指纹对不上"
         private const val CH_ONGOING = "watch_ongoing"
         private const val CH_P1 = "watch_p1"
         private const val CH_ALARM = "watch_alarm"
@@ -74,6 +75,7 @@ class WatchService : Service() {
     private var site = ""
     private var url = ""
     private var fingerprint = ""
+    @Volatile private var certBad = false
     private var token = ""
 
     /** 该弹、该收、该重弹（纯判断，JUnit 测）。 */
@@ -187,6 +189,7 @@ class WatchService : Service() {
                 }
                 if (code != 200) throw java.io.IOException("站点回 $code")
                 lostSince = 0L
+                certBad = false
                 if (lostTold) {
                     lostTold = false
                     getSystemService(NotificationManager::class.java).cancel(ID_STATE)
@@ -207,15 +210,25 @@ class WatchService : Service() {
             } catch (e: Exception) {
                 if (stopping) return
                 Log.w(TAG, "事件流断了", e)
+                certBad = isCertMismatch(e)
             }
             if (stopping) return
             val now = System.currentTimeMillis()
             if (lostSince == 0L) lostSince = now
             val mins = (now - lostSince) / 60_000
-            foreground(if (mins > 0) "连不上站点（已断 $mins 分钟），重试中" else "连不上站点，重试中")
+            // 手机 App 测试 M03:证书变了跟连不上分开说(证书变了,重试也没用,要人去换站点码)
+            if (certBad) {
+                foreground("站点证书变了，收不到报警：打开 App 更新站点码")
+            } else {
+                foreground(if (mins > 0) "连不上站点（已断 $mins 分钟），重试中" else "连不上站点，重试中")
+            }
             if (!lostTold && now - lostSince >= LOST_ALERT_MS) {
                 lostTold = true
-                tell(ID_STATE, CH_STATE, "值守断了", "$site 连不上已经两分钟：这期间的告警手机收不到")
+                if (certBad) {
+                    tell(ID_STATE, CH_STATE, "值守断了", "$site 的站点证书变了：这期间的告警手机收不到。打开 App，在站点卡片上点 ⋮ →「更新站点码」")
+                } else {
+                    tell(ID_STATE, CH_STATE, "值守断了", "$site 连不上已经两分钟：这期间的告警手机收不到")
+                }
             }
             try {
                 Thread.sleep(RETRY_MS)
@@ -315,6 +328,16 @@ class WatchService : Service() {
         return c
     }
 
+    /** 这次连不上是不是证书指纹对不上(异常链里有 [Pinned] 扔的那个)。 */
+    private fun isCertMismatch(e: Throwable): Boolean {
+        var x: Throwable? = e
+        while (x != null) {
+            if (x is CertificateException && x.message == CERT_MISMATCH) return true
+            x = x.cause
+        }
+        return false
+    }
+
     private class Pinned(private val fp: String) : X509TrustManager {
         override fun checkClientTrusted(chain: Array<out X509Certificate>?, authType: String?) {
             throw CertificateException("不收客户端证书")
@@ -324,7 +347,7 @@ class WatchService : Service() {
             val leaf = chain?.firstOrNull() ?: throw CertificateException("没有证书")
             val got = MessageDigest.getInstance("SHA-256").digest(leaf.encoded)
                 .joinToString("") { "%02x".format(it) }
-            if (got != fp) throw CertificateException("证书指纹对不上")
+            if (got != fp) throw CertificateException(CERT_MISMATCH)
         }
 
         override fun getAcceptedIssuers(): Array<X509Certificate> = arrayOf()
