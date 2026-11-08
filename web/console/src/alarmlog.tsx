@@ -49,22 +49,39 @@ export function AlarmLogPage(props: { now: number; role: string; me?: string }) 
     .then((d) => { setAlerts(d.alerts ?? []); setTruncated(!!d.truncated); setFailed(false); })
     // 第 4 轮 layout r3-N3 / N6:读不到不当成「没有报警」(计数写「–」,列表写正在重试)
     .catch(() => setFailed(true));
-  useEffect(() => {
-    void pull();
-    const id = window.setInterval(pull, 30_000);
-    return () => window.clearInterval(id);
-  }, []);
-  const pullNote = () => api<{ latest: Note | null }>("GET", "/api/shift-notes").then((d) => setNote(d.latest ?? null)).catch(() => {});
-  useEffect(() => { void pullNote(); }, []);
-
+  // liang-d5 第 5 轮前:「今天」「选日期」按那天去站点查(原来只拿最近 500 条在这里筛,一个月前的那天是空的),
+  // 一天超过 500 条能翻页
+  const [page, setPage] = useState(0);
+  const [day, setDay] = useState<{ key: string; alerts: Alert[]; total: number } | null>(null);
+  const [dayFailed, setDayFailed] = useState(false);
   const duty = useDutySettings();
   const shift = shiftStart(props.now, duty.shift_hours);
   const today = dayRange(dateInput(props.now))!;
   const picked = dayRange(date);
   const [since, until] = scope === "shift" ? [shift, Infinity] : scope === "today" ? [today.since, today.until]
     : picked ? [picked.since, picked.until] : [today.since, today.until];
-  const mine = (alerts ?? []).filter((a) => forGuard(a) && a.level !== "P3" || a.kind === "authorized_person");
-  const inScope = mine.filter((a) => a.first_ms >= since && a.first_ms < until);
+  const dayKey = scope === "shift" ? "" : `${since}-${until}-${page}`;
+  const pullDay = () => {
+    if (!dayKey) return Promise.resolve();
+    return api<{ alerts: Alert[]; total: number }>("GET", `/api/alerts?since=${since}&until=${until}&limit=${LIMIT}&offset=${page * LIMIT}`)
+      .then((d) => { setDay({ key: dayKey, alerts: d.alerts ?? [], total: d.total ?? 0 }); setDayFailed(false); })
+      .catch(() => setDayFailed(true));
+  };
+  useEffect(() => { setPage(0); }, [scope, date]);
+  useEffect(() => { void pullDay(); }, [dayKey]);
+  useEffect(() => {
+    void pull();
+    const id = window.setInterval(() => { void pull(); void pullDay(); }, 30_000);
+    return () => window.clearInterval(id);
+  }, [dayKey]);
+  const pullNote = () => api<{ latest: Note | null }>("GET", "/api/shift-notes").then((d) => setNote(d.latest ?? null)).catch(() => {});
+  useEffect(() => { void pullNote(); }, []);
+
+  const guardSees = (a: Alert) => forGuard(a) && a.level !== "P3" || a.kind === "authorized_person";
+  const mine = (alerts ?? []).filter(guardSees);
+  const dayRows = day && day.key === dayKey ? day.alerts : null;
+  const source = scope === "shift" ? alerts : dayRows;
+  const inScope = scope === "shift" ? mine.filter((a) => a.first_ms >= since && a.first_ms < until) : (dayRows ?? []).filter(guardSees);
   const shown = inScope
     .filter((a) => kindSet.size === 0 || [...kindSet].some((k) => (k === "intrusion" ? a.audience === "intrusion" || a.audience === "fire" : a.audience === k)))
     .filter((a) => !openOnly || a.resolved_ms == null)
@@ -122,10 +139,17 @@ export function AlarmLogPage(props: { now: number; role: string; me?: string }) 
         <span class="sep" />
         <button type="button" class={openOnly ? "chip on" : "chip"} aria-pressed={openOnly} onClick={() => setOpenOnly(!openOnly)}>{t("alOpenOnly")}</button>
       </div>
-      {truncated && <p class="muted small">{t("alTruncated", { n: LIMIT })}</p>}
+      {scope === "shift" && truncated && <p class="muted small">{t("alTruncated", { n: LIMIT })}</p>}
+      {scope !== "shift" && day && day.key === dayKey && day.total > LIMIT && (
+        <p class="row small al-pages" data-al-pages="1">
+          <span class="muted">{t("alPageOf", { a: page * LIMIT + 1, b: Math.min((page + 1) * LIMIT, day.total), n: day.total })}</span>
+          <button type="button" class="btn sm" disabled={page === 0} onClick={() => setPage(page - 1)}>{t("alPagePrev")}</button>
+          <button type="button" class="btn sm" disabled={(page + 1) * LIMIT >= day.total} onClick={() => setPage(page + 1)}>{t("alPageNext")}</button>
+        </p>
+      )}
       <div class="list">
-        {alerts == null && <p class={failed ? "empty warn" : "empty"} data-load-failed={failed ? "1" : undefined}>{t(failed ? "loadRetry" : "loading")}</p>}
-        {alerts != null && shown.length === 0 && <p class="empty">{t("alNone")}</p>}
+        {source == null && <p class={(scope === "shift" ? failed : dayFailed) ? "empty warn" : "empty"} data-load-failed={(scope === "shift" ? failed : dayFailed) ? "1" : undefined}>{t((scope === "shift" ? failed : dayFailed) ? "loadRetry" : "loading")}</p>}
+        {source != null && shown.length === 0 && <p class="empty">{t("alNone")}</p>}
         {shown.map((a) => <Row key={a.key} a={a} canHandle={canHandleAlerts(props.role)} onOpen={() => setDetail(a.key)} />)}
       </div>
       {said && <p class="muted small" role="status">{said}

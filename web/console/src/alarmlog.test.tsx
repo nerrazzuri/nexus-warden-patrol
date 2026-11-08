@@ -18,6 +18,8 @@ const alert = (o: Partial<Alert>): Alert => ({
 });
 
 let alerts: Alert[] = [];
+let dayCalls: string[] = [];
+let dayTotal: number | null = null;
 let truncated = false;
 let note: unknown = null;
 let posted: unknown[] = [];
@@ -27,6 +29,8 @@ beforeEach(() => {
   for (const k of ["nexwar.alarms.scope", "nexwar.alarms.kinds", "nexwar.alarms.open"]) localStorage.removeItem(k);
   lang.value = "zh";
   alerts = [];
+  dayCalls = [];
+  dayTotal = null;
   truncated = false;
   note = null;
   posted = [];
@@ -42,6 +46,14 @@ beforeEach(() => {
       return Promise.resolve(json({ latest: note }));
     }
     if (url.startsWith("/api/duty-settings")) return Promise.resolve(duty ? json(duty) : json({}, 404));
+    if (url.startsWith("/api/alerts?since=")) {
+      // 按日期查(站点那边):只回那天的,带总数;记下来给翻页的测试看
+      const q = new URLSearchParams(url.split("?")[1]);
+      dayCalls.push(url);
+      const got = alerts.filter((a) => a.first_ms >= Number(q.get("since")) && a.first_ms < Number(q.get("until")));
+      const off = Number(q.get("offset") ?? 0), lim = Number(q.get("limit") ?? 500);
+      return Promise.resolve(json({ alerts: got.slice(off, off + lim), total: dayTotal ?? got.length }));
+    }
     if (url.startsWith("/api/alerts")) return Promise.resolve(json({ alerts, limit: 500, truncated }));
     return Promise.resolve(json({}, 404));
   }) as typeof fetch);
@@ -75,7 +87,20 @@ describe("报警记录页", () => {
     await waitFor(() => expect(rows(c).length).toBe(1));
     expect(c.querySelector(".sum .box b")!.textContent).toBe("1");
     fireEvent.click(chip(c, "今天"));
-    expect(rows(c).length).toBe(2);
+    await waitFor(() => expect(rows(c).length).toBe(2));
+  });
+
+  it("liang-d5 第 5 轮前:选日期去站点按那天查;一天超过 500 条能翻页", async () => {
+    alerts = [alert({ key: "a", first_ms: at(19, 30) })];
+    dayTotal = 1234;
+    const { container: c } = page();
+    await waitFor(() => expect(rows(c).length).toBe(1));
+    fireEvent.click(chip(c, "今天"));
+    await waitFor(() => expect(c.querySelector("[data-al-pages]")).not.toBeNull());
+    expect(dayCalls.at(-1)).toContain("offset=0");
+    expect(c.querySelector("[data-al-pages]")!.textContent).toContain("共 1234 条");
+    fireEvent.click([...c.querySelectorAll<HTMLButtonElement>("[data-al-pages] button")].find((b) => b.textContent === "下一页")!);
+    await waitFor(() => expect(dayCalls.at(-1)).toContain("offset=500"));
   });
 
   it("仅显示未处理", async () => {

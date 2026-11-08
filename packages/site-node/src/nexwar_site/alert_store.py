@@ -304,6 +304,29 @@ class AlertDesk:
                              (limit,))
         return [_from_row(r).to_wire() for r in rows]
 
+    def history(self, *, since_ms: int, until_ms: int, kinds: list[str] | None = None,
+                robot: str | None = None, level: str | None = None, limit: int = 200,
+                offset: int = 0) -> dict[str, Any]:
+        """某一段时间里出过的报警(这段时间里触发过、或还开着跨进来的),按第一次触发倒序;能翻页。
+        原来报警记录只拿最近 500 条在网页里按日期筛:站点跑几周以后,一个月前的那天就是空的。"""
+        where = ["last_ms >= ?", "first_ms < ?"]
+        args: list[Any] = [since_ms, until_ms]
+        if kinds:
+            where.append(f"kind IN ({','.join('?' * len(kinds))})")
+            args += kinds
+        if robot:
+            where.append("robot = ?")
+            args.append(robot)
+        if level:
+            where.append("level = ?")
+            args.append(level)
+        w = " AND ".join(where)
+        total = self.db.query(f"SELECT COUNT(*) AS n FROM alerts WHERE {w}", tuple(args))[0]["n"]
+        rows = self.db.query(f"SELECT * FROM alerts WHERE {w} ORDER BY first_ms DESC, key "
+                             "LIMIT ? OFFSET ?", (*args, limit, offset))
+        return {"alerts": [_from_row(r).to_wire() for r in rows], "total": total,
+                "limit": limit, "offset": offset}
+
     def open_counts(self) -> dict[str, dict[str, int]]:
         """每台狗(以及 ``site``)未解决的告警按级别计数。"""
         out: dict[str, dict[str, int]] = {}

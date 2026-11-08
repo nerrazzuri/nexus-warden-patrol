@@ -120,6 +120,24 @@ _ADMIN_BIND = re.compile(r"^/api/admin/bind(?:/([0-9a-f]{1,32})/(approve|reject)
 _ROBOT_WIFI = re.compile(r"^/api/robots/([^/]{1,64})/wifi$")
 #: ``GET /api/alerts?all=1&limit=`` 的上限。
 ALERTS_LIMIT_MAX = 2000
+
+
+def _range_args(q: dict[str, list[str]], *, limit_max: int) -> tuple[int, int, int, int]:
+    """按日期查的公共参数:``since``/``until``(毫秒,默认不限)、``limit``(默认 200)、``offset``。"""
+    def num(k: str, default: int) -> int:
+        raw = (q.get(k) or [""])[0]
+        if raw == "":
+            return default
+        if not raw.isdigit():
+            raise HttpError(400, f"{k} 要是非负整数")
+        return int(raw)
+    since, until = num("since", 0), num("until", 2 ** 53)
+    if until <= since:
+        raise HttpError(400, "until 要晚于 since")
+    limit, offset = num("limit", 200), num("offset", 0)
+    if not 1 <= limit <= limit_max:
+        raise HttpError(400, f"limit 要是 1–{limit_max} 的整数")
+    return since, until, limit, offset
 #: 告警键 ``robot/kind#seq`` 里有 ``/`` 与 ``#``:客户端整个键编码成一段(``%2F``、``%23``)。
 _ALERT = re.compile(r"^/api/alerts/([^/]{1,256})/(ack|arrive|resolve|reopen|shelve|unshelve)$")
 #: W00c5c:``/api/robots/<id>/teleop``(WebSocket)与 ``/api/robots/<id>/halt``。
@@ -734,7 +752,10 @@ class _Handler(TlsHandlerMixin):
                 self._need(user, VIEW_AUDIT)
                 q = parse_qs(self.path.split("?", 1)[1] if "?" in self.path else "")
                 actor = (q.get("actor") or [None])[0]
-                return self._send_json(200, {"audit": self.site.audit.list(actor=actor)})
+                new = ("since", "until", "group", "offset", "limit", "format")
+                if not any(k in q for k in new):
+                    return self._send_json(200, {"audit": self.site.audit.list(actor=actor)})
+                return self._audit_search(q, actor)
             if method == "GET" and path == "/api/robots":
                 self._need(user, VIEW)
                 return self._send_json(200, {"robots": self.site.dispatcher.robots_view()})
@@ -770,12 +791,23 @@ class _Handler(TlsHandlerMixin):
                 if self.site.scheduler is None:
                     raise HttpError(404, "此站点未启用排程")
                 return self._send_json(200, self.site.scheduler.view())
-            if method == "GET" and path == "/api/patrols/today":
+            if method == "GET" and path in ("/api/patrols/today", "/api/patrols/day"):
                 self._need(user, VIEW)
                 from nexwar_site.today import today_view
                 desk = self._adhoc()
+                q = parse_qs(self.path.split("?", 1)[1] if "?" in self.path else "")
+                day = (q.get("date") or [None])[0] if path == "/api/patrols/day" else None
+                if path == "/api/patrols/day":
+                    from datetime import datetime
+                    try:
+                        if day is None or not re.fullmatch(r"\d{4}-\d{2}-\d{2}", day):
+                            raise ValueError(day)
+                        datetime.strptime(day, "%Y-%m-%d")
+                    except ValueError as exc:
+                        raise HttpError(400, "date 要写成 YYYY-MM-DD(真的日期)") from exc
                 return self._send_json(200, self.site.loop.call(lambda: _sync(
-                    today_view, self.site.dispatcher.db, now_ms=self.site._now(), adhoc=desk)))
+                    today_view, self.site.dispatcher.db, now_ms=self.site._now(), adhoc=desk,
+                    day=day)))
             m = _ADHOC.match(path)
             if m is not None:
                 return self._adhoc_cancel(method, unquote(m.group(1)), user)
@@ -979,6 +1011,60 @@ class _Handler(TlsHandlerMixin):
             return self._send_json(200, {**self.site.loop.call(lambda: _sync(view)), "cleared": n})
         raise HttpError(400, "action 要是 start 或 end")
 
+    def _audit_search(self, q: dict[str, list[str]], actor: str | None) -> None:
+        """``GET /api/audit?since=&until=&actor=&group=&limit=&offset=[&format=csv]``:全站活动日志。
+        ``format=csv`` 导出整段(不分页,最多 ``EXPORT_MAX`` 行,超了 400 让人缩小范围)。"""
+        import csv
+        import io
+        from datetime import datetime
+
+        from nexwar_site.audit import AUDIT_GROUPS, EXPORT_MAX
+        from nexwar_site.sitetime import site_tz
+        since, until, limit, offset = _range_args(q, limit_max=ALERTS_LIMIT_MAX)
+        group = (q.get("group") or [""])[0] or None
+        if group is not None and group not in AUDIT_GROUPS:
+            raise HttpError(400, f"group 要是 {'、'.join(AUDIT_GROUPS)} 之一")
+        audit = self.site.audit
+        if (q.get("format") or [""])[0] != "csv":
+            return self._send_json(200, audit.search(since_ms=since, until_ms=until, actor=actor,
+                                                     group=group, limit=limit, offset=offset))
+        got = audit.search(since_ms=since, until_ms=until, actor=actor, group=group,
+                           limit=EXPORT_MAX, offset=0)
+        if got["total"] > EXPORT_MAX:
+            raise HttpError(400, f"这段时间有 {got['total']} 条,一次最多导出 "
+                                 f"{EXPORT_MAX} 条:缩小日期范围")
+        tz = site_tz(self.site.dispatcher.db)
+        buf = io.StringIO()
+        w = csv.writer(buf)
+        w.writerow(["time", "actor", "role", "action", "target", "status", "remote", "detail"])
+        for r in got["audit"]:
+            at = datetime.fromtimestamp(r["at"] / 1000, tz).isoformat(timespec="seconds")
+            w.writerow([at, r["actor"], r.get("actor_role") or "", r["action"], r["target"],
+                        r["status"], r["remote"], json.dumps(r["detail"], ensure_ascii=False)])
+        data = ("\ufeff" + buf.getvalue()).encode("utf-8")   # 带 BOM:Excel 打开中文不乱码
+        day = datetime.fromtimestamp(max(since, 0) / 1000, tz).strftime("%Y%m%d")
+        self._status = 200
+        self.send_response(200)
+        self.send_header("Content-Type", "text/csv; charset=utf-8")
+        self.send_header("Content-Length", str(len(data)))
+        self.send_header("Content-Disposition", f'attachment; filename="activity-{day}.csv"')
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        self.wfile.write(data)
+
+    def _alert_history(self, q: dict[str, list[str]]) -> dict[str, Any]:
+        """``GET /api/alerts?since=&until=``(毫秒)[``&kind=a,b&robot=&level=&limit=&offset=``]:
+        按日期在站点查,能翻页(liang-d5 第 5 轮前:报警记录按日期只看得到最近 500 条)。"""
+        since, until, limit, offset = _range_args(q, limit_max=ALERTS_LIMIT_MAX)
+        kinds = [k for k in (q.get("kind") or [""])[0].split(",") if k]
+        robot = (q.get("robot") or [""])[0] or None
+        level = (q.get("level") or [""])[0] or None
+        if level is not None and level not in ("P1", "P2", "P3"):
+            raise HttpError(400, "level 要是 P1、P2 或 P3")
+        return self.site.loop.call(lambda: _sync(
+            self.site.alerts.history, since_ms=since, until_ms=until, kinds=kinds or None,
+            robot=robot, level=level, limit=limit, offset=offset))
+
     def _alerts(self, method: str, path: str, user) -> None:
         """告警与值守(W00c5a)。看:``view``;确认、解决:``handle_alerts``,人取登录账号。"""
         if self.site.alerts is None:
@@ -988,6 +1074,8 @@ class _Handler(TlsHandlerMixin):
         if method == "GET" and path == "/api/alerts":
             self._need(user, VIEW)
             q = parse_qs(self.path.split("?", 1)[1] if "?" in self.path else "")
+            if "since" in q or "until" in q:
+                return self._send_json(200, self._alert_history(q))
             if q.get("all") != ["1"]:
                 rows = self.site.loop.call(lambda: _sync(self.site.alerts.open))
                 return self._send_json(200, {"alerts": rows})

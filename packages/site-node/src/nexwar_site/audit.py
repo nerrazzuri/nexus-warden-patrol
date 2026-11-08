@@ -17,6 +17,26 @@ _KEEP_ITEMS = 10
 _KEEP_CHARS = 200
 
 
+#: 全站活动日志的操作类别(liang-d5 第 5 轮前:「11 月 5 日晚上谁撤的防、谁派的机器人」要能筛出来)。
+#: 动作是「方法 路径」,用 SQLite GLOB 认;网页上每行怎么写成人话还是网页自己的表。
+AUDIT_GROUPS: dict[str, tuple[str, ...]] = {
+    "dispatch": ("* /api/robots/*/goto", "* /api/robots/*/patrol", "* /api/robots/*/home/return",
+                 "* /api/robots/*/standby/return", "* /api/routes/*/run"),
+    "stop": ("* /api/robots/*/halt", "* /api/robots/*/abort", "* /api/robots/*/resume",
+             "* /api/robots/stop-all", "* /api/robots/resume-all"),
+    "arming": ("* /api/mode", "* /api/mode/*", "* /api/arming/*"),
+    "alarms": ("* /api/alerts/*", "* /api/alert-test*"),
+    "accounts": ("login*", "* /api/login", "* /api/logout", "* /api/accounts*", "* /api/me*"),
+    "setup": ("* /api/routes*", "* /api/route-schedules*", "* /api/schedule*", "* /api/zones*",
+              "* /api/nav-zones*", "* /api/maps*", "* /api/admin/maps*", "* /api/standby*",
+              "* /api/cameras*", "* /api/admin/cameras*", "* /api/layout*", "* /api/guard-routes*"),
+    "robots": ("* /api/admin/robots*", "* /api/admin/bind*"),
+    "views": ("VIEW", "DOWNLOAD"),
+}
+#: 一次导出最多这么多行;再多让人缩小日期范围(不悄悄截)。
+EXPORT_MAX = 20_000
+
+
 def _shrink(v: Any) -> Any:
     """长列表留前几项、写总数;长字符串截短。结构不变,读的人还看得懂。"""
     if isinstance(v, dict):
@@ -60,6 +80,26 @@ class AuditLog:
                       "VALUES (?,?,?,?,?,?,?)",
                       (self._now(), actor[:128], action[:128], target[:256], int(status),
                        encode_detail(detail), remote[:64]))
+
+    def search(self, *, since_ms: int = 0, until_ms: int = 2 ** 53, actor: str | None = None,
+               group: str | None = None, limit: int = 200, offset: int = 0) -> dict[str, Any]:
+        """全站活动日志:一段时间里、某个人、某类操作;新的在前,能翻页,带总数。"""
+        where = ["a.at >= ?", "a.at < ?"]
+        args: list[Any] = [since_ms, until_ms]
+        if actor:
+            where.append("(a.actor = ? OR a.actor = ?)")      # 登录那一行记成 login:名字
+            args += [actor, f"login:{actor}"]
+        if group:
+            pats = AUDIT_GROUPS[group]
+            where.append("(" + " OR ".join("a.action GLOB ?" for _ in pats) + ")")
+            args += pats
+        w = " AND ".join(where)
+        total = self.db.query(f"SELECT COUNT(*) AS n FROM audit a WHERE {w}", tuple(args))[0]["n"]
+        rows = self.db.query(f"SELECT a.*, c.role AS actor_role FROM audit a LEFT JOIN accounts c "
+                             f"ON c.name = a.actor WHERE {w} ORDER BY a.id DESC LIMIT ? OFFSET ?",
+                             (*args, int(limit), int(offset)))
+        return {"audit": [dict(r) | {"detail": decode_detail(r["detail"])} for r in rows],
+                "total": total, "limit": limit, "offset": offset}
 
     def list(self, limit: int = 200, actor: str | None = None) -> list[dict[str, Any]]:
         """新的在前。``actor``:只看这个人做的(W44 第二期,用户页「他做过什么」)。每行带
