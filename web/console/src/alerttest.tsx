@@ -100,3 +100,21 @@ export function AlertTestBar({ role, onCleared, pollMs = ALERT_TEST_POLL_MS }:
     </div>
   );
 }
+
+/** 第 5 轮:演练开着时总览页也说一句(以前只有报警记录页上有),点了去报警记录。 */
+export function DrillNote() {
+  const [mode, setMode] = useState<Mode | null>(null);
+  useEffect(() => {
+    let live = true;
+    const load = () => api<Mode>("GET", "/api/alert-test").then((m) => { if (live) setMode(m); }).catch(() => {});
+    void load();
+    const h = setInterval(load, 30000);
+    return () => { live = false; clearInterval(h); };
+  }, []);
+  if (!mode?.active || (mode.until_ms != null && Date.now() >= mode.until_ms)) return null;
+  return (
+    <p class="note warn" data-drill-note="1">
+      {t("atOnView", { at: hm(mode.until_ms ?? 0) })} <a href="#/alarms">{t("tabAlarms")}</a>
+    </p>
+  );
+}
