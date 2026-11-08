@@ -380,7 +380,8 @@ export function SiteUpdate({ say }: { say: Say }) {
         </p>
       )}
       <div class="row-wrap">
-        <input type="file" accept=".tar.gz,application/gzip" aria-label={t("upSiteFile")}
+        {/* 第 2 轮 config N10:站点做不了升级就连选文件也灰着(原来能选、选完才发现按钮灰) */}
+        <input type="file" accept=".tar.gz,application/gzip" aria-label={t("upSiteFile")} disabled={noPriv}
           onChange={(e) => { const f = e.currentTarget.files?.[0] ?? null; setFile(f); setBad(null); if (f) void pkgProblem(f).then(setBad); }} />
         <button type="button" class="btn primary" disabled={!file || !!bad || noPriv} onClick={() => setAsk(true)}>{t("upSiteGo")}</button>
       </div>

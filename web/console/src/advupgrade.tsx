@@ -103,7 +103,7 @@ export function UpgradePage({ say }: { say: Say }) {
           {groupClients(versions?.clients ?? []).map((c, i) => (
             <li key={i} data-client={c.name}>
               <b>{c.name}</b> {c.kind === "web" ? t("clientWeb") : `${t("clientApp")} ${c.version ?? "?"}`}
-              {c.platform && <span class="muted small"> · {c.platform}</span>}
+              {c.platform && <span class="muted small"> · {platformName(c.platform)}</span>}
               {c.n > 1 && <span class="muted small" data-client-n={c.n}> · {t("clientLogins", { n: c.n })}</span>}
               {clientTooOld(c, versions?.site.min_app_level) && <span class="tag">{t("clientOld")}</span>}
               <span class="muted small mono"> {hm(c.last_used)}</span>
@@ -128,3 +128,9 @@ export function UpgradePage({ say }: { say: Say }) {
   );
 }
 
+/** 第 2 轮 config N10:平台名写成人认得的(Android、iOS),不是小写原样。 */
+export function platformName(p: string): string {
+  const k = p.toLowerCase();
+  return k === "android" ? "Android" : k === "ios" ? "iOS" : k === "web" ? "Web" : k === "windows" ? "Windows"
+    : k === "macos" ? "macOS" : k === "linux" ? "Linux" : p;
+}

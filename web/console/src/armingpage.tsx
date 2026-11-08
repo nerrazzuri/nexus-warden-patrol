@@ -10,6 +10,7 @@ import { api, ApiError, enc } from "./api";
 import { addBlock, armedAt, copyDay, fromWire, minutesText, moveEdge, removeBlock, toWire, type Slot, type WireSlot } from "./armgrid";
 import { hm, type DutySettings } from "./data";
 import { t, type Key } from "./i18n";
+import { pageAllowed } from "./shell";
 import { Confirm } from "./dialogs";
 import { useUnsaved } from "./unsaved";
 import { dateInput } from "./recordings";
@@ -170,7 +171,10 @@ export function ArmingPage({ say, now, role = "admin" }: { say: Say; now: number
                   onClick={() => setSwitching(m)}>{t(m === "armed" ? "modeArmed" : "modeHome")}</button>
               ))}
             </div>
-            <a class="btn sm" href="#/admin/access">{t("armNowVisitor")}</a>
+            {/* 第 2 轮 config N4:打不开「临时撤防」页的账号(经理)不给这个入口,写一句谁能做 */}
+            {pageAllowed("admin/access", role)
+              ? <a class="btn sm" href="#/admin/access">{t("armNowVisitor")}</a>
+              : <span class="muted small" data-no-visitor="1">{t("armVisitorAdminOnly")}</span>}
           </div>
         )}
       </section>
@@ -357,8 +361,16 @@ function WeekGrid(props: {
 
 function CopyTo({ from, onCopy, onClose }: { from: number; onCopy: (days: number[]) => void; onClose: () => void }) {
   const [days, setDays] = useState<number[]>([]);
+  // 第 2 轮 config N7:面板一打开就滚到看得见的地方(原来在屏幕下面,看着像没反应);焦点给第一个勾选框
+  const box = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = box.current;
+    if (!el) return;
+    if (typeof el.scrollIntoView === "function") el.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    el.querySelector<HTMLElement>("input, button")?.focus({ preventScroll: true });
+  }, [from]);
   return (
-    <div class="arm-copyto panel">
+    <div class="arm-copyto panel" ref={box}>
       <p>{t("armCopyFrom", { d: t(DAY_KEYS[from]) })}</p>
       {/* P2-20:一下勾上工作日 / 周末 / 其余全部 */}
       <div class="row wrap arm-copy-quick">

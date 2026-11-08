@@ -53,3 +53,12 @@ describe("网页易用性第 1 轮 P2-24", () => {
     expect(g.map((x) => [x.name, x.kind, x.n, x.last_used])).toEqual([["gina", "app", 2, 30], ["gina", "web", 1, 20], ["olga", "app", 1, 5]]);
   });
 });
+
+describe("第 2 轮 config N10", () => {
+  it("平台名写成人认得的", async () => {
+    const { platformName } = await import("./advupgrade");
+    expect(platformName("android")).toBe("Android");
+    expect(platformName("ios")).toBe("iOS");
+    expect(platformName("tizen")).toBe("tizen");
+  });
+});

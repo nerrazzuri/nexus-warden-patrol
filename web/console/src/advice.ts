@@ -27,6 +27,8 @@ const TABLE: Record<string, Advice> = {
   // W42:有机器人等批准加入、机器人换 WiFi 等确认 —— 去机器人页批 / 确认
   bind_request: { say: "advBind", todo: "advBindTodo", go: "admin/robots" },
   wifi_change: { say: "advWifi", todo: "advWifiTodo", go: "admin/robots" },
+  // 第 2 轮 config N9:有人申请账号 —— 去用户页批准或拒绝(原来写「请联系工程师」)
+  account_request: { say: "advAccountReq", todo: "advAccountReqTodo", go: "admin/users" },
 };
 
 export function advice(kind: string): Advice | null {

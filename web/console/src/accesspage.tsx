@@ -117,10 +117,10 @@ function Visitor({ mode, zones, say, onDone }: { mode: ModeView | null; zones: s
   const [ask, setAsk] = useState(false);
   if (!mode) return null;
   const on = mode.mode === "visitor";
-  async function set(body: Record<string, unknown>) {
+  async function set(body: Record<string, unknown>, done: string) {
     try {
       await api("POST", "/api/mode", body);
-      say(t("saved"));
+      say(done);           // 第 2 轮 config N8:说清做了什么,不只「已保存」
       onDone();
     } catch (e) {
       say(errText(e));
@@ -134,7 +134,7 @@ function Visitor({ mode, zones, say, onDone }: { mode: ModeView | null; zones: s
         <div class="row">
           <b>{t("accVisitorOn", { t: mode.until_ms ? hm(mode.until_ms) : "—" })}</b>
           {(mode.visitor_zones ?? []).length > 0 && <span class="muted">{(mode.visitor_zones ?? []).join("、")}</span>}
-          <button type="button" class="btn push" onClick={() => void set({ mode: mode.prev_mode || "armed" })}>{t("accVisitorEnd")}</button>
+          <button type="button" class="btn push" onClick={() => void set({ mode: mode.prev_mode || "armed" }, t("accVisitorEnded"))}>{t("accVisitorEnd")}</button>
         </div>
       ) : (
         <>
@@ -160,7 +160,8 @@ function Visitor({ mode, zones, say, onDone }: { mode: ModeView | null; zones: s
       )}
       {ask && (
         <Confirm text={t("accVisitorAsk", { z: picked.join("、"), n: hours, t: hm(Date.now() + hours * 3_600_000) })} yes={t("accVisitorStart")}
-          onNo={() => setAsk(false)} onYes={() => { setAsk(false); void set({ mode: "visitor", zones: picked, minutes: hours * 60 }); }} />
+          onNo={() => setAsk(false)} onYes={() => { setAsk(false); void set({ mode: "visitor", zones: picked, minutes: hours * 60 },
+            t("accVisitorStarted", { z: picked.join("、"), t: hm(Date.now() + hours * 3_600_000) })); }} />
       )}
     </section>
   );
