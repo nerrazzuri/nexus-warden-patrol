@@ -10,7 +10,7 @@ import { api, ApiError, enc } from "./api";
 import { clip, hm } from "./data";
 import { Confirm } from "./dialogs";
 import { t, type Key } from "./i18n";
-import { MapCanvas, type CanvasArea, type Screen } from "./mapcanvas";
+import { MapCanvas, type CanvasArea, type Screen, type LegendKey } from "./mapcanvas";
 import { toPx, type NavZone, type PreviewMeta, type Pt } from "./mapview";
 
 type Say = (s: string) => void;
@@ -67,6 +67,8 @@ export interface TabProps {
 /** 标签自己那一层(在淡层上面画)。 */
 export interface OwnLayer {
   areas?: CanvasArea[];
+  /** 第 2 轮 P2-15:这一层画了哪几种,图例里补上。 */
+  legend?: LegendKey[];
   world?: ComponentChildren;
   marks?: (s: Screen) => ComponentChildren;
   onPick?: (px: number, py: number) => void;
@@ -228,7 +230,7 @@ export function LayoutPage({ say, robots, tabs }: { say: Say; robots: string[]; 
       <MapCanvas meta={meta} raster={`${base}/preview.png`} label={t("lyTitle")}
         areas={[...(tab === "zones" ? [] : data.areas.map((a) => ({ name: a.zone, pts: a.points, kind: "area" as const }))), ...(own.areas ?? [])]}
         navZones={tab !== "nogo"}
-        drawing={own.drawing} onPick={own.onPick} overlay={own.overlay}
+        drawing={own.drawing} onPick={own.onPick} overlay={own.overlay} legend={own.legend}
         world={<>
           <g class="dim">{dimWorld(tab, meta, data, sel)}</g>
           {own.world}
