@@ -26,7 +26,8 @@ afterEach(cleanup);
 
 const data: LayerData = { areas: [], nav: null, routes: [], guardRoutes: [], posts: [], cameras: [], robots: ["A", "B"],
   standby: [{ robot_id: "A", name: "dock", x: 2, y: 2, yaw: 0, map_id: "home", map_version: "3", default: true }] };
-const FakeMap = (o: OwnLayer) => <div class="fakemap"><button type="button" class="pick" onClick={() => o.onPick?.(40, 30)}>pick</button></div>;
+const SCREEN = { map: (x: number, y: number): [number, number] => [x, y], px: (x: number, y: number): [number, number] => [x, y], k: 1 };
+const FakeMap = (o: OwnLayer) => <div class="fakemap"><button type="button" class="pick" onClick={() => o.onPick?.(40, 30)}>pick</button><svg>{o.marks?.(SCREEN)}</svg></div>;
 const props = (): TabProps => ({
   map: { map_id: "home", version: "3", note: "" }, base: "/api/maps/home/3", meta: META, data, say: () => {},
   reload: () => Promise.resolve(), setDirty: () => {}, registerSave: (fn) => { save = fn; }, Map: FakeMap,
@@ -87,6 +88,7 @@ describe("第 4 轮 maps N1 / setup P0-14", () => {
     expect(box.getAttribute("data-carried-standby")).toBe("1");          // A · dock 这一版已经有了,不再列
     expect(box.textContent).toContain("从版本 2 带过来 1 个待命点");
     expect(box.querySelector("[data-carried-move]")!.textContent).toContain("从版本 2 挪到版本");
+    expect(c.querySelector('[data-carried-mark="B/home"]')).toBeTruthy();          // 第 5 轮:没留下也画出来
     fireEvent.click(box.querySelector('[data-keep="B/home"]')!);
     expect(c.querySelector("[data-carried-standby]")).toBeNull();
     await save!();

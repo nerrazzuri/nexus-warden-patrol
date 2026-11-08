@@ -96,6 +96,16 @@ export function StandbyTab(p: TabProps) {
           drawing={adding === "pick" || !!cur}
           onPick={adding === "pick" || cur ? pick : undefined}
           marks={(s) => <>
+            {/* 第 5 轮 maps:带过来还没留下的点先淡着画出来,留不留之前看得到在哪 */}
+            {carried.map((c) => {
+              const h = handleAt(p.meta, s, c.x, c.y, c.yaw, 26);
+              return (
+                <PoseMarker key={`carried-${key(c)}`} x={h.x} y={h.y} hx={h.hx} hy={h.hy} r={10} label={c.name.slice(0, 2)} selected={false}
+                  class="standby-pt carried" attrs={{ "data-carried-mark": key(c) } as Record<string, unknown>}>
+                  <title>{`${c.robot_id} · ${c.name} · ${t("lyStandbyCarriedTip", { v: prop?.from_version ?? "" })}`}</title>
+                </PoseMarker>
+              );
+            })}
             {chargers.map((c) => { const [x, y] = s.map(c.x, c.y); return <g key={`c-${c.robot_id}`} class="ly-charger"><circle cx={x} cy={y} r={7} /><title>{t("lyCharger", { id: c.robot_id })}</title></g>; })}
             {pts.map((x) => {
               const h = handleAt(p.meta, s, x.x, x.y, x.yaw, 26);
