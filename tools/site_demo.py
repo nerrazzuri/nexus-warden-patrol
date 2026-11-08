@@ -45,6 +45,11 @@ ENV["PYTHONPATH"] = os.pathsep.join(str(ROOT / p) for p in (
     "packages/robot-agent/src", "packages/site-node/src", "packages/localizer/src", "src"))
 HOST = "127.0.0.2"
 
+#: 仿真机器人规划用的机身半径(米):代理再加 0.05 余量 = 站点查路线用的 0.40
+#: (intercept_reach.REACH_RADIUS_M,对齐真机 Nav2 的机身矩形)。
+#: 不对齐时站点说走得通、仿真机器人当场跳点(11-09)。
+SIM_ROBOT_RADIUS_M = 0.35
+
 
 def _free_port() -> int:
     with socket.socket() as s:
@@ -569,6 +574,10 @@ def _run(a, home: Path, logs: Path, names: list[str], bport: int, fp: str, procs
                                     else ["--runs-root", str(a.dir / f"runs{sub}")]),
                                   "--map", "estate-1:7", "--home", f"{i * 1.0},0,0",
                                   "--nav", a.nav,
+                                  # 11-09 临时路线 P4–P7 被跳过:站点按 0.40 m 判通,
+                                  # 仿真老规划器按外接圆 0.52 m 判不通。两边对齐
+                                  *(["--robot-radius", f"{SIM_ROBOT_RADIUS_M}"]
+                                    if a.nav == "planned" else []),
                                   # 规划要图:站点下发地图走发件箱 + 接收口(真机器人也是这么配的);
                                   # W54 假建图也要(录包、建出的图从发件箱传站点)
                                   *(["--outbox", str(a.dir / f"outbox{sub}"),
