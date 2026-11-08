@@ -417,9 +417,10 @@ export function MapPage(props: {
           <button type="button" class="btn primary arm-all" onClick={props.onArm}>{t("armAll")}</button>
         )}
         {/* W72(用户 11-03):侧栏只列还要人处理的,最多几条;已解决、自动恢复的去报警记录看 */}
-        <h3>{t("mapTodoN", { n: todo.length })}</h3>
+        {/* 第 3 轮 layout N3:连不上站点时不说「没有要处理的」,说状态未知、计数写 ? */}
+        <h3>{t("mapTodoN", { n: props.stale && todo.length === 0 ? "?" : todo.length })}</h3>
         {older > 0 && <p class="small"><a href="#/alarms">{t("mapTodoOlder", { n: older })}</a></p>}
-        {todo.length === 0 ? <p class="muted small">{t(older > 0 ? "mapTodoNoneShift" : "mapTodoNone")}</p> : (
+        {todo.length === 0 ? (props.stale ? <p class="warn small" data-stale="1">{t("dutyStaleAlarms")}</p> : <p class="muted small">{t(older > 0 ? "mapTodoNoneShift" : "mapTodoNone")}</p>) : (
           <ul class="evlist">
             {todo.map((a) => (
               <li key={a.key}>

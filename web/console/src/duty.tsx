@@ -191,7 +191,7 @@ export function DutyPage(props: {
         </div>
       </section>
       <section class="dcard duty-alarms" aria-label={t("dutyAlarmsTitle")}>
-        <h2 class="dcard-h">{t("dutyAlarmsTitle")}<span class="mono muted push">{alarms.length}</span></h2>
+        <h2 class="dcard-h">{t("dutyAlarmsTitle")}<span class="mono muted push" data-alarm-count="1">{props.stale && alarms.length === 0 ? "?" : alarms.length}</span></h2>
         {alarms.length === 0 && <p class={props.stale ? "warn dcard-empty" : "muted dcard-empty"}>{t(props.stale ? "dutyStaleAlarms" : "dutyNoAlarms")}</p>}
         <ul class="alarmlist">
           {alarms.map((a) => (

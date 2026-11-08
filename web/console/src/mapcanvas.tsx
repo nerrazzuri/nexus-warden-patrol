@@ -47,6 +47,9 @@ export interface CanvasArea {
   tone?: "armed" | "off";
 }
 
+/** 图例超过这么多项就收成按钮。 */
+const LEGEND_INLINE = 6;
+
 export type LegendKey = "floor" | "wall" | "seen" | "unknown" | "nogo" | "hard" | "vwall" | "erase" | "slow" | "ignore" | "area" | "zone" | "region" | "ref" | "exit" | "hide" | "robot" | "alarm";
 const LEGEND_ORDER: LegendKey[] = ["floor", "wall", "seen", "unknown", "nogo", "hard", "vwall", "erase", "slow", "ignore", "area", "zone", "region", "ref", "exit", "hide", "robot", "alarm"];
 const LEGEND_TEXT: Record<LegendKey, Key> = {
@@ -288,12 +291,22 @@ export function MapCanvas(props: {
         {props.overlay}
       </div>
       <div class="mapbar">
-        <ul class="maplegend" aria-label={t("legend")}>
-          {LEGEND_ORDER.filter((k) => present.has(k)).map((k) => (
-            <li key={k} data-legend={k}><Swatch k={k} plan={!!plan} />{t(LEGEND_TEXT[k])}</li>
-          ))}
-          {props.legendExtra}
-        </ul>
+        {(() => {
+          const keys = LEGEND_ORDER.filter((k) => present.has(k));
+          const list = (
+            <ul class={keys.length > LEGEND_INLINE ? "maplegend pop" : "maplegend"} aria-label={t("legend")}>
+              {keys.map((k) => (
+                <li key={k} data-legend={k}><Swatch k={k} plan={!!plan} />{t(LEGEND_TEXT[k])}</li>
+              ))}
+              {props.legendExtra}
+            </ul>
+          );
+          // 第 3 轮 P2-31 / setup N4:项多了不再裁成一行(机器人、报警永远看不到)、也不撑出第三行:
+          // 收成「图例」按钮,点开是完整的一列
+          return keys.length > LEGEND_INLINE
+            ? <details class="legend-fold"><summary>{t("legend")} · {keys.length}</summary>{list}</details>
+            : list;
+        })()}
         <div class="mapctl">
           <span class="scale" role="img" aria-label={t("scaleAria", { m: bar.m })}>
             <svg class="scalebar" width={bar.px + 2} height="10" data-px={bar.px} aria-hidden="true"><path d={`M1 1V9H${bar.px + 1}V1`} /></svg>
