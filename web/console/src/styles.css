@@ -1560,3 +1560,6 @@ input[type="file"] { max-width: 100%; min-width: 0; }            /* 上传按钮
 .datebox input { width: 11ch; }
 /* 第 3 轮 zh N15:地图管理的版本行不以「·」开头(每一项整块换行) */
 .mm-counts > span, .mm-dogs-on > span { display: inline-block; margin-right: 12px; }
+.codebox { field-sizing: content; min-height: 6lh; }
+/* 第 3 轮 P1-66:活动记录跟面板标题一样留边距 */
+.user-audit ul.plain, .user-audit > p { padding: 12px 16px; }

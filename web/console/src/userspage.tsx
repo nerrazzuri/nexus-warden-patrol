@@ -6,14 +6,26 @@ import { api, ApiError, enc } from "./api";
 import { ConfirmPassword } from "./confirmpw";
 import { hm, hms } from "./data";
 import { Confirm, Modal } from "./dialogs";
-import { t } from "./i18n";
+import { lang, t } from "./i18n";
 import { roleLabel } from "./shell";
 import { siteStr } from "./sitetext";
 
 type Say = (s: string) => void;
 interface Account { name: string; role: string; disabled: boolean; display_name: string; expires_ms: number | null; last_login_ms: number | null; expired: boolean }
 interface AuditRow { id: number; at: number; actor: string; actor_role?: string | null; action: string; target: string; status: number;
-  detail?: { error?: string } }
+  detail?: { error?: string; role?: string; disabled?: boolean; password_reset?: boolean; display_name?: string } }
+
+/** 第 3 轮 P1-66:改账号写清改了什么(原来只写「改了账号」)。 */
+export function changeText(d: AuditRow["detail"]): string {
+  if (!d) return "";
+  const out: string[] = [];
+  if (d.role) out.push(t("auditRoleTo", { r: t(roleLabel(d.role)) }));
+  if (d.disabled === true) out.push(t("auditDisabled"));
+  if (d.disabled === false) out.push(t("auditEnabled"));
+  if (d.password_reset) out.push(t("auditPwReset"));
+  if (d.display_name) out.push(t("auditRenamed", { n: d.display_name }));
+  return out.join(lang.value === "zh" ? "；" : "; ");
+}
 
 // 第 2 轮 admin N12:三处角色下拉框同一个顺序,按权限从小到大
 const ROLES = ["viewer", "guard", "owner", "admin"] as const;
@@ -43,6 +55,7 @@ export function leftText(until: number, now: number): string {
 
 /** 审计里的动作翻成人话;认不得的原样。 */
 const ACTIONS: [RegExp, string][] = [
+  [/^(POST|DELETE) \/api\/arming\/exceptions/, "actArmException"],
   [/^login/, "actLogin"], [/^POST \/api\/logout/, "actLogout"], [/^POST \/api\/mode$/, "actMode"],
   [/^POST \/api\/alerts\/.+\/resolve$/, "actResolve"], [/^POST \/api\/alerts\/.+\/ack$/, "actAck"], [/^POST \/api\/alerts\/.+\/arrive$/, "actArrive"],
   [/^POST \/api\/robots\/[^/]+\/(goto|patrol)$/, "actDispatch"], [/^POST \/api\/robots\/[^/]+\/halt$/, "actHalt"],
@@ -60,9 +73,20 @@ const ACTIONS: [RegExp, string][] = [
   [/^POST \/api\/alert-test/, "actAlertTest"], [/^POST \/api\/admin\/cameras/, "actLayout"],
   [/^POST \/api\/admin\/maps/, "actMaps"], [/^POST \/api\/(standby|cameras|layout|guard-routes)/, "actLayout"],
   [/^POST \/api\/(releases|system)/, "actSystem"], [/^POST \/api\/me/, "actMe"],
+  // 第 3 轮 P1-66:巡逻日程、值班设置、布防例外、看录像 / 下载
+  [/^POST \/api\/schedule/, "actPatrolSched"], [/^POST \/api\/duty-settings/, "actDutySettings"],
+  [/^(POST|DELETE) \/api\/arming\/exceptions/, "actArmException"], [/^VIEW$/, "actView"], [/^DOWNLOAD$/, "actDownload"],
 ];
 /** 第 2 轮 P1-66:对象里的内部编号不摆出来(悬停看原文):「图:版本/层:哈希」只留图和版本,长哈希去掉。 */
 export function targetText(target: string): string {
+  // 第 3 轮 P1-66:布防模式写成人话;例外、录像编号写清是什么
+  const MODE: Record<string, Parameters<typeof t>[0]> = { armed: "modeArmed", home: "modeHome", stay: "modeHome", visitor: "modeVisitor", disarmed: "modeDisarmedAll" };
+  if (MODE[target]) return t(MODE[target]);
+  const ex = /^exception\/(\d+)$/.exec(target);
+  if (ex) return t("auditException", { n: ex[1] });
+  const rec = /^recording\/(\d+)$/.exec(target);
+  if (rec) return t("auditRecording", { n: rec[1] });
+  if (/^recording-clip\//.test(target)) return t("auditClip");
   const m = /^(?:[a-z_]+:)?([^:/\s]+):([^/\s]+)\/(?:[a-z_]+:)?[0-9a-f]{8,}$/i.exec(target);
   if (m) return t("auditMapVer", { map: m[1], v: m[2] });
   return target.replace(/\b[0-9a-f]{12,}\b/gi, "…");
@@ -246,7 +270,8 @@ function UserAudit({ name, account, onClose }: { name: string; account?: Account
                 : r.status >= 200 ? <span class="tag ok" data-result="ok">{t("auditOk")}</span> : null}
               {r.target && <span class="muted small" title={r.target}>{targetText(r.target)}</span>}
               {r.actor_role === "engineer" && <span class="tag">{t("roleEngineer")}</span>}
-              {r.status >= 400 && r.detail?.error && <span class="small audit-why" data-why="1">{siteStr(r.detail.error)}</span>}
+              {r.status < 400 && changeText(r.detail) && <span class="small muted" data-change="1">{changeText(r.detail)}</span>}
+              {r.status >= 400 && r.detail?.error && <span class="small audit-why" data-why="1" title={r.detail.error}>{siteStr(r.detail.error)}</span>}
             </li>
           ))}
         </ul>
