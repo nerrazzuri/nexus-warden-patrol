@@ -8,10 +8,12 @@ import { hm, hms } from "./data";
 import { Confirm, Modal } from "./dialogs";
 import { t } from "./i18n";
 import { roleLabel } from "./shell";
+import { siteStr } from "./sitetext";
 
 type Say = (s: string) => void;
 interface Account { name: string; role: string; disabled: boolean; display_name: string; expires_ms: number | null; last_login_ms: number | null; expired: boolean }
-interface AuditRow { id: number; at: number; actor: string; actor_role?: string | null; action: string; target: string; status: number }
+interface AuditRow { id: number; at: number; actor: string; actor_role?: string | null; action: string; target: string; status: number;
+  detail?: { error?: string } }
 
 const ROLES = ["admin", "guard", "owner", "viewer"] as const;
 
@@ -50,9 +52,21 @@ const ACTIONS: [RegExp, string][] = [
   [/^POST \/api\/robots\/[^/]+\/(home|standby)\/return$/, "actReturn"], [/^POST \/api\/robots\/[^/]+\/abort$/, "actAbort"],
   [/^POST \/api\/robots\/[^/]+\/resume$/, "actResume"], [/^POST \/api\/robots\/[^/]+\/posture$/, "actPosture"],
   [/^POST \/api\/robots\/[^/]+\/relocalize/, "actLocate"], [/^POST \/api\/robots/, "actRobots"],
+  // 第 2 轮 P1-66:添加、解绑、重出激活码、改名、批准加入、退回布置、告警演练
+  [/^POST \/api\/admin\/robots$/, "actRobotAdd"], [/^POST \/api\/admin\/robots\/[^/]+\/code$/, "actRobotCode"],
+  [/^POST \/api\/admin\/robots\/[^/]+\/revoke$/, "actRobotUnbind"], [/^POST \/api\/admin\/robots\/[^/]+\/name$/, "actRobotName"],
+  [/^POST \/api\/admin\/bind/, "actBind"], [/^POST \/api\/layout\/history\/\d+\/restore$/, "actRestore"],
+  [/^POST \/api\/alert-test/, "actAlertTest"], [/^POST \/api\/admin\/cameras/, "actLayout"],
   [/^POST \/api\/admin\/maps/, "actMaps"], [/^POST \/api\/(standby|cameras|layout|guard-routes)/, "actLayout"],
   [/^POST \/api\/(releases|system)/, "actSystem"], [/^POST \/api\/me/, "actMe"],
 ];
+/** 第 2 轮 P1-66:对象里的内部编号不摆出来(悬停看原文):「图:版本/层:哈希」只留图和版本,长哈希去掉。 */
+export function targetText(target: string): string {
+  const m = /^(?:[a-z_]+:)?([^:/\s]+):([^/\s]+)\/(?:[a-z_]+:)?[0-9a-f]{8,}$/i.exec(target);
+  if (m) return t("auditMapVer", { map: m[1], v: m[2] });
+  return target.replace(/\b[0-9a-f]{12,}\b/gi, "…");
+}
+
 export function actionText(a: string): string {
   const hit = ACTIONS.find(([re]) => re.test(a));
   return hit ? t(hit[1] as Parameters<typeof t>[0]) : /^(POST|PUT|DELETE|PATCH) \/api\//.test(a) ? t("actOther") : a;
@@ -229,8 +243,9 @@ function UserAudit({ name, account, onClose }: { name: string; account?: Account
               <span title={r.action}>{actionText(r.action)}</span>
               {r.status >= 400 ? <span class="tag bad" data-result="refused">{t("auditRefused")}</span>
                 : r.status >= 200 ? <span class="tag ok" data-result="ok">{t("auditOk")}</span> : null}
-              {r.target && <span class="muted small">{r.target}</span>}
+              {r.target && <span class="muted small" title={r.target}>{targetText(r.target)}</span>}
               {r.actor_role === "engineer" && <span class="tag">{t("roleEngineer")}</span>}
+              {r.status >= 400 && r.detail?.error && <span class="small audit-why" data-why="1">{siteStr(r.detail.error)}</span>}
             </li>
           ))}
         </ul>
@@ -243,6 +258,13 @@ function EngineerForm({ onClose, onNext }: { onClose: () => void; onNext: (displ
   const [display, setDisplay] = useState("");
   const [hours, setHours] = useState(4);
   const [vpn, setVpn] = useState(false);          // P1-65:多数站点没装 VPN,默认不勾
+  // 第 2 轮 P1-65:站点说没装 VPN 就灰着、写原因(不用到最后一步才说);老站点不报这一项就照旧能勾
+  const [noVpn, setNoVpn] = useState(false);
+  useEffect(() => {
+    let live = true;
+    api<{ vpn?: boolean }>("GET", "/api/system/caps").then((c) => { if (live && c.vpn === false) { setNoVpn(true); setVpn(false); } }).catch(() => {});
+    return () => { live = false; };
+  }, []);
   return (
     <Modal label={t("engOpen")} onClose={onClose}>
       <form class="form eng-form" onSubmit={(e) => { e.preventDefault(); if (display.trim()) onNext(display.trim(), hours, vpn); }}>
@@ -254,8 +276,8 @@ function EngineerForm({ onClose, onNext }: { onClose: () => void; onNext: (displ
             <label key={h}><input type="radio" name="hours" value={String(h)} checked={hours === h} onChange={() => setHours(h)} /> {t("accHours", { n: h })}</label>
           ))}
         </fieldset>
-        <label class="check"><input type="checkbox" name="vpn" checked={vpn} onChange={(e) => setVpn(e.currentTarget.checked)} /> {t("engVpn")}</label>
-        <p class="muted small">{t("engVpnHint")}</p>
+        <label class="check"><input type="checkbox" name="vpn" checked={vpn} disabled={noVpn} onChange={(e) => setVpn(e.currentTarget.checked)} /> {t("engVpn")}</label>
+        <p class="muted small" data-novpn={noVpn ? "1" : undefined}>{t(noVpn ? "engNoVpn" : "engVpnHint")}</p>
         <div class="row end">
           <button type="button" class="btn" onClick={onClose}>{t("cancel")}</button>
           <button type="submit" class="btn primary" disabled={!display.trim()}>{t("engNext")}</button>

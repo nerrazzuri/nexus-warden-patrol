@@ -90,8 +90,9 @@ log = logging.getLogger(__name__)
 MAX_BODY = 64 * 1024
 #: 网页易用性 P1-77:升级包不对时说人话(不提文件里的东西叫什么)。
 NOT_PKG = "选的文件不是升级包，打不开。请选我们给的 .tar.gz 升级文件。"
-NOT_SITE_PKG = "选的文件不是站点升级包（可能选成了机器人升级包）。"
-NOT_ROBOT_PKG = "选的文件不是机器人升级包（可能选成了站点升级包）。"
+NOT_SITE_PKG = "选的文件不是站点升级包（里面没有升级说明）。请选我们给的站点升级文件。"
+#: 第 2 轮 P1-77:不再猜「可能选成了站点升级包」(多半猜错,人还以为是密码错了)
+NOT_ROBOT_PKG = "选的文件不是机器人升级包（里面没有升级说明）。请选我们给的机器人升级文件。"
 SSE_HEARTBEAT_S = 15.0
 #: 一个请求(含读请求头)多久没动静就断:慢速攻击(slowloris)不能一直占着线程。
 REQUEST_TIMEOUT_S = 30.0
@@ -3176,7 +3177,9 @@ class _Handler(TlsHandlerMixin):
                 raise HttpError(405, "只支持 GET")
             return self._send_json(200, {
                 "priv": priv is not None,
-                "push": bool(self.site.push is not None and self.site.push.senders)})
+                "push": bool(self.site.push is not None and self.site.push.senders),
+                # 网页易用性第 2 轮 P1-65:没装 VPN,开工程师账号时「签发 VPN」先灰着
+                "vpn": bool(self.site.vpn is not None and self.site.vpn.ready)})
         if what == "push-test":
             if method != "POST":
                 raise HttpError(405, "只支持 POST")
