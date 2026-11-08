@@ -196,3 +196,18 @@ describe("第 2 轮 P1-66:操作记录说人话", () => {
     lang.value = "zh";
   });
 });
+
+describe("第 3 轮 P1-66 活动记录", () => {
+  it("日程、值班设置、例外、看录像认得;模式、例外编号写人话;改账号写改了什么", async () => {
+    const { actionText, targetText, changeText } = await import("./userspage");
+    const { lang } = await import("./i18n");
+    lang.value = "zh";
+    expect(actionText("POST /api/schedule")).toBe("改了巡逻日程");
+    expect(actionText("POST /api/duty-settings")).toBe("改了值班设置");
+    expect(actionText("POST /api/arming/exceptions/2")).toBe("改了布防例外");
+    expect(actionText("VIEW")).toBe("查看");
+    expect(targetText("armed")).toBe("布防");
+    expect(targetText("exception/2")).toBe("第 2 条例外");
+    expect(changeText({ role: "guard", disabled: true })).toBe("权限改成保安；停用");
+  });
+});

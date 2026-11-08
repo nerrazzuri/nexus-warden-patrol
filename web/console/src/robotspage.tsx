@@ -328,7 +328,7 @@ function Controls({ r, u, role, say, onChanged }: { r: RobotCard; u?: UnitInfo; 
             onClick={() => void send(() => api("POST", path("resume"), {}), t("rdSent", { id, what: t("rdResume") }))}>{t("rdResume")}</button>}
         </div>
       )}
-      {off && <p class="muted small">{t("rdOfflineNoCtl")}</p>}
+      {off && <p class="muted small">{t(r.ever_seen === false ? "rdNeverNoCtl" : "rdOfflineNoCtl")}</p>}
       {patrol && (
         <div class="rd-name">
           <label class="rd-label" for={`rd-route-${r.robot_id}`}>{t("rdRoute")}</label>
@@ -533,7 +533,8 @@ function RobotDetail({ r, u, now, role, say, onChanged, onCode, onClose, readOnl
             const d = await api<{ robot_wipe?: string; old_connection_open?: boolean }>("POST", `/api/admin/robots/${enc(r.robot_id)}/revoke`, { confirm_password: pw });
             setUnbind(null);
             // 网页易用性第 1 轮 P0-10:如实说 —— 老版本不认远程清除;消息服务器没重启时旧连接还开着
-            const wipe = d.robot_wipe === "sent" ? "robotUnbound" : d.robot_wipe === "unsupported" ? "robotUnboundNoWipe" : "robotUnboundOffline";
+            // 第 3 轮 P0-10:从没连上过的不说「下次连上时删数据」(跟确认框说法相反)
+            const wipe = d.robot_wipe === "sent" ? "robotUnbound" : d.robot_wipe === "unsupported" ? "robotUnboundNoWipe" : r.ever_seen === false ? "robotUnboundNever" : "robotUnboundOffline";
             say([t(wipe, { id: label(r) }), d.old_connection_open ? t("robotUnboundOpen") : ""].filter(Boolean).join(" "));
             onClose();
             onChanged();

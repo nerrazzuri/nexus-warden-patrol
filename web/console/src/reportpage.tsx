@@ -191,7 +191,8 @@ export function ReportsPage({ now }: { now: number }) {
                     <td class="mono">{ymd(e.first_ms).slice(5)} {hm(e.first_ms)}</td>
                     <td>{who(e)}</td>
                     <td>{title(e.kind, e.title)}</td>
-                    <td>{e.verdict ? verdictText(e.verdict) : "—"}{e.resolved_by ? ` · ${byText(e.resolved_by)}` : ""}</td>
+                    <td>{/* 第 3 轮 r2-config-N11:没有结论只有处理人时不写「— ·」 */}
+                      {[e.verdict ? verdictText(e.verdict) : "", e.resolved_by ? byText(e.resolved_by) : ""].filter(Boolean).join(" · ") || "—"}</td>
                   </tr>
                 ))}
               </tbody>
