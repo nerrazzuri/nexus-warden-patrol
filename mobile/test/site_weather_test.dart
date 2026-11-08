@@ -49,6 +49,13 @@ void main() {
     expect(find.textContaining('回到自动'), findsWidgets);
   });
 
+  testWidgets('手机 App 测试 M15：只读账号看不到改天气的按钮，说找谁', (t) async {
+    await t.pumpWidget(MaterialApp(home: SiteWeatherPage(api: FakeApi('viewer'))));
+    await t.pumpAndSettle();
+    expect(find.byKey(SiteWeatherPage.readOnlyKey), findsOneWidget);
+    expect(find.byKey(SiteWeatherPage.setKey('storm')), findsNothing);
+  });
+
   testWidgets('站点推了天气：首页当场换', (t) async {
     final api = FakeApi('owner');
     await _home(t, api);

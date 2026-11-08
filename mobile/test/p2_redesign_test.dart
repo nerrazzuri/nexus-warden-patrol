@@ -250,6 +250,12 @@ void main() {
       await t.pumpAndSettle();
     }
 
+    testWidgets('手机 App 测试 M15：只读账号的按钮灰着，下面说为什么', (t) async {
+      await scene(t, FakeApi('viewer'), _intrusion(), const Size(390, 844));
+      expect(find.byKey(SiteAlertScenePage.whyKey), findsOneWidget);
+      expect(find.textContaining('只读账号'), findsOneWidget);
+    });
+
     for (final size in const [Size(390, 844), Size(800, 360)]) {
       testWidgets('四个大按钮在底栏：不跟着滚、够高、字不小于 14（${size.width.toInt()}）', (t) async {
         final api = FakeApi('guard');

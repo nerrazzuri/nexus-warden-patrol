@@ -48,6 +48,7 @@ class SiteAlertScenePage extends StatefulWidget {
   static const Key videoKey = Key('scene-video');
   static const Key deterKey = Key('scene-deter-here');
   static const Key ackKey = Key('scene-ack');
+  static const Key whyKey = Key('scene-why');
   static const Key arriveKey = Key('scene-arrive');
   static const Key doneKey = Key('scene-done');
   static const Key doneGoKey = Key('scene-done-go');
@@ -645,11 +646,29 @@ class _SiteAlertScenePageState extends State<SiteAlertScenePage> {
     Widget row(List<Widget> xs) => Row(children: [
           for (var i = 0; i < xs.length; i++) ...[if (i > 0) gap, Expanded(child: xs[i])],
         ]);
-    if (oneRow || all.length <= 2) return row(all);
-    return Column(mainAxisSize: MainAxisSize.min, children: [
-      row(all.sublist(0, 2)),
-      const SizedBox(height: Nw.s8),
-      row(all.sublist(2)),
+    // 手机 App 测试 M15：按钮灰着要说为什么
+    final why = !handle
+        ? tr('Read-only account: you can watch this alarm; a guard or administrator handles it.',
+            '只读账号：能看，处理要保安或管理员。')
+        : !_open
+            ? tr('This alarm is closed.', '这条报警已经关了。')
+            : _needsArrive && !_arrived && _canBeFalse
+                ? tr('Tap "I\'m on site" first, then you can close it.', '先点「已到场」，才能关掉它。')
+                : '';
+    final buttons = (oneRow || all.length <= 2)
+        ? row(all)
+        : Column(mainAxisSize: MainAxisSize.min, children: [
+            row(all.sublist(0, 2)),
+            const SizedBox(height: Nw.s8),
+            row(all.sublist(2)),
+          ]);
+    if (why.isEmpty) return buttons;
+    return Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      buttons,
+      const SizedBox(height: Nw.s4),
+      Text(why,
+          key: SiteAlertScenePage.whyKey,
+          style: NwText.bodySmall.copyWith(color: Nw.of(context).textSecondary)),
     ]);
   }
 

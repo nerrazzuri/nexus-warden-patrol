@@ -77,6 +77,7 @@ class SiteWeatherPage extends StatefulWidget {
 
   static Key setKey(String c) => Key('weather-$c');
   static Key hoursKey(int h) => Key('weather-hours-$h');
+  static const Key readOnlyKey = Key('weather-read-only');
   static const Key msgKey = Key('weather-msg');
 
   @override
@@ -169,6 +170,13 @@ class _SiteWeatherPageState extends State<SiteWeatherPage> {
               ])),
           nwGap24,
         ],
+        // 手机 App 测试 M15：只读账号改不了天气：不摆按钮，说一句
+        if (!(widget.api.session?.canArm ?? false))
+          NwNotice(
+              key: SiteWeatherPage.readOnlyKey,
+              text: tr('Read-only account: a guard, manager or administrator can switch the weather.',
+                  '只读账号：改天气要保安、经理或管理员操作。'))
+        else ...[
         NwSectionLabel(tr('Set manually', '手动切换')),
         nwGap8,
         NwCard(
@@ -209,6 +217,7 @@ class _SiteWeatherPageState extends State<SiteWeatherPage> {
             Text(_msg, key: SiteWeatherPage.msgKey, style: NwText.bodyMedium.copyWith(color: nw.text)),
           ],
         ])),
+        ],
       ]),
     );
   }
