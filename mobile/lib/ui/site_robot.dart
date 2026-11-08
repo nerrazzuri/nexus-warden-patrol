@@ -28,6 +28,7 @@ import 'site_standby.dart';
 import 'site_supervise.dart';
 import 'site_teleop.dart';
 import 'site_video.dart';
+import 'stop_failed.dart';
 import 'widget/fields_dialog.dart';
 
 /// 一只狗的状态说成一行（狗列表、单狗页共用）。
@@ -129,7 +130,7 @@ class _SiteRobotPageState extends State<SiteRobotPage> {
   }
 
   /// 发一条、把结果写在页面上。狗收下了（或站点没带回执）回真。
-  Future<bool> _do(Future<Map<String, dynamic>> Function() f, String what) async {
+  Future<bool> _do(Future<Map<String, dynamic>> Function() f, String what, {bool stop = false}) async {
     String msg;
     var ok = false;
     try {
@@ -141,9 +142,15 @@ class _SiteRobotPageState extends State<SiteRobotPage> {
       msg = reason.isEmpty
           ? tr('$what: $res', '$what：$res')
           : tr('$what: $res (${ackReasonText(reason)})', '$what：$res（${ackReasonText(reason)}）');
+      if (stop && !ok && mounted) {
+        await showStopFailed(context, robot: widget.robotId, error: reason.isEmpty ? res : ackReasonText(reason));
+      }
     } on SiteError catch (e) {
       msg = tr('$what failed: ${refusalText(e)}', '$what 失败：${refusalText(e)}');
-      if (e.status == 409 && e.body['reason_code'] is String && mounted) {
+      if (stop) {
+        // 手机 App 测试 M02：叫停失败要醒目、不自动消失，叫人按机身急停
+        if (mounted) await showStopFailed(context, robot: widget.robotId, error: e);
+      } else if (e.status == 409 && e.body['reason_code'] is String && mounted) {
         // W53：常见的拒绝说清楚、给去处理的按钮
         await showRefusal(context, widget.api, e, robotId: widget.robotId, title: what, onChanged: _reload);
       }
@@ -428,7 +435,10 @@ class _SiteRobotPageState extends State<SiteRobotPage> {
     try {
       v = await widget.api.robot(widget.robotId);
     } on SiteError catch (e) {
-      if (mounted) setState(() => _msg = tr('Stop failed: $e', '叫停失败：$e'));
+      if (mounted) {
+        setState(() => _msg = tr('Stop failed: ${refusalText(e)}', '叫停失败：${refusalText(e)}'));
+        await showStopFailed(context, robot: widget.robotId, error: e);
+      }
       return;
     }
     final st = v['status'];
@@ -443,7 +453,7 @@ class _SiteRobotPageState extends State<SiteRobotPage> {
       }
       return;
     }
-    await _do(() => widget.api.abort(widget.robotId, tid), tr('Stop', '叫停'));
+    await _do(() => widget.api.abort(widget.robotId, tid), tr('Stop', '叫停'), stop: true);
   }
 
   /// 派巡逻（W53）：底部弹框，带估时、撞日程排队、被拒说原因。

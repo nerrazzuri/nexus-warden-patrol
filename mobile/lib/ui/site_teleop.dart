@@ -31,6 +31,7 @@ import 'nw/nw_widgets.dart';
 import 'site_robot.dart' show postureIcon, postureLabel;
 import 'site_video.dart';
 import 'orientation.dart';
+import 'stop_failed.dart';
 import 'widget/joystick.dart';
 
 /// 硬禁区守卫（决策 65）说的话：狗在续租回执里说、站点转过来的 `{state, label?, max_vx?}`。
@@ -594,13 +595,9 @@ class _SiteTeleopPageState extends State<SiteTeleopPage> with WidgetsBindingObse
     }
     try {
       await widget.api.halt(widget.robotId);
-    } on SiteError catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(
-                content: Text(tr('Stop not confirmed: $e. Press the E-stop on the robot',
-                    '停车未确认：$e —— 请按机身急停！'))));
-      }
+    } catch (e) {
+      // 手机 App 测试 M02：跟值守页、单台机器人页同一个框，不自动消失
+      if (mounted) await showStopFailed(context, robot: widget.robotId, error: e);
     }
   }
 

@@ -14,10 +14,12 @@ import 'package:nexwar_patrol/ui/site_list.dart';
 import 'package:nexwar_patrol/ui/site_tabs.dart';
 import 'package:nexwar_patrol/ui/site_video.dart';
 import 'package:nexwar_patrol/ui/site_watch_page.dart';
+import 'package:nexwar_patrol/ui/stop_failed.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'site_page_test.dart' show FakeApi;
+import 'support/fake_site.dart';
 
 void _size(WidgetTester t, [Size size = const Size(400, 1600)]) {
   t.view.physicalSize = size * 2;
@@ -79,6 +81,30 @@ void main() {
         expect(find.byKey(SiteDutyPage.stopKey), stop ? findsOneWidget : findsNothing, reason: role);
         await t.pumpWidget(Container());
       }
+    });
+
+    testWidgets('手机 App 测试 M02：叫停失败弹醒目的框，叫人按机身急停，不自动消失', (t) async {
+      final busy = <String, dynamic>{
+        ...siteFixture('site_robot'),
+        'status': <String, dynamic>{
+          ...(siteFixture('site_robot')['status'] as Map<String, dynamic>),
+          'task': <String, dynamic>{'task_id': 'task-1', 'type': 'patrol'},
+        },
+      };
+      final api = FakeApi('guard', robotView: busy)..abortError = const SiteError(0, '站点无响应（超时）');
+      await _duty(t, api);
+      await t.ensureVisible(find.byKey(SiteDutyPage.stopKey));
+      await t.tap(find.byKey(SiteDutyPage.stopKey));
+      await t.pumpAndSettle();
+      expect(api.calls, contains('abort A task-1'));
+      expect(find.byKey(stopFailedKey), findsOneWidget);
+      expect(find.textContaining('请立刻按机身上的急停按钮'), findsOneWidget);
+      expect(find.textContaining('站点无响应'), findsOneWidget);
+      await t.pump(const Duration(seconds: 30));
+      expect(find.byKey(stopFailedKey), findsOneWidget, reason: '不自动消失');
+      await t.tap(find.text('知道了'));
+      await t.pumpAndSettle();
+      expect(find.byKey(stopFailedKey), findsNothing);
     });
 
     testWidgets('今天的巡逻：一行一趟；排队中的临时巡逻派的人能取消', (t) async {

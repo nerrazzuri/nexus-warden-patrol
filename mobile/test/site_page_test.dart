@@ -13,7 +13,7 @@ import 'package:nexwar_patrol/ui/app_settings.dart';
 import 'package:nexwar_patrol/ui/patrol_dispatch.dart';
 import 'package:nexwar_patrol/ui/refusal.dart';
 import 'package:nexwar_patrol/ui/site_page.dart';
-import 'package:nexwar_patrol/ui/site_tabs.dart' show MeTab;
+import 'package:nexwar_patrol/ui/site_tabs.dart' show MeTab, leaveConfirmKey;
 import 'package:nexwar_patrol/ui/site_video.dart';
 import 'package:nexwar_patrol/ui/widget/live_video.dart';
 import 'package:flutter/material.dart';
@@ -194,6 +194,9 @@ class FakeApi implements SiteApi {
         (siteFixture('site_robots')['robots'] as List).cast<Map<String, dynamic>>();
   }
 
+  /// 给了就叫停（abort）时扔它（站点联系不上、证书变了）。
+  SiteError? abortError;
+
   /// 给了就用它当狗列表（比如一台没报能力的狗）。
   List<Map<String, dynamic>>? robotsOverride;
   @override
@@ -210,6 +213,7 @@ class FakeApi implements SiteApi {
   @override
   Future<Map<String, dynamic>> abort(String id, String t) async {
     calls.add('abort $id $t');
+    if (abortError != null) throw abortError!;
     return {'ack': {'result': 'accepted'}};
   }
   @override
@@ -1367,9 +1371,10 @@ void main() {
       }
       await t.pageBack();
       await t.pumpAndSettle();
-      await t.tap(find.byKey(NwShell.dogsKey));
+      // 手机 App 测试 M01：离开站点走「我的 → 退出站点」，要确认
+      await t.tap(find.byKey(MeTab.leaveKey));
       await t.pumpAndSettle();
-      await t.pageBack();
+      await t.tap(find.byKey(leaveConfirmKey));
       await t.pumpAndSettle();
       expect(api.pushLog,
           push.supported ? ['+rid-1/android', '-rid-1', 'logout'] : ['logout'],
