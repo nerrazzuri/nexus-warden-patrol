@@ -10,7 +10,7 @@ import { api, apiUpload, ApiError, badPackage, enc } from "./api";
 import { siteStr } from "./sitetext";
 import { ConfirmPassword } from "./confirmpw";
 import { Confirm } from "./dialogs";
-import { hms, md } from "./data";
+import { hm, hms, md } from "./data";
 import { t, type Key } from "./i18n";
 
 type Say = (s: string) => void;
@@ -242,14 +242,19 @@ function Spark({ pts, fmt }: { pts: Metric[]; fmt: (v: number) => string }) {
   const xs = pts.map((p) => p.ts), ys = pts.map((p) => p.value);
   const x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys);
   const L = 44, B = 16, w = 320, h = 48;
-  const d = pts.map((p, i) => `${i ? "L" : "M"}${(L + ((p.ts - x0) / (x1 - x0 || 1)) * w).toFixed(1)},${(4 + h - ((p.value - y0) / (y1 - y0 || 1)) * h).toFixed(1)}`).join(" ");
-  const day = md;
+  // 第 4 轮 config N6:数值一样只标一个刻度(线画在中间);同一天的数据,横轴标时刻
+  const flat = fmt(y0) === fmt(y1);
+  const yOf = (v: number) => (flat ? 4 + h / 2 : 4 + h - ((v - y0) / (y1 - y0 || 1)) * h);
+  const d = pts.map((p, i) => `${i ? "L" : "M"}${(L + ((p.ts - x0) / (x1 - x0 || 1)) * w).toFixed(1)},${yOf(p.value).toFixed(1)}`).join(" ");
+  const day = md(x0) === md(x1) ? hm : md;
   return (
     <svg class="spark" viewBox={`0 0 ${L + w + 4} ${h + B + 8}`} width={L + w + 4} height={h + B + 8} role="img"
-      aria-label={`${fmt(y0)}–${fmt(y1)}, ${day(x0)}–${day(x1)}`}>
+      aria-label={`${flat ? fmt(y0) : `${fmt(y0)}–${fmt(y1)}`}, ${day(x0)}–${day(x1)}`}>
       <path d={`M${L},4V${h + 4}H${L + w}`} class="spark-axis" fill="none" />
-      <text x={L - 4} y={10} class="spark-tick" text-anchor="end" data-y="max">{fmt(y1)}</text>
-      <text x={L - 4} y={h + 4} class="spark-tick" text-anchor="end" data-y="min">{fmt(y0)}</text>
+      {flat ? <text x={L - 4} y={4 + h / 2 + 4} class="spark-tick" text-anchor="end" data-y="flat">{fmt(y0)}</text> : <>
+        <text x={L - 4} y={10} class="spark-tick" text-anchor="end" data-y="max">{fmt(y1)}</text>
+        <text x={L - 4} y={h + 4} class="spark-tick" text-anchor="end" data-y="min">{fmt(y0)}</text>
+      </>}
       <text x={L} y={h + B + 4} class="spark-tick" data-x="start">{day(x0)}</text>
       <text x={L + w} y={h + B + 4} class="spark-tick" text-anchor="end" data-x="end">{day(x1)}</text>
       <path d={d} fill="none" stroke="currentColor" stroke-width="1.5" />

@@ -548,6 +548,11 @@ describe("路线页:站点的回答", () => {
     await waitFor(() => expect(r.getByText("loop-2")).toBeTruthy());
     await waitFor(() => expect(idBox.value).toBe("loop-3"));
     expect(r.container.querySelector("[data-sched-dup]")).toBeNull();
+    // 第 4 轮 r3-config-N6:开始时间也清掉,不再黄字说「这个时间已有」(指的是刚加的那一条)
+    expect((r.container.querySelector('input[name="at"]') as HTMLInputElement).value).toBe("");
+    expect(r.container.querySelector("[data-sched-same]")).toBeNull();
+    expect((r.getByText("Add schedule") as HTMLButtonElement).disabled).toBe(true);
+    expect(r.container.querySelector(".sched-list .muted.small")!.textContent).toBe("Mon");   // 星期写成 Mon,不是 mon
   });
 });
 

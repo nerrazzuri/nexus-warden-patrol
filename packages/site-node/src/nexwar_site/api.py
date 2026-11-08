@@ -806,7 +806,8 @@ class _Handler(TlsHandlerMixin):
                 return self._deterrence(method, path, user)
             if path in ("/api/mode", "/api/mode/zones"):
                 return self._mode(method, path, user)
-            if path in ("/api/arming/schedule", "/api/arming/exceptions") or _ARM_EX.match(path):
+            if path in ("/api/arming/schedule", "/api/arming/schedule/preview",
+                        "/api/arming/exceptions") or _ARM_EX.match(path):
                 return self._arming_schedule(method, path, user)
             if path.startswith("/api/guard/"):
                 return self._guard(method, path, user)
@@ -919,8 +920,12 @@ class _Handler(TlsHandlerMixin):
         except HttpError as exc:
             self.close_connection = True          # 请求体可能没读完(413),连接不能复用
             self._send_json(exc.status, {**exc.extra, "error": exc.message})
+        except (BrokenPipeError, ConnectionResetError, ssl.SSLEOFError) as exc:
+            # 第 4 轮 config N7:浏览器关页面、切页面断开了连接,不是站点出错 —— 记一行 INFO,不带栈
+            self.close_connection = True
+            log.info("客户端断开了 %s %s(%s)", method, self.path, type(exc).__name__)
         except Exception:                                    # 最后一道:别把栈回给客户端
-            log.exception("站点 API 处理 %s %s 炸了", method, self.path)
+            log.exception("站点 API 处理 %s %s 出错", method, self.path)
             self._send_json(500, {"error": "站点内部错误"})
 
     def do_GET(self) -> None:
@@ -2106,6 +2111,10 @@ class _Handler(TlsHandlerMixin):
         self._need(user, SCHEDULE)          # W53:布防时间经理也能排
         d = self._body()
         try:
+            if path == "/api/arming/schedule/preview":
+                # 第 4 轮 config N1 / N2:保存前问「此刻会变成什么」,按站点的钟、逐个防区(只读)
+                self._skip_audit = True
+                return self._send_json(200, desk.preview(d))
             if path == "/api/arming/schedule":
                 slots = d.get("slots")
                 self._audit_detail = {"enabled": d.get("enabled"),

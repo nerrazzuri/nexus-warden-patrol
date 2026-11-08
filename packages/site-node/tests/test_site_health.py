@@ -314,3 +314,29 @@ def test_网页第4轮_P1_01_密钥有毛病_英文也写出是哪几把(台):
     en = t.h.checks()["keys"]["detail_en"]
     assert en == ("Site key problem: password encryption key (missing), "
                   "backup encryption key (readable by other users)")
+
+
+def test_第4轮_config_N7_客户端断开记INFO_不记ERROR(tmp_path, monkeypatch, caplog):
+    import logging
+    import ssl
+
+    from test_site_api import 站
+
+    from nexwar_site import api as api_mod
+
+    def boom(self, method, user):
+        raise ssl.SSLEOFError("EOF occurred in violation of protocol")
+
+    s = 站(tmp_path)
+    try:
+        monkeypatch.setattr(api_mod._Handler, "_weather", boom)
+        tok = s.login()
+        with caplog.at_level(logging.INFO, logger=api_mod.log.name):
+            try:
+                s.req("GET", "/api/weather", token=tok)
+            except Exception:  # noqa: BLE001 —— 站点没回就关了连接,客户端这边报错是对的
+                pass
+        mine = [r for r in caplog.records if "/api/weather" in r.getMessage()]
+        assert mine and all(r.levelno == logging.INFO and r.exc_info is None for r in mine)
+    finally:
+        s.close()

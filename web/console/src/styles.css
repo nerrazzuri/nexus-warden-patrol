@@ -1607,3 +1607,5 @@ input[type="file"] { max-width: 100%; min-width: 0; }            /* 上传按钮
 .sw-standby { fill: var(--c-surface); stroke: var(--c-text); stroke-width: 1.5; }
 .sw-cam { fill: var(--c-primary); }
 .sw-camfan { fill: var(--c-primary); fill-opacity: .25; }
+/* 第 4 轮 r2-config-N3:「添加日程」按钮不拉成一整条 */
+.sched-form > .sched-add { justify-self: start; align-self: flex-start; width: auto; }

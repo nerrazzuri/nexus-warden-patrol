@@ -7,9 +7,9 @@ import { GuardPanel } from "./armguard";
 import { DevicesPanel } from "./devicespanel";
 import { PatrolSchedules } from "./routepage";
 import { api, ApiError, enc } from "./api";
-import { addBlock, armedAt, copyDay, fromWire, minutesText, moveEdge, removeBlock, toWire, type Slot, type WireSlot } from "./armgrid";
+import { addBlock, copyDay, fromWire, minutesText, moveEdge, removeBlock, toWire, type Slot, type WireSlot } from "./armgrid";
 import { hm, type DutySettings } from "./data";
-import { t, type Key } from "./i18n";
+import { joinList, t, type Key } from "./i18n";
 import { pageAllowed } from "./shell";
 import { Confirm } from "./dialogs";
 import { useUnsaved } from "./unsaved";
@@ -18,7 +18,41 @@ import { dateInput } from "./recordings";
 type Say = (s: string) => void;
 interface Exception { id: number; first_day: string; last_day: string; state: "armed" | "disarmed"; note: string }
 interface Schedule { enabled: boolean; slots: WireSlot[]; exceptions: Exception[] }
-interface ModeView { mode: string; label?: string; state?: string; source?: "schedule" | "manual"; next_change_ms?: number | null; manual_until_ms?: number | null; zones?: { zone: string }[] }
+interface ModeView { mode: string; label?: string; state?: string; source?: "schedule" | "manual"; next_change_ms?: number | null; manual_until_ms?: number | null;
+  zones?: { zone: string; armed?: boolean; home_armed?: boolean }[]; default_armed?: boolean | null; timezone?: string | null }
+
+/** 第 4 轮 config N2:布防页的时间一律按站点时区(日程格子就是站点时间);认不出的时区退回浏览器的。 */
+function inTz(ms: number, tz: string | null | undefined, opts: Intl.DateTimeFormatOptions, loc = "en-GB"): string | null {
+  if (!tz) return null;
+  try { return new Intl.DateTimeFormat(loc, { ...opts, timeZone: tz }).format(ms); } catch { return null; }
+}
+export const hmSite = (ms: number, tz?: string | null) => inTz(ms, tz, { hour: "2-digit", minute: "2-digit", hourCycle: "h23" }) ?? hm(ms);
+export const daySite = (ms: number, tz?: string | null) => inTz(ms, tz, { year: "numeric", month: "2-digit", day: "2-digit" }, "sv-SE") ?? dateInput(ms);
+export function browserTz(): string {
+  try { return Intl.DateTimeFormat().resolvedOptions().timeZone; } catch { return ""; }
+}
+
+/** 第 4 轮 config N1:站点预演前后逐个防区比,列出此刻会变的(「其余地方」= 没画进具名防区的那份)。 */
+export function previewChanges(before: ModeView, after: ModeView, saving = true): string | null {
+  const st = (on: boolean) => t(on ? "armStateArmed" : "armStateDisarmed");
+  const was = new Map((before.zones ?? []).map((z) => [z.zone, !!z.armed]));
+  const out: string[] = [];
+  for (const z of after.zones ?? []) {
+    const a = was.get(z.zone) ?? (before.default_armed ?? before.state !== "disarmed");
+    if (a !== !!z.armed) out.push(t("armChangeItem", { zone: z.zone, from: st(a), to: st(!!z.armed) }));
+  }
+  // 没画进具名防区的地方:按日程时站点给 default_armed;手动时只有「布防」模式才算(站点的老约定)
+  const dflt = (v: ModeView) => v.default_armed ?? (v.source === "schedule" ? v.state !== "disarmed" : v.mode === "armed");
+  const bd = dflt(before), ad = dflt(after);
+  if (bd !== ad) {
+    out.push(t("armChangeItem", { zone: t(after.zones?.length ? "armElsewhere" : "armWholeSite"), from: st(bd), to: st(ad) }));
+  }
+  if (out.length === 0) return null;
+  if (!saving) return t(after.state === "disarmed" ? "armNowAllOff" : after.state === "armed" ? "armNowAllOn" : "armNowChanges", { list: joinList(out) });
+  if (after.state === "disarmed") return t("armSaveDisarm");
+  if (after.state === "armed") return t("armSaveArm");
+  return t("armSaveChanges", { list: joinList(out) });
+}
 
 const DAY_KEYS: Key[] = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
 const HOURS = Array.from({ length: 24 }, (_, i) => i);
@@ -40,9 +74,9 @@ export function whoText(m: ModeView | null, enabled: boolean): string {
   if (!m) return "";
   const s = modeLabel(m);
   if (m.source === "schedule") {
-    return m.next_change_ms ? t("armWhoSchedule", { s, t: hm(m.next_change_ms) }) : t("armWhoScheduleNoNext", { s });
+    return m.next_change_ms ? t("armWhoSchedule", { s, t: hmSite(m.next_change_ms, m.timezone) }) : t("armWhoScheduleNoNext", { s });
   }
-  if (enabled && m.manual_until_ms) return t("armWhoManual", { s, t: hm(m.manual_until_ms) });
+  if (enabled && m.manual_until_ms) return t("armWhoManual", { s, t: hmSite(m.manual_until_ms, m.timezone) });
   return t("armWhoOff", { s });
 }
 
@@ -108,29 +142,37 @@ export function ArmingPage({ say, now, role = "admin" }: { say: Say; now: number
     const wasOn = !!loaded?.enabled;
     // 第 3 轮 config N1:停用日程时站点照此刻的状态改成手动(此刻撤防 → 留守),确认框写清变成什么
     if (!enabled && wasOn) {
-      return mode.source === "schedule"
-        ? t("armSaveOffTo", { to: t(mode.state === "disarmed" ? "modeHome" : "modeArmed") }) : t("armSaveOff");
+      if (mode.source !== "schedule") return t("armSaveOff");
+      // 第 4 轮 config N5:日程此刻撤防 → 手动没有全撤防,改成留守:外围防区马上布防,写出是哪几个
+      if (mode.state === "disarmed") {
+        const outer = (mode.zones ?? []).filter((z) => z.home_armed !== false).map((z) => z.zone);
+        return outer.length ? t("armSaveOffStay", { zones: joinList(outer) }) : t("armSaveOffTo", { to: t("modeHome") });
+      }
+      return t("armSaveOffTo", { to: t("modeArmed") });
     }
     // 第 3 轮 config N4:手动期里删光时段也要说「整周撤防」(原来手动期里一律不问)
     if (enabled && slots.length === 0) return t("armSaveEmpty");
-    // 第 3 轮 config N3:临时撤防进行中打开日程,临时撤防马上结束
-    if (enabled && !wasOn && mode.mode === "visitor") {
-      return t("armSaveEndsVisitor", { state: t(armedAt(slots, "", new Date(now)) ? "armStateArmed" : "armStateDisarmed") });
-    }
-    // 第 2 轮 N1:日程开着时手动切换管到下一个变化点(manual_until_ms),这期间存日程此刻不变;
-    // 日程原来关着,手动状态没有期限 —— 一打开日程保存,站点马上按日程走,跟按日程时一样要先确认
-    if (mode.source === "manual" && mode.manual_until_ms && wasOn && enabled) return null;
-    // 第 3 轮 config N2:留守时外围防区是布防的,也算「此刻布防」(原来把留守当撤防,打开日程撤防不问)
-    const nowArmed = mode.state !== "disarmed";
-    const willArm = enabled && armedAt(slots, "", new Date(now));
-    if (enabled && nowArmed && !willArm) return t("armSaveDisarm");
-    if (enabled && !nowArmed && willArm) return t("armSaveArm");
     return null;
   }
-  function trySave() {
+  async function trySave() {
     const e = effectNow();
-    if (e) setAskSave(e);
-    else void save();
+    if (e) { setAskSave(e); return; }
+    // 第 4 轮 config N1 / N2:其余情况问站点「此刻会变成什么」—— 按站点的钟、逐个防区比
+    //(原来按浏览器的钟、只看「全部防区」那一份:只改一个防区不问,浏览器时区不同算错)
+    if (enabled) {
+      try {
+        const p = await api<{ before: ModeView; after: ModeView }>("POST", "/api/arming/schedule/preview", { enabled, slots: toWire(slots) });
+        // 第 3 轮 config N3:临时撤防进行中打开日程,临时撤防马上结束(此刻的状态也按站点算)
+        const c = !loaded?.enabled && mode?.mode === "visitor"
+          ? t("armSaveEndsVisitor", { state: t(p.after.state === "armed" ? "armStateArmed" : p.after.state === "disarmed" ? "armStateDisarmed" : "armStatePartial") })
+          : previewChanges(p.before, p.after);
+        if (c) { setAskSave(c); return; }
+      } catch (err) {
+        say(errText(err));
+        return;
+      }
+    }
+    void save();
   }
 
   async function save() {
@@ -184,6 +226,9 @@ export function ArmingPage({ say, now, role = "admin" }: { say: Say; now: number
         <div class="arm-now-text">
           <h2>{t("armNow")}</h2>
           <p class="arm-who">{whoText(mode, loaded?.enabled ?? enabled)}</p>
+          {mode?.timezone && browserTz() && mode.timezone !== browserTz() && (
+            <p class="muted small" data-site-tz={mode.timezone}>{t("armTzNote", { tz: mode.timezone, now: hmSite(now, mode.timezone) })}</p>
+          )}
         </div>
         {mode && (
           <div class="arm-now-btns">
@@ -271,7 +316,7 @@ export function ArmingPage({ say, now, role = "admin" }: { say: Say; now: number
         </>
       )}
 
-      <Exceptions list={exceptions} say={say} onChange={(l) => { setExceptions(l); void loadMode(); }} on={!!loaded?.enabled} mode={mode} />
+      <Exceptions list={exceptions} say={say} onChange={(l) => { setExceptions(l); void loadMode(); }} on={!!loaded?.enabled} mode={mode} saved={loaded ? toWire(loaded.slots) : []} />
       {role === "owner" && <p class="muted small">{t("armOwnerNote")}</p>}
 
 
@@ -417,7 +462,7 @@ function CopyTo({ from, onCopy, onClose }: { from: number; onCopy: (days: number
   );
 }
 
-function Exceptions({ list, say, onChange, on, mode }: { list: Exception[]; say: Say; onChange: (l: Exception[]) => void; on: boolean; mode: ModeView | null }) {
+function Exceptions({ list, say, onChange, on, mode, saved }: { list: Exception[]; say: Say; onChange: (l: Exception[]) => void; on: boolean; mode: ModeView | null; saved: WireSlot[] }) {
   const [asking, setAsking] = useState<string | null>(null);
   const [first, setFirst] = useState("");
   const [last, setLast] = useState("");
@@ -426,7 +471,7 @@ function Exceptions({ list, say, onChange, on, mode }: { list: Exception[]; say:
   // 第 2 轮 P1-58 / P1-05:例外跟上面的时间表不一样,加、删马上生效 —— 删先确认,加删都说一声
   const [removing, setRemoving] = useState<Exception | null>(null);
   // P1-60:当场查 —— 不能早于今天、结束不能早于开始;错就写在这一行下面,不弹框
-  const today = dateInput(Date.now());
+  const today = daySite(Date.now(), mode?.timezone);     // 第 4 轮 config N2:「今天」是站点的今天
   const exErr = first && first < today ? t("armExPast") : first && last && last < first ? t("armExOrder") : "";
   // 第 3 轮 config N5:今天的例外会马上改变此刻的状态(日程开着、此刻按日程走)→ 跟保存日程一样先确认
   function tryAdd() {
@@ -449,11 +494,27 @@ function Exceptions({ list, say, onChange, on, mode }: { list: Exception[]; say:
       say(errText(e));
     }
   }
+  // 第 4 轮 config N3:删今天的例外会马上改变此刻的状态 —— 问站点删了以后会怎样,写进确认框;日程关着就说不起作用
+  const [removeText, setRemoveText] = useState("");
+  async function askRemove(x: Exception) {
+    const d = x.first_day === x.last_day ? x.first_day : `${x.first_day} – ${x.last_day}`;
+    if (!on) { setRemoveText(t("armExRemoveAskOff", { d })); setRemoving(x); return; }
+    let text = t("armExRemoveAsk", { d });
+    if (x.first_day <= today && today <= x.last_day && mode?.source === "schedule") {
+      try {
+        const p = await api<{ before: ModeView; after: ModeView }>("POST", "/api/arming/schedule/preview", { enabled: true, slots: saved, skip_exception: x.id });
+        const c = previewChanges(p.before, p.after, false);
+        text = c ? t("armExRemoveAskNow", { d, what: c }) : t("armExRemoveAskSame", { d });
+      } catch { /* 问不到就用一般的说法 */ }
+    }
+    setRemoveText(text);
+    setRemoving(x);
+  }
   async function remove(id: number) {
     try {
       const d = await api<Schedule>("POST", `/api/arming/exceptions/${enc(String(id))}/remove`, {});
       onChange(d.exceptions ?? []);
-      say(t("armExRemoved"));
+      say(t(on ? "armExRemoved" : "armExRemovedOff"));
     } catch (e) {
       say(errText(e));
     }
@@ -469,7 +530,7 @@ function Exceptions({ list, say, onChange, on, mode }: { list: Exception[]; say:
               <span class="mono">{x.first_day === x.last_day ? x.first_day : `${x.first_day} – ${x.last_day}`}</span>
               <b>{t(x.state === "armed" ? "armExArmed" : "armExDisarmed")}</b>
               {x.note && <span class="muted">{x.note}</span>}
-              <button type="button" class="btn sm push" onClick={() => setRemoving(x)}>{t("remove")}</button>
+              <button type="button" class="btn sm push" onClick={() => void askRemove(x)}>{t("remove")}</button>
             </li>
           ))}
         </ul>
@@ -489,7 +550,7 @@ function Exceptions({ list, say, onChange, on, mode }: { list: Exception[]; say:
       {exErr && <p class="error small" role="alert">{exErr}</p>}
       {asking && <Confirm text={asking} yes={t("armExAdd")} danger onNo={() => setAsking(null)} onYes={() => void add()} />}
       {removing && (
-        <Confirm text={t("armExRemoveAsk", { d: removing.first_day === removing.last_day ? removing.first_day : `${removing.first_day} – ${removing.last_day}` })}
+        <Confirm text={removeText}
           yes={t("remove")} danger onNo={() => setRemoving(null)} onYes={() => { const id = removing.id; setRemoving(null); void remove(id); }} />
       )}
     </section>

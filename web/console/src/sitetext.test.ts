@@ -116,3 +116,11 @@ describe("第 3 轮 zh N10 / N11 体检说人话", () => {
     expect(checkText({ ok: false, detail: "未配置推送(site.json 的 push)" })).toBe("还没设置手机推送");
   });
 });
+
+describe("第 4 轮 P1-77 升级包被拒", () => {
+  it("签名不对、损坏、已存在各说各的", () => {
+    expect(siteText("升级包的签名不匹配,不是公司发的(x:签名错误)").text).toMatch(/signature does not match/);
+    expect(siteText("升级包已损坏(文件与清单不匹配)").text).toMatch(/damaged/);
+    expect(siteText("此版本已存在").text).toBe("This version is already on the site.");
+  });
+});

@@ -48,7 +48,8 @@ beforeEach(() => {
     if (url.startsWith("/api/app-update")) return Promise.resolve(json({ available: false }));
     if (url.startsWith("/api/metrics")) {
       return Promise.resolve(json({ metrics: [{ ts: 1, key: "site_disk_free", value: 0.31 }, { ts: 2, key: "site_disk_free", value: 0.2 },
-        { ts: 1, key: "robots_online", value: 2 }] }));
+        { ts: 1, key: "robots_online", value: 2 },
+        { ts: Date.UTC(2026, 10, 8, 3), key: "upload_backlog", value: 0 }, { ts: Date.UTC(2026, 10, 8, 5), key: "upload_backlog", value: 0 }] }));
     }
     return Promise.resolve(json({}, 404));
   }) as typeof fetch);
@@ -169,6 +170,15 @@ describe("运行指标", () => {
     expect(row.querySelector('[data-y="max"]')!.textContent).toBe("31%");
     expect(row.querySelector('[data-y="min"]')!.textContent).toBe("20%");
     expect(row.querySelector('[data-x="start"]')!.textContent).not.toBe("");
+  });
+
+  it("第 4 轮 config N6:数值一样只标一个刻度;同一天的横轴标时刻", async () => {
+    const { container: c } = render(<SiteMetrics />);
+    await waitFor(() => expect(c.querySelector('[data-metric="upload_backlog"] [data-y="flat"]')).not.toBeNull());
+    const row = c.querySelector('[data-metric="upload_backlog"]')!;
+    expect(row.querySelector('[data-y="max"]')).toBeNull();
+    expect(row.querySelector('[data-x="start"]')!.textContent).toMatch(/^\d\d:\d\d$/);
+    expect(row.querySelector('[data-x="start"]')!.textContent).not.toBe(row.querySelector('[data-x="end"]')!.textContent);
   });
 });
 

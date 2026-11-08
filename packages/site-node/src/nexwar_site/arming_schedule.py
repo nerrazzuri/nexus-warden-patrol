@@ -132,16 +132,21 @@ class ArmingSchedule:
         return out
 
     @staticmethod
-    def _exception_in(c: Any, d: date) -> str | None:
+    def _exception_in(c: Any, d: date, skip: int | None = None) -> str | None:
         row = c.execute("SELECT state FROM arming_exceptions WHERE first_day<=? AND "
-                        "last_day>=? ORDER BY id DESC LIMIT 1",
-                        (d.isoformat(), d.isoformat())).fetchone()
+                        "last_day>=? AND id<>? ORDER BY id DESC LIMIT 1",
+                        (d.isoformat(), d.isoformat(), -1 if skip is None else skip)).fetchone()
         return row["state"] if row else None
 
     def scheduled(self, zone: str | None, now_ms: int) -> bool | None:
         """``zone`` 此刻按时间表布不布防;没开时间表回 ``None``。"""
         now = datetime.fromtimestamp(now_ms / 1000, self._tz())
         on, slots, ex = self._state(now.date())
+        return self._decide(on, slots, ex, zone, now)
+
+    @staticmethod
+    def _decide(on: bool, slots: list[dict[str, Any]], ex: str | None, zone: str | None,
+                now: datetime) -> bool | None:
         if not on:
             return None
         if ex is not None:
@@ -159,12 +164,19 @@ class ArmingSchedule:
 
     def next_boundary(self, now_ms: int) -> int | None:
         """下一个布防状态可能变的时刻:今天剩下的段头段尾,最晚是今天 24:00(明天 0 点,例外按天
-        换)。没开回 ``None``。"""
+        换)。没开回 ``None``。第 4 轮 config N4:今天有例外(整天一个样)就是明天 0 点。"""
         tz = self._tz()
         today = datetime.fromtimestamp(now_ms / 1000, tz).date()
-        on, slots, _ = self._state(today)
+        on, slots, ex = self._state(today)
+        return self._next(on, slots, ex, now_ms, today, tz)
+
+    @staticmethod
+    def _next(on: bool, slots: list[dict[str, Any]], ex: str | None, now_ms: int, today: date,
+              tz: tzinfo) -> int | None:
         if not on:
             return None
+        if ex is not None:
+            return int(datetime.combine(today + timedelta(days=1), time(0), tz).timestamp() * 1000)
         edges: dict[int, set[int]] = {}
         for s in slots:
             edges.setdefault(s["day"], set()).update((s["start_min"], s["end_min"]))
@@ -179,8 +191,21 @@ class ArmingSchedule:
 
     # ------------------------------------------------------------ 改
 
-    def put(self, d: Any, *, by: str) -> dict[str, Any]:
-        """整份换:``{"enabled": bool, "slots": [{zone, day, start, end}]}``。"""
+    def tz_name(self) -> str:
+        """站点时区的名字(网页按它显示布防页的时间,第 4 轮 config N2)。"""
+        return str(self._tz())
+
+    def what_if(self, d: Any) -> _WhatIf:
+        """第 4 轮 config N1 / N2:照这份(还没存的)时间表,此刻会怎样 —— 网页保存前按站点的钟、逐个
+        防区比(原来网页按浏览器的钟、只看「全部防区」那一份)。只读,不写库。"""
+        enabled, rows = self._parse(d)
+        skip = d.get("skip_exception")           # 第 4 轮 config N3:删掉这条例外以后会怎样
+        if skip is not None and (not isinstance(skip, int) or isinstance(skip, bool)):
+            raise ScheduleError("skip_exception 要是例外的编号")
+        return _WhatIf(self, enabled, [{"zone": z, "day": dd, "start_min": a, "end_min": b}
+                                       for z, dd, a, b in rows], skip)
+
+    def _parse(self, d: Any) -> tuple[bool, list[tuple[str, int, int, int]]]:
         if not isinstance(d, dict):
             raise ScheduleError("要一个对象")
         enabled = d.get("enabled")
@@ -212,6 +237,11 @@ class ArmingSchedule:
                 where = a[0] or "全部防区"
                 raise ScheduleError(f"{where} 星期{'一二三四五六日'[a[1]]}的两段重叠了:"
                                     f"{_hhmm(a[2])}–{_hhmm(a[3])} 和 {_hhmm(b[2])}–{_hhmm(b[3])}")
+        return enabled, rows
+
+    def put(self, d: Any, *, by: str) -> dict[str, Any]:
+        """整份换:``{"enabled": bool, "slots": [{zone, day, start, end}]}``。"""
+        enabled, rows = self._parse(d)
         if self.clash is not None:                       # W73 第三期:跟巡逻排程撞了不让存
             got = self.clash.new(arming={
                 "enabled": enabled, "exceptions": self.exceptions(),
@@ -258,3 +288,29 @@ class ArmingSchedule:
     def remove_exception(self, eid: int) -> bool:
         with self.db.tx() as c:
             return c.execute("DELETE FROM arming_exceptions WHERE id=?", (eid,)).rowcount > 0
+
+
+class _WhatIf:
+    """一份还没存的时间表(开关 + 时间段),例外照站点现在的;
+    接口跟 :class:`ArmingSchedule` 读的那几个一样,
+    给 ``ModeDesk.preview`` 用。"""
+
+    def __init__(self, real: ArmingSchedule, enabled: bool, slots: list[dict[str, Any]],
+                 skip: int | None = None) -> None:
+        self.real, self.on, self.slots, self.skip = real, enabled, slots, skip
+
+    def enabled(self) -> bool:
+        return self.on
+
+    def _ex(self, now_ms: int) -> tuple[datetime, str | None]:
+        now = datetime.fromtimestamp(now_ms / 1000, self.real._tz())
+        with self.real.db.snapshot() as c:
+            return now, self.real._exception_in(c, now.date(), self.skip)
+
+    def scheduled(self, zone: str | None, now_ms: int) -> bool | None:
+        now, ex = self._ex(now_ms)
+        return ArmingSchedule._decide(self.on, self.slots, ex, zone, now)
+
+    def next_boundary(self, now_ms: int) -> int | None:
+        now, ex = self._ex(now_ms)
+        return ArmingSchedule._next(self.on, self.slots, ex, now_ms, now.date(), self.real._tz())
