@@ -38,7 +38,8 @@ export function AlertTestBar({ role, onCleared, pollMs = ALERT_TEST_POLL_MS }:
     try {
       const r = await api<Mode & { cleared?: number }>("POST", "/api/alert-test", body);
       setMode(r);
-      if (r.cleared != null) { setMsg(t("atCleared", { n: r.cleared })); onCleared(); }
+      // 第 2 轮 P1-19:站点数的包括保安看不到的管理员类记录,跟眼前对不上 —— 不写条数
+      if (r.cleared != null) { setMsg(t("atCleared")); onCleared(); }
     } catch (e) {
       setMsg(e instanceof ApiError ? e.message : String(e));
     }

@@ -95,6 +95,9 @@ describe("保安的临时路线", () => {
     await waitFor(() => expect(c.textContent).toContain("第 1 个点"), { timeout: 2000 });
     expect(c.textContent).toContain("在墙里");
     expect(posts).toEqual([]);
+    // 第 2 轮 P1-16:查出问题的点没改,「开始」灰掉、说先改点(按了也只会被站点拒、看着没反应)
+    expect(btn(c, "开始")!.disabled).toBe(true);
+    expect(c.querySelector("[data-fix-points]")).not.toBeNull();
   });
 
   it("没点点不能开始", () => {

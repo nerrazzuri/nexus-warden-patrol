@@ -1,7 +1,7 @@
-import { useState } from "preact/hooks";
+import { useEffect, useState } from "preact/hooks";
 import { api, ApiError } from "./api";
 import type { Me } from "./app";
-import { t, type Key } from "./i18n";
+import { lang, t, type Key } from "./i18n";
 import { LangSwitch } from "./langswitch";
 
 export function Login({ onIn, expired, note }: { onIn: (m: Me) => void; expired: boolean; note?: string | null }) {
@@ -11,6 +11,8 @@ export function Login({ onIn, expired, note }: { onIn: (m: Me) => void; expired:
   // P2-05:记词条,不记译好的字(切语言跟着变)
   const [err, setErr] = useState<Key | "">("");
   const [show, setShow] = useState(false);
+  // 第 2 轮 P1-04 / admin N14:登录页的标签页标题跟着语言变;退出登录回到这里也不停在上一页的标题
+  useEffect(() => { document.title = `${t("signIn")} · Nexus Warden`; }, [lang.value]);
 
   async function submit(e: Event) {
     e.preventDefault();

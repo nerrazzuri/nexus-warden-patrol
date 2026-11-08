@@ -220,3 +220,15 @@ describe("第 2 轮 P1-79:顶栏布防状态的悬停按角色说", () => {
     expect(tip("viewer")).toContain("只能看");
   });
 });
+
+describe("第 2 轮 P1-03:顶栏日期不会读反", () => {
+  it("中英文都写 月-日", () => {
+    const now = new Date(2026, 10, 8, 2, 4).getTime();
+    for (const l of ["en", "zh"] as const) {
+      lang.value = l;
+      const r = render(<TopBar me={me("admin")} page="duty" mode={null} alarms={0} now={now} pref="system" onPref={() => {}} onStop={() => {}} onSignOut={() => {}} onSay={() => {}} />);
+      expect(r.container.querySelector(".clock-date")!.textContent).toBe("11-08");
+      cleanup();
+    }
+  });
+});

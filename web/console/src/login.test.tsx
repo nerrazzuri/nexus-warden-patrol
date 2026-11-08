@@ -29,3 +29,15 @@ describe("登录页", () => {
     await waitFor(() => expect(c.querySelector(".login-err")!.textContent).not.toBe(en));
   });
 });
+
+describe("第 2 轮 P1-04:登录页标题", () => {
+  it("跟着语言变,不停在上一页的标题", async () => {
+    document.title = "Alarm log · Nexus Warden";
+    lang.value = "en";
+    const r = render(<Login onIn={() => {}} expired={false} />);
+    expect(document.title).toBe("Sign in · Nexus Warden");
+    lang.value = "zh";
+    await waitFor(() => expect(document.title).toBe("登录 · Nexus Warden"));
+    r.unmount();
+  });
+});
