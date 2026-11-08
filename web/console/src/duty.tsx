@@ -214,7 +214,7 @@ export function DutyPage(props: {
         </div>
       </section>
       <section class="dcard duty-left" aria-label={t("robots")}>
-        <h2 class="dcard-h">{t("robots")}</h2>
+        <h2 class="dcard-h">{t("robots")}{ranked.length > 0 && <span class="muted small" data-robot-count={ranked.length}> · {ranked.length}</span>}</h2>
         <ul class="duty-list" aria-label={t("robots")}>
           {ranked.length === 0 && <li class={props.stale ? "warn" : "muted"}>{t(props.stale ? "dutyStaleRobots" : "dutyNoRobots")}</li>}
           {ranked.map((u) => (

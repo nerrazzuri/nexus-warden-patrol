@@ -1493,3 +1493,8 @@ input[type="file"] { max-width: 100%; min-width: 0; }            /* 上传按钮
 /* 第 3 轮 config N10:KPI 卡片下面紧接着「巡逻 / 误报 / 机器人问题」一排,卡片加了说明变高后上下贴住 */
 .kpi-groups + .rep-stats, .kpi-groups ~ .rep-stats { margin-top: 16px; }
 .rep-stats + * { margin-top: 16px; }
+/* 第 3 轮 layout N2:机器人列表和「今日巡逻」各自限高,第 3 台起被「今日巡逻」压住、今日巡逻也被裁。
+   改成整张卡片一起滚:机器人一台不落地排在前面,今日巡逻接在下面 */
+.duty-left { overflow-y: auto; }
+.duty-left .duty-list { flex: none; overflow: visible; }
+.duty-left .today { flex: none; max-height: none; overflow: visible; }

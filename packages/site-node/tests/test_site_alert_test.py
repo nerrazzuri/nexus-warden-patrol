@@ -88,3 +88,20 @@ def test_外审r1_清掉测试再重启_真告警不重用删掉的号(站点):
     desk = type(s.desk)(s.db, now_ms=s.desk._now)       # 站点重启:从库里读回
     real = desk.raise_alert(kind="intrusion", robot="A", title="真的入侵")
     assert real.key != t1.key, (real.key, t1.key)
+
+
+def test_第3轮_duty_N10_演练期间摄像头掉线_站点自己的毛病照样是真报警_不删_删前能列出来(站点):
+    s = 站点
+    alice = _登(s, "alice")
+    start = {"action": "start", "minutes": 30}
+    assert s.req("POST", "/api/alert-test", start, token=alice)[0] == 200
+    cam = _报(s, "摄像头掉线了", kind="cctv_offline", robot="cctv:gate")
+    site = _报(s, "存储快满了", kind="stuck", robot="site")
+    drill = _报(s, "演练:卡住了")
+    assert "test" not in cam.context and not cam.title.startswith("测试：")
+    assert "test" not in site.context
+    v = s.req("GET", "/api/alert-test", token=alice)[1]
+    assert [a["key"] for a in v["alarms"]] == [drill.key]
+    code, d = s.req("POST", "/api/alert-test", {"action": "end", "clear": True}, token=alice)
+    assert code == 200 and d["cleared"] == 1
+    assert {r["key"] for r in _开着的(s, alice)} >= {cam.key, site.key}

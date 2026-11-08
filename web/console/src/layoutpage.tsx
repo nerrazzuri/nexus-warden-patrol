@@ -185,6 +185,14 @@ export function LayoutPage({ say, robots, tabs }: { say: Say; robots: string[]; 
     if (!base) return;
     void reload();
   }, [base]);
+  // 第 3 轮 setup N1:机器人列表比地图版本晚到时,原来待命点按「没有机器人」加载,之后不会再加载 → 一直是空、
+  // 「添加待命点」灰着。列表到了 / 变了就重新取待命点
+  const robotKey = robots.join(",");
+  const firstRobots = useRef(true);
+  useEffect(() => {
+    if (firstRobots.current) { firstRobots.current = false; return; }
+    if (base) void reload("standby");
+  }, [robotKey]);
 
   const guard = (go: () => void) => (dirty ? setAsk(() => go) : go());
   const switchTab = (x: LayoutTab) => guard(() => {
