@@ -100,6 +100,8 @@ class NwField extends StatelessWidget {
               enabled: enabled,
               keyboardType: keyboardType,
               textInputAction: textInputAction,
+              // 手机 App 测试 M24：键盘弹起时把下面的按钮也让出来（登录页的「登录」以前只露 9 像素）
+              scrollPadding: const EdgeInsets.fromLTRB(20, 20, 20, 140),
               minLines: minLines,
               maxLines: maxLines,
               onSubmitted: onSubmitted,

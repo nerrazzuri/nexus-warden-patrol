@@ -45,6 +45,9 @@ void main() {
     expect(find.textContaining('30.0 MB'), findsNWidgets(3));
     await t.tap(find.byKey(SiteRecordingsPage.clipKey(11)));
     await t.pumpAndSettle();
+    expect(api.calls, isNot(contains('recording-bytes 11')), reason: 'M34：30 MB 先问流量');
+    await t.tap(find.byKey(SiteRecordingsPage.dataOkKey));
+    await t.pumpAndSettle();
     expect(api.calls, contains('recording-bytes 11'));
     expect(p.played.single, endsWith(' 3'));
     expect(find.byKey(SiteRecordingsPage.keepKey(10)), findsNothing, reason: '管理员不能标留着');
