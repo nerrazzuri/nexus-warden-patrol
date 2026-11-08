@@ -104,3 +104,8 @@ export async function apiUpload<T = unknown>(path: string, file: Blob, headers: 
   }
   return data as T;
 }
+
+/** 第 3 轮 P1-77:上传被拒是因为包本身(签名、指纹、已登记、太大),不是密码(密码不对是 403)。 */
+export function badPackage(e: unknown): boolean {
+  return e instanceof ApiError && (e.status === 400 || e.status === 409 || e.status === 413);
+}

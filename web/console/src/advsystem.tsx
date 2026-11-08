@@ -40,7 +40,8 @@ export function SystemPage2({ me, now, say }: { me: Me; now: number; say: (s: st
       <section class="panel sys-backup">
         <h2>{t("sysBackup")}</h2>
         <Row k="sysBackupLast" check={c.backup} />
-        <p class="muted small">{t("sysBackupHint")}</p>
+        {/* 第 3 轮 config N11:没设备份时不再接着说「每小时备份一次」 */}
+        <p class="muted small">{t(c.backup && !c.backup.ok ? "sysBackupHintOff" : "sysBackupHint")}</p>
       </section>
       <TeleopSpeeds say={say} />
       <SiteOps say={say} />

@@ -239,6 +239,59 @@ def test_网页P1_73_服务日志空的写明_带站点最近日志_按时间段
     assert "新的一条" in recent and "老的一条" not in recent and "tok-SECRET-9" not in recent
 
 
+def test_第3轮_config_N8_成功的GET访问记录另放_不挤掉站点日志(台, tmp_path, monkeypatch):
+    import logging
+
+    import nexwar_site.health as h
+    t = 台
+    rec = h.RecentLog(keep=10, keep_access=10)
+    monkeypatch.setattr(h, "RECENT", rec)
+    ev = logging.LogRecord("nexwar_site", logging.INFO, "", 0, "机器人 A 上线了", None, None)
+    ev.created = NOW / 1000 - 60
+    rec.emit(ev)
+    for _ in range(50):                                    # 网页刷接口
+        r = logging.LogRecord("nexwar_site.api", logging.INFO, "", 0, '"GET /api/robots" 200 -',
+                              None, None)
+        r.created = NOW / 1000 - 30
+        r.access = True
+        rec.emit(r)
+    out = support_bundle(tmp_path / "b.tar.gz", home=t.home, db=t.db, health=t.h, now_ms=NOW,
+                         hours=1, journal=lambda unit, hours: "-- No entries --\n")
+    with tarfile.open(out) as tar:
+        files = {n.split("/", 1)[1]: tar.extractfile(n).read().decode() for n in tar.getnames()}
+    assert "机器人 A 上线了" in files["logs/site-recent.log"]
+    assert "GET /api/robots" not in files["logs/site-recent.log"]
+    assert "GET /api/robots" in files["logs/site-access.log"]
+
+
+def test_第3轮_config_N8_访问记录只把成功的GET标成access():
+    import io
+    import logging
+
+    from nexwar_site.api import _Handler as ApiHandler
+    got: list[logging.LogRecord] = []
+
+    class H(logging.Handler):
+        def emit(self, record):
+            got.append(record)
+    lg = logging.getLogger("nexwar_site.api")
+    hd = H()
+    lg.addHandler(hd)
+    old = lg.level
+    lg.setLevel(logging.INFO)
+    try:
+        fake = ApiHandler.__new__(ApiHandler)
+        fake.client_address = ("1.2.3.4", 1)
+        fake.wfile = io.BytesIO()
+        fake.log_message('"%s" %s %s', "GET /api/robots HTTP/1.1", "200", "-")
+        fake.log_message('"%s" %s %s', "GET /api/x HTTP/1.1", "404", "-")
+        fake.log_message('"%s" %s %s', "POST /api/mode HTTP/1.1", "200", "-")
+    finally:
+        lg.removeHandler(hd)
+        lg.setLevel(old)
+    assert [getattr(r, "access", None) for r in got] == [True, False, False]
+
+
 def test_网页第2轮_P1_01_每项检查都带英文说明_不夹中文(台):
     import re
     t = 台

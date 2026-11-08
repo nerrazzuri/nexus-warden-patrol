@@ -500,7 +500,12 @@ class _Handler(TlsHandlerMixin):
     server_version = "nexwar_site"
 
     def log_message(self, fmt: str, *args: Any) -> None:     # 走 logging,别打 stderr
-        log.info("%s %s", self.address_string(), fmt % args)
+        # 第 3 轮 config N8:成功的 GET(网页每秒几十条)记成「访问记录」,诊断包里单放一个文件,
+        # 不挤掉站点日志里别的事;失败的、写操作照旧进站点日志
+        line = str(args[0]) if args else ""
+        code = str(args[1]) if len(args) > 1 else ""
+        quiet = line.startswith(("GET ", "HEAD ")) and code[:1] in ("1", "2", "3")
+        log.info("%s %s", self.address_string(), fmt % args, extra={"access": quiet})
 
     # ------------------------------------------------------------ 输入输出
 
@@ -4098,8 +4103,6 @@ class _Handler(TlsHandlerMixin):
                 raise HttpError(400, NOT_PKG) from exc
             if not any(len(p.parts) == 2 and p.name == "release.json" for p in names):
                 raise HttpError(400, NOT_ROBOT_PKG)
-            # 先收完再验密码:没读完就回 403,浏览器那边多半只看到「连接断了」,看不到「密码不对」
-            self._confirm(user, {"confirm_password": self.headers.get("X-Nexwar-Confirm") or ""})
             out = tmp / "x"
             out.mkdir()
             try:
@@ -4118,18 +4121,27 @@ class _Handler(TlsHandlerMixin):
                 raise HttpError(400, NOT_ROBOT_PKG)
             note = str(self.headers.get("X-Release-Note") or "")[:200]
             self._audit_target = tops[0].name
+            cat = ReleaseCatalog(self.site.home, self.site.dispatcher.db, now_ms=self.site._now,
+                                 pubkey=site_main.release_pubkey(self.site.home))
             try:
-                row = ReleaseCatalog(self.site.home, self.site.dispatcher.db, now_ms=self.site._now,
-                                     pubkey=site_main.release_pubkey(self.site.home)
-                                     ).add(tops[0], note=note or "网页上传")
+                # 第 3 轮 P1-77:签名不对、已登记这些先核,再要密码(原来先要密码,再在密码框下
+                # 报错、清空密码,人以为是密码错了)。先收完再验密码:没读完就回 403,
+                # 浏览器多半只看到「连接断了」
+                cat.add(tops[0], check_only=True)
+                pw = self.headers.get("X-Nexwar-Confirm") or ""
+                self._confirm(user, {"confirm_password": pw})
+                row = cat.add(tops[0], note=note or "网页上传")
             except ReleaseCatalogError as exc:
                 msg = str(exc)
                 if "已登记" in msg:
-                    raise HttpError(409, "此版本已存在") from exc
+                    raise HttpError(409, "此版本已存在",
+                                    extra={"reason": "bad_package"}) from exc
                 if "签名" in msg or "公钥" in msg:
-                    raise HttpError(400, f"升级包的签名不匹配,不是公司发的({msg})") from exc
+                    raise HttpError(400, f"升级包的签名不匹配,不是公司发的({msg})",
+                                    extra={"reason": "bad_package"}) from exc
                 if "指纹" in msg:
-                    raise HttpError(400, "升级包已损坏(文件与清单不匹配)") from exc
+                    raise HttpError(400, "升级包已损坏(文件与清单不匹配)",
+                                    extra={"reason": "bad_package"}) from exc
                 raise HttpError(400, msg) from exc
             except site_main.SiteError as exc:
                 raise HttpError(500, str(exc)) from exc

@@ -62,3 +62,19 @@ describe("第 2 轮 config N10", () => {
     expect(platformName("tizen")).toBe("tizen");
   });
 });
+
+describe("第 3 轮 config N11 / P1-77", () => {
+  it("没报版本的不再接着给「退回」或「软件太老」", async () => {
+    const { container: c } = render(<UpgradePage say={() => {}} />);
+    await waitFor(() => expect(c.querySelector('[data-robot="C"] [data-no-release]')).not.toBeNull());
+    expect(c.querySelector('[data-robot="C"] button')).toBeNull();
+    expect(c.querySelector('[data-robot="C"]')!.textContent).not.toContain("不能退回");
+  });
+
+  it("包不对(400 / 409 / 413)跟密码不对(403)分开", async () => {
+    const { ApiError, badPackage } = await import("./api");
+    expect(badPackage(new ApiError(400, "签名不匹配"))).toBe(true);
+    expect(badPackage(new ApiError(409, "已存在"))).toBe(true);
+    expect(badPackage(new ApiError(403, "密码不对"))).toBe(false);
+  });
+});

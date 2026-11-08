@@ -6,7 +6,8 @@
 import { pkgProblem } from "./pkgcheck";
 import { useEffect, useState } from "preact/hooks";
 import { useLoad } from "./admin";
-import { api, apiUpload, ApiError, enc } from "./api";
+import { api, apiUpload, ApiError, badPackage, enc } from "./api";
+import { siteStr } from "./sitetext";
 import { ConfirmPassword } from "./confirmpw";
 import { Confirm } from "./dialogs";
 import { hms, md } from "./data";
@@ -390,7 +391,13 @@ export function SiteUpdate({ say }: { say: Say }) {
       {ask && file && (
         <ConfirmPassword title={t("upSiteConfirm")} onClose={() => setAsk(false)}
           onConfirm={async (pw) => {
-            await apiUpload("/api/system/update", file, { "X-Nexwar-Confirm": pw });
+            try {
+              await apiUpload("/api/system/update", file, { "X-Nexwar-Confirm": pw });
+            } catch (e) {
+              // 第 3 轮 P1-77:包不对不是密码问题,关掉密码框单独说
+              if (badPackage(e)) { setAsk(false); say(t("upBadPkg", { why: siteStr((e as ApiError).message) })); return; }
+              throw e;
+            }
             setAsk(false);
             say(t("upSiteStarted"));
             reload();

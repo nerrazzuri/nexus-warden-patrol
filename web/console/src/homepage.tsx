@@ -46,8 +46,7 @@ export function HomePage(props: {
   }, []);
 
   // 第 2 轮 duty N6 / config N9:P3 是通知(巡逻开始了、派了临时巡逻……),不是要你处理的事,不进这里
-  const todo = props.alerts.filter((a) => a.resolved_ms == null && !forGuard(a) && a.level !== "P3")
-    .sort((a, b) => (a.level === b.level ? b.last_ms - a.last_ms : a.level < b.level ? -1 : 1));
+  const todo = homeTodo(props.alerts);
   const todayAuthz = authz.filter((a) => a.on_today);
   const m = props.mode;
   const modes: { m: Mode["mode"]; key: Key }[] = [
@@ -178,6 +177,12 @@ function compare(a: number, b: number | undefined): string {
 }
 
 /** P2-44:同一种提醒(说法一样、只是机器人不同)合成一条;顺序按第一次出现。 */
+/** 「需要你处理」那一栏:没处理的、不归值班的、不是 P3 通知。侧栏「系统状态」的数字也按它数(第 3 轮 config N7)。 */
+export function homeTodo(alerts: Alert[]): Alert[] {
+  return alerts.filter((a) => a.resolved_ms == null && !forGuard(a) && a.level !== "P3")
+    .sort((a, b) => (a.level === b.level ? b.last_ms - a.last_ms : a.level < b.level ? -1 : 1));
+}
+
 export function groupTodo(list: Alert[]): Alert[][] {
   const m = new Map<string, Alert[]>();
   for (const a of list) {
