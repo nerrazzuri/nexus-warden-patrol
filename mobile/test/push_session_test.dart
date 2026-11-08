@@ -2,6 +2,7 @@
 import 'dart:async';
 
 import 'package:nexwar_patrol/net/push.dart';
+import 'package:nexwar_patrol/net/site_client.dart' show SiteError;
 import 'package:flutter_test/flutter_test.dart';
 
 class _Reg implements PushRegistrar {
@@ -43,6 +44,25 @@ void main() {
     await s.stop();
     expect(log, ['+rid-1', '-rid-1']);
     expect(s.state.value, PushState.off);
+  });
+
+  test('手机 App 测试 M11：站点没开推送（404）直说，不再重试', () async {
+    var tries = 0;
+    final s = PushSession(_Reg(['rid-1']),
+        register: (id, p, prov) async {
+          tries++;
+          throw const SiteError(404, '此站点未启用推送');
+        },
+        unregister: (id) async {},
+        backoff: (_) => Duration.zero)
+      ..start();
+    for (var i = 0; i < 20; i++) {
+      await Future<void>.delayed(Duration.zero);
+    }
+    expect(tries, 1);
+    expect(s.state.value, PushState.waiting);
+    expect(s.reason, contains('没有配置推送'));
+    await s.stop();
   });
 
   test('F3：登记还在路上就离开了，等它落定，登记上了就马上注销', () async {
