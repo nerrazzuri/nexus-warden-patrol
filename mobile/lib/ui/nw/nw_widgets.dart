@@ -237,7 +237,7 @@ class NwStatTile extends StatelessWidget {
       Expanded(
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
         Text(label.toUpperCase(),
-            maxLines: 1,
+            maxLines: 2, // M16：「WITH ANOMA…」
             overflow: TextOverflow.ellipsis,
             style: NwText.labelSmall.copyWith(color: c.textSecondary)),
         const SizedBox(height: Nw.s4),

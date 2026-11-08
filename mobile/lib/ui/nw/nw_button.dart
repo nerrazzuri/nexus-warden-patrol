@@ -65,8 +65,8 @@ class NwButton extends StatelessWidget {
     final minimum = Size(Nw.touch, minH);
     final child = Row(mainAxisSize: MainAxisSize.min, children: [
       if (icon != null) ...[Icon(icon, size: iconSize), const SizedBox(width: Nw.s8)],
-      // 中文、长文案：摆不下就截，不把按钮撑出屏幕
-      Flexible(child: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis)),
+      // 中文、长文案：摆不下先折成两行（手机 App 测试 M16：1080 宽的屏上「Patrol」截成「Pa…」），再不行才截
+      Flexible(child: Text(label, maxLines: 2, overflow: TextOverflow.ellipsis, textAlign: TextAlign.center)),
     ]);
     ButtonStyle filled(Color bg, Color fg) => FilledButton.styleFrom(
         backgroundColor: bg,
