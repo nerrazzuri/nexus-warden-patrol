@@ -470,3 +470,21 @@ describe("第 2 轮 N2:回原点、回待命点做不成的先灰掉", () => {
     expect(btn(d, "回待命点").disabled).toBe(false);
   });
 });
+
+describe("第 4 轮 admin N2", () => {
+  it("添加重复编号:错误写在弹窗里,不只靠 toast", async () => {
+    setFetch(((url: string, init?: RequestInit) => {
+      if (init?.method === "POST" && url === "/api/admin/robots") return Promise.resolve(json({ error: "A 已登记且未吊销;先 revoke" }, 409));
+      if (url.startsWith("/api/robots/overview")) return Promise.resolve(json({ robots, open_revoked: [] }));
+      return Promise.resolve(json({}, 404));
+    }) as typeof fetch);
+    const c = page();
+    fireEvent.click(await c.findByText("添加机器人"));
+    fireEvent.click(await c.findByText("工程师：用开通码手动添加"));
+    const dlg = c.container.ownerDocument.querySelector("dialog")!;
+    fireEvent.input(dlg.querySelector("input")!, { target: { value: "A" } });
+    fireEvent.submit(dlg.querySelector("form")!);
+    await waitFor(() => expect(dlg.querySelector("[data-form-error]")?.textContent).toContain("A"));
+    expect(said).toEqual([]);
+  });
+});

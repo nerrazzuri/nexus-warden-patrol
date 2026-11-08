@@ -144,9 +144,10 @@ export function RobotsPage({ say, now, units = [], readOnly = false, role = "adm
               <button key={r.robot_id} type="button" data-robot={r.robot_id}
                 class={["robot-card", r.robot_id === open ? "on" : "", warn ? "warn" : ""].filter(Boolean).join(" ")}
                 onClick={() => setOpen(r.robot_id === open ? null : r.robot_id)}>
-                <span class="fleet-head">
+                {/* 第 4 轮 admin N1:起了名字的,名字 + 编号一行(编号不折),状态放第二行 */}
+                <span class={r.name ? "fleet-head named" : "fleet-head"}>
                   <span class="robot-name" title={label(r)}>{label(r)}</span>
-                  {r.name && <small class="muted mono">{r.robot_id}</small>}
+                  {r.name && <small class="muted mono fleet-id">{r.robot_id}</small>}
                   <span class="fleet-state">
                     {/* P1-23:刚登记、还没连上过的不是故障:灰的「等它连上」,不是红的「离线」 */}
                     {!r.online && r.ever_seen === false ? <span class="state" title={t("fleetNeverSeen")}>{t("fleetNeverSeenShort")}</span>
@@ -548,11 +549,13 @@ function RobotDetail({ r, u, now, role, say, onChanged, onCode, onClose, readOnl
 /** 机器人编号(站点 ca.SAFE_ID)。 */
 const ROBOT_ID = /^[A-Za-z0-9._-]{1,64}$/;
 
-function AddRobot({ onClose, onDone, say }: { onClose: () => void; onDone: (id: string, code: string, hours: number) => void; say: Say }) {
+function AddRobot({ onClose, onDone }: { onClose: () => void; onDone: (id: string, code: string, hours: number) => void; say?: Say }) {
   const [id, setId] = useState("");
   const [days, setDays] = useState(365);
   const [busy, setBusy] = useState(false);
   const [manual, setManual] = useState(false);
+  // 第 4 轮 admin N2:错误写在框里(toast 在弹窗遮罩下面看不清)
+  const [err, setErr] = useState("");
   // P1-25:格式在框下面写明、自己查(不靠浏览器原生提示);重复编号说「已存在,先解绑」
   const idBad = id !== "" && !ROBOT_ID.test(id);
   async function submit(e: Event) {
@@ -563,9 +566,9 @@ function AddRobot({ onClose, onDone, say }: { onClose: () => void; onDone: (id: 
       const d = await api<{ code: string; hours: number }>("POST", "/api/admin/robots", { robot_id: id, days });
       onDone(id, d.code, d.hours);
     } catch (x) {
-      if (x instanceof ApiError && x.status === 409 && String((x.data as { error?: string } | undefined)?.error ?? x.message).includes("旧连接")) say(t("robotIdOldConn", { id }));
-      else if (x instanceof ApiError && x.status === 409) say(t("robotIdTaken", { id }));
-      else say(errText(x));
+      if (x instanceof ApiError && x.status === 409 && String((x.data as { error?: string } | undefined)?.error ?? x.message).includes("旧连接")) setErr(t("robotIdOldConn", { id }));
+      else if (x instanceof ApiError && x.status === 409) setErr(t("robotIdTaken", { id }));
+      else setErr(errText(x));
     } finally {
       setBusy(false);
     }
@@ -581,10 +584,11 @@ function AddRobot({ onClose, onDone, say }: { onClose: () => void; onDone: (id: 
       )}
       {manual && <form class="form" onSubmit={submit}>
         <p class="muted small">{t("addRobotHint")}</p>
-        <label class="field">{t("robotId")}<input value={id} required autocomplete="off" aria-describedby="robot-id-rule" onInput={(e) => setId(e.currentTarget.value)} />
+        <label class="field">{t("robotId")}<input value={id} required autocomplete="off" aria-describedby="robot-id-rule" aria-invalid={err ? true : undefined} onInput={(e) => { setId(e.currentTarget.value); setErr(""); }} />
           <span id="robot-id-rule" class={idBad ? "error small" : "muted small"}>{t("robotIdRule")}</span></label>
         <details class="small"><summary>{t("addRobotCmdTitle")}</summary><p class="mono">{t("addRobotCmd")}</p></details>
         <label class="field">{t("certDays")}<input type="number" min={1} max={3650} value={days} onInput={(e) => setDays(Number(e.currentTarget.value))} /></label>
+        {err && <p class="error small" role="alert" data-form-error="1">{err}</p>}
         <div class="row end">
           <button type="button" class="btn" onClick={onClose}>{t("cancel")}</button>
           <button type="submit" class="btn primary" disabled={busy}>{t("addRobot")}</button>

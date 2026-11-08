@@ -82,6 +82,10 @@ def test_接口_我的向导记录谁都能写_清单只给管理员(tmp_path):
         assert s.req("POST", "/api/me/guide", {"tour": 2}, token=vic)[0] == 200
         assert s.req("GET", "/api/me", token=vic)[1]["guide"]["tour"] == 2
         assert s.req("POST", "/api/me/guide", {"bad": 1}, token=vic)[0] == 400
+        # 第 4 轮 admin P1-66:翻帮助只是个人界面状态,不进活动记录
+        assert s.db.query("SELECT * FROM audit WHERE action LIKE '%/api/me/guide'") == []
+        # 审计本身是开着的
+        assert s.db.query("SELECT * FROM audit WHERE action LIKE '%/api/login'")
         assert s.req("GET", "/api/setup", token=vic)[0] == 403
         alice = s.login()
         _等(lambda: s.req("GET", "/api/robots/A", token=alice)[1].get("fresh"))

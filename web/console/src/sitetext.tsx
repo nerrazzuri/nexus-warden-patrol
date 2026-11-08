@@ -106,6 +106,11 @@ const RULES: Rule[] = [
   [/^(\S+) 没有默认待命点$/, (m) => `${m[1]} has no default standby point. Add one under Setup → Standby points.`],
   [/^此站点未安装 VPN/, () => "Remote engineer access (VPN) is not set up on this site, so engineers can only connect on the site's local network."],
   [/^清单里的文件名错误$/, () => "A file name in the package list is wrong."],
+  // 第 4 轮 admin P1-01:活动日志里还是兜底文字的三类
+  [/^(\S+) 已登记且未吊销/, (m) => `${m[1]} already exists. Unbind it first to add it again.`],
+  [/^(\d+) 处不能用$/, (m) => `${m[1]} point${m[1] === "1" ? "" : "s"} cannot be used`],
+  [/^(\S+) 的钟差未知/, (m) => `${m[1]} has not reported its clock recently (just connected, or no telemetry in the last minute). Wait a moment and try again.`],
+  [/^(\S+) 的钟差 ([+-]?\d+) 秒/, (m) => `${m[1]}'s clock is ${m[2]} s off from the site. Sync its time with the site host first.`],
 ];
 
 /** 一段原文 → 英文;认不出的段落换成 UNK。 */
@@ -210,5 +215,6 @@ export function SiteSpan({ s, class: cls }: { s: string | null | undefined; clas
 /** 处理人:站点自己关的(``site:xxx``)说「系统自动」,不露内部代码(复测 duty N3、admin N1)。 */
 export function byText(by: string | null | undefined): string {
   if (!by) return "";
-  return by.startsWith("site:") ? t("bySystem") : by;
+  // 第 4 轮 admin P1-01:「站点:…」开头的也是系统自动处理
+  return /^(site|站点)[:：]/.test(by) ? t("bySystem") : by;
 }

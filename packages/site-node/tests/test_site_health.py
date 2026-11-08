@@ -304,3 +304,13 @@ def test_网页第2轮_P1_01_每项检查都带英文说明_不夹中文(台):
             assert not re.search(r"[㐀-鿿]", v["detail_en"]), (k, v["detail_en"])
     assert c["disk"]["detail_en"] == "Site disk 5% free"
     assert "Renew certificates now" in c["certs"]["detail_en"]
+
+
+def test_网页第4轮_P1_01_密钥有毛病_英文也写出是哪几把(台):
+    t = 台
+    t.h._keys = lambda: [{"name": "secrets", "problem": "没有这把密钥"},
+                         {"name": "backup", "problem": "权限过宽(0o644):别的用户也读得到"},
+                         {"name": "evidence", "problem": ""}]
+    en = t.h.checks()["keys"]["detail_en"]
+    assert en == ("Site key problem: password encryption key (missing), "
+                  "backup encryption key (readable by other users)")

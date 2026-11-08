@@ -13,7 +13,8 @@ import { siteStr } from "./sitetext";
 type Say = (s: string) => void;
 interface Account { name: string; role: string; disabled: boolean; display_name: string; expires_ms: number | null; last_login_ms: number | null; expired: boolean }
 interface AuditRow { id: number; at: number; actor: string; actor_role?: string | null; action: string; target: string; status: number;
-  detail?: { error?: string; role?: string; disabled?: boolean; password_reset?: boolean; display_name?: string } }
+  detail?: { error?: string; role?: string; disabled?: boolean; password_reset?: boolean; display_name?: string;
+    first_day?: string; last_day?: string } }
 
 /** 第 3 轮 P1-66:改账号写清改了什么(原来只写「改了账号」)。 */
 export function changeText(d: AuditRow["detail"]): string {
@@ -24,6 +25,7 @@ export function changeText(d: AuditRow["detail"]): string {
   if (d.disabled === false) out.push(t("auditEnabled"));
   if (d.password_reset) out.push(t("auditPwReset"));
   if (d.display_name) out.push(t("auditRenamed", { n: d.display_name }));
+  if (d.first_day) out.push(d.last_day && d.last_day !== d.first_day ? `${d.first_day} – ${d.last_day}` : d.first_day);
   return out.join(lang.value === "zh" ? "；" : "; ");
 }
 
@@ -55,7 +57,10 @@ export function leftText(until: number, now: number): string {
 
 /** 审计里的动作翻成人话;认不得的原样。 */
 const ACTIONS: [RegExp, string][] = [
-  [/^(POST|DELETE) \/api\/arming\/exceptions/, "actArmException"],
+  [/^POST \/api\/arming\/exceptions\/\d+\/remove$/, "actArmExceptionDel"],
+  [/^(POST|DELETE) \/api\/arming\/exceptions/, "actArmExceptionAdd"],
+  // 第 4 轮 P1-66:巡逻日程真正的接口是 route-schedules;遥控速度
+  [/^POST \/api\/route-schedules/, "actPatrolSched"], [/^POST \/api\/teleop-speeds/, "actTeleopSpeeds"],
   [/^login/, "actLogin"], [/^POST \/api\/logout/, "actLogout"], [/^POST \/api\/mode$/, "actMode"],
   [/^POST \/api\/alerts\/.+\/resolve$/, "actResolve"], [/^POST \/api\/alerts\/.+\/ack$/, "actAck"], [/^POST \/api\/alerts\/.+\/arrive$/, "actArrive"],
   [/^POST \/api\/robots\/[^/]+\/(goto|patrol)$/, "actDispatch"], [/^POST \/api\/robots\/[^/]+\/halt$/, "actHalt"],
@@ -75,7 +80,7 @@ const ACTIONS: [RegExp, string][] = [
   [/^POST \/api\/(releases|system)/, "actSystem"], [/^POST \/api\/me/, "actMe"],
   // 第 3 轮 P1-66:巡逻日程、值班设置、布防例外、看录像 / 下载
   [/^POST \/api\/schedule/, "actPatrolSched"], [/^POST \/api\/duty-settings/, "actDutySettings"],
-  [/^(POST|DELETE) \/api\/arming\/exceptions/, "actArmException"], [/^VIEW$/, "actView"], [/^DOWNLOAD$/, "actDownload"],
+  [/^VIEW$/, "actView"], [/^DOWNLOAD$/, "actDownload"],
 ];
 /** 第 2 轮 P1-66:对象里的内部编号不摆出来(悬停看原文):「图:版本/层:哈希」只留图和版本,长哈希去掉。 */
 export function targetText(target: string): string {
@@ -89,6 +94,11 @@ export function targetText(target: string): string {
   if (/^recording-clip\//.test(target)) return t("auditClip");
   const m = /^(?:[a-z_]+:)?([^:/\s]+):([^/\s]+)\/(?:[a-z_]+:)?[0-9a-f]{8,}$/i.exec(target);
   if (m) return t("auditMapVer", { map: m[1], v: m[2] });
+  // 第 4 轮 P1-66:「图:版本/名字」「camera/名字」写成人话
+  const mz = /^([^:/\s]+):(\d+)\/(.+)$/.exec(target);
+  if (mz) return `${t("auditMapVer", { map: mz[1], v: mz[2] })} · ${mz[3]}`;
+  const cam = /^camera\/(.+)$/.exec(target);
+  if (cam) return t("camNamed", { name: cam[1] });
   return target.replace(/\b[0-9a-f]{12,}\b/gi, "…");
 }
 
@@ -265,6 +275,7 @@ function UserAudit({ name, account, onClose }: { name: string; account?: Account
           {rows.slice(0, 200).map((r) => (
             <li key={r.id} class={r.status >= 400 ? "bad" : undefined}>
               <time class="mono small">{day(r.at)} {hms(r.at)}</time>
+              <div class="audit-body">
               <span title={r.action}>{actionText(r.action)}</span>
               {r.status >= 400 ? <span class="tag bad" data-result="refused">{t("auditRefused")}</span>
                 : r.status >= 200 ? <span class="tag ok" data-result="ok">{t("auditOk")}</span> : null}
@@ -272,6 +283,7 @@ function UserAudit({ name, account, onClose }: { name: string; account?: Account
               {r.actor_role === "engineer" && <span class="tag">{t("roleEngineer")}</span>}
               {r.status < 400 && changeText(r.detail) && <span class="small muted" data-change="1">{changeText(r.detail)}</span>}
               {r.status >= 400 && r.detail?.error && <span class="small audit-why" data-why="1" title={r.detail.error}>{siteStr(r.detail.error)}</span>}
+              </div>
             </li>
           ))}
         </ul>
@@ -313,31 +325,34 @@ function EngineerForm({ onClose, onNext }: { onClose: () => void; onNext: (displ
   );
 }
 
-function AddUser({ onClose, onDone, say }: { onClose: () => void; onDone: () => void; say: Say }) {
+function AddUser({ onClose, onDone }: { onClose: () => void; onDone: () => void; say?: Say }) {
   const [name, setName] = useState("");
   const [display, setDisplay] = useState("");
   const [role, setRole] = useState("guard");
   const [pw, setPw] = useState("");
+  // 第 4 轮 admin N2:错误写在框里(toast 在弹窗遮罩下面看不清)
+  const [err, setErr] = useState("");
   async function submit(e: Event) {
     e.preventDefault();
     try {
       await api("POST", "/api/accounts", { name, display_name: display, role, password: pw });
       onDone();
     } catch (x) {
-      say(errText(x));
+      setErr(errText(x));
     }
   }
   return (
     <Modal label={t("addUser")} onClose={onClose}>
       <form class="form" onSubmit={submit}>
         <label class="field">{t("displayName")}<input value={display} maxLength={64} onInput={(e) => setDisplay(e.currentTarget.value)} /></label>
-        <label class="field">{t("accountName")}<input value={name} pattern="[A-Za-z0-9._\-]{1,64}" required autocomplete="off" onInput={(e) => setName(e.currentTarget.value)} /></label>
+        <label class="field">{t("accountName")}<input value={name} pattern="[A-Za-z0-9._\-]{1,64}" required autocomplete="off" onInput={(e) => { setName(e.currentTarget.value); setErr(""); }} /></label>
         <label class="field">{t("role")}
           <select value={role} onChange={(e) => setRole(e.currentTarget.value)}>
             {ROLES.map((r) => <option key={r} value={r}>{t(roleLabel(r))}</option>)}
           </select>
         </label>
         <label class="field">{t("newPassword")}<input type="password" minLength={10} required autocomplete="new-password" value={pw} onInput={(e) => setPw(e.currentTarget.value)} /></label>
+        {err && <p class="error small" role="alert" data-form-error="1">{err}</p>}
         <div class="row end">
           <button type="button" class="btn" onClick={onClose}>{t("cancel")}</button>
           <button type="submit" class="btn primary">{t("addUser")}</button>
