@@ -116,6 +116,11 @@ def _seed_recordings(home: Path, work: Path, minutes: int,
         db.close()
 
 
+def _persons_sock(api_port: int, robot: str) -> str:
+    """``--persons-sim`` 时每台仿真机器人人员桥的套接字(tools/demo_person.py 连它)。"""
+    return f"/tmp/nexwar-demo-{api_port}-{robot}-persons.sock"
+
+
 def _seed_history(home: Path, days: int, robots: list[str], *, big_day: int = 12) -> dict[str, int]:
     """liang-d5 第 5 轮前:预先放过去 ``days`` 天的报警、临时巡逻、活动记录、交班留言(站点没起来时
     直接写库),好测「某一天发生了什么、怎么查」。``big_day`` 天前那天放 600 多条报警(超过一页)。
@@ -430,6 +435,9 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--backup", action="store_true",
                     help="开备份(备份目录、口令密钥、备份密钥都放在 --dir 下面,不碰 /etc):"
                          "试备份、解开备份、演练、托管包用")
+    ap.add_argument("--persons-sim", action="store_true",
+                    help="仿真机器人开本机人员桥;tools/demo_person.py 让某台「看见人」"
+                         "(布防时站点报 dog_sees_person,测响铃、处置)")
     ap.add_argument("--history-days", type=int, default=0, metavar="N",
                     help="预先放过去 N 天的报警、临时巡逻、活动、交班留言(12 天前 640 条报警)")
     ap.add_argument("--recordings", type=int, default=0, metavar="N",
@@ -566,7 +574,11 @@ def _run(a, home: Path, logs: Path, names: list[str], bport: int, fp: str, procs
                                      "--intake", f"https://{a.host}:{a.intake_port}"]
                                     if a.nav == "planned" or a.w54 else []),
                                   *(["--mapping-sim", str(a.map_dir.resolve())] if a.w54
-                                    else [])],
+                                    else []),
+                                  # 第 5 轮前:开本机人员桥,tools/demo_person.py 让它「看见人」
+                                  # (套接字路径最长 107 字符,演示目录太深:放 /tmp 下面的短名字)
+                                  *(["--persons", "bridge", "--persons-socket",
+                                     _persons_sock(a.api_port, n)] if a.persons_sim else [])],
                   "nexwar_agent 起来了",
                   # W61:每台自己的数据目录(远程运维的维护标记 ops-hold.json 在那里;
                   # 原来几台共用,串了)
@@ -582,6 +594,8 @@ def _run(a, home: Path, logs: Path, names: list[str], bport: int, fp: str, procs
               f"  账号  demo / {a.password}\n"
               f"  机器人 {'、'.join(names)}(仿真)\n"
               + "".join(s + "\n" for s in seeded)
+              + "".join(f"  看见人  tools/demo_person.py --socket {_persons_sock(a.api_port, n)}\n"
+                        for n in (names if a.persons_sim else []))
               + "".join(f"  没绑定 {r['serial']}  贴纸码 {r['sticker']}\n" for r in fresh)
               + "Ctrl+C 全部收掉。", flush=True)
         # 等 Ctrl+C:用处理函数立个旗,不用屏蔽信号(屏蔽会被子进程继承,收掉时它们就不理 SIGTERM)
