@@ -377,10 +377,16 @@ class TodayPatrolList extends StatelessWidget {
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: Nw.s8),
               child: Row(children: [
-                SizedBox(
-                    width: 48,
-                    child: Text(hhmm((items[i]['at_ms'] as num).toInt(), offsetMin),
-                        style: NwText.labelLarge.copyWith(color: c.text, fontFeatures: const [FontFeature.tabularFigures()]))),
+                // 手机 App 测试 M16：时间列跟着字宽，不折行（以前写死 48，字放大到 1.3 倍折成「12:5」「3」）
+                ConstrainedBox(
+                    constraints: const BoxConstraints(minWidth: 48),
+                    child: Padding(
+                      padding: const EdgeInsets.only(right: Nw.s8),
+                      child: Text(hhmm((items[i]['at_ms'] as num).toInt(), offsetMin),
+                          maxLines: 1,
+                          softWrap: false,
+                          style: NwText.labelLarge.copyWith(color: c.text, fontFeatures: const [FontFeature.tabularFigures()])),
+                    )),
                 Expanded(
                     child: Text(
                         [

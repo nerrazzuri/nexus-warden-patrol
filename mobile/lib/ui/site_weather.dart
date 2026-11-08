@@ -51,6 +51,17 @@ String weatherText(Map<String, dynamic> w) {
   return parts.join(' · ');
 }
 
+/// 值守页顶上那一行用的短说法（手机 App 测试 M16：长句在 1080 宽的屏上截成「Weather: Unk…」）：
+/// 天气名，有限速带上限速。图标已经说了这是天气。
+String weatherShort(Map<String, dynamic> w) {
+  final label = '${w['label'] ?? w['condition'] ?? '?'}';
+  final name = w['condition'] == 'unknown'
+      ? tr('Weather unknown', '天气未知')
+      : tr(_names[w['condition']] ?? label, label);
+  final cap = w['speed_cap_mps'];
+  return cap is num ? '$name · ${cap.toStringAsFixed(1)} m/s' : name;
+}
+
 IconData weatherIcon(String condition) => switch (condition) {
       'storm' => Icons.thunderstorm,
       'rain' => Icons.umbrella,

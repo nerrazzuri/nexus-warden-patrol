@@ -32,7 +32,8 @@ void main() {
     // W53：天气在值守页最上面那一行
     expect(find.descendant(of: find.byKey(SiteDutyPage.modeKey), matching: find.textContaining('下雨')),
         findsOneWidget);
-    await t.tap(find.descendant(of: find.byKey(SiteDutyPage.modeKey), matching: find.textContaining('天气')));
+    // 手机 App 测试 M16：首页只写短的（天气名、限速），图标说明是天气
+    await t.tap(find.descendant(of: find.byKey(SiteDutyPage.modeKey), matching: find.textContaining('下雨')));
     await t.pumpAndSettle();
     await t.tap(find.byKey(SiteWeatherPage.hoursKey(6)));
     await t.pumpAndSettle();
@@ -62,6 +63,9 @@ void main() {
     api.sse.add(<String, dynamic>{'kind': 'weather', 'weather': <String, dynamic>{
       'condition': 'storm', 'label': '雷暴', 'source': 'auto', 'patrols_paused': true, 'speed_cap_mps': 0.3}});
     await t.pumpAndSettle();
-    expect(find.text('天气：雷暴 · 排程巡检暂停 · 限速 0.3 m/s'), findsOneWidget);
+    expect(find.text('雷暴 · 0.3 m/s'), findsOneWidget);
+    expect(weatherText(<String, dynamic>{
+      'condition': 'storm', 'label': '雷暴', 'source': 'auto', 'patrols_paused': true, 'speed_cap_mps': 0.3}),
+        '天气：雷暴 · 排程巡检暂停 · 限速 0.3 m/s');
   });
 }

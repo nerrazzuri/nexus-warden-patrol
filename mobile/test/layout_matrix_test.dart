@@ -223,6 +223,26 @@ final _themes = <String, ThemeData? Function()>{
 };
 
 void main() {
+  // 手机 App 测试 M16：1080 宽的标准屏（411 宽）、系统字体放大到 1.3 倍：常用的几页不溢出
+  for (final lang in AppLang.values) {
+    for (final name in const ['duty (guard, today)', 'duty (owner)', 'mode', 'runs', 'weather']) {
+      testWidgets('字放大 1.3 倍不溢出 [${lang.name} 411×891] $name', (t) async {
+        appLang.value = lang;
+        addTearDown(() => appLang.value = AppLang.zh);
+        t.view.physicalSize = const Size(411, 891) * 2;
+        t.view.devicePixelRatio = 2.0;
+        addTearDown(t.view.reset);
+        await t.pumpWidget(MaterialApp(
+            theme: nwTheme(Brightness.dark),
+            builder: (c, child) => MediaQuery(
+                data: MediaQuery.of(c).copyWith(textScaler: const TextScaler.linear(1.3)), child: child!),
+            home: _pages[name]!()));
+        await t.pumpAndSettle();
+        expect(t.takeException(), isNull);
+        await t.pumpWidget(Container());
+      });
+    }
+  }
   for (final th in _themes.entries) {
     for (final lang in AppLang.values) {
       for (final size in const [_portrait, _landscape]) {

@@ -375,7 +375,7 @@ class _SiteDutyPageState extends State<SiteDutyPage> {
                 Icon(weatherIcon('${w['condition']}'), size: 16, color: c.textSecondary),
                 const SizedBox(width: 4),
                 Flexible(
-                    child: Text(weatherText(w),
+                    child: Text(weatherShort(w),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: NwText.bodySmall.copyWith(color: c.textSecondary))),
@@ -670,11 +670,15 @@ class _SiteDutyPageState extends State<SiteDutyPage> {
               padding: const EdgeInsets.symmetric(vertical: Nw.s8),
               decoration: BoxDecoration(border: Border(bottom: BorderSide(color: c.outline))),
               child: Row(children: [
-                SizedBox(
-                    width: 100,
-                    child: Text(_short(robotEventTime(e['stamp'])),
-                        maxLines: 1, overflow: TextOverflow.fade, softWrap: false,
-                        style: NwText.labelSmall.copyWith(color: c.textSecondary, fontFamily: NwFont.mono))),
+                // 手机 App 测试 M16：时间列跟着字宽，字放大也不被后面的字盖住
+                ConstrainedBox(
+                    constraints: const BoxConstraints(minWidth: 100),
+                    child: Padding(
+                      padding: const EdgeInsets.only(right: Nw.s8),
+                      child: Text(_short(robotEventTime(e['stamp'])),
+                          maxLines: 1, softWrap: false,
+                          style: NwText.labelSmall.copyWith(color: c.textSecondary, fontFamily: NwFont.mono)),
+                    )),
                 Expanded(
                     child: Text(
                         robotEventTitle('${e['kind']}', e['data'] is Map ? (e['data'] as Map).cast<String, dynamic>() : null),

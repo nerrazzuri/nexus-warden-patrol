@@ -92,7 +92,8 @@ class NwChoiceBar extends StatelessWidget {
                                     ],
                                     Flexible(
                                         child: Text(v.label,
-                                            maxLines: 1,
+                                            maxLines: 2, // M16：「TEMP DISA…」
+                                            textAlign: TextAlign.center,
                                             overflow: TextOverflow.ellipsis,
                                             style: NwText.labelMedium.copyWith(
                                                 color: fg,
