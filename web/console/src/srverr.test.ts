@@ -12,7 +12,8 @@ describe("englishError", () => {
     expect(englishError(409, "此站点未安装特权执行器(装机脚本会装):只能上主机操作")).toContain("system helper");
     expect(englishError(409, "机器人未执行:estop_active")).toBe("The robot did not do it: estop_active.");
     expect(englishError(409, "机器人未执行:急停没松")).toBe("The robot did not do it.");
-    expect(englishError(400, "某个没见过的中文错")).toBe("The site could not accept this. Check what you entered. (site message: 某个没见过的中文错)");
+    // 第 2 轮 P1-01:认不出的不接中文原话
+    expect(englishError(400, "某个没见过的中文错")).toBe("The site could not accept this. Check what you entered.");
     expect(englishError(409, "estate:1 还有机器人在用(A):先切到别的版本")).toContain("(A)");
     expect(englishError(500, "内部错")).toContain("support bundle");
     expect(englishError(400, "already English")).toBe("already English");

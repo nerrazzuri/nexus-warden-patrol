@@ -405,11 +405,12 @@ describe("对比", () => {
     fireEvent.click(getByLabelText("estate:3").querySelector("input[type=checkbox]") as HTMLElement);
     fireEvent.click(getByLabelText("estate:2").querySelector("input[type=checkbox]") as HTMLElement);
     fireEvent.click(getByText("Compare the two ticked"));            // 1 vs 2
-    second.go(json({ ...STATS, a: "2", caveat: "SECOND" }));
-    await waitFor(() => expect(c.querySelector(".mm-caveat")?.textContent).toBe("SECOND"));
-    first.go(json({ ...STATS, caveat: "FIRST" }));
+    // 说明文字现在由网页写(第 2 轮 P1-01),哪次的回包用 data-a(版本号)认
+    second.go(json({ ...STATS, a: "2" }));
+    await waitFor(() => expect(c.querySelector(".mm-diff")?.getAttribute("data-a")).toBe("2"));
+    first.go(json({ ...STATS, a: "3" }));
     await new Promise((r) => setTimeout(r, 20));
-    expect(c.querySelector(".mm-caveat")?.textContent).toBe("SECOND");
+    expect(c.querySelector(".mm-diff")?.getAttribute("data-a")).toBe("2");
   });
 });
 

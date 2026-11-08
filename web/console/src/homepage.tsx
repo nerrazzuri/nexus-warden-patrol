@@ -3,6 +3,9 @@
 // 2. 今天的安排 —— 今天几点布防(按防区)、今天的授权、临时撤防开到几点;右边切模式(设计 §11 第 14 条),写现在谁说了算。
 // 3. 机器人 —— 每台一张小卡片,点了去机器人页。
 // 4. 这周 —— 出了几次事、几次误报,跟上周比。
+import { alertAdvice, alertHeadline } from "./alertinfo";
+import { siteStr, siteText } from "./sitetext";
+import type { AdminPage } from "./shell";
 import { useEffect, useState } from "preact/hooks";
 import { advice } from "./advice";
 import { api } from "./api";
@@ -62,19 +65,23 @@ export function HomePage(props: {
             {groupTodo(todo).map((g) => {
               const a = g[0];
               const adv = advice(a.kind);
+              // 第 2 轮 P0-01:出发前检查没过 —— 写是哪一项、管理员自己怎么办、按钮去哪页(不写「请联系工程师」)
+              const pf = a.kind === "preflight_refused";
+              const pfGo = pf ? preflightPage(a) : undefined;
               const robots = [...new Set(g.map((x) => x.robot).filter((r) => r && r !== "site"))];
               return (
                 <li key={a.key} class={`todo ${a.level}`} data-kind={a.kind} data-n={g.length}>
                   <div class="todo-body">
-                    <b>{adv ? t(adv.say) : alertTitle(lang.value, a.kind, a.title)}</b>
+                    <b>{adv ? t(adv.say) : pf ? alertHeadline(a) : siteStr(alertTitle(lang.value, a.kind, a.title))}</b>
                     {robots.length > 0 && <span class="small">{t("homeTodoRobots", { r: robots.join(", ") })}</span>}
                     {/* P2-44:站点原话(带文件路径的技术说明)收起来,要看再点开 */}
-                    {a.detail && (adv ? <details class="todo-detail small"><summary>{t("homeTodoDetail")}</summary><span class="muted">{a.detail}</span></details>
-                      : <span class="muted small">{a.detail}</span>)}
-                    <span>{t(adv ? adv.todo : "advCallEngineer")}</span>
+                    {a.detail && (adv || pf || siteText(a.detail).raw
+                      ? <details class="todo-detail small"><summary>{t("homeTodoDetail")}</summary><span class="muted">{a.detail}</span></details>
+                      : <span class="muted small">{siteStr(a.detail)}</span>)}
+                    <span>{pf ? alertAdvice(a) : t(adv ? adv.todo : "advCallEngineer")}</span>
                   </div>
                   <div class="todo-acts">
-                    {adv?.go ? <a class="btn sm" href={`#/${adv.go}`}>{t("homeGo")}</a>
+                    {(adv?.go ?? pfGo) ? <a class="btn sm" href={`#/${adv?.go ?? pfGo}`}>{t("homeGo")}</a>
                       : g.some((x) => x.acked_ms == null) && <button type="button" class="btn sm" onClick={() => g.forEach((x) => x.acked_ms == null && props.onAck(x))}>{t("noticeAck")}</button>}
                     <button type="button" class="btn sm primary" onClick={() => g.forEach((x) => props.onDone(x))}>{t("noticeDone")}</button>
                   </div>
@@ -176,4 +183,12 @@ export function groupTodo(list: Alert[]): Alert[][] {
     if (g) g.push(a); else m.set(k, [a]);
   }
   return [...m.values()];
+}
+
+/** 出发前检查没过,按那一项去哪页处理(第 2 轮 P0-01)。 */
+export function preflightPage(a: Alert): AdminPage | undefined {
+  const c = (a.context as { check?: string } | undefined)?.check;
+  if (c === "home" || c === "localized") return "admin/localization";
+  if (c === "nav_ready" || c === "storage" || c === "removable") return "admin/diag";
+  return undefined;
 }

@@ -1,5 +1,6 @@
 // 地图管理页(管理员):每张图每个版本是什么、哪几只狗在用、发布到狗、回退、删旧版本、两版对比。
 // 后端见 packages/site-node/src/nexwar_site/maps_admin*.py;文字走本文件里的 tr(英, 中),不碰 i18n.ts。
+import { siteKnown, siteStr } from "./sitetext";
 import { useCallback, useEffect, useRef, useState } from "preact/hooks";
 import { api, ApiError, enc } from "./api";
 import { ConfirmPassword } from "./confirmpw";
@@ -127,7 +128,7 @@ export function MapManagePage({ say, pollMs = 5000 }: { say: Say; pollMs?: numbe
   const [deleting, setDeleting] = useState<{ map_id: string; version: string; back: string[]; latest: boolean } | null>(null);
   const [rolling, setRolling] = useState<Dog | null>(null);
   const [pick, setPick] = useState<string[]>([]);
-  const [diff, setDiff] = useState<{ map_id: string; a: string; b: string } | null>(null);
+  const [diff, setDiff] = useState<{ map_id: string; a: string; b: string; derived?: boolean } | null>(null);
   const [noise, setNoise] = useState<{ map_id: string; version: string } | null>(null);
   const gen = useRef(0);
 
@@ -188,7 +189,10 @@ export function MapManagePage({ say, pollMs = 5000 }: { say: Say; pollMs?: numbe
           {pick.length === 2 && (
             <button type="button" class="btn primary" onClick={() => {
               const [a, b] = pick.map((k) => k.split("\u0000"));
-              setDiff({ map_id: a[0], a: a[1], b: b[1] });
+              // 第 2 轮 P1-48:编辑、清噪点出来的版本跟原版同一坐标系,说明别再说「不一定同一坐标系」
+              const vs = data?.maps.find((m) => m.map_id === a[0])?.versions ?? [];
+              const derived = [a[1], b[1]].some((v) => ["edit", "denoise"].includes(vs.find((x) => x.version === v)?.source ?? ""));
+              setDiff({ map_id: a[0], a: a[1], b: b[1], derived });
             }}>{tr("Compare the two ticked", "对比勾选的两版")}</button>
           )}
         </div>
@@ -301,7 +305,7 @@ function RunningCell({ r }: { r: Running | null }) {
         {r.zones?.basis === "revision" && <span class="muted small"> {tr("(old agent: revision only)", "(旧版:只比修订号)")}</span>}
       </span>
       {r.mission && <span class="muted small mono">{tr("mission", "任务")} {r.mission.mission} · {r.mission.rev}</span>}
-      {r.problems.map((p, i) => <span key={i} class="bad small">{p}</span>)}
+      {r.problems.map((p, i) => <span key={i} class="bad small">{siteStr(p)}</span>)}
     </div>
   );
 }
@@ -313,7 +317,9 @@ function VersionCard(p: {
   const { v } = p;
   // 没改过就跟着站点的备注走;改过的是草稿(存了、站点那边的备注变成它,草稿就等于它,按钮自然灰掉)
   const [draft, setDraft] = useState<string | null>(null);
-  const note = draft ?? v.note;
+  // 第 2 轮 P1-01:站点自动写的备注(中文)英文界面翻了显示
+  const shown = siteKnown(v.note);
+  const note = draft ?? shown;
   const inUse = v.loaded_on.length > 0;
   // 网页易用性第 1 轮 P0-15:只有正在用的不能删;最新一版、退回目标都能删(确认框里说清后果)
   const whyNot = inUse ? tr("A robot is using this version", "有机器人在用这一版") : "";
@@ -338,7 +344,7 @@ function VersionCard(p: {
             placeholder={tr("Note (what changed, why)", "备注(改了什么、为什么)")} onInput={(e) => setDraft(e.currentTarget.value)} />
           {/* P1-49:写到多少字了(最多 200,多了打不进去) */}
           <span class={note.length >= 200 ? "bad small mono" : "muted small mono"}>{note.length}/200</span>
-          <button type="button" class="btn sm" disabled={note.trim() === v.note} onClick={() => p.onNote(note)}>{tr("Save note", "保存备注")}</button>
+          <button type="button" class="btn sm" disabled={note.trim() === shown} onClick={() => p.onNote(note)}>{tr("Save note", "保存备注")}</button>
         </div>
         {/* P1-50:镜像警告留在外面;建图器、帧数、回环这些技术信息收起来 */}
         {b?.handedness.verdict === "mirrored" && <p class="bad small">{tr("Mirrored map — do not publish", "这一版镜像了 —— 别发布")}</p>}
@@ -588,7 +594,7 @@ const LEGEND: [string, string, string][] = [
   ["free_only_b", "Not mapped in A, free in B", "A 没扫到、B 是空地"],
 ];
 
-export function DiffDialog({ target, onClose }: { target: { map_id: string; a: string; b: string }; onClose: () => void }) {
+export function DiffDialog({ target, onClose }: { target: { map_id: string; a: string; b: string; derived?: boolean }; onClose: () => void }) {
   const [stats, setStats] = useState<DiffStats | null>(null);
   const [err, setErr] = useState("");
   const gen = useRef(0);
@@ -608,8 +614,13 @@ export function DiffDialog({ target, onClose }: { target: { map_id: string; a: s
       {err && <p class="error" role="alert">{err}</p>}
       {!stats && !err && <p class="muted">{tr("Rendering…", "正在画…")}</p>}
       {stats && (
-        <div class="mm-diff">
-          <p class="mm-caveat" role="note">{stats.caveat}</p>
+        <div class="mm-diff" data-a={stats.a}>
+          {/* 第 2 轮 P1-01 / P1-48:说明由网页按版本来历写(站点的 caveat 是中文、而且不分来历) */}
+          <p class="mm-caveat" role="note">{target.derived
+            ? tr("One of these versions was made from the other in the map editor or by noise cleanup, so they share the same coordinate frame: every difference below is a real change.",
+              "其中一版是在地图编辑器里改的、或清噪点得到的,和另一版在同一个坐标系里:下面的差异都是真的改动。")
+            : tr("Versions built separately may not share a coordinate frame (each build starts from where that mapping run began; loop closure and rebuilding can shift and rotate the whole map). They are only aligned by origin and resolution, not registered: a large difference is probably a different frame, not a real change.",
+              "分开建的版本不一定在同一个坐标系里(每次建图以那一趟的起点为原点,回环和重建会让整张图挪一点、转一点)。这里只按原点和分辨率对齐,没有做配准:大面积的差异很可能是坐标系不同,不是地方变了。")}</p>
           {stats.likely_misaligned && (
             <p class="mm-misaligned bad" role="alert">
               {vn(tr(`Only ${Math.round((stats.alignment ?? 0) * 100)}% of A's wall cells have a wall of B next to them: these two versions are very likely NOT in the same coordinate frame. The picture below is not meaningful.`,

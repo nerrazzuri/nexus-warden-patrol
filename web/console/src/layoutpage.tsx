@@ -2,6 +2,7 @@
 // 选哪个标签只能改那一样,别的四样在图上淡着画、只作参考。右上角「保存」(这个标签有没存的改动才亮)和「历史版本」
 // (谁、几点改的,一键退回;退回走原来的保存,禁行区放宽照样要确认)。两个人同时改:后保存的看到「刚才有人改过」。
 // 这个文件是外框:选图、拉五样数据、淡层、保存按钮、历史抽屉、切标签前问没存的。各标签在 layout*.tsx。
+import { siteKnown } from "./sitetext";
 import { useUnsaved } from "./unsaved";
 import type { ComponentChildren, FunctionComponent } from "preact";
 import { useCallback, useEffect, useRef, useState } from "preact/hooks";
@@ -247,7 +248,7 @@ export function LayoutPage({ say, robots, tabs }: { say: Say; robots: string[]; 
             if (dirty) { el.value = sel ? `${sel.map_id}\u0000${sel.version}` : ""; setAsk(() => () => setSel(next)); } else setSel(next);
           }}>
             {maps.map((m) => <option key={`${m.map_id}:${m.version}`} value={`${m.map_id}\u0000${m.version}`}>
-              {m.map_id} · v{m.version}{m.active ? ` · ${t("lyActive")}` : ""}{m.note ? ` · ${m.note}` : ""}</option>)}
+              {m.map_id} · v{m.version}{m.active ? ` · ${t("lyActive")}` : ""}{m.note ? ` · ${siteKnown(m.note)}` : ""}</option>)}
           </select>
         </label>
         <span class="push" />

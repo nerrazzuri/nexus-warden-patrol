@@ -3,6 +3,7 @@ import type { ComponentChildren } from "preact";
 // 菱形 + 报警圈(未确认时闪)。侧栏只给**选中**的狗拉前后两路小画面(有 P1 时默认选 P1 的狗)。
 // 地图本身(转正、全图、缩放平移、区域名、图例、比例尺、平面图)在 mapcanvas.tsx;狗和报警点画在屏上坐标里
 // (大小不跟着缩放变),位置用跟底图同一个变换算。
+import { siteStr } from "./sitetext";
 import { useEffect, useMemo, useState } from "preact/hooks";
 import { reportStart } from "./alertinfo";
 import { api, ApiError, enc } from "./api";
@@ -553,7 +554,7 @@ export function TempRoutePanel(props: {
   const [errs, setErrs] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const pointText = (list: { index: number | null; problem: string }[]) =>
-    list.map((x) => (x.index == null ? x.problem : t("trBadPoint", { n: x.index + 1, why: x.problem })));
+    list.map((x) => (x.index == null ? siteStr(x.problem) : t("trBadPoint", { n: x.index + 1, why: siteStr(x.problem) })));
   // P1-16:点一下就查(穿墙、在禁行区里、没扫到的地方),不用等按「开始」
   const key = JSON.stringify(props.points);
   useEffect(() => {
