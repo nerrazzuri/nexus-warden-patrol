@@ -72,8 +72,8 @@ class _SiteReleasesPageState extends State<SiteReleasesPage> {
         builder: (c) => AlertDialog(
           title: Text(tr('$robot: $what $name', '$robot $what $name')),
           content: Text(tr(
-              'The robot restarts its agent (tens of seconds) and refuses while a task is running. Continue?',
-              '机器人需重启代理（约数十秒），执行任务时会拒绝。确定继续？')),
+              'The robot restarts its software (tens of seconds) and refuses while a task is running. Continue?',
+              '机器人上的程序要重启（约几十秒），执行任务时会拒绝。确定继续？')),
           actions: [
             TextButton(
                 onPressed: () => Navigator.pop(c, false), child: Text(tr('Cancel', '取消'))),

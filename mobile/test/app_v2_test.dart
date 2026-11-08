@@ -402,7 +402,7 @@ void main() {
       await t.pumpWidget(Container());
     });
 
-    testWidgets('英文界面：标题按种类是英文，站点给的中文原因照样摆出来', (t) async {
+    testWidgets('英文界面：标题按种类是英文，站点给的中文原因翻成英文', (t) async {
       _english();
       final api = FakeApi('guard')..deterRows = [_session()];
       await _alarm(t, api, _p1());
@@ -412,7 +412,8 @@ void main() {
       expect(find.text("I'll handle it"), findsOneWidget);
       expect(find.text('Sound siren (level 3)'), findsOneWidget);
       expect(find.text("I'm on site"), findsOneWidget, reason: 'W74：看见人第四个位置是已到场');
-      expect(find.text('布防中'), findsOneWidget);
+      // 手机 App 测试 M05：站点给的中文原因按语言翻
+      expect(find.text('Armed'), findsOneWidget);
       await t.pumpWidget(Container());
     });
 

@@ -412,6 +412,30 @@ void main() {
       expect(g['y'] as double, closeTo(4.25, 0.011));
       expect(g['yaw'] as double, closeTo(math.pi / 2, 0.05));
       expect(find.textContaining('Go-to sent to A'), findsOneWidget);
+      await t.pump(const Duration(seconds: 7)); // 盯这一趟的那几秒（M06）：没消息就留着「已派」
+      expect(find.textContaining('Go-to sent to A'), findsOneWidget);
+    });
+
+    testWidgets('手机 App 测试 M06：狗收下了、出发前检查没过 —— 原地说没出发、为什么', (t) async {
+      final api = Rot23Api('guard');
+      api.view = <String, dynamic>{
+        ...api.view,
+        'events': <dynamic>[
+          <String, dynamic>{'kind': 'task_failed', 'seq': 9, 'stamp': 1,
+            'data': <String, dynamic>{'task_id': 't1', 'reason': "起飞前检查未通过: home(地图 'estate-1' 未标原点)"}},
+        ],
+      };
+      final c = await pumpTab(t, api);
+      await t.tapAt(c.global(-3.5, 4.25));
+      await t.pumpAndSettle();
+      await t.tap(find.byKey(PoseBar.goKey));
+      await t.pump();
+      await t.pump();
+      expect(find.textContaining('Checking that it starts'), findsOneWidget);
+      await t.pump(const Duration(seconds: 2));
+      await t.pumpAndSettle();
+      expect(find.textContaining("A didn't go: Pre-departure check failed: the map has no origin yet"), findsOneWidget);
+      expect(find.textContaining('Go-to sent'), findsNothing);
     });
 
     testWidgets('站点拒了：原因原样显示', (t) async {

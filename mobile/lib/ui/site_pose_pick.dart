@@ -12,6 +12,7 @@ import 'package:flutter/material.dart';
 
 import '../l10n.dart';
 import '../net/site_client.dart';
+import '../net/site_text.dart';
 import 'map_view.dart';
 import 'nw/nw_button.dart';
 import 'nw/nw_theme.dart';
@@ -137,7 +138,11 @@ class PoseBar extends StatefulWidget {
       required this.controller,
       required this.mapId,
       required this.version,
-      required this.robots});
+      required this.robots,
+      this.followEvery = const Duration(seconds: 1)});
+
+  /// 派出去以后多久问一次这一趟的结果（M06；测试改短）。
+  final Duration followEvery;
 
   static const Key barKey = Key('pose-bar');
   static const Key goKey = Key('pose-go');
@@ -186,32 +191,75 @@ class _PoseBarState extends State<PoseBar> {
     return ids.isEmpty ? null : ids.first;
   }
 
-  Future<void> _run(Future<Map<String, dynamic>> Function() call, String ok) async {
+  /// [follow]：收下以后再盯这一趟几秒（手机 App 测试 M06：狗收下了，出发前检查没过、站点又拒了，
+  /// 以前只留一行「已派 A 前往」）。给的是机器人号。
+  Future<void> _run(Future<Map<String, dynamic>> Function() call, String ok, {String? follow}) async {
     final mine = _gen;
     setState(() {
       _busy = true;
       _msg = null;
     });
     String msg;
+    String? tid;
     try {
       final r = await call();
       final ack = r['ack'];
       final result = ack is Map ? ack['result'] : null;
       // 只有狗收下了才算（外审 W39-I3：没回执、被拒、过期、重复都不算）
+      final reason = ack is Map ? '${ack['reason'] ?? ''}' : '';
       msg = result == 'accepted'
           ? ok
-          : tr('The robot did not accept: $result ${ack is Map ? (ack['reason'] ?? '') : ''}',
-              '机器人未接受：$result ${ack is Map ? (ack['reason'] ?? '') : ''}');
+          : tr('The robot did not accept: ${reason.isEmpty ? result : ackReasonText(reason)}',
+              '机器人未接受：${reason.isEmpty ? result : ackReasonText(reason)}');
+      if (result == 'accepted' && r['task_id'] is String) tid = r['task_id'] as String;
     } on SiteError catch (e) {
-      // 站点拒了：原因原样给人看（监护模式要租约、没就绪、点不可达……）
-      msg = tr('Refused: ${e.message}', '被拒绝：${e.message}');
+      // 站点拒了：原因说人话给人看（监护模式要租约、没就绪、点不可达……）
+      msg = tr('Refused: ${refusalText(e)}', '被拒绝：${refusalText(e)}');
     }
-    if (mounted) {
-      setState(() {
-        _busy = false;
-        if (mine == _gen) _msg = msg;           // 上下文变了：不把结果说成现在这只狗、这张图的
-      });
+    if (!mounted) return;
+    final robot = follow;
+    if (tid != null && robot != null && mine == _gen) {
+      setState(() => _msg = tr('$msg. Checking that it starts…', '$msg，正在确认它出发了…'));
+      final out = await _outcome(robot, tid);
+      if (!mounted) return;
+      msg = out ?? msg;
     }
+    setState(() {
+      _busy = false;
+      if (mine == _gen) _msg = msg; // 上下文变了：不把结果说成现在这只狗、这张图的
+    });
+  }
+
+  /// 刚派的这一趟头几秒的结果：失败了、中止了回原因；在走了回「在路上」；没消息回 null。
+  Future<String?> _outcome(String robot, String tid) async {
+    for (var i = 0; i < 6; i++) {
+      await Future<void>.delayed(widget.followEvery);
+      if (!mounted) return null;
+      final Map<String, dynamic> v;
+      try {
+        v = await widget.api.robot(robot);
+      } on SiteError {
+        continue;
+      }
+      final evs = v['events'];
+      if (evs is List) {
+        for (final e in evs) {
+          if (e is! Map) continue;
+          final d = e['data'];
+          if (d is! Map || d['task_id'] != tid) continue;
+          final k = e['kind'];
+          if (k == 'task_failed' || k == 'task_aborted') {
+            final why = siteText('${d['reason'] ?? ''}');
+            return tr("$robot didn't go: $why", '$robot 没有出发：$why');
+          }
+          if (k == 'task_progress' || k == 'task_started') return tr('$robot is on its way', '$robot 已出发');
+        }
+      }
+      final st = v['status'];
+      final task = st is Map ? st['task'] : null;
+      if (task is Map && task['task_id'] == tid) return tr('$robot is on its way', '$robot 已出发');
+    }
+    return null;
   }
 
   Future<void> _go() async {
@@ -220,7 +268,8 @@ class _PoseBarState extends State<PoseBar> {
     await _run(
         () => widget.api.goto(id,
             mapId: widget.mapId, version: widget.version, x: at.dx, y: at.dy, yaw: widget.controller.yaw),
-        tr('Go-to sent to $id', '已派 $id 前往'));
+        tr('Go-to sent to $id', '已派 $id 前往'),
+        follow: id);
   }
 
   Future<void> _set() async {

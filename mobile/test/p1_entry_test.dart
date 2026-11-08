@@ -153,7 +153,8 @@ void main() {
       await t.pumpAndSettle();
       expect(find.byType(SiteLoginPage), findsOneWidget, reason: '没登上：留在登录页');
       expect(find.byType(NwShell), findsNothing);
-      expect(find.text('登录失败：账号或口令不对（401）'), findsOneWidget);
+      // 手机 App 测试 M05：4xx 的状态码对人没用，不印
+      expect(find.text('登录失败：账号或口令不对'), findsOneWidget);
       expect(api.closed, 1, reason: '没登上的那个连接关掉');
       await t.enterText(find.byKey(const Key('site-password')), 'right');
       await t.testTextInput.receiveAction(TextInputAction.done);

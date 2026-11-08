@@ -20,6 +20,7 @@ import 'dart:typed_data';
 import 'package:crypto/crypto.dart';
 
 import '../l10n.dart';
+import 'site_text.dart';
 import '../model/alert.dart';
 import 'error_log.dart';
 
@@ -39,8 +40,12 @@ class SiteError implements Exception {
   /// 站点证书跟手机记的指纹对不上（站点重装、重签了证书，或者有人冒充站点）。
   bool get certChanged => kind == 'cert';
 
+  /// 给人看的那句（手机 App 测试 M05：按 App 语言翻站点原文；4xx 的状态码对人没用，不印）。
   @override
-  String toString() => status == 0 ? message : tr('$message ($status)', '$message（$status）');
+  String toString() {
+    final m = siteText(message);
+    return status < 500 ? m : tr('$m ($status)', '$m（$status）');
+  }
 }
 
 /// 站点证书变了时给人看的话（手机 App 测试 M03）。
@@ -205,7 +210,8 @@ String roleName(String role) => switch (role) {
 /// 站点回的拒绝（409）按语言说：中文界面照站点原话；英文界面有 `reason_en` 就用它（W53 D10）。
 String refusalText(SiteError e) {
   final en = e.body['reason_en'];
-  return tr(en is String && en.isNotEmpty ? en : e.message, e.message);
+  if (appLang.value == AppLang.en && en is String && en.isNotEmpty) return en;
+  return siteText(e.message);
 }
 
 /// 这台狗报的能力里有没有这种任务（`robots()`、`robot()` 给的那一份）。没这个能力的按钮不显示：

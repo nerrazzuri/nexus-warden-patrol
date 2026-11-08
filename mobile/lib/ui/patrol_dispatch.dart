@@ -13,6 +13,7 @@ import 'package:flutter/material.dart';
 
 import '../l10n.dart';
 import '../net/site_client.dart';
+import '../net/site_text.dart';
 import 'nw/nw_button.dart';
 import 'nw/nw_p4_admin.dart' show nwGap8;
 import 'nw/nw_theme.dart';
@@ -311,7 +312,7 @@ class TodayPatrolList extends StatelessWidget {
         (it['by'] == s?.name || (s?.canSchedule ?? false));
     final (st, _) = patrolStateText('${it['state']}', _skippedOf(it));
     final lines = <String>[
-      '${hhmm((it['at_ms'] as num).toInt(), offsetMin)} · ${it['label']}${'${it['robot'] ?? ''}'.isEmpty ? '' : ' · ${it['robot']}'}',
+      '${hhmm((it['at_ms'] as num).toInt(), offsetMin)} · ${siteKnown('${it['label']}')}${'${it['robot'] ?? ''}'.isEmpty ? '' : ' · ${it['robot']}'}',
       st,
       if (adhoc) tr('One-off patrol sent by ${it['by']}', '${it['by']} 派的临时巡逻'),
       if (it['end_ms'] is num) tr('Ends around ${hhmm((it['end_ms'] as num).toInt(), offsetMin)}', '预计 ${hhmm((it['end_ms'] as num).toInt(), offsetMin)} 结束'),
@@ -369,7 +370,7 @@ class TodayPatrolList extends StatelessWidget {
                     child: Text(
                         [
                           if (items[i]['kind'] == 'adhoc') tr('One-off', '临时'),
-                          '${items[i]['label']}',
+                          siteKnown('${items[i]['label']}'),
                           if ('${items[i]['robot'] ?? ''}'.isNotEmpty) '${items[i]['robot']}',
                           if (items[i]['kind'] == 'adhoc' && '${items[i]['by'] ?? ''}'.isNotEmpty) '${items[i]['by']}',
                         ].join(' · '),
