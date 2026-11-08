@@ -27,6 +27,7 @@ Future<void> _tall(WidgetTester t) async {
 }
 
 void main() {
+  m04Tests();
   testWidgets('我来处理、已到场都在；没到场误报点不了；点了发 arrive', (t) async {
     await _tall(t);
     final api = FakeApi('guard');
@@ -58,7 +59,7 @@ void main() {
     expect(api.calls.where((c) => c.startsWith('resolve')), isEmpty);
     await t.tap(find.byKey(SiteAlertScenePage.doneGoKey));
     await t.pumpAndSettle();
-    expect(api.calls, contains('resolve A/dog_sees_person#1'));
+    expect(api.calls, contains('resolve A/dog_sees_person#1 handled'));
   });
 
   testWidgets('去向不明：写出几点起看不到；最后位置用最后看见的那一处', (t) async {
@@ -102,5 +103,33 @@ void main() {
     await t.pumpAndSettle();
     expect(find.byKey(SiteAlertScenePage.ackKey), findsOneWidget);
     expect(find.byKey(SiteAlertScenePage.arriveKey), findsNothing);
+  });
+}
+
+/// 手机 App 测试 M04：机器人故障、派单被拒这类真事只给「已处理」；可能误报的才有「误报」。
+void m04Tests() {
+  Alert fault(String kind, String audience) => Alert.fromWire(<String, dynamic>{
+        'key': 'A/$kind#1', 'level': 'P2', 'kind': kind, 'audience': audience, 'robot': 'A',
+        'title': 't', 'detail': '', 'first_ms': 1, 'last_ms': 1, 'count': 1, 'acked_by': '',
+        'acked_ms': null, 'resolved_ms': null, 'escalated': 0, 'channel': 'screen',
+      });
+
+  testWidgets('M04：出发前检查失败只有「已处理」，点了带 handled 结论；入侵有「误报」', (t) async {
+    await _tall(t);
+    final api = FakeApi('guard');
+    await t.pumpWidget(MaterialApp(home: SiteAlertScenePage(api: api, alert: fault('preflight_refused', 'owner'))));
+    await t.pumpAndSettle();
+    expect(find.byKey(SiteAlertScenePage.falseKey), findsNothing);
+    expect(find.text('对讲：暂不支持'), findsNothing);
+    await t.tap(find.byKey(SiteAlertScenePage.doneKey));
+    await t.pumpAndSettle();
+    await t.tap(find.byKey(SiteAlertScenePage.doneGoKey));
+    await t.pumpAndSettle();
+    expect(api.calls, contains('resolve A/preflight_refused#1 handled'));
+    await t.pumpWidget(const SizedBox());
+    await t.pumpWidget(MaterialApp(home: SiteAlertScenePage(api: FakeApi('guard'), alert: fault('cctv_motion', 'intrusion'))));
+    await t.pumpAndSettle();
+    expect(find.byKey(SiteAlertScenePage.falseKey), findsOneWidget);
+    expect(find.byKey(SiteAlertScenePage.doneKey), findsOneWidget);
   });
 }

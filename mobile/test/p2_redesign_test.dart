@@ -257,8 +257,9 @@ void main() {
         final buttons = find.byWidgetPredicate((w) =>
             (w is FilledButton || w is OutlinedButton) &&
             find.ancestor(of: find.byWidget(w), matching: find.byKey(SiteAlertScenePage.barKey)).evaluate().isNotEmpty);
-        expect(buttons, findsNWidgets(4));
-        for (final k in [SiteAlertScenePage.ackKey, SiteAlertScenePage.falseKey]) {
+        // 手机 App 测试 M10：用不了的警笛不摆灰的占位；我来处理、误报、已处理
+        expect(buttons, findsNWidgets(3));
+        for (final k in [SiteAlertScenePage.ackKey, SiteAlertScenePage.falseKey, SiteAlertScenePage.doneKey]) {
           expect(find.ancestor(of: find.byKey(k), matching: find.byKey(SiteAlertScenePage.barKey)), findsOneWidget);
           expect(find.ancestor(of: find.byKey(k), matching: find.byType(Scrollable)), findsNothing);
           final r = t.getRect(find.byKey(k));
