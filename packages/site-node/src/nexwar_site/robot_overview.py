@@ -87,8 +87,21 @@ def overview(dispatcher: Any, db: Any, *, now_ms: int, tz: tzinfo) -> list[dict[
                     "postures": list(((getattr(caps, "tasks", None) or {}).get("posture") or {})
                                      .get("modes", [])) if fresh else [],
                     "task": _task(c),
-                    "manual_note": (reg.manual_only(rid) or {}).get("note", "")})
+                    "manual_note": (reg.manual_only(rid) or {}).get("note", ""),
+                    **_return_targets(db, rid, caps)})
     return out
+
+
+def _return_targets(db: Any, rid: str, caps: Any) -> dict[str, Any]:
+    """网页易用性第 2 轮 N2:回原点、回待命点能不能派(站点派的时候同样这么查,见 standby.py)。
+    ``home_set``:狗当前地图那一版上有没有原点(没报地图 = ``None``,不知道);``standby_set``:有没有默认待命点。"""
+    patrol = ((getattr(caps, "tasks", None) or {}).get("patrol") or {}) if caps is not None else {}
+    mid, ver = patrol.get("map_id"), patrol.get("map_version")
+    home = None if mid is None else bool(db.query(
+        "SELECT 1 FROM homes WHERE robot_id=? AND map_id=? AND map_version=?", (rid, mid, ver)))
+    standby = bool(db.query("SELECT 1 FROM standby_points WHERE robot_id=? AND is_default=1",
+                            (rid,)))
+    return {"home_set": home, "standby_set": standby}
 
 
 def _week(db: Any, rid: str, now_ms: int) -> dict[str, Any]:

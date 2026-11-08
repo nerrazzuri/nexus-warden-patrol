@@ -154,3 +154,18 @@ describe("P1-14 今日巡逻的原因说人话", () => {
     expect(plainReason("起飞前检查未通过: localized(定位当前是 Lost)")).toBe("Pre-departure check failed: localization is not settled");
   });
 });
+
+describe("第 2 轮 P0-05:详情里有位置、接手后说下一步", () => {
+  const show = (a: Alert) => render(
+    <AlertDetail a={a} role="guard" now={1000} units={[]} onClose={() => {}} refresh={async () => {}} say={() => {}} />);
+  it("只有地图坐标、没有区域名:写「在地图上标着」并能跳过去", () => {
+    const r = show(alert({ kind: "intrusion", context: { pose: { map_id: "m", map_version: "1", x: 1, y: 2 } } }));
+    const link = r.container.querySelector("a[data-where-map]") as HTMLAnchorElement;
+    expect(link).not.toBeNull();
+    expect(link.getAttribute("href")).toBe("#/map");
+  });
+  it("已接手、还开着:写下一步(派机器人看、看画面或录像、选结论关闭)", () => {
+    const r = show(alert({ kind: "intrusion", acked_by: "gina", acked_ms: 500 }));
+    expect(r.container.querySelector("[data-next-step]")!.textContent).toContain("选结论");
+  });
+});

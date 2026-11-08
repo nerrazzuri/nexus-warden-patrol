@@ -18,6 +18,8 @@ const en = {
   dWhen: "Raised {a} · last {b} · {n}×",
   dWhenOnce: "Raised {a}",
   dWhere: "Where",
+  dWhereMap: "marked with a red circle on the Map page",
+  dNext: "Next: send a robot to check (or watch the live view / recording), then pick a verdict below and close the alarm.",
   dRobot: "Robot",
   dTaken: "Taken by {who}",
   dNotTaken: "Nobody has taken it yet",
@@ -42,6 +44,8 @@ const zh: Record<DKey, string> = {
   dWhen: "{a} 发生 · 最近 {b} · 共 {n} 次",
   dWhenOnce: "{a} 发生",
   dWhere: "位置",
+  dWhereMap: "在「地图」页用红圈标着",
+  dNext: "下一步：派机器人过去看（或看实时画面 / 录像），然后在下面选结论、关闭报警。",
   dRobot: "机器人",
   dTaken: "{who} 已接手",
   dNotTaken: "还没有人接手",
@@ -130,9 +134,12 @@ export function AlertDetail(props: {
           <span class={a.level === "P1" ? "tag p1" : a.level === "P2" ? "tag p2" : "tag"}>{a.level}</span>
           <span>{when}</span>
           {!site && <span>{dt("dRobot")}: <b>{nameOf(a.robot)}</b></span>}
-          {where && <span>{dt("dWhere")}: <b>{where}</b></span>}
+          {where ? <span>{dt("dWhere")}: <b>{where}</b></span>
+            : a.context?.pose && <span>{dt("dWhere")}: <a href="#/map" data-where-map="1" onClick={props.onClose}>{dt("dWhereMap")}</a></span>}
         </p>
         {open && <p class="muted small">{a.acked_by ? dt("dTaken", { who: byText(a.acked_by) }) : dt("dNotTaken")}</p>}
+        {/* 第 2 轮 P0-05:接手以后告诉保安下一步做什么 */}
+        {open && a.acked_by && canHandleAlerts(props.role) && <p class="ad-next" data-next-step="1">{dt("dNext")}</p>}
         {advice && (
           <div class="ad-do"><h3>{dt("dDo")}</h3><p>{advice}</p></div>
         )}
