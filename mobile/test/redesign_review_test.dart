@@ -103,6 +103,13 @@ void main() {
     ]) {
       testWidgets('$name：不写在线、不是绿的；图上的标记也不是绿的，写明是最后知道的位置', (t) async {
         await open(t, r());
+        if (name == '已经吊销') {
+          // 手机 App 测试 M32：吊销了的干脆不列在地图栏上
+          expect(find.byKey(SiteMapTab.robotKey('A')), findsNothing);
+          expect(find.byKey(SiteMapTab.markerKey('A')), findsNothing);
+          await t.pumpWidget(Container());
+          return;
+        }
         expect(find.descendant(of: find.byKey(SiteMapTab.robotKey('A')), matching: find.text('在线')), findsNothing);
         expect(pillTone(t), isNot(NwTone.success));
         final marker = find.byKey(SiteMapTab.markerKey('A'));

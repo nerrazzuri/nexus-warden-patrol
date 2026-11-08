@@ -277,3 +277,10 @@ String taskKindText(String taskId) {
     _ => taskId.isEmpty || RegExp(r'[0-9a-f]{8,}').hasMatch(taskId) ? tr('a task', '任务') : siteKnown(taskId),
   };
 }
+
+/// 报警是谁报的（手机 App 测试 M33）：`cctv:gate-1` → 摄像头 gate-1；`site` → 站点；机器人原样。
+String alertSourceText(String robot) {
+  if (robot == 'site') return tr('Site', '站点');
+  if (robot.startsWith('cctv:')) return tr('Camera ${robot.substring(5)}', '摄像头 ${robot.substring(5)}');
+  return robot;
+}
