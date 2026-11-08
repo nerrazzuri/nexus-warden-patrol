@@ -229,6 +229,16 @@ export function SideNav(props: { me: Me; page: Page; alarms: number | null; noti
   // P0-16:手机上导航收在「菜单」按钮里(宽屏这个按钮不显示,导航一直在);点了哪页就收起
   const [menu, setMenu] = useState(false);
   useEffect(() => setMenu(false), [props.page]);
+  // 第 2 轮 layout N11:菜单开着时 Esc、点侧栏外面都收起(原来只能再点一次「菜单」)
+  const side = useRef<HTMLElement>(null);
+  useEffect(() => {
+    if (!menu) return;
+    const key = (e: KeyboardEvent) => { if (e.key === "Escape") setMenu(false); };
+    const down = (e: PointerEvent) => { if (side.current && !side.current.contains(e.target as Node)) setMenu(false); };
+    window.addEventListener("keydown", key);
+    window.addEventListener("pointerdown", down);
+    return () => { window.removeEventListener("keydown", key); window.removeEventListener("pointerdown", down); };
+  }, [menu]);
   // 第 2 轮 P1-85:矮屏上侧栏要自己滚,当前这一页在侧栏里要看得见
   useEffect(() => {
     document.querySelector<HTMLElement>('.sidenav a[aria-current="page"]')?.scrollIntoView?.({ block: "nearest" });
@@ -238,7 +248,7 @@ export function SideNav(props: { me: Me; page: Page; alarms: number | null; noti
     return n ? <span class={b === "alarms" ? "badge alarm mono" : "badge mono"}>{n}</span> : null;
   };
   return (
-    <aside class="sidenav">
+    <aside class="sidenav" ref={side}>
       <div class="sidenav-brand">
         <BrandMark />
         <span class="sidenav-site" title={props.me.site_name}>{t("sideSite", { n: props.me.site_name })}</span>

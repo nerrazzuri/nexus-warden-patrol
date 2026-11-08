@@ -369,7 +369,11 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--c-primary); }
 @media (max-width: 720px) {
   .usermenu > .who .who-initial { display: inline-flex; width: 28px; height: 28px; border-radius: 50%; align-items: center; justify-content: center;
     background: var(--c-surfaceVariant); font-weight: 700; }
-  .topbar { position: static; }
+  /* 第 2 轮 layout N10:手机页头压成两行并吸顶 —— 第一行页名 + Stop all,第二行布防、报警、时间、帮助、头像;
+     不写「值班」那行小字(日期留着:夜班跨零点要看清哪天) */
+  .topbar { position: sticky; top: 0; padding: 6px 12px; gap: 6px 8px; min-height: 0; }
+  .pagetitle-sec { display: none; }
+  .clock { font-size: 15px; }
   /* P0-16:用户菜单不藏,只缩成首字圆头像;菜单贴屏幕右边、不出屏 */
   .usermenu > .who .who-name { display: none; }
   .topbar .usermenu > .who { padding: 0; width: 36px; }
@@ -766,7 +770,15 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--c-primary); }
 .it .what p { margin: 0; color: var(--c-textSecondary); font-size: 13px; }
 .it .res { font-size: 14px; }
 .it .res small { display: block; margin-top: 2px; color: var(--c-textMuted); font-size: 12px; }
-@media (max-width: 900px) { .it { grid-template-columns: 100px 1fr; } .it .shot { width: 100px; height: 56px; } }
+/* 第 2 轮 layout N3:标题按钮用页面的链接样式(原来是浏览器原生灰按钮);≤900 宽缩略图和时间一行,标题、说明、结果占满整行 */
+.linkish { background: none; border: 0; padding: 0; margin: 0; font: inherit; color: inherit; text-align: left; cursor: pointer; }
+.linkish:hover { text-decoration: underline; }
+.linkish:focus-visible { outline: 2px solid var(--c-focus); outline-offset: 2px; border-radius: 2px; }
+@media (max-width: 900px) {
+  .it { grid-template-columns: 100px 1fr; gap: 8px 12px; }
+  .it .shot { width: 100px; height: 56px; }
+  .it > .what, .it > .res, .it > div:last-child { grid-column: 1 / -1; }
+}
 
 /* W44 第二期:「管理」左边一列(三组,高级默认收着) */
 .adminwrap { display: block; }
@@ -994,7 +1006,8 @@ p.warn { color: var(--c-text); background: var(--c-warningSoft); padding: 8px 12
 .ly-main { min-width: 0; }
 .ly-tab { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 16px; align-items: start; }
 .ly-side { display: flex; flex-direction: column; gap: 10px; }
-.layout-map { min-height: 420px; height: 62vh; }
+/* 第 2 轮 layout N2:外框原来定死 62vh,里面的地图(100vh-280)+ 图例比它高,一列时侧面板压在图例和「整张图」上 —— 外框跟着内容走 */
+.layout-map { min-height: 420px; height: auto; }
 .layout-map .dim { opacity: .35; pointer-events: none; }
 .layout-map:not(.tab-nogo) .nogo-area, .layout-map:not(.tab-nogo) .slow-area, .layout-map:not(.tab-nogo) .ignore-area { opacity: .35; }
 .ly-route { fill: none; stroke: var(--c-info); stroke-width: 2; vector-effect: non-scaling-stroke; }
@@ -1034,7 +1047,11 @@ img.cam-live { width: 100%; max-height: 60vh; object-fit: contain; background: #
 /* W44 第四期:高级 → 定位 */
 .advloc { display: flex; flex-direction: column; gap: 12px; }
 .advloc .lead { margin: 0; }
-.loc-row { display: flex; gap: 8px; align-items: center; padding: 6px 0; }
+/* 第 2 轮 layout N1:按钮放不下就换行(原来「在这儿标原点」顶出屏幕右边) */
+.loc-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 6px 0; }
+.loc-row > .btn { white-space: nowrap; }
+.advloc .ly-side { min-width: 0; }
+.loc-detail { max-width: 100%; overflow-x: auto; }
 .loc-dot { width: 12px; height: 12px; border-radius: 50%; flex: none; background: var(--c-textMuted); }
 .loc-dot.ok { background: var(--c-success); }
 .loc-dot.unsure { background: var(--c-warning); }
@@ -1239,11 +1256,18 @@ input.invalid { border-color: var(--c-error); }
   .sidenav-nav { gap: 6px; }
   .navgroup-title { padding-top: 2px; padding-bottom: 2px; min-height: 0; }
 }
-/* P1-82:手机上页面标题占一整行,时钟、?、账号、全部停止在第二行,全部停止固定在最右 */
+/* P1-82 → 第 2 轮 layout N10:手机上第一行页名 + 头像 + 全部停止(最右),第二行布防、报警、时间、?
+   (原来全部停止排在第二行末尾,放不下就自己掉到第三行) */
 @media (max-width: 720px) {
   .topbar { padding: 6px 12px; }
-  .topbar > .pagetitle, .topbar > h1 { flex-basis: 100%; }
-  .topbar > .btn.stop { order: 10; margin-left: auto; }
+  .topbar > .pagetitle, .topbar > h1 { order: 0; flex: 1 1 50%; }
+  .topbar > .btn.stop { order: 1; margin-left: auto; }
+  .topbar > :not(.pagetitle):not(h1):not(.btn.stop):not(.usermenu) { order: 2; }
+  .topbar > .usermenu { order: 1; margin-left: auto; }          /* 头像放右上,挨着全部停止 */
+  .topbar > .usermenu + .btn.stop { margin-left: 0; }
+  .topbar { gap: 6px; }
+  .topbar .alarmcount, .topbar .armstate { padding: 0 8px; }
+  .topbar .clock { font-size: 14px; }
 }
 /* P1-09:输入框、文件选择框统一样子(:where 不加权重,各处原有的样式照样优先) */
 :where(input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="range"]):not([type="color"])), :where(textarea) {
@@ -1419,3 +1443,22 @@ input[type="date"]:not(.field input) { height: 36px; padding: 0 8px; border-radi
 .field input[type="file"] { height: auto; padding: 0; border: 0; background: none; }
 .field input[type="file"]:focus-visible { padding: 0; border: 0; outline: 2px solid var(--c-focus); outline-offset: 2px; }
 input[type="file"]:disabled { opacity: 0.6; cursor: not-allowed; }
+/* 第 2 轮 layout N14:第一帧到之前不显示图片(不露破图图标) */
+.feed.pending { visibility: hidden; }
+/* 第 2 轮 layout N5 / N7 / N8 / N12:手机上不横向溢出、字不被截 */
+@media (max-width: 720px) {
+  .mappage { margin: -12px; }                                   /* 页边距这里是 12px,原来按 16px 抵,多出 4px */
+  .users-table td[data-label]::before { content: attr(data-label) ": "; color: var(--c-textSecondary); font-size: 13px; }
+}
+.rmap { max-width: 100%; }                                       /* 最小高 300 × 4:3 把宽撑到 400 */
+.advdiag .panel-head { flex-wrap: wrap; }
+.advdiag .panel-head > .push.row { flex-wrap: wrap; min-width: 0; }
+.armhours span:last-child { transform: translateX(-100%); }      /* 「24:00」不伸出右边 */
+.field select { min-width: 6.5em; }                              /* 「07:00」不被截成「07:0」 */
+input[type="file"] { max-width: 100%; min-width: 0; }            /* 上传按钮不被挤出屏 */
+/* 第 2 轮 layout N6:录像页小地图框是 4:3,地图本身最小 420 高把图例和「整张图」挤出框外被裁 */
+.rmap .mapwrap { min-height: 0; }
+/* 第 2 轮 layout N9:分隔线画在整行上(含「详情」),按钮离面板右边留空;「今天的巡逻」是面板里的一节,不再套一层框 */
+.duty-list > li { border-bottom: 1px solid var(--c-outline); padding-right: 12px; }
+.duty-list > li > .duty-row { border-bottom: 0; }
+.duty-left .today { border: 0; border-top: 1px solid var(--c-outline); border-radius: 0; background: none; padding: 10px 16px; flex: none; }

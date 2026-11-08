@@ -7,7 +7,7 @@ import type { Me } from "./app";
 import { Console } from "./console";
 import { lang } from "./i18n";
 import type { Alert } from "./model";
-import { pageAllowed, pageScheme, readRoute, roleLabel, schemeFor, TopBar } from "./shell";
+import { pageAllowed, pageScheme, readRoute, roleLabel, schemeFor, SideNav, TopBar } from "./shell";
 import { applyTheme } from "./theme";
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
@@ -252,5 +252,19 @@ describe("第 2 轮 duty N10 / N11:顶栏", () => {
     const a = bar({ stale: true }).querySelector(".armstate")!;
     expect(a.className).toContain("stale");
     expect(a.textContent).toContain("最后已知");
+  });
+});
+
+describe("第 2 轮 layout N11:手机菜单", () => {
+  it("开着时 Esc、点外面都收起", () => {
+    const c = render(<SideNav me={me("admin")} page="duty" alarms={0} notices={0} />).container;
+    const toggle = c.querySelector(".nav-toggle") as HTMLButtonElement;
+    fireEvent.click(toggle);
+    expect(c.querySelector("#mainnav")!.className).toContain("open");
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(c.querySelector("#mainnav")!.className).not.toContain("open");
+    fireEvent.click(toggle);
+    fireEvent.pointerDown(document.body);
+    expect(c.querySelector("#mainnav")!.className).not.toContain("open");
   });
 });
