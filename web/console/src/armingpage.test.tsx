@@ -279,6 +279,62 @@ describe("布防时间页", () => {
       expect(posted.some((p) => p.url === "/api/arming/schedule")).toBe(false);
     });
 
+    it("第 3 轮 config N1:此刻按日程撤防,停用日程 → 确认框写会变成「留守」", async () => {
+      const { container: c } = page();
+      await waitFor(() => expect(row(c, 0).querySelector(".armblock")).not.toBeNull());
+      await new Promise((ok) => setTimeout(ok, 20));
+      fireEvent.click(c.querySelector("#arm-enabled")!);
+      fireEvent.click(c.querySelector(".arm-save")!);
+      await waitFor(() => expect(c.ownerDocument.querySelector(".modal")?.textContent).toContain("马上改成「留守」"));
+    });
+
+    it("第 3 轮 config N2:手动留守(外围布防)、日程关着,新日程此刻不布防 → 要确认会撤防", async () => {
+      mode = { ...mode, mode: "home", label: "留守", source: "manual", state: "partial", manual_until_ms: null };
+      schedule = { ...schedule, slots: [], enabled: false };
+      const { container: c } = page();
+      await new Promise((ok) => setTimeout(ok, 20));
+      fireEvent.click(c.querySelector("#arm-enabled")!);
+      drag(row(c, 2).querySelector(".armtrack")!, 600, 720);
+      fireEvent.click(c.querySelector(".arm-save")!);
+      await waitFor(() => expect(c.ownerDocument.querySelector(".modal")?.textContent).toContain("全站会马上撤防"));
+    });
+
+    it("第 3 轮 config N3:临时撤防进行中打开日程 → 说会结束临时撤防", async () => {
+      mode = { ...mode, mode: "visitor", label: "临时撤防", source: "manual", state: "partial", manual_until_ms: null, until_ms: at(13) };
+      schedule = { ...schedule, slots: [], enabled: false };
+      const { container: c } = page();
+      await new Promise((ok) => setTimeout(ok, 20));
+      fireEvent.click(c.querySelector("#arm-enabled")!);
+      drag(row(c, 2).querySelector(".armtrack")!, 600, 720);
+      fireEvent.click(c.querySelector(".arm-save")!);
+      await waitFor(() => expect(c.ownerDocument.querySelector(".modal")?.textContent).toContain("结束临时撤防"));
+    });
+
+    it("第 3 轮 config N4:日程开着、手动期里删光时段 → 也说整周撤防", async () => {
+      mode = { ...mode, mode: "armed", label: "布防", source: "manual", state: "armed", manual_until_ms: at(22) };
+      const { container: c } = page();
+      await waitFor(() => expect(row(c, 0).querySelector(".armblock")).not.toBeNull());
+      fireEvent.click(row(c, 0).querySelector(".armblock")!);
+      fireEvent.click(btn(c, "删除此时段"));
+      fireEvent.click(c.querySelector(".arm-save")!);
+      await waitFor(() => expect(c.ownerDocument.querySelector(".modal")?.textContent).toContain("整周都是撤防"));
+      expect(posted.some((p) => p.url === "/api/arming/schedule")).toBe(false);
+    });
+
+    it("第 3 轮 config N5:今天的「全天撤防」例外会马上撤防 → 先确认;加完刷新「现在」", async () => {
+      mode = { ...mode, mode: "armed", label: "按时间表:布防", source: "schedule", state: "armed" };
+      const d = new Date();
+      const today = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+      const { container: c } = page();
+      await waitFor(() => expect(c.querySelector(".arm-ex")).not.toBeNull());
+      await new Promise((ok) => setTimeout(ok, 20));
+      fireEvent.input(c.querySelector('.arm-ex input[name="first"]')!, { target: { value: today } });
+      fireEvent.change(c.querySelector('.arm-ex select[name="state"]')!, { target: { value: "disarmed" } });
+      fireEvent.click(btn(c, "添加例外"));
+      await waitFor(() => expect(c.ownerDocument.querySelector(".modal")?.textContent).toContain("马上撤防"));
+      expect(posted.some((p) => p.url === "/api/arming/exceptions")).toBe(false);
+    });
+
     it("日程开着、手动切换还管着(到下一个变化点):改日程此刻不变,不用确认", async () => {
       mode = { ...mode, mode: "armed", label: "布防", source: "manual", state: "armed", manual_until_ms: at(22) };
       const { container: c } = page();

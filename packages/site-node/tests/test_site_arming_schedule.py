@@ -313,6 +313,29 @@ def test_接口权限(tmp_path):
         s.close()
 
 
+@pytest.mark.parametrize(("start", "want"), [("10:00", "armed"), ("22:00", "home")])
+def test_第3轮_config_N1_停用日程_站点照此刻的状态改成手动(tmp_path, start, want):
+    """原来停用日程退回到开日程之前的手动模式(可能悄悄变成留守 / 布防),确认框却说「保持当前状态」。
+    现在:此刻按日程布防 → 手动布防;此刻按日程撤防 → 留守(手动没有全撤防)。"""
+    s = 站(tmp_path)
+    try:
+        s.api.arming = ArmingDesk(s.db, now_ms=lambda: kl(*MON, 12))
+        s.api.arming.schedule = ArmingSchedule(s.db, now_ms=lambda: kl(*MON, 12), tz=lambda: KL)
+        alice = s.login()
+        first = "armed" if want == "home" else "home"
+        assert s.req("POST", "/api/mode", {"mode": first}, token=alice)[0] == 200
+        body = {"enabled": True, "slots": [slot(0, start, "24:00")]}
+        assert s.req("POST", "/api/arming/schedule", body, token=alice)[0] == 200
+        assert s.req("GET", "/api/mode", token=alice)[1]["source"] == "schedule"
+        code, _ = s.req("POST", "/api/arming/schedule", {"enabled": False, "slots": body["slots"]},
+                        token=alice)
+        assert code == 200
+        m = s.req("GET", "/api/mode", token=alice)[1]
+        assert m["source"] == "manual" and m["mode"] == want
+    finally:
+        s.close()
+
+
 # ---- 外审 R1:开关和时间段一起存;存失败整份还是旧的 ----
 
 def test_外审R1_关时间表写一半失败_整份还是旧的(台, tmp_path, monkeypatch):
