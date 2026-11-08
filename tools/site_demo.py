@@ -362,8 +362,9 @@ def _seed_w53(base: str, password: str, robots: list[str]) -> list[str]:
                   {"revision": 0, "confirm": True, "empty_ok": True}, tok)
     if code != 200:
         out.append(f"  禁行区确认没成({code} {d.get('error', '')})")
-    # 机器人 A 起在 (0, 0):旁边绕一小圈
-    pts = [(0.6, 0.0), (0.6, 0.6), (0.0, 0.6)]
+    # 机器人 A 起在 (0, 0):旁边绕一小圈。商场图 mall3 上 A 的东北边紧挨着障碍(在 0.4 m 安全带里,
+    # 站点逐段查走不通,11-08 用户测试时路线没存成),绕东南边那片空地
+    pts = [(1.2, -0.6), (1.2, -1.4), (0.0, -1.0)]
     wps = [{"name": f"P{i + 1}", "x": x, "y": y, "yaw": 0.0} for i, (x, y) in enumerate(pts)]
     code, d = req("POST", "/api/routes/demo-loop", {"map_id": "estate-1", "map_version": "7",
                                                     "waypoints": wps, "base_revision": 0}, tok)
