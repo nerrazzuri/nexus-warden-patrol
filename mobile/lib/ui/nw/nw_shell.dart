@@ -380,7 +380,7 @@ class _HistoryTabState extends State<_HistoryTab> {
                           selected: _seg,
                           onChanged: (v) => setState(() => _seg = v),
                           labelOf: (v) => switch (v) {
-                                _History.runs => tr('Patrols', '巡检'),
+                                _History.runs => tr('Patrols', '巡逻'),
                                 _History.incidents => tr('Incidents', '事件'),
                                 _History.alarms => tr('Alarms', '报警'),
                               },

@@ -76,7 +76,7 @@ class _SiteCamerasPageState extends State<SiteCamerasPage> {
     final err = '${c['error'] ?? ''}';
     return tr(
         'Not connected$when${err.isEmpty ? '' : ': $err'} — intrusions from this camera are not received',
-        '未连接$when${err.isEmpty ? '' : '：$err'}——收不到此摄像头的入侵告警');
+        '未连接$when${err.isEmpty ? '' : '：$err'}——收不到此摄像头的入侵报警');
   }
 
   @override

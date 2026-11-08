@@ -189,6 +189,8 @@ String _en(String s) {
 /// 中文界面：挨着汉字的半角「( , : ;」换全角（时间 10:30、地址 http://、地图 home:3 不动）。
 String zhPunct(String src) {
   if (!hasChinese(src)) return src;
+  // 手机 App 测试 M37：「起飞前检查」是无人机的说法
+  src = src.replaceAll('起飞前检查', '出发前检查');
   const h = r'[㐀-鿿「」（）]';
   return src
       .replaceAllMapped(RegExp('($h) ?\\('), (m) => '${m[1]}（')

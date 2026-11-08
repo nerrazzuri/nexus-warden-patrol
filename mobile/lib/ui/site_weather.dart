@@ -37,7 +37,7 @@ String weatherText(Map<String, dynamic> w) {
       ? tr(' (manual, ${m['by'] ?? ''})', '（手动，${m['by'] ?? ''}）')
       : '';
   final parts = <String>[tr('Weather: $enLabel$who', '天气：$label$who')];
-  if (w['patrols_paused'] == true) parts.add(tr('Scheduled patrols paused', '排程巡检暂停'));
+  if (w['patrols_paused'] == true) parts.add(tr('Scheduled patrols paused', '排程巡逻暂停'));
   final cap = w['speed_cap_mps'];
   if (cap is num) {
     parts.add(tr('Speed limit ${cap.toStringAsFixed(1)} m/s', '限速 ${cap.toStringAsFixed(1)} m/s'));

@@ -84,7 +84,7 @@ void main() {
     expect(int.parse(q[3]), t0 - 30000 - 15 * 60000);
     final tile = t.widget<ListTile>(find.byKey(SiteRecordingsPage.clipKey(11)));
     expect(tile.selected, isTrue);
-    expect(find.textContaining('告警时刻'), findsOneWidget);
+    expect(find.textContaining('报警时刻'), findsOneWidget);
   });
 
   testWidgets('没开录像的站点、读不到：说清楚', (t) async {

@@ -287,7 +287,7 @@ class _SiteAlertScenePageState extends State<SiteAlertScenePage> {
       if (got != null && got.key != key) {
         // 站点明说回的是另一条：不能当成这一条确认上了
         setState(() => _msg = tr("Not acknowledged: the site returned a different alarm (${got.key})",
-            '确认失败：站点返回的是另一条告警（${got.key}）'));
+            '确认失败：站点返回的是另一条报警（${got.key}）'));
         return;
       }
       // 站点回了确认之后的这一条：谁、几点以站点记的为准。老站点不回正文：先在本地记成「我、现在」，
@@ -354,7 +354,7 @@ class _SiteAlertScenePageState extends State<SiteAlertScenePage> {
     final ok = await showDialog<bool>(
         context: context,
         builder: (c) => AlertDialog(
-              content: Text(tr('Close this alarm as handled?', '已处理，关闭此告警？')),
+              content: Text(tr('Close this alarm as handled?', '已处理，关闭此报警？')),
               actions: [
                 TextButton(onPressed: () => Navigator.pop(c, false), child: Text(tr('Cancel', '取消'))),
                 FilledButton(
@@ -380,7 +380,7 @@ class _SiteAlertScenePageState extends State<SiteAlertScenePage> {
         builder: (c) => AlertDialog(
               content: Text(tr(
                   'Mark as a false alarm? The alarm is closed; any running deterrence is not stopped here.',
-                  '标为误报？此告警将关闭，正在进行的驱离不会在此停止。')),
+                  '标为误报？此报警将关闭，正在进行的驱离不会在此停止。')),
               actions: [
                 TextButton(onPressed: () => Navigator.pop(c, false), child: Text(tr('Cancel', '取消'))),
                 FilledButton(
@@ -798,7 +798,7 @@ class _SiteAlertScenePageState extends State<SiteAlertScenePage> {
       if (ctx.isEmpty)
         Text(
             tr('This alarm has no scene data (older site, or a site-level alarm)',
-                '此告警没有现场数据（旧版站点或站点级告警）'),
+                '此报警没有现场数据（旧版站点或站点级报警）'),
             style: small),
       if (_isRobot || taskId != null) ...[
         const SizedBox(height: Nw.s8),
@@ -851,7 +851,7 @@ class _SiteAlertScenePageState extends State<SiteAlertScenePage> {
                         padding: const EdgeInsets.only(bottom: Nw.s8),
                         child: Text(
                             tr('Go to the scene first: the alarm can only be closed after you tap "I\'m on site".',
-                                '先到现场：点「已到场」后才能关闭此告警。'),
+                                '先到现场：点「已到场」后才能关闭此报警。'),
                             style: NwText.bodySmall.copyWith(color: c.textSecondary))),
                   _actions(oneRow: oneRow),
                 ]))));
@@ -912,7 +912,7 @@ class _SiteAlertScenePageState extends State<SiteAlertScenePage> {
                   tooltip: MaterialLocalizations.of(context).closeButtonTooltip,
                   onPressed: () => Navigator.maybePop(context))
               : null,
-          title: Text(tr('Alarm', '告警')),
+          title: Text(tr('Alarm', '报警')),
           actions: [
             if (widget.api.session?.canDispatch ?? false)
               StopAllButton(api: widget.api, onResult: (m) => setState(() => _msg = m)),

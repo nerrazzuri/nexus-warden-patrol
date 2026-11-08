@@ -314,7 +314,7 @@ class _SiteRobotsPageState extends State<SiteRobotsPage> {
         });
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
             content: Text(tr('Background watch off: no alarms arrive while the app is in the background',
-                '后台值守已关闭：App 在后台时收不到告警'))));
+                '后台值守已关闭：App 在后台时收不到报警'))));
       }
     } else {
       await _bgStart();

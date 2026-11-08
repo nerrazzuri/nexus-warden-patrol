@@ -91,7 +91,7 @@ class _SiteReleasesPageState extends State<SiteReleasesPage> {
       final ack = (r['ack'] as Map?) ?? const {};
       _snack(ack['result'] == 'accepted'
           ? tr('$robot accepted: $what $name (it reports when done; the site raises an alarm on failure)',
-              '$robot 已接受：$what $name（完成后上报，失败时站点告警）')
+              '$robot 已接受：$what $name（完成后上报，失败时站点报警）')
           : tr('$robot did not accept: ${ack['reason'] ?? ack['result']}',
               '$robot 未接受：${ack['reason'] ?? ack['result']}'));
       final data = ack['data'];
