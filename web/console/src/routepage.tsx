@@ -7,7 +7,7 @@ import { api, ApiError, enc } from "./api";
 import { Confirm } from "./dialogs";
 import { startDrag, clickGuard, swallowClick } from "./dragpt";
 import { t } from "./i18n";
-import type { OwnLayer } from "./layoutpage";
+import { SaveCancelled, type OwnLayer } from "./layoutpage";
 import { MapCanvas } from "./mapcanvas";
 import { PoseMarker } from "./posemarker";
 import { DispatchOnce } from "./routedispatch";
@@ -38,6 +38,7 @@ import {
   type RouteView,
 } from "./routes";
 import { rt } from "./routes_i18n";
+import { siteKnown, siteStr } from "./sitetext";
 
 type Say = (s: string) => void;
 interface MapRow { map_id: string; version: string; note: string }
@@ -88,6 +89,7 @@ export function RoutesPage({ say, embed, kind = "patrol" }: { say: Say; embed?: 
   const [showOthers, setShowOthers] = useState(false);
   const [genOpen, setGenOpen] = useState(false);
   const [genNotes, setGenNotes] = useState<string[]>([]);
+  const [genStandby, setGenStandby] = useState(false);
   const [eta, setEta] = useState<RouteEta | null>(null);
   const root = useRef<HTMLDivElement>(null);
   const guard = useRef(clickGuard());
@@ -137,7 +139,7 @@ export function RoutesPage({ say, embed, kind = "patrol" }: { say: Say; embed?: 
   const routes = view?.routes ?? [];
   const dirty = !!draft && (draft.isNew ? draft.points.length > 0 : !same(draft, orig));
   const bad = new Map<number, string>();
-  for (const p of problems) if (p.index !== null) bad.set(p.index, p.problem);
+  for (const p of problems) if (p.index !== null) bad.set(p.index, siteStr(p.problem));
   const wholeProblems = problems.filter((p) => p.index === null);
   // 11-05 现场第 15、35 条:刚存下的这一版里要原地转又贴墙的点(改了以后不算,存了再看)
   const warns = new Map<number, string>();
@@ -161,7 +163,7 @@ export function RoutesPage({ say, embed, kind = "patrol" }: { say: Say; embed?: 
     setGenNotes([]);
   }
   /** W73:按防区生成的草稿 → 新建路线的编辑页(还没存;问题照存路线时那样标出来)。 */
-  function fromGenerated(id: string, points: RoutePoint[], errs: PointProblem[], notes: string[]) {
+  function fromGenerated(id: string, points: RoutePoint[], errs: PointProblem[], notes: string[], standby = false) {
     nextEdit();
     setGenOpen(false);
     setDraft({ id, isNew: true, base: 0, points, policy: {}, map: mapKey });
@@ -169,7 +171,8 @@ export function RoutesPage({ say, embed, kind = "patrol" }: { say: Say; embed?: 
     setPi(null);
     setProblems(errs);
     setConflict(false);
-    setGenNotes([rt("guardGenDone", { n: points.length }), ...notes]);
+    setGenNotes([points.length ? rt("guardGenDone", { n: points.length }) : rt("guardGenNone"), ...notes]);
+    setGenStandby(standby);
   }
   function startNew() {
     // 新建:右侧栏换成编辑页,名字在编辑页顶上填(2026-10-15 用户:原来名字框夹在路线列表和点位列表中间)
@@ -314,7 +317,13 @@ export function RoutesPage({ say, embed, kind = "patrol" }: { say: Say; embed?: 
   useEffect(() => { embed?.setDirty(dirty); }, [dirty]);
   useEffect(() => {
     if (!embed) return;
-    embed.registerSave(canSave ? () => save(true) : null);
+    // 第 2 轮 P1-39 / layout N3:有改动但存不了(名字不对、重名、没有点)时按顶上「保存」说清为什么,不是没反应
+    const why = !draft || !dirty ? null
+      : nameTaken ? rt("routeNameTaken")
+      : !NAME_RE.test(draft.id) ? rt("routeNameHint")
+      : pts.length === 0 ? rt("routeNoPoints") : null;
+    embed.registerSave(canSave ? () => save(true)
+      : why ? async () => { say(why); throw new SaveCancelled(); } : null);
     return () => embed.registerSave(null);
   });
   function back() {
@@ -453,11 +462,11 @@ export function RoutesPage({ say, embed, kind = "patrol" }: { say: Say; embed?: 
                   <p class="small" role="alert">{rt("routeConflict")} <button type="button" class="link" onClick={() => void reloadRoute()}>{rt("routeReload")}</button></p>
                 )}
                 {problems.length > 0 && <p class="small bad" role="alert">{rt("routeProblems", { n: problems.length })}</p>}
-                {wholeProblems.map((p, i) => <p key={i} class="small bad">{p.problem}</p>)}
+                {wholeProblems.map((p, i) => <p key={i} class="small bad">{siteStr(p.problem)}</p>)}
                 {[...warns.values()].map((w, i) => <p key={`w${i}`} class="small warn" data-route-warn={i}>{w}</p>)}
                 {genNotes.map((n, i) => <p key={`g${i}`} class="muted small" data-gen-note={i}>{n}</p>)}
                 {/* P1-40:有防区没生成出点(多半是没设待命点)→ 给入口 */}
-                {genNotes.length > 1 && embed && <p class="small"><a href="#/admin/layout?tab=standby" data-gen-standby="1">{rt("guardGoStandby")}</a></p>}
+                {genStandby && embed && <p class="small"><a href="#/admin/layout?tab=standby" data-gen-standby="1">{rt("guardGoStandby")}</a></p>}
                 {draft && pts.length > 1 && (eta && !dirty ? (
                   <p class="small route-eta" data-eta-total="1" title={rt("etaBasis", { v: eta.speed_mps })}>
                     {rt("etaTotal", { t: clock(eta.total_s) })}{eta.basis === "straight" && <span class="muted"> · {rt("etaStraight")}</span>}
@@ -519,7 +528,7 @@ interface GenResult { waypoints: RoutePoint[]; problems: PointProblem[]; zones: 
 /** W73:按防区生成防区路线(设计 §4.2)。站点给的是草稿:放进编辑页,看过、挪过再存。 */
 function GuardGenerate({ map, taken, say, onDone, onClose }: {
   map: MapRow; taken: string[]; say: Say;
-  onDone: (id: string, points: RoutePoint[], problems: PointProblem[], notes: string[]) => void; onClose: () => void;
+  onDone: (id: string, points: RoutePoint[], problems: PointProblem[], notes: string[], standby?: boolean) => void; onClose: () => void;
 }) {
   const [zones, setZones] = useState<GenZone[] | null>(null);
   const [name, setName] = useState("");
@@ -542,8 +551,10 @@ function GuardGenerate({ map, taken, say, onDone, onClose }: {
         map_id: map.map_id, map_version: map.version, spacing_m: spacing,
         zones: picked.map((z) => ({ zone: z.zone, laps: z.laps, dwell_s: z.dwell_s, photos: z.photos })),
       });
-      const notes = r.zones.filter((z) => z.points === 0).map((z) => rt("guardGenZoneNone", { zone: z.zone, why: z.note }));
-      onDone(name.trim(), r.waypoints, r.problems ?? [], notes);
+      // 第 2 轮 P1-40:原因按界面语言;只有原因真跟待命点有关才给「去设待命点」
+      const empty = r.zones.filter((z) => z.points === 0);
+      const notes = empty.map((z) => rt("guardGenZoneNone", { zone: siteKnown(z.zone), why: siteStr(z.note) }));
+      onDone(name.trim(), r.waypoints, r.problems ?? [], notes, empty.some((z) => /待命点/.test(z.note ?? "")));
     } catch (e) {
       say(errText(e));
     } finally {

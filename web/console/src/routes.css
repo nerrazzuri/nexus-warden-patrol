@@ -56,3 +56,6 @@
 .route-pt.warn .pm-body { stroke: var(--c-warning); }
 .route-pt.warn .pm-nose { fill: var(--c-warning); }
 p.warn { color: var(--c-warning); }
+
+/* 第 2 轮 P1-39:路线名不合规 / 重名时规则提示变红 */
+.routename .bad { color: var(--c-error); }

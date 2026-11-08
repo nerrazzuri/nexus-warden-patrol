@@ -72,6 +72,18 @@ const RULES: Rule[] = [
   // 特殊地面自动生成的限速区名字(site map_display.TERRAIN_LABEL)
   [/^(楼梯|台阶|斜坡|草地|碎石路)(\s*\d*)$/, (m) => ({ 楼梯: "Stairs", 台阶: "Steps", 斜坡: "Slope", 草地: "Grass", 碎石路: "Gravel path" } as Record<string, string>)[m[1]] + m[2]],
   [/^地图 '([^']+)' 未标原点/, (m) => `map “${m[1]}” has no origin yet`],
+  // 防区自动选点、路线落点检查(site guard_plan.py、routes.py)
+  [/^这个点在地图外面$/, () => "the point is outside the map"],
+  [/^这个点在墙、障碍、禁行区里/, () => "the point is in or too close to a wall, obstacle or no-go area (no room for the robot)"],
+  [/^这个点不在地图上最大的那片可走区域里/, () => "the point is not in the main walkable area of the map (no standby point set yet)"],
+  [/^这个点从待命点、原点走不到$/, () => "the robot cannot get to the point from its standby point or the origin"],
+  [/^这张地图还不能自动选点/, () => "this map cannot pick points automatically yet; click the route points on the map yourself"],
+  [/^防区里没有机器人站得下的地方$/, () => "there is no spot in the zone where the robot fits (the zone may be outside the scanned area)"],
+  [/^机器人走不到这个防区[:：]还没设待命点/, () => "the robot cannot reach this zone because no standby point is set. Set one under Standby points, or draw the zone where the robot can go"],
+  [/^机器人从待命点、原点都走不到这个防区里/, () => "the robot cannot reach this zone from its standby point or the origin; draw the zone where the robot can go"],
+  [/^防区里站得下的地方离建图时走过的路都太远/, () => "every spot in the zone is too far from where the robot went while mapping (it would not locate itself reliably)"],
+  [/^(\S+) 到 (\S+) 走不通[(（]被墙或禁行区隔开[)）]$/, (m) => `No way from ${m[1]} to ${m[2]} (a wall or no-go area is in between)`],
+  [/^点要有数字的 x、y/, () => "each point needs numeric x and y (and optionally yaw)"],
   // 站点的拒绝原因
   [/^(?:账号 )?(\S+) 已存在$/, (m) => `“${m[1]}” already exists.`],
   [/^账号 (\S+)$/, (m) => `Account ${m[1]}`],
