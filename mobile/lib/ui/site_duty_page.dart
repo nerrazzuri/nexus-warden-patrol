@@ -23,6 +23,7 @@ import 'package:flutter/material.dart';
 import '../l10n.dart';
 import '../model/alert.dart';
 import '../net/site_client.dart';
+import '../net/site_text.dart';
 import 'map_wizard.dart' show openMapWizard, wizardSteps;
 import 'nw/nw_button.dart';
 import 'nw/nw_p2_duty.dart';
@@ -98,6 +99,7 @@ class SiteDutyPage extends StatefulWidget {
   static const Key resumeKey = Key('duty-resume');
   static const Key othersKey = Key('duty-others');
   static const Key safetyKey = Key('duty-safety');
+  static const Key manualKey = Key('duty-manual-only');
   static const Key noRobotsKey = Key('duty-no-robots');
   static const Key todayKey = Key('duty-today');
   static const Key noMapKey = Key('duty-no-map');
@@ -495,6 +497,9 @@ class _SiteDutyPageState extends State<SiteDutyPage> {
             ListTile(
               key: SiteDutyPage.chipKey('${r['robot_id']}'),
               selected: r['robot_id'] == _sel,
+              // M25：标出现在看的是哪台
+              leading: Icon(r['robot_id'] == _sel ? Icons.check_circle_rounded : Icons.circle_outlined,
+                  color: r['robot_id'] == _sel ? c.primary : c.textMuted),
               title: Text(robotLabel(r)),
               subtitle: Text(robotPhaseLabel(robotPhase(r))),
               trailing: robotBattery(r) == null
@@ -565,7 +570,7 @@ class _SiteDutyPageState extends State<SiteDutyPage> {
     final run = runningItem(_today, '${r['robot_id']}', tid);
     final battery = robotBattery(r);
     final doing = run != null
-        ? tr('Patrolling "${run['label']}"${run['end_ms'] is num ? ' · done around ${hhmm((run['end_ms'] as num).toInt(), _offsetMin)}' : ''}',
+        ? tr('Patrolling "${siteKnown('${run['label']}')}"${run['end_ms'] is num ? ' · done around ${hhmm((run['end_ms'] as num).toInt(), _offsetMin)}' : ''}',
             '正在巡逻「${run['label']}」${run['end_ms'] is num ? ' · 预计 ${hhmm((run['end_ms'] as num).toInt(), _offsetMin)} 结束' : ''}')
         : robotStatusLine(r);
     return Padding(
@@ -586,8 +591,18 @@ class _SiteDutyPageState extends State<SiteDutyPage> {
                   style: NwText.titleMedium.copyWith(color: c.text, fontFamily: NwFont.mono, fontWeight: FontWeight.w600)),
             ],
           ]),
-          if (r['held'] is Map) ...[
+          // 手机 App 测试 M25：「仅限手动」说为什么、谁能改
+          if (r['manual_only'] is Map) ...[
             nwGap8,
+            Text(
+                key: SiteDutyPage.manualKey,
+                tr('Manual only (set by ${(r['manual_only'] as Map)['by']}${'${(r['manual_only'] as Map)['note'] ?? ''}'.isEmpty ? '' : ': ${(r['manual_only'] as Map)['note']}'}): '
+                    'schedules and alarms will not send it; you can still send it by hand. An administrator switches it back on the robot page.',
+                    '仅限手动（${(r['manual_only'] as Map)['by']} 设的${'${(r['manual_only'] as Map)['note'] ?? ''}'.isEmpty ? '' : '：${(r['manual_only'] as Map)['note']}'}）：'
+                    '日程和报警不会派它，手动还能派。管理员在机器人页改回自动。'),
+                style: NwText.bodySmall.copyWith(color: c.textSecondary)),
+          ],
+          if (r['held'] is Map) ...[
             Row(children: [
               Expanded(
                   child: Text(
@@ -658,11 +673,11 @@ class _SiteDutyPageState extends State<SiteDutyPage> {
   }
 
   List<Widget> _events(NwColors c) {
-    final ev = (_view?['events'] as List? ?? const []).whereType<Map>().take(3).toList();
+    final ev = compactEvents((_view?['events'] as List? ?? const []).whereType<Map>().toList()).take(3).toList();
     if (ev.isEmpty) return const [];
     return [
       const SizedBox(height: Nw.s16),
-      NwSectionLabel(tr('${robotLabel(_selRobot!)} recent events', '${robotLabel(_selRobot!)} 最近事件')),
+      NwSectionLabel(tr('Recent events · ${robotLabel(_selRobot!)}', '${robotLabel(_selRobot!)} 的最近事件')),
       nwGap8,
       Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           for (final e in ev)

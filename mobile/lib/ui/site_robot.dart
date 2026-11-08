@@ -494,7 +494,7 @@ class _SiteRobotPageState extends State<SiteRobotPage> {
     final c = Nw.of(context);
     final s = widget.api.session;
     final v = _view;
-    final events = (v?['events'] as List? ?? const []).whereType<Map>().toList();
+    final events = compactEvents((v?['events'] as List? ?? const []).whereType<Map>().toList());
     final phase = v == null ? null : robotPhase(v);
     final dispatch = s?.canDispatch ?? false;
     final maps = s?.canManageMaps ?? false;

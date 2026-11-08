@@ -53,6 +53,12 @@ String? _title(String kind) => switch (kind) {
 
 /// 事件标题：查表 → 告警词条 → 种类名（下划线换空格）。[data] 给了，机器人故障报的是空列表就是「故障已清除」。
 String robotEventTitle(String kind, [Map<String, dynamic>? data]) {
+  // 手机 App 测试 M27：「完成」那一条里写着没成的，就说没成（以前失败的几趟也写「任务完成」）
+  if (kind == 'task_done' && data != null) {
+    final r = '${data['result'] ?? data['outcome'] ?? ''}';
+    if (r == 'failed' || data['ok'] == false) return tr('Task failed', '任务失败');
+    if (r == 'aborted') return tr('Task stopped', '任务中止');
+  }
   if (kind == 'robot_fault' && data != null && data['faults'] is List && (data['faults'] as List).isEmpty) {
     return tr('Faults cleared', '故障已清除');
   }
@@ -100,6 +106,17 @@ String robotEventDetail(String kind, Map<String, dynamic> data) {
     }
   }
   return parts.join(' · ');
+}
+
+/// 手机 App 测试 M27：「在路上 剩 2.8 米」一趟能报几十条，把有用的挤掉了。连着的进度只留最新的一条
+///（列表新的在前）。
+List<Map> compactEvents(List<Map> events) {
+  final out = <Map>[];
+  for (final e in events) {
+    if (e['kind'] == 'task_progress' && out.isNotEmpty && out.last['kind'] == 'task_progress') continue;
+    out.add(e);
+  }
+  return out;
 }
 
 /// 事件时刻（站点给的 `stamp`，毫秒）→ 本机时间 `MM-dd HH:mm:ss`；没有就空串。

@@ -611,7 +611,7 @@ class _SiteMapTabState extends State<SiteMapTab> {
                 overline: tr('Map', '地图'),
                 title: v?.mapId == null ? tr('Site map', '地图') : v!.tag,
                 subtitle:
-                    v?.mapId == null ? null : tr('$onMap robot(s) on this map', '此地图上 $onMap 台机器人'),
+                    v?.mapId == null ? null : tr(onMap == 1 ? '1 robot on this map' : '$onMap robots on this map', '此地图上 $onMap 台机器人'),
                 trailing: [
                   IconButton(
                       key: SiteMapTab.refreshKey,

@@ -25,6 +25,7 @@ void main() {
     expect(siteText('你的账号（只读）不能做这件事'), 'Your account is view-only and cannot do this');
     expect(siteText('剩 52 GB'), '52 GB free');
     expect(siteText('机器人看见人了:1 个人,最近 4.0 m'), 'The robot sees 1 person, nearest 4.0 m');
+    expect(siteKnown('临时路线 1 个点'), 'One-off route (1 point)');
     expect(siteText('B 被 gina 叫停了:先点「恢复」再派'), 'B was stopped by gina: tap “Resume” before sending it');
   });
 

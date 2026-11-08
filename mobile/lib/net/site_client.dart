@@ -442,8 +442,9 @@ String deviceStateText(String state) => switch (state) {
 
 /// 相机名说人话。
 String cameraName(String c) => switch (c) {
-      'front' => tr('Front', '前'),
-      'back' => tr('Back', '后'),
+      // 手机 App 测试 M27：以前「Back」跟返回键同名
+      'front' => tr('Front camera', '前摄像头'),
+      'back' => tr('Rear camera', '后摄像头'),
       'thermal' => tr('Thermal', '热像'),
       _ => c,
     };
