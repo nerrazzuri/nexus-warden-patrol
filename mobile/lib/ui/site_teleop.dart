@@ -601,10 +601,11 @@ class _SiteTeleopPageState extends State<SiteTeleopPage> with WidgetsBindingObse
     }
     if (!mounted) return;
     setState(() => _posturing = false);
-    if (bad != null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(tr('$what failed: $bad', '$what 失败：$bad'))));
-    }
+    // 手机 App 测试 M27：成了也说一声，现在是什么姿势（以前只写「accepted」）
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(bad != null
+            ? tr('$what failed: $bad', '$what 失败：$bad')
+            : tr('$what: sent. Watch the video to see the robot change posture.', '$what：已发出，看画面确认机器人换好了。'))));
   }
 
   /// 键盘（W15）：按着的方向键 → 杆值。只认按下、松开（系统连发不算）；松开就是零。

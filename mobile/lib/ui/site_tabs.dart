@@ -295,7 +295,7 @@ class _AdminHomeTabState extends State<AdminHomeTab> {
       try {
         final n = (await widget.api.bindRequests()).length;
         if (n > 0) {
-          todo.add(('bind', tr('$n robot(s) waiting to join', '$n 台机器人待批准加入'), () => widget.switchTab(1)));
+          todo.add(('bind', tr(n == 1 ? '1 robot waiting to join' : '$n robots waiting to join', '$n 台机器人待批准加入'), () => widget.switchTab(1)));
         }
       } on SiteError {
         // 站点没开绑定
