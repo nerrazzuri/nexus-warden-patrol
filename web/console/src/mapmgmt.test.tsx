@@ -4,7 +4,7 @@ import { cleanup, fireEvent, render, waitFor } from "@testing-library/preact";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { setFetch } from "./api";
 import { lang } from "./i18n";
-import { activationText, MapManagePage } from "./mapmgmt";
+import { activationText, MapManagePage, routeCount } from "./mapmgmt";
 import type { Activation, Dog, Overview, Version } from "./mapmgmt";
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
@@ -502,5 +502,15 @@ describe("W41 清噪点", () => {
     await waitFor(() => expect((c.querySelector("[data-denoise]") as HTMLButtonElement).disabled).toBe(false));
     fireEvent.click(c.querySelector("[data-denoise]") as HTMLElement);
     await waitFor(() => expect(c.querySelector('[role="alert"]')?.textContent).toContain("changed after you opened it"));
+  });
+});
+
+describe("第 2 轮 P0-14:路线条数的说法", () => {
+  it("英文单复数写对,巡逻、防区分开数", () => {
+    lang.value = "en";
+    expect(routeCount(1, 0)).toBe("1 patrol route");
+    expect(routeCount(2, 1)).toBe("2 patrol routes and 1 zone route");
+    lang.value = "zh";
+    expect(routeCount(2, 1)).toBe("2 条巡逻路线、1 条防区路线");
   });
 });
