@@ -169,10 +169,12 @@ function Editor({ say, target, Canvas }: { say: Say; target: Target; Canvas?: Fu
     }
   }
 
-  const Map = Canvas ?? ((o: OwnLayer) => (meta ? (
+  // 第 3 轮 maps N2 / P1-53:原来每次渲染都新造一个 Map 组件 → 地图整个重挂,拖框拖到一半就丢了
+  // (只剩一个 5×6 的虚线框)。现在直接渲染 MapCanvas
+  const Map = (o: OwnLayer) => (Canvas ? <Canvas {...o} /> : meta ? (
     <MapCanvas meta={{ ...meta, rotation_deg: now?.display.rotate_deg ?? meta.rotation_deg }} raster={`${base}/preview.png`} label={t("meTitle")}
       drawing={o.drawing} onPick={o.onPick} onDragRect={o.onDragRect} world={o.world} marks={o.marks} areas={o.areas} />
-  ) : null));
+  ) : null);
   const strokeW = (w: number) => (meta ? w / meta.m_per_px : 2);
   const bm = now?.display.basemap;
 
@@ -207,16 +209,16 @@ function Editor({ say, target, Canvas }: { say: Say; target: Target; Canvas?: Fu
       {loadErr && <div class="ly-conflict me-loaderr" role="alert">{t("meLoadErr")}</div>}
       <div class="ly-tab">
         <div class={result ? "me-canvas result" : "me-canvas"}>
-          <Map
-            drawing={need > 0}
-            onPick={need > 0 ? pick : undefined}
-            onDragRect={grid && shape === "rect" && meta ? (a, b, done) => {
+          {Map({
+            drawing: need > 0,
+            onPick: need > 0 ? pick : undefined,
+            onDragRect: grid && shape === "rect" && meta ? (a: Pt, b: Pt, done: boolean) => {
               const A = toMap(meta, a[0], a[1]);
               const B = toMap(meta, b[0], b[1]);
               if (done) { setRect(null); finish([A, B]); } else setRect([A, B]);
-            } : undefined}
-            areas={now?.display.regions.map((r) => ({ name: r.name, pts: r.polygon, kind: "zone" as const }))}
-            world={meta && now ? <>
+            } : undefined,
+            areas: now?.display.regions.map((r) => ({ name: r.name, pts: r.polygon, kind: "zone" as const })),
+            world: meta && now ? <>
               {bm && bmSize && (() => {
                 const x = (bm.x - meta.left_x) / meta.m_per_px;
                 const y = (meta.top_y - bm.y) / meta.m_per_px;
@@ -232,7 +234,7 @@ function Editor({ say, target, Canvas }: { say: Say; target: Target; Canvas?: Fu
                   : <polyline key={i} class={`me-op ${o.op}`} points={polyPx(meta, o.points.length > 1 ? o.points : [o.points[0], o.points[0]])} stroke-width={strokeW(o.width_m)} />)}
               {pts.length > 0 && <polyline class="draft-line" points={polyPx(meta, pts)} />}
               {rect && <polygon class="draft-line" data-drag-rect="1" points={polyPx(meta, [rect[0], [rect[1][0], rect[0][1]], rect[1], [rect[0][0], rect[1][1]]])} />}
-            </> : null} />
+            </> : null })}
           {/* P1-52:图例;能切到「擦完的样子」(擦的画成空地、加的画成墙) */}
           <div class="me-legend small" data-me-legend="1">
             <span><i class="me-sw erase" aria-hidden="true" />{t("meLegErase")}</span>

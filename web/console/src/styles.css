@@ -1294,9 +1294,9 @@ input[type="file"]::file-selector-button {
 .me-sw.terrain { background: var(--c-warning); opacity: .4; border: 1px dashed var(--c-warning); }
 .me-canvas.result .me-op { opacity: 1; }
 .me-canvas.result .me-op.erase { stroke: var(--map-free, #fefefe); }
-.me-canvas.result polygon.me-op.erase:not(.loop) { fill: var(--map-free, #fefefe); }
+.me-canvas.result polygon.me-op.erase { fill: var(--map-free, #fefefe); }
 .me-canvas.result .me-op.obstacle { stroke: var(--map-wall, #000); }
-.me-canvas.result polygon.me-op.obstacle:not(.loop) { fill: var(--map-wall, #000); }
+.me-canvas.result polygon.me-op.obstacle { fill: var(--map-wall, #000); }
 .help-here { padding: 10px 12px; border-radius: 8px; background: var(--c-surfaceVariant); margin-bottom: 8px; }
 .help-here p { margin: 4px 0 0; }
 /* P1-16:派出去的临时路线(淡一点,走过的轨迹画在上面) */
@@ -1401,6 +1401,14 @@ input[type="date"]:not(.field input) { height: 36px; padding: 0 8px; border-radi
 .ly-step { font-weight: 600; color: var(--c-brand); }
 .ly-step-hint { font-weight: 600; }
 .draft-ring { fill: none; stroke: var(--c-brand); stroke-width: 2; stroke-dasharray: 4 3; }
+/* 第 3 轮 layout N1(P0-17 回归):721–1100 总览是一列,不能锁成一屏高(面板被压到 50–70 px、
+   视频看不到、页面滚不动)。一列时整页往下滚,各卡片按自己的高度排 */
+@media (min-width: 721px) and (max-width: 1100px) {
+  .console.fill.fill-duty, .console.fill.fill-duty > .workspace { height: auto; min-height: 100vh; }
+  .console.fill.fill-duty > .workspace > .page, .console.fill.fill-duty > .page { overflow: visible; }
+  .console.fill.fill-duty .duty { flex: none; }
+  .console.fill.fill-duty .duty-mapcard { min-height: 360px; }
+}
 /* P2-31:总览地图那一行高一点;图例只占一行(放不下就横着滑),不折成两行压地图 */
 @media (min-width: 1101px) {
   .duty { grid-template-rows: auto minmax(320px, 1.5fr) minmax(240px, 1fr); }

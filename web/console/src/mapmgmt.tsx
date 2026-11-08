@@ -465,13 +465,16 @@ export function PublishDialog({ target, dogs, onClose }: { target: { map_id: str
   const sameFrame = derivedSrc(target.source);
   const leftBehind = (from: string, picked: string[]) => dogs.filter((d) => !picked.includes(d.robot_id) && d.loaded
     && d.loaded.map_id === target.map_id && d.loaded.version === from).map((d) => d.robot_id);
-  const [carry, setCarry] = useState(() => {
+  const carryDefault = (picked: string[]) => {
     if (!sameFrame) return false;
-    const picked = dogs.filter((d) => d.online && d.can_activate && !(target.unusable && d.running?.confirms === "localizer")
-      && !(d.loaded && d.loaded.map_id === target.map_id && d.loaded.version === target.version)).map((d) => d.robot_id);
     const froms = new Set(dogs.filter((d) => picked.includes(d.robot_id) && d.loaded?.map_id === target.map_id).map((d) => d.loaded!.version));
     return [...froms].every((v) => leftBehind(v, picked).length === 0);
-  });
+  };
+  const [carry, setCarryRaw] = useState(() => carryDefault(dogs.filter((d) => d.online && d.can_activate && !(target.unusable && d.running?.confirms === "localizer")
+    && !(d.loaded && d.loaded.map_id === target.map_id && d.loaded.version === target.version)).map((d) => d.robot_id)));
+  // 第 2 轮 maps N2 残留:取消勾某台以后它就留在旧版上了,人没动过这个勾时跟着改回默认(不搬)
+  const carryTouched = useRef(false);
+  const setCarry = (v: boolean) => { carryTouched.current = true; setCarryRaw(v); };
   const [layouts, setLayouts] = useState<Record<string, LayoutCounts>>({});
   const [moved, setMoved] = useState<string[] | null>(null);
   // 11-05 现场第 10 条:缺定位文件的版本,带定位器的机器人收了也会拒 —— 不让勾
@@ -480,6 +483,7 @@ export function PublishDialog({ target, dogs, onClose }: { target: { map_id: str
   // P1-46:默认勾上在线、能换图、还没用这一版的
   const [chosen, setChosen] = useState<string[]>(() => eligible
     .filter((d) => !(d.loaded && d.loaded.map_id === target.map_id && d.loaded.version === target.version)).map((d) => d.robot_id));
+  useEffect(() => { if (!carryTouched.current) setCarryRaw(carryDefault(chosen)); }, [chosen.join(",")]);
   const fromVersions = Array.from(new Set(dogs.filter((d) => chosen.includes(d.robot_id) && d.loaded?.map_id === target.map_id
     && d.loaded.version !== target.version).map((d) => d.loaded!.version))).sort();
   useEffect(() => {
@@ -569,7 +573,7 @@ export function PublishDialog({ target, dogs, onClose }: { target: { map_id: str
                     {tr(`Move these routes to v${target.version} too (only if v${target.version} was edited or cleaned from v${l.from}: same coordinates)`,
                       `把这些路线也搬到 v${target.version}(只在 v${target.version} 是从 v${l.from} 编辑、清噪点出来的时候勾:坐标一样)`)}</label>
                   {carry && leftBehind(l.from, chosen).length > 0 && (
-                    <p data-left-behind class="warn">{tr(`${leftBehind(l.from, chosen).join(", ")} stay on v${l.from} (not in this publish). Moving takes the routes off v${l.from}, so they would have no routes.`,
+                    <p data-left-behind class="warn">{tr(`${leftBehind(l.from, chosen).join(", ")} ${leftBehind(l.from, chosen).length === 1 ? "stays" : "stay"} on v${l.from} (not in this publish). Moving takes the routes off v${l.from}, so they would have no routes.`,
                       `${leftBehind(l.from, chosen).join("、")} 还在 v${l.from} 上、不在这次发布里。路线是搬走不是复制,搬了它们就没有这些路线了。`)}</p>
                   )}
                 </>

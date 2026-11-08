@@ -203,6 +203,24 @@ describe("发布", () => {
     expect(warn.querySelector("[data-left-behind]")?.textContent).toContain("D");
   });
 
+  it("第 3 轮(r2-maps-N2 残留):A、E 都在旧版、都勾上 → 默认搬;取消勾 A → 自动不搬,A 单数说 stays", async () => {
+    overview.maps[0].versions[0] = { ...overview.maps[0].versions[0], source: "edit" };
+    overview.robots.push(dog("E", { loaded: { map_id: "estate", version: "2" } }));
+    routes["GET /api/routes"] = () => json({ routes: [{ id: "night", map_id: "estate", map_version: "2" }] });
+    const { container: c, getByLabelText } = mount();
+    await waitFor(() => getByLabelText("estate:3"));
+    fireEvent.click(getByLabelText("estate:3").querySelector(".btn.primary") as HTMLElement);
+    const dialog = await waitFor(() => c.querySelector("dialog") as HTMLDialogElement);
+    const boxes = Array.from(dialog.querySelectorAll("fieldset:not(.mm-options) input[type=checkbox]")) as HTMLInputElement[];
+    expect(boxes.filter((b) => b.checked).length).toBe(3);                      // A、B、E
+    const warn = await waitFor(() => { const w = dialog.querySelector(".mm-lost"); expect(w).not.toBeNull(); return w as HTMLElement; });
+    expect((warn.querySelector("input") as HTMLInputElement).checked).toBe(true);
+    fireEvent.click(boxes[0]);
+    await waitFor(() => expect((dialog.querySelector(".mm-lost input") as HTMLInputElement).checked).toBe(false));
+    fireEvent.click(dialog.querySelector(".mm-lost input") as HTMLElement);
+    expect(dialog.querySelector("[data-left-behind]")?.textContent).toMatch(/^A stays on v2/);
+  });
+
   it("第 2 轮 N4:列出旧版有、新版没有的布置;带过来待核的说要去核", async () => {
     const zero = { areas: 0, exits: 0, hides: 0, posts: 0, net_nodes: 0, nogo: 0, cameras: 0, standby: 0, proposal: false };
     routes["GET /api/admin/maps/estate/2/layout"] = () => json({ ...zero, areas: 2, exits: 1, net_nodes: 5, nogo: 3, cameras: 1 });
