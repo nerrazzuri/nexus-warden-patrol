@@ -7,7 +7,7 @@ import { useUnsaved } from "./unsaved";
 import type { ComponentChildren, FunctionComponent } from "preact";
 import { useCallback, useEffect, useRef, useState } from "preact/hooks";
 import { api, ApiError, enc } from "./api";
-import { hm } from "./data";
+import { clip, hm } from "./data";
 import { Confirm } from "./dialogs";
 import { t, type Key } from "./i18n";
 import { MapCanvas, type CanvasArea, type Screen } from "./mapcanvas";
@@ -70,6 +70,8 @@ export interface OwnLayer {
   world?: ComponentChildren;
   marks?: (s: Screen) => ComponentChildren;
   onPick?: (px: number, py: number) => void;
+  /** 第 2 轮 P1-53:给了就按住拖出方框(预览像素),不平移地图。 */
+  onDragRect?: (a: [number, number], b: [number, number], done: boolean) => void;
   drawing?: boolean;
   overlay?: ComponentChildren;
 }
@@ -248,7 +250,7 @@ export function LayoutPage({ say, robots, tabs }: { say: Say; robots: string[]; 
             if (dirty) { el.value = sel ? `${sel.map_id}\u0000${sel.version}` : ""; setAsk(() => () => setSel(next)); } else setSel(next);
           }}>
             {maps.map((m) => <option key={`${m.map_id}:${m.version}`} value={`${m.map_id}\u0000${m.version}`}>
-              {m.map_id} · v{m.version}{m.active ? ` · ${t("lyActive")}` : ""}{m.note ? ` · ${siteKnown(m.note)}` : ""}</option>)}
+              {m.map_id} · v{m.version}{m.active ? ` · ${t("lyActive")}` : ""}{m.note ? ` · ${clip(siteKnown(m.note))}` : ""}</option>)}
           </select>
         </label>
         <span class="push" />

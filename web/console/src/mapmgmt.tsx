@@ -23,14 +23,21 @@ export interface Build {
 }
 /** P1-50:版本来源说人话(原来直接显示 denoise、edit,看着像作者名)。 */
 export function sourceText(src: string): string {
-  // 站点登记的来源:import / edit / denoise,机器人传上来的是机器人编号
-  const m: Record<string, [string, string]> = {
-    import: ["imported", "导入的"], edit: ["edited in the map editor", "地图编辑器改出来的"],
-    denoise: ["cleaned up (noise removed)", "去噪出来的"],
-  };
-  const hit = m[src];
-  return hit ? tr(hit[0], hit[1]) : tr(`built by robot ${nameOf(src)}`, `机器人 ${nameOf(src)} 建的`);
+  // 站点登记的来源:import / edit[:人] / denoise[:人] / cli:人(命令行导入),机器人传上来的是机器人编号
+  const [kind, who] = splitSource(src);
+  if (kind === "edit") return who ? tr(`edited by ${who} in the map editor`, `${who} 在地图编辑器里改的`) : tr("edited in the map editor", "地图编辑器改出来的");
+  if (kind === "denoise") return who ? tr(`noise cleaned up by ${who}`, `${who} 清的噪点`) : tr("noise cleaned up", "清噪点出来的");
+  if (kind === "cli") return tr(`imported by ${who || "an engineer"} (command line)`, `${who || "工程师"} 用命令行导入的`);
+  if (kind === "import") return tr("imported", "导入的");
+  return tr(`built by robot ${nameOf(src)}`, `机器人 ${nameOf(src)} 建的`);
 }
+
+/** 来源拆成「哪种 + 谁」(第 2 轮 P1-50:编辑、清噪点、命令行导入带操作人)。 */
+export function splitSource(src: string): [string, string] {
+  const m = /^(edit|denoise|cli):(.*)$/.exec(src);
+  return m ? [m[1], m[2]] : [src, ""];
+}
+const derivedSrc = (src: string | undefined): boolean => ["edit", "denoise"].includes(splitSource(src ?? "")[0]);
 
 export interface Version {
   version: string;
@@ -191,7 +198,7 @@ export function MapManagePage({ say, pollMs = 5000 }: { say: Say; pollMs?: numbe
               const [a, b] = pick.map((k) => k.split("\u0000"));
               // 第 2 轮 P1-48:编辑、清噪点出来的版本跟原版同一坐标系,说明别再说「不一定同一坐标系」
               const vs = data?.maps.find((m) => m.map_id === a[0])?.versions ?? [];
-              const derived = [a[1], b[1]].some((v) => ["edit", "denoise"].includes(vs.find((x) => x.version === v)?.source ?? ""));
+              const derived = [a[1], b[1]].some((v) => derivedSrc(vs.find((x) => x.version === v)?.source));
               setDiff({ map_id: a[0], a: a[1], b: b[1], derived });
             }}>{tr("Compare the two ticked", "对比勾选的两版")}</button>
           )}
@@ -304,7 +311,8 @@ function RunningCell({ r }: { r: Running | null }) {
         {tr("Zones", "区域")} {tick(r.zones?.match ?? null)}
         {r.zones?.basis === "revision" && <span class="muted small"> {tr("(old agent: revision only)", "(旧版:只比修订号)")}</span>}
       </span>
-      {r.mission && <span class="muted small mono">{tr("mission", "任务")} {r.mission.mission} · {r.mission.rev}</span>}
+      {/* 第 2 轮 P1-50:任务编号、哈希是技术信息,悬停才看 */}
+      {r.mission && <span class="muted small" title={`${r.mission.mission} · ${r.mission.rev}`}>{tr("task loaded", "任务已下发")}</span>}
       {r.problems.map((p, i) => <span key={i} class="bad small">{siteStr(p)}</span>)}
     </div>
   );
@@ -317,6 +325,8 @@ function VersionCard(p: {
   const { v } = p;
   // 没改过就跟着站点的备注走;改过的是草稿(存了、站点那边的备注变成它,草稿就等于它,按钮自然灰掉)
   const [draft, setDraft] = useState<string | null>(null);
+  // 第 2 轮 P1-49:粘贴的比剩下的位置长,浏览器悄悄截掉 —— 说一声
+  const [cut, setCut] = useState(false);
   // 第 2 轮 P1-01:站点自动写的备注(中文)英文界面翻了显示
   const shown = siteKnown(v.note);
   const note = draft ?? shown;
@@ -341,11 +351,17 @@ function VersionCard(p: {
         )}
         <div class="mm-notebox">
           <input type="text" aria-label={tr(`Note for v${v.version}`, `v${v.version} 的备注`)} value={note} maxLength={200}
-            placeholder={tr("Note (what changed, why)", "备注(改了什么、为什么)")} onInput={(e) => setDraft(e.currentTarget.value)} />
+            placeholder={tr("Note (what changed, why)", "备注(改了什么、为什么)")} onInput={(e) => setDraft(e.currentTarget.value)}
+            onPaste={(e) => {
+              const el = e.currentTarget;
+              const room = 200 - (el.value.length - ((el.selectionEnd ?? 0) - (el.selectionStart ?? 0)));
+              setCut((e.clipboardData?.getData("text") ?? "").length > room);
+            }} />
           {/* P1-49:写到多少字了(最多 200,多了打不进去) */}
           <span class={note.length >= 200 ? "bad small mono" : "muted small mono"}>{note.length}/200</span>
           <button type="button" class="btn sm" disabled={note.trim() === shown} onClick={() => p.onNote(note)}>{tr("Save note", "保存备注")}</button>
         </div>
+        {cut && <p class="bad small" role="status" data-note-cut="1">{tr("The pasted text was too long and was cut to 200 characters.", "粘贴的内容太长，只留了前 200 个字。")}</p>}
         {/* P1-50:镜像警告留在外面;建图器、帧数、回环这些技术信息收起来 */}
         {b?.handedness.verdict === "mirrored" && <p class="bad small">{tr("Mirrored map — do not publish", "这一版镜像了 —— 别发布")}</p>}
         {b ? (
@@ -439,7 +455,7 @@ export function PublishDialog({ target, dogs, onClose }: { target: { map_id: str
   }, [target.map_id]);
   // 编辑、清噪点出来的版本跟原来同一个坐标系:默认一起搬 —— 第 2 轮 N4:是「搬」不是「抄」,
   // 还有机器人留在旧版、不在这次发布里时,搬走它们就没路线了:那时默认不搬
-  const sameFrame = target.source === "edit" || target.source === "denoise";
+  const sameFrame = derivedSrc(target.source);
   const leftBehind = (from: string, picked: string[]) => dogs.filter((d) => !picked.includes(d.robot_id) && d.loaded
     && d.loaded.map_id === target.map_id && d.loaded.version === from).map((d) => d.robot_id);
   const [carry, setCarry] = useState(() => {

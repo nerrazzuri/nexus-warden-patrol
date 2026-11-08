@@ -21,18 +21,19 @@ const TERRAIN: TerrainKind[] = ["stairs", "step", "slope", "grass", "gravel"];
 const TOOL_KEY: Record<Tool, Key> = { erase: "meErase", obstacle: "meObstacle", region: "meRegion", terrain: "meTerrain", rotate: "meRotate", basemap: "meBasemap" };
 const EMPTY: Display = { rotate_deg: null, basemap: null, regions: [], terrain: [] };
 
-export function editTarget(hash: string): { map_id: string; version: string } | null {
+export function editTarget(hash: string): { map_id: string; version: string; from?: string } | null {
   const q = new URLSearchParams(hash.split("?")[1] ?? "");
   const m = q.get("map");
   const v = q.get("version");
-  return m && v ? { map_id: m, version: v } : null;
+  const from = q.get("from");
+  return m && v ? { map_id: m, version: v, ...(from ? { from } : {}) } : null;
 }
 
 function errText(e: unknown): string {
   return t("failed", { why: e instanceof ApiError ? e.message : String(e) });
 }
 
-type Target = { map_id: string; version: string };
+type Target = { map_id: string; version: string; from?: string };
 
 /** 外审 R5:编辑器跟「哪张图哪一版」绑死 —— 换了就按 key 整个重建(草稿、选的点、确认框、文件全清掉),
  *  旧的回包、旧的另存回来不碰新的那个。 */
@@ -55,6 +56,8 @@ function Editor({ say, target, Canvas }: { say: Say; target: Target; Canvas?: Fu
   const [shape, setShape] = useState<Shape>("stroke");
   const [width, setWidth] = useState(0.3);
   const [pts, setPts] = useState<Pt[]>([]);
+  // 第 2 轮 P1-53:方框按住拖着画(拖的时候先画个虚框,松手才算)
+  const [rect, setRect] = useState<[Pt, Pt] | null>(null);
   const [kind, setKind] = useState<TerrainKind>("stairs");
   const [name, setName] = useState("");
   const [file, setFile] = useState<File | null>(null);
@@ -125,9 +128,11 @@ function Editor({ say, target, Canvas }: { say: Say; target: Target; Canvas?: Fu
     setBusy(true);
     try {
       let version = target.version;
+      let got: { erased_m2?: number; obstacle_m2?: number } = {};
       if (hist.now.ops.length) {
-        const r = await api<{ version: string }>("POST", `${adm}/edit`, { digest, ops: hist.now.ops });
+        const r = await api<{ version: string; erased_m2?: number; obstacle_m2?: number }>("POST", `${adm}/edit`, { digest, ops: hist.now.ops });
         version = r.version;
+        got = r;
       }
       const vb = `/api/admin/maps/${enc(target.map_id)}/${enc(version)}`;
       let display = hist.now.display;
@@ -138,10 +143,12 @@ function Editor({ say, target, Canvas }: { say: Say; target: Target; Canvas?: Fu
       }
       // 等回包的时候换了图:人确认过的这一次照样存完(显示设置跟着它的新版本),只是不跳、不碰新的那个
       await api("POST", `${vb}/display`, display);
-      say(version === target.version ? t("saved") : t("meSavedAs", { v: version }));
+      // 第 2 轮 P1-55:报站点实际改了的面积(原来就是空地的不算),跟版本备注一致
+      say(version === target.version ? t("saved")
+        : got.erased_m2 != null ? t("meSavedAsArea", { v: version, e: got.erased_m2, o: got.obstacle_m2 ?? 0 }) : t("meSavedAs", { v: version }));
       // 存好了就不算没存(P0-12 的离开提醒不该再问);另存出新版本就跳过去(P1-55)
       if (alive.current) setHist(start(display));
-      if (alive.current && version !== target.version) location.hash = `#/admin/mapedit?map=${enc(target.map_id)}&version=${enc(version)}`;
+      if (alive.current && version !== target.version) location.hash = `#/admin/mapedit?map=${enc(target.map_id)}&version=${enc(version)}&from=${enc(target.version)}`;
     } catch (e) {
       if (!alive.current) return;
       if (e instanceof ApiError && e.status === 409) setStale(true);
@@ -164,7 +171,7 @@ function Editor({ say, target, Canvas }: { say: Say; target: Target; Canvas?: Fu
 
   const Map = Canvas ?? ((o: OwnLayer) => (meta ? (
     <MapCanvas meta={{ ...meta, rotation_deg: now?.display.rotate_deg ?? meta.rotation_deg }} raster={`${base}/preview.png`} label={t("meTitle")}
-      drawing={o.drawing} onPick={o.onPick} world={o.world} marks={o.marks} areas={o.areas} />
+      drawing={o.drawing} onPick={o.onPick} onDragRect={o.onDragRect} world={o.world} marks={o.marks} areas={o.areas} />
   ) : null));
   const strokeW = (w: number) => (meta ? w / meta.m_per_px : 2);
   const bm = now?.display.basemap;
@@ -193,6 +200,9 @@ function Editor({ say, target, Canvas }: { say: Say; target: Target; Canvas?: Fu
         <button type="button" class="btn primary me-save" disabled={!dirty || busy || !ready} onClick={() => setAsking(true)}>{now?.ops.length ? t("meSaveNew") : t("save")}</button>
       </div>
       <p class="muted small">{t("meExplain")}</p>
+      {/* 第 2 轮 P1-55:另存出来的新版本还没用上 —— 给「去发布」入口 */}
+      {target.from && <p class="me-newver small" data-publish-link="1">{t("meNewVersion", { v: target.version, from: target.from })}{" "}
+        <a href="#/admin/maps">{t("meGoPublish")}</a></p>}
       {stale && <div class="ly-conflict" role="alert">{t("meStale")}</div>}
       {loadErr && <div class="ly-conflict me-loaderr" role="alert">{t("meLoadErr")}</div>}
       <div class="ly-tab">
@@ -200,6 +210,11 @@ function Editor({ say, target, Canvas }: { say: Say; target: Target; Canvas?: Fu
           <Map
             drawing={need > 0}
             onPick={need > 0 ? pick : undefined}
+            onDragRect={grid && shape === "rect" && meta ? (a, b, done) => {
+              const A = toMap(meta, a[0], a[1]);
+              const B = toMap(meta, b[0], b[1]);
+              if (done) { setRect(null); finish([A, B]); } else setRect([A, B]);
+            } : undefined}
             areas={now?.display.regions.map((r) => ({ name: r.name, pts: r.polygon, kind: "zone" as const }))}
             world={meta && now ? <>
               {bm && bmSize && (() => {
@@ -216,6 +231,7 @@ function Editor({ say, target, Canvas }: { say: Say; target: Target; Canvas?: Fu
                   ? <polygon key={i} class={`me-op loop ${o.op}`} points={polyPx(meta, o.points)} stroke-width={strokeW(o.width_m)} />
                   : <polyline key={i} class={`me-op ${o.op}`} points={polyPx(meta, o.points.length > 1 ? o.points : [o.points[0], o.points[0]])} stroke-width={strokeW(o.width_m)} />)}
               {pts.length > 0 && <polyline class="draft-line" points={polyPx(meta, pts)} />}
+              {rect && <polygon class="draft-line" data-drag-rect="1" points={polyPx(meta, [rect[0], [rect[1][0], rect[0][1]], rect[1], [rect[0][0], rect[1][1]]])} />}
             </> : null} />
           {/* P1-52:图例;能切到「擦完的样子」(擦的画成空地、加的画成墙) */}
           <div class="me-legend small" data-me-legend="1">

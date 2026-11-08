@@ -11,7 +11,7 @@ import { hm, nameOf, useDutySettings } from "./data";
 import { siteHm } from "./todaypatrols";
 import { Modal } from "./dialogs";
 import { alertTitle, lang, refusalText, t, type Key } from "./i18n";
-import type { UnitInfo } from "./live";
+import { locText, type UnitInfo } from "./live";
 import { ENGINEERING_LAYERS, etaNext, LAYERS, layersFor, loadLayers, saveLayers, labelRows, mapPins, mapTodo, olderOpen, shiftStart, staleAfter, staleCells, tonightEvents, zoneDecor,
   type AuthzRow, type Cell, type Layer, type ModeView } from "./maplayers";
 import { fanPath } from "./layoutpage";
@@ -67,6 +67,8 @@ export function SiteMap(props: {
   pick?: boolean;
   /** 浮在图左上角的一句提示(值班页「帮它找位置」时说怎么做)。 */
   hint?: string | null;
+  /** 第 2 轮 P1-56:「帮它定位」设完位置、机器人定位好了(页面退出定位模式)。 */
+  onLocated?: (robotId: string) => void;
   /** 这张图上有名字的区域(值班页拿来算每台机器人在哪个防区)。 */
   onAreas?: (areas: CanvasArea[]) => void;
   /** 点图交给页面(地图页:让最近的机器人过去看看、临时路线);给了就不进「去这里 / 设位置」。坐标是地图米。 */
@@ -132,7 +134,9 @@ export function SiteMap(props: {
   const pose = usePosePick({ meta, map: which ? { map_id: which.map_id, version: which.version } : null,
     robotId: sel?.robot.robot_id ?? null, robotMap: selMap,
     robotAt: sel && onThisMap(sel) ? sel.robot.loc?.pose ?? null : null, role: props.role ?? "",
-    canFind: canFindPose(sel?.robot), locate: props.pick === true });
+    canFind: canFindPose(sel?.robot), locate: props.pick === true,
+    locNow: locText(sel ?? undefined), hint: props.pick === true ? props.hint : null,
+    onSettled: props.onLocated });
   // 运行可视化:规划路径、轨迹、被挡位置(2 s 一拉),近 7 天定位出过问题的地方
   const viz = useRunViz(!!which);
   const vizRobots = which ? vizOnMap(viz, which.map_id, which.version) : [];
@@ -178,7 +182,8 @@ export function SiteMap(props: {
               : props.pick === false ? undefined : pose.onPick}
             world={<>{props.route !== false && <VizWorld meta={meta} robots={vizRobots} />}{props.extraWorld?.(meta, which)}</>}
             // 「去这里」浮在图的右上角(不在图下面另占一块);运行图层的图例并进底图图例那一行
-            overlay={<>{props.hint && <div class="map-hint" role="status">{props.hint}</div>}{!props.onPickMap && props.pick !== false && pose.panel}</>}
+            // 第 2 轮 P1-56:定位时那句说明放进设位置的小卡片里(原来左上一句、卡片里一句、侧栏一句,还互相压着)
+            overlay={<>{props.hint && !(props.pick === true && pose.panel) && <div class="map-hint" role="status">{props.hint}</div>}{!props.onPickMap && props.pick !== false && pose.panel}</>}
             legendExtra={<RunLegendItems has={vizHas(vizRobots, eps)} />}
             // 区域名让开报警圈、狗(圆点 + 下面的编号)
             avoid={(s) => [

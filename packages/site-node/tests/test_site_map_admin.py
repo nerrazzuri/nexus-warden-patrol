@@ -369,6 +369,8 @@ def test_W41_清噪点_找候选_清掉另存新版_原点照抄_图换了拒_�
     assert s.db.query("SELECT x FROM homes WHERE map_version='10'")[0]["x"] == 1.0
     note = [m for m in s.maps.list() if m["version"] == "10"][0]["note"]
     assert "从 9 清了 1 处" in note
+    # 网页易用性第 2 轮 P1-50:版本来源记是谁清的(地图管理显示操作人)
+    assert [m for m in s.maps.list() if m["version"] == "10"][0]["source"] == "denoise:alice"
     row = s.db.query("SELECT detail FROM audit WHERE action LIKE '%/denoise' "
                      "ORDER BY id DESC LIMIT 1")[0]
     assert '"version": "10"' in row["detail"]

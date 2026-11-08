@@ -171,3 +171,16 @@ describe("状态的颜色(mobile.json usage;决策 64)", () => {
     expect(toneColor("unknown")).toBe(mobile.color.light.text);
   });
 });
+
+describe("第 2 轮 P1-52:地图编辑看结果的颜色跟着主题", () => {
+  it("深色下空地是暗的、墙是亮的(跟底图反过来以后一样)", () => {
+    const el = document.createElement("div");
+    applyTheme("dark", el);
+    const free = parseInt(el.style.getPropertyValue("--map-free").slice(1, 3), 16);
+    const wall = parseInt(el.style.getPropertyValue("--map-wall").slice(1, 3), 16);
+    expect(free).toBeLessThan(wall);
+    applyTheme("light", el);
+    expect(el.style.getPropertyValue("--map-free")).toBe("#fefefe");
+    expect(el.style.getPropertyValue("--map-wall")).toBe("#000000");
+  });
+});

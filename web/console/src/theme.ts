@@ -77,6 +77,9 @@ export function applyTheme(s: Scheme, root: HTMLElement = document.documentEleme
   root.style.setProperty("--font-sans", `'${mobile.font.sans}', ${fb}, system-ui, sans-serif`);
   root.style.setProperty("--font-mono", `'${mobile.font.mono}', ${fb}, ui-monospace, monospace`);
   root.style.setProperty("--map-raster", mapRasterFilter(s));
+  // 第 2 轮 P1-52:地图编辑「看结果」—— 擦掉的画成这一套下的空地色、加的障碍画成墙色(原来写死白 / 黑,深色下反了)
+  root.style.setProperty("--map-free", rasterShade(254, s));
+  root.style.setProperty("--map-wall", rasterShade(0, s));
   root.style.setProperty("color-scheme", s);
   root.dataset.theme = s;
   scheme.value = s;
