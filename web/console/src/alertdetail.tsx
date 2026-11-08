@@ -12,6 +12,7 @@ import { colon, lang, t, type Key, type Lang } from "./i18n";
 import { GoLookCard, verdictText } from "./mappage";
 import type { UnitInfo } from "./live";
 import { autoResolved, canDispatch, type Alert } from "./model";
+import { NAV_FAIL_CODES } from "./navcodes.g";
 import { recordingLink } from "./recordings";
 
 const en = {
@@ -114,6 +115,9 @@ export function AlertDetail(props: {
   const site = a.robot === "site" || a.robot.includes(":");
   const where = a.context?.zone ?? a.context?.where ?? "";
   const pose = a.context?.pose;
+  const code = (a.context as { code?: unknown } | undefined)?.code;
+  const navCode = typeof code === "string" && Object.hasOwn(NAV_FAIL_CODES, code)
+    ? [code, NAV_FAIL_CODES[code]] as const : null;
   const advice = alertAdvice(a);
 
   async function post(action: string, body: unknown, after?: string) {
@@ -157,6 +161,14 @@ export function AlertDetail(props: {
         {open && a.acked_by && canHandleAlerts(props.role) && <p class="ad-next" data-next-step="1">{dt("dNext")}</p>}
         {advice && (
           <div class="ad-do"><h3>{dt("dDo")}</h3><p>{advice}</p></div>
+        )}
+        {/* 导航 V1 第 5 节:机器人报了认得的原因码 → 写「怎么回事 + 该做什么」(跟手机同一份码表) */}
+        {navCode && (
+          <div class="ad-navcode" data-nav-code={navCode[0]}>
+            <h3>{lang.value === "zh" ? "原因" : "Why"}</h3>
+            <p class="small">{navCode[1][lang.value === "zh" ? 1 : 0]}</p>
+            <p class="small"><b>{lang.value === "zh" ? "该做什么:" : "What to do: "}</b>{navCode[1][lang.value === "zh" ? 3 : 2]}</p>
+          </div>
         )}
         {a.detail && (
           <div class="ad-site"><h3>{dt("dSite")}</h3><p class="small"><SiteSpan s={a.detail} /></p>{siteText(a.detail).raw && <details class="techdetail"><summary>{lang.value === "zh" ? "技术详情" : "Technical details"}</summary><p class="small mono">{a.detail}</p></details>}</div>

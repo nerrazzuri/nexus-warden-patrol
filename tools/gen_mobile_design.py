@@ -137,6 +137,26 @@ def nav_codes_dart() -> str:
     return "\n".join(lines) + "\n"
 
 
+def nav_codes_ts() -> str:
+    """同一份码表给网页(报警详情按码写说明和处理建议)。"""
+    src = ROOT / "packages" / "contract" / "src"
+    if str(src) not in sys.path:
+        sys.path.insert(0, str(src))
+    from nexwar_contract.navcodes import FAIL_CODES
+    lines = ["// 生成的文件,别手改:改 nexwar_contract.navcodes,"
+             "再跑 python3 tools/gen_mobile_design.py。",
+             "",
+             "/** 导航失败原因码:[英文, 中文, 英文处理建议, 中文处理建议]。 */",
+             "export const NAV_FAIL_CODES: Record<string, "
+             "readonly [string, string, string, string]> = {"]
+    for code, c in FAIL_CODES.items():
+        four = (c.en, c.zh, c.action_en, c.action_zh)
+        vals = ", ".join(json.dumps(v, ensure_ascii=False) for v in four)
+        lines.append(f"  {json.dumps(code)}: [{vals}],")
+    lines.append("};")
+    return "\n".join(lines) + "\n"
+
+
 def generate() -> dict[Path, str]:
     tokens = json.loads((ROOT / "design" / "tokens.json").read_text(encoding="utf-8"))
     catalog = json.loads((ROOT / "design" / "i18n" / "alerts.json").read_text(encoding="utf-8"))
@@ -144,7 +164,8 @@ def generate() -> dict[Path, str]:
     return {OUT / "tokens.g.dart": tokens_dart(tokens),
             OUT / "nw_tokens.g.dart": nw_tokens_dart(mobile),
             OUT / "alert_titles.g.dart": alerts_dart(catalog),
-            OUT / "nav_codes.g.dart": nav_codes_dart()}
+            OUT / "nav_codes.g.dart": nav_codes_dart(),
+            ROOT / "web" / "console" / "src" / "navcodes.g.ts": nav_codes_ts()}
 
 
 def main() -> int:
