@@ -36,6 +36,8 @@ class MainActivity : FlutterActivity() {
                     result.success(true)
                 }
                 "running" -> result.success(WatchService.running)
+                // 手机 App 测试 M01:底部导航页按返回键 = 退到后台,不结束 Activity(结束会退出登录)
+                "background" -> result.success(moveTaskToBack(true))
                 else -> result.notImplemented()
             }
         }

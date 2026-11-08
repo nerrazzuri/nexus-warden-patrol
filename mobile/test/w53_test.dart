@@ -346,6 +346,8 @@ void main() {
         }
         await t.tap(find.byKey(leave));
         await t.pumpAndSettle();
+        await t.tap(find.byKey(leaveConfirmKey));
+        await t.pumpAndSettle();
         expect(find.byType(NwShell), findsNothing, reason: role);
         expect(find.text('站点列表'), findsOneWidget, reason: role);
         await t.pumpWidget(Container());

@@ -104,6 +104,9 @@ class NwShell extends StatefulWidget {
   /// W55：登录后问站点有没有新版 App；测试给 null 就不问（默认按本机平台问）。
   final AppUpdater? Function(SiteApi api)? updater;
 
+  /// 手机 App 测试 M01：在值守页按返回键做什么（默认把 App 退到后台）；测试换成记一笔。
+  final Future<void> Function() toBackground;
+
   const NwShell(
       {super.key,
       required this.api,
@@ -113,7 +116,8 @@ class NwShell extends StatefulWidget {
       this.entry,
       this.push,
       this.ringEvery = const Duration(seconds: 4),
-      this.updater = defaultUpdater});
+      this.updater = defaultUpdater,
+      this.toBackground = moveAppToBackground});
 
   static AppUpdater? defaultUpdater(SiteApi api) {
     final p = updatePlatform();
@@ -252,7 +256,19 @@ class _NwShellState extends State<NwShell> {
         _ => NwNavItem(key: NwShell.moreKey, icon: Icons.person_rounded, label: tr('Me', '我的')),
       },
     ];
-    return SettingsHost(
+    // 手机 App 测试 M01：返回键不能退出外壳（退出 = 注销、停后台值守，值班手机随手一按就收不到报警了）。
+    // 别的栏按返回回值守页；值守页按返回把 App 退到后台。离开站点只能走第 5 栏的「退出站点」（要确认）。
+    return PopScope(
+        canPop: false,
+        onPopInvokedWithResult: (didPop, _) {
+          if (didPop) return;
+          if (_tab != 0) {
+            setState(() => _tab = 0);
+          } else {
+            unawaited(widget.toBackground());
+          }
+        },
+        child: SettingsHost(
         watch: _watchCtl,
         push: widget.push,
         updater: widget.updater,
@@ -274,7 +290,7 @@ class _NwShellState extends State<NwShell> {
       ]),
       bottomNavigationBar:
           NwBottomNav(items: items, index: _tab, onTap: (i) => setState(() => _tab = i)),
-    ));
+    )));
   }
 }
 

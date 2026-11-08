@@ -319,8 +319,7 @@ class _SiteRobotsPageState extends State<SiteRobotsPage> {
             // W53：布防、天气挪到值守页；页头不再印角色代号
             overline: title,
             title: tr('Robots', '机器人'),
-            // 能退就给返回：从站点列表登录进来的，返回 = 离开站点（注销）
-            leading: Navigator.canPop(context) ? const BackButton() : null,
+            // 手机 App 测试 M01：底部导航的页面不给返回箭头（以前点了就退出登录、停掉后台值守）；退出站点在第 5 栏
             trailing: [
               // W42：添加机器人（扫贴纸配网；站点上批准要管理权限）。W53：挪到右上角
               if (widget.entry != null && !(widget.api.session?.isViewer ?? true))
