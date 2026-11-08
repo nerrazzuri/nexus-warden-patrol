@@ -122,9 +122,22 @@ function tr(s: string): string {
 export interface SiteText { text: string; raw?: string }
 
 /** 站点 / 机器人生成的一段话按界面语言给出。英文界面认不出的部分不显示中文,``raw`` 是原文。 */
+/** 第 3 轮 zh N9:站点、机器人给的中文多用半角「( , : ;」;中文界面显示时挨着汉字的换成全角
+ *  (时间 10:30、地址 http://、地图 home:3 这类两边不是汉字的不动)。 */
+export function zhPunct(src: string): string {
+  if (!CJK.test(src)) return src;
+  const H = "[\\u3400-\\u9fff「」（）]";
+  return src
+    .replace(new RegExp(`(${H}) ?\\(`, "g"), "$1（").replace(new RegExp(`\\((?=${H})`, "g"), "（")
+    .replace(/（([^()（）]*)\)/g, "（$1）")
+    .replace(new RegExp(`(${H}|）),\\s?`, "g"), "$1，")
+    .replace(new RegExp(`(${H}|）):\\s?(?!//)`, "g"), "$1：")
+    .replace(new RegExp(`(${H}|）);\\s?`, "g"), "$1；");
+}
+
 export function siteText(s: string | null | undefined): SiteText {
   const src = s ?? "";
-  if (lang.value !== "en") return { text: src };
+  if (lang.value !== "en") return { text: zhPunct(src) };
   return siteTextEn(src);
 }
 
@@ -149,7 +162,8 @@ const NO_HOVER = "Site message in Chinese (switch the language to 中文 to read
  *  认不得的原样(人写的中文不能被换成「见详情」)。 */
 export function siteKnown(s: string | null | undefined): string {
   const src = s ?? "";
-  if (lang.value !== "en" || !CJK.test(src)) return src;
+  if (lang.value !== "en") return zhPunct(src);
+  if (!CJK.test(src)) return src;
   const out = tr(src);
   return out.includes(UNK) ? src : out;
 }
@@ -157,7 +171,34 @@ export function siteKnown(s: string | null | undefined): string {
 /** 站点体检那一项的说明:英文界面用站点给的 detail_en,没有就翻。 */
 export function checkText(c: { ok: boolean; detail?: string; detail_en?: string }): string {
   if (lang.value === "en") return c.detail_en || siteStr(c.detail);
-  return c.detail ?? "";
+  return zhPunct(zhPlain(c.detail ?? ""));
+}
+
+/** 第 3 轮 zh N10 / N11:体检说明里的开发者口吻、内部名字换成人话(站点原文给手机 App、测试用,不改)。 */
+const KEY_NAME: Record<string, string> = { secrets: "密码加密密钥", backup: "备份加密密钥", evidence: "证据加密密钥" };
+const PLAIN: [RegExp, (m: RegExpMatchArray) => string][] = [
+  [/^库能写$/, () => "数据库正常"],
+  [/^库无法写入[:：](.*)$/, (m) => `数据库写不进去：${m[1]}`],
+  [/^事件循环 ([\d.]+) 秒前转过[:：]卡住$/, (m) => `站点程序卡住了（${m[1]} 秒没响应）`],
+  [/^事件循环 ([\d.]+) 秒前转过$/, () => "站点程序运行正常"],
+  [/^后台道都在转$/, () => "后台任务都在运行"],
+  [/^卡住[:：](.*)$/, (m) => `后台任务卡住：${m[1]}`],
+  [/^证书最近的还有 (\d+) 天到期$/, (m) => `证书有效，最早的还有 ${m[1]} 天到期`],
+  [/^连着 MQTT$/, () => "机器人通信正常"],
+  [/^MQTT 已断开$/, () => "机器人通信断了"],
+  [/^未配置推送[(（]site\.json 的 push[)）]$/, () => "还没设置手机推送"],
+  [/^未接入[(（]命令行[)）]$/, () => "这里查不了"],
+];
+export function zhPlain(src: string): string {
+  for (const [re, f] of PLAIN) {
+    const m = src.match(re);
+    if (m) return f(m);
+  }
+  // 「secrets:没有这把密钥;backup:…」:密钥名换成人话
+  if (/^(secrets|backup|evidence):/.test(src)) {
+    return src.split(";").map((x) => x.replace(/^(secrets|backup|evidence):/, (_, k: string) => `${KEY_NAME[k]}：`)).join("；");
+  }
+  return src;
 }
 
 /** 显示一段站点原文:英文界面翻不出的,原文放悬停。 */

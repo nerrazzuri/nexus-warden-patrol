@@ -1544,3 +1544,19 @@ input[type="file"] { max-width: 100%; min-width: 0; }            /* 上传按钮
 .legend-fold[open] > summary::after { content: "▾"; }
 .maplegend.pop { position: absolute; left: 8px; bottom: calc(100% + 4px); z-index: 5; flex-direction: column; flex-wrap: nowrap; gap: 4px; padding: 8px 12px; background: var(--c-surface); border: 1px solid var(--c-outline); border-radius: var(--r-r8); box-shadow: 0 4px 16px rgb(0 0 0 / .25); max-height: 60vh; overflow-y: auto; }
 .duty-map .maplegend.pop { flex-wrap: nowrap; overflow-x: visible; }
+/* 第 3 轮 zh N1–N4 / N15:中文不在字和字之间断行(原来窄格子里逐字竖排「机/器/人」「外/观」);表格放不下就横着滚 */
+:lang(zh) .grid th, :lang(zh) .grid td, :lang(zh) .seg button { word-break: keep-all; }
+.menu-row > .muted.small { white-space: nowrap; flex: none; }
+:lang(zh) a { word-break: keep-all; overflow-wrap: break-word; }
+.grid th { white-space: nowrap; }
+@media (max-width: 1100px) { .grid { display: block; overflow-x: auto; } }
+/* 第 3 轮 zh N5:窄屏上长的图例项不压比例尺:图例和比例尺各占一行 */
+@media (max-width: 480px) {
+  .mapbar { flex-wrap: wrap; }
+  .maplegend { flex-basis: 100%; }
+  .maplegend:not(.pop) li { white-space: normal; }
+}
+.datebox { display: inline-flex; align-items: flex-end; gap: 6px; }
+.datebox input { width: 11ch; }
+/* 第 3 轮 zh N15:地图管理的版本行不以「·」开头(每一项整块换行) */
+.mm-counts > span, .mm-dogs-on > span { display: inline-block; margin-right: 12px; }

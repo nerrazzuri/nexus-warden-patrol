@@ -443,12 +443,12 @@ export function AppPackages({ say }: { say: Say }) {
       <p class="muted small">{t("appHint")}</p>
       {PLATFORMS.map((p) => (
         <div key={p} class="sys-row" data-platform={p}>
-          <span class="muted">{p}</span><b>{cur[p]?.available ? cur[p]?.version : t("appNone")}</b>
+          <span class="muted">{platformName(p)}</span><b>{cur[p]?.available ? cur[p]?.version : t("appNone")}</b>
         </div>
       ))}
       <div class="row-wrap">
         <select aria-label={t("appPlatform")} value={pf} onChange={(e) => setPf(e.currentTarget.value as typeof pf)}>
-          {PLATFORMS.map((p) => <option key={p} value={p}>{p}</option>)}
+          {PLATFORMS.map((p) => <option key={p} value={p}>{platformName(p)}</option>)}
         </select>
         <label class="field">{t("appFile")}<input type="file" onChange={(e) => setFile(e.currentTarget.files?.[0] ?? null)} /></label>
         <label class="field">{t("appManifest")}<input type="file" accept=".json,application/json" onChange={(e) => setMan(e.currentTarget.files?.[0] ?? null)} /></label>
@@ -456,4 +456,11 @@ export function AppPackages({ say }: { say: Say }) {
       </div>
     </section>
   );
+}
+
+/** 第 2 轮 config N10:平台名写成人认得的(Android、iOS),不是小写原样。 */
+export function platformName(p: string): string {
+  const k = p.toLowerCase();
+  return k === "android" ? "Android" : k === "ios" ? "iOS" : k === "web" ? "Web" : k === "windows" ? "Windows"
+    : k === "macos" ? "macOS" : k === "linux" ? "Linux" : p;
 }

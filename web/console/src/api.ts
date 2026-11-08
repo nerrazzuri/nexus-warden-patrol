@@ -2,6 +2,11 @@
 import { lang, t } from "./i18n";
 import { englishError } from "./srverr";
 
+/** 第 3 轮 zh N10:连不上站点时给人看的话(原来是 "network" 这个词,中英文界面都露出来)。 */
+export function netMsg(): string {
+  return lang.value === "zh" ? "连不上站点（网络断了或站点忙），稍后再试" : "Cannot reach the site (network down or site busy). Try again shortly.";
+}
+
 export class ApiError extends Error {
   constructor(
     readonly status: number,
@@ -55,7 +60,7 @@ export async function api<T = unknown>(method: "GET" | "POST", path: string, bod
       signal: opts.signal,
     });
   } catch {
-    throw new ApiError(0, opts.signal?.aborted ? "aborted" : "network");
+    throw new ApiError(0, opts.signal?.aborted ? "aborted" : netMsg());
   }
   let data: unknown = {};
   try {
@@ -64,7 +69,7 @@ export async function api<T = unknown>(method: "GET" | "POST", path: string, bod
     // 成功的回包正文读到一半被取消、断网(W44 复查 N1):不是「回了个空的」,是没问成。
     // 出错的回包(401 等)状态码已经说清楚了,照旧按状态码走(复查 M3:401 要回登录页)。
     if (resp.ok && opts.signal?.aborted) throw new ApiError(0, "aborted");
-    if (resp.ok && !(e instanceof SyntaxError)) throw new ApiError(0, "network");
+    if (resp.ok && !(e instanceof SyntaxError)) throw new ApiError(0, netMsg());
     data = {};                                       // 正文不是 JSON(老接口、空回包):照旧当空的
   }
   if (!resp.ok) {
@@ -90,7 +95,7 @@ export async function apiUpload<T = unknown>(path: string, file: Blob, headers: 
       body: file,
     });
   } catch {
-    throw new ApiError(0, "network");
+    throw new ApiError(0, netMsg());
   }
   let data: unknown = {};
   try {

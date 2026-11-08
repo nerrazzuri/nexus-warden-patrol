@@ -403,7 +403,8 @@ function OwnPassword({ onClose, onDone }: { onClose: () => void; onDone: () => v
         <label>{t("pwNew")}<input type="password" autoComplete="new-password" value={neu} onInput={(e) => setNeu((e.target as HTMLInputElement).value)} /></label>
         <span class="muted small">{t("pwRule", { n: PW_MIN })}</span>
         {err && <p class="error">{err}</p>}
-        <div class="row end"><button type="submit" class="btn primary" disabled={busy || !old || !neu}>{t("pwSave")}</button></div>
+        {/* 第 3 轮 zh N13:跟别的对话框一样有「取消」 */}
+        <div class="row end"><button type="button" class="btn" onClick={onClose}>{t("cancel")}</button><button type="submit" class="btn primary" disabled={busy || !old || !neu}>{t("pwSave")}</button></div>
       </form>
       {ask && <Confirm text={t("pwAsk")} yes={t("pwSave")} onNo={() => setAsk(false)} onYes={() => void commit()} />}
     </Modal>

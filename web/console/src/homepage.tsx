@@ -75,7 +75,7 @@ export function HomePage(props: {
                 <li key={a.key} class={`todo ${a.level}`} data-kind={a.kind} data-n={g.length}>
                   <div class="todo-body">
                     <b>{adv ? t(adv.say) : pf ? alertHeadline(a) : siteStr(alertTitle(lang.value, a.kind, a.title))}</b>
-                    {robots.length > 0 && <span class="small">{t("homeTodoRobots", { r: robots.join(", ") })}</span>}
+                    {robots.length > 0 && <span class="small">{t("homeTodoRobots", { r: joinList(robots) })}</span>}
                     {/* P2-44:站点原话(带文件路径的技术说明)收起来,要看再点开 */}
                     {a.detail && (adv || pf || siteText(a.detail).raw
                       ? <details class="todo-detail small"><summary>{t("homeTodoDetail")}</summary><span class="muted">{a.detail}</span></details>

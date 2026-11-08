@@ -95,7 +95,7 @@ describe("总览", () => {
     expect(v3.textContent).toContain("Standby points 2");
     expect((getByLabelText("Note for v3") as HTMLInputElement).value).toBe("after loop closure");
     expect(getByLabelText("estate:2").textContent).toContain("Loaded on");
-    expect(getByLabelText("estate:2").textContent).toContain("Rollback target of");
+    expect(getByLabelText("estate:2").textContent).toContain("Falls back to this for");
     // P1-50:技术信息收在「技术信息」里;没有建图记录的不再写一行技术话;来源说人话
     expect(v3.querySelector("details.mm-tech .mm-build")).not.toBeNull();
     expect(getByLabelText("estate:1").querySelector("details.mm-tech")).toBeNull();
@@ -479,7 +479,7 @@ describe("第 2 轮 P1-50:版本来源写操作人", () => {
     lang.value = "en";
     expect(sourceText("edit:alice")).toBe("edited by alice in the map editor");
     expect(sourceText("denoise:bob")).toBe("noise cleaned up by bob");
-    expect(sourceText("cli:liang")).toBe("imported by liang (command line)");
+    expect(sourceText("cli:liang")).toBe("imported by an engineer");
     expect(sourceText("edit")).toBe("edited in the map editor");
     expect(sourceText("A")).toContain("built by robot");
     lang.value = "zh";

@@ -25,7 +25,7 @@ const zh: Record<DKey, string> = {
   dId: "设备编号", dKind: "类型", dMap: "地图", dVer: "版本", dX: "x（米）", dY: "y（米）",
   kContact: "门磁", kAlarm: "报警主机", kOther: "其他",
   dAdd: "登记 / 更新", dRemove: "删除", dRotate: "换密钥",
-  dView: "机器人去 ({x}, {y})", dZone: "防区 {z}", dNoZone: "不在任何防区（按全站）",
+  dView: "机器人去（{x}，{y}）", dZone: "防区 {z}", dNoZone: "不在任何防区（按全站）",
   dSecret: "{id} 的回调：请求头 X-Nexwar-Source: {src}，密钥（只显示这一次）：{key}",
 };
 const DICTS: Record<Lang, Record<DKey, string>> = { en, zh };

@@ -141,7 +141,7 @@ describe("网页易用性第 1 轮 P2-44", () => {
     const { container: c } = page([ev("a", "A"), ev("b", "B")], mode, { done: ((a: Alert) => done.push(a.key)) as Fn });
     const rows = c.querySelectorAll('li[data-kind="evidence_plain"]');
     expect(rows.length).toBe(1);
-    expect(rows[0].textContent).toContain("涉及机器人：A, B");
+    expect(rows[0].textContent).toContain("涉及机器人：A、B");
     expect(rows[0].querySelector("details")!.textContent).toContain("evidence-pub.key");   // 原话收起来
     fireEvent.click(btn(rows[0], "已处理"));
     expect(done).toEqual(["a", "b"]);

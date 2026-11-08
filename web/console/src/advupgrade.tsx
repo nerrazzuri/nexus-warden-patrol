@@ -10,7 +10,8 @@ import { ConfirmPassword } from "./confirmpw";
 import { Confirm } from "./dialogs";
 import { hm, nameOf } from "./data";
 import { t } from "./i18n";
-import { AppPackages, SiteUpdate } from "./remoteops";
+import { AppPackages, platformName, SiteUpdate } from "./remoteops";
+export { platformName };
 
 type Say = (s: string) => void;
 interface Release { name: string; size?: number; note?: string; added_ms?: number }
@@ -134,9 +135,3 @@ export function UpgradePage({ say }: { say: Say }) {
   );
 }
 
-/** 第 2 轮 config N10:平台名写成人认得的(Android、iOS),不是小写原样。 */
-export function platformName(p: string): string {
-  const k = p.toLowerCase();
-  return k === "android" ? "Android" : k === "ios" ? "iOS" : k === "web" ? "Web" : k === "windows" ? "Windows"
-    : k === "macos" ? "macOS" : k === "linux" ? "Linux" : p;
-}

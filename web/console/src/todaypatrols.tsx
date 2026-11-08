@@ -66,8 +66,9 @@ export function TodayPatrols({ retryMs = 5_000 }: { retryMs?: number } = {}) {
             <li key={i} class="today-row" title={x.reason ? (siteText(x.reason).raw ?? siteStr(x.reason)) : undefined}>
               <span class="mono">{siteHm(x.at_ms, off)}</span>
               <span class="today-what">
-                {[x.kind === "adhoc" ? t("tdAdhoc") : "", siteKnown(x.label), x.robot, x.kind === "adhoc" ? x.by : ""].filter(Boolean).join(" · ")}
-                {x.reason ? <span class="muted small"> · {plainReason(x.reason)}</span>
+                {/* 第 3 轮 zh N11:名字本身就是「临时路线…」时不再加「临时 ·」;叫停的那趟原因 halt 跟右边「被叫停」重复,不写 */}
+                {[x.kind === "adhoc" && !/^(临时|One-off)/.test(siteKnown(x.label)) ? t("tdAdhoc") : "", siteKnown(x.label), x.robot, x.kind === "adhoc" ? x.by : ""].filter(Boolean).join(" · ")}
+                {x.reason && !(x.state === "aborted" && /^(halt|stop|stopped)$/i.test(x.reason.trim())) ? <span class="muted small"> · {plainReason(x.reason)}</span>
                   : (x.state === "failed" || x.state === "missed") && <span class="muted small"> · {missingReason()}</span>}
               </span>
               <span class={`tdchip ${tone}`}>{label}</span>

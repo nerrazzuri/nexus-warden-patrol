@@ -103,7 +103,7 @@ export function RunLegendItems({ has }: { has: VizHas }) {
       {has.path && <li data-legend="path"><svg class="sw" width="16" height="12" viewBox="0 0 16 12" aria-hidden="true"><path d="M1 6H15" class="rv-path" /></svg>{L("Planned path", "规划路径")}</li>}
       {has.trail && <li data-legend="trail"><svg class="sw" width="16" height="12" viewBox="0 0 16 12" aria-hidden="true"><path d="M1 6H15" class="rv-trail" /></svg>{L("This run's trail", "这一趟走过的")}</li>}
       {has.blocked && <li data-legend="blocked"><svg class="sw" width="16" height="12" viewBox="0 0 16 12" aria-hidden="true"><path d="M8 1L14 11H2Z" class="rv-blocked-sw" /></svg>{L("Blocked here", "被挡的地方")}</li>}
-      {has.episode && <li data-legend="episode"><svg class="sw" width="16" height="12" viewBox="0 0 16 12" aria-hidden="true"><circle cx="8" cy="6" r="4" class="rv-ep lost" /></svg>{L("Localization problem (filled: lost, hollow: degraded)", "定位出过问题(实心:丢了,空心:变差)")}</li>}
+      {has.episode && <li data-legend="episode"><svg class="sw" width="16" height="12" viewBox="0 0 16 12" aria-hidden="true"><circle cx="8" cy="6" r="4" class="rv-ep lost" /></svg>{L("Localization problem (filled: lost, hollow: degraded)", "定位出过问题（实心：丢了，空心：变差）")}</li>}
     </>
   );
 }
@@ -115,7 +115,7 @@ export function RunLegend({ has }: { has: VizHas }) {
       {has.path && <li data-legend="path"><svg class="sw" width="16" height="12" viewBox="0 0 16 12" aria-hidden="true"><path d="M1 6H15" class="rv-path" /></svg>{L("Planned path", "规划路径")}</li>}
       {has.trail && <li data-legend="trail"><svg class="sw" width="16" height="12" viewBox="0 0 16 12" aria-hidden="true"><path d="M1 6H15" class="rv-trail" /></svg>{L("This run's trail", "这一趟走过的")}</li>}
       {has.blocked && <li data-legend="blocked"><svg class="sw" width="16" height="12" viewBox="0 0 16 12" aria-hidden="true"><path d="M8 1L14 11H2Z" class="rv-blocked-sw" /></svg>{L("Blocked here", "被挡的地方")}</li>}
-      {has.episode && <li data-legend="episode"><svg class="sw" width="16" height="12" viewBox="0 0 16 12" aria-hidden="true"><circle cx="8" cy="6" r="4" class="rv-ep lost" /></svg>{L("Localization problem (filled: lost, hollow: degraded)", "定位出过问题(实心:丢了,空心:变差)")}</li>}
+      {has.episode && <li data-legend="episode"><svg class="sw" width="16" height="12" viewBox="0 0 16 12" aria-hidden="true"><circle cx="8" cy="6" r="4" class="rv-ep lost" /></svg>{L("Localization problem (filled: lost, hollow: degraded)", "定位出过问题（实心：丢了，空心：变差）")}</li>}
     </ul>
   );
 }

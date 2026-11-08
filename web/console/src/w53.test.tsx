@@ -53,7 +53,7 @@ describe("W53 网页", () => {
     const { container: c } = render(<TodayPatrols />);
     await waitFor(() => expect(c.querySelectorAll(".today-row").length).toBe(2));
     expect(c.textContent).toContain("完成");
-    expect(c.textContent).toContain("临时 · 临时路线 3 个点 · B · gina");
+    expect(c.textContent).toContain("临时路线 3 个点 · B · gina");
     expect(c.textContent).toContain("排队中");
   });
 

@@ -246,11 +246,11 @@ export function RecordingsPage(props: { robots: string[]; role: string; now: num
   return (
     <div class="recpage">
       <div class="recbar">
-        <label>{t("recDate")}
-          <input type="date" value={date} max={dateInput(props.now)} onChange={(e) => setDate((e.target as HTMLInputElement).value)} />
-        </label>
+        {/* 第 3 轮 zh N14:浏览器的日期框按浏览器语言显示(英文浏览器写 11/08/2026),跟页面别处的
+            2026-11-08 不一样:换成固定格式的文字框 + 前一天 / 后一天 */}
+        <DateBox value={date} max={dateInput(props.now)} onChange={setDate} />
         <label class="rec-jump">{t("recJump")}
-          <input type="text" class="mono hhmm wide" inputMode="numeric" maxLength={8} placeholder="HH:MM:SS" disabled={!rows || !range}
+          <input type="text" class="mono hhmm wide" inputMode="numeric" maxLength={8} placeholder={t("recTimePh")} disabled={!rows || !range}
             aria-invalid={jumpBad || undefined}
             onInput={() => setJumpBad(false)}
             onKeyDown={(e) => {
@@ -506,5 +506,33 @@ function Timeline(props: {
         <span>{t("recZoomHint")}</span>
       </div>
     </div>
+  );
+}
+
+/** 日期框:固定「YYYY-MM-DD」;回车或离开时认,不合格式 / 晚于今天的不认、变红。 */
+export function DateBox(props: { value: string; max: string; onChange: (d: string) => void }) {
+  const [v, setV] = useState(props.value);
+  const [bad, setBad] = useState(false);
+  useEffect(() => { setV(props.value); setBad(false); }, [props.value]);
+  const shift = (days: number) => {
+    const [y, m, d] = props.value.split("-").map(Number);
+    const next = dateInput(new Date(y, m - 1, d + days).getTime());
+    if (next <= props.max) props.onChange(next);
+  };
+  const commit = () => {
+    const ok = /^\d{4}-\d{2}-\d{2}$/.test(v) && !Number.isNaN(new Date(`${v}T00:00`).getTime()) && v <= props.max;
+    setBad(!ok);
+    if (ok && v !== props.value) props.onChange(v);
+  };
+  return (
+    <span class="datebox">
+      <label>{t("recDate")}
+        <input type="text" class="mono" inputMode="numeric" maxLength={10} placeholder="2026-01-31" value={v} aria-invalid={bad || undefined}
+          data-date="1" onInput={(e) => { setV(e.currentTarget.value); setBad(false); }} onBlur={commit}
+          onKeyDown={(e) => { if (e.key === "Enter") commit(); }} />
+      </label>
+      <button type="button" class="btn sm" aria-label={t("recPrevDay")} onClick={() => shift(-1)}>‹</button>
+      <button type="button" class="btn sm" aria-label={t("recNextDay")} disabled={props.value >= props.max} onClick={() => shift(1)}>›</button>
+    </span>
   );
 }
