@@ -44,7 +44,7 @@ export function StateText({ s, stale }: { s: RobotState; stale?: boolean }) {
   const a = abnormal(s);
   const shape = stateShape(s);
   return (
-    <span class={`${a ? `state ${a}` : "state"} tone-${tone(s)}`}>
+    <span class={`${a ? `state ${a}` : "state"} tone-${tone(s)}`} title={s === "manual" ? t("st_manualHint") : undefined}>
       {shape && <Shape kind={shape} />}
       {t(`st_${s}` as Key)}
     </span>

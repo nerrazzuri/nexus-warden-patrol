@@ -185,3 +185,18 @@ describe("第 2 轮 P0-05:详情里有位置、接手后说下一步", () => {
     expect(r.container.querySelector("[data-next-step]")!.textContent).toContain("选结论");
   });
 });
+
+describe("第 3 轮 duty N1", () => {
+  it("打不开定位页的账号:不叫他去定位页,写请管理员标原点", async () => {
+    listed = [alert({ first_ms: Date.now() + 500, last_ms: Date.now() + 500 })];
+    const r = await watchStart("A", Date.now(), { sleep: now, tries: 2, canFix: false });
+    expect(r.state === "refused" && r.act).toContain("请管理员");
+    const r2 = await watchStart("A", Date.now(), { sleep: now, tries: 2 });
+    expect(r2.state === "refused" && r2.act).toContain("「定位」页");
+  });
+
+  it("原因和办法之间有句号", async () => {
+    const { joinWhyAct } = await import("./mappage");
+    expect(joinWhyAct("地图还未标原点", "请管理员标原点。")).toBe("地图还未标原点。请管理员标原点。");
+  });
+});

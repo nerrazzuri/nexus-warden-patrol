@@ -9,6 +9,9 @@ import { siteStr } from "./sitetext";
 const en = {
   pfHome: "the map has no origin yet",
   pfHomeDo: "Localize the robot on this map, then press “Mark origin here” on the Localization page (or in the phone app).",
+  pfHomeDoAsk: "Ask an admin to mark the origin on this map (Localization page or the phone app).",
+  pfLocalizedDoAsk: "Ask an admin to help it find its position on the Localization page, then send it again.",
+  pfAdminDo: "Ask an admin to check it on the Diagnostics page.",
   pfLocalized: "localization is not settled",
   pfLocalizedDo: "Help it find its position on the Localization page, then send it again.",
   pfDevice: "the robot is not ready (control or emergency stop)",
@@ -38,6 +41,9 @@ type AKey = keyof typeof en;
 const zh: Record<AKey, string> = {
   pfHome: "地图还未标原点",
   pfHomeDo: "让机器人在这张地图上定好位，再到「定位」页（或手机 App）点「在这儿标原点」。",
+  pfHomeDoAsk: "请管理员在这张地图上标原点（「定位」页或手机 App）。",
+  pfLocalizedDoAsk: "请管理员到「定位」页帮它找位置，定好后再派。",
+  pfAdminDo: "请管理员到「诊断」页看看。",
   pfLocalized: "定位还未稳定",
   pfLocalizedDo: "到「定位」页帮它找位置，定好后再派。",
   pfDevice: "机器人还未就绪（控制权或急停）",
@@ -130,7 +136,7 @@ export type StartCheck = { state: "started" } | { state: "refused"; why: string;
 /** 派出后盯一会儿(P0-03):这台在 ``sentAt`` 以后出了「出发前检查未通过」就是被拒;
  *  盯完都没有就算出发了。站点问不通(断线)就是 ``unknown``,别说出发了。 */
 export async function watchStart(id: string, sentAt: number,
-  o: { tries?: number; gapMs?: number; sleep?: (ms: number) => Promise<void>; robot?: string } = {}): Promise<StartCheck> {
+  o: { tries?: number; gapMs?: number; sleep?: (ms: number) => Promise<void>; robot?: string; canFix?: boolean } = {}): Promise<StartCheck> {
   const rid = o.robot ?? id;
   const tries = o.tries ?? 8;
   const gap = o.gapMs ?? 1500;
@@ -145,7 +151,9 @@ export async function watchStart(id: string, sentAt: number,
         && Math.max(a.first_ms, a.last_ms) >= sentAt - CLOCK_SLACK_MS);
       if (hit) {
         const [why, act] = preflightKeys(hit);
-        return { state: "refused", why: at(why), act: at(act) };
+        // 第 3 轮 duty N1:打不开定位页、诊断页的账号(保安)不叫他去那儿,写「请管理员…」
+        const ask: Partial<Record<AKey, AKey>> = { pfHomeDo: "pfHomeDoAsk", pfLocalizedDo: "pfLocalizedDoAsk", pfNavDo: "pfAdminDo", pfStorageDo: "pfAdminDo", pfRemovableDo: "pfAdminDo" };
+        return { state: "refused", why: at(why), act: at(o.canFix === false ? ask[act] ?? act : act) };
       }
     } catch (e) {
       if (!(e instanceof ApiError)) continue;

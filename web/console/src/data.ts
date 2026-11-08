@@ -2,6 +2,7 @@
 import { signal } from "@preact/signals";
 import { useCallback, useEffect, useRef, useState } from "preact/hooks";
 import { api, ApiError } from "./api";
+import { t } from "./i18n";
 import type { Alert, DeterSession, Mode, Robot, Summary } from "./model";
 
 export interface SiteData {
@@ -46,7 +47,10 @@ export const robotNames = signal<Record<string, string>>({});
 
 /** 给人看的机器人名字:起了名用名字,没起用编号。 */
 export function nameOf(id: string): string {
-  return robotNames.value[id] || id;
+  if (robotNames.value[id]) return robotNames.value[id];
+  // 第 3 轮 duty N7:摄像头报的报警 robot 是「cctv:名字」,不露内部前缀
+  if (id.startsWith("cctv:")) return t("camNamed", { name: id.slice(5) });
+  return id;
 }
 
 export function useSiteData(): [SiteData | null, () => Promise<void>, Conn] {

@@ -6,7 +6,7 @@
 import { useEffect, useMemo, useRef, useState } from "preact/hooks";
 import { api, enc } from "./api";
 import { camLabel, type Cam } from "./camera";
-import { hms, nameOf } from "./data";
+import { hm, hms, nameOf } from "./data";
 import { t } from "./i18n";
 import { MapCanvas } from "./mapcanvas";
 import { toPx, type PreviewMeta } from "./mapview";
@@ -43,6 +43,14 @@ export function canReview(role: string): boolean {
 }
 
 /** 导出证据只给管理员(最高权限)(站点 permissions.EXPORT)。 */
+/** 连着放时两段之间空出这么久以上才提示(段长本身有一两秒误差)。 */
+const GAP_SAY_MS = 5_000;
+
+/** 第 3 轮 duty N4:下载文件名里的时间「2026-11-08-102502」(当地时间,不是毫秒数)。 */
+export function fileStamp(ms: number): string {
+  return `${dateInput(ms)}-${hms(ms).replace(/:/g, "")}`;
+}
+
 export function canExport(role: string): boolean {
   return role === "admin" || role === "engineer";
 }
@@ -80,6 +88,7 @@ export function RecordingsPage(props: { robots: string[]; role: string; now: num
   const [head, setHead] = useState<number | null>(props.at);
   const [speed, setSpeed] = useState(1);
   const [broken, setBroken] = useState(false);
+  const [clipMin, setClipMin] = useState(10);
   const video = useRef<HTMLVideoElement>(null);
   const pip = useRef<HTMLVideoElement>(null);
   const seek = useRef<number>(0);
@@ -147,6 +156,8 @@ export function RecordingsPage(props: { robots: string[]; role: string; now: num
       props.say(t("recNothingAfter", { t: hms(ms) }));
       return;
     }
+    // 第 3 轮 duty N5:要的时刻在空档里,说一声从几点开始放(别把 10:38 的画面当成 10:35 的)
+    if (!hit) props.say(t("recGapJump", { a: hm(ms), b: hms(rec.start_ms) }));
     seek.current = hit ? hit.offsetS : 0;
     setBroken(false);
     setHead(hit ? ms : rec.start_ms);
@@ -270,7 +281,12 @@ export function RecordingsPage(props: { robots: string[]; role: string; now: num
                 onPlay={() => void pip.current?.play().catch(() => {})}
                 onPause={() => pip.current?.pause()}
                 onTimeUpdate={(e) => setHead(shown.start_ms + (e.currentTarget as HTMLVideoElement).currentTime * 1000)}
-                onEnded={() => step(nextSegment(rows ?? [], shown))}
+                onEnded={() => {
+                  const nx = nextSegment(rows ?? [], shown);
+                  // 第 3 轮 duty N5:连着放跳过空档也说一声
+                  if (nx && nx.start_ms - (shown.start_ms + segS * 1000) > GAP_SAY_MS) props.say(t("recGapSkip", { a: hms(shown.start_ms + segS * 1000), b: hms(nx.start_ms) }));
+                  step(nx);
+                }}
                 onError={() => setBroken(true)} />
             )}
             {(!shown || broken) && (
@@ -318,9 +334,20 @@ export function RecordingsPage(props: { robots: string[]; role: string; now: num
             <div class="recctl-grp push">
             <button type="button" class="btn sm" disabled={!shown} onClick={snap}>{t("recSnap")}</button>
             {canExport(props.role) && shown && (
-              <a class="btn sm" href={`/api/recordings/${shown.id}/video`} download={`${robot}-${cam}-${shown.start_ms}.mp4`}>{t("recExport")}</a>
+              <a class="btn sm" href={`/api/recordings/${shown.id}/video`} download={`${robot}-${cam}-${fileStamp(shown.start_ms)}.mp4`}>{t("recExport")}</a>
+            )}
+            {/* 第 3 轮 duty N4:按时间段导出(从当前时刻起 N 分钟,站点打成一个 zip) */}
+            {canExport(props.role) && head != null && (
+              <span class="recctl-pair" data-clip="1">
+                <select class="sm" value={String(clipMin)} aria-label={t("recClipLen")} onChange={(e) => setClipMin(Number(e.currentTarget.value))}>
+                  {[5, 10, 30, 60].map((n) => <option key={n} value={n}>{t("recClipMin", { n })}</option>)}
+                </select>
+                <a class="btn sm" href={`/api/recordings/clip?robot=${enc(robot)}&camera=${enc(cam)}&since=${Math.floor(head)}&until=${Math.floor(head) + clipMin * 60_000}`}>{t("recClipExport")}</a>
+              </span>
             )}
             {canExport(props.role) && !shown && <button type="button" class="btn sm" disabled>{t("recExport")}</button>}
+            {/* 第 3 轮 duty N4:只有管理员能导出(设计规定),保安这里说一声找谁 */}
+            {!canExport(props.role) && <span class="muted small" data-export-ask="1">{t("recExportAsk")}</span>}
             {canReview(props.role) && (
               <button type="button" class="btn sm" aria-pressed={!!shown?.keep} disabled={!shown} onClick={keep} title={t("recKeepHint")}>
                 {shown?.keep ? t("recUnkeep") : t("recKeep")}
@@ -426,7 +453,9 @@ function Timeline(props: {
       onPointerLeave={() => { drag.current = null; }}
       onWheel={(e) => {
         e.preventDefault();
-        const at = timeAt(e, e.currentTarget as Element);
+        // 第 3 轮 P2-11:按 .track 的宽度算(.tl-tracks 含左边名字列,放大的中心会偏)
+        const track = (e.currentTarget as Element).querySelector(".track");
+        const at = timeAt(e, track ?? (e.currentTarget as Element));
         props.onView(viewSpan(props.day, view, at, e.deltaY < 0 ? 0.5 : 2));
       }}>
         {props.lanes.map((l) => (

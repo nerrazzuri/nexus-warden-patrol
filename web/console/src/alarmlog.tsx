@@ -4,7 +4,7 @@
 import { siteStr, byText } from "./sitetext";
 import { useEffect, useState } from "preact/hooks";
 import { useStored } from "./stored";
-import { AlertDetail } from "./alertdetail";
+import { AlertDetail, type ToastAction } from "./alertdetail";
 import { alertHeadline, canHandleAlerts } from "./alertinfo";
 import { AlertTestBar } from "./alerttest";
 import { api, ApiError } from "./api";
@@ -39,7 +39,10 @@ export function AlarmLogPage(props: { now: number; role: string; me?: string }) 
   const kindSet = new Set(kindList);
   const [openOnly, setOpenOnly] = useStored<boolean>("nexwar.alarms.open", false, (v): v is boolean => typeof v === "boolean");
   const [detail, setDetail] = useState<string | null>(null);
-  const [said, setSaid] = useState("");
+  const [said, setSaidRaw] = useState("");
+  // 第 2 轮 duty N8 残留(第 3 轮):在报警记录页关掉也给「撤销」按钮(原来只在页底一行字)
+  const [sayAct, setSayAct] = useState<ToastAction | null>(null);
+  const setSaid = (s: string, act?: ToastAction) => { setSaidRaw(s); setSayAct(act ?? null); };
 
   const pull = () => api<{ alerts: Alert[]; truncated?: boolean }>("GET", `/api/alerts?all=1&limit=${LIMIT}`)
     .then((d) => { setAlerts(d.alerts ?? []); setTruncated(!!d.truncated); })
@@ -123,7 +126,8 @@ export function AlarmLogPage(props: { now: number; role: string; me?: string }) 
         {alerts != null && shown.length === 0 && <p class="empty">{t("alNone")}</p>}
         {shown.map((a) => <Row key={a.key} a={a} canHandle={canHandleAlerts(props.role)} onOpen={() => setDetail(a.key)} />)}
       </div>
-      {said && <p class="muted small" role="status">{said}</p>}
+      {said && <p class="muted small" role="status">{said}
+        {sayAct && <> <button type="button" class="btn sm" data-undo="1" onClick={() => { const r = sayAct.run; setSayAct(null); r(); }}>{sayAct.label}</button></>}</p>}
       {detail && alerts?.find((a) => a.key === detail) && (
         <AlertDetail a={alerts.find((a) => a.key === detail)!} role={props.role} now={props.now} units={[]}
           onClose={() => setDetail(null)} refresh={pull} say={setSaid} />
@@ -149,8 +153,10 @@ function Row({ a, onOpen, canHandle }: { a: Alert; onOpen: () => void; canHandle
         {(a.detail || a.context?.where) && <p>{[a.context?.where && !a.context?.zone ? t("atWhere", { w: a.context.where }) : "", a.detail ? siteStr(a.detail) : ""].filter(Boolean).join(" · ")}</p>}
       </div>
       <div class="res">
-        {open ? t("evOpen") : verdictText(a)}
+        {/* 第 3 轮 duty N8:有人接手了写谁在处理;处理完带上写的备注 */}
+        {open ? (a.acked_by ? t("dutyTakenBy", { who: byText(a.acked_by) }) : t("evOpen")) : verdictText(a)}
         {!open && <small>{[byText(a.resolved_by), a.resolved_ms ? hm(a.resolved_ms) : ""].filter(Boolean).join(" · ")}</small>}
+        {!open && (a.context as { note?: string } | undefined)?.note && <small class="al-note" data-note="1">{(a.context as { note?: string }).note}</small>}
       </div>
       <div>
         {/* 第 2 轮 P0-20:只读账号处理不了,按钮就叫「详情」、不用蓝色主按钮 */}
