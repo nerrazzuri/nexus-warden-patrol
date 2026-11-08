@@ -87,11 +87,12 @@ class RoutePt {
   }
 }
 
-/// 新点的名字：P1、P2…，不跟已有的重名（照片按点位名归档，重名会互相覆盖）。
+/// 新点的名字：W1、W2…，不跟已有的重名（照片按点位名归档，重名会互相覆盖）。手机 App 测试 M26：
+/// 以前叫 P1、P2，跟报警级别 P1 撞名（通知里「点位 P1 连续 3 趟未到达」）。
 String nextPointName(List<RoutePt> pts) {
   final have = {for (final p in pts) p.name};
   for (var i = pts.length + 1;; i++) {
-    if (!have.contains('P$i')) return 'P$i';
+    if (!have.contains('W$i')) return 'W$i';
   }
 }
 
@@ -663,7 +664,8 @@ class _SiteRouteEditorPageState extends State<SiteRouteEditorPage> {
     final rid = widget.tempFor!;
     setState(() {
       _busy = true;
-      _msg = null;
+      // 手机 App 测试 M26：要等机器人回话（几秒），以前这几秒什么都不显示
+      _msg = tr('Sending to $rid… waiting for the robot to accept (a few seconds)', '正在派给 $rid…等机器人回话（几秒）');
       _problems.clear();
       _warns.clear();
     });
