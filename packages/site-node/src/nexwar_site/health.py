@@ -383,21 +383,28 @@ class RecentLog(logging.Handler):
     """网页易用性 P1-73:站点进程自己留最近的日志(带时刻),诊断包里放一份 ——
     站点不是按系统服务跑(演示站、直接起的)时 journalctl 是空的,有这份才看得到东西。"""
 
-    def __init__(self, keep: int = 5000) -> None:
+    def __init__(self, keep: int = 20000, keep_access: int = 5000) -> None:
         super().__init__(level=logging.INFO)
         import collections
         self.rows: collections.deque[tuple[float, str]] = collections.deque(maxlen=keep)
+        # 第 3 轮 config N8:成功的 GET 访问记录另放(原来每秒几十条,5000 条只够 1 分钟)
+        self.access: collections.deque[tuple[float, str]] = collections.deque(maxlen=keep_access)
         self.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s %(message)s"))
 
     def emit(self, record: logging.LogRecord) -> None:
         try:
-            self.rows.append((record.created, self.format(record)))
+            row = (record.created, self.format(record))
+            (self.access if getattr(record, "access", False) else self.rows).append(row)
         except Exception:  # noqa: BLE001 —— 记日志不能把站点弄崩
             pass
 
     def text(self, hours: int, now_s: float) -> str:
         since = now_s - hours * 3600
         return "".join(line + "\n" for at, line in list(self.rows) if at >= since)
+
+    def access_text(self, hours: int, now_s: float) -> str:
+        since = now_s - hours * 3600
+        return "".join(line + "\n" for at, line in list(self.access) if at >= since)
 
 
 #: 站点进程里装上的那一个(main 起站点时装;没装 = None,诊断包里就不放这份)。
@@ -485,6 +492,8 @@ def support_bundle(out: Path, *, home: Path, db: Any, health: HealthDesk | None,
         files[f"logs/{unit}.log"] = redact_text(got).encode()
     if RECENT is not None:
         files["logs/site-recent.log"] = redact_text(RECENT.text(hours, now_ms / 1000)).encode()
+        files["logs/site-access.log"] = redact_text(RECENT.access_text(hours,
+                                                                       now_ms / 1000)).encode()
     win = now_ms - hours * 3_600_000
     for name, sql in (
             ("events.json", "SELECT robot_id, kind, data, stamp, received_at FROM events "

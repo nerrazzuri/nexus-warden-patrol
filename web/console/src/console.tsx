@@ -21,7 +21,7 @@ import { HelpDialog, WEB_TOUR } from "./guide";
 import { ArmingPage } from "./armingpage";
 import { DutyPage } from "./duty";
 import { LiveWall } from "./livewall";
-import { HomePage } from "./homepage";
+import { groupTodo, homeTodo, HomePage } from "./homepage";
 import { DiagPage } from "./advdiag";
 import { SystemPage2 } from "./advsystem";
 import { UpgradePage } from "./advupgrade";
@@ -138,7 +138,8 @@ export function Console({ me, onOut }: { me: Me; onOut: (note?: string) => void 
   const ack = (a: Alert) => act(() => api("POST", `/api/alerts/${enc(a.key)}/ack`, {}));
   const resolve = (a: Alert, verdict: string) => act(() => api("POST", `/api/alerts/${enc(a.key)}/resolve`, { verdict }));
   const firstP1 = p1.find(forGuard);
-  const notices = alerts.filter((a) => a.resolved_ms == null && !forGuard(a)).length;
+  // 第 3 轮 config N7:跟「系统状态」页「需要你处理」一栏一样数(原来把 P3 通知也算上,页面上看不到也清不掉)
+  const notices = groupTodo(homeTodo(alerts)).length;
   const admin = isOwnerLike(me.role);
 
   // 带地图的页整页一屏(地图撑满顶栏以下):地图、防区、巡检路线

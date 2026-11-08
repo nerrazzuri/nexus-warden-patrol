@@ -4,7 +4,7 @@
 import { cleanup, fireEvent, render, waitFor } from "@testing-library/preact";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { setFetch } from "./api";
-import { HomePage } from "./homepage";
+import { groupTodo, homeTodo, HomePage } from "./homepage";
 import { lang } from "./i18n";
 import type { Alert, Mode } from "./model";
 
@@ -145,5 +145,17 @@ describe("网页易用性第 1 轮 P2-44", () => {
     expect(rows[0].querySelector("details")!.textContent).toContain("evidence-pub.key");   // 原话收起来
     fireEvent.click(btn(rows[0], "已处理"));
     expect(done).toEqual(["a", "b"]);
+  });
+});
+
+describe("第 3 轮 config N7", () => {
+  it("侧栏「系统状态」的数字跟「需要你处理」一样数:P3 通知、已处理的不算", () => {
+    const list = [
+      alert({ key: "a", level: "P2", kind: "robot_offline", robot: "A" }),
+      alert({ key: "b", level: "P3", kind: "patrol_started", robot: "A" }),
+      alert({ key: "c", level: "P3", kind: "patrol_started", robot: "B" }),
+      alert({ key: "d", level: "P2", kind: "robot_offline", robot: "B", resolved_ms: 5 }),
+    ];
+    expect(groupTodo(homeTodo(list)).length).toBe(1);
   });
 });

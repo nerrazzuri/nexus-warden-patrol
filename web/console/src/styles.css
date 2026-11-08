@@ -1487,3 +1487,9 @@ input[type="file"] { max-width: 100%; min-width: 0; }            /* 上传按钮
 }
 /* 第 2 轮 P2-15:设置页禁行区标签里的虚拟墙也是橙色(原来这里单独画成红色,跟禁区同色);画墙时的草稿线一样 */
 .nogo-line.vwall-line, .draft-line.vwall { stroke: var(--c-warning); }
+/* 第 3 轮 config N9:普通按钮不能点时只换了字色,跟能点时几乎一样(导出表格、重启站点服务、发测试推送)。
+   统一变淡 + 禁止光标;主按钮(灰底)那条更具体,不受影响 */
+.btn:disabled { opacity: 0.5; cursor: not-allowed; }
+/* 第 3 轮 config N10:KPI 卡片下面紧接着「巡逻 / 误报 / 机器人问题」一排,卡片加了说明变高后上下贴住 */
+.kpi-groups + .rep-stats, .kpi-groups ~ .rep-stats { margin-top: 16px; }
+.rep-stats + * { margin-top: 16px; }

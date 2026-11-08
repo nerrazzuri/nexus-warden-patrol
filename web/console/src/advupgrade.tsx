@@ -4,7 +4,8 @@
 import { pkgProblem } from "./pkgcheck";
 import { useState } from "preact/hooks";
 import { useLoad, clientTooOld, groupClients, type ClientRow } from "./admin";
-import { api, apiUpload, ApiError, enc } from "./api";
+import { api, apiUpload, ApiError, badPackage, enc } from "./api";
+import { siteStr } from "./sitetext";
 import { ConfirmPassword } from "./confirmpw";
 import { Confirm } from "./dialogs";
 import { hm, nameOf } from "./data";
@@ -50,7 +51,8 @@ export function UpgradePage({ say }: { say: Say }) {
             {/* 第 2 轮 P1-78:没报版本时写为什么,不只是「—」 */}
             <span class="muted">{nameOf(rid)}</span>{cur ? <b class="mono">{cur}</b> : <span class="small muted" data-no-release="1">{t("upNoRelease")}</span>}
             {/* P1-78:先确认;站点说这台不能退(老代理)就不给按钮 */}
-            {rel?.rollback?.[rid] !== false
+            {/* 第 3 轮 config N11:没报版本的不再接着说「软件太老、不能退回」 */}
+            {!cur ? null : rel?.rollback?.[rid] !== false
               ? <button type="button" class="btn sm push" onClick={() => setBacking(rid)}>{t("upRollback")}</button>
               : <span class="muted small push">{t("upNoRollback")}</span>}
           </div>
@@ -119,6 +121,10 @@ export function UpgradePage({ say }: { say: Say }) {
             setAsking(false);
             say(t("upUploaded", { name: d.release?.name ?? "" }));
             reload();
+          } catch (e) {
+            // 第 3 轮 P1-77:包不对(签名、指纹、已登记)不是密码问题 —— 关掉密码框、单独说,不清空密码重来
+            if (badPackage(e)) { setAsking(false); say(t("upBadPkg", { why: siteStr((e as ApiError).message) })); return; }
+            throw e;
           } finally {
             setBusy(false);
           }

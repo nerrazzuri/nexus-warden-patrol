@@ -362,3 +362,13 @@ def test_网页P1_77_选错文件先说文件不对_不用先输对密码(站点
         tf.addfile(info, io.BytesIO(b"hi"))
     code, got = _传(s, _登(s), buf.getvalue(), pw="wrong-wrong-wrong")
     assert code == 400 and "不是机器人升级包" in got["error"]
+
+
+def test_第3轮_P1_77_签名不对_密码也不对_说签名不说密码_不登记(站点, tmp_path):
+    s = 站点
+    d = 做包(tmp_path)
+    relsign.keygen(tmp_path / "other.key", tmp_path / "other.pub")
+    _签(d, tmp_path / "other.key")
+    code, got = _传(s, _登(s), _打包(d), pw="wrong-wrong-wrong")
+    assert code == 400 and "签名不匹配" in got["error"] and got.get("reason") == "bad_package"
+    assert s.req("GET", "/api/releases", token=_登(s))[1]["releases"] == []

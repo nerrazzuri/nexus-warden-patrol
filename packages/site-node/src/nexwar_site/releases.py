@@ -36,7 +36,9 @@ class ReleaseCatalog:
         self.db = db
         self._now = now_ms
 
-    def add(self, pkg: Path, *, note: str = "") -> dict[str, Any]:
+    def add(self, pkg: Path, *, note: str = "", check_only: bool = False) -> dict[str, Any]:
+        """登记一个解开的发布包。``check_only``(第 3 轮 P1-77):只核(名字、指纹、签名、兼容级别、
+        是否已登记),不登记,回 ``{}`` —— 网页上传时先核再要密码。"""
         pkg = Path(pkg)
         try:
             raw = json.loads((pkg / MANIFEST).read_text(encoding="utf-8"))
@@ -90,6 +92,8 @@ class ReleaseCatalog:
                                       f"{SITE_MAX_AGENT_LEVEL}):先升站点,再登记它")
         if self.db.query("SELECT 1 FROM releases WHERE name=?", (name,)):
             raise ReleaseCatalogError(f"{name} 已登记")
+        if check_only:
+            return {}
         out = self.root / f"{name}.tar.gz"
         tmp = out.with_name(out.name + ".tmp")
         with tarfile.open(tmp, "w:gz") as tf:
