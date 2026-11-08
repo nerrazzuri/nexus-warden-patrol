@@ -1443,6 +1443,8 @@ void main() {
     await t.pumpAndSettle();
     await t.tap(find.byKey(const Key('site-remove-a')));
     await t.pumpAndSettle();
+    await t.tap(find.byKey(SiteListPage.removeOkKey));
+    await t.pumpAndSettle();
     expect(store.sites, isEmpty);
   });
 

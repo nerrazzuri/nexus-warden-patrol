@@ -86,6 +86,11 @@ String? checkSiteEntry(String url, String fingerprint) {
         'Address must be https://host:port',
         '地址要是 https://主机:端口');
   }
+  // 手机 App 测试 M22：不带端口以前能存，登录时才报「连接被拒绝」
+  if (!u.hasPort) {
+    return tr('Add the port to the address, e.g. https://${u.host}:8443 (it is in the site code)',
+        '地址要带端口，比如 https://${u.host}:8443（站点码里有）');
+  }
   if (!RegExp(r'^[0-9a-f]{64}$').hasMatch(normalizeFingerprint(fingerprint))) {
     return tr(
         'Certificate fingerprint must be 64 hex characters',

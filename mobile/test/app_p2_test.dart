@@ -2,6 +2,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:nexwar_patrol/model/alert.dart';
+import 'package:nexwar_patrol/net/site_client.dart';
+import 'package:nexwar_patrol/store/site_store.dart';
+import 'package:nexwar_patrol/ui/site_add.dart';
 import 'package:nexwar_patrol/ui/nw/nw_p3_robots.dart';
 import 'package:nexwar_patrol/ui/site_alert_scene.dart';
 import 'package:nexwar_patrol/ui/site_duty_page.dart';
@@ -44,5 +47,24 @@ void main() {
     await t.pumpWidget(MaterialApp(home: SiteDutyPage(api: FakeApi('viewer'))));
     await t.pumpAndSettle();
     expect(find.textContaining('只读'), findsWidgets);
+  });
+
+  test('M22：地址不带端口不让存', () {
+    expect(checkSiteEntry('https://10.0.0.5', 'ab' * 32), contains('8443'));
+    expect(checkSiteEntry('https://10.0.0.5:8520', 'ab' * 32), isNull);
+  });
+
+  testWidgets('M22：同一个站点不加第二次，原因留在页面上', (t) async {
+    final have = SiteEntry(name: 'demo', url: 'https://10.0.0.5:8520', fingerprint: 'ab' * 32, username: '');
+    await t.pumpWidget(MaterialApp(home: SiteAddPage(existing: [have])));
+    await t.pumpAndSettle();
+    await t.enterText(find.byKey(const Key('site-name')), 'demo 2');
+    await t.enterText(find.byKey(const Key('site-url')), 'https://10.0.0.5:8520');
+    await t.enterText(find.byKey(const Key('site-fp')), 'ab' * 32);
+    await t.ensureVisible(find.byKey(const Key('site-save')));
+    await t.tap(find.byKey(const Key('site-save')));
+    await t.pumpAndSettle(const Duration(seconds: 6));
+    expect(find.byKey(SiteAddPage.errorKey), findsOneWidget);
+    expect(find.textContaining('已经在列表里'), findsOneWidget);
   });
 }
