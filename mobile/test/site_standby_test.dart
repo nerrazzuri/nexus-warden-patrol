@@ -140,6 +140,8 @@ void main() {
     expect(taskLabel(<String, dynamic>{'kind': 'dock', 'task_id': 'charge-dock-1', 'state': 'running'}),
         '充电中（对桩、充电、离桩）');
     expect(taskLabel(<String, dynamic>{'kind': 'goto', 'task_id': 'charge-goto-1', 'state': 'running'}), '去充电');
-    expect(taskLabel(<String, dynamic>{'kind': 'goto', 'task_id': 'x', 'state': 'running'}), 'goto running');
+    // 手机 App 测试 M14：别的也说人话，不露任务号
+    expect(taskLabel(<String, dynamic>{'kind': 'goto', 'task_id': 'standby-f81f3a2b11', 'state': 'pending'}), '回待命点 · 准备出发');
+    expect(taskLabel(<String, dynamic>{'kind': 'patrol', 'task_id': 'task-00ca73a75c41', 'state': 'running'}), '巡逻 · 进行中');
   });
 }

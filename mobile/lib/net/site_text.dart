@@ -261,3 +261,17 @@ String checkText(Map c) {
   }
   return zhPunct(zhPlain(d));
 }
+
+/// 任务号给人看的样子（手机 App 测试 M14）：`standby-f81f…` 这种内部号不露，说是哪一类。
+String taskKindText(String taskId) {
+  final m = RegExp(r'^([a-z]+)-').firstMatch(taskId);
+  return switch (m?.group(1)) {
+    'standby' => tr('going to its standby point', '回待命点'),
+    'home' => tr('returning home', '回原点'),
+    'goto' => tr('a go-to', '去某个点'),
+    'temp' => tr('a one-off route', '临时路线'),
+    'incident' => tr('an alarm response', '报警出动'),
+    'task' => tr('a task sent by hand', '手动派的任务'),
+    _ => taskId.isEmpty || RegExp(r'[0-9a-f]{8,}').hasMatch(taskId) ? tr('a task', '任务') : siteKnown(taskId),
+  };
+}

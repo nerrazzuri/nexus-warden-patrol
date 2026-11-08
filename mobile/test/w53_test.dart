@@ -107,6 +107,18 @@ void main() {
       expect(find.byKey(stopFailedKey), findsNothing);
     });
 
+    testWidgets('手机 App 测试 M13：经理派巡逻前就说机器人被叫停了、谁能恢复；派的按钮灰着', (t) async {
+      final v = <String, dynamic>{...siteFixture('site_robot'), 'held': <String, dynamic>{'by': 'gina', 'at_ms': 1}};
+      final api = FakeApi('owner', robotView: v);
+      await t.pumpWidget(MaterialApp(home: Builder(builder: (c) => TextButton(
+          onPressed: () => showPatrolSheet(c, api, 'A'), child: const Text('go')))));
+      await t.tap(find.text('go'));
+      await t.pumpAndSettle();
+      expect(find.byKey(const Key('patrol-held')), findsOneWidget);
+      expect(find.textContaining('保安或管理员点「恢复」之前'), findsOneWidget);
+      expect(refusalHint('held', api.session), contains('保安或管理员'));
+    });
+
     testWidgets('手机 App 测试 M09：开始、结束巡逻这类日常记录不算「其他未处理」；顶上写 P1 几条、在线几台', (t) async {
       Map<String, dynamic> row(String kind, String level) => <String, dynamic>{
             'key': 'A/$kind#1', 'level': level, 'kind': kind, 'robot': 'A', 'title': 't', 'detail': '',
