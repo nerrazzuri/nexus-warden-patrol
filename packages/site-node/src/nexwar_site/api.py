@@ -59,7 +59,7 @@ from urllib.parse import parse_qs, quote, unquote, urlparse
 
 from nexwar_contract import SCHEMA as CONTRACT_SCHEMA
 from nexwar_contract.dispatch import DispatchTimeout
-from nexwar_site.accounts import WATCH_PATHS, Accounts, AuthError, LockedOut
+from nexwar_site.accounts import WATCH_PATHS, AccountDisabled, Accounts, AuthError, LockedOut
 from nexwar_site.audit import AuditLog
 from nexwar_site.ca import SAFE_ID
 from nexwar_site.dispatcher import Dispatcher, DispatchRefused, Unsupported
@@ -1305,6 +1305,9 @@ class _Handler(TlsHandlerMixin):
             token = self.site.accounts.login(name, pw, client)
         except LockedOut as exc:
             raise HttpError(429, str(exc)) from exc
+        except AccountDisabled as exc:
+            # 还是 401(手机老版本照旧当登录失败);多给 disabled,网页说「账号已停用」
+            raise HttpError(401, str(exc), extra={"disabled": True}) from exc
         except AuthError as exc:
             hint = self._acct_desk().login_hint(name)      # W52:申请了还没批 / 被拒了
             raise HttpError(401, hint or str(exc), extra={"apply": hint} if hint else None) \

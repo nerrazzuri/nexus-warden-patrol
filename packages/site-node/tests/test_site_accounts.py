@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from nexwar_site.accounts import ABS_MS, IDLE_MS, Accounts, AuthError, LockedOut
+from nexwar_site.accounts import ABS_MS, IDLE_MS, AccountDisabled, Accounts, AuthError, LockedOut
 from nexwar_site.db import SiteDB
 
 
@@ -179,3 +179,15 @@ def test_W17_值守令牌_停用改角色改口令一起作废(acc):
     tok, _ = a.issue_watch_token("gina")
     a.reset_password("gina", "another-pass-123")
     assert a.check(tok) is None
+
+
+def test_复测admin_N8_停用的账号_口令对才说停用(acc):
+    a, _c, _ = acc
+    a.add("gina", "guard-pass-12345", role="guard")
+    a.set_disabled("gina", True)
+    with pytest.raises(AuthError) as wrong:
+        a.login("gina", "not-the-password")
+    assert not isinstance(wrong.value, AccountDisabled)       # 口令错:不透露停用
+    assert "账号或密码错误" in str(wrong.value)
+    with pytest.raises(AccountDisabled, match="已停用"):
+        a.login("gina", "guard-pass-12345")

@@ -4,7 +4,7 @@ import { cleanup, fireEvent, render, waitFor } from "@testing-library/preact";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { setFetch } from "./api";
 import { lang } from "./i18n";
-import { activationText, MapManagePage, routeCount } from "./mapmgmt";
+import { activationText, MapManagePage, rollLabel, routeCount } from "./mapmgmt";
 import type { Activation, Dog, Overview, Version } from "./mapmgmt";
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
@@ -279,7 +279,7 @@ describe("发布", () => {
     const dialog = await waitFor(() => c.querySelector("dialog") as HTMLDialogElement);
     fireEvent.input(dialog.querySelector('input[name="confirm_pw"]') as HTMLElement, { target: { value: "pw" } });
     expect(dialog.textContent).toContain("not confirmed");
-    expect((dialog.querySelector('a[href="#/admin/layout?tab=nogo"]'))).not.toBeNull();
+    expect((dialog.querySelector('a[href^="#/admin/layout?tab=nogo&map="][href*="from=publish"]'))).not.toBeNull();   // 第 2 轮 maps N12:带版本
     expect((Array.from(dialog.querySelectorAll("button")).find((b) => b.textContent === "Publish") as HTMLButtonElement).disabled).toBe(true);
   });
 
@@ -303,7 +303,7 @@ describe("回退", () => {
     await waitFor(() => getAllByText(/Roll back/));
     const buttons = Array.from(c.querySelectorAll(".mm-dogs tbody tr")).map((tr) => tr.querySelector("button") as HTMLButtonElement);
     expect(buttons.map((b) => b.disabled)).toEqual([false, true, true]);
-    expect(buttons[0].textContent).toBe("Roll back → 1");
+    expect(buttons[0].textContent).toBe("Roll back to v1");
     fireEvent.click(buttons[0]);
     const dialog = await waitFor(() => c.querySelector("dialog") as HTMLDialogElement);
     expect(dialog.textContent).toContain("nothing is downloaded");
@@ -536,5 +536,23 @@ describe("第 2 轮 P0-14:路线条数的说法", () => {
     expect(routeCount(2, 1)).toBe("2 patrol routes and 1 zone route");
     lang.value = "zh";
     expect(routeCount(2, 1)).toBe("2 条巡逻路线、1 条防区路线");
+  });
+});
+
+describe("第 2 轮 maps N9:回滚按钮写清往哪走", () => {
+  it("上一版比现在旧:退回到 v7;刚退回过、上一版更新:换回 v12", () => {
+    expect(rollLabel({ loaded: { map_id: "e", version: "12" }, rollback: { map_id: "e", version: "7", local: true } })).toBe("Roll back to v7");
+    expect(rollLabel({ loaded: { map_id: "e", version: "7" }, rollback: { map_id: "e", version: "12", local: true } })).toBe("Switch back to v12");
+    expect(rollLabel({ loaded: null, rollback: null })).toBe("Roll back");
+  });
+});
+
+describe("第 2 轮 maps N11:区域数括号里加起来等于总数", () => {
+  it("4 个里 2 禁行 1 限速:另 1 个写不可通行 / 忽略区", async () => {
+    overview.maps[0].versions[0].counts.zones = 4;
+    const { container: c, getByLabelText } = mount();
+    await waitFor(() => expect(c.textContent).toContain("v3"));
+    expect(getByLabelText("estate:3").textContent).toContain("Zones 4 (2 no-go, 1 slow, 1 impassable / ignore)");
+    expect(getByLabelText("estate:2").querySelector("[data-zone-other]")).toBeNull();
   });
 });

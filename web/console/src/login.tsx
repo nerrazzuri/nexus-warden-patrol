@@ -23,7 +23,9 @@ export function Login({ onIn, expired, note }: { onIn: (m: Me) => void; expired:
       onIn(await api<Me>("GET", "/api/me"));
     } catch (x) {
       const s = x instanceof ApiError ? x.status : 0;
-      setErr(s === 401 ? "badLogin" : s === 429 ? "lockedOut" : "siteUnreachable");
+      // 第 2 轮 admin N8:口令对、账号停用 / 过期了,站点多给 disabled —— 说「账号已停用」,不说「密码错」
+      const off = x instanceof ApiError && !!(x.data as { disabled?: boolean } | undefined)?.disabled;
+      setErr(s === 401 ? (off ? "loginDisabled" : "badLogin") : s === 429 ? "lockedOut" : "siteUnreachable");
     } finally {
       setBusy(false);
       setPw("");

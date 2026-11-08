@@ -224,7 +224,7 @@ function Editor({ say, target, Canvas }: { say: Say; target: Target; Canvas?: Fu
                   width={bmSize[0] * bm.scale / meta.m_per_px} height={bmSize[1] * bm.scale / meta.m_per_px}
                   transform={`rotate(${bm.rotate_deg} ${x} ${y})`} />;
               })()}
-              {now.display.terrain.map((tr) => <polygon key={tr.id} class={`me-terrain ${tr.kind}`} points={polyPx(meta, tr.polygon)} />)}
+              {now.display.terrain.map((tr) => <polygon key={tr.id} class={`me-terrain ${tr.kind}`} points={polyPx(meta, tr.polygon)}><title>{t(`terr_${tr.kind}` as Key)}</title></polygon>)}
               {now.ops.map((o, i) => o.shape === "rect"
                 ? <polygon key={i} class={`me-op ${o.op}`} points={polyPx(meta, [o.points[0], [o.points[1][0], o.points[0][1]], o.points[1], [o.points[0][0], o.points[1][1]]])} />
                 : closedLoop(o)
@@ -314,8 +314,8 @@ function Editor({ say, target, Canvas }: { say: Say; target: Target; Canvas?: Fu
                   <button type="button" class="btn sm push" onClick={() => change((s) => ({ ...s, display: { ...s.display, regions: s.display.regions.filter((x) => x.name !== r.name) } }))}>{t("remove")}</button></li>
               ))}
               {now.display.terrain.map((tr) => (
-                <li key={tr.id} class="row" data-terrain={tr.id}><span>{t(`terr_${tr.kind}` as Key)}</span>
-                  <label class="small">{t("meSlow")}<input type="number" name={`slow_${tr.id}`} min={0} max={2} step={0.1} value={tr.slow_mps ?? 0}
+                <li key={tr.id} class="row me-terr-row" data-terrain={tr.id}><span class="me-tname">{t(`terr_${tr.kind}` as Key)}</span>
+                  <label class="small">{t("meSlow")}<input type="number" class="me-slow" name={`slow_${tr.id}`} min={0} max={2} step={0.1} value={tr.slow_mps ?? 0}
                     onChange={(e) => { const v = Number(e.currentTarget.value); change((s) => ({ ...s, display: { ...s.display, terrain: s.display.terrain.map((x) => (x.id === tr.id ? { ...x, slow_mps: v > 0 ? v : null } : x)) } })); }} /></label>
                   <button type="button" class="btn sm push" onClick={() => change((s) => ({ ...s, display: { ...s.display, terrain: s.display.terrain.filter((x) => x.id !== tr.id) } }))}>{t("remove")}</button></li>
               ))}

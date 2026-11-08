@@ -15,7 +15,8 @@ interface Account { name: string; role: string; disabled: boolean; display_name:
 interface AuditRow { id: number; at: number; actor: string; actor_role?: string | null; action: string; target: string; status: number;
   detail?: { error?: string } }
 
-const ROLES = ["admin", "guard", "owner", "viewer"] as const;
+// 第 2 轮 admin N12:三处角色下拉框同一个顺序,按权限从小到大
+const ROLES = ["viewer", "guard", "owner", "admin"] as const;
 
 function errText(e: unknown): string {
   return t("failed", { why: e instanceof ApiError ? e.message : String(e) });
@@ -308,7 +309,7 @@ function AddUser({ onClose, onDone, say }: { onClose: () => void; onDone: () => 
         <label class="field">{t("accountName")}<input value={name} pattern="[A-Za-z0-9._\-]{1,64}" required autocomplete="off" onInput={(e) => setName(e.currentTarget.value)} /></label>
         <label class="field">{t("role")}
           <select value={role} onChange={(e) => setRole(e.currentTarget.value)}>
-            {(["guard", "owner", "viewer", "admin"] as const).map((r) => <option key={r} value={r}>{t(roleLabel(r))}</option>)}
+            {ROLES.map((r) => <option key={r} value={r}>{t(roleLabel(r))}</option>)}
           </select>
         </label>
         <label class="field">{t("newPassword")}<input type="password" minLength={10} required autocomplete="new-password" value={pw} onInput={(e) => setPw(e.currentTarget.value)} /></label>
@@ -360,7 +361,7 @@ export function Requests({ say, onDone }: { say: Say; onDone: () => void }) {
               <td class="muted small">{hm(r.created_ms)}</td>
               <td>
                 <select aria-label={`${t("role")} ${r.name}`} value={roleOf(r)} onChange={(e) => setRoles({ ...roles, [r.id]: e.currentTarget.value })}>
-                  {(["viewer", "guard", "owner", "admin"] as const).map((x) => <option key={x} value={x}>{t(roleLabel(x))}</option>)}
+                  {ROLES.map((x) => <option key={x} value={x}>{t(roleLabel(x))}</option>)}
                 </select>
               </td>
               <td class="actions">

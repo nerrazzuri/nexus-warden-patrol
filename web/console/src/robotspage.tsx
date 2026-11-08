@@ -168,7 +168,7 @@ export function RobotsPage({ say, now, units = [], readOnly = false, role = "adm
                 <span class="fleet-facts">
                   <span><small>{t("fleetLoc")}</small>{loc ? t(loc) : "—"}</span>
                   <span><small>{t("fleetNet")}</small>{r.wifi ? t(`link_${r.wifi.link}` as Key) : "—"}</span>
-                  <span><small>{t("fleetToday")}</small>{t("fleetPatrols", { n: r.patrols_today })}</span>
+                  <span><small>{t("fleetToday")}</small>{patrolsN(r.patrols_today)}</span>
                 </span>
               </button>
             );
@@ -452,8 +452,8 @@ function RobotDetail({ r, u, now, role, say, onChanged, onCode, onClose, readOnl
       <section class="rd-sec">
         <h3 class="rd-h">{t("rdPatrol")}</h3>
         <dl class="rd-facts">
-          {fact("rdToday", t("fleetPatrols", { n: r.patrols_today }))}
-          {r.patrols_7d != null && fact("rd7d", t("fleetPatrols", { n: r.patrols_7d }))}
+          {fact("rdToday", patrolsN(r.patrols_today))}
+          {r.patrols_7d != null && fact("rd7d", patrolsN(r.patrols_7d))}
           {r.aborts_7d != null && fact("rdAborts", t("rdAbortsN", { n: r.aborts_7d }))}
           {r.last_patrol_ms != null && fact("rdLastPatrol", when(r.last_patrol_ms, now), true)}
         </dl>
@@ -593,7 +593,6 @@ function CodeDialog({ id, code, hours, onClose, say }: { id: string; code: strin
       if (navigator.clipboard) await navigator.clipboard.writeText(code);
       else { box.current?.select(); document.execCommand("copy"); }
       setCopied(true);
-      say(t("copied"));
     } catch {
       box.current?.select();
       say(t("copyManual"));
@@ -604,9 +603,9 @@ function CodeDialog({ id, code, hours, onClose, say }: { id: string; code: strin
       <p class="muted small">{t("codeHint", { h: hours })}</p>
       {/* 第 2 轮 P1-24:多行框,码全看得见(原来单行要横着滚) */}
       <textarea class="codebox mono" readOnly rows={4} value={code} ref={box} onFocus={(e) => e.currentTarget.select()} aria-label={t("activationCode", { id })} />
-      {copied && <p class="small" role="status">{t("copied")}</p>}
+      {/* 第 2 轮 admin N15:「已复制」只在按钮上显示(原来框里一行 + toast 两处,框还往上跳) */}
       <div class="row end">
-        <button type="button" class="btn" onClick={() => void copy()}>{t("copy")}</button>
+        <button type="button" class="btn" onClick={() => void copy()}>{copied ? `✓ ${t("copied")}` : t("copy")}</button>
         <button type="button" class="btn primary" onClick={onClose}>{t("close")}</button>
       </div>
     </Modal>
@@ -666,4 +665,9 @@ function BindApprove({ req, onClose, onDone }: { req: BindReq; onClose: () => vo
       </form>
     </Modal>
   );
+}
+
+/** 第 2 轮 admin N15:「1 patrol」不写「1 patrols」。 */
+function patrolsN(n: number | null | undefined): string {
+  return t(n === 1 ? "fleetPatrols1" : "fleetPatrols", { n: n ?? 0 });
 }
