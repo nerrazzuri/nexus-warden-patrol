@@ -225,7 +225,7 @@ class _SiteRoutesPageState extends State<SiteRoutesPage> {
     final admin = widget.api.session?.canManageRoutes ?? false;
     final sub = NwText.bodySmall.copyWith(color: c.textSecondary);
     return Scaffold(
-        appBar: AppBar(title: Text(tr('Patrol routes', '巡检路线'))),
+        appBar: AppBar(title: Text(tr('Patrol routes', '巡逻路线'))),
         body: _loading
             ? const Center(child: CircularProgressIndicator())
             : NwListView(children: [
@@ -592,7 +592,7 @@ class _SiteRouteEditorPageState extends State<SiteRouteEditorPage> {
     }
     if (!mounted) return;
     if (robots.isEmpty) {
-      setState(() => _msg = tr('No robot can patrol right now', '当前没有可巡检的机器人'));
+      setState(() => _msg = tr('No robot can patrol right now', '当前没有可巡逻的机器人'));
       return;
     }
     final id = await showDialog<String>(
@@ -649,7 +649,7 @@ class _SiteRouteEditorPageState extends State<SiteRouteEditorPage> {
       if (mounted) {
         // 只有狗收下了才说派了（外审 W39-I3：没回执、被拒、过期、重复都不算）
         setState(() => _msg = ack['result'] == 'accepted'
-            ? tr('Patrol sent to $id', '已派 $id 去巡检')
+            ? tr('Patrol sent to $id', '已派 $id 去巡逻')
             : tr('The robot did not accept: ${ack['result']} ${ack['reason'] ?? ''}',
                 '机器人未接受：${ack['result']} ${ack['reason'] ?? ''}'));
       }

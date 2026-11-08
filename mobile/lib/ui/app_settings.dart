@@ -171,7 +171,7 @@ class _AppSettingsPageState extends State<AppSettingsPage> {
                         title: Text(tr('Background watch', '后台值守')),
                         subtitle: Text(
                             tr('Keep receiving P1 alarms when the app is in the background',
-                                'App 在后台时继续接收 P1 告警'),
+                                'App 在后台时继续接收 P1 报警'),
                             style: sub()),
                         value: watch.on,
                         onChanged: watch.busy ? null : (_) => watch.toggle(),
@@ -196,10 +196,10 @@ class _AppSettingsPageState extends State<AppSettingsPage> {
                       key: AppSettingsPage.arrivalKey,
                       secondary: Icon(on ? Icons.where_to_vote : Icons.where_to_vote_outlined,
                           color: on ? c.success : c.textSecondary),
-                      title: Text(tr('Waypoint arrival alerts', '巡检到点提醒')),
+                      title: Text(tr('Waypoint arrival alerts', '巡逻到点提醒')),
                       subtitle: Text(
                           tr('Sound and vibrate at each patrol point (for on-site tests; off after the app restarts)',
-                              '每到一个巡检点就响铃、震动（现场测试用，App 重启后自动关闭）'),
+                              '每到一个巡逻点就响铃、震动（现场测试用，App 重启后自动关闭）'),
                           style: sub()),
                       value: on,
                       onChanged: (v) => arrivalAlerts.value = v,

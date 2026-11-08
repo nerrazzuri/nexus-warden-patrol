@@ -299,7 +299,7 @@ class _SiteWatchPageState extends State<SiteWatchPage> {
       tr('Clock offset ${_num(r.clockSkewS?.toStringAsFixed(1), ' s', r.whyFor('clock_skew_s'))}',
           '时钟偏差 ${_num(r.clockSkewS?.toStringAsFixed(1), ' 秒', r.whyFor('clock_skew_s'))}'),
       r.alerts == null
-          ? tr('Open alarms: unknown (not reported by the site)', '未解决告警：未知（站点未提供）')
+          ? tr('Open alarms: unknown (not reported by the site)', '未解决报警：未知（站点未提供）')
           : tr('Open P1 ${r.alerts!['P1']} · P2 ${r.alerts!['P2']} · P3 ${r.alerts!['P3']}',
               '未解决 P1 ${r.alerts!['P1']} · P2 ${r.alerts!['P2']} · P3 ${r.alerts!['P3']}'),
       tr('Disk used ${_num(_pct(r.diskUsedRatio), '%', r.whyFor('disk_used_ratio'))}',
@@ -393,8 +393,8 @@ class _SiteWatchPageState extends State<SiteWatchPage> {
       ],
       Text(
           _alertsAt == null
-              ? tr('Alarms not loaded yet', '告警尚未加载')
-              : tr('Alarms loaded at ${_hms(_alertsAt!)}; pull down to refresh', '告警更新于 ${_hms(_alertsAt!)}；可下拉刷新'),
+              ? tr('Alarms not loaded yet', '报警尚未加载')
+              : tr('Alarms loaded at ${_hms(_alertsAt!)}; pull down to refresh', '报警更新于 ${_hms(_alertsAt!)}；可下拉刷新'),
           key: SiteWatchPage.loadedAtKey,
           style: NwText.bodySmall.copyWith(color: c.textSecondary)),
       gap8,

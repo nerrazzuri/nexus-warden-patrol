@@ -162,7 +162,7 @@ class _SiteRunsPageState extends State<SiteRunsPage> {
                       tone: stats.anomalies > 0 ? NwTone.error : NwTone.neutral)),
             ]),
             nwGap24,
-            NwSectionLabel(tr('Recent rounds', '最近的巡检')),
+            NwSectionLabel(tr('Recent rounds', '最近的巡逻')),
             nwGap8,
             if (rows.isEmpty)
               NwCard(child: Text(tr('No records yet', '暂无记录'), style: NwText.bodyMedium.copyWith(color: c.textSecondary))),

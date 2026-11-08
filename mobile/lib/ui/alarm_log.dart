@@ -99,7 +99,7 @@ class _AlarmLogPageState extends State<AlarmLogPage> {
               tone: NwTone.warning,
               text: tr(
                   'Alert test mode until ${_test!['until_ms'] is num ? hhmm((_test!['until_ms'] as num).toInt()) : '?'} (started by ${_test!['by']}): alerts raised now carry a test prefix in the title.',
-                  '告警测试模式中，到 ${_test!['until_ms'] is num ? hhmm((_test!['until_ms'] as num).toInt()) : '?'} 结束（${_test!['by']} 开的）：这期间的告警标题带「测试：」。')),
+                  '报警测试模式中，到 ${_test!['until_ms'] is num ? hhmm((_test!['until_ms'] as num).toInt()) : '?'} 结束（${_test!['by']} 开的）：这期间的报警标题带「测试：」。')),
         if (_error != null) NwNotice(text: _error!, tone: NwTone.error),
         if (rows == null && _error == null) const Center(child: CircularProgressIndicator()),
         if (rows != null && rows.isEmpty)

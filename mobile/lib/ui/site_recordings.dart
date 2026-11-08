@@ -252,7 +252,7 @@ class _SiteRecordingsPageState extends State<SiteRecordingsPage> {
               padding: const EdgeInsets.only(bottom: Nw.s8),
               child: Text(
                   tr('Alarm time: ${clipTime(around)} (times are by the robot clock)',
-                      '告警时刻：${clipTime(around)}（按机器人时钟）'),
+                      '报警时刻：${clipTime(around)}（按机器人时钟）'),
                   style: NwText.bodyMedium.copyWith(color: c.text))),
         if (_msg.isNotEmpty)
           Padding(

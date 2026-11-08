@@ -30,7 +30,7 @@ void main() {
     await _open(t, _api());
     expect(find.textContaining('gate-cam · 防区 front-yard'), findsOneWidget);
     expect(find.textContaining('最近一次报入侵'), findsOneWidget);
-    expect(find.textContaining('收不到此摄像头的入侵告警'), findsOneWidget);
+    expect(find.textContaining('收不到此摄像头的入侵报警'), findsOneWidget);
     expect(find.textContaining('画面移动也视为入侵'), findsOneWidget);
     await t.pumpWidget(Container());
   });

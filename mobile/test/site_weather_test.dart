@@ -19,7 +19,7 @@ void main() {
     final w = siteFixture('site_weather');
     expect(weatherText(w), '天气：下雨（手动，alice） · 限速 0.3 m/s');
     expect(weatherText(<String, dynamic>{'condition': 'storm', 'label': '雷暴', 'source': 'auto',
-      'patrols_paused': true, 'speed_cap_mps': 0.3}), '天气：雷暴 · 排程巡检暂停 · 限速 0.3 m/s');
+      'patrols_paused': true, 'speed_cap_mps': 0.3}), '天气：雷暴 · 排程巡逻暂停 · 限速 0.3 m/s');
     expect(weatherText(<String, dynamic>{'condition': 'unknown', 'label': '未知', 'source': 'none',
       'auto': <String, dynamic>{'enabled': true}}), '天气：未知 · 无法获取天气，按正常天气处理');
     expect(weatherText(<String, dynamic>{'condition': 'unknown', 'label': '未知', 'source': 'none',
@@ -75,6 +75,6 @@ void main() {
     expect(find.text('雷暴 · 0.3 m/s'), findsOneWidget);
     expect(weatherText(<String, dynamic>{
       'condition': 'storm', 'label': '雷暴', 'source': 'auto', 'patrols_paused': true, 'speed_cap_mps': 0.3}),
-        '天气：雷暴 · 排程巡检暂停 · 限速 0.3 m/s');
+        '天气：雷暴 · 排程巡逻暂停 · 限速 0.3 m/s');
   });
 }

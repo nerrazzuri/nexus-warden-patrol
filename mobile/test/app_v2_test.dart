@@ -122,7 +122,7 @@ void main() {
       _english();
       expect(tr('Stop all', '全部急停'), 'Stop all');
       expect(alertTitle('dog_sees_person', '机器人看见人了:2 个人'), 'Person detected');
-      expect(alertTitle('from_the_future', '新告警'), '新告警');
+      expect(alertTitle('from_the_future', '新报警'), '新报警');
       expect(alertTitle('dog_sees_person', '测试：机器人看见人了'), 'TEST: Person detected',
           reason: '外审 r1 #9:演练要看得出来');
       appLang.value = AppLang.zh;
@@ -639,7 +639,7 @@ void main() {
       await t.pump();
       await t.pump();
       expect(_text(t, SiteAlertScenePage.stateKey), endsWith('无人确认'));
-      expect(_text(t, SiteAlertScenePage.msgKey), contains('站点返回的是另一条告警（B/dog_sees_person#7）'));
+      expect(_text(t, SiteAlertScenePage.msgKey), contains('站点返回的是另一条报警（B/dog_sees_person#7）'));
       expect(_enabled(t, SiteAlertScenePage.ackKey), isTrue);
       await t.tap(find.byKey(SiteAlertScenePage.ackKey));
       await t.pump();
