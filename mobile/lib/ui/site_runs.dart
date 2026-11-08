@@ -11,6 +11,7 @@ import 'package:flutter/material.dart';
 
 import '../l10n.dart';
 import '../net/site_client.dart';
+import '../net/site_text.dart';
 import 'nw/nw_button.dart';
 import 'nw/nw_cards.dart';
 import 'nw/nw_p4_admin.dart';
@@ -28,8 +29,11 @@ String verdictText(String? v) => switch (v) {
     };
 
 /// `20260925T010000Z` → 本地时间 `2026-09-25 09:00`。认不出来原样给。
+/// 目录名可以带后缀（`20261108T065314Z-116768`，手机 App 测试 M08：以前认不出，原样印出来、也不算进「今天」）。
+final RegExp _stampRe = RegExp(r'^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})Z(?:-\S+)?$');
+
 String stampText(String stamp) {
-  final m = RegExp(r'^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})Z$').firstMatch(stamp);
+  final m = _stampRe.firstMatch(stamp);
   if (m == null) return stamp;
   final t = DateTime.utc(int.parse(m[1]!), int.parse(m[2]!), int.parse(m[3]!),
           int.parse(m[4]!), int.parse(m[5]!), int.parse(m[6]!))
@@ -38,9 +42,23 @@ String stampText(String stamp) {
   return '${t.year}-${two(t.month)}-${two(t.day)} ${two(t.hour)}:${two(t.minute)}';
 }
 
+/// 一趟的标题（手机 App 测试 M08）：路线名；派单、临时路线、报警出动的任务号不给人看，说是哪一种。
+String runTitle(Map<String, dynamic> r) {
+  final m = '${r['mission'] ?? ''}';
+  if (RegExp(r'^temp-').hasMatch(m)) return tr('One-off route', '临时路线');
+  if (RegExp(r'^incident-').hasMatch(m)) return tr('Alarm response', '报警出动');
+  if (RegExp(r'^(task|goto|standby|home)-[0-9a-f]+$').hasMatch(m)) return tr('Sent by hand', '手动派出');
+  return siteKnown(m);
+}
+
+/// 这一趟没跑完（中止、失败、没收尾）。
+bool runFailed(Map<String, dynamic> r) =>
+    r['finished'] != true || const {'aborted', 'failed', 'abort'}.contains(r['result']);
+
 String _verdictSummary(Map<String, dynamic> r) {
   final v = r['verdicts'];
-  if (r['judged_ms'] == null || v is! Map || v.isEmpty) return tr('Pending', '待判读');
+  if ((r['photos'] as num? ?? 0) == 0) return tr('No photos', '没有照片');
+  if (r['judged_ms'] == null || v is! Map || v.isEmpty) return tr('Photos not checked yet', '照片还没判读');
   final parts = <String>[
     for (final k in ['abnormal', 'unclear', 'normal', 'pending'])
       if ((v[k] as num? ?? 0) > 0) '${verdictText(k)} ${v[k]}',
@@ -57,7 +75,7 @@ bool _abnormal(Map<String, dynamic> r) => ((r['verdicts'] as Map?)?['abnormal'] 
 
 /// 这一趟是哪天跑的（当地时间）：按目录名那个 UTC 时刻。认不出来是 null。
 DateTime? _stampTime(Object? stamp) {
-  final m = RegExp(r'^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})Z$').firstMatch('$stamp');
+  final m = _stampRe.firstMatch('$stamp');
   if (m == null) return null;
   return DateTime.utc(int.parse(m[1]!), int.parse(m[2]!), int.parse(m[3]!), int.parse(m[4]!),
           int.parse(m[5]!), int.parse(m[6]!))
@@ -157,13 +175,17 @@ class _SiteRunsPageState extends State<SiteRunsPage> {
                       fit: StackFit.passthrough,
                       children: [
                         NwPatrolCard(
-                            id: '${r['mission']}',
-                            time: '${stampText('${r['stamp']}')} · ${r['robot_id']}',
-                            status: tr(
-                                '${r['robot_id']} · ${r['photos']} photos · '
-                                    '${r['finished'] == true ? '' : 'not finished · '}${_verdictSummary(r)}'
-                                    ' · ${r['reviewed'] ?? 0} reviewed',
-                                '${r['robot_id']} · 照片 ${r['photos']} · ${r['finished'] == true ? '' : '未完成 · '}${_verdictSummary(r)} · 已复核 ${r['reviewed'] ?? 0}'),
+                            // 手机 App 测试 M08：标题 = 路线名 · 机器人 · 本地时间；按结果打图标
+                            id: '${runTitle(r)} · ${r['robot_id']}',
+                            time: stampText('${r['stamp']}'),
+                            status: [
+                              if (runFailed(r)) tr('Not finished', '没跑完'),
+                              tr('${r['photos']} photos', '照片 ${r['photos']} 张'),
+                              _verdictSummary(r),
+                              if ((r['reviewed'] as num? ?? 0) > 0)
+                                tr('${r['reviewed']} checked by a person', '人工复核 ${r['reviewed']} 张'),
+                            ].join(' · '),
+                            failed: runFailed(r),
                             anomaly: _abnormal(r),
                             tone: _abnormal(r) ? NwTone.error : NwTone.neutral,
                             // 只把「异常 N」那一段标红，「正常 1 · 已复核 1」照常
@@ -311,7 +333,7 @@ class _SiteRunPageState extends State<SiteRunPage> {
           return NwListView(children: [
             NwCard(
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
-              Text('${run['mission']} · ${stampText('${run['stamp']}')}',
+              Text('${runTitle(run)} · ${stampText('${run['stamp']}')}',
                   style: NwText.titleMedium.copyWith(color: nw.text)),
               nwGap4,
               Text(
