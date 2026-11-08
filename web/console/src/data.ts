@@ -44,6 +44,8 @@ export async function fetchSite(): Promise<SiteData> {
 
 /** 管理员给机器人起的名字(W44 第二期,站点 /api/robots 带 name);每次拉站点数据都更新。 */
 export const robotNames = signal<Record<string, string>>({});
+/** 第 4 轮 layout r3-N3:现在连不上站点(值班台的轮询断了)。各页清单是空的时候,连不上就写「读取失败,正在重试」,不写「没有」。 */
+export const siteDown = signal(false);
 
 /** 给人看的机器人名字:起了名用名字,没起用编号。 */
 export function nameOf(id: string): string {

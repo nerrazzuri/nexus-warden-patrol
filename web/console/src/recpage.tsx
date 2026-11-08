@@ -531,8 +531,8 @@ export function DateBox(props: { value: string; max: string; onChange: (d: strin
           data-date="1" onInput={(e) => { setV(e.currentTarget.value); setBad(false); }} onBlur={commit}
           onKeyDown={(e) => { if (e.key === "Enter") commit(); }} />
       </label>
-      <button type="button" class="btn sm" aria-label={t("recPrevDay")} onClick={() => shift(-1)}>‹</button>
-      <button type="button" class="btn sm" aria-label={t("recNextDay")} disabled={props.value >= props.max} onClick={() => shift(1)}>›</button>
+      <button type="button" class="btn sm daystep" aria-label={t("recPrevDay")} onClick={() => shift(-1)}>‹</button>
+      <button type="button" class="btn sm daystep" aria-label={t("recNextDay")} disabled={props.value >= props.max} onClick={() => shift(1)}>›</button>
     </span>
   );
 }

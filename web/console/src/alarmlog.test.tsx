@@ -221,3 +221,14 @@ describe("第 3 轮 duty N8", () => {
     expect(c.querySelector('[data-note]')!.textContent).toBe("门没锁好");
   });
 });
+
+describe("第 4 轮 layout r3-N3 / N6", () => {
+  it("读不到报警:计数写「–」,列表写正在重试,不写「没有」", async () => {
+    setFetch(((url: string) => url.startsWith("/api/alerts")
+      ? Promise.reject(new TypeError("Failed to fetch")) : Promise.resolve(json({}))) as typeof fetch);
+    const { container: c } = page();
+    await waitFor(() => expect(c.querySelector("[data-load-failed]")).not.toBeNull());
+    expect([...c.querySelectorAll(".box b")].map((b) => b.textContent)).toEqual(["–", "–", "–"]);
+    expect(c.textContent).not.toContain("没有");
+  });
+});

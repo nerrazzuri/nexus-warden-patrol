@@ -39,7 +39,7 @@ import {
 } from "./routes";
 import { rt } from "./routes_i18n";
 import { siteKnown, siteStr } from "./sitetext";
-import { clip } from "./data";
+import { clip, siteDown } from "./data";
 
 type Say = (s: string) => void;
 interface MapRow { map_id: string; version: string; note: string }
@@ -372,7 +372,7 @@ export function RoutesPage({ say, embed, kind = "patrol" }: { say: Say; embed?: 
         </div>}
         <div class="routesplit">
           <div class="routemap" ref={root} onClickCapture={(e) => swallowClick(guard.current, e)}>
-            {!sel || !meta ? <p class="empty">{t("noMap")}</p> : (
+            {!sel || !meta ? <p class="empty">{t(siteDown.value ? "loadRetry" : "noMap")}</p> : (
               <MapLike meta={meta} raster={`${base}/preview.png`} label={guardKind ? rt("guardTitle") : rt("routesTitle")}
                 drawing={!!draft} onPick={draft ? pick : undefined}
                 overlay={!draft && routes.length > 0 ? <p class="routepick-hint small" data-route-hint="1">{rt("routePickHint")}</p> : undefined}

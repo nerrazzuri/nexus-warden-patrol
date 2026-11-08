@@ -4,7 +4,7 @@ import { siteKnown, siteStr } from "./sitetext";
 import { useCallback, useEffect, useRef, useState } from "preact/hooks";
 import { api, ApiError, enc } from "./api";
 import { ConfirmPassword } from "./confirmpw";
-import { nameOf } from "./data";
+import { nameOf, siteDown } from "./data";
 import { Modal } from "./dialogs";
 import { lang } from "./i18n";
 import "./mapmgmt.css";
@@ -231,7 +231,7 @@ export function MapManagePage({ say, pollMs = 5000 }: { say: Say; pollMs?: numbe
 
       <section class="panel">
         <div class="panel-head"><h2>{tr("Robots", "每台机器人")}</h2></div>
-        {robots.length === 0 && <p class="pad muted">{tr("No robots enrolled.", "没有登记的机器人。")}</p>}
+        {robots.length === 0 && <p class="pad muted">{siteDown.value ? tr("Couldn't load. Retrying…", "读取失败，正在重试…") : tr("No robots enrolled.", "没有登记的机器人。")}</p>}
         {robots.length > 0 && (
           <table class="grid mm-dogs">
             <thead>
@@ -547,7 +547,7 @@ export function PublishDialog({ target, dogs, onClose }: { target: { map_id: str
         <>
           <fieldset class="checks">
             <legend>{tr("Robots", "发到这几台机器人")}</legend>
-            {dogs.length === 0 && <span class="muted">{tr("No robots enrolled.", "没有登记的机器人。")}</span>}
+            {dogs.length === 0 && <span class="muted">{siteDown.value ? tr("Couldn't load. Retrying…", "读取失败，正在重试…") : tr("No robots enrolled.", "没有登记的机器人。")}</span>}
             {dogs.map((d) => {
               const ok = d.online && d.can_activate && !noLoc(d);
               return (

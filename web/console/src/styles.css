@@ -656,7 +656,7 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--c-primary); }
 .duty-map { position: relative; flex: 1; min-height: 0; display: flex; }
 .duty-map .mapbox { flex: 1; }
 @media (max-width: 1100px) {
-  .duty { grid-template-columns: minmax(0, 1fr); grid-template-rows: none; grid-template-areas: "sit" "alarms" "map" "video" "robots"; }
+  .duty { grid-template-columns: minmax(0, 1fr); grid-template-rows: none; grid-template-areas: "sit" "alarms" "map" "robots" "video"; }
   .duty-mapcard { min-height: 360px; }
   .duty-slots { grid-template-columns: 1fr; flex: none; }
   /* P0-17:一列时画面位里面全是绝对定位,没给高就是 0 —— 按画面比例撑开 */
@@ -1574,3 +1574,23 @@ input[type="file"] { max-width: 100%; min-width: 0; }            /* 上传按钮
 /* 第 4 轮 admin N2:提示做成 popover(最上层);去掉浏览器给 popover 的默认框和居中 */
 .toast[popover] { inset: auto; left: 50%; bottom: 56px; margin: 0; border: 0; padding: 0; background: transparent; color: inherit; overflow: visible; }
 .toast[popover]:not(:empty) { padding: 10px 16px; background: var(--c-text); color: var(--c-bg); }
+/* 第 4 轮 P1-84:触屏上还不到 44px 的几处(放在最后,压过前面更具体的规则) */
+@media (pointer: coarse) {
+  .legend-fold > summary { min-height: 44px; }
+  .btn.daystep { min-width: 44px; }
+  .lane > b { min-height: 44px; display: flex; align-items: center; }
+  .ly-list .linklike { min-height: 44px; }
+  .panel p > a[href], .lead > a[href] { display: inline-flex; align-items: center; min-height: 44px; }
+}
+/* 第 4 轮 layout N2:图例弹层不盖住吸顶页头(页头 z-index 5);按钮字不折行 */
+.maplegend.pop { z-index: 3; }
+.legend-fold > summary { white-space: nowrap; }
+/* 第 4 轮 layout N1:演练横幅的两个按钮放不下就换行,不撑出屏幕 */
+.alert-test .at-acts { flex-wrap: wrap; min-width: 0; max-width: 100%; }
+.alert-test .at-acts .btn { white-space: normal; text-align: left; }
+/* 第 4 轮 layout N3:两列布局时画面上「放大 ⤢」不折行 */
+.osd .btn, .slot .btn { white-space: nowrap; }
+/* 第 4 轮 layout N4:一列布局时两路画面并排(721–1100 宽),机器人状态排在画面前面,不用滚两屏 */
+@media (min-width: 721px) and (max-width: 1100px) {
+  .duty-slots { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}

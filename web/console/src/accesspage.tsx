@@ -3,7 +3,7 @@
 // 临时撤防单独一块(选防区和结束时间,到点自动恢复)。人脸、车牌名单不在这一轮(设计 §2)。
 import { useEffect, useState } from "preact/hooks";
 import { api, ApiError, enc } from "./api";
-import { hm } from "./data";
+import { hm, siteDown } from "./data";
 import { Confirm, Modal } from "./dialogs";
 import { t, type Key, joinList } from "./i18n";
 
@@ -82,7 +82,7 @@ export function AccessPage({ say, now }: { say: Say; now: number }) {
         <table class="grid">
           <thead><tr><th>{t("who")}</th><th>{t("where")}</th><th>{t("days")}</th><th>{t("timeRange")}</th><th>{t("validUntil")}</th><th>{t("colActions")}</th></tr></thead>
           <tbody>
-            {rows.length === 0 && <tr><td colSpan={6} class="muted">{t("noAuthorizations")}</td></tr>}
+            {rows.length === 0 && <tr><td colSpan={6} class="muted">{t(siteDown.value ? "loadRetry" : "noAuthorizations")}</td></tr>}
             {rows.map((r) => (
               <tr key={r.id}>
                 <td class="strong">{r.name}{r.note ? <span class="muted small"> · {r.note}</span> : null}</td>

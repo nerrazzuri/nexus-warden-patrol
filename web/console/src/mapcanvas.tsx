@@ -8,7 +8,7 @@
 //   不转、不跟着缩放变大小 —— 字永远是正的。
 // 屏上一点 → 预览像素:世界层的 getScreenCTM().inverse()(浏览器按画的那个 transform 倒回去)。
 import type { ComponentChildren } from "preact";
-import { useLayoutEffect, useRef, useState } from "preact/hooks";
+import { useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
 import { t, type Key } from "./i18n";
 import { siteKnown } from "./sitetext";
 import {
@@ -291,22 +291,7 @@ export function MapCanvas(props: {
         {props.overlay}
       </div>
       <div class="mapbar">
-        {(() => {
-          const keys = LEGEND_ORDER.filter((k) => present.has(k));
-          const list = (
-            <ul class={keys.length > LEGEND_INLINE ? "maplegend pop" : "maplegend"} aria-label={t("legend")}>
-              {keys.map((k) => (
-                <li key={k} data-legend={k}><Swatch k={k} plan={!!plan} />{t(LEGEND_TEXT[k])}</li>
-              ))}
-              {props.legendExtra}
-            </ul>
-          );
-          // 第 3 轮 P2-31 / setup N4:项多了不再裁成一行(机器人、报警永远看不到)、也不撑出第三行:
-          // 收成「图例」按钮,点开是完整的一列
-          return keys.length > LEGEND_INLINE
-            ? <details class="legend-fold"><summary>{t("legend")} · {keys.length}</summary>{list}</details>
-            : list;
-        })()}
+        <LegendBar keys={LEGEND_ORDER.filter((k) => present.has(k))} plan={!!plan} extra={props.legendExtra} />
         <div class="mapctl">
           <span class="scale" role="img" aria-label={t("scaleAria", { m: bar.m })}>
             <svg class="scalebar" width={bar.px + 2} height="10" data-px={bar.px} aria-hidden="true"><path d={`M1 1V9H${bar.px + 1}V1`} /></svg>
@@ -361,4 +346,49 @@ function Swatch({ k, plan }: { k: LegendKey; plan: boolean }) {
   else if (k === "robot") body = <circle cx="8" cy="6" r="5" class="sw-robot" />;
   else body = <path d="M8 0.5l5.5 5.5-5.5 5.5-5.5-5.5z" class="sw-alarm" />;
   return <svg class="sw" width="16" height="12" viewBox="0 0 16 12" aria-hidden="true">{body}</svg>;
+}
+
+/** 地图下面的图例。第 3 轮 P2-31:项多了收成「图例」按钮,点开是完整的一列。
+ *  第 4 轮 layout P2-31 / N2、zh N7:按实际宽度收(放不下就收,不只看条数);点外面、按 Esc 收起。 */
+function LegendBar({ keys, plan, extra }: { keys: LegendKey[]; plan: boolean; extra?: ComponentChildren }) {
+  const ul = useRef<HTMLUListElement>(null);
+  const fold = useRef<HTMLDetailsElement>(null);
+  const [tight, setTight] = useState(false);
+  const [width, setWidth] = useState(0);
+  const many = keys.length > LEGEND_INLINE;
+  // 宽度变了先按一行试,放不下再收
+  useLayoutEffect(() => { setTight(false); }, [width, keys.join()]);
+  useLayoutEffect(() => {
+    const el = ul.current;
+    if (!many && !tight && el && el.scrollWidth > el.clientWidth + 1) setTight(true);
+  });
+  useEffect(() => {
+    const bar = (ul.current ?? fold.current)?.parentElement;
+    if (!bar || typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver((es) => setWidth(Math.round(es[0].contentRect.width)));
+    ro.observe(bar);
+    return () => ro.disconnect();
+  }, []);
+  useEffect(() => {
+    const close = (e: Event) => {
+      const d = fold.current;
+      if (!d?.open) return;
+      if (e instanceof KeyboardEvent ? e.key === "Escape" : !d.contains(e.target as Node)) d.open = false;
+    };
+    document.addEventListener("keydown", close);
+    document.addEventListener("pointerdown", close);
+    return () => { document.removeEventListener("keydown", close); document.removeEventListener("pointerdown", close); };
+  }, []);
+  const folded = many || tight;
+  const list = (
+    <ul ref={ul} class={folded ? "maplegend pop" : "maplegend"} aria-label={t("legend")}>
+      {keys.map((k) => (
+        <li key={k} data-legend={k}><Swatch k={k} plan={plan} />{t(LEGEND_TEXT[k])}</li>
+      ))}
+      {extra}
+    </ul>
+  );
+  return folded
+    ? <details ref={fold} class="legend-fold"><summary>{t("legend")} · {keys.length}</summary>{list}</details>
+    : list;
 }

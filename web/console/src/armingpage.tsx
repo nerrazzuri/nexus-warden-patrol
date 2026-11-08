@@ -65,6 +65,14 @@ export function ArmingPage({ say, now, role = "admin" }: { say: Say; now: number
   const [switching, setSwitching] = useState<"armed" | "home" | null>(null);
 
   const loadMode = () => api<ModeView>("GET", "/api/mode").then(setMode).catch(() => setMode(null));
+  // 第 4 轮 layout r3-N3:读不到不画成空日程 —— 写「读取失败,正在重试」,隔 5 秒再读(保存一直是灰的)
+  const [loadFailed, setLoadFailed] = useState(false);
+  const [retry, setRetry] = useState(0);
+  useEffect(() => {
+    if (!loadFailed) return;
+    const id = window.setTimeout(() => setRetry((n) => n + 1), 5000);
+    return () => window.clearTimeout(id);
+  }, [loadFailed, retry]);
   useEffect(() => {
     Promise.all([api<Schedule>("GET", "/api/arming/schedule"), api<DutySettings>("GET", "/api/duty-settings").catch(() => duty)])
       .then(([s, d]) => {
@@ -75,10 +83,11 @@ export function ArmingPage({ say, now, role = "admin" }: { say: Say; now: number
         setDuty(d);
         setLoaded({ enabled: !!s.enabled, slots: sl, duty: d });
         setPerZone(sl.some((x) => x.zone !== ""));
+        setLoadFailed(false);
       })
-      .catch((e) => say(errText(e)));
+      .catch((e) => { if (retry === 0) say(errText(e)); setLoadFailed(true); });
     void loadMode();
-  }, []);
+  }, [retry]);
   // 第 3 轮 config N5:「此刻」一栏每分钟刷新一次(原来只在打开页面、保存、手动切换时刷新)
   const minute = Math.floor(now / 60_000);
   useEffect(() => { void loadMode(); }, [minute]);
@@ -168,6 +177,7 @@ export function ArmingPage({ say, now, role = "admin" }: { say: Say; now: number
         <button type="button" class="btn primary push arm-save" disabled={busy || !dirty} onClick={trySave}>{t("save")}</button>
       </div>
       {tabs}
+      {loaded == null && loadFailed && <p class="note warn" role="status" data-load-failed="1">{t("loadRetry")}</p>}
       <p class="muted lead">{t("armLead")}</p>
       {/* W72(用户 11-03):在网页上要能直接布防 / 撤防,不用翻到「系统状态」页去找 */}
       <section class="panel arm-now">
