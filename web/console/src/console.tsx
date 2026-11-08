@@ -144,7 +144,7 @@ export function Console({ me, onOut }: { me: Me; onOut: (note?: string) => void 
   // 带地图的页整页一屏(地图撑满顶栏以下):地图、防区、巡检路线
   const fill = route.page === "duty" || route.page === "map" || route.page === "admin/layout" || route.page === "admin/mapedit";
   return (
-    <div class={fill ? "console fill" : "console"}>
+    <div class={fill ? (route.page === "duty" ? "console fill fill-duty" : "console fill") : "console"}>
       {/* P2-01:「跳到内容」是第一个焦点;不改地址(地址是页面路由) */}
       <a class="skip" href="#main" onClick={(e) => { e.preventDefault(); document.getElementById("main")?.focus(); }}>{t("skipToContent")}</a>
       <SideNav me={me} page={route.page} alarms={stale ? null : guardAlarms} notices={admin ? notices : 0} />

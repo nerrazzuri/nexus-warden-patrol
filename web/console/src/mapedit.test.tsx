@@ -257,3 +257,15 @@ describe("网页易用性第 1 轮 P2-19", () => {
     await waitFor(() => expect(c.querySelector("polygon.me-op.obstacle")).not.toBeNull());
   });
 });
+
+describe("第 3 轮 maps N2 / P1-53", () => {
+  it("没注入假地图时(真 MapCanvas)重新渲染不重挂地图:拖框拖到一半不会丢", async () => {
+    const { container: c } = render(<MapEditPage say={() => {}} target={{ map_id: "home", version: "3" }} />);
+    await waitFor(() => expect(c.querySelector(".me-canvas .mapwrap, .me-canvas svg")).not.toBeNull());
+    const before = c.querySelector(".me-canvas")!.firstElementChild;
+    expect(before).not.toBeNull();
+    fireEvent.click(c.querySelector('input[name="me-result"]')!);            // 随便一个会引起重新渲染的操作
+    await act(async () => {});
+    expect(c.querySelector(".me-canvas")!.firstElementChild).toBe(before);
+  });
+});
