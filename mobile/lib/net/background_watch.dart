@@ -5,10 +5,14 @@
 /// 桌面版、测试里没有后台服务：[supported] 为假，界面上不显示开关（桌面版本来就开着窗口值守）。
 library;
 
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
+
+import '../design/alert_titles.g.dart';
+import '../l10n.dart';
 
 abstract class BackgroundWatch {
   bool get supported;
@@ -37,8 +41,15 @@ class ChannelBackgroundWatch implements BackgroundWatch {
       required String fingerprint,
       required String token}) async {
     if (!supported) return;
-    await _ch.invokeMethod<bool>(
-        'start', <String, String>{'site': site, 'url': url, 'fingerprint': fingerprint, 'token': token});
+    // 手机 App 测试 M05：后台服务的通知按 App 的语言说；英文报警标题用 App 的那张表
+    await _ch.invokeMethod<bool>('start', <String, String>{
+      'site': site,
+      'url': url,
+      'fingerprint': fingerprint,
+      'token': token,
+      'lang': appLang.value.name,
+      'titles': jsonEncode(<String, String>{for (final e in alertTitles.entries) e.key: e.value.$1}),
+    });
   }
 
   @override
