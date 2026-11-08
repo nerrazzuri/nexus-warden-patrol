@@ -84,6 +84,15 @@ export function RecordingsPage(props: { robots: string[]; role: string; now: num
   const [state, setState] = useState<"loading" | "ok" | "off" | "failed">("loading");
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [track, setTrack] = useState<TrackPt[]>([]);
+  // 第 3 轮 layout N3:取不到(连不上站点)≠ 今天没有,分开说
+  const [trackFailed, setTrackFailed] = useState(false);
+  const [rowsFailed, setRowsFailed] = useState(false);
+  const [retry, setRetry] = useState(0);
+  useEffect(() => {
+    if (!trackFailed && !rowsFailed) return;
+    const id = window.setTimeout(() => setRetry((r) => r + 1), 5000);
+    return () => window.clearTimeout(id);
+  }, [trackFailed, rowsFailed, retry]);
   const [cur, setCur] = useState<Recording | null>(null);
   const [head, setHead] = useState<number | null>(props.at);
   const [speed, setSpeed] = useState(1);
@@ -131,21 +140,23 @@ export function RecordingsPage(props: { robots: string[]; role: string; now: num
     api<{ recordings: Recording[] }>("GET", `/api/recordings?robot=${enc(robot)}&camera=${pipCam}&${span}&limit=2000`)
       .then((d) => live && setPipRows(ascending(d.recordings ?? []))).catch(() => live && setPipRows([]));
     api<{ points: TrackPt[] }>("GET", `/api/robots/${enc(robot)}/track?since=${range.since}&until=${Math.min(range.until, range.since + 86_400_000)}`)
-      .then((d) => live && setTrack(Array.isArray(d.points) ? d.points : [])).catch(() => live && setTrack([]));
+      .then((d) => { if (live) { setTrack(Array.isArray(d.points) ? d.points : []); setTrackFailed(false); } })
+      .catch(() => { if (live) { setTrack([]); setTrackFailed(true); } });
     return () => { live = false; };
-  }, [robot, cam, date]);
+  }, [robot, cam, date, trackFailed ? retry : 0]);
 
   // 时间轴:这一天所有机器人这一路的段、给保安看的报警(换机器人不重拉)
   useEffect(() => {
     if (!range) return;
     let live = true;
     api<{ recordings: Recording[] }>("GET", `/api/recordings?camera=${cam}&since=${range.since}&until=${range.until - 1}&limit=5000`)
-      .then((d) => live && setAllRows(d.recordings ?? [])).catch(() => live && setAllRows([]));
+      .then((d) => { if (live) { setAllRows(d.recordings ?? []); setRowsFailed(false); } })
+      .catch(() => { if (live) { setAllRows([]); setRowsFailed(true); } });
     api<{ alerts: Alert[] }>("GET", "/api/alerts?all=1&limit=500")
       .then((d) => live && setAlerts((d.alerts ?? []).filter((a) => a.level !== "P3" && a.first_ms >= range.since && a.first_ms < range.until)))
       .catch(() => live && setAlerts([]));
     return () => { live = false; };
-  }, [cam, date]);
+  }, [cam, date, rowsFailed ? retry : 0]);
 
   const sp = useMemo(() => spans(rows ?? [], segS), [rows, segS]);
 
@@ -356,9 +367,10 @@ export function RecordingsPage(props: { robots: string[]; role: string; now: num
             </div>
           </div>
         </div>
-        <RecMap robot={robot} track={track} head={head} onSeek={(ms) => rows && play(rows, ms)} />
+        <RecMap robot={robot} track={track} failed={trackFailed} head={head} onSeek={(ms) => rows && play(rows, ms)} />
       </div>
 
+      {rowsFailed && <p class="warn small" data-rows-failed="1">{t("recTimelineFailed")}</p>}
       {range && view && (
         <Timeline lanes={ls} robot={robot} day={range} view={view} head={head}
           onView={setView} onPick={(id, ms) => switchTo(id, ms)} />
@@ -368,7 +380,7 @@ export function RecordingsPage(props: { robots: string[]; role: string; now: num
 }
 
 /** 右边的地图:那一刻在哪(之前实线、之后虚线),点轨迹跳到经过那里的时刻。 */
-function RecMap(props: { robot: string; track: TrackPt[]; head: number | null; onSeek: (ms: number) => void }) {
+function RecMap(props: { robot: string; track: TrackPt[]; failed?: boolean; head: number | null; onSeek: (ms: number) => void }) {
   const here = props.head != null ? poseAt(props.track, props.head) : null;
   const ref = here ?? props.track[0] ?? null;
   const key = ref ? `${ref.map_id}/${ref.map_version}` : "";
@@ -404,7 +416,7 @@ function RecMap(props: { robot: string; track: TrackPt[]; head: number | null; o
             const [x, y] = s.map(here.x, here.y);
             return <g class="rec-here"><circle cx={x} cy={y} r="8" /><text x={x + 12} y={y + 4}>{nameOf(props.robot)}</text></g>;
           }} />
-      ) : <div class="rmap-empty muted">{t("recMapNone")}</div>}
+      ) : props.failed ? <div class="rmap-empty warn" data-failed="1">{t("loadRetry")}</div> : <div class="rmap-empty muted">{t("recMapNone")}</div>}
       <span class="rmap-hint">
         {props.head == null ? t("recMapPick") : here ? t("recMapHere", { id: nameOf(props.robot), t: hms(props.head) }) : t("recMapUnknown", { id: nameOf(props.robot), t: hms(props.head) })}
       </span>

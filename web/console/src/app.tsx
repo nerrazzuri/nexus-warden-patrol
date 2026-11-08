@@ -45,7 +45,7 @@ export function App() {
   if (me === undefined) {
     return down
       ? <div class="boot boot-down" role="alert" data-site-down="1"><p>{t("bootDown")}</p></div>
-      : <div class="boot" aria-busy="true" />;
+      : <div class="boot" aria-busy="true"><p class="boot-wait muted">{t("loading")}</p></div>;
   }
   if (me === null)
     return (

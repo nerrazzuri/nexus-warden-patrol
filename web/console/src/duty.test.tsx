@@ -241,6 +241,8 @@ describe("网页易用性第 1 轮 P0-02 / P0-06:不该说一切正常的时候"
       say={vi.fn()} refresh={vi.fn(async () => {})} onZoom={() => {}} />);
     expect(c.textContent).toContain("状态未知");
     expect(c.textContent).not.toContain("一切正常");
+    // 第 3 轮 layout N3:报警计数写 ?
+    expect(c.querySelector("[data-alarm-count]")!.textContent).toBe("?");
   });
 
   it("全部急停后:写几台已停止,保安能全部恢复(先确认)", async () => {
