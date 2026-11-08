@@ -35,7 +35,8 @@ import { rasterShade, scheme } from "./theme";
 export interface CanvasArea {
   name: string;
   pts: Pt[];
-  kind: "area" | "zone";
+  /** 第 3 轮:region = 地图编辑里起名字的显示区域(不是防区);ref = 布置里别的页的防区淡显。 */
+  kind: "area" | "zone" | "region" | "ref";
   /** 报警的防区:标红(W44)。 */
   hot?: boolean;
   /** 布置里选中的那一块:蓝色(蓝色只表示选中;第 2 轮 setup N9,原来借了报警的红色)。 */
@@ -46,12 +47,12 @@ export interface CanvasArea {
   tone?: "armed" | "off";
 }
 
-export type LegendKey = "floor" | "wall" | "seen" | "unknown" | "nogo" | "hard" | "vwall" | "erase" | "slow" | "ignore" | "area" | "zone" | "robot" | "alarm";
-const LEGEND_ORDER: LegendKey[] = ["floor", "wall", "seen", "unknown", "nogo", "hard", "vwall", "erase", "slow", "ignore", "area", "zone", "robot", "alarm"];
+export type LegendKey = "floor" | "wall" | "seen" | "unknown" | "nogo" | "hard" | "vwall" | "erase" | "slow" | "ignore" | "area" | "zone" | "region" | "ref" | "exit" | "hide" | "robot" | "alarm";
+const LEGEND_ORDER: LegendKey[] = ["floor", "wall", "seen", "unknown", "nogo", "hard", "vwall", "erase", "slow", "ignore", "area", "zone", "region", "ref", "exit", "hide", "robot", "alarm"];
 const LEGEND_TEXT: Record<LegendKey, Key> = {
   floor: "legendFloor", wall: "legendWall", seen: "legendSeen", unknown: "legendUnknown", nogo: "legendNoGo",
   hard: "hardNoGoLegend", vwall: "legendVWall", erase: "legendErase", slow: "legendSlow", ignore: "legendIgnore",
-  area: "legendArea", zone: "legendZone", robot: "legendRobot", alarm: "legendAlarm",
+  area: "legendArea", zone: "legendZone", region: "legendRegion", ref: "legendZoneRef", exit: "legendExit", hide: "legendHide", robot: "legendRobot", alarm: "legendAlarm",
 };
 
 /** 底图的灰度(站点 map_preview:空地 254、墙 0、看到过 232、未知 205;平面图:地面白、墙深灰、看到过是
@@ -255,7 +256,7 @@ export function MapCanvas(props: {
               </polyline>
             ))}
             {areas.map((a, i) => (
-              <polygon key={`${i}:${a.kind}:${a.name}`} points={polyAttr(meta, a.pts)} class={`${a.kind === "zone" ? "sec-area" : "sec-area quiet"}${a.tone ? ` ${a.tone}` : ""}${a.hot ? " hot" : ""}${a.sel ? " sel" : ""}`} data-area={a.name} />
+              <polygon key={`${i}:${a.kind}:${a.name}`} points={polyAttr(meta, a.pts)} class={`${a.kind === "zone" || a.kind === "region" ? "sec-area" : "sec-area quiet"}${a.kind === "region" ? " region" : ""}${a.tone ? ` ${a.tone}` : ""}${a.hot ? " hot" : ""}${a.sel ? " sel" : ""}`} data-area={a.name} />
             ))}
             {props.world}
           </g>
@@ -268,13 +269,16 @@ export function MapCanvas(props: {
               return <text key={`n:${z.id}`} x={at[0]} y={at[1]} class="nogo-name" data-nogo-name={z.id} font-size={12} dominant-baseline="central">{text}</text>;
             })}
             {areas.map((a, i) => {
-              const font = a.kind === "zone" ? 14 : 13;
+              const font = a.kind === "zone" || a.kind === "region" ? 14 : 13;
               const text = a.label ?? a.name;
-              const at = placeLabel(a.pts.map(([x, y]) => screen.map(x, y)), text, font, obstacles);
+              const sp = a.pts.map(([x, y]) => screen.map(x, y));
+              // 第 3 轮 maps N3:起了名字的区域放不下名字就写在它上边外面(原来干脆不写,框上看不出是哪块)
+              const at = placeLabel(sp, text, font, obstacles)
+                ?? (a.kind === "region" && sp.length ? [(Math.min(...sp.map((p) => p[0])) + Math.max(...sp.map((p) => p[0]))) / 2, Math.min(...sp.map((p) => p[1])) - 10] as Pt : null);
               if (!at) return null;
               const [x, y] = at;
               return (
-                <text key={`${i}:${a.kind}:${a.name}`} x={x} y={y} class={a.kind === "zone" ? "area-label" : "area-label quiet"}
+                <text key={`${i}:${a.kind}:${a.name}`} x={x} y={y} class={a.kind === "zone" || a.kind === "region" ? "area-label" : "area-label quiet"}
                   font-size={font} dominant-baseline="central">{text}</text>
               );
             })}
@@ -337,6 +341,10 @@ function Swatch({ k, plan }: { k: LegendKey; plan: boolean }) {
   else if (k === "vwall") body = <path d="M1 9L7 3L15 3" class="vwall-line" />;
   else if (k === "area") body = <rect x="1" y="1" width="14" height="10" class="sec-area quiet" />;
   else if (k === "zone") body = <rect x="1" y="1" width="14" height="10" class="sec-area" />;
+  else if (k === "region") body = <rect x="1" y="1" width="14" height="10" class="sec-area region" />;
+  else if (k === "ref") body = <rect x="1" y="1" width="14" height="10" class="sec-area quiet" />;
+  else if (k === "exit") body = <path d="M1 6L15 6" class="mark-exit" />;
+  else if (k === "hide") body = <circle cx="8" cy="6" r="4" class="sw-hide" />;
   else if (k === "robot") body = <circle cx="8" cy="6" r="5" class="sw-robot" />;
   else body = <path d="M8 0.5l5.5 5.5-5.5 5.5-5.5-5.5z" class="sw-alarm" />;
   return <svg class="sw" width="16" height="12" viewBox="0 0 16 12" aria-hidden="true">{body}</svg>;

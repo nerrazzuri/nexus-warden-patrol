@@ -142,11 +142,12 @@ export function NogoTab(p: TabProps) {
           {shown.map((z) => {
             const ring = z.wall ?? z.polygon;
             if (!ring || ring.length === 0) return null;
-            const cx = ring.reduce((a, q) => a + q[0], 0) / ring.length;
-            const cy = ring.reduce((a, q) => a + q[1], 0) / ring.length;
-            const [sx, sy] = s.map(cx, cy);
             const name = siteKnown(z.label) || z.id;
-            return <text key={`n:${z.id}`} x={sx} y={sy} class="nogo-name" data-nogo-name={z.id}>{name}</text>;
+            // 第 3 轮 setup N3:名字盖住了形状(短虚拟墙整条被盖住):墙的名字写在线上方;
+            // 区域放不下名字就写在它上边外面。颜色跟区域类型(原来全是红字)
+            const [sx, sy] = nameSpot(ring.map(([x, y]) => s.map(x, y)), name, !!z.wall);
+            const kind = z.wall ? "wall" : z.kind === "nogo" ? (z.hard ? "hard" : "nogo") : z.kind;
+            return <text key={`n:${z.id}`} x={sx} y={sy} class={`nogo-name k-${kind}`} data-nogo-name={z.id}>{name}</text>;
           })}
           {pts.map(([x, y], i) => { const [sx, sy] = s.map(x, y); return <circle key={i} cx={sx} cy={sy} r={5} class="draft-pt" />; })}
           {!draw && cur && curPts.map(([x, y], i) => {
@@ -211,7 +212,7 @@ export function NogoTab(p: TabProps) {
           {shown.map((z) => (
             <li key={z.id} class="row">
               <span><button type="button" class={z.id === sel ? "linklike on" : "linklike"} data-pick-zone={z.id}
-                onClick={() => setSel(z.id === sel ? null : z.id)}><b>{siteKnown(z.label) || z.id}</b></button> <span class="muted small">{nogoLine(z)}</span></span>
+                onClick={() => setSel(z.id === sel ? null : z.id)}><b>{siteKnown(z.label) || z.id}</b></button> <span class="muted small nowrap">{nogoLine(z)}</span></span>
               {z.id === sel && <button type="button" class="btn sm push" data-rename="1" onClick={() => setRenaming(true)}>{t("lyRename")}</button>}
               <button type="button" class={z.id === sel ? "btn sm" : "btn sm push"} onClick={() => setRemoving(z)}>{t("remove")}</button>
             </li>
@@ -220,11 +221,11 @@ export function NogoTab(p: TabProps) {
         </ul>
       </div>
       {renaming && cur && (
-        <RenameNogo initial={cur.label} onClose={() => setRenaming(false)}
+        <RenameNogo initial={cur.label} taken={zones.filter((z) => z.id !== cur.id).map((z) => z.label.trim())} onClose={() => setRenaming(false)}
           onSave={(label) => { setZones(zones.map((z) => (z.id === cur.id ? { ...z, label } : z))); setRenaming(false); }} />
       )}
       {form && draw && (
-        <NogoForm kind={draw} onClose={() => setForm(false)} onSave={(f) => {
+        <NogoForm kind={draw} taken={zones.map((z) => z.label.trim())} onClose={() => setForm(false)} onSave={(f) => {
           let id = `${draw === "wall" ? "w" : draw === "slow" ? "s" : draw === "ignore" ? "i" : draw === "erase" ? "e" : "n"}${(nav?.revision ?? 0) + 1}`;
           while (zones.some((z) => z.id === id)) id += "x";
           const z: Draft = { id, kind: draw === "slow" || draw === "ignore" || draw === "erase" ? draw : "nogo", label: f.label.trim(), polygon: draw === "wall" ? [] : pts };
@@ -250,13 +251,26 @@ export function NogoTab(p: TabProps) {
   );
 }
 
-function RenameNogo({ initial, onClose, onSave }: { initial: string; onClose: () => void; onSave: (label: string) => void }) {
+/** 第 3 轮 setup N8:禁区不许重名(确认框里列名字,重名分不清是哪一块)。 */
+function nameTaken(label: string, taken: string[]): boolean {
+  return taken.includes(label.trim());
+}
+
+/** 默认名已经有了就往后加「2」「3」…… */
+function freshName(base: string, taken: string[]): string {
+  if (!taken.includes(base)) return base;
+  for (let i = 2; ; i++) if (!taken.includes(`${base} ${i}`)) return `${base} ${i}`;
+}
+
+function RenameNogo({ initial, taken, onClose, onSave }: { initial: string; taken: string[]; onClose: () => void; onSave: (label: string) => void }) {
   const [v, setV] = useState(initial);
-  const ok = v.trim().length > 0 && v.trim().length <= 64;
+  const dup = nameTaken(v, taken);
+  const ok = v.trim().length > 0 && v.trim().length <= 64 && !dup;
   return (
     <Modal label={t("lyRename")} onClose={onClose}>
       <form class="form" onSubmit={(e) => { e.preventDefault(); if (ok) onSave(v.trim()); }}>
-        <label class="field">{t("navName")}<input name="label" value={v} maxLength={64} autoFocus onInput={(e) => setV(e.currentTarget.value)} /></label>
+        <label class="field">{t("navName")}<input name="label" value={v} maxLength={64} autoFocus aria-invalid={dup || undefined} onInput={(e) => setV(e.currentTarget.value)} /></label>
+        {dup && <p class="small bad" role="alert" data-dup="1">{t("lyNogoNameTaken", { z: v.trim() })}</p>}
         <div class="row end">
           <button type="button" class="btn" onClick={onClose}>{t("cancel")}</button>
           <button type="submit" class="btn primary" disabled={!ok}>{t("dlgApply")}</button>
@@ -296,18 +310,20 @@ function SureDialog({ onYes, onNo, needPw }: { onYes: (pw?: string) => Promise<v
   );
 }
 
-function NogoForm({ kind, onClose, onSave }: { kind: Draw; onClose: () => void; onSave: (f: Form) => void }) {
+function NogoForm({ kind, taken, onClose, onSave }: { kind: Draw; taken: string[]; onClose: () => void; onSave: (f: Form) => void }) {
   const [f, setF] = useState<Form>({
-    label: kind === "wall" ? t("legendVWall") : kind === "slow" ? t("legendSlow") : kind === "ignore" ? t("legendIgnore") : kind === "erase" ? t("eraseLabel") : t("legendNoGo"),
+    label: freshName(kind === "wall" ? t("legendVWall") : kind === "slow" ? t("legendSlow") : kind === "ignore" ? t("legendIgnore") : kind === "erase" ? t("eraseLabel") : t("legendNoGo"), taken),
     hard: false, speed: 0.3, temp: false, days: 3,
   });
   // P1-37:限速 0.1–5 m/s,跟输入框的 min/max 一个口径(原来 0.05 也能存);范围写在框下面
   const speedOk = f.speed >= 0.1 && f.speed <= 5;
-  const ok = f.label.trim().length > 0 && f.label.trim().length <= 64 && (kind !== "slow" || speedOk);
+  const dup = nameTaken(f.label, taken);
+  const ok = f.label.trim().length > 0 && f.label.trim().length <= 64 && (kind !== "slow" || speedOk) && !dup;
   return (
     <Modal label={kind === "wall" ? t("navFormTitleVWall") : kind === "slow" ? t("navFormTitleSlow") : kind === "ignore" ? t("navFormTitleIgnore") : kind === "erase" ? t("drawErase") : t("navFormTitleNoGo")} onClose={onClose}>
       <form class="form" onSubmit={(e) => { e.preventDefault(); if (ok) onSave(f); }}>
         <label class="field">{t("navName")}<input name="label" value={f.label} maxLength={64} autoFocus onInput={(e) => setF({ ...f, label: e.currentTarget.value })} /></label>
+        {dup && <p class="small bad" role="alert" data-dup="1">{t("lyNogoNameTaken", { z: f.label.trim() })}</p>}
         {kind === "slow" ? (
           <label class="field">{t("navSpeed")}<input type="number" name="speed" min={0.1} max={5} step={0.1} value={f.speed}
             onInput={(e) => setF({ ...f, speed: Number(e.currentTarget.value) })} />
@@ -330,4 +346,14 @@ function NogoForm({ kind, onClose, onSave }: { kind: Draw; onClose: () => void; 
       </form>
     </Modal>
   );
+}
+
+/** 名字写在哪(屏上坐标):区域装得下就在中间;墙、装不下的区域写在上边外面一点。 */
+export function nameSpot(pts: [number, number][], name: string, line: boolean): [number, number] {
+  const xs = pts.map((p) => p[0]), ys = pts.map((p) => p[1]);
+  const cx = (Math.min(...xs) + Math.max(...xs)) / 2;
+  const w = Math.max(...xs) - Math.min(...xs), h = Math.max(...ys) - Math.min(...ys);
+  const textW = [...name].reduce((a, ch) => a + (ch.charCodeAt(0) > 0x2e80 ? 12 : 7), 0);
+  if (!line && w >= textW + 8 && h >= 20) return [cx, (Math.min(...ys) + Math.max(...ys)) / 2];
+  return [cx, Math.min(...ys) - 10];
 }

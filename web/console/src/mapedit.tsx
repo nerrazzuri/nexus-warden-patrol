@@ -217,7 +217,7 @@ function Editor({ say, target, Canvas }: { say: Say; target: Target; Canvas?: Fu
               const B = toMap(meta, b[0], b[1]);
               if (done) { setRect(null); finish([A, B]); } else setRect([A, B]);
             } : undefined,
-            areas: now?.display.regions.map((r) => ({ name: r.name, pts: r.polygon, kind: "zone" as const })),
+            areas: now?.display.regions.map((r) => ({ name: r.name, pts: r.polygon, kind: "region" as const })),
             world: meta && now ? <>
               {bm && bmSize && (() => {
                 const x = (bm.x - meta.left_x) / meta.m_per_px;

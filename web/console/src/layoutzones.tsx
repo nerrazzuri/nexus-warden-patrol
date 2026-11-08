@@ -128,6 +128,8 @@ export function ZonesTab(p: TabProps) {
       <div ref={root} onClickCapture={(e) => swallowClick(guard.current, e)}>
       <p.Map
         areas={areas.map((a) => ({ name: a.zone, pts: a.points, kind: "zone" as const, sel: a.zone === sel }))}
+        // 第 3 轮 P2-15 / r2-setup-N8:出口线、藏匿点进图例
+        legend={[...(marks.some((m) => m.kind === "exit") ? ["exit" as const] : []), ...(marks.some((m) => m.kind === "hide") ? ["hide" as const] : [])]}
         drawing={!!draft || !!placing || !!markDraft}
         onPick={pick}
         // P2-37:放藏匿点第二步,在地图上明说「再点它朝哪看」

@@ -1508,3 +1508,17 @@ input[type="file"] { max-width: 100%; min-width: 0; }            /* 上传按钮
   .rmap { aspect-ratio: auto; min-height: 0; }
   .rmap .mapwrap { flex: none; height: max(240px, 70vw); }
 }
+/* 第 3 轮 setup N9:选中一行出了「改名」按钮,类型名不折成两行 */
+.nowrap { white-space: nowrap; }
+/* 第 3 轮 setup N6:历史列表跟面板标题一样留左右边距 */
+.ly-history > ul.plain, .ly-history > p { padding: 12px 16px; margin: 0; }
+/* 第 3 轮 setup N3:禁区名字颜色跟区域类型 */
+.nogo-name { font-size: 12px; }
+.nogo-name.k-wall { fill: var(--c-warning); }
+.nogo-name.k-slow { fill: var(--c-textSecondary); }
+.nogo-name.k-ignore { fill: var(--c-info, #5c6bc0); }
+.nogo-name.k-erase { fill: var(--c-textSecondary); }
+/* 第 3 轮 maps N3:地图编辑里起名字的区域(显示用,不是防区):灰色虚框 */
+.sec-area.region { fill: var(--c-textMuted); fill-opacity: 0.1; stroke: var(--c-textSecondary); stroke-dasharray: 5 3; }
+.sw .mark-exit { stroke-width: 2.5; stroke-dasharray: 4 2; }
+.sw-hide { fill: var(--c-mark); }
