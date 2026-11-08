@@ -284,3 +284,23 @@ describe("第 3 轮 setup N1", () => {
     expect(seen!.data.robots).toEqual(["A"]);
   });
 });
+
+describe("第 5 轮 r5-layout-N1", () => {
+  it("读地图目录失败不说「还没有地图」,连上以后自己再读", async () => {
+    let fail = true;
+    const ok = (url: string) => url === "/api/maps"
+      ? Promise.resolve(json({ maps: [{ map_id: "home", version: "3", note: "", active: true }] }))
+      : Promise.resolve(json(url.endsWith("/preview") ? META : {}));
+    setFetch(((url: string) => (fail && url === "/api/maps" ? Promise.reject(new TypeError("Failed to fetch")) : ok(url))) as typeof fetch);
+    const { container: c } = page();
+    await waitFor(() => expect(c.querySelector(".empty")?.textContent ?? "").toMatch(/重试|稍后|连不上|读不到/));
+    expect(c.textContent).not.toContain("还没有地图");
+    fail = false;
+    const { siteDown } = await import("./data");
+    siteDown.value = true;
+    await new Promise((r) => setTimeout(r, 20));
+    siteDown.value = false;
+    await waitFor(() => expect(c.textContent).not.toContain("读取失败"));
+    expect(c.textContent).toContain("home");
+  });
+});

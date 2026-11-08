@@ -65,7 +65,8 @@ export function AlertTestBar({ role, onCleared, pollMs = ALERT_TEST_POLL_MS }:
           <span>{admin ? t("atOn", { at: hm(mode.until_ms ?? 0), by: mode.by }) : t(role !== "viewer" ? "atOnView" : "atOnViewer", { at: hm(mode.until_ms ?? 0) })}</span>
           {admin && <span class="row wrap at-acts">
             <button type="button" class="btn sm" onClick={() => void post({ action: "end", clear: false })}>{t("atEndKeep")}</button>
-            <button type="button" class="btn sm ghost" onClick={() => setAsk(true)}>{t("atEndClear")}</button>
+            {/* 第 5 轮:没有演练报警就不问「删掉 0 条」 */}
+            {(mode.alarms?.length ?? 0) > 0 && <button type="button" class="btn sm ghost" data-end-clear="1" onClick={() => setAsk(true)}>{t("atEndClear")}</button>}
           </span>}
         </div>
       ) : (
@@ -85,7 +86,7 @@ export function AlertTestBar({ role, onCleared, pollMs = ALERT_TEST_POLL_MS }:
       {msg && <span class="small" role="status">{msg}</span>}
       {/* 第 3 轮 duty N10:列出要删哪几条、共几条(摄像头掉线、站点自己的毛病不算演练,不删) */}
       {/* 第 4 轮 duty r3-N10:逐条能取消勾选(取消的留着);写哪台、几点 */}
-      {ask && <Confirm text={t("atEndClearList", { n: (mode.alarms?.length ?? 0) - keep.length })} yes={t("atEndClear")} danger onNo={() => { setAsk(false); setKeep([]); }}
+      {ask && <Confirm text={(mode.alarms?.length ?? 0) - keep.length > 0 ? t("atEndClearList", { n: (mode.alarms?.length ?? 0) - keep.length }) : t("atEndNothing")} yes={t("atEndClear")} danger onNo={() => { setAsk(false); setKeep([]); }}
         onYes={() => { const k = keep; setAsk(false); setKeep([]); void post({ action: "end", clear: true, keep: k }); }}>
         {(mode.alarms?.length ?? 0) > 0 && <ul class="plain small at-list" data-drill-list="1">
           {mode.alarms!.slice(0, 50).map((a) => (

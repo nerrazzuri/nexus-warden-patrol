@@ -70,7 +70,14 @@ const ACTIONS: [RegExp, string][] = [
   // P1-66:常见的再多认几个;认不得的写「其他操作」,原话放悬停里
   [/^POST \/api\/robots\/[^/]+\/(home|standby)\/return$/, "actReturn"], [/^POST \/api\/robots\/[^/]+\/abort$/, "actAbort"],
   [/^POST \/api\/robots\/[^/]+\/resume$/, "actResume"], [/^POST \/api\/robots\/[^/]+\/posture$/, "actPosture"],
-  [/^POST \/api\/robots\/[^/]+\/relocalize/, "actLocate"], [/^POST \/api\/robots/, "actRobots"],
+  [/^POST \/api\/robots\/[^/]+\/relocalize/, "actLocate"],
+  // 第 5 轮 P1-66:「改了机器人」太笼统 —— 换图、建图、待命点、标原点、遥控、驱离、服务模式、看管、设置、升级、Wi-Fi
+  [/^POST \/api\/robots\/[^/]+\/map$/, "actRobotMap"], [/^POST \/api\/robots\/[^/]+\/(mapping|map_build)$/, "actRobotMapping"],
+  [/^POST \/api\/robots\/[^/]+\/standby$/, "actRobotStandby"], [/^POST \/api\/robots\/[^/]+\/home(\/here)?$/, "actRobotHome"],
+  [/^POST \/api\/robots\/[^/]+\/teleop$/, "actRobotTeleop"], [/^POST \/api\/robots\/[^/]+\/deter$/, "actRobotDeter"],
+  [/^POST \/api\/robots\/[^/]+\/service$/, "actRobotService"], [/^POST \/api\/robots\/[^/]+\/supervise$/, "actRobotSupervise"],
+  [/^POST \/api\/robots\/[^/]+\/(settings|wifi)$/, "actRobotSettings"], [/^POST \/api\/robots\/[^/]+\/release$/, "actRobotRelease"],
+  [/^POST \/api\/robots/, "actRobots"],
   // 第 2 轮 P1-66:添加、解绑、重出激活码、改名、批准加入、退回布置、告警演练
   [/^POST \/api\/admin\/robots$/, "actRobotAdd"], [/^POST \/api\/admin\/robots\/[^/]+\/code$/, "actRobotCode"],
   [/^POST \/api\/admin\/robots\/[^/]+\/revoke$/, "actRobotUnbind"], [/^POST \/api\/admin\/robots\/[^/]+\/name$/, "actRobotName"],

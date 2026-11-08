@@ -231,6 +231,14 @@ describe("第 2 轮 P1-03:顶栏日期不会读反", () => {
       cleanup();
     }
   });
+
+  it("第 5 轮:按站点时区走,不按浏览器的", () => {
+    const now = Date.UTC(2026, 10, 8, 18, 30);                 // 上海 11-09 02:30
+    const mode = { mode: "armed", timezone: "Asia/Shanghai" } as never;
+    const r = render(<TopBar me={me("admin")} page="duty" mode={mode} alarms={0} now={now} pref="system" onPref={() => {}} onStop={() => {}} onSignOut={() => {}} onSay={() => {}} />);
+    expect(r.container.querySelector(".clock")!.textContent).toContain("11-09");
+    expect(r.container.querySelector(".clock")!.textContent).toContain("02:30");
+  });
 });
 
 describe("第 2 轮 duty N10 / N11:顶栏", () => {

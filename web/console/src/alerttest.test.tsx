@@ -21,7 +21,7 @@ beforeEach(() => {
     if (url === "/api/alert-test" && init?.method === "POST") {
       const b = JSON.parse(String(init.body));
       posted.push(b);
-      mode = b.action === "start" ? { active: true, until_ms: END_AT, by: "alice" }
+      mode = b.action === "start" ? { active: true, until_ms: END_AT, by: "alice", alarms: [{ key: "A/fell#1", title: "测试：摔倒" }] }
         : { active: false, until_ms: null, by: "", cleared: b.clear ? 3 : 0 };
       return Promise.resolve(json(mode));
     }
@@ -37,6 +37,12 @@ describe("告警测试模式", () => {
     expect(alertTitle("en", "stuck", "测试：被挡住了")).toMatch(/^TEST: /);
     expect(alertTitle("zh", "stuck", "测试：被挡住了")).toMatch(/^测试：/);
     expect(alertTitle("en", "stuck", "被挡住了")).not.toMatch(/TEST/);
+  });
+  it("第 5 轮:演练期间没有报警,不给「删掉演练报警」(不问删 0 条)", async () => {
+    mode = { active: true, until_ms: END_AT, by: "alice", alarms: [] } as never;
+    const { container: c } = render(<AlertTestBar role="admin" onCleared={() => {}} />);
+    await waitFor(() => expect(btn(c, "结束演练（保留记录）")).toBeTruthy());
+    expect(c.querySelector("[data-end-clear]")).toBeNull();
   });
   it("管理员开 30 分钟 → 条幅写到几点;结束并清掉先确认,说删了几条", async () => {
     let cleared = 0;

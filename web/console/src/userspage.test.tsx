@@ -191,6 +191,8 @@ describe("第 2 轮 P1-66:操作记录说人话", () => {
     expect(actionText("POST /api/admin/robots")).toBe("Added a robot");
     expect(actionText("POST /api/admin/robots/A/revoke")).toBe("Unbound a robot");
     expect(actionText("POST /api/admin/robots/A/code")).toBe("Issued a new activation code");
+    expect(actionText("POST /api/robots/A/map")).toBe("Switched a robot's map");          // 第 5 轮 P1-66
+    expect(actionText("POST /api/robots/A/deter")).toBe("Sounded a robot's deterrent");
     expect(targetText("estate-1:7/mark:294c9dd2ce8a")).toBe("map estate-1 v7");
     expect(targetText("A")).toBe("A");
     lang.value = "zh";

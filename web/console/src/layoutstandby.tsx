@@ -120,6 +120,8 @@ export function StandbyTab(p: TabProps) {
           <section class="note warn ly-carried" data-carried-standby={carried.length}>
             <p>{t("lyStandbyCarried", { n: carried.length, v: prop?.from_version ?? "" })}</p>
             <p class="small muted">{t("lyStandbyCarriedHint")}</p>
+            {/* 第 5 轮 r5-maps-N1:「留下」是挪不是抄(站点一台机器人一个名字只有一个待命点),先说清楚 */}
+            <p class="small warn" data-carried-move="1">{t("lyStandbyCarriedMove", { from: prop?.from_version ?? "", v: p.map.version })}</p>
             <ul class="plain">
               {carried.map((c) => (
                 <li key={key(c)} class="row">
