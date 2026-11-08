@@ -136,3 +136,10 @@ describe("软件升级", () => {
     await waitFor(() => expect(posted[0]).toEqual({ url: "/api/robots/A/release", body: { action: "activate", name: "v1.4.0", when: "charging" } }));
   });
 });
+
+describe("第 2 轮 P1-73:支持包文件名带日期", () => {
+  it("nexwar_support-年月日-时分.tar.gz", async () => {
+    const { supportName } = await import("./advdiag");
+    expect(supportName(new Date(2026, 10, 8, 9, 5).getTime())).toBe("nexwar_support-20261108-0905.tar.gz");
+  });
+});

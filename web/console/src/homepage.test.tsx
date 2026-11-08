@@ -70,6 +70,7 @@ describe("现场概况", () => {
     const todo = c.querySelector(".home-todo")!;
     expect(todo.textContent).toContain("证书");
     expect(todo.textContent).toContain("工程师");
+    expect(todo.querySelector("[data-ack-done-hint]")!.textContent).toContain("「已处理」表示已经解决");   // 第 2 轮 P1-75
     fireEvent.click(btn(todo, "已处理"));
     expect(done).toHaveBeenCalledWith(expect.objectContaining({ key: "c1" }));
   });

@@ -14,11 +14,13 @@ const acct = (o: Record<string, unknown>) => ({ name: "x", role: "guard", disabl
 let accounts: Record<string, unknown>[];
 let posted: { url: string; body: Record<string, unknown> }[];
 let pwOk: boolean;
+let caps: { vpn?: boolean };
 
 beforeEach(() => {
   lang.value = "zh";
   posted = [];
   pwOk = true;
+  caps = { vpn: true };
   accounts = [
     acct({ name: "alice", role: "admin", display_name: "陈太", last_login_ms: NOW - 3_600_000 }),
     acct({ name: "olga", role: "owner", display_name: "陈先生" }),
@@ -38,6 +40,7 @@ beforeEach(() => {
       return Promise.resolve(json({ accounts }));
     }
     if (url.startsWith("/api/accounts")) return Promise.resolve(json({ accounts }));
+    if (url === "/api/system/caps") return Promise.resolve(json({ priv: true, push: true, vpn: caps.vpn }));
     if (url.startsWith("/api/audit")) {
       return Promise.resolve(json({ audit: [{ id: 1, at: NOW - 60_000, actor: "gina", actor_role: "guard", action: "POST /api/mode", target: "armed", status: 200 },
         { id: 2, at: NOW - 30_000, actor: "gina", actor_role: "guard", action: "POST /api/robots/A/goto", target: "A", status: 403 },
@@ -74,6 +77,15 @@ describe("用户页", () => {
     expect(btn(tr(c, "alice"), "删除")).toBeUndefined();
     expect(btn(tr(c, "alice"), "停用")).toBeUndefined();
     expect(btn(tr(c, "gina"), "删除")).toBeTruthy();
+  });
+
+  it("第 2 轮 P1-65:站点没装 VPN,「签发 VPN」灰着、写原因", async () => {
+    caps = { vpn: false };
+    const { container: c } = page();
+    await waitFor(() => expect(tr(c, "alice")).not.toBeNull());
+    fireEvent.click(btn(c, "给工程师开临时账号"));
+    await waitFor(() => expect((document.querySelector('form.eng-form input[name="vpn"]') as HTMLInputElement).disabled).toBe(true));
+    expect(document.querySelector("[data-novpn]")!.textContent).toContain("没有装远程访问");
   });
 
   it("开工程师账号要再输密码,口令只显示一次", async () => {
@@ -169,5 +181,18 @@ describe("网页易用性第 1 轮 P1-05 / P1-63 / P1-64", () => {
     fireEvent.click(btn(c, "添加用户"));
     const opts = Array.from(c.ownerDocument.querySelectorAll(".modal select option")).map((o) => (o as HTMLOptionElement).value);
     expect(opts).toContain("viewer");
+  });
+});
+
+describe("第 2 轮 P1-66:操作记录说人话", () => {
+  it("添加、解绑、重出激活码有自己的名字;对象里的内部编号不摆出来", async () => {
+    const { actionText, targetText } = await import("./userspage");
+    lang.value = "en";
+    expect(actionText("POST /api/admin/robots")).toBe("Added a robot");
+    expect(actionText("POST /api/admin/robots/A/revoke")).toBe("Unbound a robot");
+    expect(actionText("POST /api/admin/robots/A/code")).toBe("Issued a new activation code");
+    expect(targetText("estate-1:7/mark:294c9dd2ce8a")).toBe("map estate-1 v7");
+    expect(targetText("A")).toBe("A");
+    lang.value = "zh";
   });
 });

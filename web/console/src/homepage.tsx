@@ -61,6 +61,8 @@ export function HomePage(props: {
       {todo.length > 0 && (
         <section class="panel home-todo">
           <h2>{t("homeTodo")}</h2>
+          {/* 第 2 轮 P1-75:「知道了」和「已处理」差在哪儿 */}
+          <p class="muted small" data-ack-done-hint="1">{t("noticeAckDoneHint")}</p>
           <ul class="plain">
             {groupTodo(todo).map((g) => {
               const a = g[0];
@@ -82,8 +84,8 @@ export function HomePage(props: {
                   </div>
                   <div class="todo-acts">
                     {(adv?.go ?? pfGo) ? <a class="btn sm" href={`#/${adv?.go ?? pfGo}`}>{t("homeGo")}</a>
-                      : g.some((x) => x.acked_ms == null) && <button type="button" class="btn sm" onClick={() => g.forEach((x) => x.acked_ms == null && props.onAck(x))}>{t("noticeAck")}</button>}
-                    <button type="button" class="btn sm primary" onClick={() => g.forEach((x) => props.onDone(x))}>{t("noticeDone")}</button>
+                      : g.some((x) => x.acked_ms == null) && <button type="button" class="btn sm" title={t("noticeAckTip")} onClick={() => g.forEach((x) => x.acked_ms == null && props.onAck(x))}>{t("noticeAck")}</button>}
+                    <button type="button" class="btn sm primary" title={t("noticeDoneTip")} onClick={() => g.forEach((x) => props.onDone(x))}>{t("noticeDone")}</button>
                   </div>
                 </li>
               );

@@ -1209,6 +1209,13 @@ input.invalid { border-color: var(--c-error); }
   .btn, .sidenav a, .seg button, .alarmcount, .lang button { min-height: 44px; }
   input[type="checkbox"], input[type="radio"] { width: 22px; height: 22px; }
   label:has(> input[type="checkbox"]), label:has(> input[type="radio"]) { min-height: 44px; display: inline-flex; align-items: center; gap: 8px; }
+  /* 第 2 轮 P1-84:剩下不到 44 的 —— 账号按钮、「?」、画面上的按钮、报警筛选片、下拉框和日期框、账号菜单里的项、
+     「高级」、用户表里的名字、「重建地图 ▸」这类文字按钮 */
+  .who, .help-btn { min-height: 44px; min-width: 44px; }
+  .osd .btn, .slot .btn, .chip, .filter-chip, .al-filters button { min-height: 44px; }
+  select, input[type="date"], input[type="time"], input[type="datetime-local"] { min-height: 44px; }
+  .usermenu .menu button, .usermenu .menu a { min-height: 44px; }
+  button.navgroup-title, .linklike, .linkish, .users-name, details > summary { min-height: 44px; display: inline-flex; align-items: center; }
 }
 /* P1-41:路线编辑面板自己滚动,放弃 / 删除那一行贴在面板底部(不用滚到页面最下面) */
 @media (min-width: 900px) {
@@ -1385,3 +1392,10 @@ input[type="date"]:not(.field input) { height: 36px; padding: 0 8px; border-radi
 .slot-foot > span { flex: none; }
 .slot-foot > span:last-child { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .me-newver { margin: 0 0 8px; padding: 8px 12px; border: 1px solid var(--c-outline); border-radius: var(--r-r8); background: var(--c-surface); }
+.user-audit .audit-why { flex-basis: 100%; color: var(--c-error); }
+/* 第 2 轮 P1-71 / 72:柱状图左边的刻度;日期填错时仍显示上一段(淡一点);起止两个框顶端对齐 */
+.rep-chartwrap { display: flex; gap: 6px; align-items: stretch; }
+.rep-chartwrap > .rep-chart { flex: 1; min-width: 0; }
+.rep-axis { display: flex; flex-direction: column; justify-content: space-between; text-align: right; min-width: 2ch; padding-bottom: 18px; font-variant-numeric: tabular-nums; }
+.rep-stale { opacity: 0.55; }
+.reports > .row.wrap { align-items: flex-start; }

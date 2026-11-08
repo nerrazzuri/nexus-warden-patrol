@@ -47,7 +47,8 @@ export function UpgradePage({ say }: { say: Say }) {
         <div class="sys-row"><span class="muted">{t("upSite")}</span><b class="mono">{versions?.site.version ?? "—"}</b></div>
         {Object.entries(rel?.robots ?? {}).map(([rid, cur]) => (
           <div key={rid} class="sys-row" data-robot={rid}>
-            <span class="muted">{nameOf(rid)}</span><b class="mono">{cur ?? "—"}</b>
+            {/* 第 2 轮 P1-78:没报版本时写为什么,不只是「—」 */}
+            <span class="muted">{nameOf(rid)}</span>{cur ? <b class="mono">{cur}</b> : <span class="small muted" data-no-release="1">{t("upNoRelease")}</span>}
             {/* P1-78:先确认;站点说这台不能退(老代理)就不给按钮 */}
             {rel?.rollback?.[rid] !== false
               ? <button type="button" class="btn sm push" onClick={() => setBacking(rid)}>{t("upRollback")}</button>

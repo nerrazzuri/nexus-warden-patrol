@@ -50,7 +50,7 @@ export function DiagPage({ say }: { say: (s: string) => void }) {
           <select id="diag-hours" value={String(hours)} onChange={(e) => setHours(Number(e.currentTarget.value))}>
             {[6, 24, 72, 168].map((h) => <option key={h} value={String(h)}>{t("opsHours", { n: h })}</option>)}
           </select>
-          <a class="btn" href={`/api/support-bundle?hours=${hours}`} download="nexwar_support.tar.gz">{t("supportBundle")}</a>
+          <a class="btn" href={`/api/support-bundle?hours=${hours}`} download={supportName(Date.now())}>{t("supportBundle")}</a>
         </span>
       </div>
       <p class="muted lead">{t("diagWhen")}</p>
@@ -91,4 +91,11 @@ export function DiagPage({ say }: { say: (s: string) => void }) {
       ))}
     </section>
   );
+}
+
+/** 第 2 轮 P1-73:支持包文件名带下载的日期时刻,多次下载不重名、发给我们时分得清。 */
+export function supportName(ms: number): string {
+  const d = new Date(ms);
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `nexwar_support-${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}.tar.gz`;
 }

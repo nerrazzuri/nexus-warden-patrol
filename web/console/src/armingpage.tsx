@@ -386,6 +386,8 @@ function Exceptions({ list, say, onChange }: { list: Exception[]; say: Say; onCh
   const [last, setLast] = useState("");
   const [state, setState] = useState<"armed" | "disarmed">("armed");
   const [note, setNote] = useState("");
+  // 第 2 轮 P1-58 / P1-05:例外跟上面的时间表不一样,加、删马上生效 —— 删先确认,加删都说一声
+  const [removing, setRemoving] = useState<Exception | null>(null);
   // P1-60:当场查 —— 不能早于今天、结束不能早于开始;错就写在这一行下面,不弹框
   const today = dateInput(Date.now());
   const exErr = first && first < today ? t("armExPast") : first && last && last < first ? t("armExOrder") : "";
@@ -395,6 +397,7 @@ function Exceptions({ list, say, onChange }: { list: Exception[]; say: Say; onCh
       const d = await api<Schedule>("POST", "/api/arming/exceptions", { first_day: first, last_day: last || first, state, note });
       onChange(d.exceptions ?? []);
       setFirst(""); setLast(""); setNote("");
+      say(t("armExAdded"));
     } catch (e) {
       say(errText(e));
     }
@@ -403,6 +406,7 @@ function Exceptions({ list, say, onChange }: { list: Exception[]; say: Say; onCh
     try {
       const d = await api<Schedule>("POST", `/api/arming/exceptions/${enc(String(id))}/remove`, {});
       onChange(d.exceptions ?? []);
+      say(t("armExRemoved"));
     } catch (e) {
       say(errText(e));
     }
@@ -410,7 +414,7 @@ function Exceptions({ list, say, onChange }: { list: Exception[]; say: Say; onCh
   return (
     <section class="panel arm-ex">
       <h2>{t("armExTitle")}</h2>
-      <p class="muted small">{t("armExHint")}</p>
+      <p class="muted small">{t("armExHint")} {t("armExNow")}</p>
       {list.length > 0 && (
         <ul class="plain">
           {list.map((x) => (
@@ -418,7 +422,7 @@ function Exceptions({ list, say, onChange }: { list: Exception[]; say: Say; onCh
               <span class="mono">{x.first_day === x.last_day ? x.first_day : `${x.first_day} – ${x.last_day}`}</span>
               <b>{t(x.state === "armed" ? "armExArmed" : "armExDisarmed")}</b>
               {x.note && <span class="muted">{x.note}</span>}
-              <button type="button" class="btn sm push" onClick={() => void remove(x.id)}>{t("remove")}</button>
+              <button type="button" class="btn sm push" onClick={() => setRemoving(x)}>{t("remove")}</button>
             </li>
           ))}
         </ul>
@@ -436,6 +440,10 @@ function Exceptions({ list, say, onChange }: { list: Exception[]; say: Say; onCh
         <button type="button" class="btn" disabled={!first || !!exErr} onClick={() => void add()}>{t("armExAdd")}</button>
       </div>
       {exErr && <p class="error small" role="alert">{exErr}</p>}
+      {removing && (
+        <Confirm text={t("armExRemoveAsk", { d: removing.first_day === removing.last_day ? removing.first_day : `${removing.first_day} – ${removing.last_day}` })}
+          yes={t("remove")} danger onNo={() => setRemoving(null)} onYes={() => { const id = removing.id; setRemoving(null); void remove(id); }} />
+      )}
     </section>
   );
 }

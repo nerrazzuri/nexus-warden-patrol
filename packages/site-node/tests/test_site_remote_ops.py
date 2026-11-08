@@ -108,7 +108,8 @@ def test_站点级运维_没装执行器明说_装了交请求回202_结果之�
     s = 站点
     alice = _登(s, "alice")
     # P1-06:先能问做不做得到(网页按钮先灰着)
-    assert s.req("GET", "/api/system/caps", token=alice)[1] == {"priv": False, "push": False}
+    assert s.req("GET", "/api/system/caps", token=alice)[1] == {
+        "priv": False, "push": False, "vpn": False}
     assert s.req("POST", "/api/system/restart", {"confirm_password": PW}, token=alice)[0] == 409
     s.api.priv = SimOps()
     assert s.req("GET", "/api/system/caps", token=alice)[1]["priv"] is True

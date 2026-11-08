@@ -284,7 +284,7 @@ interface Peer { name: string; kind: string; address: string; public: string; ex
 interface WgPeer { public_key: string; latest_handshake: number }
 
 /** P1-06:站点做不做得到(装没装特权执行器、配没配推送);老站点没有这个接口 = 不知道,按钮照旧能点。 */
-interface Caps { priv?: boolean; push?: boolean }
+interface Caps { priv?: boolean; push?: boolean; vpn?: boolean }
 
 export function SiteOps({ say }: { say: Say }) {
   const [caps] = useLoad<Caps>("/api/system/caps");

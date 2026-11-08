@@ -14,7 +14,7 @@ beforeEach(() => {
   posts = [];
   setFetch(((url: string, init?: RequestInit) => {
     if (init?.method === "POST") { posts.push({ url, body: JSON.parse(String(init.body ?? "{}")) }); return Promise.resolve(json({ ack: {} })); }
-    if (url === "/api/releases") return Promise.resolve(json({ releases: [], robots: { A: "v1", B: "v1" }, rollback: { A: true, B: false } }));
+    if (url === "/api/releases") return Promise.resolve(json({ releases: [], robots: { A: "v1", B: "v1", C: null }, rollback: { A: true, B: false } }));
     if (url === "/api/versions") return Promise.resolve(json({ site: { version: "1.0" }, robots: [] }));
     return Promise.resolve(json({}, 404));
   }) as typeof fetch);
@@ -22,6 +22,12 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("P1-78 退回上一版", () => {
+  it("第 2 轮 P1-78:没报版本的写为什么", async () => {
+    const { container: c } = render(<UpgradePage say={() => {}} />);
+    await waitFor(() => expect(c.querySelector('[data-robot="C"] [data-no-release]')).not.toBeNull());
+    expect(c.querySelector('[data-robot="A"] [data-no-release]')).toBeNull();
+  });
+
   it("先确认再发;不能退的那台没有按钮", async () => {
     const { container: c } = render(<UpgradePage say={() => {}} />);
     const rowA = await waitFor(() => { const r = c.querySelector('[data-robot="A"]'); expect(r).not.toBeNull(); return r as HTMLElement; });

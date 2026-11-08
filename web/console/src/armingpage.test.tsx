@@ -137,6 +137,20 @@ describe("布防时间页", () => {
     await waitFor(() => expect(c.querySelector(".arm-ex")!.textContent).toContain("出远门"));
   });
 
+  it("第 2 轮 P1-58:删例外先确认,删完说一声;说明里写加删马上生效", async () => {
+    schedule = { ...schedule, exceptions: [{ id: 7, first_day: "2099-10-30", last_day: "2099-10-30", state: "armed", note: "" }] };
+    const said: string[] = [];
+    const { container: c } = render(<ArmingPage say={(m: string) => said.push(m)} now={at(12)} />);
+    await waitFor(() => expect(c.querySelector(".arm-ex li")).not.toBeNull());
+    expect(c.querySelector(".arm-ex")!.textContent).toContain("马上生效");
+    fireEvent.click(btn(c.querySelector(".arm-ex")!, "删除"));
+    expect(posted.some((p) => p.url.includes("/remove"))).toBe(false);
+    await waitFor(() => expect(document.querySelector("dialog")?.textContent).toContain("2099-10-30"));
+    fireEvent.click([...document.querySelectorAll("dialog button")].find((b) => b.textContent === "删除")!);
+    await waitFor(() => expect(posted.some((p) => p.url === "/api/arming/exceptions/7/remove")).toBe(true));
+    await waitFor(() => expect(said.join(" ")).toContain("已删除例外"));
+  });
+
   it("P1-60:过去的日子、结束早于开始,当场说,不发", async () => {
     const { container: c } = page();
     await waitFor(() => expect(c.querySelector(".arm-ex")).not.toBeNull());
