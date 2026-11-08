@@ -206,8 +206,9 @@ class _PatrolSheetState extends State<_PatrolSheet> {
             const Padding(padding: EdgeInsets.all(Nw.s16), child: Center(child: CircularProgressIndicator()))
           else if (rs.isEmpty)
             NwNotice(
-                text: tr('No patrol routes yet. An administrator adds them under Admin → Patrol routes.',
-                    '暂无巡逻路线，请管理员在「管理 → 巡逻路线」中添加。'))
+                text: (widget.api.session?.canManageRoutes ?? false)
+                    ? tr('No patrol routes yet. Add them under Admin → Patrol routes.', '暂无巡逻路线，请在「管理 → 巡逻路线」中添加。')
+                    : tr('No patrol routes yet. Ask an administrator to add them.', '暂无巡逻路线，请找管理员添加。'))
           else
             ConstrainedBox(
               constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(context).height * 0.45),
@@ -249,8 +250,12 @@ class _PatrolSheetState extends State<_PatrolSheet> {
           ],
           nwGap8,
           Text(
-              tr("One-off patrols are not saved to the schedule. The manager and administrator are notified; the robot returns to standby afterwards.",
-                  '临时巡逻不保存到日程，派出后通知经理和管理员，结束后机器人返回待命点。'),
+              // 手机 App 测试 M38：对经理不说「会通知经理」
+              widget.api.session?.role == 'owner'
+                  ? tr('One-off patrols are not saved to the schedule. The administrator is notified; the robot returns to standby afterwards.',
+                      '临时巡逻不保存到日程，派出后通知管理员，结束后机器人返回待命点。')
+                  : tr("One-off patrols are not saved to the schedule. The manager and administrator are notified; the robot returns to standby afterwards.",
+                      '临时巡逻不保存到日程，派出后通知经理和管理员，结束后机器人返回待命点。'),
               style: NwText.bodySmall.copyWith(color: c.textSecondary)),
           nwGap8,
           Row(children: [

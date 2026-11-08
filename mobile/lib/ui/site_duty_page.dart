@@ -622,6 +622,12 @@ class _SiteDutyPageState extends State<SiteDutyPage> {
     );
   }
 
+  /// 选中的这台在跑任务（在动）。
+  bool get _selBusy {
+    final st = _selRobot?['status'];
+    return st is Map && st['task'] is Map;
+  }
+
   Widget _actions() {
     final s = widget.api.session;
     final id = _sel!;
@@ -644,7 +650,8 @@ class _SiteDutyPageState extends State<SiteDutyPage> {
         NwButton(
             buttonKey: SiteDutyPage.stopKey,
             icon: Icons.stop_circle_rounded,
-            variant: NwButtonVariant.destructive,
+            // M38：机器人闲着时「叫停」不用那么扎眼（描边）；在动的时候才是实心红
+            variant: _selRobot != null && _selBusy ? NwButtonVariant.destructive : NwButtonVariant.outline,
             label: tr('Stop', '叫停'),
             onPressed: _stop),
     ];
@@ -760,7 +767,10 @@ class _SiteDutyPageState extends State<SiteDutyPage> {
     return Scaffold(
       body: Column(children: [
         NwHeader(
-            overline: tr('Nexus Warden', 'Nexus Warden'),
+            // 手机 App 测试 M38：只读账号在页头就标出来（以前只在「我的」页小字里）
+            overline: (widget.api.session?.isViewer ?? false)
+                ? tr('Nexus Warden · READ-ONLY', 'Nexus Warden · 只读')
+                : tr('Nexus Warden', 'Nexus Warden'),
             title: widget.title ?? tr('Duty', '值守'),
             compact: MediaQuery.sizeOf(context).height < 480),
         Expanded(

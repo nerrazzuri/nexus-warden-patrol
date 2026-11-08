@@ -30,6 +30,7 @@ import 'nw/nw_button.dart';
 import 'nw/nw_p2_duty.dart';
 import 'nw/nw_theme.dart';
 import 'nw/nw_widgets.dart';
+import 'site_tabs.dart' show AccountsPage;
 import 'site_mapping.dart';
 import 'site_recordings.dart';
 import 'site_runs.dart';
@@ -49,6 +50,7 @@ class SiteAlertScenePage extends StatefulWidget {
   static const Key deterKey = Key('scene-deter-here');
   static const Key ackKey = Key('scene-ack');
   static const Key whyKey = Key('scene-why');
+  static const Key accountsKey = Key('scene-accounts');
   static const Key arriveKey = Key('scene-arrive');
   static const Key doneKey = Key('scene-done');
   static const Key doneGoKey = Key('scene-done-go');
@@ -605,6 +607,16 @@ class _SiteAlertScenePageState extends State<SiteAlertScenePage> {
   /// 四个大按钮。[oneRow]：横屏、平板四个一排；竖屏两排。
   Widget _actions({bool oneRow = false}) {
     final s = widget.api.session;
+    // 手机 App 测试 M38：账号申请不是报警：没有「误报 / 我来处理」，管理员直接去批，别人说谁批
+    if (_a.kind == 'account_request') {
+      if (s?.canManageAccounts ?? false) {
+        return _big(SiteAlertScenePage.accountsKey, tr('Review the application', '去审批'),
+            () => Navigator.push(context, MaterialPageRoute<void>(builder: (_) => AccountsPage(api: widget.api))),
+            primary: true);
+      }
+      return Text(tr('An administrator approves account applications. Nothing to do here.', '账号申请由管理员审批，这里不用处理。'),
+          key: SiteAlertScenePage.whyKey, style: NwText.bodyMedium.copyWith(color: Nw.of(context).textSecondary));
+    }
     final handle = s?.canHandleAlerts ?? false;
     final dispatch = s?.canDispatch ?? false;
     // 新鲜的才按它的状态摆；只剩旧快照时不猜警笛开没开，让人能再要求一次（没在驱离了站点会说）
