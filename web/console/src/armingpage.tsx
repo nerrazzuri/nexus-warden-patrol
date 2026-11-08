@@ -79,6 +79,9 @@ export function ArmingPage({ say, now, role = "admin" }: { say: Say; now: number
       .catch((e) => say(errText(e)));
     void loadMode();
   }, []);
+  // 第 3 轮 config N5:「此刻」一栏每分钟刷新一次(原来只在打开页面、保存、手动切换时刷新)
+  const minute = Math.floor(now / 60_000);
+  useEffect(() => { void loadMode(); }, [minute]);
 
   const dirty = loaded != null && (loaded.enabled !== enabled || JSON.stringify(loaded.slots) !== JSON.stringify(slots)
     || JSON.stringify(loaded.duty) !== JSON.stringify(duty));
@@ -93,13 +96,24 @@ export function ArmingPage({ say, now, role = "admin" }: { say: Say; now: number
   const [askSave, setAskSave] = useState<string | null>(null);
   function effectNow(): string | null {
     if (!mode) return null;
+    const wasOn = !!loaded?.enabled;
+    // 第 3 轮 config N1:停用日程时站点照此刻的状态改成手动(此刻撤防 → 留守),确认框写清变成什么
+    if (!enabled && wasOn) {
+      return mode.source === "schedule"
+        ? t("armSaveOffTo", { to: t(mode.state === "disarmed" ? "modeHome" : "modeArmed") }) : t("armSaveOff");
+    }
+    // 第 3 轮 config N4:手动期里删光时段也要说「整周撤防」(原来手动期里一律不问)
+    if (enabled && slots.length === 0) return t("armSaveEmpty");
+    // 第 3 轮 config N3:临时撤防进行中打开日程,临时撤防马上结束
+    if (enabled && !wasOn && mode.mode === "visitor") {
+      return t("armSaveEndsVisitor", { state: t(armedAt(slots, "", new Date(now)) ? "armStateArmed" : "armStateDisarmed") });
+    }
     // 第 2 轮 N1:日程开着时手动切换管到下一个变化点(manual_until_ms),这期间存日程此刻不变;
     // 日程原来关着,手动状态没有期限 —— 一打开日程保存,站点马上按日程走,跟按日程时一样要先确认
-    if (mode.source === "manual" && mode.manual_until_ms && loaded?.enabled && enabled) return null;
-    const nowArmed = mode.source === "schedule" ? mode.state === "armed" || mode.state === "partial" : mode.mode !== "home";
+    if (mode.source === "manual" && mode.manual_until_ms && wasOn && enabled) return null;
+    // 第 3 轮 config N2:留守时外围防区是布防的,也算「此刻布防」(原来把留守当撤防,打开日程撤防不问)
+    const nowArmed = mode.state !== "disarmed";
     const willArm = enabled && armedAt(slots, "", new Date(now));
-    if (!enabled && loaded?.enabled) return t("armSaveOff");
-    if (enabled && slots.length === 0) return t("armSaveEmpty");
     if (enabled && nowArmed && !willArm) return t("armSaveDisarm");
     if (enabled && !nowArmed && willArm) return t("armSaveArm");
     return null;
@@ -247,7 +261,7 @@ export function ArmingPage({ say, now, role = "admin" }: { say: Say; now: number
         </>
       )}
 
-      <Exceptions list={exceptions} say={say} onChange={setExceptions} />
+      <Exceptions list={exceptions} say={say} onChange={(l) => { setExceptions(l); void loadMode(); }} on={!!loaded?.enabled} mode={mode} />
       {role === "owner" && <p class="muted small">{t("armOwnerNote")}</p>}
 
 
@@ -393,7 +407,8 @@ function CopyTo({ from, onCopy, onClose }: { from: number; onCopy: (days: number
   );
 }
 
-function Exceptions({ list, say, onChange }: { list: Exception[]; say: Say; onChange: (l: Exception[]) => void }) {
+function Exceptions({ list, say, onChange, on, mode }: { list: Exception[]; say: Say; onChange: (l: Exception[]) => void; on: boolean; mode: ModeView | null }) {
+  const [asking, setAsking] = useState<string | null>(null);
   const [first, setFirst] = useState("");
   const [last, setLast] = useState("");
   const [state, setState] = useState<"armed" | "disarmed">("armed");
@@ -403,13 +418,23 @@ function Exceptions({ list, say, onChange }: { list: Exception[]; say: Say; onCh
   // P1-60:当场查 —— 不能早于今天、结束不能早于开始;错就写在这一行下面,不弹框
   const today = dateInput(Date.now());
   const exErr = first && first < today ? t("armExPast") : first && last && last < first ? t("armExOrder") : "";
+  // 第 3 轮 config N5:今天的例外会马上改变此刻的状态(日程开着、此刻按日程走)→ 跟保存日程一样先确认
+  function tryAdd() {
+    if (exErr) return;
+    const end = last || first;
+    const hitsNow = on && mode?.source === "schedule" && first <= today && today <= end
+      && (state === "disarmed") === (mode.state !== "disarmed");
+    if (hitsNow) setAsking(t(state === "disarmed" ? "armExNowDisarm" : "armExNowArm"));
+    else void add();
+  }
   async function add() {
+    setAsking(null);
     if (exErr) return;
     try {
       const d = await api<Schedule>("POST", "/api/arming/exceptions", { first_day: first, last_day: last || first, state, note });
       onChange(d.exceptions ?? []);
       setFirst(""); setLast(""); setNote("");
-      say(t("armExAdded"));
+      say(t(on ? "armExAdded" : "armExAddedOff"));
     } catch (e) {
       say(errText(e));
     }
@@ -426,7 +451,7 @@ function Exceptions({ list, say, onChange }: { list: Exception[]; say: Say; onCh
   return (
     <section class="panel arm-ex">
       <h2>{t("armExTitle")}</h2>
-      <p class="muted small">{t("armExHint")} {t("armExNow")}</p>
+      <p class="muted small">{t("armExHint")} {t(on ? "armExNow" : "armExNowOff")}</p>
       {list.length > 0 && (
         <ul class="plain">
           {list.map((x) => (
@@ -449,9 +474,10 @@ function Exceptions({ list, say, onChange }: { list: Exception[]; say: Say; onCh
           </select>
         </label>
         <label class="field">{t("note")}<input name="note" maxLength={200} value={note} onInput={(e) => setNote(e.currentTarget.value)} /></label>
-        <button type="button" class="btn" disabled={!first || !!exErr} onClick={() => void add()}>{t("armExAdd")}</button>
+        <button type="button" class="btn" disabled={!first || !!exErr} onClick={tryAdd}>{t("armExAdd")}</button>
       </div>
       {exErr && <p class="error small" role="alert">{exErr}</p>}
+      {asking && <Confirm text={asking} yes={t("armExAdd")} danger onNo={() => setAsking(null)} onYes={() => void add()} />}
       {removing && (
         <Confirm text={t("armExRemoveAsk", { d: removing.first_day === removing.last_day ? removing.first_day : `${removing.first_day} – ${removing.last_day}` })}
           yes={t("remove")} danger onNo={() => setRemoving(null)} onYes={() => { const id = removing.id; setRemoving(null); void remove(id); }} />

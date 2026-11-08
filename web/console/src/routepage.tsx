@@ -680,6 +680,11 @@ function SchedulePanel({ route, view, schedules, say, reload }: {
   const all = view?.schedules ?? [];
   const nextId = () => { let n = 1; while (all.some((x) => x.id === `${route}-${n}`)) n++; return `${route}-${n}`; };
   const [id, setId] = useState(nextId);
+  // 第 3 轮 config N6:原来加好后 setId(nextId()) 用的是这一次渲染的旧列表 → 编号框还是刚用过的,当场标红。
+  // 编号没人改过(自动给的)时,列表一变就重新挑;刚打开页面列表还没到时也一样
+  const [autoId, setAutoId] = useState(true);
+  const ids = all.map((x) => x.id).join(",");
+  useEffect(() => { if (autoId) setId(nextId()); }, [ids, route, autoId]);
   const [at, setAt] = useState("22:00");
   const [days, setDays] = useState<string[]>([...DAYS]);
   const [win, setWin] = useState(30);
@@ -727,9 +732,9 @@ function SchedulePanel({ route, view, schedules, say, reload }: {
             e.preventDefault();
             if (idTaken) return;
             void call(`/api/route-schedules/${enc(id.trim())}`, { mission: route, at, days, window_min: win, on_missed: missed, base_revision: 0 }, rt("schedSaved"))
-              .then((ok) => { if (ok) setId(nextId()); });          // 加好了换下一个编号,不留着旧的
+              .then((ok) => { if (ok) setAutoId(true); });          // 加好了换下一个编号(列表刷新后挑),不留着旧的
           }}>
-            <label class="field">{rt("schedId")}<input value={id} maxLength={64} aria-invalid={idTaken || undefined} onInput={(e) => setId(e.currentTarget.value)} />
+            <label class="field">{rt("schedId")}<input value={id} maxLength={64} aria-invalid={idTaken || undefined} onInput={(e) => { setAutoId(false); setId(e.currentTarget.value); }} />
               {idTaken && <span class="error small" role="alert" data-sched-dup="1">{rt("schedIdTaken")}</span>}</label>
             {/* P1-03:时间一律 24 小时制(浏览器的时间框可能按系统显示成上午 / 下午) */}
             <label class="field">{rt("schedAt")}<input name="at" type="text" inputMode="numeric" pattern="([01][0-9]|2[0-3]):[0-5][0-9]" placeholder="21:00"

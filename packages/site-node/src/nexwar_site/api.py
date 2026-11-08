@@ -2074,7 +2074,13 @@ class _Handler(TlsHandlerMixin):
                 slots = d.get("slots")
                 self._audit_detail = {"enabled": d.get("enabled"),
                                       "slots": len(slots) if isinstance(slots, list) else None}
+                before = desk.view() if sch.enabled() else None
                 sch.put(d, by=str(user))
+                if before is not None and before["source"] == "schedule" and not sch.enabled():
+                    # 第 3 轮 config N1:停用日程时站点照「此刻」的状态走手动(原来退回到开日程之前的
+                    # 手动模式,可能悄悄变成留守 / 布防)。手动没有「全撤防」,此刻撤防的落到留守
+                    desk.set_mode("home" if before["state"] == "disarmed" else "armed",
+                                  by=str(user))
             elif path == "/api/arming/exceptions":
                 self._audit_detail = {k: d.get(k) for k in ("first_day", "last_day", "state")}
                 sch.add_exception(d, by=str(user))

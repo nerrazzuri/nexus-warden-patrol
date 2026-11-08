@@ -524,6 +524,31 @@ describe("路线页:站点的回答", () => {
     fireEvent.input(r.container.querySelector('input[name="at"]')!, { target: { value: "22:00" } });
     expect(r.container.querySelector("[data-sched-same]")).not.toBeNull();
   });
+
+  it("第 3 轮 config N6:加好以后编号换成下一个(列表刷新后挑),不标红「已被使用」", async () => {
+    installScreenCTM();
+    const sch = { id: "loop-1", mission: "loop", at: "22:00", days: ["mon"], window_min: 30, on_missed: "skip", revision: 7 };
+    const schedules: any[] = [sch];
+    routesApi({ meta: META, routes: [ROUTE], timezone: "UTC", schedules, post: (path, body) => {
+      if (path.includes("/api/route-schedules/") && !path.endsWith("/delete")) {
+        schedules.push({ ...sch, id: path.split("/").pop(), at: body.at, revision: 1 });
+        return json({ ok: true });
+      }
+      return undefined;
+    } });
+    const r = render(<RoutesPage say={() => {}} />);
+    await ready(r.container);
+    await waitFor(() => expect(r.getByText("loop")).toBeTruthy());
+    fireEvent.click(r.getByText("loop"));
+    await waitFor(() => expect(r.getByText("loop-1")).toBeTruthy());
+    const idBox = r.container.querySelector('.sched-form input[maxlength="64"]') as HTMLInputElement;
+    expect(idBox.value).toBe("loop-2");
+    fireEvent.input(r.container.querySelector('input[name="at"]')!, { target: { value: "05:30" } });
+    fireEvent.click(r.getByText("Add schedule"));
+    await waitFor(() => expect(r.getByText("loop-2")).toBeTruthy());
+    await waitFor(() => expect(idBox.value).toBe("loop-3"));
+    expect(r.container.querySelector("[data-sched-dup]")).toBeNull();
+  });
 });
 
 // ------------------------------------------------------------------ 地图页:去这里 / 设位置
