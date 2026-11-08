@@ -352,6 +352,8 @@ class _PoseBarState extends State<PoseBar> {
                             buttonKey: PoseBar.goKey,
                             label: tr('Go here', '去这里'),
                             icon: Icons.near_me_rounded,
+                            // M32：「去这里」会让机器人走，不当醒目的主按钮
+                            variant: NwButtonVariant.outline,
                             size: NwButtonSize.small,
                             onPressed: sel == null || _busy ? null : _go),
                         NwButton(

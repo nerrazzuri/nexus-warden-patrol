@@ -6,6 +6,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../l10n.dart';
+import '../net/site_text.dart';
 import '../model/alert.dart';
 import '../net/site_client.dart';
 import 'nw/nw_p2_duty.dart';
@@ -83,7 +84,8 @@ class _AlarmLogPageState extends State<AlarmLogPage> {
 
   String _day(int ms) {
     final t = DateTime.fromMillisecondsSinceEpoch(ms);
-    return '${t.month}/${t.day} ${hhmm(ms)}';
+    // 手机 App 测试 M33：跟别处一样写 11-08（以前 11/8）
+    return '${t.month.toString().padLeft(2, '0')}-${t.day.toString().padLeft(2, '0')} ${hhmm(ms)}';
   }
 
   @override
@@ -116,7 +118,7 @@ class _AlarmLogPageState extends State<AlarmLogPage> {
                 const SizedBox(width: Nw.s8),
                 Expanded(
                     child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text('${a.robot} · ${alertTitle(a.kind, a.title)}',
+                  Text('${alertSourceText(a.robot)} · ${alertTitle(a.kind, a.title)}',
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                       style: NwText.bodyMedium.copyWith(color: c.text, fontWeight: FontWeight.w600)),
