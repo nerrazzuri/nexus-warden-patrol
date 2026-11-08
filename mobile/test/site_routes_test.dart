@@ -160,7 +160,7 @@ void main() {
         expect(s['map_id'], 'estate-1');
         expect(s['map_version'], '8');
         final wp = (s['waypoints'] as List).cast<Map<String, dynamic>>();
-        expect([for (final w in wp) w['name']], ['P1', 'P2', 'P3']);
+        expect([for (final w in wp) w['name']], ['W1', 'W2', 'W3']);
         for (var i = 0; i < want.length; i++) {
           expect((wp[i]['x'] as double), closeTo(want[i].$1, 0.011), reason: 'x$i');
           expect((wp[i]['y'] as double), closeTo(want[i].$2, 0.011), reason: 'y$i');
@@ -408,7 +408,8 @@ void main() {
     for (final bad in ['', 'a b', '../x', '路线', 'x' * 65, '.hidden']) {
       expect(routeNameRe.hasMatch(bad), isFalse, reason: bad);
     }
-    expect(nextPointName([RoutePt('P2', 0, 0, 0), RoutePt('P3', 0, 0, 0)]), 'P4');
+    expect(nextPointName([RoutePt('P2', 0, 0, 0), RoutePt('P3', 0, 0, 0)]), 'W3');
+    expect(nextPointName([RoutePt('W1', 0, 0, 0)]), 'W2', reason: 'M26：不叫 P1 P2，免得跟报警级别撞名');
   });
 
   // ------------------------------------------------------------------ 地图栏：去这里 / 设位置

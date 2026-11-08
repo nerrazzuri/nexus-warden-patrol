@@ -28,6 +28,7 @@ import 'site_recordings.dart';
 import 'site_standby.dart';
 import 'site_supervise.dart';
 import 'site_teleop.dart';
+import 'site_maps.dart' show SiteMapTab;
 import 'site_video.dart';
 import 'stop_failed.dart';
 import 'widget/fields_dialog.dart';
@@ -266,6 +267,11 @@ class _SiteRobotPageState extends State<SiteRobotPage> {
             key: const Key('reloc-home'),
             onPressed: () => Navigator.pop(c, 'home'),
             child: Text(tr('At the origin (dock)', '在原点（充电桩）'))),
+        // 手机 App 测试 M28：在地图上点（以前只有地图栏有，这里没指过去）
+        SimpleDialogOption(
+            key: const Key('reloc-map'),
+            onPressed: () => Navigator.pop(c, 'map'),
+            child: Text(tr('Pick it on the map', '在地图上点出位置'))),
         SimpleDialogOption(
             key: const Key('reloc-xy'),
             onPressed: () => Navigator.pop(c, 'xy'),
@@ -278,6 +284,18 @@ class _SiteRobotPageState extends State<SiteRobotPage> {
       ]),
     );
     if (how == null || !mounted) return;
+    if (how == 'map') {
+      await Navigator.push(
+          context,
+          MaterialPageRoute<void>(
+              builder: (_) => Scaffold(
+                  appBar: AppBar(
+                      title: Text(tr('Set position of ${widget.robotId}: tap the map, then Set position',
+                          '设 ${widget.robotId} 的位置：点地图，再点「设位置」'))),
+                  body: SiteMapTab(api: widget.api))));
+      if (mounted) await _reload();
+      return;
+    }
     if (how == 'find') {
       // W41：狗拿看到的墙在整张图上套；认不准它会拒、说原因（有两处差不多像……），那时再手动设。
       await _do(() => widget.api.relocalize(widget.robotId, global: true), tr('Auto-localize', '自动定位'));
@@ -337,8 +355,12 @@ class _SiteRobotPageState extends State<SiteRobotPage> {
       builder: (c) => AlertDialog(
         title: Text(tr('Mark origin here', '在这儿标原点')),
         content: Text(tr(
-            'Set the origin of ${widget.robotId} on this map to its current position? Standby points are unchanged.\nThe robot verifies its localization first and won\'t mark it if the position isn\'t set, the error is large, or it is busy or switching maps.',
-            '将 ${widget.robotId} 在此地图上的原点改为当前位置？待命点不变。\n机器人会先核验定位：未设置位置、偏差过大、正在执行任务或换图时不会标记。')),
+            'Set the origin of ${widget.robotId} on this map to its current position? Standby points are unchanged.\n'
+                'This applies to the whole map and cannot be undone (only by marking again). Return home and "At the origin" will use the new spot.\n'
+                'The robot verifies its localization first and won\'t mark it if the position isn\'t set, the error is large, or it is busy or switching maps.',
+            '将 ${widget.robotId} 在此地图上的原点改为当前位置？待命点不变。\n'
+                '对整张地图生效，不能撤销（只能重新标）。「回原点」「在原点」以后都按新的位置。\n'
+                '机器人会先核验定位：未设置位置、偏差过大、正在执行任务或换图时不会标记。')),
         actions: [
           TextButton(onPressed: () => Navigator.pop(c, false), child: Text(tr('Cancel', '取消'))),
           FilledButton(
