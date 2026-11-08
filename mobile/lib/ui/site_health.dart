@@ -18,6 +18,7 @@ import 'package:share_plus/share_plus.dart';
 
 import '../l10n.dart';
 import '../net/site_client.dart';
+import '../net/site_text.dart';
 import 'nw/nw_button.dart';
 import 'nw/nw_cards.dart';
 import 'nw/nw_p4_admin.dart';
@@ -281,7 +282,7 @@ class _SiteHealthPageState extends State<SiteHealthPage> {
               leading: ok ? Icon(Icons.check_circle_rounded, size: 20, color: color) : PriorityShape(level: crit ? 'P1' : 'P2', color: color, size: 16),
               title: Text(crit ? tr('${checkLabel(k)} · critical', '${checkLabel(k)} · 严重') : checkLabel(k),
                   style: NwText.bodyMedium.copyWith(color: nw.text)),
-              subtitle: Text('${c['detail'] ?? ''}', style: NwText.bodySmall.copyWith(color: nw.textSecondary)),
+              subtitle: Text(checkText(c), style: NwText.bodySmall.copyWith(color: nw.textSecondary)),
               trailing: Text(ok ? tr('OK', '正常') : tr('Failed', '未通过'),
                   style: NwText.labelMedium.copyWith(color: color, fontWeight: FontWeight.w700)));
         }(),

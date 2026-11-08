@@ -24,7 +24,7 @@ class MainActivity : FlutterActivity() {
                 "start" -> {
                     askOnce()
                     val i = Intent(this, WatchService::class.java).setAction(WatchService.ACTION_START)
-                    for (k in listOf("site", "url", "fingerprint", "token")) i.putExtra(k, call.argument<String>(k) ?: "")
+                    for (k in listOf("site", "url", "fingerprint", "token", "lang", "titles")) i.putExtra(k, call.argument<String>(k) ?: "")
                     if (Build.VERSION.SDK_INT >= 26) startForegroundService(i) else startService(i)
                     result.success(true)
                 }

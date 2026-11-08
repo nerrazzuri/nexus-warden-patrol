@@ -217,3 +217,47 @@ String siteKnown(String? s) {
   final out = _en(src);
   return out.contains(_unk) ? src : out;
 }
+
+/// 体检项说明里的开发者口吻、内部名字换成人话（中文界面；网页 zhPlain 同一套）。
+const Map<String, String> _keyName = {'secrets': '密码加密密钥', 'backup': '备份加密密钥', 'evidence': '证据加密密钥'};
+
+final List<_Rule> _plain = [
+  (RegExp(r'^库能写$'), (_) => '数据库正常'),
+  (RegExp(r'^库无法写入[:：](.*)$'), (m) => '数据库写不进去：${m[1]}'),
+  (RegExp(r'^事件循环 ([\d.]+) 秒前转过[:：]卡住$'), (m) => '站点程序卡住了（${m[1]} 秒没响应）'),
+  (RegExp(r'^事件循环 ([\d.]+) 秒前转过$'), (_) => '站点程序运行正常'),
+  (RegExp(r'^后台道都在转$'), (_) => '后台任务都在运行'),
+  (RegExp(r'^卡住[:：](.*)$'), (m) => '后台任务卡住：${m[1]}'),
+  (RegExp(r'^证书最近的还有 (\d+) 天到期$'), (m) => '证书有效，最早的还有 ${m[1]} 天到期'),
+  (RegExp(r'^连着 MQTT$'), (_) => '机器人通信正常'),
+  (RegExp(r'^MQTT 已断开$'), (_) => '机器人通信断了'),
+  (RegExp(r'^未配置推送[(（]site\.json 的 push[)）]$'), (_) => '还没设置手机推送'),
+  (RegExp(r'^未接入[(（]命令行[)）]$'), (_) => '这里查不了'),
+];
+
+String zhPlain(String src) {
+  for (final (re, f) in _plain) {
+    final m = re.firstMatch(src);
+    if (m != null) return f(m);
+  }
+  if (RegExp(r'^(secrets|backup|evidence):').hasMatch(src)) {
+    return src
+        .split(';')
+        .map((x) => x
+            .replaceAllMapped(RegExp(r'^(secrets|backup|evidence):'), (m) => '${_keyName[m[1]]}：')
+            .replaceAll('没有这把密钥', '密钥文件缺失')
+            .replaceAll('权限太宽', '文件权限太宽（别的用户也能读）'))
+        .join('；');
+  }
+  return src;
+}
+
+/// 站点体检那一项的说明：英文界面用站点给的 `detail_en`，没有就翻；中文界面说人话。
+String checkText(Map c) {
+  final d = '${c['detail'] ?? ''}';
+  if (appLang.value != AppLang.zh) {
+    final en = c['detail_en'];
+    return en is String && en.isNotEmpty ? en : siteText(d);
+  }
+  return zhPunct(zhPlain(d));
+}
