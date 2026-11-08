@@ -73,6 +73,23 @@ export function NogoTab(p: TabProps) {
 
   const held = nav?.held ?? [];
   const current = !!nav?.confirmed?.current;
+  // 第 3 轮 maps N1:上一版带过来、还没核的禁行区。网页上原来看不到也采纳不了,确认就确认了一个空集
+  const prop = nav?.proposal && nav.proposal.zones.length > 0 ? nav.proposal : null;
+  async function takeProposal(keep: boolean) {
+    if (!nav || !prop) return;
+    try {
+      if (keep) {
+        await api("POST", `${p.base}/zones/confirm`, { revision: nav.revision, confirm: true, adopt: { zones: prop.zones.map((z) => z.id) } });
+        p.say(t("lyNogoPropKept", { n: prop.zones.length }));
+      } else {
+        await api("POST", `${p.base}/zones/proposal`, { action: "discard" });
+        p.say(t("lyNogoPropDropped"));
+      }
+      await p.reload("nav");
+    } catch (e) {
+      p.say(t("failed", { why: e instanceof ApiError ? e.message : String(e) }));
+    }
+  }
   const shown = zones;
   const minPts = draw === "wall" ? 2 : 3;
 
@@ -145,7 +162,19 @@ export function NogoTab(p: TabProps) {
             : held.length > 0 ? <p class="warn-text">{t("lyNogoWaitYou", { names: joinList(held.map((z) => siteKnown(z.label) || z.id)) })}</p>
             : <p class="warn-text">{t("lyNogoNeverConfirmed")}</p>}
           {behind.length > 0 && <p class="warn-text">{t("lyNogoWaitRobot", { ids: joinList(behind) })}</p>}
-          {nav && !current && !changed && <button type="button" class="btn sm primary" onClick={() => setConfirming("ask")}>{t("navConfirmBtn")}</button>}
+          {prop && (
+            <div class="nogo-prop" data-nogo-prop="1">
+              <p class="warn-text">{t(prop.frame?.same === false ? "lyNogoPropFrame" : "lyNogoProp", { v: prop.from_version, n: prop.zones.length })}</p>
+              <ul class="plain small">{prop.zones.map((z) => <li key={z.id}>{siteKnown(z.label) || z.id}</li>)}</ul>
+              <div class="row wrap">
+                <button type="button" class="btn sm primary" data-prop-keep="1" onClick={() => void takeProposal(true)}>{t("lyNogoPropKeep")}</button>
+                <button type="button" class="btn sm" data-prop-drop="1" onClick={() => void takeProposal(false)}>{t("lyNogoPropDrop")}</button>
+              </div>
+            </div>
+          )}
+          {/* 第 3 轮 maps N1:有没核的建议、这一版又一个都没画时,先处理建议,不给确认空集 */}
+          {nav && !current && !changed && !(prop && nav.zones.length === 0)
+            && <button type="button" class="btn sm primary" onClick={() => setConfirming("ask")}>{t("navConfirmBtn")}</button>}
           {/* 第 2 轮 maps N12:从发布对话框跳来的,确认完给「回去发布」 */}
           {current && typeof location !== "undefined" && /[?&]from=publish\b/.test(location.hash)
             && <a class="btn sm" href="#/admin/maps" data-back-publish="1">{t("lyNogoBackPublish")}</a>}

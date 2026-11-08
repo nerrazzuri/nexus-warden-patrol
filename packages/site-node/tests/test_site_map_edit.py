@@ -378,7 +378,39 @@ def test_第2轮_N4_另存新版本_防区_出口线_藏匿点_防区路线_路�
     # 原版不动
     assert [x["zone"] for x in a.areas.list(MAP[0], MAP[1])] == ["东区"]
     assert len(marks.list(MAP[0], MAP[1])) == 2
-    assert d["layout_copied"] == {"areas": 1, "marks": 2, "posts": 1, "net_nodes": 2}
+    assert d["layout_copied"] == {"areas": 1, "marks": 2, "posts": 1, "net_nodes": 2, "nogo": 0}
+
+
+def test_第3轮_N1_另存新版本_禁行区从来源版本照抄_没确认_有待核建议时不许确认空集(站点):
+    """第 3 轮 maps N1(P0):禁行区原来只当「待核建议」带过去(而且取的是登记时刻上的前一版,不是来源),
+    网页看不到也采纳不了,确认就确认了一个空集 → 发布后禁区全丢。现在另存直接从来源版本照抄
+    (没确认,发布前照样要确认);有待核的禁行区建议时,确认空集要拒绝。"""
+    s = 站点
+    tok = _登(s)
+    z = s.api.zones
+    pool = {"id": "pool", "kind": "nogo", "label": "泳池",
+            "polygon": [[0.5, 0.5], [1.5, 0.5], [1.5, 1.5], [0.5, 1.5]]}
+    z.put(MAP[0], MAP[1], [pool], base_revision=z.current(MAP[0], MAP[1]).revision, by="t")
+    dg = s.req("GET", f"{ADM}/noise", token=tok)[1]["digest"]
+    code, d = s.req("POST", f"{ADM}/edit", {"digest": dg, "ops": ERASE}, token=tok)
+    assert code == 200, d
+    nv = d["version"]
+    assert d["layout_copied"]["nogo"] == 1
+    v = s.req("GET", f"/api/maps/{MAP[0]}/{nv}/zones", token=tok)[1]
+    assert [x["id"] for x in v["zones"]] == ["pool"]
+    assert not (v.get("confirmed") or {}).get("current")              # 抄过来的没确认
+    assert not (v.get("proposal") or {}).get("zones")                 # 禁行区不再是建议
+    # 有待核禁行区建议、当前一个都没有:确认空集拒绝(带 empty_ok 也不行)
+    z.put(MAP[0], nv, [], base_revision=v["revision"], by="t")
+    with s.api.dispatcher.db.tx() as tx:
+        tx.execute("INSERT OR REPLACE INTO nav_zone_proposals(map_id, map_version, from_version, "
+                   "body, created_ms, state) VALUES (?,?,?,?,?,'open')",
+                   (MAP[0], nv, MAP[1], json.dumps({"zones": [pool], "standby": [],
+                                                    "intercepts": []}), 1))
+    rev = s.req("GET", f"/api/maps/{MAP[0]}/{nv}/zones", token=tok)[1]["revision"]
+    code, d = s.req("POST", f"/api/maps/{MAP[0]}/{nv}/zones/confirm",
+                    {"revision": rev, "confirm": True, "empty_ok": True}, token=tok)
+    assert code == 409 and d.get("reason") == "proposal_open", d
 
 
 def test_第2轮_N4_布置计数_发布弹窗拿来比(站点):

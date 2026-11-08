@@ -62,6 +62,20 @@ describe("布置 → 禁行区", () => {
     expect(c.querySelector(".fakemap")!.getAttribute("data-legend")!.split(",").sort()).toEqual(["nogo", "vwall"]);
   });
 
+  it("第 3 轮 maps N1:有带过来的禁行区建议、这一版一个都没有:列出来,能留下(带 adopt 确认)或丢掉;不给确认空集", async () => {
+    const n = nav({ zones: [], confirmed: null, proposal: { from_version: "7", zones: [POOL] } } as never);
+    const { container: c } = render(<NogoTab {...props(n)} />);
+    const box = c.querySelector("[data-nogo-prop]")!;
+    expect(box.textContent).toContain("泳池");
+    expect(box.textContent).toContain("第 7 版");
+    expect(btn(c, "确认此版本")).toBeUndefined();
+    fireEvent.click(box.querySelector("[data-prop-keep]")!);
+    await waitFor(() => expect(posted.find((x) => x.url.endsWith("/zones/confirm"))).toBeTruthy());
+    expect(posted.find((x) => x.url.endsWith("/zones/confirm"))!.body).toMatchObject({ confirm: true, adopt: { zones: ["n1"] } });
+    fireEvent.click(box.querySelector("[data-prop-drop]")!);
+    await waitFor(() => expect(posted.find((x) => x.url.endsWith("/zones/proposal"))?.body).toEqual({ action: "discard" }));
+  });
+
   it("画禁行区_收紧当场生效", async () => {
     const { container: c } = render(<NogoTab {...props(nav())} />);
     draw(c, "画禁行区", 3);

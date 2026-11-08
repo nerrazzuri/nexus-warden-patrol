@@ -1700,6 +1700,13 @@ class _Handler(TlsHandlerMixin):
         book = self.site.areas
         if book is None:
             raise HttpError(404, "此站点未启用防区")
+        if method == "POST" and getattr(self.site, "maps", None) is not None:
+            # 第 3 轮 setup N2:删掉的版本(或没有的版本)不许再往上写布置
+            from nexwar_site.maps import MapError
+            try:
+                self.site.maps.get(map_id, version)
+            except MapError as exc:
+                raise HttpError(404, str(exc)) from exc
         from nexwar_site.guard_plan import GuardPlanError
         posts = zone_posts(self.site)
         marks = map_marks(self.site)
@@ -3817,6 +3824,14 @@ class _Handler(TlsHandlerMixin):
                 raise HttpError(400, "adopt.intercepts 要是带过来的拦截点名字的列表")
             want_sb, want_ic = [tuple(p) for p in sb], list(ic)
         n_adopt = len(adopt.get("zones", []) or []) if isinstance(adopt, dict) else 0
+        if adopt is None and not zones.current(map_id, version).zones:
+            # 第 3 轮 maps N1:有从上一版带过来、还没核的禁行区,不许直接确认一个空集
+            # (那样发布后禁区全丢)
+            op = zones.proposal(map_id, version)
+            if op is not None and op.get("zones"):
+                raise HttpError(409, f"{map_id}:{version} 有从第 {op['from_version']} 版带过来、"
+                                     f"还没核的 {len(op['zones'])} 个禁行区:先采纳或丢掉,再确认",
+                                extra={"reason": "proposal_open"})
         if not zones.current(map_id, version).zones and not n_adopt and empty_ok is not True:
             prev = zones.view(map_id, version).get("previous")
             raise HttpError(409, f"{map_id}:{version} 一个禁行区、限速区都没有:确认之前再看一眼 ——"

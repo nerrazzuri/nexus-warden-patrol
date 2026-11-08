@@ -462,10 +462,18 @@ class MapAdmin:
         """网页易用性第 2 轮 N4:另存的新版本跟原版同一个坐标系(只换了栅格),防区、出口线、藏匿点、
         人挪过的防区查看点 / 值守位、路网照抄过去 —— 原来新版本上全是空的,换过去就没了也不说。
         原版照旧(还在原版上的机器人不受影响)。走各表自己的模块写(表的归属规矩);某一条在新图上
-        不合法(比如值守位被新画的障碍盖住)就跳过,那一条回到站点自动算的。禁行区、待命点、拦截点
-        照旧走 R2「带过来要人核」,巡逻路线、摄像头 id 唯一、只能搬,在发布时问。"""
-        got = {"areas": 0, "marks": 0, "posts": 0, "net_nodes": 0}
+        不合法(比如值守位被新画的障碍盖住)就跳过,那一条回到站点自动算的。禁行区照抄(第 3 轮 N1,
+        没确认、发布前要确认);待命点、拦截点走 R2「带过来要人核」,巡逻路线、摄像头 id 唯一、只能搬,
+        在发布时问。"""
+        got = {"areas": 0, "marks": 0, "posts": 0, "net_nodes": 0, "nogo": 0}
         site = self.site
+        zones = getattr(site, "zones", None)
+        if zones is not None:
+            # 第 3 轮 maps N1:禁行区从来源版本照抄(没确认,发布前要人确认);待命点、拦截点做成待核建议
+            try:
+                got["nogo"] = zones.seed_derived(map_id, new, old, by=by)
+            except Exception:
+                log.warning("另存 %s:%s 抄禁行区没成", map_id, new, exc_info=True)
         areas = getattr(site, "areas", None)
         if areas is None:
             return got
@@ -582,17 +590,17 @@ class MapAdmin:
                                   "(机器人上留着、出事能一键退回去):先让机器人换到别的版本、"
                                   "或者退回目标换了再删",
                              reason="rollback_target", robots=back)
-        gone = {"nav_zones": 0, "nav_zone_proposals": 0, "standby_points": 0, "intercepts": 0,
-                "homes": 0}
+        # 第 3 轮 maps N5:另存时复制过去的防区、出口线 / 藏匿点、值守位、路网、显示设置也一起清
+        tables = ("nav_zones", "nav_zone_proposals", "standby_points", "intercepts", "homes",
+                  "zone_areas", "map_marks", "zone_posts", "route_nets", "map_display")
+        gone = dict.fromkeys(tables, 0)
         try:
             size = self.cat.delete(map_id, version)
         except MapError as exc:
             raise AdminError(404, str(exc)) from exc
         with self.db.tx() as c:
-            for table, col in (("nav_zones", "map_version"), ("nav_zone_proposals", "map_version"),
-                               ("standby_points", "map_version"), ("intercepts", "map_version"),
-                               ("homes", "map_version")):
-                gone[table] = c.execute(f"DELETE FROM {table} WHERE map_id=? AND {col}=?",
+            for table in tables:
+                gone[table] = c.execute(f"DELETE FROM {table} WHERE map_id=? AND map_version=?",
                                         (map_id, version)).rowcount
         return {"deleted": f"{map_id}:{version}", "freed_bytes": size, "removed_rows": gone}
 
