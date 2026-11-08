@@ -83,6 +83,10 @@ void main() {
     await _open(t, api);
     await t.tap(find.byKey(SiteModePage.visitorKey));
     await t.pumpAndSettle();
+    // 手机 App 测试 M07：从布防切出去先确认
+    expect(find.textContaining('退出布防？'), findsOneWidget);
+    await t.tap(find.byKey(SiteModePage.leaveArmedKey));
+    await t.pumpAndSettle();
     await t.tap(find.byKey(const Key('visitor-go')));
     await t.pumpAndSettle();
     expect(api.calls, contains('mode visitor  240'));
@@ -119,11 +123,18 @@ void main() {
     final api = FakeApi('guard')..modeView = <String, dynamic>{...siteFixture('site_mode'), 'mode': 'armed'};
     await _open(t, api);
     expect(find.text('现在：布防'), findsOneWidget);
-    expect(t.widget<ButtonStyleButton>(find.byKey(SiteModePage.armKey)).onPressed, isNull);
+    // 手机 App 测试 M07：当前模式是选中样式（打勾），点了不再发
+    expect(find.descendant(of: find.byKey(SiteModePage.armKey), matching: find.byIcon(Icons.check_rounded)), findsOneWidget);
+    await t.tap(find.byKey(SiteModePage.armKey));
+    await t.pump();
+    expect(api.calls.where((c) => c == 'mode armed'), isEmpty);
     api.sse.add(<String, dynamic>{'kind': 'mode', 'mode': <String, dynamic>{...api.modeView, 'mode': 'home'}});
     await t.pump(const Duration(milliseconds: 50));
     expect(find.text('现在：留守'), findsOneWidget);
-    expect(t.widget<ButtonStyleButton>(find.byKey(SiteModePage.armKey)).onPressed, isNotNull);
+    expect(find.descendant(of: find.byKey(SiteModePage.armKey), matching: find.byIcon(Icons.check_rounded)), findsNothing);
+    await t.tap(find.byKey(SiteModePage.armKey));
+    await t.pump();
+    expect(api.calls, contains('mode armed'));
   });
 
   testWidgets('模式页：断线重连后重新拉一次（断线期间错过的切换补上）', (t) async {
