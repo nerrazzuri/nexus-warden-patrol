@@ -3,6 +3,7 @@ import { api, ApiError } from "./api";
 import type { Me } from "./app";
 import { lang, t, type Key } from "./i18n";
 import { LangSwitch } from "./langswitch";
+import { Icon } from "./icons";
 
 export function Login({ onIn, expired, note }: { onIn: (m: Me) => void; expired: boolean; note?: string | null }) {
   const [name, setName] = useState("");
@@ -51,7 +52,9 @@ export function Login({ onIn, expired, note }: { onIn: (m: Me) => void; expired:
           <span class="pw-row">
             <input type={show ? "text" : "password"} autocomplete="current-password" value={pw}
               onInput={(e) => setPw(e.currentTarget.value)} required />
-            <button type="button" class="btn sm pw-show" aria-pressed={show} onClick={() => setShow(!show)}>{t(show ? "pwHide" : "pwShow")}</button>
+            {/* 用户 11-09:「显示」做成密码框里的眼睛,两个框一样长 */}
+            <button type="button" class="pw-show" aria-pressed={show} aria-label={t(show ? "pwHide" : "pwShow")} title={t(show ? "pwHide" : "pwShow")}
+              onClick={() => setShow(!show)}><Icon name={show ? "eyeOff" : "eye"} size={18} /></button>
           </span>
         </label>
         {/* P2-04:错误那一行一直占着位置,出错时框不跳 */}
