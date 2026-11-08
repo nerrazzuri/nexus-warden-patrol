@@ -1,0 +1,30 @@
+version: 1
+profiles:
+  smoke:
+    scenarios: [straight_open, center_box_outbound_return, narrow_gate_return, wall_side_turnaround, corridor_turn_return]
+    seeds: 1
+    gate: smoke
+  core:
+    scenarios: [center_box_outbound_return, narrow_gate_return, wall_side_turnaround, slalom_return, corridor_turn_return]
+    seeds: 20
+    gate: core
+  security:
+    scenarios: [dynamic_crossing, sec_corridor_cart, sec_corridor_blocked, sec_headon_pedestrian,
+                sec_crossing_pedestrians, sec_lobby_crowd, sec_doorway_loiterer, sec_popout_pillar,
+                sec_parking_lot, sec_construction_detour]
+    seeds: 10
+    gate: security
+  release:
+    scenarios: all
+    seeds: 50
+    gate: release
+  fault:
+    scenarios: [center_box_outbound_return, narrow_gate_return, wall_side_turnaround, slalom_return, corridor_turn_return, dynamic_crossing]
+    seeds: 10
+    fault_matrix:
+      - {name: pose_jump_03, pose_jump_m: 0.30, at_s: 8.0, duration_s: 2.0}
+      - {name: yaw_jump_15, yaw_jump_deg: 15, at_s: 8.0, duration_s: 2.0}
+      - {name: loc_dropout_2s, tf_dropout_s: 2.0, at_s: 8.0}
+      - {name: obs_delay_250ms, obstacle_delay_ms: 250, at_s: 0.0}
+      - {name: obs_drop_20pct, obstacle_drop_rate: 0.20, at_s: 0.0}
+    gate: fault
