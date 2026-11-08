@@ -145,7 +145,7 @@ export function RobotsPage({ say, now, units = [], readOnly = false, role = "adm
                 class={["robot-card", r.robot_id === open ? "on" : "", warn ? "warn" : ""].filter(Boolean).join(" ")}
                 onClick={() => setOpen(r.robot_id === open ? null : r.robot_id)}>
                 <span class="fleet-head">
-                  <span class="robot-name">{label(r)}</span>
+                  <span class="robot-name" title={label(r)}>{label(r)}</span>
                   {r.name && <small class="muted mono">{r.robot_id}</small>}
                   <span class="fleet-state">
                     {/* P1-23:刚登记、还没连上过的不是故障:灰的「等它连上」,不是红的「离线」 */}

@@ -276,6 +276,15 @@ def test_没登记的机器人派遣回404带理由(站点):
     assert code == 404 and "没有登记" in d["error"]
 
 
+def test_没登记的机器人姿态和停车也回404(站点):
+    """第 2 轮 P2-25:姿态(posture)、停车(halt)原来回 409「没有登记过」,跟别的命令一样回 404。"""
+    tok = 站点.login()
+    for path, body in (("/api/robots/ghost/posture", {"mode": "stand"}),
+                       ("/api/robots/ghost/halt", {})):
+        code, d = 站点.req("POST", path, body, token=tok)
+        assert code == 404 and "没有登记" in d["error"], (path, code, d)
+
+
 def test_请求体坏_超限_参数不对(站点):
     tok = 站点.login()
     code, _ = 站点.req("POST", "/api/robots/A/goto", raw=b"{nope", token=tok)

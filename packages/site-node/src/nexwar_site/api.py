@@ -2648,6 +2648,7 @@ class _Handler(TlsHandlerMixin):
         self._need(user, ABORT)
         self._body()
         self._audit_target = robot_id
+        self._registered(robot_id)
         try:
             if self.site.teleop is not None:
                 r = self.site.teleop.halt(robot_id, user)
@@ -2716,12 +2717,18 @@ class _Handler(TlsHandlerMixin):
         return self._send_json(200, self.site.dispatch(lambda: self.site.dispatcher.deter(
             robot_id, d, issued_by=str(user), priority=MANUAL)))
 
+    def _registered(self, robot_id: str) -> None:
+        """第 2 轮 P2-25:没登记过的机器人回 404(跟派单、视频一致),不是 409「条件不满足」。"""
+        if self.site.dispatcher.registry.get(robot_id) is None:
+            raise HttpError(404, f"没有登记过 {robot_id}")
+
     def _posture(self, robot_id: str, user) -> None:
         """站起、趴下、蹲下(POC 2026-11):``{"mode": "stand"|"lie"|"crawl"}``。跟遥控同一个权限
         (人手动让机身动)。狗拒了(有任务在跑、急停……)回 409、原因原样带回。"""
         from nexwar_contract.hal import POSTURES
         self._need(user, TELEOP)
         self._audit_target = robot_id
+        self._registered(robot_id)
         d = self._body()
         mode = d.get("mode") if isinstance(d, dict) else None
         if not isinstance(mode, str) or mode not in POSTURES:

@@ -1377,7 +1377,8 @@ input[type="file"]::file-selector-button {
 /* P2-10:单独放的日期框跟别的控件一个样 */
 input[type="date"]:not(.field input) { height: 36px; padding: 0 8px; border-radius: var(--r-r8); border: 1px solid var(--c-textMuted); background: var(--c-surface); color: var(--c-text); font: inherit; font-size: 14px; color-scheme: light dark; }
 /* P2-26:窄屏刻度隔着显示 */
-@media (max-width: 768px) { .ticks span.m2 { display: none; } }
+/* 第 2 轮:1024 宽(769–1279)25 个小时标签也挤成一串,一样隔着显示 */
+@media (max-width: 1279px) { .ticks span.m2 { display: none; } }
 @media (max-width: 480px) { .ticks span.m4 { display: none; } }
 .ticks { cursor: pointer; }
 .tl-tracks { touch-action: pan-y; user-select: none; }
@@ -1468,3 +1469,11 @@ input[type="file"] { max-width: 100%; min-width: 0; }            /* 上传按钮
 /* 第 2 轮 duty N9:地图上点的位置 */
 .look-mark circle { fill: none; stroke: var(--c-brand); stroke-width: 2.5; }
 .look-mark circle.dot { fill: var(--c-brand); stroke: none; }
+/* 第 2 轮 P2-12:机器人长名字在卡片上一行,省略号截断(悬停看全名),不把卡片撑高、不挤掉状态 */
+.fleet-head { min-width: 0; }
+.fleet-head .robot-name { min-width: 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* 第 2 轮 P2-21:操作列不用 display:flex(表格的横线会跟别的列错位),按钮在格子里照常排 */
+@media (min-width: 721px) {                                   /* 手机上用户表是卡片,操作那格仍是 flex */
+  .grid td.actions { display: table-cell; }
+  .grid td.actions > * + * { margin-left: 6px; }
+}
