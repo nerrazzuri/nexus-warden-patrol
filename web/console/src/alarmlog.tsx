@@ -28,6 +28,7 @@ function canNote(role: string): boolean {
 
 export function AlarmLogPage(props: { now: number; role: string; me?: string }) {
   const [alerts, setAlerts] = useState<Alert[] | null>(null);
+  const [failed, setFailed] = useState(false);
   const [truncated, setTruncated] = useState(false);
   const [note, setNote] = useState<Note | null>(null);
   const [draft, setDraft] = useState("");
@@ -45,8 +46,9 @@ export function AlarmLogPage(props: { now: number; role: string; me?: string }) 
   const setSaid = (s: string, act?: ToastAction) => { setSaidRaw(s); setSayAct(act ?? null); };
 
   const pull = () => api<{ alerts: Alert[]; truncated?: boolean }>("GET", `/api/alerts?all=1&limit=${LIMIT}`)
-    .then((d) => { setAlerts(d.alerts ?? []); setTruncated(!!d.truncated); })
-    .catch(() => setAlerts((a) => a ?? []));
+    .then((d) => { setAlerts(d.alerts ?? []); setTruncated(!!d.truncated); setFailed(false); })
+    // 第 4 轮 layout r3-N3 / N6:读不到不当成「没有报警」(计数写「–」,列表写正在重试)
+    .catch(() => setFailed(true));
   useEffect(() => {
     void pull();
     const id = window.setInterval(pull, 30_000);
@@ -86,9 +88,9 @@ export function AlarmLogPage(props: { now: number; role: string; me?: string }) 
     <div class="alarmlog">
       <AlertTestBar role={props.role} onCleared={() => setAlerts((a) => (a ?? []).filter((x) => !x.title.startsWith("测试：")))} />
       <div class="sum">
-        <div class="box"><b>{inShift.length}</b><span>{t("alSumShift", { t: hm(shift) })}</span></div>
-        <div class="box o"><b>{inShift.filter((a) => a.resolved_ms == null).length}</b><span>{t("alSumOpen")}</span></div>
-        <div class="box r"><b>{inShift.filter((a) => a.audience === "intrusion").length}</b><span>{t("alSumIntrusion")}</span></div>
+        <div class="box"><b>{alerts == null ? "–" : inShift.length}</b><span>{t("alSumShift", { t: hm(shift) })}</span></div>
+        <div class="box o"><b>{alerts == null ? "–" : inShift.filter((a) => a.resolved_ms == null).length}</b><span>{t("alSumOpen")}</span></div>
+        <div class="box r"><b>{alerts == null ? "–" : inShift.filter((a) => a.audience === "intrusion").length}</b><span>{t("alSumIntrusion")}</span></div>
         <div class="note">
           {/* P1-20:自己刚写的不叫「上一班留言」;能改(再发一条顶替,先把原文放进框里) */}
           <h4>{note ? t(note.author === props.me ? "alNoteMine" : "alNoteFrom", { who: note.author, t: hm(note.at_ms) }) : t("alNoteNone")}</h4>
@@ -122,7 +124,7 @@ export function AlarmLogPage(props: { now: number; role: string; me?: string }) 
       </div>
       {truncated && <p class="muted small">{t("alTruncated", { n: LIMIT })}</p>}
       <div class="list">
-        {alerts == null && <p class="empty">{t("loading")}</p>}
+        {alerts == null && <p class={failed ? "empty warn" : "empty"} data-load-failed={failed ? "1" : undefined}>{t(failed ? "loadRetry" : "loading")}</p>}
         {alerts != null && shown.length === 0 && <p class="empty">{t("alNone")}</p>}
         {shown.map((a) => <Row key={a.key} a={a} canHandle={canHandleAlerts(props.role)} onOpen={() => setDetail(a.key)} />)}
       </div>

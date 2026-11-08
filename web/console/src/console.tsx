@@ -5,7 +5,7 @@ import type { ToastAction } from "./alertdetail";
 import { api, ApiError, enc } from "./api";
 import type { Me } from "./app";
 import type { Cam } from "./camera";
-import { hms, isStale, useNow, useSiteData } from "./data";
+import { hms, isStale, siteDown, useNow, useSiteData } from "./data";
 import { anyUnsaved, dropUnsaved } from "./unsaved";
 import { Confirm } from "./dialogs";
 import { lang, t, type Key } from "./i18n";
@@ -50,6 +50,7 @@ export function Console({ me, onOut }: { me: Me; onOut: (note?: string) => void 
   const now = useNow();
   // B 阶段外审 I5:拿不到新数据时,旧的照显示但标明过期 —— 不能把旧的「在线、没有报警」当成现在
   const stale = isStale(conn, now);
+  useEffect(() => { siteDown.value = stale; }, [stale]);
   const [route, setRoute] = useState(readRoute);
   const [pending, setPending] = useState<Pending>(null);
   const [toast, setToast] = useState("");

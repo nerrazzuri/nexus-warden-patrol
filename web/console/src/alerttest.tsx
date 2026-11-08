@@ -51,7 +51,7 @@ export function AlertTestBar({ role, onCleared, pollMs = ALERT_TEST_POLL_MS }:
       {active ? (
         <div class="row wrap at-on">
           <span>{admin ? t("atOn", { at: hm(mode.until_ms ?? 0), by: mode.by }) : t(role !== "viewer" ? "atOnView" : "atOnViewer", { at: hm(mode.until_ms ?? 0) })}</span>
-          {admin && <span class="row at-acts">
+          {admin && <span class="row wrap at-acts">
             <button type="button" class="btn sm" onClick={() => void post({ action: "end", clear: false })}>{t("atEndKeep")}</button>
             <button type="button" class="btn sm ghost" onClick={() => setAsk(true)}>{t("atEndClear")}</button>
           </span>}

@@ -10,7 +10,7 @@ import { siteKnown } from "./sitetext";
 import { useCallback, useEffect, useRef, useState } from "preact/hooks";
 import { api, ApiError, enc } from "./api";
 import { ConfirmPassword } from "./confirmpw";
-import { hm, robotNames } from "./data";
+import { hm, robotNames, siteDown } from "./data";
 import { Confirm, Modal } from "./dialogs";
 import { alertTitle, lang, refusalText, t, type Key } from "./i18n";
 import { autoResolved, canDispatch, canFindPose, canPatrol, canTeleop, isOwnerLike } from "./model";
@@ -134,6 +134,8 @@ export function RobotsPage({ say, now, units = [], readOnly = false, role = "adm
         </section>
       )}
       {rows && rows.length === 0 && <p class="empty">{t("robotsNone")}</p>}
+      {/* 第 4 轮 layout r3-N3:读不到时不是一片空 */}
+      {rows == null && siteDown.value && <p class="note warn" role="status" data-load-failed="1">{t("loadRetry")}</p>}
       <div class={cur ? "robots-split" : undefined}>
         <div class="robot-cards">
           {(rows ?? []).map((r) => {

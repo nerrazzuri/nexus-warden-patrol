@@ -4,7 +4,7 @@
 import { useCallback, useEffect, useState } from "preact/hooks";
 import { api, ApiError, enc } from "./api";
 import { ConfirmPassword } from "./confirmpw";
-import { hm, hms } from "./data";
+import { hm, hms, siteDown } from "./data";
 import { Confirm, Modal } from "./dialogs";
 import { lang, t } from "./i18n";
 import { roleLabel } from "./shell";
@@ -153,6 +153,7 @@ export function UsersPage({ me, say, now }: { me: string; say: Say; now: number 
         <table class="grid users-table">
           <thead><tr><th>{t("name")}</th><th>{t("role")}</th><th>{t("lastLogin")}</th><th>{t("status")}</th><th>{t("colActions")}</th></tr></thead>
           <tbody>
+            {rows.length === 0 && siteDown.value && <tr><td colSpan={5} class="warn" data-load-failed="1">{t("loadRetry")}</td></tr>}
             {rows.map((a) => {
               const isEng = a.role === "engineer";
               const self = a.name === me;

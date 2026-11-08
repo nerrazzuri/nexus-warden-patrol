@@ -7,7 +7,7 @@ import { useUnsaved } from "./unsaved";
 import type { ComponentChildren, FunctionComponent } from "preact";
 import { useCallback, useEffect, useRef, useState } from "preact/hooks";
 import { api, ApiError, enc } from "./api";
-import { clip, hm } from "./data";
+import { clip, hm, siteDown } from "./data";
 import { Confirm } from "./dialogs";
 import { t, type Key } from "./i18n";
 import { MapCanvas, type CanvasArea, type Screen, type LegendKey } from "./mapcanvas";
@@ -250,7 +250,7 @@ export function LayoutPage({ say, robots, tabs }: { say: Say; robots: string[]; 
           {own.marks?.(s)}
         </>} />
     </div>
-  ) : <p class="empty">{t("noMap")}</p>), [meta, sel, tab, data, base]);
+  ) : <p class="empty">{t(siteDown.value ? "loadRetry" : "noMap")}</p>), [meta, sel, tab, data, base]);
 
   const Tab = tabs[tab];
   return (
@@ -268,11 +268,11 @@ export function LayoutPage({ say, robots, tabs }: { say: Say; robots: string[]; 
               {m.map_id} · v{m.version}{m.active ? ` · ${t("lyActive")}` : ""}{m.note ? ` · ${clip(siteKnown(m.note))}` : ""}</option>)}
           </select>
         </label>
-        <span class="push" />
-        {HISTORY_KIND[tab] && <button type="button" class="btn" onClick={() => setHistory(!history)} aria-pressed={history}>{t("lyHistory")}</button>}
+        {/* 第 4 轮 layout N5:不用空 span 顶开(窄屏上它折到下一行,在「历史」左边空出一块) */}
+        {HISTORY_KIND[tab] && <button type="button" class="btn push" onClick={() => setHistory(!history)} aria-pressed={history}>{t("lyHistory")}</button>}
         {/* P1-34:「没保存」写在保存按钮旁边,不另起一行把地图往下推 */}
         {/* 第 2 轮 setup N15:「还没保存」的位置一直留着,出现时「历史」按钮不跳 */}
-        <span class={dirty ? "ly-dirty small" : "ly-dirty small hold"} role="status" aria-hidden={!dirty || undefined}>{t("armDirty")}</span>
+        <span class={`${dirty ? "ly-dirty small" : "ly-dirty small hold"}${HISTORY_KIND[tab] ? "" : " push"}`} role="status" aria-hidden={!dirty || undefined}>{t("armDirty")}</span>
         <button type="button" class="btn primary ly-save" disabled={!dirty || busy} onClick={() => void save()}>{t("save")}</button>
       </div>
       <p class="muted lead">{t("lyLead")}</p>
@@ -292,7 +292,7 @@ export function LayoutPage({ say, robots, tabs }: { say: Say; robots: string[]; 
           {sel && meta && Tab ? (
             <Tab key={`${tab}|${base}|${gen}`} map={sel} base={base} meta={meta} data={data} reload={reload} say={say} Map={Map}
               setDirty={setDirty} registerSave={(fn) => { saveFn.current = fn; }} />
-          ) : !sel ? <p class="empty">{t("noMap")}</p> : null}
+          ) : !sel ? <p class="empty">{t(siteDown.value ? "loadRetry" : "noMap")}</p> : null}
         </div>
         {history && sel && HISTORY_KIND[tab] && (
           <HistoryDrawer key={`${tab}|${tab === "cameras" ? "" : base}`} kind={HISTORY_KIND[tab]!} map={tab === "cameras" ? null : sel} say={say}
