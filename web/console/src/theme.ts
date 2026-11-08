@@ -128,7 +128,9 @@ const USAGE = mobile.usage as Record<string, string>;
 const ALIAS: Record<string, string> = {
   P1: "p1", P2: "p2", P3: "p3",
   deterring: "p1", fell: "p1", estop: "estop", offline: "offline",
-  patrolling: "online", returning: "online", charging: "online", idle: "online", manual: "online",
+  patrolling: "online", returning: "online", charging: "online", idle: "online",
+  // 第 2 轮 duty N10:manual = 被人叫停了、等人点恢复 —— 不是正常,用 P2(橙),跟横幅「n 台已停」一致
+  manual: "p2",
   online: "online", connected: "connected", ok: "ok", lowBattery: "lowBattery", battery: "battery",
 };
 

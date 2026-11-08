@@ -107,6 +107,22 @@ describe("P0-04 关了能撤销", () => {
     await waitFor(() => expect(posts).toContainEqual({ url: `/api/alerts/${encodeURIComponent(a.key)}/reopen`, body: {} }));
   });
 
+  it("第 2 轮 duty N8:关掉以后提示写能撤销到几点,带「撤销关闭」,点了发 reopen", async () => {
+    const said: { s: string; act?: { label: string; run: () => void } }[] = [];
+    const a = alert({ kind: "stuck" });
+    render(<AlertDetail a={a} role="guard" now={0} units={[]} onClose={() => {}} refresh={async () => {}}
+      say={(s: string, act?: { label: string; run: () => void }) => said.push({ s, act })} />);
+    const m = document.querySelector(".alertdetail")!;
+    fireEvent.click(m.querySelector('.seg button')!);
+    fireEvent.click(btn(m, "关闭报警")!);
+    await waitFor(() => expect(said.some((x) => x.act)).toBe(true));
+    const x = said.find((y) => y.act)!;
+    expect(x.s).toMatch(/前可以撤销/);
+    expect(x.act!.label).toBe("撤销关闭");
+    x.act!.run();
+    await waitFor(() => expect(posts).toContainEqual({ url: `/api/alerts/${encodeURIComponent(a.key)}/reopen`, body: {} }));
+  });
+
   it("过了 10 分钟、只读账号:没有撤销", () => {
     const a = alert({ kind: "stuck", resolved_ms: 100_000, resolved_by: "gina", verdict: "handled" });
     const { container: c } = show(a, 100_000 + 11 * 60_000);

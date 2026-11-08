@@ -76,7 +76,7 @@ describe("保安的临时路线", () => {
     fireEvent.click(btn(c, "开始")!);
     await waitFor(() => expect(posts.length).toBe(1));
     expect(posts[0]).toEqual({ url: "/api/robots/B/patrol", body: { points: [{ x: 1, y: 2 }, { x: 3, y: 4 }], map_id: "m", map_version: "1" } });
-    await waitFor(() => expect(sent).toHaveBeenCalledWith("B"));
+    await waitFor(() => expect(sent).toHaveBeenCalledWith("B", expect.any(Promise)));   // 第 2 轮 duty N2:带上出发检查的结果
   });
 
   it("走不到的点说是第几个", async () => {

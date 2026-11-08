@@ -45,7 +45,8 @@ export function HomePage(props: {
       .then(([a, b]) => setWeeks([a, b]));
   }, []);
 
-  const todo = props.alerts.filter((a) => a.resolved_ms == null && !forGuard(a))
+  // 第 2 轮 duty N6 / config N9:P3 是通知(巡逻开始了、派了临时巡逻……),不是要你处理的事,不进这里
+  const todo = props.alerts.filter((a) => a.resolved_ms == null && !forGuard(a) && a.level !== "P3")
     .sort((a, b) => (a.level === b.level ? b.last_ms - a.last_ms : a.level < b.level ? -1 : 1));
   const todayAuthz = authz.filter((a) => a.on_today);
   const m = props.mode;
