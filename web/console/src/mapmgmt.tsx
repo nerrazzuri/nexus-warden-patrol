@@ -436,16 +436,21 @@ export interface LayoutCounts { areas: number; exits: number; hides: number; pos
 /** 第 2 轮 N4:``from`` 上有、``to`` 上没有的布置,一项一句。禁区、待命点在 ``to`` 有待核建议时另说。 */
 export function missingLayout(from: LayoutCounts, to: LayoutCounts): { text: string; review: boolean }[] {
   const out: { text: string; review: boolean }[] = [];
-  const n = (k: keyof LayoutCounts) => (from[k] as number) > 0 && (to[k] as number) === 0;
-  const pl = (c: number, one: string, many: string) => `${c} ${c === 1 ? one : many}`;
-  if (n("areas")) out.push({ text: tr(pl(from.areas, "zone", "zones"), `${from.areas} 个防区`), review: false });
-  if (n("exits")) out.push({ text: tr(pl(from.exits, "exit line", "exit lines"), `${from.exits} 条出口线`), review: false });
-  if (n("hides")) out.push({ text: tr(pl(from.hides, "hiding spot", "hiding spots"), `${from.hides} 个藏匿点`), review: false });
-  if (n("posts")) out.push({ text: tr(pl(from.posts, "adjusted zone post", "adjusted zone posts"), `${from.posts} 个调过的防区查看点 / 值守位`), review: false });
-  if (n("net_nodes")) out.push({ text: tr("the road network", "路网"), review: false });
-  if (n("cameras")) out.push({ text: tr(pl(from.cameras, "camera", "cameras"), `${from.cameras} 个摄像头位置`), review: false });
-  if (n("nogo")) out.push({ text: tr(pl(from.nogo, "no-go zone", "no-go zones"), `${from.nogo} 个禁区`), review: to.proposal });
-  if (n("standby")) out.push({ text: tr(pl(from.standby, "standby point", "standby points"), `${from.standby} 个待命点`), review: to.proposal });
+  // 第 3 轮 maps N4:少了就说(原来只在新版本上这一类清零时才说);少了一部分写「3 个里少了 2 个」
+  const item = (k: "areas" | "exits" | "hides" | "posts" | "cameras" | "nogo" | "standby", one: string, many: string, unit: string, review = false) => {
+    const a = from[k], b = to[k];
+    if (!(b < a)) return;
+    const en = `${a} ${a === 1 ? one : many}`;
+    out.push({ text: b === 0 ? tr(en, `${a} ${unit}`) : tr(`${a - b} of ${en}`, `${a} ${unit}里的 ${a - b} 个`), review });
+  };
+  item("areas", "zone", "zones", "个防区");
+  item("exits", "exit line", "exit lines", "条出口线");
+  item("hides", "hiding spot", "hiding spots", "个藏匿点");
+  item("posts", "adjusted zone post", "adjusted zone posts", "个调过的防区查看点 / 值守位");
+  if (from.net_nodes > 0 && to.net_nodes === 0) out.push({ text: tr("the road network", "路网"), review: false });
+  item("cameras", "camera", "cameras", "个摄像头位置");
+  item("nogo", "no-go zone", "no-go zones", "个禁区", to.proposal);
+  item("standby", "standby point", "standby points", "个待命点", to.proposal);
   return out;
 }
 
@@ -581,8 +586,8 @@ export function PublishDialog({ target, dogs, onClose }: { target: { map_id: str
               <div key={`miss-${v}`} class="warn small mm-missing">
                 {plain.length > 0 && <p>{tr(`On v${v} but not on v${target.version}: ${plain.map((m) => m.text).join(", ")}. After switching they do nothing on these robots — draw them again on v${target.version}.`,
                   `v${v} 上有、v${target.version} 上没有:${plain.map((m) => m.text).join("、")}。换过去以后这些在这几台机器人上都不起作用,要在 v${target.version} 上重画。`)}</p>}
-                {review.length > 0 && <p>{tr(`${review.map((m) => m.text).join(", ")} were carried over from an earlier version but are not in effect yet. Check and keep them on the Zones page.`,
-                  `${review.map((m) => m.text).join("、")}已从上一版带过来,还没生效:要到「区域」页逐个核对、留下。`)}</p>}
+                {review.length > 0 && <p>{tr(`${review.map((m) => m.text).join(", ")} were carried over from an earlier version but are not in effect yet. Check and keep them in Setup (No-go areas and Standby points tabs).`,
+                  `${review.map((m) => m.text).join("、")}已从上一版带过来,还没生效:要到「布置」的「禁行区」「待命点」标签逐个核对、留下。`)}</p>}
               </div>
             );
           })}

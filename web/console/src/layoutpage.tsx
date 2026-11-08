@@ -34,6 +34,8 @@ export interface MapMark { id?: string; kind: "exit" | "hide"; name: string; poi
 export interface NavZones {
   revision: number; zones: NavZone[]; auto_confirmed?: boolean; confirm_text?: string; held?: NavZone[];
   confirmed?: { revision: number; by: string; at_ms: number; current: boolean; how: string } | null;
+  /** R2 / 第 3 轮 maps N1:从上一版带过来、还没核的建议(重新建图的版本;编辑、去噪的禁行区直接抄过来)。 */
+  proposal?: { from_version: string; zones: NavZone[]; standby?: unknown[]; intercepts?: unknown[]; frame?: { same: boolean | null } } | null;
 }
 export interface LayoutRoute { id: string; revision: number; kind?: "patrol" | "guard"; waypoints: { name: string; x: number; y: number; yaw: number }[] }
 export interface StandbyPt { robot_id: string; name: string; x: number; y: number; yaw: number; map_id: string; map_version: string; default?: boolean }

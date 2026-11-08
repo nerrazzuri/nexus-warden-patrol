@@ -223,11 +223,24 @@ def test_删除_有狗在用拒_最新一版拒_旧的删得掉_文件和挂着�
         c.execute("INSERT INTO standby_points(robot_id, map_id, map_version, name, x, y, yaw, "
                   "is_default) VALUES ('A', ?, '7', 'gate', 1, 1, 0, 1)", (MAP[0],))
     s.disp.zones.put(MAP[0], "7", [], base_revision=0, by="alice")
+    # 第 3 轮 maps N5:另存复制过去的那些布置(防区、标注、值守位、路网)也一起清
+    with s.db.tx() as c:
+        c.execute("INSERT INTO zone_areas(map_id, map_version, zone, points, updated_ms) "
+                  "VALUES (?, '7', 'z', '[]', 1)",
+                  (MAP[0],))
+        c.execute("INSERT INTO map_marks(id, map_id, map_version, kind, name, points, updated_ms) "
+                  "VALUES ('m7', ?, '7', 'exit', 'e', '[]', 1)", (MAP[0],))
     folder = s.maps.root / MAP[0] / "7"
     assert folder.is_dir()
     code, d = dele("7")
     assert code == 200 and d["deleted"] == f"{MAP[0]}:7" and d["freed_bytes"] > 0, d
     assert d["removed_rows"]["standby_points"] == 1 and d["removed_rows"]["nav_zones"] == 1
+    assert d["removed_rows"]["zone_areas"] == 1 and d["removed_rows"]["map_marks"] == 1
+    # 第 3 轮 setup N2:删掉的版本不许再往上写布置
+    code, _ = s.req("POST", f"/api/maps/{MAP[0]}/7/areas",
+                    {"zone": "z", "points": [{"x": 0, "y": 0}, {"x": 1, "y": 0}, {"x": 1, "y": 1}]},
+                    token=alice)
+    assert code == 404
     assert not folder.exists()
     assert [m["version"] for m in s.maps.list()] == ["9", "8"]
     assert s.req("GET", f"/api/maps/{MAP[0]}/7/preview", token=alice)[0] == 404

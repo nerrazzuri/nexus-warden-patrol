@@ -218,7 +218,7 @@ describe("发布", () => {
     expect(miss.textContent).toContain("1 exit line");
     expect(miss.textContent).toContain("road network");
     expect(miss.textContent).toContain("1 camera");
-    expect(miss.textContent).toContain("Check and keep them on the Zones page");
+    expect(miss.textContent).toContain("Check and keep them in Setup (No-go areas and Standby points tabs)");
   });
 
   it("只列在线又能换图的机器人;选了才能发;结果一只一行(成功和拒绝分开)", async () => {
@@ -554,5 +554,17 @@ describe("第 2 轮 maps N11:区域数括号里加起来等于总数", () => {
     await waitFor(() => expect(c.textContent).toContain("v3"));
     expect(getByLabelText("estate:3").textContent).toContain("Zones 4 (2 no-go, 1 slow, 1 impassable / ignore)");
     expect(getByLabelText("estate:2").querySelector("[data-zone-other]")).toBeNull();
+  });
+});
+
+describe("第 3 轮 maps N4", () => {
+  it("少了一部分也说:3 个禁区里少了 2 个", async () => {
+    const { missingLayout } = await import("./mapmgmt");
+    const base = { areas: 0, exits: 0, hides: 0, posts: 0, net_nodes: 0, nogo: 0, cameras: 0, standby: 0, proposal: false };
+    lang.value = "en";
+    const got = missingLayout({ ...base, nogo: 3, areas: 2 }, { ...base, nogo: 1, areas: 2 });
+    expect(got.map((m) => m.text)).toEqual(["2 of 3 no-go zones"]);
+    lang.value = "zh";
+    expect(missingLayout({ ...base, nogo: 3 }, { ...base, nogo: 1 })[0].text).toBe("3 个禁区里的 2 个");
   });
 });
