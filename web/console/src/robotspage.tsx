@@ -248,7 +248,7 @@ function RecentAlerts({ items }: { items: RecentProblem[] }) {
       {log.length > 0 && (
         <details class="rd-group rd-log" data-group="log">
           <summary>{t("robotLog", { n: log.length })}</summary>
-          <ul class="rd-list">{log.map((p) => row(p, autoResolved(p) ? { text: t("vAuto"), tone: "auto" } : { text: t("vDone"), tone: "done" }))}</ul>
+          <ul class="rd-list">{log.map((p) => row(p, autoResolved(p) ? { text: t(p.resolved_by === "site:skipped" ? "vSkipped" : "vAuto"), tone: "auto" } : { text: t("vDone"), tone: "done" }))}</ul>
         </details>
       )}
     </section>
@@ -528,7 +528,8 @@ function RobotDetail({ r, u, now, role, say, onChanged, onCode, onClose, readOnl
       )}
       {ask && <Confirm text={ask.text} yes={ask.yes} onNo={() => setAsk(null)} onYes={() => { const g = ask.go; setAsk(null); g(); }} />}
       {unbind === "ask" && (
-        <Confirm text={t(r.online ? "robotUnbindConfirm" : r.ever_seen === false ? "robotUnbindConfirmNever" : "robotUnbindConfirmOffline", { id: label(r) })} yes={t("robotUnbind")} danger onNo={() => setUnbind(null)} onYes={() => setUnbind("pw")} />
+        // 第 4 轮:解绑要重启消息服务器(吊销名单 broker 重启才读),所有机器人断线几秒 —— 写明会怎样
+        <Confirm text={`${t(r.online ? "robotUnbindConfirm" : r.ever_seen === false ? "robotUnbindConfirmNever" : "robotUnbindConfirmOffline", { id: label(r) })} ${t("robotUnbindBroker")}`} yes={t("robotUnbind")} danger onNo={() => setUnbind(null)} onYes={() => setUnbind("pw")} />
       )}
       {unbind === "pw" && (
         <ConfirmPassword title={t("robotUnbind")} onClose={() => setUnbind(null)}

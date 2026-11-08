@@ -232,3 +232,12 @@ describe("第 4 轮 layout r3-N3 / N6", () => {
     expect(c.textContent).not.toContain("没有");
   });
 });
+
+describe("第 4 轮 r3-duty-N7", () => {
+  it("摄像头、站点的报警不给「看录像」", async () => {
+    const { hasRecording } = await import("./alarmlog");
+    expect(hasRecording({ robot: "cctv:gate", kind: "cctv_offline" })).toBe(false);
+    expect(hasRecording({ robot: "site", kind: "backup_stale" })).toBe(false);
+    expect(hasRecording({ robot: "A", kind: "fallen" })).toBe(true);
+  });
+});

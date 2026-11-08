@@ -144,6 +144,7 @@ describe("机器人页", () => {
     fireEvent.click(cardOf(c, "A"));
     fireEvent.click(btn(c.querySelector(".robot-detail")!, "解绑"));
     expect(document.querySelector(".modal")!.textContent).toContain("恢复出厂");
+    expect(document.querySelector(".modal")!.textContent).toContain("所有机器人会断线");   // 第 4 轮:重启消息服务器
   });
 
   it("W42 等待批准加入:核对码、再输密码批准、能起名字;拒绝要确认", async () => {

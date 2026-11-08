@@ -23,22 +23,24 @@ log = logging.getLogger(__name__)
 #: 告警测试模式(POC):最长多少分钟;标题前缀。
 TEST_MAX_MIN = 120
 TEST_PREFIX = "测试："
-#: 第 3 轮 duty N10:演练期间这些照样是真报警(设备、站点自己的毛病,不是练习时触发的):
-#: 不打测试标记、结束演练时不会被删。
-NOT_DRILL_KINDS = frozenset({
-    "cctv_offline", "clock_skew", "cert_renew_failed", "push_failed", "board_hot", "board_overheat",
-    "schedule_died", "incident_flood", "wifi_change", "map_integrity", "evidence_seal_failed",
-    "evidence_plain", "evidence_unopened", "purged_incoming_stuck", "upload_backlog",
-    "upload_refused", "force_config_bad",
+#: 第 4 轮 duty r3-N10:演练只练「人能故意触发的」—— 在摄像头前走过、到机器人跟前、
+#: 推倒 / 抱起 / 罩住它、按急停。原来反过来列「不算演练的」,机器人自己的毛病(出发前检查不过、
+#: 连续到不了点)和派单记录也被标成「测试：」、结束时一起删了。没列在这里的一律是真报警。
+DRILL_KINDS = frozenset({
+    "intrusion", "intrusion_unanswered", "intrusion_person", "dog_sees_person", "person_left",
+    "person_overdue", "authorized_person", "force_lifted", "force_covered", "force_flipped",
+    "fallen", "estop_pressed", "deter_cornered", "lens_blocked",
+    "payload_siren", "payload_strobe", "payload_spotlight",
 })
 
 
 def drillable(robot: str, kind: str) -> bool:
-    """演练期间这条报警算不算演练的(打「测试：」、能一键删)。"""
-    if robot == "site" or kind in NOT_DRILL_KINDS:
-        return False
-    return not (kind.endswith("_failed") or kind.endswith("_offline")
-                or kind.startswith(("recording_", "archive_")))
+    """演练期间这条报警算不算演练的(打「测试：」、能一键删)。
+    ``robot`` 不看:入侵没机器人去也记在站点名下。"""
+    del robot
+    return kind in DRILL_KINDS
+
+
 #: 开张时内存里读回多少条最近的(已解决的也算);未解决的全读回。
 RESTORE_RECENT = 200
 
@@ -146,19 +148,22 @@ class AlertDesk:
 
     def test_alarms(self) -> list[dict[str, Any]]:
         """带测试标记、还在库里的报警(结束演练删之前给人看删哪些)。"""
-        rows = self.db.query("SELECT key, title FROM alerts "
+        rows = self.db.query("SELECT key, kind, robot, title, first_ms FROM alerts "
                              "WHERE json_extract(context, '$.test') = 1 "
                              "ORDER BY rowid DESC LIMIT 200")
-        return [{"key": r["key"], "title": r["title"]} for r in rows]
+        # 第 4 轮 duty N2:带上种类、哪台,网页按种类说人话(原来只有站点中文原文)
+        return [{"key": r["key"], "kind": r["kind"], "robot": r["robot"], "title": r["title"],
+                 "first_ms": r["first_ms"]} for r in rows]
 
-    def end_test(self, *, clear: bool) -> int:
-        """结束测试;``clear`` 就删掉所有带测试标记的告警(没标记的不动)。回删了几条。"""
+    def end_test(self, *, clear: bool, keep: frozenset[str] = frozenset()) -> int:
+        """结束测试;``clear`` 就删掉所有带测试标记的告警(没标记的不动;``keep`` 里的留着,
+        第 4 轮 duty r3-N10:删之前能逐条取消勾选)。回删了几条。"""
         from nexwar_site.site_settings import SiteSettings
         SiteSettings(self.db).put("alert_test", None)
         if not clear:
             return 0
         rows = self.db.query("SELECT key FROM alerts WHERE json_extract(context, '$.test') = 1")
-        keys = {r["key"] for r in rows}
+        keys = {r["key"] for r in rows} - keep
         if keys:
             st = SiteSettings(self.db)
             floor = st.get("alert_seq_floor")

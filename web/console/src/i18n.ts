@@ -219,7 +219,7 @@ const en = {
   armExOrder: "The end date is before the start date.",
   sysRestoreNoDest: "No backup location is set yet, so there is nothing to restore.",
   atTitle: "Alarm drill (test mode)",
-  atWhat: "For training: while it is on, alarms that robots and cameras raise are marked \"TEST:\", and afterwards you can delete them in one go. Device and site problems (a camera going offline, a failed backup…) stay real alarms. It does not create alarms by itself — trigger one (e.g. walk past a camera) to practise.",
+  atWhat: "For training: while it is on, alarms that people can set off on purpose (walking past a camera or up to a robot, pushing over, lifting or covering a robot, pressing its emergency stop) are marked \"TEST:\", and afterwards you can delete them in one go. Robot faults (cannot start, cannot reach a point), device and site problems stay real alarms. It does not create alarms by itself — trigger one (e.g. walk past a camera) to practise.",
   atOnView: "Alarm drill until {at}: alarms titled \"TEST:\" are practice. Handle them as usual.",
   userRemovedMsg: "Removed {name}.",
   userAddedMsg: "User added.",
@@ -372,7 +372,7 @@ const en = {
   sysBackupHintOff: "Once a backup location is set on the site host, the site makes an encrypted backup every hour and test-restores weekly.",
   upBadPkg: "The site did not accept this package (not a password problem): {why}",
   lyStandbyNoRobots: "No robot is registered on this site yet, so there is nothing to add a standby point for.",
-  atEndClearList: "End the drill and delete these {n} drill alarms? Everything else stays, including camera and site problems raised during the drill.",
+  atEndClearList: "End the drill and delete these {n} drill alarms? Everything else stays, including camera and site problems raised during the drill. Untick any you want to keep.",
   atMore: "… and {n} more",
   lookDarkDefault: "Dark (default)",
   fleetNeverSeenShort: "Not activated",
@@ -423,6 +423,10 @@ const en = {
   armExRemoveAskSame: "Remove the exception for {d}? Today goes back to the normal schedule; nothing changes right now.",
   armExRemovedOff: "Exception removed.",
   armNowAllOff: "The whole site disarms right away.", armNowAllOn: "The whole site arms right away.", armNowChanges: "Right away: {list}.",
+  robotUnbindBroker: "Unbinding also restarts the site's message server, so every robot is disconnected for about 5–10 seconds. Patrols keep going (a robot only stops and waits if it is not safe to go on), remote control stops, and alarms raised meanwhile are sent when the robots reconnect.",
+  vSkipped: "Skipped (record only)",
+  lookNoHome: "No robot can go: {ids} has no origin marked on this map, so it cannot start. Mark one on the Localization page first.",
+  trSentSkipped: "{id} skipped a point on this route: {why}",
   leaveUnsaved: "This page has changes that are not saved. Leave without saving? The changes will be lost.",
   leaveUnsavedYes: "Leave without saving",
   stopAll: "Stop all",
@@ -994,6 +998,7 @@ const en = {
   atEndKeep: "End drill (keep records)",
   atEndClearAsk: "End the drill and delete every alarm raised during it? Other alarms stay.",
   atCleared: "Drill ended; all drill alarms were deleted.",
+  atEndedKept: "Drill ended; the drill alarms are kept (marked TEST:).",
   pairNoLan: "No LAN address found. Fill in the address phones use in the site settings (not 127.0.0.1).",
   doBtn: "Send once",
   doTitle: "Send a robot along {route}",
@@ -1779,7 +1784,7 @@ const zh: Partial<Record<Key, string>> = {
   armExOrder: "结束日期早于开始日期。",
   sysRestoreNoDest: "还没设备份位置，没有可恢复的备份。",
   atTitle: "报警演练（测试模式）",
-  atWhat: "用来带人练习：开着的这段时间里机器人、摄像头发的报警标题前加「测试：」，结束后可以一键删掉；设备和站点自己的问题（摄像头掉线、备份失败……）照样是真报警。它不会自己造报警，要练就去触发一条（比如在摄像头前走过）。",
+  atWhat: "用来带人练习：开着的这段时间里，人能故意触发的报警（在摄像头前走过、走到机器人跟前、推倒 / 抱起 / 罩住机器人、按急停）标题前加「测试：」，结束后可以一键删掉；机器人自己的毛病（出不了发、到不了点）、设备和站点的问题照样是真报警。它不会自己造报警，要练就去触发一条（比如在摄像头前走过）。",
   atOnView: "报警演练中（到 {at}）：标题带「测试：」的报警是演练，照常处理即可。",
   userRemovedMsg: "已删除 {name}。",
   userAddedMsg: "已添加用户。",
@@ -1932,7 +1937,7 @@ const zh: Partial<Record<Key, string>> = {
   sysBackupHintOff: "在站点主机上设好备份位置后，站点每小时做一次加密备份，每周试恢复一次。",
   upBadPkg: "站点不收这个包（不是密码的问题）：{why}",
   lyStandbyNoRobots: "站点上还没有登记机器人，没法加待命点。",
-  atEndClearList: "结束演练并删掉下面这 {n} 条演练报警？其他报警都不动，包括演练期间摄像头、站点自己出的问题。",
+  atEndClearList: "结束演练并删掉下面这 {n} 条演练报警？其他报警都不动，包括演练期间摄像头、站点自己出的问题。想留下的取消勾选。",
   atMore: "……还有 {n} 条",
   lookDarkDefault: "深色（默认）",
   fleetNeverSeenShort: "未激活",
@@ -1982,6 +1987,10 @@ const zh: Partial<Record<Key, string>> = {
   armExRemoveAskSame: "删除 {d} 的例外？今天恢复按时间表，此刻不变。",
   armExRemovedOff: "已删除例外。",
   armNowAllOff: "全站会马上撤防。", armNowAllOn: "全站会马上布防。", armNowChanges: "马上：{list}。",
+  robotUnbindBroker: "解绑还会重启站点的消息服务器，所有机器人会断线约 5–10 秒。巡逻照常继续（只有不安全时机器人才停下等），遥控会停，这期间的报警等机器人连回来后补发。",
+  vSkipped: "已跳过（只做记录）",
+  lookNoHome: "没有机器人能去：{ids} 在这张图上还没标原点，出不了发。先在定位页标一个原点。",
+  trSentSkipped: "{id} 跳过了这条路线上的点：{why}",
   leaveUnsaved: "此页有未保存的改动。不保存就离开？改动将丢失。",
   leaveUnsavedYes: "不保存，离开",
   stopAll: "全部急停",
@@ -2552,6 +2561,7 @@ const zh: Partial<Record<Key, string>> = {
   atEndKeep: "结束演练（保留记录）",
   atEndClearAsk: "结束演练并删掉演练期间产生的所有报警？其他报警不动。",
   atCleared: "演练已结束，演练报警都已删掉。",
+  atEndedKept: "演练已结束，演练报警都留着（标题带「测试：」）。",
   pairNoLan: "没找到局域网地址，请在站点设置里填对外地址（不要用 127.0.0.1）。",
   doBtn: "派一趟",
   doTitle: "派机器人跑一趟 {route}",
@@ -3179,6 +3189,14 @@ const TEST_PREFIX = "测试：";
 /** 告警标题:认识的种类用目录里的;不认识的用站点给的原文。测试告警(标题带前缀)换成译文前缀照样标出来
  *  (外审 r1 #9:不然演练在地图、值守页上看着跟真的一样)。 */
 export function alertTitle(l: Lang, kind: string, siteTitle: string): string {
+  // 第 4 轮 r2-duty-N7:「点位没到」跳过一次和连续几趟是同一个种类,标题分开说(英文界面不都叫 Waypoint not reached)
+  const bare = siteTitle.startsWith(TEST_PREFIX) ? siteTitle.slice(TEST_PREFIX.length) : siteTitle;
+  const many = /^点位 (\S+) 连续 (\d+) 趟未到达/.exec(bare), once = /^点位 (\S+) 未到达,已跳过/.exec(bare);
+  if (kind === "stuck" && (many || once)) {
+    const head = siteTitle.startsWith(TEST_PREFIX) ? (l === "zh" ? TEST_PREFIX : "TEST: ") : "";
+    if (l === "zh") return head + bare.replace(/:路可能被堵住了$/, "：路可能被堵住了");
+    return head + (many ? `Waypoint ${many[1]} not reached ${many[2]} runs in a row` : `Waypoint ${once![1]} skipped`);
+  }
   const e = CATALOG[kind];
   if (!e || kind.startsWith("$")) return siteTitle;
   return siteTitle.startsWith(TEST_PREFIX) ? (l === "zh" ? TEST_PREFIX : "TEST: ") + e[l] : e[l];

@@ -163,8 +163,14 @@ function Row({ a, onOpen, canHandle }: { a: Alert; onOpen: () => void; canHandle
       <div>
         {/* 第 2 轮 P0-20:只读账号处理不了,按钮就叫「详情」、不用蓝色主按钮 */}
         {open ? <button type="button" class={canHandle ? "btn sm primary" : "btn sm"} onClick={onOpen}>{t(canHandle ? "alGoHandle" : "alDetails")}</button>
-          : <a class="btn sm" href={recordingLink(a)}>{t("alSeeRec")}</a>}
+          // 第 4 轮 r3-duty-N7:摄像头掉线、站点自己的报警没有机器人录像,不给「看录像」
+          : hasRecording(a) ? <a class="btn sm" href={recordingLink(a)}>{t("alSeeRec")}</a> : null}
       </div>
     </div>
   );
+}
+
+/** 这条报警有没有机器人录像可看(摄像头、站点自己的报警没有)。 */
+export function hasRecording(a: { robot: string; kind: string }): boolean {
+  return a.robot !== "site" && !a.robot.startsWith("cctv:") && a.kind !== "cctv_offline";
 }

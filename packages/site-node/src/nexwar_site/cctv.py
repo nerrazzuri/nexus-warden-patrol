@@ -515,7 +515,12 @@ class CctvManager:
                 self._alerts.raise_alert(
                     kind="cctv_offline", robot=robot,
                     title=f"摄像头 {name} 无法连接(防区 {w.cam.zone})",
-                    detail=f"{scrub(st.error) or '连不上'};此路的入侵现在无法接收")
+                    # 第 4 轮 r3-duty-N7:详情给保安看 —— 哪个摄像头、哪个防区、怎么办;
+                    # 原始的连接错误(带地址)放进 context 给工程师
+                    detail=f"摄像头 {name}(防区 {w.cam.zone})连不上,这一路的入侵现在收不到;"
+                           "看看摄像头的电源和网线",
+                    context={"camera": name, "zone": w.cam.zone,
+                             "error": scrub(st.error) or "连不上"})
         except Exception:
             log.exception("报「摄像头 %s 连不上」失败,下一拍再试", name)
             return

@@ -93,6 +93,15 @@ const RULES: Rule[] = [
   [/^防区里站得下的地方离建图时走过的路都太远/, () => "every spot in the zone is too far from where the robot went while mapping (it would not locate itself reliably)"],
   [/^(\S+) 到 (\S+) 走不通[(（]被墙或禁行区隔开[)）]$/, (m) => `No way from ${m[1]} to ${m[2]} (a wall or no-go area is in between)`],
   [/^点要有数字的 x、y/, () => "each point needs numeric x and y (and optionally yaw)"],
+  [/^摄像头 (\S+)[(（]防区 ([^)）]*)[)）]连不上,这一路的入侵现在收不到[;；]看看摄像头的电源和网线$/,
+    (m) => `Camera ${m[1]} (zone ${m[2]}) cannot be reached, so intrusions from it are not received now. Check its power and network cable.`],
+  // 第 4 轮 r2-duty-N7:点位没到 —— 跳过一次只记一笔、连续几趟才报 P1,两种分开说
+  [/^点位 (\S+) 连续 (\d+) 趟未到达[:：]路可能被堵住了$/, (m) => `Waypoint ${m[1]} not reached ${m[2]} runs in a row: the way may be blocked`],
+  [/^点位 (\S+) 未到达,已跳过$/, (m) => `Waypoint ${m[1]} not reached, skipped`],
+  [/^([\s\S]*?)[;；]?巡逻继续,只做记录$/, (m) => `${m[1] ? `${tr(m[1])}. ` : ""}The patrol went on; this is only a record.`],
+  [/^([\s\S]*?)[;；]?到达一次后自动解除$/, (m) => `${m[1] ? `${trParts(m[1])}. ` : ""}Clears itself once the point is reached.`],
+  [/^到场看看,或者改路线$/, () => "Go and look, or change the route"],
+  [/^第 (\d+) 个点[:：]\s*([\s\S]*)$/, (m) => `Point ${m[1]}: ${tr(m[2])}`],
   [/^(\S+) 从现在的位置走不到这个点/, (m) => `${m[1]} cannot get to this point from where it is now (a wall or no-go area is in between)`],
   // 第 3 轮 admin N4:诊断页、活动日志、报警里常见的几句
   [/^(?:站点盘)?(?:还|只)?剩\s*([\d.]+)\s*(GB|MB|%)$/, (m) => `${m[1]}${m[2] === "%" ? "%" : ` ${m[2]}`} free`],
@@ -118,6 +127,11 @@ const RULES: Rule[] = [
 ];
 
 /** 一段原文 → 英文;认不出的段落换成 UNK。 */
+/** 「原因;建议」两段分开翻(各自认得的才翻)。 */
+function trParts(s: string): string {
+  return s.split(/[;；]/).map((p) => tr(p)).join(". ");
+}
+
 function tr(s: string): string {
   const x = s.trim();
   if (!CJK.test(x)) return x;
