@@ -45,7 +45,7 @@ const btn = (root: Element, text: string) => Array.from(root.querySelectorAll("b
 describe("诊断", () => {
   it("检查单说人话,机器人的设备也列", async () => {
     const { container: c } = render(<DiagPage say={() => {}} />);
-    await waitFor(() => expect(c.querySelector('[data-check="db"]')!.textContent).toContain("数据库能读能写"));
+    await waitFor(() => expect(c.querySelector('[data-check="db"]')!.textContent).toContain("数据库"));
     expect(c.querySelector('[data-check="backup"]')!.className).toContain("bad");
     await waitFor(() => expect(c.querySelector('[data-robot="A"]')!.textContent).toContain("前摄像头画面正常"));
     expect(c.querySelector('[data-robot="A"]')!.textContent).toContain("浮点解");

@@ -51,6 +51,17 @@ const props = (): TabProps => ({
 const btn = (root: Element, text: string) => Array.from(root.querySelectorAll("button")).find((b) => b.textContent?.trim() === text) as HTMLButtonElement;
 const node = (c: Element, id: string) => c.querySelector(`[data-rn-node="${id}"]`) as SVGElement;
 
+/** 存;要是弹了站内确认框(孤立点),点「仍然保存」。 */
+async function saveYes(): Promise<void> {
+  const p = save!();
+  for (let i = 0; i < 20; i++) {
+    await new Promise((ok) => setTimeout(ok, 5));
+    const m = document.querySelector(".modal");
+    if (m) { fireEvent.click(btn(m, "仍然保存")); break; }
+  }
+  return p;
+}
+
 describe("布置 → 路网", () => {
   it("读出来,写点数、线数、总长", async () => {
     const { container: c } = render(<RoadnetTab {...props()} />);
@@ -69,7 +80,7 @@ describe("布置 → 路网", () => {
     fireEvent.click(node(c, "P2"));
     fireEvent.click(node(c, "P3"));                       // 先后点两个点:连上(P3 接着选中)
     fireEvent.click(node(c, "P4"));
-    await save!();
+    await saveYes();
     const body = posted.find((p) => p.url === URL)!.body;
     expect(body.base_revision).toBe(2);
     expect(body.nodes).toEqual([{ id: "P1", x: 1, y: 1 }, { id: "P2", x: 5, y: 1 }, { id: "P3", x: 4, y: 7 }, { id: "P4", x: 8, y: 7 }]);
@@ -86,7 +97,7 @@ describe("布置 → 路网", () => {
     fireEvent.click(node(c, "P2"));                       // 再连上
     fireEvent.click(node(c, "P1"));
     fireEvent.click(btn(c.querySelector(".ly-detail")!, "删除此节点"));
-    await save!();
+    await saveYes();
     const body = posted.find((p) => p.url === URL)!.body;
     expect(body.nodes).toEqual([{ id: "P2", x: 5, y: 1 }]);
     expect(body.edges).toEqual([]);
@@ -126,7 +137,7 @@ describe("布置 → 路网", () => {
     fireEvent.click(btn(c, "添加节点"));
     fireEvent.click(c.querySelector(".pick1")!);
     status = 409;
-    await expect(save!()).rejects.toMatchObject({ status: 409 });
+    await expect(saveYes()).rejects.toMatchObject({ status: 409 });
   });
 
   it("没有路网:说清楚", async () => {
@@ -159,16 +170,21 @@ describe("网页易用性第 1 轮 P2-17", () => {
 
 describe("网页易用性第 1 轮 P2-17 存之前确认", () => {
   it("有孤立点:点「取消」就不存", async () => {
-    const asked: string[] = [];
-    window.confirm = (m?: string) => { asked.push(String(m)); return false; };
+    // 第 4 轮:站内的确认框(不是浏览器自带的 confirm)
+    let native = 0;
+    window.confirm = () => { native++; return true; };
     const { container: c } = render(<RoadnetTab {...props()} />);
     await waitFor(() => expect(node(c, "P2")).not.toBeNull());
     fireEvent.click(btn(c, "添加节点"));
     fireEvent.click(c.querySelector(".pick1")!);
     fireEvent.click(btn(c, "完成添加"));
     const { SaveCancelled } = await import("./layoutpage");
-    await expect(save!()).rejects.toBeInstanceOf(SaveCancelled);
-    expect(asked[0]).toContain("未连接的节点：P3");
+    const done = save!();
+    const modal = await waitFor(() => { const m = document.querySelector(".modal"); expect(m).not.toBeNull(); return m!; });
+    expect(modal.textContent).toContain("未连接的节点：P3");
+    fireEvent.click(btn(modal, "取消"));
+    await expect(done).rejects.toBeInstanceOf(SaveCancelled);
+    expect(native).toBe(0);
     expect(posted.filter((p) => p.url === URL)).toEqual([]);
   });
 });

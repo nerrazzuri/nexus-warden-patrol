@@ -1457,7 +1457,7 @@ input[type="file"]:disabled { opacity: 0.6; cursor: not-allowed; }
 /* 第 2 轮 layout N5 / N7 / N8 / N12:手机上不横向溢出、字不被截 */
 @media (max-width: 720px) {
   .mappage { margin: -12px; }                                   /* 页边距这里是 12px,原来按 16px 抵,多出 4px */
-  .users-table td[data-label]::before { content: attr(data-label) ": "; color: var(--c-textSecondary); font-size: 13px; }
+  .users-table td[data-label]::before { content: attr(data-label) var(--colon, ": "); color: var(--c-textSecondary); font-size: 13px; }
 }
 .rmap { max-width: 100%; }                                       /* 最小高 300 × 4:3 把宽撑到 400 */
 .advdiag .panel-head { flex-wrap: wrap; }
@@ -1615,3 +1615,16 @@ input[type="file"] { max-width: 100%; min-width: 0; }            /* 上传按钮
 .lane { grid-template-columns: 96px 1fr; }
 .lane > b { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; padding-right: 6px; }
 .recrobots button { max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* 第 4 轮 zh r3-N9:中文界面「标签：」用全角冒号 */
+:root[lang="zh"], :root:lang(zh) { --colon: "："; }
+/* 第 4 轮 zh N4:卡片右上角的状态不折行(「未激活」不再逐字竖排),挤的时候名字省略 */
+.fleet-state { white-space: nowrap; flex: none; }
+.fleet-card > :first-child, .fleet-top { min-width: 0; }
+/* 第 4 轮 zh N6:诊断页的 ✓ / ✕ 显示出来(原来只靠红绿区分,色弱看不出);检查项名称写成中性的 */
+.chk .mark { display: inline-block; }
+.chk.bad .mark { color: var(--c-error); }
+/* 「·」挂在前一项的末尾:折行时新的一行开头不会是「·」 */
+.vmeta { display: inline-flex; flex-wrap: wrap; margin-left: 6px; }
+.vmeta > span:not(:last-child)::after { content: " · "; white-space: pre; }
+/* 第 4 轮 setup P2-17:「.bad」提示(穿墙线、镜像了、没确认……)一律红字,原来有几处是白字 */
+p.bad, span.bad, .small.bad { color: var(--c-error); }

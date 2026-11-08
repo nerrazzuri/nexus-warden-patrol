@@ -90,7 +90,7 @@ describe("总览", () => {
     expect(v3.textContent).toContain("latest");
     expect(v3.textContent).toContain("bag-1013");
     expect(v3.textContent).toContain("used (3)");
-    expect(v3.textContent).toContain("Handedness check: ok");
+    expect(v3.textContent).toContain("Mirror check: OK");
     expect(v3.textContent).toContain("Zones 3 (2 no-go, 1 slow)");
     expect(v3.textContent).toContain("Standby points 2");
     expect((getByLabelText("Note for v3") as HTMLInputElement).value).toBe("after loop closure");

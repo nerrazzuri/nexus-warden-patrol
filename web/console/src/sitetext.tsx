@@ -20,6 +20,33 @@ const PREFLIGHT: Record<string, string> = {
   removable: "robot storage has a problem",
 };
 
+/** 第 4 轮 zh N1 / N3:中文界面也把机器人原话说成人话 —— 去掉 goto、goal_blocked、检查项名、「起飞」。 */
+const PREFLIGHT_ZH: Record<string, string> = {
+  home: "地图还没标原点", localized: "定位还没稳", device_ready: "机器人没准备好（运控或急停）",
+  nav_ready: "导航没准备好", battery: "电量太低，不能出发", storage: "机器人存储满了", removable: "机器人存储有问题",
+};
+const PLAN_ZH: Record<string, string> = {
+  goal_blocked: "去不了这个点：终点在障碍物、禁行区里或离得太近", start_blocked: "走不了：机器人所在的地方被障碍物挡住",
+  outside: "这个点在地图外面", no_path: "找不到去终点的路", timeout: "规划路线用时太长", worker: "路线规划出错",
+};
+export function zhRobot(src: string): string {
+  let s = src.replace(/^起飞前检查未通过[:：]\s*([\s\S]*)$/, (_, rest: string) => {
+    const seen = new Set<string>();
+    const out: string[] = [];
+    for (const [, n, why] of rest.matchAll(/([a-z_]+)[(（]([^)）]*)[)）]?/g)) {
+      if (seen.has(n)) continue;
+      seen.add(n);
+      const txt = n === "battery" && /原点|出发线/.test(why ?? "") && !/低于/.test(why ?? "")
+        ? "算不出返航要留的电量（地图没有可用的原点）" : PREFLIGHT_ZH[n];
+      if (txt) out.push(txt);
+    }
+    return `出发前检查未通过：${out.length ? out.join("；") : rest}`;
+  });
+  s = s.replace(/导航拒了[:：]\s*/g, "").replace(/(^|[:：;；]\s*)[a-z_]+ 被设备拒绝[:：]\s*/g, "$1")
+    .replace(/重?规划失败[(（](\w+)[)）][:：]?[^;；]*/g, (all, code: string) => PLAN_ZH[code] ?? all);
+  return s;
+}
+
 /** 路径规划失败的原因码(contract planning/astar.py 的 PlanError.reason)。 */
 const PLAN: Record<string, string> = {
   goal_blocked: "no path — the destination is inside or too close to an obstacle or no-go area",
@@ -160,7 +187,7 @@ export function zhPunct(src: string): string {
 
 export function siteText(s: string | null | undefined): SiteText {
   const src = s ?? "";
-  if (lang.value !== "en") return { text: zhPunct(src) };
+  if (lang.value !== "en") return { text: zhPunct(zhRobot(src)) };
   return siteTextEn(src);
 }
 
@@ -219,7 +246,9 @@ export function zhPlain(src: string): string {
   }
   // 「secrets:没有这把密钥;backup:…」:密钥名换成人话
   if (/^(secrets|backup|evidence):/.test(src)) {
-    return src.split(";").map((x) => x.replace(/^(secrets|backup|evidence):/, (_, k: string) => `${KEY_NAME[k]}：`)).join("；");
+    // 第 4 轮 zh r3-N11:「没有这把密钥」太口语
+    return src.split(";").map((x) => x.replace(/^(secrets|backup|evidence):/, (_, k: string) => `${KEY_NAME[k]}：`)
+      .replace("没有这把密钥", "密钥文件缺失").replace("权限太宽", "文件权限太宽（别的用户也能读）")).join("；");
   }
   return src;
 }

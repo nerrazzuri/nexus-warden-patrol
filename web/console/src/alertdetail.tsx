@@ -8,7 +8,7 @@ import { alertAdvice, alertHeadline, canHandleAlerts } from "./alertinfo";
 import { api, ApiError, enc } from "./api";
 import { hm, nameOf } from "./data";
 import { Modal } from "./dialogs";
-import { lang, t, type Lang } from "./i18n";
+import { colon, lang, t, type Key, type Lang } from "./i18n";
 import { GoLookCard, verdictText } from "./mappage";
 import type { UnitInfo } from "./live";
 import { autoResolved, canDispatch, type Alert } from "./model";
@@ -144,11 +144,13 @@ export function AlertDetail(props: {
     <Modal label={alertHeadline(a)} onClose={props.onClose} wide>
       <div class="alertdetail" data-key={a.key}>
         <p class="ad-meta">
-          <span class={a.level === "P1" ? "tag p1" : a.level === "P2" ? "tag p2" : "tag"}>{a.level}</span>
+          {/* 第 4 轮 zh N12:P1 这类级别写出是什么意思(悬停 + 屏幕阅读器) */}
+          <span class={a.level === "P1" ? "tag p1" : a.level === "P2" ? "tag p2" : "tag"} title={t(`level${a.level}` as Key)} aria-label={t(`level${a.level}` as Key)}>{a.level}</span>
           <span>{when}</span>
-          {!site && <span>{dt("dRobot")}: <b>{nameOf(a.robot)}</b></span>}
-          {where ? <span>{dt("dWhere")}: <b>{where}</b></span>
-            : a.context?.pose && <span>{dt("dWhere")}: <a href="#/map" data-where-map="1" onClick={props.onClose}>{dt("dWhereMap")}</a></span>}
+          {/* 第 4 轮 zh N2:冒号跟着界面语言(中文全角) */}
+          {!site && <span>{dt("dRobot")}{colon()}<b>{nameOf(a.robot)}</b></span>}
+          {where ? <span>{dt("dWhere")}{colon()}<b>{where}</b></span>
+            : a.context?.pose && <span>{dt("dWhere")}{colon()}<a href="#/map" data-where-map="1" onClick={props.onClose}>{dt("dWhereMap")}</a></span>}
         </p>
         {open && <p class="muted small">{a.acked_by ? dt("dTaken", { who: byText(a.acked_by) }) : dt("dNotTaken")}</p>}
         {/* 第 2 轮 P0-05:接手以后告诉保安下一步做什么 */}
