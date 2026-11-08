@@ -240,6 +240,28 @@ void main() {
       expect(find.text('进'), findsOneWidget);
     });
 
+    testWidgets('手机 App 测试 M17：有 P1 开着，值守页以外每一栏顶上都有红条，点了回值守页', (t) async {
+      _size(t);
+      final api = FakeApi('guard');
+      await t.pumpWidget(MaterialApp(home: NwShell(api: api, ring: () {})));
+      await t.pumpAndSettle();
+      expect(find.byKey(NwShell.p1BarKey), findsNothing, reason: '值守页自己有 P1 卡');
+      api.sse.add(<String, dynamic>{'kind': 'alert', 'alert': <String, dynamic>{
+        'key': 'A/intrusion#9', 'level': 'P1', 'kind': 'intrusion', 'robot': 'A', 'title': 't', 'detail': '',
+        'first_ms': 1, 'last_ms': 1, 'count': 1, 'acked_by': '', 'acked_ms': null, 'resolved_ms': null,
+        'escalated': 0, 'channel': 'screen'}});
+      await t.pump();
+      for (final k in [NwShell.dogsKey, NwShell.mapKey, NwShell.historyKey]) {
+        await _tab(t, k);
+        expect(find.byKey(NwShell.p1BarKey), findsOneWidget, reason: '$k');
+      }
+      await t.tap(find.byKey(NwShell.p1BarKey));
+      await t.pumpAndSettle();
+      expect(find.byType(SiteDutyPage), findsOneWidget);
+      expect(find.byKey(NwShell.p1BarKey), findsNothing);
+      await t.pumpWidget(Container());
+    });
+
     testWidgets('手机 App 测试 M01：系统返回键不退出登录——别的栏回值守页，值守页退到后台；没有返回箭头', (t) async {
       _size(t);
       final api = FakeApi('admin');
