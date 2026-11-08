@@ -1,0 +1,33 @@
+version: 1
+# Simulation gates are deliberately stricter than field acceptance. Passing this
+# file is a regression signal, not a claim of field reliability.
+gates:
+  smoke:
+    min_runs: 5
+    aggregate_success_rate: 0.95
+    min_per_scenario_success_rate: 0.90
+    max_collisions: 0
+    max_clearance_violations: 0
+    max_p95_stall_s: 10.0
+  core:
+    min_runs: 100
+    aggregate_success_rate: 0.99
+    min_per_scenario_success_rate: 0.95
+    max_collisions: 0
+    max_clearance_violations: 0
+    max_p95_stall_s: 8.0
+  release:
+    min_runs: 1000
+    aggregate_success_rate: 0.995
+    min_per_scenario_success_rate: 0.98
+    max_collisions: 0
+    max_clearance_violations: 0
+    max_p95_stall_s: 6.0
+    max_progress_failures_per_100_runs: 1.0
+  fault:
+    min_runs: 300
+    aggregate_success_rate: 0.98
+    min_per_scenario_success_rate: 0.95
+    max_collisions: 0
+    max_clearance_violations: 0
+    max_p95_stall_s: 10.0
