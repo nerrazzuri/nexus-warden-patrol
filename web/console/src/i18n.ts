@@ -3047,3 +3047,8 @@ export function alertTitle(l: Lang, kind: string, siteTitle: string): string {
 export function knownKinds(): string[] {
   return Object.keys(CATALOG).filter((k) => !k.startsWith("$"));
 }
+
+/** 第 2 轮 setup N16:列举用的分隔符跟着界面语言(英文界面不出中文顿号「、」)。 */
+export function joinList(xs: readonly string[]): string {
+  return xs.join(lang.value === "zh" ? "、" : ", ");
+}

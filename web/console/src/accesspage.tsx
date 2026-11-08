@@ -5,7 +5,7 @@ import { useEffect, useState } from "preact/hooks";
 import { api, ApiError, enc } from "./api";
 import { hm } from "./data";
 import { Confirm, Modal } from "./dialogs";
-import { t, type Key } from "./i18n";
+import { t, type Key, joinList } from "./i18n";
 
 type Say = (s: string) => void;
 export interface Authz {
@@ -28,7 +28,7 @@ function errText(e: unknown): string {
   return t("failed", { why: e instanceof ApiError ? e.message : String(e) });
 }
 
-const where = (a: Authz) => (a.zones.length ? a.zones.join("、") : t("wholeSite"));
+const where = (a: Authz) => (a.zones.length ? joinList(a.zones) : t("wholeSite"));
 
 export function AccessPage({ say, now }: { say: Say; now: number }) {
   const [rows, setRows] = useState<Authz[]>([]);
@@ -133,7 +133,7 @@ function Visitor({ mode, zones, say, onDone }: { mode: ModeView | null; zones: s
       {on ? (
         <div class="row">
           <b>{t("accVisitorOn", { t: mode.until_ms ? hm(mode.until_ms) : "—" })}</b>
-          {(mode.visitor_zones ?? []).length > 0 && <span class="muted">{(mode.visitor_zones ?? []).join("、")}</span>}
+          {(mode.visitor_zones ?? []).length > 0 && <span class="muted">{joinList((mode.visitor_zones ?? []))}</span>}
           <button type="button" class="btn push" onClick={() => void set({ mode: mode.prev_mode || "armed" }, t("accVisitorEnded"))}>{t("accVisitorEnd")}</button>
         </div>
       ) : (
@@ -159,9 +159,9 @@ function Visitor({ mode, zones, say, onDone }: { mode: ModeView | null; zones: s
         </>
       )}
       {ask && (
-        <Confirm text={t("accVisitorAsk", { z: picked.join("、"), n: hours, t: hm(Date.now() + hours * 3_600_000) })} yes={t("accVisitorStart")}
+        <Confirm text={t("accVisitorAsk", { z: joinList(picked), n: hours, t: hm(Date.now() + hours * 3_600_000) })} yes={t("accVisitorStart")}
           onNo={() => setAsk(false)} onYes={() => { setAsk(false); void set({ mode: "visitor", zones: picked, minutes: hours * 60 },
-            t("accVisitorStarted", { z: picked.join("、"), t: hm(Date.now() + hours * 3_600_000) })); }} />
+            t("accVisitorStarted", { z: joinList(picked), t: hm(Date.now() + hours * 3_600_000) })); }} />
       )}
     </section>
   );

@@ -4,7 +4,7 @@
 import { useEffect, useRef, useState } from "preact/hooks";
 import { api } from "./api";
 import { clickGuard, startDrag, swallowClick } from "./dragpt";
-import { t } from "./i18n";
+import { t, joinList } from "./i18n";
 import { SaveCancelled, toMap, type TabProps } from "./layoutpage";
 import { clientToMap } from "./routes";
 
@@ -55,12 +55,12 @@ export function wallCrossings(nodes: RnNode[], edges: Edge[], walls: P2[][]): st
 /** 存之前要确认的事(孤立点);没有就 null。
  *  第 2 轮 setup N1:穿墙线站点一定拒,不再问「还是要保存吗」—— 用 ``saveBlock`` 直接说不能存。 */
 export function saveWarning(alone: string[]): string | null {
-  return alone.length ? `${t("lyRnLonely", { ids: alone.join("、") })}\n\n${t("lyRnSaveAnyway")}` : null;
+  return alone.length ? `${t("lyRnLonely", { ids: joinList(alone) })}\n\n${t("lyRnSaveAnyway")}` : null;
 }
 
 /** 站点一定不收的(连线穿过虚拟墙):说哪几条、怎么办;没有就 null。 */
 export function saveBlock(bad: string[]): string | null {
-  return bad.length ? t("lyRnCrossBlock", { ids: bad.join("、") }) : null;
+  return bad.length ? t("lyRnCrossBlock", { ids: joinList(bad) }) : null;
 }
 
 function lengthM(nodes: RnNode[], edges: Edge[]): number {
@@ -196,8 +196,8 @@ export function RoadnetTab(p: TabProps) {
         {nodes.length > 0 && (
           <p class="small">{t("lyRnStats", { nodes: String(nodes.length), edges: String(edges.length), len: lengthM(nodes, edges).toFixed(1) })}</p>
         )}
-        {alone.length > 0 && <p class="small warn">{t("lyRnLonely", { ids: alone.join("、") })}</p>}
-        {bad.length > 0 && <p class="small bad" data-rn-cross="1">{t("lyRnCrossWall", { ids: bad.join("、") })}</p>}
+        {alone.length > 0 && <p class="small warn">{t("lyRnLonely", { ids: joinList(alone) })}</p>}
+        {bad.length > 0 && <p class="small bad" data-rn-cross="1">{t("lyRnCrossWall", { ids: joinList(bad) })}</p>}
         {cur && (
           <section class="panel ly-detail">
             <h3>{cur.id}</h3>

@@ -368,6 +368,11 @@ export function MapPage(props: {
         )}
         extraMarks={(s) => (
           <>
+            {/* 第 2 轮 duty N9:点了哪儿就在哪儿标一下,确认框说的是这个点 */}
+            {look && shown.map && look.map.map_id === shown.map.map_id && look.map.version === shown.map.version && (() => {
+              const [x, y] = s.map(look.at[0], look.at[1]);
+              return <g class="look-mark" data-look-mark="1"><circle cx={x} cy={y} r={10} /><circle cx={x} cy={y} r={3} class="dot" /></g>;
+            })()}
             {on("cameras") && shown.map && camMarks(s, camsOnMap(cams, shown.map), setLiveCam)}
             {on("standby") && standby.map((p) => {
               const [x, y] = s.map(p.x, p.y);

@@ -259,7 +259,8 @@ export function LayoutPage({ say, robots, tabs }: { say: Say; robots: string[]; 
         <span class="push" />
         {HISTORY_KIND[tab] && <button type="button" class="btn" onClick={() => setHistory(!history)} aria-pressed={history}>{t("lyHistory")}</button>}
         {/* P1-34:「没保存」写在保存按钮旁边,不另起一行把地图往下推 */}
-        {dirty && <span class="ly-dirty small" role="status">{t("armDirty")}</span>}
+        {/* 第 2 轮 setup N15:「还没保存」的位置一直留着,出现时「历史」按钮不跳 */}
+        <span class={dirty ? "ly-dirty small" : "ly-dirty small hold"} role="status" aria-hidden={!dirty || undefined}>{t("armDirty")}</span>
         <button type="button" class="btn primary ly-save" disabled={!dirty || busy} onClick={() => void save()}>{t("save")}</button>
       </div>
       <p class="muted lead">{t("lyLead")}</p>

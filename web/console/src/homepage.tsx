@@ -12,7 +12,7 @@ import { api } from "./api";
 import { whoText } from "./armingpage";
 import type { Authz } from "./accesspage";
 import { hm } from "./data";
-import { alertTitle, lang, t, type Key } from "./i18n";
+import { alertTitle, lang, t, type Key, joinList } from "./i18n";
 import { SetupChecklist } from "./guide";
 import { Icon } from "./icons";
 import { forGuard, type Alert, type Mode } from "./model";
@@ -104,7 +104,7 @@ export function HomePage(props: {
                 {today.today.map((z) => (
                   <li key={z.zone}>
                     <b>{z.zone || t("homeAllZones")}</b>{" "}
-                    {z.windows.length === 0 ? t("homeDisarmedAllDay") : t("homeArmedAt", { w: z.windows.map(([a, b]) => `${a}–${b}`).join("、") })}
+                    {z.windows.length === 0 ? t("homeDisarmedAllDay") : t("homeArmedAt", { w: joinList(z.windows.map(([a, b]) => `${a}–${b}`)) })}
                   </li>
                 ))}
               </ul>
@@ -116,7 +116,7 @@ export function HomePage(props: {
               <ul class="plain">
                 {todayAuthz.map((a) => (
                   <li key={a.id}>
-                    <b>{a.name}</b> {a.zones.length ? a.zones.join("、") : t("wholeSite")} <span class="mono">{a.start}–{a.end}</span>
+                    <b>{a.name}</b> {a.zones.length ? joinList(a.zones) : t("wholeSite")} <span class="mono">{a.start}–{a.end}</span>
                     {a.active_now && <span class="tag">{t("homeAuthzNow")}</span>}
                   </li>
                 ))}
