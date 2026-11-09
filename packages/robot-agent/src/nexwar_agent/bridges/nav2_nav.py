@@ -38,6 +38,7 @@ from nexwar_agent.bridges.hal_nav import HalNavBackend
 from nexwar_agent.bridges.planned_nav import PlannedNavBackend, _heading
 from nexwar_contract.navbridge import MAX_VIA
 from nexwar_contract.obsbridge import pack_bits
+from nexwar_contract.planning import costmap as cmod
 from nexwar_contract.routenet import densify, route
 from nexwar_contract.zones import ZoneSet, point_in_polygon, segments_cross
 from nexwar_patrol.backends.base import NavRequestError
@@ -221,8 +222,16 @@ def _compose_map_odom(est: Any, odom: tuple[float, float, float]) -> list[float]
     return [x, y, math.remainder(yaw, 2 * math.pi)]
 
 
+#: Nav2 没就绪、退回自己规划的那一段按多大的圆膨胀(米,再加 INFLATE_MARGIN_M 0.05 = 0.40,跟站点查
+#: 路线的 ``intercept_reach.REACH_RADIUS_M`` 一样)。原来按外接圆 0.52 m,1.14 m 以下的通道都判走不通:
+#: 站点说走得通、Nav2 一没就绪机器人就跳点(11-09)。车身按圆算比 Nav2 的长方形松,
+#: 窄处原地转身靠守卫兜底。
+FALLBACK_RADIUS_M = 0.35
+
+
 class Nav2NavBackend(PlannedNavBackend):
     def __init__(self, *a: Any, link: Any = None, **kw: Any) -> None:
+        kw.setdefault("robot_radius_m", FALLBACK_RADIUS_M)
         super().__init__(*a, **kw)
         #: 转接服务端(:class:`~nexwar_agent.navbridge.NavBridgeServer`);``None`` = 没配,
         #: 永远退回自己的规划。
@@ -465,8 +474,9 @@ class Nav2NavBackend(PlannedNavBackend):
         if self._base is None or here is None:
             return pose
         try:
-            cm = await self._costmap_async(self._margin(here, pose))
-            snapped = self._snap_goal(cm, pose)
+            # Nav2 的机身是长方形、斜着停也得放得下:挪点照旧按外接圆(备用规划那个小半径只管找路)
+            cm = await self._costmap_async(self._margin(here, pose), cmod.ROBOT_RADIUS_M)
+            snapped = self._snap_goal(cm, pose, cmod.ROBOT_RADIUS_M)
         except Exception:                                 # 只是改善,查不了照原样
             log.exception("%s:查终点贴不贴墙没成,照原样交给 Nav2", op)
             return pose
