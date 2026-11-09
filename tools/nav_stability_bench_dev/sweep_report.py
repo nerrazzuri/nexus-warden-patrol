@@ -247,6 +247,45 @@ def main() -> int:
                      f"{fmt(pct([r.get('min_body_clearance_moving_m') for r in xs], 0.0))} m | {top} |")
     L.append("")
     # 失败原因 + Nav2 报错
+    # 导航 V1 第 2 节验收:Route Validator 对照几何判定器(只算两边都有结论的趟)
+    gated = [r for r in rows if isinstance(r.get("oracle"), dict) and "feasible" in r["oracle"]
+             and r.get("route_checks") is not None]
+    if gated:
+        L += ["## Route Validator 对照几何判定器", "",
+              "判定器 = 按地图墙、有效车身 + 每边 0.2 m 搜遍位置和朝向的标准答案;"
+              "验收:判定器可行的误拒 < 2%,判定器不可行的正确拒绝 > 50/60(按比例看)。", "",
+              "| 配置 | 判定器可行:趟数 | 误拒 | 误拒率 | 可行里自动完成 | 判定器不可行:趟数 | 正确拒绝 | 漏拒 | 漏拒里真撞 | 没查成 |",
+              "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|"]
+        for cfg in sorted({r["config"] for r in gated}):
+            rs = [r for r in gated if r["config"] == cfg]
+            fe = [r for r in rs if r["oracle"]["feasible"]]
+            inf = [r for r in rs if not r["oracle"]["feasible"]]
+            mis = [r for r in fe if r.get("route_refused")]
+            done = [r for r in fe if r.get("success")]
+            ok_rej = [r for r in inf if r.get("route_refused")]
+            miss = [r for r in inf if not r.get("route_refused")]
+            hit = [r for r in miss if phys(r, "static_physical") or phys(r, "dynamic_physical")]
+            unchecked = sum(1 for r in rs for c in r.get("route_checks") or [] if not c.get("checked"))
+            rate = f"{100 * len(mis) / len(fe):.1f}%" if fe else "—"
+            L.append(f"| {cfg} | {len(fe)} | {len(mis)} | {rate} | {len(done)}/{len(fe)} | {len(inf)} | "
+                     f"{len(ok_rej)} | {len(miss)} | {len(hit)} | {unchecked} |")
+            summary.setdefault(cfg, {})["route_validator"] = {
+                "feasible": len(fe), "misreject": len(mis), "feasible_done": len(done),
+                "infeasible": len(inf), "correct_reject": len(ok_rej), "missed": len(miss),
+                "missed_collided": len(hit), "unchecked": unchecked}
+        L.append("")
+        L += ["误拒、漏拒明细(场景 / 种子 / 判定器怎么说 / Validator 怎么说):", ""]
+        for r in gated:
+            fe, rej = r["oracle"]["feasible"], bool(r.get("route_refused"))
+            if fe == rej:
+                why_v = next((c for c in r.get("route_checks") or [] if c.get("checked") and not c.get("ok")), {})
+                legs = r["oracle"].get("legs") or []
+                o = "可行" if fe else f"不可行(第 {r['oracle'].get('first_bad')} 段 " \
+                    f"{legs[r['oracle']['first_bad']]['reason'] if legs else ''})"
+                v = f"拒 {why_v.get('code')} 余量 {why_v.get('margin')} 在 {why_v.get('at')}" if rej else "放行"
+                L.append(f"- {r['config']} {r['scenario']} s{r['seed']}:判定器{o};Validator {v}")
+        L.append("")
+
     L += ["## 失败原因", ""]
     for cfg, rs in sorted(by_cfg.items()):
         fails = defaultdict(int)

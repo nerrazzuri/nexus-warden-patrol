@@ -88,6 +88,11 @@ def run_one(job: dict, slot: int, args) -> dict:
         return res
     case = json.loads((d / "case.json").read_text())
     cfg = job["config"]
+    try:                                       # 几何判定器的答案(导航 V1 第 2 节):这一趟该过还是该拒
+        from oracle_label import label
+        oracle = label(d)
+    except Exception as e:                     # 标不出来不影响跑
+        oracle = {"error": repr(e)[:200]}
     launch_args = [f"world:={d / 'world.sdf'}", f"map:={d / 'map.yaml'}", f"params_file:={cfg.get('params', PARAMS)}",
                    f"seed:={job['seed']}", f"case_json:={d / 'case.json'}",
                    f"agent_guard:={cfg.get('guard', 'false')}", f"guard_tight:={cfg.get('tight', 'false')}",
@@ -106,8 +111,9 @@ def run_one(job: dict, slot: int, args) -> dict:
             time.sleep(10)
             budget = float(case.get("timeout_s", 90)) * len(case["goals"]) + 60
             try:
+                gate = ["--route-gate"] if cfg.get("route_gate") == "true" else []
                 subprocess.run([sys.executable, str(HERE / "goal_driver.py"), "--case", str(d / "case.json"),
-                                "--out", str(d / "metrics.json")], cwd=ROOT, env=env, timeout=budget,
+                                "--out", str(d / "metrics.json"), *gate], cwd=ROOT, env=env, timeout=budget,
                                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             except subprocess.TimeoutExpired:
                 pass
@@ -125,7 +131,7 @@ def run_one(job: dict, slot: int, args) -> dict:
                 guard = json.loads(line)["summary"]
     res = {**job_info(job), "case_sim": case.get("sim"), "expect": case.get("expect", "arrive"),
            "family": case.get("family"), "width_m": case.get("width_m"), **metrics, "log": counts,
-           "guard": guard, "wall_s": round(time.time() - t0, 1)}
+           "guard": guard, "oracle": oracle, "wall_s": round(time.time() - t0, 1)}
     keep = (not res.get("success")) or job["first"]
     if not keep and (d / "bag").exists():
         shutil.rmtree(d / "bag")

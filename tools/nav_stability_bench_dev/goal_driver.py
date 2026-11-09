@@ -76,6 +76,9 @@ def main() -> int:
         def __init__(self, case: dict):
             super().__init__("nav_stability_goal_driver")
             self.case = case
+            self.route_gate_dir = None
+            self.route_refused = False
+            self.route_checks = []
             self.client = ActionClient(self, NavigateToPose, "navigate_to_pose")
             self.min_clearance = float("inf")
             self.last_odom_speed = 0.0
@@ -247,11 +250,25 @@ def main() -> int:
             if not self.client.wait_for_server(timeout_sec=30.0):
                 return {"success": False, "reason": "navigate_to_pose action unavailable"}
             results = []
+            gate = None
+            if self.route_gate_dir is not None:
+                # 导航 V1 第 2 节:跟真机一样,每个目标出发前先查路线几何,不过就不发(主动拒绝)
+                from route_gate import RouteGate
+                gate = RouteGate(self, self.route_gate_dir)
             total_start = time.monotonic()
             for idx, goal in enumerate(self.case["goals"]):
                 self.active_since = time.monotonic()
                 request = NavigateToPose.Goal()
                 request.pose = self.pose(goal)
+                if gate is not None:
+                    chk = gate.check(self.pose(goal))
+                    chk.pop("poses", None)
+                    self.route_checks.append({"goal": idx, **chk})
+                    if chk.get("checked") and not chk.get("ok"):
+                        self.route_refused = True
+                        results.append({"goal": idx, "success": False, "reason": "route_refused",
+                                        "code": chk.get("code")})
+                        break
                 # Nav2 的 action 服务比 bt_navigator 激活早出现;没激活时目标会被拒。
                 # 第一个目标被拒就每秒重发,最多等 30 s,不把启动慢算成导航失败。
                 retry_until = time.monotonic() + (30.0 if idx == 0 else 0.0)
@@ -302,6 +319,8 @@ def main() -> int:
             return {
                 "success": success and not self.collision,
                 "goal_results": results,
+                "route_refused": self.route_refused,
+                "route_checks": self.route_checks,
                 "elapsed_s": round(time.monotonic() - total_start, 3),
                 "max_stall_s": round(self.max_stall, 3),
                 "min_clearance_m": clearance,
@@ -330,10 +349,12 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--case", type=Path, required=True)
     ap.add_argument("--out", type=Path, required=True)
+    ap.add_argument("--route-gate", action="store_true", help="每个目标出发前查路线几何(Route Validator)")
     args = ap.parse_args()
     case = json.loads(args.case.read_text(encoding="utf-8"))
     rclpy.init()
     node = Driver(case)
+    node.route_gate_dir = args.case.parent if args.route_gate else None
     try:
         metrics = node.run()
     finally:
