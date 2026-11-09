@@ -197,6 +197,22 @@ async def test_Nav2没就绪_这一段退回自己的规划_照样到(tmp_path):
     assert NavStatus.SUCCEED in t.status and not t.crashed
 
 
+async def test_Nav2没就绪_一米走廊退回自己的规划_也到得了_跟站点查路线一个口径(tmp_path):
+    """11-09:备用规划按外接圆 0.52 + 0.05 m 膨胀,1.14 m 以下的通道都判走不通;站点查路线按 0.40 m
+    (intercept_reach.REACH_RADIUS_M)。站点说走得通、Nav2 一没就绪机器人就跳点。"""
+    from nexwar_agent.bridges.nav2_nav import FALLBACK_RADIUS_M
+    from nexwar_contract.planning import costmap as cmod
+    assert FALLBACK_RADIUS_M + cmod.INFLATE_MARGIN_M == pytest.approx(0.40)
+    link = 假转接(ready=False)
+    link.reason = "还在启动"
+    t = _台(tmp_path, link, walls=_窄走廊(1.0))
+    assert t.nav.robot_radius_m == pytest.approx(FALLBACK_RADIUS_M)
+    await t.start(1.5, 4.0)
+    await t.nav.goto(Pose.from_xy_yaw(9.0, 4.0))
+    await t.跑(90.0)
+    assert NavStatus.SUCCEED in t.status and not t.crashed, t.status
+
+
 async def test_Nav2就绪_交目标_按它的速度走_它说到了就到(tmp_path):
     link = 假转接()
     t = _台(tmp_path, link)

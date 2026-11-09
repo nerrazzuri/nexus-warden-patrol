@@ -194,7 +194,7 @@ class PlannedNavBackend(HalNavBackend):
         self.zones: ZoneSet | None = None
         #: 路网(W48):有就按它分段规划;运行时只给正在用的那一版的。
         self.route_net: RouteNet | None = None
-        self._cms: dict[int, Costmap] = {}
+        self._cms: dict[Any, Costmap] = {}
         #: 图或区域每换一次 +1:线程里算到一半的旧代价图不许写回缓存(换区域之后还拿旧图规划)。
         self._epoch = 0
         self._cm: Costmap | None = None              # 当前路径用的那张
@@ -314,8 +314,11 @@ class PlannedNavBackend(HalNavBackend):
     def plan_ok(self) -> bool:
         return self._base is not None
 
-    def _costmap(self, margin_m: float) -> Costmap:
-        key = int(math.ceil(max(0.0, margin_m) / 0.1 - 1e-9))
+    def _costmap(self, margin_m: float, radius_m: float | None = None) -> Costmap:
+        """``radius_m``:按别的机身半径膨胀(默认 :attr:`robot_radius_m`),单独缓存。"""
+        k = int(math.ceil(max(0.0, margin_m) / 0.1 - 1e-9))
+        key: Any = k if radius_m is None else (k, round(radius_m, 3))
+        radius = self.robot_radius_m if radius_m is None else radius_m
         cms, epoch, base, zs = self._cms, self._epoch, self._base, self.zones
         cm = cms.get(key)
         if cm is None:
@@ -331,18 +334,20 @@ class PlannedNavBackend(HalNavBackend):
                     if 0 <= r < h and 0 <= c < w:
                         blocked[r, c] = True
             cm = cmod.build(blocked, res, origin, self._effective(zs),
-                            robot_radius_m=self.robot_radius_m + cmod.INFLATE_MARGIN_M,
-                            nogo_margin_m=key * 0.1)
+                            robot_radius_m=radius + cmod.INFLATE_MARGIN_M,
+                            nogo_margin_m=k * 0.1)
             cms[key] = cm                     # 写进算的时候那一份缓存:换过就是丢掉的那份
             if epoch != self._epoch:
                 raise _Stale()
         return cm
 
-    async def _costmap_async(self, margin_m: float) -> Costmap:
+    async def _costmap_async(self, margin_m: float, radius_m: float | None = None) -> Costmap:
         """在线程里算(百万格要几百毫秒);算到一半图或区域换了就重算。"""
         for _ in range(3):
             try:
-                return await asyncio.to_thread(self._costmap, margin_m)
+                if radius_m is None:
+                    return await asyncio.to_thread(self._costmap, margin_m)
+                return await asyncio.to_thread(self._costmap, margin_m, radius_m)
             except _Stale:
                 continue
         raise NavRequestError("goto", "图或区域一直在换,代价图算不出来")
@@ -584,7 +589,7 @@ class PlannedNavBackend(HalNavBackend):
             s += DRIFT_XY_PER_M * math.hypot(goal.position.x - est.x, goal.position.y - est.y)
         return min(s, MAX_SIGMA_MARGIN_M)
 
-    def _snap_goal(self, cm: Costmap, pose: Pose) -> Pose | None:
+    def _snap_goal(self, cm: Costmap, pose: Pose, radius_m: float | None = None) -> Pose | None:
         """工单 20:终点只是落在地图墙的膨胀圈里(本身不在墙、禁行区、临时障碍里,附近也没有临时障碍)→
         :data:`GOAL_SNAP_M` 以内最近的能站的点(朝向不变);不然 ``None``。原点、待命点是狗站着标的,
         贴着墙站得下,规划按外接圆膨胀就判「贴得太近」。临时障碍(绕障记的)附近不挪:那是 W41 的
@@ -594,7 +599,8 @@ class PlannedNavBackend(HalNavBackend):
         if rc is None or cm.hard[rc] or not cm.lethal[rc]:
             return None
         res = cm.res
-        reach = self.robot_radius_m + cmod.INFLATE_MARGIN_M + GOAL_SNAP_M
+        radius = self.robot_radius_m if radius_m is None else radius_m
+        reach = radius + cmod.INFLATE_MARGIN_M + GOAL_SNAP_M
         for (r, c) in self._temp:
             if math.hypot(cm.origin[0] + (c + 0.5) * res - x,
                           cm.origin[1] + (r + 0.5) * res - y) <= reach:
