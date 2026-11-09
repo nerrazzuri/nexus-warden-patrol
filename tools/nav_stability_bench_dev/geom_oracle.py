@@ -5,11 +5,11 @@
 一条路线;这里搜所有位姿,用来量 Validator 的误拒率和正确拒绝率。
 
 做法:
-- 朝向分 ``yaw_bins`` 档。每档把车身矩形(半长 ``half_len``、半宽 ``half_wid``)在档内几个角度
-  取并集,跟地图障碍做闵可夫斯基和 → 这一档里机器人中心不能去的格子。档内转动扫过的面积都算进去,
-  所以宁严勿松(档宽 5° 时残差 < 1 cm)。
+- 朝向分 ``yaw_bins`` 档。每档按那个角度的车身矩形(半长 ``half_len``、半宽 ``half_wid``)跟地图
+  障碍做闵可夫斯基和 → 朝这个方向时机器人中心不能去的格子。
+- 从一档原地转到下一档:这一格上两档之间转过去扫过的面积(取 5 个角度的并集)都要空着。
+- 起点放不下时在 0.5 m 内找放得下的(同 Validator 出发头 0.5 m 不查);终点一定要放得下。
 - 同一档里可以前后走、横移(D1 能横移):8 邻接连通。
-- 相邻两档、同一个格子都能站:可以原地转过去。
 - 起点所在的连通块里有终点 → 可行。
 
 只用 numpy(CI 环境没有 scipy)。栅格约定跟 ``nexwar_contract.planning.costmap`` 一样:
@@ -37,6 +37,9 @@ HALF_WID = BASE_HALF_WID + ROUTE_MARGIN
 YAW_BINS = 72
 #: 每档内取几个角度合成车身(档两端 + 中间)。
 SAMPLES_PER_BIN = 5
+#: 起点放不下有效车身时,在这么远以内找一个放得下的(同一档朝向)。跟 Route Validator 一样:
+#: 出发后头 0.5 m 不查(机器人就站在那儿,贴墙也得先走出来)。
+START_SLACK_M = 0.5
 
 
 @dataclass(frozen=True)
@@ -59,8 +62,9 @@ def _kernel(theta_lo: float, theta_hi: float, half_len: float, half_wid: float,
         ct, st = math.cos(t), math.sin(t)
         along = dx * ct + dy * st
         across = -dx * st + dy * ct
-        # 格中心落在矩形里,或者离矩形不到半格(格子本身有大小):宁严勿松
-        k |= (np.abs(along) <= half_len + res / 2) & (np.abs(across) <= half_wid + res / 2)
+        # 障碍按格中心算、机器人位置也只落在格中心,两头各差不到半格、大致抵消。原来车身再外扩
+        # 半格,1.0 m 直走廊(居中每边 0.01 m 富余)就判过不去,跟 0.98 m 的口径对不上。
+        k |= (np.abs(along) <= half_len) & (np.abs(across) <= half_wid)
     return k
 
 
@@ -123,9 +127,10 @@ def _overlap_pairs(a0, a1, b0, b1, slack: int):
             j += 1
 
 
-def _label(free: np.ndarray) -> tuple[_UF, list[list[tuple[np.ndarray, np.ndarray, int]]]]:
-    """按段做并查集:层内 8 邻接,相邻层(含 最后一档↔第一档)同一格都能站就连上。
-    返回并查集和每层每行的段 (起列, 止列, 第一个段号)。"""
+def _label(free: np.ndarray, sweep: np.ndarray
+           ) -> tuple[_UF, list[list[tuple[np.ndarray, np.ndarray, int]]]]:
+    """按段做并查集:层内 8 邻接;从第 k 档转到第 k+1 档(含 最后一档↔第一档)要这一格上转过去
+    扫过的面积都空着(``sweep[k]``)。返回并查集和每层每行的段 (起列, 止列, 第一个段号)。"""
     uf = _UF()
     nb, h, _ = free.shape
     layers: list[list[tuple[np.ndarray, np.ndarray, int]]] = []
@@ -147,10 +152,11 @@ def _label(free: np.ndarray) -> tuple[_UF, list[list[tuple[np.ndarray, np.ndarra
         if k2 == k:
             break
         for r in range(h):
-            s, e, f = layers[k][r]
-            s2, e2, f2 = layers[k2][r]
-            for i, j in _overlap_pairs(s, e, s2, e2, 0):
-                uf.union(f + i, f2 + j)
+            ss, _ = _runs(sweep[k, r])
+            for c in ss:                      # 扫过的都空 ⊂ 两档都能站:段起点落在两档各自的段里
+                a, b = _node(layers, k, r, int(c)), _node(layers, k2, r, int(c))
+                if a is not None and b is not None:
+                    uf.union(a, b)
     return uf, layers
 
 
@@ -160,6 +166,25 @@ def _node(layers, k: int, r: int, c: int) -> int | None:
     if i >= 0 and c <= e[i]:
         return f + i
     return None
+
+
+def _near_start(free: np.ndarray, layers, ks, rc: tuple[int, int], n: int) -> list[int]:
+    """起点 ``n`` 格以内、这几档朝向里放得下车身的最近那些格所在的块。"""
+    r0, c0 = rc
+    _, h, w = free.shape
+    ra, rb, ca, cb = max(0, r0 - n), min(h, r0 + n + 1), max(0, c0 - n), min(w, c0 + n + 1)
+    out = []
+    for k in ks:
+        rr, cc = np.nonzero(free[k, ra:rb, ca:cb])
+        if len(rr) == 0:
+            continue
+        d2 = (rr + ra - r0) ** 2 + (cc + ca - c0) ** 2
+        j = int(d2.argmin())
+        if d2[j] <= n * n:
+            node = _node(layers, k, int(rr[j] + ra), int(cc[j] + ca))
+            if node is not None:
+                out.append(node)
+    return out
 
 
 def _bin(yaw: float, nb: int) -> int:
@@ -185,12 +210,16 @@ def judge(blocked: np.ndarray, res: float, origin: tuple[float, float],
     if sc is None or gc is None:
         return Verdict(False, "outside")
     step = 2 * math.pi / yaw_bins
-    kernels = [_kernel(k * step - step / 2, k * step + step / 2, half_len, half_wid, res,
-                       SAMPLES_PER_BIN) for k in range(yaw_bins)]
-    free = ~_cspace(blocked, kernels)
-    uf, layers = _label(free)
+    exact = [_kernel(k * step, k * step, half_len, half_wid, res, 1) for k in range(yaw_bins)]
+    turns = [_kernel(k * step, (k + 1) * step, half_len, half_wid, res, SAMPLES_PER_BIN)
+             for k in range(yaw_bins)]
+    cs = _cspace(blocked, exact + turns)
+    free, sweep = ~cs[:yaw_bins], ~cs[yaw_bins:]
+    uf, layers = _label(free, sweep)
     sks = range(yaw_bins) if start[2] is None else [_bin(start[2], yaw_bins)]
     sns = [n for n in (_node(layers, k, *sc) for k in sks) if n is not None]
+    if not sns:
+        sns = _near_start(free, layers, sks, sc, int(round(START_SLACK_M / res)))
     if not sns:
         return Verdict(False, "start_blocked")
     gks = range(yaw_bins) if goal[2] is None else [_bin(goal[2], yaw_bins)]

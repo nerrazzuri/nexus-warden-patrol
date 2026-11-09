@@ -43,12 +43,13 @@ def test_default_body_is_route_validator_size():
     assert 2 * go.HALF_WID == pytest.approx(0.98)
 
 
-@pytest.mark.parametrize(("width", "ok"), [(1.20, True), (1.10, True), (0.90, False)])
+# 栅格 0.05 m:宽度取整格(0.95 m 画出来会变成 1.0 m)
+@pytest.mark.parametrize(("width", "ok"), [(1.20, True), (1.10, True), (1.00, True), (0.90, False)])
 def test_straight_corridor_by_width(width, ok):
     v = judge(corridor(width), (2.0, 1.5, 0.0), (5.0, 1.5, 0.0))
     assert v.feasible is ok
     if not ok:
-        assert v.reason == "start_blocked"            # 0.90 m 连站都站不下
+        assert v.reason == "start_blocked"            # 不到 0.98 m:连站都站不下
 
 
 def test_pinch_in_the_middle_is_no_path():
@@ -94,3 +95,14 @@ def test_start_heading_free_when_none():
     carve(g, 1.0, 0.5, 2.25, 5.5)                     # 1.25 m 宽、竖着的走廊
     assert judge(g, (1.6, 2.0, 0.0), (1.6, 4.0, None)).reason == "start_blocked"
     assert judge(g, (1.6, 2.0, None), (1.6, 4.0, None)).feasible
+
+
+def test_start_against_wall_gets_half_metre_slack():
+    # 起点贴着走廊尽头的墙(车身放不下),往外 0.3 m 就放得下:跟 Validator 一样头 0.5 m 不查
+    g = corridor(1.20)
+    assert judge(g, (0.9, 1.5, 0.0), (5.0, 1.5, 0.0)).feasible
+    # 离能站的地方超过 0.5 m:照旧放不下
+    g2 = corridor(1.20)
+    g2[:, :int(3.0 / RES)] = True
+    carve(g2, 2.0, 1.5 - 0.3, 3.0, 1.5 + 0.3)           # 0.6 m 宽的小口,往前 1 m 才到走廊
+    assert judge(g2, (2.1, 1.5, 0.0), (5.0, 1.5, 0.0)).reason == "start_blocked"
