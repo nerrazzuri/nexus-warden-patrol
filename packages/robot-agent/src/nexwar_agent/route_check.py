@@ -6,8 +6,10 @@ Nav2 规划出路线(``plan_result``,带朝向、不抽稀)之后、出发之前
 2. 每个位姿放「物理车身 + 基础余量」(半长 :data:`~nexwar_contract.footprint.BASE_HALF_LEN`、
    半宽 :data:`~nexwar_contract.footprint.BASE_HALF_WID`),算四边一起往外扩多少碰到地图墙,
    就是这一处的余量。
-3. 最窄处余量 < :data:`~nexwar_contract.footprint.ROUTE_MARGIN` 就拒绝出发:最窄处在终点附近报
-   ``goal_too_close_to_wall``,别处报 ``route_too_narrow``,原因里写在哪、剩多少、要多少。
+3. 最窄处余量 < :data:`~nexwar_contract.footprint.ROUTE_MARGIN_MIN`(底线 0.10 m)就拒绝出发:
+   最窄处在终点附近报 ``goal_too_close_to_wall``,别处报 ``route_too_narrow``,原因里写在哪、剩多少、
+   要多少。底线到 :data:`~nexwar_contract.footprint.ROUTE_MARGIN`(目标 0.20 m)之间放行,
+   ``tight`` = True(用户 11-09:0.2 过不去就改成 0.1)。
 
 每个位姿允许横向挪 ±:data:`SHIFT_M` 取最好的位置:Smac 的线常常不在通道正中,控制器也不死贴线走
 (1.0 m 走廊居中每边剩 0.21 m,只比要求多 1 cm,不挪的话偏 1 cm 就误拒)。
@@ -29,7 +31,7 @@ from nexwar_contract.footprint import (
     BASE_HALF_LEN,
     BASE_HALF_WID,
     ROUTE_MARGIN,
-    ROUTE_MIN_WIDTH,
+    ROUTE_MARGIN_MIN,
 )
 
 STEP_M = 0.05
@@ -52,6 +54,8 @@ class RouteCheck:
     at: tuple[float, float, float] | None
     code: str = ""
     why: str = ""
+    #: 放行了,但最窄处没留够目标余量(0.10–0.20 m)
+    tight: bool = False
 
 
 def _wrap(a: float) -> float:
@@ -114,7 +118,8 @@ def pose_margins(poses: Sequence[tuple[float, float, float]], walls: Any, res: f
 
 
 def check_route(poses: Sequence[Sequence[float]], walls: Any, res: float,
-                origin: tuple[float, float], *, need: float = ROUTE_MARGIN) -> RouteCheck:
+                origin: tuple[float, float], *, need: float = ROUTE_MARGIN_MIN,
+                want: float = ROUTE_MARGIN) -> RouteCheck:
     """查一条路线;``poses`` = ``plan_result.poses``(地图系)。"""
     dense = densify(poses)
     if not dense:
@@ -128,7 +133,7 @@ def check_route(poses: Sequence[Sequence[float]], walls: Any, res: float,
     j = int(np.argmin(m))
     worst, at = float(m[j]), dense[int(idx[j])]
     if worst >= need:
-        return RouteCheck(True, worst, at)
+        return RouteCheck(True, worst, at, tight=worst < want)
     near_goal = along[-1] - along[int(idx[j])] <= GOAL_ZONE_M
     gx, gy = dense[-1][0], dense[-1][1]
     if near_goal:
@@ -136,5 +141,6 @@ def check_route(poses: Sequence[Sequence[float]], walls: Any, res: float,
                f"{max(worst, 0.0):.2f} m 余量(要求每边 ≥ {need:.2f} m),把航点往空处挪一点")
         return RouteCheck(False, worst, at, "goal_too_close_to_wall", why)
     why = (f"路线在 ({at[0]:.2f}, {at[1]:.2f}) 处离墙只剩 {max(worst, 0.0):.2f} m"
-           f"(要求每边 ≥ {need:.2f} m,直通道约需 {ROUTE_MIN_WIDTH:.2f} m 净宽),无法安全通过")
+           f"(要求每边 ≥ {need:.2f} m,直通道约需 {2 * (BASE_HALF_WID + need):.2f} m 净宽),"
+           "无法安全通过")
     return RouteCheck(False, worst, at, "route_too_narrow", why)

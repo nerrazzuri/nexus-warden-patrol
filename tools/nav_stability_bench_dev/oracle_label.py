@@ -21,16 +21,22 @@ from route_gate import load_walls  # noqa: E402
 
 
 def label(case_dir: Path) -> dict:
-    """→ ``{"feasible": bool, "legs": [{"feasible", "reason"}…], "first_bad": 段号或 None}``。"""
+    """→ ``{"feasible": bool, "feasible_want": bool, "legs": [{"feasible", "reason", "want"}…],
+    "first_bad": 段号或 None}``。``feasible`` 按底线(每边 0.10 m,该不该放行);``feasible_want``
+    按目标(每边 0.20 m)。"""
     case = json.loads((case_dir / "case.json").read_text(encoding="utf-8"))
     walls, res, origin = load_walls(case_dir)
     pts = [case["start"], *case["goals"]]
     legs = []
     for a, b in zip(pts[:-1], pts[1:], strict=True):
-        v = geom_oracle.judge(walls, res, origin, (a[0], a[1], a[2]), (b[0], b[1], b[2]))
-        legs.append({"feasible": v.feasible, "reason": v.reason})
+        s, g = (a[0], a[1], a[2]), (b[0], b[1], b[2])
+        v = geom_oracle.judge(walls, res, origin, s, g, half_len=geom_oracle.HALF_LEN_MIN,
+                              half_wid=geom_oracle.HALF_WID_MIN)
+        w = geom_oracle.judge(walls, res, origin, s, g) if v.feasible else v
+        legs.append({"feasible": v.feasible, "reason": v.reason, "want": w.feasible})
     bad = next((i for i, g in enumerate(legs) if not g["feasible"]), None)
-    return {"feasible": bad is None, "legs": legs, "first_bad": bad}
+    return {"feasible": bad is None, "feasible_want": all(g["want"] for g in legs),
+            "legs": legs, "first_bad": bad}
 
 
 def main() -> int:

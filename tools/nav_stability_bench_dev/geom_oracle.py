@@ -29,11 +29,19 @@ import numpy as np
 _SRC = Path(__file__).resolve().parents[2] / "packages" / "contract" / "src"
 if str(_SRC) not in sys.path:
     sys.path.insert(0, str(_SRC))
-from nexwar_contract.footprint import BASE_HALF_LEN, BASE_HALF_WID, ROUTE_MARGIN  # noqa: E402
+from nexwar_contract.footprint import (  # noqa: E402
+    BASE_HALF_LEN,
+    BASE_HALF_WID,
+    ROUTE_MARGIN,
+    ROUTE_MARGIN_MIN,
+)
 
-#: 默认按 Route Validator 的口径:有效车身 1.03 × 0.58 + 每边 0.20 m = 1.43 × 0.98。
+#: 默认按路线余量的目标:有效车身 1.03 × 0.58 + 每边 0.20 m = 1.43 × 0.98。
 HALF_LEN = BASE_HALF_LEN + ROUTE_MARGIN
 HALF_WID = BASE_HALF_WID + ROUTE_MARGIN
+#: 底线:每边 0.10 m = 1.23 × 0.78(Route Validator 不到就拒绝)。
+HALF_LEN_MIN = BASE_HALF_LEN + ROUTE_MARGIN_MIN
+HALF_WID_MIN = BASE_HALF_WID + ROUTE_MARGIN_MIN
 YAW_BINS = 72
 #: 每档内取几个角度合成车身(档两端 + 中间)。
 SAMPLES_PER_BIN = 5

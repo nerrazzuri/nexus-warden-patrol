@@ -81,6 +81,6 @@ class RouteGate:
         pts = [[p.pose.position.x, p.pose.position.y,
                 2.0 * math.atan2(p.pose.orientation.z, p.pose.orientation.w)] for p in poses]
         v = check_route(pts, *self.walls)
-        return {"checked": True, "ok": v.ok, "code": v.code, "why": v.why,
+        return {"checked": True, "ok": v.ok, "tight": v.tight, "code": v.code, "why": v.why,
                 "margin": round(v.margin, 3), "at": None if v.at is None else [round(a, 2) for a in v.at],
                 "poses": len(pts)}
