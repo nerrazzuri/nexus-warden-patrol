@@ -252,10 +252,10 @@ def main() -> int:
              and r.get("route_checks") is not None]
     if gated:
         L += ["## Route Validator 对照几何判定器", "",
-              "判定器 = 按地图墙、有效车身 + 每边 0.2 m 搜遍位置和朝向的标准答案;"
+              "判定器 = 按地图墙、有效车身 + 每边 0.10 m(底线)搜遍位置和朝向的标准答案;"
               "验收:判定器可行的误拒 < 2%,判定器不可行的正确拒绝 > 50/60(按比例看)。", "",
-              "| 配置 | 判定器可行:趟数 | 误拒 | 误拒率 | 可行里自动完成 | 判定器不可行:趟数 | 正确拒绝 | 漏拒 | 漏拒里真撞 | 没查成 |",
-              "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|"]
+              "| 配置 | 判定器可行:趟数 | 误拒 | 误拒率 | 可行里自动完成 | 放行但偏窄(<0.2 m) | 判定器不可行:趟数 | 正确拒绝 | 漏拒 | 漏拒里真撞 | 没查成 |",
+              "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|"]
         for cfg in sorted({r["config"] for r in gated}):
             rs = [r for r in gated if r["config"] == cfg]
             fe = [r for r in rs if r["oracle"]["feasible"]]
@@ -267,10 +267,12 @@ def main() -> int:
             hit = [r for r in miss if phys(r, "static_physical") or phys(r, "dynamic_physical")]
             unchecked = sum(1 for r in rs for c in r.get("route_checks") or [] if not c.get("checked"))
             rate = f"{100 * len(mis) / len(fe):.1f}%" if fe else "—"
-            L.append(f"| {cfg} | {len(fe)} | {len(mis)} | {rate} | {len(done)}/{len(fe)} | {len(inf)} | "
+            tight = sum(1 for r in rs if not r.get("route_refused")
+                        and any(c.get("tight") for c in r.get("route_checks") or []))
+            L.append(f"| {cfg} | {len(fe)} | {len(mis)} | {rate} | {len(done)}/{len(fe)} | {tight} | {len(inf)} | "
                      f"{len(ok_rej)} | {len(miss)} | {len(hit)} | {unchecked} |")
             summary.setdefault(cfg, {})["route_validator"] = {
-                "feasible": len(fe), "misreject": len(mis), "feasible_done": len(done),
+                "feasible": len(fe), "misreject": len(mis), "feasible_done": len(done), "tight": tight,
                 "infeasible": len(inf), "correct_reject": len(ok_rej), "missed": len(miss),
                 "missed_collided": len(hit), "unchecked": unchecked}
         L.append("")

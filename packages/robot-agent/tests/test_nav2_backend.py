@@ -1581,13 +1581,13 @@ def _窄走廊(width):
 async def test_V1_路线检查_走廊太窄_出发前拒绝_报最窄处_不发目标(tmp_path):
     from nexwar_patrol.backends.base import NavRequestError
     link = 会规划的转接()
-    t = _台(tmp_path, link, walls=_窄走廊(0.85))
+    t = _台(tmp_path, link, walls=_窄走廊(0.7))
     await t.start(1.5, 4.0)
     link.here = (1.5, 4.0)
     with pytest.raises(NavRequestError) as e:
         await t.nav.goto(Pose.from_xy_yaw(9.0, 4.0))
     assert e.value.code == "route_too_narrow" and e.value.final, e.value
-    assert "离墙只剩" in str(e.value) and "0.98" in str(e.value)
+    assert "离墙只剩" in str(e.value) and "0.78" in str(e.value)
     assert link.kinds("plan") and not link.kinds("goal"), "拒了就不交给 Nav2"
     assert t.nav._status is NavStatus.STANDBY and not t.nav._planning
 
