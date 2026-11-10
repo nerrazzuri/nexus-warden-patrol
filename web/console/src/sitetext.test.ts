@@ -159,3 +159,15 @@ describe("第 4 轮 zh N1 / N3:中文界面也说人话", () => {
     expect(siteText("东区巡逻").text).toBe("东区巡逻");
   });
 });
+
+describe("用户 11-10「为什么只显示中文」:日程没跑、被挡下的原因英文界面也翻", () => {
+  it("迟了 + 之前没派出去 + 只许手动派", () => {
+    lang.value = "en";
+    const v = siteText("迟了 31 分钟,按 on_missed=skip;之前没派出去:A 站点设成只许手动派,不接排程");
+    expect(v.text).toBe("31 min late, so not run (on_missed=skip). Before that, no robot could be sent: A is set to manual dispatch only, so schedules do not send it");
+    expect(siteStr("B 不在线")).toBe("B is offline");
+    expect(siteStr("雷暴:排程巡检暂停")).toBe("Thunderstorm: scheduled patrols paused");
+    expect(siteStr("A 要人监护,不接排程")).toBe("A needs a person present, so schedules do not send it");
+    lang.value = "zh";
+  });
+});

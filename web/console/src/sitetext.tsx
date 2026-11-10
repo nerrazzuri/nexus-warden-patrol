@@ -78,6 +78,28 @@ function preflightList(s: string): string {
 type Rule = [RegExp, (m: RegExpMatchArray) => string];
 
 const RULES: Rule[] = [
+  // 日志设计 第 2 条(用户 11-10「为什么只显示中文」):日程没跑、被挡下的原因(site scheduler.py、dispatcher.py)
+  [/^([\s\S]+?)[;；]之前没派出去[:：]([\s\S]+)$/, (m) => `${trParts(m[1])}. Before that, no robot could be sent: ${lc(trParts(m[2]))}`],
+  [/^迟了 (\d+) 分钟[,，]按 on_missed=(\w+)[(（]站点那时未在排程[:：]补记[)）]$/,
+    (m) => `${m[1]} min late, so not run (on_missed=${m[2]}); recorded afterwards because the site was not running then`],
+  [/^迟了 (\d+) 分钟[,，]按 on_missed=(\w+)$/, (m) => `${m[1]} min late, so not run (on_missed=${m[2]})`],
+  [/^迟了 (\d+) 分钟[,，]后面还有一轮[,，]run_late 只补最近一轮[(（]补记[)）]$/,
+    (m) => `${m[1]} min late and a later round followed; run_late only catches up the latest round (recorded afterwards)`],
+  [/^(\S+) 站点设成只许手动派[,，]不接排程$/, (m) => `${m[1]} is set to manual dispatch only, so schedules do not send it`],
+  [/^(\S+) 要人监护[,，]不接排程$/, (m) => `${m[1]} needs a person present, so schedules do not send it`],
+  [/^(\S+) 正在执行 (\S+)$/, (m) => `${m[1]} is busy with ${m[2]}`],
+  [/^(\S+) 正在驱离$/, (m) => `${m[1]} is deterring an intruder`],
+  [/^(\S+) 在布防值守$/, (m) => `${m[1]} is on guard duty`],
+  [/^(\S+) 正在遥控$/, (m) => `${m[1]} is being driven by hand`],
+  [/^(\S+) 不在线$/, (m) => `${m[1]} is offline`],
+  [/^(\S+) 不在线或状态不新鲜$/, (m) => `${m[1]} is offline or has not reported recently`],
+  [/^(\S+) 的状态不新鲜/, (m) => `${m[1]} has not reported recently`],
+  [/^(\S+) 被 (\S+) 叫停了/, (m) => `${m[1]} was stopped by ${m[2]}; press Resume before sending it`],
+  [/^(\S+) 未就绪[:：]\s*(.*)$/, (m) => `${m[1]} is not ready (${m[2]})`],
+  [/^(\S+) 这一拍给了更优先的 (\S+)$/, (m) => `${m[1]} was given to the higher-priority ${m[2]}`],
+  [/^(\S+) 加载的地图是 '([^']*)'[,，]任务要 '([^']*)'$/, (m) => `${m[1]} has map “${m[2]}” loaded; the patrol needs “${m[3]}”`],
+  [/^站点的钟跟 (\S+) 差 (\d+) 秒$/, (m) => `The site clock is ${m[2]} s off from ${m[1]}`],
+  [/^雷暴[:：]排程巡检暂停$/, () => "Thunderstorm: scheduled patrols paused"],
   // 机器人的巡逻失败原因(robot-agent tasks/patrol.py、engine/machine.py、导航桥)
   [/^跳过 (\d+) 个点[(（]([^)）]*)[)）][:：]\s*([\s\S]*)$/, (m) => `Skipped ${m[1]} ${plural(m[1], "point", "points")} (${m[2]}): ${lc(tr(m[3]))}`],
   [/^导航拒了[:：]\s*([\s\S]*)$/, (m) => `Navigation refused: ${lc(tr(m[1]))}`],

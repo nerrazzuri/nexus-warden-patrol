@@ -264,6 +264,24 @@ class Dispatcher:
         if self._closed:
             return
         wire = s.to_wire()
+        seen = self.__dict__.setdefault("_online_seen", {})
+        if seen.get(robot_id) != s.online:
+            # 日志设计 第 2、3 条:机器人上线、离线进站点日志和活动日志(第一次听到它不算「上线」变化)
+            first = robot_id not in seen
+            seen[robot_id] = s.online
+            if not first:                     # 站点刚起、第一次听到的是现状,不算变化
+                from nexwar_contract import errcodes
+                from nexwar_site.audit import site_event
+                name = "robot.online" if s.online else "robot.offline"
+                log.warning("机器人 %s %s code=%s task=%s", robot_id,
+                            "上线" if s.online else "离线",
+                            errcodes.tag(name), s.task.task_id if s.task else "-")
+                site_event(self.db, self._now(), actor="site:robot",
+                           action="robot online" if s.online else "robot offline",
+                           target=robot_id, detail={"task": s.task.task_id if s.task else None}
+                           | errcodes.wire(name))
+            else:
+                log.info("机器人 %s 现在%s", robot_id, "在线" if s.online else "离线")
         with self.db.tx() as c:
             c.execute("INSERT INTO robot_state(robot_id, status, updated_at) VALUES (?,?,?) "
                       "ON CONFLICT(robot_id) DO UPDATE SET status=excluded.status, "

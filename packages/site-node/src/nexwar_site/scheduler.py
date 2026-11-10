@@ -124,6 +124,12 @@ class SiteScheduler:
     def _record(self, entry: ScheduleEntry, scheduled_ms: int, outcome: str, *,
                 robot_id: str | None = None, task_id: str | None = None,
                 note: str = "") -> None:
+        if outcome in ("skip", "alarm"):
+            # L5(liang-d5 11-10):「迟了 31 分钟」只是结果;之前为什么没派出去
+            # (只许手动派、没有能派的机器人……)要一起写出来,不然巡逻记录页看着像机器人迟到
+            why = self._blocked_note(entry.id, scheduled_ms)
+            if why and why not in note:
+                note = f"{note};之前没派出去:{why}"
         with self.db.tx() as c:
             cur = c.execute("INSERT OR IGNORE INTO schedule_runs(entry_id, scheduled_ms, outcome, "
                             "robot_id, task_id, note, decided_at, told_ms) "
@@ -131,9 +137,30 @@ class SiteScheduler:
                             (entry.id, scheduled_ms, outcome, robot_id, task_id, note,
                              self._now()))
             row_id = cur.lastrowid if cur.rowcount == 1 else None
+        if row_id is not None:               # 同一轮同一种去向只记一次,日志也只写一次
+            from nexwar_contract import errcodes
+            from nexwar_site.audit import site_event
+            name = errcodes.SCHEDULE.get(outcome)
+            lvl = logging.INFO if outcome in ("started", "busy", "displaced") else logging.WARNING
+            log.log(lvl,
+                    "日程 %s 那一轮(%d):%s code=%s robot=%s task=%s %s", entry.id, scheduled_ms,
+                    outcome, errcodes.tag(name), robot_id or entry.robot or "-", task_id or "-",
+                    note)
+            site_event(self.db, self._now(), actor="site:schedule", action=f"schedule {outcome}",
+                       target=entry.id, detail={"robot": robot_id or entry.robot or None,
+                                                "task_id": task_id, "note": note,
+                                                "scheduled_ms": scheduled_ms}
+                       | errcodes.wire(name))
         if row_id is not None and outcome in TELL_NOW:
             self._tell(row_id, entry.id, scheduled_ms, robot_id or entry.robot or None,
                        outcome, note)
+
+    def _blocked_note(self, entry_id: str, scheduled_ms: int) -> str:
+        """同一轮之前记过的「没派出去」的原因(最新那条);没有给空。"""
+        rows = self.db.query("SELECT note FROM schedule_runs WHERE entry_id=? AND scheduled_ms=? "
+                             "AND outcome NOT IN ('started','skip','alarm') AND note != '' "
+                             "ORDER BY id DESC LIMIT 1", (entry_id, scheduled_ms))
+        return str(rows[0]["note"]) if rows else ""
 
     def _told(self, entry_id: str, scheduled_ms: int) -> bool:
         return bool(self.db.query("SELECT 1 FROM schedule_runs WHERE entry_id=? AND "

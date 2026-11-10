@@ -15,6 +15,7 @@ import threading
 from collections.abc import Callable
 from typing import Any
 
+from nexwar_contract import errcodes
 from nexwar_site.alerts import Alert, AlertBook, Channel, Level
 from nexwar_site.db import SiteDB
 
@@ -206,8 +207,26 @@ class AlertDesk:
             except Exception:                        # 现场拿不到不许挡住告警
                 log.exception("%s 的现场拿不到", robot)
         ctx.update(context or {})
-        return self.book.raise_alert(kind=kind, robot=robot, title=title, detail=detail,
-                                     now_ms=self._now(), context=ctx, merge=merge, record=record)
+        code = errcodes.for_alert(kind)
+        if code is not None:
+            ctx.setdefault("err", code.hex)          # 日志设计 第 7 条:告警带错误码
+        a = self.book.raise_alert(kind=kind, robot=robot, title=title, detail=detail,
+                                  now_ms=self._now(), context=ctx, merge=merge, record=record)
+        if a.count == 1:                    # 新起的一条(合进旧的只是计数加一,不再记)
+            log.warning("告警 %s %s code=%s robot=%s key=%s:%s %s", "记一笔" if record else "产生",
+                        a.level.value if hasattr(a.level, "value") else a.level,
+                        errcodes.tag(errcodes.ALERT.get(kind, kind)), robot, a.key, title,
+                        detail[:200])
+            self._event("alert recorded" if record else "alert raised", a)
+        return a
+
+    def _event(self, action: str, a: Alert, **extra: Any) -> None:
+        from nexwar_site.audit import site_event
+        lvl = a.level.value if hasattr(a.level, "value") else str(a.level)
+        site_event(self.db, self._now(), actor="site:alerts", action=action, target=a.key,
+                   detail={"robot": a.robot, "kind": a.kind, "level": lvl,
+                           "title": a.title[:120]} | errcodes.wire(errcodes.ALERT.get(a.kind))
+                   | extra)
 
     def absorbing(self, robot: str, kind: str) -> Alert | None:
         return self.book.absorbing(robot, kind, now_ms=self._now())
@@ -267,6 +286,9 @@ class AlertDesk:
         for a in self.book.open():
             if a.robot == robot and a.kind == kind:
                 self.book.resolve(a.key, who=who, now_ms=self._now())
+                log.info("告警 %s 自动解除 code=%s robot=%s by=%s", a.key,
+                         errcodes.tag(errcodes.ALERT.get(kind, kind)), robot, who)
+                self._event("alert auto-resolved", a, by=who)
                 n += 1
         return n
 
@@ -286,7 +308,12 @@ class AlertDesk:
 
     def escalate(self) -> list[tuple[Alert, Channel]]:
         """P1 未确认的,到时限就升一档(换通道)。站点主循环每 5 s 调一次。"""
-        return list(self.book.due_escalations(now_ms=self._now()))
+        out = list(self.book.due_escalations(now_ms=self._now()))
+        for a, ch in out:
+            log.warning("告警 %s 没人确认,升级到 %s code=%s robot=%s", a.key, ch,
+                        errcodes.tag(errcodes.ALERT.get(a.kind, a.kind)), a.robot)
+            self._event("alert escalated", a, channel=str(getattr(ch, "value", ch)))
+        return out
 
     # ------------------------------------------------------------ 读
 

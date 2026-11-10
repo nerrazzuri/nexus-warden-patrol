@@ -290,7 +290,7 @@ interface Peer { name: string; kind: string; address: string; public: string; ex
 interface WgPeer { public_key: string; latest_handshake: number }
 
 /** P1-06:站点做不做得到(装没装特权执行器、配没配推送);老站点没有这个接口 = 不知道,按钮照旧能点。 */
-interface Caps { priv?: boolean; push?: boolean; vpn?: boolean }
+interface Caps { priv?: boolean; push?: boolean; vpn?: boolean; debug_log?: boolean }
 
 export function SiteOps({ say }: { say: Say }) {
   const [caps] = useLoad<Caps>("/api/system/caps");
@@ -300,6 +300,11 @@ export function SiteOps({ say }: { say: Say }) {
   const [backup] = useLoad<{ last_ok_ms?: number | null; last_verify_ms?: number | null; dest?: string | null }>("/api/system/backups");
   const [ask, setAsk] = useState<"restart" | "restore" | null>(null);
   const [busy, setBusy] = useState(false);
+  // 日志设计 第 3 条:站点「详细日志 N 分钟」,到点自动恢复
+  const [dbg, setDbg] = useState<{ until_ms: number } | null>(null);
+  const reloadDbg = () => { api<{ until_ms: number }>("GET", "/api/system/debug-log").then(setDbg).catch(() => setDbg(null)); };
+  useEffect(() => { if (caps?.debug_log) reloadDbg(); }, [caps?.debug_log]);
+  const dbgOn = (dbg?.until_ms ?? 0) > 0;
   const hs = (pub: string) => vpn?.status?.peers?.find((p) => p.public_key === pub)?.latest_handshake ?? 0;
   return (
     <>
@@ -319,6 +324,15 @@ export function SiteOps({ say }: { say: Say }) {
           <button type="button" class="btn danger" disabled={!backup?.dest} title={!backup?.dest ? t("sysRestoreNoDest") : undefined}
             onClick={() => setAsk("restore")}>{t("sysRestore")}</button>
           {!backup?.dest && <span class="muted small">{t("sysRestoreNoDest")}</span>}
+          {caps?.debug_log && (
+            <button type="button" class="btn" data-debug-log={dbgOn ? "on" : "off"} disabled={busy} onClick={() => {
+              setBusy(true);
+              api("POST", "/api/system/debug-log", { minutes: dbgOn ? 0 : 60 })
+                .then(() => { say(dbgOn ? t("opsDebugOff") : t("opsDebugOn")); reloadDbg(); })
+                .catch((e) => say(t("failed", { why: why(e) })))
+                .finally(() => setBusy(false));
+            }}>{dbgOn ? t("sysDebugStop", { t: hms(dbg!.until_ms) }) : t("sysDebug")}</button>
+          )}
         </div>
         {noPriv && <p class="muted small" data-why="priv">{t("sysNoPriv")}</p>}
         {noPush && <p class="muted small" data-why="push">{t("sysNoPush")}</p>}

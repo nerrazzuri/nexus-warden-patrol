@@ -815,7 +815,8 @@ async def test_W24复查二2_真告警台_告警报成删待报没成_保安解�
 
         def tx():
             n[0] += 1
-            return 坏() if n[0] == 2 else real()        # 第 1 次写告警成,第 2 次删待报炸
+            # 第 1 次写告警成,第 2 次是活动日志记「产生告警」(日志设计 第 2 条),第 3 次删待报炸
+            return 坏() if n[0] == 3 else real()
         monkeypatch.setattr(t.db, "tx", tx)
         try:
             return orig()

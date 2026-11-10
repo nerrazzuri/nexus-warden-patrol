@@ -5,6 +5,7 @@ API 调用(谁、什么动作、对象、结果、时刻、来源地址)。派�
 from __future__ import annotations
 
 import json
+import re
 from collections.abc import Callable
 from typing import Any
 
@@ -15,6 +16,11 @@ from nexwar_site.db import SiteDB
 MAX_DETAIL = 2000
 _KEEP_ITEMS = 10
 _KEEP_CHARS = 200
+#: 用户看的操作记录留多久(用户 11-10:一年)。
+KEEP_DAYS = 365
+#: 请求内容存进操作记录时,名字里带这些词的字段只记「有」,不记值。
+_SECRET_WORDS = ("password", "passwd", "pin", "token", "secret", "key", "otp", "code", "cookie",
+                 "cert", "credential")
 
 
 #: 全站活动日志的操作类别(liang-d5 第 5 轮前:「11 月 5 日晚上谁撤的防、谁派的机器人」要能筛出来)。
@@ -32,6 +38,8 @@ AUDIT_GROUPS: dict[str, tuple[str, ...]] = {
               "* /api/cameras*", "* /api/admin/cameras*", "* /api/layout*", "* /api/guard-routes*"),
     "robots": ("* /api/admin/robots*", "* /api/admin/bind*"),
     "views": ("VIEW", "DOWNLOAD"),
+    #: 日志设计 第 2 条:系统自己做的事(日程、机器人上下线、告警)
+    "system": ("schedule *", "robot *", "alert *"),
 }
 #: 一次导出最多这么多行;再多让人缩小日期范围(不悄悄截)。
 EXPORT_MAX = 20_000
@@ -59,6 +67,29 @@ def encode_detail(detail: dict[str, Any] | None) -> str:
     return json.dumps({"truncated": True, "keys": keys}, ensure_ascii=False)
 
 
+def redact(v: Any, depth: int = 0) -> Any:
+    """请求内容去敏、压短(日志设计 第 1 条):密码、PIN、令牌、密钥之类只记「***」;长串截短,
+    长列表只留前几个和总数。"""
+    if isinstance(v, dict):
+        out: dict[str, Any] = {}
+        for k, x in list(v.items())[:30]:
+            name = str(k)[:64]
+            low = name.lower()
+            out[name] = "***" if any(w in low for w in _SECRET_WORDS) else (
+                redact(x, depth + 1) if depth < 3 else "…")
+        return out
+    if isinstance(v, list):
+        head = [redact(x, depth + 1) if depth < 3 else "…" for x in v[:_KEEP_ITEMS]]
+        return head if len(v) <= _KEEP_ITEMS else head + [f"…共 {len(v)} 项"]
+    if isinstance(v, str):
+        v = _URL_CRED.sub(r"\1***@", v)            # rtsp://用户:密码@ 这种,密码打码
+        return v if len(v) <= _KEEP_CHARS else v[:_KEEP_CHARS] + "…"
+    return v
+
+
+_URL_CRED = re.compile(r"([a-z][a-z0-9+.-]*://[^/\s:@]*:)[^/\s@]*@", re.I)
+
+
 def decode_detail(raw: str) -> dict[str, Any]:
     """读回来。以前硬截坏了的行(W20 外审之前写的)不许让整张审计读不出来:原文给一截看。"""
     try:
@@ -66,6 +97,18 @@ def decode_detail(raw: str) -> dict[str, Any]:
     except ValueError:
         return {"unreadable": True, "raw": raw[:_KEEP_CHARS]}
     return d if isinstance(d, dict) else {"value": d}
+
+
+def site_event(db: SiteDB, at_ms: int, *, actor: str, action: str, target: str = "",
+               detail: dict[str, Any] | None = None) -> None:
+    """系统自己做的事进同一张活动日志(日志设计 第 2 条,用户 11-10:用户也看得到):
+    ``actor`` 用 ``site:schedule`` / ``site:robot`` / ``site:alerts`` 这样的。写不进去只记日志。"""
+    import logging
+    try:
+        AuditLog(db, now_ms=lambda: at_ms).record(actor=actor, action=action, target=target,
+                                                  status=200, detail=detail)
+    except Exception:
+        logging.getLogger(__name__).exception("系统事件写不进活动日志:%s %s", action, target)
 
 
 class AuditLog:
@@ -80,6 +123,12 @@ class AuditLog:
                       "VALUES (?,?,?,?,?,?,?)",
                       (self._now(), actor[:128], action[:128], target[:256], int(status),
                        encode_detail(detail), remote[:64]))
+
+    def prune(self, keep_days: int = KEEP_DAYS) -> int:
+        """删掉超过留存期的(用户 11-10:一年)。返回删了几条。"""
+        cut = self._now() - keep_days * 86_400_000
+        with self.db.tx() as c:
+            return c.execute("DELETE FROM audit WHERE at < ?", (cut,)).rowcount
 
     def search(self, *, since_ms: int = 0, until_ms: int = 2 ** 53, actor: str | None = None,
                group: str | None = None, limit: int = 200, offset: int = 0) -> dict[str, Any]:

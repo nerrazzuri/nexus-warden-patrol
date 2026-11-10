@@ -88,7 +88,10 @@ class TlsThreadingServer(ThreadingHTTPServer):
         # 的浏览器、扫端口的,每条连接一整段堆栈,日志里全是它)。别的意外照样带堆栈。
         import sys
         exc = sys.exc_info()[1]
-        if isinstance(exc, (ssl.SSLError, ConnectionError, TimeoutError, socket.timeout)):
+        if isinstance(exc, ssl.SSLError):
+            log.debug("%s 这条连接断了: %s", client_address, exc)   # 握手那里已经记过一行
+            return
+        if isinstance(exc, (ConnectionError, TimeoutError, socket.timeout)):
             log.info("%s 这条连接断了: %s", client_address, exc)
             return
         log.warning("%s 这条连接出错了", client_address, exc_info=True)
@@ -103,6 +106,8 @@ class TlsHandlerMixin(BaseHTTPRequestHandler):
             try:
                 self.request.do_handshake()
             except (OSError, ssl.SSLError) as exc:
-                log.info("%s TLS 握手没成: %s", self.client_address, exc)
+                # 日志设计 第 3 条:写出客户端地址和错误码(网页、手机没信站点证书时一连串都是它)
+                log.info("TLS 握手没成 code=0x0701 net.tls_handshake remote=%s:%s why=%s",
+                         *(tuple(self.client_address)[:2] or ("?", "?")), exc)
                 raise
         super().setup()

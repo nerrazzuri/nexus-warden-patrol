@@ -20,12 +20,14 @@ export class ApiError extends Error {
 
 /** 站点回的错:没权限(站点标了 reason=forbidden)用界面自己的话(P1-80,英文界面不夹中文);别的照站点原话。 */
 function errorText(status: number, data: unknown): string {
-  const d = data as { error?: string; reason?: string; reason_en?: string };
+  const d = data as { error?: string; reason?: string; reason_en?: string; err?: string };
   if (status === 403 && d.reason === "forbidden") return t("noPermission");
   const msg = d.error ?? `HTTP ${status}`;
+  // 日志设计 第 7 条:带错误码的(派单被拒)后面写上码,打电话报问题说得清
+  const code = typeof d.err === "string" && /^0x[0-9A-F]{4}$/.test(d.err) ? t("errCodeTail", { c: d.err }) : "";
   // P1-01:英文界面不夹中文原话(原话还在 data.error 里)
-  if (lang.value === "en") return typeof d.reason_en === "string" && d.reason_en ? d.reason_en : englishError(status, msg);
-  return msg;
+  if (lang.value === "en") return (typeof d.reason_en === "string" && d.reason_en ? d.reason_en : englishError(status, msg)) + code;
+  return msg + code;
 }
 
 export type Fetch = typeof fetch;

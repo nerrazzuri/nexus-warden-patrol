@@ -452,6 +452,23 @@ async def test_要人监护的狗不接排程_记supervised写明白(站):
     assert not [c for c in t.site.commands("A") if c["kind"] == "patrol"]
 
 
+async def test_L5_被挡下的那一轮过了窗口记skip_带上之前没派出去的原因(站):
+    """liang-d5 11-10:demo-night 先记 supervised「A 站点设成只许手动派」,30 分钟后记 skip「迟了
+    31 分钟」;巡逻记录页只显示后一条,看着像机器人迟到。skip 那一条要带上之前被挡的原因。"""
+    t = 站
+    for task in ("goto", "patrol"):
+        t.site.clients["A"].capabilities.tasks[task]["autonomy"] = "supervised"
+    t.clock.ms = 毫秒(22, 0, 30)
+    await t.run(1)
+    await _拍(t)
+    t.clock.ms = 毫秒(22, 45)
+    await _拍(t)
+    await _拍(t)
+    rows = {r["outcome"]: r["note"] for r in t.sched.runs("nightly")}
+    assert set(rows) == {"supervised", "skip"}, rows
+    assert "迟了" in rows["skip"] and "之前没派出去" in rows["skip"] and "监护" in rows["skip"]
+
+
 async def test_读不到自主级别按要人监护算(站):
     t = 站
     for task in ("goto", "patrol"):
