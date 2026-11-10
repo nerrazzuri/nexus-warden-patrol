@@ -384,7 +384,8 @@ def redact_cfg(v: Any, key: str = "") -> Any:
 
 
 def redact_text(s: str) -> str:
-    """日志打码:``Bearer`` 令牌、网址参数里的凭证 / 密码、长串十六进制(令牌哈希、密钥、指纹)只留前 8 位。"""
+    """日志打码:``Bearer`` 令牌、网址参数里的凭证 / 密码;长串十六进制(令牌哈希、密钥、指纹)
+    只留前 8 位。"""
     s = _BEARER.sub(r"\1***", s)
     s = _QUERY_SECRET.sub(r"\1***", s)
     return _LONG_HEX.sub(lambda m: m.group(0)[:8] + "…", s)

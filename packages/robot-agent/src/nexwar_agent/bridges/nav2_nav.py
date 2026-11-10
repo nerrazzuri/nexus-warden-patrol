@@ -1127,7 +1127,7 @@ class Nav2NavBackend(PlannedNavBackend):
             if "障碍数据" in v.reason:
                 await self._send(0.0, 0.0, dt_s)           # 看不清就等,不瞎挪
                 return
-            self._guarded(v, here)                         # 挡着 / 看不见 / 会扫到墙:这一步不走,下一拍重挑
+            self._guarded(v, here)                         # 挡着 / 看不见 / 扫到墙:下一拍重挑
             m["cur"] = None
             await self._send(0.0, 0.0, dt_s)
             return
@@ -1171,7 +1171,8 @@ class Nav2NavBackend(PlannedNavBackend):
         return bool(unknown) and all(abs(pts[i][0]) <= hl for i in unknown)
 
     def _sweep_ok(self, here: Any, vx: float, wz: float, walls: Any) -> bool:
-        """按 ``(vx, wz)`` 走 :data:`REC_SWEEP_S` 秒,整个车身一路上离地图墙的余量够不够、进没进禁行区。"""
+        """按 ``(vx, wz)`` 走 :data:`REC_SWEEP_S` 秒,整个车身一路上离地图墙的余量够不够、
+        进没进禁行区。"""
         blocked, res, origin = walls
         x, y, yaw = here.x, here.y, here.yaw
         m0 = float(route_check.pose_margins([(x, y, yaw)], blocked, res, origin)[0]) + BASE_MARGIN
