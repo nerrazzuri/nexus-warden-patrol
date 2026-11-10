@@ -44,7 +44,7 @@ void main() {
     final f = arrivalNote(_ev('task_failed', <String, dynamic>{
       'reason': '2 个航点未到达', 'code': 'localization_unreliable'
     }))!;
-    expect(f.text, 'C40221 任务失败：定位不可信,不敢走（重新定位）');
+    expect(f.text, 'C40221 任务失败：定位不可信,不敢走（在「定位」页重新标一下机器人在哪儿）');
     expect(arrivalNote(_ev('patrol_waypoint', <String, dynamic>{
       'name': 'P1', 'ok': false, 'note': '被挡', 'code': 'made_up'
     }))!.text, 'C40221 未到达 P1：被挡');
