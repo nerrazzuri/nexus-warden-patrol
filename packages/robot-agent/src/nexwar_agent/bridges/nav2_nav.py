@@ -572,7 +572,8 @@ class Nav2NavBackend(PlannedNavBackend):
 
     async def _via_check(self, here: Any, pose: Pose, via: list, op: str) -> Any:
         """有路网时的路线检查(外审 POC I5):沿 当前位置 → 途经点 → 目标 这条折线查余量;直段朝向不变、
-        拐角原地转(:func:`_corner_poses`)。转接节点不会规划(老的)、没地图时跟 :meth:`_route_check` 一样不查。"""
+        拐角原地转(:func:`_corner_poses`)。转接节点不会规划(老的)、没地图时跟
+        :meth:`_route_check` 一样不查。"""
         if getattr(self.link, "plan_results", None) is None or self._map_dir is None:
             return None
         pts = [(here.x, here.y), *[(float(x), float(y)) for x, y in via],
