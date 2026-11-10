@@ -38,7 +38,7 @@ from nexwar_agent import route_check
 from nexwar_agent.bridges.hal_nav import HalNavBackend
 from nexwar_agent.bridges.planned_nav import PlannedNavBackend, _heading
 from nexwar_contract import errcodes
-from nexwar_contract.footprint import BASE_MARGIN
+from nexwar_contract.footprint import BASE_HALF_LEN, BASE_MARGIN
 from nexwar_contract.navbridge import MAX_VIA
 from nexwar_contract.obsbridge import pack_bits
 from nexwar_contract.planning import costmap as cmod
@@ -219,6 +219,10 @@ MANEUVER_DONE_RAD = math.radians(25.0)
 MANEUVER_CLEAR_M = 0.03
 #: 要去的方向:Nav2 最近那条路线上离机器人这么远(米)的那一点;没有路线就朝目标。
 MANEUVER_LOOK_M = 1.0
+#: 脱困动作每一拍发速度前,按这个速度往前推这么久(秒)查整个车身扫过的范围(外审 POC r1 C2)
+REC_SWEEP_S = 1.0
+#: 机身两侧盲带比机身前后沿各宽这么多(米;雷达装在前后沿,紧贴沿口那一点也看不太到)
+SIDE_BAND_TOL_M = 0.05
 #: 沿原路倒退:记最近 :data:`TRAIL_KEEP_M` 走过的路(每 :data:`TRAIL_STEP_M` 一个点;一拍跳过
 #: :data:`TRAIL_JUMP_M` 是定位跳了,清掉重记),退 :data:`RETREAT_M`(原路不到 :data:`RETREAT_MIN_M`
 #: 不退),:data:`RETREAT_MPS` 倒着走,跟原路按前瞻 :data:`RETREAT_LOOK_M` 走;
@@ -1118,17 +1122,70 @@ class Nav2NavBackend(PlannedNavBackend):
             m["steps"] += 1
             m["last"] = pick
         vx, wz = self._deband(cur["v"], cur["w"])
-        if self.guard is not None and self.obstacles is not None:
-            v = self._guard_check(vx, wz)
-            if not v.ok and "障碍数据" in v.reason:
+        v = await self._rec_safe(here, vx, wz)
+        if v is not None:
+            if "障碍数据" in v.reason:
                 await self._send(0.0, 0.0, dt_s)           # 看不清就等,不瞎挪
                 return
-            if not v.ok and v.hits and not self._hits_all_static(v.hits, here):
-                self._guarded(v, here)                     # 人、东西挡着:这一步不走,下一拍重挑
-                m["cur"] = None
-                await self._send(0.0, 0.0, dt_s)
-                return
+            self._guarded(v, here)                         # 挡着 / 看不见 / 会扫到墙:这一步不走,下一拍重挑
+            m["cur"] = None
+            await self._send(0.0, 0.0, dt_s)
+            return
         await self._send(vx, wz, dt_s)
+
+    async def _rec_safe(self, here: Any, vx: float, wz: float) -> Any:
+        """脱困动作(自己挪、沿原路倒退)发速度前最后一道检查(外审 POC r1 C2);过了回 None,不过回
+        拦下的原因(``Verdict``)。
+
+        1. 车身按这个速度走 :data:`REC_SWEEP_S` 秒扫过的范围不许压上地图墙、不许进禁行区(余量规矩跟
+           挑步子一样:不低于 :data:`MANEUVER_CLEAR_M`,已经更贴就不许更贴);地图墙读不出来不动。
+        2. 守卫:放行才走;挡住的全是地图墙(第 1 条已经按整个车身查过)也算放行;有人有东西挡着、
+           障碍数据不新鲜不走;看不见的地方只许是机身两侧那条前后雷达都看不见的带(跟平常走一样的
+           已知限制,靠记忆),前后雷达该看得见却没看见(没数据、被挡住后面)不走。"""
+        from nexwar_agent.obstacles import Verdict
+        if abs(vx) < 1e-6 and abs(wz) < 1e-6:
+            return None
+        try:
+            walls = await self._route_walls()
+            ok = await asyncio.to_thread(self._sweep_ok, here, vx, wz, walls)
+        except Exception:                                  # 查不了就不动
+            log.exception("脱困:查车身扫过的范围出错,这一步不动")
+            ok = False
+        if not ok:
+            return Verdict(False, "脱困这一步车身会扫到地图上的墙或禁行区")
+        if self.guard is not None and self.obstacles is not None:
+            v = self._guard_check(vx, wz)
+            if v.ok or (v.hits and self._hits_all_static(v.hits, here)):
+                return None
+            if not v.hits and "障碍数据" not in v.reason and self._unknown_only_sides(vx, wz):
+                return None
+            return v
+        return None
+
+    def _unknown_only_sides(self, vx: float, wz: float) -> bool:
+        """守卫说「看不见」的那些点全在机身两侧的盲带里(机身前后沿之间,前后雷达都看不见)?"""
+        g, view = self.guard, self.obstacles
+        pts = g.swept(vx, wz, self._v_meas, (self._last_wz, self._w_meas))
+        _, unknown = view.lookup(pts, self._odom_pose)
+        hl = float(getattr(view, "body_hl", BASE_HALF_LEN)) + SIDE_BAND_TOL_M
+        return bool(unknown) and all(abs(pts[i][0]) <= hl for i in unknown)
+
+    def _sweep_ok(self, here: Any, vx: float, wz: float, walls: Any) -> bool:
+        """按 ``(vx, wz)`` 走 :data:`REC_SWEEP_S` 秒,整个车身一路上离地图墙的余量够不够、进没进禁行区。"""
+        blocked, res, origin = walls
+        x, y, yaw = here.x, here.y, here.yaw
+        m0 = float(route_check.pose_margins([(x, y, yaw)], blocked, res, origin)[0]) + BASE_MARGIN
+        thr = min(MANEUVER_CLEAR_M, m0 - 0.01)
+        poses = []
+        for _ in range(max(1, round(REC_SWEEP_S / 0.1))):
+            x += vx * 0.1 * math.cos(yaw + wz * 0.05)
+            y += vx * 0.1 * math.sin(yaw + wz * 0.05)
+            yaw += wz * 0.1
+            poses.append((x, y, yaw))
+        if any(self.nogo_at(px, py) is not None for px, py, _ in poses):
+            return False
+        ms = route_check.pose_margins(poses, blocked, res, origin) + BASE_MARGIN
+        return bool(float(ms.min()) >= thr)
 
     def _trail_note(self, here: Any) -> None:
         """记走过的路(沿原路倒退用)。"""
@@ -1218,18 +1275,15 @@ class Nav2NavBackend(PlannedNavBackend):
             k = 2.0 * ly / max(1e-6, lx * lx + ly * ly)
             wz = max(-MANEUVER_RPS, min(MANEUVER_RPS, vx * k))
         vx, wz = self._deband(vx, wz)
-        if self.guard is not None and self.obstacles is not None:
-            v = self._guard_check(vx, wz)
-            hard = not v.ok and ("障碍数据" in v.reason
-                                 or (v.hits and not self._hits_all_static(v.hits, here)))
-            if hard:
-                if b["blocked"] is None:
-                    b["blocked"] = now
-                self._guarded(v, here)
-                await self._send(0.0, 0.0, dt_s)
-                if now - b["blocked"] > RETREAT_WAIT_S:
-                    await self._back_finish(here, False, dt_s)
-                return
+        v = await self._rec_safe(here, vx, wz)
+        if v is not None:
+            if b["blocked"] is None:
+                b["blocked"] = now
+            self._guarded(v, here)
+            await self._send(0.0, 0.0, dt_s)
+            if now - b["blocked"] > RETREAT_WAIT_S:
+                await self._back_finish(here, False, dt_s)
+            return
         b["blocked"] = None
         await self._send(vx, wz, dt_s)
 

@@ -1830,3 +1830,77 @@ async def test_脱困_走着走着卡住_重新规划不管用_沿原路退回�
     await t.一拍()
     assert link.kinds("map")[-1]["nogo"] == [], "撤掉临时标记"
     assert len(link.kinds("goal")) == n + 1 and NavStatus.FAILED not in t.status
+
+
+# ---------------------------------------- 外审 POC r1 C2:脱困动作统一过最后一道安全检查
+
+
+async def _脱困台(tmp_path, x, y, yaw, monkeypatch, verdict=None, static=True, **kw):
+    """机器人放在 1.4 m 走廊里;守卫按 ``verdict`` 回(``None`` 就照真的雷达查),挡点算不算地图墙按
+    ``static``。回 ``(t, sent)``:``sent`` 收后端发出去的每条速度。"""
+    from nexwar_agent.obstacles import Verdict
+    t = _台(tmp_path, 假转接(), walls=_窄走廊(1.4), **kw)
+    await t.start(x, y, yaw)
+    for _ in range(5):                                     # 攒几帧雷达
+        await t.一拍()
+    sent = []
+
+    async def 发(vx, wz, dt_s):
+        sent.append((round(vx, 3), round(wz, 3)))
+    monkeypatch.setattr(t.nav, "_send", 发)
+    if verdict is not None:
+        monkeypatch.setattr(t.nav, "_guard_check", lambda vx, wz, g=None: Verdict(*verdict))
+        monkeypatch.setattr(t.nav, "_hits_all_static", lambda hits, here: static)
+    return t, sent
+
+
+def _退(t, path):
+    t.nav._back = {"path": list(path), "t0": t.nav._secs(), "level": 2, "why": "测试", "fail": None,
+                   "blocked": None, "stuck": (t.r.x, t.r.y)}
+
+
+async def test_外审POC_C2_沿原路倒退_车尾会扫进地图墙_挡点是墙也不许退(tmp_path, monkeypatch):
+    """codex POC r1 C2:原来守卫挡住的全是地图墙就照退,不查车身扫过的范围,0.8 秒后车尾越过墙边。"""
+    t, sent = await _脱困台(tmp_path, 1.5, 3.86, math.pi / 2, monkeypatch,
+                            (False, "挡住", ((-0.4, 0.0),)))
+    _退(t, [(1.5, 3.5), (1.5, 3.3)])                       # 原路在背后、压着南墙(车尾只剩 4 cm)
+    here = await t.nav._here()
+    await t.nav._back_step(here, 0.1)
+    assert sent and sent[-1] == (0.0, 0.0), sent
+
+
+async def test_外审POC_C2_沿原路倒退_后面雷达看不见_停下等_不瞎退(tmp_path, monkeypatch):
+    t, sent = await _脱困台(tmp_path, 5.0, 4.0, 0.0, monkeypatch, rear=False)
+    _退(t, [(4.6, 4.0), (3.5, 4.0)])
+    here = await t.nav._here()
+    await t.nav._back_step(here, 0.1)
+    assert sent and sent[-1] == (0.0, 0.0), sent
+
+
+async def test_外审POC_C2_沿原路倒退_走廊中间_后面看得见_照常退(tmp_path, monkeypatch):
+    t, sent = await _脱困台(tmp_path, 5.0, 4.0, 0.0, monkeypatch)
+    _退(t, [(4.6, 4.0), (3.5, 4.0)])
+    here = await t.nav._here()
+    await t.nav._back_step(here, 0.1)
+    assert sent and sent[-1][0] < 0, sent
+
+
+async def test_外审POC_C2_K形掉头_往后挪_后面雷达看不见_这一步不挪(tmp_path, monkeypatch):
+    t, sent = await _脱困台(tmp_path, 5.0, 4.0, 0.0, monkeypatch, rear=False)
+    now = t.nav._secs()
+    t.nav._man = {"want": math.pi, "t0": now, "steps": 1, "level": 2, "why": "测试", "fail": None,
+                  "last": None, "cur": {"v": -0.15, "w": 0.4, "t": now}}
+    here = await t.nav._here()
+    await t.nav._man_step(here, 0.1)
+    assert sent and sent[-1] == (0.0, 0.0), sent
+
+
+async def test_外审POC_C2_K形掉头_这一步会扫到地图墙_挡点是墙也不挪(tmp_path, monkeypatch):
+    t, sent = await _脱困台(tmp_path, 1.5, 3.86, math.pi / 2, monkeypatch,
+                            (False, "挡住", ((-0.4, 0.0),)))
+    now = t.nav._secs()
+    t.nav._man = {"want": 0.0, "t0": now, "steps": 1, "level": 2, "why": "测试", "fail": None,
+                  "last": None, "cur": {"v": -0.15, "w": 0.0, "t": now}}
+    here = await t.nav._here()
+    await t.nav._man_step(here, 0.1)
+    assert sent and sent[-1] == (0.0, 0.0), sent
