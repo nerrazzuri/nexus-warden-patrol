@@ -45,7 +45,7 @@ GEOMETRY_FILES = ("prior.mm", "frames.json", "floor.pgm", "floor.yaml", "coverag
 #: 都是按清单逐个来 —— 多一个文件就多下一个、多核一个,不载它、不用它。老代理建图时只收它认得的可选
 #: 文件(``mapping._settle`` 按自己那份 :data:`OPTIONAL_FILES`),新的定位器在老代理上出的 ``seen.pbm``
 #: 不进清单、不传,那一版就是没有它的老样子。
-OPTIONAL_FILES = ("geo.json", "seen.pbm")
+OPTIONAL_FILES = ("geo.json", "seen.pbm", "curb.pbm")
 #: 「看到过、狗没走过」(M9,只管显示):建图时**只透过玻璃、门口看到过**、被定成「不知道」的格子
 #: (``nexwar_localizer.grid`` 的 ``_see_through`` 去掉的那些)。规划、狗一律不读它 —— 那些格在
 #: ``floor.pgm`` 里照样是「不知道」、照样当挡;站点画平面图时把它们画成淡淡的地面,客户看得出
@@ -53,6 +53,12 @@ OPTIONAL_FILES = ("geo.json", "seen.pbm")
 #: 一模一样(行 0 = 地图上 y 最大的那一行);栅格最多 2500 万格,这个文件最多约 3.1 MB。一格都
 #: 没有就不写这个文件。
 SEEN_FILE = "seen.pbm"
+#: 路沿、绿化岛(用户 2026-11-10,工厂停车场):建图时认出来的、高出路面 7–40 cm 的陡边
+#: (``nexwar_localizer.grid`` 的 ``_curbs``)。**不改** ``floor.pgm``:Nav2 转接把这些格当「代价高、
+#: 不是墙」(规划绕开绿化岛,路沿是唯一的路时照样跨得过去);站点画平面图时标出来,扫图的人看得到
+#: 认没认对。格式跟 :data:`SEEN_FILE` 一样(PBM ``P4``,宽高、行序跟 ``floor.pgm`` 一模一样);
+#: 一格都没有就不写。
+CURB_FILE = "curb.pbm"
 COVERAGE = "coverage.json"
 #: 定位器要的(W09b;W68 加 Super-LIO 点云):配了定位器的狗只收带着它们的版本。
 PRIOR_FILES = ("prior.mm", "frames.json", SLIO_MAP_FILE)
