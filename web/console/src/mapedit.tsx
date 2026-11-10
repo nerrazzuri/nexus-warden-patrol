@@ -95,7 +95,7 @@ function Editor({ say, target, Canvas }: { say: Say; target: Target; Canvas?: Fu
   const [name, setName] = useState("");
   const [file, setFile] = useState<File | null>(null);
   // 11-10:这一版是不是草稿(草稿:预览、再改、发布到站点;正式版本:保存就另存成草稿)
-  const [drafted, setDrafted] = useState<{ draft: boolean; from: string | null } | null>(null);
+  const [drafted, setDrafted] = useState<{ draft: boolean; from: string | null; zones_removed: string[] } | null>(null);
   const [preview, setPreview] = useState(false);
   const [releasing, setReleasing] = useState(false);
   const [diffing, setDiffing] = useState(false);
@@ -112,10 +112,10 @@ function Editor({ say, target, Canvas }: { say: Say; target: Target; Canvas?: Fu
     api<{ digest: string }>("GET", `${adm}/noise`).then(ok((d) => setDigest(d.digest || ""))).catch(bad);
     // 显示设置、禁行区都读到了才有历史(哪样读不出来都不能存:存了会把那一样抹掉)
     Promise.all([api<Display>("GET", `${adm}/display`), api<NavZones>("GET", `${base}/zones`),
-      api<{ draft?: boolean; from?: string | null }>("GET", `${adm}/draft`)])
-      .then(ok(([d, n, dr]: [Display, NavZones, { draft?: boolean; from?: string | null }]) => {
+      api<{ draft?: boolean; from?: string | null; zones_removed?: string[] }>("GET", `${adm}/draft`)])
+      .then(ok(([d, n, dr]: [Display, NavZones, { draft?: boolean; from?: string | null; zones_removed?: string[] }]) => {
         setNav(n); setLoadedZones(n.zones ?? []); setHist(start({ ...EMPTY, ...d }, n.zones ?? []));
-        setDrafted({ draft: !!dr?.draft, from: dr?.from ?? null });
+        setDrafted({ draft: !!dr?.draft, from: dr?.from ?? null, zones_removed: dr?.zones_removed ?? [] });
       }))
       .catch(bad);
     return () => { alive.current = false; };
@@ -459,7 +459,9 @@ function Editor({ say, target, Canvas }: { say: Say; target: Target; Canvas?: Fu
         </div>
       </div>
       {releasing && (
-        <ConfirmPassword title={t("meReleaseTitle", { v: target.version })} text={t("meReleaseText", { v: target.version, from: origin })}
+        <ConfirmPassword title={t("meReleaseTitle", { v: target.version })}
+          text={[t("meReleaseText", { v: target.version, from: origin }),
+            ...(drafted?.zones_removed.length ? [t("meReleaseRemoved", { from: origin, names: drafted.zones_removed.join("、") })] : [])].join(" ")}
           onConfirm={release} onClose={() => setReleasing(false)} />
       )}
       {diffing && <DiffDialog target={{ map_id: target.map_id, a: origin, b: target.version, derived: true }} onClose={() => setDiffing(false)} />}

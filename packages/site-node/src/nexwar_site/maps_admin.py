@@ -372,8 +372,7 @@ class MapAdmin:
             shutil.rmtree(tmp, ignore_errors=True)
         from nexwar_site.standby import copy_homes
         homes = copy_homes(self.db, map_id, version, new)
-        self._copy_display(map_id, version, new, by=by)
-        layout = self._copy_layout(map_id, version, new, by=by)
+        layout = self._copy_over(map_id, version, new, by=by)
         return {"map_id": map_id, "from": version, "version": new, "cleaned": len(specks),
                 "cells": px, "homes_copied": homes, "layout_copied": layout}
 
@@ -433,8 +432,7 @@ class MapAdmin:
             shutil.rmtree(tmp, ignore_errors=True)
         from nexwar_site.standby import copy_homes
         homes = copy_homes(self.db, map_id, version, new)
-        self._copy_display(map_id, version, new, by=by)
-        layout = self._copy_layout(map_id, version, new, by=by)
+        layout = self._copy_over(map_id, version, new, by=by)
         out = {"map_id": map_id, "from": origin or version, "version": new, **stats,
                "homes_copied": homes, "layout_copied": layout, "by": by, "draft": True}
         if origin is not None:
@@ -467,7 +465,23 @@ class MapAdmin:
         map_id, version = self._names(map_id, version)
         self.ref(map_id, version)
         origin = self.cat.draft_of(map_id, version)
-        return {"draft": origin is not None, "from": origin}
+        return {"draft": origin is not None, "from": origin,
+                "zones_removed": self._zones_removed(map_id, origin, version)}
+
+    def _zones_removed(self, map_id: str, origin: str | None, version: str) -> list[str]:
+        """草稿比来源版本少了哪些禁行区、虚拟墙等(名字;特殊地面生成的限速区不算)。发布前给人看
+        (codex POC r1 C3:是人删的就该看得见,不是人删的更要看见)。来源版本已经删了就不比。"""
+        zones = getattr(self.site, "zones", None)
+        if origin is None or zones is None or origin == version:
+            return []
+        from nexwar_site.map_display import TERRAIN_PREFIX
+        try:
+            self.ref(map_id, origin)
+        except AdminError:
+            return []
+        have = {z.id for z in zones.current(map_id, version).zones}
+        return [z.label or z.id for z in zones.current(map_id, origin).zones
+                if not z.id.startswith(TERRAIN_PREFIX) and z.id not in have]
 
     def release(self, map_id: str, version: str, *, by: str) -> dict[str, Any]:
         """草稿发布到站点(11-10,用户:「发布的地图不是下发到机器人,而只是发布到站点,发布完了
@@ -569,6 +583,23 @@ class MapAdmin:
         out["names"]["standby"] = [f"{r['robot_id']}/{r['name']}" for r in sb]
         return out
 
+    def _copy_over(self, map_id: str, old: str, new: str, *, by: str) -> dict[str, int]:
+        """另存出来的新版本:先整份抄禁行区等布置,再抄显示设置(特殊地面落成的限速区并进去)。
+        codex POC r1 C3:原来先落特殊地面限速区,抄禁行区那一步看见新版本已有区域就跳过,禁行区丢了。
+        禁行区、限速区抄不过去就不留这个新版本(删掉、回 500),不能留一份缺禁行区的图。"""
+        try:
+            layout = self._copy_layout(map_id, old, new, by=by)
+            self._copy_display(map_id, old, new, by=by)
+        except Exception as exc:
+            log.exception("另存 %s:%s → %s 抄禁行区 / 显示没成,新版本删掉", map_id, old, new)
+            try:
+                self.delete(map_id, new)
+            except Exception:
+                log.exception("没抄全的新版本 %s:%s 没删成", map_id, new)
+            raise AdminError(500, f"禁行区、限速区没能抄到新版本({exc}):这次没存,原版不动,"
+                                  "请重试") from exc
+        return layout
+
     def _copy_layout(self, map_id: str, old: str, new: str, *, by: str) -> dict[str, int]:
         """网页易用性第 2 轮 N4:另存的新版本跟原版同一个坐标系(只换了栅格),防区、出口线、藏匿点、
         人挪过的防区查看点 / 值守位、路网照抄过去 —— 原来新版本上全是空的,换过去就没了也不说。
@@ -581,10 +612,8 @@ class MapAdmin:
         zones = getattr(site, "zones", None)
         if zones is not None:
             # 第 3 轮 maps N1:禁行区从来源版本照抄(没确认,发布前要人确认);待命点、拦截点做成待核建议
-            try:
-                got["nogo"] = zones.seed_derived(map_id, new, old, by=by)
-            except Exception:
-                log.warning("另存 %s:%s 抄禁行区没成", map_id, new, exc_info=True)
+            # codex POC r1 C3:抄不过去不吞掉,交给 _copy_over 整个作废
+            got["nogo"] = zones.seed_derived(map_id, new, old, by=by)
         areas = getattr(site, "areas", None)
         if areas is None:
             return got
@@ -651,15 +680,13 @@ class MapAdmin:
         zones = getattr(self.site, "zones", None)
         if zones is None:
             return
-        from nexwar_site.map_display import slow_zones
+        from nexwar_site.map_display import TERRAIN_PREFIX, slow_zones
         slow = slow_zones(body)
-        if slow:
-            cur = zones.current(map_id, new)
-            try:
-                zones.put(map_id, new, [z.to_wire() for z in cur.zones] + slow,
-                          base_revision=cur.revision, by=by)
-            except Exception:
-                log.warning("另存的新版本 %s:%s 特殊地面限速区没落下", map_id, new, exc_info=True)
+        cur = zones.current(map_id, new)
+        # 抄过来的禁行区里已经有来源版本的特殊地面限速区(t- 开头):换成按显示设置重新生成的,不重复
+        keep = [z.to_wire() for z in cur.zones if not z.id.startswith(TERRAIN_PREFIX)]
+        if keep + slow != [z.to_wire() for z in cur.zones]:
+            zones.put(map_id, new, keep + slow, base_revision=cur.revision, by=by)
 
     def _next_version(self, map_id: str, version: str) -> str:
         """新版本号:这个地图号下都是数字就取最大的加一;不然 ``<版本>-dn<n>``。"""
