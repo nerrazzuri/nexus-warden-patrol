@@ -37,10 +37,12 @@ interface RobotRun { robot_id: string; running?: { map_id?: string; map_version?
 
 /** 这一版禁行区的状态(在生效 / 等你确认 / 从没确认过 / 等机器人)、带过来的建议、「确认此版本」。
  *  布置 → 禁行区 和地图编辑器都用(11-10:画都在编辑器里画)。``changed``:页面上还有没存的改动(不给确认)。 */
-export function NogoStatus({ nav, base, mapId, version, changed, say, reload, draft = false }: {
+export function NogoStatus({ nav, base, mapId, version, changed, say, reload, draft = false, quiet = false }: {
   nav: NavZones | null; base: string; mapId: string; version: string; changed: boolean; say: (s: string) => void; reload: () => Promise<void>;
   /** 11-10:编辑草稿 —— 禁行区在「发布」时一起确认,这里不给单独确认 */
   draft?: boolean;
+  /** 易用性第 6 轮 W6-11:编辑器里没选禁行区工具时,不写绿色的「已生效」(看不懂指什么);要处理的照样写 */
+  quiet?: boolean;
 }) {
   const [confirming, setConfirming] = useState(false);
   const [behind, setBehind] = useState<string[]>([]);
@@ -86,7 +88,7 @@ export function NogoStatus({ nav, base, mapId, version, changed, say, reload, dr
       {/* 易用性第 6 轮 W6-04:草稿上只一种说法 —— 发布时一起确认(不说「去点确认」「只能遥控」,跟下面打架) */}
       {!nav ? <p class="muted">…</p> : draft ? <p class="muted small" data-nogo-draft="1">{t("lyNogoDraftN", { n: nav.zones?.length ?? 0 })}</p>
         : current && held.length === 0
-        ? <p class="ok-text">{t("lyNogoLive")}</p>
+        ? (quiet ? null : <p class="ok-text">{t("lyNogoLive")}</p>)
         : held.length > 0 ? <p class="warn-text">{t("lyNogoWaitYou", { names: joinList(held.map((z) => siteKnown(z.label) || z.id)) })}</p>
         // 第 4 轮 maps N1:另存出来的版本已经抄了来源版本的区域 —— 说「已有 n 个,核一下再确认」,不说「去画」
         : (nav.zones?.length ?? 0) > 0 ? <p class="warn-text" data-nogo-copied="1">{t("lyNogoCopiedCheck", { n: nav.zones.length })}</p>

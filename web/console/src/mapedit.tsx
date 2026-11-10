@@ -86,7 +86,8 @@ function Editor({ say, target, Canvas }: { say: Say; target: Target; Canvas?: Fu
   const [sel, setSel] = useState<string | null>(null);
   const [renaming, setRenaming] = useState(false);
   const [result, setResult] = useState(false);
-  const [shape, setShape] = useState<Shape>("stroke");
+  // 易用性第 6 轮 W6-11:默认方框(画笔点几下没反应,要找「完成绘制」)
+  const [shape, setShape] = useState<Shape>("rect");
   const [width, setWidth] = useState(0.3);
   const [pts, setPts] = useState<Pt[]>([]);
   // 第 2 轮 P1-53:方框按住拖着画(拖的时候先画个虚框,松手才算)
@@ -285,7 +286,8 @@ function Editor({ say, target, Canvas }: { say: Say; target: Target; Canvas?: Fu
         <button type="button" class="btn" disabled={!hist?.future.length} onClick={() => setHist((h) => (h ? redo(h) : h))}>{t("meRedo")}</button>
         <button type="button" class="btn primary me-save" disabled={!dirty || busy || !ready || preview} onClick={() => void save()}>{t("meSaveDraft")}</button>
       </div>
-      <p class="muted small">{t("meExplain")}</p>
+      {/* W6-11:页首一行;详细的收在「怎么用」 */}
+      <div class="muted small me-explain">{t("meExplainShort")} <details class="me-howto" data-me-howto="1"><summary>{t("meHowTo")}</summary><p>{t("meExplain")}</p></details></div>
       {/* 11-10 用户:保存只是草稿;预览、再改;都确认后发布(二次确认)到站点,之后才下发到机器人 */}
       {drafted && (isDraft
         ? <div class="me-draft row wrap" data-draft="1">
@@ -343,6 +345,15 @@ function Editor({ say, target, Canvas }: { say: Say; target: Target; Canvas?: Fu
               {pts.length > 0 && <polyline class={tool === "wall" ? "draft-line vwall" : "draft-line"} points={polyPx(meta, pts)} />}
               {rect && <polygon class="draft-line" data-drag-rect="1" points={polyPx(meta, [rect[0], [rect[1][0], rect[0][1]], rect[1], [rect[0][0], rect[1][1]]])} />}
             </> : null })}
+          {/* 易用性第 6 轮 W6-11:画着的时候「完成绘制 / 撤一点 / 取消」浮在地图上(原来在侧栏最底下,要滚才看得到) */}
+          {pts.length > 0 && (
+            <div class="me-drawfloat row wrap" data-draw-float="1">
+              <span class="small">{t(grid ? "meStrokePts" : "drawHint", { n: pts.length })}</span>
+              <button type="button" class="btn sm" onClick={() => setPts(pts.slice(0, -1))}>{t("undoPoint")}</button>
+              <button type="button" class="btn sm" onClick={() => setPts([])}>{t("cancel")}</button>
+              <button type="button" class="btn sm primary" disabled={pts.length < need || (tool === "region" && !name.trim())} onClick={() => finish()}>{t("lyDrawDone")}</button>
+            </div>
+          )}
           {/* P1-52:图例;能切到「擦完的样子」(擦的画成空地、加的画成墙) */}
           <div class="me-legend small" data-me-legend="1">
             <span><i class="me-sw erase" aria-hidden="true" />{t("meLegErase")}</span>
@@ -353,7 +364,7 @@ function Editor({ say, target, Canvas }: { say: Say; target: Target; Canvas?: Fu
         </div>
         <div class="ly-side">
           {/* 11-10:禁行区的状态、确认此版本、带过来的建议 —— 跟布置那一页同一个 */}
-          {nav && <NogoStatus nav={nav} base={base} mapId={target.map_id} version={target.version} changed={dirty} say={say} reload={reloadNav} draft={isDraft} />}
+          {nav && <NogoStatus nav={nav} base={base} mapId={target.map_id} version={target.version} changed={dirty} say={say} reload={reloadNav} draft={isDraft} quiet={!isZone(tool)} />}
           {!preview && <div class="me-tools" role="toolbar" aria-label={t("meTools")}>
             {GROUPS.map(([g, ks]) => (
               <div key={g} class="me-group" data-group={g}>
@@ -396,15 +407,7 @@ function Editor({ say, target, Canvas }: { say: Say; target: Target; Canvas?: Fu
           {isZone(tool) && <p class="muted small">{tool === "wall" ? t("vwallDrawHint", { n: pts.length, w: 0.3 })
             : tool === "nzErase" ? t("eraseDrawHint", { n: pts.length }) : t("navDrawHint", { n: pts.length })}</p>}
           {tool === "nzErase" && <p class="muted small" data-erase-tip="1">{t("drawEraseTip")}</p>}
-          {tool === null && <p class="muted small">{t("mePickTool")}</p>}
-          {pts.length > 0 && (
-            <div class="row wrap">
-              <span class="muted small">{t(grid ? "meStrokePts" : "drawHint", { n: pts.length })}</span>
-              <button type="button" class="btn sm" onClick={() => setPts(pts.slice(0, -1))}>{t("undoPoint")}</button>
-              <button type="button" class="btn sm primary" disabled={pts.length < need || (tool === "region" && !name.trim())} onClick={() => finish()}>{t("lyDrawDone")}</button>
-              {isZone(tool) && <button type="button" class="btn sm" onClick={() => setPts([])}>{t("cancel")}</button>}
-            </div>
-          )}
+          {tool === null && !preview && <p class="muted small">{t("mePickTool")}</p>}
           {tool === "rotate" && now && (
             <>
               <label class="field">{t("meRotateDeg", { d: Math.round(now.display.rotate_deg ?? meta?.rotation_deg ?? 0) })}
