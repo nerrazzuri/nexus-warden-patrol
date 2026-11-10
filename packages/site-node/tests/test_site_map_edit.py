@@ -439,3 +439,50 @@ def test_第2轮_N4_布置计数_发布弹窗拿来比(站点):
                    "x, y, yaw) VALUES ('gate', 'http://1.2.3.4', '东区', 1, ?, ?, 1.0, 1.0, 0)",
                    MAP)
     assert s.req("GET", f"{ADM}/layout", token=tok)[1]["cameras"] == before + 1
+
+
+def test_11_10_没发布过的编辑草稿再编辑_用新版替换它_发布前只有一个新版本(站点):
+    """用户 11-10:「之前一直都是单独保存的所以才有那么多版本」。从编辑另存出来、没有机器人换上过、
+    没挂巡逻路线的草稿,再编辑另存:新版本替换掉草稿(草稿删掉,区域照抄过来);原版、换上过的版本永远不动。"""
+    s = 站点
+    tok = _登(s)
+    z = s.api.zones
+
+    def edit(v):
+        dg = s.req("GET", f"/api/admin/maps/{MAP[0]}/{v}/noise", token=tok)[1]["digest"]
+        code, d = s.req("POST", f"/api/admin/maps/{MAP[0]}/{v}/edit", {"digest": dg, "ops": ERASE},
+                        token=tok)
+        assert code == 200, d
+        return d
+
+    def versions():
+        return sorted(m["version"] for m in s.maps.list() if m["map_id"] == MAP[0])
+
+    d1 = edit(MAP[1])                                       # 原版 → 草稿:原版不动,不替换
+    v1 = d1["version"]
+    assert "replaced" not in d1 and versions() == sorted([MAP[1], v1])
+    pool = {"id": "pool", "kind": "nogo", "label": "泳池",
+            "polygon": [[0.5, 0.5], [1.5, 0.5], [1.5, 1.5], [0.5, 1.5]]}
+    z.put(MAP[0], v1, [pool], base_revision=z.current(MAP[0], v1).revision, by="t")
+    z.confirm(MAP[0], v1, revision=z.current(MAP[0], v1).revision, by="alice")
+    d2 = edit(v1)                                           # 草稿再编辑:替换
+    v2 = d2["version"]
+    assert d2["replaced"] == v1 and versions() == sorted([MAP[1], v2]), versions()
+    assert [x.id for x in z.current(MAP[0], v2).zones] == ["pool"], "草稿上画的禁行区跟过来"
+    assert z.confirmed_current(MAP[0], v2), "草稿上确认过的,新版本照样算确认过"
+    note = next(m for m in s.maps.list() if m["map_id"] == MAP[0] and m["version"] == v2)["note"]
+    assert f"从 {MAP[1]} 编辑" in note, note
+    # 换上过(下发过换图)的草稿:不替换
+    with s.api.dispatcher.db.tx() as tx:
+        tx.execute("INSERT INTO commands(command_id, task_id, robot_id, kind, payload, issued_by, "
+                   "issued_at, ack_result) VALUES ('c1','t1','A','map_activate',?,'alice',1,"
+                   "'accepted')", (json.dumps({"map_id": MAP[0], "version": v2}),))
+    d3 = edit(v2)
+    assert "replaced" not in d3 and v2 in versions()
+    # 挂了巡逻路线的草稿:不替换(路线不跟着走)
+    v3 = d3["version"]
+    with s.api.dispatcher.db.tx() as tx:
+        tx.execute("INSERT INTO routes(route_id, map_id, map_version, definition, revision, "
+                   "updated_ms) VALUES ('r1', ?, ?, '{}', 1, 1)", (MAP[0], v3))
+    d4 = edit(v3)
+    assert "replaced" not in d4 and v3 in versions()

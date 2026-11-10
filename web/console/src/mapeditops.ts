@@ -1,21 +1,24 @@
 // 地图编辑器的操作栈(W44 第四期,设计 §6):橡皮擦、画障碍(栅格那一半,存成新的一版),区域名、特殊地面、摆正、底图
-// (显示那一半,跟着版本存)。撤销、重做;另存之前估一下擦了多少、画了多少。不碰 DOM,好测。
-import type { Pt } from "./mapview";
+// (显示那一半,跟着版本存),禁行区、虚拟墙、限速区等(11-10 搬进编辑器,跟着版本存)。撤销、重做一起管;
+// 另存之前估一下擦了多少、画了多少。不碰 DOM,好测。
+import type { NavZone, Pt } from "./mapview";
 
 export type GridOp = { op: "erase" | "obstacle"; shape: "stroke" | "line" | "rect"; points: Pt[]; width_m: number };
 export type TerrainKind = "stairs" | "step" | "slope" | "grass" | "gravel";
 export interface Terrain { id: string; kind: TerrainKind; polygon: Pt[]; slow_mps: number | null }
 export interface Basemap { file: string; x: number; y: number; scale: number; rotate_deg: number; opacity: number }
 export interface Display { rotate_deg: number | null; basemap: Basemap | null; regions: { name: string; polygon: Pt[] }[]; terrain: Terrain[] }
-export interface EditState { ops: GridOp[]; display: Display }
+/** 禁行区等(布置那一套的格式;新画的临时区带 ``for_s``)。 */
+export type ZoneDraft = NavZone & { for_s?: number };
+export interface EditState { ops: GridOp[]; display: Display; zones: ZoneDraft[] }
 
 /** 楼梯、台阶、斜坡默认放慢 0.3 m/s,草地、碎石路默认不放慢(设计 §11 第 16 条)。 */
 export const SLOW_DEFAULT: Record<TerrainKind, number | null> = { stairs: 0.3, step: 0.3, slope: 0.3, grass: null, gravel: null };
 
 export interface History { past: EditState[]; now: EditState; future: EditState[] }
 
-export function start(display: Display): History {
-  return { past: [], now: { ops: [], display }, future: [] };
+export function start(display: Display, zones: ZoneDraft[] = []): History {
+  return { past: [], now: { ops: [], display, zones }, future: [] };
 }
 
 export function apply(h: History, f: (s: EditState) => EditState): History {
