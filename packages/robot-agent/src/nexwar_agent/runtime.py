@@ -385,7 +385,8 @@ class AgentRuntime:
         #: 上装(W21):警灯、警笛、聚光灯、喇叭。不是任务;喇叭的优先级仲裁在 ``DeterDesk`` 里。
         from nexwar_agent.deter import DeterDesk
         self.deter = DeterDesk(self.hal, emit=self.events.emit,
-                               monotonic=monotonic or time.monotonic)
+                               monotonic=monotonic or time.monotonic,
+                               on_estop=self._payload_estop_pressed)
         # POC 11-05:被挡、有人太近、人多时自己放录好的话术(有那段才放)
         from nexwar_agent.autovoice import AutoVoice
         self.autovoice = AutoVoice(self.deter, monotonic=monotonic or time.monotonic)
@@ -402,6 +403,9 @@ class AgentRuntime:
         self._speed_cap_told: tuple = (None,)              # 起来时没限速:不用多发一次能力
         if self.parts is not None:
             self.processor.speed_cap_hook = self._on_speed_cap
+        #: 外审 POC r1 C1:上装急停按钮(竞品转接)本地锁住,站点「恢复」发 ``estop_release`` 解
+        if self._payload_estop_ok():
+            self.processor.estop_release_hook = self._on_estop_release
         #: 充电桩(W13 外审):此刻在不在桩上(实测;``None`` = 还没读到)、「桩上危险」(出桩、停对桩
         #: 确认不了时 dock 任务挂上,实测离桩稳 5 秒才摘)。会对桩的狗才有运动闸。
         self._on_dock: bool | None = None
@@ -1056,6 +1060,8 @@ class AgentRuntime:
             out["follow"] = self._follow_caps()       # W74:在不在跟、在不在回最后位置
         if self.parts is not None:
             out["speed_cap"] = self._speed_cap_caps()  # W29:全狗限速(站点下雨、雷暴时发)
+        if self._payload_estop_ok():
+            out["estop_release"] = {}               # 外审 POC r1 C1:站点恢复时要发解锁
         if self.hal.hal_capabilities().recharge_mode != "none":
             out["dock"] = self._dock_caps()         # W13:会对桩;在不在桩上、桩上危险
         if self.evidence_sealed is not None:
@@ -1132,6 +1138,39 @@ class AgentRuntime:
             return f"failed: {exc}"
         log.info("姿态换成 %s", mode)
         return "", {"mode": mode}
+
+    def _payload_estop_ok(self) -> bool:
+        fn = getattr(self.hal, "payload_estop_supported", None)
+        return bool(fn()) if callable(fn) else False
+
+    def _payload_estop_pressed(self) -> None:
+        """上装急停按钮按下(外审 POC r1 C1):HAL 已经锁住、停车;这里当场中止会动的任务,
+        不等站点那一圈(断网也一样)。"""
+        from nexwar_agent.commands import _MOTION_KINDS
+
+        async def go() -> None:
+            try:
+                await self.processor.abort_kinds(_MOTION_KINDS, "payload_estop")
+            except Exception:
+                log.exception("上装急停:中止任务没成")
+            try:
+                await self._stop_motion()
+            except Exception:
+                log.exception("上装急停:停车没成")
+        try:
+            asyncio.get_running_loop().create_task(go())
+        except RuntimeError:
+            log.error("上装急停:没在事件循环里,任务没中止(HAL 的锁照样拦着速度)")
+
+    async def _on_estop_release(self, cmd: Command) -> str:
+        """站点「恢复」:人确认现场安全了,解开上装急停的本地锁。机器人不会自己动,等再派。"""
+        try:
+            await self.hal.payload_estop_release()
+        except Exception as exc:  # noqa: BLE001 - 解不开:原因带回去
+            log.warning("上装急停解锁没成:%s", exc)
+            return f"failed: {exc}"
+        log.info("上装急停解锁(%s)", cmd.command_id)
+        return ""
 
     def _on_speed_cap(self, cmd: Command) -> str:
         """全狗限速(W29):记下、马上用上。``null`` 取消。"""

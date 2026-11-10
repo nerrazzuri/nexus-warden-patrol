@@ -404,3 +404,85 @@ async def test_POC1106_看见人_云台转过去_朝左的人是负的水平角_
     hal2, ev2 = _有回调的喇叭(), []
     await DeterDesk(hal2, emit=lambda k, d: ev2.append((k, d))).aim_at(10.0)
     assert ev2 == []
+
+
+# ---------------------------------------- 外审 POC r1 C1:上装急停在机器人本地锁住
+
+
+class _带急停按钮的狗(SimRobot):
+    """竞品上装那种:有急停按钮,HAL 本地锁(这里只记着),站点恢复时解。"""
+
+    def __init__(self, *a, **kw):
+        super().__init__(*a, **kw)
+        self.button = None
+        self.latched = False
+
+    def set_button_listener(self, fn):
+        def on(name):
+            if name == "estop":
+                self.latched = True
+            fn(name)
+        self.button = on
+
+    def payload_estop_supported(self):
+        return True
+
+    def payload_estop_latched(self):
+        return self.latched
+
+    async def payload_estop_release(self):
+        self.latched = False
+
+
+async def _急停台(tmp_path):
+    broker, c = MemoryBroker(), 钟()
+    ears = 耳朵()
+    st = MemoryTransport(broker, "site")
+    await st.connect()
+    await st.subscribe(f"{T.prefix}/#", ears)
+    dog = _带急停按钮的狗(now_ms=c, max_vx=1.0, max_wz=1.5, stop_latency_s=0.2, payload=True)
+    rt = AgentRuntime(transport=MemoryTransport(broker, "dog"), registration=REG, hal=dog,
+                      store_dir=tmp_path, now_ms=c, loaded_map=("m", "1"), boot_id="b",
+                      home=Pose.from_xy_yaw(0.0, 0.0), monotonic=lambda: c.mono,
+                      odom_identity=True, telemetry_period_ms=100)
+    await rt.start()
+    await broker.drain()
+    return broker, c, ears, dog, rt
+
+
+async def test_外审POC_C1_上装急停_代理当场中止任务_不等站点叫停(tmp_path):
+    broker, c, ears, dog, rt = await _急停台(tmp_path)
+    assert ears.by["capabilities"][-1]["tasks"]["estop_release"] == {}
+    await rt._on_cmd(_cmd("goto", {"target": MapPose(map_id="m", map_version="1", frame_id="map",
+                                                     x=3.0, y=0.0, yaw=0.0).to_wire()}, "g1", c))
+    await _跑(rt, broker, n=5, r=dog, c=c)
+    assert rt.processor.current is not None and not rt.processor.current.done
+    dog.button("estop")
+    await _跑(rt, broker, n=20, r=dog, c=c)
+    aborted = [e["data"] for e in ears.by.get("event", []) if e["kind"] == "task_aborted"]
+    assert aborted and aborted[-1]["task_id"] == "goto-g1", aborted
+    assert rt.processor.current is None or rt.processor.current.done
+    assert _事件(ears, "payload_button") == [{"button": "estop"}]
+    await rt.close()
+
+
+async def test_外审POC_C1_站点恢复发解锁命令_代理解开上装急停的锁(tmp_path):
+    broker, c, ears, dog, rt = await _急停台(tmp_path)
+    dog.button("estop")
+    await _跑(rt, broker, n=5, r=dog, c=c)
+    await rt._on_cmd(_cmd("estop_release", {}, "r1", c))
+    await broker.drain()
+    ack = ears.by["cmd/ack"][-1]
+    assert ack["result"] == "accepted", ack
+    assert not dog.latched
+    await rt.close()
+
+
+async def test_外审POC_C1_没有上装急停的狗_不报能力_解锁命令回unsupported(tmp_path):
+    broker, c, ears, dog, rt = await _台(tmp_path)
+    assert "estop_release" not in ears.by["capabilities"][-1]["tasks"]
+    await rt._on_cmd(_cmd("estop_release", {}, "r1", c))
+    await broker.drain()
+    ack = ears.by["cmd/ack"][-1]
+    assert ack["result"] == "rejected" and ack["reason"] == "unsupported", ack
+    await rt.close()

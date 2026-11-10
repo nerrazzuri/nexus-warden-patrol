@@ -724,3 +724,32 @@ def test_现场1105_请求体没被读走_同一条连接的下一个请求照�
     body = r2.read()
     assert r2.status == 200, body[:200]
     conn.close()
+
+
+def test_外审POC_C1_恢复_给有上装急停的机器人发解锁_没有的不发(tmp_path, monkeypatch):
+    """codex POC r1 C1:上装急停在机器人本地锁住,要人在站点点「恢复」才解。"""
+    from nexwar_adapter_sim.robot import SimRobot
+    released: list = []
+
+    async def 解(self):
+        released.append(1)
+    monkeypatch.setattr(SimRobot, "payload_estop_supported", lambda self: True, raising=False)
+    monkeypatch.setattr(SimRobot, "payload_estop_release", 解, raising=False)
+    s = 站(tmp_path)
+    try:
+        alice = s.login()
+        _等(lambda: s.req("GET", "/api/robots/A", token=alice)[1].get("fresh"))
+        assert s.req("POST", "/api/robots/A/halt", {}, token=alice)[0] == 200
+        code, d = s.req("POST", "/api/robots/A/resume", {}, token=alice)
+        assert code == 200 and d["estop_released"] is True, d
+        assert released == [1]
+    finally:
+        s.close()
+
+
+def test_外审POC_C1_没有上装急停的机器人_恢复不发解锁(站点):
+    s = 站点
+    alice = s.login()
+    _等(lambda: s.req("GET", "/api/robots/A", token=alice)[1].get("fresh"))
+    code, d = s.req("POST", "/api/robots/A/resume", {}, token=alice)
+    assert code == 200 and d["estop_released"] is None, d

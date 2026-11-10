@@ -659,3 +659,38 @@ async def test_遥控临时档3秒没续_旁路回低速_HAL也按低速换算()
 
 async def _异(v):
     return v
+
+
+async def _有(sim, cmd):
+    return any(c == cmd for c, _ in sim.commands)
+
+
+class _按钮上装:
+    """只有按钮的上装(竞品转接那种):``on_button`` 由 HAL 挂上。"""
+
+    def __init__(self):
+        self.on_button = None
+
+    def has(self, name):
+        return False
+
+
+async def test_外审POC_C1_上装急停_本地锁住_后面的速度一律拒_明确解除才放():
+    """codex POC r1 C1:急停按钮只调一次 stop(),站点叫停回来之前、断网时,下一条导航速度照样能走。"""
+    async with _台子() as (sim, hal):
+        assert not (await hal.set_velocity(_v(vx=0.36))).rejected
+        hal._payload = _按钮上装()
+        got: list = []
+        hal.set_button_listener(got.append)
+        hal._payload.on_button("estop")
+        assert got == ["estop"]
+        assert hal.payload_estop_latched()
+        r = await hal.set_velocity(_v(vx=0.36))
+        assert r.rejected and r.reason == "estop", r
+        assert await hal.estop_status() and (await hal.health()).estop
+        assert await _等(lambda: _有(sim, "halt")), "当场停"
+        hal._payload.on_button("sos")                   # 别的按钮不解锁
+        assert (await hal.set_velocity(_v(vx=0.36))).rejected
+        await hal.payload_estop_release()
+        assert not hal.payload_estop_latched()
+        assert not (await hal.set_velocity(_v(vx=0.36))).rejected

@@ -28,7 +28,8 @@ log = logging.getLogger(__name__)
 
 class DeterDesk:
     def __init__(self, hal: Any, *, emit: Callable[[str, dict[str, Any]], Any],
-                 monotonic: Callable[[], float] = time.monotonic) -> None:
+                 monotonic: Callable[[], float] = time.monotonic,
+                 on_estop: Callable[[], Any] | None = None) -> None:
         self.hal = hal
         self._emit = emit
         self._mono = monotonic
@@ -42,7 +43,11 @@ class DeterDesk:
         # POC 11-06:竞品上装的求助、急停按钮按下了 → 一条 ``payload_button`` 事件(站点出告警、叫停)
         buttons = getattr(hal, "set_button_listener", None)
         if callable(buttons):
-            buttons(lambda name: self._emit("payload_button", {"button": name}))
+            def pressed(name: str) -> None:
+                self._emit("payload_button", {"button": name})
+                if name == "estop" and on_estop is not None:
+                    on_estop()                       # 外审 POC r1 C1:代理当场中止任务,不等站点
+            buttons(pressed)
 
     def _sound_ended(self, ok: bool, why: str) -> None:
         self._sound = None

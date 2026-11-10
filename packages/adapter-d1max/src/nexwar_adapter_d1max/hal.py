@@ -34,6 +34,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import logging
 import math
 import time
 from collections.abc import Callable
@@ -67,6 +68,8 @@ from nexwar_patrol.backends.sidecar_device import (
 )
 from nexwar_patrol.protocol.agent_frames import MAX_FORWARD_FRACTION, EmergencyStatus
 from nexwar_patrol.protocol.agent_frames import MotionStatus as SdkMotion
+
+log = logging.getLogger(__name__)
 
 ADAPTER_ID = "nexwar/0.1.0"
 
@@ -159,6 +162,8 @@ class D1MaxHal:
         self._monotonic: Callable[[], float] = time.monotonic
         #: 最近一条被接受的速度到什么时候(monotonic)还有效。有效期里不算停。
         self._vel_until: float | None = None
+        #: 外审 POC r1 C1:上装急停按钮按过、还没在站点恢复(本地锁,按急停算)
+        self._payload_estop = False
 
     def _sdk_caps(self) -> tuple[float, float]:
         """SDK 比例的(往前, 往后)上限。往前:自己配的 ``max_fraction`` 和旁路进程 ``--max-fraction``
@@ -395,6 +400,8 @@ class D1MaxHal:
     def _estop_now(self) -> bool:
         """软、硬两路**都**报「已解除」才算没急停。没状态帧、任一路 ``Unknown``(旁路进程在
         客户端刚连上时会先补一帧全零的占位状态)都按急停算:不知道,放行等于赌运气。"""
+        if self._payload_estop:
+            return True                               # 外审 POC r1 C1:上装急停按过、还没解除
         st = self._b.last_state
         if st is None:
             return True
@@ -546,10 +553,29 @@ class D1MaxHal:
 
         def on_button(name: str) -> None:
             if name == "estop":
+                # 外审 POC r1 C1:本地锁住 —— 之后的速度一律拒(按急停算),不靠站点那一圈、断网也锁着;
+                # 只有明确解除(站点「恢复」→ :meth:`payload_estop_release`)才放
+                if not self._payload_estop:
+                    log.warning("上装急停按钮按下:本地锁住运动,等人确认安全后恢复")
+                self._payload_estop = True
+                self._vel_until = None
                 with contextlib.suppress(RuntimeError):
                     asyncio.get_running_loop().create_task(self.stop())
             fn(name)
         self._payload.on_button = on_button
+
+    def payload_estop_supported(self) -> bool:
+        """有上装急停按钮(竞品转接):站点「恢复」要连带给机器人解锁。"""
+        return self._payload is not None and hasattr(self._payload, "on_button")
+
+    def payload_estop_latched(self) -> bool:
+        return self._payload_estop
+
+    async def payload_estop_release(self) -> None:
+        """人确认现场安全、在站点点了恢复:解开上装急停的本地锁(机器人自己不会动,等再派)。"""
+        if self._payload_estop:
+            log.warning("上装急停的本地锁解开(站点恢复)")
+        self._payload_estop = False
 
     def sound_tts(self) -> bool:
         return self._payload is not None and bool(self._payload.cfg.tts_command)

@@ -1039,6 +1039,21 @@ class Dispatcher:
                                 issued_by=issued_by, task_id=f"halt-{uuid.uuid4().hex[:12]}",
                                 priority=TELEOP_PRIORITY)
 
+    def has_estop_release(self, robot_id: str) -> bool:
+        """这台有上装急停(本地锁,外审 POC r1 C1):站点「恢复」要连带发解锁。"""
+        c = self.clients.get(robot_id)
+        return c is not None and c.capabilities is not None \
+            and "estop_release" in c.capabilities.tasks
+
+    async def estop_release(self, robot_id: str, *, issued_by: str) -> dict[str, Any]:
+        """给机器人解开上装急停的本地锁(人在站点点了恢复之后才发)。"""
+        c = self._client_for(robot_id)
+        if c.capabilities is None or "estop_release" not in c.capabilities.tasks:
+            raise Unsupported(f"{robot_id} 没有上装急停")
+        return await self._send(c, robot_id, "estop_release", {}, issued_by=issued_by,
+                                task_id=f"estop_release-{uuid.uuid4().hex[:12]}",
+                                priority=TELEOP_PRIORITY)
+
     # ------------------------------------------------------------ 地图(W00c5d 第二部分)
 
     async def map_command(self, robot_id: str, kind: str, payload: dict[str, Any], *,

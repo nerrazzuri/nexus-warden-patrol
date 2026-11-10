@@ -3057,8 +3057,22 @@ class _Handler(TlsHandlerMixin):
         self._audit_target = robot_id
         if self.site.dispatcher.registry.get(robot_id) is None:
             raise HttpError(404, "机器人不存在")
-        was = self.site.dispatcher.resume(robot_id, by=str(user))
-        return self._send_json(200, {"robot_id": robot_id, "was_held": was})
+        disp = self.site.dispatcher
+        was = disp.resume(robot_id, by=str(user))
+        # 外审 POC r1 C1:上装急停在机器人本地锁着 —— 恢复连带发解锁;没解开(不在线、没回)回 False,
+        # 机器人照旧锁着(偏安全),再点一次恢复;没有上装急停的是 None
+        released: bool | None = None
+        if disp.has_estop_release(robot_id):
+            try:
+                r = self.site.loop.call(lambda: disp.estop_release(robot_id, issued_by=str(user)),
+                                        timeout_s=disp.ack_timeout_s + 5)
+                ack = r.get("ack") if isinstance(r, dict) else None
+                released = isinstance(ack, dict) and ack.get("result") == "accepted"
+            except Exception:                              # noqa: BLE001 - 没解开:照实说
+                log.warning("%s 恢复:上装急停解锁没成", robot_id, exc_info=True)
+                released = False
+        return self._send_json(200, {"robot_id": robot_id, "was_held": was,
+                                     "estop_released": released})
 
     def _service(self, robot_id: str, user) -> None:
         """只许手动派 / 接自动派遣(W33):``{manual_only: bool, note?}``。设成只许手动要 ``dispatch``
