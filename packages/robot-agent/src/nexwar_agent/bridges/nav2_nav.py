@@ -36,6 +36,7 @@ import numpy as np
 from nexwar_agent import route_check
 from nexwar_agent.bridges.hal_nav import HalNavBackend
 from nexwar_agent.bridges.planned_nav import PlannedNavBackend, _heading
+from nexwar_contract import errcodes
 from nexwar_contract.navbridge import MAX_VIA
 from nexwar_contract.obsbridge import pack_bits
 from nexwar_contract.planning import costmap as cmod
@@ -356,7 +357,7 @@ class Nav2NavBackend(PlannedNavBackend):
                 self._settling = False
         if why:
             self.fallback_reason = why
-            log.warning("%s:%s,这一段退回自己的规划导航", op, why)
+            log.warning("%s:%s,这一段退回自己的规划导航 code=0x040F nav.fallback_planner", op, why)
             if self.on_event is not None:
                 self.on_event("nav_fallback", {"reason": why[:200]})
             self._nav2_goal = None
@@ -390,7 +391,8 @@ class Nav2NavBackend(PlannedNavBackend):
             finally:
                 self._planning = False
             if got is not None and not got.ok:
-                log.warning("%s:路线检查不过:%s", op, got.why)
+                log.warning("%s:路线检查不过 code=%s:%s", op,
+                            errcodes.tag(errcodes.nav(got.code)) if got.code else "-", got.why)
                 if self.on_event is not None:
                     self.on_event("route_rejected", {"code": got.code, "reason": got.why[:200],
                                                      "x": round(got.at[0], 2) if got.at else None,

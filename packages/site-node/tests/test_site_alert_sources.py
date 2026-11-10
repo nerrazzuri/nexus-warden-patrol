@@ -16,7 +16,9 @@ def test_W17_狗的告警带现场_最后在哪_在跑哪一趟_重启读回来�
     a = desk.raise_alert(kind="stuck", robot="A", title="卡住了")
     assert a.context["pose"] == pose.to_wire() | {"at_ms": 1_000_000}
     assert a.context["task_id"] == "patrol-7"
-    assert desk.raise_alert(kind="schedule_died", robot="site", title="x").context == {}
+    # 日志设计 第 4 条:每条告警另带错误码
+    assert desk.raise_alert(kind="schedule_died", robot="site", title="x").context == {
+        "err": "0x030B"}
     again = AlertDesk(db, now_ms=lambda: now[0])
     [b] = [x for x in again.open() if x["kind"] == "stuck"]
     assert b["context"]["pose"]["x"] == 3.0 and b["context"]["task_id"] == "patrol-7"
@@ -31,7 +33,7 @@ def test_W17_现场拿不到不挡告警(tmp_path):
         raise RuntimeError("x")
     desk.context_for = 炸
     assert desk.raise_alert(kind="stuck", robot="A", title="卡住了", context={"k": 1}).context \
-        == {"k": 1}
+        == {"k": 1, "err": "0x0216"}
 
 
 def test_W17_老库升级_告警表补上现场列(tmp_path):

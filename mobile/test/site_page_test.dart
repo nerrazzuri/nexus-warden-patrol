@@ -123,6 +123,17 @@ class FakeApi implements SiteApi {
     return versionsBody;
   }
   @override
+  Future<Map<String, dynamic>> uploadProblem(Uint8List gz,
+      {String note = '', String robot = '', String device = '', String app = ''}) async {
+    calls.add('problem:$note:$robot');
+    return <String, dynamic>{'code': 'NW-1110-7F3A', 'at_ms': 1, 'token': 'tk'};
+  }
+  @override
+  Future<Uint8List> problemBundle(String code, String token) async {
+    calls.add('problem-bundle:$code:$token');
+    return Uint8List.fromList(List<int>.filled(100, 1));
+  }
+  @override
   Future<Uint8List> supportBundle() async {
     calls.add('support-bundle');
     if (bundleError != null) throw bundleError!;

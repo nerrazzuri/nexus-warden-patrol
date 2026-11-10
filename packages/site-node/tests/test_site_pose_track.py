@@ -24,7 +24,7 @@ def pt(tmp_path):
 
 
 def test_常量():
-    assert STEP_M == 1.0 and MAX_GAP_MS == 10_000 and KEEP_MS == 30 * 86_400_000 and CELL_M == 2.0
+    assert STEP_M == 1.0 and MAX_GAP_MS == 10_000 and KEEP_MS == 90 * 86_400_000 and CELL_M == 2.0
 
 
 def test_轨迹按机器人的钟记(pt):

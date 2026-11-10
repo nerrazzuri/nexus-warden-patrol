@@ -171,7 +171,8 @@ def err_codes_ts() -> str:
     lines = ["// 生成的文件,别手改:改 nexwar_contract.errcodes,"
              "再跑 python3 tools/gen_mobile_design.py。",
              "",
-             "/** 错误码:英文名 → [十六进制, 级别, 谁处理, 英文, 中文, 英文处理建议, 中文处理建议]。 */",
+             "/** 错误码:英文名 → [十六进制, 级别, 谁处理, 英文, 中文, "
+             "英文处理建议, 中文处理建议]。 */",
              "export const ERR_CODES: Record<string, readonly [string, string, string, string, "
              "string, string, string]> = {"]
     for c in ec.CODES.values():
@@ -191,10 +192,11 @@ def err_codes_dart() -> str:
     """同一份码表给手机。"""
     ec = _errcodes()
     lines = [HEADER,
-             "/// 错误码:英文名 → ``(十六进制, 级别, 谁处理, 英文, 中文, 英文处理建议, 中文处理建议)``。",
+             "/// 错误码:英文名 → ``(十六进制, 级别, 谁处理, 英文, 中文, "
+             "英文处理建议, 中文处理建议)``。",
              "/// 来源 ``nexwar_contract.errcodes``。",
-             "const Map<String, (String, String, String, String, String, String, String)> errCodes ="
-             " <String, (String, String, String, String, String, String, String)>{"]
+             "const Map<String, (String, String, String, String, String, String, String)> "
+             "errCodes = <String, (String, String, String, String, String, String, String)>{"]
     for c in ec.CODES.values():
         lines.append(f"  {_dart_str(c.name)}: ({_dart_str(c.hex)}, {_dart_str(c.level)}, "
                      f"{_dart_str(c.who)},")

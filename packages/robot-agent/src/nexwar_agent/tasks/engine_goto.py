@@ -92,7 +92,7 @@ class EngineMissionTask(Task):
             return
         mission = self._mission()
         try:
-            await p.engine.start(mission, home=p.home)
+            await p.engine.start(mission, home=p.home, task_id=self.task_id)
         except EngineBusy as exc:
             self._fail(f"busy: {exc}")
             return

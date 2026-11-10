@@ -83,4 +83,5 @@ def test_带上哪一项没过_网页按这一项翻译(台):
     desk, src = 台
     src.on_event("A", _failed(NO_HOME))
     [a] = _only(desk)
-    assert a.context == {"check": "home"}
+    # 日志设计 第 4 条:另带错误码
+    assert a.context == {"check": "home", "err": "0x0214"}

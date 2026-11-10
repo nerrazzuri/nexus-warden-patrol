@@ -61,6 +61,9 @@ class 站:
         from nexwar_site.recordings import RecordingStore
         self.recordings = RecordingStore(self.db, tmp_path / "recordings", now_ms=lambda: NOW)
         self.intake.recordings = self.recordings
+        from nexwar_site.robot_logs import RobotLogs
+        self.robot_logs = RobotLogs(tmp_path / "robot-logs")
+        self.intake.robot_logs = self.robot_logs
         self.intake.start()
 
     def close(self):
@@ -524,7 +527,7 @@ def test_实测_握手没成_日志一行不打堆栈_别的错照打(caplog):
     from nexwar_site.tlsserve import TlsHandlerMixin, TlsThreadingServer
     srv = TlsThreadingServer(("127.0.0.1", 0), TlsHandlerMixin, ctx=None, max_connections=2)
     try:
-        with caplog.at_level(logging.INFO, logger="nexwar_site.tlsserve"):
+        with caplog.at_level(logging.DEBUG, logger="nexwar_site.tlsserve"):
             for exc in (ssl.SSLError(1, "[SSL: TLSV1_ALERT_UNKNOWN_CA] tlsv1 alert unknown ca"),
                         ConnectionResetError(104, "reset"), TimeoutError("timed out")):
                 try:
@@ -556,4 +559,35 @@ def test_改名_还没升级的狗发老的请求头_站点照收(站点, ca, tm
     _跑(box, 3)
     assert not run.exists()
     assert len(站点.store.runs(robot_id="A")) == 1
+    box.close()
+
+
+def test_日志设计5_机器人日志按批传上来_站点按机器人存_机器人上删掉_断网时攒着(站点, ca, tmp_path):
+    import gzip
+
+    from nexwar_agent import logship
+    root = tmp_path / "dogA-outbox"
+    f = tmp_path / "agent.log"
+    f.write_text("2026-11-10T08:00:00.000+08:00 INFO x 位置 (1.00, 2.00, 0.00) map=m:1\n")
+    t = [1_794_000_000.0]
+    ship = logship.LogShipper(logship.spool_dir(root), files=(f,), run=lambda a, x: (1, ""),
+                              now_s=lambda: t[0])
+
+    now = [NOW]
+
+    def 箱(sink):
+        return Outbox(root, cap_bytes=2**30, sink=sink, sn="A", now_ms=lambda: now[0], sub="logs",
+                      run_depth=1, classify=logship.classify, settled=logship.settled)
+    dead = 箱(HttpSink("https://127.0.0.1:9", ssl_context=_ctx(ca, ca.a)))   # WiFi 断了
+    batch = ship.tick()
+    _跑(dead, 5)
+    assert batch.exists() and 站点.robot_logs.robots() == [], "传不上去:机器人上攒着"
+    dead.close()
+    box = 箱(_sink(站点, ca, ca.a, sub="/logs"))                               # WiFi 回来了
+    for _ in range(10):
+        now[0] += 400_000                                 # 过了退避(最长 300 s)
+        box.step()
+    assert not batch.exists(), "站点收齐了:机器人上删掉"
+    got = tmp_path / "robot-logs" / "A" / batch.name / "agent.log.gz"
+    assert "位置 (1.00, 2.00" in gzip.open(got, "rt").read()
     box.close()

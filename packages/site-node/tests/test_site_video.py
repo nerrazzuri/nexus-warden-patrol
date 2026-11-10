@@ -437,4 +437,5 @@ def test_工单3_site_json_写错_serve_只打一行说明_退出码2(tmp_path, 
     err = capsys.readouterr().err
     assert rc == 2
     assert "Traceback" not in err and "video.fps" in err
-    assert len([ln for ln in err.splitlines() if ln.strip()]) == 1, err
+    # 日志设计 第 3 条起启动过程的日志也进标准错误:配置不对的说明只一行、不带堆栈
+    assert len([ln for ln in err.splitlines() if "起不来" in ln]) == 1, err

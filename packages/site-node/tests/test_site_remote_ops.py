@@ -109,7 +109,7 @@ def test_站点级运维_没装执行器明说_装了交请求回202_结果之�
     alice = _登(s, "alice")
     # P1-06:先能问做不做得到(网页按钮先灰着)
     assert s.req("GET", "/api/system/caps", token=alice)[1] == {
-        "priv": False, "push": False, "vpn": False}
+        "priv": False, "push": False, "vpn": False, "debug_log": True}
     assert s.req("POST", "/api/system/restart", {"confirm_password": PW}, token=alice)[0] == 409
     s.api.priv = SimOps()
     assert s.req("GET", "/api/system/caps", token=alice)[1]["priv"] is True
@@ -378,10 +378,10 @@ def test_诊断包_带时间段_事件命令操作记录_另取的原样放进�
                          extra={"robots/A/diag.json": b'{"ok": 1}', "client_errors.json": b"[]"})
     with tarfile.open(out) as tf:
         names = {m.name.removeprefix("nexwar_support/") for m in tf.getmembers()}
-        audit = json.loads(tf.extractfile("nexwar_support/audit.json").read())
-        log = tf.extractfile("nexwar_support/logs/wg-quick@nexwar.log").read()
-    assert {"robots/A/diag.json", "client_errors.json", "events.json", "commands.json",
-            "audit.json", "logs/chrony.log"} <= names
+        audit = json.loads(tf.extractfile("nexwar_support/records/audit.json").read())
+        log = tf.extractfile("nexwar_support/host/wg-quick@nexwar.log").read()
+    assert {"robots/A/diag.json", "clients/client_errors.json", "records/events.json",
+            "records/commands.json", "records/audit.json", "host/chrony.log"} <= names
     assert audit[0]["actor"] == "alice" and log == b"wg-quick@nexwar 2h\n"
     db.close()
 

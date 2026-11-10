@@ -249,6 +249,8 @@ class OutboxPump:
         self._counted = (box, *more)
         self.boxes = (box, *more, *uncounted)
         self.period_s = period_s
+        #: 日志上传(日志设计 第 5 条,:class:`~nexwar_agent.logship.LogShipper`);代理装上时接。
+        self.shipper: Any = None
         self._stop = threading.Event()
         #: 暂停上传(W46:上装过热降负载)。手上那一块传完才停,不打断。
         self._hold = threading.Event()

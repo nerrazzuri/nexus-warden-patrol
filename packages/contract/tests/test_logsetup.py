@@ -79,3 +79,25 @@ def test_目录超上限从最旧的删_还在写的不删_超过天数的也删
     gone = logsetup.trim_dir(tmp_path, 2_500, now_s=now)
     assert [p.name for p in gone] == ["site.log.2026-10-02"]              # 超上限删最旧的
     assert (tmp_path / "site.log").exists()
+
+
+def test_装两次不叠_写的是当时的标准错误(tmp_path, monkeypatch):
+    import io
+    import logging
+
+    from nexwar_contract import logsetup
+    root = logging.getLogger()
+    before = list(root.handlers)
+    try:
+        logsetup.setup(name="x", log_dir=tmp_path)
+        logsetup.setup(name="x", log_dir=tmp_path)
+        ours = [h for h in root.handlers if getattr(h, "_nexwar_logsetup", False)]
+        assert len(ours) == 3, "标准错误 + 主日志 + 访问记录,各一份"
+        buf = io.StringIO()
+        monkeypatch.setattr("sys.stderr", buf)
+        logging.getLogger("t").warning("换了标准错误以后")
+        assert "换了标准错误以后" in buf.getvalue()
+    finally:
+        for h in [h for h in root.handlers if h not in before]:
+            root.removeHandler(h)
+            h.close()
