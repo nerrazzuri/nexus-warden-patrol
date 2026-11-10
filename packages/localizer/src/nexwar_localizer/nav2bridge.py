@@ -225,6 +225,25 @@ def speed_due(sp: float | None, last: float | None, last_at: float, now: float) 
     return sp is not None and (sp != last or now - last_at >= SPEED_REPUB_S)
 
 
+#: 部署配置里 MPPI 的 vx_max、RPP 的 desired_linear_vel(外审 POC I6;测试核对跟 params.yaml 一致)。
+MPPI_VX_MAX = 1.0
+RPP_MAX_MPS = 0.4
+
+
+def speed_limit_value(sp: float) -> tuple[bool, float]:
+    """限速 ``sp``(米/秒)发成 Nav2 的 ``SpeedLimit``:回 ``(percentage, speed_limit)``。
+
+    Nav2 Humble 的限速同时发给每个控制器:MPPI 不管绝对值还是百分比都按比例缩到 ``sp``;RPP 收到
+    绝对值就照着跑、收到百分比按它配置的 0.4 缩(外审 POC I6:原来只发绝对值,MPPI 走不动换 RPP 时,
+    普通巡逻 0.6、紧急 1.0,超出仿真里验证过的 0.4)。所以 ``sp`` 不超过 0.4 发绝对值(两个都是
+    ``sp``),超过了发百分比(MPPI 照旧是 ``sp``,RPP 是 0.4 × sp / 1.0,在 0.16 到 0.4 之间,
+    不掉进真机 0.13 m/s 以下只踏步的那一段)。"""
+    sp = max(0.0, float(sp))
+    if sp <= RPP_MAX_MPS:
+        return False, sp
+    return True, min(100.0, 100.0 * sp / MPPI_VX_MAX)
+
+
 class Nav2Bridge:
     def __init__(self, sock: Path, *, name: str = "nexwar_nav2bridge") -> None:
         import rclpy
@@ -481,7 +500,8 @@ class Nav2Bridge:
         if speed_due(sp, self._speed, self._speed_at, now):
             self._speed, self._speed_at = sp, now
             lim = self._speed_msg()
-            lim.header.stamp, lim.percentage, lim.speed_limit = stamp, False, float(sp)
+            pct, val = speed_limit_value(sp)
+            lim.header.stamp, lim.percentage, lim.speed_limit = stamp, pct, float(val)
             self.p_speed.publish(lim)
 
     def on_grid(self, m: dict[str, Any]) -> None:
