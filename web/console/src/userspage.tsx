@@ -4,9 +4,9 @@
 import { useCallback, useEffect, useState } from "preact/hooks";
 import { api, ApiError, enc } from "./api";
 import { ConfirmPassword } from "./confirmpw";
-import { hm, hms, siteDown } from "./data";
+import { hm, hms, md, siteDown } from "./data";
 import { Confirm, Modal } from "./dialogs";
-import { lang, t } from "./i18n";
+import { alertTitle, colon, lang, t } from "./i18n";
 import { roleLabel } from "./shell";
 import { siteStr } from "./sitetext";
 
@@ -22,8 +22,10 @@ export interface AuditRow { id: number; at: number; actor: string; actor_role?: 
     channel?: string; by?: string; task_id?: string | null; err?: string; err_name?: string; req?: string } }
 
 /** 第 3 轮 P1-66:改账号写清改了什么(原来只写「改了账号」)。 */
-export function changeText(d: AuditRow["detail"]): string {
+export function changeText(d: AuditRow["detail"], target = ""): string {
   if (!d) return "";
+  // W6-07:对象是报警的,标题已经在对象里(按界面语言),这里不再贴站点那句中文
+  if (ALERT_KEY.test(target)) d = { ...d, title: undefined };
   const out: string[] = [];
   if (d.role) out.push(t("auditRoleTo", { r: t(roleLabel(d.role)) }));
   if (d.disabled === true) out.push(t("auditDisabled"));
@@ -115,7 +117,34 @@ const ACTIONS: [RegExp, string][] = [
   [/^alert escalated$/, "actAlertEscalated"], [/^alert auto-resolved$/, "actAlertAutoResolved"],
 ];
 /** 第 2 轮 P1-66:对象里的内部编号不摆出来(悬停看原文):「图:版本/层:哈希」只留图和版本,长哈希去掉。 */
+/** 报警的键 ``机器人/种类#序号``(易用性第 6 轮 W6-07)。 */
+const ALERT_KEY = /^([^/\s]+)\/([a-z0-9_$]+)#\d+$/;
+
+/** 「报警:标题 · 机器人」—— 标题按种类、跟界面语言(不用站点那句中文)。 */
+function alertObj(key: string): string | null {
+  const m = ALERT_KEY.exec(key);
+  if (!m) return null;
+  const site = m[1] === "site" || m[1].includes(":");
+  return `${t("auditAlertObj")}${colon()}${alertTitle(lang.value, m[2], m[2])}${site ? "" : ` · ${m[1]}`}`;
+}
+
+/** 诊断包:``support-bundle/<引用>/<开始>-<结束>``;引用是 alert:… / run:… / task:… / robot:… / problem:… / range。 */
+function bundleObj(target: string): string | null {
+  const m = /^support-bundle\/(.*)\/(\d+)-(\d+)$/.exec(target);
+  if (!m) return null;
+  const [, ref, a, b] = m;
+  const since = Number(a), until = Number(b);
+  const span = `${md(since)} ${hm(since)}–${md(until) === md(since) ? "" : `${md(until)} `}${hm(until)}`;
+  const r = /^(alert|run|task|robot|problem):(.+)$/.exec(ref);
+  const what = !r ? null : r[1] === "alert" ? alertObj(r[2]) : r[1] === "run" ? t("auditBundleRun", { n: r[2] })
+    : r[1] === "task" ? t("auditBundleTask", { n: r[2].replace(/\b[0-9a-f]{12,}\b/gi, "…") })
+    : r[1] === "robot" ? t("auditBundleRobot", { n: r[2] }) : t("auditBundleProblem", { n: r[2] });
+  return [t("auditBundle"), what, span].filter(Boolean).join(" · ");
+}
+
 export function targetText(target: string): string {
+  const alert = alertObj(target) ?? bundleObj(target);
+  if (alert) return alert;
   // 第 3 轮 P1-66:布防模式写成人话;例外、录像编号写清是什么
   const MODE: Record<string, Parameters<typeof t>[0]> = { armed: "modeArmed", home: "modeHome", stay: "modeHome", visitor: "modeVisitor", disarmed: "modeDisarmedAll" };
   if (MODE[target]) return t(MODE[target]);
@@ -294,18 +323,19 @@ export function UsersPage({ me, say, now }: { me: string; say: Say; now: number 
 /** 活动记录的一行(用户页「他做过什么」、全站活动日志共用)。``who``:行里写上是谁做的。 */
 export function AuditLine({ r, who }: { r: AuditRow; who?: boolean }) {
   return (
-    <li class={r.status >= 400 ? "bad" : undefined} data-audit={r.id}>
+    <li class={r.status >= 400 ? "bad" : undefined} data-audit={r.id}
+      title={r.status < 400 && r.detail?.err ? [r.detail.err, r.detail.err_name].filter(Boolean).join(" ") : undefined}>
       <time class="mono small">{day(r.at)} {hms(r.at)}</time>
       <div class="audit-body">
-      {who && <b class="audit-who">{r.actor.startsWith("site:") ? t("auditSystem") : r.actor}</b>}
+      {who && <b class="audit-who">{r.actor.startsWith("site:") ? t("auditSystem") : r.actor.replace(/^login:/, "")}</b>}
       <span title={r.action}>{actionText(r.action)}</span>
       {r.status >= 400 ? <span class="tag bad" data-result="refused">{t("auditRefused")}</span>
         : r.status >= 200 ? <span class="tag ok" data-result="ok">{t("auditOk")}</span> : null}
       {r.target && <span class="muted small" title={r.target}>{targetText(r.target)}</span>}
       {r.actor_role === "engineer" && <span class="tag">{t("roleEngineer")}</span>}
-      {r.detail?.err && <span class="tag mono" data-err={r.detail.err} title={r.detail.err_name ?? ""}>{r.detail.err}</span>}
+      {r.status >= 400 && r.detail?.err && <span class="tag mono" data-err={r.detail.err} title={r.detail.err_name ?? ""}>{r.detail.err}</span>}
       {r.detail?.source && r.detail.source !== "system" && <span class="tag" data-source={r.detail.source}>{t(r.detail.source === "web" ? "auditViaWeb" : r.detail.source === "api" ? "auditViaApi" : "auditViaApp")}</span>}
-      {r.status < 400 && changeText(r.detail) && <span class="small muted" data-change="1">{changeText(r.detail)}</span>}
+      {r.status < 400 && changeText(r.detail, r.target) && <span class="small muted" data-change="1">{changeText(r.detail, r.target)}</span>}
       {r.status >= 400 && r.detail?.error && <span class="small audit-why" data-why="1" title={r.detail.error}>{siteStr(r.detail.error)}</span>}
       </div>
     </li>

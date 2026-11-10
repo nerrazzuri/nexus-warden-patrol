@@ -3,12 +3,21 @@
 // 包里有站点、机器人的日志和轨迹、各种记录,不含密钥、令牌、照片录像。
 import { useEffect, useState } from "preact/hooks";
 import { api } from "./api";
-import { nameOf } from "./data";
+import { alertHeadline } from "./alertinfo";
+import { hm, md, nameOf } from "./data";
 import { t } from "./i18n";
 import type { Alert } from "./model";
 
 export type Scene = "time" | "robot" | "run" | "alert";
-interface Run { id: number; robot_id: string; mission: string; stamp: string; first_ms: number }
+interface Run { id: number; robot_id: string; mission: string; stamp: string; first_ms: number; by?: string; points?: number | null }
+
+/** 易用性第 6 轮 W6-08:「11-09 01:18 · A · 临时路线 10 个点 · demo 派的」(原来只有 temp-1794… 编号)。 */
+export function runLabel(r: Run): string {
+  const route = r.mission.startsWith("temp-")
+    ? (r.points ? t("bpTempRouteN", { n: r.points }) : t("bpTempRoute")) : r.mission;
+  const by = !r.by ? "" : r.by.startsWith("site:") ? t("bpBySchedule") : t("bpBy", { n: r.by });
+  return [`${md(r.first_ms)} ${hm(r.first_ms)}`, nameOf(r.robot_id), route, by].filter(Boolean).join(" · ");
+}
 interface Win { since_ms: number; until_ms: number; robot: string | null; scene: string }
 
 const p2 = (n: number) => String(n).padStart(2, "0");
@@ -78,13 +87,13 @@ export function BundlePanel({ robots, fileName }: { robots: string[]; fileName: 
         {scene === "alert" && (
           <select aria-label={t("sceneAlert")} value={pick} onChange={(e) => setPick(e.currentTarget.value)}>
             <option value="">{t("bundlePick")}</option>
-            {alerts.map((a) => <option key={a.key} value={a.key}>{toLocalInput(a.first_ms).replace("T", " ")} · {a.robot ? nameOf(a.robot) + " · " : ""}{a.title}</option>)}
+            {alerts.map((a) => <option key={a.key} value={a.key}>{[`${md(a.first_ms)} ${hm(a.first_ms)}`, a.robot && a.robot !== "site" ? nameOf(a.robot) : "", alertHeadline(a)].filter(Boolean).join(" · ")}</option>)}
           </select>
         )}
         {scene === "run" && (
           <select aria-label={t("sceneRun")} value={pick} onChange={(e) => setPick(e.currentTarget.value)}>
             <option value="">{t("bundlePick")}</option>
-            {runs.map((r) => <option key={r.id} value={String(r.id)}>{toLocalInput(r.first_ms).replace("T", " ")} · {nameOf(r.robot_id)} · {r.mission}</option>)}
+            {runs.map((r) => <option key={r.id} value={String(r.id)}>{runLabel(r)}</option>)}
           </select>
         )}
       </div>
