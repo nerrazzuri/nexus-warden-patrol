@@ -85,7 +85,10 @@ def _值守(t):
 
 
 @pytest.fixture
-async def 站(tmp_path):
+async def 站(tmp_path, monkeypatch):
+    # 这里测值守排班,时间按仿真狗 1.0 m/s 算(一圈约 18 s);普通任务限巡逻速度(两种走法,11-10)放开
+    from nexwar_agent.bridges import hal_nav
+    monkeypatch.setattr(hal_nav, "PATROL_MAX_MPS", 1.0)
     t = 台子(tmp_path)
     await t.start()
     t.store = RouteStore(t.db, now_ms=t.clock)
