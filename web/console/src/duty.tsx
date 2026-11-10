@@ -250,7 +250,7 @@ export function DutyPage(props: {
             </li>
           ))}
         </ul>
-        <TodayPatrols />
+        <TodayPatrols canFix={pageAllowed("admin/robots", props.role)} />
       </section>
       {askResume && (
         <Confirm text={t("dutyResumeAsk", { n: held.length })} yes={t("dutyResumeAll")} onNo={() => setAskResume(false)} onYes={resumeAll} />

@@ -470,4 +470,14 @@ void main() {
     expect(tone, NwTone.warning);
     expect(patrolStateText('done').$2, NwTone.success);
   });
+
+  // 易用性第 6 轮 W6-02：排给的那台只许手动派，到点也不会跑
+  test('W6-02 不会跑：状态写清楚，原因说人话', () {
+    final (label, tone) = patrolStateText('blocked');
+    expect(label, anyOf("Won't run", '不会跑'));
+    expect(tone, NwTone.warning);
+    expect(patrolReasonText('manual_only', 'A'), contains('A'));
+    expect(patrolReasonText('manual_only', 'A'), isNot(contains('manual_only')));
+    expect(patrolReasonText('第 2 点被挡住', 'A'), '第 2 点被挡住');
+  });
 }

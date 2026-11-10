@@ -525,3 +525,18 @@ def test_往天的巡逻_按日期查_那天跑了的照记录写(台):
     assert v["date"] == "2027-03-15"
     assert [(x["kind"], x["robot"]) for x in v["items"]] == [("schedule", "A")]
     assert today_view(t.db, now_ms=t.now["t"])["date"] == "2027-03-17"
+
+
+def test_11_11_W6_02_机器人只许手动派_今天的巡逻写不会跑和原因_不写下一次(台):
+    from nexwar_site.today import _schedule_item
+    t = 台
+    e = SimpleNamespace(id="demo-night", mission="demo-loop", robot="A", window_min=30)
+    later = _schedule_item(t.db, e, 毫秒(22, 0), 毫秒(21, 0))
+    assert later["state"] == "later"
+    with t.db.tx() as c:
+        c.execute("INSERT INTO robot_service(robot_id, by, at_ms, note) VALUES ('A','demo',0,'')")
+    item = _schedule_item(t.db, e, 毫秒(22, 0), 毫秒(21, 0))
+    assert item["state"] == "blocked" and item["reason"] == "manual_only", item
+    assert item["robot"] == "A"
+    e2 = SimpleNamespace(id="any", mission="loop", robot="", window_min=30)
+    assert _schedule_item(t.db, e2, 毫秒(22, 0), 毫秒(21, 0))["state"] == "later", "没指定哪台:不猜"

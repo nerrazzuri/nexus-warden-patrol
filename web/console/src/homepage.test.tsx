@@ -159,3 +159,22 @@ describe("第 3 轮 config N7", () => {
     expect(groupTodo(homeTodo(list)).length).toBe(1);
   });
 });
+
+// 易用性第 6 轮 W6-02:日程派不出去 —— 只许手动派是管理员自己能改的,不叫人找工程师;要人监护的另说
+describe("W6-02 日程无法派单", () => {
+  const blocked = (detail: string) => alert({ kind: "schedule_blocked", robot: "A", audience: "owner",
+    title: "排程 demo-night 无法派单:机器人要人现场监护,排程无法派单", detail });
+  it("只许手动派:说是哪台、去机器人页改,不写联系工程师", async () => {
+    const { container: c } = page([blocked("demo-night:A 站点设成只许手动派,不接排程")]);
+    const li = await waitFor(() => c.querySelector('li[data-kind="schedule_blocked"]')!);
+    expect(li.textContent).toContain("只许手动派");
+    expect(li.textContent).not.toContain("联系工程师");
+    expect((li.querySelector("a.btn") as HTMLAnchorElement).getAttribute("href")).toBe("#/admin/robots?robot=A");
+  });
+  it("要人监护:说要有人在现场打开监护,不写联系工程师", async () => {
+    const { container: c } = page([blocked("demo-night:A 要人监护,不接排程")]);
+    const li = await waitFor(() => c.querySelector('li[data-kind="schedule_blocked"]')!);
+    expect(li.textContent).toContain("监护");
+    expect(li.textContent).not.toContain("联系工程师");
+  });
+});

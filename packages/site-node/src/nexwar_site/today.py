@@ -6,7 +6,8 @@ App 的值守页、日程页,网页的值守页都用这一份(``GET /api/patrol
 - ``done`` 走完、``failed`` 没走完(原因在 ``reason``)、``aborted`` 被叫停、``running`` 正在走;
 - ``waiting`` 到点了还没起跑(机器人忙、离线……还在窗口里,一会儿可能就跑了);
 - ``missed`` 这一轮没跑(窗口过了、跳过);
-- ``next`` 下一趟、``later`` 再往后;
+- ``next`` 下一趟、``later`` 再往后;``blocked`` 还没到点、但到了也不会跑(``reason``:``manual_only``
+  排给的那台只许手动派);
 - 临时巡逻另有 ``queued`` 排队中、``cancelled`` 取消了、``expired`` 排太久作废了。
 """
 
@@ -123,6 +124,9 @@ def _schedule_item(db: Any, e: Any, occ_ms: int, now_ms: int) -> dict[str, Any]:
             item["state"] = "running"
         return item
     if occ_ms > now_ms:
+        # 易用性第 6 轮 W6-02:排给的那台只许手动派 —— 到点也不会跑,先说清楚(不写「下一次」)
+        if e.robot and db.query("SELECT 1 FROM robot_service WHERE robot_id=?", (e.robot,)):
+            item.update(state="blocked", reason="manual_only")
         return item
     settled = next((r for r in rows if r["outcome"] in ("skip", "alarm", "dispatch_failed",
                                                            "lost")), None)
