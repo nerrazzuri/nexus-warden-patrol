@@ -162,9 +162,30 @@ def plan_reply(req_id: int, raw: list[tuple[float, float, float, float]],
     return {"type": "plan_result", "req_id": req_id, "ok": True, "poses": poses}
 
 
+#: 路沿层(``curb.pbm``,用户 2026-11-10)在发给 Nav2 的 ``/map`` 里的值:Nav2 的静态层按比例换成代价
+#: (``trinary_costmap: false``,70 → 约 177,比致命 253 低):规划绕开绿化岛,路沿是唯一的路时照样跨得
+#: 过去。墙、禁行区照旧是 100。
+CURB_OCC = 70
+
+
+def _curb(map_dir: Path, shape: tuple[int, int]) -> np.ndarray | None:
+    """路沿层 → 跟栅格一样(行从下往上)的真假;没有、坏了、大小对不上 → ``None``。"""
+    from nexwar_contract.maps import CURB_FILE
+    from nexwar_contract.planning.costmap import parse_pbm
+    p = map_dir / CURB_FILE
+    if not p.is_file():
+        return None
+    m = parse_pbm(p.read_bytes(), shape[1], shape[0])
+    if m is None:
+        log.warning("%s 跟地图对不上,不用", p)
+        return None
+    return np.flipud(m)
+
+
 def occupancy(map_dir: Path, nogo: list[list[list[float]]], clear: Any = ()
               ) -> tuple[np.ndarray, float, tuple[float, float]]:
-    """地图目录 → (占用 int8 栅格,行从下往上:0 空、100 挡;分辨率;原点)。禁行区烧成挡。
+    """地图目录 → (占用 int8 栅格,行从下往上:0 空、100 挡、:data:`CURB_OCC` 路沿;分辨率;原点)。
+    禁行区烧成挡。
 
     ``clear``:代理说「机器人站在这里」的 ``[x, y, yaw, 半长, 半宽]``(11-05 商场原点、广场窄口:那格在
     静态图上是残影,Nav2「Starting point in lethal space」一直规划不出)—— 机身矩形里的挡当空(机器人
@@ -172,6 +193,9 @@ def occupancy(map_dir: Path, nogo: list[list[list[float]]], clear: Any = ()
     from nexwar_contract.planning.costmap import load_floor, polygon_mask
     free, res, origin = load_floor(map_dir)
     occ = np.where(free, 0, 100).astype(np.int8)
+    curb = _curb(map_dir, occ.shape)
+    if curb is not None:
+        occ[curb & free] = CURB_OCC
     if clear:
         h, w = occ.shape
         cx = origin[0] + (np.arange(w) + 0.5) * res

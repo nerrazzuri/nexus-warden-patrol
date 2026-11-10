@@ -74,6 +74,28 @@ def parse_yaml(text: str) -> dict:
             "free_thresh": _num(raw.get("free_thresh", "0.196"), "free_thresh")}
 
 
+def parse_pbm(data: bytes, w: int, h: int) -> np.ndarray | None:
+    """PBM 二进制(``P4``:一格一位、每行补满一个字节、高位在前,1 = 是;``seen.pbm``、``curb.pbm``)→
+    ``(高, 宽)`` 真假,从上往下。宽高跟 ``w × h`` 对不上、头坏、正文不够长 → ``None``
+    (这一层不用)。"""
+    parts = data.split(maxsplit=3)
+    if len(parts) < 4 or parts[0] != b"P4":
+        return None
+    try:
+        mw, mh = int(parts[1]), int(parts[2])
+    except ValueError:
+        return None
+    if (mw, mh) != (w, h):
+        return None
+    row = -(-w // 8)
+    head = data.find(parts[2], len(parts[0]) + len(parts[1])) + len(parts[2]) + 1
+    body = data[head:head + row * h]
+    if len(body) < row * h:
+        return None
+    bits = np.frombuffer(body, dtype=np.uint8).reshape(h, row)
+    return np.unpackbits(bits, axis=1)[:, :w].astype(bool)
+
+
 def parse_pgm(data: bytes) -> np.ndarray:
     """P5 二进制灰度(建图流水线只写这种)→ ``(高, 宽)`` uint8,从上往下。"""
     toks: list[bytes] = []

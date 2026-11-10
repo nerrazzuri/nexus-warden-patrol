@@ -49,7 +49,7 @@ from pathlib import Path
 from typing import Any
 
 from nexwar_contract.geo import GEO_FILE
-from nexwar_contract.maps import GEOMETRY_FILES, SEEN_FILE
+from nexwar_contract.maps import CURB_FILE, GEOMETRY_FILES, SEEN_FILE
 from nexwar_localizer.frames import Frames, calibrate
 from nexwar_localizer.replay import MOLA_SHARE, read_tum
 
@@ -233,6 +233,7 @@ def package(work: Path, out: Path, *, prior_pack: PriorPack | None = None,
         raise BuildError(str(exc)) from exc
     grid.write(g, out / "floor")
     seen_written = grid.write_seen(g, out / SEEN_FILE) is not None   # M9:显示用,有才写
+    curb_written = grid.write_curb(g, out / CURB_FILE) is not None   # 路沿(11-10):有才写
     timings["grid_s"] = round(time.monotonic() - t0, 1)
     t0 = time.monotonic()
     _pack_prior(src / "raw_prior.mm", out / "prior.mm", prior_pack, run, src)
@@ -251,12 +252,15 @@ def package(work: Path, out: Path, *, prior_pack: PriorPack | None = None,
         files.append(GEO_FILE)
     if seen_written:
         files.append(SEEN_FILE)
+    if curb_written:
+        files.append(CURB_FILE)
     (out / "build.json").write_text(json.dumps({
         "version": 1, "source": source,
         "builder": _mola_info(work).get("builder", "mola-lidar-odometry"), "prior_pack":
         prior_pack.label(), "frames": why, "frames_count": len(traj),
         "grid": {"res": g.res, "size": list(g.image.shape[::-1]), "origin": list(g.origin),
-                 "rays": rays, "specks_removed": g.specks},
+                 "rays": rays, "specks_removed": g.specks,
+                 "curb_cells": int(g.curb.sum()) if g.curb is not None else 0},
         "mola": _mola_info(work), "loop_closure": lc_info,
         "superlio_map": {"points": len(slio), "voxel_m": slioloc.MAP_VOXEL_M,
                          "denoise": denoise},

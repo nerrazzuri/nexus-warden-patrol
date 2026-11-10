@@ -61,6 +61,31 @@ def test_地图烧禁行区(tmp_path):
     assert occ[20, 30] == 100 and occ[20, 5] == 0, "多边形里面是挡、外面不动"
 
 
+def test_路沿层_空地上的路沿格给中间代价_墙和禁行区照样是挡_没有路沿文件照旧(tmp_path):
+    """用户 11-10(工厂停车场的绿化岛):路沿不是墙 —— 规划绕开、必要时跨得过去。"""
+    from nexwar_localizer.nav2bridge import CURB_OCC
+    img = np.full((40, 64), 254, dtype=np.uint8)
+    img[0, :] = 0                                         # 图上最上面一行(y 最大)是墙
+    (tmp_path / "floor.pgm").write_bytes(b"P5\n64 40\n255\n" + img.tobytes())
+    (tmp_path / "floor.yaml").write_text("resolution: 0.05\norigin: [0.0, 0.0, 0.0]\nnegate: 0\n"
+                                         "occupied_thresh: 0.65\nfree_thresh: 0.196\n")
+    nogo = [[[0.0, 1.4], [0.5, 1.4], [0.5, 1.6], [0.0, 1.6]]]
+    occ0, _, _ = occupancy(tmp_path, nogo)
+    curb = np.zeros((40, 64), bool)
+    curb[10, :] = True                                    # 图上第 10 行(从上数)整行是路沿
+    curb[0, 3] = True                                     # 落在墙上的不改
+    bits = np.packbits(curb, axis=1)
+    (tmp_path / "curb.pbm").write_bytes(b"P4\n64 40\n" + bits.tobytes())
+    occ, _, _ = occupancy(tmp_path, nogo)
+    assert 0 < CURB_OCC < 100
+    assert (occ[29, 20:] == CURB_OCC).all(), "行从下往上:图上第 10 行 = 栅格第 29 行"
+    assert occ[39, 3] == 100 and occ[29, 0] == 100, "墙、禁行区照样是挡"
+    assert (occ[:29] == occ0[:29]).all() and (occ[30:39] == occ0[30:39]).all()
+    (tmp_path / "curb.pbm").write_bytes(b"P4\n10 10\n" + bytes(20))
+    occ, _, _ = occupancy(tmp_path, nogo)
+    assert (occ == occ0).all(), "路沿层跟地图对不上(大小不一样):不用"
+
+
 # ---------------------------------------------------------------- W47 外审 R7、R8、R10(目标的生灭)
 
 class _Handle:
