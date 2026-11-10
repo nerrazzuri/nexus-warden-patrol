@@ -214,6 +214,9 @@ controller_server:
 local_costmap:
   local_costmap:
     ros__parameters:
+      # 路沿层(11-10):转接发的 /map 里路沿是 70,按比例换成代价(约 177,不是墙);0 / 100 照旧空 / 挡。
+      # Humble 的 StaticLayer 读节点根部这一项(外审 POC I4:写在 static_layer 下面不生效)
+      trinary_costmap: false
       update_frequency: 10.0
       publish_frequency: 2.0
       global_frame: odom
@@ -267,11 +270,12 @@ local_costmap:
       static_layer:
         plugin: nav2_costmap_2d::StaticLayer
         map_subscribe_transient_local: true
-        # 路沿层(11-10):转接发的 /map 里路沿是 70,按比例换成代价(不是墙);0 / 100 照旧空 / 挡
-        trinary_costmap: false
 global_costmap:
   global_costmap:
     ros__parameters:
+      # 路沿层(11-10):转接发的 /map 里路沿是 70,按比例换成代价(约 177,不是墙);0 / 100 照旧空 / 挡。
+      # Humble 的 StaticLayer 读节点根部这一项(外审 POC I4:写在 static_layer 下面不生效)
+      trinary_costmap: false
       update_frequency: 2.0
       publish_frequency: 1.0
       global_frame: map
@@ -315,8 +319,6 @@ global_costmap:
       static_layer:
         plugin: nav2_costmap_2d::StaticLayer
         map_subscribe_transient_local: true
-        # 路沿层(11-10):转接发的 /map 里路沿是 70,按比例换成代价(不是墙);0 / 100 照旧空 / 挡
-        trinary_costmap: false
       inflation_layer:
         plugin: nav2_costmap_2d::InflationLayer
         cost_scaling_factor: 4.0
