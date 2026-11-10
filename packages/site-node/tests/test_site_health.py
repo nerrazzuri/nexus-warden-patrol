@@ -160,6 +160,11 @@ def test_打码规矩():
     assert redact_cfg({"a_key": "x", "key_file": "/p", "token": "", "n": 1}) == \
         {"a_key": "***", "key_file": "/p", "token": "", "n": 1}
     assert redact_text("Bearer abc.def ok") == "Bearer *** ok"
+    # 外审 POC I8:网址里的凭证、令牌、密码参数打码,别的参数照留
+    assert redact_text('"GET /api/problem-reports/NW-2026-AB12/bundle?t=Zx9_k-3 HTTP/1.1" 200') == \
+        '"GET /api/problem-reports/NW-2026-AB12/bundle?t=*** HTTP/1.1" 200'
+    assert redact_text("/x?hours=2&token=abc&password=p%40ss&robot=A") == \
+        "/x?hours=2&token=***&password=***&robot=A"
 
 
 def test_接口_探活不用登录_体检和诊断包要管理员_指标能看就能看(tmp_path):

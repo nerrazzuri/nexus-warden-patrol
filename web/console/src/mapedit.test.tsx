@@ -15,7 +15,7 @@ let posted: { url: string; body: Record<string, unknown> }[];
 let editReply: number;
 let editBody: Record<string, unknown>;
 let zones: Record<string, unknown>;
-let draftState: { draft: boolean; from: string | null };
+let draftState: { draft: boolean; from: string | null; zones_removed?: string[] };
 const POOL = { id: "n1", kind: "nogo", label: "泳池", polygon: [[1, 1], [3, 1], [3, 3]] };
 beforeEach(() => {
   lang.value = "zh";
@@ -152,6 +152,14 @@ describe("地图编辑器", () => {
     expect(posted.some((p) => p.url === "/api/admin/maps/home/3/display")).toBe(false);
   });
 
+  it("外审 POC C3:草稿比来源少了禁行区,发布对话框里点名", async () => {
+    draftState = { draft: true, from: "2", zones_removed: ["配电房"] } as typeof draftState;
+    const { container: c } = page();
+    await waitFor(() => expect(c.querySelector('.mapedit[data-ready]')).not.toBeNull());
+    fireEvent.click(c.querySelector("[data-release]")!);
+    expect(document.querySelector(".modal")!.textContent).toContain("少了这些禁行区、虚拟墙等：配电房");
+  });
+
   it("11-10:草稿上只改显示:不出新版本,直接存在草稿上", async () => {
     draftState = { draft: true, from: "2" };
     const { container: c } = page();
@@ -185,6 +193,7 @@ describe("地图编辑器", () => {
     const m = document.querySelector(".modal")!;
     expect(m.textContent).toContain("发布后 v3 成为正式版本");
     expect(m.textContent).toContain("现在不会发给任何机器人");
+    expect(m.textContent).not.toContain("少了这些禁行区");
     fireEvent.input(m.querySelector('input[type="password"]')!, { target: { value: "pw-pw-pw" } });
     fireEvent.submit(m.querySelector("form")!);
     await waitFor(() => expect(posted.find((p) => p.url === "/api/admin/maps/home/3/release")).toBeTruthy());

@@ -539,7 +539,9 @@ class _Handler(TlsHandlerMixin):
         line = str(args[0]) if args else ""
         code = str(args[1]) if len(args) > 1 else ""
         quiet = line.startswith(("GET ", "HEAD ")) and code[:1] in ("1", "2", "3")
-        log.info("%s %s", self.address_string(), fmt % args, extra={"access": quiet})
+        from nexwar_site.health import redact_text  # 外审 POC I8:网址里的凭证不进日志
+        log.info("%s %s", self.address_string(), redact_text(fmt % args),
+                 extra={"access": quiet})
 
     # ------------------------------------------------------------ 输入输出
 
@@ -709,7 +711,8 @@ class _Handler(TlsHandlerMixin):
                 return self._account_apply()          # W52:App 上申请账号(不用登录)
             if path == "/api/problem-reports" and method == "POST":
                 return self._problem_submit()         # 日志设计 第 6 条:谁都能传(登录页也能)
-            if method == "GET" and _PROBLEM_BUNDLE.match(path) and "t=" in self.path:
+            if method == "GET" and _PROBLEM_BUNDLE.match(path) and (
+                    self.headers.get("X-Problem-Token") or "t=" in self.path):
                 return self._problem_bundle(_PROBLEM_BUNDLE.match(path).group(1), None)
             if method == "POST" and path == "/api/incidents":
                 return self._incident_in()          # 摄像头不登录:验签
@@ -2713,8 +2716,12 @@ class _Handler(TlsHandlerMixin):
         if meta is None:
             raise HttpError(404, f"没有这张问题单:{code}")
         if user is None:
-            q = parse_qs(self.path.split("?", 1)[1] if "?" in self.path else "")
-            if not desk.token_ok(code, (q.get("t") or [""])[0]):
+            # 外审 POC I8:新 App 放请求头(不进访问日志);老 App 的 ?t= 照收,日志里打码
+            given = self.headers.get("X-Problem-Token") or ""
+            if not given:
+                q = parse_qs(self.path.split("?", 1)[1] if "?" in self.path else "")
+                given = (q.get("t") or [""])[0]
+            if not desk.token_ok(code, given):
                 raise HttpError(401, "凭证不对")
             self._actor = f"{meta['by']}(问题单凭证)"
         since, until = desk.window(code)

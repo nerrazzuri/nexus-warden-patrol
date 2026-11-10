@@ -2103,3 +2103,14 @@ def test_不靠SSH_感知按障碍许可连旁路_代理按速度上限():
     assert 'NEXWAR_OBS_PERMIT:-}" = 1' in obs and 'NEXWAR_OBS_PERMIT:-}" = 0' in obs
     agent = (DEPLOY / "nexwar_agent_start").read_text(encoding="utf-8")
     assert '${NEXWAR_MAX_FRACTION:+ --max-fraction $NEXWAR_MAX_FRACTION}' in agent
+
+
+def test_外审POC_I4_路沿按比例换代价_trinary_costmap写在代价地图节点根部():
+    """codex POC r1 I4:Humble 的 StaticLayer 读的是节点根部的 ``trinary_costmap``(不带图层名,
+    costmap_2d_ros 声明、默认 true);写在 static_layer 下面不生效,路沿 70 被当空地 0。"""
+    import yaml
+    d = yaml.safe_load((DEPLOY / "nav2" / "params.yaml").read_text(encoding="utf-8"))
+    for name in ("local_costmap", "global_costmap"):
+        p = d[name][name]["ros__parameters"]
+        assert p.get("trinary_costmap") is False, name
+        assert "trinary_costmap" not in p["static_layer"], f"{name}:写在图层下面不生效"
