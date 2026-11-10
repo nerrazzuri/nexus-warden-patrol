@@ -17,7 +17,7 @@ export interface AuditRow { id: number; at: number; actor: string; actor_role?: 
     first_day?: string; last_day?: string;
     // 日志设计 第 1、2 条:前后变化、来源、当时在做什么、系统事件的说明
     from?: string | null; to?: string; op?: "add" | "update" | "remove"; name?: string; x?: number; y?: number;
-    source?: "web" | "app" | "system"; doing?: { task?: string | null; kind?: string; state?: string }; why?: string;
+    source?: "web" | "app" | "api" | "system"; doing?: { task?: string | null; kind?: string; state?: string }; why?: string;
     note?: string; verdict?: string; mission?: string; robot?: string | null; title?: string; level?: string;
     channel?: string; by?: string; task_id?: string | null; err?: string; err_name?: string; req?: string } }
 
@@ -304,7 +304,7 @@ export function AuditLine({ r, who }: { r: AuditRow; who?: boolean }) {
       {r.target && <span class="muted small" title={r.target}>{targetText(r.target)}</span>}
       {r.actor_role === "engineer" && <span class="tag">{t("roleEngineer")}</span>}
       {r.detail?.err && <span class="tag mono" data-err={r.detail.err} title={r.detail.err_name ?? ""}>{r.detail.err}</span>}
-      {r.detail?.source && r.detail.source !== "system" && <span class="tag" data-source={r.detail.source}>{t(r.detail.source === "web" ? "auditViaWeb" : "auditViaApp")}</span>}
+      {r.detail?.source && r.detail.source !== "system" && <span class="tag" data-source={r.detail.source}>{t(r.detail.source === "web" ? "auditViaWeb" : r.detail.source === "api" ? "auditViaApi" : "auditViaApp")}</span>}
       {r.status < 400 && changeText(r.detail) && <span class="small muted" data-change="1">{changeText(r.detail)}</span>}
       {r.status >= 400 && r.detail?.error && <span class="small audit-why" data-why="1" title={r.detail.error}>{siteStr(r.detail.error)}</span>}
       </div>

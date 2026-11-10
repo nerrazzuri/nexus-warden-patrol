@@ -86,10 +86,14 @@ class Principal(str):
     #: ``""`` 普通会话;``"watch"`` 值守令牌(只能看告警,见 ``WATCH_PATHS``)。
     scope: str
 
-    def __new__(cls, name: str, role: str, scope: str = "") -> Principal:
+    #: 这次会话登录时是哪种程序(``"app"`` / ``"web"``;没报的 ``""``,命令行、脚本)。
+    client: str
+
+    def __new__(cls, name: str, role: str, scope: str = "", client: str = "") -> Principal:
         obj = super().__new__(cls, name)
         obj.role = role
         obj.scope = scope
+        obj.client = client
         return obj
 
     def __getnewargs__(self) -> tuple[str, str]:          # copy / pickle 要两个参数
@@ -124,6 +128,15 @@ def clean_client(obj: Any) -> str:
     if isinstance(lv, int) and not isinstance(lv, bool) and 0 <= lv <= 9999:
         out["api_level"] = lv
     return json.dumps(out, sort_keys=True)
+
+
+def _client_kind(stored: str | None) -> str:
+    """会话上存的程序信息里的类别(``app`` / ``web``);没有、读不出的回空串。"""
+    try:
+        kind = json.loads(stored).get("kind") if stored else ""
+    except (ValueError, AttributeError):
+        return ""
+    return kind if kind in CLIENT_KINDS else ""
 
 
 class Accounts:
@@ -465,8 +478,8 @@ class Accounts:
         h = _token_hash(token)
         now = self._now()
         with self.db.tx() as c:
-            row = c.execute("SELECT s.name, s.created_at, s.last_used, s.scope, a.role, "
-                            "a.disabled, a.expires_ms FROM sessions s JOIN accounts a "
+            row = c.execute("SELECT s.name, s.created_at, s.last_used, s.scope, s.client, "
+                            "a.role, a.disabled, a.expires_ms FROM sessions s JOIN accounts a "
                             "ON a.name = s.name WHERE s.token_hash=?", (h,)).fetchone()
             if row is None:
                 return None
@@ -479,7 +492,7 @@ class Accounts:
                 c.execute("DELETE FROM sessions WHERE token_hash=?", (h,))
                 return None
             c.execute("UPDATE sessions SET last_used=? WHERE token_hash=?", (now, h))
-            return Principal(row["name"], row["role"], row["scope"])
+            return Principal(row["name"], row["role"], row["scope"], _client_kind(row["client"]))
 
     def session_alive(self, token_hash: str) -> bool:
         """这个令牌(哈希)现在还有效吗:跟 :meth:`check` 同样的规矩,但不续期、不删(推送名单用,A6)。"""
