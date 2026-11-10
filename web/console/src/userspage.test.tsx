@@ -245,6 +245,10 @@ describe("日志设计 第 1、2 条:操作记录写出前后变化、来源;系
     const w = render(<ul><AuditLine r={{ id: 2, at: 0, actor: "alice", action: "POST /api/mode",
       target: "home", status: 200, detail: { from: "armed", to: "home", source: "web" } }} /></ul>).container;
     expect(w.querySelector("[data-source=web]")?.textContent).toBe("网页");
+    // W6-06:没报自己是什么程序的令牌(命令行、脚本)写「脚本」,不冒充 App
+    const a = render(<ul><AuditLine r={{ id: 3, at: 0, actor: "alice", action: "POST /api/mode",
+      target: "home", status: 200, detail: { source: "api" } }} /></ul>).container;
+    expect(a.querySelector("[data-source=api]")?.textContent).toBe("脚本");
   });
 });
 
