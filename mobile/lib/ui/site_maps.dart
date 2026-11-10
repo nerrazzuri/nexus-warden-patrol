@@ -350,6 +350,12 @@ class _MapView {
   String get tag => '$mapId:$version';
 }
 
+/// 一位小数，不出「-0.0」（M32）。
+String fixed1(double v) {
+  final t = v.toStringAsFixed(1);
+  return t == '-0.0' ? '0.0' : t;
+}
+
 /// 底图（栅格预览图或者平面图）：浅色原样，深色过 [darkMapRaster]。
 Widget _raster(BuildContext context, Uint8List png, {bool plan = false}) =>
     mapBaseImage(context, png, plan: plan, darkKey: SiteMapTab.darkRasterKey);
@@ -479,7 +485,8 @@ class _SiteMapTabState extends State<SiteMapTab> {
     var robots = const <Map<String, dynamic>>[];
     String? robotsError;
     try {
-      robots = await widget.api.robots();
+      // 手机 App 测试 M32：吊销了的不列在「这张图上的机器人」里
+      robots = [for (final r in await widget.api.robots()) if (r['revoked'] != true) r];
     } on SiteError catch (e) {
       robotsError = '$e'; // 狗的列表读不到：图照样看
     }
@@ -609,9 +616,10 @@ class _SiteMapTabState extends State<SiteMapTab> {
           return Column(children: [
             NwHeader(
                 overline: tr('Map', '地图'),
-                title: v?.mapId == null ? tr('Site map', '地图') : v!.tag,
+                // M32：标题不印内部编号 estate-1:7
+                title: v?.mapId == null ? tr('Site map', '地图') : tr('${v!.mapId} · version ${v.version}', '${v.mapId} · 第 ${v.version} 版'),
                 subtitle:
-                    v?.mapId == null ? null : tr('$onMap robot(s) on this map', '此地图上 $onMap 台机器人'),
+                    v?.mapId == null ? null : tr(onMap == 1 ? '1 robot on this map' : '$onMap robots on this map', '此地图上 $onMap 台机器人'),
                 trailing: [
                   IconButton(
                       key: SiteMapTab.refreshKey,
@@ -991,8 +999,7 @@ class _SiteMapTabState extends State<SiteMapTab> {
       final p = _pose(r);
       return p == null
           ? tr('Position not set: not drawn on the map', '未设置位置：不在地图上显示')
-          : tr('At (${p.dx.toStringAsFixed(1)}, ${p.dy.toStringAsFixed(1)}) m',
-              '在 (${p.dx.toStringAsFixed(1)}, ${p.dy.toStringAsFixed(1)}) m');
+          : tr('At (${fixed1(p.dx)}, ${fixed1(p.dy)}) m', '在 (${fixed1(p.dx)}, ${fixed1(p.dy)}) m');
     }
 
     return Material(

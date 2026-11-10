@@ -422,7 +422,18 @@ class NavZones:
     # ------------------------------------------------------------ R2:新版本带过来的建议
 
     def _previous(self, map_id: str, version: str) -> Any:
-        """站点目录里这一版之前的那一版(按登记时刻);这一版不在目录里、是第一版 → ``None``。"""
+        """站点目录里这一版之前的那一版(按登记时刻);这一版不在目录里、是第一版 → ``None``。
+        第 4 轮 maps N1:编辑、去噪另存的版本记着来源(建议表的 from_version),按来源,不按时间。"""
+        try:
+            src = self.db.query("SELECT from_version FROM nav_zone_proposals WHERE map_id=? AND "
+                                "map_version=?", (map_id, version))
+            if src:
+                rows = self.db.query("SELECT version, files FROM maps WHERE map_id=? AND version=?",
+                                     (map_id, src[0]["from_version"]))
+                if rows:
+                    return rows[0]
+        except Exception:  # noqa: BLE001 —— 老库没有建议表:按时间
+            pass
         try:
             me = self.db.query("SELECT rowid AS k, created_ms FROM maps WHERE map_id=? AND "
                                "version=?", (map_id, version))
@@ -447,6 +458,25 @@ class NavZones:
         return json.loads(rows[0]["body"]) | {"from_version": rows[0]["from_version"],
                                               "created_ms": rows[0]["created_ms"]}
 
+    def seed_derived(self, map_id: str, new: str, old: str, *, by: str) -> int:
+        """网页易用性第 3 轮 maps N1:编辑、去噪另存的新版本跟来源版本**同一个坐标系**,
+        禁行区、限速区、虚拟墙照抄过来(原来只当「待核建议」带,网页上看不到也采纳不了,确认就确认了一个空集,发布后
+        禁区全丢;建议还按登记时刻取「前一版」,不是来源版本)。抄过来的这一份**没确认**:在生效、
+        发布前照样要人在禁行区页确认。待命点、拦截点是「搬」不是「抄」(一个名字只在一版上),照旧做成
+        待核建议,来源是 ``old``。回抄过来几个区域。"""
+        if self.db.query("SELECT 1 FROM nav_zone_proposals WHERE map_id=? AND map_version=?",
+                         (map_id, new)) or self._row(map_id, new) is not None:
+            return 0
+        now = self._now()
+        zones = [z.to_wire() for z in self.current(map_id, old).zones if not z.expired(now)]
+        if zones:
+            self.put(map_id, new, zones, base_revision=0, by=by)
+        src = self.db.query("SELECT version, files FROM maps WHERE map_id=? AND version=?",
+                            (map_id, old))
+        if src:
+            self._make_proposal(map_id, new, src[0], with_zones=False)
+        return len(zones)
+
     def _ensure_proposal(self, map_id: str, version: str) -> None:
         if self.db.query("SELECT 1 FROM nav_zone_proposals WHERE map_id=? AND map_version=?",
                          (map_id, version)) or self._row(map_id, version) is not None:
@@ -454,10 +484,14 @@ class NavZones:
         prev = self._previous(map_id, version)
         if prev is None:
             return
+        self._make_proposal(map_id, version, prev, with_zones=True)
+
+    def _make_proposal(self, map_id: str, version: str, prev: Any, *, with_zones: bool) -> None:
         pv = prev["version"]
         now = self._now()
         pz = self.current(map_id, pv)
-        zones = [z.to_wire() for z in pz.zones if not z.expired(now)]
+        zones = ([z.to_wire() for z in pz.zones if not z.expired(now)] if with_zones
+                 else [])
         standby = [{"robot_id": r["robot_id"], "name": r["name"], "x": r["x"], "y": r["y"],
                     "yaw": r["yaw"], "default": bool(r["is_default"])}
                    for r in self.db.query(

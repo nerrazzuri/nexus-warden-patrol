@@ -33,6 +33,9 @@ const _allowed = <String, List<String>>{
   'lib/ui/widget/live_video.dart': [r"'$error（$status）'", r"'$head：$detail'"],
 };
 
+/// 整个文件都是站点中文原文的对照表（数据，不是界面文字）：手机 App 测试 M05，跟网页 sitetext.tsx 同一套。
+const _wholeFile = <String>{'lib/net/site_text.dart'};
+
 bool _cjk(int c) =>
     (c >= 0x4e00 && c <= 0x9fff) || (c >= 0x3000 && c <= 0x303f) || (c >= 0xff00 && c <= 0xffef) ||
     c == 0x300c || c == 0x300d;
@@ -173,6 +176,7 @@ void main() {
     expect(files.length, greaterThan(30));
     for (final f in files) {
       final path = f.path.replaceAll('\\', '/');
+      if (_wholeFile.contains(path)) continue;
       final src = f.readAsStringSync();
       final lines = src.split('\n');
       final allow = _allowed[path] ?? const <String>[];

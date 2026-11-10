@@ -51,6 +51,8 @@ class WatchService : Service() {
         const val ACTION_DISMISSED = "com.nexwar.watch.DISMISSED"
         const val PREFS = "nexwar_watch"
         private const val TAG = "D1MaxWatch"
+        private const val CERT_MISMATCH = "证书指纹对不上"
+        private val CJK = Regex("[\u3400-\u9fff]")
         private const val CH_ONGOING = "watch_ongoing"
         private const val CH_P1 = "watch_p1"
         private const val CH_ALARM = "watch_alarm"
@@ -74,6 +76,12 @@ class WatchService : Service() {
     private var site = ""
     private var url = ""
     private var fingerprint = ""
+    @Volatile private var certBad = false
+
+    /** App 的语言(手机 App 测试 M05):`en` / `zh`;英文时报警标题用 App 给的英文表。 */
+    private var lang = "zh"
+    private var titlesEn = JSONObject()
+    private fun t(en: String, zh: String) = if (lang == "zh") zh else en
     private var token = ""
 
     /** 该弹、该收、该重弹（纯判断，JUnit 测）。 */
@@ -95,7 +103,7 @@ class WatchService : Service() {
             }
             ACTION_STOP -> {
                 // 用 startForegroundService 送进来的:先 startForeground,不然系统按超时崩掉
-                foreground("停止中")
+                foreground(t("Stopping", "停止中"))
                 stopWatch(revoke = true)
                 return START_NOT_STICKY
             }
@@ -104,6 +112,8 @@ class WatchService : Service() {
                 .putString("url", intent.getStringExtra("url") ?: "")
                 .putString("fingerprint", intent.getStringExtra("fingerprint") ?: "")
                 .putString("token", intent.getStringExtra("token") ?: "")
+                .putString("lang", intent.getStringExtra("lang") ?: "zh")
+                .putString("titles", intent.getStringExtra("titles") ?: "{}")
                 .apply()
             // null:系统杀掉之后按 START_STICKY 重启，照存着的接着值守
         }
@@ -111,11 +121,14 @@ class WatchService : Service() {
         url = (prefs.getString("url", "") ?: "").trimEnd('/')
         fingerprint = prefs.getString("fingerprint", "") ?: ""
         token = prefs.getString("token", "") ?: ""
+        lang = prefs.getString("lang", "zh") ?: "zh"
+        titlesEn = try { JSONObject(prefs.getString("titles", "{}") ?: "{}") } catch (e: Exception) { JSONObject() }
+        channels() // 语言可能换了:通道名跟着换
         if (url.isEmpty() || token.isEmpty()) {
             stopWatch(revoke = false)
             return START_NOT_STICKY
         }
-        foreground("连站点中…")
+        foreground(t("Connecting to the site…", "连站点中…"))
         if (worker?.isAlive != true) {
             stopping = false
             running = true
@@ -181,17 +194,20 @@ class WatchService : Service() {
                 val code = c.responseCode
                 if (code == 401 || code == 403) {
                     c.disconnect()
-                    tell(ID_STATE, CH_STATE, "后台值守停了", "值守令牌失效了（注销、改口令、停用或到期）：打开 app 重新登录")
+                    tell(ID_STATE, CH_STATE, t("Background watch stopped", "后台值守停了"),
+                        t("The watch sign-in is no longer valid (signed out, password changed, disabled or expired). Open the app and sign in again.",
+                            "值守令牌失效了（注销、改口令、停用或到期）：打开 App 重新登录"))
                     stopWatch(revoke = false)
                     return
                 }
                 if (code != 200) throw java.io.IOException("站点回 $code")
                 lostSince = 0L
+                certBad = false
                 if (lostTold) {
                     lostTold = false
                     getSystemService(NotificationManager::class.java).cancel(ID_STATE)
                 }
-                foreground("连着站点")
+                foreground(t("Connected to the site", "连着站点"))
                 BufferedReader(InputStreamReader(c.inputStream, Charsets.UTF_8)).use { r ->
                     while (!stopping) {
                         val line = r.readLine() ?: break
@@ -207,15 +223,30 @@ class WatchService : Service() {
             } catch (e: Exception) {
                 if (stopping) return
                 Log.w(TAG, "事件流断了", e)
+                certBad = isCertMismatch(e)
             }
             if (stopping) return
             val now = System.currentTimeMillis()
             if (lostSince == 0L) lostSince = now
             val mins = (now - lostSince) / 60_000
-            foreground(if (mins > 0) "连不上站点（已断 $mins 分钟），重试中" else "连不上站点，重试中")
+            // 手机 App 测试 M03:证书变了跟连不上分开说(证书变了,重试也没用,要人去换站点码)
+            if (certBad) {
+                foreground(t("The site certificate changed, so alarms can't arrive. Open the app and update the site code.",
+                    "站点证书变了，收不到报警：打开 App 更新站点码"))
+            } else {
+                foreground(if (mins > 0) t("Can't reach the site (for $mins min), retrying", "连不上站点（已断 $mins 分钟），重试中")
+                    else t("Can't reach the site, retrying", "连不上站点，重试中"))
+            }
             if (!lostTold && now - lostSince >= LOST_ALERT_MS) {
                 lostTold = true
-                tell(ID_STATE, CH_STATE, "值守断了", "$site 连不上已经两分钟：这期间的告警手机收不到")
+                if (certBad) {
+                    tell(ID_STATE, CH_STATE, t("Watch interrupted", "值守断了"),
+                        t("The certificate of $site changed: this phone gets no alarms until it is fixed. Open the app, tap ⋮ on the site card → Update site code.",
+                            "$site 的站点证书变了：这期间的告警手机收不到。打开 App，在站点卡片上点 ⋮ →「更新站点码」"))
+                } else {
+                    tell(ID_STATE, CH_STATE, t("Watch interrupted", "值守断了"),
+                        t("$site has been unreachable for two minutes: this phone gets no alarms meanwhile.", "$site 连不上已经两分钟：这期间的告警手机收不到"))
+                }
             }
             try {
                 Thread.sleep(RETRY_MS)
@@ -272,14 +303,24 @@ class WatchService : Service() {
 
     private fun post(nm: NotificationManager, a: JSONObject, sound: Boolean) {
         val key = a.optString("key")
-        val title = "${a.optString("level")} ${a.optString("robot")} · ${a.optString("title")}"
-        val text = a.optString("detail").ifEmpty { "没人确认：打开 app 处理" }
+        // 手机 App 测试 M05:按 App 的语言说;英文界面用 App 给的英文标题表,站点的中文原因不直接摆
+        val siteTitle = a.optString("title")
+        val kindTitle = if (lang == "zh") siteTitle else titlesEn.optString(a.optString("kind")).ifEmpty {
+            if (CJK.containsMatchIn(siteTitle)) "Alarm" else siteTitle
+        }
+        val title = "${a.optString("level")} ${a.optString("robot")} · $kindTitle"
+        val detail = a.optString("detail")
+        val text = when {
+            detail.isEmpty() -> t("Not acknowledged: open the app to handle it", "没人确认：打开 App 处理")
+            lang != "zh" && CJK.containsMatchIn(detail) -> t("Open the app for details", "打开 App 看详情")
+            else -> detail
+        }
         val dismissed = Intent(this, WatchService::class.java).setAction(ACTION_DISMISSED).putExtra("key", key)
         val b = builder(if (sound) CH_ALARM else CH_P1)
             .setContentTitle(title)
             .setContentText(text)
             .setStyle(Notification.BigTextStyle().bigText(text))
-            .setSmallIcon(R.mipmap.ic_launcher)
+            .setSmallIcon(R.drawable.ic_stat_watch)
             .setContentIntent(openApp())
             // 响铃档：点开不收、划不掉（Android 14 起常驻的也划得掉 —— 划掉了 deleteIntent 叫回来重弹）；
             // 只有站点推来确认、解决才收。别的档：点开就收，划掉也行（之后升档会再弹）。
@@ -315,6 +356,16 @@ class WatchService : Service() {
         return c
     }
 
+    /** 这次连不上是不是证书指纹对不上(异常链里有 [Pinned] 扔的那个)。 */
+    private fun isCertMismatch(e: Throwable): Boolean {
+        var x: Throwable? = e
+        while (x != null) {
+            if (x is CertificateException && x.message == CERT_MISMATCH) return true
+            x = x.cause
+        }
+        return false
+    }
+
     private class Pinned(private val fp: String) : X509TrustManager {
         override fun checkClientTrusted(chain: Array<out X509Certificate>?, authType: String?) {
             throw CertificateException("不收客户端证书")
@@ -324,7 +375,7 @@ class WatchService : Service() {
             val leaf = chain?.firstOrNull() ?: throw CertificateException("没有证书")
             val got = MessageDigest.getInstance("SHA-256").digest(leaf.encoded)
                 .joinToString("") { "%02x".format(it) }
-            if (got != fp) throw CertificateException("证书指纹对不上")
+            if (got != fp) throw CertificateException(CERT_MISMATCH)
         }
 
         override fun getAcceptedIssuers(): Array<X509Certificate> = arrayOf()
@@ -336,18 +387,18 @@ class WatchService : Service() {
         if (Build.VERSION.SDK_INT < 26) return
         val nm = getSystemService(NotificationManager::class.java)
         nm.createNotificationChannel(
-            NotificationChannel(CH_ONGOING, "值守中", NotificationManager.IMPORTANCE_LOW).apply {
-                description = "后台值守常驻的那一条（Android 要求）"
+            NotificationChannel(CH_ONGOING, t("On watch", "值守中"), NotificationManager.IMPORTANCE_LOW).apply {
+                description = t("The ongoing background-watch notification (required by Android)", "后台值守常驻的那一条（Android 要求）")
                 setShowBadge(false)
             })
         nm.createNotificationChannel(
-            NotificationChannel(CH_P1, "P1 告警", NotificationManager.IMPORTANCE_HIGH).apply {
-                description = "要人立刻动身的告警"
+            NotificationChannel(CH_P1, t("P1 alarms", "P1 报警"), NotificationManager.IMPORTANCE_HIGH).apply {
+                description = t("Alarms that need someone to go now", "要人立刻动身的报警")
                 enableVibration(true)
             })
         nm.createNotificationChannel(
-            NotificationChannel(CH_ALARM, "P1 告警（响铃）", NotificationManager.IMPORTANCE_HIGH).apply {
-                description = "入侵、没人确认的 P1：闹钟声一直响到有人处理"
+            NotificationChannel(CH_ALARM, t("P1 alarms (ringing)", "P1 报警（响铃）"), NotificationManager.IMPORTANCE_HIGH).apply {
+                description = t("Intrusions and unacknowledged P1s: an alarm sound rings until someone handles it", "入侵、没人确认的 P1：闹钟声一直响到有人处理")
                 enableVibration(true)
                 setBypassDnd(true)
                 setSound(
@@ -358,8 +409,8 @@ class WatchService : Service() {
                         .build())
             })
         nm.createNotificationChannel(
-            NotificationChannel(CH_STATE, "值守断了", NotificationManager.IMPORTANCE_HIGH).apply {
-                description = "连不上站点、令牌失效：这期间收不到告警"
+            NotificationChannel(CH_STATE, t("Watch interrupted", "值守断了"), NotificationManager.IMPORTANCE_HIGH).apply {
+                description = t("Site unreachable or sign-in expired: no alarms meanwhile", "连不上站点、令牌失效：这期间收不到报警")
             })
     }
 
@@ -379,12 +430,12 @@ class WatchService : Service() {
         val stop = if (Build.VERSION.SDK_INT >= 26) PendingIntent.getForegroundService(this, 1, stopIntent, flags)
         else PendingIntent.getService(this, 1, stopIntent, flags)
         val n = builder(CH_ONGOING)
-            .setContentTitle("值守中 · $site")
+            .setContentTitle(t("On watch · $site", "值守中 · $site"))
             .setContentText(state)
-            .setSmallIcon(R.mipmap.ic_launcher)
+            .setSmallIcon(R.drawable.ic_stat_watch)
             .setOngoing(true)
             .setContentIntent(openApp())
-            .addAction(Notification.Action.Builder(null, "停止值守", stop).build())
+            .addAction(Notification.Action.Builder(null, t("Stop watching", "停止值守"), stop).build())
             .build()
         if (Build.VERSION.SDK_INT >= 34) {
             startForeground(ID_ONGOING, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
@@ -398,7 +449,7 @@ class WatchService : Service() {
             .setContentTitle(title)
             .setContentText(text)
             .setStyle(Notification.BigTextStyle().bigText(text))
-            .setSmallIcon(R.mipmap.ic_launcher)
+            .setSmallIcon(R.drawable.ic_stat_watch)
             .setContentIntent(openApp())
             .setAutoCancel(true)
             .build()

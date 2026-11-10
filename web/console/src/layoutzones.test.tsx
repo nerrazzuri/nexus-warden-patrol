@@ -31,7 +31,10 @@ const data: LayerData = {
     { name: "cam2", zone: "北区", onvif_url: "http://10.0.0.6/onvif", rtsp_url: "", username: "", has_password: false, motion: true }],
 };
 /** 假地图:一个按钮当点图(预览像素 10,20 → 地图 1,8)。 */
-const FakeMap = (o: OwnLayer) => <div class="fakemap"><button type="button" class="pick" onClick={() => o.onPick?.(10, 20)}>pick</button></div>;
+const FakeMap = (o: OwnLayer) => (
+  <div class="fakemap"><button type="button" class="pick" onClick={() => o.onPick?.(10, 20)}>pick</button>
+    <svg>{o.marks?.({ map: (x: number, y: number) => [x * 10, 100 - y * 10], px: (x: number, y: number) => [x, y], scale: 1 } as never)}</svg></div>
+);
 const props = (): TabProps => ({
   map: { map_id: "home", version: "3", note: "" }, base: "/api/maps/home/3", meta: META, data, say: () => {},
   reload: () => Promise.resolve(), setDirty: (b) => { dirty = b; }, registerSave: (fn) => { save = fn; }, Map: FakeMap,
@@ -80,7 +83,10 @@ describe("布置 → 防区", () => {
 describe("布置 → 防区:出口线、易藏点(W74 三期)", () => {
   let k = 0;
   /** 每点一下往右挪 1 m(预览像素 10 → 地图 1 m)。 */
-  const Walk = (o: OwnLayer) => <div class="fakemap"><button type="button" class="pick" onClick={() => { k += 1; o.onPick?.(10 * k, 20); }}>pick</button></div>;
+  const Walk = (o: OwnLayer) => (
+    <div class="fakemap"><button type="button" class="pick" onClick={() => { k += 1; o.onPick?.(10 * k, 20); }}>pick</button>
+      <svg>{o.marks?.({ map: (x: number, y: number) => [x * 10, 100 - y * 10], px: (x: number, y: number) => [x, y], scale: 1 } as never)}</svg></div>
+  );
   const withMarks = (marks: LayerData["marks"]): TabProps => ({ ...props(), Map: Walk, data: { ...data, marks } });
   beforeEach(() => { k = 0; });
 
@@ -104,6 +110,7 @@ describe("布置 → 防区:出口线、易藏点(W74 三期)", () => {
     fireEvent.click(btn(c, "标易藏点"));
     fireEvent.click(c.querySelector(".pick")!);
     expect(c.querySelector(".ly-marks")!.textContent).toContain("再点它朝哪看");
+    expect(c.querySelector(".ly-marks .ly-step")).not.toBeNull();   // P2-37:第二步醒目
     fireEvent.click(c.querySelector(".pick")!);
     fireEvent.input(document.querySelector('.modal input[name="mark"]')!, { target: { value: "楼梯间" } });
     fireEvent.submit(document.querySelector(".modal form")!);
@@ -113,10 +120,61 @@ describe("布置 → 防区:出口线、易藏点(W74 三期)", () => {
 
   it("删一个已有的", async () => {
     const { container: c } = render(<ZonesTab {...withMarks([{ id: "m1", kind: "hide", name: "仓库", points: [[3, 3]], yaw: 1 }])} />);
+    expect(c.querySelector('[data-mark-name="仓库"]')).not.toBeNull();     // 第 2 轮 setup N8:图上写名字
     const row = Array.from(c.querySelectorAll(".ly-marks li")).find((li) => li.textContent?.includes("仓库"))!;
     fireEvent.click(btn(row, "删除"));
     expect(c.querySelector(".ly-marks")!.textContent).not.toContain("仓库");
     await save!();
     expect(posted.find((p) => p.body.mark_id)?.body).toEqual({ mark_id: "m1", remove: true });
+  });
+});
+
+describe("网页易用性第 1 轮 P1-31", () => {
+  it("点图上的防区就选中它;改名后存:删旧名、存新名,摄像头跟着改", async () => {
+    const d2: LayerData = { ...data, areas: [...data.areas, { zone: "南区", points: [[0, 6], [4, 6], [4, 10], [0, 10]] }] };
+    const { container: c } = render(<ZonesTab {...props()} data={d2} />);
+    fireEvent.click(c.querySelector(".pick")!);                  // 点在 (1,8):南区里
+    expect(c.querySelector(".ly-detail h3")!.textContent).toBe("南区");
+    fireEvent.click(btn(c, "北区"));
+    fireEvent.click(c.querySelector("[data-rename]")!);
+    const inp = document.querySelector('.modal input[name="zone"]') as HTMLInputElement;
+    expect(inp.value).toBe("北区");
+    fireEvent.input(inp, { target: { value: "北区新" } });
+    fireEvent.submit(document.querySelector(".modal form")!);
+    expect(c.querySelector(".ly-detail h3")!.textContent).toBe("北区新");
+    await save!();
+    const areaPosts = posted.filter((p) => p.url === "/api/maps/home/3/areas").map((p) => p.body);
+    expect(areaPosts).toContainEqual({ zone: "北区", remove: true });
+    expect(areaPosts).toContainEqual({ zone: "北区新", points: [[1, 1], [5, 1], [5, 5]] });
+    expect(posted.find((p) => p.url === "/api/admin/cameras")?.body).toMatchObject({ name: "cam2", zone: "北区新" });
+  });
+});
+
+describe("第 2 轮 setup N2", () => {
+  it("改名改成已有的防区名:不许(写原因、按钮灰),另一个防区不被删", async () => {
+    const d2: LayerData = { ...data, areas: [...data.areas, { zone: "南区", points: [[0, 6], [4, 6], [4, 10], [0, 10]] }] };
+    const { container: c } = render(<ZonesTab {...props()} data={d2} />);
+    fireEvent.click(btn(c, "北区"));
+    fireEvent.click(c.querySelector("[data-rename]")!);
+    expect(document.querySelector(".modal")!.textContent).toContain("防区改名");
+    const inp = document.querySelector('.modal input[name="zone"]') as HTMLInputElement;
+    fireEvent.input(inp, { target: { value: "南区" } });
+    expect(document.querySelector("[data-zone-taken]")!.textContent).toContain("已经有叫「南区」的防区");
+    expect((document.querySelector('.modal button[type="submit"]') as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.submit(document.querySelector(".modal form")!);
+    expect(document.querySelector(".modal")).not.toBeNull();
+    expect(c.querySelector(".ly-detail h3")!.textContent).toBe("北区");
+  });
+});
+
+describe("网页易用性第 1 轮 P2-36", () => {
+  it("名字空着点保存:说「请输入名字」", () => {
+    const { container: c } = render(<ZonesTab {...props()} />);
+    fireEvent.click(btn(c, "绘制防区"));
+    for (let i = 0; i < 3; i++) fireEvent.click(c.querySelector(".pick")!);
+    fireEvent.click(btn(c, "完成绘制"));
+    fireEvent.input(document.querySelector('.modal input[name="zone"]')!, { target: { value: "   " } });
+    fireEvent.submit(document.querySelector(".modal form")!);
+    expect(document.querySelector(".modal [role=alert]")!.textContent).toBe("请输入名字。");
   });
 });

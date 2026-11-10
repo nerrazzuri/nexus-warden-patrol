@@ -6,7 +6,7 @@
 import { useEffect, useMemo, useRef, useState } from "preact/hooks";
 import { api, enc } from "./api";
 import { camLabel, type Cam } from "./camera";
-import { hms, nameOf } from "./data";
+import { hm, hms, nameOf } from "./data";
 import { t } from "./i18n";
 import { MapCanvas } from "./mapcanvas";
 import { toPx, type PreviewMeta } from "./mapview";
@@ -26,6 +26,8 @@ import {
   poseAt,
   prevSegment,
   segmentAt,
+  panView,
+  segBox,
   spans,
   viewSpan,
   type Recording,
@@ -41,12 +43,32 @@ export function canReview(role: string): boolean {
 }
 
 /** 导出证据只给管理员(最高权限)(站点 permissions.EXPORT)。 */
+/** 连着放时两段之间空出这么久以上才提示(段长本身有一两秒误差)。 */
+const GAP_SAY_MS = 5_000;
+
+/** 第 3 轮 duty N4:下载文件名里的时间「2026-11-08-102502」(当地时间,不是毫秒数)。 */
+export function fileStamp(ms: number): string {
+  return `${dateInput(ms)}-${hms(ms).replace(/:/g, "")}`;
+}
+
 export function canExport(role: string): boolean {
   return role === "admin" || role === "engineer";
 }
 
 export function RecordingsPage(props: { robots: string[]; role: string; now: number; robot: string | null; at: number | null; say: (s: string) => void; camsOf?: (robot: string) => Cam[] }) {
-  const [robot, setRobot] = useState(props.robot && props.robots.includes(props.robot) ? props.robot : props.robots[0] ?? "");
+  // P1-29:解绑了的机器人(不在 props.robots 里)只要还有录像也列出来,标「已解绑」;从报警点进来的照样能看
+  const [robot, setRobot] = useState(props.robot || props.robots[0] || "");
+  const [past, setPast] = useState<string[]>([]);
+  useEffect(() => {
+    api<{ robots?: string[] }>("GET", "/api/recordings?limit=1")
+      .then((d) => {
+        const gone = (d.robots ?? []).filter((r) => !props.robots.includes(r));
+        setPast(gone);
+        setRobot((cur) => cur || gone[0] || "");
+      })
+      .catch(() => {});
+  }, [props.robots.join(",")]);
+  const allRobots = [...props.robots, ...past.filter((r) => !props.robots.includes(r))];
   const [cam, setCam] = useState<Cam>("front");
   // 这台机器人有哪几路(W40:装了热像的多一路);换到没有这一路的就回到前面那路
   const cams = props.camsOf?.(robot) ?? CAMS;
@@ -62,10 +84,20 @@ export function RecordingsPage(props: { robots: string[]; role: string; now: num
   const [state, setState] = useState<"loading" | "ok" | "off" | "failed">("loading");
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [track, setTrack] = useState<TrackPt[]>([]);
+  // 第 3 轮 layout N3:取不到(连不上站点)≠ 今天没有,分开说
+  const [trackFailed, setTrackFailed] = useState(false);
+  const [rowsFailed, setRowsFailed] = useState(false);
+  const [retry, setRetry] = useState(0);
+  useEffect(() => {
+    if (!trackFailed && !rowsFailed) return;
+    const id = window.setTimeout(() => setRetry((r) => r + 1), 5000);
+    return () => window.clearTimeout(id);
+  }, [trackFailed, rowsFailed, retry]);
   const [cur, setCur] = useState<Recording | null>(null);
   const [head, setHead] = useState<number | null>(props.at);
   const [speed, setSpeed] = useState(1);
   const [broken, setBroken] = useState(false);
+  const [clipMin, setClipMin] = useState(10);
   const video = useRef<HTMLVideoElement>(null);
   const pip = useRef<HTMLVideoElement>(null);
   const seek = useRef<number>(0);
@@ -108,21 +140,23 @@ export function RecordingsPage(props: { robots: string[]; role: string; now: num
     api<{ recordings: Recording[] }>("GET", `/api/recordings?robot=${enc(robot)}&camera=${pipCam}&${span}&limit=2000`)
       .then((d) => live && setPipRows(ascending(d.recordings ?? []))).catch(() => live && setPipRows([]));
     api<{ points: TrackPt[] }>("GET", `/api/robots/${enc(robot)}/track?since=${range.since}&until=${Math.min(range.until, range.since + 86_400_000)}`)
-      .then((d) => live && setTrack(Array.isArray(d.points) ? d.points : [])).catch(() => live && setTrack([]));
+      .then((d) => { if (live) { setTrack(Array.isArray(d.points) ? d.points : []); setTrackFailed(false); } })
+      .catch(() => { if (live) { setTrack([]); setTrackFailed(true); } });
     return () => { live = false; };
-  }, [robot, cam, date]);
+  }, [robot, cam, date, trackFailed ? retry : 0]);
 
   // 时间轴:这一天所有机器人这一路的段、给保安看的报警(换机器人不重拉)
   useEffect(() => {
     if (!range) return;
     let live = true;
     api<{ recordings: Recording[] }>("GET", `/api/recordings?camera=${cam}&since=${range.since}&until=${range.until - 1}&limit=5000`)
-      .then((d) => live && setAllRows(d.recordings ?? [])).catch(() => live && setAllRows([]));
+      .then((d) => { if (live) { setAllRows(d.recordings ?? []); setRowsFailed(false); } })
+      .catch(() => { if (live) { setAllRows([]); setRowsFailed(true); } });
     api<{ alerts: Alert[] }>("GET", "/api/alerts?all=1&limit=500")
       .then((d) => live && setAlerts((d.alerts ?? []).filter((a) => a.level !== "P3" && a.first_ms >= range.since && a.first_ms < range.until)))
       .catch(() => live && setAlerts([]));
     return () => { live = false; };
-  }, [cam, date]);
+  }, [cam, date, rowsFailed ? retry : 0]);
 
   const sp = useMemo(() => spans(rows ?? [], segS), [rows, segS]);
 
@@ -133,6 +167,8 @@ export function RecordingsPage(props: { robots: string[]; role: string; now: num
       props.say(t("recNothingAfter", { t: hms(ms) }));
       return;
     }
+    // 第 3 轮 duty N5:要的时刻在空档里,说一声从几点开始放(别把 10:38 的画面当成 10:35 的)
+    if (!hit) props.say(t("recGapJump", { a: hm(ms), b: hms(rec.start_ms) }));
     seek.current = hit ? hit.offsetS : 0;
     setBroken(false);
     setHead(hit ? ms : rec.start_ms);
@@ -205,25 +241,34 @@ export function RecordingsPage(props: { robots: string[]; role: string; now: num
 
   const total = range ? covered(sp, range.since, range.until) : 0;
   const kept = (rows ?? []).filter((r) => r.keep).length;
-  const ls = range ? lanes(props.robots, allRows, alerts, range, segS) : [];
+  // 第 4 轮 duty N6:这一天没录像、也没报警的机器人不占一行(选中的那台留着)
+  const ls = range ? lanes(allRobots, allRows, alerts, range, segS).filter((l) => l.segs.length || l.marks.length || l.robot === robot) : [];
+  const [jumpBad, setJumpBad] = useState(false);
   return (
     <div class="recpage">
       <div class="recbar">
-        <label>{t("recDate")}
-          <input type="date" value={date} max={dateInput(props.now)} onChange={(e) => setDate((e.target as HTMLInputElement).value)} />
-        </label>
-        <label>{t("recJump")}
-          <input type="text" class="mono hhmm wide" inputMode="numeric" maxLength={8} placeholder="HH:MM:SS" disabled={!rows || !range}
+        {/* 第 3 轮 zh N14:浏览器的日期框按浏览器语言显示(英文浏览器写 11/08/2026),跟页面别处的
+            2026-11-08 不一样:换成固定格式的文字框 + 前一天 / 后一天 */}
+        <DateBox value={date} max={dateInput(props.now)} onChange={setDate} />
+        <label class="rec-jump">{t("recJump")}
+          <input type="text" class="mono hhmm wide" inputMode="numeric" maxLength={8} placeholder={t("recTimePh")} disabled={!rows || !range}
+            aria-invalid={jumpBad || undefined}
+            onInput={() => setJumpBad(false)}
             onKeyDown={(e) => {
               if (e.key !== "Enter") return;
               const s = clockSeconds((e.target as HTMLInputElement).value);
-              if (s == null) props.say(t("recBadTime"));
-              else if (range && rows) play(rows, range.since + s * 1000);
+              setJumpBad(s == null);
+              if (s != null && range && rows) play(rows, range.since + s * 1000);
             }} />
+          {/* P2-11:时间写错了就在框下面说 */}
+          {jumpBad && <small class="error" role="alert" data-jump-bad="1">{t("recBadTime")}</small>}
         </label>
         <div class="seg recrobots" role="group" aria-label={t("recRobot")}>
-          {props.robots.map((r) => (
-            <button key={r} type="button" aria-pressed={r === robot} onClick={() => switchTo(r, cur && head != null ? head : null)}>{nameOf(r)}</button>
+          {allRobots.map((r) => (
+            <button key={r} type="button" aria-pressed={r === robot} data-unbound={props.robots.includes(r) ? undefined : "1"}
+              onClick={() => switchTo(r, cur && head != null ? head : null)}>
+              {nameOf(r)}{props.robots.includes(r) ? "" : ` · ${t("recUnbound")}`}
+            </button>
           ))}
         </div>
         <div class="seg" role="group" aria-label={t("recCamera")}>
@@ -248,7 +293,12 @@ export function RecordingsPage(props: { robots: string[]; role: string; now: num
                 onPlay={() => void pip.current?.play().catch(() => {})}
                 onPause={() => pip.current?.pause()}
                 onTimeUpdate={(e) => setHead(shown.start_ms + (e.currentTarget as HTMLVideoElement).currentTime * 1000)}
-                onEnded={() => step(nextSegment(rows ?? [], shown))}
+                onEnded={() => {
+                  const nx = nextSegment(rows ?? [], shown);
+                  // 第 3 轮 duty N5:连着放跳过空档也说一声
+                  if (nx && nx.start_ms - (shown.start_ms + segS * 1000) > GAP_SAY_MS) props.say(t("recGapSkip", { a: hms(shown.start_ms + segS * 1000), b: hms(nx.start_ms) }));
+                  step(nx);
+                }}
                 onError={() => setBroken(true)} />
             )}
             {(!shown || broken) && (
@@ -267,40 +317,62 @@ export function RecordingsPage(props: { robots: string[]; role: string; now: num
               <div class="recpip">
                 <video ref={pip} key={pipSeg.rec.id} src={`/api/recordings/${pipSeg.rec.id}/video`} muted autoplay playsInline
                   aria-label={camLabel(robot, pipCam)}
-                  onLoadedMetadata={(e) => { (e.currentTarget as HTMLVideoElement).currentTime = pipSeg.offsetS; }} />
+                  onLoadedMetadata={(e) => { const v = e.currentTarget as HTMLVideoElement; v.currentTime = pipSeg.offsetS; v.playbackRate = speed; }} />
               </div>
             )}
             {shown && !broken && <div class="osd bottom recosd"><span class="osd-status">{t("recorded")}{shown.keep ? ` · ${t("recKept")}` : ""}</span></div>}
           </div>
+          {/* P1-22:分两组,各组整体换行(上一段 / 下一段不会被拆开);没有的按钮不占位 */}
           <div class="recctl">
+            <div class="recctl-grp">
             <button type="button" class="btn sm" disabled={!shown}
               onClick={() => { const v = video.current; if (v) { if (v.paused) void v.play().catch(() => {}); else v.pause(); } }}>{t("recPlayPause")}</button>
             <div class="seg" role="group" aria-label={t("recSpeed")}>
               {SPEEDS.map((s) => (
                 <button key={s} type="button" aria-pressed={s === speed}
-                  onClick={() => { setSpeed(s); if (video.current) video.current.playbackRate = s; }}>{s}×</button>
+                  // 第 4 轮 duty N7:画中画跟着一起变速(原来 4× 时它还是 1×,总落后一两秒)
+                  onClick={() => { setSpeed(s); if (video.current) video.current.playbackRate = s; if (pip.current) pip.current.playbackRate = s; }}>{s}×</button>
               ))}
             </div>
+            {/* 第 2 轮 P1-22:一对一对不拆开(1366、1440 宽时「下一段」原来单独掉到第二行) */}
+            <span class="recctl-pair">
             <button type="button" class="btn sm" disabled={!rows || head == null} onClick={() => rows && head != null && play(rows, head - 10_000)}>⏪ {t("recTenS")}</button>
             <button type="button" class="btn sm" disabled={!rows || head == null} onClick={() => rows && head != null && play(rows, head + 10_000)}>{t("recTenS")} ⏩</button>
+            </span>
+            <span class="recctl-pair">
             <button type="button" class="btn sm" disabled={!shown || !prevSegment(rows ?? [], shown)} onClick={() => shown && step(prevSegment(rows ?? [], shown))}>{t("recPrev")}</button>
             <button type="button" class="btn sm" disabled={!shown || !nextSegment(rows ?? [], shown)} onClick={() => shown && step(nextSegment(rows ?? [], shown))}>{t("recNext")}</button>
-            <span class="push" />
+            </span>
+            </div>
+            <div class="recctl-grp push">
             <button type="button" class="btn sm" disabled={!shown} onClick={snap}>{t("recSnap")}</button>
             {canExport(props.role) && shown && (
-              <a class="btn sm" href={`/api/recordings/${shown.id}/video`} download={`${robot}-${cam}-${shown.start_ms}.mp4`}>{t("recExport")}</a>
+              <a class="btn sm" href={`/api/recordings/${shown.id}/video`} download={`${robot}-${cam}-${fileStamp(shown.start_ms)}.mp4`}>{t("recExport")}</a>
+            )}
+            {/* 第 3 轮 duty N4:按时间段导出(从当前时刻起 N 分钟,站点打成一个 zip) */}
+            {canExport(props.role) && head != null && (
+              <span class="recctl-pair" data-clip="1">
+                <select class="sm" value={String(clipMin)} aria-label={t("recClipLen")} onChange={(e) => setClipMin(Number(e.currentTarget.value))}>
+                  {[5, 10, 30, 60].map((n) => <option key={n} value={n}>{t("recClipMin", { n })}</option>)}
+                </select>
+                <a class="btn sm" href={`/api/recordings/clip?robot=${enc(robot)}&camera=${enc(cam)}&since=${Math.floor(head)}&until=${Math.floor(head) + clipMin * 60_000}`}>{t("recClipExport")}</a>
+              </span>
             )}
             {canExport(props.role) && !shown && <button type="button" class="btn sm" disabled>{t("recExport")}</button>}
+            {/* 第 3 轮 duty N4:只有管理员能导出(设计规定),保安这里说一声找谁 */}
+            {!canExport(props.role) && <span class="muted small" data-export-ask="1">{t("recExportAsk")}</span>}
             {canReview(props.role) && (
               <button type="button" class="btn sm" aria-pressed={!!shown?.keep} disabled={!shown} onClick={keep} title={t("recKeepHint")}>
                 {shown?.keep ? t("recUnkeep") : t("recKeep")}
               </button>
             )}
+            </div>
           </div>
         </div>
-        <RecMap robot={robot} track={track} head={head} onSeek={(ms) => rows && play(rows, ms)} />
+        <RecMap robot={robot} track={track} failed={trackFailed} head={head} onSeek={(ms) => rows && play(rows, ms)} />
       </div>
 
+      {rowsFailed && <p class="warn small" data-rows-failed="1">{t("recTimelineFailed")}</p>}
       {range && view && (
         <Timeline lanes={ls} robot={robot} day={range} view={view} head={head}
           onView={setView} onPick={(id, ms) => switchTo(id, ms)} />
@@ -310,7 +382,7 @@ export function RecordingsPage(props: { robots: string[]; role: string; now: num
 }
 
 /** 右边的地图:那一刻在哪(之前实线、之后虚线),点轨迹跳到经过那里的时刻。 */
-function RecMap(props: { robot: string; track: TrackPt[]; head: number | null; onSeek: (ms: number) => void }) {
+function RecMap(props: { robot: string; track: TrackPt[]; failed?: boolean; head: number | null; onSeek: (ms: number) => void }) {
   const here = props.head != null ? poseAt(props.track, props.head) : null;
   const ref = here ?? props.track[0] ?? null;
   const key = ref ? `${ref.map_id}/${ref.map_version}` : "";
@@ -346,7 +418,7 @@ function RecMap(props: { robot: string; track: TrackPt[]; head: number | null; o
             const [x, y] = s.map(here.x, here.y);
             return <g class="rec-here"><circle cx={x} cy={y} r="8" /><text x={x + 12} y={y + 4}>{nameOf(props.robot)}</text></g>;
           }} />
-      ) : <div class="rmap-empty muted">{t("recMapNone")}</div>}
+      ) : props.failed ? <div class="rmap-empty warn" data-failed="1">{t("loadRetry")}</div> : <div class="rmap-empty muted">{t("recMapNone")}</div>}
       <span class="rmap-hint">
         {props.head == null ? t("recMapPick") : here ? t("recMapHere", { id: nameOf(props.robot), t: hms(props.head) }) : t("recMapUnknown", { id: nameOf(props.robot), t: hms(props.head) })}
       </span>
@@ -366,6 +438,8 @@ function Timeline(props: {
 }) {
   const { view } = props;
   const w = view.until - view.since;
+  const drag = useRef<{ x: number; view: { since: number; until: number }; width: number } | null>(null);
+  const dragged = useRef(false);
   const pct = (ms: number) => ((ms - view.since) / w) * 100;
   const timeAt = (e: MouseEvent | WheelEvent, el: Element) => {
     const box = el.getBoundingClientRect();
@@ -377,18 +451,35 @@ function Timeline(props: {
   for (let x = Math.ceil(view.since / stepMs) * stepMs; x <= view.until; x += stepMs) ticks.push(x);
   return (
     <div class="tl" data-span={String(w)}>
-      <div class="tl-tracks" onWheel={(e) => {
+      <div class="tl-tracks" onPointerDown={(e) => {
+        // P2-11:按住左右拖 = 平移(放大以后才有用);拖过了就不算点
+        const track = (e.currentTarget as Element).querySelector(".track");
+        drag.current = { x: e.clientX, view, width: track?.getBoundingClientRect().width ?? 0 };
+        dragged.current = false;
+      }} onPointerMove={(e) => {
+        const d = drag.current;
+        if (!d || d.width <= 0 || (e.buttons & 1) === 0) return;
+        const dx = e.clientX - d.x;
+        if (Math.abs(dx) < 4 && !dragged.current) return;
+        dragged.current = true;
+        props.onView(panView(props.day, d.view, dx / d.width));
+      }} onPointerUp={() => { drag.current = null; window.setTimeout(() => { dragged.current = false; }, 0); }}
+      onPointerLeave={() => { drag.current = null; }}
+      onWheel={(e) => {
         e.preventDefault();
-        const at = timeAt(e, e.currentTarget as Element);
+        // 第 3 轮 P2-11:按 .track 的宽度算(.tl-tracks 含左边名字列,放大的中心会偏)
+        const track = (e.currentTarget as Element).querySelector(".track");
+        const at = timeAt(e, track ?? (e.currentTarget as Element));
         props.onView(viewSpan(props.day, view, at, e.deltaY < 0 ? 0.5 : 2));
       }}>
         {props.lanes.map((l) => (
           <div key={l.robot} class={l.robot === props.robot ? "lane on" : "lane"}>
-            <b role="button" tabIndex={0} onClick={() => props.onPick(l.robot, props.head ?? props.day.since)}>{nameOf(l.robot)}</b>
-            <div class="track" onClick={(e) => props.onPick(l.robot, timeAt(e, e.currentTarget as Element))}>
-              {l.segs.filter(([a, b]) => b > view.since && a < view.until).map(([a, b]) => (
-                <span key={a} class="seg-rec" style={{ left: `${Math.max(0, pct(a))}%`, width: `${Math.max(0.2, pct(Math.min(b, view.until)) - Math.max(0, pct(a)))}%` }} />
-              ))}
+            <b role="button" tabIndex={0} title={nameOf(l.robot)} onClick={() => props.onPick(l.robot, props.head ?? props.day.since)}>{nameOf(l.robot)}</b>
+            <div class="track" onClick={(e) => { if (!dragged.current) props.onPick(l.robot, timeAt(e, e.currentTarget as Element)); }}>
+              {l.segs.filter(([a, b]) => b > view.since && a < view.until).map(([a, b]) => {
+                const bx = segBox(a, b, view);
+                return <span key={a} class="seg-rec" style={{ left: `${bx.left}%`, width: `${Math.min(bx.width, 100 - bx.left)}%` }} />;
+              })}
               {l.marks.filter((k) => k.t >= view.since && k.t < view.until).map((k) => (
                 <span key={k.t} class={`mk ${k.kind}`} style={{ left: `${pct(k.t)}%` }} />
               ))}
@@ -399,8 +490,16 @@ function Timeline(props: {
           <div class="tl-head" style={{ left: `calc(70px + (100% - 70px) * ${pct(props.head) / 100})` }}><span>{hms(props.head)}</span></div>
         )}
       </div>
-      <div class="ticks mono" aria-hidden="true">
-        {ticks.map((x) => <span key={x} style={{ left: `calc(70px + (100% - 70px) * ${pct(x) / 100})` }}>{hms(x).slice(0, 5)}</span>)}
+      {/* P2-26:刻度多时窄屏隔一个 / 隔三个显示;P2-11:点刻度那一条也能跳到那个时间 */}
+      <div class="ticks mono" aria-hidden="true" onClick={(e) => {
+        const box = (e.currentTarget as Element).getBoundingClientRect();
+        const inner = box.width - 70;
+        if (inner <= 0) return;
+        const f = Math.min(1, Math.max(0, (e.clientX - box.left - 70) / inner));
+        props.onPick(props.robot, view.since + f * w);
+      }}>
+        {ticks.map((x, i) => <span key={x} class={ticks.length > 12 ? `${i % 2 ? "m2" : ""}${i % 4 ? " m4" : ""}` : undefined}
+          style={{ left: `calc(70px + (100% - 70px) * ${pct(x) / 100})` }}>{hms(x).slice(0, 5)}</span>)}
       </div>
       <div class="lg muted small">
         <span><i class="k rec" />{t("recLegendRec")}</span>
@@ -409,5 +508,33 @@ function Timeline(props: {
         <span>{t("recZoomHint")}</span>
       </div>
     </div>
+  );
+}
+
+/** 日期框:固定「YYYY-MM-DD」;回车或离开时认,不合格式 / 晚于今天的不认、变红。 */
+export function DateBox(props: { value: string; max: string; onChange: (d: string) => void }) {
+  const [v, setV] = useState(props.value);
+  const [bad, setBad] = useState(false);
+  useEffect(() => { setV(props.value); setBad(false); }, [props.value]);
+  const shift = (days: number) => {
+    const [y, m, d] = props.value.split("-").map(Number);
+    const next = dateInput(new Date(y, m - 1, d + days).getTime());
+    if (next <= props.max) props.onChange(next);
+  };
+  const commit = () => {
+    const ok = /^\d{4}-\d{2}-\d{2}$/.test(v) && !Number.isNaN(new Date(`${v}T00:00`).getTime()) && v <= props.max;
+    setBad(!ok);
+    if (ok && v !== props.value) props.onChange(v);
+  };
+  return (
+    <span class="datebox">
+      <label>{t("recDate")}
+        <input type="text" class="mono" inputMode="numeric" maxLength={10} placeholder="2026-01-31" value={v} aria-invalid={bad || undefined}
+          data-date="1" onInput={(e) => { setV(e.currentTarget.value); setBad(false); }} onBlur={commit}
+          onKeyDown={(e) => { if (e.key === "Enter") commit(); }} />
+      </label>
+      <button type="button" class="btn sm daystep" aria-label={t("recPrevDay")} onClick={() => shift(-1)}>‹</button>
+      <button type="button" class="btn sm daystep" aria-label={t("recNextDay")} disabled={props.value >= props.max} onClick={() => shift(1)}>›</button>
+    </span>
   );
 }

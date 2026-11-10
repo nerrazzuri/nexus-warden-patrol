@@ -118,6 +118,7 @@ def test_接口_谁都能看能放_值班的人能标留着(站点):
     code, d = s.req("GET", f"/api/recordings?robot=A&since={T0 + 10_000}&until={T0 + 20_000}",
                     token=olga)
     assert code == 200 and d["segment_s"] == 60
+    assert d["robots"] == ["A"]          # P1-29:有录像的机器人(解绑了也列着)
     [r] = d["recordings"]
     host, port = s.api.httpd.server_address[:2]
     req = urllib.request.Request(f"http://{host}:{port}/api/recordings/{r['id']}/video",
@@ -322,3 +323,30 @@ def test_接口_录像按段取_206带范围_够不着416_不带照旧整份(站
     assert code == 416 and body == b"" and h["Content-Range"] == "bytes */200000"
     code, h, body = get("bytes=0-1,5-6")
     assert code == 200 and body == data, "一次要好几段:不理,整份发"
+
+
+def test_第3轮_duty_N4_按时间段导出_zip里每段一个文件_名字可读_只给管理员(站点):
+    import io
+    import zipfile
+    s = 站点
+    a = _存(s.rec, stamp="20261004T010000Z", n=3000)
+    b = _存(s.rec, stamp="20261004T010100Z", n=2000)
+    _存(s.rec, stamp="20261004T013000Z", n=1000)          # 时间段外
+    alice, gina = _登(s, "alice"), _登(s, "gina")
+    q = f"/api/recordings/clip?robot=A&camera=front&since={T0}&until={T0 + 10 * 60_000}"
+    assert s.req("GET", q, token=gina)[0] == 403
+    host, port = s.api.httpd.server_address[:2]
+    req = urllib.request.Request(f"http://{host}:{port}{q}",
+                                 headers={"Authorization": f"Bearer {alice}"})
+    with urllib.request.urlopen(req, timeout=10) as resp:
+        assert resp.headers["Content-Type"] == "application/zip"
+        assert "attachment" in resp.headers["Content-Disposition"]
+        z = zipfile.ZipFile(io.BytesIO(resp.read()))
+    names = z.namelist()
+    assert len(names) == 2 and all(n.startswith("A-front-2026-10-0") and n.endswith(".mp4")
+                                   for n in names)
+    assert sorted(len(z.read(n)) for n in names) == sorted([len(a), len(b)])
+    bad = f"/api/recordings/clip?robot=A&camera=front&since={T0}&until={T0 + 61 * 60_000}"
+    assert s.req("GET", bad, token=alice)[0] == 400
+    none = f"/api/recordings/clip?robot=B&camera=front&since={T0}&until={T0 + 60_000}"
+    assert s.req("GET", none, token=alice)[0] == 404

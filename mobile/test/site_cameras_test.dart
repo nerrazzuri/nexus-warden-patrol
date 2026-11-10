@@ -30,7 +30,7 @@ void main() {
     await _open(t, _api());
     expect(find.textContaining('gate-cam · 防区 front-yard'), findsOneWidget);
     expect(find.textContaining('最近一次报入侵'), findsOneWidget);
-    expect(find.textContaining('收不到此摄像头的入侵告警'), findsOneWidget);
+    expect(find.textContaining('收不到此摄像头的入侵报警'), findsOneWidget);
     expect(find.textContaining('画面移动也视为入侵'), findsOneWidget);
     await t.pumpWidget(Container());
   });
@@ -54,7 +54,9 @@ void main() {
     expect(find.text('此站点未启用摄像头'), findsOneWidget);
     await t.pumpWidget(Container());
     await _open(t, FakeApi('owner'));
-    expect(find.textContaining('camera-add'), findsOneWidget);
+    // 手机 App 测试 M35：不叫人去主机上跑命令
+    expect(find.textContaining('摄像头由工程师在站点主机上登记'), findsOneWidget);
+    expect(find.textContaining('camera-add'), findsNothing);
     await t.pumpWidget(Container());
   });
 

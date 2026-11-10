@@ -373,12 +373,12 @@ describe("平面图:有 plan 就画它(拉到预览的宽高坐标里),没有用
   });
 });
 
-describe("图例只列图上真有的东西", () => {
+describe("图例只列图上真有的东西(P2-15 起机器人、报警两项一直列)", () => {
   it("只有底图:地面、墙、没建到的", async () => {
     installScreenCTM();
     const { container: c } = mapPage(META, { units: [unit(robot("A", null))] });
     await ready(c);
-    expect(legend(c)).toEqual(["floor", "wall", "unknown"]);
+    expect(legend(c)).toEqual(["floor", "wall", "unknown", "robot", "alarm"]);   // P2-15:机器人、报警一直列
   });
   it("禁行区、区域、机器人、报警点都有:都列;没有限速区就不列限速区", async () => {
     installScreenCTM();
@@ -390,7 +390,7 @@ describe("图例只列图上真有的东西", () => {
     installScreenCTM();
     const { container: c } = mapPage({ ...META, zones: [{ ...NOGO, id: "s", kind: "slow" }] }, { units: [unit(robot("A", null))] });
     await ready(c);
-    expect(legend(c)).toEqual(["floor", "wall", "unknown", "slow"]);
+    expect(legend(c)).toEqual(["floor", "wall", "unknown", "slow", "robot", "alarm"]);
   });
   it("中文", async () => {
     installScreenCTM();
@@ -516,7 +516,7 @@ describe("防区页:在转过的图上点着画多边形,存下去的点 = 想�
       fireEvent.click(svg, { clientX: RECT.left + sx, clientY: RECT.top + sy });
       await tick();
     }
-    expect(r.container.textContent).toContain(`(${WANT.length} so far)`);
+    expect(r.container.textContent).toContain(`(${WANT.length} so far`);
     fireEvent.click(r.getByText("Finish zone"));
     await tick();
     fireEvent.input(r.container.ownerDocument.querySelector("dialog input")!, { target: { value: "Yard" } });
@@ -605,10 +605,10 @@ describe("看到过、机器人没走过 + 抹掉区:图例只在有的时候列
     installScreenCTM();
     const { container: c } = mapPage({ ...META, seen: true, zones: [NOGO, ERASE] }, { units: [unit(robot("A", null))] });
     await ready(c);
-    expect(legend(c)).toEqual(["floor", "wall", "seen", "unknown", "nogo", "erase"]);
+    expect(legend(c)).toEqual(["floor", "wall", "seen", "unknown", "nogo", "erase", "robot", "alarm"]);
     const e = c.querySelector("g.map-world polygon.erase-area")!;
     expect(e).not.toBeNull();
-    expect(e.querySelector("title")!.textContent).toBe("Erased region Junk: robots never go there");
+    expect(e.querySelector("title")!.textContent).toBe("Impassable area Junk: robots never go there");
     expect(c.querySelectorAll("g.map-world polygon.nogo-area").length).toBe(1);
   });
   it("中文图例", async () => {
@@ -617,7 +617,7 @@ describe("看到过、机器人没走过 + 抹掉区:图例只在有的时候列
     const { container: c } = mapPage({ ...META, seen: true, zones: [ERASE] }, { units: [unit(robot("A", null))] });
     await ready(c);
     const text = c.querySelector(".maplegend")!.textContent!;
-    for (const w of ["已扫描，机器人未到达", "已抹除（机器人不进入）"]) expect(text).toContain(w);
+    for (const w of ["已扫描，机器人未到达", "不可通行（机器人不进入）"]) expect(text).toContain(w);
   });
   it("刚打开就按有内容的范围放;「全图」也回到它", async () => {
     installScreenCTM();
@@ -672,8 +672,8 @@ describe("防区页:抹掉一块(导航区域 erase),点出来的地图点原样
       const s = site(meta, [OLD], 4);
       const r = render(<MapsZonesPage say={() => {}} />);
       await ready(r.container);
-      await waitFor(() => expect((r.getByText("Erase a region") as HTMLButtonElement).disabled).toBe(false));
-      fireEvent.click(r.getByText("Erase a region"));
+      await waitFor(() => expect((r.getByText("Mark impassable") as HTMLButtonElement).disabled).toBe(false));
+      fireEvent.click(r.getByText("Mark impassable"));
       await tick();
       const m = worldOf(r.container);
       const svg = r.container.querySelector("svg.map")!;
@@ -683,14 +683,14 @@ describe("防区页:抹掉一块(导航区域 erase),点出来的地图点原样
         fireEvent.click(svg, { clientX: RECT.left + sx, clientY: RECT.top + sy });
         await tick();
       }
-      expect(r.container.textContent).toContain(`(${WANT.length} so far)`);
+      expect(r.container.textContent).toContain(`(${WANT.length} so far`);
       expect(r.container.querySelector("polyline.draft-line.erase")).not.toBeNull();
       const before = s.previews();
-      fireEvent.click(r.getByText("Erase this region"));
+      fireEvent.click(r.getByText("Mark this area impassable"));
       await tick();
       const dialog = r.container.ownerDocument.querySelector("dialog")!;
       expect(dialog.textContent).toContain("Robots never enter it");
-      fireEvent.click([...dialog.querySelectorAll("button")].find((b) => b.textContent === "Erase this region")!);
+      fireEvent.click([...dialog.querySelectorAll("button")].find((b) => b.textContent === "Mark this area impassable")!);
       await waitFor(() => expect(s.posted.length).toBe(1));
       const got = s.posted[0];
       expect(got.base_revision).toBe(4);
@@ -704,7 +704,7 @@ describe("防区页:抹掉一块(导航区域 erase),点出来的地图点原样
         expect(Math.abs(y - WANT[i][1]), `y${i}`).toBeLessThan(1e-6);
       });
       await waitFor(() => expect(s.previews()).toBeGreaterThan(before));   // 重新取预览:平面图地址变了
-      await waitFor(() => expect(r.container.querySelector(".erased-list")!.textContent).toContain("Erased"));
+      await waitFor(() => expect(r.container.querySelector(".erased-list")!.textContent).toContain("Impassable"));
     });
   }
 

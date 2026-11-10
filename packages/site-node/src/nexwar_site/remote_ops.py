@@ -186,7 +186,7 @@ class CertRenewer:
 #: App、网页的错误记录:每条最多这么长;一次最多传这么多条;留多少天。
 CLIENT_ERR_CHARS = 2000
 CLIENT_ERR_BATCH = 200
-CLIENT_ERR_KEEP_MS = 14 * DAY_MS
+CLIENT_ERR_KEEP_MS = 90 * DAY_MS     # 用户 11-10:日志、记录默认都留 90 天
 _FIELDS = ("at_ms", "kind", "page", "message", "detail", "app_version", "platform")
 
 

@@ -20,6 +20,7 @@ let posted: { url: string; body: Record<string, unknown> }[];
 let pending: Record<string, unknown>[];
 let said: string[];
 let task: string | null;
+let openRevoked: string[] = [];
 
 beforeEach(() => {
   lang.value = "zh";
@@ -27,6 +28,7 @@ beforeEach(() => {
   said = [];
   pending = [];
   task = null;
+  openRevoked = [];
   robotNames.value = {};
   robots = [card({}), card({ robot_id: "B", online: false, battery_pct: null, patrols_today: 0,
     problems: [{ key: "B/stuck#1", kind: "stuck", first_ms: NOW - 60_000 }, { device: "front_camera", state: "offline" }],
@@ -45,7 +47,7 @@ beforeEach(() => {
       }
       return Promise.resolve(json({ robots }));
     }
-    if (url.startsWith("/api/robots/overview")) return Promise.resolve(json({ robots }));
+    if (url.startsWith("/api/robots/overview")) return Promise.resolve(json({ robots, open_revoked: openRevoked }));
     if (url === "/api/schedule") return Promise.resolve(json({ missions: ["east-loop", "west-loop"] }));
     if (url === "/api/robots/A") return Promise.resolve(json({ robot_id: "A", status: { online: true, task: task ? { task_id: task, kind: "patrol", state: "running" } : null } }));
     if (url === "/api/admin/bind") return Promise.resolve(json({ requests: pending }));
@@ -142,6 +144,7 @@ describe("机器人页", () => {
     fireEvent.click(cardOf(c, "A"));
     fireEvent.click(btn(c.querySelector(".robot-detail")!, "解绑"));
     expect(document.querySelector(".modal")!.textContent).toContain("恢复出厂");
+    expect(document.querySelector(".modal")!.textContent).toContain("所有机器人会断线");   // 第 4 轮:重启消息服务器
   });
 
   it("W42 等待批准加入:核对码、再输密码批准、能起名字;拒绝要确认", async () => {
@@ -189,12 +192,38 @@ describe("机器人页", () => {
   it("W42 添加:说明用手机扫贴纸,工程师的开通码收在按钮后面", async () => {
     const { container: c } = page();
     await waitFor(() => expect(cardOf(c, "A")).not.toBeNull());
-    fireEvent.click(btn(c, "添加四足机器人"));
+    fireEvent.click(btn(c, "添加机器人"));
     const m = document.querySelector(".modal")!;
     expect(m.textContent).toContain("扫描机器人贴纸");
     expect(m.querySelector("form")).toBeNull();
     fireEvent.click(btn(m, "工程师：用开通码手动添加"));
-    expect(document.querySelector(".modal form")!.textContent).toContain("provision --code");
+    const f = document.querySelector(".modal form")!;
+    expect(f.querySelector("details")!.textContent).toContain("provision --code");     // P1-24:命令行收在「高级」里
+    expect(f.querySelector("p.muted")!.textContent).not.toContain("sudo");
+    // P1-25:格式写在框下面,填错标红、不提交
+    const input = f.querySelector("input") as HTMLInputElement;
+    expect(f.textContent).toContain("最多 64 个");
+    fireEvent.input(input, { target: { value: "D1 07" } });
+    expect(f.querySelector("#robot-id-rule")!.className).toContain("error");
+    fireEvent.submit(f);
+    expect(posted.some((p) => p.url === "/api/admin/robots")).toBe(false);
+  });
+
+  it("P1-26 / P1-05:切自动派遣、重出开通码先确认,说清是什么意思", async () => {
+    const { container: c } = page();
+    await waitFor(() => expect(cardOf(c, "A")).not.toBeNull());
+    fireEvent.click(cardOf(c, "A"));
+    const d = c.querySelector(".robot-detail")!;
+    const toggle = btn(d, "改为仅限手动") ?? btn(d, "允许自动派遣");
+    fireEvent.click(toggle);
+    expect(posted.some((p) => p.url.endsWith("/service"))).toBe(false);
+    const m = document.querySelector(".modal")!;
+    expect(m.textContent).toMatch(/报警|排程/);
+    fireEvent.click(btn(m, toggle.textContent!.trim()));
+    await waitFor(() => expect(posted.some((p) => p.url === "/api/robots/A/service")).toBe(true));
+    fireEvent.click(btn(d, "重新生成开通码") ?? Array.from(d.querySelectorAll("button")).find((b) => b.textContent?.includes("开通码"))!);
+    expect(posted.some((p) => p.url.endsWith("/code"))).toBe(false);
+    expect(document.querySelector(".modal")!.textContent).toContain("旧码会立刻作废");
   });
 
   it("保安页用起的名字", () => {
@@ -221,7 +250,7 @@ describe("W71 Nav2 没起来", () => {
     robots = [card({ problems: [{ nav2: "Nav2 转接节点未连接" }] })];
     const { container: c } = page();
     await waitFor(() => expect(cardOf(c, "A")?.querySelector(".fleet-warn")).toBeTruthy());
-    expect(cardOf(c, "A").querySelector(".fleet-warn")!.textContent).toContain("Nav2 不可用(退回自带规划):Nav2 转接节点未连接");
+    expect(cardOf(c, "A").querySelector(".fleet-warn")!.textContent).toContain("Nav2 不可用（退回自带规划）：Nav2 转接节点未连接");
   });
 
   it("W72 详情:现在、巡逻统计、地图、设备、登记、手动原因", async () => {
@@ -234,7 +263,7 @@ describe("W71 Nav2 没起来", () => {
     fireEvent.click(cardOf(c, "A"));
     const d = c.querySelector(".robot-detail")!.textContent!;
     for (const s of ["现在", "最后联系", "已用 42%", "待传 3 个", "近 7 天", "12 趟", "1 次", "estate-1 v7", "与站点不一致",
-      "lidar", "camera:thermal", "故障", "先试跑", "Estate"]) expect(d).toContain(s);
+      "激光雷达", "摄像头 thermal", "故障", "先试跑", "Estate"]) expect(d).toContain(s);
   });
 
   it("W72 控制:选路线开始巡逻、回待命点、停止当前任务(现问站点在跑哪一趟)", async () => {
@@ -418,5 +447,121 @@ describe("W71 Nav2 没起来", () => {
     expect(btn(d, "停止当前任务")).toBeTruthy();
     expect(btn(d, "回待命点")).toBeUndefined();
     expect(btn(d, "恢复")).toBeUndefined();
+  });
+});
+
+describe("网页易用性第 1 轮 P1-23", () => {
+  it("还没连上过的:灰的「还没连上(等激活)」,不是红的离线", async () => {
+    robots = [card({ robot_id: "N", online: false, ever_seen: false, battery_pct: null }), card({ robot_id: "B", online: false, ever_seen: true })];
+    const { container: c } = page();
+    await waitFor(() => expect(c.querySelector('[data-robot="N"]')).not.toBeNull());
+    const n = c.querySelector('[data-robot="N"] .fleet-state')!;
+    expect(n.textContent).toContain("未激活");                         // 第 3 轮 admin N2:卡片上短一点,编号不被挤掉
+    expect(n.querySelector(".state")!.getAttribute("title")).toContain("还没连上");
+    expect(n.querySelector(".tone-error")).toBeNull();
+    expect(c.querySelector('[data-robot="B"] .fleet-state .tone-error')).not.toBeNull();
+  });
+});
+
+describe("网页易用性第 1 轮 P1-27/28", () => {
+  it("不能自己找位置的:自动定位灰掉、写原因;报了站没站着就写当前姿态", async () => {
+    lang.value = "zh";
+    robots[0] = card({ postures: ["stand", "lie"], task: null });
+    const u = { robot: { robot_id: "A", active: true, fresh: true, revoked: false, held: null,
+      status: { online: true, last_seen: 0, ready: { motion: true } }, capabilities: { tasks: {} } },
+      state: "idle", battery: 90, task: "" } as unknown as UnitInfo;
+    const { container: c } = render(<RobotsPage say={() => {}} now={NOW} role="guard" units={[u]} />);
+    await waitFor(() => expect(cardOf(c, "A")).not.toBeNull());
+    fireEvent.click(cardOf(c, "A"));
+    const d = c.querySelector(".robot-detail")!;
+    expect(btn(d, "自动定位").disabled).toBe(true);
+    expect(d.querySelector(".rd-why")!.textContent).toContain("不能自己找位置");
+    expect(d.querySelector("[data-posture-now]")!.textContent).toContain("现在站着");
+  });
+});
+
+describe("网页易用性第 1 轮 P1-30", () => {
+  it("经理:说明不提改名、解绑;没路线时让找管理员,不叫他去布置", async () => {
+    lang.value = "zh";
+    robots[0] = card({});
+    const { container: c } = render(<RobotsPage say={() => {}} now={NOW} role="owner" readOnly />);
+    await waitFor(() => expect(cardOf(c, "A")).not.toBeNull());
+    expect(c.querySelector(".lead")!.textContent).not.toContain("解绑");
+  });
+});
+
+
+describe("第 2 轮 P0-10 / N4:解绑说实话,后续步骤常驻", () => {
+  const ask = async (id: string) => {
+    const { container: c } = page();
+    await waitFor(() => expect(cardOf(c, id)).not.toBeNull());
+    fireEvent.click(cardOf(c, id));
+    fireEvent.click(btn(c.querySelector(".robot-detail")!, "解绑"));
+    return document.querySelector(".modal")!.textContent ?? "";
+  };
+  it("在线:现在就清;录像已经在站点上的留着", async () => {
+    const txt = await ask("A");
+    expect(txt).toContain("现在就清除");
+    expect(txt).toContain("站点上已有的录像不删");
+  });
+  it("离线:下次连上才清,证书现在作废", async () => {
+    const txt = await ask("B");
+    expect(txt).toContain("下次连上站点时");
+    expect(txt).not.toContain("现在就清除");
+  });
+  it("从没连上过:没有东西要清", async () => {
+    robots = [card({ robot_id: "T9", online: false, ever_seen: false })];
+    const txt = await ask("T9");
+    expect(txt).toContain("从没连上过");
+  });
+  it("消息服务没重启的:机器人页常驻一条,写要重启、才能重新添加", async () => {
+    openRevoked = ["T7"];
+    const { container: c } = page();
+    await waitFor(() => expect(c.querySelector("[data-open-revoked]")).not.toBeNull());
+    expect(c.querySelector("[data-open-revoked]")!.textContent).toContain("T7");
+    expect(c.querySelector("[data-open-revoked]")!.textContent).toContain("重启消息服务");
+  });
+});
+
+describe("第 2 轮 N2:回原点、回待命点做不成的先灰掉", () => {
+  it("没原点:回原点灰掉、写原因、给去定位页的链接;没待命点:回待命点灰掉、给去设置待命点的链接", async () => {
+    robots = [card({ home_set: false, standby_set: false })];
+    const { container: c } = page();
+    await waitFor(() => expect(cardOf(c, "A")).not.toBeNull());
+    fireEvent.click(cardOf(c, "A"));
+    const d = c.querySelector(".robot-detail")!;
+    await waitFor(() => expect(btn(d, "回原点")).toBeTruthy());
+    expect(btn(d, "回原点").disabled).toBe(true);
+    expect(btn(d, "回待命点").disabled).toBe(true);
+    expect(d.querySelector('a[href="#/admin/localization"]')).not.toBeNull();
+    expect(d.querySelector('a[href="#/admin/layout?tab=standby"]')).not.toBeNull();
+  });
+  it("都有:照常能点", async () => {
+    robots = [card({ home_set: true, standby_set: true })];
+    const { container: c } = page();
+    await waitFor(() => expect(cardOf(c, "A")).not.toBeNull());
+    fireEvent.click(cardOf(c, "A"));
+    const d = c.querySelector(".robot-detail")!;
+    await waitFor(() => expect(btn(d, "回原点")).toBeTruthy());
+    expect(btn(d, "回原点").disabled).toBe(false);
+    expect(btn(d, "回待命点").disabled).toBe(false);
+  });
+});
+
+describe("第 4 轮 admin N2", () => {
+  it("添加重复编号:错误写在弹窗里,不只靠 toast", async () => {
+    setFetch(((url: string, init?: RequestInit) => {
+      if (init?.method === "POST" && url === "/api/admin/robots") return Promise.resolve(json({ error: "A 已登记且未吊销;先 revoke" }, 409));
+      if (url.startsWith("/api/robots/overview")) return Promise.resolve(json({ robots, open_revoked: [] }));
+      return Promise.resolve(json({}, 404));
+    }) as typeof fetch);
+    const c = page();
+    fireEvent.click(await c.findByText("添加机器人"));
+    fireEvent.click(await c.findByText("工程师：用开通码手动添加"));
+    const dlg = c.container.ownerDocument.querySelector("dialog")!;
+    fireEvent.input(dlg.querySelector("input")!, { target: { value: "A" } });
+    fireEvent.submit(dlg.querySelector("form")!);
+    await waitFor(() => expect(dlg.querySelector("[data-form-error]")?.textContent).toContain("A"));
+    expect(said).toEqual([]);
   });
 });

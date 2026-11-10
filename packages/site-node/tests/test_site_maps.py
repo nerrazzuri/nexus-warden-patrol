@@ -292,3 +292,12 @@ def test_版本在建没有_按这一次命令的号认失败_历史失败不放
     assert cat.build_in_flight("estate", "1"), "重试还在跑:第三次要拒"
     失败("e2", "t2")
     assert not cat.build_in_flight("estate", "1"), "重试也失败:再放开"
+
+
+def test_网页P1_87_文件丢了_清单里标出来_不算有能用的图(cat, tmp_path):
+    src = _files(tmp_path / "src", **{"m.pgm": b"P5 map", "m.yaml": b"res: 0.05"})
+    cat.import_dir(src, map_id="m", version="1")
+    assert cat.list()[0]["missing"] == [] and cat.usable()
+    cat.file_path("m", "1", "m.pgm").unlink()
+    assert cat.list()[0]["missing"] == ["m.pgm"]
+    assert not cat.usable()

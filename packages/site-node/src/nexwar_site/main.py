@@ -192,6 +192,17 @@ def cmd_enroll_code(home: Path, robot_id: str, host: str | None, hours: float, *
         db.close()
 
 
+def cert_ever_claimed(home: Path, robot_id: str) -> bool:
+    """这只狗领过开通码(拿到过证书)没有(网页易用性第 2 轮 N5)。出过码却一直没领 → ``False``;
+    没出过码(命令行登记、证书包手工拷过去)不知道 → 按领过算。"""
+    db = SiteDB(home / "site.db")
+    try:
+        rows = db.query("SELECT used_ms FROM enroll_claims WHERE robot_id=?", (robot_id,))
+    finally:
+        db.close()
+    return not rows or rows[0]["used_ms"] is not None
+
+
 def cmd_enroll(home: Path, robot_id: str, days: int) -> Path:
     cfg = _load(home)
     ca = SiteCA(home / "ca")
@@ -1011,6 +1022,10 @@ class Server:
                                crl=ca / "crl.pem"),
             db=self.db, store=self.evidence, now_ms=wall_ms, maps=self.maps)
         self.intake.releases = self.releases
+        # 日志设计 第 5 条:机器人日志存到站点(按机器人分开,留 90 天、每台限总大小)
+        from nexwar_site.robot_logs import RobotLogs
+        self.robot_logs = RobotLogs(home / "robot-logs")
+        self.intake.robot_logs = self.robot_logs
         # W18:连续录像。不进备份(30 天两路录像要 TB 级;留存与盘的规矩见 recordings)。
         from nexwar_site.alert_sources import SITE as _SITE
         from nexwar_site.recordings import RecordingStore
@@ -1163,6 +1178,10 @@ class Server:
         self.health.alerts = self._loop_alerts            # 杂事线程里报:经事件循环
         self.api.health = self.health
         self.api.home = home                              # A4:狗领证书包
+        self.api.robot_logs = getattr(self, "robot_logs", None)
+        from nexwar_site.problem_reports import ProblemReports
+        self.problem_reports = ProblemReports(home / "problem-reports", now_ms=wall_ms)
+        self.api.problem_reports = self.problem_reports
         self.api.broker_restart = restart_broker          # W42:解绑后让 broker 重读吊销名单
         self.api.site_name = str(cfg.get("site_name") or cfg.get("site_id") or "")   # B1
         from nexwar_site.compat import CompatWatch
@@ -1304,6 +1323,12 @@ class Server:
         self._next_rec_prune = now + 600
         self.recordings.prune()
         self.privacy.prune()                           # W30:证据过了留存期删(连备份)
+        if self.api.audit is not None:
+            self.api.audit.prune()
+        if getattr(self, "robot_logs", None) is not None:
+            self.robot_logs.prune()
+        if getattr(self, "problem_reports", None) is not None:
+            self.problem_reports.prune()                     # 日志设计:用户看的操作记录留一年
         self._retry_old_incoming()
 
     def _retry_old_incoming(self) -> None:
@@ -1524,6 +1549,10 @@ def cmd_serve(home: Path, api_host: str, api_port: int, broker_url: str | None,
 # ------------------------------------------------------------ 入口
 
 
+#: 「详细日志 N 分钟」的到点文件(站点目录下;网页的接口写它)。
+DEBUG_FLAG = "debug-until.json"
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="nexwar_site", description=f"D1 Max 站点 {SITE_VERSION}")
     p.add_argument("--home", type=Path, default=DEFAULT_HOME, help="站点目录")
@@ -1687,6 +1716,8 @@ def build_parser() -> argparse.ArgumentParser:
     s = sub.add_parser("serve", help="跑站点:派遣器 + 站点 API")
     s.add_argument("--api-host", default="127.0.0.1")
     s.add_argument("--api-port", type=int, default=8443)
+    s.add_argument("--log-level", default="INFO", choices=("DEBUG", "INFO", "WARNING", "ERROR"),
+                   help="站点日志级别(日志设计 第 3 条);临时看细的用网页上的「详细日志 N 分钟」")
     s.add_argument("--broker", default=None, help="默认 mqtts://127.0.0.1:<init 时的端口>")
     s.add_argument("--rtcm-source", default=None,
                    help="RTK 改正数据(W09e、W46):serial:<设备>:<波特率>、tcp:<主机>:<端口>,"
@@ -1696,10 +1727,20 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    logging.basicConfig(level=logging.INFO,
-                        format="%(asctime)s %(levelname)s %(name)s %(message)s")
     args = build_parser().parse_args(argv)
     home: Path = args.home
+    from nexwar_contract import logsetup
+    if args.cmd == "serve":
+        # 日志设计 第 3 条:<站点目录>/logs/site.log(事件)+ access.log(成功的 GET),按天切、留 30 天、
+        # 限总大小;标准错误(systemd 日志)只有事件。级别 --log-level;网页「详细日志 N 分钟」照
+        # debug-until.json 临时调到 DEBUG。
+        logsetup.setup(name="site", log_dir=home / "logs", level=args.log_level)
+        from nexwar_contract.debuglog import DebugWatch
+        DebugWatch(home / DEBUG_FLAG).start()
+    else:
+        logsetup.setup(name="site", log_dir=None, level="INFO")
+    from nexwar_site.health import install_recent_log
+    install_recent_log()                 # 网页 P1-73:诊断包里带站点最近的日志
     try:
         if args.cmd != "keys-import":      # A3:导回密钥要写 /etc/nexwar_site,以 root 跑
             _check_owner(home)

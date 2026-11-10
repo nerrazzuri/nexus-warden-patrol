@@ -3,14 +3,18 @@ import { useEffect, useRef, useState } from "preact/hooks";
 import { t } from "./i18n";
 import { Icon } from "./icons";
 
-export function Modal({ label, onClose, wide, children }: { label: string; onClose: () => void; wide?: boolean; children: ComponentChildren }) {
+export function Modal({ label, onClose, wide, children, cls }: { label: string; onClose: () => void; wide?: boolean; children: ComponentChildren; cls?: string }) {
   const ref = useRef<HTMLDialogElement>(null);
   useEffect(() => {
     const d = ref.current;
     if (d && !d.open) d.showModal();
+    // 第 2 轮 setup N12:有要填的就把焦点放在第一个框(标了 autofocus 的优先),不停在右上角关闭按钮上
+    const f = d?.querySelector<HTMLElement>("[autofocus]")
+      ?? d?.querySelector<HTMLElement>(":scope > :not(.modal-head) :is(input:not([type=hidden]):not([type=checkbox]):not([type=radio]):not([disabled]), select:not([disabled]), textarea:not([disabled]))");
+    f?.focus();
   }, []);
   return (
-    <dialog ref={ref} class={wide ? "modal wide" : "modal"} aria-label={label}
+    <dialog ref={ref} class={`${wide ? "modal wide" : "modal"}${cls ? ` ${cls}` : ""}`} aria-label={label}
       onCancel={(e) => { e.preventDefault(); onClose(); }}>
       <div class="modal-head">
         <h2>{label}</h2>
@@ -21,10 +25,11 @@ export function Modal({ label, onClose, wide, children }: { label: string; onClo
   );
 }
 
-export function Confirm(props: { text: string; yes: string; danger?: boolean; onYes: () => void; onNo: () => void }) {
+export function Confirm(props: { text: string; yes: string; danger?: boolean; onYes: () => void; onNo: () => void; children?: ComponentChildren }) {
   return (
     <Modal label={props.yes} onClose={props.onNo}>
       <p class="confirm-text">{props.text}</p>
+      {props.children}
       <div class="row end">
         <button type="button" class="btn" onClick={props.onNo}>{t("cancel")}</button>
         <button type="button" class={props.danger ? "btn stop" : "btn primary"} onClick={props.onYes}>{props.yes}</button>

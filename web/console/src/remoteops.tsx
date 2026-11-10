@@ -3,11 +3,14 @@
 // - SiteOps:系统页 —— 重启站点、测试推送、备份与恢复、VPN 状态、运行指标曲线。
 // - SiteUpdate、AppPackages:软件升级页 —— 升级站点(公司签名的包)、App 安装包(站点分发给手机)。
 // 只给管理员、工程师(站点按 maintain 权限挡);要命的(重启整机、重启站点、恢复备份、升级站点)再输一次密码。
+import { pkgProblem } from "./pkgcheck";
 import { useEffect, useState } from "preact/hooks";
 import { useLoad } from "./admin";
-import { api, apiUpload, ApiError, enc } from "./api";
+import { api, apiUpload, ApiError, badPackage, enc } from "./api";
+import { siteStr } from "./sitetext";
 import { ConfirmPassword } from "./confirmpw";
-import { hms } from "./data";
+import { Confirm } from "./dialogs";
+import { hm, hms, md } from "./data";
 import { t, type Key } from "./i18n";
 
 type Say = (s: string) => void;
@@ -48,6 +51,7 @@ export function RobotOps({ robotId, tasks, say }: { robotId: string; tasks: stri
   const [hours, setHours] = useState(6);
   const [svc, setSvc] = useState("nexwar_agent");
   const [rebooting, setRebooting] = useState(false);
+  const [restarting, setRestarting] = useState(false);
   const [clean, setClean] = useState<{ items: Record<string, { bytes: number | null; detail?: string[] }> } | null>(null);
   const [busy, setBusy] = useState(false);
   const [sets, setSets] = useState<Settings | null>(null);
@@ -90,8 +94,12 @@ export function RobotOps({ robotId, tasks, say }: { robotId: string; tasks: stri
               {RESTARTABLE.map((u) => <option key={u} value={u}>{u}</option>)}
             </select>
             <button type="button" class="btn" disabled={busy}
-              onClick={() => void run(() => api("POST", `${base}/restart`, { unit: svc }), t("opsRestarted", { u: svc }))}>{t("opsRestart")}</button>
+              onClick={() => setRestarting(true)}>{t("opsRestart")}</button>
           </span>
+        )}
+        {restarting && (
+          <Confirm text={t("opsRestartAsk", { u: svc, id: robotId })} yes={t("opsRestart")} danger onNo={() => setRestarting(false)}
+            onYes={() => { setRestarting(false); void run(() => api("POST", `${base}/restart`, { unit: svc }), t("opsRestarted", { u: svc })); }} />
         )}
         {has("ops_reboot") && <button type="button" class="btn danger" disabled={busy} onClick={() => setRebooting(true)}>{t("opsReboot")}</button>}
         {has("ops_debug") && (
@@ -226,21 +234,38 @@ const METRICS: { key: string; label: Key }[] = [
   { key: "alerts_open_P1", label: "mtP1" },
 ];
 
-function Spark({ pts }: { pts: Metric[] }) {
+/** P2-23:带坐标轴的小趋势图:左边最高、最低值,底下起止日期。 */
+const metricText = (key: string, v: number) => (key === "site_disk_free" ? `${Math.round(v * 100)}%` : String(Math.round(v * 100) / 100));
+
+function Spark({ pts, fmt }: { pts: Metric[]; fmt: (v: number) => string }) {
   if (pts.length < 2) return <span class="muted small">—</span>;
   const xs = pts.map((p) => p.ts), ys = pts.map((p) => p.value);
   const x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys);
-  const w = 320, h = 48;
-  const d = pts.map((p, i) => `${i ? "L" : "M"}${(((p.ts - x0) / (x1 - x0 || 1)) * w).toFixed(1)},${(h - ((p.value - y0) / (y1 - y0 || 1)) * h).toFixed(1)}`).join(" ");
+  const L = 44, B = 16, w = 320, h = 48;
+  // 第 4 轮 config N6:数值一样只标一个刻度(线画在中间);同一天的数据,横轴标时刻
+  const flat = fmt(y0) === fmt(y1);
+  const yOf = (v: number) => (flat ? 4 + h / 2 : 4 + h - ((v - y0) / (y1 - y0 || 1)) * h);
+  const d = pts.map((p, i) => `${i ? "L" : "M"}${(L + ((p.ts - x0) / (x1 - x0 || 1)) * w).toFixed(1)},${yOf(p.value).toFixed(1)}`).join(" ");
+  const day = md(x0) === md(x1) ? hm : md;
   return (
-    <svg class="spark" viewBox={`0 0 ${w} ${h}`} width={w} height={h} role="img" aria-label={`${y0}–${y1}`}>
+    <svg class="spark" viewBox={`0 0 ${L + w + 4} ${h + B + 8}`} width={L + w + 4} height={h + B + 8} role="img"
+      aria-label={`${flat ? fmt(y0) : `${fmt(y0)}–${fmt(y1)}`}, ${day(x0)}–${day(x1)}`}>
+      <path d={`M${L},4V${h + 4}H${L + w}`} class="spark-axis" fill="none" />
+      {flat ? <text x={L - 4} y={4 + h / 2 + 4} class="spark-tick" text-anchor="end" data-y="flat">{fmt(y0)}</text> : <>
+        <text x={L - 4} y={10} class="spark-tick" text-anchor="end" data-y="max">{fmt(y1)}</text>
+        <text x={L - 4} y={h + 4} class="spark-tick" text-anchor="end" data-y="min">{fmt(y0)}</text>
+      </>}
+      <text x={L} y={h + B + 4} class="spark-tick" data-x="start">{day(x0)}</text>
+      <text x={L + w} y={h + B + 4} class="spark-tick" text-anchor="end" data-x="end">{day(x1)}</text>
       <path d={d} fill="none" stroke="currentColor" stroke-width="1.5" />
     </svg>
   );
 }
 
 export function SiteMetrics() {
-  const since = Date.now() - 30 * 86_400_000;
+  // 网页易用性第 1 轮 P0-19:起点只算一次。每次重画都用 Date.now() 算,网址就变,页面每秒重画一次就
+  // 每秒重新拉(实测 5 秒约 100 次)。
+  const [since] = useState(() => Math.floor((Date.now() - 30 * 86_400_000) / 60_000) * 60_000);
   const [m] = useLoad<{ metrics: Metric[] }>(`/api/metrics?since=${since}`);
   const rows = m?.metrics ?? [];
   return (
@@ -252,8 +277,8 @@ export function SiteMetrics() {
         return (
           <div key={key} class="sys-row metric" data-metric={key}>
             <span class="muted">{t(label)}</span>
-            <Spark pts={pts} />
-            <b>{last == null ? "—" : key === "site_disk_free" ? `${Math.round(last * 100)}%` : String(Math.round(last * 100) / 100)}</b>
+            <Spark pts={pts} fmt={(v) => metricText(key, v)} />
+            <b>{last == null ? "—" : metricText(key, last)}</b>
           </div>
         );
       })}
@@ -264,11 +289,22 @@ export function SiteMetrics() {
 interface Peer { name: string; kind: string; address: string; public: string; expires_ms?: number | null }
 interface WgPeer { public_key: string; latest_handshake: number }
 
+/** P1-06:站点做不做得到(装没装特权执行器、配没配推送);老站点没有这个接口 = 不知道,按钮照旧能点。 */
+interface Caps { priv?: boolean; push?: boolean; vpn?: boolean; debug_log?: boolean }
+
 export function SiteOps({ say }: { say: Say }) {
+  const [caps] = useLoad<Caps>("/api/system/caps");
+  const noPriv = caps?.priv === false;
+  const noPush = caps?.push === false;
   const [vpn] = useLoad<{ ready: boolean; peers: Peer[]; status?: { up?: boolean; peers?: WgPeer[]; error?: string } }>("/api/system/vpn");
   const [backup] = useLoad<{ last_ok_ms?: number | null; last_verify_ms?: number | null; dest?: string | null }>("/api/system/backups");
   const [ask, setAsk] = useState<"restart" | "restore" | null>(null);
   const [busy, setBusy] = useState(false);
+  // 日志设计 第 3 条:站点「详细日志 N 分钟」,到点自动恢复
+  const [dbg, setDbg] = useState<{ until_ms: number } | null>(null);
+  const reloadDbg = () => { api<{ until_ms: number }>("GET", "/api/system/debug-log").then(setDbg).catch(() => setDbg(null)); };
+  useEffect(() => { if (caps?.debug_log) reloadDbg(); }, [caps?.debug_log]);
+  const dbgOn = (dbg?.until_ms ?? 0) > 0;
   const hs = (pub: string) => vpn?.status?.peers?.find((p) => p.public_key === pub)?.latest_handshake ?? 0;
   return (
     <>
@@ -276,16 +312,30 @@ export function SiteOps({ say }: { say: Say }) {
         <h2>{t("sysOps")}</h2>
         <p class="muted small">{t("sysOpsHint")}</p>
         <div class="row-wrap">
-          <button type="button" class="btn" onClick={() => setAsk("restart")}>{t("sysRestart")}</button>
-          <button type="button" class="btn" disabled={busy} onClick={() => {
+          <button type="button" class="btn" disabled={noPriv} title={noPriv ? t("sysNoPriv") : undefined} onClick={() => setAsk("restart")}>{t("sysRestart")}</button>
+          <button type="button" class="btn" disabled={busy || noPush} title={noPush ? t("sysNoPush") : undefined} onClick={() => {
             setBusy(true);
             api<{ sent: number; errors: string[] }>("POST", "/api/system/push-test", {})
               .then((r) => say(r.errors.length ? t("failed", { why: r.errors.join(";") }) : t("sysPushSent", { n: r.sent })))
               .catch((e) => say(t("failed", { why: why(e) })))
               .finally(() => setBusy(false));
           }}>{t("sysPushTest")}</button>
-          <button type="button" class="btn danger" disabled={!backup?.dest} onClick={() => setAsk("restore")}>{t("sysRestore")}</button>
+          {/* P1-76:灰着要说原因 */}
+          <button type="button" class="btn danger" disabled={!backup?.dest} title={!backup?.dest ? t("sysRestoreNoDest") : undefined}
+            onClick={() => setAsk("restore")}>{t("sysRestore")}</button>
+          {!backup?.dest && <span class="muted small">{t("sysRestoreNoDest")}</span>}
+          {caps?.debug_log && (
+            <button type="button" class="btn" data-debug-log={dbgOn ? "on" : "off"} disabled={busy} onClick={() => {
+              setBusy(true);
+              api("POST", "/api/system/debug-log", { minutes: dbgOn ? 0 : 60 })
+                .then(() => { say(dbgOn ? t("opsDebugOff") : t("opsDebugOn")); reloadDbg(); })
+                .catch((e) => say(t("failed", { why: why(e) })))
+                .finally(() => setBusy(false));
+            }}>{dbgOn ? t("sysDebugStop", { t: hms(dbg!.until_ms) }) : t("sysDebug")}</button>
+          )}
         </div>
+        {noPriv && <p class="muted small" data-why="priv">{t("sysNoPriv")}</p>}
+        {noPush && <p class="muted small" data-why="push">{t("sysNoPush")}</p>}
       </section>
       <section class="panel sys-vpn">
         <h2>{t("sysNet")}</h2>
@@ -327,7 +377,10 @@ interface LastOp { last: null | { id: string; by: string; at_ms: number; result?
 
 export function SiteUpdate({ say }: { say: Say }) {
   const [last, reload] = useLoad<LastOp>("/api/system/update");
+  const [caps] = useLoad<Caps>("/api/system/caps");
+  const noPriv = caps?.priv === false;
   const [file, setFile] = useState<File | null>(null);
+  const [bad, setBad] = useState<string | null>(null);
   const [ask, setAsk] = useState(false);
   useEffect(() => {
     if (!last?.last || last.last.result) return;
@@ -347,14 +400,23 @@ export function SiteUpdate({ say }: { say: Say }) {
         </p>
       )}
       <div class="row-wrap">
-        <input type="file" accept=".tar.gz,application/gzip" aria-label={t("upSiteFile")}
-          onChange={(e) => setFile(e.currentTarget.files?.[0] ?? null)} />
-        <button type="button" class="btn primary" disabled={!file} onClick={() => setAsk(true)}>{t("upSiteGo")}</button>
+        {/* 第 2 轮 config N10:站点做不了升级就连选文件也灰着(原来能选、选完才发现按钮灰) */}
+        <input type="file" accept=".tar.gz,application/gzip" aria-label={t("upSiteFile")} disabled={noPriv}
+          onChange={(e) => { const f = e.currentTarget.files?.[0] ?? null; setFile(f); setBad(null); if (f) void pkgProblem(f).then(setBad); }} />
+        <button type="button" class="btn primary" disabled={!file || !!bad || noPriv} onClick={() => setAsk(true)}>{t("upSiteGo")}</button>
       </div>
+      {noPriv && <p class="muted small" data-why="priv">{t("sysNoPriv")}</p>}
+      {bad && <p class="error small" role="alert">{bad}</p>}
       {ask && file && (
         <ConfirmPassword title={t("upSiteConfirm")} onClose={() => setAsk(false)}
           onConfirm={async (pw) => {
-            await apiUpload("/api/system/update", file, { "X-Nexwar-Confirm": pw });
+            try {
+              await apiUpload("/api/system/update", file, { "X-Nexwar-Confirm": pw });
+            } catch (e) {
+              // 第 3 轮 P1-77:包不对不是密码问题,关掉密码框单独说
+              if (badPackage(e)) { setAsk(false); say(t("upBadPkg", { why: siteStr((e as ApiError).message) })); return; }
+              throw e;
+            }
             setAsk(false);
             say(t("upSiteStarted"));
             reload();
@@ -400,12 +462,12 @@ export function AppPackages({ say }: { say: Say }) {
       <p class="muted small">{t("appHint")}</p>
       {PLATFORMS.map((p) => (
         <div key={p} class="sys-row" data-platform={p}>
-          <span class="muted">{p}</span><b>{cur[p]?.available ? cur[p]?.version : t("appNone")}</b>
+          <span class="muted">{platformName(p)}</span><b>{cur[p]?.available ? cur[p]?.version : t("appNone")}</b>
         </div>
       ))}
       <div class="row-wrap">
         <select aria-label={t("appPlatform")} value={pf} onChange={(e) => setPf(e.currentTarget.value as typeof pf)}>
-          {PLATFORMS.map((p) => <option key={p} value={p}>{p}</option>)}
+          {PLATFORMS.map((p) => <option key={p} value={p}>{platformName(p)}</option>)}
         </select>
         <label class="field">{t("appFile")}<input type="file" onChange={(e) => setFile(e.currentTarget.files?.[0] ?? null)} /></label>
         <label class="field">{t("appManifest")}<input type="file" accept=".json,application/json" onChange={(e) => setMan(e.currentTarget.files?.[0] ?? null)} /></label>
@@ -413,4 +475,11 @@ export function AppPackages({ say }: { say: Say }) {
       </div>
     </section>
   );
+}
+
+/** 第 2 轮 config N10:平台名写成人认得的(Android、iOS),不是小写原样。 */
+export function platformName(p: string): string {
+  const k = p.toLowerCase();
+  return k === "android" ? "Android" : k === "ios" ? "iOS" : k === "web" ? "Web" : k === "windows" ? "Windows"
+    : k === "macos" ? "macOS" : k === "linux" ? "Linux" : p;
 }

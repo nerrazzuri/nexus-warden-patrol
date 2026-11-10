@@ -197,6 +197,22 @@ async def test_Nav2没就绪_这一段退回自己的规划_照样到(tmp_path):
     assert NavStatus.SUCCEED in t.status and not t.crashed
 
 
+async def test_Nav2没就绪_一米走廊退回自己的规划_也到得了_跟站点查路线一个口径(tmp_path):
+    """11-09:备用规划按外接圆 0.52 + 0.05 m 膨胀,1.14 m 以下的通道都判走不通;站点查路线按 0.40 m
+    (intercept_reach.REACH_RADIUS_M)。站点说走得通、Nav2 一没就绪机器人就跳点。"""
+    from nexwar_agent.bridges.nav2_nav import FALLBACK_RADIUS_M
+    from nexwar_contract.planning import costmap as cmod
+    assert FALLBACK_RADIUS_M + cmod.INFLATE_MARGIN_M == pytest.approx(0.40)
+    link = 假转接(ready=False)
+    link.reason = "还在启动"
+    t = _台(tmp_path, link, walls=_窄走廊(1.0))
+    assert t.nav.robot_radius_m == pytest.approx(FALLBACK_RADIUS_M)
+    await t.start(1.5, 4.0)
+    await t.nav.goto(Pose.from_xy_yaw(9.0, 4.0))
+    await t.跑(90.0)
+    assert NavStatus.SUCCEED in t.status and not t.crashed, t.status
+
+
 async def test_Nav2就绪_交目标_按它的速度走_它说到了就到(tmp_path):
     link = 假转接()
     t = _台(tmp_path, link)
@@ -229,6 +245,7 @@ async def test_Nav2放弃_FAILED写清楚_取消时告诉它(tmp_path):
                              "reason": "规划不出"})
     await t.跑(1.0)
     assert NavStatus.FAILED in t.status and "规划不出" in t.nav.fail_reason
+    assert t.nav.fail_code == "goal_unreachable"
     await t.跑(1.0)
     await t.nav.goto(Pose.from_xy_yaw(6.0, 4.0))
     await t.跑(0.5)
@@ -279,6 +296,7 @@ async def test_转接节点断了_走着的这一段FAILED(tmp_path):
     link.connected = False
     await t.跑(1.0)
     assert NavStatus.FAILED in t.status and "未连接" in t.nav.fail_reason
+    assert t.nav.fail_code == "nav_unavailable"
 
 
 async def test_目标号跨后端不重复_旧目标的晚到回执不认(tmp_path):
@@ -795,7 +813,7 @@ def test_复查三_转接服务端_报文按到达编号_记下每个目标第�
 
 def test_W48_协议4_目标可以带途经点():
     from nexwar_contract.navbridge import MAX_VIA, PROTO
-    assert PROTO == 4 and MAX_VIA >= 500, "路网最多 500 个点,途经点要装得下"
+    assert PROTO >= 4 and MAX_VIA >= 500, "路网最多 500 个点,途经点要装得下"
 
 
 async def test_W48_有路网_交给Nav2的目标带上路网上的途经点_没路网不带(tmp_path):
@@ -977,6 +995,7 @@ async def test_W70_Nav2失败而狗没挪窝_说规划不出_照旧再试一次(
                              "reason": "no valid path"})
     await t.跑(1.0)
     assert NavStatus.FAILED in t.status and "规划不出到目标的路线" in t.nav.fail_reason
+    assert t.nav.fail_code == "goal_unreachable"
     assert not t.nav.fail_final
 
 
@@ -1011,6 +1030,7 @@ async def test_W70_目标点上有箱子_Nav2失败_说目标点被占_不再重
                              "reason": "no valid path"})
     await t.跑(1.0)
     assert NavStatus.FAILED in t.status and "目标点被占" in t.nav.fail_reason
+    assert t.nav.fail_code == "goal_occupied"
     assert t.nav.fail_final
 
 
@@ -1147,6 +1167,7 @@ async def test_W71_机器人自己四周都被判成挡_Nav2失败_说机器人�
     await t.跑(1.0)
     assert NavStatus.FAILED in t.status and "被困" in t.nav.fail_reason, t.nav.fail_reason
     assert "目标点被占" not in t.nav.fail_reason and not t.nav.fail_final
+    assert t.nav.fail_code == "robot_trapped"
 
 
 async def test_W71_目标点贴着地图墙_交给Nav2之前挪到最近能站的点(tmp_path):
@@ -1336,3 +1357,284 @@ async def test_W74_自己的规划_走着换目标_从这儿重新规划过去(t
     await t.跑(40.0)
     assert NavStatus.SUCCEED in t.status and not t.crashed
     assert math.dist((t.r.x, t.r.y), (4.0, 6.0)) < 0.4, "到的是新目标"
+
+
+# ---------------------------------------- 导航 V1 第 1 节:D 守卫(SAFE / SLOW / STOP)
+
+
+def _按余量答(full_hits, soft_ok_at):
+    """假守卫:按全余量查 → 给 full_hits;
+    按软余量(多留的比全余量少)查、速度不超过 soft_ok_at → 放行。"""
+    from nexwar_agent.obstacles import Verdict
+    calls = []
+
+    def guard(vx, wz, g=None):
+        soft = g is not None and g.extra < 0.3 - 1e-9
+        calls.append((round(vx, 3), round(wz, 3), "soft" if soft else "full"))
+        if soft and abs(vx) <= soft_ok_at + 1e-9:
+            return Verdict(True)
+        return Verdict(False, "扫过区有挡", hits=full_hits)
+    return guard, calls
+
+
+async def test_V1_D守卫_挡的全是地图墙_降速少留余量走过去_不硬停(tmp_path):
+    """导航 V1 设计第 1 节(仿真 runs/nav-sweep-ab-1107 的 D 组):
+    全余量查到的挡全在地图墙边上(墙不会动)
+    → SLOW:余量跟速度挂钩、前进和转向同比例压到 0.3 再查,过得去就按 0.3 走,不停、不报被挡。"""
+    link = 假转接()
+    walls = [(0.1, 4.6, 11.9, 4.7)]                          # 机身左边 0.6 m 有一道地图墙
+    t = _台(tmp_path, link, walls=walls)
+    await t.start(1.5, 4.0)
+    await t.nav.goto(Pose.from_xy_yaw(9.0, 4.0))
+    guard, calls = _按余量答(full_hits=((1.0, 0.62),), soft_ok_at=0.3)   # 挡在墙上
+    t.nav._guard_check = guard
+    for _ in range(12):                                     # 再久机身转偏了,假挡点就离开墙了
+        link.now += 0.1
+        link.cmd = (link.now, 1, 0.6, 0.0, 0.3)
+        await t.一拍()
+    assert ("soft" in {c[2] for c in calls}), calls[-4:]
+    assert 0.2 < t.r.speed[0] <= 0.3 + 1e-6, t.r.speed
+    assert t.r.speed[1] == pytest.approx(0.3 * 0.3 / 0.6, abs=0.02), "转向同比例压,走的还是那条弯"
+    assert "nav_blocked" not in [k for k, _ in t.events]
+
+
+async def test_V1_D守卫_挡里有地图之外的东西_按全余量停(tmp_path):
+    link = 假转接()
+    t = _台(tmp_path, link, walls=[(0.1, 4.6, 11.9, 4.7)])
+    await t.start(1.5, 4.0)
+    await t.nav.goto(Pose.from_xy_yaw(9.0, 4.0))
+    # 一个在墙上、一个在路中间
+    guard, calls = _按余量答(full_hits=((1.0, 0.62), (1.0, 0.0)), soft_ok_at=0.6)
+    t.nav._guard_check = guard
+    for _ in range(10):
+        link.now += 0.1
+        link.cmd = (link.now, 1, 0.6, 0.0, 0.0)
+        await t.一拍()
+    assert abs(t.r.speed[0]) < 0.05, "人、箱子:停"
+    assert "soft" not in {c[2] for c in calls}, "有地图之外的挡就不试软余量"
+
+
+async def test_V1_D守卫_降到蠕行还过不去就停(tmp_path):
+    link = 假转接()
+    t = _台(tmp_path, link, walls=[(0.1, 4.6, 11.9, 4.7)])
+    await t.start(1.5, 4.0)
+    await t.nav.goto(Pose.from_xy_yaw(9.0, 4.0))
+    guard, calls = _按余量答(full_hits=((1.0, 0.62),), soft_ok_at=0.1)   # 0.2 也过不去
+    t.nav._guard_check = guard
+    for _ in range(10):
+        link.now += 0.1
+        link.cmd = (link.now, 1, 0.6, 0.0, 0.0)
+        await t.一拍()
+    assert abs(t.r.speed[0]) < 0.05
+    tried = {c[0] for c in calls if c[2] == "soft"}
+    assert {0.3, 0.2} <= tried, ("一档档压到蠕行都试过", tried)
+
+
+def test_V1_D守卫_软余量跟速度挂钩():
+    """蠕行 0.2 m/s 多留 0.05 m、0.6 m/s 以上多留到全余量 0.3 m;
+    原地转 0.15 rad/s 多留 0.05 rad、0.6 以上 0.2。"""
+    from nexwar_agent.bridges.nav2_nav import soft_guard
+    from nexwar_agent.obstacles import ObstacleGuard
+    full = ObstacleGuard()
+    assert soft_guard(full, 0.2, 0.0).extra == pytest.approx(0.05)
+    assert soft_guard(full, 0.4, 0.0).extra == pytest.approx(0.175)
+    assert soft_guard(full, 0.9, 0.0).extra == pytest.approx(full.extra)
+    assert soft_guard(full, 0.0, 0.15).extra_rad == pytest.approx(0.05)
+    assert soft_guard(full, 0.0, 1.0).extra_rad == pytest.approx(full.extra_rad)
+    g = soft_guard(full, 0.2, 0.0)
+    assert (g.body_len, g.body_wid, g.margin, g.latency, g.decel) == \
+        (full.body_len, full.body_wid, full.margin, full.latency, full.decel), "只改多留的,别的照旧"
+
+
+async def test_V1_看不见的只降速时_转向同比例压(tmp_path):
+    from nexwar_agent.bridges.nav2_nav import UNKNOWN_SLOW_MPS
+    from nexwar_agent.obstacles import Verdict
+    link = 假转接()
+    t = _台(tmp_path, link)
+    await t.start(1.5, 4.0)
+    await t.nav.goto(Pose.from_xy_yaw(9.0, 4.0))
+
+    def guard(vx, wz, g=None):
+        if abs(vx) > UNKNOWN_SLOW_MPS + 1e-9:
+            return Verdict(False, "看不见 3 处", hits=(), unknown=3)
+        return Verdict(True)
+    t.nav._guard_check = guard
+    for _ in range(15):
+        link.now += 0.1
+        link.cmd = (link.now, 1, 0.6, 0.0, 0.4)
+        await t.一拍()
+    assert t.r.speed[0] == pytest.approx(UNKNOWN_SLOW_MPS, abs=0.02)
+    assert t.r.speed[1] == pytest.approx(0.4 * UNKNOWN_SLOW_MPS / 0.6, abs=0.02)
+
+
+# ---------------------------------------- 导航 V1 第 1 节:遮挡限速(看不见的区域主动限速)
+
+
+async def _遮挡(t, n=25):
+    # 车后面从雷达看过去是看不见的;等 2.5 s,打开阴影之前那几帧(全看得见)过了记忆
+    t.per.shadow = True
+    for _ in range(n):
+        await t.一拍()
+    return t.nav._occ_cap(await t.nav._here(), 1)
+
+
+async def test_V1_遮挡限速_前方路边停着车_车后面的阴影可能冒出人_限速(tmp_path):
+    """仿真 ab_parking_delay300(D 组 s8):人从两车之间冲出,0.42 m/s 撞上。车后面那片看不见的、
+    跟机身走廊之间没有挡:按「反应 + 刹车」限速。"""
+    from nexwar_agent.bridges.nav2_nav import V_FAST
+    t = _台(tmp_path, 假转接())
+    await t.start(1.5, 4.0)
+    t.world.dyn["car"] = (2.6, 4.45, 3.2, 5.4)              # 机头前 0.6 m 起、走廊左边 0.1 m 外
+    v = await _遮挡(t)
+    # 人最早从车的远端(机头前约 1.2 m)冒出来:反应 0.5 s + 0.5 m/s² 刹车,停在它前面 0.1 m → 约 0.84
+    assert 0.75 < v < 0.9 < V_FAST, v
+    t.world.dyn["car"] = (2.1, 4.45, 2.5, 5.4)              # 车挨着机头:冒出点 0.5 m 内
+    assert await _遮挡(t) == pytest.approx(0.2 + 0.31, abs=0.12)
+
+
+async def test_V1_遮挡限速_空地不限(tmp_path):
+    from nexwar_agent.bridges.nav2_nav import V_FAST
+    t = _台(tmp_path, 假转接())
+    await t.start(1.5, 4.0)
+    assert await _遮挡(t) == pytest.approx(V_FAST)
+
+
+async def test_V1_遮挡限速_走廊两边是地图墙_墙外的阴影不算(tmp_path):
+    from nexwar_agent.bridges.nav2_nav import V_FAST
+    t = _台(tmp_path, 假转接(), walls=[(0.1, 3.2, 11.9, 3.3), (0.1, 4.7, 11.9, 4.8)])
+    await t.start(1.5, 4.0)
+    assert await _遮挡(t) == pytest.approx(V_FAST)
+
+
+async def test_V1_遮挡限速_E1按距离分档_关掉不限(tmp_path, monkeypatch):
+    from nexwar_agent.bridges import nav2_nav
+    t = _台(tmp_path, 假转接())
+    await t.start(1.5, 4.0)
+    t.world.dyn["car"] = (2.6, 4.45, 3.2, 5.4)
+    monkeypatch.setattr(nav2_nav, "OCC_ALGO", "E1")
+    assert await _遮挡(t) == pytest.approx(0.4)             # 阴影离机身 1–2 m
+    monkeypatch.setattr(nav2_nav, "OCC_ALGO", "")
+    assert t.nav._occ_cap(await t.nav._here(), 1) == pytest.approx(nav2_nav.V_FAST)
+
+
+async def test_V1_遮挡限速_算进看得清就快_也送给Nav2(tmp_path):
+    link = 假转接()
+    t = _台(tmp_path, link)
+    await t.start(1.5, 4.0)
+    t.world.dyn["car"] = (2.6, 4.45, 3.2, 5.4)
+    await t.nav.goto(Pose.from_xy_yaw(9.0, 4.0))
+    for _ in range(10):
+        link.now += 0.1
+        link.cmd = (link.now, 1, 0.9, 0.0, 0.0)
+        await t.一拍()
+    occ = t.nav._occ_cap(await t.nav._here(), 1)
+    assert t.nav._vis <= occ + 1e-6, (t.nav._vis, occ)
+
+
+async def test_V1_遮挡限速_锥形视野_机头两侧刚刚看见过的不算_不一直压蠕行(tmp_path):
+    """C40221 实测视野是锥形(机头两侧 1 m 内此刻看不见):往前走时那片刚刚看见过,不当阴影。"""
+    from nexwar_agent.bridges.nav2_nav import V_FAST
+    link = 假转接()
+    t = _台(tmp_path, link, cone=True)
+    await t.start(1.5, 4.0)
+    first = t.nav._occ_cap(await t.nav._here(), 1)
+    await t.nav.goto(Pose.from_xy_yaw(9.0, 4.0))
+    for _ in range(40):                                     # 往前走 2 m 左右
+        link.now += 0.1
+        link.cmd = (link.now, 1, 0.5, 0.0, 0.0)
+        await t.一拍()
+    later = t.nav._occ_cap(await t.nav._here(), 1)
+    assert later > 0.8 * V_FAST, (first, later)
+
+
+async def test_V1_遮挡限速_车停在侧面1米外_车后的阴影也要限速(tmp_path, monkeypatch):
+    """仿真 DE2 ab_parking_delay300 s33:人从横向 1.46 m 外的车后冒出,E2 只看 1.0 m 以内,
+    遮挡限速一次没起作用,撞上。看到 2.0 m 以后(DE3)200 趟 0 碰撞。
+    车摆在机头前 1.1–1.5 m、走廊边外 1.0–1.3 m:车后的阴影在视野锥里、离走廊边 1.0 m 以外。"""
+    from nexwar_agent.bridges import nav2_nav
+    t = _台(tmp_path, 假转接())
+    await t.start(1.5, 4.0)
+    t.world.dyn["car"] = (3.1, 5.29, 3.5, 5.6)
+    v = await _遮挡(t)
+    assert v < nav2_nav.V_FAST - 0.01, v
+    monkeypatch.setattr(nav2_nav, "OCC_E2_SIDE_M", 1.0)     # 老的 1.0 m:看不到,不限
+    assert t.nav._occ_cap(await t.nav._here(), 1) == pytest.approx(nav2_nav.V_FAST)
+
+
+# ---------------------------------------- 导航 V1 第 2 节:Route Validator V1.0(出发前查路线)
+
+
+class 会规划的转接(假转接):
+    """收到 ``plan`` 当场回 ``plan_result``:直线连到目标(朝向照目标),或者按 ``answer`` 回。"""
+
+    def __init__(self, answer=None):
+        super().__init__()
+        self.plan_results: dict = {}
+        self.answer = answer
+
+    def send(self, m):
+        if m["type"] == "plan":
+            if self.answer == "silent":
+                self.sent.append(m)
+                return True
+            gx, gy, gyaw = m["goal"]
+            sx, sy, _ = m.get("start") or [self.here[0], self.here[1], 0.0]
+            n = max(1, int(math.dist((sx, sy), (gx, gy)) / 0.025))
+            poses = [[sx + (gx - sx) * i / n, sy + (gy - sy) * i / n, gyaw] for i in range(n + 1)]
+            res = {"type": "plan_result", "req_id": m["req_id"], "ok": True, "poses": poses}
+            if self.answer is not None:
+                res = {"type": "plan_result", "req_id": m["req_id"], **self.answer}
+            self.plan_results[m["req_id"]] = res
+        return super().send(m)
+
+
+def _窄走廊(width):
+    """y = 4 为中心、x 0.5–11.5 的走廊,宽 ``width``(墙在地图里)。"""
+    h = width / 2
+    return [(0.1, 0.1, 11.9, 4.0 - h), (0.1, 4.0 + h, 11.9, 7.9)]
+
+
+async def test_V1_路线检查_走廊太窄_出发前拒绝_报最窄处_不发目标(tmp_path):
+    from nexwar_patrol.backends.base import NavRequestError
+    link = 会规划的转接()
+    t = _台(tmp_path, link, walls=_窄走廊(0.7))
+    await t.start(1.5, 4.0)
+    link.here = (1.5, 4.0)
+    with pytest.raises(NavRequestError) as e:
+        await t.nav.goto(Pose.from_xy_yaw(9.0, 4.0))
+    assert e.value.code == "route_too_narrow" and e.value.final, e.value
+    assert "离墙只剩" in str(e.value) and "0.78" in str(e.value)
+    assert link.kinds("plan") and not link.kinds("goal"), "拒了就不交给 Nav2"
+    assert t.nav._status is NavStatus.STANDBY and not t.nav._planning
+
+
+async def test_V1_路线检查_走廊够宽_查过再交给Nav2(tmp_path):
+    link = 会规划的转接()
+    t = _台(tmp_path, link, walls=_窄走廊(1.4))
+    await t.start(1.5, 4.0)
+    link.here = (1.5, 4.0)
+    await t.nav.goto(Pose.from_xy_yaw(9.0, 4.0))
+    [p] = link.kinds("plan")
+    assert p["goal"][:2] == pytest.approx([9.0, 4.0]) and link.kinds("goal")
+    assert p["start"][:2] == pytest.approx([1.5, 4.0], abs=0.05)
+
+
+async def test_V1_路线检查_转接节点不回_等一会儿照常交给Nav2(tmp_path, monkeypatch):
+    from nexwar_agent.bridges import nav2_nav
+    monkeypatch.setattr(nav2_nav, "PLAN_WAIT_S", 0.3)
+    link = 会规划的转接(answer="silent")
+    t = _台(tmp_path, link, walls=_窄走廊(0.85))
+    await t.start(1.5, 4.0)
+    link.here = (1.5, 4.0)
+    await t.nav.goto(Pose.from_xy_yaw(9.0, 4.0))
+    assert link.kinds("goal"), "检查做不成不挡路(Nav2 自己还有守卫、恢复)"
+
+
+async def test_V1_路线检查_规划器说没路_照常交给Nav2_由它报失败(tmp_path):
+    link = 会规划的转接(answer={"ok": False, "poses": [], "reason": "no_path"})
+    t = _台(tmp_path, link, walls=_窄走廊(1.4))
+    await t.start(1.5, 4.0)
+    link.here = (1.5, 4.0)
+    await t.nav.goto(Pose.from_xy_yaw(9.0, 4.0))
+    assert link.kinds("goal")
+

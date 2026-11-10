@@ -37,6 +37,13 @@ CODES: tuple[tuple[str, re.Pattern[str], str], ...] = tuple(
         ("manual_only", r"只许手动派", "This robot is set to manual dispatch only."),
         ("heading", r"头尾方向", "This robot's front/back direction isn't set correctly."),
         ("unreachable", r"无法到达|无法到达", "The robot can't reach one of these points."),
+        # 日志设计 第 7 条:剩下常见的几种也给码
+        ("busy", r"正在执行", "This robot is busy with another task."),
+        ("unregistered", r"没有登记过|登记已吊销或过期",
+         "This robot isn't registered on this site (or was removed)."),
+        ("bad_mission", r"不成形|个航点|字节",
+         "This route can't be sent as it is (too many points, "
+         "too large or malformed)."),
     ))
 
 
@@ -49,6 +56,10 @@ def reason_code(text: str) -> tuple[str, str] | None:
 
 
 def extra_for(text: str) -> dict[str, str]:
-    """给 409 回复补的字段(认不出就是空的)。"""
+    """给 409 回复补的字段:代号、英文说明、错误码(日志设计 第 7 条);认不出的只带
+    ``0x0213 dispatch.refused``。"""
+    from nexwar_contract import errcodes
     got = reason_code(text)
-    return {"reason_code": got[0], "reason_en": got[1]} if got else {}
+    if not got:
+        return errcodes.wire("dispatch.refused")
+    return {"reason_code": got[0], "reason_en": got[1]} | errcodes.wire(errcodes.REFUSAL[got[0]])

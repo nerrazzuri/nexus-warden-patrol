@@ -37,7 +37,7 @@ String weatherText(Map<String, dynamic> w) {
       ? tr(' (manual, ${m['by'] ?? ''})', '（手动，${m['by'] ?? ''}）')
       : '';
   final parts = <String>[tr('Weather: $enLabel$who', '天气：$label$who')];
-  if (w['patrols_paused'] == true) parts.add(tr('Scheduled patrols paused', '排程巡检暂停'));
+  if (w['patrols_paused'] == true) parts.add(tr('Scheduled patrols paused', '排程巡逻暂停'));
   final cap = w['speed_cap_mps'];
   if (cap is num) {
     parts.add(tr('Speed limit ${cap.toStringAsFixed(1)} m/s', '限速 ${cap.toStringAsFixed(1)} m/s'));
@@ -49,6 +49,17 @@ String weatherText(Map<String, dynamic> w) {
         : tr('No site coordinates set, manual only', '未设置站点坐标，仅可手动切换'));
   }
   return parts.join(' · ');
+}
+
+/// 值守页顶上那一行用的短说法（手机 App 测试 M16：长句在 1080 宽的屏上截成「Weather: Unk…」）：
+/// 天气名，有限速带上限速。图标已经说了这是天气。
+String weatherShort(Map<String, dynamic> w) {
+  final label = '${w['label'] ?? w['condition'] ?? '?'}';
+  final name = w['condition'] == 'unknown'
+      ? tr('Weather unknown', '天气未知')
+      : tr(_names[w['condition']] ?? label, label);
+  final cap = w['speed_cap_mps'];
+  return cap is num ? '$name · ${cap.toStringAsFixed(1)} m/s' : name;
 }
 
 IconData weatherIcon(String condition) => switch (condition) {
@@ -77,6 +88,7 @@ class SiteWeatherPage extends StatefulWidget {
 
   static Key setKey(String c) => Key('weather-$c');
   static Key hoursKey(int h) => Key('weather-hours-$h');
+  static const Key readOnlyKey = Key('weather-read-only');
   static const Key msgKey = Key('weather-msg');
 
   @override
@@ -169,6 +181,13 @@ class _SiteWeatherPageState extends State<SiteWeatherPage> {
               ])),
           nwGap24,
         ],
+        // 手机 App 测试 M15：只读账号改不了天气：不摆按钮，说一句
+        if (!(widget.api.session?.canArm ?? false))
+          NwNotice(
+              key: SiteWeatherPage.readOnlyKey,
+              text: tr('Read-only account: a guard, manager or administrator can switch the weather.',
+                  '只读账号：改天气要保安、经理或管理员操作。'))
+        else ...[
         NwSectionLabel(tr('Set manually', '手动切换')),
         nwGap8,
         NwCard(
@@ -191,12 +210,13 @@ class _SiteWeatherPageState extends State<SiteWeatherPage> {
           ]),
           nwGap16,
           Wrap(spacing: Nw.s8, runSpacing: Nw.s8, children: [
+            // 手机 App 测试 M40：现在是哪种天气，那个按钮实心带勾，别的描边
             for (final c in const ['normal', 'rain', 'storm'])
               NwButton(
                   buttonKey: SiteWeatherPage.setKey(c),
-                  variant: NwButtonVariant.secondary,
+                  variant: _w?['condition'] == c ? NwButtonVariant.primary : NwButtonVariant.outline,
                   onPressed: () => _set(c),
-                  icon: weatherIcon(c),
+                  icon: _w?['condition'] == c ? Icons.check_rounded : weatherIcon(c),
                   label: _names[c]!),
             NwButton(
                 buttonKey: SiteWeatherPage.setKey('auto'),
@@ -209,6 +229,7 @@ class _SiteWeatherPageState extends State<SiteWeatherPage> {
             Text(_msg, key: SiteWeatherPage.msgKey, style: NwText.bodyMedium.copyWith(color: nw.text)),
           ],
         ])),
+        ],
       ]),
     );
   }

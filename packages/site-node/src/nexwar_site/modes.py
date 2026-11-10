@@ -94,9 +94,10 @@ class ArmingDesk:
                         "until_ms": None}
         return r
 
-    def _governed(self, r: dict[str, Any]) -> bool:
+    def _governed(self, r: dict[str, Any], sch: Any = None) -> bool:
         """此刻按时间表(开着、不在手动期里)。"""
-        if self.schedule is None or not self.schedule.enabled():
+        sch = sch if sch is not None else self.schedule
+        if sch is None or not sch.enabled():
             return False
         mu = r.get("manual_until_ms")
         return mu is None or self._now() >= mu
@@ -159,16 +160,27 @@ class ArmingDesk:
         with self.db.snapshot():
             return self._view_locked()
 
-    def _view_locked(self) -> dict[str, Any]:
+    def preview(self, d: Any) -> dict[str, Any]:
+        """第 4 轮 config N1 / N2:照这份还没存的时间表,此刻会怎样(``{"before", "after"}``,
+        都是 :meth:`view` 的样子)。按站点的钟、逐个防区算;日程不对抛 ``ScheduleError``。只读。"""
+        if self.schedule is None:
+            raise RuntimeError("此站点未启用布防时间表")
+        sch = self.schedule.what_if(d)
+        extra = frozenset(x["zone"] for x in sch.slots if x["zone"])   # 草稿里新排的防区也列上
+        with self.db.snapshot():
+            return {"before": self._view_locked(extra=extra),
+                    "after": self._view_locked(sch, extra)}
+
+    def _view_locked(self, sch: Any = None, extra: frozenset[str] = frozenset()) -> dict[str, Any]:
         r = self._effective(self._raw())
         now = self._now()
-        governed = self._governed(r)
+        sch = sch if sch is not None else self.schedule
+        governed = self._governed(r, sch)
         home_off = set(self.home_disarmed())
         zones = []
-        for z in sorted(set(self.known_zones()) | set(r["visitor_zones"])):
+        for z in sorted(set(self.known_zones()) | set(r["visitor_zones"]) | extra):
             if governed:
-                assert self.schedule is not None
-                on = bool(self.schedule.scheduled(z, now))
+                on = bool(sch.scheduled(z, now))
             else:
                 on = not (r["mode"] != "armed" and (
                     z in home_off or (r["mode"] == "visitor" and z in r["visitor_zones"])))
@@ -176,23 +188,20 @@ class ArmingDesk:
         default_on: bool | None = None
         if zones and governed:
             # 没画进任何具名防区的地方按「全部防区一样」那份(W44 复查 R2):它也算一份
-            assert self.schedule is not None
-            default_on = self.schedule.scheduled("", now) is not False
+            default_on = sch.scheduled("", now) is not False
         if zones:
             parts = [z["armed"] for z in zones] + ([default_on] if default_on is not None else [])
             n = sum(parts)
             state = "armed" if n == len(parts) else "disarmed" if n == 0 else "partial"
         elif governed:
-            assert self.schedule is not None
-            state = "armed" if self.schedule.scheduled(None, now) else "disarmed"
+            state = "armed" if sch.scheduled(None, now) else "disarmed"
         else:
             state = "armed" if r["mode"] == "armed" else "partial"
         mode, label = r["mode"], LABEL[r["mode"]]
         if governed:
-            assert self.schedule is not None
             mode = "armed" if state == "armed" else "home"
             label = f"{LABEL['schedule']}:{STATE_LABEL[state]}"
-            nxt = self.schedule.next_boundary(now)
+            nxt = sch.next_boundary(now)
         else:
             nxt = r.get("manual_until_ms") or r["until_ms"]
         return {"mode": mode, "label": label, "prev_mode": r["prev_mode"],
@@ -201,6 +210,7 @@ class ArmingDesk:
                 "source": "schedule" if governed else "manual", "state": state,
                 "manual_until_ms": None if governed else r.get("manual_until_ms"),
                 "default_armed": default_on,
+                "timezone": self.schedule.tz_name() if self.schedule is not None else None,
                 "next_change_ms": nxt}
 
     # ------------------------------------------------------------ 改

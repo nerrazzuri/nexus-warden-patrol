@@ -1,0 +1,161 @@
+version: 1
+defaults:
+  timeout_s: 90
+  start_jitter_xy_m: 0.15
+  start_jitter_yaw_deg: 10
+  obstacle_jitter_xy_m: 0.15
+  goal_jitter_xy_m: 0.08
+  goal_jitter_yaw_deg: 5
+  map_size_m: [18, 18]
+  resolution_m: 0.05
+  boundary_wall_thickness_m: 0.20
+  safety_min_clearance_m: 0.08
+  # 起点/目标处车身离障碍(含边界墙)少于这个就拒绝生成:停不进去的目标不是导航失败。
+  min_pose_clearance_m: 0.20
+
+scenarios:
+  - id: straight_open
+    start: [-6.0, 0.0, 0.0]
+    goals: [[6.0, 0.0, 0.0]]
+    obstacles: []
+
+  - id: straight_return
+    start: [-6.0, 0.0, 0.0]
+    goals: [[6.0, 0.0, 0.0], [-6.0, 0.0, 3.14159]]
+    obstacles: []
+
+  - id: center_box_outbound_return
+    start: [-6.0, 0.0, 0.0]
+    goals: [[6.0, 0.0, 0.0], [-6.0, 0.0, 3.14159]]
+    obstacles:
+      - {x: 0.0, y: 0.0, sx: 1.0, sy: 1.0}
+
+  - id: center_box_offset
+    start: [-6.0, -1.5, 0.0]
+    goals: [[6.0, 1.5, 0.0], [-6.0, -1.5, 3.14159]]
+    obstacles:
+      - {x: 0.0, y: 0.0, sx: 1.2, sy: 1.2}
+
+  - id: ninety_left
+    start: [-5.5, -5.5, 0.0]
+    goals: [[-1.0, -5.5, 0.0], [-1.0, 4.5, 1.5708]]
+    obstacles:
+      - {x: 1.0, y: -1.0, sx: 0.8, sy: 5.0}
+
+  - id: ninety_right
+    start: [-5.5, 5.5, 0.0]
+    goals: [[-1.0, 5.5, 0.0], [-1.0, -4.5, -1.5708]]
+    obstacles:
+      - {x: 1.0, y: 1.0, sx: 0.8, sy: 5.0}
+
+  - id: narrow_gate_090
+    start: [-5.5, 0.0, 0.0]
+    goals: [[5.5, 0.0, 0.0]]
+    obstacles:
+      - {x: 0.0, y: 1.55, sx: 0.7, sy: 2.2}
+      - {x: 0.0, y: -1.55, sx: 0.7, sy: 2.2}
+
+  - id: narrow_gate_return
+    start: [-5.5, 0.0, 0.0]
+    goals: [[5.5, 0.0, 0.0], [-5.5, 0.0, 3.14159]]
+    obstacles:
+      - {x: 0.0, y: 1.50, sx: 0.7, sy: 2.1}
+      - {x: 0.0, y: -1.50, sx: 0.7, sy: 2.1}
+
+  # 墙边目标:停好后侧面离墙约 0.6 m(= 膨胀半径),抖动后最少约 0.37 m。
+  # 原来 x=5.8 时车身跟墙重叠,停不进去。
+  - id: wall_side_goal
+    start: [-5.5, -4.0, 0.0]
+    goals: [[4.8, 5.7, 1.5708]]
+    obstacles:
+      - {x: 5.9, y: 3.3, sx: 0.4, sy: 4.0}
+
+  # 原来 x=5.5 时侧面离墙 0.11 m,膨胀区里控制器停不到 0.2 m 容差内,超时。
+  - id: wall_side_turnaround
+    start: [-5.5, -4.0, 0.0]
+    goals: [[5.0, 4.8, 1.5708], [-5.5, -4.0, -3.14159]]
+    obstacles:
+      - {x: 6.1, y: 3.0, sx: 0.4, sy: 4.5}
+
+  - id: slalom_three
+    start: [-6.0, 0.0, 0.0]
+    goals: [[6.0, 0.0, 0.0]]
+    obstacles:
+      - {x: -2.0, y: 1.3, sx: 1.0, sy: 1.0}
+      - {x: 0.0, y: -1.3, sx: 1.0, sy: 1.0}
+      - {x: 2.0, y: 1.3, sx: 1.0, sy: 1.0}
+
+  - id: slalom_return
+    start: [-6.0, 0.0, 0.0]
+    goals: [[6.0, 0.0, 0.0], [-6.0, 0.0, 3.14159]]
+    obstacles:
+      - {x: -2.0, y: 1.3, sx: 1.0, sy: 1.0}
+      - {x: 0.0, y: -1.3, sx: 1.0, sy: 1.0}
+      - {x: 2.0, y: 1.3, sx: 1.0, sy: 1.0}
+
+  - id: u_shape_entry
+    start: [-6.0, 0.0, 0.0]
+    goals: [[1.0, 0.0, 0.0]]
+    obstacles:
+      - {x: 1.8, y: 2.0, sx: 4.0, sy: 0.5}
+      - {x: 1.8, y: -2.0, sx: 4.0, sy: 0.5}
+      - {x: 3.8, y: 0.0, sx: 0.5, sy: 4.5}
+
+  - id: u_shape_escape
+    start: [1.0, 0.0, 3.14159]
+    goals: [[-6.0, 0.0, 3.14159]]
+    obstacles:
+      - {x: 1.8, y: 2.0, sx: 4.0, sy: 0.5}
+      - {x: 1.8, y: -2.0, sx: 4.0, sy: 0.5}
+      - {x: 3.8, y: 0.0, sx: 0.5, sy: 4.5}
+
+  - id: corridor_long
+    start: [-6.5, 0.0, 0.0]
+    goals: [[6.5, 0.0, 0.0]]
+    obstacles:
+      - {x: 0.0, y: 2.0, sx: 13.0, sy: 0.35}
+      - {x: 0.0, y: -2.0, sx: 13.0, sy: 0.35}
+
+  - id: corridor_turn_return
+    start: [-6.0, 0.0, 0.0]
+    goals: [[4.5, 0.0, 0.0], [4.5, 3.8, 1.5708], [-6.0, 0.0, 3.14159]]
+    obstacles:
+      - {x: 0.0, y: 2.0, sx: 12.0, sy: 0.35}
+      - {x: 0.0, y: -2.0, sx: 12.0, sy: 0.35}
+      - {x: 6.0, y: 2.5, sx: 0.35, sy: 5.0}
+
+  - id: staggered_boxes
+    start: [-6.0, -4.5, 0.2]
+    goals: [[6.0, 4.5, 0.8]]
+    obstacles:
+      - {x: -3.0, y: -2.0, sx: 1.5, sy: 1.0}
+      - {x: 0.0, y: 0.0, sx: 1.5, sy: 1.0}
+      - {x: 3.0, y: 2.0, sx: 1.5, sy: 1.0}
+
+  - id: staggered_boxes_return
+    start: [-6.0, -4.5, 0.2]
+    goals: [[6.0, 4.5, 0.8], [-6.0, -4.5, -2.9]]
+    obstacles:
+      - {x: -3.0, y: -2.0, sx: 1.5, sy: 1.0}
+      - {x: 0.0, y: 0.0, sx: 1.5, sy: 1.0}
+      - {x: 3.0, y: 2.0, sx: 1.5, sy: 1.0}
+
+  - id: offset_gate_turn
+    start: [-6.0, -4.0, 0.0]
+    goals: [[0.0, -1.0, 0.4], [5.5, 4.5, 1.2]]
+    obstacles:
+      - {x: -0.2, y: 1.4, sx: 0.8, sy: 2.8}
+      - {x: 1.7, y: -1.5, sx: 0.8, sy: 2.8}
+
+  - id: reverse_pressure
+    start: [0.0, 0.0, 0.0]
+    goals: [[-5.5, 0.0, 3.14159], [5.5, 0.0, 0.0]]
+    obstacles:
+      - {x: -2.0, y: 1.2, sx: 0.8, sy: 1.0}
+      - {x: 2.0, y: -1.2, sx: 0.8, sy: 1.0}
+
+  - id: dynamic_crossing
+    start: [-6.0, 0.0, 0.0]
+    goals: [[6.0, 0.0, 0.0], [-6.0, 0.0, 3.14159]]
+    dynamic: true
+    obstacles: []

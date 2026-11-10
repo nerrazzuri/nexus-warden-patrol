@@ -24,11 +24,13 @@ import '../design/tokens.g.dart' show D1Motion;
 import '../l10n.dart';
 import '../model/alert.dart';
 import '../net/site_client.dart';
+import '../net/site_text.dart';
 import 'map_view.dart' show loadMapPicture;
 import 'nw/nw_button.dart';
 import 'nw/nw_p2_duty.dart';
 import 'nw/nw_theme.dart';
 import 'nw/nw_widgets.dart';
+import 'site_tabs.dart' show AccountsPage;
 import 'site_mapping.dart';
 import 'site_recordings.dart';
 import 'site_runs.dart';
@@ -47,6 +49,8 @@ class SiteAlertScenePage extends StatefulWidget {
   static const Key videoKey = Key('scene-video');
   static const Key deterKey = Key('scene-deter-here');
   static const Key ackKey = Key('scene-ack');
+  static const Key whyKey = Key('scene-why');
+  static const Key accountsKey = Key('scene-accounts');
   static const Key arriveKey = Key('scene-arrive');
   static const Key doneKey = Key('scene-done');
   static const Key doneGoKey = Key('scene-done-go');
@@ -170,6 +174,10 @@ class _SiteAlertScenePageState extends State<SiteAlertScenePage> {
 
   /// W74：看见人那一类要保安点过「已到场」才能处置完成 / 标误报（站点也这么拦）。
   bool get _needsArrive => _a.kind == 'dog_sees_person';
+
+  /// 手机 App 测试 M04：「误报」只给可能误报的（有人闯入、起火类，和几种传感器判断）；机器人故障、
+  /// 派单被拒、掉线、账号申请这些是真事，只给「已处理」，不然误报统计就乱了。
+  bool get _canBeFalse => alertCanBeFalse(_a);
   (String, int)? _arrivedHere;
   bool get _arrived => _a.context['arrived_ms'] != null || _arrivedHere != null;
   bool get _flashing => _a.level == 'P1' && _open && !_acked;
@@ -279,7 +287,7 @@ class _SiteAlertScenePageState extends State<SiteAlertScenePage> {
       if (got != null && got.key != key) {
         // 站点明说回的是另一条：不能当成这一条确认上了
         setState(() => _msg = tr("Not acknowledged: the site returned a different alarm (${got.key})",
-            '确认失败：站点返回的是另一条告警（${got.key}）'));
+            '确认失败：站点返回的是另一条报警（${got.key}）'));
         return;
       }
       // 站点回了确认之后的这一条：谁、几点以站点记的为准。老站点不回正文：先在本地记成「我、现在」，
@@ -346,18 +354,18 @@ class _SiteAlertScenePageState extends State<SiteAlertScenePage> {
     final ok = await showDialog<bool>(
         context: context,
         builder: (c) => AlertDialog(
-              content: Text(tr('Close this alarm as handled?', '处置完成，关闭此告警？')),
+              content: Text(tr('Close this alarm as handled?', '已处理，关闭此报警？')),
               actions: [
                 TextButton(onPressed: () => Navigator.pop(c, false), child: Text(tr('Cancel', '取消'))),
                 FilledButton(
                     key: SiteAlertScenePage.doneGoKey,
                     onPressed: () => Navigator.pop(c, true),
-                    child: Text(tr('Handled', '处置完成'))),
+                    child: Text(tr('Handled', '已处理'))),
               ],
             ));
     if (ok != true || !mounted || gen != _gen) return;
     try {
-      await widget.api.resolveAlert(key);
+      await widget.api.resolveAlert(key, verdict: 'handled');
       if (mounted && gen == _gen) Navigator.pop(context);
     } on SiteError catch (e) {
       if (mounted && gen == _gen) setState(() => _msg = tr('Not closed: $e', '关闭失败：$e'));
@@ -372,7 +380,7 @@ class _SiteAlertScenePageState extends State<SiteAlertScenePage> {
         builder: (c) => AlertDialog(
               content: Text(tr(
                   'Mark as a false alarm? The alarm is closed; any running deterrence is not stopped here.',
-                  '标为误报？此告警将关闭，正在进行的驱离不会在此停止。')),
+                  '标为误报？此报警将关闭，正在进行的驱离不会在此停止。')),
               actions: [
                 TextButton(onPressed: () => Navigator.pop(c, false), child: Text(tr('Cancel', '取消'))),
                 FilledButton(
@@ -385,7 +393,7 @@ class _SiteAlertScenePageState extends State<SiteAlertScenePage> {
     // 问的是那一条：这一页换了告警，这次的「是」不算数
     if (ok != true || !mounted || gen != _gen) return;
     try {
-      await widget.api.resolveAlert(key);
+      await widget.api.resolveAlert(key, verdict: 'false_alarm');
       if (mounted && gen == _gen) Navigator.pop(context);
     } on SiteError catch (e) {
       if (mounted && gen == _gen) setState(() => _msg = tr('Not closed: $e', '关闭失败：$e'));
@@ -599,12 +607,22 @@ class _SiteAlertScenePageState extends State<SiteAlertScenePage> {
   /// 四个大按钮。[oneRow]：横屏、平板四个一排；竖屏两排。
   Widget _actions({bool oneRow = false}) {
     final s = widget.api.session;
+    // 手机 App 测试 M38：账号申请不是报警：没有「误报 / 我来处理」，管理员直接去批，别人说谁批
+    if (_a.kind == 'account_request') {
+      if (s?.canManageAccounts ?? false) {
+        return _big(SiteAlertScenePage.accountsKey, tr('Review the application', '去审批'),
+            () => Navigator.push(context, MaterialPageRoute<void>(builder: (_) => AccountsPage(api: widget.api))),
+            primary: true);
+      }
+      return Text(tr('An administrator approves account applications. Nothing to do here.', '账号申请由管理员审批，这里不用处理。'),
+          key: SiteAlertScenePage.whyKey, style: NwText.bodyMedium.copyWith(color: Nw.of(context).textSecondary));
+    }
     final handle = s?.canHandleAlerts ?? false;
     final dispatch = s?.canDispatch ?? false;
     // 新鲜的才按它的状态摆；只剩旧快照时不猜警笛开没开，让人能再要求一次（没在驱离了站点会说）
     final d = _d;
     final sound = tr('Sound siren (level $sirenLevel)', '开警笛（第 $sirenLevel 级）');
-    Widget second;
+    Widget? second;
     if (d != null && dispatch) {
       second = switch (sirenState(d)) {
         SirenState.on => _big(SiteAlertScenePage.sirenKey, tr('Siren is on', '警笛已开'), null),
@@ -619,39 +637,50 @@ class _SiteAlertScenePageState extends State<SiteAlertScenePage> {
     } else if (_a.kind == 'dog_sees_person' && _isRobot && dispatch) {
       second = _big(SiteAlertScenePage.deterKey, tr('Deter here', '就地驱离'), _deterHere);
     } else {
-      second = _big(null, tr('Siren: not available', '警笛：暂不可用'), null);
+      second = null; // 手机 App 测试 M10：用不了的按钮收起来，不摆灰的占位
     }
     final first = _big(SiteAlertScenePage.ackKey, tr("I'll handle it", '我来处理'),
         handle && _open && !_acked ? _ack : null,
         primary: true);
     final canClose = !_needsArrive || _arrived;
-    final third = _big(SiteAlertScenePage.falseKey, tr('False alarm', '误报'),
-        handle && _open && canClose ? _falseAlarm : null);
-    // W74 看见人：第四个位置是「已到场」→「处置完成」（到场了才能关）；别的告警还是对讲占位
+    final third = _canBeFalse
+        ? _big(SiteAlertScenePage.falseKey, tr('False alarm', '误报'), handle && _open && canClose ? _falseAlarm : null)
+        : null;
+    // W74 看见人：「已到场」→「处置完成」（到场了才能关）；手机 App 测试 M04：别的告警都能直接「已处理」
     final Widget fourth;
-    if (!_needsArrive) {
-      fourth = _big(null, tr('Talk: not available', '对讲：暂不支持'), null);
-    } else if (!_arrived) {
+    if (_needsArrive && !_arrived) {
       fourth = _big(SiteAlertScenePage.arriveKey, tr("I'm on site", '已到场'), handle && _open ? _arrive : null);
     } else {
-      fourth = _big(SiteAlertScenePage.doneKey, tr('Handled', '处置完成'), handle && _open ? _done : null);
+      fourth = _big(SiteAlertScenePage.doneKey, tr('Handled', '已处理'), handle && _open ? _done : null);
     }
+    final all = <Widget>[first, ?second, ?third, fourth];
     const gap = SizedBox(width: Nw.s8);
-    if (oneRow) {
-      return Row(children: [
-        Expanded(child: first),
-        gap,
-        Expanded(child: second),
-        gap,
-        Expanded(child: third),
-        gap,
-        Expanded(child: fourth),
-      ]);
-    }
-    return Column(mainAxisSize: MainAxisSize.min, children: [
-      Row(children: [Expanded(child: first), gap, Expanded(child: second)]),
-      const SizedBox(height: Nw.s8),
-      Row(children: [Expanded(child: third), gap, Expanded(child: fourth)]),
+    Widget row(List<Widget> xs) => Row(children: [
+          for (var i = 0; i < xs.length; i++) ...[if (i > 0) gap, Expanded(child: xs[i])],
+        ]);
+    // 手机 App 测试 M15：按钮灰着要说为什么
+    final why = !handle
+        ? tr('Read-only account: you can watch this alarm; a guard or administrator handles it.',
+            '只读账号：能看，处理要保安或管理员。')
+        : !_open
+            ? tr('This alarm is closed.', '这条报警已经关了。')
+            : _needsArrive && !_arrived && _canBeFalse
+                ? tr('Tap "I\'m on site" first, then you can close it.', '先点「已到场」，才能关掉它。')
+                : '';
+    final buttons = (oneRow || all.length <= 2)
+        ? row(all)
+        : Column(mainAxisSize: MainAxisSize.min, children: [
+            row(all.sublist(0, 2)),
+            const SizedBox(height: Nw.s8),
+            row(all.sublist(2)),
+          ]);
+    if (why.isEmpty) return buttons;
+    return Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      buttons,
+      const SizedBox(height: Nw.s4),
+      Text(why,
+          key: SiteAlertScenePage.whyKey,
+          style: NwText.bodySmall.copyWith(color: Nw.of(context).textSecondary)),
     ]);
   }
 
@@ -662,7 +691,7 @@ class _SiteAlertScenePageState extends State<SiteAlertScenePage> {
     final rows = <(int, String)>[
       (
         _a.firstMs,
-        [alertTitle(_a.kind, _a.title), if (_a.detail.isNotEmpty && appLang.value == AppLang.zh) _a.detail]
+        [alertTitle(_a.kind, _a.title), if (_a.detail.isNotEmpty && appLang.value == AppLang.zh) siteText(_a.detail)]
             .join(' · ')
       ),
       if (_a.count > 1 && _a.lastMs > _a.firstMs)
@@ -746,8 +775,8 @@ class _SiteAlertScenePageState extends State<SiteAlertScenePage> {
     final small = NwText.bodySmall.copyWith(color: Nw.of(context).text);
     return [
       if (appLang.value != AppLang.zh && _a.detail.isNotEmpty)
-        // 站点给的原因是中文：英文界面也摆出来（比没有强），放在细节里
-        Text(_a.detail, style: small),
+        // 手机 App 测试 M05：站点给的原因按语言翻（以前是中文原文「原文:起飞前检查未通过…」）
+        Text(siteText(_a.detail), style: small),
       if (ctx['zone'] != null) Text(tr('Zone: ${ctx['zone']}', '防区：${ctx['zone']}'), style: small),
       if (point != null)
         Text(
@@ -769,7 +798,7 @@ class _SiteAlertScenePageState extends State<SiteAlertScenePage> {
       if (ctx.isEmpty)
         Text(
             tr('This alarm has no scene data (older site, or a site-level alarm)',
-                '此告警没有现场数据（旧版站点或站点级告警）'),
+                '此报警没有现场数据（旧版站点或站点级报警）'),
             style: small),
       if (_isRobot || taskId != null) ...[
         const SizedBox(height: Nw.s8),
@@ -822,7 +851,7 @@ class _SiteAlertScenePageState extends State<SiteAlertScenePage> {
                         padding: const EdgeInsets.only(bottom: Nw.s8),
                         child: Text(
                             tr('Go to the scene first: the alarm can only be closed after you tap "I\'m on site".',
-                                '先到现场：点「已到场」后才能关闭此告警。'),
+                                '先到现场：点「已到场」后才能关闭此报警。'),
                             style: NwText.bodySmall.copyWith(color: c.textSecondary))),
                   _actions(oneRow: oneRow),
                 ]))));
@@ -883,7 +912,7 @@ class _SiteAlertScenePageState extends State<SiteAlertScenePage> {
                   tooltip: MaterialLocalizations.of(context).closeButtonTooltip,
                   onPressed: () => Navigator.maybePop(context))
               : null,
-          title: Text(tr('Alarm', '告警')),
+          title: Text(tr('Alarm', '报警')),
           actions: [
             if (widget.api.session?.canDispatch ?? false)
               StopAllButton(api: widget.api, onResult: (m) => setState(() => _msg = m)),

@@ -95,7 +95,7 @@ void main() {
       final api = _Api('guard')..robotsOverride = _robotsOn('8');
       await _pump(t, SiteMapTab(api: api));
       expect(api.calls, containsAll(['mapPreview estate-1:8', 'mapPreviewPng estate-1:8']));
-      expect(find.text('estate-1:8'), findsOneWidget);
+      expect(find.text('estate-1 · 第 8 版'), findsOneWidget);
       expect(find.byKey(SiteMapTab.canvasKey), findsOneWidget);
       expect(find.byType(InteractiveViewer), findsOneWidget, reason: '能缩放');
       // 待命点、区域还是原来那几个 painter 画的
@@ -169,7 +169,7 @@ void main() {
       _size(t);
       final api = _Api('guard'); // 夹具里的狗报的是 estate-1:7，站点上只有 estate-1:8
       await _pump(t, SiteMapTab(api: api));
-      expect(find.text('estate-1:8'), findsOneWidget);
+      expect(find.text('estate-1 · 第 8 版'), findsOneWidget);
       expect(find.byKey(SiteMapTab.canvasKey), findsOneWidget);
       expect(find.byKey(SiteMapTab.markerKey('A')), findsNothing, reason: '坐标系不是这张图的');
       expect(find.textContaining('此地图上没有机器人'), findsOneWidget);

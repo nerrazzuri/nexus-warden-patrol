@@ -21,7 +21,7 @@ def _登(s, name):
     return s.req("POST", "/api/login", {"name": name, "password": PW})[1]["token"]
 
 
-def _报(s, title, kind="stuck", robot="A"):
+def _报(s, title, kind="fallen", robot="A"):
     return s.loop.call(lambda: _sync(s.desk.raise_alert, kind=kind, robot=robot, title=title))
 
 
@@ -88,3 +88,56 @@ def test_外审r1_清掉测试再重启_真告警不重用删掉的号(站点):
     desk = type(s.desk)(s.db, now_ms=s.desk._now)       # 站点重启:从库里读回
     real = desk.raise_alert(kind="intrusion", robot="A", title="真的入侵")
     assert real.key != t1.key, (real.key, t1.key)
+
+
+def test_第3轮_duty_N10_演练期间摄像头掉线_站点自己的毛病照样是真报警_不删_删前能列出来(站点):
+    s = 站点
+    alice = _登(s, "alice")
+    start = {"action": "start", "minutes": 30}
+    assert s.req("POST", "/api/alert-test", start, token=alice)[0] == 200
+    cam = _报(s, "摄像头掉线了", kind="cctv_offline", robot="cctv:gate")
+    site = _报(s, "存储快满了", kind="stuck", robot="site")
+    drill = _报(s, "演练:卡住了")
+    assert "test" not in cam.context and not cam.title.startswith("测试：")
+    assert "test" not in site.context
+    v = s.req("GET", "/api/alert-test", token=alice)[1]
+    assert [a["key"] for a in v["alarms"]] == [drill.key]
+    code, d = s.req("POST", "/api/alert-test", {"action": "end", "clear": True}, token=alice)
+    assert code == 200 and d["cleared"] == 1
+    assert {r["key"] for r in _开着的(s, alice)} >= {cam.key, site.key}
+
+
+def test_第4轮_duty_r3N10_演练只练人能触发的_机器人自己的毛病是真报警(站点):
+    """原来演练期间机器人自己报的(出发前检查不过、连续到不了点)也标「测试：」、结束时一起删了。"""
+    s = 站点
+    alice = _登(s, "alice")
+    assert s.req("POST", "/api/alert-test", {"action": "start", "minutes": 30},
+                 token=alice)[0] == 200
+    pre = _报(s, "出发前检查未通过", kind="preflight_refused")
+    stuck = _报(s, "连续 3 趟到不了点", kind="stuck", robot="B")
+    walk = _报(s, "防区 东区 有入侵,无机器人去", kind="intrusion_unanswered", robot="site")
+    seen = _报(s, "看见人", kind="dog_sees_person")
+    assert "test" not in pre.context and "test" not in stuck.context
+    assert walk.context.get("test") is True and seen.context.get("test") is True
+    code, d = s.req("POST", "/api/alert-test", {"action": "end", "clear": True}, token=alice)
+    assert code == 200 and d["cleared"] == 2
+    assert {r["key"] for r in _开着的(s, alice)} >= {pre.key, stuck.key}
+
+
+def test_第4轮_duty_r3N10_删之前能逐条留下(站点):
+    s = 站点
+    alice = _登(s, "alice")
+    assert s.req("POST", "/api/alert-test", {"action": "start", "minutes": 30},
+                 token=alice)[0] == 200
+    a = _报(s, "推倒了")
+    b = _报(s, "看见人", kind="dog_sees_person", robot="B")
+    v = s.req("GET", "/api/alert-test", token=alice)[1]
+    assert {x["kind"] for x in v["alarms"]} == {"fallen", "dog_sees_person"}
+    assert all(x["first_ms"] and x["robot"] for x in v["alarms"])
+    assert s.req("POST", "/api/alert-test", {"action": "end", "clear": True, "keep": "x"},
+                 token=alice)[0] == 400
+    code, d = s.req("POST", "/api/alert-test", {"action": "end", "clear": True, "keep": [b.key]},
+                    token=alice)
+    assert code == 200 and d["cleared"] == 1
+    left = {r["key"] for r in _开着的(s, alice)}
+    assert b.key in left and a.key not in left

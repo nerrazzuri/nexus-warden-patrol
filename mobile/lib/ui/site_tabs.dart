@@ -33,9 +33,30 @@ void _push(BuildContext context, Widget page) =>
     Navigator.push(context, MaterialPageRoute<void>(builder: (_) => page));
 
 /// 退出站点（回站点列表；外壳那一页退掉时站点列表注销会话、停推送）。每个角色的第 5 栏都有。
-Future<void> leaveSite(BuildContext context) => Navigator.of(context, rootNavigator: true).maybePop();
+///
+/// 手机 App 测试 M01：外壳不让返回键退出（按返回只回值守页、退到后台），所以这里先问一句，再直接退掉外壳那一页。
+Future<void> leaveSite(BuildContext context) async {
+  final ok = await showDialog<bool>(
+      context: context,
+      builder: (c) => AlertDialog(
+            title: Text(tr('Leave this site?', '退出这个站点？')),
+            content: Text(tr(
+                'You will be signed out. Background watch stops, so this phone will no longer get alarms from this site.',
+                '退出后会注销登录，后台值守也会停止，这台手机将收不到这个站点的报警。')),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(c, false), child: Text(tr('Cancel', '取消'))),
+              FilledButton(
+                  key: leaveConfirmKey,
+                  onPressed: () => Navigator.pop(c, true),
+                  child: Text(tr('Leave', '退出'))),
+            ],
+          ));
+  if (ok != true || !context.mounted) return;
+  Navigator.of(context, rootNavigator: true).pop();
+}
 
 const Key leaveSiteKey = Key('leave-site');
+const Key leaveConfirmKey = Key('leave-site-confirm');
 
 /// 一个入口：图标、名字、一句说明。
 class _Entry extends StatelessWidget {
@@ -274,7 +295,7 @@ class _AdminHomeTabState extends State<AdminHomeTab> {
       try {
         final n = (await widget.api.bindRequests()).length;
         if (n > 0) {
-          todo.add(('bind', tr('$n robot(s) waiting to join', '$n 台机器人待批准加入'), () => widget.switchTab(1)));
+          todo.add(('bind', tr(n == 1 ? '1 robot waiting to join' : '$n robots waiting to join', '$n 台机器人待批准加入'), () => widget.switchTab(1)));
         }
       } on SiteError {
         // 站点没开绑定
@@ -409,7 +430,7 @@ class _AdminHomeTabState extends State<AdminHomeTab> {
                       entryKey: AdminHomeTab.entryKey('accounts'),
                       icon: Icons.people_alt_rounded,
                       title: tr('Accounts', '账号'),
-                      hint: tr('Approve applications, change roles, disable accounts.', '审批申请、修改权限、停用账号。'),
+                      hint: tr('Approve account applications. Roles and disabling are on the web console.', '审批账号申请。改权限、停用账号请到网页值班台。'),
                       onTap: () => _push(context, AccountsPage(api: api))),
                 _Entry(
                     entryKey: AdminHomeTab.entryKey('health'),

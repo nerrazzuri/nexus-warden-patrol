@@ -34,7 +34,8 @@ a { color: var(--c-tertiary); }
 .boot { min-height: 100vh; }
 :focus-visible { outline: 2px solid var(--c-focus); outline-offset: 2px; }
 .skip { position: absolute; left: -9999px; }
-.skip:focus { left: 16px; top: 8px; z-index: 10; background: var(--c-surface); color: var(--c-text); padding: 4px 8px; border-radius: var(--r-r8); }
+/* 第 2 轮 admin N10:原来底色跟侧栏差不多,压在 logo 字上看不清 —— 用品牌色实底、加阴影、盖在最上面 */
+.skip:focus { left: 12px; top: 8px; z-index: 1000; background: var(--c-brand); color: var(--c-onBrand); padding: 8px 14px; border-radius: var(--r-r8); box-shadow: 0 2px 8px rgba(0,0,0,.35); font-weight: 600; text-decoration: none; }
 
 /* 优先级三重编码:形状 + 颜色 + 文字 */
 .shape { flex: none; }
@@ -70,7 +71,7 @@ a { color: var(--c-tertiary); }
 }
 .btn:hover:not(:disabled) { background: var(--c-surfaceVariant); }
 .btn.sm { height: 32px; padding: 0 12px; font-size: 13px; }
-.btn:disabled { color: var(--c-textMuted); background: transparent; border-color: var(--c-outline); cursor: default; opacity: 0.7; }
+.btn:disabled { color: var(--c-textMuted); background: transparent; border-color: var(--c-outline); cursor: default; }
 .btn.primary { background: var(--c-brand); color: var(--c-onBrand); border-color: var(--c-brand); font-weight: 700; }
 .btn.primary:hover:not(:disabled) { background: var(--c-brand); opacity: 0.9; }
 .btn.primary:disabled { background: var(--c-surfaceVariant); color: var(--c-textMuted); border-color: var(--c-surfaceVariant); opacity: 1; }
@@ -104,8 +105,9 @@ a { color: var(--c-tertiary); }
 .error { margin: 0; color: var(--c-error); }
 
 /* 外框(W60):左侧导航 + 右边(顶栏 + 页面)。窄屏(< 900)侧栏变成顶上一条,横着排。 */
-.console { min-height: 100vh; display: grid; grid-template-columns: 232px minmax(0, 1fr); }
-.workspace { min-width: 0; display: flex; flex-direction: column; }
+/* P1-08:页面比一屏长时侧栏底色要一直到底(侧栏本身是一屏高、粘在顶上):外框底色用侧栏色,右边盖回页面色 */
+.console { min-height: 100vh; display: grid; grid-template-columns: 232px minmax(0, 1fr); background: var(--c-sidebar); }
+.workspace { min-width: 0; display: flex; flex-direction: column; background: var(--c-bg); }
 .sidenav { background: var(--c-sidebar); border-right: 1px solid var(--c-outline); padding: 20px 12px; display: flex; flex-direction: column; gap: 20px;
   position: sticky; top: 0; height: 100vh; height: 100dvh; overflow-y: auto; }
 .sidenav-brand { display: flex; flex-direction: column; gap: 10px; padding: 0 8px; }
@@ -151,8 +153,9 @@ button.navgroup-title[aria-expanded="true"]::after { content: " ▾"; }
   .topbar > .btn.stop { padding: 0 12px; }
 }
 @media (max-width: 899px) {
-  .console { grid-template-columns: minmax(0, 1fr); }
-  .sidenav { position: static; height: auto; flex-direction: row; flex-wrap: wrap; align-items: center; gap: 8px 16px; padding: 10px 12px;
+  /* P1-81:一列时菜单那一行只占自己的高度(原来内容短时网格把菜单撑到半屏,平板上页头压着菜单) */
+  .console { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto 1fr; }
+  .sidenav { position: static; height: auto; overflow: visible; flex-direction: row; flex-wrap: wrap; align-items: center; gap: 8px 16px; padding: 10px 12px;
     border-right: 0; border-bottom: 1px solid var(--c-outline); }
   .sidenav-brand { flex-direction: row; align-items: center; padding: 0; }
   .sidenav-nav { flex-direction: row; flex-wrap: wrap; gap: 4px 12px; }
@@ -364,8 +367,29 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--c-primary); }
 
 /* 窄屏(B0:< 720 一列;前后两路仍并排) */
 @media (max-width: 720px) {
-  .topbar { position: static; }
-  .who { display: none; }
+  .usermenu > .who .who-initial { display: inline-flex; width: 28px; height: 28px; border-radius: 50%; align-items: center; justify-content: center;
+    background: var(--c-surfaceVariant); font-weight: 700; }
+  /* 第 2 轮 layout N10:手机页头压成两行并吸顶 —— 第一行页名 + Stop all,第二行布防、报警、时间、帮助、头像;
+     不写「值班」那行小字(日期留着:夜班跨零点要看清哪天) */
+  .topbar { position: sticky; top: 0; padding: 6px 12px; gap: 6px 8px; min-height: 0; }
+  .pagetitle-sec { display: none; }
+  .clock { font-size: 15px; }
+  /* P0-16:用户菜单不藏,只缩成首字圆头像;菜单贴屏幕右边、不出屏 */
+  .usermenu > .who .who-name { display: none; }
+  .topbar .usermenu > .who { padding: 0; width: 36px; }
+  .usermenu .menu { position: fixed; left: 12px; right: 12px; top: 64px; min-width: 0; max-height: calc(100dvh - 80px); overflow-y: auto; }
+  .console .sidenav .nav-toggle { display: inline-flex; margin-left: auto; }
+  .sidenav-nav:not(.open) { display: none; }
+  .sidenav-nav.open { width: 100%; flex-direction: column; }
+  .sidenav-nav.open .navgroup { flex-direction: column; align-items: stretch; }
+  .sidenav-nav.open a { min-height: 44px; }
+  /* 用户表、开户申请:一行一张卡,操作按钮折行,不出屏 */
+  .users-table { display: block; overflow: visible; }
+  .users-table thead { display: none; }
+  .users-table tbody, .users-table tr, .users-table td { display: block; }
+  .users-table tr { border-top: 1px solid var(--c-outline); padding: 8px 0; }
+  .users-table td, .users-table th:first-child, .users-table td:first-child { border: 0; padding: 4px 12px; }
+  .users-table td.actions { display: flex; }
   .page { padding: 12px; }
   .alarm-title { font-size: 18px; }
   .queue-body { max-height: 40vh; }
@@ -380,6 +404,10 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--c-primary); }
 @media (min-width: 721px) {
   .console.fill { height: 100vh; height: 100dvh; }
   .console.fill > .page { min-height: 0; overflow: auto; }
+  /* 第 2 轮 P1-08 / N15:主区包了一层 .workspace 以后上面那条对不上了,矮屏(1280×720)内容把整页撑高、
+     侧栏底色只到第一屏。工作区限在一屏高,页面自己滚 */
+  .console.fill > .workspace { min-height: 0; height: 100vh; height: 100dvh; }
+  .console.fill > .workspace > .page { min-height: 0; overflow: auto; }
   .console.fill .mappage { flex-wrap: nowrap; min-height: 0; }
   .console.fill .mapwrap { min-height: 200px; }
   .console.fill .sidebar { overflow-y: auto; }
@@ -524,6 +552,8 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--c-primary); }
 .usermenu { position: relative; }
 .usermenu > .who { height: 36px; padding: 0 10px; border: 1px solid transparent; border-radius: var(--r-r8); background: transparent; cursor: pointer; color: var(--c-text); }
 .usermenu > .who:hover { background: var(--c-surfaceVariant); }
+.who-initial { display: none; }
+.sidenav .nav-toggle { display: none; align-items: center; gap: 6px; }
 .menu { position: absolute; right: 0; top: calc(100% + 6px); z-index: 20; min-width: 280px; padding: 8px; display: flex; flex-direction: column; gap: 4px;
   background: var(--c-surface); border: 1px solid var(--c-outline); border-radius: var(--r-r12); box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3); }
 .menu-head { display: flex; flex-direction: column; gap: 2px; padding: 6px 8px 10px; border-bottom: 1px solid var(--c-outline); }
@@ -542,8 +572,10 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--c-primary); }
 
 /* W44 画面位:前摄像头大、后摄像头小窗(点了互换)、顶上状态栏;断流停在最后一帧、变灰、写已断几秒 */
 .well.lostfeed .frozen { display: block; opacity: 1; filter: grayscale(1) brightness(0.55); }
-.well .lost { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); max-width: 90%; padding: 8px 14px; border-radius: var(--r-r8);
-  background: var(--c-scrim); color: var(--c-onScrim); font-size: 15px; font-weight: 600; text-align: center; }
+/* 网页易用性 P1-11:断流提示是角落里的一行,不盖住画面中间 */
+.well .lost { position: absolute; left: 8px; top: 34px; max-width: calc(100% - 16px); padding: 3px 10px; border-radius: var(--r-r8);
+  background: var(--c-scrim); color: var(--c-onScrim); font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.slot-main .well .lost { top: 56px; }
 .well.main, .well.pip { aspect-ratio: auto; width: 100%; height: 100%; }
 /* 画面位、实况卡片顶上有状态栏:画面框自带的「A 前 时间」不显示;小窗里什么字都不写,断流只变灰 */
 .well.main .osd.top, .well.main .osd.bottom .osd-btn, .well.pip .osd, .well.pip .lost { display: none; }
@@ -561,6 +593,8 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--c-primary); }
 .slot-name { font-size: 20px; font-weight: 700; }
 .slot-mid { display: flex; gap: 16px; margin: 0 auto; padding: 3px 14px; border-radius: 999px; background: rgba(0, 0, 0, 0.45); font-size: 15px; }
 .slot-mid:empty { display: none; }
+/* P1-10:画面自己的「● 实时」抬到底栏(任务 · 电量 · 定位)上面,不跟电量叠在一起 */
+.slot-main .well.main .osd.bottom { bottom: 40px; }
 .slot-foot { position: absolute; left: 0; right: 0; bottom: 0; display: flex; flex-wrap: wrap; gap: 4px 14px; padding: 8px 14px;
   background: var(--c-scrim); color: var(--c-onScrim); font-size: 14px; font-weight: 500; pointer-events: none; }
 .slot-pip ~ .slot-foot { right: calc(28% + 24px); border-top-right-radius: var(--r-r8); }
@@ -603,6 +637,8 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--c-primary); }
 .allclear { margin: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 16px; padding: 4px 2px; font-size: 14px; color: var(--c-textSecondary); }
 .allclear b { color: var(--c-text); font-weight: 600; }
 .allclear .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--c-success); margin-right: -8px; }
+.allclear.unknown .dot { background: var(--c-warning); }
+.allclear.unknown b { color: var(--c-warning); }
 .alarmlist { list-style: none; margin: 0; padding: 0; overflow: auto; }
 .alarmlist li { display: flex; align-items: flex-start; gap: 10px; padding: 12px 16px; border-bottom: 1px solid var(--c-outline); }
 .alarmlist li.p1 { background: var(--c-errorSoft); }
@@ -620,9 +656,11 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--c-primary); }
 .duty-map { position: relative; flex: 1; min-height: 0; display: flex; }
 .duty-map .mapbox { flex: 1; }
 @media (max-width: 1100px) {
-  .duty { grid-template-columns: minmax(0, 1fr); grid-template-rows: none; grid-template-areas: "sit" "alarms" "map" "video" "robots"; }
+  .duty { grid-template-columns: minmax(0, 1fr); grid-template-rows: none; grid-template-areas: "sit" "alarms" "map" "robots" "video"; }
   .duty-mapcard { min-height: 360px; }
-  .duty-slots { grid-template-columns: 1fr; }
+  .duty-slots { grid-template-columns: 1fr; flex: none; }
+  /* P0-17:一列时画面位里面全是绝对定位,没给高就是 0 —— 按画面比例撑开 */
+  .duty-slots > .slot { aspect-ratio: 16 / 9; min-height: 180px; }
 }
 
 /* W44 实况页:2×2,每张卡片前后两路左右并排;超过 4 台往下翻(卡片高 = 顶栏以下的一半) */
@@ -689,7 +727,7 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--c-primary); }
 .track { position: relative; height: 14px; border-radius: 3px; background: var(--c-surfaceVariant); cursor: pointer; }
 .seg-rec { position: absolute; top: 0; bottom: 0; border-radius: 2px; background: var(--c-textMuted); }
 .lane.on .seg-rec { background: var(--c-tertiary); }
-.mk { position: absolute; top: -4px; width: 3px; height: 22px; border-radius: 2px; transform: translateX(-1px); }
+.mk { position: absolute; top: -4px; width: 3px; max-width: 3px; height: 22px; border-radius: 2px; transform: translateX(-1px); }
 .mk.alarm { background: var(--c-error); }
 .mk.help { background: var(--c-warning); }
 .tl-head { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--c-text); pointer-events: none; }
@@ -732,7 +770,15 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--c-primary); }
 .it .what p { margin: 0; color: var(--c-textSecondary); font-size: 13px; }
 .it .res { font-size: 14px; }
 .it .res small { display: block; margin-top: 2px; color: var(--c-textMuted); font-size: 12px; }
-@media (max-width: 900px) { .it { grid-template-columns: 100px 1fr; } .it .shot { width: 100px; height: 56px; } }
+/* 第 2 轮 layout N3:标题按钮用页面的链接样式(原来是浏览器原生灰按钮);≤900 宽缩略图和时间一行,标题、说明、结果占满整行 */
+.linkish { background: none; border: 0; padding: 0; margin: 0; font: inherit; color: inherit; text-align: left; cursor: pointer; }
+.linkish:hover { text-decoration: underline; }
+.linkish:focus-visible { outline: 2px solid var(--c-focus); outline-offset: 2px; border-radius: 2px; }
+@media (max-width: 900px) {
+  .it { grid-template-columns: 100px 1fr; gap: 8px 12px; }
+  .it .shot { width: 100px; height: 56px; }
+  .it > .what, .it > .res, .it > div:last-child { grid-column: 1 / -1; }
+}
 
 /* W44 第二期:「管理」左边一列(三组,高级默认收着) */
 .adminwrap { display: block; }
@@ -860,7 +906,7 @@ p.warn { color: var(--c-text); background: var(--c-warningSoft); padding: 8px 12
 .rd-inline input:focus-visible { outline: 0; border: 2px solid var(--c-focus); padding: 0 11px; }
 .rd-inline .btn { height: 36px; }
 .rd-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
-.rd-actions .rd-danger { margin-left: auto; color: var(--c-error); border-color: var(--c-error); background: transparent; }
+.rd-actions .rd-danger { color: var(--c-error); border-color: var(--c-error); background: transparent; }
 .rd-actions .rd-danger:hover:not(:disabled) { background: var(--c-errorSoft); }
 .rd-h { margin: 0; font-size: 15px; line-height: 20px; font-weight: 600; }
 .rd-group { display: flex; flex-direction: column; gap: 6px; }
@@ -960,7 +1006,8 @@ p.warn { color: var(--c-text); background: var(--c-warningSoft); padding: 8px 12
 .ly-main { min-width: 0; }
 .ly-tab { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 16px; align-items: start; }
 .ly-side { display: flex; flex-direction: column; gap: 10px; }
-.layout-map { min-height: 420px; height: 62vh; }
+/* 第 2 轮 layout N2:外框原来定死 62vh,里面的地图(100vh-280)+ 图例比它高,一列时侧面板压在图例和「整张图」上 —— 外框跟着内容走 */
+.layout-map { min-height: 420px; height: auto; }
 .layout-map .dim { opacity: .35; pointer-events: none; }
 .layout-map:not(.tab-nogo) .nogo-area, .layout-map:not(.tab-nogo) .slow-area, .layout-map:not(.tab-nogo) .ignore-area { opacity: .35; }
 .ly-route { fill: none; stroke: var(--c-info); stroke-width: 2; vector-effect: non-scaling-stroke; }
@@ -982,6 +1029,8 @@ p.warn { color: var(--c-text); background: var(--c-warningSoft); padding: 8px 12
 @media (max-width: 1000px) { .routes-embed .routesplit { grid-template-columns: minmax(0, 1fr); } }
 .standby-pt .pm-body, .standby-pt circle:first-of-type { fill: var(--c-surface); }
 .standby-pt.default .pm-body { fill: var(--c-success); }
+.standby-pt.carried { opacity: 0.5; pointer-events: none; }
+.standby-pt.carried .pm-body { stroke-dasharray: 3 2; }
 .ly-charger circle { fill: var(--c-warning); stroke: var(--c-surface); stroke-width: 2; }
 /* W48 布置 → 路网:连线粗一点(看得清走哪),点可以点、拖;没连上线的点标黄 */
 .rn-edge { stroke: var(--c-brand); stroke-width: 4; stroke-linecap: round; opacity: .8; }
@@ -1000,7 +1049,11 @@ img.cam-live { width: 100%; max-height: 60vh; object-fit: contain; background: #
 /* W44 第四期:高级 → 定位 */
 .advloc { display: flex; flex-direction: column; gap: 12px; }
 .advloc .lead { margin: 0; }
-.loc-row { display: flex; gap: 8px; align-items: center; padding: 6px 0; }
+/* 第 2 轮 layout N1:按钮放不下就换行(原来「在这儿标原点」顶出屏幕右边) */
+.loc-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 6px 0; }
+.loc-row > .btn { white-space: nowrap; }
+.advloc .ly-side { min-width: 0; }
+.loc-detail { max-width: 100%; overflow-x: auto; }
 .loc-dot { width: 12px; height: 12px; border-radius: 50%; flex: none; background: var(--c-textMuted); }
 .loc-dot.ok { background: var(--c-success); }
 .loc-dot.unsure { background: var(--c-warning); }
@@ -1071,8 +1124,9 @@ polygon.me-op.loop.obstacle { stroke: var(--c-brand); }
 .setup-list li.done { opacity: .7; }
 .setup-mark { width: 18px; text-align: center; color: var(--c-success); }
 .setup-text { flex: 1; display: flex; flex-direction: column; }
-.help { display: flex; flex-direction: column; gap: 12px; width: min(480px, 80vw); max-width: 100%; box-sizing: border-box; }
-.help .seg { align-self: flex-start; }
+/* 第 2 轮 duty N5:原来写 .help,时间轴「需要帮助」标记(class="mk help")也套上了 480px 宽 */
+div.help:not(.mk) { display: flex; flex-direction: column; gap: 12px; width: min(480px, 80vw); max-width: 100%; box-sizing: border-box; }
+div.help:not(.mk) .seg { align-self: flex-start; }
 .help-step p { margin: 6px 0; line-height: 1.6; }
 .help-faq details { border-bottom: 1px solid var(--c-outline); padding: 6px 0; }
 .help-faq summary { cursor: pointer; font-weight: 600; }
@@ -1125,8 +1179,8 @@ details.ops > summary { cursor: pointer; font-weight: 600; padding: 6px 0; }
 .ly-marks p { margin: 0; }
 .ly-marks li { gap: 8px; align-items: center; }
 /* W74 三期:出口线(红,虚线)、易藏点(带朝向的小标) */
-.mark-exit { stroke: var(--c-error); stroke-width: 4; stroke-dasharray: 8 4; stroke-linecap: round; }
-.mark-hide .pm-body { fill: var(--c-error); }
+.mark-exit { stroke: var(--c-mark); stroke-width: 4; stroke-dasharray: 8 4; stroke-linecap: round; }
+.mark-hide .pm-body { fill: var(--c-mark); }
 .guard-gen { display: flex; flex-direction: column; gap: 8px; padding: 10px 12px; }
 .guard-gen h3 { margin: 0; }
 .guard-gen-zones { width: 100%; border-collapse: collapse; }
@@ -1150,3 +1204,434 @@ details.ops > summary { cursor: pointer; font-weight: 600; padding: 6px 0; }
 .device-form { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
 .device-form input { width: 9em; }
 .device-secret { word-break: break-all; font-family: var(--font-mono, monospace); font-size: 0.9em; }
+
+/* 网页易用性 P1-19:演练条幅里文字和按钮分开、按钮之间留空 */
+.alert-test .at-on { gap: 8px 16px; align-items: center; }
+.alert-test .at-acts { gap: 8px; margin-left: auto; }
+.alert-test .at-off summary { cursor: pointer; color: var(--c-textSecondary); }
+.alert-test .at-off .row { gap: 8px; align-items: center; }
+/* 网页易用性 P1-72:填错的那一格 */
+input.invalid { border-color: var(--c-error); }
+.kpi-sub { display: block; }
+.ly-dirty { padding: 4px 10px; border-radius: 8px; background: var(--c-warningSoft); color: var(--c-text); font-weight: 600; }
+
+/* P1-70:导出 PDF(浏览器打印)用 A4;顶栏、侧栏、各种按钮都不打 */
+@media print {
+  @page { size: A4; margin: 12mm; }
+  .topbar, .sidenav, .btn, button, .stop { display: none !important; }
+}
+/* P1-22:录像控制栏分组整体换行 */
+.recctl-grp { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.recctl-pair { display: inline-flex; flex-wrap: nowrap; gap: 8px; }
+/* P1-83:手机上布防例外一行放不下就换行 */
+@media (max-width: 720px) { .arm-ex li.row { flex-wrap: wrap; } }
+/* P1-84:触屏上可点的地方至少 44px(戴手套也点得中) */
+@media (pointer: coarse) {
+  .btn, .sidenav a, .seg button, .alarmcount, .lang button { min-height: 44px; }
+  input[type="checkbox"], input[type="radio"] { width: 22px; height: 22px; }
+  label:has(> input[type="checkbox"]), label:has(> input[type="radio"]) { min-height: 44px; display: inline-flex; align-items: center; gap: 8px; }
+  /* 第 2 轮 P1-84:剩下不到 44 的 —— 账号按钮、「?」、画面上的按钮、报警筛选片、下拉框和日期框、账号菜单里的项、
+     「高级」、用户表里的名字、「重建地图 ▸」这类文字按钮 */
+  .who, .help-btn { min-height: 44px; min-width: 44px; }
+  .osd .btn, .slot .btn, .chip, .filter-chip, .al-filters button { min-height: 44px; }
+  select, input[type="date"], input[type="time"], input[type="datetime-local"] { min-height: 44px; }
+  .usermenu .menu button, .usermenu .menu a { min-height: 44px; }
+  button.navgroup-title, .linklike, .linkish, .users-name, details > summary { min-height: 44px; display: inline-flex; align-items: center; }
+}
+/* P1-41:路线编辑面板自己滚动,放弃 / 删除那一行贴在面板底部(不用滚到页面最下面) */
+@media (min-width: 900px) {
+  /* 第 2 轮:跟「.console.fill .routeside { max-height: 100% }」一样重,打包后那条在后面盖掉了这条
+     (父级不限高,100% 等于不限) —— 写得更具体 */
+  .console .ly-main .routesplit > .routeside { max-height: calc(100vh - 220px); overflow-y: auto; }
+}
+.routeside .route-acts { position: sticky; bottom: 0; background: var(--c-surface); padding: 8px 0; z-index: 1; }
+/* P1-66:活动日志的结果 */
+.user-audit li.bad { color: inherit; }
+.user-audit .tag.bad { background: var(--c-errorSoft); color: var(--c-error); }
+.user-audit .tag.ok { background: var(--c-surfaceVariant); color: var(--c-textSecondary); }
+/* P1-85:矮屏(1280×720 这类)侧栏排紧,展开「高级」也基本放得下 */
+@media (min-width: 900px) and (max-height: 820px) {
+  .sidenav { gap: 10px; padding: 12px 10px; }
+  .sidenav a { min-height: 30px; }
+  .sidenav-brand { gap: 4px; }
+  /* 第 2 轮:组之间 18px、组名的上下留白也收紧(1280×720 展开「高级」原来还差 108px) */
+  .sidenav-nav { gap: 6px; }
+  .navgroup-title { padding-top: 2px; padding-bottom: 2px; min-height: 0; }
+}
+/* P1-82 → 第 2 轮 layout N10:手机上第一行页名 + 头像 + 全部停止(最右),第二行布防、报警、时间、?
+   (原来全部停止排在第二行末尾,放不下就自己掉到第三行) */
+@media (max-width: 720px) {
+  .topbar { padding: 6px 12px; }
+  .topbar > .pagetitle, .topbar > h1 { order: 0; flex: 1 1 50%; }
+  .topbar > .btn.stop { order: 1; margin-left: auto; }
+  .topbar > :not(.pagetitle):not(h1):not(.btn.stop):not(.usermenu) { order: 2; }
+  .topbar > .usermenu { order: 1; margin-left: auto; }          /* 头像放右上,挨着全部停止 */
+  .topbar > .usermenu + .btn.stop { margin-left: 0; }
+  .topbar { gap: 6px; }
+  .topbar .alarmcount, .topbar .armstate { padding: 0 8px; }
+  .topbar .clock { font-size: 14px; }
+}
+/* P1-09:输入框、文件选择框统一样子(:where 不加权重,各处原有的样式照样优先) */
+:where(input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="range"]):not([type="color"])), :where(textarea) {
+  min-height: 36px; padding: 0 8px; border-radius: var(--r-r8); border: 1px solid var(--c-textMuted);
+  background: var(--c-surface); color: var(--c-text); font: inherit; font-size: 14px; box-sizing: border-box;
+}
+:where(textarea) { padding: 8px; }
+input[type="file"] { font: inherit; font-size: 14px; color: var(--c-textSecondary); }
+input[type="file"]::file-selector-button {
+  height: 36px; padding: 0 14px; margin-right: 10px; border-radius: var(--r-r8); border: 1px solid var(--c-outline);
+  background: var(--c-surface); color: var(--c-text); font: inherit; font-weight: 600; cursor: pointer;
+}
+/* P1-59:时间轴图例 */
+.arm-legend { margin: 4px 0 0; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.arm-sw { display: inline-block; width: 18px; height: 10px; border-radius: 3px; background: var(--c-success); }
+/* P1-58:布防页的保存按钮滚动时一直在 */
+.arming > .panel-head { position: sticky; top: 60px; z-index: 4; background: var(--c-bg); padding: 8px 0; }
+/* P1-52:编辑器图例、「看改完的样子」 */
+.me-legend { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; margin-top: 6px; }
+.me-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.me-sw { display: inline-block; width: 16px; height: 10px; border-radius: 2px; }
+.me-sw.erase { background: var(--c-success); opacity: .75; }
+.me-sw.obstacle { background: var(--c-brand); opacity: .75; }
+.me-sw.terrain { background: var(--c-warning); opacity: .4; border: 1px dashed var(--c-warning); }
+.me-canvas.result .me-op { opacity: 1; }
+.me-canvas.result .me-op.erase { stroke: var(--map-free, #fefefe); }
+.me-canvas.result polygon.me-op.erase { fill: var(--map-free, #fefefe); }
+.me-canvas.result .me-op.obstacle { stroke: var(--map-wall, #000); }
+.me-canvas.result polygon.me-op.obstacle { fill: var(--map-wall, #000); }
+.help-here { padding: 10px 12px; border-radius: 8px; background: var(--c-surfaceVariant); margin-bottom: 8px; }
+.help-here p { margin: 4px 0 0; }
+/* P1-16:派出去的临时路线(淡一点,走过的轨迹画在上面) */
+.temp-route.sent { opacity: .55; }
+.temp-pt.sent circle { opacity: .7; }
+/* P1-15:一两台机器人时画面按可用高度放大;放大看在手机上占满全屏(原来比墙上还小) */
+.lw-grid[data-n="1"] { grid-template-columns: 1fr; grid-auto-rows: calc(100vh - 56px - 32px - 52px); }
+.lw-grid[data-n="2"] { grid-auto-rows: calc(100vh - 56px - 32px - 52px); }
+.lw-grid[data-n="1"] .lw-pair .well, .lw-grid[data-n="2"] .lw-pair .well { aspect-ratio: auto; }
+.modal.fullcam .full .well { aspect-ratio: auto; height: min(calc(100dvh - 170px), calc((min(1100px, 100vw - 32px) - 40px) * 9 / 16)); }
+/* 两台:每张卡又高又窄,前后两路上下摆(并排的话上下全是黑边) */
+.lw-grid[data-n="2"] .lw-pair { grid-template-columns: 1fr; grid-template-rows: 1fr 1fr; }
+@media (max-width: 900px) {
+  /* 手机、竖着的平板:前后两路上下摆、按 16:9 排,卡片跟着画面高 */
+  .lw-grid, .lw-grid[data-n="1"], .lw-grid[data-n="2"] { grid-template-columns: 1fr; grid-auto-rows: auto; }
+  .lw-card { min-height: 0; }
+  .lw-pair, .lw-grid[data-n="2"] .lw-pair { position: static; grid-template-columns: 1fr; grid-template-rows: none; }
+  .lw-pair .well, .lw-grid[data-n="1"] .lw-pair .well, .lw-grid[data-n="2"] .lw-pair .well { height: auto; aspect-ratio: 16 / 9; }
+}
+@media (max-width: 720px), (max-height: 520px) {
+  .modal.fullcam { width: 100vw; max-width: 100vw; height: 100dvh; max-height: 100dvh; margin: 0; padding: 8px; border-radius: 0; }
+  .modal.fullcam .full { margin-top: 6px; }
+  .modal.fullcam .full .well { height: calc(100dvh - 110px); }
+}
+/* P1-31:选中区域的顶点,能拖 */
+.vtx-handle { fill: var(--c-surface); stroke: var(--c-brand); stroke-width: 2.5; cursor: grab; pointer-events: all; touch-action: none; }
+.vtx-handle:active { cursor: grabbing; }
+.slow-area.sel, .ignore-area.sel, .erase-area.sel, .nogo-area.sel { stroke: var(--c-brand); stroke-width: 3; vector-effect: non-scaling-stroke; }
+/* 实况墙:画面下沿的「实时」让开卡片底部那一行(电量、定位),上下摆时上面那路不用让 */
+.lw-card .well .osd.bottom { bottom: 36px; }
+.lw-grid[data-n="2"] .lw-pair .well:first-child .osd.bottom { bottom: 0; }
+@media (max-width: 900px) { .lw-pair .well:first-child .osd.bottom { bottom: 0; } }
+/* 网页易用性第 1 轮 P2 小项 */
+/* P2-16:列表里名字和「默认」标签分开 */
+.ly-list li > .tag { margin-left: 8px; }
+/* P2-28:侧栏能拿到焦点时看得见(滚动框;框画在里面,不被裁) */
+.sidenav:focus-visible { outline: 2px solid var(--c-focus); outline-offset: -2px; }
+/* P2-34/35:列表名字好点中;按钮不被长名字挤到下一行 */
+.ly-list .linklike { min-height: 36px; padding: 6px 4px; text-align: left; }
+.ly-list li.row { flex-wrap: nowrap; align-items: center; }
+.ly-list li.row > span { min-width: 0; flex: 1 1 auto; overflow-wrap: anywhere; }
+.ly-list li.row > .btn { flex: none; white-space: nowrap; }
+/* P2-42:布防时巡逻那块正文不贴边 */
+.arm-guard { padding-bottom: 12px; }
+.arm-guard > :not(.panel-head) { margin-left: 16px; margin-right: 16px; }
+#main:focus { outline: none; }
+/* P2-04/06:登录错误行占位;显示密码按钮 */
+.login-err { min-height: 20px; margin: 0; }
+.login .pw-row { position: relative; display: block; }
+.login .pw-row input { width: 100%; padding-right: 40px; box-sizing: border-box; }
+.login .pw-show { position: absolute; right: 4px; top: 50%; transform: translateY(-50%); width: 32px; height: 32px;
+  display: flex; align-items: center; justify-content: center; border: 0; border-radius: 6px; background: transparent;
+  color: var(--c-textSecondary); cursor: pointer; padding: 0; }
+.login .pw-show:hover, .login .pw-show[aria-pressed="true"] { color: var(--c-text); }
+.login .pw-show:focus-visible { outline: 2px solid var(--c-primary); outline-offset: 1px; }
+/* P2-22:菜单里的主题、语言按钮不换行 */
+.usermenu .menu .seg button { white-space: nowrap; }
+.usermenu .menu .seg { flex-wrap: wrap; }
+.notices { max-height: 65vh; overflow: auto; white-space: pre-wrap; font-size: 12px; line-height: 1.5; background: var(--c-surfaceVariant); padding: 12px; border-radius: var(--r-r8); }
+/* P2-14:路线侧栏标题和按钮放不下就换行,按钮不出界 */
+.routeside-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.routeside-head h2 { flex: 1 1 auto; min-width: 0; }
+/* P2-41:表单里下拉框跟输入框一样高,标签在同一条线上 */
+.field select { height: 44px; }
+/* 第 2 轮 P1-83:「.wrap」原来只管长字断行(overflow-wrap),「row wrap」的行其实从来不换行 ——
+   手机上布防例外那一行把下拉框压成 18px、备注和「添加」挤到卡片外面 */
+.row.wrap { flex-wrap: wrap; }
+.arm-ex .row.wrap > .field { flex: 1 1 150px; min-width: 0; }
+.row.wrap > .field { justify-content: flex-start; }
+.row.wrap:has(> .field) { align-items: flex-end; }
+.todo-detail summary { cursor: pointer; color: var(--c-textMuted); }
+/* P2-27:顶栏时钟小一点 */
+.topbar .clock { font-size: 14px; line-height: 20px; font-weight: 500; color: var(--c-textMuted); white-space: nowrap; }
+.topbar .clock-date { margin-right: 2px; }
+/* P2-32:断流时画面的替代文字不画出来(读屏照样能读),免得压在状态标上 */
+.well img.feed { color: transparent; font-size: 0; }
+/* P2-40:缩略图占位 */
+.mm-thumb-none { width: 120px; height: 120px; display: grid; place-items: center; border-radius: var(--r-r8); background: var(--c-surfaceVariant); color: var(--c-textMuted); font-size: 12px; flex: none; }
+/* P2-09:地图「显示」勾选框大一点、整行都能点,字不压框 */
+.layers { grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); }
+.layers label { min-height: 32px; min-width: 0; overflow-wrap: anywhere; }
+.layers input[type="checkbox"] { width: 18px; height: 18px; flex: none; margin: 0; }
+/* P2-10:单独放的日期框跟别的控件一个样 */
+input[type="date"]:not(.field input) { height: 36px; padding: 0 8px; border-radius: var(--r-r8); border: 1px solid var(--c-textMuted); background: var(--c-surface); color: var(--c-text); font: inherit; font-size: 14px; color-scheme: light dark; }
+/* P2-26:窄屏刻度隔着显示 */
+/* 第 2 轮:1024 宽(769–1279)25 个小时标签也挤成一串,一样隔着显示 */
+@media (max-width: 1279px) { .ticks span.m2 { display: none; } }
+@media (max-width: 480px) { .ticks span.m4 { display: none; } }
+.ticks { cursor: pointer; }
+.tl-tracks { touch-action: pan-y; user-select: none; }
+.rec-jump { position: relative; } .rec-jump .error { position: absolute; left: 0; top: 100%; white-space: nowrap; font-weight: 400; }
+/* P2-15:虚拟墙换成橙色,跟红色禁区分开;禁区写名字 */
+.vwall-line { stroke: var(--c-warning); }
+.nogo-name { fill: var(--c-error); paint-order: stroke; stroke: var(--c-surface); stroke-width: 3px; font-weight: 600; text-anchor: middle; dominant-baseline: middle; pointer-events: none; }
+.range-ends { display: flex; justify-content: space-between; font-weight: 400; }
+/* P2-20:「使用此日程」开关大一点 */
+.arm-enabled { min-height: 36px; display: inline-flex; align-items: center; gap: 8px; font-weight: 600; cursor: pointer; }
+.arm-enabled input[type="checkbox"] { width: 20px; height: 20px; margin: 0; }
+.arm-patrols-body { padding: 0 16px 16px; }
+/* P2-23:趋势图的坐标轴 */
+.spark-axis { stroke: var(--c-outline); stroke-width: 1; }
+.spark-tick { fill: var(--c-textMuted); font-size: 10px; }
+/* P2-33:「派机器人去看」卡片放到地图上方,不盖住图例和「全图」按钮 */
+.golook { top: 88px; bottom: auto; }
+@media (max-width: 720px) { .golook { left: 16px; right: 16px; width: auto; } }
+/* P2-37:放藏匿点第二步:提示醒目,第一个点外面画一圈 */
+.ly-step { font-weight: 600; color: var(--c-brand); }
+.ly-step-hint { font-weight: 600; }
+.draft-ring { fill: none; stroke: var(--c-brand); stroke-width: 2; stroke-dasharray: 4 3; }
+/* 第 3 轮 layout N1(P0-17 回归):721–1100 总览是一列,不能锁成一屏高(面板被压到 50–70 px、
+   视频看不到、页面滚不动)。一列时整页往下滚,各卡片按自己的高度排 */
+@media (min-width: 721px) and (max-width: 1100px) {
+  .console.fill.fill-duty, .console.fill.fill-duty > .workspace { height: auto; min-height: 100vh; }
+  .console.fill.fill-duty > .workspace > .page, .console.fill.fill-duty > .page { overflow: visible; }
+  .console.fill.fill-duty .duty { flex: none; }
+  .console.fill.fill-duty .duty-mapcard { min-height: 360px; }
+}
+/* P2-31:总览地图那一行高一点;图例只占一行(放不下就横着滑),不折成两行压地图 */
+@media (min-width: 1101px) {
+  .duty { grid-template-rows: auto minmax(320px, 1.5fr) minmax(240px, 1fr); }
+}
+.duty-map .maplegend { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: thin; }
+.rn-edge.bad { stroke: var(--c-error); stroke-dasharray: 6 4; }
+/* P2-08:总览机器人一行右边「详情」 */
+.duty-list > li { display: flex; align-items: stretch; gap: 6px; }
+.duty-list > li > .duty-row { flex: 1; min-width: 0; }
+.duty-row-more { align-self: center; flex: none; }
+/* 第 2 轮 P1-28 / admin N7:红色按钮禁用后看着跟能点一样 —— 跟别的禁用按钮一样变灰 */
+.btn.danger:disabled, .btn.stop:disabled, .rd-actions .rd-danger:disabled, .btn.rd-danger:disabled {
+  color: var(--c-textMuted); background: transparent; border-color: var(--c-outline); opacity: 0.7; }
+/* 第 2 轮 P1-10:画面底栏一行放不下就截(…),不折成两行压住「● 实时」 */
+.slot-foot { flex-wrap: nowrap; overflow: hidden; white-space: nowrap; }
+.slot-foot > span { flex: none; }
+.slot-foot > span:last-child { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.me-newver { margin: 0 0 8px; padding: 8px 12px; border: 1px solid var(--c-outline); border-radius: var(--r-r8); background: var(--c-surface); }
+.user-audit .audit-why { flex-basis: 100%; color: var(--c-error); }
+/* 第 2 轮 P1-71 / 72:柱状图左边的刻度;日期填错时仍显示上一段(淡一点);起止两个框顶端对齐 */
+.rep-chartwrap { display: flex; gap: 6px; align-items: stretch; }
+.rep-chartwrap > .rep-chart { flex: 1; min-width: 0; }
+.rep-axis { display: flex; flex-direction: column; justify-content: space-between; text-align: right; min-width: 2ch; padding-bottom: 18px; font-variant-numeric: tabular-nums; }
+.rep-stale { opacity: 0.55; }
+.reports > .row.wrap { align-items: flex-start; }
+/* 第 2 轮 setup N9:布置里选中的防区用选中蓝,不借报警红;N8:出口线、藏匿点换成第三色,不跟禁区同色 */
+.sec-area.sel, .sec-area.quiet.sel { fill: var(--c-brand); fill-opacity: 0.2; stroke: var(--c-brand); stroke-width: 2.5; }
+.mark-name { fill: var(--c-mark); font-size: 12px; font-weight: 600; paint-order: stroke; stroke: var(--c-surface); stroke-width: 3px; pointer-events: none; }
+/* 第 2 轮 maps N7:特殊地面那一行名字不挤成一字一行;限速框窄一点 */
+.me-terr-row { flex-wrap: wrap; gap: 6px; }
+.me-terr-row .me-tname { white-space: nowrap; flex: 0 0 auto; }
+.me-terr-row .me-slow { width: 5em; }
+/* 第 2 轮 duty N10 / N11:顶栏「n 台已叫停」(哪页都看得见);连不上时布防状态变灰 */
+.heldchip { display: inline-flex; align-items: center; padding: 2px 10px; border-radius: 999px; background: var(--c-warningSoft); color: var(--c-warning); font-weight: 600; text-decoration: none; white-space: nowrap; }
+.armstate.stale { color: var(--c-textMuted); }
+.armstate.stale .dot { background: var(--c-textMuted); }
+.toast .toast-act { margin-left: 12px; background: var(--c-bg); color: var(--c-text); }
+/* 第 2 轮 duty N7:报警详情头部「P1 · 时间 · 机器人 · 位置」原来没样式,挤成「P1Raised 02:18Robot: B」 */
+.ad-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 14px; margin: 0 0 8px; }
+/* 第 2 轮 config N10:「.field input」给了文件框一个 44px 的边框盒子,别处的文件框没有 —— 文件框统一不要外框 */
+.field input[type="file"] { height: auto; padding: 0; border: 0; background: none; }
+.field input[type="file"]:focus-visible { padding: 0; border: 0; outline: 2px solid var(--c-focus); outline-offset: 2px; }
+input[type="file"]:disabled { opacity: 0.6; cursor: not-allowed; }
+/* 第 2 轮 layout N14:第一帧到之前不显示图片(不露破图图标) */
+.feed.pending { visibility: hidden; }
+/* 第 2 轮 layout N5 / N7 / N8 / N12:手机上不横向溢出、字不被截 */
+@media (max-width: 720px) {
+  .mappage { margin: -12px; }                                   /* 页边距这里是 12px,原来按 16px 抵,多出 4px */
+  .users-table td[data-label]::before { content: attr(data-label) var(--colon, ": "); color: var(--c-textSecondary); font-size: 13px; }
+}
+.rmap { max-width: 100%; }                                       /* 最小高 300 × 4:3 把宽撑到 400 */
+.advdiag .panel-head { flex-wrap: wrap; }
+.advdiag .panel-head > .push.row { flex-wrap: wrap; min-width: 0; }
+.armhours span:last-child { transform: translateX(-100%); }      /* 「24:00」不伸出右边 */
+.field select { min-width: 6.5em; }                              /* 「07:00」不被截成「07:0」 */
+input[type="file"] { max-width: 100%; min-width: 0; }            /* 上传按钮不被挤出屏 */
+/* 第 2 轮 layout N6:录像页小地图框是 4:3,地图本身最小 420 高把图例和「整张图」挤出框外被裁 */
+.rmap .mapwrap { min-height: 0; }
+/* 第 2 轮 layout N9:分隔线画在整行上(含「详情」),按钮离面板右边留空;「今天的巡逻」是面板里的一节,不再套一层框 */
+.duty-list > li { border-bottom: 1px solid var(--c-outline); padding-right: 12px; }
+.duty-list > li > .duty-row { border-bottom: 0; }
+.duty-left .today { border: 0; border-top: 1px solid var(--c-outline); border-radius: 0; background: none; padding: 10px 16px; flex: none; }
+/* 第 2 轮 setup N15 / N5 */
+.ly-dirty.hold { visibility: hidden; }
+.field-inline select { max-width: min(28em, 60vw); min-width: 0; text-overflow: ellipsis; }
+/* 第 2 轮 duty N9:地图上点的位置 */
+.look-mark circle { fill: none; stroke: var(--c-brand); stroke-width: 2.5; }
+.look-mark circle.dot { fill: var(--c-brand); stroke: none; }
+/* 第 2 轮 P2-12:机器人长名字在卡片上一行,省略号截断(悬停看全名),不把卡片撑高、不挤掉状态 */
+.fleet-head { min-width: 0; }
+.fleet-head .robot-name { min-width: 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* 第 2 轮 P2-21:操作列不用 display:flex(表格的横线会跟别的列错位),按钮在格子里照常排 */
+@media (min-width: 721px) {                                   /* 手机上用户表是卡片,操作那格仍是 flex */
+  .grid td.actions { display: table-cell; }
+  .grid td.actions > * + * { margin-left: 6px; }
+}
+/* 第 2 轮 P2-15:设置页禁行区标签里的虚拟墙也是橙色(原来这里单独画成红色,跟禁区同色);画墙时的草稿线一样 */
+.nogo-line.vwall-line, .draft-line.vwall { stroke: var(--c-warning); }
+/* 第 3 轮 config N9:普通按钮不能点时只换了字色,跟能点时几乎一样(导出表格、重启站点服务、发测试推送)。
+   统一变淡 + 禁止光标;主按钮(灰底)那条更具体,不受影响 */
+.btn:disabled { opacity: 0.5; cursor: not-allowed; }
+/* 第 3 轮 config N10:KPI 卡片下面紧接着「巡逻 / 误报 / 机器人问题」一排,卡片加了说明变高后上下贴住 */
+.kpi-groups + .rep-stats, .kpi-groups ~ .rep-stats { margin-top: 16px; }
+.rep-stats + * { margin-top: 16px; }
+/* 第 3 轮 layout N2:机器人列表和「今日巡逻」各自限高,第 3 台起被「今日巡逻」压住、今日巡逻也被裁。
+   改成整张卡片一起滚:机器人一台不落地排在前面,今日巡逻接在下面 */
+.duty-left { overflow-y: auto; }
+.duty-left .duty-list { flex: none; overflow: visible; }
+.duty-left .today { flex: none; max-height: none; overflow: visible; }
+/* 第 3 轮 admin N6:连不上站点时的启动页 */
+.boot-down { display: flex; flex-direction: column; gap: 16px; align-items: center; justify-content: center; min-height: 100vh; padding: 16px; color: var(--c-textSecondary); text-align: center; }
+/* 第 3 轮 duty N8:没有图片时不放一块黑的空缩略图(位置留着,列对齐) */
+.it .shot.none { background: none; }
+.it .res .al-note { color: var(--c-textSecondary); font-style: italic; }
+/* 第 3 轮 duty N9:手机上录像页的地图只剩约 40px(图例、提示占了 4:3 框的大半):框按内容长,地图本身按宽给高 */
+@media (max-width: 720px) {
+  .rmap { aspect-ratio: auto; min-height: 0; }
+  .rmap .mapwrap { flex: none; height: max(240px, 70vw); }
+}
+/* 第 3 轮 setup N9:选中一行出了「改名」按钮,类型名不折成两行 */
+.nowrap { white-space: nowrap; }
+/* 第 3 轮 setup N6:历史列表跟面板标题一样留左右边距 */
+.ly-history > ul.plain, .ly-history > p { padding: 12px 16px; margin: 0; }
+/* 第 3 轮 setup N3:禁区名字颜色跟区域类型 */
+.nogo-name { font-size: 12px; }
+.nogo-name.k-wall { fill: var(--c-warning); }
+.nogo-name.k-slow { fill: var(--c-textSecondary); }
+.nogo-name.k-ignore { fill: var(--c-info, #5c6bc0); }
+.nogo-name.k-erase { fill: var(--c-textSecondary); }
+/* 第 3 轮 maps N3:地图编辑里起名字的区域(显示用,不是防区):灰色虚框 */
+.sec-area.region { fill: var(--c-textMuted); fill-opacity: 0.1; stroke: var(--c-textSecondary); stroke-dasharray: 5 3; }
+.sw .mark-exit { stroke-width: 2.5; stroke-dasharray: 4 2; }
+.sw-hide { fill: var(--c-mark); }
+/* 第 3 轮 layout N3:机器人列表里「连不上站点」跟报警那条一样是警示框 */
+.duty-list > li.warn { color: var(--c-text); background: var(--c-warningSoft); padding: 8px 12px; margin: 12px; border-radius: 8px; border-bottom: 0; }
+/* 第 3 轮 layout N4:载入慢 / 脚本没载上,几秒后才露出提示(正常载入看不到) */
+@keyframes boot-show { to { visibility: visible; } }
+.boot-wait, .boot-stuck { visibility: hidden; animation: boot-show 0s 3s forwards; padding: 24px 16px; margin: 0; }
+.boot-stuck { animation-delay: 6s; color: var(--c-text); font-size: 16px; }
+/* 第 3 轮 P1-84:触屏上按得到的东西至少 44px(画面上的固定 / 放大、标签页、分段按钮、时间框、文字链接) */
+@media (pointer: coarse) {
+  .btn, .btn.sm, .slot-btn, .ly-tabs [role="tab"], .ly-tabs button, .seg button, .recrobots button { min-height: 44px; }
+  .seg button { min-width: 44px; }
+  input:not([type="checkbox"]):not([type="radio"]), select { min-height: 44px; }
+  a.small, .linklike, .link { display: inline-flex; align-items: center; min-height: 44px; }
+}
+/* 第 3 轮 P2-31 / setup N4:图例收成按钮,点开往上弹一列 */
+.mapbar { position: relative; }
+.legend-fold { flex: 1; min-width: 0; font-size: 12px; color: var(--c-textSecondary); }
+.legend-fold > summary { cursor: pointer; display: inline-flex; align-items: center; min-height: 28px; padding: 0 8px; border: 1px solid var(--c-outline); border-radius: var(--r-r8); list-style: none; }
+.legend-fold > summary::-webkit-details-marker { display: none; }
+.legend-fold > summary::after { content: "▴"; margin-left: 6px; }
+.legend-fold[open] > summary::after { content: "▾"; }
+.maplegend.pop { position: absolute; left: 8px; bottom: calc(100% + 4px); z-index: 5; flex-direction: column; flex-wrap: nowrap; gap: 4px; padding: 8px 12px; background: var(--c-surface); border: 1px solid var(--c-outline); border-radius: var(--r-r8); box-shadow: 0 4px 16px rgb(0 0 0 / .25); max-height: 60vh; overflow-y: auto; }
+.duty-map .maplegend.pop { flex-wrap: nowrap; overflow-x: visible; }
+/* 第 3 轮 zh N1–N4 / N15:中文不在字和字之间断行(原来窄格子里逐字竖排「机/器/人」「外/观」);表格放不下就横着滚 */
+:lang(zh) .grid th, :lang(zh) .grid td, :lang(zh) .seg button { word-break: keep-all; }
+.menu-row > .muted.small { white-space: nowrap; flex: none; }
+:lang(zh) a { word-break: keep-all; overflow-wrap: break-word; }
+.grid th { white-space: nowrap; }
+@media (max-width: 1100px) { .grid { display: block; overflow-x: auto; } }
+/* 第 3 轮 zh N5:窄屏上长的图例项不压比例尺:图例和比例尺各占一行 */
+@media (max-width: 480px) {
+  .mapbar { flex-wrap: wrap; }
+  .maplegend { flex-basis: 100%; }
+  .maplegend:not(.pop) li { white-space: normal; }
+}
+.datebox { display: inline-flex; align-items: flex-end; gap: 6px; }
+.datebox input { width: 11ch; }
+/* 第 3 轮 zh N15:地图管理的版本行不以「·」开头(每一项整块换行) */
+.mm-counts > span, .mm-dogs-on > span { display: inline-block; margin-right: 12px; }
+.codebox { field-sizing: content; min-height: 6lh; }
+/* 第 3 轮 P1-66:活动记录跟面板标题一样留边距 */
+.user-audit ul.plain, .user-audit > p { padding: 12px 16px; }
+/* 第 4 轮 P1-66:活动记录每行时间一列、内容一列,换行对齐 */
+.user-audit li { display: grid; grid-template-columns: 9.5em 1fr; column-gap: 10px; align-items: baseline; }
+.user-audit .audit-body { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: baseline; min-width: 0; }
+/* 第 4 轮 admin N1:起了名字的机器人卡片:名字 + 编号一行,状态第二行;编号不在连字符处折 */
+.fleet-head.named { flex-wrap: wrap; row-gap: 2px; }
+.fleet-head .fleet-id { white-space: nowrap; flex: none; }
+.fleet-head.named .fleet-state { flex-basis: 100%; margin-left: 0; }
+.fleet-head.named .robot-name { flex: 0 1 auto; }
+/* 第 4 轮 admin N2:提示做成 popover(最上层);去掉浏览器给 popover 的默认框和居中 */
+.toast[popover] { inset: auto; left: 50%; bottom: 56px; margin: 0; border: 0; padding: 0; background: transparent; color: inherit; overflow: visible; }
+.toast[popover]:not(:empty) { padding: 10px 16px; background: var(--c-text); color: var(--c-bg); }
+/* 第 4 轮 P1-84:触屏上还不到 44px 的几处(放在最后,压过前面更具体的规则) */
+@media (pointer: coarse) {
+  .legend-fold > summary { min-height: 44px; }
+  .btn.daystep { min-width: 44px; }
+  .lane > b { min-height: 44px; display: flex; align-items: center; }
+  .ly-list .linklike { min-height: 44px; }
+  .panel p > a[href], .lead > a[href] { display: inline-flex; align-items: center; min-height: 44px; }
+}
+/* 第 4 轮 layout N2:图例弹层不盖住吸顶页头(页头 z-index 5);按钮字不折行 */
+.maplegend.pop { z-index: 3; }
+.legend-fold > summary { white-space: nowrap; }
+/* 第 4 轮 layout N1:演练横幅的两个按钮放不下就换行,不撑出屏幕 */
+.alert-test .at-acts { flex-wrap: wrap; min-width: 0; max-width: 100%; }
+.alert-test .at-acts .btn { white-space: normal; text-align: left; }
+/* 第 4 轮 layout N3:两列布局时画面上「放大 ⤢」不折行 */
+.osd .btn, .slot .btn { white-space: nowrap; }
+/* 第 4 轮 layout N4:一列布局时两路画面并排(721–1100 宽),机器人状态排在画面前面,不用滚两屏 */
+@media (min-width: 721px) and (max-width: 1100px) {
+  .duty-slots { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+/* 第 4 轮 setup r3-N5:输入框不合规则时变红(规则文字也红) */
+.field input[aria-invalid="true"] { border-color: var(--c-error); }
+/* 第 4 轮 setup r3-N9:选中的禁行区:名字和种类一行不折,改名 / 删除放到下一行 */
+.ly-list li.row.on { flex-wrap: wrap; row-gap: 6px; }
+.ly-list li.row.on > span:first-child { flex-basis: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ly-list li.row.on > .btn.push { margin-left: 0; }
+/* 第 4 轮 setup N6:历史里的时间不被「恢复」按钮挤成两行 */
+.ly-history li > div { min-width: 0; flex: 1 1 auto; }
+.ly-history li time { white-space: nowrap; }
+.ly-history li > .btn, .ly-history li > .muted.small { flex: none; }
+.sw-standby { fill: var(--c-surface); stroke: var(--c-text); stroke-width: 1.5; }
+.sw-cam { fill: var(--c-primary); }
+.sw-camfan { fill: var(--c-primary); fill-opacity: .25; }
+/* 第 4 轮 r2-config-N3:「添加日程」按钮不拉成一整条 */
+.sched-form > .sched-add { justify-self: start; align-self: flex-start; width: auto; }
+/* 第 4 轮 r2-duty-N9:报警详情里「派机器人去」的确认卡放在弹窗里,不浮到右上角压横幅 */
+.modal .golook { position: static; width: auto; margin-top: 12px; box-shadow: none; }
+/* 第 4 轮 duty N6:时间轴左列的名字一行截断(悬停看全名);选机器人的按钮也不被长名字撑宽 */
+.lane { grid-template-columns: 96px 1fr; }
+.lane > b { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; padding-right: 6px; }
+.recrobots button { max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* 第 4 轮 zh r3-N9:中文界面「标签：」用全角冒号 */
+:root[lang="zh"], :root:lang(zh) { --colon: "："; }
+/* 第 4 轮 zh N4:卡片右上角的状态不折行(「未激活」不再逐字竖排),挤的时候名字省略 */
+.fleet-state { white-space: nowrap; flex: none; }
+.fleet-card > :first-child, .fleet-top { min-width: 0; }
+/* 第 4 轮 zh N6:诊断页的 ✓ / ✕ 显示出来(原来只靠红绿区分,色弱看不出);检查项名称写成中性的 */
+.chk .mark { display: inline-block; }
+.chk.bad .mark { color: var(--c-error); }
+/* 「·」挂在前一项的末尾:折行时新的一行开头不会是「·」 */
+.vmeta { display: inline-flex; flex-wrap: wrap; margin-left: 6px; }
+.vmeta > span:not(:last-child)::after { content: " · "; white-space: pre; }
+/* 第 4 轮 setup P2-17:「.bad」提示(穿墙线、镜像了、没确认……)一律红字,原来有几处是白字 */
+p.bad, span.bad, .small.bad { color: var(--c-error); }

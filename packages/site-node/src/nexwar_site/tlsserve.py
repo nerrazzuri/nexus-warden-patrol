@@ -24,13 +24,18 @@ HANDSHAKE_TIMEOUT_S = 10.0
 
 class TlsThreadingServer(ThreadingHTTPServer):
     daemon_threads = True
+    #: 监听队列(网页易用性第 1 轮 P0-18):标准库默认 5,浏览器一开页面并发十几个请求,排不上的被拒,
+    #: 页面变成没有样式的 HTML。
+    request_queue_size = 128
 
     def __init__(self, addr, handler, *, ctx: ssl.SSLContext | None,
-                 max_connections: int = 128, max_per_ip: int = 16) -> None:
+                 max_connections: int = 512, max_per_ip: int = 160) -> None:
         self.ctx = ctx
         #: 同时开着的连接上限(W00c5d 内部评审):一条连接一个线程,不设上限的话一串慢连接就能把
         #: 站点主机的线程、内存吃光。**每个来源地址另有一个上限**:不然谁都能拿一串空连接把位子
-        #: 占满,手机的停车、狗的上传全进不来。超了的连接直接关掉。
+        #: 占满,手机的停车、狗的上传全进不来。超了的连接直接关掉。每个地址 160 条、总共 512 条
+        #: (P0-18 原来 16 → 64;第 2 轮:同一台电脑开 4–10 个浏览器会话,每个会话最多 6 条普通连接
+        #: 加事件流、实时画面,空闲的还要挂 30 秒,64 条就满了,样式表被关掉、整页没样式)。
         self._slots = threading.BoundedSemaphore(max_connections)
         self._per_ip: dict[str, int] = {}
         self._per_ip_max = max_per_ip
@@ -83,7 +88,10 @@ class TlsThreadingServer(ThreadingHTTPServer):
         # 的浏览器、扫端口的,每条连接一整段堆栈,日志里全是它)。别的意外照样带堆栈。
         import sys
         exc = sys.exc_info()[1]
-        if isinstance(exc, (ssl.SSLError, ConnectionError, TimeoutError, socket.timeout)):
+        if isinstance(exc, ssl.SSLError):
+            log.debug("%s 这条连接断了: %s", client_address, exc)   # 握手那里已经记过一行
+            return
+        if isinstance(exc, (ConnectionError, TimeoutError, socket.timeout)):
             log.info("%s 这条连接断了: %s", client_address, exc)
             return
         log.warning("%s 这条连接出错了", client_address, exc_info=True)
@@ -98,6 +106,8 @@ class TlsHandlerMixin(BaseHTTPRequestHandler):
             try:
                 self.request.do_handshake()
             except (OSError, ssl.SSLError) as exc:
-                log.info("%s TLS 握手没成: %s", self.client_address, exc)
+                # 日志设计 第 3 条:写出客户端地址和错误码(网页、手机没信站点证书时一连串都是它)
+                log.info("TLS 握手没成 code=0x0701 net.tls_handshake remote=%s:%s why=%s",
+                         *(tuple(self.client_address)[:2] or ("?", "?")), exc)
                 raise
         super().setup()

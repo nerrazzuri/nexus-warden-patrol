@@ -17,6 +17,7 @@ import 'package:flutter/material.dart';
 
 import '../l10n.dart';
 import '../net/site_client.dart';
+import '../net/site_text.dart';
 import 'map_view.dart';
 import 'nw/nw_button.dart';
 import 'nw/nw_map_raster.dart';
@@ -86,11 +87,12 @@ class RoutePt {
   }
 }
 
-/// 新点的名字：P1、P2…，不跟已有的重名（照片按点位名归档，重名会互相覆盖）。
+/// 新点的名字：W1、W2…，不跟已有的重名（照片按点位名归档，重名会互相覆盖）。手机 App 测试 M26：
+/// 以前叫 P1、P2，跟报警级别 P1 撞名（通知里「点位 P1 连续 3 趟未到达」）。
 String nextPointName(List<RoutePt> pts) {
   final have = {for (final p in pts) p.name};
   for (var i = pts.length + 1;; i++) {
-    if (!have.contains('P$i')) return 'P$i';
+    if (!have.contains('W$i')) return 'W$i';
   }
 }
 
@@ -192,29 +194,30 @@ class _SiteRoutesPageState extends State<SiteRoutesPage> {
     if (mounted) await _loadRoutes();
   }
 
+  /// 路线名哪里不对（手机 App 测试 M19：边输边说，对话框不关）。null = 能用。
+  String? routeNameProblem(String name) {
+    if (RegExp(r'\s').hasMatch(name)) {
+      return tr('No spaces: use - or _ instead (e.g. App-test-route)', '不能有空格：用 - 或 _ 代替（例如 east-gate）');
+    }
+    if (!routeNameRe.hasMatch(name)) {
+      return tr('Only letters, digits and . _ - (start with a letter or digit, up to 64)',
+          '只能用字母、数字和 . _ -（字母或数字开头，最多 64 个）');
+    }
+    if (_routes.any((r) => r['id'] == name)) return tr('A route with this name already exists', '路线名已存在');
+    return null;
+  }
+
   Future<void> _new() async {
     final got = await showFieldsDialog(context,
         title: tr('New route', '新路线'),
         fields: [
           DialogField(tr('Route name (letters, digits, . _ -)', '路线名（字母、数字、. _ -）'),
-              key: const Key('route-new-name'))
+              key: const Key('route-new-name'), check: routeNameProblem)
         ],
         confirm: tr('Create', '创建'),
         confirmKey: const Key('route-new-go'));
     if (got == null || !mounted) return;
-    final name = got[0].trim();
-    if (!routeNameRe.hasMatch(name)) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text(tr('Route name: letters, digits, . _ - only (1–64 characters)',
-              '路线名只能包含字母、数字和 . _ -（1–64 个字符）'))));
-      return;
-    }
-    if (_routes.any((r) => r['id'] == name)) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(tr('A route with this name already exists', '路线名已存在'))));
-      return;
-    }
-    await _open(newName: name);
+    await _open(newName: got[0].trim());
   }
 
   @override
@@ -223,7 +226,7 @@ class _SiteRoutesPageState extends State<SiteRoutesPage> {
     final admin = widget.api.session?.canManageRoutes ?? false;
     final sub = NwText.bodySmall.copyWith(color: c.textSecondary);
     return Scaffold(
-        appBar: AppBar(title: Text(tr('Patrol routes', '巡检路线'))),
+        appBar: AppBar(title: Text(tr('Patrol routes', '巡逻路线'))),
         body: _loading
             ? const Center(child: CircularProgressIndicator())
             : NwListView(children: [
@@ -280,7 +283,7 @@ class _SiteRoutesPageState extends State<SiteRoutesPage> {
                                       style: NwText.titleSmall.copyWith(color: c.text, fontWeight: FontWeight.w700)),
                                   nwGap4,
                                   Text(
-                                      tr('${(r['waypoints'] as List? ?? const []).length} points · revision ${r['revision']}',
+                                      tr('${(r['waypoints'] as List? ?? const []).length} points · version ${r['revision']}',
                                           '${(r['waypoints'] as List? ?? const []).length} 个点 · 第 ${r['revision']} 版'),
                                       style: sub),
                                 ])),
@@ -324,6 +327,7 @@ class SiteRouteEditorPage extends StatefulWidget {
   static const Key saveKey = Key('route-save');
   static const Key deleteKey = Key('route-delete');
   static const Key deleteOkKey = Key('route-delete-ok');
+  static const Key deleteWarnKey = Key('route-delete-warn');
   static const Key sendKey = Key('route-send');
   static const Key addModeKey = Key('route-mode-add');
   static const Key moveModeKey = Key('route-mode-move');
@@ -495,7 +499,7 @@ class _SiteRouteEditorPageState extends State<SiteRouteEditorPage> {
           if (x is Map && x['index'] is num) _warns[(x['index'] as num).toInt()] = '${x['warning']}';
         }
         _busy = false;
-        _msg = tr('Route saved (revision $_revision)', '路线已保存（第 $_revision 版）');
+        _msg = tr('Route saved (version $_revision)', '路线已保存（第 $_revision 版）');
       });
     } on SiteError catch (e) {
       if (!mounted) return;
@@ -506,7 +510,12 @@ class _SiteRouteEditorPageState extends State<SiteRouteEditorPage> {
           if (x is Map && x['index'] is num) _problems[(x['index'] as num).toInt()] = '${x['problem']}';
         }
         if (_problems.isNotEmpty) _sel = _problems.keys.first;
-        _msg = tr('Not saved: ${e.message}', '保存失败：${e.message}');
+        // 手机 App 测试 M19：说是哪几个点、按界面语言说（以前「Not saved: 1 处不能用」）
+        final which = (_problems.keys.toList()..sort()).map((i) => '${i + 1}').join(', ');
+        _msg = _problems.isEmpty
+            ? tr('Not saved: ${siteText(e.message)}', '保存失败：${e.message}')
+            : tr('Not saved: point $which cannot be used (marked red, reason listed below)',
+                '保存失败：第 $which 个点不能用（标红了，原因在下面）');
       });
     }
   }
@@ -530,11 +539,28 @@ class _SiteRouteEditorPageState extends State<SiteRouteEditorPage> {
   }
 
   Future<void> _delete() async {
+    // 手机 App 测试 M36：有机器人正在跑这条路线就先说（删了那一趟会被中止）
+    var running = <String>[];
+    try {
+      final t = await widget.api.patrolsToday();
+      running = [
+        for (final it in (t['items'] as List? ?? const []).whereType<Map>())
+          if (it['state'] == 'running' && it['label'] == _id && '${it['robot'] ?? ''}'.isNotEmpty) '${it['robot']}',
+      ];
+    } on Object {
+      // 读不到今天的巡逻：照旧问
+    }
+    if (!mounted) return;
     final ok = await showDialog<bool>(
         context: context,
         builder: (c) => AlertDialog(
               title: Text(tr('Delete route $_id?', '删除路线 $_id？')),
-              content: Text(tr('Schedules that use it must be removed first.', '请先删除使用此路线的排程。')),
+              content: Text([
+                if (running.isNotEmpty)
+                  tr('${running.join(', ')} is on this route right now. Deleting it stops that run.',
+                      '${running.join('、')} 正在跑这条路线，删掉它会让这一趟停下。'),
+                tr('Schedules that use it must be removed first.', '请先删除使用此路线的排程。'),
+              ].join('\n\n'), key: SiteRouteEditorPage.deleteWarnKey),
               actions: [
                 TextButton(onPressed: () => Navigator.pop(c, false), child: Text(tr('Cancel', '取消'))),
                 FilledButton(
@@ -567,7 +593,7 @@ class _SiteRouteEditorPageState extends State<SiteRouteEditorPage> {
     }
     if (!mounted) return;
     if (robots.isEmpty) {
-      setState(() => _msg = tr('No robot can patrol right now', '当前没有可巡检的机器人'));
+      setState(() => _msg = tr('No robot can patrol right now', '当前没有可巡逻的机器人'));
       return;
     }
     final id = await showDialog<String>(
@@ -624,7 +650,7 @@ class _SiteRouteEditorPageState extends State<SiteRouteEditorPage> {
       if (mounted) {
         // 只有狗收下了才说派了（外审 W39-I3：没回执、被拒、过期、重复都不算）
         setState(() => _msg = ack['result'] == 'accepted'
-            ? tr('Patrol sent to $id', '已派 $id 去巡检')
+            ? tr('Patrol sent to $id', '已派 $id 去巡逻')
             : tr('The robot did not accept: ${ack['result']} ${ack['reason'] ?? ''}',
                 '机器人未接受：${ack['result']} ${ack['reason'] ?? ''}'));
       }
@@ -638,7 +664,8 @@ class _SiteRouteEditorPageState extends State<SiteRouteEditorPage> {
     final rid = widget.tempFor!;
     setState(() {
       _busy = true;
-      _msg = null;
+      // 手机 App 测试 M26：要等机器人回话（几秒），以前这几秒什么都不显示
+      _msg = tr('Sending to $rid… waiting for the robot to accept (a few seconds)', '正在派给 $rid…等机器人回话（几秒）');
       _problems.clear();
       _warns.clear();
     });

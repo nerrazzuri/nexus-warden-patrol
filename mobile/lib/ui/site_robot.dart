@@ -11,6 +11,7 @@ import 'package:flutter/material.dart';
 
 import '../l10n.dart';
 import '../net/site_client.dart';
+import '../net/site_text.dart';
 import 'nw/nw_button.dart';
 import 'nw/nw_p3_robots.dart';
 import 'nw/nw_theme.dart';
@@ -27,7 +28,9 @@ import 'site_recordings.dart';
 import 'site_standby.dart';
 import 'site_supervise.dart';
 import 'site_teleop.dart';
+import 'site_maps.dart' show SiteMapTab;
 import 'site_video.dart';
+import 'stop_failed.dart';
 import 'widget/fields_dialog.dart';
 
 /// 一只狗的状态说成一行（狗列表、单狗页共用）。
@@ -57,7 +60,23 @@ String taskLabel(Map task) {
   final id = '${task['task_id'] ?? ''}';
   if (task['kind'] == 'dock') return tr('Charging (docking, charging, undocking)', '充电中（对桩、充电、离桩）');
   if (task['kind'] == 'goto' && id.startsWith('charge-')) return tr('Going to charge', '去充电');
-  return '${task['kind']} ${task['state']}';
+  // 手机 App 测试 M14：以前原样印 `goto pending`
+  final what = switch ('${task['kind']}') {
+    'patrol' => tr('Patrolling', '巡逻'),
+    'goto' => id.isEmpty ? tr('Going to a point', '去某个点') : taskKindText(id),
+    'teleop' => tr('Remote control', '遥控'),
+    _ => taskKindText(id),
+  };
+  final state = switch ('${task['state']}') {
+    'pending' || 'queued' => tr('starting', '准备出发'),
+    'running' || 'active' => tr('under way', '进行中'),
+    'paused' => tr('paused', '暂停'),
+    'done' || 'succeeded' => tr('done', '完成'),
+    'failed' => tr('failed', '失败'),
+    'aborted' => tr('stopped', '已停'),
+    final x => x,
+  };
+  return '$what · $state';
 }
 
 /// 机器人连的 WiFi 一行：`Estate · 走 4G`（W42）。
@@ -76,13 +95,26 @@ class SiteRobotPage extends StatefulWidget {
   final String robotId;
   const SiteRobotPage({super.key, required this.api, required this.robotId});
 
+  /// 操作结果的提示条。
+  static const Key msgKey = Key('robot-msg');
+
   @override
   State<SiteRobotPage> createState() => _SiteRobotPageState();
 }
 
 class _SiteRobotPageState extends State<SiteRobotPage> {
   Map<String, dynamic>? _view;
-  String? _msg;
+  /// 手机 App 测试 M14：操作结果用屏幕底部的提示条（以前写在页顶，人在下面按按钮看不见）。
+  void _say(String text) {
+    if (!mounted) return;
+    ScaffoldMessenger.maybeOf(context)
+      ?..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(
+          key: SiteRobotPage.msgKey,
+          content: Text(text),
+          behavior: SnackBarBehavior.floating,
+          duration: const Duration(seconds: 6)));
+  }
 
   /// POC 11-05：任务派出去站点收下了，机器人后来报失败（起飞前检查没过之类）—— 这里听事件流，
   /// 是这台的就在页面上说原因；不然人只看到「没动」。
@@ -108,11 +140,15 @@ class _SiteRobotPageState extends State<SiteRobotPage> {
     final d = e['data'];
     final tid = d is Map ? '${d['task_id'] ?? ''}' : '';
     final why = d is Map ? '${d['reason'] ?? ''}' : '';
+    final code = navCodeText(d is Map ? d['code'] : null);
     final fix = why.contains('未标原点')
         ? tr(' Drive the robot to the dock, set its position, then tap "Mark origin here".',
             '把机器人开到充电桩前，设好位置后点「在这儿标原点」。')
-        : '';
-    setState(() => _msg = tr('Task $tid did not run: $why.$fix', '任务 $tid 没走成：$why。$fix'));
+        : code != null
+            ? tr(' ${code.$2}.', '${code.$2}。')
+            : '';
+    // 手机 App 测试 M14：不给人看任务号
+    _say(tr('${tid.isEmpty ? 'The task' : taskKindText(tid)} did not run: $why.$fix', '${tid.isEmpty ? '任务' : taskKindText(tid)}没走成：$why。$fix'));
     unawaited(_reload());
   }
 
@@ -121,12 +157,12 @@ class _SiteRobotPageState extends State<SiteRobotPage> {
       final v = await widget.api.robot(widget.robotId);
       if (mounted) setState(() => _view = v);
     } on SiteError catch (e) {
-      if (mounted) setState(() => _msg = e.toString());
+      if (mounted) _say(e.toString());
     }
   }
 
   /// 发一条、把结果写在页面上。狗收下了（或站点没带回执）回真。
-  Future<bool> _do(Future<Map<String, dynamic>> Function() f, String what) async {
+  Future<bool> _do(Future<Map<String, dynamic>> Function() f, String what, {bool stop = false}) async {
     String msg;
     var ok = false;
     try {
@@ -134,19 +170,26 @@ class _SiteRobotPageState extends State<SiteRobotPage> {
       final ack = r['ack'];
       final reason = ack is Map ? '${ack['reason'] ?? ''}' : '';
       ok = ack is! Map || ack['result'] == 'accepted' || ack['result'] == 'duplicate';
-      final res = ack is Map ? '${ack['result']}' : 'ok';
+      // 手机 App 测试 M14：回执说人话（以前是 accepted / rejected）
+      final res = ok ? tr('sent', '已发出') : tr('not accepted by the robot', '机器人没接受');
       msg = reason.isEmpty
           ? tr('$what: $res', '$what：$res')
           : tr('$what: $res (${ackReasonText(reason)})', '$what：$res（${ackReasonText(reason)}）');
+      if (stop && !ok && mounted) {
+        await showStopFailed(context, robot: widget.robotId, error: reason.isEmpty ? res : ackReasonText(reason));
+      }
     } on SiteError catch (e) {
       msg = tr('$what failed: ${refusalText(e)}', '$what 失败：${refusalText(e)}');
-      if (e.status == 409 && e.body['reason_code'] is String && mounted) {
+      if (stop) {
+        // 手机 App 测试 M02：叫停失败要醒目、不自动消失，叫人按机身急停
+        if (mounted) await showStopFailed(context, robot: widget.robotId, error: e);
+      } else if (e.status == 409 && e.body['reason_code'] is String && mounted) {
         // W53：常见的拒绝说清楚、给去处理的按钮
         await showRefusal(context, widget.api, e, robotId: widget.robotId, title: what, onChanged: _reload);
       }
     }
     if (!mounted) return ok; // 派单要等回执，人可能早就退出这一页了
-    setState(() => _msg = msg);
+    _say(msg);
     await _reload();
     return ok;
   }
@@ -177,52 +220,6 @@ class _SiteRobotPageState extends State<SiteRobotPage> {
     await _do(() => widget.api.returnHome(widget.robotId, abort: true), what);
   }
 
-  /// 换姿态（POC）：先选、再确认（机器人会马上动）；有任务在跑直接说先停任务。
-  Future<void> _posture(Map<String, dynamic>? v) async {
-    final st = v?['status'];
-    final task = st is Map ? st['task'] : null;
-    final tid = task is Map ? task['task_id'] : null;
-    if (tid is String && tid.isNotEmpty) {
-      setState(() => _msg = tr('Running task $tid: stop it first to change posture.',
-          '正在执行任务 $tid：先停止它再换姿态。'));
-      return;
-    }
-    if (v?['held'] is Map) {
-      setState(() => _msg = tr('Stopped: press Resume before changing posture.',
-          '已叫停：先点「恢复」再换姿态。'));
-      return;
-    }
-    final modes = robotPostures(v);
-    final mode = await showModalBottomSheet<String>(
-        context: context,
-        builder: (ctx) => SafeArea(
-                child: Column(mainAxisSize: MainAxisSize.min, children: [
-              for (final m in modes)
-                ListTile(
-                    key: Key('posture-$m'),
-                    leading: Icon(postureIcon(m)),
-                    title: Text(postureLabel(m)),
-                    onTap: () => Navigator.pop(ctx, m)),
-            ])));
-    if (mode == null || !mounted) return;
-    final what = postureLabel(mode);
-    final yes = await showDialog<bool>(
-        context: context,
-        builder: (ctx) => AlertDialog(
-              title: Text(what),
-              content: Text(tr('The robot will move its body right away. Make sure nobody is next to it.',
-                  '机器人会马上动起来，先确认旁边没有人。')),
-              actions: [
-                TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(tr('Cancel', '取消'))),
-                FilledButton(
-                    key: const Key('posture-confirm'),
-                    onPressed: () => Navigator.pop(ctx, true),
-                    child: Text(what)),
-              ],
-            ));
-    if (yes != true || !mounted) return;
-    await _do(() => widget.api.posture(widget.robotId, mode), what);
-  }
 
   void _openTrail() => Navigator.push(context,
       MaterialPageRoute<void>(builder: (_) => SiteMappingTrailPage(api: widget.api, robotId: widget.robotId)));
@@ -247,7 +244,7 @@ class _SiteRobotPageState extends State<SiteRobotPage> {
     if (got == null || got[0].isEmpty) return;
     final mapId = got[1].trim(), version = got[2].trim();
     if (mapId.isEmpty != version.isEmpty) {
-      setState(() => _msg = tr(
+      _say(tr(
           'Build while driving: fill in both map ID and version (leave both empty to record only)',
           '边走边建：地图号和版本需同时填写（只录包则都留空）'));
       return;
@@ -270,6 +267,11 @@ class _SiteRobotPageState extends State<SiteRobotPage> {
             key: const Key('reloc-home'),
             onPressed: () => Navigator.pop(c, 'home'),
             child: Text(tr('At the origin (dock)', '在原点（充电桩）'))),
+        // 手机 App 测试 M28：在地图上点（以前只有地图栏有，这里没指过去）
+        SimpleDialogOption(
+            key: const Key('reloc-map'),
+            onPressed: () => Navigator.pop(c, 'map'),
+            child: Text(tr('Pick it on the map', '在地图上点出位置'))),
         SimpleDialogOption(
             key: const Key('reloc-xy'),
             onPressed: () => Navigator.pop(c, 'xy'),
@@ -282,6 +284,18 @@ class _SiteRobotPageState extends State<SiteRobotPage> {
       ]),
     );
     if (how == null || !mounted) return;
+    if (how == 'map') {
+      await Navigator.push(
+          context,
+          MaterialPageRoute<void>(
+              builder: (_) => Scaffold(
+                  appBar: AppBar(
+                      title: Text(tr('Set position of ${widget.robotId}: tap the map, then Set position',
+                          '设 ${widget.robotId} 的位置：点地图，再点「设位置」'))),
+                  body: SiteMapTab(api: widget.api))));
+      if (mounted) await _reload();
+      return;
+    }
     if (how == 'find') {
       // W41：狗拿看到的墙在整张图上套；认不准它会拒、说原因（有两处差不多像……），那时再手动设。
       await _do(() => widget.api.relocalize(widget.robotId, global: true), tr('Auto-localize', '自动定位'));
@@ -326,7 +340,7 @@ class _SiteRobotPageState extends State<SiteRobotPage> {
     if (got == null) return;
     final x = double.tryParse(got[0]), y = double.tryParse(got[1]), deg = double.tryParse(got[2]);
     if (x == null || y == null || deg == null || !x.isFinite || !y.isFinite || !deg.isFinite) {
-      if (mounted) setState(() => _msg = tr('Coordinates and heading must be numbers', '坐标和朝向须为数字'));
+      if (mounted) _say(tr('Coordinates and heading must be numbers', '坐标和朝向须为数字'));
       return;
     }
     await _do(() => widget.api.relocalize(widget.robotId, x: x, y: y, yaw: deg * pi / 180),
@@ -341,8 +355,12 @@ class _SiteRobotPageState extends State<SiteRobotPage> {
       builder: (c) => AlertDialog(
         title: Text(tr('Mark origin here', '在这儿标原点')),
         content: Text(tr(
-            'Set the origin of ${widget.robotId} on this map to its current position? Standby points are unchanged.\nThe robot verifies its localization first and won\'t mark it if the position isn\'t set, the error is large, or it is busy or switching maps.',
-            '将 ${widget.robotId} 在此地图上的原点改为当前位置？待命点不变。\n机器人会先核验定位：未设置位置、偏差过大、正在执行任务或换图时不会标记。')),
+            'Set the origin of ${widget.robotId} on this map to its current position? Standby points are unchanged.\n'
+                'This applies to the whole map and cannot be undone (only by marking again). Return home and "At the origin" will use the new spot.\n'
+                'The robot verifies its localization first and won\'t mark it if the position isn\'t set, the error is large, or it is busy or switching maps.',
+            '将 ${widget.robotId} 在此地图上的原点改为当前位置？待命点不变。\n'
+                '对整张地图生效，不能撤销（只能重新标）。「回原点」「在原点」以后都按新的位置。\n'
+                '机器人会先核验定位：未设置位置、偏差过大、正在执行任务或换图时不会标记。')),
         actions: [
           TextButton(onPressed: () => Navigator.pop(c, false), child: Text(tr('Cancel', '取消'))),
           FilledButton(
@@ -382,7 +400,7 @@ class _SiteRobotPageState extends State<SiteRobotPage> {
         );
         if (move != true) {
           if (mounted) {
-            setState(() => _msg = tr('Not marked: standby point home is still on $where',
+            _say(tr('Not marked: standby point home is still on $where',
                 '未标记：待命点 home 仍在 $where 上'));
           }
           return;
@@ -415,7 +433,7 @@ class _SiteRobotPageState extends State<SiteRobotPage> {
       }
     }
     if (!mounted) return;
-    setState(() => _msg = msg);
+    _say(msg);
     await _reload();
   }
 
@@ -425,7 +443,10 @@ class _SiteRobotPageState extends State<SiteRobotPage> {
     try {
       v = await widget.api.robot(widget.robotId);
     } on SiteError catch (e) {
-      if (mounted) setState(() => _msg = tr('Stop failed: $e', '叫停失败：$e'));
+      if (mounted) {
+        _say(tr('Stop failed: ${refusalText(e)}', '叫停失败：${refusalText(e)}'));
+        await showStopFailed(context, robot: widget.robotId, error: e);
+      }
       return;
     }
     final st = v['status'];
@@ -433,20 +454,18 @@ class _SiteRobotPageState extends State<SiteRobotPage> {
     final tid = task is Map ? task['task_id'] : null;
     if (tid is! String || tid.isEmpty) {
       if (mounted) {
-        setState(() {
-          _view = v;
-          _msg = tr('The robot isn\'t running a task', '机器人当前无任务');
-        });
+        setState(() => _view = v);
+        _say(tr('The robot isn\'t running a task', '机器人当前无任务'));
       }
       return;
     }
-    await _do(() => widget.api.abort(widget.robotId, tid), tr('Stop', '叫停'));
+    await _do(() => widget.api.abort(widget.robotId, tid), tr('Stop', '叫停'), stop: true);
   }
 
   /// 派巡逻（W53）：底部弹框，带估时、撞日程排队、被拒说原因。
   Future<void> _patrol() async {
     final msg = await showPatrolSheet(context, widget.api, widget.robotId);
-    if (msg != null && mounted) setState(() => _msg = msg);
+    if (msg != null && mounted) _say(msg);
     await _reload();
   }
 
@@ -497,12 +516,15 @@ class _SiteRobotPageState extends State<SiteRobotPage> {
     final c = Nw.of(context);
     final s = widget.api.session;
     final v = _view;
-    final events = (v?['events'] as List? ?? const []).whereType<Map>().toList();
+    final events = compactEvents((v?['events'] as List? ?? const []).whereType<Map>().toList());
     final phase = v == null ? null : robotPhase(v);
     final dispatch = s?.canDispatch ?? false;
     final maps = s?.canManageMaps ?? false;
-    void go(Widget Function() page) =>
-        Navigator.push(context, MaterialPageRoute<void>(builder: (_) => page()));
+    // 手机 App 测试 M12：从遥控等页面回来就重新拉一次（以前要手动下拉才看到「恢复」）
+    Future<void> go(Widget Function() page) async {
+      await Navigator.push(context, MaterialPageRoute<void>(builder: (_) => page()));
+      if (mounted) await _reload();
+    }
     // 宽的（横屏手机、平板、桌面）：画面在左、操作在右，不用翻就按得到；竖屏手机一栏往下排。
     final wide = MediaQuery.sizeOf(context).width >= 700;
 
@@ -533,13 +555,6 @@ class _SiteRobotPageState extends State<SiteRobotPage> {
             icon: Icons.flag_rounded,
             label: tr('Stop and return home', '中止并回原点'),
             onTap: _abortHome),
-      // 站起、趴下、蹲下（POC）：跟遥控同一个权限；机器人报了才有
-      if ((s?.canTeleop ?? false) && robotPostures(v).isNotEmpty)
-        NwOpTile(
-            tileKey: const Key('btn-posture'),
-            icon: Icons.accessibility_new_rounded,
-            label: tr('Posture…', '姿态…'),
-            onTap: () => _posture(v)),
       // 连续录像（W18）：谁都能看
       NwOpTile(
           tileKey: const Key('btn-recordings'),
@@ -550,7 +565,10 @@ class _SiteRobotPageState extends State<SiteRobotPage> {
         NwOpTile(
             tileKey: const Key('btn-teleop'),
             icon: Icons.sports_esports_rounded,
-            label: tr('Remote control', '遥控'),
+            // 用户 11-08：站起、趴下、蹲下只在遥控页里换（这里不再单独有「姿态…」）
+            label: robotPostures(v).isNotEmpty
+                ? tr('Remote control · posture', '遥控 · 姿态')
+                : tr('Remote control', '遥控'),
             onTap: () => go(() => SiteTeleopPage(api: widget.api, robotId: widget.robotId))),
       // 上装（W21）：警灯、警笛、聚光灯、喇叭。保安、管理员；狗报了 deter 才有
       if (dispatch && robotCan(v, 'deter'))
@@ -657,6 +675,15 @@ class _SiteRobotPageState extends State<SiteRobotPage> {
                           '点「恢复」前，站点不会再派出此机器人（日程、事件、回待命点、遥控均不派）'),
                       style: NwText.bodySmall.copyWith(color: c.textSecondary)),
                 ])),
+                if (!dispatch)
+                  // 手机 App 测试 M13：经理没有「恢复」：说找谁
+                  Padding(
+                      padding: const EdgeInsets.only(left: Nw.s8),
+                      child: SizedBox(
+                          width: 120,
+                          child: Text(tr('A guard or administrator can resume it', '保安或管理员能恢复'),
+                              key: const Key('robot-held-who'),
+                              style: NwText.bodySmall.copyWith(color: c.textSecondary)))),
                 if (dispatch) ...[
                   const SizedBox(width: Nw.s8),
                   NwButton(
@@ -666,8 +693,6 @@ class _SiteRobotPageState extends State<SiteRobotPage> {
                 ],
               ]),
             )),
-      if (_msg != null)
-        Padding(padding: const EdgeInsets.only(top: Nw.s8), child: NwNotice(text: _msg!, tone: NwTone.neutral)),
       const SizedBox(height: Nw.s16),
     ];
     // 画面经站点来（W00c5b）：谁都能看（经理也是），站点那头有人看才让狗推。

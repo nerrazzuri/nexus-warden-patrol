@@ -19,7 +19,11 @@ const BRAND: Record<Scheme, { brandSoft: string; onBrand: string; brandText: str
 function webExtras(p: Palette, s: Scheme): Palette {
   const b = BRAND[s];
   return { well: "#000000", mapBg: p.surfaceVariant, brand: p.tertiary, focus: p.tertiary, ...b,
-    sidebar: s === "dark" ? "#0F1218" : "#ECEEF1" };
+    sidebar: s === "dark" ? "#0F1218" : "#ECEEF1",
+    // 第 2 轮 setup N8:出口线、藏匿点的颜色(紫):不跟禁区红、虚拟墙橙、选中蓝撞
+    mark: s === "dark" ? "#C9A2E8" : "#7B3FA0",
+    // 网页易用性 P2-29:浅色下浅灰字放在灰底、侧栏上只有 3.7–4.1:1;网页用深一点的灰(≥ 4.7:1)
+    ...(s === "light" ? { textMuted: "#5F626A" } : {}) };
 }
 
 /** 深色下底图反亮度的那个 a(CSS invert(a))。 */
@@ -75,6 +79,9 @@ export function applyTheme(s: Scheme, root: HTMLElement = document.documentEleme
   root.style.setProperty("--font-sans", `'${mobile.font.sans}', ${fb}, system-ui, sans-serif`);
   root.style.setProperty("--font-mono", `'${mobile.font.mono}', ${fb}, ui-monospace, monospace`);
   root.style.setProperty("--map-raster", mapRasterFilter(s));
+  // 第 2 轮 P1-52:地图编辑「看结果」—— 擦掉的画成这一套下的空地色、加的障碍画成墙色(原来写死白 / 黑,深色下反了)
+  root.style.setProperty("--map-free", rasterShade(254, s));
+  root.style.setProperty("--map-wall", rasterShade(0, s));
   root.style.setProperty("color-scheme", s);
   root.dataset.theme = s;
   scheme.value = s;
@@ -121,7 +128,9 @@ const USAGE = mobile.usage as Record<string, string>;
 const ALIAS: Record<string, string> = {
   P1: "p1", P2: "p2", P3: "p3",
   deterring: "p1", fell: "p1", estop: "estop", offline: "offline",
-  patrolling: "online", returning: "online", charging: "online", idle: "online", manual: "online",
+  patrolling: "online", returning: "online", charging: "online", idle: "online",
+  // 第 2 轮 duty N10:manual = 被人叫停了、等人点恢复 —— 不是正常,用 P2(橙),跟横幅「n 台已停」一致
+  manual: "p2",
   online: "online", connected: "connected", ok: "ok", lowBattery: "lowBattery", battery: "battery",
 };
 

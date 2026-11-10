@@ -24,7 +24,7 @@ class MainActivity : FlutterActivity() {
                 "start" -> {
                     askOnce()
                     val i = Intent(this, WatchService::class.java).setAction(WatchService.ACTION_START)
-                    for (k in listOf("site", "url", "fingerprint", "token")) i.putExtra(k, call.argument<String>(k) ?: "")
+                    for (k in listOf("site", "url", "fingerprint", "token", "lang", "titles")) i.putExtra(k, call.argument<String>(k) ?: "")
                     if (Build.VERSION.SDK_INT >= 26) startForegroundService(i) else startService(i)
                     result.success(true)
                 }
@@ -36,6 +36,8 @@ class MainActivity : FlutterActivity() {
                     result.success(true)
                 }
                 "running" -> result.success(WatchService.running)
+                // 手机 App 测试 M01:底部导航页按返回键 = 退到后台,不结束 Activity(结束会退出登录)
+                "background" -> result.success(moveTaskToBack(true))
                 else -> result.notImplemented()
             }
         }

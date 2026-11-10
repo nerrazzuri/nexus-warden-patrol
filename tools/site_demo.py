@@ -45,6 +45,11 @@ ENV["PYTHONPATH"] = os.pathsep.join(str(ROOT / p) for p in (
     "packages/robot-agent/src", "packages/site-node/src", "packages/localizer/src", "src"))
 HOST = "127.0.0.2"
 
+#: 仿真机器人规划用的机身半径(米):代理再加 0.05 余量 = 站点查路线用的 0.40
+#: (intercept_reach.REACH_RADIUS_M,对齐真机 Nav2 的机身矩形)。
+#: 不对齐时站点说走得通、仿真机器人当场跳点(11-09)。
+SIM_ROBOT_RADIUS_M = 0.35
+
 
 def _free_port() -> int:
     with socket.socket() as s:
@@ -114,6 +119,125 @@ def _seed_recordings(home: Path, work: Path, minutes: int,
                           total=len(clips[cam]))
     finally:
         db.close()
+
+
+def _persons_sock(api_port: int, robot: str) -> str:
+    """``--persons-sim`` 时每台仿真机器人人员桥的套接字(tools/demo_person.py 连它)。"""
+    return f"/tmp/nexwar-demo-{api_port}-{robot}-persons.sock"
+
+
+def _seed_history(home: Path, days: int, robots: list[str], *, big_day: int = 12) -> dict[str, int]:
+    """liang-d5 第 5 轮前:预先放过去 ``days`` 天的报警、临时巡逻、活动记录、交班留言(站点没起来时
+    直接写库),好测「某一天发生了什么、怎么查」。``big_day`` 天前那天放 600 多条报警(超过一页)。
+    时刻按 Asia/Kuala_Lumpur(演示站点后面设的就是这个时区)。固定随机种子,每次一样。"""
+    import json
+    import random
+    from datetime import datetime, timedelta
+    from zoneinfo import ZoneInfo
+
+    from nexwar_site.alerts import LEVEL_OF
+    from nexwar_site.db import SiteDB
+    rnd = random.Random(7)
+    tz = ZoneInfo("Asia/Kuala_Lumpur")
+    today = datetime.now(tz).replace(hour=0, minute=0, second=0, microsecond=0)
+    zones = ("东区", "北门", "停车场", "仓库")
+    routes = ("东区巡逻", "周界一圈", "停车场")
+    ends = [("task_done", ""), ("task_aborted", "halt"), ("task_failed", "第 2 个点被挡住了")]
+    db = SiteDB(home / "site.db")
+    seq: dict[str, int] = {}
+    n = {"alerts": 0, "patrols": 0, "audit": 0, "notes": 0}
+    a_cols = ("key, level, kind, robot, title, detail, first_ms, last_ms, count, acked_by, "
+              "acked_ms, resolved_by, resolved_ms, escalated, context, verdict")
+    q_cols = ("id, robot, mission, label, by, created_ms, not_before_ms, estimate_s, state, "
+              "task_id, started_ms, ended_ms, note")
+
+    def ms(d: datetime) -> int:
+        return int(d.timestamp() * 1000)
+
+    def alert(c, kind: str, robot: str, title: str, at: datetime, who: str,
+              verdict: str, ctx: dict | None = None) -> None:
+        grp = f"{robot}/{kind}"
+        seq[grp] = seq.get(grp, 1000) + 1          # 1000 起:不跟站点自己往后编的号撞
+        first = ms(at)
+        done = first + rnd.randint(2, 25) * 60_000
+        c.execute(f"INSERT INTO alerts({a_cols}) VALUES ({','.join('?' * 16)})",
+                  (f"{grp}#{seq[grp]}", LEVEL_OF[kind].value, kind, robot, title, "", first,
+                   first + 30_000, 1, who, first + 60_000, who, done, 0,
+                   json.dumps(ctx or {}, ensure_ascii=False), verdict))
+        n["alerts"] += 1
+
+    def audit(c, at: datetime, who: str, action: str, target: str = "") -> None:
+        c.execute("INSERT INTO audit(at, actor, action, target, status, detail, remote) "
+                  "VALUES (?,?,?,?,?,?,?)",
+                  (ms(at), who, action, target, 200, "{}", "192.168.5.20"))
+        n["audit"] += 1
+
+    def one_day(c, back: int) -> None:
+        d0 = today - timedelta(days=back)
+
+        def at(h: int, m: int = 0, s: int = 0) -> datetime:
+            return d0 + timedelta(hours=h, minutes=m, seconds=s)
+        guard = "gina" if back % 2 else "olga"
+        # 活动:早晚交班登录、晚上布防、早上撤防
+        for h, who in ((7, "gina"), (19, "gina"), (9, "olga")):
+            audit(c, at(h, rnd.randint(0, 9)), f"login:{who}", "POST /api/login")
+        audit(c, at(22, 0, 5), guard, "POST /api/mode", "armed")
+        audit(c, at(6, 30), guard, "POST /api/mode", "disarmed")
+        # 临时巡逻:每天 2–4 趟,大多跑完,偶尔被叫停、失败
+        for i in range(rnd.randint(2, 4)):
+            robot = rnd.choice(robots)
+            start = at(rnd.choice((8, 13, 20, 23)), rnd.randint(0, 50))
+            end = start + timedelta(minutes=rnd.randint(12, 35))
+            tid = f"adhoc-hist-{back}-{i}"
+            kind, why = rnd.choices(ends, weights=(8, 1, 1))[0]
+            c.execute(f"INSERT INTO adhoc_queue({q_cols}) VALUES ({','.join('?' * 13)})",
+                      (f"hist-{back}-{i}", robot, "loop", rnd.choice(routes), guard,
+                       ms(start) - 60_000, ms(start), 1200, "started", tid, ms(start), ms(end), ""))
+            c.execute("INSERT INTO events(robot_id, boot_id, seq, event_id, kind, data, stamp, "
+                      "received_at) VALUES (?,?,?,?,?,?,?,?)",
+                      (robot, "hist", back * 10 + i, tid, kind,
+                       json.dumps({"task_id": tid, "reason": why}, ensure_ascii=False),
+                       ms(end), ms(end)))
+            audit(c, start - timedelta(seconds=40), guard, f"POST /api/robots/{robot}/patrol",
+                  robot)
+            if kind == "task_aborted":
+                audit(c, end, guard, f"POST /api/robots/{robot}/halt", robot)
+            n["patrols"] += 1
+        # 报警:夜里几条有人闯入,偶尔卡住、掉线
+        for _ in range(rnd.randint(2, 6)):
+            z = rnd.choice(zones)
+            t0 = at(rnd.choice((0, 1, 2, 3, 21, 22, 23)), rnd.randint(0, 59), rnd.randint(0, 59))
+            v = rnd.choice(("intruder", "false_alarm", "false_alarm"))
+            alert(c, "intrusion", "site", f"{z} 有人闯入", t0, guard, v, {"zone": z})
+            audit(c, t0 + timedelta(minutes=3), guard, "POST /api/alerts/x/resolve", z)
+        if rnd.random() < 0.5:
+            alert(c, "stuck", rnd.choice(robots), "点位 P2 未到达,已跳过",
+                  at(13, rnd.randint(0, 59)), guard, "handled")
+        if rnd.random() < 0.3:
+            r = rnd.choice(robots)
+            alert(c, "robot_offline", r, f"{r} 掉线", at(16, rnd.randint(0, 59)), guard, "handled")
+        if back == big_day:
+            # 那天夜里一路摄像头坏了乱报:640 条,几乎全是误报(超过报警记录一页 500 条)
+            for i in range(640):
+                t0 = at(0, 30) + timedelta(seconds=20 * i)
+                alert(c, "intrusion", "site", "仓库 有人闯入", t0, "gina", "false_alarm",
+                      {"zone": "仓库", "camera": "wh-2"})
+        notes = ((7, "gina", "夜班正常,东区一次误报已关。"),
+                 (19, "olga", "白天正常,停车场有施工车辆进出。"))
+        for h, who, text in notes:
+            if back == big_day:
+                text = "仓库摄像头 wh-2 夜里乱报 600 多条,已报修。"
+            c.execute("INSERT INTO shift_notes(at_ms, author, text) VALUES (?,?,?)",
+                      (ms(at(h, 5)), who, text))
+            n["notes"] += 1
+
+    try:
+        with db.tx() as c:
+            for back in range(days, 0, -1):
+                one_day(c, back)
+    finally:
+        db.close()
+    return n
 
 
 def _patrol(*args: str) -> str:
@@ -243,8 +367,9 @@ def _seed_w53(base: str, password: str, robots: list[str]) -> list[str]:
                   {"revision": 0, "confirm": True, "empty_ok": True}, tok)
     if code != 200:
         out.append(f"  禁行区确认没成({code} {d.get('error', '')})")
-    # 机器人 A 起在 (0, 0):旁边绕一小圈
-    pts = [(0.6, 0.0), (0.6, 0.6), (0.0, 0.6)]
+    # 机器人 A 起在 (0, 0):旁边绕一小圈。商场图 mall3 上 A 的东北边紧挨着障碍(在 0.4 m 安全带里,
+    # 站点逐段查走不通,11-08 用户测试时路线没存成),绕东南边那片空地
+    pts = [(1.2, -0.6), (1.2, -1.4), (0.0, -1.0)]
     wps = [{"name": f"P{i + 1}", "x": x, "y": y, "yaw": 0.0} for i, (x, y) in enumerate(pts)]
     code, d = req("POST", "/api/routes/demo-loop", {"map_id": "estate-1", "map_version": "7",
                                                     "waypoints": wps, "base_revision": 0}, tok)
@@ -316,6 +441,11 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--backup", action="store_true",
                     help="开备份(备份目录、口令密钥、备份密钥都放在 --dir 下面,不碰 /etc):"
                          "试备份、解开备份、演练、托管包用")
+    ap.add_argument("--persons-sim", action="store_true",
+                    help="仿真机器人开本机人员桥;tools/demo_person.py 让某台「看见人」"
+                         "(布防时站点报 dog_sees_person,测响铃、处置)")
+    ap.add_argument("--history-days", type=int, default=0, metavar="N",
+                    help="预先放过去 N 天的报警、临时巡逻、活动、交班留言(12 天前 640 条报警)")
     ap.add_argument("--recordings", type=int, default=0, metavar="N",
                     help="往站点里放 N 分钟的假录像(要 ffmpeg;看值班台的录像页用)")
     ap.add_argument("--unbound", type=int, default=0, choices=range(0, 5), metavar="N",
@@ -413,6 +543,11 @@ def _setup_rest(a, home: Path, names: list[str]) -> str:
     fp = _site(home, "fingerprint").strip()
     if a.recordings > 0:
         _seed_recordings(home, a.dir, a.recordings, a.video_dir)
+    if a.history_days > 0:
+        got = _seed_history(home, a.history_days, names)
+        print(f"  历史数据:过去 {a.history_days} 天,报警 {got['alerts']} 条、"
+              f"临时巡逻 {got['patrols']} 趟、活动 {got['audit']} 条、"
+              f"交班留言 {got['notes']} 条", flush=True)
     return fp
 
 
@@ -439,13 +574,23 @@ def _run(a, home: Path, logs: Path, names: list[str], bport: int, fp: str, procs
                                     else ["--runs-root", str(a.dir / f"runs{sub}")]),
                                   "--map", "estate-1:7", "--home", f"{i * 1.0},0,0",
                                   "--nav", a.nav,
+                                  # 11-09 临时路线 P4–P7 被跳过:站点按 0.40 m 判通,
+                                  # 仿真老规划器按外接圆 0.52 m 判不通。两边对齐
+                                  *(["--robot-radius", f"{SIM_ROBOT_RADIUS_M}"]
+                                    if a.nav == "planned" else []),
                                   # 规划要图:站点下发地图走发件箱 + 接收口(真机器人也是这么配的);
                                   # W54 假建图也要(录包、建出的图从发件箱传站点)
                                   *(["--outbox", str(a.dir / f"outbox{sub}"),
-                                     "--intake", f"https://{a.host}:{a.intake_port}"]
+                                     "--intake", f"https://{a.host}:{a.intake_port}",
+                                     # 日志设计 第 5 条:演示里没有 systemd,按文件把日志传到站点
+                                     "--log-ship-file", str(logs / f"agent{sub}.log")]
                                     if a.nav == "planned" or a.w54 else []),
                                   *(["--mapping-sim", str(a.map_dir.resolve())] if a.w54
-                                    else [])],
+                                    else []),
+                                  # 第 5 轮前:开本机人员桥,tools/demo_person.py 让它「看见人」
+                                  # (套接字路径最长 107 字符,演示目录太深:放 /tmp 下面的短名字)
+                                  *(["--persons", "bridge", "--persons-socket",
+                                     _persons_sock(a.api_port, n)] if a.persons_sim else [])],
                   "nexwar_agent 起来了",
                   # W61:每台自己的数据目录(远程运维的维护标记 ops-hold.json 在那里;
                   # 原来几台共用,串了)
@@ -461,6 +606,8 @@ def _run(a, home: Path, logs: Path, names: list[str], bport: int, fp: str, procs
               f"  账号  demo / {a.password}\n"
               f"  机器人 {'、'.join(names)}(仿真)\n"
               + "".join(s + "\n" for s in seeded)
+              + "".join(f"  看见人  tools/demo_person.py --socket {_persons_sock(a.api_port, n)}\n"
+                        for n in (names if a.persons_sim else []))
               + "".join(f"  没绑定 {r['serial']}  贴纸码 {r['sticker']}\n" for r in fresh)
               + "Ctrl+C 全部收掉。", flush=True)
         # 等 Ctrl+C:用处理函数立个旗,不用屏蔽信号(屏蔽会被子进程继承,收掉时它们就不理 SIGTERM)

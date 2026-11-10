@@ -13,6 +13,7 @@ import 'package:flutter/material.dart';
 
 import '../l10n.dart';
 import '../net/site_client.dart';
+import '../net/site_text.dart';
 import 'nw/nw_button.dart';
 import 'nw/nw_p4_admin.dart' show nwGap8;
 import 'nw/nw_theme.dart';
@@ -88,7 +89,13 @@ class _PatrolSheetState extends State<_PatrolSheet> {
     unawaited(_load());
   }
 
+  /// 被叫停了（手机 App 测试 M13）：派之前就说，不等点了才被拒。
+  Map? _held;
+
   Future<void> _load() async {
+    unawaited(widget.api.robot(widget.robotId).then((v) {
+      if (mounted && v['held'] is Map) setState(() => _held = v['held'] as Map);
+    }, onError: (Object _) {}));
     try {
       final s = await widget.api.schedule();
       final rs = (s['missions'] as List? ?? const []).map((e) => '$e').toList();
@@ -184,14 +191,24 @@ class _PatrolSheetState extends State<_PatrolSheet> {
           Text(tr('Dispatch ${widget.robotId} on patrol', '派 ${widget.robotId} 巡逻'),
               style: NwText.titleMedium.copyWith(color: c.text, fontWeight: FontWeight.w700)),
           nwGap8,
+          if (_held != null) ...[
+            NwNotice(
+                key: const Key('patrol-held'),
+                tone: NwTone.warning,
+                text: tr(
+                    '${widget.robotId} was stopped by ${_held!['by']}. It won\'t go until a guard or administrator taps Resume.',
+                    '${widget.robotId} 已被 ${_held!['by']} 叫停。保安或管理员点「恢复」之前，它不会出发。')),
+            nwGap8,
+          ],
           if (_error != null)
             NwNotice(text: _error!, tone: NwTone.error)
           else if (rs == null)
             const Padding(padding: EdgeInsets.all(Nw.s16), child: Center(child: CircularProgressIndicator()))
           else if (rs.isEmpty)
             NwNotice(
-                text: tr('No patrol routes yet. An administrator adds them under Admin → Patrol routes.',
-                    '暂无巡逻路线，请管理员在「管理 → 巡逻路线」中添加。'))
+                text: (widget.api.session?.canManageRoutes ?? false)
+                    ? tr('No patrol routes yet. Add them under Admin → Patrol routes.', '暂无巡逻路线，请在「管理 → 巡逻路线」中添加。')
+                    : tr('No patrol routes yet. Ask an administrator to add them.', '暂无巡逻路线，请找管理员添加。'))
           else
             ConstrainedBox(
               constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(context).height * 0.45),
@@ -233,8 +250,12 @@ class _PatrolSheetState extends State<_PatrolSheet> {
           ],
           nwGap8,
           Text(
-              tr("One-off patrols are not saved to the schedule. The manager and administrator are notified; the robot returns to standby afterwards.",
-                  '临时巡逻不保存到日程，派出后通知经理和管理员，结束后机器人返回待命点。'),
+              // 手机 App 测试 M38：对经理不说「会通知经理」
+              widget.api.session?.role == 'owner'
+                  ? tr('One-off patrols are not saved to the schedule. The administrator is notified; the robot returns to standby afterwards.',
+                      '临时巡逻不保存到日程，派出后通知管理员，结束后机器人返回待命点。')
+                  : tr("One-off patrols are not saved to the schedule. The manager and administrator are notified; the robot returns to standby afterwards.",
+                      '临时巡逻不保存到日程，派出后通知经理和管理员，结束后机器人返回待命点。'),
               style: NwText.bodySmall.copyWith(color: c.textSecondary)),
           nwGap8,
           Row(children: [
@@ -248,7 +269,7 @@ class _PatrolSheetState extends State<_PatrolSheet> {
                 child: NwButton(
                     buttonKey: _PatrolSheet.sendKey,
                     label: queued ? tr('Queue it', '排队派出') : tr('Send', '派出'),
-                    onPressed: _pick == null || _busy ? null : _send)),
+                    onPressed: _pick == null || _busy || _held != null ? null : _send)),
           ]),
         ]),
       ),
@@ -311,7 +332,7 @@ class TodayPatrolList extends StatelessWidget {
         (it['by'] == s?.name || (s?.canSchedule ?? false));
     final (st, _) = patrolStateText('${it['state']}', _skippedOf(it));
     final lines = <String>[
-      '${hhmm((it['at_ms'] as num).toInt(), offsetMin)} · ${it['label']}${'${it['robot'] ?? ''}'.isEmpty ? '' : ' · ${it['robot']}'}',
+      '${hhmm((it['at_ms'] as num).toInt(), offsetMin)} · ${siteKnown('${it['label']}')}${'${it['robot'] ?? ''}'.isEmpty ? '' : ' · ${it['robot']}'}',
       st,
       if (adhoc) tr('One-off patrol sent by ${it['by']}', '${it['by']} 派的临时巡逻'),
       if (it['end_ms'] is num) tr('Ends around ${hhmm((it['end_ms'] as num).toInt(), offsetMin)}', '预计 ${hhmm((it['end_ms'] as num).toInt(), offsetMin)} 结束'),
@@ -361,15 +382,21 @@ class TodayPatrolList extends StatelessWidget {
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: Nw.s8),
               child: Row(children: [
-                SizedBox(
-                    width: 48,
-                    child: Text(hhmm((items[i]['at_ms'] as num).toInt(), offsetMin),
-                        style: NwText.labelLarge.copyWith(color: c.text, fontFeatures: const [FontFeature.tabularFigures()]))),
+                // 手机 App 测试 M16：时间列跟着字宽，不折行（以前写死 48，字放大到 1.3 倍折成「12:5」「3」）
+                ConstrainedBox(
+                    constraints: const BoxConstraints(minWidth: 48),
+                    child: Padding(
+                      padding: const EdgeInsets.only(right: Nw.s8),
+                      child: Text(hhmm((items[i]['at_ms'] as num).toInt(), offsetMin),
+                          maxLines: 1,
+                          softWrap: false,
+                          style: NwText.labelLarge.copyWith(color: c.text, fontFeatures: const [FontFeature.tabularFigures()])),
+                    )),
                 Expanded(
                     child: Text(
                         [
                           if (items[i]['kind'] == 'adhoc') tr('One-off', '临时'),
-                          '${items[i]['label']}',
+                          siteKnown('${items[i]['label']}'),
                           if ('${items[i]['robot'] ?? ''}'.isNotEmpty) '${items[i]['robot']}',
                           if (items[i]['kind'] == 'adhoc' && '${items[i]['by'] ?? ''}'.isNotEmpty) '${items[i]['by']}',
                         ].join(' · '),

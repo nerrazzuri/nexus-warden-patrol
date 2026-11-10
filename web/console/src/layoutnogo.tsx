@@ -4,13 +4,16 @@
 // - 机器人还没收到在生效的那一份:写「等机器人确认中」。
 // 改的先记在页面上,外框「保存」整份存(带打开时看到的修订号;别人改过回 409,外框说「刚才有人改过」)。
 // 人员忽略区(W41,机器人在里面看见人不报)、抹掉区(机器人永远不去、画图时抹成没建图)也在这里画。
-import { useEffect, useState } from "preact/hooks";
+import { useEffect, useRef, useState } from "preact/hooks";
 import { api, ApiError } from "./api";
-import { ConfirmPassword } from "./confirmpw";
 import { Confirm, Modal } from "./dialogs";
-import { t } from "./i18n";
-import { polyPx, toMap, type NavZones, type TabProps } from "./layoutpage";
-import type { NavZone, Pt } from "./mapview";
+import { clickGuard, startDrag, swallowClick } from "./dragpt";
+import { t, joinList } from "./i18n";
+import { siteKnown } from "./sitetext";
+import { closesLoop, polyPx, toMap, type NavZones, type TabProps } from "./layoutpage";
+import type { LegendKey } from "./mapcanvas";
+import { pointInPolygon, type NavZone, type Pt } from "./mapview";
+import { clientToMap } from "./routes";
 
 type Draw = "nogo" | "wall" | "slow" | "ignore" | "erase";
 interface Form { label: string; hard: boolean; speed: number; temp: boolean; days: number }
@@ -40,8 +43,13 @@ export function NogoTab(p: TabProps) {
   const [pts, setPts] = useState<Pt[]>([]);
   const [form, setForm] = useState(false);
   const [removing, setRemoving] = useState<Draft | null>(null);
-  const [confirming, setConfirming] = useState<"ask" | "pw" | null>(null);
+  const [confirming, setConfirming] = useState<"ask" | null>(null);
   const [behind, setBehind] = useState<string[]>([]);
+  // P1-31:选中一个已画好的(点图上或点列表),能拖顶点、改名
+  const [sel, setSel] = useState<string | null>(null);
+  const [renaming, setRenaming] = useState(false);
+  const root = useRef<HTMLDivElement>(null);
+  const guard = useRef(clickGuard());
 
   const changed = JSON.stringify(zones) !== JSON.stringify(nav?.zones ?? []);
   useEffect(() => p.setDirty(changed), [changed]);
@@ -65,6 +73,23 @@ export function NogoTab(p: TabProps) {
 
   const held = nav?.held ?? [];
   const current = !!nav?.confirmed?.current;
+  // 第 3 轮 maps N1:上一版带过来、还没核的禁行区。网页上原来看不到也采纳不了,确认就确认了一个空集
+  const prop = nav?.proposal && nav.proposal.zones.length > 0 ? nav.proposal : null;
+  async function takeProposal(keep: boolean) {
+    if (!nav || !prop) return;
+    try {
+      if (keep) {
+        await api("POST", `${p.base}/zones/confirm`, { revision: nav.revision, confirm: true, adopt: { zones: prop.zones.map((z) => z.id) } });
+        p.say(t("lyNogoPropKept", { n: prop.zones.length }));
+      } else {
+        await api("POST", `${p.base}/zones/proposal`, { action: "discard" });
+        p.say(t("lyNogoPropDropped"));
+      }
+      await p.reload("nav");
+    } catch (e) {
+      p.say(t("failed", { why: e instanceof ApiError ? e.message : String(e) }));
+    }
+  }
   const shown = zones;
   const minPts = draw === "wall" ? 2 : 3;
 
@@ -78,57 +103,131 @@ export function NogoTab(p: TabProps) {
     await p.reload("nav");
   }
 
+  const cur = zones.find((z) => z.id === sel) ?? null;
+  const curPts = cur ? (cur.wall ?? cur.polygon) : [];
+  const dragVertex = (id: string, i: number) => (e: PointerEvent) => {
+    startDrag(e, guard.current, (cx, cy) => {
+      const m = clientToMap(root.current, p.meta, cx, cy);
+      if (!m) return;
+      const at: Pt = [m[0], m[1]];
+      setZones((all) => all.map((z) => (z.id !== id ? z : z.wall
+        ? { ...z, wall: z.wall.map((q, j) => (j === i ? at : q)) }
+        : { ...z, polygon: z.polygon.map((q, j) => (j === i ? at : q)) })));
+    });
+  };
   return (
     <div class="ly-tab">
+      <div ref={root} onClickCapture={(e) => swallowClick(guard.current, e)}>
       <p.Map
+        legend={[...new Set(shown.map((z): LegendKey => (z.wall ? "vwall" : z.kind === "slow" ? "slow" : z.kind === "ignore" ? "ignore"
+          : z.kind === "erase" ? "erase" : z.hard ? "hard" : "nogo")))]}
         drawing={!!draw}
-        onPick={draw ? (px, py) => setPts((d) => [...d, toMap(p.meta, px, py)]) : undefined}
+        onPick={draw ? (px, py) => {
+          if (draw !== "wall" && closesLoop(p.meta, pts, px, py)) { setForm(true); return; }
+          setPts((d) => [...d, toMap(p.meta, px, py)]);
+        } : (px, py) => {
+          const at = toMap(p.meta, px, py);
+          const hit = zones.find((z) => !z.wall && z.polygon.length >= 3 && pointInPolygon(at, z.polygon));
+          if (hit) setSel(hit.id);
+        }}
         world={<>
           {shown.map((z) => z.wall
-            ? <polyline key={z.id} points={polyPx(p.meta, z.wall)} class="nogo-line" />
-            : <polygon key={z.id} points={polyPx(p.meta, z.polygon)} class={z.kind === "slow" ? "slow-area" : z.kind === "ignore" ? "ignore-area" : z.kind === "erase" ? "erase-area" : z.hard ? "nogo-area hard" : "nogo-area"} />)}
+            ? <polyline key={z.id} points={polyPx(p.meta, z.wall)} class={`nogo-line vwall-line${z.hard ? " hard" : ""}`} data-nogo-wall={z.id} />
+            : <polygon key={z.id} points={polyPx(p.meta, z.polygon)} class={`${z.kind === "slow" ? "slow-area" : z.kind === "ignore" ? "ignore-area" : z.kind === "erase" ? "erase-area" : z.hard ? "nogo-area hard" : "nogo-area"}${z.id === sel ? " sel" : ""}`} />)}
           {held.map((z) => <polygon key={`held-${z.id}`} points={polyPx(p.meta, z.polygon)} class="nogo-area held" />)}
           {pts.length > 0 && <polyline points={polyPx(p.meta, pts)} class={draw === "wall" ? "draft-line vwall" : "draft-line"} />}
         </>}
-        marks={(s) => pts.map(([x, y], i) => { const [sx, sy] = s.map(x, y); return <circle key={i} cx={sx} cy={sy} r={5} class="draft-pt" />; })} />
+        marks={(s) => <>
+          {/* 第 2 轮 P2-15:禁区、限速区、虚拟墙写名字(原来只有颜色,分不清哪块是哪块) */}
+          {shown.map((z) => {
+            const ring = z.wall ?? z.polygon;
+            if (!ring || ring.length === 0) return null;
+            const name = siteKnown(z.label) || z.id;
+            // 第 3 轮 setup N3:名字盖住了形状(短虚拟墙整条被盖住):墙的名字写在线上方;
+            // 区域放不下名字就写在它上边外面。颜色跟区域类型(原来全是红字)
+            const [sx, sy] = nameSpot(ring.map(([x, y]) => s.map(x, y)), name, !!z.wall);
+            const kind = z.wall ? "wall" : z.kind === "nogo" ? (z.hard ? "hard" : "nogo") : z.kind;
+            return <text key={`n:${z.id}`} x={sx} y={sy} class={`nogo-name k-${kind}`} data-nogo-name={z.id}>{name}</text>;
+          })}
+          {pts.map(([x, y], i) => { const [sx, sy] = s.map(x, y); return <circle key={i} cx={sx} cy={sy} r={5} class="draft-pt" />; })}
+          {!draw && cur && curPts.map(([x, y], i) => {
+            const [sx, sy] = s.map(x, y);
+            return <circle key={`v${i}`} cx={sx} cy={sy} r={7} class="vtx-handle" data-vtx={i} onPointerDown={dragVertex(cur.id, i)}><title>{t("lyDragVertex")}</title></circle>;
+          })}
+        </>} />
+      </div>
       <div class="ly-side">
         <div class="nogo-status">
           {!nav ? <p class="muted">…</p> : current && held.length === 0
             ? <p class="ok-text">{t("lyNogoLive")}</p>
-            : held.length > 0 ? <p class="warn-text">{t("lyNogoWaitYou", { names: held.map((z) => z.label || z.id).join("、") })}</p>
+            : held.length > 0 ? <p class="warn-text">{t("lyNogoWaitYou", { names: joinList(held.map((z) => siteKnown(z.label) || z.id)) })}</p>
+            // 第 4 轮 maps N1:另存出来的版本已经抄了来源版本的区域 —— 说「已有 n 个,核一下再确认」,不说「去画」
+            : (nav.zones?.length ?? 0) > 0 ? <p class="warn-text" data-nogo-copied="1">{t("lyNogoCopiedCheck", { n: nav.zones.length })}</p>
             : <p class="warn-text">{t("lyNogoNeverConfirmed")}</p>}
-          {behind.length > 0 && <p class="warn-text">{t("lyNogoWaitRobot", { ids: behind.join("、") })}</p>}
-          {nav && !current && !changed && <button type="button" class="btn sm primary" onClick={() => setConfirming("ask")}>{t("navConfirmBtn")}</button>}
+          {behind.length > 0 && <p class="warn-text">{t("lyNogoWaitRobot", { ids: joinList(behind) })}</p>}
+          {prop && (
+            <div class="nogo-prop" data-nogo-prop="1">
+              <p class="warn-text">{t(prop.frame?.same === false ? "lyNogoPropFrame" : "lyNogoProp", { v: prop.from_version, n: prop.zones.length })}</p>
+              <ul class="plain small">{prop.zones.map((z) => <li key={z.id}>{siteKnown(z.label) || z.id}</li>)}</ul>
+              <div class="row wrap">
+                <button type="button" class="btn sm primary" data-prop-keep="1" onClick={() => void takeProposal(true)}>{t("lyNogoPropKeep")}</button>
+                <button type="button" class="btn sm" data-prop-drop="1" onClick={() => void takeProposal(false)}>{t("lyNogoPropDrop")}</button>
+              </div>
+            </div>
+          )}
+          {/* 第 3 轮 maps N1:有没核的建议、这一版又一个都没画时,先处理建议,不给确认空集 */}
+          {nav && !current && !changed && !(prop && nav.zones.length === 0)
+            && <button type="button" class="btn sm primary" onClick={() => setConfirming("ask")}>{t("navConfirmBtn")}</button>}
+          {/* 第 2 轮 maps N12:从发布对话框跳来的,确认完给「回去发布」 */}
+          {current && typeof location !== "undefined" && /[?&]from=publish\b/.test(location.hash)
+            && <a class="btn sm" href="#/admin/maps" data-back-publish="1">{t("lyNogoBackPublish")}</a>}
         </div>
         {draw ? (
           <div class="row wrap">
-            <span class="muted small">{draw === "wall" ? t("vwallDrawHint", { n: pts.length, w: 0.3 }) : t("navDrawHint", { n: pts.length })}</span>
+            <span class="muted small">{draw === "wall" ? t("vwallDrawHint", { n: pts.length, w: 0.3 })
+              : draw === "erase" ? t("eraseDrawHint", { n: pts.length }) : t("navDrawHint", { n: pts.length })}</span>
+            {/* 第 2 轮 P1-51:「不会删已画的禁行区」原来只在悬停提示里,触屏看不到 */}
+            {draw === "erase" && <span class="muted small" data-erase-tip="1">{t("drawEraseTip")}</span>}
             <button type="button" class="btn sm" disabled={!pts.length} onClick={() => setPts(pts.slice(0, -1))}>{t("undoPoint")}</button>
             <button type="button" class="btn sm" onClick={() => { setDraw(null); setPts([]); }}>{t("cancel")}</button>
             <button type="button" class="btn sm primary" disabled={pts.length < minPts} onClick={() => setForm(true)}>{t("lyDrawDone")}</button>
           </div>
         ) : (
-          <div class="row wrap">
-            <button type="button" class="btn" onClick={() => { setDraw("nogo"); setPts([]); }}>{t("drawNoGo")}</button>
-            <button type="button" class="btn" onClick={() => { setDraw("wall"); setPts([]); }}>{t("drawVWall")}</button>
-            <button type="button" class="btn" onClick={() => { setDraw("slow"); setPts([]); }}>{t("drawSlow")}</button>
-            <button type="button" class="btn" onClick={() => { setDraw("ignore"); setPts([]); }}>{t("drawIgnore")}</button>
-            <button type="button" class="btn" onClick={() => { setDraw("erase"); setPts([]); }}>{t("drawErase")}</button>
+          // P1-33/38:分两组 —— 管机器人怎么走的、管人员检测的(忽略区不是「机器人不进」);「不可通行」写明不是删禁行区
+          <div class="nogo-groups">
+            <p class="small muted">{t("nogoGroupMove")}</p>
+            <div class="row wrap">
+              <button type="button" class="btn" onClick={() => { setDraw("nogo"); setPts([]); }}>{t("drawNoGo")}</button>
+              <button type="button" class="btn" onClick={() => { setDraw("wall"); setPts([]); }}>{t("drawVWall")}</button>
+              <button type="button" class="btn" onClick={() => { setDraw("slow"); setPts([]); }}>{t("drawSlow")}</button>
+              <button type="button" class="btn" title={t("drawEraseTip")} onClick={() => { setDraw("erase"); setPts([]); }}>{t("drawErase")}</button>
+            </div>
+            <p class="small muted">{t("nogoGroupPeople")}</p>
+            <div class="row wrap">
+              <button type="button" class="btn" onClick={() => { setDraw("ignore"); setPts([]); }}>{t("drawIgnore")}</button>
+            </div>
           </div>
         )}
         <p class="muted small">{t("lyNogoHint")}</p>
         <ul class="plain ly-list">
           {shown.length === 0 && <li class="muted small">{t("noNavZones")}</li>}
           {shown.map((z) => (
-            <li key={z.id} class="row">
-              <span><b>{z.label || z.id}</b> <span class="muted small">{nogoLine(z)}</span></span>
-              <button type="button" class="btn sm push" onClick={() => setRemoving(z)}>{t("remove")}</button>
+            <li key={z.id} class={z.id === sel ? "row on" : "row"}>
+              <span><button type="button" class={z.id === sel ? "linklike on" : "linklike"} data-pick-zone={z.id}
+                onClick={() => setSel(z.id === sel ? null : z.id)}><b>{siteKnown(z.label) || z.id}</b></button> <span class="muted small nowrap">{nogoLine(z)}</span></span>
+              {z.id === sel && <button type="button" class="btn sm push" data-rename="1" onClick={() => setRenaming(true)}>{t("lyRename")}</button>}
+              <button type="button" class={z.id === sel ? "btn sm" : "btn sm push"} onClick={() => setRemoving(z)}>{t("remove")}</button>
             </li>
           ))}
+          {cur && <li class="muted small">{t("lyDragVertex")}</li>}
         </ul>
       </div>
+      {renaming && cur && (
+        <RenameNogo initial={cur.label} taken={zones.filter((z) => z.id !== cur.id).map((z) => z.label.trim())} onClose={() => setRenaming(false)}
+          onSave={(label) => { setZones(zones.map((z) => (z.id === cur.id ? { ...z, label } : z))); setRenaming(false); }} />
+      )}
       {form && draw && (
-        <NogoForm kind={draw} onClose={() => setForm(false)} onSave={(f) => {
+        <NogoForm kind={draw} taken={zones.map((z) => z.label.trim())} onClose={() => setForm(false)} onSave={(f) => {
           let id = `${draw === "wall" ? "w" : draw === "slow" ? "s" : draw === "ignore" ? "i" : draw === "erase" ? "e" : "n"}${(nav?.revision ?? 0) + 1}`;
           while (zones.some((z) => z.id === id)) id += "x";
           const z: Draft = { id, kind: draw === "slow" || draw === "ignore" || draw === "erase" ? draw : "nogo", label: f.label.trim(), polygon: draw === "wall" ? [] : pts };
@@ -143,48 +242,94 @@ export function NogoTab(p: TabProps) {
         }} />
       )}
       {removing && (
-        <Confirm text={t("lyNogoRemoveAsk", { label: removing.label || removing.id })} yes={t("remove")} danger onNo={() => setRemoving(null)}
+        <Confirm text={t("lyNogoRemoveAsk", { label: siteKnown(removing.label) || removing.id })} yes={t("remove")} danger onNo={() => setRemoving(null)}
           onYes={() => { const z = removing; setRemoving(null); setZones(zones.filter((o) => o.id !== z.id)); }} />
       )}
+      {/* P1-32:勾「我确认」和输密码在同一个对话框里(原来是两个) */}
       {confirming === "ask" && (
-        <SureDialog onNo={() => setConfirming(null)} onYes={() => {
-          if (held.length > 0) setConfirming("pw");
-          else void confirm().catch((e) => p.say(t("failed", { why: e instanceof ApiError ? e.message : String(e) })));
-        }} />
+        <SureDialog needPw={held.length > 0} onNo={() => setConfirming(null)} onYes={(pw) => confirm(pw)} />
       )}
-      {confirming === "pw" && <ConfirmPassword title={t("navConfirmBtn")} onClose={() => setConfirming(null)} onConfirm={(pw) => confirm(pw)} />}
     </div>
   );
 }
 
-/** 确认那一句(人话):勾上才能确认。 */
-function SureDialog({ onYes, onNo }: { onYes: () => void; onNo: () => void }) {
-  const [sure, setSure] = useState(false);
+/** 第 3 轮 setup N8:禁区不许重名(确认框里列名字,重名分不清是哪一块)。 */
+function nameTaken(label: string, taken: string[]): boolean {
+  return taken.includes(label.trim());
+}
+
+/** 默认名已经有了就往后加「2」「3」…… */
+function freshName(base: string, taken: string[]): string {
+  if (!taken.includes(base)) return base;
+  for (let i = 2; ; i++) if (!taken.includes(`${base} ${i}`)) return `${base} ${i}`;
+}
+
+function RenameNogo({ initial, taken, onClose, onSave }: { initial: string; taken: string[]; onClose: () => void; onSave: (label: string) => void }) {
+  const [v, setV] = useState(initial);
+  const dup = nameTaken(v, taken);
+  const ok = v.trim().length > 0 && v.trim().length <= 64 && !dup;
   return (
-    <Modal label={t("navConfirmBtn")} onClose={onNo}>
-      <p>{t("lyNogoConfirmLead")}</p>
-      <label class="field-check"><input type="checkbox" name="sure" checked={sure} onChange={(e) => setSure(e.currentTarget.checked)} />{t("lyNogoSure")}</label>
-      <div class="row end">
-        <button type="button" class="btn" onClick={onNo}>{t("cancel")}</button>
-        <button type="button" class="btn primary" disabled={!sure} onClick={onYes}>{t("lyConfirm")}</button>
-      </div>
+    <Modal label={t("lyRename")} onClose={onClose}>
+      <form class="form" onSubmit={(e) => { e.preventDefault(); if (ok) onSave(v.trim()); }}>
+        <label class="field">{t("navName")}<input name="label" value={v} maxLength={64} autoFocus aria-invalid={dup || undefined} onInput={(e) => setV(e.currentTarget.value)} /></label>
+        {dup && <p class="small bad" role="alert" data-dup="1">{t("lyNogoNameTaken", { z: v.trim() })}</p>}
+        <div class="row end">
+          <button type="button" class="btn" onClick={onClose}>{t("cancel")}</button>
+          <button type="submit" class="btn primary" disabled={!ok}>{t("dlgApply")}</button>
+        </div>
+      </form>
     </Modal>
   );
 }
 
-function NogoForm({ kind, onClose, onSave }: { kind: Draw; onClose: () => void; onSave: (f: Form) => void }) {
+/** 确认那一句(人话):勾上才能确认;删了、缩了禁行区(``needPw``)就在同一个框里再输密码。 */
+function SureDialog({ onYes, onNo, needPw }: { onYes: (pw?: string) => Promise<void>; onNo: () => void; needPw: boolean }) {
+  const [sure, setSure] = useState(false);
+  const [pw, setPw] = useState("");
+  const [err, setErr] = useState("");
+  const [busy, setBusy] = useState(false);
+  const go = async () => {
+    setBusy(true);
+    setErr("");
+    try { await onYes(needPw ? pw : undefined); } catch (e) { setErr(t("failed", { why: e instanceof ApiError ? e.message : String(e) })); } finally { setBusy(false); }
+  };
+  return (
+    <Modal label={t("navConfirmBtn")} onClose={onNo}>
+      <form onSubmit={(e) => { e.preventDefault(); if (sure && (!needPw || pw)) void go(); }}>
+        <p>{t("lyNogoConfirmLead")}</p>
+        <label class="field-check"><input type="checkbox" name="sure" checked={sure} onChange={(e) => setSure(e.currentTarget.checked)} />{t("lyNogoSure")}</label>
+        {needPw && (
+          <label class="field">{t("lyNogoPw")}<input type="password" name="confirm_pw" autoComplete="current-password" value={pw}
+            onInput={(e) => setPw(e.currentTarget.value)} /></label>
+        )}
+        {err && <p class="error small" role="alert">{err}</p>}
+        <div class="row end">
+          <button type="button" class="btn" onClick={onNo}>{t("cancel")}</button>
+          <button type="submit" class="btn primary" disabled={!sure || (needPw && !pw) || busy}>{t("lyConfirm")}</button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
+function NogoForm({ kind, taken, onClose, onSave }: { kind: Draw; taken: string[]; onClose: () => void; onSave: (f: Form) => void }) {
   const [f, setF] = useState<Form>({
-    label: kind === "wall" ? t("legendVWall") : kind === "slow" ? t("legendSlow") : kind === "ignore" ? t("legendIgnore") : kind === "erase" ? t("eraseLabel") : t("legendNoGo"),
+    label: freshName(kind === "wall" ? t("legendVWall") : kind === "slow" ? t("legendSlow") : kind === "ignore" ? t("legendIgnore") : kind === "erase" ? t("eraseLabel") : t("legendNoGo"), taken),
     hard: false, speed: 0.3, temp: false, days: 3,
   });
-  const ok = f.label.trim().length > 0 && f.label.trim().length <= 64 && (kind !== "slow" || (f.speed > 0 && f.speed <= 5));
+  // P1-37:限速 0.1–5 m/s,跟输入框的 min/max 一个口径(原来 0.05 也能存);范围写在框下面
+  const speedOk = f.speed >= 0.1 && f.speed <= 5;
+  const dup = nameTaken(f.label, taken);
+  const ok = f.label.trim().length > 0 && f.label.trim().length <= 64 && (kind !== "slow" || speedOk) && !dup;
   return (
     <Modal label={kind === "wall" ? t("navFormTitleVWall") : kind === "slow" ? t("navFormTitleSlow") : kind === "ignore" ? t("navFormTitleIgnore") : kind === "erase" ? t("drawErase") : t("navFormTitleNoGo")} onClose={onClose}>
       <form class="form" onSubmit={(e) => { e.preventDefault(); if (ok) onSave(f); }}>
-        <label class="field">{t("navName")}<input name="label" value={f.label} maxLength={64} onInput={(e) => setF({ ...f, label: e.currentTarget.value })} /></label>
+        <label class="field">{t("navName")}<input name="label" value={f.label} maxLength={64} autoFocus onInput={(e) => setF({ ...f, label: e.currentTarget.value })} /></label>
+        {dup && <p class="small bad" role="alert" data-dup="1">{t("lyNogoNameTaken", { z: f.label.trim() })}</p>}
         {kind === "slow" ? (
-          <label class="field">{t("navSpeed")}<input type="number" min={0.1} max={5} step={0.1} value={f.speed}
-            onInput={(e) => setF({ ...f, speed: Number(e.currentTarget.value) })} /></label>
+          <label class="field">{t("navSpeed")}<input type="number" name="speed" min={0.1} max={5} step={0.1} value={f.speed}
+            onInput={(e) => setF({ ...f, speed: Number(e.currentTarget.value) })} />
+            <span class={speedOk ? "muted small" : "error small"}>{t("navSpeedRange")}</span></label>
         ) : kind === "ignore" || kind === "erase" ? null : (
           <label class="field-check"><input type="checkbox" name="hard" checked={f.hard} onChange={(e) => setF({ ...f, hard: e.currentTarget.checked })} />{t("navHard")}</label>
         )}
@@ -198,9 +343,19 @@ function NogoForm({ kind, onClose, onSave }: { kind: Draw; onClose: () => void; 
         )}
         <div class="row end">
           <button type="button" class="btn" onClick={onClose}>{t("cancel")}</button>
-          <button type="submit" class="btn primary" disabled={!ok}>{t("save")}</button>
+          <button type="submit" class="btn primary" disabled={!ok}>{t("dlgApply")}</button>
         </div>
       </form>
     </Modal>
   );
+}
+
+/** 名字写在哪(屏上坐标):区域装得下就在中间;墙、装不下的区域写在上边外面一点。 */
+export function nameSpot(pts: [number, number][], name: string, line: boolean): [number, number] {
+  const xs = pts.map((p) => p[0]), ys = pts.map((p) => p[1]);
+  const cx = (Math.min(...xs) + Math.max(...xs)) / 2;
+  const w = Math.max(...xs) - Math.min(...xs), h = Math.max(...ys) - Math.min(...ys);
+  const textW = [...name].reduce((a, ch) => a + (ch.charCodeAt(0) > 0x2e80 ? 12 : 7), 0);
+  if (!line && w >= textW + 8 && h >= 20) return [cx, (Math.min(...ys) + Math.max(...ys)) / 2];
+  return [cx, Math.min(...ys) - 10];
 }

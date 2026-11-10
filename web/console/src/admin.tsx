@@ -1,5 +1,6 @@
 // 管理页共用的小件(W44 起):读一次的 useLoad、设备一格、App 版本太老、手机扫码添加站点。各页在 adv*.tsx、
 // userspage.tsx、robotspage.tsx、layout*.tsx。
+import { siteStr } from "./sitetext";
 import { useCallback, useEffect, useState } from "preact/hooks";
 import { api, ApiError, enc } from "./api";
 import { t, type Key } from "./i18n";
@@ -42,7 +43,7 @@ export interface DeviceItem { id: string; state: "online" | "offline" | "degrade
 export function deviceSummary(d: AdminRobot["devices"]): { tone: "success" | "warning" | "error"; text: string; title: string } | null {
   if (!d || !Array.isArray(d.items) || d.items.length === 0) return null;
   const bad = d.items.filter((x) => x.state !== "online");
-  const title = bad.map((x) => `${x.id}: ${t(`dev_${x.state}` as Key)}${x.detail ? ` · ${x.detail}` : ""}`).join("\n");
+  const title = bad.map((x) => `${x.id}: ${t(`dev_${x.state}` as Key)}${x.detail ? ` · ${siteStr(x.detail)}` : ""}`).join("\n");
   if (d.stale) return { tone: "warning", text: t("devStale"), title };
   if (!bad.length) return { tone: "success", text: t("devAllOk"), title: "" };
   return { tone: bad.some((x) => x.state === "error" || x.state === "offline") ? "error" : "warning",
@@ -53,6 +54,18 @@ export interface ClientRow { name: string; kind: string; version?: string; platf
 /** 登录着的 App 太老了没有:它报的接口级别比站点要的低(没报级别的说不清,不算)。 */
 export function clientTooOld(c: ClientRow, minAppLevel: number | undefined): boolean {
   return c.kind === "app" && c.api_level != null && minAppLevel != null && c.api_level < minAppLevel;
+}
+
+/** P2-24:同一个账号、同一种客户端、同一版本(同一台设备的多次登录)合成一行,记最近一次、几次登录。 */
+export function groupClients(rows: ClientRow[]): (ClientRow & { n: number })[] {
+  const m = new Map<string, ClientRow & { n: number }>();
+  for (const c of rows) {
+    const k = [c.name, c.kind, c.version ?? "", c.platform ?? "", c.api_level ?? ""].join("\u0000");
+    const g = m.get(k);
+    if (!g) m.set(k, { ...c, n: 1 });
+    else { g.n += 1; g.last_used = Math.max(g.last_used, c.last_used); }
+  }
+  return [...m.values()].sort((a, b) => b.last_used - a.last_used);
 }
 
 // ------------------------------------------------------------------ 系统
@@ -89,6 +102,8 @@ export function pairChoices(origin: string, lan: string[]): string[] {
   return out;
 }
 
+const PAIR_URL = /^https:\/\/[A-Za-z0-9.\-\[\]:]+(:\d{1,5})?\/?$/;
+
 export function PairPhone() {
   const [url, setUrl] = useState(window.location.origin);
   const [asked, setAsked] = useState(isLoopbackOrigin(window.location.origin) ? "" : window.location.origin);
@@ -116,6 +131,20 @@ export function PairPhone() {
     return () => { live = false; };
   }, [asked]);
   const g = pair ? qrGrid(pair.code) : null;
+  // P1-76:地址当场查(https://主机[:端口]);配对码能复制
+  const urlOk = PAIR_URL.test(url.trim());
+  const [copied, setCopied] = useState(false);
+  async function copyCode() {
+    if (!pair) return;
+    try {
+      await navigator.clipboard.writeText(pair.code);
+      setCopied(true);
+    } catch {
+      const sel = window.getSelection();
+      const dd = document.querySelector("[data-pair-code]");
+      if (sel && dd) { const r = document.createRange(); r.selectNodeContents(dd); sel.removeAllRanges(); sel.addRange(r); }
+    }
+  }
   return (
     <section class="panel">
       <div class="panel-head"><h2>{t("pairTitle")}</h2></div>
@@ -147,14 +176,22 @@ export function PairPhone() {
               <span>{t("pairUrl")}</span>
               <input type="url" value={url} onInput={(e) => setUrl((e.target as HTMLInputElement).value)} spellcheck={false} autocomplete="off" />
             </label>
-            <button type="submit" class="btn" disabled={url.trim() === asked}>{t("pairUpdate")}</button>
+            <button type="submit" class="btn" disabled={url.trim() === asked || !urlOk}>{t("pairUpdate")}</button>
           </form>
+          {!urlOk && url.trim() !== "" && <p class="error small">{t("pairBadUrl")}</p>}
+          {err && urlOk && <p class="error small" role="alert">{err}</p>}
           {pair && (
             <dl class="kv">
               <dt>{t("pairSite")}</dt><dd>{pair.name}</dd>
               <dt>{t("pairFingerprint")}</dt><dd class="mono small wrap">{pair.fingerprint}</dd>
-              <dt>{t("pairCode")}</dt><dd class="mono small wrap">{pair.code}</dd>
+              <dt>{t("pairCode")}</dt><dd class="mono small wrap" data-pair-code="1">{pair.code}</dd>
             </dl>
+          )}
+          {pair && (
+            <div class="row">
+              <button type="button" class="btn sm" onClick={() => void copyCode()}>{t("copy")}</button>
+              {copied && <span class="small" role="status">{t("copied")}</span>}
+            </div>
           )}
           <p class="muted small">{t("pairNoSecret")}</p>
         </div>

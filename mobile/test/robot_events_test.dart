@@ -19,6 +19,15 @@ void main() {
     expect(robotEventTitle('task_done'), 'Task done');
   });
 
+  test('导航 V1 原因码：说明里写「怎么回事 · 该做什么」，代理那句具体原因也留着', () {
+    appLang.value = AppLang.zh;
+    expect(robotEventDetail('patrol_waypoint',
+            {'name': '东门', 'ok': false, 'note': '路线在 (3.1, 2.0) 处离墙只剩 0.12 m', 'code': 'route_too_narrow'}),
+        '东门 · 未到达 · 路线太窄,过不去 · 改路线,或在地图上把这段标成不可通行 · 路线在 (3.1, 2.0) 处离墙只剩 0.12 m');
+    expect(robotEventDetail('task_failed', {'reason': '急停按下', 'code': 'made_up'}), '急停按下',
+        reason: '码不认识就照旧');
+  });
+
   test('说明：只挑人读得懂的字段；程序代号、任务号不写', () {
     appLang.value = AppLang.zh;
     expect(robotEventDetail('task_failed', {'reason': '急停按下', 'task_id': 'task-1'}), '急停按下');

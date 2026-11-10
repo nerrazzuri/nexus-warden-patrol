@@ -64,6 +64,10 @@ def test_最近的接口_没有能派的404(站点):
     gina = _登(s, "gina")
     code, d = s.req("GET", "/api/robots/nearest?map_id=nope&map_version=1&x=1&y=2", token=gina)
     assert code == 404 and d["error"] == "此地图上没有能派的机器人"
+    # 第 3 轮 duty N2:exclude 掉出事的那台(不派它去看自己)
+    code, d = s.req("GET", "/api/robots/nearest?map_id=nope&map_version=1&x=1&y=2&exclude=B",
+                    token=gina)
+    assert code == 404 and d["excluded"] == ["B"]
 
 
 def test_最近的接口_参数和权限(站点):
@@ -72,3 +76,21 @@ def test_最近的接口_参数和权限(站点):
     assert s.req("GET", "/api/robots/nearest?map_id=m&map_version=1&x=a&y=2", token=gina)[0] == 400
     assert s.req("GET", "/api/robots/nearest?map_id=m&x=1&y=2", token=gina)[0] == 400
     assert s.req("GET", "/api/robots/nearest?map_id=m&map_version=1&x=1&y=2", token=olga)[0] == 403
+
+
+def test_第3轮_duty_N3_临时路线_机器人从现在的位置走不到第1个点_要说(台):  # noqa: F811
+    from types import SimpleNamespace as NS
+
+    from nexwar_site.api import _Handler
+    pose = NS(map_id="house", map_version="narrow", x=1.5, y=2.0)
+    h = _Handler.__new__(_Handler)
+    h.site = NS(incidents=NS(reach=台.reach),
+                dispatcher=NS(clients={"B": NS(telemetry=NS(pose=pose))}))
+    errs = h._reach_first("B", "house", "narrow", [{"x": 6.5, "y": 2.0}])
+    assert errs and errs[0]["index"] == 0 and "走不到" in errs[0]["problem"]
+    assert h._reach_first("B", "house", "narrow", [{"x": 2.5, "y": 2.0}]) == []
+    pose.map_version = "wide"
+    assert h._reach_first("B", "house", "wide", [{"x": 6.5, "y": 2.0}]) == []
+    # 不在这一版上:不查
+    assert h._reach_first("B", "house", "narrow", [{"x": 6.5, "y": 2.0}]) == []
+    assert h._reach_first("X", "house", "wide", [{"x": 6.5, "y": 2.0}]) == []

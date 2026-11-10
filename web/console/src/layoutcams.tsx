@@ -61,6 +61,7 @@ export function CamerasTab(p: TabProps) {
     <div class="ly-tab">
       <div ref={root} onClickCapture={(e) => swallowClick(guard.current, e)}>
         <p.Map
+          legend={["camera"]}
           drawing={placing}
           onPick={cur && (placing || here(curPl)) ? (px, py) => { const [x, y] = toMap(p.meta, px, py); setPl(cur.name, { x, y }); setPlacing(false); } : undefined}
           world={<>{shown.map((c) => <path key={c.name} class={c.name === sel ? "cam-fan on" : "cam-fan"} d={fanPath(p.meta, c.placement as Placement)} />)}</>}
@@ -79,6 +80,8 @@ export function CamerasTab(p: TabProps) {
       <div class="ly-side">
         <button type="button" class="btn primary" onClick={() => setForm("new")}>{t("lyAddCam")}</button>
         <p class="muted small">{t("lyCamsHint")}</p>
+        {/* P1-43:跟别的标签不一样,摄像头改了马上就存 */}
+        <p class="muted small">{t("lyCamsSavesNow")}</p>
         <ul class="plain ly-list">
           {p.data.cameras.length === 0 && <li class="muted small">{t("lyNoCams")}</li>}
           {p.data.cameras.map((c) => (
@@ -115,6 +118,7 @@ export function CamerasTab(p: TabProps) {
       </div>
       {form && (
         <CameraForm initial={form === "new" ? null : (form as unknown as AdminCam)} onClose={() => setForm(null)} say={p.say}
+          zones={[...new Set(p.data.areas.map((a) => a.zone))]}
           onSaved={(warnings, zone) => {
             // 站点回的警告(防区没映射到拦截点、没画多边形)照样说出来(演示站点实测:原来只说「已保存」)
             setForm(null);

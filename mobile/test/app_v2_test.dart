@@ -122,7 +122,7 @@ void main() {
       _english();
       expect(tr('Stop all', '全部急停'), 'Stop all');
       expect(alertTitle('dog_sees_person', '机器人看见人了:2 个人'), 'Person detected');
-      expect(alertTitle('from_the_future', '新告警'), '新告警');
+      expect(alertTitle('from_the_future', '新报警'), '新报警');
       expect(alertTitle('dog_sees_person', '测试：机器人看见人了'), 'TEST: Person detected',
           reason: '外审 r1 #9:演练要看得出来');
       appLang.value = AppLang.zh;
@@ -383,7 +383,7 @@ void main() {
       await t.pumpAndSettle();
       await t.tap(find.byKey(SiteAlertScenePage.falseGoKey));
       await t.pumpAndSettle();
-      expect(api.calls, contains('resolve A/dog_sees_person#1'));
+      expect(api.calls, contains('resolve A/dog_sees_person#1 false_alarm'));
       expect(find.byType(SiteAlertScenePage), findsNothing, reason: '关了就回上一页');
     });
 
@@ -402,7 +402,7 @@ void main() {
       await t.pumpWidget(Container());
     });
 
-    testWidgets('英文界面：标题按种类是英文，站点给的中文原因照样摆出来', (t) async {
+    testWidgets('英文界面：标题按种类是英文，站点给的中文原因翻成英文', (t) async {
       _english();
       final api = FakeApi('guard')..deterRows = [_session()];
       await _alarm(t, api, _p1());
@@ -412,7 +412,8 @@ void main() {
       expect(find.text("I'll handle it"), findsOneWidget);
       expect(find.text('Sound siren (level 3)'), findsOneWidget);
       expect(find.text("I'm on site"), findsOneWidget, reason: 'W74：看见人第四个位置是已到场');
-      expect(find.text('布防中'), findsOneWidget);
+      // 手机 App 测试 M05：站点给的中文原因按语言翻
+      expect(find.text('Armed'), findsOneWidget);
       await t.pumpWidget(Container());
     });
 
@@ -638,7 +639,7 @@ void main() {
       await t.pump();
       await t.pump();
       expect(_text(t, SiteAlertScenePage.stateKey), endsWith('无人确认'));
-      expect(_text(t, SiteAlertScenePage.msgKey), contains('站点返回的是另一条告警（B/dog_sees_person#7）'));
+      expect(_text(t, SiteAlertScenePage.msgKey), contains('站点返回的是另一条报警（B/dog_sees_person#7）'));
       expect(_enabled(t, SiteAlertScenePage.ackKey), isTrue);
       await t.tap(find.byKey(SiteAlertScenePage.ackKey));
       await t.pump();
@@ -688,7 +689,7 @@ void main() {
       await t.pumpAndSettle();
       await t.tap(find.byKey(SiteAlertScenePage.falseGoKey));
       await t.pumpAndSettle();
-      expect(api.calls.where((c) => c.startsWith('resolve')), ['resolve B/dog_sees_person#7']);
+      expect(api.calls.where((c) => c.startsWith('resolve')), ['resolve B/dog_sees_person#7 false_alarm']);
     });
 
     testWidgets('I3 上一条的开警笛回包迟到：不写到换上来的这一条上', (t) async {

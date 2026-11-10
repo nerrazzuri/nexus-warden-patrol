@@ -45,6 +45,9 @@ class Alert {
   final String level;
 
   final String kind;
+
+  /// 给谁看（站点 `alert_audience.py`）：`intrusion` / `fire` / `help` / `offline` / `owner`；老站点没有 = 空。
+  final String audience;
   final String robot;
   final String title;
   final String detail;
@@ -99,12 +102,14 @@ class Alert {
     required this.escalated,
     required this.channel,
     this.context = const <String, dynamic>{},
+    this.audience = '',
   });
 
   factory Alert.fromWire(Map<String, dynamic> m) => Alert(
         key: (m['key'] as String?) ?? '',
         level: (m['level'] as String?) ?? '',
         kind: (m['kind'] as String?) ?? '',
+        audience: (m['audience'] as String?) ?? '',
         robot: (m['robot'] as String?) ?? '',
         title: (m['title'] as String?) ?? '',
         detail: (m['detail'] as String?) ?? '',
@@ -158,8 +163,8 @@ List<Alert> alertsFromWire(Map<String, dynamic> m) {
   final Object? raw = m['alerts'];
   if (raw is! List) {
     throw FormatException(m.containsKey('alerts')
-        ? tr('Invalid alarm data (${raw.runtimeType})', '告警数据格式错误（${raw.runtimeType}）')
-        : tr('Site response is missing the alarm list', '站点返回的数据缺少告警列表'));
+        ? tr('Invalid alarm data (${raw.runtimeType})', '报警数据格式错误（${raw.runtimeType}）')
+        : tr('Site response is missing the alarm list', '站点返回的数据缺少报警列表'));
   }
   return <Alert>[
     for (final Object? a in raw)
@@ -168,6 +173,27 @@ List<Alert> alertsFromWire(Map<String, dynamic> m) {
       else
         throw FormatException(tr(
             'Invalid entry in alarm data (${a.runtimeType})',
-            '告警数据中有无效条目（${a.runtimeType}）')),
+            '报警数据中有无效条目（${a.runtimeType}）')),
   ];
 }
+
+/// 手机 App 测试 M04：这条告警可能是误报吗（给不给「误报」按钮）。有人闯入、起火类，和几种靠传感器判断的
+/// （倒了、被撞、镜头被挡、卡住）可能是误报；机器人故障、派单被拒、掉线、账号申请这些是真事。
+/// 老站点不报 `audience` 时按 kind 猜：看见人、入侵类算可能误报。
+const Set<String> _maybeFalseKinds = {
+  'fallen', 'force_flipped', 'force_bump', 'lens_blocked', 'stuck', 'nav_blocked',
+  'intrusion', 'intrusion_unanswered', 'intrusion_person', 'dog_sees_person', 'person_left',
+  'force_lifted', 'force_covered',
+};
+
+bool alertCanBeFalse(Alert a) =>
+    a.audience == 'intrusion' || a.audience == 'fire' || _maybeFalseKinds.contains(a.kind);
+
+/// 手机 App 测试 M09：日常记录（开始、结束巡逻，派了临时巡逻，授权的人在场）不算「没处理的报警」。
+const Set<String> routineAlertKinds = {
+  'run_start', 'run_done', 'adhoc_patrol', 'adhoc_queue', 'authorized_person',
+};
+
+/// 算不算一条要人处理的报警（还开着、不是日常记录、不是 P3 记录）。
+bool alertNeedsAttention(Alert a) =>
+    a.resolvedMs == null && a.level != 'P3' && !routineAlertKinds.contains(a.kind);

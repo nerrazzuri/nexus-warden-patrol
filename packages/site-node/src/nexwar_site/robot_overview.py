@@ -58,7 +58,15 @@ def overview(dispatcher: Any, db: Any, *, now_ms: int, tz: tzinfo) -> list[dict[
                    "title": r["title"] or "", "first_ms": r["first_ms"],
                    "resolved_ms": r["resolved_ms"], "resolved_by": r["resolved_by"] or ""}
                   for r in mine if r["first_ms"] >= since][:RECENT_MAX]
+        # 网页易用性 P1-23:连上过没有(刚登记、等激活的不是「离线故障」)。站点重启后还没新状态的,
+        # 看它以前报过事件、回过执没有
+        live_at = getattr(c, "status_live_at", None) if c is not None else None
+        seen = fresh or live_at is not None \
+            or bool(db.query("SELECT 1 FROM events WHERE robot_id=? LIMIT 1", (rid,))) \
+            or bool(db.query("SELECT 1 FROM commands WHERE robot_id=? AND ack_result IS NOT NULL "
+                             "AND ack_result NOT IN ('expired', 'timeout') LIMIT 1", (rid,)))
         out.append({"robot_id": rid, "name": names.get(rid, ""), "revoked": rec.revoked,
+                    "ever_seen": seen,
                     "expires_at": rec.expires_at, "online": fresh,
                     "battery_pct": battery_pct(c, fresh=fresh),
                     "manual_only": reg.manual_only(rid) is not None,
@@ -81,7 +89,8 @@ def overview(dispatcher: Any, db: Any, *, now_ms: int, tz: tzinfo) -> list[dict[
                     "task": _task(c),
                     # POC 11-05:网页上开关警灯、喊话(狗报了接上哪几路、有哪些话术、能不能打字)
                     "deter": _deter(caps) if fresh else None,
-                    "manual_note": (reg.manual_only(rid) or {}).get("note", "")})
+                    "manual_note": (reg.manual_only(rid) or {}).get("note", ""),
+                    **_return_targets(db, rid, caps)})
     return out
 
 
@@ -92,6 +101,19 @@ def _deter(caps: Any) -> dict[str, Any] | None:
     return {"outputs": [str(o) for o in d.get("outputs") or []],
             "max_s": float(d.get("max_s") or 600.0), "tts": bool(d.get("tts")),
             "clips": [str(x) for x in d.get("clips") or []]}
+
+
+def _return_targets(db: Any, rid: str, caps: Any) -> dict[str, Any]:
+    """网页易用性第 2 轮 N2:回原点、回待命点能不能派(站点派的时候同样这么查,见 standby.py)。
+    ``home_set``:狗当前地图那一版上有没有原点(没报地图 = ``None``,不知道);
+    ``standby_set``:有没有默认待命点。"""
+    patrol = ((getattr(caps, "tasks", None) or {}).get("patrol") or {}) if caps is not None else {}
+    mid, ver = patrol.get("map_id"), patrol.get("map_version")
+    home = None if mid is None else bool(db.query(
+        "SELECT 1 FROM homes WHERE robot_id=? AND map_id=? AND map_version=?", (rid, mid, ver)))
+    standby = bool(db.query("SELECT 1 FROM standby_points WHERE robot_id=? AND is_default=1",
+                            (rid,)))
+    return {"home_set": home, "standby_set": standby}
 
 
 def _week(db: Any, rid: str, now_ms: int) -> dict[str, Any]:

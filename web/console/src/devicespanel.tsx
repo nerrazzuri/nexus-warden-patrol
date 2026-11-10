@@ -2,14 +2,14 @@
 // 摄像头不在这里：在「布置 → 摄像头」放到图上就行（ONVIF 订阅，站点按它的位置、朝向算查看点）。
 import { useEffect, useState } from "preact/hooks";
 import { api, ApiError } from "./api";
-import { lang, type Lang } from "./i18n";
+import { lang, t, type Lang } from "./i18n";
 
 export interface Device { id: string; kind: string; map_id: string; map_version: string; x: number; y: number; yaw: number;
   view_x: number; view_y: number; zone: string; note: string; source: string }
 
 const en = {
   dTitle: "Alarm devices by position",
-  dLead: "Door contacts and alarm panels: put them on the map; the site works out where a robot should go and which zone it is in. Each device gets its own signed callback. Cameras: place them under Layout → Cameras.",
+  dLead: "Door contacts and alarm panels: put them on the map; the site works out where a robot should go and which zone it is in. Each device gets its own signed callback. Cameras: place them under Setup → Cameras.",
   dNone: "No devices yet.",
   dId: "Device ID", dKind: "Type", dMap: "Map", dVer: "Version", dX: "x (m)", dY: "y (m)",
   kContact: "Door contact", kAlarm: "Alarm panel", kOther: "Other",
@@ -25,7 +25,7 @@ const zh: Record<DKey, string> = {
   dId: "设备编号", dKind: "类型", dMap: "地图", dVer: "版本", dX: "x（米）", dY: "y（米）",
   kContact: "门磁", kAlarm: "报警主机", kOther: "其他",
   dAdd: "登记 / 更新", dRemove: "删除", dRotate: "换密钥",
-  dView: "机器人去 ({x}, {y})", dZone: "防区 {z}", dNoZone: "不在任何防区（按全站）",
+  dView: "机器人去（{x}，{y}）", dZone: "防区 {z}", dNoZone: "不在任何防区（按全站）",
   dSecret: "{id} 的回调：请求头 X-Nexwar-Source: {src}，密钥（只显示这一次）：{key}",
 };
 const DICTS: Record<Lang, Record<DKey, string>> = { en, zh };
@@ -63,6 +63,8 @@ export function DevicesPanel({ canEdit, say }: { canEdit: boolean; say: (s: stri
     <section class="card devices-panel">
       <h2>{dt("dTitle")}</h2>
       <p class="muted small">{dt("dLead")}</p>
+      {/* 网页易用性 P1-61:只看不能改的要说为什么 */}
+      {!canEdit && <p class="small readonly-note">{t("adminOnlyNote")}</p>}
       {list.length === 0 ? <p class="muted">{dt("dNone")}</p> : (
         <ul class="plain">
           {list.map((d) => (

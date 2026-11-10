@@ -164,6 +164,20 @@ void main() {
     expect(w.calls.last, 'stop', reason: '离开（注销）就停');
   });
 
+  testWidgets('手机 App 测试 M15：只读账号不自动开后台值守；报警页说按钮为什么灰', (t) async {
+    await _land(t);
+    final api = FakeApi('viewer');
+    final w = _Watch();
+    final ctl = WatchControl();
+    await t.pumpWidget(MaterialApp(home: SiteRobotsPage(api: api, watch: w, entry: _entry, control: ctl)));
+    await t.pumpAndSettle();
+    expect(w.calls, isEmpty);
+    expect(ctl.on, isFalse);
+    await ctl.toggle();
+    await t.pumpAndSettle();
+    expect(w.calls.single, startsWith('start '), reason: '自己在设置页开可以');
+  });
+
   testWidgets('后台值守：领不到令牌就说，不假装开着', (t) async {
     await _land(t);
     final api = FakeApi('guard')..watchTokenError = const SiteError(500, '坏了');

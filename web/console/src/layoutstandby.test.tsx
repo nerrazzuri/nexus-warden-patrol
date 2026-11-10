@@ -26,7 +26,8 @@ afterEach(cleanup);
 
 const data: LayerData = { areas: [], nav: null, routes: [], guardRoutes: [], posts: [], cameras: [], robots: ["A", "B"],
   standby: [{ robot_id: "A", name: "dock", x: 2, y: 2, yaw: 0, map_id: "home", map_version: "3", default: true }] };
-const FakeMap = (o: OwnLayer) => <div class="fakemap"><button type="button" class="pick" onClick={() => o.onPick?.(40, 30)}>pick</button></div>;
+const SCREEN = { map: (x: number, y: number): [number, number] => [x, y], px: (x: number, y: number): [number, number] => [x, y], k: 1 };
+const FakeMap = (o: OwnLayer) => <div class="fakemap"><button type="button" class="pick" onClick={() => o.onPick?.(40, 30)}>pick</button><svg>{o.marks?.(SCREEN)}</svg></div>;
 const props = (): TabProps => ({
   map: { map_id: "home", version: "3", note: "" }, base: "/api/maps/home/3", meta: META, data, say: () => {},
   reload: () => Promise.resolve(), setDirty: () => {}, registerSave: (fn) => { save = fn; }, Map: FakeMap,
@@ -56,6 +57,17 @@ describe("布置 → 待命点", () => {
     expect(posted.some((p) => p.url === "/api/robots/A/standby")).toBe(false);
   });
 
+  it("第 2 轮 setup N12 / N13:弹窗焦点在名字框;填中文写明为什么不行", async () => {
+    const { container: c } = render(<StandbyTab {...props()} />);
+    fireEvent.click(btn(c, "添加待命点"));
+    fireEvent.click(c.querySelector(".pick")!);
+    const inp = document.querySelector('.modal input[name="name"]') as HTMLInputElement;
+    expect(document.activeElement).toBe(inp);
+    fireEvent.input(inp, { target: { value: "门口" } });
+    expect(document.querySelector("[data-sb-name-bad]")!.textContent).toContain("不能有空格、中文");
+    expect((document.querySelector('.modal button[type="submit"]') as HTMLButtonElement).disabled).toBe(true);
+  });
+
   it("删要确认", async () => {
     const { container: c } = render(<StandbyTab {...props()} />);
     fireEvent.click(btn(c, "A · dock"));
@@ -63,5 +75,24 @@ describe("布置 → 待命点", () => {
     fireEvent.click(btn(document.querySelector(".modal")!, "删除"));
     await save!();
     expect(posted.find((p) => p.url === "/api/robots/A/standby")?.body).toEqual({ name: "dock", remove: true });
+  });
+});
+
+describe("第 4 轮 maps N1 / setup P0-14", () => {
+  it("从上一版带过来的待命点列出来,留下后存到这一版", async () => {
+    const nav = { revision: 1, zones: [], proposal: { from_version: "2", zones: [],
+      standby: [{ robot_id: "B", name: "home", x: 5, y: 5, yaw: 0, default: true }, { robot_id: "A", name: "dock", x: 1, y: 1, yaw: 0 }] } };
+    const p = { ...props(), data: { ...data, nav: nav as unknown as LayerData["nav"] } };
+    const { container: c } = render(<StandbyTab {...p} />);
+    const box = c.querySelector("[data-carried-standby]")!;
+    expect(box.getAttribute("data-carried-standby")).toBe("1");          // A · dock 这一版已经有了,不再列
+    expect(box.textContent).toContain("从版本 2 带过来 1 个待命点");
+    expect(box.querySelector("[data-carried-move]")!.textContent).toContain("从版本 2 挪到版本");
+    expect(c.querySelector('[data-carried-mark="B/home"]')).toBeTruthy();          // 第 5 轮:没留下也画出来
+    fireEvent.click(box.querySelector('[data-keep="B/home"]')!);
+    expect(c.querySelector("[data-carried-standby]")).toBeNull();
+    await save!();
+    await waitFor(() => expect(posted.find((x) => x.url === "/api/robots/B/standby")?.body)
+      .toMatchObject({ name: "home", map_version: "3", x: 5, y: 5, default: true }));
   });
 });

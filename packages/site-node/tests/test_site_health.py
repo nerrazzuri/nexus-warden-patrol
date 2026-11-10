@@ -99,17 +99,17 @@ def test_自己盯着_证书快到期盘紧卡住报P2_好了自动解决_报失
     assert all(a.level.name == "P2" for a in t.desk.book.open())
 
 
-def test_指标历史_每5分钟一笔_留30天(台):
+def test_指标历史_每5分钟一笔_留90天(台):
     t = 台
     t.h.tick()
     t.h.tick()
     keys = {r["key"] for r in t.h.metrics()}
     assert {"site_disk_free", "loop_lag_s", "alerts_open_P1"} <= keys
     n = len(t.h.metrics())
-    t.clock[0] += 31 * DAY
+    t.clock[0] += 91 * DAY                         # 用户 11-10:日志、记录默认都留 90 天
     t.h.tick()
     assert len(t.h.metrics()) < n + len(keys) and min(r["ts"] for r in t.h.metrics()) \
-        > NOW, "30 天前的删了"
+        > NOW, "90 天前的删了"
     assert all(r["key"] == "site_disk_free" for r in t.h.metrics(key="site_disk_free"))
 
 
@@ -143,15 +143,17 @@ def test_诊断包_不带密钥令牌库文件_日志打码(台, tmp_path):
     with tarfile.open(out) as tar:
         names = tar.getnames()
         files = {n.split("/", 1)[1]: tar.extractfile(n).read() for n in names}
-    assert {"README.txt", "versions.json", "health.json", "site.json", "db_counts.json",
-            "alerts_7d.json", "metrics.csv", "logs/nexwar_site.log"} <= set(files)
+    # 日志设计 第 5 条:分 site/ robots/ records/ clients/ host/ 几块,外加 README.md
+    assert {"README.md", "site/versions.json", "site/health.json", "site/site.json",
+            "site/db_counts.json", "records/alerts.json", "site/metrics.csv",
+            "site/journal.log"} <= set(files)
     blob = b"".join(files.values())
     for bad in (b"AK-123", b"pw!", b"tok-SECRET-123", hexs.encode()):
         assert bad not in blob, bad
-    cfg = json.loads(files["site.json"])
+    cfg = json.loads(files["site/site.json"])
     assert cfg["push"]["app_key"] == "***" and cfg["push"]["secret_file"] == "/etc/x"
     assert not any(n.endswith((".db", ".key")) for n in names)
-    assert "机器人看见人了" in files["alerts_7d.json"].decode()
+    assert "机器人看见人了" in files["records/alerts.json"].decode()
 
 
 def test_打码规矩():
@@ -214,3 +216,129 @@ def test_工单9_续签了还没换到狗上_按狗报的在用证书算到期_�
     assert t.h.checks()["certs"]["ok"]
     caps.tasks.pop("tls")                                             # 老代理不报:看站点的包
     assert t.h.checks()["certs"]["ok"]
+
+
+def test_网页P1_73_服务日志空的写明_带站点最近日志_按时间段取(台, tmp_path, monkeypatch):
+    import logging
+
+    import nexwar_site.health as h
+    t = 台
+    rec = h.RecentLog()
+    monkeypatch.setattr(h, "RECENT", rec)
+    old = logging.LogRecord("nexwar_site", logging.INFO, "", 0, "老的一条", None, None)
+    old.created = NOW / 1000 - 3 * 3600
+    rec.emit(old)
+    new = logging.LogRecord("nexwar_site", logging.INFO, "", 0, "新的一条 Bearer tok-SECRET-9",
+                            None, None)
+    new.created = NOW / 1000 - 60
+    rec.emit(new)
+    out = support_bundle(tmp_path / "b.tar.gz", home=t.home, db=t.db, health=t.h, now_ms=NOW,
+                         hours=1, journal=lambda unit, hours: "-- No entries --\n")
+    with tarfile.open(out) as tar:
+        files = {n.split("/", 1)[1]: tar.extractfile(n).read().decode() for n in tar.getnames()}
+    assert "没有 nexwar_site 的系统服务日志" in files["site/journal.log"]
+    recent = files["site/site-recent.log"]
+    assert "新的一条" in recent and "老的一条" not in recent and "tok-SECRET-9" not in recent
+
+
+def test_第3轮_config_N8_成功的GET访问记录另放_不挤掉站点日志(台, tmp_path, monkeypatch):
+    import logging
+
+    import nexwar_site.health as h
+    t = 台
+    rec = h.RecentLog(keep=10, keep_access=10)
+    monkeypatch.setattr(h, "RECENT", rec)
+    ev = logging.LogRecord("nexwar_site", logging.INFO, "", 0, "机器人 A 上线了", None, None)
+    ev.created = NOW / 1000 - 60
+    rec.emit(ev)
+    for _ in range(50):                                    # 网页刷接口
+        r = logging.LogRecord("nexwar_site.api", logging.INFO, "", 0, '"GET /api/robots" 200 -',
+                              None, None)
+        r.created = NOW / 1000 - 30
+        r.access = True
+        rec.emit(r)
+    out = support_bundle(tmp_path / "b.tar.gz", home=t.home, db=t.db, health=t.h, now_ms=NOW,
+                         hours=1, journal=lambda unit, hours: "-- No entries --\n")
+    with tarfile.open(out) as tar:
+        files = {n.split("/", 1)[1]: tar.extractfile(n).read().decode() for n in tar.getnames()}
+    assert "机器人 A 上线了" in files["site/site-recent.log"]
+    assert "GET /api/robots" not in files["site/site-recent.log"]
+    assert "GET /api/robots" in files["site/site-access-recent.log"]
+
+
+def test_第3轮_config_N8_访问记录只把成功的GET标成access():
+    import io
+    import logging
+
+    from nexwar_site.api import _Handler as ApiHandler
+    got: list[logging.LogRecord] = []
+
+    class H(logging.Handler):
+        def emit(self, record):
+            got.append(record)
+    lg = logging.getLogger("nexwar_site.api")
+    hd = H()
+    lg.addHandler(hd)
+    old = lg.level
+    lg.setLevel(logging.INFO)
+    try:
+        fake = ApiHandler.__new__(ApiHandler)
+        fake.client_address = ("1.2.3.4", 1)
+        fake.wfile = io.BytesIO()
+        fake.log_message('"%s" %s %s', "GET /api/robots HTTP/1.1", "200", "-")
+        fake.log_message('"%s" %s %s', "GET /api/x HTTP/1.1", "404", "-")
+        fake.log_message('"%s" %s %s', "POST /api/mode HTTP/1.1", "200", "-")
+    finally:
+        lg.removeHandler(hd)
+        lg.setLevel(old)
+    assert [getattr(r, "access", None) for r in got] == [True, False, False]
+
+
+def test_网页第2轮_P1_01_每项检查都带英文说明_不夹中文(台):
+    import re
+    t = 台
+    for setup in (lambda: None, lambda: (t.free.__setitem__(0, 5), t.lag.__setitem__(0, 9.0),
+                                         t.ends.__setitem__("robot.crt", NOW + 10 * DAY))):
+        setup()
+        c = t.h.checks()
+        for k, v in c.items():
+            assert v.get("detail_en"), k
+            assert not re.search(r"[㐀-鿿]", v["detail_en"]), (k, v["detail_en"])
+    assert c["disk"]["detail_en"] == "Site disk 5% free"
+    assert "Renew certificates now" in c["certs"]["detail_en"]
+
+
+def test_网页第4轮_P1_01_密钥有毛病_英文也写出是哪几把(台):
+    t = 台
+    t.h._keys = lambda: [{"name": "secrets", "problem": "没有这把密钥"},
+                         {"name": "backup", "problem": "权限过宽(0o644):别的用户也读得到"},
+                         {"name": "evidence", "problem": ""}]
+    en = t.h.checks()["keys"]["detail_en"]
+    assert en == ("Site key problem: password encryption key (missing), "
+                  "backup encryption key (readable by other users)")
+
+
+def test_第4轮_config_N7_客户端断开记INFO_不记ERROR(tmp_path, monkeypatch, caplog):
+    import logging
+    import ssl
+
+    from test_site_api import 站
+
+    from nexwar_site import api as api_mod
+
+    def boom(self, method, user):
+        raise ssl.SSLEOFError("EOF occurred in violation of protocol")
+
+    s = 站(tmp_path)
+    try:
+        monkeypatch.setattr(api_mod._Handler, "_weather", boom)
+        tok = s.login()
+        with caplog.at_level(logging.INFO, logger=api_mod.log.name):
+            try:
+                s.req("GET", "/api/weather", token=tok)
+            except Exception:  # noqa: BLE001 —— 站点没回就关了连接,客户端这边报错是对的
+                pass
+        mine = [r for r in caplog.records if "/api/weather" in r.getMessage()]
+        assert mine and all(r.levelno == logging.INFO and r.exc_info is None for r in mine)
+    finally:
+        s.close()

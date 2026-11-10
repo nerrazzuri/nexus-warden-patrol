@@ -12,6 +12,7 @@ import 'package:nexwar_patrol/model/alert.dart';
 import 'package:nexwar_patrol/store/site_store.dart';
 import 'package:nexwar_patrol/ui/nw/nw_theme.dart';
 import 'package:nexwar_patrol/ui/site_health.dart';
+import 'package:nexwar_patrol/ui/problem_report.dart';
 import 'package:nexwar_patrol/ui/robot_bind_page.dart';
 import 'package:nexwar_patrol/ui/robot_ops.dart';
 import 'package:nexwar_patrol/ui/alarm_log.dart';
@@ -159,6 +160,8 @@ final _pages = <String, Widget Function()>{
   'robot (admin, busy)': () => SiteRobotPage(api: FakeApi('admin', robotView: busyView()), robotId: 'A'),
   'robot ops (W55)': () => RobotOpsPage(api: FakeApi('admin'), robotId: 'A', tasks: robotOpsAll),
   'settings (W55, site list)': () => const AppSettingsPage(),
+  'send logs (logging 6, signed in)': () => ProblemReportPage(api: FakeApi('viewer'), robots: const ['A', 'B'], share: (n, b) async => true),
+  'send logs (logging 6, no site)': () => ProblemReportPage(api: null, share: (n, b) async => true),
   'settings (W55, in site)': () => AppSettingsPage(api: FakeApi('admin'), watch: WatchControl()..bind(() async {}),
       updater: (a) => AppUpdater(api: a, platform: 'android')),
   'robot (guard)': () => SiteRobotPage(api: FakeApi('guard'), robotId: 'A'),
@@ -229,6 +232,26 @@ final _themes = <String, ThemeData? Function()>{
 };
 
 void main() {
+  // 手机 App 测试 M16：1080 宽的标准屏（411 宽）、系统字体放大到 1.3 倍：常用的几页不溢出
+  for (final lang in AppLang.values) {
+    for (final name in const ['duty (guard, today)', 'duty (owner)', 'mode', 'runs', 'weather']) {
+      testWidgets('字放大 1.3 倍不溢出 [${lang.name} 411×891] $name', (t) async {
+        appLang.value = lang;
+        addTearDown(() => appLang.value = AppLang.zh);
+        t.view.physicalSize = const Size(411, 891) * 2;
+        t.view.devicePixelRatio = 2.0;
+        addTearDown(t.view.reset);
+        await t.pumpWidget(MaterialApp(
+            theme: nwTheme(Brightness.dark),
+            builder: (c, child) => MediaQuery(
+                data: MediaQuery.of(c).copyWith(textScaler: const TextScaler.linear(1.3)), child: child!),
+            home: _pages[name]!()));
+        await t.pumpAndSettle();
+        expect(t.takeException(), isNull);
+        await t.pumpWidget(Container());
+      });
+    }
+  }
   for (final th in _themes.entries) {
     for (final lang in AppLang.values) {
       for (final size in const [_portrait, _landscape]) {

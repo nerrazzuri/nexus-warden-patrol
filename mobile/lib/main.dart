@@ -43,6 +43,7 @@ const List<(List<String>, String)> fontLicenses = <(List<String>, String)>[
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   installErrorHooks(); // W55：App 的错误记下来，登录着定时传给站点
+  await openAppLog(); // 日志设计 第 6 条：App 自己的日志文件（正式版也写），「上传日志」时带上
   LicenseRegistry.addLicense(() async* {
     for (final (families, path) in fontLicenses) {
       yield LicenseEntryWithLineBreaks(families, await rootBundle.loadString(path));

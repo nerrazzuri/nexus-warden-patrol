@@ -55,6 +55,8 @@ from nexwar_agent.engine.safety import (
     battery_ruling,
     rule,
 )
+from nexwar_contract import errcodes, logsetup
+from nexwar_contract.navcodes import fail_code
 from nexwar_patrol.backends.base import (
     BatteryEvent,
     DeviceBackend,
@@ -202,11 +204,13 @@ class WaypointResult:
     elapsed_s: float
     photos: tuple[str, ...]
     note: str = ""
+    #: 导航 V1 第 5 节:失败原因码(``nexwar_contract.navcodes``),没有 / 不是导航的原因为空
+    code: str = ""
 
     def to_wire(self) -> dict[str, Any]:
         return {"name": self.name, "ok": self.ok, "arrived_ms": self.arrived_ms,
                 "elapsed_s": round(self.elapsed_s, 2), "photos": list(self.photos),
-                "note": self.note}
+                "note": self.note, "code": self.code}
 
 
 @dataclass(frozen=True, slots=True)
@@ -334,9 +338,11 @@ class _ReturnHome(Exception):
 class _FailWaypoint(Exception):
     """当前这个点没成。按 ``on_waypoint_failed`` 处置。"""
 
-    def __init__(self, reason: str, *, retry: bool = True) -> None:
+    def __init__(self, reason: str, *, retry: bool = True, code: str = "") -> None:
         super().__init__(reason)
         self.reason = reason
+        #: 导航 V1 第 5 节:导航后端给的原因码
+        self.code = code
         #: W70:导航后端判定再试也一样(目标点被占、规划不出路线而狗没动):不按 waypoint_retry 再来
         self.retry = retry
 
@@ -618,7 +624,7 @@ class MissionEngine(EventEmitter[RunSnapshot]):
         self._busy_checks.append(check)
 
     async def start(self, mission: Mission, *,
-                    home: HomePoint | None = None) -> None:
+                    home: HomePoint | None = None, task_id: str = "") -> None:
         """开一趟。已经在跑就拒绝 —— 两趟并行会把归档搅在一起。
 
         引擎是按进程建的,原点却是按地图选的(调用方按地图选):构造时
@@ -649,7 +655,13 @@ class MissionEngine(EventEmitter[RunSnapshot]):
             asyncio.create_task(self._forward(self._nav)),
             asyncio.create_task(self._forward(self._device)),
         ]
-        self._task = asyncio.create_task(self._run())
+        # 日志设计 第 4 条:这一趟里写的日志都带任务号、地图版本(新起的协程带走当前的上下文)
+        with logsetup.context(task=task_id or None,
+                              map=f"{mission.map_id}:{mission.map_version or '?'}"):
+            log.info("开一趟 mission=%s 点数=%d 循环=%d 点位失败=%s", mission.mission,
+                     len(mission.waypoints), mission.policy.loops,
+                     mission.policy.on_waypoint_failed)
+            self._task = asyncio.create_task(self._run())
 
     async def pause(self) -> None:
         await self._queue.put(_Command("pause"))
@@ -729,6 +741,8 @@ class MissionEngine(EventEmitter[RunSnapshot]):
         frm = self._state
         self._state = to
         self._seen.add(to)
+        log.log(logging.WARNING if to in (RunState.ABORTED, RunState.ABORTING) else logging.INFO,
+                "状态 %s → %s%s", frm.value, to.value, f" 原因={reason}" if reason else "")
         if self._live is not None:
             self._live.archive.append_event("state", frm=frm.value, to=to.value,
                                             reason=reason)
@@ -820,7 +834,9 @@ class MissionEngine(EventEmitter[RunSnapshot]):
                 for i, wp in enumerate(live.mission.waypoints):
                     live.index = i
                     self._publish()
+                    logsetup.set_context(pt=i, point=wp.name)
                     result = await self._do_waypoint(wp)
+                    logsetup.set_context(pt=None, point=None)
                     live.results.append(result)
                     if result.ok:
                         live.trail.append((i, wp.pose))
@@ -1172,7 +1188,7 @@ class MissionEngine(EventEmitter[RunSnapshot]):
         attempts = 1 + (policy.waypoint_retry
                         if policy.on_waypoint_failed == "retry_then_skip" else 0)
         started = self._clock()
-        note = ""
+        note, code = "", ""
         tried = 0
         while tried < attempts:
             live.photos = []
@@ -1185,6 +1201,8 @@ class MissionEngine(EventEmitter[RunSnapshot]):
                 await self._await_nav_standby(min(
                     attempt_started + policy.waypoint_timeout_s,
                     self._clock() + NAV_STANDBY_TIMEOUT_S))
+                log.info("去这个点 (%.2f, %.2f, %.2f) 第 %d 次", wp.pose.position.x,
+                         wp.pose.position.y, wp.pose.yaw, tried + 1)
                 try:
                     await self._nav.goto(wp.pose)
                 except NavNotLocalizedError as exc:
@@ -1199,18 +1217,21 @@ class MissionEngine(EventEmitter[RunSnapshot]):
                 except NavRequestError as exc:
                     # 规划后端当场拒(没路、终点在禁行区里,W10):这个点失败、按点位失败策略走;
                     # 以前落到兜底,整趟按「引擎内部异常」中止。
-                    raise _FailWaypoint(f"导航拒了: {exc}") from None
+                    raise _FailWaypoint(f"导航拒了: {exc}", retry=not getattr(exc, "final", False),
+                                        code=fail_code(getattr(exc, "code", "")) or "") from None
                 self._note("nav", waypoint=wp.name, attempt=tried + 1)
                 await self._wait_nav_terminal(
                     attempt_started + policy.waypoint_timeout_s)
                 arrived_ms = self._stamp_ms()
+                log.info("到了 用时 %.1f s(这一次 %.1f s)", self._clock() - started,
+                         self._clock() - attempt_started)
                 await self._do_actions(wp)
                 return WaypointResult(wp.name, True, arrived_ms,
                                       self._clock() - started, tuple(live.photos))
             except _RetryWaypoint:
                 continue                     # 暂停后继续,不算一次重试
             except _FailWaypoint as exc:
-                note = exc.reason
+                note, code = exc.reason, exc.code
                 tried = tried + 1 if exc.retry else attempts
                 # 狗停在哪记进来路(W00c6b 内审):失败了的点没到过,不在回路里;接着往下一个点走的那段
                 # 是从这儿出发的。
@@ -1218,10 +1239,14 @@ class MissionEngine(EventEmitter[RunSnapshot]):
                 if where is not None:
                     live.trail.append((None, where))
                 self._note("waypoint_failed", waypoint=wp.name,
-                           attempt=tried, reason=note)
+                           attempt=tried, reason=note, code=code)
+                log.warning("没到 code=%s 第 %d 次 用时 %.1f s why=%s%s",
+                            errcodes.tag(errcodes.nav(code)) if code else "-", tried,
+                            self._clock() - attempt_started, note,
+                            "" if tried < attempts else " → 不再重试")
         if policy.on_waypoint_failed == "abort":
             raise _AbortRun(f"点位 {wp.name} 失败: {note}")
-        return WaypointResult(wp.name, False, 0, self._clock() - started, (), note)
+        return WaypointResult(wp.name, False, 0, self._clock() - started, (), note, code)
 
     async def _await_nav_standby(self, deadline: float) -> None:
         """等导航状态机回落 StandBy。等的期间照常处理事件。
@@ -1271,7 +1296,8 @@ class MissionEngine(EventEmitter[RunSnapshot]):
                 why = getattr(self._nav, "fail_reason", "")
                 raise _FailWaypoint(f"无法到达下一个点:{why}" if why
                                     else f"无法到达下一个点(导航回了 {item.status.value})",
-                                    retry=not getattr(self._nav, "fail_final", False))
+                                    retry=not getattr(self._nav, "fail_final", False),
+                                    code=fail_code(getattr(self._nav, "fail_code", "")) or "")
 
     async def _do_actions(self, wp: MissionWaypoint) -> None:
         for action in wp.actions:

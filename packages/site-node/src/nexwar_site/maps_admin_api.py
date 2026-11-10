@@ -26,7 +26,8 @@ from nexwar_site.maps_admin import AdminError, MapAdmin
 from nexwar_site.permissions import MANAGE
 
 _ROUTE = re.compile(r"^/api/admin/maps(?:/(rollback)|/([^/]{1,64})/([^/]{1,64})/"
-                    r"(note|publish|delete|diff|diff\.png|noise|denoise|edit|display|basemap|quality))?$")
+                    r"(note|publish|delete|diff|diff\.png|noise|denoise|edit|display|basemap|quality|"
+                    r"adopt-routes|layout))?$")
 MAX_ROBOTS = 32
 
 
@@ -63,6 +64,10 @@ def handle(h: Any, method: str, path: str, user: Any) -> None:
             from nexwar_site.map_wizard import read_quality
             adm.ref(map_id, version)
             return h._send_json(200, read_quality(adm.cat, map_id, version))
+        if what == "layout":                      # 第 2 轮 N4:这一版上画了多少布置
+            if method != "GET":
+                raise HttpError(404, f"没有 {method} {path}")
+            return h._send_json(200, adm.layout_counts(map_id, version))
         if what == "noise":
             if method != "GET":
                 raise HttpError(404, f"没有 {method} {path}")
@@ -79,8 +84,26 @@ def handle(h: Any, method: str, path: str, user: Any) -> None:
             note = adm.set_note(map_id, version, d.get("note"))
             h._audit_detail = {"note": note}
             return h._send_json(200, {"ok": True, "note": note})
+        if what == "adopt-routes":
+            # 网页易用性第 1 轮 P0-14:换到同一坐标系的新版本时,把旧版上的路线一起搬过来
+            src = d.get("from")
+            if not isinstance(src, str) or not src or src == version:
+                raise HttpError(400, "from 要写从哪一版搬(不能是这一版本身)")
+            routes = getattr(h.site, "routes", None)
+            if routes is None:
+                raise HttpError(409, "站点没有路线库")
+            adm.ref(map_id, version)
+            from nexwar_site.routes import RouteError
+            try:
+                moved = routes.move_to_version(map_id, src, version, by=str(user))
+            except RouteError as exc:
+                raise HttpError(409, str(exc)) from exc
+            h._audit_detail = {"from": src, "moved": moved}
+            return h._send_json(200, {"moved": moved})
         if what == "delete":
-            out = adm.delete(map_id, version)
+            if h._via_cookie:
+                h._confirm(user, d)          # 网页易用性 P1-47:跟发布一样,网页上删版本要再输密码
+            out = adm.delete(map_id, version, confirm_rollback=d.get("confirm_rollback") is True)
             h._audit_detail = out
             return h._send_json(200, out)
         if what == "edit":
@@ -203,7 +226,8 @@ def _basemap(h: Any, adm: MapAdmin, method: str, map_id: str, version: str) -> N
         raise HttpError(400, "Content-Length 不是数") from exc
     if not 0 < n <= MAX_BASEMAP:
         raise HttpError(413, "底图最大 8 MB")
-    data = h.rfile.read(n)
+    # 第 2 轮:用记数的 _read,不然 _drain 再读一遍、吞掉同连接的下一个请求
+    data = h._read(n)
     magic = b"\x89PNG" if ext == "png" else b"\xff\xd8"
     if not data.startswith(magic):
         raise HttpError(400, "文件不是 PNG / JPEG")
@@ -217,6 +241,8 @@ def _basemap(h: Any, adm: MapAdmin, method: str, map_id: str, version: str) -> N
 
 def _rollback(h: Any, adm: MapAdmin, user: Any) -> None:
     d = h._body()
+    if h._via_cookie:
+        h._confirm(user, d)                  # 网页易用性 P1-47:跟发布一样再输密码
     rid = d.get("robot_id")
     if not isinstance(rid, str) or not SAFE_ID.match(rid) or rid not in set(adm.robot_ids()):
         raise AdminError(404, "机器人不存在")

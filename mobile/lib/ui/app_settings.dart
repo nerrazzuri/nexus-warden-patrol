@@ -16,7 +16,9 @@ import 'arrival_alert.dart';
 import 'nw/nw_p4_admin.dart' show NwListView, NwListCard, nwGap8, nwGap16;
 import 'nw/nw_theme.dart';
 import 'nw/nw_widgets.dart';
+import 'problem_report.dart';
 import 'robot_bind_page.dart';
+import 'site_health.dart' show shareBundle;
 
 /// 进了站点以后由外壳（`NwShell`）挂上：设置页要的后台值守、推送、更新从这里拿。
 class SettingsHost extends InheritedWidget {
@@ -54,6 +56,7 @@ class AppSettingsPage extends StatefulWidget {
 
   const AppSettingsPage({super.key, this.api, this.watch, this.push, this.updater, this.langStore});
 
+  static const Key problemKey = Key('settings-problem');
   static const Key langKey = Key('lang-switch');
   static const Key watchKey = Key('btn-bg-watch');
   static const Key pushKey = Key('push-state');
@@ -61,6 +64,7 @@ class AppSettingsPage extends StatefulWidget {
   static const Key checkUpdateKey = Key('app-check-update');
   static const Key licensesKey = Key('app-licenses');
   static const Key unbindKey = Key('engineer-unbind');
+  static const Key engineerKey = Key('engineer-tools');
   static const Key arrivalKey = Key('arrival-alerts');
 
   @override
@@ -135,6 +139,8 @@ class _AppSettingsPageState extends State<AppSettingsPage> {
           ListTile(
             leading: const Icon(Icons.language_rounded),
             title: Text(tr('Language', '语言')),
+            // 手机 App 测试 M40：整行都能点（以前只有右边的下拉能点）
+            onTap: () => _setLang(appLang.value == AppLang.zh ? AppLang.en : AppLang.zh),
             trailing: DropdownButton<AppLang>(
                 key: AppSettingsPage.langKey,
                 value: appLang.value,
@@ -168,7 +174,7 @@ class _AppSettingsPageState extends State<AppSettingsPage> {
                         title: Text(tr('Background watch', '后台值守')),
                         subtitle: Text(
                             tr('Keep receiving P1 alarms when the app is in the background',
-                                'App 在后台时继续接收 P1 告警'),
+                                'App 在后台时继续接收 P1 报警'),
                             style: sub()),
                         value: watch.on,
                         onChanged: watch.busy ? null : (_) => watch.toggle(),
@@ -184,7 +190,7 @@ class _AppSettingsPageState extends State<AppSettingsPage> {
                         subtitle: Text(
                             st == PushState.ready
                                 ? tr('Ready', '已就绪')
-                                : tr('Not ready (${push.reason})', '未就绪（${push.reason}）'),
+                                : push.reason,
                             style: sub()),
                       )),
             ValueListenableBuilder<bool>(
@@ -193,10 +199,10 @@ class _AppSettingsPageState extends State<AppSettingsPage> {
                       key: AppSettingsPage.arrivalKey,
                       secondary: Icon(on ? Icons.where_to_vote : Icons.where_to_vote_outlined,
                           color: on ? c.success : c.textSecondary),
-                      title: Text(tr('Waypoint arrival alerts', '巡检到点提醒')),
+                      title: Text(tr('Waypoint arrival alerts', '巡逻到点提醒')),
                       subtitle: Text(
                           tr('Sound and vibrate at each patrol point (for on-site tests; off after the app restarts)',
-                              '每到一个巡检点就响铃、震动（现场测试用，App 重启后自动关闭）'),
+                              '每到一个巡逻点就响铃、震动（现场测试用，App 重启后自动关闭）'),
                           style: sub()),
                       value: on,
                       onChanged: (v) => arrivalAlerts.value = v,
@@ -225,6 +231,26 @@ class _AppSettingsPageState extends State<AppSettingsPage> {
                   : null,
               onTap: _checking ? null : () => _checkUpdate(updater),
             ),
+          // 日志设计 第 6 条：谁都能传日志（不要权限），站点开问题单、给编号，工程师按编号取
+          ListTile(
+            key: AppSettingsPage.problemKey,
+            leading: const Icon(Icons.bug_report_outlined),
+            title: Text(tr('Send logs', '上传日志')),
+            subtitle: Text(tr('Something went wrong? Send logs to the engineer', '遇到问题？把日志发给工程师'), style: sub()),
+            onTap: () async {
+              final nav = Navigator.of(context);
+              var ids = <String>[];
+              if (api != null) {
+                try {
+                  ids = [for (final r in await api.robots()) '${r['robot_id']}'];
+                } on Object {
+                  ids = <String>[]; // 机器人列表取不到：不选机器人照样能传
+                }
+              }
+              await nav.push(MaterialPageRoute<void>(
+                  builder: (_) => ProblemReportPage(api: api, robots: ids, share: shareBundle)));
+            },
+          ),
           ListTile(
             key: AppSettingsPage.licensesKey,
             leading: const Icon(Icons.description_outlined),
@@ -237,7 +263,14 @@ class _AppSettingsPageState extends State<AppSettingsPage> {
           nwGap16,
           NwSectionLabel(tr('Engineer tools', '工程师工具')),
           nwGap8,
+          // 手机 App 测试 M23：没登录的人随手能看到「解绑机器人」—— 收起来，展开前说清楚是给谁用的
           NwListCard(children: [
+            ExpansionTile(
+              key: AppSettingsPage.engineerKey,
+              leading: const Icon(Icons.engineering_outlined),
+              title: Text(tr('For installation engineers', '安装工程师专用')),
+              subtitle: Text(tr('Only when the site is lost. Not needed in daily use.', '只在站点坏了时用，平常用不到。'), style: sub()),
+              children: [
             ListTile(
               key: AppSettingsPage.unbindKey,
               leading: const Icon(Icons.build_circle_outlined),
@@ -246,6 +279,7 @@ class _AppSettingsPageState extends State<AppSettingsPage> {
               onTap: () => Navigator.push(
                   context, MaterialPageRoute<void>(builder: (_) => const EngineerUnbindPage())),
             ),
+              ]),
           ]),
         ],
       ]),

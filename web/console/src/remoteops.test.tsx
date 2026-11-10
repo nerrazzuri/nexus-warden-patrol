@@ -12,8 +12,10 @@ const json = (body: unknown, status = 200) => new Response(JSON.stringify(body),
 let posted: { url: string; body: unknown; headers: Record<string, string> }[];
 let got: string[];
 
+let caps: { priv: boolean; push: boolean } = { priv: true, push: true };
 beforeEach(() => {
   lang.value = "zh";
+  caps = { priv: true, push: true };
   posted = [];
   got = [];
   setFetch(((url: string, init?: RequestInit) => {
@@ -36,6 +38,7 @@ beforeEach(() => {
         choices: { NEXWAR_PERSONS: ["bridge", "none"], NEXWAR_OBS_PERMIT: ["0", "1"], NEXWAR_MAX_FRACTION: ["0.5", "0.7", "1.0"], NEXWAR_VENDOR_PAUSE: ["0", "1"] } }));
     }
     if (url.startsWith("/api/robots/A/ops/journal")) return Promise.resolve(json({ unit: "nexwar_agent", text: "line1\nline2", truncated: true }));
+    if (url === "/api/system/caps") return Promise.resolve(json(caps));
     if (url === "/api/system/vpn") {
       return Promise.resolve(json({ ready: true, peers: [{ name: "eng-1", kind: "engineer", address: "10.77.0.200", public: "K", expires_ms: 1 }],
         status: { up: true, peers: [{ public_key: "K", latest_handshake: 0 }] } }));
@@ -45,7 +48,8 @@ beforeEach(() => {
     if (url.startsWith("/api/app-update")) return Promise.resolve(json({ available: false }));
     if (url.startsWith("/api/metrics")) {
       return Promise.resolve(json({ metrics: [{ ts: 1, key: "site_disk_free", value: 0.31 }, { ts: 2, key: "site_disk_free", value: 0.2 },
-        { ts: 1, key: "robots_online", value: 2 }] }));
+        { ts: 1, key: "robots_online", value: 2 },
+        { ts: Date.UTC(2026, 10, 8, 3), key: "upload_backlog", value: 0 }, { ts: Date.UTC(2026, 10, 8, 5), key: "upload_backlog", value: 0 }] }));
     }
     return Promise.resolve(json({}, 404));
   }) as typeof fetch);
@@ -93,6 +97,10 @@ describe("机器人远程运维", () => {
     const { container: c } = render(<RobotOps robotId="A" tasks={ALL} say={() => {}} />);
     fireEvent.change(c.querySelector('select[aria-label="服务"]')!, { target: { value: "nexwar_localizer" } });
     fireEvent.click(btn(c, "重启服务"));
+    expect(posted).toEqual([]);                                                   // P1-74:先确认
+    const m = c.ownerDocument.querySelector(".modal") as HTMLElement;
+    expect(m.textContent).toContain("nexwar_localizer");
+    fireEvent.click(Array.from(m.querySelectorAll("button")).find((b) => b.textContent === "重启服务")!);
     await waitFor(() => expect(posted[0]).toMatchObject({ url: "/api/robots/A/ops/restart", body: { unit: "nexwar_localizer" } }));
   });
 });
@@ -133,6 +141,13 @@ describe("站点运维", () => {
     fireEvent.submit(document.querySelector("form.confirm-pw")!);
     await waitFor(() => expect(posted[0]).toMatchObject({ url: "/api/system/restart", body: { confirm_password: "pw" } }));
   });
+  it("P1-06:没装系统助手、没配推送:按钮先灰着、写原因", async () => {
+    caps = { priv: false, push: false };
+    const { container: c } = render(<SiteOps say={() => {}} />);
+    await waitFor(() => expect(c.querySelector('[data-why="priv"]')).not.toBeNull());
+    expect(btn(c, "重启站点服务").disabled).toBe(true);
+    expect(c.querySelector('[data-why="push"]')).not.toBeNull();
+  });
   it("App 安装包连签名清单一起传", async () => {
     const { container: c } = render(<AppPackages say={() => {}} />);
     await waitFor(() => expect(c.querySelector('[data-platform="android"]')!.textContent).toContain("1.2.0+12"));
@@ -150,6 +165,20 @@ describe("运行指标", () => {
   it("站点磁盘剩余是比例:显示百分比", async () => {
     const { container: c } = render(<SiteMetrics />);
     await waitFor(() => expect(c.querySelector('[data-metric="site_disk_free"] b')!.textContent).toBe("20%"));
+    // P2-23:有坐标轴:最高、最低值,起止日期
+    const row = c.querySelector('[data-metric="site_disk_free"]')!;
+    expect(row.querySelector('[data-y="max"]')!.textContent).toBe("31%");
+    expect(row.querySelector('[data-y="min"]')!.textContent).toBe("20%");
+    expect(row.querySelector('[data-x="start"]')!.textContent).not.toBe("");
+  });
+
+  it("第 4 轮 config N6:数值一样只标一个刻度;同一天的横轴标时刻", async () => {
+    const { container: c } = render(<SiteMetrics />);
+    await waitFor(() => expect(c.querySelector('[data-metric="upload_backlog"] [data-y="flat"]')).not.toBeNull());
+    const row = c.querySelector('[data-metric="upload_backlog"]')!;
+    expect(row.querySelector('[data-y="max"]')).toBeNull();
+    expect(row.querySelector('[data-x="start"]')!.textContent).toMatch(/^\d\d:\d\d$/);
+    expect(row.querySelector('[data-x="start"]')!.textContent).not.toBe(row.querySelector('[data-x="end"]')!.textContent);
   });
 });
 

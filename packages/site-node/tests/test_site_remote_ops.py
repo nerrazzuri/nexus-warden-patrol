@@ -107,8 +107,12 @@ def test_错误记录_登录着的都能报_限条数_留14天(站点, tmp_path)
 def test_站点级运维_没装执行器明说_装了交请求回202_结果之后查(站点):
     s = 站点
     alice = _登(s, "alice")
+    # P1-06:先能问做不做得到(网页按钮先灰着)
+    assert s.req("GET", "/api/system/caps", token=alice)[1] == {
+        "priv": False, "push": False, "vpn": False, "debug_log": True}
     assert s.req("POST", "/api/system/restart", {"confirm_password": PW}, token=alice)[0] == 409
     s.api.priv = SimOps()
+    assert s.req("GET", "/api/system/caps", token=alice)[1]["priv"] is True
     assert s.req("POST", "/api/system/restart", {}, token=alice)[0] == 403
     code, d = s.req("POST", "/api/system/restart", {"confirm_password": PW}, token=alice)
     assert code == 202 and d["id"]
@@ -146,6 +150,9 @@ def test_站点升级包_收下要密码_交给执行器(站点):
     assert code == 403 and not list((s.api.home / "updates").glob("*.tar.gz"))
     code, d = _upload(s, "/api/system/update", b"junk", {"X-Nexwar-Confirm": PW}, alice)
     assert code == 400
+    # 网页 P1-77:文件不对先说文件不对(密码错也一样),话里不提 release.json
+    code, d = _upload(s, "/api/system/update", b"junk", {"X-Nexwar-Confirm": "bad"}, alice)
+    assert code == 400 and "不是升级包" in d["error"] and "release.json" not in d["error"]
     code, d = _upload(s, "/api/system/update", pkg, {"X-Nexwar-Confirm": PW}, alice)
     assert code == 202, d
     (action, args), = s.api.priv.calls
@@ -371,10 +378,10 @@ def test_诊断包_带时间段_事件命令操作记录_另取的原样放进�
                          extra={"robots/A/diag.json": b'{"ok": 1}', "client_errors.json": b"[]"})
     with tarfile.open(out) as tf:
         names = {m.name.removeprefix("nexwar_support/") for m in tf.getmembers()}
-        audit = json.loads(tf.extractfile("nexwar_support/audit.json").read())
-        log = tf.extractfile("nexwar_support/logs/wg-quick@nexwar.log").read()
-    assert {"robots/A/diag.json", "client_errors.json", "events.json", "commands.json",
-            "audit.json", "logs/chrony.log"} <= names
+        audit = json.loads(tf.extractfile("nexwar_support/records/audit.json").read())
+        log = tf.extractfile("nexwar_support/host/wg-quick@nexwar.log").read()
+    assert {"robots/A/diag.json", "clients/client_errors.json", "records/events.json",
+            "records/commands.json", "records/audit.json", "host/chrony.log"} <= names
     assert audit[0]["actor"] == "alice" and log == b"wg-quick@nexwar 2h\n"
     db.close()
 

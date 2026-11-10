@@ -551,6 +551,39 @@ def test_接口_错误码_400带逐点_409冲突_审计(站点):
     assert (row["target"], row["status"]) == ("night", 400)
 
 
+def test_P2_25_没登记的机器人发指令回404(站点):
+    s = 站点
+    alice = _登(s, "alice")
+    for act, body in (("goto", {"x": 1}), ("abort", {}), ("patrol", {"mission_id": "x"})):
+        code, d = s.req("POST", f"/api/robots/GHOST/{act}", body, token=alice)
+        assert code == 404 and "GHOST" in d["error"], (act, code, d)
+
+
+def test_接口_只查不存_逐点问题照报_不存不进审计(站点):
+    """网页易用性 P1-39:画的时候就查;跟存路线同一套逐点检查。"""
+    s = 站点
+    alice, gina = _登(s, "alice"), _登(s, "gina")
+    bad = [pt("墙里", 4.0, 0.5), pt("好", 1.0, 2.0), pt("图外", 20.0, 2.0)]
+    body = {"map_id": MAP[0], "map_version": MAP[1], "waypoints": bad}
+    assert s.req("POST", "/api/route-check", body, token=gina)[0] == 403
+    code, d = s.req("POST", "/api/route-check", body, token=alice)
+    assert code == 200 and [e["index"] for e in d["errors"]] == [0, 2], d
+    code, d = s.req("POST", "/api/route-check", {**body, "waypoints": GOOD}, token=alice)
+    assert code == 200 and d["errors"] == []
+    assert s.req("POST", "/api/route-check", {"map_id": MAP[0], "waypoints": GOOD},
+                 token=alice)[0] == 400
+    assert s.req("GET", "/api/routes", token=alice)[1]["routes"] == []
+    # P1-16:保安的临时路线(只给 x、y)也能查,同一套逐点问题;点数不对 400
+    tmp = {"map_id": MAP[0], "map_version": MAP[1],
+           "points": [{"x": 4.0, "y": 0.5}, {"x": 1.0, "y": 2.0}]}
+    code, d = s.req("POST", "/api/route-check", tmp, token=gina)
+    assert code == 200 and [e["index"] for e in d["errors"]] == [0], d
+    assert s.req("POST", "/api/route-check", {**tmp, "points": []}, token=gina)[0] == 400
+    # 查成功的不进操作记录(画的时候一会儿一次);被拒、出错的照样记
+    rows = s.db.query("SELECT status FROM audit WHERE action='POST /api/route-check'")
+    assert sorted(r["status"] for r in rows) == [400, 400, 403], rows
+
+
 def test_接口_导入有摘要_导出落在站点目录_再导入收得下(站点, tmp_path):
     s = 站点
     alice = _登(s, "alice")
@@ -678,3 +711,23 @@ def test_现场15_35_没有栅格的老版本不提醒(台):
     r = 台.store.put_route("r", body(version="old", pts=[pt("a", 0.1, 0.1), pt("b", 0.2, 0.1)]),
                            by="a")
     assert r["warnings"] == []
+
+
+def test_网页P0_14_路线搬到新版本_定义里的版本一起改_修订号加一(台):
+    """网页易用性第 1 轮 P0-14:换成新版本后路线全「没了」(路线绑在旧版本上)。同一个坐标系的新版本
+    (从旧版编辑、清噪点出来的)可以把旧版上的路线一起搬过去。"""
+    s = 台.store
+    s.put_route("a", body("old"), by="x")
+    s.put_route("b", body("old"), by="x")
+    s.put_route("c", body("wide"), by="x")
+    moved = s.move_to_version("house", "old", "wide", by="gina")
+    assert moved == ["a", "b"]
+    assert [r["id"] for r in s.view("house", "wide")["routes"]] == ["a", "b", "c"]
+    assert s.view("house", "old")["routes"] == []
+    a = s.get("a")
+    assert a["map_version"] == "wide" and a["revision"] == 2
+    assert json.loads(台.db.query("SELECT definition FROM routes WHERE route_id='a'")[0]
+                      ["definition"])["map_version"] == "wide"
+    assert s.move_to_version("house", "old", "wide", by="gina") == []
+    with pytest.raises(RouteError):
+        s.move_to_version("house", "wide", "nope", by="gina")

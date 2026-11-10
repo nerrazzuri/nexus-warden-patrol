@@ -16,10 +16,11 @@ export const WEB_TOUR = 1;
 const ITEM: Record<string, [Key, Key, string]> = {
   robots: ["suRobots", "suRobotsHint", "#/admin/robots"],
   map: ["suMap", "suMapHint", "#/admin/maps"],
-  zones: ["suZones", "suZonesHint", "#/admin/layout"],
-  standby: ["suStandby", "suStandbyHint", "#/admin/layout"],
-  routes: ["suRoutes", "suRoutesHint", "#/admin/layout"],
-  schedule: ["suSchedule", "suScheduleHint", "#/admin/layout"],
+  // P1-75:直接到那一项的标签页(原来都落在第一个「防区」标签)
+  zones: ["suZones", "suZonesHint", "#/admin/layout?tab=nogo"],
+  standby: ["suStandby", "suStandbyHint", "#/admin/layout?tab=standby"],
+  routes: ["suRoutes", "suRoutesHint", "#/admin/layout?tab=routes"],
+  schedule: ["suSchedule", "suScheduleHint", "#/admin/layout?tab=routes"],
   arming: ["suArming", "suArmingHint", "#/admin/arming"],
   accounts: ["suAccounts", "suAccountsHint", "#/admin/users"],
   push: ["suPush", "suPushHint", ""],
@@ -59,7 +60,11 @@ export function SetupChecklist() {
             return (
               <li key={x.id} data-item={x.id} class={x.done ? "done" : x.skipped ? "skipped" : undefined}>
                 <span class="setup-mark" aria-hidden="true">{x.done ? "✓" : x.skipped ? "–" : "○"}</span>
-                <span class="setup-text"><b>{t(name)}</b>{!x.done && <span class="muted small">{t(hint)}</span>}</span>
+                <span class="setup-text"><b>{t(name)}</b>{!x.done && <span class="muted small">{x.skipped ? t("suSkippedNote") : t(hint)}</span>}</span>
+                {/* P1-75:跳过的能撤销 */}
+                {!x.done && x.skipped && (
+                  <button type="button" class="btn sm" onClick={() => void patch({ skip: (guide?.skip ?? []).filter((s) => s !== x.id) })}>{t("suUnskip")}</button>
+                )}
                 {!x.done && !x.skipped && (
                   <>
                     <button type="button" class="btn sm" onClick={() => void patch({ skip: [...(guide?.skip ?? []), x.id] })}>{t("suSkip")}</button>
@@ -93,15 +98,25 @@ const FAQ: [Key, Key, string[] | null][] = [
   ["fqStart", "fqStartA", ["admin", "engineer"]],
 ];
 
+/** P1-68:帮助跟着当前页:先说这一页是干什么的。 */
+const PAGE_HELP: Record<string, Key> = {
+  duty: "hpDuty", live: "hpLive", map: "hpMap", alarms: "hpAlarms", recordings: "hpRecordings",
+  "admin/robots": "hpRobots", "admin/layout": "hpLayout", "admin/arming": "hpArming", "admin/access": "hpAccess",
+  "admin/users": "hpUsers", "admin/reports": "hpReports", "admin/home": "hpHome", "admin/maps": "hpMaps",
+  "admin/localization": "hpLoc", "admin/diag": "hpDiag", "admin/upgrade": "hpUpgrade", "admin/system": "hpSystem",
+};
+
 /** 使用教程 + 常见问题(一个对话框,两段)。第一次登录自动打开,关的时候记下看过了。 */
-export function HelpDialog({ role, onClose }: { role: string; onClose: () => void }) {
+export function HelpDialog({ role, onClose, page, noAccess }: { role: string; onClose: () => void; page?: string;
+  /** 第 2 轮 admin N11 / P1-68:这个账号打不开这一页 —— 帮助说要谁来用,不介绍这页的功能。值是能用的角色名。 */
+  noAccess?: string }) {
+  const here = page ? PAGE_HELP[page] : undefined;
   const [tab, setTab] = useState<"tour" | "faq">("tour");
   const [i, setI] = useState(0);
   const steps = STEPS[role] ?? STEPS.viewer;
-  const close = () => {
-    void api("POST", "/api/me/guide", { web_tour: WEB_TOUR }).catch(() => {});
-    onClose();
-  };
+  // P2-46:一打开就记「看过了」(原来关的时候才记:开着就退出、刷新,下次登录又弹)
+  useEffect(() => { void api("POST", "/api/me/guide", { web_tour: WEB_TOUR }).catch(() => {}); }, []);
+  const close = onClose;
   return (
     <Modal label={t("helpTitle")} onClose={close}>
       <div class="help">
@@ -109,6 +124,9 @@ export function HelpDialog({ role, onClose }: { role: string; onClose: () => voi
           <button type="button" aria-pressed={tab === "tour"} onClick={() => setTab("tour")}>{t("helpTour")}</button>
           <button type="button" aria-pressed={tab === "faq"} onClick={() => setTab("faq")}>{t("helpFaq")}</button>
         </div>
+        {noAccess != null
+          ? <div class="help-here" data-help-noaccess="1"><b>{t("helpHere")}</b><p>{t("helpNoAccess", { who: noAccess })}</p></div>
+          : here && <div class="help-here" data-help-here="1"><b>{t("helpHere")}</b><p>{t(here)}</p></div>}
         {tab === "tour" ? (
           <div class="help-step">
             <p class="muted small">{i + 1} / {steps.length}</p>

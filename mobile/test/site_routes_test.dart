@@ -160,7 +160,7 @@ void main() {
         expect(s['map_id'], 'estate-1');
         expect(s['map_version'], '8');
         final wp = (s['waypoints'] as List).cast<Map<String, dynamic>>();
-        expect([for (final w in wp) w['name']], ['P1', 'P2', 'P3']);
+        expect([for (final w in wp) w['name']], ['W1', 'W2', 'W3']);
         for (var i = 0; i < want.length; i++) {
           expect((wp[i]['x'] as double), closeTo(want[i].$1, 0.011), reason: 'x$i');
           expect((wp[i]['y'] as double), closeTo(want[i].$2, 0.011), reason: 'y$i');
@@ -310,6 +310,17 @@ void main() {
     expect(api.calls, contains('deleteRoute loop base=3'));
   });
 
+  testWidgets('手机 App 测试 M36：有机器人正在跑这条路线，删之前说删了会让它停下', (t) async {
+    final api = RoutesApi('admin')
+      ..today = <String, dynamic>{'date': '2026-11-08', 'utc_offset_min': 480, 'items': [
+        {'at_ms': 1, 'kind': 'schedule', 'label': 'loop', 'robot': 'B', 'state': 'running'},
+      ]};
+    await _open(t, api, route: _route('loop', [[-3.29, 6.1]]));
+    await _reveal(t, SiteRouteEditorPage.deleteKey);
+    await _tapKey(t, SiteRouteEditorPage.deleteKey);
+    expect(find.textContaining('B is on this route right now'), findsOneWidget);
+  });
+
   testWidgets('保安：能看、能派，不能改（没有加点 / 存 / 删）；派的是站点上存着的那一条', (t) async {
     final api = RoutesApi('guard');
     await _open(t, api, route: _route('loop', [[-3.29, 6.1], [-1.5, 8.4]]));
@@ -357,6 +368,31 @@ void main() {
     expect(find.byKey(SiteRouteEditorPage.pointKey(2)), findsOneWidget);
   });
 
+  testWidgets('手机 App 测试 M19：路线名边输边说哪里不对，对话框不关、字不丢；改对了才能建', (t) async {
+    final api = RoutesApi('admin');
+    await t.binding.setSurfaceSize(const Size(900, 700));
+    addTearDown(() => t.binding.setSurfaceSize(null));
+    await t.pumpWidget(MaterialApp(home: SiteRoutesPage(api: api)));
+    await t.pumpAndSettle();
+    await t.tap(find.byKey(SiteRoutesPage.newKey));
+    await t.pumpAndSettle();
+    await t.enterText(find.byKey(const Key('route-new-name')), 'App test route');
+    await t.pump();
+    expect(find.textContaining('No spaces'), findsOneWidget);
+    await t.tap(find.byKey(const Key('route-new-go')));
+    await t.pump();
+    expect(find.byKey(const Key('route-new-name')), findsOneWidget, reason: '对话框还开着');
+    expect(find.text('App test route'), findsOneWidget, reason: '字没丢');
+    await t.enterText(find.byKey(const Key('route-new-name')), 'loop');
+    await t.pump();
+    expect(find.text('A route with this name already exists'), findsOneWidget);
+    await t.enterText(find.byKey(const Key('route-new-name')), 'App-test-route');
+    await t.pump();
+    await t.tap(find.byKey(const Key('route-new-go')));
+    await t.pumpAndSettle();
+    expect(find.byType(SiteRouteEditorPage), findsOneWidget);
+  });
+
   testWidgets('路线列表：管理员 / 保安没有「新路线」；没有路线时说没有', (t) async {
     final api = RoutesApi('guard')..routesBody = <String, dynamic>{'revision': 1, 'routes': <dynamic>[], 'schedules': <dynamic>[]};
     await t.pumpWidget(MaterialApp(home: SiteRoutesPage(api: api)));
@@ -372,7 +408,8 @@ void main() {
     for (final bad in ['', 'a b', '../x', '路线', 'x' * 65, '.hidden']) {
       expect(routeNameRe.hasMatch(bad), isFalse, reason: bad);
     }
-    expect(nextPointName([RoutePt('P2', 0, 0, 0), RoutePt('P3', 0, 0, 0)]), 'P4');
+    expect(nextPointName([RoutePt('P2', 0, 0, 0), RoutePt('P3', 0, 0, 0)]), 'W3');
+    expect(nextPointName([RoutePt('W1', 0, 0, 0)]), 'W2', reason: 'M26：不叫 P1 P2，免得跟报警级别撞名');
   });
 
   // ------------------------------------------------------------------ 地图栏：去这里 / 设位置
@@ -412,6 +449,30 @@ void main() {
       expect(g['y'] as double, closeTo(4.25, 0.011));
       expect(g['yaw'] as double, closeTo(math.pi / 2, 0.05));
       expect(find.textContaining('Go-to sent to A'), findsOneWidget);
+      await t.pump(const Duration(seconds: 7)); // 盯这一趟的那几秒（M06）：没消息就留着「已派」
+      expect(find.textContaining('Go-to sent to A'), findsOneWidget);
+    });
+
+    testWidgets('手机 App 测试 M06：狗收下了、出发前检查没过 —— 原地说没出发、为什么', (t) async {
+      final api = Rot23Api('guard');
+      api.view = <String, dynamic>{
+        ...api.view,
+        'events': <dynamic>[
+          <String, dynamic>{'kind': 'task_failed', 'seq': 9, 'stamp': 1,
+            'data': <String, dynamic>{'task_id': 't1', 'reason': "起飞前检查未通过: home(地图 'estate-1' 未标原点)"}},
+        ],
+      };
+      final c = await pumpTab(t, api);
+      await t.tapAt(c.global(-3.5, 4.25));
+      await t.pumpAndSettle();
+      await t.tap(find.byKey(PoseBar.goKey));
+      await t.pump();
+      await t.pump();
+      expect(find.textContaining('Checking that it starts'), findsOneWidget);
+      await t.pump(const Duration(seconds: 2));
+      await t.pumpAndSettle();
+      expect(find.textContaining("A didn't go: Pre-departure check failed: the map has no origin yet"), findsOneWidget);
+      expect(find.textContaining('Go-to sent'), findsNothing);
     });
 
     testWidgets('站点拒了：原因原样显示', (t) async {

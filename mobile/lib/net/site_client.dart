@@ -20,6 +20,8 @@ import 'dart:typed_data';
 import 'package:crypto/crypto.dart';
 
 import '../l10n.dart';
+import 'app_log.dart';
+import 'site_text.dart';
 import '../model/alert.dart';
 import 'error_log.dart';
 
@@ -30,11 +32,28 @@ class SiteError implements Exception {
 
   /// 站点回的整个错误体（除了 `error` 还可能带别的字段，比如标原点的 `name_taken`、`data`）。
   final Map<String, dynamic> body;
-  const SiteError(this.status, this.message, {this.body = const <String, dynamic>{}});
 
+  /// 状态 0（没拿到站点的回答）时是哪一种：`cert` 证书变了、`tls` 别的握手失败、`timeout`、`net` 连不上、
+  /// `dropped` 连接中途断了；空 = 站点回了话（手机 App 测试 M03：证书变了跟连不上分开说）。
+  final String kind;
+  const SiteError(this.status, this.message, {this.body = const <String, dynamic>{}, this.kind = ''});
+
+  /// 站点证书跟手机记的指纹对不上（站点重装、重签了证书，或者有人冒充站点）。
+  bool get certChanged => kind == 'cert';
+
+  /// 给人看的那句（手机 App 测试 M05：按 App 语言翻站点原文；4xx 的状态码对人没用，不印）。
   @override
-  String toString() => status == 0 ? message : tr('$message ($status)', '$message（$status）');
+  String toString() {
+    final m = siteText(message);
+    return status < 500 ? m : tr('$m ($status)', '$m（$status）');
+  }
 }
+
+/// 站点证书变了时给人看的话（手机 App 测试 M03）。
+String get certChangedText => tr(
+    "The site's certificate has changed. If an administrator just reinstalled the site, ask them for the new site code. "
+        "If nobody changed the site, don't sign in.",
+    '站点证书变了。如果管理员刚重装过站点，请向他要新的站点码；如果没人动过站点，先不要登录。');
 
 /// 证书的 SHA-256（DER），小写十六进制、不带冒号。跟 `nexwar_site fingerprint` 同一个算法。
 /// 边下边算指纹（App 安装包）：只留最后那一个结果。
@@ -68,6 +87,11 @@ String? checkSiteEntry(String url, String fingerprint) {
         'Address must be https://host:port',
         '地址要是 https://主机:端口');
   }
+  // 手机 App 测试 M22：不带端口以前能存，登录时才报「连接被拒绝」
+  if (!u.hasPort) {
+    return tr('Add the port to the address, e.g. https://${u.host}:8443 (it is in the site code)',
+        '地址要带端口，比如 https://${u.host}:8443（站点码里有）');
+  }
   if (!RegExp(r'^[0-9a-f]{64}$').hasMatch(normalizeFingerprint(fingerprint))) {
     return tr(
         'Certificate fingerprint must be 64 hex characters',
@@ -86,7 +110,7 @@ const int appApiLevel = 1;
 const String appVersion = '1.0.0-rc.1';
 
 /// 构建号（`pubspec.yaml` 的 `version` 加号后面那一段，测试核着）：站点分发 App（W55）比新旧只看它。
-const int appBuild = 1;
+const int appBuild = 9;
 
 /// 登录时报给站点的「我是谁」：哪一类程序、哪一版、接口级别、什么系统。只给人看，站点不拿它做判断。
 Map<String, dynamic> clientInfo({String? platform}) => <String, dynamic>{
@@ -192,7 +216,8 @@ String roleName(String role) => switch (role) {
 /// 站点回的拒绝（409）按语言说：中文界面照站点原话；英文界面有 `reason_en` 就用它（W53 D10）。
 String refusalText(SiteError e) {
   final en = e.body['reason_en'];
-  return tr(en is String && en.isNotEmpty ? en : e.message, e.message);
+  if (appLang.value == AppLang.en && en is String && en.isNotEmpty) return en;
+  return siteText(e.message);
 }
 
 /// 这台狗报的能力里有没有这种任务（`robots()`、`robot()` 给的那一份）。没这个能力的按钮不显示：
@@ -423,8 +448,9 @@ String deviceStateText(String state) => switch (state) {
 
 /// 相机名说人话。
 String cameraName(String c) => switch (c) {
-      'front' => tr('Front', '前'),
-      'back' => tr('Back', '后'),
+      // 手机 App 测试 M27：以前「Back」跟返回键同名
+      'front' => tr('Front camera', '前摄像头'),
+      'back' => tr('Rear camera', '后摄像头'),
       'thermal' => tr('Thermal', '热像'),
       'payload' => tr('Payload', '上装'),
       _ => c,
@@ -695,6 +721,14 @@ abstract class SiteApi {
   /// 诊断包（A1，管理员）：一个 `.tar.gz`，发给厂家查问题用。里面没有口令和私钥。
   Future<Uint8List> supportBundle();
 
+  /// 问题单（日志设计 第 6 条）：传 App 打好的日志（gzip），站点开一张单 → `{code, at_ms}`，
+  /// 登录着传的还有 `token`（只管这张单的整包下载）。不登录也能传（登录页上）。
+  Future<Map<String, dynamic>> uploadProblem(Uint8List gz,
+      {String note = '', String robot = '', String device = '', String app = ''});
+
+  /// 问题单的整包（站点打的：前后那段的站点、机器人日志 + App 日志），凭 [uploadProblem] 给的 `token`。
+  Future<Uint8List> problemBundle(String code, String token);
+
   /// W55 远程运维（管理员、工程师）：`/api/robots/<id>/ops/<action>`。不带 [body] 是读（`diag`、
   /// `journal`、`cleanup` 查看），带 [body] 是动手（`restart`、`reboot` 要 `confirm_password`、`debug`、
   /// `timesync`、`cleanup`、`cert-renew`）。机器人那边要跑一会儿，等得比普通请求久。
@@ -745,7 +779,8 @@ abstract class SiteApi {
   /// 告警测试模式（POC）：`{active, until_ms, by}`。谁都能看；开、结束在网页上（管理员）。
   Future<Map<String, dynamic>> alertTest();
   Future<Map<String, dynamic>> ackAlert(String key);
-  Future<Map<String, dynamic>> resolveAlert(String key);
+  /// [verdict]：`false_alarm` / `handled` / `intruder`（W44 结论，站点统计误报用）；空 = 不写结论。
+  Future<Map<String, dynamic>> resolveAlert(String key, {String verdict = ''});
 
   /// W74：保安到场了（看见人那一类要先到场才能关）。
   Future<Map<String, dynamic>> arriveAlert(String key);
@@ -1070,8 +1105,17 @@ class SiteClient implements SiteApi {
 
   // ------------------------------------------------------------ 请求
 
-  Future<dynamic> _send(String method, String path, [Object? body, Duration? within]) =>
-      _wrapped(() => _sendRaw(method, path, body).timeout(within ?? timeout));
+  Future<dynamic> _send(String method, String path, [Object? body, Duration? within]) async {
+    final t0 = DateTime.now();
+    try {
+      return await _wrapped(() => _sendRaw(method, path, body).timeout(within ?? timeout));
+    } on SiteError catch (e) {
+      // 日志设计 第 6 条：请求没成的记进 App 日志（不带查询参数和请求体）
+      AppLog.instance.line('W', '$method ${path.split('?').first} → ${e.status} ${e.kind} ${e.message} '
+          '(${DateTime.now().difference(t0).inMilliseconds} ms)');
+      rethrow;
+    }
+  }
 
   /// 连不上、握手失败、超时、连接中途断了：都收成页面认得的 [SiteError]。JSON 请求和取文件
   /// （照片、录像、诊断包）走同一套（C-B4 外审 I1：取文件的原来不包，页面接不住）。
@@ -1082,19 +1126,19 @@ class SiteClient implements SiteApi {
       rethrow;
     } on HandshakeException catch (e) {
       final seen = lastSeenFingerprint;
-      throw SiteError(
-          0,
-          seen != null && seen != fingerprint
-              ? tr('Site certificate fingerprint does not match: got $seen', '站点证书指纹不匹配：实际为 $seen')
-              : tr('TLS handshake with the site failed: $e', '与站点的加密连接失败：$e'));
+      if (seen != null && seen != fingerprint) {
+        // 手机 App 测试 M03：说人话，指纹原文收进 body（「详情」里看）
+        throw SiteError(0, certChangedText, body: <String, dynamic>{'seen': seen}, kind: 'cert');
+      }
+      throw SiteError(0, tr('TLS handshake with the site failed: $e', '与站点的加密连接失败：$e'), kind: 'tls');
     } on TimeoutException {
-      throw SiteError(0, tr('No reply from the site (timed out)', '站点无响应（超时）'));
+      throw SiteError(0, tr('No reply from the site (timed out)', '站点无响应（超时）'), kind: 'timeout');
     } on SocketException catch (e) {
-      throw SiteError(0, tr("Can't reach the site: ${e.message}", '无法连接站点：${e.message}'));
+      throw SiteError(0, tr("Can't reach the site: ${e.message}", '无法连接站点：${e.message}'), kind: 'net');
     } on HttpException catch (e) {
       throw SiteError(0, tr(
           'Connection to the site dropped: ${e.message}',
-          '跟站点的连接断了：${e.message}'));
+          '跟站点的连接断了：${e.message}'), kind: 'dropped');
     }
   }
 
@@ -1365,8 +1409,10 @@ class SiteClient implements SiteApi {
       'POST', '/api/alerts/${Uri.encodeComponent(key)}/ack', <String, dynamic>{}));
 
   @override
-  Future<Map<String, dynamic>> resolveAlert(String key) async => _map(await _send(
-      'POST', '/api/alerts/${Uri.encodeComponent(key)}/resolve', <String, dynamic>{}));
+  Future<Map<String, dynamic>> resolveAlert(String key, {String verdict = ''}) async => _map(await _send(
+      'POST',
+      '/api/alerts/${Uri.encodeComponent(key)}/resolve',
+      <String, dynamic>{if (verdict.isNotEmpty) 'verdict': verdict}));
 
   @override
   Future<Map<String, dynamic>> arriveAlert(String key) async => _map(await _send(
@@ -1491,6 +1537,43 @@ class SiteClient implements SiteApi {
   @override
   Future<Uint8List> supportBundle() =>
       _bytes('/api/support-bundle', maxBundleBytes, tr('Diagnostics bundle', '诊断包'));
+
+  @override
+  Future<Map<String, dynamic>> uploadProblem(Uint8List gz,
+          {String note = '', String robot = '', String device = '', String app = ''}) =>
+      _wrapped(() async {
+        final q = Uri(queryParameters: <String, String>{
+          if (note.isNotEmpty) 'note': note,
+          if (robot.isNotEmpty) 'robot': robot,
+          if (device.isNotEmpty) 'device': device,
+          if (app.isNotEmpty) 'app': app,
+        }).query;
+        final req = await _io.openUrl('POST', base.resolve('/api/problem-reports?$q')).timeout(timeout);
+        req.followRedirects = false;
+        final tok = session?.token;
+        if (tok != null) req.headers.set(HttpHeaders.authorizationHeader, 'Bearer $tok');
+        req.headers.contentType = ContentType('application', 'gzip');
+        req.contentLength = gz.length;
+        req.add(gz);
+        final resp = await req.close().timeout(const Duration(seconds: 60));
+        final raw = await utf8.decodeStream(resp).timeout(timeout);
+        Map<String, dynamic> d;
+        try {
+          final j = jsonDecode(raw.isEmpty ? '{}' : raw);
+          d = j is Map ? j.cast<String, dynamic>() : <String, dynamic>{};
+        } on FormatException {
+          d = <String, dynamic>{};
+        }
+        if (resp.statusCode != 200) {
+          throw SiteError(resp.statusCode, (d['error'] ?? tr('Upload failed (${resp.statusCode})', '上传失败（${resp.statusCode}）')).toString());
+        }
+        return d;
+      });
+
+  @override
+  Future<Uint8List> problemBundle(String code, String token) => _bytes(
+      '/api/problem-reports/${Uri.encodeComponent(code)}/bundle?t=${Uri.encodeQueryComponent(token)}',
+      maxBundleBytes, tr('Report package', '问题单整包'));
 
   /// 机器人运维要等机器人跑完（取日志、诊断、重启服务）：比普通请求多等一会儿。
   static const Duration opsTimeout = Duration(seconds: 90);
@@ -1713,7 +1796,11 @@ class SiteClient implements SiteApi {
       throw SiteError(0, tr("Can't reach the site: ${e.message}", '无法连接站点：${e.message}'));
     } on HandshakeException {
       io.close(force: true);
-      throw SiteError(0, tr('Site certificate does not match', '站点证书不匹配'));
+      final seen = lastSeenFingerprint;
+      if (seen != null && seen != fingerprint) {
+        throw SiteError(0, certChangedText, body: <String, dynamic>{'seen': seen}, kind: 'cert');
+      }
+      throw SiteError(0, tr('Site certificate does not match', '站点证书不匹配'), kind: 'tls');
     } on TimeoutException {
       io.close(force: true);
       throw SiteError(0, tr('Timed out connecting to the site', '连站点超时'));

@@ -46,6 +46,9 @@ void main() {
     expect(find.textContaining('30.0 MB'), findsNWidgets(3));
     await t.tap(find.byKey(SiteRecordingsPage.clipKey(11)));
     await t.pumpAndSettle();
+    expect(api.calls, isNot(contains('recording-bytes 11')), reason: 'M34：30 MB 先问流量');
+    await t.tap(find.byKey(SiteRecordingsPage.dataOkKey));
+    await t.pumpAndSettle();
     expect(api.calls, contains('recording-bytes 11'));
     expect(p.played.single, endsWith(' 3'));
     expect(find.byKey(SiteRecordingsPage.keepKey(10)), findsNothing, reason: '管理员不能标留着');
@@ -85,7 +88,7 @@ void main() {
     expect(int.parse(q[3]), t0 - 30000 - 15 * 60000);
     final tile = t.widget<ListTile>(find.byKey(SiteRecordingsPage.clipKey(11)));
     expect(tile.selected, isTrue);
-    expect(find.textContaining('告警时刻'), findsOneWidget);
+    expect(find.textContaining('报警时刻'), findsOneWidget);
   });
 
   testWidgets('没开录像的站点、读不到：说清楚', (t) async {

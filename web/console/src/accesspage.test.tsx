@@ -62,6 +62,7 @@ describe("授权和临时撤防页", () => {
     fireEvent.click(btn(c, "添加授权"));
     const f = document.querySelector("form.acc-add")!;
     fireEvent.input(f.querySelector('input[name="who"]')!, { target: { value: "客人" } });
+    fireEvent.click(f.querySelectorAll('input[name="scope"]')[0]);       // P1-62:范围要自己选
     fireEvent.click(f.querySelector('input[name="repeat"]')!);          // 关掉每周重复
     fireEvent.input(f.querySelector('input[name="date"]')!, { target: { value: "2026-10-30" } });
     fireEvent.submit(f);
@@ -78,6 +79,7 @@ describe("授权和临时撤防页", () => {
     fireEvent.click(btn(c, "添加授权"));
     const f = document.querySelector("form.acc-add")!;
     fireEvent.input(f.querySelector('input[name="who"]')!, { target: { value: "维修工" } });
+    fireEvent.click(f.querySelectorAll('input[name="scope"]')[0]);       // P1-62:范围要自己选
     fireEvent.click(f.querySelector('input[name="day1"]')!);            // 默认工作日;再勾上星期二以外的都不动
     fireEvent.submit(f);
     await waitFor(() => expect(posted.some((p) => p.url === "/api/lists/authorizations")).toBe(true));
@@ -92,7 +94,28 @@ describe("授权和临时撤防页", () => {
     fireEvent.click(c.querySelector('.acc-visitor input[value="北区"]')!);
     fireEvent.change(c.querySelector('.acc-visitor select[name="hours"]')!, { target: { value: "2" } });
     fireEvent.click(btn(c, "开始临时撤防"));
+    expect(posted.find((p) => p.url === "/api/mode")).toBeUndefined();
+    const m = c.ownerDocument.querySelector(".modal")!;
+    expect(m.textContent).toContain("临时撤防 北区，2 小时");
+    fireEvent.click(btn(m, "开始临时撤防"));
     await waitFor(() => expect(posted.find((p) => p.url === "/api/mode")?.body).toEqual({ mode: "visitor", zones: ["北区"], minutes: 120 }));
+  });
+
+  it("第 2 轮 config N8:开始后说撤了哪儿、到几点,不只「已保存」", async () => {
+    const said: string[] = [];
+    const { container: c } = render(<AccessPage say={(s: string) => said.push(s)} now={at(10)} />);
+    await waitFor(() => expect(c.querySelector(".acc-visitor")!.textContent).toContain("北区"));
+    fireEvent.click(c.querySelector('.acc-visitor input[value="北区"]')!);
+    fireEvent.click(btn(c, "开始临时撤防"));
+    fireEvent.click(btn(c.ownerDocument.querySelector(".modal")!, "开始临时撤防"));
+    await waitFor(() => expect(said.some((x) => x.startsWith("已临时撤防：北区，到 "))).toBe(true));
+  });
+
+  it("网页易用性第 1 轮 P0-09:没选防区不能开始", async () => {
+    const { container: c } = page();
+    await waitFor(() => expect(c.querySelector(".acc-visitor")!.textContent).toContain("北区"));
+    expect(btn(c, "开始临时撤防").disabled).toBe(true);
+    expect(c.querySelector(".acc-visitor")!.textContent).toContain("至少选一个防区");
   });
 
   it("临时撤防开着写到几点、能现在结束", async () => {
@@ -101,5 +124,21 @@ describe("授权和临时撤防页", () => {
     await waitFor(() => expect(c.querySelector(".acc-visitor")!.textContent).toContain("14:00"));
     fireEvent.click(btn(c, "现在结束"));
     await waitFor(() => expect(posted.find((p) => p.url === "/api/mode")?.body).toEqual({ mode: "home" }));
+  });
+});
+
+describe("网页易用性第 1 轮 P1-62", () => {
+  it("有防区时范围不默认全站;不选不发;时间是 24 小时制", async () => {
+    const { container: c } = page();
+    await waitFor(() => expect(btn(c, "添加授权")).toBeTruthy());
+    fireEvent.click(btn(c, "添加授权"));
+    const f = document.querySelector("form.acc-add") as HTMLFormElement;
+    fireEvent.input(f.querySelector('input[name="who"]')!, { target: { value: "客人" } });
+    expect(Array.from(f.querySelectorAll('input[name="scope"]')).some((r) => (r as HTMLInputElement).checked)).toBe(false);
+    fireEvent.submit(f);
+    await new Promise((r) => setTimeout(r, 20));
+    expect(posted.some((p) => p.url === "/api/lists/authorizations")).toBe(false);
+    const opts = Array.from(f.querySelectorAll('select[name="start"] option')).map((o) => o.textContent);
+    expect(opts).toContain("13:30");
   });
 });

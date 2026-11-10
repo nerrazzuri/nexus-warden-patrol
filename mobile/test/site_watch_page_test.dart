@@ -192,7 +192,7 @@ void main() {
     await t.pumpWidget(MaterialApp(
         home: SiteWatchPage(api: api, now: () => DateTime(2026, 9, 25, 21, 7, 3))));
     await t.pumpAndSettle();
-    expect(find.text('告警更新于 21:07:03；可下拉刷新'), findsOneWidget);
+    expect(find.text('报警更新于 21:07:03；可下拉刷新'), findsOneWidget);
     expect(find.byKey(SiteWatchPage.liveLostKey), findsNothing);
     final opened = api.eventsOpened;
     await api.sse.close();

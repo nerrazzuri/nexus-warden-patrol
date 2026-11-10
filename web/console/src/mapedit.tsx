@@ -3,6 +3,7 @@
 // - 区域命名、特殊地面(楼梯、台阶、斜坡默认放慢,草地、碎石路只标出来)、摆正(只转显示)、底图(只是显示):跟着版本存。
 // - 撤销、重做;「另存」之前列出这一次擦了多少、画了多少,确认才存。虚拟墙、禁行区、限速区去「布置 → 禁行区」。
 // 清噪点在「地图」页每一版的「清噪点…」里(那一页外审过,自己另存一版)。
+import { useUnsaved } from "./unsaved";
 import type { FunctionComponent } from "preact";
 import { useEffect, useRef, useState } from "preact/hooks";
 import { api, apiUpload, ApiError, enc } from "./api";
@@ -10,7 +11,7 @@ import { Confirm } from "./dialogs";
 import { t, type Key } from "./i18n";
 import { polyPx, toMap, type OwnLayer } from "./layoutpage";
 import { MapCanvas } from "./mapcanvas";
-import { apply, closedLoop, type Display, type GridOp, type History, newTerrain, redo, start, summary, type TerrainKind, undo } from "./mapeditops";
+import { apply, closedLoop, type Display, type GridOp, type History, newTerrain, redo, screenRect, start, summary, type TerrainKind, undo } from "./mapeditops";
 import type { PreviewMeta, Pt } from "./mapview";
 
 type Say = (s: string) => void;
@@ -20,18 +21,19 @@ const TERRAIN: TerrainKind[] = ["stairs", "step", "slope", "grass", "gravel"];
 const TOOL_KEY: Record<Tool, Key> = { erase: "meErase", obstacle: "meObstacle", region: "meRegion", terrain: "meTerrain", rotate: "meRotate", basemap: "meBasemap" };
 const EMPTY: Display = { rotate_deg: null, basemap: null, regions: [], terrain: [] };
 
-export function editTarget(hash: string): { map_id: string; version: string } | null {
+export function editTarget(hash: string): { map_id: string; version: string; from?: string } | null {
   const q = new URLSearchParams(hash.split("?")[1] ?? "");
   const m = q.get("map");
   const v = q.get("version");
-  return m && v ? { map_id: m, version: v } : null;
+  const from = q.get("from");
+  return m && v ? { map_id: m, version: v, ...(from ? { from } : {}) } : null;
 }
 
 function errText(e: unknown): string {
   return t("failed", { why: e instanceof ApiError ? e.message : String(e) });
 }
 
-type Target = { map_id: string; version: string };
+type Target = { map_id: string; version: string; from?: string };
 
 /** 外审 R5:编辑器跟「哪张图哪一版」绑死 —— 换了就按 key 整个重建(草稿、选的点、确认框、文件全清掉),
  *  旧的回包、旧的另存回来不碰新的那个。 */
@@ -48,10 +50,14 @@ function Editor({ say, target, Canvas }: { say: Say; target: Target; Canvas?: Fu
   const [meta, setMeta] = useState<PreviewMeta | null>(null);
   const [digest, setDigest] = useState("");
   const [hist, setHist] = useState<History | null>(null);
-  const [tool, setTool] = useState<Tool>("erase");
+  // P1-53:一打开不默认选橡皮擦(点图就擦掉了);先选工具
+  const [tool, setTool] = useState<Tool | null>(null);
+  const [result, setResult] = useState(false);
   const [shape, setShape] = useState<Shape>("stroke");
   const [width, setWidth] = useState(0.3);
   const [pts, setPts] = useState<Pt[]>([]);
+  // 第 2 轮 P1-53:方框按住拖着画(拖的时候先画个虚框,松手才算)
+  const [rect, setRect] = useState<[Pt, Pt] | null>(null);
   const [kind, setKind] = useState<TerrainKind>("stairs");
   const [name, setName] = useState("");
   const [file, setFile] = useState<File | null>(null);
@@ -82,6 +88,7 @@ function Editor({ say, target, Canvas }: { say: Say; target: Target; Canvas?: Fu
   const ready = !!meta && !!digest && !!hist && !loadErr;
   const now = hist?.now;
   const dirty = !!hist && hist.past.length > 0;
+  useUnsaved("mapedit", dirty);
   const sum = now ? summary(now) : { erased: 0, obstacle: 0 };
   const change = (f: Parameters<typeof apply>[1]) => setHist((h) => (h ? apply(h, f) : h));
   const grid = tool === "erase" || tool === "obstacle";
@@ -89,7 +96,13 @@ function Editor({ say, target, Canvas }: { say: Say; target: Target; Canvas?: Fu
 
   function finish(points = pts) {
     if (grid) {
-      const op: GridOp = { op: tool as GridOp["op"], shape, points, width_m: width };
+      // P2-19:摆正转了角度时,方框按屏幕上看到的方向画(原来按地图坐标轴,屏幕上是斜的);
+      // 交给站点的是首尾相接的一笔,站点把圈里整块擦 / 加(W61)
+      const rot = now?.display.rotate_deg ?? meta?.rotation_deg ?? 0;
+      const tilted = shape === "rect" && points.length === 2 && Math.abs(rot % 90) > 0.5;
+      const op: GridOp = tilted
+        ? { op: tool as GridOp["op"], shape: "stroke", points: screenRect(points[0], points[1], rot), width_m: 0.1 }
+        : { op: tool as GridOp["op"], shape, points, width_m: width };
       change((s) => ({ ...s, ops: [...s.ops, op] }));
     } else if (tool === "region" && name.trim()) {
       const n = name.trim();
@@ -115,9 +128,11 @@ function Editor({ say, target, Canvas }: { say: Say; target: Target; Canvas?: Fu
     setBusy(true);
     try {
       let version = target.version;
+      let got: { erased_m2?: number; obstacle_m2?: number } = {};
       if (hist.now.ops.length) {
-        const r = await api<{ version: string }>("POST", `${adm}/edit`, { digest, ops: hist.now.ops });
+        const r = await api<{ version: string; erased_m2?: number; obstacle_m2?: number }>("POST", `${adm}/edit`, { digest, ops: hist.now.ops });
         version = r.version;
+        got = r;
       }
       const vb = `/api/admin/maps/${enc(target.map_id)}/${enc(version)}`;
       let display = hist.now.display;
@@ -128,8 +143,12 @@ function Editor({ say, target, Canvas }: { say: Say; target: Target; Canvas?: Fu
       }
       // 等回包的时候换了图:人确认过的这一次照样存完(显示设置跟着它的新版本),只是不跳、不碰新的那个
       await api("POST", `${vb}/display`, display);
-      say(version === target.version ? t("saved") : t("meSavedAs", { v: version }));
-      if (alive.current) location.hash = `#/admin/mapedit?map=${enc(target.map_id)}&version=${enc(version)}`;
+      // 第 2 轮 P1-55:报站点实际改了的面积(原来就是空地的不算),跟版本备注一致
+      say(version === target.version ? t("saved")
+        : got.erased_m2 != null ? t("meSavedAsArea", { v: version, e: got.erased_m2, o: got.obstacle_m2 ?? 0 }) : t("meSavedAs", { v: version }));
+      // 存好了就不算没存(P0-12 的离开提醒不该再问);另存出新版本就跳过去(P1-55)
+      if (alive.current) setHist(start(display));
+      if (alive.current && version !== target.version) location.hash = `#/admin/mapedit?map=${enc(target.map_id)}&version=${enc(version)}&from=${enc(target.version)}`;
     } catch (e) {
       if (!alive.current) return;
       if (e instanceof ApiError && e.status === 409) setStale(true);
@@ -150,12 +169,28 @@ function Editor({ say, target, Canvas }: { say: Say; target: Target; Canvas?: Fu
     }
   }
 
-  const Map = Canvas ?? ((o: OwnLayer) => (meta ? (
+  // 第 3 轮 maps N2 / P1-53:原来每次渲染都新造一个 Map 组件 → 地图整个重挂,拖框拖到一半就丢了
+  // (只剩一个 5×6 的虚线框)。现在直接渲染 MapCanvas
+  const Map = (o: OwnLayer) => (Canvas ? <Canvas {...o} /> : meta ? (
     <MapCanvas meta={{ ...meta, rotation_deg: now?.display.rotate_deg ?? meta.rotation_deg }} raster={`${base}/preview.png`} label={t("meTitle")}
-      drawing={o.drawing} onPick={o.onPick} world={o.world} marks={o.marks} areas={o.areas} />
-  ) : null));
+      drawing={o.drawing} onPick={o.onPick} onDragRect={o.onDragRect} world={o.world} marks={o.marks} areas={o.areas} />
+  ) : null);
   const strokeW = (w: number) => (meta ? w / meta.m_per_px : 2);
   const bm = now?.display.basemap;
+
+  // P2-19:Ctrl+Z 撤销、Ctrl+Y / Ctrl+Shift+Z 重做(在输入框里打字时不管)
+  useEffect(() => {
+    const key = (e: KeyboardEvent) => {
+      if (!(e.ctrlKey || e.metaKey)) return;
+      const tag = (e.target as HTMLElement | null)?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+      const k = e.key.toLowerCase();
+      if (k === "y" || (k === "z" && e.shiftKey)) { e.preventDefault(); setHist((h) => (h && h.future.length ? redo(h) : h)); }
+      else if (k === "z") { e.preventDefault(); setHist((h) => (h && h.past.length ? undo(h) : h)); }
+    };
+    window.addEventListener("keydown", key);
+    return () => window.removeEventListener("keydown", key);
+  }, []);
 
   return (
     <section class="mapedit" data-ready={ready ? "1" : undefined}>
@@ -167,15 +202,23 @@ function Editor({ say, target, Canvas }: { say: Say; target: Target; Canvas?: Fu
         <button type="button" class="btn primary me-save" disabled={!dirty || busy || !ready} onClick={() => setAsking(true)}>{now?.ops.length ? t("meSaveNew") : t("save")}</button>
       </div>
       <p class="muted small">{t("meExplain")}</p>
+      {/* 第 2 轮 P1-55:另存出来的新版本还没用上 —— 给「去发布」入口 */}
+      {target.from && <p class="me-newver small" data-publish-link="1">{t("meNewVersion", { v: target.version, from: target.from })}{" "}
+        <a href="#/admin/maps">{t("meGoPublish")}</a></p>}
       {stale && <div class="ly-conflict" role="alert">{t("meStale")}</div>}
       {loadErr && <div class="ly-conflict me-loaderr" role="alert">{t("meLoadErr")}</div>}
       <div class="ly-tab">
-        <div class="me-canvas">
-          <Map
-            drawing={need > 0}
-            onPick={need > 0 ? pick : undefined}
-            areas={now?.display.regions.map((r) => ({ name: r.name, pts: r.polygon, kind: "zone" as const }))}
-            world={meta && now ? <>
+        <div class={result ? "me-canvas result" : "me-canvas"}>
+          {Map({
+            drawing: need > 0,
+            onPick: need > 0 ? pick : undefined,
+            onDragRect: grid && shape === "rect" && meta ? (a: Pt, b: Pt, done: boolean) => {
+              const A = toMap(meta, a[0], a[1]);
+              const B = toMap(meta, b[0], b[1]);
+              if (done) { setRect(null); finish([A, B]); } else setRect([A, B]);
+            } : undefined,
+            areas: now?.display.regions.map((r) => ({ name: r.name, pts: r.polygon, kind: "region" as const })),
+            world: meta && now ? <>
               {bm && bmSize && (() => {
                 const x = (bm.x - meta.left_x) / meta.m_per_px;
                 const y = (meta.top_y - bm.y) / meta.m_per_px;
@@ -183,14 +226,22 @@ function Editor({ say, target, Canvas }: { say: Say; target: Target; Canvas?: Fu
                   width={bmSize[0] * bm.scale / meta.m_per_px} height={bmSize[1] * bm.scale / meta.m_per_px}
                   transform={`rotate(${bm.rotate_deg} ${x} ${y})`} />;
               })()}
-              {now.display.terrain.map((tr) => <polygon key={tr.id} class={`me-terrain ${tr.kind}`} points={polyPx(meta, tr.polygon)} />)}
+              {now.display.terrain.map((tr) => <polygon key={tr.id} class={`me-terrain ${tr.kind}`} points={polyPx(meta, tr.polygon)}><title>{t(`terr_${tr.kind}` as Key)}</title></polygon>)}
               {now.ops.map((o, i) => o.shape === "rect"
                 ? <polygon key={i} class={`me-op ${o.op}`} points={polyPx(meta, [o.points[0], [o.points[1][0], o.points[0][1]], o.points[1], [o.points[0][0], o.points[1][1]]])} />
                 : closedLoop(o)
                   ? <polygon key={i} class={`me-op loop ${o.op}`} points={polyPx(meta, o.points)} stroke-width={strokeW(o.width_m)} />
                   : <polyline key={i} class={`me-op ${o.op}`} points={polyPx(meta, o.points.length > 1 ? o.points : [o.points[0], o.points[0]])} stroke-width={strokeW(o.width_m)} />)}
               {pts.length > 0 && <polyline class="draft-line" points={polyPx(meta, pts)} />}
-            </> : null} />
+              {rect && <polygon class="draft-line" data-drag-rect="1" points={polyPx(meta, [rect[0], [rect[1][0], rect[0][1]], rect[1], [rect[0][0], rect[1][1]]])} />}
+            </> : null })}
+          {/* P1-52:图例;能切到「擦完的样子」(擦的画成空地、加的画成墙) */}
+          <div class="me-legend small" data-me-legend="1">
+            <span><i class="me-sw erase" aria-hidden="true" />{t("meLegErase")}</span>
+            <span><i class="me-sw obstacle" aria-hidden="true" />{t("meLegObstacle")}</span>
+            <span><i class="me-sw terrain" aria-hidden="true" />{t("meLegTerrain")}</span>
+            <label class="push"><input type="checkbox" name="me-result" checked={result} onChange={(e) => setResult(e.currentTarget.checked)} /> {t("meShowResult")}</label>
+          </div>
         </div>
         <div class="ly-side">
           <div class="me-tools" role="toolbar" aria-label={t("meTools")}>
@@ -209,6 +260,7 @@ function Editor({ say, target, Canvas }: { say: Say; target: Target; Canvas?: Fu
               {shape !== "rect" && (
                 <label class="field">{t("meWidth", { w: width.toFixed(1) })}
                   <input name="width" type="range" min={0.1} max={1} step={0.1} value={width} onInput={(e) => setWidth(Number(e.currentTarget.value))} />
+                  <span class="range-ends muted small" aria-hidden="true"><span>0.1 m</span><span>1.0 m</span></span>
                 </label>
               )}
               <p class="muted small">{t(shape === "stroke" ? "meStrokeHint" : shape === "line" ? "meLineHint" : "meRectHint")}</p>
@@ -225,6 +277,7 @@ function Editor({ say, target, Canvas }: { say: Say; target: Target; Canvas?: Fu
             </label>
           )}
           {(tool === "region" || tool === "terrain") && <p class="muted small">{t("mePolyHint")}</p>}
+          {tool === null && <p class="muted small">{t("mePickTool")}</p>}
           {pts.length > 0 && (
             <div class="row wrap">
               <span class="muted small">{t(grid ? "meStrokePts" : "drawHint", { n: pts.length })}</span>
@@ -237,6 +290,7 @@ function Editor({ say, target, Canvas }: { say: Say; target: Target; Canvas?: Fu
               <label class="field">{t("meRotateDeg", { d: Math.round(now.display.rotate_deg ?? meta?.rotation_deg ?? 0) })}
                 <input name="rotate" type="range" min={-180} max={180} step={1} value={now.display.rotate_deg ?? meta?.rotation_deg ?? 0}
                   onChange={(e) => { const v = Number(e.currentTarget.value); change((s) => ({ ...s, display: { ...s.display, rotate_deg: v } })); }} />
+                <span class="range-ends muted small" aria-hidden="true"><span>-180°</span><span>0°</span><span>180°</span></span>
               </label>
               <button type="button" class="btn sm" onClick={() => change((s) => ({ ...s, display: { ...s.display, rotate_deg: null } }))}>{t("meRotateAuto")}</button>
               <p class="muted small">{t("meRotateHint")}</p>
@@ -247,7 +301,8 @@ function Editor({ say, target, Canvas }: { say: Say; target: Target; Canvas?: Fu
               <input type="file" name="basemap" accept="image/png,image/jpeg" onChange={(e) => { const f = e.currentTarget.files?.[0]; if (f) void upload(f); }} />
               {bm && (["x", "y", "scale", "rotate_deg", "opacity"] as const).map((k) => (
                 <label key={k} class="field">{t(`meBm_${k}` as Key)}
-                  <input type="number" name={`bm_${k}`} step={k === "opacity" ? 0.1 : k === "scale" ? 0.001 : 0.5} value={bm[k]}
+                  <input type="number" name={`bm_${k}`} step={k === "opacity" ? 0.1 : k === "scale" ? 0.001 : 0.5}
+                    value={Number(bm[k].toFixed(k === "scale" ? 4 : 2))}
                     onChange={(e) => { const v = Number(e.currentTarget.value); change((s) => ({ ...s, display: { ...s.display, basemap: s.display.basemap ? { ...s.display.basemap, [k]: v } : null } })); }} />
                 </label>
               ))}
@@ -261,8 +316,8 @@ function Editor({ say, target, Canvas }: { say: Say; target: Target; Canvas?: Fu
                   <button type="button" class="btn sm push" onClick={() => change((s) => ({ ...s, display: { ...s.display, regions: s.display.regions.filter((x) => x.name !== r.name) } }))}>{t("remove")}</button></li>
               ))}
               {now.display.terrain.map((tr) => (
-                <li key={tr.id} class="row" data-terrain={tr.id}><span>{t(`terr_${tr.kind}` as Key)}</span>
-                  <label class="small">{t("meSlow")}<input type="number" name={`slow_${tr.id}`} min={0} max={2} step={0.1} value={tr.slow_mps ?? 0}
+                <li key={tr.id} class="row me-terr-row" data-terrain={tr.id}><span class="me-tname">{t(`terr_${tr.kind}` as Key)}</span>
+                  <label class="small">{t("meSlow")}<input type="number" class="me-slow" name={`slow_${tr.id}`} min={0} max={2} step={0.1} value={tr.slow_mps ?? 0}
                     onChange={(e) => { const v = Number(e.currentTarget.value); change((s) => ({ ...s, display: { ...s.display, terrain: s.display.terrain.map((x) => (x.id === tr.id ? { ...x, slow_mps: v > 0 ? v : null } : x)) } })); }} /></label>
                   <button type="button" class="btn sm push" onClick={() => change((s) => ({ ...s, display: { ...s.display, terrain: s.display.terrain.filter((x) => x.id !== tr.id) } }))}>{t("remove")}</button></li>
               ))}

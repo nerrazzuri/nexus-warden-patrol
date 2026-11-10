@@ -1,8 +1,11 @@
 // 地图管理页(管理员):每张图每个版本是什么、哪几只狗在用、发布到狗、回退、删旧版本、两版对比。
 // 后端见 packages/site-node/src/nexwar_site/maps_admin*.py;文字走本文件里的 tr(英, 中),不碰 i18n.ts。
+import { siteKnown, siteStr } from "./sitetext";
 import { useCallback, useEffect, useRef, useState } from "preact/hooks";
 import { api, ApiError, enc } from "./api";
-import { Confirm, Modal } from "./dialogs";
+import { ConfirmPassword } from "./confirmpw";
+import { nameOf, siteDown } from "./data";
+import { Modal } from "./dialogs";
 import { lang } from "./i18n";
 import "./mapmgmt.css";
 import { toPx, type PreviewMeta } from "./mapview";
@@ -18,12 +21,33 @@ export interface Build {
   loop_closure: { used: boolean; closures: number | null; why: string | null };
   handedness: { verdict: string | null; why: string | null };
 }
+/** P1-50:版本来源说人话(原来直接显示 denoise、edit,看着像作者名)。 */
+export function sourceText(src: string): string {
+  // 站点登记的来源:import / edit[:人] / denoise[:人] / cli:人(命令行导入),机器人传上来的是机器人编号
+  const [kind, who] = splitSource(src);
+  if (kind === "edit") return who ? tr(`edited by ${who} in the map editor`, `${who} 在地图编辑器里改的`) : tr("edited in the map editor", "地图编辑器改出来的");
+  if (kind === "denoise") return who ? tr(`noise cleaned up by ${who}`, `${who} 清的噪点`) : tr("noise cleaned up", "清噪点出来的");
+  // 第 3 轮 zh N10:命令行导入的 who 是主机上的系统用户名(不是站点账号),不露出来
+  if (kind === "cli") return tr("imported by an engineer", "工程师导入的");
+  if (kind === "import") return tr("imported", "导入的");
+  return tr(`built by robot ${nameOf(src)}`, `机器人 ${nameOf(src)} 建的`);
+}
+
+/** 来源拆成「哪种 + 谁」(第 2 轮 P1-50:编辑、清噪点、命令行导入带操作人)。 */
+export function splitSource(src: string): [string, string] {
+  const m = /^(edit|denoise|cli):(.*)$/.exec(src);
+  return m ? [m[1], m[2]] : [src, ""];
+}
+const derivedSrc = (src: string | undefined): boolean => ["edit", "denoise"].includes(splitSource(src ?? "")[0]);
+
 export interface Version {
   version: string;
   created_ms: number;
   source: string;
   note: string;
   size_bytes: number;
+  /** P1-87:登记了、站点盘上却没有的文件(老站点没有这一项)。 */
+  missing?: string[];
   latest: boolean;
   build: Build | null;
   counts: { zones: number; nogo: number; slow: number; zones_rev: number; zones_confirmed: boolean | null; standby: number; intercepts: number };
@@ -66,7 +90,7 @@ export interface DiffStats {
 }
 
 function errText(e: unknown): string {
-  return tr("Failed: ", "失败:") + (e instanceof ApiError ? e.message : String(e));
+  return tr("Failed: ", "失败：") + (e instanceof ApiError ? e.message : String(e));
 }
 
 function when(ms: number): string {
@@ -83,23 +107,25 @@ export function activationText(a: Activation, nowMs: number = Date.now()): strin
   switch (a.state) {
     case "pending": {
       // W71(用户 11-03:「下发到机器人的时候需要有个提示」):站点发了多少就写多少
-      const d = a.download;
-      if (!d) return tr("Sent — waiting for the robot to start downloading", "已发出,等机器人开始下载");
+      // 第 4 轮 maps N2:下载记录比这次发的还早(回滚到机器人上已有的版本,不用下)—— 不拿上次的时间算「多久没下」
+      const d = a.download && a.download.at_ms >= a.at_ms ? a.download : null;
+      if (!d) return a.download ? tr(`Switching to ${a.version}…`, `正在换到 ${a.version}…`)
+        : tr("Sent — waiting for the robot to start downloading", "已发出，等机器人开始下载");
       const idle = Math.round((nowMs - d.at_ms) / 1000);
       const got = `${mb(d.bytes)} / ${mb(d.total)}`;
-      if (idle > 15) return tr(`Downloaded ${got}; nothing sent for ${idle} s — loading, or the link is down`, `已下载 ${got};${idle} 秒没再下 —— 在载入,或者网断了`);
+      if (idle > 15) return tr(`Downloaded ${got}; nothing sent for ${idle} s — loading, or the link is down`, `已下载 ${got}；${idle} 秒没再下 —— 在载入，或者网断了`);
       return tr(`Downloading ${got}`, `正在下载 ${got}`);
     }
     case "confirmed":
       return a.confirmed === "localizer"
         ? tr("Confirmed by the localizer", "定位器已确认")
         : a.confirmed === "load"
-          ? tr("Loaded (this robot has no localizer)", "已载入(这台机器人没有定位器)")
-          : tr("Reported done (old agent: did not wait for the localizer)", "机器人报已换(老代理:没等定位器确认)");
+          ? tr("Loaded (this robot has no localizer)", "已载入（这台机器人没有定位器）")
+          : tr("Reported done (old agent: did not wait for the localizer)", "机器人报已换（老代理：没等定位器确认）");
     case "failed":
       return tr("Failed", "没成") + (a.reason ? `: ${a.reason}` : "");
     default:
-      return tr("No answer for too long — treat as not done", "太久没动静,当作没换成");
+      return tr("No answer for too long — treat as not done", "太久没动静，当作没换成");
   }
 }
 
@@ -108,11 +134,11 @@ export function activationText(a: Activation, nowMs: number = Date.now()): strin
 export function MapManagePage({ say, pollMs = 5000 }: { say: Say; pollMs?: number }) {
   const [data, setData] = useState<Overview | null>(null);
   const [err, setErr] = useState("");
-  const [publish, setPublish] = useState<{ map_id: string; version: string; unusable?: string } | null>(null);
-  const [deleting, setDeleting] = useState<{ map_id: string; version: string } | null>(null);
+  const [publish, setPublish] = useState<{ map_id: string; version: string; unusable?: string; source?: string; zonesOk?: boolean | null } | null>(null);
+  const [deleting, setDeleting] = useState<{ map_id: string; version: string; back: string[]; latest: boolean } | null>(null);
   const [rolling, setRolling] = useState<Dog | null>(null);
   const [pick, setPick] = useState<string[]>([]);
-  const [diff, setDiff] = useState<{ map_id: string; a: string; b: string } | null>(null);
+  const [diff, setDiff] = useState<{ map_id: string; a: string; b: string; derived?: boolean } | null>(null);
   const [noise, setNoise] = useState<{ map_id: string; version: string } | null>(null);
   const gen = useRef(0);
 
@@ -145,26 +171,20 @@ export function MapManagePage({ say, pollMs = 5000 }: { say: Say; pollMs?: numbe
     void load();
   }
 
-  async function doDelete(t: { map_id: string; version: string }) {
+  // P1-47:删除、退回跟发布一样再输密码(对话框里写清后果);密码错对话框不关
+  async function doDelete(t: { map_id: string; version: string; back: string[] }, pw: string) {
+    const r = await api<{ freed_bytes: number }>("POST", `/api/admin/maps/${enc(t.map_id)}/${enc(t.version)}/delete`,
+      { confirm_password: pw, ...(t.back.length > 0 ? { confirm_rollback: true } : {}) });
     setDeleting(null);
-    try {
-      const r = await api<{ freed_bytes: number }>("POST", `/api/admin/maps/${enc(t.map_id)}/${enc(t.version)}/delete`, {});
-      say(tr(`Deleted ${t.map_id}:${t.version} (freed ${mb(r.freed_bytes)})`, `已删除 ${t.map_id}:${t.version}(腾出 ${mb(r.freed_bytes)})`));
-      setPick((p) => p.filter((v) => v !== t.version));
-    } catch (e) {
-      say(errText(e));
-    }
+    say(tr(`Deleted ${t.map_id}:${t.version} (freed ${mb(r.freed_bytes)})`, `已删除 ${t.map_id}:${t.version}（腾出 ${mb(r.freed_bytes)}）`));
+    setPick((p) => p.filter((v) => v !== t.version));
     void load();
   }
 
-  async function doRollback(d: Dog) {
+  async function doRollback(d: Dog, pw: string) {
+    const r = await api<{ result: PublishResult }>("POST", "/api/admin/maps/rollback", { robot_id: d.robot_id, without_home: true, confirm_password: pw });
     setRolling(null);
-    try {
-      const r = await api<{ result: PublishResult }>("POST", "/api/admin/maps/rollback", { robot_id: d.robot_id, without_home: true });
-      say(r.result.ok ? tr(`${d.robot_id}: rolling back…`, `${d.robot_id}:正在退回…`) : `${d.robot_id}: ${r.result.reason}`);
-    } catch (e) {
-      say(errText(e));
-    }
+    say(r.result.ok ? tr(`${d.robot_id}: rolling back…`, `${d.robot_id}：正在退回…`) : `${d.robot_id}: ${r.result.reason}`);
     void load();
   }
 
@@ -179,7 +199,10 @@ export function MapManagePage({ say, pollMs = 5000 }: { say: Say; pollMs?: numbe
           {pick.length === 2 && (
             <button type="button" class="btn primary" onClick={() => {
               const [a, b] = pick.map((k) => k.split("\u0000"));
-              setDiff({ map_id: a[0], a: a[1], b: b[1] });
+              // 第 2 轮 P1-48:编辑、清噪点出来的版本跟原版同一坐标系,说明别再说「不一定同一坐标系」
+              const vs = data?.maps.find((m) => m.map_id === a[0])?.versions ?? [];
+              const derived = [a[1], b[1]].some((v) => derivedSrc(vs.find((x) => x.version === v)?.source));
+              setDiff({ map_id: a[0], a: a[1], b: b[1], derived });
             }}>{tr("Compare the two ticked", "对比勾选的两版")}</button>
           )}
         </div>
@@ -197,20 +220,20 @@ export function MapManagePage({ say, pollMs = 5000 }: { say: Say; pollMs?: numbe
                     return on ? [...rest, key].slice(-2) : rest;
                   })}
                   onNote={(n) => void saveNote(m.map_id, v.version, n)}
-                  onPublish={() => setPublish({ map_id: m.map_id, version: v.version, unusable: v.unusable ?? "" })}
-                  onDelete={() => setDeleting({ map_id: m.map_id, version: v.version })}
+                  onPublish={() => setPublish({ map_id: m.map_id, version: v.version, unusable: v.unusable ?? "", source: v.source, zonesOk: v.counts.zones_confirmed })}
+                  onDelete={() => setDeleting({ map_id: m.map_id, version: v.version, back: v.previous_on, latest: v.latest })}
                   onNoise={() => setNoise({ map_id: m.map_id, version: v.version })}
                 />
               ))}
             </div>
           </div>
         ))}
-        {pick.length === 1 && <p class="pad muted small">{tr("Tick a second version of the same map to compare.", "再勾选同一张图的另一个版本,就能对比。")}</p>}
+        {pick.length === 1 && <p class="pad muted small">{tr("Tick a second version of the same map to compare.", "再勾选同一张图的另一个版本，就能对比。")}</p>}
       </section>
 
       <section class="panel">
         <div class="panel-head"><h2>{tr("Robots", "每台机器人")}</h2></div>
-        {robots.length === 0 && <p class="pad muted">{tr("No robots enrolled.", "没有登记的机器人。")}</p>}
+        {robots.length === 0 && <p class="pad muted">{siteDown.value ? tr("Couldn't load. Retrying…", "读取失败，正在重试…") : tr("No robots enrolled.", "没有登记的机器人。")}</p>}
         {robots.length > 0 && (
           <table class="grid mm-dogs">
             <thead>
@@ -229,7 +252,7 @@ export function MapManagePage({ say, pollMs = 5000 }: { say: Say; pollMs?: numbe
                   <td class="actions">
                     <button type="button" class="btn sm" disabled={!d.rollback} onClick={() => setRolling(d)}
                       title={d.rollback ? "" : tr("No previous version known for this robot", "不知道这台机器人的上一版")}>
-                      {tr("Roll back", "退回上一版")}{d.rollback ? ` → ${d.rollback.version}` : ""}
+                      {rollLabel(d)}
                     </button>
                   </td>
                 </tr>
@@ -243,20 +266,25 @@ export function MapManagePage({ say, pollMs = 5000 }: { say: Say; pollMs?: numbe
         <PublishDialog target={publish} dogs={robots} onClose={() => { setPublish(null); void load(); }} />
       )}
       {deleting && (
-        <Confirm danger yes={tr("Delete", "删除")} onNo={() => setDeleting(null)} onYes={() => void doDelete(deleting)}
-          text={tr(`Delete ${deleting.map_id}:${deleting.version}? Its files, zones, standby and intercept points are removed. This cannot be undone. Do not reuse the version name.`,
-            `删除 ${deleting.map_id}:${deleting.version}?它的文件、区域、待命点、拦截点都会删掉,不能恢复。以后别再用这个版本号。`)} />
+        <ConfirmPassword title={tr("Delete version", "删除版本")} onClose={() => setDeleting(null)} onConfirm={(pw) => doDelete(deleting, pw)}
+          text={[
+            tr(`Delete ${deleting.map_id}:${deleting.version}? Its files, no-go areas, security zones, exit lines, hiding spots, standby and intercept points are removed. This cannot be undone; the version number will not be used again.`,
+              `删除 ${deleting.map_id}:${deleting.version}？它的文件、禁行区、防区、出口线、藏匿点、待命点、拦截点都会删掉，不能恢复；这个版本号以后不再使用。`),
+            deleting.back.length > 0 ? tr(`${deleting.back.join(", ")} would roll back to this version; after deleting, they cannot roll back to it.`,
+              `${deleting.back.join("、")} 出问题时会退回这一版；删掉以后就退不回这一版了。`) : "",
+            deleting.latest ? tr("This is the newest version of this map.", "这是这张图最新的一版。") : "",
+          ].filter(Boolean).join(" ")} />
       )}
       {rolling && rolling.rollback && (
-        <Confirm yes={tr("Roll back", "退回")} onNo={() => setRolling(null)} onYes={() => void doRollback(rolling)}
-          text={tr(`Roll ${rolling.robot_id} back to ${rolling.rollback.map_id}:${rolling.rollback.version}? `, `把 ${rolling.robot_id} 退回到 ${rolling.rollback.map_id}:${rolling.rollback.version}?`)
+        <ConfirmPassword title={rollLabel(rolling)} onClose={() => setRolling(null)} onConfirm={(pw) => doRollback(rolling, pw)}
+          text={tr(`Roll ${rolling.robot_id} back to ${rolling.rollback.map_id}:${rolling.rollback.version}? `, `把 ${rolling.robot_id} 退回到 ${rolling.rollback.map_id}:${rolling.rollback.version}？`)
             + (rolling.rollback.local
-              ? tr("The robot still has it locally — nothing is downloaded.", "机器人本地还留着这一版,不用重新下载。")
-              : tr("The robot may not have it any more and will download it again.", "机器人上可能已经没有这一版,会重新下载。"))} />
+              ? tr("The robot still has it locally — nothing is downloaded.", "机器人本地还留着这一版，不用重新下载。")
+              : tr("The robot may not have it any more and will download it again.", "机器人上可能已经没有这一版，会重新下载。"))} />
       )}
       {diff && <DiffDialog target={diff} onClose={() => setDiff(null)} />}
       {noise && <NoiseDialog target={noise} onClose={() => setNoise(null)}
-        onDone={(r) => { setNoise(null); say(tr(`Saved as v${r.version}: ${r.cleaned} spots cleaned. Confirm its zones before publishing.`, `另存成 v${r.version}:清了 ${r.cleaned} 处。发布前先确认它的区域。`)); void load(); }} />}
+        onDone={(r) => { setNoise(null); say(tr(`Saved as v${r.version}: ${r.cleaned} spots cleaned. Confirm its zones before publishing.`, `另存成 v${r.version}：清了 ${r.cleaned} 处。发布前先确认它的区域。`)); void load(); }} />}
     </div>
   );
 }
@@ -265,7 +293,7 @@ function ActivationCell({ a }: { a: Activation }) {
   return (
     <span class={`mm-act ${a.state}`}>
       <b>{a.map_id}:{a.version}</b> · <span data-state={a.state}>{activationText(a)}</span>
-      <span class="muted small"> · {a.by} {when(a.at_ms)}</span>
+      <span class="muted small vmeta"><span>{a.by} {when(a.at_ms)}</span></span>
     </span>
   );
 }
@@ -276,18 +304,19 @@ function tick(ok: boolean | null): string {
 
 function RunningCell({ r }: { r: Running | null }) {
   if (r === null) return <span class="muted">{tr("no report yet", "还没报")}</span>;
-  if (r.legacy) return <span class="muted">{tr("Old agent: only the zone revision is compared", "老代理:只比区域修订号")}</span>;
+  if (r.legacy) return <span class="muted">{tr("Old agent: only the zone revision is compared", "老代理：只比区域修订号")}</span>;
   return (
     <div class="mm-run">
       <span class={r.map?.match === false ? "bad" : undefined}>
-        {tr("Map", "图")} {tick(r.map?.match ?? null)}{r.map?.match == null ? <span class="muted small"> {tr("(not checkable)", "(查不了)")}</span> : null}
+        {tr("Map", "图")} {tick(r.map?.match ?? null)}{r.map?.match == null ? <span class="muted small"> {tr("(not checkable)", "（查不了）")}</span> : null}
       </span>
       <span class={r.zones?.match === false ? "bad" : undefined}>
         {tr("Zones", "区域")} {tick(r.zones?.match ?? null)}
-        {r.zones?.basis === "revision" && <span class="muted small"> {tr("(old agent: revision only)", "(旧版:只比修订号)")}</span>}
+        {r.zones?.basis === "revision" && <span class="muted small"> {tr("(old agent: revision only)", "（旧版：只比修订号）")}</span>}
       </span>
-      {r.mission && <span class="muted small mono">{tr("mission", "任务")} {r.mission.mission} · {r.mission.rev}</span>}
-      {r.problems.map((p, i) => <span key={i} class="bad small">{p}</span>)}
+      {/* 第 2 轮 P1-50:任务编号、哈希是技术信息,悬停才看 */}
+      {r.mission && <span class="muted small" title={`${r.mission.mission} · ${r.mission.rev}`}>{tr("task loaded", "任务已下发")}</span>}
+      {r.problems.map((p, i) => <span key={i} class="bad small">{siteStr(p)}</span>)}
     </div>
   );
 }
@@ -299,45 +328,71 @@ function VersionCard(p: {
   const { v } = p;
   // 没改过就跟着站点的备注走;改过的是草稿(存了、站点那边的备注变成它,草稿就等于它,按钮自然灰掉)
   const [draft, setDraft] = useState<string | null>(null);
-  const note = draft ?? v.note;
+  // 第 2 轮 P1-49:粘贴的比剩下的位置长,浏览器悄悄截掉 —— 说一声
+  const [cut, setCut] = useState(false);
+  // 第 2 轮 P1-01:站点自动写的备注(中文)英文界面翻了显示
+  const shown = siteKnown(v.note);
+  const note = draft ?? shown;
   const inUse = v.loaded_on.length > 0;
-  const whyNot = inUse ? tr("A robot is using this version", "有机器人在用这一版") : v.latest ? tr("Latest version of this map", "这张图的最新一版")
-    : v.previous_on.length > 0 ? tr("A robot would roll back to this version", "是机器人的退回目标") : "";
+  // 网页易用性第 1 轮 P0-15:只有正在用的不能删;最新一版、退回目标都能删(确认框里说清后果)
+  const whyNot = inUse ? tr("A robot is using this version", "有机器人在用这一版") : "";
   const b = v.build;
   return (
     <article class="mm-ver" aria-label={`${p.map_id}:${v.version}`}>
-      <img class="mm-thumb" src={v.thumbnail} alt="" loading="lazy" width={120} height={120} />
+      <MapThumb src={v.thumbnail} />
       <div class="mm-body">
         <h3>
           <span class="mono">v{v.version}</span>
           {v.latest && <span class="mm-tag">{tr("latest", "最新")}</span>}
-          <span class="muted small"> · {when(v.created_ms)} · {v.source} · {mb(v.size_bytes)}</span>
+          {/* 第 4 轮 zh r3-N15:窄屏折行时不以「·」开头,「149 MB」不断开 */}
+          <span class="muted small vmeta"><span>{when(v.created_ms)}</span><span>{sourceText(v.source)}</span><span class="nowrap">{mb(v.size_bytes)}</span></span>
         </h3>
+        {(v.missing ?? []).length > 0 && (
+          <p class="error small" role="alert" data-missing="1">
+            {tr(`Map files could not be read (${(v.missing ?? []).length} missing). Upload this version again or delete it.`,
+              `地图文件读取失败（缺 ${(v.missing ?? []).length} 个文件）。重新上传这一版，或者删掉它。`)}
+          </p>
+        )}
         <div class="mm-notebox">
           <input type="text" aria-label={tr(`Note for v${v.version}`, `v${v.version} 的备注`)} value={note} maxLength={200}
-            placeholder={tr("Note (what changed, why)", "备注(改了什么、为什么)")} onInput={(e) => setDraft(e.currentTarget.value)} />
-          <button type="button" class="btn sm" disabled={note.trim() === v.note} onClick={() => p.onNote(note)}>{tr("Save note", "保存备注")}</button>
+            placeholder={tr("Note (what changed, why)", "备注（改了什么、为什么）")} onInput={(e) => setDraft(e.currentTarget.value)}
+            onPaste={(e) => {
+              const el = e.currentTarget;
+              const room = 200 - (el.value.length - ((el.selectionEnd ?? 0) - (el.selectionStart ?? 0)));
+              setCut((e.clipboardData?.getData("text") ?? "").length > room);
+            }} />
+          {/* P1-49:写到多少字了(最多 200,多了打不进去) */}
+          <span class={note.length >= 200 ? "bad small mono" : "muted small mono"}>{note.length}/200</span>
+          <button type="button" class="btn sm" disabled={note.trim() === shown} onClick={() => p.onNote(note)}>{tr("Save note", "保存备注")}</button>
         </div>
+        {cut && <p class="bad small" role="status" data-note-cut="1">{tr("The pasted text was too long and was cut to 200 characters.", "粘贴的内容太长，只留了前 200 个字。")}</p>}
+        {/* P1-50:镜像警告留在外面;建图器、帧数、回环这些技术信息收起来 */}
+        {b?.handedness.verdict === "mirrored" && <p class="bad small">{tr("Mirrored map — do not publish", "这一版镜像了 —— 别发布")}</p>}
         {b ? (
+          <details class="mm-tech"><summary class="small muted">{tr("Technical details", "技术信息")}</summary>
           <p class="mm-build small">
-            <span>{tr("Source", "来源")}: <b>{b.source ?? "—"}</b></span>
-            <span>{tr("Builder", "建图器")}: {b.builder ?? "—"}{b.frames != null ? ` · ${b.frames} ${tr("frames", "帧")}` : ""}</span>
-            <span>{tr("Loop closure", "回环")}: {b.loop_closure.used ? tr(`used (${b.loop_closure.closures ?? "?"})`, `用了(${b.loop_closure.closures ?? "?"} 处)`) : tr("not used", "没用") + (b.loop_closure.why ? ` (${b.loop_closure.why})` : "")}</span>
+            {/* 第 4 轮 zh r3-N10:「bag:raw-bag」说人话;「手性核对：ok」写成「方向核对：正常」 */}
+            <span>{tr("Source", "来源")}{tr(": ", "：")}<b>{typeof b.source === "string" && b.source.startsWith("bag:") ? tr(`recording ${b.source.slice(4)}`, `录制包 ${b.source.slice(4)}`) : b.source ?? "—"}</b></span>
+            <span>{tr("Builder", "建图器")}{tr(": ", "：")}{b.builder ?? "—"}{b.frames != null ? ` · ${b.frames} ${tr("frames", "帧")}` : ""}</span>
+            <span>{tr("Loop closure", "回环")}{tr(": ", "：")}{b.loop_closure.used ? tr(`used (${b.loop_closure.closures ?? "?"})`, `用了（${b.loop_closure.closures ?? "?"} 处）`) : tr("not used", "没用") + (b.loop_closure.why ? ` (${b.loop_closure.why})` : "")}</span>
             <span class={b.handedness.verdict === "mirrored" ? "bad" : undefined}>
-              {tr("Handedness check", "手性核对")}: {b.handedness.verdict ?? "—"}{b.handedness.verdict === "mirrored" ? tr(" — MIRRORED, do not publish", " —— 镜像了,别发布") : ""}
+              {tr("Mirror check", "方向核对（有没有镜像）")}{tr(": ", "：")}{b.handedness.verdict === "ok" ? tr("OK", "正常") : b.handedness.verdict ?? "—"}{b.handedness.verdict === "mirrored" ? tr(" — MIRRORED, do not publish", " —— 镜像了，别发布") : ""}
             </span>
           </p>
-        ) : <p class="muted small">{tr("No build record (imported version).", "没有建图记录(导入的版本)。")}</p>}
+          </details>
+        ) : null}
         <p class="small mm-counts">
-          <span>{tr("Zones", "区域")} {v.counts.zones} <span class="muted">({v.counts.nogo} {tr("no-go", "禁行")}, {v.counts.slow} {tr("slow", "限速")})</span>
+          <span>{tr("Zones", "区域")} {v.counts.zones} <span class="muted">{tr("(", "（")}{v.counts.nogo} {tr("no-go", "禁行")}{tr(", ", "，")}{v.counts.slow} {tr("slow", "限速")}
+            {/* 第 2 轮 maps N11:括号里加起来要等于总数 —— 剩下的是标记不可通行、忽略区 */}
+            {v.counts.zones - v.counts.nogo - v.counts.slow > 0 && <span data-zone-other="1">{tr(", ", "，")}{v.counts.zones - v.counts.nogo - v.counts.slow} {tr("impassable / ignore", "不可通行 / 忽略区")}</span>}{tr(")", "）")}</span>
             {v.counts.zones_confirmed === false && <span class="bad"> · {tr("not confirmed", "没确认")}</span>}</span>
           <span>{tr("Standby points", "待命点")} {v.counts.standby}</span>
           <span>{tr("Intercept points", "拦截点")} {v.counts.intercepts}</span>
         </p>
-        {v.unusable && <p class="bad small">{tr(`Robots with a localizer can't use this version: ${v.unusable}`, `带定位器的机器人用不了这一版:${v.unusable}`)}</p>}
+        {v.unusable && <p class="bad small">{tr(`Robots with a localizer can't use this version: ${v.unusable}`, `带定位器的机器人用不了这一版：${v.unusable}`)}</p>}
         <p class="small mm-dogs-on">
-          {v.loaded_on.length > 0 && <span>{tr("Loaded on", "正在用")}: {v.loaded_on.map((r) => <span key={r} class="mm-chip mono">{r}</span>)}</span>}
-          {v.previous_on.length > 0 && <span class="muted">{tr("Rollback target of", "是退回目标")}: {v.previous_on.map((r) => <span key={r} class="mm-chip mono">{r}</span>)}</span>}
+          {v.loaded_on.length > 0 && <span>{tr("Loaded on", "正在用")}{tr(": ", "：")}{v.loaded_on.map((r) => <span key={r} class="mm-chip mono">{r}</span>)}</span>}
+          {v.previous_on.length > 0 && <span class="muted">{tr("Falls back to this for", "出问题时退回这一版的机器人")}{tr(": ", "：")}{v.previous_on.map((r) => <span key={r} class="mm-chip mono">{r}</span>)}</span>}
         </p>
         <div class="row mm-actions">
           <button type="button" class="btn sm primary" onClick={p.onPublish}>{tr("Publish to robots…", "发布到机器人…")}</button>
@@ -357,11 +412,125 @@ function VersionCard(p: {
 
 // ------------------------------------------------------------------ 发布
 
-export function PublishDialog({ target, dogs, onClose }: { target: { map_id: string; version: string; unusable?: string }; dogs: Dog[]; onClose: () => void }) {
+/** 换图要丢的路线(P0-14):选中的机器人现在用的版本上画的路线,换到 ``target`` 以后都用不了。 */
+function lostRoutes(target: { map_id: string; version: string }, dogs: Dog[], chosen: string[],
+  routes: { id: string; map_id: string; map_version: string; kind?: string }[]): { from: string; same: boolean; ids: string[]; guard: number }[] {
+  const froms = new Map<string, { from: string; same: boolean; ids: string[]; guard: number }>();
+  for (const d of dogs) {
+    if (!chosen.includes(d.robot_id) || !d.loaded) continue;
+    if (d.loaded.map_id === target.map_id && d.loaded.version === target.version) continue;
+    const key = `${d.loaded.map_id}\u0000${d.loaded.version}`;
+    if (froms.has(key)) continue;
+    const on = routes.filter((r) => r.map_id === d.loaded!.map_id && r.map_version === d.loaded!.version);
+    const ids = on.map((r) => r.id);
+    if (ids.length) froms.set(key, { from: d.loaded.map_id === target.map_id ? d.loaded.version : `${d.loaded.map_id}:${d.loaded.version}`, same: d.loaded.map_id === target.map_id, ids, guard: on.filter((r) => r.kind === "guard").length });
+  }
+  return [...froms.values()];
+}
+
+/** 几条巡逻路线、几条防区路线(第 2 轮 P0-14:英文单复数写对)。 */
+export function routeCount(patrol: number, guard: number): string {
+  const en = [patrol ? `${patrol} patrol route${patrol === 1 ? "" : "s"}` : "", guard ? `${guard} zone route${guard === 1 ? "" : "s"}` : ""].filter(Boolean).join(" and ");
+  const zh = [patrol ? `${patrol} 条巡逻路线` : "", guard ? `${guard} 条防区路线` : ""].filter(Boolean).join("、");
+  return tr(en, zh);
+}
+
+/** 第 2 轮 N4:一版上画了多少布置(``GET …/layout``)。 */
+export interface LayoutCounts { areas: number; exits: number; hides: number; posts: number; net_nodes: number; nogo: number; cameras: number; standby: number; proposal: boolean;
+  /** 第 4 轮 maps N4:按名字比、区域分种类、带过来待核的是哪几个(老站点没有就照旧按数量比)。 */
+  names?: { areas: string[]; nogo: string[]; standby: string[] }; kinds?: Record<string, string>;
+  proposed?: { nogo: string[]; standby: string[] } }
+
+const ZONE_KIND: Record<string, [string, string, string]> = {
+  nogo: ["no-go area", "no-go areas", "个禁行区"], slow: ["slow zone", "slow zones", "个限速区"],
+  erase: ["impassable area", "impassable areas", "个不可通行区"], ignore: ["person-ignore zone", "person-ignore zones", "个忽略人区"],
+};
+
+/** 第 2 轮 N4:``from`` 上有、``to`` 上没有的布置,一项一句。禁区、待命点在 ``to`` 有待核建议时另说。 */
+export function missingLayout(from: LayoutCounts, to: LayoutCounts): { text: string; review: boolean }[] {
+  const out: { text: string; review: boolean }[] = [];
+  // 第 3 轮 maps N4:少了就说(原来只在新版本上这一类清零时才说);少了一部分写「3 个里少了 2 个」
+  const item = (k: "areas" | "exits" | "hides" | "posts" | "cameras" | "nogo" | "standby", one: string, many: string, unit: string, review = false) => {
+    const a = from[k], b = to[k];
+    if (!(b < a)) return;
+    const en = `${a} ${a === 1 ? one : many}`;
+    out.push({ text: b === 0 ? tr(en, `${a} ${unit}`) : tr(`${a - b} of ${en}`, `${a} ${unit}里的 ${a - b} 个`), review });
+  };
+  if (from.names && to.names) {
+    const gone = from.names.areas.filter((z) => !to.names!.areas.includes(z));
+    if (gone.length) out.push({ text: tr(`${gone.length} of ${from.areas} zone${from.areas === 1 ? "" : "s"} (${gone.join(", ")})`,
+      `${from.areas} 个防区里的 ${gone.length} 个（${gone.join("、")}）`), review: false });
+  } else item("areas", "zone", "zones", "个防区");
+  item("exits", "exit line", "exit lines", "条出口线");
+  item("hides", "hiding spot", "hiding spots", "个藏匿点");
+  item("posts", "adjusted zone post", "adjusted zone posts", "个调过的防区查看点 / 值守位");
+  if (from.net_nodes > 0 && to.net_nodes === 0) out.push({ text: tr("the road network", "路网"), review: false });
+  item("cameras", "camera", "cameras", "个摄像头位置");
+  if (from.names && to.names) {
+    // 第 4 轮 maps N4:按名字比;只有带过来待核的那几个算「还没生效」,别的少了就是被删了
+    const prop = to.proposed ?? { nogo: [], standby: [] };
+    const gone = from.names.nogo.filter((id) => !to.names!.nogo.includes(id));
+    const kinds = { ...(to.kinds ?? {}), ...(from.kinds ?? {}) };
+    for (const review of [false, true]) {
+      const ids = gone.filter((id) => prop.nogo.includes(id) === review);
+      for (const [k, [one, many, unit]] of Object.entries(ZONE_KIND)) {
+        const of = ids.filter((id) => (kinds[id] ?? "nogo") === k);
+        if (of.length) out.push({ text: tr(`${of.length} ${of.length === 1 ? one : many} (${of.join(", ")})`, `${of.length} ${unit}（${of.join("、")}）`), review });
+      }
+    }
+    const sb = from.names.standby.filter((x) => !to.names!.standby.includes(x));
+    for (const review of [false, true]) {
+      const of = sb.filter((x) => prop.standby.includes(x) === review);
+      if (of.length) out.push({ text: tr(`${of.length} standby point${of.length === 1 ? "" : "s"} (${of.join(", ")})`, `${of.length} 个待命点（${of.join("、")}）`), review });
+    }
+    return out;
+  }
+  item("nogo", "no-go zone", "no-go zones", "个禁区", to.proposal);
+  item("standby", "standby point", "standby points", "个待命点", to.proposal);
+  return out;
+}
+
+export function PublishDialog({ target, dogs, onClose }: { target: { map_id: string; version: string; unusable?: string; source?: string; zonesOk?: boolean | null }; dogs: Dog[]; onClose: () => void }) {
+  const [routes, setRoutes] = useState<{ id: string; map_id: string; map_version: string; kind?: string }[]>([]);
+  useEffect(() => {
+    api<{ routes: { id: string; map_id: string; map_version: string; kind?: string }[] }>("GET", `/api/routes?map_id=${enc(target.map_id)}`)
+      .then((d) => setRoutes(d.routes ?? [])).catch(() => setRoutes([]));
+  }, [target.map_id]);
+  // 编辑、清噪点出来的版本跟原来同一个坐标系:默认一起搬 —— 第 2 轮 N4:是「搬」不是「抄」,
+  // 还有机器人留在旧版、不在这次发布里时,搬走它们就没路线了:那时默认不搬
+  const sameFrame = derivedSrc(target.source);
+  const leftBehind = (from: string, picked: string[]) => dogs.filter((d) => !picked.includes(d.robot_id) && d.loaded
+    && d.loaded.map_id === target.map_id && d.loaded.version === from).map((d) => d.robot_id);
+  const carryDefault = (picked: string[]) => {
+    if (!sameFrame) return false;
+    const froms = new Set(dogs.filter((d) => picked.includes(d.robot_id) && d.loaded?.map_id === target.map_id).map((d) => d.loaded!.version));
+    return [...froms].every((v) => leftBehind(v, picked).length === 0);
+  };
+  const [carry, setCarryRaw] = useState(() => carryDefault(dogs.filter((d) => d.online && d.can_activate && !(target.unusable && d.running?.confirms === "localizer")
+    && !(d.loaded && d.loaded.map_id === target.map_id && d.loaded.version === target.version)).map((d) => d.robot_id)));
+  // 第 2 轮 maps N2 残留:取消勾某台以后它就留在旧版上了,人没动过这个勾时跟着改回默认(不搬)
+  const carryTouched = useRef(false);
+  const setCarry = (v: boolean) => { carryTouched.current = true; setCarryRaw(v); };
+  const [layouts, setLayouts] = useState<Record<string, LayoutCounts>>({});
+  const [moved, setMoved] = useState<string[] | null>(null);
   // 11-05 现场第 10 条:缺定位文件的版本,带定位器的机器人收了也会拒 —— 不让勾
   const noLoc = (d: Dog) => !!target.unusable && d.running?.confirms === "localizer";
   const eligible = dogs.filter((d) => d.online && d.can_activate && !noLoc(d));
-  const [chosen, setChosen] = useState<string[]>([]);
+  // P1-46:默认勾上在线、能换图、还没用这一版的
+  const [chosen, setChosen] = useState<string[]>(() => eligible
+    .filter((d) => !(d.loaded && d.loaded.map_id === target.map_id && d.loaded.version === target.version)).map((d) => d.robot_id));
+  useEffect(() => { if (!carryTouched.current) setCarryRaw(carryDefault(chosen)); }, [chosen.join(",")]);
+  const fromVersions = Array.from(new Set(dogs.filter((d) => chosen.includes(d.robot_id) && d.loaded?.map_id === target.map_id
+    && d.loaded.version !== target.version).map((d) => d.loaded!.version))).sort();
+  useEffect(() => {
+    for (const v of [target.version, ...fromVersions]) {
+      if (layouts[v]) continue;
+      api<LayoutCounts>("GET", `/api/admin/maps/${enc(target.map_id)}/${enc(v)}/layout`)
+        .then((d) => setLayouts((o) => ({ ...o, [v]: d }))).catch(() => { /* 查不到:不列 */ });
+    }
+  }, [target.map_id, target.version, fromVersions.join(",")]);
+  // P1-45:禁行区没确认的版本站点会拒;先说、给去确认的入口,不让白输密码
+  const zonesBad = target.zonesOk === false;
   const [noHome, setNoHome] = useState(false);
   const [pw, setPw] = useState("");
   const [busy, setBusy] = useState(false);
@@ -371,8 +540,19 @@ export function PublishDialog({ target, dogs, onClose }: { target: { map_id: str
     setBusy(true);
     setErr("");
     try {
+      const lost = lostRoutes(target, dogs, chosen, routes);
       const r = await api<{ results: PublishResult[] }>("POST", `/api/admin/maps/${enc(target.map_id)}/${enc(target.version)}/publish`, { robots: chosen, without_home: noHome, confirm_password: pw });
       setResults(r.results);
+      if (carry && r.results.some((x) => x.ok)) {
+        const got: string[] = [];
+        for (const l of lost.filter((x) => x.same)) {
+          try {
+            const m = await api<{ moved: string[] }>("POST", `/api/admin/maps/${enc(target.map_id)}/${enc(target.version)}/adopt-routes`, { from: l.from });
+            got.push(...m.moved);
+          } catch { /* 搬不了:结果里照样提示这些路线要重画 */ }
+        }
+        setMoved(got);
+      }
     } catch (e) {
       setErr(e instanceof ApiError && e.status === 403 ? tr("Wrong password.", "密码不对。") : errText(e));
       setPw("");
@@ -387,17 +567,22 @@ export function PublishDialog({ target, dogs, onClose }: { target: { map_id: str
             {results.map((r) => (
               <li key={r.robot_id} class={r.ok ? "ok" : "bad"}>
                 <b class="mono">{r.robot_id}</b>{" "}
-                {r.ok ? tr("Robot accepted — it is downloading / loading. Watch its status in the Robots table.", "机器人收下了,正在下载、载入。结果看「每台机器人」那张表。") : r.reason}
+                {r.ok ? tr("Robot accepted — it is downloading / loading. Watch its status in the Robots table.", "机器人收下了，正在下载、载入。结果看「每台机器人」那张表。") : r.reason}
               </li>
             ))}
           </ul>
+          {moved && moved.length > 0 && <p class="small">{tr(`Patrol routes moved to v${target.version}: ${moved.join(", ")}. Check them under Setup → Patrol routes.`, `已把巡逻路线搬到 v${target.version}：${moved.join("、")}。请到「布置 → 巡逻路线」核对一遍。`)}</p>}
+          {!moved && lostRoutes(target, dogs, chosen, routes).length > 0 && (
+            <p class="warn small">{tr(`Patrol routes drawn on the old version are not on v${target.version}; today's patrols that use them will not run until you redraw or move them.`,
+              `旧版本上画的巡逻路线不在 v${target.version} 上；用到它们的今日巡逻不会跑，要重画或搬过来。`)}</p>
+          )}
           <div class="row end"><button type="button" class="btn primary" onClick={onClose}>{tr("Close", "关闭")}</button></div>
         </>
       ) : (
         <>
           <fieldset class="checks">
             <legend>{tr("Robots", "发到这几台机器人")}</legend>
-            {dogs.length === 0 && <span class="muted">{tr("No robots enrolled.", "没有登记的机器人。")}</span>}
+            {dogs.length === 0 && <span class="muted">{siteDown.value ? tr("Couldn't load. Retrying…", "读取失败，正在重试…") : tr("No robots enrolled.", "没有登记的机器人。")}</span>}
             {dogs.map((d) => {
               const ok = d.online && d.can_activate && !noLoc(d);
               return (
@@ -407,24 +592,62 @@ export function PublishDialog({ target, dogs, onClose }: { target: { map_id: str
                   <span class="mono"> {d.robot_id}</span>
                   <span class="muted small"> · {d.loaded ? `${tr("now", "现在")} ${d.loaded.map_id}:${d.loaded.version}` : tr("no map loaded", "没加载地图")}
                     {!d.online ? ` · ${tr("offline", "不在线")}` : !d.can_activate ? ` · ${tr("cannot switch maps", "不能换图")}`
-                      : noLoc(d) ? ` · ${tr("has a localizer; this version lacks localization files", "带定位器,这一版缺定位文件")}` : ""}</span>
+                      : noLoc(d) ? ` · ${tr("has a localizer; this version lacks localization files", "带定位器，这一版缺定位文件")}` : ""}</span>
                 </label>
               );
             })}
           </fieldset>
           {eligible.length === 0 && dogs.length > 0 && <p class="muted small">{tr("No robot is online and able to switch maps.", "没有在线、又能换图的机器人。")}</p>}
-          <label class="checks">
-            <span><input type="checkbox" checked={noHome} onChange={(e) => setNoHome(e.currentTarget.checked)} /> {tr("Publish even if a robot has no home origin on this version", "机器人在这一版上没有原点也照发")}</span>
-          </label>
-          <p class="muted small">{tr("Each robot switches on its own: it downloads, waits until idle, loads, and (if it has a localizer) waits for the localizer to accept the map. A robot the localizer rejects goes back to its previous map.", "每台机器人各自换:下载、等空闲、载入,有定位器的还要等定位器收下新图;定位器不收的,机器人会退回原来那张。")}</p>
+          {lostRoutes(target, dogs, chosen, routes).map((l) => (
+            <div key={l.from} class="warn small mm-lost">
+              {/* 第 2 轮 P0-14:巡逻路线、防区路线分开数,不写「route(s)」 */}
+              <p>{tr(`${routeCount(l.ids.length - l.guard, l.guard)} ${l.ids.length === 1 ? "is" : "are"} drawn on ${l.same ? "v" : ""}${l.from} (${l.ids.join(", ")}). After switching to v${target.version} ${l.ids.length === 1 ? "it cannot" : "they cannot"} run, and today's patrols that use ${l.ids.length === 1 ? "it" : "them"} stop.`,
+                `${l.same ? "v" : ""}${l.from} 上画着 ${routeCount(l.ids.length - l.guard, l.guard)}（${l.ids.join("、")}）。换到 v${target.version} 以后它们不能跑，今日计划里用到它们的巡逻也会停。`)}</p>
+              {l.same ? (
+                <>
+                  <label><input type="checkbox" checked={carry} onChange={(e) => setCarry(e.currentTarget.checked)} />{" "}
+                    {tr(`Move these routes to v${target.version} too (only if v${target.version} was edited or cleaned from v${l.from}: same coordinates)`,
+                      `把这些路线也搬到 v${target.version}（只在 v${target.version} 是从 v${l.from} 编辑、清噪点出来的时候勾：坐标一样）`)}</label>
+                  {carry && leftBehind(l.from, chosen).length > 0 && (
+                    <p data-left-behind class="warn">{tr(`${leftBehind(l.from, chosen).join(", ")} ${leftBehind(l.from, chosen).length === 1 ? "stays" : "stay"} on v${l.from} (not in this publish). Moving takes the routes off v${l.from}, so they would have no routes.`,
+                      `${leftBehind(l.from, chosen).join("、")} 还在 v${l.from} 上、不在这次发布里。路线是搬走不是复制，搬了它们就没有这些路线了。`)}</p>
+                  )}
+                </>
+              ) : <p class="muted">{tr("This is a different map: redraw the routes on it.", "这是另一张图：要在新图上重画路线。")}</p>}
+            </div>
+          ))}
+          {fromVersions.map((v) => {
+            const from = layouts[v], to = layouts[target.version];
+            if (!from || !to) return null;
+            const miss = missingLayout(from, to);
+            if (miss.length === 0) return null;
+            const plain = miss.filter((m) => !m.review), review = miss.filter((m) => m.review);
+            return (
+              <div key={`miss-${v}`} class="warn small mm-missing">
+                {plain.length > 0 && <p>{tr(`On v${v} but not on v${target.version}: ${plain.map((m) => m.text).join(", ")}. After switching they do nothing on these robots — draw them again on v${target.version}.`,
+                  `v${v} 上有、v${target.version} 上没有：${plain.map((m) => m.text).join("、")}。换过去以后这些在这几台机器人上都不起作用，要在 v${target.version} 上重画。`)}</p>}
+                {review.length > 0 && <p>{tr(`${review.map((m) => m.text).join(", ")} were carried over from an earlier version but are not in effect yet. Check and keep them in Setup (No-go areas and Standby points tabs).`,
+                  `${review.map((m) => m.text).join("、")}已从上一版带过来，还没生效：要到「布置」的「禁行区」「待命点」标签逐个核对、留下。`)}</p>}
+              </div>
+            );
+          })}
+          <fieldset class="checks mm-options">
+            <legend>{tr("Options", "选项")}</legend>
+            <label><input type="checkbox" checked={noHome} onChange={(e) => setNoHome(e.currentTarget.checked)} /> {tr("Publish even if a robot has no home origin on this version", "机器人在这一版上没有原点也照发")}</label>
+          </fieldset>
+          {zonesBad && (
+            <p class="warn small" role="alert">{tr(`The no-go zones of v${target.version} are not confirmed yet; robots will refuse it. `, `v${target.version} 的禁行区还没确认，机器人会拒收。`)}
+              <a href={`#/admin/layout?tab=nogo&map=${encodeURIComponent(target.map_id)}&version=${encodeURIComponent(target.version)}&from=publish`} onClick={onClose}>{tr(`Confirm them in Setup → No-go (opens v${target.version})`, `去「布置 → 禁行区」确认（直接打开 v${target.version}）`)}</a></p>
+          )}
+          <p class="muted small">{tr("Each robot switches on its own: it downloads, waits until idle, loads, and (if it has a localizer) waits for the localizer to accept the map. A robot the localizer rejects goes back to its previous map.", "每台机器人各自换：下载、等空闲、载入，有定位器的还要等定位器收下新图；定位器不收的，机器人会退回原来那张。")}</p>
           {/* W44 第四期(设计 §5.2 第 4 条):换图要再输一次密码 */}
-          <label class="field">{tr("Your password (switching maps matters)", "你的密码(换图要紧,再输一次)")}
+          <label class="field">{tr("Your password (switching maps matters)", "你的密码（换图要紧，再输一次）")}
             <input type="password" name="confirm_pw" autoComplete="current-password" value={pw} onInput={(e) => setPw(e.currentTarget.value)} />
           </label>
           {err && <p class="error" role="alert">{err}</p>}
           <div class="row end">
             <button type="button" class="btn" onClick={onClose}>{tr("Cancel", "取消")}</button>
-            <button type="button" class="btn primary" disabled={busy || chosen.length === 0 || !pw} onClick={() => void go()}>{tr("Publish", "发布")}</button>
+            <button type="button" class="btn primary" disabled={busy || chosen.length === 0 || !pw || zonesBad} title={chosen.length === 0 ? tr("Tick at least one robot", "至少勾一台机器人") : !pw ? tr("Enter your password", "输入你的密码") : undefined} onClick={() => void go()}>{tr("Publish", "发布")}</button>
           </div>
         </>
       )}
@@ -443,11 +666,13 @@ const LEGEND: [string, string, string][] = [
   ["free_only_b", "Not mapped in A, free in B", "A 没扫到、B 是空地"],
 ];
 
-export function DiffDialog({ target, onClose }: { target: { map_id: string; a: string; b: string }; onClose: () => void }) {
+export function DiffDialog({ target, onClose }: { target: { map_id: string; a: string; b: string; derived?: boolean }; onClose: () => void }) {
   const [stats, setStats] = useState<DiffStats | null>(null);
   const [err, setErr] = useState("");
   const gen = useRef(0);
   const q = `/api/admin/maps/${enc(target.map_id)}/${enc(target.a)}/diff`;
+  // P1-48:说明里的 A、B 换成版本号(机器人也叫 A、B,容易看混)
+  const vn = (x: string) => x.replace(/\bA\b/g, `v${target.a}`).replace(/\bB\b/g, `v${target.b}`);
   useEffect(() => {
     const my = ++gen.current;
     setStats(null);
@@ -457,26 +682,34 @@ export function DiffDialog({ target, onClose }: { target: { map_id: string; a: s
       .catch((e) => { if (my === gen.current) setErr(errText(e)); });
   }, [q, target.b]);
   return (
-    <Modal wide label={tr(`Compare v${target.a} (A) and v${target.b} (B)`, `对比 v${target.a}(A)和 v${target.b}(B)`)} onClose={onClose}>
+    <Modal wide label={tr(`Compare v${target.a} with v${target.b}`, `对比 v${target.a} 和 v${target.b}`)} onClose={onClose}>
       {err && <p class="error" role="alert">{err}</p>}
       {!stats && !err && <p class="muted">{tr("Rendering…", "正在画…")}</p>}
       {stats && (
-        <div class="mm-diff">
-          <p class="mm-caveat" role="note">{stats.caveat}</p>
+        <div class="mm-diff" data-a={stats.a}>
+          {/* 第 2 轮 P1-01 / P1-48:说明由网页按版本来历写(站点的 caveat 是中文、而且不分来历) */}
+          <p class="mm-caveat" role="note">{target.derived
+            ? tr("One of these versions was made from the other in the map editor or by noise cleanup, so they share the same coordinate frame: every difference below is a real change.",
+              "其中一版是在地图编辑器里改的、或清噪点得到的，和另一版在同一个坐标系里：下面的差异都是真的改动。")
+            : tr("Versions built separately may not share a coordinate frame (each build starts from where that mapping run began; loop closure and rebuilding can shift and rotate the whole map). They are only aligned by origin and resolution, not registered: a large difference is probably a different frame, not a real change.",
+              "分开建的版本不一定在同一个坐标系里（每次建图以那一趟的起点为原点，回环和重建会让整张图挪一点、转一点）。这里只按原点和分辨率对齐，没有做配准：大面积的差异很可能是坐标系不同，不是地方变了。")}</p>
           {stats.likely_misaligned && (
             <p class="mm-misaligned bad" role="alert">
-              {tr(`Only ${Math.round((stats.alignment ?? 0) * 100)}% of A's wall cells have a wall of B next to them: these two versions are very likely NOT in the same coordinate frame. The picture below is not meaningful.`,
-                `A 的墙只有 ${Math.round((stats.alignment ?? 0) * 100)}% 在 B 里也有墙:这两版很可能不在同一个坐标系里,下面的图没有意义。`)}
+              {vn(tr(`Only ${Math.round((stats.alignment ?? 0) * 100)}% of A's wall cells have a wall of B next to them: these two versions are very likely NOT in the same coordinate frame. The picture below is not meaningful.`,
+                `A 的墙只有 ${Math.round((stats.alignment ?? 0) * 100)}% 在 B 里也有墙：这两版很可能不在同一个坐标系里，下面的图没有意义。`))}
             </p>
           )}
-          {stats.frames_json_same === false && <p class="small bad">{tr("The two versions have different frames.json (lidar mounting / frame conventions).", "两版的 frames.json 不一样(雷达装法、坐标约定)。")}</p>}
-          {stats.frames_json_same === true && <p class="small muted">{tr("Same frames.json in both (a good sign, not a proof).", "两版的 frames.json 一样(是好兆头,不是证明)。")}</p>}
-          {!stats.same_resolution && <p class="small muted">{tr("Different resolutions: B was resampled to the finer grid.", "分辨率不同:按较细的重采。")}</p>}
-          <img class="mm-diffimg" alt={tr("Difference image", "差异图")} src={`${q}.png?with=${enc(target.b)}`} />
+          {stats.frames_json_same === false && <p class="small bad">{tr("The two versions have different frames.json (lidar mounting / frame conventions).", "两版的 frames.json 不一样（雷达装法、坐标约定）。")}</p>}
+          {stats.frames_json_same === true && <p class="small muted">{tr("Same frames.json in both (a good sign, not a proof).", "两版的 frames.json 一样（是好兆头，不是证明）。")}</p>}
+          {!stats.same_resolution && <p class="small muted">{vn(tr("Different resolutions: B was resampled to the finer grid.", "分辨率不同：按较细的重采。"))}</p>}
+          {/* P1-48:点图在新标签页看原图(能放大) */}
+          <a href={`${q}.png?with=${enc(target.b)}`} target="_blank" rel="noopener" title={tr("Open full size", "看原图")}>
+            <img class="mm-diffimg" alt={tr("Difference image", "差异图")} src={`${q}.png?with=${enc(target.b)}`} />
+          </a>
           <ul class="mm-legend small">
             {LEGEND.map(([k, en, zh]) => (
               <li key={k}>
-                <span class="mm-sw" style={{ background: stats.colors[k] }} aria-hidden="true" /> {tr(en, zh)}
+                <span class="mm-sw" style={{ background: stats.colors[k] }} aria-hidden="true" /> {vn(tr(en, zh))}
                 <span class="muted"> · {stats.area_m2[k]?.toFixed(1)} m²</span>
               </li>
             ))}
@@ -544,7 +777,7 @@ export function NoiseDialog({ target, onClose, onDone }: {
       {err && <p class="error" role="alert">{err}</p>}
       {previewErr && (
         <p class="error" role="alert">
-          {tr(`Map preview unavailable (${previewErr}) — can't clean without seeing the spots.`, `地图预览拿不到(${previewErr}):看不到图就不能清。`)}{" "}
+          {tr(`Map preview unavailable (${previewErr}) — can't clean without seeing the spots.`, `地图预览拿不到（${previewErr}）：看不到图就不能清。`)}{" "}
           <button type="button" class="btn" data-noise-retry="1" onClick={retry}>{tr("Retry", "重试")}</button>
         </p>
       )}
@@ -553,7 +786,7 @@ export function NoiseDialog({ target, onClose, onDone }: {
         <div class="mm-noise">
           <p class="small">{tr(
             `Red circles: tiny isolated obstacle specks (≤ ${list.max_m2} m², open floor all around within ${list.ring_m} m) — usually people walking while the map was built. They block the planner. Click a circle to keep that one (e.g. a thin post).`,
-            `红圈:很小、四周 ${list.ring_m} 米都是空地的占用格(每处不超过 ${list.max_m2} 平方米)—— 多半是建图时有人走动留下的,会把规划的路封住。是真东西(比如细杆子)就点一下那个圈,留着它。`)}</p>
+            `红圈：很小、四周 ${list.ring_m} 米都是空地的小黑点（每处不超过 ${list.max_m2} 平方米）—— 多半是建图时有人走动留下的，会挡住机器人的路线。是真东西（比如细杆子）就点一下那个圈，留着它。`)}</p>
           {list.specks.length === 0 ? <p class="muted">{tr("No noise found in this version.", "这一版没找到噪点。")}</p> : meta && (
             <svg class="mm-noiseimg" viewBox={`0 0 ${meta.width} ${meta.height}`} role="img" aria-label={tr("Noise on the map", "图上的噪点")}>
               <image key={tries} href={`${view}/preview.png${tries ? `?try=${tries}` : ""}`} x={0} y={0} width={meta.width} height={meta.height}
@@ -562,20 +795,48 @@ export function NoiseDialog({ target, onClose, onDone }: {
               {list.specks.map((s) => {
                 const p = toPx(meta, s.x, s.y);
                 const kept = skip.has(s.id);
-                return <circle key={s.id} data-speck={s.id} data-kept={kept ? "1" : "0"} cx={p.px} cy={p.py} r={6}
-                  fill="none" stroke={kept ? "#888" : "#e53935"} stroke-width={2} stroke-dasharray={kept ? "3 2" : undefined}
+                // 网页易用性第 1 轮 P0-11:原来只有 2 像素的圈线能点(fill=none),大图缩小以后几乎点不中;
+                // 整个圈都能点,圈按图的大小放大;下面另有一张清单可以逐个勾
+                const r = Math.max(6, Math.round(Math.max(meta.width, meta.height) / 60));
+                return <circle key={s.id} data-speck={s.id} data-kept={kept ? "1" : "0"} cx={p.px} cy={p.py} r={r}
+                  fill="transparent" pointer-events="all" stroke={kept ? "#888" : "#e53935"} stroke-width={Math.max(2, r / 4)} stroke-dasharray={kept ? "3 2" : undefined}
                   style={{ cursor: "pointer" }} onClick={() => toggle(s.id)}><title>{`#${s.id} (${s.x}, ${s.y}) · ${s.px}`}</title></circle>;
               })}
             </svg>
+          )}
+          {list.specks.length > 0 && (
+            <ul class="mm-specks plain">
+              {list.specks.map((s) => (
+                <li key={s.id}>
+                  <label><input type="checkbox" data-keep={s.id} checked={skip.has(s.id)} onChange={() => toggle(s.id)} />{" "}
+                    {tr(`Keep #${s.id} at (${s.x}, ${s.y})`, `留着 #${s.id}（${s.x}，${s.y}）`)}</label>
+                </li>
+              ))}
+            </ul>
           )}
         </div>
       )}
       <div class="row end">
         <button type="button" class="btn" onClick={onClose}>{tr("Cancel", "取消")}</button>
         <button type="button" class="btn primary" data-denoise="1" disabled={!list || n === 0 || busy || !meta || !imgOk || !!previewErr} onClick={() => void go()}>
-          {tr(`Clean ${n} spots → save as a new version`, `清掉 ${n} 处,另存成新的一版`)}
+          {tr(`Clean ${n} spots → save as a new version`, `清掉 ${n} 处，另存成新的一版`)}
         </button>
       </div>
     </Modal>
   );
+}
+
+/** P2-40:缩略图读不到时显示占位,不出破图图标。 */
+function MapThumb({ src }: { src?: string | null }) {
+  const [bad, setBad] = useState(false);
+  if (!src || bad) return <div class="mm-thumb mm-thumb-none" data-thumb-none="1" aria-hidden="true">{tr("No preview", "无预览")}</div>;
+  return <img class="mm-thumb" src={src} alt="" loading="lazy" width={120} height={120} onError={() => setBad(true)} />;
+}
+
+/** 第 2 轮 maps N9:「上一版」可能比现在的新(刚退回过):那就写「换回 v12」,不写「退回 → 12」。 */
+export function rollLabel(d: Pick<Dog, "loaded" | "rollback">): string {
+  const r = d.rollback;
+  if (!r) return tr("Roll back", "退回上一版");
+  const newer = d.loaded && d.loaded.map_id === r.map_id && Number(r.version) > Number(d.loaded.version);
+  return newer ? tr(`Switch back to v${r.version}`, `换回 v${r.version}`) : tr(`Roll back to v${r.version}`, `退回到 v${r.version}`);
 }

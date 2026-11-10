@@ -37,7 +37,8 @@ beforeEach(() => {
     }
     if (url === "/api/account-requests") return Promise.resolve(json({ requests: reqs }));
     if (url === "/api/setup") {
-      return Promise.resolve(json({ items: [{ id: "robots", done: true, skipped: false }, { id: "arming", done: false, skipped: false }], done: 1, total: 2 }));
+      return Promise.resolve(json({ items: [{ id: "robots", done: true, skipped: false }, { id: "arming", done: false, skipped: (guide.skip as string[]).includes("arming") },
+        { id: "zones", done: false, skipped: false }], done: 1, total: 3 }));
     }
     if (url === "/api/me") return Promise.resolve(json({ name: "alice", role: "admin", guide }));
     return Promise.resolve(json({}, 404));
@@ -52,7 +53,7 @@ describe("W53 网页", () => {
     const { container: c } = render(<TodayPatrols />);
     await waitFor(() => expect(c.querySelectorAll(".today-row").length).toBe(2));
     expect(c.textContent).toContain("完成");
-    expect(c.textContent).toContain("临时 · 临时路线 3 个点 · B · gina");
+    expect(c.textContent).toContain("临时路线 3 个点 · B · gina");
     expect(c.textContent).toContain("排队中");
   });
 
@@ -81,9 +82,14 @@ describe("W53 网页", () => {
   it("开站清单:做完的打勾,没做的能「不用了」、能「去做」,能收起", async () => {
     const { container: c } = render(<SetupChecklist />);
     await waitFor(() => expect(c.querySelector('li[data-item="arming"]')).not.toBeNull());
-    expect(c.textContent).toContain("开站清单 1/2");
+    expect(c.textContent).toContain("开站清单 1/3");
     fireEvent.click(btn(c.querySelector('li[data-item="arming"]')!, "跳过"));
     await waitFor(() => expect(posted.some((p) => p.url === "/api/me/guide" && Array.isArray(p.body.skip))).toBe(true));
+    // P1-75:跳过的写明「没设置」、能撤销;「去做」到那一项的标签页
+    await waitFor(() => expect(c.querySelector('li[data-item="arming"]')!.textContent).toContain("并没有设置"));
+    fireEvent.click(btn(c.querySelector('li[data-item="arming"]')!, "撤销跳过"));
+    await waitFor(() => expect(posted.some((p) => p.url === "/api/me/guide" && Array.isArray(p.body.skip) && p.body.skip.length === 0)).toBe(true));
+    expect(c.querySelector('li[data-item="zones"] a')!.getAttribute("href")).toBe("#/admin/layout?tab=nogo");
     fireEvent.click(btn(c, "暂不处理"));
     await waitFor(() => expect(posted.some((p) => p.body.setup_hidden === true)).toBe(true));
   });
@@ -92,6 +98,8 @@ describe("W53 网页", () => {
     let closed = false;
     const { container: c } = render(<HelpDialog role="guard" onClose={() => { closed = true; }} />, { container: document.body });
     expect(c.textContent).toContain("1 / 5");
+    // P2-46:一打开就记下(还没点「完成」)
+    await waitFor(() => expect(posted.some((p) => p.url === "/api/me/guide" && p.body.web_tour === WEB_TOUR)).toBe(true));
     for (let i = 0; i < 4; i++) fireEvent.click(btn(c, "下一步"));
     fireEvent.click(btn(c, "完成"));
     expect(closed).toBe(true);
@@ -125,5 +133,20 @@ describe("W53 网页", () => {
     expect(pageAllowed("admin/arming", "owner")).toBe(true);
     expect(pageAllowed("admin/users", "owner")).toBe(false);
     expect(pageAllowed("admin/layout", "owner")).toBe(false);
+  });
+});
+
+describe("网页易用性第 1 轮 P1-68", () => {
+  it("帮助先说当前这一页是干什么的", () => {
+    const { container: c } = render(<HelpDialog role="admin" page="admin/arming" onClose={() => {}} />, { container: document.body });
+    expect(c.querySelector("[data-help-here]")!.textContent).toContain("布防");
+  });
+});
+
+describe("第 2 轮 admin N11", () => {
+  it("没权限的页:帮助说给谁用、找管理员,不介绍这页功能", () => {
+    const { container: c } = render(<HelpDialog role="viewer" page="admin/robots" noAccess="管理员" onClose={() => {}} />, { container: document.body });
+    expect(c.querySelector("[data-help-here]")).toBeNull();
+    expect(c.querySelector("[data-help-noaccess]")!.textContent).toContain("给「管理员」用");
   });
 });

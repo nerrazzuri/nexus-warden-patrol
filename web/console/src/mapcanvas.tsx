@@ -8,8 +8,9 @@
 //   不转、不跟着缩放变大小 —— 字永远是正的。
 // 屏上一点 → 预览像素:世界层的 getScreenCTM().inverse()(浏览器按画的那个 transform 倒回去)。
 import type { ComponentChildren } from "preact";
-import { useLayoutEffect, useRef, useState } from "preact/hooks";
+import { useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
 import { t, type Key } from "./i18n";
+import { siteKnown } from "./sitetext";
 import {
   applyMat,
   clampView,
@@ -34,21 +35,27 @@ import { rasterShade, scheme } from "./theme";
 export interface CanvasArea {
   name: string;
   pts: Pt[];
-  kind: "area" | "zone";
+  /** 第 3 轮:region = 地图编辑里起名字的显示区域(不是防区);ref = 布置里别的页的防区淡显。 */
+  kind: "area" | "zone" | "region" | "ref";
   /** 报警的防区:标红(W44)。 */
   hot?: boolean;
+  /** 布置里选中的那一块:蓝色(蓝色只表示选中;第 2 轮 setup N9,原来借了报警的红色)。 */
+  sel?: boolean;
   /** 图上写的字(不给 = 名字);W44 地图页写「主楼 · 布防」。 */
   label?: string;
   /** 布防绿色实框、撤防灰色虚框(W44 地图页的防区和布防图层)。 */
   tone?: "armed" | "off";
 }
 
-export type LegendKey = "floor" | "wall" | "seen" | "unknown" | "nogo" | "hard" | "vwall" | "erase" | "slow" | "ignore" | "area" | "zone" | "robot" | "alarm";
-const LEGEND_ORDER: LegendKey[] = ["floor", "wall", "seen", "unknown", "nogo", "hard", "vwall", "erase", "slow", "ignore", "area", "zone", "robot", "alarm"];
+/** 图例超过这么多项就收成按钮。 */
+const LEGEND_INLINE = 6;
+
+export type LegendKey = "floor" | "wall" | "seen" | "unknown" | "nogo" | "hard" | "vwall" | "erase" | "slow" | "ignore" | "area" | "zone" | "region" | "ref" | "exit" | "hide" | "standby" | "camera" | "robot" | "alarm";
+const LEGEND_ORDER: LegendKey[] = ["floor", "wall", "seen", "unknown", "nogo", "hard", "vwall", "erase", "slow", "ignore", "area", "zone", "region", "ref", "exit", "hide", "standby", "camera", "robot", "alarm"];
 const LEGEND_TEXT: Record<LegendKey, Key> = {
   floor: "legendFloor", wall: "legendWall", seen: "legendSeen", unknown: "legendUnknown", nogo: "legendNoGo",
   hard: "hardNoGoLegend", vwall: "legendVWall", erase: "legendErase", slow: "legendSlow", ignore: "legendIgnore",
-  area: "legendArea", zone: "legendZone", robot: "legendRobot", alarm: "legendAlarm",
+  area: "legendArea", zone: "legendZone", region: "legendRegion", ref: "legendZoneRef", exit: "legendExit", hide: "legendHide", standby: "legendStandby", camera: "legendCamera", robot: "legendRobot", alarm: "legendAlarm",
 };
 
 /** 底图的灰度(站点 map_preview:空地 254、墙 0、看到过 232、未知 205;平面图:地面白、墙深灰、看到过是
@@ -115,6 +122,8 @@ export function MapCanvas(props: {
   drawing?: boolean;
   /** 点了图(不是拖):点的那一处的预览像素。 */
   onPick?: (px: number, py: number) => void;
+  /** 第 2 轮 P1-53:给了就按住拖出方框(起点、当前点,预览像素;松手 done),不平移地图。 */
+  onDragRect?: (a: [number, number], b: [number, number], done: boolean) => void;
   /** 浮在地图上的东西(比如「去这里」小卡片),放在图框里、不占图下面的高。 */
   overlay?: ComponentChildren;
   /** 图例那一行里多加的项(页面自己画的图层,比如规划路径、轨迹),跟底图图例排一行。 */
@@ -170,6 +179,12 @@ export function MapCanvas(props: {
       setDragging(true);
       try { svg.current?.setPointerCapture(e.pointerId); } catch { /* 拿不到也能拖 */ }
     }
+    if (props.onDragRect) {
+      const a = fromClient(world.current, d.x, d.y);
+      const b = fromClient(world.current, e.clientX, e.clientY);
+      if (a && b) props.onDragRect(a, b, false);
+      return;
+    }
     const a = fromClient(svg.current, d.x, d.y);
     const b = fromClient(svg.current, e.clientX, e.clientY);
     if (a && b) setView({ k: d.v.k, cx: d.v.cx + b[0] - a[0], cy: d.v.cy + b[1] - a[1] });
@@ -179,6 +194,11 @@ export function MapCanvas(props: {
     if (!d || d.id !== e.pointerId) return;
     // 拖过:接下来那一下 click 不算点(不选狗、不加角)
     if (d.moved && e.type === "pointerup") dragged.current = true;
+    if (d.moved && props.onDragRect) {
+      const a = fromClient(world.current, d.x, d.y);
+      const b = fromClient(world.current, e.clientX, e.clientY);
+      if (a && b) props.onDragRect(a, b, e.type === "pointerup");
+    }
     drag.current = null;
     setDragging(false);
   }
@@ -239,19 +259,29 @@ export function MapCanvas(props: {
               </polyline>
             ))}
             {areas.map((a, i) => (
-              <polygon key={`${i}:${a.kind}:${a.name}`} points={polyAttr(meta, a.pts)} class={`${a.kind === "zone" ? "sec-area" : "sec-area quiet"}${a.tone ? ` ${a.tone}` : ""}${a.hot ? " hot" : ""}`} />
+              <polygon key={`${i}:${a.kind}:${a.name}`} points={polyAttr(meta, a.pts)} class={`${a.kind === "zone" || a.kind === "region" ? "sec-area" : "sec-area quiet"}${a.kind === "region" ? " region" : ""}${a.tone ? ` ${a.tone}` : ""}${a.hot ? " hot" : ""}${a.sel ? " sel" : ""}`} data-area={a.name} />
             ))}
             {props.world}
           </g>
           <g class="map-marks">
+            {/* P2-15:禁区上写名字(屏上的字,跟区域名一样:正的、不跟着缩放;屏上放不下就不写) */}
+            {zones.filter((z) => z.kind === "nogo" && !z.wall && z.polygon.length >= 3 && (z.label || z.id)).map((z) => {
+              const text = siteKnown(z.label) || z.id;
+              const at = placeLabel(z.polygon.map(([x, y]) => screen.map(x, y)), text, 12, obstacles);
+              if (!at) return null;
+              return <text key={`n:${z.id}`} x={at[0]} y={at[1]} class="nogo-name" data-nogo-name={z.id} font-size={12} dominant-baseline="central">{text}</text>;
+            })}
             {areas.map((a, i) => {
-              const font = a.kind === "zone" ? 14 : 13;
+              const font = a.kind === "zone" || a.kind === "region" ? 14 : 13;
               const text = a.label ?? a.name;
-              const at = placeLabel(a.pts.map(([x, y]) => screen.map(x, y)), text, font, obstacles);
+              const sp = a.pts.map(([x, y]) => screen.map(x, y));
+              // 第 3 轮 maps N3:起了名字的区域放不下名字就写在它上边外面(原来干脆不写,框上看不出是哪块)
+              const at = placeLabel(sp, text, font, obstacles)
+                ?? (a.kind === "region" && sp.length ? [(Math.min(...sp.map((p) => p[0])) + Math.max(...sp.map((p) => p[0]))) / 2, Math.min(...sp.map((p) => p[1])) - 10] as Pt : null);
               if (!at) return null;
               const [x, y] = at;
               return (
-                <text key={`${i}:${a.kind}:${a.name}`} x={x} y={y} class={a.kind === "zone" ? "area-label" : "area-label quiet"}
+                <text key={`${i}:${a.kind}:${a.name}`} x={x} y={y} class={a.kind === "zone" || a.kind === "region" ? "area-label" : "area-label quiet"}
                   font-size={font} dominant-baseline="central">{text}</text>
               );
             })}
@@ -261,12 +291,7 @@ export function MapCanvas(props: {
         {props.overlay}
       </div>
       <div class="mapbar">
-        <ul class="maplegend" aria-label={t("legend")}>
-          {LEGEND_ORDER.filter((k) => present.has(k)).map((k) => (
-            <li key={k} data-legend={k}><Swatch k={k} plan={!!plan} />{t(LEGEND_TEXT[k])}</li>
-          ))}
-          {props.legendExtra}
-        </ul>
+        <LegendBar keys={LEGEND_ORDER.filter((k) => present.has(k))} plan={!!plan} extra={props.legendExtra} />
         <div class="mapctl">
           <span class="scale" role="img" aria-label={t("scaleAria", { m: bar.m })}>
             <svg class="scalebar" width={bar.px + 2} height="10" data-px={bar.px} aria-hidden="true"><path d={`M1 1V9H${bar.px + 1}V1`} /></svg>
@@ -281,7 +306,7 @@ export function MapCanvas(props: {
 
 /** 悬停在禁行区、抹掉区上看到的那句话:名字、是不是硬禁区(决策 65)、临时区什么时候到期(决策 66)。 */
 export function navZoneTip(z: NavZone): string {
-  const name = z.label || z.id;
+  const name = siteKnown(z.label) || z.id;
   const base = z.wall
     ? (z.hard ? t("hardVWallTip", { label: name }) : t("vwallTip", { label: name }))
     : z.kind === "erase"
@@ -314,7 +339,59 @@ function Swatch({ k, plan }: { k: LegendKey; plan: boolean }) {
   else if (k === "vwall") body = <path d="M1 9L7 3L15 3" class="vwall-line" />;
   else if (k === "area") body = <rect x="1" y="1" width="14" height="10" class="sec-area quiet" />;
   else if (k === "zone") body = <rect x="1" y="1" width="14" height="10" class="sec-area" />;
+  else if (k === "region") body = <rect x="1" y="1" width="14" height="10" class="sec-area region" />;
+  else if (k === "ref") body = <rect x="1" y="1" width="14" height="10" class="sec-area quiet" />;
+  else if (k === "exit") body = <path d="M1 6L15 6" class="mark-exit" />;
+  else if (k === "hide") body = <circle cx="8" cy="6" r="4" class="sw-hide" />;
   else if (k === "robot") body = <circle cx="8" cy="6" r="5" class="sw-robot" />;
+  // 第 4 轮 setup N3:待命点、摄像头标签的图例里有本标签的图标
+  else if (k === "standby") body = <circle cx="8" cy="6" r="5" class="sw-standby" />;
+  else if (k === "camera") body = <><path d="M8 6L15 1.5V10.5Z" class="sw-camfan" /><circle cx="6" cy="6" r="4" class="sw-cam" /></>;
   else body = <path d="M8 0.5l5.5 5.5-5.5 5.5-5.5-5.5z" class="sw-alarm" />;
   return <svg class="sw" width="16" height="12" viewBox="0 0 16 12" aria-hidden="true">{body}</svg>;
+}
+
+/** 地图下面的图例。第 3 轮 P2-31:项多了收成「图例」按钮,点开是完整的一列。
+ *  第 4 轮 layout P2-31 / N2、zh N7:按实际宽度收(放不下就收,不只看条数);点外面、按 Esc 收起。 */
+function LegendBar({ keys, plan, extra }: { keys: LegendKey[]; plan: boolean; extra?: ComponentChildren }) {
+  const ul = useRef<HTMLUListElement>(null);
+  const fold = useRef<HTMLDetailsElement>(null);
+  const [tight, setTight] = useState(false);
+  const [width, setWidth] = useState(0);
+  const many = keys.length > LEGEND_INLINE;
+  // 宽度变了先按一行试,放不下再收
+  useLayoutEffect(() => { setTight(false); }, [width, keys.join()]);
+  useLayoutEffect(() => {
+    const el = ul.current;
+    if (!many && !tight && el && el.scrollWidth > el.clientWidth + 1) setTight(true);
+  });
+  useEffect(() => {
+    const bar = (ul.current ?? fold.current)?.parentElement;
+    if (!bar || typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver((es) => setWidth(Math.round(es[0].contentRect.width)));
+    ro.observe(bar);
+    return () => ro.disconnect();
+  }, []);
+  useEffect(() => {
+    const close = (e: Event) => {
+      const d = fold.current;
+      if (!d?.open) return;
+      if (e instanceof KeyboardEvent ? e.key === "Escape" : !d.contains(e.target as Node)) d.open = false;
+    };
+    document.addEventListener("keydown", close);
+    document.addEventListener("pointerdown", close);
+    return () => { document.removeEventListener("keydown", close); document.removeEventListener("pointerdown", close); };
+  }, []);
+  const folded = many || tight;
+  const list = (
+    <ul ref={ul} class={folded ? "maplegend pop" : "maplegend"} aria-label={t("legend")}>
+      {keys.map((k) => (
+        <li key={k} data-legend={k}><Swatch k={k} plan={plan} />{t(LEGEND_TEXT[k])}</li>
+      ))}
+      {extra}
+    </ul>
+  );
+  return folded
+    ? <details ref={fold} class="legend-fold"><summary>{t("legend")} · {keys.length}</summary>{list}</details>
+    : list;
 }

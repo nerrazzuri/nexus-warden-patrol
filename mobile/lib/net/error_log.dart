@@ -13,6 +13,7 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 
+import 'app_log.dart';
 import 'site_client.dart';
 
 class ErrorLog {
@@ -41,6 +42,8 @@ class ErrorLog {
 
   void note(String kind, String message, {String detail = '', String page = '', String? site}) {
     String cut(String s) => s.length > 2000 ? s.substring(0, 2000) : s;
+    // 日志设计 第 6 条：也写进 App 自己的日志文件（上传日志时带上）
+    AppLog.instance.line('E', '$kind${page.isEmpty ? '' : ' [$page]'} $message${detail.isEmpty ? '' : '\n$detail'}');
     _items.add(<String, dynamic>{
       '_site': site ?? _site,
       'at_ms': _now(),

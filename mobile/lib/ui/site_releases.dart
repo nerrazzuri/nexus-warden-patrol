@@ -72,8 +72,8 @@ class _SiteReleasesPageState extends State<SiteReleasesPage> {
         builder: (c) => AlertDialog(
           title: Text(tr('$robot: $what $name', '$robot $what $name')),
           content: Text(tr(
-              'The robot restarts its agent (tens of seconds) and refuses while a task is running. Continue?',
-              '机器人需重启代理（约数十秒），执行任务时会拒绝。确定继续？')),
+              'The robot restarts its software (tens of seconds) and refuses while a task is running. Continue?',
+              '机器人上的程序要重启（约几十秒），执行任务时会拒绝。确定继续？')),
           actions: [
             TextButton(
                 onPressed: () => Navigator.pop(c, false), child: Text(tr('Cancel', '取消'))),
@@ -91,7 +91,7 @@ class _SiteReleasesPageState extends State<SiteReleasesPage> {
       final ack = (r['ack'] as Map?) ?? const {};
       _snack(ack['result'] == 'accepted'
           ? tr('$robot accepted: $what $name (it reports when done; the site raises an alarm on failure)',
-              '$robot 已接受：$what $name（完成后上报，失败时站点告警）')
+              '$robot 已接受：$what $name（完成后上报，失败时站点报警）')
           : tr('$robot did not accept: ${ack['reason'] ?? ack['result']}',
               '$robot 未接受：${ack['reason'] ?? ack['result']}'));
       final data = ack['data'];
@@ -214,7 +214,7 @@ class _SiteReleasesPageState extends State<SiteReleasesPage> {
                               Text(e.key, style: NwText.titleMedium.copyWith(color: nw.text, fontWeight: FontWeight.w700)),
                               nwGap4,
                               Text(
-                                  '${e.value ?? tr('Unknown (not reported: the robot is offline, or does not support releases from the site)', '未知（机器人未上报：离线或不支持站点下发版本）')}',
+                                  '${e.value ?? tr('Version not reported. This robot software does not report it, so it cannot be updated from here.', '没报版本：这台机器人的软件不报自己的版本，所以不能从这里升级。')}',
                                   style: NwText.bodyMedium.copyWith(color: nw.textSecondary)),
                               // 狗没报在跑哪一版 = 没报发布能力（或者不在线）：按了也是 unsupported，不给按钮。
                               if (admin && e.value != null) ...[

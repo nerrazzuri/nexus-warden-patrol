@@ -162,7 +162,9 @@ def test_审计写明改了谁_改成什么_不带口令(站点):
     s.req("POST", "/api/accounts", {"name": "eve", "password": PW, "role": "owner"},
           token=alice)
     rows = s.req("GET", "/api/audit", token=alice)[1]["audit"]
-    by = [(r["target"], r["detail"]) for r in rows if r["action"].startswith("POST /api/accounts")]
+    # 日志设计 第 1 条起每一行另带来源(source)、请求编号(req):只比改了什么
+    by = [(r["target"], {k: v for k, v in r["detail"].items() if k not in ("source", "req")})
+          for r in rows if r["action"].startswith("POST /api/accounts")]
     assert ("gina", {"role": "admin"}) in by
     assert ("gina", {"password_reset": True}) in by
     assert ("eve", {"new_account": "eve", "role": "owner"}) in by
@@ -218,3 +220,11 @@ def test_Principal能复制能pickle_加账号必须给角色(tmp_path):
     with pytest.raises(TypeError):
         Accounts(db, now_ms=wall).add("x", PW)          # 不给角色不许默认成 admin
     db.close()
+
+
+def test_网页P1_80_没权限的报错用界面上的角色名_不带内部权限名(站点):
+    s = 站点
+    vic = _登(s, "vic")
+    code, d = s.req("POST", "/api/robots/A/abort", {"task_id": "x"}, token=vic)
+    assert code == 403 and d["reason"] == "forbidden", d
+    assert "只读" in d["error"] and "viewer" not in d["error"] and "dispatch" not in d["error"], d

@@ -31,6 +31,7 @@ import 'nw/nw_widgets.dart';
 import 'site_robot.dart' show postureIcon, postureLabel;
 import 'site_video.dart';
 import 'orientation.dart';
+import 'stop_failed.dart';
 import 'widget/joystick.dart';
 
 /// 硬禁区守卫（决策 65）说的话：狗在续租回执里说、站点转过来的 `{state, label?, max_vx?}`。
@@ -161,7 +162,10 @@ class SiteTeleopPage extends StatefulWidget {
   static const Key turnStickKey = Key('teleop-turn');
   static const Key keysKey = Key('teleop-keys');
   static const Key zoneKey = Key('teleop-zone');
-  static Key speedKey(double v) => Key('teleop-speed-${v.toStringAsFixed(1)}');
+  /// 速度竖滑条（用户 11-08：代替两排速度档）；值是第几档。
+  static const Key speedSliderKey = Key('teleop-speed-slider');
+  static const Key speedValueKey = Key('teleop-speed-value');
+  static const Key postureMenuKey = Key('teleop-posture-menu');
   static const Key speedHintKey = Key('teleop-speed-hint');
   static const Key dropKey = Key('teleop-drop');
   static const Key inSightKey = Key('teleop-insight');
@@ -209,6 +213,25 @@ class _SiteTeleopPageState extends State<SiteTeleopPage> with WidgetsBindingObse
   List<String> _postures = const [];
   bool _posturing = false;
 
+  /// 站点限速为什么低（下雨、雷暴 0.3 m/s）：滑条最大值跟着站点给的，这里说原因。
+  String? _capWhy;
+
+  Future<void> _loadWeather() async {
+    try {
+      final w = await widget.api.weather();
+      final cap = w['speed_cap_mps'];
+      if (!mounted || cap is! num) return;
+      final why = switch ('${w['condition']}') {
+        'rain' => tr('rain', '下雨'),
+        'storm' => tr('thunderstorm', '雷暴'),
+        _ => tr('weather', '天气'),
+      };
+      setState(() => _capWhy = tr('max ${cap.toStringAsFixed(1)} m/s ($why)', '最高 ${cap.toStringAsFixed(1)} m/s（$why）'));
+    } on Object {
+      return;
+    }
+  }
+
   /// POC：机器人刚丢了指令的原因；几秒没新增就收起。
   String? _dropNote;
   Timer? _dropTimer;
@@ -235,6 +258,7 @@ class _SiteTeleopPageState extends State<SiteTeleopPage> with WidgetsBindingObse
     unawaited(lockLandscape());
     unawaited(_open());
     unawaited(_loadPostures());
+    unawaited(_loadWeather());
   }
 
   @override
@@ -323,10 +347,24 @@ class _SiteTeleopPageState extends State<SiteTeleopPage> with WidgetsBindingObse
   }
 
   /// 「继续遥控」、自己再要：丢掉结束了的那条连接，重新要一次（拿到之前杆是灰的；拿到后要重新按下）。
+  /// 按了停车（这一屏的或站点叫停）之后：站点把机器人记成「叫停」，不先解除就拿不到遥控（手机 App 测试 M12）。
+  bool get _heldStop => _endReason == 'stopped_here' || _endReason == 'halt';
+
   Future<void> _resume() async {
     _retryTimer?.cancel();
     _retryTimer = null;
     if (!mounted || !_ended) return;
+    if (_heldStop) {
+      try {
+        await widget.api.resume(widget.robotId);
+      } on SiteError catch (e) {
+        if (mounted) {
+          setState(() => _status = tr("Can't release the stop: ${refusalText(e)}", '解除叫停没成功：${refusalText(e)}'));
+        }
+        return;
+      }
+      if (!mounted) return;
+    }
     unawaited(_sub?.cancel());
     _sub = null;
     final old = _link;
@@ -360,8 +398,11 @@ class _SiteTeleopPageState extends State<SiteTeleopPage> with WidgetsBindingObse
           _maxVy = (m['max_vy'] as num?)?.toDouble() ?? 0;
           _speeds = teleopSpeedsOf(m['speeds']);
           if (_speeds.isNotEmpty) _speed = teleopSpeedFor(_speeds, teleopSpeedPick);
-          _status = tr('You are in control (speed limit ${_maxVx.toStringAsFixed(2)} m/s)',
-              '遥控中（限速 ${_maxVx.toStringAsFixed(2)} m/s）');
+          // 用户 11-08：顶上只写一个速度（滑条旁边那个就是）；不再印站点上限
+          _status = _speeds.isEmpty
+              ? tr('You are in control (speed limit ${_maxVx.toStringAsFixed(1)} m/s)',
+                  '遥控中（限速 ${_maxVx.toStringAsFixed(1)} m/s）')
+              : tr('You are in control', '遥控中');
           _zoneNote = teleopZoneText(m['zone_guard'] as Map<String, dynamic>?);
           _zoneState = '${(m['zone_guard'] as Map?)?['state'] ?? ''}';
           _inSight = false;
@@ -424,6 +465,81 @@ class _SiteTeleopPageState extends State<SiteTeleopPage> with WidgetsBindingObse
 
   bool get _sticksIdle => _fwd == 0 && _turn == 0 && _lat == 0;
 
+  static const double _sliderW = 56;
+
+  /// 竖着的速度滑条：上面写现在多少 m/s，最大值是站点给的（下雨、雷暴另外说原因）。
+  Widget _speedSlider(NwColors c, Color scrim) {
+    final i = _speeds.indexOf(_speed).clamp(0, _speeds.length - 1);
+    final text = NwText.labelLarge.copyWith(color: Colors.white, fontWeight: FontWeight.w800);
+    return Container(
+      decoration: BoxDecoration(color: scrim, borderRadius: BorderRadius.circular(Nw.r12)),
+      padding: const EdgeInsets.symmetric(vertical: Nw.s4),
+      child: Column(children: [
+        Text(_speed.toStringAsFixed(1), key: SiteTeleopPage.speedValueKey, style: text),
+        Text('m/s', style: NwText.labelSmall.copyWith(color: Colors.white70)),
+        if (_capWhy != null)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 2),
+            child: Text(_capWhy!,
+                textAlign: TextAlign.center,
+                maxLines: 3,
+                style: NwText.labelSmall.copyWith(color: c.fg(NwTone.warning), fontSize: 10)),
+          ),
+        Expanded(
+          child: RotatedBox(
+            quarterTurns: 3,
+            child: Slider(
+              key: SiteTeleopPage.speedSliderKey,
+              value: i.toDouble(),
+              min: 0,
+              max: (_speeds.length - 1).toDouble(),
+              divisions: _speeds.length - 1,
+              onChanged: (x) => setState(() {
+                _speed = _speeds[x.round().clamp(0, _speeds.length - 1)];
+                _saveSpeed(_speed);
+              }),
+            ),
+          ),
+        ),
+      ]),
+    );
+  }
+
+  /// 姿态菜单（左上，不挡镜头切换）：菜单头一行就是安全提示，点哪个姿态就是确认。推着杆、正在换不能点。
+  Widget _postureMenu(NwColors c, Color scrim) {
+    final can = !_posturing && _idleShown && _sticksIdle;
+    return Container(
+      decoration: BoxDecoration(color: scrim, borderRadius: BorderRadius.circular(Nw.r12)),
+      child: PopupMenuButton<String>(
+        key: SiteTeleopPage.postureMenuKey,
+        enabled: can,
+        tooltip: tr('Posture', '姿态'),
+        onSelected: (m) => unawaited(_posture(m)),
+        itemBuilder: (_) => [
+          PopupMenuItem<String>(
+              enabled: false,
+              child: Text(tr('The robot moves right away. Keep the area around it clear.', '机器人会马上动起来，先确认旁边没有人。'),
+                  style: NwText.bodySmall.copyWith(color: c.fg(NwTone.warning), fontWeight: FontWeight.w600))),
+          for (final p in _postures)
+            PopupMenuItem<String>(
+                key: SiteTeleopPage.postureKey(p),
+                value: p,
+                child: Row(children: [Icon(postureIcon(p), size: 20), const SizedBox(width: Nw.s8), Text(postureLabel(p))])),
+        ],
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: Nw.s8, vertical: Nw.s8),
+          child: Row(mainAxisSize: MainAxisSize.min, children: [
+            Icon(Icons.accessibility_new_rounded, size: 18, color: can ? Colors.white : Colors.white38),
+            const SizedBox(width: Nw.s4),
+            Text(tr('Posture', '姿态'),
+                style: NwText.labelLarge.copyWith(color: can ? Colors.white : Colors.white38)),
+            Icon(Icons.arrow_drop_down_rounded, color: can ? Colors.white : Colors.white38),
+          ]),
+        ),
+      ),
+    );
+  }
+
   /// 屏上姿势按钮按的「松着杆」（杆、键盘改杆值不重画；发帧那一拍对一下）。
   bool _idleShown = true;
 
@@ -468,23 +584,10 @@ class _SiteTeleopPageState extends State<SiteTeleopPage> with WidgetsBindingObse
   }
 
   /// 遥控页里换姿势（用户 11-05）：确认才发；推着杆不能按（机器人那头也拒）。
+  /// 用户 11-08：姿态只在遥控页里换；菜单顶上写着「先确认旁边没人」，在菜单里点哪个就是确认（轻量确认）。
   Future<void> _posture(String mode) async {
     final what = postureLabel(mode);
-    final yes = await showDialog<bool>(
-        context: context,
-        builder: (ctx) => AlertDialog(
-              title: Text(what),
-              content: Text(tr('The robot will move its body right away. Make sure nobody is next to it.',
-                  '机器人会马上动起来，先确认旁边没有人。')),
-              actions: [
-                TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(tr('Cancel', '取消'))),
-                FilledButton(
-                    key: const Key('posture-confirm'),
-                    onPressed: () => Navigator.pop(ctx, true),
-                    child: Text(what)),
-              ],
-            ));
-    if (yes != true || !mounted) return;
+    if (!mounted) return;
     setState(() => _posturing = true);
     String? bad;
     try {
@@ -498,10 +601,11 @@ class _SiteTeleopPageState extends State<SiteTeleopPage> with WidgetsBindingObse
     }
     if (!mounted) return;
     setState(() => _posturing = false);
-    if (bad != null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(tr('$what failed: $bad', '$what 失败：$bad'))));
-    }
+    // 手机 App 测试 M27：成了也说一声，现在是什么姿势（以前只写「accepted」）
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(bad != null
+            ? tr('$what failed: $bad', '$what 失败：$bad')
+            : tr('$what: sent. Watch the video to see the robot change posture.', '$what：已发出，看画面确认机器人换好了。'))));
   }
 
   /// 键盘（W15）：按着的方向键 → 杆值。只认按下、松开（系统连发不算）；松开就是零。
@@ -589,18 +693,15 @@ class _SiteTeleopPageState extends State<SiteTeleopPage> with WidgetsBindingObse
         _ended = true;
         _granted = false;
         _endReason = 'stopped_here';
-        _status = tr('You pressed stop', '你已按下停车');
+        // 手机 App 测试 M30：停车会连它原来在跑的任务一起取消，说一声
+        _status = tr('You pressed stop. Any task it was on is cancelled too.', '你已按下停车，它原来在跑的任务也取消了。');
       });
     }
     try {
       await widget.api.halt(widget.robotId);
-    } on SiteError catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(
-                content: Text(tr('Stop not confirmed: $e. Press the E-stop on the robot',
-                    '停车未确认：$e —— 请按机身急停！'))));
-      }
+    } catch (e) {
+      // 手机 App 测试 M02：跟值守页、单台机器人页同一个框，不自动消失
+      if (mounted) await showStopFailed(context, robot: widget.robotId, error: e);
     }
   }
 
@@ -633,7 +734,12 @@ class _SiteTeleopPageState extends State<SiteTeleopPage> with WidgetsBindingObse
     final desktop = {TargetPlatform.linux, TargetPlatform.windows, TargetPlatform.macOS}
         .contains(defaultTargetPlatform);
     final lateral = _maxVy > 0;
-    return Focus(
+    // 手机 App 测试 M30：一退出就转回竖屏（以前等页面关完才转）
+    return PopScope(
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) unawaited(unlockOrientation());
+      },
+      child: Focus(
       autofocus: true,
       onKeyEvent: _onKey,
       onFocusChange: _lostFocus,
@@ -649,7 +755,8 @@ class _SiteTeleopPageState extends State<SiteTeleopPage> with WidgetsBindingObse
               // 画面铺满（不管安全区：刘海那一块也是画面）；前后切换浮在底边正中、两根杆中间
               Positioned.fill(
                   child: SiteVideo(
-                      api: widget.api, robotId: widget.robotId, fullscreen: true, sideInset: stick + Nw.s8)),
+                      api: widget.api, robotId: widget.robotId, fullscreen: true,
+                      sideInset: stick + Nw.s8 + (_speeds.length > 1 ? _sliderW : 0))),
               SafeArea(
                 child: Stack(children: [
                   // 上边：左关闭和哪台、中间状态、右「停」
@@ -658,6 +765,7 @@ class _SiteTeleopPageState extends State<SiteTeleopPage> with WidgetsBindingObse
                     right: Nw.s8,
                     top: Nw.s8,
                     child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
                       Container(
                         decoration: BoxDecoration(color: scrim, borderRadius: BorderRadius.circular(Nw.r12)),
                         padding: const EdgeInsets.fromLTRB(0, 0, Nw.s16, 0),
@@ -688,6 +796,9 @@ class _SiteTeleopPageState extends State<SiteTeleopPage> with WidgetsBindingObse
                               ]),
                         ]),
                       ),
+                      if (_postures.isNotEmpty && !_ended)
+                        Padding(padding: const EdgeInsets.only(top: Nw.s4), child: _postureMenu(c, scrim)),
+                      ]),
                       const SizedBox(width: Nw.s8),
                       Expanded(
                         child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
@@ -716,7 +827,9 @@ class _SiteTeleopPageState extends State<SiteTeleopPage> with WidgetsBindingObse
                                   key: SiteTeleopPage.resumeKey,
                                   onPressed: _resume,
                                   icon: const Icon(Icons.replay_rounded),
-                                  label: Text(tr('Resume remote control', '继续遥控')),
+                                  label: Text(_heldStop
+                                      ? tr('Release stop and continue', '解除叫停并继续遥控')
+                                      : tr('Resume remote control', '继续遥控')),
                                 ),
                               ),
                             ),
@@ -749,23 +862,6 @@ class _SiteTeleopPageState extends State<SiteTeleopPage> with WidgetsBindingObse
                                     overflow: TextOverflow.ellipsis,
                                     style: NwText.bodySmall.copyWith(color: Colors.black, fontWeight: FontWeight.w600)),
                               ),
-                            ),
-                          if (_speeds.isNotEmpty && !_ended)
-                            Padding(
-                              padding: const EdgeInsets.only(top: Nw.s4),
-                              child: Wrap(spacing: Nw.s4, runSpacing: Nw.s4, children: [
-                                for (final v in _speeds)
-                                  ChoiceChip(
-                                    key: SiteTeleopPage.speedKey(v),
-                                    visualDensity: VisualDensity.compact,
-                                    label: Text(teleopSpeedLabel(v)),
-                                    selected: _speed == v,
-                                    onSelected: (_) => setState(() {
-                                      _speed = v;
-                                      _saveSpeed(v);
-                                    }),
-                                  ),
-                              ]),
                             ),
                           if (_speeds.isNotEmpty && !_ended && _speed > kLowGearMax + 1e-9)
                             Padding(
@@ -829,7 +925,7 @@ class _SiteTeleopPageState extends State<SiteTeleopPage> with WidgetsBindingObse
                         right: stick + Nw.s16,
                         top: 64 + Nw.s16,
                         child: widget.overlay!),
-                  // 底下两根杆中间：「我在现场」、站起 / 趴下 / 蹲下（POC 11-05）
+                  // 底下两根杆中间：「我在现场」（姿态挪到左上，不挡前后镜头切换，用户 11-08）
                   Positioned(
                     left: stick + Nw.s16,
                     right: stick + Nw.s16,
@@ -840,17 +936,6 @@ class _SiteTeleopPageState extends State<SiteTeleopPage> with WidgetsBindingObse
                         runSpacing: Nw.s4,
                         verticalDirection: VerticalDirection.up,
                         children: [
-                          if (_postures.isNotEmpty && !_ended)
-                            for (final p in _postures)
-                              FilledButton.tonalIcon(
-                                key: SiteTeleopPage.postureKey(p),
-                                style: FilledButton.styleFrom(
-                                    visualDensity: VisualDensity.compact,
-                                    padding: const EdgeInsets.symmetric(horizontal: Nw.s8)),
-                                icon: Icon(postureIcon(p), size: 18),
-                                label: Text(postureLabel(p)),
-                                onPressed: _posturing || !_idleShown || !_sticksIdle ? null : () => unawaited(_posture(p)),
-                              ),
                           if (_granted && !_ended && (_zoneState == 'untrusted' || _inSight))
                             FilterChip(
                               key: SiteTeleopPage.inSightKey,
@@ -880,8 +965,17 @@ class _SiteTeleopPageState extends State<SiteTeleopPage> with WidgetsBindingObse
                       },
                     ),
                   ),
+                  // 速度竖滑条：贴右边、转向杆外侧，右手拇指够得着（用户 11-08）
+                  if (_speeds.length > 1 && !_ended)
+                    Positioned(
+                      right: Nw.s4,
+                      top: 64 + Nw.s16,
+                      bottom: Nw.s8,
+                      width: _sliderW,
+                      child: _speedSlider(c, scrim),
+                    ),
                   Positioned(
-                    right: Nw.s8,
+                    right: Nw.s8 + (_speeds.length > 1 ? _sliderW : 0),
                     bottom: Nw.s8,
                     width: stick,
                     height: stick,
@@ -899,6 +993,6 @@ class _SiteTeleopPageState extends State<SiteTeleopPage> with WidgetsBindingObse
           );
         }),
       ),
-    );
+    ));
   }
 }

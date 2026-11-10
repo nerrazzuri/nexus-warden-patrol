@@ -24,6 +24,23 @@ void main() {
     expect(verdictText(null), '待判读');
   });
 
+  test('手机 App 测试 M08：带后缀的目录名也认；今天几趟按它数；标题不露任务号；没跑完的不算成功', () {
+    final now = DateTime.now().toUtc();
+    String two(int n) => n.toString().padLeft(2, '0');
+    final stamp = '${now.year}${two(now.month)}${two(now.day)}T${two(now.hour)}${two(now.minute)}00Z-116768';
+    expect(stampText(stamp), isNot(contains('T')));
+    final rows = <Map<String, dynamic>>[
+      {'stamp': stamp, 'mission': 'task-00ca73a75c41', 'finished': false, 'result': 'aborted'},
+      {'stamp': stamp, 'mission': 'temp-1794120223278', 'finished': true, 'result': 'done'},
+    ];
+    expect(runStats(rows, DateTime.now()).today, 2);
+    expect(runTitle(rows[0]), '手动派出');
+    expect(runTitle(rows[1]), '临时路线');
+    expect(runTitle({'mission': '东区巡逻'}), '东区巡逻');
+    expect(runFailed(rows[0]), isTrue);
+    expect(runFailed(rows[1]), isFalse);
+  });
+
   testWidgets('列表：一趟一行、有异常标红；点进去看每张照片的判读与复核', (t) async {
     final api = FakeApi('guard');
     await _pumpRuns(t, api);

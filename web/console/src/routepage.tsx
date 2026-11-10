@@ -6,8 +6,8 @@ import { useCallback, useEffect, useRef, useState } from "preact/hooks";
 import { api, ApiError, enc } from "./api";
 import { Confirm } from "./dialogs";
 import { startDrag, clickGuard, swallowClick } from "./dragpt";
-import { t } from "./i18n";
-import type { OwnLayer } from "./layoutpage";
+import { t, type Key } from "./i18n";
+import { SaveCancelled, type OwnLayer } from "./layoutpage";
 import { MapCanvas } from "./mapcanvas";
 import { PoseMarker } from "./posemarker";
 import { DispatchOnce } from "./routedispatch";
@@ -38,12 +38,16 @@ import {
   type RouteView,
 } from "./routes";
 import { rt } from "./routes_i18n";
+import { siteKnown, siteStr } from "./sitetext";
+import { clip, siteDown } from "./data";
 
 type Say = (s: string) => void;
 interface MapRow { map_id: string; version: string; note: string }
 
 export const NAME_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
 const DAYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"] as const;
+/** P1-39:点改完多久去站点查一次(拖点时不用每一下都查)。 */
+export const CHECK_DELAY_MS = 600;
 const PT_R = 11;
 const HANDLE_PX = 30;
 
@@ -86,6 +90,7 @@ export function RoutesPage({ say, embed, kind = "patrol" }: { say: Say; embed?: 
   const [showOthers, setShowOthers] = useState(false);
   const [genOpen, setGenOpen] = useState(false);
   const [genNotes, setGenNotes] = useState<string[]>([]);
+  const [genStandby, setGenStandby] = useState(false);
   const [eta, setEta] = useState<RouteEta | null>(null);
   const root = useRef<HTMLDivElement>(null);
   const guard = useRef(clickGuard());
@@ -135,7 +140,7 @@ export function RoutesPage({ say, embed, kind = "patrol" }: { say: Say; embed?: 
   const routes = view?.routes ?? [];
   const dirty = !!draft && (draft.isNew ? draft.points.length > 0 : !same(draft, orig));
   const bad = new Map<number, string>();
-  for (const p of problems) if (p.index !== null) bad.set(p.index, p.problem);
+  for (const p of problems) if (p.index !== null) bad.set(p.index, siteStr(p.problem));
   const wholeProblems = problems.filter((p) => p.index === null);
   // 11-05 现场第 15、35 条:刚存下的这一版里要原地转又贴墙的点(改了以后不算,存了再看)
   const warns = new Map<number, string>();
@@ -159,7 +164,7 @@ export function RoutesPage({ say, embed, kind = "patrol" }: { say: Say; embed?: 
     setGenNotes([]);
   }
   /** W73:按防区生成的草稿 → 新建路线的编辑页(还没存;问题照存路线时那样标出来)。 */
-  function fromGenerated(id: string, points: RoutePoint[], errs: PointProblem[], notes: string[]) {
+  function fromGenerated(id: string, points: RoutePoint[], errs: PointProblem[], notes: string[], standby = false) {
     nextEdit();
     setGenOpen(false);
     setDraft({ id, isNew: true, base: 0, points, policy: {}, map: mapKey });
@@ -167,8 +172,13 @@ export function RoutesPage({ say, embed, kind = "patrol" }: { say: Say; embed?: 
     setPi(null);
     setProblems(errs);
     setConflict(false);
-    setGenNotes([rt("guardGenDone", { n: points.length }), ...notes]);
+    setGenNotes([points.length ? rt("guardGenDone", { n: points.length }) : rt("guardGenNone"), ...notes]);
+    setGenStandby(standby);
   }
+  // 第 4 轮 setup N4:点「+ 新建路线」后光标进名字框(autoFocus 只在页面第一次载入时管用)
+  const nameBox = useRef<HTMLInputElement>(null);
+  const isNew = !!draft?.isNew;
+  useEffect(() => { if (isNew) nameBox.current?.focus(); }, [isNew]);
   function startNew() {
     // 新建:右侧栏换成编辑页,名字在编辑页顶上填(2026-10-15 用户:原来名字框夹在路线列表和点位列表中间)
     nextEdit();
@@ -178,6 +188,20 @@ export function RoutesPage({ say, embed, kind = "patrol" }: { say: Say; embed?: 
     setProblems([]);
     setConflict(false);
   }
+  // P1-39:改了点就让站点查一遍(跟存的时候同一套:穿墙、在禁行区里、走不通),当场标红;不存
+  const checkGen = useRef(0);
+  const pointsKey = draft ? JSON.stringify(draft.points) : "";
+  useEffect(() => {
+    if (!draft || !sel || draft.points.length === 0 || !dirty) return;
+    const my = ++checkGen.current;
+    const id = window.setTimeout(() => {
+      api<{ errors: PointProblem[] }>("POST", "/api/route-check", { map_id: sel.map_id, map_version: sel.version, waypoints: draft.points })
+        .then((d) => { if (my === checkGen.current) setProblems(d.errors ?? []); })
+        .catch(() => { /* 老站点没有这个接口:存的时候照样会查 */ });
+    }, CHECK_DELAY_MS);
+    return () => window.clearTimeout(id);
+  }, [pointsKey, sel?.map_id, sel?.version]);
+
   function change(points: RoutePoint[], keepProblems = false) {
     setDraft((d) => (d ? { ...d, points } : d));
     if (!keepProblems) setProblems([]);
@@ -298,7 +322,13 @@ export function RoutesPage({ say, embed, kind = "patrol" }: { say: Say; embed?: 
   useEffect(() => { embed?.setDirty(dirty); }, [dirty]);
   useEffect(() => {
     if (!embed) return;
-    embed.registerSave(canSave ? () => save(true) : null);
+    // 第 2 轮 P1-39 / layout N3:有改动但存不了(名字不对、重名、没有点)时按顶上「保存」说清为什么,不是没反应
+    const why = !draft || !dirty ? null
+      : nameTaken ? rt("routeNameTaken")
+      : !NAME_RE.test(draft.id) ? rt("routeNameHint")
+      : pts.length === 0 ? rt("routeNoPoints") : null;
+    embed.registerSave(canSave ? () => save(true)
+      : why ? async () => { say(why); throw new SaveCancelled(); } : null);
     return () => embed.registerSave(null);
   });
   function back() {
@@ -329,7 +359,8 @@ export function RoutesPage({ say, embed, kind = "patrol" }: { say: Say; embed?: 
   return (
     <div class={embed ? "routes-embed" : "admin"}>
       <section class={embed ? undefined : "panel"}>
-        <div class="panel-head" hidden={!!embed}>
+        {/* P2-14:嵌在「布置」里不要这一栏(原来用 hidden,被 .panel-head 的 flex 盖掉,出了两个地图版本框) */}
+        {!embed && <div class="panel-head">
           <h1>{rt("routesTitle")}</h1>
           <label class="field-inline">{rt("routesMap")}
             <select value={sel ? `${sel.map_id}\u0000${sel.version}` : ""} onChange={(e) => {
@@ -337,16 +368,16 @@ export function RoutesPage({ say, embed, kind = "patrol" }: { say: Say; embed?: 
               const [m, v] = e.currentTarget.value.split("\u0000");
               setSel(maps.find((x) => x.map_id === m && x.version === v) ?? null);
             }}>
-              {maps.map((m) => <option key={`${m.map_id}:${m.version}`} value={`${m.map_id}\u0000${m.version}`}>{m.map_id} · v{m.version}{m.note ? ` · ${m.note}` : ""}</option>)}
+              {maps.map((m) => <option key={`${m.map_id}:${m.version}`} value={`${m.map_id}\u0000${m.version}`}>{m.map_id} · v{m.version}{m.note ? ` · ${clip(siteKnown(m.note))}` : ""}</option>)}
             </select>
           </label>
           <span class="push" />
           {dirty && <span class="muted small" role="status">{rt("routeUnsaved")}</span>}
-        </div>
+        </div>}
         <div class="routesplit">
           <div class="routemap" ref={root} onClickCapture={(e) => swallowClick(guard.current, e)}>
-            {!sel || !meta ? <p class="empty">{t("noMap")}</p> : (
-              <MapLike meta={meta} raster={`${base}/preview.png`} label={rt("routesTitle")}
+            {!sel || !meta ? <p class="empty">{t(siteDown.value ? "loadRetry" : "noMap")}</p> : (
+              <MapLike meta={meta} raster={`${base}/preview.png`} label={guardKind ? rt("guardTitle") : rt("routesTitle")}
                 drawing={!!draft} onPick={draft ? pick : undefined}
                 overlay={!draft && routes.length > 0 ? <p class="routepick-hint small" data-route-hint="1">{rt("routePickHint")}</p> : undefined}
                 world={<>
@@ -391,7 +422,7 @@ export function RoutesPage({ say, embed, kind = "patrol" }: { say: Say; embed?: 
             {guardKind && <p class="muted small">{rt("guardOnlyArmed")}</p>}
             {genOpen && sel && <GuardGenerate map={sel} taken={routes.map((r) => r.id)} say={say} onDone={fromGenerated} onClose={() => setGenOpen(false)} />}
             {routes.length === 0 && <p class="muted small">{guardKind ? rt("guardNone") : rt("routesNone")}</p>}
-            <ul class="routelist" aria-label={rt("routesTitle")}>
+            <ul class="routelist" aria-label={guardKind ? rt("guardTitle") : rt("routesTitle")}>
               {routes.map((r) => {
                 const n = schedCount(r.id);
                 return (
@@ -422,7 +453,7 @@ export function RoutesPage({ say, embed, kind = "patrol" }: { say: Say; embed?: 
                 {draft.isNew ? (
                   <label class="routename">
                     <span class="small">{rt("routeName")}</span>
-                    <input aria-label={rt("routeName")} placeholder={rt("routeName")} value={draft.id} maxLength={64} autoFocus
+                    <input aria-label={rt("routeName")} placeholder={rt("routeName")} value={draft.id} maxLength={64} ref={nameBox}
                       onInput={(e) => { const id = e.currentTarget.value.trim(); setDraft((d) => (d ? { ...d, id } : d)); }} />
                     <span class={`small${nameTaken || (draft.id && !NAME_RE.test(draft.id)) ? " bad" : " muted"}`}>
                       {nameTaken ? rt("routeNameTaken") : rt("routeNameHint")}
@@ -436,9 +467,11 @@ export function RoutesPage({ say, embed, kind = "patrol" }: { say: Say; embed?: 
                   <p class="small" role="alert">{rt("routeConflict")} <button type="button" class="link" onClick={() => void reloadRoute()}>{rt("routeReload")}</button></p>
                 )}
                 {problems.length > 0 && <p class="small bad" role="alert">{rt("routeProblems", { n: problems.length })}</p>}
-                {wholeProblems.map((p, i) => <p key={i} class="small bad">{p.problem}</p>)}
+                {wholeProblems.map((p, i) => <p key={i} class="small bad">{siteStr(p.problem)}</p>)}
                 {[...warns.values()].map((w, i) => <p key={`w${i}`} class="small warn" data-route-warn={i}>{w}</p>)}
                 {genNotes.map((n, i) => <p key={`g${i}`} class="muted small" data-gen-note={i}>{n}</p>)}
+                {/* P1-40:有防区没生成出点(多半是没设待命点)→ 给入口 */}
+                {genStandby && embed && <p class="small"><a href="#/admin/layout?tab=standby" data-gen-standby="1">{rt("guardGoStandby")}</a></p>}
                 {draft && pts.length > 1 && (eta && !dirty ? (
                   <p class="small route-eta" data-eta-total="1" title={rt("etaBasis", { v: eta.speed_mps })}>
                     {rt("etaTotal", { t: clock(eta.total_s) })}{eta.basis === "straight" && <span class="muted"> · {rt("etaStraight")}</span>}
@@ -473,7 +506,7 @@ export function RoutesPage({ say, embed, kind = "patrol" }: { say: Say; embed?: 
                   <PointForm p={selPoint} names={pts.map((x) => x.name)} idx={pi} plain={!!embed} onChange={(patch) => change(patchPoint(pts, pi, patch), true)}
                     onActions={(p2) => change(pts.map((x, k) => (k === pi ? p2 : x)), true)} />
                 ) : pts.length > 0 && <p class="muted small">{rt("pointSelectHint")}</p>}
-                <div class="row">
+                <div class="row route-acts">
                   {!embed && <button type="button" class="btn primary" disabled={!canSave} onClick={() => void save()}>{rt("routeSave")}</button>}
                   <button type="button" class="btn" disabled={!dirty} onClick={() => (draft.isNew ? setDraft(null) : orig && edit(orig))}>{rt("routeDiscard")}</button>
                   {!draft.isNew && <button type="button" class="btn stop" onClick={() => setRemoving(true)}>{rt("routeDelete")}</button>}
@@ -500,10 +533,11 @@ interface GenResult { waypoints: RoutePoint[]; problems: PointProblem[]; zones: 
 /** W73:按防区生成防区路线(设计 §4.2)。站点给的是草稿:放进编辑页,看过、挪过再存。 */
 function GuardGenerate({ map, taken, say, onDone, onClose }: {
   map: MapRow; taken: string[]; say: Say;
-  onDone: (id: string, points: RoutePoint[], problems: PointProblem[], notes: string[]) => void; onClose: () => void;
+  onDone: (id: string, points: RoutePoint[], problems: PointProblem[], notes: string[], standby?: boolean) => void; onClose: () => void;
 }) {
   const [zones, setZones] = useState<GenZone[] | null>(null);
-  const [name, setName] = useState("");
+  // 第 2 轮 setup N14:给个默认名(guard-1、guard-2…第一个没用过的),不用先手填
+  const [name, setName] = useState(() => { let n = 1; while (taken.includes(`guard-${n}`)) n++; return `guard-${n}`; });
   const [spacing, setSpacing] = useState(6);
   const [busy, setBusy] = useState(false);
   useEffect(() => {
@@ -516,6 +550,9 @@ function GuardGenerate({ map, taken, say, onDone, onClose }: {
   const picked = (zones ?? []).filter((z) => z.on);
   const dup = taken.includes(name.trim());
   const ok = picked.length > 0 && NAME_RE.test(name.trim()) && !dup && !busy;
+  // 「生成」灰着时说为什么
+  const why = busy || zones === null || zones.length === 0 ? "" : !name.trim() ? rt("guardGenNeedName")
+    : !NAME_RE.test(name.trim()) || dup ? rt("guardGenFixName") : picked.length === 0 ? rt("guardGenNeedZone") : "";
   async function go() {
     setBusy(true);
     try {
@@ -523,8 +560,10 @@ function GuardGenerate({ map, taken, say, onDone, onClose }: {
         map_id: map.map_id, map_version: map.version, spacing_m: spacing,
         zones: picked.map((z) => ({ zone: z.zone, laps: z.laps, dwell_s: z.dwell_s, photos: z.photos })),
       });
-      const notes = r.zones.filter((z) => z.points === 0).map((z) => rt("guardGenZoneNone", { zone: z.zone, why: z.note }));
-      onDone(name.trim(), r.waypoints, r.problems ?? [], notes);
+      // 第 2 轮 P1-40:原因按界面语言;只有原因真跟待命点有关才给「去设待命点」
+      const empty = r.zones.filter((z) => z.points === 0);
+      const notes = empty.map((z) => rt("guardGenZoneNone", { zone: siteKnown(z.zone), why: siteStr(z.note) }));
+      onDone(name.trim(), r.waypoints, r.problems ?? [], notes, empty.some((z) => /待命点/.test(z.note ?? "")));
     } catch (e) {
       say(errText(e));
     } finally {
@@ -565,6 +604,7 @@ function GuardGenerate({ map, taken, say, onDone, onClose }: {
         <button type="button" class="btn sm" onClick={onClose}>{t("cancel")}</button>
         <button type="submit" class="btn sm primary" disabled={!ok}>{rt("guardGenGo")}</button>
       </div>
+      {why && <p class="small muted" data-gen-why="1">{why}</p>}
     </form>
   );
 }
@@ -593,12 +633,12 @@ function PointForm({ p, idx, names, plain, onChange, onActions }: {
       <label class="field">{rt("pointDwell")}
         <input type="number" min="0" step="1" value={dwellOf(p)} onInput={(e) => { const v = num(e.currentTarget.value); if (v !== null && v >= 0) onActions(setDwell(p, v)); }} />
       </label>
-      <label class="wide"><input type="checkbox" checked={hasAction(p, "photo", "front")} onChange={() => onActions(toggleAction(p, { type: "photo", camera: "front" }))} /> {rt("pointPhotoFront")}</label>
-      <label class="wide"><input type="checkbox" checked={hasAction(p, "photo", "back")} onChange={() => onActions(toggleAction(p, { type: "photo", camera: "back" }))} /> {rt("pointPhotoBack")}</label>
-      <label class="wide"><input type="checkbox" checked={hasAction(p, "light")} onChange={() => onActions(toggleAction(p, { type: "light", on: true }))} /> {rt("pointLight")}</label>
+      <label class="wide field-check"><input type="checkbox" checked={hasAction(p, "photo", "front")} onChange={() => onActions(toggleAction(p, { type: "photo", camera: "front" }))} /> {rt("pointPhotoFront")}</label>
+      <label class="wide field-check"><input type="checkbox" checked={hasAction(p, "photo", "back")} onChange={() => onActions(toggleAction(p, { type: "photo", camera: "back" }))} /> {rt("pointPhotoBack")}</label>
+      <label class="wide field-check"><input type="checkbox" checked={hasAction(p, "light")} onChange={() => onActions(toggleAction(p, { type: "light", on: true }))} /> {rt("pointLight")}</label>
       {/* 设计 §2.4:拍热像、量温度要等热像实物接上(契约的拍照现在只认前、后两路) */}
-      <label class="wide muted" data-thermal="photo"><input type="checkbox" disabled /> {rt("pointThermal")} <span class="small">· {rt("thermalLater")}</span></label>
-      <label class="wide muted" data-thermal="temp"><input type="checkbox" disabled /> {rt("pointTemp")} <span class="small">· {rt("thermalLater")}</span></label>
+      <label class="wide field-check muted" data-thermal="photo"><input type="checkbox" disabled /> {rt("pointThermal")} <span class="small">· {rt("thermalLater")}</span></label>
+      <label class="wide field-check muted" data-thermal="temp"><input type="checkbox" disabled /> {rt("pointTemp")} <span class="small">· {rt("thermalLater")}</span></label>
       <label class="field wide">{rt("pointCheck")}
         <input value={p.check ?? ""} maxLength={500} onInput={(e) => { const v = e.currentTarget.value; const { check: _c, ...rest } = p; onActions(v ? { ...rest, check: v } : rest); }} />
       </label>
@@ -606,28 +646,71 @@ function PointForm({ p, idx, names, plain, onChange, onActions }: {
   );
 }
 
-function SchedulePanel({ route, view, schedules, say, reload }: {
-  route: string; view: RouteView | null; schedules: RouteSchedule[]; say: Say; reload: () => Promise<void>;
+/** P2-39:经理在网页上排巡逻日程(布防页的「巡逻日程」标签):挑一条路线,下面是跟路线页同一个排程面板。
+ *  路线本身(画点、改名)还是管理员在「布置」里改。 */
+export function PatrolSchedules({ say, canEdit }: { say: Say; canEdit: boolean }) {
+  const [view, setView] = useState<RouteView | null>(null);
+  const [route, setRoute] = useState("");
+  const load = useCallback(() => api<RouteView>("GET", "/api/routes?kind=patrol")
+    .then((v) => { setView(v); setRoute((r) => r || v.routes[0]?.id || ""); })
+    .catch((e) => { setView(null); say(errText(e)); }), []);
+  useEffect(() => { void load(); }, [load]);
+  if (!view) return <p class="muted">{t("loading")}</p>;
+  if (view.routes.length === 0) return <p class="muted" data-no-routes="1">{rt("routesNone")}</p>;
+  const count = (id: string) => view.schedules.filter((s) => s.mission === id).length;
+  return (
+    <section class="panel arm-patrols">
+      <div class="panel-head">
+        <h2>{rt("routeSchedules")}</h2>
+        <label class="field-inline">{rt("schedRoute")}
+          <select name="route" value={route} onChange={(e) => setRoute(e.currentTarget.value)}>
+            {view.routes.map((r) => <option key={r.id} value={r.id}>{r.id}{count(r.id) ? ` (${count(r.id)})` : ""}</option>)}
+          </select>
+        </label>
+      </div>
+      <div class="arm-patrols-body">
+        {canEdit ? <SchedulePanel key={route} inPanel route={route} view={view} schedules={view.schedules.filter((s) => s.mission === route)} say={say} reload={load} />
+          : <p class="muted small">{rt("schedReadOnly")}</p>}
+      </div>
+    </section>
+  );
+}
+
+function SchedulePanel({ route, view, schedules, say, reload, inPanel }: {
+  route: string; view: RouteView | null; schedules: RouteSchedule[]; say: Say; reload: () => Promise<void>; inPanel?: boolean;
 }) {
   const [tz, setTz] = useState("");
-  const [id, setId] = useState("");
+  // 第 2 轮 config N2 / N3:编号自动给(路线名-1、-2…第一个没用过的);用过的当场说,不等站点回「有人先改过」
+  const all = view?.schedules ?? [];
+  const nextId = () => { let n = 1; while (all.some((x) => x.id === `${route}-${n}`)) n++; return `${route}-${n}`; };
+  const [id, setId] = useState(nextId);
+  // 第 3 轮 config N6:原来加好后 setId(nextId()) 用的是这一次渲染的旧列表 → 编号框还是刚用过的,当场标红。
+  // 编号没人改过(自动给的)时,列表一变就重新挑;刚打开页面列表还没到时也一样
+  const [autoId, setAutoId] = useState(true);
+  const ids = all.map((x) => x.id).join(",");
+  useEffect(() => { if (autoId) setId(nextId()); }, [ids, route, autoId]);
   const [at, setAt] = useState("22:00");
   const [days, setDays] = useState<string[]>([...DAYS]);
   const [win, setWin] = useState(30);
   const [missed, setMissed] = useState<"skip" | "run_late" | "alarm">("skip");
   const [removing, setRemoving] = useState<RouteSchedule | null>(null);
-  const call = async (path: string, body: unknown, done: string) => {
+  const call = async (path: string, body: unknown, done: string): Promise<boolean> => {
     try {
       await api("POST", path, body);
       say(done);
       await reload();
+      return true;
     } catch (e) {
       say(errText(e));
+      return false;
     }
   };
+  const idTaken = all.some((x) => x.id === id.trim());
+  const sameTime = schedules.some((x) => x.at === at && x.days.some((d) => days.includes(d)));
   return (
     <>
-      <h2>{rt("routeSchedules")}</h2>
+      {/* 第 4 轮 r2-config-N3:放在「巡逻日程」面板里时面板已有标题,不再标一次 */}
+      {!inPanel && <h2>{rt("routeSchedules")}</h2>}
       {view && view.timezone === null ? (
         <form class="row" onSubmit={(e) => { e.preventDefault(); void call("/api/route-timezone", { timezone: tz.trim() }, t("saved")); }}>
           <label class="field">{rt("schedTimezone")}
@@ -640,22 +723,28 @@ function SchedulePanel({ route, view, schedules, say, reload }: {
         <>
           {view && <p class="muted small">{rt("schedTimezone")}: <span class="mono">{view.timezone}</span></p>}
           {schedules.length === 0 && <p class="muted small">{rt("routeNoSchedules")}</p>}
-          <ul>
+          <ul class="sched-list">
             {schedules.map((s) => (
               <li key={s.id}>
                 <span class="strong">{s.id}</span>
                 <span class="mono small">{s.at}</span>
-                <span class="muted small">{s.days.join(" ")}</span>
+                <span class="muted small">{s.days.map((d) => t(d as Key)).join(" ")}</span>
                 <button type="button" class="link push" aria-label={`${rt("schedRemove")} ${s.id}`} onClick={() => setRemoving(s)}>{t("remove")}</button>
               </li>
             ))}
           </ul>
-          <form class="form" onSubmit={(e) => {
+          <form class="form sched-form" onSubmit={(e) => {
             e.preventDefault();
-            void call(`/api/route-schedules/${enc(id.trim())}`, { mission: route, at, days, window_min: win, on_missed: missed, base_revision: 0 }, rt("schedSaved"));
+            if (idTaken) return;
+            void call(`/api/route-schedules/${enc(id.trim())}`, { mission: route, at, days, window_min: win, on_missed: missed, base_revision: 0 }, rt("schedSaved"))
+              // 加好了换下一个编号(列表刷新后挑),不留着旧的;第 4 轮 r3-config-N6:开始时间也清掉(不然黄字「这个时间已有」指的就是刚加的)
+              .then((ok) => { if (ok) { setAutoId(true); setAt(""); } });
           }}>
-            <label class="field">{rt("schedId")}<input value={id} maxLength={64} onInput={(e) => setId(e.currentTarget.value)} /></label>
-            <label class="field">{rt("schedAt")}<input type="time" value={at} onInput={(e) => setAt(e.currentTarget.value)} /></label>
+            <label class="field">{rt("schedId")}<input value={id} maxLength={64} aria-invalid={idTaken || undefined} onInput={(e) => { setAutoId(false); setId(e.currentTarget.value); }} />
+              {idTaken && <span class="error small" role="alert" data-sched-dup="1">{rt("schedIdTaken")}</span>}</label>
+            {/* P1-03:时间一律 24 小时制(浏览器的时间框可能按系统显示成上午 / 下午) */}
+            <label class="field">{rt("schedAt")}<input name="at" type="text" inputMode="numeric" pattern="([01][0-9]|2[0-3]):[0-5][0-9]" placeholder="21:00"
+              maxLength={5} value={at} onInput={(e) => setAt(e.currentTarget.value)} /></label>
             <fieldset class="checks row-wrap">
               <legend>{rt("schedDays")}</legend>
               {DAYS.map((d) => (
@@ -672,13 +761,14 @@ function SchedulePanel({ route, view, schedules, say, reload }: {
               </select>
             </label>
             <p class="muted small">{rt("schedNote")}</p>
-            <button type="submit" class="btn sm" disabled={!NAME_RE.test(id.trim()) || days.length === 0 || !(win >= 1)}>{rt("schedAdd")}</button>
+            {sameTime && <p class="warn small" data-sched-same="1">{rt("schedSameTime", { at })}</p>}
+            <button type="submit" class="btn sm sched-add" disabled={!NAME_RE.test(id.trim()) || idTaken || days.length === 0 || !(win >= 1) || !/^([01][0-9]|2[0-3]):[0-5][0-9]$/.test(at)}>{rt("schedAdd")}</button>
           </form>
         </>
       )}
       {removing && (
         <Confirm text={`${rt("schedRemove")}: ${removing.id}`} yes={rt("schedRemove")} danger onNo={() => setRemoving(null)}
-          onYes={() => { const s = removing; setRemoving(null); void call(`/api/route-schedules/${enc(s.id)}/delete`, { base_revision: s.revision }, t("saved")); }} />
+          onYes={() => { const s = removing; setRemoving(null); void call(`/api/route-schedules/${enc(s.id)}/delete`, { base_revision: s.revision }, rt("schedRemoved", { id: s.id })); }} />
       )}
     </>
   );

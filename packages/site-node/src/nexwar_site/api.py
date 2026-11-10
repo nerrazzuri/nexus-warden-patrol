@@ -42,6 +42,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import json
 import logging
@@ -58,8 +59,9 @@ from typing import Any
 from urllib.parse import parse_qs, quote, unquote, urlparse
 
 from nexwar_contract import SCHEMA as CONTRACT_SCHEMA
+from nexwar_contract import errcodes
 from nexwar_contract.dispatch import DispatchTimeout
-from nexwar_site.accounts import WATCH_PATHS, Accounts, AuthError, LockedOut
+from nexwar_site.accounts import WATCH_PATHS, AccountDisabled, Accounts, AuthError, LockedOut
 from nexwar_site.audit import AuditLog
 from nexwar_site.ca import SAFE_ID
 from nexwar_site.dispatcher import Dispatcher, DispatchRefused, Unsupported
@@ -87,7 +89,13 @@ from nexwar_site.tlsserve import TlsHandlerMixin, TlsThreadingServer
 
 log = logging.getLogger(__name__)
 
+_PROBLEM_BUNDLE = re.compile(r"^/api/problem-reports/(NW-\d{4}-[0-9A-F]{4})/bundle$")
 MAX_BODY = 64 * 1024
+#: 网页易用性 P1-77:升级包不对时说人话(不提文件里的东西叫什么)。
+NOT_PKG = "选的文件不是升级包，打不开。请选我们给的 .tar.gz 升级文件。"
+NOT_SITE_PKG = "选的文件不是站点升级包（里面没有升级说明）。请选我们给的站点升级文件。"
+#: 第 2 轮 P1-77:不再猜「可能选成了站点升级包」(多半猜错,人还以为是密码错了)
+NOT_ROBOT_PKG = "选的文件不是机器人升级包（里面没有升级说明）。请选我们给的机器人升级文件。"
 SSE_HEARTBEAT_S = 15.0
 #: 一个请求(含读请求头)多久没动静就断:慢速攻击(slowloris)不能一直占着线程。
 REQUEST_TIMEOUT_S = 30.0
@@ -113,10 +121,36 @@ _ACCT_REQ = re.compile(r"^/api/account-requests(?:/([0-9a-f]{1,32})/(approve|rej
 _ADMIN_BIND = re.compile(r"^/api/admin/bind(?:/([0-9a-f]{1,32})/(approve|reject))?$")
 #: W42 §6:确认 / 不同意机器人上提的换 WiFi。
 _ROBOT_WIFI = re.compile(r"^/api/robots/([^/]{1,64})/wifi$")
+#: 操作记录的「对象」兜底(日志设计 第 1 条):处理函数没写时从路径里认。
+_PATH_TARGET = re.compile(r"^/api/(robots|alerts|routes|route-schedules|accounts|zones|maps|"
+                          r"devices|authorizations|incidents)/([^/]{1,128})")
+
+
+def _path_target(path: str) -> str:
+    m = _PATH_TARGET.match(path)
+    return m.group(2) if m else ""
 #: ``GET /api/alerts?all=1&limit=`` 的上限。
 ALERTS_LIMIT_MAX = 2000
+
+
+def _range_args(q: dict[str, list[str]], *, limit_max: int) -> tuple[int, int, int, int]:
+    """按日期查的公共参数:``since``/``until``(毫秒,默认不限)、``limit``(默认 200)、``offset``。"""
+    def num(k: str, default: int) -> int:
+        raw = (q.get(k) or [""])[0]
+        if raw == "":
+            return default
+        if not raw.isdigit():
+            raise HttpError(400, f"{k} 要是非负整数")
+        return int(raw)
+    since, until = num("since", 0), num("until", 2 ** 53)
+    if until <= since:
+        raise HttpError(400, "until 要晚于 since")
+    limit, offset = num("limit", 200), num("offset", 0)
+    if not 1 <= limit <= limit_max:
+        raise HttpError(400, f"limit 要是 1–{limit_max} 的整数")
+    return since, until, limit, offset
 #: 告警键 ``robot/kind#seq`` 里有 ``/`` 与 ``#``:客户端整个键编码成一段(``%2F``、``%23``)。
-_ALERT = re.compile(r"^/api/alerts/([^/]{1,256})/(ack|arrive|resolve|shelve|unshelve)$")
+_ALERT = re.compile(r"^/api/alerts/([^/]{1,256})/(ack|arrive|resolve|reopen|shelve|unshelve)$")
 #: W00c5c:``/api/robots/<id>/teleop``(WebSocket)与 ``/api/robots/<id>/halt``。
 _TELEOP = re.compile(r"^/api/robots/([^/]{1,64})/"
                      r"(teleop|halt|resume|supervise|relocalize|home/here|deter|service|posture)$")
@@ -147,6 +181,7 @@ def byte_range(header: str | None, size: int) -> tuple[int, int] | None | bool:
 
 
 #: 连续录像(W18):一段 ``/api/recordings/<id>/video``、标留着 ``/api/recordings/<id>/keep``。
+CLIP_MAX_MS = 60 * 60_000      # 第 3 轮 duty N4:按时间段导出录像,一次最长 60 分钟
 _REC = re.compile(r"^/api/recordings/(\d{1,12})/(video|keep)$")
 #: 充电桩(W13):``/api/chargers/<robot_id>``。
 _CHARGER = re.compile(r"^/api/chargers/([^/]{1,128})$")
@@ -285,6 +320,10 @@ class SiteApi:
         self.health: Any = None
         #: 站点目录(商业化 A4:狗领证书包从 ``<站点目录>/ca/issued/`` 拿)。站点主程序接上。
         self.home: Path | None = None
+        #: 日志设计 第 5 条:机器人传上来的日志(诊断包里取)。站点主程序接上。
+        self.robot_logs: Any = None
+        #: 日志设计 第 6 条:问题单(:class:`~nexwar_site.problem_reports.ProblemReports`)。
+        self.problem_reports: Any = None
         #: W42 绑定申请台(``binding.BindDesk``;有站点目录时第一次用现建)。
         self.bind: Any = None
         #: W63 设备身份核对台(第一次用时现建)。
@@ -295,6 +334,8 @@ class SiteApi:
         self.account_requests: Any = None
         #: W42:解绑后重启 broker(让它重读吊销名单);站点主程序接上,回做没做到。
         self.broker_restart: Callable[[], bool] | None = None
+        #: 解绑了、消息服务器还没重启的编号(P0-10):这期间旧证书的连接还开着,不许重新登记同一编号。
+        self.open_revoked: set[str] = set()
         #: 网页值班台的静态文件目录(商业化 B1;None = 包里带的 web/,测试换成别的)。
         self.web_dir: Path | None = None
         #: 给人看的站点名(商业化 B1,网页顶栏;站点主程序从 site.json 接)。
@@ -493,7 +534,12 @@ class _Handler(TlsHandlerMixin):
     server_version = "nexwar_site"
 
     def log_message(self, fmt: str, *args: Any) -> None:     # 走 logging,别打 stderr
-        log.info("%s %s", self.address_string(), fmt % args)
+        # 第 3 轮 config N8:成功的 GET(网页每秒几十条)记成「访问记录」,诊断包里单放一个文件,
+        # 不挤掉站点日志里别的事;失败的、写操作照旧进站点日志
+        line = str(args[0]) if args else ""
+        code = str(args[1]) if len(args) > 1 else ""
+        quiet = line.startswith(("GET ", "HEAD ")) and code[:1] in ("1", "2", "3")
+        log.info("%s %s", self.address_string(), fmt % args, extra={"access": quiet})
 
     # ------------------------------------------------------------ 输入输出
 
@@ -549,6 +595,7 @@ class _Handler(TlsHandlerMixin):
             raise HttpError(400, f"JSON 无法解析: {exc}") from exc
         if not isinstance(d, dict):
             raise HttpError(400, "请求体要是 JSON 对象")
+        self._req_body = d
         return d
 
     def _token(self) -> str | None:
@@ -577,9 +624,16 @@ class _Handler(TlsHandlerMixin):
         self._actor = name
         return name
 
+    #: 界面上的角色名(网页易用性 P1-80:报错不带内部权限名、角色用界面上的叫法)。
+    ROLE_NAMES = {"admin": "管理员", "engineer": "工程师", "guard": "保安", "owner": "经理",
+                  "viewer": "只读"}
+
     def _need(self, user, perm: str) -> None:
         if not allowed(getattr(user, "role", ""), perm):
-            raise HttpError(403, f"{getattr(user, 'role', '?')} 没有 {perm} 权限")
+            role = getattr(user, "role", "")
+            who = self.ROLE_NAMES.get(role, role or "未登录")
+            raise HttpError(403, f"你的账号（{who}）不能做这件事",
+                            extra={"reason": "forbidden", "need": perm})
 
     def _send_json(self, status: int, body: Any) -> None:
         self._status = status
@@ -589,11 +643,16 @@ class _Handler(TlsHandlerMixin):
     def _handle(self, method: str) -> None:
         self._actor, self._status, self._resp = "", 0, {}
         self._audit_target, self._audit_detail = "", {}
+        self._req_body: dict[str, Any] | None = None
         self._method, self._via_cookie, self._extra_headers = method, False, []
         self._consumed = 0
         #: 这一次请求不进审计(W00c6i:续着的监护心跳每秒一条,只记开始与结束)。
         self._skip_audit = False
         path = self.path.split("?", 1)[0]
+        # 日志设计:每个请求一个编号,这个请求里写的日志行和它的操作记录都带上
+        from nexwar_contract import logsetup
+        self._req_id = uuid.uuid4().hex[:8]
+        logsetup.set_context(req=self._req_id, task=None, robot=None)
         try:
             self._route(method, path)
             self._drain()
@@ -602,14 +661,35 @@ class _Handler(TlsHandlerMixin):
             # 记下来只会把表撑满(内部评审)。登录失败、事件回调照记。
             if method != "GET" and self.site.audit is not None and self._actor \
                     and not self._skip_audit:
-                detail = {k: self._resp[k] for k in ("command_id", "task_id", "error", "outcome")
+                detail = {k: self._resp[k] for k in ("command_id", "task_id", "error", "outcome",
+                                                       "reason", "reason_code", "err", "err_name")
                           if k in self._resp} | self._audit_detail
+                target = self._audit_target or _path_target(path)
+                detail.setdefault("source", self._source())
+                detail.setdefault("req", self._req_id)
+                if self._req_body and not self._audit_detail:
+                    # 处理函数自己写明了改了什么就不另存请求(一样的东西存两份会把一行撑过上限)
+                    from nexwar_site.audit import redact
+                    detail.setdefault("request", redact(self._req_body))
                 try:
                     self.site.audit.record(actor=self._actor, action=f"{method} {path}",
-                                           target=self._audit_target, status=self._status,
+                                           target=target, status=self._status,
                                            detail=detail, remote=self.client_address[0])
                 except Exception:
                     log.exception("审计写不进去")
+                if self._status >= 400:
+                    # 日志设计 第 3 条:被拒的写请求进站点日志,带原因、谁、从哪来(原来只有状态码)
+                    log.warning("拒绝 %s %s status=%d code=%s actor=%s remote=%s target=%s why=%s",
+                                method, path, self._status,
+                                errcodes.tag(self._resp.get("err_name")), self._actor,
+                                self.client_address[0], target,
+                                str(self._resp.get("error", ""))[:300])
+
+    def _source(self) -> str:
+        """这一次是谁发来的:网页(cookie)、App(或别的带令牌的客户端)、站点自己(site:…)。"""
+        if self._actor.startswith("site:"):
+            return "system"
+        return "web" if self._via_cookie else "app"
 
     def _route(self, method: str, path: str) -> None:
         try:
@@ -627,6 +707,10 @@ class _Handler(TlsHandlerMixin):
                 return self._bind_robot(method, path)  # W42:机器人挂绑定申请、轮询、问证书还算不算
             if method == "POST" and path == "/api/account-requests":
                 return self._account_apply()          # W52:App 上申请账号(不用登录)
+            if path == "/api/problem-reports" and method == "POST":
+                return self._problem_submit()         # 日志设计 第 6 条:谁都能传(登录页也能)
+            if method == "GET" and _PROBLEM_BUNDLE.match(path) and "t=" in self.path:
+                return self._problem_bundle(_PROBLEM_BUNDLE.match(path).group(1), None)
             if method == "POST" and path == "/api/incidents":
                 return self._incident_in()          # 摄像头不登录:验签
             if method == "POST" and path == "/api/logout":
@@ -641,6 +725,13 @@ class _Handler(TlsHandlerMixin):
             user = self._user()
             if getattr(user, "scope", "") == "watch" and (method, path) not in WATCH_PATHS:
                 raise HttpError(403, "值守令牌只能看告警")
+            if path == "/api/problem-reports" or _PROBLEM_BUNDLE.match(path):
+                self._need(user, MAINTAIN)
+                if path == "/api/problem-reports":
+                    if method != "GET":
+                        raise HttpError(405, "只支持 GET")
+                    return self._send_json(200, {"reports": self._problems().list()})
+                return self._problem_bundle(_PROBLEM_BUNDLE.match(path).group(1), user)
             if method == "POST" and path == "/api/watch/token":
                 # W17:手机后台值守领一个只能看告警的长期令牌(普通会话 12 小时就到期)
                 self._need(user, VIEW)
@@ -661,6 +752,8 @@ class _Handler(TlsHandlerMixin):
             if method == "POST" and path == "/api/me/guide":
                 from nexwar_site.setup import GuideError, write_guide
                 self._need(user, VIEW)
+                # 第 4 轮 admin P1-66:翻帮助、收起清单只是个人界面状态,不进活动记录
+                self._skip_audit = True
                 try:
                     return self._send_json(200, write_guide(self.site.accounts, str(user),
                                                             self._body()))
@@ -712,7 +805,10 @@ class _Handler(TlsHandlerMixin):
                 self._need(user, VIEW_AUDIT)
                 q = parse_qs(self.path.split("?", 1)[1] if "?" in self.path else "")
                 actor = (q.get("actor") or [None])[0]
-                return self._send_json(200, {"audit": self.site.audit.list(actor=actor)})
+                new = ("since", "until", "group", "offset", "limit", "format")
+                if not any(k in q for k in new):
+                    return self._send_json(200, {"audit": self.site.audit.list(actor=actor)})
+                return self._audit_search(q, actor)
             if method == "GET" and path == "/api/robots":
                 self._need(user, VIEW)
                 return self._send_json(200, {"robots": self.site.dispatcher.robots_view()})
@@ -726,8 +822,10 @@ class _Handler(TlsHandlerMixin):
                 from nexwar_site.robot_overview import overview
                 from nexwar_site.sitetime import site_tz
                 disp = self.site.dispatcher
+                # 第 2 轮 N4:解绑了、消息服务没重启(旧连接可能还开着)的编号 —— 机器人页常驻提示
                 return self._send_json(200, {"robots": overview(
-                    disp, disp.db, now_ms=self.site._now(), tz=site_tz(disp.db))})
+                    disp, disp.db, now_ms=self.site._now(), tz=site_tz(disp.db)),
+                    "open_revoked": sorted(self.site.open_revoked)})
             if method == "GET" and path == "/api/events":
                 self._need(user, VIEW)
                 return self._sse()
@@ -746,12 +844,23 @@ class _Handler(TlsHandlerMixin):
                 if self.site.scheduler is None:
                     raise HttpError(404, "此站点未启用排程")
                 return self._send_json(200, self.site.scheduler.view())
-            if method == "GET" and path == "/api/patrols/today":
+            if method == "GET" and path in ("/api/patrols/today", "/api/patrols/day"):
                 self._need(user, VIEW)
                 from nexwar_site.today import today_view
                 desk = self._adhoc()
+                q = parse_qs(self.path.split("?", 1)[1] if "?" in self.path else "")
+                day = (q.get("date") or [None])[0] if path == "/api/patrols/day" else None
+                if path == "/api/patrols/day":
+                    from datetime import datetime
+                    try:
+                        if day is None or not re.fullmatch(r"\d{4}-\d{2}-\d{2}", day):
+                            raise ValueError(day)
+                        datetime.strptime(day, "%Y-%m-%d")
+                    except ValueError as exc:
+                        raise HttpError(400, "date 要写成 YYYY-MM-DD(真的日期)") from exc
                 return self._send_json(200, self.site.loop.call(lambda: _sync(
-                    today_view, self.site.dispatcher.db, now_ms=self.site._now(), adhoc=desk)))
+                    today_view, self.site.dispatcher.db, now_ms=self.site._now(), adhoc=desk,
+                    day=day)))
             m = _ADHOC.match(path)
             if m is not None:
                 return self._adhoc_cancel(method, unquote(m.group(1)), user)
@@ -775,14 +884,15 @@ class _Handler(TlsHandlerMixin):
                 self._need(user, MANAGE)
                 return self._import_bundle(user)
             if path in ("/api/routes", "/api/route-timezone", "/api/route-export",
-                        "/api/guard-routes/generate") \
+                        "/api/guard-routes/generate", "/api/route-check") \
                     or _ROUTE.match(path) or _ROUTE_SCHED.match(path):
                 return self._routes(method, path, user)
             if path == "/api/deterrence" or _DETER.match(path):
                 return self._deterrence(method, path, user)
             if path in ("/api/mode", "/api/mode/zones"):
                 return self._mode(method, path, user)
-            if path in ("/api/arming/schedule", "/api/arming/exceptions") or _ARM_EX.match(path):
+            if path in ("/api/arming/schedule", "/api/arming/schedule/preview",
+                        "/api/arming/exceptions") or _ARM_EX.match(path):
                 return self._arming_schedule(method, path, user)
             if path.startswith("/api/guard/"):
                 return self._guard(method, path, user)
@@ -796,7 +906,8 @@ class _Handler(TlsHandlerMixin):
                     # C-B4:谁在用哪一版 App 登录着(带账号名,只给管理员)
                     got["clients"] = self.site.accounts.clients()
                 return self._send_json(200, got)
-            if path in ("/api/health", "/api/metrics", "/api/support-bundle"):
+            if path in ("/api/health", "/api/metrics", "/api/support-bundle",
+                        "/api/support-bundle/window"):
                 return self._health(method, path, user)
             if path in ("/api/push/devices", "/api/push/devices/remove"):
                 return self._push_devices(method, path, user)
@@ -812,7 +923,8 @@ class _Handler(TlsHandlerMixin):
                 return self._runs(method, path, user)
             if path in ("/api/reports/daily", "/api/reports/summary"):
                 return self._report(method, user, path)
-            if path in ("/api/recordings", "/api/recordings/frame") or _REC.match(path):
+            if path in ("/api/recordings", "/api/recordings/frame", "/api/recordings/clip") \
+                    or _REC.match(path):
                 return self._recordings(method, path, user)
             from nexwar_site import api_runviz
             if api_runviz.handles(path):               # 运营可视化:路径轨迹、定位历史、摄像头登记
@@ -894,8 +1006,12 @@ class _Handler(TlsHandlerMixin):
         except HttpError as exc:
             self.close_connection = True          # 请求体可能没读完(413),连接不能复用
             self._send_json(exc.status, {**exc.extra, "error": exc.message})
+        except (BrokenPipeError, ConnectionResetError, ssl.SSLEOFError) as exc:
+            # 第 4 轮 config N7:浏览器关页面、切页面断开了连接,不是站点出错 —— 记一行 INFO,不带栈
+            self.close_connection = True
+            log.info("客户端断开了 %s %s(%s)", method, self.path, type(exc).__name__)
         except Exception:                                    # 最后一道:别把栈回给客户端
-            log.exception("站点 API 处理 %s %s 炸了", method, self.path)
+            log.exception("站点 API 处理 %s %s 出错", method, self.path)
             self._send_json(500, {"error": "站点内部错误"})
 
     def do_GET(self) -> None:
@@ -915,8 +1031,11 @@ class _Handler(TlsHandlerMixin):
 
         def view() -> dict[str, Any]:
             m = desk.test_mode()
-            return {"active": m is not None, "until_ms": (m or {}).get("until_ms"),
-                    "by": (m or {}).get("by", "")}
+            out = {"active": m is not None, "until_ms": (m or {}).get("until_ms"),
+                   "by": (m or {}).get("by", "")}
+            if m is not None:
+                out["alarms"] = desk.test_alarms()        # 第 3 轮 duty N10:删之前列出来
+            return out
         if method == "GET":
             self._need(user, VIEW)
             return self._send_json(200, self.site.loop.call(lambda: _sync(view)))
@@ -937,10 +1056,68 @@ class _Handler(TlsHandlerMixin):
             clear = d.get("clear", False)
             if not isinstance(clear, bool):
                 raise HttpError(400, "clear 要是 true/false")
-            n = self.site.loop.call(lambda: _sync(desk.end_test, clear=clear))
+            keep = d.get("keep", [])
+            if not isinstance(keep, list) or not all(isinstance(k, str) for k in keep):
+                raise HttpError(400, "keep 要是报警编号的列表")
+            n = self.site.loop.call(lambda: _sync(desk.end_test, clear=clear,
+                                                  keep=frozenset(keep)))
             self._audit_detail = {"action": "end", "clear": clear, "cleared": n}
             return self._send_json(200, {**self.site.loop.call(lambda: _sync(view)), "cleared": n})
         raise HttpError(400, "action 要是 start 或 end")
+
+    def _audit_search(self, q: dict[str, list[str]], actor: str | None) -> None:
+        """``GET /api/audit?since=&until=&actor=&group=&limit=&offset=[&format=csv]``:全站活动日志。
+        ``format=csv`` 导出整段(不分页,最多 ``EXPORT_MAX`` 行,超了 400 让人缩小范围)。"""
+        import csv
+        import io
+        from datetime import datetime
+
+        from nexwar_site.audit import AUDIT_GROUPS, EXPORT_MAX
+        from nexwar_site.sitetime import site_tz
+        since, until, limit, offset = _range_args(q, limit_max=ALERTS_LIMIT_MAX)
+        group = (q.get("group") or [""])[0] or None
+        if group is not None and group not in AUDIT_GROUPS:
+            raise HttpError(400, f"group 要是 {'、'.join(AUDIT_GROUPS)} 之一")
+        audit = self.site.audit
+        if (q.get("format") or [""])[0] != "csv":
+            return self._send_json(200, audit.search(since_ms=since, until_ms=until, actor=actor,
+                                                     group=group, limit=limit, offset=offset))
+        got = audit.search(since_ms=since, until_ms=until, actor=actor, group=group,
+                           limit=EXPORT_MAX, offset=0)
+        if got["total"] > EXPORT_MAX:
+            raise HttpError(400, f"这段时间有 {got['total']} 条,一次最多导出 "
+                                 f"{EXPORT_MAX} 条:缩小日期范围")
+        tz = site_tz(self.site.dispatcher.db)
+        buf = io.StringIO()
+        w = csv.writer(buf)
+        w.writerow(["time", "actor", "role", "action", "target", "status", "remote", "detail"])
+        for r in got["audit"]:
+            at = datetime.fromtimestamp(r["at"] / 1000, tz).isoformat(timespec="seconds")
+            w.writerow([at, r["actor"], r.get("actor_role") or "", r["action"], r["target"],
+                        r["status"], r["remote"], json.dumps(r["detail"], ensure_ascii=False)])
+        data = ("\ufeff" + buf.getvalue()).encode("utf-8")   # 带 BOM:Excel 打开中文不乱码
+        day = datetime.fromtimestamp(max(since, 0) / 1000, tz).strftime("%Y%m%d")
+        self._status = 200
+        self.send_response(200)
+        self.send_header("Content-Type", "text/csv; charset=utf-8")
+        self.send_header("Content-Length", str(len(data)))
+        self.send_header("Content-Disposition", f'attachment; filename="activity-{day}.csv"')
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        self.wfile.write(data)
+
+    def _alert_history(self, q: dict[str, list[str]]) -> dict[str, Any]:
+        """``GET /api/alerts?since=&until=``(毫秒)[``&kind=a,b&robot=&level=&limit=&offset=``]:
+        按日期在站点查,能翻页(liang-d5 第 5 轮前:报警记录按日期只看得到最近 500 条)。"""
+        since, until, limit, offset = _range_args(q, limit_max=ALERTS_LIMIT_MAX)
+        kinds = [k for k in (q.get("kind") or [""])[0].split(",") if k]
+        robot = (q.get("robot") or [""])[0] or None
+        level = (q.get("level") or [""])[0] or None
+        if level is not None and level not in ("P1", "P2", "P3"):
+            raise HttpError(400, "level 要是 P1、P2 或 P3")
+        return self.site.loop.call(lambda: _sync(
+            self.site.alerts.history, since_ms=since, until_ms=until, kinds=kinds or None,
+            robot=robot, level=level, limit=limit, offset=offset))
 
     def _alerts(self, method: str, path: str, user) -> None:
         """告警与值守(W00c5a)。看:``view``;确认、解决:``handle_alerts``,人取登录账号。"""
@@ -951,6 +1128,8 @@ class _Handler(TlsHandlerMixin):
         if method == "GET" and path == "/api/alerts":
             self._need(user, VIEW)
             q = parse_qs(self.path.split("?", 1)[1] if "?" in self.path else "")
+            if "since" in q or "until" in q:
+                return self._send_json(200, self._alert_history(q))
             if q.get("all") != ["1"]:
                 rows = self.site.loop.call(lambda: _sync(self.site.alerts.open))
                 return self._send_json(200, {"alerts": rows})
@@ -990,6 +1169,9 @@ class _Handler(TlsHandlerMixin):
                 a = self.site.loop.call(lambda: _sync(self.site.alerts.unshelve, key))
             elif m.group(2) == "ack":
                 a = self.site.loop.call(lambda: _sync(self.site.alerts.ack, key, who=str(user)))
+            elif m.group(2) == "reopen":
+                # 网页易用性第 1 轮 P0-04:点错了「已处理」,10 分钟内撤销
+                a = self.site.loop.call(lambda: _sync(self.site.alerts.reopen, key))
             elif m.group(2) == "arrive":
                 # W74:保安到场(看见人的那几种要先到场才能关);到场人取登录账号
                 a = self.site.loop.call(lambda: _sync(self.site.alerts.arrive, key, who=str(user)))
@@ -998,9 +1180,14 @@ class _Handler(TlsHandlerMixin):
                 verdict = d.get("verdict", "")
                 if not isinstance(verdict, str):
                     raise HttpError(400, "verdict 要是字符串")
-                self._audit_detail = {"verdict": verdict}
+                note = d.get("note", "")
+                if not isinstance(note, str):
+                    raise HttpError(400, "note 要是字符串")
+                note = note.strip()
+                self._audit_detail = {"verdict": verdict, "note": note[:200]}
                 a = self.site.loop.call(
-                    lambda: _sync(self.site.alerts.resolve, key, who=str(user), verdict=verdict))
+                    lambda: _sync(self.site.alerts.resolve, key, who=str(user), verdict=verdict,
+                                  note=note))
         except AlertNotFound as exc:
             raise HttpError(404, "没有此条告警") from exc
         except ArrivalNeeded as exc:
@@ -1281,6 +1468,9 @@ class _Handler(TlsHandlerMixin):
             token = self.site.accounts.login(name, pw, client)
         except LockedOut as exc:
             raise HttpError(429, str(exc)) from exc
+        except AccountDisabled as exc:
+            # 还是 401(手机老版本照旧当登录失败);多给 disabled,网页说「账号已停用」
+            raise HttpError(401, str(exc), extra={"disabled": True}) from exc
         except AuthError as exc:
             hint = self._acct_desk().login_hint(name)      # W52:申请了还没批 / 被拒了
             raise HttpError(401, hint or str(exc), extra={"apply": hint} if hint else None) \
@@ -1310,6 +1500,9 @@ class _Handler(TlsHandlerMixin):
             self._need(user, PATROL)              # W53:经理也能派巡逻(别的派单不能)
         else:
             self._need(user, DISPATCH)
+        if action is not None and method == "POST" and disp.registry.get(robot_id) is None:
+            # 网页易用性 P2-25:没登记过的机器人先回 404(原来先查请求体,回 400 / 409)
+            raise HttpError(404, f"没有登记过 {robot_id}")
         if action is None:
             if method != "GET":
                 raise HttpError(405, "只支持 GET")
@@ -1364,6 +1557,14 @@ class _Handler(TlsHandlerMixin):
             wire, label = self._patrol_wire(d)
             if not d.get("points"):
                 self._audit_detail = {"mission": label}
+            else:
+                # 第 4 轮 r3-duty-N3:派单时站点也查走不走得到第 1 个点(原来只在网页上查,
+                # 落点后马上按「开始」就绕过去了,机器人当场跳过、三次后成 P1)
+                errs = self._reach_first(robot_id, d.get("map_id"), d.get("map_version"),
+                                         d.get("points"))
+                if errs:
+                    raise HttpError(400, f"第 1 个点:{errs[0]['problem']}",
+                                    extra={"errors": errs, "reason": "unreachable"})
             desk = self._adhoc()
             result = self.site.dispatch(lambda: desk.submit(robot_id, wire, label=label,
                                                             by=str(user)))
@@ -1446,6 +1647,19 @@ class _Handler(TlsHandlerMixin):
             raise HttpError(400, f"points 要是 1–{TEMP_ROUTE_MAX} 个点")
         if self.site.routes is None:
             raise HttpError(404, "此站点未启用路线库")
+        flat = self._temp_waypoints(pts)
+        name = f"temp-{self.site._now()}"
+        body = {"map_id": d.get("map_id"), "map_version": d.get("map_version"), "waypoints": flat}
+        try:
+            return self.site.routes.build_mission(name, body)
+        except RouteError as exc:
+            raise HttpError(400, str(exc), extra={"errors": exc.errors}) from exc
+
+    @staticmethod
+    def _temp_waypoints(pts: Any) -> list[dict[str, Any]]:
+        """临时路线的点 → 路线点(``P1``…;朝向:每个点朝下一个点,最后一个跟前一个一样)。"""
+        if not isinstance(pts, list) or not 1 <= len(pts) <= TEMP_ROUTE_MAX:
+            raise HttpError(400, f"points 要是 1–{TEMP_ROUTE_MAX} 个点")
         flat: list[dict[str, Any]] = []
         for i, p in enumerate(pts):
             q = p if isinstance(p, dict) else {}
@@ -1459,12 +1673,29 @@ class _Handler(TlsHandlerMixin):
                                        float(b["x"]) - float(a["x"])) if a and b else 0.0)
             except (TypeError, ValueError):
                 p["yaw"] = 0.0                            # 点不成形:下面逐点报
-        name = f"temp-{self.site._now()}"
-        body = {"map_id": d.get("map_id"), "map_version": d.get("map_version"), "waypoints": flat}
+        return flat
+
+    def _reach_first(self, robot: str, map_id: Any, version: Any, points: Any
+                     ) -> list[dict[str, Any]]:
+        """第 3 轮 duty N3:机器人从现在的位置走不走得到临时路线的第 1 个点(原来只查点本身,
+        派出后提示「已出发」,其实当场 goal_blocked 跳过)。
+        拿不到位姿、不在这张图上、没有规划栅格的不查。"""
+        reach = getattr(self.site.incidents, "reach", None)
+        c = self.site.dispatcher.clients.get(robot)
+        t = c.telemetry if c is not None else None
+        if reach is None or t is None or t.pose is None or not isinstance(points, list) \
+                or not points or not isinstance(points[0], dict):
+            return []
+        if t.pose.map_id != map_id or t.pose.map_version != version:
+            return []
         try:
-            return self.site.routes.build_mission(name, body)
-        except RouteError as exc:
-            raise HttpError(400, str(exc), extra={"errors": exc.errors}) from exc
+            x, y = float(points[0]["x"]), float(points[0]["y"])
+        except (KeyError, TypeError, ValueError):
+            return []
+        if reach.path_m(map_id, version, (float(t.pose.x), float(t.pose.y)), (x, y)) is None:
+            why = f"{robot} 从现在的位置走不到这个点(被墙或禁行区隔开)"
+            return [{"index": 0, "problem": why}]
+        return []
 
     def _nearest(self, method: str, user) -> None:
         """让最近的机器人过去看看(W44):``GET ?map_id=&map_version=&x=&y=`` → 谁、多少米、约几秒。
@@ -1498,11 +1729,25 @@ class _Handler(TlsHandlerMixin):
                 out.append((rid, t.pose.map_id, t.pose.map_version,
                             float(t.pose.x), float(t.pose.y)))
             return out
+        # 第 3 轮 duty N2:``exclude`` = 出事要人帮的那台(报警是它报的),不派它自己去看自己
+        skip = set((q.get("exclude") or [""])[0].split(",")) - {""}
         cands = [c for c in self.site.loop.call(lambda: _sync(gather))
-                 if c[1] == map_id and c[2] == version]
+                 if c[1] == map_id and c[2] == version and c[0] not in skip]
         reach = getattr(self.site.incidents, "reach", None)
         if not cands:
-            raise HttpError(404, "此地图上没有能派的机器人")
+            raise HttpError(404, "此地图上没有能派的机器人", extra={"excluded": sorted(skip)})
+        # 第 4 轮 duty N3:这张图上没标原点的出不了发(起飞前检查会拒),不推荐
+        try:
+            homed = {r["robot_id"] for r in disp.db.query(
+                "SELECT robot_id FROM homes WHERE map_id=? AND map_version=?", (map_id, version))}
+        except Exception:  # noqa: BLE001 —— 老库没有原点表:不筛
+            homed = {c[0] for c in cands}
+        no_home = sorted(c[0] for c in cands if c[0] not in homed)
+        cands = [c for c in cands if c[0] in homed]
+        if not cands:
+            raise HttpError(404, f"能派的机器人在这张图上都没标原点,出不了发:{'、'.join(no_home)}",
+                            extra={"reason": "no_home", "robots": no_home,
+                                   "excluded": sorted(skip)})
         if reach is None:
             raise HttpError(404, "站点没有此地图的规划栅格,无法确定最近的机器人")
         from nexwar_site.nearest import nearest
@@ -1557,12 +1802,20 @@ class _Handler(TlsHandlerMixin):
         if method != "POST":
             raise HttpError(405, "只支持 GET/POST")
         d = self._body()
+        self._audit_target = robot_id
         try:
             if d.get("remove") is True:
                 was = [p for p in stb.list(robot_id) if p["name"] == d.get("name")]
+                self._audit_detail = {"op": "remove", "name": d.get("name"),
+                                      "was": [{k: p.get(k) for k in ("map_id", "map_version", "x",
+                                                                    "y", "yaw")} for p in was]}
                 stb.remove(robot_id, d.get("name"))
                 maps = {(p["map_id"], p["map_version"]) for p in was}
             else:
+                old = [p for p in stb.list(robot_id) if p["name"] == d.get("name")]
+                self._audit_detail = {"op": "update" if old else "add", "name": d.get("name"),
+                                      "map": f"{d.get('map_id')}:{d.get('map_version')}",
+                                      "x": d.get("x"), "y": d.get("y"), "yaw": d.get("yaw", 0.0)}
                 stb.set(robot_id, d.get("name"), map_id=d.get("map_id"),
                         map_version=d.get("map_version"), x=d.get("x"), y=d.get("y"),
                         yaw=d.get("yaw", 0.0), default=d.get("default"))
@@ -1662,6 +1915,13 @@ class _Handler(TlsHandlerMixin):
         book = self.site.areas
         if book is None:
             raise HttpError(404, "此站点未启用防区")
+        if method == "POST" and getattr(self.site, "maps", None) is not None:
+            # 第 3 轮 setup N2:删掉的版本(或没有的版本)不许再往上写布置
+            from nexwar_site.maps import MapError
+            try:
+                self.site.maps.get(map_id, version)
+            except MapError as exc:
+                raise HttpError(404, str(exc)) from exc
         from nexwar_site.guard_plan import GuardPlanError
         posts = zone_posts(self.site)
         marks = map_marks(self.site)
@@ -1829,6 +2089,11 @@ class _Handler(TlsHandlerMixin):
                 if not isinstance(days, int) or isinstance(days, bool) or not 1 <= days <= 3650:
                     raise HttpError(400, "证书有效天数要是 1–3650 的整数")
                 self._audit_target, self._audit_detail = rid, {"days": days}
+                if rid in self.site.open_revoked:
+                    raise HttpError(409, f"{rid} 解绑后旧连接可能还开着(消息服务器还没重启):"
+                                         "重启消息服务器(systemctl restart nexwar_mosquitto)"
+                                         "后才能重新登记同一编号",
+                                    extra={"reason": "old_connection_open"})
                 site_main.cmd_enroll(home, rid, days)
                 code = site_main.cmd_enroll_code(home, rid, d.get("host") or None, 24.0,
                                                  api_port=self._api_port())
@@ -1847,12 +2112,24 @@ class _Handler(TlsHandlerMixin):
                                                  api_port=self._api_port())
                 return self._send_json(200, {"robot_id": rid, "code": code, "hours": hours})
             wiped = self._unbind_robot(rid, user)
+            # 第 2 轮 N5:吊销会删掉旧码,先看领没领过;从没领过证书的狗不可能有旧连接
+            had_cert = site_main.cert_ever_claimed(home, rid) or wiped == "sent"
             summary = site_main.cmd_revoke(home, rid)
             out = {"robot_id": rid, "summary": summary, "robot_wipe": wiped}
             # 吊销进了 CRL,broker 重启才读:站点自己重启它(systemd 拉起来);做不到才叫人去重启
             restart = self.site.broker_restart
             if restart is None or not restart():
                 out["broker_restart"] = "systemctl restart nexwar_mosquitto"
+                # P0-10:旧证书的连接还开着;同一编号重新登记会把它当成新狗(不用激活就上线)
+                if had_cert:
+                    self.site.open_revoked.add(rid)
+                    out["old_connection_open"] = True
+            else:
+                self.site.open_revoked.clear()          # 重启过,之前吊销的连接也都断了
+            try:
+                self.site.loop.call(lambda: self.site.dispatcher.sync_robots())
+            except Exception:                          # 摘不掉也不影响吊销本身;定期同步会再摘
+                log.warning("解绑后摘机器人客户端失败", exc_info=True)
             return self._send_json(200, out)
         except site_main.SiteError as exc:
             msg = str(exc)
@@ -1984,7 +2261,12 @@ class _Handler(TlsHandlerMixin):
             mode = d.get("mode")
             self._need(user, ARM if mode == "armed" else SET_MODE)
             self._audit_target = str(mode)[:16]
-            self._audit_detail = {k: d[k] for k in ("zones", "minutes") if k in d}
+            try:
+                was = desk.view().get("mode")
+            except Exception:  # noqa: BLE001 —— 只是记一笔,读不出不挡
+                was = None
+            self._audit_detail = {"from": was, "to": mode} | {
+                k: d[k] for k in ("zones", "minutes") if k in d}
             return self._send_json(200, desk.set_mode(mode, by=str(user), zones=d.get("zones"),
                                                       minutes=d.get("minutes")))
         except ModeError as exc:
@@ -2008,17 +2290,32 @@ class _Handler(TlsHandlerMixin):
         self._need(user, SCHEDULE)          # W53:布防时间经理也能排
         d = self._body()
         try:
+            if path == "/api/arming/schedule/preview":
+                # 第 4 轮 config N1 / N2:保存前问「此刻会变成什么」,按站点的钟、逐个防区(只读)
+                self._skip_audit = True
+                return self._send_json(200, desk.preview(d))
             if path == "/api/arming/schedule":
                 slots = d.get("slots")
                 self._audit_detail = {"enabled": d.get("enabled"),
                                       "slots": len(slots) if isinstance(slots, list) else None}
+                before = desk.view() if sch.enabled() else None
                 sch.put(d, by=str(user))
+                if before is not None and before["source"] == "schedule" and not sch.enabled():
+                    # 第 3 轮 config N1:停用日程时站点照「此刻」的状态走手动(原来退回到开日程之前的
+                    # 手动模式,可能悄悄变成留守 / 布防)。手动没有「全撤防」,此刻撤防的落到留守
+                    desk.set_mode("home" if before["state"] == "disarmed" else "armed",
+                                  by=str(user))
             elif path == "/api/arming/exceptions":
                 self._audit_detail = {k: d.get(k) for k in ("first_day", "last_day", "state")}
                 sch.add_exception(d, by=str(user))
             else:
                 eid = int(_ARM_EX.match(path).group(1))
                 self._audit_target = f"exception/{eid}"
+                # 第 4 轮 admin P1-66:删的是哪几天,活动记录里写出来
+                old = next((e for e in sch.exceptions() if e["id"] == eid), None)
+                if old:
+                    self._audit_detail = {k: old.get(k) for k in ("first_day", "last_day", "state")}
+                    self._audit_detail["removed"] = True
                 if not sch.remove_exception(eid):
                     raise HttpError(404, "没有这一条例外")
         except ScheduleError as exc:
@@ -2332,17 +2629,141 @@ class _Handler(TlsHandlerMixin):
         self._need(user, MANAGE)
         if path == "/api/health":
             return self._send_json(200, desk.view())
+        if path == "/api/support-bundle/window":
+            # 网页先问一下按这个场景取哪一段(显示出来,可以改了再下载);不打包、不记操作记录
+            self._skip_audit = True
+            return self._send_json(200, self._bundle_window())
+        return self._send_bundle(self._bundle_window(), by=str(user))
+
+    def _send_bundle(self, win: dict[str, Any], *, by: str,
+                     more: dict[str, bytes] | None = None) -> None:
+        """按时间段、场景现打一个诊断包发出去(日志设计 第 5、6 条)。"""
         import tempfile
 
         from nexwar_site.health import support_bundle
-        q = parse_qs(self.path.split("?", 1)[1] if "?" in self.path else "")
-        h = q.get("hours", ["24"])[0]
-        hours = min(max(int(h), 1), 168) if h.isdigit() else 24      # W55:时间段,最长 7 天
-        extra = self._bundle_extra(hours)
+        desk = self.site.health
+        if desk is None:
+            raise HttpError(404, "此站点未启用体检")
+        now = self.site._now()
+        # 包里有位置轨迹、日志:谁在什么时候导出了哪一段,进操作记录(GET 本来不记)
+        self._audit_view(f"support-bundle/{win['scene']}/{win['since_ms']}-{win['until_ms']}",
+                         action="DOWNLOAD")
+        span_h = max(1, min(168, (now - win["since_ms"]) // 3_600_000 + 1))
+        extra = self._bundle_extra(span_h, robot=win["robot"])
+        extra.update(more or {})
+        log.warning("导出诊断包 actor=%s 场景=%s 时间段=%d..%d", self._actor or by, win["scene"],
+                    win["since_ms"], win["until_ms"])
         with tempfile.TemporaryDirectory(prefix="nexwar_bundle-") as tmp:
             out = support_bundle(Path(tmp) / "support.tar.gz", home=desk.home, db=desk.db,
-                                 health=desk, now_ms=self.site._now(), hours=hours, extra=extra)
+                                 health=desk, now_ms=now, extra=extra, by=by,
+                                 robot_logs=getattr(self.site, "robot_logs", None), **win)
             return self._send_bytes(out.read_bytes(), "application/gzip")
+
+    # ------------------------------------------------------------ 问题单(日志设计 第 6 条)
+
+    def _problems(self) -> Any:
+        desk = getattr(self.site, "problem_reports", None)
+        if desk is None:
+            raise HttpError(404, "此站点未启用问题单")
+        return desk
+
+    def _problem_submit(self) -> None:
+        """App 传日志开问题单。登录着的记谁传的、给一个下载这张单整包的凭证;没登录的也收(限量)。"""
+        from nexwar_site.problem_reports import MAX_BYTES, ReportRefused
+        desk = self._problems()
+        user = None
+        if self._token():
+            with contextlib.suppress(HttpError):
+                user = self._user()
+        remote = self.client_address[0]
+        self._actor = str(user) if user is not None else f"anonymous@{remote}"
+        try:
+            n = int(self.headers.get("Content-Length") or 0)
+        except ValueError as exc:
+            raise HttpError(400, "Content-Length 不是数") from exc
+        if n <= 0:
+            raise HttpError(400, "没有日志")
+        if n > MAX_BYTES:
+            self.close_connection = True
+            raise HttpError(413, f"日志超过 {MAX_BYTES // 2**20} MB")
+        data = self._read(n)
+        q = parse_qs(self.path.split("?", 1)[1] if "?" in self.path else "")
+
+        def one(k: str) -> str:
+            return (q.get(k) or [""])[0]
+        robot = one("robot")
+        if robot and not SAFE_ID.match(robot):
+            raise HttpError(400, "机器人编号不对")
+        try:
+            out = desk.submit(data=data, by=self._actor, remote=remote, note=one("note"),
+                              robot=robot, device=one("device"), app=one("app"),
+                              signed_in=user is not None)
+        except ReportRefused as exc:
+            raise HttpError(exc.status, str(exc)) from exc
+        self._audit_target = out["code"]
+        self._audit_detail = {"note": one("note")[:200], "robot": robot or None,
+                              "bytes": len(data), "signed_in": user is not None}
+        return self._send_json(200, out)
+
+    def _problem_bundle(self, code: str, user) -> None:
+        """一张问题单的整包:传单前 2 小时到传单后 10 分钟 + App 的日志。工程师(``maintain``)
+        取,或者传单的人凭那张单的凭证取(站点连不了外网时用手机分享给工程师)。"""
+        desk = self._problems()
+        meta = desk.get(code)
+        if meta is None:
+            raise HttpError(404, f"没有这张问题单:{code}")
+        if user is None:
+            q = parse_qs(self.path.split("?", 1)[1] if "?" in self.path else "")
+            if not desk.token_ok(code, (q.get("t") or [""])[0]):
+                raise HttpError(401, "凭证不对")
+            self._actor = f"{meta['by']}(问题单凭证)"
+        since, until = desk.window(code)
+        robot = meta.get("robot") or None
+        win = {"since_ms": since, "until_ms": until, "robot": robot, "task": None,
+               "scene": f"问题单 {code}:{meta.get('note') or '-'}"}
+        from nexwar_site.remote_ops import dumps
+        more = {f"clients/app-{code}.log.gz": desk.app_log(code),
+                "clients/problem.json": dumps({k: v for k, v in meta.items()
+                                               if k != "token_hash"})}
+        self._audit_target = code
+        return self._send_bundle(win, by=str(user) if user is not None else self._actor,
+                                 more=more)
+
+    def _bundle_window(self) -> dict[str, Any]:
+        """诊断包的时间段、场景(日志设计 第 5 条):``from``/``to`` 毫秒;``robot`` / ``task`` /
+        ``alert`` / ``run``(巡检记录编号)给了按它自动取,手动给的时间段优先;老的 ``hours``
+        是「最近几小时」。"""
+        from nexwar_site.health import scene_window
+        q = parse_qs(self.path.split("?", 1)[1] if "?" in self.path else "")
+
+        def one(k: str) -> str | None:
+            v = (q.get(k) or [""])[0].strip()
+            return v[:128] or None
+
+        def ms(k: str) -> int | None:
+            v = one(k)
+            if v is None:
+                return None
+            if not v.isdigit():
+                raise HttpError(400, f"{k} 要是毫秒时刻")
+            return int(v)
+        now = self.site._now()
+        h = q.get("hours", ["24"])[0]
+        hours = min(max(int(h), 1), 168) if h.isdigit() else 24      # W55:老的「最近几小时」
+        # 日志设计 第 5 条:按时间段(from/to)、按场景(robot / task / alert)导出
+        run = ms("run")
+        since = ms("from")
+        if since is None and not (one("task") or one("alert") or run is not None):
+            since = now - hours * 3_600_000
+        robot = one("robot")
+        if robot is not None and not SAFE_ID.match(robot):
+            raise HttpError(400, "机器人编号不对")
+        try:
+            return scene_window(self.site.health.db, now_ms=now, since_ms=since,
+                                until_ms=ms("to"), robot=robot, task=one("task"),
+                                alert=one("alert"), run=run)
+        except ValueError as exc:
+            raise HttpError(400, str(exc)) from exc
 
     def _push_devices(self, method: str, path: str, user) -> None:
         """这部手机收不收 P1 推送(商业化 A6):``POST /api/push/devices`` 登记推送号、
@@ -2474,7 +2895,10 @@ class _Handler(TlsHandlerMixin):
         mr, ms = _ROUTE.match(path), _ROUTE_SCHED.match(path)
         read = method == "GET"
         # W53:日程(``/api/route-schedules``)经理也能改;路线、时区、导出还是 manage
-        self._need(user, VIEW if read else SCHEDULE if ms is not None else MANAGE)
+        # P1-16:只查不存的 /api/route-check:临时路线(``points``)能派巡逻的就能查,
+        # 路线库的点要 manage(下面再查)
+        self._need(user, VIEW if read else SCHEDULE if ms is not None
+                   else PATROL if path == "/api/route-check" else MANAGE)
         try:
             if read:
                 if path == "/api/routes":
@@ -2504,6 +2928,21 @@ class _Handler(TlsHandlerMixin):
             d = self._body()
             if path == "/api/guard-routes/generate":
                 return self._guard_generate(d, user)
+            if path == "/api/route-check":
+                # 网页易用性 P1-39:画的时候就查(跟存路线同一套逐点检查,不存、不进历史);
+                # 查成了不进操作记录(一会儿一次),出错的照样记
+                if "points" in d:
+                    errs = store.check_points({
+                        "map_id": d.get("map_id"), "map_version": d.get("map_version"),
+                        "waypoints": self._temp_waypoints(d.get("points"))})
+                    if not errs and isinstance(d.get("robot"), str):
+                        errs = self._reach_first(d["robot"], d.get("map_id"), d.get("map_version"),
+                                                 d.get("points"))
+                else:
+                    self._need(user, MANAGE)
+                    errs = store.check_points(d)
+                self._skip_audit = True
+                return self._send_json(200, {"errors": errs})
             if mr is not None and mr.group(2) == "/eta":
                 raise HttpError(405, "此接口只能 GET")
             if path == "/api/route-timezone":
@@ -2576,8 +3015,11 @@ class _Handler(TlsHandlerMixin):
     def _halt(self, robot_id: str, user) -> None:
         """停车(W00c5c):走 cmd,不走遥控连接。``abort`` 权限 —— 经理也能按。"""
         self._need(user, ABORT)
-        self._body()
+        d = self._body()
         self._audit_target = robot_id
+        self._registered(robot_id)
+        self._audit_detail = {"doing": self._doing(robot_id)} | (
+            {"why": str(d["reason"])[:200]} if d.get("reason") else {})
         try:
             if self.site.teleop is not None:
                 r = self.site.teleop.halt(robot_id, user)
@@ -2594,6 +3036,18 @@ class _Handler(TlsHandlerMixin):
             # 狗说停车没成(W00c5e 内部评审):任务它中止了,腿停没停住不知道。
             raise HttpError(502, f"机器人说停车失败({ack.get('reason', '')}):按机身急停")
         return self._send_json(200, r)
+
+    def _doing(self, robot_id: str) -> dict[str, Any]:
+        """这台机器人此刻在做什么(操作记录用):任务号、任务名、状态。读不到给空。"""
+        try:
+            c = self.site.dispatcher.clients.get(robot_id)
+            st = c.status if c is not None else None
+            task = st.task if st is not None else None
+            if task is None:
+                return {"task": None}
+            return {"task": task.task_id, "kind": task.kind, "state": task.state.value}
+        except Exception:  # noqa: BLE001
+            return {}
 
     def _resume(self, robot_id: str, user) -> None:
         """解除叫停(W00c5e):之后站点才重新给这只狗派单。``dispatch`` 权限 —— 经理能停,不能恢复
@@ -2647,12 +3101,18 @@ class _Handler(TlsHandlerMixin):
         return self._send_json(200, self.site.dispatch(lambda: self.site.dispatcher.deter(
             robot_id, d, issued_by=str(user), priority=MANUAL)))
 
+    def _registered(self, robot_id: str) -> None:
+        """第 2 轮 P2-25:没登记过的机器人回 404(跟派单、视频一致),不是 409「条件不满足」。"""
+        if self.site.dispatcher.registry.get(robot_id) is None:
+            raise HttpError(404, f"没有登记过 {robot_id}")
+
     def _posture(self, robot_id: str, user) -> None:
         """站起、趴下、蹲下(POC 2026-11):``{"mode": "stand"|"lie"|"crawl"}``。跟遥控同一个权限
         (人手动让机身动)。狗拒了(有任务在跑、急停……)回 409、原因原样带回。"""
         from nexwar_contract.hal import POSTURES
         self._need(user, TELEOP)
         self._audit_target = robot_id
+        self._registered(robot_id)
         d = self._body()
         mode = d.get("mode") if isinstance(d, dict) else None
         if not isinstance(mode, str) or mode not in POSTURES:
@@ -3023,7 +3483,7 @@ class _Handler(TlsHandlerMixin):
             raise HttpError(409, f"机器人未执行:{reason}", extra={"reason": reason})
         return self._send_json(200, ack.get("data") if isinstance(ack.get("data"), dict) else {})
 
-    def _bundle_extra(self, hours: int) -> dict[str, bytes]:
+    def _bundle_extra(self, hours: int, robot: str | None = None) -> dict[str, bytes]:
         """诊断包里另外带的(W55):每台在线机器人的诊断快照、主要服务的日志;App、网页的错误记录。
         机器人那边一项取不到写进它的 errors.txt,别的照样打包。"""
         from nexwar_site.remote_ops import dumps, robot_unit
@@ -3050,7 +3510,7 @@ class _Handler(TlsHandlerMixin):
             jobs: list[tuple[str, str, dict[str, Any]]] = []
             for rid, c in list(getattr(disp, "clients", {}).items()):
                 tasks = getattr(getattr(c, "capabilities", None), "tasks", {}) or {}
-                if not (c.status and c.status.online):
+                if not (c.status and c.status.online) or (robot is not None and rid != robot):
                     continue
                 if "ops_diag" in tasks:
                     jobs.append((rid, "ops_diag", {}))
@@ -3075,16 +3535,17 @@ class _Handler(TlsHandlerMixin):
                 if st != "ok":
                     errs.append(str(data))
                 elif kind == "ops_diag":
-                    out[f"robots/{rid}/diag.json"] = dumps(data)
+                    out[f"robots/{rid}/live/diag.json"] = dumps(data)
                 else:
-                    out[f"robots/{rid}/{p['unit']}.log"] = str(
+                    # 导出这一刻机器人上的(还没传上来的那段在这里)
+                    out[f"robots/{rid}/live/{p['unit']}.log"] = str(
                         (data or {}).get("text", "")).encode()
             if errs:
-                out[f"robots/{rid}/errors.txt"] = ("\n".join(errs) + "\n").encode()
+                out[f"robots/{rid}/live/errors.txt"] = ("\n".join(errs) + "\n").encode()
         return out
 
     def _client_errors(self, method: str, user) -> None:
-        """W55:App、网页报自己的错误(登录着的谁都能报);站点留 14 天,进诊断包。"""
+        """W55:App、网页报自己的错误(登录着的谁都能报);站点留 90 天,进诊断包。"""
         if method != "POST":
             raise HttpError(405, "只支持 POST")
         if self.site.client_errors is None:
@@ -3105,6 +3566,37 @@ class _Handler(TlsHandlerMixin):
         self._need(user, MAINTAIN)
         what = path.removeprefix("/api/system/")
         priv = self.site.priv
+        if what == "caps":
+            # 网页易用性 P1-06:做不到的按钮先灰着、写原因(不用点了才说)
+            if method != "GET":
+                raise HttpError(405, "只支持 GET")
+            return self._send_json(200, {
+                "priv": priv is not None,
+                "push": bool(self.site.push is not None and self.site.push.senders),
+                # 网页易用性第 2 轮 P1-65:没装 VPN,开工程师账号时「签发 VPN」先灰着
+                "vpn": bool(self.site.vpn is not None and self.site.vpn.ready),
+                "debug_log": self.site.home is not None})
+        if what == "debug-log":
+            # 日志设计 第 3 条:站点自己的「详细日志 N 分钟」(到点自动恢复;
+            # 机器人的在诊断页各自那一块)
+            from nexwar_contract.debuglog import set_until, until_ms
+            from nexwar_site.main import DEBUG_FLAG
+            if self.site.home is None:
+                raise HttpError(404, "这个站点没有站点目录,开不了详细日志")
+            flag = self.site.home / DEBUG_FLAG
+            if method == "POST":
+                minutes = self._body().get("minutes")
+                if isinstance(minutes, bool) or not isinstance(minutes, int) \
+                        or not 0 <= minutes <= 120:
+                    raise HttpError(400, "minutes 要 0–120 的整数(0 = 关)")
+                until = self._now() + minutes * 60_000 if minutes else 0
+                set_until(flag, until)
+                self._audit_detail = {"minutes": minutes}
+                log.warning("站点详细日志 %s actor=%s", f"开 {minutes} 分钟" if minutes else "关",
+                            self._actor)
+                return self._send_json(200, {"until_ms": until})
+            u = until_ms(flag)
+            return self._send_json(200, {"until_ms": u if u > self._now() else 0})
         if what == "push-test":
             if method != "POST":
                 raise HttpError(405, "只支持 POST")
@@ -3219,19 +3711,21 @@ class _Handler(TlsHandlerMixin):
                     raise HttpError(400, "文件未传完")
                 fh.write(chunk)
                 left -= len(chunk)
+        # 网页易用性 P1-77:先看文件对不对,再核密码(选错文件不用白输密码)
+        import tarfile
+        try:
+            with tarfile.open(dest, "r:gz") as tf:
+                if not any(m.name.endswith("/release.json") for m in tf.getmembers()):
+                    dest.unlink(missing_ok=True)
+                    raise HttpError(400, NOT_SITE_PKG)
+        except (tarfile.TarError, OSError, EOFError) as exc:
+            dest.unlink(missing_ok=True)
+            raise HttpError(400, NOT_PKG) from exc
         try:
             self._confirm(user, {"confirm_password": self.headers.get("X-Nexwar-Confirm") or ""})
         except HttpError:
             dest.unlink(missing_ok=True)
             raise
-        import tarfile
-        try:
-            with tarfile.open(dest, "r:gz") as tf:
-                if not any(m.name.endswith("/release.json") for m in tf.getmembers()):
-                    raise HttpError(400, "这不是站点升级包(里面没有 release.json)")
-        except (tarfile.TarError, OSError, EOFError) as exc:
-            dest.unlink(missing_ok=True)
-            raise HttpError(400, "这不是升级包(打不开)") from exc
         return name
 
     def _app_update(self, method: str, path: str, user) -> None:
@@ -3730,6 +4224,14 @@ class _Handler(TlsHandlerMixin):
                 raise HttpError(400, "adopt.intercepts 要是带过来的拦截点名字的列表")
             want_sb, want_ic = [tuple(p) for p in sb], list(ic)
         n_adopt = len(adopt.get("zones", []) or []) if isinstance(adopt, dict) else 0
+        if adopt is None and not zones.current(map_id, version).zones:
+            # 第 3 轮 maps N1:有从上一版带过来、还没核的禁行区,不许直接确认一个空集
+            # (那样发布后禁区全丢)
+            op = zones.proposal(map_id, version)
+            if op is not None and op.get("zones"):
+                raise HttpError(409, f"{map_id}:{version} 有从第 {op['from_version']} 版带过来、"
+                                     f"还没核的 {len(op['zones'])} 个禁行区:先采纳或丢掉,再确认",
+                                extra={"reason": "proposal_open"})
         if not zones.current(map_id, version).zones and not n_adopt and empty_ok is not True:
             prev = zones.view(map_id, version).get("previous")
             raise HttpError(409, f"{map_id}:{version} 一个禁行区、限速区都没有:确认之前再看一眼 ——"
@@ -3889,7 +4391,12 @@ class _Handler(TlsHandlerMixin):
             robots = {rid: ((c.capabilities.tasks.get("release_install") or {}).get("current")
                             if c.capabilities is not None else None)
                       for rid, c in self.site.dispatcher.clients.items()}
-            return self._send_json(200, {"releases": cat.list(), "robots": robots})
+            # 网页易用性 P1-78:哪台报过「能退回上一版」,不能的网页就不给那个按钮(原来点了才说不支持)
+            rollback = {rid: (c.capabilities is not None
+                              and "release_rollback" in c.capabilities.tasks)
+                        for rid, c in self.site.dispatcher.clients.items()}
+            return self._send_json(200, {"releases": cat.list(), "robots": robots,
+                                         "rollback": rollback})
         m = _RELCMD.match(path)
         if m is None or method != "POST":
             raise HttpError(404, f"没有 {method} {path}")
@@ -3977,8 +4484,14 @@ class _Handler(TlsHandlerMixin):
                         raise HttpError(400, "文件未传完")
                     fh.write(chunk)
                     left -= len(chunk)
-            # 先收完再验密码:没读完就回 403,浏览器那边多半只看到「连接断了」,看不到「密码不对」
-            self._confirm(user, {"confirm_password": self.headers.get("X-Nexwar-Confirm") or ""})
+            # 网页易用性 P1-77:先看文件对不对(只读目录,不解开),再核密码 —— 选错文件不用白输密码
+            try:
+                with tarfile.open(raw, "r:gz") as tf:
+                    names = [Path(m.name) for m in tf.getmembers()]
+            except (tarfile.TarError, OSError, EOFError) as exc:
+                raise HttpError(400, NOT_PKG) from exc
+            if not any(len(p.parts) == 2 and p.name == "release.json" for p in names):
+                raise HttpError(400, NOT_ROBOT_PKG)
             out = tmp / "x"
             out.mkdir()
             try:
@@ -3991,24 +4504,33 @@ class _Handler(TlsHandlerMixin):
                     tf.extractall(out, **({"filter": "data"} if hasattr(tarfile, "data_filter")
                                           else {}))
             except (tarfile.TarError, OSError, EOFError) as exc:
-                raise HttpError(400, "这不是升级包(打不开)") from exc
+                raise HttpError(400, NOT_PKG) from exc
             tops = [p for p in out.iterdir() if (p / "release.json").is_file()]
             if len(tops) != 1:
-                raise HttpError(400, "这不是升级包(里面没有 release.json)")
+                raise HttpError(400, NOT_ROBOT_PKG)
             note = str(self.headers.get("X-Release-Note") or "")[:200]
             self._audit_target = tops[0].name
+            cat = ReleaseCatalog(self.site.home, self.site.dispatcher.db, now_ms=self.site._now,
+                                 pubkey=site_main.release_pubkey(self.site.home))
             try:
-                row = ReleaseCatalog(self.site.home, self.site.dispatcher.db, now_ms=self.site._now,
-                                     pubkey=site_main.release_pubkey(self.site.home)
-                                     ).add(tops[0], note=note or "网页上传")
+                # 第 3 轮 P1-77:签名不对、已登记这些先核,再要密码(原来先要密码,再在密码框下
+                # 报错、清空密码,人以为是密码错了)。先收完再验密码:没读完就回 403,
+                # 浏览器多半只看到「连接断了」
+                cat.add(tops[0], check_only=True)
+                pw = self.headers.get("X-Nexwar-Confirm") or ""
+                self._confirm(user, {"confirm_password": pw})
+                row = cat.add(tops[0], note=note or "网页上传")
             except ReleaseCatalogError as exc:
                 msg = str(exc)
                 if "已登记" in msg:
-                    raise HttpError(409, "此版本已存在") from exc
+                    raise HttpError(409, "此版本已存在",
+                                    extra={"reason": "bad_package"}) from exc
                 if "签名" in msg or "公钥" in msg:
-                    raise HttpError(400, f"升级包的签名不匹配,不是公司发的({msg})") from exc
+                    raise HttpError(400, f"升级包的签名不匹配,不是公司发的({msg})",
+                                    extra={"reason": "bad_package"}) from exc
                 if "指纹" in msg:
-                    raise HttpError(400, "升级包已损坏(文件与清单不匹配)") from exc
+                    raise HttpError(400, "升级包已损坏(文件与清单不匹配)",
+                                    extra={"reason": "bad_package"}) from exc
                 raise HttpError(400, msg) from exc
             except site_main.SiteError as exc:
                 raise HttpError(500, str(exc)) from exc
@@ -4214,9 +4736,12 @@ class _Handler(TlsHandlerMixin):
             rows = store.list(robot_id=(q.get("robot") or [None])[0],
                               camera=(q.get("camera") or [None])[0], since_ms=num("since"),
                               until_ms=num("until"), limit=num("limit") or 500)
-            return self._send_json(200, {"recordings": rows, "segment_s": SEGMENT_S})
+            return self._send_json(200, {"recordings": rows, "segment_s": SEGMENT_S,
+                                         "robots": store.robots()})
         if path == "/api/recordings/frame":
             return self._rec_frame(method, store, user)
+        if path == "/api/recordings/clip":
+            return self._rec_clip(method, store, user)
         m = _REC.match(path)
         assert m is not None
         rid, what = int(m.group(1)), m.group(2)
@@ -4241,6 +4766,52 @@ class _Handler(TlsHandlerMixin):
             raise HttpError(400, "要 keep: true/false")
         self._audit_detail = {"keep": body["keep"]}
         return self._send_json(200, {"recording": store.set_keep(rid, body["keep"])})
+
+    def _rec_clip(self, method: str, store, user) -> None:
+        """第 3 轮 duty N4:按时间段导出(原来一次只能下 1 分钟一段,10 分钟证据要点 10 次)。
+        ``GET ?robot=&camera=&since=&until=``(毫秒,最长 60 分钟)→ 一个 zip,里面每段一个 mp4,
+        文件名「机器人-摄像头-日期-时分秒.mp4」(站点本地时区)。只给能导出证据的(管理员)。"""
+        import tempfile
+        import zipfile
+        if method != "GET":
+            raise HttpError(405, "只收 GET")
+        self._need(user, EXPORT)
+        q = parse_qs(self.path.split("?", 1)[1] if "?" in self.path else "")
+        robot = (q.get("robot") or [""])[0]
+        camera = (q.get("camera") or [""])[0]
+        if not SAFE_ID.match(robot) or not SAFE_ID.match(camera):
+            raise HttpError(400, "要 robot、camera")
+        try:
+            since, until = int((q.get("since") or [""])[0]), int((q.get("until") or [""])[0])
+        except ValueError as exc:
+            raise HttpError(400, "since、until 要是毫秒整数") from exc
+        if until <= since or until - since > CLIP_MAX_MS:
+            raise HttpError(400, f"时间段要在 0–{CLIP_MAX_MS // 60_000} 分钟之间")
+        rows = [r for r in store.list(robot_id=robot, camera=camera, since_ms=since,
+                                      until_ms=until, limit=500)
+                if store.path(r).is_file()]
+        if not rows:
+            raise HttpError(404, "这段时间没有录像")
+        rows.sort(key=lambda r: r["start_ms"])
+        self._audit_view(f"recording-clip/{robot}/{camera}/{since}-{until}", action="DOWNLOAD")
+        with tempfile.TemporaryFile() as tmp:
+            with zipfile.ZipFile(tmp, "w", zipfile.ZIP_STORED) as z:
+                for r in rows:
+                    stamp = time.strftime("%Y-%m-%d-%H%M%S", time.localtime(r["start_ms"] / 1000))
+                    z.write(store.path(r), f"{robot}-{camera}-{stamp}.mp4")
+            size = tmp.tell()
+            tmp.seek(0)
+            first = time.strftime("%Y-%m-%d-%H%M", time.localtime(since / 1000))
+            self._status = 200
+            self.send_response(200)
+            self.send_header("Content-Type", "application/zip")
+            self.send_header("Content-Length", str(size))
+            self.send_header("Content-Disposition",
+                             f'attachment; filename="{robot}-{camera}-{first}.zip"')
+            self.send_header("Cache-Control", "no-store")
+            self.end_headers()
+            while chunk := tmp.read(1 << 16):
+                self.wfile.write(chunk)
 
     def _audit_view(self, target: str, *, action: str = "VIEW") -> None:
         """看了、下载了证据(W30,PDPA):记审计。同一个人看同一样东西 10 分钟内只记一次(放录像、
@@ -4338,6 +4909,7 @@ class _Handler(TlsHandlerMixin):
         if self._still():
             frames.close()                     # 取一张就走;那一路还留 idle_s 秒,下一张接得上
             return self._send_bytes(first, "image/jpeg")
+        self._audit_view(f"live/{robot_id}/{what}")      # 日志设计 第 1 条:看实时画面也记
         self._mjpeg(frames, first, VideoError)
 
     def _video_ws(self, user) -> None:

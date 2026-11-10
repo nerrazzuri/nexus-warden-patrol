@@ -146,7 +146,8 @@ async function drag(el: Element, from: { clientX: number; clientY: number }, to:
 const MAPS = { maps: [{ map_id: "m1", version: "1", note: "", created_ms: 0, source: "" }] };
 
 type Posted = { path: string; body: any };
-function routesApi(opts: { meta: PreviewMeta; routes?: any[]; timezone?: string | null; schedules?: any[]; post?: (path: string, body: any) => Response | undefined }) {
+function routesApi(opts: { meta: PreviewMeta; routes?: any[]; timezone?: string | null; schedules?: any[]; post?: (path: string, body: any) => Response | undefined;
+  check?: (body: any) => Response }) {
   const posted: Posted[] = [];
   const view = () => ({ revision: 3, timezone: opts.timezone ?? null, routes: opts.routes ?? [], schedules: opts.schedules ?? [] });
   setFetch((async (url: RequestInfo | URL, init?: RequestInit) => {
@@ -156,6 +157,7 @@ function routesApi(opts: { meta: PreviewMeta; routes?: any[]; timezone?: string 
     if (u.includes("/api/routes?")) return json(view());
     if (init?.method === "POST") {
       const body = JSON.parse(String(init.body));
+      if (u.endsWith("/api/route-check")) return opts.check ? opts.check(body) : json({ errors: [] });   // P1-39 画的时候查,不算存
       posted.push({ path: u, body });
       const custom = opts.post?.(u, body);
       if (custom) return custom;
@@ -295,13 +297,37 @@ describe("路线页:站点的回答", () => {
     await tick();
     fireEvent.click(r.getByText("Save route"));
     await waitFor(() => expect(r.container.querySelectorAll("[data-point].bad").length).toBe(2));
-    expect(r.container.textContent).toContain("b 在图上不是可通行的地方");
-    expect(r.container.textContent).toContain("c 离建图时走过的地方");
+    // 第 2 轮 P1-39:英文界面按英文说原因
+    expect(r.container.textContent).toContain("b is not a walkable spot");
+    expect(r.container.textContent).not.toContain("在图上不是可通行的地方");
     expect(posted[0].body.base_revision).toBe(4);
     fail = false;
     fireEvent.click(r.getByText("Save route"));
     await waitFor(() => expect(posted.length).toBe(2));
     await waitFor(() => expect(r.container.querySelectorAll("[data-point].bad").length).toBe(0));
+  });
+
+  it("P1-39:画的时候就查,不用等存:错的点当场标红,改好了红的消掉", async () => {
+    installScreenCTM();
+    const checks: any[] = [];
+    let bad = true;
+    routesApi({ meta: META, routes: [ROUTE], check: (body) => {
+      checks.push(body);
+      return json({ errors: bad ? [{ index: 3, name: "P4", problem: "P4 在图上不是可通行的地方(墙、障碍或未扫到)" }] : [] });
+    } });
+    const r = render(<RoutesPage say={() => {}} />);
+    await ready(r.container);
+    await waitFor(() => expect(r.getByText("loop")).toBeTruthy());
+    fireEvent.click(r.getByText("loop"));
+    await tick();
+    fireEvent.click(r.container.querySelector("svg.map")!, clientOf(r.container, META, 5, 5));
+    await waitFor(() => expect(r.container.querySelectorAll("[data-point].bad").length).toBe(1), { timeout: 2000 });
+    expect(checks[0]).toMatchObject({ map_id: "m1", map_version: "1" });
+    expect(checks[0].waypoints.length).toBe(4);
+    expect(r.container.textContent).toContain("P4 is not a walkable spot");
+    bad = false;
+    fireEvent.click(r.container.querySelector("svg.map")!, clientOf(r.container, META, 6, 6));
+    await waitFor(() => expect(r.container.querySelectorAll("[data-point].bad").length).toBe(0), { timeout: 2000 });
   });
 
   it("存下了、但有点要原地转又贴墙(11-05 现场第 15、35 条):黄字提醒、点标出来,不挡存", async () => {
@@ -464,7 +490,7 @@ describe("路线页:站点的回答", () => {
     await waitFor(() => expect(r.getByText("n1")).toBeTruthy());
     expect(r.queryByText("n2")).toBeNull();
     fireEvent.input(r.container.querySelector('.form input[maxlength="64"]')!, { target: { value: "dawn" } });
-    fireEvent.input(r.container.querySelector('input[type="time"]')!, { target: { value: "05:30" } });
+    fireEvent.input(r.container.querySelector('input[name="at"]')!, { target: { value: "05:30" } });
     fireEvent.click(r.getByText("Add schedule"));
     await waitFor(() => expect(posted.length).toBe(1));
     expect(posted[0].path).toContain("/api/route-schedules/dawn");
@@ -475,6 +501,58 @@ describe("路线页:站点的回答", () => {
     await waitFor(() => expect(posted.length).toBe(2));
     expect(posted[1].path).toContain("/api/route-schedules/n1/delete");
     expect(posted[1].body).toEqual({ base_revision: 7 });
+  });
+
+  it("第 2 轮 config N2 / N3:编号自动给;用过的当场说、不发;同一时间重复排有提醒", async () => {
+    installScreenCTM();
+    const sch = { id: "loop-1", mission: "loop", at: "22:00", days: ["mon"], window_min: 30, on_missed: "skip", revision: 7 };
+    const elsewhere = { ...sch, id: "n2", mission: "other" };
+    const posted = routesApi({ meta: META, routes: [ROUTE], timezone: "UTC", schedules: [sch, elsewhere] });
+    const r = render(<RoutesPage say={() => {}} />);
+    await ready(r.container);
+    await waitFor(() => expect(r.getByText("loop")).toBeTruthy());
+    fireEvent.click(r.getByText("loop"));
+    await waitFor(() => expect(r.getByText("loop-1")).toBeTruthy());
+    const idBox = r.container.querySelector('.sched-form input[maxlength="64"]') as HTMLInputElement;
+    expect(idBox.value).toBe("loop-2");
+    fireEvent.input(idBox, { target: { value: "n2" } });                 // 别的路线的编号也算用过
+    expect(r.container.querySelector("[data-sched-dup]")).not.toBeNull();
+    fireEvent.click(r.getByText("Add schedule"));
+    await tick();
+    expect(posted.length).toBe(0);
+    fireEvent.input(idBox, { target: { value: "loop-9" } });
+    fireEvent.input(r.container.querySelector('input[name="at"]')!, { target: { value: "22:00" } });
+    expect(r.container.querySelector("[data-sched-same]")).not.toBeNull();
+  });
+
+  it("第 3 轮 config N6:加好以后编号换成下一个(列表刷新后挑),不标红「已被使用」", async () => {
+    installScreenCTM();
+    const sch = { id: "loop-1", mission: "loop", at: "22:00", days: ["mon"], window_min: 30, on_missed: "skip", revision: 7 };
+    const schedules: any[] = [sch];
+    routesApi({ meta: META, routes: [ROUTE], timezone: "UTC", schedules, post: (path, body) => {
+      if (path.includes("/api/route-schedules/") && !path.endsWith("/delete")) {
+        schedules.push({ ...sch, id: path.split("/").pop(), at: body.at, revision: 1 });
+        return json({ ok: true });
+      }
+      return undefined;
+    } });
+    const r = render(<RoutesPage say={() => {}} />);
+    await ready(r.container);
+    await waitFor(() => expect(r.getByText("loop")).toBeTruthy());
+    fireEvent.click(r.getByText("loop"));
+    await waitFor(() => expect(r.getByText("loop-1")).toBeTruthy());
+    const idBox = r.container.querySelector('.sched-form input[maxlength="64"]') as HTMLInputElement;
+    expect(idBox.value).toBe("loop-2");
+    fireEvent.input(r.container.querySelector('input[name="at"]')!, { target: { value: "05:30" } });
+    fireEvent.click(r.getByText("Add schedule"));
+    await waitFor(() => expect(r.getByText("loop-2")).toBeTruthy());
+    await waitFor(() => expect(idBox.value).toBe("loop-3"));
+    expect(r.container.querySelector("[data-sched-dup]")).toBeNull();
+    // 第 4 轮 r3-config-N6:开始时间也清掉,不再黄字说「这个时间已有」(指的是刚加的那一条)
+    expect((r.container.querySelector('input[name="at"]') as HTMLInputElement).value).toBe("");
+    expect(r.container.querySelector("[data-sched-same]")).toBeNull();
+    expect((r.getByText("Add schedule") as HTMLButtonElement).disabled).toBe(true);
+    expect(r.container.querySelector(".sched-list .muted.small")!.textContent).toBe("Mon");   // 星期写成 Mon,不是 mon
   });
 });
 
@@ -535,7 +613,7 @@ describe("地图页:点一点去这里 / 设位置,发出去的就是点的坐�
     fireEvent.click(r.container.querySelector("svg.map")!, clientOf(r.container, META, 1, 1));
     await tick();
     fireEvent.click(r.getByText("Go here"));
-    await waitFor(() => expect(r.container.querySelector("[data-pose-msg]")!.textContent).toContain("A 要人现场监护:先在手机上打开监护"));
+    await waitFor(() => expect(r.container.querySelector("[data-pose-msg]")!.textContent).toContain("needs someone supervising on site"));
   });
 
   it("设位置:先弹确认(写着 x、y、朝向),确认后发 relocalize,x/y/yaw 就是点的;取消不发", async () => {

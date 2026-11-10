@@ -6,11 +6,11 @@ import { useEffect, useRef, useState } from "preact/hooks";
 import { api, ApiError } from "./api";
 import type { Me } from "./app";
 import { modeLabel } from "./armingpage";
-import { Modal } from "./dialogs";
-import { hm } from "./data";
+import { Confirm, Modal } from "./dialogs";
+import { hm, siteClock } from "./data";
 import { lang, setLang, t, type Key } from "./i18n";
 import { Icon } from "./icons";
-import { canDispatch, isOwnerLike, type Mode } from "./model";
+import { canArm, canDispatch, isOwnerLike, type Mode } from "./model";
 
 export type GuardPage = "duty" | "live" | "map" | "recordings" | "alarms";
 /** 「管理」各页(W44 第二期,设计 §5):常用 = 现场概况、布防时间、授权和临时撤防、用户、机器人、报表;
@@ -18,6 +18,7 @@ export type GuardPage = "duty" | "live" | "map" | "recordings" | "alarms";
 export type AdminPage =
   | "admin/home" | "admin/arming" | "admin/access" | "admin/users" | "admin/robots" | "admin/reports"
   | "admin/layout" | "admin/maps" | "admin/localization" | "admin/diag" | "admin/upgrade" | "admin/system"
+  | "admin/activity"
   | "admin/mapedit";
 export type Page = GuardPage | AdminPage;
 
@@ -41,7 +42,7 @@ export const NAV_SECTIONS: NavSection[] = [
     { id: "admin/access", key: "tabAccess" }, { id: "admin/users", key: "tabUsers" },
   ] },
   { id: "system", key: "navSystem", items: [
-    { id: "admin/reports", key: "tabReports" }, { id: "admin/home", key: "tabHome", badge: "notices" },
+    { id: "admin/reports", key: "tabReports" }, { id: "admin/activity", key: "tabActivity" }, { id: "admin/home", key: "tabHome", badge: "notices" },
   ] },
   { id: "advanced", key: "navAdvanced", fold: true, items: [
     { id: "admin/maps", key: "tabMapMgmt" }, { id: "admin/localization", key: "tabLocalization" }, { id: "admin/diag", key: "tabDiag" },
@@ -64,9 +65,10 @@ export function navFor(role: string): NavSection[] {
 export function navLabel(page: Page): { section: Key; page: Key } | null {
   for (const g of NAV_SECTIONS) {
     const x = g.items.find((i) => i.id === page);
-    if (x) return { section: g.id === "advanced" ? "navSystem" : g.key, page: x.key };
+    // P2-19:标题里的组名跟侧栏一样(地图管理在「高级」下面,不再写「系统」)
+    if (x) return { section: g.key, page: x.key };
   }
-  return page === "admin/mapedit" ? { section: "navSystem", page: "tabMapMgmt" } : null;
+  return page === "admin/mapedit" ? { section: "navAdvanced", page: "tabMapMgmt" } : null;
 }
 /** 改版前的地址(书签、手机分享的链接)。 */
 const LEGACY: Record<string, Page> = {
@@ -156,20 +158,33 @@ export function TopBar(props: {
   pref: ThemePref;
   onPref: (p: ThemePref) => void;
   onStop: () => void;
-  onSignOut: () => void;
+  /** 第 2 轮 duty N10:有几台被叫停、等人点恢复(哪一页都看得见,点了去总览恢复)。 */
+  held?: number;
+  stale?: boolean;
+  onSignOut: (note?: string) => void;
   onSay: (s: string) => void;
   /** 「?」:使用教程、常见问题(W53)。 */
   onHelp?: () => void;
 }) {
   return (
     <header class="topbar">
-      <a class="skip" href="#main">Skip to content</a>
       <PageTitle page={props.page} />
-      {props.mode && <ArmState mode={props.mode} />}
+      {props.mode && <ArmState mode={props.mode} role={props.me.role} stale={props.stale} />}
+      {!!props.held && props.page !== "duty" && (
+        <a href="#/duty" class="heldchip" data-held-chip="1">{t("topHeld", { n: props.held })}</a>
+      )}
       <a href="#/alarms" class={props.alarms ? "alarmcount on" : "alarmcount"} aria-live="polite">
         {t("alarmCount", { n: props.alarms == null ? "?" : props.alarms })}
       </a>
-      <span class="clock mono">{new Date(props.now).toLocaleTimeString("en-GB", { hour12: false })}</span>
+      {/* P2-27:小一点,带上日期(值夜班跨零点看得清是哪天) */}
+      <span class="clock mono" data-tz={props.mode?.timezone ?? ""} title={(() => {
+        const o: Intl.DateTimeFormatOptions = { weekday: "long", year: "numeric", month: "long", day: "numeric" };
+        const loc = lang.value === "zh" ? "zh-CN" : "en-GB";
+        try { return new Date(props.now).toLocaleDateString(loc, props.mode?.timezone ? { ...o, timeZone: props.mode.timezone } : o); } catch { return new Date(props.now).toLocaleDateString(loc, o); }
+      })()}>
+        <span class="clock-date">{siteClock(props.now, props.mode?.timezone).md}</span>{" "}
+        {siteClock(props.now, props.mode?.timezone).hm}
+      </span>
       {props.onHelp && (
         <button type="button" class="btn sm help-btn" aria-label={t("helpTitle")} title={t("helpTitle")} onClick={props.onHelp}>?</button>
       )}
@@ -181,9 +196,16 @@ export function TopBar(props: {
   );
 }
 
+/** 浏览器标签标题(网页易用性第 1 轮 P1-04):「页名 · Nexus Warden」,开好几个标签也分得清;跟着语言换。 */
+export function tabTitle(page: Page): string {
+  const l = navLabel(page);
+  return l ? `${t(l.page)} · Nexus Warden` : "Nexus Warden";
+}
+
 /** 顶栏左边:组名(小字)+ 页名。 */
 function PageTitle({ page }: { page: Page }) {
   const l = navLabel(page);
+  useEffect(() => { document.title = tabTitle(page); }, [page, lang.value]);
   return (
     <div class="pagetitle">
       {l && <span class="pagetitle-sec">{t(l.section)}</span>}
@@ -209,17 +231,40 @@ export function SideNav(props: { me: Me; page: Page; alarms: number | null; noti
     || props.page === "admin/mapedit";
   const [open, setOpen] = useState(inAdvanced);
   useEffect(() => { if (inAdvanced) setOpen(true); }, [inAdvanced]);
+  // P0-16:手机上导航收在「菜单」按钮里(宽屏这个按钮不显示,导航一直在);点了哪页就收起
+  const [menu, setMenu] = useState(false);
+  useEffect(() => setMenu(false), [props.page]);
+  // 第 2 轮 layout N11:菜单开着时 Esc、点侧栏外面都收起(原来只能再点一次「菜单」)
+  const side = useRef<HTMLElement>(null);
+  useEffect(() => {
+    if (!menu) return;
+    const key = (e: KeyboardEvent) => { if (e.key === "Escape") setMenu(false); };
+    const down = (e: PointerEvent) => { if (side.current && !side.current.contains(e.target as Node)) setMenu(false); };
+    window.addEventListener("keydown", key);
+    window.addEventListener("pointerdown", down);
+    return () => { window.removeEventListener("keydown", key); window.removeEventListener("pointerdown", down); };
+  }, [menu]);
+  // 第 2 轮 P1-85:矮屏上侧栏要自己滚,当前这一页在侧栏里要看得见
+  // 第 3 轮 admin N1:不对链接调 scrollIntoView(Chrome 会把「下一个 Tab 从哪开始」挪到它,第一下 Tab 就跳过了
+  // 「跳到内容」和当前项),只滚侧栏里能滚的那一层
+  useEffect(() => {
+    const a = document.querySelector<HTMLElement>('.sidenav a[aria-current="page"]');
+    if (a) revealInScroller(a);
+  }, [props.page, open]);
   const badge = (b: "alarms" | "notices" | undefined) => {
     const n = b === "alarms" ? props.alarms : b === "notices" ? props.notices : null;
     return n ? <span class={b === "alarms" ? "badge alarm mono" : "badge mono"}>{n}</span> : null;
   };
   return (
-    <aside class="sidenav">
+    <aside class="sidenav" ref={side}>
       <div class="sidenav-brand">
         <BrandMark />
-        <span class="sidenav-site" title={props.me.site_name}>{props.me.site_name}</span>
+        <span class="sidenav-site" title={props.me.site_name}>{t("sideSite", { n: props.me.site_name })}</span>
       </div>
-      <nav class="sidenav-nav" aria-label={t("mainNav")}>
+      <button type="button" class="btn sm nav-toggle" aria-expanded={menu} aria-controls="mainnav" onClick={() => setMenu(!menu)}>
+        ☰ {t("navMenu")}{props.alarms ? <span class="badge alarm mono">{props.alarms}</span> : null}
+      </button>
+      <nav id="mainnav" class={menu ? "sidenav-nav open" : "sidenav-nav"} aria-label={t("mainNav")}>
         {groups.map((g) => {
           const shown = !g.fold || open;
           return (
@@ -241,32 +286,48 @@ export function SideNav(props: { me: Me; page: Page; alarms: number | null; noti
 }
 
 /** 布防状态:只显示(设计 §4.0,用户说的),切模式在别处。 */
-function ArmState({ mode }: { mode: Mode }) {
+function ArmState({ mode, role, stale }: { mode: Mode; role: string; stale?: boolean }) {
   const text = mode.source === "schedule" ? modeLabel(mode) : mode.mode === "armed" ? t("armArmed")
     : mode.mode === "home" ? t("armHome")
     : t("armVisitor", { t: mode.until_ms ? hm(mode.until_ms) : "—" });
-  return <span class={`armstate ${mode.source === "schedule" ? (mode.state === "armed" ? "armed" : "home") : mode.mode}`}><i class="dot" aria-hidden="true" />{text}</span>;
+  // P1-79:只显示;悬停说去哪儿切、谁能切(保安能布防、不能撤防 —— 站点同一条规矩)
+  // 第 2 轮 duty N11:连不上站点时变灰、写「最后已知」,不像一切正常
+  const cls = stale ? "stale" : mode.source === "schedule" ? (mode.state === "armed" ? "armed" : "home") : mode.mode;
+  const tip = t(pageAllowed("admin/arming", role) ? "armStateTip" : canArm(role) ? "armStateTipGuard" : "armStateTipViewer");
+  return <span class={`armstate ${cls}`} data-stale={stale || undefined} title={stale ? t("armStaleTip") : tip}><i class="dot" aria-hidden="true" />{stale ? t("lastKnown", { s: text }) : text}</span>;
 }
 
-function UserMenu(props: { me: Me; pref: ThemePref; onPref: (p: ThemePref) => void; onSignOut: () => void; onSay: (s: string) => void }) {
+function UserMenu(props: { me: Me; pref: ThemePref; onPref: (p: ThemePref) => void; onSignOut: (note?: string) => void; onSay: (s: string) => void }) {
   const [open, setOpen] = useState(false);
   const [pw, setPw] = useState(false);
+  // undefined = 没开;"" = 读着;null = 读不到
+  const [notices, setNotices] = useState<string | null | undefined>(undefined);
   const box = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (!open) return;
     const off = (e: MouseEvent) => {
       if (box.current && !box.current.contains(e.target as Node)) setOpen(false);
     };
+    // P2-22:Esc 关菜单,焦点回到按钮
+    const esc = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      setOpen(false);
+      box.current?.querySelector<HTMLButtonElement>("button.who")?.focus();
+    };
     document.addEventListener("mousedown", off);
-    return () => document.removeEventListener("mousedown", off);
+    document.addEventListener("keydown", esc);
+    return () => { document.removeEventListener("mousedown", off); document.removeEventListener("keydown", esc); };
   }, [open]);
   const looks: { v: ThemePref; key: Key }[] = [
-    { v: "auto", key: "lookAuto" }, { v: "system", key: "lookSystem" }, { v: "dark", key: "lookDark" }, { v: "light", key: "lookLight" },
+    // 第 3 轮 admin N9:「默认(深色)」跟「深色」一样,只留三个,深色标出是默认
+    { v: "system", key: "lookSystem" }, { v: "dark", key: "lookDarkDefault" }, { v: "light", key: "lookLight" },
   ];
   return (
     <div class="usermenu" ref={box}>
-      <button type="button" class="who" aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen(!open)}>
-        {props.me.display_name || props.me.name} ▾
+      {/* 网页易用性第 1 轮 P0-16:窄屏只剩一个圆头像(首字),菜单还在:退出、语言、改密码都从这里 */}
+      <button type="button" class="who" aria-haspopup="menu" aria-expanded={open} aria-label={t("userMenu")} onClick={() => setOpen(!open)}>
+        <span class="who-initial" aria-hidden="true">{(props.me.display_name || props.me.name).slice(0, 1).toUpperCase()}</span>
+        <span class="who-name">{props.me.display_name || props.me.name} ▾</span>
       </button>
       {open && (
         <div class="menu" role="menu">
@@ -285,29 +346,52 @@ function UserMenu(props: { me: Me; pref: ThemePref; onPref: (p: ThemePref) => vo
             <span class="muted small">{t("menuLook")}</span>
             <div class="seg" role="group" aria-label={t("menuLook")}>
               {looks.map((l) => (
-                <button key={l.v} type="button" aria-pressed={props.pref === l.v} onClick={() => props.onPref(l.v)}>{t(l.key)}</button>
+                <button key={l.v} type="button" aria-pressed={(props.pref === "auto" ? "dark" : props.pref) === l.v} onClick={() => props.onPref(l.v)}>{t(l.key)}</button>
               ))}
             </div>
           </div>
           <button type="button" class="menu-item" role="menuitem" onClick={() => { setOpen(false); setPw(true); }}>{t("changePassword")}</button>
-          <a class="menu-item" role="menuitem" href="/assets/third-party-notices.txt" target="_blank" rel="noopener noreferrer" onClick={() => setOpen(false)}>{t("thirdParty")}</a>
-          <button type="button" class="menu-item" role="menuitem" onClick={props.onSignOut}><Icon name="logout" />{t("signOut")}</button>
+          {/* P2-22:第三方声明在对话框里看(原来是开一个原始 txt) */}
+          <button type="button" class="menu-item" role="menuitem" onClick={() => {
+            setOpen(false);
+            setNotices("");
+            fetch("/assets/third-party-notices.txt").then((r) => (r.ok ? r.text() : Promise.reject(new Error(String(r.status)))))
+              .then(setNotices).catch(() => setNotices(null));
+          }}>{t("thirdParty")}</button>
+          <button type="button" class="menu-item" role="menuitem" onClick={() => props.onSignOut()}><Icon name="logout" />{t("signOut")}</button>
         </div>
       )}
-      {pw && <OwnPassword onClose={() => setPw(false)} onDone={() => { setPw(false); props.onSay(t("pwDone")); }} />}
+      {notices !== undefined && (
+        <Modal label={t("thirdParty")} wide onClose={() => setNotices(undefined)}>
+          {notices === null ? <p class="error">{t("noticesFailed")}</p>
+            : <pre class="notices" data-notices="1">{notices || "…"}</pre>}
+        </Modal>
+      )}
+      {pw && <OwnPassword onClose={() => setPw(false)} onDone={() => { setPw(false); props.onSignOut(t("pwDoneRelogin")); }} />}
     </div>
   );
 }
+
+/** 密码至少几个字符(站点 accounts.MIN_PASSWORD)。 */
+const PW_MIN = 10;
 
 function OwnPassword({ onClose, onDone }: { onClose: () => void; onDone: () => void }) {
   const [old, setOld] = useState("");
   const [neu, setNeu] = useState("");
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
+  const [ask, setAsk] = useState(false);
   async function save(e: Event) {
     e.preventDefault();
-    setBusy(true);
     setErr("");
+    // P1-67:规则先写出来、当场查(站点也查);新旧一样不改;改之前确认(改完要重新登录)
+    if (neu.length < PW_MIN) return setErr(t("pwRule", { n: PW_MIN }));
+    if (neu === old) return setErr(t("pwSame"));
+    setAsk(true);
+  }
+  async function commit() {
+    setAsk(false);
+    setBusy(true);
     try {
       await api("POST", "/api/me/password", { old, new: neu });
       onDone();
@@ -322,9 +406,22 @@ function OwnPassword({ onClose, onDone }: { onClose: () => void; onDone: () => v
       <form class="field" onSubmit={save}>
         <label>{t("pwOld")}<input type="password" autoComplete="current-password" value={old} onInput={(e) => setOld((e.target as HTMLInputElement).value)} /></label>
         <label>{t("pwNew")}<input type="password" autoComplete="new-password" value={neu} onInput={(e) => setNeu((e.target as HTMLInputElement).value)} /></label>
+        <span class="muted small">{t("pwRule", { n: PW_MIN })}</span>
         {err && <p class="error">{err}</p>}
-        <div class="row end"><button type="submit" class="btn primary" disabled={busy || !old || !neu}>{t("pwSave")}</button></div>
+        {/* 第 3 轮 zh N13:跟别的对话框一样有「取消」 */}
+        <div class="row end"><button type="button" class="btn" onClick={onClose}>{t("cancel")}</button><button type="submit" class="btn primary" disabled={busy || !old || !neu}>{t("pwSave")}</button></div>
       </form>
+      {ask && <Confirm text={t("pwAsk")} yes={t("pwSave")} onNo={() => setAsk(false)} onYes={() => void commit()} />}
     </Modal>
   );
+}
+
+/** 把 ``el`` 滚进离它最近的、能竖着滚的祖先里看得见的地方;只改那一层的 scrollTop,不动焦点起点。 */
+export function revealInScroller(el: HTMLElement): void {
+  let box = el.parentElement;
+  while (box && !(box.scrollHeight > box.clientHeight && /auto|scroll/.test(getComputedStyle(box).overflowY))) box = box.parentElement;
+  if (!box) return;
+  const r = el.getBoundingClientRect(), b = box.getBoundingClientRect();
+  if (r.top < b.top) box.scrollTop -= b.top - r.top;
+  else if (r.bottom > b.bottom) box.scrollTop += r.bottom - b.bottom;
 }

@@ -108,7 +108,10 @@ describe("报表页", () => {
     fireEvent.input(c.querySelector('input[name="to"]')!, { target: { value: "2026-10-20" } });
     await waitFor(() => expect(c.textContent).toContain("最长 31 天"));
     expect(asked.some((u) => u.includes(`since=${day0(2026, 9, 1)}`))).toBe(false);
-    expect(c.querySelector(".rep-stats")).toBeNull();
+    // 第 2 轮 P1-72:不整片消失 —— 照旧显示上一段(淡一点、写明是哪一段),导出灰着
+    expect(c.querySelector(".rep-stale .rep-stats")).not.toBeNull();
+    expect(c.querySelector("[data-stale-range]")).not.toBeNull();
+    expect(btn(c, "导出 PDF").disabled).toBe(true);
   });
 
   it("导出 PDF 调打印", async () => {
@@ -149,5 +152,19 @@ describe("W60 关键指标", () => {
     const old = render(<ReportsPage now={NOW} />).container;
     await waitFor(() => expect(old.querySelector(".rep-stats")).not.toBeNull());
     expect(old.querySelector(".kpi")).toBeNull();
+  });
+});
+
+describe("网页易用性第 1 轮 P1-72", () => {
+  it("自定义日期:开始晚于结束,错标在开始那一格旁边", async () => {
+    const { container: c } = page();
+    const custom = await waitFor(() => { const b = Array.from(c.querySelectorAll(".seg button")).find((x) => x.textContent === "自定义"); expect(b).toBeTruthy(); return b as HTMLElement; });
+    fireEvent.click(custom);
+    fireEvent.input(c.querySelector('input[name="from"]')!, { target: { value: "2026-10-05" } });
+    fireEvent.input(c.querySelector('input[name="to"]')!, { target: { value: "2026-10-01" } });
+    const from = c.querySelector('input[name="from"]') as HTMLInputElement;
+    expect(from.getAttribute("aria-invalid")).toBe("true");
+    expect(from.parentElement!.textContent).toContain("开始日期晚于结束日期");
+    expect(c.querySelector('input[name="to"]')!.getAttribute("aria-invalid")).toBeNull();
   });
 });

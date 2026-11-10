@@ -32,7 +32,8 @@ beforeEach(() => {
       const robot = u.searchParams.get("robot");
       const cam = u.searchParams.get("camera");
       const all = [rec(1, "A", "front", at), rec(2, "A", "back", at), rec(3, "B", "front", at + 600_000)];
-      return Promise.resolve(json({ segment_s: 60, recordings: all.filter((r) => (!robot || r.robot_id === robot) && (!cam || r.camera === cam)) }));
+      return Promise.resolve(json({ segment_s: 60, robots: ["A", "B", "OLD"],
+        recordings: all.filter((r) => (!robot || r.robot_id === robot) && (!cam || r.camera === cam)) }));
     }
     return Promise.resolve(json({}, 404));
   }) as typeof fetch);
@@ -53,6 +54,13 @@ describe("录像页", () => {
     const chips = Array.from(c.querySelectorAll(".recrobots button"));
     expect(chips.map((b) => b.textContent)).toEqual(["A", "B"]);
     expect(chips[0].getAttribute("aria-pressed")).toBe("true");
+  });
+
+  it("P1-29:解绑了还有录像的也列出来,标「已解绑」", async () => {
+    const { container: c } = page();
+    await waitFor(() => expect(c.querySelector('.recrobots button[data-unbound="1"]')).not.toBeNull());
+    expect(c.querySelector('.recrobots button[data-unbound="1"]')!.textContent).toBe("OLD · 已解绑");
+    expect(c.querySelectorAll(".recrobots button").length).toBe(3);
   });
 
   it("大画面放选的那一路,小窗放另一路(同一刻)", async () => {
@@ -107,5 +115,20 @@ describe("录像页", () => {
     await waitFor(() => expect(c.querySelector("video.feed")).not.toBeNull());
     expect(btn(c, "10 秒 ⏩")).toBeDefined();
     expect(btn(c, "⏪ 10 秒")).toBeDefined();
+  });
+});
+
+describe("第 3 轮 duty N4", () => {
+  it("保安看到找管理员导出;管理员能按时间段导出,文件名是可读的日期时间", async () => {
+    const g = page("guard");
+    await waitFor(() => expect(g.container.querySelector("video.feed")).not.toBeNull());
+    expect(g.container.querySelector("[data-export-ask]")!.textContent).toContain("找管理员");
+    cleanup();
+    const a = page("admin");
+    await waitFor(() => expect(a.container.querySelector("[data-clip] a")).not.toBeNull());
+    expect(a.container.querySelector("[data-clip] a")!.getAttribute("href")).toMatch(/^\/api\/recordings\/clip\?robot=A&camera=front&since=\d+&until=\d+$/);
+    await waitFor(() => expect(a.container.querySelector('a[href$="/video"]')).not.toBeNull());
+    const dl = Array.from(a.container.querySelectorAll("a")).map((x) => (x as HTMLAnchorElement).download || x.getAttribute("download") || "");
+    expect(dl.some((d) => /^A-front-\d{4}-\d{2}-\d{2}-\d{6}\.mp4$/.test(d))).toBe(true);
   });
 });

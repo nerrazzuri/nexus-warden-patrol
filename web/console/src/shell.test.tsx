@@ -1,13 +1,13 @@
 // @vitest-environment happy-dom
 // W44 第一期:新外壳(顶栏、路由、主题、管理员的临时提醒页)。真的把 Console 渲染出来看。
 import { cleanup, fireEvent, render, waitFor } from "@testing-library/preact";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { setFetch } from "./api";
 import type { Me } from "./app";
 import { Console } from "./console";
 import { lang } from "./i18n";
 import type { Alert } from "./model";
-import { pageAllowed, pageScheme, readRoute, roleLabel, schemeFor } from "./shell";
+import { pageAllowed, pageScheme, readRoute, roleLabel, schemeFor, SideNav, TopBar } from "./shell";
 import { applyTheme } from "./theme";
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
@@ -117,7 +117,7 @@ describe("新外壳", () => {
     location.hash = "#/admin/system";
     const a = render(<Console me={me("admin")} onOut={() => {}} />);
     expect(a.container.querySelector('.sidenav a[href="#/admin/system"]')!.getAttribute("aria-current")).toBe("page");
-    expect(a.container.querySelector(".topbar .pagetitle")!.textContent).toBe("系统系统");
+    expect(a.container.querySelector(".topbar .pagetitle")!.textContent).toBe("高级系统");   // P2-19:组名跟侧栏一样
   });
 
   it("工程师看得到管理、看不到用户", () => {
@@ -150,14 +150,17 @@ describe("新外壳", () => {
     expect(Array.from(bar.querySelectorAll("button")).some((b) => b.textContent === "EN")).toBe(true);
   });
 
-  it("W58 用户菜单里能打开第三方软件声明(新窗口)", () => {
+  it("W58 用户菜单里能打开第三方软件声明(P2-22:在对话框里看)", async () => {
+    const urls: string[] = [];
+    vi.stubGlobal("fetch", (u: string) => { urls.push(u); return Promise.resolve(new Response("MIT License\nfoo", { status: 200 })); });
     const c = render(<Console me={me("guard")} onOut={() => {}} />);
     const bar = c.container.querySelector(".topbar")!;
     fireEvent.click(bar.querySelector(".usermenu > button")!);
-    const a = Array.from(bar.querySelectorAll("a")).find((x) => x.textContent === "第三方软件声明")!;
-    expect(a.getAttribute("href")).toBe("/assets/third-party-notices.txt");
-    expect(a.getAttribute("target")).toBe("_blank");
-    expect(a.getAttribute("rel")).toContain("noopener");
+    const b = Array.from(bar.querySelectorAll("button")).find((x) => x.textContent === "第三方软件声明")!;
+    fireEvent.click(b);
+    await waitFor(() => expect(document.querySelector("[data-notices]")!.textContent).toContain("MIT License"));
+    expect(urls).toContain("/assets/third-party-notices.txt");
+    vi.unstubAllGlobals();
   });
 
   it("布防状态只显示,不能点", async () => {
@@ -197,5 +200,94 @@ describe("新外壳", () => {
     cleanup();
     const g = render(<Console me={me("guard")} onOut={() => {}} />);
     expect(g.container.querySelector(".home")).toBeNull();
+  });
+});
+
+
+describe("第 2 轮 P1-79:顶栏布防状态的悬停按角色说", () => {
+  const mode = { mode: "armed", label: "布防", source: "manual", state: "armed" } as never;
+  const tip = (role: string) => {
+    const r = render(<TopBar me={me(role)} page="duty" mode={mode} alarms={0} now={0} pref="system" onPref={() => {}} onStop={() => {}} onSignOut={() => {}} onSay={() => {}} />);
+    const s = r.container.querySelector(".armstate")!.getAttribute("title") ?? "";
+    cleanup();
+    return s;
+  };
+  it("管理员说去布防时间页;保安说去地图页的全部布防、不能撤防;只看的说只能看", () => {
+    lang.value = "zh";
+    expect(tip("admin")).toContain("布防时间");
+    expect(tip("guard")).toContain("全部布防");
+    expect(tip("guard")).not.toContain("「布防时间」页切换");
+    expect(tip("viewer")).toContain("只能看");
+  });
+});
+
+describe("第 2 轮 P1-03:顶栏日期不会读反", () => {
+  it("中英文都写 月-日", () => {
+    const now = new Date(2026, 10, 8, 2, 4).getTime();
+    for (const l of ["en", "zh"] as const) {
+      lang.value = l;
+      const r = render(<TopBar me={me("admin")} page="duty" mode={null} alarms={0} now={now} pref="system" onPref={() => {}} onStop={() => {}} onSignOut={() => {}} onSay={() => {}} />);
+      expect(r.container.querySelector(".clock-date")!.textContent).toBe("11-08");
+      cleanup();
+    }
+  });
+
+  it("第 5 轮:按站点时区走,不按浏览器的", () => {
+    const now = Date.UTC(2026, 10, 8, 18, 30);                 // 上海 11-09 02:30
+    const mode = { mode: "armed", timezone: "Asia/Shanghai" } as never;
+    const r = render(<TopBar me={me("admin")} page="duty" mode={mode} alarms={0} now={now} pref="system" onPref={() => {}} onStop={() => {}} onSignOut={() => {}} onSay={() => {}} />);
+    expect(r.container.querySelector(".clock")!.textContent).toContain("11-09");
+    expect(r.container.querySelector(".clock")!.textContent).toContain("02:30");
+  });
+});
+
+describe("第 2 轮 duty N10 / N11:顶栏", () => {
+  const mode = { mode: "armed", label: "布防", source: "manual", state: "armed" } as never;
+  const bar = (o: { page?: string; held?: number; stale?: boolean }) => render(<TopBar me={me("guard")} page={(o.page ?? "map") as never} mode={mode} alarms={0} now={0}
+    pref="system" onPref={() => {}} onStop={() => {}} onSignOut={() => {}} onSay={() => {}} held={o.held} stale={o.stale} />).container;
+  it("有叫停的:别的页也显示「n 台已叫停 · 去恢复」,点了去总览;总览本页不重复", () => {
+    lang.value = "zh";
+    const c = bar({ held: 2 });
+    expect(c.querySelector("[data-held-chip]")!.textContent).toBe("2 台已叫停 · 去恢复");
+    expect(c.querySelector("[data-held-chip]")!.getAttribute("href")).toBe("#/duty");
+    cleanup();
+    expect(bar({ held: 2, page: "duty" }).querySelector("[data-held-chip]")).toBeNull();
+    cleanup();
+    expect(bar({ held: 0 }).querySelector("[data-held-chip]")).toBeNull();
+  });
+  it("连不上:布防状态变灰、写最后已知", () => {
+    lang.value = "zh";
+    const a = bar({ stale: true }).querySelector(".armstate")!;
+    expect(a.className).toContain("stale");
+    expect(a.textContent).toContain("最后已知");
+  });
+});
+
+describe("第 2 轮 layout N11:手机菜单", () => {
+  it("开着时 Esc、点外面都收起", () => {
+    const c = render(<SideNav me={me("admin")} page="duty" alarms={0} notices={0} />).container;
+    const toggle = c.querySelector(".nav-toggle") as HTMLButtonElement;
+    fireEvent.click(toggle);
+    expect(c.querySelector("#mainnav")!.className).toContain("open");
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(c.querySelector("#mainnav")!.className).not.toContain("open");
+    fireEvent.click(toggle);
+    fireEvent.pointerDown(document.body);
+    expect(c.querySelector("#mainnav")!.className).not.toContain("open");
+  });
+});
+
+describe("第 3 轮 admin N1", () => {
+  it("换页时不对侧栏链接调 scrollIntoView(会把第一下 Tab 的起点挪走)", () => {
+    const spy = vi.fn();
+    const old = HTMLElement.prototype.scrollIntoView;
+    HTMLElement.prototype.scrollIntoView = spy;
+    try {
+      const me = { name: "alice", role: "admin" } as Me;
+      render(<SideNav me={me} page="admin/users" alarms={0} notices={0} />);
+      expect(spy).not.toHaveBeenCalled();
+    } finally {
+      HTMLElement.prototype.scrollIntoView = old;
+    }
   });
 });

@@ -123,11 +123,11 @@ export function endText(how: string, ongoing: boolean): string {
   if (ongoing) return L("still ongoing", "还没恢复");
   switch (how) {
     case "recovered": return L("recovered", "恢复了");
-    case "became_lost": return L("became: not localized", "转成:定位丢了");
-    case "became_degraded": return L("became: degraded", "转成:定位变差");
-    case "offline": return L("robot went offline (end time is not the recovery time)", "机器人掉线了(结束时刻不是恢复的时刻)");
-    case "no_data": return L("no data from the robot (end time is not the recovery time)", "机器人的数据断了(结束时刻不是恢复的时刻)");
-    case "site_restart": return L("site restarted (end time is not the recovery time)", "站点重启了(结束时刻不是恢复的时刻)");
+    case "became_lost": return L("became: not localized", "转成：定位丢了");
+    case "became_degraded": return L("became: degraded", "转成：定位变差");
+    case "offline": return L("robot went offline (end time is not the recovery time)", "机器人掉线了（结束时刻不是恢复的时刻）");
+    case "no_data": return L("no data from the robot (end time is not the recovery time)", "机器人的数据断了（结束时刻不是恢复的时刻）");
+    case "site_restart": return L("site restarted (end time is not the recovery time)", "站点重启了（结束时刻不是恢复的时刻）");
     default: return how || "—";
   }
 }
@@ -172,8 +172,8 @@ export function sourceText(source: string | undefined): string {
     case "scan_match": return L("scan matching", "点云匹配");
     case "rtk": return "RTK";
     case "fused": return L("fused", "融合");
-    case "dead_reckoning": return L("dead reckoning (localizer briefly silent)", "里程推算中(定位器一时没来)");
-    case "odom_identity": return L("simulated (odometry is the position)", "仿真(里程就是位置)");
+    case "dead_reckoning": return L("dead reckoning (localizer briefly silent)", "里程推算中（定位器一时没来）");
+    case "odom_identity": return L("simulated (odometry is the position)", "仿真（里程就是位置）");
     default: return source || "—";
   }
 }
@@ -181,17 +181,17 @@ export function sourceText(source: string | undefined): string {
 /** 单行说法,跟手机 locText 同一套意思:来源、偏差、变差、为什么不可信。 */
 export function locLine(loc: LocView | null | undefined): string {
   const st = locState(loc);
-  if (!loc || st === "unknown") return L("Localization: not reported", "定位:没上报");
+  if (!loc || st === "unknown") return L("Localization: not reported", "定位：没上报");
   const r = loc.reason ?? "";
-  if (st === "unset") return L("Localization: position not set{r}", "定位:没设位置{r}", { r: r ? ` — ${r}` : "" });
-  if (st === "lost") return L("Localization unreliable: {r}", "定位不可信:{r}", { r });
+  if (st === "unset") return L("Localization: position not set{r}", "定位：没设位置{r}", { r: r ? ` — ${r}` : "" });
+  if (st === "lost") return L("Localization unreliable: {r}", "定位不可信：{r}", { r });
   const s = typeof loc.sigma_m === "number" ? loc.sigma_m.toFixed(1) : "?";
-  const base = L("Localization: {src}, error about {s} m", "定位:{src},偏差约 {s} m", { src: sourceText(loc.source), s });
-  return st === "degraded" ? `${base} · ${L("degraded: {d}", "变差:{d}", { d: loc.degraded ?? "" })}` : base;
+  const base = L("Localization: {src}, error about {s} m", "定位：{src}，偏差约 {s} m", { src: sourceText(loc.source), s });
+  return st === "degraded" ? `${base} · ${L("degraded: {d}", "变差：{d}", { d: loc.degraded ?? "" })}` : base;
 }
 
 export function blockedText(b: BlockedInfo): string {
-  return L("Blocked {n} s: {r}", "被挡 {n} 秒:{r}", { n: b.for_s, r: b.reason || L("no reason given", "没说原因") });
+  return L("Blocked {n} s: {r}", "被挡 {n} 秒：{r}", { n: b.for_s, r: b.reason || L("no reason given", "没说原因") });
 }
 
 export function replanText(r: ReplanInfo): string {
@@ -200,8 +200,8 @@ export function replanText(r: ReplanInfo): string {
     zones: ["zones changed", "区域换了"],
     near_nogo: ["too close to a no-go zone", "离禁行区太近"],
     detour: ["detouring around an obstacle", "绕障"],
-    preview: ["obstacle seen ahead, going around early", "前方有障碍,提前绕"],
+    preview: ["obstacle seen ahead, going around early", "前方有障碍，提前绕"],
   };
   const [en, zh] = why[r.why] ?? why.off_route;
-  return L("Re-planned {n}× ({w})", "重规划 {n} 次({w})", { n: r.n, w: lang.value === "zh" ? zh : en });
+  return L("Re-planned {n}× ({w})", "重规划 {n} 次（{w}）", { n: r.n, w: lang.value === "zh" ? zh : en });
 }

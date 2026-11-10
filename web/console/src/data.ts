@@ -2,6 +2,7 @@
 import { signal } from "@preact/signals";
 import { useCallback, useEffect, useRef, useState } from "preact/hooks";
 import { api, ApiError } from "./api";
+import { t } from "./i18n";
 import type { Alert, DeterSession, Mode, Robot, Summary } from "./model";
 
 export interface SiteData {
@@ -43,10 +44,15 @@ export async function fetchSite(): Promise<SiteData> {
 
 /** 管理员给机器人起的名字(W44 第二期,站点 /api/robots 带 name);每次拉站点数据都更新。 */
 export const robotNames = signal<Record<string, string>>({});
+/** 第 4 轮 layout r3-N3:现在连不上站点(值班台的轮询断了)。各页清单是空的时候,连不上就写「读取失败,正在重试」,不写「没有」。 */
+export const siteDown = signal(false);
 
 /** 给人看的机器人名字:起了名用名字,没起用编号。 */
 export function nameOf(id: string): string {
-  return robotNames.value[id] || id;
+  if (robotNames.value[id]) return robotNames.value[id];
+  // 第 3 轮 duty N7:摄像头报的报警 robot 是「cctv:名字」,不露内部前缀
+  if (id.startsWith("cctv:")) return t("camNamed", { name: id.slice(5) });
+  return id;
 }
 
 export function useSiteData(): [SiteData | null, () => Promise<void>, Conn] {
@@ -125,10 +131,33 @@ export function usePageVisible(): boolean {
   return v;
 }
 
+/** 月-日(第 2 轮 P1-03 / admin N13:中英文都写 11-08,不写会被读反的 08/11)。 */
+/** 第 5 轮:顶栏的钟按站点时区(浏览器在别的时区时也对得上值班表);认不出就按浏览器的。 */
+export function siteClock(ms: number, tz?: string | null): { md: string; hm: string } {
+  if (tz) {
+    try {
+      const p = Object.fromEntries(new Intl.DateTimeFormat("en-GB", { timeZone: tz, month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23" })
+        .formatToParts(ms).map((x) => [x.type, x.value]));
+      return { md: `${p.month}-${p.day}`, hm: `${p.hour}:${p.minute}` };
+    } catch { /* 认不出的时区 */ }
+  }
+  return { md: md(ms), hm: new Date(ms).toLocaleTimeString("en-GB", { hour12: false, hour: "2-digit", minute: "2-digit" }) };
+}
+
+export function md(ms: number): string {
+  const d = new Date(ms);
+  return `${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
 export function hms(ms: number): string {
   return new Date(ms).toLocaleTimeString("en-GB", { hour12: false });
 }
 
 export function hm(ms: number): string {
   return hms(ms).slice(0, 5);
+}
+
+/** 第 2 轮 P1-49:下拉框里的长备注截短(全文在地图管理页),不然把下拉框撑到几千像素宽。 */
+export function clip(s: string, n = 40): string {
+  return s.length > n ? `${s.slice(0, n - 1)}…` : s;
 }

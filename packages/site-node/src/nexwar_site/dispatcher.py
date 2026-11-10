@@ -234,6 +234,12 @@ class Dispatcher:
             if not r.revoked and r.robot_id not in self.clients:
                 await self.add_robot(r.robot_id)
                 added.append(r.robot_id)
+            elif r.revoked and r.robot_id in self.clients:
+                # 网页易用性第 1 轮 P0-10:吊销了就摘掉。broker 要重启才读吊销名单,这之前旧证书的
+                # 连接还在发状态,站点照收的话网页上一直显示在线。订阅撤不掉(传输层没有退订),
+                # 回调按「还是不是登记着的那个客户端」认,摘掉以后旧回调都不算数。
+                self.clients.pop(r.robot_id, None)
+                self._attached_at.pop(r.robot_id, None)
         return added
 
     async def add_robot(self, robot_id: str) -> None:
@@ -241,10 +247,12 @@ class Dispatcher:
             return
         c = DispatchClient(self._t, Topics(site_id=self.site_id, robot_id=robot_id),
                            now_ms=self._now)
-        c.on_status(lambda s, rid=robot_id: self._on_status(rid, s))
-        c.on_event(lambda e, rid=robot_id: self._on_event(rid, e))
-        c.on_telemetry(lambda t, rid=robot_id: self._on_telemetry(rid, t))
-        c.on_reconcile(lambda r, rid=robot_id: self._on_reconcile(rid, r))
+        def live(rid: str = robot_id) -> bool:                      # P0-10:摘掉的客户端不再收
+            return self.clients.get(rid) is c
+        c.on_status(lambda s, rid=robot_id: live() and self._on_status(rid, s))
+        c.on_event(lambda e, rid=robot_id: live() and self._on_event(rid, e))
+        c.on_telemetry(lambda t, rid=robot_id: live() and self._on_telemetry(rid, t))
+        c.on_reconcile(lambda r, rid=robot_id: live() and self._on_reconcile(rid, r))
         c.on_ack(self._record_ack)          # 包括等的人超时走了之后才到的回执
         self.clients[robot_id] = c
         self._attached_at[robot_id] = self._now()
@@ -256,6 +264,24 @@ class Dispatcher:
         if self._closed:
             return
         wire = s.to_wire()
+        seen = self.__dict__.setdefault("_online_seen", {})
+        if seen.get(robot_id) != s.online:
+            # 日志设计 第 2、3 条:机器人上线、离线进站点日志和活动日志(第一次听到它不算「上线」变化)
+            first = robot_id not in seen
+            seen[robot_id] = s.online
+            if not first:                     # 站点刚起、第一次听到的是现状,不算变化
+                from nexwar_contract import errcodes
+                from nexwar_site.audit import site_event
+                name = "robot.online" if s.online else "robot.offline"
+                log.warning("机器人 %s %s code=%s task=%s", robot_id,
+                            "上线" if s.online else "离线",
+                            errcodes.tag(name), s.task.task_id if s.task else "-")
+                site_event(self.db, self._now(), actor="site:robot",
+                           action="robot online" if s.online else "robot offline",
+                           target=robot_id, detail={"task": s.task.task_id if s.task else None}
+                           | errcodes.wire(name))
+            else:
+                log.info("机器人 %s 现在%s", robot_id, "在线" if s.online else "离线")
         with self.db.tx() as c:
             c.execute("INSERT INTO robot_state(robot_id, status, updated_at) VALUES (?,?,?) "
                       "ON CONFLICT(robot_id) DO UPDATE SET status=excluded.status, "

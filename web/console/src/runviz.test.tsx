@@ -166,7 +166,7 @@ describe("每台机器人下面的定位和被挡", () => {
     expect(locState(null)).toBe("unknown");
     expect(locLine(null)).toBe("Localization: not reported");
     lang.value = "zh";
-    expect(locLine(robot("A").loc)).toBe("定位:点云匹配,偏差约 0.1 m");
+    expect(locLine(robot("A").loc)).toBe("定位：点云匹配，偏差约 0.1 m");
   });
 
   it("RunInfo:变差标橙、丢了标红带形状;被挡写「被挡 N 秒:原因」;重规划写次数和原因", () => {
@@ -204,9 +204,9 @@ describe("每台机器人下面的定位和被挡", () => {
     expect(replanText({ why: "???", n: 1, at_ms: 0 })).toContain("off the route");
     expect(replanText({ why: "preview", n: 1, at_ms: 0 })).toBe("Re-planned 1× (obstacle seen ahead, going around early)");
     lang.value = "zh";
-    expect(blockedText(VIZ.robots.A.blocked!)).toBe("被挡 12 秒:前方 0.4 m 有挡");
-    expect(replanText({ why: "near_nogo", n: 3, at_ms: 0 })).toBe("重规划 3 次(离禁行区太近)");
-    expect(replanText({ why: "preview", n: 1, at_ms: 0 })).toBe("重规划 1 次(前方有障碍,提前绕)");
+    expect(blockedText(VIZ.robots.A.blocked!)).toBe("被挡 12 秒：前方 0.4 m 有挡");
+    expect(replanText({ why: "near_nogo", n: 3, at_ms: 0 })).toBe("重规划 3 次（离禁行区太近）");
+    expect(replanText({ why: "preview", n: 1, at_ms: 0 })).toBe("重规划 1 次（前方有障碍，提前绕）");
   });
 });
 
@@ -260,7 +260,9 @@ describe("定位历史页", () => {
     setFetch((async () => json({ error: "站点忙" }, 500)) as never);
     const { container: c } = render(<LocHistoryPage robots={["A"]} now={1_700_000_000_000} />);
     await waitFor(() => expect(c.querySelector("[role=alert]")).not.toBeNull());
-    expect(c.querySelector("[role=alert]")!.textContent).toContain("站点忙");
+    // 第 2 轮 P1-01:认不出的只说英文一句,不接中文原话
+    expect(c.querySelector("[role=alert]")!.textContent).toContain("The site hit an error");
+    expect(c.querySelector("[role=alert]")!.textContent).not.toContain("站点忙");
     expect(c.textContent).not.toContain("No localization problems");
   });
 });
@@ -367,7 +369,7 @@ describe("摄像头登记", () => {
     fireEvent.input(f[4], { target: { value: "z" } });
     fireEvent.submit(document.querySelector(".camform")!);
     await waitFor(() => expect(document.querySelector(".camform [role=alert]")).not.toBeNull());
-    expect(document.querySelector(".camform [role=alert]")!.textContent).toContain("地址里不要带账号口令");
+    expect(document.querySelector(".camform [role=alert]")!.textContent).toContain("Don't put the account or password in the address");
   });
 });
 

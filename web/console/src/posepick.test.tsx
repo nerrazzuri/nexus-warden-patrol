@@ -211,3 +211,63 @@ it("W41 自动找位置:机器人认不出就把原因给人看", async () => {
   fireEvent.click([...document.querySelectorAll("dialog button")].find((b) => b.textContent === "Find position automatically")!);
   await waitFor(() => expect(r.container.querySelector("[data-pose-msg]")?.textContent).toContain("差不多像"));
 });
+
+it("网页易用性 P1-56:帮它定位时主按钮是「在这里设位置」,没有「去这里」", async () => {
+  mapFetch();
+  function Locate() {
+    const pick = usePosePick({ meta, map: MA, robotId: "A", robotMap: MA, role: "admin", locate: true });
+    return <><button onClick={() => pick.onPick?.(300, 100)}>pick</button>{pick.panel}</>;
+  }
+  const r = render(<Locate />);
+  fireEvent.click(r.getByText("pick"));
+  await waitFor(() => expect(r.container.querySelector("[data-pose-text]")).not.toBeNull());
+  const primary = r.container.querySelector("[data-posebar] .btn.primary") as HTMLButtonElement;
+  expect(primary.textContent).toBe("Set position here");
+  expect([...r.container.querySelectorAll("[data-posebar] button")].some((b) => b.textContent === "Go here")).toBe(false);
+});
+
+// 第 2 轮 P1-56:设完位置看得到进度;定位好了退出(点收起来、告诉页面);设的过程中「在这里设位置」灰掉
+function Locate(p: { loc: string | null; onSettled: (id: string) => void }) {
+  const pick = usePosePick({ meta, map: MA, robotId: "A", robotMap: MA, role: "admin", locate: true, locNow: p.loc,
+    hint: "Click where A stands", onSettled: p.onSettled });
+  return <><button onClick={() => pick.onPick?.(300, 100)}>pick</button>{pick.panel}</>;
+}
+
+it("第 2 轮 P1-56:设完位置 → 定位中(按钮灰)→ 定位好了退出", async () => {
+  setFetch((async () => json({ command_id: "c1", ack: { command_id: "c1", result: "accepted" } })) as never);
+  const settled: string[] = [];
+  const t0 = Date.now();
+  let now = t0;
+  const real = Date.now;
+  Date.now = () => now;
+  try {
+    const r = render(<Locate loc="locPoor" onSettled={(id) => settled.push(id)} />);
+    expect(r.container.textContent).toContain("Click where A stands");       // 页面那句说明在卡片里
+    expect(r.container.textContent).not.toContain("drag the round handle");
+    await pickAndConfirmSet(r);
+    await waitFor(() => expect(r.container.querySelector('[data-pose-progress="wait"]')).not.toBeNull());
+    expect((r.getByText("Set position here") as HTMLButtonElement).disabled).toBe(true);
+    now = t0 + 5000;
+    r.rerender(<Locate loc="locGood" onSettled={(id) => settled.push(id)} />);
+    await waitFor(() => expect(r.container.querySelector('[data-pose-progress="done"]')).not.toBeNull());
+    await waitFor(() => expect(settled).toEqual(["A"]));
+    expect(r.container.querySelector("[data-pose-text]")).toBeNull();
+  } finally { Date.now = real; }
+});
+
+it("第 2 轮 P1-56:30 秒还没定位好 → 说清楚,能再设", async () => {
+  setFetch((async () => json({ command_id: "c1", ack: { command_id: "c1", result: "accepted" } })) as never);
+  const t0 = Date.now();
+  let now = t0;
+  const real = Date.now;
+  Date.now = () => now;
+  try {
+    const r = render(<Locate loc="locPoor" onSettled={() => {}} />);
+    await pickAndConfirmSet(r);
+    await waitFor(() => expect(r.container.querySelector('[data-pose-progress="wait"]')).not.toBeNull());
+    now = t0 + 31_000;
+    r.rerender(<Locate loc="locPoor" onSettled={() => {}} />);
+    await waitFor(() => expect(r.container.querySelector('[data-pose-progress="timeout"]')).not.toBeNull());
+    expect((r.getByText("Set position here") as HTMLButtonElement).disabled).toBe(false);
+  } finally { Date.now = real; }
+});

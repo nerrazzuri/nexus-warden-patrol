@@ -3,19 +3,23 @@
 // 没事时只有一行安静的「一切正常」(W60 约束:正常状态要安静,不放大绿条)。
 // 下面四块:地图、待处理报警、现场画面(两个位,按紧急程度自动挑,可以钉住)、机器人(每台一条 + 今日巡逻)。
 // 保安只看四类事(有人闯入、起火或过热、机器人需要帮忙、机器人掉线);技术类不在这里。
+import { byText } from "./sitetext";
 import { useEffect, useMemo, useState } from "preact/hooks";
 import { api, ApiError, enc } from "./api";
 import { hm, nameOf } from "./data";
 import { modeLabel } from "./armingpage";
 import { Shape } from "./icons";
+import { AlertDetail } from "./alertdetail";
 import { Confirm } from "./dialogs";
+import { alertHeadline, canHandleAlerts } from "./alertinfo";
 import { guardAlarms, pickSlots, rankUnits, type SlotPick } from "./dutyrank";
-import { alertTitle, lang, t } from "./i18n";
+import { t, joinList } from "./i18n";
 import { StateText, type UnitInfo } from "./live";
 import type { CanvasArea } from "./mapcanvas";
 import { SiteMap } from "./mappage";
 import { pointInPolygon } from "./mapview";
-import type { Alert, Mode } from "./model";
+import { canDispatch, type Alert, type Mode } from "./model";
+import { pageAllowed } from "./shell";
 import { VideoSlot, type Scene } from "./slot";
 import { TodayPatrols } from "./todaypatrols";
 
@@ -36,9 +40,18 @@ export function DutyPage(props: {
   onZoom: (robot: string) => void;
   /** 布防状态(一切正常那一行写上);没有就不写。 */
   mode?: Mode | null;
+  /** 跟站点断了 / 数据过期(P0-02):不能说「一切正常」。 */
+  stale?: boolean;
 }) {
-  const [pins, setPins] = useState<[string | null, string | null]>([null, null]);
-  const [confirmFalse, setConfirmFalse] = useState<Alert | null>(null);
+  // P2-08:钉住的两路记在这台浏览器上,刷新不丢
+  const [pins, setPinsRaw] = useState<[string | null, string | null]>(loadPins);
+  const setPins = (f: (p: [string | null, string | null]) => [string | null, string | null]) => setPinsRaw((p) => {
+    const n = f(p);
+    try { localStorage.setItem(PINS_KEY, JSON.stringify(n)); } catch { /* 隐私模式:不记 */ }
+    return n;
+  });
+  // 网页易用性第 1 轮 P0-04/05:点一条警报看详情,关警报要选结论
+  const [detail, setDetail] = useState<string | null>(null);
   const [finding, setFinding] = useState<string | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
   const [areas, setAreas] = useState<CanvasArea[]>([]);
@@ -75,8 +88,9 @@ export function DutyPage(props: {
     await props.refresh();
   }
   const ack = (a: Alert) => post(`/api/alerts/${enc(a.key)}/ack`, {});
-  const resolve = (a: Alert, verdict: string) => post(`/api/alerts/${enc(a.key)}/resolve`, { verdict });
   const arrive = (a: Alert) => post(`/api/alerts/${enc(a.key)}/arrive`, {});
+  const can = canHandleAlerts(props.role);
+  const shown = detail ? props.alerts.find((a) => a.key === detail) ?? null : null;
   /** W74:看见人那一类要保安点过「已到场」才能关(站点也这么拦)。 */
   const mustArrive = (a: Alert) => ARRIVE.has(a.kind) && a.context?.arrived_ms == null;
 
@@ -105,37 +119,58 @@ export function DutyPage(props: {
   };
 
   const online = props.units.filter((u) => u.state !== "offline").length;
+  // P0-06:「全部急停」以后每台都叫停着,要人恢复;不是「一切正常」
+  const held = props.units.filter((u) => u.robot.held != null);
+  const [askResume, setAskResume] = useState(false);
+  async function resumeAll() {
+    setAskResume(false);
+    const res = await Promise.allSettled(held.map((u) => api("POST", `/api/robots/${enc(u.robot.robot_id)}/resume`, {})));
+    const bad = res.filter((r) => r.status === "rejected").length;
+    props.say(bad ? t("failed", { why: `${bad}/${held.length}` }) : t("dutyResumed", { n: held.length }));
+    await props.refresh();
+  }
   return (
     <div class="duty">
       {top ? (
         <div class={top.level === "P1" ? "banner" : "banner p2"} role="alert">
           <Shape kind={top.level === "P1" ? "P1" : "P2"} />
           <div class="banner-text">
-            <b>{alertTitle(lang.value, top.kind, top.title)}</b>
+            <b>{alertHeadline(top)}</b>
             <span>{[top.context?.zone ?? (top.context?.where ? t("atWhere", { w: top.context.where }) : ""), hm(top.first_ms)].filter(Boolean).join(" · ")}</span>
             {top.context?.lost_ms != null && <span class="banner-who">{t("dutyLost")}</span>}
             {top.context?.follow === "follow" && <span class="banner-who">{t("dutyFollowing")}</span>}
             {top.context?.follow !== "follow" && top.context?.person?.where && <span class="banner-who">{t("dutyLastAt", { w: top.context.person.where })}</span>}
             {top.context?.arrived_by ? <span class="banner-who">{t("dutyArrived", { who: top.context.arrived_by })}</span>
               : mustArrive(top) ? <span class="banner-who">{t("dutyArriveFirst")}</span>
-              : top.acked_ms != null && top.acked_by && <span class="banner-who">{t("dutyTakenBy", { who: top.acked_by })}</span>}
+              : top.acked_ms != null && top.acked_by && <span class="banner-who">{t("dutyTakenBy", { who: byText(top.acked_by) })}</span>}
             {alarms.length > 1 && <span class="banner-more">{t("dutyMore", { n: alarms.length - 1 })}</span>}
           </div>
           <div class="banner-acts">
-            {top.acked_ms == null && <button type="button" class="btn onsolid" onClick={() => ack(top)}>{t("dutyTake")}</button>}
-            {mustArrive(top) && <button type="button" class="btn onsolid" onClick={() => arrive(top)}>{t("dutyArrive")}</button>}
-            {LOST.has(top.kind) && (
+            {can && top.acked_ms == null && <button type="button" class="btn onsolid" onClick={() => ack(top)}>{t("dutyTake")}</button>}
+            {can && mustArrive(top) && <button type="button" class="btn onsolid" onClick={() => arrive(top)}>{t("dutyArrive")}</button>}
+            {can && LOST.has(top.kind) && (
               <button type="button" class="btn onsolid" onClick={() => { setFinding(top.robot); setSelected(top.robot); }}>{t("dutyFindPose")}</button>
             )}
-            {mustArrive(top) ? null : top.audience === "intrusion" ? (
-              <>
-                <button type="button" class="btn onsolid" onClick={() => resolve(top, "intruder")}>{t("dutyIntruder")}</button>
-                <button type="button" class="btn onsolid" onClick={() => setConfirmFalse(top)}>{t("dutyFalse")}</button>
-              </>
-            ) : (
-              <button type="button" class="btn onsolid" onClick={() => resolve(top, "handled")}>{t("dutyHandled")}</button>
-            )}
+            <button type="button" class="btn onsolid ghost" onClick={() => setDetail(top.key)}>{t(can && !mustArrive(top) ? "dutyDetailClose" : "dutyDetail")}</button>
           </div>
+        </div>
+      ) : props.stale ? (
+        <p class="allclear unknown" role="status">
+          <i class="dot" aria-hidden="true" /><b>{t("dutyUnknown")}</b>
+          <span>{t("dutyUnknownSub")}</span>
+        </p>
+      ) : held.length > 0 ? (
+        <div class="banner p2" role="status">
+          <Shape kind="P2" />
+          <div class="banner-text">
+            <b>{t("dutyHeld", { n: held.length })}</b>
+            <span>{joinList(held.map((u) => nameOf(u.robot.robot_id)))} · {t("dutyHeldSub")}</span>
+          </div>
+          {canDispatch(props.role) && (
+            <div class="banner-acts">
+              <button type="button" class="btn onsolid" onClick={() => setAskResume(true)}>{t("dutyResumeAll")}</button>
+            </div>
+          )}
         </div>
       ) : (
         <p class="allclear" role="status">
@@ -147,22 +182,23 @@ export function DutyPage(props: {
       <section class="dcard duty-mapcard" aria-label={t("tabMap")}>
         <h2 class="dcard-h">{t("tabMap")}</h2>
         <div class="duty-map">
-          <SiteMap units={props.units} p1={alarms.filter((a) => a.level === "P1")} now={props.now} role={props.role}
+          <SiteMap units={props.units} p1={alarms.filter((a) => a.level === "P1")} now={props.now} role={props.role} stale={props.stale}
             selected={finding ?? selected ?? slots[0]?.robot ?? null} onSelect={setSelected} hot={hot} episodes={false}
             hint={finding ? t("dutyFindHint", { id: finding }) : null} pick={!!finding}
+            onLocated={(id) => { setFinding(null); props.say(t("locDoneMsg", { id: nameOf(id) })); }}
             onAreas={(a) => setAreas((old) => (sameAreas(old, a) ? old : a))} />
           {finding && <p class="sr-only">{t("dutyFindHint", { id: finding })}</p>}
         </div>
       </section>
       <section class="dcard duty-alarms" aria-label={t("dutyAlarmsTitle")}>
-        <h2 class="dcard-h">{t("dutyAlarmsTitle")}<span class="mono muted push">{alarms.length}</span></h2>
-        {alarms.length === 0 && <p class="muted dcard-empty">{t("dutyNoAlarms")}</p>}
+        <h2 class="dcard-h">{t("dutyAlarmsTitle")}<span class="mono muted push" data-alarm-count="1">{props.stale && alarms.length === 0 ? "?" : alarms.length}</span></h2>
+        {alarms.length === 0 && <p class={props.stale ? "warn dcard-empty" : "muted dcard-empty"}>{t(props.stale ? "dutyStaleAlarms" : "dutyNoAlarms")}</p>}
         <ul class="alarmlist">
           {alarms.map((a) => (
             <li key={a.key} class={a.level === "P1" ? "p1" : "p2"}>
               <Shape kind={a.level === "P1" ? "P1" : "P2"} />
-              <button type="button" class="alarmlist-main" onClick={() => setSelected(a.robot)}>
-                <b>{alertTitle(lang.value, a.kind, a.title)}</b>
+              <button type="button" class="alarmlist-main" onClick={() => { setSelected(a.robot); setDetail(a.key); }}>
+                <b>{alertHeadline(a)}</b>
                 <span class="muted small">{[a.context?.zone ?? (a.context?.where ?? ""), nameOf(a.robot)].filter(Boolean).join(" · ")}</span>
               </button>
               <span class="mono small alarmlist-t">{a.level} · {hm(a.first_ms)}</span>
@@ -178,9 +214,9 @@ export function DutyPage(props: {
         </div>
       </section>
       <section class="dcard duty-left" aria-label={t("robots")}>
-        <h2 class="dcard-h">{t("robots")}</h2>
+        <h2 class="dcard-h">{t("robots")}{ranked.length > 0 && <span class="muted small" data-robot-count={ranked.length}> · {ranked.length}</span>}</h2>
         <ul class="duty-list" aria-label={t("robots")}>
-          {ranked.length === 0 && <li class="muted">{t("dutyNoRobots")}</li>}
+          {ranked.length === 0 && <li class={props.stale ? "warn" : "muted"}>{t(props.stale ? "dutyStaleRobots" : "dutyNoRobots")}</li>}
           {ranked.map((u) => (
             <li key={u.robot.robot_id}>
               <button type="button" class={selected === u.robot.robot_id ? "duty-row on" : "duty-row"}
@@ -190,14 +226,21 @@ export function DutyPage(props: {
                 <span class="muted small">{zoneOf(u)}</span>
                 {u.battery != null && <span class="batt push">{Math.round(u.battery)}%</span>}
               </button>
+              {/* P2-08:点行 = 放进画面位;「详情」打开这台的详情(能看机器人页的去机器人页,别的去地图上找它) */}
+              <a class="btn sm duty-row-more" data-robot-more={u.robot.robot_id}
+                href={pageAllowed("admin/robots", props.role) ? `#/admin/robots?robot=${enc(u.robot.robot_id)}` : `#/map?robot=${enc(u.robot.robot_id)}`}
+                aria-label={t("dutyRobotMore", { id: nameOf(u.robot.robot_id) })}>{t("dutyDetails")}</a>
             </li>
           ))}
         </ul>
         <TodayPatrols />
       </section>
-      {confirmFalse && (
-        <Confirm text={t("dutyFalseConfirm")} yes={t("dutyFalseYes")} onNo={() => setConfirmFalse(null)}
-          onYes={() => { const a = confirmFalse; setConfirmFalse(null); void resolve(a, "false_alarm"); }} />
+      {askResume && (
+        <Confirm text={t("dutyResumeAsk", { n: held.length })} yes={t("dutyResumeAll")} onNo={() => setAskResume(false)} onYes={resumeAll} />
+      )}
+      {shown && (
+        <AlertDetail a={shown} role={props.role} now={props.now} units={props.units} onClose={() => setDetail(null)}
+          refresh={props.refresh} say={props.say} onFindPose={(r) => { setFinding(r); setSelected(r); }} />
       )}
     </div>
   );
@@ -206,4 +249,13 @@ export function DutyPage(props: {
 /** 区域换没换(名字和点一样就算没换,不重画)。 */
 function sameAreas(a: CanvasArea[], b: CanvasArea[]): boolean {
   return a.length === b.length && a.every((x, i) => x.name === b[i].name && JSON.stringify(x.pts) === JSON.stringify(b[i].pts));
+}
+
+const PINS_KEY = "nexwar.duty.pins";
+function loadPins(): [string | null, string | null] {
+  try {
+    const v = JSON.parse(localStorage.getItem(PINS_KEY) ?? "null");
+    if (Array.isArray(v) && v.length === 2 && v.every((x) => x === null || typeof x === "string")) return [v[0], v[1]];
+  } catch { /* 读不到就不钉 */ }
+  return [null, null];
 }

@@ -26,13 +26,13 @@ export interface CamRow {
 interface LiveRow { name: string; connected: boolean; error: string }
 
 export function warningText(w: CamWarning, zone: string): string {
-  if (w.code === "zone_unmapped") return L("Zone “{z}” is not mapped to an intercept point: an intrusion from this camera has no robot to send.", "防区「{z}」还没映射到拦截点:这台摄像头报入侵时没有机器人可派。", { z: zone });
-  if (w.code === "zone_no_polygon") return L("Zone “{z}” has no polygon on any map: the lists (time slots / people) cannot tell whether someone is on authorised ground.", "防区「{z}」没在任何一张图上画多边形:名单(时段 / 人员授权)判不了。", { z: zone });
+  if (w.code === "zone_unmapped") return L("Zone “{z}” is not mapped to an intercept point: an intrusion from this camera has no robot to send.", "防区「{z}」还没映射到拦截点：这台摄像头报入侵时没有机器人可派。", { z: zone });
+  if (w.code === "zone_no_polygon") return L("Zone “{z}” has no polygon on any map: the lists (time slots / people) cannot tell whether someone is on authorised ground.", "防区「{z}」没在任何一张图上画多边形：名单（时段 / 人员授权）判不了。", { z: zone });
   return w.text;
 }
 
 function errText(e: unknown): string {
-  return L("Failed: {why}", "没成:{why}", { why: e instanceof ApiError ? e.message : String(e) });
+  return L("Failed: {why}", "没成：{why}", { why: e instanceof ApiError ? e.message : String(e) });
 }
 
 export function CamerasPanel({ say }: { say: Say }) {
@@ -49,7 +49,7 @@ export function CamerasPanel({ say }: { say: Say }) {
     <section class="panel" aria-label={L("Cameras", "摄像头")}>
       <div class="panel-head">
         <h2>{L("Cameras", "摄像头")}</h2>
-        <span class="muted small push">{L("Fixed ONVIF cameras: their intrusion events dispatch a robot. Changes reach the site within about 30 s.", "固定的 ONVIF 摄像头:它们报的入侵会派机器人。改动 30 秒内生效。")}</span>
+        <span class="muted small push">{L("Fixed ONVIF cameras: their intrusion events dispatch a robot. Changes reach the site within about 30 s.", "固定的 ONVIF 摄像头：它们报的入侵会派机器人。改动 30 秒内生效。")}</span>
         <button type="button" class="btn primary" onClick={() => setForm("new")}>{L("Add camera", "添加摄像头")}</button>
       </div>
       <table class="grid">
@@ -71,7 +71,7 @@ export function CamerasPanel({ say }: { say: Say }) {
                   {c.warnings.map((w) => <div key={w.code} class="warncell" data-warning={w.code}><Shape kind="P2" size={10} /> {warningText(w, c.zone)}</div>)}
                 </td>
                 <td class="mono">{c.onvif_url}</td>
-                <td>{c.username || "—"} {c.username && <span class="muted small">{c.has_password ? L("(password set)", "(口令已设)") : L("(no password)", "(没口令)")}</span>}</td>
+                <td>{c.username || "—"} {c.username && <span class="muted small">{c.has_password ? L("(password set)", "（口令已设）") : L("(no password)", "（没口令）")}</span>}</td>
                 <td>{c.rtsp_set ? L("yes", "有") : "—"}</td>
                 <td>{c.motion ? L("yes", "是") : "—"}</td>
                 <td>{l ? (l.connected ? <span class="state tone-success">{L("Connected", "已连上")}</span> : <span class="state p2"><Shape kind="P2" />{L("Not connected", "没连上")}</span>) : <span class="muted small">{L("Waiting for the site to pick it up", "等站点接上")}</span>}</td>
@@ -88,7 +88,7 @@ export function CamerasPanel({ say }: { say: Say }) {
         <CameraForm initial={form === "new" ? null : form} onClose={() => setForm(null)} say={say}
           onSaved={(warnings, zone) => {
             setForm(null);
-            say(warnings.length ? L("Saved. Check: {w}", "存好了。注意:{w}", { w: warnings.map((w) => warningText(w, zone)).join(" ") }) : L("Saved.", "存好了。"));
+            say(warnings.length ? L("Saved. Check: {w}", "存好了。注意：{w}", { w: warnings.map((w) => warningText(w, zone)).join(" ") }) : L("Saved.", "存好了。"));
             load();
           }} />
       )}
@@ -105,9 +105,12 @@ export function CamerasPanel({ say }: { say: Say }) {
   );
 }
 
-export function CameraForm({ initial, onClose, onSaved, say }: { initial: CamRow | null; onClose: () => void; onSaved: (w: CamWarning[], zone: string) => void; say: Say }) {
+/** ``zones``:已有的防区(P1-42:从里面挑,也能填新的)。 */
+export function CameraForm({ initial, onClose, onSaved, say, zones = [] }: { initial: CamRow | null; onClose: () => void; onSaved: (w: CamWarning[], zone: string) => void; say: Say; zones?: string[] }) {
   const edit = initial !== null;
   const [name, setName] = useState(initial?.name ?? "");
+  const [tried, setTried] = useState(false);
+  const nameBad = (tried || name.length > 0) && !/^[A-Za-z0-9._-]{1,64}$/.test(name);
   const [onvif, setOnvif] = useState(initial?.onvif_url ?? "");
   const [user, setUser] = useState(initial?.username ?? "");
   const [pw, setPw] = useState("");
@@ -138,16 +141,22 @@ export function CameraForm({ initial, onClose, onSaved, say }: { initial: CamRow
     <Modal label={edit ? L("Edit camera {n}", "改摄像头 {n}", { n: name }) : L("Add camera", "添加摄像头")} onClose={() => { setPw(""); onClose(); }}>
       <form class="form camform" onSubmit={submit}>
         <label class="field">{L("Name", "名字")}
-          <input value={name} readOnly={edit} required pattern="[A-Za-z0-9._\-]{1,64}" autocomplete="off" onInput={(e) => setName(e.currentTarget.value)} />
+          <input value={name} readOnly={edit} required pattern="[A-Za-z0-9._\-]{1,64}" autocomplete="off" aria-invalid={nameBad || undefined}
+            onInvalid={(e) => { e.preventDefault(); setTried(true); }} onInput={(e) => setName(e.currentTarget.value)} />
+          {/* 第 3 轮 setup N5:规则写在框下面(跟待命点、路线一样),不合规则变红,不靠浏览器自带的气泡 */}
+          {!edit && <span class={nameBad ? "small error" : "muted small"} data-name-rule="1">{L("Letters, digits, . _ - only (no spaces or Chinese), up to 64. Put where it is in the zone field below.",
+            "只能用英文字母、数字和 . _ -（不能有空格、中文），最多 64 个。位置写在下面的防区里。")}</span>}
         </label>
-        <label class="field">{L("ONVIF address (camera or NVR)", "ONVIF 地址(摄像头或 NVR)")}
+        <label class="field">{L("ONVIF address (camera or NVR)", "ONVIF 地址（摄像头或 NVR）")}
           <input value={onvif} required placeholder="http://192.168.1.50" autocomplete="off" onInput={(e) => setOnvif(e.currentTarget.value)} />
+          <span class="muted small">{L("The camera's management address, usually http:// plus its IP. The site reads its alarms through it.",
+            "摄像头的管理地址，一般是 http:// 加摄像头的 IP。站点通过它收摄像头的报警。")}</span>
         </label>
         <label class="field">{L("Account", "账号")}
           <input value={user} autocomplete="off" onInput={(e) => setUser(e.currentTarget.value)} />
         </label>
         {edit && initial?.has_password && (
-          <label class="field row">
+          <label class="field-check">
             <input type="checkbox" checked={changePw} onChange={(e) => setChangePw(e.currentTarget.checked)} />
             {L("Change the password", "换口令")}
           </label>
@@ -157,15 +166,19 @@ export function CameraForm({ initial, onClose, onSaved, say }: { initial: CamRow
             <input type="password" value={pw} autocomplete="new-password" onInput={(e) => setPw(e.currentTarget.value)} />
           </label>
         )}
-        <label class="field">{L("Zone (the camera's intrusions count as this zone)", "防区(这台摄像头报的入侵算这个防区)")}
-          <input value={zone} required autocomplete="off" onInput={(e) => setZone(e.currentTarget.value)} />
+        <label class="field">{L("Zone (the camera's intrusions count as this zone)", "防区（这台摄像头报的入侵算这个防区）")}
+          <input name="zone" value={zone} required autocomplete="off" list="cam-zones" onInput={(e) => setZone(e.currentTarget.value)} />
+          <datalist id="cam-zones">{zones.map((z) => <option key={z} value={z} />)}</datalist>
+          {zones.length > 0 && <span class="muted small">{L("Pick one of your zones, or type a new name.", "从已有的防区里选，也可以填新的名字。")}</span>}
         </label>
-        <label class="field">{L("RTSP address for live view (optional)", "看画面的 RTSP 地址(可选)")}
+        <label class="field">{L("RTSP address for live view (optional)", "看画面的 RTSP 地址（可选）")}
           <input value={rtsp} placeholder="rtsp://192.168.1.50/stream1" autocomplete="off" onInput={(e) => setRtsp(e.currentTarget.value)} />
+          <span class="muted small">{L("The video address for watching it live; it is in the camera's manual or settings page.",
+            "看实时画面用的视频地址，在摄像头说明书或设置页里能找到。")}</span>
         </label>
-        <label class="field row">
+        <label class="field-check">
           <input type="checkbox" checked={motion} onChange={(e) => setMotion(e.currentTarget.checked)} />
-          {L("Plain motion also counts as intrusion (more false alarms: shadows, headlights)", "普通「画面动了」也算入侵(树影、车灯会多误报)")}
+          {L("Plain motion also counts as intrusion (more false alarms: shadows, headlights)", "普通「画面动了」也算入侵（树影、车灯会多误报）")}
         </label>
         {err && <p class="state p2" role="alert"><Shape kind="P2" />{err}</p>}
         <div class="row end">

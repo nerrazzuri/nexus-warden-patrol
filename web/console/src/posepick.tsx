@@ -10,7 +10,7 @@
 // - 站点 HTTP 200 不等于狗收下了:只有回执 ``accepted``(且命令号对得上)才说「已设 / 已让去」;
 //   被拒、过期、重复、看不懂的都照原因给人看。上下文变了以后才回来的回包不管。
 import type { ComponentChildren } from "preact";
-import { useRef, useState } from "preact/hooks";
+import { useEffect, useRef, useState } from "preact/hooks";
 import { api, ApiError, enc } from "./api";
 import { Confirm } from "./dialogs";
 import { clickGuard, startDrag, swallowClick } from "./dragpt";
@@ -24,6 +24,9 @@ import "./routes.css";
 export interface Pose { x: number; y: number; yaw: number }
 
 const HANDLE_PX = 34;
+/** 第 2 轮 P1-56:设完至少等这么久再认「定位好了」(狗的状态要过一两拍才更新),最多等这么久。 */
+export const SETTLE_MIN_S = 3;
+export const SETTLE_MAX_S = 30;
 
 export interface PosePick {
   /** 能点图选位置吗(管理员、保安);不能就是 undefined,地图不进「点图」模式。 */
@@ -45,6 +48,14 @@ export function usePosePick(o: {
   role: string;
   /** W41:目标狗能「自动找位置」(能力 ``relocalize.global``)。 */
   canFind?: boolean;
+  /** 网页易用性 P1-56:在「帮它定位」里 —— 主按钮是「在这里设位置」,不给「去这里」(误点就把狗派走了)。 */
+  locate?: boolean;
+  /** 第 2 轮 P1-56:目标狗此刻定位怎么样(``locText``);设完位置看着它报进度。 */
+  locNow?: string | null;
+  /** 第 2 轮 P1-56:页面给的那一句操作说明(有就只显示这一句,不再叠一句「点地图选位置」)。 */
+  hint?: string | null;
+  /** 第 2 轮 P1-56:定位好了(页面退出「帮它定位」)。 */
+  onSettled?: (robotId: string) => void;
 }): PosePick {
   const ctx = pickContext(o.robotId, o.map, o.robotMap);
   const [picked, setPicked] = useState<{ pose: Pose; ctx: string } | null>(null);
@@ -52,6 +63,9 @@ export function usePosePick(o: {
   const [askedIn, setAskedIn] = useState<string | null>(null);
   const [findIn, setFindIn] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  // 第 2 轮 P1-56:设完位置以后的进度(定位中 → 定位好了 / 30 s 还没好);只认这个上下文的
+  const [settle, setSettle] = useState<{ ctx: string; at: number } | null>(null);
+  const [tick, setTick] = useState(0);
   const ref = useRef<HTMLDivElement | null>(null);
   const guard = useRef(clickGuard());
   // 上下文每变一次代次加一:变之前发出去的请求,回来时代次不对就不管
@@ -63,6 +77,21 @@ export function usePosePick(o: {
   const pose = picked && picked.ctx === ctx ? picked.pose : null;
   const msg = said && said.ctx === ctx ? said.text : "";
   const asking = askedIn === ctx;
+  const settling = settle && settle.ctx === ctx ? settle : null;
+  const waited = settling ? Math.max(0, Math.floor((Date.now() - settling.at) / 1000)) : 0;
+  const settled = !!settling && waited >= SETTLE_MIN_S && o.locNow === "locGood";
+  const timedOut = !!settling && !settled && waited >= SETTLE_MAX_S;
+  useEffect(() => {
+    if (!settling || settled || timedOut) return;
+    const id = window.setInterval(() => setTick((n) => n + 1), 1000);
+    return () => window.clearInterval(id);
+  }, [settling?.at, settled, timedOut, tick]);
+  // 定位好了:退出选点(点和把手收起来),只留一句结果
+  useEffect(() => {
+    if (!settled) return;
+    setPicked(null);
+    if (o.robotId) o.onSettled?.(o.robotId);
+  }, [settled]);
   const wrongMap = !!(o.map && o.robotMap && !sameMap(o.map, o.robotMap));
   const setPose = (f: Pose | null | ((p: Pose | null) => Pose | null)) =>
     setPicked((cur) => {
@@ -92,7 +121,7 @@ export function usePosePick(o: {
     });
   }
 
-  async function run(path: string, body: unknown, ok: string) {
+  async function run(path: string, body: unknown, ok: string, watch = false) {
     const mine = gen.current.n;
     const stillMine = () => gen.current.n === mine;     // 回包回来时上下文变了:不管(不说成新狗的)
     setBusy(true);
@@ -101,6 +130,8 @@ export function usePosePick(o: {
       if (!stillMine()) return;
       const why = notAccepted(r);
       setMsg(why === null ? ok : `${rt("poseNeedsSupervision")}: ${why}`);
+      // 页面给了定位状态(``locNow`` 不是 undefined)才看着报进度;没给的照旧只说「已设」
+      if (why === null && watch && o.locNow !== undefined) setSettle({ ctx, at: Date.now() });
     } catch (e) {
       if (!stillMine()) return;
       // 站点拒了:原因原样给人看(supervised 要租约、没就绪、点不可达、不是同一张图……)
@@ -117,14 +148,16 @@ export function usePosePick(o: {
   const set = () => {
     setAsking(false);
     if (!pose || !o.map || !o.robotId || wrongMap) return;
+    setSettle(null);
     void run("relocalize", { x: pose.x, y: pose.y, yaw: pose.yaw, map_id: o.map.map_id, map_version: o.map.version },
-      rt("poseSetDone", { robot: o.robotId }));
+      rt("poseSetDone", { robot: o.robotId }), true);
   };
   const find = () => {
     setFindIn(null);
     if (!o.map || !o.robotId || wrongMap) return;
+    setSettle(null);
     void run("relocalize", { global: true, map_id: o.map.map_id, map_version: o.map.version },
-      rt("poseFindDone", { robot: o.robotId }));
+      rt("poseFindDone", { robot: o.robotId }), true);
   };
   const finding = findIn === ctx;
   const findable = !!(o.canFind && o.robotId && o.map && !wrongMap);
@@ -145,7 +178,7 @@ export function usePosePick(o: {
     },
     panel: !can ? null : (
       <div class={!pose && !msg ? "posebar idle" : "posebar"} data-posebar="1">
-        {!pose ? <p class="muted small">{rt("poseHint")}</p> : <p class="mono small" data-pose-text="1">{at}</p>}
+        {!pose ? (!settling && <p class="muted small">{o.hint ?? rt("poseHint")}</p>) : <p class="mono small" data-pose-text="1">{at}</p>}
         {findable && !pose && (
           <div class="row">
             <button type="button" class="btn sm" data-pose-find="1" disabled={busy} onClick={() => setFindIn(ctx)}>{rt("poseFind")}</button>
@@ -154,11 +187,20 @@ export function usePosePick(o: {
         {pose && !o.robotId && <p class="muted small">{rt("poseNoRobot")}</p>}
         {pose && o.robotId && wrongMap && <p class="small warn" data-pose-wrongmap="1">{rt("poseWrongMap", { robot: o.robotId })}</p>}
         {(pose || msg) && <div class="row">
-          <button type="button" class="btn primary sm" disabled={!pose || !o.robotId || !o.map || wrongMap || busy} onClick={go}>{rt("poseGo")}</button>
-          <button type="button" class="btn sm" disabled={!pose || !o.robotId || !o.map || wrongMap || busy} onClick={() => setAsking(true)}>{rt("poseSet")}</button>
+          {!o.locate && <button type="button" class="btn primary sm" disabled={!pose || !o.robotId || !o.map || wrongMap || busy} onClick={go}>{rt("poseGo")}</button>}
+          <button type="button" class={o.locate ? "btn primary sm" : "btn sm"} disabled={!pose || !o.robotId || !o.map || wrongMap || busy || (!!settling && !settled && !timedOut)} onClick={() => setAsking(true)}>{rt("poseSet")}</button>
           <button type="button" class="btn sm" disabled={!pose} onClick={() => { setPose(null); setMsg(""); }}>{rt("poseClear")}</button>
         </div>}
-        {msg && <p class="small" role="status" data-pose-msg="1">{msg}</p>}
+        {/* 第 4 轮 P1-56:等机器人回执时写一句,不只是按钮变灰 */}
+        {busy && !msg && !settling && <p class="small muted" role="status" data-pose-busy="1">{rt("poseSending", { robot: o.robotId ?? "" })}</p>}
+        {msg && !settling && <p class="small" role="status" data-pose-msg="1">{msg}</p>}
+        {settling && (
+          <p class={timedOut ? "small warn" : settled ? "small ok-text" : "small"} role="status" data-pose-progress={settled ? "done" : timedOut ? "timeout" : "wait"}>
+            {settled ? rt("poseSettled", { robot: o.robotId ?? "" })
+              : timedOut ? rt("poseSettleSlow", { robot: o.robotId ?? "", s: SETTLE_MAX_S })
+              : rt("poseSettling", { robot: o.robotId ?? "", s: waited })}
+          </p>
+        )}
         {finding && findable && (
           <Confirm text={rt("poseFindConfirm", { robot: o.robotId ?? "" })} yes={rt("poseFind")}
             onNo={() => setFindIn(null)} onYes={find} />

@@ -569,3 +569,20 @@ async def test_单台视图带电量_跟机器人列表一个口径(台):
     card = next(r for r in overview(t.site, t.site.db, now_ms=t.clock(), tz=site_tz(t.site.db))
                 if r["robot_id"] == "A")
     assert isinstance(view["battery_pct"], int) and view["battery_pct"] == card["battery_pct"]
+
+
+async def test_网页P0_10_解绑以后旧连接发来的状态不收_不当在线(台):
+    """网页易用性第 1 轮 P0-10:解绑后旧连接一直没断,站点照收它的状态,网页上还显示在线。
+    (broker 要重启才读吊销名单;这之前站点自己不认。)"""
+    t = 台
+    await t.run(3)
+    assert t.site.robot_view("A")["fresh"] is True
+    t.reg.revoke("A")
+    await t.site.sync_robots()
+    before = t.db.query("SELECT updated_at FROM robot_state WHERE robot_id='A'")[0]["updated_at"]
+    t.clock.advance(5)
+    await t.run(5)
+    after = t.db.query("SELECT updated_at FROM robot_state WHERE robot_id='A'")[0]["updated_at"]
+    assert after == before, "吊销了的狗的状态不落库"
+    assert "A" not in t.site.clients, "吊销了就摘掉客户端"
+    assert t.site.robot_view("A")["fresh"] is False and t.site.robot_view("A")["status"] is None

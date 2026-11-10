@@ -5,7 +5,7 @@ import { ApiError } from "./api";
 import { Modal } from "./dialogs";
 import { t } from "./i18n";
 
-export function ConfirmPassword({ title, onConfirm, onClose }: { title: string; onConfirm: (pw: string) => Promise<void>; onClose: () => void }) {
+export function ConfirmPassword({ title, text, onConfirm, onClose }: { title: string; text?: string; onConfirm: (pw: string) => Promise<void>; onClose: () => void }) {
   const [pw, setPw] = useState("");
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
@@ -27,6 +27,7 @@ export function ConfirmPassword({ title, onConfirm, onClose }: { title: string; 
   return (
     <Modal label={title} onClose={onClose}>
       <form class="form confirm-pw" onSubmit={submit}>
+        {text && <p class="confirm-text">{text}</p>}
         <p class="muted small">{t("pwAgainHint")}</p>
         <label class="field">{t("pwAgain")}<input type="password" autoComplete="current-password" value={pw} required
           onInput={(e) => setPw(e.currentTarget.value)} /></label>

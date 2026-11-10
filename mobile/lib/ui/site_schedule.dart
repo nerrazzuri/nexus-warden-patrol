@@ -51,7 +51,7 @@ class SiteSchedulePage extends StatelessWidget {
             ])),
           ])),
           nwGap24,
-          NwSectionLabel(tr('Scheduled rounds', '排好的巡检')),
+          NwSectionLabel(tr('Scheduled rounds', '排好的巡逻')),
           nwGap8,
           NwListCard(children: [
             if (entries.isEmpty) NwCardText(tr('Nothing scheduled', '无排程')),

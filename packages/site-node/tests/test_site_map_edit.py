@@ -291,3 +291,151 @@ def test_外审R4_写不出来接口回400不是500(站点, monkeypatch):
     monkeypatch.setattr(me, "apply_ops", 写不出)
     code, d = s.req("POST", f"{ADM}/edit", {"digest": dg, "ops": ERASE}, token=tok)
     assert code == 400 and "改不了" in d["error"]
+
+
+def test_网页P0_13_另存新版本_区域_特殊地面_底图都跟过去(站点):
+    """网页易用性第 1 轮 P0-13:另存新版本以后,命名区域、特殊地面、底图都没了(显示设置只存在原版本
+    上,底图文件也在原版本目录里)。站点另存时一起复制过去;清噪点出来的版本也一样。"""
+    s = 站点
+    tok = _登(s)
+    assert _传(s, tok, b"\x89PNG\r\n\x1a\n" + b"0" * 100, "image/png")[0] == 200
+    body = {"rotate_deg": 5, "basemap": {"file": "basemap.png", "x": 0, "y": 0, "scale": 0.05,
+                                        "rotate_deg": 0, "opacity": 0.5},
+            "regions": [{"name": "A区", "polygon": [[0, 0], [2, 0], [2, 2], [0, 2]]}],
+            "terrain": [{"id": "t-1", "kind": "grass",
+                         "polygon": [[5, 0], [7, 0], [7, 2], [5, 2]]}]}
+    code, d = s.req("POST", f"{ADM}/display", body, token=tok)
+    assert code == 200, d
+    want = s.req("GET", f"{ADM}/display", token=tok)[1]
+    dg = s.req("GET", f"{ADM}/noise", token=tok)[1]["digest"]
+    code, d = s.req("POST", f"{ADM}/edit", {"digest": dg, "ops": ERASE}, token=tok)
+    assert code == 200, d
+    nv = f"/api/admin/maps/{MAP[0]}/{d['version']}"
+    got = s.req("GET", f"{nv}/display", token=tok)[1]
+    assert got == want
+    assert (s.api.home / "map-display" / MAP[0] / d["version"] / "basemap.png").is_file()
+
+
+def test_第2轮_底图上传后同一条连接上的下一个请求照常(站点):
+    """网页易用性第 2 轮(P0-13 残留 / P1-54):底图用 rfile.read 读体、没记账,收尾的 _drain
+    以为体还没读又去读,把同一条 keep-alive 连接上的下一个请求吞了 —— 上传底图后另存,区域、
+    特殊地面、底图全丢,页面停在旧版本也不报错。"""
+    import http.client
+
+    s = 站点
+    tok = _登(s)
+    host, port = s.api.httpd.server_address[:2]
+    conn = http.client.HTTPConnection(host, port, timeout=5)
+    body = b"\x89PNG\r\n\x1a\n" + b"0" * 100
+    conn.request("POST", f"{ADM}/basemap", body=body,
+                 headers={"Authorization": f"Bearer {tok}", "Content-Type": "image/png"})
+    r1 = conn.getresponse()
+    assert r1.status == 200 and json.loads(r1.read())["file"] == "basemap.png"
+    conn.request("GET", "/api/robots", headers={"Authorization": f"Bearer {tok}"})
+    r2 = conn.getresponse()
+    assert r2.status == 200, r2.read()
+    assert "robots" in json.loads(r2.read())
+    conn.close()
+
+
+def test_第2轮_N4_另存新版本_防区_出口线_藏匿点_防区路线_路网都复制过去_原版不动(站点):
+    """网页易用性第 2 轮 N4(P0-14 残留):编辑、清噪点另存的新版本跟原版同一个坐标系,原来只带了
+    显示设置 —— 防区、出口线、藏匿点、路网、人挪过的防区查看点 / 值守位在新版本上全是空的。
+    另存时复制过去(原版照旧,还在原版上的机器人不受影响)。"""
+    from nexwar_site.api import map_marks, zone_posts
+
+    s = 站点
+    tok = _登(s)
+    a = s.api
+    sq = [[0.5, 0.5], [3.0, 0.5], [3.0, 1.5], [0.5, 1.5]]
+    a.areas.set(MAP[0], MAP[1], "东区", sq, by="t")
+    marks = map_marks(a)
+    marks.set(MAP[0], MAP[1], {"kind": "exit", "name": "东门", "points": [[1, 0.6], [2, 0.6]]},
+              by="t")
+    marks.set(MAP[0], MAP[1], {"kind": "hide", "name": "柱后", "points": [[2.5, 1.0]]}, by="t")
+    posts = zone_posts(a)
+    auto = next(p for p in posts.view(MAP[0], MAP[1]) if p["zone"] == "东区")
+    if auto["view"] and auto["watch"]:
+        posts.set(MAP[0], MAP[1], "东区", view=auto["view"], watch=auto["watch"], by="t")
+    nets = a.route_nets
+    if nets is not None:
+        nets.put(MAP[0], MAP[1], {"base_revision": 0,
+                                  "nodes": [{"id": "n1", "x": 1.0, "y": 1.0},
+                                            {"id": "n2", "x": 2.0, "y": 1.0}],
+                                  "edges": [["n1", "n2"]]}, by="t")
+    dg = s.req("GET", f"{ADM}/noise", token=tok)[1]["digest"]
+    code, d = s.req("POST", f"{ADM}/edit", {"digest": dg, "ops": ERASE}, token=tok)
+    assert code == 200, d
+    nv = d["version"]
+    assert [x["zone"] for x in a.areas.list(MAP[0], nv)] == ["东区"]
+    got = marks.list(MAP[0], nv)
+    assert sorted((m["kind"], m["name"]) for m in got) == [("exit", "东门"), ("hide", "柱后")]
+    assert {m["id"] for m in got}.isdisjoint({m["id"] for m in marks.list(MAP[0], MAP[1])})
+    if auto["view"] and auto["watch"]:
+        assert next(p for p in posts.view(MAP[0], nv) if p["zone"] == "东区")["auto"] is False
+    if nets is not None:
+        assert len(nets.get(MAP[0], nv).nodes) == 2
+    # 原版不动
+    assert [x["zone"] for x in a.areas.list(MAP[0], MAP[1])] == ["东区"]
+    assert len(marks.list(MAP[0], MAP[1])) == 2
+    assert d["layout_copied"] == {"areas": 1, "marks": 2, "posts": 1, "net_nodes": 2, "nogo": 0}
+
+
+def test_第3轮_N1_另存新版本_禁行区从来源版本照抄_没确认_有待核建议时不许确认空集(站点):
+    """第 3 轮 maps N1(P0):禁行区原来只当「待核建议」带过去(而且取的是登记时刻上的前一版,不是来源),
+    网页看不到也采纳不了,确认就确认了一个空集 → 发布后禁区全丢。现在另存直接从来源版本照抄
+    (没确认,发布前照样要确认);有待核的禁行区建议时,确认空集要拒绝。"""
+    s = 站点
+    tok = _登(s)
+    z = s.api.zones
+    pool = {"id": "pool", "kind": "nogo", "label": "泳池",
+            "polygon": [[0.5, 0.5], [1.5, 0.5], [1.5, 1.5], [0.5, 1.5]]}
+    z.put(MAP[0], MAP[1], [pool], base_revision=z.current(MAP[0], MAP[1]).revision, by="t")
+    dg = s.req("GET", f"{ADM}/noise", token=tok)[1]["digest"]
+    code, d = s.req("POST", f"{ADM}/edit", {"digest": dg, "ops": ERASE}, token=tok)
+    assert code == 200, d
+    nv = d["version"]
+    assert d["layout_copied"]["nogo"] == 1
+    v = s.req("GET", f"/api/maps/{MAP[0]}/{nv}/zones", token=tok)[1]
+    assert [x["id"] for x in v["zones"]] == ["pool"]
+    assert not (v.get("confirmed") or {}).get("current")              # 抄过来的没确认
+    assert not (v.get("proposal") or {}).get("zones")                 # 禁行区不再是建议
+    # 有待核禁行区建议、当前一个都没有:确认空集拒绝(带 empty_ok 也不行)
+    z.put(MAP[0], nv, [], base_revision=v["revision"], by="t")
+    with s.api.dispatcher.db.tx() as tx:
+        tx.execute("INSERT OR REPLACE INTO nav_zone_proposals(map_id, map_version, from_version, "
+                   "body, created_ms, state) VALUES (?,?,?,?,?,'open')",
+                   (MAP[0], nv, MAP[1], json.dumps({"zones": [pool], "standby": [],
+                                                    "intercepts": []}), 1))
+    rev = s.req("GET", f"/api/maps/{MAP[0]}/{nv}/zones", token=tok)[1]["revision"]
+    code, d = s.req("POST", f"/api/maps/{MAP[0]}/{nv}/zones/confirm",
+                    {"revision": rev, "confirm": True, "empty_ok": True}, token=tok)
+    assert code == 409 and d.get("reason") == "proposal_open", d
+
+
+def test_第2轮_N4_布置计数_发布弹窗拿来比(站点):
+    from nexwar_site.api import map_marks
+
+    s = 站点
+    tok = _登(s)
+    s.api.areas.set(MAP[0], MAP[1], "东区", [[0.5, 0.5], [3.0, 0.5], [3.0, 1.5], [0.5, 1.5]],
+                    by="t")
+    map_marks(s.api).set(MAP[0], MAP[1], {"kind": "hide", "name": "柱后",
+                                          "points": [[2.5, 1.0]]}, by="t")
+    code, d = s.req("GET", f"{ADM}/layout", token=tok)
+    assert code == 200, d
+    assert d["areas"] == 1 and d["hides"] == 1 and d["exits"] == 0
+    assert set(d) >= {"posts", "net_nodes", "nogo", "cameras", "standby", "proposal"}
+    # 第 4 轮 maps N4:按名字比、区域分种类、待核的是哪几个
+    assert d["names"]["areas"] == ["东区"]
+    assert set(d["names"]) == {"areas", "nogo", "standby"}
+    assert set(d["proposed"]) == {"nogo", "standby"}
+    assert isinstance(d["kinds"], dict)
+    assert s.req("GET", f"{ADM}/layout", token=_登(s, "gina"))[0] == 403
+    # 第 3 轮 r2-setup-N4:放在图上的摄像头也算
+    before = d["cameras"]
+    with s.api.dispatcher.db.tx() as tx:
+        tx.execute("INSERT INTO cameras(name, onvif_url, zone, added_ms, map_id, map_version, "
+                   "x, y, yaw) VALUES ('gate', 'http://1.2.3.4', '东区', 1, ?, ?, 1.0, 1.0, 0)",
+                   MAP)
+    assert s.req("GET", f"{ADM}/layout", token=tok)[1]["cameras"] == before + 1

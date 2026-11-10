@@ -15,6 +15,7 @@ import threading
 from collections.abc import Callable
 from typing import Any
 
+from nexwar_contract import errcodes
 from nexwar_site.alerts import Alert, AlertBook, Channel, Level
 from nexwar_site.db import SiteDB
 
@@ -23,6 +24,24 @@ log = logging.getLogger(__name__)
 #: 告警测试模式(POC):最长多少分钟;标题前缀。
 TEST_MAX_MIN = 120
 TEST_PREFIX = "测试："
+#: 第 4 轮 duty r3-N10:演练只练「人能故意触发的」—— 在摄像头前走过、到机器人跟前、
+#: 推倒 / 抱起 / 罩住它、按急停。原来反过来列「不算演练的」,机器人自己的毛病(出发前检查不过、
+#: 连续到不了点)和派单记录也被标成「测试：」、结束时一起删了。没列在这里的一律是真报警。
+DRILL_KINDS = frozenset({
+    "intrusion", "intrusion_unanswered", "intrusion_person", "dog_sees_person", "person_left",
+    "person_overdue", "authorized_person", "force_lifted", "force_covered", "force_flipped",
+    "fallen", "estop_pressed", "deter_cornered", "lens_blocked",
+    "payload_siren", "payload_strobe", "payload_spotlight",
+})
+
+
+def drillable(robot: str, kind: str) -> bool:
+    """演练期间这条报警算不算演练的(打「测试：」、能一键删)。
+    ``robot`` 不看:入侵没机器人去也记在站点名下。"""
+    del robot
+    return kind in DRILL_KINDS
+
+
 #: 开张时内存里读回多少条最近的(已解决的也算);未解决的全读回。
 RESTORE_RECENT = 200
 
@@ -128,14 +147,24 @@ class AlertDesk:
         SiteSettings(self.db).put("alert_test", mode)
         return mode
 
-    def end_test(self, *, clear: bool) -> int:
-        """结束测试;``clear`` 就删掉所有带测试标记的告警(没标记的不动)。回删了几条。"""
+    def test_alarms(self) -> list[dict[str, Any]]:
+        """带测试标记、还在库里的报警(结束演练删之前给人看删哪些)。"""
+        rows = self.db.query("SELECT key, kind, robot, title, first_ms FROM alerts "
+                             "WHERE json_extract(context, '$.test') = 1 "
+                             "ORDER BY rowid DESC LIMIT 200")
+        # 第 4 轮 duty N2:带上种类、哪台,网页按种类说人话(原来只有站点中文原文)
+        return [{"key": r["key"], "kind": r["kind"], "robot": r["robot"], "title": r["title"],
+                 "first_ms": r["first_ms"]} for r in rows]
+
+    def end_test(self, *, clear: bool, keep: frozenset[str] = frozenset()) -> int:
+        """结束测试;``clear`` 就删掉所有带测试标记的告警(没标记的不动;``keep`` 里的留着,
+        第 4 轮 duty r3-N10:删之前能逐条取消勾选)。回删了几条。"""
         from nexwar_site.site_settings import SiteSettings
         SiteSettings(self.db).put("alert_test", None)
         if not clear:
             return 0
         rows = self.db.query("SELECT key FROM alerts WHERE json_extract(context, '$.test') = 1")
-        keys = {r["key"] for r in rows}
+        keys = {r["key"] for r in rows} - keep
         if keys:
             st = SiteSettings(self.db)
             floor = st.get("alert_seq_floor")
@@ -158,7 +187,7 @@ class AlertDesk:
     def raise_alert(self, *, kind: str, robot: str, title: str, detail: str = "",
                     context: dict[str, Any] | None = None, merge: bool = True,
                     record: str = "") -> Alert:
-        if self.test_mode() is not None:
+        if self.test_mode() is not None and drillable(robot, kind):
             # POC 告警测试模式:打标记、标题前加「测试」;不合进真告警(清掉时别把真的一起删了)
             cur = self.book.absorbing(robot, kind, now_ms=self._now())
             if cur is not None and not cur.context.get("test"):
@@ -178,8 +207,26 @@ class AlertDesk:
             except Exception:                        # 现场拿不到不许挡住告警
                 log.exception("%s 的现场拿不到", robot)
         ctx.update(context or {})
-        return self.book.raise_alert(kind=kind, robot=robot, title=title, detail=detail,
-                                     now_ms=self._now(), context=ctx, merge=merge, record=record)
+        code = errcodes.for_alert(kind)
+        if code is not None:
+            ctx.setdefault("err", code.hex)          # 日志设计 第 7 条:告警带错误码
+        a = self.book.raise_alert(kind=kind, robot=robot, title=title, detail=detail,
+                                  now_ms=self._now(), context=ctx, merge=merge, record=record)
+        if a.count == 1:                    # 新起的一条(合进旧的只是计数加一,不再记)
+            log.warning("告警 %s %s code=%s robot=%s key=%s:%s %s", "记一笔" if record else "产生",
+                        a.level.value if hasattr(a.level, "value") else a.level,
+                        errcodes.tag(errcodes.ALERT.get(kind, kind)), robot, a.key, title,
+                        detail[:200])
+            self._event("alert recorded" if record else "alert raised", a)
+        return a
+
+    def _event(self, action: str, a: Alert, **extra: Any) -> None:
+        from nexwar_site.audit import site_event
+        lvl = a.level.value if hasattr(a.level, "value") else str(a.level)
+        site_event(self.db, self._now(), actor="site:alerts", action=action, target=a.key,
+                   detail={"robot": a.robot, "kind": a.kind, "level": lvl,
+                           "title": a.title[:120]} | errcodes.wire(errcodes.ALERT.get(a.kind))
+                   | extra)
 
     def absorbing(self, robot: str, kind: str) -> Alert | None:
         return self.book.absorbing(robot, kind, now_ms=self._now())
@@ -187,12 +234,16 @@ class AlertDesk:
     def ack(self, key: str, *, who: str) -> Alert:
         return self.book.ack(key, who=who, now_ms=self._now())
 
-    def resolve(self, key: str, *, who: str, verdict: str = "") -> Alert:
+    def resolve(self, key: str, *, who: str, verdict: str = "", note: str = "") -> Alert:
         a = self.book.get(key)
         if a is not None and a.kind in ARRIVAL_KINDS and a.resolved_ms is None \
                 and a.context.get("arrived_ms") is None:
             raise ArrivalNeeded("要保安先到场:到了现场点「已到场」,再处置完成或标误报")
-        return self.book.resolve(key, who=who, verdict=verdict, now_ms=self._now())
+        return self.book.resolve(key, who=who, verdict=verdict, now_ms=self._now(), note=note)
+
+    def reopen(self, key: str) -> Alert:
+        """撤销处置(点错了,``alerts.REOPEN_MS`` 内)。"""
+        return self.book.reopen(key, now_ms=self._now())
 
     def arrive(self, key: str, *, who: str) -> Alert:
         return self.book.arrive(key, who=who, now_ms=self._now())
@@ -235,6 +286,9 @@ class AlertDesk:
         for a in self.book.open():
             if a.robot == robot and a.kind == kind:
                 self.book.resolve(a.key, who=who, now_ms=self._now())
+                log.info("告警 %s 自动解除 code=%s robot=%s by=%s", a.key,
+                         errcodes.tag(errcodes.ALERT.get(kind, kind)), robot, who)
+                self._event("alert auto-resolved", a, by=who)
                 n += 1
         return n
 
@@ -254,7 +308,12 @@ class AlertDesk:
 
     def escalate(self) -> list[tuple[Alert, Channel]]:
         """P1 未确认的,到时限就升一档(换通道)。站点主循环每 5 s 调一次。"""
-        return list(self.book.due_escalations(now_ms=self._now()))
+        out = list(self.book.due_escalations(now_ms=self._now()))
+        for a, ch in out:
+            log.warning("告警 %s 没人确认,升级到 %s code=%s robot=%s", a.key, ch,
+                        errcodes.tag(errcodes.ALERT.get(a.kind, a.kind)), a.robot)
+            self._event("alert escalated", a, channel=str(getattr(ch, "value", ch)))
+        return out
 
     # ------------------------------------------------------------ 读
 
@@ -271,6 +330,29 @@ class AlertDesk:
         rows = self.db.query("SELECT * FROM alerts ORDER BY last_ms DESC, key LIMIT ?",
                              (limit,))
         return [_from_row(r).to_wire() for r in rows]
+
+    def history(self, *, since_ms: int, until_ms: int, kinds: list[str] | None = None,
+                robot: str | None = None, level: str | None = None, limit: int = 200,
+                offset: int = 0) -> dict[str, Any]:
+        """某一段时间里出过的报警(这段时间里触发过、或还开着跨进来的),按第一次触发倒序;能翻页。
+        原来报警记录只拿最近 500 条在网页里按日期筛:站点跑几周以后,一个月前的那天就是空的。"""
+        where = ["last_ms >= ?", "first_ms < ?"]
+        args: list[Any] = [since_ms, until_ms]
+        if kinds:
+            where.append(f"kind IN ({','.join('?' * len(kinds))})")
+            args += kinds
+        if robot:
+            where.append("robot = ?")
+            args.append(robot)
+        if level:
+            where.append("level = ?")
+            args.append(level)
+        w = " AND ".join(where)
+        total = self.db.query(f"SELECT COUNT(*) AS n FROM alerts WHERE {w}", tuple(args))[0]["n"]
+        rows = self.db.query(f"SELECT * FROM alerts WHERE {w} ORDER BY first_ms DESC, key "
+                             "LIMIT ? OFFSET ?", (*args, limit, offset))
+        return {"alerts": [_from_row(r).to_wire() for r in rows], "total": total,
+                "limit": limit, "offset": offset}
 
     def open_counts(self) -> dict[str, dict[str, int]]:
         """每台狗(以及 ``site``)未解决的告警按级别计数。"""

@@ -209,8 +209,6 @@ def test_删除_有狗在用拒_最新一版拒_旧的删得掉_文件和挂着�
     assert dele("7", gina)[0] == 403
     code, d = dele("7")                                   # 狗开机加载的就是 7
     assert code == 409 and d["reason"] == "in_use" and d["robots"] == ["A"]
-    code, d = dele("9")
-    assert code == 409 and d["reason"] == "latest"
     assert dele("99")[0] == 404
     _確认(s, alice, "8")
     assert _publish(s, alice, "8")[1]["results"][0]["ok"]
@@ -225,11 +223,24 @@ def test_删除_有狗在用拒_最新一版拒_旧的删得掉_文件和挂着�
         c.execute("INSERT INTO standby_points(robot_id, map_id, map_version, name, x, y, yaw, "
                   "is_default) VALUES ('A', ?, '7', 'gate', 1, 1, 0, 1)", (MAP[0],))
     s.disp.zones.put(MAP[0], "7", [], base_revision=0, by="alice")
+    # 第 3 轮 maps N5:另存复制过去的那些布置(防区、标注、值守位、路网)也一起清
+    with s.db.tx() as c:
+        c.execute("INSERT INTO zone_areas(map_id, map_version, zone, points, updated_ms) "
+                  "VALUES (?, '7', 'z', '[]', 1)",
+                  (MAP[0],))
+        c.execute("INSERT INTO map_marks(id, map_id, map_version, kind, name, points, updated_ms) "
+                  "VALUES ('m7', ?, '7', 'exit', 'e', '[]', 1)", (MAP[0],))
     folder = s.maps.root / MAP[0] / "7"
     assert folder.is_dir()
     code, d = dele("7")
     assert code == 200 and d["deleted"] == f"{MAP[0]}:7" and d["freed_bytes"] > 0, d
     assert d["removed_rows"]["standby_points"] == 1 and d["removed_rows"]["nav_zones"] == 1
+    assert d["removed_rows"]["zone_areas"] == 1 and d["removed_rows"]["map_marks"] == 1
+    # 第 3 轮 setup N2:删掉的版本不许再往上写布置
+    code, _ = s.req("POST", f"/api/maps/{MAP[0]}/7/areas",
+                    {"zone": "z", "points": [{"x": 0, "y": 0}, {"x": 1, "y": 0}, {"x": 1, "y": 1}]},
+                    token=alice)
+    assert code == 404
     assert not folder.exists()
     assert [m["version"] for m in s.maps.list()] == ["9", "8"]
     assert s.req("GET", f"/api/maps/{MAP[0]}/7/preview", token=alice)[0] == 404
@@ -238,6 +249,35 @@ def test_删除_有狗在用拒_最新一版拒_旧的删得掉_文件和挂着�
     assert row["target"] == f"{MAP[0]}:7" and "freed_bytes" in row["detail"]
     code, d = dele("8")                                   # 8 现在是退回目标
     assert code == 409 and d["reason"] == "rollback_target" and d["robots"] == ["A"], d
+
+
+def test_网页P0_15_最新一版没人用也能删_版本号不再用_退回目标确认了能删(站点, tmp_path):
+    """网页易用性第 1 轮 P0-15:最新一版、退回目标都删不掉,总会剩一个删不掉的版本。
+    现在:没机器人在用的最新一版能删(删掉的号以后不再发);退回目标要明说「知道它退不回去了」才删,
+    删完退回按钮不再指向它。"""
+    s = 站点
+    alice = _登(s, "alice")
+    _等(lambda: _rc(s) is not None)
+    def dele(v, body=None):
+        return s.req("POST", f"/api/admin/maps/{MAP[0]}/{v}/delete", body or {}, token=alice)
+
+    code, d = dele("9")                                   # 最新一版,没人用
+    assert code == 200, d
+    assert [m["version"] for m in s.maps.list() if m["map_id"] == MAP[0]] == ["8", "7"]
+    from nexwar_site.maps_admin import MapAdmin
+    assert MapAdmin(s.api)._next_version(MAP[0], "8") == "10", "删掉的 9 不再发"
+    put_version(s, tmp_path, "10")
+    for v in ("8", "10"):
+        _確认(s, alice, v)
+        assert _publish(s, alice, v)[1]["results"][0]["ok"]
+        _wait_loaded(s, v)
+    _等(lambda: _rc(s).get("previous") == [MAP[0], "8"])
+    code, d = dele("8")
+    assert code == 409 and d["reason"] == "rollback_target"
+    code, d = dele("8", {"confirm_rollback": True})
+    assert code == 200, d
+    code, d = s.req("GET", "/api/admin/maps", token=alice)
+    assert d["robots"][0]["rollback"] is None, "退回按钮不再指向删掉的版本"
 
 
 def test_删除_正在换过去的那一版也拒(站点):
@@ -342,6 +382,8 @@ def test_W41_清噪点_找候选_清掉另存新版_原点照抄_图换了拒_�
     assert s.db.query("SELECT x FROM homes WHERE map_version='10'")[0]["x"] == 1.0
     note = [m for m in s.maps.list() if m["version"] == "10"][0]["note"]
     assert "从 9 清了 1 处" in note
+    # 网页易用性第 2 轮 P1-50:版本来源记是谁清的(地图管理显示操作人)
+    assert [m for m in s.maps.list() if m["version"] == "10"][0]["source"] == "denoise:alice"
     row = s.db.query("SELECT detail FROM audit WHERE action LIKE '%/denoise' "
                      "ORDER BY id DESC LIMIT 1")[0]
     assert '"version": "10"' in row["detail"]
@@ -396,3 +438,36 @@ def test_现场10_不带定位器的机器人_缺定位文件照发(站点):
     _確认(s, alice, "9")
     code, d = _publish(s, alice, "9")
     assert code == 200 and d["results"][0]["state"] != "refused", d
+
+
+def test_网页P0_14_发布时把旧版上的路线搬到新版(站点):
+    s = 站点
+    alice, gina = _登(s, "alice"), _登(s, "gina")
+    pts = [{"name": "门", "x": 1.0, "y": 1.0, "yaw": 0.0}]
+    code, d = s.req("POST", "/api/routes/r1", {"map_id": MAP[0], "map_version": "7",
+                                              "waypoints": pts, "base_revision": 0}, token=alice)
+    assert code == 200, d
+    url = f"/api/admin/maps/{MAP[0]}/8/adopt-routes"
+    assert s.req("POST", url, {"from": "7"}, token=gina)[0] == 403
+    assert s.req("POST", url, {}, token=alice)[0] == 400
+    code, d = s.req("POST", url, {"from": "7"}, token=alice)
+    assert code == 200 and d["moved"] == ["r1"], d
+    code, d = s.req("GET", f"/api/routes?map_id={MAP[0]}&map_version=8", token=alice)
+    assert [r["id"] for r in d["routes"]] == ["r1"]
+    assert s.req("POST", f"/api/admin/maps/{MAP[0]}/99/adopt-routes", {"from": "7"},
+                 token=alice)[0] == 404
+
+
+def test_网页P1_47_网页上删版本_退回上一版跟发布一样要再输密码(站点):
+    """网页易用性第 1 轮 P1-47:发布要再输密码,写着「不能恢复」的删除和退回反而不要。
+    网页(cookie)上三样一致。"""
+    s = 站点
+    from test_site_zones import _网页
+    web = _网页(s)
+    _等(lambda: _rc(s) is not None)
+    code, d = web(f"/api/admin/maps/{MAP[0]}/9/delete", {})
+    assert code == 403 and "密码" in d["error"], d
+    code, d = web("/api/admin/maps/rollback", {"robot_id": "A"})
+    assert code == 403 and "密码" in d["error"], d
+    code, d = web(f"/api/admin/maps/{MAP[0]}/9/delete", {"confirm_password": PW})
+    assert code == 200, d

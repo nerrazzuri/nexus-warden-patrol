@@ -7,8 +7,8 @@ import { api } from "./api";
 import { Confirm, Modal } from "./dialogs";
 import { clickGuard, startDrag, swallowClick } from "./dragpt";
 import { t } from "./i18n";
-import { polyPx, toMap, type Area, type CamRow, type MapMark, type TabProps, type ZonePost } from "./layoutpage";
-import type { Pt } from "./mapview";
+import { closesLoop, polyPx, toMap, type Area, type CamRow, type MapMark, type TabProps, type ZonePost } from "./layoutpage";
+import { pointInPolygon, type Pt } from "./mapview";
 import { PoseMarker } from "./posemarker";
 import { clientToMap, handleAt, yawToward } from "./routes";
 
@@ -21,6 +21,8 @@ export function ZonesTab(p: TabProps) {
   const [camZone, setCamZone] = useState<Record<string, string>>(() => Object.fromEntries(p.data.cameras.map((c) => [c.name, c.zone])));
   const [draft, setDraft] = useState<Pt[] | null>(null);
   const [naming, setNaming] = useState(false);
+  // P1-31:改已有防区的名字
+  const [renaming, setRenaming] = useState(false);
   const [sel, setSel] = useState<string | null>(null);
   const [removing, setRemoving] = useState<string | null>(null);
   // W73:挪过的查看点、值守位(没存);null = 恢复自动
@@ -75,12 +77,42 @@ export function ZonesTab(p: TabProps) {
   };
   function pick(px: number, py: number) {
     if (markDraft) { setMarkDraft({ ...markDraft, pts: [...markDraft.pts, toMap(p.meta, px, py)] }); return; }
-    if (draft) { setDraft((d) => (d ? [...d, toMap(p.meta, px, py)] : d)); return; }
-    if (!cur || !placing) return;
+    if (draft) {
+      if (closesLoop(p.meta, draft, px, py)) { setNaming(true); return; }       // P1-36
+      setDraft((d) => (d ? [...d, toMap(p.meta, px, py)] : d));
+      return;
+    }
+    if (!cur || !placing) {
+      // P1-31:点图上的防区就选中它(最小的那块优先:套在里面的小块也点得到)
+      const at = toMap(p.meta, px, py);
+      const hit = areas.filter((a) => a.points.length >= 3 && pointInPolygon(at, a.points))
+        .sort((a, b) => polyArea(a.points) - polyArea(b.points))[0];
+      if (hit) { setSel(hit.zone); setPlacing(null); }
+      return;
+    }
     const [x, y] = toMap(p.meta, px, py);
     const base = pairOf(cur.zone) ?? { view: { x, y }, watch: { x, y, yaw: 0 } };
     setPostEdit({ ...postEdit, [cur.zone]: placing === "view" ? { ...base, view: { x, y } } : { ...base, watch: { ...base.watch, x, y } } });
     setPlacing(null);
+  }
+  // P1-31:拖选中防区的顶点
+  const dragVertex = (z: string, i: number) => (e: PointerEvent) => {
+    startDrag(e, guard.current, (cx, cy) => {
+      const m = clientToMap(root.current, p.meta, cx, cy);
+      if (!m) return;
+      setAreas((all) => all.map((a) => (a.zone === z ? { ...a, points: a.points.map((q, j) => (j === i ? [m[0], m[1]] as Pt : q)) } : a)));
+    });
+  };
+  function rename(to: string) {
+    if (!cur || to === cur.zone) { setRenaming(false); return; }
+    const from = cur.zone;
+    if (areas.some((a) => a.zone === to)) return;          // 第 2 轮 setup N2:不吞掉同名的另一个防区
+    setAreas(areas.map((a) => (a.zone === from ? { ...a, zone: to } : a)));
+    // 归这个防区的摄像头跟着改名
+    setCamZone(Object.fromEntries(Object.entries(camZone).map(([c, z]) => [c, z === from ? to : z])));
+    if (from in postEdit) { const { [from]: pe, ...rest } = postEdit; setPostEdit({ ...rest, [to]: pe }); }
+    setSel(to);
+    setRenaming(false);
   }
   const turn = (z: string) => (e: PointerEvent) => {
     startDrag(e, guard.current, (cx, cy) => {
@@ -95,9 +127,14 @@ export function ZonesTab(p: TabProps) {
     <div class="ly-tab">
       <div ref={root} onClickCapture={(e) => swallowClick(guard.current, e)}>
       <p.Map
-        areas={areas.map((a) => ({ name: a.zone, pts: a.points, kind: "zone" as const, hot: a.zone === sel }))}
+        areas={areas.map((a) => ({ name: a.zone, pts: a.points, kind: "zone" as const, sel: a.zone === sel }))}
+        // 第 3 轮 P2-15 / r2-setup-N8:出口线、藏匿点进图例
+        legend={[...(marks.some((m) => m.kind === "exit") ? ["exit" as const] : []), ...(marks.some((m) => m.kind === "hide") ? ["hide" as const] : [])]}
         drawing={!!draft || !!placing || !!markDraft}
-        onPick={draft || placing || markDraft ? pick : undefined}
+        onPick={pick}
+        // P2-37:放藏匿点第二步,在地图上明说「再点它朝哪看」
+        overlay={markDraft?.kind === "hide" && markDraft.pts.length === 1
+          ? <p class="routepick-hint ly-step-hint" data-hide-step2="1">{t("lyHideStep2")}</p> : undefined}
         world={draft && draft.length > 0 ? <polyline points={polyPx(p.meta, draft)} class="draft-line" /> : null}
         marks={(s) => <>
           {!draft && areas.map((a) => {
@@ -120,17 +157,31 @@ export function ZonesTab(p: TabProps) {
           {marks.map((m, i) => {
             if (m.kind === "exit") {
               const [[ax, ay], [bx, by]] = m.points.map(([x, y]) => s.map(x, y));
-              return <line key={`m${i}`} x1={ax} y1={ay} x2={bx} y2={by} class="mark-exit" data-mark="exit"><title>{`${m.name} · ${t("lyMarkExit")}`}</title></line>;
+              // 第 2 轮 setup N8:图上写名字
+              return (
+                <g key={`m${i}`}>
+                  <line x1={ax} y1={ay} x2={bx} y2={by} class="mark-exit" data-mark="exit"><title>{`${m.name} · ${t("lyMarkExit")}`}</title></line>
+                  <text x={(ax + bx) / 2 + 6} y={(ay + by) / 2 - 6} class="mark-name" data-mark-name={m.name}>{m.name}</text>
+                </g>
+              );
             }
             const h = handleAt(p.meta, s, m.points[0][0], m.points[0][1], m.yaw, 16);
             return (
-              <PoseMarker key={`m${i}`} x={h.x} y={h.y} hx={h.hx} hy={h.hy} r={6} label="" class="mark-hide" attrs={{ "data-mark": "hide" } as Record<string, unknown>}>
-                <title>{`${m.name} · ${t("lyMarkHide")}`}</title>
-              </PoseMarker>
+              <g key={`m${i}`}>
+                <PoseMarker x={h.x} y={h.y} hx={h.hx} hy={h.hy} r={6} label="" class="mark-hide" attrs={{ "data-mark": "hide" } as Record<string, unknown>}>
+                  <title>{`${m.name} · ${t("lyMarkHide")}`}</title>
+                </PoseMarker>
+                <text x={h.x + 9} y={h.y - 9} class="mark-name" data-mark-name={m.name}>{m.name}</text>
+              </g>
             );
           })}
           {markDraft?.pts.map(([x, y], i) => { const [sx, sy] = s.map(x, y); return <circle key={`d${i}`} cx={sx} cy={sy} r={5} class="draft-pt" />; })}
+          {markDraft?.kind === "hide" && markDraft.pts.length === 1 && (() => { const [sx, sy] = s.map(...markDraft.pts[0]); return <circle cx={sx} cy={sy} r={14} class="draft-ring" />; })()}
           {draft?.map(([x, y], i) => { const [sx, sy] = s.map(x, y); return <circle key={i} cx={sx} cy={sy} r={5} class="draft-pt" />; })}
+          {!draft && !placing && !markDraft && cur?.points.map(([x, y], i) => {
+            const [sx, sy] = s.map(x, y);
+            return <circle key={`v${i}`} cx={sx} cy={sy} r={7} class="vtx-handle" data-vtx={i} onPointerDown={dragVertex(cur.zone, i)}><title>{t("lyDragVertex")}</title></circle>;
+          })}
         </>} />
       </div>
       <div class="ly-side">
@@ -156,7 +207,9 @@ export function ZonesTab(p: TabProps) {
           onRemove={(i) => setMarks(marks.filter((_, j) => j !== i))} />
         {cur && (
           <section class="panel ly-detail">
-            <h3>{cur.zone}</h3>
+            <div class="row"><h3>{cur.zone}</h3>
+              <button type="button" class="btn sm push" data-rename="1" onClick={() => setRenaming(true)}>{t("lyRename")}</button></div>
+            <p class="muted small">{t("lyDragVertex")}</p>
             <fieldset class="checks zone-cams">
               <legend>{t("lyZoneCams")}</legend>
               {p.data.cameras.length === 0 && <span class="muted small">{t("lyNoCams")}</span>}
@@ -195,6 +248,9 @@ export function ZonesTab(p: TabProps) {
       {naming && draft && (
         <NameZone taken={areas.map((a) => a.zone)} onClose={() => setNaming(false)}
           onSave={(name) => { setAreas([...areas.filter((a) => a.zone !== name), { zone: name, points: draft }]); setDraft(null); setNaming(false); setSel(name); }} />
+      )}
+      {renaming && cur && (
+        <NameZone initial={cur.zone} taken={areas.map((a) => a.zone).filter((z) => z !== cur.zone)} onClose={() => setRenaming(false)} onSave={rename} rename />
       )}
       {removing && (
         <Confirm text={t("removeZoneConfirm", { zone: removing })} yes={t("remove")} danger onNo={() => setRemoving(null)}
@@ -238,7 +294,7 @@ function MarksBox({ marks, draft, busy, onStart, onCancel, onRemove }: {
       <p class="muted small">{t("lyMarksHint")}</p>
       {draft ? (
         <div class="row wrap">
-          <span class="muted small" role="status">{hint}</span>
+          <span class={draft.kind === "hide" && draft.pts.length === 1 ? "ly-step small" : "muted small"} role="status">{hint}</span>
           <button type="button" class="btn sm" onClick={onCancel}>{t("cancel")}</button>
         </div>
       ) : (
@@ -266,10 +322,10 @@ function NameMark({ onClose, onSave }: { onClose: () => void; onSave: (name: str
   return (
     <Modal label={t("lyMarks")} onClose={onClose}>
       <form class="form" onSubmit={(e) => { e.preventDefault(); if (name.trim()) onSave(name.trim()); }}>
-        <label class="field">{t("lyMarkName")}<input name="mark" value={name} maxLength={40} required onInput={(e) => setName(e.currentTarget.value)} /></label>
+        <label class="field">{t("lyMarkName")}<input name="mark" value={name} maxLength={40} required autoFocus onInput={(e) => setName(e.currentTarget.value)} /></label>
         <div class="row end">
           <button type="button" class="btn" onClick={onClose}>{t("cancel")}</button>
-          <button type="submit" class="btn primary">{t("save")}</button>
+          <button type="submit" class="btn primary">{t("dlgApply")}</button>
         </div>
       </form>
     </Modal>
@@ -281,17 +337,36 @@ function camBody(c: CamRow, zone: string): Record<string, unknown> {
   return { name: c.name, zone, edit: true, onvif_url: c.onvif_url, rtsp_url: c.rtsp_url ?? "", username: c.username ?? "", motion: !!c.motion };
 }
 
-function NameZone({ taken, onClose, onSave }: { taken: string[]; onClose: () => void; onSave: (name: string) => void }) {
-  const [name, setName] = useState("");
+/** 多边形面积(选点在哪块里时,小的优先)。 */
+function polyArea(pts: Pt[]): number {
+  let s = 0;
+  for (let i = 0; i < pts.length; i++) {
+    const [x1, y1] = pts[i];
+    const [x2, y2] = pts[(i + 1) % pts.length];
+    s += x1 * y2 - x2 * y1;
+  }
+  return Math.abs(s) / 2;
+}
+
+function NameZone({ taken, onClose, onSave, initial = "", rename = false }: {
+  taken: string[]; onClose: () => void; onSave: (name: string) => void; initial?: string; rename?: boolean;
+}) {
+  const [name, setName] = useState(initial);
+  const [tried, setTried] = useState(false);
   const dup = taken.includes(name.trim());
+  // 第 2 轮 setup N2:改名改成已有的防区名不许(原来会悄悄删掉那个防区);新画的同名照旧是「换掉」并写明
+  const blocked = rename && dup;
   return (
-    <Modal label={t("lyDrawDone")} onClose={onClose}>
-      <form class="form" onSubmit={(e) => { e.preventDefault(); if (name.trim()) onSave(name.trim()); }}>
-        <label class="field">{t("zoneName")}<input name="zone" value={name} maxLength={128} required onInput={(e) => setName(e.currentTarget.value)} /></label>
-        <p class="muted small">{dup ? t("lyZoneReplace") : t("zoneNameHint")}</p>
+    <Modal label={t(rename ? "lyRenameZone" : "lyDrawDone")} onClose={onClose}>
+      <form class="form" noValidate onSubmit={(e) => { e.preventDefault(); setTried(true); if (name.trim() && !blocked) onSave(name.trim()); }}>
+        <label class="field">{t("zoneName")}<input name="zone" value={name} maxLength={128} required autoFocus onInput={(e) => setName(e.currentTarget.value)} /></label>
+        {/* P2-36:空着点保存要说一声(原来弹窗只是不关) */}
+        {tried && !name.trim() ? <p class="error small" role="alert">{t("nameRequired")}</p>
+          : blocked ? <p class="error small" role="alert" data-zone-taken="1">{t("lyZoneNameTaken", { z: name.trim() })}</p>
+          : <p class="muted small">{dup ? t("lyZoneReplace") : t("zoneNameHint")}</p>}
         <div class="row end">
           <button type="button" class="btn" onClick={onClose}>{t("cancel")}</button>
-          <button type="submit" class="btn primary">{t("save")}</button>
+          <button type="submit" class="btn primary" disabled={blocked}>{t("dlgApply")}</button>
         </div>
       </form>
     </Modal>

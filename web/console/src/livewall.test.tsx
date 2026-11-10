@@ -36,6 +36,14 @@ describe("实况页", () => {
     expect(cards(c)).toEqual(["C", "B", "A"]);
   });
 
+  it("P1-15:按台数标出来,一两台时样式让画面占满整屏高", () => {
+    const one = render(<LiveWall units={[unit("A", "patrolling")]} alerts={[]} now={0} onZoom={() => {}} />);
+    expect(one.container.querySelector(".lw-grid")!.getAttribute("data-n")).toBe("1");
+    one.unmount();
+    const four = render(<LiveWall units={["A", "B", "C", "D"].map((x) => unit(x, "idle"))} alerts={[]} now={0} onZoom={() => {}} />);
+    expect(four.container.querySelector(".lw-grid")!.getAttribute("data-n")).toBe("3");
+  });
+
   it("每张卡片前后两路并排都在播", () => {
     const { container: c } = render(<LiveWall units={[unit("A", "patrolling")]} alerts={[]} now={0} onZoom={() => {}} />);
     const s = srcs(c.querySelector(".lw-card")!);

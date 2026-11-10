@@ -26,7 +26,7 @@ const Key refusalDialogKey = Key('refusal-dialog');
 String refusalHint(String code, SiteSession? s) => switch (code) {
       'held' => (s?.canDispatch ?? false)
           ? tr('Tap Resume once it is safe.', '确认安全后点「恢复」。')
-          : tr('Ask a guard or manager to resume it.', '请保安或经理点「恢复」。'),
+          : tr('Only a guard or administrator can resume it. Ask one of them.', '只有保安或管理员能点「恢复」，请找他们。'),
       'zones_unconfirmed' => (s?.canManageMaps ?? false)
           ? tr('Review the no-go zones on the map and confirm this version.', '请在地图上核对禁行区并确认此版本。')
           : tr('An administrator must confirm the no-go zones first. Remote control is unaffected.',

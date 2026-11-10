@@ -156,6 +156,7 @@ class NwFleet extends StatefulWidget {
 
   static Key filterKey(FleetFilter f) => Key('robots-filter-${f.name}');
   static const Key emptyKey = Key('robots-filter-empty');
+  static const Key revokedKey = Key('robots-revoked');
 
   @override
   State<NwFleet> createState() => _NwFleetState();
@@ -256,7 +257,9 @@ class _NwFleetState extends State<NwFleet> {
   @override
   Widget build(BuildContext context) {
     final c = Nw.of(context);
-    final robots = [for (final r in widget.robots) _withBattery(r)];
+    // 手机 App 测试 M31：吊销（解绑）了的不算在「全部」里，收到最底下一格
+    final robots = [for (final r in widget.robots) if (r['revoked'] != true) _withBattery(r)];
+    final gone = [for (final r in widget.robots) if (r['revoked'] == true) '${r['robot_id']}'];
     int count(FleetFilter f) => robots.where((r) => fleetFilterMatch(f, r)).length;
     final shown = robots.where((r) => fleetFilterMatch(_filter, r)).toList();
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, mainAxisSize: MainAxisSize.min, children: [
@@ -293,6 +296,20 @@ class _NwFleetState extends State<NwFleet> {
                   p1: phase == RobotPhase.deterring,
                   onTap: () => widget.onOpen(id));
             })),
+      if (gone.isNotEmpty)
+        ExpansionTile(
+            key: NwFleet.revokedKey,
+            tilePadding: EdgeInsets.zero,
+            title: Text(tr('Unbound (${gone.length})', '已解绑（${gone.length}）'),
+                style: NwText.labelLarge.copyWith(color: c.textSecondary)),
+            children: [
+              for (final id in gone)
+                ListTile(
+                    key: Key('robot-$id'),
+                    dense: true,
+                    title: Text(id, style: NwText.bodyMedium.copyWith(color: c.textSecondary)),
+                    onTap: () => widget.onOpen(id)),
+            ]),
     ]);
   }
 }

@@ -6,6 +6,7 @@
 library;
 
 import '../design/alert_titles.g.dart';
+import '../design/nav_codes.g.dart';
 import '../l10n.dart';
 
 String? _title(String kind) => switch (kind) {
@@ -14,7 +15,7 @@ String? _title(String kind) => switch (kind) {
       'task_aborted' => tr('Task stopped', '任务中止'),
       'task_preempted' => tr('Task replaced', '任务被新任务替换'),
       'task_progress' => tr('On the way', '在路上'),
-      'patrol_waypoint' => tr('Patrol point', '巡检点'),
+      'patrol_waypoint' => tr('Patrol point', '巡逻点'),
       'relocalized' => tr('Position re-set', '重新定位'),
       'loc_wrong_solution' => tr('Position looked wrong', '定位结果异常'),
       'loc_not_found' => tr('Position not found', '未找到位置'),
@@ -52,6 +53,12 @@ String? _title(String kind) => switch (kind) {
 
 /// 事件标题：查表 → 告警词条 → 种类名（下划线换空格）。[data] 给了，机器人故障报的是空列表就是「故障已清除」。
 String robotEventTitle(String kind, [Map<String, dynamic>? data]) {
+  // 手机 App 测试 M27：「完成」那一条里写着没成的，就说没成（以前失败的几趟也写「任务完成」）
+  if (kind == 'task_done' && data != null) {
+    final r = '${data['result'] ?? data['outcome'] ?? ''}';
+    if (r == 'failed' || data['ok'] == false) return tr('Task failed', '任务失败');
+    if (r == 'aborted') return tr('Task stopped', '任务中止');
+  }
   if (kind == 'robot_fault' && data != null && data['faults'] is List && (data['faults'] as List).isEmpty) {
     return tr('Faults cleared', '故障已清除');
   }
@@ -63,6 +70,13 @@ String robotEventTitle(String kind, [Map<String, dynamic>? data]) {
 }
 
 final RegExp _code = RegExp(r'^[a-z_]+$');
+
+/// 导航 V1 原因码 → 「怎么回事」「该做什么」两句(当前语言);码不认识是 null。
+(String, String)? navCodeText(Object? code) {
+  final c = code is String ? navFailCodes[code] : null;
+  if (c == null) return null;
+  return (tr(c.$1, c.$2), tr(c.$3, c.$4));
+}
 
 /// 事件说明：只挑人读得懂的字段，挑不出来是空串。
 String robotEventDetail(String kind, Map<String, dynamic> data) {
@@ -79,6 +93,8 @@ String robotEventDetail(String kind, Map<String, dynamic> data) {
   if (kind == 'patrol_waypoint' && data['ok'] is bool) {
     parts.add(data['ok'] == true ? tr('Arrived', '已到达') : tr('missed', '未到达'));
   }
+  final why = navCodeText(data['code']);
+  if (why != null) parts.addAll(<String>[why.$1, why.$2]);
   final dist = data['distance_m'];
   if (dist is num) parts.add(tr('${dist.toStringAsFixed(1)} m remaining', '剩余 ${dist.toStringAsFixed(1)} 米'));
   for (final k in const <String>['reason', 'why', 'note', 'message', 'error', 'detail']) {
@@ -90,6 +106,17 @@ String robotEventDetail(String kind, Map<String, dynamic> data) {
     }
   }
   return parts.join(' · ');
+}
+
+/// 手机 App 测试 M27：「在路上 剩 2.8 米」一趟能报几十条，把有用的挤掉了。连着的进度只留最新的一条
+///（列表新的在前）。
+List<Map> compactEvents(List<Map> events) {
+  final out = <Map>[];
+  for (final e in events) {
+    if (e['kind'] == 'task_progress' && out.isNotEmpty && out.last['kind'] == 'task_progress') continue;
+    out.add(e);
+  }
+  return out;
 }
 
 /// 事件时刻（站点给的 `stamp`，毫秒）→ 本机时间 `MM-dd HH:mm:ss`；没有就空串。

@@ -1,0 +1,41 @@
+# Copy to .github/workflows/nav-sim.yml after provisioning a self-hosted runner
+# labelled: self-hosted, linux, x64, ros2-humble, gazebo-fortress.
+name: navigation-product-gate
+on:
+  workflow_dispatch:
+    inputs:
+      profile:
+        description: smoke / core / release / fault
+        required: true
+        default: core
+  pull_request:
+    paths:
+      - 'deploy/nav2/**'
+      - 'packages/localizer/**'
+      - 'tools/nav_stability_bench/**'
+
+jobs:
+  nav-gate:
+    runs-on: [self-hosted, linux, x64, ros2-humble, gazebo-fortress]
+    timeout-minutes: 240
+    steps:
+      - uses: actions/checkout@v4
+      - name: Preflight
+        run: |
+          source /opt/ros/humble/setup.bash
+          python3 tools/nav_stability_bench/preflight.py
+      - name: Product simulation gate
+        run: |
+          source /opt/ros/humble/setup.bash
+          profile="${{ github.event.inputs.profile || 'core' }}"
+          python3 tools/nav_stability_bench/run_product_gate.py --profile "$profile" --out runs/nav-gate
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: navigation-product-gate
+          path: |
+            runs/nav-gate/environment.json
+            runs/nav-gate/run_manifest.json
+            runs/nav-gate/product_gate.json
+            runs/nav-gate/PRODUCT_GATE.md
+            runs/nav-gate/results.jsonl

@@ -13,7 +13,7 @@ import 'package:nexwar_patrol/ui/app_settings.dart';
 import 'package:nexwar_patrol/ui/patrol_dispatch.dart';
 import 'package:nexwar_patrol/ui/refusal.dart';
 import 'package:nexwar_patrol/ui/site_page.dart';
-import 'package:nexwar_patrol/ui/site_tabs.dart' show MeTab;
+import 'package:nexwar_patrol/ui/site_tabs.dart' show MeTab, leaveConfirmKey;
 import 'package:nexwar_patrol/ui/site_video.dart';
 import 'package:nexwar_patrol/ui/widget/live_video.dart';
 import 'package:flutter/material.dart';
@@ -78,8 +78,13 @@ class FakeApi implements SiteApi {
   StreamController<Map<String, dynamic>> sse = StreamController.broadcast();
   int eventsOpened = 0;
 
+  /// 给了就登录时扔它（证书变了、连不上）。
+  SiteError? loginError;
   @override
-  Future<SiteSession> login(String n, String p) async => session!;
+  Future<SiteSession> login(String n, String p) async {
+    if (loginError != null) throw loginError!;
+    return session!;
+  }
   /// 站点体检（C-B4）：给了就用它；[healthError] 给了就抛。诊断包同理。
   Map<String, dynamic> healthBody = <String, dynamic>{
     'ok': true, 'critical_ok': true, 'version': '1.4.0', 'now_ms': 1,
@@ -116,6 +121,17 @@ class FakeApi implements SiteApi {
     if (versionsGate != null) await versionsGate!.future;
     if (versionsError != null) throw versionsError!;
     return versionsBody;
+  }
+  @override
+  Future<Map<String, dynamic>> uploadProblem(Uint8List gz,
+      {String note = '', String robot = '', String device = '', String app = ''}) async {
+    calls.add('problem:$note:$robot');
+    return <String, dynamic>{'code': 'NW-1110-7F3A', 'at_ms': 1, 'token': 'tk'};
+  }
+  @override
+  Future<Uint8List> problemBundle(String code, String token) async {
+    calls.add('problem-bundle:$code:$token');
+    return Uint8List.fromList(List<int>.filled(100, 1));
   }
   @override
   Future<Uint8List> supportBundle() async {
@@ -194,6 +210,9 @@ class FakeApi implements SiteApi {
         (siteFixture('site_robots')['robots'] as List).cast<Map<String, dynamic>>();
   }
 
+  /// 给了就叫停（abort）时扔它（站点联系不上、证书变了）。
+  SiteError? abortError;
+
   /// 给了就用它当狗列表（比如一台没报能力的狗）。
   List<Map<String, dynamic>>? robotsOverride;
   @override
@@ -210,6 +229,7 @@ class FakeApi implements SiteApi {
   @override
   Future<Map<String, dynamic>> abort(String id, String t) async {
     calls.add('abort $id $t');
+    if (abortError != null) throw abortError!;
     return {'ack': {'result': 'accepted'}};
   }
   @override
@@ -600,8 +620,8 @@ class FakeApi implements SiteApi {
     return _acked(key);
   }
   @override
-  Future<Map<String, dynamic>> resolveAlert(String key) async {
-    calls.add('resolve $key');
+  Future<Map<String, dynamic>> resolveAlert(String key, {String verdict = ''}) async {
+    calls.add(verdict.isEmpty ? 'resolve $key' : 'resolve $key $verdict');
     return _acked(key);
   }
   @override
@@ -1143,54 +1163,21 @@ void main() {
     expect(busy.calls, ['home A abort']);
   });
 
-  testWidgets('POC 姿态：报了才有；先选再确认才发；有任务在跑直接说先停；经理没有', (t) async {
-    Map<String, dynamic> withPosture(Map<String, dynamic> v, {bool idle = true}) {
+  testWidgets('用户 11-08：机器人页没有单独的「姿态…」，遥控那格写「遥控 · 姿态」；经理没有', (t) async {
+    Map<String, dynamic> withPosture(Map<String, dynamic> v) {
       final out = jsonDecode(jsonEncode(v)) as Map<String, dynamic>;
       ((out['capabilities'] as Map)['tasks'] as Map)['posture'] = {'modes': ['stand', 'lie', 'crawl']};
-      if (idle) (out['status'] as Map)['task'] = null;
+      (out['status'] as Map)['task'] = null;
       return out;
     }
     final api = FakeApi('guard', robotView: withPosture(busyView()));
     await openRobot(t, api);
-    await t.ensureVisible(find.byKey(const Key('btn-posture')));
-    await t.tap(find.byKey(const Key('btn-posture')));
-    await t.pumpAndSettle();
-    expect(find.byKey(const Key('posture-crawl')), findsOneWidget);
-    await t.tap(find.byKey(const Key('posture-lie')));
-    await t.pumpAndSettle();
-    expect(api.calls, isEmpty, reason: '还没确认，不发');
-    expect(find.textContaining('旁边没有人'), findsOneWidget);
-    await t.tap(find.byKey(const Key('posture-confirm')));
-    await t.pumpAndSettle();
-    expect(api.calls, ['posture A lie']);
-
-    // 换一套假站点前先把页面清掉（不然上一台的详情页还盖在上面）
-    await t.pumpWidget(Container());
-    final busy = FakeApi('guard', robotView: withPosture(busyView(), idle: false));
-    await openRobot(t, busy);
-    await t.ensureVisible(find.byKey(const Key('btn-posture')));
-    await t.tap(find.byKey(const Key('btn-posture')));
-    await t.pumpAndSettle();
-    expect(find.byKey(const Key('posture-lie')), findsNothing);
-    expect(find.textContaining('先停止它再换姿态'), findsOneWidget);
-    expect(busy.calls, isEmpty);
-
-    await t.pumpWidget(Container());
-    final heldView = withPosture(busyView());
-    heldView['held'] = <String, dynamic>{'by': 'bob', 'at_ms': 1};
-    final held = FakeApi('guard', robotView: heldView);
-    await openRobot(t, held);
-    await t.ensureVisible(find.byKey(const Key('btn-posture')));
-    await t.tap(find.byKey(const Key('btn-posture')));
-    await t.pumpAndSettle();
-    expect(find.byKey(const Key('posture-lie')), findsNothing);
-    expect(find.textContaining('先点「恢复」再换姿态'), findsOneWidget);
-    expect(held.calls, isEmpty);
-
+    expect(find.byKey(const Key('btn-posture')), findsNothing);
+    expect(find.text('遥控 · 姿态'), findsOneWidget);
     await t.pumpWidget(Container());
     final owner = FakeApi('owner', robotView: withPosture(busyView()));
     await openRobot(t, owner);
-    expect(find.byKey(const Key('btn-posture')), findsNothing);
+    expect(find.byKey(const Key('btn-teleop')), findsNothing);
   });
 
   testWidgets('保安：能派巡检、回待命点、叫停', (t) async {
@@ -1368,9 +1355,10 @@ void main() {
       }
       await t.pageBack();
       await t.pumpAndSettle();
-      await t.tap(find.byKey(NwShell.dogsKey));
+      // 手机 App 测试 M01：离开站点走「我的 → 退出站点」，要确认
+      await t.tap(find.byKey(MeTab.leaveKey));
       await t.pumpAndSettle();
-      await t.pageBack();
+      await t.tap(find.byKey(leaveConfirmKey));
       await t.pumpAndSettle();
       expect(api.pushLog,
           push.supported ? ['+rid-1/android', '-rid-1', 'logout'] : ['logout'],
@@ -1466,6 +1454,8 @@ void main() {
     await t.tap(find.byKey(const Key('site-menu-a')));
     await t.pumpAndSettle();
     await t.tap(find.byKey(const Key('site-remove-a')));
+    await t.pumpAndSettle();
+    await t.tap(find.byKey(SiteListPage.removeOkKey));
     await t.pumpAndSettle();
     expect(store.sites, isEmpty);
   });

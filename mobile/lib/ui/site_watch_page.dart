@@ -25,6 +25,7 @@ import '../l10n.dart';
 import '../model/alert.dart';
 import '../model/site_watch.dart';
 import '../net/site_client.dart';
+import '../net/site_text.dart';
 import 'nw/nw_button.dart';
 import 'nw/nw_p2_duty.dart';
 import 'nw/nw_theme.dart';
@@ -214,7 +215,7 @@ class _SiteWatchPageState extends State<SiteWatchPage> {
     // 竖屏的手机一行摆不下「标题 + 两个按钮」（按钮会把标题挤成一个字一行）：按钮放到下面一行。
     return LayoutBuilder(builder: (context, box) {
       final narrow = box.maxWidth < 520;
-      final text = [if (a.detail.isNotEmpty) a.detail, state].join('\n');
+      final text = [if (a.detail.isNotEmpty) siteText(a.detail), state].join('\n');
       final sub = Text(text, style: NwText.bodyMedium.copyWith(color: p1 ? c.text : c.textSecondary));
       return Padding(
           padding: const EdgeInsets.only(bottom: Nw.s8),
@@ -298,7 +299,7 @@ class _SiteWatchPageState extends State<SiteWatchPage> {
       tr('Clock offset ${_num(r.clockSkewS?.toStringAsFixed(1), ' s', r.whyFor('clock_skew_s'))}',
           '时钟偏差 ${_num(r.clockSkewS?.toStringAsFixed(1), ' 秒', r.whyFor('clock_skew_s'))}'),
       r.alerts == null
-          ? tr('Open alarms: unknown (not reported by the site)', '未解决告警：未知（站点未提供）')
+          ? tr('Open alarms: unknown (not reported by the site)', '未解决报警：未知（站点未提供）')
           : tr('Open P1 ${r.alerts!['P1']} · P2 ${r.alerts!['P2']} · P3 ${r.alerts!['P3']}',
               '未解决 P1 ${r.alerts!['P1']} · P2 ${r.alerts!['P2']} · P3 ${r.alerts!['P3']}'),
       tr('Disk used ${_num(_pct(r.diskUsedRatio), '%', r.whyFor('disk_used_ratio'))}',
@@ -392,8 +393,8 @@ class _SiteWatchPageState extends State<SiteWatchPage> {
       ],
       Text(
           _alertsAt == null
-              ? tr('Alarms not loaded yet', '告警尚未加载')
-              : tr('Alarms loaded at ${_hms(_alertsAt!)}; pull down to refresh', '告警更新于 ${_hms(_alertsAt!)}；可下拉刷新'),
+              ? tr('Alarms not loaded yet', '报警尚未加载')
+              : tr('Alarms loaded at ${_hms(_alertsAt!)}; pull down to refresh', '报警更新于 ${_hms(_alertsAt!)}；可下拉刷新'),
           key: SiteWatchPage.loadedAtKey,
           style: NwText.bodySmall.copyWith(color: c.textSecondary)),
       gap8,
@@ -469,6 +470,8 @@ class _SiteWatchPageState extends State<SiteWatchPage> {
             key: SiteWatchPage.headerKey,
             overline: tr('Nexus Warden', 'Nexus Warden'),
             title: widget.title ?? tr('Duty', '值守'),
+            // 手机 App 测试 M09：从值守页点进来的（推进来的一页）要能返回
+            leading: Navigator.canPop(context) ? const BackButton() : null,
             compact: MediaQuery.sizeOf(context).height < SiteWatchPage.compactBelow),
         Expanded(
           // 宽屏（桌面版、值守大屏，W15）：告警一栏、每台狗一栏并排，一眼都看得见；窄的照旧一栏往下排。

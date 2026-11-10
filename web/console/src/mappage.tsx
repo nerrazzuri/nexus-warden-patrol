@@ -3,14 +3,17 @@ import type { ComponentChildren } from "preact";
 // 菱形 + 报警圈(未确认时闪)。侧栏只给**选中**的狗拉前后两路小画面(有 P1 时默认选 P1 的狗)。
 // 地图本身(转正、全图、缩放平移、区域名、图例、比例尺、平面图)在 mapcanvas.tsx;狗和报警点画在屏上坐标里
 // (大小不跟着缩放变),位置用跟底图同一个变换算。
+import { siteStr } from "./sitetext";
 import { useEffect, useMemo, useState } from "preact/hooks";
+import { reportStart, type StartCheck } from "./alertinfo";
 import { api, ApiError, enc } from "./api";
 import { hm, nameOf, useDutySettings } from "./data";
 import { siteHm } from "./todaypatrols";
 import { Modal } from "./dialogs";
-import { alertTitle, lang, refusalText, t, type Key } from "./i18n";
-import type { UnitInfo } from "./live";
-import { ENGINEERING_LAYERS, etaNext, LAYERS, layersFor, loadLayers, saveLayers, mapPins, mapTodo, shiftStart, staleAfter, staleCells, tonightEvents, zoneDecor,
+import { alertTitle, joinList, lang, refusalText, t, type Key } from "./i18n";
+import { pageAllowed } from "./shell";
+import { locText, type UnitInfo } from "./live";
+import { ENGINEERING_LAYERS, etaNext, LAYERS, layersFor, loadLayers, saveLayers, labelRows, mapPins, mapTodo, olderOpen, shiftStart, staleAfter, staleCells, tonightEvents, zoneDecor,
   type AuthzRow, type Cell, type Layer, type ModeView } from "./maplayers";
 import { fanPath } from "./layoutpage";
 import { MapCanvas, type CanvasArea, type LegendKey, type Screen } from "./mapcanvas";
@@ -65,6 +68,8 @@ export function SiteMap(props: {
   pick?: boolean;
   /** 浮在图左上角的一句提示(值班页「帮它找位置」时说怎么做)。 */
   hint?: string | null;
+  /** 第 2 轮 P1-56:「帮它定位」设完位置、机器人定位好了(页面退出定位模式)。 */
+  onLocated?: (robotId: string) => void;
   /** 这张图上有名字的区域(值班页拿来算每台机器人在哪个防区)。 */
   onAreas?: (areas: CanvasArea[]) => void;
   /** 点图交给页面(地图页:让最近的机器人过去看看、临时路线);给了就不进「去这里 / 设位置」。坐标是地图米。 */
@@ -82,6 +87,10 @@ export function SiteMap(props: {
   eta?: boolean;
   /** 现在画的是哪张图(页面按它去拉轨迹覆盖、待命点)。 */
   onMapShown?: (map: { map_id: string; version: string } | null, meta: PreviewMeta | null) => void;
+  /** 连不上站点(没有机器人数据时不说「没有地图」)。 */
+  stale?: boolean;
+  /** 预览拉不到隔多久再拉(毫秒;测试里调小)。 */
+  retryMs?: number;
 }) {
   const sel = props.units.find((u) => u.robot.robot_id === props.selected) ?? props.units[0];
   // 底图跟着选中的狗(外审 W39-I2:原来总是第一只有图的狗,选中的狗可能在另一张图上);选中的狗没报图
@@ -90,18 +99,26 @@ export function SiteMap(props: {
   const which = selMap ?? props.units.map((u) => robotMap(u.robot)).find((m) => m) ?? null;
   const key = which ? `${which.map_id}/${which.version}` : "";
   // 预览、区域记着是哪张图的:换图以后才回来的旧回包不认
-  const [got, setGot] = useState<{ key: string; meta: PreviewMeta | null; areas: { zone: string; points: Pt[] }[] }>({ key: "", meta: null, areas: [] });
+  const [got, setGot] = useState<{ key: string; meta: PreviewMeta | null; areas: { zone: string; points: Pt[] }[]; failed?: boolean }>({ key: "", meta: null, areas: [] });
+  // 第 2 轮:预览拉不到(断线)不能当成「没有地图」—— 记着失败了,按 retryMs 再拉,拉到为止
+  const [retry, setRetry] = useState(0);
   useEffect(() => {
     if (!which) return;
     let live = true;
     const base = `/api/maps/${enc(which.map_id)}/${enc(which.version)}`;
+    let timer = 0;
     api<PreviewMeta>("GET", `${base}/preview`).then((m) => live && setGot((g) => ({ key, meta: m, areas: g.key === key ? g.areas : [] })))
-      .catch(() => live && setGot((g) => ({ key, meta: null, areas: g.key === key ? g.areas : [] })));
-    api<{ areas: { zone: string; points: Pt[] }[] }>("GET", `${base}/areas`).then((d) => live && setGot((g) => ({ key, meta: g.key === key ? g.meta : null, areas: d.areas })))
+      .catch(() => {
+        if (!live) return;
+        setGot((g) => ({ key, meta: g.key === key ? g.meta : null, areas: g.key === key ? g.areas : [], failed: true }));
+        timer = window.setTimeout(() => setRetry((n) => n + 1), props.retryMs ?? 5_000);
+      });
+    api<{ areas: { zone: string; points: Pt[] }[] }>("GET", `${base}/areas`).then((d) => live && setGot((g) => ({ ...g, key, meta: g.key === key ? g.meta : null, areas: d.areas })))
       .catch(() => {});
-    return () => { live = false; };
-  }, [key]);
+    return () => { live = false; window.clearTimeout(timer); };
+  }, [key, retry]);
   const meta = got.key === key ? got.meta : null;
+  const loadFailed = got.key === key && !!got.failed && !meta;
   // 没载入时也用同一个空列表:每次给新的 [] 会让回报区域的效果每次渲染都触发,页面跟着重画,停不下来
   const areas = got.key === key ? got.areas : NO_AREAS;
   const onAreas = props.onAreas;
@@ -118,7 +135,9 @@ export function SiteMap(props: {
   const pose = usePosePick({ meta, map: which ? { map_id: which.map_id, version: which.version } : null,
     robotId: sel?.robot.robot_id ?? null, robotMap: selMap,
     robotAt: sel && onThisMap(sel) ? sel.robot.loc?.pose ?? null : null, role: props.role ?? "",
-    canFind: canFindPose(sel?.robot) });
+    canFind: canFindPose(sel?.robot), locate: props.pick === true,
+    locNow: locText(sel ?? undefined), hint: props.pick === true ? props.hint : null,
+    onSettled: props.onLocated });
   // 运行可视化:规划路径、轨迹、被挡位置(2 s 一拉),近 7 天定位出过问题的地方
   const viz = useRunViz(!!which);
   const vizRobots = which ? vizOnMap(viz, which.map_id, which.version) : [];
@@ -145,12 +164,14 @@ export function SiteMap(props: {
     const { px, py } = toPx(meta, pose.x, pose.y);
     return onMap(meta, px, py, 20) ? [{ u, px, py, yaw: pose.yaw }] : [];
   });
-  const legend: LegendKey[] = [...(bots.length ? ["robot" as const] : []), ...(pins.length ? ["alarm" as const] : [])];
+  // P2-15:机器人、报警两项一直在图例里(没有的时候也说清是什么样子)
+  const legend: LegendKey[] = ["robot", "alarm"];
 
   return (
     <div class="mapbox" {...pose.wrapProps}>
         {!which || !meta ? (
-          <p class="empty">{t("noMap")}</p>
+          <p class={loadFailed || (!which && props.stale) ? "empty warn" : "empty"} role="status">
+            {t(loadFailed || (!which && props.stale) ? "loadRetry" : "noMap")}</p>
         ) : (
           <MapCanvas meta={meta} raster={`/api/maps/${enc(which.map_id)}/${enc(which.version)}/preview.png`} label={t("mapAria")}
             areas={mapAreas(meta, areas).map((a) => {
@@ -162,7 +183,8 @@ export function SiteMap(props: {
               : props.pick === false ? undefined : pose.onPick}
             world={<>{props.route !== false && <VizWorld meta={meta} robots={vizRobots} />}{props.extraWorld?.(meta, which)}</>}
             // 「去这里」浮在图的右上角(不在图下面另占一块);运行图层的图例并进底图图例那一行
-            overlay={<>{props.hint && <div class="map-hint" role="status">{props.hint}</div>}{!props.onPickMap && props.pick !== false && pose.panel}</>}
+            // 第 2 轮 P1-56:定位时那句说明放进设位置的小卡片里(原来左上一句、卡片里一句、侧栏一句,还互相压着)
+            overlay={<>{props.hint && !(props.pick === true && pose.panel) && <div class="map-hint" role="status">{props.hint}</div>}{!props.onPickMap && props.pick !== false && pose.panel}</>}
             legendExtra={<RunLegendItems has={vizHas(vizRobots, eps)} />}
             // 区域名让开报警圈、狗(圆点 + 下面的编号)
             avoid={(s) => [
@@ -185,8 +207,12 @@ export function SiteMap(props: {
                     </g>
                   );
                 })}
-                {bots.map(({ u, px, py, yaw }) => {
+                {(() => {
+                  const rows = labelRows(bots.map((b) => s.px(b.px, b.py)), BOT_R * 4);
+                  const step = (LABEL_PX + 2) * (props.eta ? 2 : 1);
+                  return bots.map(({ u, px, py, yaw }, i) => {
                   const [x, y] = s.px(px, py);
+                  const dy = rows[i] * step;
                   // 朝向:在预览上往 yaw 走一小段,跟着图一起变换,再在屏上取定长
                   const e = heading(px, py, yaw, 10);
                   const [ex, ey] = s.px(e.hx, e.hy);
@@ -195,18 +221,23 @@ export function SiteMap(props: {
                   const a = abnormal(u.state);
                   const on = u.robot.robot_id === sel?.robot.robot_id;
                   return (
-                    <g key={u.robot.robot_id} class={`bot ${a ?? "ok"}${on ? " on" : ""}`} onClick={(e) => { e.stopPropagation(); props.onSelect(u.robot.robot_id); }}>
+                    <g key={u.robot.robot_id} class={`bot ${a ?? "ok"}${on ? " on" : ""}`} onClick={(e) => {
+                      // 第 4 轮 maps N3:点已选中的这台本身 = 在它身上选点(帮它定位时最自然的点法),交给地图
+                      if (on && pose.onPick && props.pick === true && !props.onPickMap) return;   // 只在「帮它定位」时(pick 明说要选点)
+                      e.stopPropagation(); props.onSelect(u.robot.robot_id);
+                    }}>
                       <line x1={x} y1={y} x2={x + ((ex - x) / n) * len} y2={y + ((ey - y) / n) * len} class="bot-head" />
                       <circle cx={x} cy={y} r={BOT_R} class="bot-dot" />
-                      <text x={x} y={y + BOT_R + LABEL_PX + 2} class="bot-label" font-size={LABEL_PX}>{nameOf(u.robot.robot_id)}</text>
+                      <text x={x} y={y + dy + BOT_R + LABEL_PX + 2} class="bot-label" font-size={LABEL_PX}>{nameOf(u.robot.robot_id)}</text>
                       {props.eta && etaOf(u) != null && (
-                        <text x={x} y={y + BOT_R + LABEL_PX * 2 + 4} class="bot-label eta" font-size={LABEL_PX - 1}>
+                        <text x={x} y={y + dy + BOT_R + LABEL_PX * 2 + 4} class="bot-label eta" font-size={LABEL_PX - 1}>
                           {t("etaNextMin", { n: Math.max(1, Math.round(etaOf(u)! / 60)) })}
                         </text>
                       )}
                     </g>
                   );
-                })}
+                  });
+                })()}
               </>
             )} />
         )}
@@ -226,6 +257,8 @@ export function MapPage(props: {
   /** 保安的「全部布防」(设计 §11 第 14 条):模式不是布防时才有。 */
   onArm: () => void;
   say?: (s: string) => void;
+  /** 连不上站点(第 2 轮:没有数据时不说「没有地图」)。 */
+  stale?: boolean;
 }) {
   const say = props.say ?? (() => {});
   const duty = useDutySettings();
@@ -233,6 +266,9 @@ export function MapPage(props: {
   const [shown, setShown] = useState<{ map: { map_id: string; version: string } | null; meta: PreviewMeta | null }>({ map: null, meta: null });
   const [look, setLook] = useState<{ at: Pt; map: { map_id: string; version: string } } | null>(null);
   const [route, setRoute] = useState<Pt[] | null>(null);
+  // P1-16:派出去的临时路线留在图上(哪台在走);走过的地方由「路线」图层的轨迹画出
+  // 第 2 轮 duty N2:派出后跟着出发检查的结果走 —— 被拒了侧栏写没出发、为什么,不再说「正在走」
+  const [sentRoute, setSentRoute] = useState<{ robot: string; pts: Pt[]; refused?: string; at?: number } | null>(null);
   const [cells, setCells] = useState<{ cell_m: number; cells: Cell[] } | null>(null);
   const [authz, setAuthz] = useState<AuthzRow[]>([]);
   const [recent, setRecent] = useState<Alert[]>([]);
@@ -254,14 +290,15 @@ export function MapPage(props: {
   };
   const mapKey = shown.map ? `${shown.map.map_id}/${shown.map.version}` : "";
 
-  // 本班出的事(含已处理的):30 秒一拉
+  // 本班出的事(含已处理的):30 秒一拉;第 4 轮 duty N4:顶栏的报警一变(推过来的)马上再拉,不等 30 秒
+  const p1Key = props.p1.map((a) => `${a.key}:${a.count ?? 1}:${a.resolved_ms ?? ""}`).join(",");
   useEffect(() => {
     let live = true;
     const pull = () => api<{ alerts: Alert[] }>("GET", "/api/alerts?all=1&limit=200").then((d) => live && setRecent(d.alerts ?? [])).catch(() => {});
     void pull();
     const id = window.setInterval(pull, 30_000);
     return () => { live = false; window.clearInterval(id); };
-  }, []);
+  }, [p1Key]);
   useEffect(() => {
     let live = true;
     api<{ authorizations: AuthzRow[] }>("GET", "/api/lists/authorizations").then((d) => live && setAuthz(d.authorizations ?? [])).catch(() => {});
@@ -294,6 +331,7 @@ export function MapPage(props: {
   const events = tonightEvents(recent, since);
   const pins = mapPins(recent, since);
   const todo = mapTodo(recent, since);
+  const older = olderOpen(recent, since);
   const stale = cells ? staleCells(cells.cells, props.now, staleAfter(duty.stale_hours)) : [];
   const onThisMap = (u: UnitInfo) => { const m = robotMap(u.robot); return !!(m && shown.map && m.map_id === shown.map.map_id && m.version === shown.map.version); };
   const robotsHere = props.units.filter((u) => u.state !== "offline" && onThisMap(u)).map((u) => u.robot.robot_id);
@@ -303,7 +341,7 @@ export function MapPage(props: {
 
   return (
     <div class="mappage">
-      <SiteMap units={props.units} p1={props.p1} now={props.now} selected={props.selected} onSelect={props.onSelect} role={props.role}
+      <SiteMap units={props.units} p1={props.p1} now={props.now} selected={props.selected} onSelect={props.onSelect} role={props.role} stale={props.stale}
         episodes={on("loc")} navZones={on("nogo")} route={on("route")} eta={on("route")}
         areaDecor={on("zones") ? (n) => zoneDecor(n, props.mode, authz) : (n) => ({ label: n, tone: "armed" })}
         onMapShown={(map, meta) => setShown({ map, meta })}
@@ -328,10 +366,19 @@ export function MapPage(props: {
             {route && route.length > 1 && (
               <polyline class="temp-route" points={route.map(([x, y]) => { const p = toPx(meta, x, y); return `${p.px},${p.py}`; }).join(" ")} />
             )}
+            {!route && sentRoute && !sentRoute.refused && sentRoute.pts.length > 1 && (
+              <polyline class="temp-route sent" data-sent-route={sentRoute.robot}
+                points={sentRoute.pts.map(([x, y]) => { const p = toPx(meta, x, y); return `${p.px},${p.py}`; }).join(" ")} />
+            )}
           </>
         )}
         extraMarks={(s) => (
           <>
+            {/* 第 2 轮 duty N9:点了哪儿就在哪儿标一下,确认框说的是这个点 */}
+            {look && shown.map && look.map.map_id === shown.map.map_id && look.map.version === shown.map.version && (() => {
+              const [x, y] = s.map(look.at[0], look.at[1]);
+              return <g class="look-mark" data-look-mark="1"><circle cx={x} cy={y} r={10} /><circle cx={x} cy={y} r={3} class="dot" /></g>;
+            })()}
             {on("cameras") && shown.map && camMarks(s, camsOnMap(cams, shown.map), setLiveCam)}
             {on("standby") && standby.map((p) => {
               const [x, y] = s.map(p.x, p.y);
@@ -348,9 +395,9 @@ export function MapPage(props: {
                 </g>
               )];
             })}
-            {route && route.map(([mx, my], i) => {
+            {(route ?? sentRoute?.pts ?? []).map(([mx, my], i) => {
               const [x, y] = s.map(mx, my);
-              return <g key={`tr:${i}`} class="temp-pt"><circle cx={x} cy={y} r="9" /><text x={x} y={y + 4}>{i + 1}</text></g>;
+              return <g key={`tr:${i}`} class={route ? "temp-pt" : "temp-pt sent"}><circle cx={x} cy={y} r="9" /><text x={x} y={y + 4}>{i + 1}</text></g>;
             })}
           </>
         )} />
@@ -375,15 +422,17 @@ export function MapPage(props: {
           <button type="button" class="btn primary arm-all" onClick={props.onArm}>{t("armAll")}</button>
         )}
         {/* W72(用户 11-03):侧栏只列还要人处理的,最多几条;已解决、自动恢复的去报警记录看 */}
-        <h3>{t("mapTodoN", { n: todo.length })}</h3>
-        {todo.length === 0 ? <p class="muted small">{t("mapTodoNone")}</p> : (
+        {/* 第 3 轮 layout N3:连不上站点时不说「没有要处理的」,说状态未知、计数写 ? */}
+        <h3>{t("mapTodoN", { n: props.stale && todo.length === 0 ? "?" : todo.length })}</h3>
+        {older > 0 && <p class="small"><a href="#/alarms">{t("mapTodoOlder", { n: older })}</a></p>}
+        {todo.length === 0 ? (props.stale ? <p class="warn small" data-stale="1">{t("dutyStaleAlarms")}</p> : <p class="muted small">{t(older > 0 ? "mapTodoNoneShift" : "mapTodoNone")}</p>) : (
           <ul class="evlist">
             {todo.map((a) => (
               <li key={a.key}>
                 <button type="button" class="evrow" onClick={() => toRec(a)}>
                   <time class="mono">{hm(a.first_ms)}</time>
                   <span class={`ev-what ${a.audience ?? ""}`}>{alertTitle(lang.value, a.kind, a.title)}</span>
-                  <small class="muted">{t("evOpen")} · {t("evToRec")}</small>
+                  <small class="muted">{t("evOpen")}{a.robot && a.robot !== "site" && !a.robot.includes(":") ? ` · ${t("evToRec")}` : ""}</small>
                 </button>
               </li>
             ))}
@@ -391,8 +440,26 @@ export function MapPage(props: {
         )}
         {events.length > 0 && <a class="small" href="#/alarms">{t("mapAllShift", { n: events.length })}</a>}
         {route ? (
-          shown.map && <TempRoutePanel map={shown.map} points={route} robots={robotsHere} say={say}
-            onUndo={() => setRoute(route.slice(0, -1))} onCancel={() => setRoute(null)} onSent={() => setRoute(null)} />
+          shown.map && <TempRoutePanel canFix={pageAllowed("admin/localization", props.role ?? "")} map={shown.map} points={route} robots={robotsHere} say={say}
+            onUndo={() => setRoute(route.slice(0, -1))} onCancel={() => setRoute(null)}
+            onSent={(robot, check) => {
+              setSentRoute({ robot, pts: route, at: Date.now() });
+              if (!on("route")) flip("route");            // 看得到它走到哪了
+              setRoute(null);
+              void check?.then((r) => {
+                if (r.state === "refused") setSentRoute((s) => (s && s.robot === robot ? { ...s, refused: joinWhyAct(r.why, r.act) } : s));
+              });
+            }} />
+        ) : sentRoute ? (
+          <div class={sentRoute.refused ? "tip warn" : "tip"} data-sent-tip={sentRoute.refused ? "refused" : "1"}>
+            <p>{sentRoute.refused ? t("trSentRefused", { id: nameOf(sentRoute.robot), why: sentRoute.refused }) : t("trSentShown", { id: nameOf(sentRoute.robot) })}</p>
+            {/* 第 4 轮 r3-duty-N3:派出以后跳过了点,侧栏说一声(原来一直写「在临时路线上」) */}
+            {!sentRoute.refused && (() => {
+              const sk = recent.filter((a) => a.robot === sentRoute.robot && a.resolved_by === "site:skipped" && a.first_ms >= (sentRoute.at ?? 0) - 5_000);
+              return sk.length > 0 ? <p class="warn-text small" data-sent-skipped="1">{t("trSentSkipped", { id: nameOf(sentRoute.robot), why: siteStr(sk[0].detail || sk[0].title) })}</p> : null;
+            })()}
+            <button type="button" class="btn sm" onClick={() => setSentRoute(null)}>{t("trSentHide")}</button>
+          </div>
         ) : canPatrol(props.role ?? "") && (
           <div class="tip">
             <p>{t("mapTip")}</p>
@@ -400,7 +467,7 @@ export function MapPage(props: {
           </div>
         )}
       </aside>
-      {look && <GoLookCard map={look.map} at={look.at} units={props.units} say={say} onClose={() => setLook(null)} />}
+      {look && <GoLookCard canFix={pageAllowed("admin/localization", props.role ?? "")} map={look.map} at={look.at} units={props.units} say={say} onClose={() => setLook(null)} />}
       {liveCam && (
         <Modal label={liveCam} onClose={() => setLiveCam(null)} wide>
           <img class="cam-live" alt={liveCam} src={`/api/cameras/${enc(liveCam)}/live`} />
@@ -412,6 +479,8 @@ export function MapPage(props: {
 
 /** 结论说成人话(报警记录页也用)。 */
 export function verdictText(a: Alert): string {
+  // 第 4 轮 duty N5:跳过一次的点没到过,不是「自己恢复了」
+  if (a.resolved_by === "site:skipped") return t("vSkipped");
   if (autoResolved(a)) return t("vAuto");
   return a.verdict === "intruder" ? t("vIntruder") : a.verdict === "false_alarm" ? t("vFalse") : a.verdict === "handled" ? t("vHandled") : t("vDone");
 }
@@ -441,7 +510,7 @@ export function camMarks(s: Screen, cams: PlacedCam[], open: (name: string) => v
   });
 }
 
-export function GoLookCard(props: { map: { map_id: string; version: string }; at: Pt; units: UnitInfo[]; onClose: () => void; say: (s: string) => void }) {
+export function GoLookCard(props: { map: { map_id: string; version: string }; at: Pt; units: UnitInfo[]; onClose: () => void; say: (s: string) => void; canFix?: boolean; exclude?: string }) {
   const [got, setGot] = useState<{ robot_id: string; eta_s: number } | null | "none" | "error">(null);
   const [why, setWhy] = useState("");
   const [busy, setBusy] = useState(false);
@@ -449,24 +518,30 @@ export function GoLookCard(props: { map: { map_id: string; version: string }; at
   useEffect(() => {
     let live = true;
     api<{ robot_id: string; eta_s: number }>("GET",
-      `/api/robots/nearest?map_id=${enc(props.map.map_id)}&map_version=${enc(props.map.version)}&x=${x}&y=${y}`)
+      `/api/robots/nearest?map_id=${enc(props.map.map_id)}&map_version=${enc(props.map.version)}&x=${x}&y=${y}${props.exclude ? `&exclude=${enc(props.exclude)}` : ""}`)
       .then((d) => live && setGot(d))
       .catch((e) => {
         if (!live) return;
-        if (e instanceof ApiError && e.status === 404) setGot("none");
+        // 第 4 轮 duty N3:能派的都没标原点(出不了发)—— 说是哪几台、怎么办
+        const d = e instanceof ApiError ? e.data as { reason?: string; robots?: string[] } | undefined : undefined;
+        if (e instanceof ApiError && e.status === 404 && d?.reason === "no_home") { setGot("error"); setWhy(t("lookNoHome", { ids: joinList((d.robots ?? []).map(nameOf)) })); }
+        else if (e instanceof ApiError && e.status === 404) setGot("none");
         else { setGot("error"); setWhy(e instanceof ApiError ? e.message : String(e)); }
       });
     return () => { live = false; };
-  }, [x, y, props.map.map_id, props.map.version]);
+  }, [x, y, props.map.map_id, props.map.version, props.exclude]);
   async function send(id: string) {
     setBusy(true);
     const p = props.units.find((u) => u.robot.robot_id === id)?.robot.loc?.pose;
     const yaw = (p ? yawToward(p.x, p.y, x, y) : null) ?? 0;
     try {
+      const sentAt = Date.now();
       const r = await api<CommandReply>("POST", `/api/robots/${enc(id)}/goto`,
         { target: { map_id: props.map.map_id, map_version: props.map.version, frame_id: "map", x, y, yaw } });
       const no = notAccepted(r);
-      props.say(no ?? t("lookSent", { id }));
+      // 网页易用性第 1 轮 P0-03:收下 ≠ 出发了(出发前检查在后头),确认完再说
+      if (no) props.say(no);
+      else void reportStart(nameOf(id), sentAt, props.say, { robot: id, canFix: props.canFix });
       props.onClose();
     } catch (e) {
       setWhy(e instanceof ApiError ? e.message : String(e));
@@ -477,7 +552,7 @@ export function GoLookCard(props: { map: { map_id: string; version: string }; at
   return (
     <div class="golook" role="dialog" aria-label={t("lookTitle")}>
       {got === null && <p class="muted">{t("lookAsking")}</p>}
-      {got === "none" && <p>{t("lookNone")}</p>}
+      {got === "none" && <p>{props.exclude ? t("lookOnlySelf", { id: nameOf(props.exclude) }) : t("lookNone")}</p>}
       {got === "error" && <p class="error">{why}</p>}
       {got && typeof got === "object" && (
         <p>{t("lookWho", { id: nameOf(got.robot_id), n: Math.max(1, Math.round(got.eta_s / 60)) })}</p>
@@ -493,41 +568,62 @@ export function GoLookCard(props: { map: { map_id: string; version: string }; at
   );
 }
 
+/** P1-16:落点后多久去站点查一次。 */
+export const TEMP_CHECK_MS = 400;
+
 /** 保安的临时路线(设计 §4.3,用户选的):按顺序点几个点、选一台、开始;走一趟就没了,不存。 */
 export function TempRoutePanel(props: {
+  canFix?: boolean;
   map: { map_id: string; version: string };
   points: Pt[];
   robots: string[];
   onUndo: () => void;
   onCancel: () => void;
-  onSent: () => void;
+  /** ``check``:出发检查的结果(排进日程的没有)。 */
+  onSent: (robot: string, check?: Promise<StartCheck>) => void;
   say: (s: string) => void;
 }) {
   const [robot, setRobot] = useState<string | null>(props.robots[0] ?? null);
   const [errs, setErrs] = useState<string[]>([]);
+  // 第 2 轮 P1-16:落点检查查出问题的点(改点以前「开始」灰掉;按了站点也只会回 400、看着没反应)
+  const [bad, setBad] = useState(0);
   const [busy, setBusy] = useState(false);
+  const pointText = (list: { index: number | null; problem: string }[]) =>
+    list.map((x) => (x.index == null ? siteStr(x.problem) : t("trBadPoint", { n: x.index + 1, why: siteStr(x.problem) })));
+  // P1-16:点一下就查(穿墙、在禁行区里、没扫到的地方),不用等按「开始」
+  const key = JSON.stringify(props.points);
+  useEffect(() => {
+    if (props.points.length === 0) { setErrs([]); setBad(0); return; }
+    let live = true;
+    const id = window.setTimeout(() => {
+      api<{ errors: { index: number | null; problem: string }[] }>("POST", "/api/route-check",
+        { points: props.points.map(([x, y]) => ({ x, y })), map_id: props.map.map_id, map_version: props.map.version, ...(robot ? { robot } : {}) })
+        .then((d) => { if (live) { setErrs(pointText(d.errors ?? [])); setBad((d.errors ?? []).length); } })
+        .catch(() => { /* 老站点没有这个接口:按「开始」时照样查 */ });
+    }, TEMP_CHECK_MS);
+    return () => { live = false; window.clearTimeout(id); };
+  }, [key, props.map.map_id, props.map.version, robot]);
   async function go() {
     if (!robot) return;
     setBusy(true);
     setErrs([]);
     try {
+      const sentAt = Date.now();
       const r = await api<CommandReply & { queued?: boolean; start_after_ms?: number; because?: string; utc_offset_min?: number }>(
         "POST", `/api/robots/${enc(robot)}/patrol`,
         { points: props.points.map(([x, y]) => ({ x, y })), map_id: props.map.map_id, map_version: props.map.version });
       // W53:撞上日程就排到后面(日程优先),说排到几点
       if (r.queued) {
         props.say(t("trQueued", { id: robot, at: siteHm(r.start_after_ms ?? 0, r.utc_offset_min), why: r.because ?? "" }));
-        props.onSent();
+        props.onSent(robot);
         return;
       }
       const no = notAccepted(r);
       if (no) setErrs([no]);
-      else { props.say(t("trSent", { id: robot })); props.onSent(); }
+      else props.onSent(robot, reportStart(nameOf(robot), sentAt, props.say, { robot, canFix: props.canFix }));
     } catch (e) {
       const list = e instanceof ApiError ? (e.data as { errors?: { index: number | null; problem: string }[] } | undefined)?.errors : undefined;
-      setErrs(list && list.length
-        ? list.map((x) => (x.index == null ? x.problem : t("trBadPoint", { n: x.index + 1, why: x.problem })))
-        : [e instanceof ApiError ? refusalText(e.message, e.data) : String(e)]);
+      setErrs(list && list.length ? pointText(list) : [e instanceof ApiError ? refusalText(e.message, e.data) : String(e)]);
     } finally {
       setBusy(false);
     }
@@ -541,12 +637,20 @@ export function TempRoutePanel(props: {
           <button key={id} type="button" aria-pressed={robot === id} onClick={() => setRobot(id)}>{id}</button>
         ))}
       </div>
-      {errs.map((e) => <p key={e} class="error">{e}</p>)}
+      {errs.map((e) => <p key={e} class="error" role="alert">{e}</p>)}
+      {bad > 0 && <p class="muted small" data-fix-points="1">{t("trFixPoints")}</p>}
       <div class="row">
         <button type="button" class="btn sm" disabled={props.points.length === 0} onClick={props.onUndo}>{t("trUndo")}</button>
         <button type="button" class="btn sm" onClick={props.onCancel}>{t("cancel")}</button>
-        <button type="button" class="btn sm primary push" disabled={busy || !robot || props.points.length === 0} onClick={go}>{t("trGo")}</button>
+        <button type="button" class="btn sm primary push" disabled={busy || !robot || props.points.length === 0 || bad > 0} onClick={go}>{t("trGo")}</button>
       </div>
     </div>
   );
+}
+
+/** 第 3 轮 duty N1:原因和办法之间补句号(原来拼成「…no origin yet Localize the robot…」)。 */
+export function joinWhyAct(why: string, act: string): string {
+  if (!act) return why;
+  const zh = lang.value === "zh";
+  return /[.。!！?？]$/.test(why) ? `${why}${zh ? "" : " "}${act}` : `${why}${zh ? "。" : ". "}${act}`;
 }

@@ -89,6 +89,9 @@ describe("布置外框", () => {
     // 存完标签按新数据重开:再改一次照样能存
     fireEvent.click(btn(c, "改"));
     expect((c.querySelector(".ly-save") as HTMLButtonElement).disabled).toBe(false);
+    // P1-34:「未保存」在保存按钮那一行,不另起一行
+    expect(c.querySelector(".ly-save")!.parentElement!.querySelector(".ly-dirty")).not.toBeNull();
+    expect(c.querySelector("p.arm-dirty")).toBeNull();
   });
 
   it("切标签先问没存的", async () => {
@@ -197,5 +200,107 @@ describe("布置外框", () => {
     fireEvent.click(btn(document.querySelector(".modal")!, "取消"));
     expect(on()).toBe("禁行区");
     expect(location.hash).toBe("#/admin/layout?tab=nogo");
+  });
+});
+
+describe("网页易用性第 1 轮 P1-36", () => {
+  it("点回第一个点(半米内)就是闭合;不到三个点不算", async () => {
+    const { closesLoop } = await import("./layoutpage");
+    const meta = { width: 200, height: 100, m_per_px: 0.05, left_x: 0, top_y: 5 } as never;
+    const pts: [number, number][] = [[1, 4], [3, 4], [3, 2]];
+    expect(closesLoop(meta, pts, 20, 20)).toBe(true);          // (1,4) 在像素 (20,20)
+    expect(closesLoop(meta, pts, 28, 20)).toBe(true);          // 0.4 m 外
+    expect(closesLoop(meta, pts, 40, 20)).toBe(false);         // 1 m 外
+    expect(closesLoop(meta, pts.slice(0, 2), 20, 20)).toBe(false);
+  });
+});
+
+describe("网页易用性第 1 轮 P1-44", () => {
+  it("历史摘要按界面语言拼;老站点没 facts 用站点给的", async () => {
+    const { historySummary } = await import("./layoutpage");
+    const row = { id: 1, kind: "nogo", item: "", by: "a", at_ms: 0, note: "", summary: "2 块:门、库" };
+    lang.value = "en";
+    expect(historySummary("nogo", { ...row, facts: { n: 2, names: ["门", "库"] } })).toBe("2 areas: 门, 库");
+    expect(historySummary("route", { ...row, facts: { n: 0, names: [], deleted: true } })).toBe("deleted");
+    expect(historySummary("nogo", row)).toBe("2 块:门、库");
+    lang.value = "zh";
+  });
+});
+
+describe("网页易用性第 2 轮 P1-44", () => {
+  const row = { id: 1, kind: "route", item: "a", by: "x", at_ms: 0, note: "" };
+  it("1 个用单数", async () => {
+    const { historySummary } = await import("./layoutpage");
+    lang.value = "en";
+    expect(historySummary("zones", { ...row, kind: "zones", facts: { n: 1, names: ["East"] } })).toBe("1 zone: East");
+    expect(historySummary("standby", { ...row, kind: "standby", facts: { n: 1, names: ["S1"] } })).toBe("1 standby point: S1");
+    expect(historySummary("cameras", { ...row, kind: "cameras", facts: { n: 1, names: [] } })).toBe("1 camera");
+    expect(historySummary("zones", { ...row, kind: "zones", facts: { n: 2, names: [] } })).toBe("2 zones");
+    lang.value = "zh";
+  });
+  it("巡逻路线、防区路线的历史分开;删除那条按同名早先的类型;老站点全列", async () => {
+    const { ofKind } = await import("./layoutpage");
+    const rows = [
+      { ...row, id: 4, item: "g1", facts: { n: 0, names: [], deleted: true } },
+      { ...row, id: 3, item: "g1", facts: { n: 3, names: [], route_kind: "guard" } },
+      { ...row, id: 2, item: "p1", facts: { n: 5, names: [], route_kind: "patrol" } },
+    ];
+    expect(ofKind(rows, "guard").map((r) => r.id)).toEqual([4, 3]);
+    expect(ofKind(rows, "patrol").map((r) => r.id)).toEqual([2]);
+    const old = rows.map((r) => ({ ...r, facts: { n: 1, names: [] } }));
+    expect(ofKind(old, "guard").length).toBe(3);
+  });
+});
+
+describe("第 2 轮 maps N12:地址带 map、version 就先选那一版", () => {
+  it("#/admin/layout?tab=nogo&map=B&version=1 → 选中 B:1", async () => {
+    setFetch(((url: string) => {
+      if (url === "/api/maps") return Promise.resolve(json({ maps: [{ map_id: "A", version: "1", active: true }, { map_id: "B", version: "1", active: false }] }));
+      if (url.endsWith("/preview")) return Promise.resolve(json(META));
+      if (url.endsWith("/areas")) return Promise.resolve(json({ areas: [] }));
+      if (url.endsWith("/zones")) return Promise.resolve(json({ revision: 0, zones: [] }));
+      if (url.startsWith("/api/routes")) return Promise.resolve(json({ routes: [] }));
+      if (url.startsWith("/api/admin/cameras")) return Promise.resolve(json({ cameras: [] }));
+      return Promise.resolve(json({}, 404));
+    }) as typeof fetch);
+    location.hash = "#/admin/layout?tab=nogo&map=B&version=1&from=publish";
+    const { container: c } = page();
+    await waitFor(() => expect((c.querySelector("select") as HTMLSelectElement | null)?.value).toBe("B\u00001"));
+    location.hash = "";
+  });
+});
+
+describe("第 3 轮 setup N1", () => {
+  it("机器人列表比地图版本晚到:到了以后重新取待命点", async () => {
+    let seen: TabProps | null = null;
+    const Spy = (p: TabProps) => { seen = p; return <div class="spy">{p.data.standby.length}</div>; };
+    location.hash = "#/admin/layout?tab=standby";
+    const r = render(<LayoutPage say={() => {}} robots={[]} tabs={{ ...TABS, standby: Spy }} />);
+    await waitFor(() => expect(r.container.querySelector(".spy")).not.toBeNull());
+    await new Promise((ok) => setTimeout(ok, 20));
+    expect(seen!.data.standby.length).toBe(0);
+    r.rerender(<LayoutPage say={() => {}} robots={["A"]} tabs={{ ...TABS, standby: Spy }} />);
+    await waitFor(() => expect(seen!.data.standby.length).toBe(1));
+    expect(seen!.data.robots).toEqual(["A"]);
+  });
+});
+
+describe("第 5 轮 r5-layout-N1", () => {
+  it("读地图目录失败不说「还没有地图」,连上以后自己再读", async () => {
+    let fail = true;
+    const ok = (url: string) => url === "/api/maps"
+      ? Promise.resolve(json({ maps: [{ map_id: "home", version: "3", note: "", active: true }] }))
+      : Promise.resolve(json(url.endsWith("/preview") ? META : {}));
+    setFetch(((url: string) => (fail && url === "/api/maps" ? Promise.reject(new TypeError("Failed to fetch")) : ok(url))) as typeof fetch);
+    const { container: c } = page();
+    await waitFor(() => expect(c.querySelector(".empty")?.textContent ?? "").toMatch(/重试|稍后|连不上|读不到/));
+    expect(c.textContent).not.toContain("还没有地图");
+    fail = false;
+    const { siteDown } = await import("./data");
+    siteDown.value = true;
+    await new Promise((r) => setTimeout(r, 20));
+    siteDown.value = false;
+    await waitFor(() => expect(c.textContent).not.toContain("读取失败"));
+    expect(c.textContent).toContain("home");
   });
 });

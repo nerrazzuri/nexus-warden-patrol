@@ -17,7 +17,15 @@ import 'nw/nw_p1_entry.dart';
 import 'nw/nw_shell.dart';
 import 'nw/nw_theme.dart';
 import 'nw/nw_widgets.dart';
+import '../net/pairing.dart';
+import 'problem_report.dart';
 import 'site_add.dart';
+import 'site_health.dart' show shareBundle;
+import 'site_scan.dart';
+
+const Key newCodeFieldKey = Key('site-new-code');
+const Key newCodeOkKey = Key('site-new-code-ok');
+const Key newCodeScanKey = Key('site-new-code-scan');
 
 /// 造一个站点客户端。测试换成假的。
 typedef SiteApiFactory = SiteApi Function(SiteEntry site);
@@ -46,6 +54,7 @@ class SiteListPage extends StatefulWidget {
 
   /// 右上角齿轮：设置（W55，语言、工程师工具、App 版本）。
   static const Key settingsKey = Key('open-settings');
+  static const Key removeOkKey = Key('site-remove-ok');
 
   @override
   State<SiteListPage> createState() => _SiteListPageState();
@@ -71,6 +80,22 @@ class _SiteListPageState extends State<SiteListPage> {
   }
 
   Future<void> _remove(SiteEntry s) async {
+    // 手机 App 测试 M22：以前一点就删、不能撤销
+    final ok = await showDialog<bool>(
+        context: context,
+        builder: (c) => AlertDialog(
+              title: Text(tr('Remove ${s.name} from this phone?', '从这台手机上删掉「${s.name}」？')),
+              content: Text(tr('The site itself is not affected. To add it back you need its site code again.',
+                  '站点本身不受影响。要再加回来，得重新扫或粘贴它的站点码。')),
+              actions: [
+                TextButton(onPressed: () => Navigator.pop(c, false), child: Text(tr('Cancel', '取消'))),
+                FilledButton(
+                    key: SiteListPage.removeOkKey,
+                    onPressed: () => Navigator.pop(c, true),
+                    child: Text(tr('Remove', '删除'))),
+              ],
+            ));
+    if (ok != true || !mounted) return;
     final next = [..._sites]..remove(s);
     await widget.store.save(next);
     if (mounted) setState(() => _sites = next);
@@ -95,7 +120,7 @@ class _SiteListPageState extends State<SiteListPage> {
                         controller: ctl,
                         minLines: 2,
                         maxLines: 5,
-                        decoration: InputDecoration(hintText: 'https://192.168.1.10:8443', errorText: err)),
+                        decoration: InputDecoration(hintText: tr('https://address:port', 'https://地址:端口'), errorText: err)),
                   ])),
                   actions: [
                     TextButton(onPressed: () => Navigator.pop(ctx), child: Text(tr('Cancel', '取消'))),
@@ -121,19 +146,89 @@ class _SiteListPageState extends State<SiteListPage> {
     if (mounted) setState(() => _sites = next);
   }
 
+  /// 手机 App 测试 M03：站点重装、重签了证书 —— 扫或粘贴新的站点码，只换这个站点的地址和指纹
+  /// （名字、账号、备用地址留着）。不用再「删掉重加」。回更新后的那一条（没换回 null）。
+  Future<SiteEntry?> _newCode(SiteEntry s) async {
+    final code = TextEditingController();
+    final scan = widget.scanner ?? (canScanCodes ? scanSiteCode : null);
+    final raw = await showDialog<String>(
+        context: context,
+        builder: (c) => AlertDialog(
+              title: Text(tr('Update site code of ${s.name}', '更新 ${s.name} 的站点码')),
+              content: SingleChildScrollView(
+                  child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text(tr(
+                    'Use this after an administrator reinstalled the site or renewed its certificate. Get the new code from '
+                        'the duty console (Add to phone). If nobody changed the site, stop and ask the administrator first.',
+                    '管理员重装站点或更换证书后用这个。新的站点码在值班台的「加到手机」页上。如果没人动过站点，先停下，问管理员。')),
+                const SizedBox(height: Nw.s16),
+                NwField(
+                    fieldKey: newCodeFieldKey,
+                    controller: code,
+                    autocorrect: false,
+                    enableSuggestions: false,
+                    maxLines: 4,
+                    minLines: 2,
+                    mono: true,
+                    hint: '$pairingPrefix…'),
+                if (scan != null) ...[
+                  const SizedBox(height: Nw.s8),
+                  NwButton(
+                      buttonKey: newCodeScanKey,
+                      variant: NwButtonVariant.outline,
+                      icon: Icons.qr_code_scanner_rounded,
+                      label: tr('Scan new code', '扫新码'),
+                      onPressed: () async {
+                        final got = await scan(c);
+                        if (got != null && c.mounted) Navigator.pop(c, got);
+                      }),
+                ],
+              ])),
+              actions: [
+                TextButton(onPressed: () => Navigator.pop(c), child: Text(tr('Cancel', '取消'))),
+                FilledButton(
+                    key: newCodeOkKey,
+                    onPressed: () => Navigator.pop(c, code.text),
+                    child: Text(tr('Use this code', '用这个码'))),
+              ],
+            ));
+    if (raw == null || raw.trim().isEmpty || !mounted) return null;
+    final PairingInfo p;
+    try {
+      p = decodePairing(raw);
+    } on PairingException catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+      return null;
+    }
+    final upd = s.copyWith(
+        url: p.url, fingerprint: p.fingerprint, alts: s.alts.where((u) => u != p.url).toList());
+    final next = [for (final x in _sites) identical(x, s) ? upd : x];
+    await widget.store.save(next);
+    if (!mounted) return upd;
+    setState(() => _sites = next);
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(tr('Site code of ${s.name} updated. Sign in again.', '${s.name} 的站点码已更新，请重新登录。'))));
+    return upd;
+  }
+
   /// 添加站点（App V2）：扫码、粘贴配对码或手填，都在 `SiteAddPage`；这里只管存。
   Future<void> _add() async {
     final entry = await Navigator.push<SiteEntry>(context,
-        MaterialPageRoute<SiteEntry>(builder: (_) => SiteAddPage(scanner: widget.scanner)));
+        MaterialPageRoute<SiteEntry>(builder: (_) => SiteAddPage(scanner: widget.scanner, existing: _sites)));
     if (entry == null || !mounted) return;
-    final next = [..._sites, entry];
+    // M21：新加的放最上面（以前在最底下只露半张），并说一声
+    final next = [entry, ..._sites];
     await widget.store.save(next);
-    if (mounted) setState(() => _sites = next);
+    if (!mounted) return;
+    setState(() => _sites = next);
+    ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(tr('Added ${entry.name}. Tap it to sign in.', '已添加「${entry.name}」，点它登录。'))));
   }
 
   Future<void> _open(SiteEntry s) async {
     String? account0;
     String? used;
+    var wantNewCode = false;
     final messenger = ScaffoldMessenger.of(context);
     final nav = Navigator.of(context);
     // 口令在登录页上收（2026-10-14 重做：原来是弹窗）。登录不了人留在那一页、原因摆在那一页上，
@@ -151,7 +246,8 @@ class _SiteListPageState extends State<SiteListPage> {
                   await api.login(account, password);
                 } on SiteError catch (e) {
                   api?.close();
-                  if (e.status != 0 || s.urls.length == 1) rethrow;
+                  // 证书变了 = 已经找到这台站点主机了：别的地址也是同一张证书，不用再试（M03）
+                  if (e.status != 0 || e.certChanged || s.urls.length == 1) rethrow;
                   errs.add(tr('$u: ${e.message}', '$u：${e.message}'));
                   continue;
                 } catch (_) {
@@ -164,6 +260,9 @@ class _SiteListPageState extends State<SiteListPage> {
               }
               throw SiteError(0, errs.join('\n'));
             },
+            // 手机 App 测试 M03：证书变了，登录页上直接给「扫新码 / 粘贴新码」
+            onNewCode: () => wantNewCode = true,
+            openAnon: () => widget.apiFactory(s),
             // W52：没有账号就在这里申请（不用登录），管理员批了直接用这个账号登录
             apply: (name, display, password) async {
               final api = widget.apiFactory(s);
@@ -173,7 +272,13 @@ class _SiteListPageState extends State<SiteListPage> {
                 api.close();
               }
             })));
-    if (api == null) return;
+    if (api == null) {
+      if (wantNewCode && mounted) {
+        final upd = await _newCode(s);
+        if (upd != null && mounted) await _open(upd);
+      }
+      return;
+    }
     final a = api;
     // 记下这次登录用的账号（下次登录页自动填好）、登上的地址（下次先试它）
     if ((account0 != null && account0 != s.username) || (used != null && used != s.url)) {
@@ -291,23 +396,28 @@ class _SiteListPageState extends State<SiteListPage> {
       address: s.username.isEmpty ? s.url : '${s.url} · ${s.username}',
       enterKey: Key('site-enter-${s.name}'),
       onEnter: () => _open(s),
-      menu: PopupMenuButton<bool>(
+      menu: PopupMenuButton<String>(
           key: Key('site-menu-${s.name}'),
           tooltip: tr('More', '更多'),
           icon: Icon(Icons.more_vert_rounded, color: c.textSecondary),
-          onSelected: (alts) => alts ? _editAlts(s) : _remove(s),
+          onSelected: (v) => switch (v) {
+                'alts' => _editAlts(s),
+                'code' => _newCode(s),
+                _ => _remove(s),
+              },
           itemBuilder: (_) => [
-                PopupMenuItem<bool>(
+                PopupMenuItem<String>(
                     key: Key('site-alts-${s.name}'),
-                    value: true,
+                    value: 'alts',
                     child: Text(tr('Other addresses of this site…', '这个站点的其他地址…'))),
-                PopupMenuItem<bool>(
+                PopupMenuItem<String>(
+                    key: Key('site-code-${s.name}'),
+                    value: 'code',
+                    child: Text(tr('Update site code (certificate changed)…', '更新站点码（证书变了）…'))),
+                PopupMenuItem<String>(
                     key: Key('site-remove-${s.name}'),
-                    value: false,
-                    child: Text(
-                        tr('Remove (after the certificate is reissued, remove and add again)',
-                            '删除（证书重签后需删除重加）'),
-                        style: NwText.bodyMedium.copyWith(color: c.error))),
+                    value: 'remove',
+                    child: Text(tr('Remove', '删除'), style: NwText.bodyMedium.copyWith(color: c.error))),
               ]));
 }
 
@@ -338,9 +448,19 @@ class SiteLoginPage extends StatefulWidget {
   final SiteSignIn signIn;
   /// 给了就有「申请账号」（W52）。
   final SiteApply? apply;
-  const SiteLoginPage({super.key, required this.site, required this.signIn, this.apply});
+
+  /// 手机 App 测试 M03：证书变了时登录页上「更新站点码」按钮调它（调完登录页退出、站点列表接着换码）。
+  final VoidCallback? onNewCode;
+
+  /// 日志设计 第 6 条：登不进去也能「上传日志」—— 给一个还没登录的站点连接（用完关掉）。
+  final SiteApi Function()? openAnon;
+  const SiteLoginPage(
+      {super.key, required this.site, required this.signIn, this.apply, this.onNewCode, this.openAnon});
+
+  static const Key problemKey = Key('login-problem');
 
   static const Key applyKey = Key('login-apply');
+  static const Key newCodeKey = Key('login-new-code');
 
   @override
   State<SiteLoginPage> createState() => _SiteLoginPageState();
@@ -353,6 +473,10 @@ class _SiteLoginPageState extends State<SiteLoginPage> {
   /// 正在登：这时候不收第二次提交，也不许退出去（退了登上的那个会话就没人管了）。
   bool _busy = false;
   String? _error;
+
+  /// 这次登不上是因为没连上站点（证书、网络），不是账号密码：密码框不标红（M03）。
+  bool _notPassword = false;
+  bool _certChanged = false;
 
   @override
   void dispose() {
@@ -378,9 +502,13 @@ class _SiteLoginPageState extends State<SiteLoginPage> {
       if (mounted) {
         setState(() {
           _busy = false;
+          _notPassword = e is SiteError && e.status == 0;
+          _certChanged = e is SiteError && e.certChanged;
           _error = e is SiteError && e.body['apply'] is String
               ? applyStateText(e.message)
-              : tr("Can't sign in: $e", '登录失败：$e');
+              : _certChanged
+                  ? certChangedText
+                  : tr("Can't sign in: $e", '登录失败：$e');
         });
       }
       return;
@@ -394,6 +522,16 @@ class _SiteLoginPageState extends State<SiteLoginPage> {
       return;
     }
     Navigator.pop(context, api);
+  }
+
+  Future<void> _problem() async {
+    final api = widget.openAnon!();
+    try {
+      await Navigator.push(context,
+          MaterialPageRoute<void>(builder: (_) => ProblemReportPage(api: api, share: shareBundle)));
+    } finally {
+      api.close();
+    }
   }
 
   @override
@@ -489,11 +627,25 @@ class _SiteLoginPageState extends State<SiteLoginPage> {
                                   autofocus: s.username.isNotEmpty, // 桌面版（W15）：一进来就能打字，回车就登录
                                   autocorrect: false,
                                   enableSuggestions: false,
-                                  error: error != null,
+                                  error: error != null && !_notPassword,
+                                  textInputAction: TextInputAction.go,
                                   onSubmitted: (_) => _submit()),
                               if (error != null) ...[
                                 const SizedBox(height: Nw.s16),
                                 NwNotice(key: const Key('site-login-error'), text: error, tone: NwTone.error),
+                                if (_certChanged && widget.onNewCode != null) ...[
+                                  const SizedBox(height: Nw.s8),
+                                  NwButton(
+                                      buttonKey: SiteLoginPage.newCodeKey,
+                                      variant: NwButtonVariant.outline,
+                                      icon: Icons.qr_code_scanner_rounded,
+                                      label: tr('Update site code', '更新站点码'),
+                                      fullWidth: true,
+                                      onPressed: () {
+                                        widget.onNewCode!();
+                                        Navigator.pop(context);
+                                      }),
+                                ],
                               ],
                               const SizedBox(height: Nw.s24),
                               NwButton(
@@ -515,6 +667,17 @@ class _SiteLoginPageState extends State<SiteLoginPage> {
                                               context,
                                               MaterialPageRoute<void>(
                                                   builder: (_) => AccountApplyPage(site: s, apply: widget.apply!)))),
+                                ),
+                              ],
+                              if (widget.openAnon != null) ...[
+                                const SizedBox(height: Nw.s8),
+                                Center(
+                                  child: NwButton(
+                                      buttonKey: SiteLoginPage.problemKey,
+                                      variant: NwButtonVariant.ghost,
+                                      size: NwButtonSize.small,
+                                      label: tr("Can't sign in? Send logs", '登不上？上传日志'),
+                                      onPressed: _busy ? null : _problem),
                                 ),
                               ],
                             ]))))),

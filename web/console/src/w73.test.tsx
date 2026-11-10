@@ -88,6 +88,8 @@ describe("布置 → 防区路线", () => {
     await waitFor(() => expect(c.querySelectorAll(".pointlist li").length).toBe(2));
     expect(c.textContent).toContain("生成了 2 个点");
     expect(c.textContent).toContain("西区：没放点");
+    // 第 2 轮 P1-40:没放点的原因跟待命点无关,不给「去设待命点」(会误导)
+    expect(c.querySelector("[data-gen-standby]")).toBeNull();
     await waitFor(() => expect(save).not.toBeNull());
     await save!();
     const body = posted.find((p) => p.url === "/api/routes/night-guard")!.body;
@@ -95,6 +97,71 @@ describe("布置 → 防区路线", () => {
     expect((body.waypoints as unknown[]).length).toBe(2);
     await waitFor(() => expect(c.querySelector("h2")?.textContent).toBe("night-guard"));
     expect(c.textContent).not.toContain("排程");
+  });
+});
+
+describe("第 2 轮 setup N14:按防区生成有默认名;灰着说为什么", () => {
+  it("默认 guard-1;清空名字、全不勾都写原因", async () => {
+    const { container: c } = render(<GuardRoutesTab {...base()} />);
+    fireEvent.click(await waitFor(() => btn(c, "按防区生成")));
+    await waitFor(() => expect(c.querySelector('[data-gen-zone="东区"]')).not.toBeNull());
+    const inp = c.querySelector('.guard-gen input[aria-label="路线名"]') as HTMLInputElement;
+    expect(inp.value).toMatch(/^guard-\d+$/);
+    expect(c.querySelector("[data-gen-why]")).toBeNull();
+    fireEvent.input(inp, { target: { value: "" } });
+    expect(c.querySelector("[data-gen-why]")!.textContent).toBe("先填路线名。");
+    fireEvent.input(inp, { target: { value: "g1" } });
+    for (const z of ["东区", "西区"]) fireEvent.click(c.querySelector(`[data-gen-zone="${z}"] input[type="checkbox"]`)!);
+    expect(c.querySelector("[data-gen-why]")!.textContent).toBe("至少勾一个防区。");
+  });
+});
+
+describe("第 2 轮 P1-40:按防区生成没放上点", () => {
+  async function gen(note: string, en = false) {
+    if (en) lang.value = "en";
+    const zones = GEN.zones;
+    GEN.zones = [{ zone: "east", points: 0, note }];
+    const waypoints = GEN.waypoints;
+    GEN.waypoints = [];
+    try {
+      const { container: c } = render(<GuardRoutesTab {...base()} />);
+      await waitFor(() => expect(c.querySelector(".guard-gen, button")).not.toBeNull());
+      fireEvent.click(btn(c, en ? "Generate from zones" : "按防区生成"));
+      await waitFor(() => expect(c.querySelector(".guard-gen input")).not.toBeNull());
+      fireEvent.input(c.querySelector(".guard-gen input")!, { target: { value: "g1" } });
+      fireEvent.submit(c.querySelector(".guard-gen")!);
+      await waitFor(() => expect(c.querySelector("[data-gen-note]")).not.toBeNull());
+      return c;
+    } finally { GEN.waypoints = waypoints; GEN.zones = zones; }
+  }
+  it("原因是没设待命点:给入口;英文界面原因是英文,不说「生成了 0 个点」", async () => {
+    const c = await gen("机器人走不到这个防区：还没设待命点。先在「待命点」里设一个，或者把防区画到机器人走得到的地方", true);
+    expect(c.querySelector("[data-gen-standby]")).not.toBeNull();
+    const notes = Array.from(c.querySelectorAll("[data-gen-note]")).map((e) => e.textContent).join(" ");
+    expect(notes).not.toMatch(/[㐀-鿿]/);
+    expect(notes).toContain("no standby point is set");
+    expect(notes).not.toContain("Generated 0");
+  });
+  it("别的原因:不给待命点入口", async () => {
+    const c = await gen("防区里没有机器人站得下的地方");
+    expect(c.querySelector("[data-gen-standby]")).toBeNull();
+    expect(c.textContent).toContain("一个点都没放上");
+  });
+});
+
+describe("第 2 轮 P1-39 / layout N3:路线存不了时按顶上「保存」说清为什么", () => {
+  it("名字带中文:说名字规则,不发请求、不当成存好了", async () => {
+    const said: string[] = [];
+    const { container: c } = render(<RoutesTab {...base()} say={(m: string) => said.push(m)} />);
+    await waitFor(() => expect(c.querySelector('[data-route-row="night"]')).not.toBeNull());
+    fireEvent.click(btn(c, "+ 新建路线"));
+    await waitFor(() => expect(c.querySelector('input[aria-label="路线名"]')).not.toBeNull());
+    fireEvent.input(c.querySelector('input[aria-label="路线名"]')!, { target: { value: "东区" } });
+    fireEvent.click(c.querySelector(".pick")!);
+    await waitFor(() => expect(save).not.toBeNull());
+    await expect(save!()).rejects.toThrow();
+    expect(said.join(" ")).toContain("只许字母");
+    expect(posted.filter((p) => p.url.startsWith("/api/routes/"))).toEqual([]);
   });
 });
 

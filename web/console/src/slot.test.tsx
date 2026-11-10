@@ -74,11 +74,14 @@ describe("画面位", () => {
     vi.spyOn(Date, "now").mockReturnValue(t0);
     const r = render(<VideoSlot u={unit()} now={t0} pinned={false} onPin={() => {}} onZoom={() => {}} />);
     fireEvent.error(r.container.querySelector(".slot-main img.feed")!);
+    r.rerender(<VideoSlot u={unit()} now={t0 + 1000} pinned={false} onPin={() => {}} onZoom={() => {}} />);
+    expect(r.container.querySelector(".slot-main .lost")!.textContent).toContain("画面刚断");   // P1-11:不写「0 秒」
     r.rerender(<VideoSlot u={unit()} now={t0 + 5000} pinned={false} onPin={() => {}} onZoom={() => {}} />);
     const lost = r.container.querySelector(".slot-main .lost")!;
     expect(lost.textContent).toContain("画面中断");
+    expect(lost.textContent).not.toContain("重连");   // 第 3 轮 P1-11:重连只在底下状态里说一次
     expect(lost.textContent).toContain("23:10:00");
-    expect(lost.textContent).toContain("已中断 5 秒");
+    expect(lost.textContent).toContain("中断 5 秒");
   });
 
   it("报警现场:大画面放现场,小窗放这台机器人的前摄像头", () => {
@@ -140,8 +143,9 @@ describe("外审R6 报警现场断流", () => {
     expect(subscribed()).not.toContain("/api/cameras/cam3/live");  // 断着:这一路退订了
     const lost = r.container.querySelector(".slot-main .lost")!;
     expect(lost.textContent).toContain("画面中断");
+    expect(lost.textContent).not.toContain("重连");   // 第 3 轮 P1-11:重连只在底下状态里说一次
     expect(lost.textContent).toContain("23:10:00");
-    expect(lost.textContent).toContain("已中断 15 秒");
+    expect(lost.textContent).toContain("中断 15 秒");
     await vi.advanceTimersByTimeAsync(3100);
     expect(sceneImg(r.container)!.getAttribute("data-src")).toBe("/api/cameras/cam3/live");
     expect(subscribed()).toContain("/api/cameras/cam3/live");     // W51:重连 = 重新订阅
@@ -312,5 +316,45 @@ describe("W44 复查 M3 401 正文读到一半断了", () => {
     expect(got).toBeInstanceOf(ApiError);
     expect((got as InstanceType<typeof ApiError>).status).toBe(401);
     expect(calls).toEqual([1]);
+  });
+});
+
+describe("第 2 轮 layout N14", () => {
+  it("第一帧到之前写「连接中」、图片藏着;到了才写「实时」", () => {
+    lang.value = "zh";
+    const { container: c } = render(<VideoSlot u={unit()} now={0} pinned={false} onPin={() => {}} onZoom={() => {}} />);
+    const main = c.querySelector(".well")!;
+    expect(main.querySelector(".osd-status")!.textContent).toContain("连接中");
+    expect(main.querySelector("img.feed")!.className).toContain("pending");
+    fireEvent.load(main.querySelector("img.feed")!);
+    expect(main.querySelector(".osd-status")!.textContent).toContain("实时");
+    expect(main.querySelector("img.feed")!.className).not.toContain("pending");
+  });
+});
+
+describe("第 4 轮 admin N4 看的人满了", () => {
+  it("站点回 429:画面上写人数上限,不写「正在重连」,也不只放悬停里", async () => {
+    const { setSocketFactory } = await import("./videomux");
+    let sock: { onopen: ((e: unknown) => void) | null; onmessage: ((e: { data: unknown }) => void) | null; readyState: number } | null = null;
+    setSocketFactory(() => {
+      const s = { binaryType: "blob", readyState: 0, onopen: null, onmessage: null, onclose: null, onerror: null,
+        send() {}, close() { s.readyState = 3; } } as unknown as typeof sock & { send(): void; close(): void };
+      sock = s;
+      return s as never;
+    });
+    try {
+      const r = render(<VideoSlot u={unit()} now={Date.now()} pinned={false} onPin={() => {}} onZoom={() => {}} />);
+      sock!.readyState = 1;
+      sock!.onopen?.({});
+      sock!.onmessage?.({ data: JSON.stringify({ kind: "error", id: "/api/robots/A/video/front", status: 429,
+        message: "A 的 front 已有 6 个人在看了,最多 6 个 —— 关掉一个再开" }) });
+      await new Promise((ok) => setTimeout(ok, 0));
+      const lost = r.container.querySelector(".slot-main .lost")!;
+      expect(lost.getAttribute("data-cam-full")).toBe("1");
+      expect(lost.textContent).toContain("6/6");
+      expect(r.container.querySelector(".slot-main .osd.bottom")!.textContent).toContain("看的人满了");
+    } finally {
+      setSocketFactory(null);
+    }
   });
 });

@@ -51,6 +51,9 @@ def _stamp(paths: tuple[Path, ...]) -> tuple | None:
         return None
 
 
+#: 删掉过的版本号(site_settings 里一个 JSON:{地图号: [版本, …]})。
+RETIRED_KEY = "map_retired_versions"
+
 class MapError(ValueError):
     """这张图登记不了 / 找不到。"""
 
@@ -210,8 +213,19 @@ class MapCatalog:
     # ------------------------------------------------------------ 查
 
     def list(self) -> list[dict[str, Any]]:
-        return [_row(r) for r in self.db.query(
-            "SELECT * FROM maps ORDER BY map_id, created_ms DESC")]
+        """网页易用性 P1-87:每一版带 ``missing``(登记了、盘上却缺的文件名;都在 = 空)。"""
+        out = []
+        for r in self.db.query("SELECT * FROM maps ORDER BY map_id, created_ms DESC"):
+            d = _row(r)
+            base = self.root / d["map_id"] / d["version"]
+            names = [str(f.get("name", "")) for f in d["files"] if isinstance(f, dict)]
+            d["missing"] = [n for n in names if not (base / n).is_file()]
+            out.append(d)
+        return out
+
+    def usable(self) -> bool:
+        """有至少一版地图文件齐全(开站清单的「地图」用;登记了文件却丢了不算)。"""
+        return any(not d["missing"] for d in self.list())
 
     def get(self, map_id: str, version: str) -> MapRef:
         rows = self.db.query("SELECT files FROM maps WHERE map_id=? AND version=?",
@@ -633,6 +647,21 @@ class MapCatalog:
                 "res_m": grid.get("res") if isinstance(grid.get("res"), (int, float)) else None,
                 "size_px": grid.get("size") if isinstance(grid.get("size"), list) else None}
 
+    @staticmethod
+    def _retired_all(c: Any) -> dict[str, list[str]]:
+        row = c.execute("SELECT value FROM site_settings WHERE key=?", (RETIRED_KEY,)).fetchone()
+        try:
+            d = json.loads(row[0]) if row else {}
+        except (TypeError, ValueError):
+            d = {}
+        return d if isinstance(d, dict) else {}
+
+    def retired(self, map_id: str) -> set[str]:
+        """这个地图号下删掉过的版本号(P0-15):新版本号要绕开它们。"""
+        with self.db.tx() as c:
+            v = self._retired_all(c).get(map_id, [])
+        return {x for x in v if isinstance(x, str)}
+
     def delete(self, map_id: str, version: str) -> int:
         """删掉这一版:文件、登记行,缓存里的预览也清。回删掉多少字节。**不查**有没有狗在用、是不是
         最新(那是管理页的规矩,在 ``maps_admin``);没有这一版 :class:`MapError`。"""
@@ -652,6 +681,15 @@ class MapCatalog:
                 os.replace(d, gone)                  # 先挪开再登记:登记行没了,目录不会悬着
             with self.db.tx() as c:
                 c.execute("DELETE FROM maps WHERE map_id=? AND version=?", (map_id, version))
+                # 网页易用性第 1 轮 P0-15:删掉的版本号记下来,以后不再发
+                # (机器人上可能还缓存着同名的旧文件)
+                retired = self._retired_all(c)
+                retired.setdefault(map_id, [])
+                if version not in retired[map_id]:
+                    retired[map_id].append(version)
+                # 那张表的 SQL 只在 site_settings.py(数据访问层边界),同一个事务里写
+                from nexwar_site.site_settings import SiteSettings
+                SiteSettings.put_in(c, RETIRED_KEY, retired)
             shutil.rmtree(gone, ignore_errors=True)
             try:
                 d.parent.rmdir()                     # 这个地图号下没别的版本了:空目录也删

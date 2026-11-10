@@ -44,7 +44,10 @@ def setup_view(db: Any, dispatcher: Any, *, skip: set[str] | None = None) -> dic
     no_standby = [rid for rid, (m, v) in loaded.items()
                   if not _count(db, "SELECT COUNT(*) FROM standby_points WHERE robot_id=? AND "
                                 "map_id=? AND map_version=? AND is_default=1", (rid, m, v))]
-    has_map = bool(loaded) or _count(db, "SELECT COUNT(*) FROM maps") > 0
+    # P1-87:登记了但文件丢了的不算有地图(跟地图页一致)
+    store = getattr(dispatcher, "maps", None)
+    has_map = bool(loaded) or (store.usable() if store is not None
+                               else _count(db, "SELECT COUNT(*) FROM maps") > 0)
     people = _count(db, "SELECT COUNT(*) FROM accounts WHERE disabled=0 AND role != 'engineer'")
     facts: dict[str, tuple[bool, dict[str, Any]]] = {
         "robots": (bool(robots), {"count": len(robots)}),

@@ -1,25 +1,35 @@
-import { useState } from "preact/hooks";
+import { useEffect, useRef, useState } from "preact/hooks";
 import { api, ApiError } from "./api";
 import type { Me } from "./app";
-import { t } from "./i18n";
+import { lang, t, type Key } from "./i18n";
 import { LangSwitch } from "./langswitch";
+import { Icon } from "./icons";
 
-export function Login({ onIn, expired }: { onIn: (m: Me) => void; expired: boolean }) {
+export function Login({ onIn, expired, note }: { onIn: (m: Me) => void; expired: boolean; note?: string | null }) {
   const [name, setName] = useState("");
   const [pw, setPw] = useState("");
   const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState("");
+  // P2-05:记词条,不记译好的字(切语言跟着变)
+  const [err, setErr] = useState<Key | "">("");
+  const [show, setShow] = useState(false);
+  // 第 2 轮 P1-04 / admin N14:登录页的标签页标题跟着语言变;退出登录回到这里也不停在上一页的标题
+  useEffect(() => { document.title = `${t("signIn")} · Nexus Warden`; }, [lang.value]);
+  // 第 3 轮 admin N8:autofocus 只在整页第一次加载时管用,退出登录回到这里要自己聚焦账号框
+  const nameBox = useRef<HTMLInputElement>(null);
+  useEffect(() => { nameBox.current?.focus(); }, []);
 
   async function submit(e: Event) {
     e.preventDefault();
     setBusy(true);
     setErr("");
     try {
-      await api("POST", "/api/login", { name, password: pw, web: true });
+      await api("POST", "/api/login", { name: name.trim(), password: pw, web: true });   // P2-06:首尾空格不算
       onIn(await api<Me>("GET", "/api/me"));
     } catch (x) {
       const s = x instanceof ApiError ? x.status : 0;
-      setErr(s === 401 ? t("badLogin") : s === 429 ? t("lockedOut") : t("siteUnreachable"));
+      // 第 2 轮 admin N8:口令对、账号停用 / 过期了,站点多给 disabled —— 说「账号已停用」,不说「密码错」
+      const off = x instanceof ApiError && !!(x.data as { disabled?: boolean } | undefined)?.disabled;
+      setErr(s === 401 ? (off ? "loginDisabled" : "badLogin") : s === 429 ? "lockedOut" : "siteUnreachable");
     } finally {
       setBusy(false);
       setPw("");
@@ -32,17 +42,23 @@ export function Login({ onIn, expired }: { onIn: (m: Me) => void; expired: boole
       <form class="login-card" onSubmit={submit}>
         <div class="brand"><span class="mark">NW</span><span>{t("appName")}</span></div>
         <h1>{t("dutyConsole")}</h1>
-        {expired && <p class="note" role="status">{t("sessionExpired")}</p>}
+        {note ? <p class="note" role="status">{note}</p> : expired && <p class="note" role="status">{t("sessionExpired")}</p>}
         <label>
           {t("account")}
-          <input autocomplete="username" value={name} onInput={(e) => setName(e.currentTarget.value)} required />
+          <input ref={nameBox} autocomplete="username" autoFocus value={name} onInput={(e) => setName(e.currentTarget.value)} required />
         </label>
         <label>
           {t("password")}
-          <input type="password" autocomplete="current-password" value={pw}
-            onInput={(e) => setPw(e.currentTarget.value)} required />
+          <span class="pw-row">
+            <input type={show ? "text" : "password"} autocomplete="current-password" value={pw}
+              onInput={(e) => setPw(e.currentTarget.value)} required />
+            {/* 用户 11-09:「显示」做成密码框里的眼睛,两个框一样长 */}
+            <button type="button" class="pw-show" aria-pressed={show} aria-label={t(show ? "pwHide" : "pwShow")} title={t(show ? "pwHide" : "pwShow")}
+              onClick={() => setShow(!show)}><Icon name={show ? "eyeOff" : "eye"} size={18} /></button>
+          </span>
         </label>
-        {err && <p class="error" role="alert">{err}</p>}
+        {/* P2-04:错误那一行一直占着位置,出错时框不跳 */}
+        <p class="error login-err" role="alert">{err ? t(err) : ""}</p>
         <button class="btn primary" type="submit" disabled={busy}>{busy ? t("signingIn") : t("signIn")}</button>
       </form>
     </main>

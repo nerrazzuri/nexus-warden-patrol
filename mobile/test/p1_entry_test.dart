@@ -114,6 +114,9 @@ void main() {
       expect(store.sites.length, 2, reason: '只是打开菜单');
       await t.tap(find.byKey(const Key('site-remove-别院')));
       await t.pumpAndSettle();
+      expect(store.sites.length, 2, reason: 'M22：先问一句');
+      await t.tap(find.byKey(SiteListPage.removeOkKey));
+      await t.pumpAndSettle();
       expect(store.sites.map((s) => s.name), ['庄园']);
       expect(find.text('别院'), findsNothing);
       expect(find.byType(SiteLoginPage), findsNothing, reason: '点菜单不算点卡片');
@@ -153,7 +156,8 @@ void main() {
       await t.pumpAndSettle();
       expect(find.byType(SiteLoginPage), findsOneWidget, reason: '没登上：留在登录页');
       expect(find.byType(NwShell), findsNothing);
-      expect(find.text('登录失败：账号或口令不对（401）'), findsOneWidget);
+      // 手机 App 测试 M05：4xx 的状态码对人没用，不印
+      expect(find.text('登录失败：账号或口令不对'), findsOneWidget);
       expect(api.closed, 1, reason: '没登上的那个连接关掉');
       await t.enterText(find.byKey(const Key('site-password')), 'right');
       await t.testTextInput.receiveAction(TextInputAction.done);

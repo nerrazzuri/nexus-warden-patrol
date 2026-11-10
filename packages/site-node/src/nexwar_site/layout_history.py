@@ -47,6 +47,24 @@ def summary(kind: str, body: Any) -> str:
     return ""
 
 
+def facts(kind: str, body: Any) -> dict[str, Any]:
+    """网页易用性 P1-44:摘要的原料(网页按界面语言自己拼):``n`` 几个、``names`` 叫什么;
+    删了的路线 ``deleted``。"""
+    if body is None:
+        return {"n": 0, "names": [], "deleted": kind == "route"}
+    if kind == "route":
+        # 网页易用性第 2 轮 P1-44:巡逻路线、防区路线共用一种历史,带上是哪种,网页按页签分开列
+        return {"n": len(body.get("waypoints") or []), "names": [],
+                "route_kind": str(body.get("kind") or "patrol")}
+    if kind == "zones":
+        return {"n": len(body), "names": [str(a["zone"]) for a in body][:20]}
+    if kind == "nogo":
+        return {"n": len(body), "names": [str(z.get("label") or z.get("id")) for z in body][:20]}
+    if kind == "standby":
+        return {"n": len(body), "names": [str(p["name"]) for p in body][:20]}
+    return {"n": len(body) if isinstance(body, list) else 0, "names": []}
+
+
 class LayoutHistory:
     def __init__(self, db: SiteDB, *, now_ms: Callable[[], int]) -> None:
         self.db = db
@@ -79,11 +97,14 @@ class LayoutHistory:
             sql += " AND item=?"
             args.append(item)
         rows = self.db.query(sql + " ORDER BY id DESC LIMIT ?", (*args, int(limit)))
-        return [{"id": r["id"], "kind": r["kind"], "map_id": r["map_id"],
-                 "map_version": r["map_version"], "item": r["item"], "by": r["by"],
-                 "at_ms": r["at_ms"], "note": r["note"],
-                 "summary": summary(r["kind"], None if r["body"] is None
-                                    else json.loads(r["body"]))} for r in rows]
+        out = []
+        for r in rows:
+            body = None if r["body"] is None else json.loads(r["body"])
+            out.append({"id": r["id"], "kind": r["kind"], "map_id": r["map_id"],
+                        "map_version": r["map_version"], "item": r["item"], "by": r["by"],
+                        "at_ms": r["at_ms"], "note": r["note"],
+                        "summary": summary(r["kind"], body), "facts": facts(r["kind"], body)})
+        return out
 
     def get(self, hid: int) -> dict[str, Any] | None:
         rows = self.db.query("SELECT * FROM layout_history WHERE id=?", (hid,))

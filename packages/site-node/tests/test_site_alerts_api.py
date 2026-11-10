@@ -226,3 +226,98 @@ def test_W74_看见人_没到场关不了409说清楚_点了已到场再关(站�
     assert code == 200 and d["alert"]["resolved_by"] == "gina"
     audit = s.req("GET", "/api/audit", token=alice)[1]["audit"]
     assert any(r["actor"] == "gina" and "/arrive" in r["action"] for r in audit)
+
+
+def test_网页P0_04_处置带备注_十分钟内能撤销_过了不行(站点):
+    """网页易用性第 1 轮 P0-04:「已处理」一点就关,不能写备注、不能撤销。"""
+    s = 站点
+    gina = _登(s, "gina")
+    async def 报():
+        s.desk.raise_alert(kind="stuck", robot="A", title="卡住了")
+    s.loop.call(报)
+    a = _等(lambda: _告警(s, gina, "stuck"))
+    code, d = s.req("POST", f"/api/alerts/{_键(a)}/resolve",
+                    {"verdict": "false_alarm", "note": "风吹倒的纸箱"}, token=gina)
+    assert code == 200 and d["alert"]["verdict"] == "false_alarm"
+    assert d["alert"]["context"]["note"] == "风吹倒的纸箱"
+    code, d = s.req("POST", f"/api/alerts/{_键(a)}/reopen", {}, token=gina)
+    assert code == 200 and d["alert"]["resolved_ms"] is None and d["alert"]["verdict"] == ""
+    assert _告警(s, gina, "stuck") is not None, "撤销后回到待处理"
+    code, d = s.req("POST", f"/api/alerts/{_键(a)}/resolve", {"note": 5}, token=gina)
+    assert code == 400, "备注要是字符串"
+    code, d = s.req("POST", f"/api/alerts/{_键(a)}/resolve", {"verdict": "handled"}, token=gina)
+    s.desk._now = lambda: d["alert"]["resolved_ms"] + 11 * 60_000
+    code, d = s.req("POST", f"/api/alerts/{_键(a)}/reopen", {}, token=gina)
+    assert code == 400 and "10 分钟" in d["error"], d
+
+
+def test_按日期在站点查报警_能翻页_按类型机器人筛(站点):
+    """liang-d5 第 5 轮前:报警记录按日期只看得到最近 500 条;一个月前的那天要能查到。"""
+    s = 站点
+    alice = _登(s, "alice")
+    for i in range(5):
+        s.loop.call(lambda i=i: _raise(s, i))
+    day = 86_400_000
+    old = 1_700_000_000_000
+    with s.desk.db.tx() as c:   # 把 R0–R2 挪到一个月前那天,R3、R4 留在今天
+        for i in range(3):
+            c.execute("UPDATE alerts SET first_ms = ?, last_ms = ? WHERE robot = ?",
+                      (old + i * 1000, old + i * 1000 + 10, f"R{i}"))
+    rng = f"since={old}&until={old + day}"
+    code, d = s.req("GET", f"/api/alerts?{rng}&limit=2", token=alice)
+    assert code == 200, d
+    assert d["total"] == 3 and [a["robot"] for a in d["alerts"]] == ["R2", "R1"]
+    code, d = s.req("GET", f"/api/alerts?{rng}&limit=2&offset=2", token=alice)
+    assert [a["robot"] for a in d["alerts"]] == ["R0"]
+    code, d = s.req("GET", f"/api/alerts?{rng}&robot=R1", token=alice)
+    assert d["total"] == 1 and d["alerts"][0]["robot"] == "R1"
+    code, d = s.req("GET", f"/api/alerts?{rng}&kind=fallen,lens_blocked", token=alice)
+    assert d["total"] == 0
+    bads = (f"since={old}&until={old}", "since=x", f"since={old}&level=P9", f"since={old}&limit=0")
+    for bad in bads:
+        assert s.req("GET", f"/api/alerts?{bad}", token=alice)[0] == 400, bad
+
+
+def test_全站活动日志_按日期人类别查_翻页_导出CSV(站点):
+    """liang-d5 第 5 轮前:「11 月 5 日晚上谁撤的防、谁派的机器人」—— 按日期、人、类别查,能导出。"""
+    import urllib.request
+    s = 站点
+    alice = _登(s, "alice")
+    old = 1_700_000_000_000
+    rows = [(old + 1000, "gina", "POST /api/mode", "disarmed"),
+            (old + 2000, "gina", "POST /api/robots/A/goto", "A"),
+            (old + 3000, "olga", "POST /api/robots/A/halt", "A"),
+            (old + 4000, "olga", "POST /api/mode", "armed")]
+    with s.desk.db.tx() as c:
+        for at, who, act, tgt in rows:
+            c.execute("INSERT INTO audit(at, actor, action, target, status) VALUES (?,?,?,?,200)",
+                      (at, who, act, tgt))
+    rng = f"since={old}&until={old + 86_400_000}"
+    code, d = s.req("GET", f"/api/audit?{rng}&limit=3", token=alice)
+    assert code == 200 and d["total"] == 4
+    assert [r["target"] for r in d["audit"]] == ["armed", "A", "A"]
+    d = s.req("GET", f"/api/audit?{rng}&limit=3&offset=3", token=alice)[1]
+    assert d["audit"][0]["target"] == "disarmed"
+    d = s.req("GET", f"/api/audit?{rng}&group=arming", token=alice)[1]
+    assert [r["actor"] for r in d["audit"]] == ["olga", "gina"]
+    d = s.req("GET", f"/api/audit?{rng}&group=dispatch&actor=gina", token=alice)[1]
+    assert d["total"] == 1 and d["audit"][0]["action"] == "POST /api/robots/A/goto"
+    assert s.req("GET", f"/api/audit?{rng}&group=nope", token=alice)[0] == 400
+    assert s.req("GET", "/api/audit", token=alice)[0] == 200         # 旧的用法照旧(用户页)
+    r = urllib.request.Request(s.api.url + f"/api/audit?{rng}&format=csv")
+    r.add_header("Authorization", f"Bearer {alice}")
+    with urllib.request.urlopen(r, timeout=15) as resp:
+        assert resp.headers["Content-Type"].startswith("text/csv")
+        assert "attachment" in resp.headers["Content-Disposition"]
+        text = resp.read().decode("utf-8-sig")
+    lines = text.strip().splitlines()
+    assert lines[0].startswith("time,actor") and len(lines) == 5 and "POST /api/mode" in lines[1]
+
+
+def test_往天的巡逻接口_日期要写对(站点):
+    s = 站点
+    alice = _登(s, "alice")
+    code, d = s.req("GET", "/api/patrols/day?date=2026-11-05", token=alice)
+    assert code == 200 and d["date"] == "2026-11-05"
+    for bad in ("", "?date=11-05", "?date=2026-02-30"):
+        assert s.req("GET", f"/api/patrols/day{bad}", token=alice)[0] == 400, bad

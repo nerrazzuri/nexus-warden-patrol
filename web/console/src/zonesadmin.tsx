@@ -3,6 +3,8 @@
 // 存的是整份导航区域(带改之前看到的修订号,跟手机一样);加一块是收紧、当场生效,删一块是放宽、要重新确认。
 // 2026-10-15(用户「只能画防区感觉不太够」):网页也能画禁行区、限速区、**虚拟墙**(画一条线,站点存成约 0.3 m 宽的
 // 禁行带,规则跟禁行区一样),列出狗守的区域、删、确认这一版(从上一版带过来的建议还是在手机上核)。
+import { siteKnown } from "./sitetext";
+import { clip, siteDown } from "./data";
 import { useCallback, useEffect, useRef, useState } from "preact/hooks";
 import { api, ApiError, enc } from "./api";
 import { Confirm, Modal } from "./dialogs";
@@ -270,7 +272,7 @@ export function MapsZonesPage({ say }: { say: Say }) {
               const [m, v] = e.currentTarget.value.split("\u0000");
               setSel(maps.find((x) => x.map_id === m && x.version === v) ?? null);
             }}>
-              {maps.map((m) => <option key={`${m.map_id}:${m.version}`} value={`${m.map_id}\u0000${m.version}`}>{m.map_id} · v{m.version}{m.note ? ` · ${m.note}` : ""}</option>)}
+              {maps.map((m) => <option key={`${m.map_id}:${m.version}`} value={`${m.map_id}\u0000${m.version}`}>{m.map_id} · v{m.version}{m.note ? ` · ${clip(siteKnown(m.note))}` : ""}</option>)}
             </select>
           </label>
           <span class="push" />
@@ -300,7 +302,7 @@ export function MapsZonesPage({ say }: { say: Say }) {
         </div>
         <div class="zonesplit">
           <div class="zonemap">
-            {!sel || !meta ? <p class="empty">{t("noMap")}</p> : (
+            {!sel || !meta ? <p class="empty">{t(siteDown.value ? "loadRetry" : "noMap")}</p> : (
               // 防区页只画能改的防区(防区接口,改了当场变);站点预览里的 areas 在地图页上画
               <MapCanvas meta={meta} raster={`${base}/preview.png`} label={t("tabMapsZones")}
                 areas={areas.map((a) => ({ name: a.zone, pts: a.points, kind: "zone" as const }))}
@@ -341,7 +343,7 @@ export function MapsZonesPage({ say }: { say: Say }) {
             <ul class="erased-list">
               {erased.map((z) => (
                 <li key={z.id}>
-                  <span class="strong">{z.label || z.id}</span>
+                  <span class="strong">{siteKnown(z.label) || z.id}</span>
                   <span class="muted small">{t("points", { n: z.polygon.length })}</span>
                   <button type="button" class="link push" onClick={() => setUnerasing(z)}>{t("remove")}</button>
                 </li>
@@ -433,7 +435,7 @@ function NavPanel({ nav, list, onRemove, onConfirm }: {
       <ul class="navzone-list">
         {list.map((z) => (
           <li key={z.id} data-navzone={z.id}>
-            <span class="strong">{z.label || z.id}</span>
+            <span class="strong">{siteKnown(z.label) || z.id}</span>
             <span class="muted small">{navZoneLine(z)}</span>
             <button type="button" class="link push" onClick={() => onRemove(z)}>{t("remove")}</button>
           </li>

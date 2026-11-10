@@ -29,6 +29,11 @@ void main() {
     expect(find.byKey(AppSettingsPage.langKey), findsOneWidget);
     expect(find.textContaining('$appVersion（构建 $appBuild）'), findsOneWidget);
     expect(find.byKey(AppSettingsPage.licensesKey), findsOneWidget);
+    // 手机 App 测试 M23：工程师工具收着，展开才有
+    expect(find.byKey(AppSettingsPage.unbindKey), findsNothing);
+    await t.ensureVisible(find.byKey(AppSettingsPage.engineerKey));
+    await t.tap(find.byKey(AppSettingsPage.engineerKey));
+    await t.pumpAndSettle();
     expect(find.byKey(AppSettingsPage.unbindKey), findsOneWidget);
     expect(find.byKey(AppSettingsPage.watchKey), findsNothing);
     expect(find.byKey(AppSettingsPage.checkUpdateKey), findsNothing);

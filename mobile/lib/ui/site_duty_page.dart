@@ -23,6 +23,7 @@ import 'package:flutter/material.dart';
 import '../l10n.dart';
 import '../model/alert.dart';
 import '../net/site_client.dart';
+import '../net/site_text.dart';
 import 'map_wizard.dart' show openMapWizard, wizardSteps;
 import 'nw/nw_button.dart';
 import 'nw/nw_p2_duty.dart';
@@ -40,6 +41,7 @@ import 'site_teleop.dart';
 import 'site_video.dart';
 import 'site_watch_page.dart';
 import 'site_weather.dart';
+import 'stop_failed.dart';
 
 /// 每个站点上次选的哪台（这一次打开 App 里记着；按站点地址分）。
 final Map<String, String> _picked = <String, String>{};
@@ -76,6 +78,11 @@ class SiteDutyPage extends StatefulWidget {
   static const Key modeKey = Key('duty-mode');
   /// 11-05 现场第 36 条：连不上站点主机的横幅。
   static const Key siteDownKey = Key('duty-site-down');
+
+  /// 手机 App 测试 M03：站点证书变了的横幅；机器人、今天的巡逻读不到时的「未知」。
+  static const Key certChangedKey = Key('duty-cert-changed');
+  static const Key unknownKey = Key('duty-robots-unknown');
+  static const Key todayUnknownKey = Key('duty-today-unknown');
   static const Key modeChangeKey = Key('duty-mode-change');
   static Key p1Key(String key) => Key('duty-p1-$key');
   static Key chipKey(String id) => Key('duty-chip-$id');
@@ -91,6 +98,8 @@ class SiteDutyPage extends StatefulWidget {
   static const Key detailKey = Key('duty-detail');
   static const Key resumeKey = Key('duty-resume');
   static const Key othersKey = Key('duty-others');
+  static const Key safetyKey = Key('duty-safety');
+  static const Key manualKey = Key('duty-manual-only');
   static const Key noRobotsKey = Key('duty-no-robots');
   static const Key todayKey = Key('duty-today');
   static const Key noMapKey = Key('duty-no-map');
@@ -130,6 +139,14 @@ class _SiteDutyPageState extends State<SiteDutyPage> {
   DateTime? _downSince;
   bool _downNow = false;
   String? _errNow;
+
+  /// 手机 App 测试 M03：连不上的原因是站点证书变了（跟「站点关了、网不通」分开说）。
+  bool _cert = false;
+  bool _certNow = false;
+
+  /// 机器人列表、今天的巡逻读到过没有：没读到过不能说「没有」，只能说「不知道」。
+  bool _robotsKnown = false;
+  bool _todayKnown = false;
   StreamSubscription<Map<String, dynamic>>? _sub;
   Timer? _debounce;
   Timer? _poll;
@@ -173,6 +190,7 @@ class _SiteDutyPageState extends State<SiteDutyPage> {
     } on SiteError catch (e) {
       if (e.status == 0) {
         _downNow = true;
+        if (e.certChanged) _certNow = true;
       } else if (e.status != 404) {
         _errNow = refusalText(e);
       }
@@ -184,6 +202,7 @@ class _SiteDutyPageState extends State<SiteDutyPage> {
 
   Future<void> _reload() async {
     _downNow = false;
+    _certNow = false;
     _errNow = null;
     final got = await Future.wait<Object?>([
       _try(widget.api.robots),
@@ -198,7 +217,10 @@ class _SiteDutyPageState extends State<SiteDutyPage> {
     setState(() {
       // 11-05 现场第 36 条：这一轮都连上了就清掉旧的错误、横幅
       _downSince = _downNow ? (_downSince ?? DateTime.now()) : null;
+      _cert = _downNow && _certNow;
       _error = _errNow;
+      if (got[0] is List) _robotsKnown = true;
+      if (got[2] is Map) _todayKnown = true;
       _robots = robots;
       if (got[1] is List) _alerts = (got[1] as List).cast<Alert>();
       if (got[2] is Map) {
@@ -233,7 +255,10 @@ class _SiteDutyPageState extends State<SiteDutyPage> {
     } on SiteError catch (e) {
       if (!mounted) return;
       if (e.status == 0) {
-        setState(() => _downSince ??= DateTime.now());
+        setState(() {
+          _downSince ??= DateTime.now();
+          if (e.certChanged) _cert = true;
+        });
       } else if (e.status != 404) {
         setState(() => _error = refusalText(e));
       }
@@ -292,10 +317,16 @@ class _SiteDutyPageState extends State<SiteDutyPage> {
         _say(tr('The robot isn\'t running a task', '机器人当前无任务'));
         return;
       }
-      await widget.api.abort(id, tid);
-      _say(tr('Stopped', '已叫停'));
-    } on SiteError catch (e) {
-      _say(tr('Stop failed: ${refusalText(e)}', '叫停失败：${refusalText(e)}'));
+      final r = await widget.api.abort(id, tid);
+      final ack = r['ack'];
+      if (ack is Map && ack['result'] != 'accepted' && ack['result'] != 'duplicate') {
+        if (mounted) await showStopFailed(context, robot: id, error: ackReasonText('${ack['reason'] ?? ack['result']}'));
+      } else {
+        _say(tr('Stopped', '已叫停'));
+      }
+    } catch (e) {
+      // 手机 App 测试 M02：失败要醒目、不自动消失，叫人按机身急停
+      if (mounted) await showStopFailed(context, robot: id, error: e);
     }
     unawaited(_reload());
   }
@@ -346,7 +377,7 @@ class _SiteDutyPageState extends State<SiteDutyPage> {
                 Icon(weatherIcon('${w['condition']}'), size: 16, color: c.textSecondary),
                 const SizedBox(width: 4),
                 Flexible(
-                    child: Text(weatherText(w),
+                    child: Text(weatherShort(w),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: NwText.bodySmall.copyWith(color: c.textSecondary))),
@@ -466,6 +497,9 @@ class _SiteDutyPageState extends State<SiteDutyPage> {
             ListTile(
               key: SiteDutyPage.chipKey('${r['robot_id']}'),
               selected: r['robot_id'] == _sel,
+              // M25：标出现在看的是哪台
+              leading: Icon(r['robot_id'] == _sel ? Icons.check_circle_rounded : Icons.circle_outlined,
+                  color: r['robot_id'] == _sel ? c.primary : c.textMuted),
               title: Text(robotLabel(r)),
               subtitle: Text(robotPhaseLabel(robotPhase(r))),
               trailing: robotBattery(r) == null
@@ -536,7 +570,7 @@ class _SiteDutyPageState extends State<SiteDutyPage> {
     final run = runningItem(_today, '${r['robot_id']}', tid);
     final battery = robotBattery(r);
     final doing = run != null
-        ? tr('Patrolling "${run['label']}"${run['end_ms'] is num ? ' · done around ${hhmm((run['end_ms'] as num).toInt(), _offsetMin)}' : ''}',
+        ? tr('Patrolling "${siteKnown('${run['label']}')}"${run['end_ms'] is num ? ' · done around ${hhmm((run['end_ms'] as num).toInt(), _offsetMin)}' : ''}',
             '正在巡逻「${run['label']}」${run['end_ms'] is num ? ' · 预计 ${hhmm((run['end_ms'] as num).toInt(), _offsetMin)} 结束' : ''}')
         : robotStatusLine(r);
     return Padding(
@@ -557,8 +591,18 @@ class _SiteDutyPageState extends State<SiteDutyPage> {
                   style: NwText.titleMedium.copyWith(color: c.text, fontFamily: NwFont.mono, fontWeight: FontWeight.w600)),
             ],
           ]),
-          if (r['held'] is Map) ...[
+          // 手机 App 测试 M25：「仅限手动」说为什么、谁能改
+          if (r['manual_only'] is Map) ...[
             nwGap8,
+            Text(
+                key: SiteDutyPage.manualKey,
+                tr('Manual only (set by ${(r['manual_only'] as Map)['by']}${'${(r['manual_only'] as Map)['note'] ?? ''}'.isEmpty ? '' : ': ${(r['manual_only'] as Map)['note']}'}): '
+                    'schedules and alarms will not send it; you can still send it by hand. An administrator switches it back on the robot page.',
+                    '仅限手动（${(r['manual_only'] as Map)['by']} 设的${'${(r['manual_only'] as Map)['note'] ?? ''}'.isEmpty ? '' : '：${(r['manual_only'] as Map)['note']}'}）：'
+                    '日程和报警不会派它，手动还能派。管理员在机器人页改回自动。'),
+                style: NwText.bodySmall.copyWith(color: c.textSecondary)),
+          ],
+          if (r['held'] is Map) ...[
             Row(children: [
               Expanded(
                   child: Text(
@@ -576,6 +620,12 @@ class _SiteDutyPageState extends State<SiteDutyPage> {
         ],
       ),
     );
+  }
+
+  /// 选中的这台在跑任务（在动）。
+  bool get _selBusy {
+    final st = _selRobot?['status'];
+    return st is Map && st['task'] is Map;
   }
 
   Widget _actions() {
@@ -600,7 +650,8 @@ class _SiteDutyPageState extends State<SiteDutyPage> {
         NwButton(
             buttonKey: SiteDutyPage.stopKey,
             icon: Icons.stop_circle_rounded,
-            variant: NwButtonVariant.destructive,
+            // M38：机器人闲着时「叫停」不用那么扎眼（描边）；在动的时候才是实心红
+            variant: _selRobot != null && _selBusy ? NwButtonVariant.destructive : NwButtonVariant.outline,
             label: tr('Stop', '叫停'),
             onPressed: _stop),
     ];
@@ -629,11 +680,11 @@ class _SiteDutyPageState extends State<SiteDutyPage> {
   }
 
   List<Widget> _events(NwColors c) {
-    final ev = (_view?['events'] as List? ?? const []).whereType<Map>().take(3).toList();
+    final ev = compactEvents((_view?['events'] as List? ?? const []).whereType<Map>().toList()).take(3).toList();
     if (ev.isEmpty) return const [];
     return [
       const SizedBox(height: Nw.s16),
-      NwSectionLabel(tr('${robotLabel(_selRobot!)} recent events', '${robotLabel(_selRobot!)} 最近事件')),
+      NwSectionLabel(tr('Recent events · ${robotLabel(_selRobot!)}', '${robotLabel(_selRobot!)} 的最近事件')),
       nwGap8,
       Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           for (final e in ev)
@@ -641,11 +692,15 @@ class _SiteDutyPageState extends State<SiteDutyPage> {
               padding: const EdgeInsets.symmetric(vertical: Nw.s8),
               decoration: BoxDecoration(border: Border(bottom: BorderSide(color: c.outline))),
               child: Row(children: [
-                SizedBox(
-                    width: 100,
-                    child: Text(_short(robotEventTime(e['stamp'])),
-                        maxLines: 1, overflow: TextOverflow.fade, softWrap: false,
-                        style: NwText.labelSmall.copyWith(color: c.textSecondary, fontFamily: NwFont.mono))),
+                // 手机 App 测试 M16：时间列跟着字宽，字放大也不被后面的字盖住
+                ConstrainedBox(
+                    constraints: const BoxConstraints(minWidth: 100),
+                    child: Padding(
+                      padding: const EdgeInsets.only(right: Nw.s8),
+                      child: Text(_short(robotEventTime(e['stamp'])),
+                          maxLines: 1, softWrap: false,
+                          style: NwText.labelSmall.copyWith(color: c.textSecondary, fontFamily: NwFont.mono)),
+                    )),
                 Expanded(
                     child: Text(
                         robotEventTitle('${e['kind']}', e['data'] is Map ? (e['data'] as Map).cast<String, dynamic>() : null),
@@ -704,19 +759,34 @@ class _SiteDutyPageState extends State<SiteDutyPage> {
   @override
   Widget build(BuildContext context) {
     final c = Nw.of(context);
-    final others = _alerts.where((a) => a.level != 'P1' && a.resolvedMs == null).length;
+    // 手机 App 测试 M09：日常记录不算报警
+    final others = _alerts.where((a) => a.level != 'P1' && alertNeedsAttention(a)).length;
+    final p1Open = _alerts.where((a) => a.level == 'P1' && a.resolvedMs == null).length;
+    final online = _robots.where(robotOnline).length;
     final hasRobot = _sel != null && _selRobot != null;
     return Scaffold(
       body: Column(children: [
         NwHeader(
-            overline: tr('Nexus Warden', 'Nexus Warden'),
+            // 手机 App 测试 M38：只读账号在页头就标出来（以前只在「我的」页小字里）
+            overline: (widget.api.session?.isViewer ?? false)
+                ? tr('Nexus Warden · READ-ONLY', 'Nexus Warden · 只读')
+                : tr('Nexus Warden', 'Nexus Warden'),
             title: widget.title ?? tr('Duty', '值守'),
             compact: MediaQuery.sizeOf(context).height < 480),
         Expanded(
           child: RefreshIndicator(
             onRefresh: _reload,
             child: ListView(padding: const EdgeInsets.all(Nw.s16), children: [
-              if (_downSince != null) ...[
+              if (_downSince != null && _cert) ...[
+                NwNotice(
+                    key: SiteDutyPage.certChangedKey,
+                    tone: NwTone.error,
+                    icon: Icons.gpp_bad_rounded,
+                    text: tr(
+                        "$certChangedText Robot status here is out of date and alerts won't arrive. To update the code: leave this site, then on the site card tap ⋮ → Update site code.",
+                        '$certChangedText这里机器人的状态是旧的，报警也收不到。更新站点码：退出这个站点，在站点卡片上点 ⋮ →「更新站点码」。')),
+                nwGap8,
+              ] else if (_downSince != null) ...[
                 NwNotice(
                     key: SiteDutyPage.siteDownKey,
                     tone: NwTone.error,
@@ -727,11 +797,31 @@ class _SiteDutyPageState extends State<SiteDutyPage> {
                 nwGap8,
               ],
               if (_error != null) ...[NwNotice(text: _error!, tone: NwTone.error), nwGap8],
+              // 手机 App 测试 M09：「现在安不安全」放在最上面：P1 有几条、机器人在线几台（以前藏在「其他」后面）
+              if (_robotsKnown)
+                Padding(
+                  key: SiteDutyPage.safetyKey,
+                  padding: const EdgeInsets.only(bottom: Nw.s8),
+                  child: Text(
+                      [
+                        p1Open == 0 ? tr('P1: none', 'P1：无') : tr('P1: $p1Open open', 'P1：$p1Open 条没处理'),
+                        tr('Robots online $online/${_robots.length}', '机器人在线 $online/${_robots.length}'),
+                      ].join(' · '),
+                      style: NwText.labelLarge.copyWith(
+                          color: p1Open > 0 || online < _robots.length ? c.error : c.textSecondary,
+                          fontWeight: FontWeight.w600)),
+                ),
               _modeRow(c),
               ..._p1(c),
               ..._noMap(c),
               if (!_loaded)
                 const Padding(padding: EdgeInsets.all(Nw.s24), child: Center(child: CircularProgressIndicator()))
+              else if (!hasRobot && !_robotsKnown)
+                NwNotice(
+                    key: SiteDutyPage.unknownKey,
+                    tone: NwTone.warning,
+                    text: tr("Status unknown: the robot list couldn't be read from the site.",
+                        '状态未知：读不到站点上的机器人列表。'))
               else if (!hasRobot)
                 NwNotice(
                     key: SiteDutyPage.noRobotsKey,
@@ -752,7 +842,11 @@ class _SiteDutyPageState extends State<SiteDutyPage> {
                   key: _t.today,
                   child: KeyedSubtree(
                       key: SiteDutyPage.todayKey,
-                      child: TodayPatrolList(api: widget.api, items: _today, onChanged: _reload, offsetMin: _offsetMin))),
+                      child: _todayKnown || _downSince == null
+                          ? TodayPatrolList(api: widget.api, items: _today, onChanged: _reload, offsetMin: _offsetMin)
+                          : Text(tr("Unknown: today's patrols couldn't be read from the site.", '未知：读不到站点上今天的巡逻。'),
+                              key: SiteDutyPage.todayUnknownKey,
+                              style: NwText.bodyMedium.copyWith(color: c.textSecondary)))),
               if (others > 0) ...[
                 nwGap8,
                 InkWell(
@@ -763,7 +857,10 @@ class _SiteDutyPageState extends State<SiteDutyPage> {
                     decoration: BoxDecoration(border: Border(top: BorderSide(color: c.outline))),
                     child: Row(children: [
                       Expanded(
-                          child: Text(tr('$others other open alarm(s)', '其他未处理 $others 条'),
+                          child: Text(
+                              others == 1
+                                  ? tr('1 other open alarm', '其他未处理 1 条')
+                                  : tr('$others other open alarms', '其他未处理 $others 条'),
                               style: NwText.bodyMedium.copyWith(color: c.text))),
                       Icon(Icons.chevron_right_rounded, color: c.textSecondary),
                     ]),

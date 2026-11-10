@@ -493,3 +493,35 @@ def test_W71_今天的巡逻_跳过几个点也算完成_带上跳过几个(台)
                    毫秒(22, 10)))
     item = today_view(t.db, now_ms=t.now["t"])["items"][0]
     assert item["state"] == "done" and item["skipped"] == 1 and "P3" in item["reason"]
+
+
+def test_网页第4轮_admin_N7_被叫停的那趟_写出是谁叫停的(台):
+    t = 台
+    t.now["t"] = 毫秒(23, 0)
+    with t.db.tx() as c:
+        c.execute("INSERT INTO schedule_runs(entry_id, scheduled_ms, outcome, robot_id, task_id, "
+                  "decided_at) VALUES ('nightly', ?, 'started', 'A', 'sched-1', ?)",
+                  (毫秒(22, 0), 毫秒(22, 0)))
+        c.execute("INSERT INTO commands(command_id, task_id, robot_id, kind, payload, issued_by, "
+                  "issued_at) VALUES ('c1', 'halt-1', 'A', 'halt', '{}', 'olga', ?)",
+                  (毫秒(22, 9),))
+        c.execute("INSERT INTO events(robot_id, boot_id, seq, event_id, kind, data, stamp, "
+                  "received_at) VALUES ('A','b',1,'e1','task_aborted',?,?,?)",
+                  (json.dumps({"task_id": "sched-1", "reason": "halt"}), 毫秒(22, 10),
+                   毫秒(22, 10)))
+    item = today_view(t.db, now_ms=t.now["t"])["items"][0]
+    assert item["state"] == "aborted" and item["stopped_by"] == "olga"
+
+
+def test_往天的巡逻_按日期查_那天跑了的照记录写(台):
+    """liang-d5 第 5 轮前:往天每一趟(谁派的、跑没跑完)网页上要能查到。"""
+    t = 台
+    t.now["t"] = 毫秒(23, 0) + 2 * 86_400_000          # 两天以后
+    with t.db.tx() as c:
+        c.execute("INSERT INTO schedule_runs(entry_id, scheduled_ms, outcome, robot_id, task_id, "
+                  "decided_at) VALUES ('nightly', ?, 'started', 'A', 'sched-1', ?)",
+                  (毫秒(22, 0), 毫秒(22, 0)))
+    v = today_view(t.db, now_ms=t.now["t"], day="2027-03-15")
+    assert v["date"] == "2027-03-15"
+    assert [(x["kind"], x["robot"]) for x in v["items"]] == [("schedule", "A")]
+    assert today_view(t.db, now_ms=t.now["t"])["date"] == "2027-03-17"

@@ -194,7 +194,7 @@ class PlannedNavBackend(HalNavBackend):
         self.zones: ZoneSet | None = None
         #: 路网(W48):有就按它分段规划;运行时只给正在用的那一版的。
         self.route_net: RouteNet | None = None
-        self._cms: dict[int, Costmap] = {}
+        self._cms: dict[Any, Costmap] = {}
         #: 图或区域每换一次 +1:线程里算到一半的旧代价图不许写回缓存(换区域之后还拿旧图规划)。
         self._epoch = 0
         self._cm: Costmap | None = None              # 当前路径用的那张
@@ -314,8 +314,11 @@ class PlannedNavBackend(HalNavBackend):
     def plan_ok(self) -> bool:
         return self._base is not None
 
-    def _costmap(self, margin_m: float) -> Costmap:
-        key = int(math.ceil(max(0.0, margin_m) / 0.1 - 1e-9))
+    def _costmap(self, margin_m: float, radius_m: float | None = None) -> Costmap:
+        """``radius_m``:按别的机身半径膨胀(默认 :attr:`robot_radius_m`),单独缓存。"""
+        k = int(math.ceil(max(0.0, margin_m) / 0.1 - 1e-9))
+        key: Any = k if radius_m is None else (k, round(radius_m, 3))
+        radius = self.robot_radius_m if radius_m is None else radius_m
         cms, epoch, base, zs = self._cms, self._epoch, self._base, self.zones
         cm = cms.get(key)
         if cm is None:
@@ -331,18 +334,20 @@ class PlannedNavBackend(HalNavBackend):
                     if 0 <= r < h and 0 <= c < w:
                         blocked[r, c] = True
             cm = cmod.build(blocked, res, origin, self._effective(zs),
-                            robot_radius_m=self.robot_radius_m + cmod.INFLATE_MARGIN_M,
-                            nogo_margin_m=key * 0.1)
+                            robot_radius_m=radius + cmod.INFLATE_MARGIN_M,
+                            nogo_margin_m=k * 0.1)
             cms[key] = cm                     # 写进算的时候那一份缓存:换过就是丢掉的那份
             if epoch != self._epoch:
                 raise _Stale()
         return cm
 
-    async def _costmap_async(self, margin_m: float) -> Costmap:
+    async def _costmap_async(self, margin_m: float, radius_m: float | None = None) -> Costmap:
         """在线程里算(百万格要几百毫秒);算到一半图或区域换了就重算。"""
         for _ in range(3):
             try:
-                return await asyncio.to_thread(self._costmap, margin_m)
+                if radius_m is None:
+                    return await asyncio.to_thread(self._costmap, margin_m)
+                return await asyncio.to_thread(self._costmap, margin_m, radius_m)
             except _Stale:
                 continue
         raise NavRequestError("goto", "图或区域一直在换,代价图算不出来")
@@ -491,7 +496,8 @@ class PlannedNavBackend(HalNavBackend):
 
     async def _inside_nogo(self, z: Zone, here: Any) -> None:
         self._report_nogo(z, here)
-        await self._fail(f"机器人进了禁行区 {z.label or z.id}:停,不自己往外走")
+        await self._fail(f"机器人进了禁行区 {z.label or z.id}:停,不自己往外走",
+                         code="robot_trapped")
 
     async def _near_nogo(self, z: Zone, here: Any, dt_s: float) -> None:
         """S7:再走就离(当禁行的)区域太近了 —— 刹车,从这儿按此刻的 σ 重规划(路先离开它);重规划
@@ -583,7 +589,7 @@ class PlannedNavBackend(HalNavBackend):
             s += DRIFT_XY_PER_M * math.hypot(goal.position.x - est.x, goal.position.y - est.y)
         return min(s, MAX_SIGMA_MARGIN_M)
 
-    def _snap_goal(self, cm: Costmap, pose: Pose) -> Pose | None:
+    def _snap_goal(self, cm: Costmap, pose: Pose, radius_m: float | None = None) -> Pose | None:
         """工单 20:终点只是落在地图墙的膨胀圈里(本身不在墙、禁行区、临时障碍里,附近也没有临时障碍)→
         :data:`GOAL_SNAP_M` 以内最近的能站的点(朝向不变);不然 ``None``。原点、待命点是狗站着标的,
         贴着墙站得下,规划按外接圆膨胀就判「贴得太近」。临时障碍(绕障记的)附近不挪:那是 W41 的
@@ -593,7 +599,8 @@ class PlannedNavBackend(HalNavBackend):
         if rc is None or cm.hard[rc] or not cm.lethal[rc]:
             return None
         res = cm.res
-        reach = self.robot_radius_m + cmod.INFLATE_MARGIN_M + GOAL_SNAP_M
+        radius = self.robot_radius_m if radius_m is None else radius_m
+        reach = radius + cmod.INFLATE_MARGIN_M + GOAL_SNAP_M
         for (r, c) in self._temp:
             if math.hypot(cm.origin[0] + (c + 0.5) * res - x,
                           cm.origin[1] + (r + 0.5) * res - y) <= reach:
@@ -881,7 +888,7 @@ class PlannedNavBackend(HalNavBackend):
                     await self._send(0.0, 0.0, dt_s)
                     return
                 log.warning("重规划没成:%s", out[1])
-                await self._fail(f"重规划失败:{out[1]}")
+                await self._fail(f"重规划失败:{out[1]}", code="goal_unreachable")
                 return
             if out[2] != self._epoch:
                 # 重规划完到这一拍之间区域又换了(内审应修 9):旧区域上的路不装,再来一次
@@ -898,7 +905,7 @@ class PlannedNavBackend(HalNavBackend):
             await self._send(0.0, 0.0, dt_s)            # 原地等新路径(提前绕的照样沿旧路走)
             return
         if self._path is None or self._cm is None:
-            await self._fail("没有路径")
+            await self._fail("没有路径", code="goal_unreachable")
             return
         dgoal = math.hypot(target.position.x - here.x, target.position.y - here.y)
         if self._aligning and dgoal > ARRIVE_TOL_M + REALIGN_M and self._creep_from is None:
@@ -1047,9 +1054,10 @@ class PlannedNavBackend(HalNavBackend):
         if self.obstacles is not None:
             self.obstacles.note_odom(odom.x, odom.y, odom.yaw)
 
-    def _guard_check(self, vx: float, wz: float) -> Any:
-        return self.guard.check(vx, wz, self._v_meas, self.obstacles, self._odom_pose,
-                                w_now=(self._last_wz, self._w_meas))
+    def _guard_check(self, vx: float, wz: float, g: Any = None) -> Any:
+        """按守卫 ``g`` 查这条速度(不给就用 :attr:`guard`;导航 V1 的软余量传一份改了多留的)。"""
+        return (g or self.guard).check(vx, wz, self._v_meas, self.obstacles, self._odom_pose,
+                                       w_now=(self._last_wz, self._w_meas))
 
     def _secs(self) -> float:
         """被挡计时、临时障碍的过期用单调钟(内审小:墙钟一对时就跳);没配避障就按后端的钟。"""
@@ -1092,7 +1100,7 @@ class PlannedNavBackend(HalNavBackend):
             log.error("%s:停", why)
             self.emit(AlgErrorEvent((AlgErrorItem(ALG_LIDAR_DISCONNECTED, why, 2),),
                                     self._now()))
-            await self._fail(why)
+            await self._fail(why, code="sensor_lost")
             return
         v = self._guard_check(vx, wz)
         if not v.ok and abs(vx) > 1e-6 and abs(wz) > 1e-6 and self._creep_from is None:
@@ -1104,7 +1112,8 @@ class PlannedNavBackend(HalNavBackend):
         if v.ok and self._stalled():
             from nexwar_agent.obstacles import Verdict
             await self._blocked(Verdict(False, f"发了运动命令、机器人 {STALL_S:.0f} 秒未动"
-                                        "(运控或第二层许可门未执行)"), here, dt_s, vx, wz)
+                                        "(运控或第二层许可门未执行)"), here, dt_s, vx, wz,
+                                stall=True)
             return
         if v.ok:
             if (self._unblock_owed and self._blocked_since is None and abs(vx) > 1e-6
@@ -1186,7 +1195,7 @@ class PlannedNavBackend(HalNavBackend):
         return True
 
     async def _blocked(self, v: Any, here: Any, dt_s: float, vx: float = 0.0,
-                       wz: float = 0.0) -> None:
+                       wz: float = 0.0, *, stall: bool = False) -> None:
         now = self._secs()
         if self._blocked_since is None:
             self._blocked_since = now
@@ -1200,7 +1209,9 @@ class PlannedNavBackend(HalNavBackend):
         await self._send(0.0, 0.0, dt_s)                 # 原地等(零速保住步态)
         if waited >= BLOCK_GIVEUP_S:
             log.warning("被挡 %.0f s 还没走成:放弃这一段(%s)", waited, reason)
-            await self._fail(f"被挡 {waited:.0f} 秒还未完成({reason})")
+            code = ("goal_occupied" if self._goal_covered else "controller_stalled" if stall
+                    else "dynamic_obstacle_blocked")
+            await self._fail(f"被挡 {waited:.0f} 秒还未完成({reason})", code=code)
             return
         if (waited >= BLOCK_REPORT_S or self._goal_covered) and not self._blocked_told:
             self._blocked_told = True

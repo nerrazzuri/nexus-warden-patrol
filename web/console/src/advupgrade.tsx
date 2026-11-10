@@ -1,13 +1,17 @@
 // 高级 → 软件升级(W44 第四期,设计 §5.3「软件升级」):现在的版本(站点、每台机器人);上传公司给的升级包(再输一次密码,
 // 站点照旧核签名和指纹);在线下载等站点联网(W45)。每台机器人:下载到机器人、换成这一版(现在 / 等它在充电、空闲时)、
 // 退回上一版。谁还在用老 App 也在这一页。
+import { pkgProblem } from "./pkgcheck";
 import { useState } from "preact/hooks";
-import { useLoad, clientTooOld, type ClientRow } from "./admin";
-import { api, apiUpload, ApiError, enc } from "./api";
+import { useLoad, clientTooOld, groupClients, type ClientRow } from "./admin";
+import { api, apiUpload, ApiError, badPackage, enc } from "./api";
+import { siteStr } from "./sitetext";
 import { ConfirmPassword } from "./confirmpw";
+import { Confirm } from "./dialogs";
 import { hm, nameOf } from "./data";
 import { t } from "./i18n";
-import { AppPackages, SiteUpdate } from "./remoteops";
+import { AppPackages, platformName, SiteUpdate } from "./remoteops";
+export { platformName };
 
 type Say = (s: string) => void;
 interface Release { name: string; size?: number; note?: string; added_ms?: number }
@@ -18,11 +22,13 @@ function errText(e: unknown): string {
 }
 
 export function UpgradePage({ say }: { say: Say }) {
-  const [rel, reload] = useLoad<{ releases: Release[]; robots: Record<string, string | null> }>("/api/releases");
+  const [rel, reload] = useLoad<{ releases: Release[]; robots: Record<string, string | null>; rollback?: Record<string, boolean> }>("/api/releases");
   const [versions] = useLoad<Versions>("/api/versions");
   const [file, setFile] = useState<File | null>(null);
+  const [bad, setBad] = useState<string | null>(null);
   const [asking, setAsking] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [backing, setBacking] = useState<string | null>(null);
 
   const act = async (robot: string, body: Record<string, unknown>, msg: string) => {
     try {
@@ -43,18 +49,30 @@ export function UpgradePage({ say }: { say: Say }) {
         <div class="sys-row"><span class="muted">{t("upSite")}</span><b class="mono">{versions?.site.version ?? "—"}</b></div>
         {Object.entries(rel?.robots ?? {}).map(([rid, cur]) => (
           <div key={rid} class="sys-row" data-robot={rid}>
-            <span class="muted">{nameOf(rid)}</span><b class="mono">{cur ?? "—"}</b>
-            <button type="button" class="btn sm push" onClick={() => void act(rid, { action: "rollback" }, t("upRolledBack", { id: nameOf(rid) }))}>{t("upRollback")}</button>
+            {/* 第 2 轮 P1-78:没报版本时写为什么,不只是「—」 */}
+            <span class="muted">{nameOf(rid)}</span>{cur ? <b class="mono">{cur}</b> : <span class="small muted" data-no-release="1">{t("upNoRelease")}</span>}
+            {/* P1-78:先确认;站点说这台不能退(老代理)就不给按钮 */}
+            {/* 第 3 轮 config N11:没报版本的不再接着说「软件太老、不能退回」 */}
+            {!cur ? null : rel?.rollback?.[rid] !== false
+              ? <button type="button" class="btn sm push" onClick={() => setBacking(rid)}>{t("upRollback")}</button>
+              : <span class="muted small push">{t("upNoRollback")}</span>}
           </div>
         ))}
       </section>
+      {backing && (
+        <Confirm text={t("upRollbackAsk", { id: nameOf(backing) })} yes={t("upRollback")} danger
+          onNo={() => setBacking(null)}
+          onYes={() => { const rid = backing; setBacking(null); void act(rid, { action: "rollback" }, t("upRolledBack", { id: nameOf(rid) })); }} />
+      )}
       <SiteUpdate say={say} />
       <AppPackages say={say} />
       <section class="panel up-get">
         <h2>{t("upGet")}</h2>
         <div class="row wrap">
-          <input type="file" name="pkg" accept=".tar.gz,.tgz,application/gzip" onChange={(e) => setFile(e.currentTarget.files?.[0] ?? null)} />
-          <button type="button" class="btn primary" disabled={!file || busy} onClick={() => setAsking(true)}>{t("upUpload")}</button>
+          <input type="file" name="pkg" accept=".tar.gz,.tgz,application/gzip"
+            onChange={(e) => { const f = e.currentTarget.files?.[0] ?? null; setFile(f); setBad(null); if (f) void pkgProblem(f).then(setBad); }} />
+          <button type="button" class="btn primary" disabled={!file || busy || !!bad} onClick={() => setAsking(true)}>{t("upUpload")}</button>
+          {bad && <p class="error small" role="alert">{bad}</p>}
         </div>
         <p class="muted small">{t("upUploadHint")}</p>
         <div class="row"><button type="button" class="btn" disabled>{t("upOnline")}</button><span class="muted small">{t("upOnlineLater")}</span></div>
@@ -85,9 +103,11 @@ export function UpgradePage({ say }: { say: Say }) {
         <p class="muted small">{t("clientsHint")}</p>
         <ul class="plain">
           {(versions?.clients ?? []).length === 0 && <li class="muted small">{t("clientsNone")}</li>}
-          {(versions?.clients ?? []).map((c, i) => (
-            <li key={i}>
+          {groupClients(versions?.clients ?? []).map((c, i) => (
+            <li key={i} data-client={c.name}>
               <b>{c.name}</b> {c.kind === "web" ? t("clientWeb") : `${t("clientApp")} ${c.version ?? "?"}`}
+              {c.platform && <span class="muted small"> · {platformName(c.platform)}</span>}
+              {c.n > 1 && <span class="muted small" data-client-n={c.n}> · {t("clientLogins", { n: c.n })}</span>}
               {clientTooOld(c, versions?.site.min_app_level) && <span class="tag">{t("clientOld")}</span>}
               <span class="muted small mono"> {hm(c.last_used)}</span>
             </li>
@@ -102,6 +122,10 @@ export function UpgradePage({ say }: { say: Say }) {
             setAsking(false);
             say(t("upUploaded", { name: d.release?.name ?? "" }));
             reload();
+          } catch (e) {
+            // 第 3 轮 P1-77:包不对(签名、指纹、已登记)不是密码问题 —— 关掉密码框、单独说,不清空密码重来
+            if (badPackage(e)) { setAsking(false); say(t("upBadPkg", { why: siteStr((e as ApiError).message) })); return; }
+            throw e;
           } finally {
             setBusy(false);
           }

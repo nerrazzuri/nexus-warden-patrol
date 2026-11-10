@@ -46,6 +46,9 @@ class SiteRobotsPage extends StatefulWidget {
 
   /// 后台值守开关的状态（W55：开关在「设置」页）；不给就自己建一个。
   final WatchControl? control;
+
+  /// 还开着的 P1（键 → 标题），外壳拿它在每一栏顶上画红条（手机 App 测试 M17）。
+  final ValueNotifier<Map<String, String>>? openP1;
   const SiteRobotsPage(
       {super.key,
       required this.api,
@@ -55,7 +58,8 @@ class SiteRobotsPage extends StatefulWidget {
       this.entry,
       this.push,
       this.ringEvery = const Duration(seconds: 4),
-      this.control});
+      this.control,
+      this.openP1});
 
   static const Key addKey = Key('robot-add');
 
@@ -84,9 +88,10 @@ class _SiteRobotsPageState extends State<SiteRobotsPage> {
     if (widget.watch.supported && widget.entry != null) _ctl.bind(_bgToggle);
     _reload();
     _listen();
-    // 后台值守（决策 30）：登录进来就开
+    // 后台值守（决策 30）：登录进来就开。只读账号不自动开（手机 App 测试 M15：响铃档会一直响，他又确认不了），
+    // 要的话在设置页自己开
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) unawaited(_bgStart());
+      if (mounted && !_viewer) unawaited(_bgStart());
     });
   }
 
@@ -145,8 +150,12 @@ class _SiteRobotsPageState extends State<SiteRobotsPage> {
   Future<void> _ringIfPending() async {
     try {
       final rows = await widget.api.alerts();
+      widget.openP1?.value = {
+        for (final a in rows)
+          if (a.level == 'P1' && a.resolvedMs == null) a.key: alertTitle(a.kind, a.title),
+      };
       final pending = rows.where((a) =>
-          a.channel == 'sound' && a.ackedMs == null && a.resolvedMs == null);
+          !_viewer && a.channel == 'sound' && a.ackedMs == null && a.resolvedMs == null);
       if (_disposed) return;
       _ringing
         ..clear()
@@ -222,9 +231,23 @@ class _SiteRobotsPageState extends State<SiteRobotsPage> {
   final Set<String> _ringing = <String>{};
   Timer? _bell;
 
+  /// 只读账号：响一声提醒，不一直响（他确认不了，M15）。
+  bool get _viewer => widget.api.session?.isViewer ?? false;
+
   void _track(Map<String, dynamic> a) {
     final key = '${a['key']}';
-    final want = a['channel'] == 'sound' && a['acked_ms'] == null && a['resolved_ms'] == null;
+    final p1 = widget.openP1;
+    if (p1 != null) {
+      final open = a['level'] == 'P1' && a['resolved_ms'] == null;
+      final now = Map<String, String>.of(p1.value);
+      if (open) {
+        now[key] = alertTitle('${a['kind']}', '${a['title']}');
+      } else {
+        now.remove(key);
+      }
+      p1.value = now;
+    }
+    final want = !_viewer && a['channel'] == 'sound' && a['acked_ms'] == null && a['resolved_ms'] == null;
     if (want) {
       _ringing.add(key);
     } else {
@@ -291,7 +314,7 @@ class _SiteRobotsPageState extends State<SiteRobotsPage> {
         });
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
             content: Text(tr('Background watch off: no alarms arrive while the app is in the background',
-                '后台值守已关闭：App 在后台时收不到告警'))));
+                '后台值守已关闭：App 在后台时收不到报警'))));
       }
     } else {
       await _bgStart();
@@ -319,8 +342,7 @@ class _SiteRobotsPageState extends State<SiteRobotsPage> {
             // W53：布防、天气挪到值守页；页头不再印角色代号
             overline: title,
             title: tr('Robots', '机器人'),
-            // 能退就给返回：从站点列表登录进来的，返回 = 离开站点（注销）
-            leading: Navigator.canPop(context) ? const BackButton() : null,
+            // 手机 App 测试 M01：底部导航的页面不给返回箭头（以前点了就退出登录、停掉后台值守）；退出站点在第 5 栏
             trailing: [
               // W42：添加机器人（扫贴纸配网；站点上批准要管理权限）。W53：挪到右上角
               if (widget.entry != null && !(widget.api.session?.isViewer ?? true))

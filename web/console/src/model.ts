@@ -76,7 +76,8 @@ export interface Robot {
   status?: {
     online: boolean;
     last_seen: number;
-    ready?: { estop_clear?: boolean };
+    /** ``motion``:站着、能收速度命令(趴下、蹲下、没起来都是 false)。 */
+    ready?: { estop_clear?: boolean; motion?: boolean };
     task?: { kind: string; state: string } | null;
   } | null;
   capabilities?: {
@@ -120,6 +121,8 @@ export interface Summary {
 
 export interface Mode {
   mode: "armed" | "home" | "visitor";
+  /** 站点时区(IANA 名,站点 modes.view);顶栏的钟按它走(第 5 轮)。 */
+  timezone?: string | null;
   /** 临时撤防到几点(站点 modes.view)。 */
   until_ms?: number | null;
   /** 每个防区此刻布没布防(站点 modes.view)。 */
@@ -140,7 +143,8 @@ export const GUARD_AUDIENCES = new Set(["intrusion", "fire", "help", "offline"])
 /** W72:这条是站点自己解决的(情况恢复了、短暂中断只记录),不是人处理的。 */
 export function autoResolved(a: Pick<Alert, "resolved_ms" | "resolved_by" | "verdict">): boolean {
   const by = a.resolved_by ?? "";
-  return a.resolved_ms != null && !a.verdict && (by.startsWith("site:") || by === "system");
+  // 第 4 轮 r3-duty-N7:站点关的也有写「站点:」开头的(摄像头连上了 / 已删除)
+  return a.resolved_ms != null && !a.verdict && (/^(site|站点)[:：]/.test(by) || by === "system");
 }
 
 /** 这条告警给不给保安看。老站点不报 audience 的一律算给保安(宁可多看)。 */
@@ -222,10 +226,15 @@ export function canArm(role: string): boolean {
   return isOwnerLike(role) || role === "guard" || role === "owner";
 }
 
+/** 切到留守 / 临时撤防(站点 SET_MODE,网页易用性第 1 轮 P0-20):撤防是经理、管理员的决定,保安只能布防。 */
+export function canDisarm(role: string): boolean {
+  return isOwnerLike(role) || role === "owner";
+}
+
 /** 异常状态(着色、带形状);别的都是中性(ISA-101)。 */
 export function abnormal(s: RobotState): "p1" | "p2" | null {
   if (s === "deterring" || s === "estop" || s === "fell") return "p1";
-  if (s === "offline") return "p2";
+  if (s === "offline" || s === "manual") return "p2";      // 第 2 轮 duty N10:叫停了算异常
   return null;
 }
 

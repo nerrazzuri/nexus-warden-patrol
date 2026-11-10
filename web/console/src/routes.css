@@ -56,3 +56,10 @@
 .route-pt.warn .pm-body { stroke: var(--c-warning); }
 .route-pt.warn .pm-nose { fill: var(--c-warning); }
 p.warn { color: var(--c-warning); }
+
+/* 第 2 轮 P1-39:路线名不合规 / 重名时规则提示变红 */
+.routename .bad { color: var(--c-error); }
+/* 第 2 轮 config N3:日程列表排成一行一行(原来挤成「r2cfg-demo21:30mon tue…Remove」);输入框不铺满整行 */
+.sched-list { list-style: none; padding: 0; margin: 4px 0 10px; }
+.sched-list li { display: grid; grid-template-columns: minmax(8em, auto) 4em 1fr auto; gap: 4px 12px; align-items: center; padding: 6px 0; border-bottom: 1px solid var(--c-outline); }
+.sched-form input:not([type="checkbox"]), .sched-form select { max-width: 16em; }

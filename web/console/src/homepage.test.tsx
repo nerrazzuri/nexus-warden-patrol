@@ -4,7 +4,7 @@
 import { cleanup, fireEvent, render, waitFor } from "@testing-library/preact";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { setFetch } from "./api";
-import { HomePage } from "./homepage";
+import { groupTodo, homeTodo, HomePage } from "./homepage";
 import { lang } from "./i18n";
 import type { Alert, Mode } from "./model";
 
@@ -64,12 +64,25 @@ describe("现场概况", () => {
     expect(c.querySelector(".home-todo")).toBeNull();
   });
 
+  it("第 2 轮 config N9:有人申请账号 —— 写去用户页批准,按钮去用户页", () => {
+    const { container: c } = page([alert({ key: "r1", kind: "account_request", title: "x 申请账号" })], mode, {});
+    const todo = c.querySelector(".home-todo")!;
+    expect(todo.textContent).toContain("批准或拒绝");
+    expect(todo.querySelector('a[href="#/admin/users"]')).not.toBeNull();
+  });
+
+  it("第 2 轮 duty N6:P3 通知不进「需要你处理」", () => {
+    const { container: c } = page([alert({ key: "n1", level: "P3", kind: "patrol_started", title: "巡逻开始" })], mode, {});
+    expect(c.querySelector(".home-todo")).toBeNull();
+  });
+
   it("证书提醒写人话和该做什么,能处理", async () => {
     const done = vi.fn();
     const { container: c } = page([alert({ key: "c1" })], mode, { done });
     const todo = c.querySelector(".home-todo")!;
     expect(todo.textContent).toContain("证书");
     expect(todo.textContent).toContain("工程师");
+    expect(todo.querySelector("[data-ack-done-hint]")!.textContent).toContain("「已处理」表示已经解决");   // 第 2 轮 P1-75
     fireEvent.click(btn(todo, "已处理"));
     expect(done).toHaveBeenCalledWith(expect.objectContaining({ key: "c1" }));
   });
@@ -117,5 +130,32 @@ describe("现场概况", () => {
     const { container: c } = page();
     await waitFor(() => expect(c.querySelector(".home-week")!.textContent).toContain("比上周多 2 次"));
     expect(c.querySelector(".home-week")!.textContent).toContain("与上周持平");
+  });
+});
+
+describe("网页易用性第 1 轮 P2-44", () => {
+  it("同一种提醒(两台机器人证据未加密)合成一条,写涉及哪几台;完成一次两条都关", () => {
+    const done: string[] = [];
+    const ev = (k: string, r: string) => alert({ key: k, kind: "evidence_plain", robot: r, title: "机器人上的照片、录像未加密",
+      detail: "机器人上没有站点的证据公钥(/etc/nexwar/evidence-pub.key)" });
+    const { container: c } = page([ev("a", "A"), ev("b", "B")], mode, { done: ((a: Alert) => done.push(a.key)) as Fn });
+    const rows = c.querySelectorAll('li[data-kind="evidence_plain"]');
+    expect(rows.length).toBe(1);
+    expect(rows[0].textContent).toContain("涉及机器人：A、B");
+    expect(rows[0].querySelector("details")!.textContent).toContain("evidence-pub.key");   // 原话收起来
+    fireEvent.click(btn(rows[0], "已处理"));
+    expect(done).toEqual(["a", "b"]);
+  });
+});
+
+describe("第 3 轮 config N7", () => {
+  it("侧栏「系统状态」的数字跟「需要你处理」一样数:P3 通知、已处理的不算", () => {
+    const list = [
+      alert({ key: "a", level: "P2", kind: "robot_offline", robot: "A" }),
+      alert({ key: "b", level: "P3", kind: "patrol_started", robot: "A" }),
+      alert({ key: "c", level: "P3", kind: "patrol_started", robot: "B" }),
+      alert({ key: "d", level: "P2", kind: "robot_offline", robot: "B", resolved_ms: 5 }),
+    ];
+    expect(groupTodo(homeTodo(list)).length).toBe(1);
   });
 });

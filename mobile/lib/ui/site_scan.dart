@@ -15,7 +15,9 @@ Future<String?> scanSiteCode(BuildContext context) =>
     Navigator.push<String>(context, MaterialPageRoute<String>(builder: (_) => const SiteScanPage()));
 
 class SiteScanPage extends StatefulWidget {
-  const SiteScanPage({super.key});
+  /// 扫机器人身上的贴纸（加机器人），不是站点码（手机 App 测试 M18：以前标题、提示都叫人去扫值班台的码）。
+  final bool robot;
+  const SiteScanPage({super.key, this.robot = false});
 
   @override
   State<SiteScanPage> createState() => _SiteScanPageState();
@@ -48,7 +50,10 @@ class _SiteScanPageState extends State<SiteScanPage> {
     return Scaffold(
       backgroundColor: c.bg,
       appBar: nwHeaderBar(
-          context, NwHeader(leading: BackButton(color: c.text), title: tr('Scan site code', '扫描配对码'))),
+          context,
+          NwHeader(
+              leading: BackButton(color: c.text),
+              title: widget.robot ? tr('Scan the robot sticker', '扫机器人贴纸') : tr('Scan site code', '扫描配对码'))),
       body: Stack(
         fit: StackFit.expand,
         children: [
@@ -66,7 +71,7 @@ class _SiteScanPageState extends State<SiteScanPage> {
                           'Camera access is off for this app. Allow it in the phone settings, or go back and paste the code.',
                           'App 没有相机权限。请在手机设置中允许，或返回粘贴配对码。',
                         )
-                      : tr("The camera didn't start. Go back and paste the code instead.", '相机未能启动，请返回粘贴配对码。'),
+                      : tr("The camera didn't start. Go back and type the code instead.", '相机未能启动，请返回手动输入。'),
                 ),
               ),
             ),
@@ -81,7 +86,9 @@ class _SiteScanPageState extends State<SiteScanPage> {
                 child: Padding(
                   padding: const EdgeInsets.all(Nw.s16),
                   child: Text(
-                    tr('Point the camera at the code on the console: Admin, System.', '对准值班台「管理 → 系统」中的二维码。'),
+                    widget.robot
+                        ? tr('Point the camera at the QR sticker on the robot body.', '对准机器人机身上贴的二维码。')
+                        : tr('Point the camera at the code on the console: Admin, System.', '对准值班台「管理 → 系统」中的二维码。'),
                     textAlign: TextAlign.center,
                     style: NwText.bodyMedium.copyWith(color: c.onScrim),
                   ),

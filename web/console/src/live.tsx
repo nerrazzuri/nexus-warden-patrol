@@ -44,7 +44,7 @@ export function StateText({ s, stale }: { s: RobotState; stale?: boolean }) {
   const a = abnormal(s);
   const shape = stateShape(s);
   return (
-    <span class={`${a ? `state ${a}` : "state"} tone-${tone(s)}`}>
+    <span class={`${a ? `state ${a}` : "state"} tone-${tone(s)}`} title={s === "manual" ? t("st_manualHint") : undefined}>
       {shape && <Shape kind={shape} />}
       {t(`st_${s}` as Key)}
     </span>
@@ -55,7 +55,7 @@ export function StateText({ s, stale }: { s: RobotState; stale?: boolean }) {
 export function FullCamera({ robot, cam, now, onClose, cams = CAMS }: { robot: string; cam: Cam; now: number; onClose: () => void; cams?: Cam[] }) {
   const [c, setC] = useState<Cam>(cam);
   return (
-    <Modal label={camLabel(robot, c)} wide onClose={onClose}>
+    <Modal label={camLabel(robot, c)} wide cls="fullcam" onClose={onClose}>
       <div class="seg" role="group" aria-label={robot}>
         {cams.map((x) => (
           <button key={x} type="button" aria-pressed={x === c} onClick={() => setC(x)}>{t(x)}</button>

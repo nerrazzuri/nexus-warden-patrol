@@ -1,14 +1,16 @@
 // 高级 → 诊断(W44 第四期,设计 §5.3「诊断」):什么时候用 —— 有东西不正常,或者工程师让你发日志。
 // 站点主机一张检查单(/api/health 各项,大白话,通过 / 不通过 + 站点写的说明);每台机器人一张(在线、设备健康:摄像头有画面、
 // 网络、卫星定位、存储盘……认不得的原样);「打包日志」下载站点的诊断包(不含密钥、令牌、数据库)。
-import { useEffect, useState } from "preact/hooks";
+import { useEffect } from "preact/hooks";
 import { useLoad } from "./admin";
+import { BundlePanel, ProblemList } from "./bundlepanel";
 import { nameOf } from "./data";
-import { t, type Key } from "./i18n";
+import { lang, t, type Key } from "./i18n";
 import type { Robot } from "./model";
 import { RobotOps } from "./remoteops";
+import { checkText, SiteSpan } from "./sitetext";
 
-interface Health { ok: boolean; version: string; checks: Record<string, { ok: boolean; detail?: string }> }
+interface Health { ok: boolean; version: string; checks: Record<string, { ok: boolean; detail?: string; detail_en?: string }> }
 type DevRobot = Robot & { devices?: { items: { id: string; state: string; detail?: string }[]; stale?: boolean } | null };
 
 const CHECK: Record<string, Key> = {
@@ -32,7 +34,6 @@ export function deviceText(id: string): string {
 }
 
 export function DiagPage({ say }: { say: (s: string) => void }) {
-  const [hours, setHours] = useState(24);
   const [health, reload] = useLoad<Health>("/api/health");
   const [robots, reloadRobots] = useLoad<{ robots: DevRobot[] }>("/api/robots");
   useEffect(() => {
@@ -43,14 +44,11 @@ export function DiagPage({ say }: { say: (s: string) => void }) {
     <section class="advdiag">
       <div class="panel-head">
         <h1>{t("tabDiag")}</h1>
-        <span class="push row">
-          <select aria-label={t("bundleHours")} value={String(hours)} onChange={(e) => setHours(Number(e.currentTarget.value))}>
-            {[6, 24, 72, 168].map((h) => <option key={h} value={String(h)}>{t("opsHours", { n: h })}</option>)}
-          </select>
-          <a class="btn" href={`/api/support-bundle?hours=${hours}`} download="nexwar_support.tar.gz">{t("supportBundle")}</a>
-        </span>
       </div>
       <p class="muted lead">{t("diagWhen")}</p>
+      <BundlePanel robots={(robots?.robots ?? []).filter((r) => !r.revoked).map((r) => r.robot_id)}
+        fileName={() => supportName(Date.now())} />
+      <ProblemList />
       <section class="panel checklist">
         <h2>{t("diagSite")}</h2>
         {!health ? <p class="muted">…</p> : (
@@ -59,7 +57,7 @@ export function DiagPage({ say }: { say: (s: string) => void }) {
               <li key={k} class={c.ok ? "chk ok" : "chk bad"} data-check={k}>
                 <span class="mark" aria-hidden="true">{c.ok ? "✓" : "✕"}</span>
                 <b>{CHECK[k] ? t(CHECK[k]) : k}</b>
-                {c.detail && <span class="muted small">{c.detail}</span>}
+                {c.detail && <span class="muted small" title={lang.value === "en" ? undefined : c.detail}>{checkText(c)}</span>}
               </li>
             ))}
           </ul>
@@ -74,7 +72,7 @@ export function DiagPage({ say }: { say: (s: string) => void }) {
               <li key={d.id} class={d.state === "online" ? "chk ok" : d.state === "degraded" ? "chk warn" : "chk bad"}>
                 <span class="mark" aria-hidden="true">{d.state === "online" ? "✓" : d.state === "degraded" ? "!" : "✕"}</span>
                 <b>{deviceText(d.id)}</b>
-                {d.detail && <span class="muted small">{d.detail}</span>}
+                {d.detail && <SiteSpan class="muted small" s={d.detail} />}
               </li>
             ))}
             {!r.devices && <li class="muted small">{t("diagNoDevices")}</li>}
@@ -88,4 +86,11 @@ export function DiagPage({ say }: { say: (s: string) => void }) {
       ))}
     </section>
   );
+}
+
+/** 第 2 轮 P1-73:支持包文件名带下载的日期时刻,多次下载不重名、发给我们时分得清。 */
+export function supportName(ms: number): string {
+  const d = new Date(ms);
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `nexwar_support-${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}.tar.gz`;
 }

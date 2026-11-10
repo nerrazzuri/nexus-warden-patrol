@@ -2,7 +2,7 @@
 // POC 第 8 项:告警测试模式条幅 —— 管理员开、结束并清掉(先确认);保安只看得到条幅。
 import { cleanup, fireEvent, render, waitFor } from "@testing-library/preact";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { AlertTestBar } from "./alerttest";
+import { AlertTestBar, DrillNote } from "./alerttest";
 import { setFetch } from "./api";
 import { alertTitle, lang } from "./i18n";
 
@@ -21,7 +21,7 @@ beforeEach(() => {
     if (url === "/api/alert-test" && init?.method === "POST") {
       const b = JSON.parse(String(init.body));
       posted.push(b);
-      mode = b.action === "start" ? { active: true, until_ms: END_AT, by: "alice" }
+      mode = b.action === "start" ? { active: true, until_ms: END_AT, by: "alice", alarms: [{ key: "A/fell#1", title: "测试：摔倒" }] }
         : { active: false, until_ms: null, by: "", cleared: b.clear ? 3 : 0 };
       return Promise.resolve(json(mode));
     }
@@ -38,19 +38,26 @@ describe("告警测试模式", () => {
     expect(alertTitle("zh", "stuck", "测试：被挡住了")).toMatch(/^测试：/);
     expect(alertTitle("en", "stuck", "被挡住了")).not.toMatch(/TEST/);
   });
+  it("第 5 轮:演练期间没有报警,不给「删掉演练报警」(不问删 0 条)", async () => {
+    mode = { active: true, until_ms: END_AT, by: "alice", alarms: [] } as never;
+    const { container: c } = render(<AlertTestBar role="admin" onCleared={() => {}} />);
+    await waitFor(() => expect(btn(c, "结束演练（保留记录）")).toBeTruthy());
+    expect(c.querySelector("[data-end-clear]")).toBeNull();
+  });
   it("管理员开 30 分钟 → 条幅写到几点;结束并清掉先确认,说删了几条", async () => {
     let cleared = 0;
     const { container: c } = render(<AlertTestBar role="admin" onCleared={() => cleared++} />);
-    await waitFor(() => expect(btn(c, "开始告警测试")).toBeTruthy());
-    fireEvent.click(btn(c, "开始告警测试"));
+    await waitFor(() => expect(btn(c, "开始报警演练")).toBeTruthy());
+    fireEvent.click(btn(c, "开始报警演练"));
     await waitFor(() => expect(c.querySelector('[data-alert-test="on"]')?.textContent).toContain(`到 ${endHm()} 结束`));
     expect(posted).toEqual([{ action: "start", minutes: 30 }]);
-    fireEvent.click(btn(c, "结束测试并清掉"));
+    fireEvent.click(btn(c, "结束演练并删掉演练报警"));
     expect(posted.length).toBe(1);
     const dlg = await waitFor(() => { const x = document.querySelector("dialog"); expect(x).toBeTruthy(); return x!; });
-    fireEvent.click(btn(dlg, "结束测试并清掉"));
-    await waitFor(() => expect(c.textContent).toContain("删掉 3 条测试告警"));
-    expect(posted[1]).toEqual({ action: "end", clear: true });
+    fireEvent.click(btn(dlg, "结束演练并删掉演练报警"));
+    // 第 2 轮 P1-19:不写条数(站点数的含保安看不到的记录)
+    await waitFor(() => expect(c.textContent).toContain("演练报警都已删掉"));
+    expect(posted[1]).toEqual({ action: "end", clear: true, keep: [] });
     expect(cleared).toBe(1);
   });
 
@@ -72,5 +79,53 @@ describe("告警测试模式", () => {
     const { container: c2 } = render(<AlertTestBar role="guard" onCleared={() => {}} />);
     await waitFor(() => expect(c2.querySelector('[data-alert-test="on"]')).toBeTruthy());
     expect(c2.querySelectorAll("button").length).toBe(0);
+    expect(c2.textContent).toContain("照常处理即可");                         // P1-21:只读、保安看一句人话
+    cleanup();
+    // 第 2 轮 duty N12:只读账号不能处理,不写「照常处理」
+    const { container: c3 } = render(<AlertTestBar role="viewer" onCleared={() => {}} />);
+    await waitFor(() => expect(c3.querySelector('[data-alert-test="on"]')).toBeTruthy());
+    expect(c3.textContent).toContain("你不用做什么");
+    expect(c3.textContent).not.toContain("照常处理");
+  });
+
+  it("P1-18/19:没开时收着、写清用途;开着时「只结束」在前,删记录的不是醒目的红按钮", async () => {
+    const { container: c } = render(<AlertTestBar role="admin" onCleared={() => {}} />);
+    await waitFor(() => expect(c.querySelector("details.at-off")).not.toBeNull());
+    expect(c.textContent).toContain("不会自己造报警");
+    cleanup();
+    mode = { active: true, until_ms: Date.now() + 60_000, by: "alice" };
+    const { container: c2 } = render(<AlertTestBar role="admin" onCleared={() => {}} />);
+    await waitFor(() => expect(c2.querySelector('[data-alert-test="on"]')).toBeTruthy());
+    const bs = Array.from(c2.querySelectorAll("button"));
+    expect(bs[0].textContent).toBe("结束演练（保留记录）");
+    expect(c2.querySelector("button.stop")).toBeNull();
   });
 });
+
+
+describe("第 3 轮 duty N10", () => {
+  it("结束并删掉:确认框写共几条、列出标题", async () => {
+    mode = { active: true, until_ms: END_AT, by: "alice", alarms: [{ key: "k1", title: "测试：卡住了" }, { key: "k2", title: "测试：看见人" }] };
+    const { container: c } = render(<AlertTestBar role="admin" onCleared={() => {}} />);
+    await waitFor(() => expect(c.querySelector('[data-alert-test="on"]')).not.toBeNull());
+    fireEvent.click(btn(c, "结束演练并删掉演练报警"));
+    const list = await waitFor(() => { const l = document.querySelector("[data-drill-list]"); expect(l).not.toBeNull(); return l!; });
+    expect(list.querySelectorAll("li").length).toBe(2);
+    expect(document.querySelector(".confirm-text")!.textContent).toContain("2 条");
+  });
+});
+
+describe("第 5 轮:总览页也看得到演练", () => {
+  it("开着时有一句、带去报警记录的链接;没开没有", async () => {
+    mode = { active: true, until_ms: END_AT, by: "alice" };
+    const { container: c } = render(<DrillNote />);
+    await waitFor(() => expect(c.querySelector("[data-drill-note]")).toBeTruthy());
+    expect(c.querySelector("[data-drill-note] a")!.getAttribute("href")).toBe("#/alarms");
+    cleanup();
+    mode = { active: false, until_ms: null, by: "" };
+    const r = render(<DrillNote />);
+    await new Promise((res) => setTimeout(res, 20));
+    expect(r.container.querySelector("[data-drill-note]")).toBeNull();
+  });
+});
+

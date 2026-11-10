@@ -57,12 +57,12 @@ export function LocHistoryPage({ robots, now }: { robots: string[]; now: number 
         </label>
         <button type="button" class="btn sm" onClick={reload}>{L("Refresh", "刷新")}</button>
       </div>
-      {error && <p class="state p2" role="alert"><Shape kind="P2" />{L("Could not load: {e}", "加载失败:{e}", { e: error })}</p>}
+      {error && <p class="state p2" role="alert"><Shape kind="P2" />{L("Could not load: {e}", "加载失败：{e}", { e: error })}</p>}
       <table class="grid">
         <thead>
           <tr>
             <th>{L("Started", "开始")}</th><th>{L("Duration", "时长")}</th><th>{L("Robot", "机器人")}</th>
-            <th>{L("Kind", "种类")}</th><th>{L("Where", "地点")}</th><th>{L("Why (robot's words)", "原因(机器人的原话)")}</th>
+            <th>{L("Kind", "种类")}</th><th>{L("Where", "地点")}</th><th>{L("Why (robot's words)", "原因（机器人的原话）")}</th>
             <th>{L("Task", "任务")}</th><th>{L("Ended", "怎么结束的")}</th><th />
           </tr>
         </thead>

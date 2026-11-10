@@ -36,9 +36,10 @@ void main() {
       'max_wz': 1.5, 'speeds': [0.3, 0.6, 1.0, 1.3, 1.6, 2.0]});
     await t.pump();
     await t.pump();
-    for (final v in [0.3, 0.6, 1.0, 1.3, 1.6, 2.0]) {
-      expect(find.byKey(SiteTeleopPage.speedKey(v)), findsOneWidget);
-    }
+    // 用户 11-08：一根竖滑条代替两排速度档，旁边写现在多少 m/s
+    final slider = t.widget<Slider>(find.byKey(SiteTeleopPage.speedSliderKey));
+    expect(slider.divisions, 5);
+    expect(t.widget<Text>(find.byKey(SiteTeleopPage.speedValueKey)).data, '0.6');
     expect(find.byKey(SiteTeleopPage.speedHintKey), findsNothing);
     await t.sendKeyDownEvent(LogicalKeyboardKey.keyW);
     await t.sendKeyDownEvent(LogicalKeyboardKey.keyA);
@@ -46,7 +47,9 @@ void main() {
     expect(api.link!.sent.last[0], closeTo(0.6, 1e-9), reason: '默认 0.6');
     expect(api.link!.sent.last[1], closeTo(1.5 * 0.6, 1e-9), reason: '1.0 以下转向同比例');
     expect(api.link!.sentVmax.last, 0.6);
-    await t.tap(find.byKey(SiteTeleopPage.speedKey(1.6)));
+    t.widget<Slider>(find.byKey(SiteTeleopPage.speedSliderKey)).onChanged!(4);
+    await t.pump();
+    expect(t.widget<Text>(find.byKey(SiteTeleopPage.speedValueKey)).data, '1.6');
     await t.pump(const Duration(milliseconds: 250));
     expect(api.link!.sent.last[0], closeTo(1.6, 1e-9));
     expect(api.link!.sent.last[1], closeTo(1.5, 1e-9), reason: '转向最多到站点给的,不跟着中速档变快');
@@ -60,6 +63,20 @@ void main() {
     teleopSpeedPick = null;
   });
 
+  testWidgets('用户 11-08：下雨限速时滑条旁边说最高多少、为什么', (t) async {
+    final api = FakeApi('guard')
+      ..weatherView = <String, dynamic>{'condition': 'rain', 'label': '下雨', 'source': 'manual', 'speed_cap_mps': 0.3};
+    await t.pumpWidget(MaterialApp(home: SiteTeleopPage(key: UniqueKey(), api: api, robotId: 'A')));
+    await t.pump();
+    api.link!.ctl.add(<String, dynamic>{'kind': 'granted', 'lease_epoch': 1, 'max_vx': 0.3,
+      'max_wz': 1.0, 'speeds': [0.2, 0.3]});
+    await t.pump();
+    await t.pump();
+    expect(find.text('最高 0.3 m/s（下雨）'), findsOneWidget);
+    expect(find.textContaining('限速'), findsNothing, reason: '顶上不再另外印一个限速');
+    await t.pumpWidget(Container());
+  });
+
   testWidgets('POC 速度档：上次选的这台到不了，就用到得了的最快那档', (t) async {
     teleopSpeedPick = 1.6;
     final api = FakeApi('guard');
@@ -69,7 +86,7 @@ void main() {
       'max_wz': 1.5, 'speeds': [0.3, 0.6, 1.0]});
     await t.pump();
     await t.pump();
-    expect(find.byKey(SiteTeleopPage.speedKey(1.6)), findsNothing);
+    expect(t.widget<Slider>(find.byKey(SiteTeleopPage.speedSliderKey)).divisions, 2, reason: '最大值跟着站点给的');
     await t.sendKeyDownEvent(LogicalKeyboardKey.keyW);
     await t.pump(const Duration(milliseconds: 250));
     expect(api.link!.sent.last[0], closeTo(1.0, 1e-9));
@@ -106,7 +123,7 @@ void main() {
   testWidgets('POC 速度档：老站点不给档，不显示切换，照旧按站点限速', (t) async {
     final api = FakeApi('guard');
     await _open(t, api);
-    expect(find.byKey(SiteTeleopPage.speedKey(0.3)), findsNothing);
+    expect(find.byKey(SiteTeleopPage.speedSliderKey), findsNothing);
     await t.pump(const Duration(milliseconds: 250));
     expect(api.link!.sentVmax.every((v) => v == null), isTrue, reason: '老站点不带 vmax');
     await t.pumpWidget(Container());
@@ -317,7 +334,7 @@ void main() {
     await t.sendKeyEvent(LogicalKeyboardKey.escape);
     await t.pump();
     expect(api.calls, contains('halt A'));
-    expect(find.text('你已按下停车'), findsOneWidget);
+    expect(find.text('你已按下停车，它原来在跑的任务也取消了。'), findsOneWidget);
     await t.pumpWidget(Container());
   });
 
@@ -455,9 +472,12 @@ void main() {
     await t.pump();
     await t.pump(const Duration(seconds: 10));
     expect(api2.teleopCalls, 1, reason: '有人按了停：不自己再要');
+    // 手机 App 测试 M12：按的是「解除叫停并继续遥控」：先解除叫停，再要遥控
+    expect(find.text('解除叫停并继续遥控'), findsOneWidget);
     await t.tap(find.byKey(SiteTeleopPage.resumeKey));
     await t.pump();
     await t.pump();
+    expect(api2.calls, contains('resume A'));
     expect(api2.teleopCalls, 2);
     await t.pumpWidget(Container());
   });
@@ -625,7 +645,7 @@ void main() {
     await t.pump();
     expect(api.link!.released, isTrue);
     expect(api.link!.isClosed, isTrue);
-    expect(find.text('你已按下停车'), findsOneWidget);
+    expect(find.text('你已按下停车，它原来在跑的任务也取消了。'), findsOneWidget);
     await t.pumpWidget(Container());
   });
 
@@ -640,7 +660,7 @@ void main() {
       'max_wz': 0.75});
     await t.pump();
     await t.pump();
-    expect(find.text('你已按下停车'), findsOneWidget);
+    expect(find.text('你已按下停车，它原来在跑的任务也取消了。'), findsOneWidget);
     expect(find.textContaining('遥控中'), findsNothing);
     final n = api.link!.sent.length;
     await t.pump(const Duration(milliseconds: 500));
@@ -801,18 +821,20 @@ void main() {
     final api = FakeApi('guard');
     await _open(t, api);
     await t.pump();
+    // 用户 11-08：姿态收在左上一个菜单里（不挡镜头切换）；菜单头写安全提示，点了就是确认
+    await t.tap(find.byKey(SiteTeleopPage.postureMenuKey));
+    await t.pumpAndSettle();
     for (final m in ['stand', 'lie', 'crawl']) {
       expect(find.byKey(SiteTeleopPage.postureKey(m)), findsOneWidget);
     }
+    expect(find.textContaining('旁边没有人'), findsOneWidget);
     await t.tap(find.byKey(SiteTeleopPage.postureKey('lie')));
-    await t.pumpAndSettle();
-    await t.tap(find.byKey(const Key('posture-confirm')));
     await t.pumpAndSettle();
     expect(api.calls, contains('posture A lie'));
     await t.sendKeyDownEvent(LogicalKeyboardKey.keyW);
     await t.pump(const Duration(milliseconds: 250));
-    final b = t.widget<ButtonStyleButton>(find.byKey(SiteTeleopPage.postureKey('stand')));
-    expect(b.onPressed, isNull, reason: '推着杆不换姿势');
+    final b = t.widget<PopupMenuButton<String>>(find.byKey(SiteTeleopPage.postureMenuKey));
+    expect(b.enabled, isFalse, reason: '推着杆不换姿势');
     await t.sendKeyUpEvent(LogicalKeyboardKey.keyW);
     await t.pumpWidget(Container());
   });

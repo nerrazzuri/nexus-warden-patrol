@@ -2,13 +2,15 @@
 // 选哪个标签只能改那一样,别的四样在图上淡着画、只作参考。右上角「保存」(这个标签有没存的改动才亮)和「历史版本」
 // (谁、几点改的,一键退回;退回走原来的保存,禁行区放宽照样要确认)。两个人同时改:后保存的看到「刚才有人改过」。
 // 这个文件是外框:选图、拉五样数据、淡层、保存按钮、历史抽屉、切标签前问没存的。各标签在 layout*.tsx。
+import { siteKnown } from "./sitetext";
+import { useUnsaved } from "./unsaved";
 import type { ComponentChildren, FunctionComponent } from "preact";
 import { useCallback, useEffect, useRef, useState } from "preact/hooks";
 import { api, ApiError, enc } from "./api";
-import { hm } from "./data";
+import { clip, hm, siteDown } from "./data";
 import { Confirm } from "./dialogs";
 import { t, type Key } from "./i18n";
-import { MapCanvas, type CanvasArea, type Screen } from "./mapcanvas";
+import { MapCanvas, type CanvasArea, type Screen, type LegendKey } from "./mapcanvas";
 import { toPx, type NavZone, type PreviewMeta, type Pt } from "./mapview";
 
 type Say = (s: string) => void;
@@ -32,6 +34,8 @@ export interface MapMark { id?: string; kind: "exit" | "hide"; name: string; poi
 export interface NavZones {
   revision: number; zones: NavZone[]; auto_confirmed?: boolean; confirm_text?: string; held?: NavZone[];
   confirmed?: { revision: number; by: string; at_ms: number; current: boolean; how: string } | null;
+  /** R2 / 第 3 轮 maps N1:从上一版带过来、还没核的建议(重新建图的版本;编辑、去噪的禁行区直接抄过来)。 */
+  proposal?: { from_version: string; zones: NavZone[]; standby?: unknown[]; intercepts?: unknown[]; frame?: { same: boolean | null } } | null;
 }
 export interface LayoutRoute { id: string; revision: number; kind?: "patrol" | "guard"; waypoints: { name: string; x: number; y: number; yaw: number }[] }
 export interface StandbyPt { robot_id: string; name: string; x: number; y: number; yaw: number; map_id: string; map_version: string; default?: boolean }
@@ -41,6 +45,11 @@ export interface CamRow { name: string; zone: string; onvif_url: string; rtsp_ur
 export interface LayerData {
   areas: Area[]; posts: ZonePost[]; marks?: MapMark[]; nav: NavZones | null; routes: LayoutRoute[]; guardRoutes: LayoutRoute[];
   standby: StandbyPt[]; cameras: CamRow[]; robots: string[];
+}
+
+/** 标签的保存函数抛这个 = 人在确认框里点了取消:不存、不报错(P2-17)。 */
+export class SaveCancelled extends Error {
+  constructor() { super("cancelled"); }
 }
 
 export interface TabProps {
@@ -60,9 +69,13 @@ export interface TabProps {
 /** 标签自己那一层(在淡层上面画)。 */
 export interface OwnLayer {
   areas?: CanvasArea[];
+  /** 第 2 轮 P2-15:这一层画了哪几种,图例里补上。 */
+  legend?: LegendKey[];
   world?: ComponentChildren;
   marks?: (s: Screen) => ComponentChildren;
   onPick?: (px: number, py: number) => void;
+  /** 第 2 轮 P1-53:给了就按住拖出方框(预览像素),不平移地图。 */
+  onDragRect?: (a: [number, number], b: [number, number], done: boolean) => void;
   drawing?: boolean;
   overlay?: ComponentChildren;
 }
@@ -74,6 +87,14 @@ function errText(e: unknown): string {
 /** 预览像素 → 地图坐标(米)。 */
 export function toMap(meta: PreviewMeta, px: number, py: number): Pt {
   return [Math.round((meta.left_x + px * meta.m_per_px) * 100) / 100, Math.round((meta.top_y - py * meta.m_per_px) * 100) / 100];
+}
+
+/** P1-36:画多边形时点回第一个点(半米以内,至少 8 个像素)就是闭合了,不再多加一个点。 */
+export function closesLoop(meta: PreviewMeta, pts: Pt[], px: number, py: number): boolean {
+  if (pts.length < 3) return false;
+  const f = toPx(meta, pts[0][0], pts[0][1]);
+  const tol = Math.max(8, 0.5 / meta.m_per_px);
+  return Math.hypot(f.px - px, f.py - py) <= tol;
 }
 
 export function polyPx(meta: PreviewMeta, pts: Pt[]): string {
@@ -107,6 +128,7 @@ export function LayoutPage({ say, robots, tabs }: { say: Say; robots: string[]; 
   const [data, setData] = useState<LayerData>(EMPTY);
   const [tab, setTab] = useState<LayoutTab>(() => tabFromHash(typeof location === "undefined" ? "" : location.hash));
   const [dirty, setDirty] = useState(false);
+  useUnsaved("layout", dirty);
   const [ask, setAsk] = useState<(() => void) | null>(null);
   const [conflict, setConflict] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -114,13 +136,32 @@ export function LayoutPage({ say, robots, tabs }: { say: Say; robots: string[]; 
   const [gen, setGen] = useState(0);
   const saveFn = useRef<(() => Promise<void>) | null>(null);
 
+  // 第 5 轮 r5-layout-N1:断线时进来(或者读地图目录失败)不当成「没有地图」;每 5 秒再读,连上了马上再读
+  const [mapsFailed, setMapsFailed] = useState(false);
+  const [mapsTry, setMapsTry] = useState(0);
+  const down = siteDown.value;
+  useEffect(() => { if (!down && mapsFailed) setMapsTry((n) => n + 1); }, [down]);
+  useEffect(() => {
+    if (!mapsFailed) return;
+    const h = setTimeout(() => setMapsTry((n) => n + 1), 5000);
+    return () => clearTimeout(h);
+  }, [mapsFailed, mapsTry]);
   useEffect(() => {
     api<{ maps: MapRow[] }>("GET", "/api/maps").then((d) => {
+      setMapsFailed(false);
       setMaps(d.maps ?? []);
-      setSel((s) => s ?? d.maps.find((m) => m.active) ?? d.maps[d.maps.length - 1] ?? null);
-    }).catch((e) => say(errText(e)));
-  }, []);
+      // 第 2 轮 maps N12:地址里带了 map、version(从发布对话框「去确认」跳来)就先选那一版
+      const q = new URLSearchParams((typeof location === "undefined" ? "" : location.hash).split("?")[1] ?? "");
+      const want = d.maps.find((m) => m.map_id === q.get("map") && m.version === q.get("version"));
+      setSel((s) => s ?? want ?? d.maps.find((m) => m.active) ?? d.maps[d.maps.length - 1] ?? null);
+    }).catch((e) => {
+      if (mapsTry === 0) say(errText(e));
+      setMapsFailed(true);
+    });
+  }, [mapsTry]);
   const base = sel ? `/api/maps/${enc(sel.map_id)}/${enc(sel.version)}` : "";
+  const robotsRef = useRef(robots);
+  robotsRef.current = robots;
   const cur = useRef(base);
   cur.current = base;
 
@@ -129,6 +170,7 @@ export function LayoutPage({ say, robots, tabs }: { say: Say; robots: string[]; 
     const b = base;
     const want = (x: keyof LayerData) => !k || k === x;
     const q = `map_id=${enc(sel.map_id)}&map_version=${enc(sel.version)}`;
+    const rk = robots.join(",");
     const [areaRes, nav, routes, guardRoutes, standby, cameras] = await Promise.all([
       want("areas") || want("posts") || want("marks")
         ? api<{ areas: Area[]; posts?: ZonePost[]; marks?: MapMark[] }>("GET", `${b}/areas`).catch(() => null) : null,
@@ -142,12 +184,15 @@ export function LayoutPage({ say, robots, tabs }: { say: Say; robots: string[]; 
     ]);
     if (cur.current !== b) return;
     const areaWant = want("areas") || want("posts") || want("marks");
+    // 第 4 轮 setup r3-N1:按旧的(空的)机器人列表取的那次晚回来,不能把后来按新列表取到的待命点、机器人盖成空
+    const staleRobots = rk !== robotsRef.current.join(",");
     setData((o) => ({
       areas: areaRes?.areas ?? (areaWant ? [] : o.areas), posts: areaRes?.posts ?? (areaWant ? [] : o.posts),
       marks: areaRes?.marks ?? (areaWant ? [] : o.marks),
       nav: want("nav") ? nav : o.nav, routes: routes ?? (want("routes") ? [] : o.routes),
       guardRoutes: guardRoutes ?? (want("guardRoutes") ? [] : o.guardRoutes),
-      standby: standby ?? (want("standby") ? [] : o.standby), cameras: cameras ?? (want("cameras") ? [] : o.cameras), robots,
+      standby: staleRobots ? o.standby : standby ?? (want("standby") ? [] : o.standby),
+      cameras: cameras ?? (want("cameras") ? [] : o.cameras), robots: robotsRef.current,
     }));
     if (want("nav")) api<PreviewMeta>("GET", `${b}/preview`).then((m) => { if (cur.current === b) setMeta(m); }).catch(() => {});
   }, [base, robots.join(",")]);
@@ -160,6 +205,14 @@ export function LayoutPage({ say, robots, tabs }: { say: Say; robots: string[]; 
     if (!base) return;
     void reload();
   }, [base]);
+  // 第 3 轮 setup N1:机器人列表比地图版本晚到时,原来待命点按「没有机器人」加载,之后不会再加载 → 一直是空、
+  // 「添加待命点」灰着。列表到了 / 变了就重新取待命点
+  const robotKey = robots.join(",");
+  const firstRobots = useRef(true);
+  useEffect(() => {
+    if (firstRobots.current) { firstRobots.current = false; return; }
+    if (base) void reload("standby");
+  }, [robotKey]);
 
   const guard = (go: () => void) => (dirty ? setAsk(() => go) : go());
   const switchTab = (x: LayoutTab) => guard(() => {
@@ -194,6 +247,7 @@ export function LayoutPage({ say, robots, tabs }: { say: Say; robots: string[]; 
       setGen((g) => g + 1);
       say(t("saved"));
     } catch (e) {
+      if (e instanceof SaveCancelled) return;
       if (e instanceof ApiError && e.status === 409) setConflict(true);
       else say(errText(e));
     } finally {
@@ -204,9 +258,9 @@ export function LayoutPage({ say, robots, tabs }: { say: Say; robots: string[]; 
   const Map = useCallback((own: OwnLayer) => (meta && sel ? (
     <div class={`layout-map tab-${tab}`}>
       <MapCanvas meta={meta} raster={`${base}/preview.png`} label={t("lyTitle")}
-        areas={[...(tab === "zones" ? [] : data.areas.map((a) => ({ name: a.zone, pts: a.points, kind: "area" as const }))), ...(own.areas ?? [])]}
+        areas={[...(tab === "zones" ? [] : data.areas.map((a) => ({ name: a.zone, pts: a.points, kind: "ref" as const }))), ...(own.areas ?? [])]}
         navZones={tab !== "nogo"}
-        drawing={own.drawing} onPick={own.onPick} overlay={own.overlay}
+        drawing={own.drawing} onPick={own.onPick} overlay={own.overlay} legend={own.legend}
         world={<>
           <g class="dim">{dimWorld(tab, meta, data, sel)}</g>
           {own.world}
@@ -216,7 +270,7 @@ export function LayoutPage({ say, robots, tabs }: { say: Say; robots: string[]; 
           {own.marks?.(s)}
         </>} />
     </div>
-  ) : <p class="empty">{t("noMap")}</p>), [meta, sel, tab, data, base]);
+  ) : <p class="empty">{t(siteDown.value || mapsFailed ? "loadRetry" : "noMap")}</p>), [meta, sel, tab, data, base, mapsFailed]);
 
   const Tab = tabs[tab];
   return (
@@ -231,11 +285,14 @@ export function LayoutPage({ say, robots, tabs }: { say: Say; robots: string[]; 
             if (dirty) { el.value = sel ? `${sel.map_id}\u0000${sel.version}` : ""; setAsk(() => () => setSel(next)); } else setSel(next);
           }}>
             {maps.map((m) => <option key={`${m.map_id}:${m.version}`} value={`${m.map_id}\u0000${m.version}`}>
-              {m.map_id} · v{m.version}{m.active ? ` · ${t("lyActive")}` : ""}{m.note ? ` · ${m.note}` : ""}</option>)}
+              {m.map_id} · v{m.version}{m.active ? ` · ${t("lyActive")}` : ""}{m.note ? ` · ${clip(siteKnown(m.note))}` : ""}</option>)}
           </select>
         </label>
-        <span class="push" />
-        {HISTORY_KIND[tab] && <button type="button" class="btn" onClick={() => setHistory(!history)} aria-pressed={history}>{t("lyHistory")}</button>}
+        {/* 第 4 轮 layout N5:不用空 span 顶开(窄屏上它折到下一行,在「历史」左边空出一块) */}
+        {HISTORY_KIND[tab] && <button type="button" class="btn push" onClick={() => setHistory(!history)} aria-pressed={history}>{t("lyHistory")}</button>}
+        {/* P1-34:「没保存」写在保存按钮旁边,不另起一行把地图往下推 */}
+        {/* 第 2 轮 setup N15:「还没保存」的位置一直留着,出现时「历史」按钮不跳 */}
+        <span class={`${dirty ? "ly-dirty small" : "ly-dirty small hold"}${HISTORY_KIND[tab] ? "" : " push"}`} role="status" aria-hidden={!dirty || undefined}>{t("armDirty")}</span>
         <button type="button" class="btn primary ly-save" disabled={!dirty || busy} onClick={() => void save()}>{t("save")}</button>
       </div>
       <p class="muted lead">{t("lyLead")}</p>
@@ -250,16 +307,16 @@ export function LayoutPage({ say, robots, tabs }: { say: Say; robots: string[]; 
           <button type="button" class="btn sm" onClick={() => { setConflict(false); setDirty(false); setGen((g) => g + 1); void reload(); }}>{t("lyLatest")}</button>
         </div>
       )}
-      {dirty && <p class="arm-dirty" role="status">{t("armDirty")}</p>}
       <div class={history ? "ly-body with-history" : "ly-body"}>
         <div class="ly-main">
           {sel && meta && Tab ? (
             <Tab key={`${tab}|${base}|${gen}`} map={sel} base={base} meta={meta} data={data} reload={reload} say={say} Map={Map}
               setDirty={setDirty} registerSave={(fn) => { saveFn.current = fn; }} />
-          ) : !sel ? <p class="empty">{t("noMap")}</p> : null}
+          ) : !sel ? <p class="empty">{t(siteDown.value || mapsFailed ? "loadRetry" : "noMap")}</p> : null}
         </div>
         {history && sel && HISTORY_KIND[tab] && (
-          <HistoryDrawer key={`${HISTORY_KIND[tab]}|${tab === "cameras" ? "" : base}`} kind={HISTORY_KIND[tab]!} map={tab === "cameras" ? null : sel} say={say}
+          <HistoryDrawer key={`${tab}|${tab === "cameras" ? "" : base}`} kind={HISTORY_KIND[tab]!} map={tab === "cameras" ? null : sel} say={say}
+            routeKind={tab === "guard" ? "guard" : tab === "routes" ? "patrol" : undefined}
             onRestored={() => { setDirty(false); setGen((g) => g + 1); void reload(); }} onClose={() => setHistory(false)} />
         )}
       </div>
@@ -308,12 +365,38 @@ function dimMarks(tab: LayoutTab, d: LayerData, s: Screen): ComponentChildren {
   });
 }
 
-interface HistoryRow { id: number; kind: string; item: string; by: string; at_ms: number; note: string; summary?: string }
+interface HistoryRow {
+  id: number; kind: string; item: string; by: string; at_ms: number; note: string; summary?: string;
+  /** P1-44:摘要原料(老站点没有,退回用站点拼好的中文 ``summary``)。 */
+  facts?: { n: number; names: string[]; deleted?: boolean; route_kind?: string };
+}
+
+/** P1-44:历史摘要按界面语言拼。 */
+export function historySummary(kind: string, r: HistoryRow): string {
+  const f = r.facts;
+  if (!f) return r.summary ?? "";
+  if (f.deleted) return t("lyHsDeleted");
+  const names = f.names.length ? `: ${f.names.join(", ")}` : "";
+  const key = kind === "route" ? "lyHsPoints" : kind === "zones" ? "lyHsZones" : kind === "nogo" ? "lyHsAreas"
+    : kind === "standby" ? "lyHsStandby" : kind === "cameras" ? "lyHsCameras" : null;
+  // 第 2 轮 P1-44:1 个用单数(不写 1 zones)
+  const one: Record<string, Key> = { lyHsPoints: "lyHsPoint1", lyHsZones: "lyHsZone1", lyHsAreas: "lyHsArea1", lyHsStandby: "lyHsStandby1", lyHsCameras: "lyHsCamera1" };
+  return key ? `${f.n === 1 ? t(one[key]) : t(key, { n: f.n })}${kind === "route" || kind === "cameras" ? "" : names}` : r.summary ?? "";
+}
+
+/** 第 2 轮 P1-44:巡逻路线、防区路线的历史分开列。删除那一条没带类型,按同名路线早先的类型算;
+ *  老站点(都没带类型)全列。 */
+export function ofKind(rows: HistoryRow[], routeKind?: string): HistoryRow[] {
+  if (!routeKind) return rows;
+  const known = new Map<string, string>();
+  for (const r of rows) if (r.facts?.route_kind && !known.has(r.item)) known.set(r.item, r.facts.route_kind);
+  return rows.filter((r) => (known.get(r.item) ?? routeKind) === routeKind);
+}
 
 /** 历史抽屉。外审 R3:一个抽屉只管一个「哪一层 + 哪张图哪一版」(上面按这个 key 重建,换了就整个换掉,
  *  旧的列表、确认框跟着没了);晚到的回包按代次不认;退回请求带上这三样,站点对不上就拒绝。 */
-function HistoryDrawer({ kind, map, say, onRestored, onClose }: {
-  kind: string; map: MapRow | null; say: Say; onRestored: () => void; onClose: () => void;
+function HistoryDrawer({ kind, map, say, onRestored, onClose, routeKind }: {
+  kind: string; map: MapRow | null; say: Say; onRestored: () => void; onClose: () => void; routeKind?: string;
 }) {
   const [rows, setRows] = useState<HistoryRow[] | null>(null);
   const [restoring, setRestoring] = useState<HistoryRow | null>(null);
@@ -324,7 +407,7 @@ function HistoryDrawer({ kind, map, say, onRestored, onClose }: {
     setRows(null);
     const q = `kind=${enc(expect.kind)}&map_id=${enc(expect.map_id)}&version=${enc(expect.version)}`;
     api<{ history: HistoryRow[] }>("GET", `/api/layout/history?${q}`)
-      .then((d) => { if (my === gen.current) setRows(d.history ?? []); })
+      .then((d) => { if (my === gen.current) setRows(ofKind(d.history ?? [], routeKind)); })
       .catch(() => { if (my === gen.current) setRows([]); });
   };
   useEffect(() => { load(); return () => { gen.current += 1; }; }, []);
@@ -342,7 +425,7 @@ function HistoryDrawer({ kind, map, say, onRestored, onClose }: {
                 <time class="mono small">{new Date(r.at_ms).toLocaleDateString("sv-SE")} {hm(r.at_ms)}</time> <b>{r.by}</b>
                 {r.item && <span class="muted small"> · {r.item}</span>}
                 {r.note.startsWith("restored") && <span class="tag">{t("lyRestoredTag")}</span>}
-                {r.summary && <div class="muted small">{r.summary}</div>}
+                {(r.facts || r.summary) && <div class="muted small">{historySummary(kind, r)}</div>}
               </div>
               {i > 0 && <button type="button" class="btn sm" onClick={() => setRestoring(r)}>{t("lyRestore")}</button>}
               {i === 0 && <span class="muted small">{t("lyCurrent")}</span>}

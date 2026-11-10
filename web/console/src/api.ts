@@ -1,4 +1,11 @@
 // 站点接口(商业化 B1)。网页靠 HttpOnly cookie 认人(脚本拿不到令牌);改东西的请求带 X-Nexwar-Web 头防跨站伪造。
+import { lang, t } from "./i18n";
+import { englishError } from "./srverr";
+
+/** 第 3 轮 zh N10:连不上站点时给人看的话(原来是 "network" 这个词,中英文界面都露出来)。 */
+export function netMsg(): string {
+  return lang.value === "zh" ? "连不上站点（网络断了或站点忙），稍后再试" : "Cannot reach the site (network down or site busy). Try again shortly.";
+}
 
 export class ApiError extends Error {
   constructor(
@@ -9,6 +16,18 @@ export class ApiError extends Error {
   ) {
     super(message);
   }
+}
+
+/** 站点回的错:没权限(站点标了 reason=forbidden)用界面自己的话(P1-80,英文界面不夹中文);别的照站点原话。 */
+function errorText(status: number, data: unknown): string {
+  const d = data as { error?: string; reason?: string; reason_en?: string; err?: string };
+  if (status === 403 && d.reason === "forbidden") return t("noPermission");
+  const msg = d.error ?? `HTTP ${status}`;
+  // 日志设计 第 7 条:带错误码的(派单被拒)后面写上码,打电话报问题说得清
+  const code = typeof d.err === "string" && /^0x[0-9A-F]{4}$/.test(d.err) ? t("errCodeTail", { c: d.err }) : "";
+  // P1-01:英文界面不夹中文原话(原话还在 data.error 里)
+  if (lang.value === "en") return (typeof d.reason_en === "string" && d.reason_en ? d.reason_en : englishError(status, msg)) + code;
+  return msg + code;
 }
 
 export type Fetch = typeof fetch;
@@ -43,7 +62,7 @@ export async function api<T = unknown>(method: "GET" | "POST", path: string, bod
       signal: opts.signal,
     });
   } catch {
-    throw new ApiError(0, opts.signal?.aborted ? "aborted" : "network");
+    throw new ApiError(0, opts.signal?.aborted ? "aborted" : netMsg());
   }
   let data: unknown = {};
   try {
@@ -52,11 +71,11 @@ export async function api<T = unknown>(method: "GET" | "POST", path: string, bod
     // 成功的回包正文读到一半被取消、断网(W44 复查 N1):不是「回了个空的」,是没问成。
     // 出错的回包(401 等)状态码已经说清楚了,照旧按状态码走(复查 M3:401 要回登录页)。
     if (resp.ok && opts.signal?.aborted) throw new ApiError(0, "aborted");
-    if (resp.ok && !(e instanceof SyntaxError)) throw new ApiError(0, "network");
+    if (resp.ok && !(e instanceof SyntaxError)) throw new ApiError(0, netMsg());
     data = {};                                       // 正文不是 JSON(老接口、空回包):照旧当空的
   }
   if (!resp.ok) {
-    const msg = (data as { error?: string }).error ?? `HTTP ${resp.status}`;
+    const msg = errorText(resp.status, data);
     if (resp.status >= 500 && onServerError.cb) onServerError.cb(method, path, resp.status, msg);
     // 登录本身、开页时问「我是谁」的 401 不算「过期」:只有用着用着被踢才回登录页并提示
     if (resp.status === 401 && path !== "/api/login" && path !== "/api/me") onUnauthorized.cb();
@@ -78,7 +97,7 @@ export async function apiUpload<T = unknown>(path: string, file: Blob, headers: 
       body: file,
     });
   } catch {
-    throw new ApiError(0, "network");
+    throw new ApiError(0, netMsg());
   }
   let data: unknown = {};
   try {
@@ -88,7 +107,12 @@ export async function apiUpload<T = unknown>(path: string, file: Blob, headers: 
   }
   if (!resp.ok) {
     if (resp.status === 401) onUnauthorized.cb();
-    throw new ApiError(resp.status, (data as { error?: string }).error ?? `HTTP ${resp.status}`, data);
+    throw new ApiError(resp.status, errorText(resp.status, data), data);
   }
   return data as T;
+}
+
+/** 第 3 轮 P1-77:上传被拒是因为包本身(签名、指纹、已登记、太大),不是密码(密码不对是 403)。 */
+export function badPackage(e: unknown): boolean {
+  return e instanceof ApiError && (e.status === 400 || e.status === 409 || e.status === 413);
 }

@@ -69,3 +69,13 @@ export function toWire(s: Slot[]): WireSlot[] {
 }
 
 export { hm as minutesText };
+
+/** 这个时刻按这份时间表是不是布防(网页易用性第 1 轮 P0-08:存之前说清楚存下去立刻会怎样)。
+ *  ``zone`` 自己没有时间段就跟「全部防区」那份;时间按浏览器的钟(站点和值班台在一个时区)。 */
+export function armedAt(slots: Slot[], zone: string, at: Date): boolean {
+  const day = (at.getDay() + 6) % 7;
+  const m = at.getHours() * 60 + at.getMinutes();
+  const own = slots.some((x) => x.zone === zone);
+  const use = own ? zone : "";
+  return slots.some((x) => x.zone === use && x.day === day && x.start <= m && m < x.end);
+}

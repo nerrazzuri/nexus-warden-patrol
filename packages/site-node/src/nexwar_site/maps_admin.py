@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import json
 import logging
+import shutil
 from typing import Any
 
 from nexwar_contract.errors import ContractError
@@ -201,6 +202,8 @@ class MapAdmin:
                     "version": m["version"], "created_ms": m["created_ms"], "source": m["source"],
                     "note": m.get("note") or "",
                     "size_bytes": sum(int(f.get("size", 0)) for f in m["files"]),
+                    # P1-87:登记了、盘上却没有的文件(空 = 齐全)
+                    "missing": m.get("missing", []),
                     "latest": i == 0, "build": cat.build_info(map_id, m["version"]),
                     "quality": read_quality(cat, map_id, m["version"]),
                     "counts": {"zones": len(zs.zones) if zs else 0,
@@ -357,7 +360,7 @@ class MapAdmin:
             (tmp / image).write_bytes(dn.clean(data, meta, specks))
             px = sum(s["px"] for s in specks)
             try:
-                self.cat.import_dir(tmp, map_id=map_id, version=new, source="denoise",
+                self.cat.import_dir(tmp, map_id=map_id, version=new, source=f"denoise:{by}",
                                     note=f"从 {version} 清了 {len(specks)} 处零星噪点({px} 格)")
             except MapError as exc:
                 raise AdminError(409, str(exc)) from exc
@@ -365,8 +368,10 @@ class MapAdmin:
             shutil.rmtree(tmp, ignore_errors=True)
         from nexwar_site.standby import copy_homes
         homes = copy_homes(self.db, map_id, version, new)
+        self._copy_display(map_id, version, new, by=by)
+        layout = self._copy_layout(map_id, version, new, by=by)
         return {"map_id": map_id, "from": version, "version": new, "cleaned": len(specks),
-                "cells": px, "homes_copied": homes}
+                "cells": px, "homes_copied": homes, "layout_copied": layout}
 
     def edit(self, map_id: str, version: str, *, digest: Any, ops: Any, note: Any,
              by: str) -> dict[str, Any]:
@@ -400,7 +405,7 @@ class MapAdmin:
                 shutil.copy2(src / f.name, tmp / f.name)
             (tmp / image).write_bytes(new_pgm)
             try:
-                self.cat.import_dir(tmp, map_id=map_id, version=new, source="edit",
+                self.cat.import_dir(tmp, map_id=map_id, version=new, source=f"edit:{by}",
                                     note=text or (f"从 {version} 编辑:擦了 "
                                                   f"{stats['erased_m2']} 平方米、画了 "
                                                   f"{stats['obstacle_m2']} 平方米障碍"))
@@ -410,12 +415,173 @@ class MapAdmin:
             shutil.rmtree(tmp, ignore_errors=True)
         from nexwar_site.standby import copy_homes
         homes = copy_homes(self.db, map_id, version, new)
+        self._copy_display(map_id, version, new, by=by)
+        layout = self._copy_layout(map_id, version, new, by=by)
         return {"map_id": map_id, "from": version, "version": new, **stats,
-                "homes_copied": homes, "by": by}
+                "homes_copied": homes, "layout_copied": layout, "by": by}
+
+    def layout_counts(self, map_id: str, version: str) -> dict[str, Any]:
+        """网页易用性第 2 轮 N4:这一版上画了多少布置(发布弹窗跟机器人现在用的那一版比,
+        列出换过去会缺的)。``proposal``:R2 带过来、还没核的建议有没有。只读。"""
+        map_id, version = self._names(map_id, version)
+        site = self.site
+        out: dict[str, Any] = {"areas": 0, "exits": 0, "hides": 0, "posts": 0, "net_nodes": 0,
+                               "nogo": 0, "cameras": 0, "standby": 0, "proposal": False,
+                               # 第 4 轮 maps N4:按名字比(只比数量时少两个、多一个只报「少一个」),
+                               # 区域分种类;带过来待核的是哪几个
+                               # (只有这些算「还没生效」,别的少了就是删了)
+                               "names": {"areas": [], "nogo": [], "standby": []},
+                               "kinds": {},
+                               "proposed": {"nogo": [], "standby": []}}
+        areas = getattr(site, "areas", None)
+        if areas is not None:
+            al = areas.list(map_id, version)
+            out["areas"] = len(al)
+            out["names"]["areas"] = [a["zone"] for a in al]
+        from nexwar_site.api import map_marks, zone_posts
+        marks = map_marks(site)
+        if marks is not None:
+            ms = marks.list(map_id, version)
+            out["exits"] = sum(m["kind"] == "exit" for m in ms)
+            out["hides"] = sum(m["kind"] == "hide" for m in ms)
+        posts = zone_posts(site)
+        if posts is not None:
+            out["posts"] = sum(not p.get("auto") for p in posts.view(map_id, version))
+        nets = getattr(site, "route_nets", None)
+        if nets is not None:
+            out["net_nodes"] = len(nets.get(map_id, version).nodes)
+        zones = getattr(site, "zones", None)
+        if zones is not None:
+            zs = zones.current(map_id, version).zones
+            out["nogo"] = len(zs)
+            out["names"]["nogo"] = [z.id for z in zs]
+            out["kinds"] = {z.id: z.kind for z in zs}
+            try:
+                prop = zones.proposal(map_id, version)
+            except Exception:  # noqa: BLE001 —— 老库没有建议表:当没有
+                prop = None
+            out["proposal"] = prop is not None
+            if prop:
+                out["proposed"] = {
+                    "nogo": [z.get("id") for z in prop.get("zones", []) if isinstance(z, dict)],
+                    "standby": [f"{p['robot_id']}/{p['name']}" for p in prop.get("standby", [])
+                                if isinstance(p, dict)]}
+                for z in prop.get("zones", []):
+                    if isinstance(z, dict) and z.get("id"):
+                        out["kinds"].setdefault(z["id"], z.get("kind", "nogo"))
+        devices = getattr(site, "devices", None)
+        if devices is not None:
+            out["cameras"] = sum(d.get("map_id") == map_id and d.get("map_version") == version
+                                 for d in devices.list())
+        # 第 3 轮 r2-setup-N4:放在图上的摄像头(cameras 表的位置)也算(原来只数了 devices)
+        try:
+            out["cameras"] += self.db.query(
+                "SELECT COUNT(*) AS n FROM cameras WHERE map_id=? AND map_version=?",
+                (map_id, version))[0]["n"]
+        except Exception:  # noqa: BLE001 —— 老库没有摄像头表:不加
+            pass
+        sb = self.db.query("SELECT robot_id, name FROM standby_points "
+                           "WHERE map_id=? AND map_version=?", (map_id, version))
+        out["standby"] = len(sb)
+        out["names"]["standby"] = [f"{r['robot_id']}/{r['name']}" for r in sb]
+        return out
+
+    def _copy_layout(self, map_id: str, old: str, new: str, *, by: str) -> dict[str, int]:
+        """网页易用性第 2 轮 N4:另存的新版本跟原版同一个坐标系(只换了栅格),防区、出口线、藏匿点、
+        人挪过的防区查看点 / 值守位、路网照抄过去 —— 原来新版本上全是空的,换过去就没了也不说。
+        原版照旧(还在原版上的机器人不受影响)。走各表自己的模块写(表的归属规矩);某一条在新图上
+        不合法(比如值守位被新画的障碍盖住)就跳过,那一条回到站点自动算的。禁行区照抄(第 3 轮 N1,
+        没确认、发布前要确认);待命点、拦截点走 R2「带过来要人核」,巡逻路线、摄像头 id 唯一、只能搬,
+        在发布时问。"""
+        got = {"areas": 0, "marks": 0, "posts": 0, "net_nodes": 0, "nogo": 0}
+        site = self.site
+        zones = getattr(site, "zones", None)
+        if zones is not None:
+            # 第 3 轮 maps N1:禁行区从来源版本照抄(没确认,发布前要人确认);待命点、拦截点做成待核建议
+            try:
+                got["nogo"] = zones.seed_derived(map_id, new, old, by=by)
+            except Exception:
+                log.warning("另存 %s:%s 抄禁行区没成", map_id, new, exc_info=True)
+        areas = getattr(site, "areas", None)
+        if areas is None:
+            return got
+        for a in areas.list(map_id, old):
+            try:
+                areas.set(map_id, new, a["zone"], a["points"], by=by)
+                got["areas"] += 1
+            except Exception:
+                log.warning("另存 %s:%s 抄防区 %s 没成", map_id, new, a["zone"], exc_info=True)
+        from nexwar_site.api import map_marks, zone_posts
+        marks = map_marks(site)
+        if marks is not None:
+            for m in marks.list(map_id, old):
+                try:
+                    marks.set(map_id, new, {k: m[k] for k in ("kind", "name", "points", "yaw")
+                                            if k in m}, by=by)
+                    got["marks"] += 1
+                except Exception:
+                    log.warning("另存 %s:%s 抄标注 %s 没成", map_id, new, m.get("name"),
+                                exc_info=True)
+        posts = zone_posts(site)
+        if posts is not None:
+            for p in posts.view(map_id, old):
+                if p.get("auto"):
+                    continue                 # 自动算的:新版本上照样自动算
+                try:
+                    posts.set(map_id, new, p["zone"], view=p["view"], watch=p["watch"], by=by)
+                    got["posts"] += 1
+                except Exception:
+                    log.warning("另存 %s:%s 抄防区 %s 的值守位没成", map_id, new, p["zone"],
+                                exc_info=True)
+        nets = getattr(site, "route_nets", None)
+        if nets is not None:
+            net = nets.get(map_id, old)
+            if net.nodes:
+                w = net.to_wire()
+                try:
+                    nets.put(map_id, new, {"base_revision": 0, "nodes": w["nodes"],
+                                           "edges": w["edges"]}, by=by)
+                    got["net_nodes"] = len(net.nodes)
+                except Exception:
+                    log.warning("另存 %s:%s 抄路网没成", map_id, new, exc_info=True)
+        return got
+
+    def _copy_display(self, map_id: str, old: str, new: str, *, by: str) -> None:
+        """网页易用性第 1 轮 P0-13:另存(编辑、清噪点)出来的新版本跟原版同一个坐标系,显示设置
+        (摆正角度、底图、命名区域、特殊地面)和底图文件一起带过去;特殊地面要放慢的照样落成限速区。"""
+        disp = getattr(self.site, "map_display", None)
+        if disp is None:
+            return
+        body = disp.get(map_id, old)
+        if not (body.get("regions") or body.get("terrain") or body.get("basemap")
+                or body.get("rotate_deg") is not None):
+            return
+        home = getattr(self.site, "home", None)
+        if home is not None and body.get("basemap"):
+            src, dst = home / "map-display" / map_id / old, home / "map-display" / map_id / new
+            if src.is_dir():
+                dst.mkdir(parents=True, exist_ok=True)
+                for f in src.iterdir():
+                    if f.is_file():
+                        shutil.copy2(f, dst / f.name)
+        body = disp.put(map_id, new, body, by=by)
+        zones = getattr(self.site, "zones", None)
+        if zones is None:
+            return
+        from nexwar_site.map_display import slow_zones
+        slow = slow_zones(body)
+        if slow:
+            cur = zones.current(map_id, new)
+            try:
+                zones.put(map_id, new, [z.to_wire() for z in cur.zones] + slow,
+                          base_revision=cur.revision, by=by)
+            except Exception:
+                log.warning("另存的新版本 %s:%s 特殊地面限速区没落下", map_id, new, exc_info=True)
 
     def _next_version(self, map_id: str, version: str) -> str:
         """新版本号:这个地图号下都是数字就取最大的加一;不然 ``<版本>-dn<n>``。"""
         have = [m["version"] for m in self.cat.list() if m["map_id"] == map_id]
+        have += sorted(self.cat.retired(map_id))         # P0-15:删掉过的号不再发
         if have and all(v.isdigit() for v in have):
             return str(max(int(v) for v in have) + 1)
         n = 1
@@ -423,10 +589,11 @@ class MapAdmin:
             n += 1
         return f"{version}-dn{n}"
 
-    def delete(self, map_id: str, version: str) -> dict[str, Any]:
-        """删掉一个旧版本(文件 + 登记 + 挂在它上面的区域、待命点、拦截点、原点)。**拒绝**:有狗在用、
-        这个地图号下最新的一版、有狗的换图正在路上要换到它、是哪只狗的「退回目标」(W41:
-        2026-10-26 现场误删了 v2,狗要退回去就没处退了)。"""
+    def delete(self, map_id: str, version: str, *, confirm_rollback: bool = False
+               ) -> dict[str, Any]:
+        """删掉一个版本(文件 + 登记 + 挂在它上面的区域、待命点、拦截点、原点)。**拒绝**:有狗在用、
+        有狗的换图正在路上要换到它;是哪只狗的「退回目标」(W41:2026-10-26 现场误删了 v2,狗要退回去
+        就没处退了)要 ``confirm_rollback`` 才删。删掉的版本号不再发(P0-15)。"""
         from nexwar_site.maps import MapError
         map_id, version = self._names(map_id, version)
         rows = [m for m in self.cat.list() if m["map_id"] == map_id]
@@ -438,32 +605,30 @@ class MapAdmin:
             raise AdminError(409, f"{map_id}:{version} 还有机器人在用({who}):"
                                   "先让它们换到别的版本再删",
                              reason="in_use", robots=users)
-        if rows[0]["version"] == version:
-            raise AdminError(409, f"{map_id}:{version} 是 {map_id} 的最新一版,不能删(删旧的)",
-                             reason="latest")
+        # 网页易用性第 1 轮 P0-15:最新一版没人用也能删(号记下来不再发);退回目标要明说才删
         if (map_id, version) in self._pending_targets():
             raise AdminError(409, f"有机器人正在换到 {map_id}:{version},"
                                   "等换完再说", reason="pending")
         back = [rid for rid in self.robot_ids()
                 if (t := self.rollback_target(rid)) is not None
                 and (t["map_id"], t["version"]) == (map_id, version)]
-        if back:
+        if back and not confirm_rollback:
             who = "、".join(back)
             raise AdminError(409, f"{map_id}:{version} 是 {who} 的退回目标"
                                   "(机器人上留着、出事能一键退回去):先让机器人换到别的版本、"
                                   "或者退回目标换了再删",
                              reason="rollback_target", robots=back)
-        gone = {"nav_zones": 0, "nav_zone_proposals": 0, "standby_points": 0, "intercepts": 0,
-                "homes": 0}
+        # 第 3 轮 maps N5:另存时复制过去的防区、出口线 / 藏匿点、值守位、路网、显示设置也一起清
+        tables = ("nav_zones", "nav_zone_proposals", "standby_points", "intercepts", "homes",
+                  "zone_areas", "map_marks", "zone_posts", "route_nets", "map_display")
+        gone = dict.fromkeys(tables, 0)
         try:
             size = self.cat.delete(map_id, version)
         except MapError as exc:
             raise AdminError(404, str(exc)) from exc
         with self.db.tx() as c:
-            for table, col in (("nav_zones", "map_version"), ("nav_zone_proposals", "map_version"),
-                               ("standby_points", "map_version"), ("intercepts", "map_version"),
-                               ("homes", "map_version")):
-                gone[table] = c.execute(f"DELETE FROM {table} WHERE map_id=? AND {col}=?",
+            for table in tables:
+                gone[table] = c.execute(f"DELETE FROM {table} WHERE map_id=? AND map_version=?",
                                         (map_id, version)).rowcount
         return {"deleted": f"{map_id}:{version}", "freed_bytes": size, "removed_rows": gone}
 

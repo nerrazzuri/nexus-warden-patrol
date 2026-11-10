@@ -3,13 +3,17 @@
 // 2. 今天的安排 —— 今天几点布防(按防区)、今天的授权、临时撤防开到几点;右边切模式(设计 §11 第 14 条),写现在谁说了算。
 // 3. 机器人 —— 每台一张小卡片,点了去机器人页。
 // 4. 这周 —— 出了几次事、几次误报,跟上周比。
+import { alertAdvice, alertHeadline } from "./alertinfo";
+import { siteStr, siteText } from "./sitetext";
+import type { AdminPage } from "./shell";
 import { useEffect, useState } from "preact/hooks";
 import { advice } from "./advice";
 import { api } from "./api";
 import { whoText } from "./armingpage";
 import type { Authz } from "./accesspage";
 import { hm } from "./data";
-import { alertTitle, lang, t, type Key } from "./i18n";
+import { alertTitle, lang, t, type Key, joinList } from "./i18n";
+import { DrillNote } from "./alerttest";
 import { SetupChecklist } from "./guide";
 import { Icon } from "./icons";
 import { forGuard, type Alert, type Mode } from "./model";
@@ -42,36 +46,48 @@ export function HomePage(props: {
       .then(([a, b]) => setWeeks([a, b]));
   }, []);
 
-  const todo = props.alerts.filter((a) => a.resolved_ms == null && !forGuard(a))
-    .sort((a, b) => (a.level === b.level ? b.last_ms - a.last_ms : a.level < b.level ? -1 : 1));
+  // 第 2 轮 duty N6 / config N9:P3 是通知(巡逻开始了、派了临时巡逻……),不是要你处理的事,不进这里
+  const todo = homeTodo(props.alerts);
   const todayAuthz = authz.filter((a) => a.on_today);
   const m = props.mode;
   const modes: { m: Mode["mode"]; key: Key }[] = [
-    { m: "armed", key: "modeArmed" }, { m: "home", key: "modeHome" }, { m: "visitor", key: "modeVisitor" },
+    { m: "armed", key: "modeArmed" }, { m: "home", key: "modeHome" },
   ];
 
   return (
     <section class="homepage">
       <h1>{t("tabHome")}</h1>
+      <DrillNote />
       <SetupChecklist />
 
       {todo.length > 0 && (
         <section class="panel home-todo">
           <h2>{t("homeTodo")}</h2>
+          {/* 第 2 轮 P1-75:「知道了」和「已处理」差在哪儿 */}
+          <p class="muted small" data-ack-done-hint="1">{t("noticeAckDoneHint")}</p>
           <ul class="plain">
-            {todo.map((a) => {
+            {groupTodo(todo).map((g) => {
+              const a = g[0];
               const adv = advice(a.kind);
+              // 第 2 轮 P0-01:出发前检查没过 —— 写是哪一项、管理员自己怎么办、按钮去哪页(不写「请联系工程师」)
+              const pf = a.kind === "preflight_refused";
+              const pfGo = pf ? preflightPage(a) : undefined;
+              const robots = [...new Set(g.map((x) => x.robot).filter((r) => r && r !== "site"))];
               return (
-                <li key={a.key} class={`todo ${a.level}`}>
+                <li key={a.key} class={`todo ${a.level}`} data-kind={a.kind} data-n={g.length}>
                   <div class="todo-body">
-                    <b>{adv ? t(adv.say) : alertTitle(lang.value, a.kind, a.title)}</b>
-                    {a.detail && <span class="muted small">{a.detail}</span>}
-                    <span>{t(adv ? adv.todo : "advCallEngineer")}</span>
+                    <b>{adv ? t(adv.say) : pf ? alertHeadline(a) : siteStr(alertTitle(lang.value, a.kind, a.title))}</b>
+                    {robots.length > 0 && <span class="small">{t("homeTodoRobots", { r: joinList(robots) })}</span>}
+                    {/* P2-44:站点原话(带文件路径的技术说明)收起来,要看再点开 */}
+                    {a.detail && (adv || pf || siteText(a.detail).raw
+                      ? <details class="todo-detail small"><summary>{t("homeTodoDetail")}</summary><span class="muted">{a.detail}</span></details>
+                      : <span class="muted small">{siteStr(a.detail)}</span>)}
+                    <span>{pf ? alertAdvice(a) : t(adv ? adv.todo : "advCallEngineer")}</span>
                   </div>
                   <div class="todo-acts">
-                    {adv?.go ? <a class="btn sm" href={`#/${adv.go}`}>{t("homeGo")}</a>
-                      : a.acked_ms == null && <button type="button" class="btn sm" onClick={() => props.onAck(a)}>{t("noticeAck")}</button>}
-                    <button type="button" class="btn sm primary" onClick={() => props.onDone(a)}>{t("noticeDone")}</button>
+                    {(adv?.go ?? pfGo) ? <a class="btn sm" href={`#/${adv?.go ?? pfGo}`}>{t("homeGo")}</a>
+                      : g.some((x) => x.acked_ms == null) && <button type="button" class="btn sm" title={t("noticeAckTip")} onClick={() => g.forEach((x) => x.acked_ms == null && props.onAck(x))}>{t("noticeAck")}</button>}
+                    <button type="button" class="btn sm primary" title={t("noticeDoneTip")} onClick={() => g.forEach((x) => props.onDone(x))}>{t("noticeDone")}</button>
                   </div>
                 </li>
               );
@@ -89,10 +105,13 @@ export function HomePage(props: {
                 {today.today.map((z) => (
                   <li key={z.zone}>
                     <b>{z.zone || t("homeAllZones")}</b>{" "}
-                    {z.windows.length === 0 ? t("homeDisarmedAllDay") : t("homeArmedAt", { w: z.windows.map(([a, b]) => `${a}–${b}`).join("、") })}
+                    {z.windows.length === 0 ? t("homeDisarmedAllDay") : t("homeArmedAt", { w: joinList(z.windows.map(([a, b]) => `${a}–${b}`)) })}
                   </li>
                 ))}
               </ul>
+            ) : m?.source === "schedule" ? (
+              // 第 3 轮(admin 顺带):此刻按日程走,但今天的时段还没拿到 —— 不说「没有日程」,跟上面那句打架
+              <p class="muted"><a href="#/admin/arming">{t("homeSeeSchedule")}</a></p>
             ) : (
               <p class="muted">{t("homeNoSchedule")} <a href="#/admin/arming">{t("homeSetSchedule")}</a></p>
             )}
@@ -101,7 +120,7 @@ export function HomePage(props: {
               <ul class="plain">
                 {todayAuthz.map((a) => (
                   <li key={a.id}>
-                    <b>{a.name}</b> {a.zones.length ? a.zones.join("、") : t("wholeSite")} <span class="mono">{a.start}–{a.end}</span>
+                    <b>{a.name}</b> {a.zones.length ? joinList(a.zones) : t("wholeSite")} <span class="mono">{a.start}–{a.end}</span>
                     {a.active_now && <span class="tag">{t("homeAuthzNow")}</span>}
                   </li>
                 ))}
@@ -118,6 +137,8 @@ export function HomePage(props: {
                     onClick={() => props.onMode(x.m)}>{t(x.key)}</button>
                 ))}
               </div>
+              {/* P0-09:临时撤防要选防区,在授权页做(这里原来一点就整站临时撤防,确认框却说「选中的防区」) */}
+              <a class={m.mode === "visitor" ? "btn sm on" : "btn sm"} href="#/admin/access">{t("armNowVisitor")}</a>
             </div>
           )}
         </div>
@@ -158,4 +179,29 @@ function compare(a: number, b: number | undefined): string {
   if (a > b) return t("homeMore", { n: a - b });
   if (a < b) return t("homeLess", { n: b - a });
   return t("homeSame");
+}
+
+/** P2-44:同一种提醒(说法一样、只是机器人不同)合成一条;顺序按第一次出现。 */
+/** 「需要你处理」那一栏:没处理的、不归值班的、不是 P3 通知。侧栏「系统状态」的数字也按它数(第 3 轮 config N7)。 */
+export function homeTodo(alerts: Alert[]): Alert[] {
+  return alerts.filter((a) => a.resolved_ms == null && !forGuard(a) && a.level !== "P3")
+    .sort((a, b) => (a.level === b.level ? b.last_ms - a.last_ms : a.level < b.level ? -1 : 1));
+}
+
+export function groupTodo(list: Alert[]): Alert[][] {
+  const m = new Map<string, Alert[]>();
+  for (const a of list) {
+    const k = advice(a.kind) ? `adv:${advice(a.kind)!.say}` : `kind:${a.kind}:${a.title}`;
+    const g = m.get(k);
+    if (g) g.push(a); else m.set(k, [a]);
+  }
+  return [...m.values()];
+}
+
+/** 出发前检查没过,按那一项去哪页处理(第 2 轮 P0-01)。 */
+export function preflightPage(a: Alert): AdminPage | undefined {
+  const c = (a.context as { check?: string } | undefined)?.check;
+  if (c === "home" || c === "localized") return "admin/localization";
+  if (c === "nav_ready" || c === "storage" || c === "removable") return "admin/diag";
+  return undefined;
 }

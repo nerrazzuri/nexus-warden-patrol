@@ -75,3 +75,16 @@ export function newTerrain(have: Terrain[], kind: TerrainKind, polygon: Pt[]): T
   while (have.some((t) => t.id === `t${n}`)) n++;
   return { id: `t${n}`, kind, polygon, slow_mps: SLOW_DEFAULT[kind] };
 }
+
+/** 网页易用性 P2-19:画面转了 ``deg`` 度(摆正)时,两个对角点在**屏幕上**围出的方框,换回地图坐标
+ *  (首尾相接 5 个点)。画布把图转 +deg(像素坐标 y 朝下);地图坐标 y 朝上,所以屏幕方向 = 地图转 −deg。 */
+export function screenRect(a: Pt, b: Pt, deg: number): Pt[] {
+  const r = (deg * Math.PI) / 180;
+  const c = Math.cos(r), s = Math.sin(r);
+  const to = ([x, y]: Pt): Pt => [c * x + s * y, -s * x + c * y];
+  const from = ([x, y]: Pt): Pt => [c * x - s * y, s * x + c * y];
+  const qa = to(a), qb = to(b);
+  const round = (v: number) => Math.round(v * 1000) / 1000;
+  const pts = [qa, [qb[0], qa[1]] as Pt, qb, [qa[0], qb[1]] as Pt].map((q) => from(q).map(round) as Pt);
+  return [...pts, pts[0]];
+}
