@@ -461,7 +461,10 @@ function Editor({ say, target, Canvas }: { say: Say; target: Target; Canvas?: Fu
       {releasing && (
         <ConfirmPassword title={t("meReleaseTitle", { v: target.version })}
           text={[t("meReleaseText", { v: target.version, from: origin }),
-            ...(drafted?.zones_removed.length ? [t("meReleaseRemoved", { from: origin, names: drafted.zones_removed.join("、") })] : [])].join(" ")}
+            ...(drafted?.zones_removed.length ? [t("meReleaseRemoved", { from: origin, names: drafted.zones_removed.join("、") })] : []),
+            ...(zonesNow.length ? [t("meReleaseZones", { n: zonesNow.length })] : [])].join(" ")}
+          list={zonesNow.map((z) => `${siteKnown(z.label) || z.id} · ${nogoLine(z)}`)}
+          ack={zonesNow.length ? t("meReleaseZonesAck") : undefined}
           onConfirm={release} onClose={() => setReleasing(false)} />
       )}
       {diffing && <DiffDialog target={{ map_id: target.map_id, a: origin, b: target.version, derived: true }} onClose={() => setDiffing(false)} />}
