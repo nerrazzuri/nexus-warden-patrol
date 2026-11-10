@@ -539,8 +539,9 @@ class _Handler(TlsHandlerMixin):
         line = str(args[0]) if args else ""
         code = str(args[1]) if len(args) > 1 else ""
         quiet = line.startswith(("GET ", "HEAD ")) and code[:1] in ("1", "2", "3")
-        from nexwar_site.health import redact_text      # 外审 POC I8:网址里的凭证不进日志
-        log.info("%s %s", self.address_string(), redact_text(fmt % args), extra={"access": quiet})
+        from nexwar_site.health import redact_text  # 外审 POC I8:网址里的凭证不进日志
+        log.info("%s %s", self.address_string(), redact_text(fmt % args),
+                 extra={"access": quiet})
 
     # ------------------------------------------------------------ 输入输出
 
