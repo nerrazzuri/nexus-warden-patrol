@@ -519,3 +519,27 @@ async def test_外审POC_r3_断网时按的急停_重连以后马上补报锁住
     await _跑(rt, broker, n=5, r=dog, c=c)
     assert ears.by["capabilities"][-1]["tasks"]["estop_release"] == {"latched": True, "gen": 1}
     await rt.close()
+
+
+async def test_外审POC_r4_发能力的时候又按了急停_下一拍照样补报新的代次(tmp_path):
+    """codex POC r4 #2:重连补报能力那一下又按了急停,发完把新代次记成「报过了」,
+    实际发出去的是旧的。"""
+    broker, c, ears, dog, rt = await _急停台(tmp_path)
+    broker.disconnect("dog")
+    await broker.drain()
+    dog.button("estop")                                    # 断网时按的:第 1 次
+    await _跑(rt, broker, n=3, r=dog, c=c)
+    real = rt.transport.publish
+    armed = [True]
+
+    async def 发(topic, payload, **kw):
+        if armed[0] and topic == rt.topics.capabilities:
+            armed[0] = False
+            dog.button("estop")                            # 重连补报的包已经按代次 1 装好了
+        return await real(topic, payload, **kw)
+    rt.transport.publish = 发
+    await rt.transport.connect()
+    await _跑(rt, broker, n=10, r=dog, c=c)
+    assert dog.gen == 2
+    assert ears.by["capabilities"][-1]["tasks"]["estop_release"] == {"latched": True, "gen": 2}
+    await rt.close()

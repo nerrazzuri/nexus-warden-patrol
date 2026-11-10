@@ -1062,6 +1062,7 @@ class AgentRuntime:
             out["speed_cap"] = self._speed_cap_caps()  # W29:全狗限速(站点下雨、雷暴时发)
         if self._payload_estop_ok():
             out["estop_release"] = self._estop_caps()  # 外审 POC C1:站点恢复时带代次发解锁
+            self._estop_composed = dict(out["estop_release"])
         if self.hal.hal_capabilities().recharge_mode != "none":
             out["dock"] = self._dock_caps()         # W13:会对桩;在不在桩上、桩上危险
         if self.evidence_sealed is not None:
@@ -2516,6 +2517,9 @@ class AgentRuntime:
             autonomy=self.autonomy)
         await self.transport.publish(self.topics.capabilities, _dumps(caps.to_wire()),
                                      qos=1, retain=True)
+        # 外审 POC r4 #2:记的是这一包里实际装进去的急停状态(发的时候又按了,下一拍还会再发)
+        if getattr(self, "_estop_composed", None) is not None:
+            self._estop_told = self._estop_composed
 
     def _video_live(self) -> bool:
         """遥控「没画面不许动」在狗这头的那一道:本机推流器至少一路在推。站点那头还有一道。"""
@@ -2802,7 +2806,6 @@ class AgentRuntime:
         if self._started and self._payload_estop_ok():
             # 外审 POC r3 #4:断网时按过上装急停,重连马上补报能力(站点恢复要带这一次的代次)
             await self._publish_caps()
-            self._estop_told = self._estop_caps()
         if self._started:
             if self.processor.current is not None:
                 await self.processor.current.on_online()
@@ -3151,7 +3154,6 @@ class AgentRuntime:
             # 发出去了才算报过(外审 POC r3 #4:断网时先记上「报过了」,重连后就不再发)
             if es != getattr(self, "_estop_told", None) and self.transport.connected:
                 await self._publish_caps()
-                self._estop_told = es
         if self.parts is not None:
             sc = self._apply_speed_cap()         # W29:全狗限速到点取消
             if sc != self._speed_cap_told:
