@@ -12,6 +12,9 @@
 - ``GET  /api/admin/maps/<图>/<版本>/noise``       零星噪点的候选(W41;编号、位置、几格,带栅格摘要)
 - ``GET  /api/admin/maps/<图>/<版本>/quality``     建图结论(W54:能用 / 有问题 + 原因 / 说不清)
 - ``POST /api/admin/maps/<图>/<版本>/denoise``     ``{digest, skip: [编号]}`` 清掉、另存成新的一版
+- ``POST /api/admin/maps/<图>/<版本>/edit``        ``{digest, ops}`` 存成草稿(11-10,``ops`` 可空)
+- ``GET  /api/admin/maps/<图>/<版本>/draft``       ``{draft, from}`` 是不是草稿、从哪一版编辑来的
+- ``POST /api/admin/maps/<图>/<版本>/release``     草稿发布到站点(网页上要再输密码),之后才能下发
 """
 
 from __future__ import annotations
@@ -27,7 +30,7 @@ from nexwar_site.permissions import MANAGE
 
 _ROUTE = re.compile(r"^/api/admin/maps(?:/(rollback)|/([^/]{1,64})/([^/]{1,64})/"
                     r"(note|publish|delete|diff|diff\.png|noise|denoise|edit|display|basemap|quality|"
-                    r"adopt-routes|layout))?$")
+                    r"adopt-routes|layout|draft|release))?$")
 MAX_ROBOTS = 32
 
 
@@ -68,6 +71,10 @@ def handle(h: Any, method: str, path: str, user: Any) -> None:
             if method != "GET":
                 raise HttpError(404, f"没有 {method} {path}")
             return h._send_json(200, adm.layout_counts(map_id, version))
+        if what == "draft":                       # 11-10:编辑草稿
+            if method != "GET":
+                raise HttpError(404, f"没有 {method} {path}")
+            return h._send_json(200, adm.draft(map_id, version))
         if what == "noise":
             if method != "GET":
                 raise HttpError(404, f"没有 {method} {path}")
@@ -109,8 +116,15 @@ def handle(h: Any, method: str, path: str, user: Any) -> None:
         if what == "edit":
             out = adm.edit(map_id, version, digest=d.get("digest"), ops=d.get("ops"),
                            note=d.get("note"), by=str(user))
-            h._audit_detail = {k: out[k] for k in ("version", "erased_m2", "obstacle_m2")} | {
+            h._audit_detail = {k: out.get(k) for k in ("version", "erased_m2", "obstacle_m2",
+                                                       "replaced")} | {
                 "ops": len(d.get("ops") or [])}
+            return h._send_json(200, out)
+        if what == "release":
+            if h._via_cookie:
+                h._confirm(user, d)          # 11-10:网页上发布到站点要再输密码(二次确认)
+            out = adm.release(map_id, version, by=str(user))
+            h._audit_detail = out
             return h._send_json(200, out)
         if what == "denoise":
             out = adm.denoise(map_id, version, digest=d.get("digest"), skip=d.get("skip", []),
