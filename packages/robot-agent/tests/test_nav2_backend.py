@@ -1608,6 +1608,28 @@ async def test_V1_路线检查_走廊太窄_出发前拒绝_报最窄处_不发�
     assert t.nav._status is NavStatus.STANDBY and not t.nav._planning
 
 
+async def test_两种走法_紧急任务不做路线检查_直接交给Nav2_回到普通又查(tmp_path):
+    """用户 11-09:跟可疑人物、报警出动这类紧急任务不走路线检查,走最快的路;普通巡逻照查。"""
+    from nexwar_patrol.backends.base import NavRequestError
+    link = 会规划的转接()
+    t = _台(tmp_path, link, walls=_窄走廊(0.7))
+    await t.start(1.5, 4.0)
+    link.here = (1.5, 4.0)
+    await t.nav.set_urgent(True)
+    await t.nav.goto(Pose.from_xy_yaw(9.0, 4.0))
+    assert not link.kinds("plan") and link.kinds("goal"), "紧急:不查,直接交给 Nav2"
+    link2 = 会规划的转接()
+    (tmp_path / "2").mkdir()
+    t2 = _台(tmp_path / "2", link2, walls=_窄走廊(0.7))
+    await t2.start(1.5, 4.0)
+    link2.here = (1.5, 4.0)
+    await t2.nav.set_urgent(True)
+    await t2.nav.set_urgent(False)
+    with pytest.raises(NavRequestError) as e:
+        await t2.nav.goto(Pose.from_xy_yaw(9.0, 4.0))
+    assert e.value.code == "route_too_narrow", "回到普通:照查"
+
+
 async def test_V1_路线检查_走廊够宽_查过再交给Nav2(tmp_path):
     link = 会规划的转接()
     t = _台(tmp_path, link, walls=_窄走廊(1.4))
@@ -1638,3 +1660,136 @@ async def test_V1_路线检查_规划器说没路_照常交给Nav2_由它报失�
     await t.nav.goto(Pose.from_xy_yaw(9.0, 4.0))
     assert link.kinds("goal")
 
+
+
+# ---------------------------------------- 导航 V1 第 3、4 节:卡住了自己脱困(恢复链)
+
+
+def _死胡同(width, end_x=6.0):
+    """y = 4 为中心、宽 ``width`` 的走廊,x = ``end_x`` 处封死。"""
+    h = width / 2
+    return [(0.1, 0.1, end_x + 1.0, 4.0 - h), (0.1, 4.0 + h, end_x + 1.0, 7.9),
+            (end_x, 4.0 - h, end_x + 1.0, 4.0 + h)]
+
+
+async def _跑到(t, cond, seconds):
+    for _ in range(int(seconds / 0.1)):
+        await t.一拍()
+        if cond():
+            return True
+    return False
+
+
+def _步(t):
+    return [d for k, d in t.events if k == "recovery_step"]
+
+
+async def test_脱困_一米三死胡同_Nav2规划不出_自己挪着掉头_再交给Nav2_不撞(tmp_path):
+    """用户 11-07(广场 1.3 m 死胡同):这条路必须能过 —— 机器人自己前后挪、分段转,掉过头来再走。"""
+    link = 假转接()
+    t = _台(tmp_path, link, walls=_死胡同(1.3))
+    await t.start(5.0, 4.0, 0.0)
+    await t.nav.goto(Pose.from_xy_yaw(1.5, 4.0, math.pi))
+    [g] = link.kinds("goal")
+    link.goal_states.append({"goal_id": g["goal_id"], "state": "aborted",
+                             "reason": "GridBased: failed to create plan"})
+    ok = await _跑到(t, lambda: len(link.kinds("goal")) >= 2, 90.0)
+    assert ok, (t.events, t.status)
+    assert not t.crashed, "挪的时候不许蹭墙"
+    assert abs(math.remainder(t.r.yaw - math.pi, 2 * math.pi)) < math.radians(30), t.r.yaw
+    assert NavStatus.FAILED not in t.status
+    steps = _步(t)
+    assert steps and steps[0]["action"] == "maneuver" and steps[-1]["ok"] is True, steps
+
+
+async def test_脱困_原地没进展_先重新规划_再挪_都不行停下报自动恢复试过了(tmp_path):
+    """恢复链(导航 V1 第 3 节):没进展 → 重新规划 → 自己挪 → 停下说原因,不一直耗着。"""
+    from nexwar_agent.bridges import nav2_nav
+    link = 假转接()
+    t = _台(tmp_path, link, walls=_死胡同(0.9))           # 0.9 m:机身怎么挪都掉不了头
+    await t.start(5.0, 4.0, 0.0)
+    await t.nav.goto(Pose.from_xy_yaw(1.5, 4.0, math.pi))
+    # Nav2 一直让原地左右扭(打转):速度在、结果不回
+    sign = [1.0]
+
+    def 扭():
+        sign[0] = -sign[0]
+        link.now = t.c.s()
+        link.cmd = (link.now, 0, 0.0, 0.0, 0.3 * sign[0], link.kinds("goal")[-1]["goal_id"], "beh")
+    total = 3 * nav2_nav.RECOVER_AFTER_S + nav2_nav.MANEUVER_MAX_S + 30
+    for _ in range(int(total / 0.1)):
+        扭()
+        await t.一拍()
+        if NavStatus.FAILED in t.status:
+            break
+    assert NavStatus.FAILED in t.status, (t.events, t.status)
+    assert t.nav.fail_code == "controller_stalled"
+    actions = [s["action"] for s in _步(t)]
+    assert actions[0] == "replan" and "maneuver" in actions and actions[-1] == "give_up", actions
+    assert not t.crashed
+
+
+async def test_脱困_有进展就从头算_不往下一级走(tmp_path):
+    from nexwar_agent.bridges import nav2_nav
+    link = 假转接()
+    t = _台(tmp_path, link, walls=_窄走廊(1.4))
+    await t.start(1.5, 4.0, 0.0)
+    await t.nav.goto(Pose.from_xy_yaw(11.0, 4.0))
+    gid = link.kinds("goal")[-1]["goal_id"]
+    for _ in range(int((nav2_nav.RECOVER_AFTER_S * 1.4) / 0.1)):
+        link.now = t.c.s()
+        link.cmd = (link.now, 0, 0.3, 0.0, 0.0, link.kinds("goal")[-1]["goal_id"], "beh")
+        await t.一拍()
+    assert t.r.x > 6.0, t.r.x
+    assert not _步(t), "一直在往前走:不触发恢复"
+    assert link.kinds("goal")[-1]["goal_id"] == gid
+
+
+async def test_脱困_走着走着卡住_重新规划不管用_沿原路退回去再规划(tmp_path):
+    """用户 11-10:脱困的一种办法是退回原来走过的点再重新规划 —— 原路是刚走过的,一定走得通。"""
+    from nexwar_agent.bridges import nav2_nav
+    link = 假转接()
+    t = _台(tmp_path, link, walls=_窄走廊(1.4))
+    await t.start(1.5, 4.0, 0.0)
+    await t.nav.goto(Pose.from_xy_yaw(11.0, 4.0))
+    for _ in range(100):                                  # 先正常往前走 10 秒
+        link.now = t.c.s()
+        link.cmd = (link.now, 0, 0.3, 0.0, 0.0, link.kinds("goal")[-1]["goal_id"], "beh")
+        await t.一拍()
+    x_stuck = t.r.x
+    assert x_stuck > 3.5, x_stuck
+    sign = [1.0]
+    n_goals = len(link.kinds("goal"))
+
+    def 扭():
+        sign[0] = -sign[0]
+        link.now = t.c.s()
+        link.cmd = (link.now, 0, 0.0, 0.0, 0.3 * sign[0], link.kinds("goal")[-1]["goal_id"], "beh")
+
+    def 退完():
+        return any(s["action"] == "retreat" and s["ok"] is not None for s in _步(t))
+    for _ in range(int((2 * nav2_nav.RECOVER_AFTER_S + nav2_nav.RETREAT_MAX_S + 10) / 0.1)):
+        扭()
+        await t.一拍()
+        if 退完():
+            break
+    steps = _步(t)
+    assert [s["action"] for s in steps][:2] == ["replan", "retreat"], steps
+    assert steps[-1]["ok"] is True, steps
+    assert x_stuck - t.r.x >= nav2_nav.RETREAT_M - 0.3, (x_stuck, t.r.x)
+    assert len(link.kinds("goal")) >= n_goals + 2, "重新规划一次、退完再交给 Nav2 一次"
+    assert not t.crashed
+    # 用户 11-10:重新规划不走刚才堵住的那条 —— 卡住那一处临时标成不能走(只给 Nav2,这一趟有效)
+    last_map = link.kinds("map")[-1]
+    assert link.sent.index(last_map) < link.sent.index(link.kinds("goal")[-1]), "先送图再发目标"
+    near = [poly for poly in last_map["nogo"]
+            if math.dist((sum(p[0] for p in poly) / len(poly), sum(p[1] for p in poly) / len(poly)),
+                         (x_stuck, 4.0)) < 0.3]
+    assert near, last_map["nogo"]
+    # 只有这一条路(绕开就规划不出):撤掉临时标记,还走这条
+    link.goal_states.append({"goal_id": link.kinds("goal")[-1]["goal_id"], "state": "aborted",
+                             "reason": "GridBased: failed to create plan"})
+    n = len(link.kinds("goal"))
+    await t.一拍()
+    assert link.kinds("map")[-1]["nogo"] == [], "撤掉临时标记"
+    assert len(link.kinds("goal")) == n + 1 and NavStatus.FAILED not in t.status

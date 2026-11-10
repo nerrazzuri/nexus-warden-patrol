@@ -53,6 +53,11 @@ AUTO_RELOCALIZE_WAIT_S = 30.0
 #: (米/秒)。跟下雨限速一样(决策 41):每秒最多带 0.3 m 没核过的位移走,推算上限(2 s、1 m)里最多走
 #: 0.6 m;禁行区按 σ 加宽(最多 0.5 m)守得住,刹车距离也短。遥控不经这里,不受它管。
 LOC_DEGRADED_MPS = 0.3
+#: 两种走法(用户 11-09):普通任务(巡逻、手动派、排程、回待命点)最快这么快 ——「正常巡逻速度可以降,
+#: 慢一些无所谓,不碰撞,不卡着就好」。紧急任务(报警出动、跟人、查易藏点,
+#: 见 :meth:`HalNavBackend.set_urgent`)
+#: 不受它限。两种都照样受全狗限速、定位变差、看得清多远、附近有人的降速管。
+PATROL_MAX_MPS = 0.6
 BEARING_THRESH_RAD = 0.3
 K_LIN = 1.0
 K_ANG = 2.0
@@ -65,6 +70,8 @@ def _wrap(a: float) -> float:
 
 
 class HalNavBackend(NavBackend):
+    #: 这一趟是不是紧急任务(两种走法,用户 11-09);任务起跑时由任务设(:meth:`set_urgent`)。
+    urgent = False
     def __init__(self, hal: RobotHAL, *, now_ms: Callable[[], int], map_id: str,
                  init_delay_s: float = 0.3, terminal_hold_s: float = 0.5,
                  anchor: OdomAnchor | None = None) -> None:
@@ -259,10 +266,21 @@ class HalNavBackend(NavBackend):
     async def return_home(self) -> None:
         raise NavRequestError("return_home", "直线桥不认返航,引擎沿来路回(W00c6b)")
 
+    async def set_urgent(self, on: bool) -> None:
+        """两种走法(用户 11-09):紧急任务(``on``)不限巡逻速度、出发前不做路线检查,走最快的路;
+        普通任务最快 :data:`PATROL_MAX_MPS`、照查路线。每趟任务起跑时设,不带到下一趟。"""
+        on = bool(on)
+        if on != self.urgent:
+            log.info("走法:%s", "紧急(不限巡逻速度、不做路线检查)" if on
+                     else f"普通巡逻(最快 {PATROL_MAX_MPS} m/s、出发前查路线)")
+        self.urgent = on
+
     def _vlim(self) -> float:
-        """这一拍的前进上限:任务给的 ∧ 全狗限速(W29)∧ 定位变差时的限速(对账 S6);不低于死区,
-        不然走不动。两座桥(直线、规划)自己走都经这里。"""
+        """这一拍的前进上限:任务给的 ∧ 全狗限速(W29)∧ 定位变差时的限速(对账 S6)∧ 普通任务的巡逻速度
+        (两种走法);不低于死区,不然走不动。两座桥(直线、规划)自己走都经这里。"""
         cap = self.speed_cap
+        if not self.urgent:
+            cap = min(cap, PATROL_MAX_MPS)
         if self._loc_degraded():
             cap = min(cap, LOC_DEGRADED_MPS)
         return min(self._vmax, max(cap, self._caps.deadband_vx))

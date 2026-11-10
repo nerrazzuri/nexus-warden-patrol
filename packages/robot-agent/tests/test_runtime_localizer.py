@@ -428,7 +428,7 @@ async def test_对账S6_定位可信但变差了_自动走的慢下来_好了再
         return t.dog.x - x0                               # 10 拍 = 1 s
 
     await t.拍(20)
-    assert await 速度() > 0.6
+    assert await 速度() > 0.5                             # 普通任务最快 0.6(两种走法,11-10)
     t.loc.sigma_xy = 0.3                                  # 匹配变差:σ 0.3(可信线 0.5 以内)
     await t.拍(10)
     assert await 速度() <= 0.33
@@ -436,7 +436,7 @@ async def test_对账S6_定位可信但变差了_自动走的慢下来_好了再
     assert loc["reason"] == "" and "偏差" in loc["degraded"], loc
     t.loc.sigma_xy = 0.05
     await t.拍(40)                                        # 刚变差过的那 3 s 过去
-    assert await 速度() > 0.6
+    assert await 速度() > 0.5
     assert "degraded" not in _遥测(t.ears).loc
 
 

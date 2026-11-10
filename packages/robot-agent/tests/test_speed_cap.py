@@ -131,6 +131,7 @@ def test_对账S6_定位变差_自动走限0点3_比全狗限速低的照全狗�
     nav._hal = SimpleNamespace(hal_capabilities=lambda: caps)   # 能力每次现取(11-04)
     nav._vmax, nav.speed_cap, nav.odom_ok = 1.0, math.inf, True
     nav.anchor = SimpleNamespace(degraded=lambda odom_ok: why[0])
+    nav.urgent = True                    # 紧急任务不限巡逻速度(普通的见下一条)
     assert nav._vlim() == 1.0
     why[0] = "定位偏差可能到 0.30 m"
     assert LOC_DEGRADED_MPS == 0.3 and nav._vlim() == 0.3
@@ -141,3 +142,23 @@ def test_对账S6_定位变差_自动走限0点3_比全狗限速低的照全狗�
     assert nav._vlim() == 1.0
     nav.anchor = SimpleNamespace()                        # 里程锚定:没有「变差」这一说
     assert nav._vlim() == 1.0
+
+
+def test_两种走法_普通任务最快巡逻速度_紧急不限_都还受全狗限速和死区管():
+    import math
+    from types import SimpleNamespace
+
+    from nexwar_agent.bridges.hal_nav import PATROL_MAX_MPS, HalNavBackend
+    caps = SimpleNamespace(max_vx=1.0, max_wz=1.5, deadband_vx=0.2)
+    nav = HalNavBackend.__new__(HalNavBackend)
+    nav._hal = SimpleNamespace(hal_capabilities=lambda: caps)
+    nav._vmax, nav.speed_cap = 1.0, math.inf
+    assert PATROL_MAX_MPS == 0.6
+    assert nav.urgent is False and nav._vlim() == PATROL_MAX_MPS, "默认普通巡逻"
+    nav.urgent = True
+    assert nav._vlim() == 1.0
+    nav.speed_cap = 0.3
+    assert nav._vlim() == 0.3, "下雨限速紧急的也得听"
+    nav.urgent, nav.speed_cap = False, math.inf
+    nav._vmax = 0.4
+    assert nav._vlim() == 0.4, "任务给的更低:按任务的"
