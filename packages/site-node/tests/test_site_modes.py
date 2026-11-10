@@ -270,12 +270,12 @@ def _登(s, name):
     return d["token"], d
 
 
-def test_保安只能切到布防_管理员随便切_防区配置只有管理员(站点):
+def test_保安能布防也能撤防_用户11_11_防区配置只有管理员(站点):
     s = 站点
     (gina, _), (olga, _), (alice, _) = _登(s, "gina"), _登(s, "olga"), _登(s, "alice")
     assert s.req("GET", "/api/mode", token=gina) == (200, s.api.arming.view())
-    assert s.req("POST", "/api/mode", {"mode": "home"}, token=gina)[0] == 403
-    assert s.req("POST", "/api/mode", {"mode": "visitor", "minutes": 60}, token=gina)[0] == 403
+    assert s.req("POST", "/api/mode", {"mode": "home"}, token=gina)[0] == 200
+    assert s.req("POST", "/api/mode", {"mode": "visitor", "minutes": 60}, token=gina)[0] == 200
     code, d = s.req("POST", "/api/mode", {"mode": "visitor", "zones": ["drive"], "minutes": 60},
                     token=olga)
     assert code == 200 and d["mode"] == "visitor" and d["set_by"] == "olga"
@@ -310,7 +310,18 @@ def test_没开布防模式的站点_接口404(站点):
 def test_管理员能确认告警_保安照旧(站点):
     from nexwar_site.permissions import HANDLE_ALERTS, SET_MODE, allowed
     assert allowed("owner", HANDLE_ALERTS) and allowed("guard", HANDLE_ALERTS)
-    assert not allowed("guard", SET_MODE)
+    assert allowed("guard", SET_MODE), "用户 11-11:保安在网页上也能撤防"
+
+
+def test_11_11_W6_05_保安能切留守_能撤防_照样记操作人(站点):
+    s = 站点
+    gina = _登(s, "gina")[0]
+    code, d = s.req("POST", "/api/mode", {"mode": "home"}, token=gina)
+    assert code == 200, d
+    assert s.req("GET", "/api/mode", token=gina)[1]["mode"] == "home"
+    code, d = s.req("POST", "/api/mode", {"mode": "armed"}, token=gina)
+    assert code == 200, d
+    assert s.req("GET", "/api/mode", token=gina)[1]["mode"] == "armed"
 
 
 def test_显示名_登录回包带_改显示名不吊销会话_改角色照样吊销(站点):

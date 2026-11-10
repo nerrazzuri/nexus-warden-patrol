@@ -169,8 +169,8 @@ class SiteSession {
   /// 切到布防（W20）：只看的以外谁都能。
   bool get canArm => _manage || role == 'guard' || role == 'owner';
 
-  /// 切到留守、临时撤防（撤防，W20）：经理、管理员；保安不能。
-  bool get canSetMode => _manage || role == 'owner';
+  /// 切到留守、临时撤防（撤防，W20）：经理、管理员；用户 11-11（易用性第 6 轮 W6-05）保安也能。
+  bool get canSetMode => _manage || role == 'owner' || role == 'guard';
 
   /// 排巡逻日程、布防时间（W53）：经理、管理员、工程师。
   bool get canSchedule => _manage || role == 'owner';

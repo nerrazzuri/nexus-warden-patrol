@@ -549,6 +549,15 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--c-primary); }
   color: var(--c-success); background: var(--c-successSoft); white-space: nowrap; }
 .armstate.home, .armstate.visitor { color: var(--c-textSecondary); background: var(--c-surfaceVariant); }
 .armstate .dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
+/* 易用性第 6 轮 W6-05:顶栏布防状态点开切模式 */
+.armmenu { position: relative; display: inline-flex; }
+button.armstate { border: 0; cursor: pointer; font: inherit; font-size: 14px; font-weight: 600; }
+button.armstate:disabled { cursor: default; }
+button.armstate:focus-visible { outline: 2px solid var(--c-primary); outline-offset: 2px; }
+.armmenu-list { left: 0; right: auto; min-width: 160px; }
+.armmenu-list button { height: 36px; padding: 0 10px; border: 0; border-radius: var(--r-r8); background: transparent; color: var(--c-text); text-align: left; font: inherit; cursor: pointer; }
+.armmenu-list button:hover { background: var(--c-surfaceVariant); }
+.armmenu-list button[aria-pressed="true"] { color: var(--c-primary); font-weight: 600; }
 .usermenu { position: relative; }
 .usermenu > .who { height: 36px; padding: 0 10px; border: 1px solid transparent; border-radius: var(--r-r8); background: transparent; cursor: pointer; color: var(--c-text); }
 .usermenu > .who:hover { background: var(--c-surfaceVariant); }
