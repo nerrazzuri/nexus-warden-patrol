@@ -447,6 +447,27 @@ def install_recent_log() -> RecentLog:
 BUNDLE_UNITS = ("nexwar_site", "nexwar_mosquitto", "wg-quick@nexwar", "chrony", "nexwar_ops")
 
 
+def _no_log_note(ldir: Path, name: str) -> str:
+    """诊断包里这一份日志在所选时段没有行:写明日志目录里最早一条是什么时候(再早的没留下)。"""
+    from nexwar_contract import logsetup
+    first = None
+    for p in sorted((q for q in ldir.glob(f"{name}.log*") if q.is_file()),
+                    key=lambda q: q.stat().st_mtime):
+        try:
+            with open(p, encoding="utf-8", errors="replace") as fh:
+                first = next((at for line in fh if (at := logsetup._line_time(line)) is not None),
+                             None)
+        except OSError:
+            continue
+        if first is not None:
+            break
+    if first is None:
+        return f"(这段时间没有 {name} 日志:日志目录里还没有这份日志。)\n"
+    when = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(first))
+    return (f"(这段时间没有 {name} 日志。日志目录里最早一条是 {when},"
+            "再早的没有留下:那时站点还没写日志文件,或者已经过了保留期。)\n")
+
+
 def support_bundle(out: Path, *, home: Path, db: Any, health: HealthDesk | None,
                    hours: int = 24, now_ms: int,
                    journal: Callable[[str, int], str] = _journal,
@@ -528,10 +549,10 @@ def support_bundle(out: Path, *, home: Path, db: Any, health: HealthDesk | None,
     ldir = log_dir if log_dir is not None else home / "logs"
     grep = task or None
     if ldir.is_dir():
-        files["site/site.log"] = redact_text(logsetup.read_range(
-            ldir, "site", since_s=since / 1000, until_s=until / 1000)).encode()
-        files["site/access.log"] = redact_text(logsetup.read_range(
-            ldir, "access", since_s=since / 1000, until_s=until / 1000)).encode()
+        for name in ("site", "access"):
+            got = logsetup.read_range(ldir, name, since_s=since / 1000, until_s=until / 1000)
+            # 易用性第 6 轮 W6-03:这段时间没有就写明为什么(日志从什么时候开始有),不留空文件
+            files[f"site/{name}.log"] = redact_text(got or _no_log_note(ldir, name)).encode()
         if grep:
             files[f"site/task-{grep}.log"] = redact_text(logsetup.read_range(
                 ldir, "site", since_s=since / 1000, until_s=until / 1000, grep=grep)).encode()
@@ -580,8 +601,9 @@ def support_bundle(out: Path, *, home: Path, db: Any, health: HealthDesk | None,
             ensure_ascii=False, indent=1, default=str)).encode()
     if "schedule_runs" in tables:
         put("records/schedule_runs.json", query(
-            "SELECT * FROM schedule_runs WHERE scheduled_ms BETWEEN ? AND ? ORDER BY scheduled_ms "
-            "LIMIT 20000", (since - 86_400_000, until)))
+            "SELECT * FROM schedule_runs WHERE scheduled_ms BETWEEN ? AND ? "
+            "OR decided_at BETWEEN ? AND ? ORDER BY scheduled_ms LIMIT 20000",
+            (since, until, since, until)))
     # ---- robots/
     if "robots" in tables:
         put("robots/robots.json", [{k: r[k] for k in r if k in (

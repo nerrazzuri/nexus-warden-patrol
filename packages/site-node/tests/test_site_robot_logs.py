@@ -163,3 +163,28 @@ def test_断网一天后才收到的那批_照样按行头时刻取到(tmp_path)
     _放一批(logs, "A", t0 + 86_400, "agent", f"{_iso(t0 + 10)} WARNING x 没到 code=0x0406\n")
     got = logs.read("A", since_s=t0, until_s=t0 + 600)
     assert "没到" in got["agent"]
+
+
+def test_11_11_W6_03_这段时间没日志_写明原因不留空文件_日程记录不超出所选时段(tmp_path):
+    db = SiteDB(tmp_path / "site.db")
+    (tmp_path / "site.json").write_text("{}")
+    now_ms = int(time.time() * 1000)
+    since, until = now_ms - 3 * 3_600_000, now_ms - 2 * 3_600_000
+    ldir = tmp_path / "logs"
+    ldir.mkdir()
+    (ldir / "site.log").write_text(f"{_iso(now_ms / 1000 - 600)} INFO nexwar_site 起来了\n")
+    for at in (since - 86_400_000, since + 60_000):     # 前一天那条不该进包
+        db.query("INSERT INTO schedule_runs(entry_id, scheduled_ms, outcome, decided_at) "
+                 "VALUES ('e', ?, 'skip', ?)", (at, at))
+    out = support_bundle(tmp_path / "b.tar.gz", home=tmp_path, db=db, health=None, now_ms=now_ms,
+                         journal=lambda u, h: "", since_ms=since, until_ms=until, by="alice")
+    with tarfile.open(out) as tf:
+        files = {m.name.removeprefix("nexwar_support/"): tf.extractfile(m).read().decode()
+                 for m in tf.getmembers()}
+    for name in ("site/site.log", "site/access.log"):
+        assert files[name].strip(), f"{name} 不能是空文件"
+        assert "这段时间" in files[name]
+    assert "最早一条" in files["site/site.log"], "写出日志从什么时候开始有"
+    runs = json.loads(files["records/schedule_runs.json"])
+    assert [r["scheduled_ms"] for r in runs] == [since + 60_000]
+    db.close()
