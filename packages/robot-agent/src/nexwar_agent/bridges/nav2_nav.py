@@ -1225,8 +1225,11 @@ class Nav2NavBackend(PlannedNavBackend):
         from nexwar_agent import zone_guard as zg
         for z in self._closed:
             c0 = zg.clearance((here.x, here.y, here.yaw), z, MANEUVER_CLEAR_M)
+            if c0 <= 0.0:
+                return False          # 已经压上禁行区:不自动挪(外审 POC r3 #2:相交以后距离恒为 0)
+            # 不许碰上;已经比 MANEUVER_CLEAR_M 近的,不许更近(差 1 cm 以内也照样不许相交)
             thr = min(MANEUVER_CLEAR_M, c0 - 0.01)
-            if any(zg.clearance(p, z, MANEUVER_CLEAR_M) < thr for p in poses):
+            if any((c := zg.clearance(p, z, MANEUVER_CLEAR_M)) <= 0.0 or c < thr for p in poses):
                 return False
         return True
 
