@@ -14,7 +14,12 @@ type Say = (s: string) => void;
 interface Account { name: string; role: string; disabled: boolean; display_name: string; expires_ms: number | null; last_login_ms: number | null; expired: boolean }
 export interface AuditRow { id: number; at: number; actor: string; actor_role?: string | null; action: string; target: string; status: number;
   detail?: { error?: string; role?: string; disabled?: boolean; password_reset?: boolean; display_name?: string;
-    first_day?: string; last_day?: string } }
+    first_day?: string; last_day?: string;
+    // 日志设计 第 1、2 条:前后变化、来源、当时在做什么、系统事件的说明
+    from?: string | null; to?: string; op?: "add" | "update" | "remove"; name?: string; x?: number; y?: number;
+    source?: "web" | "app" | "system"; doing?: { task?: string | null; kind?: string; state?: string }; why?: string;
+    note?: string; verdict?: string; mission?: string; robot?: string | null; title?: string; level?: string;
+    channel?: string; by?: string; task_id?: string | null; err?: string; err_name?: string; req?: string } }
 
 /** 第 3 轮 P1-66:改账号写清改了什么(原来只写「改了账号」)。 */
 export function changeText(d: AuditRow["detail"]): string {
@@ -26,6 +31,21 @@ export function changeText(d: AuditRow["detail"]): string {
   if (d.password_reset) out.push(t("auditPwReset"));
   if (d.display_name) out.push(t("auditRenamed", { n: d.display_name }));
   if (d.first_day) out.push(d.last_day && d.last_day !== d.first_day ? `${d.first_day} – ${d.last_day}` : d.first_day);
+  const MODE: Record<string, Parameters<typeof t>[0]> = { armed: "modeArmed", home: "modeHome", stay: "modeHome", visitor: "modeVisitor" };
+  const mode = (m: string) => (MODE[m] ? t(MODE[m]) : m);
+  if (d.to && d.from !== undefined) out.push(t("auditFromTo", { a: d.from ? mode(d.from) : "—", b: mode(d.to) }));
+  if (d.op && d.name) {
+    const at = typeof d.x === "number" && typeof d.y === "number" ? ` (${d.x.toFixed(2)}, ${d.y.toFixed(2)})` : "";
+    out.push(t(d.op === "remove" ? "auditOpRemove" : d.op === "update" ? "auditOpUpdate" : "auditOpAdd", { n: d.name }) + at);
+  }
+  if (d.doing) out.push(d.doing.task ? t("auditDoing", { k: d.doing.kind ?? "", task: d.doing.task }) : t("auditIdle"));
+  if (d.why) out.push(t("auditWhy", { w: d.why }));
+  if (d.mission) out.push(d.mission);
+  if (d.verdict) out.push(t("auditVerdict", { v: d.verdict }));
+  if (d.title) out.push(d.title);
+  if (d.channel) out.push(t("auditChannel", { c: d.channel }));
+  if (d.robot && !d.title) out.push(d.robot);
+  if (d.note) out.push(siteStr(d.note));
   return out.join(lang.value === "zh" ? "；" : "; ");
 }
 
@@ -88,6 +108,11 @@ const ACTIONS: [RegExp, string][] = [
   // 第 3 轮 P1-66:巡逻日程、值班设置、布防例外、看录像 / 下载
   [/^POST \/api\/schedule/, "actPatrolSched"], [/^POST \/api\/duty-settings/, "actDutySettings"],
   [/^VIEW$/, "actView"], [/^DOWNLOAD$/, "actDownload"],
+  // 日志设计 第 2 条:系统自己做的事
+  [/^schedule started$/, "actSchedStarted"], [/^schedule (skip|alarm)$/, "actSchedMissed"], [/^schedule /, "actSchedBlocked"],
+  [/^robot online$/, "actRobotOnline"], [/^robot offline$/, "actRobotOffline"],
+  [/^alert raised$/, "actAlertRaised"], [/^alert recorded$/, "actAlertRecorded"],
+  [/^alert escalated$/, "actAlertEscalated"], [/^alert auto-resolved$/, "actAlertAutoResolved"],
 ];
 /** 第 2 轮 P1-66:对象里的内部编号不摆出来(悬停看原文):「图:版本/层:哈希」只留图和版本,长哈希去掉。 */
 export function targetText(target: string): string {
@@ -272,12 +297,14 @@ export function AuditLine({ r, who }: { r: AuditRow; who?: boolean }) {
     <li class={r.status >= 400 ? "bad" : undefined} data-audit={r.id}>
       <time class="mono small">{day(r.at)} {hms(r.at)}</time>
       <div class="audit-body">
-      {who && <b class="audit-who">{r.actor}</b>}
+      {who && <b class="audit-who">{r.actor.startsWith("site:") ? t("auditSystem") : r.actor}</b>}
       <span title={r.action}>{actionText(r.action)}</span>
       {r.status >= 400 ? <span class="tag bad" data-result="refused">{t("auditRefused")}</span>
         : r.status >= 200 ? <span class="tag ok" data-result="ok">{t("auditOk")}</span> : null}
       {r.target && <span class="muted small" title={r.target}>{targetText(r.target)}</span>}
       {r.actor_role === "engineer" && <span class="tag">{t("roleEngineer")}</span>}
+      {r.detail?.err && <span class="tag mono" data-err={r.detail.err} title={r.detail.err_name ?? ""}>{r.detail.err}</span>}
+      {r.detail?.source && r.detail.source !== "system" && <span class="tag" data-source={r.detail.source}>{t(r.detail.source === "web" ? "auditViaWeb" : "auditViaApp")}</span>}
       {r.status < 400 && changeText(r.detail) && <span class="small muted" data-change="1">{changeText(r.detail)}</span>}
       {r.status >= 400 && r.detail?.error && <span class="small audit-why" data-why="1" title={r.detail.error}>{siteStr(r.detail.error)}</span>}
       </div>

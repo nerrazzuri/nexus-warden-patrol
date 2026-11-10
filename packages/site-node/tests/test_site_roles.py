@@ -162,7 +162,9 @@ def test_审计写明改了谁_改成什么_不带口令(站点):
     s.req("POST", "/api/accounts", {"name": "eve", "password": PW, "role": "owner"},
           token=alice)
     rows = s.req("GET", "/api/audit", token=alice)[1]["audit"]
-    by = [(r["target"], r["detail"]) for r in rows if r["action"].startswith("POST /api/accounts")]
+    # 日志设计 第 1 条起每一行另带来源(source):只比改了什么
+    by = [(r["target"], {k: v for k, v in r["detail"].items() if k != "source"})
+          for r in rows if r["action"].startswith("POST /api/accounts")]
     assert ("gina", {"role": "admin"}) in by
     assert ("gina", {"password_reset": True}) in by
     assert ("eve", {"new_account": "eve", "role": "owner"}) in by

@@ -12,6 +12,7 @@ const GROUPS: { v: string; key: Key }[] = [
   { v: "", key: "actAll" }, { v: "dispatch", key: "actGrpDispatch" }, { v: "stop", key: "actGrpStop" },
   { v: "arming", key: "actGrpArming" }, { v: "alarms", key: "actGrpAlarms" }, { v: "accounts", key: "actGrpAccounts" },
   { v: "setup", key: "actGrpSetup" }, { v: "robots", key: "actGrpRobots" }, { v: "views", key: "actGrpViews" },
+  { v: "system", key: "actGrpSystem" },
 ];
 
 /** 查询串(列表和导出共用)。日期看不懂的回 null。 */

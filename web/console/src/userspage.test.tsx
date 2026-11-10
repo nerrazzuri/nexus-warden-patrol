@@ -219,3 +219,43 @@ describe("第 3 轮 P1-66 活动记录", () => {
     expect(changeText({ role: "guard", disabled: true })).toBe("权限改成保安；停用");
   });
 });
+
+describe("日志设计 第 1、2 条:操作记录写出前后变化、来源;系统事件也说人话", () => {
+  it("改模式写从什么到什么,待命点写加删和坐标,叫停写当时在跑什么", async () => {
+    const { changeText } = await import("./userspage");
+    lang.value = "zh";
+    expect(changeText({ from: "armed", to: "home", source: "app" })).toContain("布防 → 留守");
+    expect(changeText({ op: "add", name: "dock", x: 1.5, y: -2 })).toBe("新增 dock (1.50, -2.00)");
+    expect(changeText({ op: "remove", name: "dock" })).toBe("删除 dock");
+    expect(changeText({ doing: { task: "t-9", kind: "patrol", state: "running" } })).toBe("当时在跑 patrol t-9");
+    expect(changeText({ note: "迟了 31 分钟;之前没派出去:A 站点设成只许手动派,不接排程" })).toContain("只许手动派");
+  });
+  it("日程、机器人上下线、告警这些系统事件有自己的名字,记录者写「系统」", async () => {
+    const { actionText, AuditLine } = await import("./userspage");
+    lang.value = "zh";
+    expect(actionText("schedule skip")).toBe("日程这一轮没跑");
+    expect(actionText("schedule supervised")).toBe("日程没能派出机器人");
+    expect(actionText("schedule started")).toBe("日程开始巡逻");
+    expect(actionText("robot offline")).toBe("机器人离线");
+    expect(actionText("alert escalated")).toBe("告警没人确认，已升级");
+    const c = render(<ul><AuditLine who r={{ id: 1, at: 0, actor: "site:schedule", action: "schedule skip",
+      target: "demo-night", status: 200, detail: { note: "迟了 31 分钟", source: "system" } }} /></ul>).container;
+    expect(c.textContent).toContain("系统");
+    expect(c.textContent).not.toContain("site:schedule");
+    const w = render(<ul><AuditLine r={{ id: 2, at: 0, actor: "alice", action: "POST /api/mode",
+      target: "home", status: 200, detail: { from: "armed", to: "home", source: "web" } }} /></ul>).container;
+    expect(w.querySelector("[data-source=web]")?.textContent).toBe("网页");
+  });
+});
+
+describe("日志设计 第 7 条:错误码", () => {
+  it("活动日志里带错误码的一行显示十六进制码,悬停是英文名", async () => {
+    const { AuditLine } = await import("./userspage");
+    lang.value = "zh";
+    const c = render(<ul><AuditLine r={{ id: 3, at: 0, actor: "site:schedule", action: "schedule skip",
+      target: "n", status: 200, detail: { err: "0x0302", err_name: "sched.missed" } }} /></ul>).container;
+    const tag = c.querySelector("[data-err]");
+    expect(tag?.textContent).toBe("0x0302");
+    expect(tag?.getAttribute("title")).toBe("sched.missed");
+  });
+});

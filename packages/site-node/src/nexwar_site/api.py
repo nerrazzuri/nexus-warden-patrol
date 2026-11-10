@@ -58,6 +58,7 @@ from typing import Any
 from urllib.parse import parse_qs, quote, unquote, urlparse
 
 from nexwar_contract import SCHEMA as CONTRACT_SCHEMA
+from nexwar_contract import errcodes
 from nexwar_contract.dispatch import DispatchTimeout
 from nexwar_site.accounts import WATCH_PATHS, AccountDisabled, Accounts, AuthError, LockedOut
 from nexwar_site.audit import AuditLog
@@ -118,6 +119,14 @@ _ACCT_REQ = re.compile(r"^/api/account-requests(?:/([0-9a-f]{1,32})/(approve|rej
 _ADMIN_BIND = re.compile(r"^/api/admin/bind(?:/([0-9a-f]{1,32})/(approve|reject))?$")
 #: W42 §6:确认 / 不同意机器人上提的换 WiFi。
 _ROBOT_WIFI = re.compile(r"^/api/robots/([^/]{1,64})/wifi$")
+#: 操作记录的「对象」兜底(日志设计 第 1 条):处理函数没写时从路径里认。
+_PATH_TARGET = re.compile(r"^/api/(robots|alerts|routes|route-schedules|accounts|zones|maps|"
+                          r"devices|authorizations|incidents)/([^/]{1,128})")
+
+
+def _path_target(path: str) -> str:
+    m = _PATH_TARGET.match(path)
+    return m.group(2) if m else ""
 #: ``GET /api/alerts?all=1&limit=`` 的上限。
 ALERTS_LIMIT_MAX = 2000
 
@@ -580,6 +589,7 @@ class _Handler(TlsHandlerMixin):
             raise HttpError(400, f"JSON 无法解析: {exc}") from exc
         if not isinstance(d, dict):
             raise HttpError(400, "请求体要是 JSON 对象")
+        self._req_body = d
         return d
 
     def _token(self) -> str | None:
@@ -627,11 +637,16 @@ class _Handler(TlsHandlerMixin):
     def _handle(self, method: str) -> None:
         self._actor, self._status, self._resp = "", 0, {}
         self._audit_target, self._audit_detail = "", {}
+        self._req_body: dict[str, Any] | None = None
         self._method, self._via_cookie, self._extra_headers = method, False, []
         self._consumed = 0
         #: 这一次请求不进审计(W00c6i:续着的监护心跳每秒一条,只记开始与结束)。
         self._skip_audit = False
         path = self.path.split("?", 1)[0]
+        # 日志设计:每个请求一个编号,这个请求里写的日志行和它的操作记录都带上
+        from nexwar_contract import logsetup
+        self._req_id = uuid.uuid4().hex[:8]
+        logsetup.set_context(req=self._req_id, task=None, robot=None)
         try:
             self._route(method, path)
             self._drain()
@@ -640,14 +655,35 @@ class _Handler(TlsHandlerMixin):
             # 记下来只会把表撑满(内部评审)。登录失败、事件回调照记。
             if method != "GET" and self.site.audit is not None and self._actor \
                     and not self._skip_audit:
-                detail = {k: self._resp[k] for k in ("command_id", "task_id", "error", "outcome")
+                detail = {k: self._resp[k] for k in ("command_id", "task_id", "error", "outcome",
+                                                       "reason", "reason_code", "err", "err_name")
                           if k in self._resp} | self._audit_detail
+                target = self._audit_target or _path_target(path)
+                detail.setdefault("source", self._source())
+                detail.setdefault("req", self._req_id)
+                if self._req_body and not self._audit_detail:
+                    # 处理函数自己写明了改了什么就不另存请求(一样的东西存两份会把一行撑过上限)
+                    from nexwar_site.audit import redact
+                    detail.setdefault("request", redact(self._req_body))
                 try:
                     self.site.audit.record(actor=self._actor, action=f"{method} {path}",
-                                           target=self._audit_target, status=self._status,
+                                           target=target, status=self._status,
                                            detail=detail, remote=self.client_address[0])
                 except Exception:
                     log.exception("审计写不进去")
+                if self._status >= 400:
+                    # 日志设计 第 3 条:被拒的写请求进站点日志,带原因、谁、从哪来(原来只有状态码)
+                    log.warning("拒绝 %s %s status=%d code=%s actor=%s remote=%s target=%s why=%s",
+                                method, path, self._status,
+                                errcodes.tag(self._resp.get("err_name")), self._actor,
+                                self.client_address[0], target,
+                                str(self._resp.get("error", ""))[:300])
+
+    def _source(self) -> str:
+        """这一次是谁发来的:网页(cookie)、App(或别的带令牌的客户端)、站点自己(site:…)。"""
+        if self._actor.startswith("site:"):
+            return "system"
+        return "web" if self._via_cookie else "app"
 
     def _route(self, method: str, path: str) -> None:
         try:
@@ -1748,12 +1784,20 @@ class _Handler(TlsHandlerMixin):
         if method != "POST":
             raise HttpError(405, "只支持 GET/POST")
         d = self._body()
+        self._audit_target = robot_id
         try:
             if d.get("remove") is True:
                 was = [p for p in stb.list(robot_id) if p["name"] == d.get("name")]
+                self._audit_detail = {"op": "remove", "name": d.get("name"),
+                                      "was": [{k: p.get(k) for k in ("map_id", "map_version", "x",
+                                                                    "y", "yaw")} for p in was]}
                 stb.remove(robot_id, d.get("name"))
                 maps = {(p["map_id"], p["map_version"]) for p in was}
             else:
+                old = [p for p in stb.list(robot_id) if p["name"] == d.get("name")]
+                self._audit_detail = {"op": "update" if old else "add", "name": d.get("name"),
+                                      "map": f"{d.get('map_id')}:{d.get('map_version')}",
+                                      "x": d.get("x"), "y": d.get("y"), "yaw": d.get("yaw", 0.0)}
                 stb.set(robot_id, d.get("name"), map_id=d.get("map_id"),
                         map_version=d.get("map_version"), x=d.get("x"), y=d.get("y"),
                         yaw=d.get("yaw", 0.0), default=d.get("default"))
@@ -2199,7 +2243,12 @@ class _Handler(TlsHandlerMixin):
             mode = d.get("mode")
             self._need(user, ARM if mode == "armed" else SET_MODE)
             self._audit_target = str(mode)[:16]
-            self._audit_detail = {k: d[k] for k in ("zones", "minutes") if k in d}
+            try:
+                was = desk.view().get("mode")
+            except Exception:  # noqa: BLE001 —— 只是记一笔,读不出不挡
+                was = None
+            self._audit_detail = {"from": was, "to": mode} | {
+                k: d[k] for k in ("zones", "minutes") if k in d}
             return self._send_json(200, desk.set_mode(mode, by=str(user), zones=d.get("zones"),
                                                       minutes=d.get("minutes")))
         except ModeError as exc:
@@ -2824,9 +2873,11 @@ class _Handler(TlsHandlerMixin):
     def _halt(self, robot_id: str, user) -> None:
         """停车(W00c5c):走 cmd,不走遥控连接。``abort`` 权限 —— 经理也能按。"""
         self._need(user, ABORT)
-        self._body()
+        d = self._body()
         self._audit_target = robot_id
         self._registered(robot_id)
+        self._audit_detail = {"doing": self._doing(robot_id)} | (
+            {"why": str(d["reason"])[:200]} if d.get("reason") else {})
         try:
             if self.site.teleop is not None:
                 r = self.site.teleop.halt(robot_id, user)
@@ -2843,6 +2894,18 @@ class _Handler(TlsHandlerMixin):
             # 狗说停车没成(W00c5e 内部评审):任务它中止了,腿停没停住不知道。
             raise HttpError(502, f"机器人说停车失败({ack.get('reason', '')}):按机身急停")
         return self._send_json(200, r)
+
+    def _doing(self, robot_id: str) -> dict[str, Any]:
+        """这台机器人此刻在做什么(操作记录用):任务号、任务名、状态。读不到给空。"""
+        try:
+            c = self.site.dispatcher.clients.get(robot_id)
+            st = c.status if c is not None else None
+            task = st.task if st is not None else None
+            if task is None:
+                return {"task": None}
+            return {"task": task.task_id, "kind": task.kind, "state": task.state.value}
+        except Exception:  # noqa: BLE001
+            return {}
 
     def _resume(self, robot_id: str, user) -> None:
         """解除叫停(W00c5e):之后站点才重新给这只狗派单。``dispatch`` 权限 —— 经理能停,不能恢复
@@ -3367,7 +3430,29 @@ class _Handler(TlsHandlerMixin):
                 "priv": priv is not None,
                 "push": bool(self.site.push is not None and self.site.push.senders),
                 # 网页易用性第 2 轮 P1-65:没装 VPN,开工程师账号时「签发 VPN」先灰着
-                "vpn": bool(self.site.vpn is not None and self.site.vpn.ready)})
+                "vpn": bool(self.site.vpn is not None and self.site.vpn.ready),
+                "debug_log": self.site.home is not None})
+        if what == "debug-log":
+            # 日志设计 第 3 条:站点自己的「详细日志 N 分钟」(到点自动恢复;
+            # 机器人的在诊断页各自那一块)
+            from nexwar_contract.debuglog import set_until, until_ms
+            from nexwar_site.main import DEBUG_FLAG
+            if self.site.home is None:
+                raise HttpError(404, "这个站点没有站点目录,开不了详细日志")
+            flag = self.site.home / DEBUG_FLAG
+            if method == "POST":
+                minutes = self._body().get("minutes")
+                if isinstance(minutes, bool) or not isinstance(minutes, int) \
+                        or not 0 <= minutes <= 120:
+                    raise HttpError(400, "minutes 要 0–120 的整数(0 = 关)")
+                until = self._now() + minutes * 60_000 if minutes else 0
+                set_until(flag, until)
+                self._audit_detail = {"minutes": minutes}
+                log.warning("站点详细日志 %s actor=%s", f"开 {minutes} 分钟" if minutes else "关",
+                            self._actor)
+                return self._send_json(200, {"until_ms": until})
+            u = until_ms(flag)
+            return self._send_json(200, {"until_ms": u if u > self._now() else 0})
         if what == "push-test":
             if method != "POST":
                 raise HttpError(405, "只支持 POST")
@@ -4680,6 +4765,7 @@ class _Handler(TlsHandlerMixin):
         if self._still():
             frames.close()                     # 取一张就走;那一路还留 idle_s 秒,下一张接得上
             return self._send_bytes(first, "image/jpeg")
+        self._audit_view(f"live/{robot_id}/{what}")      # 日志设计 第 1 条:看实时画面也记
         self._mjpeg(frames, first, VideoError)
 
     def _video_ws(self, user) -> None:

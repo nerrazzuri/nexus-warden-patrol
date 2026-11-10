@@ -155,6 +155,10 @@ export function AlertDetail(props: {
           {!site && <span>{dt("dRobot")}{colon()}<b>{nameOf(a.robot)}</b></span>}
           {where ? <span>{dt("dWhere")}{colon()}<b>{where}</b></span>
             : a.context?.pose && <span>{dt("dWhere")}{colon()}<a href="#/map" data-where-map="1" onClick={props.onClose}>{dt("dWhereMap")}</a></span>}
+          {/* 日志设计 第 7 条:告警带错误码,报问题、查日志用 */}
+          {typeof (a.context as { err?: unknown } | undefined)?.err === "string" && (
+            <span class="mono small" data-err="1">{t("errCodeLabel", { c: String((a.context as { err: string }).err) })}</span>
+          )}
         </p>
         {open && <p class="muted small">{a.acked_by ? dt("dTaken", { who: byText(a.acked_by) }) : dt("dNotTaken")}</p>}
         {/* 第 2 轮 P0-05:接手以后告诉保安下一步做什么 */}
