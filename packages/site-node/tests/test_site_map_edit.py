@@ -441,48 +441,105 @@ def test_第2轮_N4_布置计数_发布弹窗拿来比(站点):
     assert s.req("GET", f"{ADM}/layout", token=tok)[1]["cameras"] == before + 1
 
 
-def test_11_10_没发布过的编辑草稿再编辑_用新版替换它_发布前只有一个新版本(站点):
-    """用户 11-10:「之前一直都是单独保存的所以才有那么多版本」。从编辑另存出来、没有机器人换上过、
-    没挂巡逻路线的草稿,再编辑另存:新版本替换掉草稿(草稿删掉,区域照抄过来);原版、换上过的版本永远不动。"""
+def _编(s, tok, v, ops=ERASE):
+    dg = s.req("GET", f"/api/admin/maps/{MAP[0]}/{v}/noise", token=tok)[1]["digest"]
+    code, d = s.req("POST", f"/api/admin/maps/{MAP[0]}/{v}/edit", {"digest": dg, "ops": ops},
+                    token=tok)
+    assert code == 200, d
+    return d
+
+
+def _版本(s):
+    return sorted(m["version"] for m in s.maps.list() if m["map_id"] == MAP[0])
+
+
+def _草稿(s, tok, v):
+    code, d = s.req("GET", f"/api/admin/maps/{MAP[0]}/{v}/draft", token=tok)
+    assert code == 200, d
+    return d
+
+
+def test_11_10_编辑保存的都是草稿_草稿再改替换它_只留一份(站点):
+    """用户 11-10:「所有的保存只是草稿……再编辑继续改……都确认后再点发布,这样就可以减少版本的叠加」。
+    编辑出来的是草稿;改草稿:有擦改就用新版本替换它(草稿删掉、区域照抄),只改区域、显示就原地改。"""
     s = 站点
     tok = _登(s)
     z = s.api.zones
-
-    def edit(v):
-        dg = s.req("GET", f"/api/admin/maps/{MAP[0]}/{v}/noise", token=tok)[1]["digest"]
-        code, d = s.req("POST", f"/api/admin/maps/{MAP[0]}/{v}/edit", {"digest": dg, "ops": ERASE},
-                        token=tok)
-        assert code == 200, d
-        return d
-
-    def versions():
-        return sorted(m["version"] for m in s.maps.list() if m["map_id"] == MAP[0])
-
-    d1 = edit(MAP[1])                                       # 原版 → 草稿:原版不动,不替换
+    assert _草稿(s, tok, MAP[1]) == {"draft": False, "from": None}
+    d1 = _编(s, tok, MAP[1])                                 # 原版 → 草稿,原版不动
     v1 = d1["version"]
-    assert "replaced" not in d1 and versions() == sorted([MAP[1], v1])
+    assert "replaced" not in d1 and _版本(s) == sorted([MAP[1], v1])
+    assert _草稿(s, tok, v1) == {"draft": True, "from": MAP[1]}
+    ov = next(m for m in s.req("GET", "/api/admin/maps", token=tok)[1]["maps"]
+              if m["map_id"] == MAP[0])["versions"]
+    assert [(v["version"], v["draft"], v["draft_of"]) for v in ov] \
+        == [(v1, True, MAP[1]), (MAP[1], False, None)]
     pool = {"id": "pool", "kind": "nogo", "label": "泳池",
             "polygon": [[0.5, 0.5], [1.5, 0.5], [1.5, 1.5], [0.5, 1.5]]}
     z.put(MAP[0], v1, [pool], base_revision=z.current(MAP[0], v1).revision, by="t")
-    z.confirm(MAP[0], v1, revision=z.current(MAP[0], v1).revision, by="alice")
-    d2 = edit(v1)                                           # 草稿再编辑:替换
+    d2 = _编(s, tok, v1)                                     # 草稿再擦:替换,还是草稿
     v2 = d2["version"]
-    assert d2["replaced"] == v1 and versions() == sorted([MAP[1], v2]), versions()
+    assert d2["replaced"] == v1 and d2["from"] == MAP[1] and _版本(s) == sorted([MAP[1], v2])
     assert [x.id for x in z.current(MAP[0], v2).zones] == ["pool"], "草稿上画的禁行区跟过来"
-    assert z.confirmed_current(MAP[0], v2), "草稿上确认过的,新版本照样算确认过"
-    note = next(m for m in s.maps.list() if m["map_id"] == MAP[0] and m["version"] == v2)["note"]
-    assert f"从 {MAP[1]} 编辑" in note, note
-    # 换上过(下发过换图)的草稿:不替换
-    with s.api.dispatcher.db.tx() as tx:
-        tx.execute("INSERT INTO commands(command_id, task_id, robot_id, kind, payload, issued_by, "
-                   "issued_at, ack_result) VALUES ('c1','t1','A','map_activate',?,'alice',1,"
-                   "'accepted')", (json.dumps({"map_id": MAP[0], "version": v2}),))
-    d3 = edit(v2)
-    assert "replaced" not in d3 and v2 in versions()
-    # 挂了巡逻路线的草稿:不替换(路线不跟着走)
-    v3 = d3["version"]
+    assert _草稿(s, tok, v2) == {"draft": True, "from": MAP[1]}
+    assert _编(s, tok, v2, ops=[]) == {"map_id": MAP[0], "from": MAP[1], "version": v2,
+                                       "draft": True}, "草稿没擦改:不出新版本"
+
+
+def test_11_10_只改禁行区也先出草稿_原版一点不动(站点):
+    s = 站点
+    tok = _登(s)
+    before = s.api.zones.current(*MAP).revision
+    d = _编(s, tok, MAP[1], ops=[])
+    assert d["version"] != MAP[1] and _草稿(s, tok, d["version"])["draft"]
+    assert (s.maps.root / MAP[0] / d["version"] / "floor.pgm").read_bytes() \
+        == (s.maps.root / MAP[0] / MAP[1] / "floor.pgm").read_bytes()
+    assert s.api.zones.current(*MAP).revision == before
+
+
+def test_11_10_草稿不能下发到机器人_发布到站点以后才行(站点):
+    """用户 11-10:「发布的地图不是下发到机器人,而只是发布到站点,发布完了确认没问题再下发」。"""
+    s = 站点
+    tok = _登(s)
+    v = _编(s, tok, MAP[1])["version"]
+    code, d = s.req("POST", f"/api/admin/maps/{MAP[0]}/{v}/publish", {"robots": ["A"]}, token=tok)
+    assert code == 200, d
+    assert d["results"][0]["state"] == "refused" and d["results"][0]["code"] == "map_draft", d
+    code, d = s.req("POST", f"/api/admin/maps/{MAP[0]}/{v}/release", {}, token=tok)
+    assert code == 200, d
+    assert d == {"map_id": MAP[0], "version": v, "from": MAP[1], "zones_revision": 0}
+    assert _草稿(s, tok, v) == {"draft": False, "from": None}
+    assert s.api.zones.confirmed_current(MAP[0], v), "发布这一下就是确认禁行区"
+    row = next(m for m in s.maps.list() if m["map_id"] == MAP[0] and m["version"] == v)
+    assert row["source"] == "edit:alice"
+    code, d = s.req("POST", f"/api/admin/maps/{MAP[0]}/{v}/publish", {"robots": ["A"]}, token=tok)
+    assert d["results"][0].get("code") != "map_draft", d
+    code, d = s.req("POST", f"/api/admin/maps/{MAP[0]}/{v}/release", {}, token=tok)
+    assert code == 409 and "不是草稿" in d["error"], d
+    d2 = _编(s, tok, v)                                      # 发布过的再改:另出草稿,它不动
+    assert "replaced" not in d2 and v in _版本(s) and _草稿(s, tok, d2["version"])["draft"]
+
+
+def test_11_10_网页上发布要再输密码(站点):
+    from test_site_zones import _网页
+    s = 站点
+    tok = _登(s)
+    v = _编(s, tok, MAP[1])["version"]
+    web = _网页(s)
+    code, d = web(f"/api/admin/maps/{MAP[0]}/{v}/release", {})
+    assert code == 403 and "密码" in d["error"], d
+    code, d = web(f"/api/admin/maps/{MAP[0]}/{v}/release", {"confirm_password": PW})
+    assert code == 200, d
+
+
+def test_11_10_挂了巡逻路线的草稿再擦_路线搬到新草稿(站点):
+    s = 站点
+    tok = _登(s)
+    v1 = _编(s, tok, MAP[1])["version"]
     with s.api.dispatcher.db.tx() as tx:
         tx.execute("INSERT INTO routes(route_id, map_id, map_version, definition, revision, "
-                   "updated_ms) VALUES ('r1', ?, ?, '{}', 1, 1)", (MAP[0], v3))
-    d4 = edit(v3)
-    assert "replaced" not in d4 and v3 in versions()
+                   "updated_ms) VALUES ('r1', ?, ?, '{}', 1, 1)", (MAP[0], v1))
+    d = _编(s, tok, v1)
+    assert d["replaced"] == v1
+    rows = s.db.query("SELECT map_version FROM routes WHERE route_id='r1'")
+    assert [r["map_version"] for r in rows] == [d["version"]]

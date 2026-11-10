@@ -37,8 +37,10 @@ interface RobotRun { robot_id: string; running?: { map_id?: string; map_version?
 
 /** 这一版禁行区的状态(在生效 / 等你确认 / 从没确认过 / 等机器人)、带过来的建议、「确认此版本」。
  *  布置 → 禁行区 和地图编辑器都用(11-10:画都在编辑器里画)。``changed``:页面上还有没存的改动(不给确认)。 */
-export function NogoStatus({ nav, base, mapId, version, changed, say, reload }: {
+export function NogoStatus({ nav, base, mapId, version, changed, say, reload, draft = false }: {
   nav: NavZones | null; base: string; mapId: string; version: string; changed: boolean; say: (s: string) => void; reload: () => Promise<void>;
+  /** 11-10:编辑草稿 —— 禁行区在「发布」时一起确认,这里不给单独确认 */
+  draft?: boolean;
 }) {
   const [confirming, setConfirming] = useState(false);
   const [behind, setBehind] = useState<string[]>([]);
@@ -99,7 +101,8 @@ export function NogoStatus({ nav, base, mapId, version, changed, say, reload }: 
         </div>
       )}
       {/* 第 3 轮 maps N1:有没核的建议、这一版又一个都没画时,先处理建议,不给确认空集 */}
-      {nav && !current && !changed && !(prop && nav.zones.length === 0)
+      {draft && <p class="muted small" data-nogo-draft="1">{t("lyNogoDraft")}</p>}
+      {nav && !current && !changed && !draft && !(prop && nav.zones.length === 0)
         && <button type="button" class="btn sm primary" onClick={() => setConfirming(true)}>{t("navConfirmBtn")}</button>}
       {/* 第 2 轮 maps N12:从发布对话框跳来的,确认完给「回去发布」 */}
       {current && typeof location !== "undefined" && /[?&]from=publish\b/.test(location.hash)

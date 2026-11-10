@@ -272,6 +272,19 @@ describe("发布", () => {
     void getByText;
   });
 
+  it("11-10 草稿:标「草稿」,不给下发、只给「打开草稿（预览、发布）」;正式版本的按钮叫「下发到机器人」", async () => {
+    lang.value = "zh";
+    overview.maps[0].versions[0] = { ...overview.maps[0].versions[0], source: "draft:alice", draft: true, draft_of: "2" };
+    const { getByLabelText } = mount();
+    await waitFor(() => getByLabelText("estate:3"));
+    const card = getByLabelText("estate:3");
+    expect(card.querySelector("[data-draft-tag]")!.textContent).toBe("草稿");
+    expect(card.textContent).toContain("alice 在地图编辑器里的草稿");
+    expect(Array.from(card.querySelectorAll("button")).some((b) => b.textContent?.includes("下发"))).toBe(false);
+    expect(card.querySelector("[data-open-draft]")!.getAttribute("href")).toBe("#/admin/mapedit?map=estate&version=3&from=2");
+    expect(Array.from(getByLabelText("estate:2").querySelectorAll("button")).map((b) => b.textContent)).toContain("下发到机器人…");
+  });
+
   it("缺定位文件的版本(11-05 现场第 10 条):卡片上写不能下发、缺什么;带定位器的机器人不能勾", async () => {
     lang.value = "zh";
     overview.maps[0].versions[0].unusable = "此地图需要重建:旧版建的图没有 Super-LIO 定位用的点云(superlio_map.pcd)";

@@ -14,6 +14,7 @@ import json
 import logging
 import math
 import os
+import re
 import shutil
 import threading
 from collections.abc import Callable
@@ -54,6 +55,8 @@ def _stamp(paths: tuple[Path, ...]) -> tuple | None:
 
 #: 删掉过的版本号(site_settings 里一个 JSON:{地图号: [版本, …]})。
 RETIRED_KEY = "map_retired_versions"
+#: 编辑草稿的登记来源前缀(11-10):草稿不能下发,发布到站点以后改成 ``edit:``。
+DRAFT_SOURCE = "draft:"
 
 class MapError(ValueError):
     """这张图登记不了 / 找不到。"""
@@ -617,6 +620,22 @@ class MapCatalog:
                        json.dumps([f.to_wire() for f in ref.files]), note[:200]))
 
     # ------------------------------------------------------------ 管理(地图管理页)
+
+    def draft_of(self, map_id: str, version: str) -> str | None:
+        """这一版是编辑草稿(登记来源 ``draft:``,11-10)就回它最初是从哪一版编辑来的,不是回 ``None``。
+        草稿只在站点上:不能下发到机器人,发布到站点(:meth:`release_draft`)以后才是正式版本。"""
+        rows = self.db.query("SELECT source, note FROM maps WHERE map_id=? AND version=?",
+                             (map_id, version))
+        if not rows or not str(rows[0]["source"]).startswith(DRAFT_SOURCE):
+            return None
+        m = re.match(r"从 (\S+) 编辑", str(rows[0]["note"] or ""))
+        return m.group(1) if m else version
+
+    def release_draft(self, map_id: str, version: str, *, by: str) -> None:
+        """草稿发布到站点:登记来源改成 ``edit:<谁发布的>``,从此是正式版本(再改另出草稿)。"""
+        with self.db.tx() as c:
+            c.execute("UPDATE maps SET source=? WHERE map_id=? AND version=?",
+                      (f"edit:{by}", map_id, version))
 
     def set_note(self, map_id: str, version: str, note: str) -> str:
         """改这一版的备注(最多 200 字,去首尾空白);回新的备注。没有这一版 :class:`MapError`。"""

@@ -15,12 +15,14 @@ let posted: { url: string; body: Record<string, unknown> }[];
 let editReply: number;
 let editBody: Record<string, unknown>;
 let zones: Record<string, unknown>;
+let draftState: { draft: boolean; from: string | null };
 const POOL = { id: "n1", kind: "nogo", label: "泳池", polygon: [[1, 1], [3, 1], [3, 3]] };
 beforeEach(() => {
   lang.value = "zh";
   posted = [];
   editReply = 200;
-  editBody = { version: "4", erased_m2: 1 };
+  editBody = { version: "4", erased_m2: 1, from: "3", draft: true };
+  draftState = { draft: false, from: null };
   zones = { revision: 2, zones: [], confirmed: { revision: 2, by: "olga", at_ms: 1, current: true, how: "confirm" }, held: [] };
   location.hash = "#/admin/mapedit?map=home&version=3";
   setFetch(((url: string, init?: RequestInit) => {
@@ -30,6 +32,7 @@ beforeEach(() => {
       if (url.endsWith("/edit")) return Promise.resolve(editReply === 200 ? json(editBody) : json({ error: "换了" }, editReply));
       return Promise.resolve(json(body));
     }
+    if (url.endsWith("/draft")) return Promise.resolve(json(draftState));
     if (url.endsWith("/zones")) return Promise.resolve(json(url.includes("/home/4/") ? { ...zones, revision: 7 } : zones));
     if (url.startsWith("/api/robots")) return Promise.resolve(json({ robots: [] }));
     if (url.endsWith("/preview")) return Promise.resolve(json(META));
@@ -52,11 +55,18 @@ describe("地图编辑器", () => {
     expect(editTarget("#/admin/mapedit?map=home&version=4&from=3")).toEqual({ map_id: "home", version: "4", from: "3" });
   });
 
-  it("第 2 轮 P1-55:另存出来的新版本页顶上给「去发布」入口", async () => {
-    const { container: c } = render(<MapEditPage say={() => {}} target={{ map_id: "home", version: "4", from: "3" }} Canvas={Fake} />);
-    await waitFor(() => expect(c.querySelector("[data-publish-link]")).not.toBeNull());
-    expect(c.querySelector("[data-publish-link] a")!.getAttribute("href")).toBe("#/admin/maps");
-    expect(c.querySelector("[data-publish-link]")!.textContent).toContain("第 3 版");
+  it("11-10:正式版本上写「保存会存成草稿,这一版不动」;草稿上有预览、对比、发布", async () => {
+    const { container: c } = page();
+    await waitFor(() => expect(c.querySelector(".mapedit[data-ready]")).not.toBeNull());
+    expect(c.querySelector("[data-published]")!.textContent).toContain("保存会存成草稿");
+    expect(c.querySelector("[data-draft]")).toBeNull();
+    expect(c.querySelector(".me-save")!.textContent).toBe("保存草稿");
+    cleanup();
+    draftState = { draft: true, from: "2" };
+    const ui = page();
+    await waitFor(() => expect(ui.container.querySelector("[data-draft]")).not.toBeNull());
+    expect(ui.container.querySelector("[data-draft]")!.textContent).toContain("草稿 v3（从 v2 编辑）");
+    expect(ui.container.querySelector("[data-compare]")!.textContent).toBe("和 v2 对比");
   });
 
   it("橡皮擦一笔,另存前列出面积要确认,发出去的点和粗细对", async () => {
@@ -67,16 +77,16 @@ describe("地图编辑器", () => {
     fireEvent.click(c.querySelector(".pick")!);
     fireEvent.click(btn(c, "完成绘制"));
     expect(c.querySelector("polyline.me-op.erase")).not.toBeNull();
+    expect(c.querySelector("[data-unsaved]")!.textContent).toContain("平方米");
     fireEvent.click(c.querySelector(".me-save")!);
-    expect(document.body.textContent).toContain("平方米");
-    fireEvent.click(btn(document.querySelector(".modal")!, "另存为新版本"));
+    expect(document.querySelector(".modal")).toBeNull();
     await waitFor(() => expect(posted.find((p) => p.url.endsWith("/edit"))).toBeTruthy());
     const b = posted.find((p) => p.url.endsWith("/edit"))!.body;
     expect(b.digest).toBe("abc");
     expect(b.ops).toEqual([{ op: "erase", shape: "stroke", points: [[4, 7], [4, 7]], width_m: 0.3 }]);
     await waitFor(() => expect(posted.some((p) => p.url === "/api/admin/maps/home/4/display")).toBe(true));
     // 第 2 轮 P1-55:提示里报站点算的实际面积;跳到新版本时带上从哪版来的
-    await waitFor(() => expect(said.join(" ")).toContain("实际擦掉 1 平方米"));
+    await waitFor(() => expect(said.join(" ")).toContain("已存成草稿 v4：实际擦掉 1 平方米"));
     expect(location.hash).toContain("&from=3");
   });
 
@@ -131,16 +141,56 @@ describe("地图编辑器", () => {
     expect((c.querySelector('[data-terrain] input') as HTMLInputElement).value).toBe("0.3");
   });
 
-  it("摆正只改显示:不另存新版本,只存显示设置", async () => {
+  it("11-10:正式版本上只改显示也先存成草稿(ops 空),显示存到草稿上,原版不动", async () => {
     const { container: c } = page();
     await waitFor(() => expect(c.querySelector('.mapedit[data-ready]')).not.toBeNull());
-    fireEvent.click(c.querySelector('[data-tool="erase"]')!);                // P1-53:不默认选工具
     fireEvent.click(c.querySelector('[data-tool="rotate"]')!);
     fireEvent.change(c.querySelector('input[name="rotate"]')!, { target: { value: "12" } });
     fireEvent.click(c.querySelector(".me-save")!);
-    fireEvent.click(btn(document.querySelector(".modal")!, "保存"));
+    await waitFor(() => expect(posted.find((p) => p.url === "/api/admin/maps/home/4/display")?.body.rotate_deg).toBe(12));
+    expect(posted.find((p) => p.url.endsWith("/edit"))!.body.ops).toEqual([]);
+    expect(posted.some((p) => p.url === "/api/admin/maps/home/3/display")).toBe(false);
+  });
+
+  it("11-10:草稿上只改显示:不出新版本,直接存在草稿上", async () => {
+    draftState = { draft: true, from: "2" };
+    const { container: c } = page();
+    await waitFor(() => expect(c.querySelector('.mapedit[data-ready]')).not.toBeNull());
+    fireEvent.click(c.querySelector('[data-tool="rotate"]')!);
+    fireEvent.change(c.querySelector('input[name="rotate"]')!, { target: { value: "12" } });
+    fireEvent.click(c.querySelector(".me-save")!);
     await waitFor(() => expect(posted.find((p) => p.url === "/api/admin/maps/home/3/display")?.body.rotate_deg).toBe(12));
     expect(posted.some((p) => p.url.endsWith("/edit"))).toBe(false);
+    await waitFor(() => expect(said.join(" ")).toContain("草稿 v3 已保存"));
+  });
+
+  it("11-10:草稿预览 —— 有没存的改动时不给预览、发布;预览时收起工具、画布换成结果样式;发布要输密码,发完回地图管理", async () => {
+    draftState = { draft: true, from: "2" };
+    const { container: c } = page();
+    await waitFor(() => expect(c.querySelector('.mapedit[data-ready]')).not.toBeNull());
+    fireEvent.click(c.querySelector('[data-tool="erase"]')!);
+    fireEvent.click(c.querySelector(".pick")!);
+    fireEvent.click(btn(c, "完成绘制"));
+    expect((c.querySelector("[data-preview]") as HTMLButtonElement).disabled).toBe(true);
+    expect((c.querySelector("[data-release]") as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(btn(c, "撤销"));
+    fireEvent.click(c.querySelector("[data-preview]")!);
+    expect(c.querySelector(".me-tools")).toBeNull();
+    expect(c.querySelector(".me-canvas.result")).not.toBeNull();
+    expect(c.querySelector("[data-preview-hint]")).not.toBeNull();
+    expect(c.querySelector("[data-preview]")!.textContent).toBe("继续编辑");
+    fireEvent.click(c.querySelector("[data-preview]")!);
+    expect(c.querySelector(".me-tools")).not.toBeNull();
+    fireEvent.click(c.querySelector("[data-release]")!);
+    const m = document.querySelector(".modal")!;
+    expect(m.textContent).toContain("发布后 v3 成为正式版本");
+    expect(m.textContent).toContain("现在不会发给任何机器人");
+    fireEvent.input(m.querySelector('input[type="password"]')!, { target: { value: "pw-pw-pw" } });
+    fireEvent.submit(m.querySelector("form")!);
+    await waitFor(() => expect(posted.find((p) => p.url === "/api/admin/maps/home/3/release")).toBeTruthy());
+    expect(posted.find((p) => p.url === "/api/admin/maps/home/3/release")!.body).toEqual({ confirm_password: "pw-pw-pw" });
+    await waitFor(() => expect(location.hash).toBe("#/admin/maps"));
+    expect(said.join(" ")).toContain("发布到站点");
   });
 
   it("栅格换了说有人改过", async () => {
@@ -151,7 +201,6 @@ describe("地图编辑器", () => {
     fireEvent.click(c.querySelector(".pick")!);
     fireEvent.click(btn(c, "完成绘制"));
     fireEvent.click(c.querySelector(".me-save")!);
-    fireEvent.click(btn(document.querySelector(".modal")!, "另存为新版本"));
     await waitFor(() => expect(c.querySelector(".ly-conflict")!.textContent).toContain("已被修改"));
   });
 
@@ -215,7 +264,6 @@ describe("地图编辑器", () => {
     fireEvent.click(ui.container.querySelector(".pick")!);
     fireEvent.click(btn(ui.container, "完成绘制"));
     fireEvent.click(ui.container.querySelector(".me-save")!);
-    fireEvent.click(btn(document.querySelector(".modal")!, "另存为新版本"));
     await waitFor(() => expect(posted.some((p) => p.url.endsWith("/A/1/edit"))).toBe(true));
     location.hash = "#/admin/mapedit?map=B&version=1";
     ui.rerender(<MapEditPage say={() => {}} target={{ map_id: "B", version: "1" }} Canvas={Fake} />);
@@ -280,15 +328,15 @@ describe("第 3 轮 maps N2 / P1-53", () => {
 // 11-10 用户:「所有动作都要在编辑器中完成」—— 禁行区、虚拟墙、限速区、人员忽略区从「布置 → 禁行区」搬进编辑器,
 // 跟橡皮擦一起撤销、一起保存;没发布过的草稿再擦,站点替换它(这里只看网页报的话)。
 describe("编辑器里画禁行区(11-10)", () => {
+  beforeEach(() => { draftState = { draft: true, from: "2" }; });
   const ready = async (c: Element) => waitFor(() => expect(c.querySelector(".mapedit[data-ready]")).not.toBeNull());
   function drawZone(c: Element, tool: string, n: number) {
     fireEvent.click(c.querySelector(`[data-tool="${tool}"]`)!);
     for (let i = 0; i < n; i++) fireEvent.click(c.querySelector(".pick")!);
     fireEvent.click(btn(c, "完成绘制"));
   }
-  const saveAll = async (c: Element, yes = "保存") => {
+  const saveAll = async (c: Element) => {
     fireEvent.click(c.querySelector(".me-save")!);
-    fireEvent.click(btn(document.querySelector(".modal")!, yes));
   };
 
   it("工具分组:改地图本身 / 机器人能去哪 / 人员检测 / 显示;没有「去布置」的链接", async () => {
@@ -299,7 +347,7 @@ describe("编辑器里画禁行区(11-10)", () => {
     expect(c.querySelector('a[href="#/admin/layout?tab=nogo"]')).toBeNull();
   });
 
-  it("画禁行区:收紧,只存禁行区(不另存版本),带打开时的修订号", async () => {
+  it("草稿上画禁行区:只存禁行区(不出新版本),带打开时的修订号", async () => {
     const { container: c } = page();
     await ready(c);
     drawZone(c, "nogo", 3);
@@ -307,9 +355,8 @@ describe("编辑器里画禁行区(11-10)", () => {
     fireEvent.submit(document.querySelector(".modal form")!);
     expect(c.querySelector(".me-zones")!.textContent).toContain("高楼楼梯");
     expect(c.querySelector("polygon.nogo-area")).not.toBeNull();
-    fireEvent.click(c.querySelector(".me-save")!);
-    expect(document.querySelector(".modal")!.textContent).toContain("禁行区、虚拟墙等：1 处改动");
-    fireEvent.click(btn(document.querySelector(".modal")!, "保存"));
+    expect(c.querySelector("[data-unsaved]")!.textContent).toContain("禁行区、虚拟墙等 1 处");
+    await saveAll(c);
     await waitFor(() => expect(posted.find((p) => p.url === "/api/maps/home/3/zones")).toBeTruthy());
     const b = posted.find((p) => p.url === "/api/maps/home/3/zones")!.body;
     expect(b.base_revision).toBe(2);
@@ -317,8 +364,22 @@ describe("编辑器里画禁行区(11-10)", () => {
     expect(posted.some((p) => p.url.endsWith("/edit"))).toBe(false);
   });
 
-  it("一次编辑里又擦又画禁行区:保存一次 —— 先另存新版本,禁行区存到新版本上(用新版本的修订号);草稿被替换时说清楚", async () => {
-    editBody = { version: "4", from: "2", erased_m2: 1, replaced: "3" };
+  it("正式版本上画禁行区:先另存成草稿(ops 空),禁行区存到草稿上(用草稿的修订号),原版不动", async () => {
+    draftState = { draft: false, from: null };
+    const { container: c } = page();
+    await ready(c);
+    drawZone(c, "nogo", 3);
+    fireEvent.submit(document.querySelector(".modal form")!);
+    await saveAll(c);
+    await waitFor(() => expect(posted.find((p) => p.url === "/api/maps/home/4/zones")).toBeTruthy());
+    expect(posted.find((p) => p.url.endsWith("/edit"))!.body.ops).toEqual([]);
+    expect(posted.find((p) => p.url === "/api/maps/home/4/zones")!.body.base_revision).toBe(7);
+    expect(posted.some((p) => p.url === "/api/maps/home/3/zones")).toBe(false);
+    expect(location.hash).toContain("version=4&from=3");
+  });
+
+  it("草稿上又擦又画禁行区:保存一次 —— 换成新草稿,禁行区存到新草稿上(用它的修订号);说清楚替换了哪份", async () => {
+    editBody = { version: "4", from: "2", erased_m2: 1, replaced: "3", draft: true };
     const { container: c } = page();
     await ready(c);
     fireEvent.click(c.querySelector('[data-tool="erase"]')!);
@@ -326,18 +387,14 @@ describe("编辑器里画禁行区(11-10)", () => {
     fireEvent.click(btn(c, "完成绘制"));
     drawZone(c, "wall", 2);
     fireEvent.submit(document.querySelector(".modal form")!);
-    fireEvent.click(c.querySelector(".me-save")!);
-    const text = document.querySelector(".modal")!.textContent!;
-    expect(text).toContain("另存为新版本");
-    expect(text).toContain("1 处改动");
-    fireEvent.click(btn(document.querySelector(".modal")!, "另存为新版本"));
+    await saveAll(c);
     await waitFor(() => expect(posted.find((p) => p.url === "/api/maps/home/4/zones")).toBeTruthy());
     const order = posted.map((p) => p.url);
     expect(order.indexOf("/api/admin/maps/home/3/edit")).toBeLessThan(order.indexOf("/api/maps/home/4/zones"));
     const b = posted.find((p) => p.url === "/api/maps/home/4/zones")!.body;
     expect(b.base_revision).toBe(7);
     expect((b.zones as { kind: string; wall?: unknown }[])[0]).toMatchObject({ kind: "nogo", wall: [[4, 7], [4, 7]] });
-    await waitFor(() => expect(said.join(" ")).toContain("替换了还没发布的第 3 版"));
+    await waitFor(() => expect(said.join(" ")).toContain("替换了草稿 v3"));
     expect(location.hash).toContain("version=4&from=2");
   });
 
@@ -391,8 +448,14 @@ describe("编辑器里画禁行区(11-10)", () => {
     expect(body.zones.map((z) => [z.id, z.label])).toEqual([["n2", "后花园"]]);
   });
 
-  it("禁行区的状态和「确认此版本」在编辑器里;有没存的改动时不给确认", async () => {
+  it("禁行区的状态和「确认此版本」在编辑器里;有没存的改动时不给确认;草稿上不单独确认(发布时确认)", async () => {
     zones = { ...zones, zones: [POOL], confirmed: null };
+    const d = page();
+    await ready(d.container);
+    expect(d.container.querySelector("[data-nogo-draft]")).not.toBeNull();
+    expect(btn(d.container, "确认此版本")).toBeUndefined();
+    cleanup();
+    draftState = { draft: false, from: null };
     const { container: c } = page();
     await ready(c);
     expect(c.querySelector(".nogo-status")!.textContent).toContain("确认");

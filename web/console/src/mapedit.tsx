@@ -9,11 +9,12 @@ import { useUnsaved } from "./unsaved";
 import type { FunctionComponent } from "preact";
 import { useEffect, useRef, useState } from "preact/hooks";
 import { api, apiUpload, ApiError, enc } from "./api";
-import { Confirm } from "./dialogs";
+import { ConfirmPassword } from "./confirmpw";
 import { t, type Key } from "./i18n";
 import { type Draw, NogoForm, nogoLine, NogoStatus, newZone, RenameNogo, zoneLegend, zoneName, zoneShape } from "./layoutnogo";
 import { closesLoop, type NavZones, polyPx, toMap, type OwnLayer } from "./layoutpage";
 import { MapCanvas } from "./mapcanvas";
+import { DiffDialog } from "./mapmgmt";
 import { apply, closedLoop, type Display, type GridOp, type History, newTerrain, redo, screenRect, start, summary, type TerrainKind, undo, type ZoneDraft } from "./mapeditops";
 import { pointInPolygon, type PreviewMeta, type Pt } from "./mapview";
 import { siteKnown } from "./sitetext";
@@ -93,7 +94,11 @@ function Editor({ say, target, Canvas }: { say: Say; target: Target; Canvas?: Fu
   const [kind, setKind] = useState<TerrainKind>("stairs");
   const [name, setName] = useState("");
   const [file, setFile] = useState<File | null>(null);
-  const [asking, setAsking] = useState(false);
+  // 11-10:这一版是不是草稿(草稿:预览、再改、发布到站点;正式版本:保存就另存成草稿)
+  const [drafted, setDrafted] = useState<{ draft: boolean; from: string | null } | null>(null);
+  const [preview, setPreview] = useState(false);
+  const [releasing, setReleasing] = useState(false);
+  const [diffing, setDiffing] = useState(false);
   const [stale, setStale] = useState(false);
   const [busy, setBusy] = useState(false);
   const [bmSize, setBmSize] = useState<[number, number] | null>(null);
@@ -106,8 +111,12 @@ function Editor({ say, target, Canvas }: { say: Say; target: Target; Canvas?: Fu
     api<PreviewMeta>("GET", `${base}/preview`).then(ok(setMeta)).catch(bad);
     api<{ digest: string }>("GET", `${adm}/noise`).then(ok((d) => setDigest(d.digest || ""))).catch(bad);
     // 显示设置、禁行区都读到了才有历史(哪样读不出来都不能存:存了会把那一样抹掉)
-    Promise.all([api<Display>("GET", `${adm}/display`), api<NavZones>("GET", `${base}/zones`)])
-      .then(ok(([d, n]: [Display, NavZones]) => { setNav(n); setLoadedZones(n.zones ?? []); setHist(start({ ...EMPTY, ...d }, n.zones ?? [])); }))
+    Promise.all([api<Display>("GET", `${adm}/display`), api<NavZones>("GET", `${base}/zones`),
+      api<{ draft?: boolean; from?: string | null }>("GET", `${adm}/draft`)])
+      .then(ok(([d, n, dr]: [Display, NavZones, { draft?: boolean; from?: string | null }]) => {
+        setNav(n); setLoadedZones(n.zones ?? []); setHist(start({ ...EMPTY, ...d }, n.zones ?? []));
+        setDrafted({ draft: !!dr?.draft, from: dr?.from ?? null });
+      }))
       .catch(bad);
     return () => { alive.current = false; };
   }, []);
@@ -127,7 +136,9 @@ function Editor({ say, target, Canvas }: { say: Say; target: Target; Canvas?: Fu
     img.src = `${adm}/basemap?f=${enc(bmFile)}`;
   }, [bmFile, adm]);
 
-  const ready = !!meta && !!digest && !!hist && !!nav && !loadErr;
+  const ready = !!meta && !!digest && !!hist && !!nav && !!drafted && !loadErr;
+  const isDraft = !!drafted?.draft;
+  const origin = drafted?.from ?? target.from ?? target.version;
   const now = hist?.now;
   const dirty = !!hist && hist.past.length > 0;
   useUnsaved("mapedit", dirty);
@@ -178,13 +189,13 @@ function Editor({ say, target, Canvas }: { say: Say; target: Target; Canvas?: Fu
 
   async function save() {
     if (!hist || !ready) return;
-    setAsking(false);
     setBusy(true);
     try {
       let version = target.version;
-      let from = target.from;
+      let from = origin;
       let got: { erased_m2?: number; obstacle_m2?: number; replaced?: string } = {};
-      if (hist.now.ops.length) {
+      // 11-10:保存都是草稿 —— 正式版本先另存成草稿(只改禁行区、显示也一样,ops 空);草稿有擦改才换新的
+      if (!isDraft || hist.now.ops.length) {
         const r = await api<{ version: string; from?: string; erased_m2?: number; obstacle_m2?: number; replaced?: string }>("POST", `${adm}/edit`, { digest, ops: hist.now.ops });
         version = r.version;
         from = r.from ?? target.version;
@@ -206,9 +217,10 @@ function Editor({ say, target, Canvas }: { say: Say; target: Target; Canvas?: Fu
       // 等回包的时候换了图:人确认过的这一次照样存完(显示设置跟着它的新版本),只是不跳、不碰新的那个
       await api("POST", `${vb}/display`, display);
       // 第 2 轮 P1-55:报站点实际改了的面积(原来就是空地的不算),跟版本备注一致
-      say(version === target.version ? t("saved")
+      say(version === target.version ? t("meDraftSaved", { v: version })
         : got.replaced ? t("meReplaced", { v: version, old: got.replaced })
-        : got.erased_m2 != null ? t("meSavedAsArea", { v: version, e: got.erased_m2, o: got.obstacle_m2 ?? 0 }) : t("meSavedAs", { v: version }));
+        : got.erased_m2 ? t("meDraftNewArea", { v: version, from: from ?? target.version, e: got.erased_m2, o: got.obstacle_m2 ?? 0 })
+        : t("meDraftNew", { v: version, from: from ?? target.version }));
       // 存好了就不算没存(P0-12 的离开提醒不该再问);另存出新版本就跳过去(P1-55)
       if (alive.current) setHist(start(display, hist.now.zones));
       if (alive.current && version === target.version) await reloadNav().catch(() => {});
@@ -220,6 +232,14 @@ function Editor({ say, target, Canvas }: { say: Say; target: Target; Canvas?: Fu
     } finally {
       if (alive.current) setBusy(false);
     }
+  }
+
+  async function release(pw: string) {
+    const r = await api<{ version: string }>("POST", `${adm}/release`, { confirm_password: pw });
+    if (!alive.current) return;
+    setReleasing(false);
+    say(t("meReleased", { v: r.version ?? target.version }));
+    location.hash = "#/admin/maps";
   }
 
   async function upload(f: File) {
@@ -263,19 +283,36 @@ function Editor({ say, target, Canvas }: { say: Say; target: Target; Canvas?: Fu
         <a class="btn push" href="#/admin/maps">{t("meBack")}</a>
         <button type="button" class="btn" disabled={!hist?.past.length} onClick={() => setHist((h) => (h ? undo(h) : h))}>{t("meUndo")}</button>
         <button type="button" class="btn" disabled={!hist?.future.length} onClick={() => setHist((h) => (h ? redo(h) : h))}>{t("meRedo")}</button>
-        <button type="button" class="btn primary me-save" disabled={!dirty || busy || !ready} onClick={() => setAsking(true)}>{now?.ops.length ? t("meSaveNew") : t("save")}</button>
+        <button type="button" class="btn primary me-save" disabled={!dirty || busy || !ready || preview} onClick={() => void save()}>{t("meSaveDraft")}</button>
       </div>
       <p class="muted small">{t("meExplain")}</p>
-      {/* 第 2 轮 P1-55:另存出来的新版本还没用上 —— 给「去发布」入口 */}
-      {target.from && <p class="me-newver small" data-publish-link="1">{t("meNewVersion", { v: target.version, from: target.from })}{" "}
-        <a href="#/admin/maps">{t("meGoPublish")}</a></p>}
+      {/* 11-10 用户:保存只是草稿;预览、再改;都确认后发布(二次确认)到站点,之后才下发到机器人 */}
+      {drafted && (isDraft
+        ? <div class="me-draft row wrap" data-draft="1">
+            <span class="small">{t("meDraftBanner", { v: target.version, from: origin })}</span>
+            <span class="row wrap push">
+              <button type="button" class="btn sm" data-preview="1" disabled={dirty} title={dirty ? t("meSaveFirst") : undefined}
+                onClick={() => { setPreview((p) => !p); setTool(null); setPts([]); setSel(null); }}>{preview ? t("meKeepEditing") : t("mePreview")}</button>
+              <button type="button" class="btn sm" data-compare="1" onClick={() => setDiffing(true)}>{t("meCompare", { from: origin })}</button>
+              <button type="button" class="btn sm primary" data-release="1" disabled={dirty || busy} title={dirty ? t("meSaveFirst") : undefined}
+                onClick={() => setReleasing(true)}>{t("mePublishBtn")}</button>
+            </span>
+          </div>
+        : <p class="muted small" data-published="1">{t("meEditPublished")}</p>)}
+      {preview && <p class="me-preview-hint small" data-preview-hint="1">{t("mePreviewHint")}</p>}
+      {dirty && (sum.erased > 0 || sum.obstacle > 0 || zoneDiff > 0 || displayDirty) && (
+        <p class="warn-text small" data-unsaved="1">{t("meUnsaved", { what: [
+          ...(now?.ops.length ? [t("mePartGrid", { e: sum.erased, o: sum.obstacle })] : []),
+          ...(zoneDiff ? [t("mePartZones", { n: zoneDiff })] : []),
+          ...(displayDirty ? [t("mePartDisplay")] : [])].join(" · ") })}</p>
+      )}
       {stale && <div class="ly-conflict" role="alert">{t("meStale")}</div>}
       {loadErr && <div class="ly-conflict me-loaderr" role="alert">{t("meLoadErr")}</div>}
       <div class="ly-tab">
-        <div class={result ? "me-canvas result" : "me-canvas"}>
+        <div class={result || preview ? "me-canvas result" : "me-canvas"}>
           {Map({
-            drawing: need > 0,
-            onPick: pick,
+            drawing: !preview && need > 0,
+            onPick: preview ? undefined : pick,
             legend: zoneLegend(zonesNow),
             marks: (sc) => <>
               {zonesNow.map((z) => zoneName(sc, z))}
@@ -316,8 +353,8 @@ function Editor({ say, target, Canvas }: { say: Say; target: Target; Canvas?: Fu
         </div>
         <div class="ly-side">
           {/* 11-10:禁行区的状态、确认此版本、带过来的建议 —— 跟布置那一页同一个 */}
-          {nav && <NogoStatus nav={nav} base={base} mapId={target.map_id} version={target.version} changed={dirty} say={say} reload={reloadNav} />}
-          <div class="me-tools" role="toolbar" aria-label={t("meTools")}>
+          {nav && <NogoStatus nav={nav} base={base} mapId={target.map_id} version={target.version} changed={dirty} say={say} reload={reloadNav} draft={isDraft} />}
+          {!preview && <div class="me-tools" role="toolbar" aria-label={t("meTools")}>
             {GROUPS.map(([g, ks]) => (
               <div key={g} class="me-group" data-group={g}>
                 <p class="small muted">{t(g)}</p>
@@ -328,7 +365,7 @@ function Editor({ say, target, Canvas }: { say: Say; target: Target; Canvas?: Fu
                 </div>
               </div>
             ))}
-          </div>
+          </div>}
           {grid && (
             <>
               <div class="seg" role="group" aria-label={t("meShape")}>
@@ -421,13 +458,11 @@ function Editor({ say, target, Canvas }: { say: Say; target: Target; Canvas?: Fu
           )}
         </div>
       </div>
-      {asking && (
-        <Confirm text={[t("meConfirmAll"),
-          ...(now?.ops.length ? [t("mePartGrid", { e: sum.erased, o: sum.obstacle })] : []),
-          ...(zoneDiff ? [t("mePartZones", { n: zoneDiff })] : []),
-          ...(displayDirty ? [t("mePartDisplay")] : [])].join(" · ")}
-          yes={now?.ops.length ? t("meSaveNew") : t("save")} onNo={() => setAsking(false)} onYes={() => void save()} />
+      {releasing && (
+        <ConfirmPassword title={t("meReleaseTitle", { v: target.version })} text={t("meReleaseText", { v: target.version, from: origin })}
+          onConfirm={release} onClose={() => setReleasing(false)} />
       )}
+      {diffing && <DiffDialog target={{ map_id: target.map_id, a: origin, b: target.version, derived: true }} onClose={() => setDiffing(false)} />}
       {form && isZone(tool) && (
         <NogoForm kind={ZONE_DRAW[tool]} taken={zonesNow.map((z) => z.label.trim())} onClose={() => setForm(false)} onSave={(f) => {
           const draw = ZONE_DRAW[tool];
