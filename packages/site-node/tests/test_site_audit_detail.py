@@ -128,7 +128,8 @@ def _raw(s, method, path, body, headers):
 
 
 def test_11_11_W6_06_来源按会话是哪种程序登的_网页_App_脚本(tmp_path):
-    """liang-d5 第 6 轮 W6-06:浏览器登录记成了 App、curl 记成了网页 —— 原来按「这次带没带 cookie」猜。
+    """liang-d5 第 6 轮 W6-06:浏览器登录记成了 App、curl 记成了网页 ——
+    原来按「这次带没带 cookie」猜。
     改成看这次会话登录时是哪种程序:网页登录(web:true)= 网页;App 报了 client.kind=app = App;
     什么都没报的令牌 = 脚本 / 接口。"""
     from nexwar_site.webui import CSRF_HEADER

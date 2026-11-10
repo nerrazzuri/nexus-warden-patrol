@@ -75,20 +75,27 @@ FAIL_CODES: dict[str, FailCode] = {
     "sensor_lost": FailCode(
         "雷达或障碍数据断了",
         "Lidar or obstacle data lost",
-        "看一下机器人头上的雷达有没有被挡住、在不在转;还不行就在「诊断」页重启这台机器人",
-        "Check that the lidar on the robot's head is not covered and is spinning; if that does not help, restart the robot on the Diagnostics page",
+        "看一下机器人头上的雷达有没有被挡住、在不在转;"
+        "还不行就在「诊断」页重启这台机器人",
+        "Check that the lidar on the robot's head is not covered and is spinning; "
+        "if that does not help, restart the robot on the Diagnostics page",
     ),
     "robot_not_ready": FailCode(
-        "机器人现在不听自动行走的命令:急停按着、有人在遥控、有故障,或还没站好",
-        "Robot is not taking automatic driving commands: e-stop pressed, someone is driving it, a fault, or it is not standing yet",
+        "机器人现在不听自动行走的命令:"
+        "急停按着、有人在遥控、有故障,或还没站好",
+        "Robot is not taking automatic driving commands: e-stop pressed, "
+        "someone is driving it, a fault, or it is not standing yet",
         "松开急停、退出遥控、让机器人站起来,再派一次;有故障先看机器人页",
-        "Release the e-stop, leave remote control, make the robot stand up, then dispatch again; for a fault, see the Robots page",
+        "Release the e-stop, leave remote control, make the robot stand up, "
+        "then dispatch again; for a fault, see the Robots page",
     ),
     "nav_unavailable": FailCode(
         "机器人的自动行走功能没准备好或中途停了",
         "The robot's self-driving is not ready or stopped",
-        "等一两分钟再派;还不行就在「诊断」页重启这台机器人,反复出现请在 App 里提交问题单",
-        "Wait a minute or two and dispatch again; if not, restart the robot on the Diagnostics page, and send a problem report from the App if it repeats",
+        "等一两分钟再派;还不行就在「诊断」页重启这台机器人,"
+        "反复出现请在 App 里提交问题单",
+        "Wait a minute or two and dispatch again; if not, restart the robot on the "
+        "Diagnostics page, and send a problem report from the App if it repeats",
     ),
     "nav2_plan_failed": FailCode(
         "自动行走失败,具体原因没分出来",

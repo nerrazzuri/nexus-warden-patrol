@@ -170,7 +170,8 @@ def test_V1_整趟失败带原因码_报警附上该做什么(台):
                           reason="2 个航点未到达(p1, p2):定位不可信",
                           code="localization_unreliable"))
     [a] = [x for x in _all(desk) if x.resolved_ms is None]
-    assert a.kind == "run_abort" and "定位不可信" in a.detail and "「定位」页重新标" in a.detail, a.detail
+    assert a.kind == "run_abort" and "定位不可信" in a.detail, a.detail
+    assert "「定位」页重新标" in a.detail, a.detail
     assert a.context.get("code") == "localization_unreliable"
 
 
