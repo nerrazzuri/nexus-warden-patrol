@@ -1973,3 +1973,23 @@ async def test_外审POC_r3_C2_车尾贴着或压着禁行区_不许再往里退
     here = await t.nav._here()
     await t.nav._back_step(here, 0.1)
     assert sent and sent[-1] == (0.0, 0.0), sent
+
+
+async def test_外审POC_r4_离禁行区已经不到3厘米_脱困一点都不许再靠近(tmp_path, monkeypatch):
+    """codex POC r4 #1:阈值是 min(3 cm, 起点 − 1 cm),贴着的还能再靠近不到 1 cm(25 → 21 mm)。"""
+    from test_planned_nav import _区
+
+    from nexwar_agent import zone_guard as zg
+    t, sent = await _脱困台(tmp_path, 5.0, 4.0, 0.02, monkeypatch)
+    here = await t.nav._here()
+    rect = zg.footprint(here.x, here.y, here.yaw)
+    y_low = min(p[1] for p in rect)
+    await t.nav.set_zones(_区({"id": "pool", "kind": "nogo",                 # 右边贴着 25 mm
+                               "polygon": [[3.5, 3.0], [5.5, 3.0], [5.5, y_low - 0.025],
+                                           [3.5, y_low - 0.025]]}))
+    [z] = t.nav._closed
+    c0 = zg.clearance((here.x, here.y, here.yaw), z, 0.03)
+    assert 0.015 < c0 < 0.03, c0
+    walls = await t.nav._route_walls()
+    assert not t.nav._sweep_ok(here, -0.2, 0.0, walls), "倒退会往右边禁行区靠"
+    assert t.nav._sweep_ok(here, 0.2, 0.0, walls), "往前是离开"
