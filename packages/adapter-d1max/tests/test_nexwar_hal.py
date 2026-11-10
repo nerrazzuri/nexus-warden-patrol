@@ -691,6 +691,15 @@ async def test_外审POC_C1_上装急停_本地锁住_后面的速度一律拒_�
         assert await _等(lambda: _有(sim, "halt")), "当场停"
         hal._payload.on_button("sos")                   # 别的按钮不解锁
         assert (await hal.set_velocity(_v(vx=0.36))).rejected
-        await hal.payload_estop_release()
+        assert hal.payload_estop_state() == (True, 1)
+        hal._payload.on_button("estop")                 # 锁着再按:还是这一次
+        assert hal.payload_estop_state() == (True, 1)
+        assert not await hal.payload_estop_release(0), "代次不对不解"
+        assert await hal.payload_estop_release(1)
         assert not hal.payload_estop_latched()
         assert not (await hal.set_velocity(_v(vx=0.36))).rejected
+        # 外审 POC r2 #1:解过以后又按了一次,上一次的解锁命令重投不许解开这一次
+        hal._payload.on_button("estop")
+        assert hal.payload_estop_state() == (True, 2)
+        assert not await hal.payload_estop_release(1)
+        assert hal.payload_estop_latched()

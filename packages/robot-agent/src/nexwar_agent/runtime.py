@@ -1061,7 +1061,7 @@ class AgentRuntime:
         if self.parts is not None:
             out["speed_cap"] = self._speed_cap_caps()  # W29:全狗限速(站点下雨、雷暴时发)
         if self._payload_estop_ok():
-            out["estop_release"] = {}               # 外审 POC r1 C1:站点恢复时要发解锁
+            out["estop_release"] = self._estop_caps()  # 外审 POC C1:站点恢复时带代次发解锁
         if self.hal.hal_capabilities().recharge_mode != "none":
             out["dock"] = self._dock_caps()         # W13:会对桩;在不在桩上、桩上危险
         if self.evidence_sealed is not None:
@@ -1163,14 +1163,24 @@ class AgentRuntime:
             log.error("上装急停:没在事件循环里,任务没中止(HAL 的锁照样拦着速度)")
 
     async def _on_estop_release(self, cmd: Command) -> str:
-        """站点「恢复」:人确认现场安全了,解开上装急停的本地锁。机器人不会自己动,等再派。"""
+        """站点「恢复」:人确认现场安全了,解开上装急停的本地锁。机器人不会自己动,等再派。
+        要带 ``gen``(这一次锁上的代次,能力里报的):解过以后又按过,旧命令解不开(外审 POC r2 #1)。"""
+        gen = cmd.payload.get("gen") if isinstance(cmd.payload, dict) else None
+        if not isinstance(gen, int) or isinstance(gen, bool):
+            return "payload: 要带 gen(这一次急停的代次)"
         try:
-            await self.hal.payload_estop_release()
+            ok = await self.hal.payload_estop_release(gen)
         except Exception as exc:  # noqa: BLE001 - 解不开:原因带回去
             log.warning("上装急停解锁没成:%s", exc)
             return f"failed: {exc}"
-        log.info("上装急停解锁(%s)", cmd.command_id)
+        if not ok:
+            return "stale_estop: 急停之后又按过,请重新确认现场再点恢复"
+        log.info("上装急停解锁(%s,第 %d 次)", cmd.command_id, gen)
         return ""
+
+    def _estop_caps(self) -> dict[str, Any]:
+        latched, gen = self.hal.payload_estop_state()
+        return {"latched": bool(latched), "gen": int(gen)}
 
     def _on_speed_cap(self, cmd: Command) -> str:
         """全狗限速(W29):记下、马上用上。``null`` 取消。"""
@@ -3130,6 +3140,12 @@ class AgentRuntime:
             dt = (self._on_dock, self._dock_hazard)
             if dt != self._dock_told:
                 self._dock_told = dt
+                if self.transport.connected:
+                    await self._publish_caps()
+        if self._payload_estop_ok():
+            es = self._estop_caps()              # 外审 POC r2 #1:锁上、解开都马上告诉站点
+            if es != getattr(self, "_estop_told", None):
+                self._estop_told = es
                 if self.transport.connected:
                     await self._publish_caps()
         if self.parts is not None:

@@ -248,12 +248,12 @@ class CommandProcessor:
             return self._rej(cmd, why) if why else Ack(cmd.command_id, cmd.task_id,
                                                          AckResult.ACCEPTED)
         if cmd.kind == "estop_release":
-            # **不进幂等记录**:重投的旧命令至多再解一次锁 —— 只在人点了恢复之后发,方向已经确认过
+            # 进幂等记录(外审 POC r2 #1:重投的同一条回 duplicate,不再解一次);再加代次核对
             if self.estop_release_hook is None:
-                return self._rej(cmd, "unsupported")
+                return self._finish(self._rej(cmd, "unsupported"))
             why = await self.estop_release_hook(cmd)
-            return self._rej(cmd, why) if why else Ack(cmd.command_id, cmd.task_id,
-                                                         AckResult.ACCEPTED)
+            return self._finish(self._rej(cmd, why) if why else Ack(
+                cmd.command_id, cmd.task_id, AckResult.ACCEPTED))
         if cmd.kind == "posture":
             return self._finish(await self._posture(cmd))
         if cmd.kind in MAP_KINDS:

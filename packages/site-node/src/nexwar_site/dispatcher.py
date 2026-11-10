@@ -443,10 +443,15 @@ class Dispatcher:
                              (robot_id,))
         return dict(rows[0]) if rows else None
 
-    def resume(self, robot_id: str, *, by: str) -> bool:
-        """解除叫停。返回之前是不是真的停着。"""
+    def resume(self, robot_id: str, *, by: str, not_after_ms: int | None = None) -> bool:
+        """解除叫停。返回之前是不是真的停着。``not_after_ms``:只解这一刻以前的叫停(外审 POC r2 #5:
+        等机器人解锁那几秒里又按了急停、站点又叫停了一次,那一次不能顺手解掉)。"""
         with self.db.tx() as tx:
-            n = tx.execute("DELETE FROM robot_holds WHERE robot_id=?", (robot_id,)).rowcount
+            if not_after_ms is None:
+                n = tx.execute("DELETE FROM robot_holds WHERE robot_id=?", (robot_id,)).rowcount
+            else:
+                n = tx.execute("DELETE FROM robot_holds WHERE robot_id=? AND at_ms<=?",
+                               (robot_id, int(not_after_ms))).rowcount
         return n > 0
 
     def _hold(self, robot_id: str, *, by: str, reason: str) -> None:
@@ -1039,18 +1044,21 @@ class Dispatcher:
                                 issued_by=issued_by, task_id=f"halt-{uuid.uuid4().hex[:12]}",
                                 priority=TELEOP_PRIORITY)
 
-    def has_estop_release(self, robot_id: str) -> bool:
-        """这台有上装急停(本地锁,外审 POC r1 C1):站点「恢复」要连带发解锁。"""
+    def estop_latch(self, robot_id: str) -> dict[str, Any] | None:
+        """这台有上装急停(本地锁,外审 POC C1):机器人报的 ``{latched, gen}``;没有上装急停是 None。"""
         c = self.clients.get(robot_id)
-        return c is not None and c.capabilities is not None \
-            and "estop_release" in c.capabilities.tasks
+        if c is None or c.capabilities is None:
+            return None
+        got = c.capabilities.tasks.get("estop_release")
+        return got if isinstance(got, dict) else None
 
-    async def estop_release(self, robot_id: str, *, issued_by: str) -> dict[str, Any]:
-        """给机器人解开上装急停的本地锁(人在站点点了恢复之后才发)。"""
+    async def estop_release(self, robot_id: str, gen: int, *, issued_by: str) -> dict[str, Any]:
+        """给机器人解开第 ``gen`` 次上装急停的本地锁(人在站点点了恢复之后才发)。"""
         c = self._client_for(robot_id)
         if c.capabilities is None or "estop_release" not in c.capabilities.tasks:
             raise Unsupported(f"{robot_id} 没有上装急停")
-        return await self._send(c, robot_id, "estop_release", {}, issued_by=issued_by,
+        return await self._send(c, robot_id, "estop_release", {"gen": int(gen)},
+                                issued_by=issued_by,
                                 task_id=f"estop_release-{uuid.uuid4().hex[:12]}",
                                 priority=TELEOP_PRIORITY)
 

@@ -415,23 +415,26 @@ class _带急停按钮的狗(SimRobot):
     def __init__(self, *a, **kw):
         super().__init__(*a, **kw)
         self.button = None
-        self.latched = False
+        self.latched, self.gen = False, 0
 
     def set_button_listener(self, fn):
         def on(name):
-            if name == "estop":
-                self.latched = True
+            if name == "estop" and not self.latched:
+                self.latched, self.gen = True, self.gen + 1
             fn(name)
         self.button = on
 
     def payload_estop_supported(self):
         return True
 
-    def payload_estop_latched(self):
-        return self.latched
+    def payload_estop_state(self):
+        return self.latched, self.gen
 
-    async def payload_estop_release(self):
+    async def payload_estop_release(self, gen):
+        if gen != self.gen:
+            return False
         self.latched = False
+        return True
 
 
 async def _急停台(tmp_path):
@@ -452,7 +455,7 @@ async def _急停台(tmp_path):
 
 async def test_外审POC_C1_上装急停_代理当场中止任务_不等站点叫停(tmp_path):
     broker, c, ears, dog, rt = await _急停台(tmp_path)
-    assert ears.by["capabilities"][-1]["tasks"]["estop_release"] == {}
+    assert ears.by["capabilities"][-1]["tasks"]["estop_release"] == {"latched": False, "gen": 0}
     await rt._on_cmd(_cmd("goto", {"target": MapPose(map_id="m", map_version="1", frame_id="map",
                                                      x=3.0, y=0.0, yaw=0.0).to_wire()}, "g1", c))
     await _跑(rt, broker, n=5, r=dog, c=c)
@@ -470,11 +473,26 @@ async def test_外审POC_C1_站点恢复发解锁命令_代理解开上装急停
     broker, c, ears, dog, rt = await _急停台(tmp_path)
     dog.button("estop")
     await _跑(rt, broker, n=5, r=dog, c=c)
-    await rt._on_cmd(_cmd("estop_release", {}, "r1", c))
+    assert ears.by["capabilities"][-1]["tasks"]["estop_release"] == {"latched": True, "gen": 1}, \
+        "锁上了要马上告诉站点(站点恢复时带上这一次的代次)"
+    await rt._on_cmd(_cmd("estop_release", {"gen": 1}, "r1", c))
     await broker.drain()
     ack = ears.by["cmd/ack"][-1]
     assert ack["result"] == "accepted", ack
     assert not dog.latched
+    # 外审 POC r2 #1:又按了一次;上一条解锁命令重投(同一个号)、或者带旧代次的,都解不开
+    dog.button("estop")
+    await _跑(rt, broker, n=5, r=dog, c=c)
+    await rt._on_cmd(_cmd("estop_release", {"gen": 1}, "r1", c))
+    await broker.drain()
+    assert ears.by["cmd/ack"][-1]["result"] == "duplicate" and dog.latched
+    await rt._on_cmd(_cmd("estop_release", {"gen": 1}, "r2", c))
+    await broker.drain()
+    ack = ears.by["cmd/ack"][-1]
+    assert ack["result"] == "rejected" and dog.latched, ack
+    await rt._on_cmd(_cmd("estop_release", {}, "r3", c))
+    await broker.drain()
+    assert ears.by["cmd/ack"][-1]["result"] == "rejected" and dog.latched, "不带代次的不认"
     await rt.close()
 
 

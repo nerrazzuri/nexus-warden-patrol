@@ -164,6 +164,8 @@ class D1MaxHal:
         self._vel_until: float | None = None
         #: 外审 POC r1 C1:上装急停按钮按过、还没在站点恢复(本地锁,按急停算)
         self._payload_estop = False
+        #: 第几次锁上(外审 POC r2 #1):解锁命令要带上这一次的代次,旧命令重投解不开后来的急停
+        self._payload_estop_gen = 0
 
     def _sdk_caps(self) -> tuple[float, float]:
         """SDK 比例的(往前, 往后)上限。往前:自己配的 ``max_fraction`` 和旁路进程 ``--max-fraction``
@@ -556,7 +558,9 @@ class D1MaxHal:
                 # 外审 POC r1 C1:本地锁住 —— 之后的速度一律拒(按急停算),不靠站点那一圈、断网也锁着;
                 # 只有明确解除(站点「恢复」→ :meth:`payload_estop_release`)才放
                 if not self._payload_estop:
-                    log.warning("上装急停按钮按下:本地锁住运动,等人确认安全后恢复")
+                    self._payload_estop_gen += 1
+                    log.warning("上装急停按钮按下:本地锁住运动(第 %d 次),等人确认安全后恢复",
+                                self._payload_estop_gen)
                 self._payload_estop = True
                 self._vel_until = None
                 with contextlib.suppress(RuntimeError):
@@ -571,11 +575,21 @@ class D1MaxHal:
     def payload_estop_latched(self) -> bool:
         return self._payload_estop
 
-    async def payload_estop_release(self) -> None:
-        """人确认现场安全、在站点点了恢复:解开上装急停的本地锁(机器人自己不会动,等再派)。"""
+    def payload_estop_state(self) -> tuple[bool, int]:
+        """``(锁着没有, 第几次锁上)``:代理报给站点,站点恢复时带上代次。"""
+        return self._payload_estop, self._payload_estop_gen
+
+    async def payload_estop_release(self, gen: int) -> bool:
+        """人确认现场安全、在站点点了恢复:解开第 ``gen`` 次锁上的那把锁(机器人自己不会动,等再派)。
+        代次不是现在这一次(解过以后又按过)→ 不解、回 False。"""
+        if gen != self._payload_estop_gen:
+            log.warning("上装急停解锁带的代次 %s 不是现在这一次(%d):不解", gen,
+                        self._payload_estop_gen)
+            return False
         if self._payload_estop:
-            log.warning("上装急停的本地锁解开(站点恢复)")
+            log.warning("上装急停的本地锁解开(第 %d 次,站点恢复)", gen)
         self._payload_estop = False
+        return True
 
     def sound_tts(self) -> bool:
         return self._payload is not None and bool(self._payload.cfg.tts_command)

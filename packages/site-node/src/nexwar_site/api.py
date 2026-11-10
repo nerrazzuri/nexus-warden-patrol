@@ -3065,19 +3065,29 @@ class _Handler(TlsHandlerMixin):
         if self.site.dispatcher.registry.get(robot_id) is None:
             raise HttpError(404, "机器人不存在")
         disp = self.site.dispatcher
-        was = disp.resume(robot_id, by=str(user))
-        # 外审 POC r1 C1:上装急停在机器人本地锁着 —— 恢复连带发解锁;没解开(不在线、没回)回 False,
-        # 机器人照旧锁着(偏安全),再点一次恢复;没有上装急停的是 None
+        # 外审 POC C1:上装急停在机器人本地锁着 —— 先让机器人解开(带它报的这一次的代次),解开了才
+        # 撤叫停;没解开回 502、叫停照旧留着,恢复按钮还在(外审 POC r2 #5)。没有上装急停的是 None
+        t0 = disp._now()
         released: bool | None = None
-        if disp.has_estop_release(robot_id):
+        latch = disp.estop_latch(robot_id)
+        if latch is not None and latch.get("latched"):
+            why = ""
             try:
-                r = self.site.loop.call(lambda: disp.estop_release(robot_id, issued_by=str(user)),
+                gen = int(latch.get("gen", 0))
+                r = self.site.loop.call(lambda: disp.estop_release(robot_id, gen,
+                                                                   issued_by=str(user)),
                                         timeout_s=disp.ack_timeout_s + 5)
                 ack = r.get("ack") if isinstance(r, dict) else None
-                released = isinstance(ack, dict) and ack.get("result") == "accepted"
-            except Exception:                              # 没解开:照实说
+                if not (isinstance(ack, dict) and ack.get("result") == "accepted"):
+                    why = str(ack.get("reason", "")) if isinstance(ack, dict) else "没回执"
+            except Exception as exc:                       # 没解开:照实说
                 log.warning("%s 恢复:上装急停解锁没成", robot_id, exc_info=True)
-                released = False
+                why = str(exc) or type(exc).__name__
+            if why:
+                raise HttpError(502, f"机器人没解开上装急停的锁({why[:120]}):叫停照旧保留,"
+                                     "确认机器人在线、现场安全后再点恢复")
+            released = True
+        was = disp.resume(robot_id, by=str(user), not_after_ms=t0)
         return self._send_json(200, {"robot_id": robot_id, "was_held": was,
                                      "estop_released": released})
 
