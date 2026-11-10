@@ -3070,20 +3070,29 @@ class _Handler(TlsHandlerMixin):
         t0 = disp._now()
         released: bool | None = None
         latch = disp.estop_latch(robot_id)
-        if latch is not None and latch.get("latched"):
-            why = ""
+        # 外审 POC r3 #4:不凭站点手里的「没锁」跳过 —— 有上装急停就总问机器人解锁
+        # (没锁的它当场回成功)
+        if latch is not None:
+            ok, why = False, ""
             try:
                 gen = int(latch.get("gen", 0))
                 r = self.site.loop.call(lambda: disp.estop_release(robot_id, gen,
                                                                    issued_by=str(user)),
                                         timeout_s=disp.ack_timeout_s + 5)
                 ack = r.get("ack") if isinstance(r, dict) else None
-                if not (isinstance(ack, dict) and ack.get("result") == "accepted"):
-                    why = str(ack.get("reason", "")) if isinstance(ack, dict) else "没回执"
+                # 外审 POC r3 #3:只认明确成功(重复的看原来那条);过期、拒绝、没原因的都是没解开
+                if isinstance(ack, dict) and ack.get("result") == "duplicate":
+                    orig = ack.get("original")
+                    ok = isinstance(orig, dict) and orig.get("result") == "accepted"
+                else:
+                    ok = isinstance(ack, dict) and ack.get("result") == "accepted"
+                if not ok:
+                    why = (str(ack.get("reason") or ack.get("result") or "")
+                           if isinstance(ack, dict) else "") or "没回执"
             except Exception as exc:                       # 没解开:照实说
                 log.warning("%s 恢复:上装急停解锁没成", robot_id, exc_info=True)
                 why = str(exc) or type(exc).__name__
-            if why:
+            if not ok:
                 raise HttpError(502, f"机器人没解开上装急停的锁({why[:120]}):叫停照旧保留,"
                                      "确认机器人在线、现场安全后再点恢复")
             released = True

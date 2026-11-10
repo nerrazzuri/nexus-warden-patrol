@@ -762,3 +762,48 @@ def test_外审POC_C1_没有上装急停的机器人_恢复不发解锁(站点):
     _等(lambda: s.req("GET", "/api/robots/A", token=alice)[1].get("fresh"))
     code, d = s.req("POST", "/api/robots/A/resume", {}, token=alice)
     assert code == 200 and d["estop_released"] is None, d
+
+
+@pytest.mark.parametrize("ack", [{"result": "expired"},
+                                 {"result": "duplicate", "original": {"result": "rejected"}},
+                                 {"result": "rejected"}])
+def test_外审POC_r3_解锁回执不是成功_一律当没解开_叫停留着(tmp_path, monkeypatch, ack):
+    """codex POC r3 #3:回执不是 accepted、又没带原因(过期、重复)时,原来当成解开了。"""
+    from nexwar_adapter_sim.robot import SimRobot
+    monkeypatch.setattr(SimRobot, "payload_estop_supported", lambda self: True, raising=False)
+    monkeypatch.setattr(SimRobot, "payload_estop_state", lambda self: (True, 1), raising=False)
+    s = 站(tmp_path)
+    try:
+        alice = s.login()
+        _等(lambda: s.req("GET", "/api/robots/A", token=alice)[1].get("fresh"))
+        assert s.req("POST", "/api/robots/A/halt", {}, token=alice)[0] == 200
+
+        async def 假解(robot_id, gen, *, issued_by):
+            return {"ack": dict(ack)}
+        monkeypatch.setattr(s.disp, "estop_release", 假解)
+        code, d = s.req("POST", "/api/robots/A/resume", {}, token=alice)
+        assert code == 502, (code, d)
+        assert s.req("GET", "/api/robots/A", token=alice)[1]["held"] is not None
+    finally:
+        s.close()
+
+
+def test_外审POC_r3_站点记的是没锁_恢复照样先问机器人解锁(tmp_path, monkeypatch):
+    """codex POC r3 #4:只凭站点手里旧的「没锁」就撤叫停,机器人可能其实锁着。"""
+    from nexwar_adapter_sim.robot import SimRobot
+    sent: list = []
+
+    async def 解(self, gen):
+        sent.append(gen)
+        return True
+    monkeypatch.setattr(SimRobot, "payload_estop_supported", lambda self: True, raising=False)
+    monkeypatch.setattr(SimRobot, "payload_estop_state", lambda self: (False, 0), raising=False)
+    monkeypatch.setattr(SimRobot, "payload_estop_release", 解, raising=False)
+    s = 站(tmp_path)
+    try:
+        alice = s.login()
+        _等(lambda: s.req("GET", "/api/robots/A", token=alice)[1].get("fresh"))
+        code, d = s.req("POST", "/api/robots/A/resume", {}, token=alice)
+        assert code == 200 and d["estop_released"] is True and sent == [0], (code, d, sent)
+    finally:
+        s.close()

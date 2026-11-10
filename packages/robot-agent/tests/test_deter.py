@@ -419,7 +419,7 @@ class _带急停按钮的狗(SimRobot):
 
     def set_button_listener(self, fn):
         def on(name):
-            if name == "estop" and not self.latched:
+            if name == "estop":
                 self.latched, self.gen = True, self.gen + 1
             fn(name)
         self.button = on
@@ -503,4 +503,19 @@ async def test_外审POC_C1_没有上装急停的狗_不报能力_解锁命令�
     await broker.drain()
     ack = ears.by["cmd/ack"][-1]
     assert ack["result"] == "rejected" and ack["reason"] == "unsupported", ack
+    await rt.close()
+
+
+async def test_外审POC_r3_断网时按的急停_重连以后马上补报锁住了(tmp_path):
+    """codex POC r3 #4:断网期间能力变了,代理把「报过了」先记上,重连时没变化就不再发,
+    站点一直以为没锁。"""
+    broker, c, ears, dog, rt = await _急停台(tmp_path)
+    assert ears.by["capabilities"][-1]["tasks"]["estop_release"] == {"latched": False, "gen": 0}
+    broker.disconnect("dog")
+    await broker.drain()
+    dog.button("estop")
+    await _跑(rt, broker, n=5, r=dog, c=c)
+    await rt.transport.connect()
+    await _跑(rt, broker, n=5, r=dog, c=c)
+    assert ears.by["capabilities"][-1]["tasks"]["estop_release"] == {"latched": True, "gen": 1}
     await rt.close()

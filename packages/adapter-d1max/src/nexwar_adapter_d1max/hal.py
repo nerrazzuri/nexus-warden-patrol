@@ -557,10 +557,11 @@ class D1MaxHal:
             if name == "estop":
                 # 外审 POC r1 C1:本地锁住 —— 之后的速度一律拒(按急停算),不靠站点那一圈、断网也锁着;
                 # 只有明确解除(站点「恢复」→ :meth:`payload_estop_release`)才放
-                if not self._payload_estop:
-                    self._payload_estop_gen += 1
-                    log.warning("上装急停按钮按下:本地锁住运动(第 %d 次),等人确认安全后恢复",
-                                self._payload_estop_gen)
+                # 每按一次(上装那头已经去抖)都是新的一次,锁着再按也换代次(外审 POC r3 #1:
+                # 按之前发出、还没送到的恢复不许解开这一次)
+                self._payload_estop_gen += 1
+                log.warning("上装急停按钮按下:本地锁住运动(第 %d 次),等人确认安全后恢复",
+                            self._payload_estop_gen)
                 self._payload_estop = True
                 self._vel_until = None
                 with contextlib.suppress(RuntimeError):

@@ -2799,6 +2799,10 @@ class AgentRuntime:
                        task=self.processor.task_summary(), unacked_from_seq=lo, unacked_to_seq=hi)
         await self.transport.publish(self.topics.reconcile, _dumps(rc.to_wire()), qos=1)
         await self._flush_events()
+        if self._started and self._payload_estop_ok():
+            # 外审 POC r3 #4:断网时按过上装急停,重连马上补报能力(站点恢复要带这一次的代次)
+            await self._publish_caps()
+            self._estop_told = self._estop_caps()
         if self._started:
             if self.processor.current is not None:
                 await self.processor.current.on_online()
@@ -3144,10 +3148,10 @@ class AgentRuntime:
                     await self._publish_caps()
         if self._payload_estop_ok():
             es = self._estop_caps()              # 外审 POC r2 #1:锁上、解开都马上告诉站点
-            if es != getattr(self, "_estop_told", None):
+            # 发出去了才算报过(外审 POC r3 #4:断网时先记上「报过了」,重连后就不再发)
+            if es != getattr(self, "_estop_told", None) and self.transport.connected:
+                await self._publish_caps()
                 self._estop_told = es
-                if self.transport.connected:
-                    await self._publish_caps()
         if self.parts is not None:
             sc = self._apply_speed_cap()         # W29:全狗限速到点取消
             if sc != self._speed_cap_told:
