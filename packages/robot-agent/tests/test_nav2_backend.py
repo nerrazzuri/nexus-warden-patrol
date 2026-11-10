@@ -1630,6 +1630,43 @@ async def test_两种走法_紧急任务不做路线检查_直接交给Nav2_回�
     assert e.value.code == "route_too_narrow", "回到普通:照查"
 
 
+def _走廊路网():
+    from nexwar_contract.routenet import RouteNet
+    return RouteNet.from_wire({"map_id": "m", "map_version": "", "revision": 1,
+                               "nodes": [{"id": "A", "x": 1.5, "y": 4.0},
+                                         {"id": "B", "x": 5.0, "y": 4.0},
+                                         {"id": "C", "x": 9.0, "y": 4.0}],
+                               "edges": [["A", "B"], ["B", "C"]]})
+
+
+async def test_外审POC_I5_有路网的普通任务_照样查路线_查的是沿路网走的那条(tmp_path):
+    """codex POC r1 I5:有路网(途经点)时整段路线检查被跳过,0.10 m 底线没查。"""
+    from nexwar_patrol.backends.base import NavRequestError
+    link = 会规划的转接()
+    t = _台(tmp_path, link, walls=_窄走廊(0.7))
+    await t.start(1.5, 4.0)
+    link.here = (1.5, 4.0)
+    t.nav.set_route_net(_走廊路网())
+    with pytest.raises(NavRequestError) as e:
+        await t.nav.goto(Pose.from_xy_yaw(9.0, 4.0))
+    assert e.value.code == "route_too_narrow" and e.value.final, e.value
+    assert not link.kinds("goal"), "拒了就不交给 Nav2"
+    assert t.nav._status is NavStatus.STANDBY and not t.nav._planning
+    await t.nav.set_urgent(True)                           # 紧急:照旧不查
+    await t.nav.goto(Pose.from_xy_yaw(9.0, 4.0))
+    assert link.kinds("goal")[-1].get("via")
+
+
+async def test_外审POC_I5_有路网_走廊够宽_查过照常带途经点交给Nav2(tmp_path):
+    link = 会规划的转接()
+    t = _台(tmp_path, link, walls=_窄走廊(1.4))
+    await t.start(1.5, 4.0)
+    link.here = (1.5, 4.0)
+    t.nav.set_route_net(_走廊路网())
+    await t.nav.goto(Pose.from_xy_yaw(9.0, 4.0))
+    assert link.kinds("goal")[-1].get("via")
+
+
 async def test_V1_路线检查_走廊够宽_查过再交给Nav2(tmp_path):
     link = 会规划的转接()
     t = _台(tmp_path, link, walls=_窄走廊(1.4))
