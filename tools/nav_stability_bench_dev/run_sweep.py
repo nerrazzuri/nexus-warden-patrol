@@ -27,6 +27,15 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[1]
 PARAMS = ROOT / "deploy" / "nav2" / "params.yaml"
+BT = ROOT / "deploy" / "nav2" / "navigate_to_pose_d1max.xml"
+
+
+def _here(p) -> str:
+    """配置里写的相对路径:当前目录下有就用,没有按本目录算(params=params/params_rpp.yaml)。"""
+    p = Path(p)
+    if p.is_absolute() or p.exists():
+        return str(p.resolve())
+    return str(HERE / p)
 BAG_TOPICS = ["/odom", "/plan", "/scan", "/cmd_vel", "/cmd_vel_nav", "/nav_bench/actors"]
 LOG_PATTERNS = {
     "rec_backup": r"\[behavior_server\]: Running backup",
@@ -93,7 +102,8 @@ def run_one(job: dict, slot: int, args) -> dict:
         oracle = label(d)
     except Exception as e:                     # 标不出来不影响跑
         oracle = {"error": repr(e)[:200]}
-    launch_args = [f"world:={d / 'world.sdf'}", f"map:={d / 'map.yaml'}", f"params_file:={cfg.get('params', PARAMS)}",
+    launch_args = [f"world:={d / 'world.sdf'}", f"map:={d / 'map.yaml'}", f"params_file:={_here(cfg.get('params', PARAMS))}",
+                   f"bt_xml:={_here(cfg.get('bt', BT))}",
                    f"seed:={job['seed']}", f"case_json:={d / 'case.json'}",
                    f"agent_guard:={cfg.get('guard', 'false')}", f"guard_tight:={cfg.get('tight', 'false')}",
                    f"guard_log:={d / 'guard.jsonl'}", f"guard_mode:={cfg.get('mode', 'A')}",
@@ -150,7 +160,7 @@ def main() -> int:
     ap.add_argument("--seeds", type=int, default=12)
     ap.add_argument("--seeds-for", action="append", default=[], help="id前缀=种子数,例如 p0_plaza=30")
     ap.add_argument("--config", action="append", required=True,
-                    help="名字:guard=true,tight=false[,mode=A|B|C][,blind=true][,params=...]")
+                    help="名字:guard=true,tight=false[,mode=A|B|C][,blind=true][,params=...][,bt=...]")
     ap.add_argument("--parallel", type=int, default=12)
     ap.add_argument("--domain-base", type=int, default=100)
     ap.add_argument("--out", type=Path, required=True)

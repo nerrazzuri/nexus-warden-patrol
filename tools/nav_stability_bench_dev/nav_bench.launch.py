@@ -50,7 +50,7 @@ def generate_launch_description():
                 "use_sim_time": "true",
                 "autostart": "true",
                 "yaml_filename": map_yaml,
-                "default_nav_to_pose_bt_xml": str(nav_dir / "navigate_to_pose_d1max.xml"),
+                "default_nav_to_pose_bt_xml": LaunchConfiguration("bt_xml"),
                 "default_nav_through_poses_bt_xml": str(nav_dir / "navigate_through_poses_d1max.xml"),
             },
             convert_types=True,
@@ -73,6 +73,8 @@ def generate_launch_description():
     return LaunchDescription([
         DeclareLaunchArgument("world"), DeclareLaunchArgument("map"),
         DeclareLaunchArgument("params_file", default_value=str(nav_dir / "params.yaml")),
+        # 导航 V1 第 4 步:换行为树(MPPI 失败再 RPP,见 make_rpp.py)
+        DeclareLaunchArgument("bt_xml", default_value=str(nav_dir / "navigate_to_pose_d1max.xml")),
         DeclareLaunchArgument("seed", default_value="0"),
         DeclareLaunchArgument("fault_at_s", default_value="1000000000"),
         DeclareLaunchArgument("fault_duration_s", default_value="2.0"),
