@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import shutil
 from typing import Any
 
@@ -376,7 +377,10 @@ class MapAdmin:
     def edit(self, map_id: str, version: str, *, digest: Any, ops: Any, note: Any,
              by: str) -> dict[str, Any]:
         """地图编辑第一版(W44 第四期,``map_edit``):橡皮擦、画障碍,另存成新的一版(跟清噪点一样:
-        文件照抄、只换栅格,原点照抄,区域等走「新版本带过来、要人核」)。``digest`` 对不上 → 409。"""
+        文件照抄、只换栅格,原点照抄,区域等走「新版本带过来、要人核」)。``digest`` 对不上 → 409。
+        11-10(用户:「之前一直都是单独保存的所以才有那么多版本」):改的是没发布过的编辑草稿
+        (:meth:`_draft_origin`)就用新版本替换它(草稿删掉,回 ``replaced``),
+        发布前始终只有一个新版本。"""
         import shutil
         import tempfile
         from pathlib import Path
@@ -396,6 +400,7 @@ class MapAdmin:
             new_pgm, stats = me.apply_ops(data, meta, clean)
         except me.EditError as exc:
             raise AdminError(400, str(exc)) from exc
+        origin = self._draft_origin(map_id, version)
         new = self._next_version(map_id, version)
         src = self.cat.root / map_id / version
         tmp = Path(tempfile.mkdtemp(prefix="edit-", dir=self.cat.root))
@@ -406,7 +411,7 @@ class MapAdmin:
             (tmp / image).write_bytes(new_pgm)
             try:
                 self.cat.import_dir(tmp, map_id=map_id, version=new, source=f"edit:{by}",
-                                    note=text or (f"从 {version} 编辑:擦了 "
+                                    note=text or (f"从 {origin or version} 编辑:擦了 "
                                                   f"{stats['erased_m2']} 平方米、画了 "
                                                   f"{stats['obstacle_m2']} 平方米障碍"))
             except MapError as exc:
@@ -417,8 +422,58 @@ class MapAdmin:
         homes = copy_homes(self.db, map_id, version, new)
         self._copy_display(map_id, version, new, by=by)
         layout = self._copy_layout(map_id, version, new, by=by)
-        return {"map_id": map_id, "from": version, "version": new, **stats,
-                "homes_copied": homes, "layout_copied": layout, "by": by}
+        out = {"map_id": map_id, "from": origin or version, "version": new, **stats,
+               "homes_copied": homes, "layout_copied": layout, "by": by}
+        if origin is not None:
+            # 禁行区抄过去是「没确认」:草稿上已经确认过的,新版本照样算确认过
+            # (同一个人在同一个编辑里改的)
+            self._carry_confirm(map_id, version, new, by=by)
+            try:
+                self.delete(map_id, version)
+                out["replaced"] = version
+            except AdminError:
+                log.warning("编辑草稿 %s:%s 没删成,留着", map_id, version, exc_info=True)
+        return out
+
+    def _draft_origin(self, map_id: str, version: str) -> str | None:
+        """``version`` 是没发布过的编辑草稿就回它最初是从哪一版编辑来的,不是回 ``None``。
+        草稿 = 网页编辑另存出来的(登记来源 ``edit:``)、从来没下发过换图、没有机器人在用、
+        没挂巡逻路线和摄像头(这两样不跟着另存走)。"""
+        row = next((m for m in self.cat.list()
+                    if m["map_id"] == map_id and m["version"] == version), None)
+        if row is None or not str(row.get("source", "")).startswith("edit:"):
+            return None
+        if self._in_use().get((map_id, version)):
+            return None
+        for r in self.db.query("SELECT payload FROM commands WHERE kind='map_activate'"):
+            try:
+                p = json.loads(r["payload"])
+            except (TypeError, ValueError):
+                continue
+            if isinstance(p, dict) and (str(p.get("map_id")), str(p.get("version"))) \
+                    == (map_id, version):
+                return None
+        if self.db.query("SELECT COUNT(*) AS n FROM routes WHERE map_id=? AND map_version=?",
+                         (map_id, version))[0]["n"]:
+            return None
+        if self.layout_counts(map_id, version)["cameras"]:
+            return None
+        m = re.match(r"从 (\S+) 编辑", str(row.get("note") or ""))
+        return m.group(1) if m else version
+
+    def _carry_confirm(self, map_id: str, old: str, new: str, *, by: str) -> None:
+        """草稿上的禁行区已经确认到当前修订:新版本(抄过来的同一份)也确认上。没确认过的照旧没确认。"""
+        zones = getattr(self.site, "zones", None)
+        if zones is None:
+            return
+        try:
+            b = zones.current(map_id, new)
+            if not (zones.confirmed_current(map_id, old) and b.zones
+                    and b.zones == zones.current(map_id, old).zones):
+                return
+            zones.confirm(map_id, new, revision=b.revision, by=by)
+        except Exception:  # 确认不上就留给人确认
+            log.warning("草稿 %s:%s 的禁行区确认没带到 %s", map_id, old, new, exc_info=True)
 
     def layout_counts(self, map_id: str, version: str) -> dict[str, Any]:
         """网页易用性第 2 轮 N4:这一版上画了多少布置(发布弹窗跟机器人现在用的那一版比,

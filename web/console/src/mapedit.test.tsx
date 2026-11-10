@@ -13,18 +13,25 @@ const META = { width: 100, height: 100, m_per_px: 0.1, left_x: 0, top_y: 10, zon
 
 let posted: { url: string; body: Record<string, unknown> }[];
 let editReply: number;
+let editBody: Record<string, unknown>;
+let zones: Record<string, unknown>;
+const POOL = { id: "n1", kind: "nogo", label: "泳池", polygon: [[1, 1], [3, 1], [3, 3]] };
 beforeEach(() => {
   lang.value = "zh";
   posted = [];
   editReply = 200;
+  editBody = { version: "4", erased_m2: 1 };
+  zones = { revision: 2, zones: [], confirmed: { revision: 2, by: "olga", at_ms: 1, current: true, how: "confirm" }, held: [] };
   location.hash = "#/admin/mapedit?map=home&version=3";
   setFetch(((url: string, init?: RequestInit) => {
     if (init?.method === "POST") {
       const body = JSON.parse(String(init.body ?? "{}"));
       posted.push({ url, body });
-      if (url.endsWith("/edit")) return Promise.resolve(editReply === 200 ? json({ version: "4", erased_m2: 1 }) : json({ error: "换了" }, editReply));
+      if (url.endsWith("/edit")) return Promise.resolve(editReply === 200 ? json(editBody) : json({ error: "换了" }, editReply));
       return Promise.resolve(json(body));
     }
+    if (url.endsWith("/zones")) return Promise.resolve(json(url.includes("/home/4/") ? { ...zones, revision: 7 } : zones));
+    if (url.startsWith("/api/robots")) return Promise.resolve(json({ robots: [] }));
     if (url.endsWith("/preview")) return Promise.resolve(json(META));
     if (url.endsWith("/noise")) return Promise.resolve(json({ digest: "abc", specks: [] }));
     if (url.endsWith("/display")) return Promise.resolve(json({ rotate_deg: null, basemap: null, regions: [], terrain: [] }));
@@ -267,5 +274,143 @@ describe("第 3 轮 maps N2 / P1-53", () => {
     fireEvent.click(c.querySelector('input[name="me-result"]')!);            // 随便一个会引起重新渲染的操作
     await act(async () => {});
     expect(c.querySelector(".me-canvas")!.firstElementChild).toBe(before);
+  });
+});
+
+// 11-10 用户:「所有动作都要在编辑器中完成」—— 禁行区、虚拟墙、限速区、人员忽略区从「布置 → 禁行区」搬进编辑器,
+// 跟橡皮擦一起撤销、一起保存;没发布过的草稿再擦,站点替换它(这里只看网页报的话)。
+describe("编辑器里画禁行区(11-10)", () => {
+  const ready = async (c: Element) => waitFor(() => expect(c.querySelector(".mapedit[data-ready]")).not.toBeNull());
+  function drawZone(c: Element, tool: string, n: number) {
+    fireEvent.click(c.querySelector(`[data-tool="${tool}"]`)!);
+    for (let i = 0; i < n; i++) fireEvent.click(c.querySelector(".pick")!);
+    fireEvent.click(btn(c, "完成绘制"));
+  }
+  const saveAll = async (c: Element, yes = "保存") => {
+    fireEvent.click(c.querySelector(".me-save")!);
+    fireEvent.click(btn(document.querySelector(".modal")!, yes));
+  };
+
+  it("工具分组:改地图本身 / 机器人能去哪 / 人员检测 / 显示;没有「去布置」的链接", async () => {
+    const { container: c } = page();
+    await ready(c);
+    expect(Array.from(c.querySelectorAll("[data-group] p")).map((p) => p.textContent)).toEqual(["改地图本身", "机器人能去哪", "人员检测", "显示"]);
+    expect(c.querySelector('[data-group="meGroupMove"] [data-tool="nogo"]')!.textContent).toBe("画禁行区");
+    expect(c.querySelector('a[href="#/admin/layout?tab=nogo"]')).toBeNull();
+  });
+
+  it("画禁行区:收紧,只存禁行区(不另存版本),带打开时的修订号", async () => {
+    const { container: c } = page();
+    await ready(c);
+    drawZone(c, "nogo", 3);
+    fireEvent.input(document.querySelector('.modal input[name="label"]')!, { target: { value: "高楼楼梯" } });
+    fireEvent.submit(document.querySelector(".modal form")!);
+    expect(c.querySelector(".me-zones")!.textContent).toContain("高楼楼梯");
+    expect(c.querySelector("polygon.nogo-area")).not.toBeNull();
+    fireEvent.click(c.querySelector(".me-save")!);
+    expect(document.querySelector(".modal")!.textContent).toContain("禁行区、虚拟墙等：1 处改动");
+    fireEvent.click(btn(document.querySelector(".modal")!, "保存"));
+    await waitFor(() => expect(posted.find((p) => p.url === "/api/maps/home/3/zones")).toBeTruthy());
+    const b = posted.find((p) => p.url === "/api/maps/home/3/zones")!.body;
+    expect(b.base_revision).toBe(2);
+    expect((b.zones as { label: string }[]).map((z) => z.label)).toEqual(["高楼楼梯"]);
+    expect(posted.some((p) => p.url.endsWith("/edit"))).toBe(false);
+  });
+
+  it("一次编辑里又擦又画禁行区:保存一次 —— 先另存新版本,禁行区存到新版本上(用新版本的修订号);草稿被替换时说清楚", async () => {
+    editBody = { version: "4", from: "2", erased_m2: 1, replaced: "3" };
+    const { container: c } = page();
+    await ready(c);
+    fireEvent.click(c.querySelector('[data-tool="erase"]')!);
+    fireEvent.click(c.querySelector(".pick")!);
+    fireEvent.click(btn(c, "完成绘制"));
+    drawZone(c, "wall", 2);
+    fireEvent.submit(document.querySelector(".modal form")!);
+    fireEvent.click(c.querySelector(".me-save")!);
+    const text = document.querySelector(".modal")!.textContent!;
+    expect(text).toContain("另存为新版本");
+    expect(text).toContain("1 处改动");
+    fireEvent.click(btn(document.querySelector(".modal")!, "另存为新版本"));
+    await waitFor(() => expect(posted.find((p) => p.url === "/api/maps/home/4/zones")).toBeTruthy());
+    const order = posted.map((p) => p.url);
+    expect(order.indexOf("/api/admin/maps/home/3/edit")).toBeLessThan(order.indexOf("/api/maps/home/4/zones"));
+    const b = posted.find((p) => p.url === "/api/maps/home/4/zones")!.body;
+    expect(b.base_revision).toBe(7);
+    expect((b.zones as { kind: string; wall?: unknown }[])[0]).toMatchObject({ kind: "nogo", wall: [[4, 7], [4, 7]] });
+    await waitFor(() => expect(said.join(" ")).toContain("替换了还没发布的第 3 版"));
+    expect(location.hash).toContain("version=4&from=2");
+  });
+
+  it("临时的带天数;人员忽略区没有硬禁区那一项", async () => {
+    const { container: c } = page();
+    await ready(c);
+    drawZone(c, "nogo", 3);
+    fireEvent.click(document.querySelector('.modal input[name="temp"]')!);
+    fireEvent.change(document.querySelector('.modal select[name="days"]')!, { target: { value: "3" } });
+    fireEvent.submit(document.querySelector(".modal form")!);
+    drawZone(c, "ignore", 3);
+    expect(document.querySelector('.modal input[name="hard"]')).toBeNull();
+    fireEvent.submit(document.querySelector(".modal form")!);
+    await saveAll(c);
+    await waitFor(() => expect(posted.find((p) => p.url === "/api/maps/home/3/zones")).toBeTruthy());
+    const zs = posted.find((p) => p.url === "/api/maps/home/3/zones")!.body.zones as { kind: string; for_s?: number; hard?: boolean }[];
+    expect(zs[0].for_s).toBe(3 * 86400);
+    expect(zs[1].kind).toBe("ignore");
+    expect(zs[1].hard).toBeUndefined();
+  });
+
+  it("撤销能撤掉刚画的禁行区", async () => {
+    const { container: c } = page();
+    await ready(c);
+    drawZone(c, "slow", 3);
+    fireEvent.submit(document.querySelector(".modal form")!);
+    expect(c.querySelector(".me-zones")).not.toBeNull();
+    fireEvent.click(btn(c, "撤销"));
+    expect(c.querySelector(".me-zones")).toBeNull();
+    expect((c.querySelector(".me-save") as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it("原有的禁行区:点图上选中、改名(重名不让)、删掉,存的时候带上", async () => {
+    const big = { ...POOL, id: "n2", label: "花园", polygon: [[0, 6], [8, 6], [8, 10], [0, 10]] };
+    zones = { ...zones, zones: [POOL, big] };
+    const { container: c } = page();
+    await ready(c);
+    expect(c.querySelector('[data-pick-zone="n1"]')!.textContent).toBe("泳池");
+    fireEvent.click(c.querySelector(".pick")!);                  // (4,7) 在花园里
+    expect(c.querySelector('[data-pick-zone="n2"]')!.className).toContain("on");
+    fireEvent.click(c.querySelector("[data-rename]")!);
+    const inp = document.querySelector('.modal input[name="label"]') as HTMLInputElement;
+    fireEvent.input(inp, { target: { value: "泳池" } });
+    expect((document.querySelector('.modal button[type="submit"]') as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.input(inp, { target: { value: "后花园" } });
+    fireEvent.submit(document.querySelector(".modal form")!);
+    fireEvent.click(c.querySelector('[data-remove-zone="n1"]')!);
+    await saveAll(c);
+    await waitFor(() => expect(posted.find((p) => p.url === "/api/maps/home/3/zones")).toBeTruthy());
+    const body = posted.find((x) => x.url === "/api/maps/home/3/zones")!.body as { zones: { id: string; label: string }[] };
+    expect(body.zones.map((z) => [z.id, z.label])).toEqual([["n2", "后花园"]]);
+  });
+
+  it("禁行区的状态和「确认此版本」在编辑器里;有没存的改动时不给确认", async () => {
+    zones = { ...zones, zones: [POOL], confirmed: null };
+    const { container: c } = page();
+    await ready(c);
+    expect(c.querySelector(".nogo-status")!.textContent).toContain("确认");
+    expect(btn(c, "确认此版本")).toBeTruthy();
+    drawZone(c, "nogo", 3);
+    fireEvent.submit(document.querySelector(".modal form")!);
+    expect(btn(c, "确认此版本")).toBeUndefined();
+  });
+
+  it("禁行区读不出来:不能存(存了会把禁行区抹掉)", async () => {
+    setFetch(((url: string) => {
+      if (url.endsWith("/preview")) return Promise.resolve(json(META));
+      if (url.endsWith("/noise")) return Promise.resolve(json({ digest: "abc", specks: [] }));
+      if (url.endsWith("/display")) return Promise.resolve(json({ rotate_deg: null, basemap: null, regions: [], terrain: [] }));
+      return Promise.resolve(json({ error: "x" }, 500));
+    }) as typeof fetch);
+    const { container: c } = page();
+    await waitFor(() => expect(c.querySelector(".me-loaderr")).not.toBeNull());
+    expect(c.querySelector(".mapedit[data-ready]")).toBeNull();
   });
 });
