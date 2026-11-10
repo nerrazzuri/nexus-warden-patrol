@@ -221,6 +221,9 @@ describe("导航 V1 第 5 节:报警详情按原因码写「怎么回事 + 该�
     expect(box.getAttribute("data-nav-code")).toBe("goal_too_close_to_wall");
     expect(box.textContent).toContain("目标点贴墙,站不下或转不开");
     expect(box.textContent).toContain("把这个航点往空处挪一点");
+    // W6-10:码本身只在「技术详情」里(给工程师),正文不出现
+    expect(box.querySelector("details.techdetail")!.textContent).toContain("goal_too_close_to_wall");
+    expect(Array.from(box.querySelectorAll(":scope > p")).map((p) => p.textContent).join("")).not.toContain("goal_too_close_to_wall");
     cleanup();
     lang.value = "en";
     const { container: e } = show(a);
