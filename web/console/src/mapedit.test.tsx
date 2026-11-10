@@ -485,4 +485,31 @@ describe("编辑器里画禁行区(11-10)", () => {
     await waitFor(() => expect(c.querySelector(".me-loaderr")).not.toBeNull());
     expect(c.querySelector(".mapedit[data-ready]")).toBeNull();
   });
+
+  // 易用性第 6 轮 W6-04:草稿上只一种说法(发布时确认);发布对话框点名这些禁行区,要勾「核过了」才能发
+  it("W6-04 草稿:禁行区只说发布时一起确认,不说去点确认、只能遥控", async () => {
+    draftState = { draft: true, from: "2" };
+    zones = { ...zones, zones: [POOL], confirmed: null };
+    const { container: c } = page();
+    await ready(c);
+    const st = c.querySelector(".nogo-status")!.textContent!;
+    expect(st).toContain("发布");
+    expect(st).not.toContain("确认此版本");
+    expect(st).not.toContain("确认这一版");
+    expect(st).not.toContain("只能遥控");
+  });
+  it("W6-04 发布对话框:列出要一起确认的禁行区,勾了核过了才能发布", async () => {
+    draftState = { draft: true, from: "2" };
+    zones = { ...zones, zones: [POOL], confirmed: null };
+    const { container: c } = page();
+    await ready(c);
+    fireEvent.click(c.querySelector("[data-release]")!);
+    const m = document.querySelector(".modal")!;
+    expect(m.textContent).toContain("泳池");
+    fireEvent.input(m.querySelector('input[type="password"]')!, { target: { value: "pw-pw-pw" } });
+    const go = m.querySelector('button[type="submit"]') as HTMLButtonElement;
+    expect(go.disabled).toBe(true);
+    fireEvent.click(m.querySelector('input[type="checkbox"]')!);
+    expect(go.disabled).toBe(false);
+  });
 });

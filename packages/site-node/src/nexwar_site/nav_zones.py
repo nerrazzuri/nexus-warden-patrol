@@ -475,6 +475,13 @@ class NavZones:
                             (map_id, old))
         if src:
             self._make_proposal(map_id, new, src[0], with_zones=False)
+        # 易用性第 6 轮 W6-04:来源版本没有可带的(没待命点、拦截点)也记下来源 —— 不然头一回问建议时
+        # 按登记时刻取了「前一版」(可能是更新的另一版),把那一版的禁行区当建议带过来
+        with self.db.tx() as tx:
+            tx.execute("INSERT OR IGNORE INTO nav_zone_proposals(map_id, map_version, "
+                       "from_version, body, state, created_ms) VALUES (?,?,?,?,'adopted',?)",
+                       (map_id, new, old, json.dumps({"zones": [], "standby": [],
+                                                      "intercepts": []}), now))
         return len(zones)
 
     def _ensure_proposal(self, map_id: str, version: str) -> None:

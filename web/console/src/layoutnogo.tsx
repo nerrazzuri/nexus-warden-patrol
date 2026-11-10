@@ -83,7 +83,9 @@ export function NogoStatus({ nav, base, mapId, version, changed, say, reload, dr
   }
   return (
     <div class="nogo-status">
-      {!nav ? <p class="muted">…</p> : current && held.length === 0
+      {/* 易用性第 6 轮 W6-04:草稿上只一种说法 —— 发布时一起确认(不说「去点确认」「只能遥控」,跟下面打架) */}
+      {!nav ? <p class="muted">…</p> : draft ? <p class="muted small" data-nogo-draft="1">{t("lyNogoDraftN", { n: nav.zones?.length ?? 0 })}</p>
+        : current && held.length === 0
         ? <p class="ok-text">{t("lyNogoLive")}</p>
         : held.length > 0 ? <p class="warn-text">{t("lyNogoWaitYou", { names: joinList(held.map((z) => siteKnown(z.label) || z.id)) })}</p>
         // 第 4 轮 maps N1:另存出来的版本已经抄了来源版本的区域 —— 说「已有 n 个,核一下再确认」,不说「去画」
@@ -101,7 +103,6 @@ export function NogoStatus({ nav, base, mapId, version, changed, say, reload, dr
         </div>
       )}
       {/* 第 3 轮 maps N1:有没核的建议、这一版又一个都没画时,先处理建议,不给确认空集 */}
-      {draft && <p class="muted small" data-nogo-draft="1">{t("lyNogoDraft")}</p>}
       {nav && !current && !changed && !draft && !(prop && nav.zones.length === 0)
         && <button type="button" class="btn sm primary" onClick={() => setConfirming(true)}>{t("navConfirmBtn")}</button>}
       {/* 第 2 轮 maps N12:从发布对话框跳来的,确认完给「回去发布」 */}

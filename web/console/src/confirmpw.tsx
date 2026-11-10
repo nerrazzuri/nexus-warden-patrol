@@ -5,8 +5,16 @@ import { ApiError } from "./api";
 import { Modal } from "./dialogs";
 import { t } from "./i18n";
 
-export function ConfirmPassword({ title, text, onConfirm, onClose }: { title: string; text?: string; onConfirm: (pw: string) => Promise<void>; onClose: () => void }) {
+export function ConfirmPassword({ title, text, list, ack, onConfirm, onClose }: {
+  title: string; text?: string;
+  /** 易用性第 6 轮 W6-04:一起生效的东西点名列出来(发布时一起确认的禁行区)。 */
+  list?: string[];
+  /** 给了就要先勾上这一句才能确认。 */
+  ack?: string;
+  onConfirm: (pw: string) => Promise<void>; onClose: () => void;
+}) {
   const [pw, setPw] = useState("");
+  const [acked, setAcked] = useState(!ack);
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
   async function submit(e: Event) {
@@ -28,13 +36,15 @@ export function ConfirmPassword({ title, text, onConfirm, onClose }: { title: st
     <Modal label={title} onClose={onClose}>
       <form class="form confirm-pw" onSubmit={submit}>
         {text && <p class="confirm-text">{text}</p>}
+        {list && list.length > 0 && <ul class="plain small confirm-list">{list.map((x) => <li key={x}>{x}</li>)}</ul>}
+        {ack && <label class="field-check"><input type="checkbox" checked={acked} onChange={(e) => setAcked(e.currentTarget.checked)} />{ack}</label>}
         <p class="muted small">{t("pwAgainHint")}</p>
         <label class="field">{t("pwAgain")}<input type="password" autoComplete="current-password" value={pw} required
           onInput={(e) => setPw(e.currentTarget.value)} /></label>
         {err && <p class="error" role="alert">{err}</p>}
         <div class="row end">
           <button type="button" class="btn" onClick={onClose}>{t("cancel")}</button>
-          <button type="submit" class="btn primary" disabled={busy || !pw}>{t("pwConfirm")}</button>
+          <button type="submit" class="btn primary" disabled={busy || !pw || !acked}>{t("pwConfirm")}</button>
         </div>
       </form>
     </Modal>
