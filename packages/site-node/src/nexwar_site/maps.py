@@ -224,6 +224,8 @@ class MapCatalog:
             base = self.root / d["map_id"] / d["version"]
             names = [str(f.get("name", "")) for f in d["files"] if isinstance(f, dict)]
             d["missing"] = [n for n in names if not (base / n).is_file()]
+            # 编辑、去噪出来的草稿(11-10/11-11):只在站点上,不能下发 —— 手机端靠它标出来
+            d["draft"] = str(d.get("source") or "").startswith(DRAFT_SOURCE)
             out.append(d)
         return out
 

@@ -692,8 +692,10 @@ class FakeApi implements SiteApi {
     }
     return onePixelPng;
   }
+  /// 给了就用它当站点地图目录（不用夹具）。
+  Map<String, dynamic>? catalog;
   @override
-  Future<Map<String, dynamic>> maps() async => siteFixture('site_maps');
+  Future<Map<String, dynamic>> maps() async => catalog ?? siteFixture('site_maps');
   @override
   Future<Map<String, dynamic>> releases() async => siteFixture('site_releases');
   @override

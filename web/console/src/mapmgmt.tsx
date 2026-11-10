@@ -288,7 +288,7 @@ export function MapManagePage({ say, pollMs = 5000 }: { say: Say; pollMs?: numbe
       )}
       {diff && <DiffDialog target={diff} onClose={() => setDiff(null)} />}
       {noise && <NoiseDialog target={noise} onClose={() => setNoise(null)}
-        onDone={(r) => { setNoise(null); say(tr(`Saved as v${r.version}: ${r.cleaned} spots cleaned. Confirm its zones before publishing.`, `另存成 v${r.version}：清了 ${r.cleaned} 处。发布前先确认它的区域。`)); void load(); }} />}
+        onDone={(r) => { setNoise(null); say(tr(`Saved as draft v${r.version}: ${r.cleaned} spots cleaned. Open the draft to preview it and publish it to the site; then it can be sent to robots.`, `已另存为草稿 v${r.version}：清了 ${r.cleaned} 处。打开草稿预览、发布到站点后才能下发。`)); void load(); }} />}
     </div>
   );
 }
@@ -734,7 +734,7 @@ export function DiffDialog({ target, onClose }: { target: { map_id: string; a: s
 
 interface Speck { id: number; x: number; y: number; px: number }
 interface NoiseList { digest: string; res: number; max_m2: number; ring_m: number; specks: Speck[] }
-export interface DenoiseResult { version: string; cleaned: number; cells: number; homes_copied: number }
+export interface DenoiseResult { version: string; cleaned: number; cells: number; homes_copied: number; draft?: boolean; from?: string }
 
 /** 这一版里「零星噪点」的候选画在图上(红圈),点一下去掉、再点加回;确认后清掉、另存成新的一版。 */
 export function NoiseDialog({ target, onClose, onDone }: {

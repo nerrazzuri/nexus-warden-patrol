@@ -39,6 +39,7 @@ class SiteMapsPage extends StatefulWidget {
   const SiteMapsPage({super.key, required this.api});
 
   static Key mapKey(String id, String version) => Key('map-$id:$version');
+  static Key draftKey(String id, String version) => Key('map-draft-$id:$version');
   static Key bagKey(String robot, String name) => Key('bag-$robot/$name');
   static Key previewKey(String id, String version) => Key('preview-$id:$version');
   static const Key versionKey = Key('build-version');
@@ -226,13 +227,27 @@ class _SiteMapsPageState extends State<SiteMapsPage> {
                   ListTile(
                     key: SiteMapsPage.mapKey('${m['map_id']}', '${m['version']}'),
                     leading: Icon(Icons.map_rounded, color: c.textSecondary),
-                    title: Text('${m['map_id']}:${m['version']}', style: title),
+                    title: Row(children: [
+                      Flexible(child: Text('${m['map_id']}:${m['version']}', style: title)),
+                      // 11-11：编辑、去噪出来的是草稿，只在站点上，网页预览、发布到站点后才能下发
+                      if (m['draft'] == true) ...[
+                        const SizedBox(width: 6),
+                        NwStatusPill(
+                            key: SiteMapsPage.draftKey('${m['map_id']}', '${m['version']}'),
+                            label: tr('Draft', '草稿'),
+                            tone: NwTone.warning),
+                      ],
+                    ]),
                     subtitle: Text(
-                        tr(
-                            'From ${m['source']} · ${(m['files'] as List).length} files'
-                                '${(m['note'] ?? '') != '' ? ' · ${m['note']}' : ''}',
-                            '来自 ${m['source']} · ${(m['files'] as List).length} 个文件'
-                                '${(m['note'] ?? '') != '' ? ' · ${m['note']}' : ''}'),
+                        m['draft'] == true
+                            ? tr('Draft: preview it in the web map editor and publish it to the site '
+                                'before sending it to robots',
+                                '草稿：在网页地图编辑器里预览、发布到站点后才能下发')
+                            : tr(
+                                'From ${m['source']} · ${(m['files'] as List).length} files'
+                                    '${(m['note'] ?? '') != '' ? ' · ${m['note']}' : ''}',
+                                '来自 ${m['source']} · ${(m['files'] as List).length} 个文件'
+                                    '${(m['note'] ?? '') != '' ? ' · ${m['note']}' : ''}'),
                         style: sub),
                     // 看图（W00c6h）谁都能点；点这一行是下发（管理员）。
                     trailing: Row(mainAxisSize: MainAxisSize.min, children: [
@@ -247,9 +262,9 @@ class _SiteMapsPageState extends State<SiteMapsPage> {
                                       api: widget.api,
                                       mapId: '${m['map_id']}',
                                       version: '${m['version']}')))),
-                      if (admin) Icon(Icons.send_to_mobile, color: c.textSecondary),
+                      if (admin && m['draft'] != true) Icon(Icons.send_to_mobile, color: c.textSecondary),
                     ]),
-                    onTap: admin ? () => _activate(m) : null,
+                    onTap: admin && m['draft'] != true ? () => _activate(m) : null,
                   ),
               ]),
               nwGap24,
