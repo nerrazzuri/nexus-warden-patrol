@@ -28,6 +28,7 @@ import dataclasses
 import logging
 import math
 import time
+from collections import deque
 from pathlib import Path
 from typing import Any
 
@@ -37,6 +38,7 @@ from nexwar_agent import route_check
 from nexwar_agent.bridges.hal_nav import HalNavBackend
 from nexwar_agent.bridges.planned_nav import PlannedNavBackend, _heading
 from nexwar_contract import errcodes
+from nexwar_contract.footprint import BASE_MARGIN
 from nexwar_contract.navbridge import MAX_VIA
 from nexwar_contract.obsbridge import pack_bits
 from nexwar_contract.planning import costmap as cmod
@@ -187,6 +189,56 @@ EDGE_FWD_M = 0.6
 EDGE_MPS = 0.25
 EDGE_STEP_S = 6.0
 EDGE_TRIES = 2
+# ---- 导航 V1 第 3、4 节:卡住了自己脱困(恢复链)。用户 11-07(广场 1.3 m 死胡同):「那条路必须能过」——
+# 转身时机身两边余量太紧,要自己前后挪、分段转(K 字掉头)挪出来;用户 11-10:「回退到原来的点上再重新
+# 规划」。恢复链按级往下走(没进展 = :data:`RECOVER_AFTER_S` 秒没向目标靠近也没挪窝,或者原地来回扭):
+#   1 级 重新规划(取消、重发目标)→ 2 级 沿原路倒退 :data:`RETREAT_M` 回到刚走过的点、再交给 Nav2
+#   (原路刚走过,一定走得通;:meth:`Nav2NavBackend._back_step`)→ 3 级 自己前后挪、分段转
+#   (:meth:`Nav2NavBackend._man_step`)→ 停下,``controller_stalled``(遥控接管)。
+#   没有原路可退的跳过 2 级。
+#   Nav2 规划不出路、机器人原地没动的:先自己挪着转,不行再退原路,还不行才判失败。
+#   有进展就从头算。每一级发一条 ``recovery_step`` 事件(级别、做了什么、成没成、用了多久)。
+RECOVER_AFTER_S = 20.0
+#: 打转:这么多秒里 Nav2 给的转向来回换了 :data:`OSC_REVERSALS` 次(转速 ≥ :data:`OSC_MIN_RPS` 才算),
+#: 离目标也没近 —— 不等满 :data:`RECOVER_AFTER_S`。
+OSC_WINDOW_S = 10.0
+OSC_REVERSALS = 4
+OSC_MIN_RPS = 0.1
+#: 自己挪:每一小步从「前进 / 后退 / 原地 × 左转 / 右转 / 不转」里挑一个,
+#: 走 :data:`MANEUVER_STEP_S` 秒。
+#: 挑的规矩:整个一小步里物理车身离地图墙不少于 :data:`MANEUVER_CLEAR_M`(本来就比这近的,不许更近),
+#: 朝向往要去的方向转得最多的那个;转不了的,挑能让离墙更远的(挪到宽一点的地方再转)。
+#: 人、车、临时东西照样归守卫管(雷达看到不是墙的就停)。
+#: 转到差 :data:`MANEUVER_DONE_RAD` 以内交回 Nav2。
+MANEUVER_MPS = 0.15
+MANEUVER_RPS = 0.4
+MANEUVER_STEP_S = 1.0
+MANEUVER_MAX_STEPS = 24
+MANEUVER_MAX_S = 60.0
+MANEUVER_DONE_RAD = math.radians(25.0)
+MANEUVER_CLEAR_M = 0.03
+#: 要去的方向:Nav2 最近那条路线上离机器人这么远(米)的那一点;没有路线就朝目标。
+MANEUVER_LOOK_M = 1.0
+#: 沿原路倒退:记最近 :data:`TRAIL_KEEP_M` 走过的路(每 :data:`TRAIL_STEP_M` 一个点;一拍跳过
+#: :data:`TRAIL_JUMP_M` 是定位跳了,清掉重记),退 :data:`RETREAT_M`(原路不到 :data:`RETREAT_MIN_M`
+#: 不退),:data:`RETREAT_MPS` 倒着走,跟原路按前瞻 :data:`RETREAT_LOOK_M` 走;
+#: 到点差 :data:`RETREAT_DONE_M` 算到。被人、东西挡着就等,挡满 :data:`RETREAT_WAIT_S`
+#: 或一共 :data:`RETREAT_MAX_S` 秒没退完算没成。
+TRAIL_STEP_M = 0.2
+TRAIL_KEEP_M = 10.0
+TRAIL_JUMP_M = 1.0
+RETREAT_M = 1.5
+RETREAT_MIN_M = 0.5
+RETREAT_MPS = 0.2
+RETREAT_LOOK_M = 0.4
+RETREAT_DONE_M = 0.15
+RETREAT_WAIT_S = 10.0
+RETREAT_MAX_S = 30.0
+#: 退完重新规划时绕开刚才卡住的地方(用户 11-10:「重规划是不是就不走那条曾经被堵的路径了」):
+#: 卡住那一处半径这么大(米)临时当禁行区交给 Nav2,只这一趟有效;绕开就规划不出(只有这一条路)
+#: 就撤掉,还走这条。离机器人、离终点太近的不标(不许把自己、终点圈进去)。
+AVOID_R = 0.5
+AVOID_SIDES = 8
 #: 原地转最快(弧度/秒):转快了定位器跟不上(11-02 工单 13)。
 TURN_ONLY_MAX_RPS = 0.6
 #: 前进速度不到这个(米/秒)就当「原地转」,按地图上的墙核一道(:meth:`Nav2NavBackend._turn_hits_map`)。
@@ -269,6 +321,18 @@ class Nav2NavBackend(PlannedNavBackend):
         self._slow = math.inf
         #: 上一拍送给 Nav2 的限速(复查 P3:MPPI 按它缩倒车上限)。
         self._nav2_speed = V_BASE
+        #: 恢复链(导航 V1 第 3、4 节):到了第几级、上一级什么时候做的、这个目标自己挪过没有、
+        #: 正在自己挪的状态、Nav2 转向换号的记录(看打转)。
+        self._rec_level = 0
+        self._rec_at: float | None = None
+        self._rec_tried: set[str] = set()
+        self._man: dict[str, Any] | None = None
+        self._back: dict[str, Any] | None = None
+        #: 这一趟临时绕开的地方(卡住过的点,只交给 Nav2)。
+        self._avoid: list[tuple[float, float]] = []
+        self._osc: deque[tuple[float, int]] = deque()
+        #: 最近走过的路(沿原路倒退用;跨目标留着 —— 机器人就是从那儿来的)。
+        self._trail: deque[tuple[float, float]] = deque()
 
     # ------------------------------------------------------------ 图与区域 → 转接节点
 
@@ -299,6 +363,10 @@ class Nav2NavBackend(PlannedNavBackend):
         self._map_req += 1
         zs = self._effective(self.zones)
         nogo = [[list(p) for p in z.polygon] for z in zs if z.keep_out]
+        for ax, ay in getattr(self, "_avoid", ()):
+            nogo.append([[round(ax + AVOID_R * math.cos(2 * math.pi * i / AVOID_SIDES), 3),
+                          round(ay + AVOID_R * math.sin(2 * math.pi * i / AVOID_SIDES), 3)]
+                         for i in range(AVOID_SIDES)])
         speed = [{"poly": [list(p) for p in z.polygon], "mps": float(z.max_speed_mps)}
                  for z in (self.zones.zones if self.zones is not None else ())
                  if z.kind == "slow" and z.max_speed_mps and not z.keep_out]
@@ -383,7 +451,9 @@ class Nav2NavBackend(PlannedNavBackend):
         # W48:有路网就先在路网上找路,途经点交给 Nav2(NavigateThroughPoses,只是路过)
         via = route(self.route_net, (here.x, here.y), goal_xy) \
             if self.route_net is not None and here is not None else []
-        if not via and here is not None:
+        if not via and here is not None and self.urgent:
+            log.info("%s:紧急任务,不做路线检查,直接交给 Nav2", op)
+        elif not via and here is not None:
             # 导航 V1 第 2 节:出发前查路线几何;拒了不交给 Nav2,原因码给引擎、不重试
             self._planning = True                          # 等的时候不许再派一个
             try:
@@ -418,6 +488,12 @@ class Nav2NavBackend(PlannedNavBackend):
         self.link.send(msg)
         self._goal_msg, self._resends, self._quiet_since = dict(msg), 0, None
         self._edge, self._edge_tries, self._fwd_ref = None, 0, None
+        self._rec_level, self._rec_at, self._man, self._back = 0, None, None, None
+        self._rec_tried = set()
+        if self._avoid:
+            self._avoid = []
+            self._send_map()
+        self._osc.clear()
         self._prog_reset()                                 # W72:新目标,进展从头算
         if here is not None:
             pts = [(here.x, here.y), *via, goal_xy]
@@ -539,6 +615,10 @@ class Nav2NavBackend(PlannedNavBackend):
 
     async def _enter_terminal(self, status: NavStatus) -> None:
         self._turn_only = None
+        self._man = self._back = None
+        if getattr(self, "_avoid", None):
+            self._avoid = []                               # 临时绕开的只管这一趟
+            self._send_map()
         self._edge, self._fwd_ref = None, None
         self._turn_blocked_at = None
         self._goal_msg, self._quiet_since = None, None
@@ -626,6 +706,12 @@ class Nav2NavBackend(PlannedNavBackend):
         if getattr(self, "_edge", None) is not None:
             await self._edge_step(here, dt_s)
             return
+        if getattr(self, "_man", None) is not None:
+            await self._man_step(here, dt_s)
+            return
+        if getattr(self, "_back", None) is not None:
+            await self._back_step(here, dt_s)
+            return
         if self._nav2_goal is None:
             await super()._drive(here, dt_s)              # 这一段走的是自己的规划
             return
@@ -674,6 +760,8 @@ class Nav2NavBackend(PlannedNavBackend):
             return
         if tgt is not None:
             self._watch_progress(here, tgt)
+            if await self._recover_check(here, tgt, dt_s):
+                return
         c = link.cmd
         now = link._now()
         if c is None or now - c[0] > CMD_FRESH_S:
@@ -700,6 +788,7 @@ class Nav2NavBackend(PlannedNavBackend):
                 await self._send(0.0, 0.0, dt_s)
                 return
         _, _, vx, _vy, wz = c[:5]
+        self._osc_note(wz)
         sign = 1 if vx >= 0 else -1
         if abs(vx) > 1e-6 and sign != moving:
             verdict, z = self._backstop_to(here, sign)     # 要换方向:往要去的那边也查一遍
@@ -757,6 +846,7 @@ class Nav2NavBackend(PlannedNavBackend):
         if await self._edge_stuck(here, vx):
             await self._send(0.0, 0.0, dt_s)
             return
+        self._trail_note(here)
         await self._send(vx, wz, dt_s)
 
     async def _edge_stuck(self, here: Any, vx: float) -> bool:
@@ -825,6 +915,299 @@ class Nav2NavBackend(PlannedNavBackend):
             return
         await self._send(0.0, 0.0, dt_s)
         self._edge = {**e, "phase": "back", "t": now, "from": (here.x, here.y)}
+
+    # ------------------------------------------------------------ 恢复链(导航 V1 第 3、4 节)
+
+    def _osc_note(self, wz: float) -> None:
+        """记 Nav2 给的转向换没换号(看打转)。"""
+        if abs(wz) < OSC_MIN_RPS:
+            return
+        sgn, now = (1 if wz > 0 else -1), self._secs()
+        q = self._osc
+        if not q or q[-1][1] != sgn:
+            q.append((now, sgn))
+        while q and now - q[0][0] > OSC_WINDOW_S:
+            q.popleft()
+
+    def _oscillating(self, now: float) -> bool:
+        q = self._osc
+        while q and now - q[0][0] > OSC_WINDOW_S:
+            q.popleft()
+        return len(q) - 1 >= OSC_REVERSALS
+
+    def _step_event(self, level: int, action: str, ok: bool | None, here: Any, why: str,
+                    took_s: float = 0.0) -> None:
+        if self.on_event is not None:
+            self.on_event("recovery_step", {"level": level, "action": action, "ok": ok,
+                                            "reason": why[:200], "took_s": round(took_s, 1),
+                                            "x": round(here.x, 2), "y": round(here.y, 2)})
+
+    async def _recover_check(self, here: Any, tgt: Any, dt_s: float) -> bool:
+        """没进展、打转 → 恢复链往下走一级。
+
+        回 True = 这一拍归恢复链管了(在挪、或者已经停下判失败)。"""
+        p = self._prog
+        if p is None or getattr(self, "_quiet_since", None) is not None:
+            # Nav2 一直不给速度的归 W70 的重发管(:meth:`_watch_stall`);恢复链管它在给、却没进展的
+            return False
+        now = self._secs()
+        last = self._rec_at if self._rec_at is not None else -math.inf
+        since = max(p[3], last)
+        osc = now - p[3] >= OSC_WINDOW_S and now - last >= OSC_WINDOW_S and self._oscillating(now)
+        if not osc and now - since < RECOVER_AFTER_S:
+            return False
+        why = ("原地来回扭(打转),离目标没近" if osc
+               else f"{now - since:.0f} 秒没向目标靠近、也没挪窝")
+        self._rec_level += 1
+        self._rec_at = now
+        self._osc.clear()
+        if "replan" not in self._rec_tried:
+            self._rec_tried.add("replan")
+            log.warning("%s:恢复链 1 级 —— 重新规划(取消、重发目标) code=%s", why,
+                        errcodes.tag(errcodes.nav("controller_stalled")))
+            self._step_event(1, "replan", None, here, why)
+            self._resend_goal()
+            return False
+        if "retreat" not in self._rec_tried and self._trail_len() >= RETREAT_MIN_M:
+            self._start_retreat(here, why, level=self._rec_level)
+            await self._back_step(here, dt_s)
+            return True
+        if "maneuver" not in self._rec_tried and self._map_dir is not None:
+            self._start_maneuver(here, why, level=self._rec_level)
+            await self._man_step(here, dt_s)
+            return True
+        log.warning("%s:恢复链试完了(重新规划、退原路、自己挪),停下等人接管", why)
+        self._step_event(self._rec_level, "give_up", False, here, why)
+        self.fail_final = True
+        await self._send(0.0, 0.0, dt_s)
+        await self._fail(f"卡住了:{why};重新规划、退原路、自己挪都试过了,在 ({here.x:.2f}, "
+                         f"{here.y:.2f}),请遥控接管"[:200], code="controller_stalled")
+        return True
+
+    def _man_heading(self, here: Any) -> float:
+        """自己挪要转到的方向:Nav2 最近那条路线上 :data:`MANEUVER_LOOK_M` 外的那一点;
+        没有就朝目标。"""
+        plan = getattr(self.link, "plan", None) if self.link is not None else None
+        pts = plan[1] if plan and plan[0] == self._goal_id else ()
+        for x, y in pts:
+            if math.dist((x, y), (here.x, here.y)) >= MANEUVER_LOOK_M:
+                return math.atan2(y - here.y, x - here.x)
+        tgt = self._target
+        if tgt is None:
+            return here.yaw
+        if math.dist((tgt.position.x, tgt.position.y), (here.x, here.y)) < 0.05:
+            return tgt.yaw
+        return math.atan2(tgt.position.y - here.y, tgt.position.x - here.x)
+
+    def _start_maneuver(self, here: Any, why: str, *, level: int,
+                        fail: tuple[str, str] | None = None) -> None:
+        self._rec_tried.add("maneuver")
+        self._cancel_nav2()
+        want = self._man_heading(here)
+        self._man = {"want": want, "t0": self._secs(), "steps": 0, "cur": None, "level": level,
+                     "why": why, "fail": fail, "last": None}
+        log.warning("%s:恢复链 %d 级 —— 自己前后挪、分段转,转到 %.0f°(现在 %.0f°)再交回 Nav2",
+                    why, level, math.degrees(want), math.degrees(here.yaw))
+        self._step_event(level, "maneuver", None, here, why)
+
+    def _man_pick(self, here: Any, want: float, walls: Any,
+                  last: tuple[float, float] | None) -> tuple[float, float] | None:
+        """挑下一小步 ``(vx, wz)``;都不行回 None。"""
+        blocked, res, origin = walls
+        x0, y0, yaw0 = here.x, here.y, here.yaw
+        m0 = float(route_check.pose_margins([(x0, y0, yaw0)], blocked, res, origin)[0]) \
+            + BASE_MARGIN
+        thr = min(MANEUVER_CLEAR_M, m0 - 0.01)
+        e0 = abs(math.remainder(want - yaw0, 2 * math.pi))
+        best: tuple[float, float, float] | None = None
+        n = max(1, round(MANEUVER_STEP_S / 0.1))
+        for v in (MANEUVER_MPS, -MANEUVER_MPS, 0.0):
+            for w in (MANEUVER_RPS, -MANEUVER_RPS, 0.0):
+                if v == 0.0 and w == 0.0:
+                    continue
+                poses, (x, y, yaw) = [], (x0, y0, yaw0)
+                for _ in range(n):
+                    x += v * 0.1 * math.cos(yaw + w * 0.05)
+                    y += v * 0.1 * math.sin(yaw + w * 0.05)
+                    yaw += w * 0.1
+                    poses.append((x, y, yaw))
+                if any(self.nogo_at(px, py) is not None for px, py, _ in poses):
+                    continue
+                ms = route_check.pose_margins(poses, blocked, res, origin) + BASE_MARGIN
+                if float(ms.min()) < thr:
+                    continue
+                gain = e0 - abs(math.remainder(want - yaw, 2 * math.pi))
+                score = gain + 0.5 * (float(ms[-1]) - m0)
+                if w == 0.0 and last is not None and last[1] == 0.0 and last[0] == v:
+                    score -= 0.05                          # 别一直往一个方向直着挪
+                if score > 1e-3 and (best is None or score > best[0]):
+                    best = (score, v, w)
+        return None if best is None else (best[1], best[2])
+
+    async def _man_finish(self, here: Any, ok: bool, dt_s: float) -> None:
+        m, now = self._man, self._secs()
+        self._man = None
+        await self._send(0.0, 0.0, dt_s)
+        took = now - m["t0"]
+        self._step_event(m["level"], "maneuver", ok, here, m["why"], took)
+        self._rec_at = now
+        if ok:
+            log.info("自己挪完了(%.0f 秒,%d 步,朝向 %.0f°):交回 Nav2", took, m["steps"],
+                     math.degrees(here.yaw))
+            self._prog_reset()
+            self._resend_goal()
+            return
+        if m["fail"] is not None:
+            if "retreat" not in self._rec_tried and self._trail_len() >= RETREAT_MIN_M:
+                self._rec_level += 1
+                self._start_retreat(here, m["why"], level=self._rec_level, fail=m["fail"])
+                return
+            why, code = m["fail"]
+            log.warning("%s", why)
+            await self._fail(why, code=code)
+            return
+        log.warning("自己挪了 %.0f 秒没挪出来:交回 Nav2,再没进展就停下", took)
+        self._resend_goal()
+
+    async def _man_step(self, here: Any, dt_s: float) -> None:
+        """自己挪的一拍(恢复链 2 级)。"""
+        m, now = self._man, self._secs()
+        err = math.remainder(m["want"] - here.yaw, 2 * math.pi)
+        if abs(err) <= MANEUVER_DONE_RAD:
+            await self._man_finish(here, True, dt_s)
+            return
+        cur = m["cur"]
+        if cur is None or now - cur["t"] >= MANEUVER_STEP_S:
+            if now - m["t0"] > MANEUVER_MAX_S or m["steps"] >= MANEUVER_MAX_STEPS:
+                await self._man_finish(here, False, dt_s)
+                return
+            try:
+                walls = await self._route_walls()
+                pick = await asyncio.to_thread(self._man_pick, here, m["want"], walls, m["last"])
+            except Exception:                              # 算不了就当挪不了
+                log.exception("自己挪:挑下一步出错")
+                pick = None
+            if pick is None:
+                await self._man_finish(here, False, dt_s)
+                return
+            cur = m["cur"] = {"v": pick[0], "w": pick[1], "t": now}
+            m["steps"] += 1
+            m["last"] = pick
+        vx, wz = self._deband(cur["v"], cur["w"])
+        if self.guard is not None and self.obstacles is not None:
+            v = self._guard_check(vx, wz)
+            if not v.ok and "障碍数据" in v.reason:
+                await self._send(0.0, 0.0, dt_s)           # 看不清就等,不瞎挪
+                return
+            if not v.ok and v.hits and not self._hits_all_static(v.hits, here):
+                self._guarded(v, here)                     # 人、东西挡着:这一步不走,下一拍重挑
+                m["cur"] = None
+                await self._send(0.0, 0.0, dt_s)
+                return
+        await self._send(vx, wz, dt_s)
+
+    def _trail_note(self, here: Any) -> None:
+        """记走过的路(沿原路倒退用)。"""
+        tr = self._trail
+        if tr:
+            d = math.dist(tr[-1], (here.x, here.y))
+            if d > TRAIL_JUMP_M:
+                tr.clear()                                 # 定位跳了:原来记的对不上了
+            elif d < TRAIL_STEP_M:
+                return
+        tr.append((here.x, here.y))
+        while len(tr) > max(2, round(TRAIL_KEEP_M / TRAIL_STEP_M)):
+            tr.popleft()
+
+    def _trail_len(self) -> float:
+        tr = list(self._trail)
+        return sum(math.dist(a, b) for a, b in zip(tr, tr[1:], strict=False))
+
+    def _start_retreat(self, here: Any, why: str, *, level: int,
+                       fail: tuple[str, str] | None = None) -> None:
+        """恢复链:沿原路倒退 :data:`RETREAT_M`(用户 11-10),退完再交给 Nav2。"""
+        self._rec_tried.add("retreat")
+        self._cancel_nav2()
+        pts, acc = [(here.x, here.y)], 0.0
+        for p in reversed(self._trail):
+            acc += math.dist(pts[-1], p)
+            pts.append(p)
+            if acc >= RETREAT_M:
+                break
+        self._back = {"path": pts[1:], "t0": self._secs(), "level": level, "why": why,
+                      "fail": fail, "blocked": None, "stuck": (here.x, here.y)}
+        log.warning("%s:恢复链 %d 级 —— 沿原路倒退 %.1f m 回到 (%.2f, %.2f),再交给 Nav2", why,
+                    level, acc, pts[-1][0], pts[-1][1])
+        self._step_event(level, "retreat", None, here, why)
+
+    async def _back_finish(self, here: Any, ok: bool, dt_s: float) -> None:
+        b, now = self._back, self._secs()
+        self._back = None
+        await self._send(0.0, 0.0, dt_s)
+        took = now - b["t0"]
+        self._step_event(b["level"], "retreat", ok, here, b["why"], took)
+        self._rec_at = now
+        if ok:
+            sx, sy = b["stuck"]
+            tgt = self._target
+            far = math.dist((sx, sy), (here.x, here.y)) >= AVOID_R + 0.6
+            off_goal = tgt is None or math.dist((sx, sy), (tgt.position.x, tgt.position.y)) \
+                >= AVOID_R + 0.6
+            if far and off_goal:
+                self._avoid.append((sx, sy))
+                self._send_map()                           # 先送图(带临时绕开的那一处)再发目标
+            log.info("沿原路退完了(%.0f 秒):交回 Nav2 重新规划%s", took,
+                     f",绕开刚才卡住的 ({sx:.2f}, {sy:.2f})" if far and off_goal else "")
+            self._trail.clear()                            # 退过的那段不再当「来路」
+            self._prog_reset()
+            self._resend_goal()
+            return
+        if b["fail"] is not None:
+            why, code = b["fail"]
+            log.warning("%s", why)
+            await self._fail(why, code=code)
+            return
+        log.warning("沿原路退了 %.0f 秒没退完:交回 Nav2,再没进展就往下一级", took)
+        self._resend_goal()
+
+    async def _back_step(self, here: Any, dt_s: float) -> None:
+        """沿原路倒退的一拍:倒着走,跟原路(前瞻 :data:`RETREAT_LOOK_M`)。"""
+        b, now = self._back, self._secs()
+        path = b["path"]
+        while len(path) > 1 and math.dist(path[0], (here.x, here.y)) < RETREAT_LOOK_M:
+            path.pop(0)
+        if not path or (len(path) == 1 and math.dist(path[0], (here.x, here.y)) <= RETREAT_DONE_M):
+            await self._back_finish(here, True, dt_s)
+            return
+        if now - b["t0"] > RETREAT_MAX_S:
+            await self._back_finish(here, False, dt_s)
+            return
+        px, py = path[0]
+        c, sn = math.cos(here.yaw), math.sin(here.yaw)
+        lx = c * (px - here.x) + sn * (py - here.y)
+        ly = -sn * (px - here.x) + c * (py - here.y)
+        vx = -RETREAT_MPS
+        if lx > 0.05:                  # 那一点跑到前面去了(偏得厉害):原地先转过来
+            vx = 0.0
+            wz = math.copysign(MANEUVER_RPS, -ly)
+        else:
+            k = 2.0 * ly / max(1e-6, lx * lx + ly * ly)
+            wz = max(-MANEUVER_RPS, min(MANEUVER_RPS, vx * k))
+        vx, wz = self._deband(vx, wz)
+        if self.guard is not None and self.obstacles is not None:
+            v = self._guard_check(vx, wz)
+            hard = not v.ok and ("障碍数据" in v.reason
+                                 or (v.hits and not self._hits_all_static(v.hits, here)))
+            if hard:
+                if b["blocked"] is None:
+                    b["blocked"] = now
+                self._guarded(v, here)
+                await self._send(0.0, 0.0, dt_s)
+                if now - b["blocked"] > RETREAT_WAIT_S:
+                    await self._back_finish(here, False, dt_s)
+                return
+        b["blocked"] = None
+        await self._send(vx, wz, dt_s)
 
     async def retarget(self, pose: Pose) -> bool:
         """走着换目标(W74 跟人):这一段走的是 Nav2 → 换一个目标号交给它(Nav2 收新目标就放下旧的),
@@ -904,6 +1287,9 @@ class Nav2NavBackend(PlannedNavBackend):
             if self._prog_told and self.on_event is not None:
                 self.on_event("nav_unblocked", {"waited_s": round(now - p[3], 1) if p else 0.0,
                                                 "detour": True})
+            if p is not None and self._rec_level:
+                log.info("恢复链:有进展了,从头算(之前到了第 %d 级)", self._rec_level)
+            self._rec_level = 0
             self._prog, self._prog_told = (d, here.x, here.y, now), False
             return
         if not self._prog_told and now - p[3] >= NAV2_NO_PROGRESS_S and self.on_event is not None:
@@ -937,6 +1323,12 @@ class Nav2NavBackend(PlannedNavBackend):
         35 s 就到了)。"""
         raw = f"Nav2 {m['state']}:{m.get('reason', '') or '没说原因'}"
         tgt = self._target
+        if self._avoid and getattr(self, "_goal_msg", None) is not None:
+            log.warning("绕开刚才卡住的地方就规划不出(%s):只有那一条路,撤掉临时标记、还走那条", raw)
+            self._avoid = []
+            self._send_map()
+            self._resend_goal()
+            return
         # W71(11-03 17:28 商场:机身歪着,身边一圈被判成挡,Nav2「Starting point in lethal space」,
         # 原来报「目标点被占」):机器人自己被围住先说被困 —— 不是终局,挪开一点再试能好
         lethal = "lethal" in str(m.get("reason", "")).lower()
@@ -972,6 +1364,22 @@ class Nav2NavBackend(PlannedNavBackend):
             log.warning("Nav2 回了失败,这一趟判失败:%s", raw)   # 11-04:以前这一支不留日志
             await self._fail(raw[:200], code="nav2_plan_failed")
             return
+        if (stuck or trapped) and not occupied and not cause \
+                and getattr(self, "_goal_msg", None) is not None:
+            # 恢复链(导航 V1 第 3 节):规划不出、原地没动 —— 多半是转不开身:先自己挪着转,不行退原路
+            code0 = "robot_trapped" if trapped else "goal_unreachable"
+            fail = (f"{why};自己挪、退原路都没出来({raw})"[:200], code0)
+            short = "Nav2 规划不出路线、机器人没挪窝"
+            facing = abs(math.remainder(self._man_heading(here) - here.yaw, 2 * math.pi)) \
+                <= MANEUVER_DONE_RAD                       # 本来就朝着要去的方向:转身帮不上
+            if "maneuver" not in self._rec_tried and self._map_dir is not None and not facing:
+                self._rec_level = max(self._rec_level, 2)
+                self._start_maneuver(here, short, level=self._rec_level, fail=fail)
+                return
+            if "retreat" not in self._rec_tried and self._trail_len() >= RETREAT_MIN_M:
+                self._rec_level += 1
+                self._start_retreat(here, short, level=self._rec_level, fail=fail)
+                return
         log.warning("%s(%s)", why, raw)
         self.fail_final = occupied                        # 先标上:引擎收到 Failed 时就读它
         code = ("robot_trapped" if trapped or cause else "goal_occupied" if occupied

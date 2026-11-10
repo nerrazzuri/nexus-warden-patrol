@@ -358,3 +358,32 @@ def test_W73外审r3_4_回待命点这一趟_停止线15_出发按路程算_不�
     assert departure_line_pct(far, home, back="none") > 25.0, "远:按路程算,不是只看停止线"
     plain = 任务(3.0)
     assert plain.policy.battery_return_pct == 25.0, "普通 goto 照旧"
+
+
+async def test_两种走法_报警出动是紧急_不限巡逻速度_普通任务限巡逻速度(台子):
+    """用户 11-09:正常巡逻慢一些无所谓,不撞、不卡;紧急(报警出动、跟人、查易藏点:优先级 ≥ 报警)
+    走最快的。紧急的不限巡逻速度,普通的(手动派、排程、回待命点)最快 PATROL_MAX_MPS。"""
+    from nexwar_agent.bridges.hal_nav import PATROL_MAX_MPS
+    from nexwar_contract.charging import ALARM_PRIORITY
+    c, r, parts, book = 台子
+    t1 = EngineGotoTask(task_id="t1", target=_target(8.0, 0.0), max_speed_mps=None, parts=parts,
+                        events=book, now_ms=c, priority=ALARM_PRIORITY)
+    await t1.start()
+    assert parts.nav.urgent is True
+    vmax = 0.0
+    for _ in range(50):
+        await _跑(c, r, parts, t1, 1)
+        vmax = max(vmax, (await r.odometry()).vx)
+    assert vmax > PATROL_MAX_MPS + 0.1, vmax
+    await t1.abort("换一趟")
+    await _跑(c, r, parts, t1, 100)
+    assert t1.done
+    t2 = EngineGotoTask(task_id="t2", target=_target(0.0, 0.0), max_speed_mps=None, parts=parts,
+                        events=book, now_ms=c, priority=60)
+    await t2.start()
+    assert parts.nav.urgent is False, "上一趟的紧急不带到下一趟"
+    vmax = 0.0
+    for _ in range(50):
+        await _跑(c, r, parts, t2, 1)
+        vmax = max(vmax, abs((await r.odometry()).vx))
+    assert 0 < vmax <= PATROL_MAX_MPS + 1e-9, vmax

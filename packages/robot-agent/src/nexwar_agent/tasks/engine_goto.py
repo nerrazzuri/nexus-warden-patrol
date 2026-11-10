@@ -90,6 +90,10 @@ class EngineMissionTask(Task):
         except Exception as exc:  # noqa: BLE001 - 设不进去就不走:按 HAL 上限走会比要求的快
             self._fail(f"max_speed_mps {self._max_speed!r} 设不进去: {exc}")
             return
+        set_urgent = getattr(p.nav, "set_urgent", None)
+        if set_urgent is not None:
+            # 两种走法(用户 11-09):报警出动、跟人、查易藏点(优先级 ≥ 报警)是紧急的,走最快的路
+            await set_urgent(getattr(self, "priority", 0) >= ALARM_PRIORITY)
         mission = self._mission()
         try:
             await p.engine.start(mission, home=p.home, task_id=self.task_id)
