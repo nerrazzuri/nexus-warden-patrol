@@ -1228,8 +1228,8 @@ class Nav2NavBackend(PlannedNavBackend):
             c0 = zg.clearance((here.x, here.y, here.yaw), z, MANEUVER_CLEAR_M)
             if c0 <= 0.0:
                 return False          # 已经压上禁行区:不自动挪(外审 POC r3 #2:相交以后距离恒为 0)
-            # 不许碰上;已经比 MANEUVER_CLEAR_M 近的,不许更近(差 1 cm 以内也照样不许相交)
-            thr = min(MANEUVER_CLEAR_M, c0 - 0.01)
+            # 不许碰上;已经比 MANEUVER_CLEAR_M 近的,一点都不许更近(外审 POC r4 #1:原来还让 1 cm)
+            thr = min(MANEUVER_CLEAR_M, c0) - 1e-6
             if any((c := zg.clearance(p, z, MANEUVER_CLEAR_M)) <= 0.0 or c < thr for p in poses):
                 return False
         return True
