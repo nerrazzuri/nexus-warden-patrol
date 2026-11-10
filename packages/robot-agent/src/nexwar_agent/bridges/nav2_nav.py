@@ -451,13 +451,15 @@ class Nav2NavBackend(PlannedNavBackend):
         # W48:有路网就先在路网上找路,途经点交给 Nav2(NavigateThroughPoses,只是路过)
         via = route(self.route_net, (here.x, here.y), goal_xy) \
             if self.route_net is not None and here is not None else []
-        if not via and here is not None and self.urgent:
+        if here is not None and self.urgent:
             log.info("%s:紧急任务,不做路线检查,直接交给 Nav2", op)
-        elif not via and here is not None:
-            # 导航 V1 第 2 节:出发前查路线几何;拒了不交给 Nav2,原因码给引擎、不重试
+        elif here is not None:
+            # 导航 V1 第 2 节:出发前查路线几何;拒了不交给 Nav2,原因码给引擎、不重试。
+            # 外审 POC I5:有路网时查沿路网(途经点)走的那条,不是跳过
             self._planning = True                          # 等的时候不许再派一个
             try:
-                got = await self._route_check(here, pose, op)
+                got = await (self._via_check(here, pose, via, op) if via
+                             else self._route_check(here, pose, op))
             finally:
                 self._planning = False
             if got is not None and not got.ok:
@@ -532,6 +534,28 @@ class Nav2NavBackend(PlannedNavBackend):
             return await asyncio.to_thread(route_check.check_route, m["poses"], *walls)
         except Exception:                                 # 查不了不挡路
             log.exception("%s:路线检查出错,不查了", op)
+            return None
+
+    async def _via_check(self, here: Any, pose: Pose, via: list, op: str) -> Any:
+        """有路网时的路线检查(外审 POC I5):沿 当前位置 → 途经点 → 目标 这条折线查余量,朝向取每段的
+        方向(终点用目标朝向)。转接节点不会规划(老的)、没地图时跟 :meth:`_route_check` 一样不查。"""
+        if getattr(self.link, "plan_results", None) is None or self._map_dir is None:
+            return None
+        pts = [(here.x, here.y), *[(float(x), float(y)) for x, y in via],
+               (pose.position.x, pose.position.y)]
+        poses = []
+        for i, (x, y) in enumerate(pts):
+            if i == len(pts) - 1:
+                yaw = pose.yaw
+            else:
+                nx, ny = pts[i + 1]
+                yaw = math.atan2(ny - y, nx - x) if (nx, ny) != (x, y) else here.yaw
+            poses.append((x, y, yaw))
+        try:
+            walls = await self._route_walls()
+            return await asyncio.to_thread(route_check.check_route, poses, *walls)
+        except Exception:                                 # 查不了不挡路
+            log.exception("%s:路线检查(路网)出错,不查了", op)
             return None
 
     async def _route_walls(self) -> tuple[Any, float, tuple[float, float]]:
