@@ -381,12 +381,48 @@ def test_W41_清噪点_找候选_清掉另存新版_原点照抄_图换了拒_�
     assert code == 200 and again["specks"] == [], "清干净了"
     assert s.db.query("SELECT x FROM homes WHERE map_version='10'")[0]["x"] == 1.0
     note = [m for m in s.maps.list() if m["version"] == "10"][0]["note"]
-    assert "从 9 清了 1 处" in note
-    # 网页易用性第 2 轮 P1-50:版本来源记是谁清的(地图管理显示操作人)
-    assert [m for m in s.maps.list() if m["version"] == "10"][0]["source"] == "denoise:alice"
+    assert "从 9 编辑" in note and "清了 1 处" in note
+    # 网页易用性第 2 轮 P1-50:版本来源记是谁清的;11-11 起去噪出来的也是草稿
+    assert [m for m in s.maps.list() if m["version"] == "10"][0]["source"] == "draft:alice"
     row = s.db.query("SELECT detail FROM audit WHERE action LIKE '%/denoise' "
                      "ORDER BY id DESC LIMIT 1")[0]
     assert '"version": "10"' in row["detail"]
+
+
+def test_11_11_清噪点出来的是草稿_不能下发_目录里标草稿(站点):
+    """用户 11-10:「所有的保存只是草稿」;11-11:去噪也要是草稿,POC 前要做。"""
+    s = 站点
+    alice = _登(s, "alice")
+    base = f"/api/admin/maps/{MAP[0]}/9"
+    d = s.req("GET", f"{base}/noise", token=alice)[1]
+    code, e = s.req("POST", f"{base}/denoise", {"digest": d["digest"], "skip": []}, token=alice)
+    assert code == 200 and e["version"] == "10", e
+    assert e["draft"] is True and e["from"] == "9", e
+    assert s.maps.draft_of(MAP[0], "10") == "9"
+    rows = {m["version"]: m for m in s.req("GET", "/api/maps", token=alice)[1]["maps"]
+            if m["map_id"] == MAP[0]}
+    assert rows["10"]["draft"] is True and rows["9"]["draft"] is False, "手机端靠它标草稿"
+    code, r = s.req("POST", "/api/robots/A/map", {"map_id": MAP[0], "version": "10"},
+                    token=alice)
+    assert code == 409 and "草稿" in r["error"], (code, r)
+
+
+def test_11_11_在草稿上清噪点_顶掉原来那份草稿_来源照旧是最初那一版(站点):
+    s = 站点
+    alice = _登(s, "alice")
+    base = f"/api/admin/maps/{MAP[0]}/9"
+    d = s.req("GET", f"{base}/noise", token=alice)[1]
+    code, ed = s.req("POST", f"{base}/edit", {"digest": d["digest"], "ops": []}, token=alice)
+    assert code == 200 and ed["draft"] is True, ed                  # 只改图层:草稿,栅格照旧
+    dv = ed["version"]
+    d2 = s.req("GET", f"/api/admin/maps/{MAP[0]}/{dv}/noise", token=alice)[1]
+    assert d2["specks"], "草稿栅格跟原版一样,噪点还在"
+    code, e = s.req("POST", f"/api/admin/maps/{MAP[0]}/{dv}/denoise",
+                    {"digest": d2["digest"], "skip": []}, token=alice)
+    assert code == 200 and e["draft"] is True and e["from"] == "9", e
+    assert e.get("replaced") == dv, "草稿只留一份"
+    assert s.maps.draft_of(MAP[0], e["version"]) == "9"
+    assert dv not in {m["version"] for m in s.maps.list() if m["map_id"] == MAP[0]}
 
 
 def test_W71_换图等机器人时_总览带下载进度(站点):

@@ -543,7 +543,7 @@ describe("W41 清噪点", () => {
     const go = c.querySelector("[data-denoise]") as HTMLButtonElement;
     expect(go.textContent).toContain("Clean 2 spots");
     fireEvent.click(go);
-    await waitFor(() => expect(say).toHaveBeenCalledWith(expect.stringContaining("Saved as v4")));
+    await waitFor(() => expect(say).toHaveBeenCalledWith(expect.stringContaining("Saved as draft v4")));
     const post = calls.find((x) => x.method === "POST" && x.path.endsWith("/denoise"))!;
     expect(post.body).toEqual({ digest: "d1", skip: [2] });
   });

@@ -37,6 +37,30 @@ void main() {
     expect(find.textContaining('正在下载并加载'), findsOneWidget);
   });
 
+  testWidgets('草稿（编辑、去噪出来的，11-11）：标「草稿」、说怎么发布，点了不下发', (t) async {
+    final api = FakeApi('admin')
+      ..catalog = <String, dynamic>{
+        'maps': <dynamic>[
+          <String, dynamic>{'map_id': 'estate-1', 'version': '9', 'source': 'draft:alice', 'draft': true,
+            'note': '从 8 编辑:清了 2 处零星噪点(5 格)', 'files': <dynamic>[]},
+          <String, dynamic>{'map_id': 'estate-1', 'version': '8', 'source': 'import', 'draft': false,
+            'note': '', 'files': <dynamic>[]},
+        ],
+        'bags': <dynamic>[],
+      };
+    await t.pumpWidget(MaterialApp(home: SiteMapsPage(api: api)));
+    await t.pumpAndSettle();
+    expect(find.byKey(SiteMapsPage.draftKey('estate-1', '9')), findsOneWidget);
+    expect(find.byKey(SiteMapsPage.draftKey('estate-1', '8')), findsNothing);
+    expect(find.textContaining('发布到站点后才能下发'), findsOneWidget);
+    await t.tap(find.byKey(SiteMapsPage.mapKey('estate-1', '9')));
+    await t.pumpAndSettle();
+    expect(find.byKey(const Key('pick-A')), findsNothing, reason: '草稿不能下发');
+    await t.tap(find.byKey(SiteMapsPage.mapKey('estate-1', '8')));
+    await t.pumpAndSettle();
+    expect(find.byKey(const Key('pick-A')), findsOneWidget);
+  });
+
   testWidgets('管理员点一张图、选机器人、下发', (t) async {
     final api = FakeApi('admin');
     await t.pumpWidget(MaterialApp(home: SiteMapsPage(api: api)));

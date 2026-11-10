@@ -25,6 +25,7 @@ class MapManagePage extends StatefulWidget {
   static Key versionKey(String m, String v) => Key('mapver-$m-$v');
   static Key viewKey(String m, String v) => Key('mapver-view-$m-$v');
   static Key sendKey(String m, String v) => Key('mapver-send-$m-$v');
+  static Key draftKey(String m, String v) => Key('mapver-draft-$m-$v');
   static Key deleteKey(String m, String v) => Key('mapver-delete-$m-$v');
   static Key rollbackKey(String r) => Key('map-rollback-$r');
   static const Key bagsKey = Key('maps-bags');
@@ -258,6 +259,8 @@ class _MapManagePageState extends State<MapManagePage> {
     final canDelete = on.isEmpty && v['latest'] != true;
     // 11-05 现场第 10 条：缺定位文件的老版本，带定位器的机器人收了也会拒
     final unusable = '${v['unusable'] ?? ''}';
+    // 11-11：编辑、去噪出来的草稿只在站点上，网页预览、发布到站点后才能下发
+    final draft = v['draft'] == true;
     return Padding(
       padding: const EdgeInsets.only(bottom: Nw.s8),
       child: NwCard(
@@ -268,6 +271,11 @@ class _MapManagePageState extends State<MapManagePage> {
             Expanded(
                 child: Text(note.isNotEmpty ? '$note · $version' : version,
                     style: NwText.titleSmall.copyWith(color: c.text, fontWeight: FontWeight.w700))),
+            if (draft) ...[
+              NwStatusPill(
+                  key: MapManagePage.draftKey(mapId, version), label: tr('Draft', '草稿'), tone: NwTone.warning),
+              const SizedBox(width: Nw.s4),
+            ],
             if (verdict != 'unknown') NwStatusPill(label: verdictText(verdict), tone: verdictTone(verdict)),
             if (on.isNotEmpty) ...[
               const SizedBox(width: Nw.s4),
@@ -282,6 +290,13 @@ class _MapManagePageState extends State<MapManagePage> {
                 ...reasons,
               ].where((s) => s.isNotEmpty).join(' · '),
               style: NwText.bodySmall.copyWith(color: c.textSecondary)),
+          if (draft) ...[
+            const SizedBox(height: 2),
+            Text(
+                tr('Draft: preview it in the web map editor and publish it to the site before sending it to robots',
+                    '草稿：在网页地图编辑器里预览、发布到站点后才能下发'),
+                style: NwText.bodySmall.copyWith(color: c.textSecondary)),
+          ],
           if (unusable.isNotEmpty) ...[
             const SizedBox(height: 2),
             Text(tr("Robots with a localizer can't use this version: $unusable", '带定位器的机器人用不了这一版：$unusable'),
@@ -296,7 +311,8 @@ class _MapManagePageState extends State<MapManagePage> {
                 variant: NwButtonVariant.outline,
                 onPressed: () => Navigator.push(context,
                     MaterialPageRoute<void>(builder: (_) => SiteMapPreviewPage(api: api, mapId: mapId, version: version)))),
-            NwButton(
+            if (!draft)
+              NwButton(
                 buttonKey: MapManagePage.sendKey(mapId, version),
                 label: tr('Send to…', '下发给…'),
                 size: NwButtonSize.small,
