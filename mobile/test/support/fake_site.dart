@@ -20,6 +20,9 @@ class FakeSite {
   /// 原样的请求地址（含百分号编码与查询串）：告警键里的 `/`、`#` 必须编码成一段。
   final List<String> rawPaths = <String>[];
 
+  /// 每个请求带的 `X-Problem-Token` 请求头（没带是 null）。
+  final List<String?> problemTokens = <String?>[];
+
   /// 按路径覆盖状态码（默认 200）。
   final Map<String, int> statusCodes = <String, int>{};
 
@@ -70,6 +73,7 @@ class FakeSite {
     final body = raw.isEmpty ? null : jsonDecode(raw);
     final path = req.uri.path;
     rawPaths.add(req.requestedUri.toString());
+    problemTokens.add(req.headers.value('X-Problem-Token'));
     received.add((
       method: req.method,
       path: path,

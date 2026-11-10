@@ -164,6 +164,21 @@ void main() {
     }
   });
 
+  test('外审 POC I8：取问题单整包，凭证放请求头，不放网址（网址会进访问日志）', () async {
+    final site = FakeSite();
+    await site.start();
+    final c = SiteClient(site.url, testCertFingerprint());
+    try {
+      await c.problemBundle('NW-2026-AB12', 'sekret-123');
+      expect(site.rawPaths.last, endsWith('/api/problem-reports/NW-2026-AB12/bundle'));
+      expect(site.rawPaths.last, isNot(contains('sekret')));
+      expect(site.problemTokens.last, 'sekret-123');
+    } finally {
+      c.close();
+      await site.close();
+    }
+  });
+
   test('取文件（诊断包）时连不上、握手失败、超时、中途断了：都是页面认得的 SiteError（C-B4 外审 I1）', () async {
     final site = FakeSite();
     await site.start();

@@ -1569,8 +1569,10 @@ class SiteClient implements SiteApi {
 
   @override
   Future<Uint8List> problemBundle(String code, String token) => _bytes(
-      '/api/problem-reports/${Uri.encodeComponent(code)}/bundle?t=${Uri.encodeQueryComponent(token)}',
-      maxBundleBytes, tr('Report package', '问题单整包'));
+      '/api/problem-reports/${Uri.encodeComponent(code)}/bundle',
+      maxBundleBytes, tr('Report package', '问题单整包'),
+      // 外审 POC I8:凭证放请求头，不放网址（网址会进访问日志）
+      headers: {'X-Problem-Token': token});
 
   /// 机器人运维要等机器人跑完（取日志、诊断、重启服务）：比普通请求多等一会儿。
   static const Duration opsTimeout = Duration(seconds: 90);
@@ -1651,14 +1653,15 @@ class SiteClient implements SiteApi {
       _map(await _send('POST', '/api/runs/$id/keep', <String, dynamic>{'keep': keep}));
 
   /// 取一份字节（照片、预览图）：钉证书、带令牌、不跟重定向、有上限。
-  Future<Uint8List> _bytes(String path, int maxBytes, String what) =>
-      _wrapped(() => _bytesRaw(path, maxBytes, what));
+  Future<Uint8List> _bytes(String path, int maxBytes, String what, {Map<String, String>? headers}) =>
+      _wrapped(() => _bytesRaw(path, maxBytes, what, headers));
 
-  Future<Uint8List> _bytesRaw(String path, int maxBytes, String what) async {
+  Future<Uint8List> _bytesRaw(String path, int maxBytes, String what, [Map<String, String>? headers]) async {
     final req = await _io.openUrl('GET', base.resolve(path)).timeout(timeout);
     req.followRedirects = false;
     final tok = session?.token;
     if (tok != null) req.headers.set(HttpHeaders.authorizationHeader, 'Bearer $tok');
+    headers?.forEach(req.headers.set);
     final resp = await req.close().timeout(timeout);
     if (resp.statusCode != 200) {
       await resp.drain<void>();
