@@ -37,10 +37,12 @@ def _传(s, *, token=None, q="note=%E7%99%BB%E4%B8%8D%E4%B8%8A&robot=A", data=LO
         return exc.code, {}
 
 
-def _取(s, path, token=None):
+def _取(s, path, token=None, headers=None):
     r = urllib.request.Request(s.api.url + path)
     if token:
         r.add_header("Authorization", f"Bearer {token}")
+    for k, v in (headers or {}).items():
+        r.add_header(k, v)
     try:
         with urllib.request.urlopen(r, timeout=60) as resp:
             return resp.status, resp.read()
@@ -113,5 +115,25 @@ def test_值守令牌看不到问题单(tmp_path):
         code, w = s.req("POST", "/api/watch/token", {}, token=tok)
         assert code == 200
         assert s.req("GET", "/api/problem-reports", token=w["token"])[0] == 403
+    finally:
+        s.close()
+
+
+def test_外审POC_I8_凭证放请求头取整包_日志里不出现凭证(tmp_path, caplog):
+    """codex POC r1 I8:凭证放在 ``?t=`` 里,访问日志、诊断包里明文留着。新 App 放请求头;
+    老 App 照旧 ``?t=``,但日志里打码。"""
+    import logging
+    s = _站(tmp_path)
+    try:
+        tok = s.login()
+        _, d = _传(s, token=tok)
+        path = f"/api/problem-reports/{d['code']}/bundle"
+        with caplog.at_level(logging.INFO):
+            assert _取(s, path, headers={"X-Problem-Token": d["token"]})[0] == 200
+            assert _取(s, path, headers={"X-Problem-Token": "wrong"})[0] == 401
+            assert _取(s, f"{path}?t={d['token']}")[0] == 200          # 老 App
+        logged = "\n".join(r.getMessage() for r in caplog.records)
+        assert d["code"] in logged, "访问照旧记"
+        assert d["token"] not in logged
     finally:
         s.close()

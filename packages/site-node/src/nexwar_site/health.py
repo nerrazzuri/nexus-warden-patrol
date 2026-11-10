@@ -368,6 +368,8 @@ class HealthDesk:
 _SECRET_KEY = re.compile(r"(secret|password|passwd|token|key|pin|credential)", re.I)
 _LONG_HEX = re.compile(r"\b[0-9a-fA-F]{32,}\b")
 _BEARER = re.compile(r"(Bearer\s+)[A-Za-z0-9._~+/=-]+")
+#: 网址参数里的凭证、令牌、密码(外审 POC I8:问题单整包的 ``?t=``)
+_QUERY_SECRET = re.compile(r"([?&](?:t|token|access_token|key|password|pw|secret|sig)=)[^&\s\"'#]+")
 
 
 def redact_cfg(v: Any, key: str = "") -> Any:
@@ -382,8 +384,9 @@ def redact_cfg(v: Any, key: str = "") -> Any:
 
 
 def redact_text(s: str) -> str:
-    """日志打码:``Bearer`` 令牌、长串十六进制(令牌哈希、密钥、指纹)只留前 8 位。"""
+    """日志打码:``Bearer`` 令牌、网址参数里的凭证 / 密码、长串十六进制(令牌哈希、密钥、指纹)只留前 8 位。"""
     s = _BEARER.sub(r"\1***", s)
+    s = _QUERY_SECRET.sub(r"\1***", s)
     return _LONG_HEX.sub(lambda m: m.group(0)[:8] + "…", s)
 
 
