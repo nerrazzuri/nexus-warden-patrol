@@ -6,6 +6,7 @@ import math
 
 import numpy as np
 import pytest
+from nexwar_localizer import nav2bridge as nb
 from nexwar_localizer.nav2bridge import grid_points, occupancy
 
 from nexwar_contract.obsbridge import pack_bits
@@ -976,3 +977,35 @@ def test_V1_plan_result_空路线算失败():
     from nexwar_localizer.nav2bridge import plan_reply
     m = plan_reply(3, [])
     assert not m["ok"] and m["reason"] == "no_path" and m["poses"] == []
+
+
+def _mppi(pct: bool, v: float) -> float:
+    """Humble MPPI Optimizer::setSpeedLimit:绝对值按 v / vx_max 的比例缩,百分比直接缩。"""
+    return nb.MPPI_VX_MAX * (v / 100.0 if pct else v / nb.MPPI_VX_MAX)
+
+
+def _rpp(pct: bool, v: float) -> float:
+    """Humble RPP setSpeedLimit:绝对值直接当 desired_linear_vel,百分比按配置里的那个缩。"""
+    return nb.RPP_MAX_MPS * v / 100.0 if pct else v
+
+
+def test_外审POC_I6_限速对MPPI照旧_RPP不超过0点4也不掉进踏步区():
+    """codex POC r1 I6:Nav2 的限速同时发给 MPPI 和 RPP;RPP 收到绝对值就照着跑,普通巡逻 0.6、
+    紧急 1.0,超出 RPP 验证过的 0.4。"""
+    for sp in (0.1, 0.15, 0.3, 0.4, 0.41, 0.5, 0.6, 0.8, 1.0, 1.2):
+        pct, v = nb.speed_limit_value(sp)
+        assert abs(_mppi(pct, v) - min(sp, nb.MPPI_VX_MAX)) < 1e-9, sp
+        r = _rpp(pct, v)
+        assert r <= min(sp, nb.RPP_MAX_MPS) + 1e-9, (sp, r)
+        assert r >= min(sp, 0.16) - 1e-9, (sp, r)          # 真机 0.13 m/s 以下只踏步
+
+
+def test_外审POC_I6_桥里的常数跟部署配置一致():
+    from pathlib import Path
+
+    import yaml
+    root = Path(__file__).resolve().parents[3]
+    d = yaml.safe_load((root / "deploy" / "nav2" / "params.yaml").read_text(encoding="utf-8"))
+    cs = d["controller_server"]["ros__parameters"]
+    assert cs["FollowPath"]["vx_max"] == nb.MPPI_VX_MAX
+    assert cs["RPP"]["desired_linear_vel"] == nb.RPP_MAX_MPS
