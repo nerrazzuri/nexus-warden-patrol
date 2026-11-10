@@ -49,6 +49,9 @@ SEEN_GRAY = 232
 _COLORS = bytes([0, 254, SEEN_GRAY, 205]) + bytes(252)   # 预览的名次 → 灰度
 #: 平面图上「看到过」那层白色的透明度(淡淡的地面)。
 PLAN_SEEN_ALPHA = 0.35
+#: 路沿、绿化岛(``curb.pbm``,用户 2026-11-10):预览、平面图上都画成这个灰(地面上、墙下面),
+#: 预览 JSON 带 ``curb: true``。只管显示,规划在机器人那头读。
+CURB_GRAY = 150
 #: P4 正文之后容许的尾巴。
 _P4_SLACK = 16
 
@@ -274,13 +277,24 @@ def _shrink(w: int, h: int) -> int:
     return max(1, -(-max(w, h) // MAX_SIDE))
 
 
+def _curb_on_floor(curb, erase, floor):
+    """路沿掩码只留在地面上、去掉抹掉区;一格都不剩回 ``None``。"""
+    if curb is None:
+        return None
+    m = curb & floor
+    if erase is not None:
+        m &= ~erase
+    return m if m.any() else None
+
+
 def render(pgm: bytes, meta: dict[str, Any], *, seen=None,
-           erase=None) -> tuple[bytes, dict[str, Any]]:
+           erase=None, curb=None) -> tuple[bytes, dict[str, Any]]:
     """→ (PNG, 给手机的坐标换算 + 有内容的范围)。``seen``、``erase``:numpy 真假 (高, 宽)(行朝下),
-    看到过的画浅灰、抹掉的画成没建图(见模块说明)。"""
+    看到过的画浅灰、抹掉的画成没建图(见模块说明);``curb``:路沿,地面上画 :data:`CURB_GRAY`。"""
     import numpy as np
     w, h, body = parse_pgm(pgm)
     r4 = np.frombuffer(body.translate(_rank_lut(meta, _R4_UNKNOWN)), dtype=np.uint8).reshape(h, w)
+    curb = _curb_on_floor(curb, erase, r4 == _RANK_FREE)
     r4, has_seen = _overlay(r4, seen, erase, _R4_UNKNOWN, _R4_SEEN)
     ranks = r4.tobytes()
     k = _shrink(w, h)
@@ -291,6 +305,14 @@ def render(pgm: bytes, meta: dict[str, Any], *, seen=None,
         if k > 1:
             col = bytes(min(col[i:i + k]) for i in range(0, w, k))
         rows.append(col.translate(_COLORS))
+    if curb is not None:                              # 缩图时一块里有路沿就算,墙照样盖在上面
+        pw, ph = len(rows[0]), len(rows)
+        full = np.zeros((ph * k, pw * k), bool)
+        full[:h, :w] = curb
+        hit = full.reshape(ph, k, pw, k).any(axis=(1, 3))
+        img = np.frombuffer(b"".join(rows), dtype=np.uint8).reshape(ph, pw).copy()
+        img[hit & (img != _COLORS[_RANK_OCC])] = CURB_GRAY
+        rows = [r.tobytes() for r in img]
     res = meta["resolution"]
     ox, oy = meta["origin"]
     info: dict[str, Any] = {"width": len(rows[0]), "height": len(rows), "m_per_px": res * k,
@@ -300,6 +322,8 @@ def render(pgm: bytes, meta: dict[str, Any], *, seen=None,
         info["content_bbox"] = bbox
     if has_seen is not None:
         info["seen"] = True
+    if curb is not None:
+        info["curb"] = True
     if meta.get("origin_yaw"):
         info["warning"] = (f"地图 origin 带转角 {meta['origin_yaw']:.3f} rad,预览未按转角转:"
                            "待命点画的位置可能不准")
@@ -497,7 +521,7 @@ def _coverage(field, level: float):
     return np.clip(field, 0.0, 1.0, out=field)
 
 
-def _plan_pixels(ranks, k: int, width: int, height: int, s: int, seen=None):
+def _plan_pixels(ranks, k: int, width: int, height: int, s: int, seen=None, curb=None):
     """→ ``uint8`` 数组 (height·s, width·s, 2):灰度、透明度。``k``:预览比原图缩的倍数;预览盖
     ``height·k`` × ``width·k`` 个原图格(可能比原图多出一点,多出来的当未知)。``seen``:看到过的格
     (真假;画成透明度 :data:`PLAN_SEEN_ALPHA` 的白,垫在地板和墙下面)。"""
@@ -538,6 +562,12 @@ def _plan_pixels(ranks, k: int, width: int, height: int, s: int, seen=None):
     alpha = wall_a
     alpha += floor_a
     white = floor_a
+    if curb is not None:
+        # 路沿(11-10):地面上的一道中灰(只压在地面那一层上,墙照样盖着)
+        curb_a = np.minimum(layer(curb, True, _WALL_SIGMA, _WALL_LEVEL), floor_a)
+        curb_a *= np.float32(1 - CURB_GRAY / 255)
+        white -= curb_a
+        del curb_a
     if seen is not None:
         # 看到过的(M9):淡淡的白,垫在地板、墙下面:透明度再加 看到过 × 0.35 × (1 − 上面那两层)
         seen_a = layer(seen, False, _FLOOR_SIGMA, _FLOOR_LEVEL)
@@ -572,12 +602,13 @@ def _png_ga(px) -> bytes:
             + chunk(b"IDAT", zlib.compress(raw.tobytes(), 6)) + chunk(b"IEND", b""))
 
 
-def render_plan(ranks, *, seen=None, erase=None) -> tuple[bytes, int]:
+def render_plan(ranks, *, seen=None, erase=None, curb=None) -> tuple[bytes, int]:
     """``ranks``(:func:`grid_ranks` 出的)→ (平面图 PNG, 倍数)。范围跟 :func:`render` 出的预览
-    一模一样,像素是它的倍数倍。``seen``、``erase`` 同 :func:`render`。"""
+    一模一样,像素是它的倍数倍。``seen``、``erase``、``curb`` 同 :func:`render`。"""
     h, w = ranks.shape
+    curb = _curb_on_floor(curb, erase, ranks == _RANK_FREE)
     ranks, mask = _overlay(ranks, seen, erase, _RANK_UNKNOWN, None)
     k = _shrink(w, h)
     width, height = -(-w // k), -(-h // k)
     s = plan_scale(width, height)
-    return _png_ga(_plan_pixels(ranks, k, width, height, s, seen=mask)), s
+    return _png_ga(_plan_pixels(ranks, k, width, height, s, seen=mask, curb=curb)), s

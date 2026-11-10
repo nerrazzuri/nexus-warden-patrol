@@ -24,6 +24,7 @@ from nexwar_contract.errors import ContractError
 from nexwar_contract.maps import (
     COVERAGE,
     COVERAGE_RADIUS_M,
+    CURB_FILE,
     MANIFEST,
     SEEN_FILE,
     Coverage,
@@ -390,13 +391,28 @@ class MapCatalog:
                 log.warning("%s 的 %s 不画:%s", label, SEEN_FILE, exc)
         return ranks, seen, (mp.erase_mask(erase, w, h, meta) if erase else None)
 
+    def _curb(self, map_id: str, version: str, shape: tuple[int, int]) -> Any:
+        """这一版的路沿层(``curb.pbm``,11-10)→ numpy 真假 (高, 宽),行朝下;没有、坏了、大小对不上
+        → ``None``(不画,不挡)。版本内容不变,跟着栅格一起缓存。"""
+        from nexwar_site import map_preview as mp
+        h, w = shape
+        p = self.root / map_id / version / CURB_FILE
+        try:
+            if not p.is_file() or p.stat().st_size > mp.seen_limit(w, h):
+                return None
+            return mp.parse_seen(p.read_bytes(), w, h)
+        except (OSError, mp.PreviewError) as exc:
+            log.warning("%s:%s 的 %s 不画:%s", map_id, version, CURB_FILE, exc)
+            return None
+
     def _render(self, map_id: str, version: str,
                 erase: tuple = ()) -> tuple[tuple[bytes, dict[str, Any]], tuple]:
         from nexwar_site import map_preview as mp
         source, meta, image, data, seen_raw, files = self._raster(map_id, version)
         try:
             ranks, seen, em = self._layers(data, meta, seen_raw, erase, f"{map_id}:{version}")
-            png, info = mp.render(data, meta, seen=seen, erase=em)
+            curb = self._curb(map_id, version, ranks.shape)
+            png, info = mp.render(data, meta, seen=seen, erase=em, curb=curb)
             if em is not None:                        # 抹掉的不算墙的走向
                 ranks = ranks.copy()
                 ranks[em] = mp._RANK_UNKNOWN
@@ -411,7 +427,8 @@ class MapCatalog:
         _, meta, image, data, seen_raw, files = self._raster(map_id, version)
         try:
             ranks, seen, em = self._layers(data, meta, seen_raw, erase, f"{map_id}:{version}")
-            return mp.render_plan(ranks, seen=seen, erase=em), files
+            curb = self._curb(map_id, version, ranks.shape)
+            return mp.render_plan(ranks, seen=seen, erase=em, curb=curb), files
         except mp.PreviewError as exc:
             raise mp.PreviewError(f"{image}:{exc}") from exc
 

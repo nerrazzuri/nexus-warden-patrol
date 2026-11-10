@@ -51,6 +51,8 @@ export interface PreviewMeta {
   content_bbox?: number[];
   /** 这一版带「看到过、狗没走过」的淡色层(图例里加一行)。 */
   seen?: boolean;
+  /** 这一版有路沿层(curb.pbm,11-10),底图上画成中灰。 */
+  curb?: boolean;
   /** W44 第四期:地图编辑器里起的区域名、特殊地面(站点 map_display)。 */
   display?: { rotate_deg?: number | null; regions?: { name: string; polygon: Pt[] }[]; terrain?: { id: string; kind: string; polygon: Pt[] }[] } | null;
 }
