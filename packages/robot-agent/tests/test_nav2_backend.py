@@ -1960,3 +1960,16 @@ async def test_外审POC_r2_I5_路网拐角在走廊出口外的空地上_直段
         "edges": [["A", "B"], ["B", "C"]]}))
     await t.nav.goto(Pose.from_xy_yaw(5.0, 7.0, math.pi / 2))
     assert link.kinds("goal") and link.kinds("goal")[-1].get("via")
+
+
+@pytest.mark.parametrize("x1", [4.53, 4.56])                # 车尾差 5 mm / 已经压上 2.5 cm
+async def test_外审POC_r3_C2_车尾贴着或压着禁行区_不许再往里退(tmp_path, monkeypatch, x1):
+    """codex POC r3 #2:离禁行区不到 1 cm 时阈值变成负数,相交以后距离恒为 0,检查失效。"""
+    from test_planned_nav import _区
+    t, sent = await _脱困台(tmp_path, 5.0, 4.0, 0.0, monkeypatch)
+    await t.nav.set_zones(_区({"id": "pool", "kind": "nogo",
+                               "polygon": [[4.3, 3.8], [x1, 3.8], [x1, 4.2], [4.3, 4.2]]}))
+    _退(t, [(4.6, 4.0), (3.5, 4.0)])
+    here = await t.nav._here()
+    await t.nav._back_step(here, 0.1)
+    assert sent and sent[-1] == (0.0, 0.0), sent
