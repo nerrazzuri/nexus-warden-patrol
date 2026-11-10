@@ -422,6 +422,32 @@ void main() {
     expect(api.calls, contains('map A main:20261031-1'));
   });
 
+  testWidgets('草稿版本（11-11）：卡片标「草稿」、说在网页发布，没有下发按钮', (t) async {
+    _size(t);
+    final api = FakeApi('admin')
+      ..overview = <String, dynamic>{
+        'maps': <dynamic>[
+          <String, dynamic>{'map_id': 'main', 'versions': <dynamic>[
+            <String, dynamic>{'version': '20261031-3', 'note': '', 'created_ms': 0, 'latest': true,
+              'draft': true, 'draft_of': '20261031-2', 'loaded_on': <dynamic>[], 'quality': <String, dynamic>{}},
+            <String, dynamic>{'version': '20261031-2', 'note': '', 'created_ms': 0, 'latest': false,
+              'draft': false, 'loaded_on': <dynamic>['A'], 'quality': <String, dynamic>{}},
+          ]},
+        ],
+        'robots': <dynamic>[
+          <String, dynamic>{'robot_id': 'A', 'can_activate': true,
+            'loaded': <String, dynamic>{'map_id': 'main', 'version': '20261031-2'}},
+        ],
+      };
+    await t.pumpWidget(MaterialApp(home: MapManagePage(api: api)));
+    await t.pumpAndSettle();
+    expect(find.byKey(MapManagePage.draftKey('main', '20261031-3')), findsOneWidget);
+    expect(find.byKey(MapManagePage.draftKey('main', '20261031-2')), findsNothing);
+    expect(find.byKey(MapManagePage.sendKey('main', '20261031-3')), findsNothing);
+    expect(find.byKey(MapManagePage.sendKey('main', '20261031-2')), findsOneWidget);
+    expect(find.textContaining('发布到站点后才能下发'), findsOneWidget);
+  });
+
   testWidgets('缺定位文件的老版本（11-05 现场第 10 条）：卡片上写带定位器的机器人用不了、缺什么', (t) async {
     _size(t);
     final api = FakeApi('admin')

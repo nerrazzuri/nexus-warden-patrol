@@ -337,13 +337,15 @@ class MapAdmin:
                 by: str) -> dict[str, Any]:
         """把这一版的噪点候选(``skip`` 里的编号除外)清掉,另存成新的一版:文件照抄、只换栅格;
         这一版上每只狗的原点照抄(同一个坐标系)。区域、待命点、拦截点走「新版本带过来、要人核」(R2)。
+        11-11(用户:去噪也要是草稿):清出来的跟编辑器保存一样是**草稿**,预览、发布到站点后才能下发;
+        在草稿上清就顶掉那份草稿(草稿只留一份)。
         ``digest`` 跟这一版现在的栅格对不上(找完之后图换了)→ 409。"""
         import shutil
         import tempfile
         from pathlib import Path
 
         from nexwar_site import map_denoise as dn
-        from nexwar_site.maps import MapError
+        from nexwar_site.maps import DRAFT_SOURCE, MapError
         map_id, version = self._names(map_id, version)
         if not isinstance(skip, list) or not all(isinstance(i, int) and not isinstance(i, bool)
                                                 for i in skip):
@@ -355,6 +357,7 @@ class MapAdmin:
         specks = [s for s in dn.find_specks(data, meta) if s["id"] not in set(skip)]
         if not specks:
             raise AdminError(409, "没有要清的(都去掉了,或者未找到)", reason="nothing")
+        origin = self.cat.draft_of(map_id, version)
         new = self._next_version(map_id, version)
         src = self.cat.root / map_id / version
         tmp = Path(tempfile.mkdtemp(prefix="denoise-", dir=self.cat.root))
@@ -364,8 +367,11 @@ class MapAdmin:
             (tmp / image).write_bytes(dn.clean(data, meta, specks))
             px = sum(s["px"] for s in specks)
             try:
-                self.cat.import_dir(tmp, map_id=map_id, version=new, source=f"denoise:{by}",
-                                    note=f"从 {version} 清了 {len(specks)} 处零星噪点({px} 格)")
+                # 「从 X 编辑」是草稿记最初那一版的写法(:meth:`MapCatalog.draft_of` 认它)
+                self.cat.import_dir(tmp, map_id=map_id, version=new,
+                                    source=f"{DRAFT_SOURCE}{by}",
+                                    note=f"从 {origin or version} 编辑:清了 {len(specks)} "
+                                         f"处零星噪点({px} 格)")
             except MapError as exc:
                 raise AdminError(409, str(exc)) from exc
         finally:
@@ -373,8 +379,12 @@ class MapAdmin:
         from nexwar_site.standby import copy_homes
         homes = copy_homes(self.db, map_id, version, new)
         layout = self._copy_over(map_id, version, new, by=by)
-        return {"map_id": map_id, "from": version, "version": new, "cleaned": len(specks),
-                "cells": px, "homes_copied": homes, "layout_copied": layout}
+        out = {"map_id": map_id, "from": origin or version, "version": new,
+               "cleaned": len(specks), "cells": px, "homes_copied": homes,
+               "layout_copied": layout, "by": by, "draft": True}
+        if origin is not None:
+            self._replace_draft(map_id, version, new, by=by, out=out)
+        return out
 
     def edit(self, map_id: str, version: str, *, digest: Any, ops: Any, note: Any,
              by: str) -> dict[str, Any]:
