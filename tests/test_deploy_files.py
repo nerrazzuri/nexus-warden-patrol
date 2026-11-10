@@ -1898,7 +1898,8 @@ def test_W47_行为树不原地转_启动文件换成绝对路径_转接节点�
 
 
 def test_导航V1第4步_MPPI走不动换RPP_两棵行为树都改_RPP不倒车_最低速在死区以上():
-    """11-10 仿真 1084 趟:MPPI + RPP 兜底 必须过 140/270(纯 MPPI 130)、撞人车 0(纯 MPPI 1);用户同意上。"""
+    """11-10 仿真 1084 趟:MPPI + RPP 兜底 必须过 140/270(纯 MPPI 130)、撞人车 0(纯 MPPI 1);
+    用户同意上。"""
     import re
 
     import yaml
@@ -1909,7 +1910,8 @@ def test_导航V1第4步_MPPI走不动换RPP_两棵行为树都改_RPP不倒车_
     assert r["plugin"] == "nav2_regulated_pure_pursuit_controller::RegulatedPurePursuitController"
     assert r["allow_reversing"] is False, "倒车看不见后面(两侧、后方盲区)"
     assert r["use_collision_detection"] is True
-    assert min(r["min_approach_linear_velocity"], r["regulated_linear_scaling_min_speed"]) >= 0.13, \
+    low = min(r["min_approach_linear_velocity"], r["regulated_linear_scaling_min_speed"])
+    assert low >= 0.13, \
         "真机 0.13 m/s 以下只踏步不走"
     assert r["desired_linear_vel"] <= 0.6, "不超过巡逻上限"
     for name in ("navigate_to_pose_d1max.xml", "navigate_through_poses_d1max.xml"):

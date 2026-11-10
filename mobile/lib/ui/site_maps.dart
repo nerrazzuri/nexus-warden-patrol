@@ -733,7 +733,7 @@ class _SiteMapTabState extends State<SiteMapTab> {
     final vizAt = runVizShapes(v.viz, v.mapId!, v.version!, (x, y) => Offset(x, y));
     // 图例：只列图上有的（底图那三样总有）
     final legend = <NwLegendItem>[
-      ...mapBaseLegend(context, plan: v.plan, seen: geo.seen),
+      ...mapBaseLegend(context, plan: v.plan, seen: geo.seen, curb: geo.curb),
       if (placed.isNotEmpty)
         NwLegendItem(
             swatch: Container(

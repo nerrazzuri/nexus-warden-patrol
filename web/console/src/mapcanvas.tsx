@@ -50,17 +50,17 @@ export interface CanvasArea {
 /** 图例超过这么多项就收成按钮。 */
 const LEGEND_INLINE = 6;
 
-export type LegendKey = "floor" | "wall" | "seen" | "unknown" | "nogo" | "hard" | "vwall" | "erase" | "slow" | "ignore" | "area" | "zone" | "region" | "ref" | "exit" | "hide" | "standby" | "camera" | "robot" | "alarm";
-const LEGEND_ORDER: LegendKey[] = ["floor", "wall", "seen", "unknown", "nogo", "hard", "vwall", "erase", "slow", "ignore", "area", "zone", "region", "ref", "exit", "hide", "standby", "camera", "robot", "alarm"];
+export type LegendKey = "floor" | "wall" | "seen" | "curb" | "unknown" | "nogo" | "hard" | "vwall" | "erase" | "slow" | "ignore" | "area" | "zone" | "region" | "ref" | "exit" | "hide" | "standby" | "camera" | "robot" | "alarm";
+const LEGEND_ORDER: LegendKey[] = ["floor", "wall", "seen", "curb", "unknown", "nogo", "hard", "vwall", "erase", "slow", "ignore", "area", "zone", "region", "ref", "exit", "hide", "standby", "camera", "robot", "alarm"];
 const LEGEND_TEXT: Record<LegendKey, Key> = {
-  floor: "legendFloor", wall: "legendWall", seen: "legendSeen", unknown: "legendUnknown", nogo: "legendNoGo",
+  floor: "legendFloor", wall: "legendWall", seen: "legendSeen", curb: "legendCurb", unknown: "legendUnknown", nogo: "legendNoGo",
   hard: "hardNoGoLegend", vwall: "legendVWall", erase: "legendErase", slow: "legendSlow", ignore: "legendIgnore",
   area: "legendArea", zone: "legendZone", region: "legendRegion", ref: "legendZoneRef", exit: "legendExit", hide: "legendHide", standby: "legendStandby", camera: "legendCamera", robot: "legendRobot", alarm: "legendAlarm",
 };
 
 /** 底图的灰度(站点 map_preview:空地 254、墙 0、看到过 232、未知 205;平面图:地面白、墙深灰、看到过是
- *  透明度 0.35 的白、未知透明)。 */
-const SHADE = { raster: { floor: 254, wall: 0, seen: 232, unknown: 205 }, plan: { floor: 255, wall: 34, seenAlpha: 0.35 } };
+ *  透明度 0.35 的白、未知透明;路沿两种都是 150)。 */
+const SHADE = { raster: { floor: 254, wall: 0, seen: 232, unknown: 205, curb: 150 }, plan: { floor: 255, wall: 34, seenAlpha: 0.35, curb: 150 } };
 
 /** 标记层用:地图坐标 / 预览像素 → 屏上。 */
 export interface Screen {
@@ -231,6 +231,7 @@ export function MapCanvas(props: {
   if (zones.some((z) => z.kind === "ignore")) present.add("ignore");
   // 地图台账 M9、44:看到过、狗没走过(站点说这一版有才列);抹掉区(站点已经把那一块画成没建图,这里只描边)
   if (meta.seen === true) present.add("seen");
+  if (meta.curb === true) present.add("curb");   // 路沿、绿化岛(11-10)
   if (zones.some((z) => z.kind === "erase")) present.add("erase");
   for (const a of areas) present.add(a.kind);
   const bar = scaleBar(meta.m_per_px, view.k);
@@ -328,6 +329,7 @@ function Swatch({ k, plan }: { k: LegendKey; plan: boolean }) {
   else if (k === "seen") body = plan
     ? <><rect x="0.5" y="0.5" width="15" height="11" class="sw-bg sw-edge" /><rect x="0.5" y="0.5" width="15" height="11" fill={shade(SHADE.plan.floor)} fill-opacity={SHADE.plan.seenAlpha} /></>
     : <rect x="0.5" y="0.5" width="15" height="11" fill={shade(SHADE.raster.seen)} class="sw-edge" />;
+  else if (k === "curb") body = <rect x="0.5" y="0.5" width="15" height="11" fill={shade(plan ? SHADE.plan.curb : SHADE.raster.curb)} class="sw-edge" />;
   else if (k === "erase") body = <rect x="1" y="1" width="14" height="10" class="erase-area" />;
   else if (k === "unknown") body = plan
     ? <rect x="0.5" y="0.5" width="15" height="11" class="sw-bg sw-edge" />

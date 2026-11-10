@@ -611,6 +611,14 @@ describe("看到过、机器人没走过 + 抹掉区:图例只在有的时候列
     expect(e.querySelector("title")!.textContent).toBe("Impassable area Junk: robots never go there");
     expect(c.querySelectorAll("g.map-world polygon.nogo-area").length).toBe(1);
   });
+  it("站点说这一版有路沿层(11-10):图例列「路沿、绿化岛」,排在看到过后面;没有不列", async () => {
+    installScreenCTM();
+    lang.value = "zh";
+    const { container: c } = mapPage({ ...META, seen: true, curb: true, zones: [] }, { units: [unit(robot("A", null))] });
+    await ready(c);
+    expect(legend(c).slice(0, 4)).toEqual(["floor", "wall", "seen", "curb"]);
+    expect(c.querySelector(".maplegend")!.textContent!).toContain("路沿、绿化岛（规划尽量绕开）");
+  });
   it("中文图例", async () => {
     installScreenCTM();
     lang.value = "zh";
