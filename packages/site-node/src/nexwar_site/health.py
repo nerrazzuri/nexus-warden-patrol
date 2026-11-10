@@ -474,7 +474,8 @@ def support_bundle(out: Path, *, home: Path, db: Any, health: HealthDesk | None,
                    extra: dict[str, bytes] | None = None,
                    since_ms: int | None = None, until_ms: int | None = None,
                    robot: str | None = None, task: str | None = None, scene: str = "",
-                   by: str = "", robot_logs: Any = None, log_dir: Path | None = None) -> Path:
+                   by: str = "", robot_logs: Any = None, log_dir: Path | None = None,
+                   ref: str = "") -> Path:
     """写诊断包 ``out``(tar.gz)。回 ``out``。
 
     日志设计 第 5 条(用户 11-10):按时间段、按场景(某台机器人、某个任务、某条告警)导出,
@@ -741,8 +742,10 @@ def scene_window(db: Any, *, now_ms: int, since_ms: int | None = None,
                  alert: str | None = None, run: int | None = None) -> dict[str, Any]:
     """导出的时间段和场景(日志设计 第 5 条):给了告警或任务,时间段按它自动取(开始前 10 分钟到
     结束后 10 分钟),机器人也按它定;手动给的时间段优先。→ ``{since_ms, until_ms, robot, task,
-    scene}``。找不到那条告警 / 那个任务、时间段不对:``ValueError``。"""
-    scene = "按时间段"
+    scene, ref}``:``scene`` 是写进包里的一句中文;``ref`` 是给操作记录的引用(``alert:<key>``、
+    ``run:<id>``、``task:<id>``、``robot:<id>``、``range``),网页按界面语言写成人话(W6-07)。
+    找不到那条告警 / 那个任务、时间段不对:``ValueError``。"""
+    scene, ref = "按时间段", "range"
     if alert:
         rows = db.query("SELECT robot, first_ms, last_ms, resolved_ms, kind, title FROM alerts "
                         "WHERE key=?", (alert,))
@@ -754,7 +757,7 @@ def scene_window(db: Any, *, now_ms: int, since_ms: int | None = None,
         end = max(a["last_ms"] or 0, a["resolved_ms"] or 0) or a["first_ms"]
         since_ms = since_ms if since_ms is not None else a["first_ms"] - 3 * SCENE_BEFORE_MS
         until_ms = until_ms if until_ms is not None else end + SCENE_AFTER_MS
-        scene = f"告警 {alert}({a['title']})"
+        scene, ref = f"报警 {alert}({a['title']})", f"alert:{alert}"
     elif run is not None:
         rows = db.query("SELECT robot_id, mission, stamp, first_ms, last_ms FROM runs WHERE id=?",
                         (run,))
@@ -767,7 +770,7 @@ def scene_window(db: Any, *, now_ms: int, since_ms: int | None = None,
         robot = robot or r["robot_id"]
         since_ms = since_ms if since_ms is not None else t0 - SCENE_BEFORE_MS
         until_ms = until_ms if until_ms is not None else end + SCENE_AFTER_MS
-        scene = f"巡检 {r['mission']} {r['stamp']}"
+        scene, ref = f"巡逻 {r['mission']} {r['stamp']}", f"run:{run}"
     elif task:
         rows = db.query("SELECT robot_id, MIN(issued_at) AS t0, MAX(issued_at) AS t1 "
                         "FROM commands WHERE task_id=?", (task,))
@@ -780,9 +783,9 @@ def scene_window(db: Any, *, now_ms: int, since_ms: int | None = None,
         robot = robot or r["robot_id"]
         since_ms = since_ms if since_ms is not None else r["t0"] - SCENE_BEFORE_MS
         until_ms = until_ms if until_ms is not None else end + SCENE_AFTER_MS
-        scene = f"任务 {task}"
+        scene, ref = f"任务 {task}", f"task:{task}"
     elif robot:
-        scene = f"机器人 {robot}"
+        scene, ref = f"机器人 {robot}", f"robot:{robot}"
     since_ms = since_ms if since_ms is not None else now_ms - 24 * 3_600_000
     until_ms = until_ms if until_ms is not None else now_ms
     if until_ms <= since_ms:
@@ -790,7 +793,7 @@ def scene_window(db: Any, *, now_ms: int, since_ms: int | None = None,
     if until_ms - since_ms > BUNDLE_MAX_DAYS * 86_400_000:
         raise ValueError(f"一个包最多取 {BUNDLE_MAX_DAYS} 天,缩小时间段")
     return {"since_ms": int(since_ms), "until_ms": int(until_ms), "robot": robot, "task": task,
-            "scene": scene}
+            "scene": scene, "ref": ref}
 
 
 def _stamp_ms(stamp: str) -> int | None:

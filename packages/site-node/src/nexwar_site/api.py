@@ -2656,7 +2656,8 @@ class _Handler(TlsHandlerMixin):
             raise HttpError(404, "此站点未启用体检")
         now = self.site._now()
         # 包里有位置轨迹、日志:谁在什么时候导出了哪一段,进操作记录(GET 本来不记)
-        self._audit_view(f"support-bundle/{win['scene']}/{win['since_ms']}-{win['until_ms']}",
+        ref = win.get("ref") or "range"
+        self._audit_view(f"support-bundle/{ref}/{win['since_ms']}-{win['until_ms']}",
                          action="DOWNLOAD")
         span_h = max(1, min(168, (now - win["since_ms"]) // 3_600_000 + 1))
         extra = self._bundle_extra(span_h, robot=win["robot"])
@@ -2734,7 +2735,7 @@ class _Handler(TlsHandlerMixin):
         since, until = desk.window(code)
         robot = meta.get("robot") or None
         win = {"since_ms": since, "until_ms": until, "robot": robot, "task": None,
-               "scene": f"问题单 {code}:{meta.get('note') or '-'}"}
+               "scene": f"问题单 {code}:{meta.get('note') or '-'}", "ref": f"problem:{code}"}
         from nexwar_site.remote_ops import dumps
         more = {f"clients/app-{code}.log.gz": desk.app_log(code),
                 "clients/problem.json": dumps({k: v for k, v in meta.items()
@@ -3897,9 +3898,10 @@ class _Handler(TlsHandlerMixin):
             if path == "/api/runs" and method == "GET":
                 self._need(user, VIEW)
                 robot = (q.get("robot") or [None])[0]
-                return self._send_json(200, {"runs": desk.store.runs(
+                from nexwar_site.evidence import run_origins
+                return self._send_json(200, {"runs": run_origins(desk.store.db, desk.store.runs(
                     robot_id=robot, since_ms=num("since"), until_ms=num("until"),
-                    limit=num("limit") or 200, mission=(q.get("mission") or [None])[0])})
+                    limit=num("limit") or 200, mission=(q.get("mission") or [None])[0]))})
             m = _RUN.match(path)
             if m is not None:
                 rid, what, arg = int(m.group(1)), m.group(2), m.group(3)
