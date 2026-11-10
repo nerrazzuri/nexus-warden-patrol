@@ -34,6 +34,8 @@ class 假Master:
     def __init__(self) -> None:
         self.srv = SimpleXMLRPCServer(("127.0.0.1", 0), logRequests=False, allow_none=True)
         self.pubs: dict[str, str] = {}
+        self.callers: dict[str, str] = {}
+        self.owner: dict[str, str] = {}
         self.registers = 0
         self.unregisters: list[str] = []
         self.srv.register_function(self._reg, "registerPublisher")
@@ -43,7 +45,16 @@ class 假Master:
 
     def _reg(self, caller, topic, mtype, api):
         self.registers += 1
+        # 跟真的 rosmaster 一样(registrations.py:同一个节点名换了地址 = 那个节点重启了,清掉它原来的
+        # 注册;外审 POC I7)
+        old = self.callers.get(caller)
+        if old is not None and old != api:
+            for t in [t for t, c in self.owner.items() if c == caller]:
+                self.pubs.pop(t, None)
+                self.owner.pop(t, None)
+        self.callers[caller] = api
         self.pubs[topic] = api
+        self.owner[topic] = caller
         return [1, "ok", []]
 
     def _unreg(self, caller, topic, api):
@@ -243,7 +254,7 @@ async def test_竞品主控没开_起得来不卡_喊话当场报错_警灯报�
     # 主控起来了(同一个端口)
     m = 假Master.__new__(假Master)
     m.srv = SimpleXMLRPCServer(("127.0.0.1", port), logRequests=False, allow_none=True)
-    m.pubs, m.registers, m.unregisters = {}, 0, []
+    m.pubs, m.registers, m.unregisters, m.callers, m.owner = {}, 0, [], {}, {}
     m.srv.register_function(m._reg, "registerPublisher")
     m.srv.register_function(m._unreg, "unregisterPublisher")
     threading.Thread(target=m.srv.serve_forever, daemon=True).start()
@@ -650,3 +661,18 @@ def test_POC1106_音量配置_控件名只认字母数字_百分比在范围里(
     c = AnbotConfig.from_dict({"master": "http://127.0.0.1:1/", "host": "127.0.0.1",
                                "volume_control": "Speaker Playback", "volume_card": "1"})
     assert c.volume_percent == 70
+
+
+async def test_外审POC_I7_四个发布端各用各的节点名_注册完四个话题都在(master):
+    """codex POC r1 I7:四个发布端共用一个节点名、各开一个地址,master 当成同一个节点重启了,
+    互相清掉注册,最后只剩雨刷。"""
+    p = AnbotPayload(_cfg(master.url))
+    await p.start()
+    try:
+        await _等(lambda: {STROBE, VOICE, PTZ, WIPER} <= set(master.pubs))
+        await asyncio.sleep(0.2)
+        assert {STROBE, VOICE, PTZ, WIPER} <= set(master.pubs), master.pubs
+        assert len({master.owner[t] for t in (STROBE, VOICE, PTZ, WIPER)}) == 4
+        assert all(master.owner[t].startswith(p.cfg.caller) for t in (STROBE, VOICE, PTZ, WIPER))
+    finally:
+        await p.close()

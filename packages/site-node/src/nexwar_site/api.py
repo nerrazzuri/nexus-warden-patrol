@@ -3068,7 +3068,7 @@ class _Handler(TlsHandlerMixin):
                                         timeout_s=disp.ack_timeout_s + 5)
                 ack = r.get("ack") if isinstance(r, dict) else None
                 released = isinstance(ack, dict) and ack.get("result") == "accepted"
-            except Exception:                              # noqa: BLE001 - 没解开:照实说
+            except Exception:                              # 没解开:照实说
                 log.warning("%s 恢复:上装急停解锁没成", robot_id, exc_info=True)
                 released = False
         return self._send_json(200, {"robot_id": robot_id, "was_held": was,

@@ -366,16 +366,22 @@ class AnbotPayload:
         self._password = password
         self._askpass: Path | None = None
         self.on_sound_end: Callable[[bool, str], Any] | None = None
-        self._strobe = Ros1Publisher(master=cfg.master, host=cfg.host, caller=cfg.caller,
+        # 外审 POC I7:每个发布端一个节点名(各开各的 XML-RPC 地址;共用一个名字,master 当成同一个
+        # 节点重启了,互相清掉注册)
+        self._strobe = Ros1Publisher(master=cfg.master, host=cfg.host,
+                                     caller=f"{cfg.caller}_strobe",
                                      topic=cfg.strobe_topic, mtype="std_msgs/Bool",
                                      md5=BOOL_MD5, definition="bool data\n", latching=True)
-        self._voice = Ros1Publisher(master=cfg.master, host=cfg.host, caller=cfg.caller,
+        self._voice = Ros1Publisher(master=cfg.master, host=cfg.host,
+                                    caller=f"{cfg.caller}_voice",
                                     topic=cfg.voice_topic, mtype="std_msgs/String",
                                     md5=STRING_MD5, definition="string data\n", latching=False)
-        self._ptz = Ros1Publisher(master=cfg.master, host=cfg.host, caller=cfg.caller,
+        self._ptz = Ros1Publisher(master=cfg.master, host=cfg.host,
+                                  caller=f"{cfg.caller}_ptz",
                                   topic=cfg.ptz_topic, mtype="std_msgs/Float32MultiArray",
                                   md5=F32MA_MD5, definition=F32MA_DEF, latching=False)
-        self._wiper = Ros1Publisher(master=cfg.master, host=cfg.host, caller=cfg.caller,
+        self._wiper = Ros1Publisher(master=cfg.master, host=cfg.host,
+                                    caller=f"{cfg.caller}_wiper",
                                     topic=cfg.wiper_topic, mtype="std_msgs/Bool",
                                     md5=BOOL_MD5, definition="bool data\n", latching=True)
         self._pubs = (self._strobe, self._voice, self._ptz, self._wiper)
