@@ -1022,6 +1022,10 @@ class Server:
                                crl=ca / "crl.pem"),
             db=self.db, store=self.evidence, now_ms=wall_ms, maps=self.maps)
         self.intake.releases = self.releases
+        # 日志设计 第 5 条:机器人日志存到站点(按机器人分开,留 90 天、每台限总大小)
+        from nexwar_site.robot_logs import RobotLogs
+        self.robot_logs = RobotLogs(home / "robot-logs")
+        self.intake.robot_logs = self.robot_logs
         # W18:连续录像。不进备份(30 天两路录像要 TB 级;留存与盘的规矩见 recordings)。
         from nexwar_site.alert_sources import SITE as _SITE
         from nexwar_site.recordings import RecordingStore
@@ -1174,6 +1178,10 @@ class Server:
         self.health.alerts = self._loop_alerts            # 杂事线程里报:经事件循环
         self.api.health = self.health
         self.api.home = home                              # A4:狗领证书包
+        self.api.robot_logs = getattr(self, "robot_logs", None)
+        from nexwar_site.problem_reports import ProblemReports
+        self.problem_reports = ProblemReports(home / "problem-reports", now_ms=wall_ms)
+        self.api.problem_reports = self.problem_reports
         self.api.broker_restart = restart_broker          # W42:解绑后让 broker 重读吊销名单
         self.api.site_name = str(cfg.get("site_name") or cfg.get("site_id") or "")   # B1
         from nexwar_site.compat import CompatWatch
@@ -1316,7 +1324,11 @@ class Server:
         self.recordings.prune()
         self.privacy.prune()                           # W30:证据过了留存期删(连备份)
         if self.api.audit is not None:
-            self.api.audit.prune()                     # 日志设计:用户看的操作记录留一年
+            self.api.audit.prune()
+        if getattr(self, "robot_logs", None) is not None:
+            self.robot_logs.prune()
+        if getattr(self, "problem_reports", None) is not None:
+            self.problem_reports.prune()                     # 日志设计:用户看的操作记录留一年
         self._retry_old_incoming()
 
     def _retry_old_incoming(self) -> None:

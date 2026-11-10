@@ -1,8 +1,9 @@
 // 高级 → 诊断(W44 第四期,设计 §5.3「诊断」):什么时候用 —— 有东西不正常,或者工程师让你发日志。
 // 站点主机一张检查单(/api/health 各项,大白话,通过 / 不通过 + 站点写的说明);每台机器人一张(在线、设备健康:摄像头有画面、
 // 网络、卫星定位、存储盘……认不得的原样);「打包日志」下载站点的诊断包(不含密钥、令牌、数据库)。
-import { useEffect, useState } from "preact/hooks";
+import { useEffect } from "preact/hooks";
 import { useLoad } from "./admin";
+import { BundlePanel, ProblemList } from "./bundlepanel";
 import { nameOf } from "./data";
 import { lang, t, type Key } from "./i18n";
 import type { Robot } from "./model";
@@ -33,7 +34,6 @@ export function deviceText(id: string): string {
 }
 
 export function DiagPage({ say }: { say: (s: string) => void }) {
-  const [hours, setHours] = useState(24);
   const [health, reload] = useLoad<Health>("/api/health");
   const [robots, reloadRobots] = useLoad<{ robots: DevRobot[] }>("/api/robots");
   useEffect(() => {
@@ -44,16 +44,11 @@ export function DiagPage({ say }: { say: (s: string) => void }) {
     <section class="advdiag">
       <div class="panel-head">
         <h1>{t("tabDiag")}</h1>
-        {/* P1-73:时间段只管下载的支持包(下面的检查都是此刻的状态),写在旁边 */}
-        <span class="push row">
-          <label class="small muted" for="diag-hours">{t("bundleHours")}</label>
-          <select id="diag-hours" value={String(hours)} onChange={(e) => setHours(Number(e.currentTarget.value))}>
-            {[6, 24, 72, 168].map((h) => <option key={h} value={String(h)}>{t("opsHours", { n: h })}</option>)}
-          </select>
-          <a class="btn" href={`/api/support-bundle?hours=${hours}`} download={supportName(Date.now())}>{t("supportBundle")}</a>
-        </span>
       </div>
       <p class="muted lead">{t("diagWhen")}</p>
+      <BundlePanel robots={(robots?.robots ?? []).filter((r) => !r.revoked).map((r) => r.robot_id)}
+        fileName={() => supportName(Date.now())} />
+      <ProblemList />
       <section class="panel checklist">
         <h2>{t("diagSite")}</h2>
         {!health ? <p class="muted">…</p> : (

@@ -18,7 +18,9 @@ import 'nw/nw_shell.dart';
 import 'nw/nw_theme.dart';
 import 'nw/nw_widgets.dart';
 import '../net/pairing.dart';
+import 'problem_report.dart';
 import 'site_add.dart';
+import 'site_health.dart' show shareBundle;
 import 'site_scan.dart';
 
 const Key newCodeFieldKey = Key('site-new-code');
@@ -260,6 +262,7 @@ class _SiteListPageState extends State<SiteListPage> {
             },
             // 手机 App 测试 M03：证书变了，登录页上直接给「扫新码 / 粘贴新码」
             onNewCode: () => wantNewCode = true,
+            openAnon: () => widget.apiFactory(s),
             // W52：没有账号就在这里申请（不用登录），管理员批了直接用这个账号登录
             apply: (name, display, password) async {
               final api = widget.apiFactory(s);
@@ -448,7 +451,13 @@ class SiteLoginPage extends StatefulWidget {
 
   /// 手机 App 测试 M03：证书变了时登录页上「更新站点码」按钮调它（调完登录页退出、站点列表接着换码）。
   final VoidCallback? onNewCode;
-  const SiteLoginPage({super.key, required this.site, required this.signIn, this.apply, this.onNewCode});
+
+  /// 日志设计 第 6 条：登不进去也能「上传日志」—— 给一个还没登录的站点连接（用完关掉）。
+  final SiteApi Function()? openAnon;
+  const SiteLoginPage(
+      {super.key, required this.site, required this.signIn, this.apply, this.onNewCode, this.openAnon});
+
+  static const Key problemKey = Key('login-problem');
 
   static const Key applyKey = Key('login-apply');
   static const Key newCodeKey = Key('login-new-code');
@@ -513,6 +522,16 @@ class _SiteLoginPageState extends State<SiteLoginPage> {
       return;
     }
     Navigator.pop(context, api);
+  }
+
+  Future<void> _problem() async {
+    final api = widget.openAnon!();
+    try {
+      await Navigator.push(context,
+          MaterialPageRoute<void>(builder: (_) => ProblemReportPage(api: api, share: shareBundle)));
+    } finally {
+      api.close();
+    }
   }
 
   @override
@@ -648,6 +667,17 @@ class _SiteLoginPageState extends State<SiteLoginPage> {
                                               context,
                                               MaterialPageRoute<void>(
                                                   builder: (_) => AccountApplyPage(site: s, apply: widget.apply!)))),
+                                ),
+                              ],
+                              if (widget.openAnon != null) ...[
+                                const SizedBox(height: Nw.s8),
+                                Center(
+                                  child: NwButton(
+                                      buttonKey: SiteLoginPage.problemKey,
+                                      variant: NwButtonVariant.ghost,
+                                      size: NwButtonSize.small,
+                                      label: tr("Can't sign in? Send logs", '登不上？上传日志'),
+                                      onPressed: _busy ? null : _problem),
                                 ),
                               ],
                             ]))))),

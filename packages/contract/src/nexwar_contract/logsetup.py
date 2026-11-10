@@ -24,7 +24,8 @@ from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
-KEEP_DAYS = 30
+#: 用户 11-10:日志、记录默认都留 90 天。
+KEEP_DAYS = 90
 #: 一个日志目录最多占这么多(站点 2 GiB;机器人代理自己的另给)。
 MAX_TOTAL_BYTES = 2 * 2**30
 
@@ -104,6 +105,21 @@ class _OnlyAccess(logging.Filter):
         return bool(getattr(record, "access", False)) is self.want
 
 
+class _Stderr(logging.StreamHandler):
+    """写到**写的那一刻**的标准错误(装的时候那个可能已经被换掉、关了:测试、守护进程重定向)。"""
+
+    def __init__(self) -> None:
+        super().__init__(sys.stderr)
+
+    @property
+    def stream(self):  # type: ignore[override]
+        return sys.stderr
+
+    @stream.setter
+    def stream(self, _v) -> None:
+        pass
+
+
 class DailyFile(logging.handlers.TimedRotatingFileHandler):
     """半夜换文件,留 ``keep_days`` 份;换完量一下整个目录,超了从最旧的删起。"""
 
@@ -157,12 +173,15 @@ def setup(*, name: str, log_dir: Path | None, level: str | int = "INFO",
           stream: bool = True, access: bool = True) -> list[logging.Handler]:
     """装到根日志器上。``log_dir`` 为 ``None`` 只写标准错误(命令行小工具)。回装上的处理器。"""
     root = logging.getLogger()
+    for h in [h for h in root.handlers if getattr(h, "_nexwar_logsetup", False)]:
+        root.removeHandler(h)                 # 装第二次(测试、重新加载)不叠一份
+        h.close()
     lvl = level if isinstance(level, int) else logging.getLevelName(str(level).upper())
     root.setLevel(lvl if isinstance(lvl, int) else logging.INFO)
     fmt = Formatter()
     out: list[logging.Handler] = []
     if stream:
-        h = logging.StreamHandler(sys.stderr)
+        h = _Stderr()
         h.setFormatter(fmt)
         h.addFilter(_OnlyAccess(False))
         out.append(h)
@@ -183,6 +202,7 @@ def setup(*, name: str, log_dir: Path | None, level: str | int = "INFO",
             os.chmod(log_dir, 0o750)
         trim_dir(log_dir, max_total_bytes, keep_days=keep_days)
     for h in out:
+        h._nexwar_logsetup = True             # type: ignore[attr-defined]
         root.addHandler(h)
     return out
 

@@ -24,6 +24,9 @@ SRC = (Path(__file__).resolve().parents[1] / "src" / "nexwar_site")
     "manual_only": "A 站点设成只许手动派,不接排程",
     "heading": "A 的头尾方向是「反」:x",
     "unreachable": "第 2 个点无法到达",
+    "busy": "A 正在执行别的任务",
+    "unregistered": "没有登记过 Z",
+    "bad_mission": "任务定义不成形: x",
 }
 
 
@@ -42,5 +45,6 @@ def test_原话里的关键词还在源码里():
 
 
 def test_认不出就不带():
-    assert extra_for("随便什么") == {}
-    assert set(extra_for("A 不在线")) == {"reason_code", "reason_en"}
+    # 认不出原因:不带原因代号,只带通用的「派单被拒」错误码(日志设计 第 4 条)
+    assert extra_for("随便什么") == {"err": "0x0213", "err_name": "dispatch.refused"}
+    assert {"reason_code", "reason_en", "err"} <= set(extra_for("A 不在线"))

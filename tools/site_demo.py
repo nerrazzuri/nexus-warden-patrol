@@ -581,7 +581,9 @@ def _run(a, home: Path, logs: Path, names: list[str], bport: int, fp: str, procs
                                   # 规划要图:站点下发地图走发件箱 + 接收口(真机器人也是这么配的);
                                   # W54 假建图也要(录包、建出的图从发件箱传站点)
                                   *(["--outbox", str(a.dir / f"outbox{sub}"),
-                                     "--intake", f"https://{a.host}:{a.intake_port}"]
+                                     "--intake", f"https://{a.host}:{a.intake_port}",
+                                     # 日志设计 第 5 条:演示里没有 systemd,按文件把日志传到站点
+                                     "--log-ship-file", str(logs / f"agent{sub}.log")]
                                     if a.nav == "planned" or a.w54 else []),
                                   *(["--mapping-sim", str(a.map_dir.resolve())] if a.w54
                                     else []),

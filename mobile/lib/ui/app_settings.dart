@@ -16,7 +16,9 @@ import 'arrival_alert.dart';
 import 'nw/nw_p4_admin.dart' show NwListView, NwListCard, nwGap8, nwGap16;
 import 'nw/nw_theme.dart';
 import 'nw/nw_widgets.dart';
+import 'problem_report.dart';
 import 'robot_bind_page.dart';
+import 'site_health.dart' show shareBundle;
 
 /// 进了站点以后由外壳（`NwShell`）挂上：设置页要的后台值守、推送、更新从这里拿。
 class SettingsHost extends InheritedWidget {
@@ -54,6 +56,7 @@ class AppSettingsPage extends StatefulWidget {
 
   const AppSettingsPage({super.key, this.api, this.watch, this.push, this.updater, this.langStore});
 
+  static const Key problemKey = Key('settings-problem');
   static const Key langKey = Key('lang-switch');
   static const Key watchKey = Key('btn-bg-watch');
   static const Key pushKey = Key('push-state');
@@ -228,6 +231,26 @@ class _AppSettingsPageState extends State<AppSettingsPage> {
                   : null,
               onTap: _checking ? null : () => _checkUpdate(updater),
             ),
+          // 日志设计 第 6 条：谁都能传日志（不要权限），站点开问题单、给编号，工程师按编号取
+          ListTile(
+            key: AppSettingsPage.problemKey,
+            leading: const Icon(Icons.bug_report_outlined),
+            title: Text(tr('Send logs', '上传日志')),
+            subtitle: Text(tr('Something went wrong? Send logs to the engineer', '遇到问题？把日志发给工程师'), style: sub()),
+            onTap: () async {
+              final nav = Navigator.of(context);
+              var ids = <String>[];
+              if (api != null) {
+                try {
+                  ids = [for (final r in await api.robots()) '${r['robot_id']}'];
+                } on Object {
+                  ids = <String>[]; // 机器人列表取不到：不选机器人照样能传
+                }
+              }
+              await nav.push(MaterialPageRoute<void>(
+                  builder: (_) => ProblemReportPage(api: api, robots: ids, share: shareBundle)));
+            },
+          ),
           ListTile(
             key: AppSettingsPage.licensesKey,
             leading: const Icon(Icons.description_outlined),

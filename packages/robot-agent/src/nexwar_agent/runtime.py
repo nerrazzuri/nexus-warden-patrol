@@ -71,6 +71,8 @@ from nexwar_contract.zones import ZoneSet, tightens
 from nexwar_patrol.protocol.nav_types import Pose
 
 log = logging.getLogger(__name__)
+#: 任务进行中每隔多久在日志里记一行位置(毫秒)。
+POSE_LOG_MS = 5_000
 
 #: 站点事件派遣的任务号前缀(站点 ``priorities.INCIDENT_PREFIX``;代理不依赖站点包,这里照抄)。
 INCIDENT_TASK_PREFIX = "incident-"
@@ -498,6 +500,7 @@ class AgentRuntime:
         self._went_offline = False
         self._last_status_wire: dict | None = None
         self._next_telemetry_ms: int | None = None
+        self._next_pose_log_ms = 0
         #: 规划路径上报(运营可视化):限频、抽稀、有界。
         self._nav_report = NavPathReporter()
         self._started = False
@@ -3264,8 +3267,37 @@ class AgentRuntime:
         except Exception:                               # 下一轮再收
             log.exception("设备健康没收成")
 
+    async def _maybe_pose_log(self, now: int) -> None:
+        """日志设计(用户 11-10):任务进行中每 :data:`POSE_LOG_MS` 记一行位置 —— 不管连没连着站点。
+        出事时断了网,站点那段没有轨迹;这些行先留在机器人上,联网后随日志补传,导出时补上那一段。"""
+        cur = self.processor.current
+        if cur is None or cur.done or now < self._next_pose_log_ms:
+            return
+        self._next_pose_log_ms = now + POSE_LOG_MS
+        try:
+            odom, health = await self.hal.odometry(), await self.hal.health()
+            anchor = self.parts.nav.anchor if self.parts is not None else None
+            if anchor is not None:
+                odom_ok = health.loc_quality > 0.0 and odom.valid
+                est = anchor.estimate((odom.x, odom.y, odom.yaw)) if odom.valid else None
+                ok = est is not None and anchor.ok(odom_ok)
+                q = anchor.quality(odom_ok)
+            else:
+                est = (odom if odom.valid else None)
+                ok, q = est is not None, health.loc_quality
+            m = self.loaded_map
+            if est is None:
+                log.info("位置 未知 task=%s 定位=不可信 质量=%.2f", cur.task_id, q)
+            else:
+                log.info("位置 (%.2f, %.2f, %.2f) map=%s task=%s 定位=%s 质量=%.2f",
+                         est.x, est.y, est.yaw, f"{m[0]}:{m[1]}" if m else "-", cur.task_id,
+                         "可信" if ok else "不可信", q)
+        except Exception:                               # 记位置不能挡住任务
+            log.debug("记位置失败", exc_info=True)
+
     async def _maybe_telemetry(self) -> None:
         now = self._now()
+        await self._maybe_pose_log(now)
         if self._next_telemetry_ms is None:
             self._next_telemetry_ms = now + self._telemetry_period
             return

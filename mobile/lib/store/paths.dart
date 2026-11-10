@@ -9,6 +9,8 @@ import 'dart:io';
 import 'package:path_provider/path_provider.dart';
 
 import '../l10n.dart';
+import '../net/app_log.dart';
+import '../net/site_client.dart' show appVersion, appBuild;
 import 'site_store.dart';
 
 /// 站点列表文件（W00c4）。
@@ -26,6 +28,16 @@ Future<LangStore> openLangStore() async => LangStore(File('${(await _dir()).path
 
 Future<SiteStore> openSiteStore() async =>
     JsonSiteStore(File('${(await _dir()).path}/$sitesFileName'));
+
+/// App 自己的日志文件（日志设计 第 6 条）：放在 App 私有目录的 `logs/` 下。打不开也不挡启动。
+Future<void> openAppLog() async {
+  try {
+    AppLog.instance.open(Directory('${(await _dir()).path}${Platform.pathSeparator}logs'));
+  } on Object {
+    // 找不到目录：日志只记内存
+  }
+  AppLog.instance.line('I', 'app start $appVersion+$appBuild ${deviceSummary()}');
+}
 
 Future<Directory> _dir() {
   // 桌面版（W15）：documents 是用户的「文档」文件夹（~/Documents、我的文档），谁都看得见、改得了；

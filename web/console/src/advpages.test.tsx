@@ -31,6 +31,9 @@ beforeEach(() => {
       return Promise.resolve(json({}));
     }
     if (url === "/api/health") return Promise.resolve(json(health));
+    if (url === "/api/problem-reports") return Promise.resolve(json({ reports: [
+      { code: "NW-1110-7F3A", at_ms: 1, by: "anonymous@10.0.0.9", note: "登不上", robot: "A", device: "Pixel 7", app: "1.4.0", bytes: 9 },
+      { code: "NW-1110-0B12", at_ms: 2, by: "bob", note: "", robot: "", device: "", app: "", bytes: 9 }] }));
     if (url === "/api/pairing/addresses") return Promise.resolve(json({ addresses: lanAddrs }));
     if (url === "/api/teleop-speeds") return Promise.resolve(json({ speeds: [0.3, 0.6, 1.0, 1.3, 1.6, 2.0] }));
     if (url === "/api/robots") return Promise.resolve(json({ robots: [{ robot_id: "A", fresh: true, revoked: false, devices: { items: [{ id: "camera:front", state: "online" }, { id: "rtk", state: "degraded", detail: "浮点解" }] } }] }));
@@ -57,9 +60,35 @@ describe("诊断", () => {
     expect(deviceText("lens:thermal")).toBe("热像镜头");
     expect(deviceText("nav2")).toBe("自主导航（Nav2）");
   });
-  it("打包日志是下载", () => {
+  it("打包日志是下载:默认最近 24 小时", () => {
     const { container: c } = render(<DiagPage say={() => {}} />);
-    expect(c.querySelector('a[href="/api/support-bundle?hours=24"]')!.hasAttribute("download")).toBe(true);
+    const a = c.querySelector<HTMLAnchorElement>("[data-bundle] a.btn")!;
+    expect(a.hasAttribute("download")).toBe(true);
+    const q = new URLSearchParams(a.getAttribute("href")!.split("?")[1]);
+    expect(Number(q.get("to")) - Number(q.get("from"))).toBe(24 * 3_600_000);
+  });
+  it("App 传的问题单:列出来、按编号找、整包下载", async () => {
+    const { container: c } = render(<DiagPage say={() => {}} />);
+    await waitFor(() => expect(c.querySelectorAll("[data-problems] li").length).toBe(2));
+    const li = c.querySelector('[data-code="NW-1110-7F3A"]')!;
+    expect(li.textContent).toContain("登不上");
+    expect(li.querySelector("a")!.getAttribute("href")).toBe("/api/problem-reports/NW-1110-7F3A/bundle");
+    const find = c.querySelector<HTMLInputElement>("[data-problems] input")!;
+    find.value = "0b12";
+    find.dispatchEvent(new Event("input"));
+    await waitFor(() => expect(c.querySelectorAll("[data-problems] li").length).toBe(1));
+  });
+  it("导出诊断包:场景参数和时间段都进下载地址;选了场景还没选哪一个,按钮灰着", async () => {
+    const { bundleHref, toLocalInput, fromLocalInput } = await import("./bundlepanel");
+    expect(bundleHref("alert", "A/stuck#1", 1, 2)).toBe("/api/support-bundle?alert=A%2Fstuck%231&from=1&to=2");
+    expect(bundleHref("time", "x", 1, 2)).toBe("/api/support-bundle?from=1&to=2");
+    const ms = new Date(2026, 10, 7, 8, 35).getTime();
+    expect(fromLocalInput(toLocalInput(ms))).toBe(ms);
+    const { container: c } = render(<DiagPage say={() => {}} />);
+    const sel = c.querySelector<HTMLSelectElement>("#bundle-scene")!;
+    sel.value = "robot";
+    sel.dispatchEvent(new Event("change"));
+    await waitFor(() => expect(c.querySelector("[data-bundle] button[disabled]")).not.toBeNull());
   });
 });
 

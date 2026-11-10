@@ -20,6 +20,7 @@ import 'dart:typed_data';
 import 'package:crypto/crypto.dart';
 
 import '../l10n.dart';
+import 'app_log.dart';
 import 'site_text.dart';
 import '../model/alert.dart';
 import 'error_log.dart';
@@ -719,6 +720,14 @@ abstract class SiteApi {
   /// 诊断包（A1，管理员）：一个 `.tar.gz`，发给厂家查问题用。里面没有口令和私钥。
   Future<Uint8List> supportBundle();
 
+  /// 问题单（日志设计 第 6 条）：传 App 打好的日志（gzip），站点开一张单 → `{code, at_ms}`，
+  /// 登录着传的还有 `token`（只管这张单的整包下载）。不登录也能传（登录页上）。
+  Future<Map<String, dynamic>> uploadProblem(Uint8List gz,
+      {String note = '', String robot = '', String device = '', String app = ''});
+
+  /// 问题单的整包（站点打的：前后那段的站点、机器人日志 + App 日志），凭 [uploadProblem] 给的 `token`。
+  Future<Uint8List> problemBundle(String code, String token);
+
   /// W55 远程运维（管理员、工程师）：`/api/robots/<id>/ops/<action>`。不带 [body] 是读（`diag`、
   /// `journal`、`cleanup` 查看），带 [body] 是动手（`restart`、`reboot` 要 `confirm_password`、`debug`、
   /// `timesync`、`cleanup`、`cert-renew`）。机器人那边要跑一会儿，等得比普通请求久。
@@ -1093,8 +1102,17 @@ class SiteClient implements SiteApi {
 
   // ------------------------------------------------------------ 请求
 
-  Future<dynamic> _send(String method, String path, [Object? body, Duration? within]) =>
-      _wrapped(() => _sendRaw(method, path, body).timeout(within ?? timeout));
+  Future<dynamic> _send(String method, String path, [Object? body, Duration? within]) async {
+    final t0 = DateTime.now();
+    try {
+      return await _wrapped(() => _sendRaw(method, path, body).timeout(within ?? timeout));
+    } on SiteError catch (e) {
+      // 日志设计 第 6 条：请求没成的记进 App 日志（不带查询参数和请求体）
+      AppLog.instance.line('W', '$method ${path.split('?').first} → ${e.status} ${e.kind} ${e.message} '
+          '(${DateTime.now().difference(t0).inMilliseconds} ms)');
+      rethrow;
+    }
+  }
 
   /// 连不上、握手失败、超时、连接中途断了：都收成页面认得的 [SiteError]。JSON 请求和取文件
   /// （照片、录像、诊断包）走同一套（C-B4 外审 I1：取文件的原来不包，页面接不住）。
@@ -1516,6 +1534,43 @@ class SiteClient implements SiteApi {
   @override
   Future<Uint8List> supportBundle() =>
       _bytes('/api/support-bundle', maxBundleBytes, tr('Diagnostics bundle', '诊断包'));
+
+  @override
+  Future<Map<String, dynamic>> uploadProblem(Uint8List gz,
+          {String note = '', String robot = '', String device = '', String app = ''}) =>
+      _wrapped(() async {
+        final q = Uri(queryParameters: <String, String>{
+          if (note.isNotEmpty) 'note': note,
+          if (robot.isNotEmpty) 'robot': robot,
+          if (device.isNotEmpty) 'device': device,
+          if (app.isNotEmpty) 'app': app,
+        }).query;
+        final req = await _io.openUrl('POST', base.resolve('/api/problem-reports?$q')).timeout(timeout);
+        req.followRedirects = false;
+        final tok = session?.token;
+        if (tok != null) req.headers.set(HttpHeaders.authorizationHeader, 'Bearer $tok');
+        req.headers.contentType = ContentType('application', 'gzip');
+        req.contentLength = gz.length;
+        req.add(gz);
+        final resp = await req.close().timeout(const Duration(seconds: 60));
+        final raw = await utf8.decodeStream(resp).timeout(timeout);
+        Map<String, dynamic> d;
+        try {
+          final j = jsonDecode(raw.isEmpty ? '{}' : raw);
+          d = j is Map ? j.cast<String, dynamic>() : <String, dynamic>{};
+        } on FormatException {
+          d = <String, dynamic>{};
+        }
+        if (resp.statusCode != 200) {
+          throw SiteError(resp.statusCode, (d['error'] ?? tr('Upload failed (${resp.statusCode})', '上传失败（${resp.statusCode}）')).toString());
+        }
+        return d;
+      });
+
+  @override
+  Future<Uint8List> problemBundle(String code, String token) => _bytes(
+      '/api/problem-reports/${Uri.encodeComponent(code)}/bundle?t=${Uri.encodeQueryComponent(token)}',
+      maxBundleBytes, tr('Report package', '问题单整包'));
 
   /// 机器人运维要等机器人跑完（取日志、诊断、重启服务）：比普通请求多等一会儿。
   static const Duration opsTimeout = Duration(seconds: 90);

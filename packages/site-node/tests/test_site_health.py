@@ -99,17 +99,17 @@ def test_自己盯着_证书快到期盘紧卡住报P2_好了自动解决_报失
     assert all(a.level.name == "P2" for a in t.desk.book.open())
 
 
-def test_指标历史_每5分钟一笔_留30天(台):
+def test_指标历史_每5分钟一笔_留90天(台):
     t = 台
     t.h.tick()
     t.h.tick()
     keys = {r["key"] for r in t.h.metrics()}
     assert {"site_disk_free", "loop_lag_s", "alerts_open_P1"} <= keys
     n = len(t.h.metrics())
-    t.clock[0] += 31 * DAY
+    t.clock[0] += 91 * DAY                         # 用户 11-10:日志、记录默认都留 90 天
     t.h.tick()
     assert len(t.h.metrics()) < n + len(keys) and min(r["ts"] for r in t.h.metrics()) \
-        > NOW, "30 天前的删了"
+        > NOW, "90 天前的删了"
     assert all(r["key"] == "site_disk_free" for r in t.h.metrics(key="site_disk_free"))
 
 
@@ -143,15 +143,17 @@ def test_诊断包_不带密钥令牌库文件_日志打码(台, tmp_path):
     with tarfile.open(out) as tar:
         names = tar.getnames()
         files = {n.split("/", 1)[1]: tar.extractfile(n).read() for n in names}
-    assert {"README.txt", "versions.json", "health.json", "site.json", "db_counts.json",
-            "alerts_7d.json", "metrics.csv", "logs/nexwar_site.log"} <= set(files)
+    # 日志设计 第 5 条:分 site/ robots/ records/ clients/ host/ 几块,外加 README.md
+    assert {"README.md", "site/versions.json", "site/health.json", "site/site.json",
+            "site/db_counts.json", "records/alerts.json", "site/metrics.csv",
+            "site/journal.log"} <= set(files)
     blob = b"".join(files.values())
     for bad in (b"AK-123", b"pw!", b"tok-SECRET-123", hexs.encode()):
         assert bad not in blob, bad
-    cfg = json.loads(files["site.json"])
+    cfg = json.loads(files["site/site.json"])
     assert cfg["push"]["app_key"] == "***" and cfg["push"]["secret_file"] == "/etc/x"
     assert not any(n.endswith((".db", ".key")) for n in names)
-    assert "机器人看见人了" in files["alerts_7d.json"].decode()
+    assert "机器人看见人了" in files["records/alerts.json"].decode()
 
 
 def test_打码规矩():
@@ -234,8 +236,8 @@ def test_网页P1_73_服务日志空的写明_带站点最近日志_按时间段
                          hours=1, journal=lambda unit, hours: "-- No entries --\n")
     with tarfile.open(out) as tar:
         files = {n.split("/", 1)[1]: tar.extractfile(n).read().decode() for n in tar.getnames()}
-    assert "没有 nexwar_site 的系统服务日志" in files["logs/nexwar_site.log"]
-    recent = files["logs/site-recent.log"]
+    assert "没有 nexwar_site 的系统服务日志" in files["site/journal.log"]
+    recent = files["site/site-recent.log"]
     assert "新的一条" in recent and "老的一条" not in recent and "tok-SECRET-9" not in recent
 
 
@@ -259,9 +261,9 @@ def test_第3轮_config_N8_成功的GET访问记录另放_不挤掉站点日志(
                          hours=1, journal=lambda unit, hours: "-- No entries --\n")
     with tarfile.open(out) as tar:
         files = {n.split("/", 1)[1]: tar.extractfile(n).read().decode() for n in tar.getnames()}
-    assert "机器人 A 上线了" in files["logs/site-recent.log"]
-    assert "GET /api/robots" not in files["logs/site-recent.log"]
-    assert "GET /api/robots" in files["logs/site-access.log"]
+    assert "机器人 A 上线了" in files["site/site-recent.log"]
+    assert "GET /api/robots" not in files["site/site-recent.log"]
+    assert "GET /api/robots" in files["site/site-access-recent.log"]
 
 
 def test_第3轮_config_N8_访问记录只把成功的GET标成access():

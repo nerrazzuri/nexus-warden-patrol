@@ -42,6 +42,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import json
 import logging
@@ -88,6 +89,7 @@ from nexwar_site.tlsserve import TlsHandlerMixin, TlsThreadingServer
 
 log = logging.getLogger(__name__)
 
+_PROBLEM_BUNDLE = re.compile(r"^/api/problem-reports/(NW-\d{4}-[0-9A-F]{4})/bundle$")
 MAX_BODY = 64 * 1024
 #: 网页易用性 P1-77:升级包不对时说人话(不提文件里的东西叫什么)。
 NOT_PKG = "选的文件不是升级包，打不开。请选我们给的 .tar.gz 升级文件。"
@@ -318,6 +320,10 @@ class SiteApi:
         self.health: Any = None
         #: 站点目录(商业化 A4:狗领证书包从 ``<站点目录>/ca/issued/`` 拿)。站点主程序接上。
         self.home: Path | None = None
+        #: 日志设计 第 5 条:机器人传上来的日志(诊断包里取)。站点主程序接上。
+        self.robot_logs: Any = None
+        #: 日志设计 第 6 条:问题单(:class:`~nexwar_site.problem_reports.ProblemReports`)。
+        self.problem_reports: Any = None
         #: W42 绑定申请台(``binding.BindDesk``;有站点目录时第一次用现建)。
         self.bind: Any = None
         #: W63 设备身份核对台(第一次用时现建)。
@@ -701,6 +707,10 @@ class _Handler(TlsHandlerMixin):
                 return self._bind_robot(method, path)  # W42:机器人挂绑定申请、轮询、问证书还算不算
             if method == "POST" and path == "/api/account-requests":
                 return self._account_apply()          # W52:App 上申请账号(不用登录)
+            if path == "/api/problem-reports" and method == "POST":
+                return self._problem_submit()         # 日志设计 第 6 条:谁都能传(登录页也能)
+            if method == "GET" and _PROBLEM_BUNDLE.match(path) and "t=" in self.path:
+                return self._problem_bundle(_PROBLEM_BUNDLE.match(path).group(1), None)
             if method == "POST" and path == "/api/incidents":
                 return self._incident_in()          # 摄像头不登录:验签
             if method == "POST" and path == "/api/logout":
@@ -715,6 +725,13 @@ class _Handler(TlsHandlerMixin):
             user = self._user()
             if getattr(user, "scope", "") == "watch" and (method, path) not in WATCH_PATHS:
                 raise HttpError(403, "值守令牌只能看告警")
+            if path == "/api/problem-reports" or _PROBLEM_BUNDLE.match(path):
+                self._need(user, MAINTAIN)
+                if path == "/api/problem-reports":
+                    if method != "GET":
+                        raise HttpError(405, "只支持 GET")
+                    return self._send_json(200, {"reports": self._problems().list()})
+                return self._problem_bundle(_PROBLEM_BUNDLE.match(path).group(1), user)
             if method == "POST" and path == "/api/watch/token":
                 # W17:手机后台值守领一个只能看告警的长期令牌(普通会话 12 小时就到期)
                 self._need(user, VIEW)
@@ -889,7 +906,8 @@ class _Handler(TlsHandlerMixin):
                     # C-B4:谁在用哪一版 App 登录着(带账号名,只给管理员)
                     got["clients"] = self.site.accounts.clients()
                 return self._send_json(200, got)
-            if path in ("/api/health", "/api/metrics", "/api/support-bundle"):
+            if path in ("/api/health", "/api/metrics", "/api/support-bundle",
+                        "/api/support-bundle/window"):
                 return self._health(method, path, user)
             if path in ("/api/push/devices", "/api/push/devices/remove"):
                 return self._push_devices(method, path, user)
@@ -2611,17 +2629,141 @@ class _Handler(TlsHandlerMixin):
         self._need(user, MANAGE)
         if path == "/api/health":
             return self._send_json(200, desk.view())
+        if path == "/api/support-bundle/window":
+            # 网页先问一下按这个场景取哪一段(显示出来,可以改了再下载);不打包、不记操作记录
+            self._skip_audit = True
+            return self._send_json(200, self._bundle_window())
+        return self._send_bundle(self._bundle_window(), by=str(user))
+
+    def _send_bundle(self, win: dict[str, Any], *, by: str,
+                     more: dict[str, bytes] | None = None) -> None:
+        """按时间段、场景现打一个诊断包发出去(日志设计 第 5、6 条)。"""
         import tempfile
 
         from nexwar_site.health import support_bundle
-        q = parse_qs(self.path.split("?", 1)[1] if "?" in self.path else "")
-        h = q.get("hours", ["24"])[0]
-        hours = min(max(int(h), 1), 168) if h.isdigit() else 24      # W55:时间段,最长 7 天
-        extra = self._bundle_extra(hours)
+        desk = self.site.health
+        if desk is None:
+            raise HttpError(404, "此站点未启用体检")
+        now = self.site._now()
+        # 包里有位置轨迹、日志:谁在什么时候导出了哪一段,进操作记录(GET 本来不记)
+        self._audit_view(f"support-bundle/{win['scene']}/{win['since_ms']}-{win['until_ms']}",
+                         action="DOWNLOAD")
+        span_h = max(1, min(168, (now - win["since_ms"]) // 3_600_000 + 1))
+        extra = self._bundle_extra(span_h, robot=win["robot"])
+        extra.update(more or {})
+        log.warning("导出诊断包 actor=%s 场景=%s 时间段=%d..%d", self._actor or by, win["scene"],
+                    win["since_ms"], win["until_ms"])
         with tempfile.TemporaryDirectory(prefix="nexwar_bundle-") as tmp:
             out = support_bundle(Path(tmp) / "support.tar.gz", home=desk.home, db=desk.db,
-                                 health=desk, now_ms=self.site._now(), hours=hours, extra=extra)
+                                 health=desk, now_ms=now, extra=extra, by=by,
+                                 robot_logs=getattr(self.site, "robot_logs", None), **win)
             return self._send_bytes(out.read_bytes(), "application/gzip")
+
+    # ------------------------------------------------------------ 问题单(日志设计 第 6 条)
+
+    def _problems(self) -> Any:
+        desk = getattr(self.site, "problem_reports", None)
+        if desk is None:
+            raise HttpError(404, "此站点未启用问题单")
+        return desk
+
+    def _problem_submit(self) -> None:
+        """App 传日志开问题单。登录着的记谁传的、给一个下载这张单整包的凭证;没登录的也收(限量)。"""
+        from nexwar_site.problem_reports import MAX_BYTES, ReportRefused
+        desk = self._problems()
+        user = None
+        if self._token():
+            with contextlib.suppress(HttpError):
+                user = self._user()
+        remote = self.client_address[0]
+        self._actor = str(user) if user is not None else f"anonymous@{remote}"
+        try:
+            n = int(self.headers.get("Content-Length") or 0)
+        except ValueError as exc:
+            raise HttpError(400, "Content-Length 不是数") from exc
+        if n <= 0:
+            raise HttpError(400, "没有日志")
+        if n > MAX_BYTES:
+            self.close_connection = True
+            raise HttpError(413, f"日志超过 {MAX_BYTES // 2**20} MB")
+        data = self._read(n)
+        q = parse_qs(self.path.split("?", 1)[1] if "?" in self.path else "")
+
+        def one(k: str) -> str:
+            return (q.get(k) or [""])[0]
+        robot = one("robot")
+        if robot and not SAFE_ID.match(robot):
+            raise HttpError(400, "机器人编号不对")
+        try:
+            out = desk.submit(data=data, by=self._actor, remote=remote, note=one("note"),
+                              robot=robot, device=one("device"), app=one("app"),
+                              signed_in=user is not None)
+        except ReportRefused as exc:
+            raise HttpError(exc.status, str(exc)) from exc
+        self._audit_target = out["code"]
+        self._audit_detail = {"note": one("note")[:200], "robot": robot or None,
+                              "bytes": len(data), "signed_in": user is not None}
+        return self._send_json(200, out)
+
+    def _problem_bundle(self, code: str, user) -> None:
+        """一张问题单的整包:传单前 2 小时到传单后 10 分钟 + App 的日志。工程师(``maintain``)
+        取,或者传单的人凭那张单的凭证取(站点连不了外网时用手机分享给工程师)。"""
+        desk = self._problems()
+        meta = desk.get(code)
+        if meta is None:
+            raise HttpError(404, f"没有这张问题单:{code}")
+        if user is None:
+            q = parse_qs(self.path.split("?", 1)[1] if "?" in self.path else "")
+            if not desk.token_ok(code, (q.get("t") or [""])[0]):
+                raise HttpError(401, "凭证不对")
+            self._actor = f"{meta['by']}(问题单凭证)"
+        since, until = desk.window(code)
+        robot = meta.get("robot") or None
+        win = {"since_ms": since, "until_ms": until, "robot": robot, "task": None,
+               "scene": f"问题单 {code}:{meta.get('note') or '-'}"}
+        from nexwar_site.remote_ops import dumps
+        more = {f"clients/app-{code}.log.gz": desk.app_log(code),
+                "clients/problem.json": dumps({k: v for k, v in meta.items()
+                                               if k != "token_hash"})}
+        self._audit_target = code
+        return self._send_bundle(win, by=str(user) if user is not None else self._actor,
+                                 more=more)
+
+    def _bundle_window(self) -> dict[str, Any]:
+        """诊断包的时间段、场景(日志设计 第 5 条):``from``/``to`` 毫秒;``robot`` / ``task`` /
+        ``alert`` / ``run``(巡检记录编号)给了按它自动取,手动给的时间段优先;老的 ``hours``
+        是「最近几小时」。"""
+        from nexwar_site.health import scene_window
+        q = parse_qs(self.path.split("?", 1)[1] if "?" in self.path else "")
+
+        def one(k: str) -> str | None:
+            v = (q.get(k) or [""])[0].strip()
+            return v[:128] or None
+
+        def ms(k: str) -> int | None:
+            v = one(k)
+            if v is None:
+                return None
+            if not v.isdigit():
+                raise HttpError(400, f"{k} 要是毫秒时刻")
+            return int(v)
+        now = self.site._now()
+        h = q.get("hours", ["24"])[0]
+        hours = min(max(int(h), 1), 168) if h.isdigit() else 24      # W55:老的「最近几小时」
+        # 日志设计 第 5 条:按时间段(from/to)、按场景(robot / task / alert)导出
+        run = ms("run")
+        since = ms("from")
+        if since is None and not (one("task") or one("alert") or run is not None):
+            since = now - hours * 3_600_000
+        robot = one("robot")
+        if robot is not None and not SAFE_ID.match(robot):
+            raise HttpError(400, "机器人编号不对")
+        try:
+            return scene_window(self.site.health.db, now_ms=now, since_ms=since,
+                                until_ms=ms("to"), robot=robot, task=one("task"),
+                                alert=one("alert"), run=run)
+        except ValueError as exc:
+            raise HttpError(400, str(exc)) from exc
 
     def _push_devices(self, method: str, path: str, user) -> None:
         """这部手机收不收 P1 推送(商业化 A6):``POST /api/push/devices`` 登记推送号、
@@ -3340,7 +3482,7 @@ class _Handler(TlsHandlerMixin):
             raise HttpError(409, f"机器人未执行:{reason}", extra={"reason": reason})
         return self._send_json(200, ack.get("data") if isinstance(ack.get("data"), dict) else {})
 
-    def _bundle_extra(self, hours: int) -> dict[str, bytes]:
+    def _bundle_extra(self, hours: int, robot: str | None = None) -> dict[str, bytes]:
         """诊断包里另外带的(W55):每台在线机器人的诊断快照、主要服务的日志;App、网页的错误记录。
         机器人那边一项取不到写进它的 errors.txt,别的照样打包。"""
         from nexwar_site.remote_ops import dumps, robot_unit
@@ -3367,7 +3509,7 @@ class _Handler(TlsHandlerMixin):
             jobs: list[tuple[str, str, dict[str, Any]]] = []
             for rid, c in list(getattr(disp, "clients", {}).items()):
                 tasks = getattr(getattr(c, "capabilities", None), "tasks", {}) or {}
-                if not (c.status and c.status.online):
+                if not (c.status and c.status.online) or (robot is not None and rid != robot):
                     continue
                 if "ops_diag" in tasks:
                     jobs.append((rid, "ops_diag", {}))
@@ -3392,16 +3534,17 @@ class _Handler(TlsHandlerMixin):
                 if st != "ok":
                     errs.append(str(data))
                 elif kind == "ops_diag":
-                    out[f"robots/{rid}/diag.json"] = dumps(data)
+                    out[f"robots/{rid}/live/diag.json"] = dumps(data)
                 else:
-                    out[f"robots/{rid}/{p['unit']}.log"] = str(
+                    # 导出这一刻机器人上的(还没传上来的那段在这里)
+                    out[f"robots/{rid}/live/{p['unit']}.log"] = str(
                         (data or {}).get("text", "")).encode()
             if errs:
-                out[f"robots/{rid}/errors.txt"] = ("\n".join(errs) + "\n").encode()
+                out[f"robots/{rid}/live/errors.txt"] = ("\n".join(errs) + "\n").encode()
         return out
 
     def _client_errors(self, method: str, user) -> None:
-        """W55:App、网页报自己的错误(登录着的谁都能报);站点留 14 天,进诊断包。"""
+        """W55:App、网页报自己的错误(登录着的谁都能报);站点留 90 天,进诊断包。"""
         if method != "POST":
             raise HttpError(405, "只支持 POST")
         if self.site.client_errors is None:

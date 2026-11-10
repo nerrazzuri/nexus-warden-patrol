@@ -12,6 +12,7 @@ import 'package:nexwar_patrol/model/alert.dart';
 import 'package:nexwar_patrol/store/site_store.dart';
 import 'package:nexwar_patrol/ui/nw/nw_theme.dart';
 import 'package:nexwar_patrol/ui/site_health.dart';
+import 'package:nexwar_patrol/ui/problem_report.dart';
 import 'package:nexwar_patrol/ui/robot_bind_page.dart';
 import 'package:nexwar_patrol/ui/robot_ops.dart';
 import 'package:nexwar_patrol/ui/alarm_log.dart';
@@ -159,6 +160,8 @@ final _pages = <String, Widget Function()>{
   'robot (admin, busy)': () => SiteRobotPage(api: FakeApi('admin', robotView: busyView()), robotId: 'A'),
   'robot ops (W55)': () => RobotOpsPage(api: FakeApi('admin'), robotId: 'A', tasks: robotOpsAll),
   'settings (W55, site list)': () => const AppSettingsPage(),
+  'send logs (logging 6, signed in)': () => ProblemReportPage(api: FakeApi('viewer'), robots: const ['A', 'B'], share: (n, b) async => true),
+  'send logs (logging 6, no site)': () => ProblemReportPage(api: null, share: (n, b) async => true),
   'settings (W55, in site)': () => AppSettingsPage(api: FakeApi('admin'), watch: WatchControl()..bind(() async {}),
       updater: (a) => AppUpdater(api: a, platform: 'android')),
   'robot (guard)': () => SiteRobotPage(api: FakeApi('guard'), robotId: 'A'),

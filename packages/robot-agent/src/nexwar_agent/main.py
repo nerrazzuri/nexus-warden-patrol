@@ -14,6 +14,7 @@ import argparse
 import asyncio
 import logging
 import os
+import shutil
 import signal
 import sys
 import threading
@@ -294,6 +295,9 @@ def build_parser() -> argparse.ArgumentParser:
     o.add_argument("--mapping-sim", type=Path, default=None, metavar="图目录",
                    help="演示站点用(W54):假建图 —— 录包、打包流程是真的,建出的图照搬这张图,"
                         "回环按仿真机器人走过的路算;只配 --hal sim")
+    o.add_argument("--log-ship-file", action="append", default=[], type=Path,
+                   help="日志设计 第 5 条:没有 systemd 日志时(演示、仿真)按文件传到站点,可给多个;"
+                        "systemd 下跑时自动传我们各服务的 systemd 日志")
     o.add_argument("--intake", default=None,
                    help="站点的机器人专用接收口 https://host:port;"
                         "mqtts 时默认 https://<broker 主机>:8444")
@@ -474,6 +478,8 @@ class Assembled:
             self.bridge.spawn(lambda: self._sim_localize())
         if self.pump is not None:
             self.pump.start()
+            if getattr(self.pump, "shipper", None) is not None:
+                self.pump.shipper.start()
 
     async def _sim_localize(self) -> None:
         """仿真定位器:连上就按 10 Hz 出位姿;断了(被代理断开、代理重启桥)1 s 后重连。"""
@@ -516,6 +522,11 @@ class Assembled:
             log.exception("运行时关不干净")
         # 发件箱最后停(先把狗停好、控制权放掉;发件箱停不等手上那一块传完)。
         if self.pump is not None:
+            if getattr(self.pump, "shipper", None) is not None:
+                try:
+                    self.pump.shipper.stop()             # 关之前最后收一次
+                except Exception:
+                    log.exception("日志上传停不干净")
             try:
                 self.pump.stop()
             except Exception:
@@ -842,7 +853,7 @@ def _outbox(args: argparse.Namespace, registration: Registration, parts: EngineP
     from nexwar_agent.maps import MapKeeper, https_fetch
     from nexwar_agent.outbox import Outbox, OutboxPump
     cap = int(args.outbox_max_gb * 2**30)
-    sinks: list[Any] = [_NoIntake()] * 4
+    sinks: list[Any] = [_NoIntake()] * 5
     keeper = None
     if args.intake is not None:
         ctx = ssl.create_default_context(cafile=args.tls_ca)
@@ -850,7 +861,8 @@ def _outbox(args: argparse.Namespace, registration: Registration, parts: EngineP
         sinks = [HttpSink(args.intake, ssl_context=ctx),
                  HttpSink(args.intake + "/bags", ssl_context=ctx),
                  HttpSink(args.intake + "/maps", ssl_context=ctx),
-                 HttpSink(args.intake + "/video", ssl_context=ctx)]
+                 HttpSink(args.intake + "/video", ssl_context=ctx),
+                 HttpSink(args.intake + "/logs", ssl_context=ctx)]
         keeper = MapKeeper(Path(args.store_dir) / "maps", fetch=https_fetch(args.intake, ctx))
     mapper = None
     if args.mapping_sim is not None:
@@ -908,7 +920,22 @@ def _outbox(args: argparse.Namespace, registration: Registration, parts: EngineP
             n += v.seal_leftovers(sealer, lambda rel: rel == VIDEO_FILE)
         if n:
             log.info("发件箱里 %d 个明文照片、录像补封上了(%s)", n, VIDEO_SEALED)
-    pump = OutboxPump(runs, more=(bags, maps), uncounted=video)
+    # 日志设计 第 5 条:机器人日志按批传到站点(断网先攒着);跟录像一样不算进盘况
+    from nexwar_agent import logship
+    ship_units: tuple[str, ...] = ()
+    if os.environ.get("INVOCATION_ID") and shutil.which("journalctl"):   # 在 systemd 下跑
+        from nexwar_agent.ops import OUR_UNITS
+        ship_units = OUR_UNITS
+    shipper = None
+    logs_box: tuple[Any, ...] = ()
+    if args.intake is not None and (ship_units or args.log_ship_file):
+        shipper = logship.LogShipper(logship.spool_dir(args.outbox), units=ship_units,
+                                     files=args.log_ship_file)
+        logs_box = (Outbox(args.outbox, cap_bytes=logship.CAP_BYTES, sink=sinks[4],
+                           sn=registration.robot_id, now_ms=wall_ms, sub="logs", run_depth=1,
+                           classify=logship.classify, settled=logship.settled),)
+    pump = OutboxPump(runs, more=(bags, maps), uncounted=(*video, *logs_box))
+    pump.shipper = shipper
     if mapper is not None:
         from nexwar_agent.mapping import storage_pressure
         mapper.pressure = lambda: storage_pressure(pump.facts())
@@ -1051,9 +1078,11 @@ def clock_hint(exc: BaseException, *, now_ms: int) -> str:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    logging.basicConfig(level=logging.INFO,
-                        format="%(asctime)s %(levelname)s %(name)s %(message)s")
     args = parse_args(argv)
+    # 日志设计 第 4 条:统一格式(带时区时间、方括号里的任务号 / 第几个点 / 地图版本);
+    # 机器人上进 systemd 日志,由日志上传按批传到站点
+    from nexwar_contract import logsetup
+    logsetup.setup(name="agent", log_dir=None, level="INFO")
     assembled = build(args)
     try:
         assembled.start()
