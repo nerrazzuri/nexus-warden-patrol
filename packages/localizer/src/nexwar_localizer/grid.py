@@ -50,6 +50,18 @@
   可通行、占据一格都不重叠;一格都没有(没去掉、模拟射线)就是 ``None``、不写文件。裁图时掩码的格子
   也算「有内容」(不然玻璃外面的那一片被裁掉,掩码跟图对不上)。
 
+- **路沿、绿化岛**(:func:`_curbs`,用户 2026-11-10,工厂停车场):高出路面 :data:`CURB_MIN_M`–
+  :data:`CURB_MAX_M` 的陡边(车不让上去的那圈路沿、马路中间的绿化带)。比实时避障的 15 cm 线、比上面
+  0.4 m 的障碍层都矮,原来图上就是能走的地面,Nav2 会从岛上斜穿过去。认出来另记一层 ``Grid.curb``
+  (:func:`write_curb` 写成 ``curb.pbm``),**不改 floor.pgm**:Nav2 转接把它当「代价高、不是墙」
+  (``nexwar_localizer.nav2bridge``)—— 规划绕开岛,路沿是唯一的路时照样跨得过去;站点核点位、代理
+  的守卫、路线检查都不读它。怎么认:按 :data:`CURB_CELL_M` 的小格取地面高度(每格靠下那两成的点,
+  **用绝对高度**:按 1 m 大格估的「当地地面」在大格交界处会跳,拿它比会冒出假路沿),在
+  :data:`CURB_RUN_M` 以内比高的那一边标上;连起来不到 :data:`CURB_MIN_LEN_M` 的(石头、垃圾)不要;
+  往两边各放 :data:`CURB_PAD_M`(规划按机身中心那格算代价,一条细线会被斜着跨过去);建图时机器人走
+  过的地方(:data:`FOOTPRINT_M` 以内)留口子:扫图的人开过去的,多半就是斜坡口、该走的地方。
+  平铺的草坪(跟地砖齐平)认不出来 —— 高度上没有分界。
+
 只依赖 numpy(狗上用 ROS 系统 Python 里 apt 装的那份);不要 scipy、PIL。
 """
 
@@ -136,6 +148,26 @@ VIEW_CONE_BINS = 4
 #: 地方规划起来跟原来一样宽。
 PROTECT_M = 0.8
 FREE, UNKNOWN, OCCUPIED = 254, 205, 0
+# ---- 路沿、绿化岛(2026-11-10,:func:`_curbs`)
+#: 算地面高度的小格(米);每格至少 :data:`CURB_MIN_PTS` 个点,取靠下 :data:`CURB_LOW_Q` 那个点的高度
+#: (草、落叶、脚边零星的点往上抬,打到地下的多次反射往下拉,都不取极值)。
+CURB_CELL_M = 0.1
+CURB_MIN_PTS = 3
+CURB_LOW_Q = 0.2
+#: 这么远(米)以内高出这么多算路沿:7 cm 以下是井盖、减速带、地砖接缝;40 cm 起障碍层管。
+CURB_RUN_M = 0.2
+CURB_MIN_M = 0.07
+CURB_MAX_M = FLOOR_CLEAR_M
+#: 连起来(八邻接)至少这么长才算(去掉石头、垃圾、零星噪点)。
+CURB_MIN_LEN_M = 0.5
+#: 标好的路沿往两边各放这么宽。
+CURB_PAD_M = 0.1
+#: 只认离建图路线(机器人身子中心走过的路)这么近(米,按横竖步数量)的:远处点稀、测距噪声大,冒假路沿
+#: (11-10 广场图:离路 6 m 以外零零星星全是);那么远的地方规划也少去。
+CURB_NEAR_M = 6.0
+#: 挑点时离「当地地面」的范围(比 :data:`FLOOR_BAND_M` 宽:1 m 大格的地面估到岛面上时,旁边的路面点
+#: 低 15 cm 也得算进来)。
+CURB_BAND_M = (-0.3, FLOOR_CLEAR_M)
 #: W71 打包时清零星噪点(11-03 商场:旁边跟着走的人在 2 m 通道正中留下一串单格,站点判「走不通」;
 #: 站点 W41 清噪点找出 337 处,人看不过来)。规矩跟站点 ``nexwar_site.map_denoise`` 同一套:占用格的
 #: 连通块(八邻)面积不超过 :data:`SPECK_MAX_M2`、外面一圈 :data:`SPECK_RING_M` 不挨着大块占用、
@@ -166,6 +198,9 @@ class Grid:
     seen: np.ndarray | None = None
     #: W71 打包时清掉的零星噪点有几处(:func:`drop_specks`)。
     specks: int = 0
+    #: 路沿、绿化岛(2026-11-10,见模块说明):跟 ``image`` 一样大的真假,只标在可通行格上;
+    #: 没有是 ``None``。
+    curb: np.ndarray | None = None
 
     def cell_of(self, x: float, y: float) -> tuple[int, int] | None:
         """地图平面上的点在图像里的 (行, 列);出了图是 None。"""
@@ -683,6 +718,82 @@ def _see_through(free: np.ndarray, seen: _Seen, seed: np.ndarray, res: float) ->
     return keep | (free & _erode(_dilate(keep, 1), 1))      # 留下的里头零星的一格、一格宽的缝补回去
 
 
+def _components(m: np.ndarray, min_cells: int) -> np.ndarray:
+    """八邻接连起来不到 ``min_cells`` 格的块去掉(块只在 ``m`` 的格子里找,格子不多)。"""
+    keep = np.zeros_like(m)
+    seen = np.zeros_like(m)
+    H, W = m.shape
+    for r0, c0 in zip(*np.nonzero(m), strict=True):
+        if seen[r0, c0]:
+            continue
+        stack, block = [(int(r0), int(c0))], []
+        seen[r0, c0] = True
+        while stack:
+            r, c = stack.pop()
+            block.append((r, c))
+            for dr in (-1, 0, 1):
+                for dc in (-1, 0, 1):
+                    rr, cc = r + dr, c + dc
+                    if 0 <= rr < H and 0 <= cc < W and m[rr, cc] and not seen[rr, cc]:
+                        seen[rr, cc] = True
+                        stack.append((rr, cc))
+        if len(block) >= min_cells:
+            rows, cols = zip(*block, strict=True)
+            keep[list(rows), list(cols)] = True
+    return keep
+
+
+def _curbs(q: np.ndarray, h: np.ndarray, ok: np.ndarray, lo: np.ndarray, shape: tuple[int, int],
+           res: float, walked: np.ndarray) -> np.ndarray:
+    """路沿(见模块说明):回跟栅格一样大(行从下往上、没裁)的真假。``q`` 地图平面系的点,``h``/``ok``
+    离当地地面多高、有没有地面;``walked`` 机器人身子中心走过的格(跟栅格一样大)。"""
+    H, W = shape
+    cell = max(CURB_CELL_M, res)
+    k = max(1, int(round(cell / res)))
+    Hs, Ws = (H + k - 1) // k, (W + k - 1) // k
+    sel = ok & (h > CURB_BAND_M[0]) & (h < CURB_BAND_M[1])
+    p = q[sel]
+    if not len(p):
+        return np.zeros(shape, bool)
+    c = ((p[:, :2] - lo) / (res * k)).astype(int)
+    inside = (c[:, 0] >= 0) & (c[:, 0] < Ws) & (c[:, 1] >= 0) & (c[:, 1] < Hs)
+    c, z = c[inside], p[inside, 2]
+    key = c[:, 1] * Ws + c[:, 0]
+    order = np.lexsort((z, key))
+    key, z = key[order], z[order]
+    uk, start, count = np.unique(key, return_index=True, return_counts=True)
+    good = count >= CURB_MIN_PTS
+    surf = np.full(Hs * Ws, np.nan)
+    surf[uk[good]] = z[start[good] + (CURB_LOW_Q * (count[good] - 1)).astype(int)]
+    surf = surf.reshape(Hs, Ws)
+    n = max(1, int(round(CURB_RUN_M / cell)))
+    rise = np.full((Hs, Ws), -np.inf)
+    for dy in range(-n, n + 1):
+        for dx in range(-n, n + 1):
+            if (dy or dx) and dy * dy + dx * dx <= n * n:
+                other = _shift_nan(surf, dy, dx)
+                d = surf - other
+                rise = np.where(np.isfinite(d) & (d > rise), d, rise)
+    edge = (rise >= CURB_MIN_M) & (rise <= CURB_MAX_M)
+    near = np.zeros((Hs, Ws), bool)
+    wr, wc = np.nonzero(walked)
+    near[wr // k, wc // k] = True
+    edge &= _dilate(near, int(round(CURB_NEAR_M / cell)))
+    edge = _components(edge, max(2, int(round(CURB_MIN_LEN_M / cell))))
+    fine = np.repeat(np.repeat(edge, k, 0), k, 1)[:H, :W]
+    return _dilate(fine, int(round(CURB_PAD_M / res)))
+
+
+def _shift_nan(m: np.ndarray, dy: int, dx: int) -> np.ndarray:
+    """``m`` 挪 (dy, dx):结果的 [r, c] = m[r + dy, c + dx],挪出去的填 nan。"""
+    out = np.full_like(m, np.nan)
+    H, W = m.shape
+    ys, yd = (slice(dy, H), slice(0, H - dy)) if dy >= 0 else (slice(0, H + dy), slice(-dy, H))
+    xs, xd = (slice(dx, W), slice(0, W - dx)) if dx >= 0 else (slice(0, W + dx), slice(-dx, W))
+    out[yd, xd] = m[ys, xs]
+    return out
+
+
 def render(points: np.ndarray, sensor_traj: np.ndarray, frames: Frames, *, res: float = RES_M,
            floor_clear: float = FLOOR_CLEAR_M, wall_top: float = WALL_TOP_M,
            traj_margin: float = TRAJ_MARGIN_M, max_range: float = MAX_RANGE_M,
@@ -766,6 +877,9 @@ def render(points: np.ndarray, sensor_traj: np.ndarray, frames: Frames, *, res: 
     specks = 0
     if views is not None and used:
         img, specks = drop_specks(img, res, passes >= SPECK_PASS_RATIO * np.maximum(hit_scans, 1))
+    curb = _curbs(q, h, ok, lo, (H, W), res, walked)        # 路沿、绿化岛(2026-11-10)
+    curb &= ~_dilate(walked, int(round(FOOTPRINT_M / res)))  # 建图时走过的地方留口子
+    curb &= img == FREE
     known = (img != UNKNOWN) | seen_only
     if known.any():                                         # 裁到有内容的范围,四周留 5 格
         ys, xs = np.where(known)
@@ -773,9 +887,11 @@ def render(points: np.ndarray, sensor_traj: np.ndarray, frames: Frames, *, res: 
         y1, x1 = min(int(ys.max()) + 6, H), min(int(xs.max()) + 6, W)
         img = img[y0:y1, x0:x1]
         seen_only = seen_only[y0:y1, x0:x1]
+        curb = curb[y0:y1, x0:x1]
         lo = lo + np.array([x0, y0]) * res
     return Grid(image=np.flipud(img).copy(), origin=(float(lo[0]), float(lo[1])), res=res,
-                seen=np.flipud(seen_only).copy() if seen_only.any() else None, specks=specks)
+                seen=np.flipud(seen_only).copy() if seen_only.any() else None, specks=specks,
+                curb=np.flipud(curb).copy() if curb.any() else None)
 
 
 def write(grid: Grid, base: Path) -> tuple[Path, Path]:
@@ -798,5 +914,17 @@ def write_seen(grid: Grid, path: Path) -> Path | None:
     path = Path(path)
     h, w = grid.seen.shape
     bits = np.packbits(grid.seen.astype(bool), axis=1)
+    path.write_bytes(f"P4\n{w} {h}\n".encode() + bits.tobytes())
+    return path
+
+
+def write_curb(grid: Grid, path: Path) -> Path | None:
+    """路沿层(2026-11-10)写成 PBM 二进制,格式、行序跟 :func:`write_seen` 一样;
+    没有路沿不写,回 ``None``。"""
+    if grid.curb is None or not grid.curb.any():
+        return None
+    path = Path(path)
+    h, w = grid.curb.shape
+    bits = np.packbits(grid.curb.astype(bool), axis=1)
     path.write_bytes(f"P4\n{w} {h}\n".encode() + bits.tobytes())
     return path

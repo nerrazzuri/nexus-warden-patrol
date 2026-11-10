@@ -237,6 +237,8 @@ local_costmap:
       static_layer:
         plugin: nav2_costmap_2d::StaticLayer
         map_subscribe_transient_local: true
+        # 路沿层(11-10):转接发的 /map 里路沿是 70,按比例换成代价(不是墙);0 / 100 照旧空 / 挡
+        trinary_costmap: false
 global_costmap:
   global_costmap:
     ros__parameters:
@@ -283,6 +285,8 @@ global_costmap:
       static_layer:
         plugin: nav2_costmap_2d::StaticLayer
         map_subscribe_transient_local: true
+        # 路沿层(11-10):转接发的 /map 里路沿是 70,按比例换成代价(不是墙);0 / 100 照旧空 / 挡
+        trinary_costmap: false
       inflation_layer:
         plugin: nav2_costmap_2d::InflationLayer
         cost_scaling_factor: 4.0
