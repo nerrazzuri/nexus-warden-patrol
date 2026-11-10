@@ -465,11 +465,11 @@ def test_11_10_编辑保存的都是草稿_草稿再改替换它_只留一份(�
     s = 站点
     tok = _登(s)
     z = s.api.zones
-    assert _草稿(s, tok, MAP[1]) == {"draft": False, "from": None}
+    assert _草稿(s, tok, MAP[1]) == {"draft": False, "from": None, "zones_removed": []}
     d1 = _编(s, tok, MAP[1])                                 # 原版 → 草稿,原版不动
     v1 = d1["version"]
     assert "replaced" not in d1 and _版本(s) == sorted([MAP[1], v1])
-    assert _草稿(s, tok, v1) == {"draft": True, "from": MAP[1]}
+    assert _草稿(s, tok, v1) == {"draft": True, "from": MAP[1], "zones_removed": []}
     ov = next(m for m in s.req("GET", "/api/admin/maps", token=tok)[1]["maps"]
               if m["map_id"] == MAP[0])["versions"]
     assert [(v["version"], v["draft"], v["draft_of"]) for v in ov] \
@@ -481,7 +481,7 @@ def test_11_10_编辑保存的都是草稿_草稿再改替换它_只留一份(�
     v2 = d2["version"]
     assert d2["replaced"] == v1 and d2["from"] == MAP[1] and _版本(s) == sorted([MAP[1], v2])
     assert [x.id for x in z.current(MAP[0], v2).zones] == ["pool"], "草稿上画的禁行区跟过来"
-    assert _草稿(s, tok, v2) == {"draft": True, "from": MAP[1]}
+    assert _草稿(s, tok, v2) == {"draft": True, "from": MAP[1], "zones_removed": []}
     assert _编(s, tok, v2, ops=[]) == {"map_id": MAP[0], "from": MAP[1], "version": v2,
                                        "draft": True}, "草稿没擦改:不出新版本"
 
@@ -508,7 +508,7 @@ def test_11_10_草稿不能下发到机器人_发布到站点以后才行(站点
     code, d = s.req("POST", f"/api/admin/maps/{MAP[0]}/{v}/release", {}, token=tok)
     assert code == 200, d
     assert d == {"map_id": MAP[0], "version": v, "from": MAP[1], "zones_revision": 0}
-    assert _草稿(s, tok, v) == {"draft": False, "from": None}
+    assert _草稿(s, tok, v) == {"draft": False, "from": None, "zones_removed": []}
     assert s.api.zones.confirmed_current(MAP[0], v), "发布这一下就是确认禁行区"
     row = next(m for m in s.maps.list() if m["map_id"] == MAP[0] and m["version"] == v)
     assert row["source"] == "edit:alice"
@@ -543,3 +543,49 @@ def test_11_10_挂了巡逻路线的草稿再擦_路线搬到新草稿(站点):
     assert d["replaced"] == v1
     rows = s.db.query("SELECT map_version FROM routes WHERE route_id='r1'")
     assert [r["map_version"] for r in rows] == [d["version"]]
+
+
+def test_外审POC_C3_有特殊地面的图另存草稿_禁行区照样跟过去_限速区不重复(站点):
+    """codex POC r1 C3:另存时先落了特殊地面的限速区,抄禁行区那一步看见新版本已有区域就跳过,禁行区丢了。"""
+    s = 站点
+    tok = _登(s)
+    zp = f"/api/maps/{MAP[0]}/{MAP[1]}/zones"
+    danger = {"id": "danger", "kind": "nogo", "label": "配电房",
+              "polygon": [[6, 3], [7, 3], [7, 3.8]]}
+    assert s.req("POST", zp, {"zones": [danger], "base_revision": 0}, token=tok)[0] == 200
+    sq = [[1, 1], [2, 1], [2, 2], [1, 2]]
+    assert s.req("POST", f"{ADM}/display", {"terrain": [{"id": "s1", "kind": "stairs",
+                                                          "polygon": sq}]}, token=tok)[0] == 200
+    for ops in (ERASE, []):
+        v = _编(s, tok, MAP[1], ops=ops)["version"]
+        ids = sorted(z["id"] for z in s.req("GET", f"/api/maps/{MAP[0]}/{v}/zones",
+                                             token=tok)[1]["zones"])
+        assert ids == ["danger", "t-s1"], (ops, ids)
+
+
+def test_外审POC_C3_抄禁行区失败_不留下缺禁行区的草稿(站点, monkeypatch):
+    s = 站点
+    tok = _登(s)
+    before = _版本(s)
+
+    def boom(*a, **k):
+        raise RuntimeError("盘满了")
+    monkeypatch.setattr(s.api.zones, "seed_derived", boom)
+    dg = s.req("GET", f"{ADM}/noise", token=tok)[1]["digest"]
+    code, d = s.req("POST", f"{ADM}/edit", {"digest": dg, "ops": ERASE}, token=tok)
+    assert code == 500 and "禁行区" in d["error"], d
+    assert _版本(s) == before, "抄不过去就不留这个草稿"
+
+
+def test_外审POC_C3_发布前说清草稿比来源少了哪些禁行区(站点):
+    s = 站点
+    tok = _登(s)
+    zp = f"/api/maps/{MAP[0]}/{MAP[1]}/zones"
+    danger = {"id": "danger", "kind": "nogo", "label": "配电房",
+              "polygon": [[6, 3], [7, 3], [7, 3.8]]}
+    s.req("POST", zp, {"zones": [danger], "base_revision": 0}, token=tok)
+    v = _编(s, tok, MAP[1])["version"]
+    assert _草稿(s, tok, v)["zones_removed"] == []
+    z = s.api.zones
+    z.put(MAP[0], v, [], base_revision=z.current(MAP[0], v).revision, by="t")
+    assert _草稿(s, tok, v)["zones_removed"] == ["配电房"]
