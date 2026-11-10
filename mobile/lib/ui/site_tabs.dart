@@ -101,6 +101,9 @@ class _Entry extends StatelessWidget {
           tr('Walk the robot around the site once with the mapping wizard (20–40 minutes).',
               '按建图向导操作，开着机器人走一圈（约 20–40 分钟）。')
         ),
+      'home' => (tr('Origin for each robot', '每台机器人的原点'),
+          tr("Mark where each robot starts on the map it uses now. Without one it can't go anywhere on its own.",
+              '在机器人现在用的这版地图上标出发位置。没有原点，机器人不能自己出发。')),
       'zones' => (tr('Confirm no-go zones', '确认禁行区'),
           tr("Robots don't go out on their own until the no-go zones are confirmed.", '禁行区确认前，机器人不会自主出发。')),
       'standby' => (tr('Standby points', '待命点'),
@@ -329,7 +332,7 @@ class _AdminHomeTabState extends State<AdminHomeTab> {
 
   void _go(BuildContext context, String id) {
     switch (id) {
-      case 'robots' || 'standby':
+      case 'robots' || 'standby' || 'home':
         widget.switchTab(1);
       case 'map':
         unawaited(openMapWizard(context, widget.api).then((_) => _load()));

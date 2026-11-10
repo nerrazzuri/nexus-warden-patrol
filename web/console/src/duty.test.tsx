@@ -289,3 +289,35 @@ describe("网页易用性第 1 轮 P2-08 详情", () => {
     expect(d.querySelector('[data-robot-more="A"]')!.getAttribute("href")).toBe("#/admin/robots?robot=A");
   });
 });
+
+// 易用性第 6 轮 W6-01:机器人当前那版图上没原点 = 出不了发,不能说「一切正常」;按角色说该找谁
+describe("W6-01 没原点出不了发", () => {
+  const noHome = (id: string) => unit(id, "idle", { robot: { robot_id: id, active: true, fresh: true, revoked: false, held: null, home_set: false, status: { online: true, last_seen: 0 } } as never });
+  it("保安:不说一切正常,写哪几台出不了发、请联系管理员;机器人那一行也写", () => {
+    const { container: c } = page([], [noHome("A"), noHome("B"), unit("C", "idle")]);
+    expect(c.querySelector(".allclear")).toBeNull();
+    const b = c.querySelector("[data-nohome]")!;
+    expect(b.textContent).toContain("A、B");
+    expect(b.textContent).toContain("请联系管理员");
+    expect(b.querySelector("a")).toBeNull();
+    const rows = Array.from(c.querySelectorAll(".duty-row"));
+    expect(rows.find((r) => r.textContent?.includes("A"))!.textContent).toContain("没有原点");
+    expect(rows.find((r) => r.textContent?.includes("C"))!.textContent).not.toContain("没有原点");
+  });
+  it("管理员:给去定位页标原点的按钮", () => {
+    const { container: c } = render(<DutyPage units={[noHome("A")]} alerts={[]} now={1000} role="admin" say={() => {}} refresh={async () => {}} onZoom={() => {}} />);
+    const a = c.querySelector("[data-nohome] a") as HTMLAnchorElement;
+    expect(a.getAttribute("href")).toBe("#/admin/localization");
+  });
+  it("英文:单复数说对", () => {
+    lang.value = "en";
+    const { container: c } = page([], [noHome("A"), noHome("B")]);
+    expect(c.querySelector("[data-nohome]")!.textContent).toContain("A and B can't start");
+    expect(c.querySelector("[data-nohome]")!.textContent).not.toContain(" has ");
+  });
+  it("离线的不算(离线另有说法)", () => {
+    const off = unit("A", "offline", { robot: { robot_id: "A", active: true, fresh: false, revoked: false, held: null, home_set: false, status: { online: false, last_seen: 0 } } as never });
+    const { container: c } = page([], [off]);
+    expect(c.querySelector("[data-nohome]")).toBeNull();
+  });
+});

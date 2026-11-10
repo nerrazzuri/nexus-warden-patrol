@@ -16,6 +16,8 @@ export const WEB_TOUR = 1;
 const ITEM: Record<string, [Key, Key, string]> = {
   robots: ["suRobots", "suRobotsHint", "#/admin/robots"],
   map: ["suMap", "suMapHint", "#/admin/maps"],
+  // 易用性第 6 轮 W6-01:原点按机器人现在用的那版图查
+  home: ["suHome", "suHomeHint", "#/admin/localization"],
   // P1-75:直接到那一项的标签页(原来都落在第一个「防区」标签)
   zones: ["suZones", "suZonesHint", "#/admin/layout?tab=nogo"],
   standby: ["suStandby", "suStandbyHint", "#/admin/layout?tab=standby"],

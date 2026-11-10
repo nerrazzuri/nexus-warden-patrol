@@ -56,6 +56,8 @@ export interface Robot {
   fresh: boolean;
   revoked: boolean;
   held: unknown;
+  /** 易用性第 6 轮 W6-01:当前那版图上有没有原点(没有就出不了发;没报地图 / 老站点 = 不知道)。 */
+  home_set?: boolean | null;
   loc?: {
     pose?: { x: number; y: number; yaw: number } | null;
     anchored?: boolean;

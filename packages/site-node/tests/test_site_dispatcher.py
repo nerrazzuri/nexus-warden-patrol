@@ -586,3 +586,16 @@ async def test_网页P0_10_解绑以后旧连接发来的状态不收_不当在�
     assert after == before, "吊销了的狗的状态不落库"
     assert "A" not in t.site.clients, "吊销了就摘掉客户端"
     assert t.site.robot_view("A")["fresh"] is False and t.site.robot_view("A")["status"] is None
+
+
+async def test_11_11_W6_01_机器人列表带上_当前地图有没有原点_保安的总览页也看得见(台):
+    t = 台
+    m = t.site._loaded(t.site.clients.get("A"))
+    assert m is not None
+    with t.site.db.tx() as c:
+        c.execute("DELETE FROM homes WHERE robot_id='A'")
+    assert t.site.robot_view("A")["home_set"] is False, "当前这版图上没原点:出不了发"
+    with t.site.db.tx() as c:
+        c.execute("INSERT INTO homes(robot_id, map_id, map_version, name, x, y, yaw) "
+                  "VALUES ('A', ?, ?, 'h', 0, 0, 0)", m)
+    assert t.site.robot_view("A")["home_set"] is True

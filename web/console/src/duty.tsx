@@ -13,7 +13,7 @@ import { AlertDetail } from "./alertdetail";
 import { Confirm } from "./dialogs";
 import { alertHeadline, canHandleAlerts } from "./alertinfo";
 import { guardAlarms, pickSlots, rankUnits, type SlotPick } from "./dutyrank";
-import { t, joinList } from "./i18n";
+import { t, joinList, andList } from "./i18n";
 import { StateText, type UnitInfo } from "./live";
 import type { CanvasArea } from "./mapcanvas";
 import { SiteMap } from "./mappage";
@@ -119,6 +119,9 @@ export function DutyPage(props: {
   };
 
   const online = props.units.filter((u) => u.state !== "offline").length;
+  // 易用性第 6 轮 W6-01:在线、但现在用的这版图上没原点 = 派不出去(起飞前检查会拒),不能说「一切正常」
+  const noHome = props.units.filter((u) => u.state !== "offline" && u.robot.home_set === false);
+  const fixHome = pageAllowed("admin/localization", props.role);
   // P0-06:「全部急停」以后每台都叫停着,要人恢复;不是「一切正常」
   const held = props.units.filter((u) => u.robot.held != null);
   const [askResume, setAskResume] = useState(false);
@@ -169,6 +172,19 @@ export function DutyPage(props: {
           {canDispatch(props.role) && (
             <div class="banner-acts">
               <button type="button" class="btn onsolid" onClick={() => setAskResume(true)}>{t("dutyResumeAll")}</button>
+            </div>
+          )}
+        </div>
+      ) : noHome.length > 0 ? (
+        <div class="banner p2" role="status" data-nohome="1">
+          <Shape kind="P2" />
+          <div class="banner-text">
+            <b>{t("dutyNoHome", { ids: andList(noHome.map((u) => nameOf(u.robot.robot_id))) })}</b>
+            {!fixHome && <span>{t("dutyNoHomeGuard")}</span>}
+          </div>
+          {fixHome && (
+            <div class="banner-acts">
+              <a class="btn onsolid" href="#/admin/localization">{t("dutyNoHomeGo")}</a>
             </div>
           )}
         </div>
@@ -223,6 +239,7 @@ export function DutyPage(props: {
                 onClick={() => { put(u.robot.robot_id); setSelected(u.robot.robot_id); }}>
                 <span class="unit-id mono">{nameOf(u.robot.robot_id)}</span>
                 <StateText s={u.state} stale={u.stale} />
+                {u.state !== "offline" && u.robot.home_set === false && <span class="tag warn small" data-row-nohome="1">{t("dutyRowNoHome")}</span>}
                 <span class="muted small">{zoneOf(u)}</span>
                 {u.battery != null && <span class="batt push">{Math.round(u.battery)}%</span>}
               </button>

@@ -441,7 +441,7 @@ const en = {
   armNowAllOff: "The whole site disarms right away.", armNowAllOn: "The whole site arms right away.", armNowChanges: "Right away: {list}.",
   robotUnbindBroker: "Unbinding also restarts the site's message server, so every robot is disconnected for about 5–10 seconds. Patrols keep going (a robot only stops and waits if it is not safe to go on), remote control stops, and alarms raised meanwhile are sent when the robots reconnect.",
   vSkipped: "Skipped (record only)",
-  lookNoHome: "No robot can go: {ids} has no origin marked on this map, so it cannot start. Mark one on the Localization page first.",
+  lookNoHome: "No robot can go: no origin is marked on this map for {ids}. Mark one on the Localization page first.",
   trSentSkipped: "{id} skipped a point on this route: {why}",
   levelP1: "P1: urgent alarm, act now", levelP2: "P2: needs attention", levelP3: "P3: record only",
   lySaveAnyway: "Save anyway",
@@ -575,6 +575,11 @@ const en = {
   dutyLastAt: "Last seen near {w}",
   dutyNoRobots: "No robots yet.",
   dutyAllClear: "All clear",
+  dutyNoHome: "{ids} can't start: no origin is marked on the map in use.",
+  dutyNoHomeGuard: "Ask your administrator to mark one.",
+  dutyNoHomeGo: "Mark origin",
+  dutyRowNoHome: "No origin",
+  lookNoHomeGuard: "No robot can go: no origin is marked on this map for {ids}. Ask your administrator to mark one.",
   fleetAttention: "Needs attention",
   fleetBattery: "Battery",
   fleetLoc: "Localization",
@@ -1486,6 +1491,8 @@ const en = {
   suZonesHint: "Robots don't go out on their own until the no-go zones are confirmed.",
   suStandby: "Standby points",
   suStandbyHint: "Where each robot waits and returns to after a patrol.",
+  suHome: "Origin for each robot",
+  suHomeHint: "Mark where each robot starts on the map it uses now. Without one it can't go anywhere on its own.",
   suRoutes: "Patrol routes",
   suRoutesHint: "Draw routes on the map.",
   suSchedule: "Patrol schedule",
@@ -2205,6 +2212,11 @@ const zh: Partial<Record<Key, string>> = {
   dutyLastAt: "最后在 {w}",
   dutyNoRobots: "暂无机器人。",
   dutyAllClear: "一切正常",
+  dutyNoHome: "{ids} 出不了发：现在用的这版地图上还没标原点。",
+  dutyNoHomeGuard: "请联系管理员标原点。",
+  dutyNoHomeGo: "去标原点",
+  dutyRowNoHome: "没有原点",
+  lookNoHomeGuard: "没有机器人能去：{ids} 在这张图上还没标原点，出不了发。请联系管理员标原点。",
   fleetAttention: "需要关注",
   fleetBattery: "电量",
   fleetLoc: "定位",
@@ -3116,6 +3128,8 @@ const zh: Partial<Record<Key, string>> = {
   suZonesHint: "禁行区确认前，机器人不会自主出发。",
   suStandby: "待命点",
   suStandbyHint: "每台机器人的待命位置和巡逻后返回位置。",
+  suHome: "每台机器人的原点",
+  suHomeHint: "在机器人现在用的这版地图上标出发位置。没有原点，机器人不能自己出发。",
   suRoutes: "巡逻路线",
   suRoutesHint: "在地图上画路线。",
   suSchedule: "巡逻日程",
@@ -3343,6 +3357,12 @@ export function knownKinds(): string[] {
 /** 第 2 轮 setup N16:列举用的分隔符跟着界面语言(英文界面不出中文顿号「、」)。 */
 export function joinList(xs: readonly string[]): string {
   return xs.join(lang.value === "zh" ? "、" : ", ");
+}
+
+/** 易用性第 6 轮 W6-01:句子里的「A 和 B」(英文 “A, B and C”;中文照旧顿号)。 */
+export function andList(xs: readonly string[]): string {
+  if (lang.value === "zh" || xs.length < 2) return joinList(xs);
+  return `${xs.slice(0, -1).join(", ")} and ${xs[xs.length - 1]}`;
 }
 
 /** 第 4 轮 zh N2:「标签：值」的冒号跟着界面语言。 */

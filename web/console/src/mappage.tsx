@@ -10,7 +10,7 @@ import { api, ApiError, enc } from "./api";
 import { hm, nameOf, useDutySettings } from "./data";
 import { siteHm } from "./todaypatrols";
 import { Modal } from "./dialogs";
-import { alertTitle, joinList, lang, refusalText, t, type Key } from "./i18n";
+import { alertTitle, andList, lang, refusalText, t, type Key } from "./i18n";
 import { pageAllowed } from "./shell";
 import { locText, type UnitInfo } from "./live";
 import { ENGINEERING_LAYERS, etaNext, LAYERS, layersFor, loadLayers, saveLayers, labelRows, mapPins, mapTodo, olderOpen, shiftStart, staleAfter, staleCells, tonightEvents, zoneDecor,
@@ -524,7 +524,7 @@ export function GoLookCard(props: { map: { map_id: string; version: string }; at
         if (!live) return;
         // 第 4 轮 duty N3:能派的都没标原点(出不了发)—— 说是哪几台、怎么办
         const d = e instanceof ApiError ? e.data as { reason?: string; robots?: string[] } | undefined : undefined;
-        if (e instanceof ApiError && e.status === 404 && d?.reason === "no_home") { setGot("error"); setWhy(t("lookNoHome", { ids: joinList((d.robots ?? []).map(nameOf)) })); }
+        if (e instanceof ApiError && e.status === 404 && d?.reason === "no_home") { setGot("error"); setWhy(t(props.canFix ? "lookNoHome" : "lookNoHomeGuard", { ids: andList((d.robots ?? []).map(nameOf)) })); }
         else if (e instanceof ApiError && e.status === 404) setGot("none");
         else { setGot("error"); setWhy(e instanceof ApiError ? e.message : String(e)); }
       });
