@@ -286,6 +286,36 @@ def _compose_map_odom(est: Any, odom: tuple[float, float, float]) -> list[float]
 FALLBACK_RADIUS_M = 0.35
 
 
+#: 路网路线检查:拐角原地转按这么大一格(弧度)查
+CORNER_STEP_RAD = math.radians(15.0)
+
+
+def _corner_poses(pts: list[tuple[float, float]], yaw0: float, yaw_goal: float
+                  ) -> list[tuple[float, float, float]]:
+    """路网折线 → 检查用的位姿:每一段直段朝向不变,拐角(和起点、终点)原地转,转的过程每
+    :data:`CORNER_STEP_RAD` 一格(外审 POC r2 #4:原来相邻途经点之间插朝向,机器人在直走廊里就开始转,
+    正常路线被拒)。"""
+    def turn(x: float, y: float, a: float, b: float) -> list[tuple[float, float, float]]:
+        d = math.remainder(b - a, 2 * math.pi)
+        n = max(1, math.ceil(abs(d) / CORNER_STEP_RAD))
+        return [(x, y, a + d * i / n) for i in range(1, n + 1)]
+
+    out = [(pts[0][0], pts[0][1], yaw0)]
+    h = yaw0
+    for (x0, y0), (x1, y1) in zip(pts, pts[1:], strict=False):
+        if math.dist((x0, y0), (x1, y1)) < 1e-6:
+            continue
+        nh = math.atan2(y1 - y0, x1 - x0)
+        if abs(math.remainder(nh - h, 2 * math.pi)) > 1e-6:
+            out += turn(x0, y0, h, nh)
+        h = nh
+        out.append((x1, y1, h))
+    x, y, _ = out[-1]
+    if abs(math.remainder(yaw_goal - h, 2 * math.pi)) > 1e-6:
+        out += turn(x, y, h, yaw_goal)
+    return out
+
+
 class Nav2NavBackend(PlannedNavBackend):
     def __init__(self, *a: Any, link: Any = None, **kw: Any) -> None:
         kw.setdefault("robot_radius_m", FALLBACK_RADIUS_M)
@@ -541,20 +571,13 @@ class Nav2NavBackend(PlannedNavBackend):
             return None
 
     async def _via_check(self, here: Any, pose: Pose, via: list, op: str) -> Any:
-        """有路网时的路线检查(外审 POC I5):沿 当前位置 → 途经点 → 目标 这条折线查余量,朝向取每段的
-        方向(终点用目标朝向)。转接节点不会规划(老的)、没地图时跟 :meth:`_route_check` 一样不查。"""
+        """有路网时的路线检查(外审 POC I5):沿 当前位置 → 途经点 → 目标 这条折线查余量;直段朝向不变、
+        拐角原地转(:func:`_corner_poses`)。转接节点不会规划(老的)、没地图时跟 :meth:`_route_check` 一样不查。"""
         if getattr(self.link, "plan_results", None) is None or self._map_dir is None:
             return None
         pts = [(here.x, here.y), *[(float(x), float(y)) for x, y in via],
                (pose.position.x, pose.position.y)]
-        poses = []
-        for i, (x, y) in enumerate(pts):
-            if i == len(pts) - 1:
-                yaw = pose.yaw
-            else:
-                nx, ny = pts[i + 1]
-                yaw = math.atan2(ny - y, nx - x) if (nx, ny) != (x, y) else here.yaw
-            poses.append((x, y, yaw))
+        poses = _corner_poses(pts, here.yaw, pose.yaw)
         try:
             walls = await self._route_walls()
             return await asyncio.to_thread(route_check.check_route, poses, *walls)
@@ -1059,7 +1082,7 @@ class Nav2NavBackend(PlannedNavBackend):
                     y += v * 0.1 * math.sin(yaw + w * 0.05)
                     yaw += w * 0.1
                     poses.append((x, y, yaw))
-                if any(self.nogo_at(px, py) is not None for px, py, _ in poses):
+                if not self._nogo_sweep_ok(here, poses):
                     continue
                 ms = route_check.pose_margins(poses, blocked, res, origin) + BASE_MARGIN
                 if float(ms.min()) < thr:
@@ -1155,11 +1178,19 @@ class Nav2NavBackend(PlannedNavBackend):
             return Verdict(False, "脱困这一步车身会扫到地图上的墙或禁行区")
         if self.guard is not None and self.obstacles is not None:
             v = self._guard_check(vx, wz)
-            if v.ok or (v.hits and self._hits_all_static(v.hits, here)):
+            if v.ok:
                 return None
-            if not v.hits and "障碍数据" not in v.reason and self._unknown_only_sides(vx, wz):
-                return None
-            return v
+            if "障碍数据" in v.reason:
+                return v
+            if v.hits and not self._hits_all_static(v.hits, here):
+                return v                                   # 有人、有东西
+            # 挡点(有的话)全是地图墙,第 1 条已经按整个车身查过;看不见的另外查(外审 POC r2 #2:
+            # 原来挡点全是墙就直接放行,同一份结果里后面看不见的没管)
+            if v.unknown and not self._unknown_only_sides(vx, wz):
+                return v
+            if not v.hits and not v.unknown:
+                return v                                   # 说不清为什么拦:不动
+            return None
         return None
 
     def _unknown_only_sides(self, vx: float, wz: float) -> bool:
@@ -1183,10 +1214,21 @@ class Nav2NavBackend(PlannedNavBackend):
             y += vx * 0.1 * math.sin(yaw + wz * 0.05)
             yaw += wz * 0.1
             poses.append((x, y, yaw))
-        if any(self.nogo_at(px, py) is not None for px, py, _ in poses):
+        if not self._nogo_sweep_ok(here, poses):
             return False
         ms = route_check.pose_margins(poses, blocked, res, origin) + BASE_MARGIN
         return bool(float(ms.min()) >= thr)
+
+    def _nogo_sweep_ok(self, here: Any, poses: list) -> bool:
+        """整个车身(机身矩形,不是中心)一路上离禁行区(含当禁行的限速区)的距离:不低于
+        :data:`MANEUVER_CLEAR_M`,已经更近的不许更近(外审 POC r2 #3:原来只查中心,车尾扫进禁行区)。"""
+        from nexwar_agent import zone_guard as zg
+        for z in self._closed:
+            c0 = zg.clearance((here.x, here.y, here.yaw), z, MANEUVER_CLEAR_M)
+            thr = min(MANEUVER_CLEAR_M, c0 - 0.01)
+            if any(zg.clearance(p, z, MANEUVER_CLEAR_M) < thr for p in poses):
+                return False
+        return True
 
     def _trail_note(self, here: Any) -> None:
         """记走过的路(沿原路倒退用)。"""
