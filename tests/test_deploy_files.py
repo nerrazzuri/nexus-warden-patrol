@@ -1897,6 +1897,30 @@ def test_W47_行为树不原地转_启动文件换成绝对路径_转接节点�
     assert d["controller_server"]["ros__parameters"]["speed_limit_topic"] == "speed_limit"
 
 
+def test_导航V1第4步_MPPI走不动换RPP_两棵行为树都改_RPP不倒车_最低速在死区以上():
+    """11-10 仿真 1084 趟:MPPI + RPP 兜底 必须过 140/270(纯 MPPI 130)、撞人车 0(纯 MPPI 1);用户同意上。"""
+    import re
+
+    import yaml
+    d = yaml.safe_load((DEPLOY / "nav2" / "params.yaml").read_text(encoding="utf-8"))
+    cs = d["controller_server"]["ros__parameters"]
+    assert cs["controller_plugins"] == ["FollowPath", "RPP"]
+    r = cs["RPP"]
+    assert r["plugin"] == "nav2_regulated_pure_pursuit_controller::RegulatedPurePursuitController"
+    assert r["allow_reversing"] is False, "倒车看不见后面(两侧、后方盲区)"
+    assert r["use_collision_detection"] is True
+    assert min(r["min_approach_linear_velocity"], r["regulated_linear_scaling_min_speed"]) >= 0.13, \
+        "真机 0.13 m/s 以下只踏步不走"
+    assert r["desired_linear_vel"] <= 0.6, "不超过巡逻上限"
+    for name in ("navigate_to_pose_d1max.xml", "navigate_through_poses_d1max.xml"):
+        body = (DEPLOY / "nav2" / name).read_text(encoding="utf-8").split("-->", 1)[1]
+        ids = re.findall(r'<FollowPath [^>]*controller_id="(\w+)"', body)
+        assert ids == ["FollowPath", "RPP"], (name, ids)
+        fb = body[body.index('<Fallback name="MppiThenRpp">'):]
+        assert fb.index('controller_id="FollowPath"') < fb.index('controller_id="RPP"') \
+            < fb.index("</Fallback>"), name
+
+
 def test_agent启动脚本_人员检测跨板从env来_密钥缺省路径_没设不带(tmp_path):
     """跨板(检测在厂家 Orin、代理在 RK3588):NEXWAR_PERSONS_LISTEN / KEY / PEER。"""
     base = {"NEXWAR_SITE_MQTT": "mqtts://site:8883", "NEXWAR_OUTBOX": "/var/lib/nexwar/outbox",

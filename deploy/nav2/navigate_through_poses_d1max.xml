@@ -4,6 +4,7 @@
   后退速度 0.15 m/s(真机 0.13 m/s 以下只踏步不走);重规划 1 Hz(跟到点那份一样)。
   途经点是路网上的点,只是路过:RemovePassedGoals 把走过的去掉。半径 1.5 m(自带的 0.7 m 太小:
   拐弯时 MPPI 切角,离路口点 0.76 m 就过去了,没去掉,Nav2 又掉头回去找它,2026-10-29 仿真里来回走)。
+  跟线(11-10,导航 V1 第 4 步):先 MPPI,MPPI 走不动再换 RPP(Fallback MppiThenRpp)。
 -->
 <root main_tree_to_execute="MainTree">
   <BehaviorTree ID="MainTree">
@@ -19,7 +20,10 @@
           </RecoveryNode>
         </RateController>
         <RecoveryNode number_of_retries="1" name="FollowPath">
-          <FollowPath path="{path}" controller_id="FollowPath"/>
+          <Fallback name="MppiThenRpp">
+            <FollowPath path="{path}" controller_id="FollowPath"/>
+            <FollowPath path="{path}" controller_id="RPP"/>
+          </Fallback>
           <ClearEntireCostmap name="ClearLocalCostmap-Context" service_name="local_costmap/clear_entirely_local_costmap"/>
         </RecoveryNode>
       </PipelineSequence>
