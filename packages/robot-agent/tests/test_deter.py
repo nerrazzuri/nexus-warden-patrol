@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import pytest
 from test_runtime_maps import REG, T, _cmd, _跑, 耳朵, 钟
 
 from nexwar_adapter_sim.robot import SimRobot
@@ -521,24 +522,30 @@ async def test_外审POC_r3_断网时按的急停_重连以后马上补报锁住
     await rt.close()
 
 
-async def test_外审POC_r4_发能力的时候又按了急停_下一拍照样补报新的代次(tmp_path):
+@pytest.mark.parametrize("path", ["重连", "每拍"])
+async def test_外审POC_r4_发能力的时候又按了急停_下一拍照样补报新的代次(tmp_path, path):
     """codex POC r4 #2:重连补报能力那一下又按了急停,发完把新代次记成「报过了」,
     实际发出去的是旧的。"""
     broker, c, ears, dog, rt = await _急停台(tmp_path)
-    broker.disconnect("dog")
-    await broker.drain()
-    dog.button("estop")                                    # 断网时按的:第 1 次
-    await _跑(rt, broker, n=3, r=dog, c=c)
+    if path == "重连":
+        broker.disconnect("dog")
+        await broker.drain()
+        dog.button("estop")                                # 断网时按的:第 1 次
+        await _跑(rt, broker, n=3, r=dog, c=c)
     real = rt.transport.publish
     armed = [True]
 
     async def 发(topic, payload, **kw):
         if armed[0] and topic == rt.topics.capabilities:
             armed[0] = False
-            dog.button("estop")                            # 重连补报的包已经按代次 1 装好了
+            dog.button("estop")                            # 这一包已经按代次 1 装好了
+            rt._extra_tasks()                              # r5:同时在处理别的命令(对时查询等)
         return await real(topic, payload, **kw)
     rt.transport.publish = 发
-    await rt.transport.connect()
+    if path == "重连":
+        await rt.transport.connect()
+    else:
+        dog.button("estop")
     await _跑(rt, broker, n=10, r=dog, c=c)
     assert dog.gen == 2
     assert ears.by["capabilities"][-1]["tasks"]["estop_release"] == {"latched": True, "gen": 2}

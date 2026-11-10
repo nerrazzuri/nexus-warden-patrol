@@ -1062,7 +1062,6 @@ class AgentRuntime:
             out["speed_cap"] = self._speed_cap_caps()  # W29:全狗限速(站点下雨、雷暴时发)
         if self._payload_estop_ok():
             out["estop_release"] = self._estop_caps()  # 外审 POC C1:站点恢复时带代次发解锁
-            self._estop_composed = dict(out["estop_release"])
         if self.hal.hal_capabilities().recharge_mode != "none":
             out["dock"] = self._dock_caps()         # W13:会对桩;在不在桩上、桩上危险
         if self.evidence_sealed is not None:
@@ -2515,11 +2514,15 @@ class AgentRuntime:
             extra_tasks=self._extra_tasks(),
             nav_path=getattr(self.parts.nav, "PATH_KIND", "straight") if self.parts else "straight",
             autonomy=self.autonomy)
-        await self.transport.publish(self.topics.capabilities, _dumps(caps.to_wire()),
+        wire = caps.to_wire()
+        # 外审 POC r4 #2 / r5:记的是这一包里实际装进去的急停状态 —— 发之前取成局部快照,
+        # 发的时候又按了、或者别的命令又装了一遍能力,都不影响;下一拍发现不一样再发
+        sent = (wire.get("tasks") or {}).get("estop_release")
+        sent = dict(sent) if isinstance(sent, dict) else None
+        await self.transport.publish(self.topics.capabilities, _dumps(wire),
                                      qos=1, retain=True)
-        # 外审 POC r4 #2:记的是这一包里实际装进去的急停状态(发的时候又按了,下一拍还会再发)
-        if getattr(self, "_estop_composed", None) is not None:
-            self._estop_told = self._estop_composed
+        if sent is not None:
+            self._estop_told = sent
 
     def _video_live(self) -> bool:
         """遥控「没画面不许动」在狗这头的那一道:本机推流器至少一路在推。站点那头还有一道。"""
