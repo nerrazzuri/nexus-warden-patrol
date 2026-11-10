@@ -47,12 +47,13 @@ void main() {
     expect(find.textContaining('按时间表切换'), findsOneWidget);
   });
 
-  testWidgets('保安：只有「布防」，没有留守、临时撤防，也改不了防区', (t) async {
+  // 用户 11-11（易用性第 6 轮 W6-05）：保安也能撤防；防区配置照旧只有管理员
+  testWidgets('保安：布防、留守、临时撤防都能切，改不了防区', (t) async {
     final api = FakeApi('guard');
     await _open(t, api);
-    expect(find.byKey(SiteModePage.homeKey), findsNothing);
-    expect(find.byKey(SiteModePage.visitorKey), findsNothing);
-    expect(find.text('撤防（留守、临时撤防）需管理员或经理操作'), findsOneWidget);
+    expect(find.byKey(SiteModePage.homeKey), findsOneWidget);
+    expect(find.byKey(SiteModePage.visitorKey), findsOneWidget);
+    expect(find.text('撤防（留守、临时撤防）需管理员或经理操作'), findsNothing);
     expect(find.byKey(const Key('mode-zone-home-yard')), findsNothing);
     await t.tap(find.byKey(SiteModePage.armKey));
     await t.pumpAndSettle();
@@ -176,12 +177,12 @@ void main() {
     expect(find.byKey(SiteDutyPage.modeChangeKey), findsNothing);
   });
 
-  test('权限：管理员能确认告警、能切模式；保安只能布防；管理员不能标录像留着', () {
+  test('权限：管理员能确认告警、能切模式；保安也能撤防（11-11）；管理员不能标录像留着', () {
     const owner = SiteSession('t', 'o', 'owner', displayName: '张三');
     const guard = SiteSession('t', 'g', 'guard');
     expect(owner.canHandleAlerts && owner.canSetMode && owner.canArm, isTrue);
     expect(owner.canReview, isFalse);
-    expect(guard.canArm && !guard.canSetMode, isTrue);
+    expect(guard.canArm && guard.canSetMode, isTrue);
     expect(owner.displayName, '张三');
   });
 }

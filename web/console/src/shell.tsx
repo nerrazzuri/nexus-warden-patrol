@@ -158,6 +158,8 @@ export function TopBar(props: {
   pref: ThemePref;
   onPref: (p: ThemePref) => void;
   onStop: () => void;
+  /** 易用性第 6 轮 W6-05:顶栏点布防状态切模式(外壳弹确认、发请求);不给就只显示。 */
+  onMode?: (m: Mode["mode"]) => void;
   /** 第 2 轮 duty N10:有几台被叫停、等人点恢复(哪一页都看得见,点了去总览恢复)。 */
   held?: number;
   stale?: boolean;
@@ -169,7 +171,7 @@ export function TopBar(props: {
   return (
     <header class="topbar">
       <PageTitle page={props.page} />
-      {props.mode && <ArmState mode={props.mode} role={props.me.role} stale={props.stale} />}
+      {props.mode && <ArmState mode={props.mode} role={props.me.role} stale={props.stale} onMode={props.onMode} />}
       {!!props.held && props.page !== "duty" && (
         <a href="#/duty" class="heldchip" data-held-chip="1">{t("topHeld", { n: props.held })}</a>
       )}
@@ -285,16 +287,44 @@ export function SideNav(props: { me: Me; page: Page; alarms: number | null; noti
   );
 }
 
-/** 布防状态:只显示(设计 §4.0,用户说的),切模式在别处。 */
-function ArmState({ mode, role, stale }: { mode: Mode; role: string; stale?: boolean }) {
+/** 布防状态。易用性第 6 轮 W6-05(用户 11-11:保安也能撤防):能切的人点开就是布防 / 留守 / 临时撤防,
+ *  确认框在外壳里(原来只在「系统状态」页最底下才找得到)。只看的账号照旧只显示。 */
+function ArmState({ mode, role, stale, onMode }: { mode: Mode; role: string; stale?: boolean; onMode?: (m: Mode["mode"]) => void }) {
+  const [open, setOpen] = useState(false);
+  const box = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const off = (e: MouseEvent) => { if (box.current && !box.current.contains(e.target as Node)) setOpen(false); };
+    const esc = (e: KeyboardEvent) => { if (e.key === "Escape") setOpen(false); };
+    document.addEventListener("mousedown", off);
+    document.addEventListener("keydown", esc);
+    return () => { document.removeEventListener("mousedown", off); document.removeEventListener("keydown", esc); };
+  }, [open]);
   const text = mode.source === "schedule" ? modeLabel(mode) : mode.mode === "armed" ? t("armArmed")
     : mode.mode === "home" ? t("armHome")
     : t("armVisitor", { t: mode.until_ms ? hm(mode.until_ms) : "—" });
-  // P1-79:只显示;悬停说去哪儿切、谁能切(保安能布防、不能撤防 —— 站点同一条规矩)
   // 第 2 轮 duty N11:连不上站点时变灰、写「最后已知」,不像一切正常
   const cls = stale ? "stale" : mode.source === "schedule" ? (mode.state === "armed" ? "armed" : "home") : mode.mode;
-  const tip = t(pageAllowed("admin/arming", role) ? "armStateTip" : canArm(role) ? "armStateTipGuard" : "armStateTipViewer");
-  return <span class={`armstate ${cls}`} data-stale={stale || undefined} title={stale ? t("armStaleTip") : tip}><i class="dot" aria-hidden="true" />{stale ? t("lastKnown", { s: text }) : text}</span>;
+  const label = <><i class="dot" aria-hidden="true" />{stale ? t("lastKnown", { s: text }) : text}</>;
+  const can = !!onMode && canArm(role);
+  if (!can) {
+    return <span class={`armstate ${cls}`} data-stale={stale || undefined} title={stale ? t("armStaleTip") : t("armStateTipViewer")}>{label}</span>;
+  }
+  const items: { m: Mode["mode"]; key: Key }[] = [{ m: "armed", key: "modeArmed" }, { m: "home", key: "modeHome" }, { m: "visitor", key: "modeVisitor" }];
+  return (
+    <div class="armmenu" ref={box}>
+      <button type="button" class={`armstate ${cls}`} data-stale={stale || undefined} disabled={stale} aria-haspopup="menu" aria-expanded={open}
+        title={stale ? t("armStaleTip") : t(pageAllowed("admin/arming", role) ? "armStateTip" : "armStateTipGuard")} onClick={() => setOpen(!open)}>{label}</button>
+      {open && (
+        <div class="menu armmenu-list" role="menu" data-mode-menu="1">
+          {items.map((x) => (
+            <button key={x.m} type="button" role="menuitem" aria-pressed={mode.source !== "schedule" && mode.mode === x.m}
+              onClick={() => { setOpen(false); onMode!(x.m); }}>{t(x.key)}</button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
 }
 
 function UserMenu(props: { me: Me; pref: ThemePref; onPref: (p: ThemePref) => void; onSignOut: (note?: string) => void; onSay: (s: string) => void }) {

@@ -167,6 +167,7 @@ export function Console({ me, onOut }: { me: Me; onOut: (note?: string) => void 
       <TopBar me={me} page={route.page} mode={data?.mode ?? null} alarms={stale ? null : guardAlarms} now={now}
         pref={pref} onPref={(p) => { saveThemePref(p); setPref(p); }}
         onStop={() => setPending({ kind: "stop" })} onSay={say} stale={stale}
+        onMode={(m) => setPending({ kind: "mode", mode: m })}
         held={units.filter((u) => u.robot.held != null).length}
         onHelp={() => setHelp(true)}
         onSignOut={async (note?: string) => {
@@ -237,7 +238,7 @@ export function Console({ me, onOut }: { me: Me; onOut: (note?: string) => void 
       </div>
 
       {pending?.kind === "mode" && (
-        <Confirm text={t(pending.mode === "armed" ? "modeArmConfirm" : pending.mode === "home" ? "modeHomeConfirm" : "modeVisitorConfirm")}
+        <Confirm text={t(pending.mode === "armed" ? "modeArmConfirm" : pending.mode === "home" ? "modeHomeConfirm" : "modeVisitorAllConfirm")}
           yes={t(pending.mode === "armed" ? "modeArmed" : pending.mode === "home" ? "modeHome" : "modeVisitor")}
           onNo={() => setPending(null)}
           onYes={() => { const m = pending.mode; setPending(null); void act(() => api("POST", "/api/mode", { mode: m })); }} />
