@@ -1904,3 +1904,59 @@ async def test_外审POC_C2_K形掉头_这一步会扫到地图墙_挡点是墙�
     here = await t.nav._here()
     await t.nav._man_step(here, 0.1)
     assert sent and sent[-1] == (0.0, 0.0), sent
+
+
+async def test_外审POC_r2_C2_挡点全是墙_同时后面看不见_也不许退(tmp_path, monkeypatch):
+    """codex POC r2 #2:挡点全是地图墙就直接放行,没管同一份结果里后面(雷达看不见)的未知区。"""
+    from nexwar_agent.obstacles import Verdict
+    t, sent = await _脱困台(tmp_path, 5.0, 4.0, 0.0, monkeypatch, rear=False)
+    monkeypatch.setattr(t.nav, "_guard_check", lambda vx, wz, g=None: Verdict(
+        False, "扫过区有挡 1 处、看不见 50 处", hits=((-0.9, 0.6),), unknown=50))
+    monkeypatch.setattr(t.nav, "_hits_all_static", lambda hits, here: True)
+    _退(t, [(4.6, 4.0), (3.5, 4.0)])
+    here = await t.nav._here()
+    await t.nav._back_step(here, 0.1)
+    assert sent and sent[-1] == (0.0, 0.0), sent
+
+
+async def test_外审POC_r2_C2_沿原路倒退_车尾会扫进禁行区_中心在区外也不许退(tmp_path, monkeypatch):
+    """codex POC r2 #3:禁行区只查车身中心,0.68 秒后车尾进了禁行区。"""
+    from test_planned_nav import _区
+    t, sent = await _脱困台(tmp_path, 5.0, 4.0, 0.0, monkeypatch)
+    await t.nav.set_zones(_区({"id": "pool", "kind": "nogo",
+                               "polygon": [[4.3, 4.16], [4.4, 4.16], [4.4, 4.6], [4.3, 4.6]]}))
+    _退(t, [(4.6, 4.0), (3.5, 4.0)])
+    here = await t.nav._here()
+    await t.nav._back_step(here, 0.1)
+    assert sent and sent[-1] == (0.0, 0.0), sent
+
+
+async def test_外审POC_r2_C2_K形掉头挑步子_车身会压上禁行区的那一步不挑(tmp_path, monkeypatch):
+    from test_planned_nav import _区
+    t, sent = await _脱困台(tmp_path, 5.0, 4.0, 0.0, monkeypatch)
+    await t.nav.set_zones(_区({"id": "pool", "kind": "nogo",
+                               "polygon": [[4.3, 4.16], [4.4, 4.16], [4.4, 4.6], [4.3, 4.6]]}))
+    here = await t.nav._here()
+    walls = await t.nav._route_walls()
+    for v in (-0.15,):
+        for w in (0.4, -0.4, 0.0):
+            if t.nav._man_pick(here, math.pi, walls, None) == (v, w):
+                assert t.nav._sweep_ok(here, v, w, walls), (v, w)
+
+
+async def test_外审POC_r2_I5_路网拐角在走廊出口外的空地上_直段照直走_拐角原地转_能过(tmp_path):
+    """codex POC r2 #4:按途经点插朝向,机器人在 1.2 m 的直走廊里就开始慢慢转,余量算成 0.002 m 拒了;
+    实际是直段照直走、出了走廊在空地上拐。"""
+    from nexwar_contract.routenet import RouteNet
+    link = 会规划的转接()
+    walls = [(0.1, 0.1, 4.5, 3.4), (0.1, 4.6, 4.5, 7.9)]     # 1.2 m 走廊,x 4.5 以外是空地
+    t = _台(tmp_path, link, walls=walls)
+    await t.start(1.5, 4.0)
+    link.here = (1.5, 4.0)
+    t.nav.set_route_net(RouteNet.from_wire({
+        "map_id": "m", "map_version": "", "revision": 1,
+        "nodes": [{"id": "A", "x": 1.5, "y": 4.0}, {"id": "B", "x": 5.0, "y": 4.0},
+                  {"id": "C", "x": 5.0, "y": 7.0}],
+        "edges": [["A", "B"], ["B", "C"]]}))
+    await t.nav.goto(Pose.from_xy_yaw(5.0, 7.0, math.pi / 2))
+    assert link.kinds("goal") and link.kinds("goal")[-1].get("via")
