@@ -61,6 +61,9 @@ class MapGeo {
   /// 这一版带「看到过、狗没走过」的淡色层（图例里加一行）。
   final bool seen;
 
+  /// 这一版有路沿层（`curb.pbm`，11-10；中灰是站点画进底图的，图例里加一行）。
+  final bool curb;
+
   const MapGeo(
       {required this.width,
       required this.height,
@@ -71,7 +74,8 @@ class MapGeo {
       this.areas = const [],
       this.planUrl,
       this.content,
-      this.seen = false});
+      this.seen = false,
+      this.curb = false});
 
   /// 读预览 JSON。缺的、不是数的按老规矩取缺省（大小 1、一像素 1 m、边 0、不转）。
   factory MapGeo.fromPreview(Map<String, dynamic> meta) {
@@ -118,7 +122,8 @@ class MapGeo {
         areas: areas,
         planUrl: url,
         content: content,
-        seen: meta['seen'] == true);
+        seen: meta['seen'] == true,
+        curb: meta['curb'] == true);
   }
 
   double get radians => rotationDeg * math.pi / 180;
@@ -468,9 +473,12 @@ const int _planFloor = 248, _planWall = 52;
 const int _rasterSeen = 232;
 const double _planSeenAlpha = 0.35;
 
+/// 路沿、绿化岛（站点 `CURB_GRAY`，预览、平面图一样）。
+const int _curbGray = 150;
+
 /// 图例里底图那三样：地面、墙和障碍物、没扫到；[seen]（站点说这一版有）再加一样「看到过、狗没走过」。色块
 /// 跟图过同一个深色滤镜，跟图上看到的一个色。
-List<NwLegendItem> mapBaseLegend(BuildContext context, {required bool plan, bool seen = false}) {
+List<NwLegendItem> mapBaseLegend(BuildContext context, {required bool plan, bool seen = false, bool curb = false}) {
   final c = Nw.of(context);
   Widget gray(int v) => Container(
       width: 12,
@@ -493,6 +501,7 @@ List<NwLegendItem> mapBaseLegend(BuildContext context, {required bool plan, bool
                           ? Color.fromARGB((_planSeenAlpha * 255).round(), 255, 255, 255)
                           : const Color.fromARGB(255, _rasterSeen, _rasterSeen, _rasterSeen)))),
           label: tr('Scanned; not covered by the robot', '已扫描，机器人未到达')),
+    if (curb) NwLegendItem(swatch: gray(_curbGray), label: tr('Curb / raised island (avoided when planning)', '路沿、绿化岛（规划尽量绕开）')),
     NwLegendItem(
         swatch: plan
             ? Container(

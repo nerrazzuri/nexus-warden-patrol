@@ -1033,6 +1033,11 @@ class _SiteMapPreviewPageState extends State<SiteMapPreviewPage> {
                       tr('Faint floor: scanned through doors or glass; the robot never enters',
                           '浅色地面：透过门、玻璃扫描到，机器人未到达（不会进入）'),
                       style: NwText.bodySmall.copyWith(color: Nw.of(context).textSecondary)),
+                if (geo.curb)
+                  Text(
+                      tr('Mid-gray lines: curbs / raised islands, avoided when planning. A step the robot must use: drive over it once while mapping',
+                          '中灰的线：路沿、绿化岛，规划尽量绕开。要走的台阶、坡口：扫图时开上去一次'),
+                      style: NwText.bodySmall.copyWith(color: Nw.of(context).textSecondary)),
                 const Divider(),
                 for (final p in homes)
                   Text(

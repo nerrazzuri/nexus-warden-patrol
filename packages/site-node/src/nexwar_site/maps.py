@@ -14,6 +14,7 @@ import json
 import logging
 import math
 import os
+import re
 import shutil
 import threading
 from collections.abc import Callable
@@ -24,6 +25,7 @@ from nexwar_contract.errors import ContractError
 from nexwar_contract.maps import (
     COVERAGE,
     COVERAGE_RADIUS_M,
+    CURB_FILE,
     MANIFEST,
     SEEN_FILE,
     Coverage,
@@ -53,6 +55,8 @@ def _stamp(paths: tuple[Path, ...]) -> tuple | None:
 
 #: 删掉过的版本号(site_settings 里一个 JSON:{地图号: [版本, …]})。
 RETIRED_KEY = "map_retired_versions"
+#: 编辑草稿的登记来源前缀(11-10):草稿不能下发,发布到站点以后改成 ``edit:``。
+DRAFT_SOURCE = "draft:"
 
 class MapError(ValueError):
     """这张图登记不了 / 找不到。"""
@@ -390,13 +394,28 @@ class MapCatalog:
                 log.warning("%s 的 %s 不画:%s", label, SEEN_FILE, exc)
         return ranks, seen, (mp.erase_mask(erase, w, h, meta) if erase else None)
 
+    def _curb(self, map_id: str, version: str, shape: tuple[int, int]) -> Any:
+        """这一版的路沿层(``curb.pbm``,11-10)→ numpy 真假 (高, 宽),行朝下;没有、坏了、大小对不上
+        → ``None``(不画,不挡)。版本内容不变,跟着栅格一起缓存。"""
+        from nexwar_site import map_preview as mp
+        h, w = shape
+        p = self.root / map_id / version / CURB_FILE
+        try:
+            if not p.is_file() or p.stat().st_size > mp.seen_limit(w, h):
+                return None
+            return mp.parse_seen(p.read_bytes(), w, h)
+        except (OSError, mp.PreviewError) as exc:
+            log.warning("%s:%s 的 %s 不画:%s", map_id, version, CURB_FILE, exc)
+            return None
+
     def _render(self, map_id: str, version: str,
                 erase: tuple = ()) -> tuple[tuple[bytes, dict[str, Any]], tuple]:
         from nexwar_site import map_preview as mp
         source, meta, image, data, seen_raw, files = self._raster(map_id, version)
         try:
             ranks, seen, em = self._layers(data, meta, seen_raw, erase, f"{map_id}:{version}")
-            png, info = mp.render(data, meta, seen=seen, erase=em)
+            curb = self._curb(map_id, version, ranks.shape)
+            png, info = mp.render(data, meta, seen=seen, erase=em, curb=curb)
             if em is not None:                        # 抹掉的不算墙的走向
                 ranks = ranks.copy()
                 ranks[em] = mp._RANK_UNKNOWN
@@ -411,7 +430,8 @@ class MapCatalog:
         _, meta, image, data, seen_raw, files = self._raster(map_id, version)
         try:
             ranks, seen, em = self._layers(data, meta, seen_raw, erase, f"{map_id}:{version}")
-            return mp.render_plan(ranks, seen=seen, erase=em), files
+            curb = self._curb(map_id, version, ranks.shape)
+            return mp.render_plan(ranks, seen=seen, erase=em, curb=curb), files
         except mp.PreviewError as exc:
             raise mp.PreviewError(f"{image}:{exc}") from exc
 
@@ -600,6 +620,22 @@ class MapCatalog:
                        json.dumps([f.to_wire() for f in ref.files]), note[:200]))
 
     # ------------------------------------------------------------ 管理(地图管理页)
+
+    def draft_of(self, map_id: str, version: str) -> str | None:
+        """这一版是编辑草稿(登记来源 ``draft:``,11-10)就回它最初是从哪一版编辑来的,不是回 ``None``。
+        草稿只在站点上:不能下发到机器人,发布到站点(:meth:`release_draft`)以后才是正式版本。"""
+        rows = self.db.query("SELECT source, note FROM maps WHERE map_id=? AND version=?",
+                             (map_id, version))
+        if not rows or not str(rows[0]["source"]).startswith(DRAFT_SOURCE):
+            return None
+        m = re.match(r"从 (\S+) 编辑", str(rows[0]["note"] or ""))
+        return m.group(1) if m else version
+
+    def release_draft(self, map_id: str, version: str, *, by: str) -> None:
+        """草稿发布到站点:登记来源改成 ``edit:<谁发布的>``,从此是正式版本(再改另出草稿)。"""
+        with self.db.tx() as c:
+            c.execute("UPDATE maps SET source=? WHERE map_id=? AND version=?",
+                      (f"edit:{by}", map_id, version))
 
     def set_note(self, map_id: str, version: str, note: str) -> str:
         """改这一版的备注(最多 200 字,去首尾空白);回新的备注。没有这一版 :class:`MapError`。"""

@@ -25,6 +25,7 @@ export interface Build {
 export function sourceText(src: string): string {
   // 站点登记的来源:import / edit[:人] / denoise[:人] / cli:人(命令行导入),机器人传上来的是机器人编号
   const [kind, who] = splitSource(src);
+  if (kind === "draft") return who ? tr(`draft by ${who} in the map editor`, `${who} 在地图编辑器里的草稿`) : tr("map editor draft", "地图编辑器草稿");
   if (kind === "edit") return who ? tr(`edited by ${who} in the map editor`, `${who} 在地图编辑器里改的`) : tr("edited in the map editor", "地图编辑器改出来的");
   if (kind === "denoise") return who ? tr(`noise cleaned up by ${who}`, `${who} 清的噪点`) : tr("noise cleaned up", "清噪点出来的");
   // 第 3 轮 zh N10:命令行导入的 who 是主机上的系统用户名(不是站点账号),不露出来
@@ -35,13 +36,16 @@ export function sourceText(src: string): string {
 
 /** 来源拆成「哪种 + 谁」(第 2 轮 P1-50:编辑、清噪点、命令行导入带操作人)。 */
 export function splitSource(src: string): [string, string] {
-  const m = /^(edit|denoise|cli):(.*)$/.exec(src);
+  const m = /^(edit|draft|denoise|cli):(.*)$/.exec(src);
   return m ? [m[1], m[2]] : [src, ""];
 }
-const derivedSrc = (src: string | undefined): boolean => ["edit", "denoise"].includes(splitSource(src ?? "")[0]);
+const derivedSrc = (src: string | undefined): boolean => ["edit", "draft", "denoise"].includes(splitSource(src ?? "")[0]);
 
 export interface Version {
   version: string;
+  /** 11-10:编辑草稿(只在站点上、不能下发;在地图编辑器里预览、再改、发布)。老站点没有。 */
+  draft?: boolean;
+  draft_of?: string | null;
   created_ms: number;
   source: string;
   note: string;
@@ -344,6 +348,7 @@ function VersionCard(p: {
         <h3>
           <span class="mono">v{v.version}</span>
           {v.latest && <span class="mm-tag">{tr("latest", "最新")}</span>}
+          {v.draft && <span class="mm-tag draft" data-draft-tag="1">{tr("draft", "草稿")}</span>}
           {/* 第 4 轮 zh r3-N15:窄屏折行时不以「·」开头,「149 MB」不断开 */}
           <span class="muted small vmeta"><span>{when(v.created_ms)}</span><span>{sourceText(v.source)}</span><span class="nowrap">{mb(v.size_bytes)}</span></span>
         </h3>
@@ -395,11 +400,15 @@ function VersionCard(p: {
           {v.previous_on.length > 0 && <span class="muted">{tr("Falls back to this for", "出问题时退回这一版的机器人")}{tr(": ", "：")}{v.previous_on.map((r) => <span key={r} class="mm-chip mono">{r}</span>)}</span>}
         </p>
         <div class="row mm-actions">
-          <button type="button" class="btn sm primary" onClick={p.onPublish}>{tr("Publish to robots…", "发布到机器人…")}</button>
+          {/* 11-10 用户:「发布的地图不是下发到机器人,而只是发布到站点,发布完了确认没问题再下发」 */}
+          {v.draft
+            ? <a class="btn sm primary" data-open-draft="1" href={`#/admin/mapedit?map=${enc(p.map_id)}&version=${enc(v.version)}${v.draft_of ? `&from=${enc(v.draft_of)}` : ""}`}>
+                {tr("Open draft (preview, publish)…", "打开草稿（预览、发布）…")}</a>
+            : <button type="button" class="btn sm primary" onClick={p.onPublish}>{tr("Send to robots…", "下发到机器人…")}</button>}
           <button type="button" class="btn sm" disabled={!!whyNot} title={whyNot} onClick={p.onDelete}>{tr("Delete", "删除")}</button>
           {p.onNoise && <button type="button" class="btn sm" disabled={!v.has_raster} onClick={p.onNoise}>{tr("Clean noise…", "清噪点…")}</button>}
           {/* W44 第四期:地图编辑器(橡皮擦、画障碍、区域名、特殊地面、摆正、底图),另存成新的一版 */}
-          {v.has_raster && <a class="btn sm" href={`#/admin/mapedit?map=${enc(p.map_id)}&version=${enc(v.version)}`}>{tr("Edit…", "编辑…")}</a>}
+          {v.has_raster && !v.draft && <a class="btn sm" href={`#/admin/mapedit?map=${enc(p.map_id)}&version=${enc(v.version)}`}>{tr("Edit…", "编辑…")}</a>}
           <label class="field-inline small">
             <input type="checkbox" checked={p.picked} disabled={!v.has_raster} onChange={(e) => p.onPick(e.currentTarget.checked)} />
             {tr("Compare", "对比")}
@@ -560,7 +569,7 @@ export function PublishDialog({ target, dogs, onClose }: { target: { map_id: str
     setBusy(false);
   }
   return (
-    <Modal label={tr(`Publish ${target.map_id}:${target.version}`, `发布 ${target.map_id}:${target.version}`)} onClose={onClose}>
+    <Modal label={tr(`Send ${target.map_id}:${target.version} to robots`, `下发 ${target.map_id}:${target.version} 到机器人`)} onClose={onClose}>
       {results ? (
         <>
           <ul class="mm-results">

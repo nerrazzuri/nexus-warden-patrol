@@ -74,6 +74,10 @@ void main() {
       expect(g(_bbox, true).seen, isTrue);
       expect(g(_bbox, 'true').seen, isFalse);
       expect(g(_bbox).seen, isFalse);
+      // 路沿层（11-10）：站点说 curb: true 才算
+      expect(MapGeo.fromPreview(<String, dynamic>{'width': 2, 'height': 2, 'curb': true}).curb, isTrue);
+      expect(MapGeo.fromPreview(<String, dynamic>{'width': 2, 'height': 2, 'curb': 'true'}).curb, isFalse);
+      expect(MapGeo.fromPreview(<String, dynamic>{'width': 2, 'height': 2}).curb, isFalse);
     });
 
     for (final deg in const [0.0, 23.0, -40.0, 44.9]) {
@@ -139,13 +143,15 @@ void main() {
       await t.pumpAndSettle();
       expect(inLegend('已扫描，机器人未到达'), findsNothing);
       expect(inLegend('已抹除（机器人不进入）'), findsNothing);
-      final api = _Api('guard', extra: <String, dynamic>{'seen': true})
+      expect(inLegend('路沿、绿化岛（规划尽量绕开）'), findsNothing);
+      final api = _Api('guard', extra: <String, dynamic>{'seen': true, 'curb': true})
         ..zonesView = <String, dynamic>{...FakeApi('guard').zonesView, 'zones': <dynamic>[
           <String, dynamic>{'id': 'e1', 'kind': 'erase', 'label': '抹掉区', 'polygon': [[0, 0], [1, 0], [1, 1]]},
         ]};
       await t.pumpWidget(MaterialApp(home: Scaffold(body: SiteMapTab(key: UniqueKey(), api: api))));
       await t.pumpAndSettle();
       expect(inLegend('已扫描，机器人未到达'), findsOneWidget);
+      expect(inLegend('路沿、绿化岛（规划尽量绕开）'), findsOneWidget);
       expect(inLegend('已抹除（机器人不进入）'), findsOneWidget);
       expect(inLegend('限速区'), findsNothing, reason: '抹掉区不是限速区');
       expect(inLegend('禁行区'), findsNothing);
@@ -156,6 +162,7 @@ void main() {
       await t.pumpWidget(MaterialApp(home: Scaffold(body: SiteMapTab(key: UniqueKey(), api: api))));
       await t.pumpAndSettle();
       expect(inLegend('Scanned; not covered by the robot'), findsOneWidget);
+      expect(inLegend('Curb / raised island (avoided when planning)'), findsOneWidget);
       expect(inLegend('Erased (robots never enter)'), findsOneWidget);
       await t.pumpWidget(Container());
     });

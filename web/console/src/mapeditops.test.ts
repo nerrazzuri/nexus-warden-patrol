@@ -25,7 +25,7 @@ describe("操作栈", () => {
   it("面积估算", () => {
     expect(areaOf(box)).toBe(2);
     expect(areaOf(erase)).toBeCloseTo(2 * 0.2 + Math.PI * 0.01, 5);
-    const s = summary({ ops: [erase, box], display: D });
+    const s = summary({ ops: [erase, box], display: D, zones: [] });
     expect(s).toEqual({ erased: 0.4, obstacle: 2 });
   });
   it("特殊地面:楼梯默认放慢,草地不放慢,id 不重", () => {

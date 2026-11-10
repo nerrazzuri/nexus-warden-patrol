@@ -264,3 +264,38 @@ def test_接口_同一份抹掉区只渲染一次_改了重渲(站点, tmp_path,
     for _ in range(2):
         assert _raw(s, url2, gina)[0] == 200
     assert len(n) == 2 and url2 != url
+
+
+def test_路沿层_预览和平面图上画成中灰_只在地面上_预览带curb_抹掉区里不画(站点, tmp_path):
+    """用户 11-10(工厂停车场绿化岛):建图认出来的路沿(``curb.pbm``)画出来,扫图的人看得到认没认对。"""
+    s = 站点
+    gina = _登(s, "gina")
+    g, _ = _屋()
+    curb = np.zeros(g.shape, bool)
+    curb[15, 8:28] = True                                  # 屋里一道路沿
+    curb[5, 10] = True                                     # 落在墙上的不画(墙照样黑)
+    d = tmp_path / "src-50"
+    d.mkdir()
+    (d / "yard.pgm").write_bytes(_pgm(g))
+    (d / "yard.yaml").write_text(_YAML)
+    (d / "curb.pbm").write_bytes(_pbm(curb))
+    s.maps.import_dir(d, map_id=MAP[0], version="50")
+    base = f"/api/maps/{MAP[0]}/50"
+    code, info = s.req("GET", base + "/preview", token=gina)
+    assert code == 200 and info["curb"] is True, info
+    code, body = _raw(s, base + "/preview.png", gina)
+    rows = _gray_rows(body)
+    assert rows[15, 15] == mp.CURB_GRAY and rows[12, 15] == 254 and rows[5, 10] == 0
+    code, body = _raw(s, info["plan"]["url"], gina)
+    px, sc = _png_ga(body), info["plan"]["scale"]
+    on, off = px[_at(sc, 15, 15)], px[_at(sc, 11, 15)]
+    assert on[1] == 255 and on[0] < 200 and tuple(off) == (255, 255), (on, off)
+    # 抹掉区盖住路沿那一截:不画,预览不带 curb
+    corner = [[-10.0, -5.0], [-9.5, -5.0], [-9.5, -3.0], [-10.0, -3.0]]
+    s.disp.zones.put(MAP[0], "50", [{"id": "e", "kind": "erase", "label": "抹", "polygon": corner}],
+                     base_revision=0, by="alice")
+    code, info2 = s.req("GET", base + "/preview", token=gina)
+    assert code == 200 and info2.get("curb") is True, "抹掉区只盖住一角:别处的路沿还在"
+    # 没有路沿文件的老版本:不带 curb
+    _导入(s, tmp_path, "51", g)
+    assert "curb" not in s.req("GET", f"/api/maps/{MAP[0]}/51/preview", token=gina)[1]

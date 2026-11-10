@@ -4060,6 +4060,11 @@ class _Handler(TlsHandlerMixin):
     def _map_activate_payload(self, robot_id: str, ref: Any, without: Any) -> dict[str, Any]:
         """给这台狗下发 ``ref`` 这一版的 ``map_activate`` 载荷;发布条件不满足抛 :class:`HttpError`。
         ``POST /api/robots/<id>/map`` 和地图管理页(``maps_admin_api``)共用同一套条件。"""
+        maps = getattr(self.site, "maps", None)
+        if maps is not None and maps.draft_of(ref.map_id, ref.version) is not None:
+            # 11-10 用户:「发布完了确认没问题再下发」—— 草稿只在站点上
+            raise HttpError(409, f"{ref.map_id}:{ref.version} 是编辑草稿:先在地图编辑器里「发布」"
+                                 "到站点,再下发到机器人", extra={"reason": "map_draft"})
         if self.site.zones is not None and not self.site.zones.confirmed_current(ref.map_id,
                                                                        ref.version):
             # W10(W08 决定 5):发布前人工确认水池、高楼楼梯、陡坡、落差都画成禁行区了

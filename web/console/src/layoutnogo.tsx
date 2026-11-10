@@ -2,23 +2,22 @@
 // - 三种:禁行区(圈一块)、虚拟墙(画一条线,站点存成约 0.3 m 宽的禁行带)、限速区(圈一块,填限速);可以设成临时的(几天)。
 // - 加、收紧:保存就生效。删、缩小(放宽):要确认,确认之前机器人照旧绕开原来的范围;网页上确认放宽要再输一次密码。
 // - 机器人还没收到在生效的那一份:写「等机器人确认中」。
-// 改的先记在页面上,外框「保存」整份存(带打开时看到的修订号;别人改过回 409,外框说「刚才有人改过」)。
-// 人员忽略区(W41,机器人在里面看见人不报)、抹掉区(机器人永远不去、画图时抹成没建图)也在这里画。
-import { useEffect, useRef, useState } from "preact/hooks";
+// 人员忽略区(W41,机器人在里面看见人不报)、抹掉区(机器人永远不去、画图时抹成没建图)。
+// 11-10(用户:「所有动作都要在编辑器中完成」):画、删、改名、拖顶点都搬进地图编辑器(mapedit.tsx);这一页只看
+// 这一版有哪些、在不在生效,确认此版本、处理带过来的建议,给「去编辑器里改」。
+import { useEffect, useState } from "preact/hooks";
 import { api, ApiError } from "./api";
-import { Confirm, Modal } from "./dialogs";
-import { clickGuard, startDrag, swallowClick } from "./dragpt";
+import { Modal } from "./dialogs";
 import { t, joinList } from "./i18n";
 import { siteKnown } from "./sitetext";
-import { closesLoop, polyPx, toMap, type NavZones, type TabProps } from "./layoutpage";
+import { polyPx, type NavZones, type TabProps } from "./layoutpage";
 import type { LegendKey } from "./mapcanvas";
-import { pointInPolygon, type NavZone, type Pt } from "./mapview";
-import { clientToMap } from "./routes";
+import type { NavZone, Pt } from "./mapview";
 
-type Draw = "nogo" | "wall" | "slow" | "ignore" | "erase";
-interface Form { label: string; hard: boolean; speed: number; temp: boolean; days: number }
+export type Draw = "nogo" | "wall" | "slow" | "ignore" | "erase";
+export interface Form { label: string; hard: boolean; speed: number; temp: boolean; days: number }
 /** 新画的:站点要的格式(临时的带 for_s,站点按自己的钟换成到期时刻)。 */
-type Draft = NavZone & { for_s?: number };
+export type Draft = NavZone & { for_s?: number };
 const DAYS = [1, 3, 7, 30];
 
 /** 一个区域给人看的一行字:种类、硬、临时到什么时候。 */
@@ -36,41 +35,24 @@ export function nogoLine(z: Draft): string {
 
 interface RobotRun { robot_id: string; running?: { map_id?: string; map_version?: string; zones?: { match?: boolean | null } | null } | null }
 
-export function NogoTab(p: TabProps) {
-  const nav = p.data.nav;
-  const [zones, setZones] = useState<Draft[]>(nav?.zones ?? []);
-  const [draw, setDraw] = useState<Draw | null>(null);
-  const [pts, setPts] = useState<Pt[]>([]);
-  const [form, setForm] = useState(false);
-  const [removing, setRemoving] = useState<Draft | null>(null);
-  const [confirming, setConfirming] = useState<"ask" | null>(null);
+/** 这一版禁行区的状态(在生效 / 等你确认 / 从没确认过 / 等机器人)、带过来的建议、「确认此版本」。
+ *  布置 → 禁行区 和地图编辑器都用(11-10:画都在编辑器里画)。``changed``:页面上还有没存的改动(不给确认)。 */
+export function NogoStatus({ nav, base, mapId, version, changed, say, reload, draft = false }: {
+  nav: NavZones | null; base: string; mapId: string; version: string; changed: boolean; say: (s: string) => void; reload: () => Promise<void>;
+  /** 11-10:编辑草稿 —— 禁行区在「发布」时一起确认,这里不给单独确认 */
+  draft?: boolean;
+}) {
+  const [confirming, setConfirming] = useState(false);
   const [behind, setBehind] = useState<string[]>([]);
-  // P1-31:选中一个已画好的(点图上或点列表),能拖顶点、改名
-  const [sel, setSel] = useState<string | null>(null);
-  const [renaming, setRenaming] = useState(false);
-  const root = useRef<HTMLDivElement>(null);
-  const guard = useRef(clickGuard());
-
-  const changed = JSON.stringify(zones) !== JSON.stringify(nav?.zones ?? []);
-  useEffect(() => p.setDirty(changed), [changed]);
-  useEffect(() => {
-    p.registerSave(async () => {
-      if (!nav) return;
-      await api<NavZones>("POST", `${p.base}/zones`, { zones, base_revision: nav.revision });
-      await p.reload("nav");
-    });
-    return () => p.registerSave(null);
-  }, [zones, nav?.revision]);
   useEffect(() => {
     let live = true;
     api<{ robots: RobotRun[] }>("GET", "/api/robots").then((d) => {
       if (!live) return;
-      setBehind((d.robots ?? []).filter((r) => r.running?.map_id === p.map.map_id && r.running?.map_version === p.map.version
+      setBehind((d.robots ?? []).filter((r) => r.running?.map_id === mapId && r.running?.map_version === version
         && r.running?.zones?.match === false).map((r) => r.robot_id));
     }).catch(() => {});
     return () => { live = false; };
   }, [nav?.revision]);
-
   const held = nav?.held ?? [];
   const current = !!nav?.confirmed?.current;
   // 第 3 轮 maps N1:上一版带过来、还没核的禁行区。网页上原来看不到也采纳不了,确认就确认了一个空集
@@ -79,176 +61,116 @@ export function NogoTab(p: TabProps) {
     if (!nav || !prop) return;
     try {
       if (keep) {
-        await api("POST", `${p.base}/zones/confirm`, { revision: nav.revision, confirm: true, adopt: { zones: prop.zones.map((z) => z.id) } });
-        p.say(t("lyNogoPropKept", { n: prop.zones.length }));
+        await api("POST", `${base}/zones/confirm`, { revision: nav.revision, confirm: true, adopt: { zones: prop.zones.map((z) => z.id) } });
+        say(t("lyNogoPropKept", { n: prop.zones.length }));
       } else {
-        await api("POST", `${p.base}/zones/proposal`, { action: "discard" });
-        p.say(t("lyNogoPropDropped"));
+        await api("POST", `${base}/zones/proposal`, { action: "discard" });
+        say(t("lyNogoPropDropped"));
       }
-      await p.reload("nav");
+      await reload();
     } catch (e) {
-      p.say(t("failed", { why: e instanceof ApiError ? e.message : String(e) }));
+      say(t("failed", { why: e instanceof ApiError ? e.message : String(e) }));
     }
   }
-  const shown = zones;
-  const minPts = draw === "wall" ? 2 : 3;
-
   async function confirm(pw?: string) {
     if (!nav) return;
-    await api("POST", `${p.base}/zones/confirm`, {
+    await api("POST", `${base}/zones/confirm`, {
       revision: nav.revision, confirm: true, ...(nav.zones.length === 0 ? { empty_ok: true } : {}), ...(pw ? { confirm_password: pw } : {}),
     });
-    setConfirming(null);
-    p.say(t("navConfirmedOk", { rev: nav.revision }));
-    await p.reload("nav");
+    setConfirming(false);
+    say(t("navConfirmedOk", { rev: nav.revision }));
+    await reload();
   }
+  return (
+    <div class="nogo-status">
+      {!nav ? <p class="muted">…</p> : current && held.length === 0
+        ? <p class="ok-text">{t("lyNogoLive")}</p>
+        : held.length > 0 ? <p class="warn-text">{t("lyNogoWaitYou", { names: joinList(held.map((z) => siteKnown(z.label) || z.id)) })}</p>
+        // 第 4 轮 maps N1:另存出来的版本已经抄了来源版本的区域 —— 说「已有 n 个,核一下再确认」,不说「去画」
+        : (nav.zones?.length ?? 0) > 0 ? <p class="warn-text" data-nogo-copied="1">{t("lyNogoCopiedCheck", { n: nav.zones.length })}</p>
+        : <p class="warn-text">{t("lyNogoNeverConfirmed")}</p>}
+      {behind.length > 0 && <p class="warn-text">{t("lyNogoWaitRobot", { ids: joinList(behind) })}</p>}
+      {prop && (
+        <div class="nogo-prop" data-nogo-prop="1">
+          <p class="warn-text">{t(prop.frame?.same === false ? "lyNogoPropFrame" : "lyNogoProp", { v: prop.from_version, n: prop.zones.length })}</p>
+          <ul class="plain small">{prop.zones.map((z) => <li key={z.id}>{siteKnown(z.label) || z.id}</li>)}</ul>
+          <div class="row wrap">
+            <button type="button" class="btn sm primary" data-prop-keep="1" disabled={changed} onClick={() => void takeProposal(true)}>{t("lyNogoPropKeep")}</button>
+            <button type="button" class="btn sm" data-prop-drop="1" disabled={changed} onClick={() => void takeProposal(false)}>{t("lyNogoPropDrop")}</button>
+          </div>
+        </div>
+      )}
+      {/* 第 3 轮 maps N1:有没核的建议、这一版又一个都没画时,先处理建议,不给确认空集 */}
+      {draft && <p class="muted small" data-nogo-draft="1">{t("lyNogoDraft")}</p>}
+      {nav && !current && !changed && !draft && !(prop && nav.zones.length === 0)
+        && <button type="button" class="btn sm primary" onClick={() => setConfirming(true)}>{t("navConfirmBtn")}</button>}
+      {/* 第 2 轮 maps N12:从发布对话框跳来的,确认完给「回去发布」 */}
+      {current && typeof location !== "undefined" && /[?&]from=publish\b/.test(location.hash)
+        && <a class="btn sm" href="#/admin/maps" data-back-publish="1">{t("lyNogoBackPublish")}</a>}
+      {/* P1-32:勾「我确认」和输密码在同一个对话框里(原来是两个) */}
+      {confirming && <SureDialog needPw={held.length > 0} onNo={() => setConfirming(false)} onYes={(pw) => confirm(pw)} />}
+    </div>
+  );
+}
 
-  const cur = zones.find((z) => z.id === sel) ?? null;
-  const curPts = cur ? (cur.wall ?? cur.polygon) : [];
-  const dragVertex = (id: string, i: number) => (e: PointerEvent) => {
-    startDrag(e, guard.current, (cx, cy) => {
-      const m = clientToMap(root.current, p.meta, cx, cy);
-      if (!m) return;
-      const at: Pt = [m[0], m[1]];
-      setZones((all) => all.map((z) => (z.id !== id ? z : z.wall
-        ? { ...z, wall: z.wall.map((q, j) => (j === i ? at : q)) }
-        : { ...z, polygon: z.polygon.map((q, j) => (j === i ? at : q)) })));
-    });
-  };
+/** 一个区域在图上的样子(布置 → 禁行区、地图编辑器都用)。 */
+export function zoneShape(meta: TabProps["meta"], z: Draft, sel = false) {
+  return z.wall
+    ? <polyline key={z.id} points={polyPx(meta, z.wall)} class={`nogo-line vwall-line${z.hard ? " hard" : ""}`} data-nogo-wall={z.id} />
+    : <polygon key={z.id} points={polyPx(meta, z.polygon)} class={`${z.kind === "slow" ? "slow-area" : z.kind === "ignore" ? "ignore-area" : z.kind === "erase" ? "erase-area" : z.hard ? "nogo-area hard" : "nogo-area"}${sel ? " sel" : ""}`} />;
+}
+
+/** 区域的名字(屏上坐标;第 2 轮 P2-15、第 3 轮 setup N3)。 */
+export function zoneName(s: { map: (x: number, y: number) => [number, number] | Pt }, z: Draft) {
+  const ring = z.wall ?? z.polygon;
+  if (!ring || ring.length === 0) return null;
+  const name = siteKnown(z.label) || z.id;
+  const [sx, sy] = nameSpot(ring.map(([x, y]) => s.map(x, y) as [number, number]), name, !!z.wall);
+  const kind = z.wall ? "wall" : z.kind === "nogo" ? (z.hard ? "hard" : "nogo") : z.kind;
+  return <text key={`n:${z.id}`} x={sx} y={sy} class={`nogo-name k-${kind}`} data-nogo-name={z.id}>{name}</text>;
+}
+
+export function zoneLegend(zs: Draft[]): LegendKey[] {
+  return [...new Set(zs.map((z): LegendKey => (z.wall ? "vwall" : z.kind === "slow" ? "slow" : z.kind === "ignore" ? "ignore"
+    : z.kind === "erase" ? "erase" : z.hard ? "hard" : "nogo")))];
+}
+
+/** 新画的区域:id 不重(按种类开头),名字、硬、限速、临时照表单。 */
+export function newZone(draw: Draw, pts: Pt[], f: Form, have: Draft[], rev: number): Draft {
+  let id = `${draw === "wall" ? "w" : draw === "slow" ? "s" : draw === "ignore" ? "i" : draw === "erase" ? "e" : "n"}${rev + 1}`;
+  while (have.some((z) => z.id === id)) id += "x";
+  const z: Draft = { id, kind: draw === "slow" || draw === "ignore" || draw === "erase" ? draw : "nogo", label: f.label.trim(), polygon: draw === "wall" ? [] : pts };
+  if (draw === "wall") { z.wall = pts; delete (z as Partial<Draft>).polygon; }
+  if (draw === "slow") z.max_speed_mps = f.speed;
+  else if (f.hard && draw !== "ignore" && draw !== "erase") z.hard = true;
+  if (f.temp) z.for_s = f.days * 86400;
+  return z;
+}
+
+/** 布置 → 禁行区(11-10 起只看、只确认):禁行区、虚拟墙、限速区都在地图编辑器里画(用户:「所有动作都要在编辑器中
+ *  完成」)。这里列出这一版有哪些、在不在生效,给「确认此版本」和「去编辑器里改」。 */
+export function NogoTab(p: TabProps) {
+  const nav = p.data.nav;
+  const zones: Draft[] = nav?.zones ?? [];
+  useEffect(() => { p.setDirty(false); p.registerSave(null); }, []);
+  const edit = `#/admin/mapedit?map=${encodeURIComponent(p.map.map_id)}&version=${encodeURIComponent(p.map.version)}&tool=nogo`;
   return (
     <div class="ly-tab">
-      <div ref={root} onClickCapture={(e) => swallowClick(guard.current, e)}>
-      <p.Map
-        legend={[...new Set(shown.map((z): LegendKey => (z.wall ? "vwall" : z.kind === "slow" ? "slow" : z.kind === "ignore" ? "ignore"
-          : z.kind === "erase" ? "erase" : z.hard ? "hard" : "nogo")))]}
-        drawing={!!draw}
-        onPick={draw ? (px, py) => {
-          if (draw !== "wall" && closesLoop(p.meta, pts, px, py)) { setForm(true); return; }
-          setPts((d) => [...d, toMap(p.meta, px, py)]);
-        } : (px, py) => {
-          const at = toMap(p.meta, px, py);
-          const hit = zones.find((z) => !z.wall && z.polygon.length >= 3 && pointInPolygon(at, z.polygon));
-          if (hit) setSel(hit.id);
-        }}
-        world={<>
-          {shown.map((z) => z.wall
-            ? <polyline key={z.id} points={polyPx(p.meta, z.wall)} class={`nogo-line vwall-line${z.hard ? " hard" : ""}`} data-nogo-wall={z.id} />
-            : <polygon key={z.id} points={polyPx(p.meta, z.polygon)} class={`${z.kind === "slow" ? "slow-area" : z.kind === "ignore" ? "ignore-area" : z.kind === "erase" ? "erase-area" : z.hard ? "nogo-area hard" : "nogo-area"}${z.id === sel ? " sel" : ""}`} />)}
-          {held.map((z) => <polygon key={`held-${z.id}`} points={polyPx(p.meta, z.polygon)} class="nogo-area held" />)}
-          {pts.length > 0 && <polyline points={polyPx(p.meta, pts)} class={draw === "wall" ? "draft-line vwall" : "draft-line"} />}
-        </>}
-        marks={(s) => <>
-          {/* 第 2 轮 P2-15:禁区、限速区、虚拟墙写名字(原来只有颜色,分不清哪块是哪块) */}
-          {shown.map((z) => {
-            const ring = z.wall ?? z.polygon;
-            if (!ring || ring.length === 0) return null;
-            const name = siteKnown(z.label) || z.id;
-            // 第 3 轮 setup N3:名字盖住了形状(短虚拟墙整条被盖住):墙的名字写在线上方;
-            // 区域放不下名字就写在它上边外面。颜色跟区域类型(原来全是红字)
-            const [sx, sy] = nameSpot(ring.map(([x, y]) => s.map(x, y)), name, !!z.wall);
-            const kind = z.wall ? "wall" : z.kind === "nogo" ? (z.hard ? "hard" : "nogo") : z.kind;
-            return <text key={`n:${z.id}`} x={sx} y={sy} class={`nogo-name k-${kind}`} data-nogo-name={z.id}>{name}</text>;
-          })}
-          {pts.map(([x, y], i) => { const [sx, sy] = s.map(x, y); return <circle key={i} cx={sx} cy={sy} r={5} class="draft-pt" />; })}
-          {!draw && cur && curPts.map(([x, y], i) => {
-            const [sx, sy] = s.map(x, y);
-            return <circle key={`v${i}`} cx={sx} cy={sy} r={7} class="vtx-handle" data-vtx={i} onPointerDown={dragVertex(cur.id, i)}><title>{t("lyDragVertex")}</title></circle>;
-          })}
-        </>} />
-      </div>
+      <p.Map legend={zoneLegend(zones)} world={<>
+        {zones.map((z) => zoneShape(p.meta, z))}
+        {(nav?.held ?? []).map((z) => <polygon key={`held-${z.id}`} points={polyPx(p.meta, z.polygon)} class="nogo-area held" />)}
+      </>} marks={(s) => <>{zones.map((z) => zoneName(s, z))}</>} />
       <div class="ly-side">
-        <div class="nogo-status">
-          {!nav ? <p class="muted">…</p> : current && held.length === 0
-            ? <p class="ok-text">{t("lyNogoLive")}</p>
-            : held.length > 0 ? <p class="warn-text">{t("lyNogoWaitYou", { names: joinList(held.map((z) => siteKnown(z.label) || z.id)) })}</p>
-            // 第 4 轮 maps N1:另存出来的版本已经抄了来源版本的区域 —— 说「已有 n 个,核一下再确认」,不说「去画」
-            : (nav.zones?.length ?? 0) > 0 ? <p class="warn-text" data-nogo-copied="1">{t("lyNogoCopiedCheck", { n: nav.zones.length })}</p>
-            : <p class="warn-text">{t("lyNogoNeverConfirmed")}</p>}
-          {behind.length > 0 && <p class="warn-text">{t("lyNogoWaitRobot", { ids: joinList(behind) })}</p>}
-          {prop && (
-            <div class="nogo-prop" data-nogo-prop="1">
-              <p class="warn-text">{t(prop.frame?.same === false ? "lyNogoPropFrame" : "lyNogoProp", { v: prop.from_version, n: prop.zones.length })}</p>
-              <ul class="plain small">{prop.zones.map((z) => <li key={z.id}>{siteKnown(z.label) || z.id}</li>)}</ul>
-              <div class="row wrap">
-                <button type="button" class="btn sm primary" data-prop-keep="1" onClick={() => void takeProposal(true)}>{t("lyNogoPropKeep")}</button>
-                <button type="button" class="btn sm" data-prop-drop="1" onClick={() => void takeProposal(false)}>{t("lyNogoPropDrop")}</button>
-              </div>
-            </div>
-          )}
-          {/* 第 3 轮 maps N1:有没核的建议、这一版又一个都没画时,先处理建议,不给确认空集 */}
-          {nav && !current && !changed && !(prop && nav.zones.length === 0)
-            && <button type="button" class="btn sm primary" onClick={() => setConfirming("ask")}>{t("navConfirmBtn")}</button>}
-          {/* 第 2 轮 maps N12:从发布对话框跳来的,确认完给「回去发布」 */}
-          {current && typeof location !== "undefined" && /[?&]from=publish\b/.test(location.hash)
-            && <a class="btn sm" href="#/admin/maps" data-back-publish="1">{t("lyNogoBackPublish")}</a>}
-        </div>
-        {draw ? (
-          <div class="row wrap">
-            <span class="muted small">{draw === "wall" ? t("vwallDrawHint", { n: pts.length, w: 0.3 })
-              : draw === "erase" ? t("eraseDrawHint", { n: pts.length }) : t("navDrawHint", { n: pts.length })}</span>
-            {/* 第 2 轮 P1-51:「不会删已画的禁行区」原来只在悬停提示里,触屏看不到 */}
-            {draw === "erase" && <span class="muted small" data-erase-tip="1">{t("drawEraseTip")}</span>}
-            <button type="button" class="btn sm" disabled={!pts.length} onClick={() => setPts(pts.slice(0, -1))}>{t("undoPoint")}</button>
-            <button type="button" class="btn sm" onClick={() => { setDraw(null); setPts([]); }}>{t("cancel")}</button>
-            <button type="button" class="btn sm primary" disabled={pts.length < minPts} onClick={() => setForm(true)}>{t("lyDrawDone")}</button>
-          </div>
-        ) : (
-          // P1-33/38:分两组 —— 管机器人怎么走的、管人员检测的(忽略区不是「机器人不进」);「不可通行」写明不是删禁行区
-          <div class="nogo-groups">
-            <p class="small muted">{t("nogoGroupMove")}</p>
-            <div class="row wrap">
-              <button type="button" class="btn" onClick={() => { setDraw("nogo"); setPts([]); }}>{t("drawNoGo")}</button>
-              <button type="button" class="btn" onClick={() => { setDraw("wall"); setPts([]); }}>{t("drawVWall")}</button>
-              <button type="button" class="btn" onClick={() => { setDraw("slow"); setPts([]); }}>{t("drawSlow")}</button>
-              <button type="button" class="btn" title={t("drawEraseTip")} onClick={() => { setDraw("erase"); setPts([]); }}>{t("drawErase")}</button>
-            </div>
-            <p class="small muted">{t("nogoGroupPeople")}</p>
-            <div class="row wrap">
-              <button type="button" class="btn" onClick={() => { setDraw("ignore"); setPts([]); }}>{t("drawIgnore")}</button>
-            </div>
-          </div>
-        )}
+        <NogoStatus nav={nav} base={p.base} mapId={p.map.map_id} version={p.map.version} changed={false} say={p.say} reload={() => p.reload("nav")} />
+        <a class="btn primary" href={edit} data-nogo-edit="1">{t("lyNogoEditInEditor")}</a>
         <p class="muted small">{t("lyNogoHint")}</p>
         <ul class="plain ly-list">
-          {shown.length === 0 && <li class="muted small">{t("noNavZones")}</li>}
-          {shown.map((z) => (
-            <li key={z.id} class={z.id === sel ? "row on" : "row"}>
-              <span><button type="button" class={z.id === sel ? "linklike on" : "linklike"} data-pick-zone={z.id}
-                onClick={() => setSel(z.id === sel ? null : z.id)}><b>{siteKnown(z.label) || z.id}</b></button> <span class="muted small nowrap">{nogoLine(z)}</span></span>
-              {z.id === sel && <button type="button" class="btn sm push" data-rename="1" onClick={() => setRenaming(true)}>{t("lyRename")}</button>}
-              <button type="button" class={z.id === sel ? "btn sm" : "btn sm push"} onClick={() => setRemoving(z)}>{t("remove")}</button>
-            </li>
+          {zones.length === 0 && <li class="muted small">{t("noNavZones")}</li>}
+          {zones.map((z) => (
+            <li key={z.id} class="row"><span><b>{siteKnown(z.label) || z.id}</b> <span class="muted small nowrap">{nogoLine(z)}</span></span></li>
           ))}
-          {cur && <li class="muted small">{t("lyDragVertex")}</li>}
         </ul>
       </div>
-      {renaming && cur && (
-        <RenameNogo initial={cur.label} taken={zones.filter((z) => z.id !== cur.id).map((z) => z.label.trim())} onClose={() => setRenaming(false)}
-          onSave={(label) => { setZones(zones.map((z) => (z.id === cur.id ? { ...z, label } : z))); setRenaming(false); }} />
-      )}
-      {form && draw && (
-        <NogoForm kind={draw} taken={zones.map((z) => z.label.trim())} onClose={() => setForm(false)} onSave={(f) => {
-          let id = `${draw === "wall" ? "w" : draw === "slow" ? "s" : draw === "ignore" ? "i" : draw === "erase" ? "e" : "n"}${(nav?.revision ?? 0) + 1}`;
-          while (zones.some((z) => z.id === id)) id += "x";
-          const z: Draft = { id, kind: draw === "slow" || draw === "ignore" || draw === "erase" ? draw : "nogo", label: f.label.trim(), polygon: draw === "wall" ? [] : pts };
-          if (draw === "wall") { z.wall = pts; delete (z as Partial<Draft>).polygon; }
-          if (draw === "slow") z.max_speed_mps = f.speed;
-          else if (f.hard && draw !== "ignore" && draw !== "erase") z.hard = true;
-          if (f.temp) z.for_s = f.days * 86400;
-          setZones([...zones, z]);
-          setForm(false);
-          setDraw(null);
-          setPts([]);
-        }} />
-      )}
-      {removing && (
-        <Confirm text={t("lyNogoRemoveAsk", { label: siteKnown(removing.label) || removing.id })} yes={t("remove")} danger onNo={() => setRemoving(null)}
-          onYes={() => { const z = removing; setRemoving(null); setZones(zones.filter((o) => o.id !== z.id)); }} />
-      )}
-      {/* P1-32:勾「我确认」和输密码在同一个对话框里(原来是两个) */}
-      {confirming === "ask" && (
-        <SureDialog needPw={held.length > 0} onNo={() => setConfirming(null)} onYes={(pw) => confirm(pw)} />
-      )}
     </div>
   );
 }
@@ -264,7 +186,7 @@ function freshName(base: string, taken: string[]): string {
   for (let i = 2; ; i++) if (!taken.includes(`${base} ${i}`)) return `${base} ${i}`;
 }
 
-function RenameNogo({ initial, taken, onClose, onSave }: { initial: string; taken: string[]; onClose: () => void; onSave: (label: string) => void }) {
+export function RenameNogo({ initial, taken, onClose, onSave }: { initial: string; taken: string[]; onClose: () => void; onSave: (label: string) => void }) {
   const [v, setV] = useState(initial);
   const dup = nameTaken(v, taken);
   const ok = v.trim().length > 0 && v.trim().length <= 64 && !dup;
@@ -283,7 +205,7 @@ function RenameNogo({ initial, taken, onClose, onSave }: { initial: string; take
 }
 
 /** 确认那一句(人话):勾上才能确认;删了、缩了禁行区(``needPw``)就在同一个框里再输密码。 */
-function SureDialog({ onYes, onNo, needPw }: { onYes: (pw?: string) => Promise<void>; onNo: () => void; needPw: boolean }) {
+export function SureDialog({ onYes, onNo, needPw }: { onYes: (pw?: string) => Promise<void>; onNo: () => void; needPw: boolean }) {
   const [sure, setSure] = useState(false);
   const [pw, setPw] = useState("");
   const [err, setErr] = useState("");
@@ -312,7 +234,7 @@ function SureDialog({ onYes, onNo, needPw }: { onYes: (pw?: string) => Promise<v
   );
 }
 
-function NogoForm({ kind, taken, onClose, onSave }: { kind: Draw; taken: string[]; onClose: () => void; onSave: (f: Form) => void }) {
+export function NogoForm({ kind, taken, onClose, onSave }: { kind: Draw; taken: string[]; onClose: () => void; onSave: (f: Form) => void }) {
   const [f, setF] = useState<Form>({
     label: freshName(kind === "wall" ? t("legendVWall") : kind === "slow" ? t("legendSlow") : kind === "ignore" ? t("legendIgnore") : kind === "erase" ? t("eraseLabel") : t("legendNoGo"), taken),
     hard: false, speed: 0.3, temp: false, days: 3,

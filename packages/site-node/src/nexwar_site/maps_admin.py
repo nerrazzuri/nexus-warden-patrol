@@ -27,6 +27,7 @@ from typing import Any
 from nexwar_contract.errors import ContractError
 from nexwar_contract.maps import MapRef, check_name, prior_missing
 from nexwar_site.map_wizard import read_quality
+from nexwar_site.maps import DRAFT_SOURCE
 
 log = logging.getLogger(__name__)
 
@@ -205,6 +206,9 @@ class MapAdmin:
                     # P1-87:登记了、盘上却没有的文件(空 = 齐全)
                     "missing": m.get("missing", []),
                     "latest": i == 0, "build": cat.build_info(map_id, m["version"]),
+                    # 11-10:编辑草稿(只在站点上、不能下发)、最初从哪一版编辑来的
+                    "draft": str(m["source"]).startswith(DRAFT_SOURCE),
+                    "draft_of": cat.draft_of(map_id, m["version"]),
                     "quality": read_quality(cat, map_id, m["version"]),
                     "counts": {"zones": len(zs.zones) if zs else 0,
                                "nogo": len(zs.nogo()) if zs else 0,
@@ -375,40 +379,54 @@ class MapAdmin:
 
     def edit(self, map_id: str, version: str, *, digest: Any, ops: Any, note: Any,
              by: str) -> dict[str, Any]:
-        """地图编辑第一版(W44 第四期,``map_edit``):橡皮擦、画障碍,另存成新的一版(跟清噪点一样:
-        文件照抄、只换栅格,原点照抄,区域等走「新版本带过来、要人核」)。``digest`` 对不上 → 409。"""
+        """地图编辑(W44 第四期,``map_edit``):橡皮擦、画障碍。11-10(用户:「所有的保存只是草稿……
+        都确认后再点发布,这样就可以减少版本的叠加」):保存出来的都是**草稿**(登记来源 ``draft:``,
+        只在站点上,不能下发)。
+        - 改正式版本:另存成草稿(文件照抄、只换栅格;``ops`` 空 = 只改禁行区、显示,栅格不动),
+          原点照抄,区域等照抄;原版一点不动。
+        - 改草稿:有擦改就用新版本替换它(草稿删掉、区域照抄、路线搬过去,回 ``replaced``);
+          ``ops`` 空就不出新版本(禁行区、显示直接存在草稿上)。
+        ``digest`` 对不上 → 409。"""
         import shutil
         import tempfile
         from pathlib import Path
 
         from nexwar_site import map_denoise as dn
         from nexwar_site import map_edit as me
-        from nexwar_site.maps import MapError
+        from nexwar_site.maps import DRAFT_SOURCE, MapError
         map_id, version = self._names(map_id, version)
+        only_layers = isinstance(ops, list) and not ops
         try:
-            clean = me.check_ops(ops)
+            clean = [] if only_layers else me.check_ops(ops)
         except me.EditError as exc:
             raise AdminError(400, str(exc)) from exc
         _, meta, image, data = self._grid(map_id, version)
         if digest != dn.digest(data):
             raise AdminError(409, "此版本的地图在你打开以后换了:重新打开再编辑", reason="stale")
-        try:
-            new_pgm, stats = me.apply_ops(data, meta, clean)
-        except me.EditError as exc:
-            raise AdminError(400, str(exc)) from exc
+        origin = self.cat.draft_of(map_id, version)
+        if only_layers and origin is not None:
+            return {"map_id": map_id, "from": origin, "version": version, "draft": True}
+        if only_layers:
+            new_pgm, stats = data, {"erased_m2": 0.0, "obstacle_m2": 0.0}
+        else:
+            try:
+                new_pgm, stats = me.apply_ops(data, meta, clean)
+            except me.EditError as exc:
+                raise AdminError(400, str(exc)) from exc
         new = self._next_version(map_id, version)
         src = self.cat.root / map_id / version
         tmp = Path(tempfile.mkdtemp(prefix="edit-", dir=self.cat.root))
         text = str(note or "")[:120]
+        what = ("只改了禁行区、显示" if only_layers else
+                f"擦了 {stats['erased_m2']} 平方米、画了 {stats['obstacle_m2']} 平方米障碍")
         try:
             for f in self.ref(map_id, version).files:
                 shutil.copy2(src / f.name, tmp / f.name)
             (tmp / image).write_bytes(new_pgm)
             try:
-                self.cat.import_dir(tmp, map_id=map_id, version=new, source=f"edit:{by}",
-                                    note=text or (f"从 {version} 编辑:擦了 "
-                                                  f"{stats['erased_m2']} 平方米、画了 "
-                                                  f"{stats['obstacle_m2']} 平方米障碍"))
+                self.cat.import_dir(tmp, map_id=map_id, version=new,
+                                    source=f"{DRAFT_SOURCE}{by}",
+                                    note=text or f"从 {origin or version} 编辑:{what}")
             except MapError as exc:
                 raise AdminError(409, str(exc)) from exc
         finally:
@@ -417,8 +435,73 @@ class MapAdmin:
         homes = copy_homes(self.db, map_id, version, new)
         self._copy_display(map_id, version, new, by=by)
         layout = self._copy_layout(map_id, version, new, by=by)
-        return {"map_id": map_id, "from": version, "version": new, **stats,
-                "homes_copied": homes, "layout_copied": layout, "by": by}
+        out = {"map_id": map_id, "from": origin or version, "version": new, **stats,
+               "homes_copied": homes, "layout_copied": layout, "by": by, "draft": True}
+        if origin is not None:
+            self._replace_draft(map_id, version, new, by=by, out=out)
+        return out
+
+    def _replace_draft(self, map_id: str, old: str, new: str, *, by: str,
+                       out: dict[str, Any]) -> None:
+        """新草稿顶掉旧草稿:禁行区确认带过来、路线搬过来、旧草稿删掉。挂了摄像头的不删(摄像头
+        不跟着走),留着让人自己处理。"""
+        self._carry_confirm(map_id, old, new, by=by)
+        routes = getattr(self.site, "routes", None)
+        if routes is not None and self.db.query(
+                "SELECT 1 FROM routes WHERE map_id=? AND map_version=? LIMIT 1", (map_id, old)):
+            try:
+                out["routes_moved"] = routes.move_to_version(map_id, old, new, by=by)
+            except Exception:  # 搬不过去就不删旧草稿
+                log.warning("草稿 %s:%s 的路线没搬到 %s", map_id, old, new, exc_info=True)
+                return
+        if self.layout_counts(map_id, old)["cameras"]:
+            return
+        try:
+            self.delete(map_id, old)
+            out["replaced"] = old
+        except AdminError:
+            log.warning("编辑草稿 %s:%s 没删成,留着", map_id, old, exc_info=True)
+
+    def draft(self, map_id: str, version: str) -> dict[str, Any]:
+        """``{draft, from}``:这一版是不是草稿、草稿最初是从哪一版编辑来的(编辑器用)。"""
+        map_id, version = self._names(map_id, version)
+        self.ref(map_id, version)
+        origin = self.cat.draft_of(map_id, version)
+        return {"draft": origin is not None, "from": origin}
+
+    def release(self, map_id: str, version: str, *, by: str) -> dict[str, Any]:
+        """草稿发布到站点(11-10,用户:「发布的地图不是下发到机器人,而只是发布到站点,发布完了
+        确认没问题再下发」):成为正式版本,可以下发;禁行区按现在这一份确认(发布这一下就是人确认)。
+        不是草稿 → 409。"""
+        map_id, version = self._names(map_id, version)
+        self.ref(map_id, version)
+        origin = self.cat.draft_of(map_id, version)
+        if origin is None:
+            raise AdminError(409, f"{map_id}:{version} 不是草稿:已经是正式版本了",
+                             reason="not_draft")
+        rev = 0
+        zones = getattr(self.site, "zones", None)
+        if zones is not None:
+            cur = zones.current(map_id, version)
+            rev = cur.revision
+            if not zones.confirmed_current(map_id, version):
+                zones.confirm(map_id, version, revision=rev, by=by)
+        self.cat.release_draft(map_id, version, by=by)
+        return {"map_id": map_id, "version": version, "from": origin, "zones_revision": rev}
+
+    def _carry_confirm(self, map_id: str, old: str, new: str, *, by: str) -> None:
+        """草稿上的禁行区已经确认到当前修订:新版本(抄过来的同一份)也确认上。没确认过的照旧没确认。"""
+        zones = getattr(self.site, "zones", None)
+        if zones is None:
+            return
+        try:
+            b = zones.current(map_id, new)
+            if not (zones.confirmed_current(map_id, old) and b.zones
+                    and b.zones == zones.current(map_id, old).zones):
+                return
+            zones.confirm(map_id, new, revision=b.revision, by=by)
+        except Exception:  # 确认不上就留给人确认
+            log.warning("草稿 %s:%s 的禁行区确认没带到 %s", map_id, old, new, exc_info=True)
 
     def layout_counts(self, map_id: str, version: str) -> dict[str, Any]:
         """网页易用性第 2 轮 N4:这一版上画了多少布置(发布弹窗跟机器人现在用的那一版比,
