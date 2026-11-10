@@ -31,8 +31,8 @@ def _项(v):
 def test_空站点什么都没做_做一样亮一样(tmp_path):
     db = SiteDB(tmp_path / "s.db")
     v = setup_view(db, 假派遣器({}))
-    assert v["done"] == 0 and v["total"] == 9
-    assert [i["id"] for i in v["items"]][:3] == ["robots", "map", "zones"]
+    assert v["done"] == 0 and v["total"] == 10
+    assert [i["id"] for i in v["items"]][:4] == ["robots", "map", "home", "zones"]
     d = 假派遣器({"A": ("m1", "3"), "B": ("m1", "3")})
     items = _项(setup_view(db, d))
     assert items["robots"]["done"] and items["robots"]["count"] == 2
@@ -104,4 +104,26 @@ def test_网页P1_87_登记了图但文件丢了_地图那一项不算做完(tmp
     assert _项(setup_view(db, d))["map"]["done"]              # 没接地图库(老调用方):照旧按登记算
     d.maps = SimpleNamespace(usable=lambda: False)
     assert not _项(setup_view(db, d))["map"]["done"]
+    db.close()
+
+
+def test_11_11_W6_01_开站清单按机器人现在用的那版图查_原点和路线(tmp_path):
+    db = SiteDB(tmp_path / "s.db")
+    d = 假派遣器({"A": ("m1", "7"), "B": ("m1", "7")})
+    with db.tx() as c:
+        c.execute("INSERT INTO homes(robot_id, map_id, map_version, name, x, y, yaw) "
+                  "VALUES ('A','m1','11','h',0,0,0)")
+        c.execute("INSERT INTO routes(route_id, map_id, map_version, definition, revision, "
+                  "updated_ms) VALUES ('r1','m1','11','{}',1,0)")
+    it = _项(setup_view(db, d))
+    assert [i for i in it][:3] == ["robots", "map", "home"]
+    assert not it["home"]["done"] and it["home"]["robots"] == ["A", "B"], "v11 的原点不算 v7 的"
+    assert not it["routes"]["done"], "路线画在 v11 上,机器人用的是 v7"
+    with db.tx() as c:
+        c.execute("INSERT INTO homes(robot_id, map_id, map_version, name, x, y, yaw) "
+                  "VALUES ('A','m1','7','h',0,0,0), ('B','m1','7','h',0,0,0)")
+        c.execute("INSERT INTO routes(route_id, map_id, map_version, definition, revision, "
+                  "updated_ms) VALUES ('r2','m1','','{}',1,0)")
+    it = _项(setup_view(db, d))
+    assert it["home"]["done"] and it["routes"]["done"], "不分版本的路线(空版本)算"
     db.close()

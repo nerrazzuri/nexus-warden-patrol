@@ -377,6 +377,8 @@ class Dispatcher:
                "expires_at": rec.expires_at, "status": status, "capabilities": caps,
                "fresh": self._fresh(c), "held": self.held(robot_id),
                "manual_only": self.registry.manual_only(robot_id),
+               # 易用性第 6 轮 W6-01:当前这版图上有没有原点(没有就出不了发;没报地图 = None 不知道)
+               "home_set": self._home_set(robot_id, c),
                "running": self.running_view(c),
                "loc": self._loc_view(c), "clock_skew_s": _round1(self.clock_skew_s(robot_id)),
                # W09e:最近一份遥测里的 RTK 解(没配 RTK、老狗都是 None)
@@ -393,6 +395,13 @@ class Dispatcher:
         if nav:
             out["nav"] = nav
         return out
+
+    def _home_set(self, robot_id: str, c: DispatchClient | None) -> bool | None:
+        m = self._loaded(c)
+        if m is None:
+            return None
+        return bool(self.db.query("SELECT 1 FROM homes WHERE robot_id=? AND map_id=? AND "
+                                  "map_version=?", (robot_id, *m)))
 
     @staticmethod
     def _loc_view(c: DispatchClient | None) -> dict[str, Any] | None:
