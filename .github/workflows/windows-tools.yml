@@ -2,22 +2,22 @@
 name: windows-tools
 on:
   push:
-    paths: ["deploy/windows/**", "deploy/disable.sh", ".github/workflows/windows-tools.yml"]
+    paths: ["deploy/windows/**", "deploy/nexwar_maint.sh", ".github/workflows/windows-tools.yml"]
   pull_request:
-    paths: ["deploy/windows/**", "deploy/disable.sh", ".github/workflows/windows-tools.yml"]
+    paths: ["deploy/windows/**", "deploy/nexwar_maint.sh", ".github/workflows/windows-tools.yml"]
   workflow_dispatch:
 jobs:
-  disable-kit:
+  maint-kit:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
       - name: 解析 + 自检(Windows PowerShell 5.1)
         shell: powershell
         run: |
-          Copy-Item deploy/disable.sh deploy/windows/disable.sh
+          Copy-Item deploy/nexwar_maint.sh deploy/windows/nexwar_maint.sh
           $errs = $null
-          [System.Management.Automation.Language.Parser]::ParseFile("$PWD\deploy\windows\disable-robot.ps1", [ref]$null, [ref]$errs) | Out-Null
+          [System.Management.Automation.Language.Parser]::ParseFile("$PWD\deploy\windows\nexwar-maint.ps1", [ref]$null, [ref]$errs) | Out-Null
           if ($errs.Count) { $errs | ForEach-Object { Write-Host $_ }; exit 1 }
-          powershell -NoProfile -ExecutionPolicy Bypass -File deploy/windows/disable-robot.ps1 -SelfTest
+          powershell -NoProfile -ExecutionPolicy Bypass -File deploy/windows/nexwar-maint.ps1 -SelfTest
           if ($LASTEXITCODE -ne 0) { exit 1 }
           Get-Command ssh.exe | Format-List Source, Version
