@@ -158,7 +158,7 @@ async def test_急停时没就绪_拒派并说出哪一项(台):
     await t.run(12)                                        # 等一次 status 刷新
     t.agent._next_status_ms = 0
     await t.run(1)
-    with pytest.raises(DispatchRefused, match="estop_clear"):
+    with pytest.raises(DispatchRefused, match="急停按着"):
         await t.site.goto("A", target(1.0), None, issued_by="alice")
 
 

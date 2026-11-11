@@ -35,7 +35,17 @@ String refusalHint(String code, SiteSession? s) => switch (code) {
       'not_localized' => tr('Set the position on the robot page.', '请在机器人页「设位置」。'),
       'offline' => tr('Check the robot is powered on and connected.', '请检查机器人是否开机、网络是否连通。'),
       'teleop' => tr('Dispatch after remote control ends.', '请在遥控结束后再派。'),
-      'map_mismatch' => tr('Ask an administrator to send the correct map to this robot.', '请管理员为此机器人下发正确的地图。'),
+      // 易用性第 6 轮 A6-03：管理员自己就能下发，不叫他「请管理员」
+      'map_mismatch' => (s?.canManageMaps ?? false)
+          ? tr('Pick a route drawn on the map this robot uses, or send it the right map version on the Maps page.',
+              '换一条画在这台机器人当前地图上的路线，或在「地图」页给它下发对应的版本。')
+          : tr('Ask an administrator to send the correct map to this robot.', '请管理员为此机器人下发正确的地图。'),
+      // A6-02：未就绪按原因说（原来一律「还在启动、充电或站起来」）
+      'not_standing' => tr('Open remote control and choose Stand up in the posture menu, then dispatch again.',
+          '进遥控，在姿态菜单里点「站起」，再派一次。'),
+      'estop' => tr('Release the e-stop on the robot, then dispatch again.', '松开机器人上的急停，再派一次。'),
+      'no_control' => tr('Put the handheld remote down / hand control back to the site, then dispatch again.',
+          '放下手柄，把控制权交回站点，再派一次。'),
       _ => '',
     };
 
@@ -66,7 +76,8 @@ Future<void> showRefusal(BuildContext context, SiteApi api, SiteError e,
     label = tr('Confirm zones', '去确认');
     act = (c) async => open(c, SiteMapPreviewPage(api: api, mapId: zones.$1, version: zones.$2));
   } else if (robotId != null &&
-      const {'supervision', 'not_localized', 'not_ready', 'obstacles', 'teleop'}.contains(code)) {
+      const {'supervision', 'not_localized', 'not_ready', 'obstacles', 'teleop', 'not_standing', 'estop', 'no_control'}
+          .contains(code)) {
     label = tr('Open robot', '去机器人页');
     act = (c) async => open(c, SiteRobotPage(api: api, robotId: robotId));
   }

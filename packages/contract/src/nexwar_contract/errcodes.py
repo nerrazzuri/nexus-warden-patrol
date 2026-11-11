@@ -325,6 +325,8 @@ REFUSAL: dict[str, str] = {
     "held": "dispatch.held", "zones_unconfirmed": "dispatch.zones_unconfirmed",
     "supervision": "dispatch.supervision", "teleop": "dispatch.teleop", "offline": "dispatch.offline",
     "not_localized": "dispatch.not_localized", "not_ready": "dispatch.not_ready",
+    "estop": "dispatch.not_ready", "no_control": "dispatch.not_ready",
+    "not_standing": "dispatch.not_ready",
     "map_mismatch": "dispatch.map_mismatch", "obstacles": "dispatch.obstacles", "clock": "dispatch.clock",
     "zones_sync": "dispatch.zones_sync", "deterring": "dispatch.deterring",
     "manual_only": "dispatch.manual_only", "heading": "dispatch.heading",

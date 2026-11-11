@@ -484,7 +484,8 @@ class Dispatcher:
                                   f"实时 status)")
         not_ready = [k for k, v in s.ready.to_wire().items() if k != "schema" and not v]
         if not_ready:
-            raise DispatchRefused(f"{robot_id} 未就绪: {', '.join(sorted(not_ready))}")
+            from nexwar_site.refusals import not_ready_text
+            raise DispatchRefused(not_ready_text(robot_id, not_ready))
         if c.capabilities is not None and kind not in c.capabilities.tasks:
             raise DispatchRefused(f"{robot_id} 不支持 {kind}")
         self._check_skew(robot_id)
@@ -960,7 +961,8 @@ class Dispatcher:
             raise DispatchRefused(f"{robot_id} 不在线或状态不新鲜")
         bad = [k for k in ("control", "motion", "estop_clear") if not getattr(s.ready, k)]
         if bad:
-            raise DispatchRefused(f"{robot_id} 未就绪: {', '.join(bad)}")
+            from nexwar_site.refusals import not_ready_text
+            raise DispatchRefused(not_ready_text(robot_id, bad))
         if c.capabilities is not None and "teleop" not in c.capabilities.tasks:
             raise DispatchRefused(f"{robot_id} 不支持遥控")
         return await self._send(c, robot_id, "teleop", teleop_grant_payload(

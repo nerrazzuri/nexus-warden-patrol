@@ -5,6 +5,7 @@ import importlib.util
 import json
 import subprocess
 import sys
+import types
 from pathlib import Path
 
 import pytest
@@ -350,3 +351,19 @@ def test_发行打包传的签名开关_跟安卓构建读的是同一个属性�
     m = re.search(r'findProperty\("([\w.]+requireReleaseKey)"\)', gradle)
     assert m, "安卓构建里找不到 requireReleaseKey 开关"
     assert f"-P{m.group(1)}=true" in (ROOT / "tools/make_release.py").read_text("utf-8")
+
+
+def test_11_11_A6_01_打包把版本号和构建号交给App代码(tmp_path, monkeypatch):
+    """liang-d5 第 6 轮 A6-01:装的是 build 12,App 设置页、问题单、日志都写 build 9 ——
+    App 里的构建号是写死的常量,打包时给的 --build-number 只进了安卓清单。"""
+    got = []
+
+    def run(cmd, cwd=None):
+        got.append(cmd)
+        (tmp_path / mr.APK).parent.mkdir(parents=True, exist_ok=True)
+        (tmp_path / mr.APK).write_bytes(b"apk")
+        return types.SimpleNamespace(returncode=0)
+    monkeypatch.setattr(mr.subprocess, "run", run)
+    mr.build_apk(tmp_path, "1.0.0-rc.1", 13)
+    assert "--dart-define=NEXWAR_APP_BUILD=13" in got[0]
+    assert "--dart-define=NEXWAR_APP_VERSION=1.0.0-rc.1" in got[0]

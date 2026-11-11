@@ -107,10 +107,12 @@ const int appApiLevel = 1;
 
 /// 这个 App 的版本号（跟 `pubspec.yaml` 的 `version` 加号前面那一段一致，测试核着）。登录时报给站点
 /// （C-B4）：管理员在版本一览里看得到谁还在用老 App。
-const String appVersion = '1.0.0-rc.1';
+/// 发版打包时由 `tools/make_release.py` 用 `--dart-define` 填这一次的（易用性第 6 轮 A6-01：原来写死，
+/// 装的是 build 12 却处处写 build 9）；平时编译、测试用默认值。
+const String appVersion = String.fromEnvironment('NEXWAR_APP_VERSION', defaultValue: '1.0.0-rc.1');
 
 /// 构建号（`pubspec.yaml` 的 `version` 加号后面那一段，测试核着）：站点分发 App（W55）比新旧只看它。
-const int appBuild = 9;
+const int appBuild = int.fromEnvironment('NEXWAR_APP_BUILD', defaultValue: 9);
 
 /// 登录时报给站点的「我是谁」：哪一类程序、哪一版、接口级别、什么系统。只给人看，站点不拿它做判断。
 Map<String, dynamic> clientInfo({String? platform}) => <String, dynamic>{

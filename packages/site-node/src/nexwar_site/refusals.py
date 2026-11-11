@@ -21,8 +21,15 @@ CODES: tuple[tuple[str, re.Pattern[str], str], ...] = tuple(
         ("teleop", r"正在遥控", "Someone is driving this robot by remote control right now."),
         ("offline", r"不在线|状态不新鲜|未挂上派遣客户端",
          "This robot is offline or hasn't reported in recently."),
-        ("not_localized", r"未就绪.*loc", "This robot doesn't know where it is. Set its position "
-         "on the map first."),
+        # 易用性第 6 轮 A6-02:未就绪按哪一样分开说(原来一律「还在启动、充电或站起来」);急停最要紧
+        ("estop", r"未就绪.*(estop|急停)", "The e-stop on this robot is pressed. Release it, "
+         "then dispatch again."),
+        ("not_localized", r"未就绪.*(loc|定位不可用)", "This robot doesn't know where it is. "
+         "Set its position on the map first."),
+        ("no_control", r"未就绪.*(control|控制权)", "Something else has control of this robot "
+         "(for example the handheld remote). Hand control back to the site, then dispatch again."),
+        ("not_standing", r"未就绪.*(motion|没站起来)", "This robot isn't standing (it may be "
+         "sitting or lying down). Make it stand up, then dispatch again."),
         ("not_ready", r"未就绪", "This robot isn't ready yet (still starting up, charging or "
          "standing up)."),
         ("map_mismatch", r"加载的是|加载的地图|地图版本|重建过|未上报已加载的地图",
@@ -45,6 +52,19 @@ CODES: tuple[tuple[str, re.Pattern[str], str], ...] = tuple(
          "This route can't be sent as it is (too many points, "
          "too large or malformed)."),
     ))
+
+
+#: 未就绪的哪一样 → 原话里的说法(按要紧的先说)。
+_NOT_READY = (("estop_clear", "急停按着"), ("loc_ok", "定位不可用"),
+              ("control", "控制权不在站点(手柄或别的程序在控制)"),
+              ("motion", "没站起来(蹲着、趴着,或运动模式没就绪)"))
+
+
+def not_ready_text(robot_id: str, keys: list[str] | tuple[str, ...]) -> str:
+    """派遣器的「未就绪」原话:写人话,不写 ``motion`` 这种字段名(A6-02)。"""
+    words = [w for k, w in _NOT_READY if k in keys] + [k for k in keys
+                                                       if k not in dict(_NOT_READY)]
+    return f"{robot_id} 未就绪:{'、'.join(words)}"
 
 
 def reason_code(text: str) -> tuple[str, str] | None:

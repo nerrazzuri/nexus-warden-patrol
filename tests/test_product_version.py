@@ -23,7 +23,8 @@ def _places() -> dict[str, str]:
     pub = re.search(r"^version: (\S+)", (ROOT / "mobile/pubspec.yaml").read_text(encoding="utf-8"),
                     re.M).group(1)
     out["mobile/pubspec.yaml"] = pub.split("+")[0]
-    app = re.search(r"^const String appVersion = '([^']+)';",
+    app = re.search(r"^const String appVersion = (?:String\.fromEnvironment\('NEXWAR_APP_VERSION', "
+                    r"defaultValue: )?'([^']+)'\)?;",
                     (ROOT / "mobile/lib/net/site_client.dart").read_text(encoding="utf-8"), re.M)
     out["mobile/lib/net/site_client.dart(appVersion)"] = app.group(1) if app else ""
     web = ROOT / "web/console"
