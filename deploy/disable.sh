@@ -132,6 +132,70 @@ do_check() {
   return 1
 }
 
+# ------------------------------------------------------------------ 报告(发回给我们看)
+REPORT="$R/var/log/nexwar-disable-report.txt"
+PROCS='nexwar|d1max|patrol_agent|field-agent|super_?lio|Super-LIO|bt_navigator|controller_server|planner_server'
+
+write_report() {
+  local u en act pid f boot rec
+  mkdir -p "$R/var/log" "$R/tmp"
+  {
+    say "nexwar 停用报告  $(date '+%F %T %z')  主机 $(hostname 2>/dev/null)  模式 $MODE"
+    boot=$(( $(date +%s) - $(cut -d. -f1 /proc/uptime) ))
+    say "这次开机: $(date -d "@$boot" '+%F %T' 2>/dev/null)"
+    if [ -f "$STATE" ]; then
+      rec=$(stat -c %Y "$STATE")
+      say "停用记录: $(date -d "@$rec" '+%F %T' 2>/dev/null)"
+      if [ "$boot" -gt "$rec" ]; then say "停用之后整机重启过: 是"; else say "停用之后整机重启过: 否(还没重启)"; fi
+    else
+      say "停用记录: 没有(还没停用过,或已撤回)"
+    fi
+    say "装的版本: $(readlink "$R/opt/nexwar/current" 2>/dev/null || say -) / 老目录 $(readlink "$R/opt/d1max/current" 2>/dev/null || say -)"
+    say ""
+    do_check
+    say ""
+    say "== 我们的单元(开机自启 / 现在 / 进程号)"
+    for u in $(our_units); do
+      en=$(unit_state "$u"); act=$(systemctl is-active "$u" 2>/dev/null | head -n 1)
+      pid=$(systemctl show -p MainPID --value "$u" 2>/dev/null | head -n 1)
+      printf '  %-36s %-10s %-10s %s\n' "$u" "${en:--}" "${act:--}" "${pid:--}"
+    done
+    say ""
+    say "== 进程(名字里带我们程序的;没有就是空)"
+    ps -eo pid,etime,args 2>/dev/null | grep -E "$PROCS" | grep -vE 'nexwar-disable|grep -E' | cut -c1-200
+    say ""
+    say "== 监听端口(8090 是旁路)"
+    ss -ltnp 2>/dev/null | grep -E ':8090 |patrol|nexwar|d1max' | cut -c1-200
+    say ""
+    say "== 对时"
+    ls "$R/etc/chrony/conf.d" 2>/dev/null | sed 's/^/  conf.d: /'
+    chronyc -n sources 2>/dev/null | cut -c1-120
+    say ""
+    say "== 我们开回去的厂家服务"
+    for f in "$R"/var/lib/nexwar/vendor-autostart-off.json.restored "$R"/var/lib/d1max/vendor-autostart-off.json.restored; do
+      [ -f "$f" ] || continue
+      for u in $(vendor_units "$f"); do
+        say "  $u  $(unit_state "$u") / $(systemctl is-active "$u" 2>/dev/null | head -n 1)"
+      done
+    done
+    say ""
+    say "== 停用记录(/etc/nexwar/disabled/)"
+    ls -l "$DIS" 2>/dev/null
+    [ -f "$STATE" ] && sed 's/^/  原来: /' "$STATE"
+    [ -f "$MOVED" ] && sed 's/^/  挪走: /' "$MOVED"
+    say ""
+    f=$(ls -t "$R"/var/log/nexwar-disable-2*.log 2>/dev/null | head -n 1)
+    if [ -n "$f" ]; then say "== 最近一次停用/撤回的日志 ${f#"$R"}"; tail -n 60 "$f"; say ""; fi
+    say "== 我们的单元这次开机以来的日志(每个最多 15 行)"
+    for u in $(our_units); do
+      say "-- $u"
+      journalctl -b -u "$u" -n 15 --no-pager -o short-iso 2>/dev/null | cut -c1-200
+    done
+  } > "$REPORT" 2>&1
+  cp "$REPORT" "$R/tmp/nexwar-disable-report.txt" 2>/dev/null && chmod 644 "$R/tmp/nexwar-disable-report.txt"
+  say "检查报告: ${REPORT#"$R"}"
+}
+
 # ------------------------------------------------------------------ 列计划
 show_plan() {
   local u f
@@ -234,8 +298,8 @@ do_undo() {
 }
 
 case "$MODE" in
-  check) do_check; exit $? ;;
+  check) do_check; rc=$?; write_report; exit "$rc" ;;
   dry) show_plan; say "(--dry-run:什么都没动)" ;;
-  disable) do_disable ;;
-  undo) do_undo ;;
+  disable) do_disable; write_report ;;
+  undo) do_undo; write_report ;;
 esac
