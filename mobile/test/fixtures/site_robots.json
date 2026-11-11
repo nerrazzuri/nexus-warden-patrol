@@ -98,10 +98,11 @@
       },
       "clock_skew_s": 0.0,
       "devices": null,
-      "enrolled_at": 1793899522300,
-      "expires_at": 1794899522301,
+      "enrolled_at": 1794337329183,
+      "expires_at": 1795337329184,
       "fresh": true,
       "held": null,
+      "home_set": false,
       "loc": {
         "anchored": true,
         "pose": {
@@ -143,9 +144,9 @@
         }
       },
       "status": {
-        "boot_id": "boot-ab373bba28",
+        "boot_id": "boot-3813831346",
         "control_epoch": 1,
-        "last_seen": 1793899523035,
+        "last_seen": 1794337329907,
         "online": true,
         "ready": {
           "control": true,

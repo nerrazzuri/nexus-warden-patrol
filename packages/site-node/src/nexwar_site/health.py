@@ -447,13 +447,35 @@ def install_recent_log() -> RecentLog:
 BUNDLE_UNITS = ("nexwar_site", "nexwar_mosquitto", "wg-quick@nexwar", "chrony", "nexwar_ops")
 
 
+def _no_log_note(ldir: Path, name: str) -> str:
+    """诊断包里这一份日志在所选时段没有行:写明日志目录里最早一条是什么时候(再早的没留下)。"""
+    from nexwar_contract import logsetup
+    first = None
+    for p in sorted((q for q in ldir.glob(f"{name}.log*") if q.is_file()),
+                    key=lambda q: q.stat().st_mtime):
+        try:
+            with open(p, encoding="utf-8", errors="replace") as fh:
+                first = next((at for line in fh if (at := logsetup._line_time(line)) is not None),
+                             None)
+        except OSError:
+            continue
+        if first is not None:
+            break
+    if first is None:
+        return f"(这段时间没有 {name} 日志:日志目录里还没有这份日志。)\n"
+    when = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(first))
+    return (f"(这段时间没有 {name} 日志。日志目录里最早一条是 {when},"
+            "再早的没有留下:那时站点还没写日志文件,或者已经过了保留期。)\n")
+
+
 def support_bundle(out: Path, *, home: Path, db: Any, health: HealthDesk | None,
                    hours: int = 24, now_ms: int,
                    journal: Callable[[str, int], str] = _journal,
                    extra: dict[str, bytes] | None = None,
                    since_ms: int | None = None, until_ms: int | None = None,
                    robot: str | None = None, task: str | None = None, scene: str = "",
-                   by: str = "", robot_logs: Any = None, log_dir: Path | None = None) -> Path:
+                   by: str = "", robot_logs: Any = None, log_dir: Path | None = None,
+                   ref: str = "") -> Path:
     """写诊断包 ``out``(tar.gz)。回 ``out``。
 
     日志设计 第 5 条(用户 11-10):按时间段、按场景(某台机器人、某个任务、某条告警)导出,
@@ -528,10 +550,10 @@ def support_bundle(out: Path, *, home: Path, db: Any, health: HealthDesk | None,
     ldir = log_dir if log_dir is not None else home / "logs"
     grep = task or None
     if ldir.is_dir():
-        files["site/site.log"] = redact_text(logsetup.read_range(
-            ldir, "site", since_s=since / 1000, until_s=until / 1000)).encode()
-        files["site/access.log"] = redact_text(logsetup.read_range(
-            ldir, "access", since_s=since / 1000, until_s=until / 1000)).encode()
+        for name in ("site", "access"):
+            got = logsetup.read_range(ldir, name, since_s=since / 1000, until_s=until / 1000)
+            # 易用性第 6 轮 W6-03:这段时间没有就写明为什么(日志从什么时候开始有),不留空文件
+            files[f"site/{name}.log"] = redact_text(got or _no_log_note(ldir, name)).encode()
         if grep:
             files[f"site/task-{grep}.log"] = redact_text(logsetup.read_range(
                 ldir, "site", since_s=since / 1000, until_s=until / 1000, grep=grep)).encode()
@@ -580,8 +602,9 @@ def support_bundle(out: Path, *, home: Path, db: Any, health: HealthDesk | None,
             ensure_ascii=False, indent=1, default=str)).encode()
     if "schedule_runs" in tables:
         put("records/schedule_runs.json", query(
-            "SELECT * FROM schedule_runs WHERE scheduled_ms BETWEEN ? AND ? ORDER BY scheduled_ms "
-            "LIMIT 20000", (since - 86_400_000, until)))
+            "SELECT * FROM schedule_runs WHERE scheduled_ms BETWEEN ? AND ? "
+            "OR decided_at BETWEEN ? AND ? ORDER BY scheduled_ms LIMIT 20000",
+            (since, until, since, until)))
     # ---- robots/
     if "robots" in tables:
         put("robots/robots.json", [{k: r[k] for k in r if k in (
@@ -719,8 +742,10 @@ def scene_window(db: Any, *, now_ms: int, since_ms: int | None = None,
                  alert: str | None = None, run: int | None = None) -> dict[str, Any]:
     """导出的时间段和场景(日志设计 第 5 条):给了告警或任务,时间段按它自动取(开始前 10 分钟到
     结束后 10 分钟),机器人也按它定;手动给的时间段优先。→ ``{since_ms, until_ms, robot, task,
-    scene}``。找不到那条告警 / 那个任务、时间段不对:``ValueError``。"""
-    scene = "按时间段"
+    scene, ref}``:``scene`` 是写进包里的一句中文;``ref`` 是给操作记录的引用(``alert:<key>``、
+    ``run:<id>``、``task:<id>``、``robot:<id>``、``range``),网页按界面语言写成人话(W6-07)。
+    找不到那条告警 / 那个任务、时间段不对:``ValueError``。"""
+    scene, ref = "按时间段", "range"
     if alert:
         rows = db.query("SELECT robot, first_ms, last_ms, resolved_ms, kind, title FROM alerts "
                         "WHERE key=?", (alert,))
@@ -732,7 +757,7 @@ def scene_window(db: Any, *, now_ms: int, since_ms: int | None = None,
         end = max(a["last_ms"] or 0, a["resolved_ms"] or 0) or a["first_ms"]
         since_ms = since_ms if since_ms is not None else a["first_ms"] - 3 * SCENE_BEFORE_MS
         until_ms = until_ms if until_ms is not None else end + SCENE_AFTER_MS
-        scene = f"告警 {alert}({a['title']})"
+        scene, ref = f"报警 {alert}({a['title']})", f"alert:{alert}"
     elif run is not None:
         rows = db.query("SELECT robot_id, mission, stamp, first_ms, last_ms FROM runs WHERE id=?",
                         (run,))
@@ -745,7 +770,7 @@ def scene_window(db: Any, *, now_ms: int, since_ms: int | None = None,
         robot = robot or r["robot_id"]
         since_ms = since_ms if since_ms is not None else t0 - SCENE_BEFORE_MS
         until_ms = until_ms if until_ms is not None else end + SCENE_AFTER_MS
-        scene = f"巡检 {r['mission']} {r['stamp']}"
+        scene, ref = f"巡逻 {r['mission']} {r['stamp']}", f"run:{run}"
     elif task:
         rows = db.query("SELECT robot_id, MIN(issued_at) AS t0, MAX(issued_at) AS t1 "
                         "FROM commands WHERE task_id=?", (task,))
@@ -758,9 +783,9 @@ def scene_window(db: Any, *, now_ms: int, since_ms: int | None = None,
         robot = robot or r["robot_id"]
         since_ms = since_ms if since_ms is not None else r["t0"] - SCENE_BEFORE_MS
         until_ms = until_ms if until_ms is not None else end + SCENE_AFTER_MS
-        scene = f"任务 {task}"
+        scene, ref = f"任务 {task}", f"task:{task}"
     elif robot:
-        scene = f"机器人 {robot}"
+        scene, ref = f"机器人 {robot}", f"robot:{robot}"
     since_ms = since_ms if since_ms is not None else now_ms - 24 * 3_600_000
     until_ms = until_ms if until_ms is not None else now_ms
     if until_ms <= since_ms:
@@ -768,7 +793,7 @@ def scene_window(db: Any, *, now_ms: int, since_ms: int | None = None,
     if until_ms - since_ms > BUNDLE_MAX_DAYS * 86_400_000:
         raise ValueError(f"一个包最多取 {BUNDLE_MAX_DAYS} 天,缩小时间段")
     return {"since_ms": int(since_ms), "until_ms": int(until_ms), "robot": robot, "task": task,
-            "scene": scene}
+            "scene": scene, "ref": ref}
 
 
 def _stamp_ms(stamp: str) -> int | None:

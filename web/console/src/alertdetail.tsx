@@ -172,6 +172,8 @@ export function AlertDetail(props: {
             <h3>{lang.value === "zh" ? "原因" : "Why"}</h3>
             <p class="small">{navCode[1][lang.value === "zh" ? 1 : 0]}</p>
             <p class="small"><b>{lang.value === "zh" ? "该做什么:" : "What to do: "}</b>{navCode[1][lang.value === "zh" ? 3 : 2]}</p>
+            {/* 易用性第 6 轮 W6-10:原因码给工程师看,收在技术详情里 */}
+            <details class="techdetail"><summary>{lang.value === "zh" ? "技术详情" : "Technical details"}</summary><p class="small mono">{navCode[0]}</p></details>
           </div>
         )}
         {a.detail && (

@@ -5,7 +5,7 @@ import { cleanup, fireEvent, render, waitFor } from "@testing-library/preact";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { setFetch } from "./api";
 import { lang } from "./i18n";
-import { lastLoginText, UsersPage } from "./userspage";
+import { AuditLine, type AuditRow, lastLoginText, UsersPage } from "./userspage";
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
 const NOW = new Date(2026, 9, 27, 12, 0).getTime();
@@ -245,17 +245,59 @@ describe("日志设计 第 1、2 条:操作记录写出前后变化、来源;系
     const w = render(<ul><AuditLine r={{ id: 2, at: 0, actor: "alice", action: "POST /api/mode",
       target: "home", status: 200, detail: { from: "armed", to: "home", source: "web" } }} /></ul>).container;
     expect(w.querySelector("[data-source=web]")?.textContent).toBe("网页");
+    // W6-06:没报自己是什么程序的令牌(命令行、脚本)写「脚本」,不冒充 App
+    const a = render(<ul><AuditLine r={{ id: 3, at: 0, actor: "alice", action: "POST /api/mode",
+      target: "home", status: 200, detail: { source: "api" } }} /></ul>).container;
+    expect(a.querySelector("[data-source=api]")?.textContent).toBe("脚本");
   });
 });
 
 describe("日志设计 第 7 条:错误码", () => {
-  it("活动日志里带错误码的一行显示十六进制码,悬停是英文名", async () => {
+  it("被拒的一行显示十六进制码,悬停是英文名;成功的行(W6-07)码只在悬停里", async () => {
     const { AuditLine } = await import("./userspage");
     lang.value = "zh";
-    const c = render(<ul><AuditLine r={{ id: 3, at: 0, actor: "site:schedule", action: "schedule skip",
-      target: "n", status: 200, detail: { err: "0x0302", err_name: "sched.missed" } }} /></ul>).container;
+    const c = render(<ul><AuditLine r={{ id: 3, at: 0, actor: "alice", action: "POST /api/mode",
+      target: "n", status: 403, detail: { err: "0x0302", err_name: "sched.missed" } }} /></ul>).container;
     const tag = c.querySelector("[data-err]");
     expect(tag?.textContent).toBe("0x0302");
     expect(tag?.getAttribute("title")).toBe("sched.missed");
+    cleanup();
+    const ok = render(<ul><AuditLine r={{ id: 4, at: 0, actor: "site:schedule", action: "schedule skip",
+      target: "n", status: 200, detail: { err: "0x0302", err_name: "sched.missed" } }} /></ul>).container;
+    expect(ok.querySelector("[data-err]")).toBeNull();
+    expect(ok.querySelector("[data-audit]")!.getAttribute("title")).toBe("0x0302 sched.missed");
+  });
+});
+
+// 易用性第 6 轮 W6-07:正常的行不挂 0x 码;对象写人话、跟界面语言;登录那一条执行人不写 login:
+describe("W6-07 操作记录读得懂", () => {
+  const line = (r: Partial<AuditRow>) => render(<ul><AuditLine who r={{ id: 9, at: 0, actor: "alice", action: "POST /api/mode", target: "", status: 200, ...r } as AuditRow} /></ul>).container;
+  it("成功的行不挂码;被拒的照样挂", () => {
+    lang.value = "zh";
+    expect(line({ detail: { err: "0x0509" } }).querySelector("[data-err]")).toBeNull();
+    cleanup();
+    expect(line({ status: 403, detail: { err: "0x0101", error: "不行" } }).querySelector("[data-err]")).not.toBeNull();
+  });
+  it("报警的对象写「报警:标题 · 机器人」,标题跟界面语言,不重复站点那句中文", () => {
+    lang.value = "en";
+    const c = line({ action: "alert escalated", target: "B/disk_80#2", detail: { title: "机器人的发件箱所在的盘即将写满" } });
+    expect(c.textContent).toContain("Alarm: Robot storage almost full · B");
+    expect(c.textContent).not.toContain("发件箱");
+    expect(c.textContent).not.toContain("disk_80");
+  });
+  it("诊断包:写成「支持包 · 报警:… · 时间段」;老格式也不露中文原话", () => {
+    lang.value = "en";
+    const c = line({ action: "DOWNLOAD /api/support-bundle", target: "support-bundle/alert:A/schedule_blocked#3/1794307980000-1794310380000" });
+    expect(c.textContent).toContain("Support bundle");
+    expect(c.textContent).toContain("Scheduled patrol blocked · A");
+    cleanup();
+    const o = line({ action: "DOWNLOAD /api/support-bundle", target: "support-bundle/告警 A/schedule_blocked#3(排程 demo-night 无法派单:…)/1794307980000-1794310380000" });
+    expect(o.textContent).toContain("Support bundle");
+    expect(o.textContent).not.toContain("告警");
+  });
+  it("登录那一条执行人写账号名", () => {
+    lang.value = "zh";
+    const c = line({ actor: "login:demo", action: "POST /api/login" });
+    expect(c.querySelector(".audit-who")!.textContent).toBe("demo");
   });
 });

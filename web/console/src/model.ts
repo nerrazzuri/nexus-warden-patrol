@@ -56,6 +56,8 @@ export interface Robot {
   fresh: boolean;
   revoked: boolean;
   held: unknown;
+  /** 易用性第 6 轮 W6-01:当前那版图上有没有原点(没有就出不了发;没报地图 / 老站点 = 不知道)。 */
+  home_set?: boolean | null;
   loc?: {
     pose?: { x: number; y: number; yaw: number } | null;
     anchored?: boolean;
@@ -226,9 +228,9 @@ export function canArm(role: string): boolean {
   return isOwnerLike(role) || role === "guard" || role === "owner";
 }
 
-/** 切到留守 / 临时撤防(站点 SET_MODE,网页易用性第 1 轮 P0-20):撤防是经理、管理员的决定,保安只能布防。 */
+/** 切到留守 / 临时撤防(站点 SET_MODE)。用户 11-11(易用性第 6 轮 W6-05):值班的保安也能撤防。 */
 export function canDisarm(role: string): boolean {
-  return isOwnerLike(role) || role === "owner";
+  return isOwnerLike(role) || role === "owner" || role === "guard";
 }
 
 /** 异常状态(着色、带形状);别的都是中性(ISA-101)。 */

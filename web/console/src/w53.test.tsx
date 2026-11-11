@@ -150,3 +150,26 @@ describe("第 2 轮 admin N11", () => {
     expect(c.querySelector("[data-help-noaccess]")!.textContent).toContain("给「管理员」用");
   });
 });
+
+// 易用性第 6 轮 W6-02:排给的那台只许手动派 —— 写「不会跑」和原因,管理员给去改的入口
+describe("W6-02 今天的巡逻:不会跑的说清楚", () => {
+  const blocked = () => setFetch(((url: string) => Promise.resolve(url === "/api/patrols/today"
+    ? json({ items: [{ at_ms: Date.now(), kind: "schedule", label: "demo-loop", robot: "A", by: "", state: "blocked", reason: "manual_only", end_ms: null, adhoc_id: "" }] })
+    : json({}, 404))) as typeof fetch);
+  it("保安:不会跑 + 只许手动派,没有去改的按钮;不出 manual_only 原话", async () => {
+    blocked();
+    const { container: c } = render(<TodayPatrols />);
+    await waitFor(() => expect(c.querySelectorAll(".today-row").length).toBe(1));
+    expect(c.textContent).toContain("不会跑");
+    expect(c.textContent).toContain("A 只许手动派");
+    expect(c.textContent).not.toContain("manual_only");
+    expect(c.textContent).not.toContain("下一次");
+    expect(c.querySelector(".today-row a")).toBeNull();
+  });
+  it("管理员:给去机器人设置改的入口", async () => {
+    blocked();
+    const { container: c } = render(<TodayPatrols canFix />);
+    await waitFor(() => expect(c.querySelector(".today-row a")).not.toBeNull());
+    expect(c.querySelector(".today-row a")!.getAttribute("href")).toBe("#/admin/robots?robot=A");
+  });
+});

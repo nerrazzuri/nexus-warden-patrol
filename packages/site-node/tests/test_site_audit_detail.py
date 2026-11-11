@@ -31,7 +31,7 @@ def test_改模式_记从什么改成什么_来源是App(tmp_path):
         r = _最后一条(s, "POST /api/mode")
         assert r["target"] == "home"
         assert r["detail"]["from"] == "armed" and r["detail"]["to"] == "home", r
-        assert r["detail"]["source"] == "app", "带令牌来的(手机、命令行)"
+        assert r["detail"]["source"] == "api", "没报自己是什么程序的令牌(命令行、脚本)"
     finally:
         s.close()
 
@@ -108,5 +108,54 @@ def test_操作记录留一年_更早的删掉(tmp_path):
         log._now = lambda: now
         assert log.prune() == 1
         assert [r["target"] for r in log.list() if r["action"] == "POST /api/mode"] == ["armed"]
+    finally:
+        s.close()
+
+
+def _raw(s, method, path, body, headers):
+    import json
+    import urllib.error
+    import urllib.request
+    r = urllib.request.Request(s.api.url + path, data=json.dumps(body).encode(), method=method)
+    r.add_header("Content-Type", "application/json")
+    for k, v in headers.items():
+        r.add_header(k, v)
+    try:
+        with urllib.request.urlopen(r, timeout=15) as resp:
+            return resp.status, resp.headers, json.loads(resp.read())
+    except urllib.error.HTTPError as exc:
+        return exc.code, exc.headers, json.loads(exc.read() or b"{}")
+
+
+def test_11_11_W6_06_来源按会话是哪种程序登的_网页_App_脚本(tmp_path):
+    """liang-d5 第 6 轮 W6-06:浏览器登录记成了 App、curl 记成了网页 ——
+    原来按「这次带没带 cookie」猜。
+    改成看这次会话登录时是哪种程序:网页登录(web:true)= 网页;App 报了 client.kind=app = App;
+    什么都没报的令牌 = 脚本 / 接口。"""
+    from nexwar_site.webui import CSRF_HEADER
+    s = _站(tmp_path)
+    try:
+        code, h, _ = _raw(s, "POST", "/api/login", {"name": "alice", "password": PW, "web": True},
+                          {CSRF_HEADER: "1"})
+        assert code == 200
+        assert _最后一条(s, "POST /api/login")["detail"]["source"] == "web", "网页登录这一条本身"
+        cookie = h["Set-Cookie"].split(";", 1)[0]
+        code, _, d = _raw(s, "POST", "/api/mode", {"mode": "home"},
+                          {"Cookie": cookie, CSRF_HEADER: "1"})
+        assert code == 200, d
+        assert _最后一条(s, "POST /api/mode")["detail"]["source"] == "web"
+
+        code, d = s.req("POST", "/api/login", {"name": "alice", "password": PW,
+                                               "client": {"kind": "app", "version": "1.0.0"}})
+        assert code == 200
+        assert _最后一条(s, "POST /api/login", n=2)["detail"]["source"] == "app"
+        assert s.req("POST", "/api/mode", {"mode": "armed"}, token=d["token"])[0] == 200
+        assert _最后一条(s, "POST /api/mode", n=2)["detail"]["source"] == "app"
+
+        tok = s.login()
+        assert _最后一条(s, "POST /api/login", n=3)["detail"]["source"] == "api"
+        assert s.req("POST", "/api/mode", {"mode": "home"}, token=tok)[0] == 200
+        assert _最后一条(s, "POST /api/mode", n=3)["detail"]["source"] == "api"
+        # 网页会话的令牌拿到命令行里用(带 cookie):还是那次网页会话 —— 按会话,不按这次怎么带
     finally:
         s.close()

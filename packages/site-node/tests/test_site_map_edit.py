@@ -590,3 +590,22 @@ def test_外审POC_C3_发布前说清草稿比来源少了哪些禁行区(站点
     z = s.api.zones
     z.put(MAP[0], v, [], base_revision=z.current(MAP[0], v).revision, by="t")
     assert _草稿(s, tok, v)["zones_removed"] == ["配电房"]
+
+
+def test_11_11_W6_04_从没有禁行区的老版本编辑_草稿不会把更新那一版的禁行区当建议带过来(站点):
+    """liang-d5 第 6 轮 W6-04:从 v7(0 个禁行区)编辑出草稿,页面却写「从 v11 带过来 2 个禁行区」——
+    来源版本没东西可带时没记下来源,后来按登记时刻取了「前一版」。"""
+    from test_site_zones import _网页
+    s = 站点
+    tok = _登(s)
+    newer = _编(s, tok, MAP[1])["version"]
+    code, d = _网页(s)(f"/api/admin/maps/{MAP[0]}/{newer}/release", {"confirm_password": PW})
+    assert code == 200, d
+    z = s.api.zones
+    pool = {"id": "pool", "kind": "nogo", "label": "泳池",
+            "polygon": [[0.5, 0.5], [1.5, 0.5], [1.5, 1.5], [0.5, 1.5]]}
+    z.put(MAP[0], newer, [pool], base_revision=z.current(MAP[0], newer).revision, by="t")
+    draft = _编(s, tok, MAP[1])["version"]              # 从老的那版(没有禁行区)编辑
+    v = s.req("GET", f"/api/maps/{MAP[0]}/{draft}/zones", token=tok)[1]
+    assert v["zones"] == []
+    assert not (v.get("proposal") or {}).get("zones"), v.get("proposal")

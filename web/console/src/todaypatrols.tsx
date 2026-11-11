@@ -25,6 +25,7 @@ const STATE: Record<string, [Key, string]> = {
   done: ["tdDone", "ok"], failed: ["tdFailed", "bad"], aborted: ["tdAborted", ""], running: ["tdRunning", "info"],
   waiting: ["tdWaiting", "warn"], missed: ["tdMissed", "bad"], next: ["tdNext", ""], later: ["tdLater", ""],
   queued: ["tdQueued", "warn"], cancelled: ["tdCancelled", ""], expired: ["tdExpired", ""],
+  blocked: ["tdBlocked", "warn"],
 };
 
 /** 时刻按站点的钟(站点回的 ``utc_offset_min``);老站点没有就按浏览器的(外审 W53-1 #12)。 */
@@ -40,7 +41,7 @@ export function stateOf(s: string, skipped = 0): [string, string] {
   return x ? [t(x[0]), x[1]] : [s, ""];
 }
 
-export function TodayPatrols({ retryMs = 5_000 }: { retryMs?: number } = {}) {
+export function TodayPatrols({ retryMs = 5_000, canFix = false }: { retryMs?: number; canFix?: boolean } = {}) {
   const [items, setItems] = useState<TodayItem[] | null>(null);
   const [off, setOff] = useState<number | null>(null);
   // liang-d5 第 5 轮前:往天的每一趟也能查(选个日期;空 = 今天)
@@ -81,7 +82,12 @@ export function TodayPatrols({ retryMs = 5_000 }: { retryMs?: number } = {}) {
                 {[x.kind === "adhoc" && !/^(临时|One-off)/.test(siteKnown(x.label)) ? t("tdAdhoc") : "", siteKnown(x.label), x.robot, x.kind === "adhoc" && x.by ? t("tdSentBy", { who: x.by }) : ""].filter(Boolean).join(" · ")}
                 {/* 第 4 轮 admin N7:写清是谁叫停的(派单的人不一定是叫停的人) */}
                 {x.state === "aborted" && x.stopped_by && <span class="muted small" data-stopped-by="1"> · {t("tdStoppedBy", { who: byText(x.stopped_by) || x.stopped_by })}</span>}
-                {x.reason && !(x.state === "aborted" && /^(halt|stop|stopped)$/i.test(x.reason.trim())) ? <span class="muted small"> · {plainReason(x.reason)}</span>
+                {/* 易用性第 6 轮 W6-02:到了也不会跑(排给的那台只许手动派):写原因,管理员给去改的入口 */}
+                {x.state === "blocked" && x.reason === "manual_only" ? (
+                  <span class="muted small" data-blocked="1"> · {t("tdManualOnly", { id: x.robot })}
+                    {canFix && x.robot && <> <a href={`#/admin/robots?robot=${encodeURIComponent(x.robot)}`}>{t("tdFixRobot")}</a></>}
+                  </span>
+                ) : x.reason && !(x.state === "aborted" && /^(halt|stop|stopped)$/i.test(x.reason.trim())) ? <span class="muted small"> · {plainReason(x.reason)}</span>
                   : (x.state === "failed" || x.state === "missed") && <span class="muted small"> · {missingReason()}</span>}
               </span>
               <span class={`tdchip ${tone}`}>{label}</span>

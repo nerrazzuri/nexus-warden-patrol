@@ -549,6 +549,15 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--c-primary); }
   color: var(--c-success); background: var(--c-successSoft); white-space: nowrap; }
 .armstate.home, .armstate.visitor { color: var(--c-textSecondary); background: var(--c-surfaceVariant); }
 .armstate .dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
+/* 易用性第 6 轮 W6-05:顶栏布防状态点开切模式 */
+.armmenu { position: relative; display: inline-flex; }
+button.armstate { border: 0; cursor: pointer; font: inherit; font-size: 14px; font-weight: 600; }
+button.armstate:disabled { cursor: default; }
+button.armstate:focus-visible { outline: 2px solid var(--c-primary); outline-offset: 2px; }
+.armmenu-list { left: 0; right: auto; min-width: 160px; }
+.armmenu-list button { height: 36px; padding: 0 10px; border: 0; border-radius: var(--r-r8); background: transparent; color: var(--c-text); text-align: left; font: inherit; cursor: pointer; }
+.armmenu-list button:hover { background: var(--c-surfaceVariant); }
+.armmenu-list button[aria-pressed="true"] { color: var(--c-primary); font-weight: 600; }
 .usermenu { position: relative; }
 .usermenu > .who { height: 36px; padding: 0 10px; border: 1px solid transparent; border-radius: var(--r-r8); background: transparent; cursor: pointer; color: var(--c-text); }
 .usermenu > .who:hover { background: var(--c-surfaceVariant); }
@@ -1087,6 +1096,13 @@ img.cam-live { width: 100%; max-height: 60vh; object-fit: contain; background: #
 /* W44 第四期:地图编辑器 */
 .mapedit { display: flex; flex-direction: column; gap: 10px; }
 .me-canvas { min-height: 460px; height: 66vh; }
+/* 易用性第 6 轮 W6-11:画着的时候按钮浮在地图上 */
+.me-canvas { position: relative; }
+.me-drawfloat { position: absolute; top: 12px; left: 50%; transform: translateX(-50%); z-index: 5; gap: 8px; align-items: center; padding: 8px 12px;
+  background: var(--c-surface); border: 1px solid var(--c-outline); border-radius: var(--r-r12); box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3); }
+.me-explain { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: baseline; }
+.me-howto summary { cursor: pointer; color: var(--c-primary); }
+.me-howto p { margin: 4px 0 0; max-width: 72ch; }
 .me-tools { display: flex; flex-wrap: wrap; gap: 6px; }
 .me-tools button { padding: 6px 10px; border: 1px solid var(--c-outline); border-radius: 8px; background: var(--c-surface); color: var(--c-text); font: inherit; cursor: pointer; }
 .me-tools button[aria-pressed="true"] { background: var(--c-primary); color: var(--c-onPrimary); border-color: var(--c-primary); }

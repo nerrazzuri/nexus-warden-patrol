@@ -21,6 +21,18 @@ def test_每个码都有中英文说明和操作员该做什么():
         assert info.zh and info.en and info.action_zh and info.action_en, code
 
 
+#: 客户看不懂、也做不了的说法(liang-d5 第 6 轮 W6-10)。
+_DEV_WORDS = ("日志", "分类", "感知", "导航服务", "头尾", "log", "classification", "perception",
+              "navigation service", "Restart navigation", "heading", "Nav2")
+
+
+def test_11_11_W6_10_说明和该做什么都是客户能读懂_能做的():
+    for code, info in navcodes.FAIL_CODES.items():
+        for text in (info.zh, info.en, info.action_zh, info.action_en):
+            bad = [w for w in _DEV_WORDS if w.lower() in text.lower()]
+            assert not bad, (code, text, bad)
+
+
 def test_守卫紧急停是过程事件_不是失败码():
     assert "guard_emergency_stop" in navcodes.EVENTS
     assert "guard_emergency_stop" not in navcodes.FAIL_CODES

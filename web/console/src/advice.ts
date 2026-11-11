@@ -31,6 +31,12 @@ const TABLE: Record<string, Advice> = {
   account_request: { say: "advAccountReq", todo: "advAccountReqTodo", go: "admin/users" },
 };
 
-export function advice(kind: string): Advice | null {
+export function advice(kind: string, detail = ""): Advice | null {
+  // 易用性第 6 轮 W6-02:日程派不出去分两种 —— 只许手动派(管理员在机器人页自己改)、要人现场监护(现场人员在 App 里开)
+  if (kind === "schedule_blocked") {
+    return /只许手动派|manual dispatch only/.test(detail)
+      ? { say: "advSchedManual", todo: "advSchedManualTodo", go: "admin/robots" }
+      : { say: "advSchedSupervised", todo: "advSchedSupervisedTodo" };
+  }
   return TABLE[kind] ?? null;
 }

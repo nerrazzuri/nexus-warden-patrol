@@ -647,6 +647,7 @@ class _Handler(TlsHandlerMixin):
         self._audit_target, self._audit_detail = "", {}
         self._req_body: dict[str, Any] | None = None
         self._method, self._via_cookie, self._extra_headers = method, False, []
+        self._login_kind = ""
         self._consumed = 0
         #: 这一次请求不进审计(W00c6i:续着的监护心跳每秒一条,只记开始与结束)。
         self._skip_audit = False
@@ -688,10 +689,14 @@ class _Handler(TlsHandlerMixin):
                                 str(self._resp.get("error", ""))[:300])
 
     def _source(self) -> str:
-        """这一次是谁发来的:网页(cookie)、App(或别的带令牌的客户端)、站点自己(site:…)。"""
+        """这一次是谁发来的:站点自己(site:…)、网页、App、脚本 / 接口(``api``)。
+        易用性第 6 轮 W6-06:按这次**会话**登录时是哪种程序算(网页登录 = 网页,App 报了 kind=app =
+        App,什么都没报 = 脚本),不按这次带没带 cookie 猜 —— 原来浏览器登录那一条记成了 App。"""
         if self._actor.startswith("site:"):
             return "system"
-        return "web" if self._via_cookie else "app"
+        kind = self._login_kind if self._actor.startswith("login:") \
+            else getattr(self._actor, "client", "")
+        return kind or "api"
 
     def _route(self, method: str, path: str) -> None:
         try:
@@ -1468,6 +1473,8 @@ class _Handler(TlsHandlerMixin):
             client = {"kind": "web"} if web else d.get("client")
             if not web and isinstance(client, dict) and client.get("kind") == "web":
                 client = None
+            self._login_kind = "web" if web else "app" if isinstance(client, dict) \
+                and client.get("kind") == "app" else ""
             token = self.site.accounts.login(name, pw, client)
         except LockedOut as exc:
             raise HttpError(429, str(exc)) from exc
@@ -2649,7 +2656,8 @@ class _Handler(TlsHandlerMixin):
             raise HttpError(404, "此站点未启用体检")
         now = self.site._now()
         # 包里有位置轨迹、日志:谁在什么时候导出了哪一段,进操作记录(GET 本来不记)
-        self._audit_view(f"support-bundle/{win['scene']}/{win['since_ms']}-{win['until_ms']}",
+        ref = win.get("ref") or "range"
+        self._audit_view(f"support-bundle/{ref}/{win['since_ms']}-{win['until_ms']}",
                          action="DOWNLOAD")
         span_h = max(1, min(168, (now - win["since_ms"]) // 3_600_000 + 1))
         extra = self._bundle_extra(span_h, robot=win["robot"])
@@ -2679,7 +2687,7 @@ class _Handler(TlsHandlerMixin):
             with contextlib.suppress(HttpError):
                 user = self._user()
         remote = self.client_address[0]
-        self._actor = str(user) if user is not None else f"anonymous@{remote}"
+        self._actor = user if user is not None else f"anonymous@{remote}"
         try:
             n = int(self.headers.get("Content-Length") or 0)
         except ValueError as exc:
@@ -2727,7 +2735,7 @@ class _Handler(TlsHandlerMixin):
         since, until = desk.window(code)
         robot = meta.get("robot") or None
         win = {"since_ms": since, "until_ms": until, "robot": robot, "task": None,
-               "scene": f"问题单 {code}:{meta.get('note') or '-'}"}
+               "scene": f"问题单 {code}:{meta.get('note') or '-'}", "ref": f"problem:{code}"}
         from nexwar_site.remote_ops import dumps
         more = {f"clients/app-{code}.log.gz": desk.app_log(code),
                 "clients/problem.json": dumps({k: v for k, v in meta.items()
@@ -3924,9 +3932,10 @@ class _Handler(TlsHandlerMixin):
             if path == "/api/runs" and method == "GET":
                 self._need(user, VIEW)
                 robot = (q.get("robot") or [None])[0]
-                return self._send_json(200, {"runs": desk.store.runs(
+                from nexwar_site.evidence import run_origins
+                return self._send_json(200, {"runs": run_origins(desk.store.db, desk.store.runs(
                     robot_id=robot, since_ms=num("since"), until_ms=num("until"),
-                    limit=num("limit") or 200, mission=(q.get("mission") or [None])[0])})
+                    limit=num("limit") or 200, mission=(q.get("mission") or [None])[0]))})
             m = _RUN.match(path)
             if m is not None:
                 rid, what, arg = int(m.group(1)), m.group(2), m.group(3)

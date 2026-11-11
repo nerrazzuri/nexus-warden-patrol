@@ -295,8 +295,14 @@ class _PatrolSheetState extends State<_PatrolSheet> {
       'queued' => (tr('Queued', '排队中'), NwTone.warning),
       'cancelled' => (tr('Cancelled', '已取消'), NwTone.neutral),
       'expired' => (tr('Expired', '已作废'), NwTone.neutral),
+      'blocked' => (tr("Won't run", '不会跑'), NwTone.warning),
       _ => (state, NwTone.neutral),
     };
+
+/// 易用性第 6 轮 W6-02：站点给的原因码说人话（`manual_only` = 排给的那台只许手动派）；别的原样。
+String patrolReasonText(String reason, String robot) => reason == 'manual_only'
+    ? tr('$robot is set to manual dispatch only', '$robot 只许手动派')
+    : reason;
 
 int _skippedOf(Map<String, dynamic> it) => it['skipped'] is int ? it['skipped'] as int : 0;
 
@@ -336,7 +342,7 @@ class TodayPatrolList extends StatelessWidget {
       st,
       if (adhoc) tr('One-off patrol sent by ${it['by']}', '${it['by']} 派的临时巡逻'),
       if (it['end_ms'] is num) tr('Ends around ${hhmm((it['end_ms'] as num).toInt(), offsetMin)}', '预计 ${hhmm((it['end_ms'] as num).toInt(), offsetMin)} 结束'),
-      if (reason.isNotEmpty) reason,
+      if (reason.isNotEmpty) patrolReasonText(reason, '${it['robot'] ?? ''}'),
     ];
     final cancel = await showDialog<bool>(
         context: context,

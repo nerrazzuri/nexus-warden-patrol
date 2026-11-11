@@ -15,7 +15,8 @@ import json
 from typing import Any
 
 #: 清单的项,顺序就是给人看的顺序。
-ITEMS = ("robots", "map", "zones", "standby", "routes", "schedule", "arming", "accounts", "push")
+ITEMS = ("robots", "map", "home", "zones", "standby", "routes", "schedule", "arming", "accounts",
+         "push")
 #: ``guide`` 里认的键。
 _GUIDE_KEYS = {"tour": int, "web_tour": int, "setup_hidden": bool, "skip": list,
                "map_later": bool}
@@ -44,6 +45,13 @@ def setup_view(db: Any, dispatcher: Any, *, skip: set[str] | None = None) -> dic
     no_standby = [rid for rid, (m, v) in loaded.items()
                   if not _count(db, "SELECT COUNT(*) FROM standby_points WHERE robot_id=? AND "
                                 "map_id=? AND map_version=? AND is_default=1", (rid, m, v))]
+    # 易用性第 6 轮 W6-01:原点、路线按机器人**现在用的那版图**查(别的版本上有不算:出不了发)
+    no_home = [rid for rid, (m, v) in loaded.items()
+               if not _count(db, "SELECT COUNT(*) FROM homes WHERE robot_id=? AND map_id=? AND "
+                             "map_version=?", (rid, m, v))]
+    routes_ok = (any(_count(db, "SELECT COUNT(*) FROM routes WHERE map_id=? AND "
+                            "(map_version='' OR map_version=?)", mv) for mv in set(loaded.values()))
+                 if loaded else _count(db, "SELECT COUNT(*) FROM routes") > 0)
     # P1-87:登记了但文件丢了的不算有地图(跟地图页一致)
     store = getattr(dispatcher, "maps", None)
     has_map = bool(loaded) or (store.usable() if store is not None
@@ -52,9 +60,10 @@ def setup_view(db: Any, dispatcher: Any, *, skip: set[str] | None = None) -> dic
     facts: dict[str, tuple[bool, dict[str, Any]]] = {
         "robots": (bool(robots), {"count": len(robots)}),
         "map": (has_map, {}),
+        "home": (bool(loaded) and not no_home, {"robots": no_home}),
         "zones": (has_map and not unconfirmed, {"maps": unconfirmed}),
         "standby": (bool(loaded) and not no_standby, {"robots": no_standby}),
-        "routes": (_count(db, "SELECT COUNT(*) FROM routes") > 0, {}),
+        "routes": (routes_ok, {}),
         "schedule": (_count(db, "SELECT COUNT(*) FROM route_schedules") > 0, {}),
         "arming": (_count(db, "SELECT COUNT(*) FROM arming_slots") > 0, {}),
         "accounts": (people >= 2, {"count": people}),

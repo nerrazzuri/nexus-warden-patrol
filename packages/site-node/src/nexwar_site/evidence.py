@@ -423,6 +423,23 @@ class EvidenceStore:
         return safe_join(self.dir_of(run), "photos", name)
 
 
+def run_origins(db: Any, runs: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """每一趟补上谁派的(``by``)、几个点(``points``):按机器人、任务名找开始前一天内最近那条派巡逻的
+    命令(易用性第 6 轮 W6-08:诊断导出的列表原来只有 ``temp-1794…`` 这种编号)。找不到的不加。"""
+    out = []
+    for r in runs:
+        rows = db.query(
+            "SELECT issued_by, json_array_length(payload, '$.mission.waypoints') AS n "
+            "FROM commands WHERE robot_id=? AND kind='patrol' AND issued_at BETWEEN ? AND ? "
+            "AND json_extract(payload, '$.mission.mission')=? ORDER BY issued_at DESC LIMIT 1",
+            (r.get("robot_id"), int(r.get("first_ms") or 0) - 86_400_000,
+             int(r.get("first_ms") or 0) + 60_000, r.get("mission")))
+        if rows:
+            r = {**r, "by": rows[0]["issued_by"], "points": rows[0]["n"]}
+        out.append(r)
+    return out
+
+
 def _row(r) -> dict[str, Any]:
     d = dict(r)
     try:

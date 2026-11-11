@@ -73,6 +73,7 @@ describe("地图编辑器", () => {
     const { container: c } = page();
     await waitFor(() => expect(c.querySelector('.mapedit[data-ready]')).not.toBeNull());
     fireEvent.click(c.querySelector('[data-tool="erase"]')!);                // P1-53:不默认选工具
+    fireEvent.click(btn(c, "画笔"));                         // W6-11:默认方框,这里用画笔
     fireEvent.click(c.querySelector(".pick")!);
     fireEvent.click(c.querySelector(".pick")!);
     fireEvent.click(btn(c, "完成绘制"));
@@ -97,6 +98,7 @@ describe("地图编辑器", () => {
     const { container: c } = render(<MapEditPage say={() => {}} target={{ map_id: "home", version: "3" }} Canvas={Seq} />);
     await waitFor(() => expect(c.querySelector('.mapedit[data-ready]')).not.toBeNull());
     fireEvent.click(c.querySelector('[data-tool="erase"]')!);                // P1-53:不默认选工具
+    fireEvent.click(btn(c, "画笔"));                         // W6-11:默认方框,这里用画笔
     for (let k = 0; k < seq.length; k++) fireEvent.click(c.querySelector(".pick")!);
     fireEvent.click(btn(c, "完成绘制"));
     expect(c.querySelector("polygon.me-op.loop.erase")).not.toBeNull();
@@ -120,6 +122,7 @@ describe("地图编辑器", () => {
     const { container: c } = render(<MapEditPage say={() => {}} target={{ map_id: "home", version: "3" }} Canvas={D} />);
     await waitFor(() => expect(c.querySelector('.mapedit[data-ready]')).not.toBeNull());
     fireEvent.click(c.querySelector('[data-tool="erase"]')!);
+    fireEvent.click(btn(c, "画笔"));                         // W6-11:默认方框,这里用画笔
     expect(drag).toBeUndefined();                                           // 画笔:拖还是平移
     fireEvent.click(btn(c, "方框"));
     await waitFor(() => expect(drag).toBeDefined());
@@ -135,6 +138,7 @@ describe("地图编辑器", () => {
     const { container: c } = page();
     await waitFor(() => expect(c.querySelector('.mapedit[data-ready]')).not.toBeNull());
     fireEvent.click(c.querySelector('[data-tool="erase"]')!);                // P1-53:不默认选工具
+    fireEvent.click(btn(c, "画笔"));                         // W6-11:默认方框,这里用画笔
     fireEvent.click(c.querySelector('[data-tool="terrain"]')!);
     for (let i = 0; i < 3; i++) fireEvent.click(c.querySelector(".pick")!);
     fireEvent.click(btn(c, "完成绘制"));
@@ -177,6 +181,7 @@ describe("地图编辑器", () => {
     const { container: c } = page();
     await waitFor(() => expect(c.querySelector('.mapedit[data-ready]')).not.toBeNull());
     fireEvent.click(c.querySelector('[data-tool="erase"]')!);
+    fireEvent.click(btn(c, "画笔"));                         // W6-11:默认方框,这里用画笔
     fireEvent.click(c.querySelector(".pick")!);
     fireEvent.click(btn(c, "完成绘制"));
     expect((c.querySelector("[data-preview]") as HTMLButtonElement).disabled).toBe(true);
@@ -207,6 +212,7 @@ describe("地图编辑器", () => {
     const { container: c } = page();
     await waitFor(() => expect(c.querySelector('.mapedit[data-ready]')).not.toBeNull());
     fireEvent.click(c.querySelector('[data-tool="erase"]')!);                // P1-53:不默认选工具
+    fireEvent.click(btn(c, "画笔"));                         // W6-11:默认方框,这里用画笔
     fireEvent.click(c.querySelector(".pick")!);
     fireEvent.click(btn(c, "完成绘制"));
     fireEvent.click(c.querySelector(".me-save")!);
@@ -225,6 +231,7 @@ describe("地图编辑器", () => {
     const ui = render(<MapEditPage say={() => {}} target={{ map_id: "A", version: "1" }} Canvas={Fake} />);
     await waitFor(() => expect(ui.container.querySelector(".mapedit[data-ready]")).not.toBeNull());
     fireEvent.click(ui.container.querySelector('[data-tool="erase"]')!);
+    fireEvent.click(btn(ui.container, "画笔"));                         // W6-11:默认方框,这里用画笔
     fireEvent.click(ui.container.querySelector(".pick")!);
     fireEvent.click(btn(ui.container, "完成绘制"));
     expect((ui.container.querySelector(".me-save") as HTMLButtonElement).disabled).toBe(false);
@@ -237,6 +244,7 @@ describe("地图编辑器", () => {
     resolveB(json({ rotate_deg: null, basemap: null, regions: [], terrain: [] }));
     await waitFor(() => expect(ui.container.querySelector(".mapedit[data-ready]")).not.toBeNull());
     fireEvent.click(ui.container.querySelector('[data-tool="erase"]')!);
+    fireEvent.click(btn(ui.container, "画笔"));                         // W6-11:默认方框,这里用画笔
     expect((ui.container.querySelector(".me-save") as HTMLButtonElement).disabled).toBe(true);   // B 上什么都没画
     expect(posted).toEqual([]);
   });
@@ -270,6 +278,7 @@ describe("地图编辑器", () => {
     const ui = render(<MapEditPage say={() => {}} target={{ map_id: "A", version: "1" }} Canvas={Fake} />);
     await waitFor(() => expect(ui.container.querySelector(".mapedit[data-ready]")).not.toBeNull());
     fireEvent.click(ui.container.querySelector('[data-tool="erase"]')!);
+    fireEvent.click(btn(ui.container, "画笔"));                         // W6-11:默认方框,这里用画笔
     fireEvent.click(ui.container.querySelector(".pick")!);
     fireEvent.click(btn(ui.container, "完成绘制"));
     fireEvent.click(ui.container.querySelector(".me-save")!);
@@ -289,6 +298,7 @@ describe("地图编辑器", () => {
     await waitFor(() => expect(c.querySelector(".mapedit[data-ready]")).not.toBeNull());
     expect(c.textContent).toContain("先在上面选一个工具");                          // P1-53
     fireEvent.click(c.querySelector('[data-tool="erase"]')!);
+    fireEvent.click(btn(c, "画笔"));                         // W6-11:默认方框,这里用画笔
     fireEvent.click(c.querySelector(".pick")!);
     expect(c.textContent).toContain("已选 1 个点");
     expect(c.textContent).not.toContain("各个角");
@@ -311,6 +321,7 @@ describe("网页易用性第 1 轮 P2-19", () => {
     const { container: c } = page();
     await waitFor(() => expect(c.querySelector('.mapedit[data-ready]')).not.toBeNull());
     fireEvent.click(c.querySelector('[data-tool="obstacle"]')!);
+    fireEvent.click(btn(c, "画笔"));                         // W6-11:默认方框,这里用画笔
     fireEvent.click(btn(c, "方框"));
     fireEvent.click(c.querySelector(".pick")!);
     fireEvent.click(c.querySelector(".pick")!);
@@ -392,6 +403,7 @@ describe("编辑器里画禁行区(11-10)", () => {
     const { container: c } = page();
     await ready(c);
     fireEvent.click(c.querySelector('[data-tool="erase"]')!);
+    fireEvent.click(btn(c, "画笔"));                         // W6-11:默认方框,这里用画笔
     fireEvent.click(c.querySelector(".pick")!);
     fireEvent.click(btn(c, "完成绘制"));
     drawZone(c, "wall", 2);
@@ -484,5 +496,73 @@ describe("编辑器里画禁行区(11-10)", () => {
     const { container: c } = page();
     await waitFor(() => expect(c.querySelector(".me-loaderr")).not.toBeNull());
     expect(c.querySelector(".mapedit[data-ready]")).toBeNull();
+  });
+
+  // 易用性第 6 轮 W6-04:草稿上只一种说法(发布时确认);发布对话框点名这些禁行区,要勾「核过了」才能发
+  it("W6-04 草稿:禁行区只说发布时一起确认,不说去点确认、只能遥控", async () => {
+    draftState = { draft: true, from: "2" };
+    zones = { ...zones, zones: [POOL], confirmed: null };
+    const { container: c } = page();
+    await ready(c);
+    const st = c.querySelector(".nogo-status")!.textContent!;
+    expect(st).toContain("发布");
+    expect(st).not.toContain("确认此版本");
+    expect(st).not.toContain("确认这一版");
+    expect(st).not.toContain("只能遥控");
+  });
+  it("W6-04 发布对话框:列出要一起确认的禁行区,勾了核过了才能发布", async () => {
+    draftState = { draft: true, from: "2" };
+    zones = { ...zones, zones: [POOL], confirmed: null };
+    const { container: c } = page();
+    await ready(c);
+    fireEvent.click(c.querySelector("[data-release]")!);
+    const m = document.querySelector(".modal")!;
+    expect(m.textContent).toContain("泳池");
+    fireEvent.input(m.querySelector('input[type="password"]')!, { target: { value: "pw-pw-pw" } });
+    const go = m.querySelector('button[type="submit"]') as HTMLButtonElement;
+    expect(go.disabled).toBe(true);
+    fireEvent.click(m.querySelector('input[type="checkbox"]')!);
+    expect(go.disabled).toBe(false);
+  });
+});
+
+// 易用性第 6 轮 W6-11:默认画笔点几下没反应、「画完」在屏幕外;常驻的绿色「已生效」看不懂指什么;页首说明 4 行
+describe("W6-11 编辑器好上手", () => {
+  it("选了改地图的工具默认是方框", async () => {
+    const { container: c } = page();
+    await waitFor(() => expect(c.querySelector(".mapedit[data-ready]")).not.toBeNull());
+    fireEvent.click(c.querySelector('[data-tool="obstacle"]')!);
+    expect(c.querySelector(".seg button[aria-pressed=true]")!.textContent).toBe("方框");
+  });
+  it("画笔画着的时候,「完成绘制 / 撤一点 / 取消」浮在地图上", async () => {
+    const { container: c } = page();
+    await waitFor(() => expect(c.querySelector(".mapedit[data-ready]")).not.toBeNull());
+    fireEvent.click(c.querySelector('[data-tool="erase"]')!);
+    fireEvent.click(btn(c, "画笔"));
+    fireEvent.click(c.querySelector(".pick")!);
+    const float = c.querySelector(".me-canvas [data-draw-float]")!;
+    expect(float).not.toBeNull();
+    expect(btn(float, "完成绘制")).toBeTruthy();
+    expect(btn(float, "取消")).toBeTruthy();
+    expect(btn(c.querySelector(".ly-side")!, "完成绘制")).toBeUndefined();
+    fireEvent.click(btn(float, "取消"));
+    expect(c.querySelector("[data-draw-float]")).toBeNull();
+  });
+  it("绿色「已生效」只在禁行区工具里出;预览时不写「先选工具」;页首说明一行,详细的收在「怎么用」", async () => {
+    const { container: c } = page();
+    await waitFor(() => expect(c.querySelector(".mapedit[data-ready]")).not.toBeNull());
+    await waitFor(() => expect(c.querySelector(".nogo-status")).not.toBeNull());
+    expect(c.querySelector(".nogo-status")!.textContent).not.toContain("已生效");
+    fireEvent.click(c.querySelector('[data-tool="nogo"]')!);
+    expect(c.querySelector(".nogo-status")!.textContent).toContain("已生效");
+    const howto = c.querySelector("details[data-me-howto]")!;
+    expect(howto.querySelector("summary")!.textContent).toBe("怎么用");
+    expect(howto.textContent).toContain("定位用的三维地图不变");
+    cleanup();
+    draftState = { draft: true, from: "2" };
+    const ui = page();
+    await waitFor(() => expect(ui.container.querySelector("[data-preview]")).not.toBeNull());
+    fireEvent.click(ui.container.querySelector("[data-preview]")!);
+    expect(ui.container.textContent).not.toContain("先在上面选一个工具");
   });
 });

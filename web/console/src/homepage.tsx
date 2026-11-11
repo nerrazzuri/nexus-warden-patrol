@@ -68,7 +68,7 @@ export function HomePage(props: {
           <ul class="plain">
             {groupTodo(todo).map((g) => {
               const a = g[0];
-              const adv = advice(a.kind);
+              const adv = advice(a.kind, a.detail);
               // 第 2 轮 P0-01:出发前检查没过 —— 写是哪一项、管理员自己怎么办、按钮去哪页(不写「请联系工程师」)
               const pf = a.kind === "preflight_refused";
               const pfGo = pf ? preflightPage(a) : undefined;
@@ -85,7 +85,7 @@ export function HomePage(props: {
                     <span>{pf ? alertAdvice(a) : t(adv ? adv.todo : "advCallEngineer")}</span>
                   </div>
                   <div class="todo-acts">
-                    {(adv?.go ?? pfGo) ? <a class="btn sm" href={`#/${adv?.go ?? pfGo}`}>{t("homeGo")}</a>
+                    {(adv?.go ?? pfGo) ? <a class="btn sm" href={`#/${adv?.go ?? pfGo}${adv?.go === "admin/robots" && robots.length === 1 ? `?robot=${encodeURIComponent(robots[0])}` : ""}`}>{t("homeGo")}</a>
                       : g.some((x) => x.acked_ms == null) && <button type="button" class="btn sm" title={t("noticeAckTip")} onClick={() => g.forEach((x) => x.acked_ms == null && props.onAck(x))}>{t("noticeAck")}</button>}
                     <button type="button" class="btn sm primary" title={t("noticeDoneTip")} onClick={() => g.forEach((x) => props.onDone(x))}>{t("noticeDone")}</button>
                   </div>
@@ -191,7 +191,8 @@ export function homeTodo(alerts: Alert[]): Alert[] {
 export function groupTodo(list: Alert[]): Alert[][] {
   const m = new Map<string, Alert[]>();
   for (const a of list) {
-    const k = advice(a.kind) ? `adv:${advice(a.kind)!.say}` : `kind:${a.kind}:${a.title}`;
+    const ad = advice(a.kind, a.detail);
+    const k = ad ? `adv:${ad.say}` : `kind:${a.kind}:${a.title}`;
     const g = m.get(k);
     if (g) g.push(a); else m.set(k, [a]);
   }

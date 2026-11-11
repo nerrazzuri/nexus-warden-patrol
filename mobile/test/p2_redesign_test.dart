@@ -87,21 +87,13 @@ void main() {
       expect(find.text('现在：布防'), findsOneWidget);
     });
 
-    testWidgets('保安：只能布防；留守、临时撤防点不动，说了要管理员切', (t) async {
-      final api = FakeApi('guard')..modeView = _mode('home');
+    // 用户 11-11（易用性第 6 轮 W6-05）：保安也能撤防
+    testWidgets('保安：三段都能点，不再说要管理员切', (t) async {
+      final api = FakeApi('guard')..modeView = _mode('armed');
       await _duty(t, api);
-      expect(_canTap(t, SiteModeBar.homeKey), isFalse);
-      expect(_canTap(t, SiteModeBar.visitorKey), isFalse);
-      expect(find.text('撤防（留守、临时撤防）需管理员或经理操作'), findsOneWidget);
-      await t.tap(find.byKey(SiteModeBar.homeKey), warnIfMissed: false);
-      await t.tap(find.byKey(SiteModeBar.visitorKey), warnIfMissed: false);
-      await t.pumpAndSettle();
-      expect(api.calls.where((c) => c.startsWith('mode')), isEmpty);
-      expect(find.byType(SiteModePage), findsNothing);
-      await t.tap(find.byKey(SiteModeBar.armKey));
-      await t.pumpAndSettle();
-      expect(api.calls.where((c) => c.startsWith('mode')), ['mode armed']);
-      expect(find.text('现在：布防'), findsOneWidget);
+      expect(_canTap(t, SiteModeBar.homeKey), isTrue);
+      expect(_canTap(t, SiteModeBar.visitorKey), isTrue);
+      expect(find.text('撤防（留守、临时撤防）需管理员或经理操作'), findsNothing);
     });
 
     testWidgets('切不成：说的是模式页那句话，模式不变', (t) async {

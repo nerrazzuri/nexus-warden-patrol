@@ -88,6 +88,7 @@ def test_按告警导出_时间段取告警前后_轨迹合上机器人日志里
             "code=0x0406 nav.robot_trapped 第 1 次 用时 60.0 s why=被困\n")
     win = scene_window(db, now_ms=now_ms, alert="A/stuck#1")
     assert win["robot"] == "A" and win["since_ms"] < first - 60_000 < win["until_ms"] < now_ms
+    assert win["ref"] == "alert:A/stuck#1" and win["scene"].startswith("报警 "), win  # W6-07/08
     out = support_bundle(tmp_path / "b.tar.gz", home=tmp_path, db=db, health=None, now_ms=now_ms,
                          journal=lambda u, h: "", robot_logs=logs, by="alice", **win)
     with tarfile.open(out) as tf:
@@ -98,7 +99,7 @@ def test_按告警导出_时间段取告警前后_轨迹合上机器人日志里
     assert track[0] == "time_ms,source,x,y,yaw,map,task,loc"
     assert [r.split(",")[1] for r in track[1:]] == ["site", "robot"]   # 站点记的 + 机器人补的
     readme = files["README.md"]
-    assert "alice" in readme and "告警 A/stuck#1" in readme
+    assert "alice" in readme and "报警 A/stuck#1" in readme
     assert "`0x0406`" in readme and "`0x0216`" in readme and "机器人被困住" in readme
     db.close()
 
@@ -124,6 +125,7 @@ def test_按一趟巡检取时间段_从机器人上开始的时刻往前10分�
     rid = db.query("SELECT id FROM runs")[0]["id"]
     win = scene_window(db, now_ms=t0 + 6 * 86_400_000, run=rid)
     assert win["robot"] == "B" and win["since_ms"] == t0 - 600_000
+    assert win["ref"] == f"run:{rid}" and win["scene"].startswith("巡逻 "), win
     assert win["until_ms"] == t0 + 86_400_000 + 600_000, "晚传上来的最多按一天算"
     db.close()
 
@@ -152,7 +154,8 @@ def test_接口_先问时间段_再下载_下载记操作记录(tmp_path):
             assert "nexwar_support/README.md" in tf.getnames()
         r = _等(lambda: next((r for r in s.api.audit.list()
                               if r["action"].startswith("DOWNLOAD")), None))
-        assert "support-bundle/机器人 A" in r["target"] + r["action"]
+        # 易用性第 6 轮 W6-07:对象是能拆开的引用(网页按界面语言写人话),不是一句中文
+        assert r["target"].startswith("support-bundle/robot:A/"), r["target"]
     finally:
         s.close()
 
@@ -163,3 +166,52 @@ def test_断网一天后才收到的那批_照样按行头时刻取到(tmp_path)
     _放一批(logs, "A", t0 + 86_400, "agent", f"{_iso(t0 + 10)} WARNING x 没到 code=0x0406\n")
     got = logs.read("A", since_s=t0, until_s=t0 + 600)
     assert "没到" in got["agent"]
+
+
+def test_11_11_W6_03_这段时间没日志_写明原因不留空文件_日程记录不超出所选时段(tmp_path):
+    db = SiteDB(tmp_path / "site.db")
+    (tmp_path / "site.json").write_text("{}")
+    now_ms = int(time.time() * 1000)
+    since, until = now_ms - 3 * 3_600_000, now_ms - 2 * 3_600_000
+    ldir = tmp_path / "logs"
+    ldir.mkdir()
+    (ldir / "site.log").write_text(f"{_iso(now_ms / 1000 - 600)} INFO nexwar_site 起来了\n")
+    for at in (since - 86_400_000, since + 60_000):     # 前一天那条不该进包
+        db.query("INSERT INTO schedule_runs(entry_id, scheduled_ms, outcome, decided_at) "
+                 "VALUES ('e', ?, 'skip', ?)", (at, at))
+    out = support_bundle(tmp_path / "b.tar.gz", home=tmp_path, db=db, health=None, now_ms=now_ms,
+                         journal=lambda u, h: "", since_ms=since, until_ms=until, by="alice")
+    with tarfile.open(out) as tf:
+        files = {m.name.removeprefix("nexwar_support/"): tf.extractfile(m).read().decode()
+                 for m in tf.getmembers()}
+    for name in ("site/site.log", "site/access.log"):
+        assert files[name].strip(), f"{name} 不能是空文件"
+        assert "这段时间" in files[name]
+    assert "最早一条" in files["site/site.log"], "写出日志从什么时候开始有"
+    runs = json.loads(files["records/schedule_runs.json"])
+    assert [r["scheduled_ms"] for r in runs] == [since + 60_000]
+    db.close()
+
+
+def test_11_11_W6_08_巡逻列表带谁派的_几个点(tmp_path):
+    """liang-d5 第 6 轮 W6-08:诊断导出「按某一趟巡逻」只列 temp-1794158305644,
+    看不出是哪条路线、谁派的。"""
+    from nexwar_site.evidence import run_origins
+    db = SiteDB(tmp_path / "site.db")
+    t0 = 1_794_158_305_644
+    for i, (mission, by, n, robot) in enumerate([("temp-1", "demo", 10, "A"),
+                                                 ("demo-loop", "site:schedule", 4, "A"),
+                                                 ("temp-1", "gina", 3, "B")]):
+        pts = [{"name": f"P{k}"} for k in range(n)]
+        db.query("INSERT INTO commands(command_id, task_id, robot_id, kind, payload, issued_by, "
+                 "issued_at) VALUES (?,?,?,?,?,?,?)",
+                 (f"c{i}", f"adhoc-{i}", robot, "patrol",
+                  json.dumps({"mission": {"mission": mission, "waypoints": pts}}), by, t0 - 500))
+    runs = [{"id": 1, "robot_id": "A", "mission": "temp-1", "first_ms": t0},
+            {"id": 2, "robot_id": "A", "mission": "demo-loop", "first_ms": t0},
+            {"id": 3, "robot_id": "C", "mission": "x", "first_ms": t0}]
+    out = run_origins(db, runs)
+    assert (out[0]["by"], out[0]["points"]) == ("demo", 10), "同名临时路线按机器人分开"
+    assert (out[1]["by"], out[1]["points"]) == ("site:schedule", 4)
+    assert "by" not in out[2], "找不到派单的:不编"
+    db.close()

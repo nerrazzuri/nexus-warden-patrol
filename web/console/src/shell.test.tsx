@@ -163,12 +163,15 @@ describe("新外壳", () => {
     vi.unstubAllGlobals();
   });
 
-  it("布防状态只显示,不能点", async () => {
-    const c = render(<Console me={me("admin")} onOut={() => {}} />);
+  it("W6-05(用户 11-11 改了):布防状态点开切模式,选了先弹确认,不直接切", async () => {
+    const c = render(<Console me={me("guard")} onOut={() => {}} />);
     await waitFor(() => expect(c.container.querySelector(".armstate")!.textContent).toContain("布防"));
-    const s = c.container.querySelector(".armstate")!;
-    expect(s.tagName).not.toBe("BUTTON");
-    expect(s.querySelector("button")).toBeNull();
+    const s = c.container.querySelector("button.armstate") as HTMLButtonElement;
+    expect(s).not.toBeNull();
+    fireEvent.click(s);
+    fireEvent.click(Array.from(c.container.querySelectorAll("[data-mode-menu] button")).find((b) => b.textContent === "留守")!);
+    await waitFor(() => expect(document.body.textContent).toContain("留守"));
+    expect(document.querySelector(".modal, dialog")).not.toBeNull();
   });
 
   it("报警数只数给保安的", async () => {
@@ -204,20 +207,33 @@ describe("新外壳", () => {
 });
 
 
-describe("第 2 轮 P1-79:顶栏布防状态的悬停按角色说", () => {
+// 易用性第 6 轮 W6-05(用户 11-11:保安也能撤防):顶栏的布防状态点开就能切 —— 布防、留守、临时撤防
+describe("W6-05 顶栏点布防状态切模式", () => {
   const mode = { mode: "armed", label: "布防", source: "manual", state: "armed" } as never;
-  const tip = (role: string) => {
-    const r = render(<TopBar me={me(role)} page="duty" mode={mode} alarms={0} now={0} pref="system" onPref={() => {}} onStop={() => {}} onSignOut={() => {}} onSay={() => {}} />);
-    const s = r.container.querySelector(".armstate")!.getAttribute("title") ?? "";
-    cleanup();
-    return s;
-  };
-  it("管理员说去布防时间页;保安说去地图页的全部布防、不能撤防;只看的说只能看", () => {
+  const bar = (role: string, onMode = vi.fn(), stale = false) => ({ onMode, c: render(<TopBar me={me(role)} page="duty" mode={mode} alarms={0} now={0} pref="system"
+    onPref={() => {}} onStop={() => {}} onSignOut={() => {}} onSay={() => {}} onMode={onMode} stale={stale} />).container });
+  it("保安:点开有布防、留守、临时撤防,点留守交给外壳去确认", () => {
     lang.value = "zh";
-    expect(tip("admin")).toContain("布防时间");
-    expect(tip("guard")).toContain("全部布防");
-    expect(tip("guard")).not.toContain("「布防时间」页切换");
-    expect(tip("viewer")).toContain("只能看");
+    const { c, onMode } = bar("guard");
+    fireEvent.click(c.querySelector("button.armstate")!);
+    const menu = c.querySelector("[data-mode-menu]")!;
+    const items = Array.from(menu.querySelectorAll("button")).map((b) => b.textContent);
+    expect(items).toEqual(["布防", "留守", "临时撤防"]);
+    expect((menu.querySelector("button[aria-pressed=true]") as HTMLButtonElement).textContent).toBe("布防");
+    fireEvent.click(Array.from(menu.querySelectorAll("button")).find((b) => b.textContent === "留守")!);
+    expect(onMode).toHaveBeenCalledWith("home");
+    expect(c.querySelector("[data-mode-menu]")).toBeNull();
+  });
+  it("只看的:不是按钮,悬停说只能看", () => {
+    lang.value = "zh";
+    const { c } = bar("viewer");
+    expect(c.querySelector("button.armstate")).toBeNull();
+    expect(c.querySelector(".armstate")!.getAttribute("title")).toContain("只能看");
+  });
+  it("连不上站点:不给切", () => {
+    lang.value = "zh";
+    const { c } = bar("admin", vi.fn(), true);
+    expect((c.querySelector("button.armstate") as HTMLButtonElement).disabled).toBe(true);
   });
 });
 
