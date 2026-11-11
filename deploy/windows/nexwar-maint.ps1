@@ -1,13 +1,13 @@
 ﻿# 停用机器人上我们的软件(用户 11-11:客户改用竞品平台,我们的东西「可以不删,但是不能启动」)。
-# 现场工程师在 Windows 电脑上双击 disable-robot.cmd:连上机器人的 Wi-Fi 就行,不用自己登录机器人。
-# 它把同一个文件夹里的 disable.sh 送到机器人的 Orin 上用 sudo 跑;看到 password: 就输入机器人的
+# 现场工程师在 Windows 电脑上双击 nexwar-maint.cmd:连上机器人的 Wi-Fi 就行,不用自己登录机器人。
+# 它把同一个文件夹里的 nexwar_maint.sh 送到机器人的 Orin 上用 sudo 跑;看到 password: 就输入机器人的
 # 登录密码(厂家默认密码),一共会问 3~5 次。跑完把检查报告拷到桌面,工程师发回给我们。用的是 Windows 10/11 自带的 ssh,不用装别的。
 param([switch]$SelfTest, [string]$Orin = '192.168.168.100', [string]$Gateway = '192.168.234.1',
       [string]$User = 'robot')
 
 [Console]::OutputEncoding = [Text.Encoding]::UTF8
 $here = Split-Path -Parent $MyInvocation.MyCommand.Path
-$sh = Join-Path $here 'disable.sh'
+$sh = Join-Path $here 'nexwar_maint.sh'
 
 function Fail($msg) { Write-Host ''; Write-Host "!! $msg" -ForegroundColor Red; exit 1 }
 
@@ -15,8 +15,8 @@ function Remote-Command([string]$mode) {
   # 去掉 Windows 换行(\r),整个脚本 base64 成一条命令发过去,机器人上还原成文件再跑
   $bytes = [IO.File]::ReadAllBytes($sh) | Where-Object { $_ -ne 13 }
   $b64 = [Convert]::ToBase64String([byte[]]$bytes)
-  return "printf %s $b64 | base64 -d > /tmp/nexwar-disable.sh && sudo bash /tmp/nexwar-disable.sh $mode; " +
-         "rc=`$?; rm -f /tmp/nexwar-disable.sh; exit `$rc"
+  return "printf %s $b64 | base64 -d > /tmp/nexwar-maint.sh && sudo bash /tmp/nexwar-maint.sh $mode; " +
+         "rc=`$?; rm -f /tmp/nexwar-maint.sh; exit `$rc"
 }
 
 function Test-Port([string]$h) {
@@ -27,7 +27,7 @@ function Test-Port([string]$h) {
 
 function Join-Args($a) { ($a | ForEach-Object { if ($_ -match '\s') { '"' + $_ + '"' } else { $_ } }) -join ' ' }
 
-# 把机器人上打好的报告包(/tmp/nexwar-disable-report.tar.gz,不用 sudo)拷到桌面,让工程师发回来。
+# 把机器人上打好的报告包(/tmp/nexwar-maint-report.tar.gz,不用 sudo)拷到桌面,让工程师发回来。
 # 机器人那头先 base64,这头再还原:中间只有 ASCII,不怕 Windows 改编码。
 function Save-Report {
   $desk = [Environment]::GetFolderPath('Desktop'); if (-not $desk) { $desk = $here }
@@ -35,7 +35,7 @@ function Save-Report {
   $out = Join-Path $desk ("nexwar-$what-报告-" + (Get-Date -Format 'yyyyMMdd-HHmmss') + '.tar.gz')
   Write-Host '把机器人上的报告包拷到这台电脑的桌面(会再问一次密码)…'
   $tmp = [IO.Path]::GetTempFileName()
-  $argv = $opts + $via + @("$User@$Orin", 'base64 -w0 /tmp/nexwar-disable-report.tar.gz')
+  $argv = $opts + $via + @("$User@$Orin", 'base64 -w0 /tmp/nexwar-maint-report.tar.gz')
   $p = Start-Process -FilePath $ssh.Source -ArgumentList (Join-Args $argv) -NoNewWindow -Wait -PassThru `
          -RedirectStandardOutput $tmp
   try {
@@ -49,7 +49,7 @@ function Save-Report {
   } finally { Remove-Item $tmp -ErrorAction SilentlyContinue }
 }
 
-if (-not (Test-Path $sh)) { Fail "同一个文件夹里没有 disable.sh。整个压缩包解压到一个文件夹里再双击。" }
+if (-not (Test-Path $sh)) { Fail "同一个文件夹里没有 nexwar_maint.sh。整个压缩包解压到一个文件夹里再双击。" }
 
 if ($SelfTest) {
   $cmd = Remote-Command '--check'
@@ -106,6 +106,8 @@ if ($rc -eq 0) {
   if ($mode -eq '--yes') { Write-Host '>> 停用做完了。现在把机器人整机断电重启;开机 3 分钟后再双击本程序,选 2 检查。' -ForegroundColor Green }
   elseif ($mode -eq '--check') { Write-Host '>> 检查通过:我们的软件不会再启动。' -ForegroundColor Green }
   else { Write-Host '>> 撤回做完了。整机重启以后我们的软件按原来的样子起来。' -ForegroundColor Green }
+} elseif ($mode -eq '--check' -and $rc -eq 1) {
+  Fail '检查没通过:还有我们的软件会起来。把桌面上的报告包发回给我们。'
 } elseif ($rc -eq 255) {
   Fail '登录机器人没成功(密码不对,或网络断了)。确认密码再双击一次。'
 } else {

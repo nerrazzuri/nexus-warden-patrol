@@ -1,18 +1,18 @@
 #!/usr/bin/env bash
 # 停用:把我们装在机器人上的东西全部停掉、关掉开机自启。**一个文件都不删**,能撤回。
 # 用于客户不再用我们的平台(用户 11-11:C40221 客户改用竞品)。在机器人的 Orin 上跑:
-#   sudo bash disable.sh            停用(先列出要做的事,输入 yes 才动手)
-#   sudo bash disable.sh --yes      停用,不问
-#   bash disable.sh --dry-run       只列出会做什么,什么都不动
-#   bash disable.sh --check         只看:还有没有我们的东西会起来(干净退 0,不干净退 1)
-#   sudo bash disable.sh --undo     按停用时的记录恢复
+#   sudo bash nexwar_maint.sh            停用(先列出要做的事,输入 yes 才动手)
+#   sudo bash nexwar_maint.sh --yes      停用,不问
+#   bash nexwar_maint.sh --dry-run       只列出会做什么,什么都不动
+#   bash nexwar_maint.sh --check         只看:还有没有我们的东西会起来(干净退 0,不干净退 1;细节在报告里)
+#   sudo bash nexwar_maint.sh --undo     按停用时的记录恢复
 # 做的事:旁路交还控制权;我们关过自启的厂家服务开回去;我们的服务(nexwar*,以及老名字 d1max*
 # 里确实指向我们程序的)停掉并关自启;我们的对时片段挪走;crontab 里我们的行注释掉;留记录和日志。
 # 停用之后要**整机断电重启一次**(Orin 和 RK3588 一起),厂家/竞品才能重新拿到控制权。
 set -u
-R="${NEXWAR_DISABLE_ROOT:-}"
-WAIT="${NEXWAR_DISABLE_WAIT:-3}"
-MODE=disable
+R="${NEXWAR_MAINT_ROOT:-}"
+WAIT="${NEXWAR_MAINT_WAIT:-3}"
+MODE=off
 YES=0
 for a in "$@"; do
   case "$a" in
@@ -25,12 +25,12 @@ for a in "$@"; do
   esac
 done
 
-if { [ "$MODE" = disable ] || [ "$MODE" = undo ]; } && [ -z "$R" ] && [ "$(id -u)" != 0 ]; then
+if { [ "$MODE" = off ] || [ "$MODE" = undo ]; } && [ -z "$R" ] && [ "$(id -u)" != 0 ]; then
   echo "!! 要用 root 跑: sudo bash $0 $*  (什么都还没动)" >&2
   exit 2
 fi
 
-DIS="$R/etc/nexwar/disabled"
+DIS="$R/etc/nexwar/maint"
 STATE="$DIS/state.txt"
 MOVED="$DIS/moved.txt"
 OURS='/opt/(d1max|nexwar)|nexwar|d1max-motion|d1max_(patrol|site|ops|localizer|obstacles|persons|nav2)|patrol_agent|field-agent'
@@ -54,6 +54,8 @@ our_units() {
 }
 
 unit_state() { systemctl is-enabled "$1" 2>/dev/null | head -n 1; }
+# 记录、报告里不用 systemd 的英文词:自启 = 开机自启着,不自启 = 没开机自启
+state_word() { case "$1" in enabled|enabled-runtime) say 自启 ;; disabled) say 不自启 ;; *) say "${1:--}" ;; esac; }
 
 fifos() {
   find "$R/home" "$R/root" -maxdepth 5 -type p -name '*agent*.fifo' 2>/dev/null
@@ -133,11 +135,12 @@ do_check() {
 }
 
 # ------------------------------------------------------------------ 报告(发回给我们看)
-REPORT="$R/var/log/nexwar-disable-report.txt"
+REPORT="$R/var/log/nexwar-maint-report.txt"
 PROCS='nexwar|d1max|patrol_agent|field-agent|super_?lio|Super-LIO|bt_navigator|controller_server|planner_server'
 
 write_report() {
   local u en act pid f boot rec
+  say "开始抓包…" >&3
   mkdir -p "$R/var/log" "$R/tmp"
   {
     say "nexwar 停用报告  $(date '+%F %T %z')  主机 $(hostname 2>/dev/null)  模式 $MODE"
@@ -158,11 +161,11 @@ write_report() {
     for u in $(our_units); do
       en=$(unit_state "$u"); act=$(systemctl is-active "$u" 2>/dev/null | head -n 1)
       pid=$(systemctl show -p MainPID --value "$u" 2>/dev/null | head -n 1)
-      printf '  %-36s %-10s %-10s %s\n' "$u" "${en:--}" "${act:--}" "${pid:--}"
+      printf '  %-36s %-10s %-10s %s\n' "$u" "$(state_word "$en")" "${act:--}" "${pid:--}"
     done
     say ""
     say "== 进程(名字里带我们程序的;没有就是空)"
-    ps -eo pid,etime,args 2>/dev/null | grep -E "$PROCS" | grep -vE 'nexwar-disable|grep -E' | cut -c1-200
+    ps -eo pid,etime,args 2>/dev/null | grep -E "$PROCS" | grep -vE 'nexwar-maint|grep -E' | cut -c1-200
     say ""
     say "== 监听端口(8090 是旁路)"
     ss -ltnp 2>/dev/null | grep -E ':8090 |patrol|nexwar|d1max' | cut -c1-200
@@ -175,16 +178,16 @@ write_report() {
     for f in "$R"/var/lib/nexwar/vendor-autostart-off.json.restored "$R"/var/lib/d1max/vendor-autostart-off.json.restored; do
       [ -f "$f" ] || continue
       for u in $(vendor_units "$f"); do
-        say "  $u  $(unit_state "$u") / $(systemctl is-active "$u" 2>/dev/null | head -n 1)"
+        say "  $u  $(state_word "$(unit_state "$u")") / $(systemctl is-active "$u" 2>/dev/null | head -n 1)"
       done
     done
     say ""
-    say "== 停用记录(/etc/nexwar/disabled/)"
+    say "== 停用记录(/etc/nexwar/maint/)"
     ls -l "$DIS" 2>/dev/null
     [ -f "$STATE" ] && sed 's/^/  原来: /' "$STATE"
     [ -f "$MOVED" ] && sed 's/^/  挪走: /' "$MOVED"
     say ""
-    f=$(ls -t "$R"/var/log/nexwar-disable-2*.log 2>/dev/null | head -n 1)
+    f=$(ls -t "$R"/var/log/nexwar-maint-2*.log 2>/dev/null | head -n 1)
     if [ -n "$f" ]; then say "== 最近一次停用/撤回的日志 ${f#"$R"}"; tail -n 60 "$f"; say ""; fi
     say "== 我们的单元这次开机以来的日志(每个最多 15 行)"
     for u in $(our_units); do
@@ -194,20 +197,25 @@ write_report() {
   } > "$REPORT" 2>&1
   # 打成 tar.gz 发回给我们:报告 + 停用日志 + 停用记录 + 每个单元更长的日志 + 单元、进程快照。
   # 放 /tmp 下、谁都能读,Windows 那头不用 sudo 就能拷走。不带 /etc/nexwar/env(里面有站点地址等现场值)。
-  local d="$R/tmp/nexwar-disable-report" tgz="$R/tmp/nexwar-disable-report.tar.gz"
+  local d="$R/tmp/nexwar-maint-report" tgz="$R/tmp/nexwar-maint-report.tar.gz"
   rm -rf "$d"; mkdir -p "$d/journal"
   cp "$REPORT" "$d/report.txt"
-  cp "$R"/var/log/nexwar-disable-2*.log "$d/" 2>/dev/null
-  [ -d "$DIS" ] && cp -r "$DIS" "$d/disabled" 2>/dev/null
-  systemctl list-unit-files --no-legend 2>/dev/null > "$d/unit-files.txt"
+  cp "$R"/var/log/nexwar-maint-2*.log "$d/" 2>/dev/null
+  [ -d "$DIS" ] && cp -r "$DIS" "$d/records" 2>/dev/null
+  systemctl list-unit-files --no-legend 2>/dev/null | sed -E 's/ disabled( |$)/ 不自启\1/; s/ enabled( |$)/ 自启\1/g' \
+    > "$d/unit-files.txt"
   systemctl list-units --all --no-legend 2>/dev/null > "$d/units.txt"
   ps -eo pid,ppid,user,lstart,args 2>/dev/null > "$d/ps.txt"
   for u in $(our_units); do
     journalctl -b -u "$u" -n 300 --no-pager -o short-iso 2>/dev/null > "$d/journal/$u.txt"
   done
-  tar czf "$tgz" -C "$R/tmp" nexwar-disable-report 2>/dev/null && chmod 644 "$tgz"
+  rm -f "$tgz"
+  if tar czf "$tgz" -C "$R/tmp" nexwar-maint-report 2>/dev/null && chmod 644 "$tgz"; then
+    say "抓包成功,抓包完成: ${tgz#"$R"}" >&3
+  else
+    say "!! 抓包失败(报告还在 ${REPORT#"$R"})" >&3
+  fi
   rm -rf "$d"
-  say "检查报告: ${REPORT#"$R"}(打包: ${tgz#"$R"})"
 }
 
 # ------------------------------------------------------------------ 列计划
@@ -218,10 +226,10 @@ show_plan() {
   for f in $(vendor_records); do
     for u in $(vendor_units "$f"); do say "  2. 厂家的 $u 开机自启开回去、当场起来"; done
   done
-  for u in $(our_units); do say "  3. 停掉并关开机自启: $u(现在 $(unit_state "$u"))"; done
-  for f in $(conf_files); do say "  4. 挪到 /etc/nexwar/disabled/: ${f#"$R"}"; done
+  for u in $(our_units); do say "  3. 停掉并关开机自启: $u(现在 $(state_word "$(unit_state "$u")"))"; done
+  for f in $(conf_files); do say "  4. 挪到 /etc/nexwar/maint/: ${f#"$R"}"; done
   for f in $(cron_files); do say "  5. 注释掉 crontab 里我们的行: ${f#"$R"}"; done
-  say "  文件一个都不删;记录放在 /etc/nexwar/disabled/,撤回用 --undo。"
+  say "  文件一个都不删;记录放在 /etc/nexwar/maint/,撤回用 --undo。"
 }
 
 confirm() {
@@ -233,14 +241,15 @@ confirm() {
 
 start_log() {
   mkdir -p "$R/var/log" "$DIS"
-  LOG="$R/var/log/nexwar-disable-$(date +%Y%m%d-%H%M%S).log"
-  exec > >(tee -a "$LOG") 2>&1
+  LOG="$R/var/log/nexwar-maint-$(date +%Y%m%d-%H%M%S).log"
+  # --yes(Windows 程序就是这么跑的):过程一个字都不上屏,全进日志;屏幕上只有抓包那几句(用户 11-11)
+  if [ "$YES" = 1 ]; then exec >> "$LOG" 2>&1; else exec > >(tee -a "$LOG") 2>&1; fi
 }
 
 # ------------------------------------------------------------------ 停用
-do_disable() {
+do_off() {
   local u f n
-  show_plan
+  [ "$YES" = 1 ] || show_plan
   confirm || { say "没动手。"; exit 1; }
   start_log
   say "== 停用开始 $(date '+%F %T')"
@@ -260,7 +269,7 @@ do_disable() {
     mv "$f" "$f.restored"
   done
   if [ ! -f "$STATE" ]; then  # 第二次停用不覆盖第一次的记录,撤回要的是最初的样子
-    for u in $(our_units); do say "$u $(unit_state "$u")"; done > "$STATE"
+    for u in $(our_units); do say "$u $(state_word "$(unit_state "$u")")"; done > "$STATE"
   fi
   for u in $(our_units); do
     systemctl disable --now "$u" >/dev/null 2>&1 || true
@@ -275,26 +284,26 @@ do_disable() {
   systemctl try-restart systemd-timesyncd >/dev/null 2>&1 || true
   for f in $(cron_files); do
     cp -p "$f" "$DIS/crontab-${f##*/}"
-    sed -i -E "/^[[:space:]]*#/! { \\%$OURS% s/^/#nexwar-disabled# / }" "$f"
+    sed -i -E "/^[[:space:]]*#/! { \\%$OURS% s/^/#nexwar-maintd# / }" "$f"
     say "  注释掉了 crontab 里我们的行: ${f#"$R"}"
   done
   for f in $(other_mentions); do say "  ! 这里也提到了我们的程序(没改,请把这一处发回来): ${f#"$R"}"; done
   say "== 停用做完。日志: ${LOG#"$R"}"
   say ""
   say ">> 现在把机器人整机断电重启一次(Orin 和 RK3588 一起),厂家/竞品才能重新拿到控制权。"
-  say ">> 开机 3 分钟后再跑一次检查(双击程序选 2,或 bash disable.sh --check)。"
+  say ">> 开机 3 分钟后再跑一次检查(双击程序选 2,或 bash nexwar_maint.sh --check)。"
 }
 
 # ------------------------------------------------------------------ 撤回
 do_undo() {
   local u st orig new f
   [ -f "$STATE" ] || { say "没有停用记录($STATE),没什么可撤回的。"; exit 1; }
-  say "撤回:按 /etc/nexwar/disabled/ 里的记录,把原来开着的开机自启开回去、挪走的文件放回去。"
+  [ "$YES" = 1 ] || say "撤回:按 /etc/nexwar/maint/ 里的记录,把原来开着的开机自启开回去、挪走的文件放回去。"
   confirm || { say "没动手。"; exit 1; }
   start_log
   while read -r u st; do
     case "$st" in
-      enabled|enabled-runtime) systemctl enable "$u" >/dev/null 2>&1 || true; say "  开回开机自启: $u" ;;
+      自启) systemctl enable "$u" >/dev/null 2>&1 || true; say "  开回开机自启: $u" ;;
     esac
   done < "$STATE"
   if [ -f "$MOVED" ]; then
@@ -311,9 +320,10 @@ do_undo() {
   say "== 撤回做完(厂家服务的自启没再关)。整机重启以后我们的服务按原来的样子起来。"
 }
 
+exec 3>&1  # 抓包那几句走这里,别的输出在 --yes / --check 时都不上屏
 case "$MODE" in
-  check) do_check; rc=$?; write_report; exit "$rc" ;;
+  check) do_check > /dev/null 2>&1; rc=$?; write_report; exit "$rc" ;;
   dry) show_plan; say "(--dry-run:什么都没动)" ;;
-  disable) do_disable; write_report ;;
+  off) do_off; write_report ;;
   undo) do_undo; write_report ;;
 esac
