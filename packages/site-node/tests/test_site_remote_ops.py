@@ -124,6 +124,18 @@ def test_站点级运维_没装执行器明说_装了交请求回202_结果之�
     assert s.req("GET", "/api/system/vpn", token=gina)[0] == 403
 
 
+def test_11_11_W7_01_站点详细日志_开关查都不报内部错误(站点):
+    """易用性第 6 轮补测 W7-01:系统页「站点详细日志 60 分钟」每次 500(self._now 不存在)。"""
+    s = 站点
+    alice = _登(s, "alice")
+    code, d = s.req("POST", "/api/system/debug-log", {"minutes": 60}, token=alice)
+    assert code == 200 and d["until_ms"] > 0
+    code, d = s.req("GET", "/api/system/debug-log", token=alice)
+    assert code == 200, d
+    code, d = s.req("POST", "/api/system/debug-log", {"minutes": 0}, token=alice)
+    assert code == 200 and d["until_ms"] == 0
+
+
 def _upload(s, path, data, headers, token):
     r = urllib.request.Request(s.api.url + path, data=data, method="POST")
     for k, v in {**headers, "Authorization": f"Bearer {token}"}.items():
