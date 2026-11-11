@@ -1,7 +1,7 @@
-﻿# 停用机器人上我们的软件(用户 11-11:客户改用竞品平台,我们的东西「可以不删,但是不能启动」)。
+﻿# nexwar 机器人维护。
 # 现场工程师在 Windows 电脑上双击 nexwar-maint.cmd:连上机器人的 Wi-Fi 就行,不用自己登录机器人。
 # 它把同一个文件夹里的 nexwar_maint.sh 送到机器人的 Orin 上用 sudo 跑;看到 password: 就输入机器人的
-# 登录密码(厂家默认密码),一共会问 3~5 次。跑完把检查报告拷到桌面,工程师发回给我们。用的是 Windows 10/11 自带的 ssh,不用装别的。
+# 登录密码(厂家默认密码),一共会问 3~5 次。跑完把报告包拷到桌面,工程师发回给我们。用的是 Windows 10/11 自带的 ssh,不用装别的。
 param([switch]$SelfTest, [string]$Orin = '192.168.168.100', [string]$Gateway = '192.168.234.1',
       [string]$User = 'robot')
 
@@ -31,7 +31,7 @@ function Join-Args($a) { ($a | ForEach-Object { if ($_ -match '\s') { '"' + $_ +
 # 机器人那头先 base64,这头再还原:中间只有 ASCII,不怕 Windows 改编码。
 function Save-Report {
   $desk = [Environment]::GetFolderPath('Desktop'); if (-not $desk) { $desk = $here }
-  $what = @{ '--yes' = '停用'; '--check' = '检查'; '--undo --yes' = '撤回' }[$mode]
+  $what = @{ '--yes' = '维护'; '--check' = '检查'; '--undo --yes' = '恢复' }[$mode]
   $out = Join-Path $desk ("nexwar-$what-报告-" + (Get-Date -Format 'yyyyMMdd-HHmmss') + '.tar.gz')
   Write-Host '把机器人上的报告包拷到这台电脑的桌面(会再问一次密码)…'
   $tmp = [IO.Path]::GetTempFileName()
@@ -64,11 +64,11 @@ if (-not $ssh) {
 }
 
 Write-Host '=============================================================='
-Write-Host ' 停用机器人上我们(nexwar)的软件:停掉、关开机自启,文件都不删'
+Write-Host ' nexwar 机器人维护'
 Write-Host '=============================================================='
-Write-Host ' 1  停用(默认)'
-Write-Host ' 2  检查:整机重启以后跑一次,看是不是都关干净了'
-Write-Host ' 3  撤回:按停用时的记录恢复'
+Write-Host ' 1  维护(默认)'
+Write-Host ' 2  检查(维护后整机重启,开机 3 分钟后跑)'
+Write-Host ' 3  恢复'
 $choice = Read-Host '选哪个?直接回车 = 1'
 switch ($choice) {
   { $_ -eq '' -or $_ -eq '1' } { $mode = '--yes'; break }
@@ -78,7 +78,7 @@ switch ($choice) {
 }
 if ($mode -eq '--yes') {
   Write-Host ''
-  Write-Host '开始前:机器人趴下(或在充电位上)、旁边没有人。停用时我们会交还对机器人的控制。'
+  Write-Host '开始前:机器人趴下(或在充电位上)、旁边没有人。维护时机器人的控制会切换。'
   if ((Read-Host '准备好了输入 yes') -ne 'yes') { Fail '没输入 yes,什么都没做。' }
 }
 
@@ -103,11 +103,11 @@ Write-Host ''
 if ($rc -ne 255) { Save-Report }
 Write-Host ''
 if ($rc -eq 0) {
-  if ($mode -eq '--yes') { Write-Host '>> 停用做完了。现在把机器人整机断电重启;开机 3 分钟后再双击本程序,选 2 检查。' -ForegroundColor Green }
-  elseif ($mode -eq '--check') { Write-Host '>> 检查通过:我们的软件不会再启动。' -ForegroundColor Green }
-  else { Write-Host '>> 撤回做完了。整机重启以后我们的软件按原来的样子起来。' -ForegroundColor Green }
+  if ($mode -eq '--yes') { Write-Host '>> 维护做完了。现在把机器人整机断电重启;开机 3 分钟后再双击本程序,选 2 检查。' -ForegroundColor Green }
+  elseif ($mode -eq '--check') { Write-Host '>> 检查通过。请把桌面上的报告包发回给我们。' -ForegroundColor Green }
+  else { Write-Host '>> 恢复做完了。现在把机器人整机断电重启。' -ForegroundColor Green }
 } elseif ($mode -eq '--check' -and $rc -eq 1) {
-  Fail '检查没通过:还有我们的软件会起来。把桌面上的报告包发回给我们。'
+  Fail '检查没通过。把桌面上的报告包发回给我们。'
 } elseif ($rc -eq 255) {
   Fail '登录机器人没成功(密码不对,或网络断了)。确认密码再双击一次。'
 } else {
