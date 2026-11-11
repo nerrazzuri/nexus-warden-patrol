@@ -13,6 +13,8 @@
 - **站点连不了外网、也没开远程通道**:登录着传的人拿到一个只管这张单的凭证,App 用它把整包下载到
   手机,用手机的分享发给工程师。不登录传的没有这个凭证(不然局域网里谁都能借开单把站点日志拿走)。
 - 留 :data:`KEEP_DAYS` 天。
+- **删**:``POST /api/problem-reports/<编号>/delete``,要 ``maintain``(用户 11-11);操作记录里留
+  删的是哪张(说明、谁传的)。
 """
 
 from __future__ import annotations
@@ -129,6 +131,16 @@ class ProblemReports:
                 out.append(self._public(m))
         out.sort(key=lambda m: m["at_ms"], reverse=True)
         return out[:limit]
+
+    def delete(self, code: str) -> dict[str, Any] | None:
+        """删一张单(用户 11-11:测试开的单原来只能等 90 天)。→ 删掉的那张(不带凭证),没有 → None。"""
+        with self._lock:
+            m = self.get(code)
+            if m is None:
+                return None
+            shutil.rmtree(self.root / code, ignore_errors=True)
+        log.warning("删了问题单 %s(%s 传的)", code, m.get("by", "-"))
+        return self._public(m)
 
     def token_ok(self, code: str, token: str) -> bool:
         m = self.get(code)

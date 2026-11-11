@@ -78,6 +78,18 @@ describe("诊断", () => {
     find.dispatchEvent(new Event("input"));
     await waitFor(() => expect(c.querySelectorAll("[data-problems] li").length).toBe(1));
   });
+  it("问题单能删(用户 11-11):先确认,删了从列表里去掉", async () => {
+    const { container: c } = render(<DiagPage say={() => {}} />);
+    await waitFor(() => expect(c.querySelectorAll("[data-problems] li").length).toBe(2));
+    fireEvent.click(btn(c.querySelector('[data-code="NW-1110-7F3A"]')!, "删除"));
+    expect(posted).toEqual([]);
+    const dlg = document.querySelector("dialog")!;
+    expect(dlg.textContent).toContain("NW-1110-7F3A");
+    fireEvent.click(btn(dlg, "删除问题单"));
+    await waitFor(() => expect(c.querySelectorAll("[data-problems] li").length).toBe(1));
+    expect(posted.map((p) => p.url)).toEqual(["/api/problem-reports/NW-1110-7F3A/delete"]);
+    expect(c.querySelector('[data-code="NW-1110-0B12"]')).not.toBeNull();
+  });
   it("导出诊断包:场景参数和时间段都进下载地址;选了场景还没选哪一个,按钮灰着", async () => {
     const { bundleHref, toLocalInput, fromLocalInput } = await import("./bundlepanel");
     expect(bundleHref("alert", "A/stuck#1", 1, 2)).toBe("/api/support-bundle?alert=A%2Fstuck%231&from=1&to=2");

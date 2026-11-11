@@ -84,6 +84,7 @@ const ACTIONS: [RegExp, string][] = [
   [/^(POST|DELETE) \/api\/arming\/exceptions/, "actArmExceptionAdd"],
   // 第 4 轮 P1-66:巡逻日程真正的接口是 route-schedules;遥控速度
   [/^POST \/api\/route-schedules/, "actPatrolSched"], [/^POST \/api\/teleop-speeds/, "actTeleopSpeeds"],
+  [/^POST \/api\/problem-reports\/[^/]+\/delete$/, "actProblemDel"], [/^POST \/api\/problem-reports$/, "actProblemSent"],
   [/^login/, "actLogin"], [/^POST \/api\/login$/, "actLogin"], [/^POST \/api\/logout/, "actLogout"], [/^POST \/api\/mode$/, "actMode"],
   [/^POST \/api\/alerts\/.+\/resolve$/, "actResolve"], [/^POST \/api\/alerts\/.+\/ack$/, "actAck"], [/^POST \/api\/alerts\/.+\/arrive$/, "actArrive"],
   [/^POST \/api\/robots\/[^/]+\/(goto|patrol)$/, "actDispatch"], [/^POST \/api\/robots\/[^/]+\/halt$/, "actHalt"],

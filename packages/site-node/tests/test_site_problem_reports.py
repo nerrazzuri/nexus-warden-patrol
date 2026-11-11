@@ -137,3 +137,42 @@ def test_外审POC_I8_凭证放请求头取整包_日志里不出现凭证(tmp_p
         assert d["token"] not in logged
     finally:
         s.close()
+
+
+def test_删问题单_管理员能删_保安不能_删了列表和目录都没了_操作记录留一行(tmp_path):
+    """用户 11-11:测试开的单站点上删不掉(原来只能等 90 天)。"""
+    from test_site_api import PW
+    s = _站(tmp_path)
+    try:
+        tok = s.login()
+        _, d = _传(s)
+        _, keep = _传(s)
+        code = d["code"]
+        s.accounts.add("gus", PW, role="guard")
+        gus = s.req("POST", "/api/login", {"name": "gus", "password": PW})[1]["token"]
+        assert s.req("POST", f"/api/problem-reports/{code}/delete", {}, token=gus)[0] == 403
+        assert s.req("POST", f"/api/problem-reports/{code}/delete", {})[0] == 401
+        st, out = s.req("POST", f"/api/problem-reports/{code}/delete", {}, token=tok)
+        assert st == 200 and out == {"ok": True, "code": code}
+        left = [r["code"] for r in s.req("GET", "/api/problem-reports", token=tok)[1]["reports"]]
+        assert left == [keep["code"]], "只删这一张"
+        assert not (tmp_path / "problem-reports" / code).exists()
+        assert _取(s, f"/api/problem-reports/{code}/bundle", token=tok)[0] == 404
+        assert s.req("POST", f"/api/problem-reports/{code}/delete", {}, token=tok)[0] == 404
+        assert s.req("POST", "/api/problem-reports/../delete", {}, token=tok)[0] == 404
+        r = _等(lambda: next((r for r in s.api.audit.list()
+                              if r["action"] == f"POST /api/problem-reports/{code}/delete"
+                              and r["status"] == 200), None))
+        assert r["actor"] == "alice" and r["target"] == code
+        assert r["detail"]["note"] == "登不上", "记下删的是哪张(单子本身没了)"
+    finally:
+        s.close()
+
+
+def test_删问题单_编号不对或不存在(tmp_path):
+    p = ProblemReports(tmp_path, now_ms=lambda: 10**12)
+    d = p.submit(data=LOG, by="x", remote="1", signed_in=False)
+    assert p.delete("NW-0000-ZZZZ") is None and p.delete("../x") is None
+    m = p.delete(d["code"])
+    assert m["code"] == d["code"] and "token_hash" not in m
+    assert p.list() == [] and p.delete(d["code"]) is None

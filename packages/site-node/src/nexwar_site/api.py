@@ -90,6 +90,7 @@ from nexwar_site.tlsserve import TlsHandlerMixin, TlsThreadingServer
 log = logging.getLogger(__name__)
 
 _PROBLEM_BUNDLE = re.compile(r"^/api/problem-reports/(NW-\d{4}-[0-9A-F]{4})/bundle$")
+_PROBLEM_DELETE = re.compile(r"^/api/problem-reports/(NW-\d{4}-[0-9A-F]{4})/delete$")
 MAX_BODY = 64 * 1024
 #: 网页易用性 P1-77:升级包不对时说人话(不提文件里的东西叫什么)。
 NOT_PKG = "选的文件不是升级包，打不开。请选我们给的 .tar.gz 升级文件。"
@@ -740,6 +741,9 @@ class _Handler(TlsHandlerMixin):
                         raise HttpError(405, "只支持 GET")
                     return self._send_json(200, {"reports": self._problems().list()})
                 return self._problem_bundle(_PROBLEM_BUNDLE.match(path).group(1), user)
+            if method == "POST" and _PROBLEM_DELETE.match(path):
+                self._need(user, MAINTAIN)              # 用户 11-11:问题单要能删
+                return self._problem_delete(_PROBLEM_DELETE.match(path).group(1))
             if method == "POST" and path == "/api/watch/token":
                 # W17:手机后台值守领一个只能看告警的长期令牌(普通会话 12 小时就到期)
                 self._need(user, VIEW)
@@ -2743,6 +2747,15 @@ class _Handler(TlsHandlerMixin):
         self._audit_target = code
         return self._send_bundle(win, by=str(user) if user is not None else self._actor,
                                  more=more)
+
+    def _problem_delete(self, code: str) -> None:
+        gone = self._problems().delete(code)
+        if gone is None:
+            raise HttpError(404, f"没有这张问题单:{code}")
+        self._audit_target = code
+        self._audit_detail = {"note": (gone.get("note") or "")[:200], "by": gone.get("by"),
+                              "robot": gone.get("robot") or None, "at_ms": gone.get("at_ms")}
+        return self._send_json(200, {"ok": True, "code": code})
 
     def _bundle_window(self) -> dict[str, Any]:
         """诊断包的时间段、场景(日志设计 第 5 条):``from``/``to`` 毫秒;``robot`` / ``task`` /
