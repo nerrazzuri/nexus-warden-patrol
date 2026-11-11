@@ -1,0 +1,367 @@
+{
+  "$doc": "Alert titles by kind (B1). The site sends Chinese title/detail; clients show these by kind and fall back to the site's text for unknown kinds. tests/test_design_i18n.py keeps it in sync with nexwar_site.alerts.",
+  "stuck": {
+    "en": "Waypoint not reached",
+    "zh": "未到达点位"
+  },
+  "intrusion": {
+    "en": "Intrusion",
+    "zh": "发现入侵"
+  },
+  "intrusion_unanswered": {
+    "en": "Intrusion not answered",
+    "zh": "入侵无人处理"
+  },
+  "intrusion_person": {
+    "en": "Intruder confirmed",
+    "zh": "确认有人入侵"
+  },
+  "deter_cornered": {
+    "en": "Robot cornered during deterrence",
+    "zh": "驱离时机器人被逼至角落"
+  },
+  "battery_abort": {
+    "en": "Low battery, run stopped",
+    "zh": "电量不足，任务中止"
+  },
+  "run_abort": {
+    "en": "Run stopped before finishing",
+    "zh": "任务中途中止"
+  },
+  "archive_failed": {
+    "en": "Patrol record could not be saved",
+    "zh": "巡逻记录保存失败"
+  },
+  "fallen": {
+    "en": "Robot fell over",
+    "zh": "机器人跌倒"
+  },
+  "loc_lost_paused": {
+    "en": "Localization lost, needs someone on site",
+    "zh": "定位丢失，需现场处理"
+  },
+  "charge_failed": {
+    "en": "Auto-charging failed",
+    "zh": "自动回充失败"
+  },
+  "dock_stuck": {
+    "en": "Robot may be stuck on the dock",
+    "zh": "机器人可能卡在充电桩上"
+  },
+  "charge_overlap": {
+    "en": "Two robots charging, area uncovered",
+    "zh": "两台机器人同时充电，区域暂无值守"
+  },
+  "dog_sees_person": {
+    "en": "Person detected",
+    "zh": "发现人员"
+  },
+  "evidence_plain": {
+    "en": "Evidence on robot is not encrypted",
+    "zh": "机器人上的证据未加密"
+  },
+  "evidence_unopened": {
+    "en": "Sealed evidence cannot be opened",
+    "zh": "加密证据无法解开"
+  },
+  "evidence_seal_failed": {
+    "en": "Evidence could not be sealed",
+    "zh": "证据加密失败"
+  },
+  "force_flipped": {
+    "en": "Robot flipped over",
+    "zh": "机器人翻倒"
+  },
+  "force_lifted": {
+    "en": "Robot was lifted",
+    "zh": "机器人被抬起"
+  },
+  "force_covered": {
+    "en": "Robot was covered",
+    "zh": "机器人被遮挡"
+  },
+  "force_bump": {
+    "en": "Robot was bumped",
+    "zh": "机器人受到撞击"
+  },
+  "force_config_bad": {
+    "en": "Force thresholds unreadable, using defaults",
+    "zh": "受力阈值配置无效，已使用默认值"
+  },
+  "purged_incoming_stuck": {
+    "en": "Deleted evidence could not be removed",
+    "zh": "已删除的证据未能清除"
+  },
+  "backup_verify_failed": {
+    "en": "Site backup failed verification",
+    "zh": "站点备份校验失败"
+  },
+  "push_failed": {
+    "en": "P1 push notifications failing",
+    "zh": "P1 推送发送失败"
+  },
+  "cert_expiring": {
+    "en": "Certificate expiring soon",
+    "zh": "证书即将到期"
+  },
+  "site_disk_low": {
+    "en": "Site disk almost full",
+    "zh": "站点磁盘空间不足"
+  },
+  "lane_stuck": {
+    "en": "Site background task stuck",
+    "zh": "站点后台任务停滞"
+  },
+  "agent_too_old": {
+    "en": "Robot software too old",
+    "zh": "机器人软件版本过低"
+  },
+  "site_too_old": {
+    "en": "Site software older than robot",
+    "zh": "站点软件版本低于机器人"
+  },
+  "loc_degraded": {
+    "en": "Localization degraded, robot paused",
+    "zh": "定位变差，原地等待恢复"
+  },
+  "loc_lost_idle": {
+    "en": "Idle robot not localized, cannot dispatch",
+    "zh": "空闲机器人定位不可信，无法派遣"
+  },
+  "nav_blocked": {
+    "en": "Robot blocked",
+    "zh": "机器人被挡住"
+  },
+  "estop_pressed": {
+    "en": "E-stop pressed",
+    "zh": "急停已按下"
+  },
+  "lease_expired": {
+    "en": "Supervision lease expired",
+    "zh": "监护超时"
+  },
+  "suspend_stale": {
+    "en": "Robot paused too long",
+    "zh": "暂停时间过长"
+  },
+  "watchdog_died": {
+    "en": "Site watchdog stopped",
+    "zh": "站点看门程序停止"
+  },
+  "schedule_died": {
+    "en": "Scheduled patrol failed",
+    "zh": "排程执行失败"
+  },
+  "schedule_missed": {
+    "en": "Scheduled patrol missed",
+    "zh": "排程已错过"
+  },
+  "robot_offline": {
+    "en": "Robot offline during a task",
+    "zh": "机器人离线（任务进行中）"
+  },
+  "nogo": {
+    "en": "Robot inside a no-go zone",
+    "zh": "机器人位于禁行区内"
+  },
+  "recording_delete_failed": {
+    "en": "Old recordings cannot be deleted",
+    "zh": "旧录像删除失败"
+  },
+  "payload_strobe": {
+    "en": "Strobe failed",
+    "zh": "警示灯故障"
+  },
+  "payload_siren": {
+    "en": "Siren failed",
+    "zh": "警笛故障"
+  },
+  "payload_spotlight": {
+    "en": "Spotlight failed",
+    "zh": "探照灯故障"
+  },
+  "payload_amp": {
+    "en": "Amplifier failed",
+    "zh": "功放故障"
+  },
+  "board_hot": {
+    "en": "Payload running hot",
+    "zh": "上装温度偏高"
+  },
+  "board_overheat": {
+    "en": "Payload overheating, robot returned",
+    "zh": "上装严重过热，机器人已返回"
+  },
+  "lens_blocked": {
+    "en": "Thermal lens may be blocked",
+    "zh": "热像镜头可能被遮挡"
+  },
+  "finding": {
+    "en": "Inspection finding",
+    "zh": "判读发现异常"
+  },
+  "recording_failed": {
+    "en": "Recording interrupted",
+    "zh": "录像中断"
+  },
+  "agent_args_skipped": {
+    "en": "Unknown robot settings skipped",
+    "zh": "机器人启动参数无法识别，已跳过"
+  },
+  "recording_dropped": {
+    "en": "Robot recordings dropped",
+    "zh": "机器人录像未上传"
+  },
+  "recording_trimmed": {
+    "en": "Oldest recordings removed (disk full)",
+    "zh": "磁盘空间不足，已删除最旧的录像"
+  },
+  "cctv_offline": {
+    "en": "Camera offline",
+    "zh": "摄像头无法连接"
+  },
+  "disk_80": {
+    "en": "Robot storage almost full",
+    "zh": "机器人存储空间不足"
+  },
+  "backup_stale": {
+    "en": "Site backup out of date",
+    "zh": "站点备份已过期"
+  },
+  "map_failed": {
+    "en": "Map operation failed",
+    "zh": "地图操作失败"
+  },
+  "map_integrity": {
+    "en": "Robot map is corrupted",
+    "zh": "机器人上的地图已损坏"
+  },
+  "rtk": {
+    "en": "RTK base station moved",
+    "zh": "RTK 基站坐标跳变"
+  },
+  "standby_failed": {
+    "en": "Did not return to standby",
+    "zh": "未返回待命点"
+  },
+  "upload_refused": {
+    "en": "Site refused an upload",
+    "zh": "站点拒收上传"
+  },
+  "account_request": {
+    "en": "Someone applied for an account",
+    "zh": "账号申请待批准"
+  },
+  "adhoc_patrol": {
+    "en": "One-off patrol sent",
+    "zh": "临时巡逻已派出"
+  },
+  "adhoc_queue": {
+    "en": "Your queued patrol",
+    "zh": "排队中的临时巡逻"
+  },
+  "bind_request": {
+    "en": "Robot waiting to join the site",
+    "zh": "机器人申请加入站点"
+  },
+  "wifi_change": {
+    "en": "Robot WiFi change waiting for approval",
+    "zh": "机器人 WiFi 变更待确认"
+  },
+  "release_failed": {
+    "en": "Software update failed",
+    "zh": "软件升级失败"
+  },
+  "upload_backlog": {
+    "en": "Evidence upload delayed",
+    "zh": "证据上传延迟超过半小时"
+  },
+  "bundle_lag": {
+    "en": "Robot mission data out of date",
+    "zh": "机器人任务数据未更新"
+  },
+  "clock_skew": {
+    "en": "Robot clock is off",
+    "zh": "机器人时钟偏差"
+  },
+  "schedule_skipped": {
+    "en": "Scheduled patrol skipped",
+    "zh": "排程已跳过"
+  },
+  "schedule_blocked": {
+    "en": "Scheduled patrol blocked",
+    "zh": "排程被拦截"
+  },
+  "schedule_interrupted": {
+    "en": "Scheduled patrol interrupted",
+    "zh": "排程被中断"
+  },
+  "incident_flood": {
+    "en": "Too many events from one source",
+    "zh": "事件源上报过于频繁"
+  },
+  "robot_offline_idle": {
+    "en": "Robot offline",
+    "zh": "机器人离线"
+  },
+  "run_done": {
+    "en": "Patrol finished",
+    "zh": "巡逻完成"
+  },
+  "run_start": {
+    "en": "Patrol started",
+    "zh": "巡逻开始"
+  },
+  "battery_swap": {
+    "en": "Battery swap needed",
+    "zh": "需要更换电池"
+  },
+  "authorized_person": {
+    "en": "Authorized person present",
+    "zh": "授权人员在场"
+  },
+  "cert_renew_failed": {
+    "en": "Automatic certificate renewal failed",
+    "zh": "证书自动续签失败"
+  },
+  "zone_unwatched": {
+    "en": "Zone not checked for too long",
+    "zh": "防区太久没巡到"
+  },
+  "guard_stuck": {
+    "en": "Zone route keeps failing",
+    "zh": "防区路线连着跑不成"
+  },
+  "person_overdue": {
+    "en": "Person detected, no guard on site",
+    "zh": "发现人员无人到场"
+  },
+  "person_left": {
+    "en": "Person left the guarded area",
+    "zh": "人离开值守区"
+  },
+  "swap_soon": {
+    "en": "Battery swap coming up",
+    "zh": "即将换电"
+  },
+  "swap_needed": {
+    "en": "Robot waiting for a battery swap",
+    "zh": "机器人等待换电"
+  },
+  "swap_overdue": {
+    "en": "Battery swap overdue",
+    "zh": "换电超时未处理"
+  },
+  "swap_stuck": {
+    "en": "Battery out but robot still moving",
+    "zh": "拔着电池机器人还在走"
+  },
+  "guard_prep": {
+    "en": "Charge before arming",
+    "zh": "布防前先补能"
+  },
+  "preflight_refused": {
+    "en": "Pre-departure check failed, robot did not leave",
+    "zh": "出发前检查未通过，机器人未出发"
+  }
+}

@@ -18,4 +18,4 @@ where = ["src"]
 
 # 商业化 B1:网页值班台(web/console 构建出来的静态文件)跟着站点包装
 [tool.setuptools.package-data]
-nexwar_site = ["web/*.html", "web/assets/*"]
+nexwar_site = ["web/*.html", "web/assets/*", "i18n/*.json"]

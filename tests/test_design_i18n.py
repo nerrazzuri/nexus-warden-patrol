@@ -38,3 +38,10 @@ def test_W59_告警中文标题不用口语():
         if hit or zh.endswith("了") or "了，" in zh or "了（" in zh:
             bad.append(f"{kind}: {zh} {hit}")
     assert not bad, "\n".join(bad)
+
+
+def test_站点包里那份报警标题跟_design_里的一样():
+    """补测 W6-03:诊断包说明里的报警标题按种类写(站点包带一份 i18n/alerts.json),两份不能分叉。"""
+    ship = ROOT / "packages/site-node/src/nexwar_site/i18n/alerts.json"
+    assert ship.read_bytes() == (ROOT / "design" / "i18n" / "alerts.json").read_bytes(), \
+        "改了 design/i18n/alerts.json 就照样复制一份到站点包"

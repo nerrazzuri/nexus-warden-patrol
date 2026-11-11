@@ -3552,8 +3552,9 @@ class _Handler(TlsHandlerMixin):
                     out[f"robots/{rid}/live/diag.json"] = dumps(data)
                 else:
                     # 导出这一刻机器人上的(还没传上来的那段在这里)
-                    out[f"robots/{rid}/live/{p['unit']}.log"] = str(
-                        (data or {}).get("text", "")).encode()
+                    from nexwar_site.health import robot_live_log
+                    out[f"robots/{rid}/live/{p['unit']}.log"] = robot_live_log(
+                        rid, p["unit"], str((data or {}).get("text", "")), p["hours"]).encode()
             if errs:
                 out[f"robots/{rid}/live/errors.txt"] = ("\n".join(errs) + "\n").encode()
         return out

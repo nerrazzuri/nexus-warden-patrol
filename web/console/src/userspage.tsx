@@ -4,7 +4,8 @@
 import { useCallback, useEffect, useState } from "preact/hooks";
 import { api, ApiError, enc } from "./api";
 import { ConfirmPassword } from "./confirmpw";
-import { hm, hms, md, siteDown } from "./data";
+import { routeName } from "./bundlepanel";
+import { hm, hms, md, nameOf, siteDown } from "./data";
 import { Confirm, Modal } from "./dialogs";
 import { alertTitle, colon, lang, t } from "./i18n";
 import { roleLabel } from "./shell";
@@ -105,7 +106,7 @@ const ACTIONS: [RegExp, string][] = [
   [/^POST \/api\/admin\/robots\/[^/]+\/revoke$/, "actRobotUnbind"], [/^POST \/api\/admin\/robots\/[^/]+\/name$/, "actRobotName"],
   [/^POST \/api\/admin\/bind/, "actBind"], [/^POST \/api\/layout\/history\/\d+\/restore$/, "actRestore"],
   [/^POST \/api\/alert-test/, "actAlertTest"], [/^POST \/api\/admin\/cameras/, "actLayout"],
-  [/^POST \/api\/admin\/maps/, "actMaps"], [/^POST \/api\/(standby|cameras|layout|guard-routes)/, "actLayout"],
+  [/^POST \/api\/admin\/maps\/[^/]+\/[^/]+\/delete$/, "actMapDelete"], [/^POST \/api\/admin\/maps/, "actMaps"], [/^POST \/api\/(standby|cameras|layout|guard-routes)/, "actLayout"],
   [/^POST \/api\/(releases|system)/, "actSystem"], [/^POST \/api\/me/, "actMe"],
   // 第 3 轮 P1-66:巡逻日程、值班设置、布防例外、看录像 / 下载
   [/^POST \/api\/schedule/, "actPatrolSched"], [/^POST \/api\/duty-settings/, "actDutySettings"],
@@ -136,7 +137,10 @@ function bundleObj(target: string): string | null {
   const since = Number(a), until = Number(b);
   const span = `${md(since)} ${hm(since)}–${md(until) === md(since) ? "" : `${md(until)} `}${hm(until)}`;
   const r = /^(alert|run|task|robot|problem):(.+)$/.exec(ref);
-  const what = !r ? null : r[1] === "alert" ? alertObj(r[2]) : r[1] === "run" ? t("auditBundleRun", { n: r[2] })
+  // 补测 W6-08:一趟巡逻写「机器人 · 路线」(``run:<号>:<机器人>:<任务名>``),跟导出列表一样;老格式只有号
+  const run = r && r[1] === "run" ? /^\d+:([^:]+):(.+)$/.exec(r[2]) : null;
+  const what = !r ? null : r[1] === "alert" ? alertObj(r[2])
+    : run ? `${nameOf(run[1])} · ${routeName(run[2])}` : r[1] === "run" ? t("auditBundleRun", { n: r[2] })
     : r[1] === "task" ? t("auditBundleTask", { n: r[2].replace(/\b[0-9a-f]{12,}\b/gi, "…") })
     : r[1] === "robot" ? t("auditBundleRobot", { n: r[2] }) : t("auditBundleProblem", { n: r[2] });
   return [t("auditBundle"), what, span].filter(Boolean).join(" · ");
@@ -145,6 +149,11 @@ function bundleObj(target: string): string | null {
 export function targetText(target: string): string {
   const alert = alertObj(target) ?? bundleObj(target);
   if (alert) return alert;
+  // 补测:派临时路线、去看看的那一行对象是 temp-… / task-…,写人话
+  if (/^(temp-\d+|task-[0-9a-f]+)$/i.test(target)) return routeName(target);
+  // 补测:删地图版本的对象是「图:版本」
+  const mv = /^([^:/\s]+):(\d+)$/.exec(target);
+  if (mv) return t("auditMapVer", { map: mv[1], v: mv[2] });
   // 第 3 轮 P1-66:布防模式写成人话;例外、录像编号写清是什么
   const MODE: Record<string, Parameters<typeof t>[0]> = { armed: "modeArmed", home: "modeHome", stay: "modeHome", visitor: "modeVisitor", disarmed: "modeDisarmedAll" };
   if (MODE[target]) return t(MODE[target]);

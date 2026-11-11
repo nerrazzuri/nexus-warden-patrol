@@ -237,7 +237,7 @@ describe("日志设计 第 1、2 条:操作记录写出前后变化、来源;系
     expect(actionText("schedule supervised")).toBe("日程没能派出机器人");
     expect(actionText("schedule started")).toBe("日程开始巡逻");
     expect(actionText("robot offline")).toBe("机器人离线");
-    expect(actionText("alert escalated")).toBe("告警没人确认，已升级");
+    expect(actionText("alert escalated")).toBe("报警没人确认，已升级");
     const c = render(<ul><AuditLine who r={{ id: 1, at: 0, actor: "site:schedule", action: "schedule skip",
       target: "demo-night", status: 200, detail: { note: "迟了 31 分钟", source: "system" } }} /></ul>).container;
     expect(c.textContent).toContain("系统");
@@ -294,6 +294,27 @@ describe("W6-07 操作记录读得懂", () => {
     const o = line({ action: "DOWNLOAD /api/support-bundle", target: "support-bundle/告警 A/schedule_blocked#3(排程 demo-night 无法派单:…)/1794307980000-1794310380000" });
     expect(o.textContent).toContain("Support bundle");
     expect(o.textContent).not.toContain("告警");
+  });
+  // 补测(da0a60ea):诊断包按一趟巡逻写「第 25 趟巡逻」、临时路线写 temp-…、删草稿写「修改地图或防区」
+  it("补测:一趟巡逻写「机器人 · 路线」;临时路线、去看看不露编号;删地图版本单说;产生报警", () => {
+    lang.value = "zh";
+    const r = line({ action: "DOWNLOAD /api/support-bundle", target: "support-bundle/run:25:A:temp-1794360229453/1794307980000-1794310380000" });
+    expect(r.textContent).toContain("A · 临时路线");
+    expect(r.textContent).not.toContain("第 25 趟");
+    cleanup();
+    const g = line({ action: "DOWNLOAD /api/support-bundle", target: "support-bundle/run:26:B:task-60a9ef78b711/1794307980000-1794310380000" });
+    expect(g.textContent).toContain("B · 去一个点");
+    expect(g.textContent).not.toContain("60a9ef78");
+    cleanup();
+    const d = line({ action: "POST /api/robots/A/patrol", target: "temp-1794360229453" });
+    expect(d.textContent).toContain("临时路线");
+    expect(d.textContent).not.toContain("1794360229453");
+    cleanup();
+    const del = line({ action: "POST /api/admin/maps/estate-1/13/delete", target: "estate-1:13" });
+    expect(del.textContent).toContain("删除了地图版本");
+    expect(del.textContent).toContain("地图 estate-1 第 13 版");
+    cleanup();
+    expect(line({ action: "alert raised", target: "B/disk_80#2" }).textContent).toContain("产生报警");
   });
   it("登录那一条执行人写账号名", () => {
     lang.value = "zh";
