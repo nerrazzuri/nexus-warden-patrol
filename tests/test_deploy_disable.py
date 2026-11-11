@@ -116,8 +116,8 @@ def test_撤回_按记录开回原来开着的_对时片段放回(tmp_path):
     assert "systemctl enable nexwar_agent.service" in calls
     assert "systemctl enable nexwar_sidecar.service" in calls
     assert "systemctl enable nexwar_persons.service" not in calls, "原来没开机自启的不开"
-    assert not any("robot_slam" in c and c.split()[1] in ("disable", "stop", "mask") for c in calls), \
-        "厂家服务撤回时不再关掉"
+    动 = [c for c in calls if "robot_slam" in c and c.split()[1] in ("disable", "stop", "mask")]
+    assert not 动, "厂家服务撤回时不再关掉"
     assert (r / "etc/chrony/conf.d/nexwar.conf").exists()
     assert not (r / "etc/nexwar/disabled/state.txt").exists()
 
@@ -195,7 +195,7 @@ def test_每次都留检查报告_给工程师发回来(tmp_path):
     assert "停用之后整机重启过: 否" in t, "刚停用、还没重启"
     assert "原来: nexwar_agent.service enabled" in t and "停用做完" in t
     tmp_copy = r / "tmp/nexwar-disable-report.txt"
-    assert tmp_copy.exists() and tmp_copy.stat().st_mode & 0o004, "不用 sudo 也读得到,好拷回 Windows"
+    assert tmp_copy.exists() and tmp_copy.stat().st_mode & 0o004, "不用 sudo 也读得到"
 
 
 def test_脚本够小_能塞进Windows一条命令():
