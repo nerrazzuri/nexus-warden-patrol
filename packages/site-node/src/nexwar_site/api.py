@@ -3603,14 +3603,14 @@ class _Handler(TlsHandlerMixin):
                 if isinstance(minutes, bool) or not isinstance(minutes, int) \
                         or not 0 <= minutes <= 120:
                     raise HttpError(400, "minutes 要 0–120 的整数(0 = 关)")
-                until = self._now() + minutes * 60_000 if minutes else 0
+                until = self.site._now() + minutes * 60_000 if minutes else 0
                 set_until(flag, until)
                 self._audit_detail = {"minutes": minutes}
                 log.warning("站点详细日志 %s actor=%s", f"开 {minutes} 分钟" if minutes else "关",
                             self._actor)
                 return self._send_json(200, {"until_ms": until})
             u = until_ms(flag)
-            return self._send_json(200, {"until_ms": u if u > self._now() else 0})
+            return self._send_json(200, {"until_ms": u if u > self.site._now() else 0})
         if what == "push-test":
             if method != "POST":
                 raise HttpError(405, "只支持 POST")
