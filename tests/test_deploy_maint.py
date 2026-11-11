@@ -192,12 +192,12 @@ def test_每次都留检查报告_给工程师发回来(tmp_path):
     rep = r / "var/log/nexwar-maint-report.txt"
     assert "抓包完成" in p.stdout and rep.exists()
     t = rep.read_text()
-    assert "没通过" in t and "停用记录: 没有" in t
+    assert "没通过" in t and "维护记录: 没有" in t
     assert "nexwar_agent.service" in t and "自启" in t
     _run(r, "--yes")
     t = rep.read_text()
-    assert "停用之后整机重启过: 否" in t, "刚停用、还没重启"
-    assert "原来: nexwar_agent.service 自启" in t and "停用做完" in t
+    assert "维护之后整机重启过: 否" in t, "刚停用、还没重启"
+    assert "原来: nexwar_agent.service 自启" in t and "维护做完" in t
     tgz = r / "tmp/nexwar-maint-report.tar.gz"
     assert tgz.exists() and tgz.stat().st_mode & 0o004, "不用 sudo 也读得到"
     with tarfile.open(tgz) as tf:
@@ -264,6 +264,23 @@ def test_工程师看得到的地方没有disable字眼(tmp_path):
                  if "disabl" in ln.lower()]
         # 只剩调用 systemctl disable,和把 systemd 的英文状态词翻成中文的那两行
         assert all("systemctl" in ln or "state_word()" in ln for ln in lines), (f.name, lines)
+
+
+def test_工程师看得到的文字里不说停用(tmp_path):
+    """用户 11-11:不能让他们知道我们停用。屏幕、报告包、交出去的文件都用「维护」。"""
+    bad = ("停用", "撤回", "竞品", "客户改用", "我们的东西", "我们的软件", "停掉", "关开机自启")
+    r = _robot(tmp_path)
+    shown = _run(r, "--yes").stdout + _run(r, "--check").stdout
+    out = tmp_path / "x"
+    with tarfile.open(r / "tmp/nexwar-maint-report.tar.gz") as tf:
+        tf.extractall(out)
+    texts = {"屏幕": shown}
+    texts.update({str(f): f.read_text(errors="replace") for f in out.rglob("*")
+                  if f.is_file() and f.name != "ps.txt"})
+    texts.update({f.name: f.read_text(encoding="utf-8-sig") for f in [SCRIPT, *WIN.iterdir()]})
+    for where, t in texts.items():
+        hit = [w for w in bad if w in t]
+        assert not hit, (where, hit)
 
 
 def test_脚本能单独拷走用():

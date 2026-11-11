@@ -1,14 +1,12 @@
 #!/usr/bin/env bash
-# 停用:把我们装在机器人上的东西全部停掉、关掉开机自启。**一个文件都不删**,能撤回。
-# 用于客户不再用我们的平台(用户 11-11:C40221 客户改用竞品)。在机器人的 Orin 上跑:
-#   sudo bash nexwar_maint.sh            停用(先列出要做的事,输入 yes 才动手)
-#   sudo bash nexwar_maint.sh --yes      停用,不问
+# nexwar 机器人维护脚本。**一个文件都不删**,能恢复。在机器人的 Orin 上跑:
+#   sudo bash nexwar_maint.sh            维护(先列出要做的事,输入 yes 才动手)
+#   sudo bash nexwar_maint.sh --yes      维护,不问
 #   bash nexwar_maint.sh --dry-run       只列出会做什么,什么都不动
-#   bash nexwar_maint.sh --check         只看:还有没有我们的东西会起来(干净退 0,不干净退 1;细节在报告里)
-#   sudo bash nexwar_maint.sh --undo     按停用时的记录恢复
-# 做的事:旁路交还控制权;我们关过自启的厂家服务开回去;我们的服务(nexwar*,以及老名字 d1max*
-# 里确实指向我们程序的)停掉并关自启;我们的对时片段挪走;crontab 里我们的行注释掉;留记录和日志。
-# 停用之后要**整机断电重启一次**(Orin 和 RK3588 一起),厂家/竞品才能重新拿到控制权。
+#   bash nexwar_maint.sh --check         检查(通过退 0,没通过退 1;细节在报告里)
+#   sudo bash nexwar_maint.sh --undo     按维护时的记录恢复
+# 每次跑完在 /tmp/nexwar-maint-report.tar.gz 留一个报告包。--yes / --check 时屏幕上只有抓包那几句。
+# 维护之后要**整机断电重启一次**(Orin 和 RK3588 一起)。
 set -u
 R="${NEXWAR_MAINT_ROOT:-}"
 WAIT="${NEXWAR_MAINT_WAIT:-3}"
@@ -20,7 +18,7 @@ for a in "$@"; do
     --dry-run) MODE=dry ;;
     --check) MODE=check ;;
     --undo) MODE=undo ;;
-    -h|--help) sed -n '2,12p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,9p' "$0"; exit 0 ;;
     *) echo "不认识的参数: $a(看 --help)" >&2; exit 64 ;;
   esac
 done
@@ -107,30 +105,30 @@ tag_of() {  # /etc/chrony/conf.d/nexwar.conf → chrony-conf.d-nexwar.conf
 
 bridge_note() {
   if pgrep -f 'ros1_bridge|bridge_start' >/dev/null 2>&1; then
-    say "  竞品的雷达桥(ros1_bridge)在跑。"
+    say "  雷达桥(ros1_bridge): 在跑"
   else
-    say "  竞品的雷达桥(ros1_bridge)没在跑:11-05 我们停过它的进程、没改它的自启;整机重启后还没起来就告诉竞品。"
+    say "  雷达桥(ros1_bridge): 没在跑"
   fi
 }
 
 # ------------------------------------------------------------------ 只看
 do_check() {
   local bad=0 u en act f
-  say "== 检查:我们的东西还会不会起来"
+  say "== 检查"
   for u in $(our_units); do
     en=$(unit_state "$u"); act=$(systemctl is-active "$u" 2>/dev/null | head -n 1)
     case "$en" in
-      enabled|enabled-runtime|linked|linked-runtime|alias) say "  ✗ $u 还开着开机自启($en)"; bad=1 ;;
+      enabled|enabled-runtime|linked|linked-runtime|alias) say "  ✗ $u 开机自启($(state_word "$en"))"; bad=1 ;;
     esac
-    if [ "$act" = active ] || [ "$act" = activating ]; then say "  ✗ $u 正在跑"; bad=1; fi
+    if [ "$act" = active ] || [ "$act" = activating ]; then say "  ✗ $u 在运行"; bad=1; fi
   done
-  if pgrep -f '(^|/)patrol_agent( |$)' >/dev/null 2>&1; then say "  ✗ 旁路 patrol_agent 进程还在"; bad=1; fi
-  for f in $(conf_files); do say "  ✗ 还在: ${f#"$R"}"; bad=1; done
-  for f in $(cron_files); do say "  ✗ crontab 里还有我们的行: ${f#"$R"}"; bad=1; done
-  for f in $(other_mentions); do say "  ! 这里也提到了我们的程序(没改,请把这一处发回来): ${f#"$R"}"; done
+  if pgrep -f '(^|/)patrol_agent( |$)' >/dev/null 2>&1; then say "  ✗ 旁路 patrol_agent 进程在运行"; bad=1; fi
+  for f in $(conf_files); do say "  ✗ 文件在: ${f#"$R"}"; bad=1; done
+  for f in $(cron_files); do say "  ✗ crontab 有相关的行: ${f#"$R"}"; bad=1; done
+  for f in $(other_mentions); do say "  ! 相关的启动项(没改): ${f#"$R"}"; done
   bridge_note
-  if [ "$bad" = 0 ]; then say "== 通过:我们的东西都不会再起来了。"; return 0; fi
-  say "== 没通过:上面打 ✗ 的还在。先重跑一次停用;还不行就把这一屏拍下来发回来。"
+  if [ "$bad" = 0 ]; then say "== 检查通过"; return 0; fi
+  say "== 检查没通过:打 ✗ 的几项"
   return 1
 }
 
@@ -143,15 +141,15 @@ write_report() {
   say "开始抓包…" >&3
   mkdir -p "$R/var/log" "$R/tmp"
   {
-    say "nexwar 停用报告  $(date '+%F %T %z')  主机 $(hostname 2>/dev/null)  模式 $MODE"
+    say "nexwar 维护报告  $(date '+%F %T %z')  主机 $(hostname 2>/dev/null)  模式 $MODE"
     boot=$(( $(date +%s) - $(cut -d. -f1 /proc/uptime) ))
     say "这次开机: $(date -d "@$boot" '+%F %T' 2>/dev/null)"
     if [ -f "$STATE" ]; then
       rec=$(stat -c %Y "$STATE")
-      say "停用记录: $(date -d "@$rec" '+%F %T' 2>/dev/null)"
-      if [ "$boot" -gt "$rec" ]; then say "停用之后整机重启过: 是"; else say "停用之后整机重启过: 否(还没重启)"; fi
+      say "维护记录: $(date -d "@$rec" '+%F %T' 2>/dev/null)"
+      if [ "$boot" -gt "$rec" ]; then say "维护之后整机重启过: 是"; else say "维护之后整机重启过: 否(还没重启)"; fi
     else
-      say "停用记录: 没有(还没停用过,或已撤回)"
+      say "维护记录: 没有(还没维护过,或已恢复)"
     fi
     say "装的版本: $(readlink "$R/opt/nexwar/current" 2>/dev/null || say -) / 老目录 $(readlink "$R/opt/d1max/current" 2>/dev/null || say -)"
     say ""
@@ -182,20 +180,20 @@ write_report() {
       done
     done
     say ""
-    say "== 停用记录(/etc/nexwar/maint/)"
+    say "== 维护记录(/etc/nexwar/maint/)"
     ls -l "$DIS" 2>/dev/null
     [ -f "$STATE" ] && sed 's/^/  原来: /' "$STATE"
     [ -f "$MOVED" ] && sed 's/^/  挪走: /' "$MOVED"
     say ""
     f=$(ls -t "$R"/var/log/nexwar-maint-2*.log 2>/dev/null | head -n 1)
-    if [ -n "$f" ]; then say "== 最近一次停用/撤回的日志 ${f#"$R"}"; tail -n 60 "$f"; say ""; fi
+    if [ -n "$f" ]; then say "== 最近一次维护/恢复的日志 ${f#"$R"}"; tail -n 60 "$f"; say ""; fi
     say "== 我们的单元这次开机以来的日志(每个最多 15 行)"
     for u in $(our_units); do
       say "-- $u"
       journalctl -b -u "$u" -n 15 --no-pager -o short-iso 2>/dev/null | cut -c1-200
     done
   } > "$REPORT" 2>&1
-  # 打成 tar.gz 发回给我们:报告 + 停用日志 + 停用记录 + 每个单元更长的日志 + 单元、进程快照。
+  # 打成 tar.gz 发回给我们:报告 + 维护日志 + 维护记录 + 每个单元更长的日志 + 单元、进程快照。
   # 放 /tmp 下、谁都能读,Windows 那头不用 sudo 就能拷走。不带 /etc/nexwar/env(里面有站点地址等现场值)。
   local d="$R/tmp/nexwar-maint-report" tgz="$R/tmp/nexwar-maint-report.tar.gz"
   rm -rf "$d"; mkdir -p "$d/journal"
@@ -222,14 +220,14 @@ write_report() {
 show_plan() {
   local u f
   say "要做的事:"
-  for f in $(fifos); do say "  1. 往 ${f#"$R"} 写 shutdown,让旁路交还控制权"; done
+  for f in $(fifos); do say "  1. 旁路: 往 ${f#"$R"} 发 shutdown"; done
   for f in $(vendor_records); do
-    for u in $(vendor_units "$f"); do say "  2. 厂家的 $u 开机自启开回去、当场起来"; done
+    for u in $(vendor_units "$f"); do say "  2. 厂家服务开机自启、启动: $u"; done
   done
-  for u in $(our_units); do say "  3. 停掉并关开机自启: $u(现在 $(state_word "$(unit_state "$u")"))"; done
+  for u in $(our_units); do say "  3. 处理: $u(现在 $(state_word "$(unit_state "$u")"))"; done
   for f in $(conf_files); do say "  4. 挪到 /etc/nexwar/maint/: ${f#"$R"}"; done
   for f in $(cron_files); do say "  5. 注释掉 crontab 里我们的行: ${f#"$R"}"; done
-  say "  文件一个都不删;记录放在 /etc/nexwar/maint/,撤回用 --undo。"
+  say "  文件一个都不删;记录放在 /etc/nexwar/maint/,恢复用 --undo。"
 }
 
 confirm() {
@@ -246,16 +244,16 @@ start_log() {
   if [ "$YES" = 1 ]; then exec >> "$LOG" 2>&1; else exec > >(tee -a "$LOG") 2>&1; fi
 }
 
-# ------------------------------------------------------------------ 停用
+# ------------------------------------------------------------------ 维护
 do_off() {
   local u f n
   [ "$YES" = 1 ] || show_plan
   confirm || { say "没动手。"; exit 1; }
   start_log
-  say "== 停用开始 $(date '+%F %T')"
+  say "== 维护开始 $(date '+%F %T')"
   for f in $(fifos); do
     if timeout 5 bash -c 'printf "shutdown\n" > "$1"' _ "$f" 2>/dev/null; then
-      say "  已让旁路交还控制权(${f#"$R"})"
+      say "  旁路: ${f#"$R"} 已发 shutdown"
     else
       say "  ${f#"$R"} 没人在读(旁路没在跑),跳过"
     fi
@@ -264,41 +262,41 @@ do_off() {
   for f in $(vendor_records); do
     for u in $(vendor_units "$f"); do
       systemctl enable --now "$u" >/dev/null 2>&1 || true
-      say "  厂家的 $u 开机自启开回去了"
+      say "  厂家服务: $u 开机自启、已启动"
     done
     mv "$f" "$f.restored"
   done
-  if [ ! -f "$STATE" ]; then  # 第二次停用不覆盖第一次的记录,撤回要的是最初的样子
+  if [ ! -f "$STATE" ]; then  # 第二次维护不覆盖第一次的记录,恢复要的是最初的样子
     for u in $(our_units); do say "$u $(state_word "$(unit_state "$u")")"; done > "$STATE"
   fi
   for u in $(our_units); do
     systemctl disable --now "$u" >/dev/null 2>&1 || true
-    say "  停掉并关了开机自启: $u"
+    say "  已处理: $u"
   done
   for f in $(conf_files); do
     n="$DIS/$(tag_of "$f")"
     mv "$f" "$n" && printf '%s\t%s\n' "${f#"$R"}" "${n#"$R"}" >> "$MOVED"
-    say "  挪走了 ${f#"$R"}"
+    say "  已移到 /etc/nexwar/maint/: ${f#"$R"}"
   done
   systemctl try-restart chrony >/dev/null 2>&1 || true
   systemctl try-restart systemd-timesyncd >/dev/null 2>&1 || true
   for f in $(cron_files); do
     cp -p "$f" "$DIS/crontab-${f##*/}"
     sed -i -E "/^[[:space:]]*#/! { \\%$OURS% s/^/#nexwar-maintd# / }" "$f"
-    say "  注释掉了 crontab 里我们的行: ${f#"$R"}"
+    say "  crontab 已处理: ${f#"$R"}"
   done
   for f in $(other_mentions); do say "  ! 这里也提到了我们的程序(没改,请把这一处发回来): ${f#"$R"}"; done
-  say "== 停用做完。日志: ${LOG#"$R"}"
+  say "== 维护做完。日志: ${LOG#"$R"}"
   say ""
-  say ">> 现在把机器人整机断电重启一次(Orin 和 RK3588 一起),厂家/竞品才能重新拿到控制权。"
+  say ">> 现在把机器人整机断电重启一次(Orin 和 RK3588 一起)。"
   say ">> 开机 3 分钟后再跑一次检查(双击程序选 2,或 bash nexwar_maint.sh --check)。"
 }
 
-# ------------------------------------------------------------------ 撤回
+# ------------------------------------------------------------------ 恢复
 do_undo() {
   local u st orig new f
-  [ -f "$STATE" ] || { say "没有停用记录($STATE),没什么可撤回的。"; exit 1; }
-  [ "$YES" = 1 ] || say "撤回:按 /etc/nexwar/maint/ 里的记录,把原来开着的开机自启开回去、挪走的文件放回去。"
+  [ -f "$STATE" ] || { say "没有维护记录($STATE),不用恢复。"; exit 1; }
+  [ "$YES" = 1 ] || say "恢复:按 /etc/nexwar/maint/ 里的记录恢复原来的开机自启和文件。"
   confirm || { say "没动手。"; exit 1; }
   start_log
   while read -r u st; do
@@ -317,7 +315,7 @@ do_undo() {
   done
   rm -f "$STATE"
   systemctl try-restart chrony >/dev/null 2>&1 || true
-  say "== 撤回做完(厂家服务的自启没再关)。整机重启以后我们的服务按原来的样子起来。"
+  say "== 恢复做完。整机断电重启一次。"
 }
 
 exec 3>&1  # 抓包那几句走这里,别的输出在 --yes / --check 时都不上屏
