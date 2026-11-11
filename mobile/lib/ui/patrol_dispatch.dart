@@ -92,9 +92,30 @@ class _PatrolSheetState extends State<_PatrolSheet> {
   /// 被叫停了（手机 App 测试 M13）：派之前就说，不等点了才被拒。
   Map? _held;
 
+  /// 易用性第 6 轮 A6-03：画在别的地图版本上的路线 → 画在哪一版（派不了，灰掉写明）。
+  final Map<String, String> _otherMap = <String, String>{};
+  String _loaded = '';
+
   Future<void> _load() async {
-    unawaited(widget.api.robot(widget.robotId).then((v) {
+    unawaited(widget.api.robot(widget.robotId).then((v) async {
       if (mounted && v['held'] is Map) setState(() => _held = v['held'] as Map);
+      final caps = v['capabilities'];
+      final tasks = caps is Map ? caps['tasks'] : null;
+      final p = tasks is Map ? tasks['patrol'] : null;
+      if (p is! Map || p['map_id'] is! String || p['map_version'] is! String) return;
+      final lib = await widget.api.routes();
+      final other = <String, String>{};
+      for (final r in (lib['routes'] as List? ?? const []).whereType<Map>()) {
+        final v2 = '${r['map_version'] ?? ''}';
+        if (v2.isEmpty) continue;                     // 没绑版本的路线照旧能派（站点自己判）
+        if (r['map_id'] != p['map_id'] || v2 != p['map_version']) other['${r['id']}'] = v2;
+      }
+      if (!mounted) return;
+      setState(() {
+        _loaded = '${p['map_version']}';
+        _otherMap..clear()..addAll(other);
+        if (_otherMap.containsKey(_pick)) _pick = null;
+      });
     }, onError: (Object _) {}));
     try {
       final s = await widget.api.schedule();
@@ -102,7 +123,7 @@ class _PatrolSheetState extends State<_PatrolSheet> {
       if (!mounted) return;
       setState(() {
         _routes = rs;
-        _pick = rs.length == 1 ? rs.first : null;
+        _pick = rs.length == 1 && !_otherMap.containsKey(rs.first) ? rs.first : null;
       });
       for (final r in rs) {
         unawaited(widget.api.patrolPlan(widget.robotId, r).then((p) {
@@ -219,12 +240,22 @@ class _PatrolSheetState extends State<_PatrolSheet> {
                     child: NwCard(
                       key: _PatrolSheet.routeKey(r),
                       tone: _pick == r ? NwTone.info : NwTone.neutral,
-                      onTap: () => setState(() => _pick = r),
+                      onTap: _otherMap.containsKey(r) ? null : () => setState(() => _pick = r),
                       child: Row(children: [
                         Icon(_pick == r ? Icons.radio_button_checked_rounded : Icons.radio_button_off_rounded,
                             color: _pick == r ? c.primary : c.textSecondary),
                         const SizedBox(width: Nw.s8),
-                        Expanded(child: Text(r, style: NwText.bodyLarge.copyWith(color: c.text))),
+                        Expanded(
+                            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                          Text(r,
+                              style: NwText.bodyLarge
+                                  .copyWith(color: _otherMap.containsKey(r) ? c.textSecondary : c.text)),
+                          if (_otherMap.containsKey(r))
+                            Text(
+                                tr('Drawn on map v${_otherMap[r]}; ${widget.robotId} is using v$_loaded',
+                                    '画在 v${_otherMap[r]} 上，${widget.robotId} 用的是 v$_loaded'),
+                                style: NwText.bodySmall.copyWith(color: c.textSecondary)),
+                        ])),
                         Text(_plans[r]?['estimate_s'] is num ? minutesText(_plans[r]!['estimate_s'] as num) : '…',
                             style: NwText.bodySmall.copyWith(color: c.textSecondary)),
                       ]),
