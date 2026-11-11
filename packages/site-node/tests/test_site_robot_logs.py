@@ -247,6 +247,7 @@ def test_11_11_W6_03补_机器人那边这段时间没日志_写明原因():
     for empty in ("", "-- No entries --\n", "  "):
         t = robot_live_log("A", "nexwar_agent", empty, 3)
         assert "No entries" not in t and "A" in t and "nexwar_agent" in t and "3 小时" in t
+        assert "robots/A/logs/" in t and "{" not in t, "复核:少了 f 前缀,写成字面的 {robot}"
     assert robot_live_log("A", "nexwar_agent", "x 1\n", 3) == "x 1\n"
 
 
