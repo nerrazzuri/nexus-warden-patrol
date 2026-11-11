@@ -1,0 +1,23 @@
+# Windows 上的停用程序(deploy/windows/):PowerShell 5.1 能解析、自检能跑。只是提示,不是必过项。
+name: windows-tools
+on:
+  push:
+    paths: ["deploy/windows/**", "deploy/disable.sh", ".github/workflows/windows-tools.yml"]
+  pull_request:
+    paths: ["deploy/windows/**", "deploy/disable.sh", ".github/workflows/windows-tools.yml"]
+  workflow_dispatch:
+jobs:
+  disable-kit:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: 解析 + 自检(Windows PowerShell 5.1)
+        shell: powershell
+        run: |
+          Copy-Item deploy/disable.sh deploy/windows/disable.sh
+          $errs = $null
+          [System.Management.Automation.Language.Parser]::ParseFile("$PWD\deploy\windows\disable-robot.ps1", [ref]$null, [ref]$errs) | Out-Null
+          if ($errs.Count) { $errs | ForEach-Object { Write-Host $_ }; exit 1 }
+          powershell -NoProfile -ExecutionPolicy Bypass -File deploy/windows/disable-robot.ps1 -SelfTest
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          Get-Command ssh.exe | Format-List Source, Version
