@@ -22,3 +22,5 @@ deploy/nexwar_agent_start text eol=lf
 *.so.*   binary
 *.a      binary
 *.pdf    binary
+deploy/windows/*.cmd text eol=crlf
+deploy/windows/*.ps1 text eol=crlf
