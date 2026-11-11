@@ -230,7 +230,10 @@ def build_apk(repo: Path, build_name: str, build_number: int) -> Path:
     apk = repo / APK
     apk.unlink(missing_ok=True)                    # 上一次编出来的(可能是调试签名)不许冒充
     cmd = ["flutter", "build", "apk", "--release", "-Pnexwar.requireReleaseKey=true",
-           "--build-name", build_name, "--build-number", str(build_number)]
+           "--build-name", build_name, "--build-number", str(build_number),
+           # 易用性第 6 轮 A6-01:App 代码里显示、上报的版本号和构建号也用这一次的(原来写死 build 9)
+           f"--dart-define=NEXWAR_APP_VERSION={build_name}",
+           f"--dart-define=NEXWAR_APP_BUILD={build_number}"]
     if subprocess.run(cmd, cwd=repo / "mobile").returncode != 0 or not apk.is_file():
         raise ReleaseFail("安卓包没编出来(看上面 flutter 的输出)")
     return apk
