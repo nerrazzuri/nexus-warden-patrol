@@ -1,7 +1,7 @@
 ﻿# 停用机器人上我们的软件(用户 11-11:客户改用竞品平台,我们的东西「可以不删,但是不能启动」)。
 # 现场工程师在 Windows 电脑上双击 disable-robot.cmd:连上机器人的 Wi-Fi 就行,不用自己登录机器人。
 # 它把同一个文件夹里的 disable.sh 送到机器人的 Orin 上用 sudo 跑;看到 password: 就输入机器人的
-# 登录密码(厂家默认密码),一共会问 2~3 次。用的是 Windows 10/11 自带的 ssh,不用装别的。
+# 登录密码(厂家默认密码),一共会问 3~5 次。跑完把检查报告拷到桌面,工程师发回给我们。用的是 Windows 10/11 自带的 ssh,不用装别的。
 param([switch]$SelfTest, [string]$Orin = '192.168.168.100', [string]$Gateway = '192.168.234.1',
       [string]$User = 'robot')
 
@@ -23,6 +23,30 @@ function Test-Port([string]$h) {
   $c = New-Object Net.Sockets.TcpClient
   try { $ar = $c.BeginConnect($h, 22, $null, $null); return ($ar.AsyncWaitHandle.WaitOne(3000) -and $c.Connected) }
   catch { return $false } finally { $c.Close() }
+}
+
+function Join-Args($a) { ($a | ForEach-Object { if ($_ -match '\s') { '"' + $_ + '"' } else { $_ } }) -join ' ' }
+
+# 把机器人上的检查报告(/tmp/nexwar-disable-report.txt,不用 sudo)拷到桌面,让工程师发回来。
+# 机器人那头先 base64,这头再还原:中间只有 ASCII,不怕 Windows 改编码。
+function Save-Report {
+  $desk = [Environment]::GetFolderPath('Desktop'); if (-not $desk) { $desk = $here }
+  $what = @{ '--yes' = '停用'; '--check' = '检查'; '--undo --yes' = '撤回' }[$mode]
+  $out = Join-Path $desk ("nexwar-$what-报告-" + (Get-Date -Format 'yyyyMMdd-HHmmss') + '.txt')
+  Write-Host '把机器人上的检查报告拷到这台电脑的桌面(会再问一次密码)…'
+  $tmp = [IO.Path]::GetTempFileName()
+  $argv = $opts + $via + @("$User@$Orin", 'base64 -w0 /tmp/nexwar-disable-report.txt')
+  $p = Start-Process -FilePath $ssh.Source -ArgumentList (Join-Args $argv) -NoNewWindow -Wait -PassThru `
+         -RedirectStandardOutput $tmp
+  try {
+    $b64 = ([IO.File]::ReadAllText($tmp)).Trim()
+    if ($p.ExitCode -ne 0 -or -not $b64) { throw 'empty' }
+    [IO.File]::WriteAllBytes($out, [Convert]::FromBase64String($b64))
+    Write-Host ">> 报告存到了桌面: $out" -ForegroundColor Green
+    Write-Host '>> 请把这个文件发回给我们(微信、邮件都行)。' -ForegroundColor Green
+  } catch {
+    Write-Host '!! 报告没拷下来。把这一屏拍照发回来。' -ForegroundColor Red
+  } finally { Remove-Item $tmp -ErrorAction SilentlyContinue }
 }
 
 if (-not (Test-Path $sh)) { Fail "同一个文件夹里没有 disable.sh。整个压缩包解压到一个文件夹里再双击。" }
@@ -75,6 +99,8 @@ Write-Host '看到 password: 就输入机器人的登录密码(输的时候屏�
 Write-Host ''
 & $ssh.Source -t @opts @via "$User@$Orin" (Remote-Command $mode)
 $rc = $LASTEXITCODE
+Write-Host ''
+if ($rc -ne 255) { Save-Report }
 Write-Host ''
 if ($rc -eq 0) {
   if ($mode -eq '--yes') { Write-Host '>> 停用做完了。现在把机器人整机断电重启;开机 3 分钟后再双击本程序,选 2 检查。' -ForegroundColor Green }
