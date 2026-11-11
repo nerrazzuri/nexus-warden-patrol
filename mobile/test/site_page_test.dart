@@ -449,8 +449,10 @@ class FakeApi implements SiteApi {
     (standby['points'] as List).removeWhere((p) => (p as Map)['name'] == name);
     return standby;
   }
+  /// 排程那份视图（A6-03 测试改 missions）。
+  Map<String, dynamic>? scheduleBody;
   @override
-  Future<Map<String, dynamic>> schedule() async => siteFixture('site_schedule');
+  Future<Map<String, dynamic>> schedule() async => scheduleBody ?? siteFixture('site_schedule');
   @override
   Future<List<Map<String, dynamic>>> incidents() async =>
       (siteFixture('site_incidents')['incidents'] as List).cast<Map<String, dynamic>>();
@@ -1192,6 +1194,29 @@ void main() {
     // W53：派巡逻是底部弹框（估时、撞日程排队）
     await t.tap(find.byKey(const Key('btn-patrol')));
     await t.pumpAndSettle();
+    await t.tap(find.byKey(patrolRouteKey('loop')));
+    await t.pumpAndSettle();
+    await t.tap(find.byKey(patrolSendKey));
+    await t.pumpAndSettle();
+    expect(api.calls, contains('patrol A loop'));
+  });
+
+  // 易用性第 6 轮 A6-03：派巡逻的列表里有 v11 的路线，A 用的是 v7 —— 选了才被拒
+  testWidgets('A6-03 画在别的地图版本上的路线点不了，写明画在哪一版', (t) async {
+    final api = FakeApi('guard', robotView: busyView())
+      ..routesBody = <String, dynamic>{...FakeApi('guard').routesBody, 'routes': <dynamic>[
+        <String, dynamic>{'id': 'loop', 'map_id': 'estate-1', 'map_version': '7'},
+        <String, dynamic>{'id': 'demo-loop', 'map_id': 'estate-1', 'map_version': '11'}]};
+    api.scheduleBody = <String, dynamic>{...siteFixture('site_schedule'), 'missions': <String>['loop', 'demo-loop']};
+    await openRobot(t, api);
+    await t.tap(find.byKey(const Key('btn-patrol')));
+    await t.pumpAndSettle();
+    expect(find.textContaining('v11'), findsOneWidget);
+    await t.tap(find.byKey(patrolRouteKey('demo-loop')), warnIfMissed: false);
+    await t.pumpAndSettle();
+    await t.tap(find.byKey(patrolSendKey), warnIfMissed: false);
+    await t.pumpAndSettle();
+    expect(api.calls.where((c) => c.startsWith('patrol A ')), isEmpty, reason: '别的版本的路线选不上');
     await t.tap(find.byKey(patrolRouteKey('loop')));
     await t.pumpAndSettle();
     await t.tap(find.byKey(patrolSendKey));
