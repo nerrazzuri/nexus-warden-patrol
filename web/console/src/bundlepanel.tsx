@@ -5,6 +5,7 @@ import { useEffect, useState } from "preact/hooks";
 import { api } from "./api";
 import { alertHeadline } from "./alertinfo";
 import { hm, md, nameOf } from "./data";
+import { Confirm } from "./dialogs";
 import { t } from "./i18n";
 import type { Alert } from "./model";
 
@@ -122,6 +123,18 @@ export interface Problem { code: string; at_ms: number; by: string; note: string
 export function ProblemList() {
   const [list, setList] = useState<Problem[] | null>(null);
   const [q, setQ] = useState("");
+  const [del, setDel] = useState<Problem | null>(null);    // 用户 11-11:问题单要能删(先确认)
+  const [err, setErr] = useState("");
+  async function remove(p: Problem) {
+    setDel(null);
+    setErr("");
+    try {
+      await api("POST", `/api/problem-reports/${p.code}/delete`, {});
+      setList((l) => (l ?? []).filter((x) => x.code !== p.code));
+    } catch (e) {
+      setErr(String((e as Error).message ?? e));
+    }
+  }
   useEffect(() => {
     api<{ reports: Problem[] }>("GET", "/api/problem-reports").then((d) => setList(d.reports ?? [])).catch(() => setList(null));
   }, []);
@@ -143,10 +156,14 @@ export function ProblemList() {
               <span class="muted small">{toLocalInput(p.at_ms).replace("T", " ")} · {p.robot ? nameOf(p.robot) + " · " : ""}{p.by}{p.device ? " · " + p.device : ""}</span>
               {p.note && <span>{p.note}</span>}
               <a class="btn push" href={`/api/problem-reports/${p.code}/bundle`} download={`nexwar_${p.code}.tar.gz`}>{t("supportBundle")}</a>
+              <button type="button" class="btn" onClick={() => setDel(p)}>{t("remove")}</button>
             </li>
           ))}
         </ul>
       )}
+      {err && <p class="small warn">{err}</p>}
+      {del && <Confirm text={t("problemsDelAsk", { code: del.code })} yes={t("problemsDelYes")} danger
+        onNo={() => setDel(null)} onYes={() => void remove(del)} />}
     </section>
   );
 }
