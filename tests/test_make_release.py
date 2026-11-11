@@ -1,11 +1,11 @@
 """正式发行脚本(RC0-3,决策 54):条件不齐一个字节都不写;签出来的包验得过;调试签名的安卓包不认。"""
 from __future__ import annotations
 
-import types
 import importlib.util
 import json
 import subprocess
 import sys
+import types
 from pathlib import Path
 
 import pytest
