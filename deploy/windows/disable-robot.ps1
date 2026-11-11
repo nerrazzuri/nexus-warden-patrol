@@ -27,22 +27,22 @@ function Test-Port([string]$h) {
 
 function Join-Args($a) { ($a | ForEach-Object { if ($_ -match '\s') { '"' + $_ + '"' } else { $_ } }) -join ' ' }
 
-# 把机器人上的检查报告(/tmp/nexwar-disable-report.txt,不用 sudo)拷到桌面,让工程师发回来。
+# 把机器人上打好的报告包(/tmp/nexwar-disable-report.tar.gz,不用 sudo)拷到桌面,让工程师发回来。
 # 机器人那头先 base64,这头再还原:中间只有 ASCII,不怕 Windows 改编码。
 function Save-Report {
   $desk = [Environment]::GetFolderPath('Desktop'); if (-not $desk) { $desk = $here }
   $what = @{ '--yes' = '停用'; '--check' = '检查'; '--undo --yes' = '撤回' }[$mode]
-  $out = Join-Path $desk ("nexwar-$what-报告-" + (Get-Date -Format 'yyyyMMdd-HHmmss') + '.txt')
-  Write-Host '把机器人上的检查报告拷到这台电脑的桌面(会再问一次密码)…'
+  $out = Join-Path $desk ("nexwar-$what-报告-" + (Get-Date -Format 'yyyyMMdd-HHmmss') + '.tar.gz')
+  Write-Host '把机器人上的报告包拷到这台电脑的桌面(会再问一次密码)…'
   $tmp = [IO.Path]::GetTempFileName()
-  $argv = $opts + $via + @("$User@$Orin", 'base64 -w0 /tmp/nexwar-disable-report.txt')
+  $argv = $opts + $via + @("$User@$Orin", 'base64 -w0 /tmp/nexwar-disable-report.tar.gz')
   $p = Start-Process -FilePath $ssh.Source -ArgumentList (Join-Args $argv) -NoNewWindow -Wait -PassThru `
          -RedirectStandardOutput $tmp
   try {
     $b64 = ([IO.File]::ReadAllText($tmp)).Trim()
     if ($p.ExitCode -ne 0 -or -not $b64) { throw 'empty' }
     [IO.File]::WriteAllBytes($out, [Convert]::FromBase64String($b64))
-    Write-Host ">> 报告存到了桌面: $out" -ForegroundColor Green
+    Write-Host ">> 报告包存到了桌面: $out" -ForegroundColor Green
     Write-Host '>> 请把这个文件发回给我们(微信、邮件都行)。' -ForegroundColor Green
   } catch {
     Write-Host '!! 报告没拷下来。把这一屏拍照发回来。' -ForegroundColor Red
