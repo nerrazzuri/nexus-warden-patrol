@@ -180,6 +180,10 @@
     "en": "Spotlight failed",
     "zh": "探照灯故障"
   },
+  "deter_failed": {
+    "en": "Announcement not played",
+    "zh": "喊话没放出来"
+  },
   "payload_amp": {
     "en": "Amplifier failed",
     "zh": "功放故障"
@@ -359,6 +363,14 @@
   "guard_prep": {
     "en": "Charge before arming",
     "zh": "布防前先补能"
+  },
+  "payload_sos": {
+    "en": "Help button pressed on site",
+    "zh": "现场有人按了求助按钮"
+  },
+  "payload_estop": {
+    "en": "Payload e-stop pressed",
+    "zh": "上装急停按钮被按下"
   },
   "preflight_refused": {
     "en": "Pre-departure check failed, robot did not leave",
