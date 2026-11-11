@@ -41,8 +41,8 @@ String refusalHint(String code, SiteSession? s) => switch (code) {
               '换一条画在这台机器人当前地图上的路线，或在「地图」页给它下发对应的版本。')
           : tr('Ask an administrator to send the correct map to this robot.', '请管理员为此机器人下发正确的地图。'),
       // A6-02：未就绪按原因说（原来一律「还在启动、充电或站起来」）
-      'not_standing' => tr('Open remote control and choose Stand up in the posture menu, then dispatch again.',
-          '进遥控，在姿态菜单里点「站起」，再派一次。'),
+      // A7-01：蹲着时站点不让开遥控 —— 去机器人页点「站起」
+      'not_standing' => tr('On the robot page, tap Stand up, then dispatch again.', '在机器人页点「站起」，再派一次。'),
       'estop' => tr('Release the e-stop on the robot, then dispatch again.', '松开机器人上的急停，再派一次。'),
       'no_control' => tr('Put the handheld remote down / hand control back to the site, then dispatch again.',
           '放下手柄，把控制权交回站点，再派一次。'),

@@ -1167,6 +1167,36 @@ void main() {
     expect(busy.calls, ['home A abort']);
   });
 
+  // 易用性第 7 轮 A7-01（用户 11-11 定）：蹲着、趴着时站点不让开遥控，保安在 App 里没法让它站起来
+  testWidgets('A7-01 没站起来时机器人页有「站起」：先确认再发；站着、急停按着、经理都没有', (t) async {
+    Map<String, dynamic> view({required bool motion, bool estopClear = true}) {
+      final out = jsonDecode(jsonEncode(siteFixture('site_robot'))) as Map<String, dynamic>;
+      ((out['capabilities'] as Map)['tasks'] as Map)['posture'] = {'modes': ['stand', 'lie', 'crawl']};
+      final st = out['status'] as Map;
+      st['task'] = null;
+      st['ready'] = {'control': true, 'estop_clear': estopClear, 'loc_ok': true, 'motion': motion};
+      return out;
+    }
+    final api = FakeApi('guard', robotView: view(motion: false));
+    await openRobot(t, api);
+    expect(find.byKey(standUpKey), findsOneWidget);
+    expect(find.textContaining('没站起来'), findsWidgets);
+    await t.ensureVisible(find.byKey(standUpKey));
+    await t.tap(find.byKey(standUpKey));
+    await t.pumpAndSettle();
+    expect(api.calls.where((c) => c.startsWith('posture')), isEmpty, reason: '先确认');
+    await t.tap(find.byKey(standUpConfirmKey));
+    await t.pumpAndSettle();
+    expect(api.calls, contains('posture A stand'));
+    for (final other in [FakeApi('guard', robotView: view(motion: true)),
+                         FakeApi('guard', robotView: view(motion: false, estopClear: false)),
+                         FakeApi('owner', robotView: view(motion: false))]) {
+      await t.pumpWidget(Container());
+      await openRobot(t, other);
+      expect(find.byKey(standUpKey), findsNothing);
+    }
+  });
+
   testWidgets('用户 11-08：机器人页没有单独的「姿态…」，遥控那格写「遥控 · 姿态」；经理没有', (t) async {
     Map<String, dynamic> withPosture(Map<String, dynamic> v) {
       final out = jsonDecode(jsonEncode(v)) as Map<String, dynamic>;
