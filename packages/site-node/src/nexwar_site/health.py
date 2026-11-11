@@ -472,7 +472,8 @@ def robot_live_log(robot: str, unit: str, text: str, hours: int) -> str:
     if text.strip() and text.strip() != "-- No entries --":
         return text
     return (f"(机器人 {robot} 上的 {unit} 最近 {hours} 小时没有系统服务日志:服务没按系统服务"
-            f"运行(比如演示、仿真),或这段时间没有输出。已传到站点的那部分见 robots/{robot}/logs/)\n")
+            "运行(比如演示、仿真),或这段时间没有输出。"
+            f"已传到站点的那部分见 robots/{robot}/logs/)\n")
 
 
 def _no_log_note(ldir: Path, name: str) -> str:
