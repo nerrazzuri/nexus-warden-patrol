@@ -116,7 +116,8 @@ def test_撤回_按记录开回原来开着的_对时片段放回(tmp_path):
     assert "systemctl enable nexwar_agent.service" in calls
     assert "systemctl enable nexwar_sidecar.service" in calls
     assert "systemctl enable nexwar_persons.service" not in calls, "原来没开机自启的不开"
-    assert not any("robot_slam" in c for c in calls), "厂家服务撤回时不再关掉"
+    assert not any("robot_slam" in c and c.split()[1] in ("disable", "stop", "mask") for c in calls), \
+        "厂家服务撤回时不再关掉"
     assert (r / "etc/chrony/conf.d/nexwar.conf").exists()
     assert not (r / "etc/nexwar/disabled/state.txt").exists()
 
@@ -181,6 +182,22 @@ def test_crontab里我们的行注释掉_撤回放回(tmp_path):
     assert (cron / "robot").read_text().startswith("@reboot /home/robot/d1max-motion")
 
 
+def test_每次都留检查报告_给工程师发回来(tmp_path):
+    r = _robot(tmp_path)
+    p = _run(r, "--check")
+    rep = r / "var/log/nexwar-disable-report.txt"
+    assert "检查报告" in p.stdout and rep.exists()
+    t = rep.read_text()
+    assert "没通过" in t and "停用记录: 没有" in t
+    assert "nexwar_agent.service" in t and "enabled" in t
+    _run(r, "--yes")
+    t = rep.read_text()
+    assert "停用之后整机重启过: 否" in t, "刚停用、还没重启"
+    assert "原来: nexwar_agent.service enabled" in t and "停用做完" in t
+    tmp_copy = r / "tmp/nexwar-disable-report.txt"
+    assert tmp_copy.exists() and tmp_copy.stat().st_mode & 0o004, "不用 sudo 也读得到,好拷回 Windows"
+
+
 def test_脚本够小_能塞进Windows一条命令():
     """Windows 那头把脚本 base64 后当一条 ssh 命令发过去,Windows 一条命令最长 32767 个字符。"""
     assert len(SCRIPT.read_bytes()) * 4 / 3 < 30000
@@ -195,7 +212,8 @@ def test_Windows双击程序_编码对_找得到脚本():
     assert ps1.startswith(b"\xef\xbb\xbf"), "disable-robot.ps1 要存成带 BOM 的 UTF-8"
     text = ps1.decode("utf-8-sig")
     for want in ("disable.sh", "192.168.168.100", "192.168.234.1", "XG2WIFI_C40221", "-ne 13",
-                 "sudo bash /tmp/nexwar-disable.sh $mode", "--check", "--undo --yes"):
+                 "sudo bash /tmp/nexwar-disable.sh $mode", "--check", "--undo --yes",
+                 "base64 -w0 /tmp/nexwar-disable-report.txt", "GetFolderPath('Desktop')"):
         assert want in text, want
     cmd = (WIN / "disable-robot.cmd").read_bytes()
     cmd.decode("ascii")
