@@ -103,7 +103,7 @@ def test_停用_交还控制权_厂家开回去_我们的都停掉_对时片段�
     assert (r / "var/lib/nexwar/vendor-autostart-off.json.restored").exists()
     state = (r / "etc/nexwar/maint/state.txt").read_text()
     assert "nexwar_agent.service 自启" in state and "nexwar_persons.service 不自启" in state
-    logs = list((r / "var/log").glob("nexwar-maint-2*.log"))
+    logs = list((r / "var/log").glob("nexwar-maint-[0-9]*.log"))
     assert logs and "整机断电重启" in logs[0].read_text(), "过程留在日志里"
     assert [ln for ln in p.stdout.splitlines() if ln] == [
         "开始抓包…", "抓包成功,抓包完成: /tmp/nexwar-maint-report.tar.gz"], "屏幕上只有抓包"
@@ -206,6 +206,19 @@ def test_每次都留检查报告_给工程师发回来(tmp_path):
         assert f"nexwar-maint-report/{want}" in names, (want, names)
     assert any(n.endswith(".log") for n in names), "停用日志也在包里"
     assert not (r / "tmp/nexwar-maint-report").exists(), "打完包把临时目录收掉"
+
+
+def test_机器人钟是1970年_日志也进报告包(tmp_path):
+    """C40221 开机没对上时,钟在 1970 年:日志名 nexwar-maint-1970…,报告包里也要有。"""
+    r = _robot(tmp_path)
+    (r / "var/log").mkdir(parents=True, exist_ok=True)
+    (r / "var/log/nexwar-maint-19700101-080530.log").write_text("== 维护开始\n")
+    _run(r, "--check")
+    with tarfile.open(r / "tmp/nexwar-maint-report.tar.gz") as tf:
+        names = tf.getnames()
+    assert "nexwar-maint-report/nexwar-maint-19700101-080530.log" in names, names
+    t = (r / "var/log/nexwar-maint-report.txt").read_text()
+    assert "nexwar-maint-19700101-080530.log" in t
 
 
 def test_脚本够小_能塞进Windows一条命令():

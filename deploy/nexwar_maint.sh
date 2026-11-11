@@ -185,7 +185,7 @@ write_report() {
     [ -f "$STATE" ] && sed 's/^/  原来: /' "$STATE"
     [ -f "$MOVED" ] && sed 's/^/  挪走: /' "$MOVED"
     say ""
-    f=$(ls -t "$R"/var/log/nexwar-maint-2*.log 2>/dev/null | head -n 1)
+    f=$(ls -t "$R"/var/log/nexwar-maint-[0-9]*.log 2>/dev/null | head -n 1)
     if [ -n "$f" ]; then say "== 最近一次维护/恢复的日志 ${f#"$R"}"; tail -n 60 "$f"; say ""; fi
     say "== 我们的单元这次开机以来的日志(每个最多 15 行)"
     for u in $(our_units); do
@@ -198,7 +198,7 @@ write_report() {
   local d="$R/tmp/nexwar-maint-report" tgz="$R/tmp/nexwar-maint-report.tar.gz"
   rm -rf "$d"; mkdir -p "$d/journal"
   cp "$REPORT" "$d/report.txt"
-  cp "$R"/var/log/nexwar-maint-2*.log "$d/" 2>/dev/null
+  cp "$R"/var/log/nexwar-maint-[0-9]*.log "$d/" 2>/dev/null
   [ -d "$DIS" ] && cp -r "$DIS" "$d/records" 2>/dev/null
   systemctl list-unit-files --no-legend 2>/dev/null | sed -E 's/ disabled( |$)/ 不自启\1/; s/ enabled( |$)/ 自启\1/g' \
     > "$d/unit-files.txt"
