@@ -200,6 +200,32 @@ class _SiteRobotPageState extends State<SiteRobotPage> {
     return task is Map && '${task['task_id'] ?? ''}'.isNotEmpty;
   }
 
+  /// 易用性第 7 轮 A7-01（用户 11-11）：蹲着、趴着时站点不让开遥控，姿态菜单进不去 —— 机器人页直接给「站起」。
+  /// 站点报了没站起来（``ready.motion`` 是 false）、急停没按着、没任务、机器人会站起，能遥控的人才有。
+  static bool needsStand(Map<String, dynamic>? v) {
+    final st = v?['status'];
+    final ready = st is Map ? st['ready'] : null;
+    return ready is Map && ready['motion'] == false && ready['estop_clear'] != false && !_busy(v) &&
+        robotPostures(v).contains('stand');
+  }
+
+  Future<void> _standUp() async {
+    final what = tr('Stand up', '站起');
+    final yes = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+              title: Text(what),
+              content: Text(tr('${widget.robotId} will stand up where it is. Make sure no one is right next to it.',
+                  '${widget.robotId} 会原地站起来。先确认它旁边没有人。')),
+              actions: [
+                TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(tr('Cancel', '取消'))),
+                FilledButton(key: standUpConfirmKey, onPressed: () => Navigator.pop(ctx, true), child: Text(what)),
+              ],
+            ));
+    if (yes != true || !mounted) return;
+    await _do(() => widget.api.posture(widget.robotId, 'stand'), what);
+  }
+
   Future<void> _abortHome() async {
     final what = tr('Stop and return home', '中止并回原点');
     final yes = await showDialog<bool>(
@@ -693,6 +719,22 @@ class _SiteRobotPageState extends State<SiteRobotPage> {
                 ],
               ]),
             )),
+      if ((s?.canTeleop ?? false) && needsStand(v))
+        Padding(
+            padding: const EdgeInsets.only(top: Nw.s8),
+            child: NwCard(
+              key: const Key('robot-not-standing'),
+              tone: NwTone.warning,
+              child: Row(children: [
+                Expanded(
+                    child: Text(
+                        tr('${widget.robotId} is not standing (crouching or lying). It can\'t patrol or be remote-controlled until it stands up.',
+                            '${widget.robotId} 没站起来（蹲着或趴着），站起来之前不能派巡逻，也不能遥控。'),
+                        style: NwText.bodySmall.copyWith(color: c.text))),
+                const SizedBox(width: Nw.s8),
+                NwButton(buttonKey: standUpKey, label: tr('Stand up', '站起'), onPressed: _standUp),
+              ]),
+            )),
       const SizedBox(height: Nw.s16),
     ];
     // 画面经站点来（W00c5b）：谁都能看（经理也是），站点那头有人看才让狗推。
@@ -893,6 +935,10 @@ class _Devices extends StatelessWidget {
 }
 
 /// 姿态的叫法（POC）。
+/// A7-01：机器人页的「站起」和它的确认。
+const standUpKey = Key('btn-stand-up');
+const standUpConfirmKey = Key('stand-up-confirm');
+
 String postureLabel(String mode) => switch (mode) {
       'stand' => tr('Stand up', '站起'),
       'lie' => tr('Lie down', '趴下'),

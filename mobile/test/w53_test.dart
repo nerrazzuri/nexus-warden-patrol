@@ -124,6 +124,7 @@ void main() {
       final guard = FakeApi('guard').session;
       final admin = FakeApi('admin').session;
       expect(refusalHint('not_standing', guard), contains('「站起」'));
+      expect(refusalHint('not_standing', guard), isNot(contains('遥控')), reason: 'A7-01：蹲着时开不了遥控');
       expect(refusalHint('estop', guard), contains('急停'));
       expect(refusalHint('no_control', guard), contains('控制权'));
       expect(refusalHint('map_mismatch', guard), contains('请管理员'));
