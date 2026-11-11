@@ -9,12 +9,16 @@ import { t } from "./i18n";
 import type { Alert } from "./model";
 
 export type Scene = "time" | "robot" | "run" | "alert";
-interface Run { id: number; robot_id: string; mission: string; stamp: string; first_ms: number; by?: string; points?: number | null }
+interface Run { id: number; robot_id: string; mission: string; stamp: string; first_ms: number; by?: string; points?: number | null; kind?: string }
+
+/** 路线名写人话:临时路线(``temp-…``)、去一个点(「去看看」等,任务名是 ``task-…``);别的照原名。 */
+export function routeName(mission: string): string {
+  return mission.startsWith("temp-") ? t("bpTempRoute") : /^task-[0-9a-f]+$/i.test(mission) ? t("bpGoto") : mission;
+}
 
 /** 易用性第 6 轮 W6-08:「11-09 01:18 · A · 临时路线 10 个点 · demo 派的」(原来只有 temp-1794… 编号)。 */
 export function runLabel(r: Run): string {
-  const route = r.mission.startsWith("temp-")
-    ? (r.points ? t("bpTempRouteN", { n: r.points }) : t("bpTempRoute")) : r.mission;
+  const route = r.mission.startsWith("temp-") && r.points ? t("bpTempRouteN", { n: r.points }) : routeName(r.mission);
   const by = !r.by ? "" : r.by.startsWith("site:") ? t("bpBySchedule") : t("bpBy", { n: r.by });
   return [`${md(r.first_ms)} ${hm(r.first_ms)}`, nameOf(r.robot_id), route, by].filter(Boolean).join(" · ");
 }

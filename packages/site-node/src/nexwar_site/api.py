@@ -3586,8 +3586,9 @@ class _Handler(TlsHandlerMixin):
                     out[f"robots/{rid}/live/diag.json"] = dumps(data)
                 else:
                     # 导出这一刻机器人上的(还没传上来的那段在这里)
-                    out[f"robots/{rid}/live/{p['unit']}.log"] = str(
-                        (data or {}).get("text", "")).encode()
+                    from nexwar_site.health import robot_live_log
+                    out[f"robots/{rid}/live/{p['unit']}.log"] = robot_live_log(
+                        rid, p["unit"], str((data or {}).get("text", "")), p["hours"]).encode()
             if errs:
                 out[f"robots/{rid}/live/errors.txt"] = ("\n".join(errs) + "\n").encode()
         return out
@@ -3637,14 +3638,14 @@ class _Handler(TlsHandlerMixin):
                 if isinstance(minutes, bool) or not isinstance(minutes, int) \
                         or not 0 <= minutes <= 120:
                     raise HttpError(400, "minutes 要 0–120 的整数(0 = 关)")
-                until = self._now() + minutes * 60_000 if minutes else 0
+                until = self.site._now() + minutes * 60_000 if minutes else 0
                 set_until(flag, until)
                 self._audit_detail = {"minutes": minutes}
                 log.warning("站点详细日志 %s actor=%s", f"开 {minutes} 分钟" if minutes else "关",
                             self._actor)
                 return self._send_json(200, {"until_ms": until})
             u = until_ms(flag)
-            return self._send_json(200, {"until_ms": u if u > self._now() else 0})
+            return self._send_json(200, {"until_ms": u if u > self.site._now() else 0})
         if what == "push-test":
             if method != "POST":
                 raise HttpError(405, "只支持 POST")
