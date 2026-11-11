@@ -9,6 +9,7 @@ from __future__ import annotations
 import os
 import stat
 import subprocess
+import tarfile
 import threading
 from pathlib import Path
 
@@ -194,8 +195,14 @@ def test_每次都留检查报告_给工程师发回来(tmp_path):
     t = rep.read_text()
     assert "停用之后整机重启过: 否" in t, "刚停用、还没重启"
     assert "原来: nexwar_agent.service enabled" in t and "停用做完" in t
-    tmp_copy = r / "tmp/nexwar-disable-report.txt"
-    assert tmp_copy.exists() and tmp_copy.stat().st_mode & 0o004, "不用 sudo 也读得到"
+    tgz = r / "tmp/nexwar-disable-report.tar.gz"
+    assert tgz.exists() and tgz.stat().st_mode & 0o004, "不用 sudo 也读得到"
+    with tarfile.open(tgz) as tf:
+        names = tf.getnames()
+    for want in ("report.txt", "disabled/state.txt", "ps.txt", "unit-files.txt"):
+        assert f"nexwar-disable-report/{want}" in names, (want, names)
+    assert any(n.endswith(".log") for n in names), "停用日志也在包里"
+    assert not (r / "tmp/nexwar-disable-report").exists(), "打完包把临时目录收掉"
 
 
 def test_脚本够小_能塞进Windows一条命令():
@@ -213,7 +220,7 @@ def test_Windows双击程序_编码对_找得到脚本():
     text = ps1.decode("utf-8-sig")
     for want in ("disable.sh", "192.168.168.100", "192.168.234.1", "XG2WIFI_C40221", "-ne 13",
                  "sudo bash /tmp/nexwar-disable.sh $mode", "--check", "--undo --yes",
-                 "base64 -w0 /tmp/nexwar-disable-report.txt", "GetFolderPath('Desktop')"):
+                 "base64 -w0 /tmp/nexwar-disable-report.tar.gz", "GetFolderPath('Desktop')"):
         assert want in text, want
     cmd = (WIN / "disable-robot.cmd").read_bytes()
     cmd.decode("ascii")

@@ -192,8 +192,22 @@ write_report() {
       journalctl -b -u "$u" -n 15 --no-pager -o short-iso 2>/dev/null | cut -c1-200
     done
   } > "$REPORT" 2>&1
-  cp "$REPORT" "$R/tmp/nexwar-disable-report.txt" 2>/dev/null && chmod 644 "$R/tmp/nexwar-disable-report.txt"
-  say "检查报告: ${REPORT#"$R"}"
+  # 打成 tar.gz 发回给我们:报告 + 停用日志 + 停用记录 + 每个单元更长的日志 + 单元、进程快照。
+  # 放 /tmp 下、谁都能读,Windows 那头不用 sudo 就能拷走。不带 /etc/nexwar/env(里面有站点地址等现场值)。
+  local d="$R/tmp/nexwar-disable-report" tgz="$R/tmp/nexwar-disable-report.tar.gz"
+  rm -rf "$d"; mkdir -p "$d/journal"
+  cp "$REPORT" "$d/report.txt"
+  cp "$R"/var/log/nexwar-disable-2*.log "$d/" 2>/dev/null
+  [ -d "$DIS" ] && cp -r "$DIS" "$d/disabled" 2>/dev/null
+  systemctl list-unit-files --no-legend 2>/dev/null > "$d/unit-files.txt"
+  systemctl list-units --all --no-legend 2>/dev/null > "$d/units.txt"
+  ps -eo pid,ppid,user,lstart,args 2>/dev/null > "$d/ps.txt"
+  for u in $(our_units); do
+    journalctl -b -u "$u" -n 300 --no-pager -o short-iso 2>/dev/null > "$d/journal/$u.txt"
+  done
+  tar czf "$tgz" -C "$R/tmp" nexwar-disable-report 2>/dev/null && chmod 644 "$tgz"
+  rm -rf "$d"
+  say "检查报告: ${REPORT#"$R"}(打包: ${tgz#"$R"})"
 }
 
 # ------------------------------------------------------------------ 列计划
