@@ -838,4 +838,37 @@ void main() {
     await t.sendKeyUpEvent(LogicalKeyboardKey.keyW);
     await t.pumpWidget(Container());
   });
+
+  // 易用性第 6 轮 A6-02：遥控里蹲下以后退出，机器人一直蹲着、没有任何提示，之后派巡逻被拒
+  testWidgets('A6-02 这一页里让它蹲下了，退出时问要不要先站起来；站着就直接退', (t) async {
+    final api = FakeApi('guard');
+    await t.pumpWidget(MaterialApp(home: Builder(builder: (c) => TextButton(
+        onPressed: () => Navigator.push(c, MaterialPageRoute<void>(
+            builder: (_) => SiteTeleopPage(api: api, robotId: 'A'))),
+        child: const Text('go')))));
+    await t.tap(find.text('go'));
+    await t.pumpAndSettle();
+    api.link!.ctl.add(<String, dynamic>{'kind': 'granted', 'lease_epoch': 1, 'max_vx': 0.5, 'max_wz': 0.75});
+    await t.pump();
+    await t.pump();
+    await t.tap(find.byKey(SiteTeleopPage.postureMenuKey));
+    await t.pumpAndSettle();
+    await t.tap(find.byKey(SiteTeleopPage.postureKey('crawl')));
+    await t.pumpAndSettle();
+    await t.binding.handlePopRoute();
+    await t.pumpAndSettle();
+    expect(find.byType(SiteTeleopPage), findsOneWidget, reason: '先问');
+    expect(find.textContaining('蹲着'), findsWidgets);
+    await t.tap(find.byKey(SiteTeleopPage.standExitKey));
+    await t.pumpAndSettle();
+    expect(api.calls, contains('posture A stand'));
+    expect(find.byType(SiteTeleopPage), findsNothing);
+    // 再进来，什么都没换：直接退
+    await t.tap(find.text('go'));
+    await t.pumpAndSettle();
+    await t.binding.handlePopRoute();
+    await t.pumpAndSettle();
+    expect(find.byType(SiteTeleopPage), findsNothing);
+    await t.pumpWidget(Container());
+  });
 }

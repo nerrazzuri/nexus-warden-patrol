@@ -119,6 +119,18 @@ void main() {
       expect(refusalHint('held', api.session), contains('保安或管理员'));
     });
 
+    // 易用性第 6 轮 A6-02 / A6-03：未就绪按原因说；对管理员不说「请找管理员」
+    test('A6-02/03 被拒提示：蹲着说站起来、急停说松开；管理员地图不对说去地图页下发', () {
+      final guard = FakeApi('guard').session;
+      final admin = FakeApi('admin').session;
+      expect(refusalHint('not_standing', guard), contains('「站起」'));
+      expect(refusalHint('estop', guard), contains('急停'));
+      expect(refusalHint('no_control', guard), contains('控制权'));
+      expect(refusalHint('map_mismatch', guard), contains('请管理员'));
+      expect(refusalHint('map_mismatch', admin), isNot(contains('请管理员')));
+      expect(refusalHint('map_mismatch', admin), contains('地图'));
+    });
+
     testWidgets('手机 App 测试 M09：开始、结束巡逻这类日常记录不算「其他未处理」；顶上写 P1 几条、在线几台', (t) async {
       Map<String, dynamic> row(String kind, String level) => <String, dynamic>{
             'key': 'A/$kind#1', 'level': level, 'kind': kind, 'robot': 'A', 'title': 't', 'detail': '',

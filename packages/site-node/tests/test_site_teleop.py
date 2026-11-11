@@ -394,7 +394,7 @@ def test_急停按着不给租约(站点):
     s.loop.call(lambda: s.dog.emergency_stop(True))
     _等(lambda: not s.disp.clients["A"].status.ready.estop_clear, timeout=5)
     ph = 手机(s, tok)
-    assert ph.status == 409 and "estop_clear" in ph.error, (ph.status, ph.error)
+    assert ph.status == 409 and "急停按着" in ph.error, (ph.status, ph.error)
 
 
 def test_halt接到了狗的停车上(站点):
@@ -484,4 +484,22 @@ def test_遥控中钟差变成不知道_续租被拒_这一趟收掉_狗按租�
     assert _等(lambda: _停了(s), timeout=5)
     _等(lambda: s.db.query("SELECT 1 FROM events WHERE robot_id='A' AND kind='task_failed' "
                            "AND data LIKE '%lease_expired%'"), timeout=10)
+    ph.close()
+
+
+def test_11_11_A6_02_手机放开紧跟着关连接_记成本人放开不记断线(站点):
+    """liang-d5 第 6 轮 A6-02:App 退出时先发「放开」再关连接,两帧一起到;站点在收后面攒着的帧时
+    撞上关闭,前面那帧「放开」没处理,记成了 disconnected。"""
+    s = 站点
+    tok = _登(s)
+    _新鲜(s, tok)
+    ph = 手机(s, tok)
+    assert ph.status == 101, ph.error
+    ph.wait_kind("granted")
+    ph.sock.sendall(client_mask_frame(json.dumps({"kind": "release"}).encode())
+                    + client_mask_frame(b"", opcode=8))
+    _等(lambda: s.db.query("SELECT 1 FROM teleop_leases WHERE robot_id='A' "
+                           "AND end_reason IS NOT NULL"), timeout=10)
+    rows = s.db.query("SELECT end_reason FROM teleop_leases WHERE robot_id='A'")
+    assert [r["end_reason"] for r in rows] == ["released"]
     ph.close()

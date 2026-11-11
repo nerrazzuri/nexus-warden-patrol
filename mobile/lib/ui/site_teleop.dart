@@ -171,6 +171,9 @@ class SiteTeleopPage extends StatefulWidget {
   static const Key inSightKey = Key('teleop-insight');
   static Key postureKey(String mode) => Key('teleop-posture-$mode');
 
+  /// 易用性第 6 轮 A6-02：蹲着、趴着退出时那个框里的「站起来再退出」。
+  static const Key standExitKey = Key('teleop-stand-exit');
+
   @override
   State<SiteTeleopPage> createState() => _SiteTeleopPageState();
 }
@@ -212,6 +215,10 @@ class _SiteTeleopPageState extends State<SiteTeleopPage> with WidgetsBindingObse
   /// 这台机器人能换哪几种姿势（遥控页里的站起、趴下、蹲下；POC 11-05）。
   List<String> _postures = const [];
   bool _posturing = false;
+
+  /// 这一页里最后换成的姿势（没换过当站着）；不是站着的，退出时先问（A6-02）。
+  String _posed = 'stand';
+  bool _leaving = false;
 
   /// 站点限速为什么低（下雨、雷暴 0.3 m/s）：滑条最大值跟着站点给的，这里说原因。
   String? _capWhy;
@@ -585,9 +592,9 @@ class _SiteTeleopPageState extends State<SiteTeleopPage> with WidgetsBindingObse
 
   /// 遥控页里换姿势（用户 11-05）：确认才发；推着杆不能按（机器人那头也拒）。
   /// 用户 11-08：姿态只在遥控页里换；菜单顶上写着「先确认旁边没人」，在菜单里点哪个就是确认（轻量确认）。
-  Future<void> _posture(String mode) async {
+  Future<bool> _posture(String mode) async {
     final what = postureLabel(mode);
-    if (!mounted) return;
+    if (!mounted) return false;
     setState(() => _posturing = true);
     String? bad;
     try {
@@ -599,13 +606,42 @@ class _SiteTeleopPageState extends State<SiteTeleopPage> with WidgetsBindingObse
     } on SiteError catch (e) {
       bad = refusalText(e);
     }
-    if (!mounted) return;
-    setState(() => _posturing = false);
+    if (!mounted) return false;
+    setState(() {
+      _posturing = false;
+      if (bad == null) _posed = mode;
+    });
     // 手机 App 测试 M27：成了也说一声，现在是什么姿势（以前只写「accepted」）
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text(bad != null
             ? tr('$what failed: $bad', '$what 失败：$bad')
             : tr('$what: sent. Watch the video to see the robot change posture.', '$what：已发出，看画面确认机器人换好了。'))));
+    return bad == null;
+  }
+
+  /// 易用性第 6 轮 A6-02：蹲着、趴着的机器人派不了巡逻 —— 退出前问一句，能一键站起来再走。
+  Future<void> _askLeave() async {
+    final how = _posed == 'lie' ? tr('lying down', '趴着') : tr('crouching', '蹲着');
+    final pick = await showDialog<String>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+              title: Text(tr('The robot is still $how', '机器人还$how')),
+              content: Text(tr('Patrols cannot be sent while it is $how. Make it stand up before you leave?',
+                  '$how的时候派不了巡逻。退出前让它站起来吗？')),
+              actions: [
+                TextButton(onPressed: () => Navigator.pop(ctx), child: Text(tr('Cancel', '取消'))),
+                TextButton(onPressed: () => Navigator.pop(ctx, 'leave'), child: Text(tr('Leave as is', '就这样退出'))),
+                FilledButton(
+                    key: SiteTeleopPage.standExitKey,
+                    onPressed: () => Navigator.pop(ctx, 'stand'),
+                    child: Text(tr('Stand up and leave', '站起来再退出'))),
+              ],
+            ));
+    if (!mounted || pick == null) return;
+    if (pick == 'stand' && !await _posture('stand')) return;
+    if (!mounted) return;
+    setState(() => _leaving = true);
+    Navigator.of(context).pop();
   }
 
   /// 键盘（W15）：按着的方向键 → 杆值。只认按下、松开（系统连发不算）；松开就是零。
@@ -736,8 +772,13 @@ class _SiteTeleopPageState extends State<SiteTeleopPage> with WidgetsBindingObse
     final lateral = _maxVy > 0;
     // 手机 App 测试 M30：一退出就转回竖屏（以前等页面关完才转）
     return PopScope(
+      canPop: _posed == 'stand' || _leaving,
       onPopInvokedWithResult: (didPop, _) {
-        if (didPop) unawaited(unlockOrientation());
+        if (didPop) {
+          unawaited(unlockOrientation());
+        } else {
+          unawaited(_askLeave());
+        }
       },
       child: Focus(
       autofocus: true,

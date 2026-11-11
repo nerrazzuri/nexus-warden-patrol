@@ -3861,12 +3861,20 @@ class _Handler(TlsHandlerMixin):
                 if msg is not None:
                     # 连接上攒着的一并收下(4G 憋了一下):都过判帧,只转最新的那一帧。
                     batch, rx = [msg], time.monotonic()
+                    closed = False
                     while len(batch) < 64:
-                        more = ws.recv(timeout_s=0)
+                        try:
+                            more = ws.recv(timeout_s=0)
+                        except WsClosed:
+                            # A6-02:「放开」跟关连接一起到 —— 先把收到的处理了(记成本人放开)再收尾
+                            closed = True
+                            break
                         if more is None:
                             break
                         batch.append(more)
                     desk.on_messages(session, batch, rx=rx)
+                    if closed:
+                        break
                 if time.monotonic() - checked >= self.site.sse_recheck_s:
                     checked = time.monotonic()
                     who = self.site.accounts.check(token)

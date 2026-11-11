@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from nexwar_site.refusals import CODES, extra_for, reason_code
+from nexwar_site.refusals import CODES, extra_for, not_ready_text, reason_code
 
 SRC = (Path(__file__).resolve().parents[1] / "src" / "nexwar_site")
 
@@ -14,7 +14,10 @@ SRC = (Path(__file__).resolve().parents[1] / "src" / "nexwar_site")
     "supervision": "A 要人现场监护:先在手机上打开「我在现场监护」",
     "teleop": "A 正在遥控",
     "offline": "A 不在线",
+    "estop": "A 未就绪:急停按着",
     "not_localized": "A 未就绪: localized",
+    "no_control": "A 未就绪:控制权不在站点(手柄或别的程序在控制)",
+    "not_standing": "A 未就绪:没站起来(蹲着、趴着,或运动模式没就绪)",
     "not_ready": "A 未就绪: standing",
     "map_mismatch": "任务用的地图 'm1',A 加载的是 'm2'",
     "obstacles": "A 的避障不可用:感知已断开",
@@ -48,3 +51,16 @@ def test_认不出就不带():
     # 认不出原因:不带原因代号,只带通用的「派单被拒」错误码(日志设计 第 4 条)
     assert extra_for("随便什么") == {"err": "0x0213", "err_name": "dispatch.refused"}
     assert {"reason_code", "reason_en", "err"} <= set(extra_for("A 不在线"))
+
+
+def test_11_11_A6_02_未就绪写人话_按哪一样分代号():
+    """liang-d5 第 6 轮 A6-02:遥控里蹲下以后派单,站点回「A 未就绪: motion」,
+    App 却说「还在启动、充电或站起来」—— 没说是因为蹲着。"""
+    t = not_ready_text("A", ["motion"])
+    assert "motion" not in t and "没站起来" in t
+    assert reason_code(t)[0] == "not_standing"
+    assert "stand" in reason_code(t)[1].lower()
+    assert reason_code(not_ready_text("A", ["estop_clear", "motion"]))[0] == "estop", "急停最要紧"
+    assert reason_code(not_ready_text("A", ["control"]))[0] == "no_control"
+    assert reason_code(not_ready_text("A", ["loc_ok"]))[0] == "not_localized"
+    assert extra_for(t)["err"] == "0x0207"
