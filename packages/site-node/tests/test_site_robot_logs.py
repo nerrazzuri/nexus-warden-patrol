@@ -106,7 +106,7 @@ def test_按告警导出_时间段取告警前后_轨迹合上机器人日志里
 
 def test_场景找不到_时间段太长_都拒(tmp_path):
     db = SiteDB(tmp_path / "site.db")
-    with pytest.raises(ValueError, match="没有这条告警"):
+    with pytest.raises(ValueError, match="没有这条报警"):
         scene_window(db, now_ms=10**12, alert="nope")
     with pytest.raises(ValueError, match="没有这个任务"):
         scene_window(db, now_ms=10**12, task="nope")
@@ -125,7 +125,8 @@ def test_按一趟巡检取时间段_从机器人上开始的时刻往前10分�
     rid = db.query("SELECT id FROM runs")[0]["id"]
     win = scene_window(db, now_ms=t0 + 6 * 86_400_000, run=rid)
     assert win["robot"] == "B" and win["since_ms"] == t0 - 600_000
-    assert win["ref"] == f"run:{rid}" and win["scene"].startswith("巡逻 "), win
+    # 补测 W6-08:操作记录里写成和导出列表一样的「机器人 · 路线」,不写「第 25 趟巡逻」
+    assert win["ref"] == f"run:{rid}:B:夜巡" and win["scene"].startswith("巡逻 "), win
     assert win["until_ms"] == t0 + 86_400_000 + 600_000, "晚传上来的最多按一天算"
     db.close()
 
@@ -214,4 +215,52 @@ def test_11_11_W6_08_巡逻列表带谁派的_几个点(tmp_path):
     assert (out[0]["by"], out[0]["points"]) == ("demo", 10), "同名临时路线按机器人分开"
     assert (out[1]["by"], out[1]["points"]) == ("site:schedule", 4)
     assert "by" not in out[2], "找不到派单的:不编"
+    db.close()
+
+
+def test_11_11_W6_08补_去看看那趟也写谁派的_点数不算自动加的回起点(tmp_path):
+    """补测:「去看看」那一趟在导出列表里是 task-60a9ef78b711;点了 3 个点的临时路线写「4 个点」
+    (末尾自动加的「走回起点」也算进去了)。"""
+    from nexwar_site.evidence import run_origins
+    db = SiteDB(tmp_path / "site.db")
+    t0 = 1_794_158_305_644
+    pts = [{"name": "P1"}, {"name": "P2"}, {"name": "P3"}, {"name": "return-1"},
+           {"name": "return-2"}, {"name": "start"}]
+    db.query("INSERT INTO commands(command_id, task_id, robot_id, kind, payload, issued_by, "
+             "issued_at) VALUES (?,?,?,?,?,?,?)",
+             ("c1", "adhoc-1", "A", "patrol",
+              json.dumps({"mission": {"mission": "temp-9", "waypoints": pts}}), "demo", t0 - 500))
+    db.query("INSERT INTO commands(command_id, task_id, robot_id, kind, payload, issued_by, "
+             "issued_at) VALUES (?,?,?,?,?,?,?)",
+             ("c2", "task-60a9ef78b711", "B", "goto", json.dumps({"pose": {}}), "gina", t0 - 500))
+    out = run_origins(db, [{"id": 1, "robot_id": "A", "mission": "temp-9", "first_ms": t0},
+                           {"id": 2, "robot_id": "B", "mission": "task-60a9ef78b711",
+                            "first_ms": t0}])
+    assert out[0]["points"] == 3
+    assert (out[1]["by"], out[1]["kind"]) == ("gina", "goto")
+    db.close()
+
+
+def test_11_11_W6_03补_机器人那边这段时间没日志_写明原因():
+    """补测:robots/<id>/live/*.log 只有一行 -- No entries --,没写为什么。"""
+    from nexwar_site.health import robot_live_log
+    for empty in ("", "-- No entries --\n", "  "):
+        t = robot_live_log("A", "nexwar_agent", empty, 3)
+        assert "No entries" not in t and "A" in t and "nexwar_agent" in t and "3 小时" in t
+    assert robot_live_log("A", "nexwar_agent", "x 1\n", 3) == "x 1\n"
+
+
+def test_11_11_W6_03补_诊断包说明用报警_巡逻_报警标题跟列表一样(tmp_path):
+    """补测:README 里的报警标题和列表里不一样,还在用「告警 / 巡检」。"""
+    db = SiteDB(tmp_path / "site.db")
+    db.query("INSERT INTO alerts(key, kind, level, robot, title, detail, first_ms, last_ms, count, "
+             "acked_by, resolved_by, escalated, context) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+             ("A/disk_80#1", "disk_80", "P2", "A", "机器人的发件箱所在的盘即将写满", "",
+              1_790_000_000_000, 1_790_000_000_000, 1, "", "", 0, "{}"))
+    win = scene_window(db, now_ms=1_790_000_100_000, alert="A/disk_80#1")
+    assert "机器人存储空间不足" in win["scene"] and "发件箱" not in win["scene"], win["scene"]
+    from nexwar_site.health import _readme
+    text = _readme({}, since="a", until="b", scene=win["scene"], robot="A", task=None, by="x",
+                   now="n")
+    assert "告警" not in text and "巡检" not in text, text
     db.close()

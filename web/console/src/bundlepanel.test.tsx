@@ -3,7 +3,7 @@
 import { cleanup, fireEvent, render, waitFor } from "@testing-library/preact";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { setFetch } from "./api";
-import { BundlePanel } from "./bundlepanel";
+import { BundlePanel, runLabel } from "./bundlepanel";
 import { lang } from "./i18n";
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
@@ -47,5 +47,16 @@ describe("W6-08 诊断导出的列表", () => {
     expect(text).toContain("某条报警");
     expect(text).toContain("某一趟巡逻");
     expect(text).not.toMatch(/告警|巡检/);
+  });
+});
+
+// 补测(da0a60ea):「去看看」那一趟在列表里是 task-60a9ef78b711
+describe("补测 W6-08 去看看那一趟", () => {
+  it("写「去一个点」和谁派的,不露任务号", () => {
+    lang.value = "zh";
+    const s = runLabel({ id: 2, robot_id: "B", mission: "task-60a9ef78b711", first_ms: 1794307980000, by: "gina", kind: "goto" } as never);
+    expect(s).toContain("去一个点");
+    expect(s).toContain("gina 派的");
+    expect(s).not.toContain("60a9ef78");
   });
 });

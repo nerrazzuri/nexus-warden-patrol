@@ -447,6 +447,34 @@ def install_recent_log() -> RecentLog:
 BUNDLE_UNITS = ("nexwar_site", "nexwar_mosquitto", "wg-quick@nexwar", "chrony", "nexwar_ops")
 
 
+_ALERT_ZH: dict[str, str] | None = None
+
+
+def alert_title_zh(kind: str, title: str) -> str:
+    """报警标题按种类(和网页、App 列表里一样,词条在 ``i18n/alerts.json``);「点位没到」、预检没过、
+    不认得的种类照站点原话(网页也是这样)。"""
+    global _ALERT_ZH
+    if _ALERT_ZH is None:
+        try:
+            cat = json.loads((Path(__file__).parent / "i18n" / "alerts.json").read_text(
+                encoding="utf-8"))
+            _ALERT_ZH = {k: v["zh"] for k, v in cat.items()
+                         if not k.startswith("$") and isinstance(v, dict) and "zh" in v}
+        except (OSError, ValueError):
+            _ALERT_ZH = {}
+    if kind in ("stuck", "preflight_refused"):
+        return title
+    return _ALERT_ZH.get(kind, title)
+
+
+def robot_live_log(robot: str, unit: str, text: str, hours: int) -> str:
+    """诊断包里机器人那边现取的一份系统服务日志;这段时间没有行就写明为什么(补测 W6-03)。"""
+    if text.strip() and text.strip() != "-- No entries --":
+        return text
+    return (f"(机器人 {robot} 上的 {unit} 最近 {hours} 小时没有系统服务日志:服务没按系统服务"
+            "运行(比如演示、仿真),或这段时间没有输出。已传到站点的那部分见 robots/{robot}/logs/)\n")
+
+
 def _no_log_note(ldir: Path, name: str) -> str:
     """诊断包里这一份日志在所选时段没有行:写明日志目录里最早一条是什么时候(再早的没留下)。"""
     from nexwar_contract import logsetup
@@ -714,7 +742,7 @@ def _readme(files: dict[str, bytes], *, since: str, until: str, scene: str, robo
              "- `site/`:站点日志(`site.log`)、访问记录(`access.log`)、版本、配置、体检、指标",
              "- `robots/<编号>/`:机器人传上来的各服务日志(`logs/`)、轨迹(`track.csv`,"
              "`source=site` 是站点在线时记的,`source=robot` 是机器人日志里补的)、当时的诊断快照",
-             "- `records/`:操作记录(含系统事件)、告警、日程每一轮、命令和回执、事件",
+             "- `records/`:操作记录(含系统事件)、报警、日程每一轮、命令和回执、事件",
              "- `clients/`:App、网页的错误记录",
              "- `host/`:消息服务、VPN、对时等主机服务的日志", "",
              "## 这段时间出现过的错误码", ""]
@@ -750,19 +778,19 @@ def scene_window(db: Any, *, now_ms: int, since_ms: int | None = None,
         rows = db.query("SELECT robot, first_ms, last_ms, resolved_ms, kind, title FROM alerts "
                         "WHERE key=?", (alert,))
         if not rows:
-            raise ValueError(f"没有这条告警:{alert}")
+            raise ValueError(f"没有这条报警:{alert}")
         a = rows[0]
         own = str(a["robot"])
         robot = robot or (own if not own.startswith(("site", "cctv:")) else None)
         end = max(a["last_ms"] or 0, a["resolved_ms"] or 0) or a["first_ms"]
         since_ms = since_ms if since_ms is not None else a["first_ms"] - 3 * SCENE_BEFORE_MS
         until_ms = until_ms if until_ms is not None else end + SCENE_AFTER_MS
-        scene, ref = f"报警 {alert}({a['title']})", f"alert:{alert}"
+        scene, ref = f"报警 {alert}({alert_title_zh(a['kind'], a['title'])})", f"alert:{alert}"
     elif run is not None:
         rows = db.query("SELECT robot_id, mission, stamp, first_ms, last_ms FROM runs WHERE id=?",
                         (run,))
         if not rows:
-            raise ValueError(f"没有这一趟巡检:{run}")
+            raise ValueError(f"没有这一趟巡逻:{run}")
         r = rows[0]
         t0 = _stamp_ms(r["stamp"]) or r["first_ms"]
         # 断网时这一趟晚传上来,last_ms 是收齐的时刻:最多按开始后一天算
@@ -770,7 +798,9 @@ def scene_window(db: Any, *, now_ms: int, since_ms: int | None = None,
         robot = robot or r["robot_id"]
         since_ms = since_ms if since_ms is not None else t0 - SCENE_BEFORE_MS
         until_ms = until_ms if until_ms is not None else end + SCENE_AFTER_MS
-        scene, ref = f"巡逻 {r['mission']} {r['stamp']}", f"run:{run}"
+        # 补测 W6-08:引用带上机器人、任务名,网页写成和导出列表一样的「机器人 · 路线」
+        scene = f"巡逻 {r['mission']} {r['stamp']}"
+        ref = f"run:{run}:{r['robot_id']}:{r['mission']}"
     elif task:
         rows = db.query("SELECT robot_id, MIN(issued_at) AS t0, MAX(issued_at) AS t1 "
                         "FROM commands WHERE task_id=?", (task,))
