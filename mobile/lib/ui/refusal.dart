@@ -58,7 +58,7 @@ Future<void> showRefusal(BuildContext context, SiteApi api, SiteError e,
   final zones = code == 'zones_unconfirmed' ? zonesMapOf(e.message) : null;
   String? label;
   Future<void> Function(BuildContext)? act;
-  void open(BuildContext c, Widget page) =>
+  Future<void> open(BuildContext c, Widget page) =>
       Navigator.push(c, MaterialPageRoute<void>(builder: (_) => page));
   if (code == 'held' && robotId != null && (s?.canDispatch ?? false)) {
     label = tr('Resume', '恢复');
@@ -81,7 +81,8 @@ Future<void> showRefusal(BuildContext context, SiteApi api, SiteError e,
     label = tr('Open robot', '去机器人页');
     act = (c) async => open(c, SiteRobotPage(api: api, robotId: robotId));
   }
-  await showDialog<void>(
+  // A7-04：按了「去机器人页」这类按钮，等那一页回来才返回 —— 调用方据此重看状态、换掉旧提示
+  final go = await showDialog<bool>(
     context: context,
     builder: (c) => AlertDialog(
       key: refusalDialogKey,
@@ -92,12 +93,10 @@ Future<void> showRefusal(BuildContext context, SiteApi api, SiteError e,
         if (label != null && act != null)
           FilledButton(
               key: refusalActionKey,
-              onPressed: () async {
-                Navigator.pop(c);
-                await act!(context);
-              },
+              onPressed: () => Navigator.pop(c, true),
               child: Text(label)),
       ],
     ),
   );
+  if (go == true && act != null && context.mounted) await act(context);
 }

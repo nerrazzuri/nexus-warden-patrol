@@ -3,6 +3,7 @@
 // 点图的位置：测试用图自己的渲染框 `localToGlobal`（转角、缩放都算进去）算出屏上哪儿，点下去，
 // 存下去 / 发出去的地图坐标要跟想点的那一处对上 —— 图不转、转 23° 都测。
 import 'dart:async';
+import 'dart:convert';
 import 'dart:math' as math;
 
 import 'package:nexwar_patrol/l10n.dart';
@@ -11,11 +12,14 @@ import 'package:nexwar_patrol/ui/map_view.dart';
 import 'package:nexwar_patrol/ui/pose_marker.dart';
 import 'package:nexwar_patrol/ui/site_maps.dart';
 import 'package:nexwar_patrol/ui/site_pose_pick.dart';
+import 'package:nexwar_patrol/ui/refusal.dart' show refusalActionKey;
+import 'package:nexwar_patrol/ui/site_robot.dart' show SiteRobotPage;
 import 'package:nexwar_patrol/ui/site_routes.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'site_page_test.dart' show FakeApi;
+import 'support/fake_site.dart' show siteFixture;
 import 'support/fake_map.dart' show Rot23Api, rot23Preview;
 
 Map<String, dynamic> _route(String id, List<List<Object>> pts, {int rev = 3}) => <String, dynamic>{
@@ -126,6 +130,39 @@ void main() {
       expect(api.calls.where((x) => x.startsWith('saveRoute')), isEmpty, reason: '不存进路线库');
       expect(got, isNotNull, reason: '派出去就退回派单的地方，带一句结果');
     });
+  });
+
+  // liang-d5 A7-04：临时路线被拒「没站起来」→ 去机器人页站起来 → 回来，那句「没站起来」还挂着
+  testWidgets('A7-04 没站起来被拒、去机器人页站起来回来：旧提示换成「已经站起来了，再点一次」', (t) async {
+    Map<String, dynamic> view({required bool motion}) {
+      final out = jsonDecode(jsonEncode(siteFixture('site_robot'))) as Map<String, dynamic>;
+      final st = out['status'] as Map;
+      st['task'] = null;
+      st['ready'] = {'control': true, 'estop_clear': true, 'loc_ok': true, 'motion': motion};
+      return out;
+    }
+    final api = FakeApi('guard', robotView: view(motion: false))
+      ..patrolError = const SiteError(409, 'A 未就绪：没站起来（蹲着、趴着，或运动模式没就绪）',
+          body: <String, dynamic>{'reason_code': 'not_standing'});
+    await t.binding.setSurfaceSize(const Size(900, 700));
+    addTearDown(() => t.binding.setSurfaceSize(null));
+    await t.pumpWidget(MaterialApp(
+        home: SiteRouteEditorPage(api: api, mapId: 'estate-1', version: '8', newName: '', tempFor: 'A')));
+    await t.pumpAndSettle();
+    final geo = MapGeo.fromPreview(await api.mapPreview('estate-1', '8'));
+    final c = _Canvas(t, SiteRouteEditorPage.canvasKey, geo);
+    await _tapMap(t, c, -4.25, 2.5);
+    await t.tap(find.byKey(SiteRouteEditorPage.tempSendKey));
+    await t.pumpAndSettle();
+    await t.tap(find.byKey(refusalActionKey));                 // 「去机器人页」
+    await t.pumpAndSettle();
+    expect(find.byType(SiteRobotPage), findsOneWidget);
+    api.view = view(motion: true);                            // 在机器人页站起来了
+    Navigator.of(t.element(find.byType(SiteRobotPage))).pop();
+    await t.pumpAndSettle();
+    expect(find.textContaining(refusalText(api.patrolError!)), findsNothing, reason: '旧提示不留着');
+    expect(find.textContaining('A is standing now'), findsOneWidget);
+    await t.pumpWidget(Container());
   });
 
   group('路线编辑页：点图加点，存下去的是点的那一处的地图坐标', () {

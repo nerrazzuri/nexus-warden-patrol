@@ -135,10 +135,14 @@ class _SiteRobotPageState extends State<SiteRobotPage> {
   }
 
   Timer? _poll;
+  final List<Timer> _after = <Timer>[];
 
   @override
   void dispose() {
     _poll?.cancel();
+    for (final x in _after) {
+      x.cancel();
+    }
     unawaited(_events?.cancel());
     super.dispose();
   }
@@ -561,6 +565,10 @@ class _SiteRobotPageState extends State<SiteRobotPage> {
     Future<void> go(Widget Function() page) async {
       await Navigator.push(context, MaterialPageRoute<void>(builder: (_) => page()));
       if (mounted) await _reload();
+      // A7-04：遥控刚放下，站点要一两秒才收掉「遥控 · 进行中」—— 回来后 1 秒、2.5 秒各再看一次
+      for (final ms in const [1000, 2500]) {
+        _after.add(Timer(Duration(milliseconds: ms), () => unawaited(_reload(quiet: true))));
+      }
     }
     // 宽的（横屏手机、平板、桌面）：画面在左、操作在右，不用翻就按得到；竖屏手机一栏往下排。
     final wide = MediaQuery.sizeOf(context).width >= 700;

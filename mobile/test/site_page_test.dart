@@ -10,10 +10,12 @@ import 'package:nexwar_patrol/net/push.dart';
 import 'package:nexwar_patrol/net/site_client.dart';
 import 'package:nexwar_patrol/store/site_store.dart';
 import 'package:nexwar_patrol/ui/app_settings.dart';
+import 'package:nexwar_patrol/ui/nw/nw_widgets.dart' show NwStatusPill;
 import 'package:nexwar_patrol/ui/patrol_dispatch.dart';
 import 'package:nexwar_patrol/ui/refusal.dart';
 import 'package:nexwar_patrol/ui/site_page.dart';
 import 'package:nexwar_patrol/ui/site_tabs.dart' show MeTab, leaveConfirmKey;
+import 'package:nexwar_patrol/ui/site_teleop.dart' show SiteTeleopPage;
 import 'package:nexwar_patrol/ui/site_video.dart';
 import 'package:nexwar_patrol/ui/widget/live_video.dart';
 import 'package:flutter/material.dart';
@@ -1226,6 +1228,33 @@ void main() {
     await t.pumpAndSettle();
     expect(find.byKey(standUpKey), findsOneWidget);
     await t.pumpWidget(Container());
+  });
+
+  testWidgets('A7-04：从遥控退回机器人页，站点一两秒后才收掉遥控 —— 机器人页一两秒内就跟上（不等 5 秒那一轮）', (t) async {
+    Map<String, dynamic> view({Map<String, dynamic>? task}) {
+      final out = jsonDecode(jsonEncode(siteFixture('site_robot'))) as Map<String, dynamic>;
+      (out['status'] as Map)['task'] = task;
+      (out['status'] as Map)['ready'] = {'control': true, 'estop_clear': true, 'loc_ok': true, 'motion': true};
+      return out;
+    }
+    final teleop = <String, dynamic>{'kind': 'teleop', 'state': 'running', 'task_id': 'teleop-1'};
+    final api = FakeApi('guard', robotView: view(task: teleop));
+    await openRobot(t, api);
+    await t.ensureVisible(find.byKey(const Key('btn-teleop')));
+    await t.tap(find.byKey(const Key('btn-teleop')));
+    await t.pump();
+    await t.pump(const Duration(milliseconds: 500));
+    Navigator.of(t.element(find.byType(SiteTeleopPage))).pop();
+    await t.pump();
+    await t.pump(const Duration(milliseconds: 300));
+    String phase() => t.widget<NwStatusPill>(find.byKey(const Key('robot-phase'))).label;
+    expect(phase(), '执行中', reason: '站点还没收掉');
+    api.view = view();                                    // 站点收掉了
+    await t.pump(const Duration(milliseconds: 1600));
+    await t.pump();
+    expect(phase(), isNot('执行中'));
+    await t.pumpWidget(Container());
+    await t.pump(const Duration(seconds: 6));
   });
 
   testWidgets('用户 11-08：机器人页没有单独的「姿态…」，遥控那格写「遥控 · 姿态」；经理没有', (t) async {
