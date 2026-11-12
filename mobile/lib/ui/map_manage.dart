@@ -264,7 +264,7 @@ class _MapManagePageState extends State<MapManagePage> {
     final version = '${v['version']}';
     final note = '${v['note'] ?? ''}';
     final q = (v['quality'] as Map?) ?? const {};
-    final verdict = '${q['verdict'] ?? 'unknown'}';
+    final verdict = verdictOf(q);
     final reasons = [for (final r in (q['reasons'] as List? ?? const [])) qualityReasonText('$r')];
     final on = [for (final r in (v['loaded_on'] as List? ?? const [])) '$r'];
     final path = q['path_m'];

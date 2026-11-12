@@ -293,9 +293,9 @@ void main() {
         ..wizard = <String, dynamic>{'step': 'build', 'robot_id': 'A', 'map_id': 'main', 'version': '20261031-1',
           'drive': 'remote', 'by': 'u', 'label': ''}
         ..wizardBuild = <String, dynamic>{'state': 'ready', 'optimizable': true, 'quality': <String, dynamic>{
-          'verdict': 'usable', 'reasons': <dynamic>[], 'path_m': 120.0, 'optimized': false}};
+          'verdict': 'usable_unlooped', 'reasons': <dynamic>[], 'path_m': 120.0, 'optimized': false}};
       await _wizard(t, api);
-      expect(find.text('地图已建成：可用'), findsOneWidget);
+      expect(find.text('地图已建成：可用'), findsOneWidget, reason: 'minor #2：新站点没回环的叫 usable_unlooped，当能用');
       expect(find.textContaining('已回到起点闭合'), findsNothing, reason: '没做回环说不上闭没闭合');
       expect(find.textContaining('重影'), findsOneWidget, reason: '告诉人什么时候该优化');
       await _tapLive(t, MapWizardPage.optimizeKey);
@@ -305,7 +305,7 @@ void main() {
 
     for (final (why, b) in [
       ('关键帧不在站点上', <String, dynamic>{'state': 'ready', 'optimizable': false, 'quality': <String, dynamic>{
-        'verdict': 'usable', 'reasons': <dynamic>[], 'path_m': 120.0, 'optimized': false}}),
+        'verdict': 'usable_unlooped', 'reasons': <dynamic>[], 'path_m': 120.0, 'optimized': false}}),
       ('做过回环', <String, dynamic>{'state': 'ready', 'quality': <String, dynamic>{
         'verdict': 'usable', 'reasons': <dynamic>[], 'path_m': 120.0, 'max_shift_m': 0.05, 'optimized': true}}),
     ]) {
@@ -491,7 +491,7 @@ void main() {
         'maps': <dynamic>[
           <String, dynamic>{'map_id': 'main', 'versions': <dynamic>[
             <String, dynamic>{'version': '20261031-2', 'note': '一楼', 'created_ms': 0, 'latest': true,
-              'loaded_on': <dynamic>['A'], 'quality': <String, dynamic>{'verdict': 'usable', 'reasons': <dynamic>[], 'path_m': 186.0}},
+              'loaded_on': <dynamic>['A'], 'quality': <String, dynamic>{'verdict': 'usable_unlooped', 'reasons': <dynamic>[], 'path_m': 186.0}},
             <String, dynamic>{'version': '20261031-1', 'note': '', 'created_ms': 0, 'latest': false,
               'loaded_on': <dynamic>[], 'quality': <String, dynamic>{'verdict': 'problem', 'reasons': <dynamic>['no_loop'], 'path_m': 42.0}},
           ]},

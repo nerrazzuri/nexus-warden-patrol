@@ -98,6 +98,13 @@ String qualityReasonText(String code) => switch (code) {
       _ => code,
     };
 
+/// 站点给的结论档：新站点没做回环的叫 `usable_unlooped`（minor #2：老手机见 `usable` 会写「已回到起点闭合」），
+/// 这里当「能用」。
+String verdictOf(Map<dynamic, dynamic> q) {
+  final v = '${q['verdict'] ?? 'unknown'}';
+  return v == 'usable_unlooped' ? 'usable' : v;
+}
+
 /// 结论三档（加「说不清」）。
 String verdictText(String v) => switch (v) {
       'usable' => tr('Usable', '能用'),
@@ -1149,12 +1156,12 @@ class _MapWizardPageState extends State<MapWizardPage> {
       ]);
     }
     final q = (b['quality'] as Map?)?.cast<String, dynamic>() ?? const <String, dynamic>{};
-    final verdict = '${q['verdict'] ?? 'unknown'}';
+    final verdict = verdictOf(q);
     final reasons = [for (final r in (q['reasons'] as List? ?? const [])) '$r'];
     final good = verdict != 'problem';
     final path = q['path_m'], shift = q['max_shift_m'];
     // 用户 11-13：回环作可选，默认不做 —— 没做过就说不上闭没闭合；漂移大了点「优化地图」
-    final optimized = q['optimized'] != false;
+    final optimized = q['optimized'] != false && q['verdict'] != 'usable_unlooped';
     final canOptimize = b['optimizable'] == true;
     return _scroll([
       Row(key: MapWizardPage.verdictKey, children: [
