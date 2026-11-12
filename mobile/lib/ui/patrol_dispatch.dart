@@ -417,6 +417,8 @@ class _PatrolSheetState extends State<_PatrolSheet> {
       'cancelled' => (tr('Cancelled', '已取消'), NwTone.neutral),
       'expired' => (tr('Expired', '已作废'), NwTone.neutral),
       'blocked' => (tr("Won't run", '不会跑'), NwTone.warning),
+      // 第 8 轮 W8-03：被日程（或更急的任务）接替不是故障
+      'handed_over' => (tr('Handed over', '被接替'), NwTone.neutral),
       _ => (state, NwTone.neutral),
     };
 
@@ -448,6 +450,18 @@ String patrolFixText(Map<String, dynamic> it, SiteSession? s) {
     if (it['map'] is Map) refusalHint('map_mismatch', s),
   ];
   return fixes.join('\n');
+}
+
+/// 第 8 轮 W8-03：被接替的那一趟 —— 跑了几圈、谁接的（站点给的 `handover`）；没有就是空。
+String patrolHandoverText(Object? h) {
+  if (h is! Map) return '';
+  final who = switch (h['by']) {
+    'schedule' => tr('schedule ${h['name']}', '日程 ${h['name']} '),
+    'teleop' => tr('remote control', '遥控'),
+    _ => tr('a more urgent task', '更急的任务'),
+  };
+  final laps = h['laps'] is num ? (h['laps'] as num).toInt() : 0;
+  return laps > 0 ? tr('Ran $laps loop(s), then $who took over', '已跑 $laps 圈，由$who接替') : tr('$who took over', '由$who接替');
 }
 
 int _skippedOf(Map<String, dynamic> it) => it['skipped'] is int ? it['skipped'] as int : 0;
@@ -487,7 +501,13 @@ class TodayPatrolList extends StatelessWidget {
       '${hhmm((it['at_ms'] as num).toInt(), offsetMin)} · ${siteKnown('${it['label']}')}${'${it['robot'] ?? ''}'.isEmpty ? '' : ' · ${it['robot']}'}',
       st,
       if (adhoc) tr('One-off patrol sent by ${it['by']}', '${it['by']} 派的临时巡逻'),
-      if (it['end_ms'] is num) tr('Ends around ${hhmm((it['end_ms'] as num).toInt(), offsetMin)}', '预计 ${hhmm((it['end_ms'] as num).toInt(), offsetMin)} 结束'),
+      if (it['state'] == 'running' && it['lap'] is Map) lapText(it['lap']),
+      if (it['handover'] is Map) patrolHandoverText(it['handover']),
+      // 第 8 轮：还没跑完的才是「预计」；跑完了的写几点结束
+      if (it['end_ms'] is num)
+        const {'running', 'queued', 'waiting', 'next', 'later'}.contains(it['state'])
+            ? tr('Ends around ${hhmm((it['end_ms'] as num).toInt(), offsetMin)}', '预计 ${hhmm((it['end_ms'] as num).toInt(), offsetMin)} 结束')
+            : tr('Ended ${hhmm((it['end_ms'] as num).toInt(), offsetMin)}', '${hhmm((it['end_ms'] as num).toInt(), offsetMin)} 结束'),
       if (reason.isNotEmpty && !(reason == 'map_mismatch' && it['map'] is Map))
         patrolReasonText(reason, '${it['robot'] ?? ''}'),
       if (it['map'] is Map) patrolMapText(it['map'], '${it['robot'] ?? ''}'),

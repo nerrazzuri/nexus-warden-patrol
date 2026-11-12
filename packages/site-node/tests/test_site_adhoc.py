@@ -574,3 +574,49 @@ def test_易用性第7轮_整页今天的巡逻_按路线的那一版比(tmp_pat
     v = today_view(db, now_ms=毫秒(20, 0), loaded=lambda rid: ("estate-1", "7"))
     assert v["items"][0]["state"] == "next"
     db.close()
+
+
+def _一直巡逻跑了(t, 圈: int, 收尾: str, at_ms: int) -> None:
+    """A 上一趟一直巡逻(两个点一圈)跑了 ``圈`` 圈,然后报 ``收尾``。"""
+    mission = {**任务定义(), "policy": {"loops": 0}}
+    with t.db.tx() as c:
+        c.execute("INSERT INTO adhoc_queue(id, robot, mission, label, by, created_ms, not_before_ms, "
+                  "estimate_s, state, task_id, started_ms) VALUES ('f1','A',?,'loop','demo',?,?,600,"
+                  "'started','adhoc-forever-f1',?)",
+                  (json.dumps(mission), 毫秒(20, 0), 毫秒(20, 0), 毫秒(20, 0)))
+        c.execute("INSERT INTO commands(command_id, task_id, robot_id, kind, payload, issued_by, issued_at) "
+                  "VALUES ('cf','adhoc-forever-f1','A','patrol',?,'demo',?)",
+                  (json.dumps({"mission": mission}), 毫秒(20, 0)))
+        for i in range(圈 * 2):
+            c.execute("INSERT INTO events(robot_id, boot_id, seq, event_id, kind, data, stamp, received_at) "
+                      "VALUES ('A','b',?,?,'patrol_waypoint',?,?,?)",
+                      (10 + i, f"w{i}", json.dumps({"task_id": "adhoc-forever-f1", "index": i % 2}),
+                       毫秒(20, 1) + i, 毫秒(20, 1) + i))
+        if 收尾:
+            c.execute("INSERT INTO events(robot_id, boot_id, seq, event_id, kind, data, stamp, received_at) "
+                      "VALUES ('A','b',999,'end',?,?,?,?)",
+                      (收尾, json.dumps({"task_id": "adhoc-forever-f1", "reason": "preempted"}), at_ms, at_ms))
+
+
+def test_第8轮_W8_03_被日程接替的一直巡逻_不算未完成_写跑了几圈和哪条日程(台):
+    t = 台
+    _一直巡逻跑了(t, 6, "task_preempted", 毫秒(22, 0) + 2_000)
+    with t.db.tx() as c:
+        c.execute("INSERT INTO schedule_runs(entry_id, scheduled_ms, outcome, robot_id, task_id, "
+                  "decided_at) VALUES ('nightly', ?, 'started', 'A', 'sched-1', ?)",
+                  (毫秒(22, 0), 毫秒(22, 0)))
+    t.now["t"] = 毫秒(22, 30)
+    it = next(x for x in today_view(t.db, now_ms=t.now["t"], adhoc=t.desk)["items"] if x["kind"] == "adhoc")
+    assert it["state"] == "handed_over", it
+    assert it["reason"] == "", "不露 preempted 这种代号"
+    assert it["handover"] == {"by": "schedule", "name": "nightly", "laps": 6}
+    assert it["forever"] is True
+
+
+def test_第8轮_A8_01_一直巡逻在跑_不给预计结束时间_带第几圈(台):
+    t = 台
+    _一直巡逻跑了(t, 2, "", 0)
+    t.now["t"] = 毫秒(20, 30)
+    it = next(x for x in today_view(t.db, now_ms=t.now["t"], adhoc=t.desk)["items"] if x["kind"] == "adhoc")
+    assert it["state"] == "running" and it["end_ms"] is None, "一直巡逻没有固定结束时间"
+    assert it["forever"] is True and it["lap"] == {"n": 3, "of": 0}

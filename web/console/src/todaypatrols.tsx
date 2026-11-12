@@ -5,6 +5,7 @@ import { missingReason, plainReason } from "./alertinfo";
 import { api } from "./api";
 import { hm } from "./data";
 import { t, type Key } from "./i18n";
+import { lapText } from "./loops";
 
 export interface TodayItem {
   at_ms: number;
@@ -21,6 +22,10 @@ export interface TodayItem {
   skipped?: number;
   /** 易用性第 7 轮:路线画在哪一版、排给的那台用的哪一版(对不上才有)。 */
   map?: { route: string; robot: string };
+  /** 第 8 轮:一直巡逻、在跑的第几圈、被谁接替(老站点没有)。 */
+  forever?: boolean;
+  lap?: { n: number; of: number };
+  handover?: { by: "schedule" | "teleop" | "task"; name: string; laps: number };
 }
 
 const ver = (v: string) => (/^\d+$/.test(v) ? `v${v}` : v);
@@ -29,8 +34,14 @@ const STATE: Record<string, [Key, string]> = {
   done: ["tdDone", "ok"], failed: ["tdFailed", "bad"], aborted: ["tdAborted", ""], running: ["tdRunning", "info"],
   waiting: ["tdWaiting", "warn"], missed: ["tdMissed", "bad"], next: ["tdNext", ""], later: ["tdLater", ""],
   queued: ["tdQueued", "warn"], cancelled: ["tdCancelled", ""], expired: ["tdExpired", ""],
-  blocked: ["tdBlocked", "warn"],
+  blocked: ["tdBlocked", "warn"], handed_over: ["tdHandedOver", ""],
 };
+
+/** 第 8 轮 W8-03:被接替的那趟 —— 跑了几圈、谁接的。 */
+function handoverText(h: NonNullable<TodayItem["handover"]>): string {
+  const who = h.by === "schedule" ? t("tdByScheduleName", { name: h.name }) : h.by === "teleop" ? t("tdByTeleop") : t("tdByTask");
+  return h.laps > 0 ? t("tdHandoverLaps", { n: h.laps, who }) : t("tdHandover", { who });
+}
 
 /** 时刻按站点的钟(站点回的 ``utc_offset_min``);老站点没有就按浏览器的(外审 W53-1 #12)。 */
 export function siteHm(ms: number, offsetMin: number | null | undefined): string {
@@ -94,6 +105,8 @@ export function TodayPatrols({ retryMs = 5_000, canFix = false }: { retryMs?: nu
                 ) : x.reason === "map_mismatch" && x.map ? null
                   : x.reason && !(x.state === "aborted" && /^(halt|stop|stopped)$/i.test(x.reason.trim())) ? <span class="muted small"> · {plainReason(x.reason)}</span>
                   : (x.state === "failed" || x.state === "missed") && <span class="muted small"> · {missingReason()}</span>}
+                {x.state === "running" && x.lap && <span class="muted small" data-lap="1"> · {lapText(x.lap)}</span>}
+                {x.state === "handed_over" && x.handover && <span class="muted small" data-handover="1"> · {handoverText(x.handover)}</span>}
                 {x.map && <span class="muted small" data-map-gap="1"> · {t("tdMapGap", { a: ver(x.map.route), id: x.robot, b: ver(x.map.robot) })}</span>}
               </span>
               <span class={`tdchip ${tone}`}>{label}</span>
