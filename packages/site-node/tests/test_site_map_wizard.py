@@ -465,3 +465,25 @@ def test_外审W75_1_3_传了一半退回机器人出图_机器人也没成_向�
     got = w.view()["build"]
     assert got["state"] == "failed" and "录包是空的" in got["reason"]
     assert got.get("where") != "site", "是机器人上没成:给重走,不给「在站点上重试」"
+
+
+def test_外审W75_3_1_看着能优化_收的那一刻关键帧刚被清掉_说不能优化_不报内部错误(站点):
+    w = _wiz(站点)
+    v = w.apply({"action": "start", "robot_id": "A", "site_type": "indoor", "drive": "remote"},
+                by="alice")
+    old = v["version"]
+    w.apply({"action": "step", "step": "walk"}, by="alice")
+    w.apply({"action": "step", "step": "build"}, by="alice")
+    put_version_main(站点, old, build={**BUILD, "loop_closure": {"ran": False}})
+    b = _假出图(None)
+    b.key = ("main", old)
+    b.optimizable = lambda r, m, ver: True
+
+    def optimize(r, m, ver, to):
+        raise ValueError("关键帧没留在站点上")                  # 清理正好删了
+    b.optimize = optimize
+    w.w.builds = b
+    with pytest.raises(WizardError) as ei:
+        w.apply({"action": "optimize"}, by="alice")
+    assert ei.value.status == 409 and ei.value.reason == "not_optimizable"
+    assert w.view()["version"] == old, "没优化成:向导还停在原来那一版"

@@ -289,9 +289,14 @@ class MapWizard:
                     or not self.builds.optimizable(r, m, v):
                 raise WizardError(409, "这一版不能优化(没建好,或者关键帧没留在站点上)",
                                   "not_optimizable")
+            to = self._alloc(m, [*st.get("tried", []), v])
+            try:
+                self.builds.optimize(r, m, v, to)
+            except ValueError as exc:                   # 外审 W75-3 #1:收的那一刻关键帧刚被清掉
+                raise WizardError(409, "这一版不能优化(没建好,或者关键帧没留在站点上)",
+                                  "not_optimizable") from exc
             st["tried"] = [*st.get("tried", []), v][-20:]
-            st["version"] = self._alloc(m, st["tried"])
-            self.builds.optimize(r, m, v, st["version"])
+            st["version"] = to
             st["step"] = "build"
             return self._save(st)
         if action == "finish":
