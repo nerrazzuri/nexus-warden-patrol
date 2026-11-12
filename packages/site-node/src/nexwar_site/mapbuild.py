@@ -23,8 +23,10 @@ import collections
 import hashlib
 import json
 import logging
+import os
 import re
 import shutil
+import signal
 import subprocess
 import threading
 import time
@@ -114,6 +116,8 @@ class SiteMapBuilder:
         #: 优化(回环)的那几趟:(地图号, 新版本) → (留着的关键帧目录, 从哪一版来)。
         self._opt: dict[tuple[str, str], tuple[Path, str]] = {}
         self._scan()
+        if hasattr(maps, "in_flight_hooks"):
+            maps.in_flight_hooks.append(self.in_flight)
         if start_thread:
             threading.Thread(target=self._loop, name="site-mapbuild", daemon=True).start()
 
@@ -160,6 +164,14 @@ class SiteMapBuilder:
         except (OSError, ValueError, KeyError, TypeError) as exc:
             raise PathRefused(f"{job[0]} 传来的 {key[0]}:{key[1]} 关键帧清单无法读取:{exc}") \
                 from exc
+        if m.get("abandoned") is True:
+            # 外审 W75-1 #4:机器人交不了(关键帧不齐),退回自己从录包建:收了一半的删掉,不出图
+            shutil.rmtree(d, ignore_errors=True)
+            with self._cv:
+                self._status.pop(key, None)
+            log.info("%s 作废了 %s:%s 的关键帧(%s):收了一半的删掉", job[0], *key,
+                     str(m.get("reason", ""))[:200])
+            return
         for name, size, _ in files:
             if not _REL.match(name) or ".." in name:
                 raise PathRefused(f"关键帧清单里的文件名不对:{name!r}")
@@ -262,6 +274,13 @@ class SiteMapBuilder:
     def _kept(self, robot_id: str, map_id: str, version: str) -> Path:
         return self.keep_root / robot_id / map_id / version
 
+    def in_flight(self, map_id: str, version: str) -> bool:
+        """这一版号被「优化地图」占着(排着、出着、失败待重试;还没登记)。"""
+        with self._cv:
+            if (map_id, version) not in self._opt:
+                return False
+        return not self._registered(map_id, version)
+
     def optimizable(self, robot_id: str, map_id: str, version: str) -> bool:
         """这一版能不能「优化地图」:站点出的、关键帧还留着、自己不是优化出来的。"""
         return (map_id, version) not in self._opt \
@@ -310,8 +329,13 @@ class SiteMapBuilder:
                 job = self._queue.popleft()
             try:
                 self._run(job)
-            except Exception:  # 一张出不成不能把后台线程弄死
+            except Exception as exc:  # 一张出不成不能把后台线程弄死
+                # 外审 W75-1 #5:盘满、开不了日志这类意外也记成失败(能重试、告诉人),不能卡在排队
                 log.exception("出图 %s:%s 出错", job[1], job[2])
+                try:
+                    self._failed(job, f"出图出错:{exc}")
+                except Exception:
+                    log.exception("出图 %s:%s 记不下失败", job[1], job[2])
 
     def _run(self, job: Job) -> None:
         robot, map_id, version = job
@@ -331,28 +355,28 @@ class SiteMapBuilder:
         with open(base / "build.log", "w", encoding="utf-8") as logf:
             try:
                 p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                                     text=True, errors="replace")
+                                     text=True, errors="replace", start_new_session=True)
             except OSError as exc:
                 return self._failed(job, f"出图命令起不来:{exc}")
-            assert p.stdout is not None
-            for line in p.stdout:
-                logf.write(line)
-                line = line.rstrip("\n")
-                if line.startswith(PROGRESS + " "):
-                    stage = line[len(PROGRESS) + 1:].strip()
-                    with self._cv:
-                        self._status[(map_id, version)].update(stage=stage,
-                                                               stage_since=self._now())
-                elif line.strip():
-                    tail.append(line)
-                if self._now() - t0 > TIMEOUT_S:
-                    p.kill()
-                    tail.append(f"出图超过 {TIMEOUT_S:.0f} 秒,停了")
-                    break
+            # 外审 W75-1 #6:超时不能靠读日志行时顺带看(程序不出声卡住就永远读不到下一行)——
+            # 另起定时器,到点把整组进程(出图程序和它起的子命令)杀掉
+            timed_out = threading.Event()
+
+            def _expire() -> None:
+                timed_out.set()
+                _kill_group(p)
+            watchdog = threading.Timer(TIMEOUT_S, _expire)
+            watchdog.daemon = True
+            watchdog.start()
             try:
-                rc = p.wait(timeout=30)
-            except subprocess.TimeoutExpired:
-                p.kill()
+                rc = self._follow(p, logf, tail, map_id, version)
+            finally:
+                watchdog.cancel()
+                if p.poll() is None:            # 读日志时出了意外:别留下没人管的出图程序
+                    _kill_group(p)
+                    p.wait()
+            if timed_out.is_set():
+                tail.append(f"出图超过 {TIMEOUT_S:.0f} 秒,停了")
                 rc = None
         if rc != 0:
             return self._failed(job, f"出图没成(退出码 {rc}):" + " / ".join(tail))
@@ -371,6 +395,21 @@ class SiteMapBuilder:
         log.info("站点打包出完了:%s:%s(%s 的关键帧,%.0f 秒)", map_id, version, robot,
                  self._now() - t0)
         self._tell(job, ok=True, reason="")
+
+    def _follow(self, p: subprocess.Popen[str], logf: Any, tail: collections.deque[str],
+                map_id: str, version: str) -> int:
+        """读出图程序的输出(进度行改阶段,别的记日志、留尾巴),读完等它退出,回退出码。"""
+        assert p.stdout is not None
+        for line in p.stdout:
+            logf.write(line)
+            line = line.rstrip("\n")
+            if line.startswith(PROGRESS + " "):
+                stage = line[len(PROGRESS) + 1:].strip()
+                with self._cv:
+                    self._status[(map_id, version)].update(stage=stage, stage_since=self._now())
+            elif line.strip():
+                tail.append(line)
+        return p.wait()
 
     def _failed(self, job: Job, reason: str) -> None:
         reason = reason[:1000]
@@ -425,3 +464,11 @@ def runner_from(cfg: dict[str, Any], *, default: Path = DEFAULT_RUNNER) -> list[
         r = m["runner"]
         return [str(x) for x in r] if isinstance(r, list) else [str(r)]
     return [str(default)] if Path(default).is_file() else None
+
+
+def _kill_group(p: subprocess.Popen[str]) -> None:
+    """杀出图程序整组进程(它起的回环、出点云子命令一起)。"""
+    try:
+        os.killpg(p.pid, signal.SIGKILL)
+    except (ProcessLookupError, PermissionError):
+        pass

@@ -59,6 +59,9 @@ PREVIEW_MAX_BYTES = 230 * 1024
 KF_SUB = "mapkf"
 KF_MANIFEST = "kf.json"
 KF_LIVE = "live.json"
+#: 预览进程最后收到雷达的时刻离停录(录包的完成标记)最多这么远(秒),才算关键帧存到了最后(外审 W75-1
+#: #1:预览半路没了、关键帧只存了前 10 秒,原来照样交给站点、出一张缺一大块的图)。
+KF_COVER_S = 10.0
 
 
 def kf_classify(rel: str) -> int | None:
@@ -71,6 +74,30 @@ def kf_classify(rel: str) -> int | None:
 def kf_settled(run: Path) -> bool:
     """有清单才算这一趟写完(传完、站点确认才删)。"""
     return (run / KF_MANIFEST).is_file()
+
+
+def _check_live(live: Path, done: Path) -> None:
+    """关键帧齐不齐(外审 W75-1 #1):预览进程收到停止信号正常收尾、写关键帧没出过错、最后收到的雷达
+    离停录不超过 :data:`KF_COVER_S`。不齐抛 :class:`MappingError`(退回在机器人上从录包打包)。"""
+    try:
+        d = json.loads(live.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        raise MappingError(f"关键帧收尾文件读不了:{exc}") from exc
+    if not isinstance(d, dict) or d.get("clean") is not True:
+        raise MappingError("边走边存的关键帧没收尾(预览进程没正常停)")
+    errs = d.get("kf_errors")
+    if not isinstance(errs, int) or isinstance(errs, bool) or errs:
+        raise MappingError(f"边走边存的关键帧写盘出过错({errs} 次)")
+    last = d.get("last_rx")
+    if not isinstance(last, (int, float)) or isinstance(last, bool):
+        raise MappingError("边走边存的关键帧没记最后收到雷达的时刻")
+    try:
+        stopped = done.stat().st_mtime
+    except OSError as exc:
+        raise MappingError(f"录包没有完成标记:{exc}") from exc
+    if stopped - float(last) > KF_COVER_S:
+        raise MappingError(f"边走边存的关键帧只存到停录前 {stopped - float(last):.0f} 秒"
+                           "(预览进程中途停了?)")
 
 
 def storage_pressure(facts: Any) -> bool:
@@ -322,13 +349,16 @@ class MappingService:
                 except MappingError as exc:
                     self.last_fallback = str(exc)[:300]
                     log.warning("%s:%s 交不了站点打包(%s),在机器人上打包", map_id, version, exc)
+                    await asyncio.to_thread(self._abandon_kf, kd, map_id, version,
+                                            self.last_fallback)
             if out.exists():
                 raise MappingError(f"{map_id}:{version} 机器人上已有一份在传了,换个版本号")
             try:
                 if site:
-                    made = Path(await self.orch.package(src, map_id, keyframes_dir=kd))
-                else:
-                    made = Path(await self.orch.package(src, map_id))
+                    # 外审 W75-1 #1:交不了站点 = 边走边存的关键帧不齐;拿它打包照样缺一块 ——
+                    # 直接从录包重建
+                    raise MappingError(self.last_fallback or "关键帧不齐")
+                made = Path(await self.orch.package(src, map_id))
                 mode = "live"
             except Exception as exc:  # noqa: BLE001 - 在线那份打不成:退回从录包建,原因记着
                 self.last_fallback = "; ".join(x for x in (
@@ -352,6 +382,7 @@ class MappingService:
         (每个文件的大小、sha256)—— 发件箱最后传它,站点收齐核对完出图。"""
         if not (kd / KF_LIVE).is_file():
             raise MappingError("边走边存的关键帧没收尾(预览进程没正常停?)")
+        _check_live(kd / KF_LIVE, bag / DONE)
         rtk = bag / "rtk.jsonl"
         if rtk.is_file():
             shutil.copyfile(rtk, kd / ".rtk.jsonl.tmp")
@@ -366,6 +397,22 @@ class MappingService:
                                   ensure_ascii=False), encoding="utf-8")
         os.replace(tmp, kd / KF_MANIFEST)
         log.info("%s:%s 的关键帧交给站点打包(%d 个文件)", map_id, version, len(files))
+
+    @staticmethod
+    def _abandon_kf(kd: Path, map_id: str, version: str, reason: str) -> None:
+        """外审 W75-1 #4:交不了站点的关键帧作废 —— 删掉不再传,只留一份作废清单:有清单这一趟就算写完,
+        传上去、站点确认后发件箱删掉;站点收到作废清单把收了一半的删掉。"""
+        try:
+            for p in sorted(kd.iterdir()):
+                if p.name != KF_MANIFEST:
+                    shutil.rmtree(p) if p.is_dir() else p.unlink()
+            tmp = kd / f".{KF_MANIFEST}.tmp"
+            tmp.write_text(json.dumps({"map_id": map_id, "version": version, "files": [],
+                                       "abandoned": True, "reason": reason[:300]},
+                                      ensure_ascii=False), encoding="utf-8")
+            os.replace(tmp, kd / KF_MANIFEST)
+        except OSError:
+            log.exception("%s:%s 作废关键帧没办成", map_id, version)
 
     def _settle(self, made: Path, map_id: str, version: str, out: Path) -> MapRef:
         """建出来的文件挪进发件箱、放进本地库(出错只记一笔,激活时从站点下)、最后写清单。"""

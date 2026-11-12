@@ -118,6 +118,9 @@ class MapCatalog:
         self.db = db
         self._now = now_ms
         self._lock = threading.Lock()
+        #: 别处占着的版本号(外审 W75-1 #2:站点「优化地图」排着、出着、失败待重试的那一版):
+        #: ``(地图号, 版本) → 占着没有``;:meth:`build_in_flight` 一并看。
+        self.in_flight_hooks: list[Callable[[str, str], bool]] = []
         self.writer = ChunkWriter()
         #: 栅格预览(W00c6h):(地图号, 版本) → ((PNG, 坐标换算 + 显示转角), 文件, 文件戳)。一版登记了
         #: 就不变,渲染一次缓存着;栅格 / yaml 文件的大小、修改时刻变了(有人在盘上换了)重新渲。
@@ -176,7 +179,10 @@ class MapCatalog:
         """站点已经让某台狗建这个版本了(还没收齐登记):再派一台建同一个版本要挡。
         狗回了 ``map_build_failed``(或者回执拒了)的那一次不算 —— 不然这个版本号就永远用不了了。
         失败按**这一次命令的号**认(外审阻断 3:原来任意一条历史失败都算,第一次失败后重试还在跑,
-        第三次也被放行)。"""
+        第三次也被放行)。站点上出图(:attr:`in_flight_hooks`)占着的也算。"""
+        for hook in self.in_flight_hooks:
+            if hook(map_id, version):
+                return True
         for r in self.db.query("SELECT robot_id, task_id, kind, payload, ack_result FROM commands "
                                "WHERE kind IN ('map_build', 'mapping')"):
             if _builds(r["kind"], r["payload"]) != (map_id, version):
