@@ -1,0 +1,22 @@
+# 出图用的点云(W75,nexwar_localizer.build._points):simplemap 里每个关键帧先按 5 cm 降采样,再合成一个
+# 点图层「points」,原始层删掉。不降采样整个合起来:广场 8 分钟 5900 万点、sm2mm 11.8 GB 内存、328 s
+# (台式机),Orin 放不下;这样 2630 万点、1.9 GB、7 s。体素跟 build.POINTS_VOXEL_M 一致(测试核)。
+generators:
+  - class_name: mp2p_icp_filters::Generator
+    params:
+      target_layer: "raw"
+      throw_on_unhandled_observation_class: false
+      process_class_names_regex: "mrpt::obs::CObservationPointCloud"
+      process_sensor_labels_regex: ".*"
+
+filters:
+  - class_name: mp2p_icp_filters::FilterDecimateVoxels
+    params:
+      input_pointcloud_layer: "raw"
+      output_pointcloud_layer: "points"
+      voxel_filter_resolution: 0.05
+      decimate_method: DecimateMethod::FirstPoint
+
+  - class_name: mp2p_icp_filters::FilterDeleteLayer
+    params:
+      pointcloud_layer_to_remove: ["raw"]

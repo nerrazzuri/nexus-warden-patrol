@@ -82,6 +82,9 @@ LC_DEFAULT = Path("/opt/nexwar/loop-closure/bin") / LC_CLI
 PIPELINES = Path(__file__).with_name("pipelines")
 #: 回环的参数(从上游 3D GICP 那份改的,改了什么写在文件头)。
 LC_PIPELINE = PIPELINES / "loop-closure.yaml"
+#: 出图用的点云:每个关键帧先按 :data:`POINTS_VOXEL_M` 降采样再合(W75;不降采样 Orin 内存放不下)。
+POINTS_PIPELINE = PIPELINES / "points-from-simplemap.yaml"
+POINTS_VOXEL_M = 0.05
 #: 从回环后的 simplemap 重出定位先验(跟 MOLA 建图存的局部地图同一个图层、同一个类)。
 PRIOR_PIPELINE = PIPELINES / "prior-from-simplemap.yaml"
 #: 回环把关键帧挪得超过 max(这么多米, 路程 × 这个比例),或者转得超过这么多度,就不用(多半是认错了
@@ -760,11 +763,13 @@ def coverage(traj: Sequence[Any], frames: Frames, step: float = COVERAGE_STEP_M
 
 
 def _points(work: Path, run: Runner) -> Any:
-    """simplemap → 点云(``sm2mm`` 出原始点图,``mm2ply -b`` 导出 x、y、z)。"""
+    """simplemap → 点云(``sm2mm`` 按 :data:`POINTS_PIPELINE` 每帧降采样出点图,``mm2ply -b`` 导出
+    x、y、z)。"""
     import numpy as np
 
     _run(run, ["sm2mm", "-i", str(work / "map.simplemap"), "-o", str(work / "points.mm"),
-               "--no-progress-bar"], None, work / "sm2mm.log", "simplemap 转点云")
+               "-p", str(POINTS_PIPELINE), "--no-progress-bar"], None, work / "sm2mm.log",
+         "simplemap 转点云")
     _run(run, ["mm2ply", *_plugin(), "-i", str(work / "points.mm"), "-o",
                str(work / "points"), "-b", "--export-fields", "x,y,z"], None,
          work / "mm2ply.log", "导出点云")
