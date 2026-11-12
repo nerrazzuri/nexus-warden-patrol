@@ -195,6 +195,11 @@ class MapWizard:
             return {"state": "ready", "quality": read_quality(self.cat, map_id, version),
                     "optimizable": can}
         sb = self.builds.status(map_id, version) if self.builds is not None else None
+        robot_failed = self._robot_failed(st)
+        if robot_failed is not None and (sb is None or sb.get("state") == "uploading"):
+            # 外审 W75-1 #3:关键帧传了一半(还没交接,站点停在「上传中」)、退回机器人出图也没成 ——
+            # 报机器人上没成,不卡在「上传中 0%」
+            return robot_failed
         if sb is not None and sb.get("robot_id") == st["robot_id"]:
             # W75:关键帧交给站点出图了 —— 到哪一步、百分之几
             if sb["state"] == "failed":
@@ -204,6 +209,11 @@ class MapWizard:
                 sb["state"], STAGE_CODES.get(sb.get("stage", ""), ""))
             return {"state": "pending", "where": "site", "stage": stage,
                     "pct": int(sb.get("pct", 0))}
+        return {"state": "pending"}
+
+    def _robot_failed(self, st: dict[str, Any]) -> dict[str, Any] | None:
+        """机器人报了这一版建图失败 → 向导的 ``failed``;没报是 None。"""
+        map_id, version = st["map_id"], st["version"]
         rows = self.db.query("SELECT data FROM events WHERE robot_id=? AND kind='map_build_failed' "
                              "AND received_at>=? ORDER BY received_at DESC LIMIT 50",
                              (st["robot_id"], int(st.get("started_ms", 0))))
@@ -214,7 +224,7 @@ class MapWizard:
                 continue
             if isinstance(d, dict) and d.get("map_id") == map_id and d.get("version") == version:
                 return {"state": "failed", "reason": str(d.get("reason", ""))[:300]}
-        return {"state": "pending"}
+        return None
 
     # ---- 改
 

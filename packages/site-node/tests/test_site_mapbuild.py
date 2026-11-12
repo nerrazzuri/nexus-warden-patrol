@@ -263,3 +263,73 @@ def test_进度_不回环时不算回环那一段():
     on = progress_pct("点云", 0.0, lc=True)
     assert off < on
     assert progress_pct("关键帧", 1e6, lc=False) < off
+
+
+def test_外审W75_1_5_出图前置步骤出意外_比如盘满_记成失败能重试_不卡在排队(site, monkeypatch):
+    home, cat = site
+    done = []
+    b = SiteMapBuilder(home, cat, runner=_fake_builder(home), on_done=done.append,
+                       start_thread=False)
+    _upload_all(b)
+    real = b._run
+
+    def 盘满(job):
+        raise OSError(28, "No space left on device")
+    monkeypatch.setattr(b, "_run", 盘满)
+    b.run_pending()
+    st = b.status("yard", "3")
+    assert st["state"] == "failed" and "No space left" in st["reason"]
+    assert done and done[-1]["ok"] is False
+    monkeypatch.setattr(b, "_run", real)
+    b.retry("yard", "3")
+    b.run_pending()
+    assert b.status("yard", "3")["state"] == "done"
+
+
+def test_外审W75_1_6_出图程序不出声卡死_到时间整组杀掉_记失败_队列接着走(site, monkeypatch):
+    import time
+
+    import nexwar_site.mapbuild as mb
+    home, cat = site
+    f = home / "hang.py"
+    f.write_text("import subprocess, sys, time\n"
+                 "subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(60)'])\n"
+                 "time.sleep(60)\n")
+    monkeypatch.setattr(mb, "TIMEOUT_S", 0.5)
+    b = SiteMapBuilder(home, cat, runner=[sys.executable, str(f)], start_thread=False)
+    _upload_all(b)
+    t0 = time.monotonic()
+    b.run_pending()
+    assert time.monotonic() - t0 < 10, "不能等到程序自己退出"
+    st = b.status("yard", "3")
+    assert st["state"] == "failed" and "超过" in st["reason"]
+
+
+def test_外审W75_1_2_优化占着的版本号_地图目录认它在建_重启后照样认_出完了放开(site):
+    home, cat = site
+    b = SiteMapBuilder(home, cat, runner=_fake_builder(home), start_thread=False)
+    _upload_all(b)
+    b.run_pending()
+    assert not cat.build_in_flight("yard", "4")
+    b.optimize("A", "yard", "3", "4")
+    assert cat.build_in_flight("yard", "4"), "向导分配版本号、建图接口查重都看这个"
+    cat2 = MapCatalog(home, cat.db, now_ms=lambda: 1000)
+    SiteMapBuilder(home, cat2, runner=["false"], start_thread=False)    # 只看恢复,不跑
+    assert cat2.build_in_flight("yard", "4"), "站点重启后还占着"
+    b.run_pending()
+    assert cat.get("yard", "4") and not cat.build_in_flight("yard", "4")
+
+
+def test_外审W75_1_4_机器人说关键帧作废_站点删掉收了一半的_不出图不挂上传中(site):
+    home, cat = site
+    b = SiteMapBuilder(home, cat, runner=_fake_builder(home), start_thread=False)
+    _send(b, "kf/00000.bin", b"kf0")
+    assert b.status("yard", "3")["state"] == "uploading"
+    _send(b, KF_MANIFEST, json.dumps({"map_id": "yard", "version": "3", "files": [],
+                                      "abandoned": True, "reason": "没收尾"}).encode())
+    assert b.status("yard", "3") is None
+    assert not (home / "mapkf-in" / "A" / "yard" / "3").exists()
+    b.run_pending()
+    from nexwar_site.maps import MapError
+    with pytest.raises(MapError):
+        cat.get("yard", "3")

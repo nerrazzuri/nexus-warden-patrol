@@ -379,6 +379,9 @@ class Handlers:
         self._clock: list[float] = []
         #: 机器人自己的里程:(报文头时刻, 收到时刻, 朝向)。
         self.odom: list[tuple[float, float, float]] = []
+        #: 外审 W75-1 #1:最后一帧交给关键帧的本机时刻、关键帧出过几次错(交接时核齐不齐)。
+        self.last_rx: float | None = None
+        self.kf_errors = 0
 
     def _bad(self, what: str, exc: BaseException | None = None) -> None:
         self.bad += 1
@@ -396,7 +399,9 @@ class Handlers:
                 self._clock.append(self._now() - st)
             try:
                 self.kf.on_scan(st, raw)
+                self.last_rx = self._now()
             except Exception as exc:  # noqa: BLE001 —— 存不了关键帧不碍预览
+                self.kf_errors += 1
                 self._bad("关键帧", exc)
         try:
             if self.feeder.want(st):
@@ -437,16 +442,30 @@ class Handlers:
             try:
                 self.kf.on_pose(t, (p.x, p.y, p.z), (o.x, o.y, o.z, o.w))
             except Exception as exc:  # noqa: BLE001
+                self.kf_errors += 1
                 self._bad("关键帧", exc)
 
 
 def write_live(out: Path, h: Handlers, summary: dict[str, Any]) -> None:
     """边走边存的收尾(W75):``live.json`` = 关键帧汇总 + 雷达钟差 + 机器人自己的里程。最后写(先写临时
     名再改名):有它才算这一趟的关键帧齐了。"""
-    doc = {**summary, "clock_offset_s": h.clock_offset(), "odom": [list(r) for r in h.odom]}
+    doc = {**summary, "clock_offset_s": h.clock_offset(), "odom": [list(r) for r in h.odom],
+           "clean": True, "last_rx": h.last_rx, "kf_errors": h.kf_errors}
     tmp = out / f".{LIVE_FILE}.tmp"
     tmp.write_text(json.dumps(doc), encoding="utf-8")
     os.replace(tmp, out / LIVE_FILE)
+
+
+def finish_keyframes(out: Path, h: Handlers, kf: Any, *, clean: bool) -> dict[str, Any]:
+    """边走边存的收尾:关键帧收好;**正常停的**(收到停止信号、没出错退出)才写 ``live.json``(外审 W75-1
+    #1:出错退出时原来也写,半截关键帧被当成齐的交给站点)。回关键帧汇总。"""
+    summary = kf.close()
+    if clean:
+        write_live(out, h, summary)
+    else:
+        (out / LIVE_FILE).unlink(missing_ok=True)
+        log.warning("预览没正常停:关键帧不写收尾文件(交接时退回机器人上打包)")
+    return summary
 
 
 def _paired(scan_t: float, pose_t: float, window: tuple[float, float] = PAIR_WINDOW_S) -> bool:
@@ -535,6 +554,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     ex.add_node(node)
     log.info("预览:订 %s + %s,写到 %s", a.lidar_topic, a.pose_topic, a.out)
     last = time.monotonic()
+    crashed = False
     try:
         while not stop and rclpy.ok():
             ex.spin_once(timeout_sec=0.2)
@@ -543,11 +563,14 @@ def main(argv: Sequence[str] | None = None) -> int:
                 if snaps.write(grid, dropped=feeder.dropped):
                     log.info("快照 %d:%d 帧、限速丢 %d、坏的 %d", snaps.seq, grid.frames,
                              feeder.dropped, h.bad)
+    except BaseException:
+        crashed = True
+        raise
     finally:
         snaps.write(grid, dropped=feeder.dropped)
         if kf is not None:
-            summary = kf.close()
-            write_live(a.keyframes, h, summary)
+            # 收到停止信号才算正常停(rclpy 自己没了、出错退出都不算)
+            summary = finish_keyframes(a.keyframes, h, kf, clean=stop and not crashed)
             log.info("关键帧:%d 帧扫描、%d 个关键帧", summary["scans"], summary["keyframes"])
         ex.shutdown()
         node.destroy_node()
