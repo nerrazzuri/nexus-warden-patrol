@@ -623,7 +623,7 @@ class _SiteRouteEditorPageState extends State<SiteRouteEditorPage> {
     final go = await showDialog<bool>(
         context: context,
         builder: (c) => AlertDialog(
-              title: Text(tr('Send $_id to $id', '派 $id 跑一趟 $_id')),
+              title: Text(tr('Send $_id to $id', '派 $id 巡逻 $_id')),
               content: Text([
                 if (est is num) tr('Takes ${minutesText(est)} (back to standby included)', '预计${minutesText(est)}（含回待命点）'),
                 if (queued)

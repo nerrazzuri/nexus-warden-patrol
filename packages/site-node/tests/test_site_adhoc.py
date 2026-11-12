@@ -164,6 +164,8 @@ def test_撞上日程排到日程走完之后_不派_告诉派的人排到几点
     est = t.desk.estimate_s("A", parse_mission(任务定义()))
     assert got["start_after_ms"] == 毫秒(22, 0) + est * 1000 + 60_000
     assert "22:00" in got["because"] and "loop" in got["because"]
+    # 第 8 轮 W8-10:写日程名(多条日程跑同一条路线时分得清),路线名放括号里
+    assert "22:00 的日程 nightly(路线 loop)" in got["because"], got["because"]
     assert "排到" in t.alerts.got[0]["title"]
 
 
@@ -180,6 +182,7 @@ def test_正在跑日程也排到后面(台):
                   (毫秒(19, 50),))
     got = 跑(t.desk.submit("A", 任务定义(), label="loop", by="gina"))
     assert got["queued"] is True and "正在执行的日程" in got["because"]
+    assert "正在执行的日程 nightly(路线 loop)" in got["because"], got["because"]
 
 
 def test_日程没写哪台_别的台也能跑就不算撞_别的台跑不了就算(台):
