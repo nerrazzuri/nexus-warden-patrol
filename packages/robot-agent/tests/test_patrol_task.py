@@ -283,7 +283,8 @@ async def test_W76_一直巡逻低电返航时_有效优先级抬到日程之上
     assert t.done or t.effective_priority == HOMING_GUARD_PRIORITY
 
 
-async def test_minor4_一直巡逻两个近点_快照只留最近一段结果_点位编号和圈数照样连着(台子, monkeypatch, tmp_path):
+async def test_minor4_一直巡逻两个近点_快照只留最近一段_编号圈数连着(台子, monkeypatch,
+                                                                    tmp_path):
     """W76 外审 minor:两个点只隔 5 cm,原地快速循环,每到一个点都把全部结果整份重写进
     state.json。一直巡逻只留最近一段(累计数另记),点位事件的编号、第几圈不受影响。"""
     import json
