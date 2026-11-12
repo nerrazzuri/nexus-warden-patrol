@@ -31,6 +31,17 @@ String hhmm(int ms, [int? offsetMin]) {
   return '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
 }
 
+/// A7-03：临时巡逻跑完去哪（派巡逻弹层、临时路线页共用一句；跟站点 standby.py 一个口径：
+/// 正常跑完回默认待命点，只许手动派的不自己回）。[manualOnly] 不知道（null）就把例外也写上。
+String adhocEndText({String robot = '', bool? manualOnly}) => switch (manualOnly) {
+      true => tr("$robot is set to manual dispatch only, so it won't go back to standby by itself afterwards; tap Return to standby.",
+          '$robot 只许手动派，结束后不会自己回待命点，要回就点「回待命点」。'),
+      false => tr('When it finishes, the robot goes back to its default standby point.', '跑完后机器人回默认待命点。'),
+      null => tr(
+          'When it finishes, the robot goes back to its default standby point (robots set to manual dispatch only stay where they are).',
+          '跑完后机器人回默认待命点（只许手动派的机器人留在原地）。'),
+    };
+
 String minutesText(num seconds) {
   final m = (seconds / 60).round().clamp(1, 24 * 60);
   return tr('about $m min', '约 $m 分钟');
@@ -108,13 +119,21 @@ class _PatrolSheetState extends State<_PatrolSheet> {
   /// 被叫停了（手机 App 测试 M13）：派之前就说，不等点了才被拒。
   Map? _held;
 
+  /// A7-03：这台只许手动派（结束后不自己回）；没读到是 null。
+  bool? _manualOnly;
+
   /// 易用性第 6 轮 A6-03：画在别的地图版本上的路线 → 画在哪一版（派不了，灰掉写明）。
   final Map<String, String> _otherMap = <String, String>{};
   String _loaded = '';
 
   Future<void> _load() async {
     unawaited(widget.api.robot(widget.robotId).then((v) async {
-      if (mounted && v['held'] is Map) setState(() => _held = v['held'] as Map);
+      if (mounted) {
+        setState(() {
+          if (v['held'] is Map) _held = v['held'] as Map;
+          _manualOnly = v['manual_only'] is Map;
+        });
+      }
       final caps = v['capabilities'];
       final tasks = caps is Map ? caps['tasks'] : null;
       final p = tasks is Map ? tasks['patrol'] : null;
@@ -356,11 +375,8 @@ class _PatrolSheetState extends State<_PatrolSheet> {
           nwGap8,
           Text(
               // 手机 App 测试 M38：对经理不说「会通知经理」
-              widget.api.session?.role == 'owner'
-                  ? tr('One-off patrols are not saved to the schedule. The administrator is notified; the robot returns to standby afterwards.',
-                      '临时巡逻不保存到日程，派出后通知管理员，结束后机器人返回待命点。')
-                  : tr("One-off patrols are not saved to the schedule. The manager and administrator are notified; the robot returns to standby afterwards.",
-                      '临时巡逻不保存到日程，派出后通知经理和管理员，结束后机器人返回待命点。'),
+              '${widget.api.session?.role == 'owner' ? tr('One-off patrols are not saved to the schedule. The administrator is notified. ', '临时巡逻不保存到日程，派出后通知管理员。') : tr('One-off patrols are not saved to the schedule. The manager and administrator are notified. ', '临时巡逻不保存到日程，派出后通知经理和管理员。')}'
+              '${adhocEndText(robot: widget.robotId, manualOnly: _manualOnly)}',
               style: NwText.bodySmall.copyWith(color: c.textSecondary)),
           nwGap8,
           Row(children: [
