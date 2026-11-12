@@ -226,6 +226,19 @@ void main() {
       expect(find.textContaining('预计'), findsNothing, reason: '跑完了的写几点结束，不写预计');
     });
 
+    // 第 8 轮 A8-06：在别的页（机器人页、路线页）派出去，首页「今天的巡逻」马上刷新，不等 30 秒那一轮
+    testWidgets('第 8 轮 A8-06：别处派出巡逻后首页今天的巡逻马上重读', (t) async {
+      final api = FakeApi('guard')..session = const SiteSession('t', 'gina', 'guard');
+      await _duty(t, api);
+      int n() => api.calls.where((c) => c == 'patrolsToday').length;
+      final before = n();
+      patrolSent.value++;
+      await t.pump();
+      expect(n(), before + 1, reason: '马上读一次');
+      await t.pump(const Duration(seconds: 3));
+      expect(n(), greaterThanOrEqualTo(before + 3), reason: '站点记下来可能慢一点：1 秒、3 秒再读');
+    });
+
     testWidgets('其他没处理的报警收成一行，点开是原来的告警总览', (t) async {
       final api = FakeApi('guard');
       await _duty(t, api);

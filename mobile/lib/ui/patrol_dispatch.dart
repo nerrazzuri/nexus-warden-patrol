@@ -62,13 +62,19 @@ String dispatchResultText(Map<String, dynamic> r, String label) {
       '已派出：「$label」${est is num ? '，${minutesText(est)}' : ''}，已通知经理和管理员。');
 }
 
+/// 第 8 轮 A8-06：派出去（或排上了）一趟就加一。首页「今天的巡逻」听它马上重读（在机器人页、路线页派的也算）。
+final ValueNotifier<int> patrolSent = ValueNotifier<int>(0);
+
 /// 弹派巡逻框。派出去（或排上了）回给人看的那一句；没派回 null。
-Future<String?> showPatrolSheet(BuildContext context, SiteApi api, String robotId) =>
-    showModalBottomSheet<String>(
-        context: context,
-        isScrollControlled: true,
-        showDragHandle: true,
-        builder: (_) => _PatrolSheet(api: api, robotId: robotId));
+Future<String?> showPatrolSheet(BuildContext context, SiteApi api, String robotId) async {
+  final msg = await showModalBottomSheet<String>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (_) => _PatrolSheet(api: api, robotId: robotId));
+  if (msg != null) patrolSent.value++;
+  return msg;
+}
 
 class _PatrolSheet extends StatefulWidget {
   final SiteApi api;

@@ -25,7 +25,7 @@ import 'nw/nw_p4_admin.dart';
 import 'nw/nw_theme.dart';
 import 'nw/nw_widgets.dart';
 import 'nw/nw_p3_robots.dart' show robotNotStanding;
-import 'patrol_dispatch.dart' show adhocEndText, dispatchResultText, hhmm, minutesText;
+import 'patrol_dispatch.dart' show adhocEndText, dispatchResultText, hhmm, minutesText, patrolSent;
 import 'pose_marker.dart';
 import 'refusal.dart';
 import 'widget/fields_dialog.dart';
@@ -672,6 +672,7 @@ class _SiteRouteEditorPageState extends State<SiteRouteEditorPage> {
     });
     try {
       final r = await widget.api.patrolPoints(rid, [for (final p in _pts) (p.x, p.y)], widget.mapId, widget.version);
+      patrolSent.value++;
       if (!mounted) return;
       final ack = r['ack'];
       if (r['queued'] != true && ack is Map && ack['result'] != 'accepted' && ack['result'] != 'duplicate') {

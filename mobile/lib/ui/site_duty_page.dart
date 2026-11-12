@@ -191,6 +191,21 @@ class _SiteDutyPageState extends State<SiteDutyPage> {
       if (k == 'alert' || k == 'status' || k == 'mode' || k == 'weather' || k == 'event') _soon();
     }, onError: (Object _) {});
     _poll = Timer.periodic(const Duration(seconds: 30), (_) => unawaited(_reload()));
+    patrolSent.addListener(_onSent);
+  }
+
+  // 第 8 轮 A8-06：派出去了马上读；站点记下来可能慢一点，1 秒、3 秒再读
+  final List<Timer> _after = [];
+  void _onSent() {
+    unawaited(_reload());
+    for (final t in _after) {
+      t.cancel();
+    }
+    _after
+      ..clear()
+      ..addAll([
+        for (final ms in const [1000, 3000]) Timer(Duration(milliseconds: ms), () => unawaited(_reload())),
+      ]);
   }
 
   @override
@@ -198,12 +213,17 @@ class _SiteDutyPageState extends State<SiteDutyPage> {
     _sub?.cancel();
     _debounce?.cancel();
     _poll?.cancel();
+    patrolSent.removeListener(_onSent);
+    for (final t in _after) {
+      t.cancel();
+    }
     _downTimer?.cancel();
     super.dispose();
   }
 
   void _soon() {
-    _debounce?.cancel();
+    // 第 8 轮 A8-06：原来每来一条就重新计时 —— 状态一秒推一条，就一直不读；已经排上了就不再推后
+    if (_debounce?.isActive ?? false) return;
     _debounce = Timer(const Duration(milliseconds: 400), () => unawaited(_reload()));
   }
 
