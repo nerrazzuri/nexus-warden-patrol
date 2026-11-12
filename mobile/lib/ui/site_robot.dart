@@ -126,10 +126,15 @@ class _SiteRobotPageState extends State<SiteRobotPage> {
     super.initState();
     _reload();
     _events = widget.api.events().listen(_onFeed, onError: (Object _) {}, cancelOnError: true);
+    // 易用性第 7 轮：别处（网页、手柄）改了它的姿态、任务，这一页开着也要跟上（以前要退出再进）
+    _poll = Timer.periodic(kRobotPageRefresh, (_) => unawaited(_reload(quiet: true)));
   }
+
+  Timer? _poll;
 
   @override
   void dispose() {
+    _poll?.cancel();
     unawaited(_events?.cancel());
     super.dispose();
   }
@@ -153,12 +158,13 @@ class _SiteRobotPageState extends State<SiteRobotPage> {
     unawaited(_reload());
   }
 
-  Future<void> _reload() async {
+  /// [quiet]：定时刷新的，读不到不弹提示（断网时每几秒弹一次会刷屏；值守页有连不上的横幅）。
+  Future<void> _reload({bool quiet = false}) async {
     try {
       final v = await widget.api.robot(widget.robotId);
       if (mounted) setState(() => _view = v);
     } on SiteError catch (e) {
-      if (mounted) _say(e.toString());
+      if (mounted && !quiet) _say(e.toString());
     }
   }
 
@@ -938,6 +944,9 @@ class _Devices extends StatelessWidget {
 /// 姿态的叫法（POC）。
 /// A7-01：机器人页的「站起」和它的确认。
 const standUpKey = Key('btn-stand-up');
+
+/// 机器人页开着时多久重读一次（姿态、任务、电量）。
+const kRobotPageRefresh = Duration(seconds: 5);
 const standUpConfirmKey = Key('stand-up-confirm');
 
 String postureLabel(String mode) => switch (mode) {
