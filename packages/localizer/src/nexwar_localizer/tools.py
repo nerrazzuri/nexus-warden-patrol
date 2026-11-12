@@ -241,7 +241,7 @@ def _build(a: argparse.Namespace) -> int:
                                   keyframes=a.keyframes)
     else:
         timings = {} if a.reuse else build.run_mapping(a.bag, work, lidar_topic=a.lidar_topic)
-    lc = build.find_loop_closure(a.loop_closure)
+    lc = _loop_closure(a.loop_closure)
     print(f"回环工具:{lc or '没有(不回环)'}")
     files = build.package(work, a.out, prior_pack=build.PriorPack.parse(a.prior_pack),
                           source=f"bag:{a.bag.name}", timings=timings, bag=a.bag,
@@ -251,6 +251,12 @@ def _build(a: argparse.Namespace) -> int:
                      indent=2))
     print("文件:", ", ".join(files))
     return 0
+
+
+def _loop_closure(setting: str) -> str | None:
+    """回环工具的路径;设成不回环是 :data:`build.LC_OFF`;要回环但没装是 None。"""
+    from nexwar_localizer import build
+    return build.find_loop_closure(setting) or (build.LC_OFF if build.lc_is_off(setting) else None)
 
 
 def _build_from_keyframes(a: argparse.Namespace, work: Path) -> int:
@@ -265,7 +271,7 @@ def _build_from_keyframes(a: argparse.Namespace, work: Path) -> int:
     _say("关键帧")
     info = S.prepare_live(work, kd, cfg=S.config_path(), prior_pipeline=build.PRIOR_PIPELINE,
                           plugin=build._plugin())
-    lc = build.find_loop_closure(a.loop_closure)
+    lc = _loop_closure(a.loop_closure)
     print(f"回环工具:{lc or '没有(不回环)'}")
     files = build.package(work, a.out, prior_pack=build.PriorPack.parse(a.prior_pack),
                           source=f"keyframes:{kd.name}", timings={"prepare_s": info["prepare_s"]},

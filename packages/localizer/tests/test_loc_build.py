@@ -641,8 +641,20 @@ def test_建图命令_回环开关交给打包(tmp_path, monkeypatch):
     monkeypatch.setattr(B, "find_loop_closure", lambda s: None if s == "off" else f"找:{s}")
     base = ["build", "--bag", str(tmp_path / "bag"), "--out", str(tmp_path / "o"), "--reuse"]
     # 用户 11-13:默认不回环;要回环明说 auto(站点「优化地图」那一趟)
-    assert tools.main(base) == 0 and seen["loop_closure"] is None
+    assert tools.main(base) == 0 and seen["loop_closure"] == B.LC_OFF
     assert tools.main([*base, "--loop-closure", "auto"]) == 0 and seen["loop_closure"] == "找:auto"
+    monkeypatch.setattr(B, "find_loop_closure", lambda s: None)       # auto 但没装
+    assert tools.main([*base, "--loop-closure", "auto"]) == 0 and seen["loop_closure"] is None
+
+
+def test_用户1113_设成不回环_原因写设置了不回环_不说没有工具(tmp_path):
+    """笔记本 11-13 对照时看到:关掉回环,build.json 却写「没有回环工具」,会误导。"""
+    _, info = B.loop_close(tmp_path, B.LC_OFF)
+    assert info["ran"] is False and "设置为不回环" in info["why"] and "没有" not in info["why"]
+    _, info = B.loop_close(tmp_path, None)
+    assert "没有回环工具" in info["why"]
+    assert B.lc_is_off("off", env={}) and B.lc_is_off("auto", env={B.LC_ENV: "off"})
+    assert not B.lc_is_off("auto", env={})
 
 
 # ------------------------------------------------------------ 对账 S2:地图手性(跟里程同号)
