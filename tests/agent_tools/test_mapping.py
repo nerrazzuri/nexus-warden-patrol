@@ -903,3 +903,15 @@ async def test_W75_Super_LIO边走边建_预览顺带存关键帧_打包用它_�
     o2 = MappingOrchestrator(procs2, replace(cfg, front="mola"))
     await o2.start_record("run2", live_map_id="m")
     assert "--keyframes" not in [s for s in procs2.started if s.name == "mapview"][0].argv
+
+
+async def test_W75_站点打包_关键帧目录由调用方给_预览和退回打包都用它(tmp_path, procs, cfg):
+    orch = _slio(tmp_path, procs, cfg)
+    kd = tmp_path / "outbox" / "mapkf" / "mall" / "7"
+    await orch.start_record("run1", live_map_id="mall", keyframes_dir=kd)
+    prev = [s for s in procs.started if s.name == "mapview"][0].argv
+    assert prev[prev.index("--keyframes") + 1] == str(kd)
+    await orch.stop_record()
+    await orch.package(cfg.bags_dir / "run1", "mall", keyframes_dir=kd)
+    pack = [s for s in procs.started if s.name == "mappack"][0].argv
+    assert pack[pack.index("--keyframes") + 1] == str(kd)

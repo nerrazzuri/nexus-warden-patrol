@@ -1432,7 +1432,9 @@ class AgentRuntime:
                     return "storage_full"         # 录包很大:发件箱满了不录
             elif not self.mapper.recording:
                 return "not_recording"
-            self._rec_job = loop.create_task(self._record(action, name, cmd.task_id, target))
+            pack = "site" if action == "start" and cmd.payload.get("pack") == "site" else "robot"
+            self._rec_job = loop.create_task(self._record(action, name, cmd.task_id, target,
+                                                          pack=pack))
             return ""
         if self._running(self._build_job) or self._running(self._rec_job) \
                 or self.mapper.recording:
@@ -1445,13 +1447,16 @@ class AgentRuntime:
         return ""
 
     async def _record(self, action: str, name: str, task_id: str,
-                      target: tuple[str, str] | None = None) -> None:
-        """录包的开始、停止(在后台做:起、停 ros2 bag 要十几秒,不能在命令锁里等)。"""
+                      target: tuple[str, str] | None = None, pack: str = "robot") -> None:
+        """录包的开始、停止(在后台做:起、停 ros2 bag 要十几秒,不能在命令锁里等)。``pack="site"``
+        (W75):站点让这一版在站点主机上打包。"""
         self._rec_action = action
         try:
             if action == "start":
                 if target is None:
                     await self.mapper.start(name)
+                elif pack == "site":
+                    await self.mapper.start(name, target=target, task_id=task_id, pack="site")
                 else:
                     await self.mapper.start(name, target=target, task_id=task_id)
                 # 录上了:当场清空、换一趟(W00c6h 内审:不靠每拍看边沿 —— 两拍之间又停又开会漏)。
@@ -2258,6 +2263,10 @@ class AgentRuntime:
         base = {"task_id": task, "bag": bag, "map_id": map_id, "version": version}
         try:
             _, mode = await self.mapper.finish()
+            if mode == "site":
+                # W75:关键帧清单写好了,发件箱传完站点就出图(站点出完自己登记、通知)
+                self.events.emit("map_handoff", base)
+                return
             rays = getattr(self.mapper, "last_rays", "")
             extra = {"mode": mode, **({"grid_rays": rays} if rays else {})}
             if self.mapper.last_fallback:
