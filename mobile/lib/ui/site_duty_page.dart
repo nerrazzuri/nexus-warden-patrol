@@ -86,6 +86,7 @@ String manualOnlyText(Map m) {
 const kSiteDownGrace = Duration(seconds: 15);
 
 class SiteDutyPage extends StatefulWidget {
+  static const drillKey = Key('duty-drill');
   final SiteApi api;
   final String? title;
   /// 进来就要开始的上手导览（外壳给；W53 §8.2）。
@@ -137,6 +138,17 @@ class DutyTargets {
 }
 
 class _SiteDutyPageState extends State<SiteDutyPage> {
+  Map<String, dynamic>? _drill;
+  bool get _drillOn {
+    final u = _drill?['until_ms'];
+    return _drill != null && (u is! num || DateTime.now().millisecondsSinceEpoch < u);
+  }
+
+  String _drillEnd() {
+    final u = _drill?['until_ms'];
+    return u is num ? hhmm(u.toInt()) : '?';
+  }
+
   final DutyTargets _t = DutyTargets();
   List<Map<String, dynamic>> _robots = const [];
   List<Alert> _alerts = const [];
@@ -253,6 +265,7 @@ class _SiteDutyPageState extends State<SiteDutyPage> {
       _try(widget.api.mode),
       _try(widget.api.weather),
       _try(widget.api.mapWizard),
+      _try(widget.api.alertTest),
     ]);
     if (!mounted) return;
     final robots = got[0] is List ? dutyOrder((got[0] as List).cast<Map<String, dynamic>>()) : _robots;
@@ -275,6 +288,7 @@ class _SiteDutyPageState extends State<SiteDutyPage> {
       if (got[3] is Map) _mode = (got[3] as Map).cast<String, dynamic>();
       if (got[4] is Map) _weather = (got[4] as Map).cast<String, dynamic>();
       if (got[5] is Map) _mapWiz = (got[5] as Map).cast<String, dynamic>();
+      if (got[6] is Map) _drill = (got[6] as Map)['active'] == true ? (got[6] as Map).cast<String, dynamic>() : null;
       final ids = robots.map((r) => '${r['robot_id']}').toList();
       final want = _sel ?? _picked[_site];
       _sel = want != null && ids.contains(want) ? want : (ids.isEmpty ? null : ids.first);
@@ -858,6 +872,16 @@ class _SiteDutyPageState extends State<SiteDutyPage> {
                 nwGap8,
               ],
               if (_error != null) ...[NwNotice(text: _error!, tone: NwTone.error), nwGap8],
+              // W6-13 / minor #25：报警演练开着，值班页也说一句（以前只有报警记录页）
+              if (_drillOn) ...[
+                NwNotice(
+                    key: SiteDutyPage.drillKey,
+                    tone: NwTone.warning,
+                    text: tr(
+                        'Alarm drill until ${_drillEnd()}: alarms whose title starts with "TEST:" are the drill. Handle them as usual.',
+                        '报警演练中（到 ${_drillEnd()}）：标题带「测试：」的报警是演练，照常处理即可。')),
+                nwGap8,
+              ],
               // 手机 App 测试 M09：「现在安不安全」放在最上面：P1 有几条、机器人在线几台（以前藏在「其他」后面）
               if (_robotsKnown)
                 Padding(
