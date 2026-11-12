@@ -316,6 +316,27 @@ def test_今天的巡逻_日程走完_没跑_在跑(台):
     assert today_view(t.db, now_ms=t.now["t"])["items"][0]["state"] == "waiting"
 
 
+def test_minor37_run_late_的窗口过了_还会补跑_写等机器人_不写没跑(tmp_path):
+    """W53 minor #37:on_missed=run_late 的那一轮,窗口过了执行器还会补跑(一直到下一轮之前),
+    今天的巡逻却早早写「没跑」。"""
+    from test_site_schedule import 排程
+    db = SiteDB(tmp_path / "s.db")
+    import_bundle(db, 打包(tmp_path, 1, schedule=排程.replace("on_missed: skip",
+                                                             "on_missed: run_late")),
+                  imported_by="alice", now_ms=1)
+    with db.tx() as c:
+        c.execute("INSERT INTO schedule_runs(entry_id, scheduled_ms, outcome, robot_id, note, "
+                  "decided_at) VALUES ('nightly', ?, 'no_robot', NULL, 'A 离线', ?)",
+                  (毫秒(22, 0), 毫秒(22, 0)))
+    item = today_view(db, now_ms=毫秒(23, 0))["items"][0]
+    assert item["state"] == "waiting", item
+    assert "离线" in item["reason"]
+    # 过了这一天(不跨午夜的排程,第二天就不补这一轮了)→ 没跑
+    old = today_view(db, now_ms=毫秒(10, 0, 0, 16), day="2027-03-15")["items"][0]
+    assert old["state"] == "missed"
+    db.close()
+
+
 # ------------------------------------------------------------ 外审 W53-1
 
 
