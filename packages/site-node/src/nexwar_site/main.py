@@ -1110,7 +1110,9 @@ class Server:
         self.patrol_energy = PatrolEnergy(self.db, self.dispatcher, _Settings(self.db),
                                           now_ms=wall_ms)
         self.charge.wants = combine_lines(self.guard.topup_line, self.patrol_energy.charge_line)
-        self.charge.resume_for = self.guard.resume_pct
+        # 外审 W76-4:出桩线取值守要的和巡逻欠着补能要的高的(都没要 → 默认的)
+        self.charge.resume_for = combine_lines(self.guard.resume_pct,
+                                               self.patrol_energy.resume_line)
         # W73 第四期:没桩的保安换电(进度按两块电池判)
         from nexwar_site.battery_swap import SwapDesk
 
