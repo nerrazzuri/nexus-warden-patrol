@@ -396,6 +396,19 @@ def bag_odom(bag: Path, topics: Sequence[str] = ODOM_TOPICS
     return topic, rows
 
 
+#: 传给 :func:`package` / :func:`loop_close` 的「设置成不回环」(跟「没装回环工具」的 None 分开,
+#: ``build.json`` 里说法不一样 —— 笔记本 11-13 对照时提的)。
+LC_OFF = "off"
+
+
+def lc_is_off(setting: str, *, env: Mapping[str, str] | None = None) -> bool:
+    """``setting``(和环境变量 :data:`LC_ENV`)是不是明说了不回环。"""
+    env = os.environ if env is None else env
+    if setting == "auto":
+        setting = env.get(LC_ENV, "").strip() or "auto"
+    return setting == "off"
+
+
 def find_loop_closure(setting: str = "auto", *, env: Mapping[str, str] | None = None,
                       which: Callable[[str], str | None] = shutil.which,
                       default: Path = LC_DEFAULT) -> str | None:
@@ -430,6 +443,8 @@ def loop_close(work: Path, cli: str | None, run: Runner = subprocess.run
     位姿(``sm-cli export-keyframes``),轨迹按它挪(:func:`correct_traj`),从回环后的 simplemap 重出
     先验(``sm2mm``)。回 ``(打包用哪个目录, build.json 的 loop_closure)``:成了是 ``work/lc``,不成
     (没有工具、跑不成、没找到回环、挪得太多)是 ``work`` 原样。"""
+    if cli == LC_OFF:
+        return work, {"ran": False, "why": "设置为不回环(off)"}
     if not cli:
         return work, {"ran": False, "why": f"没有回环工具({LC_CLI})"}
     work = Path(work).absolute()     # 回环工具在 lc/ 里跑:相对路径会读不到
