@@ -13,7 +13,8 @@
   高,照样要补。
 - 只看巡逻那一趟(#4):之后回待命点、去充电那几趟的 ``task_done`` 不盖掉它。
 - 换到一半站点重启(#5):两块合起来没到换好线,照样接上。
-- 换好、充好(≥ 换好线)就销账(W76-2 #3,落库):之后再掉电按平时的线,不再为这一趟起。
+- 换好、充好(≥ 换好线)就销账(W76-2 #3,落库):之后再掉电按平时的线,不再为这一趟起。销账是
+  每拍看电量(:meth:`PatrolEnergy.tick`,W76-3 #2),两块分开报的要两块都装着、都到线(W76-3 #1)。
 - 只看电量不行:换电引导会叫停在动的机器人,低电时有人遥控不能被它打断,所以要「空着」。
 
 跟布防值守自己的补能线并用,取高的(:func:`combine_lines`)。
@@ -53,26 +54,39 @@ class PatrolEnergy:
         """该起换电引导了 → 那条线;不然 ``None``。"""
         return SWAP_OK_PCT if self._wants(rid) else None
 
+    def tick(self) -> None:
+        """每拍看一遍:因电量结束的那一趟,电补好了就销账(外审 W76-3 #2:不靠回充、换电来问 ——
+        回充周期里不问,充到线、出桩又略低于线,会一直进出桩)。"""
+        for rid in list(self.dispatcher.clients):
+            try:
+                self._settle(rid)
+            except Exception:
+                log.exception("%s 巡逻补能销账没办成", rid)
+
+    def _settle(self, rid: str) -> None:
+        c = self.dispatcher.clients.get(rid)
+        st = getattr(c, "status", None)
+        if st is None or not st.online or not _full(c):
+            return
+        task_id = self._ended_for_battery(rid)
+        done = self._done()
+        if task_id is not None and done.get(rid) != task_id:
+            self.settings.put(DONE_KEY, {**done, rid: task_id})   # 落库:站点重启也记得
+
+    def _done(self) -> dict[str, Any]:
+        done = self.settings.get(DONE_KEY, {})
+        return done if isinstance(done, dict) else {}
+
     def _wants(self, rid: str) -> bool:
         c = self.dispatcher.clients.get(rid)
         st = getattr(c, "status", None)
-        if st is None or not st.online:
+        if st is None or not st.online or st.task is not None or _full(c):
             return False
         pct = getattr(getattr(c, "telemetry", None), "battery_pct", None)
         if not isinstance(pct, (int, float)) or isinstance(pct, bool):
             return False
         task_id = self._ended_for_battery(rid)
-        if task_id is None:
-            return False
-        done = self.settings.get(DONE_KEY, {})
-        done = done if isinstance(done, dict) else {}
-        if done.get(rid) == task_id:
-            return False                                 # 这一趟补过了
-        if pct >= SWAP_OK_PCT:
-            # 外审 W76-2 #3:换好 / 充好了 —— 销账(落库,站点重启也记得),之后再掉电按平时的线
-            self.settings.put(DONE_KEY, {**done, rid: task_id})
-            return False
-        return st.task is None
+        return task_id is not None and self._done().get(rid) != task_id
 
     def _ended_for_battery(self, rid: str) -> str | None:
         """最近一趟巡逻是因为电量结束的、而且在 :data:`RECENT_MS` 以内 → 它的任务号;
@@ -90,6 +104,17 @@ class PatrolEnergy:
         except ValueError:
             return None
         return rows[0]["task_id"] if isinstance(d, dict) and d.get("ended") == "battery" else None
+
+
+def _full(c: Any) -> bool:
+    """电补好了没有。两块分开报的:两块都装着、都到换好线(外审 W76-3 #1:拔着一块时总电量按在位的
+    那块算,会看着像补好了);不分开报的:总电量到线。"""
+    t = getattr(c, "telemetry", None)
+    packs = getattr(t, "battery_packs", None)
+    if packs:
+        return all(isinstance(p, (int, float)) and p >= SWAP_OK_PCT for p in packs)
+    pct = getattr(t, "battery_pct", None)
+    return isinstance(pct, (int, float)) and not isinstance(pct, bool) and pct >= SWAP_OK_PCT
 
 
 def combine_lines(*lines: Line) -> Line:
