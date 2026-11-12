@@ -962,6 +962,23 @@ class _MapWizardPageState extends State<MapWizardPage> {
     final built = '${(_w?['build'] as Map?)?['state'] ?? 'pending'}';
     final tip = walkTip(
         pathM: path, fromStartM: from, elapsed: Duration(minutes: mins), speed: _speed, turn: _turn);
+    // minor #35：横屏时底下两个按钮并排一行、预览按屏幕高度来（不然底栏和预览把屏幕占满）
+    final mq = MediaQuery.sizeOf(context);
+    final wide = mq.width > mq.height;
+    final teleop = NwButton(
+        buttonKey: MapWizardPage.teleopKey,
+        label: tr('Open phone remote control', '打开手机遥控'),
+        icon: Icons.sports_esports_rounded,
+        variant: NwButtonVariant.outline,
+        fullWidth: true,
+        size: wide ? NwButtonSize.medium : NwButtonSize.large,
+        onPressed: _busy ? null : _openTeleop);
+    final finish = NwButton(
+        buttonKey: MapWizardPage.doneWalkKey,
+        label: tr('Finish walking', '结束行走'),
+        fullWidth: true,
+        size: wide ? NwButtonSize.medium : NwButtonSize.large,
+        onPressed: _busy || !live ? null : _doneWalking);
     return _scroll([
       NwCard(
         key: MapWizardPage.walkStatusKey,
@@ -989,7 +1006,7 @@ class _MapWizardPageState extends State<MapWizardPage> {
       ],
       const SizedBox(height: Nw.s8),
       SizedBox(
-          height: 360,
+          height: wide ? (mq.height * 0.6).clamp(160.0, 360.0) : 360,
           child: MappingPreviewView(api: api, robotId: _robotId, period: widget.poll, onData: _onPreview)),
       const SizedBox(height: Nw.s8),
       Text(tr('Blue: path walked · Grey: not scanned · Green dot: start',
@@ -1027,24 +1044,17 @@ class _MapWizardPageState extends State<MapWizardPage> {
             onPressed: _startRec),
       ],
     ], [
-      if (!remote) ...[
-        NwButton(
-            buttonKey: MapWizardPage.teleopKey,
-            label: tr('Open phone remote control', '打开手机遥控'),
-            icon: Icons.sports_esports_rounded,
-            variant: NwButtonVariant.outline,
-            fullWidth: true,
-            size: NwButtonSize.large,
-            onPressed: _busy ? null : _openTeleop),
-        const SizedBox(height: Nw.s8),
+      if (wide && !remote)
+        Row(children: [
+          Expanded(child: teleop),
+          const SizedBox(width: Nw.s8),
+          Expanded(child: finish),
+        ])
+      else ...[
+        if (!remote) ...[teleop, const SizedBox(height: Nw.s8)],
+        finish,
       ],
-      NwButton(
-          buttonKey: MapWizardPage.doneWalkKey,
-          label: tr('Finish walking', '结束行走'),
-          fullWidth: true,
-          size: NwButtonSize.large,
-          onPressed: _busy || !live ? null : _doneWalking),
-    ]);
+    ], dense: wide);
   }
 
   // ---- 4 建图
@@ -1630,7 +1640,7 @@ class _MapWizardPageState extends State<MapWizardPage> {
       child: Text(t, style: NwText.labelMedium.copyWith(color: Nw.of(context).textSecondary, letterSpacing: 0.6)));
 
   /// 中间能滚，底下一排按钮钉住。
-  Widget _scroll(List<Widget> body, List<Widget> bottom) {
+  Widget _scroll(List<Widget> body, List<Widget> bottom, {bool dense = false}) {
     final c = Nw.of(context);
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
       Expanded(
@@ -1644,7 +1654,7 @@ class _MapWizardPageState extends State<MapWizardPage> {
       if (bottom.isNotEmpty)
         Container(
           decoration: BoxDecoration(color: c.bg, border: Border(top: BorderSide(color: c.outline))),
-          padding: const EdgeInsets.fromLTRB(Nw.s16, Nw.s16, Nw.s16, Nw.s16),
+          padding: EdgeInsets.symmetric(horizontal: Nw.s16, vertical: dense ? Nw.s8 : Nw.s16),
           child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, mainAxisSize: MainAxisSize.min, children: bottom),
         ),
     ]);
