@@ -333,6 +333,21 @@ void main() {
       expect(find.byKey(SetupChecklist.itemKey('robots')), findsNothing, reason: '收起来了');
     });
 
+    // 第 8 轮 W8-08：路线画在别的版本上，清单说在哪一版；日程的路线跑不了，说哪条
+    testWidgets('第 8 轮：开站清单说路线画在 v11 上、机器人用 v7；日程跑不了', (t) async {
+      final api = FakeApi('admin')
+        ..setupBody = <String, dynamic>{'done': 0, 'total': 2, 'items': <dynamic>[
+          <String, dynamic>{'id': 'routes', 'done': false, 'skipped': false,
+            'elsewhere': [{'route': 'demo-loop', 'map': 'm1', 'version': '11'}], 'using': [{'map': 'm1', 'version': '7'}]},
+          <String, dynamic>{'id': 'schedule', 'done': false, 'skipped': false, 'blocked': ['demo-night']},
+        ]};
+      _size(t);
+      await t.pumpWidget(MaterialApp(home: AdminHomeTab(api: api, switchTab: (_) {})));
+      await t.pumpAndSettle();
+      expect(find.textContaining('有 1 条路线（demo-loop）画在 v11 上，机器人在用 v7：在 v7 上重画'), findsOneWidget);
+      expect(find.textContaining('日程 demo-night 要跑的路线跑不了'), findsOneWidget);
+    });
+
     testWidgets('账号审批：权限下拉默认只看，选保安、输密码批准', (t) async {
       final api = FakeApi('admin')
         ..acctReqs = <Map<String, dynamic>>[<String, dynamic>{'id': 'r1', 'name': 'wangxm', 'display': '王小明'}];

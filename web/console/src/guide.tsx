@@ -8,7 +8,24 @@ import { Modal } from "./dialogs";
 import { t, type Key } from "./i18n";
 
 export interface Guide { tour: number; web_tour?: number; setup_hidden: boolean; skip: string[] }
-interface SetupItem { id: string; done: boolean; skipped: boolean }
+interface MapVer { map: string; version: string }
+interface SetupItem {
+  id: string; done: boolean; skipped: boolean;
+  /** 第 8 轮 W8-08:路线都画在别的版本上(``elsewhere``)、机器人在用哪一版(``using``);日程的路线跑不了(``blocked``)。 */
+  elsewhere?: (MapVer & { route: string })[]; using?: MapVer[]; blocked?: string[];
+}
+
+/** 第 8 轮 W8-08:清单那一项的具体情况(没有就是空,用通用的说明)。 */
+export function setupDetail(x: SetupItem): string {
+  const ver = (m: MapVer) => (m.version ? `v${m.version}` : m.map);
+  if (x.id === "routes" && x.elsewhere?.length && x.using?.length) {
+    const at = [...new Set(x.elsewhere.map(ver))].join("、");
+    const use = x.using.map(ver).join("、");
+    return t("suRoutesElsewhere", { n: x.elsewhere.length, names: x.elsewhere.map((r) => r.route).join("、"), at, use });
+  }
+  if (x.id === "schedule" && x.blocked?.length) return t("suSchedBlocked", { names: x.blocked.join("、") });
+  return "";
+}
 
 /** 网页导览的版本:内容大改了加一。跟 App 的分开记(``web_tour``)。 */
 export const WEB_TOUR = 1;
@@ -62,7 +79,7 @@ export function SetupChecklist() {
             return (
               <li key={x.id} data-item={x.id} class={x.done ? "done" : x.skipped ? "skipped" : undefined}>
                 <span class="setup-mark" aria-hidden="true">{x.done ? "✓" : x.skipped ? "–" : "○"}</span>
-                <span class="setup-text"><b>{t(name)}</b>{!x.done && <span class="muted small">{x.skipped ? t("suSkippedNote") : t(hint)}</span>}</span>
+                <span class="setup-text"><b>{t(name)}</b>{!x.done && <span class="muted small">{x.skipped ? t("suSkippedNote") : setupDetail(x) || t(hint)}</span>}</span>
                 {/* P1-75:跳过的能撤销 */}
                 {!x.done && x.skipped && (
                   <button type="button" class="btn sm" onClick={() => void patch({ skip: (guide?.skip ?? []).filter((s) => s !== x.id) })}>{t("suUnskip")}</button>

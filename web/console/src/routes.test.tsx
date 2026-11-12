@@ -155,7 +155,11 @@ function routesApi(opts: { meta: PreviewMeta; routes?: any[]; timezone?: string 
     if (u.endsWith("/api/maps")) return json(MAPS);
     if (u.endsWith("/api/robots")) return json({ robots: [{ robot_id: "A" }, { robot_id: "B" }] });
     if (u.endsWith("/preview")) return json(opts.meta);
-    if (u.includes("/api/routes?")) return json(view());
+    if (u.includes("/api/routes?")) {
+      const want = new URL(u, "http://x").searchParams.get("map_version");
+      const v = view();
+      return json(want == null ? v : { ...v, routes: v.routes.filter((r: any) => r.map_version === want || r.map_version === "") });
+    }
     if (init?.method === "POST") {
       const body = JSON.parse(String(init.body));
       if (u.endsWith("/api/route-check")) return opts.check ? opts.check(body) : json({ errors: [] });   // P1-39 画的时候查,不算存
@@ -282,6 +286,18 @@ describe("路线页:拖点、拖朝向把手、调序、删、动作", () => {
 describe("路线页:站点的回答", () => {
   const ROUTE = { id: "loop", map_id: "m1", map_version: "1", revision: 4, bound: true, updated_by: "a", updated_ms: 0, policy: {},
     waypoints: [P("a", 1, 1), P("b", 2, 2), P("c", 3, 3)] };
+
+  // 第 8 轮 W8-08:选的这一版上没有路线、别的版本上有 → 说在哪一版(客户以为路线丢了)
+  it("W8-08 这一版没路线时写别的版本上有几条", async () => {
+    installScreenCTM();
+    routesApi({ meta: META, routes: [{ ...ROUTE, id: "demo-loop", map_version: "11" }], timezone: "UTC", schedules: [] });
+    const r = render(<RoutesPage say={() => {}} />);
+    await ready(r.container);
+    await waitFor(() => expect(r.container.querySelector("[data-routes-elsewhere]")).not.toBeNull());
+    lang.value = "zh";
+    await tick();
+    expect(r.container.querySelector("[data-routes-elsewhere]")!.textContent).toContain("v11 上有 1 条路线(demo-loop)");
+  });
 
   it("逐点校验没过:错的点标红、说原因,存不下;改好重存按原来的修订号带过去", async () => {
     installScreenCTM();

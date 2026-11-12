@@ -138,6 +138,16 @@ export function RoutesPage({ say, embed, kind = "patrol" }: { say: Say; embed?: 
   }, [base]);
 
   const routes = view?.routes ?? [];
+  // 第 8 轮 W8-08:这一版上没有路线时,看同一张图的别的版本上有没有(有就说在哪一版,客户以为路线丢了)
+  const [elsewhere, setElsewhere] = useState<Route[]>([]);
+  const noneHere = !!view && routes.length === 0;
+  useEffect(() => {
+    setElsewhere([]);
+    if (!noneHere || !sel) return;
+    api<RouteView>("GET", `/api/routes?kind=${kind}`)
+      .then((v) => setElsewhere(v.routes.filter((r) => r.map_id === sel.map_id && r.map_version !== sel.version)))
+      .catch(() => setElsewhere([]));
+  }, [noneHere, sel?.map_id, sel?.version]);
   const dirty = !!draft && (draft.isNew ? draft.points.length > 0 : !same(draft, orig));
   const bad = new Map<number, string>();
   for (const p of problems) if (p.index !== null) bad.set(p.index, siteStr(p.problem));
@@ -422,6 +432,14 @@ export function RoutesPage({ say, embed, kind = "patrol" }: { say: Say; embed?: 
             {guardKind && <p class="muted small">{rt("guardOnlyArmed")}</p>}
             {genOpen && sel && <GuardGenerate map={sel} taken={routes.map((r) => r.id)} say={say} onDone={fromGenerated} onClose={() => setGenOpen(false)} />}
             {routes.length === 0 && <p class="muted small">{guardKind ? rt("guardNone") : rt("routesNone")}</p>}
+            {routes.length === 0 && elsewhere.length > 0 && (
+              <p class="muted small" data-routes-elsewhere="1">
+                {[...new Set(elsewhere.map((r) => r.map_version))].map((v) => {
+                  const here = elsewhere.filter((r) => r.map_version === v);
+                  return rt("routesOnOther", { v, n: here.length, names: here.map((r) => r.id).join("、") });
+                }).join(" ")}
+              </p>
+            )}
             <ul class="routelist" aria-label={guardKind ? rt("guardTitle") : rt("routesTitle")}>
               {routes.map((r) => {
                 const n = schedCount(r.id);

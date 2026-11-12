@@ -207,3 +207,19 @@ describe("第 8 轮 今天的巡逻:被接替、第几圈", () => {
     expect(c.textContent).toContain("一直巡逻 · 第 3 圈");
   });
 });
+
+// 第 8 轮 W8-08:路线画在别的版本上时清单说在哪一版;日程的路线跑不了说哪条
+describe("第 8 轮 开站清单:路线在别的版本上", () => {
+  it("写「有 1 条路线画在 v11 上,机器人在用 v7:在 v7 上重画」和跑不了的日程", async () => {
+    setFetch(((url: string) => Promise.resolve(url === "/api/setup"
+      ? json({ items: [
+        { id: "routes", done: false, skipped: false, elsewhere: [{ route: "demo-loop", map: "m1", version: "11" }], using: [{ map: "m1", version: "7" }] },
+        { id: "schedule", done: false, skipped: false, blocked: ["demo-night"] }], done: 0, total: 2 })
+      : url === "/api/me" ? json({ name: "alice", role: "admin", guide: { tour: 1, setup_hidden: false, skip: [] } }) : json({}, 404))) as typeof fetch);
+    const { container: c } = render(<SetupChecklist />);
+    await waitFor(() => expect(c.querySelector('[data-item="routes"]')).not.toBeNull());
+    expect(c.querySelector('[data-item="routes"]')!.textContent).toContain("有 1 条路线(demo-loop)画在 v11 上,机器人在用 v7:在 v7 上重画");
+    expect(c.querySelector('[data-item="schedule"]')!.textContent).toContain("日程 demo-night 要跑的路线跑不了");
+  });
+});
+
