@@ -130,6 +130,8 @@ class _PatrolSheetState extends State<_PatrolSheet> {
 
   /// 易用性第 6 轮 A6-03：画在别的地图版本上的路线 → 画在哪一版（派不了，灰掉写明）。
   final Map<String, String> _otherMap = <String, String>{};
+  /// 第 8 轮 W8-11：路线编号 → 显示名（起了名字的）。
+  final Map<String, String> _titles = <String, String>{};
   String _loaded = '';
 
   Future<void> _load() async {
@@ -146,6 +148,11 @@ class _PatrolSheetState extends State<_PatrolSheet> {
       if (p is! Map || p['map_id'] is! String || p['map_version'] is! String) return;
       final lib = await widget.api.routes();
       final other = <String, String>{};
+      final titles = <String, String>{
+        for (final r in (lib['routes'] as List? ?? const []).whereType<Map>())
+          if ('${r['title'] ?? ''}'.isNotEmpty) '${r['id']}': '${r['title']}',
+      };
+      if (mounted) setState(() => _titles..clear()..addAll(titles));
       for (final r in (lib['routes'] as List? ?? const []).whereType<Map>()) {
         final v2 = '${r['map_version'] ?? ''}';
         if (v2.isEmpty) continue;                     // 没绑版本的路线照旧能派（站点自己判）
@@ -311,7 +318,7 @@ class _PatrolSheetState extends State<_PatrolSheet> {
                           const SizedBox(width: Nw.s8),
                           Expanded(
                               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                            Text(r,
+                            Text(_titles[r] ?? r,
                                 style: NwText.bodyLarge
                                     .copyWith(color: _otherMap.containsKey(r) ? c.textSecondary : c.text)),
                             if (_otherMap.containsKey(r)) ...[
@@ -458,6 +465,12 @@ String patrolFixText(Map<String, dynamic> it, SiteSession? s) {
   return fixes.join('\n');
 }
 
+/// 第 8 轮 W8-11：今天的巡逻那一趟写什么名字 —— 路线起了显示名写显示名，没起写编号（临时路线照站点的话）。
+String todayLabel(Map it) {
+  final t = '${it['title'] ?? ''}';
+  return t.isNotEmpty ? t : siteKnown('${it['label']}');
+}
+
 /// 第 8 轮 W8-03：被接替的那一趟 —— 跑了几圈、谁接的（站点给的 `handover`）；没有就是空。
 String patrolHandoverText(Object? h) {
   if (h is! Map) return '';
@@ -504,7 +517,7 @@ class TodayPatrolList extends StatelessWidget {
         (it['by'] == s?.name || (s?.canSchedule ?? false));
     final (st, _) = patrolStateText('${it['state']}', _skippedOf(it));
     final lines = <String>[
-      '${hhmm((it['at_ms'] as num).toInt(), offsetMin)} · ${siteKnown('${it['label']}')}${'${it['robot'] ?? ''}'.isEmpty ? '' : ' · ${it['robot']}'}',
+      '${hhmm((it['at_ms'] as num).toInt(), offsetMin)} · ${todayLabel(it)}${'${it['robot'] ?? ''}'.isEmpty ? '' : ' · ${it['robot']}'}',
       st,
       if (adhoc) tr('One-off patrol sent by ${it['by']}', '${it['by']} 派的临时巡逻'),
       if (it['state'] == 'running' && it['lap'] is Map) lapText(it['lap']),
@@ -587,7 +600,7 @@ class TodayPatrolList extends StatelessWidget {
                     child: Text(
                         [
                           if (items[i]['kind'] == 'adhoc') tr('One-off', '临时'),
-                          siteKnown('${items[i]['label']}'),
+                          todayLabel(items[i]),
                           if ('${items[i]['robot'] ?? ''}'.isNotEmpty) '${items[i]['robot']}',
                           if (items[i]['kind'] == 'adhoc' && '${items[i]['by'] ?? ''}'.isNotEmpty) '${items[i]['by']}',
                         ].join(' · '),

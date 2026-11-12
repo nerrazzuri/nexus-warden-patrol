@@ -180,7 +180,7 @@ class _SiteRoutesPageState extends State<SiteRoutesPage> {
   List<Map<String, dynamic>> get _routes =>
       (_view?['routes'] as List? ?? const []).whereType<Map<String, dynamic>>().toList();
 
-  Future<void> _open({Map<String, dynamic>? route, String? newName}) async {
+  Future<void> _open({Map<String, dynamic>? route, String? newName, String? newTitle}) async {
     final s = _sel!;
     await Navigator.push(
         context,
@@ -191,34 +191,58 @@ class _SiteRoutesPageState extends State<SiteRoutesPage> {
                 version: '${s['version']}',
                 route: route,
                 newName: newName,
+                newTitle: newTitle,
                 allRoutes: _routes)));
     if (mounted) await _loadRoutes();
   }
 
   /// 路线名哪里不对（手机 App 测试 M19：边输边说，对话框不关）。null = 能用。
+  /// 第 8 轮 W8-11：名字能写中文、带空格 —— 当显示名，编号自动给；只用字母数字的直接当编号（重名要说）。
   String? routeNameProblem(String name) {
-    if (RegExp(r'\s').hasMatch(name)) {
-      return tr('No spaces: use - or _ instead (e.g. App-test-route)', '不能有空格：用 - 或 _ 代替（例如 east-gate）');
-    }
-    if (!routeNameRe.hasMatch(name)) {
-      return tr('Only letters, digits and . _ - (start with a letter or digit, up to 64)',
-          '只能用字母、数字和 . _ -（字母或数字开头，最多 64 个）');
-    }
-    if (_routes.any((r) => r['id'] == name)) return tr('A route with this name already exists', '路线名已存在');
+    final n = name.trim();
+    if (n.isEmpty) return tr('Enter a name', '请填路线名');
+    if (n.length > 40) return tr('Up to 40 characters', '最多 40 个字');
+    if (routeNameRe.hasMatch(n) && _allIds.contains(n)) return tr('A route with this name already exists', '路线名已存在');
     return null;
   }
 
+  Set<String> _allIds = const {};
+
+  String _autoId() {
+    var n = 1;
+    while (_allIds.contains('route-$n')) {
+      n++;
+    }
+    return 'route-$n';
+  }
+
   Future<void> _new() async {
+    // 编号全站唯一（别的图、别的版本上的也算）
+    try {
+      final lib = await widget.api.routes();
+      _allIds = {
+        for (final r in (lib['routes'] as List? ?? const []).whereType<Map>()) '${r['id']}',
+        for (final r in _routes) '${r['id']}',
+      };
+    } on SiteError {
+      _allIds = {for (final r in _routes) '${r['id']}'};
+    }
+    if (!mounted) return;
     final got = await showFieldsDialog(context,
         title: tr('New route', '新路线'),
         fields: [
-          DialogField(tr('Route name (letters, digits, . _ -)', '路线名（字母、数字、. _ -）'),
+          DialogField(tr('Route name (any language)', '路线名（可以写中文）'),
               key: const Key('route-new-name'), check: routeNameProblem)
         ],
         confirm: tr('Create', '创建'),
         confirmKey: const Key('route-new-go'));
     if (got == null || !mounted) return;
-    await _open(newName: got[0].trim());
+    final name = got[0].trim();
+    if (routeNameRe.hasMatch(name)) {
+      await _open(newName: name);
+    } else {
+      await _open(newName: _autoId(), newTitle: name);
+    }
   }
 
   @override
@@ -280,7 +304,7 @@ class _SiteRoutesPageState extends State<SiteRoutesPage> {
                               child: Row(children: [
                                 Expanded(
                                     child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                                  Text('${r['id']}',
+                                  Text('${(r['title'] ?? '') != '' ? r['title'] : r['id']}',
                                       style: NwText.titleSmall.copyWith(color: c.text, fontWeight: FontWeight.w700)),
                                   nwGap4,
                                   Text(
@@ -307,6 +331,8 @@ class SiteRouteEditorPage extends StatefulWidget {
   /// 站点上的这一条（`GET /api/routes` 里的一项）；新建的是 null，给 [newName]。
   final Map<String, dynamic>? route;
   final String? newName;
+  /// 第 8 轮 W8-11：新建时人写的显示名（能写中文）；编号是 [newName]。
+  final String? newTitle;
   final List<Map<String, dynamic>> allRoutes;
 
   /// W53（用户 10-31）：临时路线 —— 保安在图上点几个点，派给这台机器人走一趟；**不存**、不进日程。
@@ -319,6 +345,7 @@ class SiteRouteEditorPage extends StatefulWidget {
       required this.version,
       this.route,
       this.newName,
+      this.newTitle,
       this.allRoutes = const [],
       this.tempFor});
 
@@ -356,6 +383,8 @@ class _SiteRouteEditorPageState extends State<SiteRouteEditorPage> {
   late final Future<(Map<String, dynamic>, Uint8List, bool)> _data = _load();
   final TransformationController _zoom = TransformationController();
   late String _id;
+  /// 第 8 轮 W8-11：显示名（没起是空，标题写编号）。
+  String _title = '';
   late int _revision;
   late Map<String, dynamic> _policy;
   List<RoutePt> _pts = [];
@@ -386,6 +415,7 @@ class _SiteRouteEditorPageState extends State<SiteRouteEditorPage> {
 
   void _adopt(Map<String, dynamic>? r) {
     _id = r == null ? widget.newName ?? '' : '${r['id']}';
+    _title = r == null ? widget.newTitle ?? '' : '${r['title'] ?? ''}';
     _revision = r == null ? 0 : (r['revision'] as num).toInt();
     _policy = r == null ? <String, dynamic>{} : ((r['policy'] as Map?) ?? const {}).cast<String, dynamic>();
     _pts = [
@@ -491,6 +521,7 @@ class _SiteRouteEditorPageState extends State<SiteRouteEditorPage> {
         'waypoints': [for (final p in _pts) p.toWire()],
         'policy': _policy,
         'base_revision': _revision,
+        if (_title.isNotEmpty) 'title': _title,
       });
       if (!mounted) return;
       setState(() {
@@ -716,7 +747,7 @@ class _SiteRouteEditorPageState extends State<SiteRouteEditorPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-        appBar: AppBar(title: Text(_temp ? tr('Custom route for ${widget.tempFor}', '${widget.tempFor} 的临时路线') : _id)),
+        appBar: AppBar(title: Text(_temp ? tr('Custom route for ${widget.tempFor}', '${widget.tempFor} 的临时路线') : (_title.isNotEmpty ? _title : _id))),
         body: FutureBuilder<(Map<String, dynamic>, Uint8List, bool)>(
             future: _data,
             builder: (context, snap) {
