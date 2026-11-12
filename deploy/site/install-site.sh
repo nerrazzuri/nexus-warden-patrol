@@ -198,7 +198,8 @@ Package: ros-humble-mola* ros-humble-mp2p-icp* ros-humble-mrpt*
 Pin: origin snapshots.ros.org
 Pin-Priority: 1001
 EOF
-  apt-get update
+  # 别的源(比如本地 Ubuntu 镜像 404)报错不该挡住出图组件:快照源刷到了就能装,装不上 install 会报
+  apt-get update || echo "  !! apt-get update 有源报错,接着装出图组件" >&2
   apt-get install -y ros-humble-ros-workspace ros-humble-mola-sm-loop-closure ros-humble-mp2p-icp \
     ros-humble-mola-metric-maps ros-humble-mola-lidar-odometry \
     python3-numpy cmake g++
