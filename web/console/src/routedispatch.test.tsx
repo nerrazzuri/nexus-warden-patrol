@@ -31,10 +31,10 @@ beforeEach(() => {
 afterEach(cleanup);
 const btn = (root: Element | Document, text: string) => Array.from(root.querySelectorAll("button")).find((b) => b.textContent?.trim() === text) as HTMLButtonElement;
 
-describe("派一趟", () => {
+describe("派巡逻(路线页)", () => {
   it("选了机器人先看预计多久、现在就走;确认了才派", async () => {
     const { container: c } = render(<DispatchOnce route="loop" say={(s) => said.push(s)} />);
-    fireEvent.click(btn(c, "派一趟"));
+    fireEvent.click(btn(c, "派巡逻"));
     const sel = await waitFor(() => { const s = document.querySelector<HTMLSelectElement>('select[name="robot"]'); expect(s?.options.length).toBe(2); return s!; });
     expect(Array.from(sel.options).map((o) => o.value)).toEqual(["", "A"]);
     expect(btn(document, "派出").disabled).toBe(true);
@@ -50,7 +50,7 @@ describe("派一趟", () => {
   it("撞日程:说几点之后开始,按钮是排队派出", async () => {
     plan = { estimate_s: 300, start_ms: Date.UTC(2026, 10, 5, 14, 0), queued: true, because: "夜巡", utc_offset_min: 480 };
     const { container: c } = render(<DispatchOnce route="loop" say={() => {}} />);
-    fireEvent.click(btn(c, "派一趟"));
+    fireEvent.click(btn(c, "派巡逻"));
     const sel = await waitFor(() => { const s = document.querySelector<HTMLSelectElement>('select[name="robot"]'); expect(s?.options.length).toBe(2); return s!; });
     fireEvent.change(sel, { target: { value: "A" } });
     await waitFor(() => expect(document.querySelector("[data-plan]")?.textContent).toContain("22:00 之后开始(夜巡)".replace("(", "（").replace(")", "）")));
@@ -59,7 +59,7 @@ describe("派一趟", () => {
 
   it("W76 循环次数:选几圈估时带圈数、派出带圈数;一直巡逻说马上走、跑到电量线、会被哪趟日程打断", async () => {
     const { container: c } = render(<DispatchOnce route="loop" say={(s) => said.push(s)} />);
-    fireEvent.click(btn(c, "派一趟"));
+    fireEvent.click(btn(c, "派巡逻"));
     const sel = await waitFor(() => { const s = document.querySelector<HTMLSelectElement>('select[name="robot"]'); expect(s?.options.length).toBe(2); return s!; });
     fireEvent.change(sel, { target: { value: "A" } });
     const loops = document.querySelector<HTMLSelectElement>('select[name="loops"]')!;
