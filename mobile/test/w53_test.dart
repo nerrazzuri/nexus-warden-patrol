@@ -11,6 +11,7 @@ import 'package:nexwar_patrol/ui/patrol_dispatch.dart';
 import 'package:nexwar_patrol/ui/refusal.dart';
 import 'package:nexwar_patrol/ui/site_duty_page.dart';
 import 'package:nexwar_patrol/ui/site_list.dart';
+import 'package:nexwar_patrol/ui/site_robot.dart' show SiteRobotPage;
 import 'package:nexwar_patrol/ui/site_tabs.dart';
 import 'package:nexwar_patrol/ui/site_video.dart';
 import 'package:nexwar_patrol/ui/site_watch_page.dart';
@@ -521,4 +522,25 @@ void main() {
     expect(patrolReasonText('manual_only', 'A'), isNot(contains('manual_only')));
     expect(patrolReasonText('第 2 点被挡住', 'A'), '第 2 点被挡住');
   });
+
+  // liang-d5 易用性第 7 轮：「不会跑」点开只写「A 只许手动派」—— 没有去改的入口，也没提路线画在 v11 上
+  for (final role in ['guard', 'admin']) {
+    testWidgets('第 7 轮 不会跑点开（$role）：写上两边的地图版本、去哪改，有「去机器人页」', (t) async {
+      final it = <String, dynamic>{
+        'at_ms': DateTime(2027, 3, 15, 22).millisecondsSinceEpoch, 'kind': 'schedule', 'label': 'loop',
+        'robot': 'A', 'by': '', 'state': 'blocked', 'reason': 'manual_only', 'end_ms': null,
+        'map': {'route': '11', 'robot': '12'},
+      };
+      await t.pumpWidget(MaterialApp(
+          home: Scaffold(body: TodayPatrolList(api: FakeApi(role), items: [it]))));
+      await t.tap(find.byKey(todayRowKey(0)));
+      await t.pumpAndSettle();
+      expect(find.textContaining('路线画在 v11 上，A 用的是 v12'), findsOneWidget);
+      expect(find.textContaining(role == 'admin' ? '网页「管理 → 机器人」' : '找管理员'), findsOneWidget);
+      await t.tap(find.byKey(const Key('today-robot')));
+      await t.pumpAndSettle();
+      expect(find.byType(SiteRobotPage), findsOneWidget);
+      await t.pumpWidget(Container());
+    });
+  }
 }

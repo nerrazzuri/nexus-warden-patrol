@@ -172,4 +172,14 @@ describe("W6-02 今天的巡逻:不会跑的说清楚", () => {
     await waitFor(() => expect(c.querySelector(".today-row a")).not.toBeNull());
     expect(c.querySelector(".today-row a")!.getAttribute("href")).toBe("#/admin/robots?robot=A");
   });
+  // 易用性第 7 轮:路线画的那一版跟机器人用的对不上 —— 两边版本写出来(也是到点不会跑的原因)
+  it("路线和机器人的地图版本对不上:写出两边的版本,不出 map_mismatch 原话", async () => {
+    setFetch(((url: string) => Promise.resolve(url === "/api/patrols/today"
+      ? json({ items: [{ at_ms: Date.now(), kind: "schedule", label: "demo-loop", robot: "A", by: "", state: "blocked", reason: "map_mismatch", end_ms: null, adhoc_id: "", map: { route: "11", robot: "12" } }] })
+      : json({}, 404))) as typeof fetch);
+    const { container: c } = render(<TodayPatrols />);
+    await waitFor(() => expect(c.querySelectorAll(".today-row").length).toBe(1));
+    expect(c.textContent).toContain("路线画在 v11 上,A 用的是 v12");
+    expect(c.textContent).not.toContain("map_mismatch");
+  });
 });

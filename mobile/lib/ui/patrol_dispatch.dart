@@ -19,6 +19,7 @@ import 'nw/nw_p4_admin.dart' show nwGap8;
 import 'nw/nw_theme.dart';
 import 'nw/nw_widgets.dart';
 import 'refusal.dart';
+import 'site_robot.dart' show SiteRobotPage;
 import 'site_routes.dart' show SiteRouteEditorPage;
 
 /// 时刻 `14:05`。给了 [offsetMin]（站点时区离 UTC 几分钟，站点回的 `utc_offset_min`）就按站点的钟，
@@ -391,9 +392,34 @@ class _PatrolSheetState extends State<_PatrolSheet> {
     };
 
 /// 易用性第 6 轮 W6-02：站点给的原因码说人话（`manual_only` = 排给的那台只许手动派）；别的原样。
-String patrolReasonText(String reason, String robot) => reason == 'manual_only'
-    ? tr('$robot is set to manual dispatch only', '$robot 只许手动派')
-    : reason;
+String patrolReasonText(String reason, String robot) => switch (reason) {
+      'manual_only' => tr('$robot is set to manual dispatch only', '$robot 只许手动派'),
+      'map_mismatch' => tr("$robot's map doesn't match the route", '$robot 用的地图跟路线对不上'),
+      _ => reason,
+    };
+
+String _ver(String v) => RegExp(r'^\d+$').hasMatch(v) ? 'v$v' : v;
+
+/// 易用性第 7 轮：站点给的 `map`（路线画在哪一版、机器人用的哪一版）说人话；没有就是空。
+String patrolMapText(Object? map, String robot) {
+  if (map is! Map) return '';
+  final a = _ver('${map['route']}'), b = _ver('${map['robot']}');
+  return tr('The route is drawn on map $a; $robot is using $b', '路线画在 $a 上，$robot 用的是 $b');
+}
+
+/// 易用性第 7 轮：「不会跑」去哪改（按角色；App 里改不了派遣方式，管理员去网页）。
+String patrolFixText(Map<String, dynamic> it, SiteSession? s) {
+  final robot = '${it['robot'] ?? ''}';
+  final fixes = <String>[
+    if (it['reason'] == 'manual_only')
+      (s?.canManageRobots ?? false)
+          ? tr('To let it run on schedule: web console → Admin → Robots → $robot → set to automatic dispatch.',
+              '要让它按日程跑：在网页「管理 → 机器人」把 $robot 改回自动派。')
+          : tr('Ask an administrator to set $robot back to automatic dispatch.', '找管理员把 $robot 改回自动派。'),
+    if (it['map'] is Map) refusalHint('map_mismatch', s),
+  ];
+  return fixes.join('\n');
+}
 
 int _skippedOf(Map<String, dynamic> it) => it['skipped'] is int ? it['skipped'] as int : 0;
 
@@ -433,13 +459,26 @@ class TodayPatrolList extends StatelessWidget {
       st,
       if (adhoc) tr('One-off patrol sent by ${it['by']}', '${it['by']} 派的临时巡逻'),
       if (it['end_ms'] is num) tr('Ends around ${hhmm((it['end_ms'] as num).toInt(), offsetMin)}', '预计 ${hhmm((it['end_ms'] as num).toInt(), offsetMin)} 结束'),
-      if (reason.isNotEmpty) patrolReasonText(reason, '${it['robot'] ?? ''}'),
+      if (reason.isNotEmpty && !(reason == 'map_mismatch' && it['map'] is Map))
+        patrolReasonText(reason, '${it['robot'] ?? ''}'),
+      if (it['map'] is Map) patrolMapText(it['map'], '${it['robot'] ?? ''}'),
+      if (it['state'] == 'blocked') patrolFixText(it, s),
     ];
+    final robotId = '${it['robot'] ?? ''}';
     final cancel = await showDialog<bool>(
         context: context,
         builder: (c) => AlertDialog(
               content: Text(lines.join('\n')),
               actions: [
+                if (it['state'] == 'blocked' && robotId.isNotEmpty)
+                  TextButton(
+                      key: const Key('today-robot'),
+                      onPressed: () {
+                        Navigator.pop(c, false);
+                        Navigator.push(context,
+                            MaterialPageRoute<void>(builder: (_) => SiteRobotPage(api: api, robotId: robotId)));
+                      },
+                      child: Text(tr('Open robot', '去机器人页'))),
                 if (canCancel)
                   TextButton(
                       key: const Key('today-cancel'),
