@@ -19,7 +19,9 @@ export function routeName(mission: string): string {
 
 /** 易用性第 6 轮 W6-08:「11-09 01:18 · A · 临时路线 10 个点 · demo 派的」(原来只有 temp-1794… 编号)。 */
 export function runLabel(r: Run): string {
-  const route = r.mission.startsWith("temp-") && r.points ? t("bpTempRouteN", { n: r.points }) : routeName(r.mission);
+  // minor #19:回原点、回待命点那一趟任务名是 standby-…(站点按目标认出是不是原点)
+  const route = r.kind === "home" ? t("bpHome") : r.kind === "standby" || r.mission.startsWith("standby-") ? t("bpStandby")
+    : r.mission.startsWith("temp-") && r.points ? t("bpTempRouteN", { n: r.points }) : routeName(r.mission);
   const by = !r.by ? "" : r.by.startsWith("site:") ? t("bpBySchedule") : t("bpBy", { n: r.by });
   return [`${md(r.first_ms)} ${hm(r.first_ms)}`, nameOf(r.robot_id), route, by].filter(Boolean).join(" · ");
 }

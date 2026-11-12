@@ -800,7 +800,10 @@ def scene_window(db: Any, *, now_ms: int, since_ms: int | None = None,
         since_ms = since_ms if since_ms is not None else t0 - SCENE_BEFORE_MS
         until_ms = until_ms if until_ms is not None else end + SCENE_AFTER_MS
         # 补测 W6-08:引用带上机器人、任务名,网页写成和导出列表一样的「机器人 · 路线」
-        scene = f"巡逻 {r['mission']} {r['stamp']}"
+        from nexwar_site.evidence import run_origins, run_title_zh
+        named = run_origins(db, [{"robot_id": r["robot_id"], "mission": r["mission"],
+                                  "first_ms": r["first_ms"]}])[0]
+        scene = f"{run_title_zh(named)} {r['stamp']}"     # minor #19:不露 temp-… / standby-… 编号
         ref = f"run:{run}:{r['robot_id']}:{r['mission']}"
     elif task:
         rows = db.query("SELECT robot_id, MIN(issued_at) AS t0, MAX(issued_at) AS t1 "

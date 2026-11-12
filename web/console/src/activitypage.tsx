@@ -4,7 +4,7 @@ import { useEffect, useState } from "preact/hooks";
 import { api } from "./api";
 import { t, type Key } from "./i18n";
 import { dateInput, dayRange } from "./recordings";
-import { AuditLine, type AuditRow } from "./userspage";
+import { AuditLine, mergeAudit, type AuditRow } from "./userspage";
 
 const PAGE = 200;
 /** 跟站点 audit.AUDIT_GROUPS 一一对应。 */
@@ -72,7 +72,7 @@ export function ActivityPage({ now }: { now: number }) {
               <button type="button" class="btn sm" disabled={(page + 1) * PAGE >= got.total} onClick={() => setPage(page + 1)}>{t("alPageNext")}</button>
             </>}
           </p>
-          <ul class="plain user-audit">{got.audit.map((r) => <AuditLine key={r.id} r={r} who />)}</ul>
+          <ul class="plain user-audit">{mergeAudit(got.audit).map((r) => <AuditLine key={r.id} r={r} who />)}</ul>
         </>
       )}
     </section>
