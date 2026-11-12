@@ -341,6 +341,23 @@ void main() {
       expect(find.byType(CircularProgressIndicator), findsNothing);
     });
 
+    testWidgets('minor #35 横屏走一圈：底下两个按钮并排一行，预览不撑出屏幕', (t) async {
+      final api = _admin()
+        ..wizard = <String, dynamic>{'step': 'walk', 'robot_id': 'A', 'map_id': 'main', 'version': '20261031-1',
+          'drive': 'phone', 'by': 'u', 'label': ''};
+      api.previewReplies.addAll([for (var i = 0; i < 10; i++) _pv(trail: [[0, 0], [3, 0]])]);
+      await _wizard(t, api);
+      _size(t, const Size(800, 390));
+      await t.pumpAndSettle();
+      await _tick(t);
+      final a = t.getRect(find.byKey(MapWizardPage.teleopKey));
+      final b = t.getRect(find.byKey(MapWizardPage.doneWalkKey));
+      expect(a.top, closeTo(b.top, 1), reason: '并排一行');
+      expect(390 - a.top, lessThan(90), reason: '底栏只占一行按钮');
+      expect(t.getRect(find.byKey(MappingPreviewView.canvasKey)).height, lessThan(390));
+      expect(t.takeException(), isNull);
+    });
+
     testWidgets('手机开：遥控页角上有小预览和「走完了」，点了回来停录建图', (t) async {
       final api = _admin()
         ..wizard = <String, dynamic>{'step': 'walk', 'robot_id': 'A', 'map_id': 'main', 'version': '20261031-1',
