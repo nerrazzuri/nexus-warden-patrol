@@ -20,7 +20,9 @@ export interface AuditRow { id: number; at: number; actor: string; actor_role?: 
     from?: string | null; to?: string; op?: "add" | "update" | "remove"; name?: string; x?: number; y?: number;
     source?: "web" | "app" | "api" | "system"; doing?: { task?: string | null; kind?: string; state?: string }; why?: string;
     note?: string; verdict?: string; mission?: string; robot?: string | null; title?: string; level?: string;
-    channel?: string; by?: string; task_id?: string | null; err?: string; err_name?: string; req?: string } }
+    channel?: string; by?: string; task_id?: string | null; err?: string; err_name?: string; req?: string;
+    // minor #18:派单的点数、去一个点的目标、存草稿存成的版本
+    points?: number; request?: { target?: unknown }; version?: string } }
 
 /** 第 3 轮 P1-66:改账号写清改了什么(原来只写「改了账号」)。 */
 export function changeText(d: AuditRow["detail"], target = ""): string {
@@ -43,7 +45,10 @@ export function changeText(d: AuditRow["detail"], target = ""): string {
   }
   if (d.doing) out.push(d.doing.task ? t("auditDoing", { k: d.doing.kind ?? "", task: d.doing.task }) : t("auditIdle"));
   if (d.why) out.push(t("auditWhy", { w: d.why }));
-  if (d.mission) out.push(d.mission);
+  // minor #18:临时路线写几个点(原来露 temp-… 编号);去一个点写出来;存草稿写存成第几版
+  if (d.mission) out.push(d.mission.startsWith("temp-") && d.points ? t("bpTempRouteN", { n: d.points }) : routeName(d.mission));
+  else if (d.request?.target) out.push(t("bpGoto"));
+  if (d.version && /^[^:/\s]+:[^:/\s]+$/.test(target)) out.push(t("auditDraftVer", { v: d.version }));
   if (d.verdict) out.push(t("auditVerdict", { v: d.verdict }));
   if (d.title) out.push(d.title);
   if (d.channel) out.push(t("auditChannel", { c: d.channel }));
@@ -107,7 +112,7 @@ const ACTIONS: [RegExp, string][] = [
   [/^POST \/api\/admin\/robots\/[^/]+\/revoke$/, "actRobotUnbind"], [/^POST \/api\/admin\/robots\/[^/]+\/name$/, "actRobotName"],
   [/^POST \/api\/admin\/bind/, "actBind"], [/^POST \/api\/layout\/history\/\d+\/restore$/, "actRestore"],
   [/^POST \/api\/alert-test/, "actAlertTest"], [/^POST \/api\/admin\/cameras/, "actLayout"],
-  [/^POST \/api\/admin\/maps\/[^/]+\/[^/]+\/delete$/, "actMapDelete"], [/^POST \/api\/admin\/maps/, "actMaps"], [/^POST \/api\/(standby|cameras|layout|guard-routes)/, "actLayout"],
+  [/^POST \/api\/admin\/maps\/[^/]+\/[^/]+\/delete$/, "actMapDelete"], [/^POST \/api\/admin\/maps\/[^/]+\/[^/]+\/edit$/, "actMapDraft"], [/^POST \/api\/admin\/maps/, "actMaps"], [/^POST \/api\/(standby|cameras|layout|guard-routes)/, "actLayout"],
   [/^POST \/api\/(releases|system)/, "actSystem"], [/^POST \/api\/me/, "actMe"],
   // 第 3 轮 P1-66:巡逻日程、值班设置、布防例外、看录像 / 下载
   [/^POST \/api\/schedule/, "actPatrolSched"], [/^POST \/api\/duty-settings/, "actDutySettings"],
@@ -330,6 +335,21 @@ export function UsersPage({ me, say, now }: { me: string; say: Say; now: number 
   );
 }
 
+const DISPLAY = /^POST \/api\/admin\/maps\/([^/]+)\/([^/]+)\/display$/;
+const EDIT = /^POST \/api\/admin\/maps\/([^/]+)\/[^/]+\/edit$/;
+
+/** minor #18:网页存地图草稿是两次请求(编辑存成新版本、再存显示设置),记成两行「修改地图」。
+ * 紧跟在「存成第 N 版」后面(同一个人、一分钟内、正是那一版)的显示设置不单列。``rows`` 新的在前。 */
+export function mergeAudit(rows: AuditRow[]): AuditRow[] {
+  return rows.filter((r, i) => {
+    const m = DISPLAY.exec(r.action);
+    const prev = rows[i + 1];
+    if (!m || !prev || prev.actor !== r.actor || r.at - prev.at > 60_000) return true;
+    const e = EDIT.exec(prev.action);
+    return !(e && e[1] === m[1] && prev.detail?.version === m[2] && prev.status < 400);
+  });
+}
+
 /** 活动记录的一行(用户页「他做过什么」、全站活动日志共用)。``who``:行里写上是谁做的。 */
 export function AuditLine({ r, who }: { r: AuditRow; who?: boolean }) {
   return (
@@ -366,7 +386,7 @@ function UserAudit({ name, account, onClose }: { name: string; account?: Account
       </div>
       {rows == null ? <p class="muted">…</p> : rows.length === 0 ? <p class="muted">{t("userDidNone")}</p> : (
         <ul class="plain">
-          {rows.slice(0, 200).map((r) => <AuditLine key={r.id} r={r} />)}
+          {mergeAudit(rows.slice(0, 200)).map((r) => <AuditLine key={r.id} r={r} />)}
         </ul>
       )}
     </aside>

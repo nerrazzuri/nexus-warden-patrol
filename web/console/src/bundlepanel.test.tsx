@@ -60,3 +60,15 @@ describe("补测 W6-08 去看看那一趟", () => {
     expect(s).not.toContain("60a9ef78");
   });
 });
+
+describe("minor #19:回原点、回待命点那一趟", () => {
+  it("写回原点 / 回待命点,不露 standby- 编号", () => {
+    lang.value = "zh";
+    const home = runLabel({ id: 3, robot_id: "A", mission: "standby-3cf9d8fb1ceb", first_ms: 1794307980000, by: "demo", kind: "home" } as never);
+    expect(home).toContain("回原点");
+    expect(home).not.toContain("3cf9d8");
+    const sb = runLabel({ id: 4, robot_id: "A", mission: "standby-aaaa", first_ms: 1794307980000, kind: "standby" } as never);
+    expect(sb).toContain("回待命点");
+    expect(runLabel({ id: 5, robot_id: "A", mission: "standby-bbbb", first_ms: 1794307980000 } as never)).toContain("回待命点");
+  });
+});

@@ -16,6 +16,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import math
 import os
 import shutil
 import threading
@@ -432,6 +433,16 @@ def run_origins(db: Any, runs: list[dict[str, Any]]) -> list[dict[str, Any]]:
     for r in runs:
         t0 = int(r.get("first_ms") or 0)
         mission = str(r.get("mission") or "")
+        if mission.startswith("standby-"):
+            # minor #19:回原点、回待命点那趟(任务名 standby-…):目标是这台的原点就是回原点
+            rows = db.query("SELECT issued_by, payload FROM commands WHERE task_id=? "
+                            "AND kind='goto' ORDER BY issued_at DESC LIMIT 1", (mission,))
+            if rows:
+                r = {**r, "by": rows[0]["issued_by"],
+                     "kind": "home" if _to_home(db, str(r.get("robot_id") or ""),
+                                                rows[0]["payload"]) else "standby"}
+            out.append(r)
+            continue
         if mission.startswith("task-"):
             rows = db.query("SELECT issued_by FROM commands WHERE task_id=? AND kind='goto' "
                             "ORDER BY issued_at DESC LIMIT 1", (mission,))
@@ -454,6 +465,34 @@ def run_origins(db: Any, runs: list[dict[str, Any]]) -> list[dict[str, Any]]:
             r = {**r, "by": rows[0]["issued_by"], "points": n}
         out.append(r)
     return out
+
+
+def _to_home(db: Any, robot: str, payload: str) -> bool:
+    """这条 goto 的目标是不是这台机器人那张图那一版的原点(半米以内)。"""
+    try:
+        t = json.loads(payload)["target"]
+        rows = db.query("SELECT x, y FROM homes WHERE robot_id=? AND map_id=? AND map_version=?",
+                        (robot, t["map_id"], str(t["map_version"])))
+        return bool(rows) and math.hypot(rows[0]["x"] - float(t["x"]),
+                                         rows[0]["y"] - float(t["y"])) <= 0.5
+    except (ValueError, KeyError, TypeError):
+        return False
+
+
+def run_title_zh(r: dict[str, Any]) -> str:
+    """一趟(``run_origins`` 补过的)写成一句中文:临时路线几个点、去一个点、回原点、回待命点、
+    巡逻某条路线(minor #19:问题包 README 场景行原来写「巡逻 temp-1794…」)。"""
+    mission = str(r.get("mission") or "")
+    kind = r.get("kind")
+    if kind == "home":
+        return "回原点"
+    if kind == "standby" or mission.startswith("standby-"):
+        return "回待命点"
+    if kind == "goto" or mission.startswith("task-"):
+        return "去一个点"
+    if mission.startswith("temp-"):
+        return f"临时路线 {r['points']} 个点" if r.get("points") else "临时路线"
+    return f"巡逻 {mission}"
 
 
 def _row(r) -> dict[str, Any]:
