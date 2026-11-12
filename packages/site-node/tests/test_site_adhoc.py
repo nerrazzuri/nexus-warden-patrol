@@ -540,3 +540,37 @@ def test_11_11_W6_02_机器人只许手动派_今天的巡逻写不会跑和原�
     assert item["robot"] == "A"
     e2 = SimpleNamespace(id="any", mission="loop", robot="", window_min=30)
     assert _schedule_item(t.db, e2, 毫秒(22, 0), 毫秒(21, 0))["state"] == "later", "没指定哪台:不猜"
+
+
+def test_易用性第7轮_不会跑写上路线画在哪一版_机器人用哪一版(台):
+    """liang-d5 r7:「不会跑」只写「A 只许手动派」,没提路线画在 v11 上 —— 版本对不上也是到点不会跑的原因。"""
+    from nexwar_site.today import _schedule_item
+    t = 台
+    e = SimpleNamespace(id="demo-night", mission="demo-loop", robot="A", window_min=30)
+    want = ("mall", "11")
+    item = _schedule_item(t.db, e, 毫秒(22, 0), 毫秒(21, 0), want=want, loaded=lambda rid: ("mall", "12"))
+    assert item["state"] == "blocked" and item["reason"] == "map_mismatch", item
+    assert item["map"] == {"route": "11", "robot": "12"}
+    same = _schedule_item(t.db, e, 毫秒(22, 0), 毫秒(21, 0), want=want, loaded=lambda rid: ("mall", "11"))
+    assert same["state"] == "later" and "map" not in same
+    unknown = _schedule_item(t.db, e, 毫秒(22, 0), 毫秒(21, 0), want=want, loaded=lambda rid: (None, None))
+    assert unknown["state"] == "later", "机器人没报加载的图(离线)不猜"
+    with t.db.tx() as c:
+        c.execute("INSERT INTO robot_service(robot_id, by, at_ms, note) VALUES ('A','demo',0,'')")
+    both = _schedule_item(t.db, e, 毫秒(22, 0), 毫秒(21, 0), want=want, loaded=lambda rid: ("mall", "12"))
+    assert both["state"] == "blocked" and both["reason"] == "manual_only"
+    assert both["map"] == {"route": "11", "robot": "12"}, "两个原因都写"
+
+
+def test_易用性第7轮_整页今天的巡逻_按路线的那一版比(tmp_path):
+    db = SiteDB(tmp_path / "s.db")
+    from test_site_schedule import 排程
+    import_bundle(db, 打包(tmp_path, 1, schedule=排程.replace("    mission: loop\n",
+                                                              "    mission: loop\n    robot: A\n")),
+                  imported_by="alice", now_ms=1)
+    v = today_view(db, now_ms=毫秒(20, 0), loaded=lambda rid: ("estate-1", "8"))
+    item = v["items"][0]
+    assert item["robot"] == "A" and item["state"] == "blocked" and item["map"] == {"route": "7", "robot": "8"}
+    v = today_view(db, now_ms=毫秒(20, 0), loaded=lambda rid: ("estate-1", "7"))
+    assert v["items"][0]["state"] == "next"
+    db.close()

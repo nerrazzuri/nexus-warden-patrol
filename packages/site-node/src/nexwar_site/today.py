@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import json
 from datetime import datetime, timedelta
+from collections.abc import Callable
 from typing import Any
 
 from nexwar_contract.schedule import occurrences_between
@@ -64,7 +65,8 @@ def _stopped_by(db: Any, robot: str, start_ms: int, end_ms: int) -> str:
 
 
 def today_view(db: Any, *, now_ms: int, adhoc: Any = None,
-               day: str | None = None) -> dict[str, Any]:
+               day: str | None = None,
+               loaded: Callable[[str], tuple[Any, Any]] | None = None) -> dict[str, Any]:
     """今天(或 ``day`` = ``YYYY-MM-DD`` 那天,站点时区)的每一趟巡逻。往天的按现在这份日程排轮次,
     跑了的、没跑的照库里的记录写(liang-d5 第 5 轮前:往天的巡逻在网页上查不到)。"""
     act = active_bundle(db)
@@ -85,7 +87,9 @@ def today_view(db: Any, *, now_ms: int, adhoc: Any = None,
                 occ_ms = int(occ.timestamp() * 1000)
                 if occ_ms < act.since(e.id):
                     continue                            # 这条日程加进来之前的轮次:那时还没有它
-                items.append(_schedule_item(db, e, occ_ms, now_ms))
+                m = act.missions.get(e.mission)
+                want = (m.map_id, m.map_version) if m is not None and m.map_version else None
+                items.append(_schedule_item(db, e, occ_ms, now_ms, want=want, loaded=loaded))
     if adhoc is not None:
         for r in adhoc.between(a_ms, b_ms):
             items.append(_adhoc_item(db, r, now_ms))
@@ -103,7 +107,20 @@ def today_view(db: Any, *, now_ms: int, adhoc: Any = None,
             "items": items}
 
 
-def _schedule_item(db: Any, e: Any, occ_ms: int, now_ms: int) -> dict[str, Any]:
+def _map_gap(want: tuple[str, str] | None, got: tuple[Any, Any] | None) -> dict[str, str] | None:
+    """路线画在哪一版、机器人加载的哪一版;对得上、或者有一头不知道,回 None(不猜)。"""
+    if want is None or got is None or got[0] is None or got[1] is None:
+        return None
+    if (str(got[0]), str(got[1])) == (str(want[0]), str(want[1])):
+        return None
+    if str(got[0]) != str(want[0]):
+        return {"route": f"{want[0]}:{want[1]}", "robot": f"{got[0]}:{got[1]}"}
+    return {"route": str(want[1]), "robot": str(got[1])}
+
+
+def _schedule_item(db: Any, e: Any, occ_ms: int, now_ms: int, *,
+                   want: tuple[str, str] | None = None,
+                   loaded: Callable[[str], tuple[Any, Any]] | None = None) -> dict[str, Any]:
     rows = [dict(r) for r in db.query(
         "SELECT outcome, robot_id, task_id, result, note, decided_at FROM schedule_runs "
         "WHERE entry_id=? AND scheduled_ms=? ORDER BY id", (e.id, occ_ms))]
@@ -127,6 +144,12 @@ def _schedule_item(db: Any, e: Any, occ_ms: int, now_ms: int) -> dict[str, Any]:
         # 易用性第 6 轮 W6-02:排给的那台只许手动派 —— 到点也不会跑,先说清楚(不写「下一次」)
         if e.robot and db.query("SELECT 1 FROM robot_service WHERE robot_id=?", (e.robot,)):
             item.update(state="blocked", reason="manual_only")
+        # 易用性第 7 轮:排给的那台加载的图跟路线画的那一版对不上,到点也不会跑 —— 写上两边的版本
+        gap = _map_gap(want, loaded(e.robot)) if e.robot and loaded is not None else None
+        if gap is not None:
+            item["map"] = gap
+            if item["state"] != "blocked":
+                item.update(state="blocked", reason="map_mismatch")
         return item
     settled = next((r for r in rows if r["outcome"] in ("skip", "alarm", "dispatch_failed",
                                                            "lost")), None)

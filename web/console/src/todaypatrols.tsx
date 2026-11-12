@@ -19,7 +19,11 @@ export interface TodayItem {
   adhoc_id: string;
   /** W71:跑完了、跳过了几个点(到了一部分算完成)。老站点没有。 */
   skipped?: number;
+  /** 易用性第 7 轮:路线画在哪一版、排给的那台用的哪一版(对不上才有)。 */
+  map?: { route: string; robot: string };
 }
+
+const ver = (v: string) => (/^\d+$/.test(v) ? `v${v}` : v);
 
 const STATE: Record<string, [Key, string]> = {
   done: ["tdDone", "ok"], failed: ["tdFailed", "bad"], aborted: ["tdAborted", ""], running: ["tdRunning", "info"],
@@ -87,8 +91,10 @@ export function TodayPatrols({ retryMs = 5_000, canFix = false }: { retryMs?: nu
                   <span class="muted small" data-blocked="1"> · {t("tdManualOnly", { id: x.robot })}
                     {canFix && x.robot && <> <a href={`#/admin/robots?robot=${encodeURIComponent(x.robot)}`}>{t("tdFixRobot")}</a></>}
                   </span>
-                ) : x.reason && !(x.state === "aborted" && /^(halt|stop|stopped)$/i.test(x.reason.trim())) ? <span class="muted small"> · {plainReason(x.reason)}</span>
+                ) : x.reason === "map_mismatch" && x.map ? null
+                  : x.reason && !(x.state === "aborted" && /^(halt|stop|stopped)$/i.test(x.reason.trim())) ? <span class="muted small"> · {plainReason(x.reason)}</span>
                   : (x.state === "failed" || x.state === "missed") && <span class="muted small"> · {missingReason()}</span>}
+                {x.map && <span class="muted small" data-map-gap="1"> · {t("tdMapGap", { a: ver(x.map.route), id: x.robot, b: ver(x.map.robot) })}</span>}
               </span>
               <span class={`tdchip ${tone}`}>{label}</span>
             </li>
