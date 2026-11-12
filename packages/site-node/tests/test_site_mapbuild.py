@@ -357,3 +357,46 @@ def test_外审W75_2_3_优化失败待重试_清理旧关键帧时不删它的�
     b.retry("yard", "4")
     b.run_pending()
     assert b.status("yard", "4")["state"] == "done"
+
+
+def test_外审W75_3_1_清理选好要删的那份时_优化正好要它_收下的优化不能丢源(site, monkeypatch):
+    """外审 W75-3 #1:清理取完「优化在用」快照、还没删,
+    优化请求正好引用那份并排上队 → 源被删、任务丢。
+    要么优化等清理删完再验源(被拒、什么都没收),要么源留着;不许「收下了又删了」。"""
+    import threading
+    from pathlib import Path
+
+    import nexwar_site.mapbuild as mb
+    home, cat = site
+    monkeypatch.setattr(mb, "KEEP_N", 1)
+    b = SiteMapBuilder(home, cat, runner=_fake_builder(home), start_thread=False)
+    _upload_all(b)
+    b.run_pending()                                     # yard:3 出成了,关键帧留着
+    src = b.keep_root / "A" / "yard" / "3"
+    real = mb.shutil.rmtree
+    got: dict = {}
+
+    def rmtree(p, *a, **kw):
+        if Path(p).resolve() == src.resolve() and "t" not in got:
+            def opt():
+                try:
+                    b.optimize("A", "yard", "3", "4")
+                    got["ok"] = True
+                except ValueError:
+                    got["ok"] = False
+            got["t"] = threading.Thread(target=opt)
+            got["t"].start()
+            got["t"].join(0.5)                          # 修好了:优化等锁,这里等不到
+        return real(p, *a, **kw)
+
+    monkeypatch.setattr(mb.shutil, "rmtree", rmtree)
+    newer = home / "other-kf"
+    newer.mkdir()
+    (newer / KF_MANIFEST).write_text("{}")
+    b._keep(("A", "yard", "9"), newer)                 # 超了 KEEP_N:要删 yard:3
+    got["t"].join(5)
+    assert "ok" in got
+    if got["ok"]:
+        assert (src / KF_MANIFEST).is_file(), "优化收下了:源不能被删"
+    else:
+        assert ("yard", "4") not in b._opt and b.status("yard", "4") is None, "拒了:什么都没留下"
