@@ -92,6 +92,10 @@ _STANDBY_POLL_S = 0.05
 #: 返航最多等这么久。
 RETURN_TIMEOUT_S = 300.0
 
+#: 一直巡逻只留最近这么多条点位结果(W76 外审 minor:两个近点原地快速循环,三小时上万条,
+#: 每到一个点都整份重写 state.json)。更早的只记累计数;点位事件在丢之前早就发出去了。
+FOREVER_KEEP_RESULTS = 200
+
 #: Python 3.10 的 ``asyncio.TimeoutError`` **还不是**内建 ``TimeoutError``
 #: 的别名(3.11 才合并),而开发机和板载都还在 3.10 —— 只写内建那个,
 #: ``wait_for`` 的超时就会漏出去,被兜底当成"引擎内部异常"整趟中止。
@@ -295,15 +299,20 @@ class RunSnapshot:
     results: tuple[WaypointResult, ...] = ()
     reason: str = ""
     suspended_at: SuspendPoint | None = None
+    #: ``results[0]`` 是这一趟的第几个结果(一直巡逻丢掉了更早的;别的都是 0)。
+    results_from: int = 0
 
     def to_wire(self) -> dict[str, Any]:
-        return {"state": self.state.value, "mission": self.mission,
-                "waypoint_index": self.waypoint_index,
-                "waypoint_name": self.waypoint_name, "total": self.total,
-                "started_ms": self.started_ms, "reason": self.reason,
-                "results": [r.to_wire() for r in self.results],
-                "suspended_at": (self.suspended_at.to_wire()
-                                 if self.suspended_at else None)}
+        out = {"state": self.state.value, "mission": self.mission,
+               "waypoint_index": self.waypoint_index,
+               "waypoint_name": self.waypoint_name, "total": self.total,
+               "started_ms": self.started_ms, "reason": self.reason,
+               "results": [r.to_wire() for r in self.results],
+               "suspended_at": (self.suspended_at.to_wire()
+                                if self.suspended_at else None)}
+        if self.results_from:
+            out["results_from"] = self.results_from
+        return out
 
 
 # ------------------------------------------------------------------ 内部信号
@@ -381,6 +390,9 @@ class _Live:
     started_ms: int
     index: int = 0
     results: list[WaypointResult] = field(default_factory=list)
+    #: 一直巡逻丢掉的更早的结果:几条、其中到了几条(``FOREVER_KEEP_RESULTS``)。
+    dropped: int = 0
+    dropped_ok: int = 0
     #: 跑完了几圈(W76:一直巡逻时站点、手机显示「第几圈」)。
     laps: int = 0
     battery_pct: float = 100.0
@@ -740,7 +752,7 @@ class MissionEngine(EventEmitter[RunSnapshot]):
             waypoint_index=live.index, waypoint_name=wps[idx].name,
             total=len(wps), started_ms=live.started_ms,
             results=tuple(live.results), reason=reason,
-            suspended_at=live.suspended)
+            suspended_at=live.suspended, results_from=live.dropped)
         live.archive.write_state(self._snapshot.to_wire())
         self.emit(self._snapshot)
 
@@ -847,6 +859,10 @@ class MissionEngine(EventEmitter[RunSnapshot]):
                     result = await self._do_waypoint(wp)
                     logsetup.set_context(pt=None, point=None)
                     live.results.append(result)
+                    if pol.forever and len(live.results) > FOREVER_KEEP_RESULTS:
+                        old = live.results.pop(0)
+                        live.dropped += 1
+                        live.dropped_ok += int(old.ok)
                     if result.ok:
                         reached += 1
                         live.trail.append((i, wp.pose))
@@ -1089,9 +1105,10 @@ class MissionEngine(EventEmitter[RunSnapshot]):
                     log.exception("收尾时广播也失败了")
                 await self._stop_nav_quietly()
             if live is not None:
-                succeeded = sum(1 for r in live.results if r.ok)
+                succeeded = live.dropped_ok + sum(1 for r in live.results if r.ok)
+                ran = live.dropped + len(live.results)
                 # W76 一直巡逻:没有「一共几个点」,按跑过的算
-                total = (len(live.results) if live.mission.policy.forever
+                total = (ran if live.mission.policy.forever
                          else len(live.mission.waypoints) * live.mission.policy.loops)
                 # ``result``:站点登记运行记录读的就是它(工单 20,2026-10-28:原来没写,只有引擎的
                 # ``state: done`` =「这趟跑到头了」,点全没到的回待命点看着像回去了)。点都到了才
@@ -1099,9 +1116,9 @@ class MissionEngine(EventEmitter[RunSnapshot]):
                 # 终态「完成(跳过 N 点)」对上);别的(一个都没到、没跑完)``failed``
                 if self._state is RunState.ABORTED:
                     result = "aborted"
-                elif succeeded == total and len(live.results) == total:
+                elif succeeded == total and ran == total:
                     result = "done"
-                elif succeeded > 0 and len(live.results) == total:
+                elif succeeded > 0 and ran == total:
                     result = "partial"
                 else:
                     result = "failed"
@@ -1110,10 +1127,12 @@ class MissionEngine(EventEmitter[RunSnapshot]):
                     "result": result,
                     "reason": self._snapshot.reason,
                     "succeeded": succeeded,
-                    "failed": len(live.results) - succeeded,
+                    "failed": ran - succeeded,
                     "total": total,
                     "results": [r.to_wire() for r in live.results],
                 }
+                if live.dropped:                  # 一直巡逻丢了更早的结果:results 从第几个起
+                    summary["results_from"] = live.dropped
                 broken = live.archive.failure_summary()
                 if broken is not None:
                     # 这一趟的归档是残缺的(W00c6a 内审 S4):照片、事件流后半截可能没有。
