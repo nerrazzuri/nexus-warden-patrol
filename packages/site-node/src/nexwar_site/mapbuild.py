@@ -110,6 +110,8 @@ class SiteMapBuilder:
         self.writer = ChunkWriter()
         self._now = now
         self._cv = threading.Condition()
+        # 外审 W75-3 #1:清理留着的关键帧、收优化请求排成一个接一个(删之前核的「谁在用」不会过时)
+        self._keep_lock = threading.Lock()
         self._queue: collections.deque[Job] = collections.deque()
         #: (地图号, 版本) → 状态(``robot_id``、``state``、``stage``、``since``、``reason``)。
         self._status: dict[tuple[str, str], dict[str, Any]] = {}
@@ -288,17 +290,23 @@ class SiteMapBuilder:
 
     def optimize(self, robot_id: str, map_id: str, version: str, to_version: str) -> None:
         """拿 ``version`` 留着的关键帧回环,出成 ``to_version``(新的一版;``version`` 不动)。"""
-        if not self.optimizable(robot_id, map_id, version):
-            raise ValueError(f"{map_id}:{version} 的关键帧没留在站点上,不能优化")
-        kd = self._kept(robot_id, map_id, version)
-        (kd / f"{OPT_PREFIX}{to_version}").write_text("", encoding="utf-8")   # 站点重启接着跑
-        self._opt[(map_id, to_version)] = (kd, version)
-        self._enqueue((robot_id, map_id, to_version))
+        with self._keep_lock:
+            if not self.optimizable(robot_id, map_id, version):
+                raise ValueError(f"{map_id}:{version} 的关键帧没留在站点上,不能优化")
+            kd = self._kept(robot_id, map_id, version)
+            (kd / f"{OPT_PREFIX}{to_version}").write_text("", encoding="utf-8")   # 站点重启接着跑
+            with self._cv:
+                self._opt[(map_id, to_version)] = (kd, version)
+            self._enqueue((robot_id, map_id, to_version))
         log.info("%s:%s 排队优化(回环),出成 %s", map_id, version, to_version)
 
     def _keep(self, job: Job, kd: Path) -> None:
         """出成了:关键帧挪到 ``mapkf-keep`` 留着;超过 :data:`KEEP_N` 份删最老的。"""
         dst = self._kept(*job)
+        with self._keep_lock:
+            self._keep_locked(kd, dst)
+
+    def _keep_locked(self, kd: Path, dst: Path) -> None:
         try:
             if kd != dst:
                 shutil.rmtree(dst, ignore_errors=True)
