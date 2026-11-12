@@ -96,16 +96,17 @@ void main() {
     expect(installs, 0);
   });
 
-  testWidgets('站点里换语言先问；取消就不换', (t) async {
+  testWidgets('易用性第 6 轮 A6-06：站点里换语言直接换，不问、不回站点列表（不用重新登录）', (t) async {
     await _show(t, AppSettingsPage(api: FakeApi('guard')));
     await t.tap(find.byKey(AppSettingsPage.langKey));
     await t.pumpAndSettle();
     await t.tap(find.text('English').last);
     await t.pumpAndSettle();
-    expect(find.text('切换语言后将回到站点列表，是否继续？'), findsOneWidget);
-    await t.tap(find.text('取消'));
-    await t.pumpAndSettle();
-    expect(appLang.value, AppLang.zh);
+    expect(find.textContaining('回到站点列表'), findsNothing);
+    expect(find.byType(AlertDialog), findsNothing);
+    expect(appLang.value, AppLang.en);
+    expect(find.byType(AppSettingsPage), findsOneWidget);
+    appLang.value = AppLang.zh;
   });
 
   testWidgets('入口：保安在「我的」、管理员在「管理」、经理在「日程」右上角', (t) async {

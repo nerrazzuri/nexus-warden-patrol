@@ -56,7 +56,7 @@ Future<void> main() async {
   runApp(PatrolApp(siteStore: await openSiteStore(), langStore: langStore));
 }
 
-class PatrolApp extends StatelessWidget {
+class PatrolApp extends StatefulWidget {
   final SiteStore siteStore;
 
   /// 语言存哪儿；测试不给（不落盘）。
@@ -65,33 +65,61 @@ class PatrolApp extends StatelessWidget {
   const PatrolApp({super.key, required this.siteStore, this.langStore});
 
   @override
+  State<PatrolApp> createState() => _PatrolAppState();
+}
+
+class _PatrolAppState extends State<PatrolApp> {
+  @override
+  void initState() {
+    super.initState();
+    appLang.addListener(_onLang);
+  }
+
+  @override
+  void dispose() {
+    appLang.removeListener(_onLang);
+    super.dispose();
+  }
+
+  /// 换语言：每一页的文字都是画的时候取的（tr），所以把现有的每一页都重画一遍。
+  /// 易用性第 6 轮 A6-06：以前整个 App 按语言重建（MaterialApp 的 key 跟着变），人被退回站点列表、
+  /// 站点里还得重新登录；现在留在原来那一页、登录还在。
+  void _onLang() {
+    if (!mounted) return;
+    setState(() {});
+    void redraw(Element e) {
+      e.markNeedsBuild();
+      e.visitChildren(redraw);
+    }
+
+    (context as Element).visitChildren(redraw);
+  }
+
+  @override
   Widget build(BuildContext context) {
-    // 换语言整棵重建（key 跟着语言变）：每一页的文字都是画的时候取的，不重建就还是旧的。
-    // 换语言的入口只在站点列表（根页面），所以重建不会把人从别的页面踢出来。
-    return ValueListenableBuilder<AppLang>(
-        valueListenable: appLang,
-        builder: (context, lang, _) => MaterialApp(
-              key: ValueKey<AppLang>(lang),
-              title: 'Nexus Warden',
-              // 系统自带的文字（返回、关闭这些按钮的提示）跟着 App 选的语言，不跟系统。
-              locale: lang == AppLang.zh ? const Locale('zh', 'CN') : const Locale('en'),
-              supportedLocales: const <Locale>[Locale('en'), Locale('zh', 'CN')],
-              localizationsDelegates: GlobalMaterialLocalizations.delegates,
-              // 桌面版（W15）：鼠标拖也能滚、能「下拉刷新」（Flutter 桌面默认只认触摸、触控板拖动）。
-              scrollBehavior: const MaterialScrollBehavior().copyWith(dragDevices: {
-                PointerDeviceKind.touch,
-                PointerDeviceKind.mouse,
-                PointerDeviceKind.trackpad,
-                PointerDeviceKind.stylus,
-              }),
-              // 浅色、深色两套都有，跟着系统走（2026-10-14 重做，用户定的）。
-              theme: nwTheme(Brightness.light),
-              darkTheme: nwTheme(Brightness.dark),
-              themeMode: ThemeMode.system,
-              home: SiteListPage(store: siteStore, langStore: langStore),
-              // 刘海、三键导航栏（安卓 15 起强制全屏到边）：每一页都躲开。顶上归各页的 AppBar。
-              builder: (context, child) =>
-                  SafeArea(top: false, child: child ?? const SizedBox.shrink()),
-            ));
+    final lang = appLang.value;
+    return MaterialApp(
+      title: 'Nexus Warden',
+      // 系统自带的文字（返回、关闭这些按钮的提示）跟着 App 选的语言，不跟系统。
+      locale: lang == AppLang.zh ? const Locale('zh', 'CN') : const Locale('en'),
+      supportedLocales: const <Locale>[Locale('en'), Locale('zh', 'CN')],
+      localizationsDelegates: GlobalMaterialLocalizations.delegates,
+      // 桌面版（W15）：鼠标拖也能滚、能「下拉刷新」（Flutter 桌面默认只认触摸、触控板拖动）。
+      scrollBehavior: const MaterialScrollBehavior().copyWith(
+        dragDevices: {
+          PointerDeviceKind.touch,
+          PointerDeviceKind.mouse,
+          PointerDeviceKind.trackpad,
+          PointerDeviceKind.stylus,
+        },
+      ),
+      // 浅色、深色两套都有，跟着系统走（2026-10-14 重做，用户定的）。
+      theme: nwTheme(Brightness.light),
+      darkTheme: nwTheme(Brightness.dark),
+      themeMode: ThemeMode.system,
+      home: SiteListPage(store: widget.siteStore, langStore: widget.langStore),
+      // 刘海、三键导航栏（安卓 15 起强制全屏到边）：每一页都躲开。顶上归各页的 AppBar。
+      builder: (context, child) => SafeArea(top: false, child: child ?? const SizedBox.shrink()),
+    );
   }
 }
