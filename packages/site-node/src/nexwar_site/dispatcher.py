@@ -78,9 +78,10 @@ class SkewUnknown(DispatchRefused):
 def version_mismatch_text(mission: str, map_id: str, version: str, robot_id: str,
                           loaded: str) -> str:
     """任务绑的那一版跟狗加载的不一样(R1;派遣器、排程共用)。"""
-    return (f"任务 {mission} 的点是在 {map_id} 第 {version} 版上量的,"
-            f"{robot_id} 加载的是第 {loaded} 版:每次建图原点都不同,老坐标在新图上不可信 —— "
-            "在新图上核过点、改 map_version、重新打包导入(或者让机器人换回那一版图)")
+    # 第 8 轮 W8-02:客户看得懂的话(以前写「改 map_version、重新打包导入」,是给工程师的)
+    return (f"路线 {mission} 画在 {map_id} 第 {version} 版地图上,"
+            f"{robot_id} 加载的是第 {loaded} 版:每次建图原点都不一样,旧路线的点在新图上对不上 —— "
+            f"在第 {loaded} 版地图上重画这条路线(或让 {robot_id} 换回第 {version} 版地图)")
 
 
 class Unsupported(DispatchRefused):
@@ -825,7 +826,8 @@ class Dispatcher:
         if loaded[0] is None or loaded[1] is None:
             raise DispatchRefused(f"{robot_id} 未上报已加载的地图")
         if m.map_id != loaded[0]:
-            raise DispatchRefused(f"任务用的地图 {m.map_id!r},{robot_id} 加载的是 {loaded[0]!r}")
+            raise DispatchRefused(f"路线画在地图 {m.map_id} 上,{robot_id} 加载的是 {loaded[0]}:"
+                                  f"在 {loaded[0]} 上重画这条路线,或给 {robot_id} 下发 {m.map_id}")
         if m.map_version != loaded[1]:
             raise DispatchRefused(version_mismatch_text(m.mission, m.map_id, m.map_version,
                                                         robot_id, str(loaded[1])))

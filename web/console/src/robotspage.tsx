@@ -279,6 +279,7 @@ function Controls({ r, u, role, say, onChanged }: { r: RobotCard; u?: UnitInfo; 
   const [err, setErr] = useState<string | null>(null);
   const [ask, setAsk] = useState<Posture | null>(null);
   const [askHome, setAskHome] = useState(false);
+  const [drawn, setDrawn] = useState<Record<string, { id: string; v: string }>>({});
   const patrol = canPatrol(role);
   const dispatch = canDispatch(role);
   useEffect(() => {
@@ -286,7 +287,18 @@ function Controls({ r, u, role, say, onChanged }: { r: RobotCard; u?: UnitInfo; 
     api<{ missions?: string[] }>("GET", "/api/schedule")
       .then((d) => { const m = d.missions ?? []; setRoutes(m); setPick(m.length === 1 ? m[0] : ""); })
       .catch(() => setRoutes([]));
+    // 第 8 轮 W8-02:路线画在哪一版(跟 App 一样,别的版本上的灰掉);读不到就不灰(站点照样会拒)
+    api<{ routes?: { id: string; map_id?: string; map_version?: string }[] }>("GET", "/api/routes")
+      .then((d) => setDrawn(Object.fromEntries((d.routes ?? []).map((x) => [x.id, { id: x.map_id ?? "", v: x.map_version ?? "" }]))))
+      .catch(() => setDrawn({}));
   }, [r.robot_id, patrol]);
+  /** 这条路线画在别的图 / 版本上:回「画在哪一版」;对得上、不知道回 null。 */
+  const otherMap = (m: string): string | null => {
+    const d = drawn[m];
+    if (!d || !d.v || !r.map?.version) return null;
+    if (d.id && r.map.id && d.id !== r.map.id) return `${d.id} v${d.v}`;
+    return d.v === r.map.version ? null : `v${d.v}`;
+  };
   useEffect(() => setErr(null), [r.robot_id]);
   const id = r.name || r.robot_id;
   const send = async (fn: () => Promise<(CommandReply & { queued?: boolean; start_after_ms?: number; because?: string; utc_offset_min?: number }) | null>,
@@ -343,7 +355,10 @@ function Controls({ r, u, role, say, onChanged }: { r: RobotCard; u?: UnitInfo; 
             <div class="rd-inline">
               <select id={`rd-route-${r.robot_id}`} name="route" value={pick} onChange={(e) => setPick(e.currentTarget.value)}>
                 <option value="">{t("rdPickRoute")}</option>
-                {(routes ?? []).map((m) => <option key={m} value={m}>{m}</option>)}
+                {(routes ?? []).map((m) => {
+                  const o = otherMap(m);
+                  return <option key={m} value={m} disabled={o !== null}>{o === null ? m : `${m} — ${t("rdRouteOtherMap", { at: o, id, v: `v${r.map?.version ?? ""}` })}`}</option>;
+                })}
               </select>
               <LoopsSelect value={loops} onChange={setLoops} />
               <button type="button" class="btn sm primary" disabled={busy || off || !pick}
