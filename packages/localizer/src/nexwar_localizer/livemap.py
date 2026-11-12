@@ -55,6 +55,10 @@ PAIR_WINDOW_S = (-0.01, 0.08)
 #: Super-LIO(工单 21)的位姿时刻是这一帧最后一个点:比报文头晚约 0.1 s。
 SUPERLIO_PAIR_WINDOW_S = (0.05, 0.16)
 KEEP_SCANS = 10                 # 等位姿的点云最多留几帧
+#: 边走边存关键帧(W75):收尾写的汇总文件;雷达钟差取前多少帧。
+LIVE_FILE = "live.json"           # 跟 superlio.LIVE_FILE 一致(测试核)
+CLOCK_SAMPLES = 200
+KF_QOS_DEPTH = 5
 KEEP_POSES = 50
 PERIOD_S = 3.0                  # 多久写一张快照(有新帧才写)
 #: PNG 超过这么大就先把图缩一半再发(障碍优先),直到放得下 —— 回执有上限(代理那边 240 KiB),
@@ -363,10 +367,18 @@ class Handlers:
     """ROS 回调(:func:`main` 接上):一条坏消息只丢它自己,不让预览进程退出(内审应修 3:短报文、
     缺字段的点云、全零或 NaN 的位姿原来会一路抛出 ``spin_once``,进程退了也没人重启)。"""
 
-    def __init__(self, feeder: Feeder, *, decode_cloud: Callable[[bytes], Any]) -> None:
+    def __init__(self, feeder: Feeder, *, decode_cloud: Callable[[bytes], Any],
+                 keyframes: Any = None, now: Callable[[], float] = time.time) -> None:
+        """``keyframes``(W75):边走边存关键帧(``superlio.LiveKeyframes``),每帧点云、每个位姿都给它
+        (不受预览限速);同时记雷达「收到 − 报文头」(配 RTK 用)和机器人自己的里程朝向(核手性用)。"""
         self.feeder = feeder
         self._decode = decode_cloud
         self.bad = 0
+        self.kf = keyframes
+        self._now = now
+        self._clock: list[float] = []
+        #: 机器人自己的里程:(报文头时刻, 收到时刻, 朝向)。
+        self.odom: list[tuple[float, float, float]] = []
 
     def _bad(self, what: str, exc: BaseException | None = None) -> None:
         self.bad += 1
@@ -376,10 +388,37 @@ class Handlers:
     def on_scan(self, raw: bytes) -> None:
         try:
             st = cdr_stamp(raw)
-            if self.feeder.want(st):
-                self.feeder.on_scan(st, self._decode(raw))
         except Exception as exc:  # noqa: BLE001 —— 尽力而为,坏一帧丢一帧
             self._bad("点云", exc)
+            return
+        if self.kf is not None:
+            if len(self._clock) < CLOCK_SAMPLES:
+                self._clock.append(self._now() - st)
+            try:
+                self.kf.on_scan(st, raw)
+            except Exception as exc:  # noqa: BLE001 —— 存不了关键帧不碍预览
+                self._bad("关键帧", exc)
+        try:
+            if self.feeder.want(st):
+                self.feeder.on_scan(st, self._decode(raw))
+        except Exception as exc:  # noqa: BLE001
+            self._bad("点云", exc)
+
+    def clock_offset(self) -> float | None:
+        """雷达「本机收到 − 报文头」的中位数(秒;跟 ``build.bag_clock_offset`` 一个算法)。"""
+        c = sorted(self._clock)
+        return c[len(c) // 2] if c else None
+
+    def on_odom(self, m: Any) -> None:
+        try:
+            s, o = m.header.stamp, m.pose.pose.orientation
+            yaw = math.atan2(2 * (o.w * o.z + o.x * o.y), 1 - 2 * (o.y * o.y + o.z * o.z))
+            row = (s.sec + s.nanosec * 1e-9, self._now(), yaw)
+        except Exception as exc:  # noqa: BLE001
+            self._bad("里程", exc)
+            return
+        if all(math.isfinite(c) for c in row):
+            self.odom.append(row)
 
     def on_pose(self, m: Any) -> None:
         try:
@@ -389,9 +428,25 @@ class Handlers:
             if not all(math.isfinite(c) for c in v) or norm < 1e-9:
                 self._bad("位姿")
                 return
-            self.feeder.on_pose(s.sec + s.nanosec * 1e-9, (p.x, p.y, p.z), (o.x, o.y, o.z, o.w))
+            t = s.sec + s.nanosec * 1e-9
+            self.feeder.on_pose(t, (p.x, p.y, p.z), (o.x, o.y, o.z, o.w))
         except Exception as exc:  # noqa: BLE001
             self._bad("位姿", exc)
+            return
+        if self.kf is not None:
+            try:
+                self.kf.on_pose(t, (p.x, p.y, p.z), (o.x, o.y, o.z, o.w))
+            except Exception as exc:  # noqa: BLE001
+                self._bad("关键帧", exc)
+
+
+def write_live(out: Path, h: Handlers, summary: dict[str, Any]) -> None:
+    """边走边存的收尾(W75):``live.json`` = 关键帧汇总 + 雷达钟差 + 机器人自己的里程。最后写(先写临时
+    名再改名):有它才算这一趟的关键帧齐了。"""
+    doc = {**summary, "clock_offset_s": h.clock_offset(), "odom": [list(r) for r in h.odom]}
+    tmp = out / f".{LIVE_FILE}.tmp"
+    tmp.write_text(json.dumps(doc), encoding="utf-8")
+    os.replace(tmp, out / LIVE_FILE)
 
 
 def _paired(scan_t: float, pose_t: float, window: tuple[float, float] = PAIR_WINDOW_S) -> bool:
@@ -415,7 +470,13 @@ def main(argv: Sequence[str] | None = None) -> int:
     ap.add_argument("--period", type=float, default=PERIOD_S)
     ap.add_argument("--superlio", action="store_true",
                     help="位姿是 Super-LIO 的(IMU 位姿、帧末时刻;工单 21)")
+    ap.add_argument("--keyframes", type=Path, default=None,
+                    help="W75:边走边存关键帧到这个目录(要 --superlio)")
+    ap.add_argument("--odom-topic", default="/odom/mc_odom",
+                    help="机器人自己的里程(存关键帧时一起记朝向,核手性用)")
     a = ap.parse_args(argv)
+    if a.keyframes is not None and not a.superlio:
+        ap.error("--keyframes 要跟 --superlio 一起用")
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 
     import rclpy
@@ -428,10 +489,19 @@ def main(argv: Sequence[str] | None = None) -> int:
     from nexwar_localizer.build import cloud_xyz
 
     grid = LiveGrid()
+    kf = None
+    decode = lambda raw: cloud_xyz(deserialize_message(raw, PointCloud2))  # noqa: E731
     if a.superlio:
         from nexwar_localizer import superlio
-        feeder = Feeder(grid, window=SUPERLIO_PAIR_WINDOW_S,
-                        extrinsic=superlio.extrinsic(superlio.config_path()))
+        ext = superlio.extrinsic(superlio.config_path())
+        feeder = Feeder(grid, window=SUPERLIO_PAIR_WINDOW_S, extrinsic=ext)
+        if a.keyframes is not None:
+            a.keyframes.mkdir(parents=True, exist_ok=True)
+            (a.keyframes / LIVE_FILE).unlink(missing_ok=True)
+            kf = superlio.LiveKeyframes(
+                superlio.Keyframer(a.keyframes, ext[0], ext[1], decode,
+                                   voxel=superlio.KF_VOXEL_M),
+                log=a.keyframes / "lio.tum")
     else:
         feeder = Feeder(grid)
     snaps = Snapshots(a.out, run=a.run)
@@ -451,10 +521,15 @@ def main(argv: Sequence[str] | None = None) -> int:
     qos = QoSProfile(depth=2, history=HistoryPolicy.KEEP_LAST,
                      reliability=ReliabilityPolicy.BEST_EFFORT)
 
-    h = Handlers(feeder, decode_cloud=lambda raw: cloud_xyz(deserialize_message(raw, PointCloud2)))
+    if kf is not None:                    # 存关键帧时多留几帧:解一帧关键帧的工夫别丢了后面的
+        qos = QoSProfile(depth=KF_QOS_DEPTH, history=HistoryPolicy.KEEP_LAST,
+                         reliability=ReliabilityPolicy.BEST_EFFORT)
+    h = Handlers(feeder, decode_cloud=decode, keyframes=kf)
     node.create_subscription(PointCloud2, a.lidar_topic, h.on_scan, qos, raw=True)
     pose_qos = QoSProfile(depth=KEEP_POSES, reliability=ReliabilityPolicy.BEST_EFFORT)
     node.create_subscription(Odometry, a.pose_topic, h.on_pose, pose_qos)
+    if kf is not None:
+        node.create_subscription(Odometry, a.odom_topic, h.on_odom, pose_qos)
     # 一个执行器反复用(全局的那个每次 spin_once 都要加、摘节点;内审小 4)
     ex = SingleThreadedExecutor()
     ex.add_node(node)
@@ -470,6 +545,10 @@ def main(argv: Sequence[str] | None = None) -> int:
                              feeder.dropped, h.bad)
     finally:
         snaps.write(grid, dropped=feeder.dropped)
+        if kf is not None:
+            summary = kf.close()
+            write_live(a.keyframes, h, summary)
+            log.info("关键帧:%d 帧扫描、%d 个关键帧", summary["scans"], summary["keyframes"])
         ex.shutdown()
         node.destroy_node()
         rclpy.try_shutdown()
