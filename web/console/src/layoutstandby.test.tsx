@@ -96,3 +96,23 @@ describe("第 4 轮 maps N1 / setup P0-14", () => {
       .toMatchObject({ name: "home", map_version: "3", x: 5, y: 5, default: true }));
   });
 });
+
+// 网页第 5 轮遗留 minor #27:带过来的待命点只有「留下」,不要的没法丢
+describe("minor #27:带过来的待命点能丢", () => {
+  it("点「丢弃」告诉站点只丢这一个、列表里去掉;两个以上还有「全部丢弃」", async () => {
+    const nav = { revision: 1, zones: [], proposal: { from_version: "2", zones: [],
+      standby: [{ robot_id: "B", name: "home", x: 5, y: 5, yaw: 0, default: true }, { robot_id: "B", name: "gate", x: 6, y: 6, yaw: 0 }] } };
+    let reloaded = 0;
+    const p = { ...props(), data: { ...data, nav: nav as unknown as LayerData["nav"] }, reload: () => { reloaded++; return Promise.resolve(); } };
+    const { container: c } = render(<StandbyTab {...p} />);
+    const box = c.querySelector("[data-carried-standby]")!;
+    expect(box.querySelector("[data-drop-all]")).toBeTruthy();
+    fireEvent.click(box.querySelector('[data-drop="B/home"]')!);
+    await waitFor(() => expect(posted.find((x) => x.url === "/api/maps/home/3/zones/proposal")?.body)
+      .toEqual({ action: "drop_standby", standby: [{ robot_id: "B", name: "home" }] }));
+    await waitFor(() => expect(c.querySelector('[data-drop="B/home"]')).toBeNull());
+    expect(c.querySelector('[data-carried-mark="B/home"]')).toBeNull();
+    expect(c.querySelector('[data-drop="B/gate"]')).toBeTruthy();
+    expect(reloaded).toBeGreaterThan(0);
+  });
+});
