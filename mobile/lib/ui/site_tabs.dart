@@ -119,6 +119,24 @@ class _Entry extends StatelessWidget {
       _ => (id, ''),
     };
 
+/// 第 8 轮 W8-08：清单那一项的具体情况（路线都画在别的版本上、日程的路线跑不了）；没有就是空，用通用说明。
+String setupDetailText(Map it) {
+  String ver(Object? m) => m is Map ? ('${m['version'] ?? ''}'.isEmpty ? '${m['map']}' : 'v${m['version']}') : '';
+  final away = it['elsewhere'], use = it['using'], blocked = it['blocked'];
+  if (it['id'] == 'routes' && away is List && away.isNotEmpty && use is List && use.isNotEmpty) {
+    final names = away.map((r) => r is Map ? '${r['route']}' : '').join('、');
+    final at = away.map(ver).toSet().join('、'), u = use.map(ver).join('、');
+    return tr('${away.length} route(s) ($names) are drawn on $at, but the robots use $u: redraw on $u.',
+        '有 ${away.length} 条路线（$names）画在 $at 上，机器人在用 $u：在 $u 上重画。');
+  }
+  if (it['id'] == 'schedule' && blocked is List && blocked.isNotEmpty) {
+    final names = blocked.join('、');
+    return tr("Schedule $names can't run its route (drawn on another map version, or deleted): change the route or redraw it.",
+        '日程 $names 要跑的路线跑不了（画在别的地图版本上或已删除）：改路线或重画。');
+  }
+  return '';
+}
+
 class SetupChecklist extends StatefulWidget {
   final SiteApi api;
   /// 「去做」按到哪儿（外壳给：切到哪一栏或推哪一页）。
@@ -224,7 +242,8 @@ class _SetupChecklistState extends State<SetupChecklist> {
                       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                     Text(setupItemText('${it['id']}').$1, style: NwText.bodyMedium.copyWith(color: c.text)),
                     if (it['done'] != true)
-                      Text(setupItemText('${it['id']}').$2, style: NwText.bodySmall.copyWith(color: c.textSecondary)),
+                      Text(setupDetailText(it).isNotEmpty ? setupDetailText(it) : setupItemText('${it['id']}').$2,
+                          style: NwText.bodySmall.copyWith(color: c.textSecondary)),
                   ])),
                   if (it['done'] != true && it['skipped'] != true) ...[
                     TextButton(

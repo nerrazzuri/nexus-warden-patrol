@@ -127,3 +127,25 @@ def test_11_11_W6_01_开站清单按机器人现在用的那版图查_原点和�
     it = _项(setup_view(db, d))
     assert it["home"]["done"] and it["routes"]["done"], "不分版本的路线(空版本)算"
     db.close()
+
+
+def test_第8轮_W8_08_路线画在别的版本上_清单说在哪一版_日程的路线跑不了不打勾(tmp_path):
+    db = SiteDB(tmp_path / "s.db")
+    d = 假派遣器({"A": ("m1", "7")})
+    with db.tx() as c:
+        c.execute("INSERT INTO routes(route_id, map_id, map_version, definition, revision, "
+                  "updated_ms) VALUES ('demo-loop','m1','11','{}',1,0)")
+        c.execute("INSERT INTO route_schedules(entry_id, definition, revision, active_from_ms, "
+                  "updated_ms, updated_by, source) VALUES ('demo-night', "
+                  "'{\"mission\": \"demo-loop\", \"at\": \"22:00\"}', 1, 0, 0, 'a', 'editor')")
+    it = _项(setup_view(db, d))
+    assert not it["routes"]["done"]
+    assert it["routes"]["elsewhere"] == [{"route": "demo-loop", "map": "m1", "version": "11"}]
+    assert it["routes"]["using"] == [{"map": "m1", "version": "7"}]
+    assert not it["schedule"]["done"], "日程的路线画在 v11 上,机器人用 v7,跑不了"
+    assert it["schedule"]["blocked"] == ["demo-night"]
+    with db.tx() as c:
+        c.execute("UPDATE routes SET map_version='7' WHERE route_id='demo-loop'")
+    it = _项(setup_view(db, d))
+    assert it["routes"]["done"] and it["schedule"]["done"] and it["schedule"]["blocked"] == []
+    db.close()
