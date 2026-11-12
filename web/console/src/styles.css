@@ -1443,7 +1443,7 @@ input[type="date"]:not(.field input) { height: 36px; padding: 0 8px; border-radi
 /* P2-08:总览机器人一行右边「详情」 */
 .duty-list > li { display: flex; align-items: stretch; gap: 6px; }
 .duty-list > li > .duty-row { flex: 1; min-width: 0; }
-.duty-row-more { align-self: center; flex: none; }
+.duty-row-more, .duty-list > li > [data-robot-patrol] { align-self: center; flex: none; }
 /* 第 2 轮 P1-28 / admin N7:红色按钮禁用后看着跟能点一样 —— 跟别的禁用按钮一样变灰 */
 .btn.danger:disabled, .btn.stop:disabled, .rd-actions .rd-danger:disabled, .btn.rd-danger:disabled {
   color: var(--c-textMuted); background: transparent; border-color: var(--c-outline); opacity: 0.7; }

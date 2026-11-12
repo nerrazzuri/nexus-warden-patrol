@@ -19,6 +19,7 @@ import type { CanvasArea } from "./mapcanvas";
 import { SiteMap } from "./mappage";
 import { pointInPolygon } from "./mapview";
 import { canDispatch, type Alert, type Mode } from "./model";
+import { DispatchOnce } from "./routedispatch";
 import { pageAllowed } from "./shell";
 import { VideoSlot, type Scene } from "./slot";
 import { TodayPatrols } from "./todaypatrols";
@@ -246,7 +247,11 @@ export function DutyPage(props: {
               {/* P2-08:点行 = 放进画面位;「详情」打开这台的详情(能看机器人页的去机器人页,别的去地图上找它) */}
               <a class="btn sm duty-row-more" data-robot-more={u.robot.robot_id}
                 href={pageAllowed("admin/robots", props.role) ? `#/admin/robots?robot=${enc(u.robot.robot_id)}` : `#/map?robot=${enc(u.robot.robot_id)}`}
-                aria-label={t("dutyRobotMore", { id: nameOf(u.robot.robot_id) })}>{t("dutyDetails")}</a>
+                aria-label={t("dutyRobotMore", { id: nameOf(u.robot.robot_id) })}>{pageAllowed("admin/robots", props.role) ? t("dutyDetails") : t("dutyOnMap")}</a>
+              {/* 第 8 轮 W8-09:看不了机器人页的(保安)在这里按路线派巡逻、选圈数,跟 App 一样 */}
+              {!pageAllowed("admin/robots", props.role) && canDispatch(props.role) && u.state !== "offline" && (
+                <DispatchOnce robot={u.robot.robot_id} say={props.say} cls="btn sm" />
+              )}
             </li>
           ))}
         </ul>
