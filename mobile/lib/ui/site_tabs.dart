@@ -955,6 +955,7 @@ class MeTab extends StatelessWidget {
 
   static const Key leaveKey = Key('me-leave');
   static const Key settingsKey = Key('me-settings');
+  static const Key reportKey = Key('me-report');
 
   @override
   Widget build(BuildContext context) {
@@ -999,6 +1000,13 @@ class MeTab extends StatelessWidget {
                   title: tr('Practice an alarm', '报警演练'),
                   hint: tr("A simulated alarm visible only to you; nothing is sent to the site.", '模拟报警，仅你可见，不发送到站点。'),
                   onTap: () => _push(context, const PracticeAlarmPage())),
+            // 易用性第 6 轮 A6-07：保安出了问题直接在这儿报（以前要走「我的 → 设置 → 上传日志」三层）
+            _Entry(
+                entryKey: MeTab.reportKey,
+                icon: Icons.bug_report_outlined,
+                title: tr('Report a problem', '报问题'),
+                hint: tr('Say what happened; the logs go to the engineer.', '写一句出了什么事，日志发给工程师。'),
+                onTap: () => openProblemReport(context, api)),
             _Entry(
                 entryKey: const Key('me-help'),
                 icon: Icons.help_outline_rounded,

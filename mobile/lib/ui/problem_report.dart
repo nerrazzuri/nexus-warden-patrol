@@ -48,6 +48,7 @@ class ProblemReportPage extends StatefulWidget {
   static const Key shareBundleKey = Key('problem-share-bundle');
   static const Key shareAppKey = Key('problem-share-app');
   static const Key msgKey = Key('problem-msg');
+  static const Key otherKey = Key('problem-other');
 
   @override
   State<ProblemReportPage> createState() => _ProblemReportPageState();
@@ -166,6 +167,13 @@ class _ProblemReportPageState extends State<ProblemReportPage> {
     }
   }
 
+  Widget _appOnly() => NwButton(
+      buttonKey: ProblemReportPage.shareAppKey,
+      fullWidth: true,
+      variant: NwButtonVariant.ghost,
+      label: tr('Send the app log only', '只发 App 日志'),
+      onPressed: _busy ? null : () => _shareApp());
+
   @override
   Widget build(BuildContext context) {
     final c = Nw.of(context);
@@ -180,11 +188,16 @@ class _ProblemReportPageState extends State<ProblemReportPage> {
               constraints: const BoxConstraints(maxWidth: 480),
               child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
                 if (code == null) ...[
+                  // 易用性第 6 轮 A6-07 / A7-02：说明跟唯一的主按钮「发送」对得上；没登录站点时不提站点开单
                   Text(
-                      tr('Something went wrong? Say what happened and send. The site opens a report with a number; '
-                          'tell the engineer that number. No passwords or photos are sent.',
-                          '遇到问题了？写一句出了什么事，按「上传」。站点会开一张问题单、给一个编号，把编号告诉工程师就行。'
-                          '不会传密码和照片。'),
+                      widget.api != null
+                          ? tr('Something went wrong? Say what happened and tap "Send". The site opens a report with a number '
+                              'and the logs go to the engineer (WeChat / WhatsApp). No passwords or photos are sent.',
+                              '遇到问题了？写一句出了什么事，按「发送」。站点会开一张问题单、给一个编号，日志发给工程师（微信 / WhatsApp）。'
+                              '不会传密码和照片。')
+                          : tr('Something went wrong? Say what happened and tap "Send": the app log goes to the engineer '
+                              '(WeChat / WhatsApp). No passwords or photos are sent.',
+                              '遇到问题了？写一句出了什么事，按「发送」，App 日志发给工程师（微信 / WhatsApp）。不会传密码和照片。'),
                       style: NwText.bodyMedium.copyWith(color: c.textSecondary)),
                   const SizedBox(height: Nw.s16),
                   NwField(
@@ -211,19 +224,28 @@ class _ProblemReportPageState extends State<ProblemReportPage> {
                       buttonKey: ProblemReportPage.engineerKey,
                       size: NwButtonSize.large,
                       fullWidth: true,
-                      label: _busy
-                          ? tr('Sending…', '正在发送…')
-                          : tr('Send to engineer (WeChat / WhatsApp)', '发给工程师（微信 / WhatsApp）'),
+                      label: _busy ? tr('Sending…', '正在发送…') : tr('Send', '发送'),
                       onPressed: _busy ? null : _sendToEngineer),
-                  if (widget.api != null) ...[
-                    const SizedBox(height: Nw.s8),
-                    NwButton(
-                        buttonKey: ProblemReportPage.sendKey,
-                        fullWidth: true,
-                        variant: NwButtonVariant.outline,
-                        label: tr('Upload to the site only (engineer fetches remotely)', '只传到站点（工程师远程取）'),
-                        onPressed: _busy ? null : () => _send()),
-                  ],
+                  // A6-07：别的方式收起来，客户一眼只看到一个该点的按钮
+                  if (widget.api != null)
+                    Theme(
+                      data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+                      child: ExpansionTile(
+                          key: ProblemReportPage.otherKey,
+                          tilePadding: EdgeInsets.zero,
+                          title: Text(tr('Other ways', '其他方式'),
+                              style: NwText.bodyMedium.copyWith(color: c.textSecondary)),
+                          children: [
+                            NwButton(
+                                buttonKey: ProblemReportPage.sendKey,
+                                fullWidth: true,
+                                variant: NwButtonVariant.outline,
+                                label: tr('Upload to the site only (engineer fetches remotely)', '只传到站点（工程师远程取）'),
+                                onPressed: _busy ? null : () => _send()),
+                            const SizedBox(height: Nw.s8),
+                            _appOnly(),
+                          ]),
+                    ),
                 ] else ...[
                   Icon(Icons.check_circle_rounded, size: 48, color: c.success),
                   const SizedBox(height: Nw.s16),
@@ -259,13 +281,7 @@ class _ProblemReportPageState extends State<ProblemReportPage> {
                         label: tr('Send package to engineer (WeChat / WhatsApp)', '整包发给工程师（微信 / WhatsApp）'),
                         onPressed: _busy ? null : _shareBundle),
                 ],
-                const SizedBox(height: Nw.s16),
-                NwButton(
-                    buttonKey: ProblemReportPage.shareAppKey,
-                    fullWidth: true,
-                    variant: NwButtonVariant.ghost,
-                    label: tr('Send the app log only', '只发 App 日志'),
-                    onPressed: _busy ? null : () => _shareApp()),
+                if (code != null) ...[const SizedBox(height: Nw.s16), _appOnly()],
                 if (_msg != null) ...[
                   const SizedBox(height: Nw.s16),
                   NwNotice(key: ProblemReportPage.msgKey, text: _msg!, tone: _msgBad ? NwTone.error : NwTone.info),
