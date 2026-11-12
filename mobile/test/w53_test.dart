@@ -374,6 +374,18 @@ void main() {
       expect(find.textContaining('日程 demo-night 要跑的路线跑不了'), findsOneWidget);
     });
 
+    // minor #21（liang-d5 W7）：标原点时自动加了待命点，清单打勾 —— 写明待命点就是原点
+    testWidgets('minor #21：待命点就是原点的，打勾也写一句', (t) async {
+      final api = FakeApi('admin')
+        ..setupBody = <String, dynamic>{'done': 1, 'total': 1, 'items': <dynamic>[
+          <String, dynamic>{'id': 'standby', 'done': true, 'skipped': false, 'robots': <dynamic>[], 'at_home': ['A']},
+        ]};
+      _size(t);
+      await t.pumpWidget(MaterialApp(home: AdminHomeTab(api: api, switchTab: (_) {})));
+      await t.pumpAndSettle();
+      expect(find.textContaining('A 的待命点就是原点（标原点时自动加的）'), findsOneWidget);
+    });
+
     testWidgets('账号审批：权限下拉默认只看，选保安、输密码批准', (t) async {
       final api = FakeApi('admin')
         ..acctReqs = <Map<String, dynamic>>[<String, dynamic>{'id': 'r1', 'name': 'wangxm', 'display': '王小明'}];

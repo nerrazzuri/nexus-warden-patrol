@@ -130,6 +130,14 @@ String setupDetailText(Map it) {
     return tr('${away.length} route(s) ($names) are drawn on $at, but the robots use $u: redraw on $u.',
         '有 ${away.length} 条路线（$names）画在 $at 上，机器人在用 $u：在 $u 上重画。');
   }
+  final home = it['at_home'];
+  if (it['id'] == 'standby' && it['done'] == true && home is List && home.isNotEmpty) {
+    // minor #21：标原点时站点顺手加的待命点就在原点上
+    final ids = home.join(tr(', ', '\u3001'));
+    return tr('The standby point of $ids is its origin (added automatically when the origin was marked). '
+        'To park it somewhere else, add a standby point on the Layout page.',
+        '$ids 的待命点就是原点（标原点时自动加的）。想让它停到别处，在网页布置页加一个待命点。');
+  }
   if (it['id'] == 'schedule' && blocked is List && blocked.isNotEmpty) {
     final names = blocked.join(tr(', ', '\u3001'));
     return tr("Schedule $names can't run its route (drawn on another map version, or deleted): change the route or redraw it.",
@@ -244,7 +252,9 @@ class _SetupChecklistState extends State<SetupChecklist> {
                     Text(setupItemText('${it['id']}').$1, style: NwText.bodyMedium.copyWith(color: c.text)),
                     if (it['done'] != true)
                       Text(setupDetailText(it).isNotEmpty ? setupDetailText(it) : setupItemText('${it['id']}').$2,
-                          style: NwText.bodySmall.copyWith(color: c.textSecondary)),
+                          style: NwText.bodySmall.copyWith(color: c.textSecondary))
+                    else if (setupDetailText(it).isNotEmpty)
+                      Text(setupDetailText(it), style: NwText.bodySmall.copyWith(color: c.textSecondary)),
                   ])),
                   if (it['done'] != true && it['skipped'] != true) ...[
                     TextButton(

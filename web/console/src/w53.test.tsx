@@ -223,6 +223,18 @@ describe("第 8 轮 开站清单:路线在别的版本上", () => {
   });
 });
 
+// minor #21(liang-d5 W7):标原点时自动加了待命点,清单打勾 —— 写明待命点就是原点
+describe("minor #21 开站清单:待命点就是原点", () => {
+  it("写「A 的待命点就是原点(标原点时自动加的)」", async () => {
+    setFetch(((url: string) => Promise.resolve(url === "/api/setup"
+      ? json({ items: [{ id: "standby", done: true, skipped: false, robots: [], at_home: ["A"] }], done: 1, total: 1 })
+      : url === "/api/me" ? json({ name: "alice", role: "admin", guide: { tour: 1, setup_hidden: false, skip: [] } }) : json({}, 404))) as typeof fetch);
+    const { container: c } = render(<SetupChecklist />);
+    await waitFor(() => expect(c.querySelector('[data-item="standby"]')).not.toBeNull());
+    expect(c.querySelector('[data-item="standby"]')!.textContent).toContain("A 的待命点就是原点(标原点时自动加的)");
+  });
+});
+
 // 第 8 轮 W8-11:今天的巡逻写路线显示名
 describe("第 8 轮 今天的巡逻写显示名", () => {
   it("有显示名写显示名", async () => {
