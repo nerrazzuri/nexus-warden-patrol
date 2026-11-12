@@ -516,6 +516,18 @@ def test_有回环工具_跑回环_从回环后的simplemap重出点云先验与
     assert "loop_closure_s" in b["timings_s"]
 
 
+def test_中间目录给的是相对路径_回环工具在lc里跑也能找到simplemap(tmp_path, monkeypatch):
+    work, pts = _scene(tmp_path, False)
+    cli = _lc_tool(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    fake = 假MOLA(pts, closures=3, shift=(0.0, 0.01, 0.0))
+    B.package(work.relative_to(tmp_path), tmp_path / "out", run=fake, loop_closure=cli)
+    [lc] = [c for c in fake.calls if Path(c[0]).name == "mola-sm-lc-cli"]
+    assert Path(lc[lc.index("-i") + 1]).is_absolute(), \
+        "回环工具在 lc/ 里跑:给相对路径它读到空文件,回环悄悄不用(11-12 台式机撞到)"
+    assert Path(lc[lc.index("-o") + 1]).is_absolute()
+
+
 def test_没有回环工具_出的文件跟原来一样_build_json说没有(tmp_path):
     work, pts = _scene(tmp_path, False)
     fake, out = _plain(tmp_path, pts, work)
