@@ -24,6 +24,13 @@ describe("技术提醒说人话", () => {
     }
     expect(advice("loc_degraded")!.go).toBe("admin/localization");
   });
+  // W6-09:机器人盘满(disk_80)以前借用站点盘的说法,首页写「站点磁盘空间即将用尽。机器人:B、A」
+  it("机器人存储盘快满和站点盘快满是两件事,说法分开", () => {
+    expect(t(advice("disk_80")!.say)).toContain("机器人");
+    expect(t(advice("disk_80")!.say)).not.toContain("站点");
+    expect(t(advice("site_disk_low")!.say)).toContain("站点");
+    expect(t(advice("disk_80")!.todo)).toContain("90%");
+  });
   it("没写的回 null", () => {
     expect(advice("something_new")).toBeNull();
   });

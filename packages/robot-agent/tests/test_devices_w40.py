@@ -65,7 +65,7 @@ async def test_盘_没挂上故障_快满降级_够用在线(tmp_path):
     dh._disk_usage = lambda p: U(1000 * 2**30, 950 * 2**30, 50 * 2**30)
     assert _by(await dh.refresh())["disk"][0] == "degraded"
     dh._disk_usage = lambda p: U(1000 * 2**30, 100 * 2**30, 900 * 2**30)
-    assert _by(await dh.refresh())["disk"] == ("online", "剩 900 GB")
+    assert _by(await dh.refresh())["disk"] == ("online", "已用 10%,剩 900 GB")
 
 
 async def test_网络设备_连得上在线_连不上离线_并着查():
@@ -152,3 +152,15 @@ async def test_仿真狗装了上装_随遥测带设备健康(tmp_path):
     await _跑(rt, broker, n=10, r=dog, c=c)            # 不到 10 s 不再带
     assert len([t for t in ears.by.get("telemetry", []) if "devices" in t]) == n
     await rt.close()
+
+
+async def test_minor_W6_09_盘到八成就降级_跟站点的报警同一条线_写用了多少剩多少(tmp_path):
+    """liang-d5 第 6 轮 W6-09:报警说 B 的盘快满了(站点按已用 80% 报),诊断页却写「剩 31 GB ✓」
+    (原来剩不到一成才降级)。同一条线,同一个说法。"""
+    dh = DeviceHealth(hal=object(), outbox=tmp_path)
+    dh._disk_usage = lambda p: U(170 * 2**30, 139 * 2**30, 31 * 2**30)        # 已用 82%
+    state, text = _by(await dh.refresh())["disk"]
+    assert state == "degraded", text
+    assert "已用 82%" in text and "剩 31 GB" in text and "90%" in text
+    dh._disk_usage = lambda p: U(170 * 2**30, 100 * 2**30, 70 * 2**30)        # 已用 59%
+    assert _by(await dh.refresh())["disk"] == ("online", "已用 59%,剩 70 GB")

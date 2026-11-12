@@ -26,12 +26,14 @@ from typing import Any
 from urllib.parse import urlsplit
 
 from nexwar_contract.devices import device
+from nexwar_contract.storage import STOP_RATIO, WARN_RATIO
 
 log = logging.getLogger(__name__)
 
 CONNECT_TIMEOUT_S = 1.0
-#: 发件箱那块盘剩不到这么多算降级。
-LOW_FREE = 0.10
+#: 发件箱那块盘用到 ``WARN_RATIO`` 算降级 —— 跟站点报「机器人存储空间不足」(``disk_80``)同一条线
+#: (W6-09:原来剩不到一成才降级,报警响了诊断页还打勾);到 ``STOP_RATIO`` 不接新的巡逻。
+WARN_USED, STOP_USED = WARN_RATIO, STOP_RATIO
 _RTK_FIX = {"float": "浮点解", "dgps": "差分", "single": "单点(未收到改正?)"}
 
 
@@ -163,8 +165,10 @@ class DeviceHealth:
             u = self._disk_usage(self.outbox)
         except OSError as exc:
             return device("disk", "error", f"无法读取盘:{exc}")
-        free = u.free / u.total if u.total else 0.0
+        used = 1.0 - (u.free / u.total if u.total else 0.0)
         gb = u.free / 2**30
-        if free < LOW_FREE:
-            return device("disk", "degraded", f"只剩 {free:.0%}({gb:.1f} GB)")
-        return device("disk", "online", f"剩 {gb:.0f} GB")
+        left = f"剩 {gb:.0f} GB" if gb >= 10 else f"剩 {gb:.1f} GB"
+        if used >= WARN_USED:
+            return device("disk", "degraded",
+                          f"已用 {used:.0%},{left}:到 {STOP_USED:.0%} 就不接新的巡逻(没传完的不删)")
+        return device("disk", "online", f"已用 {used:.0%},{left}")
