@@ -319,6 +319,8 @@ class MapWizardPage extends StatefulWidget {
   static Key siteTypeKey(String t) => Key('wizard-site-$t');
   static const Key labelKey = Key('wizard-label');
   static const Key checksKey = Key('wizard-checks');
+  /// 第 8 轮 A8-02：机器人在一直巡逻时的「叫停」。
+  static const Key stopTaskKey = Key('wizard-stop-task');
   static Key driveKey(String d) => Key('wizard-drive-$d');
   static const Key startRecKey = Key('wizard-start-rec');
   static const Key walkStatusKey = Key('wizard-walk-status');
@@ -580,16 +582,51 @@ class _MapWizardPageState extends State<MapWizardPage> {
     final caps = r['capabilities'];
     final tasks = caps is Map ? caps['tasks'] : null;
     final canMap = tasks is Map && tasks['mapping'] is Map && (tasks['mapping'] as Map)['live'] == true;
+    final id = '${r['robot_id']}';
     return [
       (online, tr('Online', '在线'), tr('Power on the robot and connect it to the network.', '请开机并连接网络。')),
       (b == null || b >= 50, b == null ? tr('Battery unknown', '电量未知') : tr('Battery ${b.round()}% (50% or more required)', '电量 ${b.round()}%（需 50% 以上）'),
           tr('Charge first: mapping takes about 20–40 minutes.', '请先充电：建图约需 20–40 分钟。')),
-      (!online || !robotActive(r), tr('Idle (no task)', '空闲（无任务）'), tr('Wait for the current task to finish.', '请等待当前任务完成。')),
+      (
+        !online || !robotActive(r),
+        tr('Idle (no task)', '空闲（无任务）'),
+        // 第 8 轮 A8-02：一直巡逻要到电量线才结束，等不到
+        _forever(r)
+            ? tr('$id is keep-patrolling: stop it first (it only ends at the patrol battery line).',
+                '$id 正在一直巡逻，要先叫停（一直巡逻要到巡逻电量线才结束）。')
+            : tr('Wait for the current task to finish.', '请等待当前任务完成。')
+      ),
       (!(ready is Map && ready['estop_clear'] == false), tr('Emergency stop released', '急停已松开'),
           tr('Release the emergency stop.', '松开急停。')),
       (!online || canMap, tr('Can map', '能建图'),
-          tr('This robot doesn\'t support live mapping (update its software).', '此机器人不支持边走边建图（请先升级）。')),
+          // 第 8 轮 A8-03：说找谁升级（App 里没有升级入口）
+          tr("This robot's software can't map while walking yet. Ask your delivery engineer to update it, or use another robot.",
+              '这台机器人的软件还不能边走边建图：请联系交付工程师升级，或换一台机器人。')),
     ];
+  }
+
+  static String _taskId(Map<String, dynamic> r) {
+    final st = r['status'];
+    final task = st is Map ? st['task'] : null;
+    return task is Map ? '${task['task_id'] ?? ''}' : '';
+  }
+
+  static bool _forever(Map<String, dynamic> r) {
+    final lap = r['lap'];
+    return _taskId(r).startsWith('adhoc-forever-') || (lap is Map && lap['of'] == 0);
+  }
+
+  Future<void> _stopTask(Map<String, dynamic> r) async {
+    setState(() => _busy = true);
+    try {
+      await api.abort('${r['robot_id']}', _taskId(r));
+      final robots = await api.robots();
+      if (mounted) setState(() => _robots = [for (final x in robots) if (x['revoked'] != true) x]);
+    } on SiteError catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(refusalText(e))));
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
   }
 
   Future<void> _prepareNext() async {
@@ -684,6 +721,15 @@ class _MapWizardPageState extends State<MapWizardPage> {
                           style: NwText.bodyMedium.copyWith(color: x.$1 ? c.text : c.error))),
                 ]),
               ),
+            if (robotOnline(r) && robotActive(r) && _forever(r)) ...[
+              const SizedBox(height: Nw.s8),
+              NwButton(
+                  buttonKey: MapWizardPage.stopTaskKey,
+                  variant: NwButtonVariant.outline,
+                  icon: Icons.stop_rounded,
+                  label: tr('Stop ${r['robot_id']}', '叫停 ${r['robot_id']}'),
+                  onPressed: _busy ? null : () => _stopTask(r)),
+            ],
           ]),
         ),
       ],
@@ -693,6 +739,17 @@ class _MapWizardPageState extends State<MapWizardPage> {
           text: tr('Place the robot where it will charge (in front of the dock). Start and finish there.',
               '请将机器人放在今后的充电位置（充电桩前），从此处出发并最终回到此处。')),
     ], [
+      // 第 8 轮 A8-03：下一步灰着时在按钮上面说为什么（横屏时检查表可能在屏幕外）
+      if (r != null && !ok)
+        Padding(
+          padding: const EdgeInsets.only(bottom: Nw.s8),
+          child: Text(
+              key: const Key('wizard-next-why'),
+              checks.where((x) => !x.$1).map((x) => x.$3).first,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: NwText.bodySmall.copyWith(color: c.error)),
+        ),
       NwButton(
           buttonKey: MapWizardPage.nextKey,
           label: tr('Next', '下一步'),
