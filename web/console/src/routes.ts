@@ -19,6 +19,8 @@ export interface RoutePoint {
 }
 
 export interface Route {
+  /** 第 8 轮 W8-11:显示名(老站点没有)。 */
+  title?: string;
   id: string;
   /** W73:patrol 巡逻路线 / guard 防区路线(只给布防值守用)。老站点没有这一项 = 巡逻。 */
   kind?: "patrol" | "guard";
@@ -35,6 +37,8 @@ export interface Route {
 }
 
 export interface RouteSchedule {
+  /** 第 8 轮 W8-11:显示名(老站点没有)。 */
+  title?: string;
   id: string;
   mission: string;
   at: string;
@@ -61,6 +65,8 @@ export interface PointProblem { index: number | null; name: string; problem: str
 /** 编辑中的一条:isNew 的还没存过(base = 0)。 */
 export interface Draft {
   id: string;
+  /** 第 8 轮 W8-11:给人看的名字(能写中文);没起是空。 */
+  title?: string;
   isNew: boolean;
   base: number;
   points: RoutePoint[];
@@ -188,3 +194,9 @@ export function clock(sec: number): string {
   const ss = String(s % 60).padStart(2, "0");
   return h > 0 ? `${h}:${String(m).padStart(2, "0")}:${ss}` : `${m}:${ss}`;
 }
+
+/** 第 8 轮 W8-11:路线、排程给人看的名字 —— 起了显示名写显示名,没起写编号。 */
+export function routeLabel(r: { id: string; title?: string } | undefined, id = ""): string {
+  return r?.title || r?.id || id;
+}
+

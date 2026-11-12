@@ -279,7 +279,7 @@ function Controls({ r, u, role, say, onChanged }: { r: RobotCard; u?: UnitInfo; 
   const [err, setErr] = useState<string | null>(null);
   const [ask, setAsk] = useState<Posture | null>(null);
   const [askHome, setAskHome] = useState(false);
-  const [drawn, setDrawn] = useState<Record<string, { id: string; v: string }>>({});
+  const [drawn, setDrawn] = useState<Record<string, { id: string; v: string; title?: string }>>({});
   const patrol = canPatrol(role);
   const dispatch = canDispatch(role);
   useEffect(() => {
@@ -288,8 +288,8 @@ function Controls({ r, u, role, say, onChanged }: { r: RobotCard; u?: UnitInfo; 
       .then((d) => { const m = d.missions ?? []; setRoutes(m); setPick(m.length === 1 ? m[0] : ""); })
       .catch(() => setRoutes([]));
     // 第 8 轮 W8-02:路线画在哪一版(跟 App 一样,别的版本上的灰掉);读不到就不灰(站点照样会拒)
-    api<{ routes?: { id: string; map_id?: string; map_version?: string }[] }>("GET", "/api/routes")
-      .then((d) => setDrawn(Object.fromEntries((d.routes ?? []).map((x) => [x.id, { id: x.map_id ?? "", v: x.map_version ?? "" }]))))
+    api<{ routes?: { id: string; map_id?: string; map_version?: string; title?: string }[] }>("GET", "/api/routes")
+      .then((d) => setDrawn(Object.fromEntries((d.routes ?? []).map((x) => [x.id, { id: x.map_id ?? "", v: x.map_version ?? "", title: x.title }]))))
       .catch(() => setDrawn({}));
   }, [r.robot_id, patrol]);
   /** 这条路线画在别的图 / 版本上:回「画在哪一版」;对得上、不知道回 null。 */
@@ -357,13 +357,14 @@ function Controls({ r, u, role, say, onChanged }: { r: RobotCard; u?: UnitInfo; 
                 <option value="">{t("rdPickRoute")}</option>
                 {(routes ?? []).map((m) => {
                   const o = otherMap(m);
-                  return <option key={m} value={m} disabled={o !== null}>{o === null ? m : `${m} — ${t("rdRouteOtherMap", { at: o, id, v: `v${r.map?.version ?? ""}` })}`}</option>;
+                  const name = drawn[m]?.title || m;             // 第 8 轮 W8-11:写显示名
+                  return <option key={m} value={m} disabled={o !== null}>{o === null ? name : `${name} — ${t("rdRouteOtherMap", { at: o, id, v: `v${r.map?.version ?? ""}` })}`}</option>;
                 })}
               </select>
               <LoopsSelect value={loops} onChange={setLoops} />
               <button type="button" class="btn sm primary" disabled={busy || off || !pick}
                 onClick={() => void send(() => api("POST", path("patrol"), { mission_id: pick, loops }),
-                  t("rdPatrolSent", { id, route: pick }))}>
+                  t("rdPatrolSent", { id, route: drawn[pick]?.title || pick }))}>
                 {t("rdStartPatrol")}
               </button>
             </div>

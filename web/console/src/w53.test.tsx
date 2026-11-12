@@ -223,3 +223,16 @@ describe("第 8 轮 开站清单:路线在别的版本上", () => {
   });
 });
 
+// 第 8 轮 W8-11:今天的巡逻写路线显示名
+describe("第 8 轮 今天的巡逻写显示名", () => {
+  it("有显示名写显示名", async () => {
+    setFetch(((url: string) => Promise.resolve(url === "/api/patrols/today"
+      ? json({ items: [{ at_ms: Date.now(), kind: "schedule", label: "route-1", title: "一楼夜巡", robot: "A", by: "", state: "later", reason: "", end_ms: null, adhoc_id: "" }] })
+      : json({}, 404))) as typeof fetch);
+    const { container: c } = render(<TodayPatrols />);
+    await waitFor(() => expect(c.querySelectorAll(".today-row").length).toBe(1));
+    expect(c.textContent).toContain("一楼夜巡 · A");
+    expect(c.textContent).not.toContain("route-1");
+  });
+});
+

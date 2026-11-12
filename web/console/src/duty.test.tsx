@@ -32,7 +32,7 @@ beforeEach(() => {
       posts.push({ url, body: JSON.parse(String(init.body ?? "{}")) });
       return Promise.resolve(url.endsWith("/resolve") && resolveStatus !== 200 ? json({ error: "没有这条告警" }, resolveStatus) : json({}));
     }
-    if (url.startsWith("/api/routes?")) return Promise.resolve(json({ revision: 1, timezone: "UTC", routes: [{ id: "loop-test", map_id: "m1", map_version: "1" }], schedules: [] }));
+    if (url.startsWith("/api/routes?")) return Promise.resolve(json({ revision: 1, timezone: "UTC", routes: [{ id: "loop-test", map_id: "m1", map_version: "1", title: "一楼夜巡" }], schedules: [] }));
     if (url.startsWith("/api/robots/B/patrol-plan")) return Promise.resolve(json({ estimate_s: 600, start_ms: 0, queued: false, because: "", loops: 3 }));
     if (url.startsWith("/api/cameras")) return Promise.resolve(json({ cameras: [{ name: "cam3", zone: "北区", rtsp: true }] }));
     return Promise.resolve(json({}, 404));
@@ -301,6 +301,7 @@ describe("第 8 轮 W8-09 保安网页派巡逻", () => {
     fireEvent.click(c.querySelector('[data-robot-patrol="B"]')!);
     const route = await waitFor(() => { const x = document.querySelector('select[name="route"]') as HTMLSelectElement; expect(x.options.length).toBe(2); return x; });
     expect(document.querySelector('select[name="robot"]')).toBeNull();
+    expect(route.options[1].textContent).toBe("一楼夜巡");
     expect(document.querySelector("dialog")!.textContent).toContain("派 B 巡逻");
     fireEvent.change(route, { target: { value: "loop-test" } });
     fireEvent.change(document.querySelector('select[name="loops"]')!, { target: { value: "3" } });

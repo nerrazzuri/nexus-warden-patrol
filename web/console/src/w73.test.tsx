@@ -150,7 +150,8 @@ describe("第 2 轮 P1-40:按防区生成没放上点", () => {
 });
 
 describe("第 2 轮 P1-39 / layout N3:路线存不了时按顶上「保存」说清为什么", () => {
-  it("名字带中文:说名字规则,不发请求、不当成存好了", async () => {
+  // 第 8 轮 W8-11 起:名字带中文可以 —— 当显示名,编号自动给(原来是说名字规则、不发请求)
+  it("名字带中文:当显示名存,编号自动给", async () => {
     const said: string[] = [];
     const { container: c } = render(<RoutesTab {...base()} say={(m: string) => said.push(m)} />);
     await waitFor(() => expect(c.querySelector('[data-route-row="night"]')).not.toBeNull());
@@ -159,9 +160,12 @@ describe("第 2 轮 P1-39 / layout N3:路线存不了时按顶上「保存」说
     fireEvent.input(c.querySelector('input[aria-label="路线名"]')!, { target: { value: "东区" } });
     fireEvent.click(c.querySelector(".pick")!);
     await waitFor(() => expect(save).not.toBeNull());
-    await expect(save!()).rejects.toThrow();
-    expect(said.join(" ")).toContain("只许字母");
-    expect(posted.filter((p) => p.url.startsWith("/api/routes/"))).toEqual([]);
+    await save!().catch(() => {});
+    const got = posted.filter((p) => p.url.startsWith("/api/routes/"));
+    expect(got.length).toBe(1);
+    expect(got[0].url).toMatch(/^\/api\/routes\/route-\d+$/);
+    expect((got[0].body as { title?: string }).title).toBe("东区");
+    expect(said.join(" ")).not.toContain("只许字母");
   });
 });
 
