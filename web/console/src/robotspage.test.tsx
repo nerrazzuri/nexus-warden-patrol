@@ -241,7 +241,7 @@ describe("机器人页", () => {
     fireEvent.click(cardOf(c, "A"));
     const d = c.querySelector(".robot-detail")!;
     expect(d.querySelector("form")).toBeNull();
-    expect(Array.from(d.querySelectorAll("button")).map((b) => b.textContent?.trim())).toEqual(["关闭", "开始巡逻", "停止当前任务"]);
+    expect(Array.from(d.querySelectorAll("button")).map((b) => b.textContent?.trim())).toEqual(["关闭", "派巡逻", "停止当前任务"]);
   });
 });
 
@@ -273,9 +273,9 @@ describe("W71 Nav2 没起来", () => {
     fireEvent.click(cardOf(c, "A"));
     const d = c.querySelector(".robot-detail")!;
     await waitFor(() => expect(d.querySelectorAll('select[name="route"] option').length).toBe(3));
-    expect(btn(d, "开始巡逻").disabled).toBe(true);
+    expect(btn(d, "派巡逻").disabled).toBe(true);
     fireEvent.change(d.querySelector('select[name="route"]')!, { target: { value: "west-loop" } });
-    fireEvent.click(btn(d, "开始巡逻"));
+    fireEvent.click(btn(d, "派巡逻"));
     await waitFor(() => expect(posted.find((p) => p.url === "/api/robots/A/patrol")?.body).toEqual({ mission_id: "west-loop", loops: 1 }));
     await waitFor(() => expect(said.join()).toContain("west-loop"));
     fireEvent.click(btn(d, "回待命点"));
@@ -295,7 +295,7 @@ describe("W71 Nav2 没起来", () => {
     await waitFor(() => expect(d.querySelectorAll('select[name="route"] option').length).toBe(3));
     fireEvent.change(d.querySelector('select[name="route"]')!, { target: { value: "west-loop" } });
     fireEvent.change(d.querySelector('select[name="loops"]')!, { target: { value: "0" } });
-    fireEvent.click(btn(d, "开始巡逻"));
+    fireEvent.click(btn(d, "派巡逻"));
     await waitFor(() => expect(posted.find((p) => p.url === "/api/robots/A/patrol")?.body).toEqual({ mission_id: "west-loop", loops: 0 }));
   });
 
@@ -381,7 +381,7 @@ describe("W71 Nav2 没起来", () => {
     await waitFor(() => expect(cardOf(o, "A")).not.toBeNull());
     fireEvent.click(cardOf(o, "A"));
     d = o.querySelector(".robot-detail")!;
-    expect(btn(d, "开始巡逻")).toBeTruthy();
+    expect(btn(d, "派巡逻")).toBeTruthy();
     expect(btn(d, "停止当前任务")).toBeTruthy();
     expect(btn(d, "回待命点")).toBeUndefined();
     expect(btn(d, "恢复")).toBeUndefined();

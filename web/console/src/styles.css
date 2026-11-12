@@ -1261,6 +1261,8 @@ input.invalid { border-color: var(--c-error); }
   .console .ly-main .routesplit > .routeside { max-height: calc(100vh - 220px); overflow-y: auto; }
 }
 .routeside .route-acts { position: sticky; bottom: 0; background: var(--c-surface); padding: 8px 0; z-index: 1; }
+/* 第 8 轮 W8-01:英文按钮长,放不下就换行(以前「派巡逻」被挤出屏幕) */
+.route-acts { flex-wrap: wrap; row-gap: 8px; }
 /* P1-66:活动日志的结果 */
 .user-audit li.bad { color: inherit; }
 .user-audit .tag.bad { background: var(--c-errorSoft); color: var(--c-error); }
