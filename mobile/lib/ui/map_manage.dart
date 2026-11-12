@@ -23,7 +23,8 @@ String versionLabel(String v) =>
 
 /// 站点记的版本说明（「从 10 编辑:擦了…」）按界面写：「从第 10 版编辑：擦了…」。
 String versionNoteText(String note) {
-  final m = RegExp(r'^从 (\S+) 编辑:(.*)$').firstMatch(note);
+  // 站点原话「从 X 编辑:…」（写成 \u 转义：这里是认站点的字，不是给人看的）
+  final m = RegExp('^\u4ece (\\S+) \u7f16\u8f91:(.*)\$').firstMatch(note);
   if (m == null) return note;
   return tr('Edited from ${versionLabel(m[1]!).toLowerCase()}: ${m[2]}', '从${versionLabel(m[1]!)}编辑：${m[2]}');
 }
