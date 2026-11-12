@@ -65,6 +65,7 @@ class EngineMissionTask(Task):
         self._unconfirmed_s = 0.0
         #: 这一趟的「归档写不进去」报过没有(W00c6a:一趟报一条)。
         self._archive_reported = False
+        self._returning_told = False
         #: 引擎任务死了的原因(W00c6a 看门);非空之后按终态走:等停车确认、导航回待命,再报失败。
         self._dead: str | None = None
 
@@ -138,6 +139,12 @@ class EngineMissionTask(Task):
         engine = self._parts.engine
         snap = engine.snapshot
         self._report_waypoints(snap.results)
+        if not self._returning_told and getattr(engine, "returned", "") \
+                and self._mission().policy.forever:
+            # 外审 W76-2 #1:一直巡逻开始回家了 —— 站点日程看见它就等它到家(机器人这时会回忙)
+            self._returning_told = True
+            self._events.emit("task_returning", {"task_id": self.task_id,
+                                                 "reason": str(engine.returned)[:200]})
         err = engine.archive_error
         if err and not self._archive_reported:
             # 盘满、只读重挂(W00c6a):这一趟照跑,但照片、记录没存下 —— 要让人知道,证据缺了。
@@ -254,7 +261,9 @@ class EngineMissionTask(Task):
             m = self._mission()
         except NotImplementedError:
             return self.priority
-        if m.policy.forever and self._parts.engine.state.value == "RETURNING" and not self.done:
+        # 外审 W76-2 #2:看「这一趟已经开始返航」(引擎 ``returned``,下一趟才清),不看此刻是不是
+        # RETURNING —— 返航途中暂停、挂起,引擎落了终态还在等停车确认,都还是在回家
+        if m.policy.forever and getattr(self._parts.engine, "returned", "") and not self.done:
             return max(self.priority, HOMING_GUARD_PRIORITY)
         return self.priority
 
