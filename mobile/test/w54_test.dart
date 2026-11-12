@@ -243,6 +243,29 @@ void main() {
       expect(find.byKey(MapWizardPage.rewalkKey), findsOneWidget);
     });
 
+    testWidgets('W75 站点出图失败：能在站点上重试（同一版，不用重走），也能重走', (t) async {
+      final api = _admin()
+        ..wizard = <String, dynamic>{'step': 'build', 'robot_id': 'A', 'map_id': 'main', 'version': '20261031-1',
+          'drive': 'remote', 'by': 'u', 'label': ''}
+        ..wizardBuild = <String, dynamic>{'state': 'failed', 'where': 'site', 'reason': '回环工具炸了'};
+      await _wizard(t, api);
+      expect(find.textContaining('回环工具炸了'), findsOneWidget);
+      expect(find.byKey(MapWizardPage.rewalkKey), findsOneWidget);
+      await _tapLive(t, MapWizardPage.retrySiteKey);
+      expect(api.calls, contains('wizard retry_site'));
+      expect(api.calls.where((c) => c == 'wizard rewalk'), isEmpty);
+      expect(find.byKey(MapWizardPage.buildProgressKey), findsOneWidget, reason: '重试了：回到进度条');
+    });
+
+    testWidgets('机器人上没建成：没有「在站点上重试」', (t) async {
+      final api = _admin()
+        ..wizard = <String, dynamic>{'step': 'build', 'robot_id': 'A', 'map_id': 'main', 'version': '20261031-1',
+          'drive': 'remote', 'by': 'u', 'label': ''}
+        ..wizardBuild = <String, dynamic>{'state': 'failed', 'reason': 'MappingError: 录包是空的'};
+      await _wizard(t, api);
+      expect(find.byKey(MapWizardPage.retrySiteKey), findsNothing);
+    });
+
     testWidgets('W75 站点在出图：进度条 + 阶段名 + 百分比', (t) async {
       final api = _admin()
         ..wizard = <String, dynamic>{'step': 'build', 'robot_id': 'A', 'map_id': 'main', 'version': '20261031-1',

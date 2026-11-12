@@ -332,6 +332,7 @@ class MapWizardPage extends StatefulWidget {
   static const Key verdictKey = Key('wizard-verdict');
   static const Key useKey = Key('wizard-use');
   static const Key rewalkKey = Key('wizard-rewalk');
+  static const Key retrySiteKey = Key('wizard-retry-site');
   static const Key zonesOpenKey = Key('wizard-zones-open');
   static const Key zonesEmptyKey = Key('wizard-zones-empty');
   static const Key zonesConfirmKey = Key('wizard-zones-confirm');
@@ -1056,19 +1057,36 @@ class _MapWizardPageState extends State<MapWizardPage> {
       ], const []);
     }
     if (state == 'failed') {
+      // W75：站点出图失败，关键帧还在站点上 —— 先在站点上重出同一版，不用重走
+      final onSite = b['where'] == 'site';
       return _scroll([
         _h1(tr("Mapping failed", '建图失败')),
         NwNotice(key: MapWizardPage.buildStatusKey, tone: NwTone.error, text: '${b['reason'] ?? ''}'),
         const SizedBox(height: Nw.s8),
-        Text(tr('Walk again. If it fails again, send this message to your delivery engineer.',
-                '请重新行走一次。若仍失败，请将此信息发给交付工程师。'),
+        Text(
+            onSite
+                ? tr('Retry on the site computer first (no need to walk again). '
+                        'If it fails again, walk again and send this message to your delivery engineer.',
+                    '可先在站点主机上重试，无需重新行走。若仍失败，请重新行走，并将此信息发给交付工程师。')
+                : tr('Walk again. If it fails again, send this message to your delivery engineer.',
+                    '请重新行走一次。若仍失败，请将此信息发给交付工程师。'),
             style: NwText.bodyMedium.copyWith(color: c.textSecondary)),
       ], [
+        if (onSite) ...[
+          NwButton(
+              buttonKey: MapWizardPage.retrySiteKey,
+              label: tr('Retry on site', '在站点上重试'),
+              fullWidth: true,
+              size: NwButtonSize.large,
+              onPressed: _busy ? null : _retrySite),
+          const SizedBox(height: Nw.s8),
+        ],
         NwButton(
             buttonKey: MapWizardPage.rewalkKey,
             label: tr('Map again', '重新建图'),
             fullWidth: true,
             size: NwButtonSize.large,
+            variant: onSite ? NwButtonVariant.outline : NwButtonVariant.primary,
             onPressed: _busy ? null : _rewalk),
       ]);
     }
@@ -1146,6 +1164,15 @@ class _MapWizardPageState extends State<MapWizardPage> {
                 onPressed: _busy ? null : (good ? () => _go('zones') : _rewalk))),
       ]),
     ]);
+  }
+
+  /// W75：站点出图失败了，在站点上用已经传上来的关键帧重出同一版。
+  Future<void> _retrySite() async {
+    try {
+      await _act(<String, dynamic>{'action': 'retry_site'});
+    } on SiteError {
+      return; // _err 里有
+    }
   }
 
   /// 重走一遍：站点换一个新版本号（旧的那一版留着），接着就开录（跟「开始录」一样）。

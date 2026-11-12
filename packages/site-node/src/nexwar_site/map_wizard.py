@@ -227,7 +227,7 @@ class MapWizard:
         return self.view() or st
 
     def apply(self, d: Any, *, by: str) -> dict[str, Any]:
-        """``{action: start|step|rewalk|finish|abandon, wizard_id, …}``;回改完的状态(放弃回 {})。
+        """``{action: start|step|rewalk|retry_site|finish|abandon, wizard_id, …}``;回改完的状态(放弃回 {})。
         开始以后的每一步都要带这份向导的 ``wizard_id``:被别人换掉的旧页面改不了新的。"""
         if not isinstance(d, dict):
             raise WizardError(400, "要 JSON 对象")
@@ -254,6 +254,13 @@ class MapWizard:
             st["step"] = "walk"
             st["started_ms"] = self.now_ms()
             return self._save(st)
+        if action == "retry_site":
+            # W75:站点出图失败,关键帧还在站点上 —— 同一版再出一次,不用重走
+            sb = self.builds.status(st["map_id"], st["version"]) if self.builds else None
+            if not sb or sb.get("robot_id") != st["robot_id"] or sb["state"] != "failed":
+                raise WizardError(409, "这一版不是站点出图失败的,不能在站点上重试", "not_failed")
+            self.builds.retry(st["map_id"], st["version"])
+            return self._save(st)
         if action == "finish":
             m, v, r = st["map_id"], st["version"], st["robot_id"]
             if not self._built(m, v):
@@ -266,7 +273,7 @@ class MapWizard:
             self.settings.put(KEY, None)
             return st | {"step": "done"}
         if action != "step":
-            raise WizardError(400, "action 只认 start、step、rewalk、finish、abandon")
+            raise WizardError(400, "action 只认 start、step、rewalk、retry_site、finish、abandon")
         step = d.get("step")
         if step not in STEPS or step == "done":
             raise WizardError(400, f"step 只认 {'、'.join(STEPS[:-1])}")

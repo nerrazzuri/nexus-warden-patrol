@@ -854,6 +854,8 @@ class FakeApi implements SiteApi {
       case 'rewalk':
         wizard = <String, dynamic>{...?wizard, 'step': 'walk', 'version': '20261031-2'};
         wizardBuild = <String, dynamic>{'state': 'pending'}; // 新版本还没建
+      case 'retry_site':
+        wizardBuild = <String, dynamic>{'state': 'pending', 'where': 'site', 'stage': 'queued', 'pct': 0};
       case 'finish':
         final done = <String, dynamic>{...?wizard, 'step': 'done'};
         wizard = null;
