@@ -341,3 +341,30 @@ def test_版本号的日期按站点时区(站点):
     v = w.apply({"action": "start", "robot_id": "A", "site_type": "indoor", "drive": "remote"},
                 by="alice")
     assert v["version"] == "20261101-1"
+
+
+class _假出图:
+    def __init__(self, st):
+        self.st = st
+
+    def status(self, map_id, version):
+        return self.st if (map_id, version) == self.key else None
+
+
+def test_W75_向导_站点在出图_带阶段和百分比_没出成带原因(站点):
+    w = _wiz(站点)
+    v = w.apply({"action": "start", "robot_id": "A", "site_type": "indoor", "drive": "remote"},
+                by="alice")
+    b = _假出图({"state": "running", "robot_id": "A", "stage": "回环", "pct": 40})
+    b.key = ("main", v["version"])
+    w.w.builds = b
+    got = w.view()["build"]
+    assert got == {"state": "pending", "where": "site", "stage": "loop", "pct": 40}
+    b.st = {"state": "uploading", "robot_id": "A"}
+    assert w.view()["build"] == {"state": "pending", "where": "site", "stage": "upload",
+                                 "pct": 0}
+    b.st = {"state": "failed", "robot_id": "A", "reason": "回环工具炸了"}
+    got = w.view()["build"]
+    assert got["state"] == "failed" and "回环工具炸了" in got["reason"] and got["where"] == "site"
+    b.st = {"state": "running", "robot_id": "B", "stage": "回环", "pct": 40}
+    assert w.view()["build"] == {"state": "pending"}, "别的机器人的不算"

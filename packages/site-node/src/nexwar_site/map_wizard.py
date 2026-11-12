@@ -153,9 +153,11 @@ class MapWizard:
 
     def __init__(self, settings: Any, cat: Any, db: Any, *, now_ms: Callable[[], int],
                  known: Callable[[str], bool], day: Callable[[], str] | None = None,
-                 zones: Any = None) -> None:
+                 zones: Any = None, builds: Any = None) -> None:
         self.settings = settings
         self.zones = zones
+        #: 站点主机出图(W75,:class:`nexwar_site.mapbuild.SiteMapBuilder`);没装出图组件是 None。
+        self.builds = builds
         self.cat = cat
         self.db = db
         self.now_ms = now_ms
@@ -182,6 +184,16 @@ class MapWizard:
         map_id, version = st["map_id"], st["version"]
         if self._built(map_id, version):
             return {"state": "ready", "quality": read_quality(self.cat, map_id, version)}
+        sb = self.builds.status(map_id, version) if self.builds is not None else None
+        if sb is not None and sb.get("robot_id") == st["robot_id"]:
+            # W75:关键帧交给站点出图了 —— 到哪一步、百分之几
+            if sb["state"] == "failed":
+                return {"state": "failed", "where": "site", "reason": sb.get("reason", "")}
+            from nexwar_site.mapbuild import STAGE_CODES
+            stage = {"uploading": "upload", "queued": "queued"}.get(
+                sb["state"], STAGE_CODES.get(sb.get("stage", ""), ""))
+            return {"state": "pending", "where": "site", "stage": stage,
+                    "pct": int(sb.get("pct", 0))}
         rows = self.db.query("SELECT data FROM events WHERE robot_id=? AND kind='map_build_failed' "
                              "AND received_at>=? ORDER BY received_at DESC LIMIT 50",
                              (st["robot_id"], int(st.get("started_ms", 0))))
