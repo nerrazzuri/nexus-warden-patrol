@@ -106,7 +106,7 @@ class 假MOLA:
             if closed and self.kf_garbage:
                 text = ["nan? 1 2 3 4 5 6 7", "坏 行 不 是 数 字 啊 !"]
             out.write_text("\n".join(text) + "\n")
-        if name == "sm2mm" and "-p" in cmd:
+        if name == "sm2mm" and "-p" in cmd and cmd[cmd.index("-p") + 1] != str(B.POINTS_PIPELINE):
             src, dst = Path(cmd[cmd.index("-i") + 1]), Path(cmd[cmd.index("-o") + 1])
             dst.write_bytes(b"prior-from:" + src.read_bytes())
         if name == "mm2ply":
@@ -496,8 +496,8 @@ def test_有回环工具_跑回环_从回环后的simplemap重出点云先验与
     sm2mm = [c for c in fake.calls if c[0] == "sm2mm"]
     assert {c[c.index("-i") + 1] for c in sm2mm} == {str(work / "lc" / "map.simplemap")}, \
         "点云、先验都从回环后的 simplemap 重出"
-    [prior] = [c for c in sm2mm if "-p" in c]
-    assert prior[prior.index("-p") + 1] == str(B.PRIOR_PIPELINE) and B.PRIOR_PIPELINE.is_file()
+    assert sorted(c[c.index("-p") + 1] for c in sm2mm) == sorted(
+        [str(B.PRIOR_PIPELINE), str(B.POINTS_PIPELINE)]) and B.PRIOR_PIPELINE.is_file()
     assert (tmp_path / "out" / "prior.mm").read_bytes() == b"prior-from:sm-lc"
     [ply] = [c for c in fake.calls if c[0] == "mm2ply"]
     assert ply[ply.index("-i") + 1] == str(work / "lc" / "points.mm")
@@ -521,7 +521,8 @@ def test_没有回环工具_出的文件跟原来一样_build_json说没有(tmp_
     fake, out = _plain(tmp_path, pts, work)
     assert [c[0] for c in fake.calls] == ["sm2mm", "mm2ply"], "不多调一个命令"
     assert fake.calls[0] == ["sm2mm", "-i", str(work / "map.simplemap"), "-o",
-                             str(work / "points.mm"), "--no-progress-bar"]
+                             str(work / "points.mm"), "-p", str(B.POINTS_PIPELINE),
+                             "--no-progress-bar"]
     assert not (work / "lc").exists()
     import os
     assert os.stat(out / "prior.mm").st_ino == os.stat(work / "raw_prior.mm").st_ino
@@ -547,7 +548,8 @@ def test_回环不成_退回原来的打包_build_json说为什么(tmp_path, cas
         assert (out / name).read_bytes() == (plain / name).read_bytes(), (case, name)
     sm2mm = [c for c in fake.calls if c[0] == "sm2mm"]
     assert sm2mm == [["sm2mm", "-i", str(work / "map.simplemap"), "-o", str(work / "points.mm"),
-                      "--no-progress-bar"]], "退回去:点云从原来的 simplemap 出,不重出先验"
+                      "-p", str(B.POINTS_PIPELINE), "--no-progress-bar"]], \
+        "退回去:点云从原来的 simplemap 出,不重出先验"
     lcj = json.loads((out / "build.json").read_text())["loop_closure"]
     assert lcj["ran"] is True and lcj["used"] is False and why in lcj["why"], lcj
     if case == "失败":
@@ -555,6 +557,19 @@ def test_回环不成_退回原来的打包_build_json说为什么(tmp_path, cas
     if case == "未找到":
         assert lcj["closures"] == 0
         assert not [c for c in fake.calls if c[0] == "sm-cli"], "未返回环就不用再导关键帧"
+
+
+def test_点云流水线_每个关键帧先按5厘米降采样_不留原始层():
+    """W75:不降采样整个 simplemap 一起出(广场 5900 万点、11.8 GB 内存、328 s,Orin 放不下);每帧先
+    降采样再合 1.9 GB、7 s。"""
+    import yaml
+    doc = yaml.safe_load(B.POINTS_PIPELINE.read_text())
+    [vox] = [f["params"] for f in doc["filters"]
+             if f["class_name"] == "mp2p_icp_filters::FilterDecimateVoxels"]
+    assert vox["voxel_filter_resolution"] == B.POINTS_VOXEL_M == 0.05
+    assert vox["input_pointcloud_layer"] == "raw" and vox["output_pointcloud_layer"] == "points"
+    assert any(f["class_name"] == "mp2p_icp_filters::FilterDeleteLayer"
+               and f["params"]["pointcloud_layer_to_remove"] == ["raw"] for f in doc["filters"])
 
 
 def test_轨迹按前后两个关键帧的改动插值():
