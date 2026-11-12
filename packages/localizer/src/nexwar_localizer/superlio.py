@@ -50,6 +50,10 @@ PUBLISHED = ("/lio/odom", "/lio/imu/odom", "/lio/robo/odom", "/lio/path", "/lio/
 #: 关键帧间隔:走这么远或转这么多取一帧(MOLA 建图的关键帧也是这个量级)。
 KF_DIST_M = 0.3
 KF_TURN_DEG = 10.0
+#: 边走边存的关键帧按这么大的体素降采样(W75:出图的点云也是 5 cm,省一半多的盘、上传和回环的内存)。
+KF_VOXEL_M = 0.05
+#: 边走边存收尾时写的汇总(``livemap.write_live``):有它才算这一趟的关键帧齐了。
+LIVE_FILE = "live.json"
 #: 关键帧点云按离雷达的距离裁(太近是机身、太远是噪点)。
 RANGE_MIN_M, RANGE_MAX_M = 0.6, 80.0
 #: 位姿取在扫描的哪个时刻(Airy 一帧 0.1 s,报文头是起点):取中间。
@@ -281,58 +285,153 @@ def bag_clouds(bag: Path, topic: str = LIDAR_TOPIC) -> Iterator[tuple[float, Any
 # ---------------------------------------------------------------- 轨迹、关键帧
 def make_keyframes(poses: Sequence[Pose], clouds: Iterable[tuple[float, Any]], work: Path,
                    R_il: Sequence[Sequence[float]], t_il: Sequence[float],
-                   xyz_of: Callable[[Any], Any]) -> dict[str, int]:
+                   xyz_of: Callable[[Any], Any], *, voxel: float | None = None) -> dict[str, int]:
     """写 ``work/traj.tum``(每帧扫描的雷达位姿)和 ``work/kf/``
-    (关键帧:``index.txt`` + 点云 float32)。
-    回 ``{"scans", "traj", "keyframes"}``。"""
-    import numpy as np
-
-    kf = work / "kf"
-    shutil.rmtree(kf, ignore_errors=True)
-    kf.mkdir(parents=True)
+    (关键帧:``index.txt`` + 点云 float32)。``voxel``:关键帧点云按这么大的体素降采样(W75)。
+    回 ``{"scans", "traj", "keyframes", "first_scan", "last_scan"}``。"""
     times = [r[0] for r in poses]
-    traj: list[str] = []
-    index: list[str] = []
-    last_kf: tuple[list[float], list[list[float]]] | None = None
-    prev: tuple[float, list[float], list[list[float]]] | None = None
-    scans = 0
-    first: float | None = None
-    last: float | None = None
+    k = Keyframer(work, R_il, t_il, xyz_of, voxel=voxel)
     for t, msg in clouds:
-        scans += 1
-        first = t if first is None else first
-        last = t
-        got = pose_at(poses, t + SCAN_MID_S, times)
-        if got is None:
-            continue
-        p, R = lidar_pose(got[0], got[1], R_il, t_il)
+        k.scan(t, msg, pose_at(poses, t + SCAN_MID_S, times))
+    return k.close()
+
+
+class Keyframer:
+    """取关键帧(:func:`make_keyframes` 和边走边存 :class:`LiveKeyframes` 共用一套规则):一帧一帧喂
+    扫描和它中间时刻的 IMU 位姿。每存一个关键帧就落盘(先写点开头的临时名再改名,上传器不收半个文件),
+    索引、轨迹逐行追加 —— 进程半路没了,存下的照样能用。"""
+
+    def __init__(self, work: Path, R_il: Sequence[Sequence[float]], t_il: Sequence[float],
+                 xyz_of: Callable[[Any], Any], *, voxel: float | None = None) -> None:
+        self.work, self.R_il, self.t_il, self.xyz_of, self.voxel = work, R_il, t_il, xyz_of, voxel
+        self.kf = work / "kf"
+        shutil.rmtree(self.kf, ignore_errors=True)
+        self.kf.mkdir(parents=True)
+        self._index = open(self.kf / "index.txt", "w", encoding="utf-8")
+        self._traj = open(work / "traj.tum", "w", encoding="utf-8")
+        self.scans = self.traj = self.keyframes = 0
+        self.first: float | None = None
+        self.last: float | None = None
+        self._last_kf: tuple[list[float], list[list[float]]] | None = None
+        self._prev: tuple[float, list[float], list[list[float]]] | None = None
+
+    def scan(self, t: float, msg: Any,
+             pose: tuple[Sequence[float], Sequence[float]] | None) -> None:
+        import numpy as np
+
+        self.scans += 1
+        self.first = t if self.first is None else self.first
+        self.last = t
+        if pose is None:
+            return
+        p, R = lidar_pose(pose[0], pose[1], self.R_il, self.t_il)
         q = mat_to_quat(R)
-        traj.append(f"{t:.6f} " + " ".join(f"{c:.6f}" for c in (*p, *q)) + "\n")
+        self._traj.write(f"{t:.6f} " + " ".join(f"{c:.6f}" for c in (*p, *q)) + "\n")
+        self._traj.flush()
+        self.traj += 1
         v = w = [0.0, 0.0, 0.0]
+        prev = self._prev
         if prev is not None and t > prev[0]:
             dt = t - prev[0]
             v = [c / dt for c in _apply(_T(R), [a - b for a, b in zip(p, prev[1], strict=True)])]
             w = [c / dt for c in _log(_mul(_T(prev[2]), R))]
-        prev = (t, p, R)
-        if last_kf is not None:
-            moved = math.dist(p, last_kf[0])
-            turned = math.degrees(rot_angle(_mul(_T(last_kf[1]), R)))
+        self._prev = (t, p, R)
+        if self._last_kf is not None:
+            moved = math.dist(p, self._last_kf[0])
+            turned = math.degrees(rot_angle(_mul(_T(self._last_kf[1]), R)))
             if moved < KF_DIST_M and turned < KF_TURN_DEG:
-                continue
-        xyz = np.asarray(xyz_of(msg), float)
+                return
+        xyz = np.asarray(self.xyz_of(msg), float)
         if len(xyz):
             rng = np.linalg.norm(xyz, axis=1)
             xyz = xyz[(rng > RANGE_MIN_M) & (rng < RANGE_MAX_M)]
         if len(xyz) < MIN_KF_POINTS:
+            return
+        if self.voxel:
+            from nexwar_localizer.slioloc import voxel_down
+            xyz = voxel_down(xyz, self.voxel)
+        name = f"{self.keyframes:05d}.bin"
+        tmp = self.kf / f".{name}.tmp"
+        xyz.astype("<f4").tofile(tmp)
+        os.replace(tmp, self.kf / name)
+        self._index.write(f"{t:.6f} " + " ".join(f"{c:.6f}" for c in (*p, *q, *v, *w))
+                          + f" {name}\n")
+        self._index.flush()
+        self.keyframes += 1
+        self._last_kf = (p, R)
+
+    def close(self) -> dict[str, Any]:
+        self._index.close()
+        self._traj.close()
+        return {"scans": self.scans, "traj": self.traj, "keyframes": self.keyframes,
+                "first_scan": self.first, "last_scan": self.last}
+
+
+class LiveKeyframes:
+    """边走边存关键帧(W75):点云、位姿各自来(Super-LIO 算完一帧才发位姿,比点云晚)。点云先攒着原始
+    报文,等到盖住它中间时刻的位姿再交给 :class:`Keyframer` —— 跟录完再取(:func:`make_keyframes`)
+    一样的插值、一样的结果;只有取成关键帧的那几帧才解点云。位姿等了 ``wait_s`` 还没来,这帧按
+    没位姿算。位姿照 :func:`clean` 的规矩丢坏的。"""
+
+    def __init__(self, keyframer: Keyframer, *, wait_s: float = 1.0, keep_poses: int = 200,
+                 log: Path | None = None) -> None:
+        """``log``:收下的位姿(IMU)逐行另记一份 TUM(建完把关 :func:`quality` 用)。"""
+        import collections
+        self.k = keyframer
+        self._log = None if log is None else open(log, "w", encoding="utf-8")
+        self.wait_s = wait_s
+        self.poses: collections.deque[Pose] = collections.deque(maxlen=keep_poses)
+        self.pending: collections.deque[tuple[float, Any]] = collections.deque()
+        self._newest = -math.inf
+
+    def on_scan(self, t: float, msg: Any) -> None:
+        self.pending.append((t, msg))
+        self._newest = max(self._newest, t)
+        self._drain()
+
+    def on_pose(self, t: float, p: Sequence[float], q: Sequence[float]) -> None:
+        got = clean([(t, tuple(p), tuple(q))])
+        if not got or (self.poses and got[0][0] <= self.poses[-1][0]):
+            return
+        self.poses.append(got[0])
+        if self._log is not None:
+            t0, p0, q0 = got[0]
+            self._log.write(" ".join(repr(float(c)) for c in (t0, *p0, *q0)) + "\n")
+            self._log.flush()
+        self._newest = max(self._newest, t)
+        self._drain()
+
+    def _drain(self, final: bool = False) -> None:
+        while self.pending:
+            t, msg = self.pending[0]
+            mid = t + SCAN_MID_S
+            if self.poses and self.poses[-1][0] >= mid or final:
+                pose = pose_at(list(self.poses), mid) if self.poses else None
+            elif self._newest - t > self.wait_s:
+                pose = None
+            else:
+                return
+            self.pending.popleft()
+            self.k.scan(t, msg, pose)
+
+    def close(self) -> dict[str, Any]:
+        self._drain(final=True)
+        if self._log is not None:
+            self._log.close()
+        return self.k.close()
+
+
+def read_tum_poses(path: Path) -> list[Pose]:
+    """:class:`LiveKeyframes` 记的位姿(TUM:时刻 x y z qx qy qz qw)。坏行跳过。"""
+    out: list[Pose] = []
+    for line in Path(path).read_text(encoding="utf-8").splitlines():
+        try:
+            v = [float(c) for c in line.split()]
+        except ValueError:
             continue
-        name = f"{len(index):05d}.bin"
-        xyz.astype("<f4").tofile(kf / name)
-        index.append(f"{t:.6f} " + " ".join(f"{c:.6f}" for c in (*p, *q, *v, *w)) + f" {name}")
-        last_kf = (p, R)
-    (kf / "index.txt").write_text("\n".join(index) + "\n", encoding="utf-8")
-    (work / "traj.tum").write_text("".join(traj), encoding="utf-8")
-    return {"scans": scans, "traj": len(traj), "keyframes": len(index), "first_scan": first,
-            "last_scan": last}
+        if len(v) == 8:
+            out.append((v[0], (v[1], v[2], v[3]), (v[4], v[5], v[6], v[7])))
+    return out
 
 
 def quality(poses: Sequence[Pose]) -> dict[str, float]:
@@ -375,6 +474,15 @@ def _run(run: Runner, cmd: list[str], log: Path, what: str, env: dict[str, str] 
         raise SuperLioError(f"{what}失败(退出码 {rc}),日志见 {log}")
 
 
+def _checked(poses: Iterable[Pose]) -> tuple[list[Pose], dict[str, float]]:
+    poses = clean(poses)
+    if len(poses) < 20:
+        raise SuperLioError(f"Super-LIO 只给了 {len(poses)} 个位姿(没跑起来?)")
+    q = quality(poses)
+    check(q)
+    return poses, q
+
+
 def prepare(work: Path, bag: Path, poses: Sequence[Pose], *, cfg: Path, root: Path = ROOT,
             prior_pipeline: Path, plugin: Sequence[str] = (), run: Runner = subprocess.run,
             clouds: Iterable[tuple[float, Any]] | None = None,
@@ -382,11 +490,7 @@ def prepare(work: Path, bag: Path, poses: Sequence[Pose], *, cfg: Path, root: Pa
     """位姿 → ``work`` 里出图要的三样(``traj.tum``、``map.simplemap``、``raw_prior.mm``)
     + ``mola.json``
     (``build.json`` 抄它:这次用的哪个前端、参数、质量)。回汇总。"""
-    poses = clean(poses)
-    if len(poses) < 20:
-        raise SuperLioError(f"Super-LIO 只给了 {len(poses)} 个位姿(没跑起来?)")
-    q = quality(poses)
-    check(q)
+    poses, q = _checked(poses)
     if xyz_of is None:
         from nexwar_localizer.build import cloud_xyz as xyz_of
     R_il, t_il = extrinsic(cfg)
@@ -394,6 +498,39 @@ def prepare(work: Path, bag: Path, poses: Sequence[Pose], *, cfg: Path, root: Pa
     t0 = time.monotonic()
     n = make_keyframes(poses, bag_clouds(bag) if clouds is None else clouds, work, R_il, t_il,
                        xyz_of)
+    info = _finish(work, work / "kf", n, poses, q, cfg=cfg, root=root,
+                   prior_pipeline=prior_pipeline, plugin=plugin, run=run, source=source, t0=t0)
+    shutil.rmtree(work / "kf", ignore_errors=True)        # 几百 MB,simplemap 里都有了
+    return info
+
+
+def prepare_live(work: Path, kf_dir: Path, *, cfg: Path, root: Path = ROOT,
+                 prior_pipeline: Path, plugin: Sequence[str] = (), run: Runner = subprocess.run
+                 ) -> dict[str, Any]:
+    """边走边存的关键帧(W75,``livemap --keyframes``)→ ``work`` 里出图要的三样 + ``mola.json``,跟
+    :func:`prepare` 一样的把关,只是不读录包。``kf_dir`` 原样留着(站点打包也用它)。"""
+    try:
+        n = json.loads((kf_dir / LIVE_FILE).read_text(encoding="utf-8"))
+        n = {k: n[k] for k in ("scans", "traj", "keyframes", "first_scan", "last_scan")}
+    except (OSError, ValueError, KeyError, TypeError) as exc:
+        raise SuperLioError(f"边走边存的关键帧没收尾(没有 {LIVE_FILE}:预览进程没正常停?)"
+                            ",从录包建") from exc
+    t0 = time.monotonic()
+    try:
+        poses, q = _checked(read_tum_poses(kf_dir / "lio.tum"))
+    except OSError as exc:
+        raise SuperLioError("边走边存的关键帧缺位姿(lio.tum)") from exc
+    work.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(kf_dir / "traj.tum", work / "traj.tum")
+    return _finish(work, kf_dir / "kf", n, poses, q, cfg=cfg, root=root,
+                   prior_pipeline=prior_pipeline, plugin=plugin, run=run, source="live-kf",
+                   t0=t0)
+
+
+def _finish(work: Path, kf: Path, n: dict[str, Any], poses: Sequence[Pose], q: dict[str, float],
+            *, cfg: Path, root: Path, prior_pipeline: Path, plugin: Sequence[str], run: Runner,
+            source: str, t0: float) -> dict[str, Any]:
+    """关键帧取完之后:盖住了多少、够不够,kf2sm 出 simplemap,sm2mm 出先验,写 ``mola.json``。"""
     if n["scans"] and n["traj"] < MIN_POSE_COVERAGE * n["scans"]:
         raise SuperLioError(f"位姿只覆盖了 {n['traj']}/{n['scans']} 帧扫描"
                             "(Super-LIO 中途停了?录位姿断了?),不出残缺的图")
@@ -404,12 +541,11 @@ def prepare(work: Path, bag: Path, poses: Sequence[Pose], *, cfg: Path, root: Pa
                             f"{last - poses[-1][0]:.0f} s 前结束),不出残缺的图")
     if n["keyframes"] < 3:
         raise SuperLioError(f"关键帧只有 {n['keyframes']} 个(走得太短,或位姿跟点云时间对不上)")
-    _run(run, [str(root / "bin/kf2sm"), str(work / "kf"), str(work / "map.simplemap")],
+    _run(run, [str(root / "bin/kf2sm"), str(kf), str(work / "map.simplemap")],
          work / "kf2sm.log", "关键帧转 simplemap")
     _run(run, ["sm2mm", *plugin, "-i", str(work / "map.simplemap"), "-o",
                str(work / "raw_prior.mm"), "-p", str(prior_pipeline), "--no-progress-bar"],
          work / "prior.log", "从关键帧出定位先验")
-    shutil.rmtree(work / "kf", ignore_errors=True)        # 几百 MB,simplemap 里都有了
     info = {"builder": "super-lio", "source": source, "config": str(cfg),
             "version": _version(root), "lidar_topic": LIDAR_TOPIC, "imu_topic": IMU_TOPIC,
             "keyframe": {"dist_m": KF_DIST_M, "turn_deg": KF_TURN_DEG}, "quality": q,

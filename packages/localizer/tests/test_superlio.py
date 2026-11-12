@@ -337,3 +337,161 @@ def test_外审_外参旋转部分要正交_不能带缩放(tmp_path):
     f.write_text("lio.extrinsic.lidar_imu: [0,0,nan, 1,0,0, 0,1,0, 0,0,1]\n")
     with pytest.raises(S.SuperLioError):
         S.extrinsic(f)
+
+
+def _walk() -> tuple[list[S.Pose], list[tuple[float, int]]]:
+    """边走边转(取关键帧两条规则都碰到),中间位姿断档 0.8 s(那几帧没位姿)。"""
+    poses = []
+    for k in range(200):
+        t = 2000.0 + k * 0.1
+        if 2080.0 < t < 2080.8:
+            continue
+        poses.append((t + 0.1, (k * 0.04, 0.01 * k, 0.0), _yaw_q(math.radians(1.5 * k))))
+    clouds = [(2000.0 + k * 0.1, k) for k in range(198)]
+    return poses, clouds
+
+
+def _cloud(k: int) -> np.ndarray:
+    rng = np.random.default_rng(k)
+    return rng.uniform(-6, 6, (900, 3))
+
+
+def _files(d: Path) -> dict[str, bytes]:
+    return {p.relative_to(d).as_posix(): p.read_bytes() for p in sorted(d.rglob("*"))
+            if p.is_file()}
+
+
+def test_W75_边走边存关键帧_位姿晚到_出的文件跟录完再取的逐字节一样(tmp_path):
+    poses, clouds = _walk()
+    R, t = [[0, -1, 0], [1, 0, 0], [0, 0, 1]], (0.1, 0.0, 0.05)
+    want = S.make_keyframes(poses, clouds, tmp_path / "a", R, t, _cloud)
+    live = S.LiveKeyframes(S.Keyframer(tmp_path / "b", R, t, _cloud))
+    decoded = []
+    live.k.xyz_of = lambda k: decoded.append(k) or _cloud(k)
+    pi = 0
+    for ts, k in clouds:                     # 位姿比点云晚 0.15 s 到(Super-LIO 算完一帧才发)
+        while pi < len(poses) and poses[pi][0] <= ts - 0.05:
+            live.on_pose(*poses[pi])
+            pi += 1
+        live.on_scan(ts, k)
+    for p in poses[pi:]:
+        live.on_pose(*p)
+    got = live.close()
+    assert got == want
+    assert _files(tmp_path / "b") == _files(tmp_path / "a")
+    assert len(decoded) == want["keyframes"], "只解关键帧那几帧(一帧原始点云 4.5 MB)"
+
+
+def test_W75_边走边存_关键帧每存一个就落盘_文件先写成点开头的再改名(tmp_path):
+    poses, clouds = _walk()
+    live = S.LiveKeyframes(S.Keyframer(tmp_path, np.eye(3).tolist(), (0, 0, 0), _cloud))
+    for p in poses[:40]:
+        live.on_pose(*p)
+    for ts, k in clouds[:30]:
+        live.on_scan(ts, k)
+    names = sorted(p.name for p in (tmp_path / "kf").iterdir())
+    assert "00000.bin" in names and not [n for n in names if n.startswith(".")]
+    rows = (tmp_path / "kf/index.txt").read_text().splitlines()
+    assert len(rows) == len([n for n in names if n.endswith(".bin")]), "索引跟着写,进程没了也留着"
+
+
+def test_W75_关键帧按体素降采样_裁剪和点数门槛照旧在降采样之前(tmp_path):
+    poses = _line(30)
+    pts = np.vstack([np.array([[5.0, 0, 0]] * 800), [[0.2, 0, 0]] * 100])
+    n = S.make_keyframes(poses, [(1000.0, None)], tmp_path, np.eye(3).tolist(), (0, 0, 0),
+                         lambda _: pts, voxel=0.05)
+    assert n["keyframes"] == 1
+    assert np.fromfile(tmp_path / "kf/00000.bin", "<f4").size == 3, "800 个同一点留一个"
+
+
+def test_W75_位姿一直不来_等够了按没位姿算_不一直攒着原始点云(tmp_path):
+    live = S.LiveKeyframes(S.Keyframer(tmp_path, np.eye(3).tolist(), (0, 0, 0), _cloud),
+                           wait_s=1.0)
+    for k in range(40):
+        live.on_scan(3000.0 + k * 0.1, k)
+    assert len(live.pending) <= 11
+    assert live.close()["traj"] == 0
+
+
+def test_W75_边走边存_收到的位姿另记一份_建完把关用(tmp_path):
+    live = S.LiveKeyframes(S.Keyframer(tmp_path, np.eye(3).tolist(), (0, 0, 0), _cloud),
+                           log=tmp_path / "lio.tum")
+    for p in _line(5):
+        live.on_pose(*p)
+    live.on_pose(1000.2, (float("nan"), 0, 0), (0, 0, 0, 1))      # 坏的、时间倒退的不记
+    live.close()
+    assert S.read_tum_poses(tmp_path / "lio.tum") == S.clean(_line(5))
+
+
+def _live_dir(d: Path, poses: list[S.Pose], scans: int = 98) -> dict:
+    live = S.LiveKeyframes(S.Keyframer(d, np.eye(3).tolist(), (0, 0, 0),
+                                       lambda _: np.ones((900, 3)) * 4), log=d / "lio.tum")
+    for p in poses:
+        live.on_pose(*p)
+    for k in range(scans):
+        live.on_scan(1000.0 + k * 0.1, None)
+    n = live.close()
+    (d / S.LIVE_FILE).write_text(json.dumps({**n, "clock_offset_s": 0.01, "odom": []}))
+    return n
+
+
+def test_W75_用边走边存的关键帧出中间文件_不读录包(tmp_path):
+    kd = tmp_path / "kf-live"
+    n = _live_dir(kd, _line(100))
+    run = _Run()
+    info = S.prepare_live(tmp_path / "w", kd, cfg=S.DEFAULT_CONFIG, root=Path("/opt/x"),
+                          prior_pipeline=Path("/p.yaml"), run=run)
+    assert run.cmds[0] == ["/opt/x/bin/kf2sm", str(kd / "kf"), str(tmp_path / "w/map.simplemap")]
+    assert run.cmds[1][0] == "sm2mm" and "/p.yaml" in run.cmds[1]
+    assert (tmp_path / "w/traj.tum").read_text() == (kd / "traj.tum").read_text()
+    saved = json.loads((tmp_path / "w/mola.json").read_text())
+    assert saved["source"] == "live-kf"
+    assert saved["keyframes"] == n["keyframes"] == info["keyframes"]
+    assert saved["quality"] == S.quality(_line(100))
+    assert (kd / "kf").is_dir(), "关键帧是站点那份的原料:不在这儿删"
+
+
+def test_W75_边走边存的没收尾_或者轨迹突跳_都不出图_说清楚(tmp_path):
+    kd = tmp_path / "kf-live"
+    _live_dir(kd, _line(100))
+    (kd / S.LIVE_FILE).unlink()
+    with pytest.raises(S.SuperLioError, match="没收尾"):
+        S.prepare_live(tmp_path / "w", kd, cfg=S.DEFAULT_CONFIG, prior_pipeline=Path("p"),
+                       run=_Run())
+    poses = _line(100)
+    poses[50] = (poses[50][0], (9.0, 0.0, 0.0), poses[50][2])
+    _live_dir(kd, poses)
+    with pytest.raises(S.SuperLioError, match="突跳"):
+        S.prepare_live(tmp_path / "w", kd, cfg=S.DEFAULT_CONFIG, prior_pipeline=Path("p"),
+                       run=_Run())
+    _live_dir(kd, _line(100)[:30])                  # 位姿只盖住开头 3 秒
+    with pytest.raises(S.SuperLioError, match="覆盖"):
+        S.prepare_live(tmp_path / "w", kd, cfg=S.DEFAULT_CONFIG, prior_pipeline=Path("p"),
+                       run=_Run())
+
+
+def test_W75_建图命令_有边走边存的关键帧就用_不读录包(tmp_path, monkeypatch):
+    from nexwar_localizer import tools
+    seen = _fake_front(monkeypatch, tmp_path, live=True)
+    monkeypatch.setattr(S, "prepare_live", lambda work, kd, **kw: seen.setdefault(
+        "live", (kd, kw["prior_pipeline"])) and {"quality": S.quality(_line(100)),
+                                                  "keyframes": 16, "prepare_s": 0.5})
+    t = tools._superlio_front(tmp_path / "bag1", tmp_path / "w", reuse=True,
+                              keyframes=tmp_path / "kd")
+    assert seen["live"][0] == tmp_path / "kd"
+    assert "read" not in seen and "prepare" not in seen, "录包一帧都不读"
+    assert t["prepare_s"] == 0.5
+
+
+def test_W75_建图命令_边走边存的不全_退回读录包_原因记下(tmp_path, monkeypatch):
+    from nexwar_localizer import tools
+
+    def bad(*a, **kw):
+        raise S.SuperLioError("边走边存的关键帧没收尾")
+    seen = _fake_front(monkeypatch, tmp_path, live=True)
+    monkeypatch.setattr(S, "prepare_live", bad)
+    t = tools._superlio_front(tmp_path / "bag1", tmp_path / "w", reuse=True,
+                              keyframes=tmp_path / "kd")
+    assert seen["prepare"][0].startswith("live") and "没收尾" in seen["prepare"][0], \
+        "build.json 的 mola.source 写着为什么没用边走边存的"
+    assert set(t) == {"superlio_s", "prepare_s"}
