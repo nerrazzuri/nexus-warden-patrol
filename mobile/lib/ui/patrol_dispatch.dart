@@ -351,9 +351,9 @@ class _PatrolSheetState extends State<_PatrolSheet> {
                 key: patrolForeverKey,
                 tone: NwTone.info,
                 text: tr(
-                    'Keep patrolling: starts now and loops until the battery reaches the site\'s patrol return line, then goes back to recharge or swap and the task ends.'
+                    'Keep patrolling: starts now and loops until the battery ${plan['return_pct'] is num ? 'drops to ${plan['return_pct']}% (the site\'s patrol battery line)' : 'reaches the site\'s patrol battery line'}, then goes back to recharge or swap and the task ends.'
                         '${'${plan['interrupted_by'] ?? ''}'.isEmpty ? '' : ' ${plan['interrupted_by']} will stop it and run instead.'}',
-                    '一直巡逻：现在就走，一圈接一圈，电量到站点设的巡逻电量线就回去充电或换电池，这一趟结束。'
+                    '一直巡逻：现在就走，一圈接一圈，电量${plan['return_pct'] is num ? '降到 ${plan['return_pct']}%（站点设的巡逻电量线）' : '到站点设的巡逻电量线'}就回去充电或换电池，这一趟结束。'
                         '${'${plan['interrupted_by'] ?? ''}'.isEmpty ? '' : '${plan['interrupted_by']}到点会停下它、改跑日程。'}')),
           ],
           nwGap8,

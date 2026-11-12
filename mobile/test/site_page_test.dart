@@ -788,7 +788,7 @@ class FakeApi implements SiteApi {
     calls.add('patrolPlan $robotId $missionId${loops == 1 ? '' : ' loops=$loops'}');
     if (loops == 0) {
       return <String, dynamic>{'estimate_s': 12000, 'start_ms': 0, 'queued': false, 'because': '',
-        'forever': true, 'interrupted_by': '22:00 日程「loop」', 'label': missionId, 'loops': 0};
+        'forever': true, 'return_pct': 30, 'interrupted_by': '22:00 日程「loop」', 'label': missionId, 'loops': 0};
     }
     return plans[missionId] ??
         <String, dynamic>{'estimate_s': 600, 'start_ms': 0, 'queued': false, 'because': '', 'label': missionId,
@@ -1307,6 +1307,7 @@ void main() {
     await t.tap(find.byKey(patrolLoopsKey(0)));
     await t.pumpAndSettle();
     expect(find.byKey(patrolForeverKey), findsOneWidget);
+    expect(find.textContaining('电量降到 30%（站点设的巡逻电量线）'), findsOneWidget, reason: '第 8 轮 W8-05：写出电量线是多少');
     expect(find.textContaining('22:00 日程「loop」'), findsOneWidget);
     await t.ensureVisible(find.byKey(patrolSendKey));
     await t.tap(find.byKey(patrolSendKey));

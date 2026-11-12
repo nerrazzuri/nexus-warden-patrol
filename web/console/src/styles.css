@@ -1653,3 +1653,6 @@ input[type="file"] { max-width: 100%; min-width: 0; }            /* 上传按钮
 .vmeta > span:not(:last-child)::after { content: " · "; white-space: pre; }
 /* 第 4 轮 setup P2-17:「.bad」提示(穿墙线、镜像了、没确认……)一律红字,原来有几处是白字 */
 p.bad, span.bad, .small.bad { color: var(--c-error); }
+
+/* 第 8 轮 W8-05:填错的输入框标红 */
+input[aria-invalid="true"] { border-color: var(--c-error); outline-color: var(--c-error); }

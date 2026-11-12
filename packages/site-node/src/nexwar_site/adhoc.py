@@ -35,6 +35,7 @@ from nexwar_contract.schedule import ScheduleEntry, occurrences_between
 from nexwar_site.catalog import active_bundle
 from nexwar_site.dispatcher import DispatchRefused
 from nexwar_site.priorities import MANUAL
+from nexwar_site.site_settings import SiteSettings
 
 log = logging.getLogger(__name__)
 
@@ -354,6 +355,8 @@ class AdhocDesk:
             c = self.collision(robot, now, est)
             return {"estimate_s": est, "start_ms": now, "queued": False, "because": "",
                     "forever": True, "interrupted_by": c[1] if c else "", "loops": 0,
+                    # 第 8 轮 W8-05:派单说明里写出电量线是多少(以前只说「站点设的巡逻电量线」)
+                    "return_pct": int(SiteSettings(self.db).patrol_return_pct()),
                     "utc_offset_min": self.offset_min()}
         t, because = self.slot(robot, now, est)
         # ``loops``:这一趟实际跑几圈(W76 外审 #8:手机看见这一项才给选圈数 —— 老站点不认 loops)
