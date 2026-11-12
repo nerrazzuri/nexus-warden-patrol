@@ -1172,6 +1172,13 @@ class GuardDuty:
                         "actions": acts})
         return out
 
+    @staticmethod
+    def _hide_pt(w: dict[str, Any], zone: str) -> dict[str, Any]:
+        """易藏点巡检点 → 算电量、圈时用的点(名字、防区、坐标、停几秒的动作)。"""
+        pos = (w.get("pose") or {}).get("position") or {}
+        return {"name": w["name"], "zone": zone, "x": float(pos.get("x", 0.0)),
+                "y": float(pos.get("y", 0.0)), "actions": w.get("actions") or []}
+
     def _hot_hides(self, rid: str, info: dict[str, Any], hot: list[str],
                    n: int) -> list[tuple[dict[str, Any], str]]:
         """W74 三期:加密巡查这一圈先看那几个防区里的易藏点(最后看见人的那个防区的先看);
@@ -1488,7 +1495,10 @@ class GuardDuty:
         if not pts:
             self._wait(e, rid, f"防区路线 {info['id']} 上布防着的防区里没有点")
             return
-        why = self._why_not(rid, info, e, pts)           # 外审 r4 #3 / r5 #3:按这一圈实际的点算
+        hide_z = self._hot_hides(rid, info, hot, len(pts)) if hot else []
+        # minor #31:加密巡查先看的易藏点也算进这一圈的电量预算(以前按没有它们的一圈放行)
+        budget = [self._hide_pt(w, z) for w, z in hide_z] + pts
+        why = self._why_not(rid, info, e, budget)        # 外审 r4 #3 / r5 #3:按这一圈实际的点算
         if why:
             self._wait(e, rid, why)
             return
@@ -1496,7 +1506,6 @@ class GuardDuty:
         self._retry_at[eid] = now + RETRY_MS              # 派成了再清
         names = [p["name"] for p in pts]
         by_name = {w["name"]: w for w in info["wire"]["waypoints"]}
-        hide_z = self._hot_hides(rid, info, hot, len(names)) if hot else []
         hide = [w for w, _ in hide_z]
         mission = {**info["wire"], "waypoints": hide + [by_name[n] for n in names]
                    + self._standby_tail(e, info, rid, by_name, len(names) + len(hide))}
@@ -1514,7 +1523,7 @@ class GuardDuty:
                       (eid, rid, "lap", tid, now, lap, started,
                        started + (0 if hot else int(e["gap_min"])) * 60_000, plan,
                        run["fails"] if run else 0))
-        self._sent_key[rid] = self._need_key(e, info, rid, pts)
+        self._sent_key[rid] = self._need_key(e, info, rid, budget)
         self._log("resume" if resume else "lap_start", robot=rid, entry=eid,
                   detail=(f"第 {lap} 圈接着跑" if resume else f"第 {lap} 圈") + ":"
                   + "→".join(names))
@@ -1755,13 +1764,13 @@ class GuardDuty:
             from nexwar_site.route_eta import estimate
             wire = {w["name"]: w for w in info["wire"]["waypoints"]}
             src = info["points"] if names is None else list(pts or [])
+            # minor #31:加密巡查的易藏点不在路线里 —— 它自己带着停几秒的动作
+            got_w = [wire.get(p["name"]) or p for p in src]
             flat = {"id": info["id"], "map_id": info["map_id"], "map_version": info["map_version"],
                     "waypoints": [{"name": p["name"], "x": p["x"], "y": p["y"],
-                                   "yaw": float((wire[p["name"]].get("pose") or {})
-                                                .get("yaw", 0.0) or 0.0),
-                                   **({"actions": wire[p["name"]]["actions"]}
-                                      if wire[p["name"]].get("actions") else {})}
-                                  for p in src]}
+                                   "yaw": float((w.get("pose") or {}).get("yaw", 0.0) or 0.0),
+                                   **({"actions": w["actions"]} if w.get("actions") else {})}
+                                  for p, w in zip(src, got_w, strict=True)]}
             try:
                 got = estimate(self.db, self.reach, flat)
                 total = float(got["total_s"])
