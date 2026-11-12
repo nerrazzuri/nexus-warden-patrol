@@ -400,3 +400,25 @@ def test_外审W75_3_1_清理选好要删的那份时_优化正好要它_收下�
         assert (src / KF_MANIFEST).is_file(), "优化收下了:源不能被删"
     else:
         assert ("yard", "4") not in b._opt and b.status("yard", "4") is None, "拒了:什么都没留下"
+
+
+def test_minor1_作废以后迟到的旧上传_不重建收件目录_叫机器人当传完_重启也不复活(site):
+    """W75 外审 2 #4:作废清单先处理完、一笔超时的旧关键帧 PUT 随后落盘 —— 以前重建收件目录、
+    状态回到「上传中」,重启也清不掉。作废要记下来:迟到的块回「已丢弃」(机器人当传完)。"""
+    home, cat = site
+    b = SiteMapBuilder(home, cat, runner=_fake_builder(home), start_thread=False)
+    _send(b, "kf/00000.bin", b"kf0")
+    _send(b, KF_MANIFEST, json.dumps({"map_id": "yard", "version": "3",
+                                      "abandoned": True, "reason": "没收尾"}).encode())
+    late = _send(b, "kf/00001.bin", b"kf1-late")
+    assert late.discarded, "迟到的块:不收、叫机器人当传完"
+    assert b.status("yard", "3") is None
+    d = home / "mapkf-in" / "A" / "yard" / "3"
+    assert not any(p.name.startswith("00") for p in d.rglob("*")) if d.exists() else True
+    b2 = SiteMapBuilder(home, cat, runner=_fake_builder(home), start_thread=False)
+    assert b2.status("yard", "3") is None, "重启后不复活成「上传中」"
+    assert b2.put_chunk("A", "yard/3", "kf/00002.bin", offset=0, data=b"x", total=1).discarded
+    (d / "kf").mkdir(parents=True, exist_ok=True)              # 修之前留下的残骸:重启时清掉
+    (d / "kf" / "00003.bin").write_bytes(b"old")
+    SiteMapBuilder(home, cat, runner=_fake_builder(home), start_thread=False)
+    assert not d.exists()

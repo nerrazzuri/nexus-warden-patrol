@@ -65,6 +65,8 @@ TIMEOUT_S = 3600.0
 #: 失败原因带日志的最后几行。
 TAIL_LINES = 12
 FAILED = ".failed"
+#: 机器人作废了这一趟关键帧(W75 外审 2 #4):收件目录旁边留这个记号,迟到的旧上传直接丢弃。
+ABANDONED = ".abandoned"
 _REL = re.compile(r"^(?:kf/)?[A-Za-z0-9][A-Za-z0-9_.-]*$")
 
 Job = tuple[str, str, str]          # (机器人, 地图号, 版本)
@@ -138,14 +140,24 @@ class SiteMapBuilder:
             raise PathRefused(f"关键帧的路径错误:{run!r}/{rel!r}")
         if not self.maps._build_issued(robot_id, map_id, version):
             raise PathRefused(f"站点未让 {robot_id} 建 {map_id}:{version}")
+        if self._abandoned_mark((robot_id, map_id, version)).is_file():
+            # 作废过了:迟到的旧上传不重建收件目录,叫机器人当传完(它早清了这一趟)
+            return Stored(size=total, sha256="", discarded=True)
         path = safe_join(self.root, robot_id, map_id, version, *rel.split("/"))
         got = self.writer.write(path, offset=offset, data=data, total=total)
+        if self._abandoned_mark((robot_id, map_id, version)).is_file():
+            # 写的时候作废正好处理完了(这一块在它之后落盘):删掉,照样叫机器人当传完
+            shutil.rmtree(self._dir((robot_id, map_id, version)), ignore_errors=True)
+            return Stored(size=total, sha256="", discarded=True)
         if got.size >= total:
             self._check((robot_id, map_id, version))
         return got
 
     def _dir(self, job: Job) -> Path:
         return self.root / job[0] / job[1] / job[2]
+
+    def _abandoned_mark(self, job: Job) -> Path:
+        return self.root / job[0] / job[1] / (job[2] + ABANDONED)
 
     def _check(self, job: Job) -> None:
         """清单到了、文件都齐、大小和哈希都对 → 排进队。没齐什么也不做;对不上抛 :class:`PathRefused`
@@ -161,6 +173,8 @@ class SiteMapBuilder:
                 raise ValueError(f"清单写的是 {m.get('map_id')}:{m.get('version')}")
             if m.get("abandoned") is True:
                 # 外审 W75-1 #4:机器人交不了(关键帧不齐),退回自己从录包建:收了一半的删掉,不出图
+                mark = self._abandoned_mark(job)
+                mark.write_text(str(m.get("reason", ""))[:200], encoding="utf-8")
                 shutil.rmtree(d, ignore_errors=True)
                 with self._cv:
                     self._status.pop(key, None)
@@ -206,6 +220,9 @@ class SiteMapBuilder:
             if not d.is_dir():
                 continue
             job: Job = (d.parent.parent.name, d.parent.name, d.name)
+            if self._abandoned_mark(job).is_file():   # 作废过,又被迟到的上传建了出来:清掉
+                shutil.rmtree(d, ignore_errors=True)
+                continue
             f = d / FAILED
             if f.is_file():
                 self._set(job, "failed", reason=f.read_text(encoding="utf-8", errors="replace"))
