@@ -34,6 +34,7 @@
 #  - ICP final threshold sigma 0.2 -> 0.05 m. With 0.2 m the 2026-10-08 office
 #    maps got new 5-8 cm double walls from loose closures; voxel 0.05 + sigma
 #    0.05 gave the tightest walls overall on the three test maps (docs/建图回环.md).
+#  - ICP quality checkpoint 150 -> 10 (W75, see icp_settings below);
 #  - assume_planar_world stays false: MOLA's frame is the first lidar frame,
 #    the RS-Airy is mounted with X vertical, so "z" is not up.
 
@@ -114,9 +115,13 @@ icp_settings:
     # Important: Evaluate quality as ratio of matched pairs using the FINAL annealing-like adaptive threshold.
     force_final_pairings_for_quality: true
 
+    # W75 (2026-11-13): upstream put this at iteration 150 while maxIterations is
+    # 100, so it never fired and hopeless candidates (0% goodness) ran 80-100
+    # iterations. At 10: plaza loop 1071 kfs 125 s -> 96 s, same 44 closures,
+    # final trajectory within 0.2 cm of the old one.
     quality_checkpoints:
-      - iteration: 150
-        minimum_quality: 0.03
+      - iteration: 10
+        minimum_quality: 0.05
 
     #debugPrintIterationProgress: true  # Print iteration progress
     #generateDebugFiles: true  # Can be override with env var "MP2P_ICP_GENERATE_DEBUG_FILES=1"
