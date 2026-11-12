@@ -49,7 +49,7 @@ def _floats(s: str, n: int) -> tuple[float, ...]:
     return v
 
 
-def main(argv: Sequence[str] | None = None) -> int:
+def parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="nexwar_loc", description=__doc__.split("\n")[0])
     sub = p.add_subparsers(dest="cmd", required=True)
     c = sub.add_parser("calibrate", help="从建图轨迹标 frames.json")
@@ -85,8 +85,9 @@ def main(argv: Sequence[str] | None = None) -> int:
                    help="W75:边走边存的关键帧目录(配 --reuse;不全就退回读录包)")
     b.add_argument("--rtk-antenna", type=lambda s: _floats(s, 2), default=(0.0, 0.0),
                    help="RTK 天线在机器人身上的水平位置(朝前,朝左,米;W09e 配经纬度用,真机量)")
-    b.add_argument("--loop-closure", default="auto",
-                   help="回环(可选,docs/建图回环.md):auto = 找得到回环工具就跑(环境变量 "
+    b.add_argument("--loop-closure", default="off",
+                   help="回环(可选,docs/建图回环.md;用户 11-13 默认不跑,站点「优化地图」才跑):"
+                        "auto = 找得到回环工具就跑(环境变量 "
                         "NEXWAR_LOOP_CLOSURE、PATH、/opt/nexwar/loop-closure),off = 不跑,或者给"
                         "mola-sm-lc-cli 的路径")
     cr = sub.add_parser("calibrate-rear", help="标后雷达外参(W09i)")
@@ -144,6 +145,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     ia.add_argument("--traj", type=Path, required=True,
                     help="同一个录包的回放轨迹(replay 的 OUT/traj.tum;机身 = 点云系)")
     ia.add_argument("--imu-topic", default="/front_lidar/imu")
+    return p
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    p = parser()
     a = p.parse_args(argv)
     if getattr(a, "imu_topic", None) is not None and a.cmd in ("replay", "sweep"):
         if a.imu_ypr is None:

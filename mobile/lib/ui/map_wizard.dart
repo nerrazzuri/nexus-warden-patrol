@@ -333,6 +333,7 @@ class MapWizardPage extends StatefulWidget {
   static const Key useKey = Key('wizard-use');
   static const Key rewalkKey = Key('wizard-rewalk');
   static const Key retrySiteKey = Key('wizard-retry-site');
+  static const Key optimizeKey = Key('wizard-optimize');
   static const Key zonesOpenKey = Key('wizard-zones-open');
   static const Key zonesEmptyKey = Key('wizard-zones-empty');
   static const Key zonesConfirmKey = Key('wizard-zones-confirm');
@@ -1095,6 +1096,9 @@ class _MapWizardPageState extends State<MapWizardPage> {
     final reasons = [for (final r in (q['reasons'] as List? ?? const [])) '$r'];
     final good = verdict != 'problem';
     final path = q['path_m'], shift = q['max_shift_m'];
+    // 用户 11-13：回环作可选，默认不做 —— 没做过就说不上闭没闭合；漂移大了点「优化地图」
+    final optimized = q['optimized'] != false;
+    final canOptimize = b['optimizable'] == true;
     return _scroll([
       Row(key: MapWizardPage.verdictKey, children: [
         Icon(
@@ -1125,7 +1129,7 @@ class _MapWizardPageState extends State<MapWizardPage> {
       NwCard(
         tone: good ? NwTone.neutral : NwTone.warning,
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          if (good && verdict == 'usable') Text(tr('✓ Loop closed at the start', '✓ 已回到起点闭合')),
+          if (good && verdict == 'usable' && optimized) Text(tr('✓ Loop closed at the start', '✓ 已回到起点闭合')),
           if (path is num) Text(tr('Walked ${path.round()} m', '走了 ${path.round()} 米')),
           if (verdict == 'unknown')
             Text(tr("No build record for this version, so its quality can't be assessed. Check the map before using it.",
@@ -1146,7 +1150,26 @@ class _MapWizardPageState extends State<MapWizardPage> {
       Text(tr("Check that walls are straight and no room is missing. If not, walk again.",
               '请检查墙体是否平直、房间是否完整，如有问题请重新行走。'),
           style: NwText.bodySmall.copyWith(color: c.textSecondary)),
+      if (canOptimize) ...[
+        const SizedBox(height: Nw.s4),
+        Text(
+            tr('If a wall shows a ghost copy or two layers, tap "Optimize map". The site computer corrects it from the scans '
+                    'already uploaded (about 5–10 minutes, no need to walk again) and saves it as a new version.',
+                '如果墙体有重影、出现两层，点「优化地图」：站点主机用已上传的扫描数据重新拼接（约 5–10 分钟，无需重新行走），'
+                    '结果另存为新版本。'),
+            style: NwText.bodySmall.copyWith(color: c.textSecondary)),
+      ],
     ], [
+      if (canOptimize) ...[
+        NwButton(
+            buttonKey: MapWizardPage.optimizeKey,
+            label: tr('Optimize map', '优化地图'),
+            variant: NwButtonVariant.outline,
+            fullWidth: true,
+            size: NwButtonSize.large,
+            onPressed: _busy ? null : _optimize),
+        const SizedBox(height: Nw.s8),
+      ],
       Row(children: [
         Expanded(
             child: NwButton(
@@ -1164,6 +1187,15 @@ class _MapWizardPageState extends State<MapWizardPage> {
                 onPressed: _busy ? null : (good ? () => _go('zones') : _rewalk))),
       ]),
     ]);
+  }
+
+  /// 用户 11-13「优化地图」：站点拿留着的关键帧回环，出成新的一版（这一版留着）。
+  Future<void> _optimize() async {
+    try {
+      await _act(<String, dynamic>{'action': 'optimize'});
+    } on SiteError {
+      return; // _err 里有
+    }
   }
 
   /// W75：站点出图失败了，在站点上用已经传上来的关键帧重出同一版。
