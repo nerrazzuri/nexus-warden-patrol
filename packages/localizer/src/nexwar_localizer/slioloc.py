@@ -225,11 +225,20 @@ def write_pcd(path: Path, xyz: Any) -> None:
 
 
 def voxel_down(xyz: Any, res: float) -> np.ndarray:
-    """每个 ``res`` 体素留一个点(第一个)。"""
+    """每个 ``res`` 体素留一个点(第一个)。体素下标压成一个整数再去重(W75:2600 万点按行去重 56 s,
+    这样 3 s,结果一样);下标超出 :func:`_keys` 的范围才按行去重。"""
     a = np.asarray(xyz, dtype=np.float64)
     a = a[np.isfinite(a).all(axis=1)]
-    _, idx = np.unique(np.floor(a / res).astype(np.int64), axis=0, return_index=True)
+    v = np.floor(a / res).astype(np.int64)
+    if len(v) and -_KEY_HALF <= v.min() and v.max() < _KEY_HALF:
+        _, idx = np.unique(_keys(v), return_index=True)
+    else:
+        _, idx = np.unique(v, axis=0, return_index=True)
     return a[np.sort(idx)]
+
+
+#: :func:`_keys` 每轴能编的体素下标范围:[-2^20, 2^20)。
+_KEY_HALF = 1 << 20
 
 
 def _keys(v: np.ndarray) -> np.ndarray:

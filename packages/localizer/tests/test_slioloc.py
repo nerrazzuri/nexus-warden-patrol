@@ -103,6 +103,22 @@ def test_体素降采样():
     assert len(L.voxel_down(xyz, 0.25)) == 2
 
 
+def _voxel_ref(xyz: np.ndarray, res: float) -> np.ndarray:
+    """原来的写法(按行去重,W75 实测 2600 万点 56 s):快写法的结果要跟它逐点一样。"""
+    a = xyz[np.isfinite(xyz).all(axis=1)]
+    _, idx = np.unique(np.floor(a / res).astype(np.int64), axis=0, return_index=True)
+    return a[np.sort(idx)]
+
+
+@pytest.mark.parametrize("span", [30.0, 2e5])
+def test_体素降采样_快写法跟按行去重逐点一样_坐标超出编号范围也对(span):
+    rng = np.random.default_rng(7)
+    xyz = rng.uniform(-span, span, (20000, 3))
+    xyz = np.vstack([xyz, xyz[:5000] + 0.001, [[np.nan, 0, 0], [np.inf, 1, 1]]])
+    got = L.voxel_down(xyz, 0.05)
+    assert np.array_equal(got, _voxel_ref(xyz, 0.05))
+
+
 def _room() -> np.ndarray:
     """一个 20×12 m 的房间:地、四面墙,中间两根柱子(点距 0.1 m)。"""
     g = np.arange(0, 1, 0.1)
