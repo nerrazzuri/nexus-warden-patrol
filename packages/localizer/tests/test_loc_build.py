@@ -806,3 +806,66 @@ def test_S2_从真的mcap录包读里程_报文头收到时刻朝向(tmp_path):
         "/odom/mc_odom [(50.0, 100.0, 0.0), (51.0, 101.0, 0.5), (52.0, 102.0, 1.0)]",
         "/odom/current_pose [(50.0, 100.0, 0.0), (51.0, 101.0, -0.5), (52.0, 102.0, -1.0)]",
         "None"], r.stdout
+
+
+def _live(tmp, yaws, **kw):
+    """边走边存的关键帧目录里那份收尾文件(W75 ``livemap.write_live``):里程朝向、雷达钟差。"""
+    d = tmp / "kf-live"
+    d.mkdir(exist_ok=True)
+    (d / "live.json").write_text(json.dumps({"keyframes": 9, "clock_offset_s": 0.05,
+                                             "odom": [list(r) for r in _里程(yaws, **kw)]}))
+    return d
+
+
+def test_W75_站点打包_没有录包_里程从关键帧目录里拿_核手性照做_栅格用模拟射线(tmp_path):
+    work, pts, yaws = _转圈(tmp_path, False)
+    B.package(work, tmp_path / "out", run=假MOLA(pts), live=_live(tmp_path, yaws))
+    b = json.loads((tmp_path / "out" / "build.json").read_text())
+    assert b["handedness"]["verdict"] == "ok", b["handedness"]
+    assert b["grid"]["rays"].startswith("synthetic"), b["grid"]["rays"]
+    assert b["superlio_map"]["denoise"]["skipped"], "没有逐帧扫描:不做射线清除,写明"
+
+
+def test_W75_站点打包_关键帧目录里的里程跟图反着转_不出图(tmp_path):
+    work, pts, yaws = _转圈(tmp_path, False)
+    with pytest.raises(B.BuildError, match="镜像"):
+        B.package(work, tmp_path / "out", run=假MOLA(pts),
+                  live=_live(tmp_path, yaws, sign=-1.0))
+
+
+def test_W75_建图命令_只给关键帧目录_站点上打包_不要录包_报进度(tmp_path, monkeypatch, capsys):
+    from nexwar_localizer import superlio as S
+    from nexwar_localizer import tools
+    seen = {}
+
+    def 准备(work, kd, **kw):
+        seen["prepare"] = (work, kd)
+        return {"quality": {}, "keyframes": 9, "prepare_s": 0.1}
+
+    def 打包(work, out, **kw):
+        seen.update(kw)
+        kw["progress"]("回环")
+        out.mkdir(parents=True, exist_ok=True)
+        (out / "build.json").write_text("{}")
+        return []
+    monkeypatch.setattr(S, "prepare_live", 准备)
+    monkeypatch.setattr(B, "package", 打包)
+    monkeypatch.setattr(B, "find_loop_closure", lambda s: None)
+    kd = tmp_path / "kd"
+    assert tools.main(["build", "--from-keyframes", str(kd), "--out", str(tmp_path / "o"),
+                       "--work", str(tmp_path / "w")]) == 0
+    assert seen["prepare"] == (tmp_path / "w", kd)
+    assert seen["live"] == kd and seen["bag"] is None
+    assert seen["source"] == "keyframes:kd"
+    out = capsys.readouterr().out
+    assert f"{tools.PROGRESS} 关键帧" in out and f"{tools.PROGRESS} 回环" in out
+    with pytest.raises(SystemExit):
+        tools.main(["build", "--out", str(tmp_path / "o")])          # 录包、关键帧总得给一个
+
+
+def test_W75_打包每到一步报一声(tmp_path):
+    work, pts = _scene(tmp_path, False)
+    said = []
+    B.package(work, tmp_path / "out", run=假MOLA(pts), loop_closure=_lc_tool(tmp_path),
+              progress=said.append)
+    assert said == ["回环", "点云", "栅格", "先验", "定位地图"]

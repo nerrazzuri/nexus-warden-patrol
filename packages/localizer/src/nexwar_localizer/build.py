@@ -185,13 +185,24 @@ def package(work: Path, out: Path, *, prior_pack: PriorPack | None = None,
             clock_offset: Callable[[Path, str], float | None] | None = None,
             loop_closure: str | None = None,
             read_odom: Callable[[Path], tuple[str, list[tuple[float, float, float]]] | None]
-            | None = None) -> list[str]:
+            | None = None, live: Path | None = None,
+            progress: Callable[[str], None] | None = None) -> list[str]:
     """``work`` 里的 ``raw_prior.mm``、``traj.tum``、``map.simplemap`` → ``out`` 里的版本文件。回
     文件名。给了 ``bag``(建图的那个录包)就从里面逐帧读扫描打真射线、读狗自己的里程核手性(镜像就抛
     :class:`BuildError`,一个版本文件都不写)。``loop_closure`` 是回环工具的路径
     (:func:`find_loop_closure`;None = 不回环):先回环(:func:`loop_close`),成了就从 ``work/lc``
-    里回环后的三样打包。"""
+    里回环后的三样打包。``live``(W75,站点上打包、没有录包):边走边存的关键帧目录 —— 里程、雷达钟差从
+    它的 ``live.json`` 拿,RTK 解从它的 ``rtk.jsonl`` 拿;栅格用模拟射线。"""
     prior_pack = prior_pack or PriorPack()
+    say = progress or (lambda _stage: None)
+    aux = bag
+    if bag is None and live is not None:
+        aux = live
+        doc = json.loads((live / "live.json").read_text(encoding="utf-8"))
+        rows = [(float(a), float(b), float(c)) for a, b, c in doc.get("odom") or []]
+        off = doc.get("clock_offset_s")
+        read_odom = read_odom or (lambda _: (ODOM_TOPICS[0], rows) if rows else None)
+        clock_offset = clock_offset or (lambda *_: off)
     import numpy as np
 
     from nexwar_localizer import grid
@@ -205,17 +216,19 @@ def package(work: Path, out: Path, *, prior_pack: PriorPack | None = None,
     if n < 10:
         raise BuildError(f"建图轨迹只有 {n} 帧,太短")
     t0 = time.monotonic()
+    say("回环")
     src, lc_info = loop_close(work, loop_closure, run)
     if lc_info["ran"]:
         timings["loop_closure_s"] = round(time.monotonic() - t0, 1)
     traj = read_tum(src / "traj.tum")
     t0 = time.monotonic()
+    say("点云")
     points = _points(src, run)
     timings["points_s"] = round(time.monotonic() - t0, 1)
     sensor = np.array([p for _, p, _ in traj])
     frames, why = orient(points, traj)
     frames = frames.with_sensor_in_base(*sensor_in_base)
-    hand = check_handedness(traj, frames, bag, lidar_topic, read_odom or bag_odom,
+    hand = check_handedness(traj, frames, aux, lidar_topic, read_odom or bag_odom,
                             clock_offset or bag_clock_offset)
     if hand["verdict"] == "mirrored":
         raise BuildError(
@@ -225,6 +238,7 @@ def package(work: Path, out: Path, *, prior_pack: PriorPack | None = None,
             "核雷达的装法和 frames 的标定(对账 S2)")
     frames.save(out / "frames.json")
     t0 = time.monotonic()
+    say("栅格")
     from nexwar_localizer import mapclean, slioloc
     slio = slioloc.voxel_down(points, slioloc.MAP_VOXEL_M)
     rc = mapclean.RayClear(slio, slioloc.MAP_VOXEL_M)     # W70:画栅格那批逐帧扫描顺带清动态点
@@ -239,16 +253,18 @@ def package(work: Path, out: Path, *, prior_pack: PriorPack | None = None,
     curb_written = grid.write_curb(g, out / CURB_FILE) is not None   # 路沿(11-10):有才写
     timings["grid_s"] = round(time.monotonic() - t0, 1)
     t0 = time.monotonic()
+    say("先验")
     _pack_prior(src / "raw_prior.mm", out / "prior.mm", prior_pack, run, src)
     timings["prior_s"] = round(time.monotonic() - t0, 1)
     t0 = time.monotonic()
+    say("定位地图")
     slio, denoise = _denoise(slio, sensor, frames, g, rc)
     slioloc.write_pcd(out / slioloc.MAP_FILE, slio)
     timings["denoise_s"] = round(time.monotonic() - t0, 1)
     cov = coverage(traj, frames)
     (out / "coverage.json").write_text(json.dumps({"version": 1, "step_m": COVERAGE_STEP_M,
                                                    "path": cov}) + "\n")
-    geo_info = _georeference(out, bag, traj, frames, rtk_antenna, lidar_topic,
+    geo_info = _georeference(out, aux, traj, frames, rtk_antenna, lidar_topic,
                              clock_offset or bag_clock_offset)
     files = list(FILES)
     if geo_info.get("written"):
