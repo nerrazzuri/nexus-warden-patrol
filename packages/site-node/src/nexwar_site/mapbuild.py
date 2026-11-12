@@ -155,23 +155,23 @@ class SiteMapBuilder:
                 return
         try:
             m = json.loads((d / KF_MANIFEST).read_text(encoding="utf-8"))
-            files = [(str(f["name"]), int(f["size"]), str(f["sha256"])) for f in m["files"]]
             if (m.get("map_id"), m.get("version")) != key:
                 raise ValueError(f"清单写的是 {m.get('map_id')}:{m.get('version')}")
+            if m.get("abandoned") is True:
+                # 外审 W75-1 #4:机器人交不了(关键帧不齐),退回自己从录包建:收了一半的删掉,不出图
+                shutil.rmtree(d, ignore_errors=True)
+                with self._cv:
+                    self._status.pop(key, None)
+                log.info("%s 作废了 %s:%s 的关键帧(%s):收了一半的删掉", job[0], *key,
+                         str(m.get("reason", ""))[:200])
+                return
+            files = [(str(f["name"]), int(f["size"]), str(f["sha256"])) for f in m["files"]]
         except FileNotFoundError:
             self._set(job, "uploading")
             return
         except (OSError, ValueError, KeyError, TypeError) as exc:
             raise PathRefused(f"{job[0]} 传来的 {key[0]}:{key[1]} 关键帧清单无法读取:{exc}") \
                 from exc
-        if m.get("abandoned") is True:
-            # 外审 W75-1 #4:机器人交不了(关键帧不齐),退回自己从录包建:收了一半的删掉,不出图
-            shutil.rmtree(d, ignore_errors=True)
-            with self._cv:
-                self._status.pop(key, None)
-            log.info("%s 作废了 %s:%s 的关键帧(%s):收了一半的删掉", job[0], *key,
-                     str(m.get("reason", ""))[:200])
-            return
         for name, size, _ in files:
             if not _REL.match(name) or ".." in name:
                 raise PathRefused(f"关键帧清单里的文件名不对:{name!r}")
@@ -304,7 +304,11 @@ class SiteMapBuilder:
                 shutil.rmtree(dst, ignore_errors=True)
                 dst.parent.mkdir(parents=True, exist_ok=True)
                 shutil.move(str(kd), str(dst))
-            kept = sorted((d for d in self.keep_root.glob("*/*/*") if d.is_dir()),
+            with self._cv:                              # 外审 W75-2 #3:优化还要用的不删
+                busy = {src.resolve() for (m, v), (src, _) in self._opt.items()
+                        if not self._registered(m, v)}
+            kept = sorted((d for d in self.keep_root.glob("*/*/*")
+                           if d.is_dir() and d.resolve() not in busy),
                           key=lambda d: d.stat().st_mtime)
             for old in kept[:max(0, len(kept) - KEEP_N)]:
                 shutil.rmtree(old, ignore_errors=True)

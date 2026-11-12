@@ -325,7 +325,7 @@ def test_外审W75_1_4_机器人说关键帧作废_站点删掉收了一半的_�
     b = SiteMapBuilder(home, cat, runner=_fake_builder(home), start_thread=False)
     _send(b, "kf/00000.bin", b"kf0")
     assert b.status("yard", "3")["state"] == "uploading"
-    _send(b, KF_MANIFEST, json.dumps({"map_id": "yard", "version": "3", "files": [],
+    _send(b, KF_MANIFEST, json.dumps({"map_id": "yard", "version": "3",
                                       "abandoned": True, "reason": "没收尾"}).encode())
     assert b.status("yard", "3") is None
     assert not (home / "mapkf-in" / "A" / "yard" / "3").exists()
@@ -333,3 +333,27 @@ def test_外审W75_1_4_机器人说关键帧作废_站点删掉收了一半的_�
     from nexwar_site.maps import MapError
     with pytest.raises(MapError):
         cat.get("yard", "3")
+
+
+def test_外审W75_2_3_优化失败待重试_清理旧关键帧时不删它的源_重试照样能跑(site, monkeypatch):
+    import nexwar_site.mapbuild as mb
+    home, cat = site
+    monkeypatch.setattr(mb, "KEEP_N", 1)
+    b = SiteMapBuilder(home, cat, runner=_fake_builder(home), start_thread=False)
+    _upload_all(b)
+    b.run_pending()
+    src = b.keep_root / "A" / "yard" / "3"
+    b.optimize("A", "yard", "3", "4")
+    (home / "fake_build.py").write_text("import sys; print('回环工具炸了'); sys.exit(1)\n")
+    b.run_pending()
+    assert b.status("yard", "4")["state"] == "failed"
+    newer = home / "other-kf"
+    newer.mkdir()
+    (newer / KF_MANIFEST).write_text("{}")
+    b._keep(("A", "yard", "9"), newer)                 # 又留了一份更新的:超了 KEEP_N
+    assert (src / KF_MANIFEST).is_file(), "优化还要用(失败待重试):不能删"
+    assert list(src.glob(".optimize-4")), "恢复标记也留着"
+    _fake_builder(home)                                 # 恢复正常的出图程序
+    b.retry("yard", "4")
+    b.run_pending()
+    assert b.status("yard", "4")["state"] == "done"
