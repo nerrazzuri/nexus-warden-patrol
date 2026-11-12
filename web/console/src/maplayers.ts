@@ -84,6 +84,34 @@ export function labelRows(pts: [number, number][], near: number): number[] {
   return rows;
 }
 
+/**
+ * W6-15:屏上靠得比 ``near`` 还近的几个点(同一处的两台机器人)围着它们的中心摊成一个小圈,
+ * 相邻两个隔开 ``near``;隔得远的原样。画的时候再拉一根细线回原位。
+ */
+export function fanOut(pts: [number, number][], near: number): [number, number][] {
+  const n = pts.length;
+  const up = pts.map((_, i) => i);
+  const root = (i: number): number => (up[i] === i ? i : (up[i] = root(up[i])));
+  for (let i = 0; i < n; i++) {
+    for (let j = i + 1; j < n; j++) {
+      if (Math.hypot(pts[i][0] - pts[j][0], pts[i][1] - pts[j][1]) < near) up[root(i)] = root(j);
+    }
+  }
+  const groups = new Map<number, number[]>();
+  for (let i = 0; i < n; i++) groups.set(root(i), [...(groups.get(root(i)) ?? []), i]);
+  const out = pts.map(([x, y]) => [x, y] as [number, number]);
+  for (const g of groups.values()) {
+    if (g.length < 2) continue;
+    const cx = g.reduce((a, i) => a + pts[i][0], 0) / g.length, cy = g.reduce((a, i) => a + pts[i][1], 0) / g.length;
+    const r = near / (2 * Math.sin(Math.PI / g.length));
+    g.forEach((i, k) => {
+      const a = -Math.PI / 2 + (2 * Math.PI * k) / g.length;
+      out[i] = [cx + r * Math.cos(a), cy + r * Math.sin(a)];
+    });
+  }
+  return out;
+}
+
 /** W72:地图上的事件标记 —— 只留本班入侵类(在哪儿出的事,解决了也值得看)和还没处理的。 */
 export function mapPins(alerts: Alert[], since: number): Alert[] {
   return tonightEvents(alerts, since).filter((a) => a.resolved_ms == null || a.audience === "intrusion");

@@ -7,7 +7,7 @@ import mobile from "../../../design/mobile.json";
 import { lang } from "./i18n";
 import { StateText } from "./live";
 import { pinFor } from "./shell";
-import { applyTheme, followSystem, mapRasterFilter, palette, pinScheme, scheme, themeColor, tone, toneColor } from "./theme";
+import { applyTheme, followSystem, mapRasterFilter, palette, pinScheme, rasterShade, scheme, themeColor, tone, toneColor } from "./theme";
 
 /** 假的 matchMedia("(prefers-color-scheme: dark)"):能改 matches、能发 change。 */
 function fakeQuery(dark: boolean) {
@@ -108,11 +108,18 @@ describe("地图、时间轴、画面的颜色取当前这一套", () => {
     expect(css(root, "--map-raster")).toBe("none");
     applyTheme("dark", root);
     expect(css(root, "--map-raster")).toBe(mapRasterFilter("dark"));
-    // invert(a): y = a + (1 − 2a)·x;对一对手机的 y = 235 − 0.82·x(差不超过 5 级)
-    const a = Number(/invert\(([\d.]+)\)/.exec(mapRasterFilter("dark"))![1]);
-    for (const [x, want] of [[254, 27], [205, 67], [0, 235]]) {
-      expect(Math.abs(255 * (a + (1 - 2 * a) * (x / 255)) - want)).toBeLessThanOrEqual(5);
-    }
+    // 空地、墙跟手机的 y = 235 − 0.82·x 一样(差不超过 5 级)
+    const g = (x: number) => parseInt(rasterShade(x, "dark").slice(1, 3), 16);
+    expect(Math.abs(g(254) - 27)).toBeLessThanOrEqual(5);
+    expect(Math.abs(g(0) - 235)).toBeLessThanOrEqual(5);
+    // W6-15:未建图(205)跟空地拉开(以前 24 对 64,图例上看着一样)
+    expect(g(205) - g(254)).toBeGreaterThanOrEqual(64);
+    expect(g(232) - g(254)).toBeGreaterThanOrEqual(16);       // 看过的地方在中间
+    expect(g(232)).toBeLessThan(g(205));
+    // 滤镜跟图例同一张表
+    expect(mapRasterFilter("dark")).toBe("url(#nw-raster-dark)");
+    const fn = document.querySelector("#nw-raster-dark feFuncR");
+    expect(fn?.getAttribute("type")).toBe("table");
   });
 
   it("视频底两套都是黑的", () => {

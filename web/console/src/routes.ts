@@ -91,10 +91,11 @@ export function yawToward(fx: number, fy: number, tx: number, ty: number): numbe
 export const degOf = (yaw: number) => round((yaw * 180) / Math.PI, 1);
 export const radOf = (deg: number) => round((deg * Math.PI) / 180, 4);
 
-/** 新点的名字:P1、P2…,不跟已有的重名(照片按点位名归档,重名会互相覆盖)。 */
+/** 新点的名字:W1、W2…,不跟已有的重名(照片按点位名归档,重名会互相覆盖)。
+ *  W6-15:以前叫 P1、P2,跟报警级别 P1 撞名;手机早改成 W 了,网页跟上(已有路线的点名不动)。 */
 export function nextName(points: RoutePoint[]): string {
   const have = new Set(points.map((p) => p.name));
-  for (let i = points.length + 1; ; i++) if (!have.has(`P${i}`)) return `P${i}`;
+  for (let i = points.length + 1; ; i++) if (!have.has(`W${i}`)) return `W${i}`;
 }
 
 /** 在末尾加一个点;朝向 = 从上一个点走过来的方向(第一个点朝 +x)。 */

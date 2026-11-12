@@ -144,6 +144,9 @@ describe("第 4 轮 r2-duty-N7 点位没到", () => {
     const { alertTitle } = await import("./i18n");
     expect(alertTitle("en", "stuck", "点位 P2 连续 3 趟未到达:路可能被堵住了")).toBe("Waypoint P2 not reached 3 runs in a row");
     expect(alertTitle("en", "stuck", "点位 P2 未到达,已跳过")).toBe("Waypoint P2 skipped");
+    // W6-15:中文界面不露站点原话的半角逗号(报表里写「点位 P4 未到达,已跳过」)
+    expect(alertTitle("zh", "stuck", "点位 P4 未到达,已跳过")).toBe("点位 P4 未到达，已跳过");
+    expect(alertTitle("zh", "stuck", "测试：点位 W1 未到达,已跳过")).toBe("测试：点位 W1 未到达，已跳过");
     expect(siteText("到场看看,或者改路线;到达一次后自动解除").text).toBe("Go and look, or change the route. Clears itself once the point is reached.");
     expect(siteText("巡逻继续,只做记录").text).toBe("The patrol went on; this is only a record.");
   });

@@ -26,27 +26,57 @@ function webExtras(p: Palette, s: Scheme): Palette {
     ...(s === "light" ? { textMuted: "#5F626A" } : {}) };
 }
 
-/** 深色下底图反亮度的那个 a(CSS invert(a))。 */
-const RASTER_INVERT = 0.91;
-
 export function palette(s: Scheme): Palette {
   const base = (mobile.color as Record<Scheme, Palette>)[s];
   return { ...base, ...webExtras(base, s) };
 }
 
 /**
- * 深色下地图栅格的滤镜:跟手机的 ColorFilter(y = 235 − 0.82·x)一样的意思 —— 空地 254→约 24、未知 205→约 64、
- * 墙 0→约 232。CSS 的 invert(a) 是 y = a − (2a − 1)·x,a = 0.91 时斜率 −0.82、截距 232。浅色下原样。
- * 只用在底图(.mapimg:栅格或平面图)上,不用在上面画的狗、防区。
+ * 深色下地图栅格的滤镜:空地 254→约 27、墙 0→约 235,跟手机的 ColorFilter(y = 235 − 0.82·x)一样。
+ * W6-15:直线反色下未建图(205)只到 64,跟空地(24)在图例上看着一样 —— 改成分段表(SVG feComponentTransfer),
+ * 未建图提到约 100,看过的地方(232)在中间,路沿(150)比未建图再亮一些。浅色下原样。
+ * 只用在底图(.mapimg:栅格或平面图)上,不用在上面画的机器人、防区。
  */
+export const DARK_RASTER_TABLE = [0.92, 0.76, 0.62, 0.50, 0.40, 0.10];
+const FILTER_ID = "nw-raster-dark";
+
 export function mapRasterFilter(s: Scheme): string {
-  return s === "dark" ? `invert(${RASTER_INVERT})` : "none";
+  return s === "dark" ? `url(#${FILTER_ID})` : "none";
+}
+
+/** 把那张表做成文档里的一个 SVG 滤镜(页面上的 img、svg image 都用 url(#…) 引它);只放一次。 */
+function ensureRasterFilter(): void {
+  if (typeof document === "undefined" || document.getElementById(FILTER_ID)) return;
+  const ns = "http://www.w3.org/2000/svg";
+  const svg = document.createElementNS(ns, "svg");
+  svg.setAttribute("width", "0");
+  svg.setAttribute("height", "0");
+  svg.setAttribute("aria-hidden", "true");
+  svg.setAttribute("style", "position:absolute;width:0;height:0;overflow:hidden");
+  const f = document.createElementNS(ns, "filter");
+  f.setAttribute("id", FILTER_ID);
+  f.setAttribute("color-interpolation-filters", "sRGB");
+  const ct = document.createElementNS(ns, "feComponentTransfer");
+  for (const c of ["R", "G", "B"]) {
+    const fn = document.createElementNS(ns, `feFunc${c}`);
+    fn.setAttribute("type", "table");
+    fn.setAttribute("tableValues", DARK_RASTER_TABLE.join(" "));
+    ct.appendChild(fn);
+  }
+  f.appendChild(ct);
+  svg.appendChild(f);
+  document.body?.appendChild(svg);
 }
 
 /** 底图(栅格、平面图)上的一个灰度在这一套下显示成什么颜色(跟 --map-raster 滤镜一样算):图例色块用。 */
 export function rasterShade(grey: number, s: Scheme): string {
-  const a = RASTER_INVERT;
-  const v = s === "dark" ? 255 * (a + (1 - 2 * a) * (grey / 255)) : grey;
+  let v = grey;
+  if (s === "dark") {
+    // 跟 feFuncX type="table" 一样:n 段线性插值
+    const tb = DARK_RASTER_TABLE, n = tb.length - 1, x = Math.max(0, Math.min(1, grey / 255));
+    const k = Math.min(n - 1, Math.floor(x * n));
+    v = 255 * (tb[k] + (x * n - k) * (tb[k + 1] - tb[k]));
+  }
   const h = Math.round(Math.max(0, Math.min(255, v))).toString(16).padStart(2, "0");
   return `#${h}${h}${h}`;
 }
@@ -78,6 +108,7 @@ export function applyTheme(s: Scheme, root: HTMLElement = document.documentEleme
   root.style.setProperty("--font-display", `'${mobile.font.display}', ${fb}, system-ui, sans-serif`);
   root.style.setProperty("--font-sans", `'${mobile.font.sans}', ${fb}, system-ui, sans-serif`);
   root.style.setProperty("--font-mono", `'${mobile.font.mono}', ${fb}, ui-monospace, monospace`);
+  if (s === "dark") ensureRasterFilter();
   root.style.setProperty("--map-raster", mapRasterFilter(s));
   // 第 2 轮 P1-52:地图编辑「看结果」—— 擦掉的画成这一套下的空地色、加的障碍画成墙色(原来写死白 / 黑,深色下反了)
   root.style.setProperty("--map-free", rasterShade(254, s));

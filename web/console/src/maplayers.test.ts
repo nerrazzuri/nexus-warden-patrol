@@ -1,7 +1,7 @@
 // W44 地图页的图层规则(设计 §4.3):多久没巡过、今晚的事、本班从几点算、下一个巡检点几分钟到、防区标签。
 import { beforeEach, describe, expect, it } from "vitest";
 import { lang } from "./i18n";
-import { DEFAULT_LAYERS, ENGINEERING_LAYERS, etaNext, layersFor, type Layer, MAP_TODO_MAX, labelRows, mapPins, mapTodo, olderOpen, shiftStart, staleAfter, staleCells, STALE_AFTER_MS, tonightEvents, zoneDecor } from "./maplayers";
+import { DEFAULT_LAYERS, ENGINEERING_LAYERS, etaNext, layersFor, type Layer, MAP_TODO_MAX, fanOut, labelRows, mapPins, mapTodo, olderOpen, shiftStart, staleAfter, staleCells, STALE_AFTER_MS, tonightEvents, zoneDecor } from "./maplayers";
 import type { Alert } from "./model";
 
 beforeEach(() => {
@@ -139,5 +139,38 @@ describe("多久没巡过按站点设置", () => {
 describe("P1-12 两台叠在一起", () => {
   it("挨得近的名字错开行,远的不挪", () => {
     expect(labelRows([[100, 100], [101, 100], [300, 300], [100, 102]], 20)).toEqual([0, 1, 0, 2]);
+  });
+});
+
+// W6-15:A、B 停在同一个地方,B 的点被 A 盖住了 —— 靠得太近的几台在屏上摊开(原位不动的那台没有)
+describe("W6-15 重叠的机器人点摊开", () => {
+  it("隔得远的原样", () => {
+    expect(fanOut([[0, 0], [100, 0]], 10)).toEqual([[0, 0], [100, 0]]);
+  });
+  it("叠在一起的两台、三台摊开,两两隔开至少 near,围着原位", () => {
+    for (const n of [2, 3]) {
+      const pts = Array.from({ length: n }, () => [50, 50] as [number, number]);
+      const got = fanOut(pts, 12);
+      for (let i = 0; i < n; i++) {
+        for (let j = i + 1; j < n; j++) expect(Math.hypot(got[i][0] - got[j][0], got[i][1] - got[j][1])).toBeGreaterThanOrEqual(12 - 1e-6);
+        expect(Math.hypot(got[i][0] - 50, got[i][1] - 50)).toBeLessThanOrEqual(12);
+      }
+    }
+  });
+  it("只摊挨着的那一组,别的不动", () => {
+    const got = fanOut([[0, 0], [2, 1], [200, 200]], 12);
+    expect(got[2]).toEqual([200, 200]);
+    expect(Math.hypot(got[0][0] - got[1][0], got[0][1] - got[1][1])).toBeGreaterThanOrEqual(12 - 1e-6);
+  });
+});
+
+describe("W6-15「Tonight」勾选项写清是什么", () => {
+  it("英文写今晚的事件,不只一个 Tonight", async () => {
+    const { t, lang } = await import("./i18n");
+    lang.value = "en";
+    expect(t("layerEvents")).toBe("Tonight's events");
+    expect(t("tonightN", { n: 3 })).toBe("Tonight's events · 3");
+    lang.value = "zh";
+    expect(t("layerEvents")).toBe("今晚事件");
   });
 });

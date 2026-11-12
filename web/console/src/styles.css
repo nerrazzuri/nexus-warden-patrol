@@ -260,6 +260,7 @@ button.navgroup-title[aria-expanded="true"]::after { content: " ▾"; }
 .bot { cursor: pointer; }
 .bot .bot-dot { fill: var(--c-text); stroke: var(--c-surface); stroke-width: 3; }
 .bot .bot-head { stroke: var(--c-text); stroke-width: 3; }
+.bot-leader { stroke: var(--c-textSecondary); stroke-width: 1; stroke-dasharray: 2 2; }
 .bot .bot-label { fill: var(--c-text); text-anchor: middle; font-family: var(--font-mono); font-weight: 600; paint-order: stroke; stroke: var(--c-surface); stroke-width: 4px; }
 .bot.ok .bot-dot { fill: var(--c-success); } .bot.ok .bot-head { stroke: var(--c-success); }
 .bot.p1 .bot-dot, .bot.p1 .bot-label { fill: var(--c-error); } .bot.p1 .bot-head { stroke: var(--c-error); }
