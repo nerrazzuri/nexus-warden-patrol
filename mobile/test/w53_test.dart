@@ -142,8 +142,36 @@ void main() {
         ..alertRows = [row('run_start', 'P3'), row('run_done', 'P2'), row('adhoc_patrol', 'P2'), row('stuck', 'P2')];
       await _duty(t, api);
       expect(find.text('其他未处理 1 条'), findsOneWidget);
-      expect(find.textContaining('P1：无'), findsOneWidget);
+      expect(find.textContaining('没有紧急报警'), findsOneWidget, reason: 'A6-04：不写客户看不懂的「P1：无」');
+      expect(find.textContaining('P1'), findsNothing);
       expect(find.byKey(SiteDutyPage.safetyKey), findsOneWidget);
+    });
+
+    testWidgets('A6-04：新登记的机器人「只许手动派」写人话，不露 enroll 和站点原话', (t) async {
+      final v = Map<String, dynamic>.of(siteFixture('site_robot'))
+        ..['manual_only'] = <String, dynamic>{'by': 'enroll', 'at_ms': 1, 'note': '新登记:确认之前只许手动派'};
+      final api = FakeApi('guard', robotView: v)..robotsOverride = <Map<String, dynamic>>[v];
+      await _duty(t, api);
+      final txt = t.widget<Text>(find.byKey(SiteDutyPage.manualKey)).data!;
+      expect(txt, contains('新加入的机器人，管理员确认前只许手动派'));
+      expect(txt, isNot(contains('enroll')));
+      expect(txt, isNot(contains('新登记:')));
+      appLang.value = AppLang.en;
+      await t.pumpWidget(Container());                  // 换语言整个 App 重建
+      await _duty(t, api);
+      final en = t.widget<Text>(find.byKey(SiteDutyPage.manualKey)).data!;
+      expect(en, contains('New robot'));
+      expect(en, isNot(contains('enroll')));
+      expect(en, isNot(contains('新')));
+      appLang.value = AppLang.zh;
+    });
+
+    testWidgets('A6-04：人设的「只许手动派」照旧写谁设的、为什么', (t) async {
+      final v = Map<String, dynamic>.of(siteFixture('site_robot'))
+        ..['manual_only'] = <String, dynamic>{'by': 'olga', 'at_ms': 1, 'note': '在修腿'};
+      final api = FakeApi('guard', robotView: v)..robotsOverride = <Map<String, dynamic>>[v];
+      await _duty(t, api);
+      expect(t.widget<Text>(find.byKey(SiteDutyPage.manualKey)).data, contains('olga 设的：在修腿'));
     });
 
     testWidgets('今天的巡逻：一行一趟；排队中的临时巡逻派的人能取消', (t) async {

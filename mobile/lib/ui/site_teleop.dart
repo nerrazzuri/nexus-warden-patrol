@@ -167,6 +167,7 @@ class SiteTeleopPage extends StatefulWidget {
   static const Key speedValueKey = Key('teleop-speed-value');
   static const Key postureMenuKey = Key('teleop-posture-menu');
   static const Key speedHintKey = Key('teleop-speed-hint');
+  static const Key speedCapKey = Key('teleop-speed-cap');
   static const Key dropKey = Key('teleop-drop');
   static const Key inSightKey = Key('teleop-insight');
   static Key postureKey(String mode) => Key('teleop-posture-$mode');
@@ -193,6 +194,8 @@ class _SiteTeleopPageState extends State<SiteTeleopPage> with WidgetsBindingObse
   double _speed = 0;
 
   /// 推满前进多快：选的那档（不超过站点限速）；老站点 = 站点限速。
+  /// 选的速度过了低速档：机器人用中速档（不能横移）。
+  bool get _midGear => _speeds.isNotEmpty && _speed > kLowGearMax + 1e-9;
   double get _vTop => _speeds.isEmpty ? _maxVx : math.min(_speed, _maxVx);
 
   /// 转向、横移占站点上限的几成：跟着选的速度走，到 1.0 m/s 就满（中速档不更快）。
@@ -492,6 +495,10 @@ class _SiteTeleopPageState extends State<SiteTeleopPage> with WidgetsBindingObse
                 maxLines: 3,
                 style: NwText.labelSmall.copyWith(color: c.fg(NwTone.warning), fontSize: 10)),
           ),
+        // A6-05：滑条顶头写站点给的上限（看的人知道为什么最高只到这儿）；限速了有上面那句「最高…（下雨）」
+        if (_capWhy == null)
+          Text(tr('max ${_speeds.last.toStringAsFixed(1)}', '上限 ${_speeds.last.toStringAsFixed(1)}'),
+              key: SiteTeleopPage.speedCapKey, style: NwText.labelSmall.copyWith(color: Colors.white70)),
         Expanded(
           child: RotatedBox(
             quarterTurns: 3,
@@ -906,13 +913,18 @@ class _SiteTeleopPageState extends State<SiteTeleopPage> with WidgetsBindingObse
                             ),
                           if (_speeds.isNotEmpty && !_ended && _speed > kLowGearMax + 1e-9)
                             Padding(
-                              key: SiteTeleopPage.speedHintKey,
                               padding: const EdgeInsets.only(top: Nw.s4),
-                              child: Text(
-                                  tr('Above 1.0 m/s the robot uses its middle gear: no sideways, slower turning; release the stick to change gear',
-                                      '超过 1.0 m/s 用中速档：不能横移、转向变慢；换档要先松开摇杆'),
-                                  style: NwText.bodySmall.copyWith(
-                                      color: Colors.white, shadows: const [Shadow(blurRadius: 3)])),
+                              // 易用性第 6 轮 A6-05：白字直接压在亮画面上读不出来 —— 加底色
+                              child: Container(
+                                key: SiteTeleopPage.speedHintKey,
+                                padding: const EdgeInsets.symmetric(horizontal: Nw.s8, vertical: Nw.s4),
+                                decoration: BoxDecoration(
+                                    color: Colors.black.withValues(alpha: 0.6), borderRadius: BorderRadius.circular(Nw.r8)),
+                                child: Text(
+                                    tr('Above 1.0 m/s the robot uses its middle gear: no sideways, slower turning; release the stick to change gear',
+                                        '超过 1.0 m/s 用中速档：不能横移、转向变慢；换档要先松开摇杆'),
+                                    style: NwText.bodySmall.copyWith(color: Colors.white)),
+                              ),
                             ),
                           if (desktop)
                             Padding(
@@ -998,7 +1010,8 @@ class _SiteTeleopPageState extends State<SiteTeleopPage> with WidgetsBindingObse
                       key: SiteTeleopPage.moveStickKey,
                       axis: JoystickAxis.translate,
                       enabled: _canDrive,
-                      label: lateral ? tr('Move · sideways', '前后 · 横移') : tr('Move', '前后'),
+                      // A6-05：中速档不能横移，标签跟着只写前后
+                      label: lateral && !_midGear ? tr('Move · sideways', '前后 · 横移') : tr('Move', '前后'),
                       icon: lateral ? Icons.open_with_rounded : null,
                       onChanged: (v) {
                         _fwd = v.dy;

@@ -63,6 +63,29 @@ void main() {
     teleopSpeedPick = null;
   });
 
+  testWidgets('易用性第 6 轮 A6-05：中速档提示有底色看得清；中速档左杆只写「前后」；滑条写站点上限', (t) async {
+    teleopSpeedPick = null;
+    final api = FakeApi('guard');
+    api.weatherView = <String, dynamic>{'condition': 'clear', 'source': 'auto'};   // 不限速
+    await t.pumpWidget(MaterialApp(home: SiteTeleopPage(key: UniqueKey(), api: api, robotId: 'A')));
+    await t.pump();
+    api.link!.ctl.add(<String, dynamic>{'kind': 'granted', 'lease_epoch': 1, 'max_vx': 2.0, 'max_vy': 0.5,
+      'max_wz': 1.5, 'speeds': [0.3, 0.6, 1.0, 1.3, 1.6, 2.0]});
+    await t.pump();
+    await t.pump();
+    expect(find.text('前后 · 横移'), findsOneWidget);
+    expect(find.byKey(SiteTeleopPage.speedCapKey), findsOneWidget);
+    expect(t.widget<Text>(find.byKey(SiteTeleopPage.speedCapKey)).data, '上限 2.0');
+    t.widget<Slider>(find.byKey(SiteTeleopPage.speedSliderKey)).onChanged!(4);   // 1.6：中速档
+    await t.pump();
+    expect(find.text('前后'), findsOneWidget, reason: '中速档不能横移');
+    expect(find.text('前后 · 横移'), findsNothing);
+    final box = t.widget<Container>(find.byKey(SiteTeleopPage.speedHintKey));
+    expect((box.decoration as BoxDecoration?)?.color, isNotNull, reason: '白字压在亮画面上要有底色');
+    await t.pumpWidget(Container());
+    teleopSpeedPick = null;
+  });
+
   testWidgets('用户 11-08：下雨限速时滑条旁边说最高多少、为什么', (t) async {
     final api = FakeApi('guard')
       ..weatherView = <String, dynamic>{'condition': 'rain', 'label': '下雨', 'source': 'manual', 'speed_cap_mps': 0.3};
