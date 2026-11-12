@@ -379,6 +379,12 @@ PUSH_ROUTES: dict[str, tuple[tuple[str, ...] | None, str]] = {
     "swap_needed": (("guard",), "请来换电池"),
     "swap_overdue": (("owner",), "换电池没人管"),
 }
+#: 按角色推的这几种,那几种角色**一部登记了的手机都没有**时改推给谁(W76 外审 #10:站点没有保安账号、
+#: 保安没登记手机,换电提醒原来谁都收不到也不报)。
+PUSH_FALLBACK: dict[str, tuple[str, ...]] = {
+    "swap_needed": ("owner", "admin"),
+    "swap_overdue": ("admin",),
+}
 
 
 def enqueue(tx: Any, alert: Any, now_ms: int) -> None:
@@ -548,8 +554,11 @@ class PushDesk:
             # 名单每一遍重新算(RC 加固复查 R1):这一遍里有推送号没了(FCM 令牌失效),那部手机登记的
             # 另一个通道这才轮得上 —— 原来名单只算一次、没有要发的通道也记成「发完了」,那部手机两头
             # 都没收到。**发没发过只看逐台的账**(``push_sent``),不看通道的「发完」标记。
+            fallback = PUSH_FALLBACK.get(kind[0]["kind"]) if kind else None
             for _ in range(RECOUNT_MAX):
                 devices = self._devices(roles, account=account)
+                if fallback and not any(devices.values()):
+                    devices = self._devices(fallback)
                 gone = 0
                 done = []
                 for name in PROVIDERS:                    # 一个通道没发出去,不耽误另一个

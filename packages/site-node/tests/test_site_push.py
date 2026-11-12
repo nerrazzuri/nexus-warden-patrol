@@ -1059,3 +1059,24 @@ def test_W76_换电提醒只推保安_半小时没人换的升级只推经理(�
     desk.raise_alert(kind="swap_overdue", robot="A", title="A 换电池 30 分钟没进展", merge=False)
     p.tick()
     assert sorted(r for reg, _, _, _ in j.sent for r in reg) == ["rid-olga"], "只推经理"
+
+
+def test_W76外审_没有保安的手机_换电提醒改推经理管理员_没有经理的手机_升级推管理员(台):
+    """外审 W76-1 #10:原来只推保安,站点没有保安账号 / 保安没登记手机时谁都收不到、也不报。"""
+    desk, p, j, clock, db = 台
+    with db.tx() as c:
+        c.execute("UPDATE accounts SET role='viewer' WHERE role='guard'")
+        for name, role in (("ada", "admin"), ("olga", "owner")):
+            c.execute("INSERT INTO accounts(name, role, salt, pw_hash, created_at, disabled) "
+                      "VALUES (?, ?, x'00', x'00', 0, 0)", (name, role))
+            c.execute("INSERT INTO sessions(token_hash, name, created_at, last_used) "
+                      "VALUES (?, ?, 0, 0)", ("s-" + name, name))
+    p.register("ada", "rid-ada", "android", session="s-ada")
+    desk.raise_alert(kind="swap_needed", robot="A", title="A 已到换电位,请来换电池", merge=False)
+    p.tick()
+    assert sorted(r for reg, _, _, _ in j.sent for r in reg) == ["rid-ada"]
+    j.sent.clear()
+    desk.raise_alert(kind="swap_overdue", robot="A", title="A 换电池 30 分钟没进展", merge=False)
+    p.tick()
+    got = sorted(r for reg, _, _, _ in j.sent for r in reg)
+    assert got == ["rid-ada"], "没有经理的手机推管理员"

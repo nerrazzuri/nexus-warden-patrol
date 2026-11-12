@@ -619,3 +619,14 @@ async def test_W17_goto的photo只认已知相机(cp):
                                    payload={"target": POSE.to_wire(), "photo": bad}).to_wire(),
                               TOPIC)
         assert ack.result is AckResult.REJECTED and ack.reason.startswith("payload: photo"), ack
+
+
+async def test_W76_旧任务报了更高的有效优先级_比它低的回busy(cp):
+    """外审 W76-1 #1:一直巡逻已经在低电返航,日程(优先级更高)不许把返航抢掉。"""
+    await cp.handle(_cmd(priority=5).to_wire(), TOPIC)
+    await cp.step(0.1)
+    cp.current.effective_priority = 50
+    ack = await cp.handle(_cmd(cid="c2", tid="t2", priority=20).to_wire(), TOPIC)
+    assert ack.result is AckResult.REJECTED and ack.reason == "busy"
+    ack = await cp.handle(_cmd(cid="c3", tid="t3", priority=60).to_wire(), TOPIC)
+    assert ack.result is AckResult.ACCEPTED, "人手动派的照样能抢"

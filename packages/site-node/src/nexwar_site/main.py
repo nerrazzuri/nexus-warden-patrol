@@ -1107,7 +1107,8 @@ class Server:
         # 跟值守的取高
         from nexwar_site.patrol_energy import PatrolEnergy, combine_lines
         from nexwar_site.site_settings import SiteSettings as _Settings
-        self.patrol_energy = PatrolEnergy(self.db, self.dispatcher, _Settings(self.db))
+        self.patrol_energy = PatrolEnergy(self.db, self.dispatcher, _Settings(self.db),
+                                          now_ms=wall_ms)
         self.charge.wants = combine_lines(self.guard.topup_line, self.patrol_energy.charge_line)
         self.charge.resume_for = self.guard.resume_pct
         # W73 第四期:没桩的保安换电(进度按两块电池判)

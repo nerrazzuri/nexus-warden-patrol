@@ -41,6 +41,11 @@ STOP_CONFIRM_TIMEOUT_S = 5.0
 _TERMINAL = frozenset({RunState.DONE, RunState.ABORTED})
 
 
+#: W76 外审 #1:一直巡逻低电返航途中报的有效优先级 —— 高过站点的排程(10–49),低过人手动派的(60)、
+#: 报警派遣(80)。日程到点要打断一直巡逻,可返航那一段不能被打断(打断了机器人就停在半路、没电)。
+HOMING_GUARD_PRIORITY = 50
+
+
 class EngineMissionTask(Task):
     """在 MissionEngine 上跑一趟 ``Mission`` 的任务(goto 与 patrol 共用)。子类给出这趟的
     ``Mission``(``_mission``),可选地每拍报进度(``_progress``)。"""
@@ -240,6 +245,18 @@ class EngineMissionTask(Task):
                 await stop()
             except Exception:
                 log.exception("引擎死了之后停车失败")
+
+    @property
+    def effective_priority(self) -> int:
+        """抢占时按这个比(``commands``):一直巡逻正在低电返航 → 抬到
+        :data:`HOMING_GUARD_PRIORITY`。"""
+        try:
+            m = self._mission()
+        except NotImplementedError:
+            return self.priority
+        if m.policy.forever and self._parts.engine.state.value == "RETURNING" and not self.done:
+            return max(self.priority, HOMING_GUARD_PRIORITY)
+        return self.priority
 
     def _finish_aborted(self) -> None:
         assert self._abort_reason is not None

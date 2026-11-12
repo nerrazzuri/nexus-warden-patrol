@@ -276,7 +276,7 @@ describe("W71 Nav2 没起来", () => {
     expect(btn(d, "开始巡逻").disabled).toBe(true);
     fireEvent.change(d.querySelector('select[name="route"]')!, { target: { value: "west-loop" } });
     fireEvent.click(btn(d, "开始巡逻"));
-    await waitFor(() => expect(posted.find((p) => p.url === "/api/robots/A/patrol")?.body).toEqual({ mission_id: "west-loop" }));
+    await waitFor(() => expect(posted.find((p) => p.url === "/api/robots/A/patrol")?.body).toEqual({ mission_id: "west-loop", loops: 1 }));
     await waitFor(() => expect(said.join()).toContain("west-loop"));
     fireEvent.click(btn(d, "回待命点"));
     await waitFor(() => expect(posted.some((p) => p.url === "/api/robots/A/standby/return")).toBe(true));

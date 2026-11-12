@@ -291,8 +291,9 @@ class CommandProcessor:
         blockers = [self._find_task(t) for t in conflicts]
         # W70(11-03 C40221):已经在中止的不挡 —— 原来 abort 之后约 6 s
         # (等 Nav2 取消、狗刹停)发什么都回忙
-        if any(b is not None and b.priority >= cmd.priority and not getattr(b, "aborting", False)
-               for b in blockers):
+        # W76 外审 #1:任务可以报比派它时更高的有效优先级(一直巡逻低电返航时),比它低的不许抢
+        if any(b is not None and getattr(b, "effective_priority", b.priority) >= cmd.priority
+               and not getattr(b, "aborting", False) for b in blockers):
             return self._finish(self._rej(cmd, "busy"))
 
         task = self._factory(cmd)

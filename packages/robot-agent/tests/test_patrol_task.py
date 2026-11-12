@@ -247,3 +247,22 @@ def test_W76_能力里报一直巡逻():
     caps = compose_capabilities(robot_id="r", adapter_id="sim", hal_caps=r.hal_capabilities(),
                                 loaded_map=("m", "1"), nav_path="builtin", autonomy="full")
     assert caps.tasks["patrol"]["loops_forever"] is True
+
+
+async def test_W76_一直巡逻低电返航时_有效优先级抬到日程之上_有限圈不抬(台子):
+    from nexwar_agent.tasks.engine_goto import HOMING_GUARD_PRIORITY
+    from nexwar_contract.mission import LOOPS_FOREVER
+    c, r, parts, book = 台子
+    t = PatrolTask(task_id="t1", mission=_任务((1.0, 0.0), (1.0, 1.0),
+                                               policy=Policy(loops=LOOPS_FOREVER)),
+                   parts=parts, events=book, now_ms=c, priority=5)
+    await t.start()
+    await _跑(c, r, parts, t, 30)
+    assert t.effective_priority == 5
+    r.inject_battery(20.0)
+    for _ in range(200):
+        await _跑(c, r, parts, t, 1)
+        if parts.engine.state.value == "RETURNING":
+            break
+    assert parts.engine.state.value == "RETURNING"
+    assert t.effective_priority == HOMING_GUARD_PRIORITY > 49
