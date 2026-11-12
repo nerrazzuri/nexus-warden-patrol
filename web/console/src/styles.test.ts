@@ -25,3 +25,19 @@ describe("W62 地图上正在画的东西跟墙分得开", () => {
     expect(r).not.toMatch(/var\(--c-text\)|var\(--c-primary\)/);
   });
 });
+
+// liang-d5 第 6 轮 W6-14:390 像素宽时,中文图例被压成「地/面」「未/建/图」竖着排;活动日志仍是左右两栏
+describe("W6-14 手机宽度", () => {
+  const sheet = readFileSync(`${process.cwd()}/src/styles.css`, "utf-8").replace(/\/\*[\s\S]*?\*\//g, "");
+  const narrow = [...sheet.matchAll(/@media \(max-width: 480px\) \{([\s\S]*?)\n\}/g)].map((m) => m[1]).join("\n");
+  it("图例每项不缩、不拆字", () => {
+    expect(sheet).toMatch(/\.maplegend li \{[^}]*flex: none/);
+    expect(narrow).not.toMatch(/\.maplegend[^{]*li \{[^}]*white-space: normal/);
+  });
+  it("窄屏上值班地图的图例换行(不挤在一行里)", () => {
+    expect(narrow).toMatch(/\.duty-map \.maplegend \{[^}]*flex-wrap: wrap/);
+  });
+  it("活动日志窄屏上下排(时间在上)", () => {
+    expect(narrow).toMatch(/\.user-audit li \{[^}]*grid-template-columns: 1fr/);
+  });
+});
