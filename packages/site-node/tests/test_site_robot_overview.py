@@ -328,7 +328,7 @@ def test_W76_概览_几圈的巡逻写第几圈_一直巡逻也写_一圈的不�
 
 
 def test_minor3_第几圈只数这一趟派出以后的点_走索引不扫全部历史(台):
-    """W76 外审 minor:「第几圈」每次扫这台机器人全部到点历史。只数派出那一刻以后的(走 events_kind 索引)。"""
+    """W76 外审 minor:「第几圈」每次扫全部到点历史。只数派出以后的(走 events_kind 索引)。"""
     from nexwar_site.robot_overview import lap_counts
     d, db = 台
     _巡逻(db, "t-loop", 3)
