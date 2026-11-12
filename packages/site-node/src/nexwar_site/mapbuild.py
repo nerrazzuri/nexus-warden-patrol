@@ -12,6 +12,9 @@
 - 出成了:登记(来源是机器人的号,备注「站点打包」),收件那份关键帧删掉;没出成:原因(日志尾巴)记在
   ``.failed`` 里,关键帧留着,可以重试(:meth:`SiteMapBuilder.retry`);站点重启后不自己再跑失败的。
 - 站点重启:收齐了、还没出的接着出。
+- **默认不回环**(用户 11-13):出图就直接用。出成了关键帧挪到 ``mapkf-keep/`` 留着(最近
+  :data:`KEEP_N` 份);漂移大了,工程师在建图向导里点「优化地图」(:meth:`SiteMapBuilder.optimize`),
+  站点拿留着的关键帧回环、登记成新的一版(旧版留着:登记了的版本不改,机器人可能已经在用)。
 """
 
 from __future__ import annotations
@@ -39,11 +42,17 @@ log = logging.getLogger(__name__)
 KF_MANIFEST = "kf.json"
 INCOMING = "mapkf-in"
 WORK = "mapkf-work"
+#: 出成了的关键帧挪到这里留着,给「优化地图」用(``<机器人>/<地图号>/<版本>/``)。
+KEEP = "mapkf-keep"
+#: 最多留几份(一份广场那么大约 300 MB):超了删最老的。
+KEEP_N = 5
+#: 优化请求落在留着的那份关键帧目录里:``.optimize-<新版本>``,内容空 = 排着,``failed: …`` = 没成。
+OPT_PREFIX = ".optimize-"
 #: 出图命令报进度的行(跟 ``nexwar_localizer.tools.PROGRESS`` 一致)。
 PROGRESS = "@@进度"
-#: 各步、台式机上广场 8 分钟那趟各用了多少秒(W75 实测;回环按体素 0.20 m):按它折百分比。
+#: 各步、台式机上广场 8 分钟那趟各用了多少秒(W75 实测;回环 11-13 调参后):按它折百分比。
 STAGES: tuple[tuple[str, float], ...] = (
-    ("关键帧", 15.0), ("回环", 100.0), ("点云", 7.0), ("栅格", 14.0), ("先验", 1.0),
+    ("关键帧", 15.0), ("回环", 64.0), ("点云", 7.0), ("栅格", 14.0), ("先验", 1.0),
     ("定位地图", 3.0))
 #: 给手机、网页的阶段代号(界面按它翻译;出图命令打的是中文阶段名)。
 STAGE_CODES = {"关键帧": "keyframes", "回环": "loop", "点云": "points", "栅格": "grid",
@@ -59,14 +68,16 @@ _REL = re.compile(r"^(?:kf/)?[A-Za-z0-9][A-Za-z0-9_.-]*$")
 Job = tuple[str, str, str]          # (机器人, 地图号, 版本)
 
 
-def progress_pct(stage: str, elapsed_s: float) -> int:
+def progress_pct(stage: str, elapsed_s: float, *, lc: bool = True) -> int:
     """在 ``stage`` 这一步、已经走了 ``elapsed_s`` 秒:百分之几。一步之内按时间往前挪,最多挪到这一步
-    预计用时的 95%(机器慢的话停在那儿等,不越过下一步的起点)。"""
+    预计用时的 95%(机器慢的话停在那儿等,不越过下一步的起点)。``lc``:这一趟回不回环(不回环不算
+    回环那一段)。"""
     if stage == DONE_STAGE:
         return 100
-    total = sum(d for _, d in STAGES)
+    stages = [(n, d) for n, d in STAGES if lc or n != "回环"]
+    total = sum(d for _, d in stages)
     before = 0.0
-    for s, d in STAGES:
+    for s, d in stages:
         if s == stage:
             return min(99, int(100 * (before + min(max(elapsed_s, 0.0), 0.95 * d)) / total))
         before += d
@@ -89,6 +100,7 @@ class SiteMapBuilder:
         出完(成没成都调)``{"robot_id", "map_id", "version", "ok", "reason"}``。"""
         self.root = Path(home) / INCOMING
         self.work_root = Path(home) / WORK
+        self.keep_root = Path(home) / KEEP
         self.root.mkdir(parents=True, exist_ok=True)
         self.maps = maps
         self.runner = list(runner)
@@ -99,6 +111,8 @@ class SiteMapBuilder:
         self._queue: collections.deque[Job] = collections.deque()
         #: (地图号, 版本) → 状态(``robot_id``、``state``、``stage``、``since``、``reason``)。
         self._status: dict[tuple[str, str], dict[str, Any]] = {}
+        #: 优化(回环)的那几趟:(地图号, 新版本) → (留着的关键帧目录, 从哪一版来)。
+        self._opt: dict[tuple[str, str], tuple[Path, str]] = {}
         self._scan()
         if start_thread:
             threading.Thread(target=self._loop, name="site-mapbuild", daemon=True).start()
@@ -164,6 +178,16 @@ class SiteMapBuilder:
         log.info("%s 的关键帧收齐了:%s:%s,排队出图", *job)
 
     def _scan(self) -> None:
+        for m in sorted(self.keep_root.glob(f"*/*/*/{OPT_PREFIX}*")):
+            kd = m.parent
+            robot, map_id, frm = kd.parent.parent.name, kd.parent.name, kd.name
+            to = m.name[len(OPT_PREFIX):]
+            self._opt[(map_id, to)] = (kd, frm)
+            why = m.read_text(encoding="utf-8", errors="replace")
+            if why.startswith("failed: "):
+                self._set((robot, map_id, to), "failed", reason=why[len("failed: "):], lc=True)
+            elif not self._registered(map_id, to):
+                self._enqueue((robot, map_id, to))
         for d in sorted(self.root.glob("*/*/*")):
             if not d.is_dir():
                 continue
@@ -176,6 +200,21 @@ class SiteMapBuilder:
                 self._check(job)
             except PathRefused as exc:
                 log.warning("站点重启后核关键帧:%s", exc)
+
+    def _registered(self, map_id: str, version: str) -> bool:
+        try:
+            self.maps.get(map_id, version)
+            return True
+        except Exception:  # noqa: BLE001 - MapError:没有这一版
+            return False
+
+    def _enqueue(self, job: Job) -> None:
+        with self._cv:
+            self._status[(job[1], job[2])] = {"robot_id": job[0], "state": "queued",
+                                               "since": self._now(),
+                                               "lc": (job[1], job[2]) in self._opt}
+            self._queue.append(job)
+            self._cv.notify_all()
 
     def _set(self, job: Job, state: str, **kw: Any) -> None:
         with self._cv:
@@ -195,7 +234,7 @@ class SiteMapBuilder:
         if st["state"] == "running":
             out["stage"] = st.get("stage", STAGES[0][0])
             since = st.get("stage_since", st["since"])
-            out["pct"] = progress_pct(out["stage"], self._now() - since)
+            out["pct"] = progress_pct(out["stage"], self._now() - since, lc=bool(st.get("lc")))
         elif st["state"] == "done":
             out["pct"] = 100
         elif st["state"] == "failed":
@@ -208,10 +247,50 @@ class SiteMapBuilder:
         if st is None or st["state"] != "failed":
             raise ValueError(f"{map_id}:{version} 不是出图失败的")
         job = (st["robot_id"], map_id, version)
+        opt = self._opt.get((map_id, version))
+        if opt is not None:                               # 优化没成:再回环一次
+            (opt[0] / f"{OPT_PREFIX}{version}").write_text("", encoding="utf-8")
+            self._enqueue(job)
+            return
         (self._dir(job) / FAILED).unlink(missing_ok=True)
         with self._cv:
             del self._status[(map_id, version)]
         self._check(job)
+
+    # ------------------------------------------------------------ 优化地图(回环)
+
+    def _kept(self, robot_id: str, map_id: str, version: str) -> Path:
+        return self.keep_root / robot_id / map_id / version
+
+    def optimizable(self, robot_id: str, map_id: str, version: str) -> bool:
+        """这一版能不能「优化地图」:站点出的、关键帧还留着、自己不是优化出来的。"""
+        return (map_id, version) not in self._opt \
+            and (self._kept(robot_id, map_id, version) / KF_MANIFEST).is_file()
+
+    def optimize(self, robot_id: str, map_id: str, version: str, to_version: str) -> None:
+        """拿 ``version`` 留着的关键帧回环,出成 ``to_version``(新的一版;``version`` 不动)。"""
+        if not self.optimizable(robot_id, map_id, version):
+            raise ValueError(f"{map_id}:{version} 的关键帧没留在站点上,不能优化")
+        kd = self._kept(robot_id, map_id, version)
+        (kd / f"{OPT_PREFIX}{to_version}").write_text("", encoding="utf-8")   # 站点重启接着跑
+        self._opt[(map_id, to_version)] = (kd, version)
+        self._enqueue((robot_id, map_id, to_version))
+        log.info("%s:%s 排队优化(回环),出成 %s", map_id, version, to_version)
+
+    def _keep(self, job: Job, kd: Path) -> None:
+        """出成了:关键帧挪到 ``mapkf-keep`` 留着;超过 :data:`KEEP_N` 份删最老的。"""
+        dst = self._kept(*job)
+        try:
+            if kd != dst:
+                shutil.rmtree(dst, ignore_errors=True)
+                dst.parent.mkdir(parents=True, exist_ok=True)
+                shutil.move(str(kd), str(dst))
+            kept = sorted((d for d in self.keep_root.glob("*/*/*") if d.is_dir()),
+                          key=lambda d: d.stat().st_mtime)
+            for old in kept[:max(0, len(kept) - KEEP_N)]:
+                shutil.rmtree(old, ignore_errors=True)
+        except OSError:
+            log.exception("留关键帧没成(不影响这一版)")
 
     # ------------------------------------------------------------ 出图
 
@@ -236,16 +315,18 @@ class SiteMapBuilder:
 
     def _run(self, job: Job) -> None:
         robot, map_id, version = job
-        kd = self._dir(job)
+        opt = self._opt.get((map_id, version))
+        kd = opt[0] if opt is not None else self._dir(job)
         base = self.work_root / robot / map_id / version
         out, work = base / "out", base / "work"
         shutil.rmtree(base, ignore_errors=True)
         base.mkdir(parents=True)
         t0 = self._now()
-        self._set(job, "running", stage=STAGES[0][0], stage_since=t0)
+        self._set(job, "running", stage=STAGES[0][0], stage_since=t0, lc=opt is not None)
         tail: collections.deque[str] = collections.deque(maxlen=TAIL_LINES)
+        # 用户 11-13:默认不回环;「优化地图」那一趟才回环
         cmd = [*self.runner, "build", "--from-keyframes", str(kd), "--out", str(out),
-               "--work", str(work)]
+               "--work", str(work), "--loop-closure", "auto" if opt is not None else "off"]
         rc: int | None
         with open(base / "build.log", "w", encoding="utf-8") as logf:
             try:
@@ -275,13 +356,17 @@ class SiteMapBuilder:
                 rc = None
         if rc != 0:
             return self._failed(job, f"出图没成(退出码 {rc}):" + " / ".join(tail))
+        note = (f"站点优化(回环,从 {opt[1]})" if opt is not None
+                else "站点打包(边走边存的关键帧)")
         try:
-            self.maps.import_dir(out, map_id=map_id, version=version, source=robot,
-                                 note="站点打包(边走边存的关键帧)")
+            self.maps.import_dir(out, map_id=map_id, version=version, source=robot, note=note)
         except Exception as exc:  # noqa: BLE001 —— MapError、盘满……都按没成说
             return self._failed(job, f"出完了但登记不进地图目录:{exc}")
         shutil.rmtree(base, ignore_errors=True)
-        shutil.rmtree(kd, ignore_errors=True)
+        if opt is not None:
+            (kd / f"{OPT_PREFIX}{version}").unlink(missing_ok=True)
+        else:
+            self._keep(job, kd)
         self._set(job, "done", seconds=round(self._now() - t0, 1))
         log.info("站点打包出完了:%s:%s(%s 的关键帧,%.0f 秒)", map_id, version, robot,
                  self._now() - t0)
@@ -289,11 +374,16 @@ class SiteMapBuilder:
 
     def _failed(self, job: Job, reason: str) -> None:
         reason = reason[:1000]
+        opt = self._opt.get((job[1], job[2]))
         try:
-            (self._dir(job) / FAILED).write_text(reason, encoding="utf-8")
+            if opt is not None:
+                (opt[0] / f"{OPT_PREFIX}{job[2]}").write_text(f"failed: {reason}",
+                                                              encoding="utf-8")
+            else:
+                (self._dir(job) / FAILED).write_text(reason, encoding="utf-8")
         except OSError:
             log.exception("记不下出图失败的原因")
-        self._set(job, "failed", reason=reason)
+        self._set(job, "failed", reason=reason, lc=opt is not None)
         log.warning("站点打包 %s:%s 没成:%s", job[1], job[2], reason)
         self._tell(job, ok=False, reason=reason)
 

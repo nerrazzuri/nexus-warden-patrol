@@ -257,6 +257,37 @@ void main() {
       expect(find.byKey(MapWizardPage.buildProgressKey), findsOneWidget, reason: '重试了：回到进度条');
     });
 
+    testWidgets('用户 11-13：没做回环，说明什么时候点「优化地图」；点了换新版本、回到进度条', (t) async {
+      final api = _admin()
+        ..wizard = <String, dynamic>{'step': 'build', 'robot_id': 'A', 'map_id': 'main', 'version': '20261031-1',
+          'drive': 'remote', 'by': 'u', 'label': ''}
+        ..wizardBuild = <String, dynamic>{'state': 'ready', 'optimizable': true, 'quality': <String, dynamic>{
+          'verdict': 'usable', 'reasons': <dynamic>[], 'path_m': 120.0, 'optimized': false}};
+      await _wizard(t, api);
+      expect(find.text('地图已建成：可用'), findsOneWidget);
+      expect(find.textContaining('已回到起点闭合'), findsNothing, reason: '没做回环说不上闭没闭合');
+      expect(find.textContaining('重影'), findsOneWidget, reason: '告诉人什么时候该优化');
+      await _tapLive(t, MapWizardPage.optimizeKey);
+      expect(api.calls, contains('wizard optimize'));
+      expect(find.byKey(MapWizardPage.buildProgressKey), findsOneWidget, reason: '优化：回到进度条');
+    });
+
+    for (final (why, b) in [
+      ('关键帧不在站点上', <String, dynamic>{'state': 'ready', 'optimizable': false, 'quality': <String, dynamic>{
+        'verdict': 'usable', 'reasons': <dynamic>[], 'path_m': 120.0, 'optimized': false}}),
+      ('做过回环', <String, dynamic>{'state': 'ready', 'quality': <String, dynamic>{
+        'verdict': 'usable', 'reasons': <dynamic>[], 'path_m': 120.0, 'max_shift_m': 0.05, 'optimized': true}}),
+    ]) {
+      testWidgets('用户 11-13：$why的，没有「优化地图」', (t) async {
+        final api = _admin()
+          ..wizard = <String, dynamic>{'step': 'build', 'robot_id': 'A', 'map_id': 'main', 'version': '20261031-1',
+            'drive': 'remote', 'by': 'u', 'label': ''}
+          ..wizardBuild = b;
+        await _wizard(t, api);
+        expect(find.byKey(MapWizardPage.optimizeKey), findsNothing);
+      });
+    }
+
     testWidgets('机器人上没建成：没有「在站点上重试」', (t) async {
       final api = _admin()
         ..wizard = <String, dynamic>{'step': 'build', 'robot_id': 'A', 'map_id': 'main', 'version': '20261031-1',

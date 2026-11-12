@@ -640,8 +640,9 @@ def test_建图命令_回环开关交给打包(tmp_path, monkeypatch):
     monkeypatch.setattr(B, "package", 打包)
     monkeypatch.setattr(B, "find_loop_closure", lambda s: None if s == "off" else f"找:{s}")
     base = ["build", "--bag", str(tmp_path / "bag"), "--out", str(tmp_path / "o"), "--reuse"]
-    assert tools.main(base) == 0 and seen["loop_closure"] == "找:auto"
-    assert tools.main([*base, "--loop-closure", "off"]) == 0 and seen["loop_closure"] is None
+    # 用户 11-13:默认不回环;要回环明说 auto(站点「优化地图」那一趟)
+    assert tools.main(base) == 0 and seen["loop_closure"] is None
+    assert tools.main([*base, "--loop-closure", "auto"]) == 0 and seen["loop_closure"] == "找:auto"
 
 
 # ------------------------------------------------------------ 对账 S2:地图手性(跟里程同号)

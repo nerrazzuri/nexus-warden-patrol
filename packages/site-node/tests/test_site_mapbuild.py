@@ -25,6 +25,8 @@ def _fake_builder(tmp_path, *, fail=False):
         out = pathlib.Path(a[a.index("--out") + 1])
         assert a[0] == "build" and "--work" in a
         assert (kd / "kf" / "00000.bin").read_bytes() == b"kf0"
+        lc = a[a.index("--loop-closure") + 1]
+        print(lc, file=open({str(tmp_path / "lc-args.txt")!r}, "a"))
         for s in ("关键帧", "回环", "点云"):
             print("@@进度", s, flush=True)
         if {fail!r}:
@@ -32,7 +34,8 @@ def _fake_builder(tmp_path, *, fail=False):
             sys.exit(1)
         out.mkdir(parents=True)
         (out / "floor.pgm").write_bytes(b"P5")
-        (out / "build.json").write_text("{{}}")
+        ran = "true" if lc == "auto" else "false"
+        (out / "build.json").write_text('{{"loop_closure": {{"ran": %s}}}}' % ran)
         print("@@进度 完成", flush=True)
     """))
     return [sys.executable, str(f)]
@@ -80,6 +83,8 @@ def test_收齐关键帧_核对清单_后台出图_登记成这一版_来源记�
     b.run_pending()
     ref = cat.get("yard", "3")
     assert {f.name for f in ref.files} == {"floor.pgm", "build.json"}
+    # 用户 11-13:默认不回环(出图就直接用;漂移大了在向导里点「优化地图」再回环)
+    assert (home / "lc-args.txt").read_text().split() == ["off"]
     row = cat.db.query("SELECT source, note FROM maps WHERE map_id='yard'")[0]
     assert row["source"] == "A" and "站点打包" in row["note"]
     st = b.status("yard", "3")
@@ -192,3 +197,69 @@ def test_出图命令_配置里给了用配置的_没给看装没装出图组件
 def test_阶段代号_每个阶段都有():
     from nexwar_site.mapbuild import STAGE_CODES
     assert {s for s, _ in STAGES} | {"完成"} == set(STAGE_CODES)
+
+
+def test_用户1113_出完了关键帧留着_能优化地图_换新版本号回环_旧版留着(site):
+    home, cat = site
+    done = []
+    b = SiteMapBuilder(home, cat, runner=_fake_builder(home), on_done=done.append,
+                       start_thread=False)
+    _upload_all(b)
+    b.run_pending()
+    assert b.optimizable("A", "yard", "3")
+    assert not b.optimizable("B", "yard", "3") and not b.optimizable("A", "yard", "2")
+    b.optimize("A", "yard", "3", "4")
+    assert b.status("yard", "4")["state"] == "queued"
+    b.run_pending()
+    assert (home / "lc-args.txt").read_text().split() == ["off", "auto"]
+    assert cat.get("yard", "3") and cat.get("yard", "4")
+    row = cat.db.query("SELECT source, note FROM maps WHERE map_id='yard' AND version='4'")[0]
+    assert row["source"] == "A" and "优化" in row["note"] and "3" in row["note"]
+    assert b.status("yard", "4")["state"] == "done"
+    assert done[-1]["version"] == "4" and done[-1]["ok"]
+    assert not b.optimizable("A", "yard", "4"), "优化过的那一版不再给优化"
+
+
+def test_用户1113_优化排着队站点重启_接着跑_失败了能重试(site):
+    home, cat = site
+    b = SiteMapBuilder(home, cat, runner=_fake_builder(home), start_thread=False)
+    _upload_all(b)
+    b.run_pending()
+    b.optimize("A", "yard", "3", "4")
+    b2 = SiteMapBuilder(home, cat, runner=_fake_builder(home, fail=True), start_thread=False)
+    assert b2.status("yard", "4")["state"] == "queued", "重启后接着排"
+    b2.run_pending()
+    assert b2.status("yard", "4")["state"] == "failed"
+    b3 = SiteMapBuilder(home, cat, runner=_fake_builder(home), start_thread=False)
+    assert b3.status("yard", "4")["state"] == "failed", "失败也记得"
+    b3.retry("yard", "4")
+    b3.run_pending()
+    assert b3.status("yard", "4")["state"] == "done" and cat.get("yard", "4")
+
+
+def test_用户1113_没有那一版的关键帧_不能优化(site):
+    home, cat = site
+    b = SiteMapBuilder(home, cat, runner=_fake_builder(home), start_thread=False)
+    with pytest.raises(ValueError):
+        b.optimize("A", "yard", "3", "4")
+
+
+def test_关键帧只留最近几份_老的删掉(site, monkeypatch):
+    import nexwar_site.mapbuild as mb
+    home, cat = site
+    monkeypatch.setattr(mb, "KEEP_N", 1)
+    b = SiteMapBuilder(home, cat, runner=_fake_builder(home), start_thread=False)
+    _upload_all(b)
+    b.run_pending()
+    b.optimize("A", "yard", "3", "4")
+    b.run_pending()
+    keep = b.keep_root
+    b._keep(("A", "yard", "9"), keep / "A" / "yard" / "3")      # 再留一份:超了,删最老的
+    assert len([d for d in keep.glob("*/*/*") if d.is_dir()]) == 1
+
+
+def test_进度_不回环时不算回环那一段():
+    off = progress_pct("点云", 0.0, lc=False)
+    on = progress_pct("点云", 0.0, lc=True)
+    assert off < on
+    assert progress_pct("关键帧", 1e6, lc=False) < off
