@@ -693,6 +693,13 @@ function SchedulePanel({ route, view, schedules, say, reload, inPanel }: {
   const [days, setDays] = useState<string[]>([...DAYS]);
   const [win, setWin] = useState(30);
   const [missed, setMissed] = useState<"skip" | "run_late" | "alarm">("skip");
+  // 第 8 轮 W8-06:由哪台跑(空 = 哪台空就哪台)
+  const [robot, setRobot] = useState("");
+  const [robots, setRobots] = useState<string[]>([]);
+  useEffect(() => {
+    api<{ robots: { robot_id: string; revoked?: boolean }[] }>("GET", "/api/robots")
+      .then((d) => setRobots(d.robots.filter((x) => !x.revoked).map((x) => x.robot_id))).catch(() => setRobots([]));
+  }, []);
   const [removing, setRemoving] = useState<RouteSchedule | null>(null);
   const call = async (path: string, body: unknown, done: string): Promise<boolean> => {
     try {
@@ -729,6 +736,7 @@ function SchedulePanel({ route, view, schedules, say, reload, inPanel }: {
                 <span class="strong">{s.id}</span>
                 <span class="mono small">{s.at}</span>
                 <span class="muted small">{s.days.map((d) => t(d as Key)).join(" ")}</span>
+                <span class="muted small" data-sched-robot="1">{s.robot ? rt("schedByRobot", { id: s.robot }) : rt("schedAnyRobot")}</span>
                 <button type="button" class="link push" aria-label={`${rt("schedRemove")} ${s.id}`} onClick={() => setRemoving(s)}>{t("remove")}</button>
               </li>
             ))}
@@ -736,7 +744,7 @@ function SchedulePanel({ route, view, schedules, say, reload, inPanel }: {
           <form class="form sched-form" onSubmit={(e) => {
             e.preventDefault();
             if (idTaken) return;
-            void call(`/api/route-schedules/${enc(id.trim())}`, { mission: route, at, days, window_min: win, on_missed: missed, base_revision: 0 }, rt("schedSaved"))
+            void call(`/api/route-schedules/${enc(id.trim())}`, { mission: route, at, days, window_min: win, on_missed: missed, base_revision: 0, ...(robot ? { robot } : {}) }, rt("schedSaved"))
               // 加好了换下一个编号(列表刷新后挑),不留着旧的;第 4 轮 r3-config-N6:开始时间也清掉(不然黄字「这个时间已有」指的就是刚加的)
               .then((ok) => { if (ok) { setAutoId(true); setAt(""); } });
           }}>
@@ -753,6 +761,12 @@ function SchedulePanel({ route, view, schedules, say, reload, inPanel }: {
               ))}
             </fieldset>
             <label class="field">{rt("schedWindow")}<input type="number" min="1" max="1440" value={win} onInput={(e) => setWin(Number(e.currentTarget.value))} /></label>
+            <label class="field">{rt("schedRobot")}
+              <select name="schedRobot" value={robot} onChange={(e) => setRobot(e.currentTarget.value)}>
+                <option value="">{rt("schedAnyRobot")}</option>
+                {robots.map((x) => <option key={x} value={x}>{x}</option>)}
+              </select>
+            </label>
             <label class="field">{rt("schedMissed")}
               <select value={missed} onChange={(e) => setMissed(e.currentTarget.value as typeof missed)}>
                 <option value="skip">{rt("schedSkip")}</option>

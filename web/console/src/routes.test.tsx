@@ -153,6 +153,7 @@ function routesApi(opts: { meta: PreviewMeta; routes?: any[]; timezone?: string 
   setFetch((async (url: RequestInfo | URL, init?: RequestInit) => {
     const u = String(url);
     if (u.endsWith("/api/maps")) return json(MAPS);
+    if (u.endsWith("/api/robots")) return json({ robots: [{ robot_id: "A" }, { robot_id: "B" }] });
     if (u.endsWith("/preview")) return json(opts.meta);
     if (u.includes("/api/routes?")) return json(view());
     if (init?.method === "POST") {
@@ -476,6 +477,30 @@ describe("路线页:站点的回答", () => {
     fireEvent.click(r.getByText("Set timezone"));
     await waitFor(() => expect(posted.at(-1)!.path).toContain("/api/route-timezone"));
     expect(posted.at(-1)!.body).toEqual({ timezone: "Asia/Kuala_Lumpur" });
+  });
+
+  // 第 8 轮 W8-06:加日程能选由哪台跑(默认哪台空就哪台);列表里写由哪台跑
+  it("W8-06 排程:选由哪台跑,列表写出来", async () => {
+    installScreenCTM();
+    const sch = { id: "n1", mission: "loop", at: "22:00", days: ["mon"], window_min: 30, on_missed: "skip", revision: 7, robot: "B" };
+    const any = { ...sch, id: "n3", at: "23:00", robot: undefined };
+    const posted = routesApi({ meta: META, routes: [ROUTE], timezone: "UTC", schedules: [sch, any] });
+    const r = render(<RoutesPage say={() => {}} />);
+    await ready(r.container);
+    await waitFor(() => expect(r.getByText("loop")).toBeTruthy());
+    fireEvent.click(r.getByText("loop"));
+    await waitFor(() => expect(r.getByText("n1")).toBeTruthy());
+    const rows = Array.from(r.container.querySelectorAll(".sched-list li")).map((x) => x.textContent ?? "");
+    expect(rows[0]).toContain("Robot B");
+    expect(rows[1]).toContain("Any free robot");
+    const pick = await waitFor(() => { const x = r.container.querySelector('select[name="schedRobot"]') as HTMLSelectElement; expect(x.options.length).toBe(3); return x; });
+    expect(pick.value).toBe("");
+    fireEvent.change(pick, { target: { value: "A" } });
+    fireEvent.input(r.container.querySelector('.form input[maxlength="64"]')!, { target: { value: "dawn" } });
+    fireEvent.input(r.container.querySelector('input[name="at"]')!, { target: { value: "05:30" } });
+    fireEvent.click(r.getByText("Add schedule"));
+    await waitFor(() => expect(posted.length).toBe(1));
+    expect(posted[0].body).toMatchObject({ mission: "loop", at: "05:30", robot: "A" });
   });
 
   it("排程:有时区时列出这条路线的排程,加、删", async () => {
