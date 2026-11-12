@@ -100,7 +100,8 @@ def test_ping回pong_close回close(一对):
     bytes([0xC1]) + _client_frame(b"x")[1:],               # RSV1 置了(没协商过扩展)
     _client_frame(b"p" * 126, opcode=9),                   # 控制帧超过 125 字节
     _client_frame(b"p", opcode=9, fin=False),              # 控制帧分片
-])
+# 掩码是随机的:按固定特征起名(pytest-xdist 并行跑时各进程要收到同样的测试名)
+], ids=lambda f: f"len{len(f)}-{f[:2].hex()}")
 def test_不合规矩的帧_断开(一对, frame):
     ws, peer = 一对
     peer.sendall(frame)
