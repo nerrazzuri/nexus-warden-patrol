@@ -2,8 +2,12 @@
 
 在站点主机(POC 是现场笔记本)上装好出图组件以后跑一次,看 3 分钟能不能做到、内存够不够。
 
-    python3 tools/w75_site_build_check.py <录包目录> <工作目录> --runner <出图命令...>
+    source /opt/ros/humble/setup.bash
+    PYTHONPATH=$(ls -d packages/*/src | tr '\n' ':')src:$PYTHONPATH \
+      python3 tools/w75_site_build_check.py <录包目录> <工作目录> --runner <出图命令...> \
         [--pose /d1max_loc/lio/odom]
+
+  PYTHONPATH 末尾要接上 ``:$PYTHONPATH``,不然 ROS 的 ``rosbag2_py`` 找不到。
 
 - 录包要有 ``/front_lidar``、Super-LIO 位姿(默认 ``/d1max_loc/lio/odom``)、``/odom/mc_odom``。
 - 工作目录会被清空重建。站点数据库、地图目录都建在里面,不碰真站点。

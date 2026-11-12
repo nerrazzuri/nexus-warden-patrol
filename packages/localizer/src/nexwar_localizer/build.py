@@ -432,6 +432,7 @@ def loop_close(work: Path, cli: str | None, run: Runner = subprocess.run
     (没有工具、跑不成、没找到回环、挪得太多)是 ``work`` 原样。"""
     if not cli:
         return work, {"ran": False, "why": f"没有回环工具({LC_CLI})"}
+    work = Path(work).absolute()     # 回环工具在 lc/ 里跑:相对路径会读不到
     lc = work / "lc"
     shutil.rmtree(lc, ignore_errors=True)
     lc.mkdir(parents=True)
