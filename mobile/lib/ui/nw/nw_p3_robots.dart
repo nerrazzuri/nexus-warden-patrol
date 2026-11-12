@@ -38,7 +38,17 @@ enum RobotPhase {
 
   /// 在跑任务。
   working,
+
+  /// 没任务、蹲着或趴着（站点 `ready.motion` 是 false）：要先站起来才能派、能遥控。
+  notStanding,
   idle,
+}
+
+/// 站点报了没站起来（蹲着、趴着，或运动模式没就绪）。
+bool robotNotStanding(Map<String, dynamic> r) {
+  final st = r['status'];
+  final ready = st is Map ? st['ready'] : null;
+  return ready is Map && ready['motion'] == false;
 }
 
 Map? _taskOf(Map<String, dynamic> r) {
@@ -81,7 +91,9 @@ RobotPhase robotPhase(Map<String, dynamic> r, {bool deterring = false}) {
   if (robotCharging(r)) return RobotPhase.charging;
   final b = robotBattery(r);
   if (b != null && b < NwBattery.lowBelow) return RobotPhase.lowBattery;
-  return _taskOf(r) != null ? RobotPhase.working : RobotPhase.idle;
+  if (_taskOf(r) != null) return RobotPhase.working;
+  // 易用性第 7 轮：蹲着不说「空闲」（空闲听着像随时能派）
+  return robotNotStanding(r) ? RobotPhase.notStanding : RobotPhase.idle;
 }
 
 /// 药丸的颜色：红只给驱离、急停、离线；橙只给低电；绿给在干活、在充电；别的不上色。
@@ -93,7 +105,7 @@ NwTone robotPhaseTone(RobotPhase p) => switch (p) {
       RobotPhase.charging => nwToneOf('battery'),
       RobotPhase.working => nwToneOf('online'),
       RobotPhase.idle => nwToneOf('idle'),
-      RobotPhase.revoked || RobotPhase.unknown || RobotPhase.held => NwTone.neutral,
+      RobotPhase.revoked || RobotPhase.unknown || RobotPhase.held || RobotPhase.notStanding => NwTone.neutral,
     };
 
 /// 药丸的字。
@@ -107,6 +119,7 @@ String robotPhaseLabel(RobotPhase p) => switch (p) {
       RobotPhase.charging => tr('CHARGING', '充电'),
       RobotPhase.lowBattery => tr('LOW BATTERY', '低电'),
       RobotPhase.working => tr('WORKING', '执行中'),
+      RobotPhase.notStanding => tr('NOT STANDING', '没站起来'),
       RobotPhase.idle => tr('IDLE', '空闲'),
     };
 
