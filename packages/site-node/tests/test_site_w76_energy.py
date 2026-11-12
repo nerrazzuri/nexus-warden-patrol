@@ -149,3 +149,20 @@ def test_外审3_只问要不要补能不销账_充到线之前出桩也接着�
     t.pe.tick()
     t.c.telemetry.battery_pct = 79.5
     assert t.pe.swap_line("A") is None and t.pe.charge_line("A") == 25.0
+
+
+def test_外审4_巡逻欠着补能_回充至少充到85_值守要的低也不提前出桩_补好了不再管(tmp_path):
+    """外审 W76-4:值守要充到 60% 就出桩,巡逻要补到 80%,空着了又进桩(四分钟 6 次);出桩线正好
+    80 时达线那一下可能夹在两拍之间,没销上账。充到 85:在 80 以上要待好几分钟,每拍一定看得见。"""
+    from nexwar_site.patrol_energy import CHARGE_TO_PCT
+    t = 台(tmp_path, pct=30.0)
+    assert t.pe.resume_line("A") is None, "没欠着:按值守 / 默认的"
+    t.结束("task_done", ended="battery")
+    assert CHARGE_TO_PCT == 85.0 > SWAP_OK_PCT
+    t.c.status.task = SimpleNamespace(task_id="dock-1")  # 充着电也要答(出桩线在派回充时定)
+    assert t.pe.resume_line("A") == CHARGE_TO_PCT
+    assert combine_lines(lambda r: 60.0, t.pe.resume_line)("A") == CHARGE_TO_PCT
+    assert combine_lines(lambda r: 95.0, t.pe.resume_line)("A") == 95.0
+    t.c.telemetry.battery_pct = 82.0
+    t.pe.tick()
+    assert t.pe.resume_line("A") is None

@@ -36,6 +36,9 @@ Line = Callable[[str], "float | None"]
 _TERMINAL = ("task_done", "task_failed", "task_aborted", "task_preempted")
 #: 巡逻因电量结束之后多久以内还管它补能(之后机器人多半已经被人处理过、或另有安排)。
 RECENT_MS = 2 * 3_600_000
+#: 巡逻欠着补能时回充至少充到这么多(外审 W76-4):比换好线高一截 —— 值守要的出桩线可能更低(60%),
+#: 充到线就出桩会又进桩;出桩线正好 80 时达线那一下可能夹在两拍之间,销不上账。
+CHARGE_TO_PCT = SWAP_OK_PCT + 5.0
 #: 站点设置里记「哪一趟因电量结束的巡逻已经补好了」:``{robot_id: task_id}``。
 DONE_KEY = "patrol_energy_done"
 
@@ -53,6 +56,14 @@ class PatrolEnergy:
     def swap_line(self, rid: str) -> float | None:
         """该起换电引导了 → 那条线;不然 ``None``。"""
         return SWAP_OK_PCT if self._wants(rid) else None
+
+    def resume_line(self, rid: str) -> float | None:
+        """回充充到多少出桩:巡逻还欠着补能 → :data:`CHARGE_TO_PCT`;不然 ``None``(按值守 / 默认的)。
+        派回充时问,机器人这时可能正在跑别的(去充电那一趟):不看空不空着。"""
+        task_id = self._ended_for_battery(rid)
+        if task_id is None or self._done().get(rid) == task_id:
+            return None
+        return CHARGE_TO_PCT
 
     def tick(self) -> None:
         """每拍看一遍:因电量结束的那一趟,电补好了就销账(外审 W76-3 #2:不靠回充、换电来问 ——
