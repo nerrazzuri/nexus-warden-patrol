@@ -11,6 +11,7 @@
 
 from __future__ import annotations
 
+import hmac
 import secrets
 import threading
 from collections import deque
@@ -159,12 +160,17 @@ class AccountRequests:
             except Exception:  # noqa: BLE001
                 pass
 
-    def login_hint(self, name: str) -> str:
-        """登录失败时补一句(只说申请的状态,不说密码对不对)。"""
-        rows = self.db.query("SELECT state FROM account_requests WHERE name=? "
+    def login_hint(self, name: str, password: Any = None) -> str:
+        """登录失败时补一句申请的状态。minor #38:只对输了申请时那个密码的人说(不然随便一个密码就能
+        探出谁在申请);minor #39:先把过了 7 天的记成过期,不再说「等批准」。"""
+        self._expire(self._now())
+        rows = self.db.query("SELECT state, salt, pw_hash FROM account_requests WHERE name=? "
                              "ORDER BY created_ms DESC LIMIT 1", (str(name)[:64],))
-        if not rows:
+        if not rows or not isinstance(password, str) or not password:
+            return ""
+        r = rows[0]
+        if not hmac.compare_digest(_hash(password, r["salt"]), r["pw_hash"]):
             return ""
         return {"pending": "此账号还在等管理员批准",
                 "rejected": "此账号的申请被管理员拒了",
-                "expired": "此账号的申请已过期(7 天无人批),重新申请"}.get(rows[0]["state"], "")
+                "expired": "此账号的申请已过期(7 天无人批),重新申请"}.get(r["state"], "")

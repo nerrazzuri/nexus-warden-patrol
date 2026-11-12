@@ -1495,7 +1495,7 @@ class _Handler(TlsHandlerMixin):
             # 还是 401(手机老版本照旧当登录失败);多给 disabled,网页说「账号已停用」
             raise HttpError(401, str(exc), extra={"disabled": True}) from exc
         except AuthError as exc:
-            hint = self._acct_desk().login_hint(name)      # W52:申请了还没批 / 被拒了
+            hint = self._acct_desk().login_hint(name, pw)  # W52:申请了还没批 / 被拒了
             raise HttpError(401, hint or str(exc), extra={"apply": hint} if hint else None) \
                 from exc
         who = self.site.accounts.check(token)
