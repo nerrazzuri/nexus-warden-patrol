@@ -4196,8 +4196,14 @@ class _Handler(TlsHandlerMixin):
             if method == "POST" and what == "confirm":
                 return self._zones_confirm(map_id, version, d, user)
             if method == "POST" and what == "proposal":
+                if d.get("action") == "drop_standby":
+                    # minor #27:带过来的待命点一个个丢(禁行区、拦截点的建议不动)
+                    n = zones.drop_proposal_standby(map_id, version, d.get("standby"), by=str(user))
+                    self._audit_detail = {"proposal": "drop_standby", "standby": d.get("standby"),
+                                          "dropped": n}
+                    return self._send_json(200, zones.view(map_id, version))
                 if d.get("action") != "discard":
-                    raise HttpError(400, "要 action: discard")
+                    raise HttpError(400, "要 action: discard 或 drop_standby")
                 zones.discard_proposal(map_id, version, by=str(user))
                 self._audit_detail = {"proposal": "discard"}
                 return self._send_json(200, zones.view(map_id, version))

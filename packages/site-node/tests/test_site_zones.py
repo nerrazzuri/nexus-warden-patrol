@@ -516,6 +516,40 @@ def test_新版本_采纳一部分并确认_丢掉_都只一次(tmp_path):
         z.confirm("m", "3", revision=0, by="a", adopt={"zones": ["pond"]})
 
 
+def test_minor27_带过来的待命点能一个个丢_禁行区拦截点的建议还在(tmp_path):
+    """网页第 5 轮遗留 #27:带过来的待命点只有「留下」,不要的没法去掉
+    (整份丢会把禁行区、拦截点的建议一起丢)。"""
+    z, _ = _z(tmp_path)
+    _上一版(z.db, z)
+    _图(z.db, "2", 200)
+    assert z.view("m", "2")["proposal"]["standby"]
+    z.drop_proposal_standby("m", "2", [{"robot_id": "A", "name": "dock"}], by="a")
+    p = z.view("m", "2")["proposal"]
+    assert p["standby"] == [] and {"pond", "lawn"} <= {x["id"] for x in p["zones"]}
+    assert p["intercepts"]
+    with pytest.raises(ZonesError):
+        z.drop_proposal_standby("m", "2", [{"robot_id": "A", "name": "dock"}], by="a")
+    # 都丢光了就整份收起来
+    z.discard_proposal("m", "2", by="a")
+    assert z.view("m", "2").get("proposal") is None
+
+
+def test_minor27_接口_丢一个带过来的待命点(站点):
+    s = 站点
+    alice, gina = _登(s, "alice"), _登(s, "gina")
+    dock = {"robot_id": "A", "name": "dock", "x": 1, "y": 2, "yaw": 0, "default": True}
+    body0 = json.dumps({"zones": [], "intercepts": [], "standby": [dock]})
+    with s.db.tx() as c:
+        c.execute("INSERT INTO nav_zone_proposals(map_id, map_version, from_version, body, "
+                  "created_ms) VALUES (?,?,?,?,?)", (MAP[0], MAP[1], "0", body0, 1))
+    body = {"action": "drop_standby", "standby": [{"robot_id": "A", "name": "dock"}]}
+    assert s.req("POST", f"{ZP}/proposal", body, token=gina)[0] == 403
+    code, d = s.req("POST", f"{ZP}/proposal", body, token=alice)
+    assert code == 200, d
+    assert d["proposal"]["standby"] == []
+    assert s.req("POST", f"{ZP}/proposal", body, token=alice)[0] in (400, 409)
+
+
 def test_接口_收紧免确认_派单不断_放宽要确认才派(站点):
     s = 站点
     alice = _登(s, "alice")
