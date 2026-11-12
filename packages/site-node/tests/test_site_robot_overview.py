@@ -325,3 +325,21 @@ def test_W76_概览_几圈的巡逻写第几圈_一直巡逻也写_一圈的不�
     assert _one(d, db)["lap"] is None
     st.task = None
     assert _one(d, db)["lap"] is None
+
+
+def test_minor3_第几圈只数这一趟派出以后的点_走索引不扫全部历史(台):
+    """W76 外审 minor:「第几圈」每次扫这台机器人全部到点历史。只数派出那一刻以后的(走 events_kind 索引)。"""
+    from nexwar_site.robot_overview import lap_counts
+    d, db = 台
+    _巡逻(db, "t-loop", 3)
+    with db.tx() as c:                                  # 派出之前的(不可能是这一趟的)不算
+        c.execute("INSERT INTO events(robot_id, boot_id, seq, event_id, kind, data, stamp, "
+                  "received_at) VALUES ('A','old',1,'old-1','patrol_waypoint',?,?,?)",
+                  (json.dumps({"task_id": "t-loop", "index": 0}), NOW - 5, NOW - 5))
+    _到点(db, "t-loop", 3)
+    assert lap_counts(db, "A", "t-loop") == (3, 1)
+    plan = " ".join(str(tuple(r)) for r in db.query(
+        "EXPLAIN QUERY PLAN SELECT COUNT(*) FROM events WHERE kind='patrol_waypoint' "
+        "AND robot_id=? AND received_at>=? AND json_extract(data, '$.task_id')=?",
+        ("A", NOW, "t-loop")))
+    assert "events_kind" in plan and "received_at>?" in plan, plan

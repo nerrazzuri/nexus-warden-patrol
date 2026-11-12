@@ -57,17 +57,8 @@ def _terminal(db: Any, robot: str, task_id: str) -> tuple[str, int, str, int] | 
 
 def _loops(db: Any, robot: str, task_id: str) -> tuple[int, int] | None:
     """几圈的巡逻 → ``(共几圈(0 = 一直巡逻), 已经跑完几圈)``;一圈的、不是巡逻 → None。"""
-    if not task_id:
-        return None
-    rows = db.query("SELECT json_extract(payload, '$.mission.policy.loops') AS loops, "
-                    "json_array_length(json_extract(payload, '$.mission.waypoints')) AS pts "
-                    "FROM commands WHERE robot_id=? AND task_id=? AND kind='patrol' LIMIT 1",
-                    (robot, task_id))
-    if not rows or rows[0]["loops"] is None or rows[0]["loops"] == 1 or not rows[0]["pts"]:
-        return None
-    [n] = db.query("SELECT COUNT(*) AS n FROM events WHERE robot_id=? AND kind='patrol_waypoint' "
-                   "AND json_extract(data, '$.task_id')=?", (robot, task_id))
-    return int(rows[0]["loops"]), int(n["n"]) // int(rows[0]["pts"])
+    from nexwar_site.robot_overview import lap_counts
+    return lap_counts(db, robot, task_id)
 
 
 def _handover(db: Any, robot: str, task_id: str, at_ms: int) -> dict[str, Any]:
