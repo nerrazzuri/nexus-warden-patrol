@@ -312,6 +312,7 @@ class MapWizardPage extends StatefulWidget {
   static const Key exitPauseKey = Key('wizard-exit-pause');
   static const Key exitAbandonKey = Key('wizard-exit-abandon');
   static const Key stepKey = Key('wizard-step');
+  static const Key buildProgressKey = Key('wizard-build-progress');
   static const Key nextKey = Key('wizard-next');
   static const Key backKey = Key('wizard-back');
   static Key robotKey(String id) => Key('wizard-robot-$id');
@@ -1006,9 +1007,40 @@ class _MapWizardPageState extends State<MapWizardPage> {
     );
   }
 
+  /// 站点出图的阶段代号说成人话。
+  static String _stageName(String stage) => switch (stage) {
+        'upload' => tr('Uploading scans from the robot', '机器人上传扫描数据'),
+        'queued' => tr('Waiting to start', '等待开始'),
+        'keyframes' => tr('Reading scans', '读取扫描数据'),
+        'loop' => tr('Closing the loop', '闭合回环'),
+        'points' => tr('Building the point cloud', '生成点云'),
+        'grid' => tr('Drawing the floor map', '生成平面地图'),
+        'prior' || 'locmap' => tr('Building the localization map', '生成定位地图'),
+        _ => tr('Building', '出图中'),
+      };
+
   Widget _build(NwColors c) {
     final b = (_w?['build'] as Map?)?.cast<String, dynamic>() ?? const <String, dynamic>{};
     final state = '${b['state'] ?? 'pending'}';
+    if (state == 'pending' && b['where'] == 'site') {
+      // W75：关键帧交给站点主机出图了 —— 到哪一步、百分之几
+      final pct = ((b['pct'] as num?) ?? 0).clamp(0, 100).toInt();
+      return _scroll([
+        _h1(tr('Building the map', '正在建图')),
+        const SizedBox(height: Nw.s24),
+        LinearProgressIndicator(key: MapWizardPage.buildProgressKey, value: pct / 100),
+        const SizedBox(height: Nw.s16),
+        Text('${_stageName('${b['stage'] ?? ''}')}  $pct%',
+            key: MapWizardPage.buildStatusKey,
+            textAlign: TextAlign.center,
+            style: NwText.bodyMedium.copyWith(color: c.textSecondary)),
+        const SizedBox(height: Nw.s8),
+        Text(tr('The site computer is building the map. Usually under 3 minutes.',
+                '站点主机正在出图，通常 3 分钟以内。'),
+            textAlign: TextAlign.center,
+            style: NwText.bodySmall.copyWith(color: c.textSecondary)),
+      ], const []);
+    }
     if (state == 'pending') {
       return _scroll([
         _h1(tr('Building the map', '正在建图')),
