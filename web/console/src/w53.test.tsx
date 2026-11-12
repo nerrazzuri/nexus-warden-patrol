@@ -183,3 +183,27 @@ describe("W6-02 今天的巡逻:不会跑的说清楚", () => {
     expect(c.textContent).not.toContain("map_mismatch");
   });
 });
+
+// 第 8 轮 W8-03 / W8-04:被日程接替的一直巡逻不写「未完成」、不露 preempted;在跑的写第几圈
+describe("第 8 轮 今天的巡逻:被接替、第几圈", () => {
+  it("被日程接替:写跑了几圈、哪条日程接的,不写未完成和 preempted", async () => {
+    setFetch(((url: string) => Promise.resolve(url === "/api/patrols/today"
+      ? json({ items: [{ at_ms: Date.now(), kind: "adhoc", label: "loop-test", robot: "B", by: "demo", state: "handed_over", reason: "", end_ms: Date.now(), adhoc_id: "f1", forever: true, handover: { by: "schedule", name: "cut-test", laps: 6 } }] })
+      : json({}, 404))) as typeof fetch);
+    const { container: c } = render(<TodayPatrols />);
+    await waitFor(() => expect(c.querySelectorAll(".today-row").length).toBe(1));
+    expect(c.textContent).toContain("已跑 6 圈,由日程 cut-test 接替");
+    expect(c.textContent).toContain("被接替");
+    expect(c.textContent).not.toContain("未完成");
+    expect(c.textContent).not.toContain("preempted");
+    expect(c.querySelector(".tdchip")!.className).not.toMatch(/bad/);
+  });
+  it("在跑的一直巡逻:写「一直巡逻 · 第 3 圈」", async () => {
+    setFetch(((url: string) => Promise.resolve(url === "/api/patrols/today"
+      ? json({ items: [{ at_ms: Date.now(), kind: "adhoc", label: "loop-test", robot: "B", by: "demo", state: "running", reason: "", end_ms: null, adhoc_id: "f1", forever: true, lap: { n: 3, of: 0 } }] })
+      : json({}, 404))) as typeof fetch);
+    const { container: c } = render(<TodayPatrols />);
+    await waitFor(() => expect(c.querySelectorAll(".today-row").length).toBe(1));
+    expect(c.textContent).toContain("一直巡逻 · 第 3 圈");
+  });
+});

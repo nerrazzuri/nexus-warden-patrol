@@ -1,6 +1,8 @@
 // W53（用户 2026-10-30 / 10-31）：值守页跟着一台机器人走、画面手动开、按角色的按钮、派巡逻弹框
 // （估时、撞日程排队、被拒说原因）、今天的巡逻、管理栏（要你处理、开站清单）、账号审批、日程、申请账号、
 // 上手导览和报警练习。
+import 'dart:convert';
+
 import 'package:nexwar_patrol/l10n.dart';
 import 'package:nexwar_patrol/net/site_client.dart';
 import 'package:nexwar_patrol/store/site_store.dart';
@@ -193,6 +195,35 @@ void main() {
       await t.tap(find.byKey(const Key('today-cancel')));
       await t.pumpAndSettle();
       expect(api.calls, contains('cancelAdhoc q1'));
+    });
+
+    // 第 8 轮 W8-03 / A8-01 / W8-04：被日程接替的一直巡逻不写「未完成」「preempted」「预计…结束」；
+    // 在跑的一直巡逻首页写第几圈，不写预计结束时间
+    testWidgets('第 8 轮：被接替的一趟写跑了几圈、谁接的；在跑的一直巡逻写第几圈、不写预计结束', (t) async {
+      final v = jsonDecode(jsonEncode(siteFixture('site_robot'))) as Map<String, dynamic>;
+      (v['status'] as Map)['task'] = {'kind': 'patrol', 'state': 'running', 'task_id': 'adhoc-forever-f2'};
+      v['lap'] = {'n': 6, 'of': 0};
+      final api = FakeApi('guard', robotView: v)
+        ..session = const SiteSession('t', 'gina', 'guard')
+        ..today = <String, dynamic>{'date': 'x', 'timezone': 'UTC', 'items': <dynamic>[
+          <String, dynamic>{'at_ms': 1800000000000, 'kind': 'adhoc', 'label': 'loop-test', 'robot': 'A',
+            'by': 'demo', 'state': 'handed_over', 'reason': '', 'end_ms': 1800000600000, 'adhoc_id': 'f1',
+            'forever': true, 'handover': {'by': 'schedule', 'name': 'cut-test', 'laps': 6}},
+          <String, dynamic>{'at_ms': 1800001000000, 'kind': 'adhoc', 'label': 'loop-test', 'robot': 'A',
+            'by': 'gina', 'state': 'running', 'reason': '', 'end_ms': null, 'adhoc_id': 'f2',
+            'task_id': 'adhoc-forever-f2', 'forever': true, 'lap': {'n': 6, 'of': 0}},
+        ]};
+      await _duty(t, api);
+      expect(find.text('被接替'), findsOneWidget);
+      expect(find.text('未完成'), findsNothing);
+      expect(find.textContaining('一直巡逻 · 第 6 圈'), findsWidgets);
+      expect(find.textContaining('预计'), findsNothing, reason: '一直巡逻没有固定结束时间');
+      await t.ensureVisible(find.byKey(todayRowKey(0)));
+      await t.tap(find.byKey(todayRowKey(0)));
+      await t.pumpAndSettle();
+      expect(find.textContaining('已跑 6 圈，由日程 cut-test 接替'), findsOneWidget);
+      expect(find.textContaining('preempted'), findsNothing);
+      expect(find.textContaining('预计'), findsNothing, reason: '跑完了的写几点结束，不写预计');
     });
 
     testWidgets('其他没处理的报警收成一行，点开是原来的告警总览', (t) async {
