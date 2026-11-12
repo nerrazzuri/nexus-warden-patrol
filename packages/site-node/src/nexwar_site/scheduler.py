@@ -359,6 +359,10 @@ class SiteScheduler:
             running = self.dispatcher.busy(rid)
             if not reason and running is not None and not running.startswith(FOREVER_PREFIX):
                 reason, kind = f"{rid} 正在执行 {running}", "busy"
+            if not reason and running is not None and self._homing(rid, running):
+                # 外审 W76-2 #1:一直巡逻电量到线、已经在回家 —— 机器人这时回忙(护着回程),
+                # 按忙等它到家;不然这一轮记成跑过、被拒,同一窗口里不再补
+                reason, kind = f"{rid} 一直巡逻电量到线,正在回原点", "busy"
             if not reason and rid in self._site_busy():
                 reason, kind = f"{rid} 正在驱离", "busy"
             if not reason and rid in self._guarding():
@@ -389,6 +393,12 @@ class SiteScheduler:
             else:
                 ok.append(rid)
         return ok or yielding, taken, ";".join(why) or "没有登记的机器人", kinds
+
+    def _homing(self, rid: str, task_id: str) -> bool:
+        """``task_id`` 这一趟一直巡逻报过「开始回家」(``task_returning``)没有。"""
+        return bool(self.db.query(
+            "SELECT 1 FROM events WHERE robot_id=? AND kind='task_returning' "
+            "AND json_extract(data, '$.task_id')=? LIMIT 1", (rid, task_id)))
 
     def _guarding(self) -> set[str]:
         if self.guard_busy is None:

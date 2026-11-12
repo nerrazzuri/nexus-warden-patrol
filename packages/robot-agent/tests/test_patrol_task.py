@@ -266,3 +266,18 @@ async def test_W76_一直巡逻低电返航时_有效优先级抬到日程之上
             break
     assert parts.engine.state.value == "RETURNING"
     assert t.effective_priority == HOMING_GUARD_PRIORITY > 49
+    await _跑(c, r, parts, t, 1)
+    # 外审 W76-2 #1:告诉站点「这一趟在回家了」(一趟一条),站点日程等它到家、不拿这一轮去撞忙
+    back = [e.data for e in book.pending() if e.kind == "task_returning"]
+    assert len(back) == 1 and back[0]["task_id"] == "t1" and back[0]["reason"]
+    # 外审 W76-2 #2:返航途中暂停了、引擎落了终态还在等停车确认 —— 都还在回家,照样护着
+    await parts.engine.pause()
+    await _跑(c, r, parts, t, 1)
+    assert parts.engine.state.value == "PAUSED"
+    assert t.effective_priority == HOMING_GUARD_PRIORITY
+    await parts.engine.resume()
+    for _ in range(600):
+        await _跑(c, r, parts, t, 1)
+        if parts.engine.state.value == "DONE" or t.done:
+            break
+    assert t.done or t.effective_priority == HOMING_GUARD_PRIORITY

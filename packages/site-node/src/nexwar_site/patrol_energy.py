@@ -12,7 +12,8 @@
 - 不跟全站电量线比(#3):机器人按动态返航线(中止线 + 回原点耗电 × 1.5)回来,回来时电量可能比全站线
   高,照样要补。
 - 只看巡逻那一趟(#4):之后回待命点、去充电那几趟的 ``task_done`` 不盖掉它。
-- 换到一半站点重启(#5):两块合起来没到换好线,照样接上;换好、充好(≥ 换好线)就不再起。
+- 换到一半站点重启(#5):两块合起来没到换好线,照样接上。
+- 换好、充好(≥ 换好线)就销账(W76-2 #3,落库):之后再掉电按平时的线,不再为这一趟起。
 - 只看电量不行:换电引导会叫停在动的机器人,低电时有人遥控不能被它打断,所以要「空着」。
 
 跟布防值守自己的补能线并用,取高的(:func:`combine_lines`)。
@@ -34,6 +35,8 @@ Line = Callable[[str], "float | None"]
 _TERMINAL = ("task_done", "task_failed", "task_aborted", "task_preempted")
 #: 巡逻因电量结束之后多久以内还管它补能(之后机器人多半已经被人处理过、或另有安排)。
 RECENT_MS = 2 * 3_600_000
+#: 站点设置里记「哪一趟因电量结束的巡逻已经补好了」:``{robot_id: task_id}``。
+DONE_KEY = "patrol_energy_done"
 
 
 class PatrolEnergy:
@@ -53,27 +56,40 @@ class PatrolEnergy:
     def _wants(self, rid: str) -> bool:
         c = self.dispatcher.clients.get(rid)
         st = getattr(c, "status", None)
-        if st is None or not st.online or st.task is not None:
+        if st is None or not st.online:
             return False
         pct = getattr(getattr(c, "telemetry", None), "battery_pct", None)
-        if not isinstance(pct, (int, float)) or isinstance(pct, bool) or pct >= SWAP_OK_PCT:
+        if not isinstance(pct, (int, float)) or isinstance(pct, bool):
             return False
-        return self._ended_for_battery(rid)
+        task_id = self._ended_for_battery(rid)
+        if task_id is None:
+            return False
+        done = self.settings.get(DONE_KEY, {})
+        done = done if isinstance(done, dict) else {}
+        if done.get(rid) == task_id:
+            return False                                 # 这一趟补过了
+        if pct >= SWAP_OK_PCT:
+            # 外审 W76-2 #3:换好 / 充好了 —— 销账(落库,站点重启也记得),之后再掉电按平时的线
+            self.settings.put(DONE_KEY, {**done, rid: task_id})
+            return False
+        return st.task is None
 
-    def _ended_for_battery(self, rid: str) -> bool:
+    def _ended_for_battery(self, rid: str) -> str | None:
+        """最近一趟巡逻是因为电量结束的、而且在 :data:`RECENT_MS` 以内 → 它的任务号;
+        不然 ``None``。"""
         marks = ",".join("?" * len(_TERMINAL))
         rows = self.db.query(
-            "SELECT e.data, e.received_at FROM events e JOIN commands c "
+            "SELECT e.data, e.received_at, c.task_id FROM events e JOIN commands c "
             "ON c.robot_id = e.robot_id AND c.task_id = json_extract(e.data, '$.task_id') "
             f"AND c.kind = 'patrol' WHERE e.robot_id=? AND e.kind IN ({marks}) "
             "ORDER BY e.received_at DESC, e.rowid DESC LIMIT 1", (rid, *_TERMINAL))
         if not rows or self._now() - int(rows[0]["received_at"] or 0) > RECENT_MS:
-            return False
+            return None
         try:
             d = json.loads(rows[0]["data"] or "{}")
         except ValueError:
-            return False
-        return isinstance(d, dict) and d.get("ended") == "battery"
+            return None
+        return rows[0]["task_id"] if isinstance(d, dict) and d.get("ended") == "battery" else None
 
 
 def combine_lines(*lines: Line) -> Line:
