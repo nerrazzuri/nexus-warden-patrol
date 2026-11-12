@@ -1256,6 +1256,35 @@ async def test_W74三期_加密巡查_那几个防区里的易藏点先看(站):
 
 
 
+async def test_minor31_加密巡查先看的易藏点算进这一圈的电量预算(站):
+    """W74 minor #31:加密巡查加进去的易藏点没算进电量预算 —— 按没有易藏点的一圈放行,实际要多走。"""
+    from nexwar_site.map_marks import MapMarks
+    t = 站
+    t.duty.marks = MapMarks(t.db, now_ms=t.clock)
+    for n, p in (("西楼梯", [8.0, 1.0]), ("东仓库", [3.0, 1.0])):
+        t.duty.marks.set(MAP[0], MAP[1], {"kind": "hide", "name": n, "points": [p]}, by="alice")
+    _方案(t, gap_min=10)
+    seen: list[list[str]] = []
+    real = t.duty._why_not
+
+    def spy(rid, info, e=None, pts=None):
+        seen.append([str(p["name"]) for p in (pts or [])])
+        return real(rid, info, e, pts)
+    t.duty._why_not = spy
+    for _ in range(30):
+        await _跑(t, 0.5)
+        if t.dog.x > 5.5:
+            break
+    t.duty.alerts.raise_alert(kind="dog_sees_person", robot="A", title="看见人")
+    await _跑(t, 3)
+    t.duty.alerts.resolve_all("A", "dog_sees_person", who="gina")
+    await _跑(t, 3)
+    assert _names(_patrols(t)[-1])[0].startswith("加密-易藏点")
+    hot = [x for x in seen if any(n.startswith("加密-易藏点") for n in x)]
+    assert hot, seen
+    assert hot[-1][:2] == ["加密-易藏点1-西楼梯", "加密-易藏点2-东仓库"]
+
+
 async def test_外审r1_3_跟人和派生的那几趟_盯着的时候跑完不自动回待命点(站):
     t = 站
     tid = await _跟着(t)
