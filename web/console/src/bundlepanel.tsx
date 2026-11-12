@@ -50,6 +50,7 @@ export function bundleHref(scene: Scene, pick: string, from: number | null, to: 
 export function BundlePanel({ robots, fileName }: { robots: string[]; fileName: () => string }) {
   const [scene, setScene] = useState<Scene>("time");
   const [pick, setPick] = useState("");
+  const [q, setQ] = useState("");
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [runs, setRuns] = useState<Run[]>([]);
   const [from, setFrom] = useState(() => toLocalInput(Date.now() - 24 * 3_600_000));
@@ -70,6 +71,11 @@ export function BundlePanel({ robots, fileName }: { robots: string[]; fileName: 
       .catch((e) => setErr(String((e as Error).message ?? e)));
   }, [scene, pick]);
 
+  const words = q.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  const hit = (label: string) => words.every((w) => label.toLowerCase().includes(w));
+  const shownAlerts = alerts.map((a) => [a, [`${md(a.first_ms)} ${hm(a.first_ms)}`, a.robot && a.robot !== "site" ? nameOf(a.robot) : "",
+    alertHeadline(a)].filter(Boolean).join(" · ")] as const).filter(([, l]) => hit(l));
+  const shownRuns = runs.map((r) => [r, runLabel(r)] as const).filter(([, l]) => hit(l));
   const f = fromLocalInput(from), u = fromLocalInput(to);
   const bad = f === null || u === null || u <= f || u - f > 7 * 86_400_000;
   const needPick = scene !== "time" && !pick;
@@ -79,7 +85,7 @@ export function BundlePanel({ robots, fileName }: { robots: string[]; fileName: 
       <p class="muted small">{t("bundleHint")}</p>
       <div class="row wrap">
         <label class="small muted" for="bundle-scene">{t("bundleScene")}</label>
-        <select id="bundle-scene" value={scene} onChange={(e) => { setScene(e.currentTarget.value as Scene); setPick(""); }}>
+        <select id="bundle-scene" value={scene} onChange={(e) => { setScene(e.currentTarget.value as Scene); setPick(""); setQ(""); }}>
           <option value="time">{t("sceneTime")}</option>
           <option value="alert">{t("sceneAlert")}</option>
           <option value="run">{t("sceneRun")}</option>
@@ -91,18 +97,25 @@ export function BundlePanel({ robots, fileName }: { robots: string[]; fileName: 
             {robots.map((r) => <option key={r} value={r}>{nameOf(r)}</option>)}
           </select>
         )}
+        {(scene === "alert" || scene === "run") && (
+          // minor #23:报警有两百多条,下拉里一条条找不过来 —— 先输几个字筛
+          <input type="search" data-bundle-filter class="small" value={q} placeholder={t("bundleFilter")}
+            aria-label={t("bundleFilter")} onInput={(e) => setQ(e.currentTarget.value)} />
+        )}
         {scene === "alert" && (
           <select aria-label={t("sceneAlert")} value={pick} onChange={(e) => setPick(e.currentTarget.value)}>
-            <option value="">{t("bundlePick")}</option>
-            {alerts.map((a) => <option key={a.key} value={a.key}>{[`${md(a.first_ms)} ${hm(a.first_ms)}`, a.robot && a.robot !== "site" ? nameOf(a.robot) : "", alertHeadline(a)].filter(Boolean).join(" · ")}</option>)}
+            <option value="">{shownAlerts.length || !q.trim() ? t("bundlePick") : t("bundleNoMatch")}</option>
+            {shownAlerts.map(([a, label]) => <option key={a.key} value={a.key}>{label}</option>)}
           </select>
         )}
         {scene === "run" && (
           <select aria-label={t("sceneRun")} value={pick} onChange={(e) => setPick(e.currentTarget.value)}>
-            <option value="">{t("bundlePick")}</option>
-            {runs.map((r) => <option key={r.id} value={String(r.id)}>{runLabel(r)}</option>)}
+            <option value="">{shownRuns.length || !q.trim() ? t("bundlePick") : t("bundleNoMatch")}</option>
+            {shownRuns.map(([r, label]) => <option key={r.id} value={String(r.id)}>{label}</option>)}
           </select>
         )}
+        {(scene === "alert" ? shownAlerts : scene === "run" ? shownRuns : [1]).length === 0 && q.trim()
+          && <span class="small muted" data-no-match>{t("bundleNoMatch")}</span>}
       </div>
       <div class="row wrap">
         <label class="small muted" for="bundle-from">{t("bundleFrom")}</label>

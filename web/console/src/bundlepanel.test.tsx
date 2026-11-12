@@ -72,3 +72,24 @@ describe("minor #19:回原点、回待命点那一趟", () => {
     expect(runLabel({ id: 5, robot_id: "A", mission: "standby-bbbb", first_ms: 1794307980000 } as never)).toContain("回待命点");
   });
 });
+
+describe("minor #23:报警、巡逻下拉能筛", () => {
+  it("输几个字只剩对得上的(机器人、标题、日期都能筛)", async () => {
+    lang.value = "zh";
+    const { container: c } = render(<BundlePanel robots={["A", "B"]} fileName={() => "x"} />);
+    const scene = c.querySelector("#bundle-scene") as HTMLSelectElement;
+    fireEvent.change(scene, { target: { value: "run" } });
+    await waitFor(() => expect(opts(c, "某一趟巡逻").length).toBe(4));
+    const box = c.querySelector("input[data-bundle-filter]") as HTMLInputElement;
+    fireEvent.input(box, { target: { value: "demo-loop" } });
+    expect(opts(c, "某一趟巡逻").slice(1)).toEqual(["11-09 01:18 · A · demo-loop · 按日程"]);
+    fireEvent.input(box, { target: { value: "  " } });
+    expect(opts(c, "某一趟巡逻").length).toBe(4);
+    fireEvent.change(scene, { target: { value: "alert" } });
+    await waitFor(() => expect(opts(c, "某条报警").length).toBe(2));
+    const box2 = c.querySelector("input[data-bundle-filter]") as HTMLInputElement;
+    fireEvent.input(box2, { target: { value: "没有这个" } });
+    expect(opts(c, "某条报警").slice(1)).toEqual([]);
+    expect(c.textContent).toContain("没有对得上的");
+  });
+});
