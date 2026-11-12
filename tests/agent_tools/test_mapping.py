@@ -486,6 +486,7 @@ async def test_边走边建_停录两个一起停_在线建图给足存盘时间
     await orch.start_record("w1", live_map_id="m1")
     await orch.stop_record()
     assert set(grace) == {"bagrecord", "molamap", "mapview"} and grace["molamap"] >= 120
+    assert grace["mapview"] >= 10, "W75:预览要存完关键帧、写 live.json"
     assert orch.phase == "idle" and orch.live_map is None
 
 
@@ -880,3 +881,25 @@ async def test_外审_打包失败后再打包_仍按开录时的前端(tmp_path
     await orch.package(cfg.bags_dir / "run1", "mall")
     packs = [s.argv for s in procs.started if s.name == "mappack"]
     assert all(a[a.index("--front") + 1] == "superlio" for a in packs)
+
+
+async def test_W75_Super_LIO边走边建_预览顺带存关键帧_打包用它_从录包重建和MOLA不用(
+        tmp_path, procs, cfg, bag):
+    orch = _slio(tmp_path, procs, cfg)
+    await orch.start_record("run1", live_map_id="mall")
+    kd = cfg.maps_dir / ".work" / ".kf" / "mall"
+    prev = [s for s in procs.started if s.name == "mapview"][0].argv
+    assert prev[prev.index("--keyframes") + 1] == str(kd)
+    assert orch.keyframes_dir("mall") == kd
+    await orch.stop_record()
+    await orch.package(cfg.bags_dir / "run1", "mall")
+    pack = [s for s in procs.started if s.name == "mappack"][0].argv
+    assert pack[pack.index("--keyframes") + 1] == str(kd)
+    await orch.rebuild(bag, "m1")
+    b = [s for s in procs.started if s.name == "mapbuild"][0].argv
+    assert "--keyframes" not in b, "从录包重建:没有边走边存的"
+    from dataclasses import replace
+    procs2 = type(procs)(tmp_path / "l2")
+    o2 = MappingOrchestrator(procs2, replace(cfg, front="mola"))
+    await o2.start_record("run2", live_map_id="m")
+    assert "--keyframes" not in [s for s in procs2.started if s.name == "mapview"][0].argv

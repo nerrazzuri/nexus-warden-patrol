@@ -74,6 +74,8 @@ def main(argv: Sequence[str] | None = None) -> int:
                           "录下的位姿不是建图轨迹;11-04 广场)")
     b.add_argument("--front", choices=("mola", "superlio"), default="mola",
                    help="建图前端(工单 21):superlio = Super-LIO 的轨迹 + 原始点云;mola = 原来的")
+    b.add_argument("--keyframes", type=Path, default=None,
+                   help="W75:边走边存的关键帧目录(配 --reuse;不全就退回读录包)")
     b.add_argument("--rtk-antenna", type=lambda s: _floats(s, 2), default=(0.0, 0.0),
                    help="RTK 天线在机器人身上的水平位置(朝前,朝左,米;W09e 配经纬度用,真机量)")
     b.add_argument("--loop-closure", default="auto",
@@ -216,7 +218,8 @@ def _build(a: argparse.Namespace) -> int:
     from nexwar_localizer import build
     work = a.work or a.out.with_name(a.out.name + ".work")
     if a.front == "superlio":
-        timings = _superlio_front(a.bag, work, reuse=a.reuse, replay=a.replay)
+        timings = _superlio_front(a.bag, work, reuse=a.reuse, replay=a.replay,
+                                  keyframes=a.keyframes)
     else:
         timings = {} if a.reuse else build.run_mapping(a.bag, work, lidar_topic=a.lidar_topic)
     lc = build.find_loop_closure(a.loop_closure)
@@ -231,8 +234,8 @@ def _build(a: argparse.Namespace) -> int:
     return 0
 
 
-def _superlio_front(bag: Path, work: Path, *, reuse: bool,
-                    replay: bool = False) -> dict[str, float]:
+def _superlio_front(bag: Path, work: Path, *, reuse: bool, replay: bool = False,
+                    keyframes: Path | None = None) -> dict[str, float]:
     """Super-LIO 前端(工单 21):录包里有边走边建录下的位姿就用;没有(老的包、只录了原始数据)
     在隔离域里回放给 Super-LIO 重算。出 ``work`` 里的三样,之后照原来的打包(回环、栅格、先验)。"""
     import shutil
@@ -245,6 +248,21 @@ def _superlio_front(bag: Path, work: Path, *, reuse: bool,
         raise S.SuperLioError(f"Super-LIO 未装({S.ROOT}):先跑 deploy/nexwar_superlio_build")
     shutil.rmtree(work, ignore_errors=True)
     t0 = time.monotonic()
+    why = ""
+    if keyframes is not None and reuse:
+        # W75:边走边存了关键帧就用它,录包一帧都不读(广场 8 分钟的包光读一遍就要 142 s)
+        try:
+            info = S.prepare_live(work, keyframes, cfg=cfg, prior_pipeline=build.PRIOR_PIPELINE,
+                                  plugin=build._plugin())
+        except S.SuperLioError as exc:
+            why = f"(边走边存的关键帧没用上:{exc})"[:300]
+            print(f"边走边存的关键帧没用上,从录包取:{exc}")
+            shutil.rmtree(work, ignore_errors=True)
+        else:
+            q = info["quality"]
+            print(f"Super-LIO(边走边存的关键帧):{q['duration_s']} s、路程 {q['path_m']} m、"
+                  f"首尾相距 {q['start_end_m']} m、关键帧 {info['keyframes']}")
+            return {"superlio_s": 0.0, "prepare_s": info["prepare_s"]}
     try:
         if replay:
             raise S.SuperLioError("强制回放重算")
@@ -256,7 +274,7 @@ def _superlio_front(bag: Path, work: Path, *, reuse: bool,
         poses, source = S.read_odom(lio, "/lio/odom"), "replay"
     t1 = time.monotonic()
     info = S.prepare(work, bag, poses, cfg=cfg, prior_pipeline=build.PRIOR_PIPELINE,
-                     plugin=build._plugin(), source=source)
+                     plugin=build._plugin(), source=source + why)
     q = info["quality"]
     print(f"Super-LIO({source}):{q['duration_s']} s、路程 {q['path_m']} m、首尾相距 "
           f"{q['start_end_m']} m(回到起点的话这就是误差)、关键帧 {info['keyframes']}")

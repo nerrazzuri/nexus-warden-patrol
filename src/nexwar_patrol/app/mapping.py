@@ -69,6 +69,8 @@ MOLA_CLI = "/opt/ros/humble/lib/mola_launcher/mola-cli"
 #: 建图预览(W09f):跟在线建图一起起的小进程(``nexwar_localizer.livemap``),攒一张俯视栅格给手机看。
 LIVE_PREVIEW = Path("/opt/nexwar/current/deploy/nexwar_live_preview")
 MOLA_LO_SHARE = "/opt/ros/humble/share/mola_lidar_odometry"
+#: 预览停的时候给多久(W75:它还要把等位姿的几帧存完、写关键帧的收尾 live.json;没写完打包退回读录包)。
+PREVIEW_STOP_GRACE_S = 15.0
 #: 在线建图停的时候给多久存盘(开发机 4 分半的走动:simplemap 200 MB + 局部地图 150 MB,3.5 s;
 #: Orin 上盘慢,给足)。
 LIVE_SAVE_GRACE_S = 300.0
@@ -396,7 +398,7 @@ class MappingOrchestrator:
     async def _stop_preview(self) -> None:
         """预览停不掉只记一行:它不写要紧的东西,不碍停录。"""
         try:
-            await self._procs.stop(self.PREVIEW)
+            await self._procs.stop(self.PREVIEW, term_grace_s=PREVIEW_STOP_GRACE_S)
         except Exception as exc:  # noqa: BLE001 —— 尽力而为
             log.warning("建图预览停不掉:%s", exc)
 
@@ -444,7 +446,9 @@ class MappingOrchestrator:
             spec = self.spec_for_build(bag, map_id,
                                        front=self._live_front(work) if reuse else self.front())
             if reuse:
-                spec = replace(spec, name=name, argv=(*spec.argv, "--reuse"))
+                extra = ("--keyframes", str(self.keyframes_dir(map_id))) \
+                    if self._live_front(work) == "superlio" else ()
+                spec = replace(spec, name=name, argv=(*spec.argv, "--reuse", *extra))
             await self._start(spec)
             started = True
             await self._wait(name, REBUILD_TIMEOUT_S)
@@ -553,6 +557,10 @@ class MappingOrchestrator:
         在事件循环里调(会摘掉已退的进程)。"""
         return self.PREVIEW in self._procs.running()
 
+    def keyframes_dir(self, map_id: str) -> Path:
+        """边走边存的关键帧(W75,预览进程写):中间目录旁边单独一个(打包会清掉整个中间目录)。"""
+        return self._cfg.maps_dir / ".work" / ".kf" / map_id
+
     def preview_dir(self, map_id: str) -> Path:
         """建图预览的快照写在哪(W09f):这张图的中间目录底下。"""
         return self._out(map_id)[1] / "preview"
@@ -564,7 +572,8 @@ class MappingOrchestrator:
             name=self.PREVIEW,
             argv=(str(self._cfg.live_preview), "--out", str(self.preview_dir(map_id)),
                   "--run", run, "--lidar-topic", self._cfg.lidar_topic,
-                  *(("--pose-topic", SUPERLIO_ODOM, "--superlio") if front == "superlio"
+                  *(("--pose-topic", SUPERLIO_ODOM, "--superlio",
+                     "--keyframes", str(self.keyframes_dir(map_id))) if front == "superlio"
                     else ("--pose-topic", f"{LIVE_NS}/lidar_odometry/pose"))),
             env=self._live_env(),
             ready_pattern="",

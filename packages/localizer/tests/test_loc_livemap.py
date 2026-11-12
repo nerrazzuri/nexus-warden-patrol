@@ -472,3 +472,48 @@ def test_Super_LIO的位姿_IMU换成雷达_时刻是帧末_晚100ms也配得上
     f.on_pose(10.1, (1.0, 0.0, 0.0), (0.0, 0.0, 0.0, 1.0))
     o, R, _ = g.added[0]
     assert np.allclose(o, [1.1, 0, 0]) and np.allclose(R, R_il)
+
+
+class _KF:
+    def __init__(self, fail=False):
+        self.scans, self.poses, self.fail = [], [], fail
+
+    def on_scan(self, t, raw):
+        if self.fail:
+            raise OSError("盘满")
+        self.scans.append(t)
+
+    def on_pose(self, t, p, q):
+        self.poses.append((t, p, q))
+
+
+def test_W75_边走边存关键帧_每帧点云都给它_不受预览限速_存不了不碍预览():
+    g, kf = _Grid(), _KF()
+    h = L.Handlers(L.Feeder(g), decode_cloud=lambda raw: np.ones((8, 3)), keyframes=kf,
+                   now=lambda: 100.25)
+    for k in range(10):                                  # 10 Hz;预览每秒只要 2 帧
+        h.on_scan(_raw(100.0 + k * 0.1))
+    assert len(kf.scans) == 10
+    h.on_pose(_M(100.05, (1, 2, 3), (0, 0, 0, 1)))
+    assert kf.poses == [(pytest.approx(100.05), (1, 2, 3), (0, 0, 0, 1))]
+    # 收到 − 报文头的中位数(跟 build.bag_clock_offset 一样取排好序的第 n/2 个)
+    assert h.clock_offset() == pytest.approx(100.25 - 100.4, abs=1e-6)
+    bad = L.Handlers(L.Feeder(g), decode_cloud=lambda raw: np.ones((8, 3)), keyframes=_KF(True))
+    bad.on_scan(_raw(200.0))
+    bad.on_pose(_M(200.05, (0, 0, 0), (0, 0, 0, 1)))
+    assert bad.bad == 1 and len(g.added) == 2, "关键帧存不了只记一笔,预览照画"
+
+
+def test_W75_记下机器人自己的里程朝向_核手性用(tmp_path):
+    h = L.Handlers(L.Feeder(_Grid()), decode_cloud=lambda raw: np.ones((8, 3)),
+                   keyframes=_KF(), now=lambda: 50.5)
+    yaw = 0.3
+    h.on_odom(_M(50.0, (0, 0, 0), (0, 0, math.sin(yaw / 2), math.cos(yaw / 2))))
+    h.on_odom(object())
+    assert h.odom == [(50.0, 50.5, pytest.approx(yaw))]
+    L.write_live(tmp_path, h, {"keyframes": 3})
+    from nexwar_localizer import superlio
+    assert L.LIVE_FILE == superlio.LIVE_FILE
+    d = json.loads((tmp_path / L.LIVE_FILE).read_text())
+    assert d["keyframes"] == 3 and d["clock_offset_s"] is None
+    assert d["odom"] == [[50.0, 50.5, pytest.approx(yaw)]]
