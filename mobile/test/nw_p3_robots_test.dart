@@ -6,6 +6,7 @@ import 'package:nexwar_patrol/ui/nw/nw_p3_robots.dart';
 import 'package:nexwar_patrol/ui/nw/nw_theme.dart';
 import 'package:nexwar_patrol/ui/nw/nw_widgets.dart';
 import 'package:nexwar_patrol/ui/site_page.dart';
+import 'package:nexwar_patrol/ui/site_robot.dart' show robotStatusLine;
 import 'package:nexwar_patrol/ui/site_teleop.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -60,6 +61,14 @@ void main() {
           reason: '已经在充了就不再喊低电');
       expect(robotPhase(_robot('A', status: {'task': _patrol})), RobotPhase.working);
       expect(robotPhase(_robot('A')), RobotPhase.idle);
+      // 易用性第 7 轮：蹲着、趴着（站点 ready.motion=false）没任务时不说「空闲」—— 空闲听着像随时能派
+      final crouch = {'ready': {'control': true, 'motion': false, 'estop_clear': true, 'loc_ok': true}};
+      expect(robotPhase(_robot('A', status: crouch)), RobotPhase.notStanding);
+      expect(robotPhaseLabel(RobotPhase.notStanding), '没站起来');
+      expect(robotStatusLine(_robot('A', status: crouch)), contains('没站起来'));
+      expect(robotStatusLine(_robot('A', status: crouch)), isNot(contains('空闲')));
+      expect(robotPhase(_robot('A', over: {'battery_pct': 12}, status: crouch)), RobotPhase.lowBattery,
+          reason: '低电更要紧');
       expect(robotPhase(_robot('A', over: {'battery_pct': 80})), RobotPhase.idle);
     });
 
