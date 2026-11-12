@@ -47,7 +47,13 @@ export function changeText(d: AuditRow["detail"], target = ""): string {
   if (d.why) out.push(t("auditWhy", { w: d.why }));
   // minor #18:临时路线写几个点(原来露 temp-… 编号);去一个点写出来;存草稿写存成第几版
   if (d.mission) out.push(d.mission.startsWith("temp-") && d.points ? t("bpTempRouteN", { n: d.points }) : routeName(d.mission));
-  else if (d.request?.target) out.push(t("bpGoto"));
+  else if (d.request?.target) {
+    // minor #26:去哪写出来(地图坐标,一位小数)
+    const g = d.request.target as { x?: unknown; y?: unknown };
+    const at = typeof g.x === "number" && typeof g.y === "number"
+      ? (lang.value === "zh" ? `（${g.x.toFixed(1)}, ${g.y.toFixed(1)}）` : ` (${g.x.toFixed(1)}, ${g.y.toFixed(1)})`) : "";
+    out.push(t("bpGoto") + at);
+  }
   if (d.version && /^[^:/\s]+:[^:/\s]+$/.test(target)) out.push(t("auditDraftVer", { v: d.version }));
   if (d.verdict) out.push(t("auditVerdict", { v: d.verdict }));
   if (d.title) out.push(d.title);
@@ -97,7 +103,7 @@ const ACTIONS: [RegExp, string][] = [
   [/^POST \/api\/lists\/authorizations/, "actAuthz"], [/^POST \/api\/arming\//, "actSchedule"],
   [/^POST \/api\/shift-notes$/, "actNote"], [/^POST \/api\/routes/, "actRoutes"], [/^POST \/api\/(zones|nav-zones|maps)/, "actMaps"],
   // P1-66:常见的再多认几个;认不得的写「其他操作」,原话放悬停里
-  [/^POST \/api\/robots\/[^/]+\/(home|standby)\/return$/, "actReturn"], [/^POST \/api\/robots\/[^/]+\/abort$/, "actAbort"],
+  [/^POST \/api\/robots\/[^/]+\/home\/return$/, "actReturnHome"], [/^POST \/api\/robots\/[^/]+\/standby\/return$/, "actReturnStandby"], [/^POST \/api\/robots\/[^/]+\/abort$/, "actAbort"],
   [/^POST \/api\/robots\/[^/]+\/resume$/, "actResume"], [/^POST \/api\/robots\/[^/]+\/posture$/, "actPosture"],
   [/^POST \/api\/robots\/[^/]+\/relocalize/, "actLocate"],
   // 第 5 轮 P1-66:「改了机器人」太笼统 —— 换图、建图、待命点、标原点、遥控、驱离、服务模式、看管、设置、升级、Wi-Fi

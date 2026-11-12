@@ -336,6 +336,18 @@ describe("minor #18:活动记录 —— 派单写路线、去看看写去一个�
     expect(actionText("POST /api/admin/maps/estate-1/7/edit")).toBe("把地图存成草稿");
     expect(changeText({ version: "15" } as AuditRow["detail"], "estate-1:7")).toBe("存成第 15 版");
   });
+  // minor #26(网页第 5 轮):「派了一台机器人」没写去哪 —— 去一个点写坐标;回去分回原点、回待命点
+  it("minor #26:派去一个点写坐标;回原点、回待命点分开说", async () => {
+    const { actionText, changeText } = await import("./userspage");
+    lang.value = "zh";
+    expect(changeText({ request: { target: { map_id: "m", x: 12.345, y: -4.5, yaw: 0 } } } as AuditRow["detail"])).toBe("去一个点（12.3, -4.5）");
+    expect(actionText("POST /api/robots/A/home/return")).toBe("让机器人回原点");
+    expect(actionText("POST /api/robots/A/standby/return")).toBe("让机器人回待命点");
+    lang.value = "en";
+    expect(actionText("POST /api/robots/A/home/return")).toBe("Sent a robot back to its origin");
+    expect(actionText("POST /api/robots/A/standby/return")).toBe("Sent a robot to its standby point");
+    lang.value = "zh";
+  });
   it("存草稿紧跟着的那条「显示设置」不单列一行", async () => {
     const { mergeAudit } = await import("./userspage");
     const row = (id: number, at: number, action: string, target: string, detail = {}): AuditRow =>
