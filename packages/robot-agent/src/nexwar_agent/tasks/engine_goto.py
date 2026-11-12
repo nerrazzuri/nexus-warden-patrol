@@ -172,11 +172,20 @@ class EngineMissionTask(Task):
             bad = [r for r in snap.results if not r.ok]
             m = self._mission()
             expected = len(m.waypoints) * m.policy.loops
-            if engine.returned:
+            laps = int(getattr(engine, "laps", 0) or 0)
+            if engine.returned and m.policy.forever:
+                # W76 一直巡逻:跑到电量到线回原点就是它的正常结束(用户 11-12:补能后这一趟结束)
+                self.state = TaskState.DONE
+                self.detail = {"reason": (f"一直巡逻:跑了 {laps} 圈,{engine.returned},"
+                                          "已回到原点补能")[:200],
+                               "laps": laps, "ended": "battery"}
+            elif engine.returned:
                 # 半路返航(电量到线)回到了原点:引擎落 DONE,可点位没跑完(W00c6b 内审阻断 1)。报失败、
                 # 原因带上返航起因 —— 站点按电量告警,也不会当成「停在最后一个点」派回程巡检。
                 self.state = TaskState.FAILED
                 self.detail = {"reason": f"{engine.returned}(半路返航,已回到原点)"[:200]}
+                if m.policy.loops != 1:
+                    self.detail["laps"] = laps
             elif len(snap.results) < expected:
                 self.state = TaskState.FAILED
                 self.detail = {"reason": f"只跑了 {len(snap.results)}/{expected} 个点"}
@@ -232,6 +241,9 @@ class EngineMissionTask(Task):
         self.state = (TaskState.PREEMPTED if self._abort_reason == "preempted"
                       else TaskState.ABORTED)
         self.detail = {"reason": self._abort_reason}
+        m = self._mission()
+        if m.policy.loops != 1:                           # W76:中止的也说跑了几圈
+            self.detail["laps"] = int(getattr(self._parts.engine, "laps", 0) or 0)
 
 
 

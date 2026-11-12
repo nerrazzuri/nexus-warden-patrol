@@ -112,6 +112,10 @@ class MissionWaypoint:
         return out
 
 
+#: ``policy.loops`` 的「一直跑」(W76):跑到电量到返航线、回原点补能为止。
+LOOPS_FOREVER = 0
+
+
 @dataclass(frozen=True, slots=True)
 class Policy:
     """跑这个任务时的策略。默认值取自设计 spec §6.1 的样例。"""
@@ -127,6 +131,8 @@ class Policy:
     battery_abort_pct: float = 15.0
     on_loc_lost: str = "pause_then_abort"
     on_control_lost: str = "pause"
+    #: 跑几圈。:data:`LOOPS_FOREVER`(0)= 一直跑,直到电量到返航线回原点补能(W76,用户 11-12);
+    #: 那样回到原点算这一趟正常结束。老代理不认 0:站点只给报了 ``loops_forever`` 能力的机器人派。
     loops: int = 1
     #: 这一趟的归档留多少天(spec §4.4)。**按任务算,不是全局设置** —— 日巡
     #: 留 30 天够了,季度大检那一趟得留一年。整份 policy 会随 manifest 落进
@@ -147,6 +153,11 @@ class Policy:
     #: 去充电桩的这一趟(W13)。出发线只看中止线:去充是电量唯一能回来的路,原地不动只会耗干;路上照样
     #: 到中止线就停。不进线格式:只有代理自己拼的回充 goto 用。
     charging_trip: bool = False
+
+    @property
+    def forever(self) -> bool:
+        """一直跑(W76):圈数是 :data:`LOOPS_FOREVER`。"""
+        return self.loops == LOOPS_FOREVER
 
     def to_wire(self) -> dict[str, Any]:
         out = {
@@ -286,8 +297,8 @@ def _parse_policy(raw: Any) -> Policy:
         got["waypoint_retry"] = value
     if "loops" in raw:
         value = raw["loops"]
-        _require(isinstance(value, int) and not isinstance(value, bool) and value >= 1,
-                 f"policy.loops 应为正整数,实际为 {value!r}")
+        _require(isinstance(value, int) and not isinstance(value, bool) and value >= 0,
+                 f"policy.loops 应为非负整数(0 = 一直跑),实际为 {value!r}")
         got["loops"] = value
     if "retention_days" in raw:
         value = raw["retention_days"]

@@ -381,6 +381,8 @@ class _Live:
     started_ms: int
     index: int = 0
     results: list[WaypointResult] = field(default_factory=list)
+    #: 跑完了几圈(W76:一直巡逻时站点、手机显示「第几圈」)。
+    laps: int = 0
     battery_pct: float = 100.0
     loc_reset_attempts: int = 0
     #: 每次丢定位重置的时刻(工单 16):``loc_reset_attempts`` 只数 ``LOC_RESET_WINDOW_S`` 以内的。
@@ -517,6 +519,11 @@ class MissionEngine(EventEmitter[RunSnapshot]):
     def need_pct(self) -> float | None:
         """起飞前因为电量没过拦下的:狗上的出发线(%);不是 → ``None``。"""
         return self._live.need_pct if self._live is not None else None
+
+    @property
+    def laps(self) -> int:
+        """这一趟跑完了几圈(W76)。"""
+        return self._live.laps if self._live is not None else 0
 
     @property
     def returned(self) -> str:
@@ -830,7 +837,9 @@ class MissionEngine(EventEmitter[RunSnapshot]):
 
             await self._transition(RunState.RUNNING)
             live.start_pose = await self._where()
-            for _ in range(live.mission.policy.loops):
+            pol = live.mission.policy
+            while pol.forever or live.laps < pol.loops:
+                reached = 0
                 for i, wp in enumerate(live.mission.waypoints):
                     live.index = i
                     self._publish()
@@ -839,7 +848,12 @@ class MissionEngine(EventEmitter[RunSnapshot]):
                     logsetup.set_context(pt=None, point=None)
                     live.results.append(result)
                     if result.ok:
+                        reached += 1
                         live.trail.append((i, wp.pose))
+                live.laps += 1
+                if pol.forever and reached == 0:
+                    # W76:一直巡逻却一整圈一个点都没到 —— 停下,不空转到没电
+                    raise _AbortRun(f"一直巡逻:第 {live.laps} 圈一整圈一个点都没到,停下")
             await self._transition(RunState.DONE)
         except _ReturnHome as exc:
             await self._go_home(exc.reason)
@@ -1076,7 +1090,9 @@ class MissionEngine(EventEmitter[RunSnapshot]):
                 await self._stop_nav_quietly()
             if live is not None:
                 succeeded = sum(1 for r in live.results if r.ok)
-                total = len(live.mission.waypoints) * live.mission.policy.loops
+                # W76 一直巡逻:没有「一共几个点」,按跑过的算
+                total = (len(live.results) if live.mission.policy.forever
+                         else len(live.mission.waypoints) * live.mission.policy.loops)
                 # ``result``:站点登记运行记录读的就是它(工单 20,2026-10-28:原来没写,只有引擎的
                 # ``state: done`` =「这趟跑到头了」,点全没到的回待命点看着像回去了)。点都到了才
                 # ``done``;中止 ``aborted``;跑到头、跳过了几个、到了至少一个 ``partial``(W71,跟任务

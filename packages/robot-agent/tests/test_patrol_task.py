@@ -192,3 +192,47 @@ async def test_点都到了_清单结果done(台子, tmp_path):
     assert t.state is TaskState.DONE
     [m] = list((tmp_path / "runs").rglob("manifest.json"))
     assert json.loads(m.read_text())["summary"]["result"] == "done"
+
+
+async def test_W76_一直巡逻_电量到线回原点_算完成_写跑了几圈(台子):
+    from nexwar_contract.mission import LOOPS_FOREVER
+    c, r, parts, book = 台子
+    t = PatrolTask(task_id="t1", mission=_任务((1.0, 0.0), (1.0, 1.0),
+                                               policy=Policy(loops=LOOPS_FOREVER)),
+                   parts=parts, events=book, now_ms=c)
+    await t.start()
+    for _ in range(200):
+        await _跑(c, r, parts, t, 50)
+        if parts.engine.laps >= 2:
+            break
+    assert parts.engine.laps >= 2 and not t.done
+    r.inject_battery(20.0)                                   # 返航线 25
+    await _跑(c, r, parts, t, 3000)
+    assert t.state is TaskState.DONE, (t.state, t.detail)
+    assert t.detail["laps"] >= 2 and t.detail["ended"] == "battery"
+    assert "电量" in t.detail["reason"] and "圈" in t.detail["reason"]
+    laps = [e["lap"] for e in _点事件(book)]
+    assert laps[:4] == [1, 1, 2, 2], "点位事件带第几圈"
+
+
+async def test_W76_有限圈半路电量到线_照旧失败_写跑了几圈(台子):
+    c, r, parts, book = 台子
+    t = PatrolTask(task_id="t1", mission=_任务((1.0, 0.0), (1.0, 1.0), policy=Policy(loops=50)),
+                   parts=parts, events=book, now_ms=c)
+    await t.start()
+    for _ in range(200):
+        await _跑(c, r, parts, t, 50)
+        if parts.engine.laps >= 1:
+            break
+    r.inject_battery(20.0)
+    await _跑(c, r, parts, t, 3000)
+    assert t.state is TaskState.FAILED, (t.state, t.detail)
+    assert "半路返航" in t.detail["reason"] and t.detail["laps"] >= 1
+
+
+def test_W76_能力里报一直巡逻():
+    from nexwar_agent.status import compose_capabilities
+    r = SimRobot(now_ms=lambda: 0, max_vx=1.0)
+    caps = compose_capabilities(robot_id="r", adapter_id="sim", hal_caps=r.hal_capabilities(),
+                                loaded_map=("m", "1"), nav_path="builtin", autonomy="full")
+    assert caps.tasks["patrol"]["loops_forever"] is True

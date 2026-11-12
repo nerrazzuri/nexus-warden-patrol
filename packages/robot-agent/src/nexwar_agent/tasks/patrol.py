@@ -33,8 +33,11 @@ class PatrolTask(EngineMissionTask):
     def _report_waypoints(self, results) -> None:
         for i in range(self._reported_results, len(results)):
             r = results[i]
-            ev = {"task_id": self.task_id, "index": i, "total": len(self.mission.waypoints),
+            n = len(self.mission.waypoints)
+            ev = {"task_id": self.task_id, "index": i, "total": n,
                   "name": r.name, "ok": r.ok, "note": r.note}
+            if self.mission.policy.loops != 1 and n:
+                ev["lap"] = i // n + 1                   # W76:第几圈(从 1 数)
             if r.code:                                   # 导航 V1 第 5 节:没到的点带原因码
                 ev["code"] = r.code
             self._events.emit("patrol_waypoint", ev)
