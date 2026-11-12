@@ -85,7 +85,7 @@ def quality(build: Any, coverage_path: Any) -> dict[str, Any]:
     ``short_path`` 走得太少),文字在 App 里。"""
     if not isinstance(build, dict):
         return {"verdict": "unknown", "reasons": [], "closures": None, "max_shift_m": None,
-                "path_m": None}
+                "path_m": None, "optimized": False}
     lc = build.get("loop_closure") if isinstance(build.get("loop_closure"), dict) else {}
     closures = lc.get("closures") if isinstance(lc.get("closures"), int) \
         and not isinstance(lc.get("closures"), bool) else None
@@ -94,15 +94,18 @@ def quality(build: Any, coverage_path: Any) -> dict[str, Any]:
     if path is None:
         path = _path_len(coverage_path)
     reasons = []
+    # 用户 11-13:回环作可选,默认不做 —— 没做回环(``ran`` 为假)就说不上闭没闭合,不算问题;
+    # App 提示漂移大了点「优化地图」
+    ran = lc.get("ran", True) is not False
     if shift is not None and shift >= MAX_SHIFT_M:
         reasons.append("big_shift")              # 闭合了但挪得多,或挪得太多被丢掉
-    elif not lc.get("used") or not closures:
+    elif ran and (not lc.get("used") or not closures):
         reasons.append("no_loop")
     if path is not None and path < MIN_PATH_M:
         reasons.append("short_path")
     return {"verdict": "problem" if reasons else "usable", "reasons": reasons,
             "closures": closures, "max_shift_m": shift,
-            "path_m": None if path is None else round(path, 1)}
+            "path_m": None if path is None else round(path, 1), "optimized": ran}
 
 
 def read_quality(cat: Any, map_id: str, version: str) -> dict[str, Any]:
@@ -183,7 +186,14 @@ class MapWizard:
         """这一版建好了没有:``ready``(带结论)、``failed``(带原因)、``pending``(在录、在建、在传)。"""
         map_id, version = st["map_id"], st["version"]
         if self._built(map_id, version):
-            return {"state": "ready", "quality": read_quality(self.cat, map_id, version)}
+            can = False
+            if self.builds is not None:
+                try:
+                    can = bool(self.builds.optimizable(st["robot_id"], map_id, version))
+                except Exception:  # noqa: BLE001 - 查不了按不能优化
+                    can = False
+            return {"state": "ready", "quality": read_quality(self.cat, map_id, version),
+                    "optimizable": can}
         sb = self.builds.status(map_id, version) if self.builds is not None else None
         if sb is not None and sb.get("robot_id") == st["robot_id"]:
             # W75:关键帧交给站点出图了 —— 到哪一步、百分之几
@@ -227,7 +237,7 @@ class MapWizard:
         return self.view() or st
 
     def apply(self, d: Any, *, by: str) -> dict[str, Any]:
-        """``{action: start|step|rewalk|retry_site|finish|abandon, wizard_id, …}``;
+        """``{action: start|step|rewalk|retry_site|optimize|finish|abandon, wizard_id, …}``;
         回改完的状态(放弃回 {})。开始以后的每一步都要带这份向导的 ``wizard_id``:
         被别人换掉的旧页面改不了新的。"""
         if not isinstance(d, dict):
@@ -262,6 +272,18 @@ class MapWizard:
                 raise WizardError(409, "这一版不是站点出图失败的,不能在站点上重试", "not_failed")
             self.builds.retry(st["map_id"], st["version"])
             return self._save(st)
+        if action == "optimize":
+            # 用户 11-13「优化地图」:漂移大了,站点拿留着的关键帧回环,出成新的一版(这一版留着)
+            m, v, r = st["map_id"], st["version"], st["robot_id"]
+            if not self._built(m, v) or self.builds is None \
+                    or not self.builds.optimizable(r, m, v):
+                raise WizardError(409, "这一版不能优化(没建好,或者关键帧没留在站点上)",
+                                  "not_optimizable")
+            st["tried"] = [*st.get("tried", []), v][-20:]
+            st["version"] = self._alloc(m, st["tried"])
+            self.builds.optimize(r, m, v, st["version"])
+            st["step"] = "build"
+            return self._save(st)
         if action == "finish":
             m, v, r = st["map_id"], st["version"], st["robot_id"]
             if not self._built(m, v):
@@ -274,7 +296,8 @@ class MapWizard:
             self.settings.put(KEY, None)
             return st | {"step": "done"}
         if action != "step":
-            raise WizardError(400, "action 只认 start、step、rewalk、retry_site、finish、abandon")
+            raise WizardError(
+                400, "action 只认 start、step、rewalk、retry_site、optimize、finish、abandon")
         step = d.get("step")
         if step not in STEPS or step == "done":
             raise WizardError(400, f"step 只认 {'、'.join(STEPS[:-1])}")

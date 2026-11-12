@@ -395,3 +395,54 @@ def test_W75_站点出图失败_向导里在站点上重试_同一版重出_没�
     with pytest.raises(WizardError) as ei:
         w.apply({"action": "retry_site"}, by="alice")
     assert ei.value.reason == "not_failed"
+
+
+# ------------------------------------------------------------ 用户 11-13:回环作可选,「优化地图」
+
+
+def test_用户1113_没做回环_不算没闭合_标着没优化():
+    q = quality({**BUILD, "loop_closure": {"ran": False, "why": "没有回环工具(mola-sm-lc-cli)"}},
+                [[0, 0], [30, 0]])
+    assert q["verdict"] == "usable" and q["reasons"] == [] and q["optimized"] is False
+    q = quality(_lc(used=True, closures=2, path_m=120.0, max_shift_m=0.08), None)
+    assert q["optimized"] is True
+
+
+def test_用户1113_建好了能优化地图_换新版本号_回到出图那一步_旧版留着(站点):
+    w = _wiz(站点)
+    v = w.apply({"action": "start", "robot_id": "A", "site_type": "indoor", "drive": "remote"},
+                by="alice")
+    old = v["version"]
+    w.apply({"action": "step", "step": "walk"}, by="alice")
+    w.apply({"action": "step", "step": "build"}, by="alice")
+    put_version_main(站点, old, build={**BUILD, "loop_closure": {"ran": False}})
+    b = _假出图(None)
+    b.key = ("main", old)
+    b.can, b.asked = {("A", "main", old)}, []
+    b.optimizable = lambda r, m, ver: (r, m, ver) in b.can
+
+    def optimize(r, m, ver, to):
+        b.asked.append((r, m, ver, to))
+        b.key, b.st = ("main", to), {"state": "queued", "robot_id": "A"}
+    b.optimize = optimize
+    w.w.builds = b
+    got = w.view()["build"]
+    assert got["state"] == "ready" and got["optimizable"] is True
+    v = w.apply({"action": "optimize"}, by="alice")
+    assert v["version"] != old and b.asked == [("A", "main", old, v["version"])]
+    assert v["step"] == "build" and v["build"]["state"] == "pending"
+    assert 站点.maps.get("main", old) is not None, "旧版留着"
+    with pytest.raises(WizardError) as ei:
+        w.apply({"action": "optimize"}, by="alice")            # 新的这一版还没建好
+    assert ei.value.status == 409 and ei.value.reason == "not_optimizable"
+
+
+def test_用户1113_关键帧没留在站点上_不给优化(站点):
+    w = _wiz(站点)
+    v = w.apply({"action": "start", "robot_id": "A", "site_type": "indoor", "drive": "remote"},
+                by="alice")
+    put_version_main(站点, v["version"], build=BUILD)
+    assert w.view()["build"].get("optimizable") is False
+    with pytest.raises(WizardError) as ei:
+        w.apply({"action": "optimize"}, by="alice")
+    assert ei.value.reason == "not_optimizable"

@@ -31,3 +31,14 @@ def test_W75_子图配准用的点降到两万():
     got = [f["params"] for f in y["submap_final_filter"]
            if f["class_name"] == "mp2p_icp_filters::FilterDecimateAdaptive"]
     assert got and _default(got[0]["desired_output_point_count"]) == 20000
+
+
+def test_用户1113_出图默认不回环_要回环得明说():
+    """用户 11-13:回环作可选 —— 机器人出图、发到站点就直接用;
+    漂移大了在建图向导里点「优化地图」再回环。
+    机器人自己打包(``deploy/nexwar_map_build``)不带这个参数,走的就是默认。"""
+    from nexwar_localizer.tools import parser
+    a = parser().parse_args(["build", "--bag", "b", "--out", "o"])
+    assert a.loop_closure == "off"
+    assert parser().parse_args(["build", "--bag", "b", "--out", "o",
+                                "--loop-closure", "auto"]).loop_closure == "auto"
