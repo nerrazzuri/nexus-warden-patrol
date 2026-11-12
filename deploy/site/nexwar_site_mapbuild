@@ -2,14 +2,28 @@
 # 站点主机出图(W75 方案 1):站点程序(nexwar_site.mapbuild)起它,在机器人边走边传上来的关键帧上
 # 跑回环、出点云、栅格、先验。参数原样交给 ``nexwar_localizer.tools``(build --from-keyframes …)。
 #
-# 跑在 ROS 的系统 Python 里(MOLA 的命令行、numpy 在那边);代码用 install-site.sh --with-mapping
-# 放进 /opt/nexwar_site/mapping 的那一份 packages/localizer 与 packages/contract(纯 Python)。
+# 跑在 ROS 的系统 Python 里(MOLA 的命令行、numpy 在那边)。代码:
+# - 正式装的站点:install-site.sh --with-mapping 放进 /opt/nexwar_site/mapping 的那一份;
+# - 从仓库直接跑的站点(现场笔记本):没有那个目录,就用这个脚本所在仓库的 packages/。
+#   site.json 里写 "mapbuild": {"runner": ["<仓库>/deploy/site/nexwar_site_mapbuild"]}。
+# kf2sm 在 $NEXWAR_SUPERLIO_ROOT/bin/kf2sm(没设:装好的 superlio 目录,再没有就机器人那份的位置)。
 set -eu
 here=/opt/nexwar_site/mapping
+if [ -d "$here/localizer" ]; then
+  py="$here/localizer:$here/contract"
+  : "${NEXWAR_SUPERLIO_ROOT:=$here/superlio}"
+else
+  repo=$(cd "$(dirname "$0")/../.." && pwd -P)
+  py="$repo/packages/localizer/src:$repo/packages/contract/src"
+  : "${NEXWAR_SUPERLIO_ROOT:=/opt/nexwar/superlio/current}"
+fi
+[ -x "$NEXWAR_SUPERLIO_ROOT/bin/kf2sm" ] || {
+  echo "没有 kf2sm:$NEXWAR_SUPERLIO_ROOT/bin/kf2sm(install-site.sh --with-mapping 会编;或设 NEXWAR_SUPERLIO_ROOT)" >&2
+  exit 3; }
+export NEXWAR_SUPERLIO_ROOT
 # ROS 的 setup 脚本里有未定义变量,关掉 -u 再 source
 set +u
 . /opt/ros/humble/setup.sh
 set -u
-export NEXWAR_SUPERLIO_ROOT="$here/superlio"
-export PYTHONPATH="$here/localizer:$here/contract${PYTHONPATH:+:$PYTHONPATH}"
+export PYTHONPATH="$py${PYTHONPATH:+:$PYTHONPATH}"
 exec /usr/bin/python3 -m nexwar_localizer.tools "$@"
