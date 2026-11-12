@@ -26,6 +26,9 @@ function canNote(role: string): boolean {
   return role === "admin" || role === "engineer" || role === "guard" || role === "owner";
 }
 
+/** 读不到报警时多久再试一次。 */
+export const RETRY_MS = 3_000;
+
 export function AlarmLogPage(props: { now: number; role: string; me?: string }) {
   const [alerts, setAlerts] = useState<Alert[] | null>(null);
   const [failed, setFailed] = useState(false);
@@ -74,6 +77,12 @@ export function AlarmLogPage(props: { now: number; role: string; me?: string }) 
     const id = window.setInterval(() => { void pull(); void pullDay(); }, 30_000);
     return () => window.clearInterval(id);
   }, [dayKey]);
+  // minor #30(r5-layout-N1):读不到的时候 3 秒再试一次(不等 30 秒那一轮),网一通马上回来
+  useEffect(() => {
+    if (!failed && !dayFailed) return;
+    const id = window.setInterval(() => { if (failed) void pull(); if (dayFailed) void pullDay(); }, RETRY_MS);
+    return () => window.clearInterval(id);
+  }, [failed, dayFailed, dayKey]);
   const pullNote = () => api<{ latest: Note | null }>("GET", "/api/shift-notes").then((d) => setNote(d.latest ?? null)).catch(() => {});
   useEffect(() => { void pullNote(); }, []);
 
