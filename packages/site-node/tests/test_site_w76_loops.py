@@ -227,3 +227,57 @@ async def test_外审2_一直巡逻已经在回家_日程到点等它_不白白�
         assert "started" in [x["outcome"] for x in t.sched.runs("nightly")], t.sched.runs()
     finally:
         await t.close()
+
+
+async def test_minor5_回家事件还没到站点_日程被机器人回忙_这一轮也等它到家_不记成派过(tmp_path):
+    """W76 外审后定的 minor:机器人开始回家(有效优先级抬到 50)到站点收到 ``task_returning``
+    之间约 1 秒,这时日程到点 —— 站点不知道它在回家,派过去被回忙,以前记 dispatch_failed、
+    同一窗口不再补。现在:回忙的对象是一直巡逻,就当它在回家,这一轮按忙等。"""
+    from test_site_dispatcher import 台子
+    from test_site_schedule import 打包, 毫秒
+    from test_site_schedule_alerts import _拍
+
+    from nexwar_site.catalog import import_bundle
+    from nexwar_site.priorities import FOREVER_PATROL, FOREVER_PREFIX
+    from nexwar_site.scheduler import SiteScheduler
+    t = 台子(tmp_path)
+    t.clock.ms = 毫秒(21, 50)
+    t.dog.inject_battery(100.0)
+    await t.start()
+    try:
+        import_bundle(t.db, 打包(tmp_path, 1), imported_by="alice", now_ms=t.clock())
+        t.sched = SiteScheduler(t.db, t.site, now_ms=t.clock, on_outcome=lambda *a: None)
+        await t.run(2)
+        tid = f"{FOREVER_PREFIX}x5"
+        w = with_loops(任务定义(), LOOPS_FOREVER, return_pct=25.0, caps=NEW)
+        r = await t.send(t.site.patrol("A", w, issued_by="gina", priority=FOREVER_PATROL,
+                                       task_id=tid))
+        assert r["ack"]["result"] == "accepted", r
+        await t.run(20)
+        t.dog.inject_battery(20.0)                         # 电量到线:机器人开始回家
+        for _ in range(40):
+            await t.run(1)
+            if t.db.query("SELECT 1 FROM events WHERE kind='task_returning'"):
+                break
+        with t.db.tx() as c:                               # 站点还没收到「在回家」
+            c.execute("DELETE FROM events WHERE kind='task_returning'")
+        t.clock.ms = 毫秒(22, 0, 30)
+        await t.run(2)
+        assert t.site.busy("A") == tid, "还在回家路上"
+        await _拍(t)
+        await t.run(2)
+        outs = [x["outcome"] for x in t.sched.runs("nightly")]
+        assert "dispatch_failed" not in outs and "started" not in outs, t.sched.runs()
+        assert outs == ["busy"], [(x["outcome"], x["note"]) for x in t.sched.runs()]
+        assert t.site.busy("A") == tid
+        t.clock.ms = 毫秒(22, 0, 40)
+        await _拍(t)
+        await t.run(2)
+        assert [x["outcome"] for x in t.sched.runs("nightly")] == ["busy"], "等它,不每拍再撞一次"
+        await t.send(t.site.abort("A", tid, issued_by="gina"))   # 到家了(这里用撤代替)
+        await t.run(30)
+        t.clock.ms = 毫秒(22, 2)
+        await _拍(t)
+        assert "started" in [x["outcome"] for x in t.sched.runs("nightly")], t.sched.runs()
+    finally:
+        await t.close()
