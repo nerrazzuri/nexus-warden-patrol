@@ -122,6 +122,23 @@ void main() {
       expect(find.byKey(MapWizardPage.doneWalkKey), findsOneWidget, reason: '直接回到走一圈那一步');
     });
 
+    testWidgets('minor #36 站点有图、有没做完的向导：也问「接着做」，不说「需先建图」', (t) async {
+      _size(t, const Size(400, 900));
+      final api = _admin()
+        ..mapsCount = 2
+        ..guide = <String, dynamic>{'tour': 99}
+        ..wizard = <String, dynamic>{'step': 'walk', 'robot_id': 'A', 'map_id': 'main', 'version': '20261031-1',
+          'drive': 'remote', 'by': 'eng-1', 'label': ''};
+      await t.pumpWidget(MaterialApp(home: NwShell(api: api, title: '站点', ring: () {})));
+      await t.pumpAndSettle();
+      expect(find.byKey(mapOfferKey), findsOneWidget);
+      expect(find.textContaining('第 3 步'), findsWidgets);
+      expect(find.textContaining('需先建图'), findsNothing);
+      await t.tap(find.byKey(mapOfferLaterKey));
+      await t.pumpAndSettle();
+      expect(api.guide['map_later'], isNot(isTrue), reason: '接着做的稍后不记');
+    });
+
     testWidgets('保安：不弹窗，值守页一行「请管理员建图」，没有按钮；站点有图就什么都没有', (t) async {
       _size(t, const Size(400, 900));
       final guard = FakeApi('guard')..mapsCount = 0;
