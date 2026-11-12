@@ -570,6 +570,28 @@ void main() {
     await t.pumpWidget(Container());
   });
 
+  testWidgets('A7 复测：没站起来被拒 —— 说要先站起来、给「站起」按钮，确认后站起再接着要遥控', (t) async {
+    final api = FakeApi('guard')
+      ..teleopError = const SiteError(409, 'A 未就绪：没站起来（蹲着、趴着，或运动模式没就绪）',
+          body: <String, dynamic>{'reason_code': 'not_standing'})
+      ..teleopErrorTimes = 1;
+    await t.pumpWidget(MaterialApp(home: SiteTeleopPage(api: api, robotId: 'A')));
+    await t.pump();
+    await t.pump();
+    expect(find.textContaining('先站起来'), findsOneWidget);
+    expect(find.byKey(SiteTeleopPage.standUpKey), findsOneWidget);
+    await t.tap(find.byKey(SiteTeleopPage.standUpKey));
+    await t.pumpAndSettle();
+    expect(find.textContaining('旁边没有人'), findsOneWidget, reason: '站起前先确认');
+    await t.tap(find.byKey(SiteTeleopPage.standUpConfirmKey));
+    await t.pump();
+    await t.pump();
+    expect(api.calls, contains('posture A stand'));
+    expect(api.teleopCalls, 2, reason: '站起来以后接着要遥控');
+    expect(find.byKey(SiteTeleopPage.standUpKey), findsNothing);
+    await t.pumpWidget(Container());
+  });
+
   testWidgets('画面还没起来被拒（no_video）：说在等画面，隔一会儿再要，拿到了照常遥控（W54）', (t) async {
     final api = FakeApi('guard')
       ..teleopError = const SiteError(409, 'A 没有画面:没画面不许动', body: <String, dynamic>{'reason': 'no_video'})

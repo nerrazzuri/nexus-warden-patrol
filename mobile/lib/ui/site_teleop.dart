@@ -158,6 +158,8 @@ class SiteTeleopPage extends StatefulWidget {
   static const Key stopKey = Key('teleop-stop');
   static const Key statusKey = Key('teleop-status');
   static const Key resumeKey = Key('teleop-resume');
+  static const Key standUpKey = Key('teleop-stand-up');
+  static const Key standUpConfirmKey = Key('teleop-stand-up-confirm');
   static const Key moveStickKey = Key('teleop-move');
   static const Key turnStickKey = Key('teleop-turn');
   static const Key keysKey = Key('teleop-keys');
@@ -217,6 +219,9 @@ class _SiteTeleopPageState extends State<SiteTeleopPage> with WidgetsBindingObse
 
   /// 这台机器人能换哪几种姿势（遥控页里的站起、趴下、蹲下；POC 11-05）。
   List<String> _postures = const [];
+
+  /// 易用性第 7 轮复测：站点因为没站起来（蹲着、趴着）不给遥控 —— 说要先站起来，给「站起」按钮。
+  bool _needStand = false;
   bool _posturing = false;
 
   /// 这一页里最后换成的姿势（没换过当站着）；不是站着的，退出时先问（A6-02）。
@@ -329,7 +334,18 @@ class _SiteTeleopPageState extends State<SiteTeleopPage> with WidgetsBindingObse
       }
       _link = link;
       _sub = link.messages.listen(_onMsg);
+      if (_needStand) setState(() => _needStand = false);
     } on SiteError catch (e) {
+      // 没站起来：自动再要也没用（机器人不站起来永远拿不到），说清楚、给按钮
+      if (e.body['reason_code'] == 'not_standing' && mounted && !_ended) {
+        setState(() {
+          _needStand = true;
+          _status = tr('${widget.robotId} is not standing (crouched or lying down). Stand it up first to drive.',
+              '${widget.robotId} 没站起来（蹲着或趴着），要先站起来才能遥控。');
+          _ended = true;
+        });
+        return;
+      }
       if (e.status == 409 && e.body['reason'] == 'no_video' && _noVideo < _videoRetries && mounted && !_ended) {
         _noVideo++;
         setState(() => _status = tr('Waiting for the video to start…', '正在等待画面…'));
@@ -359,6 +375,33 @@ class _SiteTeleopPageState extends State<SiteTeleopPage> with WidgetsBindingObse
   /// 「继续遥控」、自己再要：丢掉结束了的那条连接，重新要一次（拿到之前杆是灰的；拿到后要重新按下）。
   /// 按了停车（这一屏的或站点叫停）之后：站点把机器人记成「叫停」，不先解除就拿不到遥控（手机 App 测试 M12）。
   bool get _heldStop => _endReason == 'stopped_here' || _endReason == 'halt';
+
+  /// 先问旁边有没有人，站起来，再接着要遥控。
+  Future<void> _standUp() async {
+    final what = tr('Stand up', '站起');
+    final yes = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+              title: Text(what),
+              content: Text(tr('${widget.robotId} will stand up where it is. Make sure no one is right next to it.',
+                  '${widget.robotId} 会原地站起来。先确认它旁边没有人。')),
+              actions: [
+                TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(tr('Cancel', '取消'))),
+                FilledButton(
+                    key: SiteTeleopPage.standUpConfirmKey, onPressed: () => Navigator.pop(ctx, true), child: Text(what)),
+              ],
+            ));
+    if (yes != true || !mounted) return;
+    try {
+      await widget.api.posture(widget.robotId, 'stand');
+    } on SiteError catch (e) {
+      if (mounted) setState(() => _status = tr("Couldn't stand up: ${refusalText(e)}", '没站起来：${refusalText(e)}'));
+      return;
+    }
+    if (!mounted) return;
+    setState(() => _needStand = false);
+    await _resume();
+  }
 
   Future<void> _resume() async {
     _retryTimer?.cancel();
@@ -866,7 +909,20 @@ class _SiteTeleopPageState extends State<SiteTeleopPage> with WidgetsBindingObse
                               style: NwText.titleSmall.copyWith(color: Colors.white, fontWeight: FontWeight.bold),
                             ),
                           ),
-                          if (_canResume)
+                          if (_needStand && _ended)
+                            Padding(
+                              padding: const EdgeInsets.only(top: Nw.s4),
+                              child: Align(
+                                alignment: Alignment.centerLeft,
+                                child: FilledButton.icon(
+                                  key: SiteTeleopPage.standUpKey,
+                                  onPressed: _standUp,
+                                  icon: const Icon(Icons.accessibility_new_rounded),
+                                  label: Text(tr('Stand up', '站起')),
+                                ),
+                              ),
+                            ),
+                          if (_canResume && !_needStand)
                             Padding(
                               padding: const EdgeInsets.only(top: Nw.s4),
                               child: Align(
