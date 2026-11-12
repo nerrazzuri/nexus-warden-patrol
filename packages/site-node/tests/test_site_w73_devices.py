@@ -103,6 +103,22 @@ async def test_删了设备_回调验签不过_拦截点也没了(设备):
         await _设备报(t, "door-1", sec, {"event_id": "d1", "type": "intrusion"})
 
 
+def test_minor34_老防区映射还指着设备的拦截点_不让删_说先改哪几个防区(设备):
+    """W73 minor #34:删设备时拦截点删不掉(老防区映射指着它),错误被吞了 —— 设备没了、拦截点留着、
+    那个防区的入侵还往一个没设备的点派。跟删拦截点一样:先改防区。"""
+    t = 设备
+    t.book.put("door-1", {"kind": "contact", "map_id": MAP[0], "map_version": MAP[1],
+                          "x": 3.0, "y": 1.0}, by="alice")
+    t.desk.map_zone("前门", "dev-door-1")
+    with pytest.raises(DeviceError, match="前门"):
+        t.book.remove("door-1")
+    assert [d["id"] for d in t.book.list()] == ["door-1"], "没删一半"
+    assert t.desk.intercept("dev-door-1") is not None
+    t.desk.unmap_zone("前门")
+    t.book.remove("door-1")
+    assert t.book.list() == [] and t.desk.intercept("dev-door-1") is None
+
+
 async def test_老接口_按防区名_先找圈好的防区_找不到按老映射(设备):
     from test_site_incidents import _报
     t = 设备

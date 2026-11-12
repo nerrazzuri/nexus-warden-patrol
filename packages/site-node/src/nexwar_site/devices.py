@@ -192,6 +192,13 @@ class DeviceBook:
         from nexwar_site.incidents import IncidentError
         if self.get(dev_id) is None:
             raise DeviceError(f"没有设备 {dev_id}")
+        # minor #34:老防区映射还指着它的拦截点就不删(以前错误被吞:设备没了、拦截点留着,
+        # 那个防区的入侵还往这里派)—— 跟删拦截点一样,先改那几个防区
+        zs = [r["zone"] for r in self.db.query("SELECT zone FROM zones WHERE intercept=?",
+                                                (PREFIX + dev_id,))]
+        if zs:
+            raise DeviceError(f"防区 {'、'.join(zs)} 还指着设备 {dev_id} 的拦截点:"
+                              "先改那几个防区派去哪里,再删设备")
         for fn in (self.incidents.remove_source, self.incidents.remove_intercept):
             try:
                 fn(PREFIX + dev_id)
