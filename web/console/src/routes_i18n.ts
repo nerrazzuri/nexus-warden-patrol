@@ -128,7 +128,7 @@ const en = {
 export type RKey = keyof typeof en;
 
 const zh: Record<RKey, string> = {
-  routesTitle: "巡检路线",
+  routesTitle: "巡逻路线",
   guardTitle: "防区路线",
   guardNone: "这一版地图上还没有防区路线。可以按防区自动生成，也可以手动画。",
   guardOnlyArmed: "防区路线只在布防值守时跑，不是巡逻路线，不能排进巡逻排程。",
