@@ -22,3 +22,12 @@ def test_W75_ICP提前放弃的检查点在迭代上限之内_不然没希望的
     cps = p["quality_checkpoints"]
     assert cps and all(int(c["iteration"]) < top for c in cps), (cps, top)
     assert min(int(c["iteration"]) for c in cps) <= 10
+
+
+def test_W75_子图配准用的点降到两万():
+    """11-13 广场整圈:5 万 → 2 万,回环 96 s → 64 s;走过两次的地方清晰度不变
+    (中位 3.48 → 3.42 cm)。"""
+    y = yaml.safe_load(LC_PIPELINE.read_text())
+    got = [f["params"] for f in y["submap_final_filter"]
+           if f["class_name"] == "mp2p_icp_filters::FilterDecimateAdaptive"]
+    assert got and _default(got[0]["desired_output_point_count"]) == 20000

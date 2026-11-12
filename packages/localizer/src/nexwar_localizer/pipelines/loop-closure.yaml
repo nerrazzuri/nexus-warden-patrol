@@ -34,7 +34,8 @@
 #  - ICP final threshold sigma 0.2 -> 0.05 m. With 0.2 m the 2026-10-08 office
 #    maps got new 5-8 cm double walls from loose closures; voxel 0.05 + sigma
 #    0.05 gave the tightest walls overall on the three test maps (docs/建图回环.md).
-#  - ICP quality checkpoint 150 -> 10 (W75, see icp_settings below);
+#  - ICP quality checkpoint 150 -> 10, registration points 50000 -> 20000
+#    (W75, see below);
 #  - assume_planar_world stays false: MOLA's frame is the first lidar frame,
 #    the RS-Airy is mounted with X vertical, so "z" is not up.
 
@@ -395,7 +396,10 @@ submap_final_filter:
       input_pointcloud_layer: "localmap_points"
       output_pointcloud_layer: "points_to_register_points"
       voxel_size: "${MOLA_CLOUD_DECIMATION_VOXEL_SIZE|0.15}" # [m]
-      desired_output_point_count: "${MOLA_DECIMATED_POINTS_MAP|50000}"
+      # W75 (2026-11-13): 50000 -> 20000. Plaza loop: 96 s -> 64 s; map crispness
+      # where the robot passed twice unchanged (median local plane thickness
+      # 3.48 -> 3.42 cm, share > 8 cm 13.6% -> 14.1%).
+      desired_output_point_count: "${MOLA_DECIMATED_POINTS_MAP|20000}"
       parallelization_grain_size: 8000 # When TBB is enabled, the grainsize for splitting the input clouds into threads
 
   - class_name: mp2p_icp_filters::FilterMerge
