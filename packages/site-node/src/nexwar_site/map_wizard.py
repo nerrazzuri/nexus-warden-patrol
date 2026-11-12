@@ -227,8 +227,9 @@ class MapWizard:
         return self.view() or st
 
     def apply(self, d: Any, *, by: str) -> dict[str, Any]:
-        """``{action: start|step|rewalk|retry_site|finish|abandon, wizard_id, …}``;回改完的状态(放弃回 {})。
-        开始以后的每一步都要带这份向导的 ``wizard_id``:被别人换掉的旧页面改不了新的。"""
+        """``{action: start|step|rewalk|retry_site|finish|abandon, wizard_id, …}``;
+        回改完的状态(放弃回 {})。开始以后的每一步都要带这份向导的 ``wizard_id``:
+        被别人换掉的旧页面改不了新的。"""
         if not isinstance(d, dict):
             raise WizardError(400, "要 JSON 对象")
         with _LOCK:
