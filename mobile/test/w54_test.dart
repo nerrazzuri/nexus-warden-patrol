@@ -139,6 +139,37 @@ void main() {
   });
 
   group('向导', () {
+    // 第 8 轮 A8-02：一直巡逻要到电量线才结束，「等待当前任务完成」等不到 —— 说正在一直巡逻、给叫停
+    testWidgets('第 8 轮 A8-02：机器人在一直巡逻，说要先叫停并给按钮', (t) async {
+      final a = _robotA();
+      (a['status'] as Map)['task'] = <String, dynamic>{'kind': 'patrol', 'state': 'running', 'task_id': 'adhoc-forever-f1'};
+      a['lap'] = <String, dynamic>{'n': 3, 'of': 0};
+      final api = FakeApi('admin', robotView: a)
+        ..robotsOverride = [a]
+        ..mapsCount = 0;
+      await _wizard(t, api);
+      expect(find.textContaining('A 正在一直巡逻，要先叫停'), findsWidgets);
+      expect(find.byKey(const Key('wizard-next-why')), findsOneWidget, reason: '下一步上面也说为什么');
+      expect(find.textContaining('请等待当前任务完成'), findsNothing);
+      await _tap(t, MapWizardPage.stopTaskKey);
+      expect(api.calls, contains('abort A adhoc-forever-f1'));
+    });
+
+    // 第 8 轮 A8-03：「请先升级」说去哪儿升级
+    testWidgets('第 8 轮 A8-03：不能建图时说找谁升级', (t) async {
+      final a = _robotA();
+      final caps = Map<String, dynamic>.from(a['capabilities'] as Map);
+      caps['tasks'] = <String, dynamic>{...(caps['tasks'] as Map)}..remove('mapping');
+      a['capabilities'] = caps;
+      final api = FakeApi('admin', robotView: a)
+        ..robotsOverride = [a]
+        ..mapsCount = 0;
+      await _wizard(t, api);
+      expect(find.textContaining('请先升级'), findsNothing);
+      expect(find.textContaining('这台机器人的软件还不能边走边建图'), findsWidgets);
+      expect(find.textContaining('交付工程师'), findsWidgets);
+    });
+
     testWidgets('遥控器开：七步走完 —— 起地图号版本、开录带版本、走完停录、能用、没有禁行区、下发、标原点', (t) async {
       final api = _admin();
       await _wizard(t, api);
@@ -358,7 +389,7 @@ void main() {
         ..robotsOverride = [low]
         ..mapsCount = 0;
       await _wizard(t, api);
-      expect(find.textContaining('先充电'), findsOneWidget);
+      expect(find.textContaining('先充电'), findsWidgets, reason: '检查表里一次、灰着的下一步上面一次');
       expect(t.widget<FilledButton>(find.byKey(MapWizardPage.nextKey)).onPressed, isNull);
     });
   });
