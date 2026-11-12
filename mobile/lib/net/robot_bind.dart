@@ -17,6 +17,7 @@ import 'package:crypto/crypto.dart';
 import 'package:flutter/services.dart';
 
 import '../l10n.dart';
+import 'app_log.dart';
 
 const String stickerPrefix = 'D1MAXBOT1.';
 const String unbindPrefix = 'D1MAXUNBIND1.';
@@ -205,13 +206,17 @@ class RobotHotspot implements RobotBindLink {
       if (resp.statusCode != 200) {
         throw RobotBindError(resp.statusCode, '${m['error'] ?? resp.statusCode}');
       }
+      // 易用性第 6 轮 A6-07：配网每一步记进 App 日志（不带 WiFi 密码、绑定码）
+      if (method != 'GET') AppLog.instance.line('I', 'robot hotspot $method $path → ok');
       return m;
-    } on RobotBindError {
+    } on RobotBindError catch (e) {
+      AppLog.instance.line('W', 'robot hotspot $method $path → ${e.status} ${e.message}');
       rethrow;
     } on HandshakeException {
       throw RobotBindError(0, tr("The connected robot doesn't match the sticker (certificate mismatch)",
           '已连接的机器人与贴纸不符（证书不匹配）'));
     } catch (e) {
+      AppLog.instance.line('W', 'robot hotspot $method $path → $e');
       throw RobotBindError(0, tr("Can't connect to the robot over its hotspot: $e", '无法通过热点连接机器人：$e'));
     }
   }

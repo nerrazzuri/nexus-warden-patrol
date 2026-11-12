@@ -224,19 +224,7 @@ class _AppSettingsPageState extends State<AppSettingsPage> {
             leading: const Icon(Icons.bug_report_outlined),
             title: Text(tr('Send logs', '上传日志')),
             subtitle: Text(tr('Something went wrong? Send logs to the engineer', '遇到问题？把日志发给工程师'), style: sub()),
-            onTap: () async {
-              final nav = Navigator.of(context);
-              var ids = <String>[];
-              if (api != null) {
-                try {
-                  ids = [for (final r in await api.robots()) '${r['robot_id']}'];
-                } on Object {
-                  ids = <String>[]; // 机器人列表取不到：不选机器人照样能传
-                }
-              }
-              await nav.push(MaterialPageRoute<void>(
-                  builder: (_) => ProblemReportPage(api: api, robots: ids, share: shareBundle)));
-            },
+            onTap: () => openProblemReport(context, api),
           ),
           ListTile(
             key: AppSettingsPage.licensesKey,
@@ -272,4 +260,18 @@ class _AppSettingsPageState extends State<AppSettingsPage> {
       ]),
     );
   }
+}
+
+/// 打开上传日志页（设置页、「我的」页共用）：先取机器人列表给下拉框，取不到就不选机器人照样能传。
+Future<void> openProblemReport(BuildContext context, SiteApi? api) async {
+  final nav = Navigator.of(context);
+  var ids = <String>[];
+  if (api != null) {
+    try {
+      ids = [for (final r in await api.robots()) '${r['robot_id']}'];
+    } on Object {
+      ids = <String>[];
+    }
+  }
+  await nav.push(MaterialPageRoute<void>(builder: (_) => ProblemReportPage(api: api, robots: ids, share: shareBundle)));
 }
