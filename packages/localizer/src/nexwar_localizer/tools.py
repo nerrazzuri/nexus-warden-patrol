@@ -38,6 +38,10 @@ SWEEP = ((0.5, 0.0, 0.0), (1.0, 0.0, 0.0), (2.0, 0.0, 0.0), (3.0, 0.0, 0.0), (0.
 CONVERGED_M = 0.3
 
 
+#: 打包报进度的行(W75:站点的出图任务按它算百分比):``<PROGRESS> <这一步>``。
+PROGRESS = "@@进度"
+
+
 def _floats(s: str, n: int) -> tuple[float, ...]:
     v = tuple(float(c) for c in s.split(","))
     if len(v) != n or not all(math.isfinite(c) for c in v):
@@ -61,7 +65,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     c.add_argument("--sensor-in-base", type=lambda s: _floats(s, 2), default=(0.4043, 0.0),
                    help="雷达在机器人身上的水平偏移(朝前,朝左,米;前雷达按 SDK 文档 2.10 节)")
     b = sub.add_parser("build", help="从录包建一个地图版本(MOLA 建图 + 打包)")
-    b.add_argument("--bag", type=Path, required=True)
+    src = b.add_mutually_exclusive_group(required=True)
+    src.add_argument("--bag", type=Path)
+    src.add_argument("--from-keyframes", type=Path, default=None,
+                     help="W75:站点上打包 —— 只用机器人边走边存、传上来的关键帧目录,不要录包")
     b.add_argument("--out", type=Path, required=True, help="版本文件放这儿")
     b.add_argument("--work", type=Path, default=None, help="中间文件(默认 <out>.work)")
     b.add_argument("--lidar-topic", default="/front_lidar")
@@ -214,9 +221,15 @@ def _merge_bag(a: argparse.Namespace) -> int:
     return 0
 
 
+def _say(stage: str) -> None:
+    print(f"{PROGRESS} {stage}", flush=True)
+
+
 def _build(a: argparse.Namespace) -> int:
     from nexwar_localizer import build
     work = a.work or a.out.with_name(a.out.name + ".work")
+    if a.from_keyframes is not None:
+        return _build_from_keyframes(a, work)
     if a.front == "superlio":
         timings = _superlio_front(a.bag, work, reuse=a.reuse, replay=a.replay,
                                   keyframes=a.keyframes)
@@ -227,9 +240,32 @@ def _build(a: argparse.Namespace) -> int:
     files = build.package(work, a.out, prior_pack=build.PriorPack.parse(a.prior_pack),
                           source=f"bag:{a.bag.name}", timings=timings, bag=a.bag,
                           lidar_topic=a.lidar_topic, rtk_antenna=tuple(a.rtk_antenna),
-                          loop_closure=lc)
+                          loop_closure=lc, progress=_say)
     print(json.dumps(json.loads((a.out / "build.json").read_text()), ensure_ascii=False,
                      indent=2))
+    print("文件:", ", ".join(files))
+    return 0
+
+
+def _build_from_keyframes(a: argparse.Namespace, work: Path) -> int:
+    """W75:站点上打包。关键帧目录(机器人 ``livemap --keyframes`` 存的、传上来的)→ 中间文件
+    (:func:`superlio.prepare_live`)→ 回环、点云、栅格、先验(没有录包:栅格用模拟射线)。"""
+    import shutil
+
+    from nexwar_localizer import build
+    from nexwar_localizer import superlio as S
+    kd = a.from_keyframes
+    shutil.rmtree(work, ignore_errors=True)
+    _say("关键帧")
+    info = S.prepare_live(work, kd, cfg=S.config_path(), prior_pipeline=build.PRIOR_PIPELINE,
+                          plugin=build._plugin())
+    lc = build.find_loop_closure(a.loop_closure)
+    print(f"回环工具:{lc or '没有(不回环)'}")
+    files = build.package(work, a.out, prior_pack=build.PriorPack.parse(a.prior_pack),
+                          source=f"keyframes:{kd.name}", timings={"prepare_s": info["prepare_s"]},
+                          bag=None, live=kd, lidar_topic=a.lidar_topic,
+                          rtk_antenna=tuple(a.rtk_antenna), loop_closure=lc, progress=_say)
+    _say("完成")
     print("文件:", ", ".join(files))
     return 0
 
