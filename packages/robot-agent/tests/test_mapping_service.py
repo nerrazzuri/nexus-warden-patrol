@@ -27,8 +27,9 @@ class 假编排:
         self.package_fail = ""
         self.mode = ""
 
-    async def start_record(self, name, live_map_id=None):
+    async def start_record(self, name, live_map_id=None, keyframes_dir=None):
         self.live = live_map_id
+        self.kf_dir = keyframes_dir
         (self.bags / name).mkdir(parents=True)
         (self.bags / name / "metadata.yaml").write_text("x")
         (self.bags / name / f"{name}_0.mcap").write_bytes(b"lidar" * 100)
@@ -37,8 +38,9 @@ class 假编排:
     async def stop_record(self):
         return sorted(self.bags.iterdir())[-1]
 
-    async def package(self, bag, map_id):
+    async def package(self, bag, map_id, keyframes_dir=None):
         self.packaged = (bag, map_id)
+        self.packaged_kf = keyframes_dir
         if self.package_fail:
             from nexwar_patrol.app.mapping import MappingError as OrchError
             raise OrchError(self.package_fail)
@@ -528,3 +530,90 @@ async def test_M9_建好的图带seen_pbm就一起收进清单_没有照旧(svc)
     await svc.stop()
     ref = await svc.build(svc.last_bag, "estate-1", "12")
     assert SEEN_FILE not in [f.name for f in ref.files]
+
+
+# ---------------------------------------------------------------- W75 方案 1:站点打包
+def _site_svc(tmp_path):
+    from nexwar_agent.mapping import KF_SUB
+    box = tmp_path / "outbox"
+    svc = MappingService(假编排(box / "bags", tmp_path / "work"), bags_root=box / "bags",
+                         maps_out=box / "maps", kf_root=box / KF_SUB)
+    return svc, box
+
+
+def _walked(kd, *, finished=True):
+    """预览进程边走边存下的(``livemap --keyframes``)。"""
+    (kd / "kf").mkdir(parents=True, exist_ok=True)
+    (kd / "kf" / "00000.bin").write_bytes(b"kf0")
+    (kd / "kf" / "index.txt").write_text("1 2 3\n")
+    for n in ("lio.tum", "traj.tum"):
+        (kd / n).write_text(n)
+    if finished:
+        (kd / "live.json").write_text("{}")
+
+
+async def test_W75_站点打包_关键帧存进发件箱边走边传_走完写清单_机器人上不打包(tmp_path):
+    import hashlib
+
+    from nexwar_agent.mapping import KF_MANIFEST
+    svc, box = _site_svc(tmp_path)
+    await svc.start("yard", target=("estate-1", "5"), task_id="t9", pack="site")
+    kd = box / "mapkf" / "estate-1" / "5"
+    assert svc.orch.kf_dir == kd
+    assert json.loads((svc.bags_root / svc.last_bag / ".live").read_text())["pack"] == "site"
+    _walked(kd)
+    (svc.bags_root / svc.last_bag / "rtk.jsonl").write_text('{"fix": 4}\n')
+    await svc.stop()
+    ref, mode = await svc.finish()
+    assert ref is None and mode == "site"
+    assert not hasattr(svc.orch, "packaged"), "回环、出点云都在站点上做"
+    m = json.loads((kd / KF_MANIFEST).read_text())
+    assert (m["map_id"], m["version"]) == ("estate-1", "5")
+    got = {f["name"]: f for f in m["files"]}
+    assert set(got) == {"kf/00000.bin", "kf/index.txt", "live.json", "lio.tum", "traj.tum",
+                        "rtk.jsonl"}
+    assert got["kf/00000.bin"]["sha256"] == hashlib.sha256(b"kf0").hexdigest()
+    assert svc.pending is None and not svc.held
+    assert not svc.bag_settled(svc.bags_root / svc.last_bag), "站点没出成还要拿录包重建:留着"
+
+
+async def test_W75_站点打包_边走边存的没收尾_退回机器人上打包_原因记下(tmp_path):
+    from nexwar_agent.mapping import KF_MANIFEST
+    svc, box = _site_svc(tmp_path)
+    await svc.start("yard", target=("estate-1", "5"), pack="site")
+    kd = box / "mapkf" / "estate-1" / "5"
+    _walked(kd, finished=False)
+    await svc.stop()
+    ref, mode = await svc.finish()
+    assert mode == "live" and ref.version == "5" and svc.orch.packaged_kf == kd
+    assert "没收尾" in svc.last_fallback
+    assert not (kd / KF_MANIFEST).exists()
+
+
+async def test_W75_机器人上打包_关键帧照旧放在建图的中间目录_不进发件箱(tmp_path):
+    svc, box = _site_svc(tmp_path)
+    await svc.start("yard", target=("estate-1", "5"))
+    assert svc.orch.kf_dir is None, "编排用自己的中间目录"
+    await svc.stop()
+    _, mode = await svc.finish()
+    assert mode == "live" and svc.orch.packaged_kf is None
+
+
+async def test_W75_代理重启_站点打包的这一趟接着收尾(tmp_path):
+    svc, box = _site_svc(tmp_path)
+    await svc.start("yard", target=("estate-1", "5"), pack="site")
+    _walked(box / "mapkf" / "estate-1" / "5")
+    again, _ = _site_svc(tmp_path)
+    assert again.pending_pack == "site"
+    _, mode = await again.finish()
+    assert mode == "site"
+
+
+def test_W75_关键帧的分类_清单最后传_点开头的不传_有清单才算传完能删(tmp_path):
+    from nexwar_agent.mapping import kf_classify, kf_settled
+    assert kf_classify("kf/00000.bin") == kf_classify("live.json") == 4
+    assert kf_classify("kf.json") == 5
+    assert kf_classify("kf/.00001.bin.tmp") is None and kf_classify(".x") is None
+    assert not kf_settled(tmp_path)
+    (tmp_path / "kf.json").write_text("{}")
+    assert kf_settled(tmp_path)

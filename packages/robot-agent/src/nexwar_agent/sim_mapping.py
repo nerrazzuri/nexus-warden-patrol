@@ -105,7 +105,10 @@ class SimMappingOrchestrator:
 
     # ---- 录包
 
-    async def start_record(self, name: str, live_map_id: str | None = None) -> str:
+    async def start_record(self, name: str, live_map_id: str | None = None,
+                           keyframes_dir: Path | None = None) -> str:
+        """``keyframes_dir``(W75 站点打包):仿真出不了关键帧,不管它 —— 收尾时没有 ``live.json``,
+        服务层退回在「机器人」上打包。"""
         bag = self.bags_dir / name
         bag.mkdir(parents=True)
         (bag / "metadata.yaml").write_text("# 演示站点的假包\n")
@@ -189,7 +192,8 @@ class SimMappingOrchestrator:
 
     # ---- 出图
 
-    async def package(self, bag: str | Path, map_id: str) -> str:
+    async def package(self, bag: str | Path, map_id: str,
+                      keyframes_dir: Path | None = None) -> str:
         return await self._make(map_id, "live")
 
     async def rebuild(self, bag: str | Path, map_id: str) -> str:

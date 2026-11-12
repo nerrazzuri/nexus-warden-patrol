@@ -846,15 +846,18 @@ def _outbox(args: argparse.Namespace, registration: Registration, parts: EngineP
     from nexwar_agent.engine.http_sink import HttpSink
     from nexwar_agent.mapping import (
         DONE,
+        KF_SUB,
         MappingService,
         bag_classify,
+        kf_classify,
+        kf_settled,
         map_classify,
         map_settled,
     )
     from nexwar_agent.maps import MapKeeper, https_fetch
     from nexwar_agent.outbox import Outbox, OutboxPump
     cap = int(args.outbox_max_gb * 2**30)
-    sinks: list[Any] = [_NoIntake()] * 5
+    sinks: list[Any] = [_NoIntake()] * 6
     keeper = None
     if args.intake is not None:
         ctx = ssl.create_default_context(cafile=args.tls_ca)
@@ -863,7 +866,8 @@ def _outbox(args: argparse.Namespace, registration: Registration, parts: EngineP
                  HttpSink(args.intake + "/bags", ssl_context=ctx),
                  HttpSink(args.intake + "/maps", ssl_context=ctx),
                  HttpSink(args.intake + "/video", ssl_context=ctx),
-                 HttpSink(args.intake + "/logs", ssl_context=ctx)]
+                 HttpSink(args.intake + "/logs", ssl_context=ctx),
+                 HttpSink(args.intake + "/mapkf", ssl_context=ctx)]
         keeper = MapKeeper(Path(args.store_dir) / "maps", fetch=https_fetch(args.intake, ctx))
     mapper = None
     if args.mapping_sim is not None:
@@ -884,7 +888,7 @@ def _outbox(args: argparse.Namespace, registration: Registration, parts: EngineP
                                                                       "superlio")),
                                    pause_units=_mapping_pauser())
         mapper = MappingService(orch, bags_root=args.outbox / "bags",
-                                maps_out=args.outbox / "maps")
+                                maps_out=args.outbox / "maps", kf_root=args.outbox / KF_SUB)
         mapper.keeper = keeper                            # 建好的图放进本地库(W09c 决定 7)
     from nexwar_agent.recording import STAGING, SUB
     runs = Outbox(args.outbox, cap_bytes=cap, sink=sinks[0], sn=registration.robot_id,
@@ -897,6 +901,10 @@ def _outbox(args: argparse.Namespace, registration: Registration, parts: EngineP
     maps = Outbox(args.outbox, cap_bytes=cap, sink=sinks[2], sn=registration.robot_id,
                   now_ms=wall_ms, sub="maps", run_depth=2, classify=map_classify,
                   settled=map_settled)
+    # W75:边走边存的关键帧,站点打包用(存一个传一个;清单最后传,站点确认了才删)
+    mapkf = Outbox(args.outbox, cap_bytes=cap, sink=sinks[5], sn=registration.robot_id,
+                   now_ms=wall_ms, sub=KF_SUB, run_depth=2, classify=kf_classify,
+                   settled=kf_settled)
 
     def _active() -> set[Path]:
         # 引擎跑完之后 archive 还指着上一趟(W00c5d 内部评审):只有正在跑的那一趟算「正在写」,
@@ -935,7 +943,7 @@ def _outbox(args: argparse.Namespace, registration: Registration, parts: EngineP
         logs_box = (Outbox(args.outbox, cap_bytes=logship.CAP_BYTES, sink=sinks[4],
                            sn=registration.robot_id, now_ms=wall_ms, sub="logs", run_depth=1,
                            classify=logship.classify, settled=logship.settled),)
-    pump = OutboxPump(runs, more=(bags, maps), uncounted=(*video, *logs_box))
+    pump = OutboxPump(runs, more=(bags, maps, mapkf), uncounted=(*video, *logs_box))
     pump.shipper = shipper
     if mapper is not None:
         from nexwar_agent.mapping import storage_pressure
