@@ -43,7 +43,7 @@ describe("派一趟", () => {
     expect(document.querySelector("[data-plan]")!.textContent).toContain("现在就走");
     expect(posted).toEqual([]);
     fireEvent.click(btn(document, "派出"));
-    await waitFor(() => expect(posted).toEqual([{ url: "/api/robots/A/patrol", body: { mission_id: "loop" } }]));
+    await waitFor(() => expect(posted).toEqual([{ url: "/api/robots/A/patrol", body: { mission_id: "loop", loops: 1 } }]));
     await waitFor(() => expect(said.join()).toContain("loop"));
   });
 

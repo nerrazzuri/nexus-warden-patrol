@@ -1,9 +1,19 @@
-"""W76 循环巡逻:巡逻电量到全站电量线(值班设置 ``patrol_return_pct``)回来以后怎么补能。
+"""W76 循环巡逻:巡逻因为电量到线结束、回来以后怎么补能。
 
-- 有桩:回充的起充线取这条线(回充自己判机器人空着、电量在线下,见 ``charging.ChargeDesk``)。
-- 没桩:**上一趟是因为电量到线结束的**(代理在终态详情里写 ``ended: "battery"``)、机器人在线空着、
-  电量还在线下,才起换电引导(``battery_swap.SwapDesk``)。只看电量不行:换电引导会叫停在动的机器人,
-  低电时有人遥控、或刚加的机器人还没开始巡逻,不能被它打断、也不该叫保安来换。
+- 平时:回充的起充线 = 全站巡逻电量线(值班设置 ``patrol_return_pct``;回充自己判机器人空着、电量
+  在线下,见 ``charging.ChargeDesk``)。
+- **最近一趟巡逻是因为电量结束的**(代理在终态详情里写 ``ended: "battery"``)、
+  :data:`RECENT_MS` 以内、
+  机器人在线空着、电量还没到 :data:`~nexwar_site.energy.SWAP_OK_PCT`(换电引导判「换好」那一条)→
+  要补能:有桩按这条线起回充,没桩起换电引导(``battery_swap.SwapDesk``)。
+
+外审 W76-1 之后:
+
+- 不跟全站电量线比(#3):机器人按动态返航线(中止线 + 回原点耗电 × 1.5)回来,回来时电量可能比全站线
+  高,照样要补。
+- 只看巡逻那一趟(#4):之后回待命点、去充电那几趟的 ``task_done`` 不盖掉它。
+- 换到一半站点重启(#5):两块合起来没到换好线,照样接上;换好、充好(≥ 换好线)就不再起。
+- 只看电量不行:换电引导会叫停在动的机器人,低电时有人遥控不能被它打断,所以要「空着」。
 
 跟布防值守自己的补能线并用,取高的(:func:`combine_lines`)。
 """
@@ -15,42 +25,49 @@ import logging
 from collections.abc import Callable
 from typing import Any
 
+from nexwar_site.energy import SWAP_OK_PCT
+
 log = logging.getLogger(__name__)
 
 Line = Callable[[str], "float | None"]
 
 _TERMINAL = ("task_done", "task_failed", "task_aborted", "task_preempted")
+#: 巡逻因电量结束之后多久以内还管它补能(之后机器人多半已经被人处理过、或另有安排)。
+RECENT_MS = 2 * 3_600_000
 
 
 class PatrolEnergy:
-    def __init__(self, db: Any, dispatcher: Any, settings: Any) -> None:
+    def __init__(self, db: Any, dispatcher: Any, settings: Any, *,
+                 now_ms: Callable[[], int]) -> None:
         self.db, self.dispatcher, self.settings = db, dispatcher, settings
-
-    def _line(self) -> float:
-        return float(self.settings.patrol_return_pct())
+        self._now = now_ms
 
     def charge_line(self, rid: str) -> float | None:
         """回充的起充线(%)。"""
-        return self._line()
+        return SWAP_OK_PCT if self._wants(rid) else float(self.settings.patrol_return_pct())
 
     def swap_line(self, rid: str) -> float | None:
         """该起换电引导了 → 那条线;不然 ``None``。"""
+        return SWAP_OK_PCT if self._wants(rid) else None
+
+    def _wants(self, rid: str) -> bool:
         c = self.dispatcher.clients.get(rid)
         st = getattr(c, "status", None)
         if st is None or not st.online or st.task is not None:
-            return None
+            return False
         pct = getattr(getattr(c, "telemetry", None), "battery_pct", None)
-        line = self._line()
-        if not isinstance(pct, (int, float)) or isinstance(pct, bool) or pct > line:
-            return None
-        return line if self._ended_for_battery(rid) else None
+        if not isinstance(pct, (int, float)) or isinstance(pct, bool) or pct >= SWAP_OK_PCT:
+            return False
+        return self._ended_for_battery(rid)
 
     def _ended_for_battery(self, rid: str) -> bool:
+        marks = ",".join("?" * len(_TERMINAL))
         rows = self.db.query(
-            "SELECT data FROM events WHERE robot_id=? AND kind IN "
-            f"({','.join('?' * len(_TERMINAL))}) "
-            "ORDER BY received_at DESC, rowid DESC LIMIT 1", (rid, *_TERMINAL))
-        if not rows:
+            "SELECT e.data, e.received_at FROM events e JOIN commands c "
+            "ON c.robot_id = e.robot_id AND c.task_id = json_extract(e.data, '$.task_id') "
+            f"AND c.kind = 'patrol' WHERE e.robot_id=? AND e.kind IN ({marks}) "
+            "ORDER BY e.received_at DESC, e.rowid DESC LIMIT 1", (rid, *_TERMINAL))
+        if not rows or self._now() - int(rows[0]["received_at"] or 0) > RECENT_MS:
             return False
         try:
             d = json.loads(rows[0]["data"] or "{}")

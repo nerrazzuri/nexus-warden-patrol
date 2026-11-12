@@ -327,6 +327,10 @@ def _parse_policy(raw: Any) -> Policy:
             got[key] = value
 
     policy = replace(base, **got)
+    # W76 外审 #2:一直巡逻只靠电量到线回去收尾;低电还接着走就会一直跑到中止线、停在外面
+    _require(not (policy.forever and policy.on_battery_low == "continue"),
+             "一直巡逻(policy.loops 0)的 on_battery_low 只能是 return_home —— "
+             "低电接着走会跑到中止线停在外面")
     _require(policy.battery_abort_pct <= policy.battery_return_pct,
              f"中止电量({policy.battery_abort_pct})不能高于返航电量"
              f"({policy.battery_return_pct}) —— 那样永远轮不到返航")
@@ -366,11 +370,14 @@ def parse_mission(raw: Any) -> Mission:
                  f"点位名重复: {wp.name} —— 照片按点位名归档,重名会互相覆盖")
         seen.add(wp.name)
 
+    policy = _parse_policy(raw.get("policy"))
+    # W76 外审 #9:一个点的一直巡逻 —— 机器人就站在点上,一圈接一圈原地「到达」,结果越积越多
+    _require(not policy.forever or len(waypoints) >= 2, "一直巡逻至少要两个点位")
     return Mission(
         mission=name,           # type: ignore[arg-type]
         map_id=map_id,          # type: ignore[arg-type]
         waypoints=waypoints,
-        policy=_parse_policy(raw.get("policy")),
+        policy=policy,
         route_source=route_source,
         route_path_id=route_path_id,
         map_version=map_version,

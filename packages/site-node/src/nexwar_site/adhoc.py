@@ -89,6 +89,9 @@ def with_loops(wire: dict[str, Any], loops: Any, *, return_pct: float,
         if loops == LOOPS_FOREVER and not caps.get("loops_forever"):
             raise LoopsRefused("这台机器人的程序版本太老,不支持一直巡逻,请先升级机器人")
         pol["loops"] = loops
+        if loops == LOOPS_FOREVER:
+            # 外审 #2:一直巡逻只靠电量到线回去收尾 —— 路线里写的「低电接着走」在这里换成回原点
+            pol["on_battery_low"] = "return_home"
     cur = pol.get("battery_return_pct")
     cur = float(cur) if isinstance(cur, (int, float)) and not isinstance(cur, bool) else 0.0
     pol["battery_return_pct"] = max(cur, float(return_pct))
@@ -155,6 +158,8 @@ class AdhocDesk:
             "AND json_extract(e.data, '$.task_id') = c.task_id "
             "WHERE c.robot_id=? AND c.kind='patrol' "
             "AND json_extract(c.payload, '$.mission.mission')=? "
+            # W76 外审 #6:只认一圈的(几圈、一直巡逻的那几趟会把单圈估时拉到几个小时)
+            "AND COALESCE(json_extract(c.payload, '$.mission.policy.loops'), 1) = 1 "
             "GROUP BY c.task_id ORDER BY c.issued_at DESC LIMIT ?",
             (robot, mission_name, HISTORY_N))
         got = [(r["t1"] - r["t0"]) / 1000 for r in rows if r["t1"] and r["t1"] > r["t0"]]
@@ -348,11 +353,12 @@ class AdhocDesk:
             # W76:一直巡逻马上走;``interrupted_by`` = 跑到电量线之前会打断它的那一趟日程(没有是空串)
             c = self.collision(robot, now, est)
             return {"estimate_s": est, "start_ms": now, "queued": False, "because": "",
-                    "forever": True, "interrupted_by": c[1] if c else "",
+                    "forever": True, "interrupted_by": c[1] if c else "", "loops": 0,
                     "utc_offset_min": self.offset_min()}
         t, because = self.slot(robot, now, est)
+        # ``loops``:这一趟实际跑几圈(W76 外审 #8:手机看见这一项才给选圈数 —— 老站点不认 loops)
         return {"estimate_s": est, "start_ms": t, "queued": t > now, "because": because,
-                "utc_offset_min": self.offset_min()}
+                "loops": m.policy.loops, "utc_offset_min": self.offset_min()}
 
     async def submit(self, robot: str, wire: dict[str, Any], *, label: str,
                      by: str) -> dict[str, Any]:

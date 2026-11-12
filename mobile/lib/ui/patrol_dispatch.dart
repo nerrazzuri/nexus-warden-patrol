@@ -298,7 +298,8 @@ class _PatrolSheetState extends State<_PatrolSheet> {
                   ),
               ]),
             ),
-          if (rs != null && rs.isNotEmpty) ...[
+          // 外审 W76-1 #8：站点回的「先看会怎样」里有 `loops` 才认圈数（老站点不认，选了也白选）
+          if (rs != null && rs.isNotEmpty && _plans.values.any((p) => p.containsKey('loops'))) ...[
             nwGap8,
             Text(tr('Loops', '循环次数'), style: NwText.bodySmall.copyWith(color: c.textSecondary)),
             const SizedBox(height: Nw.s4),

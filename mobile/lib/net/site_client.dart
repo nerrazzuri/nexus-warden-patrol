@@ -1272,7 +1272,7 @@ class SiteClient implements SiteApi {
   @override
   Future<Map<String, dynamic>> patrol(String id, String missionId, {int loops = 1}) async =>
       _map(await _send('POST', '/api/robots/${Uri.encodeComponent(id)}/patrol',
-          <String, dynamic>{'mission_id': missionId, if (loops != 1) 'loops': loops}));
+          <String, dynamic>{'mission_id': missionId, 'loops': loops}));
 
   @override
   Future<Map<String, dynamic>> routes({String? mapId, String? version}) async => _map(await _send(
@@ -1839,7 +1839,7 @@ class SiteClient implements SiteApi {
   Future<Map<String, dynamic>> patrolPlan(String robotId, String missionId, {int loops = 1}) async =>
       _map(await _send('GET',
           '/api/robots/${Uri.encodeComponent(robotId)}/patrol-plan?mission_id=${Uri.encodeQueryComponent(missionId)}'
-          '${loops == 1 ? '' : '&loops=$loops'}'));
+          '&loops=$loops'));
 
   @override
   Future<Map<String, dynamic>> patrolsToday() async {

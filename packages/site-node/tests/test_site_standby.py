@@ -727,3 +727,16 @@ async def test_W73外审r2_换电位就是派去的默认待命点_回换电位�
                       "('task_done','task_failed') AND json_extract(data,'$.task_id')=?",
                       (g["task_id"],))
     assert [x["kind"] for x in rows] == ["task_done"], (kinds, rows)
+
+
+async def test_W76外审_一直巡逻电量到线回了原点_不自动回待命点_也不报(站):
+    """外审 W76-1 #4:会规划的回待命点那一趟会盖掉「因电量结束」,补能就不起;直线的报 standby_failed。
+    一直巡逻是自己回的原点,接下来由补能(回充 / 换电)接手。"""
+    t = 站
+    t.stb.set("A", "dock", map_id="estate-1", map_version="7", x=0.0, y=0.0, yaw=0.0, default=True)
+    sub = t.site.feed.subscribe()
+    for path in ("straight", "planned"):
+        t.site.clients["A"].capabilities.tasks["goto"]["path"] = path
+        await t.send(t.stb._auto("A", f"adhoc-forever-{path}"))
+    assert not _cmds(t, "goto") and not _cmds(t, "patrol")
+    assert not [i for i in _feed(sub) if i["kind"] == "standby_failed"]

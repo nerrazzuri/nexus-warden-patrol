@@ -779,15 +779,19 @@ class FakeApi implements SiteApi {
     return patrolReply ?? siteFixture('site_dispatch');
   }
 
+  /// W76：站点认不认圈数（老站点的「先看会怎样」里没有 `loops`）。
+  bool sitesLoops = true;
+
   @override
   Future<Map<String, dynamic>> patrolPlan(String robotId, String missionId, {int loops = 1}) async {
     calls.add('patrolPlan $robotId $missionId${loops == 1 ? '' : ' loops=$loops'}');
     if (loops == 0) {
       return <String, dynamic>{'estimate_s': 12000, 'start_ms': 0, 'queued': false, 'because': '',
-        'forever': true, 'interrupted_by': '22:00 日程「loop」', 'label': missionId};
+        'forever': true, 'interrupted_by': '22:00 日程「loop」', 'label': missionId, 'loops': 0};
     }
     return plans[missionId] ??
-        <String, dynamic>{'estimate_s': 600, 'start_ms': 0, 'queued': false, 'because': '', 'label': missionId};
+        <String, dynamic>{'estimate_s': 600, 'start_ms': 0, 'queued': false, 'because': '', 'label': missionId,
+          if (sitesLoops) 'loops': loops};
   }
 
   @override
@@ -1256,6 +1260,14 @@ void main() {
     await t.tap(find.byKey(patrolSendKey));
     await t.pumpAndSettle();
     expect(api.calls, contains('patrol A loop loops=0'));
+  });
+
+  testWidgets('W76 外审：老站点不认圈数，不给选', (t) async {
+    final api = FakeApi('guard', robotView: busyView())..sitesLoops = false;
+    await openRobot(t, api);
+    await t.tap(find.byKey(const Key('btn-patrol')));
+    await t.pumpAndSettle();
+    expect(find.byKey(patrolLoopsKey(0)), findsNothing);
   });
 
   // 易用性第 6 轮 A6-03：派巡逻的列表里有 v11 的路线，A 用的是 v7 —— 选了才被拒

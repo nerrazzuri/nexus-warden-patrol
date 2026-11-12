@@ -82,7 +82,8 @@ void main() {
       '/api/robots/A/abort',
       '/api/robots/A/standby/return',
     ]);
-    expect(posts[0].body, {'mission_id': 'loop'});
+    expect(posts[0].body, {'mission_id': 'loop', 'loops': 1});
+    // W76 外审 #7：1 圈也发 —— 不发站点按路线里存的圈数跑
     expect(posts[1].body, {'task_id': 'task-9'});
     c.close();
   });
