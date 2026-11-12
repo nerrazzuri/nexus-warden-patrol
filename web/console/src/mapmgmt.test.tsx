@@ -95,7 +95,7 @@ describe("总览", () => {
     expect(v3.textContent).toContain("Standby points 2");
     expect((getByLabelText("Note for v3") as HTMLInputElement).value).toBe("after loop closure");
     expect(getByLabelText("estate:2").textContent).toContain("Loaded on");
-    expect(getByLabelText("estate:2").textContent).toContain("Falls back to this for");
+    expect(getByLabelText("estate:2").textContent).toContain("Previous version of");
     // P1-50:技术信息收在「技术信息」里;没有建图记录的不再写一行技术话;来源说人话
     expect(v3.querySelector("details.mm-tech .mm-build")).not.toBeNull();
     expect(getByLabelText("estate:1").querySelector("details.mm-tech")).toBeNull();
@@ -118,7 +118,7 @@ describe("总览", () => {
   it("每台机器人:加载的版本、最近一次下发的状态、实际配置核对;中文", async () => {
     lang.value = "zh";
     const { container: c } = mount();
-    await waitFor(() => expect(c.textContent).toContain("定位器已确认"));
+    await waitFor(() => expect(c.textContent).toContain("已在新图上定好位"));
     expect(c.textContent).toContain("estate:2");
     expect(c.textContent).toContain("不在线");
   });
@@ -285,6 +285,14 @@ describe("发布", () => {
     expect(Array.from(getByLabelText("estate:2").querySelectorAll("button")).map((b) => b.textContent)).toContain("下发到机器人…");
   });
 
+  it("W6-12:只有最新那一版的「下发到机器人」是主按钮", async () => {
+    lang.value = "zh";
+    const { getByLabelText } = mount();
+    await waitFor(() => getByLabelText("estate:3"));
+    const send = (k: string) => Array.from(getByLabelText(k).querySelectorAll("button")).find((x) => x.textContent === "下发到机器人…");
+    expect(send("estate:3")!.className).toContain("primary");
+    expect(send("estate:2")!.className).not.toContain("primary");
+  });
   it("缺定位文件的版本(11-05 现场第 10 条):卡片上写不能下发、缺什么;带定位器的机器人不能勾", async () => {
     lang.value = "zh";
     overview.maps[0].versions[0].unusable = "此地图需要重建:旧版建的图没有 Super-LIO 定位用的点云(superlio_map.pcd)";
@@ -292,7 +300,7 @@ describe("发布", () => {
     overview.robots[1].running = { ...overview.robots[1].running!, confirms: "load" };
     const { container: c, getByLabelText } = mount();
     await waitFor(() => getByLabelText("estate:3"));
-    expect(getByLabelText("estate:3").textContent).toContain("带定位器的机器人用不了");
+    expect(getByLabelText("estate:3").textContent).toContain("这一版缺定位文件，机器人用不了");
     expect(getByLabelText("estate:3").textContent).toContain("superlio_map.pcd");
     expect(getByLabelText("estate:2").textContent).not.toContain("用不了");
     fireEvent.click(getByLabelText("estate:3").querySelector(".btn.primary") as HTMLElement);
@@ -464,9 +472,11 @@ describe("换图状态和运行配置的文字", () => {
     // 第 4 轮 maps N2:回滚到已有的版本,下载记录是上一次的 —— 不算「多久没下」
     expect(activationText(act("pending", { at_ms: 700_000, download: { bytes: 145e6, total: 145e6, at_ms: 1000 } }), 702_000))
       .toBe("Switching to 2…");
-    expect(activationText(act("confirmed", { confirmed: "localizer" }))).toBe("Confirmed by the localizer");
-    expect(activationText(act("confirmed", { confirmed: "load" }))).toContain("no localizer");
-    expect(activationText(act("confirmed", { confirmed: "legacy" }))).toContain("did not wait for the localizer");
+    // W6-12:不出现 localizer 这种词
+    expect(activationText(act("confirmed", { confirmed: "localizer" }))).toBe("Localized on the new map");
+    expect(activationText(act("confirmed", { confirmed: "load" }))).toBe("Loaded");
+    expect(activationText(act("confirmed", { confirmed: "legacy" }))).toContain("older robot software");
+    for (const k of ["localizer", "load", "legacy"]) expect(activationText(act("confirmed", { confirmed: k }))).not.toMatch(/locali[sz]er/i);
     expect(activationText(act("failed", { reason: "rejected the prior (rolled back)" }))).toBe("Failed: rejected the prior (rolled back)");
     expect(activationText(act("timeout"))).toContain("treat as not done");
   });
@@ -576,7 +586,7 @@ describe("第 2 轮 P0-14:路线条数的说法", () => {
 describe("第 2 轮 maps N9:回滚按钮写清往哪走", () => {
   it("上一版比现在旧:退回到 v7;刚退回过、上一版更新:换回 v12", () => {
     expect(rollLabel({ loaded: { map_id: "e", version: "12" }, rollback: { map_id: "e", version: "7", local: true } })).toBe("Roll back to v7");
-    expect(rollLabel({ loaded: { map_id: "e", version: "7" }, rollback: { map_id: "e", version: "12", local: true } })).toBe("Switch back to v12");
+    expect(rollLabel({ loaded: { map_id: "e", version: "7" }, rollback: { map_id: "e", version: "12", local: true } })).toBe("Switch to v12 (newer)");
     expect(rollLabel({ loaded: null, rollback: null })).toBe("Roll back");
   });
 });
