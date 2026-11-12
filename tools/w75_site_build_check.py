@@ -24,8 +24,18 @@ import time
 from pathlib import Path
 
 
-def keyframes_from_bag(bag: Path, out: Path, pose_topic: str) -> dict:
+def _reader(bag: Path, topics: list[str]):
     import rosbag2_py
+    storage = "mcap" if "mcap" in (bag / "metadata.yaml").read_text() else "sqlite3"
+    r = rosbag2_py.SequentialReader()
+    r.open(rosbag2_py.StorageOptions(uri=str(bag), storage_id=storage),
+           rosbag2_py.ConverterOptions("cdr", "cdr"))
+    r.set_filter(rosbag2_py.StorageFilter(topics=topics))
+    return r
+
+
+def keyframes_from_bag(bag: Path, out: Path, pose_topic: str,
+                       pose_bag: Path | None = None) -> dict:
     from nav_msgs.msg import Odometry
     from nexwar_localizer import livemap as L
     from nexwar_localizer import superlio as S
@@ -41,12 +51,16 @@ def keyframes_from_bag(bag: Path, out: Path, pose_topic: str) -> dict:
     clock = [0.0]
     h = L.Handlers(L.Feeder(L.LiveGrid(), window=L.SUPERLIO_PAIR_WINDOW_S, extrinsic=ext),
                    decode_cloud=decode, keyframes=kf, now=lambda: clock[0])
-    meta = (bag / "metadata.yaml").read_text()
-    r = rosbag2_py.SequentialReader()
-    storage = "mcap" if "mcap" in meta else "sqlite3"
-    r.open(rosbag2_py.StorageOptions(uri=str(bag), storage_id=storage),
-           rosbag2_py.ConverterOptions("cdr", "cdr"))
-    r.set_filter(rosbag2_py.StorageFilter(topics=["/front_lidar", pose_topic, "/odom/mc_odom"]))
+    # 位姿在别的包里(Super-LIO 重放出来的):按报文头时刻排好,录包走到那个时刻就喂
+    poses: list = []
+    if pose_bag is not None:
+        pr = _reader(pose_bag, [pose_topic])
+        while pr.has_next():
+            poses.append(deserialize_message(pr.read_next()[1], Odometry))
+        poses.sort(key=lambda m: m.header.stamp.sec + m.header.stamp.nanosec * 1e-9)
+    pi = 0
+    topics = ["/front_lidar", "/odom/mc_odom"] + ([] if pose_bag else [pose_topic])
+    r = _reader(bag, topics)
     n = 0
     while r.has_next():
         topic, raw, t_ns = r.read_next()
@@ -54,10 +68,18 @@ def keyframes_from_bag(bag: Path, out: Path, pose_topic: str) -> dict:
         if topic == "/front_lidar":
             h.on_scan(raw)
             n += 1
+            # 真机上 Super-LIO 的位姿在这一帧之后才到:这一帧处理完再喂到它为止的位姿
+            upto = L.cdr_stamp(raw) + L.SUPERLIO_PAIR_WINDOW_S[1]
+            while pi < len(poses) and (poses[pi].header.stamp.sec
+                                       + poses[pi].header.stamp.nanosec * 1e-9) <= upto:
+                h.on_pose(poses[pi])
+                pi += 1
         elif topic == pose_topic:
             h.on_pose(deserialize_message(raw, Odometry))
         else:
             h.on_odom(deserialize_message(raw, Odometry))
+    for m in poses[pi:]:
+        h.on_pose(m)
     summary = kf.close()
     L.write_live(out, h, summary)
     return {"scans": n, "summary": summary}
@@ -101,13 +123,15 @@ def main() -> None:
     ap.add_argument("--runner", nargs="+", required=True,
                     help="出图命令,跟 site.json 的 mapbuild.runner 一样")
     ap.add_argument("--pose", default="/d1max_loc/lio/odom")
+    ap.add_argument("--pose-bag", type=Path, default=None,
+                    help="位姿在另一个包里(比如 Super-LIO 重放出来的 lio_bag)")
     a = ap.parse_args()
     shutil.rmtree(a.work, ignore_errors=True)
     kd, home = a.work / "kf", a.work / "site"
     kd.mkdir(parents=True)
     home.mkdir()
     t = time.monotonic()
-    k = keyframes_from_bag(a.bag, kd, a.pose)
+    k = keyframes_from_bag(a.bag, kd, a.pose, a.pose_bag)
     print("关键帧:", k["scans"], "帧雷达,", k["summary"], f"用时 {time.monotonic() - t:.1f} s")
     r = site_build(kd, home, a.runner)
     peak = resource.getrusage(resource.RUSAGE_CHILDREN).ru_maxrss / 1024 / 1024
