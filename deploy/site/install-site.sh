@@ -16,6 +16,10 @@
 #   sudo bash deploy/site/install-site.sh --recover
 # 只装软件、用户、目录、服务单元:**不生成密钥**(三把要先从离线另存的那份放回 /etc/nexwar_site/,
 # 没放回就停下)、**不 init**(不建新的站点身份)、**不起服务**。之后 `nexwar_site restore`,再起服务。
+#
+# **出图组件**(W75:机器人走完一圈,站点主机 3 分钟内出图):加 --with-mapping。要能上外网:加 ROS 2
+# 的 apt 源,装 MOLA / mp2p_icp 的命令行(约 2 GB),编 kf2sm,装出图命令 /usr/local/bin/nexwar_site_mapbuild。
+# 没装的站点,机器人照旧自己打包。--upgrade 时装过的会把出图用的代码换成新版(不装系统包)。
 set -euo pipefail
 
 PKG="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -29,6 +33,8 @@ RECOVER=0
 UPGRADE=0
 NO_VPN=0
 KEYS_FILE=""
+WITH_MAPPING=0
+MAPPING=/opt/nexwar_site/mapping
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -38,6 +44,7 @@ while [[ $# -gt 0 ]]; do
     --recover) RECOVER=1; shift ;;
     --upgrade) UPGRADE=1; shift ;;
     --no-vpn) NO_VPN=1; shift ;;
+    --with-mapping) WITH_MAPPING=1; shift ;;
     --keys) KEYS_FILE="$2"; shift 2 ;;
     *) echo "不认识的参数: $1" >&2; exit 2 ;;
   esac
@@ -170,6 +177,43 @@ if [[ $RECOVER -eq 1 && -n "$KEYS_FILE" ]]; then
   for k in secrets backup evidence; do
     [[ -f /etc/nexwar_site/$k.key ]] || { echo "托管包里没有 $k.key" >&2; exit 2; }
   done
+fi
+
+# W75 出图组件:系统包只在 --with-mapping 时装;代码、kf2sm 装过就跟着升级
+if [[ $WITH_MAPPING -eq 1 && $UPGRADE -eq 0 ]]; then
+  echo "  出图组件:ROS 2 Humble 的 MOLA 命令行"
+  if [[ ! -f /etc/apt/sources.list.d/ros2.list ]]; then
+    apt-get install -y curl gnupg lsb-release
+    curl -fsSL https://raw.githubusercontent.com/ros/rosdistro/master/ros.key \
+      -o /usr/share/keyrings/ros-archive-keyring.gpg
+    echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/ros-archive-keyring.gpg]" \
+      "http://packages.ros.org/ros2/ubuntu $(. /etc/os-release && echo "$UBUNTU_CODENAME") main" \
+      > /etc/apt/sources.list.d/ros2.list
+    apt-get update
+  fi
+  apt-get install -y ros-humble-ros-workspace ros-humble-mola-sm-loop-closure ros-humble-mp2p-icp \
+    ros-humble-mola-metric-maps ros-humble-mola-lidar-odometry ros-humble-mrpt2 \
+    python3-numpy cmake g++
+fi
+if [[ $WITH_MAPPING -eq 1 || -d "$MAPPING" ]]; then
+  echo "  出图组件:代码与 kf2sm"
+  [[ -f /opt/ros/humble/setup.sh ]] || { echo "  !! 没有 ROS 2 Humble:先 --with-mapping 装(要外网)" >&2; exit 2; }
+  mkdir -p "$MAPPING/superlio/bin"
+  rm -rf "$MAPPING/localizer.new" "$MAPPING/contract.new"
+  cp -a "$PKG/packages/localizer/src" "$MAPPING/localizer.new"
+  cp -a "$PKG/packages/contract/src" "$MAPPING/contract.new"
+  rm -rf "$MAPPING/localizer" "$MAPPING/contract"
+  mv "$MAPPING/localizer.new" "$MAPPING/localizer"
+  mv "$MAPPING/contract.new" "$MAPPING/contract"
+  b=$(mktemp -d)
+  ( set +u; . /opt/ros/humble/setup.sh; set -u
+    cd "$b" && cmake -DCMAKE_PREFIX_PATH=/opt/ros/humble "$PKG/packages/localizer/native/superlio/kf2sm" \
+      > cmake.log 2>&1 && make -j"$(nproc)" > make.log 2>&1 ) \
+    || { echo "  !! kf2sm 编不成,日志在 $b" >&2; exit 1; }
+  install -m 0755 "$b/kf2sm" "$MAPPING/superlio/bin/kf2sm"
+  rm -rf "$b"
+  install -m 0755 "$PKG/deploy/site/nexwar_site_mapbuild" /usr/local/bin/nexwar_site_mapbuild
+  echo "  出图组件装好了:机器人建图时关键帧传到站点,在这台机器上出图"
 fi
 
 echo "[4/5] 站点目录"
