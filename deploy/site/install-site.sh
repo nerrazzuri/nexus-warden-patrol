@@ -181,18 +181,26 @@ fi
 
 # W75 出图组件:系统包只在 --with-mapping 时装;代码、kf2sm 装过就跟着升级
 if [[ $WITH_MAPPING -eq 1 && $UPGRADE -eq 0 ]]; then
-  echo "  出图组件:ROS 2 Humble 的 MOLA 命令行"
-  if [[ ! -f /etc/apt/sources.list.d/ros2.list ]]; then
-    apt-get install -y curl gnupg lsb-release
-    curl -fsSL https://raw.githubusercontent.com/ros/rosdistro/master/ros.key \
-      -o /usr/share/keyrings/ros-archive-keyring.gpg
-    echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/ros-archive-keyring.gpg]" \
-      "http://packages.ros.org/ros2/ubuntu $(. /etc/os-release && echo "$UBUNTU_CODENAME") main" \
-      > /etc/apt/sources.list.d/ros2.list
-    apt-get update
-  fi
+  # 版本钉在 ROS 快照 2026-09-14(MRPT 2.15、MOLA 3.2、回环 1.2.2,跟开发机一样)。
+  # 10-11 以后的正式源把 MOLA 挪到了 MRPT 3.5,跟 2.15 的文件冲突,装不上(笔记本 11-12 撞到过)。
+  echo "  出图组件:ROS 2 Humble 的 MOLA 命令行(快照 2026-09-14)"
+  SNAP=2026-09-14
+  SNAP_KEY=4B63CF8FDE49746E98FA01DDAD19BAB3CBF125EA
+  apt-get install -y curl gnupg
+  curl -fsSL "https://keyserver.ubuntu.com/pks/lookup?op=get&search=0x$SNAP_KEY" \
+    | gpg --dearmor > /usr/share/keyrings/ros-snapshots-keyring.gpg
+  echo "deb [arch=amd64 signed-by=/usr/share/keyrings/ros-snapshots-keyring.gpg]" \
+    "http://snapshots.ros.org/humble/$SNAP/ubuntu jammy main" \
+    > /etc/apt/sources.list.d/ros2-snapshot.list
+  cat > /etc/apt/preferences.d/nexwar-mapping <<EOF
+# W75 出图组件:MOLA / mp2p_icp / MRPT 只认快照 $SNAP,别被正式源升到 MRPT 3.5
+Package: ros-humble-mola* ros-humble-mp2p-icp* ros-humble-mrpt*
+Pin: origin snapshots.ros.org
+Pin-Priority: 1001
+EOF
+  apt-get update
   apt-get install -y ros-humble-ros-workspace ros-humble-mola-sm-loop-closure ros-humble-mp2p-icp \
-    ros-humble-mola-metric-maps ros-humble-mola-lidar-odometry ros-humble-mrpt2 \
+    ros-humble-mola-metric-maps ros-humble-mola-lidar-odometry \
     python3-numpy cmake g++
 fi
 if [[ $WITH_MAPPING -eq 1 || -d "$MAPPING" ]]; then
