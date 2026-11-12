@@ -24,6 +24,7 @@ import 'nw/nw_map_raster.dart';
 import 'nw/nw_p4_admin.dart';
 import 'nw/nw_theme.dart';
 import 'nw/nw_widgets.dart';
+import 'nw/nw_p3_robots.dart' show robotNotStanding;
 import 'patrol_dispatch.dart' show adhocEndText, dispatchResultText, hhmm, minutesText;
 import 'pose_marker.dart';
 import 'refusal.dart';
@@ -692,6 +693,17 @@ class _SiteRouteEditorPageState extends State<SiteRouteEditorPage> {
       });
       if (e.status == 409 && e.body['reason_code'] is String) {
         await showRefusal(context, widget.api, e, robotId: rid);
+        // A7-04：从机器人页回来，没站起来那件事已经好了 —— 旧提示换掉，不让人以为还不行
+        if (e.body['reason_code'] == 'not_standing' && mounted) {
+          try {
+            final v = await widget.api.robot(rid);
+            if (mounted && !robotNotStanding(v)) {
+              setState(() => _msg = tr('$rid is standing now. Tap Send again.', '$rid 已经站起来了，再点一次派出。'));
+            }
+          } on SiteError {
+            // 读不到就留着原来的话
+          }
+        }
       }
     } finally {
       if (mounted) setState(() => _busy = false);
