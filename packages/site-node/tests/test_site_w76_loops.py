@@ -136,3 +136,16 @@ def test_先看会怎样_一直巡逻马上走_说会被哪趟日程打断(台):
     p = t.desk.plan("A", w)
     assert p["queued"] is False and p["forever"] is True
     assert "22:00" in p["interrupted_by"], p
+
+
+def test_任务包里的路线不许存一直巡逻_不然日程会派出去(tmp_path):
+    import pytest as _pt
+    from test_site_schedule import 打包
+
+    from nexwar_site.catalog import CatalogError, import_bundle
+    from nexwar_site.db import SiteDB
+    db = SiteDB(tmp_path / "s.db")
+    bad = {**任务定义(), "policy": {"loops": 0}}
+    with _pt.raises(CatalogError, match="loops"):
+        import_bundle(db, 打包(tmp_path, 1, mission=bad), imported_by="alice", now_ms=1)
+    db.close()

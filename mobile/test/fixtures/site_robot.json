@@ -49,7 +49,8 @@
       "patrol": {
         "autonomy": "autonomous",
         "map_id": "estate-1",
-        "map_version": "7"
+        "map_version": "7",
+        "loops_forever": true
       },
       "posture": {
         "modes": [
@@ -250,6 +251,7 @@
       "site_rev": 0
     }
   },
+  "lap": null,
   "status": {
     "boot_id": "boot-3813831346",
     "control_epoch": 1,

@@ -71,6 +71,9 @@ def import_bundle(db: SiteDB, bundle_dir: Path, *, imported_by: str,
             missions[p.stem] = parse_mission(json.loads(p.read_text(encoding="utf-8")))
         except (OSError, ValueError, MissionError) as exc:
             raise CatalogError(f"任务 {p.name} 不合规: {exc}") from exc
+        if missions[p.stem].policy.forever:            # W76:跟路线库一样,一直巡逻只在派的时候选
+            raise CatalogError(f"任务 {p.name} 不合规: policy.loops 要是正整数"
+                               "(一直巡逻在派巡逻时选)")
     unbound = [unbound_mission_text(f"{mid}.json", m.map_id, _map_versions(db, m.map_id))
                for mid, m in missions.items() if not m.map_version]
     if unbound:
