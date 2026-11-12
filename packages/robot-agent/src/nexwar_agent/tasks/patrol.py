@@ -31,9 +31,11 @@ class PatrolTask(EngineMissionTask):
         return self.mission
 
     def _report_waypoints(self, results) -> None:
-        for i in range(self._reported_results, len(results)):
-            r = results[i]
-            n = len(self.mission.waypoints)
+        # 一直巡逻的快照只留最近一段(``results_from`` = 第一条是这一趟的第几个):按总编号发
+        start = int(getattr(self._parts.engine.snapshot, "results_from", 0) or 0)
+        n = len(self.mission.waypoints)
+        for i in range(max(self._reported_results, start), start + len(results)):
+            r = results[i - start]
             ev = {"task_id": self.task_id, "index": i, "total": n,
                   "name": r.name, "ok": r.ok, "note": r.note}
             if self.mission.policy.loops != 1 and n:
@@ -41,7 +43,7 @@ class PatrolTask(EngineMissionTask):
             if r.code:                                   # 导航 V1 第 5 节:没到的点带原因码
                 ev["code"] = r.code
             self._events.emit("patrol_waypoint", ev)
-        self._reported_results = len(results)
+        self._reported_results = start + len(results)
 
     def _partial_ok(self, results, bad) -> bool:
         """到了至少一个点(W71):一个都没到还是 failed。"""
