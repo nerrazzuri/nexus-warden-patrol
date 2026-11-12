@@ -167,3 +167,27 @@ def test_minor21_待命点只有标原点时自动加的那个_打勾但写明�
     it = _项(setup_view(db, d))["standby"]
     assert it["done"] and it["at_home"] == ["A"], it
     db.close()
+
+
+def test_minor40_没报在用哪张图的机器人_原点待命点不打勾_写明是哪几台(tmp_path):
+    """W53 minor #40:B 登记了还没报载着哪张图,清单只看 A:A 标好了就打勾,B 漏了。"""
+    db = SiteDB(tmp_path / "s.db")
+    d = 假派遣器({"A": ("m1", "3"), "B": None})
+    with db.tx() as c:
+        c.execute("INSERT INTO homes(robot_id, map_id, map_version, name, x, y, yaw) "
+                  "VALUES ('A','m1','3','h',0,0,0)")
+        c.execute("INSERT INTO standby_points(robot_id, name, map_id, map_version, x, y, yaw, "
+                  "is_default) VALUES ('A','dock','m1','3',5,5,0,1)")
+    it = _项(setup_view(db, d))
+    for k in ("home", "standby"):
+        assert not it[k]["done"] and it[k]["no_map"] == ["B"], (k, it[k])
+        assert it[k]["robots"] == [], "A 的做好了"
+    d.clients["B"] = SimpleNamespace(m=("m1", "3"))
+    with db.tx() as c:
+        c.execute("INSERT INTO homes(robot_id, map_id, map_version, name, x, y, yaw) "
+                  "VALUES ('B','m1','3','h',0,0,0)")
+        c.execute("INSERT INTO standby_points(robot_id, name, map_id, map_version, x, y, yaw, "
+                  "is_default) VALUES ('B','dock','m1','3',6,5,0,1)")
+    it = _项(setup_view(db, d))
+    assert it["home"]["done"] and it["standby"]["done"] and it["home"]["no_map"] == []
+    db.close()

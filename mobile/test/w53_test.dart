@@ -386,6 +386,17 @@ void main() {
       expect(find.textContaining('A 的待命点就是原点（标原点时自动加的）'), findsOneWidget);
     });
 
+    testWidgets('minor #40：没报在用哪张图的机器人，原点那一项写明是哪几台', (t) async {
+      final api = FakeApi('admin')
+        ..setupBody = <String, dynamic>{'done': 0, 'total': 1, 'items': <dynamic>[
+          <String, dynamic>{'id': 'home', 'done': false, 'skipped': false, 'robots': <dynamic>[], 'no_map': ['B']},
+        ]};
+      _size(t);
+      await t.pumpWidget(MaterialApp(home: AdminHomeTab(api: api, switchTab: (_) {})));
+      await t.pumpAndSettle();
+      expect(find.textContaining('B 还没报在用哪张图'), findsOneWidget);
+    });
+
     testWidgets('账号审批：权限下拉默认只看，选保安、输密码批准', (t) async {
       final api = FakeApi('admin')
         ..acctReqs = <Map<String, dynamic>>[<String, dynamic>{'id': 'r1', 'name': 'wangxm', 'display': '王小明'}];

@@ -16,6 +16,8 @@ interface SetupItem {
   elsewhere?: (MapVer & { route: string })[]; using?: MapVer[]; blocked?: string[];
   /** minor #21:默认待命点就在原点上的机器人(标原点时站点自动加的)。 */
   at_home?: string[];
+  /** minor #40:登记了还没报在用哪张图的机器人(原点、待命点查不了)。 */
+  no_map?: string[];
 }
 
 /** 第 8 轮 W8-08:清单那一项的具体情况(没有就是空,用通用的说明)。 */
@@ -27,6 +29,9 @@ export function setupDetail(x: SetupItem): string {
     return t("suRoutesElsewhere", { n: x.elsewhere.length, names: x.elsewhere.map((r) => r.route).join("、"), at, use });
   }
   if (x.id === "schedule" && x.blocked?.length) return t("suSchedBlocked", { names: x.blocked.join("、") });
+  if ((x.id === "home" || x.id === "standby") && !x.done && x.no_map?.length) {
+    return t("suNoMap", { ids: x.no_map.map(nameOf).join("、") });
+  }
   if (x.id === "standby" && x.done && x.at_home?.length) return t("suStandbyAtHome", { ids: x.at_home.map(nameOf).join("、") });
   return "";
 }

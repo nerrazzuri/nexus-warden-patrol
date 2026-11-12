@@ -235,6 +235,18 @@ describe("minor #21 开站清单:待命点就是原点", () => {
   });
 });
 
+// minor #40:登记了还没报在用哪张图的机器人 —— 原点、待命点不打勾,写明是哪几台
+describe("minor #40 开站清单:没报地图的机器人", () => {
+  it("写「B 还没报在用哪张图」", async () => {
+    setFetch(((url: string) => Promise.resolve(url === "/api/setup"
+      ? json({ items: [{ id: "home", done: false, skipped: false, robots: [], no_map: ["B"] }], done: 0, total: 1 })
+      : url === "/api/me" ? json({ name: "alice", role: "admin", guide: { tour: 1, setup_hidden: false, skip: [] } }) : json({}, 404))) as typeof fetch);
+    const { container: c } = render(<SetupChecklist />);
+    await waitFor(() => expect(c.querySelector('[data-item="home"]')).not.toBeNull());
+    expect(c.querySelector('[data-item="home"]')!.textContent).toContain("B 还没报在用哪张图");
+  });
+});
+
 // 第 8 轮 W8-11:今天的巡逻写路线显示名
 describe("第 8 轮 今天的巡逻写显示名", () => {
   it("有显示名写显示名", async () => {

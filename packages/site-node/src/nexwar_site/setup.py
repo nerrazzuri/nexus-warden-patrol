@@ -39,6 +39,8 @@ def setup_view(db: Any, dispatcher: Any, *, skip: set[str] | None = None) -> dic
         got = dispatcher._loaded(dispatcher.clients.get(rid))
         if got is not None:
             loaded[rid] = got
+    # minor #40:登记了、还没报在用哪张图的 —— 原点、待命点查不了,不算做完,写明是哪几台
+    no_map = [rid for rid in robots if rid not in loaded]
     zones = getattr(dispatcher, "zones", None)
     unconfirmed = sorted({f"{m}:{v}" for m, v in loaded.values()
                           if zones is not None and not zones.confirmed_current(m, v)})
@@ -84,9 +86,11 @@ def setup_view(db: Any, dispatcher: Any, *, skip: set[str] | None = None) -> dic
     facts: dict[str, tuple[bool, dict[str, Any]]] = {
         "robots": (bool(robots), {"count": len(robots)}),
         "map": (has_map, {}),
-        "home": (bool(loaded) and not no_home, {"robots": no_home}),
+        "home": (bool(loaded) and not no_home and not no_map,
+                 {"robots": no_home, "no_map": no_map}),
         "zones": (has_map and not unconfirmed, {"maps": unconfirmed}),
-        "standby": (bool(loaded) and not no_standby, {"robots": no_standby, "at_home": at_home}),
+        "standby": (bool(loaded) and not no_standby and not no_map,
+                    {"robots": no_standby, "at_home": at_home, "no_map": no_map}),
         "routes": (routes_ok, routes_detail),
         "schedule": (bool(sched) and len(blocked) < len(sched), {"blocked": blocked}),
         "arming": (_count(db, "SELECT COUNT(*) FROM arming_slots") > 0, {}),
