@@ -347,7 +347,7 @@ function Controls({ r, u, role, say, onChanged }: { r: RobotCard; u?: UnitInfo; 
               </select>
               <LoopsSelect value={loops} onChange={setLoops} />
               <button type="button" class="btn sm primary" disabled={busy || off || !pick}
-                onClick={() => void send(() => api("POST", path("patrol"), loops === 1 ? { mission_id: pick } : { mission_id: pick, loops }),
+                onClick={() => void send(() => api("POST", path("patrol"), { mission_id: pick, loops }),
                   t("rdPatrolSent", { id, route: pick }))}>
                 {t("rdStartPatrol")}
               </button>

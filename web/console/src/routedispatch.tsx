@@ -34,7 +34,8 @@ export function DispatchOnce({ route, say }: { route: string; say: (s: string) =
     setPlan(null);
     setErr(null);
     if (!id) return;
-    const lq = n === 1 ? "" : `&loops=${n}`;
+    // 外审 W76-1 #7:选了 1 圈也发 —— 不发站点按路线里存的圈数跑
+    const lq = `&loops=${n}`;
     api<Plan>("GET", `/api/robots/${enc(id)}/patrol-plan?mission_id=${encodeURIComponent(route)}${lq}`)
       .then(setPlan).catch((e) => setErr(why(e)));
   };
@@ -45,7 +46,7 @@ export function DispatchOnce({ route, say }: { route: string; say: (s: string) =
   const go = async () => {
     setBusy(true);
     try {
-      const r = await api<Sent>("POST", `/api/robots/${enc(robot)}/patrol`, loops === 1 ? { mission_id: route } : { mission_id: route, loops });
+      const r = await api<Sent>("POST", `/api/robots/${enc(robot)}/patrol`, { mission_id: route, loops });
       if (r.queued) say(t("trQueued", { id: robot, at: siteHm(r.start_after_ms ?? 0, r.utc_offset_min), why: r.because ?? "" }));
       else if (r.ack && r.ack.result !== "accepted" && r.ack.result !== "duplicate") {
         setErr(t("rdNotAccepted", { why: r.ack.reason || r.ack.result || "" }));

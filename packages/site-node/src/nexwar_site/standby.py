@@ -511,6 +511,12 @@ class StandbyManager:
             # W33:只许手动派的狗,站点不自己让它动(回待命点也不派),人手动叫
             log.info("%s 只许手动派:%s 结束后不自动回待命点", robot_id, after)
             return
+        from nexwar_site.priorities import FOREVER_PREFIX
+        if after.startswith(FOREVER_PREFIX):
+            # W76 外审 #4:一直巡逻只在电量到线时正常结束,机器人自己回了原点;接下来回充 / 换电接手
+            # (派回待命点会盖掉「因电量结束」那一笔,直线的狗还来路不明报 standby_failed)
+            log.info("%s 一直巡逻 %s 结束:已自己回原点,不自动回待命点", robot_id, after)
+            return
         if after.startswith(TELEOP_TASK_PREFIX) and self._path_kind(robot_id) != "planned":
             # 遥控放租之后直线的狗不自动回(W00c6b 内审):起点是人刚开到的任意位置,人在场。
             log.info("%s 遥控放租之后不自动回待命点(直线的机器人,人手动叫)", robot_id)

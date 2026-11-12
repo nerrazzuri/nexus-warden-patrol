@@ -149,3 +149,34 @@ def test_任务包里的路线不许存一直巡逻_不然日程会派出去(tmp
     with _pt.raises(CatalogError, match="loops"):
         import_bundle(db, 打包(tmp_path, 1, mission=bad), imported_by="alice", now_ms=1)
     db.close()
+
+
+def test_外审1_路线写了低电接着走_派一直巡逻时换成回原点():
+    w = with_loops({**任务定义(), "policy": {"on_battery_low": "continue"}}, LOOPS_FOREVER,
+                   return_pct=25.0, caps=NEW)
+    assert parse_mission(w).policy.on_battery_low == "return_home"
+
+
+def test_外审1_估时的历史只认一圈的_几圈和一直巡逻的不算(台):  # noqa: F811
+    import json
+
+    from test_site_adhoc import 毫秒
+    t = 台
+    for i, (loops, dur) in enumerate(((0, 7200), (3, 1800), (1, 600))):
+        t0 = 毫秒(10 + i, 0)
+        wire = {**任务定义(), "policy": {"loops": loops}}
+        with t.db.tx() as c:
+            c.execute("INSERT INTO commands(command_id, task_id, robot_id, kind, payload, "
+                      "issued_by, issued_at) VALUES (?,?,?,?,?,?,?)",
+                      (f"c{i}", f"t{i}", "A", "patrol", json.dumps({"mission": wire}), "g", t0))
+            c.execute("INSERT INTO events(robot_id, boot_id, seq, event_id, kind, data, stamp, "
+                      "received_at) VALUES (?,?,?,?,?,?,?,?)",
+                      ("A", "b", i, f"e{i}", "task_done", json.dumps({"task_id": f"t{i}"}),
+                       t0 + dur * 1000, t0 + dur * 1000))
+    assert t.desk.history_s("A", "loop") == 600
+
+
+def test_外审1_先看会怎样写实际跑几圈_手机凭它知道站点认圈数(台):  # noqa: F811
+    t = 台
+    assert t.desk.plan("A", with_loops(任务定义(), 3, return_pct=25.0, caps=NEW))["loops"] == 3
+    assert t.desk.plan("A", 任务定义())["loops"] == 1
