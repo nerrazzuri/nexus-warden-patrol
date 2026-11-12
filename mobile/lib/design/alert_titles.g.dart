@@ -67,6 +67,7 @@ const Map<String, (String, String)> alertTitles = <String, (String, String)>{
   'account_request': ('Someone applied for an account', '账号申请待批准'),
   'adhoc_patrol': ('One-off patrol sent', '临时巡逻已派出'),
   'adhoc_queue': ('Your queued patrol', '排队中的临时巡逻'),
+  'map_ready': ('Map built', '地图已建成'),
   'bind_request': ('Robot waiting to join the site', '机器人申请加入站点'),
   'wifi_change': ('Robot WiFi change waiting for approval', '机器人 WiFi 变更待确认'),
   'release_failed': ('Software update failed', '软件升级失败'),

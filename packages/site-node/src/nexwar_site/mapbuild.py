@@ -308,11 +308,11 @@ class SiteMapBuilder:
 
 
 def notify(desk: Any, r: dict[str, Any]) -> None:
-    """出完了告诉人(W75):成了记一条「地图建好了」(P3,推给管理员、工程师),之前的建图失败解决掉;
+    """出完了告诉人(W75):成了记一条「地图已建成」(P3,推给管理员、工程师),之前的建图失败解决掉;
     没成报「建图失败」(带原因)。``desk`` 是告警簿(线程里用 ``LoopAlerts``)。"""
     rid, which = r["robot_id"], f"{r['map_id']}:{r['version']}"
     if r["ok"]:
-        desk.raise_alert(kind="map_ready", robot=rid, title=f"地图建好了:{which}",
+        desk.raise_alert(kind="map_ready", robot=rid, title=f"地图已建成:{which}",
                          detail="在建图向导里看结论、点「用这张图」", merge=False)
         desk.resolve_all(rid, "map_failed", who="site:map_ready")
     else:
