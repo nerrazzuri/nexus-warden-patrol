@@ -243,6 +243,19 @@ void main() {
       expect(find.byKey(MapWizardPage.rewalkKey), findsOneWidget);
     });
 
+    testWidgets('W75 站点在出图：进度条 + 阶段名 + 百分比', (t) async {
+      final api = _admin()
+        ..wizard = <String, dynamic>{'step': 'build', 'robot_id': 'A', 'map_id': 'main', 'version': '20261031-1',
+          'drive': 'remote', 'by': 'u', 'label': ''}
+        ..wizardBuild = <String, dynamic>{'state': 'pending', 'where': 'site', 'stage': 'loop', 'pct': 40};
+      await _wizard(t, api);
+      final bar = t.widget<LinearProgressIndicator>(find.byKey(MapWizardPage.buildProgressKey));
+      expect(bar.value, closeTo(0.4, 1e-9));
+      expect(find.textContaining('闭合回环'), findsOneWidget);
+      expect(find.textContaining('40%'), findsOneWidget);
+      expect(find.byType(CircularProgressIndicator), findsNothing);
+    });
+
     testWidgets('手机开：遥控页角上有小预览和「走完了」，点了回来停录建图', (t) async {
       final api = _admin()
         ..wizard = <String, dynamic>{'step': 'walk', 'robot_id': 'A', 'map_id': 'main', 'version': '20261031-1',

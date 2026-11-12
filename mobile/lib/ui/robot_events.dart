@@ -22,6 +22,7 @@ String? _title(String kind) => switch (kind) {
       'loc_conflict_resolved' => tr('Position conflict resolved', '定位冲突已解决'),
       'map_activated' => tr('Map switched', '换了地图'),
       'map_built' => tr('Map built', '建图完成'),
+      'map_handoff' => tr('Scans sent to the site for map building', '扫描数据已交给站点出图'),
       'map_build_failed' => tr('Map build failed', '建图失败'),
       'map_activate_failed' => tr('Map switch failed', '换地图失败'),
       'map_load_failed' => tr('Map load failed', '地图加载失败'),
