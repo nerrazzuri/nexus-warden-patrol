@@ -840,3 +840,34 @@ async def test_慢机上换图_跑完要等后台换完才断言(台):
     await rt._on_cmd(_cmd("map_activate", ref, "s1", c))
     await _跑(rt, broker)
     assert rt.loaded_map == ("m", "7"), "后台换完了才回来"
+
+
+async def test_W75_站点打包_开录带pack_site_走完交给站点_发交接事件不发建好了(tmp_path):
+    rec = _假边走边建()
+
+    async def start(name, target=None, task_id="", pack="robot"):
+        rec.calls.append(("start", name, target, pack))
+        rec.recording, rec.last_bag, rec.live, rec.live_task = True, f"{name}-x", target, task_id
+
+    async def stop():
+        rec.recording = False
+        rec.pending, rec.live = (rec.last_bag, *rec.live), None
+        rec.pending_task = rec.live_task
+
+    async def finish():
+        rec.pending = None
+        rec.last_fallback = ""
+        return None, "site"
+    rec.start, rec.stop, rec.finish = start, stop, finish
+    broker, c, ears, rt = await _起(tmp_path, rec)
+    await rt._on_cmd(_cmd("mapping", {"action": "start", "name": "yard", "map_id": "m",
+                                      "version": "5", "pack": "site"}, "s1", c))
+    await _跑(rt, broker, n=3)
+    assert rec.calls[0] == ("start", "yard", ("m", "5"), "site")
+    await rt._on_cmd(_cmd("mapping", {"action": "stop"}, "s2", c))
+    await _跑(rt, broker, n=5)
+    kinds = [e["kind"] for e in ears.by["event"]]
+    assert "map_built" not in kinds
+    got = [e for e in ears.by["event"] if e["kind"] == "map_handoff"][-1]["data"]
+    assert (got["map_id"], got["version"], got["task_id"]) == ("m", "5", "mapping-s1")
+    await rt.close()

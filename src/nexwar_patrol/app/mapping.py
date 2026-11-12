@@ -172,6 +172,8 @@ class MappingOrchestrator:
         #: 这一趟的预览没起来的原因(W09f);起来了是空串。
         self.preview_error = ""
         self._retry: asyncio.Task[None] | None = None
+        #: 调用方给的关键帧目录(W75 站点打包):图号 → 目录。
+        self._kf_dirs: dict[str, Path] = {}
 
     @property
     def log_dir(self) -> Path:
@@ -310,10 +312,12 @@ class MappingOrchestrator:
         """正在边走边建的图号(W09c2);没有是 None。"""
         return self._live
 
-    async def start_record(self, name: str, *, live_map_id: str | None = None) -> Path:
+    async def start_record(self, name: str, *, live_map_id: str | None = None,
+                           keyframes_dir: Path | None = None) -> Path:
         """开录。返回包的落盘路径。给了 ``live_map_id`` 就同时起在线建图(W09c2 边走边建):MOLA
         建图模式订实时域的雷达,停的时候把局部地图、轨迹、simplemap 存进这张图的中间目录,之后
-        :meth:`package` 打包(不用再在录包上跑一遍)。"""
+        :meth:`package` 打包(不用再在录包上跑一遍)。``keyframes_dir``(W75):边走边存的关键帧放哪
+        (站点打包的放进发件箱);没给用 :meth:`keyframes_dir`。"""
         self._require_idle("录包")
         _check_name(name, "包名")
         if live_map_id is not None:
@@ -328,6 +332,9 @@ class MappingOrchestrator:
                 shutil.rmtree(d, ignore_errors=True)
             work.mkdir(parents=True)
             forget_home(self._cfg.maps_dir, live_map_id)   # 坐标系要重建了
+            self._kf_dirs.pop(live_map_id, None)
+            if keyframes_dir is not None:
+                self._kf_dirs[live_map_id] = Path(keyframes_dir)
         front = self.front() if live_map_id is not None else ""
         slio = front == "superlio"
         self.pause_error = ""
@@ -422,11 +429,13 @@ class MappingOrchestrator:
         forget_home(self._cfg.maps_dir, map_id)
         return await self._run_build(bag, map_id, reuse=False)
 
-    async def package(self, bag: Path, map_id: str) -> Path:
+    async def package(self, bag: Path, map_id: str, keyframes_dir: Path | None = None) -> Path:
         """把边走边建存下的(中间目录里的局部地图、轨迹、simplemap)打成版本文件(W09c2):建图脚本
         ``--reuse``,不在录包上再跑一遍 MOLA(录包只拿来读逐帧扫描打真射线)。返回版本文件的目录。"""
         self._require_idle("打包")
         _check_name(map_id, "图名")
+        if keyframes_dir is not None:
+            self._kf_dirs[map_id] = Path(keyframes_dir)
         return await self._run_build(Path(bag), map_id, reuse=True)
 
     async def _run_build(self, bag: Path, map_id: str, *, reuse: bool) -> Path:
@@ -558,8 +567,10 @@ class MappingOrchestrator:
         return self.PREVIEW in self._procs.running()
 
     def keyframes_dir(self, map_id: str) -> Path:
-        """边走边存的关键帧(W75,预览进程写):中间目录旁边单独一个(打包会清掉整个中间目录)。"""
-        return self._cfg.maps_dir / ".work" / ".kf" / map_id
+        """边走边存的关键帧(W75,预览进程写):开录时调用方给了就用它,不然在中间目录旁边单独一个
+        (打包会清掉整个中间目录)。"""
+        got = self._kf_dirs.get(map_id)
+        return got if got is not None else self._cfg.maps_dir / ".work" / ".kf" / map_id
 
     def preview_dir(self, map_id: str) -> Path:
         """建图预览的快照写在哪(W09f):这张图的中间目录底下。"""

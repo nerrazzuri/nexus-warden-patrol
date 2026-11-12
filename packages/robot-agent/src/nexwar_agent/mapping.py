@@ -54,6 +54,25 @@ PREVIEW_PNG_MAX_B64 = 200 * 1024
 PREVIEW_MAX_BYTES = 230 * 1024
 
 
+#: W75 方案 1(站点打包):边走边存的关键帧放进发件箱的这一块(``mapkf/<地图号>/<版本>/``),存一个传一个;
+#: 走完写清单 ``kf.json``(最后传),站点收齐核对完在站点主机上出图。``live.json`` 是预览进程收尾写的。
+KF_SUB = "mapkf"
+KF_MANIFEST = "kf.json"
+KF_LIVE = "live.json"
+
+
+def kf_classify(rel: str) -> int | None:
+    """关键帧都传,清单最后走;点开头的(写到一半的临时文件)不传。"""
+    if rel.split("/")[-1].startswith("."):
+        return None
+    return 5 if rel == KF_MANIFEST else 4
+
+
+def kf_settled(run: Path) -> bool:
+    """有清单才算这一趟写完(传完、站点确认才删)。"""
+    return (run / KF_MANIFEST).is_file()
+
+
 def storage_pressure(facts: Any) -> bool:
     """盘况(``StorageFacts``)说盘紧了:留着备重建的包该让位了。"""
     if facts is None:
@@ -91,8 +110,14 @@ def _sha256(path: Path) -> str:
 
 
 class MappingService:
-    def __init__(self, orchestrator: Any, *, bags_root: Path, maps_out: Path) -> None:
+    def __init__(self, orchestrator: Any, *, bags_root: Path, maps_out: Path,
+                 kf_root: Path | None = None) -> None:
+        """``kf_root``(W75):发件箱里放边走边存关键帧的那一块;没有就不能站点打包。"""
         self.orch = orchestrator
+        self.kf_root = None if kf_root is None else Path(kf_root)
+        #: 正在边走边建的、待打包的这一趟在哪打包(``robot`` / ``site``,W75)。
+        self.live_pack = "robot"
+        self.pending_pack = "robot"
         self.bags_root = Path(bags_root)
         self.maps_out = Path(maps_out)
         self.recording = False
@@ -138,13 +163,14 @@ class MappingService:
                     t = json.loads((b / LIVE).read_text("utf-8"))
                     got = (b.name, str(t["map_id"]), str(t["version"]))
                     task = str(t.get("task_id", ""))
+                    pack = "site" if t.get("pack") == "site" else "robot"
                 except (OSError, ValueError, KeyError, TypeError, AttributeError):
                     continue
                 if self.pending is not None:
                     self.lost.append((*self.pending, self.pending_task))
                     (self.bags_root / self.pending[0] / LIVE).unlink(missing_ok=True)
                     self.held.discard(self.pending[0])
-                self.pending, self.pending_task = got, task
+                self.pending, self.pending_task, self.pending_pack = got, task, pack
                 self.held.add(b.name)
 
     def bag_settled(self, run: Path) -> bool:
@@ -156,9 +182,12 @@ class MappingService:
         return age_days >= BAG_KEEP_DAYS
 
     async def start(self, name: str, target: tuple[str, str] | None = None,
-                    task_id: str = "") -> None:
+                    task_id: str = "", pack: str = "robot") -> None:
         """开录。给了 ``target``(地图号, 版本)就同时在线建这一版(W09c2 边走边建);``task_id`` 是开录
-        那条命令的号 —— 这一版建好、没建成的事件都带它(站点按它认是哪一次,外审阻断 3)。"""
+        那条命令的号 —— 这一版建好、没建成的事件都带它(站点按它认是哪一次,外审阻断 3)。
+        ``pack="site"``(W75):关键帧边走边存进发件箱传给站点,走完在站点主机上打包。"""
+        if pack == "site" and (target is None or self.kf_root is None):
+            pack = "robot"
         if self.recording:
             raise MappingError(f"正在录 {self.last_bag},先停")
         if self.pending is not None:
@@ -169,10 +198,17 @@ class MappingService:
         if target is not None:
             if (self.maps_out / target[0] / target[1]).exists():
                 raise MappingError(f"{target[0]}:{target[1]} 机器人上已有一份在传了,换个版本号")
-            bag = Path(await self.orch.start_record(full, live_map_id=target[0]))
+            if pack == "site":
+                kd = self._kf_dir(*target)
+                shutil.rmtree(kd, ignore_errors=True)
+                bag = Path(await self.orch.start_record(full, live_map_id=target[0],
+                                                        keyframes_dir=kd))
+            else:
+                bag = Path(await self.orch.start_record(full, live_map_id=target[0]))
             try:
-                (bag / LIVE).write_text(json.dumps({"map_id": target[0], "version": target[1],
-                                                    "task_id": task_id}), encoding="utf-8")
+                mark = {"map_id": target[0], "version": target[1], "task_id": task_id}
+                (bag / LIVE).write_text(json.dumps(mark | ({"pack": "site"} if pack == "site"
+                                                           else {})), encoding="utf-8")
             except BaseException:
                 # 记不下恢复标记(盘满、只读重挂):已经起了的录包、在线建图收掉再报(外审阻断 1)
                 try:
@@ -186,6 +222,7 @@ class MappingService:
         self.last_bag = full
         self.live = target
         self.live_task = task_id
+        self.live_pack = pack
 
     async def stop(self) -> None:
         """停录。边走边建的:记下待打包(:meth:`finish`,调用方丢到后台),包先占住(打包要读它)。"""
@@ -211,6 +248,7 @@ class MappingService:
                 self.held.add(bag.name)
             self.pending = (bag.name, *live)
             self.pending_task = self.live_task
+            self.pending_pack = self.live_pack
         if err is not None:
             raise err
 
@@ -261,21 +299,40 @@ class MappingService:
         if self.recording:
             await self.stop()
 
-    async def finish(self) -> tuple[MapRef, str]:
+    def _kf_dir(self, map_id: str, version: str) -> Path:
+        assert self.kf_root is not None
+        return self.kf_root / map_id / version
+
+    async def finish(self) -> tuple[MapRef | None, str]:
         """把边走边建的这一版收尾:先打包在线建好的(``live``);不成(MOLA 半路没了、存下的不齐……)
-        就退回在录包上从头建(``bag``)。回(图, 哪种)。"""
+        就退回在录包上从头建(``bag``)。回(图, 哪种)。站点打包的(W75)写好关键帧清单交给站点,
+        回 ``(None, "site")``;关键帧不全就退回在机器人上打包。"""
         assert self.pending is not None
         bag, map_id, version = self.pending
         src = self.bags_root / bag
         out = self.maps_out / map_id / version
+        site = self.pending_pack == "site" and self.kf_root is not None
+        self.last_fallback = ""
         try:
+            if site:
+                kd = self._kf_dir(map_id, version)
+                try:
+                    await asyncio.to_thread(self._handoff, kd, src, map_id, version)
+                    return None, "site"
+                except MappingError as exc:
+                    self.last_fallback = str(exc)[:300]
+                    log.warning("%s:%s 交不了站点打包(%s),在机器人上打包", map_id, version, exc)
             if out.exists():
                 raise MappingError(f"{map_id}:{version} 机器人上已有一份在传了,换个版本号")
             try:
-                made, mode = Path(await self.orch.package(src, map_id)), "live"
-                self.last_fallback = ""
+                if site:
+                    made = Path(await self.orch.package(src, map_id, keyframes_dir=kd))
+                else:
+                    made = Path(await self.orch.package(src, map_id))
+                mode = "live"
             except Exception as exc:  # noqa: BLE001 - 在线那份打不成:退回从录包建,原因记着
-                self.last_fallback = f"{type(exc).__name__}: {exc}"[:300]
+                self.last_fallback = "; ".join(x for x in (
+                    self.last_fallback, f"{type(exc).__name__}: {exc}") if x)[:300]
                 log.warning("边走边建的 %s:%s 打包没成(%s),退回从录包建", map_id, version,
                             self.last_fallback)
                 made, mode = Path(await self.orch.rebuild(src, map_id)), "bag"
@@ -285,9 +342,30 @@ class MappingService:
         finally:
             self.pending = None
             self.pending_task = ""
+            self.pending_pack = "robot"
             (src / LIVE).unlink(missing_ok=True)
             with self.lock:
                 self.held.discard(bag)
+
+    def _handoff(self, kd: Path, bag: Path, map_id: str, version: str) -> None:
+        """站点打包(W75):预览进程收尾了(有 ``live.json``)才交;录包里的 RTK 解一起带上;最后写清单
+        (每个文件的大小、sha256)—— 发件箱最后传它,站点收齐核对完出图。"""
+        if not (kd / KF_LIVE).is_file():
+            raise MappingError("边走边存的关键帧没收尾(预览进程没正常停?)")
+        rtk = bag / "rtk.jsonl"
+        if rtk.is_file():
+            shutil.copyfile(rtk, kd / ".rtk.jsonl.tmp")
+            os.replace(kd / ".rtk.jsonl.tmp", kd / "rtk.jsonl")
+        files = []
+        for p in sorted(kd.rglob("*")):
+            rel = p.relative_to(kd).as_posix()
+            if p.is_file() and rel != KF_MANIFEST and kf_classify(rel) is not None:
+                files.append({"name": rel, "size": p.stat().st_size, "sha256": _sha256(p)})
+        tmp = kd / f".{KF_MANIFEST}.tmp"
+        tmp.write_text(json.dumps({"map_id": map_id, "version": version, "files": files},
+                                  ensure_ascii=False), encoding="utf-8")
+        os.replace(tmp, kd / KF_MANIFEST)
+        log.info("%s:%s 的关键帧交给站点打包(%d 个文件)", map_id, version, len(files))
 
     def _settle(self, made: Path, map_id: str, version: str, out: Path) -> MapRef:
         """建出来的文件挪进发件箱、放进本地库(出错只记一笔,激活时从站点下)、最后写清单。"""
