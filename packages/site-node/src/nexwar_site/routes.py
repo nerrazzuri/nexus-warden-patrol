@@ -320,6 +320,10 @@ class RouteStore:
             m = parse_mission(raw)
         except (MissionError, ValueError) as exc:
             raise RouteError(str(exc)) from exc
+        if m.policy.forever:
+            # W76:「一直巡逻」只在派的时候选(查机器人支不支持、按比日程低的优先级派);
+            # 存进路线就会被日程派出去
+            raise RouteError("policy.loops 存路线要是正整数;一直巡逻在派巡逻时选")
         kind = body.get("kind")
         if kind is not None and kind not in KINDS:
             raise RouteError(f"kind 只能是 {' / '.join(KINDS)}:{kind!r}")
