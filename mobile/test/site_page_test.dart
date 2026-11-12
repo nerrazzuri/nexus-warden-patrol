@@ -1339,6 +1339,25 @@ void main() {
     });
   }
 
+  // liang-d5 A7-03：临时巡逻结束后去哪说法不一（弹层写待命点、临时路线页写出发点、只许手动派的其实不自动回）
+  test('A7-03 临时巡逻结束后去哪：一句话，只许手动派的说不会自己回', () {
+    expect(adhocEndText(), contains('回默认待命点'));
+    expect(adhocEndText(), contains('只许手动派'));
+    expect(adhocEndText(), isNot(contains('出发点')));
+    expect(adhocEndText(robot: 'A', manualOnly: true), contains('A 只许手动派，结束后不会自己回'));
+    expect(adhocEndText(robot: 'A', manualOnly: false), isNot(contains('只许手动派')));
+  });
+
+  testWidgets('A7-03 派巡逻弹层：只许手动派的那台写「不会自己回」', (t) async {
+    final v = <String, dynamic>{...busyView(), 'manual_only': <String, dynamic>{'by': 'olga', 'at_ms': 1, 'note': ''}};
+    final api = FakeApi('guard', robotView: v);
+    await openRobot(t, api);
+    await t.tap(find.byKey(const Key('btn-patrol')));
+    await t.pumpAndSettle();
+    expect(find.textContaining('结束后不会自己回待命点'), findsOneWidget);
+    expect(find.textContaining('返回待命点'), findsNothing);
+  });
+
   testWidgets('经理：叫停、派巡逻（W53），没有回待命点', (t) async {
     final api = FakeApi('owner', robotView: busyView());
     await openRobot(t, api);

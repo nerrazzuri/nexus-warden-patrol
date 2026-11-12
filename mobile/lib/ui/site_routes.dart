@@ -24,7 +24,7 @@ import 'nw/nw_map_raster.dart';
 import 'nw/nw_p4_admin.dart';
 import 'nw/nw_theme.dart';
 import 'nw/nw_widgets.dart';
-import 'patrol_dispatch.dart' show dispatchResultText, hhmm, minutesText;
+import 'patrol_dispatch.dart' show adhocEndText, dispatchResultText, hhmm, minutesText;
 import 'pose_marker.dart';
 import 'refusal.dart';
 import 'widget/fields_dialog.dart';
@@ -929,8 +929,8 @@ class _SiteRouteEditorPageState extends State<SiteRouteEditorPage> {
             Padding(
                 padding: const EdgeInsets.only(top: Nw.s4),
                 child: Text(
-                    tr("One-off route, not saved. The robot returns to where it started afterwards.",
-                        '临时路线不保存，结束后机器人返回出发点。'),
+                    // A7-03：跟派巡逻弹层一句话（以前写「返回出发点」，站点其实是回待命点）
+                    '${tr('One-off route, not saved. ', '临时路线不保存。')}${adhocEndText()}',
                     style: sub)),
           if (_dirty && _canSend && !_isNew && !_temp)
             Padding(
