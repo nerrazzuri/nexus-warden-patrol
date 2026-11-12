@@ -310,11 +310,13 @@ void main() {
       await _tab(t, NwShell.dogsKey);
       expect(find.text('庄园'), findsOneWidget, reason: '站点名交给了机器人列表（W53：页头不再印角色代号）');
       await _tab(t, NwShell.moreKey);
+      await t.ensureVisible(find.byKey(MeTab.leaveKey));
       await t.tap(find.byKey(MeTab.leaveKey));
       await t.pumpAndSettle();
       await t.tap(find.text('取消'));
       await t.pumpAndSettle();
       expect(find.byType(NwShell), findsOneWidget, reason: '取消就留下');
+      await t.ensureVisible(find.byKey(MeTab.leaveKey));
       await t.tap(find.byKey(MeTab.leaveKey));
       await t.pumpAndSettle();
       expect(find.textContaining('收不到这个站点的报警'), findsOneWidget);

@@ -1209,6 +1209,25 @@ void main() {
     }
   });
 
+  testWidgets('易用性第 7 轮：机器人页开着时网页上让它蹲下 —— 几秒内自己刷出「站起」卡片（不用退出再进）', (t) async {
+    Map<String, dynamic> view({required bool motion}) {
+      final out = jsonDecode(jsonEncode(siteFixture('site_robot'))) as Map<String, dynamic>;
+      ((out['capabilities'] as Map)['tasks'] as Map)['posture'] = {'modes': ['stand', 'lie', 'crawl']};
+      final st = out['status'] as Map;
+      st['task'] = null;
+      st['ready'] = {'control': true, 'estop_clear': true, 'loc_ok': true, 'motion': motion};
+      return out;
+    }
+    final api = FakeApi('guard', robotView: view(motion: true));
+    await openRobot(t, api);
+    expect(find.byKey(standUpKey), findsNothing);
+    api.view = view(motion: false);                       // 网页上让它蹲下了
+    await t.pump(kRobotPageRefresh + const Duration(milliseconds: 100));
+    await t.pumpAndSettle();
+    expect(find.byKey(standUpKey), findsOneWidget);
+    await t.pumpWidget(Container());
+  });
+
   testWidgets('用户 11-08：机器人页没有单独的「姿态…」，遥控那格写「遥控 · 姿态」；经理没有', (t) async {
     Map<String, dynamic> withPosture(Map<String, dynamic> v) {
       final out = jsonDecode(jsonEncode(v)) as Map<String, dynamic>;
@@ -1455,6 +1474,9 @@ void main() {
       await t.pageBack();
       await t.pumpAndSettle();
       // 手机 App 测试 M01：离开站点走「我的 → 退出站点」，要确认
+      // 列表是懒建的：「报问题」加进来以后「退出站点」在 800x600 下看不到，先滚过去
+      await t.scrollUntilVisible(find.byKey(MeTab.leaveKey), 200,
+          scrollable: find.descendant(of: find.byType(MeTab), matching: find.byType(Scrollable)).first);
       await t.tap(find.byKey(MeTab.leaveKey));
       await t.pumpAndSettle();
       await t.tap(find.byKey(leaveConfirmKey));
