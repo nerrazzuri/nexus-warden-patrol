@@ -56,7 +56,20 @@ TURN_DEG = 60.0
 #: 不进 :func:`nexwar_site.catalog.active_bundle`,排程不许挂)。
 KINDS = ("patrol", "guard")
 #: 编辑器能写的键;别的(``route`` 的 vendor_path 之类)不收。
-_EDITABLE = frozenset({"map_id", "map_version", "waypoints", "policy", "base_revision", "kind"})
+_EDITABLE = frozenset({"map_id", "map_version", "waypoints", "policy", "base_revision", "kind",
+                       "title"})
+#: 第 8 轮 W8-11:显示名最长几个字。
+TITLE_MAX = 40
+
+
+def _title(body: dict[str, Any]) -> str | None:
+    """接口里的显示名:没带 → None(不改);带了 → 去掉首尾空白(空串 = 清掉)。"""
+    if "title" not in body:
+        return None
+    t = body["title"]
+    if not isinstance(t, str) or len(t.strip()) > TITLE_MAX or any(ord(c) < 32 for c in t):
+        raise RouteError(f"显示名要是 0–{TITLE_MAX} 个字的文字(不能有换行)")
+    return t.strip()
 EXPORT_BUNDLE_ID = "site-routes"
 
 
@@ -146,7 +159,7 @@ class RouteStore:
     @staticmethod
     def _route_view(r: Any) -> dict[str, Any]:
         m = parse_mission(json.loads(r["definition"]))
-        return {"id": r["route_id"], "kind": r["kind"],
+        return {"id": r["route_id"], "kind": r["kind"], "title": r["title"],
                 "map_id": r["map_id"], "map_version": r["map_version"],
                 "revision": r["revision"], "updated_ms": r["updated_ms"],
                 "updated_by": r["updated_by"], "source": r["source"],
@@ -156,7 +169,7 @@ class RouteStore:
 
     @staticmethod
     def _schedule_view(r: Any) -> dict[str, Any]:
-        return {**json.loads(r["definition"]), "revision": r["revision"],
+        return {**json.loads(r["definition"]), "title": r["title"], "revision": r["revision"],
                 "active_from_ms": r["active_from_ms"], "updated_ms": r["updated_ms"],
                 "updated_by": r["updated_by"], "source": r["source"]}
 
@@ -355,6 +368,7 @@ class RouteStore:
 
     def put_route(self, route_id: str, body: dict[str, Any], *, by: str) -> dict[str, Any]:
         base = self._base(body.get("base_revision"))
+        title = _title(body)
         m = self._validate_route(route_id, body)
         definition = _json(m.to_wire())
         now = self._now()
@@ -381,15 +395,17 @@ class RouteStore:
                                  "先从值守方案里去掉再改成巡逻路线")
             if row is None:
                 tx.execute("INSERT INTO routes(route_id, map_id, map_version, definition, "
-                           "revision, updated_ms, updated_by, source, kind) "
-                           "VALUES (?,?,?,?,1,?,?,?,?)",
+                           "revision, updated_ms, updated_by, source, kind, title) "
+                           "VALUES (?,?,?,?,1,?,?,?,?,?)",
                            (route_id, m.map_id, m.map_version, definition, now, by, "editor",
-                            kind))
+                            kind, title or ""))
             else:
                 tx.execute("UPDATE routes SET map_id=?, map_version=?, definition=?, "
                            "revision=revision+1, updated_ms=?, updated_by=?, source='editor', "
                            "kind=? WHERE route_id=?",
                            (m.map_id, m.map_version, definition, now, by, kind, route_id))
+                if title is not None:
+                    tx.execute("UPDATE routes SET title=? WHERE route_id=?", (title, route_id))
             self._touch(tx, by, now)
             if clash is not None:                        # 同一个事务里查:撞了就整个回滚
                 got = clash.since(before, routes=[route_id])
@@ -469,7 +485,9 @@ class RouteStore:
         base = self._base(body.get("base_revision"))
         if not NAME_RE.match(entry_id):
             raise RouteError(f"排程 id 只许 ASCII 字母、数字、. _ -(1–64 个字符):{entry_id!r}")
-        raw = {k: v for k, v in body.items() if k not in ("base_revision", "revision", "id")}
+        title = _title(body)
+        raw = {k: v for k, v in body.items()
+               if k not in ("base_revision", "revision", "id", "title")}
         s = self._store_row()
         tz = s["timezone"] if s is not None else None
         if not tz:
@@ -502,8 +520,9 @@ class RouteStore:
                                     f"排程 {entry_id} 已被删除:请刷新后再改")
             if row is None:
                 tx.execute("INSERT INTO route_schedules(entry_id, definition, revision, "
-                           "active_from_ms, updated_ms, updated_by, source) "
-                           "VALUES (?,?,1,?,?,?,'editor')", (entry_id, definition, now, now, by))
+                           "active_from_ms, updated_ms, updated_by, source, title) "
+                           "VALUES (?,?,1,?,?,?,'editor',?)",
+                           (entry_id, definition, now, now, by, title or ""))
                 self._touch(tx, by, now)
             elif _json(json.loads(row["definition"])) != definition:
                 # 改了:从现在起算(改钟点不该把今天早些时候就过了的那一轮补跑出来)
@@ -511,7 +530,20 @@ class RouteStore:
                            "active_from_ms=?, updated_ms=?, updated_by=?, source='editor' "
                            "WHERE entry_id=?", (definition, now, now, by, entry_id))
                 self._touch(tx, by, now)
+            if row is not None and title is not None and title != row["title"]:
+                tx.execute("UPDATE route_schedules SET title=?, updated_ms=?, updated_by=? "
+                           "WHERE entry_id=?", (title, now, by, entry_id))
+                self._touch(tx, by, now)
         return self.view()
+
+    def titles(self) -> dict[str, str]:
+        """路线编号 → 显示名(只列起了名字的)。今天的巡逻、机器人卡片拿它把编号换成人起的名字。"""
+        return {r["route_id"]: r["title"] for r in self.db.query(
+            "SELECT route_id, title FROM routes WHERE title<>''")}
+
+    def schedule_titles(self) -> dict[str, str]:
+        return {r["entry_id"]: r["title"] for r in self.db.query(
+            "SELECT entry_id, title FROM route_schedules WHERE title<>''")}
 
     def delete_schedule(self, entry_id: str, *, base_revision: Any, by: str) -> None:
         base = self._base(base_revision)

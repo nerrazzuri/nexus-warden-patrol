@@ -731,3 +731,37 @@ def test_网页P0_14_路线搬到新版本_定义里的版本一起改_修订号
     assert s.move_to_version("house", "old", "wide", by="gina") == []
     with pytest.raises(RouteError):
         s.move_to_version("house", "wide", "nope", by="gina")
+
+
+# ------------------------------------------------------------ 第 8 轮 W8-11:显示名(能写中文)
+
+
+def test_第8轮_W8_11_路线和排程有显示名_能写中文_编号不变(台):
+    s = 台.store
+    r = s.put_route("route-1", {**body(), "title": " 一楼夜巡 "}, by="a")
+    assert r["id"] == "route-1" and r["title"] == "一楼夜巡"
+    r = s.put_route("route-1", {**body(base=1)}, by="a")
+    assert r["title"] == "一楼夜巡", "改路线不带显示名就留着原来的"
+    r = s.put_route("route-1", {**body(base=2), "title": ""}, by="a")
+    assert r["title"] == "", "带空串就是清掉"
+    with pytest.raises(RouteError, match="显示名"):
+        s.put_route("route-1", {**body(base=3), "title": "长" * 41}, by="a")
+    s.put_route("route-1", {**body(base=3), "title": "一楼夜巡"}, by="a")
+    s.set_timezone("Asia/Kuala_Lumpur", by="a")
+    v = s.put_schedule("sched-1", _sched(mission="route-1", title="每晚十点"), by="a")
+    got = next(x for x in v["schedules"] if x["id"] == "sched-1")
+    assert got["title"] == "每晚十点" and got["mission"] == "route-1"
+    assert next(x for x in v["routes"] if x["id"] == "route-1")["title"] == "一楼夜巡"
+    assert s.titles() == {"route-1": "一楼夜巡"}
+
+
+def test_第8轮_W8_11_今天的巡逻带路线显示名(台):
+    from nexwar_site.today import today_view
+    s = 台.store
+    s.put_route("route-1", {**body(), "title": "一楼夜巡"}, by="a")
+    s.set_timezone("UTC", by="a")
+    s.put_schedule("sched-1", _sched(mission="route-1", title="每晚十点", days=[
+        "mon", "tue", "wed", "thu", "fri", "sat", "sun"]), by="a")
+    items = today_view(台.db, now_ms=台.t[0] + 3_600_000)["items"]
+    assert items and items[0]["label"] == "route-1"
+    assert items[0]["title"] == "一楼夜巡" and items[0]["schedule_title"] == "每晚十点"
