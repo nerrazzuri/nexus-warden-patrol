@@ -268,33 +268,46 @@ class _PatrolSheetState extends State<_PatrolSheet> {
                 for (final r in rs)
                   Padding(
                     padding: const EdgeInsets.only(bottom: Nw.s8),
-                    child: NwCard(
-                      key: _PatrolSheet.routeKey(r),
-                      tone: _pick == r ? NwTone.info : NwTone.neutral,
-                      onTap: _otherMap.containsKey(r) ? null : () => setState(() => _pick = r),
-                      child: Row(children: [
-                        Icon(_pick == r ? Icons.radio_button_checked_rounded : Icons.radio_button_off_rounded,
-                            color: _pick == r ? c.primary : c.textSecondary),
-                        const SizedBox(width: Nw.s8),
-                        Expanded(
-                            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                          Text(r,
-                              style: NwText.bodyLarge
-                                  .copyWith(color: _otherMap.containsKey(r) ? c.textSecondary : c.text)),
-                          if (_otherMap.containsKey(r))
+                    // 易用性第 7 轮：画在别的版本上的路线整行变淡、不写预计时间、写「派不了」和按角色的去处
+                    child: Opacity(
+                      opacity: _otherMap.containsKey(r) ? 0.55 : 1,
+                      child: NwCard(
+                        key: _PatrolSheet.routeKey(r),
+                        tone: _pick == r ? NwTone.info : NwTone.neutral,
+                        onTap: _otherMap.containsKey(r) ? null : () => setState(() => _pick = r),
+                        child: Row(children: [
+                          Icon(
+                              _otherMap.containsKey(r)
+                                  ? Icons.block_rounded
+                                  : _pick == r
+                                      ? Icons.radio_button_checked_rounded
+                                      : Icons.radio_button_off_rounded,
+                              color: _pick == r ? c.primary : c.textSecondary),
+                          const SizedBox(width: Nw.s8),
+                          Expanded(
+                              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                            Text(r,
+                                style: NwText.bodyLarge
+                                    .copyWith(color: _otherMap.containsKey(r) ? c.textSecondary : c.text)),
+                            if (_otherMap.containsKey(r)) ...[
+                              Text(
+                                  tr("Can't dispatch: drawn on map v${_otherMap[r]}; ${widget.robotId} is using v$_loaded",
+                                      '派不了：画在 v${_otherMap[r]} 上，${widget.robotId} 用的是 v$_loaded'),
+                                  style: NwText.bodySmall.copyWith(color: c.textSecondary)),
+                              Text(refusalHint('map_mismatch', widget.api.session),
+                                  style: NwText.bodySmall.copyWith(color: c.textSecondary)),
+                            ],
+                          ])),
+                          if (!_otherMap.containsKey(r))
                             Text(
-                                tr('Drawn on map v${_otherMap[r]}; ${widget.robotId} is using v$_loaded',
-                                    '画在 v${_otherMap[r]} 上，${widget.robotId} 用的是 v$_loaded'),
+                                _plans[r]?['forever'] == true
+                                    ? loopsText(0)
+                                    : _plans[r]?['estimate_s'] is num
+                                        ? minutesText(_plans[r]!['estimate_s'] as num)
+                                        : '…',
                                 style: NwText.bodySmall.copyWith(color: c.textSecondary)),
-                        ])),
-                        Text(
-                            _plans[r]?['forever'] == true
-                                ? loopsText(0)
-                                : _plans[r]?['estimate_s'] is num
-                                    ? minutesText(_plans[r]!['estimate_s'] as num)
-                                    : '…',
-                            style: NwText.bodySmall.copyWith(color: c.textSecondary)),
-                      ]),
+                        ]),
+                      ),
                     ),
                   ),
               ]),

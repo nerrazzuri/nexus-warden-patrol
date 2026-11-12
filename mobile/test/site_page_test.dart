@@ -1316,6 +1316,29 @@ void main() {
     expect(api.calls, contains('patrol A loop'));
   });
 
+  // liang-d5 易用性第 7 轮：灰掉的路线还写着预计时间、灰得不够；管理员看到的跟保安一样，管理员能做的那句提示看不到
+  for (final role in ['guard', 'admin']) {
+    testWidgets('第 7 轮 画在别的版本上的路线（$role）：不写预计时间、整行变淡、写「派不了」和按角色的去处', (t) async {
+      final api = FakeApi(role, robotView: busyView())
+        ..routesBody = <String, dynamic>{...FakeApi(role).routesBody, 'routes': <dynamic>[
+          <String, dynamic>{'id': 'loop', 'map_id': 'estate-1', 'map_version': '7'},
+          <String, dynamic>{'id': 'demo-loop', 'map_id': 'estate-1', 'map_version': '11'}]};
+      api.scheduleBody = <String, dynamic>{...siteFixture('site_schedule'), 'missions': <String>['loop', 'demo-loop']};
+      await openRobot(t, api);
+      await t.tap(find.byKey(const Key('btn-patrol')));
+      await t.pumpAndSettle();
+      final row = find.byKey(patrolRouteKey('demo-loop'));
+      expect(find.descendant(of: row, matching: find.textContaining('分钟')), findsNothing, reason: '派不了就不写多久');
+      expect(find.descendant(of: row, matching: find.textContaining('派不了')), findsOneWidget);
+      final op = t.widget<Opacity>(find.ancestor(of: row, matching: find.byType(Opacity)).first);
+      expect(op.opacity, lessThan(0.7));
+      expect(find.descendant(of: row, matching: find.textContaining(role == 'admin' ? '「地图」页' : '请管理员')),
+          findsOneWidget);
+      expect(find.descendant(of: find.byKey(patrolRouteKey('loop')), matching: find.textContaining('分钟')),
+          findsOneWidget, reason: '能派的照旧写');
+    });
+  }
+
   testWidgets('经理：叫停、派巡逻（W53），没有回待命点', (t) async {
     final api = FakeApi('owner', robotView: busyView());
     await openRobot(t, api);
