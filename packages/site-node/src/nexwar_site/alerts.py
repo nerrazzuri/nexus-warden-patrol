@@ -231,6 +231,8 @@ LEVEL_OF: dict[str, Level] = {
     # W53:有人手动派了临时巡逻(告诉经理、管理员);排队的那一趟起跑了、作废了(告诉派的人)。
     "adhoc_patrol": Level.P3,
     "adhoc_queue": Level.P3,
+    # W75:站点出完一张图(推给管理员、工程师:可以用了)
+    "map_ready": Level.P3,
 }
 
 

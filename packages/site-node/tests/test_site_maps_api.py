@@ -3,6 +3,8 @@
 
 from __future__ import annotations
 
+import json
+
 import pytest
 from test_site_api import MAP, PW, _等, target, 站
 
@@ -236,3 +238,22 @@ def test_原点表优先_挪删待命点不动原点(站点):
     code, d = s.req("GET", f"/api/maps/{MAP[0]}/14/preview", token=alice)
     if code == 200:                                       # 这张假图没有栅格就没有预览
         assert [h["name"] for h in d["homes"]] == ["home"]
+
+
+def test_W75_站点装了出图组件_边走边建的开录带上站点打包(站点):
+    s = 站点
+    alice = _登(s, "alice")
+    _等(lambda: _caps(s) is not None and "mapping" in _caps(s).tasks)
+
+    def 发的(version):
+        rows = s.db.query("SELECT payload FROM commands WHERE kind='mapping' ORDER BY issued_at")
+        got = [json.loads(r["payload"]) for r in rows]
+        return [p for p in got if p.get("version") == version][-1]
+    s.req("POST", "/api/robots/A/mapping", {"action": "start", "name": "y", "map_id": MAP[0],
+                                            "version": "31"}, token=alice)
+    assert "pack" not in 发的("31")
+    s.req("POST", "/api/robots/A/mapping", {"action": "stop"}, token=alice)
+    s.api.mapbuilds = object()
+    s.req("POST", "/api/robots/A/mapping", {"action": "start", "name": "y", "map_id": MAP[0],
+                                            "version": "32"}, token=alice)
+    assert 发的("32")["pack"] == "site"

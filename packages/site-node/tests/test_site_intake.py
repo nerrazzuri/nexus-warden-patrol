@@ -591,3 +591,60 @@ def test_日志设计5_机器人日志按批传上来_站点按机器人存_机�
     got = tmp_path / "robot-logs" / "A" / batch.name / "agent.log.gz"
     assert "位置 (1.00, 2.00" in gzip.open(got, "rt").read()
     box.close()
+
+
+def test_W75_关键帧边走边传到站点_清单最后到_站点出图登记_机器人上删掉_没装出图组件不收(
+        站点, ca, tmp_path):
+    import hashlib
+    import sys
+    import textwrap
+
+    from nexwar_agent.mapping import KF_MANIFEST, KF_SUB, kf_classify, kf_settled
+    from nexwar_site.mapbuild import SiteMapBuilder
+    with 站点.db.tx() as c:
+        c.execute("INSERT INTO commands(command_id, task_id, robot_id, kind, payload, issued_by, "
+                  "issued_at, priority) VALUES ('c1','t1','A','mapping',?, 'alice', 1, 0)",
+                  (json.dumps({"action": "start", "name": "y", "map_id": "yard", "version": "3",
+                               "pack": "site"}),))
+    root = tmp_path / "dogA-outbox"
+    now = [NOW]
+
+    def 跑(n):
+        for _ in range(n):
+            now[0] += 400_000                             # 过了退避(最长 300 s)
+            box.step()
+    kd = root / KF_SUB / "yard" / "3"
+    (kd / "kf").mkdir(parents=True)
+    (kd / "kf" / "00000.bin").write_bytes(b"kf0" * 1000)
+    (kd / "kf" / ".00001.bin.tmp").write_bytes(b"half")            # 写到一半:不传
+    box = Outbox(root, cap_bytes=2**30, sink=_sink(站点, ca, ca.a, sub="/mapkf"), sn="A",
+                 now_ms=lambda: now[0], sub=KF_SUB, run_depth=2, classify=kf_classify,
+                 settled=kf_settled)
+    跑(5)
+    assert (kd / "kf" / "00000.bin").exists(), "没装出图组件:站点不收,机器人上留着"
+    prog = tmp_path / "fake_build.py"
+    prog.write_text(textwrap.dedent("""
+        import sys, pathlib
+        a = sys.argv[1:]
+        out = pathlib.Path(a[a.index("--out") + 1])
+        out.mkdir(parents=True)
+        (out / "floor.pgm").write_bytes(b"P5")
+        print("@@进度 完成", flush=True)
+    """))
+    b = SiteMapBuilder(tmp_path / "site", 站点.maps, runner=[sys.executable, str(prog)],
+                       start_thread=False)
+    站点.intake.mapbuilds = b
+    跑(5)
+    assert b.status("yard", "3")["state"] == "uploading", "清单还没写"
+    (kd / "kf" / ".00001.bin.tmp").unlink()
+    files = {"kf/00000.bin": b"kf0" * 1000, "live.json": b"{}"}
+    (kd / "live.json").write_bytes(b"{}")
+    (kd / KF_MANIFEST).write_text(json.dumps({"map_id": "yard", "version": "3", "files": [
+        {"name": n, "size": len(d), "sha256": hashlib.sha256(d).hexdigest()}
+        for n, d in files.items()]}))
+    跑(10)
+    assert b.status("yard", "3")["state"] == "queued"
+    assert not kd.exists(), "站点收齐了:机器人上删掉"
+    b.run_pending()
+    assert {f.name for f in 站点.maps.get("yard", "3").files} == {"floor.pgm"}
+    box.close()
