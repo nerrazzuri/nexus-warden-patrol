@@ -5,6 +5,7 @@ import { Modal } from "./dialogs";
 import { t, type Key } from "./i18n";
 import { Shape, type ShapeKind } from "./icons";
 import { tone } from "./theme";
+import { lapText } from "./loops";
 import { abnormal, type DeterSession, type Robot, type RobotState } from "./model";
 
 export interface UnitInfo {
@@ -37,6 +38,17 @@ export function locText(u: UnitInfo | undefined): Key | null {
   if (l.degraded || l.reason) return "locPoor";
   if (l.anchored === false || !l.pose) return "locNone";
   return "locGood";
+}
+
+const TASK: Record<string, Key> = { patrol: "st_patrolling", goto: "st_patrolling", standby: "st_returning" };
+
+/** 第 8 轮 W8-04:状态后面那一小段。几圈的巡逻写第几圈;跟状态说的一样就不写(以前卡片上「巡逻中 巡逻中」)。 */
+export function taskNote(r: Robot, kind: string, state: RobotState): string {
+  const lap = (r as Robot & { lap?: { n: number; of: number } | null }).lap;
+  if ((kind === "patrol" || kind === "goto") && lap) return lapText(lap);
+  const k = TASK[kind];
+  if (!k || `st_${state}` === k) return "";
+  return t(k);
 }
 
 export function StateText({ s, stale }: { s: RobotState; stale?: boolean }) {

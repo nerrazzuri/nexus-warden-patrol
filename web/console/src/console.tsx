@@ -8,9 +8,9 @@ import type { Cam } from "./camera";
 import { hms, isStale, siteDown, useNow, useSiteData } from "./data";
 import { anyUnsaved, dropUnsaved } from "./unsaved";
 import { Confirm } from "./dialogs";
-import { lang, t, type Key } from "./i18n";
+import { lang, t } from "./i18n";
 import { Shape } from "./icons";
-import { FullCamera, type UnitInfo } from "./live";
+import { FullCamera, taskNote, type UnitInfo } from "./live";
 import { LocPage } from "./advloc";
 import { RecordingsPage } from "./recpage";
 import { ReportsPage } from "./reportpage";
@@ -36,7 +36,6 @@ import { LAYOUT_TABS } from "./layouttabs";
 import { isAdminPage, loadThemePref, navLabel, pageAllowed, pinFor, readRoute, roleLabel, saveThemePref, SideNav, TopBar, type Page, type ThemePref } from "./shell";
 import { pinScheme, systemIsDark } from "./theme";
 
-const TASK: Record<string, Key> = { patrol: "st_patrolling", goto: "st_patrolling", standby: "st_returning" };
 
 type Pending =
   | { kind: "mode"; mode: Mode["mode"] }
@@ -134,7 +133,7 @@ export function Console({ me, onOut }: { me: Me; onOut: (note?: string) => void 
         const kind = r.status?.task?.kind ?? "";
         const state = robotState(r, deter.get(r.robot_id), kind.includes("dock") || kind.includes("charg"), fell.has(r.robot_id));
         return { robot: r, state, battery: stale ? null : batt.get(r.robot_id) ?? null, deter: deter.get(r.robot_id),
-          task: stale ? "" : kind && TASK[kind] ? t(TASK[kind]) : "", stale, deterUnknown };
+          task: stale ? "" : taskNote(r, kind, state), stale, deterUnknown };
       });
   }, [data, lang.value, stale]);
   const online = units.filter((u) => u.state !== "offline");
