@@ -525,6 +525,8 @@ export function GoLookCard(props: { map: { map_id: string; version: string }; at
         // 第 4 轮 duty N3:能派的都没标原点(出不了发)—— 说是哪几台、怎么办
         const d = e instanceof ApiError ? e.data as { reason?: string; robots?: string[] } | undefined : undefined;
         if (e instanceof ApiError && e.status === 404 && d?.reason === "no_home") { setGot("error"); setWhy(t(props.canFix ? "lookNoHome" : "lookNoHomeGuard", { ids: andList((d.robots ?? []).map(nameOf)) })); }
+        // minor #20(W7-02):有能派的、但都走不到这个点(墙里、障碍上、不连通)
+        else if (e instanceof ApiError && e.status === 404 && d?.reason === "unreachable") { setGot("error"); setWhy(t("lookUnreachable")); }
         else if (e instanceof ApiError && e.status === 404) setGot("none");
         else { setGot("error"); setWhy(e instanceof ApiError ? e.message : String(e)); }
       });

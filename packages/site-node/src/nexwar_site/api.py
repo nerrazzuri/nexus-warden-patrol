@@ -1795,8 +1795,11 @@ class _Handler(TlsHandlerMixin):
                                    "excluded": sorted(skip)})
         if reach is None:
             raise HttpError(404, "站点没有此地图的规划栅格,无法确定最近的机器人")
-        from nexwar_site.nearest import nearest
+        from nexwar_site.nearest import nearest, why_none
         got = nearest(reach, cands, map_id, version, x, y)
+        if got is None and why_none(reach, cands, map_id, version, x, y) == "unreachable":
+            raise HttpError(404, "机器人走不到这个点(在墙里、障碍上,或者跟机器人所在的地方不连通):"
+                                 "换一个点", extra={"reason": "unreachable"})
         if got is None:
             raise HttpError(404, "此地图上没有能派的机器人")
         return self._send_json(200, got)
