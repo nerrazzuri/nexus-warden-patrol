@@ -65,6 +65,14 @@ describe("让最近的机器人过去看看", () => {
     await waitFor(() => expect(c.textContent).toContain("这张地图上现在没有能派的机器人。要在线、在这张地图上定好位"));
     expect(btn(c, "派出")).toBeUndefined();
   });
+
+  it("minor #20(W7-02):点到走不到的地方,说走不到,不说没有机器人", async () => {
+    nearest = { status: 404, body: { error: "机器人走不到这个点", reason: "unreachable" } };
+    const { container: c } = render(<GoLookCard map={MAP} at={[3, 4]} units={[unitA]} onClose={() => {}} say={() => {}} />);
+    await waitFor(() => expect(c.textContent).toContain("机器人走不到这个点"));
+    expect(c.textContent).not.toContain("没有能派的机器人");
+    expect(btn(c, "派出")).toBeUndefined();
+  });
 });
 
 describe("保安的临时路线", () => {

@@ -27,3 +27,11 @@ def nearest(reach: Any, candidates: list[tuple[str, str, str, float, float]], ma
         if best is None or m < best["path_m"]:
             best = {"robot_id": rid, "path_m": m, "eta_s": round(m / NOMINAL_MPS)}
     return best
+
+
+def why_none(reach: Any, candidates: list[tuple[str, str, str, float, float]], map_id: str,
+             version: str, x: float, y: float) -> str:
+    """:func:`nearest` 挑不出时为什么(minor #20,liang-d5 W7-02:点到墙里也说「没有可用机器人」):
+    这张图这一版上有能派的、但都走不到 → ``unreachable``;一台都没有 → ``no_robot``。"""
+    same = [c for c in candidates if c[1] == map_id and c[2] == version]
+    return "unreachable" if same else "no_robot"
