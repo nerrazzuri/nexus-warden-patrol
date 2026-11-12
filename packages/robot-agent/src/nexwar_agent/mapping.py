@@ -21,6 +21,7 @@ import hashlib
 import json
 import logging
 import os
+import re
 import shutil
 import threading
 import time
@@ -38,6 +39,9 @@ BUILT = ".built"
 #: 边走边建的包(W09c2):开录时记下建哪一版(``{"map_id", "version"}``),收尾完了删。代理重启时按它
 #: 接着收尾(内审应修 1:待打包原来只在内存里,重启就丢,站点一直当它「在建」)。
 LIVE = ".live"
+#: 发停录那一刻(本机钟,秒;外审 W75-2 #1):关键帧齐不齐按它比 —— ``.done`` 是收尾完才打的(录包写
+#: 索引、在线建图存盘要好一会;代理重启补打的更晚),拿它比会把齐的误判成不齐。
+STOP_AT = ".stop_at"
 #: 没重建过的包,录完之后在狗上最多留几天(传完、站点确认之后才删)。
 BAG_KEEP_DAYS = 7
 #: **盘紧了就不留**(W00c5d 第三部分内部评审:留着的包把发件箱撑满,巡检就被拒 storage_full):
@@ -76,7 +80,25 @@ def kf_settled(run: Path) -> bool:
     return (run / KF_MANIFEST).is_file()
 
 
-def _check_live(live: Path, done: Path) -> None:
+def _stopped_at(bag: Path) -> float | None:
+    """这一趟停录的时刻(本机钟,秒):发停录时记下的 :data:`STOP_AT`;没有(代理录到一半没了)按录包
+    元数据算录包结束的时刻;都没有是 None。"""
+    try:
+        return float((bag / STOP_AT).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        pass
+    try:
+        meta = (bag / "metadata.yaml").read_text(encoding="utf-8")
+    except OSError:
+        return None
+    start = re.search(r"starting_time:\s*\n\s*nanoseconds_since_epoch:\s*(\d+)", meta)
+    dur = re.search(r"duration:\s*\n\s*nanoseconds:\s*(\d+)", meta)
+    if start is None or dur is None:
+        return None
+    return (int(start.group(1)) + int(dur.group(1))) / 1e9
+
+
+def _check_live(live: Path, stopped: float | None) -> None:
     """关键帧齐不齐(外审 W75-1 #1):预览进程收到停止信号正常收尾、写关键帧没出过错、最后收到的雷达
     离停录不超过 :data:`KF_COVER_S`。不齐抛 :class:`MappingError`(退回在机器人上从录包打包)。"""
     try:
@@ -91,10 +113,8 @@ def _check_live(live: Path, done: Path) -> None:
     last = d.get("last_rx")
     if not isinstance(last, (int, float)) or isinstance(last, bool):
         raise MappingError("边走边存的关键帧没记最后收到雷达的时刻")
-    try:
-        stopped = done.stat().st_mtime
-    except OSError as exc:
-        raise MappingError(f"录包没有完成标记:{exc}") from exc
+    if stopped is None:
+        raise MappingError("没记下停录的时刻(录包也没有元数据),核不了关键帧齐不齐")
     if stopped - float(last) > KF_COVER_S:
         raise MappingError(f"边走边存的关键帧只存到停录前 {stopped - float(last):.0f} 秒"
                            "(预览进程中途停了?)")
@@ -259,6 +279,12 @@ class MappingService:
         # 「停了」收 —— 不然上层「在录」、下层「闲着」,之后停不了也开不了(外审复查阻断)。边走边建的
         # 照样记待打包,错再往外报。
         err: BaseException | None = None
+        if self.live is not None:                 # 边走边建的:先记下发停录的时刻(站点打包核关键帧)
+            try:
+                (self.bags_root / self.last_bag / STOP_AT).write_text(f"{time.time():.3f}",
+                                                                      encoding="utf-8")
+            except OSError:
+                log.exception("记不下发停录的时刻(交接时按不齐算,退回从录包建)")
         try:
             bag = Path(await self.orch.stop_record())
         except Exception as exc:  # noqa: BLE001 - 什么错都先按「停了」收,再原样往外报
@@ -382,7 +408,7 @@ class MappingService:
         (每个文件的大小、sha256)—— 发件箱最后传它,站点收齐核对完出图。"""
         if not (kd / KF_LIVE).is_file():
             raise MappingError("边走边存的关键帧没收尾(预览进程没正常停?)")
-        _check_live(kd / KF_LIVE, bag / DONE)
+        _check_live(kd / KF_LIVE, _stopped_at(bag))
         rtk = bag / "rtk.jsonl"
         if rtk.is_file():
             shutil.copyfile(rtk, kd / ".rtk.jsonl.tmp")
@@ -407,7 +433,8 @@ class MappingService:
                 if p.name != KF_MANIFEST:
                     shutil.rmtree(p) if p.is_dir() else p.unlink()
             tmp = kd / f".{KF_MANIFEST}.tmp"
-            tmp.write_text(json.dumps({"map_id": map_id, "version": version, "files": [],
+            # 不带 files(外审 W75-2 #2):不认作废的站点读不出文件列表、拒收,不会当空清单出图
+            tmp.write_text(json.dumps({"map_id": map_id, "version": version,
                                        "abandoned": True, "reason": reason[:300]},
                                       ensure_ascii=False), encoding="utf-8")
             os.replace(tmp, kd / KF_MANIFEST)

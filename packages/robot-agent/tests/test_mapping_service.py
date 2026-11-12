@@ -610,6 +610,11 @@ async def test_W75_代理重启_站点打包的这一趟接着收尾(tmp_path):
     svc, box = _site_svc(tmp_path)
     await svc.start("yard", target=("estate-1", "5"), pack="site")
     _walked(box / "mapkf" / "estate-1" / "5")
+    import time
+    end = int(time.time() * 1e9)                     # 录包元数据(录包程序正常写完的):结束时刻
+    (svc.bags_root / svc.last_bag / "metadata.yaml").write_text(
+        "rosbag2_bagfile_information:\n  version: 5\n  duration:\n    nanoseconds: 60000000000\n"
+        f"  starting_time:\n    nanoseconds_since_epoch: {end - 60_000_000_000}\n")
     again, _ = _site_svc(tmp_path)
     assert again.pending_pack == "site"
     _, mode = await again.finish()
@@ -664,6 +669,40 @@ async def test_外审W75_1_4_关键帧作废_只留一份作废清单_传完站�
     assert mode == "bag"
     assert [p.name for p in kd.rglob("*") if p.is_file()] == [KF_MANIFEST], "关键帧不再传"
     m = json.loads((kd / KF_MANIFEST).read_text())
-    assert m["abandoned"] is True and m["files"] == [] and "没收尾" in m["reason"]
+    assert m["abandoned"] is True and "没收尾" in m["reason"]
+    assert "files" not in m, "外审 W75-2 #2:不认作废的站点读不出文件列表、拒收,不会当空清单出图"
     assert (m["map_id"], m["version"]) == ("estate-1", "5")
     assert kf_settled(kd), "有清单 = 写完了:传完、站点确认就删"
+
+
+@pytest.mark.parametrize("why, done_later", [
+    ("停录收尾慢(录包写索引、在线建图存盘)", 30.0),
+    ("预览收尾了、代理没来得及写完成标记,重启后补写", 120.0),
+])
+async def test_外审W75_2_1_关键帧齐不齐按发停录那一刻比_不按收尾完的时刻(tmp_path, why, done_later):
+    import os
+    import time
+
+    from nexwar_agent.mapping import DONE
+    svc, box = _site_svc(tmp_path)
+    await svc.start("yard", target=("estate-1", "5"), pack="site")
+    kd = box / "mapkf" / "estate-1" / "5"
+    _walked(kd)
+    await svc.stop()
+    done = svc.bags_root / svc.last_bag / DONE
+    later = time.time() + done_later
+    os.utime(done, (later, later))
+    _, mode = await svc.finish()
+    assert mode == "site", why
+
+
+async def test_外审W75_2_1_没记发停录的时刻_保守退回从录包重建(tmp_path):
+    from nexwar_agent.mapping import STOP_AT
+    svc, box = _site_svc(tmp_path)
+    await svc.start("yard", target=("estate-1", "5"), pack="site")
+    kd = box / "mapkf" / "estate-1" / "5"
+    _walked(kd)
+    await svc.stop()
+    (svc.bags_root / svc.last_bag / STOP_AT).unlink()           # 录包也没有元数据
+    _, mode = await svc.finish()
+    assert mode == "bag" and "停录" in svc.last_fallback
