@@ -452,6 +452,18 @@ def test_反过来_改布防时间撞上已有巡逻_也不让存(站):
                                      "state": "armed"}, by="olga")       # 星期二没巡逻
 
 
+def test_minor33_后加的例外盖住先加的_那天撤防了就不算布防占用(站):
+    """W73 minor #33:2027-01-19 先加了全天布防,后来又加了全天撤防(运行时按后加的,那天撤防);
+    查冲突时还按布防算,星期二的巡逻误拒。"""
+    t = _冲突台(站)
+    _方案(t)
+    t.arming.schedule.add_exception({"first_day": "2027-01-19", "last_day": "2027-01-19",
+                                     "state": "armed"}, by="olga")       # 星期二
+    t.arming.schedule.add_exception({"first_day": "2027-01-19", "last_day": "2027-01-19",
+                                     "state": "disarmed"}, by="olga")    # 后加的:那天撤防
+    _排(t, "s4", "10:00", days=("tue",))                 # 不该拦
+
+
 def test_反过来_改值守方案撞上已有巡逻_也不让存(站):
     t = _冲突台(站)
     _排(t, "s1", "22:30")
