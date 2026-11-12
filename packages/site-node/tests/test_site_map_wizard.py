@@ -368,3 +368,30 @@ def test_W75_向导_站点在出图_带阶段和百分比_没出成带原因(站
     assert got["state"] == "failed" and "回环工具炸了" in got["reason"] and got["where"] == "site"
     b.st = {"state": "running", "robot_id": "B", "stage": "回环", "pct": 40}
     assert w.view()["build"] == {"state": "pending"}, "别的机器人的不算"
+
+
+def test_W75_站点出图失败_向导里在站点上重试_同一版重出_没失败的不让重试(站点):
+    w = _wiz(站点)
+    v = w.apply({"action": "start", "robot_id": "A", "site_type": "indoor", "drive": "remote"},
+                by="alice")
+    b = _假出图({"state": "running", "robot_id": "A", "stage": "回环", "pct": 40})
+    b.key = ("main", v["version"])
+    b.retried = []
+
+    def retry(map_id, version):
+        b.retried.append((map_id, version))
+        b.st = {"state": "queued", "robot_id": "A"}
+    b.retry = retry
+    w.w.builds = b
+    with pytest.raises(WizardError) as ei:
+        w.apply({"action": "retry_site"}, by="alice")
+    assert ei.value.status == 409 and ei.value.reason == "not_failed"
+    b.st = {"state": "failed", "robot_id": "A", "reason": "回环工具炸了"}
+    got = w.apply({"action": "retry_site"}, by="alice")
+    assert b.retried == [("main", v["version"])], "同一版重出,不换版本号"
+    assert got["version"] == v["version"]
+    assert got["build"] == {"state": "pending", "where": "site", "stage": "queued", "pct": 0}
+    w.w.builds = None
+    with pytest.raises(WizardError) as ei:
+        w.apply({"action": "retry_site"}, by="alice")
+    assert ei.value.reason == "not_failed"
