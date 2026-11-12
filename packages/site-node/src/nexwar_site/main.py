@@ -1103,7 +1103,12 @@ class Server:
         self.standby.hold = lambda rid, tid: _hold(rid, tid) or self.guard.holds(rid, tid)
         self.scheduler.guard_busy = self.guard.robots
         # W73 第四期:有桩的按值守的出站线起回充、充到够撑到布防结束
-        self.charge.wants = self.guard.topup_line
+        # W76:巡逻电量到全站电量线回来以后 —— 回充按这条线起、没桩的上一趟因电量结束起换电;
+        # 跟值守的取高
+        from nexwar_site.patrol_energy import PatrolEnergy, combine_lines
+        from nexwar_site.site_settings import SiteSettings as _Settings
+        self.patrol_energy = PatrolEnergy(self.db, self.dispatcher, _Settings(self.db))
+        self.charge.wants = combine_lines(self.guard.topup_line, self.patrol_energy.charge_line)
         self.charge.resume_for = self.guard.resume_pct
         # W73 第四期:没桩的保安换电(进度按两块电池判)
         from nexwar_site.battery_swap import SwapDesk
@@ -1112,7 +1117,9 @@ class Server:
             c = self.dispatcher.clients.get(rid)
             caps = c.capabilities.tasks if c is not None and c.capabilities is not None else {}
             return self.charge.charger(rid) is not None and "dock" in caps
-        self.swap = SwapDesk(self.dispatcher, now_ms=wall_ms, need=self.guard.topup_line,
+        self.swap = SwapDesk(self.dispatcher, now_ms=wall_ms,
+                             need=combine_lines(self.guard.topup_line,
+                                                self.patrol_energy.swap_line),
                              eta_min=self.guard.topup_eta_min, has_charger=_has_charger,
                              home=self.standby.swap_point)
         self.swap.alerts = self.alerts

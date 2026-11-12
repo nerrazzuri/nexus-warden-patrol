@@ -342,7 +342,9 @@ class SiteScheduler:
         mission = act.missions[entry.mission]
         ids = [entry.robot] if entry.robot else [
             r.robot_id for r in self.dispatcher.registry.list() if not r.revoked]
+        from nexwar_site.priorities import FOREVER_PREFIX
         ok, taken, why, kinds = [], [], [], set()
+        yielding: list[str] = []         # W76:正在一直巡逻的 —— 能派(日程打断它),有空着的先用空着的
         for rid in ids:
             if rid in claimed:               # 这一拍刚派给了更优先的(它此刻已经报忙了)
                 taken.append(rid)
@@ -354,8 +356,9 @@ class SiteScheduler:
                 reason, kind = (f"{rid} 站点设成只许手动派,不接排程"
                                 if self.dispatcher.autonomy(rid) == "manual_only"
                                 else f"{rid} 要人监护,不接排程"), "supervised"
-            if not reason and self.dispatcher.busy(rid) is not None:
-                reason, kind = f"{rid} 正在执行 {self.dispatcher.busy(rid)}", "busy"
+            running = self.dispatcher.busy(rid)
+            if not reason and running is not None and not running.startswith(FOREVER_PREFIX):
+                reason, kind = f"{rid} 正在执行 {running}", "busy"
             if not reason and rid in self._site_busy():
                 reason, kind = f"{rid} 正在驱离", "busy"
             if not reason and rid in self._guarding():
@@ -381,9 +384,11 @@ class SiteScheduler:
             if reason:
                 why.append(reason)
                 kinds.add(kind)
+            elif running is not None:
+                yielding.append(rid)
             else:
                 ok.append(rid)
-        return ok, taken, ";".join(why) or "没有登记的机器人", kinds
+        return ok or yielding, taken, ";".join(why) or "没有登记的机器人", kinds
 
     def _guarding(self) -> set[str]:
         if self.guard_busy is None:

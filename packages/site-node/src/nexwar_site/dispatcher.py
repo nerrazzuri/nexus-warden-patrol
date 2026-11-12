@@ -380,6 +380,8 @@ class Dispatcher:
                # 易用性第 6 轮 W6-01:当前这版图上有没有原点(没有就出不了发;没报地图 = None 不知道)
                "home_set": self._home_set(robot_id, c),
                "running": self.running_view(c),
+               # W76:正在跑几圈的巡逻 → 第几圈 / 共几圈(0 = 一直巡逻);跟机器人卡片一个算法
+               "lap": _lap_of(self.db, robot_id, c),
                "loc": self._loc_view(c), "clock_skew_s": _round1(self.clock_skew_s(robot_id)),
                # W09e:最近一份遥测里的 RTK 解(没配 RTK、老狗都是 None)
                "rtk": c.telemetry.rtk if c is not None and c.telemetry is not None else None,
@@ -1170,6 +1172,11 @@ class Dispatcher:
                 cb(ack)
             except Exception:
                 log.exception("回执回调炸了(%s),其余照常", ack.command_id)
+
+
+def _lap_of(db: Any, robot_id: str, c: Any) -> dict[str, int] | None:
+    from nexwar_site.robot_overview import _lap, _task
+    return _lap(db, robot_id, _task(c))
 
 
 def _round1(v: float | None) -> float | None:

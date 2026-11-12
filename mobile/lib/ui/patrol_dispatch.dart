@@ -76,12 +76,27 @@ const Key patrolSendKey = _PatrolSheet.sendKey;
 const Key patrolQueuedKey = Key('patrol-queued');
 const Key patrolCustomKey = Key('patrol-custom');
 
+/// W76 循环次数：1、2、3、5、10 圈或一直巡逻（0）。
+const List<int> patrolLoopChoices = <int>[1, 2, 3, 5, 10, 0];
+Key patrolLoopsKey(int n) => Key('patrol-loops-$n');
+const Key patrolForeverKey = Key('patrol-forever');
+
+String loopsText(int n) => n == 0 ? tr('Keep patrolling', '一直巡逻') : tr('$n×', '$n 圈');
+
+/// 正在跑第几圈（站点机器人视图的 `lap`）：共几圈写「第 2 / 3 圈」，一直巡逻写「一直巡逻 · 第 5 圈」；一圈的是空串。
+String lapText(Object? lap) {
+  if (lap is! Map || lap['n'] is! num || lap['of'] is! num) return '';
+  final n = (lap['n'] as num).toInt(), of = (lap['of'] as num).toInt();
+  return of == 0 ? tr('Keep patrolling · loop $n', '一直巡逻 · 第 $n 圈') : tr('Loop $n of $of', '第 $n / $of 圈');
+}
+
 class _PatrolSheetState extends State<_PatrolSheet> {
   List<String>? _routes;
   final Map<String, Map<String, dynamic>> _plans = <String, Map<String, dynamic>>{};
   String? _pick;
   String? _error;
   bool _busy = false;
+  int _loops = 1;
 
   @override
   void initState() {
@@ -125,14 +140,29 @@ class _PatrolSheetState extends State<_PatrolSheet> {
         _routes = rs;
         _pick = rs.length == 1 && !_otherMap.containsKey(rs.first) ? rs.first : null;
       });
-      for (final r in rs) {
-        unawaited(widget.api.patrolPlan(widget.robotId, r).then((p) {
-          if (mounted) setState(() => _plans[r] = p);
-        }, onError: (Object _) {}));
-      }
+      _loadPlans(rs);
     } on SiteError catch (e) {
       if (mounted) setState(() => _error = tr("Can't load routes: ${refusalText(e)}", '无法加载路线：${refusalText(e)}'));
     }
+  }
+
+  void _loadPlans(List<String> rs) {
+    final n = _loops;
+    for (final r in rs) {
+      unawaited(widget.api.patrolPlan(widget.robotId, r, loops: n).then((p) {
+        if (mounted && _loops == n) setState(() => _plans[r] = p);
+      }, onError: (Object _) {}));
+    }
+  }
+
+  void _setLoops(int n) {
+    if (n == _loops) return;
+    setState(() {
+      _loops = n;
+      _plans.clear();
+    });
+    final rs = _routes;
+    if (rs != null) _loadPlans(rs);
   }
 
   Future<void> _send() async {
@@ -140,7 +170,7 @@ class _PatrolSheetState extends State<_PatrolSheet> {
     if (r == null) return;
     setState(() => _busy = true);
     try {
-      final got = await widget.api.patrol(widget.robotId, r);
+      final got = await widget.api.patrol(widget.robotId, r, loops: _loops);
       final ack = got['ack'];
       if (got['queued'] != true && ack is Map && ack['result'] != 'accepted' && ack['result'] != 'duplicate') {
         // 机器人明确没收（忙、电量低……）：不说「派出去了」（外审 W53-1 #4）
@@ -256,13 +286,42 @@ class _PatrolSheetState extends State<_PatrolSheet> {
                                     '画在 v${_otherMap[r]} 上，${widget.robotId} 用的是 v$_loaded'),
                                 style: NwText.bodySmall.copyWith(color: c.textSecondary)),
                         ])),
-                        Text(_plans[r]?['estimate_s'] is num ? minutesText(_plans[r]!['estimate_s'] as num) : '…',
+                        Text(
+                            _plans[r]?['forever'] == true
+                                ? loopsText(0)
+                                : _plans[r]?['estimate_s'] is num
+                                    ? minutesText(_plans[r]!['estimate_s'] as num)
+                                    : '…',
                             style: NwText.bodySmall.copyWith(color: c.textSecondary)),
                       ]),
                     ),
                   ),
               ]),
             ),
+          if (rs != null && rs.isNotEmpty) ...[
+            nwGap8,
+            Text(tr('Loops', '循环次数'), style: NwText.bodySmall.copyWith(color: c.textSecondary)),
+            const SizedBox(height: Nw.s4),
+            Wrap(spacing: Nw.s8, runSpacing: Nw.s4, children: [
+              for (final n in patrolLoopChoices)
+                ChoiceChip(
+                    key: patrolLoopsKey(n),
+                    label: Text(loopsText(n)),
+                    selected: _loops == n,
+                    onSelected: _busy ? null : (_) => _setLoops(n)),
+            ]),
+          ],
+          if (plan != null && plan['forever'] == true) ...[
+            nwGap8,
+            NwNotice(
+                key: patrolForeverKey,
+                tone: NwTone.info,
+                text: tr(
+                    'Keep patrolling: starts now and loops until the battery reaches the site\'s patrol return line, then goes back to recharge or swap and the task ends.'
+                        '${'${plan['interrupted_by'] ?? ''}'.isEmpty ? '' : ' ${plan['interrupted_by']} will stop it and run instead.'}',
+                    '一直巡逻：现在就走，一圈接一圈，电量到站点设的巡逻电量线就回去充电或换电池，这一趟结束。'
+                        '${'${plan['interrupted_by'] ?? ''}'.isEmpty ? '' : '${plan['interrupted_by']}到点会停下它、改跑日程。'}')),
+          ],
           nwGap8,
           NwButton(
               buttonKey: patrolCustomKey,

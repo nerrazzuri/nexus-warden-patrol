@@ -66,6 +66,35 @@ class AdhocError(ValueError):
     """请求本身不对(没有这一条、不是你的……)。"""
 
 
+#: 循环次数最多几圈(W76);再多就选「一直巡逻」。
+MAX_LOOPS = 99
+
+
+class LoopsRefused(Exception):
+    """这台机器人跑不了要的圈数(老代理不认一直巡逻;接口回 409)。"""
+
+
+def with_loops(wire: dict[str, Any], loops: Any, *, return_pct: float,
+               caps: dict[str, Any]) -> dict[str, Any]:
+    """W76:派巡逻时把圈数(``None`` = 不改路线里写的;0 = 一直巡逻)和全站电量线写进任务。
+
+    电量线取路线里写的和全站的高的那个(机器人自己还按回原点的路程算,再取高的)。一直巡逻只派给
+    能力里报了 ``loops_forever`` 的机器人:老代理会按「圈数要正整数」拒收。
+    圈数不对抛 ``ValueError``。"""
+    from nexwar_contract.mission import LOOPS_FOREVER
+    pol = dict(wire.get("policy") or {})
+    if loops is not None:
+        if not isinstance(loops, int) or isinstance(loops, bool) or not 0 <= loops <= MAX_LOOPS:
+            raise ValueError(f"循环次数要是 1–{MAX_LOOPS} 的整数,或 0(一直巡逻)")
+        if loops == LOOPS_FOREVER and not caps.get("loops_forever"):
+            raise LoopsRefused("这台机器人的程序版本太老,不支持一直巡逻,请先升级机器人")
+        pol["loops"] = loops
+    cur = pol.get("battery_return_pct")
+    cur = float(cur) if isinstance(cur, (int, float)) and not isinstance(cur, bool) else 0.0
+    pol["battery_return_pct"] = max(cur, float(return_pct))
+    return {**wire, "policy": pol}
+
+
 def _dist(a: tuple[float, float], b: tuple[float, float]) -> float:
     return math.hypot(a[0] - b[0], a[1] - b[1])
 
@@ -137,6 +166,11 @@ class AdhocDesk:
         p = getattr(getattr(c, "telemetry", None), "pose", None)
         return (float(p.x), float(p.y), float(p.yaw)) if p is not None else None
 
+    def _pct(self, robot: str) -> float | None:
+        c = self.dispatcher.clients.get(robot)
+        v = getattr(getattr(c, "telemetry", None), "battery_pct", None)
+        return float(v) if isinstance(v, (int, float)) and not isinstance(v, bool) else None
+
     def _straight(self, robot: str) -> bool:
         c = self.dispatcher.clients.get(robot)
         caps = getattr(c, "capabilities", None)
@@ -153,7 +187,7 @@ class AdhocDesk:
         跑好几圈的,不加。"""
         here = self._here(robot)
         m = parse_mission(wire)
-        if here is None or not m.waypoints or int(m.policy.loops or 1) > 1:
+        if here is None or not m.waypoints or m.policy.loops != 1:   # W76:0 = 一直巡逻也不加
             return wire
         last = m.waypoints[-1].pose.position
         if _dist((last.x, last.y), (here[0], here[1])) < 0.5:
@@ -170,7 +204,14 @@ class AdhocDesk:
     def estimate_s(self, robot: str, mission: Mission) -> int:
         """这一趟连走回起点(不知道起点就回待命点)大概要多少秒(已乘余量)。"""
         here = self._here(robot)
-        hist = self.history_s(robot, mission.mission)
+        if mission.policy.forever:
+            # W76 一直巡逻:跑到电量到线为止 —— 按从现在的电量用到线估(不知道电量按满电)
+            from nexwar_site.energy import DRAIN_PCT_PER_H
+            pct = self._pct(robot)
+            left = max(0.0, (100.0 if pct is None else pct) - mission.policy.battery_return_pct)
+            return int(math.ceil(max(left / DRAIN_PCT_PER_H * 3600, 60.0) * MARGIN))
+        # 历史是一趟一圈的;跑几圈的按路长乘圈数估
+        hist = self.history_s(robot, mission.mission) if mission.policy.loops == 1 else None
         if hist is not None:
             back = ((here[0], here[1]) if here is not None
                     else self._standby_xy(robot, mission.map_id))
@@ -303,6 +344,12 @@ class AdhocDesk:
         m = parse_mission(wire)
         est = self.estimate_s(robot, m)
         now = self._now()
+        if m.policy.forever:
+            # W76:一直巡逻马上走;``interrupted_by`` = 跑到电量线之前会打断它的那一趟日程(没有是空串)
+            c = self.collision(robot, now, est)
+            return {"estimate_s": est, "start_ms": now, "queued": False, "because": "",
+                    "forever": True, "interrupted_by": c[1] if c else "",
+                    "utc_offset_min": self.offset_min()}
         t, because = self.slot(robot, now, est)
         return {"estimate_s": est, "start_ms": t, "queued": t > now, "because": because,
                 "utc_offset_min": self.offset_min()}
@@ -310,13 +357,16 @@ class AdhocDesk:
     async def submit(self, robot: str, wire: dict[str, Any], *, label: str,
                      by: str) -> dict[str, Any]:
         """派一趟临时巡逻:不撞就马上派(撞了 ``DispatchRefused`` 照旧抛给调用方);撞了就排队。"""
+        from nexwar_site.priorities import FOREVER_PATROL, FOREVER_PREFIX
         m = parse_mission(wire)
         est = self.estimate_s(robot, m)
         now = self._now()
-        t, because = self.slot(robot, now, est)
+        # W76 一直巡逻(用户 11-12):不看日程马上派,优先级比排程低 —— 日程到点打断它
+        forever = m.policy.forever
+        t, because = (now, "") if forever else self.slot(robot, now, est)
         aid = uuid.uuid4().hex[:12]
         if t <= now:
-            task_id = f"{ADHOC_PREFIX}{aid}"
+            task_id = f"{FOREVER_PREFIX if forever else ADHOC_PREFIX}{aid}"
 
             def 发之前记账(_cmd, tx) -> None:
                 tx.execute("INSERT INTO adhoc_queue(id, robot, mission, label, by, created_ms, "
@@ -325,7 +375,8 @@ class AdhocDesk:
                            (aid, robot, json.dumps(wire, ensure_ascii=False), label, by, now, now,
                             est, task_id, now))
             r = await self.dispatcher.patrol(robot, self.with_return(robot, wire), issued_by=by,
-                                             priority=MANUAL, task_id=task_id,
+                                             priority=FOREVER_PATROL if forever else MANUAL,
+                                             task_id=task_id,
                                              before_send=发之前记账)
             res, why = _ack_result(r)
             if res not in _OK_ACKS:

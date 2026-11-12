@@ -86,7 +86,7 @@ def overview(dispatcher: Any, db: Any, *, now_ms: int, tz: tzinfo) -> list[dict[
                     # POC:能换哪几种姿势(狗报的;不新鲜不给)、正在跑的任务(有就不让换姿势)
                     "postures": list(((getattr(caps, "tasks", None) or {}).get("posture") or {})
                                      .get("modes", [])) if fresh else [],
-                    "task": _task(c),
+                    "task": _task(c), "lap": _lap(db, rid, _task(c)),
                     "manual_note": (reg.manual_only(rid) or {}).get("note", ""),
                     **_return_targets(db, rid, caps)})
     return out
@@ -120,6 +120,25 @@ def _task(c: Any) -> str | None:
     """狗状态里正在跑的任务号(没有 / 没状态 = None)。"""
     task = getattr(getattr(c, "status", None), "task", None)
     return getattr(task, "task_id", None)
+
+
+def _lap(db: Any, rid: str, task_id: str | None) -> dict[str, int] | None:
+    """W76:正在跑的是几圈的巡逻 → ``{"n": 第几圈, "of": 共几圈(0 = 一直巡逻)}``;
+    一圈的、不是巡逻 → None。
+    按这一趟已经报了几个点(到了的、跳过的都算)÷ 每圈几个点。"""
+    if not task_id:
+        return None
+    rows = db.query("SELECT json_extract(payload, '$.mission.policy.loops') AS loops, "
+                    "json_array_length(json_extract(payload, '$.mission.waypoints')) AS pts "
+                    "FROM commands WHERE robot_id=? AND task_id=? AND kind='patrol' LIMIT 1",
+                    (rid, task_id))
+    if not rows or rows[0]["loops"] is None or rows[0]["loops"] == 1 or not rows[0]["pts"]:
+        return None
+    loops, pts = int(rows[0]["loops"]), int(rows[0]["pts"])
+    [n] = db.query("SELECT COUNT(*) AS n FROM events WHERE robot_id=? AND kind='patrol_waypoint' "
+                   "AND json_extract(data, '$.task_id')=?", (rid, task_id))
+    lap = int(n["n"]) // pts + 1
+    return {"n": min(lap, loops) if loops else lap, "of": loops}
 
 
 def _held(dispatcher: Any, rid: str) -> dict[str, Any] | None:

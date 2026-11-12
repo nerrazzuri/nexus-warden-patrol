@@ -18,6 +18,7 @@ import { notAccepted, type CommandReply } from "./posepick";
 import { siteHm } from "./todaypatrols";
 import { Shape } from "./icons";
 import { locText, StateText, type UnitInfo } from "./live";
+import { lapText, LoopsSelect } from "./loops";
 
 type Say = (s: string) => void;
 export interface RobotCard {
@@ -38,6 +39,8 @@ export interface RobotCard {
   enrolled_at?: number | null; manual_note?: string; held?: { by: string; at_ms: number } | null;
   /** POC:能换哪几种姿态、正在跑的任务(老站点没有)。 */
   postures?: Posture[]; task?: string | null;
+  /** W76:正在跑几圈的巡逻 —— 第几圈、共几圈(0 = 一直巡逻)。一圈的、老站点没有。 */
+  lap?: { n: number; of: number } | null;
 }
 export type Posture = "stand" | "lie" | "crawl";
 const POSTURE_KEY: Record<Posture, "rdStand" | "rdLie" | "rdCrawl"> = { stand: "rdStand", lie: "rdLie", crawl: "rdCrawl" };
@@ -271,6 +274,7 @@ type Act = (fn: () => Promise<unknown>, msg?: string) => Promise<void>;
 function Controls({ r, u, role, say, onChanged }: { r: RobotCard; u?: UnitInfo; role: string; say: Say; onChanged: () => void }) {
   const [routes, setRoutes] = useState<string[] | null>(null);
   const [pick, setPick] = useState("");
+  const [loops, setLoops] = useState(1);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [ask, setAsk] = useState<Posture | null>(null);
@@ -341,8 +345,10 @@ function Controls({ r, u, role, say, onChanged }: { r: RobotCard; u?: UnitInfo; 
                 <option value="">{t("rdPickRoute")}</option>
                 {(routes ?? []).map((m) => <option key={m} value={m}>{m}</option>)}
               </select>
+              <LoopsSelect value={loops} onChange={setLoops} />
               <button type="button" class="btn sm primary" disabled={busy || off || !pick}
-                onClick={() => void send(() => api("POST", path("patrol"), { mission_id: pick }), t("rdPatrolSent", { id, route: pick }))}>
+                onClick={() => void send(() => api("POST", path("patrol"), loops === 1 ? { mission_id: pick } : { mission_id: pick, loops }),
+                  t("rdPatrolSent", { id, route: pick }))}>
                 {t("rdStartPatrol")}
               </button>
             </div>
@@ -451,7 +457,8 @@ function RobotDetail({ r, u, now, role, say, onChanged, onCode, onClose, readOnl
         <h3 class="rd-h">{t("rdNow")}</h3>
         <dl class="rd-facts">
           <div><dt>{t("rdState")}</dt><dd>{u && r.online ? <><StateText s={u.state} stale={u.stale} />{u.task && <small class="muted"> {u.task}</small>}</>
-            : r.online ? t("online") : r.ever_seen === false ? t("fleetNeverSeen") : t("st_offline")}</dd></div>
+            : r.online ? t("online") : r.ever_seen === false ? t("fleetNeverSeen") : t("st_offline")}
+            {r.online && r.lap && <small class="muted" data-lap="1"> · {lapText(r.lap)}</small>}</dd></div>
           {fact("fleetBattery", r.battery_pct == null ? "—" : `${r.battery_pct}%`, true)}
           {fact("fleetLoc", `${loc ? t(loc) : "—"}${u?.robot.loc?.localizer ? ` · ${u.robot.loc.localizer}` : ""}`)}
           {fact("wifiLabel", r.wifi ? `${r.wifi.ssid || "—"} · ${t(`link_${r.wifi.link}` as Key)}` : "—")}

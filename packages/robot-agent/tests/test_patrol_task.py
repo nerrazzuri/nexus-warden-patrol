@@ -228,6 +228,17 @@ async def test_W76_有限圈半路电量到线_照旧失败_写跑了几圈(台�
     await _跑(c, r, parts, t, 3000)
     assert t.state is TaskState.FAILED, (t.state, t.detail)
     assert "半路返航" in t.detail["reason"] and t.detail["laps"] >= 1
+    assert t.detail["ended"] == "battery"
+
+
+async def test_W76_设了两圈跑完_完成_写圈数跑完_跟一直巡逻分得开(台子):
+    c, r, parts, book = 台子
+    t = PatrolTask(task_id="t1", mission=_任务((1.0, 0.0), (1.0, 1.0), policy=Policy(loops=2)),
+                   parts=parts, events=book, now_ms=c)
+    await t.start()
+    await _跑(c, r, parts, t, 6000)
+    assert t.state is TaskState.DONE, (t.state, t.detail)
+    assert t.detail["laps"] == 2 and t.detail["ended"] == "loops"
 
 
 def test_W76_能力里报一直巡逻():

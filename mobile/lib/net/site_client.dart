@@ -609,7 +609,9 @@ abstract class SiteApi {
   Future<Map<String, dynamic>> robot(String id);
   /// 派巡逻（W53：都是临时巡逻）。撞上日程不派、排到后面：回 `{queued: true, start_after_ms, estimate_s,
   /// because, adhoc_id}`；马上派了回 `{task_id, ack, queued: false, estimate_s, adhoc_id}`。
-  Future<Map<String, dynamic>> patrol(String id, String missionId);
+  ///
+  /// W76：[loops] 跑几圈（1 照旧不发；0 = 一直巡逻，电量到站点设的线回去补能、这一趟结束，日程到点会停下它）。
+  Future<Map<String, dynamic>> patrol(String id, String missionId, {int loops = 1});
 
   /// 派一趟临时路线（W53，用户 10-31：保安在图上点几个点）：不存进路线库、不进日程。[points] 是地图坐标（米）。
   /// 回的跟 [patrol] 一样。
@@ -617,7 +619,8 @@ abstract class SiteApi {
       String robotId, List<(double, double)> points, String mapId, String version);
 
   /// 派之前先看（W53）：`{estimate_s, start_ms, queued, because, label}`。不派。
-  Future<Map<String, dynamic>> patrolPlan(String robotId, String missionId);
+  /// W76：一直巡逻（[loops] 0）回 `{forever: true, interrupted_by}`（会被哪趟日程打断，没有是空串）。
+  Future<Map<String, dynamic>> patrolPlan(String robotId, String missionId, {int loops = 1});
 
   /// 今天的巡逻（W53）：`{date, timezone, items: [{at_ms, kind, label, robot, by, state, reason, end_ms,
   /// adhoc_id, ...}]}`。
@@ -1264,9 +1267,9 @@ class SiteClient implements SiteApi {
       _map(await _send('GET', '/api/robots/${Uri.encodeComponent(id)}'));
 
   @override
-  Future<Map<String, dynamic>> patrol(String id, String missionId) async =>
+  Future<Map<String, dynamic>> patrol(String id, String missionId, {int loops = 1}) async =>
       _map(await _send('POST', '/api/robots/${Uri.encodeComponent(id)}/patrol',
-          <String, dynamic>{'mission_id': missionId}));
+          <String, dynamic>{'mission_id': missionId, if (loops != 1) 'loops': loops}));
 
   @override
   Future<Map<String, dynamic>> routes({String? mapId, String? version}) async => _map(await _send(
@@ -1830,8 +1833,10 @@ class SiteClient implements SiteApi {
       }));
 
   @override
-  Future<Map<String, dynamic>> patrolPlan(String robotId, String missionId) async => _map(await _send(
-      'GET', '/api/robots/${Uri.encodeComponent(robotId)}/patrol-plan?mission_id=${Uri.encodeQueryComponent(missionId)}'));
+  Future<Map<String, dynamic>> patrolPlan(String robotId, String missionId, {int loops = 1}) async =>
+      _map(await _send('GET',
+          '/api/robots/${Uri.encodeComponent(robotId)}/patrol-plan?mission_id=${Uri.encodeQueryComponent(missionId)}'
+          '${loops == 1 ? '' : '&loops=$loops'}'));
 
   @override
   Future<Map<String, dynamic>> patrolsToday() async {

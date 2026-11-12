@@ -43,7 +43,7 @@ log = logging.getLogger(__name__)
 
 SOON_MIN = 15
 REPUSH_MIN = 10
-MANAGER_MIN = 20
+MANAGER_MIN = 30                 # W76 用户 11-12:换电池是保安的活,超过半小时没人换才通知经理
 #: 派它回换电位没走成(没接、半路停了),过这么久再派。
 RESEND_S = 60
 #: 离换电位这么近、手上没任务 = 到了。

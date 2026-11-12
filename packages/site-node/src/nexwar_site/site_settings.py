@@ -11,8 +11,12 @@ from typing import Any
 
 #: ``self_protect_siren``(W74 四期):布防时被遮挡、推倒、抱起来自动鸣笛;关了只开警灯
 #: (现场不许自动鸣笛)。
+#: ``patrol_return_pct``(W76,用户 11-12 定全站一个):巡逻(尤其一直巡逻)电量低于它就结束这一趟、
+#: 回去补能;机器人自己还按回原点的路程算,取高的那个。
 DEFAULT_DUTY: dict[str, Any] = {"shift_hours": [7, 19], "stale_hours": 2,
-                                "self_protect_siren": True}
+                                "self_protect_siren": True, "patrol_return_pct": 25}
+#: 电量线能设的范围(%)。
+PATROL_RETURN_RANGE = (20, 60)
 #: 遥控速度档(POC 2026-11,m/s):手机摇杆满推 = 这一档。要 0 < 慢 ≤ 中 ≤ 快 ≤ 1.5。
 #: 遥控速度表(m/s,POC;用户 11-05:按速度分档,目前最高到 SDK 中速档 2.0)。超过 1.0 的机器人自己换
 #: 中速档;机器人到不了的档手机上不显示。
@@ -64,7 +68,14 @@ class SiteSettings:
                 out["stale_hours"] = st
             if isinstance(got.get("self_protect_siren"), bool):
                 out["self_protect_siren"] = got["self_protect_siren"]
+            rp = got.get("patrol_return_pct")
+            if _int(rp) and PATROL_RETURN_RANGE[0] <= rp <= PATROL_RETURN_RANGE[1]:
+                out["patrol_return_pct"] = rp
         return out
+
+    def patrol_return_pct(self) -> float:
+        """巡逻回去补能的电量线(W76,%)。"""
+        return float(self.duty()["patrol_return_pct"])
 
     def set_duty(self, d: Any, *, by: str) -> dict[str, Any]:
         if not isinstance(d, dict):
@@ -87,6 +98,11 @@ class SiteSettings:
             if not isinstance(d["self_protect_siren"], bool):
                 raise SettingsError("自动鸣笛要是 true / false")
             cur["self_protect_siren"] = d["self_protect_siren"]
+        if "patrol_return_pct" in d:
+            rp, (lo, hi) = d["patrol_return_pct"], PATROL_RETURN_RANGE
+            if not _int(rp) or not lo <= rp <= hi:
+                raise SettingsError(f"巡逻回去补能的电量线要是 {lo}–{hi} 的整数(%)")
+            cur["patrol_return_pct"] = rp
         self.put("duty", cur)
         return cur
 

@@ -1039,3 +1039,23 @@ def test_复查R1_通道一次回了失败又说有推送号没了_当轮也重�
     p.tick()
     assert ["jp-lee"] in j.sent, "lee 的 FCM 号没了:当轮就走它的极光"
     assert _队(db)[0]["sent_ms"] is None, "fcm-omar 尚未发成"
+
+
+def test_W76_换电提醒只推保安_半小时没人换的升级只推经理(台):
+    """用户 11-12:换电池是值守保安的活,只有保安收到;超过半小时没人换才升级通知经理。"""
+    desk, p, j, clock, db = 台
+    with db.tx() as c:
+        for name, role in (("ada", "admin"), ("olga", "owner")):
+            c.execute("INSERT INTO accounts(name, role, salt, pw_hash, created_at, disabled) "
+                      "VALUES (?, ?, x'00', x'00', 0, 0)", (name, role))
+            c.execute("INSERT INTO sessions(token_hash, name, created_at, last_used) "
+                      "VALUES (?, ?, 0, 0)", ("s-" + name, name))
+    for name in ("ada", "olga"):
+        p.register(name, "rid-" + name, "android", session="s-" + name)
+    desk.raise_alert(kind="swap_needed", robot="A", title="A 已到换电位,请来换电池", merge=False)
+    p.tick()
+    assert sorted(r for reg, _, _, _ in j.sent for r in reg) == ["rid-gina"], "只推保安"
+    j.sent.clear()
+    desk.raise_alert(kind="swap_overdue", robot="A", title="A 换电池 30 分钟没进展", merge=False)
+    p.tick()
+    assert sorted(r for reg, _, _, _ in j.sent for r in reg) == ["rid-olga"], "只推经理"
