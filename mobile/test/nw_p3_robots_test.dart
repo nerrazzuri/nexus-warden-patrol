@@ -6,7 +6,6 @@ import 'package:nexwar_patrol/ui/nw/nw_p3_robots.dart';
 import 'package:nexwar_patrol/ui/nw/nw_theme.dart';
 import 'package:nexwar_patrol/ui/nw/nw_widgets.dart';
 import 'package:nexwar_patrol/ui/site_page.dart';
-import 'package:nexwar_patrol/ui/site_robot.dart' show robotStatusLine;
 import 'package:nexwar_patrol/ui/site_teleop.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
