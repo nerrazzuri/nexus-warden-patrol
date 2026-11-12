@@ -520,6 +520,33 @@ void main() {
     expect(api.calls, contains('map A main:20261031-1'));
   });
 
+  // 第 8 轮 A8-04：每行先写「第 N 版」再写说明（冒号全角）；切到别的版本叫「换回第 N 版」，不叫「退回」
+  testWidgets('第 8 轮 A8-04：版本行先写第几版；按钮写换回第几版', (t) async {
+    _size(t);
+    final api = FakeApi('admin')
+      ..overview = <String, dynamic>{
+        'maps': <dynamic>[
+          <String, dynamic>{'map_id': 'main', 'versions': <dynamic>[
+            <String, dynamic>{'version': '11', 'note': '从 10 编辑:擦了 0.2 平方米', 'created_ms': 0, 'latest': true,
+              'loaded_on': <dynamic>[], 'quality': <String, dynamic>{'verdict': 'usable'}},
+            <String, dynamic>{'version': '7', 'note': '', 'created_ms': 0, 'latest': false,
+              'loaded_on': <dynamic>['A'], 'quality': <String, dynamic>{}},
+          ]},
+        ],
+        'robots': <dynamic>[
+          <String, dynamic>{'robot_id': 'A', 'can_activate': true,
+            'loaded': <String, dynamic>{'map_id': 'main', 'version': '7'},
+            'rollback': <String, dynamic>{'map_id': 'main', 'version': '11'}},
+        ],
+      };
+    await t.pumpWidget(MaterialApp(home: MapManagePage(api: api)));
+    await t.pumpAndSettle();
+    expect(find.text('第 11 版 · 从第 10 版编辑：擦了 0.2 平方米'), findsOneWidget);
+    expect(find.text('第 7 版'), findsOneWidget);
+    expect(find.text('换回第 11 版'), findsOneWidget);
+    expect(find.textContaining('退回'), findsNothing);
+  });
+
   testWidgets('草稿版本（11-11）：卡片标「草稿」、说在网页发布，没有下发按钮', (t) async {
     _size(t);
     final api = FakeApi('admin')
