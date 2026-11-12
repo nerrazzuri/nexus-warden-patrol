@@ -405,7 +405,9 @@ void main() {
     expect(find.byKey(SiteRouteEditorPage.pointKey(2)), findsOneWidget);
   });
 
-  testWidgets('手机 App 测试 M19：路线名边输边说哪里不对，对话框不关、字不丢；改对了才能建', (t) async {
+  // 手机 App 测试 M19：路线名边输边说哪里不对，对话框不关、字不丢。
+  // 第 8 轮 W8-11 起：名字能写中文、带空格 —— 当显示名，编号自动给；只用字母数字的当编号（重名要说）
+  testWidgets('M19 / W8-11：中文名当显示名、编号自动给；字母数字名重名要说', (t) async {
     final api = RoutesApi('admin');
     await t.binding.setSurfaceSize(const Size(900, 700));
     addTearDown(() => t.binding.setSurfaceSize(null));
@@ -413,21 +415,44 @@ void main() {
     await t.pumpAndSettle();
     await t.tap(find.byKey(SiteRoutesPage.newKey));
     await t.pumpAndSettle();
-    await t.enterText(find.byKey(const Key('route-new-name')), 'App test route');
-    await t.pump();
-    expect(find.textContaining('No spaces'), findsOneWidget);
-    await t.tap(find.byKey(const Key('route-new-go')));
-    await t.pump();
-    expect(find.byKey(const Key('route-new-name')), findsOneWidget, reason: '对话框还开着');
-    expect(find.text('App test route'), findsOneWidget, reason: '字没丢');
     await t.enterText(find.byKey(const Key('route-new-name')), 'loop');
     await t.pump();
     expect(find.text('A route with this name already exists'), findsOneWidget);
-    await t.enterText(find.byKey(const Key('route-new-name')), 'App-test-route');
+    await t.tap(find.byKey(const Key('route-new-go')));
     await t.pump();
+    expect(find.byKey(const Key('route-new-name')), findsOneWidget, reason: '对话框还开着');
+    expect(find.text('loop'), findsWidgets, reason: '字没丢');
+    await t.enterText(find.byKey(const Key('route-new-name')), '一楼 夜巡');
+    await t.pump();
+    expect(find.text('A route with this name already exists'), findsNothing);
     await t.tap(find.byKey(const Key('route-new-go')));
     await t.pumpAndSettle();
-    expect(find.byType(SiteRouteEditorPage), findsOneWidget);
+    final ed = t.widget<SiteRouteEditorPage>(find.byType(SiteRouteEditorPage));
+    expect(ed.newTitle, '一楼 夜巡');
+    expect(ed.newName, matches(RegExp(r'^route-\d+$')));
+  });
+
+  testWidgets('W8-11：显示名存下去；列表写显示名', (t) async {
+    final api = FakeApi('admin');
+    await t.binding.setSurfaceSize(const Size(900, 700));
+    addTearDown(() => t.binding.setSurfaceSize(null));
+    await t.pumpWidget(MaterialApp(
+        home: SiteRouteEditorPage(api: api, mapId: 'estate-1', version: '8', newName: 'route-1', newTitle: '一楼夜巡')));
+    await t.pumpAndSettle();
+    expect(find.text('一楼夜巡'), findsWidgets, reason: '标题写显示名');
+    final geo = MapGeo.fromPreview(await api.mapPreview('estate-1', '8'));
+    final c = _Canvas(t, SiteRouteEditorPage.canvasKey, geo);
+    await _tapMap(t, c, -4.25, 2.5);
+    await _tapMap(t, c, 1.75, -1.25);
+    await _tapKey(t, SiteRouteEditorPage.saveKey);
+    expect(api.savedRoutes.single['id'], 'route-1');
+    expect(api.savedRoutes.single['title'], '一楼夜巡');
+    final lib = RoutesApi('admin');
+    (lib.routesBody['routes'] as List).cast<Map<String, dynamic>>().first['title'] = '外围一圈';
+    await t.pumpWidget(MaterialApp(home: SiteRoutesPage(api: lib)));
+    await t.pumpAndSettle();
+    final first = '${(lib.routesBody['routes'] as List).cast<Map>().first['id']}';
+    expect(find.descendant(of: find.byKey(SiteRoutesPage.routeKey(first)), matching: find.text('外围一圈')), findsOneWidget);
   });
 
   testWidgets('路线列表：管理员 / 保安没有「新路线」；没有路线时说没有', (t) async {

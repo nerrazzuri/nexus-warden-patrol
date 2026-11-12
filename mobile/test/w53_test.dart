@@ -239,6 +239,19 @@ void main() {
       expect(n(), greaterThanOrEqualTo(before + 3), reason: '站点记下来可能慢一点：1 秒、3 秒再读');
     });
 
+    // 第 8 轮 W8-11：今天的巡逻写路线显示名
+    testWidgets('第 8 轮 W8-11：今天的巡逻写显示名', (t) async {
+      final api = FakeApi('guard')
+        ..session = const SiteSession('t', 'gina', 'guard')
+        ..today = <String, dynamic>{'date': 'x', 'timezone': 'UTC', 'items': <dynamic>[
+          <String, dynamic>{'at_ms': 1800000000000, 'kind': 'schedule', 'label': 'route-1', 'title': '一楼夜巡', 'robot': 'A',
+            'by': '', 'state': 'later', 'reason': '', 'end_ms': null, 'adhoc_id': ''},
+        ]};
+      await _duty(t, api);
+      expect(find.textContaining('一楼夜巡'), findsWidgets);
+      expect(find.textContaining('route-1'), findsNothing);
+    });
+
     testWidgets('其他没处理的报警收成一行，点开是原来的告警总览', (t) async {
       final api = FakeApi('guard');
       await _duty(t, api);

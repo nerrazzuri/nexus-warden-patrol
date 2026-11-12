@@ -23,7 +23,6 @@ import 'package:flutter/material.dart';
 import '../l10n.dart';
 import '../model/alert.dart';
 import '../net/site_client.dart';
-import '../net/site_text.dart';
 import 'map_wizard.dart' show openMapWizard, wizardSteps;
 import 'nw/nw_button.dart';
 import 'nw/nw_p2_duty.dart';
@@ -635,8 +634,8 @@ class _SiteDutyPageState extends State<SiteDutyPage> {
     // 第 8 轮 W8-04 / A8-01：几圈的巡逻写第几圈；一直巡逻站点不给结束时间，就不写「预计…结束」
     final lap = lapText(run?['lap'] ?? r['lap']);
     final doing = run != null
-        ? tr('Patrolling "${siteKnown('${run['label']}')}"${lap.isEmpty ? '' : ' · $lap'}${run['end_ms'] is num ? ' · done around ${hhmm((run['end_ms'] as num).toInt(), _offsetMin)}' : ''}',
-            '正在巡逻「${run['label']}」${lap.isEmpty ? '' : ' · $lap'}${run['end_ms'] is num ? ' · 预计 ${hhmm((run['end_ms'] as num).toInt(), _offsetMin)} 结束' : ''}')
+        ? tr('Patrolling "${todayLabel(run)}"${lap.isEmpty ? '' : ' · $lap'}${run['end_ms'] is num ? ' · done around ${hhmm((run['end_ms'] as num).toInt(), _offsetMin)}' : ''}',
+            '正在巡逻「${todayLabel(run)}」${lap.isEmpty ? '' : ' · $lap'}${run['end_ms'] is num ? ' · 预计 ${hhmm((run['end_ms'] as num).toInt(), _offsetMin)} 结束' : ''}')
         : robotStatusLine(r);
     return Padding(
       key: _t.status,
