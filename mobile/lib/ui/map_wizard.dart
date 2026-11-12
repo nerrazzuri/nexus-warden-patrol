@@ -35,7 +35,7 @@ Future<void> openMapWizard(BuildContext context, SiteApi api) =>
     Navigator.of(context, rootNavigator: true)
         .push(MaterialPageRoute<void>(fullscreenDialog: true, builder: (_) => MapWizardPage(api: api)));
 
-/// 登录进站点以后（导览走完）：管理员、工程师，站点一张图都没有 → 弹「开始建图」。点过「稍后」记在账号上
+/// 登录进站点以后（导览走完）：管理员、工程师，站点一张图都没有 → 弹「开始建图」（站点有图但有没做完的向导也问）。点过「稍后」记在账号上
 /// （`guide.map_later`），不再每次弹；有没做完的向导就改问「接着做」（这个不记稍后）。
 Future<void> maybeOfferMapping(BuildContext context, SiteApi api) async {
   if (!(api.session?.canManageMaps ?? false)) return;
@@ -48,8 +48,10 @@ Future<void> maybeOfferMapping(BuildContext context, SiteApi api) async {
   } on FormatException {
     return;
   }
-  if ((w['maps'] as num? ?? 1) > 0 || !context.mounted) return;
   final wiz = w['wizard'] is Map ? w['wizard'] as Map : null;
+  // minor #36：站点有图、但有没做完的向导（在建一张新图）也问「接着做」
+  final hasMaps = (w['maps'] as num? ?? 1) > 0;
+  if ((hasMaps && wiz == null) || !context.mounted) return;
   final g = me['guide'];
   if (wiz == null && g is Map && g['map_later'] == true) return;
   final step = wiz == null ? 0 : wizardSteps.indexOf('${wiz['step']}') + 1;
@@ -60,9 +62,11 @@ Future<void> maybeOfferMapping(BuildContext context, SiteApi api) async {
       title: Text(wiz != null
           ? tr('Mapping stopped at step $step. Continue?', '上次建图停在第 $step 步，是否继续？')
           : tr('This site has no map yet', '此站点尚无地图')),
-      content: Text(tr(
-          'A map is needed before patrolling. Start mapping now? (about 20–40 minutes)',
-          '巡逻前需先建图。现在开始建图？（约 20–40 分钟）')),
+      content: Text(hasMaps
+          ? tr('The site already has a map; the new map you started is not finished yet.',
+              '站点已有地图；上次开始建的新图还没做完。')
+          : tr('A map is needed before patrolling. Start mapping now? (about 20–40 minutes)',
+              '巡逻前需先建图。现在开始建图？（约 20–40 分钟）')),
       actions: [
         TextButton(key: mapOfferLaterKey, onPressed: () => Navigator.pop(c, false), child: Text(tr('Later', '稍后'))),
         FilledButton(
