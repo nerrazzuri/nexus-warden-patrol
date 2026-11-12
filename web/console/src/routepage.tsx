@@ -36,6 +36,7 @@ import {
   type RoutePoint,
   type RouteSchedule,
   type RouteView,
+  routeLabel,
 } from "./routes";
 import { rt } from "./routes_i18n";
 import { siteKnown, siteStr } from "./sitetext";
@@ -56,7 +57,7 @@ function errText(e: unknown): string {
 }
 
 const same = (a: Draft | null, r: Route | undefined): boolean =>
-  !!a && !!r && !a.isNew && JSON.stringify(a.points) === JSON.stringify(r.waypoints);
+  !!a && !!r && !a.isNew && JSON.stringify(a.points) === JSON.stringify(r.waypoints) && (a.title ?? "") === (r.title ?? "");
 
 /** 嵌进「布置」页(W44 第三期):图、地图版本、保存按钮都用外框的;不显示坐标数字(设计 §1:改路线不用看到坐标)。 */
 export interface RouteEmbed {
@@ -138,6 +139,13 @@ export function RoutesPage({ say, embed, kind = "patrol" }: { say: Say; embed?: 
   }, [base]);
 
   const routes = view?.routes ?? [];
+  const [allIds, setAllIds] = useState<string[]>([]);
+  const autoId = () => {
+    const taken = new Set([...allIds, ...routes.map((r) => r.id)]);
+    let n = 1;
+    while (taken.has(`route-${n}`)) n++;
+    return `route-${n}`;
+  };
   // 第 8 轮 W8-08:这一版上没有路线时,看同一张图的别的版本上有没有(有就说在哪一版,客户以为路线丢了)
   const [elsewhere, setElsewhere] = useState<Route[]>([]);
   const noneHere = !!view && routes.length === 0;
@@ -166,7 +174,7 @@ export function RoutesPage({ say, embed, kind = "patrol" }: { say: Say; embed?: 
   function edit(r: Route) {
     if (embed) reopen = { map: mapKey, id: r.id };
     nextEdit();
-    setDraft({ id: r.id, isNew: false, base: r.revision, points: r.waypoints, policy: r.policy, map: mapKey });
+    setDraft({ id: r.id, title: r.title ?? "", isNew: false, base: r.revision, points: r.waypoints, policy: r.policy, map: mapKey });
     setOrig(r);
     setPi(null);
     setProblems([]);
@@ -192,7 +200,9 @@ export function RoutesPage({ say, embed, kind = "patrol" }: { say: Say; embed?: 
   function startNew() {
     // 新建:右侧栏换成编辑页,名字在编辑页顶上填(2026-10-15 用户:原来名字框夹在路线列表和点位列表中间)
     nextEdit();
-    setDraft({ id: "", isNew: true, base: 0, points: [], policy: {}, map: mapKey });
+    setDraft({ id: "", title: "", isNew: true, base: 0, points: [], policy: {}, map: mapKey });
+    // 第 8 轮 W8-11:写中文名时自动给编号 —— 编号全站唯一(别的图、别的版本上的也算)
+    api<RouteView>("GET", "/api/routes").then((v) => setAllIds(v.routes.map((x) => x.id))).catch(() => setAllIds([]));
     setOrig(undefined);
     setPi(null);
     setProblems([]);
@@ -238,10 +248,11 @@ export function RoutesPage({ say, embed, kind = "patrol" }: { say: Say; embed?: 
     try {
       const r = await api<Route>("POST", `/api/routes/${enc(draft.id)}`, {
         map_id: sel.map_id, map_version: sel.version, waypoints: draft.points, policy: draft.policy, base_revision: draft.base, kind,
+        ...(draft.title != null ? { title: draft.title } : {}),
       });
       if (!still(tk)) return;                 // 已经离开这条路线 / 这张图:存下了,但不放进现在这一页
       say(rt("routeSaved", { rev: r.revision }));
-      setDraft({ id: r.id, isNew: false, base: r.revision, points: r.waypoints, policy: r.policy, map: tk.map });
+      setDraft({ id: r.id, title: r.title ?? "", isNew: false, base: r.revision, points: r.waypoints, policy: r.policy, map: tk.map });
       setOrig(r);
       await load();
     } catch (e) {
@@ -446,7 +457,7 @@ export function RoutesPage({ say, embed, kind = "patrol" }: { say: Say; embed?: 
                 return (
                   <li key={r.id}>
                     <button type="button" class="routerow" data-route-row={r.id} onClick={() => edit(r)}>
-                      <span class="routerow-name">{r.id}</span>
+                      <span class="routerow-name">{routeLabel(r)}</span>
                       <span class="muted small">
                         {rt("routePointsN", { n: r.waypoints.length })}
                         {n > 0 && ` · ${rt("routeSchedN", { n })}`}
@@ -471,13 +482,27 @@ export function RoutesPage({ say, embed, kind = "patrol" }: { say: Say; embed?: 
                 {draft.isNew ? (
                   <label class="routename">
                     <span class="small">{rt("routeName")}</span>
-                    <input aria-label={rt("routeName")} placeholder={rt("routeName")} value={draft.id} maxLength={64} ref={nameBox}
-                      onInput={(e) => { const id = e.currentTarget.value.trim(); setDraft((d) => (d ? { ...d, id } : d)); }} />
-                    <span class={`small${nameTaken || (draft.id && !NAME_RE.test(draft.id)) ? " bad" : " muted"}`}>
-                      {nameTaken ? rt("routeNameTaken") : rt("routeNameHint")}
+                    <input aria-label={rt("routeName")} placeholder={rt("routeName")} value={draft.title || draft.id} maxLength={40} ref={nameBox}
+                      onInput={(e) => {
+                        // 第 8 轮 W8-11:只有字母数字的当编号;写了中文(或别的)当显示名,编号自动给
+                        const v = e.currentTarget.value.trim();
+                        setDraft((d) => (d ? (NAME_RE.test(v) || !v ? { ...d, id: v, title: "" } : { ...d, id: autoId(), title: v }) : d));
+                      }} />
+                    <span class={`small${nameTaken ? " bad" : " muted"}`} data-route-id-hint="1">
+                      {nameTaken ? rt("routeNameTaken") : draft.title ? rt("routeAutoId", { id: draft.id }) : rt("routeNameHint")}
                     </span>
                   </label>
-                ) : <h2>{draft.id}</h2>}
+                ) : (
+                  <>
+                    <h2>{draft.title || draft.id}</h2>
+                    <label class="routename">
+                      <span class="small">{rt("routeTitle")}</span>
+                      <input name="routeTitle" aria-label={rt("routeTitle")} value={draft.title ?? ""} maxLength={40} placeholder={draft.id}
+                        onInput={(e) => { const title = e.currentTarget.value; setDraft((d) => (d ? { ...d, title } : d)); }} />
+                      <span class="small muted">{rt("routeIdIs", { id: draft.id })}</span>
+                    </label>
+                  </>
+                )}
                 {sel && <p class="muted small">{rt("routeBind", { v: sel.version })}</p>}
                 {orig && !orig.bound && <p class="muted small">{rt("routeUnbound")}</p>}
                 <p class="muted small">{rt("routeAddHint")}</p>
@@ -528,7 +553,7 @@ export function RoutesPage({ say, embed, kind = "patrol" }: { say: Say; embed?: 
                   {!embed && <button type="button" class="btn primary" disabled={!canSave} onClick={() => void save()}>{rt("routeSave")}</button>}
                   <button type="button" class="btn" disabled={!dirty} onClick={() => (draft.isNew ? setDraft(null) : orig && edit(orig))}>{rt("routeDiscard")}</button>
                   {!draft.isNew && <button type="button" class="btn stop" onClick={() => setRemoving(true)}>{rt("routeDelete")}</button>}
-                  {!draft.isNew && !dirty && !guardKind && <DispatchOnce route={draft.id} say={say} />}
+                  {!draft.isNew && !dirty && !guardKind && <DispatchOnce route={draft.id} title={draft.title} say={say} />}
                 </div>
                 {!draft.isNew && !guardKind && (
                   <SchedulePanel route={draft.id} view={view} schedules={mySchedules} say={say} reload={load} />
@@ -682,7 +707,7 @@ export function PatrolSchedules({ say, canEdit }: { say: Say; canEdit: boolean }
         <h2>{rt("routeSchedules")}</h2>
         <label class="field-inline">{rt("schedRoute")}
           <select name="route" value={route} onChange={(e) => setRoute(e.currentTarget.value)}>
-            {view.routes.map((r) => <option key={r.id} value={r.id}>{r.id}{count(r.id) ? ` (${count(r.id)})` : ""}</option>)}
+            {view.routes.map((r) => <option key={r.id} value={r.id}>{routeLabel(r)}{count(r.id) ? ` (${count(r.id)})` : ""}</option>)}
           </select>
         </label>
       </div>
@@ -707,6 +732,8 @@ function SchedulePanel({ route, view, schedules, say, reload, inPanel }: {
   const [autoId, setAutoId] = useState(true);
   const ids = all.map((x) => x.id).join(",");
   useEffect(() => { if (autoId) setId(nextId()); }, [ids, route, autoId]);
+  // 第 8 轮 W8-11:写中文名就当显示名,编号照旧自动给
+  const [title, setTitle] = useState("");
   const [at, setAt] = useState("22:00");
   const [days, setDays] = useState<string[]>([...DAYS]);
   const [win, setWin] = useState(30);
@@ -751,7 +778,7 @@ function SchedulePanel({ route, view, schedules, say, reload, inPanel }: {
           <ul class="sched-list">
             {schedules.map((s) => (
               <li key={s.id}>
-                <span class="strong">{s.id}</span>
+                <span class="strong" title={s.title ? s.id : undefined}>{routeLabel(s)}</span>
                 <span class="mono small">{s.at}</span>
                 <span class="muted small">{s.days.map((d) => t(d as Key)).join(" ")}</span>
                 <span class="muted small" data-sched-robot="1">{s.robot ? rt("schedByRobot", { id: s.robot }) : rt("schedAnyRobot")}</span>
@@ -762,11 +789,15 @@ function SchedulePanel({ route, view, schedules, say, reload, inPanel }: {
           <form class="form sched-form" onSubmit={(e) => {
             e.preventDefault();
             if (idTaken) return;
-            void call(`/api/route-schedules/${enc(id.trim())}`, { mission: route, at, days, window_min: win, on_missed: missed, base_revision: 0, ...(robot ? { robot } : {}) }, rt("schedSaved"))
+            void call(`/api/route-schedules/${enc(id.trim())}`, { mission: route, at, days, window_min: win, on_missed: missed, base_revision: 0, ...(robot ? { robot } : {}), ...(title ? { title } : {}) }, rt("schedSaved"))
               // 加好了换下一个编号(列表刷新后挑),不留着旧的;第 4 轮 r3-config-N6:开始时间也清掉(不然黄字「这个时间已有」指的就是刚加的)
-              .then((ok) => { if (ok) { setAutoId(true); setAt(""); } });
+              .then((ok) => { if (ok) { setAutoId(true); setAt(""); setTitle(""); } });
           }}>
-            <label class="field">{rt("schedId")}<input value={id} maxLength={64} aria-invalid={idTaken || undefined} onInput={(e) => { setAutoId(false); setId(e.currentTarget.value); }} />
+            <label class="field">{rt("schedId")}<input value={title || id} maxLength={64} aria-invalid={idTaken || undefined} onInput={(e) => {
+              const v = e.currentTarget.value;
+              if (!v.trim() || NAME_RE.test(v.trim())) { setTitle(""); setAutoId(false); setId(v); } else { setTitle(v.trim()); setAutoId(true); }
+            }} />
+              {title && <span class="muted small" data-sched-auto-id="1">{rt("routeAutoId", { id })}</span>}
               {idTaken && <span class="error small" role="alert" data-sched-dup="1">{rt("schedIdTaken")}</span>}</label>
             {/* P1-03:时间一律 24 小时制(浏览器的时间框可能按系统显示成上午 / 下午) */}
             <label class="field">{rt("schedAt")}<input name="at" type="text" inputMode="numeric" pattern="([01][0-9]|2[0-3]):[0-5][0-9]" placeholder="21:00"

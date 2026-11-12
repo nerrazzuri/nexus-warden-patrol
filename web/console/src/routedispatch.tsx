@@ -11,12 +11,14 @@ interface Plan { estimate_s?: number | null; start_ms?: number; queued?: boolean
 interface Sent { queued?: boolean; start_after_ms?: number; because?: string; utc_offset_min?: number; ack?: { result?: string; reason?: string } }
 
 /** 两种用法:路线页定了路线、挑机器人(``route``);第 8 轮 W8-09 值守页定了机器人、挑路线(``robot``)。 */
-export function DispatchOnce({ route: fixedRoute, robot: fixedRobot, say, cls }: {
+export function DispatchOnce({ route: fixedRoute, robot: fixedRobot, say, cls, title }: {
   route?: string; robot?: string; say: (s: string) => void; cls?: string;
+  /** 第 8 轮 W8-11:定了的那条路线的显示名。 */
+  title?: string;
 }) {
   const [open, setOpen] = useState(false);
   const [robots, setRobots] = useState<string[] | null>(null);
-  const [routes, setRoutes] = useState<string[] | null>(null);
+  const [routes, setRoutes] = useState<{ id: string; title?: string }[] | null>(null);
   const [robot, setRobot] = useState(fixedRobot ?? "");
   const [route, setRoute] = useState(fixedRoute ?? "");
   const [loops, setLoops] = useState(1);
@@ -37,8 +39,8 @@ export function DispatchOnce({ route: fixedRoute, robot: fixedRobot, say, cls }:
         .catch((e) => { setRobots([]); setErr(why(e)); });
     }
     if (fixedRoute == null) {
-      api<{ routes: { id: string }[] }>("GET", "/api/routes?kind=patrol")
-        .then((d) => setRoutes(d.routes.map((r) => r.id)))
+      api<{ routes: { id: string; title?: string }[] }>("GET", "/api/routes?kind=patrol")
+        .then((d) => setRoutes(d.routes.map((r) => ({ id: r.id, title: r.title }))))
         .catch((e) => { setRoutes([]); setErr(why(e)); });
     }
   };
@@ -62,7 +64,7 @@ export function DispatchOnce({ route: fixedRoute, robot: fixedRobot, say, cls }:
       else if (r.ack && r.ack.result !== "accepted" && r.ack.result !== "duplicate") {
         setErr(t("rdNotAccepted", { why: r.ack.reason || r.ack.result || "" }));
         return;
-      } else say(t("rdPatrolSent", { id: robot, route }));
+      } else say(t("rdPatrolSent", { id: robot, route: title || routes?.find((x) => x.id === route)?.title || route }));
       setOpen(false);
     } catch (e) {
       setErr(why(e));
@@ -74,7 +76,7 @@ export function DispatchOnce({ route: fixedRoute, robot: fixedRobot, say, cls }:
     <>
       <button type="button" class={cls ?? "btn"} data-dispatch-once="1" data-robot-patrol={fixedRobot} onClick={start}>{t("doBtn")}</button>
       {open && (
-        <Modal label={fixedRoute != null ? t("doTitle", { route: fixedRoute }) : t("doTitleRobot", { id: fixedRobot ?? "" })} onClose={() => setOpen(false)}>
+        <Modal label={fixedRoute != null ? t("doTitle", { route: title || fixedRoute }) : t("doTitleRobot", { id: fixedRobot ?? "" })} onClose={() => setOpen(false)}>
           <div class="route-dispatch">
             {fixedRobot == null && <>
               <label class="field">{t("doRobot")}
@@ -89,7 +91,7 @@ export function DispatchOnce({ route: fixedRoute, robot: fixedRobot, say, cls }:
               <label class="field">{t("doRoute")}
                 <select name="route" value={route} onChange={(e) => pickRoute(e.currentTarget.value)}>
                   <option value="">{t("doPickRoute")}</option>
-                  {(routes ?? []).map((id) => <option key={id} value={id}>{id}</option>)}
+                  {(routes ?? []).map((x) => <option key={x.id} value={x.id}>{x.title || x.id}</option>)}
                 </select>
               </label>
               {routes !== null && routes.length === 0 && <p class="muted small">{t("doNoRoute")}</p>}

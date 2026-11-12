@@ -24,6 +24,8 @@ export interface TodayItem {
   map?: { route: string; robot: string };
   /** 第 8 轮:一直巡逻、在跑的第几圈、被谁接替(老站点没有)。 */
   forever?: boolean;
+  /** 第 8 轮 W8-11:路线的显示名(没起是空)。 */
+  title?: string;
   lap?: { n: number; of: number };
   handover?: { by: "schedule" | "teleop" | "task"; name: string; laps: number };
 }
@@ -94,7 +96,7 @@ export function TodayPatrols({ retryMs = 5_000, canFix = false }: { retryMs?: nu
               <span class="mono">{siteHm(x.at_ms, off)}</span>
               <span class="today-what">
                 {/* 第 3 轮 zh N11:名字本身就是「临时路线…」时不再加「临时 ·」;叫停的那趟原因 halt 跟右边「被叫停」重复,不写 */}
-                {[x.kind === "adhoc" && !/^(临时|One-off)/.test(siteKnown(x.label)) ? t("tdAdhoc") : "", siteKnown(x.label), x.robot, x.kind === "adhoc" && x.by ? t("tdSentBy", { who: x.by }) : ""].filter(Boolean).join(" · ")}
+                {[x.kind === "adhoc" && !/^(临时|One-off)/.test(siteKnown(x.label)) ? t("tdAdhoc") : "", x.title || siteKnown(x.label), x.robot, x.kind === "adhoc" && x.by ? t("tdSentBy", { who: x.by }) : ""].filter(Boolean).join(" · ")}
                 {/* 第 4 轮 admin N7:写清是谁叫停的(派单的人不一定是叫停的人) */}
                 {x.state === "aborted" && x.stopped_by && <span class="muted small" data-stopped-by="1"> · {t("tdStoppedBy", { who: byText(x.stopped_by) || x.stopped_by })}</span>}
                 {/* 易用性第 6 轮 W6-02:到了也不会跑(排给的那台只许手动派):写原因,管理员给去改的入口 */}

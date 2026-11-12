@@ -189,6 +189,34 @@ async function openNew(meta: PreviewMeta, name = "night", extra: Partial<Paramet
   return { r, posted, svg: r.container.querySelector("svg.map")!, c: r.container };
 }
 
+// 第 8 轮 W8-11:路线名能写中文 —— 写的当显示名,编号自动给;列表、编辑页标题写显示名
+describe("W8-11 路线显示名", () => {
+  it("新建写中文名:编号自动给 route-N,显示名带过去", async () => {
+    const { r, posted, svg, c } = await openNew(META, "一楼夜巡", { routes: [{ id: "route-1", map_id: "m1", map_version: "1", revision: 1, bound: true,
+      updated_by: "a", updated_ms: 0, policy: {}, waypoints: [P("a", 1, 1)], title: "" }] });
+    expect(c.textContent).toContain("route-2");
+    for (const [x, y] of [[1, 1], [2, 2]] as [number, number][]) {
+      fireEvent.click(svg, clientOf(c, META, x, y));
+      await tick();
+    }
+    fireEvent.click(r.getByText("Save route"));
+    await waitFor(() => expect(posted.length).toBe(1));
+    expect(posted[0].path).toContain("/api/routes/route-2");
+    expect(posted[0].body.title).toBe("一楼夜巡");
+  });
+  it("列表写显示名(没起就写编号)", async () => {
+    installScreenCTM();
+    routesApi({ meta: META, routes: [
+      { id: "route-1", map_id: "m1", map_version: "1", revision: 1, bound: true, updated_by: "a", updated_ms: 0, policy: {}, waypoints: [P("a", 1, 1)], title: "一楼夜巡" },
+      { id: "loop", map_id: "m1", map_version: "1", revision: 1, bound: true, updated_by: "a", updated_ms: 0, policy: {}, waypoints: [P("a", 1, 1)], title: "" }] });
+    const r = render(<RoutesPage say={() => {}} />);
+    await ready(r.container);
+    await waitFor(() => expect(r.container.querySelector('[data-route-row="route-1"]')).not.toBeNull());
+    expect(r.container.querySelector('[data-route-row="route-1"] .routerow-name')!.textContent).toBe("一楼夜巡");
+    expect(r.container.querySelector('[data-route-row="loop"] .routerow-name')!.textContent).toBe("loop");
+  });
+});
+
 describe("路线页:点图加点,存下去的是点的那一处的地图坐标", () => {
   const WANT: [number, number][] = [[1.23, -2.5], [4.56, -2.5], [4.56, 1.11], [-3.07, 6.4]];
   for (const deg of [undefined, 0, 30, -30]) {
@@ -496,6 +524,24 @@ describe("路线页:站点的回答", () => {
   });
 
   // 第 8 轮 W8-06:加日程能选由哪台跑(默认哪台空就哪台);列表里写由哪台跑
+  // 第 8 轮 W8-11:排程名也能写中文 —— 写的当显示名,编号自动给;列表写显示名
+  it("W8-11 排程:中文名当显示名,编号自动给", async () => {
+    installScreenCTM();
+    const sch = { id: "loop-1", title: "每晚十点", mission: "loop", at: "22:00", days: ["mon"], window_min: 30, on_missed: "skip", revision: 7 };
+    const posted = routesApi({ meta: META, routes: [ROUTE], timezone: "UTC", schedules: [sch] });
+    const r = render(<RoutesPage say={() => {}} />);
+    await ready(r.container);
+    await waitFor(() => expect(r.getByText("loop")).toBeTruthy());
+    fireEvent.click(r.getByText("loop"));
+    await waitFor(() => expect(r.getByText("每晚十点")).toBeTruthy());
+    fireEvent.input(r.container.querySelector('.form input[maxlength="64"]')!, { target: { value: "清早一圈" } });
+    fireEvent.input(r.container.querySelector('input[name="at"]')!, { target: { value: "05:30" } });
+    fireEvent.click(r.getByText("Add schedule"));
+    await waitFor(() => expect(posted.length).toBe(1));
+    expect(posted[0].path).toContain("/api/route-schedules/loop-2");
+    expect(posted[0].body.title).toBe("清早一圈");
+  });
+
   it("W8-06 排程:选由哪台跑,列表写出来", async () => {
     installScreenCTM();
     const sch = { id: "n1", mission: "loop", at: "22:00", days: ["mon"], window_min: 30, on_missed: "skip", revision: 7, robot: "B" };
