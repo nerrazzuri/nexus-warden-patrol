@@ -45,6 +45,13 @@ def setup_view(db: Any, dispatcher: Any, *, skip: set[str] | None = None) -> dic
     no_standby = [rid for rid, (m, v) in loaded.items()
                   if not _count(db, "SELECT COUNT(*) FROM standby_points WHERE robot_id=? AND "
                                 "map_id=? AND map_version=? AND is_default=1", (rid, m, v))]
+    # minor #21(liang-d5 W7):标原点时站点顺手建了个待命点(就在原点上),清单自动打勾 —— 照样算有,
+    # 但写明哪几台的默认待命点就在原点上(想停到别处去布置页加)
+    at_home = [rid for rid, (m, v) in loaded.items() if rid not in no_standby and _count(
+        db, "SELECT COUNT(*) FROM standby_points s JOIN homes h ON h.robot_id=s.robot_id AND "
+            "h.map_id=s.map_id AND h.map_version=s.map_version WHERE s.robot_id=? AND "
+            "s.map_id=? AND s.map_version=? AND s.is_default=1 AND abs(s.x-h.x)<0.3 AND "
+            "abs(s.y-h.y)<0.3", (rid, m, v))]
     # 易用性第 6 轮 W6-01:原点、路线按机器人**现在用的那版图**查(别的版本上有不算:出不了发)
     no_home = [rid for rid, (m, v) in loaded.items()
                if not _count(db, "SELECT COUNT(*) FROM homes WHERE robot_id=? AND map_id=? AND "
@@ -79,7 +86,7 @@ def setup_view(db: Any, dispatcher: Any, *, skip: set[str] | None = None) -> dic
         "map": (has_map, {}),
         "home": (bool(loaded) and not no_home, {"robots": no_home}),
         "zones": (has_map and not unconfirmed, {"maps": unconfirmed}),
-        "standby": (bool(loaded) and not no_standby, {"robots": no_standby}),
+        "standby": (bool(loaded) and not no_standby, {"robots": no_standby, "at_home": at_home}),
         "routes": (routes_ok, routes_detail),
         "schedule": (bool(sched) and len(blocked) < len(sched), {"blocked": blocked}),
         "arming": (_count(db, "SELECT COUNT(*) FROM arming_slots") > 0, {}),

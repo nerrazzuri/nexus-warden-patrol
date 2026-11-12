@@ -149,3 +149,21 @@ def test_第8轮_W8_08_路线画在别的版本上_清单说在哪一版_日程�
     it = _项(setup_view(db, d))
     assert it["routes"]["done"] and it["schedule"]["done"] and it["schedule"]["blocked"] == []
     db.close()
+
+
+def test_minor21_待命点只有标原点时自动加的那个_打勾但写明就是原点(tmp_path):
+    """liang-d5 W7:标完原点,开站清单「待命点」自动打勾(自动生成了 home-estate-1),人以为自己做过。
+    照样算有(机器人有地方回),但写明是哪几台的待命点就在原点上。"""
+    db = SiteDB(tmp_path / "s.db")
+    d = 假派遣器({"A": ("m1", "3"), "B": ("m1", "3")})
+    with db.tx() as c:
+        for rid, x in (("A", 0.0), ("B", 0.0)):
+            c.execute("INSERT INTO homes(robot_id, map_id, map_version, name, x, y, yaw) "
+                      "VALUES (?,'m1','3','home-m1',?,0,0)", (rid, x))
+        c.execute("INSERT INTO standby_points(robot_id, name, map_id, map_version, x, y, yaw, "
+                  "is_default) VALUES ('A','home-m1','m1','3',0,0,0,1)")
+        c.execute("INSERT INTO standby_points(robot_id, name, map_id, map_version, x, y, yaw, "
+                  "is_default) VALUES ('B','dock','m1','3',5,5,0,1)")
+    it = _项(setup_view(db, d))["standby"]
+    assert it["done"] and it["at_home"] == ["A"], it
+    db.close()
