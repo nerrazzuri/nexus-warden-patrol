@@ -142,7 +142,14 @@ def today_view(db: Any, *, now_ms: int, adhoc: Any = None,
     if adhoc is not None:
         for r in adhoc.between(a_ms, b_ms):
             items.append(_adhoc_item(db, r, now_ms))
+    # 第 8 轮 W8-11:路线、排程起了显示名(能写中文)的带上;没起是空串,照旧显示编号
+    titles = {r["route_id"]: r["title"] for r in db.query("SELECT route_id, title FROM routes")}
+    stitles = {r["entry_id"]: r["title"] for r in db.query(
+        "SELECT entry_id, title FROM route_schedules")}
     for it in items:
+        it["title"] = titles.get(str(it.get("label") or ""), "")
+        if it.get("schedule_id"):
+            it["schedule_title"] = stitles.get(str(it["schedule_id"]), "")
         _loop_fields(db, it)
         if it["state"] == "aborted" and it.get("robot") and it.get("end_ms"):
             it["stopped_by"] = _stopped_by(db, it["robot"], int(it["at_ms"]), int(it["end_ms"]))
