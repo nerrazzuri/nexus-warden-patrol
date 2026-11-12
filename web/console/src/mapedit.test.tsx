@@ -526,6 +526,29 @@ describe("编辑器里画禁行区(11-10)", () => {
   });
 });
 
+// 网页第 5 轮遗留 minor #28:发布对话框单复数(「These 1 areas」);虚拟墙也叫成 no-go zones
+describe("minor #28 发布对话框说法", () => {
+  it("英文一个区域用单数;文字说禁行区、虚拟墙等", async () => {
+    const { t, lang } = await import("./i18n");
+    lang.value = "en";
+    expect(t("meReleaseZones1")).toBe("This area is confirmed and starts to apply once robots use this version:");
+    expect(t("meReleaseZones", { n: 2 })).toContain("These 2 areas");
+    expect(t("meReleaseText", { v: "3", from: "2" })).toContain("no-go zones, virtual walls and slow zones");
+    lang.value = "zh";
+    expect(t("meReleaseZones1")).toBe("下面这个区域会确认，机器人用上这一版后就按它走：");
+  });
+  it("只有一个区域时对话框用单数那句", async () => {
+    draftState = { draft: true, from: "2" };
+    zones = { ...zones, zones: [POOL], confirmed: null };
+    const { container: c } = page();
+    await waitFor(() => expect(c.querySelector("[data-release]")).not.toBeNull());
+    fireEvent.click(c.querySelector("[data-release]")!);
+    const m = document.querySelector(".modal")!;
+    expect(m.textContent).toContain("下面这个区域会确认");
+    expect(m.textContent).not.toContain("这 1 个区域");
+  });
+});
+
 // 易用性第 6 轮 W6-11:默认画笔点几下没反应、「画完」在屏幕外;常驻的绿色「已生效」看不懂指什么;页首说明 4 行
 describe("W6-11 编辑器好上手", () => {
   it("选了改地图的工具默认是方框", async () => {
