@@ -198,7 +198,7 @@ _T: tuple[tuple[int, str, str, str, str, str, str, str], ...] = (
     (0x050C, "robot.fault", "error", "engineer", "机器人报故障", "Robot reported a fault", "看故障说明", "See the fault text"),
     (0x050D, "robot.swap_soon", "warn", "user", "快要换电池了", "Battery swap soon", "准备电池", "Get a battery ready"),
     (0x050E, "robot.swap_needed", "error", "user", "到换电位了,请来换电池", "At the swap point; please swap the battery", "去换电池", "Swap the battery"),
-    (0x050F, "robot.swap_overdue", "error", "user", "等换电池超过 20 分钟", "Battery swap overdue", "马上去换", "Swap it now"),
+    (0x050F, "robot.swap_overdue", "error", "user", "等换电池超过 30 分钟", "Battery swap overdue", "马上去换", "Swap it now"),
     (0x0510, "robot.swap_stuck", "error", "user", "拔着一块电池机器人还在走", "Robot moving with a battery out", "别靠近,用遥控器或急停", "Keep clear; use the remote or e-stop"),
     (0x0511, "robot.battery_swap", "info", "user", "换了电池", "Battery swapped", "", ""),
     (0x0512, "robot.force_flipped", "error", "user", "机器人被掀翻", "Robot was flipped", "去现场", "Go on site"),

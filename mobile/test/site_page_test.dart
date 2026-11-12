@@ -221,8 +221,8 @@ class FakeApi implements SiteApi {
     return robotCalls > 1 && laterView != null ? laterView! : view;
   }
   @override
-  Future<Map<String, dynamic>> patrol(String id, String m) async {
-    calls.add('patrol $id $m');
+  Future<Map<String, dynamic>> patrol(String id, String m, {int loops = 1}) async {
+    calls.add('patrol $id $m${loops == 1 ? '' : ' loops=$loops'}');
     if (patrolError != null) throw patrolError!;
     return patrolReply ?? siteFixture('site_dispatch');
   }
@@ -779,8 +779,12 @@ class FakeApi implements SiteApi {
   }
 
   @override
-  Future<Map<String, dynamic>> patrolPlan(String robotId, String missionId) async {
-    calls.add('patrolPlan $robotId $missionId');
+  Future<Map<String, dynamic>> patrolPlan(String robotId, String missionId, {int loops = 1}) async {
+    calls.add('patrolPlan $robotId $missionId${loops == 1 ? '' : ' loops=$loops'}');
+    if (loops == 0) {
+      return <String, dynamic>{'estimate_s': 12000, 'start_ms': 0, 'queued': false, 'because': '',
+        'forever': true, 'interrupted_by': '22:00 日程「loop」', 'label': missionId};
+    }
     return plans[missionId] ??
         <String, dynamic>{'estimate_s': 600, 'start_ms': 0, 'queued': false, 'because': '', 'label': missionId};
   }
@@ -1229,6 +1233,28 @@ void main() {
     await t.tap(find.byKey(patrolSendKey));
     await t.pumpAndSettle();
     expect(api.calls, contains('patrol A loop'));
+  });
+
+  testWidgets('W76 派巡逻可选循环次数：一直巡逻说清楚会怎样，派出带 loops 0', (t) async {
+    final api = FakeApi('guard', robotView: busyView());
+    await openRobot(t, api);
+    await t.tap(find.byKey(const Key('btn-patrol')));
+    await t.pumpAndSettle();
+    await t.tap(find.byKey(patrolRouteKey('loop')));
+    await t.pumpAndSettle();
+    expect(find.byKey(patrolLoopsKey(3)), findsOneWidget);
+    await t.tap(find.byKey(patrolLoopsKey(3)));
+    await t.pumpAndSettle();
+    expect(api.calls, contains('patrolPlan A loop loops=3'));
+    await t.ensureVisible(find.byKey(patrolLoopsKey(0)));
+    await t.tap(find.byKey(patrolLoopsKey(0)));
+    await t.pumpAndSettle();
+    expect(find.byKey(patrolForeverKey), findsOneWidget);
+    expect(find.textContaining('22:00 日程「loop」'), findsOneWidget);
+    await t.ensureVisible(find.byKey(patrolSendKey));
+    await t.tap(find.byKey(patrolSendKey));
+    await t.pumpAndSettle();
+    expect(api.calls, contains('patrol A loop loops=0'));
   });
 
   // 易用性第 6 轮 A6-03：派巡逻的列表里有 v11 的路线，A 用的是 v7 —— 选了才被拒

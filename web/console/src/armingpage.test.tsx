@@ -207,6 +207,20 @@ describe("布防时间页", () => {
       { shift_hours: [7, 19], stale_hours: 2, self_protect_siren: false }));
   });
 
+  it("W76:巡逻回去补能的电量线(全站一个,20–60%)", async () => {
+    const { container: c } = page();
+    await waitFor(() => expect(c.querySelector('input[name="patrolReturn"]')).not.toBeNull());
+    await new Promise((r) => setTimeout(r, 20));          // 等站点的设置读回来
+    const box = c.querySelector('input[name="patrolReturn"]') as HTMLInputElement;
+    expect(box.value).toBe("25");
+    expect(box.min).toBe("20");
+    expect(box.max).toBe("60");
+    fireEvent.input(box, { target: { value: "40" } });
+    fireEvent.click(c.querySelector(".arm-save")!);
+    await waitFor(() => expect(posted.find((p) => p.url === "/api/duty-settings")?.body).toEqual(
+      { shift_hours: [7, 19], stale_hours: 2, patrol_return_pct: 40 }));
+  });
+
   it("没存离开有提示", async () => {
     const { container: c } = page();
     await waitFor(() => expect(row(c, 0).querySelector(".armblock")).not.toBeNull());

@@ -6,6 +6,11 @@ from __future__ import annotations
 
 #: 回待命点:最低,谁来都能抢。
 STANDBY_RETURN = -10
+#: W76 一直巡逻(手动派的、``policy.loops = 0``):比排程低 —— 用户 11-12 定「日程到点打断它」,
+#: 机器人收到排程那一趟自己停下一直巡逻(``task_preempted``),跑完不再接着跑。比回待命点高。
+FOREVER_PATROL = 5
+#: 一直巡逻的 task_id 前缀(仍是 ``adhoc-`` 开头,临时巡逻那一套照认):排程据此把它看成能派。
+FOREVER_PREFIX = "adhoc-forever-"
 #: 排程巡检:10 + 条目的 priority(夹在 0..39),即 10–49。
 SCHEDULE_BASE = 10
 SCHEDULE_SPAN = 39

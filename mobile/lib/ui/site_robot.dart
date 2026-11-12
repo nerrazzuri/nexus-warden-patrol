@@ -40,7 +40,8 @@ String robotStatusLine(Map<String, dynamic> r) {
   if (st is! Map) return tr('No status', '无状态');
   final online = st['online'] == true && r['fresh'] == true;
   final task = st['task'];
-  final taskText = task is Map ? taskLabel(task) : tr('Idle', '空闲');
+  final lap = task is Map ? lapText(r['lap']) : '';      // W76：几圈的巡逻跑到第几圈
+  final taskText = task is Map ? '${taskLabel(task)}${lap.isEmpty ? '' : ' · $lap'}' : tr('Idle', '空闲');
   final held = r['held'] is Map ? tr('Stopped · ', '已叫停 · ') : '';
   // W33：只许手动派的狗（站点自己不让它动）；狗确认看见人（决策 48）
   final manual = r['manual_only'] is Map ? tr('Manual only · ', '仅限手动 · ') : '';

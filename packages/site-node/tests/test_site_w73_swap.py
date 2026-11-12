@@ -137,7 +137,7 @@ def test_一块一块换_站点按电池自己判进度():
     assert any(e["step"] == "done" for e in t.desk.events)
 
 
-def test_保安一直不来_10分钟再推_20分钟推给经理():
+def test_保安一直不来_10分钟再推_30分钟推给经理():
     t = 台()
     t.need = 35.0
     t.tick()
@@ -147,6 +147,8 @@ def test_保安一直不来_10分钟再推_20分钟推给经理():
     t.tick(60)
     assert t.kinds().count("swap_needed") == 2
     assert "swap_overdue" not in t.kinds()
+    t.tick(10 * 60)
+    assert "swap_overdue" not in t.kinds(), "W76 用户 11-12:半小时没人换才升级"
     t.tick(10 * 60)
     assert "swap_overdue" in t.kinds()
     t.tick(60)
@@ -225,7 +227,7 @@ def test_外审_换到一半走了_插回不满_每一步没进展都会再推�
     t.tick(10 * 60)
     again = [a for a in t.alerts.raised if a["kind"] == "swap_needed"][1:]
     assert len(again) == 1 and "现在换 2 号" in again[0]["detail"]
-    t.tick(10 * 60)
+    t.tick(20 * 60)
     [m] = [a for a in t.alerts.raised if a["kind"] == "swap_overdue"]
     assert "现在换 2 号" in m["detail"]
     t.packs = [96.0, None]

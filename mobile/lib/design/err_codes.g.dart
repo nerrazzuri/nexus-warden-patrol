@@ -262,7 +262,7 @@ const Map<String, (String, String, String, String, String, String, String)> errC
       'At the swap point; please swap the battery', '到换电位了,请来换电池',
       'Swap the battery', '去换电池'),
   'robot.swap_overdue': ('0x050F', 'error', 'user',
-      'Battery swap overdue', '等换电池超过 20 分钟',
+      'Battery swap overdue', '等换电池超过 30 分钟',
       'Swap it now', '马上去换'),
   'robot.swap_stuck': ('0x0510', 'error', 'user',
       'Robot moving with a battery out', '拔着一块电池机器人还在走',
