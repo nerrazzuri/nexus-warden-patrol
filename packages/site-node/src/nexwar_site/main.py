@@ -1410,7 +1410,8 @@ class Server:
                                      ("证据没封", "evidence_watch", "tick"),     # W30b
                                      ("版本", "compat", "tick"),                 # A7
                                      ("证书续签", "cert_renewer", "tick"),        # W55
-                                     ("临时撤防到点退回", "arming", "tick")):        # W20
+                                     ("临时撤防到点退回", "arming", "tick"),         # W20
+                                     ("巡逻补能销账", "patrol_energy", "tick")):    # W76
                 try:
                     getattr(getattr(self, part), meth)()
                 except Exception:

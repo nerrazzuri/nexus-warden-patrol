@@ -23,7 +23,7 @@ class 台:
         self.db = SiteDB(tmp_path / "s.db")
         self.st = SiteSettings(self.db)
         self.now = NOW
-        self.c = SimpleNamespace(telemetry=SimpleNamespace(battery_pct=pct),
+        self.c = SimpleNamespace(telemetry=SimpleNamespace(battery_pct=pct, battery_packs=None),
                                  status=SimpleNamespace(online=True, task=None))
         self.pe = PatrolEnergy(self.db, SimpleNamespace(clients={"A": self.c}), self.st,
                                now_ms=lambda: self.now)
@@ -75,6 +75,7 @@ def test_换到一半站点重启照样接上_换好充好了销账_之后再掉
     t.c.status.task = SimpleNamespace(task_id="dock-1")  # 在回充桩上充着:不起,但充到线照样销账
     t.c.telemetry.battery_pct = 90.0
     assert t.pe.swap_line("A") is None
+    t.pe.tick()                                          # 外审 W76-3 #2:销账靠每拍看电量
     t.c.status.task = None
     t.c.telemetry.battery_pct = 79.0
     assert t.pe.swap_line("A") is None and t.pe.charge_line("A") == 25.0, "补过了:按平时的线"
@@ -115,3 +116,36 @@ def test_值守的线和巡逻的线_取高的_都没有是None_一头出错不�
     def 坏(r):
         raise RuntimeError("x")
     assert combine_lines(坏, lambda r: 25.0)("A") == 25.0
+
+
+def test_外审3_两块分开报_两块都装着都到线才销账_拔着一块不算(tmp_path):
+    """外审 W76-3 #1:第一块换好 [90, 35],拔第二块成 [90, None],总电量按在位的算是 90 ——
+    以前就销账了。"""
+    t = 台(tmp_path, pct=90.0)
+    t.结束("task_done", ended="battery")
+    t.c.telemetry.battery_packs = (90.0, None)
+    t.pe.tick()
+    assert t.pe.swap_line("A") == SWAP_OK_PCT, "还缺一块:接着引导"
+    t.c.telemetry.battery_packs = (90.0, 35.0)
+    t.c.telemetry.battery_pct = 62.0
+    t.pe.tick()
+    assert t.pe.swap_line("A") == SWAP_OK_PCT
+    t.c.telemetry.battery_packs = (90.0, 95.0)
+    t.c.telemetry.battery_pct = 92.0
+    t.pe.tick()
+    t.c.telemetry.battery_packs = (79.0, 79.0)
+    t.c.telemetry.battery_pct = 79.0
+    assert t.pe.swap_line("A") is None, "换好了销账,之后掉电不再起"
+
+
+def test_外审3_只问要不要补能不销账_充到线之前出桩也接着要(tmp_path):
+    t = 台(tmp_path, pct=81.0)
+    t.结束("task_done", ended="battery")
+    assert t.pe.swap_line("A") is None                   # 81%:眼下不用补
+    t.c.telemetry.battery_pct = 79.0
+    assert t.pe.swap_line("A") == SWAP_OK_PCT, "没经过一拍销账:还算没补好"
+    t.pe.tick()
+    t.c.telemetry.battery_pct = 81.0
+    t.pe.tick()
+    t.c.telemetry.battery_pct = 79.5
+    assert t.pe.swap_line("A") is None and t.pe.charge_line("A") == 25.0
