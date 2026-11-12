@@ -67,13 +67,27 @@ def test_之后回待命点去充电那几趟不盖掉(tmp_path):
     assert t.pe.swap_line("A") == SWAP_OK_PCT
 
 
-def test_换好充好了_过了两小时_上一趟不是电量结束_在跑任务_都不起(tmp_path):
+def test_换到一半站点重启照样接上_换好充好了销账_之后再掉电不再起_重启也记得(tmp_path):
+    """外审 W76-2 #3:以前换好(两块 90%)之后半小时掉到 79%,旧的「因电量结束」还在,又起一轮换电。"""
+    t = 台(tmp_path, pct=60.0)                           # 换到一半站点重启:合起来还不到线
+    t.结束("task_done", ended="battery")
+    assert t.pe.swap_line("A") == SWAP_OK_PCT
+    t.c.status.task = SimpleNamespace(task_id="dock-1")  # 在回充桩上充着:不起,但充到线照样销账
+    t.c.telemetry.battery_pct = 90.0
+    assert t.pe.swap_line("A") is None
+    t.c.status.task = None
+    t.c.telemetry.battery_pct = 79.0
+    assert t.pe.swap_line("A") is None and t.pe.charge_line("A") == 25.0, "补过了:按平时的线"
+    again = PatrolEnergy(t.db, SimpleNamespace(clients={"A": t.c}), t.st, now_ms=lambda: t.now)
+    assert again.swap_line("A") is None, "站点重启也记得补过了"
+    t.c.telemetry.battery_pct = 30.0
+    t.结束("task_done", ended="battery")                  # 又跑了一趟、又因电量结束:重新起
+    assert t.pe.swap_line("A") == SWAP_OK_PCT
+
+
+def test_过了两小时_上一趟不是电量结束_在跑任务_掉线_读不出电量_都不起(tmp_path):
     t = 台(tmp_path, pct=30.0)
     t.结束("task_done", ended="battery")
-    t.c.telemetry.battery_pct = SWAP_OK_PCT
-    assert t.pe.swap_line("A") is None and t.pe.charge_line("A") == 25.0, "换好 / 充好了"
-    t.c.telemetry.battery_pct = 60.0                     # 换到一半站点重启:两块合起来还不到线
-    assert t.pe.swap_line("A") == SWAP_OK_PCT
     t.now = NOW + RECENT_MS + 1
     assert t.pe.swap_line("A") is None, "两小时前的事了"
     t.now = NOW
@@ -87,6 +101,7 @@ def test_换好充好了_过了两小时_上一趟不是电量结束_在跑任�
     t.c.status.online = False
     assert t.pe.swap_line("A") is None
     t.c.status.online = True
+    assert t.pe.swap_line("A") == SWAP_OK_PCT
     t.结束("task_done", ended="loops", laps=2)
     assert t.pe.swap_line("A") is None
 

@@ -180,3 +180,49 @@ def test_外审1_先看会怎样写实际跑几圈_手机凭它知道站点认�
     t = 台
     assert t.desk.plan("A", with_loops(任务定义(), 3, return_pct=25.0, caps=NEW))["loops"] == 3
     assert t.desk.plan("A", 任务定义())["loops"] == 1
+
+
+async def test_外审2_一直巡逻已经在回家_日程到点等它_不白白记成跑过_到家以后照派(tmp_path):
+    """外审 W76-2 #1:返航途中机器人回忙(有效优先级 50),以前这一轮记 started → dispatch_failed,
+    同一窗口里不再补。机器人报了 ``task_returning`` 就按忙等它。"""
+    import json
+
+    from test_site_dispatcher import 台子
+    from test_site_schedule import 打包, 毫秒
+    from test_site_schedule_alerts import _拍
+
+    from nexwar_site.catalog import import_bundle
+    from nexwar_site.priorities import FOREVER_PATROL, FOREVER_PREFIX
+    from nexwar_site.scheduler import SiteScheduler
+    t = 台子(tmp_path)
+    t.clock.ms = 毫秒(21, 50)
+    t.dog.inject_battery(100.0)
+    await t.start()
+    try:
+        import_bundle(t.db, 打包(tmp_path, 1), imported_by="alice", now_ms=t.clock())
+        t.sched = SiteScheduler(t.db, t.site, now_ms=t.clock, on_outcome=lambda *a: None)
+        await t.run(2)
+        tid = f"{FOREVER_PREFIX}x2"
+        w = with_loops(任务定义(), LOOPS_FOREVER, return_pct=25.0, caps=NEW)
+        r = await t.send(t.site.patrol("A", w, issued_by="gina", priority=FOREVER_PATROL,
+                                       task_id=tid))
+        assert r["ack"]["result"] == "accepted", r
+        await t.run(20)
+        with t.db.tx() as c:
+            c.execute("INSERT INTO events(robot_id, boot_id, seq, event_id, kind, data, stamp, "
+                      "received_at) VALUES (?,?,?,?,?,?,?,?)",
+                      ("A", "ret", 1, "ret-1", "task_returning",
+                       json.dumps({"task_id": tid, "reason": "电量低"}), t.clock(), t.clock()))
+        t.clock.ms = 毫秒(22, 0, 30)
+        await t.run(2)
+        await _拍(t)
+        assert [x["outcome"] for x in t.sched.runs("nightly")] == ["busy"], t.sched.runs()
+        assert t.site.busy("A") == tid, "没去抢回家的那一趟"
+        await t.send(t.site.abort("A", tid, issued_by="gina"))   # 到家了(这里用撤代替)
+        await t.run(30)
+        assert t.site.busy("A") is None
+        t.clock.ms = 毫秒(22, 2)
+        await _拍(t)
+        assert "started" in [x["outcome"] for x in t.sched.runs("nightly")], t.sched.runs()
+    finally:
+        await t.close()
