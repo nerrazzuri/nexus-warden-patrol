@@ -380,7 +380,7 @@ class SiteScheduler:
                 p = caps.tasks.get("patrol", {}) if caps else {}
                 loaded = (p.get("map_id"), p.get("map_version"))
                 if loaded[0] != mission.map_id:
-                    reason = f"{rid} 加载的地图是 {loaded[0]!r},任务要 {mission.map_id!r}"
+                    reason = f"{rid} 加载的地图是 {loaded[0]},路线画在 {mission.map_id} 上"
                 elif loaded[1] != mission.map_version:
                     # R1:同一张图换了版本(重建过),老坐标不可信 —— 跟图不对一样不派,挑别的狗
                     reason = version_mismatch_text(entry.mission, mission.map_id,
