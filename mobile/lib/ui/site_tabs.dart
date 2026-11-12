@@ -130,6 +130,13 @@ String setupDetailText(Map it) {
     return tr('${away.length} route(s) ($names) are drawn on $at, but the robots use $u: redraw on $u.',
         '有 ${away.length} 条路线（$names）画在 $at 上，机器人在用 $u：在 $u 上重画。');
   }
+  final noMap = it['no_map'];
+  if ((it['id'] == 'home' || it['id'] == 'standby') && it['done'] != true && noMap is List && noMap.isNotEmpty) {
+    // minor #40：登记了还没报在用哪张图的机器人
+    final ids = noMap.join(tr(', ', '\u3001'));
+    return tr("$ids hasn't reported which map it is using yet, so this can't be checked. Turn it on and let it localize, then look again.",
+        '$ids 还没报在用哪张图，查不了这一项。开机、定好位以后再看。');
+  }
   final home = it['at_home'];
   if (it['id'] == 'standby' && it['done'] == true && home is List && home.isNotEmpty) {
     // minor #21：标原点时站点顺手加的待命点就在原点上
