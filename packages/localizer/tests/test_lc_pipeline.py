@@ -5,7 +5,6 @@ from __future__ import annotations
 import re
 
 import yaml
-
 from nexwar_localizer.build import LC_PIPELINE
 
 
