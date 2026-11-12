@@ -21,6 +21,7 @@ import { HelpDialog, WEB_TOUR } from "./guide";
 import { ArmingPage } from "./armingpage";
 import { DutyPage } from "./duty";
 import { LiveWall } from "./livewall";
+import { DrillNote } from "./alerttest";
 import { groupTodo, homeTodo, HomePage } from "./homepage";
 import { ActivityPage } from "./activitypage";
 import { DiagPage } from "./advdiag";
@@ -190,6 +191,8 @@ export function Console({ me, onOut }: { me: Me; onOut: (note?: string) => void 
         {(["duty", "live", "map", "alarms", "recordings"] as Page[]).includes(route.page) && navLabel(route.page) && (
           <h1 class="sr-only">{t(navLabel(route.page)!.page)}</h1>
         )}
+        {/* W6-13 / minor #25:演练开着,保安的值班、实时画面、地图页也说一句(以前只有管理员总览、报警记录页) */}
+        {(["duty", "live", "map"] as Page[]).includes(route.page) && <DrillNote role={me.role} />}
         {route.page === "duty" && (
           <DutyPage units={units} alerts={alerts} now={now} role={me.role} say={say} refresh={refresh} mode={data?.mode ?? null} stale={stale}
             onZoom={(id) => setPending({ kind: "cam", robot: id, cam: "front" })} />

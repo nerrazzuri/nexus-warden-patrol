@@ -51,4 +51,25 @@ void main() {
     expect(find.byKey(SiteDutyPage.siteDownKey), findsNothing);
     await t.pumpWidget(Container());
   });
+
+  // W6-13 / minor #25：报警演练开着，保安在值班页上也要看得到（以前只有报警记录页）
+  testWidgets('W6-13：演练开着，值班页顶上说一句；没开不说', (t) async {
+    await t.binding.setSurfaceSize(const Size(800, 900));
+    addTearDown(() => t.binding.setSurfaceSize(null));
+    final api = FakeApi('guard');
+    await t.pumpWidget(MaterialApp(home: SiteDutyPage(api: api)));
+    await t.pumpAndSettle();
+    expect(find.byKey(SiteDutyPage.drillKey), findsNothing);
+    final end = DateTime.now().add(const Duration(hours: 1));
+    api.alertTestMode = <String, dynamic>{'active': true, 'until_ms': end.millisecondsSinceEpoch, 'by': 'alice'};
+    await t.pump(const Duration(seconds: 31));
+    await t.pumpAndSettle();
+    expect(find.byKey(SiteDutyPage.drillKey), findsOneWidget);
+    expect(find.textContaining('报警演练中'), findsOneWidget);
+    api.alertTestMode = <String, dynamic>{'active': false, 'until_ms': null, 'by': ''};
+    await t.pump(const Duration(seconds: 31));
+    await t.pumpAndSettle();
+    expect(find.byKey(SiteDutyPage.drillKey), findsNothing);
+    await t.pumpWidget(Container());
+  });
 }
