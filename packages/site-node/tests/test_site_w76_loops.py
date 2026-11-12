@@ -136,6 +136,7 @@ def test_先看会怎样_一直巡逻马上走_说会被哪趟日程打断(台):
     p = t.desk.plan("A", w)
     assert p["queued"] is False and p["forever"] is True
     assert "22:00" in p["interrupted_by"], p
+    assert p["return_pct"] == 25, "第 8 轮 W8-05:派单说明写出电量线是多少"
 
 
 def test_任务包里的路线不许存一直巡逻_不然日程会派出去(tmp_path):

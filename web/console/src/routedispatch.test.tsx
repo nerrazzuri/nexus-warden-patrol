@@ -67,10 +67,11 @@ describe("派巡逻(路线页)", () => {
     expect(Array.from(loops.options).map((o) => o.textContent)).toContain("一直巡逻");
     fireEvent.change(loops, { target: { value: "3" } });
     await waitFor(() => expect(planUrls.at(-1)).toContain("&loops=3"));
-    plan = { estimate_s: 12000, start_ms: 0, queued: false, because: "", forever: true, interrupted_by: "22:00 日程「夜巡」" };
+    plan = { estimate_s: 12000, start_ms: 0, queued: false, because: "", forever: true, return_pct: 30, interrupted_by: "22:00 日程「夜巡」" };
     fireEvent.change(loops, { target: { value: "0" } });
     await waitFor(() => expect(document.querySelector("[data-plan]")?.textContent).toContain("22:00 日程「夜巡」"));
     expect(document.querySelector("[data-plan]")!.textContent).toContain("一直巡逻");
+    expect(document.querySelector("[data-plan]")!.textContent).toContain("电量降到 30%（站点设的巡逻电量线）");
     fireEvent.click(btn(document, "派出"));
     await waitFor(() => expect(posted).toEqual([{ url: "/api/robots/A/patrol", body: { mission_id: "loop", loops: 0 } }]));
   });

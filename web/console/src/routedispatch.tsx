@@ -7,7 +7,7 @@ import { t } from "./i18n";
 import { LoopsSelect } from "./loops";
 import { siteHm } from "./todaypatrols";
 
-interface Plan { estimate_s?: number | null; start_ms?: number; queued?: boolean; because?: string; utc_offset_min?: number; forever?: boolean; interrupted_by?: string }
+interface Plan { estimate_s?: number | null; start_ms?: number; queued?: boolean; because?: string; utc_offset_min?: number; forever?: boolean; interrupted_by?: string; return_pct?: number }
 interface Sent { queued?: boolean; start_after_ms?: number; because?: string; utc_offset_min?: number; ack?: { result?: string; reason?: string } }
 
 export function DispatchOnce({ route, say }: { route: string; say: (s: string) => void }) {
@@ -77,7 +77,7 @@ export function DispatchOnce({ route, say }: { route: string; say: (s: string) =
             </label>
             {plan && (plan.forever ? (
               <p class="small" data-plan="1">
-                {t("doForever")}
+                {plan.return_pct != null ? t("doForeverPct", { n: plan.return_pct }) : t("doForever")}
                 {plan.interrupted_by ? <> · {t("doForeverCut", { what: plan.interrupted_by })}</> : null}
               </p>
             ) : (

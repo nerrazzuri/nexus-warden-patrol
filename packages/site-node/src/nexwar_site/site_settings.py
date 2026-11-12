@@ -101,7 +101,7 @@ class SiteSettings:
         if "patrol_return_pct" in d:
             rp, (lo, hi) = d["patrol_return_pct"], PATROL_RETURN_RANGE
             if not _int(rp) or not lo <= rp <= hi:
-                raise SettingsError(f"巡逻回去补能的电量线要是 {lo}–{hi} 的整数(%)")
+                raise SettingsError(f"巡逻电量线要是 {lo}–{hi} 的整数(%)")
             cur["patrol_return_pct"] = rp
         self.put("duty", cur)
         return cur
