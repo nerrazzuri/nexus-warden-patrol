@@ -121,11 +121,12 @@ export function activationText(a: Activation, nowMs: number = Date.now()): strin
       return tr(`Downloading ${got}`, `正在下载 ${got}`);
     }
     case "confirmed":
+      // W6-12:不写 localizer / 定位器这种词
       return a.confirmed === "localizer"
-        ? tr("Confirmed by the localizer", "定位器已确认")
+        ? tr("Localized on the new map", "已在新图上定好位")
         : a.confirmed === "load"
-          ? tr("Loaded (this robot has no localizer)", "已载入（这台机器人没有定位器）")
-          : tr("Reported done (old agent: did not wait for the localizer)", "机器人报已换（老代理：没等定位器确认）");
+          ? tr("Loaded", "已载入")
+          : tr("Robot reports switched (older robot software: did not wait to localize)", "机器人报已换（机器人软件较旧，没等定好位）");
     case "failed":
       return tr("Failed", "没成") + (a.reason ? `: ${a.reason}` : "");
     default:
@@ -394,17 +395,18 @@ function VersionCard(p: {
           <span>{tr("Standby points", "待命点")} {v.counts.standby}</span>
           <span>{tr("Intercept points", "拦截点")} {v.counts.intercepts}</span>
         </p>
-        {v.unusable && <p class="bad small">{tr(`Robots with a localizer can't use this version: ${v.unusable}`, `带定位器的机器人用不了这一版：${v.unusable}`)}</p>}
+        {v.unusable && <p class="bad small">{tr(`This version lacks localization files, robots can't use it: ${v.unusable}`, `这一版缺定位文件，机器人用不了：${v.unusable}`)}</p>}
         <p class="small mm-dogs-on">
           {v.loaded_on.length > 0 && <span>{tr("Loaded on", "正在用")}{tr(": ", "：")}{v.loaded_on.map((r) => <span key={r} class="mm-chip mono">{r}</span>)}</span>}
-          {v.previous_on.length > 0 && <span class="muted">{tr("Falls back to this for", "出问题时退回这一版的机器人")}{tr(": ", "：")}{v.previous_on.map((r) => <span key={r} class="mm-chip mono">{r}</span>)}</span>}
+          {v.previous_on.length > 0 && <span class="muted">{tr("Previous version of (can roll back here)", "是这几台的上一版（可退回到这版）")}{tr(": ", "：")}{v.previous_on.map((r) => <span key={r} class="mm-chip mono">{r}</span>)}</span>}
         </p>
         <div class="row mm-actions">
           {/* 11-10 用户:「发布的地图不是下发到机器人,而只是发布到站点,发布完了确认没问题再下发」 */}
           {v.draft
             ? <a class="btn sm primary" data-open-draft="1" href={`#/admin/mapedit?map=${enc(p.map_id)}&version=${enc(v.version)}${v.draft_of ? `&from=${enc(v.draft_of)}` : ""}`}>
                 {tr("Open draft (preview, publish)…", "打开草稿（预览、发布）…")}</a>
-            : <button type="button" class="btn sm primary" onClick={p.onPublish}>{tr("Send to robots…", "下发到机器人…")}</button>}
+            // W6-12:四个版本都是蓝色主按钮,看不出该用哪个 —— 只有最新那版是主按钮
+            : <button type="button" class={v.latest ? "btn sm primary" : "btn sm"} onClick={p.onPublish}>{tr("Send to robots…", "下发到机器人…")}</button>}
           <button type="button" class="btn sm" disabled={!!whyNot} title={whyNot} onClick={p.onDelete}>{tr("Delete", "删除")}</button>
           {p.onNoise && <button type="button" class="btn sm" disabled={!v.has_raster} onClick={p.onNoise}>{tr("Clean noise…", "清噪点…")}</button>}
           {/* W44 第四期:地图编辑器(橡皮擦、画障碍、区域名、特殊地面、摆正、底图),另存成新的一版 */}
@@ -601,7 +603,7 @@ export function PublishDialog({ target, dogs, onClose }: { target: { map_id: str
                   <span class="mono"> {d.robot_id}</span>
                   <span class="muted small"> · {d.loaded ? `${tr("now", "现在")} ${d.loaded.map_id}:${d.loaded.version}` : tr("no map loaded", "没加载地图")}
                     {!d.online ? ` · ${tr("offline", "不在线")}` : !d.can_activate ? ` · ${tr("cannot switch maps", "不能换图")}`
-                      : noLoc(d) ? ` · ${tr("has a localizer; this version lacks localization files", "带定位器，这一版缺定位文件")}` : ""}</span>
+                      : noLoc(d) ? ` · ${tr("this version lacks localization files", "这一版缺定位文件")}` : ""}</span>
                 </label>
               );
             })}
@@ -648,7 +650,7 @@ export function PublishDialog({ target, dogs, onClose }: { target: { map_id: str
             <p class="warn small" role="alert">{tr(`The no-go zones of v${target.version} are not confirmed yet; robots will refuse it. `, `v${target.version} 的禁行区还没确认，机器人会拒收。`)}
               <a href={`#/admin/layout?tab=nogo&map=${encodeURIComponent(target.map_id)}&version=${encodeURIComponent(target.version)}&from=publish`} onClick={onClose}>{tr(`Confirm them in Setup → No-go (opens v${target.version})`, `去「布置 → 禁行区」确认（直接打开 v${target.version}）`)}</a></p>
           )}
-          <p class="muted small">{tr("Each robot switches on its own: it downloads, waits until idle, loads, and (if it has a localizer) waits for the localizer to accept the map. A robot the localizer rejects goes back to its previous map.", "每台机器人各自换：下载、等空闲、载入，有定位器的还要等定位器收下新图；定位器不收的，机器人会退回原来那张。")}</p>
+          <p class="muted small">{tr("Each robot switches on its own: it downloads, waits until idle, loads, and waits until it has localized on the new map. A robot that can't localize on it goes back to its previous map.", "每台机器人各自换：下载、等空闲、载入，再等它在新图上定好位；定不了位的，机器人会退回原来那张。")}</p>
           {/* W44 第四期(设计 §5.2 第 4 条):换图要再输一次密码 */}
           <label class="field">{tr("Your password (switching maps matters)", "你的密码（换图要紧，再输一次）")}
             <input type="password" name="confirm_pw" autoComplete="current-password" value={pw} onInput={(e) => setPw(e.currentTarget.value)} />
@@ -847,5 +849,6 @@ export function rollLabel(d: Pick<Dog, "loaded" | "rollback">): string {
   const r = d.rollback;
   if (!r) return tr("Roll back", "退回上一版");
   const newer = d.loaded && d.loaded.map_id === r.map_id && Number(r.version) > Number(d.loaded.version);
-  return newer ? tr(`Switch back to v${r.version}`, `换回 v${r.version}`) : tr(`Roll back to v${r.version}`, `退回到 v${r.version}`);
+  // W6-12:「换回 v11」看着像往旧的退 —— 写明那版更新
+  return newer ? tr(`Switch to v${r.version} (newer)`, `切到 v${r.version}（更新的那版）`) : tr(`Roll back to v${r.version}`, `退回到 v${r.version}`);
 }

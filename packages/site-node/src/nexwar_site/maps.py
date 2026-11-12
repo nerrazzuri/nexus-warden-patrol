@@ -58,6 +58,15 @@ RETIRED_KEY = "map_retired_versions"
 #: 编辑草稿的登记来源前缀(11-10):草稿不能下发,发布到站点以后改成 ``edit:``。
 DRAFT_SOURCE = "draft:"
 
+
+def link_or_copy(src: Path, dst: Path) -> None:
+    """版本目录里的文件登记之后不再原地改写(换底图是先删再写):同一块盘上硬链接,
+    不整份复制(W6-12:每个草稿复制一份 149 MB 的点云);链接不了(跨盘、不支持)再复制。"""
+    try:
+        os.link(src, dst)
+    except OSError:
+        shutil.copy2(src, dst)
+
 class MapError(ValueError):
     """这张图登记不了 / 找不到。"""
 
@@ -540,8 +549,11 @@ class MapCatalog:
     # ------------------------------------------------------------ 登记
 
     def import_dir(self, src: Path, *, map_id: str, version: str, source: str = "import",
-                   note: str = "") -> MapRef:
-        """把一个目录里的文件(不含子目录与 ``map.json``)登记成一张图。"""
+                   note: str = "", link: bool = False) -> MapRef:
+        """把一个目录里的文件(不含子目录与 ``map.json``)登记成一张图。
+
+        ``link``:``src`` 是站点自己的临时目录(编辑另存)才硬链接;外面的目录照旧复制,
+        免得别人原地改那边的文件把登记过的图也改了。"""
         try:
             check_name(map_id, "地图号")
             check_name(version, "版本")
@@ -560,7 +572,7 @@ class MapCatalog:
             tmp.mkdir(parents=True)
             files = []
             for n in names:
-                shutil.copy2(Path(src) / n, tmp / n)
+                (link_or_copy if link else shutil.copy2)(Path(src) / n, tmp / n)
                 files.append(MapFile(name=n, size=(tmp / n).stat().st_size,
                                      sha256=_sha256(tmp / n)))
             ref = MapRef(map_id=map_id, version=version, files=tuple(files))

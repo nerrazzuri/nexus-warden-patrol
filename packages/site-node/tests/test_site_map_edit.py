@@ -143,6 +143,27 @@ def test_只另存新版本_原版不动(站点):
     assert _值(new, 4.0, 0.5) == 254
 
 
+def test_W6_12_另存的新版本没改的文件跟原版共用一份_不再整份复制(站点):
+    """liang-d5 第 6 轮 W6-12:每个草稿都复制一份 149 MB(定位点云占大头),站点盘只剩 14%。
+    没改的文件硬链接(同一份),只有改了的栅格是新的;原版的栅格不能跟着变。"""
+    s = 站点
+    tok = _登(s)
+    dg = s.req("GET", f"{ADM}/noise", token=tok)[1]["digest"]
+    old = s.maps.root / MAP[0] / MAP[1]
+    before = (old / "floor.pgm").read_bytes()
+    code, d = s.req("POST", f"{ADM}/edit", {"digest": dg, "ops": ERASE}, token=tok)
+    assert code == 200, d
+    new = s.maps.root / MAP[0] / d["version"]
+    keep = ("floor.pgm", "map.json")          # 栅格改了;map.json 是每版自己的清单
+    shared = [f.name for f in old.iterdir()
+              if f.is_file() and f.name not in keep and (new / f.name).exists()]
+    assert shared
+    for n in shared:
+        assert (old / n).stat().st_ino == (new / n).stat().st_ino, n
+    assert (old / "floor.pgm").stat().st_ino != (new / "floor.pgm").stat().st_ino
+    assert (old / "floor.pgm").read_bytes() == before
+
+
 def test_栅格换了不让存(站点):
     s = 站点
     code, d = s.req("POST", f"{ADM}/edit", {"digest": "0" * 16, "ops": ERASE}, token=_登(s))

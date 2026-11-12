@@ -589,7 +589,7 @@ void main() {
       };
     await t.pumpWidget(MaterialApp(home: MapManagePage(api: api)));
     await t.pumpAndSettle();
-    expect(find.textContaining('带定位器的机器人用不了'), findsOneWidget);
+    expect(find.textContaining('这一版缺定位文件，机器人用不了'), findsOneWidget);   // W6-12：不说定位器
     expect(find.textContaining('superlio_map.pcd'), findsOneWidget);
   });
 
@@ -603,7 +603,7 @@ void main() {
     final t = mapSwitchText(a('pending', d: d), nowMs: now, rateBps: 2e6);
     expect(t, contains('约还要 30 秒'));
     expect(mapSwitchText(a('pending', d: {...d, 'at_ms': now - 20000}), nowMs: now), contains('在载入定位'));
-    expect(mapSwitchText(a('confirmed', confirmed: 'localizer'), nowMs: now), contains('定位已确认'));
+    expect(mapSwitchText(a('confirmed', confirmed: 'localizer'), nowMs: now), contains('已在新图上定好位'));
     expect(mapSwitchText(a('failed', reason: '校验不对'), nowMs: now), contains('校验不对'));
     expect(mapSwitchText(a('timeout'), nowMs: now), contains('太久'));
   });

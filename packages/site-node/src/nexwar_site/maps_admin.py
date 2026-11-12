@@ -27,7 +27,7 @@ from typing import Any
 from nexwar_contract.errors import ContractError
 from nexwar_contract.maps import MapRef, check_name, prior_missing
 from nexwar_site.map_wizard import read_quality
-from nexwar_site.maps import DRAFT_SOURCE
+from nexwar_site.maps import DRAFT_SOURCE, link_or_copy
 
 log = logging.getLogger(__name__)
 
@@ -363,12 +363,13 @@ class MapAdmin:
         tmp = Path(tempfile.mkdtemp(prefix="denoise-", dir=self.cat.root))
         try:
             for f in self.ref(map_id, version).files:
-                shutil.copy2(src / f.name, tmp / f.name)
+                if f.name != image:              # 栅格要改:不链接,下面写新的(不然原版跟着变)
+                    link_or_copy(src / f.name, tmp / f.name)
             (tmp / image).write_bytes(dn.clean(data, meta, specks))
             px = sum(s["px"] for s in specks)
             try:
                 # 「从 X 编辑」是草稿记最初那一版的写法(:meth:`MapCatalog.draft_of` 认它)
-                self.cat.import_dir(tmp, map_id=map_id, version=new,
+                self.cat.import_dir(tmp, map_id=map_id, version=new, link=True,
                                     source=f"{DRAFT_SOURCE}{by}",
                                     note=f"从 {origin or version} 编辑:清了 {len(specks)} "
                                          f"处零星噪点({px} 格)")
@@ -430,10 +431,11 @@ class MapAdmin:
                 f"擦了 {stats['erased_m2']} 平方米、画了 {stats['obstacle_m2']} 平方米障碍")
         try:
             for f in self.ref(map_id, version).files:
-                shutil.copy2(src / f.name, tmp / f.name)
+                if f.name != image:              # 栅格要改:不链接,下面写新的(不然原版跟着变)
+                    link_or_copy(src / f.name, tmp / f.name)
             (tmp / image).write_bytes(new_pgm)
             try:
-                self.cat.import_dir(tmp, map_id=map_id, version=new,
+                self.cat.import_dir(tmp, map_id=map_id, version=new, link=True,
                                     source=f"{DRAFT_SOURCE}{by}",
                                     note=text or f"从 {origin or version} 编辑:{what}")
             except MapError as exc:
