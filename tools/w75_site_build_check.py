@@ -118,21 +118,31 @@ def site_build(kd: Path, home: Path, runner: list[str]) -> dict:
 
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    ap.add_argument("bag", type=Path)
-    ap.add_argument("work", type=Path)
+    ap.add_argument("bag", type=Path, nargs="?", default=None,
+                    help="录包目录;给了 --keyframes 就不用")
+    ap.add_argument("work", type=Path, nargs="?", default=None)
     ap.add_argument("--runner", nargs="+", required=True,
                     help="出图命令,跟 site.json 的 mapbuild.runner 一样")
+    ap.add_argument("--keyframes", type=Path, default=None,
+                    help="直接用现成的关键帧目录(本工具上一次出的 <工作目录>/kf),不读录包")
     ap.add_argument("--pose", default="/d1max_loc/lio/odom")
     ap.add_argument("--pose-bag", type=Path, default=None,
                     help="位姿在另一个包里(比如 Super-LIO 重放出来的 lio_bag)")
     a = ap.parse_args()
+    if a.keyframes is not None and a.work is None:
+        a.bag, a.work = None, a.bag              # 只给了一个位置参数:那就是工作目录
+    if a.work is None or (a.bag is None) == (a.keyframes is None):
+        ap.error("录包目录和 --keyframes 给一个,再给工作目录")
     shutil.rmtree(a.work, ignore_errors=True)
     kd, home = a.work / "kf", a.work / "site"
-    kd.mkdir(parents=True)
-    home.mkdir()
-    t = time.monotonic()
-    k = keyframes_from_bag(a.bag, kd, a.pose, a.pose_bag)
-    print("关键帧:", k["scans"], "帧雷达,", k["summary"], f"用时 {time.monotonic() - t:.1f} s")
+    home.mkdir(parents=True)
+    if a.keyframes is not None:
+        shutil.copytree(a.keyframes, kd)
+    else:
+        kd.mkdir()
+        t = time.monotonic()
+        k = keyframes_from_bag(a.bag, kd, a.pose, a.pose_bag)
+        print("关键帧:", k["scans"], "帧雷达,", k["summary"], f"用时 {time.monotonic() - t:.1f} s")
     r = site_build(kd, home, a.runner)
     peak = resource.getrusage(resource.RUSAGE_CHILDREN).ru_maxrss / 1024 / 1024
     print(f"站点出图用时 {r['seconds']:.1f} s,出图进程内存最高 {peak:.1f} GB")
