@@ -549,7 +549,14 @@ def _walked(kd, *, finished=True):
     for n in ("lio.tum", "traj.tum"):
         (kd / n).write_text(n)
     if finished:
-        (kd / "live.json").write_text("{}")
+        _live(kd)
+
+
+def _live(kd, **kw):
+    """预览进程正常收尾写的 ``live.json``(外审 W75-1 #1 起带收尾情况)。"""
+    import time
+    doc = {"clean": True, "last_rx": time.time(), "kf_errors": 0, **kw}
+    (kd / "live.json").write_text(json.dumps(doc))
 
 
 async def test_W75_站点打包_关键帧存进发件箱边走边传_走完写清单_机器人上不打包(tmp_path):
@@ -585,9 +592,9 @@ async def test_W75_站点打包_边走边存的没收尾_退回机器人上打�
     _walked(kd, finished=False)
     await svc.stop()
     ref, mode = await svc.finish()
-    assert mode == "live" and ref.version == "5" and svc.orch.packaged_kf == kd
+    assert mode == "bag" and ref.version == "5", "外审 W75-1 #1:关键帧不齐从录包重建"
     assert "没收尾" in svc.last_fallback
-    assert not (kd / KF_MANIFEST).exists()
+    assert json.loads((kd / KF_MANIFEST).read_text())["abandoned"] is True
 
 
 async def test_W75_机器人上打包_关键帧照旧放在建图的中间目录_不进发件箱(tmp_path):
@@ -617,3 +624,46 @@ def test_W75_关键帧的分类_清单最后传_点开头的不传_有清单才�
     assert not kf_settled(tmp_path)
     (tmp_path / "kf.json").write_text("{}")
     assert kf_settled(tmp_path)
+
+
+@pytest.mark.parametrize("why, live, said", [
+    ("预览进程出错退出(没收到停止就收尾)", {"clean": False}, "没正常停"),
+    ("老预览进程写的、没有收尾情况", {"clean": None}, "没正常停"),
+    ("关键帧写盘出过错", {"kf_errors": 3}, "写盘出过错"),
+    ("预览中途停了:最后一帧离停录 50 秒", {"last_rx_ago": 50.0}, "停录前"),
+])
+async def test_外审W75_1_1_关键帧不齐_不交站点_退回机器人上打包(tmp_path, why, live, said):
+    import time
+
+    from nexwar_agent.mapping import KF_MANIFEST
+    svc, box = _site_svc(tmp_path)
+    await svc.start("yard", target=("estate-1", "5"), pack="site")
+    kd = box / "mapkf" / "estate-1" / "5"
+    _walked(kd, finished=False)
+    ago = live.pop("last_rx_ago", 0.0)
+    _live(kd, last_rx=time.time() - ago, **live)
+    if live.get("clean") is None and "clean" in live:
+        d = json.loads((kd / "live.json").read_text())
+        del d["clean"]
+        (kd / "live.json").write_text(json.dumps(d))
+    await svc.stop()
+    ref, mode = await svc.finish()
+    assert mode == "bag" and ref.version == "5", why
+    assert said in svc.last_fallback, svc.last_fallback
+    assert json.loads((kd / KF_MANIFEST).read_text())["abandoned"] is True, "不交站点出图"
+
+
+async def test_外审W75_1_4_关键帧作废_只留一份作废清单_传完站点确认就能删(tmp_path):
+    from nexwar_agent.mapping import KF_MANIFEST, kf_settled
+    svc, box = _site_svc(tmp_path)
+    await svc.start("yard", target=("estate-1", "5"), pack="site")
+    kd = box / "mapkf" / "estate-1" / "5"
+    _walked(kd, finished=False)
+    await svc.stop()
+    _, mode = await svc.finish()
+    assert mode == "bag"
+    assert [p.name for p in kd.rglob("*") if p.is_file()] == [KF_MANIFEST], "关键帧不再传"
+    m = json.loads((kd / KF_MANIFEST).read_text())
+    assert m["abandoned"] is True and m["files"] == [] and "没收尾" in m["reason"]
+    assert (m["map_id"], m["version"]) == ("estate-1", "5")
+    assert kf_settled(kd), "有清单 = 写完了:传完、站点确认就删"

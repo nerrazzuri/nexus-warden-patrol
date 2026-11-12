@@ -517,3 +517,27 @@ def test_W75_记下机器人自己的里程朝向_核手性用(tmp_path):
     d = json.loads((tmp_path / L.LIVE_FILE).read_text())
     assert d["keyframes"] == 3 and d["clock_offset_s"] is None
     assert d["odom"] == [[50.0, 50.5, pytest.approx(yaw)]]
+
+
+def test_外审W75_1_1_收尾文件记正常停了没有_最后收到雷达的时刻_关键帧写盘错几次(tmp_path):
+    t = [100.0]
+    h = L.Handlers(L.Feeder(_Grid()), decode_cloud=lambda raw: np.ones((8, 3)),
+                   keyframes=_KF(), now=lambda: t[0])
+    h.on_scan(_raw(99.9))
+    t[0] = 130.0
+    h.on_scan(_raw(129.9))
+    bad = L.Handlers(L.Feeder(_Grid()), decode_cloud=lambda raw: np.ones((8, 3)),
+                     keyframes=_KF(True), now=lambda: 140.0)
+    bad.on_scan(_raw(139.9))
+
+    class _Close:
+        def close(self):
+            return {"keyframes": 2}
+    L.finish_keyframes(tmp_path, h, _Close(), clean=True)
+    d = json.loads((tmp_path / L.LIVE_FILE).read_text())
+    assert d["clean"] is True and d["last_rx"] == 130.0 and d["kf_errors"] == 0
+    assert d["keyframes"] == 2
+    L.finish_keyframes(tmp_path, bad, _Close(), clean=True)
+    assert json.loads((tmp_path / L.LIVE_FILE).read_text())["kf_errors"] == 1
+    L.finish_keyframes(tmp_path, h, _Close(), clean=False)
+    assert not (tmp_path / L.LIVE_FILE).exists(), "没正常停:不写收尾文件(交接时退回机器人上打包)"

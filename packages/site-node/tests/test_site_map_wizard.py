@@ -446,3 +446,22 @@ def test_用户1113_关键帧没留在站点上_不给优化(站点):
     with pytest.raises(WizardError) as ei:
         w.apply({"action": "optimize"}, by="alice")
     assert ei.value.reason == "not_optimizable"
+
+
+def test_外审W75_1_3_传了一半退回机器人出图_机器人也没成_向导报失败不卡在上传中(站点):
+    w = _wiz(站点)
+    v = w.apply({"action": "start", "robot_id": "A", "site_type": "indoor", "drive": "remote"},
+                by="alice")
+    b = _假出图({"state": "uploading", "robot_id": "A"})
+    b.key = ("main", v["version"])
+    b.optimizable = lambda *a: False
+    w.w.builds = b
+    assert w.view()["build"]["stage"] == "upload"
+    with 站点.db.tx() as c:
+        c.execute("INSERT INTO events(robot_id, boot_id, seq, event_id, kind, data, stamp, "
+                  "received_at) VALUES ('A','b',1,'e1','map_build_failed',?,0,?)",
+                  (json.dumps({"map_id": "main", "version": v["version"],
+                               "reason": "MappingError: 录包是空的"}), 1_700_000_000_001))
+    got = w.view()["build"]
+    assert got["state"] == "failed" and "录包是空的" in got["reason"]
+    assert got.get("where") != "site", "是机器人上没成:给重走,不给「在站点上重试」"
