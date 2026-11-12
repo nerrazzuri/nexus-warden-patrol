@@ -76,20 +76,7 @@ class _AppSettingsPageState extends State<AppSettingsPage> {
 
   Future<void> _setLang(AppLang lang) async {
     if (lang == appLang.value) return;
-    if (widget.api != null) {
-      // 换语言整个 App 重建（见 PatrolApp）：站点里的页面都会关掉，回到站点列表
-      final ok = await showDialog<bool>(
-          context: context,
-          builder: (c) => AlertDialog(
-                content: Text(tr('Switching the language returns to the site list. Continue?',
-                    '切换语言后将回到站点列表，是否继续？')),
-                actions: [
-                  TextButton(onPressed: () => Navigator.pop(c, false), child: Text(tr('Cancel', '取消'))),
-                  FilledButton(onPressed: () => Navigator.pop(c, true), child: Text(tr('Switch', '切换'))),
-                ],
-              ));
-      if (ok != true) return;
-    }
+    // 易用性第 6 轮 A6-06：换语言留在这一页、登录还在（PatrolApp 只重画），不用再先问
     await setAppLang(lang, store: widget.langStore);
   }
 
