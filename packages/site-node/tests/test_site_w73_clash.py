@@ -67,6 +67,22 @@ def test_巡逻任意一台_至少一台没被布防占就行():
     assert len(clashes([p], [_g(robot="A"), _g(eid=2, robot="B")], robots=["A", "B"])) == 1
 
 
+def test_minor32_任意一台的两段值守一前一后_不算同时占两台():
+    """W73 minor #32:巡逻那一段先碰到 22:00–23:00 的「任意一台」值守、再碰到 23:00–24:00 的另一条,
+    两条没有同时在跑,只占一台;以前按两台算,两台机器人的站点就误拒。"""
+    a = _g(eid=1, robot="", wins=((MON * 1440 + 22 * 60, MON * 1440 + 23 * 60),))
+    b = _g(eid=2, robot="", wins=((MON * 1440 + 23 * 60, MON * 1440 + 24 * 60),))
+    p = _p(robot="A", at=(22, 30), dur_s=3600)            # 22:30 起,拖过 23:00
+    assert clashes([p], [a, b], robots=["A", "B"]) == []
+    # 真同时的两条:A 被巡逻占了,只剩 B 一台,不够
+    c = _g(eid=3, robot="", wins=((MON * 1440 + 22 * 60, MON * 1440 + 24 * 60),))
+    assert len(clashes([p], [a, c], robots=["A", "B"])) == 1
+    # 巡逻任意一台:两段一前一后的指定机器人值守,任何时刻都还有一台空着
+    fa = _g(eid=4, robot="A", wins=((MON * 1440 + 22 * 60, MON * 1440 + 23 * 60),))
+    fb = _g(eid=5, robot="B", wins=((MON * 1440 + 23 * 60, MON * 1440 + 24 * 60),))
+    assert clashes([_p(robot="", at=(22, 30), dur_s=3600)], [fa, fb], robots=["A", "B"]) == []
+
+
 def test_值守占用就是它路线经过的防区布防的那几段():
     assert guard_busy(_g()) == [(MON * 1440 + 22 * 60, MON * 1440 + 24 * 60)]
 

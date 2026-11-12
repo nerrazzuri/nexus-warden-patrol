@@ -84,40 +84,64 @@ def _overlap(a: tuple[int, int], b: tuple[int, int]) -> bool:
     return any(a[0] < b[1] + s and b[0] + s < a[1] for s in (-WEEK, 0, WEEK))
 
 
+def _segments(iv: tuple[int, int], hit: list[tuple[dict[str, Any], tuple[int, int]]]
+              ) -> list[list[tuple[dict[str, Any], tuple[int, int]]]]:
+    """巡逻那一段按值守窗口的起止切开,每一小段里**同时**在的那几条值守(minor #32:一前一后的两段
+    「任意一台」不算同时占两台)。"""
+    cuts = {iv[0], iv[1]}
+    for _, w in hit:
+        for sh in (-WEEK, 0, WEEK):
+            for t in (w[0] + sh, w[1] + sh):
+                if iv[0] < t < iv[1]:
+                    cuts.add(t)
+    pts = sorted(cuts)
+    out = []
+    for t0, t1 in zip(pts, pts[1:], strict=False):
+        mid = (t0 + t1) / 2
+        on = [(g, w) for g, w in hit
+              if any(w[0] + sh <= mid < w[1] + sh for sh in (-WEEK, 0, WEEK))]
+        if on:
+            out.append(on)
+    return out
+
+
+def _judge(p: Patrol, iv: tuple[int, int], hit: list[tuple[dict[str, Any], tuple[int, int]]],
+           allr: set[str]) -> str:
+    """同一时刻在的这几条值守跟这一轮巡逻撞没撞;撞了回一句话,不撞回空串。"""
+    fixed = {g["robot"] for g, _ in hit if g["robot"]}
+    n_any = len({g["id"] for g, _ in hit if not g["robot"]})
+    first_g, first_w = hit[0]
+    label = first_g.get("note") or _guard_label(first_w)
+    if p.robot:
+        own = [(g, w) for g, w in hit if g["robot"] == p.robot]
+        if own:
+            g, w = own[0]
+            lab = g.get("note") or _guard_label(w)
+            return (f"{p.robot} 在{_when(*iv)}有巡逻(排程 {p.id}),跟{lab}"
+                    f"(防区路线 {g['route']})撞了")
+        spare = allr - fixed - {p.robot}
+        if n_any and len(spare) < n_any:
+            return (f"{p.robot} 在{_when(*iv)}有巡逻(排程 {p.id}),{label}要「任意一台」"
+                    f"机器人值守,剩下的不够(还差 {n_any - len(spare)} 台)")
+        return ""
+    if len(allr - fixed) - n_any < 1:
+        return f"排程 {p.id} 写的任意一台,{_when(*iv)}所有机器人都在布防值守({label})"
+    return ""
+
+
 def clashes(patrols: Iterable[Patrol], guards: list[dict[str, Any]], *,
             robots: list[str]) -> list[str]:
     """撞上的每一处一句话(给人看的)。``guards``:``{id, route, robot('' = 任意一台), windows,
-    note?}``;``robots``:站点登记着的机器人。"""
+    note?}``;``robots``:站点登记着的机器人。按时刻算:同一时刻在的值守才一起占机器人。"""
     out: list[str] = []
     allr = set(robots)
     for p in patrols:
         for iv in patrol_busy(p):
             hit = [(g, w) for g in guards for w in guard_busy(g) if _overlap(iv, w)]
-            if not hit:
-                continue
-            fixed = {g["robot"] for g, _ in hit if g["robot"]}
-            n_any = len({g["id"] for g, _ in hit if not g["robot"]})
-            first_g, first_w = hit[0]
-            label = first_g.get("note") or _guard_label(first_w)
-            if p.robot:
-                own = [(g, w) for g, w in hit if g["robot"] == p.robot]
-                if own:
-                    g, w = own[0]
-                    lab = g.get("note") or _guard_label(w)
-                    out.append(f"{p.robot} 在{_when(*iv)}有巡逻(排程 {p.id}),跟{lab}"
-                               f"(防区路线 {g['route']})撞了")
-                    break
-                spare = allr - fixed - {p.robot}
-                if n_any and len(spare) < n_any:
-                    out.append(f"{p.robot} 在{_when(*iv)}有巡逻(排程 {p.id}),{label}要「任意一台」"
-                               f"机器人值守,剩下的不够(还差 {n_any - len(spare)} 台)")
-                    break
-            else:
-                free = len(allr - fixed) - n_any
-                if free < 1:
-                    out.append(f"排程 {p.id} 写的任意一台,{_when(*iv)}所有机器人都在布防值守"
-                               f"({label})")
-                    break
+            msg = next((m for seg in _segments(iv, hit) if (m := _judge(p, iv, seg, allr))), "")
+            if msg:
+                out.append(msg)
+                break
     return out
 
 
@@ -189,17 +213,20 @@ class ClashCheck:
         if not view.get("enabled"):
             return []                                    # 手动布防:运行时布防优先(§6.4)
         today = date.fromtimestamp(self._now() / 1000)
-        armed_days: list[tuple[int, str]] = []
-        for x in view.get("exceptions") or []:
-            if x.get("state") != "armed":
-                continue
+        # minor #33:同一天有几条例外的,跟运行时一样按后加的算(编号大的;还没存的那条最新)
+        final: dict[date, str] = {}
+        excs = sorted(view.get("exceptions") or [],
+                      key=lambda x: x.get("id") if isinstance(x.get("id"), int) else 1 << 62)
+        for x in excs:
             d0, d1 = date.fromisoformat(x["first_day"]), date.fromisoformat(x["last_day"])
             d = max(d0, today)
             n = 0
             while d <= d1 and n < 31:
-                armed_days.append((d.weekday(), d.isoformat()))
+                final[d] = str(x.get("state"))
                 d += timedelta(days=1)
                 n += 1
+        armed_days = [(d.weekday(), d.isoformat()) for d, st in sorted(final.items())
+                      if st == "armed"]
         out = []
         for e in plan.get("entries", []):
             info = self.guard._route(e["route"])
