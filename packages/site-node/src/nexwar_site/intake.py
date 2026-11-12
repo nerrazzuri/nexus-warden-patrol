@@ -74,6 +74,8 @@ class IntakeServer:
         self.recordings: Any = None
         #: 日志设计 第 5 条:机器人传上来的日志(:class:`~nexwar_site.robot_logs.RobotLogs`)。
         self.robot_logs: Any = None
+        #: W75:站点主机出图(``nexwar_site.mapbuild.SiteMapBuilder``),收关键帧;没装是 None。
+        self.mapbuilds: Any = None
         #: 永远不收的一块:``(狗, 一趟, 文件, 原因)``(主程序接到告警台)。
         self.on_refused: Callable[[str, str, str, str], None] | None = None
         self._now = now_ms
@@ -224,9 +226,11 @@ class _Handler(TlsHandlerMixin):
 
     def do_POST(self) -> None:
         kinds = {WIRE_PATH: "runs", "/maps" + WIRE_PATH: "maps", "/bags" + WIRE_PATH: "bags",
-                 "/video" + WIRE_PATH: "video", "/logs" + WIRE_PATH: "logs"}
+                 "/video" + WIRE_PATH: "video", "/logs" + WIRE_PATH: "logs",
+                 "/mapkf" + WIRE_PATH: "mapkf"}
         kind = kinds.get(self.path)
         if kind is None or (kind in ("maps", "bags") and self.site.maps is None) \
+                or (kind == "mapkf" and self.site.mapbuilds is None) \
                 or (kind == "video" and self.site.recordings is None) \
                 or (kind == "logs" and self.site.robot_logs is None):
             self._drain()
@@ -255,7 +259,8 @@ class _Handler(TlsHandlerMixin):
                "maps": getattr(self.site.maps, "put_map_chunk", None),
                "bags": getattr(self.site.maps, "put_bag_chunk", None),
                "video": getattr(self.site.recordings, "put", None),
-               "logs": getattr(self.site.robot_logs, "put", None)}[kind]
+               "logs": getattr(self.site.robot_logs, "put", None),
+               "mapkf": getattr(self.site.mapbuilds, "put_chunk", None)}[kind]
         try:
             got = put(robot, run, rel, offset=offset, data=data, total=total)
         except PathRefused as exc:

@@ -406,6 +406,8 @@ class SiteApi:
             from nexwar_site.intercept_reach import InterceptReach
             self.routes.reach = InterceptReach(dispatcher.db, maps, zones)
         self.zones = zones
+        #: W75:站点主机出图(``nexwar_site.mapbuild.SiteMapBuilder``);没装出图组件是 None。
+        self.mapbuilds: Any = None
         if zones is not None and getattr(dispatcher, "zones", None) is None:
             dispatcher.zones = zones
         #: W48:路网。跟区域一样有地图目录就有,派遣器共用这一份(补发)。
@@ -4098,6 +4100,10 @@ class _Handler(TlsHandlerMixin):
                                              "地图号、版本")
                     self._check_new_version(cat, *target)
                     payload |= {"map_id": target[0], "version": target[1]}
+                    if getattr(self.site, "mapbuilds", None) is not None:
+                        # W75:站点装了出图组件 —— 关键帧传上来在站点主机上出图(老机器人不认,
+                        # 照旧自己打包)
+                        payload["pack"] = "site"
             elif what == "outbox_retry":
                 # 站点改了收件规矩之后,让狗把隔离的文件再传一次(W00c5d 内部评审)。
                 kind, payload = "outbox_retry", {}
@@ -4126,7 +4132,7 @@ class _Handler(TlsHandlerMixin):
             rec = reg.get(rid) if SAFE_ID.match(rid) else None
             return rec is not None and not getattr(rec, "revoked", False)
         w = MapWizard(settings, cat, self.site.dispatcher.db, now_ms=self.site._now, known=known,
-                      zones=self.site.zones)
+                      zones=self.site.zones, builds=getattr(self.site, "mapbuilds", None))
         if method == "GET":
             self._need(user, VIEW)
             return self._send_json(200, {"wizard": w.view(), "maps": len(cat.list())})

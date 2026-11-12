@@ -45,6 +45,9 @@ PROGRESS = "@@进度"
 STAGES: tuple[tuple[str, float], ...] = (
     ("关键帧", 15.0), ("回环", 100.0), ("点云", 7.0), ("栅格", 14.0), ("先验", 1.0),
     ("定位地图", 3.0))
+#: 给手机、网页的阶段代号(界面按它翻译;出图命令打的是中文阶段名)。
+STAGE_CODES = {"关键帧": "keyframes", "回环": "loop", "点云": "points", "栅格": "grid",
+               "先验": "prior", "定位地图": "locmap", "完成": "done"}
 DONE_STAGE = "完成"
 #: 出图最多跑多久。
 TIMEOUT_S = 3600.0
@@ -302,3 +305,33 @@ class SiteMapBuilder:
                           "reason": reason})
         except Exception:
             log.exception("出图结果的回调出错")
+
+
+def notify(desk: Any, r: dict[str, Any]) -> None:
+    """出完了告诉人(W75):成了记一条「地图建好了」(P3,推给管理员、工程师),之前的建图失败解决掉;
+    没成报「建图失败」(带原因)。``desk`` 是告警簿(线程里用 ``LoopAlerts``)。"""
+    rid, which = r["robot_id"], f"{r['map_id']}:{r['version']}"
+    if r["ok"]:
+        desk.raise_alert(kind="map_ready", robot=rid, title=f"地图建好了:{which}",
+                         detail="在建图向导里看结论、点「用这张图」", merge=False)
+        desk.resolve_all(rid, "map_failed", who="site:map_ready")
+    else:
+        desk.raise_alert(kind="map_failed", robot=rid, title=f"站点出图失败:{which}",
+                         detail=f"{r['reason'][-280:]};关键帧留在站点上,可以重试")
+
+
+#: 出图组件装好的命令(``install-site.sh --with-mapping`` 装;它起 ROS 环境再跑
+#: ``nexwar_localizer.tools``)。
+DEFAULT_RUNNER = Path("/usr/local/bin/nexwar_site_mapbuild")
+
+
+def runner_from(cfg: dict[str, Any], *, default: Path = DEFAULT_RUNNER) -> list[str] | None:
+    """``site.json`` 的 ``mapbuild``:``{"runner": [...]}`` 用它;``{"enabled": false}`` 关掉;没写就看
+    出图组件装没装。回 None = 不在站点上出图(机器人照旧自己打包)。"""
+    m = cfg.get("mapbuild") or {}
+    if m.get("enabled") is False:
+        return None
+    if m.get("runner"):
+        r = m["runner"]
+        return [str(x) for x in r] if isinstance(r, list) else [str(r)]
+    return [str(default)] if Path(default).is_file() else None

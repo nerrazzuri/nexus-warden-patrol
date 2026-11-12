@@ -1022,6 +1022,15 @@ class Server:
                                crl=ca / "crl.pem"),
             db=self.db, store=self.evidence, now_ms=wall_ms, maps=self.maps)
         self.intake.releases = self.releases
+        # W75 方案 1:装了出图组件就在站点主机上出图(机器人边走边传关键帧;没装照旧机器人自己打包)
+        from nexwar_site.mapbuild import SiteMapBuilder, notify, runner_from
+        runner = runner_from(cfg)
+        self.mapbuilds = SiteMapBuilder(home, self.maps, runner=runner,
+                                        on_done=lambda r: notify(loop_alerts, r)) \
+            if runner is not None else None
+        self.intake.mapbuilds = self.mapbuilds
+        if self.mapbuilds is None:
+            log.info("没装出图组件:建图在机器人上打包")
         # 日志设计 第 5 条:机器人日志存到站点(按机器人分开,留 90 天、每台限总大小)
         from nexwar_site.robot_logs import RobotLogs
         self.robot_logs = RobotLogs(home / "robot-logs")
@@ -1076,6 +1085,7 @@ class Server:
                            supervision=self.supervision, zones=self.zones, now_ms=wall_ms)
         self.teleop.audit = self.api.audit
         self.api.arming = self.arming
+        self.api.mapbuilds = self.mapbuilds                          # W75
         self.api.areas, self.api.authz = self.areas, self.authz      # B1c
         self.sightings.areas = self.areas
         self.sightings.where_of = self.alert_sources.where_of   # W74 二期:人最后在哪

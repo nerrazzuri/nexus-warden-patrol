@@ -147,3 +147,48 @@ def test_进度_按阶段算百分比_阶段里按时间往前挪_不超过下�
     d = progress_pct("回环", 1e6)
     e = progress_pct("点云", 0.0)
     assert 0 <= a < b < c < d < e < progress_pct("完成", 0.0) == 100
+
+
+class _台:
+    def __init__(self):
+        self.got, self.resolved = [], []
+
+    def raise_alert(self, **kw):
+        self.got.append(kw)
+
+    def resolve_all(self, robot, kind, *, who):
+        self.resolved.append((robot, kind))
+
+
+def test_出完了告诉人_成了记一条建好了推给管理员工程师_没成报建图失败():
+    from nexwar_site.alerts import LEVEL_OF, Level
+    from nexwar_site.mapbuild import notify
+    from nexwar_site.push import PUSH_ROUTES
+    d = _台()
+    notify(d, {"robot_id": "A", "map_id": "yard", "version": "3", "ok": True, "reason": ""})
+    a = d.got[-1]
+    assert a["kind"] == "map_ready" and a["robot"] == "A" and "yard" in a["title"]
+    assert a["merge"] is False, "每一版都要推一次"
+    assert LEVEL_OF["map_ready"] == Level.P3
+    assert PUSH_ROUTES["map_ready"][0] == ("admin", "engineer")
+    assert ("A", "map_failed") in d.resolved
+    notify(d, {"robot_id": "A", "map_id": "yard", "version": "4", "ok": False,
+               "reason": "回环工具炸了"})
+    a = d.got[-1]
+    assert a["kind"] == "map_failed" and "yard:4" in a["title"] and "回环工具炸了" in a["detail"]
+    assert PUSH_ROUTES["map_failed"][0] == ("admin", "engineer")
+
+
+def test_出图命令_配置里给了用配置的_没给看装没装出图组件(tmp_path):
+    from nexwar_site.mapbuild import runner_from
+    assert runner_from({"mapbuild": {"runner": ["/x/py", "-m", "y"]}}, default=tmp_path / "n") \
+        == ["/x/py", "-m", "y"]
+    assert runner_from({}, default=tmp_path / "n") is None
+    (tmp_path / "n").write_text("#!/bin/sh\n")
+    assert runner_from({}, default=tmp_path / "n") == [str(tmp_path / "n")]
+    assert runner_from({"mapbuild": {"enabled": False}}, default=tmp_path / "n") is None
+
+
+def test_阶段代号_每个阶段都有():
+    from nexwar_site.mapbuild import STAGE_CODES
+    assert {s for s, _ in STAGES} | {"完成"} == set(STAGE_CODES)
