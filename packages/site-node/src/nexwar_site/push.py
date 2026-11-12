@@ -379,7 +379,7 @@ PUSH_ROUTES: dict[str, tuple[tuple[str, ...] | None, str]] = {
     "swap_needed": (("guard",), "请来换电池"),
     "swap_overdue": (("owner",), "换电池没人管"),
     # W75:走完一圈等着用图的人要知道建好了、没建成
-    "map_ready": (MANAGE_ROLES, "地图建好了"),
+    "map_ready": (MANAGE_ROLES, "地图已建成"),
     "map_failed": (MANAGE_ROLES, "建图失败"),
 }
 #: 按角色推的这几种,那几种角色**一部登记了的手机都没有**时改推给谁(W76 外审 #10:站点没有保安账号、
