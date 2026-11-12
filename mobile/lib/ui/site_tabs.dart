@@ -124,13 +124,14 @@ String setupDetailText(Map it) {
   String ver(Object? m) => m is Map ? ('${m['version'] ?? ''}'.isEmpty ? '${m['map']}' : 'v${m['version']}') : '';
   final away = it['elsewhere'], use = it['using'], blocked = it['blocked'];
   if (it['id'] == 'routes' && away is List && away.isNotEmpty && use is List && use.isNotEmpty) {
-    final names = away.map((r) => r is Map ? '${r['route']}' : '').join('、');
-    final at = away.map(ver).toSet().join('、'), u = use.map(ver).join('、');
+    final sep = tr(', ', '\u3001');
+    final names = away.map((r) => r is Map ? '${r['route']}' : '').join(sep);
+    final at = away.map(ver).toSet().join(sep), u = use.map(ver).join(sep);
     return tr('${away.length} route(s) ($names) are drawn on $at, but the robots use $u: redraw on $u.',
         '有 ${away.length} 条路线（$names）画在 $at 上，机器人在用 $u：在 $u 上重画。');
   }
   if (it['id'] == 'schedule' && blocked is List && blocked.isNotEmpty) {
-    final names = blocked.join('、');
+    final names = blocked.join(tr(', ', '\u3001'));
     return tr("Schedule $names can't run its route (drawn on another map version, or deleted): change the route or redraw it.",
         '日程 $names 要跑的路线跑不了（画在别的地图版本上或已删除）：改路线或重画。');
   }
