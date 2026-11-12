@@ -546,21 +546,24 @@ def test_11_11_W6_02_机器人只许手动派_今天的巡逻写不会跑和原�
 
 
 def test_易用性第7轮_不会跑写上路线画在哪一版_机器人用哪一版(台):
-    """liang-d5 r7:「不会跑」只写「A 只许手动派」,没提路线画在 v11 上 —— 版本对不上也是到点不会跑的原因。"""
+    """liang-d5 r7:「不会跑」只写「A 只许手动派」,没提路线画在 v11 上 ——
+    版本对不上也是到点不会跑的原因。"""
     from nexwar_site.today import _schedule_item
     t = 台
     e = SimpleNamespace(id="demo-night", mission="demo-loop", robot="A", window_min=30)
     want = ("mall", "11")
-    item = _schedule_item(t.db, e, 毫秒(22, 0), 毫秒(21, 0), want=want, loaded=lambda rid: ("mall", "12"))
+    def at(got):
+        return _schedule_item(t.db, e, 毫秒(22, 0), 毫秒(21, 0), want=want, loaded=lambda rid: got)
+    item = at(("mall", "12"))
     assert item["state"] == "blocked" and item["reason"] == "map_mismatch", item
     assert item["map"] == {"route": "11", "robot": "12"}
-    same = _schedule_item(t.db, e, 毫秒(22, 0), 毫秒(21, 0), want=want, loaded=lambda rid: ("mall", "11"))
+    same = at(("mall", "11"))
     assert same["state"] == "later" and "map" not in same
-    unknown = _schedule_item(t.db, e, 毫秒(22, 0), 毫秒(21, 0), want=want, loaded=lambda rid: (None, None))
+    unknown = at((None, None))
     assert unknown["state"] == "later", "机器人没报加载的图(离线)不猜"
     with t.db.tx() as c:
         c.execute("INSERT INTO robot_service(robot_id, by, at_ms, note) VALUES ('A','demo',0,'')")
-    both = _schedule_item(t.db, e, 毫秒(22, 0), 毫秒(21, 0), want=want, loaded=lambda rid: ("mall", "12"))
+    both = at(("mall", "12"))
     assert both["state"] == "blocked" and both["reason"] == "manual_only"
     assert both["map"] == {"route": "11", "robot": "12"}, "两个原因都写"
 
@@ -573,7 +576,8 @@ def test_易用性第7轮_整页今天的巡逻_按路线的那一版比(tmp_pat
                   imported_by="alice", now_ms=1)
     v = today_view(db, now_ms=毫秒(20, 0), loaded=lambda rid: ("estate-1", "8"))
     item = v["items"][0]
-    assert item["robot"] == "A" and item["state"] == "blocked" and item["map"] == {"route": "7", "robot": "8"}
+    assert item["robot"] == "A" and item["state"] == "blocked"
+    assert item["map"] == {"route": "7", "robot": "8"}
     v = today_view(db, now_ms=毫秒(20, 0), loaded=lambda rid: ("estate-1", "7"))
     assert v["items"][0]["state"] == "next"
     db.close()
@@ -583,22 +587,29 @@ def _一直巡逻跑了(t, 圈: int, 收尾: str, at_ms: int) -> None:
     """A 上一趟一直巡逻(两个点一圈)跑了 ``圈`` 圈,然后报 ``收尾``。"""
     mission = {**任务定义(), "policy": {"loops": 0}}
     with t.db.tx() as c:
-        c.execute("INSERT INTO adhoc_queue(id, robot, mission, label, by, created_ms, not_before_ms, "
-                  "estimate_s, state, task_id, started_ms) VALUES ('f1','A',?,'loop','demo',?,?,600,"
-                  "'started','adhoc-forever-f1',?)",
+        c.execute("INSERT INTO adhoc_queue(id, robot, mission, label, by, created_ms, "
+                  "not_before_ms, estimate_s, state, task_id, started_ms) VALUES "
+                  "('f1','A',?,'loop','demo',?,?,600,'started','adhoc-forever-f1',?)",
                   (json.dumps(mission), 毫秒(20, 0), 毫秒(20, 0), 毫秒(20, 0)))
-        c.execute("INSERT INTO commands(command_id, task_id, robot_id, kind, payload, issued_by, issued_at) "
-                  "VALUES ('cf','adhoc-forever-f1','A','patrol',?,'demo',?)",
+        c.execute("INSERT INTO commands(command_id, task_id, robot_id, kind, payload, issued_by, "
+                  "issued_at) VALUES ('cf','adhoc-forever-f1','A','patrol',?,'demo',?)",
                   (json.dumps({"mission": mission}), 毫秒(20, 0)))
         for i in range(圈 * 2):
-            c.execute("INSERT INTO events(robot_id, boot_id, seq, event_id, kind, data, stamp, received_at) "
-                      "VALUES ('A','b',?,?,'patrol_waypoint',?,?,?)",
-                      (10 + i, f"w{i}", json.dumps({"task_id": "adhoc-forever-f1", "index": i % 2}),
+            c.execute("INSERT INTO events(robot_id, boot_id, seq, event_id, kind, data, stamp, "
+                      "received_at) VALUES ('A','b',?,?,'patrol_waypoint',?,?,?)",
+                      (10 + i, f"w{i}",
+                       json.dumps({"task_id": "adhoc-forever-f1", "index": i % 2}),
                        毫秒(20, 1) + i, 毫秒(20, 1) + i))
         if 收尾:
-            c.execute("INSERT INTO events(robot_id, boot_id, seq, event_id, kind, data, stamp, received_at) "
-                      "VALUES ('A','b',999,'end',?,?,?,?)",
-                      (收尾, json.dumps({"task_id": "adhoc-forever-f1", "reason": "preempted"}), at_ms, at_ms))
+            c.execute("INSERT INTO events(robot_id, boot_id, seq, event_id, kind, data, stamp, "
+                      "received_at) VALUES ('A','b',999,'end',?,?,?,?)",
+                      (收尾, json.dumps({"task_id": "adhoc-forever-f1", "reason": "preempted"}),
+                       at_ms, at_ms))
+
+
+def _临时(t):
+    items = today_view(t.db, now_ms=t.now["t"], adhoc=t.desk)["items"]
+    return next(x for x in items if x["kind"] == "adhoc")
 
 
 def test_第8轮_W8_03_被日程接替的一直巡逻_不算未完成_写跑了几圈和哪条日程(台):
@@ -609,7 +620,7 @@ def test_第8轮_W8_03_被日程接替的一直巡逻_不算未完成_写跑了�
                   "decided_at) VALUES ('nightly', ?, 'started', 'A', 'sched-1', ?)",
                   (毫秒(22, 0), 毫秒(22, 0)))
     t.now["t"] = 毫秒(22, 30)
-    it = next(x for x in today_view(t.db, now_ms=t.now["t"], adhoc=t.desk)["items"] if x["kind"] == "adhoc")
+    it = _临时(t)
     assert it["state"] == "handed_over", it
     assert it["reason"] == "", "不露 preempted 这种代号"
     assert it["handover"] == {"by": "schedule", "name": "nightly", "laps": 6}
@@ -620,6 +631,6 @@ def test_第8轮_A8_01_一直巡逻在跑_不给预计结束时间_带第几圈(
     t = 台
     _一直巡逻跑了(t, 2, "", 0)
     t.now["t"] = 毫秒(20, 30)
-    it = next(x for x in today_view(t.db, now_ms=t.now["t"], adhoc=t.desk)["items"] if x["kind"] == "adhoc")
+    it = _临时(t)
     assert it["state"] == "running" and it["end_ms"] is None, "一直巡逻没有固定结束时间"
     assert it["forever"] is True and it["lap"] == {"n": 3, "of": 0}

@@ -14,8 +14,8 @@ App 的值守页、日程页,网页的值守页都用这一份(``GET /api/patrol
 from __future__ import annotations
 
 import json
-from datetime import datetime, timedelta
 from collections.abc import Callable
+from datetime import datetime, timedelta
 from typing import Any
 
 from nexwar_contract.schedule import occurrences_between
@@ -75,7 +75,8 @@ def _handover(db: Any, robot: str, task_id: str, at_ms: int) -> dict[str, Any]:
     lo = _loops(db, robot, task_id)
     out: dict[str, Any] = {"by": "task", "name": "", "laps": lo[1] if lo else 0}
     runs = db.query("SELECT entry_id FROM schedule_runs WHERE robot_id=? AND outcome='started' "
-                    "AND task_id<>? AND decided_at BETWEEN ? AND ? ORDER BY decided_at DESC LIMIT 1",
+                    "AND task_id<>? AND decided_at BETWEEN ? AND ? "
+                    "ORDER BY decided_at DESC LIMIT 1",
                     (robot, task_id, at_ms - 120_000, at_ms + 10_000))
     if runs:
         out.update(by="schedule", name=str(runs[0]["entry_id"]))
@@ -89,8 +90,8 @@ def _handover(db: Any, robot: str, task_id: str, at_ms: int) -> dict[str, Any]:
 
 
 def _loop_fields(db: Any, item: dict[str, Any]) -> None:
-    """W76 / 第 8 轮 A8-01:几圈的巡逻带 ``lap``(在跑的第几圈)、一直巡逻带 ``forever`` 且不给预计结束时间;
-    被接替的带 ``handover``。"""
+    """W76 / 第 8 轮 A8-01:几圈的巡逻带 ``lap``(在跑的第几圈)、一直巡逻带 ``forever``
+    且不给预计结束时间;被接替的带 ``handover``。"""
     robot, tid = str(item.get("robot") or ""), str(item.get("task_id") or "")
     lo = _loops(db, robot, tid) if robot and tid else None
     if lo is not None:
