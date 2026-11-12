@@ -54,6 +54,15 @@ String? _title(String kind) => switch (kind) {
 
 /// 事件标题：查表 → 告警词条 → 种类名（下划线换空格）。[data] 给了，机器人故障报的是空列表就是「故障已清除」。
 String robotEventTitle(String kind, [Map<String, dynamic>? data]) {
+  // minor #16（A6-02）：遥控也是机器人上的一趟任务，结束时报终态 —— 写成遥控结束，不写「任务完成」
+  if (data != null && '${data['task_id'] ?? ''}'.startsWith('teleop-')) {
+    switch (kind) {
+      case 'task_done' || 'task_aborted' || 'task_preempted':
+        return tr('Remote control ended', '遥控结束');
+      case 'task_failed':
+        return tr('Remote control ended with an error', '遥控异常结束');
+    }
+  }
   // 手机 App 测试 M27：「完成」那一条里写着没成的，就说没成（以前失败的几趟也写「任务完成」）
   if (kind == 'task_done' && data != null) {
     final r = '${data['result'] ?? data['outcome'] ?? ''}';
