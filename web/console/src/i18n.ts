@@ -620,12 +620,12 @@ const en = {
   layerCameras: "Cameras",
   layerRoute: "Patrol route",
   layerStandby: "Standby points",
-  layerEvents: "Tonight",
+  layerEvents: "Tonight's events",
   layerStale: "Not patrolled for a while",
   layerNoGo: "No-go zones",
   mapShow: "Show",
   armAll: "Arm all",
-  tonightN: "Tonight · {n}",
+  tonightN: "Tonight's events · {n}",
   mapTodoN: "Needs action this shift · {n}",
   mapTodoNone: "Nothing needs action.",
   mapAllShift: "All {n} this shift → alarm log",
@@ -3440,7 +3440,7 @@ export function alertTitle(l: Lang, kind: string, siteTitle: string): string {
   const many = /^点位 (\S+) 连续 (\d+) 趟未到达/.exec(bare), once = /^点位 (\S+) 未到达,已跳过/.exec(bare);
   if (kind === "stuck" && (many || once)) {
     const head = siteTitle.startsWith(TEST_PREFIX) ? (l === "zh" ? TEST_PREFIX : "TEST: ") : "";
-    if (l === "zh") return head + bare.replace(/:路可能被堵住了$/, "：路可能被堵住了");
+    if (l === "zh") return head + bare.replace(/:路可能被堵住了$/, "：路可能被堵住了").replace(/未到达,已跳过/, "未到达，已跳过");
     return head + (many ? `Waypoint ${many[1]} not reached ${many[2]} runs in a row` : `Waypoint ${once![1]} skipped`);
   }
   const e = CATALOG[kind];

@@ -246,6 +246,23 @@ function mapPage(meta: PreviewMeta, opts: { units?: UnitInfo[]; p1?: Alert[]; se
 const ready = async (c: Element) => waitFor(() => expect(c.querySelector("g.map-world")).not.toBeNull());
 const legend = (c: Element) => [...c.querySelectorAll("[data-legend]")].map((e) => e.getAttribute("data-legend"));
 
+describe("W6-15 同一处的两台机器人", () => {
+  it("两个点摊开(B 不被 A 盖住),各拉一根细线回原位;单独一台不拉线", async () => {
+    installScreenCTM();
+    const units = [unit(robot("A", { x: 2, y: 3, yaw: 0 })), unit(robot("B", { x: 2, y: 3, yaw: 0 }))];
+    const { container: c } = mapPage({ ...META }, { units });
+    await ready(c);
+    const dots = [...c.querySelectorAll(".bot .bot-dot")].map((d) => [Number(d.getAttribute("cx")), Number(d.getAttribute("cy"))]);
+    expect(dots.length).toBe(2);
+    expect(Math.hypot(dots[0][0] - dots[1][0], dots[0][1] - dots[1][1])).toBeGreaterThan(10);
+    expect(c.querySelectorAll("[data-bot-leader]").length).toBe(2);
+    cleanup();
+    const one = mapPage({ ...META }, {});
+    await ready(one.container);
+    expect(one.container.querySelectorAll("[data-bot-leader]").length).toBe(0);
+  });
+});
+
 describe("地图页:整张图和上面的东西一起转,字是正的", () => {
   for (const deg of [23, -31]) {
     it(`转 ${deg}°:底图、禁行区、区域多边形在世界层里;机器人、报警点跟着转到对的屏上位置;字不转`, async () => {

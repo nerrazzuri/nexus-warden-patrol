@@ -13,7 +13,7 @@ import { Modal } from "./dialogs";
 import { alertTitle, andList, lang, refusalText, t, type Key } from "./i18n";
 import { pageAllowed } from "./shell";
 import { locText, type UnitInfo } from "./live";
-import { ENGINEERING_LAYERS, etaNext, LAYERS, layersFor, loadLayers, saveLayers, labelRows, mapPins, mapTodo, olderOpen, shiftStart, staleAfter, staleCells, tonightEvents, zoneDecor,
+import { ENGINEERING_LAYERS, etaNext, fanOut, LAYERS, layersFor, loadLayers, saveLayers, labelRows, mapPins, mapTodo, olderOpen, shiftStart, staleAfter, staleCells, tonightEvents, zoneDecor,
   type AuthzRow, type Cell, type Layer, type ModeView } from "./maplayers";
 import { fanPath } from "./layoutpage";
 import { MapCanvas, type CanvasArea, type LegendKey, type Screen } from "./mapcanvas";
@@ -208,14 +208,20 @@ export function SiteMap(props: {
                   );
                 })}
                 {(() => {
-                  const rows = labelRows(bots.map((b) => s.px(b.px, b.py)), BOT_R * 4);
+                  // W6-15:停在同一处的几台摊开画(不然后一台的点盖住前一台),细线连回原位
+                  const real = bots.map((b) => s.px(b.px, b.py));
+                  const fan = fanOut(real, BOT_R * 2 + 3);
+                  const rows = labelRows(fan, BOT_R * 4);
                   const step = (LABEL_PX + 2) * (props.eta ? 2 : 1);
                   return bots.map(({ u, px, py, yaw }, i) => {
-                  const [x, y] = s.px(px, py);
+                  const [x, y] = fan[i];
+                  const [rx, ry] = real[i];
+                  const moved = Math.hypot(x - rx, y - ry) > 0.5;
                   const dy = rows[i] * step;
                   // 朝向:在预览上往 yaw 走一小段,跟着图一起变换,再在屏上取定长
                   const e = heading(px, py, yaw, 10);
-                  const [ex, ey] = s.px(e.hx, e.hy);
+                  const [ex0, ey0] = s.px(e.hx, e.hy);
+                  const ex = ex0 + x - rx, ey = ey0 + y - ry;
                   const n = Math.hypot(ex - x, ey - y) || 1;
                   const len = BOT_R * 2.2;
                   const a = abnormal(u.state);
@@ -226,6 +232,7 @@ export function SiteMap(props: {
                       if (on && pose.onPick && props.pick === true && !props.onPickMap) return;   // 只在「帮它定位」时(pick 明说要选点)
                       e.stopPropagation(); props.onSelect(u.robot.robot_id);
                     }}>
+                      {moved && <line x1={rx} y1={ry} x2={x} y2={y} class="bot-leader" data-bot-leader="1" />}
                       <line x1={x} y1={y} x2={x + ((ex - x) / n) * len} y2={y + ((ey - y) / n) * len} class="bot-head" />
                       <circle cx={x} cy={y} r={BOT_R} class="bot-dot" />
                       <text x={x} y={y + dy + BOT_R + LABEL_PX + 2} class="bot-label" font-size={LABEL_PX}>{nameOf(u.robot.robot_id)}</text>
