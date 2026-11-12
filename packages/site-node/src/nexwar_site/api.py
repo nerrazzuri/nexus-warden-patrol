@@ -1569,6 +1569,7 @@ class _Handler(TlsHandlerMixin):
         elif action == "patrol":
             # W53:手动派的巡逻都是临时巡逻 —— 估时、撞日程就排在日程后面、通知经理和管理员
             wire, label = self._patrol_wire(d)
+            wire = self._with_loops(robot_id, wire, d.get("loops"))
             if not d.get("points"):
                 self._audit_detail = {"mission": label}
             else:
@@ -1639,6 +1640,23 @@ class _Handler(TlsHandlerMixin):
             raise HttpError(403, str(exc)) from exc
         self._send_json(200, {"ok": True})
 
+    def _with_loops(self, robot_id: str, wire: dict[str, Any], loops: Any) -> dict[str, Any]:
+        """W76:圈数(``None`` 不改;0 = 一直巡逻)和全站的巡逻电量线写进任务。
+        老机器人派一直巡逻 409。"""
+        from nexwar_site.adhoc import LoopsRefused, with_loops
+        from nexwar_site.site_settings import DEFAULT_DUTY
+        c = self.site.dispatcher.clients.get(robot_id)
+        caps = c.capabilities.tasks.get("patrol", {}) if c and c.capabilities else {}
+        st = self.site.settings
+        line = (st.patrol_return_pct() if st is not None
+                else float(DEFAULT_DUTY["patrol_return_pct"]))
+        try:
+            return with_loops(wire, loops, return_pct=line, caps=caps)
+        except LoopsRefused as exc:
+            raise HttpError(409, str(exc), extra={"reason": "loops_unsupported"}) from exc
+        except ValueError as exc:
+            raise HttpError(400, str(exc)) from exc
+
     def _patrol_plan(self, method: str, robot_id: str, user) -> None:
         """派之前先看(W53):``GET ?mission_id=`` → 估时、能不能马上走、撞了哪趟日程。"""
         if method != "GET":
@@ -1648,6 +1666,10 @@ class _Handler(TlsHandlerMixin):
             raise HttpError(404, f"没有登记过 {robot_id}")
         q = parse_qs(self.path.split("?", 1)[1] if "?" in self.path else "")
         wire, label = self._patrol_wire({"mission_id": (q.get("mission_id") or [""])[0]})
+        raw = (q.get("loops") or [""])[0]
+        if raw and not raw.isdigit():
+            raise HttpError(400, "loops 要是整数(0 = 一直巡逻)")
+        wire = self._with_loops(robot_id, wire, int(raw) if raw else None)
         desk = self._adhoc()
         got = self.site.loop.call(lambda: _sync(desk.plan, robot_id, wire))
         self._send_json(200, {**got, "label": label})

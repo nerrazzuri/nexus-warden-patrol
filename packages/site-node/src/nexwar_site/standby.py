@@ -430,6 +430,9 @@ class StandbyManager:
         if (m.map_id, version) != (p["map_id"], p["map_version"]):
             raise StandbyError(f"{task_id} 跑在 {m.map_id}:{version},待命点 {p['name']} 登记在 "
                                f"{p['map_id']}:{p['map_version']}(地图或版本不匹配,来路坐标不可信)")
+        if m.policy.forever:
+            # W76:一直巡逻只在电量到线时结束,机器人自己回了原点,不知道停在哪一圈的哪个点
+            raise StandbyError(f"{task_id} 是一直巡逻,机器人已自己回原点,不沿来路回待命点")
         want = len(m.waypoints) * m.policy.loops
         got = self._arrived(robot_id, task_id)
         if got != want:

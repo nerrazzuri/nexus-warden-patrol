@@ -285,6 +285,20 @@ describe("W71 Nav2 没起来", () => {
     await waitFor(() => expect(posted.find((p) => p.url === "/api/robots/A/abort")?.body).toEqual({ task_id: "t9" }));
   });
 
+  it("W76 开始巡逻可选循环次数(一直巡逻带 loops 0);在跑几圈的巡逻显示第几圈", async () => {
+    robots[0] = card({ task: "adhoc-forever-x", lap: { n: 4, of: 0 } });
+    const { container: c } = render(<RobotsPage say={(s) => said.push(s)} now={NOW} role="admin" />);
+    await waitFor(() => expect(cardOf(c, "A")).not.toBeNull());
+    fireEvent.click(cardOf(c, "A"));
+    const d = c.querySelector(".robot-detail")!;
+    await waitFor(() => expect(d.textContent).toContain("一直巡逻 · 第 4 圈"));
+    await waitFor(() => expect(d.querySelectorAll('select[name="route"] option').length).toBe(3));
+    fireEvent.change(d.querySelector('select[name="route"]')!, { target: { value: "west-loop" } });
+    fireEvent.change(d.querySelector('select[name="loops"]')!, { target: { value: "0" } });
+    fireEvent.click(btn(d, "开始巡逻"));
+    await waitFor(() => expect(posted.find((p) => p.url === "/api/robots/A/patrol")?.body).toEqual({ mission_id: "west-loop", loops: 0 }));
+  });
+
   it("POC 回原点:没任务直接回;有任务时回原点灰掉,中止并回原点先确认再发 abort", async () => {
     robots[0] = card({ task: null });
     const { container: c } = render(<RobotsPage say={(s) => said.push(s)} now={NOW} role="guard" />);

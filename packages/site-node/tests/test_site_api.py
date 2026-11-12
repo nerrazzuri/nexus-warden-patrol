@@ -807,3 +807,31 @@ def test_外审POC_r3_站点记的是没锁_恢复照样先问机器人解锁(tm
         assert code == 200 and d["estop_released"] is True and sent == [0], (code, d, sent)
     finally:
         s.close()
+
+
+def test_W76_派巡逻带圈数_全站电量线写进任务_圈数不对400(站点, tmp_path):
+    tok = 站点.login()
+    _等(lambda: 站点.req("GET", "/api/robots/A", token=tok)[1].get("fresh"))
+    assert 站点.req("POST", "/api/bundles", {"path": str(_任务包(tmp_path))}, token=tok)[0] == 200
+    assert 站点.req("POST", "/api/duty-settings", {"patrol_return_pct": 40}, token=tok)[0] == 200
+    code, d = 站点.req("POST", "/api/robots/A/patrol", {"mission_id": "loop", "loops": 2},
+                     token=tok)
+    assert code == 200 and d["ack"]["result"] == "accepted", d
+    row = 站点.db.query("SELECT payload FROM commands WHERE task_id=?", (d["task_id"],))[0]
+    pol = json.loads(row["payload"])["mission"]["policy"]
+    assert pol["loops"] == 2 and pol["battery_return_pct"] == 40.0
+    _等(lambda: 站点.req("GET", "/api/robots/A", token=tok)[1].get("lap") is not None)
+    assert 站点.req("GET", "/api/robots/A", token=tok)[1]["lap"]["of"] == 2, "手机看第几圈"
+    code, d = 站点.req("POST", "/api/robots/A/patrol", {"mission_id": "loop", "loops": 100},
+                     token=tok)
+    assert code == 400 and "循环次数" in d["error"], d
+
+
+def test_W76_先看会怎样_带圈数_一直巡逻说马上走(站点, tmp_path):
+    tok = 站点.login()
+    _等(lambda: 站点.req("GET", "/api/robots/A", token=tok)[1].get("fresh"))
+    assert 站点.req("POST", "/api/bundles", {"path": str(_任务包(tmp_path))}, token=tok)[0] == 200
+    code, d = 站点.req("GET", "/api/robots/A/patrol-plan?mission_id=loop&loops=0", token=tok)
+    assert code == 200 and d["forever"] is True and d["queued"] is False, d
+    code, d = 站点.req("GET", "/api/robots/A/patrol-plan?mission_id=loop&loops=x", token=tok)
+    assert code == 400, d

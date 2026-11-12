@@ -286,3 +286,42 @@ def test_网页第2轮_N2_原点和默认待命点有没有_回原点回待命�
                   "VALUES ('A','s','m',0,0,0,1)")
     r = _one(d, db)
     assert r["home_set"] is True and r["standby_set"] is True
+
+
+def _巡逻(db, tid, loops, n_pts=2):
+    pol = {"loops": loops}
+    wps = [{"name": f"p{i}"} for i in range(n_pts)]
+    with db.tx() as c:
+        c.execute("INSERT INTO commands(command_id, task_id, robot_id, kind, payload, issued_by, "
+                  "issued_at, ack_result) VALUES (?,?,?,?,?,?,?,?)",
+                  (f"c-{tid}", tid, "A", "patrol",
+                   json.dumps({"mission": {"policy": pol, "waypoints": wps}}), "g", NOW,
+                   "accepted"))
+
+
+def _到点(db, tid, k):
+    with db.tx() as c:
+        for i in range(k):
+            c.execute("INSERT INTO events(robot_id, boot_id, seq, event_id, kind, data, stamp, "
+                      "received_at) VALUES (?,?,?,?,?,?,?,?)",
+                      ("A", tid, 100 + i, f"{tid}-{i}", "patrol_waypoint",
+                       json.dumps({"task_id": tid, "index": i, "ok": True}), NOW, NOW))
+
+
+def test_W76_概览_几圈的巡逻写第几圈_一直巡逻也写_一圈的不写(台):
+    d, db = 台
+    st = d.clients["A"].status
+    st.task = SimpleNamespace(task_id="t-loop")
+    _巡逻(db, "t-loop", 3)
+    assert _one(d, db)["lap"] == {"n": 1, "of": 3}
+    _到点(db, "t-loop", 3)                             # 第 1 圈两个点 + 第 2 圈一个点
+    assert _one(d, db)["lap"] == {"n": 2, "of": 3}
+    st.task = SimpleNamespace(task_id="t-forever")
+    _巡逻(db, "t-forever", 0)
+    _到点(db, "t-forever", 8)
+    assert _one(d, db)["lap"] == {"n": 5, "of": 0}
+    st.task = SimpleNamespace(task_id="t-one")
+    _巡逻(db, "t-one", 1)
+    assert _one(d, db)["lap"] is None
+    st.task = None
+    assert _one(d, db)["lap"] is None

@@ -183,7 +183,8 @@ class EngineMissionTask(Task):
                 # 半路返航(电量到线)回到了原点:引擎落 DONE,可点位没跑完(W00c6b 内审阻断 1)。报失败、
                 # 原因带上返航起因 —— 站点按电量告警,也不会当成「停在最后一个点」派回程巡检。
                 self.state = TaskState.FAILED
-                self.detail = {"reason": f"{engine.returned}(半路返航,已回到原点)"[:200]}
+                self.detail = {"reason": f"{engine.returned}(半路返航,已回到原点)"[:200],
+                               "ended": "battery"}
                 if m.policy.loops != 1:
                     self.detail["laps"] = laps
             elif len(snap.results) < expected:
@@ -202,6 +203,10 @@ class EngineMissionTask(Task):
             else:
                 self.state = TaskState.DONE
                 self.detail = dict(extra or {})
+            if self.state is TaskState.DONE and not m.policy.forever and m.policy.loops != 1:
+                # W76:设了几圈、跑完了 —— 跟「一直巡逻电量到线」分得开(用户 11-12 问)
+                self.detail.setdefault("laps", laps)
+                self.detail.setdefault("ended", "loops")
         else:
             self.state = TaskState.FAILED
             self.detail = {"reason": snap.reason or "engine aborted"}

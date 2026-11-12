@@ -375,6 +375,9 @@ PUSH_ROUTES: dict[str, tuple[tuple[str, ...] | None, str]] = {
     "account_request": (("admin",), "等你批准"),
     "adhoc_patrol": (("owner", "admin"), "临时巡逻"),
     "adhoc_queue": (None, "临时巡逻"),
+    # W76 用户 11-12:换电池是值守保安的活 —— 只推保安;半小时没人换才升级推经理
+    "swap_needed": (("guard",), "请来换电池"),
+    "swap_overdue": (("owner",), "换电池没人管"),
 }
 
 
