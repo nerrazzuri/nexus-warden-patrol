@@ -103,7 +103,10 @@ def quality(build: Any, coverage_path: Any) -> dict[str, Any]:
         reasons.append("no_loop")
     if path is not None and path < MIN_PATH_M:
         reasons.append("short_path")
-    return {"verdict": "problem" if reasons else "usable", "reasons": reasons,
+    # minor #2(W75 外审 2 #5):老手机见 ``usable`` 就写「✓ 已回到起点闭合」—— 没做回环的给
+    # ``usable_unlooped``(老手机不认,写「无法评估」,不打包票;新手机当能用、不写闭合)
+    verdict = "problem" if reasons else ("usable" if ran else "usable_unlooped")
+    return {"verdict": verdict, "reasons": reasons,
             "closures": closures, "max_shift_m": shift,
             "path_m": None if path is None else round(path, 1), "optimized": ran}
 
