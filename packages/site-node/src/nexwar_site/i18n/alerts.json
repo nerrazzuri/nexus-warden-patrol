@@ -264,6 +264,10 @@
     "en": "Your queued patrol",
     "zh": "排队中的临时巡逻"
   },
+  "map_ready": {
+    "en": "Map built",
+    "zh": "地图已建成"
+  },
   "bind_request": {
     "en": "Robot waiting to join the site",
     "zh": "机器人申请加入站点"

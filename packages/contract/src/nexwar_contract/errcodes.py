@@ -222,6 +222,7 @@ _T: tuple[tuple[int, str, str, str, str, str, str, str], ...] = (
     (0x0605, "loc.map_failed", "warn", "engineer", "地图下发或切换失败", "Map delivery or switch failed", "重试", "Retry"),
     (0x0606, "loc.map_integrity", "warn", "engineer", "地图文件不完整", "Map files incomplete", "重新下发地图", "Push the map again"),
     (0x0607, "loc.map_build_failed", "warn", "engineer", "建图失败", "Map building failed", "看建图日志", "Check the mapping log"),
+    (0x0608, "loc.map_ready", "info", "engineer", "地图已建成", "Map built", "在建图向导里看结论", "Check the result in the mapping wizard"),
     # ---- 0x07 网络、证书、连接
     (0x0701, "net.tls_handshake", "info", "engineer", "TLS 握手失败(对方没信站点证书或证书不对)", "TLS handshake failed (client does not trust the site certificate)",
      "核对手机、浏览器装的站点证书", "Check the site certificate on the phone or browser"),
@@ -305,7 +306,7 @@ ALERT: dict[str, str] = {
     "recording_failed": "evidence.recording_failed", "agent_args_skipped": "update.agent_args_skipped",
     "recording_dropped": "evidence.recording_dropped", "recording_trimmed": "evidence.recording_trimmed",
     "cctv_offline": "sense.cctv_offline", "disk_80": "site.disk_80", "backup_stale": "site.backup_stale",
-    "map_failed": "loc.map_failed", "map_integrity": "loc.map_integrity", "rtk": "loc.rtk",
+    "map_failed": "loc.map_failed", "map_ready": "loc.map_ready", "map_integrity": "loc.map_integrity", "rtk": "loc.rtk",
     "standby_failed": "dispatch.standby_failed", "upload_refused": "evidence.upload_refused",
     "release_failed": "update.release_failed", "upload_backlog": "evidence.upload_backlog",
     "bundle_lag": "sched.bundle_lag", "clock_skew": "net.clock_skew",
