@@ -9,7 +9,7 @@ from __future__ import annotations
 import json
 
 import pytest
-from test_site_api import MAP, PW, 站
+from test_site_api import MAP, PW, _等, 站
 from test_site_intercept_reach import _屋子
 from test_site_maps import _files
 
@@ -150,6 +150,41 @@ def test_退回删掉的路线(站点):
     code, d = _restore(s, tok, rows[1]["id"])
     assert code == 200, d
     assert s.req("GET", "/api/routes/night", token=tok)[0] == 200
+
+
+def test_第12轮_W12_01_退回删掉的路线_名字跟着回来_历史和活动日志写路线名(站点):
+    """liang-d5 r12:退回删掉的「二楼夜巡」,回来叫 route-1;历史每行只写 route-1;活动日志
+    「退回了布置的旧版本 route:estate-1:7/route-1」。"""
+    s = 站点
+    tok = _登(s)
+    wp = [{"name": "a", "x": 1.0, "y": 2.0, "yaw": 0.0}]
+    _, r = s.req("POST", "/api/routes/route-1", {"map_id": MAP[0], "map_version": MAP[1],
+                                                 "waypoints": wp, "base_revision": 0,
+                                                 "title": "二楼夜巡"}, token=tok)
+    s.req("POST", "/api/routes/route-1/delete", {"base_revision": r["revision"]}, token=tok)
+    rows = _hist(s, tok, "route", item="route-1")
+    assert [x["title"] for x in rows] == ["二楼夜巡", "二楼夜巡"], rows
+    code, d = _restore(s, tok, rows[1]["id"])
+    assert code == 200, d
+    assert s.req("GET", "/api/routes/route-1", token=tok)[1]["title"] == "二楼夜巡"
+    _等(lambda: any(a["action"].endswith("/restore") for a in s.api.audit.list()))
+    [a] = [a for a in s.api.audit.list() if a["action"].endswith("/restore")]
+    assert a["detail"].get("target_name") == "二楼夜巡", a
+
+
+def test_第12轮_W10_04_新建路线和改路线_活动日志分得开(站点):
+    s = 站点
+    tok = _登(s)
+    wp = [{"name": "a", "x": 1.0, "y": 2.0, "yaw": 0.0}]
+    _, r = s.req("POST", "/api/routes/night", {"map_id": MAP[0], "map_version": MAP[1],
+                                               "waypoints": wp, "base_revision": 0}, token=tok)
+    s.req("POST", "/api/routes/night", {"map_id": MAP[0], "map_version": MAP[1],
+                                        "waypoints": wp + [{**wp[0], "name": "b", "x": 2.0}],
+                                        "base_revision": r["revision"]}, token=tok)
+    _等(lambda: len([a for a in s.api.audit.list()
+                    if a["action"] == "POST /api/routes/night"]) == 2)
+    rows = [a for a in s.api.audit.list() if a["action"] == "POST /api/routes/night"]
+    assert sorted(bool(a["detail"].get("created")) for a in rows) == [False, True], rows
 
 
 def test_摄像头历史不存口令_退回删掉的写要重填口令(站点):

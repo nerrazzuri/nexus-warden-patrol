@@ -21,6 +21,15 @@ class AlarmLogPage extends StatefulWidget {
   const AlarmLogPage({super.key, required this.api});
 
   static Key rowKey(String key) => Key('alarm-log-$key');
+  static const Key todoKey = Key('alarm-log-todo');
+  static Key todoRowKey(String key) => Key('alarm-log-todo-$key');
+
+  /// 第 12 轮 W12-02：跟网页报警记录同一套规则 —— 给保安的（入侵、起火、求助、离线；老站点没有
+  /// audience 也算）才是「报警」；授权的人在场照旧列。
+  static bool isAlarm(Alert a) => (a.level != 'P3' && alertForGuard(a)) || a.kind == 'authorized_person';
+
+  /// 管理员要处理的事（存储不足、排程派不了……）：网页总览叫「待处理事项」，这里也这么叫，不当报警。
+  static bool isTodo(Alert a) => !isAlarm(a) && a.level != 'P3' && a.resolvedMs == null;
 
   /// 测试模式条幅多久重新问一次站点（外审 r1 #10：别人开了、结束了，这边也跟着变）。
   static const Duration testPoll = Duration(seconds: 15);
@@ -31,6 +40,7 @@ class AlarmLogPage extends StatefulWidget {
 
 class _AlarmLogPageState extends State<AlarmLogPage> {
   List<Alert>? _rows;
+  List<Alert> _todo = const [];
   String? _error;
 
   /// POC 告警测试模式开着：到几点、谁开的。没开 / 老站点 = null。
@@ -74,7 +84,12 @@ class _AlarmLogPageState extends State<AlarmLogPage> {
     try {
       final all = await widget.api.alerts(all: true);
       await _loadTest();
-      if (mounted) setState(() => _rows = all.where((a) => a.level != 'P3').toList());
+      if (mounted) {
+        setState(() {
+          _rows = all.where(AlarmLogPage.isAlarm).toList();
+          _todo = all.where(AlarmLogPage.isTodo).toList();
+        });
+      }
     } on SiteError catch (e) {
       if (mounted) setState(() => _error = refusalText(e));
     } on FormatException catch (e) {
@@ -104,6 +119,33 @@ class _AlarmLogPageState extends State<AlarmLogPage> {
                   '报警测试模式中，到 ${_test!['until_ms'] is num ? hhmm((_test!['until_ms'] as num).toInt()) : '?'} 结束（${_test!['by']} 开的）：这期间的报警标题带「测试：」。')),
         if (_error != null) NwNotice(text: _error!, tone: NwTone.error),
         if (rows == null && _error == null) const Center(child: CircularProgressIndicator()),
+        if (_todo.isNotEmpty)
+          Padding(
+            key: AlarmLogPage.todoKey,
+            padding: const EdgeInsets.only(bottom: Nw.s16),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(tr('Needs your attention (${_todo.length}) — not alarms', '待处理事项（${_todo.length} 条，不是报警）'),
+                  style: NwText.titleSmall.copyWith(color: c.text)),
+              const SizedBox(height: Nw.s8),
+              for (final a in _todo)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: Nw.s8),
+                  child: NwCard(
+                    key: AlarmLogPage.todoRowKey(a.key),
+                    onTap: () => Navigator.push(context,
+                        MaterialPageRoute<void>(builder: (_) => SiteAlertScenePage(api: widget.api, alert: a))),
+                    child: Row(children: [
+                      Expanded(
+                          child: Text('${alertSourceText(a.robot)} · ${alertTitle(a.kind, a.title)}',
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: NwText.bodyMedium.copyWith(color: c.text))),
+                      Text(_day(a.firstMs), style: NwText.labelSmall.copyWith(color: c.textSecondary)),
+                    ]),
+                  ),
+                ),
+            ]),
+          ),
         if (rows != null && rows.isEmpty)
           Text(tr('No alarms.', '没有报警。'), style: NwText.bodyMedium.copyWith(color: c.textSecondary)),
         for (final a in rows ?? const <Alert>[])

@@ -194,6 +194,10 @@ const Set<String> routineAlertKinds = {
   'run_start', 'run_done', 'adhoc_patrol', 'adhoc_queue', 'authorized_person',
 };
 
-/// 算不算一条要人处理的报警（还开着、不是日常记录、不是 P3 记录）。
+/// 第 12 轮 W12-02：给保安看的（跟网页 `forGuard` 一样）—— 入侵、起火、求助、离线；老站点没有 audience 也算。
+/// 别的（`owner`：存储不足、排程派不了……）是管理员的待处理事项，不算报警。
+bool alertForGuard(Alert a) => const {'', 'intrusion', 'fire', 'help', 'offline'}.contains(a.audience);
+
+/// 算不算一条要人处理的报警（还开着、不是日常记录、不是 P3 记录、是给保安的）。
 bool alertNeedsAttention(Alert a) =>
-    a.resolvedMs == null && a.level != 'P3' && !routineAlertKinds.contains(a.kind);
+    a.resolvedMs == null && a.level != 'P3' && !routineAlertKinds.contains(a.kind) && alertForGuard(a);

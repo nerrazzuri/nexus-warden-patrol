@@ -339,6 +339,26 @@ void main() {
       await t.pumpWidget(Container());
     });
 
+    testWidgets('第 12 轮 W12-02：报警和网页同一套规则 —— 管理员的事归「待处理事项」，不标「未处理」', (t) async {
+      final base = Map<String, dynamic>.from((siteFixture('site_alerts')['alerts'] as List).first as Map);
+      Map<String, dynamic> row(String key, String kind, String audience, String title) => <String, dynamic>{
+            ...base, 'key': key, 'kind': kind, 'audience': audience, 'title': title, 'level': 'P2',
+            'acked_by': '', 'acked_ms': null, 'resolved_ms': null, 'robot': 'A'};
+      final api = FakeApi('owner')
+        ..alertRows = [
+          row('A/disk_80#7', 'disk_80', 'owner', '机器人存储空间不足'),
+          row('A/offline#1', 'offline', 'offline', '机器人离线'),
+        ];
+      await t.pumpWidget(MaterialApp(home: Scaffold(body: AlarmLogPage(api: api))));
+      await t.pumpAndSettle();
+      expect(find.byKey(AlarmLogPage.todoKey), findsOneWidget);
+      expect(find.byKey(AlarmLogPage.todoRowKey('A/disk_80#7')), findsOneWidget);
+      expect(find.byKey(AlarmLogPage.rowKey('A/disk_80#7')), findsNothing);
+      expect(find.byKey(AlarmLogPage.rowKey('A/offline#1')), findsOneWidget);
+      expect(find.text('未处理'), findsOneWidget, reason: '只有离线那条是报警');
+      await t.pumpWidget(Container());
+    });
+
     testWidgets('外审 r1 #10：页面开着时别人开了测试，过一会儿条幅自己出来；关了自己收', (t) async {
       final api = FakeApi('guard');
       await t.pumpWidget(MaterialApp(home: Scaffold(body: AlarmLogPage(api: api))));

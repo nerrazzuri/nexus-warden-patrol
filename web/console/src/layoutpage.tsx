@@ -365,8 +365,19 @@ function dimMarks(tab: LayoutTab, d: LayerData, s: Screen): ComponentChildren {
   });
 }
 
+/** 第 12 轮 W12-01:历史那一行写什么 —— 路线有显示名写显示名,没有写编号。 */
+export const historyItemLabel = (r: { item: string; title?: string }): string => r.title || r.item;
+
+/** 退回确认框:路线的写是哪条路线(以前四条不同的路线都只写「回退到 demo 于 19:00 保存的版本?」)。 */
+export function restoreAskText(kind: string, r: { item: string; title?: string; at_ms: number; by: string }): string {
+  if (kind === "route") return t("lyRestoreRouteNamed", { name: historyItemLabel(r), t: hm(r.at_ms), by: r.by });
+  return t(kind === "nogo" ? "lyRestoreNogo" : "lyRestoreAsk", { t: hm(r.at_ms), by: r.by });
+}
+
 interface HistoryRow {
   id: number; kind: string; item: string; by: string; at_ms: number; note: string; summary?: string;
+  /** 第 12 轮 W12-01:路线的显示名(站点给;老站点没有) */
+  title?: string;
   /** P1-44:摘要原料(老站点没有,退回用站点拼好的中文 ``summary``)。 */
   facts?: { n: number; names: string[]; deleted?: boolean; route_kind?: string };
 }
@@ -423,7 +434,7 @@ function HistoryDrawer({ kind, map, say, onRestored, onClose, routeKind }: {
             <li key={r.id}>
               <div>
                 <time class="mono small">{new Date(r.at_ms).toLocaleDateString("sv-SE")} {hm(r.at_ms)}</time> <b>{r.by}</b>
-                {r.item && <span class="muted small"> · {r.item}</span>}
+                {r.item && <span class="muted small"> · {historyItemLabel(r)}</span>}
                 {r.note.startsWith("restored") && <span class="tag">{t("lyRestoredTag")}</span>}
                 {(r.facts || r.summary) && <div class="muted small">{historySummary(kind, r)}</div>}
               </div>
@@ -434,7 +445,7 @@ function HistoryDrawer({ kind, map, say, onRestored, onClose, routeKind }: {
         </ul>
       )}
       {restoring && (
-        <Confirm text={t(kind === "nogo" ? "lyRestoreNogo" : kind === "route" ? "lyRestoreRoute" : "lyRestoreAsk", { t: hm(restoring.at_ms), by: restoring.by })}
+        <Confirm text={restoreAskText(kind, restoring)}
           yes={t("lyRestore")} onNo={() => setRestoring(null)}
           onYes={() => {
             const r = restoring;

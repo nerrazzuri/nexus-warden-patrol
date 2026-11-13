@@ -182,7 +182,7 @@ export function AlertDetail(props: {
         {!open && (
           <p class="ad-closed">
             {dt("dClosed", { v: verdictText(a), who: byText(a.resolved_by) || "—", t: a.resolved_ms ? hm(a.resolved_ms) : "" })}
-            {a.context && (a.context as { note?: string }).note && <><br /><span class="muted">{(a.context as { note?: string }).note}</span></>}
+            {a.context && (a.context as { note?: string }).note && <><br /><span class="muted"><SiteSpan s={(a.context as { note?: string }).note} /></span></>}
           </p>
         )}
         <div class="row wrap ad-acts">

@@ -142,7 +142,9 @@ void main() {
             'escalated': 0, 'channel': 'screen',
           };
       final api = FakeApi('guard')
-        ..alertRows = [row('run_start', 'P3'), row('run_done', 'P2'), row('adhoc_patrol', 'P2'), row('stuck', 'P2')];
+        ..alertRows = [row('run_start', 'P3'), row('run_done', 'P2'), row('adhoc_patrol', 'P2'), row('stuck', 'P2'),
+          // 第 12 轮 W12-02：管理员的事（存储不足）不算保安的「其他未处理」，跟网页值班页一样
+          <String, dynamic>{...row('disk_80', 'P2'), 'audience': 'owner'}];
       await _duty(t, api);
       expect(find.text('其他未处理 1 条'), findsOneWidget);
       expect(find.textContaining('没有紧急报警'), findsOneWidget, reason: 'A6-04：不写客户看不懂的「P1：无」');

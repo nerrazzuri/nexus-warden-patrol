@@ -148,15 +148,16 @@ const MAPS = { maps: [{ map_id: "m1", version: "1", note: "", created_ms: 0, sou
 
 type Posted = { path: string; body: any };
 function routesApi(opts: { meta: PreviewMeta; routes?: any[]; timezone?: string | null; schedules?: any[]; post?: (path: string, body: any) => Response | undefined;
-  check?: (body: any) => Response }) {
+  check?: (body: any) => Response; retired?: string[] }) {
   const posted: Posted[] = [];
-  const view = () => ({ revision: 3, timezone: opts.timezone ?? null, routes: opts.routes ?? [], schedules: opts.schedules ?? [] });
+  const view = () => ({ revision: 3, timezone: opts.timezone ?? null, routes: opts.routes ?? [], schedules: opts.schedules ?? [],
+    retired_routes: opts.retired ?? [] });
   setFetch((async (url: RequestInfo | URL, init?: RequestInit) => {
     const u = String(url);
     if (u.endsWith("/api/maps")) return json(MAPS);
     if (u.endsWith("/api/robots")) return json({ robots: [{ robot_id: "A" }, { robot_id: "B", manual_only: true }] });
     if (u.endsWith("/preview")) return json(opts.meta);
-    if (u.includes("/api/routes?")) {
+    if (u.includes("/api/routes?") || u.endsWith("/api/routes")) {
       const want = new URL(u, "http://x").searchParams.get("map_version");
       const v = view();
       return json(want == null ? v : { ...v, routes: v.routes.filter((r: any) => r.map_version === want || r.map_version === "") });
@@ -189,6 +190,22 @@ async function openNew(meta: PreviewMeta, name = "night", extra: Partial<Paramet
   await tick();
   return { r, posted, svg: r.container.querySelector("svg.map")!, c: r.container };
 }
+
+// 第 12 轮 W11-01:编号重名要查全站(别的版本上的、删掉的),不是只查这一版 —— 以前点「保存」才报「用过」
+describe("第 12 轮 W11-01 新建路线编号查全站", () => {
+  it("别的版本上有、删掉用过的:一输入就说重名,存不了", async () => {
+    const other = { id: "demo-loop", map_id: "m1", map_version: "2", revision: 1, bound: true, updated_by: "a", updated_ms: 0,
+      policy: {}, waypoints: [P("a", 1, 1)], title: "" };
+    const { r } = await openNew(META, "demo-loop", { routes: [other], retired: ["route-1"] });
+    await waitFor(() => expect(r.getByText("A route with this name already exists on the site.")).toBeTruthy());
+    fireEvent.input(r.getByPlaceholderText("Route name"), { target: { value: "route-1" } });
+    await tick();
+    expect(r.getByText("A route with this name already exists on the site.")).toBeTruthy();
+    fireEvent.input(r.getByPlaceholderText("Route name"), { target: { value: "fresh" } });
+    await tick();
+    expect(r.queryByText("A route with this name already exists on the site.")).toBeNull();
+  });
+});
 
 // 第 8 轮 W8-11:路线名能写中文 —— 写的当显示名,编号自动给;列表、编辑页标题写显示名
 describe("W8-11 路线显示名", () => {
