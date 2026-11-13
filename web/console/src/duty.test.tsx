@@ -7,6 +7,7 @@ import { DutyPage } from "./duty";
 import { lang } from "./i18n";
 import type { UnitInfo } from "./live";
 import type { Alert, RobotState } from "./model";
+import realRobots from "../../../mobile/test/fixtures/site_robots.json";
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
 
@@ -35,7 +36,8 @@ beforeEach(() => {
       return Promise.resolve(url.endsWith("/resolve") && resolveStatus !== 200 ? json({ error: "没有这条告警" }, resolveStatus) : json({}));
     }
     if (url.startsWith("/api/routes?")) return Promise.resolve(json({ revision: 1, timezone: "UTC", routes: [{ id: "loop-test", map_id: "m1", map_version: "1", title: "一楼夜巡" }, ...extraRoutes], schedules: [] }));
-    if (url === "/api/robots") return Promise.resolve(json({ robots: [{ robot_id: "B", map: { id: "m1", version: "1" } }] }));
+    // 第 10 轮:用真站点的 /api/robots 形状(站点测试生成的夹具),只换机器人号和在用的地图
+    if (url === "/api/robots") return Promise.resolve(json({ robots: [{ ...realRobots.robots[0], robot_id: "B", running: { ...realRobots.robots[0].running, map_id: "m1", map_version: "1" } }] }));
     if (url.startsWith("/api/robots/B/patrol-plan")) return Promise.resolve(json({ estimate_s: 600, start_ms: 0, queued: false, because: "", loops: 3 }));
     if (url.startsWith("/api/cameras")) return Promise.resolve(json({ cameras: [{ name: "cam3", zone: "北区", rtsp: true }] }));
     return Promise.resolve(json({}, 404));
