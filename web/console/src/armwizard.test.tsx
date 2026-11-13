@@ -3,7 +3,7 @@
 import { cleanup, fireEvent, render, waitFor } from "@testing-library/preact";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { setFetch } from "./api";
-import { ArmWizard, dailySlots, missingText, needsWizard, PatrolReason, wholeMap, type Readiness } from "./armwizard";
+import { afterLines, ArmWizard, dailySlots, missingText, needsWizard, PatrolReason, wholeMap, type Readiness } from "./armwizard";
 import { lang } from "./i18n";
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
@@ -34,7 +34,11 @@ beforeEach(() => {
     if (init?.method === "POST") {
       const body = JSON.parse(String(init.body ?? "{}"));
       posted.push({ url, body });
-      if (url === "/api/guard/plan") ready.missing = [];
+      if (url === "/api/guard/plan") {
+        ready.missing = [];
+        const es = (body as { entries: Record<string, unknown>[] }).entries;
+        plan = { ...plan, revision: Number(plan.revision) + 1, entries: es.map((e, i) => ({ id: i + 1, ...e })) };
+      }
       if (url === "/api/guard-routes/generate") {
         return Promise.resolve(json({ waypoints: [{ name: "1-1", x: 1, y: 1, yaw: 0 }], problems: [], zones: [{ zone: "1", points: 1, note: "" }] }));
       }
@@ -90,6 +94,54 @@ describe("布防向导的小函数", () => {
   });
 });
 
+describe("UIUX-036:布防后逐条说", () => {
+  it("外审 Minor:英文界面的未出发原因翻成英文", () => {
+    lang.value = "en";
+    try {
+      const e1 = [{ id: 1, route: "guard-1", robot: "", gap_min: 0, shuffle: false }];
+      const [lines] = afterLines(e1, { duty: null, runs: [], waiting: { 1: "A 不在线" }, zones: [], now_ms: 1 }, () => "R");
+      expect(lines[0]).toBe("“R” has not started: A is offline");
+      // 外审 2 Minor:值守常见的几种原因都有英文
+      const why = (w: string) => afterLines(e1, { duty: null, runs: [], waiting: { 1: w }, zones: [], now_ms: 1 }, () => "R")[0][0];
+      expect(why("A 设成只许手动派")).toBe("“R” has not started: A is set to manual dispatch only");
+      expect(why("A 在回充")).toBe("“R” has not started: A is charging");
+      expect(why("A 还没报电量")).toBe("“R” has not started: A has not reported its battery yet");
+      expect(why("A 电量 20%,不够跑一圈(要 ≥ 40%),先补能")).toBe("“R” has not started: A is at 20%, not enough for a lap (needs ≥ 40%); charging first");
+      expect(why("A 刚连回来,等它报手上的任务")).toBe("“R” has not started: A just reconnected; waiting for it to report its task");
+      expect(why("A 没登记")).toBe("“R” has not started: A is not registered");
+      expect(why("A 要人在旁边监护,不自己出去")).toBe("“R” has not started: A needs a person beside it and does not go out alone");
+      expect(why("防区路线 g1 上布防着的防区里没有点")).toBe("“R” has not started: zone route g1 has no points in the armed zones");
+    } finally { lang.value = "zh"; }
+  });
+
+  it("哪台在跑哪条第几圈、哪条在等为什么;每条都有结果才算说完", () => {
+    const entries = [{ id: 1, route: "guard-1", robot: "", gap_min: 0, shuffle: false }, { id: 2, route: "old", robot: "B", gap_min: 0, shuffle: false }];
+    const title = (id: string) => (id === "guard-1" ? "防区巡逻 1" : id);
+    const st = { duty: null, runs: [{ entry: 1, robot_id: "A", state: "lap", lap: 1, task_id: "t1", next_lap_ms: 0, watch_zone: "" }],
+      waiting: { 2: "B 设成只许手动派" }, zones: [], now_ms: 1 };
+    expect(afterLines(entries, st, title)).toEqual([["A 正在跑「防区巡逻 1」，第 1 圈。", "「old」还没出发：B 设成只许手动派"], true]);
+    expect(afterLines(entries, { ...st, waiting: {} }, title)).toEqual([["A 正在跑「防区巡逻 1」，第 1 圈。"], false]);
+  });
+
+  it("外审:只有 lap 才说「正在跑」;值守、等下一圈、暂停各说各的,有原因带上", () => {
+    const e1 = [{ id: 1, route: "guard-1", robot: "", gap_min: 0, shuffle: false }];
+    const run = (state: string) => ({ duty: null, runs: [{ entry: 1, robot_id: "A", state, lap: 2, task_id: "t1", next_lap_ms: 0, watch_zone: "1" }],
+      waiting: {}, zones: [], now_ms: 1 });
+    const title = () => "R";
+    // 外审 2:watch 是在去值守点的路上(到了才是 post)
+    expect(afterLines(e1, run("watch"), title)[0]).toEqual(["A 跑完第 2 圈，正在去「R」的值守点。"]);
+    expect(afterLines(e1, run("post"), title)[0]).toEqual(["A 跑完第 2 圈，在「R」的值守点守着。"]);
+    expect(afterLines(e1, run("wait"), title)[0]).toEqual(["A 在等「R」的下一圈。"]);
+    expect(afterLines(e1, { ...run("resume"), waiting: { 1: "A 电量低，先去补能" } }, title)[0])
+      .toEqual(["A 在等「R」的下一圈：A 电量低，先去补能"]);
+    expect(afterLines(e1, run("paused"), title)[0]).toEqual(["A 在「R」上暂停了。"]);
+    expect(afterLines(e1, run("held"), title)[0]).toEqual(["A 在「R」上暂停了。"]);
+    // 外审 2:正在停下 / 收队还没确认停住 → 照实说,也接着看(不算有结果)
+    expect(afterLines(e1, run("stopping"), title)).toEqual([["A 正在停下（「R」），等它确认停住。"], false]);
+    expect(afterLines(e1, run("standdown"), title)).toEqual([["A 正在收队（「R」），等它确认停住。"], false]);
+  });
+});
+
 describe("布防向导", () => {
   it("缺值守方案:直接到「谁去巡逻」;说 A 只许手动派、能改成自动派遣;存方案;布防后说谁出发了", async () => {
     let changes = 0;
@@ -111,7 +163,8 @@ describe("布防向导", () => {
     status = { duty: { id: 1, started_ms: 1 }, runs: [{ entry: 1, robot_id: "B", state: "lap", lap: 1, task_id: "guard-1-x", next_lap_ms: 0, watch_zone: "" }], waiting: {}, zones: [], now_ms: 1 };
     fireEvent.click(r.getByText("现在布防"));
     await waitFor(() => expect(posted.some((p) => p.url === "/api/mode" && p.body.mode === "armed")).toBe(true));
-    await waitFor(() => expect(doc.querySelector("[data-wiz-after]")!.textContent).toBe("B 已出发巡逻防区。"), { timeout: 4000 });
+    // UIUX-036:按方案逐条说哪台在跑哪条、第几圈(原来只说「B 已出发」)
+    await waitFor(() => expect(doc.querySelector("[data-wiz-after]")!.textContent).toBe("B 正在跑「guard-1」，第 1 圈。"), { timeout: 4000 });
   });
 
   it("没有防区:停在第一步;「整张图作为一个防区」按地图外框建一个「全场」", async () => {
@@ -153,6 +206,14 @@ describe("布防向导", () => {
     expect(doc.querySelector(".wiz-editor select")).toBeNull();
     expect(doc.querySelector(".wiz-editor")!.textContent).toContain("estate-1 · v7");
     expect(location.hash).toBe(before);
+  });
+
+  it("UIUX-036:值守方案里不止一条时,确认页全列出来", async () => {
+    ready.missing = [];
+    plan = { ...plan, entries: [{ id: 1, route: "guard-1", robot: "", gap_min: 0, shuffle: false, end_standby: true },
+      { id: 2, route: "old", robot: "B", gap_min: 0, shuffle: false, end_standby: true }] };
+    const r = render(<ArmWizard say={() => {}} onClose={() => {}} />);
+    await waitFor(() => expect(r.container.ownerDocument.querySelector("[data-wiz-plan]")?.textContent).toBe("guard-1（哪台空就派哪台）；old（B）"));
   });
 
   it("外审 1 #1 #9:存方案只换这条路线那一行,别的路线、隐藏选项都不动", async () => {

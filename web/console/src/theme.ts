@@ -52,7 +52,8 @@ function ensureRasterFilter(): void {
   svg.setAttribute("width", "0");
   svg.setAttribute("height", "0");
   svg.setAttribute("aria-hidden", "true");
-  svg.setAttribute("style", "position:absolute;width:0;height:0;overflow:hidden");
+  // UIUX-001:不用 style 属性(站点的 CSP 只许同源样式表,内联样式被拦掉,这个 svg 会多撑出一行 24px)
+  svg.classList.add("svg-defs");
   const f = document.createElementNS(ns, "filter");
   f.setAttribute("id", FILTER_ID);
   f.setAttribute("color-interpolation-filters", "sRGB");

@@ -2,8 +2,7 @@
 .routesplit { display: flex; flex-wrap: wrap; }
 .routemap { flex: 999 1 560px; min-width: 0; background: var(--c-mapBg); display: flex; flex-direction: column; }
 .routemap .mapwrap { flex: none; height: 600px; }
-.routeside { flex: 1 1 320px; max-width: 420px; padding: 12px 16px; border-left: 1px solid var(--c-outline); display: flex; flex-direction: column; gap: 12px; }
-.routeside h2 { font-size: 16px; }
+.routeside { flex: 1 1 340px; max-width: 440px; scroll-padding-bottom: 72px; padding: 12px 16px; border-left: 1px solid var(--c-outline); display: flex; flex-direction: column; gap: 12px; }
 .routeside ul { list-style: none; margin: 0; padding: 0; }
 .routelist li, .pointlist li { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-top: 1px solid var(--c-outline); }
 .routelist li[aria-current="true"], .pointlist li[aria-current="true"] { background: color-mix(in srgb, var(--c-tertiary) 12%, transparent); }
@@ -31,7 +30,7 @@
 .route-pt.other { cursor: default; opacity: 0.75; }
 .route-pt.other .pm-body { stroke: var(--c-textSecondary); }
 .route-pt.other .pm-nose { fill: var(--c-textSecondary); }
-.route-pt.other .pm-label { font-size: 9px; }
+.route-pt.other .pm-label { font-size: 11px; }
 .route-handle { cursor: grab; touch-action: none; }
 .route-handle:hover .pm-nose { filter: brightness(1.15); }
 .map.drawing .route-pt { cursor: grab; }
@@ -49,6 +48,12 @@
 .routepick-hint { position: absolute; top: 12px; left: 50%; transform: translateX(-50%); margin: 0; padding: 6px 12px;
   background: var(--c-surface); border: 1px solid var(--c-outline); border-radius: 6px; box-shadow: 0 1px 4px rgb(0 0 0 / 15%); }
 .field-check { display: flex; align-items: center; gap: 6px; }
+/* UIUX-013:说明文字跟标签同一段,不被拆成第二列 */
+.field-check > .fc-text { flex: 1 1 auto; min-width: 0; }
+/* UIUX-014:点位名左对齐、一行放不下用省略号(悬停看全名);上移 / 下移 / 删除按钮收窄 */
+.pointlist .link { display: flex; align-items: center; flex: 1 1 auto; min-width: 0; text-align: left; justify-content: flex-start; }
+.pointlist .link .pname { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pointlist .btn.sm { min-width: 32px; padding: 0 6px; }
 .routeside-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .routeback { align-self: flex-start; }
 .routename { display: flex; flex-direction: column; gap: 4px; }

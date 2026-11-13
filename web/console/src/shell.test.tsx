@@ -143,6 +143,10 @@ describe("新外壳", () => {
     const g = render(<Console me={me("guard")} onOut={() => {}} />);
     expect(g.container.querySelector(".noaccess")).not.toBeNull();
     expect(g.container.querySelector(".adminbody")).toBeNull();
+    // UIUX-034:说给谁用,给回去的按钮(保安回值班)
+    expect(g.container.querySelector(".noaccess h2")!.textContent).toBe("你的账号打不开这一页");
+    expect(g.container.querySelector(".noaccess p")!.textContent).toContain("管理员");
+    expect(g.container.querySelector("[data-noaccess-home]")!.getAttribute("href")).toBe("#/duty");
   });
 
   it("顶栏没有语言按钮,在用户菜单里", () => {
