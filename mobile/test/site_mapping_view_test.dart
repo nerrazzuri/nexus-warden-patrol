@@ -182,6 +182,19 @@ void main() {
     expect(find.textContaining('没有栅格'), findsOneWidget);
   });
 
+  test('POC Top Glove：录着说还能录多久；停了说录了多久、多大、哪个话题没录到', () {
+    appLang.value = AppLang.zh;
+    expect(recordInfoText({'recording': true, 'est_minutes': 37}), '按机器人剩余空间，大约还能录 37 分钟');
+    expect(recordInfoText({'recording': true}), '');
+    const r = {'bag': 'b1', 'minutes': 12.6, 'bytes': 2900000000, 'empty_topics': ['/rear_lidar'], 'metadata': true};
+    final s = recordInfoText({'recording': false, 'last_record': r});
+    expect(s, contains('上一个包 b1：录了 12.6 分钟，2.9 GB'));
+    expect(s, contains('这些话题一条都没录到：/rear_lidar'));
+    expect(recordInfoText({'recording': false, 'last_record': {...r, 'empty_topics': []}}), contains('每个话题都录到了数据'));
+    expect(recordInfoText({'recording': false, 'last_record': {...r, 'metadata': false}}), contains('索引文件缺失'));
+    expect(recordInfoText({'recording': false, 'last_record': <String, dynamic>{}}), '', reason: '老代理没给');
+  });
+
   test('轨迹画布：点按比例缩进画布、起点在里面', () {
     final p = TrailPainter(const [Offset(0, 0), Offset(10, 0), Offset(10, 5)]);
     final m = p.layout(const Size(220, 120));

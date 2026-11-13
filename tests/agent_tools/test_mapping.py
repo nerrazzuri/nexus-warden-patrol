@@ -67,6 +67,7 @@ class FakeProcs:
 def _不等在线建图起稳(monkeypatch):
     import nexwar_patrol.app.mapping as M
     monkeypatch.setattr(M, "LIVE_SETTLE_S", 0.0)
+    monkeypatch.setattr(M, "_disk_free", lambda p: 10**12)    # CI 机器盘小:开录查盘另有测试
 
 
 @pytest.fixture
@@ -168,6 +169,51 @@ async def test_录包会起进程并进到recording(orch, procs):
     assert orch.phase == "recording"
     assert procs.running() == ["bagrecord"]
     assert path.name == "w1"
+
+
+# ------------------------------------------------------------------ POC Top Glove:跟竞品一起录
+
+
+async def test_POC_只录包_低优先级_不跟竞品抢CPU(orch, procs):
+    """竞品在同一台机器人上建图(用的是 Orin 转过去的雷达):我们只录包时 nice/ionice 降下来。"""
+    await orch.start_record("shadow1")
+    line = _argv(procs.started, "bagrecord")
+    assert line.startswith("nice -n 10 ionice -c 2 -n 7 "), line
+    await orch.stop_record()
+
+
+async def test_POC_边走边建照旧不降优先级(orch, procs):
+    await orch.start_record("live1", live_map_id="m1")
+    assert not _argv(procs.started, "bagrecord").startswith("nice "), "边走边建要实时录"
+    await orch.stop_record()
+
+
+async def test_POC_盘不够就不开录_说剩多少要多少(orch, procs, monkeypatch):
+    import nexwar_patrol.app.mapping as M
+    monkeypatch.setattr(M, "_disk_free", lambda p: 5 * 10**9)
+    with pytest.raises(M.MappingArgError, match="只剩 5.0 GB.*至少要 20 GB"):
+        await orch.start_record("shadow2")
+    assert procs.running() == [] and orch.phase == "idle"
+
+
+async def test_POC_停录后说录了多久_多大_哪个话题一条都没有(orch, cfg, monkeypatch):
+    import nexwar_patrol.app.mapping as M
+    t = {"now": 1000.0}
+    monkeypatch.setattr(M.time, "monotonic", lambda: t["now"])
+    path = await orch.start_record("shadow3")
+    t["now"] += 754.0
+    path.mkdir(parents=True, exist_ok=True)
+    (path / "shadow3_0.mcap").write_bytes(b"x" * 3_000_000)
+    topics = "".join(
+        f"    - topic_metadata:\n        name: {n}\n      message_count: {c}\n"
+        for n, c in (("/front_lidar", 7540), ("/rear_lidar", 0)))
+    (path / "metadata.yaml").write_text(
+        "rosbag2_bagfile_information:\n  duration:\n    nanoseconds: 754000000000\n"
+        f"  topics_with_message_count:\n{topics}", encoding="utf-8")
+    await orch.stop_record()
+    s = orch.to_wire()["last_record"]
+    assert s["bag"] == "shadow3" and s["minutes"] == 12.6 and s["bytes"] >= 3_000_000
+    assert s["empty_topics"] == ["/rear_lidar"]
 
 
 async def test_录着包的时候再录会被拒(orch):

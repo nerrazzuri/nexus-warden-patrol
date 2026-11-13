@@ -1433,8 +1433,12 @@ class AgentRuntime:
             if isinstance(n, bool) or not isinstance(n, int) or n < 0:
                 return "payload: since 要是不小于 0 的整数"
             starting = self._running(self._rec_job) and self._rec_action == "start"
+            # POC Top Glove:开录时估的还能录几分钟、上一个包录完的小结(编排器给;仿真的没有)
+            orch = getattr(self.mapper, "orch", None)
+            extra = {"est_minutes": int(getattr(orch, "est_minutes", 0) or 0),
+                     "last_record": dict(getattr(orch, "last_record", None) or {})}
             return "", self.trail.since(n) | {"recording": bool(self.mapper.recording),
-                                              "starting": starting}
+                                              "starting": starting} | extra
         if kind == "mapping_preview":
             n = cmd.payload.get("since", 0)
             if isinstance(n, bool) or not isinstance(n, int) or n < 0:
