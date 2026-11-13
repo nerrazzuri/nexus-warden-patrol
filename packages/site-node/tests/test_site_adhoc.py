@@ -686,7 +686,9 @@ def test_第8轮_W8_03_被日程接替的一直巡逻_不算未完成_写跑了�
     it = _临时(t)
     assert it["state"] == "handed_over", it
     assert it["reason"] == "", "不露 preempted 这种代号"
-    assert it["handover"] == {"by": "schedule", "name": "nightly", "laps": 6}
+    # 第 9 轮 W9-01：多带 schedule_id(站点按它换成日程显示名)
+    assert it["handover"] == {"by": "schedule", "name": "nightly", "laps": 6,
+                              "schedule_id": "nightly"}
     assert it["forever"] is True
 
 
