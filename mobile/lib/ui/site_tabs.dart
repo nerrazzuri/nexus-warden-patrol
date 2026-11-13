@@ -690,9 +690,11 @@ String schedName(Map<String, dynamic> e, Map<String, String> titles) {
 /// 第 9 轮 A9-01：哪些路线排了也跑不了（画在别的地图版本上，没有一台机器人在用那一版）→ 为什么。
 /// 机器人都没报在用哪张图时一条也不灰（不知道就别拦）。
 Map<String, String> routeBlocked(List<Map> routes, List<Map> robots) {
+  // 第 10 轮 A9-01：/api/robots 里在用哪张图在 running.map_id / map_version（没有 map 字段）
   final using = <String>{
     for (final r in robots)
-      if (r['map'] is Map && (r['map'] as Map)['id'] != null) '${(r['map'] as Map)['id']}@${(r['map'] as Map)['version']}',
+      if (r['running'] is Map && (r['running'] as Map)['map_id'] != null)
+        '${(r['running'] as Map)['map_id']}@${(r['running'] as Map)['map_version']}',
   };
   if (using.isEmpty) return const {};
   return {
@@ -754,7 +756,8 @@ class _SchedulePageState extends State<SchedulePage> {
         _sched = (got[1] as Map).cast<String, dynamic>();
         _routes = [for (final m in ((got[2] as Map)['missions'] as List? ?? const [])) '$m'];
         _robots = [for (final r in robots) '${r['robot_id']}'];
-        _manual = {for (final r in robots) if (r['manual_only'] == true) '${r['robot_id']}'};
+        // 第 10 轮 A9-01：站点给的是 {by, at_ms, note} 对象（没设是 null），不是 true
+        _manual = {for (final r in robots) if (r['manual_only'] != null && r['manual_only'] != false) '${r['robot_id']}'};
         _titles = {for (final r in lib) if ('${r['title'] ?? ''}'.isNotEmpty) '${r['id']}': '${r['title']}'};
         _blocked = routeBlocked(lib, robots);
       });

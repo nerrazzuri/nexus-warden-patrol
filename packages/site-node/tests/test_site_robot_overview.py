@@ -359,3 +359,17 @@ def test_minor3_第几圈只数这一趟派出以后的点_走索引不扫全部
         "AND robot_id=? AND received_at>=? AND json_extract(data, '$.task_id')=?",
         ("A", NOW, "t-loop")))
     assert "events_kind" in plan and "received_at>?" in plan, plan
+
+
+def test_第10轮_W9_09_遥测没报存储块_从盘那一行的说明读出用了多少(台):
+    """第 10 轮复测:模拟机器人(和老代理)遥测里没有 storage,卡片退回写「存储盘降级」;
+    盘那一行的说明里其实写着「已用 86%」。"""
+    d, db = 台
+    d.devices["A"] = {"items": [{"id": "disk", "state": "degraded",
+                                 "detail": "已用 86%,剩 31 GB:到 90% 就不接新的巡逻"}],
+                      "at_ms": NOW, "stale": False}
+    r = _one(d, db)
+    assert r["storage"] == {"used_ratio": 0.86, "backlog_files": None, "oldest_backlog_s": None}
+    # 盘那一行没写百分比:还是不知道
+    d.devices["A"]["items"][0]["detail"] = "读不出"
+    assert _one(d, db)["storage"] is None

@@ -989,9 +989,11 @@ class SiteAlertSources:
         ids = list(self._sched_entries.get(prev.key, ())) if prev is not None else []
         if entry_id not in ids:
             ids.append(entry_id)
-        title = f"排程{self._sched_names(ids)} {_SCHEDULE_TITLE[kind]}:{what}"
+        # 第 10 轮 W9-02:名字带「」,后面不加空格(以前「排程「补跑测试」 在等机器人」)
+        title = f"排程{self._sched_names(ids)}{_SCHEDULE_TITLE[kind]}:{what}"
         a = self.desk.raise_alert(kind=kind, robot=robot, title=title,
-                                  detail=f"{self._sched_name(entry_id)}:{note}"[:300])
+                                  # 第 10 轮 W9-10:「demo-night：A 站点设成…」用全角冒号
+                                  detail=f"{self._sched_name(entry_id)}：{note}"[:300])
         self._sched_entries[a.key] = ids
         while len(self._sched_entries) > 200:            # 只为合并标题记着,老的放掉
             self._sched_entries.pop(next(iter(self._sched_entries)))
@@ -1021,7 +1023,7 @@ class SiteAlertSources:
             if ids:
                 self._sched_entries[a.key] = ids
                 self.desk.amend(a.key, title=(
-                    f"排程{self._sched_names(ids)} {_SCHEDULE_TITLE['schedule_waiting']}:"
+                    f"排程{self._sched_names(ids)}{_SCHEDULE_TITLE['schedule_waiting']}:"
                     f"{_SCHEDULE_ALERTS['late_waiting'][1]}"))
             else:
                 self._sched_entries.pop(a.key, None)
@@ -1076,10 +1078,14 @@ class SiteAlertSources:
         """站点推送流里的一条。只管 ``standby_failed``(自动回待命点没派成,狗停在原地)。"""
         if item.get("kind") != "standby_failed":
             return
+        # 第 10 轮 W10-01:说人话(以前「teleop-1 结束后:…」露任务编号);编号放进 context 给工程师查
+        after = str(item.get("after", ""))
+        what = ("遥控" if after.startswith("teleop-")
+                else "巡逻" if after.startswith(("sched-", "adhoc-")) else "上一趟任务")
         self.desk.raise_alert(kind="standby_failed", robot=str(item.get("robot_id", SITE)),
                               title="未返回待命点",
-                              detail=f"{item.get('after', '?')} 结束后:"
-                                     f"{item.get('reason', '')}"[:300])
+                              detail=f"{what}结束后没能回待命点:{item.get('reason', '')}"[:300],
+                              context={"task_id": after} if after else None)
 
     def on_site_error(self, what: str, error: str) -> None:
         """站点自己的一条协程这一拍没办成(``error`` 非空)。只在由好变坏的那一刻报。"""

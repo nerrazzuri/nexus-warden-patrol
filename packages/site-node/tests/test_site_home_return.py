@@ -75,7 +75,7 @@ def test_没任务_直接回原点(站点):
     _备好(s)
     assert s.req("POST", "/api/robots/A/home/here", {"name": "dock"}, token=alice)[0] == 200
     code, d = s.req("POST", "/api/robots/A/home/return", {}, token=gina)
-    assert code == 200 and d["task_id"].startswith("standby-") and d.get("aborted") is None, d
+    assert code == 200 and d["task_id"].startswith("standby-home-") and d.get("aborted") is None, d
 
 
 def test_外审r1_中止后停车没确认_不派回原点(站点):

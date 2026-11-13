@@ -155,6 +155,8 @@ void main() {
           {'id': 'rtk', 'state': 'degraded', 'detail': '浮点解'},
           {'id': 'link:router', 'state': 'offline', 'detail': '连不上 192.168.10.1:80'},
           {'id': 'camera:thermal', 'state': 'error', 'detail': '录像断了'},
+          // 第 10 轮 W9-10：机器人原话的半角标点换成全角
+          {'id': 'disk', 'state': 'online', 'detail': '已用 86%,剩 31 GB'},
         ],
         'at_ms': 1,
         'stale': false,
@@ -164,6 +166,7 @@ void main() {
     expect(find.text('路由器：离线 · 连不上 192.168.10.1:80'), findsOneWidget);
     expect(find.text('相机 热像：故障 · 录像断了'), findsOneWidget);
     expect(find.text('RTK：降级 · 浮点解'), findsOneWidget);
+    expect(find.textContaining('已用 86%，剩 31 GB'), findsOneWidget);
     final ys = [for (final k in ['camera:thermal', 'link:router', 'rtk', 'relay'])
       t.getTopLeft(find.byKey(Key('device-$k'))).dy];
     expect(ys, [...ys]..sort(), reason: '故障、离线、降级、在线');

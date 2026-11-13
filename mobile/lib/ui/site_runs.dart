@@ -5,6 +5,7 @@
 /// - 保安、管理员能复核、让站点重判；经理只看。
 library;
 
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -48,7 +49,7 @@ String runTitle(Map<String, dynamic> r) {
   if (RegExp(r'^temp-').hasMatch(m)) return tr('One-off route', '临时路线');
   if (RegExp(r'^incident-').hasMatch(m)) return tr('Alarm response', '报警出动');
   // 第 9 轮 A9-02：巡逻跑完自己回待命点 / 回原点的那一趟不是「手动派出」
-  if (r['kind'] == 'home' || RegExp(r'^home-').hasMatch(m)) return tr('Back to origin', '回原点');
+  if (r['kind'] == 'home' || RegExp(r'^(standby-)?home-').hasMatch(m)) return tr('Back to origin', '回原点');
   if (r['kind'] == 'standby' || RegExp(r'^standby-').hasMatch(m)) return tr('Back to standby point', '回待命点');
   if (RegExp(r'^(task|goto)-[0-9a-f]+$').hasMatch(m)) return tr('Sent by hand', '手动派出');
   // 第 9 轮 W9-01：路线起了显示名写显示名（站点带 title）
@@ -58,6 +59,9 @@ String runTitle(Map<String, dynamic> r) {
 
 /// 第 9 轮 W9-03：这一趟的结果说人话（站点给的是 done / aborted / failed 这种代号）。
 String runResultText(Map<String, dynamic> r) {
+  // 第 10 轮 A10-01：站点说正在跑的写进行中；机器人报被接替的写被接替（站点给 running、ended）
+  if (r['running'] == true) return tr('In progress', '进行中');
+  if (r['ended'] == 'preempted') return tr('Handed over', '被接替');
   if (r['finished'] != true) return tr('Not finished', '没跑完');
   return switch ('${r['result'] ?? ''}') {
     'aborted' || 'abort' => tr('Stopped', '叫停了'),
@@ -69,7 +73,9 @@ String runResultText(Map<String, dynamic> r) {
 
 /// 这一趟没跑完（中止、失败、没收尾）。
 bool runFailed(Map<String, dynamic> r) =>
-    r['finished'] != true || const {'aborted', 'failed', 'abort'}.contains(r['result']);
+    r['running'] != true &&
+    r['ended'] != 'preempted' &&
+    (r['finished'] != true || const {'aborted', 'failed', 'abort'}.contains(r['result']));
 
 String _verdictSummary(Map<String, dynamic> r) {
   final v = r['verdicts'];
@@ -132,7 +138,35 @@ class SiteRunsPage extends StatefulWidget {
 }
 
 class _SiteRunsPageState extends State<SiteRunsPage> {
-  late Future<List<Map<String, dynamic>>> _rows = widget.api.runs(robotId: widget.robotId);
+  late Future<List<Map<String, dynamic>>> _rows = _load();
+
+  /// 第 10 轮 A10-01：列表里有正在跑的，隔 15 秒自己再取一次（不用人下拉刷新才看到跑完）。
+  Timer? _tick;
+  static const _refreshEvery = Duration(seconds: 15);
+
+  Future<List<Map<String, dynamic>>> _load() {
+    final f = widget.api.runs(robotId: widget.robotId);
+    f.then((rows) {
+      if (!mounted) return;
+      _tick?.cancel();
+      if (rows.any((r) => r['running'] == true)) {
+        _tick = Timer(_refreshEvery, () {
+          if (mounted) {
+            setState(() {
+              _rows = _load();
+            });
+          }
+        });
+      }
+    }, onError: (Object _) {});
+    return f;
+  }
+
+  @override
+  void dispose() {
+    _tick?.cancel();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -140,7 +174,7 @@ class _SiteRunsPageState extends State<SiteRunsPage> {
     final body = RefreshIndicator(
       onRefresh: () async {
         setState(() {
-          _rows = widget.api.runs(robotId: widget.robotId);
+          _rows = _load();
         });
         await _rows.catchError((Object _) => <Map<String, dynamic>>[]);
       },
@@ -195,7 +229,8 @@ class _SiteRunsPageState extends State<SiteRunsPage> {
                             id: '${runTitle(r)} · ${r['robot_id']}',
                             time: stampText('${r['stamp']}'),
                             status: [
-                              if (runFailed(r)) tr('Not finished', '没跑完'),
+                              if (runFailed(r) || r['running'] == true || r['ended'] == 'preempted')
+                                runResultText(r),
                               // 第 9 轮 A9-02：没照片只说一次「没有照片」
                               if ((r['photos'] as num? ?? 0) > 0) tr('${r['photos']} photos', '照片 ${r['photos']} 张'),
                               _verdictSummary(r),

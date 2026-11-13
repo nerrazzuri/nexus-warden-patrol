@@ -946,7 +946,8 @@ class _Devices extends StatelessWidget {
               Expanded(
                   child: Text(
                       '${deviceName('${d['id']}')}${tr(': ', '：')}${deviceStateText('${d['state']}')}'
-                      '${'${d['detail'] ?? ''}'.isEmpty ? '' : ' · ${d['detail']}'}',
+                      // 第 10 轮 W9-10：站点原话走 siteText（中文全角，英文界面翻）
+                      '${'${d['detail'] ?? ''}'.isEmpty ? '' : ' · ${siteText('${d['detail']}')}'}',
                       style: NwText.bodyMedium.copyWith(color: c.text))),
             ])),
     ]);

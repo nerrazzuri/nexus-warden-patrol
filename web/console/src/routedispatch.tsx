@@ -35,9 +35,12 @@ export function DispatchOnce({ route: fixedRoute, robot: fixedRobot, say, cls, t
     setLoops(1);
     setPlan(null);
     setErr(null);
-    api<{ robots: { robot_id: string; fresh?: boolean; revoked?: boolean; map?: { id?: string; version?: string } | null }[] }>("GET", "/api/robots")
+    // 第 10 轮 W9-04:/api/robots 里在用哪张图在 running.map_id / map_version(没有 map 这个字段;
+    // 以前读 r.map,测试的假数据带了、真站点没有,判断不了)
+    api<{ robots: { robot_id: string; fresh?: boolean; revoked?: boolean; running?: { map_id?: string | null; map_version?: string | null } | null }[] }>("GET", "/api/robots")
       .then((d) => {
-        setMaps(Object.fromEntries(d.robots.filter((r) => r.map).map((r) => [r.robot_id, r.map ?? {}])));
+        setMaps(Object.fromEntries(d.robots.filter((r) => r.running?.map_id)
+          .map((r) => [r.robot_id, { id: r.running?.map_id ?? undefined, version: r.running?.map_version ?? undefined }])));
         if (fixedRobot == null) setRobots(d.robots.filter((r) => !r.revoked && r.fresh !== false).map((r) => r.robot_id));
       })
       .catch((e) => { if (fixedRobot == null) { setRobots([]); setErr(why(e)); } });

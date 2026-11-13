@@ -63,7 +63,10 @@ log = logging.getLogger(__name__)
 
 #: 自动回程碰上这些暂时性的拒绝(W09h 钟差还不知道;代理重连时状态还不新鲜 / 还没报在线)限时再试:
 #: 每 2 s 一次、最多 7 次(约 15 s,够攒齐钟差样本)。别的拒绝(没人监护、忙、地图对不上)不再试。
-_TRANSIENT_REFUSALS = ("钟差未知", "不新鲜", "不在线")
+# 第 10 轮 W10-01:「正在遥控」—— 遥控结束的事件先到、状态晚一拍,站点还当它在遥控
+_TRANSIENT_REFUSALS = ("钟差未知", "不新鲜", "不在线", "正在遥控")
+#: 离待命点这么近(米,同一张图同一版)就当已经在待命点,不派回程(第 10 轮 W10-01)。
+AT_STANDBY_M = 0.3
 STANDBY_TRANSIENT_RETRIES = 7
 STANDBY_RETRY_EVERY_S = 2.0
 
@@ -344,9 +347,11 @@ class StandbyManager:
         target = MapPose(map_id=mid, map_version=ver, frame_id="map",
                          x=h["x"], y=h["y"], yaw=h["yaw"]).to_wire()
         async with self._sending(robot_id):
+            # 第 10 轮 W10-05:回原点的任务号 standby-home-…(还是 standby- 开头,去重照认;
+            # 网页、App 据此写「回原点」不写「回待命点」)
             r = await self.dispatcher.goto(robot_id, target, None, issued_by=issued_by,
                                            priority=STANDBY_RETURN, homing=True,
-                                           task_id=f"{STANDBY_PREFIX}{uuid.uuid4().hex[:12]}")
+                                           task_id=f"{STANDBY_PREFIX}home-{uuid.uuid4().hex[:12]}")
         return {**r, "aborted": aborted}
 
     @contextlib.asynccontextmanager
@@ -521,6 +526,10 @@ class StandbyManager:
             # 遥控放租之后直线的狗不自动回(W00c6b 内审):起点是人刚开到的任意位置,人在场。
             log.info("%s 遥控放租之后不自动回待命点(直线的机器人,人手动叫)", robot_id)
             return
+        if self._at_standby(robot_id, after):
+            # 第 10 轮 W10-01:遥控开了没动就退出,机器人一直在待命点 —— 不用回,也不报
+            log.info("%s 在 %s 结束时已经在待命点:不派回程", robot_id, after)
+            return
         try:
             why = self.refusal(robot_id) if self.refusal is not None else ""
             if why:
@@ -535,6 +544,22 @@ class StandbyManager:
             log.warning("%s 在 %s 结束后回待命点没派成: %s", robot_id, after, exc)
             self.dispatcher.feed.publish({"kind": "standby_failed", "robot_id": robot_id,
                                           "after": after, "reason": str(exc)})
+
+    def _at_standby(self, robot_id: str, after: str) -> bool:
+        """机器人现在离要回的待命点不到 :data:`AT_STANDBY_M`(最近一份遥测的位置,同一张图同一版)。
+        拿不准(没位置、没待命点、图对不上)就当不在。"""
+        c = self.dispatcher.clients.get(robot_id)
+        t = getattr(c, "telemetry", None) if c is not None else None
+        pose = getattr(t, "pose", None)
+        if pose is None:
+            return False
+        try:
+            p = self._checked_default(robot_id, self._target(robot_id, after))
+        except DispatchRefused:
+            return False
+        if (pose.map_id, pose.map_version) != (p["map_id"], p["map_version"]):
+            return False
+        return math.hypot(pose.x - p["x"], pose.y - p["y"]) < AT_STANDBY_M
 
     async def return_after_once(self, robot_id: str, after: str, *,
                                 issued_by: str) -> dict[str, Any]:

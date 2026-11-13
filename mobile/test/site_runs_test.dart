@@ -1,5 +1,6 @@
 // 站点模式的运行记录（W00c5d）：列表、一趟、照片、复核（保安、管理员）、重判；管理员只看。夹具来自真站点。
 import 'package:nexwar_patrol/net/site_client.dart' show SiteError;
+import 'package:nexwar_patrol/net/site_text.dart' show taskKindText;
 import 'package:nexwar_patrol/ui/site_page.dart';
 import 'package:nexwar_patrol/ui/site_runs.dart';
 import 'package:flutter/material.dart';
@@ -14,6 +15,31 @@ Future<void> _pumpRuns(WidgetTester t, FakeApi api) async {
 }
 
 void main() {
+  test('第 10 轮 A10-01：正在跑的写进行中、被接替的写被接替，都不算没跑完', () {
+    final running = {'finished': false, 'running': true};
+    final handed = {'finished': true, 'result': 'aborted', 'ended': 'preempted'};
+    expect(runResultText(running), '进行中');
+    expect(runResultText(handed), '被接替');
+    expect(runFailed(running), isFalse);
+    expect(runFailed(handed), isFalse);
+    expect(runFailed({'finished': false}), isTrue);
+  });
+
+  testWidgets('第 10 轮 A10-01：列表上写进行中、被接替；有在跑的自己隔一会儿刷新', (t) async {
+    final api = _RunningApi();
+    await _pumpRuns(t, api);
+    expect(find.textContaining('进行中'), findsOneWidget);
+    expect(find.textContaining('被接替'), findsOneWidget);
+    expect(find.textContaining('没跑完'), findsNothing);
+    final before = api.calls.where((c) => c == 'runs').length;
+    api.rows = [{...api.rows[0], 'finished': true, 'result': 'done', 'running': null}, api.rows[1]];
+    await t.pump(const Duration(seconds: 16));
+    await t.pumpAndSettle();
+    expect(api.calls.where((c) => c == 'runs').length, greaterThan(before));
+    expect(find.textContaining('进行中'), findsNothing);
+    await t.pumpWidget(const SizedBox());
+  });
+
   test('时刻给人看：UTC 目录名换成本地时间；结论说人话', () {
     final local = DateTime.utc(2026, 9, 25, 1).toLocal();
     expect(stampText('20260925T010000Z'),
@@ -43,6 +69,11 @@ void main() {
 
   test('第 9 轮 W9-01 / A9-02：标题写路线显示名；自己回待命点、回原点的那一趟不写手动派出', () {
     expect(runTitle({'mission': 'route-1', 'title': '一楼夜巡'}), '一楼夜巡');
+    // 第 10 轮 W10-05：回原点那趟任务号 standby-home-…
+    expect(runTitle({'mission': 'standby-home-7ff9137e03c8'}), '回原点');
+    expect(runTitle({'mission': 'standby-7ff9137e03c8'}), '回待命点');
+    expect(taskKindText('standby-home-7ff9137e03c8'), '回原点');
+    expect(taskKindText('standby-7ff9137e03c8'), '回待命点');
     expect(runTitle({'mission': 'standby-9a1b2c', 'kind': 'standby'}), '回待命点');
     expect(runTitle({'mission': 'standby-9a1b2c', 'kind': 'home'}), '回原点');
     expect(runTitle({'mission': 'standby-9a1b2c'}), '回待命点');
@@ -145,3 +176,19 @@ void main() {
     expect(api.calls.where((c) => c.startsWith('photo 1 ')).length, greaterThanOrEqualTo(4));
   });
 }
+
+class _RunningApi extends FakeApi {
+  _RunningApi() : super('guard');
+  List<Map<String, dynamic>> rows = [
+    {'id': 7, 'robot_id': 'A', 'mission': 'route-1', 'stamp': '20260925T010000Z', 'finished': false,
+     'result': '', 'photos': 0, 'running': true, 'task_id': 'adhoc-1'},
+    {'id': 6, 'robot_id': 'B', 'mission': 'route-1', 'stamp': '20260925T000000Z', 'finished': true,
+     'result': 'aborted', 'photos': 0, 'ended': 'preempted', 'task_id': 'adhoc-0'},
+  ];
+  @override
+  Future<List<Map<String, dynamic>>> runs({String? robotId, String? mission}) async {
+    calls.add('runs');
+    return rows;
+  }
+}
+

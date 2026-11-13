@@ -5,7 +5,7 @@ import { useEffect, useRef, useState } from "preact/hooks";
 import { api } from "./api";
 import { Confirm, Modal } from "./dialogs";
 import { clickGuard, startDrag, swallowClick } from "./dragpt";
-import { t } from "./i18n";
+import { joinList, t } from "./i18n";
 import { toMap, type StandbyPt, type TabProps } from "./layoutpage";
 import { PoseMarker } from "./posemarker";
 import { NAME_RE } from "./routepage";
@@ -17,6 +17,23 @@ export const spName = (p: { robot_id: string; name: string }): string =>
   p.name === "home" ? t("lyStandbyAuto", { id: p.robot_id }) : `${p.robot_id} · ${p.name}`;
 /** 地图上的小标签:自动加的写机器人编号(原来截成「ho」),自己起名的写名字前两个字。 */
 const spMark = (p: { robot_id: string; name: string }): string => (p.name === "home" ? p.robot_id : p.name).slice(0, 2);
+/** 第 10 轮 W10-06:离得这么近(米)的几个待命点算同一处 —— 图标叠在一起只看得到最上面那个。 */
+const SAME_SPOT_M = 0.3;
+
+/** 叠在同一处的几组待命点(两个以上的才算):每组第一个点的位置 + 各自的标签。 */
+export function sameSpots(pts: { robot_id: string; name: string; x: number; y: number }[]): { x: number; y: number; labels: string[] }[] {
+  const used = new Set<number>();
+  const out: { x: number; y: number; labels: string[] }[] = [];
+  pts.forEach((p, i) => {
+    if (used.has(i)) return;
+    const group = pts.map((q, j) => [q, j] as const).filter(([q, j]) => !used.has(j) && Math.hypot(q.x - p.x, q.y - p.y) < SAME_SPOT_M);
+    if (group.length < 2) return;
+    group.forEach(([, j]) => used.add(j));
+    out.push({ x: p.x, y: p.y, labels: [...new Set(group.map(([q]) => (q.name === "home" ? q.robot_id : `${q.robot_id} ${q.name}`)))] });
+  });
+  return out;
+}
+
 interface Carried { robot_id: string; name: string; x: number; y: number; yaw: number; default?: boolean }
 interface Charger { robot_id: string; map_id: string; map_version: string; x: number; y: number }
 
@@ -134,6 +151,10 @@ export function StandbyTab(p: TabProps) {
                   <title>{spName(x)}</title>
                 </PoseMarker>
               );
+            })}
+            {sameSpots(pts).map((g) => {
+              const [x, y] = s.map(g.x, g.y);
+              return <text key={`same-${g.x}-${g.y}`} class="standby-group" data-standby-group="1" x={x} y={y - 16} text-anchor="middle">{joinList(g.labels)}</text>;
             })}
           </>} />
       </div>

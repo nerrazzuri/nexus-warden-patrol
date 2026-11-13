@@ -110,6 +110,18 @@ describe("机器人页", () => {
     expect(c.querySelector(".robot-detail")!.textContent).toContain("未到达点位");
   });
 
+  it("第 10 轮 W9-10:点位没到那条只写一遍,用全角标点", async () => {
+    robots = [card({ robot_id: "B", recent_problems: [
+      { key: "B/stuck#3", kind: "stuck", level: "P2", title: "点位 P7 未到达,已跳过", first_ms: NOW - 50_000, resolved_ms: null, resolved_by: "" },
+    ] })];
+    const { container: c } = page();
+    await waitFor(() => expect(cardOf(c, "B")).not.toBeNull());
+    fireEvent.click(cardOf(c, "B"));
+    const sec = c.querySelector(".robot-detail .robot-alerts")!;
+    expect(sec.textContent).toContain("点位 P7 未到达，已跳过");
+    expect(sec.textContent).not.toContain("未到达,已跳过");
+  });
+
   it("W72 详情里的告警分三组放在最下面:要处理(P1)、待跟进、记录(自动恢复的标出来、收起来)", async () => {
     robots = [card({ robot_id: "B", recent_problems: [
       { key: "B/robot_offline#2", kind: "robot_offline", level: "P1", first_ms: NOW - 50_000, resolved_ms: NOW - 40_000, resolved_by: "site:back_soon" },
@@ -610,5 +622,20 @@ describe("第 4 轮 admin N2", () => {
     fireEvent.submit(dlg.querySelector("form")!);
     await waitFor(() => expect(dlg.querySelector("[data-form-error]")?.textContent).toContain("A"));
     expect(said).toEqual([]);
+  });
+});
+
+describe("第 10 轮 W10-03", () => {
+  it("机器人页「状态」的圈数只写一遍", async () => {
+    lang.value = "zh";
+    robots[0] = card({ task: "adhoc-forever-x", lap: { n: 4, of: 0 } });
+    const u = { robot: { robot_id: "A", active: true, fresh: true, revoked: false, held: null,
+      status: { online: true, last_seen: 0, ready: { motion: true } }, capabilities: { tasks: {} } },
+      state: "patrolling", battery: 90, task: "一直巡逻 · 第 4 圈" } as unknown as UnitInfo;
+    const { container: c } = render(<RobotsPage say={() => {}} now={NOW} role="admin" units={[u]} />);
+    await waitFor(() => expect(cardOf(c, "A")).not.toBeNull());
+    fireEvent.click(cardOf(c, "A"));
+    const facts = c.querySelector(".robot-detail .rd-facts")!.textContent!;
+    expect(facts.split("第 4 圈").length - 1).toBe(1);
   });
 });

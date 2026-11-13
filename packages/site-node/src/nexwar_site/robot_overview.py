@@ -8,6 +8,7 @@
 
 from __future__ import annotations
 
+import re
 from datetime import tzinfo
 from typing import Any
 
@@ -78,7 +79,7 @@ def overview(dispatcher: Any, db: Any, *, now_ms: int, tz: tzinfo) -> list[dict[
                     # W72(用户 11-03):详情面板要的 —— 近 7 天、上次联系、存储、地图、设备、登记
                     **week,
                     "last_seen_ms": getattr(c, "status_live_at", None) if c is not None else None,
-                    "storage": _storage(c), "map": _map(dispatcher, c),
+                    "storage": _storage(c) or _storage_from_devices(dv), "map": _map(dispatcher, c),
                     "devices": [{"id": x.get("id"), "state": x.get("state")}
                                 for x in (dv or {}).get("items", [])] if dv and not dv.get("stale")
                     else [],
@@ -194,6 +195,23 @@ def _storage(c: Any) -> dict[str, Any] | None:
         return None
     return {"used_ratio": st.disk_used_ratio, "backlog_files": st.backlog_files,
             "oldest_backlog_s": st.oldest_backlog_s}
+
+
+_DISK_USED = re.compile(r"已用\s*(\d{1,3})\s*%")
+
+
+def _storage_from_devices(dv: Any) -> dict[str, Any] | None:
+    """第 10 轮 W9-09:遥测没报 storage(模拟机器人、老代理)时,从盘那一行的说明(代理写的
+    「已用 86%,剩 31 GB…」)读出用了多少;读不出就是不知道。"""
+    if not dv or dv.get("stale"):
+        return None
+    for x in dv.get("items", []):
+        if str(x.get("id", "")).split(":")[0] == "disk":
+            m = _DISK_USED.search(str(x.get("detail") or ""))
+            if m and int(m.group(1)) <= 100:
+                return {"used_ratio": int(m.group(1)) / 100, "backlog_files": None,
+                        "oldest_backlog_s": None}
+    return None
 
 
 def _map(dispatcher: Any, c: Any) -> dict[str, Any] | None:

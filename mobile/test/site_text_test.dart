@@ -16,6 +16,10 @@ void main() {
     expect(siteKnown('一楼夜巡'), '一楼夜巡');
     appLang.value = AppLang.en;
     expect(siteKnown('从 7 清了 337 处零星噪点(773 格)'), 'Noise cleanup of version 7: removed 337 specks (773 cells)');
+    // 第 10 轮 W10-01
+    final back = siteText('遥控结束后没能回待命点:B 正在遥控');
+    expect(back, startsWith('After remote control, the robot could not go back to its standby point: '));
+    expect(hasChinese(back), isFalse, reason: back);
   });
 
   test('巡逻跳点 + 导航被拒 + 规划失败：整句英文', () {

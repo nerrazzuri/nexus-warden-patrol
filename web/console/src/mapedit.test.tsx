@@ -43,7 +43,8 @@ beforeEach(() => {
 });
 afterEach(cleanup);
 
-const Fake = (o: OwnLayer) => <div class="fakemap"><button type="button" class="pick" onClick={() => o.onPick?.(40, 30)}>pick</button><svg>{o.world}</svg></div>;
+let fakeK = 1;
+const Fake = (o: OwnLayer) => <div class="fakemap"><button type="button" class="pick" onClick={() => o.onPick?.(40, 30)}>pick</button><svg>{o.world}{o.marks?.({ map: (x, y) => [x, y], px: (x, y) => [x * fakeK, y * fakeK], k: fakeK })}</svg></div>;
 let said: string[] = [];
 const page = () => { said = []; return render(<MapEditPage say={(m: string) => said.push(m)} target={{ map_id: "home", version: "3" }} Canvas={Fake} />); };
 const btn = (root: Element, text: string) => Array.from(root.querySelectorAll("button")).find((b) => b.textContent?.trim() === text) as HTMLButtonElement;
@@ -100,10 +101,22 @@ describe("地图编辑器", () => {
       fireEvent.click(c.querySelector(".pick")!);
       const dot = c.querySelectorAll(`circle.me-brush.${tool}`);
       expect(dot.length, tool).toBe(1);
-      // 半径 = 笔刷粗细的一半(默认 0.3 m,图上一像素 0.1 m → 1.5 像素)
-      expect(Number(dot[0].getAttribute("r"))).toBeCloseTo(1.5);
+      // 半径 = 笔刷粗细的一半(默认 0.3 m,图上一像素 0.1 m → 1.5 像素)× 屏幕缩放;第 10 轮 W10-06:至少 5 像素
+      expect(Number(dot[0].getAttribute("r"))).toBeCloseTo(5);
       fireEvent.click(btn(c, "取消"));
     }
+  });
+
+  it("第 10 轮 W10-06:放大了笔刷圆跟着变大(屏幕上 = 笔刷宽 × 缩放)", async () => {
+    fakeK = 10;
+    try {
+      const { container: c } = page();
+      await waitFor(() => expect(c.querySelector('.mapedit[data-ready]')).not.toBeNull());
+      fireEvent.click(c.querySelector('[data-tool="erase"]')!);
+      fireEvent.click(btn(c, "画笔"));
+      fireEvent.click(c.querySelector(".pick")!);
+      expect(Number(c.querySelector("circle.me-brush")!.getAttribute("r"))).toBeCloseTo(15);
+    } finally { fakeK = 1; }
   });
 
   it("W61 画笔首尾接上:预览里圈内填满(跟站点一样整块擦)", async () => {

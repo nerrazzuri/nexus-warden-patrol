@@ -472,9 +472,15 @@ void main() {
           <String, dynamic>{'id': 'old', 'title': '', 'map_id': 'estate-1', 'map_version': '11'},
           <String, dynamic>{'id': 'route-1', 'title': '一楼夜巡', 'map_id': 'estate-1', 'map_version': '7'},
         ]}
+        // 第 10 轮：用真站点的 /api/robots 形状（站点测试生成的夹具）：在用的图在 running 里，
+        // 只许手动派是 {by, at_ms, note} 对象（以前假数据写 map、manual_only: true，真站点没有）
         ..robotsOverride = <Map<String, dynamic>>[
-          <String, dynamic>{'robot_id': 'A', 'map': <String, dynamic>{'id': 'estate-1', 'version': '7'}},
-          <String, dynamic>{'robot_id': 'B', 'manual_only': true, 'map': <String, dynamic>{'id': 'estate-1', 'version': '7'}},
+          for (final id in ['A', 'B'])
+            <String, dynamic>{
+              ...((siteFixture('site_robots')['robots'] as List).first as Map).cast<String, dynamic>(),
+              'robot_id': id,
+              'manual_only': id == 'B' ? <String, dynamic>{'by': 'demo', 'at_ms': 1, 'note': ''} : null,
+            },
         ]
         ..schedules = <String, dynamic>{'timezone': 'UTC', 'revision': 1, 'schedules': <dynamic>[
           <String, dynamic>{'id': 'route-1-1', 'title': '夜巡测试', 'mission': 'route-1', 'at': '10:05',
