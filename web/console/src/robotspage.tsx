@@ -39,6 +39,8 @@ export interface RobotCard {
   enrolled_at?: number | null; manual_note?: string; held?: { by: string; at_ms: number } | null;
   /** POC:能换哪几种姿态、正在跑的任务(老站点没有)。 */
   postures?: Posture[]; task?: string | null;
+  /** 第 9 轮 W9-06:正在跑的任务给人看的说法(不露 adhoc-forever-… 这种编号)。 */
+  task_what?: { kind: string; route: string; forever: boolean } | null;
   /** W76:正在跑几圈的巡逻 —— 第几圈、共几圈(0 = 一直巡逻)。一圈的、老站点没有。 */
   lap?: { n: number; of: number } | null;
 }
@@ -71,6 +73,15 @@ function problemText(p: RobotCard["problems"][number]): string {
 }
 
 /** ``readOnly``(W60):经理只看 —— 没有添加、批准加入、改名、改派单方式、开通码、解绑、确认换 WiFi。 */
+/** 第 9 轮 W9-06:正在跑的任务说成人话:「一直巡逻（一楼夜巡）」「巡逻（一楼夜巡）」「回待命点」……;
+ *  老站点没给说法的写「一个任务」。 */
+export function taskWhat(w: { kind: string; route: string; forever: boolean } | null | undefined): string {
+  if (!w) return t("twTask");
+  const k = w.kind === "patrol" ? (w.forever ? "twForever" : "twPatrol")
+    : w.kind === "goto" ? "twGoto" : w.kind === "standby" ? "twStandby" : w.kind === "home" ? "twHome" : "twTask";
+  return w.route ? t("twRoute", { what: t(k), route: w.route }) : t(k);
+}
+
 export function RobotsPage({ say, now, units = [], readOnly = false, role = "admin", robot = null }: {
   say: Say; now: number; units?: UnitInfo[]; readOnly?: boolean; role?: string; robot?: string | null;
 }) {
@@ -326,7 +337,10 @@ function Controls({ r, u, role, say, onChanged }: { r: RobotCard; u?: UnitInfo; 
     const v = await api<{ status?: { task?: { task_id?: string } | null } | null }>("GET", `/api/robots/${enc(r.robot_id)}`);
     const tid = v.status?.task?.task_id;
     if (!tid) { say(t("rdNoTask", { id })); return null; }
-    return api("POST", path("abort"), { task_id: tid });
+    const res = await api<CommandReply>("POST", path("abort"), { task_id: tid });
+    // 第 9 轮 W9-06:机器人收到叫停到真的停下要一两秒 —— 过一会儿再刷两次,不让页面一直写「一直巡逻 · 第 2 圈」
+    for (const ms of [1500, 4000]) setTimeout(onChanged, ms);
+    return res;
   }, t("rdSent", { id, what: t("rdAbort") }));
   const off = !r.online;
   // P1-27:点了也做不成的先灰掉、把原因写在按钮下面(不是点了才报红字)
@@ -403,12 +417,12 @@ function Controls({ r, u, role, say, onChanged }: { r: RobotCard; u?: UnitInfo; 
                 onClick={() => setAsk(m)}>{t(POSTURE_KEY[m])}</button>
             ))}
           </div>
-          {r.task && <p class="muted small">{t("rdPostureBusy", { task: r.task })}</p>}
+          {r.task && <p class="muted small">{t("rdPostureBusy", { id, what: taskWhat(r.task_what) })}</p>}
           {!r.task && r.held && <p class="muted small">{t("rdPostureHeld")}</p>}
         </div>
       )}
       {askHome && (
-        <Confirm text={t("rdAbortHomeAsk", { id, task: r.task ?? "" })} yes={t("rdAbortHome")} danger
+        <Confirm text={t("rdAbortHomeAsk", { id, what: taskWhat(r.task_what) })} yes={t("rdAbortHome")} danger
           onNo={() => setAskHome(false)}
           onYes={() => {
             setAskHome(false);

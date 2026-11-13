@@ -87,6 +87,7 @@ def overview(dispatcher: Any, db: Any, *, now_ms: int, tz: tzinfo) -> list[dict[
                     "postures": list(((getattr(caps, "tasks", None) or {}).get("posture") or {})
                                      .get("modes", [])) if fresh else [],
                     "task": _task(c), "lap": _lap(db, rid, _task(c)),
+                    "task_what": task_what(db, rid, _task(c)),
                     "manual_note": (reg.manual_only(rid) or {}).get("note", ""),
                     **_return_targets(db, rid, caps)})
     return out
@@ -120,6 +121,25 @@ def _task(c: Any) -> str | None:
     """狗状态里正在跑的任务号(没有 / 没状态 = None)。"""
     task = getattr(getattr(c, "status", None), "task", None)
     return getattr(task, "task_id", None)
+
+
+def task_what(db: Any, rid: str, task_id: str | None) -> dict[str, Any] | None:
+    """第 9 轮 W9-06:正在跑的任务给人看的说法 —— ``{"kind": patrol / goto / standby / home…,
+    "route": 路线显示名(临时路线是空), "forever": 一直巡逻}``;查不到 None(网页照旧不写编号)。"""
+    if not task_id:
+        return None
+    rows = db.query("SELECT kind, json_extract(payload, '$.mission.mission') AS m, "
+                    "json_extract(payload, '$.mission.policy.loops') AS loops FROM commands "
+                    "WHERE robot_id=? AND task_id=? LIMIT 1", (rid, task_id))
+    if not rows:
+        return None
+    m = str(rows[0]["m"] or "")
+    route = ""
+    if m and not m.startswith(("temp-", "incident-", "task-", "goto-", "home-", "standby-")):
+        from nexwar_site.names import route_name
+        route = route_name(db, m)
+    return {"kind": str(rows[0]["kind"] or ""), "route": route,
+            "forever": rows[0]["kind"] == "patrol" and rows[0]["loops"] == 0}
 
 
 def lap_counts(db: Any, rid: str, task_id: str | None) -> tuple[int, int] | None:
