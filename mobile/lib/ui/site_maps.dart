@@ -228,8 +228,9 @@ class _SiteMapsPageState extends State<SiteMapsPage> {
                   ListTile(
                     key: SiteMapsPage.mapKey('${m['map_id']}', '${m['version']}'),
                     leading: Icon(Icons.map_rounded, color: c.textSecondary),
+                    // 第 11 轮 A11-01：跟地图管理一个写法（第几版、谁编辑、说明、哪几台在用），不写 edit:demo、几个文件
                     title: Row(children: [
-                      Flexible(child: Text('${m['map_id']}:${m['version']}', style: title)),
+                      Flexible(child: Text('${m['map_id']} · ${versionLabel('${m['version']}')}', style: title)),
                       // 11-11：编辑、去噪出来的是草稿，只在站点上，网页预览、发布到站点后才能下发
                       if (m['draft'] == true) ...[
                         const SizedBox(width: 6),
@@ -238,17 +239,23 @@ class _SiteMapsPageState extends State<SiteMapsPage> {
                             label: tr('Draft', '草稿'),
                             tone: NwTone.warning),
                       ],
+                      if ((m['loaded_on'] as List? ?? const []).isNotEmpty) ...[
+                        const SizedBox(width: 6),
+                        NwStatusPill(
+                            label: tr('In use: ${(m['loaded_on'] as List).join(', ')}',
+                                '${(m['loaded_on'] as List).join('、')} 在用'),
+                            tone: NwTone.info),
+                      ],
                     ]),
                     subtitle: Text(
                         m['draft'] == true
                             ? tr('Draft: preview it in the web map editor and publish it to the site '
                                 'before sending it to robots',
                                 '草稿：在网页地图编辑器里预览、发布到站点后才能下发')
-                            : tr(
-                                'From ${m['source']} · ${(m['files'] as List).length} files'
-                                    '${(m['note'] ?? '') != '' ? ' · ${m['note']}' : ''}',
-                                '来自 ${m['source']} · ${(m['files'] as List).length} 个文件'
-                                    '${(m['note'] ?? '') != '' ? ' · ${m['note']}' : ''}'),
+                            : [
+                                mapSourceText('${m['source'] ?? ''}'),
+                                if ('${m['note'] ?? ''}'.isNotEmpty) versionNoteText('${m['note']}'),
+                              ].where((s) => s.isNotEmpty).join(' · '),
                         style: sub),
                     // 看图（W00c6h）谁都能点；点这一行是下发（管理员）。
                     trailing: Row(mainAxisSize: MainAxisSize.min, children: [

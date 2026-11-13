@@ -33,7 +33,7 @@ export interface RobotCard {
   /** 第 2 轮 N2:当前地图那一版有没有原点(没报地图 = null)、有没有默认待命点。老站点没有。 */
   home_set?: boolean | null; standby_set?: boolean;
   patrols_7d?: number; aborts_7d?: number; last_patrol_ms?: number | null; last_seen_ms?: number | null; ever_seen?: boolean;
-  storage?: { used_ratio: number; backlog_files: number; oldest_backlog_s: number | null } | null;
+  storage?: { used_ratio: number; backlog_files: number | null; oldest_backlog_s: number | null } | null;
   map?: { id: string; version: string | null; match: boolean | null } | null;
   devices?: { id: string; state: string; detail?: string }[];
   enrolled_at?: number | null; manual_note?: string; held?: { by: string; at_ms: number } | null;
@@ -590,7 +590,9 @@ function RobotDetail({ r, u, now, role, say, onChanged, onCode, onClose, readOnl
           {fact("fleetLoc", `${loc ? t(loc) : "—"}${u?.robot.loc?.localizer ? ` · ${u.robot.loc.localizer}` : ""}`)}
           {fact("wifiLabel", r.wifi ? `${r.wifi.ssid || "—"} · ${t(`link_${r.wifi.link}` as Key)}` : "—")}
           {fact("rdLastSeen", r.last_seen_ms ? ago(r.last_seen_ms, now) : "—")}
-          {r.storage && fact("rdStorage", t("rdStorageVal", { p: Math.round(r.storage.used_ratio * 100), n: r.storage.backlog_files }))}
+          {/* 第 11 轮 W11-02:不知道待传几个(站点从盘那一行读出的用量)只写用了多少 */}
+          {r.storage && fact("rdStorage", r.storage.backlog_files == null ? t("rdStorageUsed", { p: Math.round(r.storage.used_ratio * 100) })
+            : t("rdStorageVal", { p: Math.round(r.storage.used_ratio * 100), n: r.storage.backlog_files }))}
         </dl>
         {devices.length > 0 && <p class="note small">{devices.map((p) => problemText(p, r)).join(" · ")}</p>}
       </section>

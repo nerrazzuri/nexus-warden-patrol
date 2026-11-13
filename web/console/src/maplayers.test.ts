@@ -1,7 +1,7 @@
 // W44 地图页的图层规则(设计 §4.3):多久没巡过、今晚的事、本班从几点算、下一个巡检点几分钟到、防区标签。
 import { beforeEach, describe, expect, it } from "vitest";
 import { lang } from "./i18n";
-import { DEFAULT_LAYERS, ENGINEERING_LAYERS, etaNext, layersFor, type Layer, MAP_TODO_MAX, eventLabelY, fanOut, labelAbove, labelRows, mapPins, mapTodo, olderOpen, shiftStart, staleAfter, staleCells, STALE_AFTER_MS, tonightEvents, zoneDecor } from "./maplayers";
+import { botLayout, DEFAULT_LAYERS, ENGINEERING_LAYERS, etaNext, textHalfW, layersFor, type Layer, MAP_TODO_MAX, eventLabelY, fanOut, labelAbove, labelRows, mapPins, mapTodo, olderOpen, shiftStart, staleAfter, staleCells, STALE_AFTER_MS, tonightEvents, zoneDecor } from "./maplayers";
 import type { Alert } from "./model";
 
 beforeEach(() => {
@@ -185,10 +185,26 @@ describe("W6-15「Tonight」勾选项写清是什么", () => {
 
 describe("第 10 轮 W10-06:地图上报警标签不压机器人名字", () => {
   it("附近没有机器人:标在点上方 14 像素;旁边有机器人:挪到机器人和它名字的上面", () => {
-    expect(eventLabelY(100, 100, [], 7, 12)).toBe(86);
-    expect(eventLabelY(100, 100, [[300, 100]], 7, 12)).toBe(86);
-    const y = eventLabelY(100, 100, [[104, 102]], 7, 12);
-    // 机器人点 + 上下各两行名字都在标签下面
-    expect(y).toBeLessThanOrEqual(102 - 7 - 2 * 12 - 4);
+    expect(eventLabelY(100, 100, [], 12)).toBe(86);
+    const far = botLayout([[300, 100]], ["A"], 7, 12, false);
+    expect(eventLabelY(100, 100, far.map((b) => b.box), 12)).toBe(86);
+    const [b] = botLayout([[104, 102]], ["A"], 7, 12, false);
+    const y = eventLabelY(100, 100, [b.box], 12);
+    expect(y).toBeLessThanOrEqual(b.box[1] - 2);
+  });
+
+  it("第 11 轮:两台停在同一处(摊开画、名字挪到点上面):报警标签压不到任何一台的名字", () => {
+    const bots = botLayout([[200, 200], [200, 200]], ["A", "B"], 7, 12, false);
+    const ly = eventLabelY(200, 200, bots.map((b) => b.box), 12, textHalfW("16:28 排程在等机器人", 11));
+    for (const b of bots) {
+      const nameTop = b.y + b.dy + 7 + 12 + 2 - 12;
+      expect(ly, "标签底边在名字上面").toBeLessThan(nameTop);
+      expect(ly).toBeLessThanOrEqual(b.box[1]);
+    }
+  });
+
+  it("第 11 轮:标签多宽按字算(汉字一个字一个字高)", () => {
+    expect(textHalfW("排程在等", 11)).toBeGreaterThan(20);
+    expect(textHalfW("16:28 排程在等机器人", 11)).toBeGreaterThan(textHalfW("16:28", 11) + 30);
   });
 });

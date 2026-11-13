@@ -1,6 +1,7 @@
 // 站点模式的地图（W00c5d 第二部分）：管理员下发图、拿录包重建、录包开始停止；别的角色只看。
 import 'package:nexwar_patrol/ui/site_mapping.dart';
 import 'package:nexwar_patrol/ui/site_maps.dart';
+import 'package:nexwar_patrol/ui/map_manage.dart' show mapSourceText;
 import 'package:nexwar_patrol/ui/site_page.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -122,6 +123,39 @@ void main() {
     await t.tap(find.byKey(const Key('build-go')));
     await t.pumpAndSettle();
     expect(api.calls, contains('build A yard-0925 estate-1:9'));
+  });
+
+  test('第 11 轮 A11-01：地图从哪来写人话，不写 edit:demo、cli:liang', () {
+    expect(mapSourceText('edit:demo'), 'demo 编辑');
+    expect(mapSourceText('cli:liang'), 'liang 导入');
+    expect(mapSourceText('import'), '导入');
+    expect(mapSourceText('draft:demo'), 'demo 编辑（草稿）');
+    expect(mapSourceText('A'), 'A 建图');
+    expect(mapSourceText(''), '');
+  });
+
+  testWidgets('第 11 轮 A11-01：经理看的地图目录跟地图管理一个写法：第几版、谁编辑、哪几台在用，不写几个文件', (t) async {
+    final api = FakeApi('manager')
+      ..catalog = <String, dynamic>{
+        'maps': <dynamic>[
+          <String, dynamic>{'map_id': 'estate-1', 'version': '11', 'source': 'edit:demo',
+            'note': '从 10 编辑:擦了 0.2 平方米', 'files': <dynamic>[1, 2, 3, 4, 5, 6, 7, 8],
+            'loaded_on': <dynamic>['A', 'B'], 'draft': false},
+          <String, dynamic>{'map_id': 'estate-1', 'version': '10', 'source': 'cli:liang', 'note': '',
+            'files': <dynamic>[1], 'loaded_on': <dynamic>[], 'draft': false},
+        ],
+        'bags': <dynamic>[],
+      };
+    await t.pumpWidget(MaterialApp(home: SiteMapsPage(api: api)));
+    await t.pumpAndSettle();
+    expect(find.textContaining('第 11 版'), findsOneWidget);
+    expect(find.textContaining('demo 编辑 · 从第 10 版编辑：擦了 0.2 平方米'), findsOneWidget);
+    expect(find.text('A、B 在用'), findsOneWidget);
+    expect(find.textContaining('liang 导入'), findsOneWidget);
+    expect(find.textContaining('个文件'), findsNothing);
+    expect(find.textContaining('edit:'), findsNothing);
+    expect(find.textContaining('cli:'), findsNothing);
+    expect(find.textContaining('estate-1:11'), findsNothing);
   });
 
   testWidgets('保安只看：点了不下发', (t) async {

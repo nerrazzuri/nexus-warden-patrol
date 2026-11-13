@@ -12,11 +12,13 @@ import { NAME_RE } from "./routepage";
 import { clientToMap, handleAt, yawToward } from "./routes";
 
 const key = (p: { robot_id: string; name: string }) => `${p.robot_id}/${p.name}`;
-/** 第 9 轮 W9-12:标原点时自动加的那个(名字是 home)写「A 的待命点」;自己起名的写「A · 名字」。 */
+/** 标原点时自动加的待命点:名字是 home;home 已登记在别的图上时站点起名 home-<图名>(第 11 轮 W11-04)。 */
+const autoHome = (name: string): boolean => name === "home" || /^home-[A-Za-z0-9._-]+$/.test(name);
+/** 第 9 轮 W9-12:标原点时自动加的那个写「A 的待命点」;自己起名的写「A · 名字」。 */
 export const spName = (p: { robot_id: string; name: string }): string =>
-  p.name === "home" ? t("lyStandbyAuto", { id: p.robot_id }) : `${p.robot_id} · ${p.name}`;
+  autoHome(p.name) ? t("lyStandbyAuto", { id: p.robot_id }) : `${p.robot_id} · ${p.name}`;
 /** 地图上的小标签:自动加的写机器人编号(原来截成「ho」),自己起名的写名字前两个字。 */
-const spMark = (p: { robot_id: string; name: string }): string => (p.name === "home" ? p.robot_id : p.name).slice(0, 2);
+const spMark = (p: { robot_id: string; name: string }): string => (autoHome(p.name) ? p.robot_id : p.name).slice(0, 2);
 /** 第 10 轮 W10-06:离得这么近(米)的几个待命点算同一处 —— 图标叠在一起只看得到最上面那个。 */
 const SAME_SPOT_M = 0.3;
 
@@ -29,7 +31,7 @@ export function sameSpots(pts: { robot_id: string; name: string; x: number; y: n
     const group = pts.map((q, j) => [q, j] as const).filter(([q, j]) => !used.has(j) && Math.hypot(q.x - p.x, q.y - p.y) < SAME_SPOT_M);
     if (group.length < 2) return;
     group.forEach(([, j]) => used.add(j));
-    out.push({ x: p.x, y: p.y, labels: [...new Set(group.map(([q]) => (q.name === "home" ? q.robot_id : `${q.robot_id} ${q.name}`)))] });
+    out.push({ x: p.x, y: p.y, labels: [...new Set(group.map(([q]) => (autoHome(q.name) ? q.robot_id : `${q.robot_id} ${q.name}`)))] });
   });
   return out;
 }

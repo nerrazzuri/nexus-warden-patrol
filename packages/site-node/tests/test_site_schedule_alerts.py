@@ -629,6 +629,9 @@ def test_W902_在等_报P2不报P1_补跑起来了自己关(告警):
     assert audience("schedule_waiting") == "help"
     src.on_schedule_outcome("nightly", "B", "late_started", "B 补跑了这一轮")
     assert not desk.book.open(), "补跑起来了:那条提醒关掉(记在站点名下也关)"
+    # 第 11 轮 W11-05:关闭说明按实际写一种(以前「补跑了 / 已改报错过」看不出补跑了没有)
+    [a] = desk.book.all()
+    assert a.context.get("note") == "B 补跑了", a.context
 
 
 def test_W902_放弃了_报P1错过_在等那条一起关(告警):
@@ -637,6 +640,8 @@ def test_W902_放弃了_报P1错过_在等那条一起关(告警):
     src.on_schedule_outcome("nightly", None, "late_gave_up", "下一轮到了")
     [a] = desk.book.open()
     assert (a.kind, a.level.value) == ("schedule_missed", "P1")
+    [w] = [x for x in desk.book.all() if x.kind == "schedule_waiting"]
+    assert w.context.get("note") == "等不到机器人，改报错过", w.context
     assert "一直没" in a.title or "等到" in a.title
 
 

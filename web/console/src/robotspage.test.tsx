@@ -92,6 +92,17 @@ describe("机器人页", () => {
     expect(c.textContent).not.toContain("disk");
   });
 
+  it("第 11 轮 W11-02:不知道待传几个(站点从盘那一行读出的用量)只写「已用 88%」,不写 null", async () => {
+    robots = [card({ storage: { used_ratio: 0.88, backlog_files: null, oldest_backlog_s: null } })];
+    const { container: c } = page();
+    await waitFor(() => expect(cardOf(c, "A")).not.toBeNull());
+    fireEvent.click(cardOf(c, "A"));
+    const d = c.querySelector(".robot-detail")!.textContent!;
+    expect(d).toContain("已用 88%");
+    expect(d).not.toContain("null");
+    expect(d).not.toContain("待传");
+  });
+
   it("改名字", async () => {
     const { container: c } = page();
     await waitFor(() => expect(cardOf(c, "A")).not.toBeNull());

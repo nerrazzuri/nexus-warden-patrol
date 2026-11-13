@@ -223,6 +223,8 @@ class _SiteRoutesPageState extends State<SiteRoutesPage> {
       _allIds = {
         for (final r in (lib['routes'] as List? ?? const []).whereType<Map>()) '${r['id']}',
         for (final r in _routes) '${r['id']}',
+        // 第 11 轮 W11-01：删掉过的编号（旧记录还指着，站点不让再用）
+        for (final r in (lib['retired_routes'] as List? ?? const [])) '$r',
       };
     } on SiteError {
       _allIds = {for (final r in _routes) '${r['id']}'};

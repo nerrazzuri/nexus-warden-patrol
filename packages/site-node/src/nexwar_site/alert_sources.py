@@ -145,6 +145,11 @@ LOC_IDLE_P2_S = 120
 LOC_IDLE_BOOT_S = 300
 
 
+def _teleop(task_id: object) -> bool:
+    from nexwar_site.dispatcher import TELEOP_TASK_PREFIX
+    return str(task_id or "").startswith(TELEOP_TASK_PREFIX)
+
+
 @dataclass
 class _Mem:
     """一台狗的「上次是什么」。"""
@@ -390,6 +395,8 @@ class SiteAlertSources:
         self._loc_idle(rid, m, idle_bad=not running and not s.ready.loc_ok, ok=s.ready.loc_ok)
         if running and s.task.task_id != m.started:
             m.started = s.task.task_id
+            if _teleop(s.task.task_id):                  # 第 11 轮 W10-04:遥控不是巡逻,不报开跑
+                return
             self.desk.raise_alert(kind="run_start", robot=rid,
                                   title=f"开跑:{s.task.kind} {s.task.task_id}")
 
@@ -566,7 +573,8 @@ class SiteAlertSources:
         d = e.data if isinstance(e.data, dict) else {}
         tid = d.get("task_id", "")
         if e.kind == "task_done":
-            self.desk.raise_alert(kind="run_done", robot=rid, title=f"已完成:{tid}")
+            if not _teleop(tid):                         # 第 11 轮 W10-04:遥控结束不报「已完成」
+                self.desk.raise_alert(kind="run_done", robot=rid, title=f"已完成:{tid}")
         elif e.kind == "payload_button":
             self._payload_button(rid, str(d.get("button", "")))
         elif e.kind == "task_failed":
@@ -979,7 +987,10 @@ class SiteAlertSources:
         同一只狗(或站点)同一个 kind 的告警会合成一条(告警簿的规矩):标题把合进来的**每一条排程**
         都列上(内审:以前标题只剩最后那条,前面没跑的那条从告警里消失);详情是最近那条的原因。"""
         if outcome in ("late_started", "late_gave_up"):
-            self._stop_waiting(entry_id)
+            # 第 11 轮 W11-05:按实际写一种(以前「补跑了 / 已改报错过」)
+            self._stop_waiting(entry_id, f"{robot_id} 补跑了" if outcome == "late_started"
+                               and robot_id else "补跑了" if outcome == "late_started"
+                               else "等不到机器人，改报错过")
         hit = _SCHEDULE_ALERTS.get(outcome)
         if hit is None:
             return
@@ -1007,7 +1018,7 @@ class SiteAlertSources:
         return "、".join(f"「{self._sched_name(i)}」" for i in ids[:5]) + (
             f" 等 {len(ids)} 条" if len(ids) > 5 else "")
 
-    def _stop_waiting(self, entry_id: str) -> None:
+    def _stop_waiting(self, entry_id: str, note: str) -> None:
         """第 9 轮 W9-02:这条排程补跑起来了(或放弃了),「在等机器人」那条里去掉它;没别的了就关掉。"""
         for a in self.desk.book.open():
             if a.kind != "schedule_waiting":
@@ -1027,7 +1038,7 @@ class SiteAlertSources:
                     f"{_SCHEDULE_ALERTS['late_waiting'][1]}"))
             else:
                 self._sched_entries.pop(a.key, None)
-                self.desk.resolve(a.key, who="site:schedule", note="补跑了 / 已改报错过")
+                self.desk.resolve(a.key, who="site:schedule", note=note)
 
     def on_incident(self, row: dict) -> None:
         """一条入侵有了去向(W16):派出去了、并进已出动的,说「有入侵、谁去了」(记在那只狗名下);没狗、

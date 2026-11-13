@@ -57,6 +57,18 @@ export interface RouteView {
   timezone: string | null;
   routes: Route[];
   schedules: RouteSchedule[];
+  /** 第 11 轮 W11-01:删掉过的编号(旧记录还指着,站点不让再用) */
+  retired_routes?: string[];
+  retired_schedules?: string[];
+}
+
+/** 第 11 轮 W11-01:新建时自动给的编号 ``<base>-N``:跳过 ``taken`` 和站点说删掉过的。 */
+export function freeId(base: string, taken: Iterable<string>, view?: RouteView | null,
+  kind: "route" | "schedule" = "route"): string {
+  const used = new Set([...taken, ...((kind === "route" ? view?.retired_routes : view?.retired_schedules) ?? [])]);
+  let n = 1;
+  while (used.has(`${base}-${n}`)) n++;
+  return `${base}-${n}`;
 }
 
 /** 站点逐点校验没过时回的(400 的 errors)。index 为 null = 整条的问题。 */

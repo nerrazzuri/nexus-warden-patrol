@@ -283,6 +283,10 @@ class NwPatrolCard extends StatelessWidget {
 
   /// 这一趟没跑完（中止、失败）：不打绿勾（手机 App 测试 M08）。
   final bool failed;
+
+  /// 第 11 轮 A10-01：还在跑、被接替（让给了别的任务）：也不打绿勾，换中性的图标。
+  final bool inProgress;
+  final bool handedOver;
   final NwTone tone;
 
   /// [status] 里异常的那一段（「Abnormal 1」）。给了、又在 [status] 里：只有这一段上色加粗，其余照常
@@ -308,12 +312,20 @@ class NwPatrolCard extends StatelessWidget {
       this.thumbs = const <Widget>[],
       this.more = 0,
       this.failed = false,
+      this.inProgress = false,
+      this.handedOver = false,
       this.onTap});
 
   @override
   Widget build(BuildContext context) {
     final c = Nw.of(context);
-    final mark = anomaly ? c.fg(tone) : (failed ? c.warning : c.success);
+    final mark = anomaly
+        ? c.fg(tone)
+        : failed
+            ? c.warning
+            : (inProgress || handedOver)
+                ? c.textSecondary
+                : c.success;
     Widget box(Widget child) => ClipRRect(
         borderRadius: BorderRadius.circular(Nw.r8),
         child: Container(width: 80, height: 60, color: c.surfaceVariant, alignment: Alignment.center, child: child));
@@ -327,7 +339,13 @@ class NwPatrolCard extends StatelessWidget {
                 Icon(
                     anomaly
                         ? Icons.warning_amber_rounded
-                        : (failed ? Icons.cancel_outlined : Icons.check_circle_outline_rounded),
+                        : failed
+                            ? Icons.cancel_outlined
+                            : inProgress
+                                ? Icons.timelapse_rounded
+                                : handedOver
+                                    ? Icons.swap_horiz_rounded
+                                    : Icons.check_circle_outline_rounded,
                     size: 16,
                     color: mark),
                 const SizedBox(width: Nw.s4),

@@ -141,23 +141,23 @@ class _SiteRunsPageState extends State<SiteRunsPage> {
   late Future<List<Map<String, dynamic>>> _rows = _load();
 
   /// 第 10 轮 A10-01：列表里有正在跑的，隔 15 秒自己再取一次（不用人下拉刷新才看到跑完）。
+  /// 第 11 轮 A10-01：没有在跑的也隔 30 秒取一次（打开以后才开跑的那一趟自己出来）。
   Timer? _tick;
   static const _refreshEvery = Duration(seconds: 15);
+  static const _refreshIdle = Duration(seconds: 30);
 
   Future<List<Map<String, dynamic>>> _load() {
     final f = widget.api.runs(robotId: widget.robotId);
     f.then((rows) {
       if (!mounted) return;
       _tick?.cancel();
-      if (rows.any((r) => r['running'] == true)) {
-        _tick = Timer(_refreshEvery, () {
-          if (mounted) {
-            setState(() {
-              _rows = _load();
-            });
-          }
-        });
-      }
+      _tick = Timer(rows.any((r) => r['running'] == true) ? _refreshEvery : _refreshIdle, () {
+        if (mounted) {
+          setState(() {
+            _rows = _load();
+          });
+        }
+      });
     }, onError: (Object _) {});
     return f;
   }
@@ -238,6 +238,8 @@ class _SiteRunsPageState extends State<SiteRunsPage> {
                                 tr('${r['reviewed']} checked by a person', '人工复核 ${r['reviewed']} 张'),
                             ].join(' · '),
                             failed: runFailed(r),
+                            inProgress: r['running'] == true,
+                            handedOver: r['ended'] == 'preempted',
                             anomaly: _abnormal(r),
                             tone: _abnormal(r) ? NwTone.error : NwTone.neutral,
                             // 只把「异常 N」那一段标红，「正常 1 · 已复核 1」照常

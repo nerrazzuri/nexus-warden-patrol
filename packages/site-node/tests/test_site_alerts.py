@@ -134,6 +134,14 @@ def test_急停_由清变按下才报一次_掉线的遗言不算(台):
     assert _kinds(desk).count("estop_pressed") == 1, "遗言里 ready 全是假,不是急停"
 
 
+def test_第11轮_W10_04_遥控不记巡逻开始_巡逻完成(台):
+    """遥控那一趟(teleop-…)不是巡逻:不发「开跑」「已完成」通知(活动日志里以前记成巡逻开始、完成)。"""
+    c, db, desk, src, *_ = 台
+    src.on_status("A", _status(task=_running("teleop-2", kind="teleop")))
+    src.on_event("A", _ev("task_done", task_id="teleop-2"))
+    assert _kinds(desk) == []
+
+
 def test_开跑只报一次_跑完_失败分电量与其他_人点的中止不报(台):
     c, db, desk, src, *_ = 台
     src.on_status("A", _status(task=_running("t1")))
