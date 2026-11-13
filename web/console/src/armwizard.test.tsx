@@ -95,6 +95,16 @@ describe("布防向导的小函数", () => {
 });
 
 describe("UIUX-036:布防后逐条说", () => {
+  it("外审 Minor:英文界面的未出发原因翻成英文", () => {
+    lang.value = "en";
+    try {
+      const e1 = [{ id: 1, route: "guard-1", robot: "", gap_min: 0, shuffle: false }];
+      const [lines] = afterLines(e1, { duty: null, runs: [], waiting: { 1: "A 不在线" }, zones: [], now_ms: 1 }, () => "R");
+      expect(lines[0]).toMatch(/^“R” has not started: /);
+      expect(lines[0]).not.toMatch(/[\u4e00-\u9fff]/);
+    } finally { lang.value = "zh"; }
+  });
+
   it("哪台在跑哪条第几圈、哪条在等为什么;每条都有结果才算说完", () => {
     const entries = [{ id: 1, route: "guard-1", robot: "", gap_min: 0, shuffle: false }, { id: 2, route: "old", robot: "B", gap_min: 0, shuffle: false }];
     const title = (id: string) => (id === "guard-1" ? "防区巡逻 1" : id);
@@ -102,6 +112,20 @@ describe("UIUX-036:布防后逐条说", () => {
       waiting: { 2: "B 设成只许手动派" }, zones: [], now_ms: 1 };
     expect(afterLines(entries, st, title)).toEqual([["A 正在跑「防区巡逻 1」，第 1 圈。", "「old」还没出发：B 设成只许手动派"], true]);
     expect(afterLines(entries, { ...st, waiting: {} }, title)).toEqual([["A 正在跑「防区巡逻 1」，第 1 圈。"], false]);
+  });
+
+  it("外审:只有 lap 才说「正在跑」;值守、等下一圈、暂停各说各的,有原因带上", () => {
+    const e1 = [{ id: 1, route: "guard-1", robot: "", gap_min: 0, shuffle: false }];
+    const run = (state: string) => ({ duty: null, runs: [{ entry: 1, robot_id: "A", state, lap: 2, task_id: "t1", next_lap_ms: 0, watch_zone: "1" }],
+      waiting: {}, zones: [], now_ms: 1 });
+    const title = () => "R";
+    expect(afterLines(e1, run("watch"), title)[0]).toEqual(["A 跑完第 2 圈，在「R」的值守点守着。"]);
+    expect(afterLines(e1, run("post"), title)[0]).toEqual(["A 跑完第 2 圈，在「R」的值守点守着。"]);
+    expect(afterLines(e1, run("wait"), title)[0]).toEqual(["A 在等「R」的下一圈。"]);
+    expect(afterLines(e1, { ...run("resume"), waiting: { 1: "A 电量低，先去补能" } }, title)[0])
+      .toEqual(["A 在等「R」的下一圈：A 电量低，先去补能"]);
+    expect(afterLines(e1, run("paused"), title)[0]).toEqual(["A 在「R」上暂停了。"]);
+    expect(afterLines(e1, run("held"), title)[0]).toEqual(["A 在「R」上暂停了。"]);
   });
 });
 

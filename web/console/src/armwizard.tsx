@@ -5,6 +5,7 @@ import { useEffect, useState } from "preact/hooks";
 import { api, ApiError } from "./api";
 import { robotNames } from "./data";
 import { Confirm, Modal } from "./dialogs";
+import { siteStr } from "./sitetext";
 import { lang, type Lang } from "./i18n";
 import { LayoutPage } from "./layoutpage";
 import { GuardRoutesTab } from "./layoutroutes";
@@ -69,7 +70,11 @@ const en = {
   armed: "Armed.",
   started: "{robot} has set off on the zone route.",
   runLine: "{robot} is running “{route}”, lap {lap}.",
-  restLine: "{robot} finished a lap of “{route}” and is waiting for the next one.",
+  restLine: "{robot} is waiting for the next lap of “{route}”.",
+  restWhyLine: "{robot} is waiting for the next lap of “{route}”: {why}",
+  watchLine: "{robot} finished lap {lap} and is standing at the watch post of “{route}”.",
+  pauseLine: "{robot} has paused on “{route}”.",
+  pauseWhyLine: "{robot} has paused on “{route}”: {why}",
   waitLine: "“{route}” has not started: {why}",
   sumPlan: "Guard plan",
   waiting: "Not started yet: {why}",
@@ -137,7 +142,11 @@ const zh: Record<WKey, string> = {
   armed: "已布防。",
   started: "{robot} 已出发巡逻防区。",
   runLine: "{robot} 正在跑「{route}」，第 {lap} 圈。",
-  restLine: "{robot} 跑完一圈「{route}」，在等下一圈。",
+  restLine: "{robot} 在等「{route}」的下一圈。",
+  restWhyLine: "{robot} 在等「{route}」的下一圈：{why}",
+  watchLine: "{robot} 跑完第 {lap} 圈，在「{route}」的值守点守着。",
+  pauseLine: "{robot} 在「{route}」上暂停了。",
+  pauseWhyLine: "{robot} 在「{route}」上暂停了：{why}",
   waitLine: "「{route}」还没出发：{why}",
   sumPlan: "值守方案",
   waiting: "还没出发：{why}",
@@ -216,10 +225,16 @@ export function afterLines(entries: GuardEntry[], st: Status, title: (route: str
   let all = entries.length > 0;
   for (const e of entries) {
     const run = e.id == null ? undefined : st.runs.find((x) => x.entry === e.id);
-    const why = e.id == null ? "" : st.waiting[String(e.id)];
-    if (run && run.task_id) out.push(wt("runLine", { robot: who(run.robot_id), route: title(e.route), lap: Math.max(1, run.lap) }));
-    else if (run) out.push(wt("restLine", { robot: who(run.robot_id), route: title(e.route) }));
-    else if (why) out.push(wt("waitLine", { route: title(e.route), why }));
+    const raw = e.id == null ? "" : st.waiting[String(e.id)];
+    const why = raw ? siteStr(raw) : "";
+    const v = { robot: run ? who(run.robot_id) : "", route: title(e.route), lap: run ? Math.max(1, run.lap) : 1, why };
+    // 外审:按站点的运行状态说(guard_duty.py):lap 在跑;watch / post 跑完一圈在值守点;
+    // wait / resume 等下一圈(可能在补能);held / paused / stopping / standdown 停下了
+    if (run?.state === "lap") out.push(wt("runLine", v));
+    else if (run && (run.state === "watch" || run.state === "post")) out.push(wt("watchLine", v));
+    else if (run && (run.state === "wait" || run.state === "resume")) out.push(wt(why ? "restWhyLine" : "restLine", v));
+    else if (run) out.push(wt(why ? "pauseWhyLine" : "pauseLine", v));
+    else if (why) out.push(wt("waitLine", v));
     else all = false;
   }
   return [out, all];
