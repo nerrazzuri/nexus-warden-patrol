@@ -161,7 +161,9 @@ class PushSession {
 
   /// 界面上看：没开（不支持、没配）/ 还没登记上（带原因）/ 登记上了。
   final ValueNotifier<PushState> state = ValueNotifier(PushState.off);
-  String reason = '';
+  /// 第 9 轮 W9-08：存英文、中文两份，读的时候按当时的界面语言给（换了语言不用重新登录，原来停在登记那一刻的语言）。
+  (String, String)? _reason;
+  String get reason => _reason == null ? '' : tr(_reason!.$1, _reason!.$2);
 
   bool _stopped = false;
   final List<String> _registered = <String>[];
@@ -176,14 +178,14 @@ class PushSession {
   void start() {
     if (_all.isEmpty || _run != null) return;
     state.value = PushState.waiting;
-    reason = tr('Registering for push notifications', '正在登记推送');
+    _reason = ('Registering for push notifications', '正在登记推送');
     _run = _loop();
   }
 
   Future<void> _loop() async {
     final pending = _all;
     for (var attempt = 0; !_stopped && pending.isNotEmpty; attempt++) {
-      var why = '';
+      (String, String)? why;
       for (final r in List<PushRegistrar>.of(pending)) {
         String? id;
         try {
@@ -191,10 +193,7 @@ class PushSession {
         } catch (_) {}
         if (_stopped) return;
         if (id == null) {
-          if (why.isEmpty) {
-            why = tr('Push not registered yet. Retrying later',
-                '推送尚未注册，稍后自动重试');
-          }
+          why ??= ('Push not registered yet. Retrying later', '推送尚未注册，稍后自动重试');
           continue;
         }
         try {
@@ -205,21 +204,21 @@ class PushSession {
         } catch (e) {
           // 手机 App 测试 M11：站点根本没开推送（404）就直说、不再重试；以前显示「未就绪（推送注册失败：…）」
           if (e is SiteError && e.status == 404) {
-            reason = tr("This site has no push notifications set up. Alarms reach this phone only through background watch.",
+            _reason = ("This site has no push notifications set up. Alarms reach this phone only through background watch.",
                 '这个站点没有配置推送。报警只能靠「后台值守」送到这台手机。');
             state.value = PushState.waiting;
             return;
           }
-          why = tr('Push registration failed: $e. Retrying later', '推送注册失败：$e，稍后自动重试');
+          why = ('Push registration failed: $e. Retrying later', '推送注册失败：$e，稍后自动重试');
         }
         if (_stopped) return;
       }
       if (_registered.isNotEmpty) {
-        reason = '';
+        _reason = null;
         state.value = PushState.ready;
         if (attempt >= extraTries) return;                 // 剩下的通道这台手机上没有：不试了
       } else {
-        reason = why;
+        _reason = why;
         state.value = PushState.waiting;
       }
       if (pending.isEmpty) return;
