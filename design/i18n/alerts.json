@@ -292,6 +292,10 @@
     "en": "Scheduled patrol skipped",
     "zh": "排程已跳过"
   },
+  "schedule_waiting": {
+    "en": "Scheduled patrol waiting for a robot",
+    "zh": "排程在等机器人"
+  },
   "schedule_blocked": {
     "en": "Scheduled patrol blocked",
     "zh": "排程被拦截"

@@ -34,6 +34,12 @@ _DAYS = ("mon", "tue", "wed", "thu", "fri", "sat", "sun")
 _ZH_DAYS = ("周一", "周二", "周三", "周四", "周五", "周六", "周日")
 
 
+
+def _sname(db: Any, eid: str) -> str:
+    from nexwar_site.names import schedule_name
+    n = schedule_name(db, eid)
+    return "" if n == eid else n
+
 @dataclass(frozen=True)
 class Patrol:
     id: str
@@ -46,6 +52,12 @@ class Patrol:
     until_min: int
     duration_s: float             # 预计用时(measured 时就是 90 分位)
     measured: bool = False
+    #: 第 9 轮 W9-01:给人看的排程名(起了显示名就是它,没起是编号)。
+    title: str = ""
+
+    @property
+    def name(self) -> str:
+        return self.title or self.id
 
 
 def _hm(m: int) -> str:
@@ -117,15 +129,15 @@ def _judge(p: Patrol, iv: tuple[int, int], hit: list[tuple[dict[str, Any], tuple
         if own:
             g, w = own[0]
             lab = g.get("note") or _guard_label(w)
-            return (f"{p.robot} 在{_when(*iv)}有巡逻(排程 {p.id}),跟{lab}"
-                    f"(防区路线 {g['route']})撞了")
+            return (f"{p.robot} 在{_when(*iv)}有巡逻(排程「{p.name}」),跟{lab}"
+                    f"(防区路线「{g.get('route_name') or g['route']}」)撞了")
         spare = allr - fixed - {p.robot}
         if n_any and len(spare) < n_any:
-            return (f"{p.robot} 在{_when(*iv)}有巡逻(排程 {p.id}),{label}要「任意一台」"
+            return (f"{p.robot} 在{_when(*iv)}有巡逻(排程「{p.name}」),{label}要「任意一台」"
                     f"机器人值守,剩下的不够(还差 {n_any - len(spare)} 台)")
         return ""
     if len(allr - fixed) - n_any < 1:
-        return f"排程 {p.id} 写的任意一台,{_when(*iv)}所有机器人都在布防值守({label})"
+        return f"排程「{p.name}」写的任意一台,{_when(*iv)}所有机器人都在布防值守({label})"
     return ""
 
 
@@ -200,7 +212,8 @@ class ClashCheck:
                               window_min=int(w.get("window_min", 0)),
                               every_min=int(w.get("every_min", 0) or 0),
                               until_min=_min(w["until"]) if w.get("until") else at,
-                              duration_s=self._duration(route)))
+                              duration_s=self._duration(route),
+                              title=str(w.get("title") or "") or _sname(self.db, eid)))
         return out
 
     def guards(self, *, plan: dict[str, Any] | None = None,
@@ -208,6 +221,7 @@ class ClashCheck:
         from datetime import date, timedelta
 
         from nexwar_site.guard_forecast import weekly_windows
+        from nexwar_site.names import route_name
         plan = plan if plan is not None else self.guard.plan()
         view = arming if arming is not None else self.schedule.view()
         if not view.get("enabled"):
@@ -233,10 +247,12 @@ class ClashCheck:
             if info is None:
                 continue
             wins = weekly_windows(view.get("slots") or [], info["zones"], enabled=True)
-            out.append({"id": e.get("id", e["route"]), "route": e["route"],
+            rname = route_name(self.db, e["route"])
+            out.append({"id": e.get("id", e["route"]), "route": e["route"], "route_name": rname,
                         "robot": e.get("robot", ""), "windows": wins})
             for wd, iso in armed_days:
                 out.append({"id": e.get("id", e["route"]), "route": e["route"],
+                            "route_name": rname,
                             "robot": e.get("robot", ""), "windows": [(wd * 1440, wd * 1440 + 1440)],
                             "note": f"{iso} 全天布防(例外)"})
         return out

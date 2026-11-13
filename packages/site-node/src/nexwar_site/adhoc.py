@@ -315,7 +315,7 @@ class AdhocDesk:
             end = max(t0 + est * 1000, self._now() + 60_000)
             if end > start_ms:
                 # 第 8 轮 W8-10:写日程名,路线名放括号里(多条日程跑同一条路线时分得清)
-                found.append((end, f"正在执行的日程 {entry.id}(路线 {entry.mission})" if entry
+                found.append((end, f"正在执行的日程{self._names(entry)}" if entry
                               else f"正在执行的日程「{running}」"))
         tz = act.schedule.tz()
         a = datetime.fromtimestamp(start_ms / 1000, tz=tz)
@@ -332,8 +332,13 @@ class AdhocDesk:
                     continue
                 end = occ_ms + self._entry_est_s(act, robot, e) * 1000
                 if end > start_ms:
-                    found.append((end, f"{occ:%H:%M} 的日程 {e.id}(路线 {e.mission})"))
+                    found.append((end, f"{occ:%H:%M} 的日程{self._names(e)}"))
         return max(found) if found else None
+
+    def _names(self, e: Any) -> str:
+        """「排程名」(路线「路线名」):第 9 轮 W9-01 写显示名,没起名写编号。"""
+        from nexwar_site.names import route_name, schedule_name
+        return f"「{schedule_name(self.db, e.id)}」(路线「{route_name(self.db, e.mission)}」)"
 
     def slot(self, robot: str, start_ms: int, dur_s: int) -> tuple[int, str]:
         """最早能起跑的时刻(不撞日程)和推后的原因(没推是空串)。"""
