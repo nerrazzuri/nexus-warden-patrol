@@ -26,6 +26,7 @@ import 'nw/nw_widgets.dart';
 import 'map_manage.dart';
 import 'map_view.dart';
 import 'map_wizard.dart' show openMapWizard;
+import 'patrol_dispatch.dart' show lapText;
 import 'run_viz.dart';
 import 'site_mapping.dart';
 import 'site_pose_pick.dart';
@@ -1012,9 +1013,12 @@ class _SiteMapTabState extends State<SiteMapTab> {
         return tag == null ? tr('Reports no map', '未上报当前地图') : tr('On map $tag', '位于地图 $tag');
       }
       final p = _pose(r);
-      return p == null
+      final at = p == null
           ? tr('Position not set: not drawn on the map', '未设置位置：不在地图上显示')
           : tr('At (${fixed1(p.dx)}, ${fixed1(p.dy)}) m', '在 (${fixed1(p.dx)}, ${fixed1(p.dy)}) m');
+      // 第 9 轮 W8-04：几圈的巡逻写第几圈（以前只写坐标）
+      final lap = r['lap'] is Map ? lapText(r['lap']) : '';
+      return lap.isEmpty ? at : '$lap · $at';
     }
 
     return Material(

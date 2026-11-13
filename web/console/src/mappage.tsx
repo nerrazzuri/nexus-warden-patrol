@@ -236,9 +236,10 @@ export function SiteMap(props: {
                       <line x1={x} y1={y} x2={x + ((ex - x) / n) * len} y2={y + ((ey - y) / n) * len} class="bot-head" />
                       <circle cx={x} cy={y} r={BOT_R} class="bot-dot" />
                       <text x={x} y={y + dy + BOT_R + LABEL_PX + 2} class="bot-label" font-size={LABEL_PX}>{nameOf(u.robot.robot_id)}</text>
-                      {props.eta && etaOf(u) != null && (
-                        <text x={x} y={y + dy + BOT_R + LABEL_PX * 2 + 4} class="bot-label eta" font-size={LABEL_PX - 1}>
-                          {t("etaNextMin", { n: Math.max(1, Math.round(etaOf(u)! / 60)) })}
+                      {/* 第 9 轮 W8-04:几圈的巡逻写第几圈,后面跟多久到下一个点 */}
+                      {props.eta && (etaOf(u) != null || u.task) && (
+                        <text x={x} y={y + dy + BOT_R + LABEL_PX * 2 + 4} class="bot-label eta" font-size={LABEL_PX - 1} data-bot-eta="1">
+                          {[u.task, etaOf(u) != null ? t("etaNextMin", { n: Math.max(1, Math.round(etaOf(u)! / 60)) }) : ""].filter(Boolean).join(" · ")}
                         </text>
                       )}
                     </g>

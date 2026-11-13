@@ -314,6 +314,15 @@ describe("第 8 轮 W8-09 保安网页派巡逻", () => {
   });
 });
 
+describe("第 9 轮 W8-04 总览机器人列表写第几圈", () => {
+  it("在跑几圈巡逻的那台写「第 2 / 3 圈」", () => {
+    const { container: c } = page([], [unit("A", "patrolling", { task: "第 2 / 3 圈" }), unit("B", "idle")]);
+    const rows = Array.from(c.querySelectorAll(".duty-row"));
+    expect(rows.find((r) => r.textContent?.includes("A"))!.querySelector("[data-row-task]")!.textContent).toBe("第 2 / 3 圈");
+    expect(rows.find((r) => r.textContent?.includes("B"))!.querySelector("[data-row-task]")).toBeNull();
+  });
+});
+
 describe("第 9 轮 W9-04 保安派巡逻:跑不了的路线灰掉", () => {
   it("画在别的地图版本上的路线灰掉,写要管理员按新地图重画", async () => {
     extraRoutes = [{ id: "demo-loop", map_id: "m1", map_version: "11" }];

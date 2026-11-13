@@ -92,7 +92,11 @@ void main() {
   group('地图栏', () {
     testWidgets('机器人报着的那张图当主体：画布、图上的机器人、图例、底下这张图上的机器人；右上进地图列表', (t) async {
       _size(t);
-      final api = _Api('guard')..robotsOverride = _robotsOn('8');
+      // 第 9 轮 W8-04：几圈的巡逻在机器人列表里写第几圈
+      final api = _Api('guard')
+        ..robotsOverride = [
+          for (final r in _robotsOn('8')) <String, dynamic>{...r, 'lap': <String, dynamic>{'n': 2, 'of': 3}}
+        ];
       await _pump(t, SiteMapTab(api: api));
       expect(api.calls, containsAll(['mapPreview estate-1:8', 'mapPreviewPng estate-1:8']));
       expect(find.text('estate-1 · 第 8 版'), findsOneWidget);
@@ -113,6 +117,8 @@ void main() {
           reason: '这张图上没画的不列');
       expect(find.byKey(SiteMapTab.robotKey('A')), findsOneWidget);
       expect(find.descendant(of: find.byKey(SiteMapTab.robotKey('A')), matching: find.text('在线')), findsOneWidget);
+      expect(find.descendant(of: find.byKey(SiteMapTab.robotKey('A')), matching: find.textContaining('第 2 / 3 圈 · 在 (1.0, 2.0) m')),
+          findsOneWidget);
       await t.tap(find.byKey(SiteMapTab.listKey));
       await t.pumpAndSettle();
       expect(find.byType(SiteMapsPage), findsOneWidget);
