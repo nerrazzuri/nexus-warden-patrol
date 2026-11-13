@@ -25,14 +25,14 @@ export function Modal({ label, onClose, wide, children, cls }: { label: string; 
   );
 }
 
-export function Confirm(props: { text: string; yes: string; danger?: boolean; onYes: () => void; onNo: () => void; children?: ComponentChildren }) {
+export function Confirm(props: { text: string; yes: string; danger?: boolean; stop?: boolean; onYes: () => void; onNo: () => void; children?: ComponentChildren }) {
   return (
     <Modal label={props.yes} onClose={props.onNo}>
       <p class="confirm-text">{props.text}</p>
       {props.children}
       <div class="row end">
         <button type="button" class="btn" onClick={props.onNo}>{t("cancel")}</button>
-        <button type="button" class={props.danger ? "btn stop" : "btn primary"} onClick={props.onYes}>{props.yes}</button>
+        <button type="button" class={props.stop ? "btn stop" : props.danger ? "btn danger" : "btn primary"} onClick={props.onYes}>{props.yes}</button>
       </div>
     </Modal>
   );

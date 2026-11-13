@@ -120,6 +120,10 @@ describe("地图、时间轴、画面的颜色取当前这一套", () => {
     expect(mapRasterFilter("dark")).toBe("url(#nw-raster-dark)");
     const fn = document.querySelector("#nw-raster-dark feFuncR");
     expect(fn?.getAttribute("type")).toBe("table");
+    // UIUX-001:滤镜所在的 svg 用类隐藏,不用 style 属性(站点 CSP 拦内联样式,页面会多出 24px 滚动)
+    const svg = fn!.closest("svg")!;
+    expect(svg.getAttribute("style")).toBeNull();
+    expect(svg.classList.contains("svg-defs")).toBe(true);
   });
 
   it("视频底两套都是黑的", () => {

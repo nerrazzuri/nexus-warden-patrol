@@ -68,6 +68,10 @@ const en = {
   back: "Back", next: "Next",
   armed: "Armed.",
   started: "{robot} has set off on the zone route.",
+  runLine: "{robot} is running “{route}”, lap {lap}.",
+  restLine: "{robot} finished a lap of “{route}” and is waiting for the next one.",
+  waitLine: "“{route}” has not started: {why}",
+  sumPlan: "Guard plan",
   waiting: "Not started yet: {why}",
   watching: "Checking whether a robot sets off…",
   noStart: "No robot has set off yet. The guard status on the Arming times page says why.",
@@ -132,6 +136,10 @@ const zh: Record<WKey, string> = {
   back: "上一步", next: "下一步",
   armed: "已布防。",
   started: "{robot} 已出发巡逻防区。",
+  runLine: "{robot} 正在跑「{route}」，第 {lap} 圈。",
+  restLine: "{robot} 跑完一圈「{route}」，在等下一圈。",
+  waitLine: "「{route}」还没出发：{why}",
+  sumPlan: "值守方案",
   waiting: "还没出发：{why}",
   watching: "正在看有没有机器人出发……",
   noStart: "还没有机器人出发，原因见「布防时间」页的值守状态。",
@@ -199,6 +207,22 @@ export async function needsWizard(): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+/** UIUX-036:布防后按值守方案逐条说真话 —— 哪台在跑哪条路线第几圈、哪条在等、为什么。
+ *  返回 [这几句, 是不是每条都有了结果]。 */
+export function afterLines(entries: GuardEntry[], st: Status, title: (route: string) => string): [string[], boolean] {
+  const out: string[] = [];
+  let all = entries.length > 0;
+  for (const e of entries) {
+    const run = e.id == null ? undefined : st.runs.find((x) => x.entry === e.id);
+    const why = e.id == null ? "" : st.waiting[String(e.id)];
+    if (run && run.task_id) out.push(wt("runLine", { robot: who(run.robot_id), route: title(e.route), lap: Math.max(1, run.lap) }));
+    else if (run) out.push(wt("restLine", { robot: who(run.robot_id), route: title(e.route) }));
+    else if (why) out.push(wt("waitLine", { route: title(e.route), why }));
+    else all = false;
+  }
+  return [out, all];
 }
 
 /** 每天 from–to 布防(跨半夜的拆成两段),全部防区一样。 */
@@ -401,12 +425,20 @@ export function ArmWizard({ say, onClose, arming = false, onChanged }: { say: Sa
       if (!withPatrol) { onClose(); return; }
       setAfter(wt("watching"));
       // 布防后十几秒内说清楚:谁出发了,或者为什么没出发
+      const entries = plan?.entries ?? [];
       for (let i = 0; i < 8; i++) {
         await new Promise((ok) => setTimeout(ok, 2000));
         const st = await api<Status>("GET", "/api/guard/status").catch(() => null);
-        const run = st?.runs.find((x) => x.task_id);
+        if (!st) continue;
+        if (entries.length) {
+          const [lines, all] = afterLines(entries, st, routeTitle);
+          if (lines.length) setAfter(lines.join("\n"));
+          if (all) return;
+          continue;
+        }
+        const run = st.runs.find((x) => x.task_id);
         if (run) { setAfter(wt("started", { robot: who(run.robot_id) })); return; }
-        const why = st ? Object.values(st.waiting)[0] : "";
+        const why = Object.values(st.waiting)[0];
         if (why) setAfter(wt("waiting", { why }));
       }
       setAfter((s) => (s === wt("watching") ? wt("noStart") : s));
@@ -416,6 +448,7 @@ export function ArmWizard({ say, onClose, arming = false, onChanged }: { say: Sa
   const steps: WKey[] = ["s1", "s2", "s3", "s4", "s5"];
   const robots = r?.robots ?? [];
   const sel = r?.routes.find((x) => x.id === route);
+  const routeTitle = (id: string) => r?.routes.find((x) => x.id === id)?.title || id;
   const canNext = step === 0 ? !!r?.zones.length : step === 1 ? !!route : step === 3 ? !!route && !!plan : true;
   return (
     <Modal label={wt("title")} onClose={() => guarded(onClose)} wide cls="armwiz">
@@ -518,9 +551,13 @@ export function ArmWizard({ say, onClose, arming = false, onChanged }: { say: Sa
             <dt>{wt("sumRoute")}</dt><dd>{sel ? sel.title || sel.id : "—"}</dd>
             <dt>{wt("sumTime")}</dt><dd>{sched.enabled && sched.slots.length ? wt("sumSlots", { n: sched.slots.length }) : wt("sumManual")}</dd>
             <dt>{wt("sumWho")}</dt><dd>{robot ? who(robot) : wt("whoAny")}</dd>
+            {/* UIUX-036:值守方案里不止这一条时,全列出来(布防后它们都会跑) */}
+            {plan && plan.entries.length > 1 && <><dt>{wt("sumPlan")}</dt><dd data-wiz-plan="1">{plan.entries.map((e) =>
+              lang.value === "zh" ? `${routeTitle(e.route)}（${e.robot ? who(e.robot) : wt("whoAny")}）`
+                : `${routeTitle(e.route)} (${e.robot ? who(e.robot) : wt("whoAny")})`).join(lang.value === "zh" ? "；" : "; ")}</dd></>}
           </dl>
           {r.missing.length > 0 && <p class="bad" role="status" data-wiz-missing="1">{wt("stillMissing", { why: missingText(r) })}</p>}
-          {after && <p role="status" data-wiz-after="1">{after}</p>}
+          {after && <div role="status" data-wiz-after="1">{after.split("\n").map((x, i) => <p key={i}>{x}</p>)}</div>}
         </section>
       )}
       {editor && map && (

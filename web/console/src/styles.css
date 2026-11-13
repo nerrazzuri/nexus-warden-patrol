@@ -18,7 +18,13 @@ body {
   line-height: 24px;
   -webkit-font-smoothing: antialiased;
 }
-h1, h2 { margin: 0; font-family: var(--font-display); font-size: 20px; line-height: 26px; font-weight: 600; }
+/* UIUX-031:三级标题全站各一个字号(页面 22 / 区块 17 / 小节 15),下级不大于上级 */
+h1, h2, h3 { margin: 0; font-family: var(--font-display); font-weight: 600; }
+h1 { font-size: 22px; line-height: 28px; }
+h2 { font-size: 17px; line-height: 24px; }
+h3 { font-size: 15px; line-height: 22px; }
+/* UIUX-001 */
+.svg-defs { position: absolute; width: 0; height: 0; overflow: hidden; }
 button { font: inherit; }
 a { color: var(--c-tertiary); }
 .mono { font-family: var(--font-mono); }
@@ -30,6 +36,8 @@ a { color: var(--c-tertiary); }
 .row { display: flex; align-items: center; gap: 12px; }
 .row.end { justify-content: flex-end; margin-top: 16px; }
 .empty { padding: 32px 16px; color: var(--c-textSecondary); }
+.empty.noaccess { display: flex; flex-direction: column; align-items: flex-start; gap: 12px; max-width: 560px; }
+.empty.noaccess h2 { color: var(--c-text); }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 .boot { min-height: 100vh; }
 :focus-visible { outline: 2px solid var(--c-focus); outline-offset: 2px; }
@@ -81,6 +89,9 @@ a { color: var(--c-tertiary); }
 .btn.onsolid:hover:not(:disabled) { background: transparent; }
 .btn.stop { background: var(--c-error); color: var(--c-onError); border: 2px solid var(--c-errorFrame); font-weight: 700; }
 .btn.stop:hover:not(:disabled) { background: var(--c-error); opacity: 0.9; }
+/* UIUX-006:实心红只给「全部叫停」(急停);删除、重启这类危险操作一律红字红框 */
+.btn.danger { color: var(--c-error); border: 1px solid var(--c-error); background: transparent; }
+.btn.danger:hover:not(:disabled) { background: var(--c-errorSoft); }
 .btn.icon { width: 40px; padding: 0; }
 .link { background: none; border: 0; padding: 4px; color: var(--c-tertiary); cursor: pointer; font-size: 14px; font-weight: 600; text-decoration: underline; text-underline-offset: 3px; }
 /* 分段选择(手机的 SegmentedButton):外框里一格一格,选中的格子垫一块 */
@@ -220,7 +231,7 @@ button.navgroup-title[aria-expanded="true"]::after { content: " ▾"; }
 /* 报警队列(底部常驻) */
 .queue { position: sticky; bottom: 0; z-index: 5; background: var(--c-surface); border-top: 1px solid var(--c-outline); }
 .queue-head { min-height: 44px; padding: 0 16px; display: flex; flex-wrap: wrap; align-items: center; gap: 16px; font-size: 14px; }
-.queue-head h2 { font-size: 18px; }
+.queue-head h2 { }
 .queue-peek { display: inline-flex; align-items: center; gap: 8px; }
 .tabs { display: flex; gap: 2px; padding: 3px; border: 1px solid var(--c-outline); border-radius: var(--r-r8); }
 .tabs button { height: 28px; padding: 0 10px; border: 0; border-radius: var(--r-r4); background: transparent; color: var(--c-textSecondary); font-family: var(--font-sans); font-size: 13px; font-weight: 600; cursor: pointer; }
@@ -366,6 +377,8 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--c-primary); }
 .confirm-text { margin: 0; }
 .shelve fieldset { border: 0; padding: 0; margin: 0 0 12px; display: flex; flex-direction: column; gap: 8px; }
 .field { display: flex; flex-direction: column; gap: 6px; font-size: 14px; font-weight: 600; }
+/* UIUX-003:标签粗、填的值不粗(标签和值分得开) */
+.field input, .field select, .field textarea { font-weight: 400; }
 /* 提示条(手机的 SnackBar):反色 */
 .toast { position: fixed; left: 50%; bottom: 56px; transform: translateX(-50%); max-width: calc(100% - 32px); z-index: 20; }
 .toast:not(:empty) { padding: 10px 16px; border-radius: var(--r-r8); background: var(--c-text); color: var(--c-bg); }
@@ -749,8 +762,8 @@ button.armstate:focus-visible { outline: 2px solid var(--c-primary); outline-off
 .mk.alarm { background: var(--c-error); }
 .mk.help { background: var(--c-warning); }
 .tl-head { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--c-text); pointer-events: none; }
-.tl-head span { position: absolute; top: -16px; left: 4px; padding: 0 5px; border-radius: 3px; font-size: 11px; background: var(--c-text); color: var(--c-surface); white-space: nowrap; }
-.ticks { position: relative; height: 16px; font-size: 11px; color: var(--c-textMuted); }
+.tl-head span { position: absolute; top: -16px; left: 4px; padding: 0 5px; border-radius: 3px; font-size: 12px; background: var(--c-text); color: var(--c-surface); white-space: nowrap; }
+.ticks { position: relative; height: 16px; font-size: 12px; color: var(--c-textMuted); }
 .ticks span { position: absolute; transform: translateX(-50%); }
 .lg { display: flex; flex-wrap: wrap; gap: 14px; padding-left: 70px; }
 .lg i.k { display: inline-block; width: 14px; height: 8px; margin-right: 6px; border-radius: 2px; vertical-align: middle; }
@@ -800,6 +813,8 @@ button.armstate:focus-visible { outline: 2px solid var(--c-primary); outline-off
 
 /* W44 第二期:「管理」左边一列(三组,高级默认收着) */
 .adminwrap { display: block; }
+/* UIUX-009:表单、列表页在大屏上限宽 1280px(地图、布置、值班这些铺满一屏的页不限) */
+.console:not(.fill) .adminbody, .alarmlog { max-width: 1280px; }
 .adminbody { min-width: 0; }
 @media print { .sidenav { display: none !important; } .console { display: block; } }
 
@@ -811,14 +826,14 @@ button.armstate:focus-visible { outline: 2px solid var(--c-primary); outline-off
 .arm-zones { display: flex; flex-wrap: wrap; gap: 6px; }
 .arm-follow { display: flex; align-items: center; gap: 12px; padding: 12px; border: 1px dashed var(--c-outline); border-radius: 8px; }
 .armgrid { display: flex; flex-direction: column; gap: 6px; padding-top: 18px; position: relative; }
-.armhours { position: relative; height: 14px; margin: 0 92px 0 48px; font-size: 11px; color: var(--c-textMuted); }
+.armhours { position: relative; height: 16px; margin: 0 92px 0 48px; font-size: 12px; color: var(--c-textMuted); }
 .armhours span { position: absolute; transform: translateX(-50%); }
 .armrow { display: grid; grid-template-columns: 40px minmax(0, 1fr) 84px; gap: 8px; align-items: center; }
 .armday { font-size: 13px; font-weight: 600; color: var(--c-textSecondary); }
 .armtrack { position: relative; height: 32px; border-radius: 6px; background: var(--c-surfaceVariant); cursor: crosshair; touch-action: none;
   background-image: linear-gradient(to right, var(--c-outline) 1px, transparent 1px); background-size: calc(100% / 24) 100%; }
 .armblock { position: absolute; top: 3px; bottom: 3px; border-radius: 4px; background: var(--c-success); color: var(--c-onPrimary);
-  font-size: 11px; display: flex; align-items: center; justify-content: center; overflow: hidden; cursor: pointer; }
+  font-size: 12px; display: flex; align-items: center; justify-content: center; overflow: hidden; cursor: pointer; }
 .armblock.on { outline: 2px solid var(--c-focus); }
 .armblock.ghost { background: var(--c-successSoft); pointer-events: none; }
 .armlabel { white-space: nowrap; pointer-events: none; }
@@ -829,7 +844,7 @@ button.armstate:focus-visible { outline: 2px solid var(--c-primary); outline-off
 .arm-ex ul.plain { list-style: none; padding: 0; margin: 0 0 8px; display: flex; flex-direction: column; gap: 6px; }
 .arm-ex li.row { gap: 12px; }
 /* W73 第二期:值守方案 */
-.arm-guard h3 { font-size: 14px; margin: 16px 0 6px; }
+.arm-guard h3 { margin: 16px 0 6px; }
 .arm-guard ul.plain { list-style: none; padding: 0; margin: 0 0 8px; display: flex; flex-direction: column; gap: 6px; }
 .guard-entry { gap: 12px; align-items: flex-end; }
 .guard-shuffle { display: flex; align-items: center; gap: 6px; }
@@ -909,7 +924,7 @@ p.warn { color: var(--c-text); background: var(--c-warningSoft); padding: 8px 12
 .check-digits.big { font-size: 32px; text-align: center; margin: 8px 0; }
 .wifi-change { margin: 12px 0; padding: 12px 16px; border: 1px solid var(--c-outline); border-left: 4px solid var(--c-warning); border-radius: var(--r-r8); background: var(--c-surface); display: flex; flex-direction: column; gap: 8px; }
 /* W72:详情面板 —— 一段一块、统一内边距;基本信息两列;改名字一行;操作一行、解绑靠右;告警三组 */
-.robot-detail .panel-head h2 { font-size: 20px; line-height: 28px; font-weight: 600; margin: 0; }
+.robot-detail .panel-head h2 { margin: 0; }
 .rd-sec { padding: 16px; display: flex; flex-direction: column; gap: 12px; }
 .rd-sec + .rd-sec { border-top: 1px solid var(--c-outline); }
 .rd-facts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 16px; margin: 0; }
@@ -979,7 +994,7 @@ p.warn { color: var(--c-text); background: var(--c-warningSoft); padding: 8px 12
 .seg-help { background: var(--c-warning); }
 .rep-legend { display: flex; gap: 16px; }
 .rep-legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; vertical-align: middle; }
-.rep-lbl { font-size: 11px; color: var(--c-textMuted); }
+.rep-lbl { font-size: 12px; color: var(--c-textMuted); }
 .rep-events tr.clickable { cursor: pointer; }
 .rep-events tr.clickable:hover { background: var(--c-surfaceVariant); }
 @media (max-width: 700px) { .rep-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
@@ -1022,7 +1037,8 @@ p.warn { color: var(--c-text); background: var(--c-warningSoft); padding: 8px 12
 .ly-body { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; min-height: 0; }
 .ly-body.with-history { grid-template-columns: minmax(0, 1fr) 320px; }
 .ly-main { min-width: 0; }
-.ly-tab { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 16px; align-items: start; }
+/* UIUX-011:右侧面板随屏幕变宽(340–440px) */
+.ly-tab { display: grid; grid-template-columns: minmax(0, 1fr) clamp(340px, 28vw, 440px); gap: 16px; align-items: start; }
 .ly-side { display: flex; flex-direction: column; gap: 10px; }
 /* 第 2 轮 layout N2:外框原来定死 62vh,里面的地图(100vh-280)+ 图例比它高,一列时侧面板压在图例和「整张图」上 —— 外框跟着内容走 */
 .layout-map { min-height: 420px; height: auto; }
@@ -1043,7 +1059,7 @@ p.warn { color: var(--c-text); background: var(--c-warningSoft); padding: 8px 12
 .nogo-status p { margin: 0; }
 .ok-text { color: var(--c-success); font-weight: 600; }
 .route-line.bad-seg { stroke: var(--c-error); stroke-dasharray: 6 4; stroke-width: 3; }
-.routes-embed .routesplit { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 16px; }
+.routes-embed .routesplit { display: grid; grid-template-columns: minmax(0, 1fr) clamp(340px, 28vw, 440px); gap: 16px; }
 @media (max-width: 1000px) { .routes-embed .routesplit { grid-template-columns: minmax(0, 1fr); } }
 .standby-pt .pm-body, .standby-pt circle:first-of-type { fill: var(--c-surface); }
 .standby-pt.default .pm-body { fill: var(--c-success); }
@@ -1130,7 +1146,7 @@ polygon.me-op.loop.obstacle { stroke: var(--c-brand); }
 
 /* W44 第二到四期:新页里的卡片留内边距(老页用 .panel-head / .pad,新页直接放内容) */
 :is(.homepage, .arming, .access, .users, .robots, .reports, .layout, .advdiag, .advsystem, .advupgrade, .advmaps, .advloc, .mapedit) .panel:not(:has(> .panel-head)) { padding: 12px 16px; }
-:is(.homepage, .arming, .access, .advdiag, .advsystem, .advupgrade) .panel > h2 { margin: 0 0 8px; font-size: 17px; }
+:is(.homepage, .arming, .access, .advdiag, .advsystem, .advupgrade) .panel > h2 { margin: 0 0 8px; }
 /* 布置、地图编辑器的地图在一屏模式里也要够高 */
 .layout-map .mapwrap, .me-canvas .mapwrap, .console.fill .layout-map .mapwrap, .console.fill .me-canvas .mapwrap { flex: none; height: calc(100vh - 280px); min-height: 420px; }
 .ly-side .row { flex-wrap: wrap; }
@@ -1143,7 +1159,7 @@ polygon.me-op.loop.obstacle { stroke: var(--c-brand); }
 .today-row { display: flex; align-items: flex-start; gap: 8px; font-size: 13px; }
 /* 第 9 轮 W9-11:窄栏里不截断(以前「由日程接替」「第几圈」都变成省略号),换行写全 */
 .today-what { flex: 1; min-width: 0; overflow-wrap: anywhere; }
-.tdchip { font-size: 11px; padding: 1px 8px; border-radius: 99px; background: var(--c-surfaceVariant); white-space: nowrap; }
+.tdchip { font-size: 13px; font-weight: 600; padding: 1px 8px; border-radius: 99px; background: var(--c-surfaceVariant); white-space: nowrap; }
 .tdchip.ok { color: var(--c-success); } .tdchip.bad { color: var(--c-error); } .tdchip.warn { color: var(--c-warning); } .tdchip.info { color: var(--c-primary); }
 
 /* W53:开站清单、使用教程 */
@@ -1430,7 +1446,7 @@ input[type="date"]:not(.field input) { height: 36px; padding: 0 8px; border-radi
 .arm-patrols-body { padding: 0 16px 16px; }
 /* P2-23:趋势图的坐标轴 */
 .spark-axis { stroke: var(--c-outline); stroke-width: 1; }
-.spark-tick { fill: var(--c-textMuted); font-size: 10px; }
+.spark-tick { fill: var(--c-textMuted); font-size: 11px; }
 /* P2-33:「派机器人去看」卡片放到地图上方,不盖住图例和「全图」按钮 */
 .golook { top: 88px; bottom: auto; }
 @media (max-width: 720px) { .golook { left: 16px; right: 16px; width: auto; } }
@@ -1688,6 +1704,9 @@ input[aria-invalid="true"] { border-color: var(--c-error); outline-color: var(--
 .wiz-sum { display: grid; grid-template-columns: max-content 1fr; gap: 6px 16px; margin: 0; }
 .wiz-sum dt { color: var(--c-textMuted); }
 .wiz-sum dd { margin: 0; }
-.wiz-editor { height: min(70vh, 640px); display: flex; flex-direction: column; border-top: 1px solid var(--c-outline); padding-top: 8px; }
+/* UIUX-037:编辑器高度按屏幕剩下的算;「上一步 / 下一步」贴在对话框底部,一直看得见 */
+.modal.armwiz .wiz-actions { position: sticky; bottom: 0; z-index: 2; margin: 12px -20px -20px; padding: 12px 20px;
+  background: var(--c-surface); border-top: 1px solid var(--c-outline); }
+.wiz-editor { height: min(calc(100dvh - 360px), 640px); min-height: 320px; display: flex; flex-direction: column; border-top: 1px solid var(--c-outline); padding-top: 8px; }
 .wiz-editor .layout { flex: 1; min-height: 0; }
 .row.wrap { flex-wrap: wrap; }

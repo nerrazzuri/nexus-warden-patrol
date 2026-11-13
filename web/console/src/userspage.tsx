@@ -316,7 +316,7 @@ export function UsersPage({ me, say, now }: { me: string; say: Say; now: number 
                       <>
                         {!off && <button type="button" class="btn sm" onClick={() => setAsk({ text: t("engCloseAsk", { who: a.display_name || a.name }), yes: t("engClose"), danger: true,
                           go: () => void change(a.name, { disabled: true }, t("engClosed")) })}>{t("engClose")}</button>}
-                        <button type="button" class="btn sm" onClick={() => setRemoving(a)}>{t("remove")}</button>
+                        <button type="button" class="btn sm danger" onClick={() => setRemoving(a)}>{t("remove")}</button>
                       </>
                     ) : !self && (
                       <>
@@ -324,7 +324,7 @@ export function UsersPage({ me, say, now }: { me: string; say: Say; now: number 
                           : setAsk({ text: t("disableAsk", { who: a.display_name || a.name }), yes: t("disable"), danger: true,
                             go: () => void change(a.name, { disabled: true }, t("userDisabled", { who: a.display_name || a.name })) }))}>{a.disabled ? t("enable") : t("disable")}</button>
                         <button type="button" class="btn sm" onClick={() => setResetFor(a.name)}>{t("resetPassword")}</button>
-                        <button type="button" class="btn sm" onClick={() => setRemoving(a)}>{t("remove")}</button>
+                        <button type="button" class="btn sm danger" onClick={() => setRemoving(a)}>{t("remove")}</button>
                       </>
                     )}
                   </td>
