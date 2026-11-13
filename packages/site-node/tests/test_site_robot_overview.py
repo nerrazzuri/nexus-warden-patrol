@@ -366,7 +366,7 @@ def test_第10轮_W9_09_遥测没报存储块_从盘那一行的说明读出用�
     盘那一行的说明里其实写着「已用 86%」。"""
     d, db = 台
     d.devices["A"] = {"items": [{"id": "disk", "state": "degraded",
-                                 "detail": "已用 86%,剩 31 GB:到 90% 就不接新的巡逻(没传完的不删)"}],
+                                 "detail": "已用 86%,剩 31 GB:到 90% 就不接新的巡逻"}],
                       "at_ms": NOW, "stale": False}
     r = _one(d, db)
     assert r["storage"] == {"used_ratio": 0.86, "backlog_files": None, "oldest_backlog_s": None}
