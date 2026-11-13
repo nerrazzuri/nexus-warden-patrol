@@ -337,12 +337,7 @@ export function ArmingPage({ say, now, role = "admin" }: { say: Say; now: number
             <input name="stale" type="number" min={1} max={48} value={duty.stale_hours}
               onInput={(e) => setDuty({ ...duty, stale_hours: Number(e.currentTarget.value) })} />
           </label>
-          <label class="field">{t("armPatrolReturn")}
-            <input name="patrolReturn" type="number" min={20} max={60} step={1} value={duty.patrol_return_pct ?? 25}
-              onInput={(e) => setDuty({ ...duty, patrol_return_pct: Number(e.currentTarget.value) })} />
-          </label>
         </div>
-        <p class="muted small">{t("armPatrolReturnHint")}</p>
         <label class="row">
           <input name="siren" type="checkbox" checked={duty.self_protect_siren !== false}
             onChange={(e) => setDuty({ ...duty, self_protect_siren: e.currentTarget.checked })} />
