@@ -899,12 +899,25 @@ class SiteAlertSources:
         """狗的发件箱(W00c5d,决策 8):盘到 80%、证据积压半小时,各报一次;回落之后才重新武装。"""
         if f.disk_used_ratio >= WARN_RATIO and not m.disk80:
             m.disk80 = True
-            self.desk.raise_alert(
-                # W6-09:跟诊断页(机器人设备「存储盘」)、首页提醒同一个说法、同一条线
-                kind="disk_80", robot=rid, title="机器人存储空间不足",
-                detail=f"存录像和巡逻记录的盘已用 {f.disk_used_ratio:.0%};"
-                       "到 90% 机器人就不接新的巡逻(没传完的不删)")
+            # W6-09:跟诊断页(机器人设备「存储盘」)、首页提醒同一个说法、同一条线
+            title = "机器人存储空间不足"
+            detail = (f"存录像和巡逻记录的盘已用 {f.disk_used_ratio:.0%};"
+                      "到 90% 机器人就不接新的巡逻(没传完的不删)")
+            # 第 9 轮 W9-09:站点重启后又报一条,旧说法那条(「发件箱所在的盘即将写满」)还开着 ——
+            # 还开着的就改成新说法接着用,多出来的旧条关掉
+            olds = sorted((a for a in self.desk.book.open()
+                           if a.robot == rid and a.kind == "disk_80"), key=lambda a: a.first_ms)
+            if olds:
+                self.desk.amend(olds[-1].key, title=title, detail=detail)
+                for a in olds[:-1]:
+                    self.desk.resolve(a.key, who="site:storage_merged")
+            else:
+                self.desk.raise_alert(kind="disk_80", robot=rid, title=title, detail=detail)
         elif f.disk_used_ratio < DISK_CLEAR_RATIO:
+            if m.disk80 or any(a.robot == rid and a.kind == "disk_80"
+                               for a in self.desk.book.open()):
+                # 第 9 轮 W9-09:清出空间了,报警自己关掉(以前一直挂着要人手动关)
+                self.desk.resolve_all(rid, "disk_80", who="site:storage_ok")
             m.disk80 = False
         oldest = f.oldest_backlog_s or 0
         if oldest >= BACKLOG_ALARM_S and not m.backlog:
