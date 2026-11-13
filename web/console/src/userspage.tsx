@@ -14,6 +14,8 @@ import { siteStr } from "./sitetext";
 type Say = (s: string) => void;
 interface Account { name: string; role: string; disabled: boolean; display_name: string; expires_ms: number | null; last_login_ms: number | null; expired: boolean }
 export interface AuditRow { id: number; at: number; actor: string; actor_role?: string | null; action: string; target: string; status: number;
+  /** 第 10 轮 W9-01:对象是日程、路线时站点给的显示名(老站点没有)。 */
+  target_name?: string;
   detail?: { error?: string; role?: string; disabled?: boolean; password_reset?: boolean; display_name?: string;
     first_day?: string; last_day?: string;
     // 日志设计 第 1、2 条:前后变化、来源、当时在做什么、系统事件的说明
@@ -370,7 +372,7 @@ export function AuditLine({ r, who }: { r: AuditRow; who?: boolean }) {
       <span title={r.action}>{actionText(r.action)}</span>
       {r.status >= 400 ? <span class="tag bad" data-result="refused">{t("auditRefused")}</span>
         : r.status >= 200 ? <span class="tag ok" data-result="ok">{t("auditOk")}</span> : null}
-      {r.target && <span class="muted small" title={r.target}>{targetText(r.target)}</span>}
+      {r.target && <span class="muted small" title={r.target}>{r.target_name || targetText(r.target)}</span>}
       {r.actor_role === "engineer" && <span class="tag">{t("roleEngineer")}</span>}
       {r.status >= 400 && r.detail?.err && <span class="tag mono" data-err={r.detail.err} title={r.detail.err_name ?? ""}>{r.detail.err}</span>}
       {r.detail?.source && r.detail.source !== "system" && <span class="tag" data-source={r.detail.source}>{t(r.detail.source === "web" ? "auditViaWeb" : r.detail.source === "api" ? "auditViaApi" : "auditViaApp")}</span>}

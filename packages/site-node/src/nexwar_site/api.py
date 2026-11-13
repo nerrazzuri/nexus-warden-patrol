@@ -821,7 +821,8 @@ class _Handler(TlsHandlerMixin):
                 actor = (q.get("actor") or [None])[0]
                 new = ("since", "until", "group", "offset", "limit", "format")
                 if not any(k in q for k in new):
-                    return self._send_json(200, {"audit": self.site.audit.list(actor=actor)})
+                    return self._send_json(200, {"audit": self._audit_named(
+                        self.site.audit.list(actor=actor))})
                 return self._audit_search(q, actor)
             if method == "GET" and path == "/api/robots":
                 self._need(user, VIEW)
@@ -1093,6 +1094,22 @@ class _Handler(TlsHandlerMixin):
             return self._send_json(200, {**self.site.loop.call(lambda: _sync(view)), "cleared": n})
         raise HttpError(400, "action 要是 start 或 end")
 
+    def _audit_named(self, rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """第 10 轮 W9-01:对象是日程、路线的,带上显示名 ``target_name``(起了中文名的不写
+        route-1-2);查不到名字的不加。"""
+        from nexwar_site.names import route_name, schedule_name
+        db = self.site.dispatcher.db
+        for r in rows:
+            tgt = str(r.get("target") or "")
+            if not tgt or "/" in tgt or ":" in tgt:
+                continue
+            name = schedule_name(db, tgt)
+            if name == tgt:
+                name = route_name(db, tgt)
+            if name != tgt:
+                r["target_name"] = name
+        return rows
+
     def _audit_search(self, q: dict[str, list[str]], actor: str | None) -> None:
         """``GET /api/audit?since=&until=&actor=&group=&limit=&offset=[&format=csv]``:全站活动日志。
         ``format=csv`` 导出整段(不分页,最多 ``EXPORT_MAX`` 行,超了 400 让人缩小范围)。"""
@@ -1108,8 +1125,10 @@ class _Handler(TlsHandlerMixin):
             raise HttpError(400, f"group 要是 {'、'.join(AUDIT_GROUPS)} 之一")
         audit = self.site.audit
         if (q.get("format") or [""])[0] != "csv":
-            return self._send_json(200, audit.search(since_ms=since, until_ms=until, actor=actor,
-                                                     group=group, limit=limit, offset=offset))
+            got = audit.search(since_ms=since, until_ms=until, actor=actor, group=group,
+                               limit=limit, offset=offset)
+            self._audit_named(got.get("audit", []))
+            return self._send_json(200, got)
         got = audit.search(since_ms=since, until_ms=until, actor=actor, group=group,
                            limit=EXPORT_MAX, offset=0)
         if got["total"] > EXPORT_MAX:
