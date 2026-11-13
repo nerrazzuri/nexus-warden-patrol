@@ -653,14 +653,27 @@ function GuardGenerate({ map, taken, say, onDone, onClose }: {
   );
 }
 
+/** 底部操作栏的高度(吸在面板底部),表单要露在它上面。 */
+const SIDE_BAR_PX = 72;
+export function revealInSide(el: HTMLElement): void {
+  const side = el.closest<HTMLElement>(".routeside");
+  if (!side || side.scrollHeight <= side.clientHeight) return;
+  const s = side.getBoundingClientRect();
+  const f = el.getBoundingClientRect();
+  const bottom = s.bottom - SIDE_BAR_PX;
+  if (f.top < s.top) side.scrollTop -= s.top - f.top;
+  else if (f.bottom > bottom) side.scrollTop += Math.min(f.bottom - bottom, f.top - s.top);
+}
+
 function PointForm({ p, idx, names, plain, onChange, onActions }: {
   p: RoutePoint; idx: number; names: string[]; plain?: boolean;
   onChange: (patch: Partial<RoutePoint>) => void; onActions: (p: RoutePoint) => void;
 }) {
   const dup = names.some((n, k) => k !== idx && n === p.name);
-  // UIUX-012:点了哪个点,面板就滚到它的表单(底部操作栏留了 scroll-padding,不会盖住)
+  // UIUX-012:点了哪个点,右侧面板就滚到它的表单。外审:只滚面板自己(宽屏上它单独滚),
+  // 窄屏上下排时面板不单独滚 → 不动,免得拖点时把整页、地图滚走
   const box = useRef<HTMLDivElement>(null);
-  useEffect(() => { box.current?.scrollIntoView?.({ block: "nearest" }); }, [idx]);
+  useEffect(() => { if (box.current) revealInSide(box.current); }, [idx]);
   const num = (v: string) => (v.trim() === "" || !Number.isFinite(Number(v)) ? null : Number(v));
   return (
     <div class="pointform" ref={box} aria-label={`${idx + 1}`}>

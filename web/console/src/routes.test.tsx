@@ -9,7 +9,7 @@ import type { UnitInfo } from "./live";
 import { SiteMap } from "./mappage";
 import { applyMat, toPx, type Mat, type PreviewMeta } from "./mapview";
 import type { Robot } from "./model";
-import { RoutesPage } from "./routepage";
+import { revealInSide, RoutesPage } from "./routepage";
 import {
   addPoint,
   deletePoint,
@@ -507,7 +507,7 @@ describe("路线页:站点的回答", () => {
     }
   });
 
-  it("UIUX-006 / 012 / 014:删除在最左、红框;点了点位,面板滚到它的表单;点位名带全名提示", async () => {
+  it("UIUX-006 / 014:删除在最左、红框;点位名带全名提示;窄屏(面板不单独滚)选点位不滚整页", async () => {
     installScreenCTM();
     const seen: Element[] = [];
     const old = Element.prototype.scrollIntoView;
@@ -527,8 +527,29 @@ describe("路线页:站点的回答", () => {
       expect(link.title).toBe("b");
       fireEvent.click(link);
       await tick();
-      expect(seen.some((el) => el.classList.contains("pointform"))).toBe(true);
+      expect(r.container.querySelector(".pointform")).not.toBeNull();
+      expect(seen).toEqual([]);
     } finally { Element.prototype.scrollIntoView = old; }
+  });
+
+  it("UIUX-012:面板单独滚时,滚到表单露在底部操作栏上面;表单已经看得见就不动", () => {
+    const side = document.createElement("div");
+    side.className = "routeside";
+    const form = document.createElement("div");
+    side.appendChild(form);
+    document.body.appendChild(side);
+    const rect = (top: number, h: number) => ({ top, bottom: top + h, left: 0, right: 0, width: 0, height: h, x: 0, y: top, toJSON: () => ({}) });
+    Object.defineProperty(side, "scrollHeight", { value: 2000 });
+    Object.defineProperty(side, "clientHeight", { value: 600 });
+    side.getBoundingClientRect = () => rect(100, 600);
+    form.getBoundingClientRect = () => rect(650, 300);
+    revealInSide(form);
+    expect(side.scrollTop).toBe(Math.min(950 - (700 - 72), 650 - 100));
+    side.scrollTop = 0;
+    form.getBoundingClientRect = () => rect(200, 100);
+    revealInSide(form);
+    expect(side.scrollTop).toBe(0);
+    side.remove();
   });
 
   it("没改的不能存;删路线先确认,带当前修订号", async () => {
