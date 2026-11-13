@@ -168,6 +168,10 @@ void main() {
       expect(find.textContaining('A 正在一直巡逻，要先叫停'), findsWidgets);
       expect(find.byKey(const Key('wizard-next-why')), findsOneWidget, reason: '下一步上面也说为什么');
       expect(find.textContaining('请等待当前任务完成'), findsNothing);
+      // 第 9 轮 A8-02 尾巴：「叫停」就在「下一步」正上方（横屏时检查表可能在屏幕外）
+      final stop = t.getRect(find.byKey(MapWizardPage.stopTaskKey));
+      final next = t.getRect(find.byKey(MapWizardPage.nextKey));
+      expect(next.top - stop.bottom, inInclusiveRange(0, 24));
       await _tap(t, MapWizardPage.stopTaskKey);
       expect(api.calls, contains('abort A adhoc-forever-f1'));
     });
