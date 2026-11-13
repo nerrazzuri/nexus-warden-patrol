@@ -779,6 +779,9 @@ abstract class SiteApi {
 
   /// 布防模式（W20）：当前模式、临时撤防到几点、每个防区现在布不布防。站点没开回 404。
   Future<Map<String, dynamic>> mode();
+  /// 布防向导（用户 11-13）：布防时机器人会不会自己巡逻、缺哪样。`{map_id, map_version, zones, routes,
+  /// robots: [{id, code, why}], missing: [zones|route|plan|robot]}`；站点按机器人在用的那张图查。老站点 404。
+  Future<Map<String, dynamic>> guardReadiness();
   /// 切模式：`armed`（谁都能）、`home`、`visitor`（经理、管理员；临时撤防带 [zones] 和 [minutes]）。
   Future<Map<String, dynamic>> setMode(String mode, {List<String>? zones, int? minutes});
   /// 这个防区留守时布不布防（管理员）。
@@ -1380,6 +1383,9 @@ class SiteClient implements SiteApi {
 
   @override
   Future<Map<String, dynamic>> mode() async => _map(await _send('GET', '/api/mode'));
+
+  @override
+  Future<Map<String, dynamic>> guardReadiness() async => _map(await _send('GET', '/api/guard/readiness'));
 
   @override
   Future<Map<String, dynamic>> weather() async => _map(await _send('GET', '/api/weather'));

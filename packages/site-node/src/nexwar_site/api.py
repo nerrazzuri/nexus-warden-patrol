@@ -2433,17 +2433,38 @@ class _Handler(TlsHandlerMixin):
 
     def _guard(self, method: str, path: str, user) -> None:
         """布防值守(W73 第二期)。看(``view``):``GET /api/guard/plan``(方案 + 预报 + 提示)、
-        ``/api/guard/status``、``/api/guard/duties[/{id}]``;改方案 ``POST /api/guard/plan``
+        ``/api/guard/status``、``/api/guard/duties[/{id}]``、``/api/guard/readiness?map_id&map_version``
+        (布防向导);改方案 ``POST /api/guard/plan``
         (``schedule``,跟布防时间表一样经理也能配)。"""
         from nexwar_site.guard_duty import PlanConflict, PlanError
         g = self.site.guard
         if g is None:
             raise HttpError(404, "此站点未启用布防值守")
         m = _GUARD_DUTY.match(path)
-        if path not in ("/api/guard/plan", "/api/guard/status", "/api/guard/duties") and not m:
+        if path not in ("/api/guard/plan", "/api/guard/status", "/api/guard/duties",
+                        "/api/guard/readiness") and not m:
             raise HttpError(404, "没有这个接口")
         if method == "GET":
             self._need(user, VIEW)
+            if path == "/api/guard/readiness":
+                # 布防向导(用户 11-13):这张图上缺哪样、哪台为什么派不了
+                q = parse_qs(self.path.split("?", 1)[1] if "?" in self.path else "")
+                mid, ver = q.get("map_id", [""])[0], q.get("map_version", [""])[0]
+                if bool(mid) != bool(ver):
+                    raise HttpError(400, "map_id、map_version 要一起给"
+                                         "(都不给 = 机器人在用的那张图)")
+                if not mid:
+                    # 手机上只问「会不会巡逻、为什么」:机器人在用最多的那一版,
+                    # 没有就最新登记的一版
+                    rows = [m for m in self.site.maps.list() if not m.get("draft")]
+                    new = max(rows, key=lambda m: m.get("created_ms") or 0) if rows else None
+                    got = g.default_map() or ((new["map_id"], new["version"]) if new else None)
+                    if got is None:
+                        none = {"map_id": "", "map_version": "", "zones": [], "routes": [],
+                                "robots": [], "missing": ["zones", "route", "plan", "robot"]}
+                        return self._send_json(200, none)
+                    mid, ver = got
+                return self._send_json(200, g.readiness(mid, ver))
             if path == "/api/guard/plan":
                 plan = g.plan()
                 return self._send_json(200, {**plan, "forecast": g.forecast(plan),

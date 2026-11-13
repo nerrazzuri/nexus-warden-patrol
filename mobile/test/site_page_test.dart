@@ -396,6 +396,10 @@ class FakeApi implements SiteApi {
   /// 布防模式（W20）：默认用真站点的夹具（临时撤防）；切、改防区记在 [calls] 里、照着改它。
   Map<String, dynamic> modeView = Map<String, dynamic>.from(siteFixture('site_mode'));
   SiteError? modeError;
+  /// 布防向导（用户 11-13）：布防时机器人会不会自己巡逻；默认都齐了。
+  Map<String, dynamic> readinessView = <String, dynamic>{'missing': <String>[], 'robots': <dynamic>[]};
+  @override
+  Future<Map<String, dynamic>> guardReadiness() async => readinessView;
   @override
   Future<Map<String, dynamic>> mode() async {
     if (modeError != null) throw modeError!;

@@ -1,0 +1,160 @@
+// @vitest-environment happy-dom
+// 布防向导(用户 11-13):用户自己配布防值守时卡住 —— 存了防区路线没进值守方案、机器人只许手动派,系统没说为什么不走。
+import { cleanup, fireEvent, render, waitFor } from "@testing-library/preact";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { setFetch } from "./api";
+import { ArmWizard, dailySlots, missingText, needsWizard, PatrolReason, wholeMap, type Readiness } from "./armwizard";
+import { lang } from "./i18n";
+
+const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
+const MAPS = { maps: [{ map_id: "estate-1", version: "6", note: "", loaded_on: [] }, { map_id: "estate-1", version: "7", note: "", active: true, loaded_on: ["A", "B"] }] };
+const META = { width: 100, height: 50, m_per_px: 0.1, left_x: -2, top_y: 3, zones: [] };
+const R: Readiness = {
+  map_id: "estate-1", map_version: "7", zones: ["1"], routes: [{ id: "guard-1", title: "", zones: ["1"], in_plan: false }],
+  robots: [{ id: "A", code: "manual_only", why: "A 设成只许手动派" }, { id: "B", code: "", why: "" }], missing: ["plan"],
+};
+
+let ready: Readiness;
+let status: unknown;
+let posted: { url: string; body: Record<string, unknown> }[];
+let gets: string[];
+beforeEach(() => {
+  lang.value = "zh";
+  ready = structuredClone(R);
+  status = { duty: null, runs: [], waiting: {}, zones: [], now_ms: 1 };
+  posted = [];
+  gets = [];
+  setFetch(((url: string, init?: RequestInit) => {
+    if (init?.method === "POST") {
+      const body = JSON.parse(String(init.body ?? "{}"));
+      posted.push({ url, body });
+      if (url === "/api/guard/plan") ready.missing = [];
+      if (url.endsWith("/areas")) ready = { ...ready, zones: [String(body.zone)], missing: ready.missing.filter((m) => m !== "zones") };
+      if (url === "/api/robots/A/service") ready.robots[0] = { id: "A", code: "", why: "" };
+      return Promise.resolve(json({ revision: 1, entries: [], limits: {}, forecast: { entries: [], zones: [], warnings: [] } }));
+    }
+    gets.push(url);
+    if (url === "/api/maps") return Promise.resolve(json(MAPS));
+    if (url.startsWith("/api/guard/readiness")) return Promise.resolve(json(ready));
+    if (url === "/api/guard/plan") return Promise.resolve(json({ revision: 0, entries: [], limits: {}, forecast: { entries: [], zones: [], warnings: [] } }));
+    if (url === "/api/arming/schedule") return Promise.resolve(json({ enabled: false, slots: [] }));
+    if (url === "/api/guard/status") return Promise.resolve(json(status));
+    if (url.endsWith("/preview")) return Promise.resolve(json(META));
+    return Promise.resolve(json({}, 404));
+  }) as typeof fetch);
+});
+afterEach(cleanup);
+
+describe("布防向导的小函数", () => {
+  it("每天 21:30 到 06:00:跨半夜拆成两段,一周 14 段;不跨半夜一周 7 段", () => {
+    const s = dailySlots(21 * 60 + 30, 6 * 60);
+    expect(s).toHaveLength(14);
+    expect(s).toContainEqual({ zone: "", day: 0, start: "21:30", end: "24:00" });
+    expect(s).toContainEqual({ zone: "", day: 0, start: "00:00", end: "06:00" });
+    expect(dailySlots(8 * 60, 18 * 60)).toHaveLength(7);
+  });
+  it("整张图的外框按地图元数据算(米)", () => {
+    expect(wholeMap(META)).toEqual([[-2, -2], [8, -2], [8, 3], [-2, 3]]);
+  });
+  it("为什么不巡逻:按步骤先说缺的第一样;缺机器人时说每台的原因", () => {
+    expect(missingText({ ...R, missing: ["zones", "route", "plan", "robot"] })).toBe("这张图上没有防区");
+    expect(missingText({ ...R, missing: ["plan"] })).toBe("值守方案里没有给机器人分配防区路线");
+    expect(missingText({ ...R, missing: ["robot"] })).toBe("A 设成只许手动派");
+    expect(missingText({ ...R, missing: [] })).toBe("");
+    lang.value = "en";
+    expect(missingText({ ...R, missing: ["robot"] })).toBe("A is set to manual dispatch only");
+    expect(missingText({ ...R, missing: ["plan"] })).toBe("no zone route is assigned to a robot");
+  });
+  it("点布防前查:用机器人在用的那一版图;缺东西才开向导", async () => {
+    expect(await needsWizard()).toBe(true);
+    expect(gets).toContain("/api/guard/readiness?map_id=estate-1&map_version=7");
+    ready.missing = [];
+    expect(await needsWizard()).toBe(false);
+  });
+});
+
+describe("布防向导", () => {
+  it("缺值守方案:直接到「谁去巡逻」;说 A 只许手动派、能改成自动派遣;存方案;布防后说谁出发了", async () => {
+    const r = render(<ArmWizard say={() => {}} onClose={() => {}} arming />);
+    await waitFor(() => expect(r.container.ownerDocument.querySelector("[data-wiz-step=who]")).not.toBeNull());
+    const doc = r.container.ownerDocument;
+    expect(doc.querySelector("[data-wiz-robot=A]")!.textContent).toContain("A 设成只许手动派");
+    fireEvent.click(doc.querySelector<HTMLButtonElement>("[data-wiz-robot=A] button")!);
+    await waitFor(() => expect(posted.some((p) => p.url === "/api/robots/A/service" && p.body.manual_only === false)).toBe(true));
+    await waitFor(() => expect(doc.querySelector("[data-wiz-robot=A]")!.textContent).toContain("能派"));
+    fireEvent.click(r.getByText("下一步"));
+    await waitFor(() => expect(posted.some((p) => p.url === "/api/guard/plan")).toBe(true));
+    const plan = posted.find((p) => p.url === "/api/guard/plan")!.body;
+    expect(plan.entries).toEqual([{ route: "guard-1", robot: "", gap_min: 0, shuffle: false, end_standby: true }]);
+    expect(plan.base_revision).toBe(0);
+    await waitFor(() => expect(doc.querySelector("[data-wiz-step=confirm]")).not.toBeNull());
+    expect(doc.querySelector("[data-wiz-missing]")).toBeNull();
+    status = { duty: { id: 1, started_ms: 1 }, runs: [{ entry: 1, robot_id: "B", state: "lap", lap: 1, task_id: "guard-1-x", next_lap_ms: 0, watch_zone: "" }], waiting: {}, zones: [], now_ms: 1 };
+    fireEvent.click(r.getByText("现在布防"));
+    await waitFor(() => expect(posted.some((p) => p.url === "/api/mode" && p.body.mode === "armed")).toBe(true));
+    await waitFor(() => expect(doc.querySelector("[data-wiz-after]")!.textContent).toBe("B 已出发巡逻防区。"), { timeout: 4000 });
+  });
+
+  it("没有防区:停在第一步;「整张图作为一个防区」按地图外框建一个「全场」", async () => {
+    ready = { ...ready, zones: [], routes: [], missing: ["zones", "route", "plan"] };
+    const r = render(<ArmWizard say={() => {}} onClose={() => {}} />);
+    await waitFor(() => expect(r.getByText("这张图上还没有防区。")).toBeTruthy());
+    expect((r.getByText("下一步") as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(r.getByText("整张图作为一个防区"));
+    await waitFor(() => expect(posted.some((p) => p.url.endsWith("/areas"))).toBe(true));
+    const a = posted.find((p) => p.url.endsWith("/areas"))!;
+    expect(a.url).toBe("/api/maps/estate-1/7/areas");
+    expect(a.body).toEqual({ zone: "全场", points: [[-2, -2], [8, -2], [8, 3], [-2, 3]] });
+    await waitFor(() => expect((r.getByText("下一步") as HTMLButtonElement).disabled).toBe(false));
+  });
+
+  it("布防时间:选「每天 21:30 到 06:00」存成启用的时间表", async () => {
+    ready.missing = [];
+    const r = render(<ArmWizard say={() => {}} onClose={() => {}} />);
+    await waitFor(() => expect(r.container.ownerDocument.querySelector("[data-wiz-step=confirm]")).not.toBeNull());
+    fireEvent.click(r.getByText(/什么时候布防/));
+    fireEvent.click(r.getByText("下一步"));
+    await waitFor(() => expect(posted.some((p) => p.url === "/api/arming/schedule")).toBe(true));
+    const s = posted.find((p) => p.url === "/api/arming/schedule")!.body;
+    expect(s.enabled).toBe(true);
+    expect(s.slots).toHaveLength(14);
+  });
+
+  it("在地图上改防区:就地嵌布置页的防区编辑器,不跳页面、没有别的标签", async () => {
+    ready.missing = ["zones"];
+    const before = location.hash;
+    const r = render(<ArmWizard say={() => {}} onClose={() => {}} />);
+    await waitFor(() => expect(r.getByText("在地图上修改防区")).toBeTruthy());
+    fireEvent.click(r.getByText("在地图上修改防区"));
+    const doc = r.container.ownerDocument;
+    await waitFor(() => expect(doc.querySelector(".wiz-editor .layout")).not.toBeNull());
+    expect(doc.querySelector(".wiz-editor .ly-tabs")).toBeNull();
+    expect(doc.querySelector(".wiz-editor select")).toBeNull();
+    expect(doc.querySelector(".wiz-editor")!.textContent).toContain("estate-1 · v7");
+    expect(location.hash).toBe(before);
+  });
+
+  it("只布防、不让机器人巡逻:直接布防,不存方案", async () => {
+    let closed = false;
+    const r = render(<ArmWizard say={() => {}} onClose={() => { closed = true; }} arming />);
+    await waitFor(() => expect(r.getByText("只布防，不让机器人巡逻")).toBeTruthy());
+    fireEvent.click(r.getByText("只布防，不让机器人巡逻"));
+    await waitFor(() => expect(closed).toBe(true));
+    expect(posted.map((p) => p.url)).toEqual(["/api/mode"]);
+  });
+});
+
+describe("布防着却不巡逻:说原因", () => {
+  it("缺东西时写一句并给向导入口;齐了不写", async () => {
+    let opened = false;
+    const r = render(<PatrolReason onWizard={() => { opened = true; }} />);
+    await waitFor(() => expect(r.container.textContent).toContain("布防着，但机器人不会自己巡逻：值守方案里没有给机器人分配防区路线。"));
+    fireEvent.click(r.getByText("打开布防向导"));
+    expect(opened).toBe(true);
+    cleanup();
+    ready.missing = [];
+    const r2 = render(<PatrolReason onWizard={() => {}} />);
+    await new Promise((ok) => setTimeout(ok, 50));
+    expect(r2.container.querySelector("[data-patrol-reason]")).toBeNull();
+  });
+});

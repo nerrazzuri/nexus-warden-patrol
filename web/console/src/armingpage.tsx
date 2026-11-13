@@ -4,6 +4,7 @@
 import { useEffect, useRef, useState } from "preact/hooks";
 import { canArm, canDisarm, canSchedule, isOwnerLike } from "./model";
 import { GuardPanel } from "./armguard";
+import { ArmWizard, needsWizard, PatrolReason, wt } from "./armwizard";
 import { DevicesPanel } from "./devicespanel";
 import { PatrolSchedules } from "./routepage";
 import { api, ApiError, enc } from "./api";
@@ -97,6 +98,9 @@ export function ArmingPage({ say, now, role = "admin" }: { say: Say; now: number
   const [copyFrom, setCopyFrom] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
   const [switching, setSwitching] = useState<"armed" | "home" | null>(null);
+  const [wiz, setWiz] = useState<"open" | "arm" | null>(null);
+  const wizBtn = canDuty && <button type="button" class="btn" data-open-wizard="1" onClick={() => setWiz("open")}>{wt("title")}</button>;
+  const wizBox = wiz && <ArmWizard say={say} arming={wiz === "arm"} onClose={() => { setWiz(null); void loadMode(); }} />;
 
   const loadMode = () => api<ModeView>("GET", "/api/mode").then(setMode).catch(() => setMode(null));
   // 第 4 轮 layout r3-N3:读不到不画成空日程 —— 写「读取失败,正在重试」,隔 5 秒再读(保存一直是灰的)
@@ -203,7 +207,8 @@ export function ArmingPage({ say, now, role = "admin" }: { say: Say; now: number
   if (sec !== "times") {
     return (
       <section class="arming">
-        <div class="panel-head"><h1>{t("tabArming")}</h1></div>
+        <div class="panel-head"><h1>{t("tabArming")}</h1>{wizBtn}</div>
+        {wizBox}
         {tabs}
         {dirty && <p class="arm-dirty" role="status">{t("armDirtyOther")}</p>}
         {sec === "patrols" ? <>{canDuty && <PatrolLine say={say} />}<PatrolSchedules say={say} canEdit={canSchedule(role)} /></>
@@ -215,6 +220,7 @@ export function ArmingPage({ say, now, role = "admin" }: { say: Say; now: number
     <section class="arming">
       <div class="panel-head">
         <h1>{t("tabArming")}</h1>
+        {wizBtn}
         {dirty && <span class="ly-dirty small" role="status">{t("armDirty")}</span>}
         <button type="button" class="btn primary push arm-save" disabled={busy || !dirty} onClick={trySave}>{t("save")}</button>
       </div>
@@ -226,6 +232,7 @@ export function ArmingPage({ say, now, role = "admin" }: { say: Say; now: number
         <div class="arm-now-text">
           <h2>{t("armNow")}</h2>
           <p class="arm-who">{whoText(mode, loaded?.enabled ?? enabled)}</p>
+          {mode?.state === "armed" && canDuty && <PatrolReason onWizard={() => setWiz("open")} />}
           {mode?.timezone && browserTz() && mode.timezone !== browserTz() && (
             <p class="muted small" data-site-tz={mode.timezone}>{t("armTzNote", { tz: mode.timezone, now: hmSite(now, mode.timezone) })}</p>
           )}
@@ -237,7 +244,8 @@ export function ArmingPage({ say, now, role = "admin" }: { say: Say; now: number
                 <button key={m} type="button" aria-pressed={mode.source !== "schedule" && mode.mode === m}
                   disabled={m === "armed" ? !canArm(role) : !canDisarm(role)}
                   title={m !== "armed" && !canDisarm(role) ? t("armNoDisarm") : undefined}
-                  onClick={() => setSwitching(m)}>{t(m === "armed" ? "modeArmed" : "modeHome")}</button>
+                  onClick={() => (m === "armed" && canDuty
+                    ? void needsWizard().then((n) => (n ? setWiz("arm") : setSwitching(m))) : setSwitching(m))}>{t(m === "armed" ? "modeArmed" : "modeHome")}</button>
               ))}
             </div>
             {/* 第 2 轮 config N4:打不开「临时撤防」页的账号(经理)不给这个入口,写一句谁能做 */}
@@ -247,6 +255,7 @@ export function ArmingPage({ say, now, role = "admin" }: { say: Say; now: number
           </div>
         )}
       </section>
+      {wizBox}
       {askSave && <Confirm text={askSave} yes={t("save")} onNo={() => setAskSave(null)} onYes={() => void save()} />}
       {switching && (
         <Confirm text={t(switching === "armed" ? "modeArmConfirm" : "modeHomeConfirm")}
