@@ -18,7 +18,9 @@ export function DispatchOnce({ route: fixedRoute, robot: fixedRobot, say, cls, t
 }) {
   const [open, setOpen] = useState(false);
   const [robots, setRobots] = useState<string[] | null>(null);
-  const [routes, setRoutes] = useState<{ id: string; title?: string }[] | null>(null);
+  const [routes, setRoutes] = useState<{ id: string; title?: string; map_id?: string; map_version?: string }[] | null>(null);
+  // 第 9 轮 W9-04:每台在用哪张图哪一版 —— 画在别的版本上的路线灰掉写原因(跟机器人页一样)
+  const [maps, setMaps] = useState<Record<string, { id?: string; version?: string }>>({});
   const [robot, setRobot] = useState(fixedRobot ?? "");
   const [route, setRoute] = useState(fixedRoute ?? "");
   const [loops, setLoops] = useState(1);
@@ -33,14 +35,15 @@ export function DispatchOnce({ route: fixedRoute, robot: fixedRobot, say, cls, t
     setLoops(1);
     setPlan(null);
     setErr(null);
-    if (fixedRobot == null) {
-      api<{ robots: { robot_id: string; fresh?: boolean; revoked?: boolean }[] }>("GET", "/api/robots")
-        .then((d) => setRobots(d.robots.filter((r) => !r.revoked && r.fresh !== false).map((r) => r.robot_id)))
-        .catch((e) => { setRobots([]); setErr(why(e)); });
-    }
+    api<{ robots: { robot_id: string; fresh?: boolean; revoked?: boolean; map?: { id?: string; version?: string } | null }[] }>("GET", "/api/robots")
+      .then((d) => {
+        setMaps(Object.fromEntries(d.robots.filter((r) => r.map).map((r) => [r.robot_id, r.map ?? {}])));
+        if (fixedRobot == null) setRobots(d.robots.filter((r) => !r.revoked && r.fresh !== false).map((r) => r.robot_id));
+      })
+      .catch((e) => { if (fixedRobot == null) { setRobots([]); setErr(why(e)); } });
     if (fixedRoute == null) {
-      api<{ routes: { id: string; title?: string }[] }>("GET", "/api/routes?kind=patrol")
-        .then((d) => setRoutes(d.routes.map((r) => ({ id: r.id, title: r.title }))))
+      api<{ routes: { id: string; title?: string; map_id?: string; map_version?: string }[] }>("GET", "/api/routes?kind=patrol")
+        .then((d) => setRoutes(d.routes.map((r) => ({ id: r.id, title: r.title, map_id: r.map_id, map_version: r.map_version }))))
         .catch((e) => { setRoutes([]); setErr(why(e)); });
     }
   };
@@ -52,6 +55,13 @@ export function DispatchOnce({ route: fixedRoute, robot: fixedRobot, say, cls, t
     const lq = `&loops=${n}`;
     api<Plan>("GET", `/api/robots/${enc(id)}/patrol-plan?mission_id=${encodeURIComponent(rt)}${lq}`)
       .then(setPlan).catch((e) => setErr(why(e)));
+  };
+  /** 这条路线这台跑不了:画在哪(「v11」或「estate-2 v3」);跑得了或不知道回 null。 */
+  const otherMap = (rt: { map_id?: string; map_version?: string } | undefined, id: string): string | null => {
+    const m = maps[id];
+    if (!rt || !rt.map_version || !m?.version) return null;
+    if (rt.map_id && m.id && rt.map_id !== m.id) return `${rt.map_id} v${rt.map_version}`;
+    return rt.map_version === m.version ? null : `v${rt.map_version}`;
   };
   const pick = (id: string) => { setRobot(id); ask(id, route, loops); };
   const pickRoute = (rt: string) => { setRoute(rt); ask(robot, rt, loops); };
@@ -91,7 +101,12 @@ export function DispatchOnce({ route: fixedRoute, robot: fixedRobot, say, cls, t
               <label class="field">{t("doRoute")}
                 <select name="route" value={route} onChange={(e) => pickRoute(e.currentTarget.value)}>
                   <option value="">{t("doPickRoute")}</option>
-                  {(routes ?? []).map((x) => <option key={x.id} value={x.id}>{x.title || x.id}</option>)}
+                  {(routes ?? []).map((x) => {
+                    const o = robot ? otherMap(x, robot) : null;
+                    return <option key={x.id} value={x.id} disabled={o !== null}>
+                      {o === null ? x.title || x.id : `${x.title || x.id} — ${t("doRouteOtherMap", { at: o, id: robot, v: `v${maps[robot]?.version ?? ""}` })}`}
+                    </option>;
+                  })}
                 </select>
               </label>
               {routes !== null && routes.length === 0 && <p class="muted small">{t("doNoRoute")}</p>}

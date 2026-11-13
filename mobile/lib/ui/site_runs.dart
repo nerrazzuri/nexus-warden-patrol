@@ -56,6 +56,17 @@ String runTitle(Map<String, dynamic> r) {
   return title.isNotEmpty ? title : siteKnown(m);
 }
 
+/// 第 9 轮 W9-03：这一趟的结果说人话（站点给的是 done / aborted / failed 这种代号）。
+String runResultText(Map<String, dynamic> r) {
+  if (r['finished'] != true) return tr('Not finished', '没跑完');
+  return switch ('${r['result'] ?? ''}') {
+    'aborted' || 'abort' => tr('Stopped', '叫停了'),
+    'failed' => tr('Failed', '没跑成'),
+    'preempted' => tr('Handed over', '被接替'),
+    _ => tr('Finished', '已完成'),
+  };
+}
+
 /// 这一趟没跑完（中止、失败、没收尾）。
 bool runFailed(Map<String, dynamic> r) =>
     r['finished'] != true || const {'aborted', 'failed', 'abort'}.contains(r['result']);
@@ -343,10 +354,8 @@ class _SiteRunPageState extends State<SiteRunPage> {
                   style: NwText.titleMedium.copyWith(color: nw.text)),
               nwGap4,
               Text(
-                  tr(
-                      '${run['robot_id']} · ${run['photos']} photos · '
-                          '${run['finished'] == true ? 'finished (${run['result']})' : 'not finished'}',
-                      '${run['robot_id']} · 照片 ${run['photos']} · ${run['finished'] == true ? '已完成（${run['result']}）' : '未完成'}'),
+                  // 第 9 轮 W9-03：结果写人话，不露 done / aborted
+                  '${run['robot_id']} · ${tr('${run['photos']} photos', '照片 ${run['photos']} 张')} · ${runResultText(run)}',
                   style: NwText.bodySmall.copyWith(color: nw.textSecondary)),
             ])),
             nwGap24,

@@ -14,6 +14,7 @@ App 的值守页、日程页,网页的值守页都用这一份(``GET /api/patrol
 from __future__ import annotations
 
 import json
+import re
 from collections.abc import Callable
 from datetime import datetime, timedelta
 from typing import Any
@@ -26,6 +27,10 @@ from nexwar_site.sitetime import site_tz
 _RESULT = {"done": "done", "failed": "failed", "aborted": "aborted", "preempted": "handed_over"}
 _TERMINAL = {"task_done": "done", "task_failed": "failed", "task_aborted": "aborted",
              "task_preempted": "handed_over"}
+#: 第 9 轮 W9-03:机器人报的结束原因只是一个代号(``abort``、``done``、``halt``……)时不给人看 ——
+#: 状态(叫停的、完成)已经说清楚了。
+_CODE_ONLY = re.compile(r"^\s*(abort(ed)?|done|halt(ed)?|stop(ped)?|cancel(l?ed)?|preempted|ok|"
+                        r"finished|completed?)\s*$", re.I)
 #: 排程账里「这一轮到点了还没起跑」的几种去向(还在窗口里就是 waiting)。
 _PENDING = ("busy", "no_robot", "displaced", "supervised", "weather", "skew", "ambiguous")
 
@@ -52,6 +57,8 @@ def _terminal(db: Any, robot: str, task_id: str) -> tuple[str, int, str, int] | 
         skipped = s if isinstance(s, int) and not isinstance(s, bool) and s > 0 else 0
     if rows[0]["kind"] == "task_preempted":
         why = ""                                      # 不露 preempted 这种代号;谁接替的见 _handover
+    if _CODE_ONLY.match(why):
+        why = ""                                      # 第 9 轮 W9-03:代号不给人看
     return _TERMINAL[rows[0]["kind"]], int(rows[0]["received_at"]), why, skipped
 
 

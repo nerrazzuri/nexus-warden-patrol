@@ -348,6 +348,24 @@ def test_minor37_run_late_的窗口过了_还会补跑_写等机器人_不写没
     db.close()
 
 
+def test_W903_结束原因只是代号的不给人看_说了话的照给(tmp_path):
+    import json
+
+    from nexwar_site.today import _terminal
+    db = SiteDB(tmp_path / "s.db")
+    for i, (kind, why) in enumerate([("task_aborted", "abort"), ("task_done", "done"),
+                                     ("task_failed", "导航失败:前面堵住了")]):
+        with db.tx() as c:
+            c.execute("INSERT INTO events(robot_id, kind, data, received_at, event_id, seq, "
+                      "stamp, boot_id) VALUES ('A', ?, ?, ?, ?, ?, ?, 'b')",
+                      (kind, json.dumps({"task_id": f"t{i}", "reason": why}), 1000 + i,
+                       f"e{i}", i, 1000 + i))
+    assert _terminal(db, "A", "t0")[2] == ""
+    assert _terminal(db, "A", "t1")[2] == ""
+    assert "堵住" in _terminal(db, "A", "t2")[2]
+    db.close()
+
+
 # ------------------------------------------------------------ 外审 W53-1
 
 
