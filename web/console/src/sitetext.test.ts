@@ -8,6 +8,13 @@ beforeEach(() => { lang.value = "en"; });
 afterEach(() => { lang.value = "zh"; });
 
 describe("站点原文翻成英文", () => {
+  it("第 9 轮 W9-08:未就绪的每一样都翻,不夹中文", () => {
+    const s = siteText("B 未就绪:没站起来(蹲着、趴着,或运动模式没就绪)");
+    expect(s.text).toBe("B is not ready (not standing (crouched, lying down, or motion not ready))");
+    expect(siteText("A 未就绪:急停按着、定位不可用").text).toBe("A is not ready (emergency stop is pressed; it doesn't know where it is)");
+    expect(CJK.test(siteText("排程 route-1-2 本轮未执行:B 未就绪:没站起来(蹲着、趴着,或运动模式没就绪)").text)).toBe(false);
+  });
+
   it("巡逻跳点 + 导航被拒 + 规划失败(goal_blocked):整句都是英文", () => {
     const s = siteText("跳过 1 个点(P2):导航拒了: goto 被设备拒绝: 规划失败(goal_blocked):终点在障碍、禁行区里或贴得太近");
     expect(s.text).toBe("Skipped 1 point (P2): navigation refused: no path — the destination is inside or too close to an obstacle or no-go area");

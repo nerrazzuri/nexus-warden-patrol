@@ -116,9 +116,13 @@ def _stopped_by(db: Any, robot: str, start_ms: int, end_ms: int) -> str:
 
 def today_view(db: Any, *, now_ms: int, adhoc: Any = None,
                day: str | None = None,
-               loaded: Callable[[str], tuple[Any, Any]] | None = None) -> dict[str, Any]:
+               loaded: Callable[[str], tuple[Any, Any]] | None = None,
+               not_ready: Callable[[str], list[str]] | None = None) -> dict[str, Any]:
     """今天(或 ``day`` = ``YYYY-MM-DD`` 那天,站点时区)的每一趟巡逻。往天的按现在这份日程排轮次,
-    跑了的、没跑的照库里的记录写(liang-d5 第 5 轮前:往天的巡逻在网页上查不到)。"""
+    跑了的、没跑的照库里的记录写(liang-d5 第 5 轮前:往天的巡逻在网页上查不到)。
+
+    ``not_ready``:机器人现在哪几样没就绪(``motion``、``estop_clear``……;就绪了是空的)。
+    「下一次」那一趟排给的机器人没就绪,那一行带上 ``not_ready``(第 9 轮 W9-05)。"""
     act = active_bundle(db)
     tz = act.schedule.tz() if act is not None else site_tz(db)
     now = datetime.fromtimestamp(now_ms / 1000, tz=tz)
@@ -159,6 +163,10 @@ def today_view(db: Any, *, now_ms: int, adhoc: Any = None,
     first = next((it for it in items if it["state"] == "later"), None)
     if first is not None:
         first["state"] = "next"                         # 还没到点的第一趟
+        rid = str(first.get("robot") or "")
+        bad = not_ready(rid) if rid and not_ready is not None else []
+        if bad:
+            first["not_ready"] = bad
     off = now.utcoffset()
     return {"date": start.strftime("%Y-%m-%d"), "timezone": str(tz),
             # 手机、网页按站点的钟显示时刻(外审 W53-1 #12)
