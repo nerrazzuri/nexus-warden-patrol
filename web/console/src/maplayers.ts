@@ -91,6 +91,21 @@ export function labelAbove(pts: [number, number][], r: number, h: number): boole
     && Math.abs(ox - x) < r * 2 + h && oy > y && oy - y < r * 2 + h * 1.5));
 }
 
+/** 第 10 轮 W10-06:报警标签(画在报警点上方)的基线 y。标签横向 ±``LABEL_HALF_W`` 内有机器人、
+ *  竖向会压到机器人的点或它的名字(点上下各两行,名字可能画在点上面也可能在下面)的,挪到那台机器人整块的上面。
+ *  ``bots``:机器人在屏上的位置;``r`` 点半径;``h`` 一行字高。 */
+const LABEL_HALF_W = 60;
+export function eventLabelY(x: number, y: number, bots: [number, number][], r: number, h: number): number {
+  let ly = y - 14;
+  for (let pass = 0; pass < 4; pass++) {
+    const hit = bots.find(([bx, by]) => Math.abs(bx - x) < LABEL_HALF_W
+      && ly > by - r - 2 * h - 4 - 2 && ly - h < by + r + 2 * h + 4);
+    if (!hit) break;
+    ly = hit[1] - r - 2 * h - 6;
+  }
+  return ly;
+}
+
 /**
  * W6-15:屏上靠得比 ``near`` 还近的几个点(同一处的两台机器人)围着它们的中心摊成一个小圈,
  * 相邻两个隔开 ``near``;隔得远的原样。画的时候再拉一根细线回原位。
