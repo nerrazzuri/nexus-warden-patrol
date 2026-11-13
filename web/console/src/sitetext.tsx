@@ -272,7 +272,8 @@ const NO_HOVER = "Site message in Chinese (switch the language to 中文 to read
  *  认不得的原样(人写的中文不能被换成「见详情」)。 */
 export function siteKnown(s: string | null | undefined): string {
   const src = s ?? "";
-  if (lang.value !== "en") return zhPunct(src);
+  // 第 9 轮 A8-04 尾巴:版本说明「从 7 清了…」「从 9 编辑…」写成「从第 7 版…」
+  if (lang.value !== "en") return zhPunct(src.replace(/^从 (\d+) (清了|编辑)/, "从第 $1 版$2"));
   if (!CJK.test(src)) return src;
   const out = tr(src);
   return out.includes(UNK) ? src : out;

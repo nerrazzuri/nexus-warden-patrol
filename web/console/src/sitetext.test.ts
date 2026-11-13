@@ -113,6 +113,10 @@ describe("第 3 轮 zh N9", () => {
     expect(zhPunct("已用 86%,剩 30 GB:到 90% 就不接新的巡逻(没传完的不删)")).toBe("已用 86%，剩 30 GB：到 90% 就不接新的巡逻（没传完的不删）");
     expect(zhPunct("排程 route-1-2 本轮未执行:到点没有能派的机器人")).toBe("排程 route-1-2 本轮未执行：到点没有能派的机器人");
     expect(zhPunct("编号 route-1(不变)")).toBe("编号 route-1（不变）");
+    const { siteKnown: known } = await import("./sitetext");
+    lang.value = "zh";
+    expect(known("从 7 清了 337 处零星噪点(773 格)")).toBe("从第 7 版清了 337 处零星噪点（773 格）");
+    lang.value = "en";
   });
 });
 
