@@ -621,7 +621,8 @@ def test_W902_在等_报P2不报P1_补跑起来了自己关(告警):
     [a] = desk.book.open()
     assert (a.kind, a.level.value) == ("schedule_waiting", "P2")
     assert "在等" in a.title and "B 没站起来" in a.detail
-    # 第 10 轮 W9-02:标题「排程「nightly」在等机器人」中间不多空格;给保安看(网页总览、报警记录看得到)
+    # 第 10 轮 W9-02:标题「排程「nightly」在等机器人」中间不多空格;
+    # 给保安看(网页总览、报警记录看得到)
     assert a.title.startswith("排程「nightly」在等机器人:"), a.title
     assert a.detail.startswith("nightly：B 没站起来"), "W9-10:名字和原因之间全角冒号"
     from nexwar_site.alert_audience import audience
