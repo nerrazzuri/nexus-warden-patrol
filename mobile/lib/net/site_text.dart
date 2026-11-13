@@ -282,6 +282,8 @@ String checkText(Map c) {
 
 /// 任务号给人看的样子（手机 App 测试 M14）：`standby-f81f…` 这种内部号不露，说是哪一类。
 String taskKindText(String taskId) {
+  // 第 10 轮 W10-05：回原点那趟任务号是 standby-home-…
+  if (taskId.startsWith('standby-home-')) return tr('returning home', '回原点');
   final m = RegExp(r'^([a-z]+)-').firstMatch(taskId);
   return switch (m?.group(1)) {
     'standby' => tr('going to its standby point', '回待命点'),

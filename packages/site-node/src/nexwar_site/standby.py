@@ -347,9 +347,11 @@ class StandbyManager:
         target = MapPose(map_id=mid, map_version=ver, frame_id="map",
                          x=h["x"], y=h["y"], yaw=h["yaw"]).to_wire()
         async with self._sending(robot_id):
+            # 第 10 轮 W10-05:回原点的任务号 standby-home-…(还是 standby- 开头,去重照认;
+            # 网页、App 据此写「回原点」不写「回待命点」)
             r = await self.dispatcher.goto(robot_id, target, None, issued_by=issued_by,
                                            priority=STANDBY_RETURN, homing=True,
-                                           task_id=f"{STANDBY_PREFIX}{uuid.uuid4().hex[:12]}")
+                                           task_id=f"{STANDBY_PREFIX}home-{uuid.uuid4().hex[:12]}")
         return {**r, "aborted": aborted}
 
     @contextlib.asynccontextmanager

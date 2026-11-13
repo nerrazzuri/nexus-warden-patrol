@@ -1,5 +1,6 @@
 // 站点模式的运行记录（W00c5d）：列表、一趟、照片、复核（保安、管理员）、重判；管理员只看。夹具来自真站点。
 import 'package:nexwar_patrol/net/site_client.dart' show SiteError;
+import 'package:nexwar_patrol/net/site_text.dart' show taskKindText;
 import 'package:nexwar_patrol/ui/site_page.dart';
 import 'package:nexwar_patrol/ui/site_runs.dart';
 import 'package:flutter/material.dart';
@@ -43,6 +44,11 @@ void main() {
 
   test('第 9 轮 W9-01 / A9-02：标题写路线显示名；自己回待命点、回原点的那一趟不写手动派出', () {
     expect(runTitle({'mission': 'route-1', 'title': '一楼夜巡'}), '一楼夜巡');
+    // 第 10 轮 W10-05：回原点那趟任务号 standby-home-…
+    expect(runTitle({'mission': 'standby-home-7ff9137e03c8'}), '回原点');
+    expect(runTitle({'mission': 'standby-7ff9137e03c8'}), '回待命点');
+    expect(taskKindText('standby-home-7ff9137e03c8'), '回原点');
+    expect(taskKindText('standby-7ff9137e03c8'), '回待命点');
     expect(runTitle({'mission': 'standby-9a1b2c', 'kind': 'standby'}), '回待命点');
     expect(runTitle({'mission': 'standby-9a1b2c', 'kind': 'home'}), '回原点');
     expect(runTitle({'mission': 'standby-9a1b2c'}), '回待命点');

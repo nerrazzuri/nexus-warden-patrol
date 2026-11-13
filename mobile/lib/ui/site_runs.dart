@@ -48,7 +48,7 @@ String runTitle(Map<String, dynamic> r) {
   if (RegExp(r'^temp-').hasMatch(m)) return tr('One-off route', '临时路线');
   if (RegExp(r'^incident-').hasMatch(m)) return tr('Alarm response', '报警出动');
   // 第 9 轮 A9-02：巡逻跑完自己回待命点 / 回原点的那一趟不是「手动派出」
-  if (r['kind'] == 'home' || RegExp(r'^home-').hasMatch(m)) return tr('Back to origin', '回原点');
+  if (r['kind'] == 'home' || RegExp(r'^(standby-)?home-').hasMatch(m)) return tr('Back to origin', '回原点');
   if (r['kind'] == 'standby' || RegExp(r'^standby-').hasMatch(m)) return tr('Back to standby point', '回待命点');
   if (RegExp(r'^(task|goto)-[0-9a-f]+$').hasMatch(m)) return tr('Sent by hand', '手动派出');
   // 第 9 轮 W9-01：路线起了显示名写显示名（站点带 title）
