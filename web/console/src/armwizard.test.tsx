@@ -16,6 +16,9 @@ const R: Readiness = {
 
 let ready: Readiness;
 let status: unknown;
+let plan: Record<string, unknown>;
+let preview: Record<string, unknown> | null;
+let taken: Set<string>;
 let posted: { url: string; body: Record<string, unknown> }[];
 let gets: string[];
 beforeEach(() => {
@@ -24,11 +27,24 @@ beforeEach(() => {
   status = { duty: null, runs: [], waiting: {}, zones: [], now_ms: 1 };
   posted = [];
   gets = [];
+  plan = { revision: 0, entries: [], limits: {}, forecast: { entries: [], zones: [], warnings: [] } };
+  preview = null;
+  taken = new Set();
   setFetch(((url: string, init?: RequestInit) => {
     if (init?.method === "POST") {
       const body = JSON.parse(String(init.body ?? "{}"));
       posted.push({ url, body });
       if (url === "/api/guard/plan") ready.missing = [];
+      if (url === "/api/guard-routes/generate") {
+        return Promise.resolve(json({ waypoints: [{ name: "1-1", x: 1, y: 1, yaw: 0 }], problems: [], zones: [{ zone: "1", points: 1, note: "" }] }));
+      }
+      if (url === "/api/arming/schedule/preview") {
+        const m = { mode: "armed", state: "armed", zones: [{ zone: "1", armed: true }] };
+        return Promise.resolve(json(preview ?? { before: m, after: m }));
+      }
+      if (url.startsWith("/api/routes/") && taken.has(decodeURIComponent(url.split("/").pop()!))) {
+        return Promise.resolve(json({ error: "路线别人刚改过", errors: [] }, 409));
+      }
       if (url.endsWith("/areas")) ready = { ...ready, zones: [String(body.zone)], missing: ready.missing.filter((m) => m !== "zones") };
       if (url === "/api/robots/A/service") ready.robots[0] = { id: "A", code: "", why: "" };
       return Promise.resolve(json({ revision: 1, entries: [], limits: {}, forecast: { entries: [], zones: [], warnings: [] } }));
@@ -36,7 +52,7 @@ beforeEach(() => {
     gets.push(url);
     if (url === "/api/maps") return Promise.resolve(json(MAPS));
     if (url.startsWith("/api/guard/readiness")) return Promise.resolve(json(ready));
-    if (url === "/api/guard/plan") return Promise.resolve(json({ revision: 0, entries: [], limits: {}, forecast: { entries: [], zones: [], warnings: [] } }));
+    if (url === "/api/guard/plan") return Promise.resolve(json(plan));
     if (url === "/api/arming/schedule") return Promise.resolve(json({ enabled: false, slots: [] }));
     if (url === "/api/guard/status") return Promise.resolve(json(status));
     if (url.endsWith("/preview")) return Promise.resolve(json(META));
@@ -65,9 +81,9 @@ describe("布防向导的小函数", () => {
     expect(missingText({ ...R, missing: ["robot"] })).toBe("A is set to manual dispatch only");
     expect(missingText({ ...R, missing: ["plan"] })).toBe("no zone route is assigned to a robot");
   });
-  it("点布防前查:用机器人在用的那一版图;缺东西才开向导", async () => {
+  it("点布防前查:图由站点挑(跟手机同一张,外审 1 #8);缺东西才开向导", async () => {
     expect(await needsWizard()).toBe(true);
-    expect(gets).toContain("/api/guard/readiness?map_id=estate-1&map_version=7");
+    expect(gets).toContain("/api/guard/readiness");
     ready.missing = [];
     expect(await needsWizard()).toBe(false);
   });
@@ -132,6 +148,57 @@ describe("布防向导", () => {
     expect(doc.querySelector(".wiz-editor select")).toBeNull();
     expect(doc.querySelector(".wiz-editor")!.textContent).toContain("estate-1 · v7");
     expect(location.hash).toBe(before);
+  });
+
+  it("外审 1 #1 #9:存方案只换这条路线那一行,别的路线、隐藏选项都不动", async () => {
+    plan = { ...plan, revision: 3, entries: [
+      { id: 1, route: "other", robot: "B", gap_min: 5, shuffle: true, end_standby: false },
+      { id: 2, route: "guard-1", robot: "", gap_min: 0, shuffle: true, end_standby: false }] };
+    const r = render(<ArmWizard say={() => {}} onClose={() => {}} />);
+    await waitFor(() => expect(r.container.ownerDocument.querySelector("[data-wiz-step=who]")).not.toBeNull());
+    fireEvent.change(r.container.ownerDocument.querySelector("[data-wiz-step=who] select")!, { target: { value: "B" } });
+    fireEvent.click(r.getByText("下一步"));
+    await waitFor(() => expect(posted.some((p) => p.url === "/api/guard/plan")).toBe(true));
+    const body = posted.find((p) => p.url === "/api/guard/plan")!.body;
+    expect(body.base_revision).toBe(3);
+    expect(body.entries).toEqual([
+      { route: "other", robot: "B", gap_min: 5, shuffle: true, end_standby: false },
+      { route: "guard-1", robot: "B", gap_min: 0, shuffle: true, end_standby: false }]);
+  });
+
+  it("外审 1 #2:改布防时间会马上撤防,先说清楚,确认了才存", async () => {
+    ready.missing = [];
+    preview = { before: { mode: "armed", state: "armed", zones: [{ zone: "1", armed: true }] },
+      after: { mode: "home", state: "disarmed", zones: [{ zone: "1", armed: false }] } };
+    const r = render(<ArmWizard say={() => {}} onClose={() => {}} />);
+    await waitFor(() => expect(r.container.ownerDocument.querySelector("[data-wiz-step=confirm]")).not.toBeNull());
+    fireEvent.click(r.getByText(/什么时候布防/));
+    fireEvent.click(r.getByText("下一步"));
+    await waitFor(() => expect(r.getAllByText("保存这个时间").length).toBeGreaterThan(0));
+    expect(posted.some((p) => p.url === "/api/arming/schedule")).toBe(false);
+    fireEvent.click(r.getAllByText("保存这个时间").find((el) => el.tagName === "BUTTON")!);
+    await waitFor(() => expect(posted.some((p) => p.url === "/api/arming/schedule")).toBe(true));
+  });
+
+  it("外审 1 #4:一个防区都不经过的路线不能选,写原因", async () => {
+    ready.routes = [...ready.routes, { id: "far", title: "远处", zones: [], in_plan: false }];
+    ready.missing = ["plan"];
+    const r = render(<ArmWizard say={() => {}} onClose={() => {}} />);
+    await waitFor(() => expect(r.container.ownerDocument.querySelector("[data-wiz-step=who]")).not.toBeNull());
+    fireEvent.click(r.getByText(/巡逻路线/));
+    await waitFor(() => expect(r.container.ownerDocument.querySelector("[data-route-nozone]")?.textContent).toBe("一个防区都不经过，机器人不会去跑"));
+    const radios = r.container.ownerDocument.querySelectorAll<HTMLInputElement>("input[name=wiz-route]");
+    expect([...radios].map((x) => [x.checked, x.disabled])).toEqual([[true, false], [false, true]]);
+  });
+
+  it("外审 1 #10:自动生成的编号被别的路线占着(409),换下一个", async () => {
+    ready = { ...ready, routes: [], missing: ["route", "plan"] };
+    taken.add("guard-estate-1-7");
+    const r = render(<ArmWizard say={() => {}} onClose={() => {}} />);
+    await waitFor(() => expect(r.getByText("按防区自动生成")).toBeTruthy());
+    fireEvent.click(r.getByText("按防区自动生成"));
+    await waitFor(() => expect(posted.some((p) => p.url === "/api/routes/guard-estate-1-7-2")).toBe(true));
+    expect(r.container.ownerDocument.querySelector(".wiz-editor")).toBeNull();
   });
 
   it("只布防、不让机器人巡逻:直接布防,不存方案", async () => {

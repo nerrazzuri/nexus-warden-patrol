@@ -99,8 +99,8 @@ export function ArmingPage({ say, now, role = "admin" }: { say: Say; now: number
   const [busy, setBusy] = useState(false);
   const [switching, setSwitching] = useState<"armed" | "home" | null>(null);
   const [wiz, setWiz] = useState<"open" | "arm" | null>(null);
-  const wizBtn = canDuty && <button type="button" class="btn" data-open-wizard="1" onClick={() => setWiz("open")}>{wt("title")}</button>;
-  const wizBox = wiz && <ArmWizard say={say} arming={wiz === "arm"} onClose={() => { setWiz(null); void loadMode(); }} />;
+  const [askWiz, setAskWiz] = useState<"open" | "arm" | null>(null);
+  const wizChanged = useRef(false);
 
   const loadMode = () => api<ModeView>("GET", "/api/mode").then(setMode).catch(() => setMode(null));
   // 第 4 轮 layout r3-N3:读不到不画成空日程 —— 写「读取失败,正在重试」,隔 5 秒再读(保存一直是灰的)
@@ -133,6 +133,16 @@ export function ArmingPage({ say, now, role = "admin" }: { say: Say; now: number
   const dirty = loaded != null && (loaded.enabled !== enabled || JSON.stringify(loaded.slots) !== JSON.stringify(slots)
     || JSON.stringify(loaded.duty) !== JSON.stringify(duty));
   useUnsaved("arming", dirty);
+  // 布防向导(用户 11-13)。外审 1 #3:向导会改布防时间 —— 这页有没存的草稿先问(不然存草稿会把向导存的盖回去);
+  // 向导里改过东西,关掉后这页从站点重读
+  const openWiz = (k: "open" | "arm") => (dirty ? setAskWiz(k) : setWiz(k));
+  const wizBtn = canDuty && <button type="button" class="btn" data-open-wizard="1" onClick={() => openWiz("open")}>{wt("title")}</button>;
+  const wizBox = <>
+    {wiz && <ArmWizard say={say} arming={wiz === "arm"} onChanged={() => { wizChanged.current = true; }}
+      onClose={() => { setWiz(null); if (wizChanged.current) { wizChanged.current = false; setRetry((n) => n + 1); } else void loadMode(); }} />}
+    {askWiz && <Confirm text={wt("dropArming")} yes={wt("dropYes")} danger onNo={() => setAskWiz(null)}
+      onYes={() => { const k = askWiz; setAskWiz(null); setEnabled(loaded!.enabled); setSlots(loaded!.slots); setDuty(loaded!.duty); setWiz(k); }} />}
+  </>;
 
   const zones = Array.from(new Set([...(mode?.zones ?? []).map((z) => z.zone), ...slots.filter((x) => x.zone).map((x) => x.zone)])).sort();
   const editing = perZone ? zone : "";
@@ -232,7 +242,7 @@ export function ArmingPage({ say, now, role = "admin" }: { say: Say; now: number
         <div class="arm-now-text">
           <h2>{t("armNow")}</h2>
           <p class="arm-who">{whoText(mode, loaded?.enabled ?? enabled)}</p>
-          {mode?.state === "armed" && canDuty && <PatrolReason onWizard={() => setWiz("open")} />}
+          {mode?.state === "armed" && canDuty && <PatrolReason onWizard={() => openWiz("open")} />}
           {mode?.timezone && browserTz() && mode.timezone !== browserTz() && (
             <p class="muted small" data-site-tz={mode.timezone}>{t("armTzNote", { tz: mode.timezone, now: hmSite(now, mode.timezone) })}</p>
           )}
@@ -245,7 +255,7 @@ export function ArmingPage({ say, now, role = "admin" }: { say: Say; now: number
                   disabled={m === "armed" ? !canArm(role) : !canDisarm(role)}
                   title={m !== "armed" && !canDisarm(role) ? t("armNoDisarm") : undefined}
                   onClick={() => (m === "armed" && canDuty
-                    ? void needsWizard().then((n) => (n ? setWiz("arm") : setSwitching(m))) : setSwitching(m))}>{t(m === "armed" ? "modeArmed" : "modeHome")}</button>
+                    ? void needsWizard().then((n) => (n ? openWiz("arm") : setSwitching(m))) : setSwitching(m))}>{t(m === "armed" ? "modeArmed" : "modeHome")}</button>
               ))}
             </div>
             {/* 第 2 轮 config N4:打不开「临时撤防」页的账号(经理)不给这个入口,写一句谁能做 */}

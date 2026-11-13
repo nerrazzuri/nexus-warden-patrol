@@ -650,24 +650,35 @@ class GuardDuty:
             routes.append({"id": r["route_id"], "title": r["title"] or "",
                            "zones": info["zones"] if info else [],
                            "in_plan": any(e["route"] == r["route_id"] for e in plan)})
-        mine = [e for e in plan if any(e["route"] == r["id"] for r in routes)]
+        # 外审 1 #4:一个防区都不经过的路线布防时不会跑(tick 只跑经过布防防区的),不算
+        good = {r["id"] for r in routes if r["zones"]}
+        mine = [e for e in plan if e["route"] in good]
         first = self._route(mine[0]["route"]) if mine else None
         info = first or {"id": "", "map_id": map_id, "map_version": version}
         ids = sorted(set(self.dispatcher.clients) | {e["robot"] for e in mine if e["robot"]})
+        # 外审 1 #5:方案里指定给别的图上路线的机器人,那条布防着时先留给它,「任意一台」用不上
+        fixed = {e["robot"]: e["route"] for e in plan if e["robot"]}
         robots = []
         for rid in ids:
             code, why = self._unfit_code(rid, info)
+            if not code and rid in fixed and fixed[rid] not in good:
+                code, why = "reserved", f"{rid} 指定给了值守方案里的另一条路线 {fixed[rid]}"
             robots.append({"id": rid, "code": code, "why": why})
         fit = {r["id"] for r in robots if not r["code"]}
         missing = []
         if not zones:
             missing.append("zones")
-        if not routes:
+        if not good:
             missing.append("route")
         if not mine:
             missing.append("plan")
-        # 还没有方案:看有没有哪台能派这张图;有方案:方案里每条至少一条派得出去
-        if not (any((e["robot"] in fit) if e["robot"] else fit for e in mine) if mine else fit):
+        # 还没有方案:看有没有哪台能派这张图;有方案:方案里至少一条派得出去
+        # (指定的那台能派;「任意一台」要有一台能派、又没指定给别的路线)
+        def can(e: dict[str, Any]) -> bool:
+            if e["robot"]:
+                return e["robot"] in fit
+            return any(fixed.get(r) in (None, e["route"]) for r in fit)
+        if not (any(can(e) for e in mine) if mine else fit):
             missing.append("robot")
         return {"map_id": map_id, "map_version": version, "zones": zones, "routes": routes,
                 "robots": robots, "missing": missing}

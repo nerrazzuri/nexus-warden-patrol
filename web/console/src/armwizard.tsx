@@ -4,14 +4,15 @@
 import { useEffect, useState } from "preact/hooks";
 import { api, ApiError } from "./api";
 import { robotNames } from "./data";
-import { Modal } from "./dialogs";
+import { Confirm, Modal } from "./dialogs";
 import { lang, type Lang } from "./i18n";
-import { LayoutPage, type MapRow } from "./layoutpage";
+import { LayoutPage } from "./layoutpage";
 import { GuardRoutesTab } from "./layoutroutes";
 import { ZonesTab } from "./layoutzones";
 import { addBlock, toWire, type Slot, type WireSlot } from "./armgrid";
 import type { PreviewMeta } from "./mapview";
 import type { GuardEntry, Plan, Status } from "./armguard";
+import { previewChanges } from "./armingpage";
 
 export type Missing = "zones" | "route" | "plan" | "robot";
 export interface ReadyRoute { id: string; title: string; zones: string[]; in_plan: boolean }
@@ -75,6 +76,11 @@ const en = {
   needPlan: "no zone route is assigned to a robot",
   needRobot: "no robot can be dispatched",
   openWizard: "Open the arming wizard",
+  routeNoZone: "passes through no zone, robots will not run it",
+  dropEdits: "The editor has unsaved changes. Discard them?",
+  dropArming: "This page has unsaved arming-time changes. The wizard may change arming times too, so these changes will be discarded.",
+  dropYes: "Discard",
+  timeGoOn: "Save these times",
   notPatrolling: "Armed, but robots will not patrol on their own: {why}.",
 };
 type WKey = keyof typeof en;
@@ -132,6 +138,11 @@ const zh: Record<WKey, string> = {
   needPlan: "值守方案里没有给机器人分配防区路线",
   needRobot: "没有能派的机器人",
   openWizard: "打开布防向导",
+  routeNoZone: "一个防区都不经过，机器人不会去跑",
+  dropEdits: "编辑器里有没保存的修改，要丢掉吗？",
+  dropArming: "这页的布防时间还有没保存的修改。布防向导也会改布防时间，打开向导会丢掉这些修改。",
+  dropYes: "丢掉",
+  timeGoOn: "保存这个时间",
   notPatrolling: "布防着，但机器人不会自己巡逻：{why}。",
 };
 const DICTS: Record<Lang, Record<WKey, string>> = { en, zh };
@@ -145,13 +156,10 @@ const errText = (e: unknown) => (e instanceof ApiError ? e.message : String(e));
 const enc = encodeURIComponent;
 const GAPS = [0, 10, 15, 30, 60];
 
-/** 向导用哪张图:机器人在用最多的那一版;没有就当前版、最后一版。 */
+/** 向导用哪张图:站点挑(机器人在用最多的那一版;没有就最新登记的正式版,不挑草稿)—— 跟手机同一张(外审 1 #8)。 */
 export async function pickMap(): Promise<MapPick | null> {
-  const d = await api<{ maps: (MapRow & { loaded_on?: string[] })[] }>("GET", "/api/maps");
-  const maps = d.maps ?? [];
-  const used = [...maps].sort((a, b) => (b.loaded_on?.length ?? 0) - (a.loaded_on?.length ?? 0))[0];
-  const m = (used && (used.loaded_on?.length ?? 0) > 0 ? used : null) ?? maps.find((x) => x.active) ?? maps[maps.length - 1];
-  return m ? { map_id: m.map_id, version: m.version } : null;
+  const r = await api<Readiness>("GET", "/api/guard/readiness");
+  return r.map_id ? { map_id: r.map_id, version: r.map_version } : null;
 }
 
 export async function readiness(map: MapPick): Promise<Readiness> {
@@ -181,9 +189,8 @@ export function missingText(r: Readiness): string {
 /** 点「布防」前查一下:要不要开向导(查不出来 → 不开,照原来的确认框)。 */
 export async function needsWizard(): Promise<boolean> {
   try {
-    const map = await pickMap();
-    if (!map) return false;
-    return (await readiness(map)).missing.length > 0;
+    const r = await api<Readiness>("GET", "/api/guard/readiness");
+    return !!r.map_id && r.missing.length > 0;
   } catch {
     return false;
   }
@@ -210,7 +217,7 @@ export function wholeMap(meta: PreviewMeta): [number, number][] {
   return [[x0, y0], [x1, y0], [x1, y1], [x0, y1]];
 }
 
-export function ArmWizard({ say, onClose, arming = false }: { say: Say; onClose: () => void; arming?: boolean }) {
+export function ArmWizard({ say, onClose, arming = false, onChanged }: { say: Say; onClose: () => void; arming?: boolean; onChanged?: () => void }) {
   const [map, setMap] = useState<MapPick | null>(null);
   const [r, setR] = useState<Readiness | null>(null);
   const [plan, setPlan] = useState<Plan | null>(null);
@@ -228,6 +235,13 @@ export function ArmWizard({ say, onClose, arming = false }: { say: Say; onClose:
   const [to, setTo] = useState("06:00");
   const [note, setNote] = useState("");
   const [after, setAfter] = useState("");
+  // 外审 1 #6:嵌着的编辑器有没存的改动时,换步、收起、关向导先问
+  const [editorDirty, setEditorDirty] = useState(false);
+  const [askDrop, setAskDrop] = useState<(() => void) | null>(null);
+  const guarded = (go: () => void) => (editor && editorDirty ? setAskDrop(() => go) : go());
+  const closeEditor = () => { setEditor(null); setEditorDirty(false); };
+  // 外审 1 #2:存下去会马上撤防 / 布防的,先说清楚
+  const [askTime, setAskTime] = useState<{ text: string; body: Sched } | null>(null);
 
   async function load(m: MapPick | null = map, first = false) {
     if (!m) return;
@@ -237,8 +251,9 @@ export function ArmWizard({ say, onClose, arming = false }: { say: Say; onClose:
       setR(got);
       setPlan(p);
       setSched(s);
-      const mine = got.routes.find((x) => x.in_plan) ?? got.routes[0];
-      setRoute((cur) => (got.routes.some((x) => x.id === cur) ? cur : mine?.id ?? ""));
+      const usable = got.routes.filter((x) => x.zones.length);
+      const mine = usable.find((x) => x.in_plan) ?? usable[0];
+      setRoute((cur) => (usable.some((x) => x.id === cur) ? cur : mine?.id ?? ""));
       const e = p.entries.find((x) => x.route === mine?.id);
       if (first) {
         if (e) { setRobot(e.robot); setGap(e.gap_min); }
@@ -258,6 +273,9 @@ export function ArmWizard({ say, onClose, arming = false }: { say: Say; onClose:
 
   const done = [!!r?.zones.length, !!route, !!sched?.enabled && !!sched.slots.length, !!r && !r.missing.includes("plan") && !r.missing.includes("robot"), false];
   const base = map ? `/api/maps/${enc(map.map_id)}/${enc(map.version)}` : "";
+
+  /** 嵌着的编辑器存好了:重新查,也告诉外面。 */
+  const changed = () => { onChanged?.(); return load(); };
 
   async function wholeZone() {
     setBusy(true);
@@ -292,8 +310,9 @@ export function ArmWizard({ say, onClose, arming = false }: { say: Say; onClose:
           saved = id;
         } catch (x) {
           // 编号用过(删掉过的也算)换下一个;点有问题交给编辑器改
-          if (x instanceof ApiError && x.status === 400 && /用过|已经有/.test(x.message)) continue;
-          if (x instanceof ApiError && Array.isArray((x.data as { errors?: unknown[] } | undefined)?.errors)) {
+          if (x instanceof ApiError && (x.status === 409 || (x.status === 400 && /用过|已经有|已有/.test(x.message)))) continue;
+          const errs = x instanceof ApiError ? (x.data as { errors?: unknown[] } | undefined)?.errors : undefined;
+          if (Array.isArray(errs) && errs.length) {
             setNote(wt("routeProblems"));
             setEditor("guard");
             return;
@@ -320,25 +339,35 @@ export function ArmWizard({ say, onClose, arming = false }: { say: Say; onClose:
   /** 第 3 步的「下一步」:按选的存布防时间。 */
   async function saveTime(): Promise<boolean> {
     if (!sched || time === "keep") return true;
+    if (time === "manual" && !sched.enabled) return true;
+    const body: Sched = time === "manual" ? { enabled: false, slots: sched.slots } : { enabled: true, slots: dailySlots(minutes(from), minutes(to)) };
     try {
-      if (time === "manual") {
-        if (sched.enabled) await api("POST", "/api/arming/schedule", { enabled: false, slots: sched.slots });
-      } else {
-        await api("POST", "/api/arming/schedule", { enabled: true, slots: dailySlots(minutes(from), minutes(to)) });
-      }
-      await load();
+      const p = await api<{ before: Parameters<typeof previewChanges>[0]; after: Parameters<typeof previewChanges>[1] }>(
+        "POST", "/api/arming/schedule/preview", body).catch(() => null);
+      const warn = p ? previewChanges(p.before, p.after) : null;
+      if (warn) { setAskTime({ text: warn, body }); return false; }
+      await putTime(body);
       return true;
     } catch (x) { say(errText(x)); return false; }
+  }
+  async function putTime(body: Sched) {
+    await api("POST", "/api/arming/schedule", body);
+    onChanged?.();
+    await load();
   }
 
   /** 第 4 步的「下一步」:值守方案里这条路线换成选的机器人(别的路线不动)。 */
   async function savePlan(): Promise<boolean> {
     if (!plan || !route) return false;
-    const keep = plan.entries.filter((e) => e.route !== route && (!robot || e.robot !== robot));
-    const entries: GuardEntry[] = [...keep, { route, robot, gap_min: gap, shuffle: false, end_standby: true }];
+    // 外审 1 #1 #9:只换这条路线那一行(别的条目一条不动;同一台机器人指定两条由站点拒绝、写原因),
+    // 界面上没有的选项(打乱、每圈回待命点)保留原来的
+    const old = plan.entries.find((e) => e.route === route);
+    const mine: GuardEntry = { route, robot, gap_min: gap, shuffle: old?.shuffle ?? false, end_standby: old?.end_standby ?? true };
+    const entries: GuardEntry[] = old ? plan.entries.map((e) => (e === old ? mine : e)) : [...plan.entries, mine];
     try {
       await api("POST", "/api/guard/plan", { entries: entries.map(({ route, robot, gap_min, shuffle, end_standby }) =>
         ({ route, robot, gap_min, shuffle, end_standby: end_standby !== false })), limits: plan.limits, base_revision: plan.revision });
+      onChanged?.();
       await load();
       return true;
     } catch (x) { say(errText(x)); return false; }
@@ -349,7 +378,7 @@ export function ArmWizard({ say, onClose, arming = false }: { say: Say; onClose:
     try {
       if (step === 2 && !(await saveTime())) return;
       if (step === 3 && !(await savePlan())) return;
-      setEditor(null);
+      closeEditor();
       setNote("");
       setStep((s) => Math.min(4, s + 1));
     } finally { setBusy(false); }
@@ -380,13 +409,13 @@ export function ArmWizard({ say, onClose, arming = false }: { say: Say; onClose:
   const sel = r?.routes.find((x) => x.id === route);
   const canNext = step === 0 ? !!r?.zones.length : step === 1 ? !!route : step === 3 ? !!route && !!plan : true;
   return (
-    <Modal label={wt("title")} onClose={onClose} wide cls="armwiz">
+    <Modal label={wt("title")} onClose={() => guarded(onClose)} wide cls="armwiz">
       <p class="muted small">{wt("lead")}</p>
       {map && <p class="small" data-wiz-map="1">{wt("map", { map: map.map_id, ver: map.version })}</p>}
       <ol class="wiz-steps" aria-label={wt("title")}>
         {steps.map((k, i) => (
           <li key={k} aria-current={i === step ? "step" : undefined} class={done[i] ? "done" : ""}>
-            <button type="button" class="wiz-step" disabled={!started || busy} onClick={() => { setEditor(null); setNote(""); setStep(i); }}>
+            <button type="button" class="wiz-step" disabled={!started || busy} onClick={() => guarded(() => { closeEditor(); setNote(""); setStep(i); })}>
               {done[i] ? "✓ " : `${i + 1}. `}{wt(k)}
             </button>
           </li>
@@ -398,7 +427,7 @@ export function ArmWizard({ say, onClose, arming = false }: { say: Say; onClose:
           <p>{r.zones.length ? wt("zonesHave", { list: r.zones.join("、") }) : wt("zonesNone")}</p>
           <div class="row wrap">
             {!r.zones.length && <button type="button" class="btn primary" disabled={busy} onClick={() => void wholeZone()}>{wt("zoneWhole")}</button>}
-            <button type="button" class="btn" onClick={() => setEditor(editor === "zones" ? null : "zones")}>
+            <button type="button" class="btn" onClick={() => (editor === "zones" ? guarded(closeEditor) : setEditor("zones"))}>
               {editor === "zones" ? wt("hideEditor") : wt(r.zones.length ? "zoneEdit" : "zoneDraw")}</button>
           </div>
         </section>
@@ -409,15 +438,17 @@ export function ArmWizard({ say, onClose, arming = false }: { say: Say; onClose:
             <fieldset class="wiz-pick">
               <legend>{wt("routeHave")}</legend>
               {r.routes.map((x) => (
-                <label key={x.id}><input type="radio" name="wiz-route" checked={route === x.id} onChange={() => setRoute(x.id)} />
-                  {" "}{x.title || x.id} <span class="muted small">{x.zones.length ? wt("routeVia", { zones: x.zones.join("、") }) : ""}</span></label>
+                <label key={x.id}><input type="radio" name="wiz-route" checked={route === x.id} disabled={!x.zones.length} onChange={() => setRoute(x.id)} />
+                  {" "}{x.title || x.id}{" "}
+                  {x.zones.length ? <span class="muted small">{wt("routeVia", { zones: x.zones.join("、") })}</span>
+                    : <span class="bad small" data-route-nozone="1">{wt("routeNoZone")}</span>}</label>
               ))}
             </fieldset>
           ) : <p>{wt("routeNone")}</p>}
           <div class="row wrap">
             <button type="button" class={r.routes.length ? "btn" : "btn primary"} disabled={busy || !r.zones.length} onClick={() => void genRoute()}>
               {wt(r.routes.length ? "routeGenAgain" : "routeGen")}</button>
-            <button type="button" class="btn" onClick={() => setEditor(editor === "guard" ? null : "guard")}>
+            <button type="button" class="btn" onClick={() => (editor === "guard" ? guarded(closeEditor) : setEditor("guard"))}>
               {editor === "guard" ? wt("hideEditor") : wt("routeEdit")}</button>
           </div>
           {note && <p class="bad small" role="status">{note}</p>}
@@ -486,15 +517,24 @@ export function ArmWizard({ say, onClose, arming = false }: { say: Say; onClose:
       {editor && map && (
         <div class="wiz-editor">
           <LayoutPage say={say} robots={robots.map((x) => x.id)} tabs={editor === "zones" ? { zones: ZonesTab } : { guard: GuardRoutesTab }}
-            embed={{ tab: editor, map, onSaved: () => void load() }} />
+            embed={{ tab: editor, map, onSaved: () => void changed(), onDirty: setEditorDirty }} />
         </div>
       )}
+      {askDrop && <Confirm text={wt("dropEdits")} yes={wt("dropYes")} danger onNo={() => setAskDrop(null)}
+        onYes={() => { const go = askDrop; setAskDrop(null); closeEditor(); go(); }} />}
+      {askTime && <Confirm text={askTime.text} yes={wt("timeGoOn")} onNo={() => setAskTime(null)}
+        onYes={() => {
+          const b = askTime.body;
+          setAskTime(null);
+          setBusy(true);
+          putTime(b).then(() => setStep(3)).catch((x) => say(errText(x))).finally(() => setBusy(false));
+        }} />}
       <div class="row end wiz-actions">
-        {arming && step < 4 && <button type="button" class="btn" disabled={busy} onClick={() => void arm(false)}>{wt("armOnly")}</button>}
-        {step > 0 && <button type="button" class="btn" disabled={busy} onClick={() => { setEditor(null); setNote(""); setStep(step - 1); }}>{wt("back")}</button>}
-        {step < 4 && <button type="button" class="btn primary" disabled={busy || !canNext || !started} onClick={() => void next()}>{wt("next")}</button>}
+        {arming && step < 4 && <button type="button" class="btn" disabled={busy} onClick={() => guarded(() => void arm(false))}>{wt("armOnly")}</button>}
+        {step > 0 && <button type="button" class="btn" disabled={busy} onClick={() => guarded(() => { closeEditor(); setNote(""); setStep(step - 1); })}>{wt("back")}</button>}
+        {step < 4 && <button type="button" class="btn primary" disabled={busy || !canNext || !started} onClick={() => guarded(() => void next())}>{wt("next")}</button>}
         {step === 4 && !after && <button type="button" class="btn primary" disabled={busy} onClick={() => void arm(true)}>{wt("armNow")}</button>}
-        {step === 4 && <button type="button" class="btn" onClick={onClose}>{wt("done")}</button>}
+        {step === 4 && <button type="button" class="btn" onClick={() => guarded(onClose)}>{wt("done")}</button>}
       </div>
     </Modal>
   );

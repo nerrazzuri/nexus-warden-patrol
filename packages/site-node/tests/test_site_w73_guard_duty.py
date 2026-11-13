@@ -1644,3 +1644,28 @@ def test_向导_就绪检查_方案指定的机器人没登记_也算缺机器�
     got = t.duty.readiness(*MAP)
     assert got["missing"] == ["robot"]
     assert {"id": "B", "code": "unregistered", "why": "B 没登记"} in got["robots"]
+
+
+def test_外审1_4_路线一个防区都不经过_不算就绪(站):
+    t = 站
+    far = [{"name": n, "x": x, "y": 30.0, "yaw": 0.0} for n, x in (("P", 2.0), ("Q", 7.0))]
+    t.store.put_route("nowhere", {"map_id": MAP[0], "map_version": MAP[1], "kind": "guard",
+                                  "waypoints": far, "base_revision": 0}, by="alice")
+    t.duty.put_plan({"entries": [{"route": "nowhere", "robot": ""}], "base_revision": 0},
+                    by="alice")
+    got = t.duty.readiness(*MAP)
+    assert {"id": "nowhere", "title": "", "zones": [], "in_plan": True} in got["routes"]
+    assert got["missing"] == ["plan"], "方案里的路线一个防区都不经过:跟没有方案一样,不会巡逻"
+
+
+def test_外审1_5_唯一一台被另一张图的方案指定了_任意一台的方案派不出(站):
+    t = 站
+    t.store.put_route("other-map", {"map_id": MAP[0], "map_version": "8", "kind": "guard",
+                                    "waypoints": ROUTE, "base_revision": 0}, by="alice")
+    t.duty.put_plan({"entries": [{"route": "night-guard", "robot": ""},
+                                 {"route": "other-map", "robot": "A"}], "base_revision": 0},
+                    by="alice")
+    got = t.duty.readiness(*MAP)
+    assert got["missing"] == ["robot"]
+    assert got["robots"] == [{"id": "A", "code": "reserved",
+                              "why": "A 指定给了值守方案里的另一条路线 other-map"}]

@@ -268,6 +268,19 @@ describe("布防时间页", () => {
     expect(now().querySelector('a[href="#/admin/access"]')!.textContent).toContain("临时撤防");
   });
 
+  it("外审 1 #3:这页有没存的布防时间,打开向导先问(向导存的不会被旧草稿盖回去)", async () => {
+    missing = ["plan"];
+    const { container: c } = page();
+    await waitFor(() => expect(c.querySelector(".arm-now")?.textContent).toContain("按时间表"));
+    fireEvent.click(c.querySelector("#arm-enabled")!);
+    fireEvent.click(c.querySelector("[data-open-wizard]")!);
+    await waitFor(() => expect(document.querySelector(".modal")?.textContent).toContain("打开向导会丢掉这些修改"));
+    expect(document.querySelector(".armwiz")).toBeNull();
+    fireEvent.click(btn(document.querySelector(".modal")!, "丢掉"));
+    await waitFor(() => expect(document.querySelector(".armwiz")).not.toBeNull());
+    expect((c.querySelector("#arm-enabled") as HTMLInputElement).checked).toBe(true);
+  });
+
   it("布防向导(用户 11-13):防区、路线、值守方案缺东西时,点「布防」先开向导;页顶有向导入口", async () => {
     missing = ["zones", "route", "plan"];
     const { container: c } = page();

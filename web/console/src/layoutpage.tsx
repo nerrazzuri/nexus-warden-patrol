@@ -122,7 +122,11 @@ export function tabFromHash(hash: string): LayoutTab {
 const EMPTY: LayerData = { areas: [], posts: [], marks: [], nav: null, routes: [], guardRoutes: [], standby: [], cameras: [], robots: [] };
 
 /** 布防向导(用户 11-13)里嵌一个标签:固定这张图、这一页,不动地址栏,存好了告诉向导。 */
-export interface LayoutEmbed { tab: LayoutTab; map: { map_id: string; version: string }; onSaved?: () => void }
+export interface LayoutEmbed {
+  tab: LayoutTab; map: { map_id: string; version: string }; onSaved?: () => void;
+  /** 有没有没存的改动(向导换步、关掉之前先问)。 */
+  onDirty?: (dirty: boolean) => void;
+}
 
 export function LayoutPage({ say, robots, tabs, embed }: {
   say: Say; robots: string[]; tabs: Partial<Record<LayoutTab, FunctionComponent<TabProps>>>; embed?: LayoutEmbed;
@@ -133,7 +137,9 @@ export function LayoutPage({ say, robots, tabs, embed }: {
   const [data, setData] = useState<LayerData>(EMPTY);
   const [tab, setTab] = useState<LayoutTab>(() => embed?.tab ?? tabFromHash(typeof location === "undefined" ? "" : location.hash));
   const [dirty, setDirty] = useState(false);
-  useUnsaved("layout", dirty);
+  // 外审 1 #7:向导里嵌的那份用自己的标记,不清掉布置页本身的
+  useUnsaved(embed ? "layout-wizard" : "layout", dirty);
+  useEffect(() => embed?.onDirty?.(dirty), [dirty]);
   const [ask, setAsk] = useState<(() => void) | null>(null);
   const [conflict, setConflict] = useState(false);
   const [busy, setBusy] = useState(false);
