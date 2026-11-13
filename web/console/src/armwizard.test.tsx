@@ -100,8 +100,17 @@ describe("UIUX-036:布防后逐条说", () => {
     try {
       const e1 = [{ id: 1, route: "guard-1", robot: "", gap_min: 0, shuffle: false }];
       const [lines] = afterLines(e1, { duty: null, runs: [], waiting: { 1: "A 不在线" }, zones: [], now_ms: 1 }, () => "R");
-      expect(lines[0]).toMatch(/^“R” has not started: /);
-      expect(lines[0]).not.toMatch(/[\u4e00-\u9fff]/);
+      expect(lines[0]).toBe("“R” has not started: A is offline");
+      // 外审 2 Minor:值守常见的几种原因都有英文
+      const why = (w: string) => afterLines(e1, { duty: null, runs: [], waiting: { 1: w }, zones: [], now_ms: 1 }, () => "R")[0][0];
+      expect(why("A 设成只许手动派")).toBe("“R” has not started: A is set to manual dispatch only");
+      expect(why("A 在回充")).toBe("“R” has not started: A is charging");
+      expect(why("A 还没报电量")).toBe("“R” has not started: A has not reported its battery yet");
+      expect(why("A 电量 20%,不够跑一圈(要 ≥ 40%),先补能")).toBe("“R” has not started: A is at 20%, not enough for a lap (needs ≥ 40%); charging first");
+      expect(why("A 刚连回来,等它报手上的任务")).toBe("“R” has not started: A just reconnected; waiting for it to report its task");
+      expect(why("A 没登记")).toBe("“R” has not started: A is not registered");
+      expect(why("A 要人在旁边监护,不自己出去")).toBe("“R” has not started: A needs a person beside it and does not go out alone");
+      expect(why("防区路线 g1 上布防着的防区里没有点")).toBe("“R” has not started: zone route g1 has no points in the armed zones");
     } finally { lang.value = "zh"; }
   });
 
@@ -119,13 +128,17 @@ describe("UIUX-036:布防后逐条说", () => {
     const run = (state: string) => ({ duty: null, runs: [{ entry: 1, robot_id: "A", state, lap: 2, task_id: "t1", next_lap_ms: 0, watch_zone: "1" }],
       waiting: {}, zones: [], now_ms: 1 });
     const title = () => "R";
-    expect(afterLines(e1, run("watch"), title)[0]).toEqual(["A 跑完第 2 圈，在「R」的值守点守着。"]);
+    // 外审 2:watch 是在去值守点的路上(到了才是 post)
+    expect(afterLines(e1, run("watch"), title)[0]).toEqual(["A 跑完第 2 圈，正在去「R」的值守点。"]);
     expect(afterLines(e1, run("post"), title)[0]).toEqual(["A 跑完第 2 圈，在「R」的值守点守着。"]);
     expect(afterLines(e1, run("wait"), title)[0]).toEqual(["A 在等「R」的下一圈。"]);
     expect(afterLines(e1, { ...run("resume"), waiting: { 1: "A 电量低，先去补能" } }, title)[0])
       .toEqual(["A 在等「R」的下一圈：A 电量低，先去补能"]);
     expect(afterLines(e1, run("paused"), title)[0]).toEqual(["A 在「R」上暂停了。"]);
     expect(afterLines(e1, run("held"), title)[0]).toEqual(["A 在「R」上暂停了。"]);
+    // 外审 2:正在停下 / 收队还没确认停住 → 照实说,也接着看(不算有结果)
+    expect(afterLines(e1, run("stopping"), title)).toEqual([["A 正在停下（「R」），等它确认停住。"], false]);
+    expect(afterLines(e1, run("standdown"), title)).toEqual([["A 正在收队（「R」），等它确认停住。"], false]);
   });
 });
 
