@@ -504,6 +504,7 @@ const Map<String, String> alertErr = <String, String>{
   'clock_skew': 'net.clock_skew',
   'schedule_skipped': 'sched.missed',
   'schedule_blocked': 'sched.no_robot',
+  'schedule_waiting': 'sched.no_robot',
   'schedule_interrupted': 'sched.interrupted',
   'incident_flood': 'site.incident_flood',
   'robot_offline_idle': 'robot.offline_idle',
