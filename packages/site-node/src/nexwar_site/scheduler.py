@@ -408,7 +408,9 @@ class SiteScheduler:
                     reason = f"{rid} 加载的地图是 {loaded[0]},路线画在 {mission.map_id} 上"
                 elif loaded[1] != mission.map_version:
                     # R1:同一张图换了版本(重建过),老坐标不可信 —— 跟图不对一样不派,挑别的狗
-                    reason = version_mismatch_text(entry.mission, mission.map_id,
+                    from nexwar_site.names import route_name
+                    reason = version_mismatch_text(route_name(self.db, entry.mission),
+                                                   mission.map_id,
                                                    mission.map_version, rid, str(loaded[1]))
             if reason:
                 why.append(reason)

@@ -41,6 +41,14 @@ void main() {
     expect(runFailed(rows[1]), isFalse);
   });
 
+  test('第 9 轮 W9-01 / A9-02：标题写路线显示名；自己回待命点、回原点的那一趟不写手动派出', () {
+    expect(runTitle({'mission': 'route-1', 'title': '一楼夜巡'}), '一楼夜巡');
+    expect(runTitle({'mission': 'standby-9a1b2c', 'kind': 'standby'}), '回待命点');
+    expect(runTitle({'mission': 'standby-9a1b2c', 'kind': 'home'}), '回原点');
+    expect(runTitle({'mission': 'standby-9a1b2c'}), '回待命点');
+    expect(runTitle({'mission': 'task-00ca73a75c41'}), '手动派出');
+  });
+
   testWidgets('列表：一趟一行、有异常标红；点进去看每张照片的判读与复核', (t) async {
     final api = FakeApi('guard');
     await _pumpRuns(t, api);

@@ -675,7 +675,7 @@ class _SiteRouteEditorPageState extends State<SiteRouteEditorPage> {
     try {
       final r = await widget.api.patrol(id, _id);
       if (r['queued'] == true) {
-        if (mounted) setState(() => _msg = dispatchResultText(r, _id));
+        if (mounted) setState(() => _msg = dispatchResultText(r, _title.isNotEmpty ? _title : _id));
         return;
       }
       final ack = (r['ack'] as Map?) ?? const {};

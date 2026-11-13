@@ -19,7 +19,7 @@ export interface AuditRow { id: number; at: number; actor: string; actor_role?: 
     // 日志设计 第 1、2 条:前后变化、来源、当时在做什么、系统事件的说明
     from?: string | null; to?: string; op?: "add" | "update" | "remove"; name?: string; x?: number; y?: number;
     source?: "web" | "app" | "api" | "system"; doing?: { task?: string | null; kind?: string; state?: string }; why?: string;
-    note?: string; verdict?: string; mission?: string; robot?: string | null; title?: string; level?: string;
+    note?: string; verdict?: string; mission?: string; mission_title?: string; robot?: string | null; title?: string; level?: string;
     channel?: string; by?: string; task_id?: string | null; err?: string; err_name?: string; req?: string;
     // minor #18:派单的点数、去一个点的目标、存草稿存成的版本
     points?: number; request?: { target?: unknown }; version?: string } }
@@ -46,7 +46,8 @@ export function changeText(d: AuditRow["detail"], target = ""): string {
   if (d.doing) out.push(d.doing.task ? t("auditDoing", { k: d.doing.kind ?? "", task: d.doing.task }) : t("auditIdle"));
   if (d.why) out.push(t("auditWhy", { w: d.why }));
   // minor #18:临时路线写几个点(原来露 temp-… 编号);去一个点写出来;存草稿写存成第几版
-  if (d.mission) out.push(d.mission.startsWith("temp-") && d.points ? t("bpTempRouteN", { n: d.points }) : routeName(d.mission));
+  // 第 9 轮 W9-01:路线起了显示名写显示名(站点带 mission_title)
+  if (d.mission) out.push(d.mission.startsWith("temp-") && d.points ? t("bpTempRouteN", { n: d.points }) : d.mission_title || routeName(d.mission));
   else if (d.request?.target) {
     // minor #26:去哪写出来(地图坐标,一位小数)
     const g = d.request.target as { x?: unknown; y?: unknown };
@@ -96,6 +97,8 @@ const ACTIONS: [RegExp, string][] = [
   // 第 4 轮 P1-66:巡逻日程真正的接口是 route-schedules;遥控速度
   [/^POST \/api\/route-schedules/, "actPatrolSched"], [/^POST \/api\/teleop-speeds/, "actTeleopSpeeds"],
   [/^POST \/api\/problem-reports\/[^/]+\/delete$/, "actProblemDel"], [/^POST \/api\/problem-reports$/, "actProblemSent"],
+  // 第 9 轮 W9-07:遥控开始、结束(站点记的是 teleop_start / teleop_end)
+  [/^teleop_start$/, "actTeleopStart"], [/^teleop_end$/, "actTeleopEnd"],
   [/^login/, "actLogin"], [/^POST \/api\/login$/, "actLogin"], [/^POST \/api\/logout/, "actLogout"], [/^POST \/api\/mode$/, "actMode"],
   [/^POST \/api\/alerts\/.+\/resolve$/, "actResolve"], [/^POST \/api\/alerts\/.+\/ack$/, "actAck"], [/^POST \/api\/alerts\/.+\/arrive$/, "actArrive"],
   [/^POST \/api\/robots\/[^/]+\/(goto|patrol)$/, "actDispatch"], [/^POST \/api\/robots\/[^/]+\/halt$/, "actHalt"],

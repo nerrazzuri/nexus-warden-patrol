@@ -216,7 +216,8 @@ class _PatrolSheetState extends State<_PatrolSheet> {
         }
         return;
       }
-      if (mounted) Navigator.pop(context, dispatchResultText(got, r));
+      // 第 9 轮 W9-01：提示写路线的显示名，不写 route-1
+      if (mounted) Navigator.pop(context, dispatchResultText(got, _titles[r] ?? r));
     } on SiteError catch (e) {
       if (!mounted) return;
       setState(() => _busy = false);

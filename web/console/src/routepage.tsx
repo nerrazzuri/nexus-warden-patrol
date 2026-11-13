@@ -564,7 +564,7 @@ export function RoutesPage({ say, embed, kind = "patrol" }: { say: Say; embed?: 
         </div>
       </section>
       {removing && draft && (
-        <Confirm text={rt("routeDeleteConfirm", { name: draft.id })} yes={rt("routeDelete")} danger onNo={() => setRemoving(false)} onYes={() => void del()} />
+        <Confirm text={rt("routeDeleteConfirm", { name: draft.title || draft.id })} yes={rt("routeDelete")} danger onNo={() => setRemoving(false)} onYes={() => void del()} />
       )}
     </div>
   );
@@ -741,9 +741,15 @@ function SchedulePanel({ route, view, schedules, say, reload, inPanel }: {
   // 第 8 轮 W8-06:由哪台跑(空 = 哪台空就哪台)
   const [robot, setRobot] = useState("");
   const [robots, setRobots] = useState<string[]>([]);
+  // 第 9 轮 A9-01:只许手动派的机器人在选项里写明(排了日程也不会派它)
+  const [manual, setManual] = useState<Set<string>>(new Set());
   useEffect(() => {
-    api<{ robots: { robot_id: string; revoked?: boolean }[] }>("GET", "/api/robots")
-      .then((d) => setRobots(d.robots.filter((x) => !x.revoked).map((x) => x.robot_id))).catch(() => setRobots([]));
+    api<{ robots: { robot_id: string; revoked?: boolean; manual_only?: boolean }[] }>("GET", "/api/robots")
+      .then((d) => {
+        const live = d.robots.filter((x) => !x.revoked);
+        setRobots(live.map((x) => x.robot_id));
+        setManual(new Set(live.filter((x) => x.manual_only).map((x) => x.robot_id)));
+      }).catch(() => setRobots([]));
   }, []);
   const [removing, setRemoving] = useState<RouteSchedule | null>(null);
   const call = async (path: string, body: unknown, done: string): Promise<boolean> => {
@@ -782,7 +788,7 @@ function SchedulePanel({ route, view, schedules, say, reload, inPanel }: {
                 <span class="mono small">{s.at}</span>
                 <span class="muted small">{s.days.map((d) => t(d as Key)).join(" ")}</span>
                 <span class="muted small" data-sched-robot="1">{s.robot ? rt("schedByRobot", { id: s.robot }) : rt("schedAnyRobot")}</span>
-                <button type="button" class="link push" aria-label={`${rt("schedRemove")} ${s.id}`} onClick={() => setRemoving(s)}>{t("remove")}</button>
+                <button type="button" class="link push" aria-label={`${rt("schedRemove")} ${routeLabel(s)}`} onClick={() => setRemoving(s)}>{t("remove")}</button>
               </li>
             ))}
           </ul>
@@ -813,7 +819,7 @@ function SchedulePanel({ route, view, schedules, say, reload, inPanel }: {
             <label class="field">{rt("schedRobot")}
               <select name="schedRobot" value={robot} onChange={(e) => setRobot(e.currentTarget.value)}>
                 <option value="">{rt("schedAnyRobot")}</option>
-                {robots.map((x) => <option key={x} value={x}>{x}</option>)}
+                {robots.map((x) => <option key={x} value={x}>{manual.has(x) ? rt("schedManualRobot", { id: x }) : x}</option>)}
               </select>
             </label>
             <label class="field">{rt("schedMissed")}
@@ -830,8 +836,8 @@ function SchedulePanel({ route, view, schedules, say, reload, inPanel }: {
         </>
       )}
       {removing && (
-        <Confirm text={`${rt("schedRemove")}: ${removing.id}`} yes={rt("schedRemove")} danger onNo={() => setRemoving(null)}
-          onYes={() => { const s = removing; setRemoving(null); void call(`/api/route-schedules/${enc(s.id)}/delete`, { base_revision: s.revision }, rt("schedRemoved", { id: s.id })); }} />
+        <Confirm text={rt("schedRemoveConfirm", { name: routeLabel(removing) })} yes={rt("schedRemove")} danger onNo={() => setRemoving(null)}
+          onYes={() => { const s = removing; setRemoving(null); void call(`/api/route-schedules/${enc(s.id)}/delete`, { base_revision: s.revision }, rt("schedRemoved", { id: routeLabel(s) })); }} />
       )}
     </>
   );

@@ -358,3 +358,21 @@ describe("minor #18:活动记录 —— 派单写路线、去看看写去一个�
     expect(mergeAudit(rows).map((r) => r.id)).toEqual([2, 1]);
   });
 });
+
+describe("第 9 轮 W9-01 / W9-07:活动日志写路线显示名、遥控写人话", () => {
+  it("派巡逻那一行写站点带来的路线显示名,不写 route-1", async () => {
+    const { changeText } = await import("./userspage");
+    lang.value = "zh";
+    expect(changeText({ mission: "route-1", mission_title: "一楼夜巡" })).toBe("一楼夜巡");
+    expect(changeText({ mission: "route-1" })).toBe("route-1");
+  });
+  it("遥控开始、结束写中文,中英文都不露 teleop_start", async () => {
+    const { actionText } = await import("./userspage");
+    lang.value = "zh";
+    expect(actionText("teleop_start")).toBe("开始遥控");
+    expect(actionText("teleop_end")).toBe("结束遥控");
+    lang.value = "en";
+    expect(actionText("teleop_start")).toBe("Started remote control");
+    lang.value = "zh";
+  });
+});

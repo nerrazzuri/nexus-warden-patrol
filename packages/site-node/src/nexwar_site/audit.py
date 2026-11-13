@@ -27,7 +27,9 @@ _SECRET_WORDS = ("password", "passwd", "pin", "token", "secret", "key", "otp", "
 #: 动作是「方法 路径」,用 SQLite GLOB 认;网页上每行怎么写成人话还是网页自己的表。
 AUDIT_GROUPS: dict[str, tuple[str, ...]] = {
     "dispatch": ("* /api/robots/*/goto", "* /api/robots/*/patrol", "* /api/robots/*/home/return",
-                 "* /api/robots/*/standby/return", "* /api/routes/*/run"),
+                 "* /api/robots/*/standby/return", "* /api/routes/*/run",
+                 # 第 9 轮 W9-07:遥控也归派机器人,筛得出来
+                 "teleop_start", "teleop_end"),
     "stop": ("* /api/robots/*/halt", "* /api/robots/*/abort", "* /api/robots/*/resume",
              "* /api/robots/stop-all", "* /api/robots/resume-all"),
     "arming": ("* /api/mode", "* /api/mode/*", "* /api/arming/*"),
@@ -111,6 +113,17 @@ def site_event(db: SiteDB, at_ms: int, *, actor: str, action: str, target: str =
         logging.getLogger(__name__).exception("系统事件写不进活动日志:%s %s", action, target)
 
 
+
+def _titled(db: Any, detail: Any) -> Any:
+    """第 9 轮 W9-01:派巡逻那一行带上路线的显示名(``mission_title``),网页写中文名不写 route-1。"""
+    if isinstance(detail, dict) and isinstance(detail.get("mission"), str) \
+            and "mission_title" not in detail:
+        from nexwar_site.names import route_name
+        name = route_name(db, detail["mission"])
+        if name != detail["mission"]:
+            return {**detail, "mission_title": name}
+    return detail
+
 class AuditLog:
     def __init__(self, db: SiteDB, *, now_ms: Callable[[], int]) -> None:
         self.db = db
@@ -147,7 +160,8 @@ class AuditLog:
         rows = self.db.query(f"SELECT a.*, c.role AS actor_role FROM audit a LEFT JOIN accounts c "
                              f"ON c.name = a.actor WHERE {w} ORDER BY a.id DESC LIMIT ? OFFSET ?",
                              (*args, int(limit), int(offset)))
-        return {"audit": [dict(r) | {"detail": decode_detail(r["detail"])} for r in rows],
+        return {"audit": [dict(r) | {"detail": _titled(self.db, decode_detail(r["detail"]))}
+                          for r in rows],
                 "total": total, "limit": limit, "offset": offset}
 
     def list(self, limit: int = 200, actor: str | None = None) -> list[dict[str, Any]]:
@@ -157,4 +171,4 @@ class AuditLog:
         rows = self.db.query(f"SELECT a.*, c.role AS actor_role FROM audit a LEFT JOIN accounts c "
                              f"ON c.name = a.actor {where} ORDER BY a.id DESC LIMIT ?",
                              (*args, int(limit)))
-        return [dict(r) | {"detail": decode_detail(r["detail"])} for r in rows]
+        return [dict(r) | {"detail": _titled(self.db, decode_detail(r["detail"]))} for r in rows]

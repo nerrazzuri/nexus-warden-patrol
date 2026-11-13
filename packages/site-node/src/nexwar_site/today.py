@@ -70,7 +70,9 @@ def _handover(db: Any, robot: str, task_id: str, at_ms: int) -> dict[str, Any]:
                     "ORDER BY decided_at DESC LIMIT 1",
                     (robot, task_id, at_ms - 120_000, at_ms + 10_000))
     if runs:
-        out.update(by="schedule", name=str(runs[0]["entry_id"]))
+        from nexwar_site.names import schedule_name  # 第 9 轮 W9-01:写显示名
+        out.update(by="schedule", name=schedule_name(db, runs[0]["entry_id"]),
+                   schedule_id=str(runs[0]["entry_id"]))
         return out
     cmds = db.query("SELECT task_id FROM commands WHERE robot_id=? AND task_id<>? "
                     "AND issued_at BETWEEN ? AND ? ORDER BY issued_at DESC LIMIT 1",
