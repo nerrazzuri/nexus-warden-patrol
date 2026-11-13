@@ -7,6 +7,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
+import time
 
 import numpy as np
 import pytest
@@ -125,7 +126,9 @@ async def _换图(rt, broker, site, c, ears, ver="2", files=None):
            | {"home.json": b'{"x":1,"y":1,"yaw":0}'})
     ref = site.add("m", ver, geo)
     await rt._on_cmd(_cmd("map_activate", ref, f"a{ver}", c))
-    for _ in range(50):
+    # 规划栅格在后台线程里载:全量并行、机器忙的时候 1 秒不够,按墙钟最多等 15 秒
+    deadline = time.monotonic() + 15
+    while time.monotonic() < deadline:
         await _跑(rt, broker, 2)
         if rt.loaded_map == ("m", ver) and (rt._grid_job is None or rt._grid_job.done()):
             break
