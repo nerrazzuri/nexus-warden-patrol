@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from types import SimpleNamespace
 
 import pytest
@@ -190,4 +191,21 @@ def test_minor40_没报在用哪张图的机器人_原点待命点不打勾_写�
                   "is_default) VALUES ('B','dock','m1','3',6,5,0,1)")
     it = _项(setup_view(db, d))
     assert it["home"]["done"] and it["standby"]["done"] and it["home"]["no_map"] == []
+    db.close()
+
+
+def test_第9轮_W8_08尾巴_有一条日程跑不了就不打勾_写日程显示名(tmp_path):
+    db = SiteDB(tmp_path / "s.db")
+    d = 假派遣器({"A": ("m1", "7")})
+    with db.tx() as c:
+        c.execute("INSERT INTO routes(route_id, map_id, map_version, definition, revision, "
+                  "updated_ms) VALUES ('demo-loop','m1','11','{}',1,0), ('r7','m1','7','{}',1,0)")
+        for eid, title, mission in (("demo-night", "夜巡", "demo-loop"), ("ok-1", "", "r7")):
+            c.execute("INSERT INTO route_schedules(entry_id, title, definition, revision, "
+                      "active_from_ms, updated_ms, updated_by, source) "
+                      "VALUES (?, ?, ?, 1, 0, 0, 'a', 'editor')",
+                      (eid, title, json.dumps({"mission": mission, "at": "22:00"})))
+    it = _项(setup_view(db, d))
+    assert not it["schedule"]["done"], "两条里一条跑不了,也不打勾(以前打着勾又写跑不了)"
+    assert it["schedule"]["blocked"] == ["夜巡"]
     db.close()
