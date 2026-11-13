@@ -262,6 +262,18 @@ class AdhocDesk:
         loaded = self.dispatcher._loaded(self.dispatcher.clients.get(rid))
         return loaded == (mission.map_id, mission.map_version)
 
+    def _sched_can_send(self, rid: str, mission: Mission | None) -> bool:
+        """第 11 轮 W11-03:写明了这台的日程,到点派不派得了它。只许手动派、路线不在它现在的图上
+        的,排程执行器不会派它 —— 不算撞(以前说「到点会停下它」,其实不会)。这一刻忙、离线不算
+        (到点可能就好了)。"""
+        autonomy = getattr(self.dispatcher, "autonomy", None)
+        if autonomy is not None and autonomy(rid) == "manual_only":
+            return False
+        if mission is None:
+            return True
+        loaded = self.dispatcher._loaded(self.dispatcher.clients.get(rid))
+        return loaded is None or loaded == (mission.map_id, mission.map_version)
+
     # ------------------------------------------------------------ 撞日程
 
     def _entries_for(self, robot: str) -> tuple[Any, list[ScheduleEntry]]:
@@ -274,7 +286,7 @@ class AdhocDesk:
         out = []
         for e in act.schedule.entries:
             if e.robot:
-                if e.robot == robot:
+                if e.robot == robot and self._sched_can_send(robot, act.missions.get(e.mission)):
                     out.append(e)
                 continue
             m = act.missions.get(e.mission)
@@ -338,7 +350,13 @@ class AdhocDesk:
     def _names(self, e: Any) -> str:
         """「排程名」(路线「路线名」):第 9 轮 W9-01 写显示名,没起名写编号。"""
         from nexwar_site.names import route_name, schedule_name
-        return f"「{schedule_name(self.db, e.id)}」(路线「{route_name(self.db, e.mission)}」)"
+        # 第 11 轮 W9-10:中文句子里用全角括号
+        return f"「{schedule_name(self.db, e.id)}」（路线「{route_name(self.db, e.mission)}」）"
+
+    def _label(self, label: Any) -> str:
+        """第 11 轮 W11-01:通知里写路线的显示名(写进标题就定下了,删了路线也不变回 route-1)。"""
+        from nexwar_site.names import route_name
+        return route_name(self.db, label)
 
     def slot(self, robot: str, start_ms: int, dur_s: int) -> tuple[int, str]:
         """最早能起跑的时刻(不撞日程)和推后的原因(没推是空串)。"""
@@ -476,7 +494,7 @@ class AdhocDesk:
             if res not in _OK_ACKS:
                 self._fail_started(task_id, f"机器人回 {res}" + (f":{why}" if why else ""))
                 continue
-            self._tell(r, "排队的临时巡逻开始了", f"{rid} 开始走「{r['label']}」")
+            self._tell(r, "排队的临时巡逻开始了", f"{rid} 开始走「{self._label(r['label'])}」")
 
     def _fail_started(self, task_id: str, note: str, *, tell: bool = True) -> None:
         """已经记成起跑的那一趟机器人没收:改成没走成、告诉派的人。"""
@@ -487,7 +505,7 @@ class AdhocDesk:
             rows = c.execute("SELECT * FROM adhoc_queue WHERE task_id=?", (task_id,)).fetchall()
         if n and rows and tell:
             r = dict(rows[0])
-            self._tell(r, f"临时巡逻未完成:{r['robot']}「{r['label']}」", note)
+            self._tell(r, f"临时巡逻未完成:{r['robot']}「{self._label(r['label'])}」", note)
 
     def _on_ack(self, ack: Any) -> None:
         """回执(包括超时之后才到的):临时巡逻那一趟机器人明确没收,改成没走成。"""
@@ -505,7 +523,7 @@ class AdhocDesk:
             n = c.execute("UPDATE adhoc_queue SET state=?, note=?, ended_ms=? WHERE id=? "
                           "AND state='queued'", (state, note, self._now(), r["id"])).rowcount
         if n:
-            self._tell(r, f"临时巡逻未完成:{r['robot']}「{r['label']}」", note)
+            self._tell(r, f"临时巡逻未完成:{r['robot']}「{self._label(r['label'])}」", note)
 
     # ------------------------------------------------------------ 通知
 
@@ -524,10 +542,11 @@ class AdhocDesk:
                    queued: tuple[int, str] | None) -> None:
         mins = max(1, round(est / 60))
         if queued is None:
-            title = f"{by} 派 {robot} 走「{label}」(临时,约 {mins} 分钟)"
+            title = f"{by} 派 {robot} 走「{self._label(label)}」（临时，约 {mins} 分钟）"
         else:
             at = datetime.fromtimestamp(queued[0] / 1000, tz=self._tz())
-            title = f"{by} 派 {robot} 走「{label}」(临时),跟{queued[1]}撞了,排到 {at:%H:%M}"
+            title = (f"{by} 派 {robot} 走「{self._label(label)}」（临时），跟{queued[1]}撞了，"
+                     f"排到 {at:%H:%M}")
         self._raise(kind=KIND_SENT, robot=robot, title=title, detail="临时巡逻不进日程",
                     context={"by": by, "label": label, "estimate_s": est})
 

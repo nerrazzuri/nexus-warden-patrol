@@ -213,7 +213,14 @@ class RouteStore:
             "routes": [self._route_view(r) for r in self.db.query(sql, tuple(args))],
             "schedules": [self._schedule_view(r) for r in self.db.query(
                 "SELECT * FROM route_schedules ORDER BY entry_id")],
+            # 第 11 轮 W11-01:删掉过的编号。网页、App 新建时跳过它们
+            "retired_routes": self._retired("route"),
+            "retired_schedules": self._retired("schedule"),
         }
+
+    def _retired(self, kind: str) -> list[str]:
+        return [r["id"] for r in self.db.query(
+            "SELECT id FROM retired_ids WHERE kind=? ORDER BY id", (kind,))]
 
     def get(self, route_id: str) -> dict[str, Any]:
         rows = self.db.query("SELECT * FROM routes WHERE route_id=?", (route_id,))
@@ -380,7 +387,10 @@ class RouteStore:
             raise RouteError("base_revision 要是整数(改之前看到的修订号;新建是 0)")
         return base_revision
 
-    def put_route(self, route_id: str, body: dict[str, Any], *, by: str) -> dict[str, Any]:
+    def put_route(self, route_id: str, body: dict[str, Any], *, by: str,
+                  restore: bool = False) -> dict[str, Any]:
+        """``restore``:布置历史退回,把删掉的那一条原样拿回来 —— 同一条,编号可以再用
+        (第 11 轮 W11-01)。"""
         base = self._base(body.get("base_revision"))
         title = _title(body)
         m = self._validate_route(route_id, body)
@@ -408,6 +418,10 @@ class RouteStore:
                 raise RouteError(f"路线{_rn(tx, route_id)}在布防的值守方案里:巡逻路线不能拿来值守,"
                                  "先从值守方案里去掉再改成巡逻路线")
             if row is None:
+                if restore:
+                    tx.execute("DELETE FROM retired_ids WHERE kind='route' AND id=?", (route_id,))
+                else:
+                    _not_retired(tx, "route", route_id, "路线")
                 tx.execute("INSERT INTO routes(route_id, map_id, map_version, definition, "
                            "revision, updated_ms, updated_by, source, kind, title) "
                            "VALUES (?,?,?,?,1,?,?,?,?,?)",
@@ -473,6 +487,7 @@ class RouteStore:
                                  "先改排程或删排程")
             if _guard_plan_uses(tx, route_id):
                 raise RouteError(f"布防的值守方案还在用路线{_rn(tx, route_id)}:先从值守方案里去掉")
+            _retire(tx, "route", route_id, "SELECT title FROM routes WHERE route_id=?", now)
             tx.execute("DELETE FROM routes WHERE route_id=?", (route_id,))
             self._touch(tx, by, now)
 
@@ -533,6 +548,7 @@ class RouteStore:
                                     f"你看到的是第 {base} 版)" if cur else
                                     f"排程 {entry_id} 已被删除:请刷新后再改")
             if row is None:
+                _not_retired(tx, "schedule", entry_id, "排程")
                 tx.execute("INSERT INTO route_schedules(entry_id, definition, revision, "
                            "active_from_ms, updated_ms, updated_by, source, title) "
                            "VALUES (?,?,1,?,?,?,'editor',?)",
@@ -570,6 +586,8 @@ class RouteStore:
             if row["revision"] != base:
                 raise RouteConflict(f"排程 {entry_id} 已被修改(现在是第 {row['revision']} 版,"
                                     f"你看到的是第 {base} 版):请刷新后再删")
+            _retire(tx, "schedule", entry_id,
+                    "SELECT title FROM route_schedules WHERE entry_id=?", now)
             tx.execute("DELETE FROM route_schedules WHERE entry_id=?", (entry_id,))
             self._touch(tx, by, now)
 
@@ -620,6 +638,20 @@ class RouteStore:
 
 
 # ---------------------------------------------------------------- 任务包导进库
+
+
+def _retire(tx: Any, kind: str, key: str, title_sql: str, now: int) -> None:
+    """第 11 轮 W11-01:删之前记下编号和名字。"""
+    row = tx.execute(title_sql, (key,)).fetchone()
+    tx.execute("INSERT OR REPLACE INTO retired_ids(kind, id, title, deleted_ms) VALUES (?,?,?,?)",
+               (kind, key, str(row["title"] or "") if row is not None else "", now))
+
+
+def _not_retired(tx: Any, kind: str, key: str, what: str) -> None:
+    if tx.execute("SELECT 1 FROM retired_ids WHERE kind=? AND id=?",
+                  (kind, key)).fetchone() is not None:
+        raise RouteError(f"{what}编号 {key} 用过(那条已经删了,旧记录还指着它):换一个编号。"
+                         "刷新页面后新建会自动跳过用过的编号")
 
 
 def _schedules_of(tx: Any, route_id: str) -> list[str]:

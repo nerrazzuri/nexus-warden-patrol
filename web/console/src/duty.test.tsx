@@ -323,6 +323,13 @@ describe("第 9 轮 W8-04 总览机器人列表写第几圈", () => {
     expect(rows.find((r) => r.textContent?.includes("A"))!.querySelector("[data-row-task]")!.textContent).toBe("第 2 / 3 圈");
     expect(rows.find((r) => r.textContent?.includes("B"))!.querySelector("[data-row-task]")).toBeNull();
   });
+
+  it("第 11 轮 W10-02:一直巡逻那一栏放不下,行里只写「第 3 圈」,悬停看全", () => {
+    const { container: c } = page([], [unit("A", "patrolling", { task: "一直巡逻 · 第 3 圈", taskShort: "第 3 圈" })]);
+    const cell = c.querySelector(".duty-row [data-row-task]")!;
+    expect(cell.textContent).toBe("第 3 圈");
+    expect(cell.getAttribute("title")).toBe("一直巡逻 · 第 3 圈");
+  });
 });
 
 describe("第 9 轮 W9-04 保安派巡逻:跑不了的路线灰掉", () => {

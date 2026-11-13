@@ -432,6 +432,22 @@ void main() {
     expect(ed.newName, matches(RegExp(r'^route-\d+$')));
   });
 
+  testWidgets('第 11 轮 W11-01：自动给的编号跳过删掉过的（旧记录还指着，站点不让再用）', (t) async {
+    final api = RoutesApi('admin');
+    api.routesBody = {...api.routesBody, 'retired_routes': <dynamic>['route-1', 'route-2']};
+    await t.binding.setSurfaceSize(const Size(900, 700));
+    addTearDown(() => t.binding.setSurfaceSize(null));
+    await t.pumpWidget(MaterialApp(home: SiteRoutesPage(api: api)));
+    await t.pumpAndSettle();
+    await t.tap(find.byKey(SiteRoutesPage.newKey));
+    await t.pumpAndSettle();
+    await t.enterText(find.byKey(const Key('route-new-name')), '一楼 夜巡');
+    await t.pump();
+    await t.tap(find.byKey(const Key('route-new-go')));
+    await t.pumpAndSettle();
+    expect(t.widget<SiteRouteEditorPage>(find.byType(SiteRouteEditorPage)).newName, 'route-3');
+  });
+
   testWidgets('W8-11：显示名存下去；列表写显示名', (t) async {
     final api = FakeApi('admin');
     await t.binding.setSurfaceSize(const Size(900, 700));

@@ -14,7 +14,10 @@ import 'nw/nw_widgets.dart';
 import 'widget/bar_actions.dart';
 
 /// 第 9 轮 W9-12：标原点时自动加的待命点（名字是 home）写「在原点（标原点时自动加的）」，不写 home。
-String standbyName(Map p) => p['name'] == 'home'
+/// 第 11 轮 W11-04：home 已登记在别的图上时站点起名 home-<图名>，也算。
+bool autoHomeName(Object? name) => name == 'home' || RegExp(r'^home-[A-Za-z0-9._-]+$').hasMatch('$name');
+
+String standbyName(Map p) => autoHomeName(p['name'])
     ? tr('At the origin (added when the origin was marked)', '在原点（标原点时自动加的）')
     : '${p['name']}';
 
@@ -247,7 +250,7 @@ class _SiteStandbyPageState extends State<SiteStandbyPage> {
                     Text(tr('No origin marked yet', '尚未标原点'), style: body.copyWith(color: c.textSecondary)),
                   for (final h in _homes)
                     Text(
-                      '${h['name'] == 'home' ? tr('Origin', '原点') : h['name']}  ${_xy(h)}',
+                      '${autoHomeName(h['name']) ? tr('Origin', '原点') : h['name']}  ${_xy(h)}',
                       key: Key('home-${h['map_id']}-${h['map_version']}'),
                       style: body,
                     ),

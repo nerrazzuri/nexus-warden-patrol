@@ -448,6 +448,18 @@ String deviceStateText(String state) => switch (state) {
       _ => state,
     };
 
+/// 设备那一行的开头：「喇叭：降级」。第 11 轮 W9-09：存储盘只是快满了（代理写「已用 88%…」、
+/// 用了八成以上）写「存储盘快满（88%）」，不写「降级」。
+String deviceHead(String id, String state, String detail) {
+  final kind = id.split(':').first;
+  final used = RegExp('\u5df2\u7528\\s*(\\d{1,3})\\s*%').firstMatch(detail); // 站点原话「已用 N%」
+  final n = used == null ? null : int.parse(used.group(1)!);
+  if (kind == 'disk' && state == 'degraded' && n != null && n >= 80 && n <= 100) {
+    return tr('Storage disk nearly full ($n%)', '存储盘快满（$n%）');
+  }
+  return '${deviceName(id)}${tr(': ', '：')}${deviceStateText(state)}';
+}
+
 /// 相机名说人话。
 String cameraName(String c) => switch (c) {
       // 手机 App 测试 M27：以前「Back」跟返回键同名

@@ -46,6 +46,8 @@ void main() {
   test('第 9 轮 W9-12：标原点时自动加的待命点（home）不写 home', () {
     expect(standbyName({'name': 'home'}), '在原点（标原点时自动加的）');
     expect(standbyName({'name': 'gate'}), 'gate');
+    // 第 11 轮 W11-04：home 已登记在别的图上时站点起名 home-<图名>，也是自动加的
+    expect(standbyName({'name': 'home-estate-1'}), '在原点（标原点时自动加的）');
   });
 
   testWidgets('回指定的待命点', (t) async {

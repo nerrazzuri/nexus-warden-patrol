@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { setFetch } from "./api";
 import { lang } from "./i18n";
 import type { LayerData, OwnLayer, TabProps } from "./layoutpage";
-import { spName, StandbyTab } from "./layoutstandby";
+import { sameSpots, spName, StandbyTab } from "./layoutstandby";
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
 const META = { width: 100, height: 100, m_per_px: 0.1, left_x: 0, top_y: 10, zones: [] };
@@ -39,6 +39,11 @@ describe("第 9 轮 W9-12 待命点的叫法", () => {
     lang.value = "zh";
     expect(spName({ robot_id: "A", name: "home" })).toBe("A 的待命点");
     expect(spName({ robot_id: "A", name: "dock" })).toBe("A · dock");
+    // 第 11 轮 W11-04:home 已登记在别的图上时站点起名 home-<图名>,也是自动加的
+    expect(spName({ robot_id: "A", name: "home-estate-1" })).toBe("A 的待命点");
+    expect(spName({ robot_id: "B", name: "home-estate-1-7" })).toBe("B 的待命点");
+    expect(sameSpots([{ robot_id: "A", name: "home-estate-1", x: 1, y: 1 }, { robot_id: "B", name: "home-estate-1", x: 1, y: 1 }])[0].labels)
+      .toEqual(["A", "B"]);
   });
 });
 

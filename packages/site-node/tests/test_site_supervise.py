@@ -105,8 +105,11 @@ def test_心跳不刷审计_只记开始和结束(监护站):
     got = [_心跳(s, tok) for _ in range(5)] + [_心跳(s, tok, "release")]
     # 每一步都要成(W31:全量时偶发只记了一条 —— 某一步等回执超时之类,先让它说清楚是哪一步)
     assert [c for c, _ in got] == [200] * 6, got
-    rows = [r for r in s.api.audit.list() if "/supervise" in r["action"]]
-    assert len(rows) == 2, rows
+    # 审计在回完话以后才写(最后那一步的那条可能还没落库):等一会儿再数;多记了也看得出来
+    def rows():
+        return [r for r in s.api.audit.list() if "/supervise" in r["action"]]
+    _等(lambda: len(rows()) >= 2)
+    assert len(rows()) == 2, rows()
 
 
 def test_两个人交替续_审计各记一次开始(监护站):

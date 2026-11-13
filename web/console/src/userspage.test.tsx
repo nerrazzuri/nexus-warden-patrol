@@ -405,4 +405,26 @@ describe("第 10 轮 W10-04:活动日志写具体", () => {
     }
     expect(line({ actor: "site:alerts", action: "alert raised", target: "A/stuck#1", detail: { kind: "stuck", level: "P1" } })).toContain("产生报警");
   });
+
+  it("第 11 轮:机器人事件后面不写「报警:」;看巡逻记录、仅限手动、删日程删路线写清", async () => {
+    const { AuditLine } = await import("./userspage");
+    lang.value = "zh";
+    const line = (r: Partial<AuditRow>) => {
+      cleanup();
+      return render(<ul><AuditLine r={{ id: 1, at: 0, actor: "gina", action: "", target: "", status: 200, ...r } as AuditRow} /></ul>).container.textContent!;
+    };
+    const e = line({ actor: "site:alerts", action: "alert raised", target: "B/run_start#3", detail: { kind: "run_start", level: "P3", robot: "B" } });
+    expect(e).toContain("机器人事件");
+    expect(e).toContain("巡逻开始 · B");
+    expect(e).not.toContain("报警");
+    const run = line({ action: "VIEW", target: "run/398", detail: { source: "app" } });
+    expect(run).toContain("巡逻记录 #398");
+    expect(run).not.toContain("run/");
+    expect(line({ action: "POST /api/robots/B/service", target: "B", detail: { manual_only: true } })).toContain("设为仅限手动派");
+    expect(line({ action: "POST /api/robots/B/service", target: "B", detail: { manual_only: false } })).toContain("改回自动派遣");
+    const ds = line({ action: "POST /api/route-schedules/route-1-2/delete", target: "route-1-2", target_name: "补跑测试", detail: { delete: true } });
+    expect(ds).toContain("删除巡逻日程");
+    expect(ds).toContain("补跑测试");
+    expect(line({ action: "POST /api/routes/route-1/delete", target: "route-1", detail: { delete: true } })).toContain("删除巡逻路线");
+  });
 });

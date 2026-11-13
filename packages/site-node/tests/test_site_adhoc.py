@@ -165,7 +165,7 @@ def test_撞上日程排到日程走完之后_不派_告诉派的人排到几点
     assert got["start_after_ms"] == 毫秒(22, 0) + est * 1000 + 60_000
     assert "22:00" in got["because"] and "loop" in got["because"]
     # 第 8 轮 W8-10:写日程名(多条日程跑同一条路线时分得清),路线名放括号里
-    assert "22:00 的日程「nightly」(路线「loop」)" in got["because"], got["because"]
+    assert "22:00 的日程「nightly」（路线「loop」）" in got["because"], got["because"]
     assert "排到" in t.alerts.got[0]["title"]
 
 
@@ -176,8 +176,27 @@ def test_W901_撞日程的说明写排程和路线的显示名(台):
         c.execute("UPDATE routes SET title='一楼夜巡' WHERE route_id='loop'")
     t.now["t"] = 毫秒(21, 59)
     got = 跑(t.desk.submit("A", 任务定义(), label="loop", by="gina"))
-    assert "22:00 的日程「夜巡」(路线「一楼夜巡」)" in got["because"], got["because"]
+    assert "22:00 的日程「夜巡」（路线「一楼夜巡」）" in got["because"], got["because"]
     assert "nightly" not in got["because"]
+    # 第 11 轮 W11-01:通知标题写路线名(写进去就定了,删了路线也不变回编号)
+    assert "gina 派 A 走「一楼夜巡」（临时），跟" in t.alerts.got[-1]["title"], t.alerts.got[-1]
+
+
+def test_第11轮_W11_03_写明这台的日程派不了它_不算撞(台):
+    """日程写明了 A,可 A 只许手动派、或者日程的路线不在 A 现在的图上:到点也派不了 A,不会打断它。"""
+    t = 台
+    with t.db.tx() as c:
+        d = json.loads(c.execute("SELECT definition FROM route_schedules "
+                                 "WHERE entry_id='nightly'").fetchone()[0])
+        c.execute("UPDATE route_schedules SET definition=? WHERE entry_id='nightly'",
+                  (json.dumps({**d, "robot": "A"}),))
+    t.now["t"] = 毫秒(21, 59)
+    assert t.desk.collision("A", 毫秒(21, 59), 600) is not None, "派得了:照旧算撞"
+    t.disp.autonomy = lambda rid: "manual_only"
+    assert t.desk.collision("A", 毫秒(21, 59), 600) is None, "只许手动派:日程不派它"
+    t.disp.autonomy = lambda rid: "autonomous"
+    t.disp.loaded = ("estate-1", "11")
+    assert t.desk.collision("A", 毫秒(21, 59), 600) is None, "路线画在 v7,A 用的是 v11"
 
 
 def test_正在跑日程也排到后面(台):
@@ -193,7 +212,7 @@ def test_正在跑日程也排到后面(台):
                   (毫秒(19, 50),))
     got = 跑(t.desk.submit("A", 任务定义(), label="loop", by="gina"))
     assert got["queued"] is True and "正在执行的日程" in got["because"]
-    assert "正在执行的日程「nightly」(路线「loop」)" in got["because"], got["because"]
+    assert "正在执行的日程「nightly」（路线「loop」）" in got["because"], got["because"]
 
 
 def test_日程没写哪台_别的台也能跑就不算撞_别的台跑不了就算(台):
@@ -462,9 +481,9 @@ def test_外审8_派不出去的不排队_当场说(台):
     with pytest.raises(DispatchRefused, match="不在线"):
         跑(t.desk.submit("A", 任务定义(), label="loop", by="gina"))
     t.disp.cannot.clear()
-    t.disp.loaded = ("estate-1", "6")
+    # 第 11 轮 W11-03:日程照旧派得了 A(撞),这一趟临时路线却画在 A 没加载的 v6 上
     with pytest.raises(DispatchRefused, match="加载的是"):
-        跑(t.desk.submit("A", 任务定义(), label="loop", by="gina"))
+        跑(t.desk.submit("A", {**任务定义(), "map_version": "6"}, label="loop", by="gina"))
     assert t.db.query("SELECT COUNT(*) AS n FROM adhoc_queue")[0]["n"] == 0
 
 

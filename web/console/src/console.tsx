@@ -134,7 +134,7 @@ export function Console({ me, onOut }: { me: Me; onOut: (note?: string) => void 
         const kind = r.status?.task?.kind ?? "";
         const state = robotState(r, deter.get(r.robot_id), kind.includes("dock") || kind.includes("charg"), fell.has(r.robot_id));
         return { robot: r, state, battery: stale ? null : batt.get(r.robot_id) ?? null, deter: deter.get(r.robot_id),
-          task: stale ? "" : taskNote(r, kind, state), stale, deterUnknown };
+          task: stale ? "" : taskNote(r, kind, state), taskShort: stale ? "" : taskNote(r, kind, state, true), stale, deterUnknown };
       });
   }, [data, lang.value, stale]);
   const online = units.filter((u) => u.state !== "offline");

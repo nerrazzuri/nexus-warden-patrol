@@ -671,6 +671,12 @@ class _Handler(TlsHandlerMixin):
                                                        "reason", "reason_code", "err", "err_name")
                           if k in self._resp} | self._audit_detail
                 target = self._audit_target or _path_target(path)
+                # 第 11 轮 W11-01:日程、路线的名字在这一刻存下(删了、编号换了主人,记录照旧)。
+                # 只有改路线、日程的请求才查(别的请求不多查库)
+                named = path.startswith(("/api/routes/", "/api/route-schedules/", "/api/schedule"))
+                name = self._target_name(target) if named else ""
+                if name:
+                    detail.setdefault("target_name", name)
                 detail.setdefault("source", self._source())
                 detail.setdefault("req", self._req_id)
                 if self._req_body and not self._audit_detail:
@@ -1103,19 +1109,30 @@ class _Handler(TlsHandlerMixin):
             out[rid] = getattr(task, "task_id", None) if d._fresh(c) else None
         return out
 
-    def _audit_named(self, rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
-        """第 10 轮 W9-01:对象是日程、路线的,带上显示名 ``target_name``(起了中文名的不写
-        route-1-2);查不到名字的不加。"""
+    def _target_name(self, target: str) -> str:
+        """对象是日程、路线时的显示名;不是、没起名字的回空串。"""
         from nexwar_site.names import route_name, schedule_name
-        db = self.site.dispatcher.db
-        for r in rows:
-            tgt = str(r.get("target") or "")
-            if not tgt or "/" in tgt or ":" in tgt:
-                continue
+        tgt = str(target or "")
+        if not tgt or "/" in tgt or ":" in tgt:
+            return ""
+        try:
+            db = self.site.dispatcher.db
             name = schedule_name(db, tgt)
             if name == tgt:
                 name = route_name(db, tgt)
-            if name != tgt:
+        except Exception:  # noqa: BLE001 - 查名字不挡记审计
+            return ""
+        return name if name != tgt else ""
+
+    def _audit_named(self, rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """第 10 轮 W9-01:对象是日程、路线的,带上显示名 ``target_name``(起了中文名的不写
+        route-1-2);查不到名字的不加。第 11 轮 W11-01:写记录时存下的名字优先(删了、编号换了主人
+        也不变),老记录没存的现查(删掉的查退役表)。"""
+        for r in rows:
+            d = r.get("detail")
+            stored = d.get("target_name") if isinstance(d, dict) else None
+            name = str(stored) if stored else self._target_name(str(r.get("target") or ""))
+            if name:
                 r["target_name"] = name
         return rows
 
@@ -1416,7 +1433,8 @@ class _Handler(TlsHandlerMixin):
                     if base:
                         store.delete_route(item, base_revision=base, by=str(user))
                 else:
-                    store.put_route(item, dict(body) | {"base_revision": base}, by=str(user))
+                    store.put_route(item, dict(body) | {"base_revision": base}, by=str(user),
+                                    restore=True)
             elif kind == "standby":
                 stb = self.site.standby
                 want = {p["name"]: p for p in body or []}
@@ -4074,7 +4092,16 @@ class _Handler(TlsHandlerMixin):
             raise HttpError(404, "此站点未启用地图目录")
         if path == "/api/maps" and method == "GET":
             self._need(user, VIEW)
-            return self._send_json(200, {"maps": cat.list(), "bags": cat.bags()})
+            # 第 11 轮 A11-01:每一版哪几台在用(经理、保安的地图目录也标出来;算法同地图管理页)
+            try:
+                from nexwar_site.maps_admin_api import _admin
+                in_use = _admin(self)._in_use()
+            except Exception:                    # 算不出来不挡看目录
+                log.exception("地图目录:算不出哪几台在用")
+                in_use = {}
+            maps = [m | {"loaded_on": in_use.get((m["map_id"], m["version"]), [])}
+                    for m in cat.list()]
+            return self._send_json(200, {"maps": maps, "bags": cat.bags()})
         m = _MAPVIEW.match(path)
         if m is not None and method == "GET":
             self._need(user, VIEW)

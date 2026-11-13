@@ -15,4 +15,14 @@ void main() {
     expect(deviceName('fan:stir'), 'Fan stir');
     appLang.value = AppLang.zh;
   });
+
+  test('第 11 轮 W9-09：存储盘只是快满了，写「存储盘快满（88%）」不写「降级」', () {
+    appLang.value = AppLang.zh;
+    expect(deviceHead('disk', 'degraded', '已用 88%,剩 27 GB:到 90% 就不接新的巡逻'), '存储盘快满（88%）');
+    expect(deviceHead('disk', 'error', '读不出来'), '存储盘：故障');
+    expect(deviceHead('speaker', 'degraded', ''), '喇叭：降级');
+    appLang.value = AppLang.en;
+    expect(deviceHead('disk', 'degraded', '已用 88%,剩 27 GB'), 'Storage disk nearly full (88%)');
+    appLang.value = AppLang.zh;
+  });
 }

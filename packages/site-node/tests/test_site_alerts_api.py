@@ -340,3 +340,28 @@ def test_第10轮_W9_01_活动日志的对象是日程_路线时带显示名(站
     assert rows["route-1-2"]["target_name"] == "夜巡测试"
     assert rows["route-1"]["target_name"] == "一楼夜巡"
     assert "target_name" not in rows["gone-9"], "查不到名字的不加(网页照旧写编号)"
+
+
+def test_第11轮_W11_01_活动日志记当时的名字_删了也不变回编号(站点):
+    """名字在写记录那一刻存下:删掉以后、编号换了主人以后,旧记录照旧写当时的名字。"""
+    s = 站点
+    alice = _登(s, "alice")
+    with s.db.tx() as c:
+        c.execute("INSERT INTO route_schedules(entry_id, title, definition, revision, "
+                  "active_from_ms, updated_ms, updated_by, source) "
+                  "VALUES ('route-1-2', '夜巡测试', '{}', 1, 0, 0, 'a', 'editor')")
+    st, _ = s.req("POST", "/api/route-schedules/route-1-2/delete", {"base_revision": 1},
+                  token=alice)
+    assert st == 200
+    import time
+    for _ in range(100):                                  # 审计在回完话之后才写
+        if s.db.query("SELECT 1 FROM audit WHERE target='route-1-2'"):
+            break
+        time.sleep(0.02)
+    with s.db.tx() as c:                                  # 后来这个编号叫了别的名字
+        c.execute("INSERT INTO retired_ids(kind, id, title, deleted_ms) "
+                  "VALUES ('schedule','route-1-2','补跑测试',0) "
+                  "ON CONFLICT(kind, id) DO UPDATE SET title='补跑测试'")
+    [row] = [r for r in s.req("GET", "/api/audit", token=alice)[1]["audit"]
+             if r["target"] == "route-1-2"]
+    assert row["target_name"] == "夜巡测试" and row["detail"]["delete"] is True

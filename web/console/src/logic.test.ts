@@ -245,6 +245,11 @@ describe("model", () => {
     lang.value = "zh";
     expect(taskNote(go("standby-7ff9137e03c8") as never, "goto", "returning")).toBe("回待命点");
     expect(taskNote(go("standby-home-7ff9137e03c8") as never, "goto", "returning")).toBe("回原点");
+    // 第 11 轮 W10-02:总览那一栏窄,一直巡逻只写「第 3 圈」
+    const lap = { ...task("patrol"), lap: { n: 3, of: 0 } };
+    expect(taskNote(lap as never, "patrol", "patrolling")).toBe("一直巡逻 · 第 3 圈");
+    expect(taskNote(lap as never, "patrol", "patrolling", true)).toBe("第 3 圈");
+    expect(taskNote({ ...lap, lap: { n: 2, of: 3 } } as never, "patrol", "patrolling", true)).toBe("第 2 / 3 圈");
     lang.value = was;
     expect(robotState(ok, undefined, true)).toBe("charging");
     expect(robotState(ok, undefined, false)).toBe("idle");

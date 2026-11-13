@@ -25,7 +25,7 @@ from typing import Any
 #: 74 W74 三期:地图标注 map_marks —— 出口线、易藏点(只加表);外审 r2:值守进度 guard_runs.follow
 #:    记看见人这一回的跟人(只加列)。
 #: 75 第 8 轮 W8-11:路线、排程的显示名 routes.title / route_schedules.title(能写中文;只加列)。
-SCHEMA_VERSION = 75
+SCHEMA_VERSION = 76
 
 _DDL = """
 CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
@@ -613,6 +613,15 @@ CREATE TABLE IF NOT EXISTS route_store (
     updated_ms  INTEGER NOT NULL DEFAULT 0,
     updated_by  TEXT NOT NULL DEFAULT '',
     last_import TEXT NOT NULL DEFAULT ''
+);
+-- 第 11 轮 W11-01(库 76):删掉的路线(kind=route)、排程(kind=schedule)。编号不再发给新建的
+-- (不然旧记录会写成新名字);名字留着,记录里照样写当时的名字。
+CREATE TABLE IF NOT EXISTS retired_ids (
+    kind        TEXT NOT NULL,
+    id          TEXT NOT NULL,
+    title       TEXT NOT NULL DEFAULT '',
+    deleted_ms  INTEGER NOT NULL,
+    PRIMARY KEY (kind, id)
 );
 -- 运营可视化(库 59):定位丢了 / 变差的每一段(loc_history.py)。有界:每台机器人 500 段、全站 5000 段、
 -- 90 天。end_ms 空 = 还没结束;end_how:recovered / became_* / offline / no_data / site_restart。
