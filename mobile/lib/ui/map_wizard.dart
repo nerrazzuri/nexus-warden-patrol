@@ -732,15 +732,6 @@ class _MapWizardPageState extends State<MapWizardPage> {
                           style: NwText.bodyMedium.copyWith(color: x.$1 ? c.text : c.error))),
                 ]),
               ),
-            if (robotOnline(r) && robotActive(r) && _forever(r)) ...[
-              const SizedBox(height: Nw.s8),
-              NwButton(
-                  buttonKey: MapWizardPage.stopTaskKey,
-                  variant: NwButtonVariant.outline,
-                  icon: Icons.stop_rounded,
-                  label: tr('Stop ${r['robot_id']}', '叫停 ${r['robot_id']}'),
-                  onPressed: _busy ? null : () => _stopTask(r)),
-            ],
           ]),
         ),
       ],
@@ -760,6 +751,18 @@ class _MapWizardPageState extends State<MapWizardPage> {
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
               style: NwText.bodySmall.copyWith(color: c.error)),
+        ),
+      // 第 9 轮 A8-02 尾巴：「叫停」紧跟在原因下面、「下一步」上面（以前在检查表里，横屏时在屏幕外看不到）
+      if (r != null && robotOnline(r) && robotActive(r) && _forever(r))
+        Padding(
+          padding: const EdgeInsets.only(bottom: Nw.s8),
+          child: NwButton(
+              buttonKey: MapWizardPage.stopTaskKey,
+              variant: NwButtonVariant.outline,
+              icon: Icons.stop_rounded,
+              fullWidth: true,
+              label: tr('Stop ${r['robot_id']}', '叫停 ${r['robot_id']}'),
+              onPressed: _busy ? null : () => _stopTask(r)),
         ),
       NwButton(
           buttonKey: MapWizardPage.nextKey,
