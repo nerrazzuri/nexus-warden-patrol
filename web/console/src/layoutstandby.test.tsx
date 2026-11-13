@@ -124,3 +124,17 @@ describe("minor #27:带过来的待命点能丢", () => {
     expect(reloaded).toBeGreaterThan(0);
   });
 });
+
+describe("第 10 轮 W10-06", () => {
+  it("A、B 的待命点在同一处:图上写「A、B」,不是只看到 B", () => {
+    lang.value = "zh";
+    const both: LayerData = { ...data, standby: [
+      { robot_id: "A", name: "home", x: 2, y: 2, yaw: 0, map_id: "home", map_version: "3", default: true },
+      { robot_id: "B", name: "home", x: 2.05, y: 2, yaw: 0, map_id: "home", map_version: "3", default: true },
+      { robot_id: "B", name: "far", x: 8, y: 8, yaw: 0, map_id: "home", map_version: "3" }] };
+    const { container: c } = render(<StandbyTab {...props()} data={both} />);
+    const g = c.querySelectorAll("[data-standby-group]");
+    expect(g.length).toBe(1);
+    expect(g[0].textContent).toBe("A、B");
+  });
+});

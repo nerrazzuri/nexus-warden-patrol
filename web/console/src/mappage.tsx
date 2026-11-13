@@ -13,7 +13,7 @@ import { Modal } from "./dialogs";
 import { alertTitle, andList, lang, refusalText, t, type Key } from "./i18n";
 import { pageAllowed } from "./shell";
 import { locText, type UnitInfo } from "./live";
-import { ENGINEERING_LAYERS, etaNext, fanOut, labelAbove, LAYERS, layersFor, loadLayers, saveLayers, labelRows, mapPins, mapTodo, olderOpen, shiftStart, staleAfter, staleCells, tonightEvents, zoneDecor,
+import { ENGINEERING_LAYERS, etaNext, eventLabelY, fanOut, labelAbove, LAYERS, layersFor, loadLayers, saveLayers, labelRows, mapPins, mapTodo, olderOpen, shiftStart, staleAfter, staleCells, tonightEvents, zoneDecor,
   type AuthzRow, type Cell, type Layer, type ModeView } from "./maplayers";
 import { fanPath } from "./layoutpage";
 import { MapCanvas, type CanvasArea, type LegendKey, type Screen } from "./mapcanvas";
@@ -82,7 +82,8 @@ export function SiteMap(props: {
   areaDecor?: (name: string) => { label: string; tone: "armed" | "off" } | null;
   /** 世界层(预览像素)、标记层(屏上)里页面自己多画的。 */
   extraWorld?: (meta: PreviewMeta, map: { map_id: string; version: string }) => ComponentChildren;
-  extraMarks?: (s: Screen, meta: PreviewMeta, map: { map_id: string; version: string }) => ComponentChildren;
+  /** ``bots``:这张图上机器人在屏上的位置(第 10 轮 W10-06:报警标签避开机器人名字)。 */
+  extraMarks?: (s: Screen, meta: PreviewMeta, map: { map_id: string; version: string }, bots: [number, number][]) => ComponentChildren;
   /** 在巡逻的机器人下面写「下一个点约 N 分钟」(地图页的巡逻路线图层)。 */
   eta?: boolean;
   /** 现在画的是哪张图(页面按它去拉轨迹覆盖、待命点)。 */
@@ -196,7 +197,7 @@ export function SiteMap(props: {
               <>
                 {!props.onPickMap && props.pick !== false && pose.marks(s)}
                 {props.route !== false && vizMarks(s, meta, vizRobots, eps)}
-                {props.extraMarks?.(s, meta, which)}
+                {props.extraMarks?.(s, meta, which, bots.map((b) => s.px(b.px, b.py)))}
                 {pins.map(({ a, px, py }) => {
                   const [x, y] = s.px(px, py);
                   const h = PIN_R / 2.5;
@@ -383,7 +384,7 @@ export function MapPage(props: {
             )}
           </>
         )}
-        extraMarks={(s) => (
+        extraMarks={(s, _meta, _map, botPx) => (
           <>
             {/* 第 2 轮 duty N9:点了哪儿就在哪儿标一下,确认框说的是这个点 */}
             {look && shown.map && look.map.map_id === shown.map.map_id && look.map.version === shown.map.version && (() => {
@@ -399,10 +400,11 @@ export function MapPage(props: {
               const p = a.context?.pose;
               if (!p || p.map_id !== shown.map!.map_id || p.map_version !== shown.map!.version) return [];
               const [x, y] = s.map(p.x, p.y);
+              const ly = eventLabelY(x, y, botPx, BOT_R, LABEL_PX);
               return [(
                 <g key={`ev:${a.key}`} class={`event-pin ${a.audience ?? ""}`} onClick={(e) => { e.stopPropagation(); toRec(a); }}>
-                  <line x1={x} y1={y} x2={x} y2={y - 10} />
-                  <text x={x} y={y - 14}>{`${hm(a.first_ms)} ${alertTitle(lang.value, a.kind, a.title).slice(0, 12)}`}</text>
+                  <line x1={x} y1={y} x2={x} y2={ly + 4} />
+                  <text x={x} y={ly} data-event-label="1">{`${hm(a.first_ms)} ${alertTitle(lang.value, a.kind, a.title).slice(0, 12)}`}</text>
                 </g>
               )];
             })}

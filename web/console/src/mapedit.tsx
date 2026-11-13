@@ -65,6 +65,9 @@ type Target = { map_id: string; version: string; from?: string };
 
 /** 外审 R5:编辑器跟「哪张图哪一版」绑死 —— 换了就按 key 整个重建(草稿、选的点、确认框、文件全清掉),
  *  旧的回包、旧的另存回来不碰新的那个。 */
+/** 第 10 轮 W10-06:笔刷圆在屏幕上至少这么大(半径,像素)。 */
+const BRUSH_MIN_PX = 5;
+
 export function MapEditPage({ say, target, Canvas }: { say: Say; target: Target | null; Canvas?: FunctionComponent<OwnLayer> }) {
   if (!target) return <p class="empty">{t("meNoTarget")}</p>;
   return <Editor key={`${target.map_id}\u0000${target.version}`} say={say} target={target} Canvas={Canvas} />;
@@ -319,6 +322,14 @@ function Editor({ say, target, Canvas }: { say: Say; target: Target; Canvas?: Fu
             marks: (sc) => <>
               {zonesNow.map((z) => zoneName(sc, z))}
               {(isZone(tool) || tool === "region" || tool === "terrain") && pts.map(([x, y], i) => { const [sx, sy] = sc.map(x, y); return <circle key={i} cx={sx} cy={sy} r={5} class="draft-pt" />; })}
+              {/* 第 9 轮 W9-13:橡皮擦 / 画障碍每点一下画一个笔刷大小的圆(第一下就看得到、看得出会擦多宽);
+                  颜色跟笔画一样,描一圈对比色。第 10 轮 W10-06:画在屏幕这一层,半径至少 5 像素(默认笔刷缩小看
+                  只有 6 像素直径) */}
+              {meta && (tool === "erase" || tool === "obstacle") && pts.map((p, i) => {
+                const q = toPx(meta, p[0], p[1]);
+                const [sx, sy] = sc.px(q.px, q.py);
+                return <circle key={`brush-${i}`} cx={sx} cy={sy} r={Math.max(BRUSH_MIN_PX, (strokeW(width) / 2) * sc.k)} class={`me-brush ${tool}`} />;
+              })}
             </>,
             onDragRect: grid && shape === "rect" && meta ? (a: Pt, b: Pt, done: boolean) => {
               const A = toMap(meta, a[0], a[1]);
@@ -345,10 +356,6 @@ function Editor({ say, target, Canvas }: { say: Say; target: Target; Canvas?: Fu
               {pts.length > 0 && <polyline class={tool === "wall" ? "draft-line vwall" : "draft-line"} points={polyPx(meta, pts)} />}
               {/* 第 9 轮 W9-13:橡皮擦 / 画障碍每点一下画一个笔刷大小的圆(第一下就看得到、看得出会擦多宽);
                   颜色跟笔画一样,描一圈对比色,深浅底图上都看得见 */}
-              {(tool === "erase" || tool === "obstacle") && pts.map((p, i) => {
-                const q = toPx(meta, p[0], p[1]);
-                return <circle key={`brush-${i}`} cx={q.px} cy={q.py} r={strokeW(width) / 2} class={`me-brush ${tool}`} />;
-              })}
               {rect && <polygon class="draft-line" data-drag-rect="1" points={polyPx(meta, [rect[0], [rect[1][0], rect[0][1]], rect[1], [rect[0][0], rect[1][1]]])} />}
             </> : null })}
           {/* 易用性第 6 轮 W6-11:画着的时候「完成绘制 / 撤一点 / 取消」浮在地图上(原来在侧栏最底下,要滚才看得到) */}

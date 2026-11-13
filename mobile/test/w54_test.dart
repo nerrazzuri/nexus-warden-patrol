@@ -176,6 +176,23 @@ void main() {
       expect(api.calls, contains('abort A adhoc-forever-f1'));
     });
 
+    testWidgets('第 10 轮 W10-06：横屏第一步底栏只占一行（原因、叫停、下一步并排）', (t) async {
+      final a = _robotA();
+      (a['status'] as Map)['task'] = <String, dynamic>{'kind': 'patrol', 'state': 'running', 'task_id': 'adhoc-forever-f1'};
+      final api = FakeApi('admin', robotView: a)
+        ..robotsOverride = [a]
+        ..mapsCount = 0;
+      await _wizard(t, api);
+      _size(t, const Size(800, 390));
+      await t.pumpAndSettle();
+      final stop = t.getRect(find.byKey(MapWizardPage.stopTaskKey));
+      final next = t.getRect(find.byKey(MapWizardPage.nextKey));
+      expect(stop.top, closeTo(next.top, 2), reason: '叫停、下一步并排');
+      expect(390 - next.top, lessThan(90), reason: '底栏只占一行');
+      expect(find.byKey(const Key('wizard-next-why')), findsOneWidget, reason: '原因还在，一行');
+      expect(t.takeException(), isNull);
+    });
+
     // 第 8 轮 A8-03：「请先升级」说去哪儿升级
     testWidgets('第 8 轮 A8-03：不能建图时说找谁升级', (t) async {
       final a = _robotA();

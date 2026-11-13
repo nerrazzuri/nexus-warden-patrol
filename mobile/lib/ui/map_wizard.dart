@@ -740,37 +740,52 @@ class _MapWizardPageState extends State<MapWizardPage> {
           tone: NwTone.info,
           text: tr('Place the robot where it will charge (in front of the dock). Start and finish there.',
               '请将机器人放在今后的充电位置（充电桩前），从此处出发并最终回到此处。')),
-    ], [
-      // 第 8 轮 A8-03：下一步灰着时在按钮上面说为什么（横屏时检查表可能在屏幕外）
-      if (r != null && !ok)
-        Padding(
-          padding: const EdgeInsets.only(bottom: Nw.s8),
-          child: Text(
-              key: const Key('wizard-next-why'),
-              checks.where((x) => !x.$1).map((x) => x.$3).first,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: NwText.bodySmall.copyWith(color: c.error)),
-        ),
-      // 第 9 轮 A8-02 尾巴：「叫停」紧跟在原因下面、「下一步」上面（以前在检查表里，横屏时在屏幕外看不到）
-      if (r != null && robotOnline(r) && robotActive(r) && _forever(r))
-        Padding(
-          padding: const EdgeInsets.only(bottom: Nw.s8),
-          child: NwButton(
-              buttonKey: MapWizardPage.stopTaskKey,
-              variant: NwButtonVariant.outline,
-              icon: Icons.stop_rounded,
-              fullWidth: true,
-              label: tr('Stop ${r['robot_id']}', '叫停 ${r['robot_id']}'),
-              onPressed: _busy ? null : () => _stopTask(r)),
-        ),
-      NwButton(
-          buttonKey: MapWizardPage.nextKey,
-          label: tr('Next', '下一步'),
-          fullWidth: true,
-          size: NwButtonSize.large,
-          onPressed: ok && !_busy ? _prepareNext : null),
-    ]);
+    ], _setupBottom(c, r, ok, checks));
+  }
+
+  /// 第一步底栏：下一步灰着时说为什么（第 8 轮 A8-03）、一直巡逻时给「叫停」（第 9 轮 A8-02）、下一步。
+  /// 第 10 轮 W10-06：横屏时三样并排一行（以前竖着叠，占了大半屏，上面只剩一行能看）。
+  List<Widget> _setupBottom(NwColors c, Map<String, dynamic>? r, bool ok, List<(bool, String, String)> checks) {
+    final size = MediaQuery.sizeOf(context);
+    final wide = size.width > size.height;
+    final why = r != null && !ok
+        ? Text(
+            key: const Key('wizard-next-why'),
+            checks.where((x) => !x.$1).map((x) => x.$3).first,
+            maxLines: wide ? 1 : 2,
+            overflow: TextOverflow.ellipsis,
+            style: NwText.bodySmall.copyWith(color: c.error))
+        : null;
+    final stop = r != null && robotOnline(r) && robotActive(r) && _forever(r)
+        ? NwButton(
+            buttonKey: MapWizardPage.stopTaskKey,
+            variant: NwButtonVariant.outline,
+            icon: Icons.stop_rounded,
+            fullWidth: !wide,
+            label: tr('Stop ${r['robot_id']}', '叫停 ${r['robot_id']}'),
+            onPressed: _busy ? null : () => _stopTask(r))
+        : null;
+    final next = NwButton(
+        buttonKey: MapWizardPage.nextKey,
+        label: tr('Next', '下一步'),
+        fullWidth: !wide,
+        size: wide ? NwButtonSize.medium : NwButtonSize.large,
+        onPressed: ok && !_busy ? _prepareNext : null);
+    if (wide) {
+      return [
+        Row(children: [
+          Expanded(child: why ?? const SizedBox.shrink()),
+          if (stop != null) ...[const SizedBox(width: Nw.s8), stop],
+          const SizedBox(width: Nw.s8),
+          next,
+        ]),
+      ];
+    }
+    return [
+      if (why != null) Padding(padding: const EdgeInsets.only(bottom: Nw.s8), child: why),
+      if (stop != null) Padding(padding: const EdgeInsets.only(bottom: Nw.s8), child: stop),
+      next,
+    ];
   }
 
   // ---- 2 怎么开
