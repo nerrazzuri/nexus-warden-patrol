@@ -9,7 +9,7 @@ import { hm, hms, md, nameOf, siteDown } from "./data";
 import { Confirm, Modal } from "./dialogs";
 import { alertTitle, colon, lang, t } from "./i18n";
 import { roleLabel } from "./shell";
-import { siteStr } from "./sitetext";
+import { siteStr, zhPunct } from "./sitetext";
 
 type Say = (s: string) => void;
 interface Account { name: string; role: string; disabled: boolean; display_name: string; expires_ms: number | null; last_login_ms: number | null; expired: boolean }
@@ -377,7 +377,7 @@ export function AuditLine({ r, who }: { r: AuditRow; who?: boolean }) {
       {r.status >= 400 && r.detail?.err && <span class="tag mono" data-err={r.detail.err} title={r.detail.err_name ?? ""}>{r.detail.err}</span>}
       {r.detail?.source && r.detail.source !== "system" && <span class="tag" data-source={r.detail.source}>{t(r.detail.source === "web" ? "auditViaWeb" : r.detail.source === "api" ? "auditViaApi" : "auditViaApp")}</span>}
       {r.status < 400 && changeText(r.detail, r.target) && <span class="small muted" data-change="1">{changeText(r.detail, r.target)}</span>}
-      {r.status >= 400 && r.detail?.error && <span class="small audit-why" data-why="1" title={r.detail.error}>{siteStr(r.detail.error)}</span>}
+      {r.status >= 400 && r.detail?.error && <span class="small audit-why" data-why="1" title={zhPunct(r.detail.error)}>{siteStr(r.detail.error)}</span>}
       </div>
     </li>
   );

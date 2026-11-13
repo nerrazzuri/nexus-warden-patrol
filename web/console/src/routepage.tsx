@@ -6,7 +6,7 @@ import { useCallback, useEffect, useRef, useState } from "preact/hooks";
 import { api, ApiError, enc } from "./api";
 import { Confirm } from "./dialogs";
 import { startDrag, clickGuard, swallowClick } from "./dragpt";
-import { t, type Key } from "./i18n";
+import { colon, t, type Key } from "./i18n";
 import { SaveCancelled, type OwnLayer } from "./layoutpage";
 import { MapCanvas } from "./mapcanvas";
 import { PoseMarker } from "./posemarker";
@@ -779,7 +779,7 @@ function SchedulePanel({ route, view, schedules, say, reload, inPanel }: {
         </form>
       ) : (
         <>
-          {view && <p class="muted small">{rt("schedTimezone")}: <span class="mono">{view.timezone}</span></p>}
+          {view && <p class="muted small">{rt("schedTimezone")}{colon()}<span class="mono">{view.timezone}</span></p>}
           {schedules.length === 0 && <p class="muted small">{rt("routeNoSchedules")}</p>}
           <ul class="sched-list">
             {schedules.map((s) => (
