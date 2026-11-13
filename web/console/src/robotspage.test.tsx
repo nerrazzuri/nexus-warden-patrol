@@ -82,6 +82,16 @@ describe("机器人页", () => {
     expect(cardOf(c, "B").querySelector(".fleet-warn")).not.toBeNull();
   });
 
+  it("第 9 轮 W9-09:盘只是快满了写「存储盘快满（86%）」,不写 disk 异常", async () => {
+    robots = [card({ problems: [{ device: "disk", state: "degraded" }], storage: { used_ratio: 0.86, backlog_files: 0, oldest_backlog_s: null } }),
+      card({ robot_id: "B", problems: [{ device: "camera:front", state: "error" }] })];
+    const { container: c } = page();
+    await waitFor(() => expect(cardOf(c, "A")?.querySelector(".fleet-warn")).toBeTruthy());
+    expect(cardOf(c, "A").querySelector(".fleet-warn")!.textContent).toBe("存储盘快满（86%）");
+    expect(cardOf(c, "B").querySelector(".fleet-warn")!.textContent).toBe("摄像头 前故障");
+    expect(c.textContent).not.toContain("disk");
+  });
+
   it("改名字", async () => {
     const { container: c } = page();
     await waitFor(() => expect(cardOf(c, "A")).not.toBeNull());

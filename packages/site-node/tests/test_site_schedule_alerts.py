@@ -651,3 +651,19 @@ def test_W901_报警标题写排程的显示名(告警):
     src.on_schedule_outcome("route-1-2", None, "no_robot", "B 不在线")
     [a] = desk.book.open()
     assert "「补跑测试」" in a.title and "route-1-2" not in a.title
+
+
+def test_W909_存储盘报警_站点重启后不再多开一条_旧说法那条改成新说法_清出空间自动关(告警):
+    from nexwar_contract.storage import StorageFacts
+    desk, src = 告警
+    for t in (0, 10_000_000):                       # 站点重启前后各报了一条(合并窗口早过了)
+        desk.book.raise_alert(kind="disk_80", robot="A", title="机器人的发件箱所在的盘即将写满",
+                              now_ms=t)
+    facts = dict(outbox_bytes=0, outbox_cap_bytes=1, backlog_files=0, backlog_bytes=0,
+                 oldest_backlog_s=None)
+    src._storage("A", src._m("A"), StorageFacts(disk_used_ratio=0.86, **facts))
+    left = [a for a in desk.book.open() if a.kind == "disk_80"]
+    assert len(left) == 1 and left[0].title == "机器人存储空间不足", left
+    assert "86%" in left[0].detail
+    src._storage("A", src._m("A"), StorageFacts(disk_used_ratio=0.5, **facts))
+    assert [a for a in desk.book.open() if a.kind == "disk_80"] == []

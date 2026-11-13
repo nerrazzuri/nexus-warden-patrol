@@ -67,9 +67,13 @@ function day(ms: number): string {
 
 const label = (r: RobotCard) => r.name || r.robot_id;
 
-function problemText(p: RobotCard["problems"][number]): string {
+function problemText(p: RobotCard["problems"][number], r?: RobotCard): string {
   if ("nav2" in p) return t("robotNav2Down", { why: p.nav2 });
-  return "kind" in p ? alertTitle(lang.value, p.kind, p.kind) : t("robotDeviceBad", { d: p.device });
+  if ("kind" in p) return alertTitle(lang.value, p.kind, p.kind);
+  // 第 9 轮 W9-09:盘只是快满了,写「存储盘快满(86%)」,不写「disk 异常」
+  const used = r?.storage?.used_ratio;
+  if (p.device.split(":")[0] === "disk" && used != null && used >= 0.8) return t("robotDiskFull", { n: Math.round(used * 100) });
+  return t("robotDeviceBad", { d: devName(p.device), state: t(`dev_${p.state}` as Key) });
 }
 
 /** ``readOnly``(W60):经理只看 —— 没有添加、批准加入、改名、改派单方式、开通码、解绑、确认换 WiFi。 */
@@ -179,7 +183,7 @@ export function RobotsPage({ say, now, units = [], readOnly = false, role = "adm
                   <span class="fleet-bar" aria-hidden="true"><i style={{ width: `${Math.max(0, Math.min(100, r.battery_pct ?? 0))}%` }} /></span>
                 </span>
                 {r.problems.length > 0 && (
-                  <span class="fleet-warn"><Shape kind="P2" />{problemText(r.problems[0])}{r.problems.length > 1 ? ` · ${t("robotProblems", { n: r.problems.length })}` : ""}</span>
+                  <span class="fleet-warn"><Shape kind="P2" />{problemText(r.problems[0], r)}{r.problems.length > 1 ? ` · ${t("robotProblems", { n: r.problems.length })}` : ""}</span>
                 )}
                 {r.wifi?.change && <span class="fleet-warn"><Shape kind="P2" />{t("wifiPending")}</span>}
                 <span class="fleet-facts">
@@ -495,7 +499,7 @@ function RobotDetail({ r, u, now, role, say, onChanged, onCode, onClose, readOnl
           {fact("rdLastSeen", r.last_seen_ms ? ago(r.last_seen_ms, now) : "—")}
           {r.storage && fact("rdStorage", t("rdStorageVal", { p: Math.round(r.storage.used_ratio * 100), n: r.storage.backlog_files }))}
         </dl>
-        {devices.length > 0 && <p class="note small">{devices.map(problemText).join(" · ")}</p>}
+        {devices.length > 0 && <p class="note small">{devices.map((p) => problemText(p, r)).join(" · ")}</p>}
       </section>
       {(canPatrol(role) || isOwnerLike(role)) && !r.revoked && <Controls r={r} u={u} role={role} say={say} onChanged={onChanged} />}
       <section class="rd-sec">
