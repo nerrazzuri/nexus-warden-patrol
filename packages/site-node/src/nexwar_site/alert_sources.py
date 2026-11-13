@@ -948,7 +948,8 @@ class SiteAlertSources:
         ids = list(self._sched_entries.get(prev.key, ())) if prev is not None else []
         if entry_id not in ids:
             ids.append(entry_id)
-        title = f"排程{self._sched_names(ids)} {_SCHEDULE_TITLE[kind]}:{what}"
+        # 第 10 轮 W9-02:名字带「」,后面不加空格(以前「排程「补跑测试」 在等机器人」)
+        title = f"排程{self._sched_names(ids)}{_SCHEDULE_TITLE[kind]}:{what}"
         a = self.desk.raise_alert(kind=kind, robot=robot, title=title,
                                   detail=f"{self._sched_name(entry_id)}:{note}"[:300])
         self._sched_entries[a.key] = ids
@@ -980,7 +981,7 @@ class SiteAlertSources:
             if ids:
                 self._sched_entries[a.key] = ids
                 self.desk.amend(a.key, title=(
-                    f"排程{self._sched_names(ids)} {_SCHEDULE_TITLE['schedule_waiting']}:"
+                    f"排程{self._sched_names(ids)}{_SCHEDULE_TITLE['schedule_waiting']}:"
                     f"{_SCHEDULE_ALERTS['late_waiting'][1]}"))
             else:
                 self._sched_entries.pop(a.key, None)
