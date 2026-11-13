@@ -80,7 +80,7 @@ export interface Robot {
     last_seen: number;
     /** ``motion``:站着、能收速度命令(趴下、蹲下、没起来都是 false)。 */
     ready?: { estop_clear?: boolean; motion?: boolean };
-    task?: { kind: string; state: string } | null;
+    task?: { kind: string; state: string; task_id?: string } | null;
   } | null;
   capabilities?: {
     tasks?: Record<string, Record<string, unknown>>;
@@ -175,6 +175,8 @@ export function robotState(r: Robot, deter: DeterSession | undefined, charging: 
   if (deter) return "deterring";
   if (r.held) return "manual";
   const kind = st.task?.kind ?? "";
+  // 第 10 轮 W10-05:回待命点、回原点那趟是 goto,任务号 standby- 开头(站点 standby.py)
+  if (kind === "goto" && String(st.task?.task_id ?? "").startsWith("standby-")) return "returning";
   if (kind === "patrol" || kind === "goto") return "patrolling";
   if (kind === "standby" || kind === "return") return "returning";
   if (charging) return "charging";

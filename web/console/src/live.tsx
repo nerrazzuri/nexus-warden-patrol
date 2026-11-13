@@ -45,6 +45,9 @@ const TASK: Record<string, Key> = { patrol: "st_patrolling", goto: "st_patrollin
 /** 第 8 轮 W8-04:状态后面那一小段。几圈的巡逻写第几圈;跟状态说的一样就不写(以前卡片上「巡逻中 巡逻中」)。 */
 export function taskNote(r: Robot, kind: string, state: RobotState): string {
   const lap = (r as Robot & { lap?: { n: number; of: number } | null }).lap;
+  // 第 10 轮 W10-05:「返回中」后面写清是回待命点还是回原点
+  const tid = String(r.status?.task?.task_id ?? "");
+  if (kind === "goto" && tid.startsWith("standby-")) return t(tid.startsWith("standby-home-") ? "noteHome" : "noteStandby");
   if ((kind === "patrol" || kind === "goto") && lap) return lapText(lap);
   const k = TASK[kind];
   if (!k || `st_${state}` === k) return "";

@@ -1,6 +1,7 @@
 // 值班台的逻辑(商业化 B1):词条齐不齐、狗的状态、告警排序、坐标换算、请求头。
 // 站点数据用手机那边的夹具(mobile/test/fixtures,站点测试真跑出来的),两边对同一份契约。
 import { readFileSync } from "node:fs";
+import { taskNote } from "./live";
 import { describe, expect, it, vi } from "vitest";
 import { api, ApiError, onUnauthorized, setFetch } from "./api";
 import { alertTitle, DICTS, initialLang, knownKinds, lang, tr } from "./i18n";
@@ -235,6 +236,16 @@ describe("model", () => {
     const task = (kind: string) => ({ ...ok, status: { ...ok.status!, task: { kind, state: "running" } } });
     expect(robotState(task("patrol"), undefined, false)).toBe("patrolling");
     expect(robotState(task("standby"), undefined, false)).toBe("returning");
+    // 第 10 轮 W10-05:回待命点、回原点那趟机器人报的是 goto(任务号 standby-…),不是巡逻
+    const go = (id: string) => ({ ...ok, status: { ...ok.status!, task: { kind: "goto", state: "running", task_id: id } } });
+    expect(robotState(go("standby-7ff9137e03c8"), undefined, false)).toBe("returning");
+    expect(robotState(go("standby-home-7ff9137e03c8"), undefined, false)).toBe("returning");
+    expect(robotState(go("task-1"), undefined, false)).toBe("patrolling");
+    const was = lang.value;
+    lang.value = "zh";
+    expect(taskNote(go("standby-7ff9137e03c8") as never, "goto", "returning")).toBe("回待命点");
+    expect(taskNote(go("standby-home-7ff9137e03c8") as never, "goto", "returning")).toBe("回原点");
+    lang.value = was;
     expect(robotState(ok, undefined, true)).toBe("charging");
     expect(robotState(ok, undefined, false)).toBe("idle");
   });
