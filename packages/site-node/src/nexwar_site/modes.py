@@ -168,11 +168,20 @@ class ArmingDesk:
         sch = self.schedule.what_if(d)
         extra = frozenset(x["zone"] for x in sch.slots if x["zone"])   # 草稿里新排的防区也列上
         with self.db.snapshot():
-            return {"before": self._view_locked(extra=extra),
-                    "after": self._view_locked(sch, extra)}
+            before = self._view_locked(extra=extra)
+            mode = None
+            if before["source"] == "schedule" and not sch.enabled():
+                # 布防向导外审 2 #3:保存时停用时间表照「此刻」转手动(api 存时间表那一段),
+                # 预演也照它算
+                mode = "home" if before["state"] == "disarmed" else "armed"
+            return {"before": before, "after": self._view_locked(sch, extra, mode=mode)}
 
-    def _view_locked(self, sch: Any = None, extra: frozenset[str] = frozenset()) -> dict[str, Any]:
+    def _view_locked(self, sch: Any = None, extra: frozenset[str] = frozenset(),
+                     mode: str | None = None) -> dict[str, Any]:
         r = self._effective(self._raw())
+        if mode is not None:                             # 预演:当作已经切成这个手动模式
+            r = r | {"mode": mode, "prev_mode": "", "visitor_zones": [], "until_ms": None,
+                     "manual_until_ms": None}
         now = self._now()
         sch = sch if sch is not None else self.schedule
         governed = self._governed(r, sch)

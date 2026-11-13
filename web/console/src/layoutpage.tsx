@@ -121,14 +121,25 @@ export function tabFromHash(hash: string): LayoutTab {
 
 const EMPTY: LayerData = { areas: [], posts: [], marks: [], nav: null, routes: [], guardRoutes: [], standby: [], cameras: [], robots: [] };
 
-export function LayoutPage({ say, robots, tabs }: { say: Say; robots: string[]; tabs: Partial<Record<LayoutTab, FunctionComponent<TabProps>>> }) {
+/** 布防向导(用户 11-13)里嵌一个标签:固定这张图、这一页,不动地址栏,存好了告诉向导。 */
+export interface LayoutEmbed {
+  tab: LayoutTab; map: { map_id: string; version: string }; onSaved?: () => void;
+  /** 有没有没存的改动(向导换步、关掉之前先问)。 */
+  onDirty?: (dirty: boolean) => void;
+}
+
+export function LayoutPage({ say, robots, tabs, embed }: {
+  say: Say; robots: string[]; tabs: Partial<Record<LayoutTab, FunctionComponent<TabProps>>>; embed?: LayoutEmbed;
+}) {
   const [maps, setMaps] = useState<MapRow[]>([]);
   const [sel, setSel] = useState<MapRow | null>(null);
   const [meta, setMeta] = useState<PreviewMeta | null>(null);
   const [data, setData] = useState<LayerData>(EMPTY);
-  const [tab, setTab] = useState<LayoutTab>(() => tabFromHash(typeof location === "undefined" ? "" : location.hash));
+  const [tab, setTab] = useState<LayoutTab>(() => embed?.tab ?? tabFromHash(typeof location === "undefined" ? "" : location.hash));
   const [dirty, setDirty] = useState(false);
-  useUnsaved("layout", dirty);
+  // 外审 1 #7:向导里嵌的那份用自己的标记,不清掉布置页本身的
+  useUnsaved(embed ? "layout-wizard" : "layout", dirty);
+  useEffect(() => embed?.onDirty?.(dirty), [dirty]);
   const [ask, setAsk] = useState<(() => void) | null>(null);
   const [conflict, setConflict] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -152,7 +163,8 @@ export function LayoutPage({ say, robots, tabs }: { say: Say; robots: string[]; 
       setMaps(d.maps ?? []);
       // 第 2 轮 maps N12:地址里带了 map、version(从发布对话框「去确认」跳来)就先选那一版
       const q = new URLSearchParams((typeof location === "undefined" ? "" : location.hash).split("?")[1] ?? "");
-      const want = d.maps.find((m) => m.map_id === q.get("map") && m.version === q.get("version"));
+      const want = embed ? d.maps.find((m) => m.map_id === embed.map.map_id && m.version === embed.map.version)
+        : d.maps.find((m) => m.map_id === q.get("map") && m.version === q.get("version"));
       setSel((s) => s ?? want ?? d.maps.find((m) => m.active) ?? d.maps[d.maps.length - 1] ?? null);
     }).catch((e) => {
       if (mapsTry === 0) say(errText(e));
@@ -228,7 +240,7 @@ export function LayoutPage({ say, robots, tabs }: { say: Say; robots: string[]; 
   tabNow.current = tab;
   useEffect(() => {
     const on = () => {
-      if (!location.hash.startsWith("#/admin/layout")) return;
+      if (embed || !location.hash.startsWith("#/admin/layout")) return;
       const x = tabFromHash(location.hash);
       if (x !== tabNow.current) switchTab(x);
     };
@@ -246,6 +258,7 @@ export function LayoutPage({ say, robots, tabs }: { say: Say; robots: string[]; 
       // 站点存下的那一份可能跟草稿不完全一样(临时区的天数换成到期时刻、坐标取整……):标签按新数据重开
       setGen((g) => g + 1);
       say(t("saved"));
+      embed?.onSaved?.();
     } catch (e) {
       if (e instanceof SaveCancelled) return;
       if (e instanceof ApiError && e.status === 409) setConflict(true);
@@ -276,8 +289,8 @@ export function LayoutPage({ say, robots, tabs }: { say: Say; robots: string[]; 
   return (
     <section class="layout">
       <div class="panel-head">
-        <h1>{t("lyTitle")}</h1>
-        <label class="field-inline">{t("mapLabel")}
+        {!embed && <h1>{t("lyTitle")}</h1>}
+        {embed ? <span class="field-inline">{t("mapLabel")} {embed.map.map_id} · v{embed.map.version}</span> : <label class="field-inline">{t("mapLabel")}
           <select value={sel ? `${sel.map_id}\u0000${sel.version}` : ""} onChange={(e) => {
             const [m, v] = e.currentTarget.value.split("\u0000");
             const next = maps.find((x) => x.map_id === m && x.version === v) ?? null;
@@ -287,20 +300,20 @@ export function LayoutPage({ say, robots, tabs }: { say: Say; robots: string[]; 
             {maps.map((m) => <option key={`${m.map_id}:${m.version}`} value={`${m.map_id}\u0000${m.version}`}>
               {m.map_id} · v{m.version}{m.active ? ` · ${t("lyActive")}` : ""}{m.note ? ` · ${clip(siteKnown(m.note))}` : ""}</option>)}
           </select>
-        </label>
+        </label>}
         {/* 第 4 轮 layout N5:不用空 span 顶开(窄屏上它折到下一行,在「历史」左边空出一块) */}
-        {HISTORY_KIND[tab] && <button type="button" class="btn push" onClick={() => setHistory(!history)} aria-pressed={history}>{t("lyHistory")}</button>}
+        {HISTORY_KIND[tab] && !embed && <button type="button" class="btn push" onClick={() => setHistory(!history)} aria-pressed={history}>{t("lyHistory")}</button>}
         {/* P1-34:「没保存」写在保存按钮旁边,不另起一行把地图往下推 */}
         {/* 第 2 轮 setup N15:「还没保存」的位置一直留着,出现时「历史」按钮不跳 */}
-        <span class={`${dirty ? "ly-dirty small" : "ly-dirty small hold"}${HISTORY_KIND[tab] ? "" : " push"}`} role="status" aria-hidden={!dirty || undefined}>{t("armDirty")}</span>
+        <span class={`${dirty ? "ly-dirty small" : "ly-dirty small hold"}${HISTORY_KIND[tab] && !embed ? "" : " push"}`} role="status" aria-hidden={!dirty || undefined}>{t("armDirty")}</span>
         <button type="button" class="btn primary ly-save" disabled={!dirty || busy} onClick={() => void save()}>{t("save")}</button>
       </div>
-      <p class="muted lead">{t("lyLead")}</p>
-      <div class="ly-tabs" role="tablist">
+      {!embed && <p class="muted lead">{t("lyLead")}</p>}
+      {!embed && <div class="ly-tabs" role="tablist">
         {LAYOUT_TABS.map((x) => (
           <button key={x} type="button" role="tab" aria-selected={tab === x} onClick={() => tab !== x && switchTab(x)}>{t(TAB_KEY[x])}</button>
         ))}
-      </div>
+      </div>}
       {conflict && (
         <div class="ly-conflict" role="alert">
           <span>{t("lyConflict")}</span>
@@ -321,7 +334,7 @@ export function LayoutPage({ say, robots, tabs }: { say: Say; robots: string[]; 
         )}
       </div>
       {ask && (
-        <Confirm text={t("lyDiscard")} yes={t("lyDiscardYes")} danger onNo={() => { setAsk(null); replaceHash(`#/admin/layout?tab=${tab}`); }}
+        <Confirm text={t("lyDiscard")} yes={t("lyDiscardYes")} danger onNo={() => { setAsk(null); if (!embed) replaceHash(`#/admin/layout?tab=${tab}`); }}
           onYes={() => { const go = ask; setAsk(null); setDirty(false); go(); }} />
       )}
     </section>

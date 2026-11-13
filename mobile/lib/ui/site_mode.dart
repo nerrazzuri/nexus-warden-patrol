@@ -22,6 +22,50 @@ import 'nw/nw_p2_duty.dart';
 import 'nw/nw_theme.dart';
 import 'nw/nw_widgets.dart';
 
+String? _robotWhy(String code, String id) => switch (code) {
+      'unregistered' => tr('$id is not registered', '$id 没登记'),
+      'offline' => tr('$id is offline', '$id 不在线'),
+      'stale' => tr('$id has not reported for a while', '$id 的状态不新鲜'),
+      'manual_only' => tr('$id is set to manual dispatch only', '$id 设成只许手动派'),
+      'supervised' => tr('$id needs a person beside it', '$id 要人在旁边监护'),
+      'map' => tr('$id has a different map loaded', '$id 加载的地图不对'),
+      'reserved' => tr('$id is assigned to another route in the guard plan',
+          '$id 指定给了值守方案里的另一条路线'),
+      _ => null,
+    };
+
+/// 布防着机器人为什么不会自己巡逻（一句话，跟网页布防向导同一套）；都齐了 → 空串。
+String patrolReason(Map<String, dynamic> r) {
+  final missing = [for (final m in (r['missing'] as List? ?? const [])) '$m'];
+  if (missing.isEmpty) return '';
+  switch (missing.first) {
+    case 'zones':
+      return tr('this map has no zones', '这张图上没有防区');
+    case 'route':
+      return tr('there is no zone route', '没有防区路线');
+    case 'plan':
+      return tr('no zone route is assigned to a robot', '值守方案里没有给机器人分配防区路线');
+  }
+  final bad = [
+    for (final x in (r['robots'] as List? ?? const []))
+      if (x is Map && '${x['code'] ?? ''}'.isNotEmpty)
+        _robotWhy('${x['code']}', '${x['id']}') ?? '${x['why']}',
+  ];
+  return bad.isEmpty ? tr('no robot can be dispatched', '没有能派的机器人') : bad.join(tr('; ', '；'));
+}
+
+/// 布防成了以后问一句：机器人会不会自己巡逻；不会就说为什么、去哪设（查不出来不说）。
+Future<String> armPatrolNote(SiteApi api) async {
+  try {
+    final why = patrolReason(await api.guardReadiness());
+    if (why.isEmpty) return '';
+    return tr('Armed, but robots will not patrol on their own: $why. An administrator can set this up with the arming wizard on the web (Arming times page).',
+        '已布防，但机器人不会自己巡逻：$why。请管理员在网页「布防时间」页用布防向导设置。');
+  } on SiteError {
+    return '';
+  }
+}
+
 class SiteModePage extends StatefulWidget {
   final SiteApi api;
   const SiteModePage({super.key, required this.api});
@@ -108,6 +152,13 @@ class _SiteModePageState extends State<SiteModePage> {
       msg = tr('$what failed: $e', '$what失败：$e');
     }
     if (mounted) setState(() => _msg = msg);
+  }
+
+  Future<void> _arm() async {
+    await _run(() => widget.api.setMode('armed'), tr('Switch to Armed', '切换为布防'));
+    if (!mounted || _mode?['mode'] != 'armed') return;
+    final note = await armPatrolNote(widget.api);
+    if (note.isNotEmpty && mounted) setState(() => _msg = note);
   }
 
   /// 从布防切出去之前问一句（M07：以前不确认，只提示「切换为留守：完成」）。
@@ -243,7 +294,7 @@ class _SiteModePageState extends State<SiteModePage> {
               final buttons = <Widget>[
                 if (canArm)
                   btn(SiteModePage.armKey, 'armed', tr('Armed', '布防'),
-                      () => _run(() => widget.api.setMode('armed'), tr('Switch to Armed', '切换为布防'))),
+                      () => _arm()),
                 if (canSet) ...[
                   btn(SiteModePage.homeKey, 'home', tr('Stay', '留守'), () => _toHome(now)),
                   btn(SiteModePage.visitorKey, 'visitor', tr('Temp disarm', '临时撤防'), () => _visitorAsk(now)),
@@ -451,6 +502,13 @@ class _SiteModeBarState extends State<SiteModeBar> {
     }
   }
 
+  Future<void> _arm() async {
+    await _run(() => widget.api.setMode('armed'), tr('Switch to Armed', '切换为布防'));
+    if (!mounted || _mode?['mode'] != 'armed') return;
+    final note = await armPatrolNote(widget.api);
+    if (note.isNotEmpty && mounted) setState(() => _msg = note);
+  }
+
   Future<void> _home() async {
     final ok = await showDialog<bool>(
         context: context,
@@ -494,7 +552,7 @@ class _SiteModeBarState extends State<SiteModeBar> {
             selected: now == 'armed',
             onTap: !canArm || _busy || now == 'armed'
                 ? null
-                : () => _run(() => widget.api.setMode('armed'), tr('Switch to Armed', '切换为布防'))),
+                : () => _arm()),
         NwChoice(
             key: SiteModeBar.homeKey,
             icon: Icons.home_rounded,

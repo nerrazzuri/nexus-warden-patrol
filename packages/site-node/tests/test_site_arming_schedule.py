@@ -456,3 +456,16 @@ def test_第4轮_config_N3_预演删掉今天的例外(台):
     assert 台.view()["timezone"] == "Asia/Kuala_Lumpur"
     with pytest.raises(ScheduleError):
         台.preview(d | {"skip_exception": "x"})
+
+
+def test_布防向导外审2_3_预演停用时间表_跟保存一样按此刻的状态转手动(台):
+    """保存时停用时间表:此刻不是全撤防就转手动布防(全布防)。预演原来退回开时间表之前的手动模式(留守),
+    说「没变化」,存下去东区却马上布防了。"""
+    台.set_mode("home", by="alice")
+    rows = [slot(0, "00:00", "24:00"), slot(0, "20:00", "24:00", zone="东区")]
+    台.schedule.put({"enabled": True, "slots": rows}, by="alice")
+    assert 台.view()["state"] == "partial"
+    d = 台.preview({"enabled": False, "slots": rows})
+    assert d["after"]["source"] == "manual" and d["after"]["mode"] == "armed"
+    assert {z["zone"]: z["armed"] for z in d["after"]["zones"]} == {"东区": True}
+    assert d["after"]["state"] == "armed"

@@ -87,6 +87,32 @@ void main() {
       expect(find.text('现在：布防'), findsOneWidget);
     });
 
+    // 用户 11-13：配好了布防却没巡逻，系统没说为什么 —— 布防后不会自己巡逻要说原因、去哪设
+    testWidgets('布防成了但机器人不会巡逻：说原因（只许手动派）和去网页布防向导', (t) async {
+      final api = FakeApi('guard')
+        ..modeView = _mode('home')
+        ..readinessView = <String, dynamic>{
+          'missing': ['robot'],
+          'robots': [
+            {'id': 'A', 'code': 'manual_only', 'why': 'A 设成只许手动派'},
+          ],
+        };
+      await _duty(t, api);
+      await t.tap(find.byKey(SiteModeBar.armKey));
+      await t.pumpAndSettle();
+      expect(api.calls.last, 'mode armed');
+      expect(find.textContaining('已布防，但机器人不会自己巡逻：A 设成只许手动派。请管理员在网页「布防时间」页用布防向导设置。'),
+          findsOneWidget);
+    });
+
+    testWidgets('布防成了、都齐了：不多说', (t) async {
+      final api = FakeApi('guard')..modeView = _mode('home');
+      await _duty(t, api);
+      await t.tap(find.byKey(SiteModeBar.armKey));
+      await t.pumpAndSettle();
+      expect(find.textContaining('不会自己巡逻'), findsNothing);
+    });
+
     // 用户 11-11（易用性第 6 轮 W6-05）：保安也能撤防
     testWidgets('保安：三段都能点，不再说要管理员切', (t) async {
       final api = FakeApi('guard')..modeView = _mode('armed');

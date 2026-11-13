@@ -3,6 +3,7 @@
 // 2. 今天的安排 —— 今天几点布防(按防区)、今天的授权、临时撤防开到几点;右边切模式(设计 §11 第 14 条),写现在谁说了算。
 // 3. 机器人 —— 每台一张小卡片,点了去机器人页。
 // 4. 这周 —— 出了几次事、几次误报,跟上周比。
+import { PatrolReason } from "./armwizard";
 import { alertAdvice, alertHeadline } from "./alertinfo";
 import { siteStr, siteText, zhPunct } from "./sitetext";
 import type { AdminPage } from "./shell";
@@ -29,6 +30,8 @@ export function HomePage(props: {
   onAck: (a: Alert) => void;
   onDone: (a: Alert) => void;
   onMode: (m: Mode["mode"]) => void;
+  /** 布防向导(用户 11-13):布防着机器人却不会自己巡逻时,在模式开关下说原因、给入口(管理员)。 */
+  onWizard?: () => void;
 }) {
   const [today, setToday] = useState<{ enabled: boolean; today: Today[] } | null>(null);
   const [authz, setAuthz] = useState<Authz[]>([]);
@@ -139,6 +142,7 @@ export function HomePage(props: {
               </div>
               {/* P0-09:临时撤防要选防区,在授权页做(这里原来一点就整站临时撤防,确认框却说「选中的防区」) */}
               <a class={m.mode === "visitor" ? "btn sm on" : "btn sm"} href="#/admin/access">{t("armNowVisitor")}</a>
+              {props.onWizard && m.state !== "disarmed" && m.mode === "armed" && <PatrolReason onWizard={props.onWizard} />}
             </div>
           )}
         </div>

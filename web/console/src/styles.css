@@ -1673,3 +1673,21 @@ p.bad, span.bad, .small.bad { color: var(--c-error); }
 
 /* 第 8 轮 W8-05:填错的输入框标红 */
 input[aria-invalid="true"] { border-color: var(--c-error); outline-color: var(--c-error); }
+
+/* 布防向导(用户 11-13) */
+.armwiz section { display: flex; flex-direction: column; gap: 12px; margin: 12px 0; }
+.wiz-steps { display: flex; flex-wrap: wrap; gap: 8px; list-style: none; margin: 12px 0; padding: 0; }
+.wiz-step { padding: 6px 12px; border-radius: var(--r-r8); border: 1px solid var(--c-outline); background: transparent; color: var(--c-textMuted); font: inherit; cursor: pointer; }
+.wiz-steps li.done .wiz-step { color: var(--c-success); }
+.wiz-steps li[aria-current="step"] .wiz-step { border-color: var(--c-primary); color: var(--c-text); font-weight: 600; }
+.wiz-pick { display: flex; flex-direction: column; gap: 8px; border: 0; margin: 0; padding: 0; }
+.wiz-pick legend { margin-bottom: 8px; }
+.wiz-robots { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.wiz-robots li { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.wiz-robots .ok { color: var(--c-success); }
+.wiz-sum { display: grid; grid-template-columns: max-content 1fr; gap: 6px 16px; margin: 0; }
+.wiz-sum dt { color: var(--c-textMuted); }
+.wiz-sum dd { margin: 0; }
+.wiz-editor { height: min(70vh, 640px); display: flex; flex-direction: column; border-top: 1px solid var(--c-outline); padding-top: 8px; }
+.wiz-editor .layout { flex: 1; min-height: 0; }
+.row.wrap { flex-wrap: wrap; }
