@@ -1094,6 +1094,15 @@ class _Handler(TlsHandlerMixin):
             return self._send_json(200, {**self.site.loop.call(lambda: _sync(view)), "cleared": n})
         raise HttpError(400, "action 要是 start 或 end")
 
+    def _current_tasks(self) -> dict[str, str | None]:
+        """每台机器人现在跑的任务号(状态新鲜的;没任务 None)。"""
+        d = self.site.dispatcher
+        out: dict[str, str | None] = {}
+        for rid, c in list(d.clients.items()):
+            task = getattr(getattr(c, "status", None), "task", None)
+            out[rid] = getattr(task, "task_id", None) if d._fresh(c) else None
+        return out
+
     def _audit_named(self, rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
         """第 10 轮 W9-01:对象是日程、路线的,带上显示名 ``target_name``(起了中文名的不写
         route-1-2);查不到名字的不加。"""
@@ -3983,7 +3992,8 @@ class _Handler(TlsHandlerMixin):
                 from nexwar_site.evidence import run_origins
                 return self._send_json(200, {"runs": run_origins(desk.store.db, desk.store.runs(
                     robot_id=robot, since_ms=num("since"), until_ms=num("until"),
-                    limit=num("limit") or 200, mission=(q.get("mission") or [None])[0]))})
+                    limit=num("limit") or 200, mission=(q.get("mission") or [None])[0]),
+                    current=self._current_tasks())})
             m = _RUN.match(path)
             if m is not None:
                 rid, what, arg = int(m.group(1)), m.group(2), m.group(3)
@@ -3991,6 +4001,10 @@ class _Handler(TlsHandlerMixin):
                 if method == "GET" and what is None:
                     self._need(user, VIEW)
                     got = desk.detail(rid)
+                    # 第 10 轮 A10-01:详情跟列表一样补上回原点 / 回待命点、被接替、正在跑
+                    from nexwar_site.evidence import run_origins
+                    got = {**got, "run": run_origins(desk.store.db, [got["run"]],
+                                                     current=self._current_tasks())[0]}
                     self._audit_view(f"run/{rid}")
                     return self._send_json(200, got)
                 if method == "GET" and what == "photos" and arg:

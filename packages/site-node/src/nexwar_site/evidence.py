@@ -16,7 +16,6 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
-import math
 import os
 import shutil
 import threading
@@ -424,7 +423,39 @@ class EvidenceStore:
         return safe_join(self.dir_of(run), "photos", name)
 
 
-def run_origins(db: Any, runs: list[dict[str, Any]]) -> list[dict[str, Any]]:
+_TERMINAL = {"task_done": "done", "task_failed": "failed", "task_aborted": "aborted",
+             "task_preempted": "preempted"}
+
+
+def _ended(db: Any, robot: str, task_id: str) -> str | None:
+    """这一趟任务机器人报的收尾(done / failed / aborted / preempted);没报 None。"""
+    rows = db.query("SELECT kind FROM events WHERE robot_id=? AND kind IN "
+                    "('task_done','task_failed','task_aborted','task_preempted') "
+                    "AND json_extract(data, '$.task_id')=? ORDER BY received_at DESC LIMIT 1",
+                    (robot, task_id))
+    return _TERMINAL.get(rows[0]["kind"]) if rows else None
+
+
+def run_origins(db: Any, runs: list[dict[str, Any]],
+                current: dict[str, str | None] | None = None) -> list[dict[str, Any]]:
+    """见 :func:`_run_origins`;第 10 轮 A10-01 再补 ``task_id``、``ended``(机器人报的收尾,
+    ``preempted`` = 被接替)、``running``(没收尾、机器人现在跑的就是这一趟;``current`` = 每台机器人
+    现在的任务号)。"""
+    out = []
+    for r in _run_origins(db, runs):
+        tid = r.get("task_id")
+        if tid:
+            end = _ended(db, str(r.get("robot_id") or ""), str(tid))
+            if end is not None:
+                r = {**r, "ended": end}
+            elif not r.get("finished") and current is not None \
+                    and current.get(str(r.get("robot_id") or "")) == tid:
+                r = {**r, "running": True}
+        out.append(r)
+    return out
+
+
+def _run_origins(db: Any, runs: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """每一趟补上谁派的(``by``)、几个点(``points``):按机器人、任务名找开始前一天内最近那条派巡逻的
     命令(易用性第 6 轮 W6-08:诊断导出的列表原来只有 ``temp-1794…`` 这种编号)。点数不算末尾自动
     加的「走回起点」(``return-N``、``start``)。「去看看」那种去一个点的(任务名就是 ``task-…``)
@@ -434,24 +465,24 @@ def run_origins(db: Any, runs: list[dict[str, Any]]) -> list[dict[str, Any]]:
         t0 = int(r.get("first_ms") or 0)
         mission = str(r.get("mission") or "")
         if mission.startswith("standby-"):
-            # minor #19:回原点、回待命点那趟(任务名 standby-…):目标是这台的原点就是回原点
-            rows = db.query("SELECT issued_by, payload FROM commands WHERE task_id=? "
+            # minor #19:回原点、回待命点那趟(任务名 standby-…)。第 10 轮 A10-01:回原点认任务号
+            # standby-home-…(以前按目标点认,待命点设在原点上的,回待命点也写成回原点)
+            rows = db.query("SELECT issued_by FROM commands WHERE task_id=? "
                             "AND kind='goto' ORDER BY issued_at DESC LIMIT 1", (mission,))
             if rows:
-                r = {**r, "by": rows[0]["issued_by"],
-                     "kind": "home" if _to_home(db, str(r.get("robot_id") or ""),
-                                                rows[0]["payload"]) else "standby"}
+                r = {**r, "by": rows[0]["issued_by"], "task_id": mission,
+                     "kind": "home" if mission.startswith("standby-home-") else "standby"}
             out.append(r)
             continue
         if mission.startswith("task-"):
             rows = db.query("SELECT issued_by FROM commands WHERE task_id=? AND kind='goto' "
                             "ORDER BY issued_at DESC LIMIT 1", (mission,))
             if rows:
-                r = {**r, "by": rows[0]["issued_by"], "kind": "goto"}
+                r = {**r, "by": rows[0]["issued_by"], "kind": "goto", "task_id": mission}
             out.append(r)
             continue
         rows = db.query(
-            "SELECT issued_by, payload FROM commands WHERE robot_id=? AND kind='patrol' "
+            "SELECT issued_by, payload, task_id FROM commands WHERE robot_id=? AND kind='patrol' "
             "AND issued_at BETWEEN ? AND ? AND json_extract(payload, '$.mission.mission')=? "
             "ORDER BY issued_at DESC LIMIT 1",
             (r.get("robot_id"), t0 - 86_400_000, t0 + 60_000, mission))
@@ -462,7 +493,7 @@ def run_origins(db: Any, runs: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 wps = []
             n = sum(1 for w in wps if not (isinstance(w, dict) and (
                 w.get("name") == "start" or str(w.get("name", "")).startswith("return-"))))
-            r = {**r, "by": rows[0]["issued_by"], "points": n}
+            r = {**r, "by": rows[0]["issued_by"], "points": n, "task_id": rows[0]["task_id"]}
         if not mission.startswith(("temp-", "incident-")):
             from nexwar_site.names import route_name  # 第 9 轮 W9-01:记录写路线显示名
             name = route_name(db, mission)
@@ -470,18 +501,6 @@ def run_origins(db: Any, runs: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 r = {**r, "title": name}
         out.append(r)
     return out
-
-
-def _to_home(db: Any, robot: str, payload: str) -> bool:
-    """这条 goto 的目标是不是这台机器人那张图那一版的原点(半米以内)。"""
-    try:
-        t = json.loads(payload)["target"]
-        rows = db.query("SELECT x, y FROM homes WHERE robot_id=? AND map_id=? AND map_version=?",
-                        (robot, t["map_id"], str(t["map_version"])))
-        return bool(rows) and math.hypot(rows[0]["x"] - float(t["x"]),
-                                         rows[0]["y"] - float(t["y"])) <= 0.5
-    except (ValueError, KeyError, TypeError):
-        return False
 
 
 def run_title_zh(r: dict[str, Any]) -> str:

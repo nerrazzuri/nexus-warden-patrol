@@ -276,7 +276,9 @@ def test_minor19_回原点回待命点那趟写人话_README场景行不露编�
     tgt = {"map_id": "m", "map_version": "7", "frame_id": "map", "yaw": 0.0}
     db.query("INSERT INTO homes(robot_id, map_id, map_version, name, x, y, yaw) "
              "VALUES ('A','m','7','home',1.0,2.0,0.0)")
-    for i, (task, x, y) in enumerate([("standby-aaa", 1.05, 2.0), ("standby-bbb", 9.0, 9.0)]):
+    # 第 10 轮 A10-01:回原点认任务号 standby-home-…(以前按目标点认:待命点设在原点上的,自动回待命点
+    # 也被写成回原点,列表和详情对不上)
+    for i, (task, x, y) in enumerate([("standby-home-aaa", 1.05, 2.0), ("standby-bbb", 1.05, 2.0)]):
         db.query("INSERT INTO commands(command_id, task_id, robot_id, kind, payload, issued_by, "
                  "issued_at) VALUES (?,?,?,?,?,?,?)",
                  (f"c{i}", task, "A", "goto", json.dumps({"target": {**tgt, "x": x, "y": y}}),
@@ -286,15 +288,41 @@ def test_minor19_回原点回待命点那趟写人话_README场景行不露编�
              (json.dumps({"mission": {"mission": "temp-9", "waypoints": [{"name": "P1"},
                                                                           {"name": "P2"}]}}),
               t0 - 500))
-    out = run_origins(db, [{"id": 1, "robot_id": "A", "mission": "standby-aaa", "first_ms": t0},
+    out = run_origins(db, [{"id": 1, "robot_id": "A", "mission": "standby-home-aaa",
+                            "first_ms": t0},
                            {"id": 2, "robot_id": "A", "mission": "standby-bbb", "first_ms": t0}])
     assert (out[0]["by"], out[0]["kind"]) == ("demo", "home")
     assert out[1]["kind"] == "standby"
     stamp = time.strftime("%Y%m%dT%H%M%SZ", time.gmtime(t0 / 1000))
-    for mission in ("temp-9", "standby-aaa"):
+    for mission in ("temp-9", "standby-home-aaa"):
         db.query("INSERT INTO runs(robot_id, mission, stamp, first_ms, last_ms) VALUES (?,?,?,?,?)",
                  ("A", mission, stamp, t0, t0))
     ids = [r["id"] for r in db.query("SELECT id FROM runs ORDER BY id")]
     assert scene_window(db, now_ms=t0 + 1000, run=ids[0])["scene"].startswith("临时路线 2 个点 ")
     assert scene_window(db, now_ms=t0 + 1000, run=ids[1])["scene"].startswith("回原点 ")
+    db.close()
+
+
+def test_第10轮_A10_01_记录带任务号_被接替_正在跑(tmp_path):
+    """liang-d5 第 10 轮 A10-01:App 记录里正在跑的、被接替的都写「没跑完」。"""
+    from nexwar_site.evidence import run_origins
+    db = SiteDB(tmp_path / "site.db")
+    t0 = 1_794_158_305_644
+    for i, task in enumerate(("adhoc-1", "adhoc-2", "adhoc-3")):
+        db.query("INSERT INTO commands(command_id, task_id, robot_id, kind, payload, issued_by, "
+                 "issued_at) VALUES (?,?,?,?,?,?,?)",
+                 (f"c{i}", task, "AB"[i % 2], "patrol",
+                  json.dumps({"mission": {"mission": f"r{i}", "waypoints": []}}), "demo",
+                  t0 - 500))
+    db.query("INSERT INTO events(robot_id, boot_id, seq, event_id, kind, data, stamp, received_at) "
+             "VALUES ('A','b',1,'e1','task_preempted',?,?,?)",
+             (json.dumps({"task_id": "adhoc-1"}), t0 + 10, t0 + 10))
+    runs = [{"id": 1, "robot_id": "A", "mission": "r0", "first_ms": t0, "finished": False},
+            {"id": 2, "robot_id": "B", "mission": "r1", "first_ms": t0, "finished": False},
+            {"id": 3, "robot_id": "A", "mission": "r2", "first_ms": t0, "finished": False}]
+    out = run_origins(db, runs, current={"B": "adhoc-2", "A": "something-else"})
+    assert out[0]["task_id"] == "adhoc-1" and out[0]["ended"] == "preempted"
+    assert out[0].get("running") is not True
+    assert out[1]["running"] is True, "机器人现在跑的就是这一趟"
+    assert out[2].get("running") is not True and "ended" not in out[2], "没收尾、也不在跑:照旧"
     db.close()
