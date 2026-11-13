@@ -988,7 +988,7 @@ class _ScheduleEditorState extends State<_ScheduleEditor> {
                       enabled: !widget.blocked.containsKey(r) || r == widget.old?['mission'],
                       child: Text(
                           widget.blocked.containsKey(r)
-                              ? '${widget.titles[r] ?? r}（${widget.blocked[r]}）'
+                              ? tr('${widget.titles[r] ?? r} (${widget.blocked[r]})', '${widget.titles[r] ?? r}（${widget.blocked[r]}）')
                               : widget.titles[r] ?? r,
                           overflow: TextOverflow.ellipsis)),
               ],
