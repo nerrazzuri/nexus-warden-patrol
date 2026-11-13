@@ -32,12 +32,13 @@ String versionNoteText(String note) {
 
 /// 第 11 轮 A11-01：站点记的地图来源（edit:demo、cli:liang、import、draft:demo、建图的机器人编号）写人话。
 String mapSourceText(String source) {
-  final m = RegExp(r'^(edit|cli|draft):(.+)$').firstMatch(source);
+  final m = RegExp(r'^(edit|cli|draft|denoise):(.+)$').firstMatch(source);
   if (m != null) {
     final who = m[2]!;
     return switch (m[1]) {
       'edit' => tr('Edited by $who', '$who 编辑'),
       'cli' => tr('Imported by $who', '$who 导入'),
+      'denoise' => tr('Denoised by $who', '$who 去噪'),
       _ => tr('Edited by $who (draft)', '$who 编辑（草稿）'),
     };
   }

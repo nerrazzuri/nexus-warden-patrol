@@ -24,7 +24,7 @@ export interface AuditRow { id: number; at: number; actor: string; actor_role?: 
     note?: string; verdict?: string; mission?: string; mission_title?: string; robot?: string | null; title?: string; level?: string; kind?: string;
     channel?: string; by?: string; task_id?: string | null; err?: string; err_name?: string; req?: string;
     // minor #18:派单的点数、去一个点的目标、存草稿存成的版本
-    points?: number; request?: { target?: unknown }; version?: string; manual_only?: boolean; delete?: boolean } }
+    points?: number; request?: { target?: unknown }; version?: string; manual_only?: boolean; delete?: boolean; created?: boolean } }
 
 /** 第 3 轮 P1-66:改账号写清改了什么(原来只写「改了账号」)。 */
 export function changeText(d: AuditRow["detail"], target = ""): string {
@@ -209,6 +209,9 @@ export function rowActionText(r: Pick<AuditRow, "action" | "target" | "detail">)
   if (/^POST \/api\/robots\/[^/]+\/service$/.test(r.action) && typeof d.manual_only === "boolean") return t(d.manual_only ? "actManualOn" : "actManualOff");
   if (/^POST \/api\/route-schedules\/[^/]+\/delete$/.test(r.action)) return t("actPatrolSchedDel");
   if (/^POST \/api\/routes\/[^/]+\/delete$/.test(r.action)) return t("actRoutesDel");
+  // 第 12 轮 W10-04:新建跟修改分开(站点在详情里记 created)
+  if (d.created && /^POST \/api\/routes\/[^/]+$/.test(r.action)) return t("actRoutesNew");
+  if (d.created && /^POST \/api\/route-schedules\/[^/]+$/.test(r.action)) return t("actPatrolSchedNew");
   return actionText(r.action);
 }
 
@@ -220,7 +223,8 @@ function robotEvent(r: Pick<AuditRow, "action" | "detail">): boolean {
 /** 一行的对象。第 11 轮 W10-04:机器人事件不写「报警:」(写「巡逻开始 · B」)。 */
 export function rowTargetText(r: Pick<AuditRow, "action" | "target" | "detail" | "target_name">): string {
   if (r.target_name) return r.target_name;
-  const m = robotEvent(r) ? ALERT_KEY.exec(r.target) : null;
+  // 第 12 轮 W10-04:「产生报警」那一行对象也不写「报警:」(以前「产生报警 · 报警:排程在等机器人 · B」)
+  const m = robotEvent(r) || /^alert (raised|recorded)$/.test(r.action) ? ALERT_KEY.exec(r.target) : null;
   if (m) {
     const site = m[1] === "site" || m[1].includes(":");
     return `${alertTitle(lang.value, m[2], m[2])}${site ? "" : ` · ${nameOf(m[1])}`}`;
@@ -410,7 +414,7 @@ export function AuditLine({ r, who }: { r: AuditRow; who?: boolean }) {
       {who && <b class="audit-who">{r.actor.startsWith("site:") ? t("auditSystem") : r.actor.replace(/^login:/, "")}</b>}
       <span title={r.action}>{rowActionText(r)}</span>
       {r.status >= 400 ? <span class="tag bad" data-result="refused">{t("auditRefused")}</span>
-        : r.status >= 200 ? <span class="tag ok" data-result="ok">{t("auditOk")}</span> : null}
+        : r.status >= 200 && /^[A-Z]+ /.test(r.action) ? <span class="tag ok" data-result="ok">{t("auditOk")}</span> : null}
       {r.target && <span class="muted small" title={r.target}>{rowTargetText(r)}</span>}
       {r.actor_role === "engineer" && <span class="tag">{t("roleEngineer")}</span>}
       {r.status >= 400 && r.detail?.err && <span class="tag mono" data-err={r.detail.err} title={r.detail.err_name ?? ""}>{r.detail.err}</span>}

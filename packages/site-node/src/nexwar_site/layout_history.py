@@ -97,12 +97,18 @@ class LayoutHistory:
             sql += " AND item=?"
             args.append(item)
         rows = self.db.query(sql + " ORDER BY id DESC LIMIT ?", (*args, int(limit)))
+        from nexwar_site.names import route_name
         out = []
         for r in rows:
             body = None if r["body"] is None else json.loads(r["body"])
+            # 第 12 轮 W12-01:路线写显示名(快照里的;老快照没有、删了的按路线现在 / 删掉时的名字)
+            title = ""
+            if r["kind"] == "route":
+                title = str((body or {}).get("title") or "") or route_name(self.db, r["item"])
+                title = "" if title == r["item"] else title
             out.append({"id": r["id"], "kind": r["kind"], "map_id": r["map_id"],
                         "map_version": r["map_version"], "item": r["item"], "by": r["by"],
-                        "at_ms": r["at_ms"], "note": r["note"],
+                        "at_ms": r["at_ms"], "note": r["note"], "title": title,
                         "summary": summary(r["kind"], body), "facts": facts(r["kind"], body)})
         return out
 

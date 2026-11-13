@@ -101,7 +101,15 @@ const RULES: Rule[] = [
     (m) => `${m[1]} min late and a later round followed; run_late only catches up the latest round (recorded afterwards)`],
   [/^(\S+) 站点设成只许手动派[,，]不接排程$/, (m) => `${m[1]} is set to manual dispatch only, so schedules do not send it`],
   [/^(\S+) 要人监护[,，]不接排程$/, (m) => `${m[1]} needs a person present, so schedules do not send it`],
+  // 第 12 轮 W10-04:站点改写人话(日程名 / 一直巡逻 / 临时巡逻);老的编号照旧
+  [/^(\S+) 正在执行日程「([^」]*)」$/, (m) => `${m[1]} is running the schedule “${m[2]}”`],
+  [/^(\S+) 正在执行一直巡逻$/, (m) => `${m[1]} is on a continuous patrol`],
+  [/^(\S+) 正在执行临时巡逻$/, (m) => `${m[1]} is on a one-off patrol`],
   [/^(\S+) 正在执行 (\S+)$/, (m) => `${m[1]} is busy with ${m[2]}`],
+  // 第 12 轮 W12-06:「在等机器人」那条关掉时的说明(site alert_sources.py _stop_waiting)
+  [/^(\S+) 补跑了$/, (m) => `${m[1]} ran it late`],
+  [/^补跑了$/, () => "Ran late"],
+  [/^等不到机器人[,，]改报错过$/, () => "Gave up waiting for a robot; reported as missed"],
   // 第 10 轮 W10-01:没回待命点的说明(site alert_sources.py on_feed)
   [/^(遥控|巡逻|上一趟任务)结束后没能回待命点[:：]([\s\S]*)$/,
     (m) => `After ${m[1] === "遥控" ? "remote control" : m[1] === "巡逻" ? "the patrol" : "the last task"}, the robot could not go back to its standby point: ${trParts(m[2])}`],
@@ -113,6 +121,7 @@ const RULES: Rule[] = [
   [/^(\S+) 的状态不新鲜/, (m) => `${m[1]} has not reported recently`],
   [/^(\S+) 被 (\S+) 叫停了/, (m) => `${m[1]} was stopped by ${m[2]}; press Resume before sending it`],
   [/^(\S+) 未就绪[:：]\s*(.*)$/, (m) => `${m[1]} is not ready (${notReadyList(m[2])})`],
+  [/^(\S+) 这一拍给了更优先的「([^」]*)」(?:[(（]on_missed=\w+[)）])?$/, (m) => `${m[1]} was given to the higher-priority schedule “${m[2]}”`],
   [/^(\S+) 这一拍给了更优先的 (\S+)$/, (m) => `${m[1]} was given to the higher-priority ${m[2]}`],
   [/^(\S+) 加载的地图是 '([^']*)'[,，]任务要 '([^']*)'$/, (m) => `${m[1]} has map “${m[2]}” loaded; the patrol needs “${m[3]}”`],
   [/^站点的钟跟 (\S+) 差 (\d+) 秒$/, (m) => `The site clock is ${m[2]} s off from ${m[1]}`],
@@ -201,6 +210,12 @@ function trParts(s: string): string {
 function tr(s: string): string {
   const x = s.trim();
   if (!CJK.test(x)) return x;
+  // 第 12 轮 W12-06:站点写「日程名：原因」(全角冒号)—— 名字照原样,后面认得就翻,英文句子用半角冒号
+  const named = /^([^\s:：;；]{1,40})：([\s\S]+)$/.exec(x);
+  if (named) {
+    const rest = tr(named[2]);
+    if (rest !== UNK && !rest.includes(UNK)) return `${named[1]}: ${rest}`;
+  }
   for (const [re, f] of RULES) {
     const m = x.match(re);
     if (m) return f(m);

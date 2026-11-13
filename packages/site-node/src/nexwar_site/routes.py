@@ -650,8 +650,8 @@ def _retire(tx: Any, kind: str, key: str, title_sql: str, now: int) -> None:
 def _not_retired(tx: Any, kind: str, key: str, what: str) -> None:
     if tx.execute("SELECT 1 FROM retired_ids WHERE kind=? AND id=?",
                   (kind, key)).fetchone() is not None:
-        raise RouteError(f"{what}编号 {key} 用过(那条已经删了,旧记录还指着它):换一个编号。"
-                         "刷新页面后新建会自动跳过用过的编号")
+        # 第 12 轮 W11-01:给人看的句子用全角标点;不叫人「刷新页面」(网页一输入就说重名了)
+        raise RouteError(f"{what}编号 {key} 用过了（那条已经删了，旧记录还指着它），请换一个编号。")
 
 
 def _schedules_of(tx: Any, route_id: str) -> list[str]:

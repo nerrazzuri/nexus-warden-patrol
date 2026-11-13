@@ -112,7 +112,7 @@ export function TodayPatrols({ retryMs = 5_000, canFix = false }: { retryMs?: nu
                 {/* 第 4 轮 admin N7:写清是谁叫停的(派单的人不一定是叫停的人) */}
                 {x.state === "aborted" && x.stopped_by && <span class="muted small" data-stopped-by="1"> · {t("tdStoppedBy", { who: byText(x.stopped_by) || x.stopped_by })}</span>}
                 {/* 易用性第 6 轮 W6-02:到了也不会跑(排给的那台只许手动派):写原因,管理员给去改的入口 */}
-                {x.state === "blocked" && x.reason === "manual_only" ? (
+                {(x.state === "blocked" || x.state === "missed") && x.reason === "manual_only" ? (
                   <span class="muted small" data-blocked="1"> · {t("tdManualOnly", { id: x.robot })}
                     {canFix && x.robot && <> <a href={`#/admin/robots?robot=${encodeURIComponent(x.robot)}`}>{t("tdFixRobot")}</a></>}
                   </span>

@@ -199,6 +199,22 @@ def test_第11轮_W11_03_写明这台的日程派不了它_不算撞(台):
     assert t.desk.collision("A", 毫秒(21, 59), 600) is None, "路线画在 v7,A 用的是 v11"
 
 
+def test_第12轮_W12_04_一直巡逻说明写最先到点的那条日程(台):
+    """liang-d5 r12:B 有 19:25 和 19:28 两条日程,说明写了 19:28 的(取了走完得最晚的那条)。"""
+    t = 台
+    with t.db.tx() as c:
+        row = c.execute("SELECT * FROM route_schedules WHERE entry_id='nightly'").fetchone()
+        d = json.loads(row["definition"])
+        cols = row.keys()
+        early = json.dumps({**d, "id": "early", "at": "21:30"})
+        vals = {k: row[k] for k in cols} | {"entry_id": "early", "definition": early}
+        c.execute(f"INSERT INTO route_schedules({','.join(cols)}) VALUES "
+                  f"({','.join('?' for _ in cols)})", tuple(vals[k] for k in cols))
+    t.now["t"] = 毫秒(21, 0)
+    p = t.desk.plan("A", {**任务定义(), "policy": {**任务定义().get("policy", {}), "loops": 0}})
+    assert p["forever"] and p["interrupted_by"].startswith("21:30 "), p["interrupted_by"]
+
+
 def test_正在跑日程也排到后面(台):
     t = 台
     t.disp.running["A"] = "sched-abc"
@@ -612,6 +628,23 @@ def test_11_11_W6_02_机器人只许手动派_今天的巡逻写不会跑和原�
     assert item["robot"] == "A"
     e2 = SimpleNamespace(id="any", mission="loop", robot="", window_min=30)
     assert _schedule_item(t.db, e2, 毫秒(22, 0), 毫秒(21, 0))["state"] == "later", "没指定哪台:不猜"
+
+
+def test_第12轮_W12_03_只许手动派过了点_不写等待机器人(台):
+    """liang-d5 r12:19:23 之前写「A 只许手动派 · 不会跑」,过了 19:23 写「等待机器人」,
+    像还会跑。"""
+    from nexwar_site.today import _schedule_item
+    t = 台
+    e = SimpleNamespace(id="demo-night", mission="demo-loop", robot="A", window_min=30)
+    with t.db.tx() as c:
+        c.execute("INSERT INTO robot_service(robot_id, by, at_ms, note) VALUES ('A','demo',0,'')")
+        c.execute("INSERT INTO schedule_runs(entry_id, scheduled_ms, outcome, robot_id, note, "
+                  "decided_at) VALUES ('demo-night', ?, 'supervised', NULL, "
+                  "'A 站点设成只许手动派,不接排程', ?)", (毫秒(22, 0), 毫秒(22, 0)))
+    inwin = _schedule_item(t.db, e, 毫秒(22, 0), 毫秒(22, 5))
+    assert (inwin["state"], inwin["reason"]) == ("blocked", "manual_only"), inwin
+    over = _schedule_item(t.db, e, 毫秒(22, 0), 毫秒(23, 0))
+    assert (over["state"], over["reason"]) == ("missed", "manual_only"), over
 
 
 def test_易用性第7轮_不会跑写上路线画在哪一版_机器人用哪一版(台):

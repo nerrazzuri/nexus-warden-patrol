@@ -306,9 +306,11 @@ class AdhocDesk:
         m = act.missions.get(entry.mission)
         return self.estimate_s(robot, m) if m is not None else 30 * 60
 
-    def collision(self, robot: str, start_ms: int, dur_s: int) -> tuple[int, str] | None:
+    def collision(self, robot: str, start_ms: int, dur_s: int, *,
+                  first: bool = False) -> tuple[int, str] | None:
         """``[start, start + dur]`` 这段这台机器人有没有日程。→ ``(那趟日程预计走完的时刻, 说明)``,
-        没有 → ``None``。正在跑的日程也算(``sched-`` 开头的任务)。"""
+        没有 → ``None``。正在跑的日程也算(``sched-`` 开头的任务)。排队推后取走完得最晚的那趟;
+        ``first``(第 12 轮 W12-04,一直巡逻说谁会先停下它)取最先到点的那趟。"""
         act, entries = self._entries_for(robot)
         if act is None:
             return None
@@ -328,7 +330,7 @@ class AdhocDesk:
             if end > start_ms:
                 # 第 8 轮 W8-10:写日程名,路线名放括号里(多条日程跑同一条路线时分得清)
                 found.append((end, f"正在执行的日程{self._names(entry)}" if entry
-                              else f"正在执行的日程「{running}」"))
+                              else f"正在执行的日程「{running}」", self._now()))
         tz = act.schedule.tz()
         a = datetime.fromtimestamp(start_ms / 1000, tz=tz)
         b = a + timedelta(seconds=dur_s)
@@ -344,8 +346,11 @@ class AdhocDesk:
                     continue
                 end = occ_ms + self._entry_est_s(act, robot, e) * 1000
                 if end > start_ms:
-                    found.append((end, f"{occ:%H:%M} 的日程{self._names(e)}"))
-        return max(found) if found else None
+                    found.append((end, f"{occ:%H:%M} 的日程{self._names(e)}", occ_ms))
+        if not found:
+            return None
+        hit = min(found, key=lambda f: (f[2], f[0])) if first else max(found)
+        return hit[0], hit[1]
 
     def _names(self, e: Any) -> str:
         """「排程名」(路线「路线名」):第 9 轮 W9-01 写显示名,没起名写编号。"""
@@ -377,7 +382,7 @@ class AdhocDesk:
         now = self._now()
         if m.policy.forever:
             # W76:一直巡逻马上走;``interrupted_by`` = 跑到电量线之前会打断它的那一趟日程(没有是空串)
-            c = self.collision(robot, now, est)
+            c = self.collision(robot, now, est, first=True)
             return {"estimate_s": est, "start_ms": now, "queued": False, "because": "",
                     "forever": True, "interrupted_by": c[1] if c else "", "loops": 0,
                     # 第 8 轮 W8-05:派单说明里写出电量线是多少(以前只说「站点设的巡逻电量线」)

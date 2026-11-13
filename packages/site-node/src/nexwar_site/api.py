@@ -1333,8 +1333,9 @@ class _Handler(TlsHandlerMixin):
         if kind == "route":
             r = self.site.routes.get(item)
             # W73:带上类别 —— 删掉的防区路线退回来还是防区路线(老快照没有,按巡逻路线)
-            return {k: r[k] for k in ("map_id", "map_version", "waypoints", "policy", "kind")
-                    if k in r}
+            # 第 12 轮 W12-01:带上显示名 —— 退回删掉的路线,名字跟着回来
+            return {k: r[k] for k in ("map_id", "map_version", "waypoints", "policy", "kind",
+                                      "title") if k in r}
         if kind == "standby":
             return [{k: p[k] for k in ("name", "x", "y", "yaw", "default")}
                     for p in self.site.standby.list(item)
@@ -1394,6 +1395,12 @@ class _Handler(TlsHandlerMixin):
             raise HttpError(409, "此版本不是你现在看的那张图、那一层的:请刷新历史后再回退")
         self._audit_target = f"{row['kind']}:{row['map_id']}:{row['map_version']}/{row['item']}"
         self._audit_detail = {"restore": row["id"]}
+        if row["kind"] == "route":
+            from nexwar_site.names import route_name
+            body = row.get("body") if isinstance(row.get("body"), dict) else {}
+            name = str(body.get("title") or "") or route_name(self.site.dispatcher.db, row["item"])
+            if name and name != row["item"]:
+                self._audit_detail["target_name"] = name   # 第 12 轮 W12-01:活动日志写路线名
         warnings = self._restore(row, user)
         self._hist(row["kind"], row["map_id"], row["map_version"], row["item"], user,
                    note=f"restored #{row['id']}")
@@ -3083,6 +3090,8 @@ class _Handler(TlsHandlerMixin):
                 self._hist("route", out["map_id"], out["map_version"], rid, user)
                 self._audit_detail = {"revision": out["revision"], "points": len(out["waypoints"]),
                                       "map": f"{out['map_id']}:{out['map_version']}"}
+                if d.get("base_revision") in (0, None):
+                    self._audit_detail["created"] = True   # 第 12 轮 W10-04:新建跟修改分开写
                 return self._send_json(200, out)
             if ms is not None and ms.group(1):
                 eid = unquote(ms.group(1))
@@ -3094,6 +3103,8 @@ class _Handler(TlsHandlerMixin):
                     return self._send_json(200, {"ok": True})
                 self._audit_detail = {"mission": str(d.get("mission"))[:64],
                                       "at": str(d.get("at"))[:8]}
+                if d.get("base_revision") in (0, None):
+                    self._audit_detail["created"] = True   # 第 12 轮 W10-04
                 return self._send_json(200, store.put_schedule(eid, d, by=str(user)))
         except RouteConflict as exc:
             raise HttpError(409, str(exc), extra={"errors": exc.errors}) from exc

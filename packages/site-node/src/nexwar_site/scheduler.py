@@ -383,7 +383,7 @@ class SiteScheduler:
                                 else f"{rid} 要人监护,不接排程"), "supervised"
             running = self.dispatcher.busy(rid)
             if not reason and running is not None and not running.startswith(FOREVER_PREFIX):
-                reason, kind = f"{rid} 正在执行 {running}", "busy"
+                reason, kind = f"{rid} 正在执行{self._task_text(running)}", "busy"
             if not reason and running is not None and self._homing(rid, running):
                 # 外审 W76-2 #1:一直巡逻电量到线、已经在回家 —— 机器人这时回忙(护着回程),
                 # 按忙等它到家;不然这一轮记成跑过、被拒,同一窗口里不再补
@@ -447,6 +447,21 @@ class SiteScheduler:
                  r["entry_id"], r["robot_id"])
         return True
 
+    def _task_text(self, task_id: str) -> str:
+        """第 12 轮 W10-04:正在跑的任务说人话(以前「正在执行 sched-88538beef299」)。"""
+        from nexwar_site.names import schedule_name
+        from nexwar_site.priorities import FOREVER_PREFIX
+        if task_id.startswith("sched-"):
+            rows = self.db.query("SELECT entry_id FROM schedule_runs WHERE task_id=? LIMIT 1",
+                                 (task_id,))
+            if rows:
+                return f"日程「{schedule_name(self.db, rows[0]['entry_id'])}」"
+        if task_id.startswith(FOREVER_PREFIX):
+            return "一直巡逻"
+        if task_id.startswith("adhoc-"):
+            return "临时巡逻"
+        return f" {task_id}"
+
     def _homing(self, rid: str, task_id: str) -> bool:
         """``task_id`` 这一趟一直巡逻报过「开始回家」(``task_returning``)没有。"""
         if (rid, task_id) in self._homing_seen:
@@ -502,8 +517,11 @@ class SiteScheduler:
         ok, taken, why, kinds = self._candidates(act, entry, claimed)
         if not ok:
             if taken:
+                from nexwar_site.names import schedule_name
                 self._record(entry, scheduled_ms, "displaced",
-                             note="; ".join(f"{r} 这一拍给了更优先的 {claimed[r]}"
+                             # 第 12 轮 W10-04:写日程名(以前露编号 route-2-1)
+                             note="; ".join(f"{r} 这一拍给了更优先的"
+                                            f"「{schedule_name(self.db, claimed[r])}」"
                                             for r in taken)
                              + (f"(on_missed={entry.on_missed})"
                                 if entry.on_missed == "alarm" else ""))

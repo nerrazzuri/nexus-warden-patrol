@@ -8,6 +8,19 @@ beforeEach(() => { lang.value = "en"; });
 afterEach(() => { lang.value = "zh"; });
 
 describe("站点原文翻成英文", () => {
+  it("第 12 轮 W12-06:关闭说明「B 补跑了」翻成英文;「日程名：原因」英文句子用半角冒号", () => {
+    expect(siteText("B 补跑了").text).toBe("B ran it late");
+    expect(siteText("等不到机器人，改报错过").text).toBe("Gave up waiting for a robot; reported as missed");
+    const d = siteText("等不到测试：B 未就绪:没站起来(蹲着、趴着,或运动模式没就绪)").text;
+    expect(d).toBe("等不到测试: B is not ready (not standing (crouched, lying down, or motion not ready))");
+  });
+
+  it("第 12 轮 W10-04:正在执行、给了更优先的写日程名,英文也翻", () => {
+    expect(siteText("A 正在执行日程「二楼夜巡」").text).toBe("A is running the schedule “二楼夜巡”");
+    expect(siteText("B 正在执行一直巡逻").text).toBe("B is on a continuous patrol");
+    expect(siteText("A 这一拍给了更优先的「vip」(on_missed=alarm)").text).toBe("A was given to the higher-priority schedule “vip”");
+  });
+
   it("第 9 轮 W9-08:未就绪的每一样都翻,不夹中文", () => {
     const s = siteText("B 未就绪:没站起来(蹲着、趴着,或运动模式没就绪)");
     expect(s.text).toBe("B is not ready (not standing (crouched, lying down, or motion not ready))");

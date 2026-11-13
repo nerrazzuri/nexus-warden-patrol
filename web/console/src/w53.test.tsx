@@ -33,6 +33,7 @@ beforeEach(() => {
       return Promise.resolve(json({ items: [
         { at_ms: Date.now(), kind: "schedule", label: "外围一圈", robot: "A", by: "", state: "done", reason: "", end_ms: null, adhoc_id: "" },
         { at_ms: Date.now(), kind: "adhoc", label: "临时路线 3 个点", robot: "B", by: "gina", state: "queued", reason: "", end_ms: null, adhoc_id: "q" },
+        { at_ms: Date.now(), kind: "schedule", label: "demo-loop", robot: "A", by: "", state: "missed", reason: "manual_only", end_ms: null, adhoc_id: "" },
       ] }));
     }
     if (url === "/api/account-requests") return Promise.resolve(json({ requests: reqs }));
@@ -51,8 +52,11 @@ const btn = (root: Element, text: string) => Array.from(root.querySelectorAll("b
 describe("W53 网页", () => {
   it("今天的巡逻:一行一趟,临时的写谁派的", async () => {
     const { container: c } = render(<TodayPatrols />);
-    await waitFor(() => expect(c.querySelectorAll(".today-row").length).toBe(2));
+    await waitFor(() => expect(c.querySelectorAll(".today-row").length).toBe(3));
     expect(c.textContent).toContain("完成");
+    // 第 12 轮 W12-03:只许手动派、过了点没跑:写原因,不露 manual_only
+    expect(c.textContent).toContain("A 只许手动派");
+    expect(c.textContent).not.toContain("manual_only");
     expect(c.textContent).toContain("临时路线 3 个点 · B · gina");
     expect(c.textContent).toContain("排队中");
   });

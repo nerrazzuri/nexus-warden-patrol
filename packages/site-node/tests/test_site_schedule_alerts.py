@@ -105,9 +105,15 @@ entries:
     await _拍(t)
     assert {r["entry_id"]: r["outcome"] for r in t.sched.runs()} == \
         {"vip": "started", "nightly": "displaced"}
+    # 第 12 轮 W10-04:原因写日程名,不露编号(以前「这一拍给了更优先的 route-2-1」)
+    [d] = [r for r in t.sched.runs("nightly") if r["outcome"] == "displaced"]
+    assert "A 这一拍给了更优先的「vip」" in d["note"], d["note"]
     await t.run(5)
     await _拍(t)                                          # 狗在跑 vip
     assert "busy" in [r["outcome"] for r in t.sched.runs("nightly")]
+    # 以前「正在执行 sched-88538beef299」
+    b = [r for r in t.sched.runs("nightly") if r["outcome"] == "busy"][0]
+    assert b["note"] == "A 正在执行日程「vip」", b["note"]
     for _ in range(40):                                   # vip 跑完
         await t.run(20)
         await _拍(t)
@@ -425,6 +431,29 @@ def test_去向对应的告警与级别(告警, outcome, kind, level):
     [a] = desk.book.all()
     assert (a.kind, a.level.value, a.robot) == (kind, level, "A")
     assert "nightly" in a.title and "A 不在线" in a.detail
+
+
+def test_第12轮_W12_03_只许手动派写真原因_同一原因不每晚再报(tmp_path):
+    """liang-d5 r12:每晚 19:23 一条「无法派单:机器人要人现场监护,排程无法派单」—— 真原因是
+    A 只许手动派;「无法派单」说两遍;同一原因 11-08 到 11-13 每天一条。"""
+    from nexwar_site.alert_sources import SiteAlertSources
+    from nexwar_site.alert_store import AlertDesk
+    from nexwar_site.db import SiteDB
+    db = SiteDB(tmp_path / "a.db")
+    now = {"t": 1_000}
+    desk = AlertDesk(db, now_ms=lambda: now["t"])
+    src = SiteAlertSources(desk, now_ms=lambda: now["t"])
+    src.on_schedule_outcome("demo-night", "A", "supervised", "A 站点设成只许手动派,不接排程")
+    [a] = desk.book.all()
+    assert a.title == "排程「demo-night」派不了：A 只许手动派", a.title
+    assert "要人现场监护" not in a.title and a.title.count("派") == 2
+    desk.resolve(a.key, who="demo")
+    now["t"] += 86_400_000                               # 第二天同一原因
+    src.on_schedule_outcome("demo-night", "A", "supervised", "A 站点设成只许手动派,不接排程")
+    assert len(desk.book.all()) == 1, "同一原因一星期内不再报"
+    src.on_schedule_outcome("demo-night", "A", "supervised", "A 要人监护,不接排程")
+    assert [x.title for x in desk.book.all()][-1] == "排程「demo-night」派不了：A 要人现场监护"
+    db.close()
 
 
 def test_没派给哪只狗_报在站点名下(告警):
