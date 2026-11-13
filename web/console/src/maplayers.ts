@@ -91,17 +91,43 @@ export function labelAbove(pts: [number, number][], r: number, h: number): boole
     && Math.abs(ox - x) < r * 2 + h && oy > y && oy - y < r * 2 + h * 1.5));
 }
 
-/** 第 10 轮 W10-06:报警标签(画在报警点上方)的基线 y。标签横向 ±``LABEL_HALF_W`` 内有机器人、
- *  竖向会压到机器人的点或它的名字(点上下各两行,名字可能画在点上面也可能在下面)的,挪到那台机器人整块的上面。
- *  ``bots``:机器人在屏上的位置;``r`` 点半径;``h`` 一行字高。 */
+/** 屏上的一块:左、上、右、下。 */
+export type Box = [number, number, number, number];
+
+/** 一行字的半宽(像素):汉字、全角一个字一个字高,别的大约 0.6 个字高。 */
+export function textHalfW(s: string, px: number): number {
+  let w = 0;
+  for (const ch of s) w += /[\u3000-\u9fff\uff00-\uffef]/.test(ch) ? px : px * 0.6;
+  return w / 2 + 2;
+}
+
+/** 第 11 轮 W10-06:机器人在屏上怎么画 —— 同一处的摊开(W6-15)、名字错行、压着别的点就挪到点上面(第 9 轮),
+ *  每台给出画的位置、名字往下挪多少(``dy``)和点加名字(有「第几圈 · 多久到」再加一行)占的那一块。
+ *  地图页画机器人、报警标签躲机器人都用这一份(以前标签按机器人原来的位置躲,摊开、挪上去的名字躲不开)。 */
+export function botLayout(real: [number, number][], names: string[], r: number, h: number, eta: boolean):
+  { x: number; y: number; dy: number; box: Box }[] {
+  const fan = fanOut(real, r * 2 + 3);
+  const rows = labelRows(fan, r * 4);
+  const above = labelAbove(fan, r, h);
+  const step = (h + 2) * (eta ? 2 : 1);
+  return fan.map(([x, y], i) => {
+    const dy = above[i] ? -(r * 2 + 4) - step - rows[i] * step : rows[i] * step;
+    const base = y + dy + r + h + 2;
+    const last = eta ? base + h + 2 : base;
+    const half = Math.max(r, textHalfW(names[i] ?? "", h), eta ? 60 : 0);
+    return { x, y, dy, box: [x - half, Math.min(y - r, base - h), x + half, Math.max(y + r, last + 3)] };
+  });
+}
+
+/** 第 10 轮 W10-06:报警标签(画在报警点上方、居中)的基线 y。横向 ±``halfW`` 内、竖向压到机器人那一块
+ *  (点和名字,见 :func:`botLayout`)的,挪到那一块的上面;挪了再查,最多几次。 */
 const LABEL_HALF_W = 60;
-export function eventLabelY(x: number, y: number, bots: [number, number][], r: number, h: number): number {
+export function eventLabelY(x: number, y: number, boxes: Box[], h: number, halfW = LABEL_HALF_W): number {
   let ly = y - 14;
-  for (let pass = 0; pass < 4; pass++) {
-    const hit = bots.find(([bx, by]) => Math.abs(bx - x) < LABEL_HALF_W
-      && ly > by - r - 2 * h - 4 - 2 && ly - h < by + r + 2 * h + 4);
-    if (!hit) break;
-    ly = hit[1] - r - 2 * h - 6;
+  for (let pass = 0; pass < 6; pass++) {
+    const hit = boxes.filter(([x1, y1, x2, y2]) => x2 > x - halfW && x1 < x + halfW && ly > y1 - 2 && ly - h < y2 + 2);
+    if (!hit.length) break;
+    ly = Math.min(...hit.map((b) => b[1])) - 4;
   }
   return ly;
 }

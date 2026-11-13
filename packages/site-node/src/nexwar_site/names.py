@@ -17,15 +17,22 @@ def _title(db: Any, sql: str, key: str) -> str:
     return str(rows[0]["title"] or "").strip() if rows else ""
 
 
+def _retired(db: Any, kind: str, key: str) -> str:
+    """第 11 轮 W11-01:删掉的路线、排程留着当时的名字(``retired_ids``)。"""
+    return _title(db, f"SELECT title FROM retired_ids WHERE kind='{kind}' AND id=?", key)
+
+
 def route_name(db: Any, route_id: Any) -> str:
     rid = str(route_id or "")
     if not rid or db is None:
         return rid
-    return _title(db, "SELECT title FROM routes WHERE route_id=?", rid) or rid
+    return (_title(db, "SELECT title FROM routes WHERE route_id=?", rid)
+            or _retired(db, "route", rid) or rid)
 
 
 def schedule_name(db: Any, entry_id: Any) -> str:
     eid = str(entry_id or "")
     if not eid or db is None:
         return eid
-    return _title(db, "SELECT title FROM route_schedules WHERE entry_id=?", eid) or eid
+    return (_title(db, "SELECT title FROM route_schedules WHERE entry_id=?", eid)
+            or _retired(db, "schedule", eid) or eid)

@@ -108,6 +108,11 @@ def test_总览_版本信息_构建信息_数量_缩略图_只有管理员能看
     assert v7["loaded_on"] == ["A"], "机器人开机加载的是 7"
     (r,) = d["robots"]
     assert r["robot_id"] == "A" and r["loaded"] == {"map_id": MAP[0], "version": "7"}
+    # 第 11 轮 A11-01:地图目录(经理、保安看的那份)也说哪几台在用
+    code, d = s.req("GET", "/api/maps", token=gina)
+    assert code == 200
+    on = {m["version"]: m["loaded_on"] for m in d["maps"]}
+    assert on["7"] == ["A"] and on["8"] == [] and on["9"] == []
     assert r["online"] and r["activation"] is None and r["rollback"] is None
 
 

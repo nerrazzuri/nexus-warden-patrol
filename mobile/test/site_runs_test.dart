@@ -40,6 +40,30 @@ void main() {
     await t.pumpWidget(const SizedBox());
   });
 
+  testWidgets('第 11 轮 A10-01：进行中、被接替不打绿勾；没有在跑的也隔一会儿刷新（新开跑的那趟自己出来）', (t) async {
+    final api = _RunningApi();
+    await _pumpRuns(t, api);
+    Icon iconOf(int id) => t.widget<Icon>(
+        find.descendant(of: find.byKey(SiteRunsPage.runKey(id)), matching: find.byType(Icon)).first);
+    expect(iconOf(7).icon, isNot(Icons.check_circle_outline_rounded), reason: '进行中');
+    expect(iconOf(6).icon, isNot(Icons.check_circle_outline_rounded), reason: '被接替');
+    expect(iconOf(6).icon, isNot(Icons.cancel_outlined), reason: '被接替不算没跑完');
+    // 都跑完了、没有在跑的：照样隔一会儿再取，新开跑的那一趟自己出现
+    api.rows = [{...api.rows[0], 'finished': true, 'result': 'done', 'running': null}, api.rows[1]];
+    await t.pump(const Duration(seconds: 16));
+    await t.pumpAndSettle();
+    expect(iconOf(7).icon, Icons.check_circle_outline_rounded);
+    api.rows = [
+      {'id': 8, 'robot_id': 'A', 'mission': 'route-1', 'stamp': '20260925T020000Z', 'finished': false,
+       'result': '', 'photos': 0, 'running': true, 'task_id': 'adhoc-2'},
+      ...api.rows,
+    ];
+    await t.pump(const Duration(seconds: 31));
+    await t.pumpAndSettle();
+    expect(find.byKey(SiteRunsPage.runKey(8)), findsOneWidget);
+    await t.pumpWidget(const SizedBox());
+  });
+
   test('时刻给人看：UTC 目录名换成本地时间；结论说人话', () {
     final local = DateTime.utc(2026, 9, 25, 1).toLocal();
     expect(stampText('20260925T010000Z'),

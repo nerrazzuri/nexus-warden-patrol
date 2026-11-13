@@ -241,7 +241,8 @@ export function DutyPage(props: {
                 <span class="unit-id mono">{nameOf(u.robot.robot_id)}</span>
                 <StateText s={u.state} stale={u.stale} />
                 {/* 第 9 轮 W8-04:总览的机器人列表也写第几圈(以前只写「巡逻中」) */}
-                {u.task && <span class="muted small" data-row-task="1" title={u.task}>{u.task}</span>}
+                {/* 第 11 轮 W10-02:那一栏窄,写短说法(「第 3 圈」),悬停看全 */}
+                {u.task && <span class="muted small" data-row-task="1" title={u.task}>{u.taskShort || u.task}</span>}
                 {u.state !== "offline" && u.robot.home_set === false && <span class="tag warn small" data-row-nohome="1">{t("dutyRowNoHome")}</span>}
                 <span class="muted small">{zoneOf(u)}</span>
                 {u.battery != null && <span class="batt push">{Math.round(u.battery)}%</span>}

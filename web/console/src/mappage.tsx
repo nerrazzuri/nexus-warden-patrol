@@ -13,7 +13,7 @@ import { Modal } from "./dialogs";
 import { alertTitle, andList, lang, refusalText, t, type Key } from "./i18n";
 import { pageAllowed } from "./shell";
 import { locText, type UnitInfo } from "./live";
-import { ENGINEERING_LAYERS, etaNext, eventLabelY, fanOut, labelAbove, LAYERS, layersFor, loadLayers, saveLayers, labelRows, mapPins, mapTodo, olderOpen, shiftStart, staleAfter, staleCells, tonightEvents, zoneDecor,
+import { botLayout, type Box, ENGINEERING_LAYERS, etaNext, eventLabelY, LAYERS, textHalfW, layersFor, loadLayers, saveLayers, mapPins, mapTodo, olderOpen, shiftStart, staleAfter, staleCells, tonightEvents, zoneDecor,
   type AuthzRow, type Cell, type Layer, type ModeView } from "./maplayers";
 import { fanPath } from "./layoutpage";
 import { MapCanvas, type CanvasArea, type LegendKey, type Screen } from "./mapcanvas";
@@ -83,7 +83,7 @@ export function SiteMap(props: {
   /** 世界层(预览像素)、标记层(屏上)里页面自己多画的。 */
   extraWorld?: (meta: PreviewMeta, map: { map_id: string; version: string }) => ComponentChildren;
   /** ``bots``:这张图上机器人在屏上的位置(第 10 轮 W10-06:报警标签避开机器人名字)。 */
-  extraMarks?: (s: Screen, meta: PreviewMeta, map: { map_id: string; version: string }, bots: [number, number][]) => ComponentChildren;
+  extraMarks?: (s: Screen, meta: PreviewMeta, map: { map_id: string; version: string }, bots: Box[]) => ComponentChildren;
   /** 在巡逻的机器人下面写「下一个点约 N 分钟」(地图页的巡逻路线图层)。 */
   eta?: boolean;
   /** 现在画的是哪张图(页面按它去拉轨迹覆盖、待命点)。 */
@@ -165,6 +165,9 @@ export function SiteMap(props: {
     const { px, py } = toPx(meta, pose.x, pose.y);
     return onMap(meta, px, py, 20) ? [{ u, px, py, yaw: pose.yaw }] : [];
   });
+  // 第 11 轮 W10-06:机器人怎么摆(画机器人、报警标签躲开名字都用这一份)
+  const layoutOf = (s: Screen) => botLayout(bots.map((b) => s.px(b.px, b.py)), bots.map((b) => nameOf(b.u.robot.robot_id)),
+    BOT_R, LABEL_PX, !!props.eta);
   // P2-15:机器人、报警两项一直在图例里(没有的时候也说清是什么样子)
   const legend: LegendKey[] = ["robot", "alarm"];
 
@@ -197,7 +200,7 @@ export function SiteMap(props: {
               <>
                 {!props.onPickMap && props.pick !== false && pose.marks(s)}
                 {props.route !== false && vizMarks(s, meta, vizRobots, eps)}
-                {props.extraMarks?.(s, meta, which, bots.map((b) => s.px(b.px, b.py)))}
+                {props.extraMarks?.(s, meta, which, layoutOf(s).map((b) => b.box))}
                 {pins.map(({ a, px, py }) => {
                   const [x, y] = s.px(px, py);
                   const h = PIN_R / 2.5;
@@ -209,19 +212,14 @@ export function SiteMap(props: {
                   );
                 })}
                 {(() => {
-                  // W6-15:停在同一处的几台摊开画(不然后一台的点盖住前一台),细线连回原位
+                  // W6-15:停在同一处的几台摊开画(不然后一台的点盖住前一台),细线连回原位;
+                  // 第 9 轮 W6-15:名字底下压着另一台的点 → 画到点上面(往上错开)。怎么摆见 botLayout
                   const real = bots.map((b) => s.px(b.px, b.py));
-                  const fan = fanOut(real, BOT_R * 2 + 3);
-                  const rows = labelRows(fan, BOT_R * 4);
-                  const above = labelAbove(fan, BOT_R, LABEL_PX);
-                  const step = (LABEL_PX + 2) * (props.eta ? 2 : 1);
+                  const lay = layoutOf(s);
                   return bots.map(({ u, px, py, yaw }, i) => {
-                  const [x, y] = fan[i];
+                  const { x, y, dy } = lay[i];
                   const [rx, ry] = real[i];
                   const moved = Math.hypot(x - rx, y - ry) > 0.5;
-                  // 第 9 轮 W6-15:名字底下压着另一台的点 → 画到点上面(往上错开)
-                  // (挪上去时最后一行字的底边在点上面 2 像素;有「第几圈 · 多久到」那一行也算进去)
-                  const dy = above[i] ? -(BOT_R * 2 + 4) - step - rows[i] * step : rows[i] * step;
                   // 朝向:在预览上往 yaw 走一小段,跟着图一起变换,再在屏上取定长
                   const e = heading(px, py, yaw, 10);
                   const [ex0, ey0] = s.px(e.hx, e.hy);
@@ -400,11 +398,12 @@ export function MapPage(props: {
               const p = a.context?.pose;
               if (!p || p.map_id !== shown.map!.map_id || p.map_version !== shown.map!.version) return [];
               const [x, y] = s.map(p.x, p.y);
-              const ly = eventLabelY(x, y, botPx, BOT_R, LABEL_PX);
+              const text = `${hm(a.first_ms)} ${alertTitle(lang.value, a.kind, a.title).slice(0, 12)}`;
+              const ly = eventLabelY(x, y, botPx, LABEL_PX, textHalfW(text, 11));
               return [(
                 <g key={`ev:${a.key}`} class={`event-pin ${a.audience ?? ""}`} onClick={(e) => { e.stopPropagation(); toRec(a); }}>
                   <line x1={x} y1={y} x2={x} y2={ly + 4} />
-                  <text x={x} y={ly} data-event-label="1">{`${hm(a.first_ms)} ${alertTitle(lang.value, a.kind, a.title).slice(0, 12)}`}</text>
+                  <text x={x} y={ly} data-event-label="1">{text}</text>
                 </g>
               )];
             })}

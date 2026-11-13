@@ -14,6 +14,8 @@ export interface UnitInfo {
   battery: number | null;
   deter?: DeterSession;
   task: string;
+  /** 第 11 轮 W10-02:总览那一栏窄时写的短说法(「第 3 圈」);悬停看 ``task``。 */
+  taskShort?: string;
   /** 现在的速度(米/秒;遥测有才有)。 */
   speed?: number | null;
   /** 数据过期了(B 阶段外审 I5):状态显示「未知」。 */
@@ -43,12 +45,12 @@ export function locText(u: UnitInfo | undefined): Key | null {
 const TASK: Record<string, Key> = { patrol: "st_patrolling", goto: "st_patrolling", standby: "st_returning" };
 
 /** 第 8 轮 W8-04:状态后面那一小段。几圈的巡逻写第几圈;跟状态说的一样就不写(以前卡片上「巡逻中 巡逻中」)。 */
-export function taskNote(r: Robot, kind: string, state: RobotState): string {
+export function taskNote(r: Robot, kind: string, state: RobotState, short = false): string {
   const lap = (r as Robot & { lap?: { n: number; of: number } | null }).lap;
   // 第 10 轮 W10-05:「返回中」后面写清是回待命点还是回原点
   const tid = String(r.status?.task?.task_id ?? "");
   if (kind === "goto" && tid.startsWith("standby-")) return t(tid.startsWith("standby-home-") ? "noteHome" : "noteStandby");
-  if ((kind === "patrol" || kind === "goto") && lap) return lapText(lap);
+  if ((kind === "patrol" || kind === "goto") && lap) return short && lap.of === 0 ? t("lapShort", { n: lap.n }) : lapText(lap);
   const k = TASK[kind];
   if (!k || `st_${state}` === k) return "";
   return t(k);

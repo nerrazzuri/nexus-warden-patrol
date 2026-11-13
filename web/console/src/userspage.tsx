@@ -24,7 +24,7 @@ export interface AuditRow { id: number; at: number; actor: string; actor_role?: 
     note?: string; verdict?: string; mission?: string; mission_title?: string; robot?: string | null; title?: string; level?: string; kind?: string;
     channel?: string; by?: string; task_id?: string | null; err?: string; err_name?: string; req?: string;
     // minor #18:派单的点数、去一个点的目标、存草稿存成的版本
-    points?: number; request?: { target?: unknown }; version?: string } }
+    points?: number; request?: { target?: unknown }; version?: string; manual_only?: boolean; delete?: boolean } }
 
 /** 第 3 轮 P1-66:改账号写清改了什么(原来只写「改了账号」)。 */
 export function changeText(d: AuditRow["detail"], target = ""): string {
@@ -178,6 +178,9 @@ export function targetText(target: string): string {
   if (MODE[target]) return t(MODE[target]);
   const ex = /^exception\/(\d+)$/.exec(target);
   if (ex) return t("auditException", { n: ex[1] });
+  // 第 11 轮 W10-04:App 看巡逻记录的对象「run/398」
+  const run = /^run\/(\d+)$/.exec(target);
+  if (run) return t("auditRunRec", { n: run[1] });
   const rec = /^recording\/(\d+)$/.exec(target);
   if (rec) return t("auditRecording", { n: rec[1] });
   if (/^recording-clip\//.test(target)) return t("auditClip");
@@ -201,8 +204,28 @@ const ROBOT_EVENTS = new Set(["run_start", "run_done", "adhoc_patrol", "patrol_s
 export function rowActionText(r: Pick<AuditRow, "action" | "target" | "detail">): string {
   if (r.action === "VIEW" && /^live\//.test(r.target)) return t("actWatchLive");
   const d = r.detail ?? {};
-  if (/^alert (raised|recorded)$/.test(r.action) && (d.level === "P3" || ROBOT_EVENTS.has(d.kind ?? ""))) return t("actRobotEvent");
+  if (robotEvent(r)) return t("actRobotEvent");
+  // 第 11 轮 W10-04:仅限手动 / 改回自动(以前「切换机器人的维护模式」);删日程、删路线(以前记成「改了」)
+  if (/^POST \/api\/robots\/[^/]+\/service$/.test(r.action) && typeof d.manual_only === "boolean") return t(d.manual_only ? "actManualOn" : "actManualOff");
+  if (/^POST \/api\/route-schedules\/[^/]+\/delete$/.test(r.action)) return t("actPatrolSchedDel");
+  if (/^POST \/api\/routes\/[^/]+\/delete$/.test(r.action)) return t("actRoutesDel");
   return actionText(r.action);
+}
+
+function robotEvent(r: Pick<AuditRow, "action" | "detail">): boolean {
+  const d = r.detail ?? {};
+  return /^alert (raised|recorded)$/.test(r.action) && (d.level === "P3" || ROBOT_EVENTS.has(d.kind ?? ""));
+}
+
+/** 一行的对象。第 11 轮 W10-04:机器人事件不写「报警:」(写「巡逻开始 · B」)。 */
+export function rowTargetText(r: Pick<AuditRow, "action" | "target" | "detail" | "target_name">): string {
+  if (r.target_name) return r.target_name;
+  const m = robotEvent(r) ? ALERT_KEY.exec(r.target) : null;
+  if (m) {
+    const site = m[1] === "site" || m[1].includes(":");
+    return `${alertTitle(lang.value, m[2], m[2])}${site ? "" : ` · ${nameOf(m[1])}`}`;
+  }
+  return targetText(r.target);
 }
 
 export function actionText(a: string): string {
@@ -388,7 +411,7 @@ export function AuditLine({ r, who }: { r: AuditRow; who?: boolean }) {
       <span title={r.action}>{rowActionText(r)}</span>
       {r.status >= 400 ? <span class="tag bad" data-result="refused">{t("auditRefused")}</span>
         : r.status >= 200 ? <span class="tag ok" data-result="ok">{t("auditOk")}</span> : null}
-      {r.target && <span class="muted small" title={r.target}>{r.target_name || targetText(r.target)}</span>}
+      {r.target && <span class="muted small" title={r.target}>{rowTargetText(r)}</span>}
       {r.actor_role === "engineer" && <span class="tag">{t("roleEngineer")}</span>}
       {r.status >= 400 && r.detail?.err && <span class="tag mono" data-err={r.detail.err} title={r.detail.err_name ?? ""}>{r.detail.err}</span>}
       {r.detail?.source && r.detail.source !== "system" && <span class="tag" data-source={r.detail.source}>{t(r.detail.source === "web" ? "auditViaWeb" : r.detail.source === "api" ? "auditViaApi" : "auditViaApp")}</span>}

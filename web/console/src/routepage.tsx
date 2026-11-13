@@ -36,6 +36,7 @@ import {
   type RoutePoint,
   type RouteSchedule,
   type RouteView,
+  freeId,
   routeLabel,
 } from "./routes";
 import { rt } from "./routes_i18n";
@@ -140,12 +141,7 @@ export function RoutesPage({ say, embed, kind = "patrol" }: { say: Say; embed?: 
 
   const routes = view?.routes ?? [];
   const [allIds, setAllIds] = useState<string[]>([]);
-  const autoId = () => {
-    const taken = new Set([...allIds, ...routes.map((r) => r.id)]);
-    let n = 1;
-    while (taken.has(`route-${n}`)) n++;
-    return `route-${n}`;
-  };
+  const autoId = () => freeId("route", [...allIds, ...routes.map((r) => r.id)], view, "route");
   // 第 8 轮 W8-08:这一版上没有路线时,看同一张图的别的版本上有没有(有就说在哪一版,客户以为路线丢了)
   const [elsewhere, setElsewhere] = useState<Route[]>([]);
   const noneHere = !!view && routes.length === 0;
@@ -202,7 +198,9 @@ export function RoutesPage({ say, embed, kind = "patrol" }: { say: Say; embed?: 
     nextEdit();
     setDraft({ id: "", title: "", isNew: true, base: 0, points: [], policy: {}, map: mapKey });
     // 第 8 轮 W8-11:写中文名时自动给编号 —— 编号全站唯一(别的图、别的版本上的也算)
-    api<RouteView>("GET", "/api/routes").then((v) => setAllIds(v.routes.map((x) => x.id))).catch(() => setAllIds([]));
+    // 第 11 轮 W11-01:删掉过的编号也算用过
+    api<RouteView>("GET", "/api/routes").then((v) => setAllIds([...v.routes.map((x) => x.id), ...(v.retired_routes ?? [])]))
+      .catch(() => setAllIds([]));
     setOrig(undefined);
     setPi(null);
     setProblems([]);
@@ -725,7 +723,7 @@ function SchedulePanel({ route, view, schedules, say, reload, inPanel }: {
   const [tz, setTz] = useState("");
   // 第 2 轮 config N2 / N3:编号自动给(路线名-1、-2…第一个没用过的);用过的当场说,不等站点回「有人先改过」
   const all = view?.schedules ?? [];
-  const nextId = () => { let n = 1; while (all.some((x) => x.id === `${route}-${n}`)) n++; return `${route}-${n}`; };
+  const nextId = () => freeId(route, all.map((x) => x.id), view, "schedule");
   const [id, setId] = useState(nextId);
   // 第 3 轮 config N6:原来加好后 setId(nextId()) 用的是这一次渲染的旧列表 → 编号框还是刚用过的,当场标红。
   // 编号没人改过(自动给的)时,列表一变就重新挑;刚打开页面列表还没到时也一样
@@ -763,7 +761,7 @@ function SchedulePanel({ route, view, schedules, say, reload, inPanel }: {
       return false;
     }
   };
-  const idTaken = all.some((x) => x.id === id.trim());
+  const idTaken = all.some((x) => x.id === id.trim()) || (view?.retired_schedules ?? []).includes(id.trim());
   const sameTime = schedules.some((x) => x.at === at && x.days.some((d) => days.includes(d)));
   return (
     <>

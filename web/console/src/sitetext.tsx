@@ -216,16 +216,24 @@ export interface SiteText { text: string; raw?: string }
 export function zhPunct(src: string): string {
   if (!CJK.test(src)) return src;
   const H = "[\\u3400-\\u9fff「」（）]";
-  return src
-    .replace(new RegExp(`(${H}) ?\\(`, "g"), "$1（").replace(new RegExp(`\\((?=${H})`, "g"), "（")
-    .replace(/（([^()（）]*)\)/g, "（$1）")
+  let s = src
+    .replace(new RegExp(`(${H}) ?\\(`, "g"), "$1（").replace(new RegExp(`\\((?=${H})`, "g"), "（");
+  // 第 11 轮 W9-10:括号套括号(「battery(…(见 home 项))」)由里往外配,外面那个也换
+  for (let i = 0; i < 4; i++) {
+    const next = s.replace(/（((?:[^()（）]|（[^()（）]*）)*)\)/g, "（$1）");
+    if (next === s) break;
+    s = next;
+  }
+  return s
     .replace(new RegExp(`(${H}|）),\\s?`, "g"), "$1，")
     .replace(new RegExp(`(${H}|）):\\s?(?!//)`, "g"), "$1：")
     .replace(new RegExp(`(${H}|）);\\s?`, "g"), "$1；")
     // 第 9 轮 W9-10:前面是数字、字母(「已用 86%,剩 30 GB:到 90%」),后面是汉字的也换
     .replace(new RegExp(`,\\s?(?=${H})`, "g"), "，")
     .replace(new RegExp(`:\\s?(?=${H})`, "g"), "：")
-    .replace(new RegExp(`;\\s?(?=${H})`, "g"), "；");
+    .replace(new RegExp(`;\\s?(?=${H})`, "g"), "；")
+    // 第 11 轮 W9-10:「demo-night:A 站点设成…」:冒号两边都是字母数字,后面跟一个词再接汉字
+    .replace(new RegExp(`(?<=[A-Za-z0-9_-]):(?=[A-Za-z][\\w-]* ${H})`, "g"), "：");
 }
 
 /** 第 5 轮 P1-01:系统页上还露着的三种站点原文(中文界面也不该露):「…;原文:机器人原话」只说该做什么、

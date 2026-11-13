@@ -30,6 +30,22 @@ String versionNoteText(String note) {
   return tr('Edited from ${versionLabel(m[1]!).toLowerCase()}: ${m[2]}', '从${versionLabel(m[1]!)}编辑：${m[2]}');
 }
 
+/// 第 11 轮 A11-01：站点记的地图来源（edit:demo、cli:liang、import、draft:demo、建图的机器人编号）写人话。
+String mapSourceText(String source) {
+  final m = RegExp(r'^(edit|cli|draft):(.+)$').firstMatch(source);
+  if (m != null) {
+    final who = m[2]!;
+    return switch (m[1]) {
+      'edit' => tr('Edited by $who', '$who 编辑'),
+      'cli' => tr('Imported by $who', '$who 导入'),
+      _ => tr('Edited by $who (draft)', '$who 编辑（草稿）'),
+    };
+  }
+  if (source.isEmpty) return '';
+  if (source == 'import') return tr('Imported', '导入');
+  return tr('Mapped by $source', '$source 建图');
+}
+
 class MapManagePage extends StatefulWidget {
   final SiteApi api;
   const MapManagePage({super.key, required this.api});

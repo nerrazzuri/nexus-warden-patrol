@@ -2,15 +2,15 @@
   "bags": [
     {
       "bytes": 5000,
-      "first_ms": 1794332218975,
-      "last_ms": 1794332218975,
+      "first_ms": 1794561822893,
+      "last_ms": 1794561822893,
       "name": "yard-0925",
       "robot_id": "A"
     }
   ],
   "maps": [
     {
-      "created_ms": 1794332218973,
+      "created_ms": 1794561822892,
       "draft": false,
       "files": [
         {
@@ -24,6 +24,7 @@
           "size": 16
         }
       ],
+      "loaded_on": [],
       "map_id": "estate-1",
       "missing": [],
       "note": "厂商图",

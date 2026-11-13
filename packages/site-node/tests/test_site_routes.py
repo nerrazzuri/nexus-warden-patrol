@@ -136,6 +136,30 @@ def test_删路线_修订号对得上才删_还有排程用不许删(台):
     assert s.view()["routes"] == [] and active_bundle(台.db) is None
 
 
+def test_第11轮_W11_01_删掉的路线日程_名字留着_编号不再发(台):
+    """删掉的路线、排程:记录里还写当时的名字;编号不再给新建的用(不然旧记录会写成新名字)。"""
+    from nexwar_site import names
+    s = 台.store
+    s.put_route("route-1", body(title="一楼夜巡"), by="demo")
+    s.set_timezone("Asia/Kuala_Lumpur", by="demo")
+    s.put_schedule("route-1-1", {"mission": "route-1", "at": "22:00", "days": ["mon"],
+                                 "window_min": 30, "on_missed": "skip", "base_revision": 0,
+                                 "title": "夜巡测试"}, by="demo")
+    s.delete_schedule("route-1-1", base_revision=1, by="demo")
+    s.delete_route("route-1", base_revision=1, by="demo")
+    assert names.route_name(台.db, "route-1") == "一楼夜巡"
+    assert names.schedule_name(台.db, "route-1-1") == "夜巡测试"
+    v = s.view()
+    assert v["retired_routes"] == ["route-1"] and v["retired_schedules"] == ["route-1-1"]
+    with pytest.raises(RouteError, match="用过"):
+        s.put_route("route-1", body(), by="demo")
+    s.put_route("route-2", body(), by="demo")
+    with pytest.raises(RouteError, match="用过"):
+        s.put_schedule("route-1-1", {"mission": "route-2", "at": "22:00", "days": ["mon"],
+                                     "window_min": 30, "on_missed": "skip",
+                                     "base_revision": 0}, by="demo")
+
+
 # ------------------------------------------------------------ 校验
 
 
