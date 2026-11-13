@@ -214,7 +214,16 @@ export function Console({ me, onOut }: { me: Me; onOut: (note?: string) => void 
           <LiveWall units={units} alerts={alerts} now={now} onZoom={(id) => setPending({ kind: "cam", robot: id, cam: "front" })} />
         )}
         {route.page === "alarms" && <AlarmLogPage now={now} role={me.role} me={me.name} />}
-        {!pageAllowed(route.page, me.role) && <p class="empty noaccess" role="alert">{t("noAccess")}</p>}
+        {/* UIUX-034:无权限页说清楚给谁用,给一个回去的按钮 */}
+        {!pageAllowed(route.page, me.role) && (
+          <section class="empty noaccess" role="alert">
+            <h2>{t("noAccessTitle")}</h2>
+            <p>{t("noAccessWho", { who: (["guard", "owner", "admin"] as const).filter((r) => pageAllowed(route.page, r)).map((r) => t(roleLabel(r))).join(" / ") })}</p>
+            {pageAllowed("admin/home", me.role)
+              ? <a class="btn primary" href="#/admin/home" data-noaccess-home="1">{t("noAccessHome")}</a>
+              : <a class="btn primary" href="#/duty" data-noaccess-home="1">{t("noAccessDuty")}</a>}
+          </section>
+        )}
         {isAdminPage(route.page) && pageAllowed(route.page, me.role) && (
           <div class="adminwrap">
             <div class="adminbody" key={pageGen}>
@@ -267,7 +276,7 @@ export function Console({ me, onOut }: { me: Me; onOut: (note?: string) => void 
           onYes={() => { const h = leave; setLeave(null); dropUnsaved(); location.hash = h; }} />
       )}
       {pending?.kind === "stop" && (
-        <Confirm text={t("stopAllConfirm", { n: online.length })} yes={t("stopAll")} danger onNo={() => setPending(null)} onYes={stopAll} />
+        <Confirm text={t("stopAllConfirm", { n: online.length })} yes={t("stopAll")} stop onNo={() => setPending(null)} onYes={stopAll} />
       )}
       {pending?.kind === "cam" && <FullCamera robot={pending.robot} cam={pending.cam} now={now} onClose={() => setPending(null)}
         cams={robotCams(units.find((u) => u.robot.robot_id === pending.robot)?.robot)} />}

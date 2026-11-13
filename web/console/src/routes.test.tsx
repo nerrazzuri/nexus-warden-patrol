@@ -507,6 +507,30 @@ describe("路线页:站点的回答", () => {
     }
   });
 
+  it("UIUX-006 / 012 / 014:删除在最左、红框;点了点位,面板滚到它的表单;点位名带全名提示", async () => {
+    installScreenCTM();
+    const seen: Element[] = [];
+    const old = Element.prototype.scrollIntoView;
+    Element.prototype.scrollIntoView = function (this: Element) { seen.push(this); };
+    try {
+      routesApi({ meta: META, routes: [ROUTE] });
+      const r = render(<RoutesPage say={() => {}} />);
+      await ready(r.container);
+      await waitFor(() => expect(r.getByText("loop")).toBeTruthy());
+      fireEvent.click(r.getByText("loop"));
+      await tick();
+      const acts = r.container.querySelector(".route-acts")!;
+      expect(acts.firstElementChild!.textContent).toBe("Delete route");
+      expect(acts.firstElementChild!.className).toBe("btn danger");
+      expect(acts.querySelector(".btn.stop")).toBeNull();
+      const link = r.container.querySelectorAll<HTMLButtonElement>(".pointlist .link")[1];
+      expect(link.title).toBe("b");
+      fireEvent.click(link);
+      await tick();
+      expect(seen.some((el) => el.classList.contains("pointform"))).toBe(true);
+    } finally { Element.prototype.scrollIntoView = old; }
+  });
+
   it("没改的不能存;删路线先确认,带当前修订号", async () => {
     installScreenCTM();
     const other = { ...ROUTE, id: "other", waypoints: [P("x", 0, 0), P("y", 1, 0)] };
@@ -520,7 +544,7 @@ describe("路线页:站点的回答", () => {
     expect(r.container.querySelector('polyline.route-line[data-route="loop"]')).not.toBeNull();
     fireEvent.click(r.getByText("Delete route"));
     await tick();
-    fireEvent.click(r.container.ownerDocument.querySelector("dialog .btn.stop")!);
+    fireEvent.click(r.container.ownerDocument.querySelector("dialog .btn.danger")!);
     await waitFor(() => expect(posted.length).toBe(1));
     expect(posted[0].path).toContain("/api/routes/loop/delete");
     expect(posted[0].body).toEqual({ base_revision: 4 });
@@ -604,7 +628,7 @@ describe("路线页:站点的回答", () => {
     expect(posted[0].body).toMatchObject({ mission: "loop", at: "05:30", window_min: 30, on_missed: "skip", base_revision: 0 });
     fireEvent.click(r.getByLabelText("Remove schedule n1"));
     await tick();
-    fireEvent.click(r.container.ownerDocument.querySelector("dialog .btn.stop")!);
+    fireEvent.click(r.container.ownerDocument.querySelector("dialog .btn.danger")!);
     await waitFor(() => expect(posted.length).toBe(2));
     expect(posted[1].path).toContain("/api/route-schedules/n1/delete");
     expect(posted[1].body).toEqual({ base_revision: 7 });

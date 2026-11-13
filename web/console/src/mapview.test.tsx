@@ -914,7 +914,7 @@ describe("地图与防区:网页画禁行区、限速区、虚拟墙;列出机�
     expect(posted[0].body).toEqual({ revision: 7, confirm: true });
     fireEvent.click(r.container.querySelector('[data-navzone="w3"] button')!);
     await tick();
-    fireEvent.click(r.container.ownerDocument.querySelector("dialog .btn.stop")!);
+    fireEvent.click(r.container.ownerDocument.querySelector("dialog .btn.danger")!);
     await waitFor(() => expect(posted.length).toBe(2));
     expect(posted[1].body.zones).toEqual([]);
   });
@@ -1034,7 +1034,7 @@ describe("地图与防区:换图后才回来的旧回包不进这张图;确认�
     await waitFor(() => expect(panel(r.container)).toContain("B-flower"));
     fireEvent.click(r.container.querySelector('[data-navzone="B-flower"] button')!);
     await tick();
-    fireEvent.click(r.container.ownerDocument.querySelector("dialog .btn.stop")!);
+    fireEvent.click(r.container.ownerDocument.querySelector("dialog .btn.danger")!);
     await waitFor(() => expect(posted.length).toBe(1));
     fireEvent.change(r.getByLabelText("Map"), { target: { value: "A\u00001" } });
     await waitFor(() => expect(panel(r.container)).toContain("A-pool"));

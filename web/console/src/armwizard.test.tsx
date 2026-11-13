@@ -3,7 +3,7 @@
 import { cleanup, fireEvent, render, waitFor } from "@testing-library/preact";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { setFetch } from "./api";
-import { ArmWizard, dailySlots, missingText, needsWizard, PatrolReason, wholeMap, type Readiness } from "./armwizard";
+import { afterLines, ArmWizard, dailySlots, missingText, needsWizard, PatrolReason, wholeMap, type Readiness } from "./armwizard";
 import { lang } from "./i18n";
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
@@ -34,7 +34,11 @@ beforeEach(() => {
     if (init?.method === "POST") {
       const body = JSON.parse(String(init.body ?? "{}"));
       posted.push({ url, body });
-      if (url === "/api/guard/plan") ready.missing = [];
+      if (url === "/api/guard/plan") {
+        ready.missing = [];
+        const es = (body as { entries: Record<string, unknown>[] }).entries;
+        plan = { ...plan, revision: Number(plan.revision) + 1, entries: es.map((e, i) => ({ id: i + 1, ...e })) };
+      }
       if (url === "/api/guard-routes/generate") {
         return Promise.resolve(json({ waypoints: [{ name: "1-1", x: 1, y: 1, yaw: 0 }], problems: [], zones: [{ zone: "1", points: 1, note: "" }] }));
       }
@@ -90,6 +94,17 @@ describe("布防向导的小函数", () => {
   });
 });
 
+describe("UIUX-036:布防后逐条说", () => {
+  it("哪台在跑哪条第几圈、哪条在等为什么;每条都有结果才算说完", () => {
+    const entries = [{ id: 1, route: "guard-1", robot: "", gap_min: 0, shuffle: false }, { id: 2, route: "old", robot: "B", gap_min: 0, shuffle: false }];
+    const title = (id: string) => (id === "guard-1" ? "防区巡逻 1" : id);
+    const st = { duty: null, runs: [{ entry: 1, robot_id: "A", state: "lap", lap: 1, task_id: "t1", next_lap_ms: 0, watch_zone: "" }],
+      waiting: { 2: "B 设成只许手动派" }, zones: [], now_ms: 1 };
+    expect(afterLines(entries, st, title)).toEqual([["A 正在跑「防区巡逻 1」，第 1 圈。", "「old」还没出发：B 设成只许手动派"], true]);
+    expect(afterLines(entries, { ...st, waiting: {} }, title)).toEqual([["A 正在跑「防区巡逻 1」，第 1 圈。"], false]);
+  });
+});
+
 describe("布防向导", () => {
   it("缺值守方案:直接到「谁去巡逻」;说 A 只许手动派、能改成自动派遣;存方案;布防后说谁出发了", async () => {
     let changes = 0;
@@ -111,7 +126,8 @@ describe("布防向导", () => {
     status = { duty: { id: 1, started_ms: 1 }, runs: [{ entry: 1, robot_id: "B", state: "lap", lap: 1, task_id: "guard-1-x", next_lap_ms: 0, watch_zone: "" }], waiting: {}, zones: [], now_ms: 1 };
     fireEvent.click(r.getByText("现在布防"));
     await waitFor(() => expect(posted.some((p) => p.url === "/api/mode" && p.body.mode === "armed")).toBe(true));
-    await waitFor(() => expect(doc.querySelector("[data-wiz-after]")!.textContent).toBe("B 已出发巡逻防区。"), { timeout: 4000 });
+    // UIUX-036:按方案逐条说哪台在跑哪条、第几圈(原来只说「B 已出发」)
+    await waitFor(() => expect(doc.querySelector("[data-wiz-after]")!.textContent).toBe("B 正在跑「guard-1」，第 1 圈。"), { timeout: 4000 });
   });
 
   it("没有防区:停在第一步;「整张图作为一个防区」按地图外框建一个「全场」", async () => {
@@ -153,6 +169,14 @@ describe("布防向导", () => {
     expect(doc.querySelector(".wiz-editor select")).toBeNull();
     expect(doc.querySelector(".wiz-editor")!.textContent).toContain("estate-1 · v7");
     expect(location.hash).toBe(before);
+  });
+
+  it("UIUX-036:值守方案里不止一条时,确认页全列出来", async () => {
+    ready.missing = [];
+    plan = { ...plan, entries: [{ id: 1, route: "guard-1", robot: "", gap_min: 0, shuffle: false, end_standby: true },
+      { id: 2, route: "old", robot: "B", gap_min: 0, shuffle: false, end_standby: true }] };
+    const r = render(<ArmWizard say={() => {}} onClose={() => {}} />);
+    await waitFor(() => expect(r.container.ownerDocument.querySelector("[data-wiz-plan]")?.textContent).toBe("guard-1（哪台空就派哪台）；old（B）"));
   });
 
   it("外审 1 #1 #9:存方案只换这条路线那一行,别的路线、隐藏选项都不动", async () => {

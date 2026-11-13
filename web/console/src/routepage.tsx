@@ -524,7 +524,7 @@ export function RoutesPage({ say, embed, kind = "patrol" }: { say: Say; embed?: 
                   {pts.map((p, i) => (
                     <li key={i} aria-current={i === pi ? "true" : undefined}>
                       <span class="num">{i + 1}</span>
-                      <button type="button" class="link" onClick={() => setPi(i)}>{p.name}</button>
+                      <button type="button" class="link" title={p.name} onClick={() => setPi(i)}><span class="pname">{p.name}</span></button>
                       {bad.has(i) && <span class="bad" title={bad.get(i)}>!</span>}
                       <span class="push" />
                       {!dirty && etaOf.has(p.name) && (() => {
@@ -548,10 +548,12 @@ export function RoutesPage({ say, embed, kind = "patrol" }: { say: Say; embed?: 
                   <PointForm p={selPoint} names={pts.map((x) => x.name)} idx={pi} plain={!!embed} onChange={(patch) => change(patchPoint(pts, pi, patch), true)}
                     onActions={(p2) => change(pts.map((x, k) => (k === pi ? p2 : x)), true)} />
                 ) : pts.length > 0 && <p class="muted small">{rt("pointSelectHint")}</p>}
+                {/* UIUX-006:删除放最左、红框,跟保存 / 派巡逻隔开 */}
                 <div class="row route-acts">
-                  {!embed && <button type="button" class="btn primary" disabled={!canSave} onClick={() => void save()}>{rt("routeSave")}</button>}
+                  {!draft.isNew && <button type="button" class="btn danger" onClick={() => setRemoving(true)}>{rt("routeDelete")}</button>}
+                  <span class="push" />
                   <button type="button" class="btn" disabled={!dirty} onClick={() => (draft.isNew ? setDraft(null) : orig && edit(orig))}>{rt("routeDiscard")}</button>
-                  {!draft.isNew && <button type="button" class="btn stop" onClick={() => setRemoving(true)}>{rt("routeDelete")}</button>}
+                  {!embed && <button type="button" class="btn primary" disabled={!canSave} onClick={() => void save()}>{rt("routeSave")}</button>}
                   {!draft.isNew && !dirty && !guardKind && <DispatchOnce route={draft.id} title={draft.title} say={say} />}
                 </div>
                 {!draft.isNew && !guardKind && (
@@ -656,9 +658,12 @@ function PointForm({ p, idx, names, plain, onChange, onActions }: {
   onChange: (patch: Partial<RoutePoint>) => void; onActions: (p: RoutePoint) => void;
 }) {
   const dup = names.some((n, k) => k !== idx && n === p.name);
+  // UIUX-012:点了哪个点,面板就滚到它的表单(底部操作栏留了 scroll-padding,不会盖住)
+  const box = useRef<HTMLDivElement>(null);
+  useEffect(() => { box.current?.scrollIntoView?.({ block: "nearest" }); }, [idx]);
   const num = (v: string) => (v.trim() === "" || !Number.isFinite(Number(v)) ? null : Number(v));
   return (
-    <div class="pointform" aria-label={`${idx + 1}`}>
+    <div class="pointform" ref={box} aria-label={`${idx + 1}`}>
       <label class="field wide">{rt("pointName")}
         <input value={p.name} maxLength={64} aria-invalid={dup || !p.name.trim()} onInput={(e) => onChange({ name: e.currentTarget.value })} />
       </label>
@@ -679,8 +684,8 @@ function PointForm({ p, idx, names, plain, onChange, onActions }: {
       <label class="wide field-check"><input type="checkbox" checked={hasAction(p, "photo", "back")} onChange={() => onActions(toggleAction(p, { type: "photo", camera: "back" }))} /> {rt("pointPhotoBack")}</label>
       <label class="wide field-check"><input type="checkbox" checked={hasAction(p, "light")} onChange={() => onActions(toggleAction(p, { type: "light", on: true }))} /> {rt("pointLight")}</label>
       {/* 设计 §2.4:拍热像、量温度要等热像实物接上(契约的拍照现在只认前、后两路) */}
-      <label class="wide field-check muted" data-thermal="photo"><input type="checkbox" disabled /> {rt("pointThermal")} <span class="small">· {rt("thermalLater")}</span></label>
-      <label class="wide field-check muted" data-thermal="temp"><input type="checkbox" disabled /> {rt("pointTemp")} <span class="small">· {rt("thermalLater")}</span></label>
+      <label class="wide field-check muted" data-thermal="photo"><input type="checkbox" disabled /> <span class="fc-text">{rt("pointThermal")} <span class="small">· {rt("thermalLater")}</span></span></label>
+      <label class="wide field-check muted" data-thermal="temp"><input type="checkbox" disabled /> <span class="fc-text">{rt("pointTemp")} <span class="small">· {rt("thermalLater")}</span></span></label>
       <label class="field wide">{rt("pointCheck")}
         <input value={p.check ?? ""} maxLength={500} onInput={(e) => { const v = e.currentTarget.value; const { check: _c, ...rest } = p; onActions(v ? { ...rest, check: v } : rest); }} />
       </label>
