@@ -72,7 +72,10 @@ const en = {
   runLine: "{robot} is running “{route}”, lap {lap}.",
   restLine: "{robot} is waiting for the next lap of “{route}”.",
   restWhyLine: "{robot} is waiting for the next lap of “{route}”: {why}",
+  goPostLine: "{robot} finished lap {lap} and is heading to the watch post of “{route}”.",
   watchLine: "{robot} finished lap {lap} and is standing at the watch post of “{route}”.",
+  stoppingLine: "{robot} is stopping (“{route}”); waiting for it to confirm it has stopped.",
+  standdownLine: "{robot} is standing down (“{route}”); waiting for it to confirm it has stopped.",
   pauseLine: "{robot} has paused on “{route}”.",
   pauseWhyLine: "{robot} has paused on “{route}”: {why}",
   waitLine: "“{route}” has not started: {why}",
@@ -144,7 +147,10 @@ const zh: Record<WKey, string> = {
   runLine: "{robot} 正在跑「{route}」，第 {lap} 圈。",
   restLine: "{robot} 在等「{route}」的下一圈。",
   restWhyLine: "{robot} 在等「{route}」的下一圈：{why}",
+  goPostLine: "{robot} 跑完第 {lap} 圈，正在去「{route}」的值守点。",
   watchLine: "{robot} 跑完第 {lap} 圈，在「{route}」的值守点守着。",
+  stoppingLine: "{robot} 正在停下（「{route}」），等它确认停住。",
+  standdownLine: "{robot} 正在收队（「{route}」），等它确认停住。",
   pauseLine: "{robot} 在「{route}」上暂停了。",
   pauseWhyLine: "{robot} 在「{route}」上暂停了：{why}",
   waitLine: "「{route}」还没出发：{why}",
@@ -228,10 +234,15 @@ export function afterLines(entries: GuardEntry[], st: Status, title: (route: str
     const raw = e.id == null ? "" : st.waiting[String(e.id)];
     const why = raw ? siteStr(raw) : "";
     const v = { robot: run ? who(run.robot_id) : "", route: title(e.route), lap: run ? Math.max(1, run.lap) : 1, why };
-    // 外审:按站点的运行状态说(guard_duty.py):lap 在跑;watch / post 跑完一圈在值守点;
-    // wait / resume 等下一圈(可能在补能);held / paused / stopping / standdown 停下了
+    // 外审:按站点的运行状态说(guard_duty.py):lap 在跑;watch 在去值守点的路上、post 到了;
+    // wait / resume 等下一圈(可能在补能);stopping / standdown 还没确认停住(接着看);held / paused 停下了
     if (run?.state === "lap") out.push(wt("runLine", v));
-    else if (run && (run.state === "watch" || run.state === "post")) out.push(wt("watchLine", v));
+    else if (run?.state === "watch") out.push(wt("goPostLine", v));
+    else if (run?.state === "post") out.push(wt("watchLine", v));
+    else if (run && (run.state === "stopping" || run.state === "standdown")) {
+      out.push(wt(run.state === "stopping" ? "stoppingLine" : "standdownLine", v));
+      all = false;
+    }
     else if (run && (run.state === "wait" || run.state === "resume")) out.push(wt(why ? "restWhyLine" : "restLine", v));
     else if (run) out.push(wt(why ? "pauseWhyLine" : "pauseLine", v));
     else if (why) out.push(wt("waitLine", v));
