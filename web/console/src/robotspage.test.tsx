@@ -110,6 +110,18 @@ describe("机器人页", () => {
     expect(c.querySelector(".robot-detail")!.textContent).toContain("未到达点位");
   });
 
+  it("第 10 轮 W9-10:点位没到那条只写一遍,用全角标点", async () => {
+    robots = [card({ robot_id: "B", recent_problems: [
+      { key: "B/stuck#3", kind: "stuck", level: "P2", title: "点位 P7 未到达,已跳过", first_ms: NOW - 50_000, resolved_ms: null, resolved_by: "" },
+    ] })];
+    const { container: c } = page();
+    await waitFor(() => expect(cardOf(c, "B")).not.toBeNull());
+    fireEvent.click(cardOf(c, "B"));
+    const sec = c.querySelector(".robot-detail .robot-alerts")!;
+    expect(sec.textContent).toContain("点位 P7 未到达，已跳过");
+    expect(sec.textContent).not.toContain("未到达,已跳过");
+  });
+
   it("W72 详情里的告警分三组放在最下面:要处理(P1)、待跟进、记录(自动恢复的标出来、收起来)", async () => {
     robots = [card({ robot_id: "B", recent_problems: [
       { key: "B/robot_offline#2", kind: "robot_offline", level: "P1", first_ms: NOW - 50_000, resolved_ms: NOW - 40_000, resolved_by: "site:back_soon" },

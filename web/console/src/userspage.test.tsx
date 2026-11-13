@@ -43,7 +43,7 @@ beforeEach(() => {
     if (url === "/api/system/caps") return Promise.resolve(json({ priv: true, push: true, vpn: caps.vpn }));
     if (url.startsWith("/api/audit")) {
       return Promise.resolve(json({ audit: [{ id: 1, at: NOW - 60_000, actor: "gina", actor_role: "guard", action: "POST /api/mode", target: "armed", status: 200 },
-        { id: 2, at: NOW - 30_000, actor: "gina", actor_role: "guard", action: "POST /api/robots/A/goto", target: "A", status: 403 },
+        { id: 2, at: NOW - 30_000, actor: "gina", actor_role: "guard", action: "POST /api/robots/A/goto", target: "A", status: 403, detail: { error: "A 未就绪:没站起来(电量低)" } },
         { id: 3, at: NOW - 20_000, actor: "gina", actor_role: "guard", action: "POST /api/weird/thing", target: "", status: 200 },
         // 第 10 轮 W9-01:站点给了显示名
         { id: 4, at: NOW - 10_000, actor: "gina", actor_role: "guard", action: "POST /api/route-schedules", target: "route-1-2", target_name: "夜巡测试", status: 200 }] }));
@@ -150,6 +150,8 @@ describe("用户页", () => {
     expect(au.querySelectorAll('[data-result="ok"]').length).toBe(3);
     expect(au.textContent).toContain("其他操作");
     expect(au.textContent).toContain("夜巡测试");
+    // 第 10 轮 W9-10:被拒原因的悬停也是全角
+    expect(au.querySelector("[data-why]")!.getAttribute("title")).toBe("A 未就绪：没站起来（电量低）");
     expect(au.textContent).not.toContain("route-1-2");
     expect(au.textContent).not.toContain("/api/");
   });

@@ -6,7 +6,7 @@
 // 照片位这一期放图标;电池健康机器人还不报,不显示。
 // W60 卡片分层:第一层名字、状态、在做什么、电量;第二层定位、网络、今天几趟;出了毛病才多一条琥珀色提示
 // (正常时安静,不写「正常」)。在做什么、定位从值班的实时数据来(units),概况接口没有。
-import { siteKnown, siteStr } from "./sitetext";
+import { siteKnown, siteStr, zhPunct } from "./sitetext";
 import { useCallback, useEffect, useRef, useState } from "preact/hooks";
 import { api, ApiError, enc } from "./api";
 import { ConfirmPassword } from "./confirmpw";
@@ -241,7 +241,9 @@ function RecentAlerts({ items }: { items: RecentProblem[] }) {
   const row = (p: RecentProblem, tag?: { text: string; tone: string }) => {
     const name = alertTitle(lang.value, p.kind, p.title || p.kind);
     // 站点写的具体标题(「断联 20 秒后恢复」)是中文的:中文界面下跟在类型名后面
-    const more = lang.value === "zh" && p.title && p.title !== name ? p.title : "";
+    // (第 10 轮 W9-10:先换成全角再比,只差标点的不再写一遍半角的原话)
+    const raw = p.title ? zhPunct(p.title) : "";
+    const more = lang.value === "zh" && raw && raw !== name ? raw : "";
     return (
     <li key={p.key}>
       <time class="mono">{when(p.first_ms)}</time>

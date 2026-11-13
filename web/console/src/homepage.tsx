@@ -4,7 +4,7 @@
 // 3. 机器人 —— 每台一张小卡片,点了去机器人页。
 // 4. 这周 —— 出了几次事、几次误报,跟上周比。
 import { alertAdvice, alertHeadline } from "./alertinfo";
-import { siteStr, siteText } from "./sitetext";
+import { siteStr, siteText, zhPunct } from "./sitetext";
 import type { AdminPage } from "./shell";
 import { useEffect, useState } from "preact/hooks";
 import { advice } from "./advice";
@@ -80,7 +80,7 @@ export function HomePage(props: {
                     {robots.length > 0 && <span class="small">{t("homeTodoRobots", { r: joinList(robots) })}</span>}
                     {/* P2-44:站点原话(带文件路径的技术说明)收起来,要看再点开 */}
                     {a.detail && (adv || pf || siteText(a.detail).raw
-                      ? <details class="todo-detail small"><summary>{t("homeTodoDetail")}</summary><span class="muted">{a.detail}</span></details>
+                      ? <details class="todo-detail small"><summary>{t("homeTodoDetail")}</summary><span class="muted">{lang.value === "zh" ? zhPunct(a.detail) : a.detail}</span></details>
                       : <span class="muted small">{siteStr(a.detail)}</span>)}
                     <span>{pf ? alertAdvice(a) : t(adv ? adv.todo : "advCallEngineer")}</span>
                   </div>
