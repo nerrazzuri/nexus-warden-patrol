@@ -29,6 +29,8 @@ String? _robotWhy(String code, String id) => switch (code) {
       'manual_only' => tr('$id is set to manual dispatch only', '$id 设成只许手动派'),
       'supervised' => tr('$id needs a person beside it', '$id 要人在旁边监护'),
       'map' => tr('$id has a different map loaded', '$id 加载的地图不对'),
+      'reserved' => tr('$id is assigned to another route in the guard plan',
+          '$id 指定给了值守方案里的另一条路线'),
       _ => null,
     };
 

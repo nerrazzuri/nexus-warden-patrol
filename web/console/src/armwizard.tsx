@@ -78,6 +78,8 @@ const en = {
   openWizard: "Open the arming wizard",
   routeNoZone: "passes through no zone, robots will not run it",
   dropEdits: "The editor has unsaved changes. Discard them?",
+  dropPage: "This page has unsaved changes. The arming wizard may change the same settings, so these changes will be discarded.",
+  routeIdFull: "Could not find a free route id. Create the route on Setup → Zone routes.",
   dropArming: "This page has unsaved arming-time changes. The wizard may change arming times too, so these changes will be discarded.",
   dropYes: "Discard",
   timeGoOn: "Save these times",
@@ -140,6 +142,8 @@ const zh: Record<WKey, string> = {
   openWizard: "打开布防向导",
   routeNoZone: "一个防区都不经过，机器人不会去跑",
   dropEdits: "编辑器里有没保存的修改，要丢掉吗？",
+  dropPage: "这页还有没保存的修改。布防向导可能改同样的设置，打开向导会丢掉这些修改。",
+  routeIdFull: "找不到空着的路线编号，请到「布置 → 防区路线」新建。",
   dropArming: "这页的布防时间还有没保存的修改。布防向导也会改布防时间，打开向导会丢掉这些修改。",
   dropYes: "丢掉",
   timeGoOn: "保存这个时间",
@@ -170,6 +174,7 @@ const ROBOT_EN: Record<string, string> = {
   unregistered: "{id} is not registered", offline: "{id} is offline", stale: "{id} has not reported for a while",
   manual_only: "{id} is set to manual dispatch only", supervised: "{id} needs a person beside it and does not go out alone",
   map: "{id} has a different map loaded",
+  reserved: "{id} is assigned to another route in the guard plan",
 };
 /** 这台为什么派不了:中文界面用站点原话,英文界面按原因代号说。 */
 export function robotWhy(x: ReadyRobot): string {
@@ -301,8 +306,10 @@ export function ArmWizard({ say, onClose, arming = false, onChanged }: { say: Sa
       const taken = new Set(r.routes.map((x) => x.id));
       const title = wt("routeGenTitle", { map: map.map_id, ver: map.version });
       let saved = "";
+      // 外审 2 #5:前缀先截短,给「-2」「-20」留位置(编号最长 64)
+      const head = `guard-${map.map_id}-${map.version}`.replace(/[^A-Za-z0-9_.-]/g, "-").slice(0, 60);
       for (let i = 1; i <= 20 && !saved; i++) {
-        const id = `guard-${map.map_id}-${map.version}${i > 1 ? `-${i}` : ""}`.replace(/[^A-Za-z0-9_.-]/g, "-").slice(0, 64);
+        const id = `${head}${i > 1 ? `-${i}` : ""}`;
         if (taken.has(id)) continue;
         try {
           await api("POST", `/api/routes/${enc(id)}`, { map_id: map.map_id, map_version: map.version, waypoints: g.waypoints,
@@ -323,7 +330,7 @@ export function ArmWizard({ say, onClose, arming = false, onChanged }: { say: Sa
       if (saved) {
         setRoute(saved);
         say(wt("routeSavedN", { name: title, n: g.waypoints.length }));
-      }
+      } else setNote(wt("routeIdFull"));
       await load();
     } catch (x) { say(errText(x)); } finally { setBusy(false); }
   }
@@ -343,8 +350,9 @@ export function ArmWizard({ say, onClose, arming = false, onChanged }: { say: Sa
     const body: Sched = time === "manual" ? { enabled: false, slots: sched.slots } : { enabled: true, slots: dailySlots(minutes(from), minutes(to)) };
     try {
       const p = await api<{ before: Parameters<typeof previewChanges>[0]; after: Parameters<typeof previewChanges>[1] }>(
-        "POST", "/api/arming/schedule/preview", body).catch(() => null);
-      const warn = p ? previewChanges(p.before, p.after) : null;
+        "POST", "/api/arming/schedule/preview", body);
+      // 外审 2 #2:预演失败不当成「没变化」,停下说原因(人可以再点一次)
+      const warn = previewChanges(p.before, p.after);
       if (warn) { setAskTime({ text: warn, body }); return false; }
       await putTime(body);
       return true;

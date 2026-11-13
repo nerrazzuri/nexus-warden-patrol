@@ -1666,6 +1666,9 @@ def test_外审1_5_唯一一台被另一张图的方案指定了_任意一台的
                                  {"route": "other-map", "robot": "A"}], "base_revision": 0},
                     by="alice")
     got = t.duty.readiness(*MAP)
+    assert got["missing"] == [], "外审 2 #4:那条路线一个防区都不经过,布防时不跑,不占 A"
+    t.areas.set(MAP[0], "8", "东区", EAST, by="alice")
+    got = t.duty.readiness(*MAP)
     assert got["missing"] == ["robot"]
     assert got["robots"] == [{"id": "A", "code": "reserved",
                               "why": "A 指定给了值守方案里的另一条路线 other-map"}]

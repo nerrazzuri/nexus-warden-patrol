@@ -40,6 +40,7 @@ beforeEach(() => {
       }
       if (url === "/api/arming/schedule/preview") {
         const m = { mode: "armed", state: "armed", zones: [{ zone: "1", armed: true }] };
+        if (preview?.__fail) return Promise.resolve(json({ error: "预演坏了" }, 500));
         return Promise.resolve(json(preview ?? { before: m, after: m }));
       }
       if (url.startsWith("/api/routes/") && taken.has(decodeURIComponent(url.split("/").pop()!))) {
@@ -189,6 +190,19 @@ describe("布防向导", () => {
     await waitFor(() => expect(r.container.ownerDocument.querySelector("[data-route-nozone]")?.textContent).toBe("一个防区都不经过，机器人不会去跑"));
     const radios = r.container.ownerDocument.querySelectorAll<HTMLInputElement>("input[name=wiz-route]");
     expect([...radios].map((x) => [x.checked, x.disabled])).toEqual([[true, false], [false, true]]);
+  });
+
+  it("外审 2 #2:预演失败不存,说原因", async () => {
+    ready.missing = [];
+    let said = "";
+    preview = { __fail: true };
+    const r = render(<ArmWizard say={(s) => { said = s; }} onClose={() => {}} />);
+    await waitFor(() => expect(r.container.ownerDocument.querySelector("[data-wiz-step=confirm]")).not.toBeNull());
+    fireEvent.click(r.getByText(/什么时候布防/));
+    fireEvent.click(r.getByText("下一步"));
+    await waitFor(() => expect(said).toContain("预演坏了"));
+    expect(posted.some((p) => p.url === "/api/arming/schedule")).toBe(false);
+    expect(r.container.ownerDocument.querySelector("[data-wiz-step=time]")).not.toBeNull();
   });
 
   it("外审 1 #10:自动生成的编号被别的路线占着(409),换下一个", async () => {
