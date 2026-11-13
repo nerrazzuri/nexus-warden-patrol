@@ -170,6 +170,24 @@ def test_值守状态和记录_保安能看(站点):
     assert g is s.api.guard
 
 
+def test_布防向导_就绪检查接口(站点):
+    """用户 11-13:点布防先查这张图上防区、防区路线、值守方案、能派的机器人缺哪样。"""
+    s = 站点
+    _接值守(s)
+    gina = _登(s, "gina")
+    code, d = s.req("GET", "/api/guard/readiness?map_id=shop&map_version=1", token=gina)
+    assert code == 200, d
+    assert d["zones"] == ["东区", "西区"] and d["routes"] == [] and "route" in d["missing"]
+    code, d = s.req("GET", "/api/guard/readiness?map_id=shop", token=gina)
+    assert code == 400 and "map_version" in d["error"]
+    code, d = s.req("GET", "/api/guard/readiness", token=gina)
+    assert code == 200 and (d["map_id"], d["map_version"]) == ("estate-1", "7"), \
+        "不给图:用机器人在用的那一版(手机上用)"
+    s.api.guard.default_map = lambda: None
+    code, d = s.req("GET", "/api/guard/readiness", token=gina)
+    assert (d["map_id"], d["map_version"]) == ("shop", "1"), "机器人都没报图 → 最新登记的那一版"
+
+
 def test_W73第五期_设备登记在图上_管理员登记_密钥只给一次_保安只能看(站点):
     from nexwar_site.api import zone_posts
     from nexwar_site.devices import DeviceBook

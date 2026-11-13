@@ -13,10 +13,12 @@ const at = (h: number, m = 0) => new Date(2026, 9, 26, h, m).getTime();
 let schedule: Record<string, unknown>;
 let mode: Record<string, unknown>;
 let posted: { url: string; body: Record<string, unknown> }[];
+let missing: string[] | null;
 
 beforeEach(() => {
   lang.value = "zh";
   posted = [];
+  missing = null;
   schedule = { enabled: true, slots: [{ zone: "", day: 0, start: "22:00", end: "24:00" }], exceptions: [], today: [] };
   // 中午 12 点:时间表(周一 22–24 点)此刻是撤防
   mode = { mode: "home", label: "按时间表:撤防", source: "schedule", state: "disarmed", next_change_ms: at(22), manual_until_ms: null,
@@ -36,6 +38,10 @@ beforeEach(() => {
     if (url.startsWith("/api/arming/schedule")) return Promise.resolve(json(schedule));
     if (url.startsWith("/api/duty-settings")) return Promise.resolve(json({ shift_hours: [7, 19], stale_hours: 2 }));
     if (url.startsWith("/api/mode")) return Promise.resolve(json(mode));
+    // 布防向导(用户 11-13):默认老站点(没有就绪检查),照原来的确认框
+    if (url === "/api/maps" && missing) return Promise.resolve(json({ maps: [{ map_id: "m", version: "1", note: "", loaded_on: ["A"] }] }));
+    if (url === "/api/guard/plan" && missing) return Promise.resolve(json({ revision: 0, entries: [], limits: {}, forecast: { entries: [], zones: [], warnings: [] } }));
+    if (url.startsWith("/api/guard/readiness") && missing) return Promise.resolve(json({ map_id: "m", map_version: "1", zones: [], routes: [], robots: [], missing }));
     if (url.startsWith("/api/routes")) return Promise.resolve(json({ revision: 1, timezone: "Asia/Kuala_Lumpur",
       routes: [{ id: "night", waypoints: [] }, { id: "day", waypoints: [] }],
       schedules: [{ id: "n22", mission: "night", at: "22:00", days: ["mon"], window_min: 30, on_missed: "skip", revision: 1 }] }));
@@ -255,9 +261,22 @@ describe("布防时间页", () => {
     fireEvent.click(btn(document.querySelector(".modal")!, "留守"));
     await waitFor(() => expect(posted.find((p) => p.url === "/api/mode")?.body).toEqual({ mode: "home" }));
     fireEvent.click(btn(now(), "布防"));
+    // 先查要不要开布防向导(异步),查不出来照原来的确认框
+    await waitFor(() => expect(document.querySelector(".modal")).not.toBeNull());
     fireEvent.click(btn(document.querySelector(".modal")!, "布防"));
     await waitFor(() => expect(posted.filter((p) => p.url === "/api/mode").map((p) => p.body.mode)).toEqual(["home", "armed"]));
     expect(now().querySelector('a[href="#/admin/access"]')!.textContent).toContain("临时撤防");
+  });
+
+  it("布防向导(用户 11-13):防区、路线、值守方案缺东西时,点「布防」先开向导;页顶有向导入口", async () => {
+    missing = ["zones", "route", "plan"];
+    const { container: c } = page();
+    const now = () => c.querySelector(".arm-now")!;
+    await waitFor(() => expect(now().textContent).toContain("按时间表"));
+    expect(c.querySelector("[data-open-wizard]")!.textContent).toBe("布防向导");
+    fireEvent.click(btn(now(), "布防"));
+    await waitFor(() => expect(document.querySelector(".armwiz")?.textContent).toContain("这张图上还没有防区"));
+    expect(posted.some((p) => p.url === "/api/mode")).toBe(false);
   });
 
   describe("网页易用性第 1 轮 P0-08:存下去立刻撤防 / 布防,先确认", () => {

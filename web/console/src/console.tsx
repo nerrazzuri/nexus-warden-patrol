@@ -19,6 +19,7 @@ import { FELL_KINDS, forGuard, isOwnerLike, queue, robotCams, robotState, type A
 import { AlarmLogPage } from "./alarmlog";
 import { HelpDialog, WEB_TOUR } from "./guide";
 import { ArmingPage } from "./armingpage";
+import { ArmWizard, needsWizard } from "./armwizard";
 import { DutyPage } from "./duty";
 import { LiveWall } from "./livewall";
 import { DrillNote } from "./alerttest";
@@ -155,6 +156,12 @@ export function Console({ me, onOut }: { me: Me; onOut: (note?: string) => void 
   // 第 3 轮 config N7:跟「系统状态」页「需要你处理」一栏一样数(原来把 P3 通知也算上,页面上看不到也清不掉)
   const notices = groupTodo(homeTodo(alerts)).length;
   const admin = isOwnerLike(me.role);
+  // 布防向导(用户 11-13):管理员点「布防」时,防区 / 防区路线 / 值守方案 / 能派的机器人缺哪样就先开向导
+  const [wiz, setWiz] = useState<"open" | "arm" | null>(null);
+  const askMode = (m: Mode["mode"]) => {
+    if (m !== "armed" || !admin) return setPending({ kind: "mode", mode: m });
+    void needsWizard().then((n) => (n ? setWiz("arm") : setPending({ kind: "mode", mode: m })));
+  };
 
   // 带地图的页整页一屏(地图撑满顶栏以下):地图、防区、巡检路线
   const fill = route.page === "duty" || route.page === "map" || route.page === "admin/layout" || route.page === "admin/mapedit";
@@ -167,7 +174,7 @@ export function Console({ me, onOut }: { me: Me; onOut: (note?: string) => void 
       <TopBar me={me} page={route.page} mode={data?.mode ?? null} alarms={stale ? null : guardAlarms} now={now}
         pref={pref} onPref={(p) => { saveThemePref(p); setPref(p); }}
         onStop={() => setPending({ kind: "stop" })} onSay={say} stale={stale}
-        onMode={(m) => setPending({ kind: "mode", mode: m })}
+        onMode={askMode}
         held={units.filter((u) => u.robot.held != null).length}
         onHelp={() => setHelp(true)}
         onSignOut={async (note?: string) => {
@@ -207,7 +214,7 @@ export function Console({ me, onOut }: { me: Me; onOut: (note?: string) => void 
             <div class="adminbody">
               {route.page === "admin/home" && (
                 <HomePage alerts={alerts} mode={data?.mode ?? null} now={now} onAck={ack} onDone={(a) => resolve(a, "handled")}
-                  onMode={(m) => setPending({ kind: "mode", mode: m })} />
+                  onMode={askMode} onWizard={admin ? () => setWiz("open") : undefined} />
               )}
               {route.page === "admin/arming" && <ArmingPage say={say} now={now} role={me.role} />}
               {route.page === "admin/users" && pageAllowed(route.page, me.role) && <UsersPage me={me.name} say={say} now={now} />}
@@ -234,7 +241,7 @@ export function Console({ me, onOut }: { me: Me; onOut: (note?: string) => void 
           <MapPage units={units} p1={p1} now={now} role={me.role} selected={route.robot ?? firstP1?.robot ?? null}
             onSelect={(id) => go("map", id)}
             onVideo={(id) => go("duty", id)} mode={data?.mode ?? null} say={say} stale={stale}
-            onArm={() => setPending({ kind: "mode", mode: "armed" })} />
+            onArm={() => askMode("armed")} />
         )}
       </main>
       </div>
@@ -245,6 +252,7 @@ export function Console({ me, onOut }: { me: Me; onOut: (note?: string) => void 
           onNo={() => setPending(null)}
           onYes={() => { const m = pending.mode; setPending(null); void act(() => api("POST", "/api/mode", { mode: m })); }} />
       )}
+      {wiz && <ArmWizard say={say} arming={wiz === "arm"} onClose={() => setWiz(null)} />}
       {leave != null && (
         <Confirm text={t("leaveUnsaved")} yes={t("leaveUnsavedYes")} danger onNo={() => setLeave(null)}
           onYes={() => { const h = leave; setLeave(null); dropUnsaved(); location.hash = h; }} />

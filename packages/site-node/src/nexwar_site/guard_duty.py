@@ -600,25 +600,77 @@ class GuardDuty:
     def _unfit(self, rid: str, info: dict[str, Any]) -> str:
         """这台根本派不了这条路线(不在线、状态旧、只许手动、要人监护、图不对);能 → 空串。
         不看电量、忙不忙 —— 预报按它挑候选(外审 r5 #5)。"""
+        return self._unfit_code(rid, info)[1]
+
+    def _unfit_code(self, rid: str, info: dict[str, Any]) -> tuple[str, str]:
+        """同 :meth:`_unfit`,多一个原因代号(布防向导按它给「改成自动派遣」之类的按钮)。"""
         c = self._client(rid)
         if c is None:
-            return f"{rid} 没登记"
+            return "unregistered", f"{rid} 没登记"
         if c.status is None or not c.status.online:
-            return f"{rid} 不在线"
+            return "offline", f"{rid} 不在线"
         fresh = getattr(self.dispatcher, "_fresh", None)
         if callable(fresh) and not fresh(c):
-            return f"{rid} 的状态不新鲜"
+            return "stale", f"{rid} 的状态不新鲜"
         m = getattr(getattr(self.dispatcher, "registry", None), "manual_only", None)
         if callable(m) and m(rid) is not None:
-            return f"{rid} 设成只许手动派"
+            return "manual_only", f"{rid} 设成只许手动派"
         auto = getattr(self.dispatcher, "autonomy", None)
         if callable(auto) and auto(rid) != "autonomous":
-            return f"{rid} 要人在旁边监护,不自己出去"
+            return "supervised", f"{rid} 要人在旁边监护,不自己出去"
         caps = c.capabilities.tasks.get("patrol", {}) if c.capabilities is not None else {}
         if (caps.get("map_id"), caps.get("map_version")) != (info["map_id"], info["map_version"]):
-            return (f"{rid} 加载的地图不是 {info['map_id']} v{info['map_version']}"
-                    f"(防区路线 {info['id']} 画在这一版上)")
-        return ""
+            on = f"(防区路线 {info['id']} 画在这一版上)" if info.get("id") else ""
+            return "map", f"{rid} 加载的地图不是 {info['map_id']} v{info['map_version']}{on}"
+        return "", ""
+
+    def default_map(self) -> tuple[str, str] | None:
+        """机器人在用最多的那一版图(布防向导、手机上问「会不会巡逻」用);一台都没报 → None。"""
+        n: dict[tuple[str, str], int] = {}
+        for c in self.dispatcher.clients.values():
+            caps = c.capabilities.tasks.get("patrol", {}) if c.capabilities is not None else {}
+            if caps.get("map_id") and caps.get("map_version"):
+                k = (str(caps["map_id"]), str(caps["map_version"]))
+                n[k] = n.get(k, 0) + 1
+        return max(sorted(n), key=lambda k: n[k]) if n else None
+
+    def readiness(self, map_id: str, version: str) -> dict[str, Any]:
+        """布防向导(用户 11-13):这张图上布防时机器人会不会自己巡逻,缺哪样、为什么。
+
+        ``missing`` 按向导的步骤排:``zones``(没画防区)、``route``(没有防区路线)、``plan``(值守方案
+        里没有这张图上的路线)、``robot``(方案里的路线一台能派的都没有)。``robots`` 每台一行
+        ``{id, code, why}``,``code`` 空 = 能派(不看电量、忙不忙,那是临时的)。"""
+        zones = [a["zone"] for a in self.areas.list(map_id, version)]
+        rows = self.db.query("SELECT route_id, title FROM routes WHERE kind='guard' AND map_id=? "
+                             "AND map_version=? ORDER BY route_id", (map_id, version))
+        plan = self.plan()["entries"]
+        routes = []
+        for r in rows:
+            info = self._route(r["route_id"])
+            routes.append({"id": r["route_id"], "title": r["title"] or "",
+                           "zones": info["zones"] if info else [],
+                           "in_plan": any(e["route"] == r["route_id"] for e in plan)})
+        mine = [e for e in plan if any(e["route"] == r["id"] for r in routes)]
+        first = self._route(mine[0]["route"]) if mine else None
+        info = first or {"id": "", "map_id": map_id, "map_version": version}
+        ids = sorted(set(self.dispatcher.clients) | {e["robot"] for e in mine if e["robot"]})
+        robots = []
+        for rid in ids:
+            code, why = self._unfit_code(rid, info)
+            robots.append({"id": rid, "code": code, "why": why})
+        fit = {r["id"] for r in robots if not r["code"]}
+        missing = []
+        if not zones:
+            missing.append("zones")
+        if not routes:
+            missing.append("route")
+        if not mine:
+            missing.append("plan")
+        # 还没有方案:看有没有哪台能派这张图;有方案:方案里每条至少一条派得出去
+        if not (any((e["robot"] in fit) if e["robot"] else fit for e in mine) if mine else fit):
+            missing.append("robot")
+        return {"map_id": map_id, "map_version": version, "zones": zones, "routes": routes,
+                "robots": robots, "missing": missing}
 
     def _pick(self, e: dict[str, Any], info: dict[str, Any], taken: set[str],
               pts: list[dict[str, Any]] | None = None) -> tuple[str, str]:
