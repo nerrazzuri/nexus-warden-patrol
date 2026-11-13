@@ -22,6 +22,12 @@ void main() {
     expect(robotStatusLine(_r(null)), isNot(contains('圈')));
   });
 
+  test('第 9 轮 W9-05：下一趟排给的机器人蹲着，那一行写出来；不是下一趟、就绪了的不写', () {
+    expect(patrolNotReadyText({'state': 'next', 'robot': 'B', 'not_ready': ['motion']}), 'B 现在没站起来，到点前不好就跑不了');
+    expect(patrolNotReadyText({'state': 'later', 'robot': 'B', 'not_ready': ['motion']}), '');
+    expect(patrolNotReadyText({'state': 'next', 'robot': 'B'}), '');
+  });
+
   test('循环次数的字', () {
     expect(patrolLoopChoices, <int>[1, 2, 3, 5, 10, 0]);
     expect(loopsText(0), '一直巡逻');

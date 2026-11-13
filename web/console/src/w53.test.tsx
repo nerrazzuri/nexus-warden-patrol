@@ -151,6 +151,19 @@ describe("第 2 轮 admin N11", () => {
   });
 });
 
+// 第 9 轮 W9-05:下一趟排给的机器人蹲着 —— 那一行写出来
+describe("W9-05 今天的巡逻:下一趟的机器人没就绪", () => {
+  it("写「B 现在没站起来,到点前不好就跑不了」", async () => {
+    setFetch(((url: string) => Promise.resolve(url === "/api/patrols/today"
+      ? json({ items: [{ at_ms: Date.now() + 60_000, kind: "schedule", label: "route-1", title: "一楼夜巡", robot: "B", by: "", state: "next", reason: "", end_ms: null, adhoc_id: "", not_ready: ["motion"] }] })
+      : json({}, 404))) as typeof fetch);
+    const { container: c } = render(<TodayPatrols />);
+    await waitFor(() => expect(c.querySelector("[data-not-ready]")).not.toBeNull());
+    expect(c.querySelector("[data-not-ready]")!.textContent).toContain("B 现在没站起来，到点前不好就跑不了");
+    expect(c.textContent).not.toContain("motion");
+  });
+});
+
 // 易用性第 6 轮 W6-02:排给的那台只许手动派 —— 写「不会跑」和原因,管理员给去改的入口
 describe("W6-02 今天的巡逻:不会跑的说清楚", () => {
   const blocked = () => setFetch(((url: string) => Promise.resolve(url === "/api/patrols/today"

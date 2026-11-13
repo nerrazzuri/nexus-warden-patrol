@@ -1130,8 +1130,9 @@ polygon.me-op.loop.obstacle { stroke: var(--c-brand); }
 .today { border: 1px solid var(--c-outline); border-radius: var(--r-r12); background: var(--c-surface); padding: 8px 12px; max-height: 40%; overflow: auto; }
 .today-h { margin: 0 0 6px; font-size: 13px; color: var(--c-textSecondary); font-weight: 600; }
 .today-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
-.today-row { display: flex; align-items: center; gap: 8px; font-size: 13px; }
-.today-what { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.today-row { display: flex; align-items: flex-start; gap: 8px; font-size: 13px; }
+/* 第 9 轮 W9-11:窄栏里不截断(以前「由日程接替」「第几圈」都变成省略号),换行写全 */
+.today-what { flex: 1; min-width: 0; overflow-wrap: anywhere; }
 .tdchip { font-size: 11px; padding: 1px 8px; border-radius: 99px; background: var(--c-surfaceVariant); white-space: nowrap; }
 .tdchip.ok { color: var(--c-success); } .tdchip.bad { color: var(--c-error); } .tdchip.warn { color: var(--c-warning); } .tdchip.info { color: var(--c-primary); }
 

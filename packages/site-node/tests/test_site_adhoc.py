@@ -633,6 +633,19 @@ def test_易用性第7轮_整页今天的巡逻_按路线的那一版比(tmp_pat
     db.close()
 
 
+def test_W905_下一次排给的机器人蹲着_那一行带上没就绪的哪几样(tmp_path):
+    db = SiteDB(tmp_path / "s.db")
+    from test_site_schedule import 排程
+    import_bundle(db, 打包(tmp_path, 1, schedule=排程.replace("    mission: loop\n",
+                                                              "    mission: loop\n    robot: A\n")),
+                  imported_by="alice", now_ms=1)
+    v = today_view(db, now_ms=毫秒(20, 0), not_ready=lambda rid: ["motion"] if rid == "A" else [])
+    assert v["items"][0]["state"] == "next" and v["items"][0]["not_ready"] == ["motion"]
+    v = today_view(db, now_ms=毫秒(20, 0), not_ready=lambda rid: [])
+    assert "not_ready" not in v["items"][0]
+    db.close()
+
+
 def _一直巡逻跑了(t, 圈: int, 收尾: str, at_ms: int) -> None:
     """A 上一趟一直巡逻(两个点一圈)跑了 ``圈`` 圈,然后报 ``收尾``。"""
     mission = {**任务定义(), "policy": {"loops": 0}}
