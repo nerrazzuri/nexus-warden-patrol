@@ -657,7 +657,9 @@ class GuardDuty:
         info = first or {"id": "", "map_id": map_id, "map_version": version}
         ids = sorted(set(self.dispatcher.clients) | {e["robot"] for e in mine if e["robot"]})
         # 外审 1 #5:方案里指定给别的图上路线的机器人,那条布防着时先留给它,「任意一台」用不上
-        fixed = {e["robot"]: e["route"] for e in plan if e["robot"]}
+        # 外审 2 #4:只算布防时真会跑的(经过防区的)路线
+        fixed = {e["robot"]: e["route"] for e in plan
+                 if e["robot"] and (self._route(e["route"]) or {}).get("zones")}
         robots = []
         for rid in ids:
             code, why = self._unfit_code(rid, info)

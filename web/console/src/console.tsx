@@ -19,7 +19,7 @@ import { FELL_KINDS, forGuard, isOwnerLike, queue, robotCams, robotState, type A
 import { AlarmLogPage } from "./alarmlog";
 import { HelpDialog, WEB_TOUR } from "./guide";
 import { ArmingPage } from "./armingpage";
-import { ArmWizard, needsWizard } from "./armwizard";
+import { ArmWizard, needsWizard, wt } from "./armwizard";
 import { DutyPage } from "./duty";
 import { LiveWall } from "./livewall";
 import { DrillNote } from "./alerttest";
@@ -158,9 +158,15 @@ export function Console({ me, onOut }: { me: Me; onOut: (note?: string) => void 
   const admin = isOwnerLike(me.role);
   // 布防向导(用户 11-13):管理员点「布防」时,防区 / 防区路线 / 值守方案 / 能派的机器人缺哪样就先开向导
   const [wiz, setWiz] = useState<"open" | "arm" | null>(null);
+  // 布防向导外审 2 #1:向导会改布防时间、防区、路线 —— 当前页有没存的草稿先问(不然存草稿会把向导存的盖回去);
+  // 向导改过东西,关掉后当前页整页重开(从站点重读)
+  const [askWiz, setAskWiz] = useState<"open" | "arm" | null>(null);
+  const [pageGen, setPageGen] = useState(0);
+  const wizChanged = useRef(false);
+  const openWiz = (k: "open" | "arm") => (anyUnsaved() ? setAskWiz(k) : setWiz(k));
   const askMode = (m: Mode["mode"]) => {
     if (m !== "armed" || !admin) return setPending({ kind: "mode", mode: m });
-    void needsWizard().then((n) => (n ? setWiz("arm") : setPending({ kind: "mode", mode: m })));
+    void needsWizard().then((n) => (n ? openWiz("arm") : setPending({ kind: "mode", mode: m })));
   };
 
   // 带地图的页整页一屏(地图撑满顶栏以下):地图、防区、巡检路线
@@ -211,10 +217,10 @@ export function Console({ me, onOut }: { me: Me; onOut: (note?: string) => void 
         {!pageAllowed(route.page, me.role) && <p class="empty noaccess" role="alert">{t("noAccess")}</p>}
         {isAdminPage(route.page) && pageAllowed(route.page, me.role) && (
           <div class="adminwrap">
-            <div class="adminbody">
+            <div class="adminbody" key={pageGen}>
               {route.page === "admin/home" && (
                 <HomePage alerts={alerts} mode={data?.mode ?? null} now={now} onAck={ack} onDone={(a) => resolve(a, "handled")}
-                  onMode={askMode} onWizard={admin ? () => setWiz("open") : undefined} />
+                  onMode={askMode} onWizard={admin ? () => openWiz("open") : undefined} />
               )}
               {route.page === "admin/arming" && <ArmingPage say={say} now={now} role={me.role} />}
               {route.page === "admin/users" && pageAllowed(route.page, me.role) && <UsersPage me={me.name} say={say} now={now} />}
@@ -252,7 +258,10 @@ export function Console({ me, onOut }: { me: Me; onOut: (note?: string) => void 
           onNo={() => setPending(null)}
           onYes={() => { const m = pending.mode; setPending(null); void act(() => api("POST", "/api/mode", { mode: m })); }} />
       )}
-      {wiz && <ArmWizard say={say} arming={wiz === "arm"} onClose={() => setWiz(null)} />}
+      {wiz && <ArmWizard say={say} arming={wiz === "arm"} onChanged={() => { wizChanged.current = true; }}
+        onClose={() => { setWiz(null); if (wizChanged.current) { wizChanged.current = false; setPageGen((g) => g + 1); } }} />}
+      {askWiz && <Confirm text={wt("dropPage")} yes={wt("dropYes")} danger onNo={() => setAskWiz(null)}
+        onYes={() => { const k = askWiz; setAskWiz(null); dropUnsaved(); setPageGen((g) => g + 1); setWiz(k); }} />}
       {leave != null && (
         <Confirm text={t("leaveUnsaved")} yes={t("leaveUnsavedYes")} danger onNo={() => setLeave(null)}
           onYes={() => { const h = leave; setLeave(null); dropUnsaved(); location.hash = h; }} />
