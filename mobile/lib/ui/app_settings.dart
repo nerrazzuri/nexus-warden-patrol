@@ -222,7 +222,7 @@ class _AppSettingsPageState extends State<AppSettingsPage> {
           ListTile(
             key: AppSettingsPage.problemKey,
             leading: const Icon(Icons.bug_report_outlined),
-            title: Text(tr('Send logs', '上传日志')),
+            title: Text(tr('Report a problem', '报问题')),
             subtitle: Text(tr('Something went wrong? Send logs to the engineer', '遇到问题？把日志发给工程师'), style: sub()),
             onTap: () => openProblemReport(context, api),
           ),

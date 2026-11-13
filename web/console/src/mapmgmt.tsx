@@ -397,8 +397,9 @@ function VersionCard(p: {
         </p>
         {v.unusable && <p class="bad small">{tr(`This version lacks localization files, robots can't use it: ${v.unusable}`, `这一版缺定位文件，机器人用不了：${v.unusable}`)}</p>}
         <p class="small mm-dogs-on">
-          {v.loaded_on.length > 0 && <span>{tr("Loaded on", "正在用")}{tr(": ", "：")}{v.loaded_on.map((r) => <span key={r} class="mm-chip mono">{r}</span>)}</span>}
-          {v.previous_on.length > 0 && <span class="muted">{tr("Previous version of (can roll back here)", "是这几台的上一版（可退回到这版）")}{tr(": ", "：")}{v.previous_on.map((r) => <span key={r} class="mm-chip mono">{r}</span>)}</span>}
+          {/* 第 9 轮 W6-12 尾巴:几台之间要隔开(原来连成「AB」);上一版可能比现在用的新,不说「退回」 */}
+          {v.loaded_on.length > 0 && <span data-loaded-on="1">{tr("Loaded on", "正在用")}{tr(": ", "：")}<span class="mono">{v.loaded_on.join(tr(", ", "、"))}</span></span>}
+          {v.previous_on.length > 0 && <span class="muted" data-previous-on="1">{tr("Used before by (can switch back to it)", "这几台之前用的是这一版（可以换回来）")}{tr(": ", "：")}<span class="mono">{v.previous_on.join(tr(", ", "、"))}</span></span>}
         </p>
         <div class="row mm-actions">
           {/* 11-10 用户:「发布的地图不是下发到机器人,而只是发布到站点,发布完了确认没问题再下发」 */}

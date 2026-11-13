@@ -95,7 +95,9 @@ describe("总览", () => {
     expect(v3.textContent).toContain("Standby points 2");
     expect((getByLabelText("Note for v3") as HTMLInputElement).value).toBe("after loop closure");
     expect(getByLabelText("estate:2").textContent).toContain("Loaded on");
-    expect(getByLabelText("estate:2").textContent).toContain("Previous version of");
+    // 第 9 轮 W6-12 尾巴:不说「退回」(那版可能更新),几台之间隔开
+    expect(getByLabelText("estate:2").querySelector("[data-previous-on]")?.textContent).toMatch(/^Used before by \(can switch back to it\): \S/);
+    expect(getByLabelText("estate:2").textContent).not.toContain("roll back here");
     // P1-50:技术信息收在「技术信息」里;没有建图记录的不再写一行技术话;来源说人话
     expect(v3.querySelector("details.mm-tech .mm-build")).not.toBeNull();
     expect(getByLabelText("estate:1").querySelector("details.mm-tech")).toBeNull();

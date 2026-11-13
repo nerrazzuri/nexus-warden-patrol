@@ -179,7 +179,8 @@ class _ProblemReportPageState extends State<ProblemReportPage> {
     final c = Nw.of(context);
     final code = _code;
     return Scaffold(
-      appBar: AppBar(title: Text(tr('Send logs', '上传日志'))),
+      // 第 9 轮 A6-07 尾巴：入口都叫「报问题」，标题跟着叫（以前进来变成「上传日志」）
+      appBar: AppBar(title: Text(tr('Report a problem', '报问题'))),
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
