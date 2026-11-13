@@ -382,3 +382,27 @@ describe("第 9 轮 W9-01 / W9-07:活动日志写路线显示名、遥控写人�
     lang.value = "zh";
   });
 });
+
+describe("第 10 轮 W10-04:活动日志写具体", () => {
+  it("App 开后台值守、看直播、巡逻开始结束这类机器人事件", async () => {
+    const { AuditLine } = await import("./userspage");
+    lang.value = "zh";
+    const line = (r: Partial<AuditRow>) => {
+      cleanup();
+      return render(<ul><AuditLine r={{ id: 1, at: 0, actor: "gina", action: "", target: "", status: 200, ...r } as AuditRow} /></ul>).container.textContent!;
+    };
+    const w = line({ action: "POST /api/watch/token", detail: { source: "app" } });
+    expect(w).toContain("开启手机后台值守");
+    expect(w).not.toContain("其他操作");
+    const v = line({ action: "VIEW", target: "live/B/front" });
+    expect(v).toContain("看直播");
+    expect(v).toContain("B 前摄像头");
+    expect(v).not.toContain("live/");
+    for (const kind of ["run_done", "run_start", "adhoc_patrol"]) {
+      const e = line({ actor: "site:alerts", action: "alert raised", target: `A/${kind}#3`, detail: { kind, level: "P3", robot: "A" } });
+      expect(e, kind).toContain("机器人事件");
+      expect(e, kind).not.toContain("产生报警");
+    }
+    expect(line({ actor: "site:alerts", action: "alert raised", target: "A/stuck#1", detail: { kind: "stuck", level: "P1" } })).toContain("产生报警");
+  });
+});
