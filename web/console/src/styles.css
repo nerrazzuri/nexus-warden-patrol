@@ -248,7 +248,7 @@ button.navgroup-title[aria-expanded="true"]::after { content: " ▾"; }
 .mapbar { display: flex; align-items: center; gap: 6px 16px; padding: 6px 12px; background: var(--c-surface); border-top: 1px solid var(--c-outline); }
 .maplegend { flex: 1; min-width: 0; list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 4px 14px; font-family: var(--font-sans); font-size: 12px; line-height: 18px; color: var(--c-textSecondary); }
 .mapctl { flex: none; display: flex; align-items: center; gap: 12px; }
-.maplegend li { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.maplegend li { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; flex: none; }
 .sw { flex: none; display: block; }
 .sw .sw-edge { stroke: var(--c-textMuted); stroke-width: 1; }
 .sw .sw-bg { fill: var(--c-mapBg); }
@@ -260,6 +260,7 @@ button.navgroup-title[aria-expanded="true"]::after { content: " ▾"; }
 .bot { cursor: pointer; }
 .bot .bot-dot { fill: var(--c-text); stroke: var(--c-surface); stroke-width: 3; }
 .bot .bot-head { stroke: var(--c-text); stroke-width: 3; }
+.bot-leader { stroke: var(--c-textSecondary); stroke-width: 1; stroke-dasharray: 2 2; }
 .bot .bot-label { fill: var(--c-text); text-anchor: middle; font-family: var(--font-mono); font-weight: 600; paint-order: stroke; stroke: var(--c-surface); stroke-width: 4px; }
 .bot.ok .bot-dot { fill: var(--c-success); } .bot.ok .bot-head { stroke: var(--c-success); }
 .bot.p1 .bot-dot, .bot.p1 .bot-label { fill: var(--c-error); } .bot.p1 .bot-head { stroke: var(--c-error); }
@@ -1576,10 +1577,11 @@ input[type="file"] { max-width: 100%; min-width: 0; }            /* 上传按钮
 .grid th { white-space: nowrap; }
 @media (max-width: 1100px) { .grid { display: block; overflow-x: auto; } }
 /* 第 3 轮 zh N5:窄屏上长的图例项不压比例尺:图例和比例尺各占一行 */
+/* W6-14:图例项不缩、不拆字(以前 white-space: normal 让中文一字一行);一行放不下就整项换行 */
 @media (max-width: 480px) {
   .mapbar { flex-wrap: wrap; }
   .maplegend { flex-basis: 100%; }
-  .maplegend:not(.pop) li { white-space: normal; }
+  .duty-map .maplegend { flex-wrap: wrap; overflow-x: visible; }
 }
 .datebox { display: inline-flex; align-items: flex-end; gap: 6px; }
 .datebox input { width: 11ch; }
@@ -1590,6 +1592,10 @@ input[type="file"] { max-width: 100%; min-width: 0; }            /* 上传按钮
 .user-audit ul.plain, .user-audit > p { padding: 12px 16px; }
 /* 第 4 轮 P1-66:活动记录每行时间一列、内容一列,换行对齐 */
 .user-audit li { display: grid; grid-template-columns: 9.5em 1fr; column-gap: 10px; align-items: baseline; }
+/* W6-14:活动日志窄屏上下排(时间一行,内容一行);要在上面这条之后才压得住 */
+@media (max-width: 480px) {
+  .user-audit li { grid-template-columns: 1fr; row-gap: 2px; }
+}
 .user-audit .audit-body { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: baseline; min-width: 0; }
 /* 第 4 轮 admin N1:起了名字的机器人卡片:名字 + 编号一行,状态第二行;编号不在连字符处折 */
 .fleet-head.named { flex-wrap: wrap; row-gap: 2px; }

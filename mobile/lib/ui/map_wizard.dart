@@ -35,7 +35,7 @@ Future<void> openMapWizard(BuildContext context, SiteApi api) =>
     Navigator.of(context, rootNavigator: true)
         .push(MaterialPageRoute<void>(fullscreenDialog: true, builder: (_) => MapWizardPage(api: api)));
 
-/// 登录进站点以后（导览走完）：管理员、工程师，站点一张图都没有 → 弹「开始建图」。点过「稍后」记在账号上
+/// 登录进站点以后（导览走完）：管理员、工程师，站点一张图都没有 → 弹「开始建图」（站点有图但有没做完的向导也问）。点过「稍后」记在账号上
 /// （`guide.map_later`），不再每次弹；有没做完的向导就改问「接着做」（这个不记稍后）。
 Future<void> maybeOfferMapping(BuildContext context, SiteApi api) async {
   if (!(api.session?.canManageMaps ?? false)) return;
@@ -48,8 +48,10 @@ Future<void> maybeOfferMapping(BuildContext context, SiteApi api) async {
   } on FormatException {
     return;
   }
-  if ((w['maps'] as num? ?? 1) > 0 || !context.mounted) return;
   final wiz = w['wizard'] is Map ? w['wizard'] as Map : null;
+  // minor #36：站点有图、但有没做完的向导（在建一张新图）也问「接着做」
+  final hasMaps = (w['maps'] as num? ?? 1) > 0;
+  if ((hasMaps && wiz == null) || !context.mounted) return;
   final g = me['guide'];
   if (wiz == null && g is Map && g['map_later'] == true) return;
   final step = wiz == null ? 0 : wizardSteps.indexOf('${wiz['step']}') + 1;
@@ -60,9 +62,11 @@ Future<void> maybeOfferMapping(BuildContext context, SiteApi api) async {
       title: Text(wiz != null
           ? tr('Mapping stopped at step $step. Continue?', '上次建图停在第 $step 步，是否继续？')
           : tr('This site has no map yet', '此站点尚无地图')),
-      content: Text(tr(
-          'A map is needed before patrolling. Start mapping now? (about 20–40 minutes)',
-          '巡逻前需先建图。现在开始建图？（约 20–40 分钟）')),
+      content: Text(hasMaps
+          ? tr('The site already has a map; the new map you started is not finished yet.',
+              '站点已有地图；上次开始建的新图还没做完。')
+          : tr('A map is needed before patrolling. Start mapping now? (about 20–40 minutes)',
+              '巡逻前需先建图。现在开始建图？（约 20–40 分钟）')),
       actions: [
         TextButton(key: mapOfferLaterKey, onPressed: () => Navigator.pop(c, false), child: Text(tr('Later', '稍后'))),
         FilledButton(
@@ -97,6 +101,13 @@ String qualityReasonText(String code) => switch (code) {
       'short_path' => tr('Path too short: some areas may be missing', '行走距离过短：可能有区域缺失'),
       _ => code,
     };
+
+/// 站点给的结论档：新站点没做回环的叫 `usable_unlooped`（minor #2：老手机见 `usable` 会写「已回到起点闭合」），
+/// 这里当「能用」。
+String verdictOf(Map<dynamic, dynamic> q) {
+  final v = '${q['verdict'] ?? 'unknown'}';
+  return v == 'usable_unlooped' ? 'usable' : v;
+}
 
 /// 结论三档（加「说不清」）。
 String verdictText(String v) => switch (v) {
@@ -955,6 +966,23 @@ class _MapWizardPageState extends State<MapWizardPage> {
     final built = '${(_w?['build'] as Map?)?['state'] ?? 'pending'}';
     final tip = walkTip(
         pathM: path, fromStartM: from, elapsed: Duration(minutes: mins), speed: _speed, turn: _turn);
+    // minor #35：横屏时底下两个按钮并排一行、预览按屏幕高度来（不然底栏和预览把屏幕占满）
+    final mq = MediaQuery.sizeOf(context);
+    final wide = mq.width > mq.height;
+    final teleop = NwButton(
+        buttonKey: MapWizardPage.teleopKey,
+        label: tr('Open phone remote control', '打开手机遥控'),
+        icon: Icons.sports_esports_rounded,
+        variant: NwButtonVariant.outline,
+        fullWidth: true,
+        size: wide ? NwButtonSize.medium : NwButtonSize.large,
+        onPressed: _busy ? null : _openTeleop);
+    final finish = NwButton(
+        buttonKey: MapWizardPage.doneWalkKey,
+        label: tr('Finish walking', '结束行走'),
+        fullWidth: true,
+        size: wide ? NwButtonSize.medium : NwButtonSize.large,
+        onPressed: _busy || !live ? null : _doneWalking);
     return _scroll([
       NwCard(
         key: MapWizardPage.walkStatusKey,
@@ -982,7 +1010,7 @@ class _MapWizardPageState extends State<MapWizardPage> {
       ],
       const SizedBox(height: Nw.s8),
       SizedBox(
-          height: 360,
+          height: wide ? (mq.height * 0.6).clamp(160.0, 360.0) : 360,
           child: MappingPreviewView(api: api, robotId: _robotId, period: widget.poll, onData: _onPreview)),
       const SizedBox(height: Nw.s8),
       Text(tr('Blue: path walked · Grey: not scanned · Green dot: start',
@@ -1020,24 +1048,17 @@ class _MapWizardPageState extends State<MapWizardPage> {
             onPressed: _startRec),
       ],
     ], [
-      if (!remote) ...[
-        NwButton(
-            buttonKey: MapWizardPage.teleopKey,
-            label: tr('Open phone remote control', '打开手机遥控'),
-            icon: Icons.sports_esports_rounded,
-            variant: NwButtonVariant.outline,
-            fullWidth: true,
-            size: NwButtonSize.large,
-            onPressed: _busy ? null : _openTeleop),
-        const SizedBox(height: Nw.s8),
+      if (wide && !remote)
+        Row(children: [
+          Expanded(child: teleop),
+          const SizedBox(width: Nw.s8),
+          Expanded(child: finish),
+        ])
+      else ...[
+        if (!remote) ...[teleop, const SizedBox(height: Nw.s8)],
+        finish,
       ],
-      NwButton(
-          buttonKey: MapWizardPage.doneWalkKey,
-          label: tr('Finish walking', '结束行走'),
-          fullWidth: true,
-          size: NwButtonSize.large,
-          onPressed: _busy || !live ? null : _doneWalking),
-    ]);
+    ], dense: wide);
   }
 
   // ---- 4 建图
@@ -1149,12 +1170,12 @@ class _MapWizardPageState extends State<MapWizardPage> {
       ]);
     }
     final q = (b['quality'] as Map?)?.cast<String, dynamic>() ?? const <String, dynamic>{};
-    final verdict = '${q['verdict'] ?? 'unknown'}';
+    final verdict = verdictOf(q);
     final reasons = [for (final r in (q['reasons'] as List? ?? const [])) '$r'];
     final good = verdict != 'problem';
     final path = q['path_m'], shift = q['max_shift_m'];
     // 用户 11-13：回环作可选，默认不做 —— 没做过就说不上闭没闭合；漂移大了点「优化地图」
-    final optimized = q['optimized'] != false;
+    final optimized = q['optimized'] != false && q['verdict'] != 'usable_unlooped';
     final canOptimize = b['optimizable'] == true;
     return _scroll([
       Row(key: MapWizardPage.verdictKey, children: [
@@ -1623,7 +1644,7 @@ class _MapWizardPageState extends State<MapWizardPage> {
       child: Text(t, style: NwText.labelMedium.copyWith(color: Nw.of(context).textSecondary, letterSpacing: 0.6)));
 
   /// 中间能滚，底下一排按钮钉住。
-  Widget _scroll(List<Widget> body, List<Widget> bottom) {
+  Widget _scroll(List<Widget> body, List<Widget> bottom, {bool dense = false}) {
     final c = Nw.of(context);
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
       Expanded(
@@ -1637,7 +1658,7 @@ class _MapWizardPageState extends State<MapWizardPage> {
       if (bottom.isNotEmpty)
         Container(
           decoration: BoxDecoration(color: c.bg, border: Border(top: BorderSide(color: c.outline))),
-          padding: const EdgeInsets.fromLTRB(Nw.s16, Nw.s16, Nw.s16, Nw.s16),
+          padding: EdgeInsets.symmetric(horizontal: Nw.s16, vertical: dense ? Nw.s8 : Nw.s16),
           child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, mainAxisSize: MainAxisSize.min, children: bottom),
         ),
     ]);

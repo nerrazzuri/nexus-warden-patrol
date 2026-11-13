@@ -936,8 +936,10 @@ class SiteAlertSources:
         if f.disk_used_ratio >= WARN_RATIO and not m.disk80:
             m.disk80 = True
             self.desk.raise_alert(
-                kind="disk_80", robot=rid, title="机器人的发件箱所在的盘即将写满",
-                detail=f"已用 {f.disk_used_ratio:.0%};到 90% 机器人就不接新的巡检(不删未传完的)")
+                # W6-09:跟诊断页(机器人设备「存储盘」)、首页提醒同一个说法、同一条线
+                kind="disk_80", robot=rid, title="机器人存储空间不足",
+                detail=f"存录像和巡逻记录的盘已用 {f.disk_used_ratio:.0%};"
+                       "到 90% 机器人就不接新的巡逻(没传完的不删)")
         elif f.disk_used_ratio < DISK_CLEAR_RATIO:
             m.disk80 = False
         oldest = f.oldest_backlog_s or 0

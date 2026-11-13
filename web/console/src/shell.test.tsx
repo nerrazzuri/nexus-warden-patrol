@@ -19,6 +19,7 @@ const alert = (o: Partial<Alert>): Alert => ({
 
 let alerts: Alert[] = [];
 let posted: { url: string; body: unknown }[] = [];
+let drill: { active: boolean; until_ms: number | null; by: string } = { active: false, until_ms: null, by: "" };
 
 function fakeSite() {
   setFetch(((url: string, init?: RequestInit) => {
@@ -31,6 +32,7 @@ function fakeSite() {
     if (url.startsWith("/api/mode")) return Promise.resolve(json({ mode: "armed", until_ms: null }));
     if (url.startsWith("/api/deterrence")) return Promise.resolve(json({ sessions: [] }));
     if (url.startsWith("/api/watch/summary")) return Promise.resolve(json({ robots: [] }));
+    if (url.startsWith("/api/alert-test")) return Promise.resolve(json(drill));
     return Promise.resolve(json({}, 404));
   }) as typeof fetch);
 }
@@ -41,6 +43,7 @@ beforeEach(() => {
   lang.value = "zh";
   alerts = [];
   posted = [];
+  drill = { active: false, until_ms: null, by: "" };
   location.hash = "";
   fakeSite();
 });
@@ -305,5 +308,24 @@ describe("第 3 轮 admin N1", () => {
     } finally {
       HTMLElement.prototype.scrollIntoView = old;
     }
+  });
+});
+
+// W6-13 / minor #25:保安开着值班页、实时画面页,看不到「正在演练」(以前只在管理员总览、报警记录页)
+describe("W6-13 演练提示", () => {
+  for (const hash of ["", "#/live", "#/map"]) {
+    it(`保安在 ${hash || "#/"} 也看得到正在演练`, async () => {
+      drill = { active: true, until_ms: Date.now() + 600_000, by: "alice" };
+      location.hash = hash;
+      const c = render(<Console me={me("guard")} onOut={() => {}} />);
+      await waitFor(() => expect(c.container.querySelector("[data-drill-note]")).not.toBeNull());
+      expect(c.container.querySelector("[data-drill-note]")!.textContent).toContain("报警演练中");
+    });
+  }
+  it("没在演练就不出", async () => {
+    const c = render(<Console me={me("guard")} onOut={() => {}} />);
+    await waitFor(() => expect(c.container.querySelector('main[data-page="duty"]')).not.toBeNull());
+    await new Promise((r) => setTimeout(r, 30));
+    expect(c.container.querySelector("[data-drill-note]")).toBeNull();
   });
 });

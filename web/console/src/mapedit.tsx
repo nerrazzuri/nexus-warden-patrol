@@ -465,7 +465,7 @@ function Editor({ say, target, Canvas }: { say: Say; target: Target; Canvas?: Fu
         <ConfirmPassword title={t("meReleaseTitle", { v: target.version })}
           text={[t("meReleaseText", { v: target.version, from: origin }),
             ...(drafted?.zones_removed.length ? [t("meReleaseRemoved", { from: origin, names: drafted.zones_removed.join("、") })] : []),
-            ...(zonesNow.length ? [t("meReleaseZones", { n: zonesNow.length })] : [])].join(" ")}
+            ...(zonesNow.length ? [zonesNow.length === 1 ? t("meReleaseZones1") : t("meReleaseZones", { n: zonesNow.length })] : [])].join(" ")}
           list={zonesNow.map((z) => `${siteKnown(z.label) || z.id} · ${nogoLine(z)}`)}
           ack={zonesNow.length ? t("meReleaseZonesAck") : undefined}
           onConfirm={release} onClose={() => setReleasing(false)} />

@@ -8,7 +8,8 @@ export interface Advice { say: Key; todo: Key; go?: AdminPage }
 const TABLE: Record<string, Advice> = {
   cert_expiring: { say: "advCert", todo: "advCallEngineer" },
   site_disk_low: { say: "advDisk", todo: "advDiskTodo", go: "admin/system" },
-  disk_80: { say: "advDisk", todo: "advDiskTodo", go: "admin/system" },
+  // W6-09:机器人自己的存储盘(存录像和巡逻记录)快满,跟站点主机的盘是两回事
+  disk_80: { say: "advRobotDisk", todo: "advRobotDiskTodo", go: "admin/diag" },
   backup_stale: { say: "advBackup", todo: "advBackupTodo", go: "admin/system" },
   backup_verify_failed: { say: "advBackupBad", todo: "advBackupTodo", go: "admin/system" },
   evidence_plain: { say: "advEvidence", todo: "advCallEngineer" },

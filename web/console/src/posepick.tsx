@@ -23,6 +23,17 @@ import "./routes.css";
 
 export interface Pose { x: number; y: number; yaw: number }
 
+/** 点在机器人身上算「它就在这儿」:半米内。 */
+const ON_ROBOT_M = 0.5;
+
+/** 选点时的朝向(minor #29):点在机器人身上(半米内)用它现在的朝向 —— 从它指向几厘米外的点等于乱的;
+ *  远一点从机器人指向点(多半是让它走过去的方向);都没有沿用上一次。之后拖三角尖改。 */
+export function pickYaw(from: { x: number; y: number; yaw?: number } | null, x: number, y: number, prev: number): number {
+  if (!from) return prev;
+  if (Math.hypot(x - from.x, y - from.y) < ON_ROBOT_M) return typeof from.yaw === "number" ? from.yaw : prev;
+  return yawToward(from.x, from.y, x, y) ?? prev;
+}
+
 const HANDLE_PX = 34;
 /** 第 2 轮 P1-56:设完至少等这么久再认「定位好了」(狗的状态要过一两拍才更新),最多等这么久。 */
 export const SETTLE_MIN_S = 3;
@@ -44,7 +55,7 @@ export function usePosePick(o: {
   /** 目标狗**加载的**图(能力里报的);跟 ``map`` 不是同一张就不许发。狗没报(null)让站点、狗去核。 */
   robotMap?: { map_id: string; version: string } | null;
   /** 狗此刻的位置(有就拿它当新点的默认朝向:从狗看向那个点)。 */
-  robotAt?: { x: number; y: number } | null;
+  robotAt?: { x: number; y: number; yaw?: number } | null;
   role: string;
   /** W41:目标狗能「自动找位置」(能力 ``relocalize.global``)。 */
   canFind?: boolean;
@@ -105,9 +116,7 @@ export function usePosePick(o: {
   function onPick(px: number, py: number) {
     if (!meta) return;
     const [x, y] = pxToMap(meta, px, py);
-    const from = o.robotAt;
-    const yaw = (from && yawToward(from.x, from.y, x, y)) ?? pose?.yaw ?? 0;
-    setPose({ x, y, yaw });
+    setPose({ x, y, yaw: pickYaw(o.robotAt ?? null, x, y, pose?.yaw ?? 0) });
     setMsg("");
   }
   function dragHandle(e: PointerEvent) {

@@ -1495,7 +1495,7 @@ class _Handler(TlsHandlerMixin):
             # 还是 401(手机老版本照旧当登录失败);多给 disabled,网页说「账号已停用」
             raise HttpError(401, str(exc), extra={"disabled": True}) from exc
         except AuthError as exc:
-            hint = self._acct_desk().login_hint(name)      # W52:申请了还没批 / 被拒了
+            hint = self._acct_desk().login_hint(name, pw)  # W52:申请了还没批 / 被拒了
             raise HttpError(401, hint or str(exc), extra={"apply": hint} if hint else None) \
                 from exc
         who = self.site.accounts.check(token)
@@ -1795,8 +1795,11 @@ class _Handler(TlsHandlerMixin):
                                    "excluded": sorted(skip)})
         if reach is None:
             raise HttpError(404, "站点没有此地图的规划栅格,无法确定最近的机器人")
-        from nexwar_site.nearest import nearest
+        from nexwar_site.nearest import nearest, why_none
         got = nearest(reach, cands, map_id, version, x, y)
+        if got is None and why_none(reach, cands, map_id, version, x, y) == "unreachable":
+            raise HttpError(404, "机器人走不到这个点(在墙里、障碍上,或者跟机器人所在的地方不连通):"
+                                 "换一个点", extra={"reason": "unreachable"})
         if got is None:
             raise HttpError(404, "此地图上没有能派的机器人")
         return self._send_json(200, got)
@@ -4227,8 +4230,14 @@ class _Handler(TlsHandlerMixin):
             if method == "POST" and what == "confirm":
                 return self._zones_confirm(map_id, version, d, user)
             if method == "POST" and what == "proposal":
+                if d.get("action") == "drop_standby":
+                    # minor #27:带过来的待命点一个个丢(禁行区、拦截点的建议不动)
+                    n = zones.drop_proposal_standby(map_id, version, d.get("standby"), by=str(user))
+                    self._audit_detail = {"proposal": "drop_standby", "standby": d.get("standby"),
+                                          "dropped": n}
+                    return self._send_json(200, zones.view(map_id, version))
                 if d.get("action") != "discard":
-                    raise HttpError(400, "要 action: discard")
+                    raise HttpError(400, "要 action: discard 或 drop_standby")
                 zones.discard_proposal(map_id, version, by=str(user))
                 self._audit_detail = {"proposal": "discard"}
                 return self._send_json(200, zones.view(map_id, version))

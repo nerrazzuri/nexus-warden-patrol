@@ -265,3 +265,36 @@ def test_11_11_W6_03补_诊断包说明用报警_巡逻_报警标题跟列表一
                    now="n")
     assert "告警" not in text and "巡检" not in text, text
     db.close()
+
+
+def test_minor19_回原点回待命点那趟写人话_README场景行不露编号(tmp_path):
+    """liang-d5 W6 补测:问题包列表里「回原点」那趟是 standby-3cf9d8fb1ceb;README 场景行写
+    「巡逻 temp-1794…」。"""
+    from nexwar_site.evidence import run_origins
+    db = SiteDB(tmp_path / "site.db")
+    t0 = 1_794_158_305_644
+    tgt = {"map_id": "m", "map_version": "7", "frame_id": "map", "yaw": 0.0}
+    db.query("INSERT INTO homes(robot_id, map_id, map_version, name, x, y, yaw) "
+             "VALUES ('A','m','7','home',1.0,2.0,0.0)")
+    for i, (task, x, y) in enumerate([("standby-aaa", 1.05, 2.0), ("standby-bbb", 9.0, 9.0)]):
+        db.query("INSERT INTO commands(command_id, task_id, robot_id, kind, payload, issued_by, "
+                 "issued_at) VALUES (?,?,?,?,?,?,?)",
+                 (f"c{i}", task, "A", "goto", json.dumps({"target": {**tgt, "x": x, "y": y}}),
+                  "demo", t0 - 500))
+    db.query("INSERT INTO commands(command_id, task_id, robot_id, kind, payload, issued_by, "
+             "issued_at) VALUES ('c9','adhoc-9','A','patrol',?,'gina',?)",
+             (json.dumps({"mission": {"mission": "temp-9", "waypoints": [{"name": "P1"},
+                                                                          {"name": "P2"}]}}),
+              t0 - 500))
+    out = run_origins(db, [{"id": 1, "robot_id": "A", "mission": "standby-aaa", "first_ms": t0},
+                           {"id": 2, "robot_id": "A", "mission": "standby-bbb", "first_ms": t0}])
+    assert (out[0]["by"], out[0]["kind"]) == ("demo", "home")
+    assert out[1]["kind"] == "standby"
+    stamp = time.strftime("%Y%m%dT%H%M%SZ", time.gmtime(t0 / 1000))
+    for mission in ("temp-9", "standby-aaa"):
+        db.query("INSERT INTO runs(robot_id, mission, stamp, first_ms, last_ms) VALUES (?,?,?,?,?)",
+                 ("A", mission, stamp, t0, t0))
+    ids = [r["id"] for r in db.query("SELECT id FROM runs ORDER BY id")]
+    assert scene_window(db, now_ms=t0 + 1000, run=ids[0])["scene"].startswith("临时路线 2 个点 ")
+    assert scene_window(db, now_ms=t0 + 1000, run=ids[1])["scene"].startswith("回原点 ")
+    db.close()

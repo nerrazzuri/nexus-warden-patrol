@@ -77,7 +77,7 @@ String mapSwitchText(Map<String, dynamic> a, {required int nowMs, double? rateBp
       final total0 = total > 0 ? total : bytes;
       final got = '${_mb(bytes).replaceAll(' MB', '')} / ${_mb(total0)}';
       if (idle > 15) {
-        return tr('Downloaded $got; nothing for $idle s: loading the localizer, or the link is down',
+        return tr('Downloaded $got; nothing for $idle s: loading the map, or the link is down',
             '已下载 $got；$idle 秒没再下：在载入定位，或者网断了');
       }
       final eta = rateBps != null && rateBps > 0 && total > bytes ? (total - bytes) / rateBps : null;
@@ -85,7 +85,7 @@ String mapSwitchText(Map<String, dynamic> a, {required int nowMs, double? rateBp
           '已下载 $got${eta != null ? '，约还要 ${_left(eta)}' : ''}');
     case 'confirmed':
       return a['confirmed'] == 'localizer'
-          ? tr('Switched; localizer confirmed', '已换好，定位已确认')
+          ? tr('Switched; localized on the new map', '已换好，已在新图上定好位')
           : tr('Switched. The robot is using this map now.', '已换好，机器人正在用这张图。');
     case 'failed':
       return tr('Not switched${reason.isEmpty ? '' : ': $reason'}', '没换成${reason.isEmpty ? '' : '：$reason'}');
@@ -264,7 +264,7 @@ class _MapManagePageState extends State<MapManagePage> {
     final version = '${v['version']}';
     final note = '${v['note'] ?? ''}';
     final q = (v['quality'] as Map?) ?? const {};
-    final verdict = '${q['verdict'] ?? 'unknown'}';
+    final verdict = verdictOf(q);
     final reasons = [for (final r in (q['reasons'] as List? ?? const [])) qualityReasonText('$r')];
     final on = [for (final r in (v['loaded_on'] as List? ?? const [])) '$r'];
     final path = q['path_m'];
@@ -311,7 +311,7 @@ class _MapManagePageState extends State<MapManagePage> {
           ],
           if (unusable.isNotEmpty) ...[
             const SizedBox(height: 2),
-            Text(tr("Robots with a localizer can't use this version: $unusable", '带定位器的机器人用不了这一版：$unusable'),
+            Text(tr("This version lacks localization files, robots can't use it: $unusable", '这一版缺定位文件，机器人用不了：$unusable'),
                 style: NwText.bodySmall.copyWith(color: c.error)),
           ],
           const SizedBox(height: Nw.s8),

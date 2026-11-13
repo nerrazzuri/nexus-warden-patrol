@@ -57,8 +57,19 @@ export function StandbyTab(p: TabProps) {
 
   // 第 4 轮 maps N1 / setup P0-14:从上一版带过来的待命点(待核建议)列在这里,核过位置一个个留下或全留下,再保存
   const prop = p.data.nav?.proposal;
+  const [dropped, setDropped] = useState<string[]>([]);
   const carried = ((prop?.standby ?? []) as Carried[])
-    .filter((c) => p.data.robots.includes(c.robot_id) && !pts.some((x) => key(x) === key(c)));
+    .filter((c) => p.data.robots.includes(c.robot_id) && !pts.some((x) => key(x) === key(c)) && !dropped.includes(key(c)));
+  // minor #27:不要的带过来的待命点丢掉(只丢待命点,禁行区、拦截点的建议不动)
+  const drop = async (cs: Carried[]) => {
+    try {
+      await api("POST", `${p.base}/zones/proposal`, { action: "drop_standby", standby: cs.map((c) => ({ robot_id: c.robot_id, name: c.name })) });
+      setDropped((d) => [...d, ...cs.map(key)]);
+      void p.reload("nav");
+    } catch (e) {
+      p.say(t("failed", { why: String((e as Error).message ?? e) }));
+    }
+  };
   const keep = (cs: Carried[]) => {
     const add = cs.map((c): StandbyPt => ({ robot_id: c.robot_id, name: c.name, x: c.x, y: c.y, yaw: c.yaw,
       map_id: p.map.map_id, map_version: p.map.version, default: !!c.default && !pts.some((x) => x.robot_id === c.robot_id && x.default) }));
@@ -137,10 +148,14 @@ export function StandbyTab(p: TabProps) {
                 <li key={key(c)} class="row">
                   <span>{c.robot_id} · {c.name}{c.default ? ` · ${t("lyDefault")}` : ""}</span>
                   <button type="button" class="btn sm push" data-keep={key(c)} onClick={() => keep([c])}>{t("lyKeep")}</button>
+                  <button type="button" class="btn sm ghost" data-drop={key(c)} onClick={() => void drop([c])}>{t("lyDrop")}</button>
                 </li>
               ))}
             </ul>
-            {carried.length > 1 && <button type="button" class="btn sm" data-keep-all="1" onClick={() => keep(carried)}>{t("lyKeepAll")}</button>}
+            {carried.length > 1 && <div class="row">
+              <button type="button" class="btn sm" data-keep-all="1" onClick={() => keep(carried)}>{t("lyKeepAll")}</button>
+              <button type="button" class="btn sm ghost" data-drop-all="1" onClick={() => void drop(carried)}>{t("lyDropAll")}</button>
+            </div>}
           </section>
         )}
         <ul class="plain ly-list">

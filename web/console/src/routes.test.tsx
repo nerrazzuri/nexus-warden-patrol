@@ -37,9 +37,9 @@ const P = (name: string, x: number, y: number, yaw = 0): RoutePoint => ({ name, 
 describe("点的增删挪调序", () => {
   it("新点接在末尾,名字不重,朝向 = 从上一个点走过来的方向", () => {
     let ps = addPoint([], 1, 2);
-    expect(ps).toEqual([{ name: "P1", x: 1, y: 2, yaw: 0 }]);
+    expect(ps).toEqual([{ name: "W1", x: 1, y: 2, yaw: 0 }]);
     ps = addPoint(ps, 1, 5);
-    expect(ps[1].name).toBe("P2");
+    expect(ps[1].name).toBe("W2");
     expect(ps[1].yaw).toBeCloseTo(Math.PI / 2, 3);
     ps = addPoint(ps, 1, 5);                                   // 跟上一个点重合:朝向沿用,不是 NaN
     expect(ps[2].yaw).toBeCloseTo(Math.PI / 2, 3);
@@ -47,8 +47,9 @@ describe("点的增删挪调序", () => {
   });
   it("删掉中间的以后再加,名字不跟剩下的撞", () => {
     const ps = deletePoint([P("P1", 0, 0), P("P2", 1, 0), P("P3", 2, 0)], 0);
-    expect(nextName(ps)).toBe("P4");
-    expect(addPoint(ps, 3, 0).map((p) => p.name)).toEqual(["P2", "P3", "P4"]);
+    // W6-15:新点叫 W1、W2(跟手机一样;P1 跟报警级别撞名)
+    expect(nextName(ps)).toBe("W3");
+    expect(addPoint(ps, 3, 0).map((p) => p.name)).toEqual(["P2", "P3", "W3"]);
   });
   it("调序:挪前、挪后、越界不动", () => {
     const ps = [P("a", 0, 0), P("b", 1, 0), P("c", 2, 0)];
@@ -235,7 +236,7 @@ describe("路线页:点图加点,存下去的是点的那一处的地图坐标",
       expect(b).toMatchObject({ map_id: "m1", map_version: "1", base_revision: 0 });
       expect(b.waypoints.length).toBe(WANT.length);
       b.waypoints.forEach((w: RoutePoint, i: number) => { near(w.x, WANT[i][0]); near(w.y, WANT[i][1]); });
-      expect(b.waypoints.map((w: RoutePoint) => w.name)).toEqual(["P1", "P2", "P3", "P4"]);
+      expect(b.waypoints.map((w: RoutePoint) => w.name)).toEqual(["W1", "W2", "W3", "W4"]);
     });
   }
   it("转 30° 又放大过", async () => {
@@ -292,7 +293,7 @@ describe("路线页:拖点、拖朝向把手、调序、删、动作", () => {
     fireEvent.click(r.getByLabelText("Move up 3"));                    // P3 变成第 2 个
     fireEvent.click(r.getByLabelText("Remove point 1"));               // 删 P1
     await tick();
-    expect([...c.querySelectorAll(".pointlist .link")].map((e) => e.textContent)).toEqual(["P3", "P2"]);
+    expect([...c.querySelectorAll(".pointlist .link")].map((e) => e.textContent)).toEqual(["W3", "W2"]);
     fireEvent.click(c.querySelector('[data-point="0"]')!);
     await tick();
     fireEvent.input(r.getByLabelText("Point name"), { target: { value: "Gate" } });
@@ -303,7 +304,7 @@ describe("路线页:拖点、拖朝向把手、调序、删、动作", () => {
     fireEvent.click(r.getByText("Save route"));
     await waitFor(() => expect(posted.length).toBe(1));
     const w = posted[0].body.waypoints as RoutePoint[];
-    expect(w.map((p) => p.name)).toEqual(["Gate", "P2"]);
+    expect(w.map((p) => p.name)).toEqual(["Gate", "W2"]);
     expect(w[0].actions).toEqual([{ type: "dwell", seconds: 5 }, { type: "photo", camera: "front" }]);
     expect(w[0].check).toBe("padlock");
     near(w[0].yaw, Math.PI / 2, 0.001);

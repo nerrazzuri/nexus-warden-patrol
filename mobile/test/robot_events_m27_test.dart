@@ -22,4 +22,11 @@ void main() {
     expect(robotEventTitle('task_done', {'result': 'done'}), '任务完成');
     expect(cameraName('back'), '后摄像头');
   });
+  // minor #16（A6-02）：遥控结束时机器人报一条 task_done，以前写成「任务完成」，看着像跑完了一趟任务
+  test('遥控那一趟结束写「遥控结束」，不写任务完成', () {
+    expect(robotEventTitle('task_done', {'task_id': 'teleop-ab12'}), '遥控结束');
+    expect(robotEventTitle('task_aborted', {'task_id': 'teleop-ab12'}), '遥控结束');
+    expect(robotEventTitle('task_failed', {'task_id': 'teleop-ab12'}), '遥控异常结束');
+    expect(robotEventTitle('task_done', {'task_id': 'adhoc-1'}), '任务完成');
+  });
 }

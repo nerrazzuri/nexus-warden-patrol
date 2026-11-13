@@ -281,3 +281,39 @@ async def test_W76_一直巡逻低电返航时_有效优先级抬到日程之上
         if parts.engine.state.value == "DONE" or t.done:
             break
     assert t.done or t.effective_priority == HOMING_GUARD_PRIORITY
+
+
+async def test_minor4_一直巡逻两个近点_快照只留最近一段_编号圈数连着(台子, monkeypatch,
+                                                                    tmp_path):
+    """W76 外审 minor:两个点只隔 5 cm,原地快速循环,每到一个点都把全部结果整份重写进
+    state.json。一直巡逻只留最近一段(累计数另记),点位事件的编号、第几圈不受影响。"""
+    import json
+
+    from nexwar_agent.engine import machine
+    from nexwar_contract.mission import LOOPS_FOREVER
+    monkeypatch.setattr(machine, "FOREVER_KEEP_RESULTS", 6)
+    c, r, parts, book = 台子
+    t = PatrolTask(task_id="t1", mission=_任务((1.0, 0.0), (1.0, 0.05),
+                                               policy=Policy(loops=LOOPS_FOREVER)),
+                   parts=parts, events=book, now_ms=c)
+    await t.start()
+    for _ in range(400):
+        await _跑(c, r, parts, t, 50)
+        if parts.engine.laps >= 8:
+            break
+    assert parts.engine.laps >= 8
+    snap = parts.engine.snapshot
+    assert len(snap.results) <= 6, len(snap.results)
+    assert snap.results_from + len(snap.results) >= 16
+    [st] = list((tmp_path / "runs").rglob("state.json"))
+    assert len(json.loads(st.read_text())["results"]) <= 6
+    evs = _点事件(book)
+    assert [e["index"] for e in evs] == list(range(len(evs))), "点位编号连着,不因为丢了旧结果重来"
+    assert [e["lap"] for e in evs] == [i // 2 + 1 for i in range(len(evs))]
+    r.inject_battery(20.0)
+    await _跑(c, r, parts, t, 3000)
+    assert t.state is TaskState.DONE, (t.state, t.detail)
+    [m] = list((tmp_path / "runs").rglob("manifest.json"))
+    s = json.loads(m.read_text())["summary"]
+    assert s["total"] == s["succeeded"] + s["failed"] >= 16, s
+    assert len(s["results"]) <= 6 and s["results_from"] == s["total"] - len(s["results"])

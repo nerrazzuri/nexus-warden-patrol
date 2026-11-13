@@ -324,3 +324,37 @@ describe("W6-07 操作记录读得懂", () => {
     expect(c.querySelector(".audit-who")!.textContent).toBe("demo");
   });
 });
+
+describe("minor #18:活动记录 —— 派单写路线、去看看写去一个点、保存草稿一次", () => {
+  it("临时路线写几个点不写 temp- 编号;去一个点写出来;地图编辑写成存草稿第几版", async () => {
+    const { actionText, changeText } = await import("./userspage");
+    lang.value = "zh";
+    expect(changeText({ mission: "temp-1794360229453", points: 3 } as AuditRow["detail"])).toBe("临时路线 3 个点");
+    expect(changeText({ mission: "temp-1794360229453" })).toBe("临时路线");
+    expect(changeText({ mission: "loop-test" })).toBe("loop-test");
+    expect(changeText({ request: { target: { x: 1 } } } as AuditRow["detail"])).toBe("去一个点");
+    expect(actionText("POST /api/admin/maps/estate-1/7/edit")).toBe("把地图存成草稿");
+    expect(changeText({ version: "15" } as AuditRow["detail"], "estate-1:7")).toBe("存成第 15 版");
+  });
+  // minor #26(网页第 5 轮):「派了一台机器人」没写去哪 —— 去一个点写坐标;回去分回原点、回待命点
+  it("minor #26:派去一个点写坐标;回原点、回待命点分开说", async () => {
+    const { actionText, changeText } = await import("./userspage");
+    lang.value = "zh";
+    expect(changeText({ request: { target: { map_id: "m", x: 12.345, y: -4.5, yaw: 0 } } } as AuditRow["detail"])).toBe("去一个点（12.3, -4.5）");
+    expect(actionText("POST /api/robots/A/home/return")).toBe("让机器人回原点");
+    expect(actionText("POST /api/robots/A/standby/return")).toBe("让机器人回待命点");
+    lang.value = "en";
+    expect(actionText("POST /api/robots/A/home/return")).toBe("Sent a robot back to its origin");
+    expect(actionText("POST /api/robots/A/standby/return")).toBe("Sent a robot to its standby point");
+    lang.value = "zh";
+  });
+  it("存草稿紧跟着的那条「显示设置」不单列一行", async () => {
+    const { mergeAudit } = await import("./userspage");
+    const row = (id: number, at: number, action: string, target: string, detail = {}): AuditRow =>
+      ({ id, at, actor: "demo", action, target, status: 200, detail });
+    const rows = [row(3, 5_000, "POST /api/admin/maps/estate-1/15/display", "estate-1:15"),
+      row(2, 4_000, "POST /api/admin/maps/estate-1/7/edit", "estate-1:7", { version: "15" }),
+      row(1, 1_000, "POST /api/admin/maps/estate-1/9/display", "estate-1:9")];
+    expect(mergeAudit(rows).map((r) => r.id)).toEqual([2, 1]);
+  });
+});

@@ -118,9 +118,33 @@ def test_七天没人批作废_登录说过期了_有提醒批完解决(tmp_path
     desk.submit({"name": "x1", "display": "甲", "password": "pass-word-123"}, source="1.2.3.4")
     assert a.raised[0]["kind"] == "account_request" and "甲" in a.raised[0]["title"]
     clock[0] += ar.TTL_MS + 1
-    assert desk.pending() == [] and "过期" in desk.login_hint("x1")
+    assert desk.pending() == [] and "过期" in desk.login_hint("x1", "pass-word-123")
     desk.submit({"name": "x2", "display": "乙", "password": "pass-word-123"}, source="1.2.3.4")
     [r] = desk.pending()
     desk.reject(r["id"], by="alice")
     assert a.resolved == [("site", "account_request", "alice")]
+    db.close()
+
+
+def test_minor38_密码不对不说申请状态(站点):
+    """W53 minor #38:随便输个密码也能看到这个账号名在申请、等批准 —— 只有申请时设的那个密码才说。"""
+    s = 站点
+    _申请(s)
+    code, d = _登(s, "wangxm", "wrong-pass-999")
+    assert code == 401 and "批准" not in d["error"] and not d.get("apply"), d
+    code, d = _登(s, "wangxm", "pass-word-123")
+    assert code == 401 and "等管理员批准" in d["error"], d
+
+
+def test_minor39_过期了没人来扫_登录也说过期_不说等批准(tmp_path):
+    """W53 minor #39:申请过了 7 天、还没有别的操作把它记成过期,登录仍说「等批准」。"""
+    from nexwar_site.accounts import Accounts
+    from nexwar_site.db import SiteDB
+    db = SiteDB(tmp_path / "s.db")
+    clock = [1_000_000]
+    desk = ar.AccountRequests(Accounts(db, now_ms=lambda: clock[0]), now_ms=lambda: clock[0])
+    desk.submit({"name": "x1", "display": "甲", "password": "pass-word-123"}, source="1.2.3.4")
+    clock[0] += ar.TTL_MS + 1
+    hint = desk.login_hint("x1", "pass-word-123")
+    assert "过期" in hint and "等" not in hint, hint
     db.close()

@@ -4,6 +4,7 @@
 // - 常见问题:按角色挑。
 import { useEffect, useState } from "preact/hooks";
 import { api } from "./api";
+import { nameOf } from "./data";
 import { Modal } from "./dialogs";
 import { t, type Key } from "./i18n";
 
@@ -13,6 +14,10 @@ interface SetupItem {
   id: string; done: boolean; skipped: boolean;
   /** 第 8 轮 W8-08:路线都画在别的版本上(``elsewhere``)、机器人在用哪一版(``using``);日程的路线跑不了(``blocked``)。 */
   elsewhere?: (MapVer & { route: string })[]; using?: MapVer[]; blocked?: string[];
+  /** minor #21:默认待命点就在原点上的机器人(标原点时站点自动加的)。 */
+  at_home?: string[];
+  /** minor #40:登记了还没报在用哪张图的机器人(原点、待命点查不了)。 */
+  no_map?: string[];
 }
 
 /** 第 8 轮 W8-08:清单那一项的具体情况(没有就是空,用通用的说明)。 */
@@ -24,6 +29,10 @@ export function setupDetail(x: SetupItem): string {
     return t("suRoutesElsewhere", { n: x.elsewhere.length, names: x.elsewhere.map((r) => r.route).join("、"), at, use });
   }
   if (x.id === "schedule" && x.blocked?.length) return t("suSchedBlocked", { names: x.blocked.join("、") });
+  if ((x.id === "home" || x.id === "standby") && !x.done && x.no_map?.length) {
+    return t("suNoMap", { ids: x.no_map.map(nameOf).join("、") });
+  }
+  if (x.id === "standby" && x.done && x.at_home?.length) return t("suStandbyAtHome", { ids: x.at_home.map(nameOf).join("、") });
   return "";
 }
 
@@ -79,7 +88,8 @@ export function SetupChecklist() {
             return (
               <li key={x.id} data-item={x.id} class={x.done ? "done" : x.skipped ? "skipped" : undefined}>
                 <span class="setup-mark" aria-hidden="true">{x.done ? "✓" : x.skipped ? "–" : "○"}</span>
-                <span class="setup-text"><b>{t(name)}</b>{!x.done && <span class="muted small">{x.skipped ? t("suSkippedNote") : setupDetail(x) || t(hint)}</span>}</span>
+                <span class="setup-text"><b>{t(name)}</b>{!x.done ? <span class="muted small">{x.skipped ? t("suSkippedNote") : setupDetail(x) || t(hint)}</span>
+                  : setupDetail(x) && <span class="muted small">{setupDetail(x)}</span>}</span>
                 {/* P1-75:跳过的能撤销 */}
                 {!x.done && x.skipped && (
                   <button type="button" class="btn sm" onClick={() => void patch({ skip: (guide?.skip ?? []).filter((s) => s !== x.id) })}>{t("suUnskip")}</button>

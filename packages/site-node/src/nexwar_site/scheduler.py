@@ -110,6 +110,8 @@ class SiteScheduler:
         self.dispatcher = dispatcher
         self._now = now_ms
         self._ref = time_reference
+        #: 回过「忙」的一直巡逻(机器人在回家、站点还没收到 ``task_returning``):按在回家等
+        self._homing_seen: set[tuple[str, str]] = set()
         self.last_error = ""
         dispatcher.on_event(self._on_event)
         dispatcher.on_ack(self._on_ack)
@@ -254,6 +256,8 @@ class SiteScheduler:
         """回执(包括超时之后才到的):狗明确没收,那一行从 started 改成 dispatch_failed。"""
         if ack.result in (AckResult.ACCEPTED, AckResult.DUPLICATE):
             return
+        if ack.reason == "busy" and self._homing_race(ack.task_id):
+            return
         note = f"机器人回 {ack.result.value}: {ack.reason}"
         with self.db.tx() as c:
             cur = c.execute("UPDATE OR IGNORE schedule_runs SET outcome='dispatch_failed', "
@@ -394,8 +398,36 @@ class SiteScheduler:
                 ok.append(rid)
         return ok or yielding, taken, ";".join(why) or "没有登记的机器人", kinds
 
+    def _homing_race(self, task_id: str) -> bool:
+        """W76 minor:日程派过去被回「忙」,挡着的是一直巡逻 —— 一直巡逻只在回家时才挡日程
+        (有效优先级抬到 50),是站点还没收到 ``task_returning``(约 1 秒)。这一轮不算派过:
+        改记 ``busy``、``last_started`` 退回这一轮之前,往后按在回家等它到家(不每拍再撞)。"""
+        from nexwar_site.priorities import FOREVER_PREFIX
+        rows = self.db.query("SELECT id, entry_id, scheduled_ms, robot_id FROM schedule_runs "
+                             "WHERE task_id=? AND outcome='started'", (task_id,))
+        if not rows or not rows[0]["robot_id"]:
+            return False
+        r = rows[0]
+        running = self.dispatcher.busy(r["robot_id"])
+        if running is None or not running.startswith(FOREVER_PREFIX):
+            return False
+        self._homing_seen.add((r["robot_id"], running))
+        note = f"{r['robot_id']} 一直巡逻电量到线,正在回原点"
+        with self.db.tx() as c:
+            c.execute("UPDATE OR IGNORE schedule_runs SET outcome='busy', note=?, task_id=NULL "
+                      "WHERE id=?", (note, r["id"]))
+            c.execute("DELETE FROM schedule_runs WHERE id=? AND outcome='started'", (r["id"],))
+            c.execute("UPDATE schedule_state SET last_started_ms=? WHERE entry_id=? "
+                      "AND last_started_ms>=?", (r["scheduled_ms"] - 1, r["entry_id"],
+                                                 r["scheduled_ms"]))
+        log.info("排程 %s:%s 回忙(在回家,站点还没收到),这一轮等它到家",
+                 r["entry_id"], r["robot_id"])
+        return True
+
     def _homing(self, rid: str, task_id: str) -> bool:
         """``task_id`` 这一趟一直巡逻报过「开始回家」(``task_returning``)没有。"""
+        if (rid, task_id) in self._homing_seen:
+            return True
         return bool(self.db.query(
             "SELECT 1 FROM events WHERE robot_id=? AND kind='task_returning' "
             "AND json_extract(data, '$.task_id')=? LIMIT 1", (rid, task_id)))

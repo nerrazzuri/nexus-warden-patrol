@@ -122,6 +122,23 @@ void main() {
       expect(find.byKey(MapWizardPage.doneWalkKey), findsOneWidget, reason: '直接回到走一圈那一步');
     });
 
+    testWidgets('minor #36 站点有图、有没做完的向导：也问「接着做」，不说「需先建图」', (t) async {
+      _size(t, const Size(400, 900));
+      final api = _admin()
+        ..mapsCount = 2
+        ..guide = <String, dynamic>{'tour': 99}
+        ..wizard = <String, dynamic>{'step': 'walk', 'robot_id': 'A', 'map_id': 'main', 'version': '20261031-1',
+          'drive': 'remote', 'by': 'eng-1', 'label': ''};
+      await t.pumpWidget(MaterialApp(home: NwShell(api: api, title: '站点', ring: () {})));
+      await t.pumpAndSettle();
+      expect(find.byKey(mapOfferKey), findsOneWidget);
+      expect(find.textContaining('第 3 步'), findsWidgets);
+      expect(find.textContaining('需先建图'), findsNothing);
+      await t.tap(find.byKey(mapOfferLaterKey));
+      await t.pumpAndSettle();
+      expect(api.guide['map_later'], isNot(isTrue), reason: '接着做的稍后不记');
+    });
+
     testWidgets('保安：不弹窗，值守页一行「请管理员建图」，没有按钮；站点有图就什么都没有', (t) async {
       _size(t, const Size(400, 900));
       final guard = FakeApi('guard')..mapsCount = 0;
@@ -293,9 +310,9 @@ void main() {
         ..wizard = <String, dynamic>{'step': 'build', 'robot_id': 'A', 'map_id': 'main', 'version': '20261031-1',
           'drive': 'remote', 'by': 'u', 'label': ''}
         ..wizardBuild = <String, dynamic>{'state': 'ready', 'optimizable': true, 'quality': <String, dynamic>{
-          'verdict': 'usable', 'reasons': <dynamic>[], 'path_m': 120.0, 'optimized': false}};
+          'verdict': 'usable_unlooped', 'reasons': <dynamic>[], 'path_m': 120.0, 'optimized': false}};
       await _wizard(t, api);
-      expect(find.text('地图已建成：可用'), findsOneWidget);
+      expect(find.text('地图已建成：可用'), findsOneWidget, reason: 'minor #2：新站点没回环的叫 usable_unlooped，当能用');
       expect(find.textContaining('已回到起点闭合'), findsNothing, reason: '没做回环说不上闭没闭合');
       expect(find.textContaining('重影'), findsOneWidget, reason: '告诉人什么时候该优化');
       await _tapLive(t, MapWizardPage.optimizeKey);
@@ -305,7 +322,7 @@ void main() {
 
     for (final (why, b) in [
       ('关键帧不在站点上', <String, dynamic>{'state': 'ready', 'optimizable': false, 'quality': <String, dynamic>{
-        'verdict': 'usable', 'reasons': <dynamic>[], 'path_m': 120.0, 'optimized': false}}),
+        'verdict': 'usable_unlooped', 'reasons': <dynamic>[], 'path_m': 120.0, 'optimized': false}}),
       ('做过回环', <String, dynamic>{'state': 'ready', 'quality': <String, dynamic>{
         'verdict': 'usable', 'reasons': <dynamic>[], 'path_m': 120.0, 'max_shift_m': 0.05, 'optimized': true}}),
     ]) {
@@ -339,6 +356,23 @@ void main() {
       expect(find.textContaining('闭合回环'), findsOneWidget);
       expect(find.textContaining('40%'), findsOneWidget);
       expect(find.byType(CircularProgressIndicator), findsNothing);
+    });
+
+    testWidgets('minor #35 横屏走一圈：底下两个按钮并排一行，预览不撑出屏幕', (t) async {
+      final api = _admin()
+        ..wizard = <String, dynamic>{'step': 'walk', 'robot_id': 'A', 'map_id': 'main', 'version': '20261031-1',
+          'drive': 'phone', 'by': 'u', 'label': ''};
+      api.previewReplies.addAll([for (var i = 0; i < 10; i++) _pv(trail: [[0, 0], [3, 0]])]);
+      await _wizard(t, api);
+      _size(t, const Size(800, 390));
+      await t.pumpAndSettle();
+      await _tick(t);
+      final a = t.getRect(find.byKey(MapWizardPage.teleopKey));
+      final b = t.getRect(find.byKey(MapWizardPage.doneWalkKey));
+      expect(a.top, closeTo(b.top, 1), reason: '并排一行');
+      expect(390 - a.top, lessThan(90), reason: '底栏只占一行按钮');
+      expect(t.getRect(find.byKey(MappingPreviewView.canvasKey)).height, lessThan(390));
+      expect(t.takeException(), isNull);
     });
 
     testWidgets('手机开：遥控页角上有小预览和「走完了」，点了回来停录建图', (t) async {
@@ -491,7 +525,7 @@ void main() {
         'maps': <dynamic>[
           <String, dynamic>{'map_id': 'main', 'versions': <dynamic>[
             <String, dynamic>{'version': '20261031-2', 'note': '一楼', 'created_ms': 0, 'latest': true,
-              'loaded_on': <dynamic>['A'], 'quality': <String, dynamic>{'verdict': 'usable', 'reasons': <dynamic>[], 'path_m': 186.0}},
+              'loaded_on': <dynamic>['A'], 'quality': <String, dynamic>{'verdict': 'usable_unlooped', 'reasons': <dynamic>[], 'path_m': 186.0}},
             <String, dynamic>{'version': '20261031-1', 'note': '', 'created_ms': 0, 'latest': false,
               'loaded_on': <dynamic>[], 'quality': <String, dynamic>{'verdict': 'problem', 'reasons': <dynamic>['no_loop'], 'path_m': 42.0}},
           ]},
@@ -589,7 +623,7 @@ void main() {
       };
     await t.pumpWidget(MaterialApp(home: MapManagePage(api: api)));
     await t.pumpAndSettle();
-    expect(find.textContaining('带定位器的机器人用不了'), findsOneWidget);
+    expect(find.textContaining('这一版缺定位文件，机器人用不了'), findsOneWidget);   // W6-12：不说定位器
     expect(find.textContaining('superlio_map.pcd'), findsOneWidget);
   });
 
@@ -603,7 +637,7 @@ void main() {
     final t = mapSwitchText(a('pending', d: d), nowMs: now, rateBps: 2e6);
     expect(t, contains('约还要 30 秒'));
     expect(mapSwitchText(a('pending', d: {...d, 'at_ms': now - 20000}), nowMs: now), contains('在载入定位'));
-    expect(mapSwitchText(a('confirmed', confirmed: 'localizer'), nowMs: now), contains('定位已确认'));
+    expect(mapSwitchText(a('confirmed', confirmed: 'localizer'), nowMs: now), contains('已在新图上定好位'));
     expect(mapSwitchText(a('failed', reason: '校验不对'), nowMs: now), contains('校验不对'));
     expect(mapSwitchText(a('timeout'), nowMs: now), contains('太久'));
   });

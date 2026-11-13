@@ -57,17 +57,8 @@ def _terminal(db: Any, robot: str, task_id: str) -> tuple[str, int, str, int] | 
 
 def _loops(db: Any, robot: str, task_id: str) -> tuple[int, int] | None:
     """几圈的巡逻 → ``(共几圈(0 = 一直巡逻), 已经跑完几圈)``;一圈的、不是巡逻 → None。"""
-    if not task_id:
-        return None
-    rows = db.query("SELECT json_extract(payload, '$.mission.policy.loops') AS loops, "
-                    "json_array_length(json_extract(payload, '$.mission.waypoints')) AS pts "
-                    "FROM commands WHERE robot_id=? AND task_id=? AND kind='patrol' LIMIT 1",
-                    (robot, task_id))
-    if not rows or rows[0]["loops"] is None or rows[0]["loops"] == 1 or not rows[0]["pts"]:
-        return None
-    [n] = db.query("SELECT COUNT(*) AS n FROM events WHERE robot_id=? AND kind='patrol_waypoint' "
-                   "AND json_extract(data, '$.task_id')=?", (robot, task_id))
-    return int(rows[0]["loops"]), int(n["n"]) // int(rows[0]["pts"])
+    from nexwar_site.robot_overview import lap_counts
+    return lap_counts(db, robot, task_id)
 
 
 def _handover(db: Any, robot: str, task_id: str, at_ms: int) -> dict[str, Any]:
@@ -139,7 +130,8 @@ def today_view(db: Any, *, now_ms: int, adhoc: Any = None,
                     continue                            # 这条日程加进来之前的轮次:那时还没有它
                 m = act.missions.get(e.mission)
                 want = (m.map_id, m.map_version) if m is not None and m.map_version else None
-                items.append(_schedule_item(db, e, occ_ms, now_ms, want=want, loaded=loaded))
+                items.append(_schedule_item(db, e, occ_ms, now_ms, want=want, loaded=loaded,
+                                            tz=tz))
     if adhoc is not None:
         for r in adhoc.between(a_ms, b_ms):
             items.append(_adhoc_item(db, r, now_ms))
@@ -176,9 +168,22 @@ def _map_gap(want: tuple[str, str] | None, got: tuple[Any, Any] | None) -> dict[
     return {"route": str(want[1]), "robot": str(got[1])}
 
 
+def _late_runnable(e: Any, occ_ms: int, now_ms: int, tz: Any) -> bool:
+    """``run_late`` 的这一轮窗口过了,执行器此刻还会不会补跑它(是不晚于现在的最新一轮)。"""
+    if getattr(e, "on_missed", "") != "run_late" or tz is None:
+        return False
+    from nexwar_contract.schedule import DecisionKind, decide
+    try:
+        d = decide(e, now=datetime.fromtimestamp(now_ms / 1000, tz=tz), last_started_ms=None)
+    except Exception:  # noqa: BLE001 - 算不出:照窗口算
+        return False
+    return d.kind == DecisionKind.LATE and d.scheduled_ms == occ_ms
+
+
 def _schedule_item(db: Any, e: Any, occ_ms: int, now_ms: int, *,
                    want: tuple[str, str] | None = None,
-                   loaded: Callable[[str], tuple[Any, Any]] | None = None) -> dict[str, Any]:
+                   loaded: Callable[[str], tuple[Any, Any]] | None = None,
+                   tz: Any = None) -> dict[str, Any]:
     rows = [dict(r) for r in db.query(
         "SELECT outcome, robot_id, task_id, result, note, decided_at FROM schedule_runs "
         "WHERE entry_id=? AND scheduled_ms=? ORDER BY id", (e.id, occ_ms))]
@@ -213,6 +218,8 @@ def _schedule_item(db: Any, e: Any, occ_ms: int, now_ms: int, *,
                                                            "lost")), None)
     last = rows[-1] if rows else None
     window_over = now_ms > occ_ms + int(e.window_min) * 60_000
+    if window_over and settled is None and _late_runnable(e, occ_ms, now_ms, tz):
+        window_over = False                              # minor #37:run_late 还会补跑这一轮
     if settled is not None or window_over:
         item["state"] = "missed"
         item["reason"] = ((settled or last or {}).get("note") or "到点没有能派的机器人")[:200]

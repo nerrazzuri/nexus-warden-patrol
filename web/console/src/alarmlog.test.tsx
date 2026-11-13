@@ -258,6 +258,23 @@ describe("第 4 轮 layout r3-N3 / N6", () => {
   });
 });
 
+// 网页第 5 轮 r5-layout-N1:断网恢复后报警记录页要 10–20 秒才回来(读不到要等下一次 30 秒的轮询)
+describe("minor #30 断网恢复", () => {
+  it("读不到时 3 秒再试,网一通马上回来", async () => {
+    let down = true;
+    setFetch(((url: string) => {
+      if (url.startsWith("/api/alerts")) return down ? Promise.reject(new TypeError("Failed to fetch")) : Promise.resolve(json({ alerts: [], limit: 500 }));
+      return Promise.resolve(json({}));
+    }) as typeof fetch);
+    const { container: c } = page();
+    await waitFor(() => expect(c.querySelector("[data-load-failed]")).not.toBeNull());
+    await new Promise((r) => setTimeout(r, 3500));              // 第一次重试还是断的
+    expect(c.querySelector("[data-load-failed]")).not.toBeNull();
+    down = false;
+    await waitFor(() => expect(c.querySelector("[data-load-failed]")).toBeNull(), { timeout: 4500 });
+  }, 12000);
+});
+
 describe("第 4 轮 r3-duty-N7", () => {
   it("摄像头、站点的报警不给「看录像」", async () => {
     const { hasRecording } = await import("./alarmlog");

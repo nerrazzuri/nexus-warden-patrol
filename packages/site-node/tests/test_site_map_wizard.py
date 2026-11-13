@@ -403,9 +403,10 @@ def test_W75_站点出图失败_向导里在站点上重试_同一版重出_没�
 def test_用户1113_没做回环_不算没闭合_标着没优化():
     q = quality({**BUILD, "loop_closure": {"ran": False, "why": "没有回环工具(mola-sm-lc-cli)"}},
                 [[0, 0], [30, 0]])
-    assert q["verdict"] == "usable" and q["reasons"] == [] and q["optimized"] is False
+    # minor #2(W75 外审 2 #5):老手机见 usable 就写「✓ 已回到起点闭合」—— 没回环的另给一个它不认的
+    assert q["verdict"] == "usable_unlooped" and q["reasons"] == [] and q["optimized"] is False
     q = quality(_lc(used=True, closures=2, path_m=120.0, max_shift_m=0.08), None)
-    assert q["optimized"] is True
+    assert q["optimized"] is True and q["verdict"] == "usable"
 
 
 def test_用户1113_建好了能优化地图_换新版本号_回到出图那一步_旧版留着(站点):

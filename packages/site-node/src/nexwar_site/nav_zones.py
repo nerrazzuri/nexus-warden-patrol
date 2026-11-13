@@ -520,6 +520,31 @@ class NavZones:
                        "from_version, body, created_ms) VALUES (?,?,?,?,?)",
                        (map_id, version, pv, json.dumps(body, ensure_ascii=False), now))
 
+    def drop_proposal_standby(self, map_id: str, version: str, items: Any, *, by: str) -> int:
+        """minor #27:带过来的建议里去掉这几个待命点(``[{robot_id, name}]``),
+        禁行区、拦截点的建议不动。一个都对不上 → :class:`ZonesError`。回去掉了几个。"""
+        if not isinstance(items, list) or not items or not all(
+                isinstance(i, dict) and isinstance(i.get("robot_id"), str)
+                and isinstance(i.get("name"), str) for i in items):
+            raise ZonesError("standby 要是 [{robot_id, name}] 的列表")
+        drop = {(i["robot_id"], i["name"]) for i in items}
+        self._ensure_proposal(map_id, version)
+        with self.db.tx() as tx:
+            rows = tx.execute("SELECT body FROM nav_zone_proposals WHERE map_id=? AND "
+                              "map_version=? AND state='open'", (map_id, version)).fetchall()
+            if not rows:
+                raise ZonesError(f"{map_id}:{version} 没有待核的、从上一版带过来的东西")
+            body = json.loads(rows[0]["body"])
+            keep = [x for x in body.get("standby", []) if (x["robot_id"], x["name"]) not in drop]
+            n = len(body.get("standby", [])) - len(keep)
+            if not n:
+                raise ZonesError("带过来的待命点里没有这几个")
+            body["standby"] = keep
+            tx.execute("UPDATE nav_zone_proposals SET body=? WHERE map_id=? AND map_version=? "
+                       "AND state='open'", (json.dumps(body, ensure_ascii=False), map_id, version))
+        log.info("%s:%s 带过来的待命点丢了 %d 个(%s)", map_id, version, n, by)
+        return n
+
     def discard_proposal(self, map_id: str, version: str, *, by: str) -> None:
         self._ensure_proposal(map_id, version)
         with self.db.tx() as tx:

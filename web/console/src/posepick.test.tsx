@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 // 地图页「去这里 / 在这里设位置」跟底图、选中的狗绑在同一张图上(外审 W39-I2),只有狗收下了才说成功(W39-I3)。
 import { cleanup, fireEvent, render, waitFor } from "@testing-library/preact";
-import { afterEach, beforeEach, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { setFetch } from "./api";
 import { lang } from "./i18n";
 import { SiteMap } from "./mappage";
@@ -270,4 +270,15 @@ it("第 2 轮 P1-56:30 秒还没定位好 → 说清楚,能再设", async () => 
     await waitFor(() => expect(r.container.querySelector('[data-pose-progress="timeout"]')).not.toBeNull());
     expect((r.getByText("Set position here") as HTMLButtonElement).disabled).toBe(false);
   } finally { Date.now = real; }
+});
+
+// 网页第 5 轮遗留 minor #29:点在机器人圆点上(帮它定位最自然的点法)朝向是乱的 —— 从机器人指向几厘米外的点
+describe("minor #29 选位置时的朝向", () => {
+  it("点在机器人身上(半米内):用它现在的朝向;远一点:从机器人指向点的方向;都没有就沿用上一次", async () => {
+    const { pickYaw } = await import("./posepick");
+    expect(pickYaw({ x: 1, y: 1, yaw: 1.2 }, 1.03, 0.98, 0)).toBeCloseTo(1.2, 6);
+    expect(pickYaw({ x: 0, y: 0, yaw: 1.2 }, 0, 3, 0)).toBeCloseTo(Math.PI / 2, 3);
+    expect(pickYaw({ x: 1, y: 1 }, 1.03, 0.98, 0.7)).toBeCloseTo(0.7, 6);
+    expect(pickYaw(null, 5, 5, 0.3)).toBeCloseTo(0.3, 6);
+  });
 });
