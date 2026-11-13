@@ -43,6 +43,11 @@ void main() {
     expect(t.takeException(), isNull);
   });
 
+  test('第 9 轮 W9-12：标原点时自动加的待命点（home）不写 home', () {
+    expect(standbyName({'name': 'home'}), '在原点（标原点时自动加的）');
+    expect(standbyName({'name': 'gate'}), 'gate');
+  });
+
   testWidgets('回指定的待命点', (t) async {
     final api = _api('guard');
     await _open(t, api);

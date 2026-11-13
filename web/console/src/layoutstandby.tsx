@@ -12,6 +12,11 @@ import { NAME_RE } from "./routepage";
 import { clientToMap, handleAt, yawToward } from "./routes";
 
 const key = (p: { robot_id: string; name: string }) => `${p.robot_id}/${p.name}`;
+/** 第 9 轮 W9-12:标原点时自动加的那个(名字是 home)写「A 的待命点」;自己起名的写「A · 名字」。 */
+export const spName = (p: { robot_id: string; name: string }): string =>
+  p.name === "home" ? t("lyStandbyAuto", { id: p.robot_id }) : `${p.robot_id} · ${p.name}`;
+/** 地图上的小标签:自动加的写机器人编号(原来截成「ho」),自己起名的写名字前两个字。 */
+const spMark = (p: { robot_id: string; name: string }): string => (p.name === "home" ? p.robot_id : p.name).slice(0, 2);
 interface Carried { robot_id: string; name: string; x: number; y: number; yaw: number; default?: boolean }
 interface Charger { robot_id: string; map_id: string; map_version: string; x: number; y: number }
 
@@ -111,9 +116,9 @@ export function StandbyTab(p: TabProps) {
             {carried.map((c) => {
               const h = handleAt(p.meta, s, c.x, c.y, c.yaw, 26);
               return (
-                <PoseMarker key={`carried-${key(c)}`} x={h.x} y={h.y} hx={h.hx} hy={h.hy} r={10} label={c.name.slice(0, 2)} selected={false}
+                <PoseMarker key={`carried-${key(c)}`} x={h.x} y={h.y} hx={h.hx} hy={h.hy} r={10} label={spMark(c)} selected={false}
                   class="standby-pt carried" attrs={{ "data-carried-mark": key(c) } as Record<string, unknown>}>
-                  <title>{`${c.robot_id} · ${c.name} · ${t("lyStandbyCarriedTip", { v: prop?.from_version ?? "" })}`}</title>
+                  <title>{`${spName(c)} · ${t("lyStandbyCarriedTip", { v: prop?.from_version ?? "" })}`}</title>
                 </PoseMarker>
               );
             })}
@@ -122,11 +127,11 @@ export function StandbyTab(p: TabProps) {
               const h = handleAt(p.meta, s, x.x, x.y, x.yaw, 26);
               const k = key(x);
               return (
-                <PoseMarker key={k} x={h.x} y={h.y} hx={h.hx} hy={h.hy} r={10} label={x.name.slice(0, 2)} selected={k === sel}
+                <PoseMarker key={k} x={h.x} y={h.y} hx={h.hx} hy={h.hy} r={10} label={spMark(x)} selected={k === sel}
                   class={`standby-pt${x.default ? " default" : ""}`}
                   attrs={{ "data-standby": k, onPointerDown: drag(k, "move"), onClick: (e: MouseEvent) => { e.stopPropagation(); setSel(k); } } as Record<string, unknown>}
                   handle={k === sel ? { data: k, onPointerDown: drag(k, "turn") } : undefined}>
-                  <title>{`${x.robot_id} · ${x.name}`}</title>
+                  <title>{spName(x)}</title>
                 </PoseMarker>
               );
             })}
@@ -146,7 +151,7 @@ export function StandbyTab(p: TabProps) {
             <ul class="plain">
               {carried.map((c) => (
                 <li key={key(c)} class="row">
-                  <span>{c.robot_id} · {c.name}{c.default ? ` · ${t("lyDefault")}` : ""}</span>
+                  <span>{spName(c)}{c.default ? ` · ${t("lyDefault")}` : ""}</span>
                   <button type="button" class="btn sm push" data-keep={key(c)} onClick={() => keep([c])}>{t("lyKeep")}</button>
                   <button type="button" class="btn sm ghost" data-drop={key(c)} onClick={() => void drop([c])}>{t("lyDrop")}</button>
                 </li>
@@ -162,14 +167,14 @@ export function StandbyTab(p: TabProps) {
           {pts.length === 0 && <li class="muted small">{t("lyNoStandby")}</li>}
           {pts.map((x) => (
             <li key={key(x)}>
-              <button type="button" class={key(x) === sel ? "linklike on" : "linklike"} onClick={() => setSel(key(x))}>{x.robot_id} · {x.name}</button>
+              <button type="button" class={key(x) === sel ? "linklike on" : "linklike"} onClick={() => setSel(key(x))}>{spName(x)}</button>
               {x.default && <span class="tag">{t("lyDefault")}</span>}
             </li>
           ))}
         </ul>
         {cur && (
           <section class="panel ly-detail">
-            <h3>{cur.robot_id} · {cur.name}</h3>
+            <h3>{spName(cur)}</h3>
             <p class="muted small">{t("lyStandbyMoveHint")}</p>
             <label class="field-check"><input type="checkbox" name="default" checked={!!cur.default} onChange={(e) => {
               const on = e.currentTarget.checked;
@@ -189,7 +194,7 @@ export function StandbyTab(p: TabProps) {
         }} />
       )}
       {removing && (
-        <Confirm text={t("lyStandbyRemove", { name: `${removing.robot_id} · ${removing.name}` })} yes={t("remove")} danger onNo={() => setRemoving(null)}
+        <Confirm text={t("lyStandbyRemove", { name: spName(removing) })} yes={t("remove")} danger onNo={() => setRemoving(null)}
           onYes={() => { const r = removing; setRemoving(null); setSel(null); setPts(pts.filter((x) => key(x) !== key(r))); }} />
       )}
     </div>

@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { setFetch } from "./api";
 import { lang } from "./i18n";
 import type { LayerData, OwnLayer, TabProps } from "./layoutpage";
-import { StandbyTab } from "./layoutstandby";
+import { spName, StandbyTab } from "./layoutstandby";
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
 const META = { width: 100, height: 100, m_per_px: 0.1, left_x: 0, top_y: 10, zones: [] };
@@ -33,6 +33,14 @@ const props = (): TabProps => ({
   reload: () => Promise.resolve(), setDirty: () => {}, registerSave: (fn) => { save = fn; }, Map: FakeMap,
 });
 const btn = (root: Element, text: string) => Array.from(root.querySelectorAll("button")).find((b) => b.textContent?.trim() === text) as HTMLButtonElement;
+
+describe("第 9 轮 W9-12 待命点的叫法", () => {
+  it("标原点时自动加的(home)写「A 的待命点」,自己起名的写「A · 名字」", () => {
+    lang.value = "zh";
+    expect(spName({ robot_id: "A", name: "home" })).toBe("A 的待命点");
+    expect(spName({ robot_id: "A", name: "dock" })).toBe("A · dock");
+  });
+});
 
 describe("布置 → 待命点", () => {
   it("选中以后点图挪过去,存下", async () => {
