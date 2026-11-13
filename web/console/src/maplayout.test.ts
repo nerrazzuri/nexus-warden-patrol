@@ -40,3 +40,12 @@ describe("巡检路线页整页一屏(跟防区页一样)", () => {
     expect(flat).toMatch(/\.console\.fill \.routesplit \{[^}]*flex: ?1/);
   });
 });
+
+describe("第 10 轮 W10-02:总览机器人列表 1440 宽不折行", () => {
+  it("状态标签不折行、不被挤;圈数一行、放不下省略", () => {
+    expect(decl(".duty-row .state")).toMatch(/white-space: ?nowrap/);
+    expect(decl(".duty-row .state")).toMatch(/flex: ?none/);
+    expect(decl(".duty-row [data-row-task]")).toMatch(/white-space: ?nowrap/);
+    expect(decl(".duty-row [data-row-task]")).toMatch(/text-overflow: ?ellipsis/);
+  });
+});

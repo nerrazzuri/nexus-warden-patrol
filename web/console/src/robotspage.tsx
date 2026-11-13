@@ -494,7 +494,8 @@ function RobotDetail({ r, u, now, role, say, onChanged, onCode, onClose, readOnl
         <dl class="rd-facts">
           <div><dt>{t("rdState")}</dt><dd>{u && r.online ? <><StateText s={u.state} stale={u.stale} />{u.task && <small class="muted"> {u.task}</small>}</>
             : r.online ? t("online") : r.ever_seen === false ? t("fleetNeverSeen") : t("st_offline")}
-            {r.online && r.lap && <small class="muted" data-lap="1"> · {lapText(r.lap)}</small>}</dd></div>
+            {/* 第 10 轮 W10-03:实时状态那一小段已经写了第几圈的,这里不再写一遍 */}
+            {r.online && r.lap && !(u && u.task) && <small class="muted" data-lap="1"> · {lapText(r.lap)}</small>}</dd></div>
           {fact("fleetBattery", r.battery_pct == null ? "—" : `${r.battery_pct}%`, true)}
           {fact("fleetLoc", `${loc ? t(loc) : "—"}${u?.robot.loc?.localizer ? ` · ${u.robot.loc.localizer}` : ""}`)}
           {fact("wifiLabel", r.wifi ? `${r.wifi.ssid || "—"} · ${t(`link_${r.wifi.link}` as Key)}` : "—")}
