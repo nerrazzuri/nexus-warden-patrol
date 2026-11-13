@@ -41,6 +41,8 @@ export interface RobotCard {
   postures?: Posture[]; task?: string | null;
   /** POC 11-05:上装能开哪几路、有哪些话术、能不能打字(老站点没有)。 */
   deter?: Deter | null;
+  /** 第 9 轮 W9-06:正在跑的任务给人看的说法(不露 adhoc-forever-… 这种编号)。 */
+  task_what?: { kind: string; route: string; forever: boolean } | null;
   /** W76:正在跑几圈的巡逻 —— 第几圈、共几圈(0 = 一直巡逻)。一圈的、老站点没有。 */
   lap?: { n: number; of: number } | null;
 }
@@ -72,12 +74,25 @@ function day(ms: number): string {
 
 const label = (r: RobotCard) => r.name || r.robot_id;
 
-function problemText(p: RobotCard["problems"][number]): string {
+function problemText(p: RobotCard["problems"][number], r?: RobotCard): string {
   if ("nav2" in p) return t("robotNav2Down", { why: p.nav2 });
-  return "kind" in p ? alertTitle(lang.value, p.kind, p.kind) : t("robotDeviceBad", { d: p.device });
+  if ("kind" in p) return alertTitle(lang.value, p.kind, p.kind);
+  // 第 9 轮 W9-09:盘只是快满了,写「存储盘快满(86%)」,不写「disk 异常」
+  const used = r?.storage?.used_ratio;
+  if (p.device.split(":")[0] === "disk" && used != null && used >= 0.8) return t("robotDiskFull", { n: Math.round(used * 100) });
+  return t("robotDeviceBad", { d: devName(p.device), state: t(`dev_${p.state}` as Key) });
 }
 
 /** ``readOnly``(W60):经理只看 —— 没有添加、批准加入、改名、改派单方式、开通码、解绑、确认换 WiFi。 */
+/** 第 9 轮 W9-06:正在跑的任务说成人话:「一直巡逻（一楼夜巡）」「巡逻（一楼夜巡）」「回待命点」……;
+ *  老站点没给说法的写「一个任务」。 */
+export function taskWhat(w: { kind: string; route: string; forever: boolean } | null | undefined): string {
+  if (!w) return t("twTask");
+  const k = w.kind === "patrol" ? (w.forever ? "twForever" : "twPatrol")
+    : w.kind === "goto" ? "twGoto" : w.kind === "standby" ? "twStandby" : w.kind === "home" ? "twHome" : "twTask";
+  return w.route ? t("twRoute", { what: t(k), route: w.route }) : t(k);
+}
+
 export function RobotsPage({ say, now, units = [], readOnly = false, role = "admin", robot = null }: {
   say: Say; now: number; units?: UnitInfo[]; readOnly?: boolean; role?: string; robot?: string | null;
 }) {
@@ -175,7 +190,7 @@ export function RobotsPage({ say, now, units = [], readOnly = false, role = "adm
                   <span class="fleet-bar" aria-hidden="true"><i style={{ width: `${Math.max(0, Math.min(100, r.battery_pct ?? 0))}%` }} /></span>
                 </span>
                 {r.problems.length > 0 && (
-                  <span class="fleet-warn"><Shape kind="P2" />{problemText(r.problems[0])}{r.problems.length > 1 ? ` · ${t("robotProblems", { n: r.problems.length })}` : ""}</span>
+                  <span class="fleet-warn"><Shape kind="P2" />{problemText(r.problems[0], r)}{r.problems.length > 1 ? ` · ${t("robotProblems", { n: r.problems.length })}` : ""}</span>
                 )}
                 {r.wifi?.change && <span class="fleet-warn"><Shape kind="P2" />{t("wifiPending")}</span>}
                 <span class="fleet-facts">
@@ -333,7 +348,10 @@ function Controls({ r, u, role, say, onChanged }: { r: RobotCard; u?: UnitInfo; 
     const v = await api<{ status?: { task?: { task_id?: string } | null } | null }>("GET", `/api/robots/${enc(r.robot_id)}`);
     const tid = v.status?.task?.task_id;
     if (!tid) { say(t("rdNoTask", { id })); return null; }
-    return api("POST", path("abort"), { task_id: tid });
+    const res = await api<CommandReply>("POST", path("abort"), { task_id: tid });
+    // 第 9 轮 W9-06:机器人收到叫停到真的停下要一两秒 —— 过一会儿再刷两次,不让页面一直写「一直巡逻 · 第 2 圈」
+    for (const ms of [1500, 4000]) setTimeout(onChanged, ms);
+    return res;
   }, t("rdSent", { id, what: t("rdAbort") }));
   const off = !r.online;
   // P1-27:点了也做不成的先灰掉、把原因写在按钮下面(不是点了才报红字)
@@ -410,13 +428,13 @@ function Controls({ r, u, role, say, onChanged }: { r: RobotCard; u?: UnitInfo; 
                 onClick={() => setAsk(m)}>{t(POSTURE_KEY[m])}</button>
             ))}
           </div>
-          {r.task && <p class="muted small">{t("rdPostureBusy", { task: r.task })}</p>}
+          {r.task && <p class="muted small">{t("rdPostureBusy", { id, what: taskWhat(r.task_what) })}</p>}
           {!r.task && r.held && <p class="muted small">{t("rdPostureHeld")}</p>}
         </div>
       )}
       {dispatch && r.deter && <DeterPanel r={r} d={r.deter} id={id} busy={busy} off={off} send={send} path={path} />}
       {askHome && (
-        <Confirm text={t("rdAbortHomeAsk", { id, task: r.task ?? "" })} yes={t("rdAbortHome")} danger
+        <Confirm text={t("rdAbortHomeAsk", { id, what: taskWhat(r.task_what) })} yes={t("rdAbortHome")} danger
           onNo={() => setAskHome(false)}
           onYes={() => {
             setAskHome(false);
@@ -571,7 +589,7 @@ function RobotDetail({ r, u, now, role, say, onChanged, onCode, onClose, readOnl
           {fact("rdLastSeen", r.last_seen_ms ? ago(r.last_seen_ms, now) : "—")}
           {r.storage && fact("rdStorage", t("rdStorageVal", { p: Math.round(r.storage.used_ratio * 100), n: r.storage.backlog_files }))}
         </dl>
-        {devices.length > 0 && <p class="note small">{devices.map(problemText).join(" · ")}</p>}
+        {devices.length > 0 && <p class="note small">{devices.map((p) => problemText(p, r)).join(" · ")}</p>}
       </section>
       {(canPatrol(role) || isOwnerLike(role)) && !r.revoked && <Controls r={r} u={u} role={role} say={say} onChanged={onChanged} />}
       <section class="rd-sec">

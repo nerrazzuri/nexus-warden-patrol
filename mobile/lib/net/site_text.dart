@@ -117,6 +117,9 @@ final List<_Rule> _rules = [
   (RegExp(r'先去充电或换电池'), (_) => 'Charge it or swap the battery first.'),
   (RegExp(r'^临时路线 (\d+) 个点$'), (m) => 'One-off route (${m[1]} ${_pl(m[1]!, 'point', 'points')})'),
   (RegExp(r'^临时巡逻不进日程$'), (_) => 'One-off patrol (not in the schedule)'),
+  // 第 9 轮 A8-04 尾巴：地图版本说明（跟网页 sitetext.tsx 一样）
+  (RegExp(r'^从 (\S+) 清了 (\d+) 处零星噪点[(（](\d+) 格[)）]$'),
+      (m) => 'Noise cleanup of version ${m[1]}: removed ${m[2]} specks (${m[3]} cells)'),
   (RegExp(r'^新登记[:：]确认之前只许手动派$'), (_) => 'Newly registered: manual dispatch only until confirmed'),
   (RegExp(r'^(\S+) 离建图时走过的地方 ([\d.]+) m[(（]超过 ([\d.]+) m[)）][,，]那里定位不可靠[:：]先把那里建进图$'),
       (m) => '${m[1]} is ${m[2]} m from where the robot went while mapping (limit ${m[3]} m), '
@@ -200,7 +203,11 @@ String zhPunct(String src) {
       .replaceAllMapped(RegExp(r'（([^()（）]*)\)'), (m) => '（${m[1]}）')
       .replaceAllMapped(RegExp('($h|）),\\s?'), (m) => '${m[1]}，')
       .replaceAllMapped(RegExp('($h|）):\\s?(?!//)'), (m) => '${m[1]}：')
-      .replaceAllMapped(RegExp('($h|）);\\s?'), (m) => '${m[1]}；');
+      .replaceAllMapped(RegExp('($h|）);\\s?'), (m) => '${m[1]}；')
+      // 第 9 轮 W9-10：前面是数字、字母（「已用 86%,剩 30 GB:到 90%」），后面是汉字的也换
+      .replaceAll(RegExp(',\\s?(?=$h)'), '，')
+      .replaceAll(RegExp(':\\s?(?=$h)'), '：')
+      .replaceAll(RegExp(';\\s?(?=$h)'), '；');
 }
 
 /// 站点、机器人生成的一段话按 App 语言给出（英文认不出的部分写「(in Chinese)」）。
@@ -216,7 +223,10 @@ String siteText(String? s) {
 /// 人也可能写的（路线名、区域名）：英文界面只翻认得的站点自动文字，认不得的原样（人写的中文不换掉）。
 String siteKnown(String? s) {
   final src = s ?? '';
-  if (appLang.value == AppLang.zh) return zhPunct(src);
+  // 第 9 轮 A8-04 尾巴：版本说明「从 7 清了…」「从 9 编辑…」写成「从第 7 版…」
+  if (appLang.value == AppLang.zh) {
+    return zhPunct(src.replaceFirstMapped(RegExp(r'^从 (\d+) (清了|编辑)'), (m) => '从第 ${m[1]} 版${m[2]}'));
+  }
   if (!hasChinese(src)) return src;
   final out = _en(src);
   return out.contains(_unk) ? src : out;

@@ -1,7 +1,7 @@
 // W44 地图页的图层规则(设计 §4.3):多久没巡过、今晚的事、本班从几点算、下一个巡检点几分钟到、防区标签。
 import { beforeEach, describe, expect, it } from "vitest";
 import { lang } from "./i18n";
-import { DEFAULT_LAYERS, ENGINEERING_LAYERS, etaNext, layersFor, type Layer, MAP_TODO_MAX, fanOut, labelRows, mapPins, mapTodo, olderOpen, shiftStart, staleAfter, staleCells, STALE_AFTER_MS, tonightEvents, zoneDecor } from "./maplayers";
+import { DEFAULT_LAYERS, ENGINEERING_LAYERS, etaNext, layersFor, type Layer, MAP_TODO_MAX, fanOut, labelAbove, labelRows, mapPins, mapTodo, olderOpen, shiftStart, staleAfter, staleCells, STALE_AFTER_MS, tonightEvents, zoneDecor } from "./maplayers";
 import type { Alert } from "./model";
 
 beforeEach(() => {
@@ -139,6 +139,13 @@ describe("多久没巡过按站点设置", () => {
 describe("P1-12 两台叠在一起", () => {
   it("挨得近的名字错开行,远的不挪", () => {
     expect(labelRows([[100, 100], [101, 100], [300, 300], [100, 102]], 20)).toEqual([0, 1, 0, 2]);
+  });
+  it("第 9 轮 W6-15:名字底下压着另一台的点 → 名字挪到点上面", () => {
+    // A 在 (100,100),B 在 A 正下方 20 像素:A 的名字(画在点下面)会被 B 的点盖住
+    expect(labelAbove([[100, 100], [102, 120]], 6, 12)).toEqual([true, false]);
+    // 隔得远、或者 B 在 A 上面:都不挪
+    expect(labelAbove([[100, 100], [200, 120]], 6, 12)).toEqual([false, false]);
+    expect(labelAbove([[100, 120], [100, 60]], 6, 12)).toEqual([false, false]);
   });
 });
 

@@ -569,3 +569,101 @@ async def test_W14_跑过的轮次不补记成错过(站, tmp_path):
     got = sorted((r["scheduled_ms"], r["outcome"]) for r in t.sched.runs("hourly", limit=50))
     assert got == [(毫秒(22, 0), "started"), (毫秒(23, 0), "alarm")], got
     assert [o for _, _, o in _去向(t)] == ["alarm"], "跑过的那一轮不说"
+
+
+# ------------------------------------------------------------ 第 9 轮 W9-02:迟到也跑,先等机器人
+
+
+async def test_W902_迟到也跑_没就绪先说在等_补跑起来了说起跑了(站, tmp_path, monkeypatch):
+    t = 站
+    _换排程(t, tmp_path, 排程.replace("window_min: 30", "window_min: 2")
+            .replace("on_missed: skip", "on_missed: run_late"))
+    real = t.site.dispatchable
+    monkeypatch.setattr(t.site, "dispatchable", lambda rid, kind: f"{rid} 没站起来")
+    await _拍(t, 22, 0, 10)
+    await _拍(t, 22, 1, 20)
+    assert _去向(t) == [("nightly", None, "late_waiting")], "迟到也跑:不说没跑,说在等"
+    await _拍(t, 22, 5)
+    await _拍(t, 22, 8)
+    assert _去向(t) == [("nightly", None, "late_waiting")], "窗口过了也还在等,不再另说"
+    monkeypatch.setattr(t.site, "dispatchable", real)
+    t.clock.ms = 毫秒(22, 9)
+    await t.run(2)                                        # 钟跳了 9 分钟:等狗报一次新鲜的状态
+    await _拍(t)
+    assert "started" in [r["outcome"] for r in t.sched.runs("nightly")]
+    assert [o for _, _, o in _去向(t)] == ["late_waiting", "late_started"]
+
+
+async def test_W902_迟到也跑_一整轮都没就绪_下一轮到了才报错过(站, tmp_path, monkeypatch):
+    t = 站
+    _换排程(t, tmp_path, _夜里每小时.format(on_missed="run_late"))
+    monkeypatch.setattr(t.site, "dispatchable", lambda rid, kind: f"{rid} 没站起来")
+    await _拍(t, 22, 0, 10)
+    await _拍(t, 22, 6)
+    assert [o for _, _, o in _去向(t)] == ["late_waiting"]
+    await _拍(t, 23, 0, 10)
+    out = [(e, o) for e, _, o in _去向(t)]
+    assert ("hourly", "late_gave_up") in out, out
+    assert out.count(("hourly", "late_gave_up")) == 1
+
+
+async def test_W902_不是迟到也跑的_照旧报没跑(站, monkeypatch):
+    t = 站
+    monkeypatch.setattr(t.site, "dispatchable", lambda rid, kind: f"{rid} 没站起来")
+    await _拍(t, 22, 0, 30)
+    await _拍(t, 22, 6)
+    assert _去向(t) == [("nightly", None, "no_robot")]
+
+
+def test_W902_在等_报P2不报P1_补跑起来了自己关(告警):
+    desk, src = 告警
+    src.on_schedule_outcome("nightly", None, "late_waiting", "B 没站起来")
+    [a] = desk.book.open()
+    assert (a.kind, a.level.value) == ("schedule_waiting", "P2")
+    assert "在等" in a.title and "B 没站起来" in a.detail
+    src.on_schedule_outcome("nightly", "B", "late_started", "B 补跑了这一轮")
+    assert not desk.book.open(), "补跑起来了:那条提醒关掉(记在站点名下也关)"
+
+
+def test_W902_放弃了_报P1错过_在等那条一起关(告警):
+    desk, src = 告警
+    src.on_schedule_outcome("nightly", None, "late_waiting", "B 没站起来")
+    src.on_schedule_outcome("nightly", None, "late_gave_up", "下一轮到了")
+    [a] = desk.book.open()
+    assert (a.kind, a.level.value) == ("schedule_missed", "P1")
+    assert "一直没" in a.title or "等到" in a.title
+
+
+def test_W902_两条在等_一条补跑了_另一条还开着(告警):
+    desk, src = 告警
+    src.on_schedule_outcome("nightly", None, "late_waiting", "B 没站起来")
+    src.on_schedule_outcome("gate", None, "late_waiting", "B 没站起来")
+    src.on_schedule_outcome("nightly", "B", "late_started", "")
+    [a] = desk.book.open()
+    assert "gate" in a.title and "nightly" not in a.title
+
+
+def test_W901_报警标题写排程的显示名(告警):
+    desk, src = 告警
+    with desk.db.tx() as c:
+        c.execute("INSERT INTO route_schedules(entry_id, title, definition, revision, "
+                  "active_from_ms, updated_ms) VALUES ('route-1-2', '补跑测试', '{}', 1, 0, 0)")
+    src.on_schedule_outcome("route-1-2", None, "no_robot", "B 不在线")
+    [a] = desk.book.open()
+    assert "「补跑测试」" in a.title and "route-1-2" not in a.title
+
+
+def test_W909_存储盘报警_站点重启后不再多开一条_旧说法那条改成新说法_清出空间自动关(告警):
+    from nexwar_contract.storage import StorageFacts
+    desk, src = 告警
+    for t in (0, 10_000_000):                       # 站点重启前后各报了一条(合并窗口早过了)
+        desk.book.raise_alert(kind="disk_80", robot="A", title="机器人的发件箱所在的盘即将写满",
+                              now_ms=t)
+    facts = dict(outbox_bytes=0, outbox_cap_bytes=1, backlog_files=0, backlog_bytes=0,
+                 oldest_backlog_s=None)
+    src._storage("A", src._m("A"), StorageFacts(disk_used_ratio=0.86, **facts))
+    left = [a for a in desk.book.open() if a.kind == "disk_80"]
+    assert len(left) == 1 and left[0].title == "机器人存储空间不足", left
+    assert "86%" in left[0].detail
+    src._storage("A", src._m("A"), StorageFacts(disk_used_ratio=0.5, **facts))
+    assert [a for a in desk.book.open() if a.kind == "disk_80"] == []

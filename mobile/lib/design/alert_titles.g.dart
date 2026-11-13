@@ -76,6 +76,7 @@ const Map<String, (String, String)> alertTitles = <String, (String, String)>{
   'bundle_lag': ('Robot mission data out of date', '机器人任务数据未更新'),
   'clock_skew': ('Robot clock is off', '机器人时钟偏差'),
   'schedule_skipped': ('Scheduled patrol skipped', '排程已跳过'),
+  'schedule_waiting': ('Scheduled patrol waiting for a robot', '排程在等机器人'),
   'schedule_blocked': ('Scheduled patrol blocked', '排程被拦截'),
   'schedule_interrupted': ('Scheduled patrol interrupted', '排程被中断'),
   'incident_flood': ('Too many events from one source', '事件源上报过于频繁'),

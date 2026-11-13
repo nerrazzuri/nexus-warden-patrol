@@ -75,6 +75,20 @@ function preflightList(s: string): string {
   return known.length ? known.join("; ") : UNK;
 }
 
+/** 第 9 轮 W9-08:「未就绪:急停按着、没站起来(…)」里的每一样(site refusals._NOT_READY)。 */
+const NOT_READY: [RegExp, string][] = [
+  [/^急停按着/, "emergency stop is pressed"],
+  [/^定位不可用/, "it doesn't know where it is"],
+  [/^控制权不在站点/, "the site doesn't have control (a handset or another program does)"],
+  [/^没站起来/, "not standing (crouched, lying down, or motion not ready)"],
+];
+function notReadyList(s: string): string {
+  return s.split(/[、,，]\s*(?![^(（]*[)）])/).map((x) => {
+    const hit = NOT_READY.find(([rx]) => rx.test(x.trim()));
+    return hit ? hit[1] : /[\u4e00-\u9fff]/.test(x) ? "not ready" : x.trim();
+  }).join("; ");
+}
+
 type Rule = [RegExp, (m: RegExpMatchArray) => string];
 
 const RULES: Rule[] = [
@@ -95,7 +109,7 @@ const RULES: Rule[] = [
   [/^(\S+) 不在线或状态不新鲜$/, (m) => `${m[1]} is offline or has not reported recently`],
   [/^(\S+) 的状态不新鲜/, (m) => `${m[1]} has not reported recently`],
   [/^(\S+) 被 (\S+) 叫停了/, (m) => `${m[1]} was stopped by ${m[2]}; press Resume before sending it`],
-  [/^(\S+) 未就绪[:：]\s*(.*)$/, (m) => `${m[1]} is not ready (${m[2]})`],
+  [/^(\S+) 未就绪[:：]\s*(.*)$/, (m) => `${m[1]} is not ready (${notReadyList(m[2])})`],
   [/^(\S+) 这一拍给了更优先的 (\S+)$/, (m) => `${m[1]} was given to the higher-priority ${m[2]}`],
   [/^(\S+) 加载的地图是 '([^']*)'[,，]任务要 '([^']*)'$/, (m) => `${m[1]} has map “${m[2]}” loaded; the patrol needs “${m[3]}”`],
   [/^站点的钟跟 (\S+) 差 (\d+) 秒$/, (m) => `The site clock is ${m[2]} s off from ${m[1]}`],
@@ -204,7 +218,11 @@ export function zhPunct(src: string): string {
     .replace(/（([^()（）]*)\)/g, "（$1）")
     .replace(new RegExp(`(${H}|）),\\s?`, "g"), "$1，")
     .replace(new RegExp(`(${H}|）):\\s?(?!//)`, "g"), "$1：")
-    .replace(new RegExp(`(${H}|）);\\s?`, "g"), "$1；");
+    .replace(new RegExp(`(${H}|）);\\s?`, "g"), "$1；")
+    // 第 9 轮 W9-10:前面是数字、字母(「已用 86%,剩 30 GB:到 90%」),后面是汉字的也换
+    .replace(new RegExp(`,\\s?(?=${H})`, "g"), "，")
+    .replace(new RegExp(`:\\s?(?=${H})`, "g"), "：")
+    .replace(new RegExp(`;\\s?(?=${H})`, "g"), "；");
 }
 
 /** 第 5 轮 P1-01:系统页上还露着的三种站点原文(中文界面也不该露):「…;原文:机器人原话」只说该做什么、
@@ -254,7 +272,8 @@ const NO_HOVER = "Site message in Chinese (switch the language to 中文 to read
  *  认不得的原样(人写的中文不能被换成「见详情」)。 */
 export function siteKnown(s: string | null | undefined): string {
   const src = s ?? "";
-  if (lang.value !== "en") return zhPunct(src);
+  // 第 9 轮 A8-04 尾巴:版本说明「从 7 清了…」「从 9 编辑…」写成「从第 7 版…」
+  if (lang.value !== "en") return zhPunct(src.replace(/^从 (\d+) (清了|编辑)/, "从第 $1 版$2"));
   if (!CJK.test(src)) return src;
   const out = tr(src);
   return out.includes(UNK) ? src : out;

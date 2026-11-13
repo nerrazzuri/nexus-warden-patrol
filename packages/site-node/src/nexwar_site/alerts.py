@@ -216,6 +216,7 @@ LEVEL_OF: dict[str, Level] = {
     "clock_skew": Level.P2,
     # 排程写了错过就跳过、这一轮跳过了;狗要人监护、排程派不了(W00c6c)。今天之内核一下、改配置。
     "schedule_skipped": Level.P2,
+    "schedule_waiting": Level.P2,       # 第 9 轮 W9-02:迟到也跑的排程在等机器人就绪
     "schedule_blocked": Level.P2,
     # 排程巡检跑到一半被更优先的任务打断(W14):打断它的事本身已经有人在管,这一轮补不补人定。
     "schedule_interrupted": Level.P2,

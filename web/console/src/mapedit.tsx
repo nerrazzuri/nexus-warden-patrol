@@ -16,7 +16,7 @@ import { closesLoop, type NavZones, polyPx, toMap, type OwnLayer } from "./layou
 import { MapCanvas } from "./mapcanvas";
 import { DiffDialog } from "./mapmgmt";
 import { apply, closedLoop, type Display, type GridOp, type History, newTerrain, redo, screenRect, start, summary, type TerrainKind, undo, type ZoneDraft } from "./mapeditops";
-import { pointInPolygon, type PreviewMeta, type Pt } from "./mapview";
+import { pointInPolygon, type PreviewMeta, type Pt, toPx } from "./mapview";
 import { siteKnown } from "./sitetext";
 
 type Say = (s: string) => void;
@@ -318,7 +318,7 @@ function Editor({ say, target, Canvas }: { say: Say; target: Target; Canvas?: Fu
             legend: zoneLegend(zonesNow),
             marks: (sc) => <>
               {zonesNow.map((z) => zoneName(sc, z))}
-              {isZone(tool) && pts.map(([x, y], i) => { const [sx, sy] = sc.map(x, y); return <circle key={i} cx={sx} cy={sy} r={5} class="draft-pt" />; })}
+              {(isZone(tool) || tool === "region" || tool === "terrain") && pts.map(([x, y], i) => { const [sx, sy] = sc.map(x, y); return <circle key={i} cx={sx} cy={sy} r={5} class="draft-pt" />; })}
             </>,
             onDragRect: grid && shape === "rect" && meta ? (a: Pt, b: Pt, done: boolean) => {
               const A = toMap(meta, a[0], a[1]);
@@ -343,6 +343,12 @@ function Editor({ say, target, Canvas }: { say: Say; target: Target; Canvas?: Fu
                   ? <polygon key={i} class={`me-op loop ${o.op}`} points={polyPx(meta, o.points)} stroke-width={strokeW(o.width_m)} />
                   : <polyline key={i} class={`me-op ${o.op}`} points={polyPx(meta, o.points.length > 1 ? o.points : [o.points[0], o.points[0]])} stroke-width={strokeW(o.width_m)} />)}
               {pts.length > 0 && <polyline class={tool === "wall" ? "draft-line vwall" : "draft-line"} points={polyPx(meta, pts)} />}
+              {/* 第 9 轮 W9-13:橡皮擦 / 画障碍每点一下画一个笔刷大小的圆(第一下就看得到、看得出会擦多宽);
+                  颜色跟笔画一样,描一圈对比色,深浅底图上都看得见 */}
+              {(tool === "erase" || tool === "obstacle") && pts.map((p, i) => {
+                const q = toPx(meta, p[0], p[1]);
+                return <circle key={`brush-${i}`} cx={q.px} cy={q.py} r={strokeW(width) / 2} class={`me-brush ${tool}`} />;
+              })}
               {rect && <polygon class="draft-line" data-drag-rect="1" points={polyPx(meta, [rect[0], [rect[1][0], rect[0][1]], rect[1], [rect[0][0], rect[1][1]]])} />}
             </> : null })}
           {/* 易用性第 6 轮 W6-11:画着的时候「完成绘制 / 撤一点 / 取消」浮在地图上(原来在侧栏最底下,要滚才看得到) */}

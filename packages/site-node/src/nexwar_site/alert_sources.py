@@ -71,8 +71,13 @@ _SCHEDULE_ALERTS: dict[str, tuple[str, str]] = {
     "supervised": ("schedule_blocked", "机器人要人现场监护,排程无法派单"),
     # W14:被事件派遣、手动派单、遥控打断了,不续(W00c2b 决定 D2A,用户 2026-10-02 维持)
     "preempted": ("schedule_interrupted", "跑到一半被更优先的任务打断了,本轮未巡完、不续"),
+    # 第 9 轮 W9-02:选了「迟到也跑」的,到点没就绪先说在等(P2),补跑起来了自己关;等到下一轮都没跑成
+    # 才报错过(P1)
+    "late_waiting": ("schedule_waiting", "到点机器人还没就绪,就绪了会补跑"),
+    "late_gave_up": ("schedule_missed", "等到下一轮机器人都一直没就绪,这一轮没跑"),
 }
 _SCHEDULE_TITLE = {"schedule_missed": "本轮未执行", "schedule_skipped": "跳过了一轮",
+                   "schedule_waiting": "在等机器人",
                    "schedule_blocked": "无法派单", "schedule_interrupted": "本轮未巡完"}
 
 #: 站点主循环多久调一次 :meth:`SiteAlertSources.step`(秒)。升级时限是分钟级,5 s 够细。
@@ -935,12 +940,25 @@ class SiteAlertSources:
         """狗的发件箱(W00c5d,决策 8):盘到 80%、证据积压半小时,各报一次;回落之后才重新武装。"""
         if f.disk_used_ratio >= WARN_RATIO and not m.disk80:
             m.disk80 = True
-            self.desk.raise_alert(
-                # W6-09:跟诊断页(机器人设备「存储盘」)、首页提醒同一个说法、同一条线
-                kind="disk_80", robot=rid, title="机器人存储空间不足",
-                detail=f"存录像和巡逻记录的盘已用 {f.disk_used_ratio:.0%};"
-                       "到 90% 机器人就不接新的巡逻(没传完的不删)")
+            # W6-09:跟诊断页(机器人设备「存储盘」)、首页提醒同一个说法、同一条线
+            title = "机器人存储空间不足"
+            detail = (f"存录像和巡逻记录的盘已用 {f.disk_used_ratio:.0%};"
+                      "到 90% 机器人就不接新的巡逻(没传完的不删)")
+            # 第 9 轮 W9-09:站点重启后又报一条,旧说法那条(「发件箱所在的盘即将写满」)还开着 ——
+            # 还开着的就改成新说法接着用,多出来的旧条关掉
+            olds = sorted((a for a in self.desk.book.open()
+                           if a.robot == rid and a.kind == "disk_80"), key=lambda a: a.first_ms)
+            if olds:
+                self.desk.amend(olds[-1].key, title=title, detail=detail)
+                for a in olds[:-1]:
+                    self.desk.resolve(a.key, who="site:storage_merged")
+            else:
+                self.desk.raise_alert(kind="disk_80", robot=rid, title=title, detail=detail)
         elif f.disk_used_ratio < DISK_CLEAR_RATIO:
+            if m.disk80 or any(a.robot == rid and a.kind == "disk_80"
+                               for a in self.desk.book.open()):
+                # 第 9 轮 W9-09:清出空间了,报警自己关掉(以前一直挂着要人手动关)
+                self.desk.resolve_all(rid, "disk_80", who="site:storage_ok")
             m.disk80 = False
         oldest = f.oldest_backlog_s or 0
         if oldest >= BACKLOG_ALARM_S and not m.backlog:
@@ -960,6 +978,8 @@ class SiteAlertSources:
 
         同一只狗(或站点)同一个 kind 的告警会合成一条(告警簿的规矩):标题把合进来的**每一条排程**
         都列上(内审:以前标题只剩最后那条,前面没跑的那条从告警里消失);详情是最近那条的原因。"""
+        if outcome in ("late_started", "late_gave_up"):
+            self._stop_waiting(entry_id)
         hit = _SCHEDULE_ALERTS.get(outcome)
         if hit is None:
             return
@@ -969,13 +989,43 @@ class SiteAlertSources:
         ids = list(self._sched_entries.get(prev.key, ())) if prev is not None else []
         if entry_id not in ids:
             ids.append(entry_id)
-        names = "、".join(ids[:5]) + (f" 等 {len(ids)} 条" if len(ids) > 5 else "")
-        a = self.desk.raise_alert(kind=kind, robot=robot,
-                                  title=f"排程 {names} {_SCHEDULE_TITLE[kind]}:{what}",
-                                  detail=f"{entry_id}:{note}"[:300])
+        title = f"排程{self._sched_names(ids)} {_SCHEDULE_TITLE[kind]}:{what}"
+        a = self.desk.raise_alert(kind=kind, robot=robot, title=title,
+                                  detail=f"{self._sched_name(entry_id)}:{note}"[:300])
         self._sched_entries[a.key] = ids
         while len(self._sched_entries) > 200:            # 只为合并标题记着,老的放掉
             self._sched_entries.pop(next(iter(self._sched_entries)))
+
+    def _sched_name(self, entry_id: str) -> str:
+        from nexwar_site.names import schedule_name
+        return schedule_name(getattr(self.desk, "db", None), entry_id)
+
+    def _sched_names(self, ids: list[str]) -> str:
+        """「夜巡」、「补跑测试」(第 9 轮 W9-01:写显示名,没起名写编号)。"""
+        return "、".join(f"「{self._sched_name(i)}」" for i in ids[:5]) + (
+            f" 等 {len(ids)} 条" if len(ids) > 5 else "")
+
+    def _stop_waiting(self, entry_id: str) -> None:
+        """第 9 轮 W9-02:这条排程补跑起来了(或放弃了),「在等机器人」那条里去掉它;没别的了就关掉。"""
+        for a in self.desk.book.open():
+            if a.kind != "schedule_waiting":
+                continue
+            ids = self._sched_entries.get(a.key)
+            if ids is None:                               # 站点重启过:按标题认
+                if f"「{self._sched_name(entry_id)}」" not in a.title:
+                    continue
+                ids = [entry_id]
+            if entry_id not in ids:
+                continue
+            ids = [i for i in ids if i != entry_id]
+            if ids:
+                self._sched_entries[a.key] = ids
+                self.desk.amend(a.key, title=(
+                    f"排程{self._sched_names(ids)} {_SCHEDULE_TITLE['schedule_waiting']}:"
+                    f"{_SCHEDULE_ALERTS['late_waiting'][1]}"))
+            else:
+                self._sched_entries.pop(a.key, None)
+                self.desk.resolve(a.key, who="site:schedule", note="补跑了 / 已改报错过")
 
     def on_incident(self, row: dict) -> None:
         """一条入侵有了去向(W16):派出去了、并进已出动的,说「有入侵、谁去了」(记在那只狗名下);没狗、

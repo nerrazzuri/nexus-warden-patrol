@@ -1,6 +1,7 @@
 // 一次登录的推送登记（商业化 A6 外审 F2、F3）：拿不到号、登记失败退避重试；离开时在路上的登记落定后注销。
 import 'dart:async';
 
+import 'package:nexwar_patrol/l10n.dart';
 import 'package:nexwar_patrol/net/push.dart';
 import 'package:nexwar_patrol/net/site_client.dart' show SiteError;
 import 'package:flutter_test/flutter_test.dart';
@@ -62,6 +63,10 @@ void main() {
     expect(tries, 1);
     expect(s.state.value, PushState.waiting);
     expect(s.reason, contains('没有配置推送'));
+    // 第 9 轮 W9-08：换成英文（不用重新登录）后，原因也跟着换成英文
+    appLang.value = AppLang.en;
+    expect(s.reason, contains('no push notifications set up'));
+    appLang.value = AppLang.zh;
     await s.stop();
   });
 

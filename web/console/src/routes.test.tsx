@@ -154,7 +154,7 @@ function routesApi(opts: { meta: PreviewMeta; routes?: any[]; timezone?: string 
   setFetch((async (url: RequestInfo | URL, init?: RequestInit) => {
     const u = String(url);
     if (u.endsWith("/api/maps")) return json(MAPS);
-    if (u.endsWith("/api/robots")) return json({ robots: [{ robot_id: "A" }, { robot_id: "B" }] });
+    if (u.endsWith("/api/robots")) return json({ robots: [{ robot_id: "A" }, { robot_id: "B", manual_only: true }] });
     if (u.endsWith("/preview")) return json(opts.meta);
     if (u.includes("/api/routes?")) {
       const want = new URL(u, "http://x").searchParams.get("map_version");
@@ -325,7 +325,7 @@ describe("路线页:站点的回答", () => {
     await waitFor(() => expect(r.container.querySelector("[data-routes-elsewhere]")).not.toBeNull());
     lang.value = "zh";
     await tick();
-    expect(r.container.querySelector("[data-routes-elsewhere]")!.textContent).toContain("v11 上有 1 条路线(demo-loop)");
+    expect(r.container.querySelector("[data-routes-elsewhere]")!.textContent).toContain("v11 上有 1 条路线（demo-loop）");
   });
 
   it("逐点校验没过:错的点标红、说原因,存不下;改好重存按原来的修订号带过去", async () => {
@@ -558,6 +558,8 @@ describe("路线页:站点的回答", () => {
     expect(rows[1]).toContain("Any free robot");
     const pick = await waitFor(() => { const x = r.container.querySelector('select[name="schedRobot"]') as HTMLSelectElement; expect(x.options.length).toBe(3); return x; });
     expect(pick.value).toBe("");
+    // 第 9 轮 A9-01:只许手动派的写明
+    expect(Array.from(pick.options).map((o) => o.textContent)).toEqual(["Any free robot", "A", "B (manual dispatch only: schedules will not send it)"]);
     fireEvent.change(pick, { target: { value: "A" } });
     fireEvent.input(r.container.querySelector('.form input[maxlength="64"]')!, { target: { value: "dawn" } });
     fireEvent.input(r.container.querySelector('input[name="at"]')!, { target: { value: "05:30" } });

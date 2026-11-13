@@ -127,7 +127,8 @@ void main() {
           reason: '外审 r1 #9:演练要看得出来');
       appLang.value = AppLang.zh;
       expect(tr('Stop all', '全部急停'), '全部急停');
-      expect(alertTitle('dog_sees_person', '机器人看见人了:2 个人'), '机器人看见人了:2 个人');
+      // 第 9 轮 W9-10：中文界面的半角冒号换成全角
+      expect(alertTitle('dog_sees_person', '机器人看见人了:2 个人'), '机器人看见人了：2 个人');
       expect(alertTitle('dog_sees_person', ''), isNotEmpty, reason: '站点没给标题：用词条里的中文');
     });
 

@@ -151,6 +151,19 @@ describe("第 2 轮 admin N11", () => {
   });
 });
 
+// 第 9 轮 W9-05:下一趟排给的机器人蹲着 —— 那一行写出来
+describe("W9-05 今天的巡逻:下一趟的机器人没就绪", () => {
+  it("写「B 现在没站起来,到点前不好就跑不了」", async () => {
+    setFetch(((url: string) => Promise.resolve(url === "/api/patrols/today"
+      ? json({ items: [{ at_ms: Date.now() + 60_000, kind: "schedule", label: "route-1", title: "一楼夜巡", robot: "B", by: "", state: "next", reason: "", end_ms: null, adhoc_id: "", not_ready: ["motion"] }] })
+      : json({}, 404))) as typeof fetch);
+    const { container: c } = render(<TodayPatrols />);
+    await waitFor(() => expect(c.querySelector("[data-not-ready]")).not.toBeNull());
+    expect(c.querySelector("[data-not-ready]")!.textContent).toContain("B 现在没站起来，到点前不好就跑不了");
+    expect(c.textContent).not.toContain("motion");
+  });
+});
+
 // 易用性第 6 轮 W6-02:排给的那台只许手动派 —— 写「不会跑」和原因,管理员给去改的入口
 describe("W6-02 今天的巡逻:不会跑的说清楚", () => {
   const blocked = () => setFetch(((url: string) => Promise.resolve(url === "/api/patrols/today"
@@ -179,7 +192,7 @@ describe("W6-02 今天的巡逻:不会跑的说清楚", () => {
       : json({}, 404))) as typeof fetch);
     const { container: c } = render(<TodayPatrols />);
     await waitFor(() => expect(c.querySelectorAll(".today-row").length).toBe(1));
-    expect(c.textContent).toContain("路线画在 v11 上,A 用的是 v12");
+    expect(c.textContent).toContain("路线画在 v11 上，A 用的是 v12");
     expect(c.textContent).not.toContain("map_mismatch");
   });
 });
@@ -192,7 +205,7 @@ describe("第 8 轮 今天的巡逻:被接替、第几圈", () => {
       : json({}, 404))) as typeof fetch);
     const { container: c } = render(<TodayPatrols />);
     await waitFor(() => expect(c.querySelectorAll(".today-row").length).toBe(1));
-    expect(c.textContent).toContain("已跑 6 圈,由日程 cut-test 接替");
+    expect(c.textContent).toContain("已跑 6 圈，由日程 cut-test 接替");
     expect(c.textContent).toContain("被接替");
     expect(c.textContent).not.toContain("未完成");
     expect(c.textContent).not.toContain("preempted");
@@ -218,20 +231,20 @@ describe("第 8 轮 开站清单:路线在别的版本上", () => {
       : url === "/api/me" ? json({ name: "alice", role: "admin", guide: { tour: 1, setup_hidden: false, skip: [] } }) : json({}, 404))) as typeof fetch);
     const { container: c } = render(<SetupChecklist />);
     await waitFor(() => expect(c.querySelector('[data-item="routes"]')).not.toBeNull());
-    expect(c.querySelector('[data-item="routes"]')!.textContent).toContain("有 1 条路线(demo-loop)画在 v11 上,机器人在用 v7:在 v7 上重画");
+    expect(c.querySelector('[data-item="routes"]')!.textContent).toContain("有 1 条路线（demo-loop）画在 v11 上，机器人在用 v7：在 v7 上重画");
     expect(c.querySelector('[data-item="schedule"]')!.textContent).toContain("日程 demo-night 要跑的路线跑不了");
   });
 });
 
 // minor #21(liang-d5 W7):标原点时自动加了待命点,清单打勾 —— 写明待命点就是原点
 describe("minor #21 开站清单:待命点就是原点", () => {
-  it("写「A 的待命点就是原点(标原点时自动加的)」", async () => {
+  it("写「A 的待命点就是原点（标原点时自动加的）」", async () => {
     setFetch(((url: string) => Promise.resolve(url === "/api/setup"
       ? json({ items: [{ id: "standby", done: true, skipped: false, robots: [], at_home: ["A"] }], done: 1, total: 1 })
       : url === "/api/me" ? json({ name: "alice", role: "admin", guide: { tour: 1, setup_hidden: false, skip: [] } }) : json({}, 404))) as typeof fetch);
     const { container: c } = render(<SetupChecklist />);
     await waitFor(() => expect(c.querySelector('[data-item="standby"]')).not.toBeNull());
-    expect(c.querySelector('[data-item="standby"]')!.textContent).toContain("A 的待命点就是原点(标原点时自动加的)");
+    expect(c.querySelector('[data-item="standby"]')!.textContent).toContain("A 的待命点就是原点（标原点时自动加的）");
   });
 });
 

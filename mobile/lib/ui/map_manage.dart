@@ -9,6 +9,7 @@ import 'package:flutter/material.dart';
 
 import '../l10n.dart';
 import '../net/site_client.dart';
+import '../net/site_text.dart' show siteKnown;
 import 'map_wizard.dart';
 import 'nw/nw_button.dart';
 import 'nw/nw_p4_admin.dart' show nwGap8, NwListView;
@@ -25,7 +26,7 @@ String versionLabel(String v) =>
 String versionNoteText(String note) {
   // 站点原话「从 X 编辑:…」（写成 \u 转义：这里是认站点的字，不是给人看的）
   final m = RegExp('^\u4ece (\\S+) \u7f16\u8f91:(.*)\$').firstMatch(note);
-  if (m == null) return note;
+  if (m == null) return siteKnown(note);          // 第 9 轮 A8-04 尾巴：「从 7 清了…」也写第几版、按语言
   return tr('Edited from ${versionLabel(m[1]!).toLowerCase()}: ${m[2]}', '从${versionLabel(m[1]!)}编辑：${m[2]}');
 }
 

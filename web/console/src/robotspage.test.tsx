@@ -82,6 +82,16 @@ describe("机器人页", () => {
     expect(cardOf(c, "B").querySelector(".fleet-warn")).not.toBeNull();
   });
 
+  it("第 9 轮 W9-09:盘只是快满了写「存储盘快满（86%）」,不写 disk 异常", async () => {
+    robots = [card({ problems: [{ device: "disk", state: "degraded" }], storage: { used_ratio: 0.86, backlog_files: 0, oldest_backlog_s: null } }),
+      card({ robot_id: "B", problems: [{ device: "camera:front", state: "error" }] })];
+    const { container: c } = page();
+    await waitFor(() => expect(cardOf(c, "A")?.querySelector(".fleet-warn")).toBeTruthy());
+    expect(cardOf(c, "A").querySelector(".fleet-warn")!.textContent).toBe("存储盘快满（86%）");
+    expect(cardOf(c, "B").querySelector(".fleet-warn")!.textContent).toBe("摄像头 前故障");
+    expect(c.textContent).not.toContain("disk");
+  });
+
   it("改名字", async () => {
     const { container: c } = page();
     await waitFor(() => expect(cardOf(c, "A")).not.toBeNull());
@@ -301,7 +311,7 @@ describe("W71 Nav2 没起来", () => {
     fireEvent.click(cardOf(c, "A"));
     const d = c.querySelector(".robot-detail")!;
     await waitFor(() => expect((d.querySelector('option[value="west-loop"]') as HTMLOptionElement | null)?.disabled).toBe(true));
-    expect(d.querySelector('option[value="west-loop"]')!.textContent).toContain("画在 v11 上,A 用的是 v7");
+    expect(d.querySelector('option[value="west-loop"]')!.textContent).toContain("画在 v11 上，A 用的是 v7");
     expect((d.querySelector('option[value="east-loop"]') as HTMLOptionElement).disabled).toBe(false);
   });
 
@@ -339,7 +349,8 @@ describe("W71 Nav2 没起来", () => {
     fireEvent.click(btn(d2, "中止并回原点"));
     expect(posted.some((p) => p.url === "/api/robots/A/home/return")).toBe(false);
     const dlg = await waitFor(() => { const x = c2.querySelector("dialog"); expect(x).toBeTruthy(); return x!; });
-    expect(dlg.textContent).toContain("patrol-7");
+    expect(dlg.textContent).toContain("A：中止执行任务，然后回原点？");     // 第 9 轮 W9-06:不露任务编号
+    expect(dlg.textContent).not.toContain("patrol-7");
     fireEvent.click(btn(dlg, "中止并回原点"));
     await waitFor(() => expect(posted.find((p) => p.url === "/api/robots/A/home/return")?.body).toEqual({ abort: true }));
   });
@@ -435,13 +446,15 @@ describe("W71 Nav2 没起来", () => {
     await waitFor(() => expect(posted.find((p) => p.url === "/api/robots/A/posture")?.body).toEqual({ mode: "lie" }));
     await waitFor(() => expect(said.join()).toContain("已趴下"));
     cleanup();
-    robots[0] = card({ postures: ["stand", "lie"], task: "patrol-7" });
+    robots[0] = card({ postures: ["stand", "lie"], task: "adhoc-forever-dcf7", task_what: { kind: "patrol", route: "一楼夜巡", forever: true } });
     const { container: c2 } = render(<RobotsPage say={(s) => said.push(s)} now={NOW} role="guard" />);
     await waitFor(() => expect(cardOf(c2, "A")).not.toBeNull());
     fireEvent.click(cardOf(c2, "A"));
     const d2 = c2.querySelector(".robot-detail")!;
     expect(btn(d2, "趴下").disabled).toBe(true);
-    expect(d2.textContent).toContain("正在执行任务 patrol-7");
+    // 第 9 轮 W9-06:写在干什么,不露任务编号
+    expect(d2.textContent).toContain("A 正在一直巡逻（一楼夜巡）：先叫停再换姿态。");
+    expect(d2.textContent).not.toContain("adhoc-forever");
     expect(Array.from(d2.querySelectorAll("button")).some((b) => b.textContent?.trim() === "蹲下")).toBe(false);
     cleanup();
     robots[0] = card({ postures: ["stand", "lie"], task: null, held: { by: "bob", at_ms: NOW - 1000 } });

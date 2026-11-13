@@ -7,6 +7,9 @@ import { hm } from "./data";
 import { t, type Key } from "./i18n";
 import { lapText } from "./loops";
 
+/** 第 9 轮 W9-05:机器人没就绪的哪一样 → 说法。 */
+const NOT_READY: Record<string, Key> = { motion: "tdNrMotion", estop_clear: "tdNrEstop", loc_ok: "tdNrLoc", control: "tdNrControl" };
+
 export interface TodayItem {
   at_ms: number;
   kind: "schedule" | "adhoc";
@@ -27,6 +30,8 @@ export interface TodayItem {
   /** 第 8 轮 W8-11:路线的显示名(没起是空)。 */
   title?: string;
   lap?: { n: number; of: number };
+  /** 第 9 轮 W9-05:「下一次」那一趟排给的机器人现在哪几样没就绪(motion、estop_clear……)。 */
+  not_ready?: string[];
   handover?: { by: "schedule" | "teleop" | "task"; name: string; laps: number };
 }
 
@@ -58,6 +63,9 @@ export function stateOf(s: string, skipped = 0): [string, string] {
   return x ? [t(x[0]), x[1]] : [s, ""];
 }
 
+/** 有在跑的几圈巡逻时多久刷一次。 */
+export const LAP_MS = 5_000;
+
 export function TodayPatrols({ retryMs = 5_000, canFix = false }: { retryMs?: number; canFix?: boolean } = {}) {
   const [items, setItems] = useState<TodayItem[] | null>(null);
   const [off, setOff] = useState<number | null>(null);
@@ -71,9 +79,13 @@ export function TodayPatrols({ retryMs = 5_000, canFix = false }: { retryMs?: nu
     let timer = 0;
     setItems(null);
     const load = () => api<{ items: TodayItem[]; utc_offset_min?: number; date?: string }>("GET", day ? `/api/patrols/day?date=${day}` : "/api/patrols/today")
-      .then((d) => { if (live) { setItems(d.items ?? []); setOff(d.utc_offset_min ?? null); setFailed(false); if (!day && d.date) setToday(d.date); } return true; })
-      .catch(() => { if (live) setFailed(true); return false; })
-      .then((ok) => { if (live) timer = window.setTimeout(load, ok ? 30_000 : retryMs); });
+      .then((d) => {
+        if (live) { setItems(d.items ?? []); setOff(d.utc_offset_min ?? null); setFailed(false); if (!day && d.date) setToday(d.date); }
+        // 第 9 轮 W8-04:有在跑的几圈巡逻时 5 秒一刷(跟实时画面的第几圈对得上),平时 30 秒
+        return (d.items ?? []).some((x) => x.state === "running" && x.lap) ? LAP_MS : 30_000;
+      })
+      .catch(() => { if (live) setFailed(true); return retryMs; })
+      .then((ms) => { if (live) timer = window.setTimeout(load, ms); });
     void load();
     return () => { live = false; window.clearTimeout(timer); };
   }, [day]);
@@ -108,6 +120,9 @@ export function TodayPatrols({ retryMs = 5_000, canFix = false }: { retryMs?: nu
                   : x.reason && !(x.state === "aborted" && /^(halt|stop|stopped)$/i.test(x.reason.trim())) ? <span class="muted small"> · {plainReason(x.reason)}</span>
                   : (x.state === "failed" || x.state === "missed") && <span class="muted small"> · {missingReason()}</span>}
                 {x.state === "running" && x.lap && <span class="muted small" data-lap="1"> · {lapText(x.lap)}</span>}
+                {x.state === "next" && x.not_ready && x.not_ready.length > 0 && (
+                  <span class="warn small" data-not-ready="1"> · {t("tdNotReady", { id: x.robot, why: x.not_ready.map((k) => t(NOT_READY[k] ?? "tdNrOther")).join(t("tdNrSep")) })}</span>
+                )}
                 {x.state === "handed_over" && x.handover && <span class="muted small" data-handover="1"> · {handoverText(x.handover)}</span>}
                 {x.map && <span class="muted small" data-map-gap="1"> · {t("tdMapGap", { a: ver(x.map.route), id: x.robot, b: ver(x.map.robot) })}</span>}
               </span>

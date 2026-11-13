@@ -680,6 +680,28 @@ String daysText(List days) {
 }
 
 /// 日程页：今天 / 每周。[embedded] 在底部栏里（经理的第 5 栏）不带返回。
+/// 第 9 轮 W9-01：日程给人看的名字——起了日程名写日程名，没有写路线的显示名，再没有写编号。
+String schedName(Map<String, dynamic> e, Map<String, String> titles) {
+  final t = '${e['title'] ?? ''}';
+  if (t.isNotEmpty) return t;
+  return titles['${e['mission']}'] ?? '${e['mission']}';
+}
+
+/// 第 9 轮 A9-01：哪些路线排了也跑不了（画在别的地图版本上，没有一台机器人在用那一版）→ 为什么。
+/// 机器人都没报在用哪张图时一条也不灰（不知道就别拦）。
+Map<String, String> routeBlocked(List<Map> routes, List<Map> robots) {
+  final using = <String>{
+    for (final r in robots)
+      if (r['map'] is Map && (r['map'] as Map)['id'] != null) '${(r['map'] as Map)['id']}@${(r['map'] as Map)['version']}',
+  };
+  if (using.isEmpty) return const {};
+  return {
+    for (final r in routes)
+      if ('${r['map_version'] ?? ''}'.isNotEmpty && !using.contains('${r['map_id']}@${r['map_version']}'))
+        '${r['id']}': tr('drawn on map version ${r['map_version']}; no robot is using it', '画在第 ${r['map_version']} 版地图上，没有机器人在用'),
+  };
+}
+
 class SchedulePage extends StatefulWidget {
   final SiteApi api;
   final bool embedded;
@@ -702,6 +724,10 @@ class _SchedulePageState extends State<SchedulePage> {
   Map<String, dynamic>? _sched;
   List<String> _routes = const [];
   List<String> _robots = const [];
+  /// 第 9 轮 W9-01 / A9-01：路线编号 → 显示名；跑不了的路线 → 为什么；只许手动派的机器人。
+  Map<String, String> _titles = const {};
+  Map<String, String> _blocked = const {};
+  Set<String> _manual = const {};
   String? _msg;
 
   @override
@@ -717,14 +743,20 @@ class _SchedulePageState extends State<SchedulePage> {
         widget.api.routeSchedules(),
         widget.api.schedule(),
         widget.api.robots(),
+        widget.api.routes().catchError((_) => <String, dynamic>{}),
       ]);
       if (!mounted) return;
+      final robots = [for (final r in got[3] as List) if (r is Map && r['revoked'] != true) r];
+      final lib = [for (final r in ((got[4] as Map)['routes'] as List? ?? const [])) if (r is Map) r];
       setState(() {
         _today = [for (final x in ((got[0] as Map)['items'] as List? ?? const [])) if (x is Map) x.cast<String, dynamic>()];
         _offsetMin = ((got[0] as Map)['utc_offset_min'] as num?)?.toInt();
         _sched = (got[1] as Map).cast<String, dynamic>();
         _routes = [for (final m in ((got[2] as Map)['missions'] as List? ?? const [])) '$m'];
-        _robots = [for (final r in got[3] as List) if (r is Map && r['revoked'] != true) '${r['robot_id']}'];
+        _robots = [for (final r in robots) '${r['robot_id']}'];
+        _manual = {for (final r in robots) if (r['manual_only'] == true) '${r['robot_id']}'};
+        _titles = {for (final r in lib) if ('${r['title'] ?? ''}'.isNotEmpty) '${r['id']}': '${r['title']}'};
+        _blocked = routeBlocked(lib, robots);
       });
     } on SiteError catch (e) {
       if (mounted) setState(() => _msg = refusalText(e));
@@ -736,7 +768,9 @@ class _SchedulePageState extends State<SchedulePage> {
   Future<void> _edit([Map<String, dynamic>? old]) async {
     final got = await showDialog<Map<String, dynamic>>(
         context: context,
-        builder: (_) => _ScheduleEditor(api: widget.api, routes: _routes, robots: _robots, old: old));
+        builder: (_) => _ScheduleEditor(
+            api: widget.api, routes: _routes, robots: _robots, old: old,
+            titles: _titles, blocked: _blocked, manual: _manual));
     if (got == null) return;
     final id = old != null ? '${old['id']}' : 'app-${DateTime.now().millisecondsSinceEpoch}';
     // 外审 W53-1 #9：编辑器没有的字段（每隔几分钟、到几点、优先级、回哪个待命点……）原样带回去，
@@ -765,7 +799,7 @@ class _SchedulePageState extends State<SchedulePage> {
     final ok = await showDialog<bool>(
         context: context,
         builder: (c) => AlertDialog(
-              content: Text(tr('Delete the ${e['at']} "${e['mission']}" schedule?', '删除日程 ${e['at']}「${e['mission']}」？')),
+              content: Text(tr('Delete the ${e['at']} "${schedName(e, _titles)}" schedule?', '删除日程 ${e['at']}「${schedName(e, _titles)}」？')),
               actions: [
                 TextButton(onPressed: () => Navigator.pop(c, false), child: Text(tr('Cancel', '取消'))),
                 FilledButton(
@@ -820,8 +854,10 @@ class _SchedulePageState extends State<SchedulePage> {
                   Expanded(
                       child: Text(
                           [
-                            '${e['mission']}',
-                            if ('${e['robot'] ?? ''}'.isNotEmpty) '${e['robot']}' else tr('any robot', '任意机器人'),
+                            // 第 9 轮 W9-01：先写排程名，再写路线名（起了名的写显示名）
+                            if ('${e['title'] ?? ''}'.isNotEmpty) '${e['title']}',
+                            _titles['${e['mission']}'] ?? '${e['mission']}',
+                            if ('${e['robot'] ?? ''}'.isNotEmpty) '${e['robot']}' else tr('any free robot', '哪台空就哪台'),
                             daysText(e['days'] as List? ?? const []),
                             if ((e['every_min'] as num? ?? 0) > 0) scheduleWhen(e),
                           ].join(' · '),
@@ -878,14 +914,27 @@ class _ScheduleEditor extends StatefulWidget {
   final List<String> routes;
   final List<String> robots;
   final Map<String, dynamic>? old;
-  const _ScheduleEditor({required this.api, required this.routes, required this.robots, this.old});
+  final Map<String, String> titles;
+  final Map<String, String> blocked;
+  final Set<String> manual;
+  const _ScheduleEditor(
+      {required this.api,
+      required this.routes,
+      required this.robots,
+      this.old,
+      this.titles = const {},
+      this.blocked = const {},
+      this.manual = const {}});
 
   @override
   State<_ScheduleEditor> createState() => _ScheduleEditorState();
 }
 
 class _ScheduleEditorState extends State<_ScheduleEditor> {
-  late String _route = widget.old?['mission'] as String? ?? widget.routes.first;
+  // 第 9 轮 A9-01：新加的默认选第一条跑得了的路线
+  late String _route = widget.old?['mission'] as String? ??
+      widget.routes.firstWhere((r) => !widget.blocked.containsKey(r), orElse: () => widget.routes.first);
+  late final TextEditingController _name = TextEditingController(text: '${widget.old?['title'] ?? ''}');
   late String _robot = widget.old?['robot'] as String? ?? '';
   late TimeOfDay _at = _parse('${widget.old?['at'] ?? '08:00'}');
   late final Set<String> _picked = {for (final d in (widget.old?['days'] as List? ?? _allDays)) '$d'};
@@ -920,11 +969,29 @@ class _ScheduleEditorState extends State<_ScheduleEditor> {
       title: Text(widget.old == null ? tr('Add a schedule', '添加日程') : tr('Edit schedule', '编辑日程')),
       content: SingleChildScrollView(
         child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          TextField(
+              key: const Key('sched-name'),
+              controller: _name,
+              maxLength: 40,
+              decoration: InputDecoration(
+                  labelText: tr('Schedule name', '日程名'), hintText: tr('e.g. Night patrol', '例如：夜巡'))),
           DropdownButtonFormField<String>(
               key: const Key('sched-route'),
               initialValue: _route,
+              isExpanded: true,
               decoration: InputDecoration(labelText: tr('Route', '路线')),
-              items: [for (final r in widget.routes) DropdownMenuItem(value: r, child: Text(r))],
+              // 第 9 轮 W9-01 / A9-01：写显示名；跑不了的灰掉，写为什么
+              items: [
+                for (final r in widget.routes)
+                  DropdownMenuItem(
+                      value: r,
+                      enabled: !widget.blocked.containsKey(r) || r == widget.old?['mission'],
+                      child: Text(
+                          widget.blocked.containsKey(r)
+                              ? tr('${widget.titles[r] ?? r} (${widget.blocked[r]})', '${widget.titles[r] ?? r}（${widget.blocked[r]}）')
+                              : widget.titles[r] ?? r,
+                          overflow: TextOverflow.ellipsis)),
+              ],
               onChanged: (v) {
                 setState(() => _route = v ?? _route);
                 unawaited(_estimate());
@@ -934,8 +1001,15 @@ class _ScheduleEditorState extends State<_ScheduleEditor> {
               initialValue: _robot,
               decoration: InputDecoration(labelText: tr('Robot', '机器人')),
               items: [
-                DropdownMenuItem(value: '', child: Text(tr('Any robot (assigned by the site)', '任意机器人（站点分配）'))),
-                for (final r in widget.robots) DropdownMenuItem(value: r, child: Text(r)),
+                DropdownMenuItem(value: '', child: Text(tr('Any free robot', '哪台空就哪台'))),
+                for (final r in widget.robots)
+                  DropdownMenuItem(
+                      value: r,
+                      child: Text(
+                          widget.manual.contains(r)
+                              ? tr('$r (manual dispatch only: schedules will not send it)', '$r（只许手动派，日程不会派它）')
+                              : r,
+                          overflow: TextOverflow.ellipsis)),
               ],
               onChanged: (v) {
                 setState(() => _robot = v ?? '');
@@ -961,7 +1035,7 @@ class _ScheduleEditorState extends State<_ScheduleEditor> {
           ]),
           if (_est != null) ...[
             const SizedBox(height: Nw.s8),
-            Text(tr('${minutesText(_est!)} per patrol (including the walk back).', '每趟约${minutesText(_est!)}（含返回）。')),
+            Text(tr('${minutesText(_est!)} per patrol (including the walk back).', '每趟${minutesText(_est!)}（含返回）。')),
           ],
         ]),
       ),
@@ -973,6 +1047,7 @@ class _ScheduleEditorState extends State<_ScheduleEditor> {
                 ? null
                 : () => Navigator.pop(context, <String, dynamic>{
                       'mission': _route,
+                      'title': _name.text.trim(),
                       if (_robot.isNotEmpty) 'robot': _robot,
                       'at': '${two(_at.hour)}:${two(_at.minute)}',
                       'days': [for (final d in _allDays) if (_picked.contains(d)) d],

@@ -216,7 +216,8 @@ class _PatrolSheetState extends State<_PatrolSheet> {
         }
         return;
       }
-      if (mounted) Navigator.pop(context, dispatchResultText(got, r));
+      // 第 9 轮 W9-01：提示写路线的显示名，不写 route-1
+      if (mounted) Navigator.pop(context, dispatchResultText(got, _titles[r] ?? r));
     } on SiteError catch (e) {
       if (!mounted) return;
       setState(() => _busy = false);
@@ -451,6 +452,25 @@ String patrolMapText(Object? map, String robot) {
   return tr('The route is drawn on map $a; $robot is using $b', '路线画在 $a 上，$robot 用的是 $b');
 }
 
+/// 第 9 轮 W9-05：「下一次」那一趟排给的机器人现在哪几样没就绪（站点给的 `not_ready`）；就绪了是空。
+String patrolNotReadyText(Map it) {
+  final bad = it['not_ready'];
+  if (it['state'] != 'next' || bad is! List || bad.isEmpty) return '';
+  final words = [
+    for (final k in bad)
+      switch ('$k') {
+        'motion' => tr('not standing', '没站起来'),
+        'estop_clear' => tr('emergency stop pressed', '急停按着'),
+        'loc_ok' => tr("doesn't know where it is", '不知道自己在哪'),
+        'control' => tr("the site doesn't have control", '控制权不在站点'),
+        _ => tr('not ready', '没就绪'),
+      }
+  ];
+  final id = '${it['robot'] ?? ''}';
+  return tr("$id is not ready right now (${words.join(', ')}): it won't run unless that is fixed in time",
+      '$id 现在${words.join('、')}，到点前不好就跑不了');
+}
+
 /// 易用性第 7 轮：「不会跑」去哪改（按角色；App 里改不了派遣方式，管理员去网页）。
 String patrolFixText(Map<String, dynamic> it, SiteSession? s) {
   final robot = '${it['robot'] ?? ''}';
@@ -597,16 +617,22 @@ class TodayPatrolList extends StatelessWidget {
                           style: NwText.labelLarge.copyWith(color: c.text, fontFeatures: const [FontFeature.tabularFigures()])),
                     )),
                 Expanded(
-                    child: Text(
-                        [
-                          if (items[i]['kind'] == 'adhoc') tr('One-off', '临时'),
-                          todayLabel(items[i]),
-                          if ('${items[i]['robot'] ?? ''}'.isNotEmpty) '${items[i]['robot']}',
-                          if (items[i]['kind'] == 'adhoc' && '${items[i]['by'] ?? ''}'.isNotEmpty) '${items[i]['by']}',
-                        ].join(' · '),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: NwText.bodyMedium.copyWith(color: c.text))),
+                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+                  Text(
+                      [
+                        if (items[i]['kind'] == 'adhoc') tr('One-off', '临时'),
+                        todayLabel(items[i]),
+                        if ('${items[i]['robot'] ?? ''}'.isNotEmpty) '${items[i]['robot']}',
+                        if (items[i]['kind'] == 'adhoc' && '${items[i]['by'] ?? ''}'.isNotEmpty) '${items[i]['by']}',
+                      ].join(' · '),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: NwText.bodyMedium.copyWith(color: c.text)),
+                  // 第 9 轮 W9-05：下一趟排给的机器人没就绪，这一行就写出来
+                  if (patrolNotReadyText(items[i]).isNotEmpty)
+                    Text(patrolNotReadyText(items[i]),
+                        key: Key('today-not-ready-$i'), style: NwText.bodySmall.copyWith(color: c.warning)),
+                ])),
                 const SizedBox(width: Nw.s8),
                 Builder(builder: (_) {
                   final (label, tone) = patrolStateText('${items[i]['state']}', _skippedOf(items[i]));

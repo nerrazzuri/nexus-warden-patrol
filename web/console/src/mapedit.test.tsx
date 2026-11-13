@@ -91,6 +91,21 @@ describe("地图编辑器", () => {
     expect(location.hash).toContain("&from=3");
   });
 
+  it("第 9 轮 W9-13:橡皮擦 / 画障碍点第一下就画出笔刷大小的圆(以前第二下才看得到)", async () => {
+    const { container: c } = page();
+    await waitFor(() => expect(c.querySelector('.mapedit[data-ready]')).not.toBeNull());
+    for (const tool of ["erase", "obstacle"]) {
+      fireEvent.click(c.querySelector(`[data-tool="${tool}"]`)!);
+      fireEvent.click(btn(c, "画笔"));
+      fireEvent.click(c.querySelector(".pick")!);
+      const dot = c.querySelectorAll(`circle.me-brush.${tool}`);
+      expect(dot.length, tool).toBe(1);
+      // 半径 = 笔刷粗细的一半(默认 0.3 m,图上一像素 0.1 m → 1.5 像素)
+      expect(Number(dot[0].getAttribute("r"))).toBeCloseTo(1.5);
+      fireEvent.click(btn(c, "取消"));
+    }
+  });
+
   it("W61 画笔首尾接上:预览里圈内填满(跟站点一样整块擦)", async () => {
     const seq: [number, number][] = [[10, 10], [60, 10], [60, 60], [10, 60], [11, 11]];
     let i = 0;

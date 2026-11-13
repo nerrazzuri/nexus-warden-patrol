@@ -311,6 +311,7 @@ ALERT: dict[str, str] = {
     "release_failed": "update.release_failed", "upload_backlog": "evidence.upload_backlog",
     "bundle_lag": "sched.bundle_lag", "clock_skew": "net.clock_skew",
     "schedule_skipped": "sched.missed", "schedule_blocked": "sched.no_robot",
+    "schedule_waiting": "sched.no_robot",
     "schedule_interrupted": "sched.interrupted", "incident_flood": "site.incident_flood",
     "robot_offline_idle": "robot.offline_idle", "bind_request": "net.bind_request",
     "wifi_change": "net.wifi_change", "account_request": "site.account_request",

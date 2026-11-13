@@ -238,6 +238,14 @@ describe("model", () => {
     expect(robotState(ok, undefined, true)).toBe("charging");
     expect(robotState(ok, undefined, false)).toBe("idle");
   });
+  it("第 9 轮 W9-05:没任务、蹲着或趴着写「没站起来」(跟 App 一样),算 P2", () => {
+    const down = { ...robot, status: { ...robot.status!, ready: { estop_clear: true, motion: false } } };
+    expect(robotState(down, undefined, false)).toBe("notstanding");
+    expect(abnormal("notstanding")).toBe("p2");
+    expect(DICTS.zh.st_notstanding).toBe("没站起来");
+    const busy = { ...down, status: { ...down.status!, task: { kind: "patrol", state: "running" } } };
+    expect(robotState(busy, undefined, false)).toBe("patrolling");
+  });
   it("巡的是哪张图", () => {
     expect(robotMap(robot)).toEqual({ map_id: "estate-1", version: "7" });
     expect(robotMap({ ...robot, capabilities: null })).toBeNull();

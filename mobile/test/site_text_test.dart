@@ -7,6 +7,17 @@ void main() {
   setUp(() => appLang.value = AppLang.en);
   tearDown(() => appLang.value = AppLang.zh);
 
+  test('第 9 轮 W9-10：中文界面站点原话的半角标点换全角（前面是数字、字母也换）；报警标题也换', () {
+    appLang.value = AppLang.zh;
+    expect(zhPunct('已用 86%,剩 30 GB:到 90% 就不接新的巡逻(没传完的不删)'), '已用 86%，剩 30 GB：到 90% 就不接新的巡逻（没传完的不删）');
+    expect(alertTitle('schedule_missed', '排程 route-1-2 本轮未执行:到点没有能派的机器人'), '排程 route-1-2 本轮未执行：到点没有能派的机器人');
+    expect(zhPunct('10:30 在 home:3'), '10:30 在 home:3');
+    expect(siteKnown('从 7 清了 337 处零星噪点(773 格)'), '从第 7 版清了 337 处零星噪点（773 格）');
+    expect(siteKnown('一楼夜巡'), '一楼夜巡');
+    appLang.value = AppLang.en;
+    expect(siteKnown('从 7 清了 337 处零星噪点(773 格)'), 'Noise cleanup of version 7: removed 337 specks (773 cells)');
+  });
+
   test('巡逻跳点 + 导航被拒 + 规划失败：整句英文', () {
     expect(siteText('跳过 1 个点(P2):导航拒了: goto 被设备拒绝: 规划失败(goal_blocked):终点在障碍、禁行区里或贴得太近'),
         'Skipped 1 point (P2): navigation refused: no path — the destination is inside or too close to an obstacle or no-go area');

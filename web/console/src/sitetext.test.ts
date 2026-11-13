@@ -8,6 +8,13 @@ beforeEach(() => { lang.value = "en"; });
 afterEach(() => { lang.value = "zh"; });
 
 describe("站点原文翻成英文", () => {
+  it("第 9 轮 W9-08:未就绪的每一样都翻,不夹中文", () => {
+    const s = siteText("B 未就绪:没站起来(蹲着、趴着,或运动模式没就绪)");
+    expect(s.text).toBe("B is not ready (not standing (crouched, lying down, or motion not ready))");
+    expect(siteText("A 未就绪:急停按着、定位不可用").text).toBe("A is not ready (emergency stop is pressed; it doesn't know where it is)");
+    expect(CJK.test(siteText("排程 route-1-2 本轮未执行:B 未就绪:没站起来(蹲着、趴着,或运动模式没就绪)").text)).toBe(false);
+  });
+
   it("巡逻跳点 + 导航被拒 + 规划失败(goal_blocked):整句都是英文", () => {
     const s = siteText("跳过 1 个点(P2):导航拒了: goto 被设备拒绝: 规划失败(goal_blocked):终点在障碍、禁行区里或贴得太近");
     expect(s.text).toBe("Skipped 1 point (P2): navigation refused: no path — the destination is inside or too close to an obstacle or no-go area");
@@ -102,6 +109,14 @@ describe("第 3 轮 zh N9", () => {
     expect(zhPunct("不能派(地图 home:3 没确认),10:30 再试")).toBe("不能派（地图 home:3 没确认），10:30 再试");
     expect(zhPunct("见 http://a.b")).toBe("见 http://a.b");
     expect(zhPunct("Battery 12%")).toBe("Battery 12%");
+    // 第 9 轮 W9-10:前面是数字、字母,后面是汉字的也换
+    expect(zhPunct("已用 86%,剩 30 GB:到 90% 就不接新的巡逻(没传完的不删)")).toBe("已用 86%，剩 30 GB：到 90% 就不接新的巡逻（没传完的不删）");
+    expect(zhPunct("排程 route-1-2 本轮未执行:到点没有能派的机器人")).toBe("排程 route-1-2 本轮未执行：到点没有能派的机器人");
+    expect(zhPunct("编号 route-1(不变)")).toBe("编号 route-1（不变）");
+    const { siteKnown: known } = await import("./sitetext");
+    lang.value = "zh";
+    expect(known("从 7 清了 337 处零星噪点(773 格)")).toBe("从第 7 版清了 337 处零星噪点（773 格）");
+    lang.value = "en";
   });
 });
 

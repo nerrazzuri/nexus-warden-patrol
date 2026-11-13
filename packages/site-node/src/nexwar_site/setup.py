@@ -76,7 +76,8 @@ def setup_view(db: Any, dispatcher: Any, *, skip: set[str] | None = None) -> dic
     # 日程要跑的路线跑不了(不存在、画在别的版本上)的不算排好了
     sched = [(str(r["entry_id"]), _parse(r["definition"]).get("mission"))
              for r in db.query("SELECT entry_id, definition FROM route_schedules")]
-    blocked = sorted(eid for eid, mission in sched
+    from nexwar_site.names import schedule_name  # 第 9 轮 W9-01:写日程显示名
+    blocked = sorted(schedule_name(db, eid) for eid, mission in sched
                      if mission not in all_routes or not runnable(*all_routes[str(mission)]))
     # P1-87:登记了但文件丢了的不算有地图(跟地图页一致)
     store = getattr(dispatcher, "maps", None)
@@ -92,7 +93,8 @@ def setup_view(db: Any, dispatcher: Any, *, skip: set[str] | None = None) -> dic
         "standby": (bool(loaded) and not no_standby and not no_map,
                     {"robots": no_standby, "at_home": at_home, "no_map": no_map}),
         "routes": (routes_ok, routes_detail),
-        "schedule": (bool(sched) and len(blocked) < len(sched), {"blocked": blocked}),
+        # 第 9 轮 W8-08 尾巴:有一条跑不了就不打勾(以前打着勾又写「跑不了」)
+        "schedule": (bool(sched) and not blocked, {"blocked": blocked}),
         "arming": (_count(db, "SELECT COUNT(*) FROM arming_slots") > 0, {}),
         "accounts": (people >= 2, {"count": people}),
         "push": (_count(db, "SELECT COUNT(*) FROM push_devices") > 0, {}),

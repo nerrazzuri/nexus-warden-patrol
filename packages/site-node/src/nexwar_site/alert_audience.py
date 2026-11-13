@@ -50,7 +50,8 @@ _OWNER = ("agent_args_skipped", "preflight_refused", "agent_too_old", "archive_f
           "map_ready", "payload_amp", "purged_incoming_stuck", "push_failed",
           "recording_delete_failed", "recording_dropped", "recording_failed", "recording_trimmed",
           "release_failed", "rtk", "run_done", "run_start", "schedule_blocked", "schedule_died",
-          "schedule_interrupted", "schedule_skipped", "site_disk_low", "site_too_old",
+          "schedule_interrupted", "schedule_skipped", "schedule_waiting", "site_disk_low",
+          "site_too_old",
           "upload_backlog", "upload_refused", "watchdog_died")
 
 AUDIENCE_OF: dict[str, Audience] = {

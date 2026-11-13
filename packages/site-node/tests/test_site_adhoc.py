@@ -165,8 +165,19 @@ def test_撞上日程排到日程走完之后_不派_告诉派的人排到几点
     assert got["start_after_ms"] == 毫秒(22, 0) + est * 1000 + 60_000
     assert "22:00" in got["because"] and "loop" in got["because"]
     # 第 8 轮 W8-10:写日程名(多条日程跑同一条路线时分得清),路线名放括号里
-    assert "22:00 的日程 nightly(路线 loop)" in got["because"], got["because"]
+    assert "22:00 的日程「nightly」(路线「loop」)" in got["because"], got["because"]
     assert "排到" in t.alerts.got[0]["title"]
+
+
+def test_W901_撞日程的说明写排程和路线的显示名(台):
+    t = 台
+    with t.db.tx() as c:
+        c.execute("UPDATE route_schedules SET title='夜巡' WHERE entry_id='nightly'")
+        c.execute("UPDATE routes SET title='一楼夜巡' WHERE route_id='loop'")
+    t.now["t"] = 毫秒(21, 59)
+    got = 跑(t.desk.submit("A", 任务定义(), label="loop", by="gina"))
+    assert "22:00 的日程「夜巡」(路线「一楼夜巡」)" in got["because"], got["because"]
+    assert "nightly" not in got["because"]
 
 
 def test_正在跑日程也排到后面(台):
@@ -182,7 +193,7 @@ def test_正在跑日程也排到后面(台):
                   (毫秒(19, 50),))
     got = 跑(t.desk.submit("A", 任务定义(), label="loop", by="gina"))
     assert got["queued"] is True and "正在执行的日程" in got["because"]
-    assert "正在执行的日程 nightly(路线 loop)" in got["because"], got["because"]
+    assert "正在执行的日程「nightly」(路线「loop」)" in got["because"], got["because"]
 
 
 def test_日程没写哪台_别的台也能跑就不算撞_别的台跑不了就算(台):
@@ -334,6 +345,24 @@ def test_minor37_run_late_的窗口过了_还会补跑_写等机器人_不写没
     # 过了这一天(不跨午夜的排程,第二天就不补这一轮了)→ 没跑
     old = today_view(db, now_ms=毫秒(10, 0, 0, 16), day="2027-03-15")["items"][0]
     assert old["state"] == "missed"
+    db.close()
+
+
+def test_W903_结束原因只是代号的不给人看_说了话的照给(tmp_path):
+    import json
+
+    from nexwar_site.today import _terminal
+    db = SiteDB(tmp_path / "s.db")
+    for i, (kind, why) in enumerate([("task_aborted", "abort"), ("task_done", "done"),
+                                     ("task_failed", "导航失败:前面堵住了")]):
+        with db.tx() as c:
+            c.execute("INSERT INTO events(robot_id, kind, data, received_at, event_id, seq, "
+                      "stamp, boot_id) VALUES ('A', ?, ?, ?, ?, ?, ?, 'b')",
+                      (kind, json.dumps({"task_id": f"t{i}", "reason": why}), 1000 + i,
+                       f"e{i}", i, 1000 + i))
+    assert _terminal(db, "A", "t0")[2] == ""
+    assert _terminal(db, "A", "t1")[2] == ""
+    assert "堵住" in _terminal(db, "A", "t2")[2]
     db.close()
 
 
@@ -604,6 +633,19 @@ def test_易用性第7轮_整页今天的巡逻_按路线的那一版比(tmp_pat
     db.close()
 
 
+def test_W905_下一次排给的机器人蹲着_那一行带上没就绪的哪几样(tmp_path):
+    db = SiteDB(tmp_path / "s.db")
+    from test_site_schedule import 排程
+    import_bundle(db, 打包(tmp_path, 1, schedule=排程.replace("    mission: loop\n",
+                                                              "    mission: loop\n    robot: A\n")),
+                  imported_by="alice", now_ms=1)
+    v = today_view(db, now_ms=毫秒(20, 0), not_ready=lambda rid: ["motion"] if rid == "A" else [])
+    assert v["items"][0]["state"] == "next" and v["items"][0]["not_ready"] == ["motion"]
+    v = today_view(db, now_ms=毫秒(20, 0), not_ready=lambda rid: [])
+    assert "not_ready" not in v["items"][0]
+    db.close()
+
+
 def _一直巡逻跑了(t, 圈: int, 收尾: str, at_ms: int) -> None:
     """A 上一趟一直巡逻(两个点一圈)跑了 ``圈`` 圈,然后报 ``收尾``。"""
     mission = {**任务定义(), "policy": {"loops": 0}}
@@ -644,7 +686,9 @@ def test_第8轮_W8_03_被日程接替的一直巡逻_不算未完成_写跑了�
     it = _临时(t)
     assert it["state"] == "handed_over", it
     assert it["reason"] == "", "不露 preempted 这种代号"
-    assert it["handover"] == {"by": "schedule", "name": "nightly", "laps": 6}
+    # 第 9 轮 W9-01：多带 schedule_id(站点按它换成日程显示名)
+    assert it["handover"] == {"by": "schedule", "name": "nightly", "laps": 6,
+                              "schedule_id": "nightly"}
     assert it["forever"] is True
 
 

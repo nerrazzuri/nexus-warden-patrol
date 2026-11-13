@@ -879,9 +879,16 @@ class _Handler(TlsHandlerMixin):
                     caps = c.capabilities if c is not None else None
                     p = caps.tasks.get("patrol", {}) if caps is not None else {}
                     return (p.get("map_id"), p.get("map_version"))
+
+                def not_ready(rid: str) -> list[str]:
+                    c = disp.clients.get(rid)
+                    s = c.status if c is not None else None
+                    if s is None or not s.online:
+                        return []
+                    return [k for k, v in s.ready.to_wire().items() if k != "schema" and not v]
                 return self._send_json(200, self.site.loop.call(lambda: _sync(
                     today_view, disp.db, now_ms=self.site._now(), adhoc=desk,
-                    day=day, loaded=loaded)))
+                    day=day, loaded=loaded, not_ready=not_ready)))
             m = _ADHOC.match(path)
             if m is not None:
                 return self._adhoc_cancel(method, unquote(m.group(1)), user)

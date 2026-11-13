@@ -13,6 +13,11 @@ import 'nw/nw_theme.dart';
 import 'nw/nw_widgets.dart';
 import 'widget/bar_actions.dart';
 
+/// 第 9 轮 W9-12：标原点时自动加的待命点（名字是 home）写「在原点（标原点时自动加的）」，不写 home。
+String standbyName(Map p) => p['name'] == 'home'
+    ? tr('At the origin (added when the origin was marked)', '在原点（标原点时自动加的）')
+    : '${p['name']}';
+
 class SiteStandbyPage extends StatefulWidget {
   final SiteApi api;
   final String robotId;
@@ -242,7 +247,7 @@ class _SiteStandbyPageState extends State<SiteStandbyPage> {
                     Text(tr('No origin marked yet', '尚未标原点'), style: body.copyWith(color: c.textSecondary)),
                   for (final h in _homes)
                     Text(
-                      '${h['name']}  ${_xy(h)}',
+                      '${h['name'] == 'home' ? tr('Origin', '原点') : h['name']}  ${_xy(h)}',
                       key: Key('home-${h['map_id']}-${h['map_version']}'),
                       style: body,
                     ),
@@ -265,7 +270,7 @@ class _SiteStandbyPageState extends State<SiteStandbyPage> {
                             dense: true,
                             shape: Border(bottom: BorderSide(color: c.outline)),
                             title: Text(
-                                '${p['name']}${p['default'] == true ? tr(' (default)', '（默认）') : ''}'),
+                                '${standbyName(p)}${p['default'] == true ? tr(' (default)', '（默认）') : ''}'),
                             subtitle: Text(_xy(p)),
                             trailing: Wrap(
                               spacing: 4,

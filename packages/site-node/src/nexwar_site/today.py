@@ -14,6 +14,7 @@ App 的值守页、日程页,网页的值守页都用这一份(``GET /api/patrol
 from __future__ import annotations
 
 import json
+import re
 from collections.abc import Callable
 from datetime import datetime, timedelta
 from typing import Any
@@ -26,6 +27,10 @@ from nexwar_site.sitetime import site_tz
 _RESULT = {"done": "done", "failed": "failed", "aborted": "aborted", "preempted": "handed_over"}
 _TERMINAL = {"task_done": "done", "task_failed": "failed", "task_aborted": "aborted",
              "task_preempted": "handed_over"}
+#: 第 9 轮 W9-03:机器人报的结束原因只是一个代号(``abort``、``done``、``halt``……)时不给人看 ——
+#: 状态(叫停的、完成)已经说清楚了。
+_CODE_ONLY = re.compile(r"^\s*(abort(ed)?|done|halt(ed)?|stop(ped)?|cancel(l?ed)?|preempted|ok|"
+                        r"finished|completed?)\s*$", re.I)
 #: 排程账里「这一轮到点了还没起跑」的几种去向(还在窗口里就是 waiting)。
 _PENDING = ("busy", "no_robot", "displaced", "supervised", "weather", "skew", "ambiguous")
 
@@ -52,6 +57,8 @@ def _terminal(db: Any, robot: str, task_id: str) -> tuple[str, int, str, int] | 
         skipped = s if isinstance(s, int) and not isinstance(s, bool) and s > 0 else 0
     if rows[0]["kind"] == "task_preempted":
         why = ""                                      # 不露 preempted 这种代号;谁接替的见 _handover
+    if _CODE_ONLY.match(why):
+        why = ""                                      # 第 9 轮 W9-03:代号不给人看
     return _TERMINAL[rows[0]["kind"]], int(rows[0]["received_at"]), why, skipped
 
 
@@ -70,7 +77,9 @@ def _handover(db: Any, robot: str, task_id: str, at_ms: int) -> dict[str, Any]:
                     "ORDER BY decided_at DESC LIMIT 1",
                     (robot, task_id, at_ms - 120_000, at_ms + 10_000))
     if runs:
-        out.update(by="schedule", name=str(runs[0]["entry_id"]))
+        from nexwar_site.names import schedule_name  # 第 9 轮 W9-01:写显示名
+        out.update(by="schedule", name=schedule_name(db, runs[0]["entry_id"]),
+                   schedule_id=str(runs[0]["entry_id"]))
         return out
     cmds = db.query("SELECT task_id FROM commands WHERE robot_id=? AND task_id<>? "
                     "AND issued_at BETWEEN ? AND ? ORDER BY issued_at DESC LIMIT 1",
@@ -107,9 +116,13 @@ def _stopped_by(db: Any, robot: str, start_ms: int, end_ms: int) -> str:
 
 def today_view(db: Any, *, now_ms: int, adhoc: Any = None,
                day: str | None = None,
-               loaded: Callable[[str], tuple[Any, Any]] | None = None) -> dict[str, Any]:
+               loaded: Callable[[str], tuple[Any, Any]] | None = None,
+               not_ready: Callable[[str], list[str]] | None = None) -> dict[str, Any]:
     """今天(或 ``day`` = ``YYYY-MM-DD`` 那天,站点时区)的每一趟巡逻。往天的按现在这份日程排轮次,
-    跑了的、没跑的照库里的记录写(liang-d5 第 5 轮前:往天的巡逻在网页上查不到)。"""
+    跑了的、没跑的照库里的记录写(liang-d5 第 5 轮前:往天的巡逻在网页上查不到)。
+
+    ``not_ready``:机器人现在哪几样没就绪(``motion``、``estop_clear``……;就绪了是空的)。
+    「下一次」那一趟排给的机器人没就绪,那一行带上 ``not_ready``(第 9 轮 W9-05)。"""
     act = active_bundle(db)
     tz = act.schedule.tz() if act is not None else site_tz(db)
     now = datetime.fromtimestamp(now_ms / 1000, tz=tz)
@@ -150,6 +163,10 @@ def today_view(db: Any, *, now_ms: int, adhoc: Any = None,
     first = next((it for it in items if it["state"] == "later"), None)
     if first is not None:
         first["state"] = "next"                         # 还没到点的第一趟
+        rid = str(first.get("robot") or "")
+        bad = not_ready(rid) if rid and not_ready is not None else []
+        if bad:
+            first["not_ready"] = bad
     off = now.utcoffset()
     return {"date": start.strftime("%Y-%m-%d"), "timezone": str(tz),
             # 手机、网页按站点的钟显示时刻(外审 W53-1 #12)

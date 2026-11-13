@@ -77,6 +77,9 @@ TELL_NOW = frozenset({"dispatch_failed", "alarm", "skip", "supervised"})
 TELL_LATER = frozenset({"no_robot", "ambiguous", "skew"})
 #: 宽限期上限(窗口更短就按窗口)。
 GRACE_MS = 5 * 60_000
+#: 第 9 轮 W9-02:``run_late`` 的排程到点派不出去,窗口过了也还会补跑 —— 不说「没跑」,说「在等」
+#: (P2);补跑起来了说「起跑了」(那条提醒自己关);等到被下一轮顶掉都没跑成,才说「放弃了」(P1)。
+LATE_WAITING, LATE_STARTED, LATE_GAVE_UP = "late_waiting", "late_started", "late_gave_up"
 #: 回执超时之后等多久还没见狗在跑这一趟,算派丢了。
 LOST_MS = 2 * 60_000
 #: 补说只看最近这么久的账(站点停机跨了几天,更老的不再翻出来)。
@@ -98,6 +101,8 @@ class SiteScheduler:
         self.db = db
         #: ``(排程 id, 狗或 None, 去向, 备注)``:这一轮没跑(W00c6c),见模块说明。
         self.on_outcome = on_outcome
+        #: 当前任务包里错过了照补(``on_missed: run_late``)的排程(每拍更新,第 9 轮 W9-02)。
+        self._run_late: set[str] = set()
         #: 天气(W29,``weather.WeatherDesk``):雷暴时到点不起跑。站点主程序接上。
         self.weather: Any = None
         #: 站点这头占着的狗(驱离会话;系统审查 S05):狗上一时没有任务(没配保持距离、补派窗口、
@@ -169,11 +174,26 @@ class SiteScheduler:
                                   "scheduled_ms=? AND told_ms IS NOT NULL LIMIT 1",
                                   (entry_id, scheduled_ms)))
 
+    def _waited(self, entry_id: str, scheduled_ms: int) -> bool:
+        """这一轮说过「在等」(``run_late``,第 9 轮 W9-02):说过的是派不出去那几种。"""
+        return bool(self.db.query(
+            "SELECT 1 FROM schedule_runs WHERE entry_id=? AND scheduled_ms=? AND told_ms IS NOT "
+            f"NULL AND outcome IN ({','.join('?' * len(TELL_LATER))}) LIMIT 1",
+            (entry_id, scheduled_ms, *sorted(TELL_LATER))))
+
     def _tell(self, row_id: int, entry_id: str, scheduled_ms: int, robot_id: str | None,
               outcome: str, note: str) -> None:
-        """这一轮还没说过就说,说成了记在 ``row_id`` 那一行上。"""
-        if self.on_outcome is None or self._told(entry_id, scheduled_ms):
+        """这一轮还没说过就说,说成了记在 ``row_id`` 那一行上。``run_late`` 的派不出去说成「在等」;
+        说过「在等」的那一轮被顶掉(``skip``)再说一次「放弃了」。"""
+        if self.on_outcome is None:
             return
+        if self._told(entry_id, scheduled_ms):
+            if not (outcome == "skip" and entry_id in self._run_late
+                    and self._waited(entry_id, scheduled_ms)):
+                return
+            outcome = LATE_GAVE_UP
+        elif outcome in TELL_LATER and entry_id in self._run_late:
+            outcome = LATE_WAITING
         try:
             self.on_outcome(entry_id, robot_id, outcome, note)
         except Exception:
@@ -277,6 +297,7 @@ class SiteScheduler:
             return
         now_ms = self._now()
         now = datetime.fromtimestamp(now_ms / 1000, tz=act.schedule.tz())
+        self._run_late = {e.id for e in act.schedule.entries if e.on_missed == "run_late"}
         decisions = []
         for e in act.schedule.entries:
             d = decide(e, now=now, last_started_ms=self.last_started(e.id))
@@ -387,7 +408,9 @@ class SiteScheduler:
                     reason = f"{rid} 加载的地图是 {loaded[0]},路线画在 {mission.map_id} 上"
                 elif loaded[1] != mission.map_version:
                     # R1:同一张图换了版本(重建过),老坐标不可信 —— 跟图不对一样不派,挑别的狗
-                    reason = version_mismatch_text(entry.mission, mission.map_id,
+                    from nexwar_site.names import route_name
+                    reason = version_mismatch_text(route_name(self.db, entry.mission),
+                                                   mission.map_id,
                                                    mission.map_version, rid, str(loaded[1]))
             if reason:
                 why.append(reason)
@@ -533,6 +556,11 @@ class SiteScheduler:
             return
         if r["ack"]["result"] == "accepted":
             log.info("排程 %s 到点(%s),派 %s 给 %s", entry.id, d.kind.value, entry.mission, rid)
+            if self.on_outcome is not None and self._waited(entry.id, scheduled_ms):
+                try:                                      # 第 9 轮 W9-02:在等的那条提醒关掉
+                    self.on_outcome(entry.id, rid, LATE_STARTED, f"{rid} 补跑了这一轮")
+                except Exception:
+                    log.exception("排程 %s 补跑起来了,告诉告警源没成", entry.id)
 
     # ------------------------------------------------------------ 视图
 

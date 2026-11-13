@@ -22,9 +22,11 @@ const alert = (o: Partial<Alert>): Alert => ({
 let posts: { url: string; body: unknown }[] = [];
 let resolveStatus = 200;
 
+let extraRoutes: Record<string, string>[] = [];
 beforeEach(() => {
   lang.value = "zh";
   posts = [];
+  extraRoutes = [];
   resolveStatus = 200;
   vi.stubGlobal("IntersectionObserver", undefined);
   setFetch(((url: string, init?: RequestInit) => {
@@ -32,7 +34,8 @@ beforeEach(() => {
       posts.push({ url, body: JSON.parse(String(init.body ?? "{}")) });
       return Promise.resolve(url.endsWith("/resolve") && resolveStatus !== 200 ? json({ error: "没有这条告警" }, resolveStatus) : json({}));
     }
-    if (url.startsWith("/api/routes?")) return Promise.resolve(json({ revision: 1, timezone: "UTC", routes: [{ id: "loop-test", map_id: "m1", map_version: "1", title: "一楼夜巡" }], schedules: [] }));
+    if (url.startsWith("/api/routes?")) return Promise.resolve(json({ revision: 1, timezone: "UTC", routes: [{ id: "loop-test", map_id: "m1", map_version: "1", title: "一楼夜巡" }, ...extraRoutes], schedules: [] }));
+    if (url === "/api/robots") return Promise.resolve(json({ robots: [{ robot_id: "B", map: { id: "m1", version: "1" } }] }));
     if (url.startsWith("/api/robots/B/patrol-plan")) return Promise.resolve(json({ estimate_s: 600, start_ms: 0, queued: false, because: "", loops: 3 }));
     if (url.startsWith("/api/cameras")) return Promise.resolve(json({ cameras: [{ name: "cam3", zone: "北区", rtsp: true }] }));
     return Promise.resolve(json({}, 404));
@@ -308,6 +311,31 @@ describe("第 8 轮 W8-09 保安网页派巡逻", () => {
     await waitFor(() => expect(document.querySelector("[data-plan]")).not.toBeNull());
     fireEvent.click(Array.from(document.querySelectorAll("dialog button")).find((b) => b.textContent === "派出")!);
     await waitFor(() => expect(posts).toContainEqual({ url: "/api/robots/B/patrol", body: { mission_id: "loop-test", loops: 3 } }));
+  });
+});
+
+describe("第 9 轮 W8-04 总览机器人列表写第几圈", () => {
+  it("在跑几圈巡逻的那台写「第 2 / 3 圈」", () => {
+    const { container: c } = page([], [unit("A", "patrolling", { task: "第 2 / 3 圈" }), unit("B", "idle")]);
+    const rows = Array.from(c.querySelectorAll(".duty-row"));
+    expect(rows.find((r) => r.textContent?.includes("A"))!.querySelector("[data-row-task]")!.textContent).toBe("第 2 / 3 圈");
+    expect(rows.find((r) => r.textContent?.includes("B"))!.querySelector("[data-row-task]")).toBeNull();
+  });
+});
+
+describe("第 9 轮 W9-04 保安派巡逻:跑不了的路线灰掉", () => {
+  it("画在别的地图版本上的路线灰掉,写要管理员按新地图重画", async () => {
+    extraRoutes = [{ id: "demo-loop", map_id: "m1", map_version: "11" }];
+    const { container: c } = page([]);
+    fireEvent.click(c.querySelector('[data-robot-patrol="B"]')!);
+    const route = await waitFor(() => {
+      const x = document.querySelector('select[name="route"]') as HTMLSelectElement;
+      expect(x.options.length).toBe(3);
+      expect(x.options[2].disabled).toBe(true);
+      return x;
+    });
+    expect(route.options[1].disabled).toBe(false);
+    expect(route.options[2].textContent).toContain("要管理员按新地图重画");
   });
 });
 

@@ -84,6 +84,13 @@ export function labelRows(pts: [number, number][], near: number): number[] {
   return rows;
 }
 
+/** 第 9 轮 W6-15:名字画在点下面(``r`` 点的半径、``h`` 一行字高)会压在另一台的点上的,挪到点上面。
+ *  返回每个点的名字要不要挪上去。 */
+export function labelAbove(pts: [number, number][], r: number, h: number): boolean[] {
+  return pts.map(([x, y], i) => pts.some(([ox, oy], j) => j !== i
+    && Math.abs(ox - x) < r * 2 + h && oy > y && oy - y < r * 2 + h * 1.5));
+}
+
 /**
  * W6-15:屏上靠得比 ``near`` 还近的几个点(同一处的两台机器人)围着它们的中心摊成一个小圈,
  * 相邻两个隔开 ``near``;隔得远的原样。画的时候再拉一根细线回原位。

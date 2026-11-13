@@ -465,6 +465,54 @@ void main() {
       expect(sent!.containsKey('updated_by'), isFalse);
     });
 
+    testWidgets('第 9 轮 W9-01 / A9-01：日程写日程名和路线显示名；加日程默认选跑得了的、跑不了的灰掉；只许手动派的写明', (t) async {
+      final api = FakeApi('owner')
+        ..scheduleBody = <String, dynamic>{'missions': <dynamic>['old', 'route-1']}
+        ..routesBody = <String, dynamic>{'revision': 1, 'timezone': 'UTC', 'schedules': <dynamic>[], 'routes': <dynamic>[
+          <String, dynamic>{'id': 'old', 'title': '', 'map_id': 'estate-1', 'map_version': '11'},
+          <String, dynamic>{'id': 'route-1', 'title': '一楼夜巡', 'map_id': 'estate-1', 'map_version': '7'},
+        ]}
+        ..robotsOverride = <Map<String, dynamic>>[
+          <String, dynamic>{'robot_id': 'A', 'map': <String, dynamic>{'id': 'estate-1', 'version': '7'}},
+          <String, dynamic>{'robot_id': 'B', 'manual_only': true, 'map': <String, dynamic>{'id': 'estate-1', 'version': '7'}},
+        ]
+        ..schedules = <String, dynamic>{'timezone': 'UTC', 'revision': 1, 'schedules': <dynamic>[
+          <String, dynamic>{'id': 'route-1-1', 'title': '夜巡测试', 'mission': 'route-1', 'at': '10:05',
+            'days': <dynamic>['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'], 'robot': 'B', 'revision': 1},
+        ]};
+      Map<String, dynamic>? sent;
+      api.onSaveSchedule = (b) => sent = b;
+      _size(t);
+      await t.pumpWidget(MaterialApp(home: SchedulePage(api: api)));
+      await t.pumpAndSettle();
+      await t.tap(find.byKey(SchedulePage.weekTabKey));
+      await t.pumpAndSettle();
+      expect(find.textContaining('夜巡测试 · 一楼夜巡 · B'), findsOneWidget);
+      expect(find.textContaining('route-1'), findsNothing);
+      await t.tap(find.byKey(SchedulePage.addKey));
+      await t.pumpAndSettle();
+      expect(find.text('一楼夜巡'), findsWidgets, reason: '默认选跑得了的那条，写显示名');
+      await t.tap(find.byKey(const Key('sched-route')));
+      await t.pumpAndSettle();
+      expect(find.textContaining('old（画在第 11 版地图上，没有机器人在用）'), findsWidgets);
+      await t.tap(find.text('一楼夜巡').last);
+      await t.pumpAndSettle();
+      await t.tap(find.byKey(const Key('sched-robot')));
+      await t.pumpAndSettle();
+      expect(find.text('哪台空就哪台'), findsWidgets);
+      expect(find.textContaining('B（只许手动派，日程不会派它）'), findsWidgets);
+      await t.tap(find.text('哪台空就哪台').last);
+      await t.pumpAndSettle();
+      expect(find.textContaining('约约'), findsNothing);
+      await t.enterText(find.byKey(const Key('sched-name')), '早巡');
+      await t.tap(find.byKey(const Key('sched-day-sun')));
+      await t.pump();
+      await t.tap(find.byKey(const Key('sched-save')));
+      await t.pumpAndSettle();
+      expect(sent!['mission'], 'route-1');
+      expect(sent!['title'], '早巡');
+    });
+
     testWidgets('保安看日程：只看，不能加', (t) async {
       final api = FakeApi('guard');
       _size(t);
