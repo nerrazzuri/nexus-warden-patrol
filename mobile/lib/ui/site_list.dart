@@ -676,7 +676,7 @@ class _SiteLoginPageState extends State<SiteLoginPage> {
                                       buttonKey: SiteLoginPage.problemKey,
                                       variant: NwButtonVariant.ghost,
                                       size: NwButtonSize.small,
-                                      label: tr("Can't sign in? Send logs", '登不上？上传日志'),
+                                      label: tr("Can't sign in? Report a problem", '登不上？报问题'),
                                       onPressed: _busy ? null : _problem),
                                 ),
                               ],

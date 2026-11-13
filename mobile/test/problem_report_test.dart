@@ -42,6 +42,9 @@ void main() {
           shared.add(name);
           return true;
         })));
+    // 第 9 轮 A6-07 尾巴：标题跟入口一样叫「报问题」
+    expect(find.text('报问题'), findsOneWidget);
+    expect(find.text('上传日志'), findsNothing);
     await tester.enterText(find.byKey(ProblemReportPage.noteKey), '大门口停住');
     await tester.tap(find.byKey(ProblemReportPage.otherKey));     // A6-07：「只传到站点」收在「其他方式」里
     await tester.pumpAndSettle();
