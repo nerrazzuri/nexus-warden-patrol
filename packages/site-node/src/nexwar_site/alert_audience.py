@@ -27,6 +27,7 @@ _HELP = ("stuck", "nav_blocked", "fallen", "force_flipped", "deter_cornered", "b
          "run_abort", "charge_failed", "dock_stuck", "loc_lost_paused", "loc_lost_idle",
          "estop_pressed", "nogo", "payload_siren", "payload_strobe", "payload_spotlight",
          "schedule_missed", "battery_swap", "standby_failed", "lease_expired", "suspend_stale",
+         "schedule_waiting",       # 第 10 轮 W9-02:迟到也跑的在等机器人(多半蹲着)—— 保安能处理
          "board_overheat",
          "zone_unwatched", "guard_stuck",      # W73:防区没人看 —— 保安盯摄像头或人去
          "swap_soon", "swap_needed", "guard_prep",   # W73 第四期:保安换电池 / 布防前先补能
@@ -48,7 +49,7 @@ _OWNER = ("agent_args_skipped", "preflight_refused", "agent_too_old", "archive_f
           "map_ready", "payload_amp", "purged_incoming_stuck", "push_failed",
           "recording_delete_failed", "recording_dropped", "recording_failed", "recording_trimmed",
           "release_failed", "rtk", "run_done", "run_start", "schedule_blocked", "schedule_died",
-          "schedule_interrupted", "schedule_skipped", "schedule_waiting", "site_disk_low",
+          "schedule_interrupted", "schedule_skipped", "site_disk_low",
           "site_too_old",
           "upload_backlog", "upload_refused", "watchdog_died")
 
