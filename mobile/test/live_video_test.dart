@@ -337,6 +337,24 @@ void main() {
     await teardown(t, ctl);
   });
 
+  testWidgets('A7-01 复测 / A6-08 同类：手机连不上站点时说手机这头，不说「站点显示机器人离线」', (WidgetTester t) async {
+    final StreamController<VideoHealth> ctl = StreamController<VideoHealth>();
+    await t.pumpWidget(wrap(LiveVideo(
+        baseUrl: 'http://127.0.0.1:9', camera: 'front', health: ctl.stream)));
+    ctl.add(const VideoHealth(<String, bool>{'front': true}));      // 先连上过
+    await t.pump();
+    ctl.add(const VideoHealth.unreachable());                          // 手机断网：问不到站点
+    await t.pump();
+    await t.pump();
+    expect(find.textContaining('站点显示此机器人离线'), findsNothing);
+    expect(find.textContaining('手机连不上站点'), findsOneWidget);
+    ctl.add(const VideoHealth(<String, bool>{'front': false}));     // 网回来了，站点说它真离线
+    await t.pump();
+    await t.pump();
+    expect(find.textContaining('站点显示此机器人离线'), findsOneWidget);
+    await teardown(t, ctl);
+  });
+
   testWidgets('掉线再回来要重新拉流', (WidgetTester t) async {
     /// **这一条是这个 widget 唯一的技术难点。**
     ///

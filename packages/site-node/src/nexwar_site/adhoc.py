@@ -35,6 +35,7 @@ from nexwar_contract.schedule import ScheduleEntry, occurrences_between
 from nexwar_site.catalog import active_bundle
 from nexwar_site.dispatcher import DispatchRefused
 from nexwar_site.priorities import MANUAL
+from nexwar_site.site_settings import SiteSettings
 
 log = logging.getLogger(__name__)
 
@@ -313,7 +314,9 @@ class AdhocDesk:
             # 按「现在再过一分钟」算 —— 不然手动的那趟优先级高,会把日程打断
             end = max(t0 + est * 1000, self._now() + 60_000)
             if end > start_ms:
-                found.append((end, f"正在执行的日程「{entry.mission if entry else running}」"))
+                # 第 8 轮 W8-10:写日程名,路线名放括号里(多条日程跑同一条路线时分得清)
+                found.append((end, f"正在执行的日程 {entry.id}(路线 {entry.mission})" if entry
+                              else f"正在执行的日程「{running}」"))
         tz = act.schedule.tz()
         a = datetime.fromtimestamp(start_ms / 1000, tz=tz)
         b = a + timedelta(seconds=dur_s)
@@ -329,7 +332,7 @@ class AdhocDesk:
                     continue
                 end = occ_ms + self._entry_est_s(act, robot, e) * 1000
                 if end > start_ms:
-                    found.append((end, f"{occ:%H:%M} 日程「{e.mission}」"))
+                    found.append((end, f"{occ:%H:%M} 的日程 {e.id}(路线 {e.mission})"))
         return max(found) if found else None
 
     def slot(self, robot: str, start_ms: int, dur_s: int) -> tuple[int, str]:
@@ -354,6 +357,8 @@ class AdhocDesk:
             c = self.collision(robot, now, est)
             return {"estimate_s": est, "start_ms": now, "queued": False, "because": "",
                     "forever": True, "interrupted_by": c[1] if c else "", "loops": 0,
+                    # 第 8 轮 W8-05:派单说明里写出电量线是多少(以前只说「站点设的巡逻电量线」)
+                    "return_pct": int(SiteSettings(self.db).patrol_return_pct()),
                     "utc_offset_min": self.offset_min()}
         t, because = self.slot(robot, now, est)
         # ``loops``:这一趟实际跑几圈(W76 外审 #8:手机看见这一项才给选圈数 —— 老站点不认 loops)

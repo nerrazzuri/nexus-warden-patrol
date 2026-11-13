@@ -53,7 +53,7 @@ class SiteVideoHealthPoller {
       if (cams.join(',') != cameras.value.join(',')) cameras.value = cams;
       h = VideoHealth(<String, bool>{for (final c in cams) c: up});
     } on Object {
-      h = const VideoHealth(<String, bool>{});
+      h = const VideoHealth.unreachable();
     } finally {
       _inFlight = false;
     }

@@ -206,7 +206,7 @@ export function ArmingPage({ say, now, role = "admin" }: { say: Say; now: number
         <div class="panel-head"><h1>{t("tabArming")}</h1></div>
         {tabs}
         {dirty && <p class="arm-dirty" role="status">{t("armDirtyOther")}</p>}
-        {sec === "patrols" ? <PatrolSchedules say={say} canEdit={canSchedule(role)} />
+        {sec === "patrols" ? <>{canDuty && <PatrolLine say={say} />}<PatrolSchedules say={say} canEdit={canSchedule(role)} /></>
           : sec === "guard" ? <GuardPanel say={say} now={now} canEdit={canSchedule(role)} /> : <DevicesPanel say={say} canEdit={isOwnerLike(role)} />}
       </section>
     );
@@ -561,3 +561,46 @@ function Exceptions({ list, say, onChange, on, mode, saved }: { list: Exception[
     </section>
   );
 }
+
+/** 第 8 轮 W8-05:全站一个的巡逻电量线 —— 放在「巡逻日程」(以前藏在「布防时间 → 交班」),自己存;
+ * 填错了框标红、说原因、存不了。 */
+function PatrolLine({ say }: { say: Say }) {
+  const [v, setV] = useState<string>("");
+  const [saved, setSaved] = useState<number | null>(null);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    api<DutySettings>("GET", "/api/duty-settings")
+      .then((d) => { const n = d.patrol_return_pct ?? 25; setSaved(n); setV(String(n)); })
+      .catch(() => { setSaved(25); setV("25"); });
+  }, []);
+  const n = Number(v);
+  const ok = v.trim() !== "" && Number.isInteger(n) && n >= 20 && n <= 60;
+  const save = async () => {
+    setBusy(true);
+    try {
+      await api("POST", "/api/duty-settings", { patrol_return_pct: n });
+      setSaved(n);
+      say(t("armPatrolLineSaved", { n }));
+    } catch (e) {
+      say(t("failed", { why: e instanceof ApiError ? e.message : String(e) }));
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <section class="panel arm-patrol-line" data-patrol-line="1">
+      <h2>{t("armPatrolReturn")}</h2>
+      <div class="row wrap">
+        <label class="field">{t("armPatrolLineField")}
+          <input name="patrolReturn" type="number" min={20} max={60} step={1} value={v} aria-invalid={ok ? "false" : "true"}
+            class={ok ? undefined : "bad"} onInput={(e) => setV(e.currentTarget.value)} />
+        </label>
+        <button type="button" class="btn primary" data-patrol-line-save="1" disabled={busy || !ok || n === saved}
+          onClick={() => void save()}>{t("save")}</button>
+      </div>
+      {!ok && <p class="small bad" role="alert">{t("armPatrolLineBad")}</p>}
+      <p class="muted small">{t("armPatrolReturnHint")}</p>
+    </section>
+  );
+}
+

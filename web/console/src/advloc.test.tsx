@@ -51,4 +51,14 @@ describe("定位页", () => {
     expect(c.textContent).toContain("在地图上");
     expect((c.querySelector("details.loc-detail") as HTMLDetailsElement).open).toBe(false);
   });
+  // minor #22:看得出哪台设了原点(当前用的那版图上)
+  it("每台写原点设了没有", () => {
+    const us: UnitInfo[] = [{ robot: robot({ home_set: true }), state: "idle", battery: 50, task: "" },
+      { robot: robot({ robot_id: "C", home_set: false }), state: "idle", battery: 50, task: "" },
+      { robot: robot({ robot_id: "D", home_set: null }), state: "idle", battery: 50, task: "" }];
+    const { container: c } = render(<LocPage units={us} alerts={[]} now={0} role="admin" />);
+    expect(c.querySelector('.loc-row[data-robot="A"] [data-home]')!.textContent).toBe("原点已设");
+    expect(c.querySelector('.loc-row[data-robot="C"] [data-home]')!.textContent).toBe("没设原点");
+    expect(c.querySelector('.loc-row[data-robot="D"] [data-home]')).toBeNull();
+  });
 });

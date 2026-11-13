@@ -41,7 +41,11 @@ String robotStatusLine(Map<String, dynamic> r) {
   final online = st['online'] == true && r['fresh'] == true;
   final task = st['task'];
   final lap = task is Map ? lapText(r['lap']) : '';      // W76：几圈的巡逻跑到第几圈
-  final taskText = task is Map ? '${taskLabel(task)}${lap.isEmpty ? '' : ' · $lap'}' : tr('Idle', '空闲');
+  final taskText = task is Map
+      ? '${taskLabel(task)}${lap.isEmpty ? '' : ' · $lap'}'
+      : robotNotStanding(r)
+          ? tr('Not standing (crouched or lying down)', '没站起来（蹲着或趴着）')
+          : tr('Idle', '空闲');
   final held = r['held'] is Map ? tr('Stopped · ', '已叫停 · ') : '';
   // W33：只许手动派的狗（站点自己不让它动）；狗确认看见人（决策 48）
   final manual = r['manual_only'] is Map ? tr('Manual only · ', '仅限手动 · ') : '';
@@ -126,10 +130,19 @@ class _SiteRobotPageState extends State<SiteRobotPage> {
     super.initState();
     _reload();
     _events = widget.api.events().listen(_onFeed, onError: (Object _) {}, cancelOnError: true);
+    // 易用性第 7 轮：别处（网页、手柄）改了它的姿态、任务，这一页开着也要跟上（以前要退出再进）
+    _poll = Timer.periodic(kRobotPageRefresh, (_) => unawaited(_reload(quiet: true)));
   }
+
+  Timer? _poll;
+  final List<Timer> _after = <Timer>[];
 
   @override
   void dispose() {
+    _poll?.cancel();
+    for (final x in _after) {
+      x.cancel();
+    }
     unawaited(_events?.cancel());
     super.dispose();
   }
@@ -153,12 +166,13 @@ class _SiteRobotPageState extends State<SiteRobotPage> {
     unawaited(_reload());
   }
 
-  Future<void> _reload() async {
+  /// [quiet]：定时刷新的，读不到不弹提示（断网时每几秒弹一次会刷屏；值守页有连不上的横幅）。
+  Future<void> _reload({bool quiet = false}) async {
     try {
       final v = await widget.api.robot(widget.robotId);
       if (mounted) setState(() => _view = v);
     } on SiteError catch (e) {
-      if (mounted) _say(e.toString());
+      if (mounted && !quiet) _say(e.toString());
     }
   }
 
@@ -551,6 +565,10 @@ class _SiteRobotPageState extends State<SiteRobotPage> {
     Future<void> go(Widget Function() page) async {
       await Navigator.push(context, MaterialPageRoute<void>(builder: (_) => page()));
       if (mounted) await _reload();
+      // A7-04：遥控刚放下，站点要一两秒才收掉「遥控 · 进行中」—— 回来后 1 秒、2.5 秒各再看一次
+      for (final ms in const [1000, 2500]) {
+        _after.add(Timer(Duration(milliseconds: ms), () => unawaited(_reload(quiet: true))));
+      }
     }
     // 宽的（横屏手机、平板、桌面）：画面在左、操作在右，不用翻就按得到；竖屏手机一栏往下排。
     final wide = MediaQuery.sizeOf(context).width >= 700;
@@ -938,6 +956,9 @@ class _Devices extends StatelessWidget {
 /// 姿态的叫法（POC）。
 /// A7-01：机器人页的「站起」和它的确认。
 const standUpKey = Key('btn-stand-up');
+
+/// 机器人页开着时多久重读一次（姿态、任务、电量）。
+const kRobotPageRefresh = Duration(seconds: 5);
 const standUpConfirmKey = Key('stand-up-confirm');
 
 String postureLabel(String mode) => switch (mode) {

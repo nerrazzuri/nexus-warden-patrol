@@ -872,9 +872,16 @@ class _Handler(TlsHandlerMixin):
                         datetime.strptime(day, "%Y-%m-%d")
                     except ValueError as exc:
                         raise HttpError(400, "date 要写成 YYYY-MM-DD(真的日期)") from exc
+                disp = self.site.dispatcher
+
+                def loaded(rid: str) -> tuple[Any, Any]:
+                    c = disp.clients.get(rid)
+                    caps = c.capabilities if c is not None else None
+                    p = caps.tasks.get("patrol", {}) if caps is not None else {}
+                    return (p.get("map_id"), p.get("map_version"))
                 return self._send_json(200, self.site.loop.call(lambda: _sync(
-                    today_view, self.site.dispatcher.db, now_ms=self.site._now(), adhoc=desk,
-                    day=day)))
+                    today_view, disp.db, now_ms=self.site._now(), adhoc=desk,
+                    day=day, loaded=loaded)))
             m = _ADHOC.match(path)
             if m is not None:
                 return self._adhoc_cancel(method, unquote(m.group(1)), user)

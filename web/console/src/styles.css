@@ -1261,6 +1261,8 @@ input.invalid { border-color: var(--c-error); }
   .console .ly-main .routesplit > .routeside { max-height: calc(100vh - 220px); overflow-y: auto; }
 }
 .routeside .route-acts { position: sticky; bottom: 0; background: var(--c-surface); padding: 8px 0; z-index: 1; }
+/* 第 8 轮 W8-01:英文按钮长,放不下就换行(以前「派巡逻」被挤出屏幕) */
+.route-acts { flex-wrap: wrap; row-gap: 8px; }
 /* P1-66:活动日志的结果 */
 .user-audit li.bad { color: inherit; }
 .user-audit .tag.bad { background: var(--c-errorSoft); color: var(--c-error); }
@@ -1441,7 +1443,7 @@ input[type="date"]:not(.field input) { height: 36px; padding: 0 8px; border-radi
 /* P2-08:总览机器人一行右边「详情」 */
 .duty-list > li { display: flex; align-items: stretch; gap: 6px; }
 .duty-list > li > .duty-row { flex: 1; min-width: 0; }
-.duty-row-more { align-self: center; flex: none; }
+.duty-row-more, .duty-list > li > [data-robot-patrol] { align-self: center; flex: none; }
 /* 第 2 轮 P1-28 / admin N7:红色按钮禁用后看着跟能点一样 —— 跟别的禁用按钮一样变灰 */
 .btn.danger:disabled, .btn.stop:disabled, .rd-actions .rd-danger:disabled, .btn.rd-danger:disabled {
   color: var(--c-textMuted); background: transparent; border-color: var(--c-outline); opacity: 0.7; }
@@ -1651,3 +1653,6 @@ input[type="file"] { max-width: 100%; min-width: 0; }            /* 上传按钮
 .vmeta > span:not(:last-child)::after { content: " · "; white-space: pre; }
 /* 第 4 轮 setup P2-17:「.bad」提示(穿墙线、镜像了、没确认……)一律红字,原来有几处是白字 */
 p.bad, span.bad, .small.bad { color: var(--c-error); }
+
+/* 第 8 轮 W8-05:填错的输入框标红 */
+input[aria-invalid="true"] { border-color: var(--c-error); outline-color: var(--c-error); }

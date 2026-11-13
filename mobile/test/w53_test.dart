@@ -1,6 +1,8 @@
 // W53（用户 2026-10-30 / 10-31）：值守页跟着一台机器人走、画面手动开、按角色的按钮、派巡逻弹框
 // （估时、撞日程排队、被拒说原因）、今天的巡逻、管理栏（要你处理、开站清单）、账号审批、日程、申请账号、
 // 上手导览和报警练习。
+import 'dart:convert';
+
 import 'package:nexwar_patrol/l10n.dart';
 import 'package:nexwar_patrol/net/site_client.dart';
 import 'package:nexwar_patrol/store/site_store.dart';
@@ -11,6 +13,7 @@ import 'package:nexwar_patrol/ui/patrol_dispatch.dart';
 import 'package:nexwar_patrol/ui/refusal.dart';
 import 'package:nexwar_patrol/ui/site_duty_page.dart';
 import 'package:nexwar_patrol/ui/site_list.dart';
+import 'package:nexwar_patrol/ui/site_robot.dart' show SiteRobotPage;
 import 'package:nexwar_patrol/ui/site_tabs.dart';
 import 'package:nexwar_patrol/ui/site_video.dart';
 import 'package:nexwar_patrol/ui/site_watch_page.dart';
@@ -142,8 +145,36 @@ void main() {
         ..alertRows = [row('run_start', 'P3'), row('run_done', 'P2'), row('adhoc_patrol', 'P2'), row('stuck', 'P2')];
       await _duty(t, api);
       expect(find.text('其他未处理 1 条'), findsOneWidget);
-      expect(find.textContaining('P1：无'), findsOneWidget);
+      expect(find.textContaining('没有紧急报警'), findsOneWidget, reason: 'A6-04：不写客户看不懂的「P1：无」');
+      expect(find.textContaining('P1'), findsNothing);
       expect(find.byKey(SiteDutyPage.safetyKey), findsOneWidget);
+    });
+
+    testWidgets('A6-04：新登记的机器人「只许手动派」写人话，不露 enroll 和站点原话', (t) async {
+      final v = Map<String, dynamic>.of(siteFixture('site_robot'))
+        ..['manual_only'] = <String, dynamic>{'by': 'enroll', 'at_ms': 1, 'note': '新登记:确认之前只许手动派'};
+      final api = FakeApi('guard', robotView: v)..robotsOverride = <Map<String, dynamic>>[v];
+      await _duty(t, api);
+      final txt = t.widget<Text>(find.byKey(SiteDutyPage.manualKey)).data!;
+      expect(txt, contains('新加入的机器人，管理员确认前只许手动派'));
+      expect(txt, isNot(contains('enroll')));
+      expect(txt, isNot(contains('新登记:')));
+      appLang.value = AppLang.en;
+      await t.pumpWidget(Container());                  // 换语言整个 App 重建
+      await _duty(t, api);
+      final en = t.widget<Text>(find.byKey(SiteDutyPage.manualKey)).data!;
+      expect(en, contains('New robot'));
+      expect(en, isNot(contains('enroll')));
+      expect(en, isNot(contains('新')));
+      appLang.value = AppLang.zh;
+    });
+
+    testWidgets('A6-04：人设的「只许手动派」照旧写谁设的、为什么', (t) async {
+      final v = Map<String, dynamic>.of(siteFixture('site_robot'))
+        ..['manual_only'] = <String, dynamic>{'by': 'olga', 'at_ms': 1, 'note': '在修腿'};
+      final api = FakeApi('guard', robotView: v)..robotsOverride = <Map<String, dynamic>>[v];
+      await _duty(t, api);
+      expect(t.widget<Text>(find.byKey(SiteDutyPage.manualKey)).data, contains('olga 设的：在修腿'));
     });
 
     testWidgets('今天的巡逻：一行一趟；排队中的临时巡逻派的人能取消', (t) async {
@@ -164,6 +195,61 @@ void main() {
       await t.tap(find.byKey(const Key('today-cancel')));
       await t.pumpAndSettle();
       expect(api.calls, contains('cancelAdhoc q1'));
+    });
+
+    // 第 8 轮 W8-03 / A8-01 / W8-04：被日程接替的一直巡逻不写「未完成」「preempted」「预计…结束」；
+    // 在跑的一直巡逻首页写第几圈，不写预计结束时间
+    testWidgets('第 8 轮：被接替的一趟写跑了几圈、谁接的；在跑的一直巡逻写第几圈、不写预计结束', (t) async {
+      final v = jsonDecode(jsonEncode(siteFixture('site_robot'))) as Map<String, dynamic>;
+      (v['status'] as Map)['task'] = {'kind': 'patrol', 'state': 'running', 'task_id': 'adhoc-forever-f2'};
+      v['lap'] = {'n': 6, 'of': 0};
+      final api = FakeApi('guard', robotView: v)
+        ..session = const SiteSession('t', 'gina', 'guard')
+        ..today = <String, dynamic>{'date': 'x', 'timezone': 'UTC', 'items': <dynamic>[
+          <String, dynamic>{'at_ms': 1800000000000, 'kind': 'adhoc', 'label': 'loop-test', 'robot': 'A',
+            'by': 'demo', 'state': 'handed_over', 'reason': '', 'end_ms': 1800000600000, 'adhoc_id': 'f1',
+            'forever': true, 'handover': {'by': 'schedule', 'name': 'cut-test', 'laps': 6}},
+          <String, dynamic>{'at_ms': 1800001000000, 'kind': 'adhoc', 'label': 'loop-test', 'robot': 'A',
+            'by': 'gina', 'state': 'running', 'reason': '', 'end_ms': null, 'adhoc_id': 'f2',
+            'task_id': 'adhoc-forever-f2', 'forever': true, 'lap': {'n': 6, 'of': 0}},
+        ]};
+      await _duty(t, api);
+      expect(find.text('被接替'), findsOneWidget);
+      expect(find.text('未完成'), findsNothing);
+      expect(find.textContaining('一直巡逻 · 第 6 圈'), findsWidgets);
+      expect(find.textContaining('预计'), findsNothing, reason: '一直巡逻没有固定结束时间');
+      await t.ensureVisible(find.byKey(todayRowKey(0)));
+      await t.tap(find.byKey(todayRowKey(0)));
+      await t.pumpAndSettle();
+      expect(find.textContaining('已跑 6 圈，由日程 cut-test 接替'), findsOneWidget);
+      expect(find.textContaining('preempted'), findsNothing);
+      expect(find.textContaining('预计'), findsNothing, reason: '跑完了的写几点结束，不写预计');
+    });
+
+    // 第 8 轮 A8-06：在别的页（机器人页、路线页）派出去，首页「今天的巡逻」马上刷新，不等 30 秒那一轮
+    testWidgets('第 8 轮 A8-06：别处派出巡逻后首页今天的巡逻马上重读', (t) async {
+      final api = FakeApi('guard')..session = const SiteSession('t', 'gina', 'guard');
+      await _duty(t, api);
+      int n() => api.calls.where((c) => c == 'patrolsToday').length;
+      final before = n();
+      patrolSent.value++;
+      await t.pump();
+      expect(n(), before + 1, reason: '马上读一次');
+      await t.pump(const Duration(seconds: 3));
+      expect(n(), greaterThanOrEqualTo(before + 3), reason: '站点记下来可能慢一点：1 秒、3 秒再读');
+    });
+
+    // 第 8 轮 W8-11：今天的巡逻写路线显示名
+    testWidgets('第 8 轮 W8-11：今天的巡逻写显示名', (t) async {
+      final api = FakeApi('guard')
+        ..session = const SiteSession('t', 'gina', 'guard')
+        ..today = <String, dynamic>{'date': 'x', 'timezone': 'UTC', 'items': <dynamic>[
+          <String, dynamic>{'at_ms': 1800000000000, 'kind': 'schedule', 'label': 'route-1', 'title': '一楼夜巡', 'robot': 'A',
+            'by': '', 'state': 'later', 'reason': '', 'end_ms': null, 'adhoc_id': ''},
+        ]};
+      await _duty(t, api);
+      expect(find.textContaining('一楼夜巡'), findsWidgets);
+      expect(find.textContaining('route-1'), findsNothing);
     });
 
     testWidgets('其他没处理的报警收成一行，点开是原来的告警总览', (t) async {
@@ -271,6 +357,21 @@ void main() {
       await t.pumpAndSettle();
       expect(api.calls, contains('setGuide setup_hidden'));
       expect(find.byKey(SetupChecklist.itemKey('robots')), findsNothing, reason: '收起来了');
+    });
+
+    // 第 8 轮 W8-08：路线画在别的版本上，清单说在哪一版；日程的路线跑不了，说哪条
+    testWidgets('第 8 轮：开站清单说路线画在 v11 上、机器人用 v7；日程跑不了', (t) async {
+      final api = FakeApi('admin')
+        ..setupBody = <String, dynamic>{'done': 0, 'total': 2, 'items': <dynamic>[
+          <String, dynamic>{'id': 'routes', 'done': false, 'skipped': false,
+            'elsewhere': [{'route': 'demo-loop', 'map': 'm1', 'version': '11'}], 'using': [{'map': 'm1', 'version': '7'}]},
+          <String, dynamic>{'id': 'schedule', 'done': false, 'skipped': false, 'blocked': ['demo-night']},
+        ]};
+      _size(t);
+      await t.pumpWidget(MaterialApp(home: AdminHomeTab(api: api, switchTab: (_) {})));
+      await t.pumpAndSettle();
+      expect(find.textContaining('有 1 条路线（demo-loop）画在 v11 上，机器人在用 v7：在 v7 上重画'), findsOneWidget);
+      expect(find.textContaining('日程 demo-night 要跑的路线跑不了'), findsOneWidget);
     });
 
     testWidgets('账号审批：权限下拉默认只看，选保安、输密码批准', (t) async {
@@ -493,4 +594,25 @@ void main() {
     expect(patrolReasonText('manual_only', 'A'), isNot(contains('manual_only')));
     expect(patrolReasonText('第 2 点被挡住', 'A'), '第 2 点被挡住');
   });
+
+  // liang-d5 易用性第 7 轮：「不会跑」点开只写「A 只许手动派」—— 没有去改的入口，也没提路线画在 v11 上
+  for (final role in ['guard', 'admin']) {
+    testWidgets('第 7 轮 不会跑点开（$role）：写上两边的地图版本、去哪改，有「去机器人页」', (t) async {
+      final it = <String, dynamic>{
+        'at_ms': DateTime(2027, 3, 15, 22).millisecondsSinceEpoch, 'kind': 'schedule', 'label': 'loop',
+        'robot': 'A', 'by': '', 'state': 'blocked', 'reason': 'manual_only', 'end_ms': null,
+        'map': {'route': '11', 'robot': '12'},
+      };
+      await t.pumpWidget(MaterialApp(
+          home: Scaffold(body: TodayPatrolList(api: FakeApi(role), items: [it]))));
+      await t.tap(find.byKey(todayRowKey(0)));
+      await t.pumpAndSettle();
+      expect(find.textContaining('路线画在 v11 上，A 用的是 v12'), findsOneWidget);
+      expect(find.textContaining(role == 'admin' ? '网页「管理 → 机器人」' : '找管理员'), findsOneWidget);
+      await t.tap(find.byKey(const Key('today-robot')));
+      await t.pumpAndSettle();
+      expect(find.byType(SiteRobotPage), findsOneWidget);
+      await t.pumpWidget(Container());
+    });
+  }
 }

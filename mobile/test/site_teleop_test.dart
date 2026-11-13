@@ -63,6 +63,29 @@ void main() {
     teleopSpeedPick = null;
   });
 
+  testWidgets('易用性第 6 轮 A6-05：中速档提示有底色看得清；中速档左杆只写「前后」；滑条写站点上限', (t) async {
+    teleopSpeedPick = null;
+    final api = FakeApi('guard');
+    api.weatherView = <String, dynamic>{'condition': 'clear', 'source': 'auto'};   // 不限速
+    await t.pumpWidget(MaterialApp(home: SiteTeleopPage(key: UniqueKey(), api: api, robotId: 'A')));
+    await t.pump();
+    api.link!.ctl.add(<String, dynamic>{'kind': 'granted', 'lease_epoch': 1, 'max_vx': 2.0, 'max_vy': 0.5,
+      'max_wz': 1.5, 'speeds': [0.3, 0.6, 1.0, 1.3, 1.6, 2.0]});
+    await t.pump();
+    await t.pump();
+    expect(find.text('前后 · 横移'), findsOneWidget);
+    expect(find.byKey(SiteTeleopPage.speedCapKey), findsOneWidget);
+    expect(t.widget<Text>(find.byKey(SiteTeleopPage.speedCapKey)).data, '上限 2.0');
+    t.widget<Slider>(find.byKey(SiteTeleopPage.speedSliderKey)).onChanged!(4);   // 1.6：中速档
+    await t.pump();
+    expect(find.text('前后'), findsOneWidget, reason: '中速档不能横移');
+    expect(find.text('前后 · 横移'), findsNothing);
+    final box = t.widget<Container>(find.byKey(SiteTeleopPage.speedHintKey));
+    expect((box.decoration as BoxDecoration?)?.color, isNotNull, reason: '白字压在亮画面上要有底色');
+    await t.pumpWidget(Container());
+    teleopSpeedPick = null;
+  });
+
   testWidgets('用户 11-08：下雨限速时滑条旁边说最高多少、为什么', (t) async {
     final api = FakeApi('guard')
       ..weatherView = <String, dynamic>{'condition': 'rain', 'label': '下雨', 'source': 'manual', 'speed_cap_mps': 0.3};
@@ -544,6 +567,28 @@ void main() {
     expect(after, isNotEmpty);
     expect(after.every((f) => f[0] == 0 && f[1] == 0), isTrue,
         reason: '画面回来之后杆值是零,不许按断之前的值开走: $after');
+    await t.pumpWidget(Container());
+  });
+
+  testWidgets('A7 复测：没站起来被拒 —— 说要先站起来、给「站起」按钮，确认后站起再接着要遥控', (t) async {
+    final api = FakeApi('guard')
+      ..teleopError = const SiteError(409, 'A 未就绪：没站起来（蹲着、趴着，或运动模式没就绪）',
+          body: <String, dynamic>{'reason_code': 'not_standing'})
+      ..teleopErrorTimes = 1;
+    await t.pumpWidget(MaterialApp(home: SiteTeleopPage(api: api, robotId: 'A')));
+    await t.pump();
+    await t.pump();
+    expect(find.textContaining('先站起来'), findsOneWidget);
+    expect(find.byKey(SiteTeleopPage.standUpKey), findsOneWidget);
+    await t.tap(find.byKey(SiteTeleopPage.standUpKey));
+    await t.pumpAndSettle();
+    expect(find.textContaining('旁边没有人'), findsOneWidget, reason: '站起前先确认');
+    await t.tap(find.byKey(SiteTeleopPage.standUpConfirmKey));
+    await t.pump();
+    await t.pump();
+    expect(api.calls, contains('posture A stand'));
+    expect(api.teleopCalls, 2, reason: '站起来以后接着要遥控');
+    expect(find.byKey(SiteTeleopPage.standUpKey), findsNothing);
     await t.pumpWidget(Container());
   });
 

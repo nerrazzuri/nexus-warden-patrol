@@ -32,6 +32,8 @@ beforeEach(() => {
       posts.push({ url, body: JSON.parse(String(init.body ?? "{}")) });
       return Promise.resolve(url.endsWith("/resolve") && resolveStatus !== 200 ? json({ error: "没有这条告警" }, resolveStatus) : json({}));
     }
+    if (url.startsWith("/api/routes?")) return Promise.resolve(json({ revision: 1, timezone: "UTC", routes: [{ id: "loop-test", map_id: "m1", map_version: "1", title: "一楼夜巡" }], schedules: [] }));
+    if (url.startsWith("/api/robots/B/patrol-plan")) return Promise.resolve(json({ estimate_s: 600, start_ms: 0, queued: false, because: "", loops: 3 }));
     if (url.startsWith("/api/cameras")) return Promise.resolve(json({ cameras: [{ name: "cam3", zone: "北区", rtsp: true }] }));
     return Promise.resolve(json({}, 404));
   }) as typeof fetch);
@@ -291,6 +293,24 @@ describe("网页易用性第 1 轮 P2-08 详情", () => {
 });
 
 // 易用性第 6 轮 W6-01:机器人当前那版图上没原点 = 出不了发,不能说「一切正常」;按角色说该找谁
+// 第 8 轮 W8-09:保安在网页也能按路线派巡逻、选圈数(跟 App 一样);「详情」只是去地图,就叫「在地图上看」
+describe("第 8 轮 W8-09 保安网页派巡逻", () => {
+  it("保安每台一行有「派巡逻」:选路线、圈数,派出", async () => {
+    const { container: c } = page([]);
+    expect(c.querySelector('[data-robot-more="A"]')!.textContent).toBe("在地图上看");
+    fireEvent.click(c.querySelector('[data-robot-patrol="B"]')!);
+    const route = await waitFor(() => { const x = document.querySelector('select[name="route"]') as HTMLSelectElement; expect(x.options.length).toBe(2); return x; });
+    expect(document.querySelector('select[name="robot"]')).toBeNull();
+    expect(route.options[1].textContent).toBe("一楼夜巡");
+    expect(document.querySelector("dialog")!.textContent).toContain("派 B 巡逻");
+    fireEvent.change(route, { target: { value: "loop-test" } });
+    fireEvent.change(document.querySelector('select[name="loops"]')!, { target: { value: "3" } });
+    await waitFor(() => expect(document.querySelector("[data-plan]")).not.toBeNull());
+    fireEvent.click(Array.from(document.querySelectorAll("dialog button")).find((b) => b.textContent === "派出")!);
+    await waitFor(() => expect(posts).toContainEqual({ url: "/api/robots/B/patrol", body: { mission_id: "loop-test", loops: 3 } }));
+  });
+});
+
 describe("W6-01 没原点出不了发", () => {
   const noHome = (id: string) => unit(id, "idle", { robot: { robot_id: id, active: true, fresh: true, revoked: false, held: null, home_set: false, status: { online: true, last_seen: 0 } } as never });
   it("保安:不说一切正常,写哪几台出不了发、请联系管理员;机器人那一行也写", () => {

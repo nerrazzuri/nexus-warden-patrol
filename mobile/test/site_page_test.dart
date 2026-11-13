@@ -10,10 +10,12 @@ import 'package:nexwar_patrol/net/push.dart';
 import 'package:nexwar_patrol/net/site_client.dart';
 import 'package:nexwar_patrol/store/site_store.dart';
 import 'package:nexwar_patrol/ui/app_settings.dart';
+import 'package:nexwar_patrol/ui/nw/nw_widgets.dart' show NwStatusPill;
 import 'package:nexwar_patrol/ui/patrol_dispatch.dart';
 import 'package:nexwar_patrol/ui/refusal.dart';
 import 'package:nexwar_patrol/ui/site_page.dart';
 import 'package:nexwar_patrol/ui/site_tabs.dart' show MeTab, leaveConfirmKey;
+import 'package:nexwar_patrol/ui/site_teleop.dart' show SiteTeleopPage;
 import 'package:nexwar_patrol/ui/site_video.dart';
 import 'package:nexwar_patrol/ui/widget/live_video.dart';
 import 'package:flutter/material.dart';
@@ -787,7 +789,7 @@ class FakeApi implements SiteApi {
     calls.add('patrolPlan $robotId $missionId${loops == 1 ? '' : ' loops=$loops'}');
     if (loops == 0) {
       return <String, dynamic>{'estimate_s': 12000, 'start_ms': 0, 'queued': false, 'because': '',
-        'forever': true, 'interrupted_by': '22:00 日程「loop」', 'label': missionId, 'loops': 0};
+        'forever': true, 'return_pct': 30, 'interrupted_by': '22:00 日程「loop」', 'label': missionId, 'loops': 0};
     }
     return plans[missionId] ??
         <String, dynamic>{'estimate_s': 600, 'start_ms': 0, 'queued': false, 'because': '', 'label': missionId,
@@ -1210,6 +1212,52 @@ void main() {
     }
   });
 
+  testWidgets('易用性第 7 轮：机器人页开着时网页上让它蹲下 —— 几秒内自己刷出「站起」卡片（不用退出再进）', (t) async {
+    Map<String, dynamic> view({required bool motion}) {
+      final out = jsonDecode(jsonEncode(siteFixture('site_robot'))) as Map<String, dynamic>;
+      ((out['capabilities'] as Map)['tasks'] as Map)['posture'] = {'modes': ['stand', 'lie', 'crawl']};
+      final st = out['status'] as Map;
+      st['task'] = null;
+      st['ready'] = {'control': true, 'estop_clear': true, 'loc_ok': true, 'motion': motion};
+      return out;
+    }
+    final api = FakeApi('guard', robotView: view(motion: true));
+    await openRobot(t, api);
+    expect(find.byKey(standUpKey), findsNothing);
+    api.view = view(motion: false);                       // 网页上让它蹲下了
+    await t.pump(kRobotPageRefresh + const Duration(milliseconds: 100));
+    await t.pumpAndSettle();
+    expect(find.byKey(standUpKey), findsOneWidget);
+    await t.pumpWidget(Container());
+  });
+
+  testWidgets('A7-04：从遥控退回机器人页，站点一两秒后才收掉遥控 —— 机器人页一两秒内就跟上（不等 5 秒那一轮）', (t) async {
+    Map<String, dynamic> view({Map<String, dynamic>? task}) {
+      final out = jsonDecode(jsonEncode(siteFixture('site_robot'))) as Map<String, dynamic>;
+      (out['status'] as Map)['task'] = task;
+      (out['status'] as Map)['ready'] = {'control': true, 'estop_clear': true, 'loc_ok': true, 'motion': true};
+      return out;
+    }
+    final teleop = <String, dynamic>{'kind': 'teleop', 'state': 'running', 'task_id': 'teleop-1'};
+    final api = FakeApi('guard', robotView: view(task: teleop));
+    await openRobot(t, api);
+    await t.ensureVisible(find.byKey(const Key('btn-teleop')));
+    await t.tap(find.byKey(const Key('btn-teleop')));
+    await t.pump();
+    await t.pump(const Duration(milliseconds: 500));
+    Navigator.of(t.element(find.byType(SiteTeleopPage))).pop();
+    await t.pump();
+    await t.pump(const Duration(milliseconds: 300));
+    String phase() => t.widget<NwStatusPill>(find.byKey(const Key('robot-phase'))).label;
+    expect(phase(), '执行中', reason: '站点还没收掉');
+    api.view = view();                                    // 站点收掉了
+    await t.pump(const Duration(milliseconds: 1600));
+    await t.pump();
+    expect(phase(), isNot('执行中'));
+    await t.pumpWidget(Container());
+    await t.pump(const Duration(seconds: 6));
+  });
+
   testWidgets('用户 11-08：机器人页没有单独的「姿态…」，遥控那格写「遥控 · 姿态」；经理没有', (t) async {
     Map<String, dynamic> withPosture(Map<String, dynamic> v) {
       final out = jsonDecode(jsonEncode(v)) as Map<String, dynamic>;
@@ -1260,6 +1308,7 @@ void main() {
     await t.tap(find.byKey(patrolLoopsKey(0)));
     await t.pumpAndSettle();
     expect(find.byKey(patrolForeverKey), findsOneWidget);
+    expect(find.textContaining('电量降到 30%（站点设的巡逻电量线）'), findsOneWidget, reason: '第 8 轮 W8-05：写出电量线是多少');
     expect(find.textContaining('22:00 日程「loop」'), findsOneWidget);
     await t.ensureVisible(find.byKey(patrolSendKey));
     await t.tap(find.byKey(patrolSendKey));
@@ -1296,6 +1345,48 @@ void main() {
     await t.tap(find.byKey(patrolSendKey));
     await t.pumpAndSettle();
     expect(api.calls, contains('patrol A loop'));
+  });
+
+  // liang-d5 易用性第 7 轮：灰掉的路线还写着预计时间、灰得不够；管理员看到的跟保安一样，管理员能做的那句提示看不到
+  for (final role in ['guard', 'admin']) {
+    testWidgets('第 7 轮 画在别的版本上的路线（$role）：不写预计时间、整行变淡、写「派不了」和按角色的去处', (t) async {
+      final api = FakeApi(role, robotView: busyView())
+        ..routesBody = <String, dynamic>{...FakeApi(role).routesBody, 'routes': <dynamic>[
+          <String, dynamic>{'id': 'loop', 'map_id': 'estate-1', 'map_version': '7'},
+          <String, dynamic>{'id': 'demo-loop', 'map_id': 'estate-1', 'map_version': '11'}]};
+      api.scheduleBody = <String, dynamic>{...siteFixture('site_schedule'), 'missions': <String>['loop', 'demo-loop']};
+      await openRobot(t, api);
+      await t.tap(find.byKey(const Key('btn-patrol')));
+      await t.pumpAndSettle();
+      final row = find.byKey(patrolRouteKey('demo-loop'));
+      expect(find.descendant(of: row, matching: find.textContaining('分钟')), findsNothing, reason: '派不了就不写多久');
+      expect(find.descendant(of: row, matching: find.textContaining('派不了')), findsOneWidget);
+      final op = t.widget<Opacity>(find.ancestor(of: row, matching: find.byType(Opacity)).first);
+      expect(op.opacity, lessThan(0.7));
+      expect(find.descendant(of: row, matching: find.textContaining(role == 'admin' ? '「地图」页' : '请管理员')),
+          findsOneWidget);
+      expect(find.descendant(of: find.byKey(patrolRouteKey('loop')), matching: find.textContaining('分钟')),
+          findsOneWidget, reason: '能派的照旧写');
+    });
+  }
+
+  // liang-d5 A7-03：临时巡逻结束后去哪说法不一（弹层写待命点、临时路线页写出发点、只许手动派的其实不自动回）
+  test('A7-03 临时巡逻结束后去哪：一句话，只许手动派的说不会自己回', () {
+    expect(adhocEndText(), contains('回默认待命点'));
+    expect(adhocEndText(), contains('只许手动派'));
+    expect(adhocEndText(), isNot(contains('出发点')));
+    expect(adhocEndText(robot: 'A', manualOnly: true), contains('A 只许手动派，结束后不会自己回'));
+    expect(adhocEndText(robot: 'A', manualOnly: false), isNot(contains('只许手动派')));
+  });
+
+  testWidgets('A7-03 派巡逻弹层：只许手动派的那台写「不会自己回」', (t) async {
+    final v = <String, dynamic>{...busyView(), 'manual_only': <String, dynamic>{'by': 'olga', 'at_ms': 1, 'note': ''}};
+    final api = FakeApi('guard', robotView: v);
+    await openRobot(t, api);
+    await t.tap(find.byKey(const Key('btn-patrol')));
+    await t.pumpAndSettle();
+    expect(find.textContaining('结束后不会自己回待命点'), findsOneWidget);
+    expect(find.textContaining('返回待命点'), findsNothing);
   });
 
   testWidgets('经理：叫停、派巡逻（W53），没有回待命点', (t) async {
@@ -1456,6 +1547,9 @@ void main() {
       await t.pageBack();
       await t.pumpAndSettle();
       // 手机 App 测试 M01：离开站点走「我的 → 退出站点」，要确认
+      // 列表是懒建的：「报问题」加进来以后「退出站点」在 800x600 下看不到，先滚过去
+      await t.scrollUntilVisible(find.byKey(MeTab.leaveKey), 200,
+          scrollable: find.descendant(of: find.byType(MeTab), matching: find.byType(Scrollable)).first);
       await t.tap(find.byKey(MeTab.leaveKey));
       await t.pumpAndSettle();
       await t.tap(find.byKey(leaveConfirmKey));

@@ -76,20 +76,7 @@ class _AppSettingsPageState extends State<AppSettingsPage> {
 
   Future<void> _setLang(AppLang lang) async {
     if (lang == appLang.value) return;
-    if (widget.api != null) {
-      // 换语言整个 App 重建（见 PatrolApp）：站点里的页面都会关掉，回到站点列表
-      final ok = await showDialog<bool>(
-          context: context,
-          builder: (c) => AlertDialog(
-                content: Text(tr('Switching the language returns to the site list. Continue?',
-                    '切换语言后将回到站点列表，是否继续？')),
-                actions: [
-                  TextButton(onPressed: () => Navigator.pop(c, false), child: Text(tr('Cancel', '取消'))),
-                  FilledButton(onPressed: () => Navigator.pop(c, true), child: Text(tr('Switch', '切换'))),
-                ],
-              ));
-      if (ok != true) return;
-    }
+    // 易用性第 6 轮 A6-06：换语言留在这一页、登录还在（PatrolApp 只重画），不用再先问
     await setAppLang(lang, store: widget.langStore);
   }
 
@@ -237,19 +224,7 @@ class _AppSettingsPageState extends State<AppSettingsPage> {
             leading: const Icon(Icons.bug_report_outlined),
             title: Text(tr('Send logs', '上传日志')),
             subtitle: Text(tr('Something went wrong? Send logs to the engineer', '遇到问题？把日志发给工程师'), style: sub()),
-            onTap: () async {
-              final nav = Navigator.of(context);
-              var ids = <String>[];
-              if (api != null) {
-                try {
-                  ids = [for (final r in await api.robots()) '${r['robot_id']}'];
-                } on Object {
-                  ids = <String>[]; // 机器人列表取不到：不选机器人照样能传
-                }
-              }
-              await nav.push(MaterialPageRoute<void>(
-                  builder: (_) => ProblemReportPage(api: api, robots: ids, share: shareBundle)));
-            },
+            onTap: () => openProblemReport(context, api),
           ),
           ListTile(
             key: AppSettingsPage.licensesKey,
@@ -285,4 +260,18 @@ class _AppSettingsPageState extends State<AppSettingsPage> {
       ]),
     );
   }
+}
+
+/// 打开上传日志页（设置页、「我的」页共用）：先取机器人列表给下拉框，取不到就不选机器人照样能传。
+Future<void> openProblemReport(BuildContext context, SiteApi? api) async {
+  final nav = Navigator.of(context);
+  var ids = <String>[];
+  if (api != null) {
+    try {
+      ids = [for (final r in await api.robots()) '${r['robot_id']}'];
+    } on Object {
+      ids = <String>[];
+    }
+  }
+  await nav.push(MaterialPageRoute<void>(builder: (_) => ProblemReportPage(api: api, robots: ids, share: shareBundle)));
 }

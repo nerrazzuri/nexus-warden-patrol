@@ -23,7 +23,6 @@ import 'package:flutter/material.dart';
 import '../l10n.dart';
 import '../model/alert.dart';
 import '../net/site_client.dart';
-import '../net/site_text.dart';
 import 'map_wizard.dart' show openMapWizard, wizardSteps;
 import 'nw/nw_button.dart';
 import 'nw/nw_p2_duty.dart';
@@ -67,6 +66,24 @@ String robotLabel(Map<String, dynamic> r) {
   final n = '${r['name'] ?? ''}';
   return n.isEmpty ? '${r['robot_id']}' : n;
 }
+
+/// 「仅限手动」说为什么、谁能改（手机 App 测试 M25）。易用性第 6 轮 A6-04：新登记的（站点写 by=enroll）
+/// 写「新加入的机器人」，不露 enroll 和站点原话；人设的照旧写谁设的、为什么。
+String manualOnlyText(Map m) {
+  final enroll = '${m['by']}' == 'enroll';
+  final note = '${m['note'] ?? ''}';
+  final why = enroll
+      ? tr('New robot: manual dispatch only until an administrator confirms it',
+          '新加入的机器人，管理员确认前只许手动派')
+      : tr('Manual only (set by ${m['by']}${note.isEmpty ? '' : ': $note'})',
+          '仅限手动（${m['by']} 设的${note.isEmpty ? '' : '：$note'}）');
+  return tr('$why. Schedules and alarms will not send it; you can still send it by hand. '
+          'An administrator switches it back on the robot page.',
+      '$why。日程和报警不会派它，手动还能派。管理员在机器人页改回自动。');
+}
+
+/// 连不上站点主机多久才挂横幅（A6-08：网络其实是通的，一次没连上就闪红条让值班的人紧张）。
+const kSiteDownGrace = Duration(seconds: 15);
 
 class SiteDutyPage extends StatefulWidget {
   final SiteApi api;
@@ -137,6 +154,10 @@ class _SiteDutyPageState extends State<SiteDutyPage> {
   String? _error;
   /// 11-05 现场第 36 条：从什么时候起连不上站点（null = 连得上）；这一轮重读有没有连不上、有没有别的错。
   DateTime? _downSince;
+  /// 易用性第 6 轮 A6-08：连不上满 [kSiteDownGrace] 才挂「连不上站点主机」横幅（一次没连上、几秒后又好了不闪红条）。
+  bool _downShown = false;
+  bool _downGraceOver = false;
+  Timer? _downTimer;
   bool _downNow = false;
   String? _errNow;
 
@@ -169,6 +190,21 @@ class _SiteDutyPageState extends State<SiteDutyPage> {
       if (k == 'alert' || k == 'status' || k == 'mode' || k == 'weather' || k == 'event') _soon();
     }, onError: (Object _) {});
     _poll = Timer.periodic(const Duration(seconds: 30), (_) => unawaited(_reload()));
+    patrolSent.addListener(_onSent);
+  }
+
+  // 第 8 轮 A8-06：派出去了马上读；站点记下来可能慢一点，1 秒、3 秒再读
+  final List<Timer> _after = [];
+  void _onSent() {
+    unawaited(_reload());
+    for (final t in _after) {
+      t.cancel();
+    }
+    _after
+      ..clear()
+      ..addAll([
+        for (final ms in const [1000, 3000]) Timer(Duration(milliseconds: ms), () => unawaited(_reload())),
+      ]);
   }
 
   @override
@@ -176,11 +212,17 @@ class _SiteDutyPageState extends State<SiteDutyPage> {
     _sub?.cancel();
     _debounce?.cancel();
     _poll?.cancel();
+    patrolSent.removeListener(_onSent);
+    for (final t in _after) {
+      t.cancel();
+    }
+    _downTimer?.cancel();
     super.dispose();
   }
 
   void _soon() {
-    _debounce?.cancel();
+    // 第 8 轮 A8-06：原来每来一条就重新计时 —— 状态一秒推一条，就一直不读；已经排上了就不再推后
+    if (_debounce?.isActive ?? false) return;
     _debounce = Timer(const Duration(milliseconds: 400), () => unawaited(_reload()));
   }
 
@@ -217,6 +259,7 @@ class _SiteDutyPageState extends State<SiteDutyPage> {
     setState(() {
       // 11-05 现场第 36 条：这一轮都连上了就清掉旧的错误、横幅
       _downSince = _downNow ? (_downSince ?? DateTime.now()) : null;
+      _armDownBanner();
       _cert = _downNow && _certNow;
       _error = _errNow;
       if (got[0] is List) _robotsKnown = true;
@@ -246,6 +289,24 @@ class _SiteDutyPageState extends State<SiteDutyPage> {
     }
   }
 
+  /// 连上了：收起横幅、停计时。刚连不上：先不挂；[kSiteDownGrace] 以后再试一次，还连不上才挂。在 setState 里调。
+  void _armDownBanner() {
+    if (_downSince == null) {
+      _downTimer?.cancel();
+      _downTimer = null;
+      _downGraceOver = false;
+      _downShown = false;
+    } else if (_downGraceOver) {
+      _downShown = true;
+    } else {
+      _downTimer ??= Timer(kSiteDownGrace, () {
+        _downTimer = null;
+        _downGraceOver = true;
+        if (mounted) unawaited(_reload());
+      });
+    }
+  }
+
   Future<void> _loadView() async {
     final id = _sel;
     if (id == null) return;
@@ -257,6 +318,7 @@ class _SiteDutyPageState extends State<SiteDutyPage> {
       if (e.status == 0) {
         setState(() {
           _downSince ??= DateTime.now();
+          _armDownBanner();
           if (e.certChanged) _cert = true;
         });
       } else if (e.status != 404) {
@@ -569,9 +631,11 @@ class _SiteDutyPageState extends State<SiteDutyPage> {
     final tid = task is Map ? '${task['task_id'] ?? ''}' : null;
     final run = runningItem(_today, '${r['robot_id']}', tid);
     final battery = robotBattery(r);
+    // 第 8 轮 W8-04 / A8-01：几圈的巡逻写第几圈；一直巡逻站点不给结束时间，就不写「预计…结束」
+    final lap = lapText(run?['lap'] ?? r['lap']);
     final doing = run != null
-        ? tr('Patrolling "${siteKnown('${run['label']}')}"${run['end_ms'] is num ? ' · done around ${hhmm((run['end_ms'] as num).toInt(), _offsetMin)}' : ''}',
-            '正在巡逻「${run['label']}」${run['end_ms'] is num ? ' · 预计 ${hhmm((run['end_ms'] as num).toInt(), _offsetMin)} 结束' : ''}')
+        ? tr('Patrolling "${todayLabel(run)}"${lap.isEmpty ? '' : ' · $lap'}${run['end_ms'] is num ? ' · done around ${hhmm((run['end_ms'] as num).toInt(), _offsetMin)}' : ''}',
+            '正在巡逻「${todayLabel(run)}」${lap.isEmpty ? '' : ' · $lap'}${run['end_ms'] is num ? ' · 预计 ${hhmm((run['end_ms'] as num).toInt(), _offsetMin)} 结束' : ''}')
         : robotStatusLine(r);
     return Padding(
       key: _t.status,
@@ -596,10 +660,7 @@ class _SiteDutyPageState extends State<SiteDutyPage> {
             nwGap8,
             Text(
                 key: SiteDutyPage.manualKey,
-                tr('Manual only (set by ${(r['manual_only'] as Map)['by']}${'${(r['manual_only'] as Map)['note'] ?? ''}'.isEmpty ? '' : ': ${(r['manual_only'] as Map)['note']}'}): '
-                    'schedules and alarms will not send it; you can still send it by hand. An administrator switches it back on the robot page.',
-                    '仅限手动（${(r['manual_only'] as Map)['by']} 设的${'${(r['manual_only'] as Map)['note'] ?? ''}'.isEmpty ? '' : '：${(r['manual_only'] as Map)['note']}'}）：'
-                    '日程和报警不会派它，手动还能派。管理员在机器人页改回自动。'),
+                manualOnlyText(r['manual_only'] as Map),
                 style: NwText.bodySmall.copyWith(color: c.textSecondary)),
           ],
           if (r['held'] is Map) ...[
@@ -786,7 +847,7 @@ class _SiteDutyPageState extends State<SiteDutyPage> {
                         "$certChangedText Robot status here is out of date and alerts won't arrive. To update the code: leave this site, then on the site card tap ⋮ → Update site code.",
                         '$certChangedText这里机器人的状态是旧的，报警也收不到。更新站点码：退出这个站点，在站点卡片上点 ⋮ →「更新站点码」。')),
                 nwGap8,
-              ] else if (_downSince != null) ...[
+              ] else if (_downSince != null && _downShown) ...[
                 NwNotice(
                     key: SiteDutyPage.siteDownKey,
                     tone: NwTone.error,
@@ -804,7 +865,7 @@ class _SiteDutyPageState extends State<SiteDutyPage> {
                   padding: const EdgeInsets.only(bottom: Nw.s8),
                   child: Text(
                       [
-                        p1Open == 0 ? tr('P1: none', 'P1：无') : tr('P1: $p1Open open', 'P1：$p1Open 条没处理'),
+                        p1Open == 0 ? tr('No urgent alarms', '没有紧急报警') : tr('Urgent alarms not handled: $p1Open', '紧急报警 $p1Open 条没处理'),
                         tr('Robots online $online/${_robots.length}', '机器人在线 $online/${_robots.length}'),
                       ].join(' · '),
                       style: NwText.labelLarge.copyWith(

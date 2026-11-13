@@ -18,6 +18,9 @@ void main() {
     api.robotsError = const SiteError(0, '无法连接站点：Connection refused');
     await t.pump(const Duration(seconds: 31));
     await t.pumpAndSettle();
+    expect(find.byKey(SiteDutyPage.siteDownKey), findsNothing, reason: 'A6-08：一次没连上先不挂');
+    await t.pump(kSiteDownGrace);
+    await t.pumpAndSettle();
     expect(find.byKey(SiteDutyPage.siteDownKey), findsOneWidget);
     expect(find.descendant(of: find.byKey(SiteDutyPage.siteDownKey), matching: find.textContaining('连不上站点主机')),
         findsOneWidget);
@@ -26,6 +29,26 @@ void main() {
     await t.pumpAndSettle();
     expect(find.byKey(SiteDutyPage.siteDownKey), findsNothing);
     expect(find.textContaining('Connection refused'), findsNothing, reason: '连回来以后旧的错误不留着');
+    await t.pumpWidget(Container());
+  });
+
+  testWidgets('A6-08：一次没连上、15 秒内又连上了 —— 不闪「连不上站点主机」红条', (t) async {
+    await t.binding.setSurfaceSize(const Size(800, 900));
+    addTearDown(() => t.binding.setSurfaceSize(null));
+    final api = FakeApi('guard');
+    await t.pumpWidget(MaterialApp(home: SiteDutyPage(api: api)));
+    await t.pumpAndSettle();
+    api.robotsError = const SiteError(0, '无法连接站点：Connection reset');
+    await t.pump(const Duration(seconds: 31));            // 30 秒那一轮没连上
+    await t.pumpAndSettle();
+    expect(find.byKey(SiteDutyPage.siteDownKey), findsNothing);
+    api.robotsError = null;                               // 网络其实是好的
+    await t.pump(kSiteDownGrace);                         // 满 15 秒再试一次：连上了
+    await t.pumpAndSettle();
+    expect(find.byKey(SiteDutyPage.siteDownKey), findsNothing);
+    await t.pump(const Duration(seconds: 31));
+    await t.pumpAndSettle();
+    expect(find.byKey(SiteDutyPage.siteDownKey), findsNothing);
     await t.pumpWidget(Container());
   });
 }

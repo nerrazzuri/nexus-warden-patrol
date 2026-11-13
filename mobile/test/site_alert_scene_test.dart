@@ -223,4 +223,14 @@ void main() {
     await t.pumpAndSettle();
     expect(find.byKey(SiteAlertScenePage.deterKey), findsNothing);
   });
+
+  // 易用性第 6 轮 A6-09：保安不该加机器人（站点上批准要管理权限），就不给「添加机器人」按钮
+  for (final (role, shown) in [('guard', false), ('owner', false), ('admin', true)]) {
+    testWidgets('A6-09 $role ${shown ? '有' : '没有'}「添加机器人」', (t) async {
+      final api = FakeApi(role);
+      await t.pumpWidget(MaterialApp(home: SiteRobotsPage(api: api, watch: _Watch(), entry: _entry)));
+      await t.pumpAndSettle();
+      expect(find.byKey(SiteRobotsPage.addKey), shown ? findsOneWidget : findsNothing);
+    });
+  }
 }

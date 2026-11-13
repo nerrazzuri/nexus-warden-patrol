@@ -66,6 +66,12 @@ export function LocPage(props: { units: UnitInfo[]; alerts: Alert[]; now: number
                   <i class={`loc-dot ${lv}`} aria-hidden="true" />
                   <b>{nameOf(id)}</b>
                   <span class="muted small">{t(TEXT[lv])}</span>
+                  {/* minor #22:看得出哪台设了原点(当前用的那版图上;不知道就不写) */}
+                  {u.robot.home_set != null && (
+                    <span class={u.robot.home_set ? "tag small" : "tag warn small"} data-home={u.robot.home_set ? "1" : "0"}>
+                      {t(u.robot.home_set ? "locHomeSet" : "locHomeNone")}
+                    </span>
+                  )}
                   {lv !== "unknown" && (
                     <button type="button" class={finding === id ? "btn sm primary push" : "btn sm push"}
                       onClick={() => { setFinding(finding === id ? null : id); setSelected(id); }}>

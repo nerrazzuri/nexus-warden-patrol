@@ -3,6 +3,7 @@
 // 点图的位置：测试用图自己的渲染框 `localToGlobal`（转角、缩放都算进去）算出屏上哪儿，点下去，
 // 存下去 / 发出去的地图坐标要跟想点的那一处对上 —— 图不转、转 23° 都测。
 import 'dart:async';
+import 'dart:convert';
 import 'dart:math' as math;
 
 import 'package:nexwar_patrol/l10n.dart';
@@ -11,11 +12,14 @@ import 'package:nexwar_patrol/ui/map_view.dart';
 import 'package:nexwar_patrol/ui/pose_marker.dart';
 import 'package:nexwar_patrol/ui/site_maps.dart';
 import 'package:nexwar_patrol/ui/site_pose_pick.dart';
+import 'package:nexwar_patrol/ui/refusal.dart' show refusalActionKey;
+import 'package:nexwar_patrol/ui/site_robot.dart' show SiteRobotPage;
 import 'package:nexwar_patrol/ui/site_routes.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'site_page_test.dart' show FakeApi;
+import 'support/fake_site.dart' show siteFixture;
 import 'support/fake_map.dart' show Rot23Api, rot23Preview;
 
 Map<String, dynamic> _route(String id, List<List<Object>> pts, {int rev = 3}) => <String, dynamic>{
@@ -126,6 +130,39 @@ void main() {
       expect(api.calls.where((x) => x.startsWith('saveRoute')), isEmpty, reason: '不存进路线库');
       expect(got, isNotNull, reason: '派出去就退回派单的地方，带一句结果');
     });
+  });
+
+  // liang-d5 A7-04：临时路线被拒「没站起来」→ 去机器人页站起来 → 回来，那句「没站起来」还挂着
+  testWidgets('A7-04 没站起来被拒、去机器人页站起来回来：旧提示换成「已经站起来了，再点一次」', (t) async {
+    Map<String, dynamic> view({required bool motion}) {
+      final out = jsonDecode(jsonEncode(siteFixture('site_robot'))) as Map<String, dynamic>;
+      final st = out['status'] as Map;
+      st['task'] = null;
+      st['ready'] = {'control': true, 'estop_clear': true, 'loc_ok': true, 'motion': motion};
+      return out;
+    }
+    final api = FakeApi('guard', robotView: view(motion: false))
+      ..patrolError = const SiteError(409, 'A 未就绪：没站起来（蹲着、趴着，或运动模式没就绪）',
+          body: <String, dynamic>{'reason_code': 'not_standing'});
+    await t.binding.setSurfaceSize(const Size(900, 700));
+    addTearDown(() => t.binding.setSurfaceSize(null));
+    await t.pumpWidget(MaterialApp(
+        home: SiteRouteEditorPage(api: api, mapId: 'estate-1', version: '8', newName: '', tempFor: 'A')));
+    await t.pumpAndSettle();
+    final geo = MapGeo.fromPreview(await api.mapPreview('estate-1', '8'));
+    final c = _Canvas(t, SiteRouteEditorPage.canvasKey, geo);
+    await _tapMap(t, c, -4.25, 2.5);
+    await t.tap(find.byKey(SiteRouteEditorPage.tempSendKey));
+    await t.pumpAndSettle();
+    await t.tap(find.byKey(refusalActionKey));                 // 「去机器人页」
+    await t.pumpAndSettle();
+    expect(find.byType(SiteRobotPage), findsOneWidget);
+    api.view = view(motion: true);                            // 在机器人页站起来了
+    Navigator.of(t.element(find.byType(SiteRobotPage))).pop();
+    await t.pumpAndSettle();
+    expect(find.textContaining(refusalText(api.patrolError!)), findsNothing, reason: '旧提示不留着');
+    expect(find.textContaining('A is standing now'), findsOneWidget);
+    await t.pumpWidget(Container());
   });
 
   group('路线编辑页：点图加点，存下去的是点的那一处的地图坐标', () {
@@ -368,7 +405,9 @@ void main() {
     expect(find.byKey(SiteRouteEditorPage.pointKey(2)), findsOneWidget);
   });
 
-  testWidgets('手机 App 测试 M19：路线名边输边说哪里不对，对话框不关、字不丢；改对了才能建', (t) async {
+  // 手机 App 测试 M19：路线名边输边说哪里不对，对话框不关、字不丢。
+  // 第 8 轮 W8-11 起：名字能写中文、带空格 —— 当显示名，编号自动给；只用字母数字的当编号（重名要说）
+  testWidgets('M19 / W8-11：中文名当显示名、编号自动给；字母数字名重名要说', (t) async {
     final api = RoutesApi('admin');
     await t.binding.setSurfaceSize(const Size(900, 700));
     addTearDown(() => t.binding.setSurfaceSize(null));
@@ -376,21 +415,44 @@ void main() {
     await t.pumpAndSettle();
     await t.tap(find.byKey(SiteRoutesPage.newKey));
     await t.pumpAndSettle();
-    await t.enterText(find.byKey(const Key('route-new-name')), 'App test route');
-    await t.pump();
-    expect(find.textContaining('No spaces'), findsOneWidget);
-    await t.tap(find.byKey(const Key('route-new-go')));
-    await t.pump();
-    expect(find.byKey(const Key('route-new-name')), findsOneWidget, reason: '对话框还开着');
-    expect(find.text('App test route'), findsOneWidget, reason: '字没丢');
     await t.enterText(find.byKey(const Key('route-new-name')), 'loop');
     await t.pump();
     expect(find.text('A route with this name already exists'), findsOneWidget);
-    await t.enterText(find.byKey(const Key('route-new-name')), 'App-test-route');
+    await t.tap(find.byKey(const Key('route-new-go')));
     await t.pump();
+    expect(find.byKey(const Key('route-new-name')), findsOneWidget, reason: '对话框还开着');
+    expect(find.text('loop'), findsWidgets, reason: '字没丢');
+    await t.enterText(find.byKey(const Key('route-new-name')), '一楼 夜巡');
+    await t.pump();
+    expect(find.text('A route with this name already exists'), findsNothing);
     await t.tap(find.byKey(const Key('route-new-go')));
     await t.pumpAndSettle();
-    expect(find.byType(SiteRouteEditorPage), findsOneWidget);
+    final ed = t.widget<SiteRouteEditorPage>(find.byType(SiteRouteEditorPage));
+    expect(ed.newTitle, '一楼 夜巡');
+    expect(ed.newName, matches(RegExp(r'^route-\d+$')));
+  });
+
+  testWidgets('W8-11：显示名存下去；列表写显示名', (t) async {
+    final api = FakeApi('admin');
+    await t.binding.setSurfaceSize(const Size(900, 700));
+    addTearDown(() => t.binding.setSurfaceSize(null));
+    await t.pumpWidget(MaterialApp(
+        home: SiteRouteEditorPage(api: api, mapId: 'estate-1', version: '8', newName: 'route-1', newTitle: '一楼夜巡')));
+    await t.pumpAndSettle();
+    expect(find.text('一楼夜巡'), findsWidgets, reason: '标题写显示名');
+    final geo = MapGeo.fromPreview(await api.mapPreview('estate-1', '8'));
+    final c = _Canvas(t, SiteRouteEditorPage.canvasKey, geo);
+    await _tapMap(t, c, -4.25, 2.5);
+    await _tapMap(t, c, 1.75, -1.25);
+    await _tapKey(t, SiteRouteEditorPage.saveKey);
+    expect(api.savedRoutes.single['id'], 'route-1');
+    expect(api.savedRoutes.single['title'], '一楼夜巡');
+    final lib = RoutesApi('admin');
+    (lib.routesBody['routes'] as List).cast<Map<String, dynamic>>().first['title'] = '外围一圈';
+    await t.pumpWidget(MaterialApp(home: SiteRoutesPage(api: lib)));
+    await t.pumpAndSettle();
+    final first = '${(lib.routesBody['routes'] as List).cast<Map>().first['id']}';
+    expect(find.descendant(of: find.byKey(SiteRoutesPage.routeKey(first)), matching: find.text('外围一圈')), findsOneWidget);
   });
 
   testWidgets('路线列表：管理员 / 保安没有「新路线」；没有路线时说没有', (t) async {

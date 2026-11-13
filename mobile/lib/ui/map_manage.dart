@@ -17,6 +17,18 @@ import 'nw/nw_widgets.dart';
 import 'site_mapping.dart' show SiteMapPreviewPage;
 import 'site_maps.dart' show SiteMapsPage;
 
+/// 第 8 轮 A8-04：版本先写「第 N 版」（纯数字的）；别的写法（日期编号）写「版本 X」。
+String versionLabel(String v) =>
+    RegExp(r'^\d+$').hasMatch(v) ? tr('Version $v', '第 $v 版') : tr('Version $v', '版本 $v');
+
+/// 站点记的版本说明（「从 10 编辑:擦了…」）按界面写：「从第 10 版编辑：擦了…」。
+String versionNoteText(String note) {
+  // 站点原话「从 X 编辑:…」（写成 \u 转义：这里是认站点的字，不是给人看的）
+  final m = RegExp('^\u4ece (\\S+) \u7f16\u8f91:(.*)\$').firstMatch(note);
+  if (m == null) return note;
+  return tr('Edited from ${versionLabel(m[1]!).toLowerCase()}: ${m[2]}', '从${versionLabel(m[1]!)}编辑：${m[2]}');
+}
+
 class MapManagePage extends StatefulWidget {
   final SiteApi api;
   const MapManagePage({super.key, required this.api});
@@ -231,7 +243,7 @@ class _MapManagePageState extends State<MapManagePage> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (c) => AlertDialog(
-        title: Text(tr('Switch $robot back to ${rb['map_id']}:${rb['version']}?', '把 $robot 退回 ${rb['map_id']}:${rb['version']}？')),
+        title: Text(tr('Switch $robot to ${rb['map_id']} ${versionLabel('${rb['version']}')}?', '把 $robot 换回 ${rb['map_id']} ${versionLabel('${rb['version']}')}？')),
         actions: [
           TextButton(onPressed: () => Navigator.pop(c, false), child: Text(tr('Cancel', '取消'))),
           FilledButton(key: const Key('rollback-ok'), onPressed: () => Navigator.pop(c, true), child: Text(tr('Roll back', '回退'))),
@@ -269,7 +281,7 @@ class _MapManagePageState extends State<MapManagePage> {
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Row(children: [
             Expanded(
-                child: Text(note.isNotEmpty ? '$note · $version' : version,
+                child: Text(note.isNotEmpty ? '${versionLabel(version)} · ${versionNoteText(note)}' : versionLabel(version),
                     style: NwText.titleSmall.copyWith(color: c.text, fontWeight: FontWeight.w700))),
             if (draft) ...[
               NwStatusPill(
@@ -382,7 +394,7 @@ class _MapManagePageState extends State<MapManagePage> {
                       if (r['rollback'] is Map)
                         NwButton(
                             buttonKey: MapManagePage.rollbackKey('${r['robot_id']}'),
-                            label: tr('Back to ${r['rollback']['version']}', '退回 ${r['rollback']['version']}'),
+                            label: tr('Switch to ${versionLabel('${r['rollback']['version']}')}', '换回${versionLabel('${r['rollback']['version']}')}'),
                             size: NwButtonSize.small,
                             variant: NwButtonVariant.outline,
                             onPressed: () => _rollback('${r['robot_id']}', r['rollback'] as Map)),

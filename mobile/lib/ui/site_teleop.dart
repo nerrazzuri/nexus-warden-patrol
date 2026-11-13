@@ -158,6 +158,8 @@ class SiteTeleopPage extends StatefulWidget {
   static const Key stopKey = Key('teleop-stop');
   static const Key statusKey = Key('teleop-status');
   static const Key resumeKey = Key('teleop-resume');
+  static const Key standUpKey = Key('teleop-stand-up');
+  static const Key standUpConfirmKey = Key('teleop-stand-up-confirm');
   static const Key moveStickKey = Key('teleop-move');
   static const Key turnStickKey = Key('teleop-turn');
   static const Key keysKey = Key('teleop-keys');
@@ -167,6 +169,7 @@ class SiteTeleopPage extends StatefulWidget {
   static const Key speedValueKey = Key('teleop-speed-value');
   static const Key postureMenuKey = Key('teleop-posture-menu');
   static const Key speedHintKey = Key('teleop-speed-hint');
+  static const Key speedCapKey = Key('teleop-speed-cap');
   static const Key dropKey = Key('teleop-drop');
   static const Key inSightKey = Key('teleop-insight');
   static Key postureKey(String mode) => Key('teleop-posture-$mode');
@@ -193,6 +196,8 @@ class _SiteTeleopPageState extends State<SiteTeleopPage> with WidgetsBindingObse
   double _speed = 0;
 
   /// 推满前进多快：选的那档（不超过站点限速）；老站点 = 站点限速。
+  /// 选的速度过了低速档：机器人用中速档（不能横移）。
+  bool get _midGear => _speeds.isNotEmpty && _speed > kLowGearMax + 1e-9;
   double get _vTop => _speeds.isEmpty ? _maxVx : math.min(_speed, _maxVx);
 
   /// 转向、横移占站点上限的几成：跟着选的速度走，到 1.0 m/s 就满（中速档不更快）。
@@ -214,6 +219,9 @@ class _SiteTeleopPageState extends State<SiteTeleopPage> with WidgetsBindingObse
 
   /// 这台机器人能换哪几种姿势（遥控页里的站起、趴下、蹲下；POC 11-05）。
   List<String> _postures = const [];
+
+  /// 易用性第 7 轮复测：站点因为没站起来（蹲着、趴着）不给遥控 —— 说要先站起来，给「站起」按钮。
+  bool _needStand = false;
   bool _posturing = false;
 
   /// 这一页里最后换成的姿势（没换过当站着）；不是站着的，退出时先问（A6-02）。
@@ -326,7 +334,18 @@ class _SiteTeleopPageState extends State<SiteTeleopPage> with WidgetsBindingObse
       }
       _link = link;
       _sub = link.messages.listen(_onMsg);
+      if (_needStand) setState(() => _needStand = false);
     } on SiteError catch (e) {
+      // 没站起来：自动再要也没用（机器人不站起来永远拿不到），说清楚、给按钮
+      if (e.body['reason_code'] == 'not_standing' && mounted && !_ended) {
+        setState(() {
+          _needStand = true;
+          _status = tr('${widget.robotId} is not standing (crouched or lying down). Stand it up first to drive.',
+              '${widget.robotId} 没站起来（蹲着或趴着），要先站起来才能遥控。');
+          _ended = true;
+        });
+        return;
+      }
       if (e.status == 409 && e.body['reason'] == 'no_video' && _noVideo < _videoRetries && mounted && !_ended) {
         _noVideo++;
         setState(() => _status = tr('Waiting for the video to start…', '正在等待画面…'));
@@ -356,6 +375,33 @@ class _SiteTeleopPageState extends State<SiteTeleopPage> with WidgetsBindingObse
   /// 「继续遥控」、自己再要：丢掉结束了的那条连接，重新要一次（拿到之前杆是灰的；拿到后要重新按下）。
   /// 按了停车（这一屏的或站点叫停）之后：站点把机器人记成「叫停」，不先解除就拿不到遥控（手机 App 测试 M12）。
   bool get _heldStop => _endReason == 'stopped_here' || _endReason == 'halt';
+
+  /// 先问旁边有没有人，站起来，再接着要遥控。
+  Future<void> _standUp() async {
+    final what = tr('Stand up', '站起');
+    final yes = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+              title: Text(what),
+              content: Text(tr('${widget.robotId} will stand up where it is. Make sure no one is right next to it.',
+                  '${widget.robotId} 会原地站起来。先确认它旁边没有人。')),
+              actions: [
+                TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(tr('Cancel', '取消'))),
+                FilledButton(
+                    key: SiteTeleopPage.standUpConfirmKey, onPressed: () => Navigator.pop(ctx, true), child: Text(what)),
+              ],
+            ));
+    if (yes != true || !mounted) return;
+    try {
+      await widget.api.posture(widget.robotId, 'stand');
+    } on SiteError catch (e) {
+      if (mounted) setState(() => _status = tr("Couldn't stand up: ${refusalText(e)}", '没站起来：${refusalText(e)}'));
+      return;
+    }
+    if (!mounted) return;
+    setState(() => _needStand = false);
+    await _resume();
+  }
 
   Future<void> _resume() async {
     _retryTimer?.cancel();
@@ -492,6 +538,10 @@ class _SiteTeleopPageState extends State<SiteTeleopPage> with WidgetsBindingObse
                 maxLines: 3,
                 style: NwText.labelSmall.copyWith(color: c.fg(NwTone.warning), fontSize: 10)),
           ),
+        // A6-05：滑条顶头写站点给的上限（看的人知道为什么最高只到这儿）；限速了有上面那句「最高…（下雨）」
+        if (_capWhy == null)
+          Text(tr('max ${_speeds.last.toStringAsFixed(1)}', '上限 ${_speeds.last.toStringAsFixed(1)}'),
+              key: SiteTeleopPage.speedCapKey, style: NwText.labelSmall.copyWith(color: Colors.white70)),
         Expanded(
           child: RotatedBox(
             quarterTurns: 3,
@@ -859,7 +909,20 @@ class _SiteTeleopPageState extends State<SiteTeleopPage> with WidgetsBindingObse
                               style: NwText.titleSmall.copyWith(color: Colors.white, fontWeight: FontWeight.bold),
                             ),
                           ),
-                          if (_canResume)
+                          if (_needStand && _ended)
+                            Padding(
+                              padding: const EdgeInsets.only(top: Nw.s4),
+                              child: Align(
+                                alignment: Alignment.centerLeft,
+                                child: FilledButton.icon(
+                                  key: SiteTeleopPage.standUpKey,
+                                  onPressed: _standUp,
+                                  icon: const Icon(Icons.accessibility_new_rounded),
+                                  label: Text(tr('Stand up', '站起')),
+                                ),
+                              ),
+                            ),
+                          if (_canResume && !_needStand)
                             Padding(
                               padding: const EdgeInsets.only(top: Nw.s4),
                               child: Align(
@@ -906,13 +969,18 @@ class _SiteTeleopPageState extends State<SiteTeleopPage> with WidgetsBindingObse
                             ),
                           if (_speeds.isNotEmpty && !_ended && _speed > kLowGearMax + 1e-9)
                             Padding(
-                              key: SiteTeleopPage.speedHintKey,
                               padding: const EdgeInsets.only(top: Nw.s4),
-                              child: Text(
-                                  tr('Above 1.0 m/s the robot uses its middle gear: no sideways, slower turning; release the stick to change gear',
-                                      '超过 1.0 m/s 用中速档：不能横移、转向变慢；换档要先松开摇杆'),
-                                  style: NwText.bodySmall.copyWith(
-                                      color: Colors.white, shadows: const [Shadow(blurRadius: 3)])),
+                              // 易用性第 6 轮 A6-05：白字直接压在亮画面上读不出来 —— 加底色
+                              child: Container(
+                                key: SiteTeleopPage.speedHintKey,
+                                padding: const EdgeInsets.symmetric(horizontal: Nw.s8, vertical: Nw.s4),
+                                decoration: BoxDecoration(
+                                    color: Colors.black.withValues(alpha: 0.6), borderRadius: BorderRadius.circular(Nw.r8)),
+                                child: Text(
+                                    tr('Above 1.0 m/s the robot uses its middle gear: no sideways, slower turning; release the stick to change gear',
+                                        '超过 1.0 m/s 用中速档：不能横移、转向变慢；换档要先松开摇杆'),
+                                    style: NwText.bodySmall.copyWith(color: Colors.white)),
+                              ),
                             ),
                           if (desktop)
                             Padding(
@@ -998,7 +1066,8 @@ class _SiteTeleopPageState extends State<SiteTeleopPage> with WidgetsBindingObse
                       key: SiteTeleopPage.moveStickKey,
                       axis: JoystickAxis.translate,
                       enabled: _canDrive,
-                      label: lateral ? tr('Move · sideways', '前后 · 横移') : tr('Move', '前后'),
+                      // A6-05：中速档不能横移，标签跟着只写前后
+                      label: lateral && !_midGear ? tr('Move · sideways', '前后 · 横移') : tr('Move', '前后'),
                       icon: lateral ? Icons.open_with_rounded : null,
                       onChanged: (v) {
                         _fwd = v.dy;

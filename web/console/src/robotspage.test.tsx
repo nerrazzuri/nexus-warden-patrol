@@ -241,7 +241,7 @@ describe("机器人页", () => {
     fireEvent.click(cardOf(c, "A"));
     const d = c.querySelector(".robot-detail")!;
     expect(d.querySelector("form")).toBeNull();
-    expect(Array.from(d.querySelectorAll("button")).map((b) => b.textContent?.trim())).toEqual(["关闭", "开始巡逻", "停止当前任务"]);
+    expect(Array.from(d.querySelectorAll("button")).map((b) => b.textContent?.trim())).toEqual(["关闭", "派巡逻", "停止当前任务"]);
   });
 });
 
@@ -273,9 +273,9 @@ describe("W71 Nav2 没起来", () => {
     fireEvent.click(cardOf(c, "A"));
     const d = c.querySelector(".robot-detail")!;
     await waitFor(() => expect(d.querySelectorAll('select[name="route"] option').length).toBe(3));
-    expect(btn(d, "开始巡逻").disabled).toBe(true);
+    expect(btn(d, "派巡逻").disabled).toBe(true);
     fireEvent.change(d.querySelector('select[name="route"]')!, { target: { value: "west-loop" } });
-    fireEvent.click(btn(d, "开始巡逻"));
+    fireEvent.click(btn(d, "派巡逻"));
     await waitFor(() => expect(posted.find((p) => p.url === "/api/robots/A/patrol")?.body).toEqual({ mission_id: "west-loop", loops: 1 }));
     await waitFor(() => expect(said.join()).toContain("west-loop"));
     fireEvent.click(btn(d, "回待命点"));
@@ -283,6 +283,26 @@ describe("W71 Nav2 没起来", () => {
     await waitFor(() => expect(btn(d, "停止当前任务").disabled).toBe(false));
     fireEvent.click(btn(d, "停止当前任务"));
     await waitFor(() => expect(posted.find((p) => p.url === "/api/robots/A/abort")?.body).toEqual({ task_id: "t9" }));
+  });
+
+  // 第 8 轮 W8-02:跟 App 一样,画在别的地图版本上的路线灰掉、写原因(以前选得上,点了才报写给工程师的错)
+  it("W8-02 路线下拉:画在别的版本上的路线选不了,写画在哪一版、机器人用哪一版", async () => {
+    robots[0] = card({ map: { id: "estate-1", version: "7", match: true } });
+    setFetch(((url: string, init?: RequestInit) => {
+      if (url.startsWith("/api/routes")) return Promise.resolve(json({ routes: [
+        { id: "east-loop", map_id: "estate-1", map_version: "7" }, { id: "west-loop", map_id: "estate-1", map_version: "11" }] }));
+      if (url.startsWith("/api/robots/overview")) return Promise.resolve(json({ robots, open_revoked: [] }));
+      if (url === "/api/schedule") return Promise.resolve(json({ missions: ["east-loop", "west-loop"] }));
+      void init;
+      return Promise.resolve(json({}, 404));
+    }) as typeof fetch);
+    const { container: c } = render(<RobotsPage say={(s) => said.push(s)} now={NOW} role="admin" />);
+    await waitFor(() => expect(cardOf(c, "A")).not.toBeNull());
+    fireEvent.click(cardOf(c, "A"));
+    const d = c.querySelector(".robot-detail")!;
+    await waitFor(() => expect((d.querySelector('option[value="west-loop"]') as HTMLOptionElement | null)?.disabled).toBe(true));
+    expect(d.querySelector('option[value="west-loop"]')!.textContent).toContain("画在 v11 上,A 用的是 v7");
+    expect((d.querySelector('option[value="east-loop"]') as HTMLOptionElement).disabled).toBe(false);
   });
 
   it("W76 开始巡逻可选循环次数(一直巡逻带 loops 0);在跑几圈的巡逻显示第几圈", async () => {
@@ -295,7 +315,7 @@ describe("W71 Nav2 没起来", () => {
     await waitFor(() => expect(d.querySelectorAll('select[name="route"] option').length).toBe(3));
     fireEvent.change(d.querySelector('select[name="route"]')!, { target: { value: "west-loop" } });
     fireEvent.change(d.querySelector('select[name="loops"]')!, { target: { value: "0" } });
-    fireEvent.click(btn(d, "开始巡逻"));
+    fireEvent.click(btn(d, "派巡逻"));
     await waitFor(() => expect(posted.find((p) => p.url === "/api/robots/A/patrol")?.body).toEqual({ mission_id: "west-loop", loops: 0 }));
   });
 
@@ -457,7 +477,7 @@ describe("W71 Nav2 没起来", () => {
     await waitFor(() => expect(cardOf(o, "A")).not.toBeNull());
     fireEvent.click(cardOf(o, "A"));
     d = o.querySelector(".robot-detail")!;
-    expect(btn(d, "开始巡逻")).toBeTruthy();
+    expect(btn(d, "派巡逻")).toBeTruthy();
     expect(btn(d, "停止当前任务")).toBeTruthy();
     expect(btn(d, "回待命点")).toBeUndefined();
     expect(btn(d, "恢复")).toBeUndefined();

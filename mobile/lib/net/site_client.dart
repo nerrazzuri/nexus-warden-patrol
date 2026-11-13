@@ -1113,7 +1113,14 @@ class SiteClient implements SiteApi {
   Future<dynamic> _send(String method, String path, [Object? body, Duration? within]) async {
     final t0 = DateTime.now();
     try {
-      return await _wrapped(() => _sendRaw(method, path, body).timeout(within ?? timeout));
+      final r = await _wrapped(() => _sendRaw(method, path, body).timeout(within ?? timeout));
+      // 易用性第 6 轮 A6-07：改了东西的请求（登录、派单、配网批准……）成了也记一行，出事时看得出做过哪几步；
+      // 只读的 GET 是轮询，不记（刷屏）
+      if (method != 'GET') {
+        AppLog.instance.line('I', '$method ${path.split('?').first} → ok '
+            '(${DateTime.now().difference(t0).inMilliseconds} ms)');
+      }
+      return r;
     } on SiteError catch (e) {
       // 日志设计 第 6 条：请求没成的记进 App 日志（不带查询参数和请求体）
       AppLog.instance.line('W', '$method ${path.split('?').first} → ${e.status} ${e.kind} ${e.message} '

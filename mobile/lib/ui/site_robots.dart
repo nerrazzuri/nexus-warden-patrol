@@ -345,7 +345,8 @@ class _SiteRobotsPageState extends State<SiteRobotsPage> {
             // 手机 App 测试 M01：底部导航的页面不给返回箭头（以前点了就退出登录、停掉后台值守）；退出站点在第 5 栏
             trailing: [
               // W42：添加机器人（扫贴纸配网；站点上批准要管理权限）。W53：挪到右上角
-              if (widget.entry != null && !(widget.api.session?.isViewer ?? true))
+              // 易用性第 6 轮 A6-09：只有能管机器人的才给（保安、业主点了站点也批不了）
+              if (widget.entry != null && (widget.api.session?.canManageRobots ?? false))
                 IconButton(
                     key: SiteRobotsPage.addKey,
                     tooltip: tr('Add robot', '添加机器人'),

@@ -34,7 +34,15 @@ import '../nw/nw_theme.dart';
 class VideoHealth {
   final Map<String, bool> online;
 
-  const VideoHealth(this.online);
+  /// 这一次问到站点没有。问不到（手机断网、站点关了）就是 false：这时说不了机器人在不在线。
+  final bool reachable;
+
+  const VideoHealth(this.online) : reachable = true;
+
+  /// 问不到站点（A6-08 同类：以前跟「站点说离线」一样写「站点显示此机器人离线」，其实断网的是手机）。
+  const VideoHealth.unreachable()
+      : online = const <String, bool>{},
+        reachable = false;
 
   /// 一路都没有就不许开狗（遥控的「没画面不许动」在手机这头的样子）。
   bool get anyLive => online.values.any((v) => v);
@@ -310,6 +318,9 @@ class _LiveVideoState extends State<LiveVideo> {
 
   /// 手机 App 测试 M03：站点说过这台在不在线没有。没说过（站点连不上、证书变了）不能写「站点显示离线」。
   bool _heard = false;
+
+  /// 最近一次问不到站点（手机这头断网）。
+  bool _unreachable = false;
   String _trouble = '';
 
   /// 第几条流。
@@ -404,6 +415,10 @@ class _LiveVideoState extends State<LiveVideo> {
   }
 
   void _onHealth(VideoHealth h) {
+    if (h.reachable == _unreachable) {
+      _unreachable = !h.reachable;
+      if (mounted) setState(() {});
+    }
     if (!_heard) {
       _heard = true;
       if (mounted) setState(() {});
@@ -645,6 +660,12 @@ class _LiveVideoState extends State<LiveVideo> {
           tr('${widget.camera}: no video', '${widget.camera} 没有画面'),
           tr("No video status from the site yet. If this stays, the phone can't read from the site",
               '还没收到站点的画面状态。一直这样说明手机读不到站点的数据'));
+    }
+    if (_unreachable) {
+      return _panel(
+          tr('${widget.camera}: no video', '${widget.camera} 没有画面'),
+          tr("This phone can't reach the site. Check the phone's network (Wi-Fi or mobile data); the video comes back by itself",
+              '手机连不上站点。请检查手机网络（WiFi 或移动数据），连上后画面会自己回来'));
     }
     return _panel(
         tr('${widget.camera}: no video', '${widget.camera} 没有画面'),

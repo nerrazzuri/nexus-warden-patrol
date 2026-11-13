@@ -24,7 +24,8 @@ from typing import Any
 #: 73 W73 第五期:外部设备按位置绑定 ext_devices(只加表)。
 #: 74 W74 三期:地图标注 map_marks —— 出口线、易藏点(只加表);外审 r2:值守进度 guard_runs.follow
 #:    记看见人这一回的跟人(只加列)。
-SCHEMA_VERSION = 74
+#: 75 第 8 轮 W8-11:路线、排程的显示名 routes.title / route_schedules.title(能写中文;只加列)。
+SCHEMA_VERSION = 75
 
 _DDL = """
 CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
@@ -1001,6 +1002,9 @@ _ADDED_COLUMNS = (
     ("cert_pending", "old_fingerprint", "TEXT NOT NULL DEFAULT ''"),  # W55 外审 3 N2
     # W73 第一期(库 71):patrol 巡逻路线 / guard 防区路线(只给布防值守用,巡逻、排程看不见)
     ("routes", "kind", "TEXT NOT NULL DEFAULT 'patrol'"),
+    # 第 8 轮 W8-11(库 75):给人看的名字(能写中文);编号还是 ASCII(照片文件名、任务包里用)
+    ("routes", "title", "TEXT NOT NULL DEFAULT ''"),
+    ("route_schedules", "title", "TEXT NOT NULL DEFAULT ''"),
 )
 
 

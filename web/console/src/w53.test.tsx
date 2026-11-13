@@ -172,4 +172,67 @@ describe("W6-02 今天的巡逻:不会跑的说清楚", () => {
     await waitFor(() => expect(c.querySelector(".today-row a")).not.toBeNull());
     expect(c.querySelector(".today-row a")!.getAttribute("href")).toBe("#/admin/robots?robot=A");
   });
+  // 易用性第 7 轮:路线画的那一版跟机器人用的对不上 —— 两边版本写出来(也是到点不会跑的原因)
+  it("路线和机器人的地图版本对不上:写出两边的版本,不出 map_mismatch 原话", async () => {
+    setFetch(((url: string) => Promise.resolve(url === "/api/patrols/today"
+      ? json({ items: [{ at_ms: Date.now(), kind: "schedule", label: "demo-loop", robot: "A", by: "", state: "blocked", reason: "map_mismatch", end_ms: null, adhoc_id: "", map: { route: "11", robot: "12" } }] })
+      : json({}, 404))) as typeof fetch);
+    const { container: c } = render(<TodayPatrols />);
+    await waitFor(() => expect(c.querySelectorAll(".today-row").length).toBe(1));
+    expect(c.textContent).toContain("路线画在 v11 上,A 用的是 v12");
+    expect(c.textContent).not.toContain("map_mismatch");
+  });
 });
+
+// 第 8 轮 W8-03 / W8-04:被日程接替的一直巡逻不写「未完成」、不露 preempted;在跑的写第几圈
+describe("第 8 轮 今天的巡逻:被接替、第几圈", () => {
+  it("被日程接替:写跑了几圈、哪条日程接的,不写未完成和 preempted", async () => {
+    setFetch(((url: string) => Promise.resolve(url === "/api/patrols/today"
+      ? json({ items: [{ at_ms: Date.now(), kind: "adhoc", label: "loop-test", robot: "B", by: "demo", state: "handed_over", reason: "", end_ms: Date.now(), adhoc_id: "f1", forever: true, handover: { by: "schedule", name: "cut-test", laps: 6 } }] })
+      : json({}, 404))) as typeof fetch);
+    const { container: c } = render(<TodayPatrols />);
+    await waitFor(() => expect(c.querySelectorAll(".today-row").length).toBe(1));
+    expect(c.textContent).toContain("已跑 6 圈,由日程 cut-test 接替");
+    expect(c.textContent).toContain("被接替");
+    expect(c.textContent).not.toContain("未完成");
+    expect(c.textContent).not.toContain("preempted");
+    expect(c.querySelector(".tdchip")!.className).not.toMatch(/bad/);
+  });
+  it("在跑的一直巡逻:写「一直巡逻 · 第 3 圈」", async () => {
+    setFetch(((url: string) => Promise.resolve(url === "/api/patrols/today"
+      ? json({ items: [{ at_ms: Date.now(), kind: "adhoc", label: "loop-test", robot: "B", by: "demo", state: "running", reason: "", end_ms: null, adhoc_id: "f1", forever: true, lap: { n: 3, of: 0 } }] })
+      : json({}, 404))) as typeof fetch);
+    const { container: c } = render(<TodayPatrols />);
+    await waitFor(() => expect(c.querySelectorAll(".today-row").length).toBe(1));
+    expect(c.textContent).toContain("一直巡逻 · 第 3 圈");
+  });
+});
+
+// 第 8 轮 W8-08:路线画在别的版本上时清单说在哪一版;日程的路线跑不了说哪条
+describe("第 8 轮 开站清单:路线在别的版本上", () => {
+  it("写「有 1 条路线画在 v11 上,机器人在用 v7:在 v7 上重画」和跑不了的日程", async () => {
+    setFetch(((url: string) => Promise.resolve(url === "/api/setup"
+      ? json({ items: [
+        { id: "routes", done: false, skipped: false, elsewhere: [{ route: "demo-loop", map: "m1", version: "11" }], using: [{ map: "m1", version: "7" }] },
+        { id: "schedule", done: false, skipped: false, blocked: ["demo-night"] }], done: 0, total: 2 })
+      : url === "/api/me" ? json({ name: "alice", role: "admin", guide: { tour: 1, setup_hidden: false, skip: [] } }) : json({}, 404))) as typeof fetch);
+    const { container: c } = render(<SetupChecklist />);
+    await waitFor(() => expect(c.querySelector('[data-item="routes"]')).not.toBeNull());
+    expect(c.querySelector('[data-item="routes"]')!.textContent).toContain("有 1 条路线(demo-loop)画在 v11 上,机器人在用 v7:在 v7 上重画");
+    expect(c.querySelector('[data-item="schedule"]')!.textContent).toContain("日程 demo-night 要跑的路线跑不了");
+  });
+});
+
+// 第 8 轮 W8-11:今天的巡逻写路线显示名
+describe("第 8 轮 今天的巡逻写显示名", () => {
+  it("有显示名写显示名", async () => {
+    setFetch(((url: string) => Promise.resolve(url === "/api/patrols/today"
+      ? json({ items: [{ at_ms: Date.now(), kind: "schedule", label: "route-1", title: "一楼夜巡", robot: "A", by: "", state: "later", reason: "", end_ms: null, adhoc_id: "" }] })
+      : json({}, 404))) as typeof fetch);
+    const { container: c } = render(<TodayPatrols />);
+    await waitFor(() => expect(c.querySelectorAll(".today-row").length).toBe(1));
+    expect(c.textContent).toContain("一楼夜巡 · A");
+    expect(c.textContent).not.toContain("route-1");
+  });
+});
+

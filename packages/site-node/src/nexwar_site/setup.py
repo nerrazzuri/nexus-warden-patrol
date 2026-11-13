@@ -49,9 +49,26 @@ def setup_view(db: Any, dispatcher: Any, *, skip: set[str] | None = None) -> dic
     no_home = [rid for rid, (m, v) in loaded.items()
                if not _count(db, "SELECT COUNT(*) FROM homes WHERE robot_id=? AND map_id=? AND "
                              "map_version=?", (rid, m, v))]
-    routes_ok = (any(_count(db, "SELECT COUNT(*) FROM routes WHERE map_id=? AND "
-                            "(map_version='' OR map_version=?)", mv) for mv in set(loaded.values()))
-                 if loaded else _count(db, "SELECT COUNT(*) FROM routes") > 0)
+    using = set(loaded.values())
+
+    def runnable(m: str, v: str) -> bool:
+        return not using or any(m == um and v in ("", uv) for um, uv in using)
+
+    all_routes = {r["route_id"]: (str(r["map_id"]), str(r["map_version"] or ""))
+                  for r in db.query("SELECT route_id, map_id, map_version FROM routes")}
+    routes_ok = any(runnable(m, v) for m, v in all_routes.values())
+    # 第 8 轮 W8-08:路线都画在别的版本上 → 说画在哪一版、机器人用哪一版(客户以为路线丢了)
+    routes_detail: dict[str, Any] = {}
+    if not routes_ok and all_routes and using:
+        routes_detail = {
+            "elsewhere": [{"route": rid, "map": m, "version": v}
+                          for rid, (m, v) in sorted(all_routes.items())],
+            "using": [{"map": m, "version": v} for m, v in sorted(using)]}
+    # 日程要跑的路线跑不了(不存在、画在别的版本上)的不算排好了
+    sched = [(str(r["entry_id"]), _parse(r["definition"]).get("mission"))
+             for r in db.query("SELECT entry_id, definition FROM route_schedules")]
+    blocked = sorted(eid for eid, mission in sched
+                     if mission not in all_routes or not runnable(*all_routes[str(mission)]))
     # P1-87:登记了但文件丢了的不算有地图(跟地图页一致)
     store = getattr(dispatcher, "maps", None)
     has_map = bool(loaded) or (store.usable() if store is not None
@@ -63,8 +80,8 @@ def setup_view(db: Any, dispatcher: Any, *, skip: set[str] | None = None) -> dic
         "home": (bool(loaded) and not no_home, {"robots": no_home}),
         "zones": (has_map and not unconfirmed, {"maps": unconfirmed}),
         "standby": (bool(loaded) and not no_standby, {"robots": no_standby}),
-        "routes": (routes_ok, {}),
-        "schedule": (_count(db, "SELECT COUNT(*) FROM route_schedules") > 0, {}),
+        "routes": (routes_ok, routes_detail),
+        "schedule": (bool(sched) and len(blocked) < len(sched), {"blocked": blocked}),
         "arming": (_count(db, "SELECT COUNT(*) FROM arming_slots") > 0, {}),
         "accounts": (people >= 2, {"count": people}),
         "push": (_count(db, "SELECT COUNT(*) FROM push_devices") > 0, {}),

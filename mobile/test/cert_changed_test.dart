@@ -50,6 +50,8 @@ void main() {
     api.robotsError = const SiteError(0, '无法连接站点：Connection refused', kind: 'net');
     await t.pump(const Duration(seconds: 31));
     await t.pumpAndSettle();
+    await t.pump(kSiteDownGrace);                       // A6-08：满 15 秒还连不上才挂
+    await t.pumpAndSettle();
     expect(find.byKey(SiteDutyPage.siteDownKey), findsOneWidget);
     expect(find.byKey(SiteDutyPage.certChangedKey), findsNothing);
     expect(find.byKey(SiteDutyPage.unknownKey), findsNothing, reason: '读到过，留着旧的（横幅说是旧的）');

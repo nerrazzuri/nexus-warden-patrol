@@ -119,6 +119,25 @@ class _Entry extends StatelessWidget {
       _ => (id, ''),
     };
 
+/// 第 8 轮 W8-08：清单那一项的具体情况（路线都画在别的版本上、日程的路线跑不了）；没有就是空，用通用说明。
+String setupDetailText(Map it) {
+  String ver(Object? m) => m is Map ? ('${m['version'] ?? ''}'.isEmpty ? '${m['map']}' : 'v${m['version']}') : '';
+  final away = it['elsewhere'], use = it['using'], blocked = it['blocked'];
+  if (it['id'] == 'routes' && away is List && away.isNotEmpty && use is List && use.isNotEmpty) {
+    final sep = tr(', ', '\u3001');
+    final names = away.map((r) => r is Map ? '${r['route']}' : '').join(sep);
+    final at = away.map(ver).toSet().join(sep), u = use.map(ver).join(sep);
+    return tr('${away.length} route(s) ($names) are drawn on $at, but the robots use $u: redraw on $u.',
+        '有 ${away.length} 条路线（$names）画在 $at 上，机器人在用 $u：在 $u 上重画。');
+  }
+  if (it['id'] == 'schedule' && blocked is List && blocked.isNotEmpty) {
+    final names = blocked.join(tr(', ', '\u3001'));
+    return tr("Schedule $names can't run its route (drawn on another map version, or deleted): change the route or redraw it.",
+        '日程 $names 要跑的路线跑不了（画在别的地图版本上或已删除）：改路线或重画。');
+  }
+  return '';
+}
+
 class SetupChecklist extends StatefulWidget {
   final SiteApi api;
   /// 「去做」按到哪儿（外壳给：切到哪一栏或推哪一页）。
@@ -224,7 +243,8 @@ class _SetupChecklistState extends State<SetupChecklist> {
                       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                     Text(setupItemText('${it['id']}').$1, style: NwText.bodyMedium.copyWith(color: c.text)),
                     if (it['done'] != true)
-                      Text(setupItemText('${it['id']}').$2, style: NwText.bodySmall.copyWith(color: c.textSecondary)),
+                      Text(setupDetailText(it).isNotEmpty ? setupDetailText(it) : setupItemText('${it['id']}').$2,
+                          style: NwText.bodySmall.copyWith(color: c.textSecondary)),
                   ])),
                   if (it['done'] != true && it['skipped'] != true) ...[
                     TextButton(
@@ -955,6 +975,7 @@ class MeTab extends StatelessWidget {
 
   static const Key leaveKey = Key('me-leave');
   static const Key settingsKey = Key('me-settings');
+  static const Key reportKey = Key('me-report');
 
   @override
   Widget build(BuildContext context) {
@@ -999,6 +1020,13 @@ class MeTab extends StatelessWidget {
                   title: tr('Practice an alarm', '报警演练'),
                   hint: tr("A simulated alarm visible only to you; nothing is sent to the site.", '模拟报警，仅你可见，不发送到站点。'),
                   onTap: () => _push(context, const PracticeAlarmPage())),
+            // 易用性第 6 轮 A6-07：保安出了问题直接在这儿报（以前要走「我的 → 设置 → 上传日志」三层）
+            _Entry(
+                entryKey: MeTab.reportKey,
+                icon: Icons.bug_report_outlined,
+                title: tr('Report a problem', '报问题'),
+                hint: tr('Say what happened; the logs go to the engineer.', '写一句出了什么事，日志发给工程师。'),
+                onTap: () => openProblemReport(context, api)),
             _Entry(
                 entryKey: const Key('me-help'),
                 icon: Icons.help_outline_rounded,

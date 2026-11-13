@@ -19,6 +19,7 @@ import 'nw/nw_p4_admin.dart' show nwGap8;
 import 'nw/nw_theme.dart';
 import 'nw/nw_widgets.dart';
 import 'refusal.dart';
+import 'site_robot.dart' show SiteRobotPage;
 import 'site_routes.dart' show SiteRouteEditorPage;
 
 /// 时刻 `14:05`。给了 [offsetMin]（站点时区离 UTC 几分钟，站点回的 `utc_offset_min`）就按站点的钟，
@@ -29,6 +30,17 @@ String hhmm(int ms, [int? offsetMin]) {
       : DateTime.fromMillisecondsSinceEpoch(ms, isUtc: true).add(Duration(minutes: offsetMin));
   return '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
 }
+
+/// A7-03：临时巡逻跑完去哪（派巡逻弹层、临时路线页共用一句；跟站点 standby.py 一个口径：
+/// 正常跑完回默认待命点，只许手动派的不自己回）。[manualOnly] 不知道（null）就把例外也写上。
+String adhocEndText({String robot = '', bool? manualOnly}) => switch (manualOnly) {
+      true => tr("$robot is set to manual dispatch only, so it won't go back to standby by itself afterwards; tap Return to standby.",
+          '$robot 只许手动派，结束后不会自己回待命点，要回就点「回待命点」。'),
+      false => tr('When it finishes, the robot goes back to its default standby point.', '跑完后机器人回默认待命点。'),
+      null => tr(
+          'When it finishes, the robot goes back to its default standby point (robots set to manual dispatch only stay where they are).',
+          '跑完后机器人回默认待命点（只许手动派的机器人留在原地）。'),
+    };
 
 String minutesText(num seconds) {
   final m = (seconds / 60).round().clamp(1, 24 * 60);
@@ -50,13 +62,19 @@ String dispatchResultText(Map<String, dynamic> r, String label) {
       '已派出：「$label」${est is num ? '，${minutesText(est)}' : ''}，已通知经理和管理员。');
 }
 
+/// 第 8 轮 A8-06：派出去（或排上了）一趟就加一。首页「今天的巡逻」听它马上重读（在机器人页、路线页派的也算）。
+final ValueNotifier<int> patrolSent = ValueNotifier<int>(0);
+
 /// 弹派巡逻框。派出去（或排上了）回给人看的那一句；没派回 null。
-Future<String?> showPatrolSheet(BuildContext context, SiteApi api, String robotId) =>
-    showModalBottomSheet<String>(
-        context: context,
-        isScrollControlled: true,
-        showDragHandle: true,
-        builder: (_) => _PatrolSheet(api: api, robotId: robotId));
+Future<String?> showPatrolSheet(BuildContext context, SiteApi api, String robotId) async {
+  final msg = await showModalBottomSheet<String>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (_) => _PatrolSheet(api: api, robotId: robotId));
+  if (msg != null) patrolSent.value++;
+  return msg;
+}
 
 class _PatrolSheet extends StatefulWidget {
   final SiteApi api;
@@ -107,19 +125,34 @@ class _PatrolSheetState extends State<_PatrolSheet> {
   /// 被叫停了（手机 App 测试 M13）：派之前就说，不等点了才被拒。
   Map? _held;
 
+  /// A7-03：这台只许手动派（结束后不自己回）；没读到是 null。
+  bool? _manualOnly;
+
   /// 易用性第 6 轮 A6-03：画在别的地图版本上的路线 → 画在哪一版（派不了，灰掉写明）。
   final Map<String, String> _otherMap = <String, String>{};
+  /// 第 8 轮 W8-11：路线编号 → 显示名（起了名字的）。
+  final Map<String, String> _titles = <String, String>{};
   String _loaded = '';
 
   Future<void> _load() async {
     unawaited(widget.api.robot(widget.robotId).then((v) async {
-      if (mounted && v['held'] is Map) setState(() => _held = v['held'] as Map);
+      if (mounted) {
+        setState(() {
+          if (v['held'] is Map) _held = v['held'] as Map;
+          _manualOnly = v['manual_only'] is Map;
+        });
+      }
       final caps = v['capabilities'];
       final tasks = caps is Map ? caps['tasks'] : null;
       final p = tasks is Map ? tasks['patrol'] : null;
       if (p is! Map || p['map_id'] is! String || p['map_version'] is! String) return;
       final lib = await widget.api.routes();
       final other = <String, String>{};
+      final titles = <String, String>{
+        for (final r in (lib['routes'] as List? ?? const []).whereType<Map>())
+          if ('${r['title'] ?? ''}'.isNotEmpty) '${r['id']}': '${r['title']}',
+      };
+      if (mounted) setState(() => _titles..clear()..addAll(titles));
       for (final r in (lib['routes'] as List? ?? const []).whereType<Map>()) {
         final v2 = '${r['map_version'] ?? ''}';
         if (v2.isEmpty) continue;                     // 没绑版本的路线照旧能派（站点自己判）
@@ -267,33 +300,46 @@ class _PatrolSheetState extends State<_PatrolSheet> {
                 for (final r in rs)
                   Padding(
                     padding: const EdgeInsets.only(bottom: Nw.s8),
-                    child: NwCard(
-                      key: _PatrolSheet.routeKey(r),
-                      tone: _pick == r ? NwTone.info : NwTone.neutral,
-                      onTap: _otherMap.containsKey(r) ? null : () => setState(() => _pick = r),
-                      child: Row(children: [
-                        Icon(_pick == r ? Icons.radio_button_checked_rounded : Icons.radio_button_off_rounded,
-                            color: _pick == r ? c.primary : c.textSecondary),
-                        const SizedBox(width: Nw.s8),
-                        Expanded(
-                            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                          Text(r,
-                              style: NwText.bodyLarge
-                                  .copyWith(color: _otherMap.containsKey(r) ? c.textSecondary : c.text)),
-                          if (_otherMap.containsKey(r))
+                    // 易用性第 7 轮：画在别的版本上的路线整行变淡、不写预计时间、写「派不了」和按角色的去处
+                    child: Opacity(
+                      opacity: _otherMap.containsKey(r) ? 0.55 : 1,
+                      child: NwCard(
+                        key: _PatrolSheet.routeKey(r),
+                        tone: _pick == r ? NwTone.info : NwTone.neutral,
+                        onTap: _otherMap.containsKey(r) ? null : () => setState(() => _pick = r),
+                        child: Row(children: [
+                          Icon(
+                              _otherMap.containsKey(r)
+                                  ? Icons.block_rounded
+                                  : _pick == r
+                                      ? Icons.radio_button_checked_rounded
+                                      : Icons.radio_button_off_rounded,
+                              color: _pick == r ? c.primary : c.textSecondary),
+                          const SizedBox(width: Nw.s8),
+                          Expanded(
+                              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                            Text(_titles[r] ?? r,
+                                style: NwText.bodyLarge
+                                    .copyWith(color: _otherMap.containsKey(r) ? c.textSecondary : c.text)),
+                            if (_otherMap.containsKey(r)) ...[
+                              Text(
+                                  tr("Can't dispatch: drawn on map v${_otherMap[r]}; ${widget.robotId} is using v$_loaded",
+                                      '派不了：画在 v${_otherMap[r]} 上，${widget.robotId} 用的是 v$_loaded'),
+                                  style: NwText.bodySmall.copyWith(color: c.textSecondary)),
+                              Text(refusalHint('map_mismatch', widget.api.session),
+                                  style: NwText.bodySmall.copyWith(color: c.textSecondary)),
+                            ],
+                          ])),
+                          if (!_otherMap.containsKey(r))
                             Text(
-                                tr('Drawn on map v${_otherMap[r]}; ${widget.robotId} is using v$_loaded',
-                                    '画在 v${_otherMap[r]} 上，${widget.robotId} 用的是 v$_loaded'),
+                                _plans[r]?['forever'] == true
+                                    ? loopsText(0)
+                                    : _plans[r]?['estimate_s'] is num
+                                        ? minutesText(_plans[r]!['estimate_s'] as num)
+                                        : '…',
                                 style: NwText.bodySmall.copyWith(color: c.textSecondary)),
-                        ])),
-                        Text(
-                            _plans[r]?['forever'] == true
-                                ? loopsText(0)
-                                : _plans[r]?['estimate_s'] is num
-                                    ? minutesText(_plans[r]!['estimate_s'] as num)
-                                    : '…',
-                            style: NwText.bodySmall.copyWith(color: c.textSecondary)),
-                      ]),
+                        ]),
+                      ),
                     ),
                   ),
               ]),
@@ -318,9 +364,9 @@ class _PatrolSheetState extends State<_PatrolSheet> {
                 key: patrolForeverKey,
                 tone: NwTone.info,
                 text: tr(
-                    'Keep patrolling: starts now and loops until the battery reaches the site\'s patrol return line, then goes back to recharge or swap and the task ends.'
+                    'Keep patrolling: starts now and loops until the battery ${plan['return_pct'] is num ? 'drops to ${plan['return_pct']}% (the site\'s patrol battery line)' : 'reaches the site\'s patrol battery line'}, then goes back to recharge or swap and the task ends.'
                         '${'${plan['interrupted_by'] ?? ''}'.isEmpty ? '' : ' ${plan['interrupted_by']} will stop it and run instead.'}',
-                    '一直巡逻：现在就走，一圈接一圈，电量到站点设的巡逻电量线就回去充电或换电池，这一趟结束。'
+                    '一直巡逻：现在就走，一圈接一圈，电量${plan['return_pct'] is num ? '降到 ${plan['return_pct']}%（站点设的巡逻电量线）' : '到站点设的巡逻电量线'}就回去充电或换电池，这一趟结束。'
                         '${'${plan['interrupted_by'] ?? ''}'.isEmpty ? '' : '${plan['interrupted_by']}到点会停下它、改跑日程。'}')),
           ],
           nwGap8,
@@ -342,11 +388,8 @@ class _PatrolSheetState extends State<_PatrolSheet> {
           nwGap8,
           Text(
               // 手机 App 测试 M38：对经理不说「会通知经理」
-              widget.api.session?.role == 'owner'
-                  ? tr('One-off patrols are not saved to the schedule. The administrator is notified; the robot returns to standby afterwards.',
-                      '临时巡逻不保存到日程，派出后通知管理员，结束后机器人返回待命点。')
-                  : tr("One-off patrols are not saved to the schedule. The manager and administrator are notified; the robot returns to standby afterwards.",
-                      '临时巡逻不保存到日程，派出后通知经理和管理员，结束后机器人返回待命点。'),
+              '${widget.api.session?.role == 'owner' ? tr('One-off patrols are not saved to the schedule. The administrator is notified. ', '临时巡逻不保存到日程，派出后通知管理员。') : tr('One-off patrols are not saved to the schedule. The manager and administrator are notified. ', '临时巡逻不保存到日程，派出后通知经理和管理员。')}'
+              '${adhocEndText(robot: widget.robotId, manualOnly: _manualOnly)}',
               style: NwText.bodySmall.copyWith(color: c.textSecondary)),
           nwGap8,
           Row(children: [
@@ -387,13 +430,58 @@ class _PatrolSheetState extends State<_PatrolSheet> {
       'cancelled' => (tr('Cancelled', '已取消'), NwTone.neutral),
       'expired' => (tr('Expired', '已作废'), NwTone.neutral),
       'blocked' => (tr("Won't run", '不会跑'), NwTone.warning),
+      // 第 8 轮 W8-03：被日程（或更急的任务）接替不是故障
+      'handed_over' => (tr('Handed over', '被接替'), NwTone.neutral),
       _ => (state, NwTone.neutral),
     };
 
 /// 易用性第 6 轮 W6-02：站点给的原因码说人话（`manual_only` = 排给的那台只许手动派）；别的原样。
-String patrolReasonText(String reason, String robot) => reason == 'manual_only'
-    ? tr('$robot is set to manual dispatch only', '$robot 只许手动派')
-    : reason;
+String patrolReasonText(String reason, String robot) => switch (reason) {
+      'manual_only' => tr('$robot is set to manual dispatch only', '$robot 只许手动派'),
+      'map_mismatch' => tr("$robot's map doesn't match the route", '$robot 用的地图跟路线对不上'),
+      _ => reason,
+    };
+
+String _ver(String v) => RegExp(r'^\d+$').hasMatch(v) ? 'v$v' : v;
+
+/// 易用性第 7 轮：站点给的 `map`（路线画在哪一版、机器人用的哪一版）说人话；没有就是空。
+String patrolMapText(Object? map, String robot) {
+  if (map is! Map) return '';
+  final a = _ver('${map['route']}'), b = _ver('${map['robot']}');
+  return tr('The route is drawn on map $a; $robot is using $b', '路线画在 $a 上，$robot 用的是 $b');
+}
+
+/// 易用性第 7 轮：「不会跑」去哪改（按角色；App 里改不了派遣方式，管理员去网页）。
+String patrolFixText(Map<String, dynamic> it, SiteSession? s) {
+  final robot = '${it['robot'] ?? ''}';
+  final fixes = <String>[
+    if (it['reason'] == 'manual_only')
+      (s?.canManageRobots ?? false)
+          ? tr('To let it run on schedule: web console → Admin → Robots → $robot → set to automatic dispatch.',
+              '要让它按日程跑：在网页「管理 → 机器人」把 $robot 改回自动派。')
+          : tr('Ask an administrator to set $robot back to automatic dispatch.', '找管理员把 $robot 改回自动派。'),
+    if (it['map'] is Map) refusalHint('map_mismatch', s),
+  ];
+  return fixes.join('\n');
+}
+
+/// 第 8 轮 W8-11：今天的巡逻那一趟写什么名字 —— 路线起了显示名写显示名，没起写编号（临时路线照站点的话）。
+String todayLabel(Map it) {
+  final t = '${it['title'] ?? ''}';
+  return t.isNotEmpty ? t : siteKnown('${it['label']}');
+}
+
+/// 第 8 轮 W8-03：被接替的那一趟 —— 跑了几圈、谁接的（站点给的 `handover`）；没有就是空。
+String patrolHandoverText(Object? h) {
+  if (h is! Map) return '';
+  final who = switch (h['by']) {
+    'schedule' => tr('schedule ${h['name']}', '日程 ${h['name']} '),
+    'teleop' => tr('remote control', '遥控'),
+    _ => tr('a more urgent task', '更急的任务'),
+  };
+  final laps = h['laps'] is num ? (h['laps'] as num).toInt() : 0;
+  return laps > 0 ? tr('Ran $laps loop(s), then $who took over', '已跑 $laps 圈，由$who接替') : tr('$who took over', '由$who接替');
+}
 
 int _skippedOf(Map<String, dynamic> it) => it['skipped'] is int ? it['skipped'] as int : 0;
 
@@ -429,17 +517,36 @@ class TodayPatrolList extends StatelessWidget {
         (it['by'] == s?.name || (s?.canSchedule ?? false));
     final (st, _) = patrolStateText('${it['state']}', _skippedOf(it));
     final lines = <String>[
-      '${hhmm((it['at_ms'] as num).toInt(), offsetMin)} · ${siteKnown('${it['label']}')}${'${it['robot'] ?? ''}'.isEmpty ? '' : ' · ${it['robot']}'}',
+      '${hhmm((it['at_ms'] as num).toInt(), offsetMin)} · ${todayLabel(it)}${'${it['robot'] ?? ''}'.isEmpty ? '' : ' · ${it['robot']}'}',
       st,
       if (adhoc) tr('One-off patrol sent by ${it['by']}', '${it['by']} 派的临时巡逻'),
-      if (it['end_ms'] is num) tr('Ends around ${hhmm((it['end_ms'] as num).toInt(), offsetMin)}', '预计 ${hhmm((it['end_ms'] as num).toInt(), offsetMin)} 结束'),
-      if (reason.isNotEmpty) patrolReasonText(reason, '${it['robot'] ?? ''}'),
+      if (it['state'] == 'running' && it['lap'] is Map) lapText(it['lap']),
+      if (it['handover'] is Map) patrolHandoverText(it['handover']),
+      // 第 8 轮：还没跑完的才是「预计」；跑完了的写几点结束
+      if (it['end_ms'] is num)
+        const {'running', 'queued', 'waiting', 'next', 'later'}.contains(it['state'])
+            ? tr('Ends around ${hhmm((it['end_ms'] as num).toInt(), offsetMin)}', '预计 ${hhmm((it['end_ms'] as num).toInt(), offsetMin)} 结束')
+            : tr('Ended ${hhmm((it['end_ms'] as num).toInt(), offsetMin)}', '${hhmm((it['end_ms'] as num).toInt(), offsetMin)} 结束'),
+      if (reason.isNotEmpty && !(reason == 'map_mismatch' && it['map'] is Map))
+        patrolReasonText(reason, '${it['robot'] ?? ''}'),
+      if (it['map'] is Map) patrolMapText(it['map'], '${it['robot'] ?? ''}'),
+      if (it['state'] == 'blocked') patrolFixText(it, s),
     ];
+    final robotId = '${it['robot'] ?? ''}';
     final cancel = await showDialog<bool>(
         context: context,
         builder: (c) => AlertDialog(
               content: Text(lines.join('\n')),
               actions: [
+                if (it['state'] == 'blocked' && robotId.isNotEmpty)
+                  TextButton(
+                      key: const Key('today-robot'),
+                      onPressed: () {
+                        Navigator.pop(c, false);
+                        Navigator.push(context,
+                            MaterialPageRoute<void>(builder: (_) => SiteRobotPage(api: api, robotId: robotId)));
+                      },
+                      child: Text(tr('Open robot', '去机器人页'))),
                 if (canCancel)
                   TextButton(
                       key: const Key('today-cancel'),
@@ -493,7 +600,7 @@ class TodayPatrolList extends StatelessWidget {
                     child: Text(
                         [
                           if (items[i]['kind'] == 'adhoc') tr('One-off', '临时'),
-                          siteKnown('${items[i]['label']}'),
+                          todayLabel(items[i]),
                           if ('${items[i]['robot'] ?? ''}'.isNotEmpty) '${items[i]['robot']}',
                           if (items[i]['kind'] == 'adhoc' && '${items[i]['by'] ?? ''}'.isNotEmpty) '${items[i]['by']}',
                         ].join(' · '),

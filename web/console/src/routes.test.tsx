@@ -153,8 +153,13 @@ function routesApi(opts: { meta: PreviewMeta; routes?: any[]; timezone?: string 
   setFetch((async (url: RequestInfo | URL, init?: RequestInit) => {
     const u = String(url);
     if (u.endsWith("/api/maps")) return json(MAPS);
+    if (u.endsWith("/api/robots")) return json({ robots: [{ robot_id: "A" }, { robot_id: "B" }] });
     if (u.endsWith("/preview")) return json(opts.meta);
-    if (u.includes("/api/routes?")) return json(view());
+    if (u.includes("/api/routes?")) {
+      const want = new URL(u, "http://x").searchParams.get("map_version");
+      const v = view();
+      return json(want == null ? v : { ...v, routes: v.routes.filter((r: any) => r.map_version === want || r.map_version === "") });
+    }
     if (init?.method === "POST") {
       const body = JSON.parse(String(init.body));
       if (u.endsWith("/api/route-check")) return opts.check ? opts.check(body) : json({ errors: [] });   // P1-39 画的时候查,不算存
@@ -183,6 +188,34 @@ async function openNew(meta: PreviewMeta, name = "night", extra: Partial<Paramet
   await tick();
   return { r, posted, svg: r.container.querySelector("svg.map")!, c: r.container };
 }
+
+// 第 8 轮 W8-11:路线名能写中文 —— 写的当显示名,编号自动给;列表、编辑页标题写显示名
+describe("W8-11 路线显示名", () => {
+  it("新建写中文名:编号自动给 route-N,显示名带过去", async () => {
+    const { r, posted, svg, c } = await openNew(META, "一楼夜巡", { routes: [{ id: "route-1", map_id: "m1", map_version: "1", revision: 1, bound: true,
+      updated_by: "a", updated_ms: 0, policy: {}, waypoints: [P("a", 1, 1)], title: "" }] });
+    expect(c.textContent).toContain("route-2");
+    for (const [x, y] of [[1, 1], [2, 2]] as [number, number][]) {
+      fireEvent.click(svg, clientOf(c, META, x, y));
+      await tick();
+    }
+    fireEvent.click(r.getByText("Save route"));
+    await waitFor(() => expect(posted.length).toBe(1));
+    expect(posted[0].path).toContain("/api/routes/route-2");
+    expect(posted[0].body.title).toBe("一楼夜巡");
+  });
+  it("列表写显示名(没起就写编号)", async () => {
+    installScreenCTM();
+    routesApi({ meta: META, routes: [
+      { id: "route-1", map_id: "m1", map_version: "1", revision: 1, bound: true, updated_by: "a", updated_ms: 0, policy: {}, waypoints: [P("a", 1, 1)], title: "一楼夜巡" },
+      { id: "loop", map_id: "m1", map_version: "1", revision: 1, bound: true, updated_by: "a", updated_ms: 0, policy: {}, waypoints: [P("a", 1, 1)], title: "" }] });
+    const r = render(<RoutesPage say={() => {}} />);
+    await ready(r.container);
+    await waitFor(() => expect(r.container.querySelector('[data-route-row="route-1"]')).not.toBeNull());
+    expect(r.container.querySelector('[data-route-row="route-1"] .routerow-name')!.textContent).toBe("一楼夜巡");
+    expect(r.container.querySelector('[data-route-row="loop"] .routerow-name')!.textContent).toBe("loop");
+  });
+});
 
 describe("路线页:点图加点,存下去的是点的那一处的地图坐标", () => {
   const WANT: [number, number][] = [[1.23, -2.5], [4.56, -2.5], [4.56, 1.11], [-3.07, 6.4]];
@@ -281,6 +314,18 @@ describe("路线页:拖点、拖朝向把手、调序、删、动作", () => {
 describe("路线页:站点的回答", () => {
   const ROUTE = { id: "loop", map_id: "m1", map_version: "1", revision: 4, bound: true, updated_by: "a", updated_ms: 0, policy: {},
     waypoints: [P("a", 1, 1), P("b", 2, 2), P("c", 3, 3)] };
+
+  // 第 8 轮 W8-08:选的这一版上没有路线、别的版本上有 → 说在哪一版(客户以为路线丢了)
+  it("W8-08 这一版没路线时写别的版本上有几条", async () => {
+    installScreenCTM();
+    routesApi({ meta: META, routes: [{ ...ROUTE, id: "demo-loop", map_version: "11" }], timezone: "UTC", schedules: [] });
+    const r = render(<RoutesPage say={() => {}} />);
+    await ready(r.container);
+    await waitFor(() => expect(r.container.querySelector("[data-routes-elsewhere]")).not.toBeNull());
+    lang.value = "zh";
+    await tick();
+    expect(r.container.querySelector("[data-routes-elsewhere]")!.textContent).toContain("v11 上有 1 条路线(demo-loop)");
+  });
 
   it("逐点校验没过:错的点标红、说原因,存不下;改好重存按原来的修订号带过去", async () => {
     installScreenCTM();
@@ -476,6 +521,48 @@ describe("路线页:站点的回答", () => {
     fireEvent.click(r.getByText("Set timezone"));
     await waitFor(() => expect(posted.at(-1)!.path).toContain("/api/route-timezone"));
     expect(posted.at(-1)!.body).toEqual({ timezone: "Asia/Kuala_Lumpur" });
+  });
+
+  // 第 8 轮 W8-06:加日程能选由哪台跑(默认哪台空就哪台);列表里写由哪台跑
+  // 第 8 轮 W8-11:排程名也能写中文 —— 写的当显示名,编号自动给;列表写显示名
+  it("W8-11 排程:中文名当显示名,编号自动给", async () => {
+    installScreenCTM();
+    const sch = { id: "loop-1", title: "每晚十点", mission: "loop", at: "22:00", days: ["mon"], window_min: 30, on_missed: "skip", revision: 7 };
+    const posted = routesApi({ meta: META, routes: [ROUTE], timezone: "UTC", schedules: [sch] });
+    const r = render(<RoutesPage say={() => {}} />);
+    await ready(r.container);
+    await waitFor(() => expect(r.getByText("loop")).toBeTruthy());
+    fireEvent.click(r.getByText("loop"));
+    await waitFor(() => expect(r.getByText("每晚十点")).toBeTruthy());
+    fireEvent.input(r.container.querySelector('.form input[maxlength="64"]')!, { target: { value: "清早一圈" } });
+    fireEvent.input(r.container.querySelector('input[name="at"]')!, { target: { value: "05:30" } });
+    fireEvent.click(r.getByText("Add schedule"));
+    await waitFor(() => expect(posted.length).toBe(1));
+    expect(posted[0].path).toContain("/api/route-schedules/loop-2");
+    expect(posted[0].body.title).toBe("清早一圈");
+  });
+
+  it("W8-06 排程:选由哪台跑,列表写出来", async () => {
+    installScreenCTM();
+    const sch = { id: "n1", mission: "loop", at: "22:00", days: ["mon"], window_min: 30, on_missed: "skip", revision: 7, robot: "B" };
+    const any = { ...sch, id: "n3", at: "23:00", robot: undefined };
+    const posted = routesApi({ meta: META, routes: [ROUTE], timezone: "UTC", schedules: [sch, any] });
+    const r = render(<RoutesPage say={() => {}} />);
+    await ready(r.container);
+    await waitFor(() => expect(r.getByText("loop")).toBeTruthy());
+    fireEvent.click(r.getByText("loop"));
+    await waitFor(() => expect(r.getByText("n1")).toBeTruthy());
+    const rows = Array.from(r.container.querySelectorAll(".sched-list li")).map((x) => x.textContent ?? "");
+    expect(rows[0]).toContain("Robot B");
+    expect(rows[1]).toContain("Any free robot");
+    const pick = await waitFor(() => { const x = r.container.querySelector('select[name="schedRobot"]') as HTMLSelectElement; expect(x.options.length).toBe(3); return x; });
+    expect(pick.value).toBe("");
+    fireEvent.change(pick, { target: { value: "A" } });
+    fireEvent.input(r.container.querySelector('.form input[maxlength="64"]')!, { target: { value: "dawn" } });
+    fireEvent.input(r.container.querySelector('input[name="at"]')!, { target: { value: "05:30" } });
+    fireEvent.click(r.getByText("Add schedule"));
+    await waitFor(() => expect(posted.length).toBe(1));
+    expect(posted[0].body).toMatchObject({ mission: "loop", at: "05:30", robot: "A" });
   });
 
   it("排程:有时区时列出这条路线的排程,加、删", async () => {

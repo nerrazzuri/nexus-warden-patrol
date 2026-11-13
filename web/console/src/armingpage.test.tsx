@@ -207,18 +207,24 @@ describe("布防时间页", () => {
       { shift_hours: [7, 19], stale_hours: 2, self_protect_siren: false }));
   });
 
-  it("W76:巡逻回去补能的电量线(全站一个,20–60%)", async () => {
+  // 第 8 轮 W8-05:电量线挪到「巡逻日程」页签、叫「巡逻电量线」、自己存;填错了框标红、说原因、存不了
+  it("W8-05 巡逻电量线:在巡逻日程页签,填错标红,自己存", async () => {
     const { container: c } = page();
-    await waitFor(() => expect(c.querySelector('input[name="patrolReturn"]')).not.toBeNull());
-    await new Promise((r) => setTimeout(r, 20));          // 等站点的设置读回来
-    const box = c.querySelector('input[name="patrolReturn"]') as HTMLInputElement;
-    expect(box.value).toBe("25");
-    expect(box.min).toBe("20");
-    expect(box.max).toBe("60");
+    await waitFor(() => expect(c.querySelector('select[name="shiftA"]')).not.toBeNull());
+    expect(c.querySelector('input[name="patrolReturn"]')).toBeNull();
+    fireEvent.click(c.querySelector('[data-arm-tab="patrols"]')!);
+    const box = await waitFor(() => c.querySelector('input[name="patrolReturn"]') as HTMLInputElement);
+    await waitFor(() => expect(box.value).toBe("25"));
+    expect(c.textContent).toContain("巡逻电量线");
+    fireEvent.input(box, { target: { value: "70" } });
+    expect(box.getAttribute("aria-invalid")).toBe("true");
+    expect(c.textContent).toContain("20–60");
+    const save = c.querySelector("[data-patrol-line-save]") as HTMLButtonElement;
+    expect(save.disabled).toBe(true);
     fireEvent.input(box, { target: { value: "40" } });
-    fireEvent.click(c.querySelector(".arm-save")!);
-    await waitFor(() => expect(posted.find((p) => p.url === "/api/duty-settings")?.body).toEqual(
-      { shift_hours: [7, 19], stale_hours: 2, patrol_return_pct: 40 }));
+    expect(box.getAttribute("aria-invalid")).toBe("false");
+    fireEvent.click(save);
+    await waitFor(() => expect(posted.find((p) => p.url === "/api/duty-settings")?.body).toEqual({ patrol_return_pct: 40 }));
   });
 
   it("没存离开有提示", async () => {

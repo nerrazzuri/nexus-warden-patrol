@@ -149,7 +149,12 @@ void main() {
       await t.pumpAndSettle();
       await t.tap(find.text('中文').last);
       await t.pumpAndSettle();
-      expect(find.text('选择站点'), findsOneWidget);
+      // 易用性第 6 轮 A6-06：换语言留在原来那一页（以前整个 App 重建、退回站点列表、站点里还得重新登录）
+      expect(find.byKey(const Key('lang-switch')), findsOneWidget, reason: '还在设置页');
+      expect(find.text('中文'), findsWidgets);
+      Navigator.of(t.element(find.byKey(const Key('lang-switch')))).pop();
+      await t.pumpAndSettle();
+      expect(find.text('选择站点'), findsOneWidget, reason: '后面那一页也换了');
       expect(find.text('Select site'), findsNothing);
       // 存盘是真的文件读写：得让真时钟走几步（见 support/pump.dart 的说明）
       for (var i = 0; i < 10 && !File('${dir.path}/lang.json').existsSync(); i++) {
