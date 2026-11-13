@@ -287,7 +287,7 @@ export function ArmWizard({ say, onClose, arming = false, onChanged }: { say: Sa
     try {
       const meta = await api<PreviewMeta>("GET", `${base}/preview`);
       await api("POST", `${base}/areas`, { zone: wt("zoneWholeName"), points: wholeMap(meta) });
-      await load();
+      await changed();   // 外审 3:背后的页要重读
     } catch (x) { say(errText(x)); } finally { setBusy(false); }
   }
 
@@ -330,6 +330,7 @@ export function ArmWizard({ say, onClose, arming = false, onChanged }: { say: Sa
       if (saved) {
         setRoute(saved);
         say(wt("routeSavedN", { name: title, n: g.waypoints.length }));
+        onChanged?.();
       } else setNote(wt("routeIdFull"));
       await load();
     } catch (x) { say(errText(x)); } finally { setBusy(false); }
@@ -339,7 +340,7 @@ export function ArmWizard({ say, onClose, arming = false, onChanged }: { say: Sa
     setBusy(true);
     try {
       await api("POST", `/api/robots/${enc(rid)}/service`, { manual_only: false });
-      await load();
+      await changed();
     } catch (x) { say(errText(x)); } finally { setBusy(false); }
   }
 
