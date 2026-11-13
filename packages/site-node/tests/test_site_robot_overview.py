@@ -327,6 +327,22 @@ def test_W76_概览_几圈的巡逻写第几圈_一直巡逻也写_一圈的不�
     assert _one(d, db)["lap"] is None
 
 
+def test_W906_正在跑的任务给人看的说法_不露任务编号(台):
+    d, db = 台
+    st = d.clients["A"].status
+    with db.tx() as c:
+        c.execute("INSERT INTO commands(command_id, task_id, robot_id, kind, payload, issued_by, "
+                  "issued_at, ack_result) VALUES ('c1','adhoc-forever-dcf7',?,'patrol',?,'g',?,"
+                  "'accepted')", ("A", json.dumps({"mission": {"mission": "route-1",
+                                                               "policy": {"loops": 0}}}), NOW))
+        c.execute("INSERT INTO routes(route_id, title, map_id, map_version, definition, revision, "
+                  "updated_ms, updated_by) VALUES ('route-1','一楼夜巡','m','7','{}',1,0,'x')")
+    st.task = SimpleNamespace(task_id="adhoc-forever-dcf7")
+    assert _one(d, db)["task_what"] == {"kind": "patrol", "route": "一楼夜巡", "forever": True}
+    st.task = None
+    assert _one(d, db)["task_what"] is None
+
+
 def test_minor3_第几圈只数这一趟派出以后的点_走索引不扫全部历史(台):
     """W76 外审 minor:「第几圈」每次扫全部到点历史。只数派出以后的(走 events_kind 索引)。"""
     from nexwar_site.robot_overview import lap_counts
