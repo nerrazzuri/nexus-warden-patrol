@@ -503,3 +503,34 @@ def test_11_11_A6_02_手机放开紧跟着关连接_记成本人放开不记断�
     rows = s.db.query("SELECT end_reason FROM teleop_leases WHERE robot_id='A'")
     assert [r["end_reason"] for r in rows] == ["released"]
     ph.close()
+
+
+def test_W907_遥控开始结束归在派机器人里_筛得出来(tmp_path):
+    from nexwar_site.audit import AuditLog
+    from nexwar_site.db import SiteDB
+    db = SiteDB(tmp_path / "a.db")
+    ms = [1_000]
+    log = AuditLog(db, now_ms=lambda: ms[0])
+    log.record(actor="gina", action="teleop_start", target="A", status=200)
+    ms[0] = 2_000
+    log.record(actor="gina", action="teleop_end", target="A", status=200,
+               detail={"mission": "route-1"})
+    got = log.search(group="dispatch")
+    assert sorted(r["action"] for r in got["audit"]) == ["teleop_end", "teleop_start"]
+
+
+def test_W901_审计里派巡逻那一行带路线显示名(tmp_path):
+    from nexwar_site.audit import AuditLog
+    from nexwar_site.db import SiteDB
+    db = SiteDB(tmp_path / "a.db")
+    with db.tx() as c:
+        c.execute("INSERT INTO routes(route_id, title, kind, definition, revision, map_id, "
+                  "map_version, updated_ms) VALUES ('route-1', '一楼夜巡', 'patrol', '{}', 1, "
+                  "'m', '1', 0)")
+    log = AuditLog(db, now_ms=lambda: 1_000)
+    log.record(actor="gina", action="POST /api/robots/A/patrol", target="A", status=200,
+               detail={"mission": "route-1"})
+    [r] = log.search()["audit"]
+    assert r["detail"]["mission_title"] == "一楼夜巡"
+    [r] = log.list()
+    assert r["detail"]["mission_title"] == "一楼夜巡"

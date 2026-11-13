@@ -128,7 +128,7 @@ def test_删路线_修订号对得上才删_还有排程用不许删(台):
                           "on_missed": "skip", "base_revision": 0}, by="alice")
     with pytest.raises(RouteConflict):
         s.delete_route("night", base_revision=9, by="alice")
-    with pytest.raises(RouteError, match="s1 还在用"):
+    with pytest.raises(RouteError, match="「s1」还在用"):
         s.delete_route("night", base_revision=1, by="alice")
     assert "night" in active_bundle(台.db).missions, "未删"
     s.delete_schedule("s1", base_revision=1, by="alice")
@@ -537,7 +537,7 @@ def test_接口_错误码_400带逐点_409冲突_审计(站点):
     code, d = s.req("POST", "/api/route-schedules/s1", _sched(), token=alice)
     assert code == 200 and d["schedules"][0]["id"] == "s1"
     code, d = s.req("POST", "/api/routes/night/delete", {"base_revision": 1}, token=alice)
-    assert code == 400 and "s1 还在用" in d["error"]
+    assert code == 400 and "「s1」还在用" in d["error"]
     assert s.req("POST", "/api/route-schedules/s1/delete", {"base_revision": 1},
                  token=alice)[0] == 200
     assert s.req("POST", "/api/routes/night/delete", {"base_revision": 1}, token=alice)[0] == 200

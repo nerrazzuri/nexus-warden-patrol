@@ -73,6 +73,20 @@ def _title(body: dict[str, Any]) -> str | None:
 EXPORT_BUNDLE_ID = "site-routes"
 
 
+def _rn(tx: Any, route_id: str) -> str:
+    """「路线显示名」(第 9 轮 W9-01;没起名写编号)。在事务里查,不另开连接。"""
+    row = tx.execute("SELECT title FROM routes WHERE route_id=?", (route_id,)).fetchone()
+    return f"「{(row['title'] if row is not None else '') or route_id}」"
+
+
+def _sn(tx: Any, ids: list[str]) -> str:
+    out = []
+    for i in ids:
+        row = tx.execute("SELECT title FROM route_schedules WHERE entry_id=?", (i,)).fetchone()
+        out.append(f"「{(row['title'] if row is not None else '') or i}」")
+    return "、".join(out)
+
+
 class RouteError(Exception):
     """存不下:``errors`` 是逐点的问题。"""
 
@@ -387,11 +401,11 @@ class RouteStore:
             if kind == "guard" and row is not None and row["kind"] != "guard":
                 used = _schedules_of(tx, route_id)
                 if used:
-                    raise RouteError(f"路线 {route_id} 还有排程 {', '.join(used)} 在用:防区路线不能"
-                                     "按排程跑,先删掉这些排程再改成防区路线")
+                    raise RouteError(f"路线{_rn(tx, route_id)}还有排程{_sn(tx, used)}在用:"
+                                     "防区路线不能按排程跑,先删掉这些排程再改成防区路线")
             if kind != "guard" and row is not None and row["kind"] == "guard" \
                     and _guard_plan_uses(tx, route_id):
-                raise RouteError(f"路线 {route_id} 在布防的值守方案里:巡逻路线不能拿来值守,"
+                raise RouteError(f"路线{_rn(tx, route_id)}在布防的值守方案里:巡逻路线不能拿来值守,"
                                  "先从值守方案里去掉再改成巡逻路线")
             if row is None:
                 tx.execute("INSERT INTO routes(route_id, map_id, map_version, definition, "
@@ -455,10 +469,10 @@ class RouteStore:
                 "SELECT entry_id, definition FROM route_schedules").fetchall()
                 if json.loads(r["definition"]).get("mission") == route_id]
             if users:
-                raise RouteError(f"排程 {', '.join(sorted(users))} 还在用路线 {route_id}:"
+                raise RouteError(f"排程{_sn(tx, sorted(users))}还在用路线{_rn(tx, route_id)}:"
                                  "先改排程或删排程")
             if _guard_plan_uses(tx, route_id):
-                raise RouteError(f"布防的值守方案还在用路线 {route_id}:先从值守方案里去掉")
+                raise RouteError(f"布防的值守方案还在用路线{_rn(tx, route_id)}:先从值守方案里去掉")
             tx.execute("DELETE FROM routes WHERE route_id=?", (route_id,))
             self._touch(tx, by, now)
 

@@ -79,7 +79,7 @@ def version_mismatch_text(mission: str, map_id: str, version: str, robot_id: str
                           loaded: str) -> str:
     """任务绑的那一版跟狗加载的不一样(R1;派遣器、排程共用)。"""
     # 第 8 轮 W8-02:客户看得懂的话(以前写「改 map_version、重新打包导入」,是给工程师的)
-    return (f"路线 {mission} 画在 {map_id} 第 {version} 版地图上,"
+    return (f"路线「{mission}」画在 {map_id} 第 {version} 版地图上,"
             f"{robot_id} 加载的是第 {loaded} 版:每次建图原点都不一样,旧路线的点在新图上对不上 —— "
             f"在第 {loaded} 版地图上重画这条路线(或让 {robot_id} 换回第 {version} 版地图)")
 
@@ -829,8 +829,9 @@ class Dispatcher:
             raise DispatchRefused(f"路线画在地图 {m.map_id} 上,{robot_id} 加载的是 {loaded[0]}:"
                                   f"在 {loaded[0]} 上重画这条路线,或给 {robot_id} 下发 {m.map_id}")
         if m.map_version != loaded[1]:
-            raise DispatchRefused(version_mismatch_text(m.mission, m.map_id, m.map_version,
-                                                        robot_id, str(loaded[1])))
+            from nexwar_site.names import route_name  # 第 9 轮 W9-01:写显示名
+            raise DispatchRefused(version_mismatch_text(route_name(self.db, m.mission), m.map_id,
+                                                        m.map_version, robot_id, str(loaded[1])))
         if len(m.waypoints) > MAX_PATROL_WAYPOINTS:
             raise DispatchRefused(f"一趟最多 {MAX_PATROL_WAYPOINTS} 个航点,这趟 "
                                   f"{len(m.waypoints)} 个")

@@ -47,8 +47,13 @@ String runTitle(Map<String, dynamic> r) {
   final m = '${r['mission'] ?? ''}';
   if (RegExp(r'^temp-').hasMatch(m)) return tr('One-off route', '临时路线');
   if (RegExp(r'^incident-').hasMatch(m)) return tr('Alarm response', '报警出动');
-  if (RegExp(r'^(task|goto|standby|home)-[0-9a-f]+$').hasMatch(m)) return tr('Sent by hand', '手动派出');
-  return siteKnown(m);
+  // 第 9 轮 A9-02：巡逻跑完自己回待命点 / 回原点的那一趟不是「手动派出」
+  if (r['kind'] == 'home' || RegExp(r'^home-').hasMatch(m)) return tr('Back to origin', '回原点');
+  if (r['kind'] == 'standby' || RegExp(r'^standby-').hasMatch(m)) return tr('Back to standby point', '回待命点');
+  if (RegExp(r'^(task|goto)-[0-9a-f]+$').hasMatch(m)) return tr('Sent by hand', '手动派出');
+  // 第 9 轮 W9-01：路线起了显示名写显示名（站点带 title）
+  final title = '${r['title'] ?? ''}';
+  return title.isNotEmpty ? title : siteKnown(m);
 }
 
 /// 这一趟没跑完（中止、失败、没收尾）。
@@ -180,7 +185,8 @@ class _SiteRunsPageState extends State<SiteRunsPage> {
                             time: stampText('${r['stamp']}'),
                             status: [
                               if (runFailed(r)) tr('Not finished', '没跑完'),
-                              tr('${r['photos']} photos', '照片 ${r['photos']} 张'),
+                              // 第 9 轮 A9-02：没照片只说一次「没有照片」
+                              if ((r['photos'] as num? ?? 0) > 0) tr('${r['photos']} photos', '照片 ${r['photos']} 张'),
                               _verdictSummary(r),
                               if ((r['reviewed'] as num? ?? 0) > 0)
                                 tr('${r['reviewed']} checked by a person', '人工复核 ${r['reviewed']} 张'),

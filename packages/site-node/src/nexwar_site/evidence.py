@@ -463,6 +463,11 @@ def run_origins(db: Any, runs: list[dict[str, Any]]) -> list[dict[str, Any]]:
             n = sum(1 for w in wps if not (isinstance(w, dict) and (
                 w.get("name") == "start" or str(w.get("name", "")).startswith("return-"))))
             r = {**r, "by": rows[0]["issued_by"], "points": n}
+        if not mission.startswith(("temp-", "incident-")):
+            from nexwar_site.names import route_name  # 第 9 轮 W9-01:记录写路线显示名
+            name = route_name(db, mission)
+            if name != mission:
+                r = {**r, "title": name}
         out.append(r)
     return out
 
