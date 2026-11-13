@@ -92,13 +92,15 @@ describe("布防向导的小函数", () => {
 
 describe("布防向导", () => {
   it("缺值守方案:直接到「谁去巡逻」;说 A 只许手动派、能改成自动派遣;存方案;布防后说谁出发了", async () => {
-    const r = render(<ArmWizard say={() => {}} onClose={() => {}} arming />);
+    let changes = 0;
+    const r = render(<ArmWizard say={() => {}} onClose={() => {}} arming onChanged={() => { changes++; }} />);
     await waitFor(() => expect(r.container.ownerDocument.querySelector("[data-wiz-step=who]")).not.toBeNull());
     const doc = r.container.ownerDocument;
     expect(doc.querySelector("[data-wiz-robot=A]")!.textContent).toContain("A 设成只许手动派");
     fireEvent.click(doc.querySelector<HTMLButtonElement>("[data-wiz-robot=A] button")!);
     await waitFor(() => expect(posted.some((p) => p.url === "/api/robots/A/service" && p.body.manual_only === false)).toBe(true));
     await waitFor(() => expect(doc.querySelector("[data-wiz-robot=A]")!.textContent).toContain("能派"));
+    expect(changes).toBe(1);   // 外审 3:改成自动派遣也算改过,背后的页要重读
     fireEvent.click(r.getByText("下一步"));
     await waitFor(() => expect(posted.some((p) => p.url === "/api/guard/plan")).toBe(true));
     const plan = posted.find((p) => p.url === "/api/guard/plan")!.body;
@@ -114,7 +116,8 @@ describe("布防向导", () => {
 
   it("没有防区:停在第一步;「整张图作为一个防区」按地图外框建一个「全场」", async () => {
     ready = { ...ready, zones: [], routes: [], missing: ["zones", "route", "plan"] };
-    const r = render(<ArmWizard say={() => {}} onClose={() => {}} />);
+    let changes = 0;
+    const r = render(<ArmWizard say={() => {}} onClose={() => {}} onChanged={() => { changes++; }} />);
     await waitFor(() => expect(r.getByText("这张图上还没有防区。")).toBeTruthy());
     expect((r.getByText("下一步") as HTMLButtonElement).disabled).toBe(true);
     fireEvent.click(r.getByText("整张图作为一个防区"));
@@ -123,6 +126,7 @@ describe("布防向导", () => {
     expect(a.url).toBe("/api/maps/estate-1/7/areas");
     expect(a.body).toEqual({ zone: "全场", points: [[-2, -2], [8, -2], [8, 3], [-2, 3]] });
     await waitFor(() => expect((r.getByText("下一步") as HTMLButtonElement).disabled).toBe(false));
+    expect(changes).toBe(1);   // 外审 3:背后的布置页要重读,不然再存「全场」会盖掉这个
   });
 
   it("布防时间:选「每天 21:30 到 06:00」存成启用的时间表", async () => {
@@ -208,11 +212,13 @@ describe("布防向导", () => {
   it("外审 1 #10:自动生成的编号被别的路线占着(409),换下一个", async () => {
     ready = { ...ready, routes: [], missing: ["route", "plan"] };
     taken.add("guard-estate-1-7");
-    const r = render(<ArmWizard say={() => {}} onClose={() => {}} />);
+    let changes = 0;
+    const r = render(<ArmWizard say={() => {}} onClose={() => {}} onChanged={() => { changes++; }} />);
     await waitFor(() => expect(r.getByText("按防区自动生成")).toBeTruthy());
     fireEvent.click(r.getByText("按防区自动生成"));
     await waitFor(() => expect(posted.some((p) => p.url === "/api/routes/guard-estate-1-7-2")).toBe(true));
     expect(r.container.ownerDocument.querySelector(".wiz-editor")).toBeNull();
+    await waitFor(() => expect(changes).toBe(1));
   });
 
   it("只布防、不让机器人巡逻:直接布防,不存方案", async () => {
