@@ -325,7 +325,7 @@ describe("路线页:站点的回答", () => {
     await waitFor(() => expect(r.container.querySelector("[data-routes-elsewhere]")).not.toBeNull());
     lang.value = "zh";
     await tick();
-    expect(r.container.querySelector("[data-routes-elsewhere]")!.textContent).toContain("v11 上有 1 条路线(demo-loop)");
+    expect(r.container.querySelector("[data-routes-elsewhere]")!.textContent).toContain("v11 上有 1 条路线（demo-loop）");
   });
 
   it("逐点校验没过:错的点标红、说原因,存不下;改好重存按原来的修订号带过去", async () => {

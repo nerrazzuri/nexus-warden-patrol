@@ -14,6 +14,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 
 import 'design/alert_titles.g.dart';
+import 'net/site_text.dart' show zhPunct;
 
 enum AppLang { en, zh }
 
@@ -30,7 +31,8 @@ String tr(String en, String zh) => appLang.value == AppLang.zh ? zh : en;
 const String kAlertTestPrefix = '测试：';
 
 String alertTitle(String kind, String siteTitle) {
-  if (appLang.value == AppLang.zh && siteTitle.isNotEmpty) return siteTitle;
+  // 第 9 轮 W9-10：站点给的标题多用半角「:,(」，挨着汉字的换成全角（跟网页一样）
+  if (appLang.value == AppLang.zh && siteTitle.isNotEmpty) return zhPunct(siteTitle);
   final e = alertTitles[kind];
   if (e == null) return siteTitle;
   final title = appLang.value == AppLang.zh ? e.$2 : e.$1;

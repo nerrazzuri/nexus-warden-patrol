@@ -27,7 +27,7 @@ function notice(doc: Document): void {
   // 样式表正是没载上的那张:用 CSSOM 直接设(CSP 只拦 HTML 里写的 style 属性,不拦脚本设的)
   p.style.cssText = "margin:0;padding:12px 16px;background:#B42318;color:#fff;font:16px/1.4 system-ui,sans-serif";
   p.textContent = (doc.documentElement.lang || "").startsWith("zh")
-    ? "页面样式没有载入完整(站点忙或网络断了一下)。请刷新页面。"
+    ? "页面样式没有载入完整（站点忙或网络断了一下）。请刷新页面。"
     : "The page styles did not load fully (the site was busy or the network dropped). Please reload the page.";
   doc.body.prepend(p);
 }

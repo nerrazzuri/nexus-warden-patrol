@@ -218,7 +218,11 @@ export function zhPunct(src: string): string {
     .replace(/（([^()（）]*)\)/g, "（$1）")
     .replace(new RegExp(`(${H}|）),\\s?`, "g"), "$1，")
     .replace(new RegExp(`(${H}|）):\\s?(?!//)`, "g"), "$1：")
-    .replace(new RegExp(`(${H}|）);\\s?`, "g"), "$1；");
+    .replace(new RegExp(`(${H}|）);\\s?`, "g"), "$1；")
+    // 第 9 轮 W9-10:前面是数字、字母(「已用 86%,剩 30 GB:到 90%」),后面是汉字的也换
+    .replace(new RegExp(`,\\s?(?=${H})`, "g"), "，")
+    .replace(new RegExp(`:\\s?(?=${H})`, "g"), "：")
+    .replace(new RegExp(`;\\s?(?=${H})`, "g"), "；");
 }
 
 /** 第 5 轮 P1-01:系统页上还露着的三种站点原文(中文界面也不该露):「…;原文:机器人原话」只说该做什么、
