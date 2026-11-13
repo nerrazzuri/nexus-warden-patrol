@@ -21,7 +21,7 @@ export interface AuditRow { id: number; at: number; actor: string; actor_role?: 
     // 日志设计 第 1、2 条:前后变化、来源、当时在做什么、系统事件的说明
     from?: string | null; to?: string; op?: "add" | "update" | "remove"; name?: string; x?: number; y?: number;
     source?: "web" | "app" | "api" | "system"; doing?: { task?: string | null; kind?: string; state?: string }; why?: string;
-    note?: string; verdict?: string; mission?: string; mission_title?: string; robot?: string | null; title?: string; level?: string;
+    note?: string; verdict?: string; mission?: string; mission_title?: string; robot?: string | null; title?: string; level?: string; kind?: string;
     channel?: string; by?: string; task_id?: string | null; err?: string; err_name?: string; req?: string;
     // minor #18:派单的点数、去一个点的目标、存草稿存成的版本
     points?: number; request?: { target?: unknown }; version?: string } }
@@ -128,6 +128,8 @@ const ACTIONS: [RegExp, string][] = [
   // 第 3 轮 P1-66:巡逻日程、值班设置、布防例外、看录像 / 下载
   [/^POST \/api\/schedule/, "actPatrolSched"], [/^POST \/api\/duty-settings/, "actDutySettings"],
   [/^VIEW$/, "actView"], [/^DOWNLOAD$/, "actDownload"],
+  // 第 10 轮 W10-04:App 开后台值守(以前「其他操作 · App」)
+  [/^POST \/api\/watch\/token$/, "actWatchToken"],
   // 日志设计 第 2 条:系统自己做的事
   [/^schedule started$/, "actSchedStarted"], [/^schedule (skip|alarm)$/, "actSchedMissed"], [/^schedule /, "actSchedBlocked"],
   [/^robot online$/, "actRobotOnline"], [/^robot offline$/, "actRobotOffline"],
@@ -184,9 +186,23 @@ export function targetText(target: string): string {
   // 第 4 轮 P1-66:「图:版本/名字」「camera/名字」写成人话
   const mz = /^([^:/\s]+):(\d+)\/(.+)$/.exec(target);
   if (mz) return `${t("auditMapVer", { map: mz[1], v: mz[2] })} · ${mz[3]}`;
+  // 第 10 轮 W10-04:看直播的对象「live/B/front」写成「B 前摄像头」
+  const live = /^live\/([^/]+)\/(front|back|thermal)$/.exec(target);
+  if (live) return t("auditLiveCam", { robot: nameOf(live[1]), cam: t(live[2] as "front" | "back" | "thermal") });
   const cam = /^camera\/(.+)$/.exec(target);
   if (cam) return t("camNamed", { name: cam[1] });
   return target.replace(/\b[0-9a-f]{12,}\b/gi, "…");
+}
+
+/** 第 10 轮 W10-04:巡逻开始、结束、临时巡逻这类通知(P3)记的是「alert raised」,不是报警 —— 写机器人事件。 */
+const ROBOT_EVENTS = new Set(["run_start", "run_done", "adhoc_patrol", "patrol_started", "patrol_done"]);
+
+/** 一行的动作:多看一眼对象和详情(看直播、机器人事件)。 */
+export function rowActionText(r: Pick<AuditRow, "action" | "target" | "detail">): string {
+  if (r.action === "VIEW" && /^live\//.test(r.target)) return t("actWatchLive");
+  const d = r.detail ?? {};
+  if (/^alert (raised|recorded)$/.test(r.action) && (d.level === "P3" || ROBOT_EVENTS.has(d.kind ?? ""))) return t("actRobotEvent");
+  return actionText(r.action);
 }
 
 export function actionText(a: string): string {
@@ -369,7 +385,7 @@ export function AuditLine({ r, who }: { r: AuditRow; who?: boolean }) {
       <time class="mono small">{day(r.at)} {hms(r.at)}</time>
       <div class="audit-body">
       {who && <b class="audit-who">{r.actor.startsWith("site:") ? t("auditSystem") : r.actor.replace(/^login:/, "")}</b>}
-      <span title={r.action}>{actionText(r.action)}</span>
+      <span title={r.action}>{rowActionText(r)}</span>
       {r.status >= 400 ? <span class="tag bad" data-result="refused">{t("auditRefused")}</span>
         : r.status >= 200 ? <span class="tag ok" data-result="ok">{t("auditOk")}</span> : null}
       {r.target && <span class="muted small" title={r.target}>{r.target_name || targetText(r.target)}</span>}
