@@ -385,7 +385,8 @@ async def test_遥控放租之后_直线狗不自动回待命点_也不报(站):
     """内审应修 4:遥控放租报 ``task_done("teleop-N")``,以前站点照样派一条直线 goto —— 起点最随意
     的一种自动回原点。直线的狗不回(人刚开完,人知道狗在哪);会规划的狗照旧回。"""
     t = 站
-    t.stb.set("A", "dock", map_id="estate-1", map_version="7", x=0.0, y=0.0, yaw=0.0, default=True)
+    # (待命点离狗现在的位置 5 m:第 10 轮 W10-01 起,本来就在待命点的不回)
+    t.stb.set("A", "dock", map_id="estate-1", map_version="7", x=5.0, y=0.0, yaw=0.0, default=True)
     sub = t.site.feed.subscribe()
     await t.send(t.stb._auto("A", "teleop-7"))
     assert not _cmds(t, "goto") and not _cmds(t, "patrol")
@@ -393,6 +394,45 @@ async def test_遥控放租之后_直线狗不自动回待命点_也不报(站):
     t.site.clients["A"].capabilities.tasks["goto"]["path"] = "planned"
     await t.send(t.stb._auto("A", "teleop-8"))
     assert len(_cmds(t, "goto")) == 1
+
+
+async def test_第10轮_W10_01_遥控完本来就在待命点_不派也不报(站):
+    """第 10 轮 W10-01:遥控开始了、摇杆没动就退出 —— 机器人一直在待命点。以前照样派回程,
+    状态还没换(还写着在遥控)就被拒,给保安报一条「未返回待命点」。"""
+    t = 站
+    t.site.clients["A"].capabilities.tasks["goto"]["path"] = "planned"
+    t.stb.set("A", "dock", map_id="estate-1", map_version="7", x=0.2, y=0.1, yaw=0.0, default=True)
+    await t.run(30)                                 # 先收到一份带位置的遥测(狗在原地 0,0)
+    sub = t.site.feed.subscribe()
+    await t.send(t.stb._auto("A", "teleop-9"))
+    assert not _cmds(t, "goto"), "离待命点不到 0.3 米:不用回"
+    assert not [i for i in _feed(sub) if i["kind"] == "standby_failed"]
+
+
+async def test_第10轮_W10_01_站点还当它在遥控_等一等再派_不报(站, monkeypatch):
+    """遥控结束的事件先到、状态晚一拍:派回程时站点还看见「正在遥控」。这是暂时的,等一等再试。"""
+    from nexwar_site import standby as sb
+    t = 站
+    t.site.clients["A"].capabilities.tasks["goto"]["path"] = "planned"
+    t.stb.set("A", "dock", map_id="estate-1", map_version="7", x=5.0, y=0.0, yaw=0.0, default=True)
+    calls = {"n": 0}
+    real = t.stb.return_to
+
+    async def first_busy(*a, **k):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise sb.DispatchRefused("A 正在遥控")
+        return await real(*a, **k)
+
+    async def no_sleep(_s):
+        return None
+
+    monkeypatch.setattr(t.stb, "return_to", first_busy)
+    monkeypatch.setattr(t.stb, "_sleep", no_sleep)
+    sub = t.site.feed.subscribe()
+    await t.send(t.stb._auto("A", "teleop-10"))
+    assert calls["n"] == 2 and len(_cmds(t, "goto")) == 1
+    assert not [i for i in _feed(sub) if i["kind"] == "standby_failed"]
 
 
 async def test_待命点名带两个点_回程巡检照样成形(站):

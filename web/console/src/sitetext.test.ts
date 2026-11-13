@@ -14,6 +14,11 @@ describe("站点原文翻成英文", () => {
     expect(siteText("A 未就绪:急停按着、定位不可用").text).toBe("A is not ready (emergency stop is pressed; it doesn't know where it is)");
     expect(CJK.test(siteText("排程 route-1-2 本轮未执行:B 未就绪:没站起来(蹲着、趴着,或运动模式没就绪)").text)).toBe(false);
   });
+  it("第 10 轮 W10-01:没回待命点的说明翻成英文,不露任务编号", () => {
+    const s = siteText("遥控结束后没能回待命点:B 正在遥控").text;
+    expect(s).toMatch(/^After remote control, the robot could not go back to its standby point: /);
+    expect(CJK.test(s)).toBe(false);
+  });
 
   it("巡逻跳点 + 导航被拒 + 规划失败(goal_blocked):整句都是英文", () => {
     const s = siteText("跳过 1 个点(P2):导航拒了: goto 被设备拒绝: 规划失败(goal_blocked):终点在障碍、禁行区里或贴得太近");
