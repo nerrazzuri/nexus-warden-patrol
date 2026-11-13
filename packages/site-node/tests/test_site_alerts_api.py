@@ -321,3 +321,21 @@ def test_往天的巡逻接口_日期要写对(站点):
     assert code == 200 and d["date"] == "2026-11-05"
     for bad in ("", "?date=11-05", "?date=2026-02-30"):
         assert s.req("GET", f"/api/patrols/day{bad}", token=alice)[0] == 400, bad
+
+
+def test_第10轮_W9_01_活动日志的对象是日程_路线时带显示名(站点):
+    """第 10 轮复测:活动日志写「改了巡逻日程 route-1-2」「改了路线 route-1」——起了中文名的写中文名。"""
+    s = 站点
+    alice = _登(s, "alice")
+    with s.db.tx() as c:
+        c.execute("INSERT INTO routes(route_id, map_id, map_version, definition, revision, "
+                  "updated_ms, title) VALUES ('route-1','m1','7','{}',1,0,'一楼夜巡')")
+        c.execute("INSERT INTO route_schedules(entry_id, title, definition, revision, "
+                  "active_from_ms, updated_ms, updated_by, source) "
+                  "VALUES ('route-1-2', '夜巡测试', '{}', 1, 0, 0, 'a', 'editor')")
+    for tgt in ("route-1-2", "route-1", "gone-9"):
+        s.api.audit.record(actor="demo", action="schedule blocked", target=tgt, status=200)
+    rows = {r["target"]: r for r in s.req("GET", "/api/audit", token=alice)[1]["audit"]}
+    assert rows["route-1-2"]["target_name"] == "夜巡测试"
+    assert rows["route-1"]["target_name"] == "一楼夜巡"
+    assert "target_name" not in rows["gone-9"], "查不到名字的不加(网页照旧写编号)"

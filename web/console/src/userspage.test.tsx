@@ -44,7 +44,9 @@ beforeEach(() => {
     if (url.startsWith("/api/audit")) {
       return Promise.resolve(json({ audit: [{ id: 1, at: NOW - 60_000, actor: "gina", actor_role: "guard", action: "POST /api/mode", target: "armed", status: 200 },
         { id: 2, at: NOW - 30_000, actor: "gina", actor_role: "guard", action: "POST /api/robots/A/goto", target: "A", status: 403 },
-        { id: 3, at: NOW - 20_000, actor: "gina", actor_role: "guard", action: "POST /api/weird/thing", target: "", status: 200 }] }));
+        { id: 3, at: NOW - 20_000, actor: "gina", actor_role: "guard", action: "POST /api/weird/thing", target: "", status: 200 },
+        // 第 10 轮 W9-01:站点给了显示名
+        { id: 4, at: NOW - 10_000, actor: "gina", actor_role: "guard", action: "POST /api/route-schedules", target: "route-1-2", target_name: "夜巡测试", status: 200 }] }));
     }
     return Promise.resolve(json({}, 404));
   }) as typeof fetch);
@@ -145,8 +147,10 @@ describe("用户页", () => {
     // P1-66:写成功 / 被拒绝;认不得的写「其他操作」,不露接口路径
     const au = c.querySelector(".user-audit")!;
     expect(au.querySelectorAll('[data-result="refused"]').length).toBe(1);
-    expect(au.querySelectorAll('[data-result="ok"]').length).toBe(2);
+    expect(au.querySelectorAll('[data-result="ok"]').length).toBe(3);
     expect(au.textContent).toContain("其他操作");
+    expect(au.textContent).toContain("夜巡测试");
+    expect(au.textContent).not.toContain("route-1-2");
     expect(au.textContent).not.toContain("/api/");
   });
 
