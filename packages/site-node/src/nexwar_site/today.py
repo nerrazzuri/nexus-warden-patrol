@@ -145,17 +145,23 @@ def today_view(db: Any, *, now_ms: int, adhoc: Any = None,
                 want = (m.map_id, m.map_version) if m is not None and m.map_version else None
                 items.append(_schedule_item(db, e, occ_ms, now_ms, want=want, loaded=loaded,
                                             tz=tz))
+    items += _deleted_schedule_items(db, act, a_ms, b_ms, now_ms)
     if adhoc is not None:
         for r in adhoc.between(a_ms, b_ms):
             items.append(_adhoc_item(db, r, now_ms))
-    # 第 8 轮 W8-11:路线、排程起了显示名(能写中文)的带上;没起是空串,照旧显示编号
-    titles = {r["route_id"]: r["title"] for r in db.query("SELECT route_id, title FROM routes")}
-    stitles = {r["entry_id"]: r["title"] for r in db.query(
-        "SELECT entry_id, title FROM route_schedules")}
+    # 第 8 轮 W8-11:路线、排程起了显示名(能写中文)的带上;没起是空串,照旧显示编号。
+    # 第 12 轮 W11-01:删掉的也照当时的名字写(names 会查 retired_ids)
+    from nexwar_site.names import route_name, schedule_name
     for it in items:
-        it["title"] = titles.get(str(it.get("label") or ""), "")
+        label = str(it.get("label") or "")
+        it["title"] = route_name(db, label) if label else ""
+        if it["title"] == label:
+            it["title"] = ""
         if it.get("schedule_id"):
-            it["schedule_title"] = stitles.get(str(it["schedule_id"]), "")
+            sid = str(it["schedule_id"])
+            it["schedule_title"] = schedule_name(db, sid)
+            if it["schedule_title"] == sid:
+                it["schedule_title"] = ""
         _loop_fields(db, it)
         if it["state"] == "aborted" and it.get("robot") and it.get("end_ms"):
             it["stopped_by"] = _stopped_by(db, it["robot"], int(it["at_ms"]), int(it["end_ms"]))
@@ -172,6 +178,33 @@ def today_view(db: Any, *, now_ms: int, adhoc: Any = None,
             # 手机、网页按站点的钟显示时刻(外审 W53-1 #12)
             "utc_offset_min": int(off.total_seconds() // 60) if off is not None else 0,
             "items": items}
+
+
+def _deleted_schedule_items(db: Any, act: Any, a_ms: int, b_ms: int,
+                            now_ms: int) -> list[dict[str, Any]]:
+    """第 12 轮 W11-01:今天已经跑过、后来日程被删了的那几趟 —— 照排程账补回来(不然从列表里消失)。
+    路线编号从派单命令里取。"""
+    from types import SimpleNamespace
+    live = {e.id for e in act.schedule.entries} if act is not None else set()
+    out = []
+    for r in db.query("SELECT entry_id, scheduled_ms, robot_id, task_id FROM schedule_runs "
+                      "WHERE outcome='started' AND scheduled_ms BETWEEN ? AND ? "
+                      "ORDER BY scheduled_ms", (a_ms, b_ms)):
+        if r["entry_id"] in live:
+            continue
+        mission = ""
+        cmd = db.query("SELECT payload FROM commands WHERE task_id=? ORDER BY issued_at LIMIT 1",
+                       (r["task_id"] or "",))
+        if cmd:
+            try:
+                m = json.loads(cmd[0]["payload"]).get("mission")
+                mission = str(m.get("mission") or "") if isinstance(m, dict) else ""
+            except (ValueError, AttributeError):
+                mission = ""
+        e = SimpleNamespace(id=r["entry_id"], mission=mission, robot=r["robot_id"] or "",
+                            window_min=0)
+        out.append(_schedule_item(db, e, int(r["scheduled_ms"]), now_ms))
+    return out
 
 
 def _map_gap(want: tuple[str, str] | None, got: tuple[Any, Any] | None) -> dict[str, str] | None:
@@ -235,6 +268,12 @@ def _schedule_item(db: Any, e: Any, occ_ms: int, now_ms: int, *,
                                                            "lost")), None)
     last = rows[-1] if rows else None
     window_over = now_ms > occ_ms + int(e.window_min) * 60_000
+    if settled is None and e.robot and db.query("SELECT 1 FROM robot_service WHERE robot_id=?",
+                                                (e.robot,)):
+        # 第 12 轮 W12-03:排给的那台只许手动派 —— 过了点也不写「等待机器人」(像还会跑):
+        # 窗口里写「不会跑」,窗口过了写「没跑」,原因都是 manual_only
+        item.update(state="missed" if window_over else "blocked", reason="manual_only")
+        return item
     if window_over and settled is None and _late_runnable(e, occ_ms, now_ms, tz):
         window_over = False                              # minor #37:run_late 还会补跑这一轮
     if settled is not None or window_over:

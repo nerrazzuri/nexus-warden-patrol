@@ -427,4 +427,24 @@ describe("第 10 轮 W10-04:活动日志写具体", () => {
     expect(ds).toContain("补跑测试");
     expect(line({ action: "POST /api/routes/route-1/delete", target: "route-1", detail: { delete: true } })).toContain("删除巡逻路线");
   });
+
+  it("第 12 轮 W10-04:新建和修改分开;报警行不写「报警:」;系统事件不标「成功」", async () => {
+    const { AuditLine } = await import("./userspage");
+    lang.value = "zh";
+    const line = (r: Partial<AuditRow>) => {
+      cleanup();
+      return render(<ul><AuditLine r={{ id: 1, at: 0, actor: "gina", action: "", target: "", status: 200, ...r } as AuditRow} /></ul>).container.textContent!;
+    };
+    expect(line({ action: "POST /api/routes/route-3", target: "route-3", detail: { created: true } })).toContain("新建巡逻路线");
+    expect(line({ action: "POST /api/routes/route-3", target: "route-3", detail: {} })).toContain("修改巡逻路线");
+    expect(line({ action: "POST /api/route-schedules/s1", target: "s1", detail: { created: true } })).toContain("新建巡逻日程");
+    const al = line({ actor: "site:alerts", action: "alert raised", target: "B/schedule_waiting#3", detail: { kind: "schedule_waiting", level: "P2" } });
+    expect(al).toContain("产生报警");
+    expect(al).not.toContain("报警：");
+    expect(al).not.toContain("成功");
+    const sb = line({ actor: "site:schedule", action: "schedule no_robot", target: "demo-night", detail: {} });
+    expect(sb).toContain("日程没能派出机器人");
+    expect(sb).not.toContain("成功");
+    expect(line({ action: "POST /api/mode", target: "armed" })).toContain("成功");
+  });
 });

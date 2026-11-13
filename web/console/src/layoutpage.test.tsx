@@ -6,7 +6,7 @@ import { useEffect } from "preact/hooks";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { ApiError, setFetch } from "./api";
 import { lang } from "./i18n";
-import { LayoutPage, tabFromHash, type TabProps } from "./layoutpage";
+import { historyItemLabel, LayoutPage, restoreAskText, tabFromHash, type TabProps } from "./layoutpage";
 import { readRoute } from "./shell";
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
@@ -178,6 +178,15 @@ describe("布置外框", () => {
     lateA[0](json({}));
     await waitFor(() => expect(c.querySelector(".ly-history")!.textContent).toContain("A-old"));
     expect(posted.filter((p) => p.url.includes("/restore"))).toEqual([]);
+  });
+
+  it("第 12 轮 W12-01:路线历史写路线名,退回确认框说是哪条路线", () => {
+    lang.value = "zh";
+    const r = { id: 1, kind: "route", item: "route-1", by: "demo", at_ms: 0, note: "", title: "二楼夜巡" };
+    expect(historyItemLabel(r)).toBe("二楼夜巡");
+    expect(historyItemLabel({ ...r, title: "" })).toBe("route-1");
+    expect(restoreAskText("route", r)).toContain("路线「二楼夜巡」");
+    expect(restoreAskText("zones", { ...r, item: "" })).not.toContain("路线「");
   });
 
   it("旧地址跳过来", () => {

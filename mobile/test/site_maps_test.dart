@@ -131,6 +131,8 @@ void main() {
     expect(mapSourceText('import'), '导入');
     expect(mapSourceText('draft:demo'), 'demo 编辑（草稿）');
     expect(mapSourceText('A'), 'A 建图');
+    // 第 12 轮 A11-01：去噪出来的
+    expect(mapSourceText('denoise:demo'), 'demo 去噪');
     expect(mapSourceText(''), '');
   });
 

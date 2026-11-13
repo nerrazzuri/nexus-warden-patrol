@@ -1002,6 +1002,15 @@ class SiteAlertSources:
             ids.append(entry_id)
         # 第 10 轮 W9-02:名字带「」,后面不加空格(以前「排程「补跑测试」 在等机器人」)
         title = f"排程{self._sched_names(ids)}{_SCHEDULE_TITLE[kind]}:{what}"
+        if kind == "schedule_blocked":
+            # 第 12 轮 W12-03:写真原因(只许手动派 / 要人现场监护),「无法派单」不说两遍;
+            # 同一原因一星期内报过就不再每晚报一条(人要做的是改设置,不是每晚再看一遍)
+            why = "只许手动派" if "只许手动派" in note else "要人现场监护"
+            title = f"排程{self._sched_names(ids)}派不了：{robot_id + ' ' if robot_id else ''}{why}"
+            week = self._now() - 7 * 86_400_000
+            if any(a.kind == kind and a.robot == robot and a.title == title
+                   and a.last_ms >= week for a in self.desk.book.all()):
+                return
         a = self.desk.raise_alert(kind=kind, robot=robot, title=title,
                                   # 第 10 轮 W9-10:「demo-night：A 站点设成…」用全角冒号
                                   detail=f"{self._sched_name(entry_id)}：{note}"[:300])

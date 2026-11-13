@@ -151,13 +151,40 @@ def test_第11轮_W11_01_删掉的路线日程_名字留着_编号不再发(台)
     assert names.schedule_name(台.db, "route-1-1") == "夜巡测试"
     v = s.view()
     assert v["retired_routes"] == ["route-1"] and v["retired_schedules"] == ["route-1-1"]
-    with pytest.raises(RouteError, match="用过"):
+    with pytest.raises(RouteError, match="用过了（那条已经删了，旧记录还指着它），请换一个编号。$"):
         s.put_route("route-1", body(), by="demo")
     s.put_route("route-2", body(), by="demo")
     with pytest.raises(RouteError, match="用过"):
         s.put_schedule("route-1-1", {"mission": "route-2", "at": "22:00", "days": ["mon"],
                                      "window_min": 30, "on_missed": "skip",
                                      "base_revision": 0}, by="demo")
+
+
+def test_第12轮_W11_01_删掉的路线日程_今天的巡逻还写名字_跑过的那几趟还在(台):
+    """liang-d5 r12:删完以后「今天的巡逻」写回 route-1,日程跑过的两趟也从列表里没了。"""
+    from nexwar_site.today import today_view
+    s = 台.store
+    s.set_timezone("Asia/Kuala_Lumpur", by="demo")
+    s.put_route("route-1", body(title="一楼夜巡"), by="demo")
+    s.put_schedule("route-1-1", {"mission": "route-1", "at": "22:00",
+                                 "days": ["mon", "tue", "wed", "thu", "fri", "sat", "sun"],
+                                 "window_min": 30, "on_missed": "skip", "base_revision": 0,
+                                 "title": "夜巡测试"}, by="demo")
+    at = 毫秒(22, 0)
+    with 台.db.tx() as c:
+        c.execute("INSERT INTO schedule_runs(entry_id, scheduled_ms, outcome, robot_id, task_id, "
+                  "decided_at) VALUES ('route-1-1', ?, 'started', 'A', 'sched-1', ?)", (at, at))
+        c.execute("INSERT INTO commands(command_id, task_id, robot_id, kind, payload, issued_by, "
+                  "issued_at) VALUES ('c1', 'sched-1', 'A', 'patrol', ?, 'scheduler', ?)",
+                  (json.dumps({"mission": {"mission": "route-1", "map_id": "house"}}), at))
+    now = 毫秒(23, 0)
+    before = [x for x in today_view(台.db, now_ms=now)["items"] if x["kind"] == "schedule"]
+    assert [(x["title"], x["schedule_title"]) for x in before] == [("一楼夜巡", "夜巡测试")]
+    s.delete_schedule("route-1-1", base_revision=1, by="demo")
+    s.delete_route("route-1", base_revision=1, by="demo")
+    after = [x for x in today_view(台.db, now_ms=now)["items"] if x["kind"] == "schedule"]
+    assert [(x["at_ms"], x["robot"], x["task_id"], x["title"], x["schedule_title"])
+            for x in after] == [(at, "A", "sched-1", "一楼夜巡", "夜巡测试")], after
 
 
 # ------------------------------------------------------------ 校验

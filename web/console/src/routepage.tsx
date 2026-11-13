@@ -336,7 +336,8 @@ export function RoutesPage({ say, embed, kind = "patrol" }: { say: Say; embed?: 
     };
   }
 
-  const nameTaken = !!draft?.isNew && routes.some((r) => r.id === draft.id);
+  // 第 12 轮 W11-01:查全站(别的版本上的、删掉用过的编号),不是只查这一版
+  const nameTaken = !!draft?.isNew && (routes.some((r) => r.id === draft.id) || allIds.includes(draft.id));
   const canSave = !!draft && dirty && pts.length > 0 && NAME_RE.test(draft.id) && !nameTaken;
   useEffect(() => { embed?.setDirty(dirty); }, [dirty]);
   useEffect(() => {
