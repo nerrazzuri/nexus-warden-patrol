@@ -244,6 +244,9 @@ export function MapCanvas(props: {
           onWheel={onWheel} onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerEnd}
           onPointerCancel={onPointerEnd} onClickCapture={onClickCapture} onClick={onClick}>
           <g class="map-world" ref={world} transform={matrixAttr(M)}>
+            {/* 第 9 轮 W6-15:深色下平面图的「未建图」是透明的、露出页面底色,「已扫描未到达」(半透明的地面色)
+                叠上去跟它几乎一样。垫一层栅格「未建图」的灰,三种灰跟栅格图一样分得开 */}
+            {plan && scheme.value === "dark" && <rect x="0" y="0" width={meta.width} height={meta.height} fill={rasterShade(SHADE.raster.unknown, "dark")} data-plan-backdrop="1" />}
             <image key={plan ? plan.url : props.raster} href={plan ? plan.url : props.raster} x="0" y="0" width={meta.width} height={meta.height}
               preserveAspectRatio="none" class={plan ? "mapimg plan" : "mapimg"}
               onError={plan ? () => setPlanBad(plan.url) : undefined} />
@@ -327,11 +330,11 @@ function Swatch({ k, plan }: { k: LegendKey; plan: boolean }) {
   if (k === "floor") body = <rect x="0.5" y="0.5" width="15" height="11" fill={shade(plan ? SHADE.plan.floor : SHADE.raster.floor)} class="sw-edge" />;
   else if (k === "wall") body = <rect x="0.5" y="0.5" width="15" height="11" fill={shade(plan ? SHADE.plan.wall : SHADE.raster.wall)} class="sw-edge" />;
   else if (k === "seen") body = plan
-    ? <><rect x="0.5" y="0.5" width="15" height="11" class="sw-bg sw-edge" /><rect x="0.5" y="0.5" width="15" height="11" fill={shade(SHADE.plan.floor)} fill-opacity={SHADE.plan.seenAlpha} /></>
+    ? <><rect x="0.5" y="0.5" width="15" height="11" class={s === "dark" ? "sw-edge" : "sw-bg sw-edge"} fill={s === "dark" ? shade(SHADE.raster.unknown) : undefined} /><rect x="0.5" y="0.5" width="15" height="11" fill={shade(SHADE.plan.floor)} fill-opacity={SHADE.plan.seenAlpha} /></>
     : <rect x="0.5" y="0.5" width="15" height="11" fill={shade(SHADE.raster.seen)} class="sw-edge" />;
   else if (k === "curb") body = <rect x="0.5" y="0.5" width="15" height="11" fill={shade(plan ? SHADE.plan.curb : SHADE.raster.curb)} class="sw-edge" />;
   else if (k === "erase") body = <rect x="1" y="1" width="14" height="10" class="erase-area" />;
-  else if (k === "unknown") body = plan
+  else if (k === "unknown") body = plan && s !== "dark"
     ? <rect x="0.5" y="0.5" width="15" height="11" class="sw-bg sw-edge" />
     : <rect x="0.5" y="0.5" width="15" height="11" fill={shade(SHADE.raster.unknown)} class="sw-edge" />;
   else if (k === "nogo") body = <rect x="1" y="1" width="14" height="10" class="nogo-area" />;

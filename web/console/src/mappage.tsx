@@ -13,7 +13,7 @@ import { Modal } from "./dialogs";
 import { alertTitle, andList, lang, refusalText, t, type Key } from "./i18n";
 import { pageAllowed } from "./shell";
 import { locText, type UnitInfo } from "./live";
-import { ENGINEERING_LAYERS, etaNext, fanOut, LAYERS, layersFor, loadLayers, saveLayers, labelRows, mapPins, mapTodo, olderOpen, shiftStart, staleAfter, staleCells, tonightEvents, zoneDecor,
+import { ENGINEERING_LAYERS, etaNext, fanOut, labelAbove, LAYERS, layersFor, loadLayers, saveLayers, labelRows, mapPins, mapTodo, olderOpen, shiftStart, staleAfter, staleCells, tonightEvents, zoneDecor,
   type AuthzRow, type Cell, type Layer, type ModeView } from "./maplayers";
 import { fanPath } from "./layoutpage";
 import { MapCanvas, type CanvasArea, type LegendKey, type Screen } from "./mapcanvas";
@@ -212,12 +212,15 @@ export function SiteMap(props: {
                   const real = bots.map((b) => s.px(b.px, b.py));
                   const fan = fanOut(real, BOT_R * 2 + 3);
                   const rows = labelRows(fan, BOT_R * 4);
+                  const above = labelAbove(fan, BOT_R, LABEL_PX);
                   const step = (LABEL_PX + 2) * (props.eta ? 2 : 1);
                   return bots.map(({ u, px, py, yaw }, i) => {
                   const [x, y] = fan[i];
                   const [rx, ry] = real[i];
                   const moved = Math.hypot(x - rx, y - ry) > 0.5;
-                  const dy = rows[i] * step;
+                  // 第 9 轮 W6-15:名字底下压着另一台的点 → 画到点上面(往上错开)
+                  // (挪上去时最后一行字的底边在点上面 2 像素;有「第几圈 · 多久到」那一行也算进去)
+                  const dy = above[i] ? -(BOT_R * 2 + 4) - step - rows[i] * step : rows[i] * step;
                   // 朝向:在预览上往 yaw 走一小段,跟着图一起变换,再在屏上取定长
                   const e = heading(px, py, yaw, 10);
                   const [ex0, ey0] = s.px(e.hx, e.hy);
