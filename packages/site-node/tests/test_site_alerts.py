@@ -166,7 +166,12 @@ def test_推送流里的没回待命点_记一条P2_别的推送不管(台):
                  "reason": "A 要人现场监护"})
     [a] = desk.book.all()
     assert a.kind == "standby_failed" and a.robot == "A" and a.level.value == "P2"
-    assert "t9" in a.detail and "监护" in a.detail
+    # 第 10 轮 W10-01:不露任务编号,说人话;编号在 context 里
+    assert a.detail == "上一趟任务结束后没能回待命点:A 要人现场监护"
+    assert a.context.get("task_id") == "t9"
+    src.on_feed({"kind": "standby_failed", "robot_id": "B", "after": "teleop-1",
+                 "reason": "B 正在遥控"})
+    assert desk.book.all()[-1].detail.startswith("遥控结束后没能回待命点:")
 
 
 def test_点位没到记一笔_到了不报(台):

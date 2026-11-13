@@ -101,6 +101,10 @@ final List<_Rule> _rules = [
   (RegExp(r'^跳过 (\d+) 个点[(（]([^)）]*)[)）][:：]\s*([\s\S]*)$'),
       (m) => 'Skipped ${m[1]} ${_pl(m[1]!, 'point', 'points')} (${m[2]}): ${_lc(_en(m[3]!))}'),
   (RegExp(r'^导航拒了[:：]\s*([\s\S]*)$'), (m) => 'Navigation refused: ${_lc(_en(m[1]!))}'),
+  // 第 10 轮 W10-01：没回待命点的说明（跟网页 sitetext.tsx 一样）
+  (RegExp(r'^(遥控|巡逻|上一趟任务)结束后没能回待命点[:：]\s*([\s\S]*)$'),
+      (m) => 'After ${m[1] == '遥控' ? 'remote control' : m[1] == '巡逻' ? 'the patrol' : 'the last task'}, '
+          'the robot could not go back to its standby point: ${_en(m[2]!)}'),
   (RegExp(r'^\w+ 被设备拒绝[:：]\s*([\s\S]*)$'), (m) => _en(m[1]!)),
   (RegExp(r'^重?规划失败[(（](\w+)[)）][\s\S]*$'), (m) => _plan[m[1]] ?? 'no path (${m[1]})'),
   (RegExp(r'^重规划失败[:：]\s*([\s\S]*)$'), (m) => 'Re-planning failed: ${_lc(_en(m[1]!))}'),

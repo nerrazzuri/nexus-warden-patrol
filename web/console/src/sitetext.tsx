@@ -102,6 +102,9 @@ const RULES: Rule[] = [
   [/^(\S+) 站点设成只许手动派[,，]不接排程$/, (m) => `${m[1]} is set to manual dispatch only, so schedules do not send it`],
   [/^(\S+) 要人监护[,，]不接排程$/, (m) => `${m[1]} needs a person present, so schedules do not send it`],
   [/^(\S+) 正在执行 (\S+)$/, (m) => `${m[1]} is busy with ${m[2]}`],
+  // 第 10 轮 W10-01:没回待命点的说明(site alert_sources.py on_feed)
+  [/^(遥控|巡逻|上一趟任务)结束后没能回待命点[:：]([\s\S]*)$/,
+    (m) => `After ${m[1] === "遥控" ? "remote control" : m[1] === "巡逻" ? "the patrol" : "the last task"}, the robot could not go back to its standby point: ${trParts(m[2])}`],
   [/^(\S+) 正在驱离$/, (m) => `${m[1]} is deterring an intruder`],
   [/^(\S+) 在布防值守$/, (m) => `${m[1]} is on guard duty`],
   [/^(\S+) 正在遥控$/, (m) => `${m[1]} is being driven by hand`],
