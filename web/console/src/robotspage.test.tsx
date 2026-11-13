@@ -548,3 +548,18 @@ describe("第 4 轮 admin N2", () => {
     expect(said).toEqual([]);
   });
 });
+
+describe("第 10 轮 W10-03", () => {
+  it("机器人页「状态」的圈数只写一遍", async () => {
+    lang.value = "zh";
+    robots[0] = card({ task: "adhoc-forever-x", lap: { n: 4, of: 0 } });
+    const u = { robot: { robot_id: "A", active: true, fresh: true, revoked: false, held: null,
+      status: { online: true, last_seen: 0, ready: { motion: true } }, capabilities: { tasks: {} } },
+      state: "patrolling", battery: 90, task: "一直巡逻 · 第 4 圈" } as unknown as UnitInfo;
+    const { container: c } = render(<RobotsPage say={() => {}} now={NOW} role="admin" units={[u]} />);
+    await waitFor(() => expect(cardOf(c, "A")).not.toBeNull());
+    fireEvent.click(cardOf(c, "A"));
+    const facts = c.querySelector(".robot-detail .rd-facts")!.textContent!;
+    expect(facts.split("第 4 圈").length - 1).toBe(1);
+  });
+});

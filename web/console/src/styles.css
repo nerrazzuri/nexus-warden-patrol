@@ -667,6 +667,10 @@ button.armstate:focus-visible { outline: 2px solid var(--c-primary); outline-off
 .duty-row:hover { background: var(--c-surfaceVariant); }
 .duty-row.on { background: var(--c-brandSoft); }
 .duty-row .unit-id { font-size: 15px; font-weight: 600; }
+/* 第 10 轮 W10-02:1440 宽时「巡逻中」被挤成竖排、圈数折两行 —— 状态不缩不折,圈数一行放不下省略(悬停看全) */
+.duty-row .state { flex: none; white-space: nowrap; }
+.duty-row [data-row-task] { min-width: 0; flex: 0 1 auto; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.duty-row .unit-id, .duty-row .batt { flex: none; white-space: nowrap; }
 .duty-map { position: relative; flex: 1; min-height: 0; display: flex; }
 .duty-map .mapbox { flex: 1; }
 @media (max-width: 1100px) {
