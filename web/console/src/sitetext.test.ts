@@ -109,6 +109,10 @@ describe("第 3 轮 zh N9", () => {
     expect(zhPunct("不能派(地图 home:3 没确认),10:30 再试")).toBe("不能派（地图 home:3 没确认），10:30 再试");
     expect(zhPunct("见 http://a.b")).toBe("见 http://a.b");
     expect(zhPunct("Battery 12%")).toBe("Battery 12%");
+    // 第 9 轮 W9-10:前面是数字、字母,后面是汉字的也换
+    expect(zhPunct("已用 86%,剩 30 GB:到 90% 就不接新的巡逻(没传完的不删)")).toBe("已用 86%，剩 30 GB：到 90% 就不接新的巡逻（没传完的不删）");
+    expect(zhPunct("排程 route-1-2 本轮未执行:到点没有能派的机器人")).toBe("排程 route-1-2 本轮未执行：到点没有能派的机器人");
+    expect(zhPunct("编号 route-1(不变)")).toBe("编号 route-1（不变）");
   });
 });
 

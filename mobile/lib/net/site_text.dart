@@ -200,7 +200,11 @@ String zhPunct(String src) {
       .replaceAllMapped(RegExp(r'（([^()（）]*)\)'), (m) => '（${m[1]}）')
       .replaceAllMapped(RegExp('($h|）),\\s?'), (m) => '${m[1]}，')
       .replaceAllMapped(RegExp('($h|）):\\s?(?!//)'), (m) => '${m[1]}：')
-      .replaceAllMapped(RegExp('($h|）);\\s?'), (m) => '${m[1]}；');
+      .replaceAllMapped(RegExp('($h|）);\\s?'), (m) => '${m[1]}；')
+      // 第 9 轮 W9-10：前面是数字、字母（「已用 86%,剩 30 GB:到 90%」），后面是汉字的也换
+      .replaceAll(RegExp(',\\s?(?=$h)'), '，')
+      .replaceAll(RegExp(':\\s?(?=$h)'), '：')
+      .replaceAll(RegExp(';\\s?(?=$h)'), '；');
 }
 
 /// 站点、机器人生成的一段话按 App 语言给出（英文认不出的部分写「(in Chinese)」）。

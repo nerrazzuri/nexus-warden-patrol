@@ -311,7 +311,7 @@ describe("W71 Nav2 没起来", () => {
     fireEvent.click(cardOf(c, "A"));
     const d = c.querySelector(".robot-detail")!;
     await waitFor(() => expect((d.querySelector('option[value="west-loop"]') as HTMLOptionElement | null)?.disabled).toBe(true));
-    expect(d.querySelector('option[value="west-loop"]')!.textContent).toContain("画在 v11 上,A 用的是 v7");
+    expect(d.querySelector('option[value="west-loop"]')!.textContent).toContain("画在 v11 上，A 用的是 v7");
     expect((d.querySelector('option[value="east-loop"]') as HTMLOptionElement).disabled).toBe(false);
   });
 
