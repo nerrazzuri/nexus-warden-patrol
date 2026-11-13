@@ -222,3 +222,25 @@ def test_POC1106_云台角度带到派遣器_没云台的狗回409(站点):
     assert got == [body]
     assert s.req("POST", "/api/robots/A/deter", {"output": "ptz", "on": True, "pan": 999},
                  token=gina)[0] == 400
+
+
+def test_用户1113_布防看见人_真派单到仿真狗_警灯亮_喇叭放话术(站点):
+    """站点 → 代理 → 仿真上装:布防时看见人,警灯开、喇叭放 warn-<语言>(真派单、真代理)。"""
+    from test_site_api import _等 as 等
+
+    from nexwar_site.modes import ArmingDesk
+    from nexwar_site.sightings import PersonWatch
+    s = 站点
+    _新鲜(s, _登(s, "gina"))
+    arming = ArmingDesk(s.db, now_ms=lambda: 1_800_000_000_000)
+
+    async def 看见人():
+        c = s.disp.clients["A"]
+        c.capabilities.tasks["persons"] = {"state": "ok", "present": True, "count": 1,
+                                            "nearest_m": 4.0}
+        w = PersonWatch(s.db, s.disp, now_ms=lambda: 1_800_000_000_000, arming=arming,
+                        deterrence=type("D", (), {"sessions": {}})())
+        w.tick()
+    s.loop.call(看见人)
+    等(lambda: s.dog.deter_on("strobe") and s.dog.deter_on("speaker"), timeout=5)
+    assert s.dog.deter_clip == "warn-zh"

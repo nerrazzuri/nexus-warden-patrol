@@ -43,4 +43,11 @@ void main() {
         '出发前检查未通过：地图还没标原点；算不出返航要留的电量（地图没有可用的原点）');
     expect(zhPunct('不能派(地图 home:3 没确认),10:30 再试'), '不能派（地图 home:3 没确认），10:30 再试');
   });
+
+  test('用户 11-13：布防见人的说明，开了警灯喊话 / 没上装两种都是英文', () {
+    expect(siteText('布防中,机器人已开警灯、喊话警告;看现场照片,要驱离就点「就地驱离」'),
+        startsWith('The site is armed. The robot has turned on its warning light'));
+    expect(siteText('布防中,机器人不在驱离;看现场照片,要驱离就点「就地驱离」'),
+        startsWith('The site is armed and the robot is not deterring'));
+  });
 }
