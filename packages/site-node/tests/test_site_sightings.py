@@ -268,3 +268,124 @@ def test_W73_值守位上定位说不清_不按盯着的防区算(台):
     t.d.persons("A", present=True, count=1)
     t.w.tick()
     assert [a["kind"] for a in t.w.alerts.raised] == ["dog_sees_person"], "说不清宁可报(同外审 R2)"
+
+
+# ---------------------------------------------------------------- 用户 11-13:布防见人就喊话、开警灯
+
+class 假上装派遣(假派遣):
+    def __init__(self, outputs=("strobe", "speaker"), clips=("restricted", "distance")):
+        super().__init__()
+        self.clients["A"].capabilities.tasks["deter"] = {"outputs": list(outputs),
+                                                          "clips": list(clips)}
+        self.sent: list[tuple[str, dict, int]] = []
+
+    async def deter(self, rid, payload, *, issued_by, priority):
+        self.sent.append((rid, payload, priority))
+        return {"ack": {"result": "accepted"}}
+
+
+def _上装台(t, **kw):
+    import asyncio  # noqa: F401
+    d = 假上装派遣(**kw)
+    w = PersonWatch(t.db, d, now_ms=lambda: t.ms[0], arming=t.arming, deterrence=t.det)
+    w.alerts = 假告警台()
+    return d, w
+
+
+async def _拍(w):
+    import asyncio
+    w.tick()
+    for _ in range(3):
+        await asyncio.sleep(0)
+
+
+async def test_用户1113_布防看见人_开警灯放话术_人一直在每30秒再来一次_低于人手动喊话(台):
+    from nexwar_site.priorities import MANUAL
+    from nexwar_site.sightings import WARN_EVERY_MS
+    t = 台
+    d, w = _上装台(t)
+    d.persons("A", present=True, count=1, nearest_m=4.0)
+    await _拍(w)
+    outs = {p["output"]: (p, pri) for _, p, pri in d.sent}
+    assert outs["strobe"][0]["on"] is True and outs["strobe"][0]["max_s"] > WARN_EVERY_MS / 1000
+    assert outs["speaker"][0]["clip"] == "restricted" and outs["speaker"][1] < MANUAL
+    n = len(d.sent)
+    await _拍(w)
+    assert len(d.sent) == n, "30 秒里不重复"
+    t.ms[0] += WARN_EVERY_MS
+    await _拍(w)
+    assert len(d.sent) == 2 * n, "人还在:再来一次"
+    d.persons("A", present=False)
+    await _拍(w)
+    t.ms[0] += WARN_EVERY_MS
+    await _拍(w)
+    assert len(d.sent) == 2 * n, "人走了不再喊"
+
+
+async def test_用户1113_撤防_授权在场_驱离中_都不喊不开灯(台):
+    t = 台
+    d, w = _上装台(t)
+    t.arming.set_mode("home", by="olga")
+    d.persons("A", present=True, count=1)
+    await _拍(w)
+    assert d.sent == []
+    t.arming.set_mode("armed", by="gina")
+    t.det.sessions["A"] = object()                       # 驱离中:归驱离那一场管
+    await _拍(w)
+    assert d.sent == []
+
+
+async def test_用户1113_没有那段话术只开灯_没接警灯只放话术_没上装什么都不发(台):
+    t = 台
+    d, w = _上装台(t, clips=("distance",))
+    d.persons("A", present=True, count=1)
+    await _拍(w)
+    assert [p["output"] for _, p, _ in d.sent] == ["strobe"]
+    d2, w2 = _上装台(t, outputs=("speaker",))
+    d2.persons("A", present=True, count=1)
+    await _拍(w2)
+    assert [p["output"] for _, p, _ in d2.sent] == ["speaker"]
+    t3 = 假派遣()                                         # 没装上装
+    w3 = PersonWatch(t.db, t3, now_ms=lambda: t.ms[0], arming=t.arming, deterrence=t.det)
+    w3.alerts = 假告警台()
+    t3.persons("A", present=True, count=1)
+    await _拍(w3)                                         # 不抛
+
+
+async def test_用户1113_我们的上装_中英文轮着放(台):
+    from nexwar_site.sightings import WARN_EVERY_MS
+    t = 台
+    d, w = _上装台(t, clips=("warn-zh", "warn-en", "notified-zh"))
+    d.persons("A", present=True, count=1)
+    got = []
+    for _ in range(3):
+        await _拍(w)
+        t.ms[0] += WARN_EVERY_MS
+    got = [p["clip"] for _, p, _ in d.sent if p["output"] == "speaker"]
+    assert got == ["warn-zh", "warn-en", "warn-zh"]
+
+
+async def test_用户1113_报警说明_开了灯喊话写已警告(台):
+    t = 台
+    d, w = _上装台(t)
+    d.persons("A", present=True, count=1)
+    await _拍(w)
+    [a] = w.alerts.raised
+    assert a["detail"].startswith("布防中,机器人已开警灯、喊话警告") and "就地驱离" in a["detail"]
+
+
+def test_用户1113_没上装的机器人_报警说明照旧(台):
+    t = 台
+    t.d.persons("A", present=True, count=1)
+    t.w.tick()
+    [b] = t.w.alerts.raised
+    assert b["detail"].startswith("布防中,机器人不在驱离")
+
+
+async def test_用户1113_有警灯没喇叭_只开灯_不推进话术轮次(台):
+    t = 台
+    d, w = _上装台(t, outputs=("strobe",), clips=("warn-zh", "warn-en"))
+    d.persons("A", present=True, count=1)
+    await _拍(w)
+    assert [p["output"] for _, p, _ in d.sent] == ["strobe"]
+    assert w._warn_n == {}

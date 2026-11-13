@@ -6,6 +6,8 @@ W24 的人员检测原来只在驱离里用:狗待命、巡检时看见人,站�
 - **布防**(模式 ``armed``)时,狗**确认**看见人(代理判的 ``present``:同一相机 3 帧里 2 帧)、又不在驱离
   里(驱离中的归 W24 管)→ 报 **P1** ``dog_sees_person``「狗看见人了」,带人数、最近距离、狗的位置;
   现场的照片在 ``persons`` 那几趟里(代理没有事件任务时截图归它),手机现场页「现场照片」就能看。
+- **当场警告**(用户 11-13):报 P1 的同时机器人开警灯、放一段话术(:meth:`PersonWatch._warn`);
+  人一直在每 :data:`WARN_EVERY_MS` 再来一次,人走了(或看不到了)再看见当场再来。不走过去、不追。
 - 保安看过现场决定要不要驱离:手机上一键「就地驱离」(:meth:`DeterrenceDesk.start_here`)。
 - **留守、临时撤防、撤防不报**(手动切的留守 / 临时撤防:有的防区撤了,一律不报,W33 的老约定)。
 - **布防时间表管着、部分防区布防**(W44 外审 R2):按机器人**可靠的现在位置**
@@ -28,6 +30,7 @@ W74 一期(设计 docs/W74-看见人处置-设计.md §六、§九):
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import math
 from collections.abc import Callable
@@ -37,6 +40,17 @@ from nexwar_site.db import SiteDB
 from nexwar_site.pending_alerts import flush, queue
 
 log = logging.getLogger(__name__)
+
+#: 用户 11-13:布防时看见人,机器人当场开警灯、放一段话术;人一直在就隔这么久再来一次。
+WARN_EVERY_MS = 30_000
+#: 警灯一次开这么久(秒,比间隔长一点:人一直在灯就一直亮;人走了到点自己关)。
+WARN_STROBE_S = 40.0
+#: 话术:机器人有竞品上装的 ``restricted``(「这里是禁区,请马上离开」)就放它;不然跟驱离第 2 级一样,
+#: 「这里是受保护区域,请离开」``warn-<语言>`` 有哪几种轮着放(中文、英文、马来文)。
+WARN_POC_CLIP = "restricted"
+WARN_CLIP_S = 15.0
+#: 喇叭优先级:低于保安手动喊话(``MANUAL`` 60)、驱离(80),高于机器人自己的提醒(40)。
+WARN_PRIORITY = 55
 
 PERSON_KIND = "dog_sees_person"
 OVERDUE_KIND = "person_overdue"
@@ -68,6 +82,10 @@ class PersonWatch:
         self.alerts: Any = None
         #: 每台最后一次记最后位置的时刻(内存;站点重启了下一拍重记)。
         self._tracked: dict[str, int] = {}
+        #: 每台最后一次见人喊话、开灯的时刻;轮到第几段话术(内存)。
+        self._warned: dict[str, int] = {}
+        self._warn_n: dict[str, int] = {}
+        self._warn_jobs: set[asyncio.Task[None]] = set()
         #: W74 二期:地图上一个点在哪(命名区域、没命名用防区名;``{map_id, map_version, x, y}``)。
         #: 站点主程序接上;没接就不说。
         self.where_of: Callable[[dict[str, Any]], str | None] | None = None
@@ -174,11 +192,13 @@ class PersonWatch:
                 if kind == "lost":
                     if self._open(rid) is not None:
                         self._found(rid, now)
+                        self._warn(rid, now)
                         continue
                     self._done(rid)                       # 那条关了:另起一回
                     kind = None
                 if kind == "p1":
                     self._track(rid, now)                 # 这一回报过 P1 了:记最后位置
+                    self._warn(rid, now)
                     continue
                 who = self._authorized(rid)          # B1c:名单(每拍按当前授权、当前位置重核)
                 if kind is None and who is not None:
@@ -187,8 +207,60 @@ class PersonWatch:
                     # 新的一回没授权 → 报 P1;授权在场的这一回,授权失效 / 狗走出授权区 / 位置说不清了
                     # 而人还在 → 补报一次 P1(B 阶段外审 I1)
                     self._raise(rid, p, now, lapsed=kind == "authorized")
+                    self._warn(rid, now)
         flush(self.db, self.alerts)
         self._overdue(now)
+
+    # ------------------------------------------------------------ 用户 11-13:见人喊话、开灯
+
+    def _warn_plan(self, rid: str) -> tuple[bool, list[str]]:
+        """这台能怎么警告:(开不开得了警灯, 能放的话术);没上装 = ``(False, [])``。"""
+        c = self.dispatcher.clients.get(rid)
+        caps = getattr(getattr(c, "capabilities", None), "tasks", None) or {}
+        d = caps.get("deter") if isinstance(caps, dict) else None
+        if not isinstance(d, dict) or not callable(getattr(self.dispatcher, "deter", None)):
+            return False, []
+        outs, clips = set(d.get("outputs") or []), set(d.get("clips") or [])
+        if "speaker" not in outs:
+            return "strobe" in outs, []
+        from nexwar_site.deterrence import LANGS
+        pool = [WARN_POC_CLIP] if WARN_POC_CLIP in clips else \
+            [f"warn-{lang}" for lang in LANGS if f"warn-{lang}" in clips]
+        return "strobe" in outs, pool
+
+    def _warn(self, rid: str, now: int) -> None:
+        """布防时看见人(不在驱离、没授权):开警灯、放一段话术;人在就每 :data:`WARN_EVERY_MS` 一次。
+        机器人没接警灯就只放话术,没有那段话术就只开灯;都没有不发。发不出去只记日志(报警照报)。"""
+        last = self._warned.get(rid)
+        if last is not None and now - last < WARN_EVERY_MS:
+            return
+        strobe, pool = self._warn_plan(rid)
+        payloads: list[dict[str, Any]] = []
+        if strobe:
+            payloads.append({"output": "strobe", "on": True, "max_s": WARN_STROBE_S})
+        if pool:
+            n = self._warn_n.get(rid, 0)
+            self._warn_n[rid] = n + 1
+            payloads.append({"output": "speaker", "on": True, "max_s": WARN_CLIP_S,
+                             "clip": pool[n % len(pool)]})
+        if not payloads:
+            return
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            return                                        # 不在事件循环里(不该发生):不发
+        self._warned[rid] = now
+        for pl in payloads:
+            job = loop.create_task(self._warn_one(rid, pl))
+            self._warn_jobs.add(job)
+            job.add_done_callback(self._warn_jobs.discard)
+
+    async def _warn_one(self, rid: str, payload: dict[str, Any]) -> None:
+        try:
+            await self.dispatcher.deter(rid, payload, issued_by="site:person_warn",
+                                        priority=WARN_PRIORITY)
+        except Exception as exc:  # noqa: BLE001 - 喊不出去:报警照报,记一笔
+            log.warning("%s 见人%s没发出去:%s", rid, payload.get("output"), exc)
 
     # ------------------------------------------------------------ W74 一期
 
@@ -213,6 +285,7 @@ class PersonWatch:
         with self.db.tx() as tx:
             tx.execute("DELETE FROM person_sightings WHERE robot_id=?", (rid,))
         self._tracked.pop(rid, None)
+        self._warned.pop(rid, None)                      # 再看见人当场再喊
 
     def _set_kind(self, rid: str, kind: str) -> None:
         with self.db.tx() as tx:
@@ -236,6 +309,7 @@ class PersonWatch:
         self._tracked[rid] = now
 
     def _lost(self, rid: str, now: int) -> None:
+        self._warned.pop(rid, None)                      # 又看见人当场再喊
         a = self._open(rid)
         last = a.context.get("last_seen") or {}
         where = (f",最后在 ({last['x']}, {last['y']})" if "x" in last else "")
@@ -364,7 +438,8 @@ class PersonWatch:
             tx.execute("INSERT INTO person_sightings(robot_id, started_ms, kind) VALUES (?,?,'p1') "
                        "ON CONFLICT(robot_id) DO UPDATE SET kind='p1'", (rid, now))
             queue(tx, kind="dog_sees_person", robot=rid, title=title,
-                  detail="布防中,机器人不在驱离;看现场照片,要驱离就点「就地驱离」",
+                  detail=("布防中,机器人已开警灯、喊话警告;" if any(self._warn_plan(rid)) else
+                          "布防中,机器人不在驱离;") + "看现场照片,要驱离就点「就地驱离」",
                   context=context, now_ms=now)
         log.info("%s 看见人了(布防中):%s", rid, title)
 

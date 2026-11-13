@@ -167,6 +167,8 @@ final List<_Rule> _rules = [
       (m) => 'The robot sees ${m[1]} ${_pl(m[1]!, 'person', 'people')}${m[2] != null ? ', nearest ${m[2]} m' : ''}'),
   (RegExp(r'^值守中$'), (_) => 'On watch'),
   (RegExp(r'^布防中$'), (_) => 'Armed'),
+  (RegExp(r'^布防中,机器人已开警灯、喊话警告'),
+      (_) => 'The site is armed. The robot has turned on its warning light and played a warning. Check the photo; tap “Deter here” to deter.'),
   (RegExp(r'^布防中,机器人不在驱离'),
       (_) => 'The site is armed and the robot is not deterring. Check the photo; tap “Deter here” to deter.'),
   (RegExp(r'^机器人一段时间没看到这个人了'),
