@@ -11,7 +11,7 @@ import { modeLabel } from "./armingpage";
 import { Confirm, Modal } from "./dialogs";
 import { hm, siteClock } from "./data";
 import { lang, setLang, t, type Key } from "./i18n";
-import { Icon } from "./icons";
+import { Icon, Shape } from "./icons";
 import { canArm, canDispatch, isOwnerLike, type Mode } from "./model";
 
 export type GuardPage = "duty" | "live" | "map" | "recordings" | "alarms";
@@ -179,6 +179,7 @@ export function TopBar(props: {
         <a href="#/duty" class="heldchip" data-held-chip="1">{t("topHeld", { n: props.held })}</a>
       )}
       <a href="#/alarms" class={props.alarms ? "alarmcount on" : "alarmcount"} aria-live="polite">
+        {!!props.alarms && <Shape kind="P1" />}
         {t("alarmCount", { n: props.alarms == null ? "?" : props.alarms })}
       </a>
       {/* P2-27:小一点,带上日期(值夜班跨零点看得清是哪天) */}
@@ -258,7 +259,7 @@ export function SideNav(props: { me: Me; page: Page; alarms: number | null; noti
   }, [props.page, open]);
   const badge = (b: "alarms" | "notices" | undefined) => {
     const n = b === "alarms" ? props.alarms : b === "notices" ? props.notices : null;
-    return n ? <span class={b === "alarms" ? "badge alarm mono" : "badge mono"}>{n}</span> : null;
+    return n ? <span class={b === "alarms" ? "badge alarm mono" : "badge mono"}>{b === "alarms" && <Shape kind="P1" size={10} />}{n}</span> : null;
   };
   return (
     <aside class="sidenav" ref={side}>
