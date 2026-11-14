@@ -38,7 +38,7 @@ from nexwar_agent import route_check
 from nexwar_agent.bridges.hal_nav import HalNavBackend
 from nexwar_agent.bridges.planned_nav import PlannedNavBackend, _heading
 from nexwar_contract import errcodes
-from nexwar_contract.footprint import BASE_HALF_LEN, BASE_MARGIN
+from nexwar_contract.footprint import BASE_MARGIN
 from nexwar_contract.navbridge import MAX_VIA
 from nexwar_contract.obsbridge import pack_bits
 from nexwar_contract.planning import costmap as cmod
@@ -75,6 +75,18 @@ UNKNOWN_SLOW_MPS = 0.3
 #: 箱子也被当墙,定位偏了更说不准)。看得见的挡一律按全余量停。蠕行速度(遮挡限速的下限):真机前进
 #: 低于 0.13 m/s 只踏步不走(10-29),0.15 离死区太近。
 SOFT_CREEP_MPS = 0.2
+#: 外审 11-14、用户定:两侧盲带(前后雷达都看不见)没有 10 s 以内的记忆不许转身 —— 先往看得清、没挡的
+#: 一侧直着走这么远(一个车身长 0.93 m 再加视野边缘、栅格的余量:新位置的盲带每一格都在前 / 后雷达
+#: 视野里过一遍;1.0 m 时车头角那一格还差一点),再转。前后都挪不了就停下报被挡。最多挪
+#: :data:`LOOK_TRIES` 次,离上回挪的地方走出 :data:`LOOK_RESET_M` 才清零(Nav2 原地来回扭的时候
+#: 别一回回自己往前挪下去),一次最多 :data:`LOOK_S` 秒。
+LOOK_M = 1.2
+LOOK_MPS = SOFT_CREEP_MPS
+LOOK_S = 10.0
+LOOK_TRIES = 2
+LOOK_RESET_M = 3.0
+#: 只差朝向的原地转:挪出去看清再倒回出发点,离出发点这么近算回来了(米)。
+LOOK_BACK_TOL_M = 0.05
 # ---- 看得清就快(决策 76,用户 2026-10-29:报警要 90 s 内到位;两侧盲区让 1.0 m/s 一律跑不安全)
 #: 看得清、附近没有地图之外的东西时最快多快(米/秒;还受任务、站点、全狗限速管)。
 V_FAST = 1.0
@@ -212,8 +224,6 @@ MANEUVER_CLEAR_M = 0.03
 MANEUVER_LOOK_M = 1.0
 #: 脱困动作每一拍发速度前,按这个速度往前推这么久(秒)查整个车身扫过的范围(外审 POC r1 C2)
 REC_SWEEP_S = 1.0
-#: 机身两侧盲带比机身前后沿各宽这么多(米;雷达装在前后沿,紧贴沿口那一点也看不太到)
-SIDE_BAND_TOL_M = 0.05
 #: 沿原路倒退:记最近 :data:`TRAIL_KEEP_M` 走过的路(每 :data:`TRAIL_STEP_M` 一个点;一拍跳过
 #: :data:`TRAIL_JUMP_M` 是定位跳了,清掉重记),退 :data:`RETREAT_M`(原路不到 :data:`RETREAT_MIN_M`
 #: 不退),:data:`RETREAT_MPS` 倒着走,跟原路按前瞻 :data:`RETREAT_LOOK_M` 走;
@@ -311,6 +321,9 @@ class Nav2NavBackend(PlannedNavBackend):
         self._nav2_goal: int | None = None
         #: 这一段只原地转到这个朝向(工单 11-02-11);``None`` = 不是。
         self._turn_only: float | None = None
+        self._look: dict[str, Any] | None = None
+        self._look_tries = 0
+        self._look_at = (0.0, 0.0)
         self._turn_err: float | None = None                # 上一拍原地转的误差(看转没转过头)
         self._turn_blocked_at: float | None = None         # 只差朝向的原地转从什么时候起被挡(W70)
         self._near_best: float | None = None               # 进了终点半米以后最近到过多近(W70)
@@ -453,6 +466,7 @@ class Nav2NavBackend(PlannedNavBackend):
             raise NavRequestError(op, "终点在禁行区里")
         self.fallback_reason = ""
         self._turn_only = None
+        self._look, self._look_tries = None, 0
         self._turn_err = None
         if here is not None and math.dist((here.x, here.y),
                                           (pose.position.x, pose.position.y)) <= TURN_ONLY_M:
@@ -519,6 +533,7 @@ class Nav2NavBackend(PlannedNavBackend):
         self.link.send(msg)
         self._goal_msg, self._resends, self._quiet_since = dict(msg), 0, None
         self._edge, self._edge_tries, self._fwd_ref = None, 0, None
+        self._look, self._look_tries = None, 0
         self._rec_level, self._rec_at, self._man, self._back = 0, None, None, None
         self._rec_tried = set()
         if self._avoid:
@@ -674,6 +689,7 @@ class Nav2NavBackend(PlannedNavBackend):
 
     async def _enter_terminal(self, status: NavStatus) -> None:
         self._turn_only = None
+        self._look, self._look_tries = None, 0
         self._man = self._back = None
         if getattr(self, "_avoid", None):
             self._avoid = []                               # 临时绕开的只管这一趟
@@ -888,10 +904,15 @@ class Nav2NavBackend(PlannedNavBackend):
                 wz *= UNKNOWN_SLOW_MPS / abs(vx)
                 vx = math.copysign(UNKNOWN_SLOW_MPS, vx)
                 v = self._guard_check(vx, wz)
+            if v.band_only and await self._look_go(v, here, dt_s):
+                return
             if v.stops:
                 self._guarded(v, here)
                 await self._send(0.0, 0.0, dt_s)
                 return
+        self._look = None
+        if self._look_tries and math.dist(self._look_at, (here.x, here.y)) >= LOOK_RESET_M:
+            self._look_tries = 0                           # 离上回挪的地方走远了:下回再被拦还能挪
         if self._guard_told and self.on_event is not None:
             self.on_event("nav_unblocked", {"waited_s": round(self._secs()
                                                               - (self._guard_since or 0), 1),
@@ -962,7 +983,7 @@ class Nav2NavBackend(PlannedNavBackend):
         wz = math.copysign(max(MIN_TURN_RPS, min(TURN_ONLY_MAX_RPS, abs(err))), err)
         blocked = self._turn_hits_map(0.0, wz, here)
         if not blocked and self.guard is not None and self.obstacles is not None:
-            v = self._guard_check(0.0, wz)
+            v = self._guard_check(0.0, wz, free_s=obstacles_mod.REC_FREE_S)  # 台阶脱困(用户 11-14)
             blocked = v.stops
         if abs(err) > TURN_DONE_RAD * 2 and not blocked and now - e["t"] <= EDGE_STEP_S:
             await self._send(0.0, wz, dt_s)
@@ -1126,6 +1147,9 @@ class Nav2NavBackend(PlannedNavBackend):
     async def _man_step(self, here: Any, dt_s: float) -> None:
         """自己挪的一拍(恢复链 2 级)。"""
         m, now = self._man, self._secs()
+        if self._look is not None and await self._look_go(None, here, dt_s):
+            m["cur"] = None                                # 挪完看清了重挑这一步
+            return
         err = math.remainder(m["want"] - here.yaw, 2 * math.pi)
         if abs(err) <= MANEUVER_DONE_RAD:
             await self._man_finish(here, True, dt_s)
@@ -1153,6 +1177,9 @@ class Nav2NavBackend(PlannedNavBackend):
             if v.cause == "data":
                 await self._send(0.0, 0.0, dt_s)           # 看不清就等,不瞎挪
                 return
+            if v.band_only and await self._look_go(v, here, dt_s):
+                m["cur"] = None
+                return
             self._guarded(v, here)                         # 挡着 / 看不见 / 扫到墙:下一拍重挑
             m["cur"] = None
             await self._send(0.0, 0.0, dt_s)
@@ -1165,9 +1192,9 @@ class Nav2NavBackend(PlannedNavBackend):
 
         1. 车身按这个速度走 :data:`REC_SWEEP_S` 秒扫过的范围不许压上地图墙、不许进禁行区(余量规矩跟
            挑步子一样:不低于 :data:`MANEUVER_CLEAR_M`,已经更贴就不许更贴);地图墙读不出来不动。
-        2. 守卫:放行才走;看得见的挡(地图墙也算,外审 11-14)、障碍数据不新鲜不走;看不见的地方
-           只许是机身两侧那条前后雷达都看不见的带(跟平常走一样的已知限制,靠记忆),前后雷达该看得见
-           却没看见(没数据、被挡住后面)不走。"""
+        2. 守卫:放行才走;看得见的挡(地图墙也算,外审 11-14)、障碍数据不新鲜不走;看不见的按守卫
+           的规矩(外审 11-14):前进、只在车头视野里看不见,不超过 :data:`UNKNOWN_SLOW_MPS` 才走;
+           两侧盲带、后退、原地转有看不见的不走。"""
         from nexwar_agent.obstacles import Verdict
         if abs(vx) < 1e-6 and abs(wz) < 1e-6:
             return None
@@ -1180,7 +1207,7 @@ class Nav2NavBackend(PlannedNavBackend):
         if not ok:
             return Verdict(False, "脱困这一步车身会扫到地图上的墙或禁行区")
         if self.guard is not None and self.obstacles is not None:
-            v = self._guard_check(vx, wz)
+            v = self._guard_check(vx, wz, free_s=obstacles_mod.REC_FREE_S)   # 用户 11-14
             if v.ok:
                 return None
             if v.cause == "data":
@@ -1189,20 +1216,10 @@ class Nav2NavBackend(PlannedNavBackend):
                 # 外审 11-14:看得见的挡一律不动。原来挡点全是地图墙就放行(第 1 条按地图查过车身)——
                 # 定位偏了,地图说不压、雷达看见的墙其实就在那
                 return v
-            if v.unknown and not self._unknown_only_sides(vx, wz):
-                return v
-            if not v.hits and not v.unknown:
-                return v                                   # 说不清为什么拦:不动
-            return None
+            if v.cause == "unknown" and abs(vx) <= UNKNOWN_SLOW_MPS + 1e-9:
+                return None                                # 前进、看不见的只在车头视野里:慢着走
+            return v                                       # 盲带 / 后退 / 原地转看不见、说不清:不动
         return None
-
-    def _unknown_only_sides(self, vx: float, wz: float) -> bool:
-        """守卫说「看不见」的那些点全在机身两侧的盲带里(机身前后沿之间,前后雷达都看不见)?"""
-        g, view = self.guard, self.obstacles
-        pts = g.swept(vx, wz, self._v_meas, (self._last_wz, self._w_meas))
-        _, unknown = view.lookup(pts, self._odom_pose)
-        hl = float(getattr(view, "body_hl", BASE_HALF_LEN)) + SIDE_BAND_TOL_M
-        return bool(unknown) and all(abs(pts[i][0]) <= hl for i in unknown)
 
     def _sweep_ok(self, here: Any, vx: float, wz: float, walls: Any) -> bool:
         """按 ``(vx, wz)`` 走 :data:`REC_SWEEP_S` 秒,整个车身一路上离地图墙的余量够不够、
@@ -1559,10 +1576,62 @@ class Nav2NavBackend(PlannedNavBackend):
             return False
         return len(hits) >= 2
 
+    async def _look_go(self, v: Any, here: Any, dt_s: float, *, ret: bool = False) -> bool:
+        """转身被两侧盲带看不见拦住(``v``;``None`` = 只把进行中的接着做):先直着往看得清、没挡的
+        一侧挪 :data:`LOOK_M`,盲带看过一遍再转(外审 11-14、用户定)。``ret``:挪完再原路倒回出发点
+        (只差朝向的原地转要站在目标上)。这一拍发了挪的速度回 True;挪不了、挪完了回 False,调用方
+        照常停、报被挡。"""
+        now = self._secs()
+        lk = self._look
+        if lk is None:
+            if v is None or self._look_tries >= LOOK_TRIES:
+                return False
+            # 先挑地图上整段 LOOK_M 都放得下的一侧(死胡同里别先往尽头挪),都放不下再挑能动的
+            try:
+                walls = await self._route_walls()
+                room = {d: await asyncio.to_thread(self._sweep_ok, here, d * LOOK_M / REC_SWEEP_S,
+                                                   0.0, walls) for d in (1, -1)}
+            except Exception:
+                log.exception("先挪看清:查地图上放不放得下出错,按两边都放不下挑")
+                room = {1: False, -1: False}
+            for d in sorted((1, -1), key=lambda d: not room[d]):
+                vx, _ = self._deband(d * LOOK_MPS, 0.0)
+                if await self._rec_safe(here, vx, 0.0) is None:
+                    lk = self._look = {"dir": d, "from": (here.x, here.y), "t": now,
+                                       "ret": ret, "phase": "out"}
+                    self._look_tries += 1
+                    self._look_at = (here.x, here.y)
+                    log.info("转身被两侧盲带挡住(%s):先%s直走 %.1f m 看清再转%s", v.reason,
+                             "往前" if d > 0 else "往后", LOOK_M, "、再倒回来" if ret else "")
+                    break
+            else:
+                return False
+        moved = math.dist(lk["from"], (here.x, here.y))
+        if lk["phase"] == "out":
+            done = moved >= LOOK_M or now - lk["t"] > LOOK_S
+            if done and lk["ret"]:
+                lk = self._look = {**lk, "phase": "back", "t": now}
+            elif done:
+                self._look = None
+                return False
+        d = lk["dir"] if lk["phase"] == "out" else -lk["dir"]
+        if lk["phase"] == "back" and (moved <= LOOK_BACK_TOL_M or now - lk["t"] > LOOK_S):
+            self._look = None
+            return False
+        vx, _ = self._deband(d * LOOK_MPS, 0.0)
+        if await self._rec_safe(here, vx, 0.0) is not None:
+            self._look = None
+            return False
+        self._trail_note(here)                             # 挪过的也是走过的路(沿原路倒退要用)
+        await self._send(vx, 0.0, dt_s)
+        return True
+
     async def _turn_step(self, here: Any, dt_s: float) -> None:
         """只差朝向:原地转到 :attr:`_turn_only`(工单 11-02-11)。地图上的墙、守卫照样管;被挡
         :data:`TURN_BLOCKED_S` 秒就停在这儿算到(W70)。"""
         assert self._turn_only is not None
+        if self._look is not None and await self._look_go(None, here, dt_s):
+            return                                         # 挪出去看清、倒回来,做完再转
         err = math.remainder(self._turn_only - here.yaw, 2 * math.pi)
         over = self._turn_err is not None and err * self._turn_err < 0
         self._turn_err = err
@@ -1581,6 +1650,9 @@ class Nav2NavBackend(PlannedNavBackend):
             v = self._guard_check(0.0, wz)
             if v.stops:
                 blocked = v
+        if blocked is not None and blocked.band_only \
+                and await self._look_go(blocked, here, dt_s, ret=True):
+            return
         if blocked is None:
             self._turn_blocked_at = None
             await self._send(0.0, wz, dt_s)

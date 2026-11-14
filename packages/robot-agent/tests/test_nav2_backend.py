@@ -368,11 +368,13 @@ async def test_限速压前进时转向同比例压_弯不变急_工单11_02_9(t
     await t.nav.set_speed(0.3)
     await t.nav.goto(Pose.from_xy_yaw(6.0, 4.0))
     seen = []
-    for _ in range(10):
+    for _ in range(80):                                     # 刚出发两侧没看过:先直走看清
         link.now += 0.1
         link.cmd = (link.now, 1, 0.87, 0.0, 0.7)
         await t.一拍()
-        seen.append((t.nav._last_vx, t.nav._last_wz))
+        if abs(t.nav._last_wz) > 1e-6:
+            seen.append((t.nav._last_vx, t.nav._last_wz))
+    assert seen, "看清以后照 Nav2 的弯走"
     vx, wz = max(seen)
     assert abs(vx - 0.3) < 1e-6, vx
     assert abs(wz / vx - 0.7 / 0.87) < 0.01, ("弯半径要跟 Nav2 的一样", vx, wz)
@@ -877,6 +879,8 @@ async def test_只差朝向的目标_代理自己原地转_不交给Nav2_工单1
     await t.跑(20.0)
     assert NavStatus.SUCCEED in t.status, (t.status, t.nav.fail_reason)
     assert abs(math.degrees(t.r.yaw) - 10) < 9, math.degrees(t.r.yaw)
+    # 外审 11-14:刚出发两侧没看过,先直走出去看清、倒回来再转 —— 最后还站在目标上
+    assert math.dist((t.r.x, t.r.y), (1.55, 4.0)) < 0.15, (t.r.x, t.r.y)
 
 
 async def test_离目标远的照样交给Nav2(tmp_path):
@@ -892,10 +896,10 @@ async def test_Nav2走到目标附近只差朝向_代理接过来自己转_工�
     xy 容差、只差朝向时代理取消 Nav2 的目标,自己原地转。"""
     link = 假转接()
     t = _台(tmp_path, link)
-    await t.start(1.5, 4.0, 0.0)
+    await t.start(0.6, 4.0, 0.0)                         # 外审 11-14:走过来两侧才看过
     await t.nav.goto(Pose.from_xy_yaw(2.5, 4.0, math.radians(66)))
     gid = link.kinds("goal")[-1]["goal_id"]
-    for _ in range(60):                                  # Nav2 把它开到目标点,朝向不管
+    for _ in range(90):                                  # Nav2 把它开到目标点,朝向不管
         link.now += 0.1
         dx = 2.5 - t.r.x
         link.cmd = (link.now, 1, 0.3 if dx > 0.05 else 0.0, 0.0, 0.0)
@@ -1090,15 +1094,17 @@ async def test_W70_离终点不到半米_15秒没再靠近_停在这儿算到(tm
     assert link.kinds("cancel")[-1]["goal_id"] == gid
 
 
-def _卡在台阶边(t, roll):
-    """仿真狗:朝向跟台阶边差不到 25° 时腿在边上打滑,往前走不动;机身按 ``roll`` 歪着。"""
+def _卡在台阶边(t, roll, at_x=-math.inf):
+    """仿真狗:走到 ``at_x`` 以后,朝向跟台阶边差不到 25° 时腿在边上打滑,往前走不动;机身按 ``roll``
+    歪着。"""
     from nexwar_contract.hal import ImuSample
     real = t.r.tick
 
     def tick(dt):
         x, y = t.r.x, t.r.y
         real(dt)
-        if abs(math.remainder(t.r.yaw, 2 * math.pi)) < math.radians(25) and t.r.x > x:
+        if abs(math.remainder(t.r.yaw, 2 * math.pi)) < math.radians(25) and t.r.x > x \
+                and x >= at_x:
             t.r.x, t.r.y = x, y
 
     async def imu():
@@ -1114,18 +1120,21 @@ async def test_W71_沿着台阶边打滑走不动_机身歪着_退一点转大�
     from nexwar_agent.bridges.nav2_nav import EDGE_TURN_RAD
     link = 假转接()
     t = _台(tmp_path, link)
-    await t.start(1.5, 4.0)
-    _卡在台阶边(t, roll=math.radians(-4.8))
+    # 外审 11-14:从 1.5 m 外走到台阶边才卡住(两侧盲带走过来时看过;一出现就卡着的话两侧从没看过,
+    # 不许转身,得先挪看清)
+    await t.start(0.2, 4.0)
+    _卡在台阶边(t, roll=math.radians(-4.8), at_x=1.5)
     await t.nav.goto(Pose.from_xy_yaw(9.0, 4.0, 0.0))
     first = link.kinds("goal")[-1]
     yaws, track = [], []
-    for _ in range(250):
+    for _ in range(300):
         link.now += 0.1
         gid = link.kinds("goal")[-1]["goal_id"]
         link.cmd = (link.now, gid, 0.4, 0.0, 0.0)
         await t.一拍()
-        yaws.append(t.r.yaw)
-        track.append((t.r.x, t.r.yaw))
+        if track or t.r.x >= 1.5:
+            yaws.append(t.r.yaw)
+            track.append((t.r.x, t.r.yaw))
     turned = next(i for i, (_, y) in enumerate(track) if y > EDGE_TURN_RAD * 0.8)
     backed = next(i for i, (x, _) in enumerate(track) if x < 1.4)
     assert turned < backed, "用户:「困着的时候应该先转角度 再后退」"
@@ -1189,6 +1198,11 @@ async def test_W71_目标点贴着地图墙_交给Nav2之前挪到最近能站�
     assert (g["x"], g["y"]) == (6.0, 3.0)
 
 
+def _晃(i):
+    """原地前后晃:0.2 m/s 往前 1 s、往后 1 s(离目标的远近变不到 0.3 m,算没进展)。"""
+    return 0.2 if (i // 10) % 2 == 0 else -0.2
+
+
 async def test_W72_离终点还远_原地打转30秒没进展_报被挡_走起来了报恢复(tmp_path):
     """用户 11-03:导航卡住几十秒要给站点告警(站点一分钟报 P2,恢复了自动解除);11-03 绕人贴着沙发,
     Nav2 自己原地转了 70 秒,守卫没拦,站点什么都不知道。"""
@@ -1199,14 +1213,16 @@ async def test_W72_离终点还远_原地打转30秒没进展_报被挡_走起�
     await t.nav.goto(Pose.from_xy_yaw(9.0, 4.0, 0.0))
     gid = link.kinds("goal")[-1]["goal_id"]
     blocked = lambda: [d for k, d in t.events if k == "nav_blocked"]   # noqa: E731
-    for _ in range(int((NAV2_NO_PROGRESS_S - 3) * 10)):    # Nav2 一直给原地转的速度
+    # Nav2 一直原地前后晃(外审 11-14 起原地转超过 10 s 两侧记忆过期、守卫拦,另走被挡那条路报)
+    n = int((NAV2_NO_PROGRESS_S - 3) * 10)
+    for i in range(n):
         link.now += 0.1
-        link.cmd = (link.now, gid, 0.0, 0.0, 0.6)
+        link.cmd = (link.now, gid, _晃(i), 0.0, 0.0)
         await t.一拍()
     assert blocked() == [], "还不到时候"
-    for _ in range(50):
+    for i in range(n, n + 50):
         link.now += 0.1
-        link.cmd = (link.now, gid, 0.0, 0.0, 0.6)
+        link.cmd = (link.now, gid, _晃(i), 0.0, 0.0)
         await t.一拍()
     [b] = blocked()
     assert "没向目标靠近" in b["reason"] and b["waited_s"] >= NAV2_NO_PROGRESS_S
@@ -1242,17 +1258,17 @@ async def test_W72_换了新目标_进展从头算_不拿上一个目标的时�
     await t.start(1.5, 4.0)
     await t.nav.goto(Pose.from_xy_yaw(5.0, 4.0, 0.0))
     gid = link.kinds("goal")[-1]["goal_id"]
-    for _ in range(int((NAV2_NO_PROGRESS_S - 5) * 10)):     # 原地转了 25 秒(还没报)
+    for i in range(int((NAV2_NO_PROGRESS_S - 5) * 10)):     # 原地晃了 25 秒(还没报)
         link.now += 0.1
-        link.cmd = (link.now, gid, 0.0, 0.0, 0.6)
+        link.cmd = (link.now, gid, _晃(i), 0.0, 0.0)
         await t.一拍()
     await t.nav.stop()
     await t.跑(1.0)
     await t.nav.goto(Pose.from_xy_yaw(1.5, 9.0, 0.0))       # 换成更远的目标
     gid = link.kinds("goal")[-1]["goal_id"]
-    for _ in range(80):                                     # 新目标上转了 8 秒
+    for i in range(80):                                     # 新目标上晃了 8 秒
         link.now += 0.1
-        link.cmd = (link.now, gid, 0.0, 0.0, 0.6)
+        link.cmd = (link.now, gid, _晃(i), 0.0, 0.0)
         await t.一拍()
     assert [d for k, d in t.events if k == "nav_blocked"] == []
 
@@ -1828,6 +1844,8 @@ async def test_脱困_走着走着卡住_重新规划不管用_沿原路退回�
     steps = _步(t)
     assert [s["action"] for s in steps][:2] == ["replan", "retreat"], steps
     assert steps[-1]["ok"] is True, steps
+    # 外审 11-14:Nav2 原地扭的时候两侧记忆过期,代理会先直走看清(往前挪)—— 卡住的位置按判卡住那一刻
+    x_stuck = steps[0]["x"]
     assert x_stuck - t.r.x >= nav2_nav.RETREAT_M - 0.3, (x_stuck, t.r.x)
     assert len(link.kinds("goal")) >= n_goals + 2, "重新规划一次、退完再交给 Nav2 一次"
     assert not t.crashed
@@ -1864,7 +1882,7 @@ async def _脱困台(tmp_path, x, y, yaw, monkeypatch, verdict=None, **kw):
         sent.append((round(vx, 3), round(wz, 3)))
     monkeypatch.setattr(t.nav, "_send", 发)
     if verdict is not None:
-        monkeypatch.setattr(t.nav, "_guard_check", lambda vx, wz, g=None: Verdict(*verdict))
+        monkeypatch.setattr(t.nav, "_guard_check", lambda vx, wz, g=None, **kw: Verdict(*verdict))
     return t, sent
 
 
@@ -1924,7 +1942,7 @@ async def test_外审POC_r2_C2_挡点全是墙_同时后面看不见_也不许�
     """codex POC r2 #2:挡点全是地图墙就直接放行,没管同一份结果里后面(雷达看不见)的未知区。"""
     from nexwar_agent.obstacles import Verdict
     t, sent = await _脱困台(tmp_path, 5.0, 4.0, 0.0, monkeypatch, rear=False)
-    monkeypatch.setattr(t.nav, "_guard_check", lambda vx, wz, g=None: Verdict(
+    monkeypatch.setattr(t.nav, "_guard_check", lambda vx, wz, g=None, **kw: Verdict(
         False, "扫过区有挡 1 处、看不见 50 处", hits=((-0.9, 0.6),), unknown=50))
     _退(t, [(4.6, 4.0), (3.5, 4.0)])
     here = await t.nav._here()
@@ -2016,3 +2034,62 @@ async def test_外审POC_r4_离禁行区已经不到3厘米_脱困一点都不�
     walls = await t.nav._route_walls()
     assert not t.nav._sweep_ok(here, -0.2, 0.0, walls), "倒退会往右边禁行区靠"
     assert t.nav._sweep_ok(here, 0.2, 0.0, walls), "往前是离开"
+
+
+# ---------------------------------------- 外审 11-14、用户定:两侧盲带看不清不转身,先直着挪看清再转
+
+
+async def test_外审1114_刚出发两侧没看过_Nav2要原地转_先直走看清再转(tmp_path):
+    link = 假转接()
+    t = _台(tmp_path, link)
+    await t.start(3.0, 4.0)
+    await t.nav.goto(Pose.from_xy_yaw(1.0, 4.0))
+    x0, sent = t.r.x, []
+    for _ in range(80):
+        link.now += 0.1
+        link.cmd = (link.now, 1, 0.0, 0.0, 0.6)
+        await t.一拍()
+        sent.append((round(t.nav._last_vx, 2), round(t.nav._last_wz, 2)))
+    first = next(c for c in sent if c != (0.0, 0.0))
+    assert first[0] > 0.1 and first[1] == 0.0, ("先直着往前挪", sent[:6])
+    turned = [i for i, (_, w) in enumerate(sent) if abs(w) > 0.1]
+    assert turned, ("看清以后照 Nav2 的转", sent[-5:])
+    assert 0.5 < t.r.x - x0 < 1.4, ("挪了约一个车身长", t.r.x - x0)
+    assert all(abs(v) < 1e-6 for v, _ in sent[turned[0]:turned[0] + 20]), "开始转以后不再挪"
+
+
+async def test_外审1114_两侧没看过_前面有挡_后面没雷达_不挪不转_报被挡(tmp_path):
+    link = 假转接()
+    t = _台(tmp_path, link, rear=False)
+    t.world.dyn["box"] = (3.6, 3.6, 3.9, 4.4)              # 车头前 0.1 m 一个箱子
+    await t.start(3.0, 4.0)
+    await t.nav.goto(Pose.from_xy_yaw(1.0, 4.0))
+    x0 = t.r.x
+    for _ in range(70):
+        link.now += 0.1
+        link.cmd = (link.now, 1, 0.0, 0.0, 0.6)
+        await t.一拍()
+    assert abs(t.r.x - x0) < 0.02 and abs(t.r.yaw) < 0.02, (t.r.x, t.r.yaw)
+    assert "nav_blocked" in [k for k, _ in t.events]
+
+
+async def test_外审1114_先挪的次数用完_不再自己挪_正常走出3米才清零(tmp_path):
+    """Nav2 原地来回扭的时候,别一回回自己往前挪下去(那是代理在走,不是 Nav2 要的)。"""
+    from nexwar_agent.bridges.nav2_nav import LOOK_RESET_M, LOOK_TRIES
+    link = 假转接()
+    t = _台(tmp_path, link)
+    await t.start(1.5, 4.0)
+    await t.nav.goto(Pose.from_xy_yaw(9.0, 4.0))
+    here = await t.nav._here()
+    t.nav._look_tries, t.nav._look_at = LOOK_TRIES, (here.x, here.y)
+    x0 = t.r.x
+    for _ in range(30):
+        link.now += 0.1
+        link.cmd = (link.now, 1, 0.0, 0.0, 0.6)
+        await t.一拍()
+    assert abs(t.r.x - x0) < 0.02, "次数用完:不挪"
+    for _ in range(int((LOOK_RESET_M + 0.5) / 0.05)):     # Nav2 正常往前开 0.5 m/s
+        link.now += 0.1
+        link.cmd = (link.now, 1, 0.5, 0.0, 0.0)
+        await t.一拍()
+    assert t.r.x - x0 >= LOOK_RESET_M and t.nav._look_tries == 0
