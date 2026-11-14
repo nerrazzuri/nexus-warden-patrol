@@ -1,0 +1,227 @@
+missing 226
+V4-normal | 派去看一眼
+V4-normal | 临时路线
+V4-normal | 全部切热像
+V4-alarm | 派机器人
+V4-alarm | A 28%，来回约用 6%，够
+V4-alarm | 现场警示 · 用 A 的喇叭和警灯
+V4-alarm | 喊话：请离开
+V4-alarm | 开警灯 30 秒
+V4-alarm | A 到场后用，驱离闯入的人
+V4-alarm | 通知
+V4-alarm | 通知经理 olga
+V4-alarm | App 推送 + 电话
+G-playback | 保留这段
+G-playback | 跳到时间
+G-playback | 跳到 时:分:秒
+G-playback | 超过保留期也不删
+G-check | 保安 派去看一眼
+G-check | 停车场北侧
+G-check | 在地图上点要看的位置，可以再点别处换位置
+G-check | 退出
+G-check | 机器人能走到 · 离 A 约 60 米
+G-check | 派哪台
+G-check | 最近的：A · 约 2 分钟到
+G-check | B · 在充电，18%
+G-check | A 会先暂停 guard-1 第 3 圈
+G-check | 看完以后
+G-check | 接着巡逻
+G-check | 回待命点
+G-check | 取消
+G-check | 到了以后在下面画面里看；不会产生报警
+G-route | 保安 临时路线
+G-route | 按顺序在地图上点，已点 4 个。只走这一次，不保存。
+G-route | 停车场入口
+G-route | 2 号楼东门
+G-route | 4 走不到
+G-route | 在墙外，和机器人那边不连通。挪开或撤销。
+G-route | A · 约 9 分钟走完
+G-route | 撤销上一个点
+G-route | 开始
+G-route | 走完回到原来的任务；日程到点时日程优先
+G-route | 先挪开或撤销第 4 个点
+G-robot | 保安 单台机器人
+G-robot | ← 全场
+G-robot | 北区 · guard-1 第 3 圈 · 62% · 定位好 · 上次联系 1 秒前
+G-robot | 前
+G-robot | 后
+G-robot | 热像
+G-robot | 回中
+G-robot | 中文
+G-robot | 现在的任务
+G-robot | 在跑 guard-1 第 3 圈，还要约 12 分钟。
+G-robot | 停下后它等你下一步；回待命点会中止这一圈
+G-robot | 派它
+G-robot | 跑 1 圈
+G-robot | 跑 3 圈
+G-robot | 一直巡逻
+G-robot | 这一圈跑完再开始；日程到点时日程优先
+G-robot | 派它去看一眼…
+G-robot | 姿态：
+G-robot | 定位：
+G-robot | 定位好
+G-robot | 重新定位
+G-robot | guard-1 走完
+G-robot | 镜头
+G-robot | 云台
+G-robot | 语言
+G-robot | 圈数
+G-estop | 保安 急停后
+G-estop | 2 台已急停
+G-estop | 2 台机器人已急停
+G-estop | gina 23:52 按了全部急停。它们原地不动，直到恢复；恢复后不会自己接着跑，要再派。
+G-estop | 全部恢复…
+M-alarm | 经理 告警处理中
+M-alarm | olga · 经理
+M-alarm | 现场 · 由值班保安做
+M-alarm | 派机器人、喊话、警灯由值班保安做。现在值班：
+M-alarm | （在线），
+M-alarm | 还没接手
+M-alarm | 最近能去的是 A：离北门 48 米，约 1 分钟
+M-alarm | 催 gina 处理
+V-alarm | 只读 告警处理中
+V-alarm | vic · 只读
+V-alarm | 还没人接手
+V-alarm | 谁在处理
+V-alarm | 值班：gina（在线）
+V-alarm | 还没派
+V-alarm | 最近的 A 离北门 48 米
+V-alarm | 还没定
+V-alarm | 定了会显示在这里
+V-alarm | 只读账号：可以看画面和录像，处理由值班人员做
+S-home | 布置
+S-home | 维护
+S-arming | 粗条：布防时段
+S-arming | 细线：布防期间连续巡逻，断开处在充电或换车
+S-arming | 圆圈：排好的单次巡逻和开始时间
+S-arming | 布防到 07:00
+S-arming | 19:00 起布防
+S-arming | 在空白处拖动加布防时段，拖两端改时间。
+S-arming | 巡逻电量线
+S-arming | 低于这个电量就回去充电，另一台接上
+S-arming | 布防时连续巡逻
+S-arming | 排好的巡逻 01:00
+S-arming | 排好的巡逻 04:00
+S-arming | 排好的巡逻 22:00
+S-arming | 排好的巡逻 20:00
+S-access | 加上授权
+S-access | 星期
+R-A2 | 其余 9 项正常。
+R-A2 | 换一台跑 01:00
+R-A2 | 其余 9 项正常
+R-A2 | 诊断包
+R-A2 | 日志、配置和最近 10 分钟的状态，打包给工程师
+R-A2 | 它现在没在跑任务，可以重启。
+R-A2 | 约 1 分钟，期间不能派
+R-A2 | 约 4 分钟，期间不能派
+R-A2 | 证书马上作废，所有机器人断开约 10 秒。要输入密码。
+M-robot | 经理 机器人
+M-robot | 开始停车场一圈 · gina 派的
+M-robot | 62% · 约 2 小时 40 分
+M-robot | 在跑停车场一圈，还要约 25 分钟。
+M-robot | 停车场一圈 · 约 25 分
+M-robot | 这一圈跑完再开始；日程到点时日程优先。
+M-robot | 现场控制
+M-robot | 云台、喊话、警灯、停下和遥控由值班保安在「值班」页做。
+M-robot | 现在值班：gina（在线）
+M-robot | A 的画面
+M-robot | A 的任务
+S-system | 地图、定位、诊断、软件升级。安装和售后用，平时不用来这里。
+P-parity | 老网页功能对照
+P-parity | 老网页功能 → 新稿对照
+P-parity | 逐项对照老网页代码（duty、mappage、robotspage、recpage、alarmlog、layout*、arming*、users 等）。已画 15 · 本轮补画 11 · 只画了一部分 14 · 还没画 8。没画的不等于去掉：写代码时照老功能保留。
+P-parity | 老网页的功能
+P-parity | 新稿在哪
+P-parity | 说明
+P-parity | 值班（保安）
+P-parity | 报警：我来处理、定结论、结案写备注、撤销关闭
+P-parity | V4-B 告警处理中 · 记录与录像
+P-parity | 已画
+P-parity | 报警：已到场
+P-parity | V4-B 步骤条
+P-parity | 只画了一部分
+P-parity | 步骤条里有「到场」，按钮没单独画
+P-parity | 报警：别的页面也弹出、另有 n 件、开报警声音
+P-parity | 还没画
+P-parity | 要画一个全站报警条
+P-parity | 机器人跟着目标 / 看不到人了、去向不明
+P-parity | 告警页的状态变化，要补一张
+P-parity | 地图上点一处，派最近的机器人去看
+P-parity | 保安 · 派去看一眼
+P-parity | 本轮补画
+P-parity | 可选看完接着巡逻或回待命点
+P-parity | 临时路线：按顺序点几个点巡逻一次
+P-parity | 保安 · 临时路线
+P-parity | 走不到的点就地标出
+P-parity | 派路线巡逻、圈数、一直巡逻、排队
+P-parity | 保安 · 单台机器人
+P-parity | 停止任务、回待命点
+P-parity | 中止并回原点
+P-parity | 单台机器人页只有回待命点，回原点没画
+P-parity | 全部急停后：全部恢复
+P-parity | 保安 · 急停后
+P-parity | 协助定位（在地图上点它的实际位置）
+P-parity | 只有「重新定位」按钮，地图上点的那一步没画
+P-parity | 姿态 站立/趴下；云台、雨刷、前/后/热像
+P-parity | 喊话：常用话、临时一句、停止、语言
+P-parity | 编辑常用话（全站共用，最多 12 句，多语言）
+P-parity | 入口有，编辑面板没画
+P-parity | 警灯时长/开关、警报声、英文警告
+P-parity | 多画面、监控墙、全部切热像
+P-parity | 全部切热像本轮补上
+P-parity | 今天的巡逻；看别的日子
+P-parity | V4-A 右栏
+P-parity | 今晚的有，别的日子没画
+P-parity | V4-A 左下
+P-parity | 本班事件：筛选、只看未处理、分页
+P-parity | 录像：速度、±10 秒、截图、导出
+P-parity | 保安 · 历史回放
+P-parity | 录像：跳到时间、保留这段
+P-parity | 录像：上一段/下一段、换日期、时间轴缩放、机器人当时位置
+P-parity | 当时位置有，其余没画
+P-parity | 报警演练（测试模式）
+P-parity | 账号菜单：语言、改密码、外观、报警声音、退出
+P-parity | 连不上站点的提示
+P-parity | 开站清单、帮助、教程
+P-parity | 现场设置（管理员）
+P-parity | 概况：待处理、今天的安排、机器人、这周
+P-parity | 布置：7 个标签 → 8 个图层
+P-parity | 只画了禁行区那层；巡逻路线（点位、停留、拍照、热像、按防区生成、估时）、防区（查看点、值守位、出口线、易藏点）、路网、待命点（带过来的留下/丢掉）、摄像头、报警设备的编辑面板没画
+P-parity | 地图版本：历史、回退、有人同时改
+P-parity | 布置 · 历史版本…
+P-parity | 只有入口
+P-parity | 布防时间表、例外、巡逻日程、布防时巡逻、巡逻电量线
+P-parity | 电量线本轮补上
+P-parity | 按防区分开设、切换模式、布防向导
+P-parity | 授权：现在生效、全部、加授权
+P-parity | 按防区临时撤防
+P-parity | 授权 · 页头按钮
+P-parity | 面板没画
+P-parity | 人员：列表、改角色、停用、重设密码、删除、待批准、操作记录
+P-parity | 添加人员；工程师临时账号（VPN 配置、密码只显示一次）
+P-parity | 人员 · 页头按钮
+P-parity | 机器人：批准加入（核对码）、换 Wi-Fi、改名、派单方式、开通码、解绑
+P-parity | 机器人 · 操作 / 设置
+P-parity | 机器人：远程运维（重启、日志、对时、续证书、清理、参数、诊断包）
+P-parity | 机器人 · 设置
+P-parity | 添加机器人（手机 / 开通码 / 命令行）
+P-parity | 机器人 · 添加
+P-parity | 只有按钮
+P-parity | 报告：汇总、按天、事件表、导出
+P-parity | 值班日报、报警 CSV、巡逻 CSV
+P-parity | 只有「导出表格 / PDF」
+P-parity | 报告 · 操作记录
+P-parity | 维护：软件升级
+P-parity | 维护：地图（重新建图清单）、定位（设原点、定位历史）、诊断
+P-parity | 左边有入口，内容没画
+P-parity | 站点：主机状态、备份、遥控速度档
+P-parity | 四种角色
+P-parity | 保安：值班全部操作，没有现场设置
+P-parity | V4 / 保安 系列
+P-parity | 经理：处理报警、急停、布防、派巡逻；不能派机器人去报警点、不能遥控
+P-parity | 经理 · 告警处理中 / 经理 · 机器人
+P-parity | 现场设置只有 机器人（只看）、布防与巡逻、报告
+P-parity | 经理看不到概况
+P-parity | 代码就是这样；建议给经理开只读概况，要你定
+P-parity | 只读：只能看，不能处理、不能急停
+P-parity | 只读 · 告警处理中

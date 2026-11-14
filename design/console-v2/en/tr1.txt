@@ -1,0 +1,400 @@
+0|V4-A Normal operations
+1|Monitoring
+2|Events & Recordings
+3|Armed · until 07:00
+4|Robots 2/2 online
+5|Open 0
+6|gina · Guard
+7|E-STOP ALL
+8|Security events
+9|Intrusion, fire
+10|None open
+11|Equipment & operations
+12|Robots, patrols
+13|B battery 18%
+14|Auto-docking at 22:40 · 80% by 01:00
+15|Closed this shift: 4
+16|Vehicle loitering, car park
+17|False alarm
+18|Person approaching, south wall
+19|Confirmed intrusion
+20|A obstructed, recovered
+21|Resolved
+22|B offline 2 min
+23|Handover note · olga 19:05
+24|Contractor vehicles in the car park; expected until 22:00.
+25|Handover note for next shift
+26|All systems normal
+27|A on guard-1, lap 3 · Next patrol 01:00 by B
+28|All
+29|Patrol routes
+30|Zones
+31|Cameras
+32|Building 2
+33|North sector · Armed
+34|Dock 1
+35|A path travelled
+36|Fixed cameras
+37|20 m ▁▁▁▁
+38|Video
+39|Single
+40|Dual
+41|Quad
+42|Video wall
+43|Front camera
+44|Live
+45|Camera 1 · Main gate
+46|Robots
+47|Patrolling
+48|North sector · guard-1 lap 3 · Localized
+49|View video
+50|Details
+51|Charging
+52|Dock 1 · 80% by approx. 01:00
+53|Tonight's patrols
+54|Completed
+55|Lap 3
+56|Awaiting charge
+57|Scheduled
+58|Recent activity
+59|A passed Building 2 north side
+60|B returned to dock
+61|gina closed: Vehicle loitering, car park
+62|A started guard-1
+63|Shift 19:00 → 07:00
+64|Patrol
+65|Charging
+66|Offline
+67|Equipment fault
+68|Select any point to review footage at that time
+69|Now 23:40
+70|Main navigation
+71|All robots stop in place; manual reset required
+72|Events
+73|Write before handover
+74|Map layers
+75|Site map: A patrolling the north sector, B at the dock
+76|Zoom in
+77|Zoom out
+78|Video layout
+79|Robots & patrols
+80|Shift timeline
+81|V4-B Alarm in progress
+82|Open 3
+83|Security events 1
+84|Perimeter breach, north gate
+85|Camera 3 · 23:47 · 1 min ago
+86|Unassigned
+87|Equipment & operations 2
+88|B awaiting battery swap
+89|Dock 1 · 23:31 · olga handling
+90|A battery below 30%
+91|Patrolling · 23:12
+92|P1 · Security event · North sector, north gate · Camera 3 · 23:47:12 · heading toward Building 2
+93|Take ownership
+94|Detected 23:47
+95|Assigned
+96|Dispatched
+97|On site
+98|Verified
+99|Closed
+100|−30 s replay
+101|Person · 0.93
+102|Camera 3 · North gate · Event footage
+103|Front camera · 48 m from north gate
+104|North gate
+105|To Building 2
+106|North sector
+107|A 48 m · ETA 1 min
+108|Site map
+109|Dispatch A
+110|NEW
+111|A 28%: round trip to north gate uses approx. 6% — sufficient
+112|A announcement
+113|A strobe
+114|Notify manager
+115|Disposition
+116|Timeline
+117|23:47:12 Camera 3 detected person · 23:47:15 notified gina, olga
+118|Robots · nearest to incident first
+119|48 m from north gate · ETA 1 min
+120|guard-1 lap 3 · Localized
+121|Awaiting swap
+122|Dock 1 · Unavailable
+123|B battery depleted; may not complete
+124|Camera 3 detected person (north gate)
+125|B at 6%, parked at dock
+126|olga took ownership: B awaiting battery swap
+127|A battery 30%
+128|Select any point to review footage (video is marked "Playback")
+129|Now 23:48
+130|Response steps
+131|Incident map: alarm at north gate, A 48 m east, approx. 1 min route
+132|Response
+133|Take ownership, then record a disposition
+134|Guard Playback
+135|▌▌ PLAYBACK · 22:05:14
+136|Vehicle loitering, car park · Closed (false alarm, gina 22:09)
+137|You are viewing footage from 1 h 35 min ago, not live video
+138|Return to live
+139|Camera 2 · Car park
+140|Playback 22:05:14
+141|−10 s
+142|Pause
+143|+10 s
+144|Snapshot
+145|Export clip (22:04–22:09)
+146|Car park
+147|Positions at 22:05
+148|Grey = at that time
+149|Robots · Live
+150|Right panel always shows live status
+151|North sector · guard-1 lap 3
+152|Alarm history
+153|Camera 2: vehicle stationary over 10 min
+154|gina took ownership
+155|gina reviewed footage: contractor vehicle
+156|Closed: false alarm · "Contractor vehicle, per olga's handover note"
+157|Yellow line = playback position · White line = now
+158|Playback 22:05
+159|Recordings
+160|Speed
+161|Back 10 s
+162|Forward 10 s
+163|Position at 22:05: A on the east side of the car park
+164|Guard Multiple alarms
+165|Armed
+166|Robots 1/2 online
+167|Open 4
+168|Security events 2
+169|By time
+170|02:12 · gina handling · A en route
+171|02:13 · Unassigned
+172|B offline
+173|Since 02:10 · Last seen east corridor
+174|01:00 patrol not run
+175|B battery insufficient; skipped
+176|Simultaneous alarms are allocated by responder; see centre panel
+177|3 events within 2 min
+178|2 intrusions, 1 robot offline. Allocate responders first, then handle each event.
+179|Request backup (notify olga, duty manager)
+180|① North gate
+181|② South wall
+182|Only A is available; south wall covered by fixed Camera 6 only
+183|Owner
+184|Responder
+185|Next step
+186|① Perimeter breach, north gate
+187|A · 20 s out
+188|Camera 3 · A front
+189|Open
+190|② Person approaching, south wall
+191|None
+192|No robot available · guard required
+193|Camera 6
+194|None
+195|Deferred — intrusions first
+196|To ① North gate
+197|20 s out · Patrol paused
+198|Offline 4 min
+199|Last seen 02:10, east corridor · Weak Wi-Fi signal
+200|View last 1 min before disconnect
+201|Camera 6 detected person (south wall)
+202|gina dispatched A to north gate
+203|B disconnected
+204|4 markers 02:10–02:14, grouped as "4"; zoom in to expand
+205|Site: alarms at north gate and south wall; A en route to north gate; B offline in east corridor
+206|Allocation
+207|Guard 1366 compact
+208|23:47 · Unassigned
+209|Closed this shift: 4 · Handover notes under Events & Recordings
+210|P1 · North gate · Camera 3 · 23:47 · toward Building 2
+211|Detected
+212|−30 s
+213|Map ▸
+214|Camera 3 · North gate
+215|Announce
+216|Strobe
+217|Activity
+218|Expand timeline
+219|Account & site
+220|A 48 m east of north gate
+221|Right panel (collapsed)
+222|Robot A 28%
+223|Robot B 6% awaiting swap
+224|Open 3 · Back to monitoring
+225|Alarms
+226|Handover notes
+227|Time
+228|This shift (since 19:00)
+229|Today
+230|Last 7 days
+231|Select dates…
+232|2026-11-15 19:00 → now
+233|Type
+234|Intrusion / fire · 3
+235|Robot assistance required · 3
+236|Robot offline · 1
+237|Status
+238|Open
+239|Closed
+240|Robot / camera
+241|Cameras 1–6
+242|Clear filters
+243|This shift
+244|Open
+245|7 alarms this shift
+246|Export spreadsheet
+247|Location
+248|Owner
+249|Outcome
+250|North gate · Camera 3
+251|Respond
+252|In progress
+253|Car park · Camera 2
+254|South wall · Camera 6
+255|A obstructed
+256|East corridor
+257|System
+258|Auto-recovered
+259|22:05:14 · Camera 2 · Closed: false alarm (gina 22:09)
+260|Camera 2
+261|Recording 22:05:14
+262|Play
+263|A's view at the same moment
+264|Export clip
+265|Vehicle stationary over 10 min
+266|Closed: false alarm · "Contractor vehicle, per olga's handover note"
+267|Reopen (until 22:19)
+268|Filters
+269|Show
+270|Selected record
+271|Site Setup Overview
+272|Site Setup
+273|Disarmed · Arms 19:00
+274|demo · Administrator
+275|Daily
+276|Overview
+277|Users
+278|Site
+279|Site layout
+280|Arming & patrols
+281|Access & temporary disarm
+282|Records
+283|Reports & audit log
+284|Advanced · Installation & support
+285|Maps, localization, diagnostics, updates
+286|Disarmed; scheduled to arm at 19:00. Both robots online.
+287|4 approvals pending, 2 advisories.
+288|View reports
+289|Action required 6
+290|Blue disc = approval required on the linked page; amber triangle = advisory: Acknowledge keeps it listed, Resolve removes it
+291|Robot C40388 requests enrolment
+292|Initiated from olga's phone 09:41 · 6-digit code verification required
+293|Approve on Robots
+294|B requests Wi-Fi change to estate-iot
+295|Initiated by the robot 08:12
+296|Approve in B settings
+297|Ravi requests a Guard account
+298|Submitted from the mobile app 09:58
+299|Approve on Users
+300|Keep-out zone "Pond" reduced
+301|demo edited 10:12 · Original boundary enforced until confirmed
+302|Confirm in Site layout
+303|B battery health degrading
+304|Robot: B · Since 11-14 · Full-charge runtime 2 h 10 min, down from 3 h last month
+305|Technical details
+306|Acknowledge
+307|Site storage 71% used
+308|30-day video retention; projected full in approx. 40 days
+309|Today's schedule · Sun 11-15
+310|Change mode…
+311|Temporary disarm by zone…
+312|Armed
+313|All zones
+314|Schedule active
+315|Access
+316|HVAC maintenance
+317|Cleaning
+318|2 · HVAC maintenance active
+319|4 runs · A running now
+320|Now 10:20
+321|Dark = armed; hatched = authorized access (no urgent alarm for persons detected in the zone); grey = patrol. Select a segment to edit.
+322|Go to Robots
+323|Car park loop · 2nd run today
+324|Normal
+325|Online · 1 patrol today
+326|Battery degrading
+327|This week, from 11-09
+328|23
+329|3 more than last week
+330|9
+331|Same as last week
+332|Patrols completed
+333|2 aborted, low battery
+334|Action items
+335|Seen; keep listed until resolved
+336|Resolved; remove from list
+337|Today's schedule
+338|This week
+339|Site Setup Site layout
+340|Map version 4 · In service.
+341|1 keep-out zone change awaiting confirmation.
+342|Version history…
+343|Save
+344|Keep-out & speed zones
+345|1 reduced; awaiting confirmation
+346|Armed patrol route
+347|Navigation graph
+348|41 nodes · 1.2 km
+349|Standby points & docks
+350|2 carried over from version 3; not yet kept
+351|Alarm devices
+352|Door contacts, panic buttons
+353|Other layers shown dimmed
+354|Select
+355|Draw keep-out
+356|Draw speed zone
+357|Draw virtual wall
+358|Draw exclusion
+359|Undo
+360|North corridor
+361|South wall
+362|Pond
+363|Dashed = original boundary, enforced until confirmed
+364|Max 0.5 m/s
+365|Virtual wall
+366|Exclusion
+367|Drag corner handles to reshape · 1 square = 5 m · Each save creates a version you can restore; additions and enlargements apply on save, deletions and reductions require confirmation
+368|Awaiting confirmation
+369|You reduced "Pond". Robots keep avoiding the original boundary (dashed) until you confirm.
+370|Before confirming, check that water, stairs, steep slopes and drops remain inside keep-out zones.
+371|Confirm with password…
+372|Name
+373|Keep-out
+374|Speed limit
+375|Hard keep-out
+376|Water, drops: blocked even under remote control
+377|Temporary
+378|Deleted automatically on expiry
+379|20 × 16 m · Map version 4 · demo edited 10:12
+380|Delete zone…
+381|No unsaved changes
+382|Layers
+383|Layer being edited
+384|Tools
+385|Map version 4: keep-out layer; Pond zone reduced, awaiting confirmation
+386|Selected zone
+387|Site Setup Arming & patrols
+388|By schedule: disarmed now,
+389|arms today at 19:00
+390|.
+391|Use schedule
+392|Whole site
+393|Per zone
+394|Week
+395|Armed patrol
+396|Scheduled patrol run
+397|Drag on empty space to add an armed period
+398|Mon
+399|Tue

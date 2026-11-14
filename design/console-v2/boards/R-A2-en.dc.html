@@ -1,0 +1,200 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Robots Settings</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&display=swap">
+<style>
+body{margin:0}
+a{color:#1A5FA6}a:hover{color:#0E3F70}
+.btn{height:40px;padding:0 16px;border:1px solid #6B7178;border-radius:2px;background:#fff;color:#16191D;font:600 14px Barlow,"Noto Sans SC","Microsoft YaHei UI",sans-serif;display:inline-flex;align-items:center;gap:8px;cursor:pointer;white-space:nowrap;text-decoration:none}
+.btn.sm{height:32px;padding:0 12px;font-size:13px}
+.btn.pri{background:#1F6FC0;border-color:#1F6FC0;color:#fff;font-weight:700}
+.btn.danger{border-color:#C4262B;color:#B0202A}
+.btn.stop{background:#D42F33;border-color:#D42F33;color:#fff;font-weight:700}
+.seg{display:inline-flex;border:1px solid #C9CDD2}
+.seg .btn{border:0;background:transparent;border-radius:0}
+.seg .btn+.btn{border-left:1px solid #C9CDD2}
+.seg .btn.on{background:#1F6FC0;color:#fff}
+.lbl{font-size:12px;font-weight:600;letter-spacing:.06em;color:#5A6068}
+.mut{color:#565B62}
+.ring{display:inline-block;flex:none;width:12px;height:12px;border:3px solid #C4262B;border-radius:50%;box-sizing:border-box}
+.tri{display:inline-block;flex:none;width:0;height:0;border-left:7px solid transparent;border-right:7px solid transparent;border-bottom:12px solid #D99A00}
+.sq{display:inline-block;flex:none;width:9px;height:9px;background:#1E8A47}
+.h1{margin:0;font-size:24px;line-height:30px;font-weight:700}
+.h2{margin:0;font-size:16px;line-height:22px;font-weight:600}
+.card{background:#fff;border:1px solid #D5D8DC}
+.cardh{display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:1px solid #E3E5E8}
+th{text-align:left;font-size:12px;font-weight:600;letter-spacing:.06em;color:#5A6068;padding:10px 12px;border-bottom:1px solid #D5D8DC;background:#F8F9F8}
+td{padding:10px 12px;border-bottom:1px solid #E3E5E8;vertical-align:middle}
+.chip{display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 8px;font-size:12px;font-weight:700}
+.ok{background:#E4F3E9;color:#17703A} .warn{background:#FCF1D6;color:#7A5200} .bad{background:#FBE5E5;color:#A41E24} .gray{background:#ECEEF0;color:#454A51}
+.field{display:flex;flex-direction:column;gap:4px}
+.field input,.field select{height:40px;border:1px solid #6B7178;border-radius:2px;padding:0 10px;font:inherit;background:#fff;color:#16191D}
+.snav a{display:flex;align-items:center;gap:8px;min-height:36px;margin:0 8px;padding:0 10px;color:#A9AEB4;text-decoration:none;font-weight:600;border-radius:2px}
+.snav a[aria-current]{background:#1F6FC0;color:#fff} .snav .g{color:#A9AEB4}
+.snav .g{padding:14px 16px 4px}
+.new{display:inline-block;padding:0 6px;border:1px solid #1F6FC0;color:#1A5FA6;font-size:11px;font-weight:700;line-height:16px}
+</style>
+</helmet>
+<div style="width:1536px;height:960px;box-sizing:border-box;background:#F2F3F1;color:#16191D;font-family:Barlow,'Noto Sans SC','Microsoft YaHei UI',sans-serif;font-size:14px;line-height:20px;font-variant-numeric:tabular-nums;display:flex;flex-direction:column">
+  <header style="height:60px;flex:none;display:flex;align-items:center;gap:16px;padding:0 16px;border-bottom:1px solid #2E333A;background:#0A0C0E;color:#ECEDEA">
+    <div style="display:flex;flex-direction:column;line-height:14px"><b style="font-size:13px;letter-spacing:.12em">NEXUS</b><span style="font-size:11px;letter-spacing:.12em;color:#B4B8BE">WARDEN</span></div>
+    <span style="color:#B4B8BE">estate-1</span>
+    <nav aria-label="Main navigation" style="display:flex;margin-left:8px">
+      <a href="#" style="height:60px;display:flex;align-items:center;padding:0 14px;color:#B4B8BE;text-decoration:none;font-weight:600">Monitoring</a>
+      <a href="#" style="height:60px;display:flex;align-items:center;padding:0 14px;color:#B4B8BE;text-decoration:none;font-weight:600">Events & Recordings</a>
+      <a href="#" aria-current="page" style="height:60px;display:flex;align-items:center;padding:0 14px;color:#ECEDEA;text-decoration:none;font-weight:700;box-shadow:inset 0 -3px 0 #1F6FC0">Site Setup</a>
+    </nav>
+    <div style="flex:1"></div>
+    <span style="display:inline-flex;align-items:center;gap:8px;height:32px;padding:0 12px;background:#20242A;color:#ECEDEA;font-weight:600">Disarmed · Arms 19:00</span>
+    <span style="display:inline-flex;align-items:center;gap:8px;height:32px;padding:0 12px;background:#20242A;font-weight:600">Robots 2/2 online</span>
+    <a href="#" style="display:inline-flex;align-items:center;gap:8px;height:32px;padding:0 12px;background:#20242A;color:#B4B8BE;font-weight:600;text-decoration:none">Open 0</a>
+    <span style="font-size:16px;font-weight:600">10:20</span>
+    <span style="color:#B4B8BE">demo · Administrator</span>
+    <button class="btn stop" type="button"><span style="width:12px;height:12px;border:2px solid #fff;border-radius:50%;box-sizing:border-box"></span>E-STOP ALL</button>
+  </header>
+  <div style="flex:1;min-height:0;display:grid;grid-template-columns:232px minmax(0,1fr)">
+    <nav class="snav" aria-label="Site Setup" style="background:#15181B;border-right:1px solid #15181B;padding:8px 0;overflow:auto">
+      <div class="g lbl">Daily</div>
+      <a href="#"><span style="flex:1">Overview</span><span class="chip" style="height:20px;background:#1F6FC0;color:#fff">6</span></a>
+      <a href="#" aria-current="page"><span style="flex:1">Robots</span></a>
+      <a href="#"><span style="flex:1">Users</span></a>
+      <div class="g lbl">Site</div>
+      <a href="#"><span style="flex:1">Layout</span></a>
+      <a href="#"><span style="flex:1">Arming & patrols</span></a>
+      <a href="#"><span style="flex:1">Access</span></a>
+      <div class="g lbl">Records</div>
+      <a href="#"><span style="flex:1">Reports</span></a>
+      <div class="g lbl">Advanced</div>
+      <a href="#"><span style="flex:1">Maintenance</span></a>
+    </nav>
+    <main style="min-width:0;min-height:0;overflow:hidden;display:flex;flex-direction:column">
+
+<div style="flex:1;min-height:0;display:grid;grid-template-columns:248px minmax(0,1fr)">
+  <aside aria-label="Fleet" style="background:#fff;border-right:1px solid #D5D8DC;display:flex;flex-direction:column;min-height:0">
+    <div style="display:flex;align-items:center;padding:16px;gap:8px;border-bottom:1px solid #E3E5E8"><h1 class="h2" style="flex:1;font-size:18px">Robots 2</h1><button class="btn sm" type="button">Add</button></div>
+    <a href="#" style="display:grid;grid-template-columns:14px minmax(0,1fr) auto;gap:4px 10px;align-items:center;padding:12px 16px;border-bottom:1px solid #E3E5E8;text-decoration:none;color:#16191D;">
+        <span class="sq"></span><b style="font-size:16px">A <span class="mut" style="font-weight:400;font-size:13px">C40221</span></b><b style="color:#16191D">62%</b>
+        <span></span><span class="mut">Patrolling car park loop</span><span></span></a>
+    <a href="#" style="display:grid;grid-template-columns:14px minmax(0,1fr) auto;gap:4px 10px;align-items:center;padding:12px 16px;border-bottom:1px solid #E3E5E8;text-decoration:none;color:#16191D;background:#E3EEF9;box-shadow:inset 0 0 0 2px #1F6FC0" aria-current="true">
+        <span class="tri" style="border-left-width:6px;border-right-width:6px;border-bottom-width:11px"></span><b style="font-size:16px">B <span class="mut" style="font-weight:400;font-size:13px">C40011</span></b><b style="color:#7A5200">18%</b>
+        <span></span><span class="mut">Charging · Network change pending</span><span></span></a>
+    <div style="margin-top:auto;padding:14px 16px;border-top:1px solid #D5D8DC">
+      <div style="display:flex;gap:8px;align-items:center"><span aria-hidden="true" style="display:inline-block;flex:none;width:12px;height:12px;border-radius:50%;background:#1F6FC0"></span><b>1 enrolment request</b></div>
+      <div class="mut" style="margin:4px 0 10px">C40388 · olga's phone · 09:41<br>Verification code <b style="color:#16191D;letter-spacing:.08em">482 913</b></div>
+      <div style="display:grid;grid-template-columns:minmax(0,2fr) minmax(0,1fr);gap:8px"><button class="btn sm pri" type="button" style="justify-content:center">Verify and approve…</button><button class="btn sm" type="button" style="justify-content:center">Reject</button></div></div></aside>
+  <div style="min-width:0;min-height:0;display:flex;flex-direction:column">
+    <div style="flex:none;display:flex;align-items:center;gap:14px;padding:16px 24px;border-bottom:1px solid #D5D8DC;background:#fff">
+      <h2 style="margin:0;font-size:28px;line-height:34px">B</h2><span class="chip warn"><span class="tri" style="border-left-width:5px;border-right-width:5px;border-bottom-width:9px"></span>Charging 18%</span><span class="mut">C40011 · Localized · Last contact 1 s ago</span>
+      <span style="flex:1"></span>
+      <div class="seg" role="tablist" aria-label="View of B"><button class="btn" type="button" role="tab" aria-selected="false">Operate</button><button class="btn on" type="button" role="tab" aria-selected="true">Settings</button></div></div>
+    <!-- 名字和派单是设置，不是体检项：放成表单条 -->
+    <form style="flex:none;display:flex;align-items:center;gap:28px;padding:14px 24px;background:#fff;border-bottom:1px solid #D5D8DC" onsubmit="return false">
+      <label style="display:flex;align-items:center;gap:10px"><span class="lbl">Name</span><input value="B" style="height:40px;border:1px solid #6B7178;border-radius:2px;padding:0 10px;font:inherit;background:#fff;width:180px"><button class="btn sm" type="button">Save</button></label>
+      <span style="width:1px;align-self:stretch;background:#E3E5E8"></span>
+      <div style="display:flex;align-items:center;gap:10px"><span class="lbl">Dispatch mode</span><div class="seg" role="radiogroup" aria-label="Dispatch mode"><button class="btn sm on" type="button" role="radio" aria-checked="true">Automatic</button><button class="btn sm" type="button" role="radio" aria-checked="false">Manual only</button></div><span class="mut" style="font-size:13px">Automatic: available to schedules and alarm response</span></div>
+    </form>
+    <div style="flex:1;min-height:0;overflow:auto;display:grid;grid-template-columns:minmax(0,1fr) 300px;background:#fff">
+      <div style="min-width:0;display:flex;flex-direction:column">
+        <p style="margin:0;padding:16px 20px;font-size:17px;line-height:24px;border-bottom:1px solid #D5D8DC"><b>2 items need attention. </b>9 other checks normal.</p>
+        <div role="table" aria-label="B status" style="display:grid;grid-template-columns:44px 120px minmax(0,1fr) 188px;column-gap:12px;background:#fff">
+          <div role="row" style="display:contents">
+      <span style="padding:15px 0 0 20px;display:flex;justify-content:center"><span aria-hidden="true" style="display:inline-block;flex:none;width:12px;height:12px;border-radius:50%;background:#1F6FC0"></span></span>
+      <span style="padding:12px 0;font-weight:600">Wi-Fi</span>
+      <span style="padding:12px 0"><span style="display:block"><b>Change to estate-iot requested; awaiting your approval</b></span><span class="mut" style="display:block;font-size:13px">Currently estate-staff · Requested by the robot 08:12 · Reconnects approx. 30 s after approval</span></span>
+      <span style="padding:9px 20px 9px 0;display:flex;flex-direction:column;gap:6px"><button class="btn sm pri" type="button" style="width:100%;justify-content:center">Approve network change</button><button class="btn sm" type="button" style="width:100%;justify-content:center">Reject</button></span></div>
+      <div style="grid-column:1/-1;height:1px;background:#E3E5E8"></div><div role="row" style="display:contents">
+      <span style="padding:15px 0 0 20px;display:flex;justify-content:center"><span class="tri"></span></span>
+      <span style="padding:12px 0;font-weight:600">Battery</span>
+      <span style="padding:12px 0"><span style="display:block"><b style="color:#7A5200">18%, charging</b></span><span class="mut" style="display:block;font-size:13px">80% by approx. 01:10; may not complete the 01:00 run</span></span>
+      <span style="padding:9px 20px 9px 0;display:flex;flex-direction:column;gap:6px"><button class="btn sm" type="button" style="width:100%;justify-content:center">Reassign 01:00 run</button></span></div>
+      <div style="grid-column:1/-1;height:1px;background:#E3E5E8"></div>
+          <div style="grid-column:1/-1;display:flex;align-items:center;gap:10px;padding:10px 20px;background:#F8F9F8"><span class="mut">9 other checks normal</span><button type="button" aria-expanded="true" style="background:none;border:0;padding:0;color:#1A5FA6;font:600 14px Barlow,'Noto Sans SC',sans-serif;cursor:pointer;display:inline-flex;gap:4px;align-items:center">Collapse <svg width="14" height="14" viewBox="0 0 20 20" aria-hidden="true"><polyline points="4,13 10,7 16,13" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="square"/></svg></button></div>
+          <div style="grid-column:1/-1;height:1px;background:#E3E5E8"></div>
+          <div style="grid-column:1/-1;padding:14px 20px 4px" class="lbl">Connectivity</div><div role="row" style="display:contents">
+      <span style="padding:15px 0 0 20px;display:flex;justify-content:center"><span class="sq"></span></span>
+      <span style="padding:12px 0;font-weight:600">Certificate</span>
+      <span style="padding:12px 0"><span style="display:block">Valid until 2027-10-03</span><span class="mut" style="display:block;font-size:13px">687 days remaining; reminder 30 days before expiry</span></span>
+      <span style="padding:9px 20px 9px 0;display:flex;flex-direction:column;gap:6px"><button class="btn sm" type="button" style="width:100%;justify-content:center">Renew now</button></span></div>
+      <div style="grid-column:1/-1;height:1px;background:#E3E5E8"></div><div role="row" style="display:contents">
+      <span style="padding:15px 0 0 20px;display:flex;justify-content:center"><span class="sq"></span></span>
+      <span style="padding:12px 0;font-weight:600">Activation code</span>
+      <span style="padding:12px 0"><span style="display:block">None active</span><span class="mut" style="display:block;font-size:13px">Required only after an OS reinstall or re-enrolment</span></span>
+      <span style="padding:9px 20px 9px 0;display:flex;flex-direction:column;gap:6px"><button class="btn sm" type="button" style="width:100%;justify-content:center">Issue new code…</button></span></div>
+      <div style="grid-column:1/-1;height:1px;background:#E3E5E8"></div><div style="grid-column:1/-1;padding:14px 20px 4px" class="lbl">Hardware</div><div role="row" style="display:contents">
+      <span style="padding:15px 0 0 20px;display:flex;justify-content:center"><span class="sq"></span></span>
+      <span style="padding:12px 0;font-weight:600">Time</span>
+      <span style="padding:12px 0"><span style="display:block">0.2 s offset from site</span><span class="mut" style="display:block;font-size:13px">Sync required only above 2 s</span></span>
+      <span style="padding:9px 20px 9px 0;display:flex;flex-direction:column;gap:6px"><button class="btn sm" type="button" style="width:100%;justify-content:center">Sync time</button></span></div>
+      <div style="grid-column:1/-1;height:1px;background:#E3E5E8"></div><div role="row" style="display:contents">
+      <span style="padding:15px 0 0 20px;display:flex;justify-content:center"><span class="sq"></span></span>
+      <span style="padding:12px 0;font-weight:600">Storage</span>
+      <span style="padding:12px 0"><span style="display:block">41% used; no recordings pending upload</span></span>
+      <span style="padding:9px 20px 9px 0;display:flex;flex-direction:column;gap:6px"><button class="btn sm" type="button" style="width:100%;justify-content:center">Clean up…</button></span></div>
+      <div style="grid-column:1/-1;height:1px;background:#E3E5E8"></div><div role="row" style="display:contents">
+      <span style="padding:15px 0 0 20px;display:flex;justify-content:center"><span class="sq"></span></span>
+      <span style="padding:12px 0;font-weight:600">Software & map</span>
+      <span style="padding:12px 0"><span style="display:block">v1.20 · Map version 4, matches site</span></span>
+      <span style="padding:9px 20px 9px 0;display:flex;flex-direction:column;gap:6px"></span></div>
+      <div style="grid-column:1/-1;height:1px;background:#E3E5E8"></div><div role="row" style="display:contents">
+      <span style="padding:15px 0 0 20px;display:flex;justify-content:center"><span class="sq"></span></span>
+      <span style="padding:12px 0;font-weight:600">Robot parameters</span>
+      <span style="padding:12px 0"><span style="display:block">Speed, volume, obstacle clearance</span></span>
+      <span style="padding:9px 20px 9px 0;display:flex;flex-direction:column;gap:6px"><button class="btn sm" type="button" style="width:100%;justify-content:center">Edit parameters…</button></span></div>
+      <div style="grid-column:1/-1;height:1px;background:#E3E5E8"></div><div style="grid-column:1/-1;padding:14px 20px 4px" class="lbl">Troubleshooting</div><div role="row" style="display:contents">
+      <span style="padding:15px 0 0 20px;display:flex;justify-content:center"></span>
+      <span style="padding:12px 0;font-weight:600">Logs</span>
+      <span style="padding:12px 0"><span style="display:block"><span style="display:inline-flex;gap:8px"><select aria-label="Log type" style="height:40px;border:1px solid #6B7178;border-radius:2px;padding:0 10px;font:inherit;background:#fff;height:32px"><option>Patrol service</option><option>Video</option><option>Network</option></select><select aria-label="Time range" style="height:40px;border:1px solid #6B7178;border-radius:2px;padding:0 10px;font:inherit;background:#fff;height:32px"><option>Last 1 h</option><option>Last 24 h</option></select></span></span></span>
+      <span style="padding:9px 20px 9px 0;display:flex;flex-direction:column;gap:6px"><button class="btn sm" type="button" style="width:100%;justify-content:center">View logs</button></span></div>
+      <div style="grid-column:1/-1;height:1px;background:#E3E5E8"></div><div role="row" style="display:contents">
+      <span style="padding:15px 0 0 20px;display:flex;justify-content:center"></span>
+      <span style="padding:12px 0;font-weight:600">Debug mode</span>
+      <span style="padding:12px 0"><span style="display:block">Off</span><span class="mut" style="display:block;font-size:13px">Turns off automatically after 30 min; for remote support</span></span>
+      <span style="padding:9px 20px 9px 0;display:flex;flex-direction:column;gap:6px"><button class="btn sm" type="button" style="width:100%;justify-content:center">Enable for 30 min</button></span></div>
+      <div style="grid-column:1/-1;height:1px;background:#E3E5E8"></div><div role="row" style="display:contents">
+      <span style="padding:15px 0 0 20px;display:flex;justify-content:center"></span>
+      <span style="padding:12px 0;font-weight:600">Support bundle</span>
+      <span style="padding:12px 0"><span style="display:block">Logs, configuration and the last 10 min of status, packaged for an engineer</span></span>
+      <span style="padding:9px 20px 9px 0;display:flex;flex-direction:column;gap:6px"><button class="btn sm" type="button" style="width:100%;justify-content:center">Download support bundle</button></span></div>
+      <div style="grid-column:1/-1;height:1px;background:#E3E5E8"></div>
+        </div>
+      </div>
+      <aside aria-label="B history and removal" style="padding:20px 24px;display:flex;flex-direction:column;gap:20px;border-left:1px solid #D5D8DC">
+        <section>
+          <h3 class="h2" style="margin-bottom:10px">Device history</h3>
+          <ol style="list-style:none;margin:0;padding:0 0 0 14px;border-left:2px solid #D5D8DC;display:flex;flex-direction:column;gap:14px">
+            <li><div class="mut" style="font-size:12px">11-15 08:12</div>Requested Wi-Fi change to estate-iot</li>
+            <li><div class="mut" style="font-size:12px">11-02</div>Updated to map version 4</li>
+            <li><div class="mut" style="font-size:12px">10-28</div>Updated to v1.20</li>
+            <li><div class="mut" style="font-size:12px">10-04</div>Enrolled via olga's phone · approved by demo</li>
+          </ol>
+        </section>
+        <section style="border-top:1px solid #D5D8DC;padding-top:16px;display:flex;flex-direction:column;gap:16px">
+          <h3 class="h2">Restart & removal</h3>
+          <p class="mut" style="margin:-8px 0 0;font-size:13px">No task running; safe to restart.</p>
+          <div style="display:flex;flex-direction:column;gap:6px"><button class="btn sm" type="button" style="width:100%;justify-content:center">Restart patrol service…</button><span class="mut" style="font-size:12.5px">Approx. 1 min; unavailable for dispatch meanwhile</span></div>
+          <div style="display:flex;flex-direction:column;gap:6px"><button class="btn sm" type="button" style="width:100%;justify-content:center">Restart robot…</button><span class="mut" style="font-size:12.5px">Approx. 4 min; unavailable for dispatch meanwhile</span></div>
+          <div style="display:flex;flex-direction:column;gap:6px;border-top:1px solid #E3E5E8;padding-top:16px"><button class="btn sm danger" type="button" style="width:100%;justify-content:center">Unbind B…</button><span class="mut" style="font-size:12.5px">Revokes the certificate immediately; all robots disconnect for approx. 10 s. Password required.</span></div>
+        </section>
+      </aside>
+    </div>
+  </div>
+</div>
+
+    </main>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1536,"height":960}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

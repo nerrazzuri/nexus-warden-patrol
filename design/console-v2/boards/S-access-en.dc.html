@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Site Setup Access & temporary disarm</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&display=swap">
+<style>
+body{margin:0}
+a{color:#1A5FA6}a:hover{color:#0E3F70}
+.btn{height:40px;padding:0 16px;border:1px solid #6B7178;border-radius:2px;background:#fff;color:#16191D;font:600 14px Barlow,"Noto Sans SC","Microsoft YaHei UI",sans-serif;display:inline-flex;align-items:center;gap:8px;cursor:pointer;white-space:nowrap;text-decoration:none}
+.btn.sm{height:32px;padding:0 12px;font-size:13px}
+.btn.pri{background:#1F6FC0;border-color:#1F6FC0;color:#fff;font-weight:700}
+.btn.danger{border-color:#C4262B;color:#B0202A}
+.btn.stop{background:#D42F33;border-color:#D42F33;color:#fff;font-weight:700}
+.seg{display:inline-flex;border:1px solid #C9CDD2}
+.seg .btn{border:0;background:transparent;border-radius:0}
+.seg .btn+.btn{border-left:1px solid #C9CDD2}
+.seg .btn.on{background:#1F6FC0;color:#fff}
+.lbl{font-size:12px;font-weight:600;letter-spacing:.06em;color:#5A6068}
+.mut{color:#565B62}
+.ring{display:inline-block;flex:none;width:12px;height:12px;border:3px solid #C4262B;border-radius:50%;box-sizing:border-box}
+.tri{display:inline-block;flex:none;width:0;height:0;border-left:7px solid transparent;border-right:7px solid transparent;border-bottom:12px solid #D99A00}
+.sq{display:inline-block;flex:none;width:9px;height:9px;background:#1E8A47}
+.h1{margin:0;font-size:24px;line-height:30px;font-weight:700}
+.h2{margin:0;font-size:16px;line-height:22px;font-weight:600}
+.card{background:#fff;border:1px solid #D5D8DC}
+.cardh{display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:1px solid #E3E5E8}
+th{text-align:left;font-size:12px;font-weight:600;letter-spacing:.06em;color:#5A6068;padding:10px 12px;border-bottom:1px solid #D5D8DC;background:#F8F9F8}
+td{padding:10px 12px;border-bottom:1px solid #E3E5E8;vertical-align:middle}
+.chip{display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 8px;font-size:12px;font-weight:700}
+.ok{background:#E4F3E9;color:#17703A} .warn{background:#FCF1D6;color:#7A5200} .bad{background:#FBE5E5;color:#A41E24} .gray{background:#ECEEF0;color:#454A51}
+.field{display:flex;flex-direction:column;gap:4px}
+.field input,.field select{height:40px;border:1px solid #6B7178;border-radius:2px;padding:0 10px;font:inherit;background:#fff;color:#16191D}
+.snav a{display:flex;align-items:center;gap:8px;min-height:36px;margin:0 8px;padding:0 10px;color:#A9AEB4;text-decoration:none;font-weight:600;border-radius:2px}
+.snav a[aria-current]{background:#1F6FC0;color:#fff} .snav .g{color:#A9AEB4}
+.snav .g{padding:14px 16px 4px}
+.new{display:inline-block;padding:0 6px;border:1px solid #1F6FC0;color:#1A5FA6;font-size:11px;font-weight:700;line-height:16px}
+</style>
+</helmet>
+<div style="width:1536px;height:960px;box-sizing:border-box;background:#F2F3F1;color:#16191D;font-family:Barlow,'Noto Sans SC','Microsoft YaHei UI',sans-serif;font-size:14px;line-height:20px;font-variant-numeric:tabular-nums;display:flex;flex-direction:column">
+  <header style="height:60px;flex:none;display:flex;align-items:center;gap:16px;padding:0 16px;border-bottom:1px solid #2E333A;background:#0A0C0E;color:#ECEDEA">
+    <div style="display:flex;flex-direction:column;line-height:14px"><b style="font-size:13px;letter-spacing:.12em">NEXUS</b><span style="font-size:11px;letter-spacing:.12em;color:#B4B8BE">WARDEN</span></div>
+    <span style="color:#B4B8BE">estate-1</span>
+    <nav aria-label="Main navigation" style="display:flex;margin-left:8px">
+      <a href="#" style="height:60px;display:flex;align-items:center;padding:0 14px;color:#B4B8BE;text-decoration:none;font-weight:600">Monitoring</a>
+      <a href="#" style="height:60px;display:flex;align-items:center;padding:0 14px;color:#B4B8BE;text-decoration:none;font-weight:600">Events & Recordings</a>
+      <a href="#" aria-current="page" style="height:60px;display:flex;align-items:center;padding:0 14px;color:#ECEDEA;text-decoration:none;font-weight:700;box-shadow:inset 0 -3px 0 #1F6FC0">Site Setup</a>
+    </nav>
+    <div style="flex:1"></div>
+    <span style="display:inline-flex;align-items:center;gap:8px;height:32px;padding:0 12px;background:#20242A;color:#ECEDEA;font-weight:600">Disarmed · Arms 19:00</span>
+    <span style="display:inline-flex;align-items:center;gap:8px;height:32px;padding:0 12px;background:#20242A;font-weight:600">Robots 2/2 online</span>
+    <a href="#" style="display:inline-flex;align-items:center;gap:8px;height:32px;padding:0 12px;background:#20242A;color:#B4B8BE;font-weight:600;text-decoration:none">Open 0</a>
+    <span style="font-size:16px;font-weight:600">10:20</span>
+    <span style="color:#B4B8BE">demo · Administrator</span>
+    <button class="btn stop" type="button"><span style="width:12px;height:12px;border:2px solid #fff;border-radius:50%;box-sizing:border-box"></span>E-STOP ALL</button>
+  </header>
+  <div style="flex:1;min-height:0;display:grid;grid-template-columns:232px minmax(0,1fr)">
+    <nav class="snav" aria-label="Site Setup" style="background:#15181B;border-right:1px solid #15181B;padding:8px 0;overflow:auto">
+      <div class="g lbl">Daily</div>
+      <a href="#"><span style="flex:1">Overview</span><span class="chip" style="height:20px;background:#1F6FC0;color:#fff">6</span></a>
+      <a href="#"><span style="flex:1">Robots</span></a>
+      <a href="#"><span style="flex:1">Users</span></a>
+      <div class="g lbl">Site</div>
+      <a href="#"><span style="flex:1">Layout</span></a>
+      <a href="#"><span style="flex:1">Arming & patrols</span></a>
+      <a href="#" aria-current="page"><span style="flex:1">Access</span></a>
+      <div class="g lbl">Records</div>
+      <a href="#"><span style="flex:1">Reports</span></a>
+      <div class="g lbl">Advanced</div>
+      <a href="#"><span style="flex:1">Maintenance</span></a>
+    </nav>
+    <main style="min-width:0;min-height:0;overflow:hidden;display:flex;flex-direction:column">
+
+<div style="flex:none;display:flex;align-items:center;gap:16px;padding:0 28px;min-height:74px;background:#fff;border-bottom:1px solid #D5D8DC">
+      <h1 style="margin:0;font-size:28px;line-height:34px">Access</h1>
+      <p style="margin:0;font-size:15px;min-width:0"><b>1 authorization active</b>: HVAC maintenance, until 12:00.</p>
+      <span style="flex:1"></span><button class="btn" type="button">Temporary disarm by zone…</button></div>
+<div style="flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,1fr) 380px">
+  <div style="min-width:0;overflow:auto;display:flex;flex-direction:column;background:#fff">
+    <section aria-label="Active now" style="background:#fff;border-bottom:1px solid #D5D8DC">
+      <div style="padding:12px 20px"><h2 class="h2" style="font-size:17px">Active now</h2></div>
+      <div style="display:grid;grid-template-columns:120px minmax(0,1fr) auto;column-gap:14px;align-items:center">
+        <div style="grid-column:1/-1;height:1px;background:#E3E5E8"></div><span class="lbl" style="padding-left:20px">Access</span>
+        <div style="padding:12px 0"><b>HVAC maintenance</b> · Car park, North corridor · 09:00 → 12:00<div class="mut" style="font-size:13px">Persons detected in these zones are logged without an urgent alarm</div></div>
+        <button class="btn sm" type="button" style="margin-right:20px">End early</button>
+        <div style="grid-column:1/-1;height:1px;background:#E3E5E8"></div><span class="lbl" style="padding-left:20px">Temporary disarm</span>
+        <div style="padding:12px 0" class="mut">None. The site is disarmed until 19:00; while armed, individual zones can be disarmed for a set number of hours and re-arm automatically.</div><span></span>
+      </div>
+    </section>
+    <section aria-label="All authorizations" style="background:#fff;border-bottom:1px solid #D5D8DC">
+      <div style="display:flex;align-items:baseline;gap:12px;padding:12px 20px"><h2 class="h2" style="font-size:17px">All authorizations 4</h2><span class="mut" style="font-size:13px">Recurring entries shown by weekday; underlined = today</span></div>
+      <div style="display:grid;grid-template-columns:150px 150px minmax(0,1fr) 110px auto;column-gap:16px;align-items:center">
+        <div style="grid-column:1/-1;height:1px;background:#E3E5E8"></div><span class="lbl" style="padding:8px 0 8px 20px">Who</span><span class="lbl">Scope</span><span class="lbl">Days & hours</span><span class="lbl">Valid until</span><span></span><div style="grid-column:1/-1;height:1px;background:#E3E5E8"></div>
+        <div style="display:contents"><div style="padding:12px 0 12px 20px"><b>HVAC maintenance</b><div class="mut" style="font-size:13px">Vendor, 2 persons</div></div>
+      <div style="padding:12px 0">Car park, North corridor</div><div style="padding:12px 0"><div style="display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:3px"><span style="height:26px;display:flex;align-items:center;justify-content:center;font-size:12.5px;font-weight:600;background:#F2F3F1;color:#8A9097;">Mo</span><span style="height:26px;display:flex;align-items:center;justify-content:center;font-size:12.5px;font-weight:600;background:#F2F3F1;color:#8A9097;">Tu</span><span style="height:26px;display:flex;align-items:center;justify-content:center;font-size:12.5px;font-weight:600;background:#F2F3F1;color:#8A9097;">We</span><span style="height:26px;display:flex;align-items:center;justify-content:center;font-size:12.5px;font-weight:600;background:#F2F3F1;color:#8A9097;">Th</span><span style="height:26px;display:flex;align-items:center;justify-content:center;font-size:12.5px;font-weight:600;background:#F2F3F1;color:#8A9097;">Fr</span><span style="height:26px;display:flex;align-items:center;justify-content:center;font-size:12.5px;font-weight:600;background:#F2F3F1;color:#8A9097;">Sa</span><span style="height:26px;display:flex;align-items:center;justify-content:center;font-size:12.5px;font-weight:600;background:#2A2F35;color:#fff;box-shadow:inset 0 -3px 0 #16191D;">Su</span></div><div class="mut" style="font-size:12.5px;margin-top:3px">11-15 09:00–12:00</div></div>
+      <div style="padding:12px 0" class="mut">Today</div><div style="padding:9px 20px 9px 0;display:flex;justify-content:flex-end"><button class="btn sm" type="button">Delete…</button></div></div><div style="grid-column:1/-1;height:1px;background:#E3E5E8"></div>
+        <div style="display:contents"><div style="padding:12px 0 12px 20px"><b>Cleaning</b></div>
+      <div style="padding:12px 0">Building 2 perimeter</div><div style="padding:12px 0"><div style="display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:3px"><span style="height:26px;display:flex;align-items:center;justify-content:center;font-size:12.5px;font-weight:600;background:#2A2F35;color:#fff;">Mo</span><span style="height:26px;display:flex;align-items:center;justify-content:center;font-size:12.5px;font-weight:600;background:#F2F3F1;color:#8A9097;">Tu</span><span style="height:26px;display:flex;align-items:center;justify-content:center;font-size:12.5px;font-weight:600;background:#2A2F35;color:#fff;">We</span><span style="height:26px;display:flex;align-items:center;justify-content:center;font-size:12.5px;font-weight:600;background:#F2F3F1;color:#8A9097;">Th</span><span style="height:26px;display:flex;align-items:center;justify-content:center;font-size:12.5px;font-weight:600;background:#2A2F35;color:#fff;">Fr</span><span style="height:26px;display:flex;align-items:center;justify-content:center;font-size:12.5px;font-weight:600;background:#F2F3F1;color:#8A9097;">Sa</span><span style="height:26px;display:flex;align-items:center;justify-content:center;font-size:12.5px;font-weight:600;background:#2A2F35;color:#fff;box-shadow:inset 0 -3px 0 #16191D;">Su</span></div><div class="mut" style="font-size:12.5px;margin-top:3px">Mon, Wed, Fri, Sun 14:00–17:00</div></div>
+      <div style="padding:12px 0" class="mut">2026-12-31</div><div style="padding:9px 20px 9px 0;display:flex;justify-content:flex-end"><button class="btn sm" type="button">Delete…</button></div></div><div style="grid-column:1/-1;height:1px;background:#E3E5E8"></div>
+        <div style="display:contents"><div style="padding:12px 0 12px 20px"><b>Refuse collection</b></div>
+      <div style="padding:12px 0">South wall</div><div style="padding:12px 0"><div style="display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:3px"><span style="height:26px;display:flex;align-items:center;justify-content:center;font-size:12.5px;font-weight:600;background:#F2F3F1;color:#8A9097;">Mo</span><span style="height:26px;display:flex;align-items:center;justify-content:center;font-size:12.5px;font-weight:600;background:#F2F3F1;color:#8A9097;">Tu</span><span style="height:26px;display:flex;align-items:center;justify-content:center;font-size:12.5px;font-weight:600;background:#2A2F35;color:#fff;">We</span><span style="height:26px;display:flex;align-items:center;justify-content:center;font-size:12.5px;font-weight:600;background:#F2F3F1;color:#8A9097;">Th</span><span style="height:26px;display:flex;align-items:center;justify-content:center;font-size:12.5px;font-weight:600;background:#F2F3F1;color:#8A9097;">Fr</span><span style="height:26px;display:flex;align-items:center;justify-content:center;font-size:12.5px;font-weight:600;background:#F2F3F1;color:#8A9097;">Sa</span><span style="height:26px;display:flex;align-items:center;justify-content:center;font-size:12.5px;font-weight:600;background:#F2F3F1;color:#8A9097;box-shadow:inset 0 -3px 0 #16191D;">Su</span></div><div class="mut" style="font-size:12.5px;margin-top:3px">Wednesdays 07:00–08:00</div></div>
+      <div style="padding:12px 0" class="mut">No expiry</div><div style="padding:9px 20px 9px 0;display:flex;justify-content:flex-end"><button class="btn sm" type="button">Delete…</button></div></div><div style="grid-column:1/-1;height:1px;background:#E3E5E8"></div>
+        <div style="display:contents"><div style="padding:12px 0 12px 20px"><b>Night-shift guard rounds</b><div class="mut" style="font-size:13px">Pedestrian movement not alarmed</div></div>
+      <div style="padding:12px 0">Whole site</div><div style="padding:12px 0"><div style="display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:3px"><span style="height:26px;display:flex;align-items:center;justify-content:center;font-size:12.5px;font-weight:600;background:#2A2F35;color:#fff;">Mo</span><span style="height:26px;display:flex;align-items:center;justify-content:center;font-size:12.5px;font-weight:600;background:#2A2F35;color:#fff;">Tu</span><span style="height:26px;display:flex;align-items:center;justify-content:center;font-size:12.5px;font-weight:600;background:#2A2F35;color:#fff;">We</span><span style="height:26px;display:flex;align-items:center;justify-content:center;font-size:12.5px;font-weight:600;background:#2A2F35;color:#fff;">Th</span><span style="height:26px;display:flex;align-items:center;justify-content:center;font-size:12.5px;font-weight:600;background:#2A2F35;color:#fff;">Fr</span><span style="height:26px;display:flex;align-items:center;justify-content:center;font-size:12.5px;font-weight:600;background:#2A2F35;color:#fff;">Sa</span><span style="height:26px;display:flex;align-items:center;justify-content:center;font-size:12.5px;font-weight:600;background:#2A2F35;color:#fff;box-shadow:inset 0 -3px 0 #16191D;">Su</span></div><div class="mut" style="font-size:12.5px;margin-top:3px">Daily 22:00–02:00 (overnight)</div></div>
+      <div style="padding:12px 0" class="mut">No expiry</div><div style="padding:9px 20px 9px 0;display:flex;justify-content:flex-end"><button class="btn sm" type="button">Delete…</button></div></div><div style="grid-column:1/-1;height:1px;background:#E3E5E8"></div>
+      </div>
+    </section>
+  </div>
+  <aside aria-label="Add authorization" style="background:#fff;border-left:1px solid #D5D8DC;display:flex;flex-direction:column;min-height:0">
+    <div style="padding:16px 20px;border-bottom:1px solid #D5D8DC">
+      <h2 class="h2" style="font-size:17px">Add authorization</h2>
+      <p class="mut" style="margin:4px 0 0;font-size:13px">While active, persons detected in the selected zones raise no urgent alarm; detections are logged only.</p>
+    </div>
+    <form onsubmit="return false" style="flex:1;min-height:0;display:flex;flex-direction:column"><div style="flex:1;min-height:0;overflow:auto;padding:16px 20px;display:flex;flex-direction:column;gap:14px">
+      <div class="field"><label class="lbl">Who</label><input style="height:40px;border:1px solid #6B7178;border-radius:2px;padding:0 10px;font:inherit;background:#fff;color:#16191D" placeholder="e.g. Maintenance contractor"></div>
+      <div class="field"><span class="lbl">Scope</span><div class="seg" role="tablist" aria-label="Scope" style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));width:100%"><button class="btn" type="button" role="tab" aria-selected="false" style="justify-content:center;padding:0 6px">Whole site</button><button class="btn on" type="button" role="tab" aria-selected="true" style="justify-content:center;padding:0 6px">Selected zones</button></div>
+        <div style="margin-top:8px"><div role="group" aria-label="Zones" style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px"><button type="button" aria-pressed="false" style="height:36px;min-width:0;padding:0 6px;border:1px solid #9AA0A6;background:#fff;color:#16191D;border-radius:2px;font:600 14px Barlow,'Noto Sans SC',sans-serif;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">North gate</button><button type="button" aria-pressed="true" style="height:36px;min-width:0;padding:0 6px;border:1px solid #1F6FC0;background:#1F6FC0;color:#fff;border-radius:2px;font:600 14px Barlow,'Noto Sans SC',sans-serif;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">North corridor</button><button type="button" aria-pressed="true" style="height:36px;min-width:0;padding:0 6px;border:1px solid #1F6FC0;background:#1F6FC0;color:#fff;border-radius:2px;font:600 14px Barlow,'Noto Sans SC',sans-serif;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Car park</button><button type="button" aria-pressed="false" style="height:36px;min-width:0;padding:0 6px;border:1px solid #9AA0A6;background:#fff;color:#16191D;border-radius:2px;font:600 14px Barlow,'Noto Sans SC',sans-serif;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">South wall</button><button type="button" aria-pressed="false" style="height:36px;min-width:0;padding:0 6px;border:1px solid #9AA0A6;background:#fff;color:#16191D;border-radius:2px;font:600 14px Barlow,'Noto Sans SC',sans-serif;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Building 2 perimeter</button></div></div></div>
+      <div class="field"><span class="lbl">When</span><div class="seg" role="tablist" aria-label="Recurrence" style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));width:100%"><button class="btn" type="button" role="tab" aria-selected="false" style="justify-content:center;padding:0 6px">Single date</button><button class="btn on" type="button" role="tab" aria-selected="true" style="justify-content:center;padding:0 6px">Weekly</button></div>
+        <div style="margin-top:8px"><div role="group" aria-label="Weekdays" style="display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:6px"><button type="button" aria-pressed="true" style="height:36px;min-width:0;padding:0 6px;border:1px solid #1F6FC0;background:#1F6FC0;color:#fff;border-radius:2px;font:600 14px Barlow,'Noto Sans SC',sans-serif;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Mo</button><button type="button" aria-pressed="true" style="height:36px;min-width:0;padding:0 6px;border:1px solid #1F6FC0;background:#1F6FC0;color:#fff;border-radius:2px;font:600 14px Barlow,'Noto Sans SC',sans-serif;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Tu</button><button type="button" aria-pressed="true" style="height:36px;min-width:0;padding:0 6px;border:1px solid #1F6FC0;background:#1F6FC0;color:#fff;border-radius:2px;font:600 14px Barlow,'Noto Sans SC',sans-serif;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">We</button><button type="button" aria-pressed="true" style="height:36px;min-width:0;padding:0 6px;border:1px solid #1F6FC0;background:#1F6FC0;color:#fff;border-radius:2px;font:600 14px Barlow,'Noto Sans SC',sans-serif;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Th</button><button type="button" aria-pressed="true" style="height:36px;min-width:0;padding:0 6px;border:1px solid #1F6FC0;background:#1F6FC0;color:#fff;border-radius:2px;font:600 14px Barlow,'Noto Sans SC',sans-serif;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Fr</button><button type="button" aria-pressed="false" style="height:36px;min-width:0;padding:0 6px;border:1px solid #9AA0A6;background:#fff;color:#16191D;border-radius:2px;font:600 14px Barlow,'Noto Sans SC',sans-serif;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Sa</button><button type="button" aria-pressed="false" style="height:36px;min-width:0;padding:0 6px;border:1px solid #9AA0A6;background:#fff;color:#16191D;border-radius:2px;font:600 14px Barlow,'Noto Sans SC',sans-serif;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Su</button></div></div>
+        <div style="margin-top:6px;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px"><button class="btn sm" type="button" style="justify-content:center">Daily</button><button class="btn sm" type="button" style="justify-content:center">Weekdays</button><button class="btn sm" type="button" style="justify-content:center">Weekend</button></div></div>
+      <div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px"><div class="field"><label class="lbl">From</label><input style="height:40px;border:1px solid #6B7178;border-radius:2px;padding:0 10px;font:inherit;background:#fff;color:#16191D;min-width:0" value="22:00"></div><div class="field"><label class="lbl">To</label><input style="height:40px;border:1px solid #6B7178;border-radius:2px;padding:0 10px;font:inherit;background:#fff;color:#16191D;min-width:0" value="06:00"></div></div>
+      <p class="mut" style="margin:-6px 0 0;font-size:12.5px">An end time earlier than the start spans midnight.</p>
+      <div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px"><div class="field"><label class="lbl">Valid until <span style="font-weight:400">· Optional</span></label><input style="height:40px;border:1px solid #6B7178;border-radius:2px;padding:0 10px;font:inherit;background:#fff;color:#16191D;min-width:0" placeholder="No expiry"></div><div class="field"><label class="lbl">Notes <span style="font-weight:400">· Optional</span></label><input style="height:40px;border:1px solid #6B7178;border-radius:2px;padding:0 10px;font:inherit;background:#fff;color:#16191D;min-width:0"></div></div>
+      </div>
+      <div style="flex:none;padding:12px 20px;border-top:1px solid #D5D8DC;background:#fff"><div style="display:grid;grid-template-columns:minmax(0,2fr) minmax(0,1fr);gap:8px"><button class="btn pri" type="button" style="justify-content:center">Add authorization</button><button class="btn" type="button" style="justify-content:center">Clear</button></div></div>
+    </form>
+  </aside>
+</div>
+
+    </main>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1536,"height":960}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

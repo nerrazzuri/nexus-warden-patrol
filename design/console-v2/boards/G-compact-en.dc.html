@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Guard 1366 compact</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&display=swap">
+<style>
+body{margin:0}
+a{color:#5AA2E6}a:hover{color:#CFE4FA}
+.btn{height:40px;padding:0 14px;border:1px solid #9A9FA6;border-radius:2px;background:#16191D;color:#ECEDEA;font:600 14px Barlow,"Noto Sans SC","Microsoft YaHei UI",sans-serif;display:inline-flex;align-items:center;gap:8px;cursor:pointer;white-space:nowrap}
+.btn.sm{height:32px;padding:0 12px;font-size:13px}
+.btn.pri{background:#1F6FC0;border-color:#1F6FC0;color:#fff;font-weight:700}
+.btn.stop{background:#D42F33;border-color:#D42F33;color:#fff;font-weight:700}
+.seg{display:inline-flex;border:1px solid #2E333A}
+.seg .btn{border:0;background:transparent;border-radius:0}
+.seg .btn+.btn{border-left:1px solid #2E333A}
+.seg .btn.on{background:#1F6FC0;color:#fff}
+.lbl{font-size:12px;font-weight:600;letter-spacing:.06em;color:#9A9FA6}
+.ring{display:inline-block;flex:none;width:12px;height:12px;border:3px solid #FF6166;border-radius:50%;box-sizing:border-box}
+.tri{display:inline-block;flex:none;width:0;height:0;border-left:7px solid transparent;border-right:7px solid transparent;border-bottom:12px solid #F2B01E}
+.sq{display:inline-block;flex:none;width:9px;height:9px;background:#3DC46E}
+.disc{display:inline-block;flex:none;width:10px;height:10px;border-radius:50%;background:#fff}
+.h2{margin:0;font-size:15px;line-height:22px;font-weight:600}
+.vid{position:relative;background:#000;border:1px solid #2E333A;min-height:0;overflow:hidden}
+.vid .noise{position:absolute;inset:0;background:#07080A}
+.vid .cap{position:absolute;left:0;right:0;top:0;display:flex;align-items:center;gap:8px;padding:6px 10px;background:rgba(0,0,0,.65)}
+</style>
+</helmet>
+<div style="width:1366px;height:768px;box-sizing:border-box;background:#0E1013;color:#ECEDEA;font-family:Barlow,'Noto Sans SC','Microsoft YaHei UI',sans-serif;font-size:14px;line-height:20px;font-variant-numeric:tabular-nums;display:flex;flex-direction:column">
+
+  <!-- 顶栏：放不下的收进「站点」菜单，急停和未处理永远在 -->
+  <header style="height:52px;flex:none;display:flex;align-items:center;gap:12px;padding:0 12px;border-bottom:1px solid #2E333A;background:#0A0C0E">
+    <div style="display:flex;flex-direction:column;line-height:13px"><b style="font-size:12px;letter-spacing:.12em">NEXUS</b><span style="font-size:11px;letter-spacing:.12em;color:#B4B8BE">WARDEN</span></div>
+    <nav aria-label="Main navigation" style="display:flex">
+      <a href="#" aria-current="page" style="height:52px;display:flex;align-items:center;padding:0 12px;color:#ECEDEA;text-decoration:none;font-weight:700;box-shadow:inset 0 -3px 0 #1F6FC0">Monitoring</a>
+      <a href="#" style="height:52px;display:flex;align-items:center;padding:0 12px;color:#B4B8BE;text-decoration:none;font-weight:600">Events & Recordings</a>
+    </nav>
+    <div style="flex:1"></div>
+    <span style="display:inline-flex;align-items:center;gap:8px;height:32px;padding:0 10px;background:#16281D;color:#3DC46E;font-weight:600"><span class="sq"></span>Armed</span>
+    <span style="display:inline-flex;align-items:center;gap:8px;height:32px;padding:0 10px;background:#33191B;color:#FF6166;font-weight:700;box-shadow:inset 0 0 0 1px #FF6166"><span class="ring" style="width:11px;height:11px;border-width:2px"></span>Open 3</span>
+    <span style="font-size:15px;font-weight:600">23:48</span>
+    <button class="btn sm" type="button" aria-label="Account & site">gina ▾</button>
+    <button class="btn stop" type="button"><span style="width:12px;height:12px;border:2px solid #fff;border-radius:50%;box-sizing:border-box"></span>E-STOP ALL</button>
+  </header>
+
+  <div style="flex:1;min-height:0;display:grid;grid-template-columns:280px minmax(0,1fr) 56px">
+    <aside aria-label="Events" style="border-right:1px solid #2E333A;display:flex;flex-direction:column;min-height:0;overflow:auto">
+      <div style="padding:10px 14px;border-bottom:1px solid #2E333A"><h2 class="h2">Security events 1</h2></div>
+      <a href="#" aria-current="true" style="padding:10px 14px;display:block;background:#33191B;box-shadow:inset 0 0 0 2px #FF6166;color:#ECEDEA;text-decoration:none">
+        <span style="display:flex;gap:10px;align-items:center"><span class="ring"></span><b style="flex:1">Perimeter breach, north gate</b><span style="color:#FF6166;font-weight:700">P1</span></span>
+        <span style="display:block;margin-left:22px;color:#FF6166;font-weight:600">23:47 · Unassigned</span>
+      </a>
+      <div style="padding:10px 14px;border-bottom:1px solid #2E333A;border-top:1px solid #2E333A"><h2 class="h2">Equipment & operations 2</h2></div>
+      <a href="#" style="padding:10px 14px;display:flex;gap:10px;align-items:center;color:#ECEDEA;text-decoration:none;border-bottom:1px solid #2E333A"><span class="ring"></span><span style="flex:1">B awaiting battery swap</span><span style="color:#B4B8BE">23:31</span></a>
+      <a href="#" style="padding:10px 14px;display:flex;gap:10px;align-items:center;color:#ECEDEA;text-decoration:none;border-bottom:1px solid #2E333A"><span class="tri"></span><span style="flex:1">A battery below 30%</span><span style="color:#B4B8BE">23:12</span></a>
+      <p class="lbl" style="margin:auto 14px 12px">Closed this shift: 4 · Handover notes under Events & Recordings</p>
+    </aside>
+
+    <main style="min-width:0;display:flex;flex-direction:column;min-height:0">
+      <div style="padding:10px 16px;display:flex;align-items:center;gap:12px;background:#16191D;box-shadow:inset 0 4px 0 #D42F33;border-bottom:1px solid #2E333A">
+        <span style="width:28px;height:28px;border:7px solid #FF6166;border-radius:50%;box-sizing:border-box;flex:none"></span>
+        <div style="flex:1;min-width:0"><h1 style="margin:0;font-size:20px;line-height:26px">Perimeter breach, north gate</h1><div style="color:#B4B8BE;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">P1 · North gate · Camera 3 · 23:47 · toward Building 2</div></div>
+        <button class="btn pri" type="button" style="height:44px"><span class="disc"></span>Take ownership</button>
+      </div>
+      <ol aria-label="Response steps" style="list-style:none;margin:0;padding:8px 16px;display:flex;border-bottom:1px solid #2E333A;font-weight:600">
+        <li style="flex:1;display:flex;align-items:center;gap:8px;color:#3DC46E"><span class="sq"></span>Detected</li>
+        <li style="flex:1;display:flex;align-items:center;gap:8px"><span style="width:10px;height:10px;border:2px solid #5AA2E6;border-radius:50%;box-sizing:border-box"></span>Assigned</li>
+        <li style="flex:1;color:#9A9FA6">Dispatched</li><li style="flex:1;color:#9A9FA6">On site</li><li style="flex:1;color:#9A9FA6">Verified</li><li style="flex:1;color:#9A9FA6">Closed</li>
+      </ol>
+      <!-- 小屏：画面优先，地图改成右上角可展开的抽屉 -->
+      <div style="flex:1;min-height:0;position:relative;padding:10px 16px;display:flex;flex-direction:column;gap:8px">
+        <div style="display:flex;align-items:center;gap:8px">
+          <div class="seg" role="group" aria-label="Video layout"><button class="btn sm on" type="button" aria-pressed="true">Single</button><button class="btn sm" type="button">Dual</button><button class="btn sm" type="button">Quad</button></div>
+          <span style="flex:1"></span>
+          <button class="btn sm" type="button">−30 s</button>
+          <button class="btn sm" type="button" aria-expanded="true">Map ▸</button>
+        </div>
+        <figure class="vid" style="margin:0;flex:1">
+          <div class="noise"></div>
+          <div style="position:absolute;left:30%;top:26%;width:66px;height:112px;border:2px solid #FF6166"></div><div style="position:absolute;left:30%;top:calc(26% + 116px);background:#000;color:#FF6166;font-weight:700;padding:2px 8px">Person · 0.93</div>
+          <figcaption class="cap"><span>Camera 3 · North gate</span><span style="flex:1"></span><span style="color:#ECEDEA;font-weight:700;letter-spacing:.06em">Live</span></figcaption>
+          <!-- 地图抽屉压在画面右侧，不挤画面宽度 -->
+          <div style="position:absolute;right:0;top:36px;bottom:0;width:300px;background:#15181C;border-left:1px solid #2E333A;box-shadow:-8px 0 24px rgba(0,0,0,.45)">
+            <svg viewBox="0 0 300 300" style="width:100%;height:100%" role="img" aria-label="A 48 m east of north gate">
+              <path d="M20 30 H280 V110 H210 V280 H90 V110 H20 Z" fill="#232830" stroke="#6A7078" stroke-width="2"/>
+              <circle cx="66" cy="54" r="14" fill="none" stroke="#FF6166" stroke-width="5"/>
+              <path d="M230 64 C 170 64, 120 60, 82 56" fill="none" stroke="#5AA2E6" stroke-width="3" stroke-dasharray="6 4"/>
+              <circle cx="230" cy="64" r="8" fill="#3DC46E" stroke="#0E1013" stroke-width="2"/>
+              <text x="230" y="50" fill="#ECEDEA" font-size="12" font-weight="700" text-anchor="middle">A</text>
+              <text x="150" y="150" fill="#B4B8BE" font-size="12" text-anchor="middle">A 48 m · ETA 1 min</text>
+            </svg>
+          </div>
+        </figure>
+        <div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px">
+          <button class="btn" type="button">Dispatch A</button><button class="btn" type="button">Announce</button><button class="btn" type="button">Strobe</button>
+          <span style="flex:1"></span>
+          <div class="seg" role="group" aria-label="Disposition"><button class="btn sm" type="button">Confirmed intrusion</button><button class="btn sm" type="button">False alarm</button></div>
+          <button class="btn sm" type="button" disabled title="Take ownership, then record a disposition" style="border-style:dashed;color:#9A9FA6;background:transparent">Closed</button>
+        </div>
+      </div>
+    </main>
+
+    <!-- 右栏折成竖条：点开从右边滑出 -->
+    <nav aria-label="Right panel (collapsed)" style="border-left:1px solid #2E333A;display:flex;flex-direction:column;align-items:center;gap:4px;padding:8px 0;background:#0A0C0E">
+      <button class="btn" type="button" aria-label="Robot A 28%" style="width:44px;height:56px;padding:0;flex-direction:column;justify-content:center;gap:2px"><b>A</b><span style="font-size:11px;color:#F2B01E">28%</span></button>
+      <button class="btn" type="button" aria-label="Robot B 6% awaiting swap" style="width:44px;height:56px;padding:0;flex-direction:column;justify-content:center;gap:2px;border-color:#FF6166"><b>B</b><span style="font-size:11px;color:#FF6166">6%</span></button>
+      <span style="flex:1"></span>
+      <button class="btn" type="button" aria-label="Tonight's patrols" style="width:44px;height:44px;padding:0;justify-content:center;font-size:12px">Patrol</button>
+      <button class="btn" type="button" aria-label="Recent activity" style="width:44px;height:44px;padding:0;justify-content:center;font-size:12px">Activity</button>
+    </nav>
+  </div>
+
+  <!-- 时间轴折成一行，点「展开」才到 88 高 -->
+  <section aria-label="Shift timeline" style="height:40px;flex:none;border-top:1px solid #2E333A;background:#0A0C0E;padding:0 12px;box-sizing:border-box;display:flex;align-items:center;gap:12px">
+    <span class="lbl" style="color:#ECEDEA">19:00</span>
+    <div style="position:relative;flex:1;height:12px;background:#16191D">
+      <div style="position:absolute;left:0;width:9%;top:0;bottom:0;background:#1F6FC0"></div>
+      <div style="position:absolute;left:25%;width:14.6%;top:0;bottom:0;background:#1F6FC0"></div>
+      <span class="ring" style="position:absolute;left:22%;top:1px;width:10px;height:10px;border-width:2px"></span>
+      <span class="ring" style="position:absolute;left:39%;top:1px;width:10px;height:10px;border-width:2px"></span>
+      <div style="position:absolute;left:39.6%;top:-6px;bottom:-6px;width:2px;background:#ECEDEA"></div>
+    </div>
+    <span class="lbl" style="color:#ECEDEA">07:00</span>
+    <button class="btn sm" type="button" aria-expanded="false">Expand timeline</button>
+  </section>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1366,"height":768}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

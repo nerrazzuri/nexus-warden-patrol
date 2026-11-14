@@ -1,0 +1,134 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&display=swap">
+<style>
+body{margin:0}
+a{color:#1A5FA6}a:hover{color:#0E3F70}
+.btn{height:40px;padding:0 16px;border:1px solid #6B7178;border-radius:2px;background:#fff;color:#16191D;font:600 14px Barlow,"Noto Sans SC","Microsoft YaHei UI",sans-serif;display:inline-flex;align-items:center;gap:8px;cursor:pointer;white-space:nowrap;text-decoration:none}
+.btn.sm{height:32px;padding:0 12px;font-size:13px}
+.btn.pri{background:#1F6FC0;border-color:#1F6FC0;color:#fff;font-weight:700}
+.btn.danger{border-color:#C4262B;color:#B0202A}
+.btn.stop{background:#D42F33;border-color:#D42F33;color:#fff;font-weight:700}
+.seg{display:inline-flex;border:1px solid #C9CDD2}
+.seg .btn{border:0;background:transparent;border-radius:0}
+.seg .btn+.btn{border-left:1px solid #C9CDD2}
+.seg .btn.on{background:#1F6FC0;color:#fff}
+.lbl{font-size:12px;font-weight:600;letter-spacing:.06em;color:#5A6068}
+.mut{color:#565B62}
+.ring{display:inline-block;flex:none;width:12px;height:12px;border:3px solid #C4262B;border-radius:50%;box-sizing:border-box}
+.tri{display:inline-block;flex:none;width:0;height:0;border-left:7px solid transparent;border-right:7px solid transparent;border-bottom:12px solid #D99A00}
+.sq{display:inline-block;flex:none;width:9px;height:9px;background:#1E8A47}
+.h1{margin:0;font-size:24px;line-height:30px;font-weight:700}
+.h2{margin:0;font-size:16px;line-height:22px;font-weight:600}
+.card{background:#fff;border:1px solid #D5D8DC}
+.cardh{display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:1px solid #E3E5E8}
+th{text-align:left;font-size:12px;font-weight:600;letter-spacing:.06em;color:#5A6068;padding:10px 12px;border-bottom:1px solid #D5D8DC;background:#F8F9F8}
+td{padding:10px 12px;border-bottom:1px solid #E3E5E8;vertical-align:middle}
+.chip{display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 8px;font-size:12px;font-weight:700}
+.ok{background:#E4F3E9;color:#17703A} .warn{background:#FCF1D6;color:#7A5200} .bad{background:#FBE5E5;color:#A41E24} .gray{background:#ECEEF0;color:#454A51}
+.field{display:flex;flex-direction:column;gap:4px}
+.field input,.field select{height:40px;border:1px solid #6B7178;border-radius:2px;padding:0 10px;font:inherit;background:#fff;color:#16191D}
+.snav a{display:flex;align-items:center;gap:8px;min-height:36px;padding:0 16px;color:#2A2F35;text-decoration:none;font-weight:600}
+.snav a[aria-current]{background:#E3EEF9;color:#0E3F70;box-shadow:inset 0 0 0 1px #9DC1E6}
+.snav .g{padding:14px 16px 4px}
+.new{display:inline-block;padding:0 6px;border:1px solid #1F6FC0;color:#1A5FA6;font-size:11px;font-weight:700;line-height:16px}
+</style>
+</head><body>
+<div style="width:1536px;height:960px;box-sizing:border-box;background:#F2F3F1;color:#16191D;font-family:Barlow,'Noto Sans SC','Microsoft YaHei UI',sans-serif;font-size:14px;line-height:20px;font-variant-numeric:tabular-nums;display:flex;flex-direction:column">
+  <header style="height:60px;flex:none;display:flex;align-items:center;gap:16px;padding:0 16px;border-bottom:1px solid #2E333A;background:#0A0C0E;color:#ECEDEA">
+    <div style="display:flex;flex-direction:column;line-height:14px"><b style="font-size:13px;letter-spacing:.12em">NEXUS</b><span style="font-size:11px;letter-spacing:.12em;color:#B4B8BE">WARDEN</span></div>
+    <span style="color:#B4B8BE">estate-1</span>
+    <nav aria-label="主导航" style="display:flex;margin-left:8px">
+      <a href="#" style="height:60px;display:flex;align-items:center;padding:0 14px;color:#B4B8BE;text-decoration:none;font-weight:600">值班</a>
+      <a href="#" style="height:60px;display:flex;align-items:center;padding:0 14px;color:#B4B8BE;text-decoration:none;font-weight:600">记录与录像</a>
+      <a href="#" aria-current="page" style="height:60px;display:flex;align-items:center;padding:0 14px;color:#ECEDEA;text-decoration:none;font-weight:700;box-shadow:inset 0 -3px 0 #1F6FC0">现场设置</a>
+    </nav>
+    <div style="flex:1"></div>
+    <span style="display:inline-flex;align-items:center;gap:8px;height:32px;padding:0 12px;background:#16281D;color:#3DC46E;font-weight:600"><span class="sq" style="background:#3DC46E"></span>布防中 · 到 07:00</span>
+    <span style="display:inline-flex;align-items:center;gap:8px;height:32px;padding:0 12px;background:#20242A;font-weight:600">机器人 2/2 在线</span>
+    <a href="#" style="display:inline-flex;align-items:center;gap:8px;height:32px;padding:0 12px;background:#20242A;color:#B4B8BE;font-weight:600;text-decoration:none">未处理 0</a>
+    <span style="font-size:16px;font-weight:600">10:20</span>
+    <span style="color:#B4B8BE">demo · 管理员</span>
+    <button class="btn stop" type="button"><span style="width:12px;height:12px;border:2px solid #fff;border-radius:50%;box-sizing:border-box"></span>全部急停</button>
+  </header>
+  <div style="flex:1;min-height:0;display:grid;grid-template-columns:232px minmax(0,1fr)">
+    <nav class="snav" aria-label="现场设置" style="background:#fff;border-right:1px solid #D5D8DC;padding:8px 0;overflow:auto">
+      <div class="g lbl">日常</div>
+      <a href="#"><span style="flex:1">概况</span><span class="chip warn" style="height:20px">2</span></a>
+      <a href="#" aria-current="page"><span style="flex:1">机器人</span></a>
+      <a href="#"><span style="flex:1">人员与权限</span></a>
+      <div class="g lbl">现场</div>
+      <a href="#"><span style="flex:1">现场布置</span></a>
+      <a href="#"><span style="flex:1">布防与巡逻</span></a>
+      <a href="#"><span style="flex:1">来访与授权</span></a>
+      <div class="g lbl">记录</div>
+      <a href="#"><span style="flex:1">报告与操作记录</span></a>
+      <div class="g lbl">高级 · 安装和售后用</div>
+      <a href="#"><span style="flex:1">地图版本、定位、诊断、升级</span></a>
+    </nav>
+    <main style="min-width:0;min-height:0;overflow:hidden;display:flex;flex-direction:column">
+
+<div style="flex:none;padding:20px 32px 0;display:flex;align-items:baseline;gap:16px"><h1 class="h1" style="flex:1">机器人</h1><button class="btn sm" type="button">添加机器人</button></div>
+<section aria-label="机队" style="flex:none;margin:12px 32px 0;background:#fff;border:1px solid #D5D8DC">
+  <table style="width:100%;border-collapse:collapse"><thead><tr><th>机器人</th><th>在干什么</th><th style="text-align:right">电量</th><th>定位</th><th>网络</th><th>今天</th><th>派单</th><th>要注意</th></tr></thead><tbody>
+    <tr style="background:#E3EEF9;box-shadow:inset 0 0 0 2px #1F6FC0"><td><b>A</b> <span class="mut">C40221</span></td><td><span style="display:inline-flex;gap:6px;align-items:center"><span class="sq"></span>巡逻 guard-1</span></td><td style="text-align:right;font-weight:700">62%</td><td>好</td><td>好</td><td>3 轮 · 卡住 1 次</td><td>自动</td><td class="mut">—</td></tr>
+    <tr><td><b>B</b> <span class="mut">C40011</span></td><td><span style="display:inline-flex;gap:6px;align-items:center"><span style="width:9px;height:9px;background:#9AA0A6"></span>充电中</span></td><td style="text-align:right;font-weight:700;color:#7A5200">18%</td><td>好</td><td>好</td><td>1 轮</td><td>自动</td><td><span style="display:inline-flex;gap:6px;align-items:center;color:#7A5200"><span class="tri" style="border-left-width:6px;border-right-width:6px;border-bottom-width:10px"></span>Wi-Fi 换网待批</span></td></tr>
+    <tr style="background:#FCF1D6"><td><b>C40388</b></td><td colspan="6" style="color:#4A3600">请求加入 · olga 的手机 09:41 · 核对码 <b>482 913</b></td><td><a href="#">核对后批准…</a> · <a href="#">拒绝</a></td></tr>
+  </tbody></table>
+</section>
+<div style="flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,1fr) 380px;gap:32px;padding:24px 32px">
+  <article aria-label="A" style="min-width:0;display:flex;flex-direction:column;gap:18px">
+    <p style="margin:0;font-size:28px;line-height:36px;font-weight:700;max-width:22em">A 正在巡逻 guard-1 第 3 圈，<br>还要约 40 分钟，电量够跑完。</p>
+    <div style="position:relative;display:flex;gap:8px;align-items:center">
+      <button class="btn pri" type="button">停下并回家</button>
+      <button class="btn" type="button">停下当前任务</button>
+      <button class="btn" type="button" aria-expanded="true" aria-haspopup="menu" style="box-shadow:inset 0 0 0 1px #1F6FC0;border-color:#1F6FC0">更多操作 <svg width="14" height="14" viewBox="0 0 20 20" aria-hidden="true"><polyline points="4,7 10,13 16,7" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="square"/></svg></button>
+      <span class="mut" style="margin-left:8px">急停在顶栏</span>
+      <div role="menu" aria-label="更多操作" style="position:absolute;left:0;top:48px;width:560px;background:#fff;border:1px solid #6B7178;box-shadow:0 12px 32px rgba(21,24,27,.18);display:grid;grid-template-columns:1fr 1fr;z-index:2">
+  <div style="border-right:1px solid #E3E5E8;padding-bottom:8px"><div class="lbl" style="padding:10px 14px 2px">任务</div><a href="#" role="menuitem" style="display:flex;gap:8px;align-items:baseline;padding:7px 14px;color:#16191D;text-decoration:none"><span style="flex:1">派一次巡逻…</span><span class="mut" style="font-size:12px">这一圈后开始</span></a><a href="#" role="menuitem" style="display:flex;gap:8px;align-items:baseline;padding:7px 14px;color:#16191D;text-decoration:none"><span style="flex:1">回家</span><span class="mut" style="font-size:12px">先停下</span></a><a href="#" role="menuitem" style="display:flex;gap:8px;align-items:baseline;padding:7px 14px;color:#16191D;text-decoration:none"><span style="flex:1">回待命点</span><span class="mut" style="font-size:12px">先停下</span></a>
+    <div class="lbl" style="padding:10px 14px 2px">喊话与警示</div><a href="#" role="menuitem" style="display:flex;gap:8px;align-items:baseline;padding:7px 14px;color:#16191D;text-decoration:none"><span style="flex:1">念常用话</span><span class="mut" style="font-size:12px">3 句</span></a><a href="#" role="menuitem" style="display:flex;gap:8px;align-items:baseline;padding:7px 14px;color:#16191D;text-decoration:none"><span style="flex:1">临时说一句…</span><span class="mut" style="font-size:12px"></span></a><a href="#" role="menuitem" style="display:flex;gap:8px;align-items:baseline;padding:7px 14px;color:#16191D;text-decoration:none"><span style="flex:1">开警灯…</span><span class="mut" style="font-size:12px">30 秒</span></a><a href="#" role="menuitem" style="display:flex;gap:8px;align-items:baseline;padding:7px 14px;color:#16191D;text-decoration:none"><span style="flex:1">放警报声 / 英文警告</span><span class="mut" style="font-size:12px"></span></a>
+    <div class="lbl" style="padding:10px 14px 2px">身体</div><a href="#" role="menuitem" style="display:flex;gap:8px;align-items:baseline;padding:7px 14px;color:#16191D;text-decoration:none"><span style="flex:1">趴下</span><span class="mut" style="font-size:12px">会马上动</span></a><a href="#" role="menuitem" style="display:flex;gap:8px;align-items:baseline;padding:7px 14px;color:#16191D;text-decoration:none"><span style="flex:1">云台…</span><span class="mut" style="font-size:12px">0° / −10°</span></a><a href="#" role="menuitem" style="display:flex;gap:8px;align-items:baseline;padding:7px 14px;color:#16191D;text-decoration:none"><span style="flex:1">雨刷 10 秒</span><span class="mut" style="font-size:12px"></span></a></div>
+  <div style="padding-bottom:8px"><div class="lbl" style="padding:10px 14px 2px">这台的设置</div><a href="#" role="menuitem" style="display:flex;gap:8px;align-items:baseline;padding:7px 14px;color:#16191D;text-decoration:none"><span style="flex:1">改名字</span><span class="mut" style="font-size:12px"></span></a><a href="#" role="menuitem" style="display:flex;gap:8px;align-items:baseline;padding:7px 14px;color:#16191D;text-decoration:none"><span style="flex:1">派单方式</span><span class="mut" style="font-size:12px">现在 自动</span></a><a href="#" role="menuitem" style="display:flex;gap:8px;align-items:baseline;padding:7px 14px;color:#16191D;text-decoration:none"><span style="flex:1">发新激活码…</span><span class="mut" style="font-size:12px"></span></a><a href="#" role="menuitem" style="display:flex;gap:8px;align-items:baseline;padding:7px 14px;color:#16191D;text-decoration:none"><span style="flex:1">Wi-Fi 换网审批</span><span class="mut" style="font-size:12px">没有待批</span></a>
+    <div class="lbl" style="padding:10px 14px 2px">维护</div><a href="#" role="menuitem" style="display:flex;gap:8px;align-items:baseline;padding:7px 14px;color:#16191D;text-decoration:none"><span style="flex:1">对时</span><span class="mut" style="font-size:12px"></span></a><a href="#" role="menuitem" style="display:flex;gap:8px;align-items:baseline;padding:7px 14px;color:#16191D;text-decoration:none"><span style="flex:1">清理存储…</span><span class="mut" style="font-size:12px">64%</span></a><a href="#" role="menuitem" style="display:flex;gap:8px;align-items:baseline;padding:7px 14px;color:#16191D;text-decoration:none"><span style="flex:1">续证书</span><span class="mut" style="font-size:12px">到 2027-10</span></a><a href="#" role="menuitem" style="display:flex;gap:8px;align-items:baseline;padding:7px 14px;color:#16191D;text-decoration:none"><span style="flex:1">看日志 / 调试</span><span class="mut" style="font-size:12px"></span></a><a href="#" role="menuitem" style="display:flex;gap:8px;align-items:baseline;padding:7px 14px;color:#16191D;text-decoration:none"><span style="flex:1">重启巡逻程序…</span><span class="mut" style="font-size:12px"></span></a><a href="#" role="menuitem" style="display:flex;gap:8px;align-items:baseline;padding:7px 14px;color:#16191D;text-decoration:none"><span style="flex:1">重启机器人…</span><span class="mut" style="font-size:12px"></span></a>
+    <div style="border-top:1px solid #E3E5E8;margin-top:6px"></div><a href="#" role="menuitem" style="display:block;padding:9px 14px;color:#A41E24;text-decoration:none;font-weight:600">解绑 A…</a></div>
+</div>
+    </div>
+    <section style="margin-top:8px">
+      <h2 class="h2" style="margin-bottom:6px">今天的经过</h2>
+      <div style="position:relative;height:18px;background:#ECEEEB;margin:6px 0 4px">
+        <div style="position:absolute;left:0;width:22%;top:0;bottom:0;background:#9AA0A6"></div>
+        <div style="position:absolute;left:22%;width:14%;top:0;bottom:0;background:#1F6FC0"></div>
+        <div style="position:absolute;left:36%;width:0.8%;top:0;bottom:0;background:#C4262B"></div>
+        <div style="position:absolute;left:37%;width:9%;top:0;bottom:0;background:#9AA0A6"></div>
+        <div style="position:absolute;left:46%;width:6%;top:0;bottom:0;background:#1F6FC0"></div>
+      </div>
+      <div class="mut" style="display:flex;justify-content:space-between;font-size:12px"><span>12:00</span><span>16:00</span><span>20:00</span><span>24:00</span><span>04:00</span><span>08:00</span><span>12:00</span></div>
+      <ol style="list-style:none;margin:8px 0 0;padding:0">
+        <li style="display:grid;grid-template-columns:52px 16px 1fr;gap:8px;align-items:center;padding:7px 0;border-bottom:1px solid #EDEEEC"><span class="mut">22:00</span><span class="sq"></span><span>开始 guard-1（日程）</span></li>
+        <li style="display:grid;grid-template-columns:52px 16px 1fr;gap:8px;align-items:center;padding:7px 0;border-bottom:1px solid #EDEEEC"><span class="mut">20:52</span><span class="ring" style="width:11px;height:11px;border-width:2px"></span><span>卡住，东侧通道 · 2 分钟后自己脱困</span></li>
+        <li style="display:grid;grid-template-columns:52px 16px 1fr;gap:8px;align-items:center;padding:7px 0;border-bottom:1px solid #EDEEEC"><span class="mut">19:30</span><span style="width:9px;height:9px;background:#9AA0A6"></span><span>充电到 92%</span></li>
+      </ol>
+    </section>
+  </article>
+  <aside aria-label="A 的状况" style="display:flex;flex-direction:column;gap:18px">
+    <section><h2 class="h2" style="margin-bottom:8px">身体状况</h2>
+      <dl style="margin:0;display:grid;grid-template-columns:76px 1fr;border-top:1px solid #D5D8DC">
+        <dt class="mut" style="padding:8px 0;border-bottom:1px solid #E3E5E8">电池</dt><dd style="margin:0;padding:8px 0;border-bottom:1px solid #E3E5E8"><b>62%</b> · 约 2 小时 40 分 · 健康 94%</dd>
+        <dt class="mut" style="padding:8px 0;border-bottom:1px solid #E3E5E8">姿态</dt><dd style="margin:0;padding:8px 0;border-bottom:1px solid #E3E5E8">站着</dd>
+        <dt class="mut" style="padding:8px 0;border-bottom:1px solid #E3E5E8">定位</dt><dd style="margin:0;padding:8px 0;border-bottom:1px solid #E3E5E8">好 · 地图第 4 版</dd>
+        <dt class="mut" style="padding:8px 0;border-bottom:1px solid #E3E5E8">网络</dt><dd style="margin:0;padding:8px 0;border-bottom:1px solid #E3E5E8">Wi-Fi 好 · 上次联系 2 秒前</dd>
+        <dt class="mut" style="padding:8px 0;border-bottom:1px solid #E3E5E8">设备</dt><dd style="margin:0;padding:8px 0;border-bottom:1px solid #E3E5E8">云台、警灯、喇叭 正常</dd>
+        <dt class="mut" style="padding:8px 0;border-bottom:1px solid #E3E5E8">存储</dt><dd style="margin:0;padding:8px 0;border-bottom:1px solid #E3E5E8">64% · 3 段待上传</dd>
+        <dt class="mut" style="padding:8px 0;border-bottom:1px solid #E3E5E8">证书</dt><dd style="margin:0;padding:8px 0;border-bottom:1px solid #E3E5E8">到 2027-10-03</dd>
+      </dl></section>
+    <section><div style="display:flex;align-items:baseline;margin-bottom:6px"><h2 class="h2" style="flex:1">30 天报警</h2><a href="#">全部 4 条</a></div>
+      <ol style="list-style:none;margin:0;padding:0">
+        <li style="display:grid;grid-template-columns:52px 16px 1fr;gap:8px;align-items:center;padding:7px 0;border-bottom:1px solid #EDEEEC"><span class="mut">11-14</span><span class="ring" style="width:11px;height:11px;border-width:2px"></span><span>北门有人 · 确认有人</span></li>
+        <li style="display:grid;grid-template-columns:52px 16px 1fr;gap:8px;align-items:center;padding:7px 0;border-bottom:1px solid #EDEEEC"><span class="mut">11-12</span><span class="tri" style="border-left-width:6px;border-right-width:6px;border-bottom-width:10px"></span><span>定位变差 · 已恢复</span></li>
+      </ol></section>
+  </aside>
+</div>
+
+    </main>
+  </div>
+</div>
+</body></html>

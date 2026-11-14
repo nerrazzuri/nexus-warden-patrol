@@ -1,0 +1,173 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>现场设置 布防与巡逻</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&display=swap">
+<style>
+body{margin:0}
+a{color:#1A5FA6}a:hover{color:#0E3F70}
+.btn{height:40px;padding:0 16px;border:1px solid #6B7178;border-radius:2px;background:#fff;color:#16191D;font:600 14px Barlow,"Noto Sans SC","Microsoft YaHei UI",sans-serif;display:inline-flex;align-items:center;gap:8px;cursor:pointer;white-space:nowrap;text-decoration:none}
+.btn.sm{height:32px;padding:0 12px;font-size:13px}
+.btn.pri{background:#1F6FC0;border-color:#1F6FC0;color:#fff;font-weight:700}
+.btn.danger{border-color:#C4262B;color:#B0202A}
+.btn.stop{background:#D42F33;border-color:#D42F33;color:#fff;font-weight:700}
+.seg{display:inline-flex;border:1px solid #C9CDD2}
+.seg .btn{border:0;background:transparent;border-radius:0}
+.seg .btn+.btn{border-left:1px solid #C9CDD2}
+.seg .btn.on{background:#1F6FC0;color:#fff}
+.lbl{font-size:12px;font-weight:600;letter-spacing:.06em;color:#5A6068}
+.mut{color:#565B62}
+.ring{display:inline-block;flex:none;width:12px;height:12px;border:3px solid #C4262B;border-radius:50%;box-sizing:border-box}
+.tri{display:inline-block;flex:none;width:0;height:0;border-left:7px solid transparent;border-right:7px solid transparent;border-bottom:12px solid #D99A00}
+.sq{display:inline-block;flex:none;width:9px;height:9px;background:#1E8A47}
+.h1{margin:0;font-size:24px;line-height:30px;font-weight:700}
+.h2{margin:0;font-size:16px;line-height:22px;font-weight:600}
+.card{background:#fff;border:1px solid #D5D8DC}
+.cardh{display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:1px solid #E3E5E8}
+th{text-align:left;font-size:12px;font-weight:600;letter-spacing:.06em;color:#5A6068;padding:10px 12px;border-bottom:1px solid #D5D8DC;background:#F8F9F8}
+td{padding:10px 12px;border-bottom:1px solid #E3E5E8;vertical-align:middle}
+.chip{display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 8px;font-size:12px;font-weight:700}
+.ok{background:#E4F3E9;color:#17703A} .warn{background:#FCF1D6;color:#7A5200} .bad{background:#FBE5E5;color:#A41E24} .gray{background:#ECEEF0;color:#454A51}
+.field{display:flex;flex-direction:column;gap:4px}
+.field input,.field select{height:40px;border:1px solid #6B7178;border-radius:2px;padding:0 10px;font:inherit;background:#fff;color:#16191D}
+.snav a{display:flex;align-items:center;gap:8px;min-height:36px;margin:0 8px;padding:0 10px;color:#A9AEB4;text-decoration:none;font-weight:600;border-radius:2px}
+.snav a[aria-current]{background:#1F6FC0;color:#fff} .snav .g{color:#A9AEB4}
+.snav .g{padding:14px 16px 4px}
+.new{display:inline-block;padding:0 6px;border:1px solid #1F6FC0;color:#1A5FA6;font-size:11px;font-weight:700;line-height:16px}
+</style>
+</helmet>
+<div style="width:1536px;height:960px;box-sizing:border-box;background:#F2F3F1;color:#16191D;font-family:Barlow,'Noto Sans SC','Microsoft YaHei UI',sans-serif;font-size:14px;line-height:20px;font-variant-numeric:tabular-nums;display:flex;flex-direction:column">
+  <header style="height:60px;flex:none;display:flex;align-items:center;gap:16px;padding:0 16px;border-bottom:1px solid #2E333A;background:#0A0C0E;color:#ECEDEA">
+    <div style="display:flex;flex-direction:column;line-height:14px"><b style="font-size:13px;letter-spacing:.12em">NEXUS</b><span style="font-size:11px;letter-spacing:.12em;color:#B4B8BE">WARDEN</span></div>
+    <span style="color:#B4B8BE">estate-1</span>
+    <nav aria-label="主导航" style="display:flex;margin-left:8px">
+      <a href="#" style="height:60px;display:flex;align-items:center;padding:0 14px;color:#B4B8BE;text-decoration:none;font-weight:600">值班</a>
+      <a href="#" style="height:60px;display:flex;align-items:center;padding:0 14px;color:#B4B8BE;text-decoration:none;font-weight:600">记录与录像</a>
+      <a href="#" aria-current="page" style="height:60px;display:flex;align-items:center;padding:0 14px;color:#ECEDEA;text-decoration:none;font-weight:700;box-shadow:inset 0 -3px 0 #1F6FC0">现场设置</a>
+    </nav>
+    <div style="flex:1"></div>
+    <span style="display:inline-flex;align-items:center;gap:8px;height:32px;padding:0 12px;background:#20242A;color:#ECEDEA;font-weight:600">撤防 · 19:00 布防</span>
+    <span style="display:inline-flex;align-items:center;gap:8px;height:32px;padding:0 12px;background:#20242A;font-weight:600">机器人 2/2 在线</span>
+    <a href="#" style="display:inline-flex;align-items:center;gap:8px;height:32px;padding:0 12px;background:#20242A;color:#B4B8BE;font-weight:600;text-decoration:none">未处理 0</a>
+    <span style="font-size:16px;font-weight:600">10:20</span>
+    <span style="color:#B4B8BE">demo · 管理员</span>
+    <button class="btn stop" type="button"><span style="width:12px;height:12px;border:2px solid #fff;border-radius:50%;box-sizing:border-box"></span>全部急停</button>
+  </header>
+  <div style="flex:1;min-height:0;display:grid;grid-template-columns:232px minmax(0,1fr)">
+    <nav class="snav" aria-label="现场设置" style="background:#15181B;border-right:1px solid #15181B;padding:8px 0;overflow:auto">
+      <div class="g lbl">日常</div>
+      <a href="#"><span style="flex:1">概况</span><span class="chip" style="height:20px;background:#1F6FC0;color:#fff">6</span></a>
+      <a href="#"><span style="flex:1">机器人</span></a>
+      <a href="#"><span style="flex:1">人员</span></a>
+      <div class="g lbl">现场</div>
+      <a href="#"><span style="flex:1">布置</span></a>
+      <a href="#" aria-current="page"><span style="flex:1">布防与巡逻</span></a>
+      <a href="#"><span style="flex:1">授权</span></a>
+      <div class="g lbl">记录</div>
+      <a href="#"><span style="flex:1">报告</span></a>
+      <div class="g lbl">高级</div>
+      <a href="#"><span style="flex:1">维护</span></a>
+    </nav>
+    <main style="min-width:0;min-height:0;overflow:hidden;display:flex;flex-direction:column">
+
+<div style="flex:none;display:flex;align-items:center;gap:16px;padding:0 28px;min-height:74px;background:#fff;border-bottom:1px solid #D5D8DC">
+      <h1 style="margin:0;font-size:28px;line-height:34px">布防与巡逻</h1>
+      <p style="margin:0;font-size:15px;min-width:0">按时间表：现在撤防，<b>今天 19:00 布防</b>。</p>
+      <span style="flex:1"></span><label style="display:flex;gap:8px;align-items:center;font-weight:600"><input type="checkbox" checked style="width:18px;height:18px">使用时间表</label><div class="seg" role="tablist" aria-label="布防范围"><button class="btn on" type="button" role="tab" aria-selected="true">全站一起</button><button class="btn" type="button" role="tab" aria-selected="false">按防区分开</button></div><button class="btn" type="button">切换模式…</button><button class="btn pri" type="button">保存</button></div>
+<div style="flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,1fr) 380px">
+  <div style="min-width:0;overflow:auto;display:flex;flex-direction:column;background:#fff">
+    <section aria-label="一周" style="background:#fff;border-bottom:1px solid #D5D8DC">
+      <div style="display:flex;align-items:center;gap:18px;padding:12px 20px;flex-wrap:wrap">
+        <h2 class="h2" style="font-size:17px;flex:1">一周</h2>
+        <span style="display:inline-flex;gap:6px;align-items:center" class="mut"><span style="width:18px;height:12px;background:#D5D8DC"></span>布防</span>
+        <span style="display:inline-flex;gap:6px;align-items:center" class="mut"><span style="width:18px;height:12px;background:#2A2F35"></span>布防中，有机器人在巡逻</span>
+        <span style="display:inline-flex;gap:6px;align-items:center" class="mut"><span style="width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;border-top:7px solid #16191D"></span>排好的单次巡逻</span>
+        
+      </div>
+      <div style="display:grid;grid-template-columns:72px minmax(0,1fr) 16px;column-gap:12px">
+        <div style="grid-column:1/-1;height:1px;background:#E3E5E8"></div><span></span><div style="position:relative;height:22px;font-size:11px;color:#5A6068;margin-top:6px"><span style="position:absolute;left:0.0%;transform:translateX(-50%)">00:00</span><span style="position:absolute;left:25.0%;transform:translateX(-50%)">06:00</span><span style="position:absolute;left:50.0%;transform:translateX(-50%)">12:00</span><span style="position:absolute;left:75.0%;transform:translateX(-50%)">18:00</span><span style="position:absolute;left:100.0%;transform:translateX(-50%)">24:00</span></div><span></span><div style="grid-column:1/-1;height:1px;background:#E3E5E8"></div>
+        <div style="display:contents"><span style="padding:20px 0 0 20px;font-weight:600;">周一</span>
+      <div style="position:relative;height:44px;margin:6px 0"><div title="布防" style="position:absolute;left:0.000%;width:29.167%;top:20px;height:20px;background:#D5D8DC"></div><div title="布防" style="position:absolute;left:79.167%;width:20.833%;top:20px;height:20px;background:#D5D8DC"></div><div title="有机器人在巡逻" style="position:absolute;left:0.000%;width:3.333%;top:20px;height:20px;background:#2A2F35"></div><div title="有机器人在巡逻" style="position:absolute;left:6.250%;width:8.750%;top:20px;height:20px;background:#2A2F35"></div><div title="有机器人在巡逻" style="position:absolute;left:19.167%;width:9.167%;top:20px;height:20px;background:#2A2F35"></div><div title="有机器人在巡逻" style="position:absolute;left:79.167%;width:9.167%;top:20px;height:20px;background:#2A2F35"></div><div title="有机器人在巡逻" style="position:absolute;left:89.583%;width:10.417%;top:20px;height:20px;background:#2A2F35"></div><span style="position:absolute;left:calc(4.167% - 20px);top:0;width:40px;text-align:center;font-size:10.5px;line-height:11px;color:#16191D;font-weight:600">01:00</span><span title="排好的巡逻 01:00" style="position:absolute;left:calc(4.167% - 5px);top:12px;width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;border-top:7px solid #16191D"></span><span style="position:absolute;left:calc(16.667% - 20px);top:0;width:40px;text-align:center;font-size:10.5px;line-height:11px;color:#16191D;font-weight:600">04:00</span><span title="排好的巡逻 04:00" style="position:absolute;left:calc(16.667% - 5px);top:12px;width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;border-top:7px solid #16191D"></span><span style="position:absolute;left:calc(91.667% - 20px);top:0;width:40px;text-align:center;font-size:10.5px;line-height:11px;color:#16191D;font-weight:600">22:00</span><span title="排好的巡逻 22:00" style="position:absolute;left:calc(91.667% - 5px);top:12px;width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;border-top:7px solid #16191D"></span></div><span></span></div><div style="grid-column:1/-1;height:1px;background:#E3E5E8"></div><div style="display:contents"><span style="padding:20px 0 0 20px;font-weight:600;">周二</span>
+      <div style="position:relative;height:44px;margin:6px 0"><div title="布防" style="position:absolute;left:0.000%;width:29.167%;top:20px;height:20px;background:#D5D8DC"></div><div title="布防" style="position:absolute;left:79.167%;width:20.833%;top:20px;height:20px;background:#D5D8DC"></div><div title="有机器人在巡逻" style="position:absolute;left:0.000%;width:3.333%;top:20px;height:20px;background:#2A2F35"></div><div title="有机器人在巡逻" style="position:absolute;left:6.250%;width:8.750%;top:20px;height:20px;background:#2A2F35"></div><div title="有机器人在巡逻" style="position:absolute;left:19.167%;width:9.167%;top:20px;height:20px;background:#2A2F35"></div><div title="有机器人在巡逻" style="position:absolute;left:79.167%;width:9.167%;top:20px;height:20px;background:#2A2F35"></div><div title="有机器人在巡逻" style="position:absolute;left:89.583%;width:10.417%;top:20px;height:20px;background:#2A2F35"></div><span style="position:absolute;left:calc(4.167% - 20px);top:0;width:40px;text-align:center;font-size:10.5px;line-height:11px;color:#16191D;font-weight:600">01:00</span><span title="排好的巡逻 01:00" style="position:absolute;left:calc(4.167% - 5px);top:12px;width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;border-top:7px solid #16191D"></span><span style="position:absolute;left:calc(16.667% - 20px);top:0;width:40px;text-align:center;font-size:10.5px;line-height:11px;color:#16191D;font-weight:600">04:00</span><span title="排好的巡逻 04:00" style="position:absolute;left:calc(16.667% - 5px);top:12px;width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;border-top:7px solid #16191D"></span><span style="position:absolute;left:calc(91.667% - 20px);top:0;width:40px;text-align:center;font-size:10.5px;line-height:11px;color:#16191D;font-weight:600">22:00</span><span title="排好的巡逻 22:00" style="position:absolute;left:calc(91.667% - 5px);top:12px;width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;border-top:7px solid #16191D"></span></div><span></span></div><div style="grid-column:1/-1;height:1px;background:#E3E5E8"></div><div style="display:contents"><span style="padding:20px 0 0 20px;font-weight:600;">周三</span>
+      <div style="position:relative;height:44px;margin:6px 0"><div title="布防" style="position:absolute;left:0.000%;width:29.167%;top:20px;height:20px;background:#D5D8DC"></div><div title="布防" style="position:absolute;left:79.167%;width:20.833%;top:20px;height:20px;background:#D5D8DC"></div><div title="有机器人在巡逻" style="position:absolute;left:0.000%;width:3.333%;top:20px;height:20px;background:#2A2F35"></div><div title="有机器人在巡逻" style="position:absolute;left:6.250%;width:8.750%;top:20px;height:20px;background:#2A2F35"></div><div title="有机器人在巡逻" style="position:absolute;left:19.167%;width:9.167%;top:20px;height:20px;background:#2A2F35"></div><div title="有机器人在巡逻" style="position:absolute;left:79.167%;width:9.167%;top:20px;height:20px;background:#2A2F35"></div><div title="有机器人在巡逻" style="position:absolute;left:89.583%;width:10.417%;top:20px;height:20px;background:#2A2F35"></div><span style="position:absolute;left:calc(4.167% - 20px);top:0;width:40px;text-align:center;font-size:10.5px;line-height:11px;color:#16191D;font-weight:600">01:00</span><span title="排好的巡逻 01:00" style="position:absolute;left:calc(4.167% - 5px);top:12px;width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;border-top:7px solid #16191D"></span><span style="position:absolute;left:calc(16.667% - 20px);top:0;width:40px;text-align:center;font-size:10.5px;line-height:11px;color:#16191D;font-weight:600">04:00</span><span title="排好的巡逻 04:00" style="position:absolute;left:calc(16.667% - 5px);top:12px;width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;border-top:7px solid #16191D"></span><span style="position:absolute;left:calc(91.667% - 20px);top:0;width:40px;text-align:center;font-size:10.5px;line-height:11px;color:#16191D;font-weight:600">22:00</span><span title="排好的巡逻 22:00" style="position:absolute;left:calc(91.667% - 5px);top:12px;width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;border-top:7px solid #16191D"></span></div><span></span></div><div style="grid-column:1/-1;height:1px;background:#E3E5E8"></div><div style="display:contents"><span style="padding:20px 0 0 20px;font-weight:600;">周四</span>
+      <div style="position:relative;height:44px;margin:6px 0"><div title="布防" style="position:absolute;left:0.000%;width:29.167%;top:20px;height:20px;background:#D5D8DC"></div><div title="布防" style="position:absolute;left:79.167%;width:20.833%;top:20px;height:20px;background:#D5D8DC"></div><div title="有机器人在巡逻" style="position:absolute;left:0.000%;width:3.333%;top:20px;height:20px;background:#2A2F35"></div><div title="有机器人在巡逻" style="position:absolute;left:6.250%;width:8.750%;top:20px;height:20px;background:#2A2F35"></div><div title="有机器人在巡逻" style="position:absolute;left:19.167%;width:9.167%;top:20px;height:20px;background:#2A2F35"></div><div title="有机器人在巡逻" style="position:absolute;left:79.167%;width:9.167%;top:20px;height:20px;background:#2A2F35"></div><div title="有机器人在巡逻" style="position:absolute;left:89.583%;width:10.417%;top:20px;height:20px;background:#2A2F35"></div><span style="position:absolute;left:calc(4.167% - 20px);top:0;width:40px;text-align:center;font-size:10.5px;line-height:11px;color:#16191D;font-weight:600">01:00</span><span title="排好的巡逻 01:00" style="position:absolute;left:calc(4.167% - 5px);top:12px;width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;border-top:7px solid #16191D"></span><span style="position:absolute;left:calc(16.667% - 20px);top:0;width:40px;text-align:center;font-size:10.5px;line-height:11px;color:#16191D;font-weight:600">04:00</span><span title="排好的巡逻 04:00" style="position:absolute;left:calc(16.667% - 5px);top:12px;width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;border-top:7px solid #16191D"></span><span style="position:absolute;left:calc(91.667% - 20px);top:0;width:40px;text-align:center;font-size:10.5px;line-height:11px;color:#16191D;font-weight:600">22:00</span><span title="排好的巡逻 22:00" style="position:absolute;left:calc(91.667% - 5px);top:12px;width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;border-top:7px solid #16191D"></span></div><span></span></div><div style="grid-column:1/-1;height:1px;background:#E3E5E8"></div><div style="display:contents"><span style="padding:20px 0 0 20px;font-weight:600;">周五</span>
+      <div style="position:relative;height:44px;margin:6px 0"><div title="布防" style="position:absolute;left:0.000%;width:29.167%;top:20px;height:20px;background:#D5D8DC"></div><div title="布防" style="position:absolute;left:79.167%;width:20.833%;top:20px;height:20px;background:#D5D8DC"></div><div title="有机器人在巡逻" style="position:absolute;left:0.000%;width:3.333%;top:20px;height:20px;background:#2A2F35"></div><div title="有机器人在巡逻" style="position:absolute;left:6.250%;width:8.750%;top:20px;height:20px;background:#2A2F35"></div><div title="有机器人在巡逻" style="position:absolute;left:19.167%;width:9.167%;top:20px;height:20px;background:#2A2F35"></div><div title="有机器人在巡逻" style="position:absolute;left:79.167%;width:9.167%;top:20px;height:20px;background:#2A2F35"></div><div title="有机器人在巡逻" style="position:absolute;left:89.583%;width:10.417%;top:20px;height:20px;background:#2A2F35"></div><span style="position:absolute;left:calc(4.167% - 20px);top:0;width:40px;text-align:center;font-size:10.5px;line-height:11px;color:#16191D;font-weight:600">01:00</span><span title="排好的巡逻 01:00" style="position:absolute;left:calc(4.167% - 5px);top:12px;width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;border-top:7px solid #16191D"></span><span style="position:absolute;left:calc(16.667% - 20px);top:0;width:40px;text-align:center;font-size:10.5px;line-height:11px;color:#16191D;font-weight:600">04:00</span><span title="排好的巡逻 04:00" style="position:absolute;left:calc(16.667% - 5px);top:12px;width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;border-top:7px solid #16191D"></span><span style="position:absolute;left:calc(91.667% - 20px);top:0;width:40px;text-align:center;font-size:10.5px;line-height:11px;color:#16191D;font-weight:600">22:00</span><span title="排好的巡逻 22:00" style="position:absolute;left:calc(91.667% - 5px);top:12px;width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;border-top:7px solid #16191D"></span></div><span></span></div><div style="grid-column:1/-1;height:1px;background:#E3E5E8"></div><div style="display:contents"><span style="padding:20px 0 0 20px;font-weight:600;">周六</span>
+      <div style="position:relative;height:44px;margin:6px 0"><div title="布防" style="position:absolute;left:0.000%;width:29.167%;top:20px;height:20px;background:#D5D8DC"></div><div title="布防" style="position:absolute;left:79.167%;width:20.833%;top:20px;height:20px;background:#D5D8DC"></div><div title="有机器人在巡逻" style="position:absolute;left:0.000%;width:3.333%;top:20px;height:20px;background:#2A2F35"></div><div title="有机器人在巡逻" style="position:absolute;left:6.250%;width:8.750%;top:20px;height:20px;background:#2A2F35"></div><div title="有机器人在巡逻" style="position:absolute;left:19.167%;width:9.167%;top:20px;height:20px;background:#2A2F35"></div><div title="有机器人在巡逻" style="position:absolute;left:79.167%;width:9.167%;top:20px;height:20px;background:#2A2F35"></div><div title="有机器人在巡逻" style="position:absolute;left:89.583%;width:10.417%;top:20px;height:20px;background:#2A2F35"></div><span style="position:absolute;left:calc(4.167% - 20px);top:0;width:40px;text-align:center;font-size:10.5px;line-height:11px;color:#16191D;font-weight:600">01:00</span><span title="排好的巡逻 01:00" style="position:absolute;left:calc(4.167% - 5px);top:12px;width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;border-top:7px solid #16191D"></span><span style="position:absolute;left:calc(16.667% - 20px);top:0;width:40px;text-align:center;font-size:10.5px;line-height:11px;color:#16191D;font-weight:600">04:00</span><span title="排好的巡逻 04:00" style="position:absolute;left:calc(16.667% - 5px);top:12px;width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;border-top:7px solid #16191D"></span><span style="position:absolute;left:calc(83.333% - 20px);top:0;width:40px;text-align:center;font-size:10.5px;line-height:11px;color:#16191D;font-weight:600">20:00</span><span title="排好的巡逻 20:00" style="position:absolute;left:calc(83.333% - 5px);top:12px;width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;border-top:7px solid #16191D"></span><span style="position:absolute;left:calc(91.667% - 20px);top:0;width:40px;text-align:center;font-size:10.5px;line-height:11px;color:#16191D;font-weight:600">22:00</span><span title="排好的巡逻 22:00" style="position:absolute;left:calc(91.667% - 5px);top:12px;width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;border-top:7px solid #16191D"></span></div><span></span></div><div style="grid-column:1/-1;height:1px;background:#E3E5E8"></div><div style="display:contents"><span style="padding:20px 0 0 20px;font-weight:700;text-decoration:underline 3px;text-underline-offset:5px;">周日<span class="mut" style="font-weight:400;font-size:12px;display:block;text-decoration:none">今天</span></span>
+      <div style="position:relative;height:44px;margin:6px 0"><div title="布防" style="position:absolute;left:0.000%;width:29.167%;top:20px;height:20px;background:#D5D8DC"></div><div title="布防" style="position:absolute;left:79.167%;width:20.833%;top:20px;height:20px;background:#D5D8DC"></div><div title="有机器人在巡逻" style="position:absolute;left:0.000%;width:3.333%;top:20px;height:20px;background:#2A2F35"></div><div title="有机器人在巡逻" style="position:absolute;left:6.250%;width:8.750%;top:20px;height:20px;background:#2A2F35"></div><div title="有机器人在巡逻" style="position:absolute;left:19.167%;width:9.167%;top:20px;height:20px;background:#2A2F35"></div><div title="有机器人在巡逻" style="position:absolute;left:79.167%;width:9.167%;top:20px;height:20px;background:#2A2F35"></div><div title="有机器人在巡逻" style="position:absolute;left:89.583%;width:10.417%;top:20px;height:20px;background:#2A2F35"></div><span style="position:absolute;left:calc(4.167% - 20px);top:0;width:40px;text-align:center;font-size:10.5px;line-height:11px;color:#16191D;font-weight:600">01:00</span><span title="排好的巡逻 01:00" style="position:absolute;left:calc(4.167% - 5px);top:12px;width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;border-top:7px solid #16191D"></span><span style="position:absolute;left:calc(16.667% - 20px);top:0;width:40px;text-align:center;font-size:10.5px;line-height:11px;color:#16191D;font-weight:600">04:00</span><span title="排好的巡逻 04:00" style="position:absolute;left:calc(16.667% - 5px);top:12px;width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;border-top:7px solid #16191D"></span><span style="position:absolute;left:calc(83.333% - 20px);top:0;width:40px;text-align:center;font-size:10.5px;line-height:11px;color:#16191D;font-weight:600">20:00</span><span title="排好的巡逻 20:00" style="position:absolute;left:calc(83.333% - 5px);top:12px;width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;border-top:7px solid #16191D"></span><span style="position:absolute;left:calc(91.667% - 20px);top:0;width:40px;text-align:center;font-size:10.5px;line-height:11px;color:#16191D;font-weight:600">22:00</span><span title="排好的巡逻 22:00" style="position:absolute;left:calc(91.667% - 5px);top:12px;width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;border-top:7px solid #16191D"></span></div><span></span></div><div style="grid-column:1/-1;height:1px;background:#E3E5E8"></div>
+      </div>
+      <div style="display:flex;gap:10px;align-items:center;padding:10px 20px"><span class="mut" style="font-size:13px;flex:1">在空白处拖动加布防时段，拖两端改时间。</span><span class="mut" style="font-size:13px">把选中那天复制到：</span><button class="btn sm" type="button">工作日</button><button class="btn sm" type="button">周末</button><button class="btn sm" type="button">其余全部</button></div>
+    </section>
+    <div style="display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr);border-bottom:1px solid #D5D8DC">
+      <section aria-label="巡逻日程" style="background:#fff;border-bottom:1px solid #D5D8DC">
+        <div style="display:flex;align-items:center;padding:12px 20px"><h2 class="h2" style="font-size:17px;flex:1">巡逻日程</h2><button class="btn sm" type="button">加一条</button></div>
+        <table style="width:100%;border-collapse:collapse"><thead><tr><th>几点</th><th>路线</th><th>机器人</th><th>错过了</th></tr></thead><tbody>
+          <tr><td>每天 01:00</td><td>guard-1</td><td>哪台空就哪台</td><td class="mut">迟 15 分内补跑</td></tr>
+          <tr><td>每天 04:00</td><td>guard-1</td><td>A</td><td class="mut">跳过</td></tr>
+          <tr><td>每天 22:00</td><td>guard-1</td><td>A</td><td class="mut">跳过</td></tr>
+          <tr><td>周末 20:00</td><td>停车场一圈</td><td>哪台空就哪台</td><td class="mut">跳过</td></tr>
+        </tbody></table>
+      </section>
+      <section aria-label="例外日期" style="background:#fff;border-bottom:1px solid #D5D8DC">
+        <div style="display:flex;align-items:center;padding:12px 20px"><h2 class="h2" style="font-size:17px;flex:1">例外日期</h2><button class="btn sm" type="button">加例外</button></div>
+        <div style="display:grid;grid-template-columns:auto minmax(0,1fr) auto;column-gap:12px;align-items:center">
+          <div style="grid-column:1/-1;height:1px;background:#E3E5E8"></div><b style="padding:10px 0 10px 20px">12-24 → 12-26</b><span>全天布防</span><button class="btn sm" type="button" style="margin-right:20px">删除</button>
+          <div style="grid-column:1/-1;height:1px;background:#E3E5E8"></div><b style="padding:10px 0 10px 20px">12-31</b><span>全天撤防</span><button class="btn sm" type="button" style="margin-right:20px">删除</button>
+        </div>
+        <p class="mut" style="margin:0;padding:8px 20px 12px;font-size:13px">加、删例外马上生效，不用按保存。</p>
+      </section>
+    </div>
+  </div>
+  <aside aria-label="布防时巡逻" style="background:#fff;border-left:1px solid #D5D8DC;display:flex;flex-direction:column;min-height:0;overflow:auto">
+    <div style="padding:16px 20px;border-bottom:1px solid #D5D8DC">
+      <h2 class="h2" style="font-size:17px">布防时巡逻</h2>
+      <p class="mut" style="margin:4px 0 0;font-size:13px">布防期间机器人一圈接一圈地走，中间停下歇着、充电、换车。</p>
+    </div>
+    <div style="padding:16px 20px;display:flex;flex-direction:column;gap:14px">
+      <div class="field"><label class="lbl">路线</label><select style="height:40px;border:1px solid #6B7178;border-radius:2px;padding:0 10px;font:inherit;background:#fff;color:#16191D"><option>guard-1 · 一圈约 18 分</option></select></div>
+      <div class="field"><label class="lbl">机器人</label><select style="height:40px;border:1px solid #6B7178;border-radius:2px;padding:0 10px;font:inherit;background:#fff;color:#16191D"><option>A、B 轮换</option></select></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        <div class="field"><label class="lbl">两圈之间歇</label><select style="height:40px;border:1px solid #6B7178;border-radius:2px;padding:0 10px;font:inherit;background:#fff;color:#16191D"><option>10 分钟</option></select></div>
+        <div class="field"><label class="lbl">每圈顺序</label><select style="height:40px;border:1px solid #6B7178;border-radius:2px;padding:0 10px;font:inherit;background:#fff;color:#16191D"><option>打乱</option><option>固定</option></select></div>
+      </div>
+      <div class="field"><label class="lbl">巡逻电量线</label><div style="display:grid;grid-template-columns:120px minmax(0,1fr);gap:10px;align-items:center"><select style="height:40px;border:1px solid #6B7178;border-radius:2px;padding:0 10px;font:inherit;background:#fff;color:#16191D"><option>30%</option></select><span class="mut" style="font-size:13px">低于这个电量就回去充电，另一台接上</span></div></div>
+      <label style="display:flex;gap:10px;align-items:center"><input type="checkbox" checked style="width:18px;height:18px">撤防时回待命点</label>
+      <div style="border-top:1px solid #E3E5E8;padding-top:14px">
+        <h3 class="h2" style="margin-bottom:8px">今晚会怎么跑</h3>
+        <dl style="margin:0;display:grid;grid-template-columns:100px 1fr;gap:6px 10px">
+          <dt class="mut">一次充电</dt><dd style="margin:0">A 约 7 圈，B 约 4 圈</dd>
+          <dt class="mut">换车</dt><dd style="margin:0">22:00 A 跑日程那轮时 B 接上；之后轮流</dd>
+          <dt class="mut">每个防区</dt><dd style="margin:0">至少 25 分钟经过一次</dd>
+        </dl>
+        <div style="position:relative;height:28px;margin-top:12px;background:#F2F3F1">
+          <div style="position:absolute;left:0;width:36%;top:0;height:13px;background:#2A2F35"></div><span style="position:absolute;left:4px;top:0;font-size:10.5px;color:#fff;font-weight:700">A</span>
+          <div style="position:absolute;left:36%;width:44%;top:15px;height:13px;background:#2A2F35"></div><span style="position:absolute;left:calc(36% + 4px);top:15px;font-size:10.5px;color:#fff;font-weight:700">B</span>
+          <div style="position:absolute;left:80%;width:20%;top:0;height:13px;background:#2A2F35"></div>
+        </div>
+        <div class="mut" style="display:flex;justify-content:space-between;font-size:11px;margin-top:2px"><span>19:00</span><span>01:00</span><span>07:00</span></div>
+      </div>
+      <div style="border-top:1px solid #E3E5E8;padding-top:14px;display:flex;flex-direction:column;gap:6px">
+        <h3 class="h2">昨晚</h3>
+        <p style="margin:0">跑了 31 圈，每个防区最长 22 分钟没人经过。</p>
+        <a href="#">看每一圈的记录</a>
+      </div>
+    </div>
+  </aside>
+</div>
+
+    </main>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1536,"height":960}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

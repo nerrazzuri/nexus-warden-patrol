@@ -1,0 +1,153 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&display=swap">
+<style>
+body{margin:0}
+a{color:#1A5FA6}a:hover{color:#0E3F70}
+.btn{height:40px;padding:0 16px;border:1px solid #6B7178;border-radius:2px;background:#fff;color:#16191D;font:600 14px Barlow,"Noto Sans SC","Microsoft YaHei UI",sans-serif;display:inline-flex;align-items:center;gap:8px;cursor:pointer;white-space:nowrap;text-decoration:none}
+.btn.sm{height:32px;padding:0 12px;font-size:13px}
+.btn.pri{background:#1F6FC0;border-color:#1F6FC0;color:#fff;font-weight:700}
+.btn.danger{border-color:#C4262B;color:#B0202A}
+.btn.stop{background:#D42F33;border-color:#D42F33;color:#fff;font-weight:700}
+.seg{display:inline-flex;border:1px solid #C9CDD2}
+.seg .btn{border:0;background:transparent;border-radius:0}
+.seg .btn+.btn{border-left:1px solid #C9CDD2}
+.seg .btn.on{background:#1F6FC0;color:#fff}
+.lbl{font-size:12px;font-weight:600;letter-spacing:.06em;color:#5A6068}
+.mut{color:#565B62}
+.ring{display:inline-block;flex:none;width:12px;height:12px;border:3px solid #C4262B;border-radius:50%;box-sizing:border-box}
+.tri{display:inline-block;flex:none;width:0;height:0;border-left:7px solid transparent;border-right:7px solid transparent;border-bottom:12px solid #D99A00}
+.sq{display:inline-block;flex:none;width:9px;height:9px;background:#1E8A47}
+.h1{margin:0;font-size:24px;line-height:30px;font-weight:700}
+.h2{margin:0;font-size:16px;line-height:22px;font-weight:600}
+.card{background:#fff;border:1px solid #D5D8DC}
+.cardh{display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:1px solid #E3E5E8}
+th{text-align:left;font-size:12px;font-weight:600;letter-spacing:.06em;color:#5A6068;padding:10px 12px;border-bottom:1px solid #D5D8DC;background:#F8F9F8}
+td{padding:10px 12px;border-bottom:1px solid #E3E5E8;vertical-align:middle}
+.chip{display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 8px;font-size:12px;font-weight:700}
+.ok{background:#E4F3E9;color:#17703A} .warn{background:#FCF1D6;color:#7A5200} .bad{background:#FBE5E5;color:#A41E24} .gray{background:#ECEEF0;color:#454A51}
+.field{display:flex;flex-direction:column;gap:4px}
+.field input,.field select{height:40px;border:1px solid #6B7178;border-radius:2px;padding:0 10px;font:inherit;background:#fff;color:#16191D}
+.snav a{display:flex;align-items:center;gap:8px;min-height:36px;margin:0 8px;padding:0 10px;color:#A9AEB4;text-decoration:none;font-weight:600;border-radius:2px}
+.snav a[aria-current]{background:#1F6FC0;color:#fff} .snav .g{color:#A9AEB4}
+.snav .g{padding:14px 16px 4px}
+.new{display:inline-block;padding:0 6px;border:1px solid #1F6FC0;color:#1A5FA6;font-size:11px;font-weight:700;line-height:16px}
+</style>
+</head><body>
+<div style="width:1536px;height:960px;box-sizing:border-box;background:#F2F3F1;color:#16191D;font-family:Barlow,'Noto Sans SC','Microsoft YaHei UI',sans-serif;font-size:14px;line-height:20px;font-variant-numeric:tabular-nums;display:flex;flex-direction:column">
+  <header style="height:60px;flex:none;display:flex;align-items:center;gap:16px;padding:0 16px;border-bottom:1px solid #2E333A;background:#0A0C0E;color:#ECEDEA">
+    <div style="display:flex;flex-direction:column;line-height:14px"><b style="font-size:13px;letter-spacing:.12em">NEXUS</b><span style="font-size:11px;letter-spacing:.12em;color:#B4B8BE">WARDEN</span></div>
+    <span style="color:#B4B8BE">estate-1</span>
+    <nav aria-label="主导航" style="display:flex;margin-left:8px">
+      <a href="#" style="height:60px;display:flex;align-items:center;padding:0 14px;color:#B4B8BE;text-decoration:none;font-weight:600">值班</a>
+      <a href="#" style="height:60px;display:flex;align-items:center;padding:0 14px;color:#B4B8BE;text-decoration:none;font-weight:600">记录与录像</a>
+      <a href="#" aria-current="page" style="height:60px;display:flex;align-items:center;padding:0 14px;color:#ECEDEA;text-decoration:none;font-weight:700;box-shadow:inset 0 -3px 0 #1F6FC0">现场设置</a>
+    </nav>
+    <div style="flex:1"></div>
+    <span style="display:inline-flex;align-items:center;gap:8px;height:32px;padding:0 12px;background:#20242A;color:#ECEDEA;font-weight:600">撤防 · 19:00 布防</span>
+    <span style="display:inline-flex;align-items:center;gap:8px;height:32px;padding:0 12px;background:#20242A;font-weight:600">机器人 2/2 在线</span>
+    <a href="#" style="display:inline-flex;align-items:center;gap:8px;height:32px;padding:0 12px;background:#20242A;color:#B4B8BE;font-weight:600;text-decoration:none">未处理 0</a>
+    <span style="font-size:16px;font-weight:600">10:20</span>
+    <span style="color:#B4B8BE">demo · 管理员</span>
+    <button class="btn stop" type="button"><span style="width:12px;height:12px;border:2px solid #fff;border-radius:50%;box-sizing:border-box"></span>全部急停</button>
+  </header>
+  <div style="flex:1;min-height:0;display:grid;grid-template-columns:232px minmax(0,1fr)">
+    <nav class="snav" aria-label="现场设置" style="background:#15181B;border-right:1px solid #15181B;padding:8px 0;overflow:auto">
+      <div class="g lbl">日常</div>
+      <a href="#"><span style="flex:1">概况</span><span class="chip warn" style="height:20px">2</span></a>
+      <a href="#"><span style="flex:1">机器人</span></a>
+      <a href="#"><span style="flex:1">人员</span></a>
+      <div class="g lbl">现场</div>
+      <a href="#" aria-current="page"><span style="flex:1">现场布置</span></a>
+      <a href="#"><span style="flex:1">布防与巡逻</span></a>
+      <a href="#"><span style="flex:1">授权与临时撤防</span></a>
+      <div class="g lbl">记录</div>
+      <a href="#"><span style="flex:1">报告与操作记录</span></a>
+      <div class="g lbl">高级 · 安装和售后用</div>
+      <a href="#"><span style="flex:1">地图、定位、诊断、升级</span></a>
+    </nav>
+    <main style="min-width:0;min-height:0;overflow:hidden;display:flex;flex-direction:column">
+
+<div style="flex:none;display:flex;align-items:center;gap:16px;padding:16px 28px;background:#fff;border-bottom:1px solid #D5D8DC">
+      <h1 style="margin:0;font-size:28px;line-height:34px">现场布置</h1>
+      <p style="margin:0;font-size:15px;display:flex;align-items:center;gap:8px;min-width:0"><span aria-hidden="true" style="display:inline-block;flex:none;width:12px;height:12px;border-radius:50%;background:#1F6FC0"></span>地图第 4 版 · 在用。<b>禁行区有 1 处改动等你确认。</b></p>
+      <span style="flex:1"></span><button class="btn" type="button">历史版本…</button><button class="btn" type="button" disabled title="没有没保存的改动" style="border-style:dashed;color:#6B7178">保存</button></div>
+<div style="flex:1;min-height:0;display:grid;grid-template-columns:256px minmax(0,1fr) 340px">
+  <aside aria-label="图层" style="background:#fff;border-right:1px solid #D5D8DC;display:flex;flex-direction:column;min-height:0;overflow:auto">
+    <div role="radiogroup" aria-label="正在改哪一层">
+      <button type="button" role="radio" aria-checked="false" style="display:grid;grid-template-columns:16px minmax(0,1fr) auto;gap:2px 10px;align-items:center;width:100%;text-align:left;padding:10px 16px;border:0;border-bottom:1px solid #E3E5E8;background-color:#fff;font:14px/20px Barlow,'Noto Sans SC',sans-serif;color:#16191D;cursor:pointer">
+      <span></span><b style="font-weight:600">防区</b><span class="mut">7</span>
+      </button>
+      <button type="button" role="radio" aria-checked="true" style="background:#E3EEF9;box-shadow:inset 0 0 0 2px #1F6FC0;display:grid;grid-template-columns:16px minmax(0,1fr) auto;gap:2px 10px;align-items:center;width:100%;text-align:left;padding:10px 16px;border:0;border-bottom:1px solid #E3E5E8;background-color:#E3EEF9;font:14px/20px Barlow,'Noto Sans SC',sans-serif;color:#16191D;cursor:pointer">
+      <span><span aria-hidden="true" style="display:inline-block;flex:none;width:12px;height:12px;border-radius:50%;background:#1F6FC0"></span></span><b style="font-weight:700">禁行区和限速</b><span class="mut">4</span>
+      <span></span><span style="grid-column:2/4;font-size:12.5px;color:#0E3F70">1 处缩小了，等你确认</span></button>
+      <button type="button" role="radio" aria-checked="false" style="display:grid;grid-template-columns:16px minmax(0,1fr) auto;gap:2px 10px;align-items:center;width:100%;text-align:left;padding:10px 16px;border:0;border-bottom:1px solid #E3E5E8;background-color:#fff;font:14px/20px Barlow,'Noto Sans SC',sans-serif;color:#16191D;cursor:pointer">
+      <span></span><b style="font-weight:600">巡逻路线</b><span class="mut">2</span>
+      </button>
+      <button type="button" role="radio" aria-checked="false" style="display:grid;grid-template-columns:16px minmax(0,1fr) auto;gap:2px 10px;align-items:center;width:100%;text-align:left;padding:10px 16px;border:0;border-bottom:1px solid #E3E5E8;background-color:#fff;font:14px/20px Barlow,'Noto Sans SC',sans-serif;color:#16191D;cursor:pointer">
+      <span></span><b style="font-weight:600">布防时巡逻路线</b><span class="mut">1</span>
+      </button>
+      <button type="button" role="radio" aria-checked="false" style="display:grid;grid-template-columns:16px minmax(0,1fr) auto;gap:2px 10px;align-items:center;width:100%;text-align:left;padding:10px 16px;border:0;border-bottom:1px solid #E3E5E8;background-color:#fff;font:14px/20px Barlow,'Noto Sans SC',sans-serif;color:#16191D;cursor:pointer">
+      <span></span><b style="font-weight:600">路网</b><span class="mut">41 点 · 1.2 公里</span>
+      </button>
+      <button type="button" role="radio" aria-checked="false" style="display:grid;grid-template-columns:16px minmax(0,1fr) auto;gap:2px 10px;align-items:center;width:100%;text-align:left;padding:10px 16px;border:0;border-bottom:1px solid #E3E5E8;background-color:#fff;font:14px/20px Barlow,'Noto Sans SC',sans-serif;color:#16191D;cursor:pointer">
+      <span><span aria-hidden="true" style="display:inline-block;flex:none;width:12px;height:12px;border-radius:50%;background:#1F6FC0"></span></span><b style="font-weight:600">待命点和充电桩</b><span class="mut">3</span>
+      <span></span><span style="grid-column:2/4;font-size:12.5px;color:#0E3F70">第 3 版带过来 2 个，还没留下</span></button>
+      <button type="button" role="radio" aria-checked="false" style="display:grid;grid-template-columns:16px minmax(0,1fr) auto;gap:2px 10px;align-items:center;width:100%;text-align:left;padding:10px 16px;border:0;border-bottom:1px solid #E3E5E8;background-color:#fff;font:14px/20px Barlow,'Noto Sans SC',sans-serif;color:#16191D;cursor:pointer">
+      <span></span><b style="font-weight:600">固定摄像头</b><span class="mut">6</span>
+      </button>
+      <button type="button" role="radio" aria-checked="false" style="display:grid;grid-template-columns:16px minmax(0,1fr) auto;gap:2px 10px;align-items:center;width:100%;text-align:left;padding:10px 16px;border:0;border-bottom:1px solid #E3E5E8;background-color:#fff;font:14px/20px Barlow,'Noto Sans SC',sans-serif;color:#16191D;cursor:pointer">
+      <span></span><b style="font-weight:600">报警设备</b><span class="mut">4</span>
+      <span></span><span style="grid-column:2/4;font-size:12.5px;color:#0E3F70">门磁、报警按钮</span></button>
+    </div>
+    <div style="padding:14px 16px;display:flex;flex-direction:column;gap:6px">
+      <span class="lbl">其余图层淡着显示</span>
+      <label style="display:flex;gap:8px;align-items:center;min-height:28px"><input type="checkbox" checked>防区</label>
+      <label style="display:flex;gap:8px;align-items:center;min-height:28px"><input type="checkbox" checked>摄像头</label>
+      <label style="display:flex;gap:8px;align-items:center;min-height:28px"><input type="checkbox">路网</label>
+    </div>
+  </aside>
+  <figure style="margin:0;position:relative;min-width:0;background-color:#ECEEEB;background-image:linear-gradient(#E3E5E2 1px,transparent 1px),linear-gradient(90deg,#E3E5E2 1px,transparent 1px);background-size:24px 24px">
+    <div style="position:absolute;left:16px;top:16px;right:16px;display:flex;gap:8px;z-index:1;align-items:center">
+      <div class="seg" role="tablist" aria-label="工具"><button class="btn on" type="button" role="tab" aria-selected="true">选择</button><button class="btn" type="button" role="tab" aria-selected="false">画禁行区</button><button class="btn" type="button" role="tab" aria-selected="false">画限速区</button><button class="btn" type="button" role="tab" aria-selected="false">画虚拟墙</button><button class="btn" type="button" role="tab" aria-selected="false">画忽略区</button></div>
+      <button class="btn" type="button">撤销</button>
+    </div>
+    <svg viewBox="0 0 760 640" preserveAspectRatio="xMidYMid meet" style="position:absolute;inset:0;width:100%;height:100%" role="img" aria-label="第 4 版地图：禁行区图层，水池禁行区被缩小，等你确认">
+  <path d="M60 60 H700 V260 H520 V600 H240 V260 H60 Z" fill="#fff" stroke="#6B7178" stroke-width="2.5"/>
+  <rect x="270" y="300" width="220" height="190" fill="#F2F3F1" stroke="#9AA0A6" stroke-dasharray="6 4"/><text x="380" y="400" fill="#5A6068" font-size="14" text-anchor="middle">2 号楼</text>
+  <g fill="none" stroke="#B4B8BE" stroke-width="1.2"><rect x="72" y="72" width="160" height="130"/><rect x="246" y="72" width="230" height="130"/><rect x="490" y="72" width="198" height="176"/><rect x="250" y="510" width="260" height="78"/></g>
+  <g fill="#9AA0A6" font-size="12" text-anchor="middle"><text x="152" y="140">北门</text><text x="361" y="140">北区通道</text><text x="589" y="120">停车场</text><text x="380" y="555">南墙</text></g>
+  <!-- 水池：原范围虚线，新范围实线 -->
+  <rect x="540" y="280" width="140" height="110" fill="none" stroke="#C4262B" stroke-width="2" stroke-dasharray="7 5"/>
+  <rect x="560" y="296" width="96" height="78" fill="#C4262B" fill-opacity=".14" stroke="#C4262B" stroke-width="3"/>
+  <g fill="#fff" stroke="#1F6FC0" stroke-width="2.5"><rect x="554" y="290" width="12" height="12"/><rect x="650" y="290" width="12" height="12"/><rect x="554" y="368" width="12" height="12"/><rect x="650" y="368" width="12" height="12"/></g>
+  <text x="608" y="340" fill="#8E1820" font-size="13" font-weight="700" text-anchor="middle">水池</text>
+  <text x="610" y="408" fill="#8E1820" font-size="11.5" text-anchor="middle">虚线 = 原范围，确认前仍避开</text>
+  <rect x="96" y="226" width="110" height="22" fill="#D99A00" fill-opacity=".16" stroke="#D99A00" stroke-width="2"/><text x="151" y="242" fill="#6A4A00" font-size="11.5" text-anchor="middle">限速 0.5</text>
+  <path d="M240 260 L240 300" stroke="#16191D" stroke-width="5"/><text x="232" y="290" fill="#16191D" font-size="11.5" text-anchor="end">虚拟墙</text>
+  <rect x="300" y="226" width="64" height="26" fill="none" stroke="#6B7178" stroke-width="1.5" stroke-dasharray="3 3"/><text x="332" y="244" fill="#454A51" font-size="11" text-anchor="middle">忽略区</text>
+</svg>
+    <figcaption class="mut" style="position:absolute;left:16px;bottom:14px;background:#fff;border:1px solid #D5D8DC;padding:6px 10px">拖角上的点改形状 · 1 格 = 5 米 · 每次保存留一个版本，可回退；新增、扩大保存即生效，删除、缩小要你确认</figcaption>
+  </figure>
+  <aside aria-label="选中的区域" style="background:#fff;border-left:1px solid #D5D8DC;display:flex;flex-direction:column;min-height:0">
+    <div style="padding:16px 20px;border-bottom:1px solid #D5D8DC;background:#EEF4FB">
+      <div style="display:flex;gap:8px;align-items:center"><span aria-hidden="true" style="display:inline-block;flex:none;width:12px;height:12px;border-radius:50%;background:#1F6FC0"></span><b>等你确认</b></div>
+      <p style="margin:6px 0 10px">你把「水池」缩小了。确认前机器人继续避开原来的范围（虚线）。</p>
+      <p class="mut" style="margin:0 0 10px;font-size:13px">确认前再看一遍：水池、楼梯、陡坡、落差都还在禁行区里。</p>
+      <button class="btn pri" type="button">输入密码确认…</button>
+    </div>
+    <div style="padding:16px 20px;display:flex;flex-direction:column;gap:14px;flex:1">
+      <h2 class="h2" style="font-size:17px">水池</h2>
+      <div class="field"><label class="lbl" for="nm">名字</label><input id="nm" style="height:40px;border:1px solid #6B7178;border-radius:2px;padding:0 10px;font:inherit;background:#fff;color:#16191D" value="水池"></div>
+      <div class="field"><span class="lbl">种类</span><div class="seg" role="tablist" aria-label="种类"><button class="btn on" type="button" role="tab" aria-selected="true">禁行</button><button class="btn" type="button" role="tab" aria-selected="false">限速</button><button class="btn" type="button" role="tab" aria-selected="false">虚拟墙</button><button class="btn" type="button" role="tab" aria-selected="false">忽略区</button></div></div>
+      <label style="display:flex;gap:10px;align-items:flex-start"><input type="checkbox" checked style="width:18px;height:18px;margin-top:1px"><span>硬禁区<span class="mut" style="display:block;font-size:13px">水体、落差：遥控也进不去</span></span></label>
+      <label style="display:flex;gap:10px;align-items:flex-start"><input type="checkbox" style="width:18px;height:18px;margin-top:1px"><span>临时<span class="mut" style="display:block;font-size:13px">到期站点自动删除</span></span></label>
+      <div class="mut" style="font-size:13px">20 × 16 米 · 第 4 版地图 · demo 10:12 改</div>
+      <button class="btn danger" type="button" style="margin-top:auto;align-self:flex-start">删除这个区域…</button>
+    </div>
+  </aside>
+</div>
+
+    </main>
+  </div>
+</div>
+</body></html>
