@@ -24,7 +24,8 @@ export type AdminPage =
   | "admin/mapedit";
 export type Page = GuardPage | AdminPage;
 
-export const GUARD_PAGES: GuardPage[] = ["duty", "live", "map", "recordings", "alarms"];
+/** 「实时画面」「地图」两页并进了值班页(redesign 第二轮):老地址跳值班。 */
+export const GUARD_PAGES: GuardPage[] = ["duty", "recordings", "alarms"];
 
 /** 顶栏的三个大块(redesign 第二轮,design/console-v2/HANDOFF.md):值班 / 记录与录像 / 现场设置。 */
 export type Section = "monitor" | "events" | "setup";
@@ -50,7 +51,6 @@ export const SETUP_NAV: SetupGroup[] = [
 ];
 /** 一个大块(或现场设置的一项)里的几页,页头下面一排小标签切换。 */
 export const SUBPAGES: { pages: Page[]; keys: Key[] }[] = [
-  { pages: ["duty", "live", "map"], keys: ["tabOverview", "tabLive", "tabMap"] },
   { pages: ["alarms", "recordings"], keys: ["subEvents", "subRecordings"] },
   { pages: ["admin/reports", "admin/activity"], keys: ["tabReports", "subAudit"] },
   { pages: ["admin/system", "admin/upgrade", "admin/maps", "admin/localization", "admin/diag"],
@@ -82,6 +82,7 @@ export function setupHome(role: string): AdminPage | null {
 /** 页面的名字(浏览器标签、帮助用):所在大块 + 页名。 */
 export function navLabel(page: Page): { section: Key; page: Key } | null {
   const sec = SECTIONS.find((x) => x.id === sectionOf(page))!.key;
+  if (page === "duty" || page === "live" || page === "map") return { section: sec, page: "secMonitor" };
   const sub = SUBPAGES.find((g) => g.pages.includes(page));
   if (sub && !isAdminPage(page)) return { section: sec, page: sub.keys[sub.pages.indexOf(page)] };
   const it = setupItemOf(page);
@@ -92,7 +93,7 @@ export function navLabel(page: Page): { section: Key; page: Key } | null {
 /** 改版前的地址(书签、手机分享的链接)。 */
 const LEGACY: Record<string, Page> = {
   localization: "admin/localization", reports: "admin/reports", "admin/notices": "admin/home", "admin/lists": "admin/access",
-  "admin/zones": "admin/layout", "admin/routes": "admin/layout",
+  "admin/zones": "admin/layout", "admin/routes": "admin/layout", live: "duty", map: "duty",
 };
 
 export interface Route {

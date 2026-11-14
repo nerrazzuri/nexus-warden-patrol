@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { setFetch } from "./api";
 import { lang } from "./i18n";
 import type { UnitInfo } from "./live";
-import { camMarks, camsOnMap, camWorld, GoLookCard, mapAreas, MapPage, personMarks, TempRoutePanel } from "./mappage";
+import { camMarks, camsOnMap, camWorld, GoLookCard, mapAreas, MapPage, personMarks, PRESETS, TempRoutePanel } from "./mappage";
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
 const MAP = { map_id: "m", version: "1" };
@@ -115,25 +115,24 @@ describe("保安的临时路线", () => {
   });
 });
 
-describe("地图页的图层开关", () => {
-  it("W60 基本图层默认开(含禁行区),待命点默认关;保安看不到工程图层、不显示定位那些", () => {
-    try { localStorage.removeItem("nexwar.maplayers"); } catch { /* */ }
-    const { container: c } = render(<MapPage units={[]} p1={[]} now={0} selected={null} onSelect={() => {}} onVideo={() => {}} role="guard"
-      mode={null} onArm={() => {}} />);
-    const box = (name: string) => Array.from(c.querySelectorAll(".layers label")).find((l) => l.textContent?.includes(name))?.querySelector("input") as HTMLInputElement;
-    expect(box("禁行区").checked).toBe(true);
-    expect(box("防区和布防").checked).toBe(true);
-    expect(box("巡逻路线").checked).toBe(true);
-    expect(box("摄像头").checked).toBe(true);
-    expect(c.textContent).not.toContain("定位");
-    expect(c.querySelector(".eng-layers")).toBeNull();
+describe("值班页地图的图层(redesign 第二轮:全部 / 巡逻路线 / 防区 / 摄像头)", () => {
+  it("每一档开哪几层;禁行区跟防区走,摄像头单独一档", () => {
+    expect(PRESETS.all).toEqual(expect.arrayContaining(["zones", "cameras", "route", "events", "nogo"]));
+    expect(PRESETS.route).toEqual(["route", "events"]);
+    expect(PRESETS.zones).toContain("nogo");
+    expect(PRESETS.cameras).toEqual(["cameras", "events"]);
+  });
+
+  it("保安没有工程图层", () => {
+    const { container: c } = render(<MapPage units={[]} p1={[]} now={0} selected={null} onSelect={() => {}} role="guard" mode={null} />);
+    expect(c.querySelector(".map-eng")).toBeNull();
+    expect(c.textContent).not.toContain("定位历史");
   });
 
   it("W60 工程师多一组工程图层(默认关):覆盖、定位历史", () => {
     try { localStorage.removeItem("nexwar.maplayers"); } catch { /* */ }
-    const { container: c } = render(<MapPage units={[]} p1={[]} now={0} selected={null} onSelect={() => {}} onVideo={() => {}} role="engineer"
-      mode={null} onArm={() => {}} />);
-    const eng = c.querySelector(".eng-layers")!;
+    const { container: c } = render(<MapPage units={[]} p1={[]} now={0} selected={null} onSelect={() => {}} role="engineer" mode={null} />);
+    const eng = c.querySelector(".map-eng")!;
     expect(eng.querySelector("summary")!.textContent).toBe("工程图层");
     expect(Array.from(eng.querySelectorAll("label")).map((l) => l.textContent)).toEqual(["未巡逻时长", "定位历史"]);
     expect(Array.from(eng.querySelectorAll("input")).every((i) => !(i as HTMLInputElement).checked)).toBe(true);

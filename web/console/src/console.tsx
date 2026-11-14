@@ -14,15 +14,13 @@ import { FullCamera, taskNote, type UnitInfo } from "./live";
 import { LocPage } from "./advloc";
 import { RecordingsPage } from "./recpage";
 import { ReportsPage } from "./reportpage";
-import { MapPage } from "./mappage";
 import { FELL_KINDS, forGuard, isOwnerLike, queue, robotCams, robotState, type Alert, type Mode } from "./model";
 import { AlarmLogPage } from "./alarmlog";
 import { HelpDialog, WEB_TOUR } from "./guide";
 import { ArmingPage } from "./armingpage";
 import { ArmWizard, needsWizard, patrolHint, wt } from "./armwizard";
 import { AlarmPop } from "./alarmpop";
-import { DutyPage } from "./duty";
-import { LiveWall } from "./livewall";
+import { MonitorPage } from "./monitor";
 import { DrillNote } from "./alerttest";
 import { groupTodo, homeTodo, HomePage } from "./homepage";
 import { ActivityPage } from "./activitypage";
@@ -98,9 +96,6 @@ export function Console({ me, onOut }: { me: Me; onOut: (note?: string) => void 
     pinScheme(pinFor(route.page, pref, systemIsDark()));
   }, [route.page, pref]);
   useEffect(() => () => pinScheme(null), []);
-  const go = (page: Page, robot?: string) => {
-    location.hash = `#/${page}${robot ? `?robot=${encodeURIComponent(robot)}` : ""}`;
-  };
 
   // 第 2 轮 duty N2:新提示换掉旧的计时(原来上一条的 6 秒计时会把下一条提前清掉,中间空着);长的多留一会儿
   const toastTimer = useRef(0);
@@ -126,7 +121,6 @@ export function Console({ me, onOut }: { me: Me; onOut: (note?: string) => void 
   const alerts = data?.alerts ?? [];
   const { active } = queue(alerts, now);
   const guardAlarms = active.filter(forGuard).length;
-  const p1 = active.filter((a) => a.level === "P1");
   const fell = new Set(alerts.filter((a) => a.resolved_ms == null && FELL_KINDS.has(a.kind)).map((a) => a.robot));
   const units: UnitInfo[] = useMemo(() => {
     const deter = new Map((data?.deter ?? []).map((d) => [d.robot_id, d]));
@@ -155,7 +149,6 @@ export function Console({ me, onOut }: { me: Me; onOut: (note?: string) => void 
 
   const ack = (a: Alert) => act(() => api("POST", `/api/alerts/${enc(a.key)}/ack`, {}));
   const resolve = (a: Alert, verdict: string) => act(() => api("POST", `/api/alerts/${enc(a.key)}/resolve`, { verdict }));
-  const firstP1 = p1.find(forGuard);
   // 第 3 轮 config N7:跟「系统状态」页「需要你处理」一栏一样数(原来把 P3 通知也算上,页面上看不到也清不掉)
   const notices = groupTodo(homeTodo(alerts)).length;
   const admin = isOwnerLike(me.role);
@@ -174,7 +167,7 @@ export function Console({ me, onOut }: { me: Me; onOut: (note?: string) => void 
 
   // 带地图的页整页一屏(地图撑满顶栏以下):地图、防区、巡检路线
   const section = sectionOf(route.page);
-  const fill = route.page === "duty" || route.page === "map" || route.page === "admin/layout" || route.page === "admin/mapedit";
+  const fill = route.page === "duty" || route.page === "admin/layout" || route.page === "admin/mapedit";
   return (
     <div class={`console sec-${section}${fill ? (route.page === "duty" ? " fill fill-duty" : " fill") : ""}`} data-section={section}>
       {/* P2-01:「跳到内容」是第一个焦点;不改地址(地址是页面路由) */}
@@ -213,11 +206,8 @@ export function Console({ me, onOut }: { me: Me; onOut: (note?: string) => void 
         {/* W6-13 / minor #25:演练开着,保安的值班、实时画面、地图页也说一句(以前只有管理员总览、报警记录页) */}
         {(["duty", "live", "map"] as Page[]).includes(route.page) && <DrillNote role={me.role} />}
         {route.page === "duty" && (
-          <DutyPage units={units} alerts={alerts} now={now} role={me.role} say={say} refresh={refresh} mode={data?.mode ?? null} stale={stale}
+          <MonitorPage units={units} alerts={alerts} now={now} role={me.role} me={me.name} say={say} refresh={refresh} mode={data?.mode ?? null} stale={stale}
             onZoom={(id) => setPending({ kind: "cam", robot: id, cam: "front" })} />
-        )}
-        {route.page === "live" && (
-          <LiveWall units={units} alerts={alerts} now={now} onZoom={(id) => setPending({ kind: "cam", robot: id, cam: "front" })} />
         )}
         {route.page === "alarms" && <AlarmLogPage now={now} role={me.role} me={me.name} />}
         {/* UIUX-034:无权限页说清楚给谁用,给一个回去的按钮 */}
@@ -257,12 +247,6 @@ export function Console({ me, onOut }: { me: Me; onOut: (note?: string) => void 
           <RecordingsPage key={`${route.robot ?? ""}@${route.at ?? ""}`} robots={units.map((u) => u.robot.robot_id)} role={me.role} now={now}
             camsOf={(id) => robotCams(units.find((u) => u.robot.robot_id === id)?.robot)}
             robot={route.robot} at={route.at} say={say} />
-        )}
-        {route.page === "map" && (
-          <MapPage units={units} p1={p1} now={now} role={me.role} selected={route.robot ?? firstP1?.robot ?? null}
-            onSelect={(id) => go("map", id)}
-            onVideo={(id) => go("duty", id)} mode={data?.mode ?? null} say={say} stale={stale}
-            onArm={() => askMode("armed")} />
         )}
       </main>
       </div>
