@@ -55,15 +55,16 @@ class 台:
             self.t += 100
 
 
-async def test_人在前面3米内_往后退_退到4米外停():
-    s = 台(target=(0.0, 2.0))
+async def test_人在前面4米内_往后退_退到5米外停():
+    """用户 11-15:保持 4–5 m(原来 3 进 4 出)。"""
+    s = 台(target=(0.0, 3.0))
     await s.task.start()
     await s.拍()
     assert s.task.mode == "retreat" and s.dog.cmds[-1] == (-RETREAT_V, 0.0)
-    s.target = (0.0, 3.5)                                 # 3–4 m 之间:接着退(不在 3 m 线上来回翻)
+    s.target = (0.0, 4.5)                                 # 4–5 m 之间:接着退(不在 4 m 线上来回翻)
     await s.拍()
     assert s.task.mode == "retreat"
-    s.target = (0.0, 4.2)
+    s.target = (0.0, 5.2)
     await s.拍()
     assert s.task.mode == "hold" and s.dog.stops == 1
 
@@ -75,11 +76,11 @@ async def test_人在后面_往前走_远离人():
     assert s.dog.cmds[-1][0] > 0
 
 
-async def test_只退不进_人在远处不追_3到4米之间也不开始退():
+async def test_只退不进_人在远处不追_4到5米之间也不开始退():
     s = 台(target=(0.0, 8.0))
     await s.task.start()
     await s.拍(5)
-    s.target = (0.0, 3.5)
+    s.target = (0.0, 4.5)
     await s.拍(5)
     assert s.dog.cmds == [] and s.task.mode == "hold"
 

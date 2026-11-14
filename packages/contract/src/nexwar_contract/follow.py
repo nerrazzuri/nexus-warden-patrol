@@ -6,6 +6,8 @@
 
 - 目标点:人后方 ``keep_m``(机器人 → 人那条线上,离人 ``keep_m``),朝着人;每秒按人的新位置更新
   (导航中途改目标,不停车)。不出地图、不进禁行区、照常避障,守卫不放宽。
+- **人走近就退**(用户 11-15):人进 :data:`BACK_M` 以内 → 停下这一段、往远离人的方向退,退到
+  :data:`CLEAR_M` 以外接着跟;退不了(守卫拦、禁行区、拉不开)→ 原地站定,发 ``follow_cornered`` 一次。
 - 跟丢:连续 ``lost_s`` 秒没看到被跟的人,或者人在到不了的地方(规划不出路)→ 回最后看见人的地方,
   朝人离开的方向停下,任务结束(``result: lost``)。
 - 上限:跟了 ``max_s`` 秒或走了 ``max_m`` 米 → 按跟丢办(``result: limit``)。半路电量到线、引擎返航 →
@@ -29,7 +31,11 @@ from nexwar_contract.errors import ContractError
 #: 跟报警出动一样(:data:`~nexwar_contract.charging.ALARM_PRIORITY`):值守的这一圈先停。
 FOLLOW_PRIORITY = ALARM_PRIORITY
 TASK_PREFIX = "follow-"
-KEEP_M = 3.0
+#: 用户 11-15:离人保持 4–5 m。跟的目标点在人后方 ``keep_m``;人走近到 :data:`BACK_M` 以内就往后退,
+#: 退到 :data:`CLEAR_M` 以外停(同保持距离 W25 的退法:过守卫、不进禁行区、从不往人那边走)。
+KEEP_M = 4.5
+BACK_M = 4.0
+CLEAR_M = 5.0
 MAX_S = 180
 MAX_M = 150.0
 LOST_S = 10.0

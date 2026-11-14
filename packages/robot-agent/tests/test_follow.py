@@ -69,9 +69,10 @@ def test_契约_默认_越界拒():
 
 
 async def test_人往前走_机器人跟上_保持3米左右_路上发轨迹(台子):  # noqa: F811
+    """跟的机制(这张图有隔墙,地方小:按 3 m 跟;默认 4.5 m 见下面没有隔墙的那几个)。"""
     c, r, parts = 台子
     p = 人(r, 3.0, 3.0)
-    t, emits = _任务(台子, p)
+    t, emits = _任务(台子, p, keep_m=3.0)
     await t.start()
 
     def 走():
@@ -169,6 +170,8 @@ async def test_运行时_能力里有跟人_收命令_能力报在跟(tmp_path):
         await broker.drain()
         st = ears.by["capabilities"][-1]["tasks"]["follow"]
         assert st["state"] == "follow" and st["task_id"] == "follow-f1", st
+        t = rt.processor.current
+        assert t._hal is rt.hal and t._backoff is not None, "用户 11-15:人走近就退,真装上了"
     finally:
         await rt.close()
 
@@ -210,3 +213,122 @@ async def test_外审9_两个人_被跟的还看得见_旁边更近的不抢(台
     await _跑(台子, t, 8, 走)
     assert t._person is not None and math.dist(t._person, (p.x, p.y)) < 1.0, \
         (t._person, (p.x, p.y))
+
+
+# ---------------------------------------------------------------- 用户 11-15:保持 4–5 m,人靠近就退
+
+
+@pytest.fixture
+async def 空台(tmp_path):
+    """没有隔墙的 12 × 8 m(人往机器人走、机器人往后退要地方)。"""
+    from test_planned_engine import 画图, 钟
+
+    from nexwar_adapter_sim.robot import SimRobot
+    from nexwar_agent.assembly import build_engine
+    from nexwar_agent.planning.planner import Planner
+    from nexwar_patrol.protocol.nav_types import Pose
+    c = 钟()
+    r = SimRobot(now_ms=c, max_vx=0.6, max_wz=1.5, stop_latency_s=0.2)
+    await r.connect()
+    await r.acquire_control()
+    画图(tmp_path)
+    parts = build_engine(r, runs_root=tmp_path / "runs", now_ms=c, monotonic=lambda: c.mono,
+                         map_id="m", home=Pose.from_xy_yaw(2.5, 4.0), nav_kind="planned",
+                         planner=Planner(in_process=True))
+    parts.nav.load_grid(tmp_path)
+    await parts.nav.connect()
+    r.teleport(2.5, 4.0, 0.0)
+    yield c, r, parts
+    await parts.engine.aclose()
+
+
+class 守卫:
+    def __init__(self, ok=True):
+        self.ok, self.reason = ok, "" if ok else "后面有挡"
+
+    def __call__(self, vx, wz):
+        return self
+
+
+def _退的任务(台, p, ok=True, **kw):
+    from nexwar_agent.tasks.standoff import Backoff
+    c, r, parts = 台
+    t, emits = _任务(台, p, **kw)
+    t._hal = r
+    t._backoff = Backoff(check=守卫(ok), here=lambda: (r.x, r.y, r.yaw), nogo=lambda x, y, d: "")
+    return t, emits
+
+
+def test_用户1115_跟人保持4到5米_保持距离也是4进5出():
+    from nexwar_contract import follow, standoff
+    assert FollowRequest().keep_m == 4.5
+    assert follow.BACK_M == 4.0 and follow.CLEAR_M == 5.0
+    assert standoff.TOO_CLOSE_M == 4.0 and standoff.CLEAR_M == 5.0
+
+
+async def test_人往前走_跟上去_停在人后面4到5米(空台):
+    c, r, parts = 空台
+    p = 人(r, 6.0, 4.0)
+    t, _ = _退的任务(空台, p)
+    await t.start()
+
+    def 走():
+        p.x = min(p.x + 0.05, 10.5)
+    await _跑(空台, t, 30, 走)
+    d = math.hypot(p.x - r.x, p.y - r.y)
+    assert r.x > 4.5, "跟上去了"
+    assert 4.0 <= d <= 5.6, d
+
+
+async def test_人走近到4米以内_往后退到5米以外才停_从不往人那边走(空台):
+    c, r, parts = 空台
+    p = 人(r, 7.0, 4.0)                                  # 4.5 m:站着不动
+    t, _ = _退的任务(空台, p)
+    await t.start()
+    await _跑(空台, t, 1)
+    assert r.x == pytest.approx(2.5, abs=0.05), "4–5 m 之间站着"
+    xs, modes = [], set()
+
+    def 逼近():
+        p.x = max(p.x - 0.06, 6.3)                      # 人往机器人走,停在 6.3
+        xs.append(r.x)
+        modes.add(t.caps()["state"])
+    await _跑(空台, t, 15, 逼近)
+    assert "retreat" in modes
+    assert all(b <= a + 0.02 for a, b in zip(xs, xs[1:], strict=False)), "退的时候不往人那边走"
+    d = math.hypot(p.x - r.x, p.y - r.y)
+    assert 4.9 <= d <= 5.6, d
+    assert t.state is TaskState.RUNNING and t.caps()["state"] == "follow", "退够了接着跟"
+
+
+async def test_人靠近_退不了_原地站定_报无路可退一次(空台):
+    c, r, parts = 空台
+    p = 人(r, 6.0, 4.0)
+    t, emits = _退的任务(空台, p, ok=False)
+    await t.start()
+
+    def 逼近():
+        p.x = max(p.x - 0.06, 5.5)
+    await _跑(空台, t, 10, 逼近)
+    assert r.x == pytest.approx(2.5, abs=0.1), "退不了:不动"
+    assert t.caps()["state"] == "cornered"
+    corner = [d for k, d in emits if k == "follow_cornered"]
+    assert len(corner) == 1 and corner[0]["task_id"] == "follow-1"
+    assert "后面有挡" in corner[0]["why"]
+
+
+async def test_退着的时候被中止_停稳再终态(空台):
+    c, r, parts = 空台
+    p = 人(r, 6.0, 4.0)
+    t, _ = _退的任务(空台, p)
+    await t.start()
+
+    def 逼近():
+        p.x = max(p.x - 0.06, 5.0)
+    await _跑(空台, t, 3, 逼近)
+    assert t.caps()["state"] == "retreat"
+    await t.abort("人工")
+    await _跑(空台, t, 5)
+    assert t.state is TaskState.ABORTED
+    o = await r.odometry()
+    assert abs(o.vx) < 0.05
