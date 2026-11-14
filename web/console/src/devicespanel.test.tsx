@@ -42,6 +42,15 @@ describe("外部设备面板", () => {
     await waitFor(() => expect(c.textContent).toContain("还没有登记设备"));
   });
 
+  it("UIUX-026:每一格都有看得见的标签(填了字也知道这格是什么)", async () => {
+    const { getByLabelText, container: c } = render(<DevicesPanel canEdit say={() => {}} />);
+    await waitFor(() => expect(c.querySelector(".device-form")).not.toBeNull());
+    for (const [label, name] of [["设备编号", "dev-id"], ["类型", "dev-kind"], ["地图", "dev-map"], ["版本", "dev-ver"], ["x（米）", "dev-x"], ["y（米）", "dev-y"]]) {
+      expect(getByLabelText(label).getAttribute("name")).toBe(name);
+    }
+    expect(c.querySelectorAll(".device-form label.field").length).toBe(6);
+  });
+
   it("没开这一项的站点不显示;没权限的看不到表单", async () => {
     setFetch((() => Promise.resolve(json({}, 404))) as typeof fetch);
     const { container: c } = render(<DevicesPanel canEdit say={() => {}} />);
