@@ -775,6 +775,14 @@ async def test_W17_入侵一来就到最高档响铃_确认之后再来一条照
     assert stuck["channel"] == "screen", "别的 P1 照旧从屏幕开始升档"
 
 
+
+async def test_第三档_布防时看见人也一来就响_不等5分钟(带告警):
+    # 用户 11-14:布防时机器人看见人跟入侵一样,一来就到出声档、一直响到有人确认
+    t = 带告警
+    t.alerts.raise_alert(kind="dog_sees_person", robot="A", title="发现人员")
+    a = [x for x in _开着的(t) if x["kind"] == "dog_sees_person"][0]
+    assert a["channel"] == "sound" and a["escalated"] == 2
+
 async def test_W17_入侵告警带现场_防区_拦截点_哪一趟(带告警):
     t = 带告警
     await t.run(12)

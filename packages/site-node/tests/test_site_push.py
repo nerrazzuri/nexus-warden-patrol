@@ -56,11 +56,12 @@ def _队(db):
 
 
 def test_P1新起排一条_同一条再来不重排_升档再排一条_P2不排(台):
+    # 看见人 11-14 起一来就到最高档(test_site_incidents),升档用别的 P1 看
     desk, p, j, clock, db = 台
-    desk.raise_alert(kind="dog_sees_person", robot="A", title="机器人看见人了:2 个人")
-    desk.raise_alert(kind="dog_sees_person", robot="A", title="机器人看见人了:2 个人")
+    desk.raise_alert(kind="stuck", robot="A", title="机器人卡住了")
+    desk.raise_alert(kind="stuck", robot="A", title="机器人卡住了")
     desk.raise_alert(kind="evidence_plain", robot="A", title="机器人上未加密")
-    assert [(r["tier"], r["title"]) for r in _队(db)] == [(0, "机器人看见人了:2 个人")]
+    assert [(r["tier"], r["title"]) for r in _队(db)] == [(0, "机器人卡住了")]
     clock[0] += 3 * 60_000
     desk.escalate()
     assert [r["tier"] for r in _队(db)] == [0, 1], "无人确认、升档:再推一次"
