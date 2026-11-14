@@ -88,7 +88,7 @@ export function DevicesPanel({ canEdit, say }: { canEdit: boolean; say: (s: stri
           <label class="field">{dt("dVer")}<input name="dev-ver" value={f.map_version} onInput={(e) => setF({ ...f, map_version: e.currentTarget.value })} /></label>
           <label class="field">{dt("dX")}<input name="dev-x" type="number" step="0.1" value={f.x} onInput={(e) => setF({ ...f, x: e.currentTarget.value })} /></label>
           <label class="field">{dt("dY")}<input name="dev-y" type="number" step="0.1" value={f.y} onInput={(e) => setF({ ...f, y: e.currentTarget.value })} /></label>
-          <button type="button" onClick={add} disabled={!f.id || !f.map_id || !f.map_version || f.x === "" || f.y === ""}>{dt("dAdd")}</button>
+          <button type="button" class="btn primary" onClick={add} disabled={!f.id || !f.map_id || !f.map_version || f.x === "" || f.y === ""}>{dt("dAdd")}</button>
         </div>
       )}
     </section>

@@ -20,6 +20,8 @@ export interface Alert {
   shelved_ms?: number | null;
   shelved_until_ms?: number | null;
   shelved_reason?: string;
+  /** 升到哪一档(站点 alerts.Channel):screen 只在屏上 → push 推手机 → sound 出声。只有 P1 升档;入侵一来就是 sound。老站点没有。 */
+  channel?: "screen" | "push" | "sound";
   /** 给谁看(W44,站点 alert_audience):intrusion / fire / help / offline 给保安,owner 给管理员。老站点没有。 */
   audience?: string;
   /** 结论(W44):intruder 确认有人 / false_alarm 误报 / handled 处理好了;空 = 没说。 */

@@ -1,6 +1,6 @@
 /* 地图管理页(mapmgmt.tsx)。只用现有的颜色令牌;状态不靠颜色单独表达(文字、符号都带)。 */
 .mm-map { padding: 8px 16px 16px; }
-.mm-mapid { font-size: 16px; margin: 8px 0; }
+.mm-mapid { font-size: 15px; line-height: 22px; margin: 8px 0; }
 .mm-vers { display: flex; flex-direction: column; gap: var(--sp-3); }
 .mm-ver { display: flex; gap: var(--sp-4); padding: 12px; border: 1px solid var(--c-outline); border-radius: var(--r-r8); background: var(--c-surface); }
 .mm-thumb { flex: none; width: 120px; height: 120px; object-fit: contain; background: var(--c-mapBg); border-radius: var(--r-r8); }

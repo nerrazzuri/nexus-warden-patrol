@@ -632,7 +632,7 @@ button.armstate:focus-visible { outline: 2px solid var(--c-primary); outline-off
 .slot-foot .mono { font-family: var(--font-mono); }
 .slot-foot.scene { background: transparent; }
 .slot-cam { padding: 2px 10px; border-radius: var(--r-r8); background: rgba(0, 0, 0, 0.55); border: 1px solid rgba(255, 255, 255, 0.35); font-weight: 600; }
-.slot-btn { height: 30px; padding: 0 12px; border: 1px solid rgba(255, 255, 255, 0.35); border-radius: var(--r-r8); background: rgba(255, 255, 255, 0.14);
+.slot-btn { height: var(--ctl-sm); padding: 0 12px; border: 1px solid rgba(255, 255, 255, 0.35); border-radius: var(--r-r8); background: rgba(255, 255, 255, 0.14);
   color: #fff; font-size: 14px; cursor: pointer; }
 .slot-btn:first-of-type { margin-left: auto; }
 .slot-mid ~ .slot-btn:first-of-type { margin-left: 0; }
@@ -653,7 +653,7 @@ button.armstate:focus-visible { outline: 2px solid var(--c-primary); outline-off
 .duty-left { grid-area: robots; }
 .dcard { min-height: 0; display: flex; flex-direction: column; background: var(--c-surface); border: 1px solid var(--c-outline); border-radius: var(--r-r12); overflow: hidden; }
 .dcard-h { display: flex; align-items: center; gap: var(--sp-2); margin: 0; padding: 12px 16px; border-bottom: 1px solid var(--c-outline);
-  font-family: var(--font-sans); font-size: 14px; line-height: 20px; font-weight: 600; }
+  font-family: var(--font-sans); font-size: 15px; line-height: 22px; font-weight: 600; }
 .dcard-empty { margin: 0; padding: 16px; }
 .banner { display: flex; align-items: center; gap: var(--sp-4); padding: 14px 18px; border-radius: var(--r-r12); background: var(--c-error); color: var(--c-onError); }
 .banner .shape.P1, .banner .shape.P2 { fill: currentColor; }
@@ -664,6 +664,23 @@ button.armstate:focus-visible { outline: 2px solid var(--c-primary); outline-off
 .banner-text b { font-family: var(--font-display); font-size: 20px; line-height: 26px; }
 .banner-more { padding: 2px 10px; border-radius: var(--r-rPill); background: rgba(0, 0, 0, 0.25); font-size: 13px; font-weight: 600; }
 .banner-acts { display: flex; gap: var(--sp-2); flex-wrap: wrap; }
+/* 第三档 #40:别的页上来了新报警,右下角弹卡片(值守页有横幅,不弹);右上角会盖住各页的主按钮。
+   在对话框、账号菜单下面,页面上面 */
+.alarm-pop { position: fixed; bottom: var(--sp-5); right: var(--sp-5); z-index: 4; width: min(380px, calc(100% - 32px));
+  display: flex; flex-direction: column; gap: var(--sp-2); padding: var(--sp-3) var(--sp-4); border-radius: var(--r-r12);
+  background: var(--c-error); color: var(--c-onError); box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45); }
+.alarm-pop.p2 { background: var(--c-warningSoft); color: var(--c-text); border: 1px solid var(--c-warning); }
+.alarm-pop .shape.P1 { fill: currentColor; }
+.alarm-pop.p2 .shape.P2 { fill: var(--c-warning); }
+.alarm-pop-head { display: flex; align-items: center; gap: var(--sp-2); }
+.alarm-pop-head b { flex: 1; min-width: 0; font-size: 16px; line-height: 22px; overflow-wrap: anywhere; }
+.alarm-pop-x { width: var(--ctl-sm); height: var(--ctl-sm); border: 0; border-radius: var(--r-r8); background: transparent;
+  color: inherit; font-size: 20px; line-height: 1; cursor: pointer; }
+.alarm-pop-x:hover { background: rgba(0, 0, 0, 0.2); }
+.alarm-pop-sub { font-size: 13px; opacity: 0.9; }
+.alarm-pop-note { font-size: 13px; font-weight: 600; }
+.alarm-pop-acts { display: flex; gap: var(--sp-2); flex-wrap: wrap; }
+.alarm-pop.p2 .btn.onsolid { color: var(--c-text); border-color: var(--c-textMuted); }
 .allclear { margin: 0; display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2) var(--sp-4); padding: 4px 2px; font-size: 14px; color: var(--c-textSecondary); }
 .allclear b { color: var(--c-text); font-weight: 600; }
 .allclear .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--c-success); margin-right: -8px; }
@@ -935,6 +952,7 @@ p.warn { color: var(--c-text); background: var(--c-warningSoft); padding: 8px 12
 .rd-facts > div { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .rd-facts dt { font-size: 12px; line-height: 16px; color: var(--c-textMuted); }
 .rd-facts dd { margin: 0; font-size: 14px; line-height: 20px; overflow-wrap: anywhere; }
+.rd-facts dd small { font-size: 12px; }   /* UIUX-002:状态小字不小于 12px */
 .rd-name { display: flex; flex-direction: column; gap: var(--sp-2); }
 .rd-label { font-size: 12px; line-height: 16px; color: var(--c-textMuted); }
 .rd-inline { display: flex; gap: var(--sp-2); align-items: center; }
@@ -1162,7 +1180,7 @@ polygon.me-op.loop.obstacle { stroke: var(--c-brand); }
 /* W53:值班页左下角「今天的巡逻」 */
 .duty-left .duty-list { flex: 1 1 auto; }
 .today { border: 1px solid var(--c-outline); border-radius: var(--r-r12); background: var(--c-surface); padding: 8px 12px; max-height: 40%; overflow: auto; }
-.today-h { margin: 0 0 6px; font-size: 13px; color: var(--c-textSecondary); font-weight: 600; }
+.today-h { margin: 0 0 6px; font-size: 15px; line-height: 22px; color: var(--c-textSecondary); font-weight: 600; }
 .today-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--sp-1); }
 .today-row { display: flex; align-items: flex-start; gap: var(--sp-2); font-size: 13px; }
 /* 第 9 轮 W9-11:窄栏里不截断(以前「由日程接替」「第几圈」都变成省略号),换行写全 */
@@ -1201,7 +1219,7 @@ details.ops > summary { cursor: pointer; font-weight: 600; padding: 6px 0; }
 
 /* W60 报表关键指标:两组(安防运营、系统可靠性),每组三张;比上一段:好绿、差琥珀、持平灰 */
 .kpi-groups { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(520px, 100%), 1fr)); gap: var(--sp-4); }
-.kpi-group-h { margin: 0 0 8px; font-family: var(--font-sans); font-size: 13px; font-weight: 600; letter-spacing: 0.04em; color: var(--c-textSecondary); }
+.kpi-group-h { margin: 0 0 8px; font-family: var(--font-sans); font-size: 15px; line-height: 22px; font-weight: 600; letter-spacing: 0.04em; color: var(--c-textSecondary); }
 /* UIUX-033:卡片按宽度自动折行(每张至少 200px);英文说明以前在 1366 宽挤成 4 行 */
 .kpi-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: var(--sp-3); }
 .kpi { display: flex; flex-direction: column; gap: var(--sp-1); padding: 16px; border: 1px solid var(--c-outline); border-radius: var(--r-r12); background: var(--c-surface); }
@@ -1218,7 +1236,7 @@ details.ops > summary { cursor: pointer; font-weight: 600; padding: 6px 0; }
 
 /* W72:布防时间页顶上的「现在」—— 左边说现在是什么、谁说了算,右边直接切 */
 .arm-now { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--sp-3) var(--sp-5); padding: 16px; margin: 12px 0; }
-.arm-now-text h2 { margin: 0 0 4px; font-size: 15px; line-height: 20px; font-weight: 600; }
+.arm-now-text h2 { margin: 0 0 4px; font-size: 17px; line-height: 24px; font-weight: 600; }
 .arm-now-text .arm-who { margin: 0; }
 .arm-now-btns { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2); }
 /* W73 防区路线 / 查看点、值守位 / 每点预计时间 */
