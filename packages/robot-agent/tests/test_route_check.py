@@ -42,7 +42,7 @@ def test_常数_三层车身口径():
 
 def test_插值到5厘米_朝向走最短角():
     d = densify([[0.0, 0.0, 3.0], [0.2, 0.0, -3.0]], step=0.05)
-    assert len(d) == 5
+    assert len(d) == 6                     # 平移要 4 步;转 0.28 rad 角点扫 0.22 m → 5 步
     assert all(math.dist(a[:2], b[:2]) <= 0.05 + 1e-9 for a, b in zip(d, d[1:], strict=False))
     assert all(abs(p[2]) >= 3.0 - 1e-6 for p in d), "3.0 → -3.0 走过 π,不从 0 绕"
 
@@ -102,12 +102,67 @@ def test_路线穿墙_余量为负_拒绝():
     assert not r.ok and r.margin < 0
 
 
-@pytest.mark.parametrize(("width", "ok"), [(1.3, True), (1.1, False)])
+@pytest.mark.parametrize(("width", "ok"), [(1.5, True), (1.4, False), (1.1, False)])
 def test_L弯_按车身朝向扫(width, ok):
-    """在拐角原地转 90°:车身对角线扫过拐角。1.3 m 剩 0.1 多(放行、偏窄),1.1 m 扫到墙。"""
+    """在拐角正中原地转 90°:车身外角(半对角 0.59 m)+ 底线 0.10 要离墙约 0.69 m,墙格再按方格
+    算(扣半格):1.5 m 放行、偏窄;1.4 m 剩 0.08 不够。原来 1.3 m 靠每个位姿横挪 0.15 m 放行 ——
+    挪过去的线不是要执行的路线(外审 11-14),现在拒。"""
     walls, res, org = _走廊(width, length=6.0 + width / 2, turn=True)
     path = _直线(1.0, 6.0) + [[6.0, 2.0 + i * 0.025, math.pi / 2] for i in range(1, 160)]
     r = check_route(path, walls, res, org)
     assert r.ok is ok, r
     if ok:
         assert r.tight
+
+
+# ---- 11-14 外审(master 31bb0b5a 上复现):只查当前路线本身,三个漏查反例 ----
+
+def _开阔地(n_m=6.0):
+    n = int(n_m / RES)
+    return np.zeros((n, n), dtype=bool)
+
+
+def test_外审_原地转半圈_中间转到横着时扫到墙_要查出来():
+    """同一位置朝向 0 → 180°:只插两头的话,转到 90° 那一刻车身半长朝墙、压进墙也查不到。"""
+    walls = _开阔地()
+    yy = (np.arange(walls.shape[0]) + 0.5) * RES
+    walls[yy < 2.0 - 0.45, :] = True                         # 墙在中心下方 0.45 m
+    pre = [[1.0 + i * 0.05, 2.0, 0.0] for i in range(41)]    # 先走 2 m(躲开起步免检)
+    r = check_route(pre + [[3.0, 2.0, 0.0], [3.0, 2.0, math.pi]], walls, RES, (0.0, 0.0))
+    assert r.status == "refused" and not r.ok, r
+    assert r.margin < 0
+
+
+def test_外审_插值按车身角点限步_转一个大角也拆细():
+    pts = densify([[0.0, 0.0, 0.0], [0.0, 0.0, math.pi / 2]])
+    corner = math.hypot(BASE_HALF_LEN + ROUTE_MARGIN, BASE_HALF_WID + ROUTE_MARGIN)
+    for a, b in zip(pts, pts[1:], strict=False):
+        assert abs(b[2] - a[2]) * corner <= 0.05 + 1e-9
+
+
+def test_外审_车身伸出地图边_图外当墙():
+    """中心离地图下边 0.10 m,图里没有墙:车身一半在图外,不能报余量 0.5。"""
+    r = check_route([[1.0 + i * 0.05, 0.10, 0.0] for i in range(60)], _开阔地(), RES, (0.0, 0.0))
+    assert r.status == "refused" and r.margin < 0, r
+
+
+def test_外审_空路线_不算通过_算没查成():
+    r = check_route([], _开阔地(), RES, (0.0, 0.0))
+    assert not r.ok and r.status == "unchecked" and r.code == "no_route", r
+
+
+def test_外审_已在终点不用动_算通过():
+    walls = _开阔地()
+    r = check_route([[3.0, 3.0, 0.5]], walls, RES, (0.0, 0.0))
+    assert r.ok and r.status == "ok" and r.code == "at_goal", r
+
+
+def test_外审_终点离墙零点二五_不许靠横挪背书_拒绝():
+    """仿真 p0_goal_wall_d025:中心离墙 0.25 m(要 0.39 m),原来每个位姿横挪 0.15 m 找最宽的位置,
+    就放行了 —— 挪过去的那条线不是要执行的路线。"""
+    walls = _开阔地()
+    yy = (np.arange(walls.shape[0]) + 0.5) * RES
+    xx = (np.arange(walls.shape[1]) + 0.5) * RES
+    walls[(yy > 4.0)[:, None] & (xx > 3.6)[None, :]] = True      # 墙只在终点边上
+    r = check_route(_直线(1.0, 4.0, y=4.0 - 0.25), walls, RES, (0.0, 0.0))
+    assert r.status == "refused" and r.code == "goal_too_close_to_wall", r
