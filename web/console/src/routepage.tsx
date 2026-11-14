@@ -878,7 +878,7 @@ function SchedulePanel({ route, view, schedules, say, reload, inPanel }: {
             </label>
             <p class="muted small">{rt("schedNote")}</p>
             {sameTime && <p class="warn small" data-sched-same="1">{rt("schedSameTime", { at })}</p>}
-            <button type="submit" class="btn sm sched-add" disabled={idTaken || missing.length > 0}>{rt("schedAdd")}</button>
+            <button type="submit" class="btn primary sched-add" disabled={idTaken || missing.length > 0}>{rt("schedAdd")}</button>
             {missing.length > 0 && <p class="small muted" role="status" data-sched-missing="1">{rt("schedMissing", { what: joinList(missing) })}</p>}
           </form>
         </>
