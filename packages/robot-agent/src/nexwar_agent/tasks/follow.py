@@ -43,7 +43,8 @@ RETARGET_EVERY_S = 1.0
 #: 离人比 ``keep_m`` 远这么多(米)才起新的一段。要比退到的 :data:`CLEAR_M` 远(4.5 + 1 = 5.5 m),
 #: 不然刚退到 5 m 又往前跟。
 START_EXTRA_M = 1.0
-#: 退着的时候收尾:先停车,最多等这么久(秒)停稳再进终态(同保持距离)。
+#: 退过以后等停稳:这么久(秒)还没确认停稳,重发停车、报一次 ``follow_stop_unconfirmed``;一直不放行
+#: (不起导航段、不进终态,外审 W77-2 #1)。
 STOP_CONFIRM_TIMEOUT_S = 5.0
 #: 退的时候,人要是这么久(毫秒)以内看到的才算数;看不到了就不退(不知道往哪退)。
 BACK_FRESH_MS = 500
@@ -109,6 +110,7 @@ class FollowTask(Task):
         #: 退过以后发了停车、还没确认停稳:等了多久(秒);``None`` 不用等(外审 W77-1 #3:停稳之前
         #: 不起导航段、不进终态;停车出错也不清这一笔)。
         self._stop_wait: float | None = None
+        self._stop_alarmed = False
         #: 不安全的断线(外审 W77-1 #2):停车、不退、不起新的一段,连回来再接着。
         self._paused = False
 
@@ -338,14 +340,22 @@ class FollowTask(Task):
         except Exception:
             log.exception("跟人 %s:问停没停失败", self.task_id)
             stopped = False
+        if stopped:
+            self._stop_wait = None
+            return True
         self._stop_wait += dt_s
-        if not stopped and self._stop_wait < STOP_CONFIRM_TIMEOUT_S:
-            return False
-        if not stopped:
-            log.warning("跟人 %s:等了 %.0f 秒没确认停稳,照常往下", self.task_id,
-                        STOP_CONFIRM_TIMEOUT_S)
-        self._stop_wait = None
-        return True
+        if self._stop_wait >= STOP_CONFIRM_TIMEOUT_S:
+            self._stop_wait = 0.0
+            if not self._stop_alarmed:
+                self._stop_alarmed = True
+                log.error("跟人 %s:%.0f 秒没确认停稳,重发停车,不起导航段、不交接", self.task_id,
+                          STOP_CONFIRM_TIMEOUT_S)
+                self._events.emit("follow_stop_unconfirmed", {"task_id": self.task_id})
+            try:
+                await self._hal.stop()
+            except Exception:
+                log.exception("跟人 %s:重发停车失败", self.task_id)
+        return False
 
     async def _settled(self, dt_s: float) -> bool:
         """要收尾了:在退就先停车;退过的都要停稳(最多 :data:`STOP_CONFIRM_TIMEOUT_S`)。"""

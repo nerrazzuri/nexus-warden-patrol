@@ -449,3 +449,27 @@ async def test_外审1_1_往后退_查出不出地图(tmp_path):
         assert rt._standoff_nogo(3.0, 3.0, 0.15) == ""
     finally:
         await rt.close()
+
+
+async def test_外审W77_2_1_一直确认不了停稳_不放行_重发停车_报一次(空台):
+    c, r, parts = 空台
+    p = 人(r, 6.0, 4.0)
+    t, emits = _退的任务(空台, p)
+    hal = 慢停的狗(r)
+    t._hal = hal
+    await t.start()
+
+    def 逼近():
+        p.x = max(p.x - 0.06, 5.0)
+    await _跑(空台, t, 3, 逼近)
+    p.x = 11.0                                           # 人走远了:该往前跟
+    await _跑(空台, t, 12)
+    assert t._leg is None, "一直没确认停稳:不起导航段"
+    assert hal.stop_n >= 2, "过一阵重发停车"
+    assert len([d for k, d in emits if k == "follow_stop_unconfirmed"]) == 1
+    await t.abort("preempted")
+    await _跑(空台, t, 8)
+    assert t.state is TaskState.RUNNING, "没停稳:不交接"
+    hal.never = False
+    await _跑(空台, t, 2)
+    assert t.state is TaskState.PREEMPTED

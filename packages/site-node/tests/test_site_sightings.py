@@ -514,3 +514,37 @@ async def test_外审W77_1_7_受力警报还管着灯笛_人走了不关_只撤�
     w.held_by_others = lambda rid: set()
     await _拍(w)
     assert d.sent == [], "交给受力警报那边了,这边的账已经撤了"
+
+
+async def test_外审W77_2_2_关的回执迟到_人又出现灯笛重开了_旧回执不销新账(台):
+    import asyncio
+
+    from nexwar_site.sightings import UNWARN_RETRY_MS, WARN_EVERY_MS
+    t = 台
+    d, w = _上装台(t, outputs=("strobe", "siren", "speaker"))
+    d.persons("A", present=True, count=1)
+    await _拍(w)
+    real = d.deter
+    gate = asyncio.Event()
+
+    async def 慢关(rid, payload, *, issued_by, priority):
+        if not payload["on"]:
+            await gate.wait()                            # 关的回执迟到
+        return await real(rid, payload, issued_by=issued_by, priority=priority)
+    d.deter = 慢关
+    d.persons("A", present=False)
+    await _拍(w)                                         # 发出关,回执没到
+    t.ms[0] += WARN_EVERY_MS
+    d.persons("A", present=True, count=1)
+    await _拍(w)                                         # 人又出现:重开
+    gate.set()
+    for _ in range(5):
+        await asyncio.sleep(0)                           # 旧的关回执到了
+    d.sent.clear()
+    d.persons("A", present=False)
+    t.ms[0] += UNWARN_RETRY_MS
+    await _拍(w)
+    for _ in range(5):
+        await asyncio.sleep(0)
+    assert {p["output"] for _, p, _ in d.sent if not p["on"]} == {"strobe", "siren"}, \
+        "第二次人走了照样关"

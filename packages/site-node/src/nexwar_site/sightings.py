@@ -192,7 +192,7 @@ class PersonWatch:
             present = p.get("present")
             if rid in busy:
                 if self._lit_of(rid):
-                    self._set_lit(rid, set())             # 驱离那一场接手了灯笛:这边不再关
+                    self._set_lit(rid, {})             # 驱离那一场接手了灯笛:这边不再关
             elif present is False:
                 self._unwarn(rid, now)
             if present is False and rid in seen:
@@ -262,7 +262,8 @@ class PersonWatch:
                 payloads.append({"output": out, "on": True, "max_s": WARN_STROBE_S})
         lit = {p["output"] for p in payloads if p["output"] in ("strobe", "siren")}
         if lit:
-            self._set_lit(rid, self._lit_of(rid) | lit)
+            cur = self._lit_of(rid)                       # 每开一次换一代(外审 W77-2 #2)
+            self._set_lit(rid, {**cur, **{o: cur.get(o, 0) + 1 for o in lit}})
         if pool:
             n = self._warn_n.get(rid, 0)
             self._warn_n[rid] = n + 1
@@ -280,23 +281,27 @@ class PersonWatch:
             self._warn_jobs.add(job)
             job.add_done_callback(self._warn_jobs.discard)
 
-    def _lit_of(self, rid: str) -> set[str]:
+    def _lit_of(self, rid: str) -> dict[str, int]:
+        """见人开着、还没确认关掉的输出 → 开的第几代(外审 W77-2 #2:关的回执只销它关的那一代)。"""
         rows = self.db.query("SELECT outputs FROM person_warn_lit WHERE robot_id=?", (rid,))
         if not rows:
-            return set()
+            return {}
         try:
             got = json.loads(rows[0]["outputs"])
         except ValueError:
-            return set()
-        return {str(x) for x in got} if isinstance(got, list) else set()
+            return {}
+        if isinstance(got, list):
+            return {str(x): 0 for x in got}
+        return {str(k): int(v) for k, v in got.items() if isinstance(v, int)} \
+            if isinstance(got, dict) else {}
 
-    def _set_lit(self, rid: str, outs: set[str]) -> None:
+    def _set_lit(self, rid: str, outs: dict[str, int]) -> None:
         with self.db.tx() as tx:
             if outs:
                 tx.execute("INSERT INTO person_warn_lit(robot_id, outputs, updated_ms) "
                            "VALUES (?,?,?) ON CONFLICT(robot_id) DO UPDATE SET "
                            "outputs=excluded.outputs, updated_ms=excluded.updated_ms",
-                           (rid, json.dumps(sorted(outs)), self._now()))
+                           (rid, json.dumps(dict(sorted(outs.items()))), self._now()))
             else:
                 tx.execute("DELETE FROM person_warn_lit WHERE robot_id=?", (rid,))
 
@@ -314,8 +319,8 @@ class PersonWatch:
             except Exception:
                 log.exception("%s 受力警报管着哪几样读不出来:先不关", rid)
                 return
-        if outs & held:
-            outs -= held
+        if set(outs) & held:
+            outs = {o: g for o, g in outs.items() if o not in held}
             self._set_lit(rid, outs)                      # 交给受力警报那边:这边不再关
         todo = [o for o in sorted(outs) if (rid, o) not in self._unwarn_busy]
         if not todo or now < self._unwarn_at.get(rid, 0):
@@ -327,17 +332,20 @@ class PersonWatch:
         self._unwarn_at[rid] = now + UNWARN_RETRY_MS
         for out in todo:
             self._unwarn_busy.add((rid, out))
-            job = loop.create_task(self._unwarn_one(rid, out))
+            job = loop.create_task(self._unwarn_one(rid, out, outs[out]))
             self._warn_jobs.add(job)
             job.add_done_callback(self._warn_jobs.discard)
 
-    async def _unwarn_one(self, rid: str, out: str) -> None:
+    async def _unwarn_one(self, rid: str, out: str, gen: int) -> None:
         try:
             r = await self.dispatcher.deter(rid, {"output": out, "on": False},
                                             issued_by="site:person_warn", priority=WARN_PRIORITY)
             ack = (r or {}).get("ack") if isinstance(r, dict) else None
             if isinstance(ack, dict) and ack.get("result") == "accepted":
-                self._set_lit(rid, self._lit_of(rid) - {out})
+                cur = self._lit_of(rid)
+                if cur.get(out) == gen:                   # 关的就是这一代;后来又开过的不销
+                    cur.pop(out)
+                    self._set_lit(rid, cur)
             else:
                 log.warning("%s 见人开的%s没关成(%s):过一会儿再关", rid, out, ack)
         except Exception as exc:  # noqa: BLE001 - 关不掉:过一会儿再关
