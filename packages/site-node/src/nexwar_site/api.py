@@ -4027,8 +4027,12 @@ class _Handler(TlsHandlerMixin):
         try:
             session = desk.open(robot_id, user, takeover_reason=reason)
         except TeleopRefused as exc:
-            raise HttpError(exc.status, exc.message,
-                            extra={"reason": exc.reason} if exc.reason else None) from exc
+            # minor #7:认得出的未就绪原因跟派单一样带代号(not_standing → 手机出「站起」按钮)
+            from nexwar_site.refusals import extra_for, reason_code
+            extra = {"reason": exc.reason} if exc.reason else {}
+            if reason_code(exc.message):
+                extra |= extra_for(exc.message)
+            raise HttpError(exc.status, exc.message, extra=extra or None) from exc
         ws = upgrade(self)
         if ws is None:
             desk.close(session, "bad_upgrade")
