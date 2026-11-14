@@ -102,15 +102,19 @@ def test_路线穿墙_余量为负_拒绝():
     assert not r.ok and r.margin < 0
 
 
-@pytest.mark.parametrize(("width", "ok"), [(1.5, True), (1.4, False), (1.1, False)])
-def test_L弯_按车身朝向扫(width, ok):
+@pytest.mark.parametrize(("width", "ok", "searched"),
+                         [(1.5, True, False), (1.4, True, True), (1.1, True, True),
+                          (1.0, False, False)])
+def test_L弯_按车身朝向扫(width, ok, searched):
     """在拐角正中原地转 90°:车身外角(半对角 0.59 m)+ 底线 0.10 要离墙约 0.69 m,墙格再按方格
-    算(扣半格):1.5 m 放行、偏窄;1.4 m 剩 0.08 不够。原来 1.3 m 靠每个位姿横挪 0.15 m 放行 ——
-    挪过去的线不是要执行的路线(外审 11-14),现在拒。"""
+    算(扣半格):1.5 m 原路线放行、偏窄;1.4 m 原路线剩 0.08 不够。原来 1.3 m 靠每个位姿横挪
+    0.15 m 放行 —— 挪过去的线不是要执行的路线(外审 11-14),已去掉。现在 1.4 / 1.1 m 靠局部搜索
+    (不横移)找一条边走边让的路放行,给出要执行的 ``path``;1.0 m 不横移过不去,拒。"""
     walls, res, org = _走廊(width, length=6.0 + width / 2, turn=True)
     path = _直线(1.0, 6.0) + [[6.0, 2.0 + i * 0.025, math.pi / 2] for i in range(1, 160)]
     r = check_route(path, walls, res, org)
     assert r.ok is ok, r
+    assert (r.path is not None) is searched, r
     if ok:
         assert r.tight
 
