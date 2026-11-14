@@ -1,6 +1,6 @@
-// 图标(B0 专业版):优先级三重编码的形状(P1 实心菱形、P2 实心三角、P3 空心圆)、离线(空心圆加一道斜杠,
-// 「没有」的意思;离线是红的,不能借 P2 的三角)、急停八边形,
-// 外加几个线条图标(Lucide 风格,ISC 许可的样子手画)。形状永远跟文字一起出现,不单独表意。
+// 图标(redesign 11-14:ISO 7010 安全标识的几何):P1 红色粗圆环(「出事了」)、P2 黄色警告三角(深色描边)、P3 细的中性圆、
+// 离线 = 禁止标志(圆环加斜杠,「没在工作」);正常 = 绿色方块(安全条件,样式表画在状态字前面,不进 DOM);
+// 急停八边形,外加几个线条图标(Lucide 风格,ISC 许可的样子手画)。形状永远跟文字一起出现,不单独表意。
 import type { JSX } from "preact";
 
 export type ShapeKind = "P1" | "P2" | "P3" | "offline";
@@ -8,8 +8,9 @@ export type ShapeKind = "P1" | "P2" | "P3" | "offline";
 export function Shape({ kind, size = 12 }: { kind: ShapeKind; size?: number }): JSX.Element {
   return (
     <svg class={`shape ${kind}`} width={size} height={size} viewBox="0 0 12 12" aria-hidden="true">
-      {kind === "P1" && <path d="M6 0l6 6-6 6-6-6z" />}
-      {kind === "P2" && <path d="M6 1l6 10H0z" />}
+      {/* 圆环用挖空的路径画(evenodd):各处样式表照旧用 fill 上色 */}
+      {kind === "P1" && <path fill-rule="evenodd" d="M6 .25a5.75 5.75 0 1 0 0 11.5a5.75 5.75 0 1 0 0-11.5zm0 2.9a2.85 2.85 0 1 1 0 5.7a2.85 2.85 0 1 1 0-5.7z" />}
+      {kind === "P2" && <path stroke-linejoin="round" d="M6 1.1l5.2 9.4H.8z" />}
       {kind === "P3" && <circle cx="6" cy="6" r="4.5" fill="none" stroke-width="1.5" />}
       {kind === "offline" && (
         <g fill="none" stroke-width="1.5" stroke-linecap="round">

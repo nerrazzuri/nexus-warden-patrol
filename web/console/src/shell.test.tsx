@@ -68,12 +68,13 @@ describe("外壳的纯函数", () => {
     expect(roleLabel("owner")).toBe("roleFamily");
     expect(roleLabel("engineer")).toBe("roleEngineer");
   });
-  it("W60 全站默认深色(管理页不再换浅色)", () => {
-    for (const p of ["duty", "live", "map", "recordings", "alarms", "admin/users", "admin/system"] as const) expect(pageScheme(p)).toBe("dark");
+  it("redesign(用户 11-14「两种都有」):保安页默认深色,管理页默认浅色", () => {
+    for (const p of ["duty", "live", "map", "recordings", "alarms"] as const) expect(pageScheme(p)).toBe("dark");
+    for (const p of ["admin/users", "admin/system", "admin/layout"] as const) expect(pageScheme(p)).toBe("light");
   });
   it("个人选了就按个人的,选「跟随系统」就跟系统", () => {
     expect(schemeFor("duty", "auto", false)).toBe("dark");
-    expect(schemeFor("admin/users", "auto", false)).toBe("dark");
+    expect(schemeFor("admin/users", "auto", false)).toBe("light");
     expect(schemeFor("duty", "light", true)).toBe("light");
     expect(schemeFor("admin/users", "dark", false)).toBe("dark");
     expect(schemeFor("duty", "system", false)).toBe("light");
@@ -194,14 +195,14 @@ describe("新外壳", () => {
     await waitFor(() => expect(c.container.querySelector(".alarmcount")!.textContent).toContain("1"));
   });
 
-  it("W60 切到管理页还是深色(真的挂上)", async () => {
+  it("redesign 11-14:从保安页切到管理页换成浅色(真的挂上)", async () => {
     location.hash = "#/map";
     const c = render(<Console me={me("admin")} onOut={() => {}} />);
     await waitFor(() => expect(document.documentElement.dataset.theme).toBe("dark"));
     location.hash = "#/admin/users";
     window.dispatchEvent(new HashChangeEvent("hashchange"));
     await new Promise((r) => setTimeout(r, 20));
-    expect(document.documentElement.dataset.theme).toBe("dark");
+    expect(document.documentElement.dataset.theme).toBe("light");
     c.unmount();
   });
 
