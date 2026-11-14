@@ -390,7 +390,7 @@ a.btn { text-decoration: none; }
 input[type="checkbox"], input[type="radio"] { accent-color: var(--c-brand); }
 
 /* 弹窗、提示 */
-.modal { border: 1px solid var(--c-outline); border-top: 4px solid var(--c-text); border-radius: var(--r-r12); background: var(--c-surface); color: var(--c-text); padding: 16px 20px 20px; width: min(520px, calc(100% - 32px));
+.modal { border: 1px solid var(--c-outline); border-radius: var(--r-r12); background: var(--c-surface); color: var(--c-text); padding: 16px 20px 20px; width: min(520px, calc(100% - 32px));
   box-shadow: 0 24px 64px rgba(0, 0, 0, 0.45); }
 .modal.wide { width: min(1100px, calc(100% - 32px)); }
 .modal::backdrop { background: var(--c-scrim); }
