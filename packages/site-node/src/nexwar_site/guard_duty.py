@@ -1913,7 +1913,7 @@ class GuardDuty:
                         mins = (now - base) // 60_000
                         reasons = [self._reason(e, info, runs.get(e["id"])) for e, info in who]
                         self.alerts.raise_alert(
-                            kind=ALERT_KIND, robot=key, title=f"{z} 已 {mins} 分钟没巡到",
+                            kind=ALERT_KIND, robot=key, title=f"防区 {z} 已 {mins} 分钟没巡到",
                             detail="原因:" + ";".join(r for r in reasons if r)
                             + ";先看这个防区的摄像头",
                             context={"zone": z, "last_seen_ms": last or None})

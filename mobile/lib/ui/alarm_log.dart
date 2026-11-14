@@ -26,7 +26,10 @@ class AlarmLogPage extends StatefulWidget {
 
   /// 第 12 轮 W12-02：跟网页报警记录同一套规则 —— 给保安的（入侵、起火、求助、离线；老站点没有
   /// audience 也算）才是「报警」；授权的人在场照旧列。
-  static bool isAlarm(Alert a) => (a.level != 'P3' && alertForGuard(a)) || a.kind == 'authorized_person';
+  // 易用性 r7:P1 不管发给谁都算报警 —— 手机按出声档响铃不看受众(换电 30 分钟没进展是发给经理的,保安手机也响),
+  // 响了就得在这里找得到;首页「紧急报警」也是数所有没处理的 P1
+  static bool isAlarm(Alert a) =>
+      (a.level != 'P3' && alertForGuard(a)) || a.level == 'P1' || a.kind == 'authorized_person';
 
   /// 管理员要处理的事（存储不足、排程派不了……）：网页总览叫「待处理事项」，这里也这么叫，不当报警。
   static bool isTodo(Alert a) => !isAlarm(a) && a.level != 'P3' && a.resolvedMs == null;
@@ -150,7 +153,7 @@ class _AlarmLogPageState extends State<AlarmLogPage> {
                     child: Row(children: [
                       Expanded(
                           child: Text(
-                              '${alertSourceText(g.first.robot)} · ${alertTitle(g.first.kind, g.first.title)}'
+                              '${alertLine(g.first.robot, g.first.kind, g.first.title)}'
                               '${g.length > 1 ? tr(' · ${g.length} times', ' · 共 ${g.length} 次') : ''}',
                               maxLines: 2,
                               overflow: TextOverflow.ellipsis,
@@ -186,7 +189,7 @@ class _AlarmLogPageState extends State<AlarmLogPage> {
                 const SizedBox(width: Nw.s8),
                 Expanded(
                     child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text('${alertSourceText(a.robot)} · ${alertTitle(a.kind, a.title)}',
+                  Text(alertLine(a.robot, a.kind, a.title),
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                       style: NwText.bodyMedium.copyWith(color: c.text, fontWeight: FontWeight.w600)),
