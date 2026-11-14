@@ -4,7 +4,7 @@
 import { cleanup, render, waitFor } from "@testing-library/preact";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { setFetch } from "./api";
-import { DutyPage } from "./duty";
+import { MonitorPage } from "./monitor";
 import { lang } from "./i18n";
 import { SiteMap } from "./mappage";
 import { TodayPatrols } from "./todaypatrols";
@@ -58,11 +58,12 @@ describe("今天的巡逻", () => {
 
 describe("值班页列表", () => {
   it("连不上:报警列表、机器人列表写情况未知,不写没有报警、没有机器人", () => {
-    const r = render(<DutyPage units={[]} alerts={[]} now={1000} role="guard" stale
+    const r = render(<MonitorPage units={[]} alerts={[]} now={1000} role="guard" stale
       say={vi.fn()} refresh={vi.fn(async () => {})} onZoom={() => {}} />);
-    const alarms = r.container.querySelector(".duty-alarms")!;
-    expect(alarms.textContent).toContain("报警情况未知");
-    expect(alarms.textContent).not.toContain("没有待处理");
-    expect(r.container.querySelector(".duty-left")!.textContent).toContain("机器人情况未知");
+    const queue = r.container.querySelector(".mon-left")!;
+    expect(queue.textContent).toContain("报警情况未知");
+    expect(queue.textContent).not.toContain("没有待处理");
+    expect(r.container.querySelector(".mon-right")!.textContent).toContain("机器人情况未知");
+    expect(r.container.querySelector(".mon-head h1")!.textContent).toContain("状态未知");
   });
 });
