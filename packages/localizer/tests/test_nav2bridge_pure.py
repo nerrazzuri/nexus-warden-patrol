@@ -1052,3 +1052,64 @@ def test_TG1117_代理送了map_odom_记下定位的时刻_没送不记():
     assert b._loc_wall < 0
     b.on_tick({**_tick(2_000), "map_odom": [0.0, 0.0, 0.0]})
     assert b._loc_wall > 0
+
+
+# ------------------------------------------------ 外审 11-14:照查过的路走(FollowPath)
+
+def _桥_带跟路(monkeypatch):
+    import sys
+    from types import SimpleNamespace as NS
+    b, futs = _桥(monkeypatch)
+    monkeypatch.setitem(sys.modules, "nav_msgs.msg", NS(Path=lambda: NS(header=NS(), poses=[])))
+    b._m["FollowPath"] = NS(Goal=lambda: NS())
+    b.follow_goals = []
+
+    def follow_send(goal):
+        b.follow_goals.append(goal)
+        f = __import__("concurrent.futures").futures.Future()
+        futs[len(futs)] = f
+        return f
+    b.follow = NS(server_is_ready=lambda: True, send_goal_async=follow_send)
+    return b, futs
+
+
+_路 = [[1.0, 2.0, 0.0], [1.5, 2.0, 0.0], [1.5, 2.0, 0.5], [2.0, 2.3, 0.5]]
+
+
+def test_带路的目标_交给控制器照着走_不让Nav2另规划(monkeypatch):
+    b, futs = _桥_带跟路(monkeypatch)
+    b.on_goal({"goal_id": 3, "x": 2.0, "y": 2.3, "yaw": 0.5, "path": _路})
+    assert not b.sent_goals and not b.thru_goals, "不发 NavigateToPose"
+    g = b.follow_goals[0]
+    assert g.controller_id == "FollowPath" and g.goal_checker_id == "general_goal_checker"
+    assert g.path.header.frame_id == "map"
+    got = [(p.pose.position.x, p.pose.position.y) for p in g.path.poses]
+    assert got == [(x, y) for x, y, _ in _路], "一个点不少、不抽稀"
+    import math
+    assert 2 * math.atan2(g.path.poses[2].pose.orientation.z,
+                          g.path.poses[2].pose.orientation.w) == pytest.approx(0.5)
+
+
+def test_带路的目标_收下就把这条路报给代理_代理才认控制器的速度(monkeypatch):
+    b, futs = _桥_带跟路(monkeypatch)
+    b.on_goal({"goal_id": 3, "x": 2.0, "y": 2.3, "yaw": 0.5, "path": _路})
+    futs[0].set_result(_Handle())
+    paths = [m for m in b.sent if m["type"] == "path"]
+    assert paths and paths[0]["goal_id"] == 3
+    assert paths[0]["pts"][0] == [1.0, 2.0] and paths[0]["pts"][-1] == [2.0, 2.3]
+    order = [m["type"] if m["type"] != "goal_state" else m["state"] for m in b.sent]
+    assert order.index("path") < order.index("accepted")
+
+
+def test_带路的目标_指定换RPP跟(monkeypatch):
+    b, futs = _桥_带跟路(monkeypatch)
+    b.on_goal({"goal_id": 4, "x": 2.0, "y": 2.3, "yaw": 0.5, "path": _路, "controller": "RPP"})
+    assert b.follow_goals[0].controller_id == "RPP"
+
+
+def test_带路的目标_跟路动作不在_回拒(monkeypatch):
+    from types import SimpleNamespace as NS
+    b, futs = _桥_带跟路(monkeypatch)
+    b.follow = NS(server_is_ready=lambda: False)
+    b.on_goal({"goal_id": 5, "x": 2.0, "y": 2.3, "yaw": 0.5, "path": _路})
+    assert b.sent[-1]["state"] == "rejected" and "跟路" in b.sent[-1]["reason"]
