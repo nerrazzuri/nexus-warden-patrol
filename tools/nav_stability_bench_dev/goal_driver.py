@@ -289,6 +289,11 @@ def main() -> int:
             return self._wait(handle)
 
         def _drive_path(self, path, controller) -> dict:
+            if self.route_gate_dir is not None:
+                # 11-15:留下要执行的路,事后跟里程比偏了多少(跟得紧不紧)
+                with (self.route_gate_dir / "paths.jsonl").open("a", encoding="utf-8") as f:
+                    f.write(json.dumps({"t": time.monotonic(), "controller": controller,
+                                        "path": [[round(v, 3) for v in q] for q in path]}) + "\n")
             if not self.follow.wait_for_server(timeout_sec=30.0):
                 return {"success": False, "reason": "follow_path action unavailable"}
             request = FollowPath.Goal()
