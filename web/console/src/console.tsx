@@ -265,7 +265,7 @@ export function Console({ me, onOut }: { me: Me; onOut: (note?: string) => void 
 
       {pending?.kind === "mode" && (
         <Confirm text={t(pending.mode === "armed" ? "modeArmConfirm" : pending.mode === "home" ? "modeHomeConfirm" : "modeVisitorAllConfirm")}
-          yes={t(pending.mode === "armed" ? "modeArmed" : pending.mode === "home" ? "modeHome" : "modeVisitor")}
+          yes={t(pending.mode === "armed" ? "modeArmed" : pending.mode === "home" ? "modeHome" : "modeVisitorAll")}
           onNo={() => setPending(null)}
           onYes={() => {
             const m = pending.mode; setPending(null);
