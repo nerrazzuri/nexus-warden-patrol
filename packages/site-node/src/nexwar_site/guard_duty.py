@@ -883,6 +883,8 @@ class GuardDuty:
             key = getattr(a, "key", "") if a is not None else ""
             if a is not None and not fs.get("alert"):
                 fs = self._fs_set(rid, alert=key)        # 老进度(没记是哪一条):认现在这条
+            if self._unsure_stop(rid, fs):
+                return True                               # 外审 W77-6/7 #1:没确认停稳,等保安
             if a is not None and key == fs.get("alert") and self._gone(rid, a, fs, running, now):
                 # 用户 11-15:人走了 → 自动接着巡逻(警灯、警笛人走了当场关,在 sightings)。
                 # 告警不关:还是要保安到场才能关;人再出现(lost_ms 清了)再停下来跟
@@ -897,8 +899,6 @@ class GuardDuty:
                 await self._maybe_follow(eid, rid)
                 await self._follow_todo(eid, rid)
                 return True
-            if self._unsure_stop(rid, fs):
-                return True                               # 外审 W77-6 #1:没确认停稳,等保安
             timed_out = now >= run["until_ms"] and a is not None and key == fs.get("alert")
             if timed_out:
                 self._amend(key, hold_done=True)         # 这一条不再拦(落在告警上,重启也认)
@@ -947,13 +947,20 @@ class GuardDuty:
 
     def _unsure_stop(self, rid: str, fs: dict[str, Any]) -> bool:
         """外审 W77-6 #1:这一回派的跟人、回防区、看易藏点哪一趟以「停车没确认」收尾 ——
-        不自动接着巡逻、不派下一趟,报一次 ``guard_stuck`` 叫保安看(保安接管、撤防都能解开)。"""
+        不自动接着巡逻、不派下一趟,报一次 ``guard_stuck`` 叫保安看
+        (保安关了那一条、接管、撤防都能解开)。"""
         bad = next((t for t in (fs.get("task"), fs.get("own")) if isinstance(t, str) and t
                     and (r := self._terminal(rid, t)) is not None
                     and r[1].get("reason") == "stop_unconfirmed"), None)
-        if bad is None:
+        if bad is None or fs.get("stuck_ok") == bad:
             return False
-        if self.alerts is not None and not self.alerts.has_open(rid, "guard_stuck"):
+        open_ = self.alerts is not None and self.alerts.has_open(rid, "guard_stuck")
+        if fs.get("stuck") == bad and not open_:
+            self._fs_set(rid, stuck_ok=bad)               # 保安看过、关了那一条:接着
+            self._log("stop_unconfirmed_ok", robot=rid, detail=f"{bad}:保安关了停车没确认")
+            return False
+        if self.alerts is not None and not open_:
+            self._fs_set(rid, stuck=bad)
             self._log("stop_unconfirmed", robot=rid, detail=f"{bad} 收尾时停车没确认")
             self.alerts.raise_alert(
                 kind="guard_stuck", robot=rid, title=f"{rid} 停车没确认",
@@ -1468,6 +1475,8 @@ class GuardDuty:
             if nxt:                                      # 就是它、还没确认停下(外审 r3 #1)
                 await self._retry_stop(eid, run, now)
                 return
+            if self._unsure_stop(rid, self._fs(rid)):
+                return                                    # 外审 W77-7 #1:停的那一趟没确认停稳
             then = self._stop_then.pop(eid, "resume")
             self._stop_tries.pop(eid, None)
             if then == "held":
