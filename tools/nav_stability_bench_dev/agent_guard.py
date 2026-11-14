@@ -215,7 +215,8 @@ def main() -> int:
     rclpy.init()
     node = Node("nav_bench_agent_guard")
     pub = node.create_publisher(Twist, "/cmd_vel", 10)
-    st = {"now": None, "pose": None, "v": 0.0, "w": 0.0, "last_wz": 0.0, "last_vx": 0.0, "actors": [], "seq": 0,
+    st = {"now": None, "pose": None, "v": 0.0, "w": 0.0, "last_wz": 0.0, "last_vx": 0.0,
+          "actors": [], "seq": 0,
           "blocked_ticks": 0, "ticks": 0, "tight_ticks": 0, "turn_map_ticks": 0, "slowed_ticks": 0,
           "soft_slow_ticks": 0, "vis_capped_ticks": 0, "occ_capped_ticks": 0, "hist": []}
     log = open(args.log, "a", encoding="utf-8") if args.log else None
