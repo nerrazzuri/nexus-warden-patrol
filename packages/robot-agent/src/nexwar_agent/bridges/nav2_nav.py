@@ -483,7 +483,7 @@ class Nav2NavBackend(PlannedNavBackend):
             return
         pose = await self._snap_for_nav2(here, pose, op)
         goal_xy = (pose.position.x, pose.position.y)
-        if self._avoid:                                    # 上一趟留下的临时绕开:先撤,再查这一趟的路
+        if self._avoid:                                    # 上一趟的临时绕开:先撤再查路
             self._avoid = []
             self._send_map()
         # W48:有路网就先在路网上找路,途经点交给 Nav2(NavigateThroughPoses,只是路过)

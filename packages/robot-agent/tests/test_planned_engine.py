@@ -313,3 +313,48 @@ async def test_W74_引擎没在跑_换目标什么都不做(台子):
     c, r, parts = 台子
     await parts.engine.retarget(Pose.from_xy_yaw(3.0, 5.0))
     assert parts.engine.state is RunState.IDLE
+
+
+# ---------------------------------------- 用户 11-15(最高优先:整趟走完):一圈走完回头补没到的点
+
+_POND = {"map_id": "m", "map_version": "v", "revision": 1,
+         "zones": [{"id": "pond", "kind": "nogo", "polygon": [[3, 4], [5, 4], [5, 6], [3, 6]]}]}
+
+
+async def test_一圈走完_回头补没到的点_补到了算到_不多出一条(台子):
+    c, r, parts = 台子
+    await parts.nav.set_zones(ZoneSet.from_wire(_POND))
+    await parts.engine.start(_任务([("坏", 4.0, 5.0), ("好", 3.5, 2.0)]), home=parts.home)
+    state = {"cleared": False}
+
+    async def each():
+        res = parts.engine._live.results if parts.engine._live else []
+        if not state["cleared"] and len(res) == 2:         # 走完一圈:当时挡着的走了
+            state["cleared"] = True
+            await parts.nav.set_zones(None)
+    await _跑完(c, r, parts, limit=8000, each=each)
+    assert parts.engine.state is RunState.DONE, parts.engine.snapshot.reason
+    res = parts.engine._live.results
+    assert [(x.name, x.ok) for x in res] == [("坏", True), ("好", True)], res
+    assert "回头补到" in res[0].note
+
+
+async def test_回头补也没到_照旧记没到_说明补过(台子):
+    c, r, parts = 台子
+    await parts.nav.set_zones(ZoneSet.from_wire(_POND))
+    await parts.engine.start(_任务([("坏", 4.0, 5.0), ("好", 3.5, 2.0)]), home=parts.home)
+    await _跑完(c, r, parts, limit=8000)
+    assert parts.engine.state is RunState.DONE, parts.engine.snapshot.reason
+    res = parts.engine._live.results
+    assert [(x.name, x.ok) for x in res] == [("坏", False), ("好", True)]
+    assert "回头补也没到" in res[0].note
+
+
+async def test_只试一次的策略_不回头补(台子):
+    c, r, parts = 台子
+    await parts.nav.set_zones(ZoneSet.from_wire(_POND))
+    await parts.engine.start(_任务([("坏", 4.0, 5.0), ("好", 3.5, 2.0)],
+                                   on_waypoint_failed="skip"), home=parts.home)
+    await _跑完(c, r, parts)
+    res = parts.engine._live.results
+    assert [x.ok for x in res] == [False, True] and "回头补" not in res[0].note
