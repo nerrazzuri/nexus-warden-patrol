@@ -31,6 +31,16 @@ class AlarmLogPage extends StatefulWidget {
   /// 管理员要处理的事（存储不足、排程派不了……）：网页总览叫「待处理事项」，这里也这么叫，不当报警。
   static bool isTodo(Alert a) => !isAlarm(a) && a.level != 'P3' && a.resolvedMs == null;
 
+  /// 同一种、同一句话的合成一组（每晚一条的「排程派不了」只占一行）；组内新的在前，组按最新一次排。
+  static List<List<Alert>> groupTodo(Iterable<Alert> list) {
+    final m = <String, List<Alert>>{};
+    for (final a in list) {
+      (m['${a.kind}\u0000${a.title}'] ??= <Alert>[]).add(a);
+    }
+    final groups = [for (final g in m.values) g..sort((a, b) => b.firstMs.compareTo(a.firstMs))];
+    return groups..sort((a, b) => b.first.firstMs.compareTo(a.first.firstMs));
+  }
+
   /// 测试模式条幅多久重新问一次站点（外审 r1 #10：别人开了、结束了，这边也跟着变）。
   static const Duration testPoll = Duration(seconds: 15);
 
@@ -40,7 +50,8 @@ class AlarmLogPage extends StatefulWidget {
 
 class _AlarmLogPageState extends State<AlarmLogPage> {
   List<Alert>? _rows;
-  List<Alert> _todo = const [];
+  /// 待处理事项，同类合成一组（第 13 轮 W13-02：跟网页一样，同一句话的合成一条；组里最新的在前）。
+  List<List<Alert>> _todo = const [];
   String? _error;
 
   /// POC 告警测试模式开着：到几点、谁开的。没开 / 老站点 = null。
@@ -87,7 +98,9 @@ class _AlarmLogPageState extends State<AlarmLogPage> {
       if (mounted) {
         setState(() {
           _rows = all.where(AlarmLogPage.isAlarm).toList();
-          _todo = all.where(AlarmLogPage.isTodo).toList();
+          // 第 13 轮 W13-02：网页只给管理员、工程师看待处理事项（保安批不了账号、管不了存储）
+          final role = widget.api.session?.role ?? '';
+          _todo = role == 'admin' || role == 'engineer' ? AlarmLogPage.groupTodo(all.where(AlarmLogPage.isTodo)) : const [];
         });
       }
     } on SiteError catch (e) {
@@ -127,27 +140,40 @@ class _AlarmLogPageState extends State<AlarmLogPage> {
               Text(tr('Needs your attention (${_todo.length}) — not alarms', '待处理事项（${_todo.length} 条，不是报警）'),
                   style: NwText.titleSmall.copyWith(color: c.text)),
               const SizedBox(height: Nw.s8),
-              for (final a in _todo)
+              for (final g in _todo)
                 Padding(
                   padding: const EdgeInsets.only(bottom: Nw.s8),
                   child: NwCard(
-                    key: AlarmLogPage.todoRowKey(a.key),
+                    key: AlarmLogPage.todoRowKey(g.first.key),
                     onTap: () => Navigator.push(context,
-                        MaterialPageRoute<void>(builder: (_) => SiteAlertScenePage(api: widget.api, alert: a))),
+                        MaterialPageRoute<void>(builder: (_) => SiteAlertScenePage(api: widget.api, alert: g.first))),
                     child: Row(children: [
                       Expanded(
-                          child: Text('${alertSourceText(a.robot)} · ${alertTitle(a.kind, a.title)}',
+                          child: Text(
+                              '${alertSourceText(g.first.robot)} · ${alertTitle(g.first.kind, g.first.title)}'
+                              '${g.length > 1 ? tr(' · ${g.length} times', ' · 共 ${g.length} 次') : ''}',
                               maxLines: 2,
                               overflow: TextOverflow.ellipsis,
                               style: NwText.bodyMedium.copyWith(color: c.text))),
-                      Text(_day(a.firstMs), style: NwText.labelSmall.copyWith(color: c.textSecondary)),
+                      Text(_day(g.first.firstMs), style: NwText.labelSmall.copyWith(color: c.textSecondary)),
                     ]),
                   ),
                 ),
             ]),
           ),
+        // 第 13 轮 W13-02：报警部分要有标题；没有未处理的也说一句（以前待处理事项后面直接接「已解决」）
+        if (rows != null) ...[
+          Text(tr('Alarms', '报警'), style: NwText.titleSmall.copyWith(color: c.text)),
+          const SizedBox(height: Nw.s8),
+        ],
         if (rows != null && rows.isEmpty)
           Text(tr('No alarms.', '没有报警。'), style: NwText.bodyMedium.copyWith(color: c.textSecondary)),
+        if (rows != null && rows.isNotEmpty && rows.every((a) => a.resolvedMs != null))
+          Padding(
+            padding: const EdgeInsets.only(bottom: Nw.s8),
+            child: Text(tr('No open alarms.', '没有未处理的报警。'),
+                style: NwText.bodyMedium.copyWith(color: c.textSecondary)),
+          ),
         for (final a in rows ?? const <Alert>[])
           Padding(
             padding: const EdgeInsets.only(bottom: Nw.s8),
