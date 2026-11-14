@@ -1,17 +1,32 @@
-/* 跟手机 App 同样的三种字(SIL OFL 1.1,许可证随包在 /assets/OFL-*.txt)。取自 mobile/assets/fonts 的可变字体,
-   只留拉丁、标点、箭头、几何形状几段,转成 woff2;字重走 wght 轴。中文落到系统字(mobile.json 的 fallback)。
+/* 网页的字(redesign/console-v2):Barlow —— DIN 一脉的标识用无衬线(SIL OFL 1.1,许可证随包在 /assets/OFL-Barlow.txt),
+   取自 @fontsource/barlow 5.2.8 的 latin 子集,400/500/600/700 四个字重;数字一律 tabular-nums(见 styles.css)。
+   等宽 JetBrains Mono 只留给编号、地址、错误码这类代码。中文落到系统字(web.json 的 fallback)。
    打在包里,不从网上取(站点 CSP:font-src 'self')。 */
 @font-face {
-  font-family: "Space Grotesk";
-  src: url("./fonts/SpaceGrotesk.woff2") format("woff2");
-  font-weight: 300 700;
+  font-family: "Barlow";
+  src: url("./fonts/Barlow-400.woff2") format("woff2");
+  font-weight: 400;
   font-style: normal;
   font-display: swap;
 }
 @font-face {
-  font-family: "Inter";
-  src: url("./fonts/Inter.woff2") format("woff2");
-  font-weight: 100 900;
+  font-family: "Barlow";
+  src: url("./fonts/Barlow-500.woff2") format("woff2");
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Barlow";
+  src: url("./fonts/Barlow-600.woff2") format("woff2");
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Barlow";
+  src: url("./fonts/Barlow-700.woff2") format("woff2");
+  font-weight: 700;
   font-style: normal;
   font-display: swap;
 }

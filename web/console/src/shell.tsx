@@ -103,9 +103,10 @@ export function roleLabel(role: string): Key {
     : role === "viewer" ? "roleViewer" : "roleFamily";
 }
 
-/** 页面默认的明暗:W60 起全站深色(原来管理页浅色,切页面像进了另一个系统)。 */
-export function pageScheme(_p: Page): "dark" | "light" {
-  return "dark";
+/** 页面默认的明暗(redesign,用户 2026-11-14「两种都有」):保安页深色(夜间值班室),管理页浅色(白天办公室)。
+ *  W60 当初嫌切页面像进了另一个系统 —— 现在侧栏两套都是深石墨色的「立柱」,标识语言一致,深浅只换工作区。 */
+export function pageScheme(p: Page): "dark" | "light" {
+  return isAdminPage(p) ? "light" : "dark";
 }
 
 /** 个人在「外观」里的选择:默认(深色)、跟随系统、一直深色、一直浅色。 */
