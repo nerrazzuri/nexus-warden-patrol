@@ -1724,3 +1724,5 @@ input[aria-invalid="true"] { border-color: var(--c-error); outline-color: var(--
 /* UIUX-030:长弹窗(添加摄像头、添加授权…)在矮屏上要内部滚动时,底下「取消 / 提交」一行贴住对话框底边,一直看得见 */
 .modal form > .row.end:last-child { position: sticky; bottom: -20px; z-index: 2; margin: 12px -20px -20px; padding: 12px 20px;
   background: var(--c-surface); border-top: 1px solid var(--c-outline); }
+/* UIUX-027:布置页各页签的「新建」按钮一个样子:普通高主按钮、左对齐、按内容宽(以前有的撑满 320px、有的是小按钮) */
+.ly-new { align-self: flex-start; width: auto; }

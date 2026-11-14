@@ -266,6 +266,13 @@ describe("布防时间页", () => {
     expect(bar.querySelector("button")).toBeNull();
   });
 
+  it("UIUX-021:页签不再跟页名重复(页名「布防时间」,第一个页签叫「时间表」)", async () => {
+    const { container: c } = page();
+    await waitFor(() => expect(c.querySelector('[data-arm-tab="times"]')).not.toBeNull());
+    expect(c.querySelector("h1")!.textContent).toBe("布防时间");
+    expect(c.querySelector('[data-arm-tab="times"]')!.textContent).toBe("时间表");
+  });
+
   it("没存离开有提示", async () => {
     const { container: c } = page();
     await waitFor(() => expect(row(c, 0).querySelector(".armblock")).not.toBeNull());
