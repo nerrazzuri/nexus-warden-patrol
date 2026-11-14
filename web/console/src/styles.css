@@ -838,7 +838,9 @@ button.armstate:focus-visible { outline: 2px solid var(--c-primary); outline-off
 
 /* W44 报警记录页 */
 .alarmlog { display: flex; flex-direction: column; gap: var(--sp-4); }
-.alarmlog .sum { display: flex; gap: var(--sp-3); align-items: stretch; flex-wrap: wrap; }
+/* UIUX-E025:三个数字框不再被旁边的留言框撑高 */
+.alarmlog .sum { display: flex; gap: var(--sp-3); align-items: flex-start; flex-wrap: wrap; }
+.note-label { display: block; margin: 4px 0 2px; font-size: 13px; font-weight: 600; color: var(--c-textSecondary); }
 .alarmlog .box { min-width: 130px; padding: 12px 18px; border: 1px solid var(--c-outline); border-radius: var(--r-r12); background: var(--c-surface); }
 .alarmlog .box b { display: block; font-size: 26px; font-variant-numeric: tabular-nums; }
 .alarmlog .box span { color: var(--c-textSecondary); font-size: 13px; }

@@ -126,9 +126,11 @@ export function AlarmLogPage(props: { now: number; role: string; me?: string }) 
           {note && note.author === props.me && canNote(props.role) && !draft && (
             <button type="button" class="btn sm" onClick={() => setDraft(note.text)}>{t("alNoteEdit")}</button>
           )}
+          {/* UIUX-E015:留言框有看得见的标签(原来只有占位字) */}
+          {canNote(props.role) && <label class="note-label" for="al-note-text">{t("alNoteLabel")}</label>}
           {canNote(props.role) && (
             <div class="note-write">
-              <textarea rows={2} maxLength={500} placeholder={t("alNoteHint")} value={draft}
+              <textarea id="al-note-text" rows={2} maxLength={500} placeholder={t("alNoteHint")} value={draft}
                 onInput={(e) => setDraft((e.target as HTMLTextAreaElement).value)} />
               <button type="button" class="btn sm" disabled={!draft.trim()} onClick={leave}>{t("alNoteSave")}</button>
             </div>
