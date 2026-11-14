@@ -666,8 +666,9 @@ button.armstate:focus-visible { outline: 2px solid var(--c-primary); outline-off
 .banner-acts { display: flex; gap: var(--sp-2); flex-wrap: wrap; }
 /* 第三档 #40:别的页上来了新报警,右下角弹卡片(值守页有横幅,不弹);右上角会盖住各页的主按钮。
    在对话框、账号菜单下面,页面上面 */
-.alarm-pop { position: fixed; bottom: var(--sp-5); right: var(--sp-5); z-index: 4; width: min(380px, calc(100% - 32px));
-  display: flex; flex-direction: column; gap: var(--sp-2); padding: var(--sp-3) var(--sp-4); border-radius: var(--r-r12);
+/* UIUX-048:缩小(380 → 320 宽、按钮小档、一行写全),少盖住页面上的按钮 */
+.alarm-pop { position: fixed; bottom: var(--sp-4); right: var(--sp-4); z-index: 4; width: min(320px, calc(100% - 32px));
+  display: flex; flex-direction: column; gap: var(--sp-1); padding: var(--sp-2) var(--sp-3); border-radius: var(--r-r12);
   background: var(--c-error); color: var(--c-onError); box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45); }
 .alarm-pop.p2 { background: var(--c-warningSoft); color: var(--c-text); border: 1px solid var(--c-warning); }
 .alarm-pop .shape.P1 { fill: currentColor; }

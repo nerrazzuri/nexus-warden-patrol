@@ -66,17 +66,27 @@ describe("报警弹窗", () => {
     expect(b.chimes).toEqual(["P2"]);
   });
 
-  it("「我来处理」确认这一条;「去值守页」跳过去;「关闭」只关这一条,再来一条新的照样弹", () => {
+  it("「我来处理」确认这一条;「去值守页」跳过去;「全部收起」关掉,再来一条新的照样弹", () => {
     const r = render(pop([alert()]));
     fireEvent.click(r.getByText("我来处理"));
     expect(acks).toEqual(["k1"]);
     fireEvent.click(r.getByText("去值守页"));
     expect(gone).toBe(1);
-    fireEvent.click(r.getByLabelText("关闭"));
+    fireEvent.click(r.getByLabelText("全部收起"));
     expect(r.container.querySelector("[data-alarm-pop]")).toBeNull();
     r.rerender(pop([alert(), alert({ key: "k2", title: "B 摔倒了" })]));
     expect(r.container.querySelector("[data-alarm-pop]")?.textContent).toContain("B 摔倒了");
     expect(b.chimes).toEqual(["P1", "P1"]);
+  });
+
+  it("UIUX-048:× 是「全部收起」—— 好几条一起收,不会一条接一条补上来;再来新的照样弹", () => {
+    const r = render(pop([alert(), alert({ key: "k2", title: "B 摔倒了" })]));
+    fireEvent.click(r.getByLabelText("全部收起"));
+    expect(r.container.querySelector("[data-alarm-pop]")).toBeNull();
+    r.rerender(pop([alert(), alert({ key: "k2", title: "B 摔倒了" }), alert({ key: "k3", title: "C 卡住了" })]));
+    const card = r.container.querySelector("[data-alarm-pop]")!;
+    expect(card.textContent).toContain("C 卡住了");
+    expect(card.textContent).not.toContain("另有");
   });
 
   it("好几条:先给最要紧的(没确认的 P1 在 P2 前),写「另有 N 件」", () => {
@@ -114,7 +124,7 @@ describe("报警声音", () => {
 
   it("关了卡片照样响(要有人确认才停);离开页面停", () => {
     const r = render(pop([alert({ channel: "sound" })]));
-    fireEvent.click(r.getByLabelText("关闭"));
+    fireEvent.click(r.getByLabelText("全部收起"));
     expect(b.ringing).toBe(true);
     r.unmount();
     expect(b.ringing).toBe(false);
