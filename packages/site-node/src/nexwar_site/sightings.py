@@ -276,6 +276,16 @@ class PersonWatch:
             log.exception("%s 人在哪说不出来", rid)
             return None
 
+    def _place_name(self, p: dict[str, Any]) -> str | None:
+        """位置(带 map_id / map_version)说成地方名;说不出 None。"""
+        if self.where_of is None:
+            return None
+        try:
+            return self.where_of(p)
+        except Exception:
+            log.exception("人最后在哪说不出来")
+            return None
+
     def _open(self, rid: str) -> Any:
         """这台还开着的那条 P1(告警台不支持就 ``None``:按老规矩,人走了就清)。"""
         f = getattr(self.alerts, "open_of", None)
@@ -312,7 +322,9 @@ class PersonWatch:
         self._warned.pop(rid, None)                      # 又看见人当场再喊
         a = self._open(rid)
         last = a.context.get("last_seen") or {}
-        where = (f",最后在 ({last['x']}, {last['y']})" if "x" in last else "")
+        # 易用性 r7:不写坐标(客户看不懂);说得出在哪就写地方,说不出就不写
+        place = self._place_name(last) if "x" in last else None
+        where = f",最后在{place}" if place else ""
         self.alerts.amend_open(
             rid, PERSON_KIND, title=f"看不到了,去向不明{where}",
             detail="机器人一段时间没看到这个人了,人可能躲到别处或离开了。请保安到场查看,"

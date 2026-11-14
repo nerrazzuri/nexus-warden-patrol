@@ -196,7 +196,18 @@ void main() {
     await t.pumpWidget(const SizedBox());
     await t.pumpWidget(MaterialApp(home: SiteMapPreviewPage(api: api, mapId: 'estate-1', version: '9')));
     await t.pumpAndSettle();
-    expect(find.textContaining('区域第 3 版 · 改过没确认：确认后才能下发'), findsOneWidget);
+    expect(find.textContaining('禁行区改过没确认：确认后才能下发'), findsOneWidget);
+    // 易用性 r7:不写「区域第 N 版」(从 0 数、客户看不懂);确认过的说「已确认」
+    expect(find.textContaining('区域第'), findsNothing);
+    for (final rev in [0, 1]) {
+      api.zonesView = <String, dynamic>{'revision': rev, 'zones': <dynamic>[], 'confirm_text': 'x',
+          'confirmed': {'revision': rev, 'by': 'alice', 'at_ms': 1, 'current': true}};
+      await t.pumpWidget(const SizedBox());
+      await t.pumpWidget(MaterialApp(home: SiteMapPreviewPage(api: api, mapId: 'estate-1', version: '9')));
+      await t.pumpAndSettle();
+      expect(find.textContaining(rev == 0 ? '没有禁行区 · 已确认' : '禁行区已确认'), findsOneWidget);
+      expect(find.textContaining('区域第'), findsNothing);
+    }
   });
 
   test('轨迹画布：点按比例缩进画布、起点在里面', () {

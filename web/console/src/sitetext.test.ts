@@ -45,6 +45,10 @@ describe("站点原文翻成英文", () => {
     expect(siteText("账号 wangxm").text).toBe("Account wangxm");
     expect(siteText("新登记:确认之前只许手动派").text).toBe("Newly registered: manual dispatch only until confirmed");
     expect(siteText("从 9 编辑:擦了 0.09 平方米、画了 0 平方米障碍").text).toBe("Edited from version 9: erased 0.09 m², drew 0 m² of obstacles");
+    // 易用性 r7:站点只写改了的那半句
+    expect(siteText("从 9 编辑:擦了 0.09 平方米").text).toBe("Edited from version 9: erased 0.09 m²");
+    expect(siteText("从 9 编辑:画了 1.5 平方米障碍").text).toBe("Edited from version 9: drew 1.5 m² of obstacles");
+    expect(siteText("从 9 编辑:只改了禁行区、显示").text).toBe("Edited from version 9: only no-go zones / display changed");
   });
 
   it("起飞前检查:按检查项说人话", () => {
