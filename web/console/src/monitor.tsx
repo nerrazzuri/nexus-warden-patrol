@@ -4,7 +4,6 @@
 // 原来的「实时画面」页 = 监控墙,「地图」页 = 中间的地图(派去看一眼、临时路线在页头)。
 import { useEffect, useMemo, useState } from "preact/hooks";
 import { api, ApiError, enc } from "./api";
-import { AlertDetail } from "./alertdetail";
 import { alertHeadline, canHandleAlerts } from "./alertinfo";
 import { modeLabel } from "./armingpage";
 import { CameraWell, camLabel } from "./camera";
@@ -12,18 +11,19 @@ import { hm, nameOf, useDutySettings } from "./data";
 import { Confirm } from "./dialogs";
 import { guardAlarms, pickSlots, rankUnits, type SlotPick } from "./dutyrank";
 import { alertTitle, andList, joinList, lang, t, type Key } from "./i18n";
-import { Shape } from "./icons";
 import { locText, type UnitInfo } from "./live";
 import { LiveWall } from "./livewall";
 import { shiftStart } from "./maplayers";
 import type { CanvasArea } from "./mapcanvas";
 import { MapPage, verdictText, type MapPreset, type MapTool } from "./mappage";
 import { pointInPolygon } from "./mapview";
-import { autoResolved, canDispatch, forGuard, robotCams, type Alert, type Mode, type RobotState } from "./model";
+import { autoResolved, canDispatch, forGuard, robotCams, type Alert, type Mode } from "./model";
 import { DispatchOnce } from "./routedispatch";
 import { pageAllowed } from "./shell";
 import { byText } from "./sitetext";
 import { VideoSlot, type Scene } from "./slot";
+import { Sign, stateSign, type VideoLayout } from "./signs";
+import { awayText, IncidentView, responder, type FixedCam } from "./incident";
 import { isSecurity, ShiftTimeline } from "./shifttl";
 import { TodayPatrols, type TodayItem } from "./todaypatrols";
 
@@ -32,12 +32,10 @@ const LOST = new Set(["loc_lost_paused", "loc_lost_idle"]);
 /** W74:要保安先到场才能关的告警(站点 alert_store.ARRIVAL_KINDS)。 */
 const ARRIVE = new Set(["dog_sees_person"]);
 
-export type VideoLayout = "single" | "dual" | "quad" | "wall";
 const LAYOUT_KEY = "nexwar.monvideo";
 const PRESET_KEY = "nexwar.mappreset";
 const PINS_KEY = "nexwar.dutyPins";
 
-interface FixedCam { name: string; zone: string }
 interface Note { id: number; at_ms: number; author: string; text: string }
 
 function load<T extends string>(key: string, ok: readonly T[], dflt: T): T {
@@ -45,19 +43,6 @@ function load<T extends string>(key: string, ok: readonly T[], dflt: T): T {
 }
 function keep(key: string, v: string): void {
   try { localStorage.setItem(key, v); } catch { /* 隐私模式:不记 */ }
-}
-
-/** 机器人状态的标识(ISO 7010 那套):正常绿方块、待命/充电空心方块、要注意黄三角、出事红圈。 */
-export function stateSign(s: RobotState): "ok" | "idle" | "warn" | "bad" {
-  if (s === "offline" || s === "estop" || s === "fell") return "bad";
-  if (s === "patrolling" || s === "returning" || s === "deterring" || s === "manual") return "ok";
-  if (s === "idle" || s === "charging") return "idle";
-  return "warn";
-}
-
-export function Sign({ kind }: { kind: "ok" | "idle" | "warn" | "bad" | "info" }) {
-  return kind === "bad" ? <Shape kind="P1" size={12} /> : kind === "warn" ? <Shape kind="P2" size={13} />
-    : <i class={`sign ${kind}`} aria-hidden="true" />;
 }
 
 /** 最近活动:本班的告警(来了、谁接了、谁关了)和巡逻(开始、走完),新的在前。 */
@@ -138,8 +123,15 @@ export function MonitorPage(props: {
   const hot = new Set(alarms.map((a) => a.context?.zone).filter((z): z is string => !!z));
   const unitOf = (id: string) => props.units.find((u) => u.robot.robot_id === id);
   const can = canHandleAlerts(props.role);
-  const shown = detail ? props.alerts.find((a) => a.key === detail) ?? recent.find((a) => a.key === detail) ?? null : null;
   const top = alarms[0];
+  // 有告警时中间是「这件事」(第 3 期):点左栏哪一条看哪一条;没点过看最要紧的那条;点「全场地图」回平时的样子,
+  // 直到来了新的一条
+  const [siteView, setSiteView] = useState(false);
+  const [seenTop, setSeenTop] = useState<string | null>(null);
+  if ((top?.key ?? null) !== seenTop) { setSeenTop(top?.key ?? null); if (top && top.key !== seenTop) setSiteView(false); }
+  const picked = detail ? props.alerts.find((a) => a.key === detail) ?? recent.find((a) => a.key === detail) ?? null : null;
+  const focus = picked ?? (!siteView ? top ?? null : null);
+  const openAlarm = (a: Alert) => { setSelected(a.robot); setDetail(a.key); setSiteView(false); };
   const held = props.units.filter((u) => u.robot.held != null);
   const noHome = props.units.filter((u) => u.state !== "offline" && u.robot.home_set === false);
   const fixHome = pageAllowed("admin/localization", props.role);
@@ -190,7 +182,7 @@ export function MonitorPage(props: {
           {can && top.acked_ms == null && <button type="button" class="btn primary" onClick={() => void post(`/api/alerts/${enc(top.key)}/ack`)}>{t("dutyTake")}</button>}
           {can && mustArrive(top) && <button type="button" class="btn" onClick={() => void post(`/api/alerts/${enc(top.key)}/arrive`)}>{t("dutyArrive")}</button>}
           {can && LOST.has(top.kind) && <button type="button" class="btn" onClick={() => { setFinding(top.robot); setSelected(top.robot); }}>{t("dutyFindPose")}</button>}
-          <button type="button" class="btn" onClick={() => setDetail(top.key)}>{t(can && !mustArrive(top) ? "dutyDetailClose" : "dutyDetail")}</button>
+          <button type="button" class="btn" onClick={() => openAlarm(top)}>{t("monOpenIncident")}</button>
         </>
       ),
     };
@@ -232,6 +224,13 @@ export function MonitorPage(props: {
   ].slice(0, 4);
   const layouts: { v: VideoLayout; key: Key }[] = [{ v: "single", key: "monSingle" }, { v: "dual", key: "monDual" }, { v: "quad", key: "monQuad" }, { v: "wall", key: "monWall" }];
   const presets: { v: MapPreset; key: Key }[] = [{ v: "all", key: "monPAll" }, { v: "route", key: "monPRoutes" }, { v: "zones", key: "monPZones" }, { v: "cameras", key: "monPCams" }];
+  const byIncident = focus && focus.resolved_ms == null ? [...ranked].sort((x, y) => near(x) - near(y)) : ranked;
+  function near(u: typeof ranked[number]): number {
+    if (!focus) return 0;
+    if (u.robot.robot_id === focus.robot) return -1;
+    const d = responder({ ...focus, robot: "" }, [u]);
+    return d?.dist ?? Number.POSITIVE_INFINITY;
+  }
   const activity = recentActivity(recent.filter(forGuard), patrols, since, props.now).slice(0, 6);
   const robotsPage = pageAllowed("admin/robots", props.role);
 
@@ -241,20 +240,20 @@ export function MonitorPage(props: {
         <section class="mon-sec">
           <h2 class="mon-h"><span>{t("monSecurity")}{security.length > 0 && ` ${security.length}`}</span><small>{t("monSecurityHint")}</small></h2>
           {security.length === 0 ? <p class="mon-none"><Sign kind={props.stale ? "warn" : "ok"} />{t(props.stale ? "dutyStaleAlarms" : "monNoneOpen")}</p> : (
-            <ul class="mon-q">{security.map((a) => <QueueRow key={a.key} a={a} on={detail === a.key} onOpen={() => { setSelected(a.robot); setDetail(a.key); }} />)}</ul>
+            <ul class="mon-q">{security.map((a) => <QueueRow key={a.key} a={a} on={focus?.key === a.key} onOpen={() => openAlarm(a)} />)}</ul>
           )}
         </section>
         <section class="mon-sec">
           <h2 class="mon-h"><span>{t("monEquipment")}{equipment.length > 0 && ` ${equipment.length}`}</span><small>{t("monEquipmentHint")}</small></h2>
-          {equipment.length === 0 ? <p class="mon-none"><Sign kind="ok" />{t("monNoneOpen")}</p> : (
-            <ul class="mon-q">{equipment.map((a) => <QueueRow key={a.key} a={a} on={detail === a.key} onOpen={() => { setSelected(a.robot); setDetail(a.key); }} />)}</ul>
+          {equipment.length === 0 ? <p class="mon-none"><Sign kind={props.stale ? "warn" : "ok"} />{t(props.stale ? "dutyStaleAlarms" : "monNoneOpen")}</p> : (
+            <ul class="mon-q">{equipment.map((a) => <QueueRow key={a.key} a={a} on={focus?.key === a.key} onOpen={() => openAlarm(a)} />)}</ul>
           )}
         </section>
         <section class="mon-sec mon-closed">
           <h2 class="mon-h"><span>{t("monClosed", { n: closed.length })}</span></h2>
           <ul class="mon-closedlist">
             {closed.slice(0, 12).map((a) => (
-              <li key={a.key}><button type="button" onClick={() => setDetail(a.key)}>
+              <li key={a.key} class={focus?.key === a.key ? "on" : ""}><button type="button" onClick={() => openAlarm(a)}>
                 <time class="mono">{hm(a.resolved_ms ?? a.first_ms)}</time>
                 <span>{alertTitle(lang.value, a.kind, a.title)}</span>
                 <span class="muted">{autoResolved(a) ? t("monAuto") : verdictText(a) || t("monResolved")}</span>
@@ -266,6 +265,13 @@ export function MonitorPage(props: {
       </aside>
 
       <section class="mon-center" aria-label={t("secMonitor")}>
+        {focus ? (
+          <IncidentView a={focus} units={props.units} alerts={props.alerts} now={props.now} role={props.role} mode={props.mode ?? null} stale={props.stale}
+            cams={cams} layout={layout} onLayout={(l) => { setLayout(l); keep(LAYOUT_KEY, l); }} say={props.say} refresh={props.refresh}
+            onSite={() => { setDetail(null); setSiteView(true); }} onZoom={props.onZoom}
+            onFindPose={(r) => { setFinding(r); setSelected(r); setDetail(null); setSiteView(true); }}
+            onAreas={(a) => setAreas((old) => (old.length === a.length && old.every((x, i) => x.name === a[i].name) ? old : a))} />
+        ) : (<>
         <header class="mon-head" data-sign={head.sign}>
           <Sign kind={head.sign} />
           <div class="mon-head-text">
@@ -320,18 +326,20 @@ export function MonitorPage(props: {
               </div>
             )}
         </section>
+        </>)}
       </section>
 
       <aside class="mon-right" aria-label={t("monRobots")}>
         <section class="mon-sec">
-          <h2 class="mon-h"><span>{t("monRobots")}</span></h2>
+          <h2 class="mon-h"><span>{t(focus && focus.resolved_ms == null ? "monRobotsNearest" : "monRobots")}</span></h2>
           {ranked.length === 0 && <p class={props.stale ? "warn mon-pad" : "muted mon-pad"}>{t(props.stale ? "dutyStaleRobots" : "dutyNoRobots")}</p>}
           <ul class="mon-robots">
-            {ranked.map((u) => {
+            {byIncident.map((u) => {
               const id = u.robot.robot_id;
               const sign = u.stale ? "warn" : stateSign(u.state);
               const loc = locText(u);
-              const sub = [zoneOf(u), u.task, loc ? t(loc) : "", u.state !== "offline" && u.robot.home_set === false ? t("dutyRowNoHome") : ""].filter(Boolean).join(" · ");
+              const dist = focus && focus.resolved_ms == null ? responder({ ...focus, robot: "" }, [u])?.dist ?? null : null;
+              const sub = [awayText(dist, focus?.context?.zone ?? focus?.context?.where ?? ""), zoneOf(u), u.task, loc ? t(loc) : "", u.state !== "offline" && u.robot.home_set === false ? t("dutyRowNoHome") : ""].filter(Boolean).join(" · ");
               return (
                 <li key={id} class={selected === id ? "mon-robot on" : "mon-robot"} data-robot={id}>
                   <div class="mon-robot-top">
@@ -367,10 +375,6 @@ export function MonitorPage(props: {
         onPick={(robot, at) => { location.hash = `#/recordings?robot=${enc(robot)}&t=${Math.round(at)}`; }} />
 
       {askResume && <Confirm text={t("dutyResumeAsk", { n: held.length })} yes={t("dutyResumeAll")} onNo={() => setAskResume(false)} onYes={resumeAll} />}
-      {shown && (
-        <AlertDetail a={shown} role={props.role} now={props.now} units={props.units} onClose={() => setDetail(null)}
-          refresh={props.refresh} say={props.say} onFindPose={(r) => { setFinding(r); setSelected(r); }} />
-      )}
     </div>
   );
 }

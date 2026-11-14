@@ -10,6 +10,7 @@ import type { Alert, RobotState } from "./model";
 import { MonitorPage, recentActivity } from "./monitor";
 import { shiftSpans } from "./shifttl";
 import type { TodayItem } from "./todaypatrols";
+import realRobots from "../../../mobile/test/fixtures/site_robots.json";
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
 const unit = (id: string, state: RobotState, o: Partial<UnitInfo> = {}): UnitInfo => ({
@@ -22,16 +23,19 @@ const alert = (o: Partial<Alert>): Alert => ({
 });
 const NOW = Date.UTC(2026, 10, 15, 15, 0);   // 本班从 19:00(本地)开始;用相对 NOW 的时刻
 let recent: Alert[] = [];
+let posts: { url: string; body: unknown }[] = [];
 let notes: { text: string }[] = [];
 
 beforeEach(() => {
   lang.value = "zh";
   recent = [];
   notes = [];
+  posts = [];
   vi.stubGlobal("IntersectionObserver", undefined);
   try { localStorage.clear(); } catch { /* */ }
   setFetch(((url: string, init?: RequestInit) => {
     if (init?.method === "POST") {
+      posts.push({ url, body: JSON.parse(String(init.body ?? "{}")) });
       if (url === "/api/shift-notes") notes.push(JSON.parse(String(init.body)));
       return Promise.resolve(json({}));
     }
@@ -39,6 +43,9 @@ beforeEach(() => {
     if (url.startsWith("/api/shift-notes")) return Promise.resolve(json({ latest: { id: 1, at_ms: NOW - 3_600_000, author: "olga", text: "停车场有施工车" } }));
     if (url.startsWith("/api/patrols/today")) return Promise.resolve(json({ items: [] }));
     if (url.startsWith("/api/cameras")) return Promise.resolve(json({ cameras: [] }));
+    if (url.startsWith("/api/routes?")) return Promise.resolve(json({ revision: 1, timezone: "UTC", routes: [{ id: "loop-test", map_id: "m1", map_version: "1", title: "一楼夜巡" }], schedules: [] }));
+    if (url === "/api/robots") return Promise.resolve(json({ robots: [{ ...realRobots.robots[0], robot_id: "B", running: { ...realRobots.robots[0].running, map_id: "m1", map_version: "1" } }] }));
+    if (url.startsWith("/api/robots/B/patrol-plan")) return Promise.resolve(json({ estimate_s: 600, start_ms: 0, queued: false, because: "", loops: 3 }));
     return Promise.resolve(json({}, 404));
   }) as typeof fetch);
 });
@@ -158,5 +165,75 @@ describe("最近活动、整班时间轴", () => {
     expect(spans).toEqual([{ robot: "A", from: 100, to: 200, kind: "patrol" }, { robot: "A", from: 500, to: 600, kind: "patrol" },
       { robot: "B", from: 300, to: 600, kind: "offline" }]);
     expect(marks.map((m) => [m.key, m.kind])).toEqual([["s", "security"], ["e", "equipment"]]);
+  });
+});
+
+describe("右栏机器人(从老值班页搬来)", () => {
+  const held = (id: string) => unit(id, "estop", { robot: { robot_id: id, active: true, fresh: true, revoked: false, held: { by: "gina" }, status: { online: true, last_seen: 0 } } as never });
+  const noHome = (id: string) => unit(id, "idle", { robot: { robot_id: id, active: true, fresh: true, revoked: false, held: null, home_set: false, status: { online: true, last_seen: 0 } } as never });
+
+  it("数据过期:状态写未知", () => {
+    const c = page([], "guard", [unit("A", "patrolling", { stale: true })]);
+    expect(c.querySelector(".mon-robot")!.textContent).toContain("未知");
+    expect(c.querySelector(".mon-robot")!.textContent).not.toContain("巡逻中");
+  });
+
+  it("全部急停后:先确认再全部恢复;只读没有恢复按钮", async () => {
+    const c = page([], "guard", [held("A"), held("B"), unit("C", "idle")]);
+    expect(c.querySelector(".mon-head h1")!.textContent).toBe("2 台机器人已急停");
+    fireEvent.click(Array.from(c.querySelectorAll(".mon-head button")).find((b) => b.textContent === "全部恢复…")!);
+    expect(posts).toEqual([]);
+    fireEvent.click(Array.from(document.querySelectorAll(".modal button")).find((b) => b.textContent?.includes("全部恢复"))!);
+    await waitFor(() => expect(posts.map((p) => p.url).sort()).toEqual(["/api/robots/A/resume", "/api/robots/B/resume"]));
+    cleanup();
+    const d = page([], "viewer", [held("A")]);
+    expect(d.querySelector(".mon-head h1")!.textContent).toBe("1 台机器人已急停");
+    expect(d.querySelectorAll(".mon-head-acts button").length).toBe(0);
+  });
+
+  it("P2-08:钉住的那一路刷新后还在", () => {
+    const c = page([]);
+    fireEvent.click(c.querySelector(".slot-pin")!);
+    expect(c.querySelector(".slot-pin")!.getAttribute("aria-pressed")).toBe("true");
+    cleanup();
+    expect(page([]).querySelector(".slot-pin")!.getAttribute("aria-pressed")).toBe("true");
+  });
+
+  it("详情:保安在本页选中它(不跳页),管理员去机器人页", () => {
+    const c = page([]);
+    const more = c.querySelector('[data-robot-more="B"]') as HTMLAnchorElement;
+    fireEvent.click(more);
+    expect(c.querySelector('.mon-robot.on')!.getAttribute("data-robot")).toBe("B");
+    cleanup();
+    expect(page([], "admin").querySelector('[data-robot-more="A"]')!.getAttribute("href")).toBe("#/admin/robots?robot=A");
+  });
+
+  it("W8-09:保安每台有「派巡逻」:选路线、圈数,派出", async () => {
+    const c = page([]);
+    fireEvent.click(c.querySelector('[data-robot-patrol="B"]')!);
+    const route = await waitFor(() => { const x = document.querySelector('select[name="route"]') as HTMLSelectElement; expect(x.options.length).toBe(2); return x; });
+    fireEvent.change(route, { target: { value: "loop-test" } });
+    fireEvent.change(document.querySelector('select[name="loops"]')!, { target: { value: "3" } });
+    await waitFor(() => expect(document.querySelector("[data-plan]")).not.toBeNull());
+    fireEvent.click(Array.from(document.querySelectorAll("dialog button")).find((b) => b.textContent === "派出")!);
+    await waitFor(() => expect(posts).toContainEqual({ url: "/api/robots/B/patrol", body: { mission_id: "loop-test", loops: 3 } }));
+  });
+
+  it("W8-04:在跑几圈的那台写第几圈", () => {
+    const c = page([], "guard", [unit("A", "patrolling", { task: "第 2 / 3 圈" }), unit("B", "idle")]);
+    expect(c.querySelector('[data-robot="A"] .mon-robot-sub')!.textContent).toContain("第 2 / 3 圈");
+  });
+
+  it("W6-01 没原点:页头写哪几台出不了发;保安请联系管理员,管理员去定位页;离线的不算", () => {
+    const c = page([], "guard", [noHome("A"), noHome("B"), unit("C", "idle")]);
+    expect(c.querySelector(".mon-head h1")!.textContent).toContain("A、B");
+    expect(c.querySelector(".mon-head p")!.textContent).toContain("请联系管理员");
+    expect(c.querySelector('[data-robot="A"] .mon-robot-sub')!.textContent).toContain("没有原点");
+    expect(c.querySelector('[data-robot="C"] .mon-robot-sub')).toBeNull();
+    cleanup();
+    expect(page([], "admin", [noHome("A")]).querySelector(".mon-head-acts a")!.getAttribute("href")).toBe("#/admin/localization");
+    cleanup();
+    const off = unit("A", "offline", { robot: { robot_id: "A", active: true, fresh: false, revoked: false, held: null, home_set: false, status: { online: false, last_seen: 0 } } as never });
+    expect(page([], "guard", [off]).querySelector(".mon-head h1")!.textContent).not.toContain("出不了发");
   });
 });
