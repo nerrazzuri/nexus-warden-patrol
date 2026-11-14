@@ -32,6 +32,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from nexwar_contract.footprint import BODY_LEN, BODY_WID
+
 log = logging.getLogger(__name__)
 
 CHECK_FRAMES = 20
@@ -108,8 +110,8 @@ class Config:
     ground_tol: float = 0.08            # 离地这么近算地面
     drop: float = 0.15                  # 比地面低这么多算落差
     near: float = 3.0                   # 落差只在这么近里认(远处地面点少、误报多)
-    body_len: float = 0.93
-    body_wid: float = 0.48
+    body_len: float = BODY_LEN
+    body_wid: float = BODY_WID
     margin: float = 0.05
     #: 机头那一窄条(``|y| ≤ nose_half_w``)自滤再往前管这么多(11-05 商场:机头下挂的线平时读 0.05 m,
     #: 机身一歪读到 0.12 m,正前 0.55 m 挡了 5 分钟)。两边不管:草坪边、箱子角照样挡。

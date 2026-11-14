@@ -17,6 +17,8 @@ import time
 from collections import deque
 from pathlib import Path
 
+from safety_geom import BODY_HX
+
 BLIND_X = 0.4043
 
 
@@ -83,7 +85,7 @@ def main() -> int:
                     # 360° 的看得见 —— 不去掉的话 Nav2 比真机多看见侧面,对「弱守卫」的结论偏乐观
                     py = r * math.sin(angle)
                     if self.args.blind_band == "cone":          # 实测锥形视野(obs-3f4)
-                        if abs(px) <= BLIND_X or abs(py) > 0.6 + 0.9 * max(abs(px) - 0.465, 0.0):
+                        if abs(px) <= BLIND_X or abs(py) > 0.6 + 0.9 * max(abs(px) - BODY_HX, 0.0):
                             angle += msg.angle_increment
                             continue
                         pts.append((px, py, 0.35))

@@ -26,6 +26,7 @@ from typing import Any
 
 import numpy as np
 
+from nexwar_contract.footprint import BASE_MARGIN, BODY_LEN, BODY_WID
 from nexwar_contract.obsbridge import Grid
 
 #: 记忆多久(秒)。前后两台半球雷达都看不见机身两侧那条带,转身、急转时扫过它全靠往前走时看过的记忆;
@@ -329,8 +330,8 @@ class ObstacleView:
         return np.nonzero(res == 1)[0].tolist(), np.nonzero(res < 0)[0].tolist()
 
     #: 机身矩形的一半(查「狗自己刚站过的地方」用;跟守卫的机身尺寸一致)。
-    body_hl: float = 0.465
-    body_hw: float = 0.24
+    body_hl: float = BODY_LEN / 2
+    body_hw: float = BODY_WID / 2
 
     def _self_swept(self, wx: Any, wy: Any) -> Any:
         """这些点(里程系)是不是狗自己最近 :data:`SELF_SWEPT_S` 秒里机身占过的地方:雷达看不见机身
@@ -391,9 +392,9 @@ class Verdict:
 
 @dataclass
 class ObstacleGuard:
-    body_len: float = 0.93
-    body_wid: float = 0.48
-    margin: float = 0.05
+    body_len: float = BODY_LEN
+    body_wid: float = BODY_WID
+    margin: float = BASE_MARGIN
     latency: float = 0.2                     # 链路延迟(秒,待 W00d 量)
     decel: float = 0.5                       # 刹车减速度(m/s²,待真机量)
     extra: float = 0.3                       # 再留这么多(米)

@@ -49,6 +49,7 @@ for p in ("packages/contract/src", "packages/robot-agent/src"):
     sys.path.insert(0, str(ROOT / p))
 
 from nexwar_agent.obstacles import ObstacleGuard, ObstacleView  # noqa: E402
+from nexwar_contract.footprint import BODY_LEN  # noqa: E402
 from nexwar_contract.obsbridge import Grid, pack_bits  # noqa: E402
 
 RES, SIZE = 0.1, 80
@@ -60,7 +61,7 @@ CONE = False
 
 def cone_mask(lx, ly):
     """机身系的点在不在前 / 后雷达的视野锥里(跟正式代码 OCC_FOV_HALF_M / OCC_FOV_SLOPE 一样)。"""
-    return np.abs(ly) <= 0.6 + 0.9 * np.maximum(np.abs(lx) - 0.465, 0.0)
+    return np.abs(ly) <= 0.6 + 0.9 * np.maximum(np.abs(lx) - BODY_LEN / 2, 0.0)
 MIN_TRAVEL_MPS, MIN_TURN_RPS, DEBAND_FLOOR = 0.13, 0.15, 0.03
 UNKNOWN_SLOW_MPS = 0.3
 TURN_VX = 0.05

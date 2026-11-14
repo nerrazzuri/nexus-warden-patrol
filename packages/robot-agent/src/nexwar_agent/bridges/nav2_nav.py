@@ -38,7 +38,7 @@ from nexwar_agent import route_check
 from nexwar_agent.bridges.hal_nav import HalNavBackend
 from nexwar_agent.bridges.planned_nav import PlannedNavBackend, _heading
 from nexwar_contract import errcodes
-from nexwar_contract.footprint import BASE_MARGIN
+from nexwar_contract.footprint import BASE_MARGIN, BODY_LEN, BODY_WID
 from nexwar_contract.navbridge import MAX_VIA
 from nexwar_contract.obsbridge import pack_bits
 from nexwar_contract.planning import costmap as cmod
@@ -671,8 +671,8 @@ class Nav2NavBackend(PlannedNavBackend):
         if not slow:
             return math.inf
         g = self.guard
-        hl = getattr(g, "body_len", 0.93) / 2 + getattr(g, "margin", 0.05)
-        hw = getattr(g, "body_wid", 0.48) / 2 + getattr(g, "margin", 0.05)
+        hl = getattr(g, "body_len", BODY_LEN) / 2 + getattr(g, "margin", BASE_MARGIN)
+        hw = getattr(g, "body_wid", BODY_WID) / 2 + getattr(g, "margin", BASE_MARGIN)
         h = _heading(here.yaw, sign)
         c, sn = math.cos(h), math.sin(h)
         rect = tuple((here.x + c * dx - sn * dy, here.y + sn * dx + c * dy)
@@ -1470,7 +1470,7 @@ class Nav2NavBackend(PlannedNavBackend):
             g = self.guard
             self._clear_at = (list(getattr(self, "_clear_at", [])) + [[
                 round(here.x, 3), round(here.y, 3), round(here.yaw, 4),
-                getattr(g, "body_len", 0.93) / 2, getattr(g, "body_wid", 0.48) / 2]])[-8:]
+                getattr(g, "body_len", BODY_LEN) / 2, getattr(g, "body_wid", BODY_WID) / 2]])[-8:]
             self._send_map()
         trapped = lethal or self._trapped(here)
         occupied = not trapped and tgt is not None and self._target_occupied(here, tgt)
@@ -1526,8 +1526,8 @@ class Nav2NavBackend(PlannedNavBackend):
         if view is None or not getattr(view, "frames", None):
             return False
         g = self.guard
-        hl = getattr(g, "body_len", 0.93) / 2
-        hw = getattr(g, "body_wid", 0.48) / 2
+        hl = getattr(g, "body_len", BODY_LEN) / 2
+        hw = getattr(g, "body_wid", BODY_WID) / 2
         ends: list[list[tuple[float, float]]] = [[], []]
         for d in (0.15, 0.25, 0.35):
             for k in range(-4, 5):
@@ -1548,8 +1548,8 @@ class Nav2NavBackend(PlannedNavBackend):
         if view is None or not getattr(view, "frames", None):
             return False
         g = self.guard
-        hl = getattr(g, "body_len", 0.93) / 2
-        hw = getattr(g, "body_wid", 0.48) / 2
+        hl = getattr(g, "body_len", BODY_LEN) / 2
+        hw = getattr(g, "body_wid", BODY_WID) / 2
         c, s = math.cos(tgt.yaw), math.sin(tgt.yaw)
         ch, sh = math.cos(here.yaw), math.sin(here.yaw)
         pts = []
@@ -1723,9 +1723,9 @@ class Nav2NavBackend(PlannedNavBackend):
         sgn = 1.0 if travel >= 0 else -1.0
         X = np.broadcast_to(c[:, None] * sgn, (n, n))            # 行进方向上的前后
         Y = np.broadcast_to(c[None, :], (n, n))
-        margin = getattr(g, "margin", 0.05)
-        hl = getattr(g, "body_len", 0.93) / 2 + margin
-        hw = getattr(g, "body_wid", 0.48) / 2 + margin
+        margin = getattr(g, "margin", BASE_MARGIN)
+        hl = getattr(g, "body_len", BODY_LEN) / 2 + margin
+        hw = getattr(g, "body_wid", BODY_WID) / 2 + margin
         corr = (np.abs(Y) <= hw) & (X > hl)
         bad = corr & (occ | (~known & (X > hl + FRONT_BLIND_M)))
         clear = float(X[bad].min() - hl) if bad.any() else float(X[corr].max() - hl)
@@ -1767,9 +1767,9 @@ class Nav2NavBackend(PlannedNavBackend):
         XX, YY = np.meshgrid(cc, cc, indexing="ij")         # 行 = 朝前,列 = 朝左(拍下时机身系)
         wall = self._map_wall_grid(XX, YY, f.pose, here)
         shield = occ | wall
-        margin = getattr(g, "margin", 0.05)
-        hl = getattr(g, "body_len", 0.93) / 2 + margin
-        hw = getattr(g, "body_wid", 0.48) / 2 + margin
+        margin = getattr(g, "margin", BASE_MARGIN)
+        hl = getattr(g, "body_len", BODY_LEN) / 2 + margin
+        hw = getattr(g, "body_wid", BODY_WID) / 2 + margin
         X = XX * (1.0 if travel >= 0 else -1.0)
         gap = np.abs(YY) - hw
         jl = int(np.searchsorted(cc, hw))                   # 左边第一列在走廊外
