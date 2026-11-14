@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>经理 概况</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&display=swap">
+<style>
+body{margin:0}
+a{color:#1A5FA6}a:hover{color:#0E3F70}
+.btn{height:40px;padding:0 16px;border:1px solid #6B7178;border-radius:2px;background:#fff;color:#16191D;font:600 14px Barlow,"Noto Sans SC","Microsoft YaHei UI",sans-serif;display:inline-flex;align-items:center;gap:8px;cursor:pointer;white-space:nowrap;text-decoration:none}
+.btn.sm{height:32px;padding:0 12px;font-size:13px}
+.btn.pri{background:#1F6FC0;border-color:#1F6FC0;color:#fff;font-weight:700}
+.btn.danger{border-color:#C4262B;color:#B0202A}
+.btn.stop{background:#D42F33;border-color:#D42F33;color:#fff;font-weight:700}
+.seg{display:inline-flex;border:1px solid #C9CDD2}
+.seg .btn{border:0;background:transparent;border-radius:0}
+.seg .btn+.btn{border-left:1px solid #C9CDD2}
+.seg .btn.on{background:#1F6FC0;color:#fff}
+.lbl{font-size:12px;font-weight:600;letter-spacing:.06em;color:#5A6068}
+.mut{color:#565B62}
+.ring{display:inline-block;flex:none;width:12px;height:12px;border:3px solid #C4262B;border-radius:50%;box-sizing:border-box}
+.tri{display:inline-block;flex:none;width:0;height:0;border-left:7px solid transparent;border-right:7px solid transparent;border-bottom:12px solid #D99A00}
+.sq{display:inline-block;flex:none;width:9px;height:9px;background:#1E8A47}
+.h1{margin:0;font-size:24px;line-height:30px;font-weight:700}
+.h2{margin:0;font-size:16px;line-height:22px;font-weight:600}
+.card{background:#fff;border:1px solid #D5D8DC}
+.cardh{display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:1px solid #E3E5E8}
+th{text-align:left;font-size:12px;font-weight:600;letter-spacing:.06em;color:#5A6068;padding:10px 12px;border-bottom:1px solid #D5D8DC;background:#F8F9F8}
+td{padding:10px 12px;border-bottom:1px solid #E3E5E8;vertical-align:middle}
+.chip{display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 8px;font-size:12px;font-weight:700}
+.ok{background:#E4F3E9;color:#17703A} .warn{background:#FCF1D6;color:#7A5200} .bad{background:#FBE5E5;color:#A41E24} .gray{background:#ECEEF0;color:#454A51}
+.field{display:flex;flex-direction:column;gap:4px}
+.field input,.field select{height:40px;border:1px solid #6B7178;border-radius:2px;padding:0 10px;font:inherit;background:#fff;color:#16191D}
+.snav a{display:flex;align-items:center;gap:8px;min-height:36px;margin:0 8px;padding:0 10px;color:#A9AEB4;text-decoration:none;font-weight:600;border-radius:2px}
+.snav a[aria-current]{background:#1F6FC0;color:#fff} .snav .g{color:#A9AEB4}
+.snav .g{padding:14px 16px 4px}
+.new{display:inline-block;padding:0 6px;border:1px solid #1F6FC0;color:#1A5FA6;font-size:11px;font-weight:700;line-height:16px}
+</style>
+</helmet>
+<div style="width:1536px;height:960px;box-sizing:border-box;background:#F2F3F1;color:#16191D;font-family:Barlow,'Noto Sans SC','Microsoft YaHei UI',sans-serif;font-size:14px;line-height:20px;font-variant-numeric:tabular-nums;display:flex;flex-direction:column">
+  <header style="height:60px;flex:none;display:flex;align-items:center;gap:16px;padding:0 16px;border-bottom:1px solid #2E333A;background:#0A0C0E;color:#ECEDEA">
+    <div style="display:flex;flex-direction:column;line-height:14px"><b style="font-size:13px;letter-spacing:.12em">NEXUS</b><span style="font-size:11px;letter-spacing:.12em;color:#B4B8BE">WARDEN</span></div>
+    <span style="color:#B4B8BE">estate-1</span>
+    <nav aria-label="主导航" style="display:flex;margin-left:8px">
+      <a href="#" style="height:60px;display:flex;align-items:center;padding:0 14px;color:#B4B8BE;text-decoration:none;font-weight:600">值班</a>
+      <a href="#" style="height:60px;display:flex;align-items:center;padding:0 14px;color:#B4B8BE;text-decoration:none;font-weight:600">记录与录像</a>
+      <a href="#" aria-current="page" style="height:60px;display:flex;align-items:center;padding:0 14px;color:#ECEDEA;text-decoration:none;font-weight:700;box-shadow:inset 0 -3px 0 #1F6FC0">现场设置</a>
+    </nav>
+    <div style="flex:1"></div>
+    <span style="display:inline-flex;align-items:center;gap:8px;height:32px;padding:0 12px;background:#20242A;color:#ECEDEA;font-weight:600">撤防 · 19:00 布防</span>
+    <span style="display:inline-flex;align-items:center;gap:8px;height:32px;padding:0 12px;background:#20242A;font-weight:600">机器人 2/2 在线</span>
+    <a href="#" style="display:inline-flex;align-items:center;gap:8px;height:32px;padding:0 12px;background:#20242A;color:#B4B8BE;font-weight:600;text-decoration:none">未处理 0</a>
+    <span style="font-size:16px;font-weight:600">10:20</span>
+    <span style="color:#B4B8BE">olga · 经理</span>
+    <button class="btn stop" type="button"><span style="width:12px;height:12px;border:2px solid #fff;border-radius:50%;box-sizing:border-box"></span>全部急停</button>
+  </header>
+  <div style="flex:1;min-height:0;display:grid;grid-template-columns:232px minmax(0,1fr)">
+    <nav class="snav" aria-label="现场设置" style="background:#15181B;border-right:1px solid #15181B;padding:8px 0;overflow:auto">
+      <div class="g lbl">日常</div>
+      <a href="#" aria-current="page"><span style="flex:1">概况</span></a>
+      <a href="#"><span style="flex:1">机器人</span></a>
+      <div class="g lbl">现场</div>
+      <a href="#"><span style="flex:1">布防与巡逻</span></a>
+      <div class="g lbl">记录</div>
+      <a href="#"><span style="flex:1">报告</span></a>
+    </nav>
+    <main style="min-width:0;min-height:0;overflow:hidden;display:flex;flex-direction:column">
+
+<div style="flex:none;display:flex;align-items:center;gap:16px;padding:0 28px;min-height:74px;background:#fff;border-bottom:1px solid #D5D8DC">
+      <h1 style="margin:0;font-size:28px;line-height:34px">概况</h1>
+      <p style="margin:0;font-size:15px;min-width:0">现在撤防，19:00 按时间表布防。机器人 2 台都在线。<b>昨晚 4 次报警，2 次确认有人，都已结案。</b></p>
+      <span style="flex:1"></span><a class="btn" href="#">看报告</a></div>
+<div style="flex:1;min-height:0;overflow:auto;display:grid;grid-template-columns:minmax(0,1fr) 400px;background:#fff">
+  <div style="display:flex;flex-direction:column;min-width:0">
+    <section aria-label="最近 24 小时的报警" style="background:#fff;border-bottom:1px solid #D5D8DC">
+      <div style="display:flex;align-items:baseline;gap:12px;padding:14px 20px"><h2 class="h2" style="font-size:17px;flex:1">最近 24 小时的报警 4</h2><a href="#">看全部记录</a></div>
+      <div style="display:grid;grid-template-columns:96px 20px minmax(0,1fr) 110px 180px;gap:12px;padding:0 20px 6px" class="lbl"><span>时间</span><span></span><span>事件</span><span>谁处理的</span><span>结论</span></div>
+      <ul style="list-style:none;margin:0;padding:0">
+        <li style="display:grid;grid-template-columns:96px 20px minmax(0,1fr) 110px 180px;gap:12px;align-items:center;padding:10px 20px;border-top:1px solid #E3E5E8"><span class="mut">11-14 23:47</span><span><span class="ring"></span></span><span>北门有人翻越 · A 到场</span><span class="mut">gina</span><b style="font-weight:600">确认有人</b></li>
+        <li style="display:grid;grid-template-columns:96px 20px minmax(0,1fr) 110px 180px;gap:12px;align-items:center;padding:10px 20px;border-top:1px solid #E3E5E8"><span class="mut">11-14 22:05</span><span><span class="tri"></span></span><span>停车场车辆停留</span><span class="mut">gina</span><b style="font-weight:600">误报</b></li>
+        <li style="display:grid;grid-template-columns:96px 20px minmax(0,1fr) 110px 180px;gap:12px;align-items:center;padding:10px 20px;border-top:1px solid #E3E5E8"><span class="mut">11-14 21:40</span><span><span class="ring"></span></span><span>南墙有人靠近</span><span class="mut">gina</span><b style="font-weight:600">确认有人</b></li>
+        <li style="display:grid;grid-template-columns:96px 20px minmax(0,1fr) 110px 180px;gap:12px;align-items:center;padding:10px 20px;border-top:1px solid #E3E5E8"><span class="mut">11-14 20:52</span><span><span class="tri"></span></span><span>A 在东走廊受阻</span><span class="mut">系统</span><b style="font-weight:600">已自行恢复</b></li>
+      </ul>
+    </section>
+    <section aria-label="今天的安排" style="background:#fff;border-bottom:1px solid #D5D8DC;padding:16px 20px 18px">
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px"><h2 class="h2" style="font-size:17px;flex:1">今天的安排 · 11-15 周日</h2><a href="#">去布防与巡逻改</a></div>
+      <div style="display:grid;grid-template-columns:72px minmax(0,1fr) 170px;column-gap:14px;align-items:center;position:relative">
+        <span></span><div style="position:relative;height:16px;font-size:11px;color:#5A6068"><span style="position:absolute;left:0.0%;transform:translateX(-50%)">00</span><span style="position:absolute;left:12.5%;transform:translateX(-50%)">03</span><span style="position:absolute;left:25.0%;transform:translateX(-50%)">06</span><span style="position:absolute;left:37.5%;transform:translateX(-50%)">09</span><span style="position:absolute;left:50.0%;transform:translateX(-50%)">12</span><span style="position:absolute;left:62.5%;transform:translateX(-50%)">15</span><span style="position:absolute;left:75.0%;transform:translateX(-50%)">18</span><span style="position:absolute;left:87.5%;transform:translateX(-50%)">21</span><span style="position:absolute;left:100.0%;transform:translateX(-50%)">24</span></div><span></span>
+        <div style="display:contents"><span style="font-weight:600;padding:6px 0">布防</span>
+      <div style="position:relative;height:26px;background:#F2F3F1;margin:4px 0"><div style="position:absolute;left:0.000%;width:29.167%;top:0;bottom:0;background:#2A2F35;color:#fff;font-size:12px;font-weight:600;display:flex;align-items:center;padding-left:6px;overflow:hidden;white-space:nowrap">全部防区</div><div style="position:absolute;left:79.167%;width:20.833%;top:0;bottom:0;background:#2A2F35;color:#fff;font-size:12px;font-weight:600;display:flex;align-items:center;padding-left:6px;overflow:hidden;white-space:nowrap">全部防区</div></div><span class="mut" style="font-size:13px;padding:6px 0">时间表开着</span></div>
+        <div style="display:contents"><span style="font-weight:600;padding:6px 0">授权</span>
+      <div style="position:relative;height:26px;background:#F2F3F1;margin:4px 0"><div style="position:absolute;left:37.500%;width:12.500%;top:0;bottom:0;background:repeating-linear-gradient(135deg,#fff 0 4px,#D5D8DC 4px 5px);box-shadow:inset 0 0 0 2px #2A2F35;font-size:12px;font-weight:600;display:flex;align-items:center;padding-left:6px;overflow:hidden;white-space:nowrap">空调维修</div><div style="position:absolute;left:58.333%;width:12.500%;top:0;bottom:0;background:repeating-linear-gradient(135deg,#fff 0 4px,#D5D8DC 4px 5px);box-shadow:inset 0 0 0 2px #2A2F35;font-size:12px;font-weight:600;display:flex;align-items:center;padding-left:6px;overflow:hidden;white-space:nowrap">保洁</div></div><span class="mut" style="font-size:13px;padding:6px 0">2 条 · 空调维修在生效</span></div>
+        <div style="display:contents"><span style="font-weight:600;padding:6px 0">巡逻</span>
+      <div style="position:relative;height:26px;background:#F2F3F1;margin:4px 0"><div style="position:absolute;left:4.167%;width:10.417%;top:0;bottom:0;background:#9AA0A6;color:#fff;font-size:12px;font-weight:600;display:flex;align-items:center;padding-left:6px;overflow:hidden;white-space:nowrap">B</div><div style="position:absolute;left:16.667%;width:10.417%;top:0;bottom:0;background:#9AA0A6;color:#fff;font-size:12px;font-weight:600;display:flex;align-items:center;padding-left:6px;overflow:hidden;white-space:nowrap">A</div><div style="position:absolute;left:42.000%;width:1.750%;top:0;bottom:0;background:#9AA0A6;color:#fff;font-size:12px;font-weight:600;display:flex;align-items:center;padding-left:6px;overflow:hidden;white-space:nowrap"></div><div style="position:absolute;left:91.667%;width:8.333%;top:0;bottom:0;background:#9AA0A6;color:#fff;font-size:12px;font-weight:600;display:flex;align-items:center;padding-left:6px;overflow:hidden;white-space:nowrap">A</div></div><span class="mut" style="font-size:13px;padding:6px 0">4 轮 · A 现在在跑</span></div>
+        <span></span><div style="position:relative;height:0"><div style="position:absolute;left:43.06%;top:-118px;height:122px;width:2px;background:#16191D"></div><span style="position:absolute;left:43.06%;top:6px;transform:translateX(-50%);font-size:12px;font-weight:700">现在 10:20</span></div><span></span>
+      </div>
+      <p class="mut" style="margin:26px 0 0;font-size:13px">深色 = 布防；斜线框 = 授权（区内发现有人不报紧急报警）；灰 = 巡逻。</p>
+    </section>
+    <section aria-label="管理员在处理" style="background:#fff;border-bottom:1px solid #D5D8DC">
+      <div style="display:flex;align-items:baseline;gap:12px;padding:14px 20px"><h2 class="h2" style="font-size:17px">管理员在处理 4</h2><span class="mut" style="font-size:13px">批准和设备提醒由管理员 demo 处理，这里只看进度</span></div>
+      <ul style="list-style:none;margin:0;padding:0">
+        <li style="display:grid;grid-template-columns:20px minmax(0,1fr) 190px;gap:4px 12px;padding:11px 20px;border-top:1px solid #E3E5E8;align-items:center"><span><span aria-hidden="true" style="display:inline-block;flex:none;width:12px;height:12px;border-radius:50%;background:#1F6FC0"></span></span><div><b>机器人 C40388 请求加入</b><div class="mut" style="font-size:13px">你的手机 09:41 发起</div></div><span class="mut" style="font-size:13px">等 demo 核对批准</span></li>
+        <li style="display:grid;grid-template-columns:20px minmax(0,1fr) 190px;gap:4px 12px;padding:11px 20px;border-top:1px solid #E3E5E8;align-items:center"><span><span aria-hidden="true" style="display:inline-block;flex:none;width:12px;height:12px;border-radius:50%;background:#1F6FC0"></span></span><div><b>Ravi 申请保安账号</b><div class="mut" style="font-size:13px">09:58 从手机 App 发起</div></div><span class="mut" style="font-size:13px">等 demo 批准</span></li>
+        <li style="display:grid;grid-template-columns:20px minmax(0,1fr) 190px;gap:4px 12px;padding:11px 20px;border-top:1px solid #E3E5E8;align-items:center"><span><span class="tri"></span></span><div><b>B 的电池在变差</b><div class="mut" style="font-size:13px">满电能跑 2 小时 10 分，上个月 3 小时</div></div><span class="mut" style="font-size:13px">demo 已看到 · 11-14</span></li>
+        <li style="display:grid;grid-template-columns:20px minmax(0,1fr) 190px;gap:4px 12px;padding:11px 20px;border-top:1px solid #E3E5E8;align-items:center"><span><span class="tri"></span></span><div><b>站点磁盘用了 71%</b><div class="mut" style="font-size:13px">录像保留 30 天，约 40 天后满</div></div><span class="mut" style="font-size:13px">demo 已看到 · 11-15</span></li>
+      </ul>
+    </section>
+  </div>
+  <div style="display:flex;flex-direction:column;border-left:1px solid #D5D8DC">
+    <section aria-label="机器人" style="background:#fff;border-bottom:1px solid #D5D8DC">
+      <div style="display:flex;align-items:baseline;padding:14px 20px"><h2 class="h2" style="font-size:17px;flex:1">机器人</h2><a href="#">去机器人页</a></div>
+      <div style="display:grid;grid-template-columns:44px 24px minmax(0,1fr) auto;gap:0 8px;align-items:center">
+        <div style="grid-column:1/-1;height:1px;background:#E3E5E8"></div><span style="padding:12px 0 12px 20px"><span class="sq"></span></span><b style="font-size:16px">A</b><span>在跑停车场一圈 · 今天第 2 次</span><span class="mut" style="padding-right:20px">正常</span>
+        <div style="grid-column:1/-1;height:1px;background:#E3E5E8"></div><span style="padding:12px 0 12px 20px"><span class="tri"></span></span><b style="font-size:16px">B</b><span>在线 · 今天巡逻 1 次</span><span style="padding-right:20px;color:#7A5200;font-weight:600">电池变差</span>
+      </div>
+    </section>
+    <section aria-label="这周" style="background:#fff;border-bottom:1px solid #D5D8DC">
+      <div style="display:flex;align-items:baseline;padding:14px 20px"><h2 class="h2" style="font-size:17px;flex:1">这周 11-09 起</h2><a href="#">看报告</a></div>
+      <dl style="margin:0;display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:0 14px">
+        <div style="grid-column:1/-1;height:1px;background:#E3E5E8"></div><dt style="padding:10px 0 10px 20px">事件</dt><dd style="margin:0;padding:10px 0;font-weight:700;text-align:right">23 次</dd><dd class="mut" style="margin:0;padding:10px 20px 10px 0">比上周多 3 次</dd>
+        <div style="grid-column:1/-1;height:1px;background:#E3E5E8"></div><dt style="padding:10px 0 10px 20px">误报</dt><dd style="margin:0;padding:10px 0;font-weight:700;text-align:right">9 次</dd><dd class="mut" style="margin:0;padding:10px 20px 10px 0">与上周持平</dd>
+        <div style="grid-column:1/-1;height:1px;background:#E3E5E8"></div><dt style="padding:10px 0 10px 20px">巡逻走完</dt><dd style="margin:0;padding:10px 0;font-weight:700;text-align:right">26 / 28</dd><dd class="mut" style="margin:0;padding:10px 20px 10px 0">2 次电量不够</dd>
+      </dl>
+    </section>
+    <section aria-label="值班人员" style="background:#fff;border-bottom:1px solid #D5D8DC">
+      <div style="display:flex;align-items:baseline;padding:14px 20px"><h2 class="h2" style="font-size:17px;flex:1">值班人员</h2></div>
+      <dl style="margin:0;display:grid;grid-template-columns:96px minmax(0,1fr);gap:0 12px">
+        <div style="grid-column:1/-1;height:1px;background:#E3E5E8"></div><dt class="mut" style="padding:10px 0 10px 20px">昨晚</dt><dd style="margin:0;padding:10px 20px 10px 0">gina · 19:00–07:00</dd>
+        <div style="grid-column:1/-1;height:1px;background:#E3E5E8"></div><dt class="mut" style="padding:10px 0 10px 20px">今晚</dt><dd style="margin:0;padding:10px 20px 10px 0">gina · 19:00 起</dd>
+      </dl>
+      <div style="padding:12px 20px 16px;border-top:1px solid #E3E5E8"><div class="lbl" style="margin-bottom:6px">交班留言 · gina 07:02</div><p style="margin:0">北门 23:47 翻越的人已离开，录像已保留。北门围栏顶部有一段松了，建议白天找人修。</p></div>
+    </section>
+  </div>
+</div>
+
+    </main>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1536,"height":960}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

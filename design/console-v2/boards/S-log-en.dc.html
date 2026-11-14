@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Site Setup Audit log</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&display=swap">
+<style>
+body{margin:0}
+a{color:#1A5FA6}a:hover{color:#0E3F70}
+.btn{height:40px;padding:0 16px;border:1px solid #6B7178;border-radius:2px;background:#fff;color:#16191D;font:600 14px Barlow,"Noto Sans SC","Microsoft YaHei UI",sans-serif;display:inline-flex;align-items:center;gap:8px;cursor:pointer;white-space:nowrap;text-decoration:none}
+.btn.sm{height:32px;padding:0 12px;font-size:13px}
+.btn.pri{background:#1F6FC0;border-color:#1F6FC0;color:#fff;font-weight:700}
+.btn.danger{border-color:#C4262B;color:#B0202A}
+.btn.stop{background:#D42F33;border-color:#D42F33;color:#fff;font-weight:700}
+.seg{display:inline-flex;border:1px solid #C9CDD2}
+.seg .btn{border:0;background:transparent;border-radius:0}
+.seg .btn+.btn{border-left:1px solid #C9CDD2}
+.seg .btn.on{background:#1F6FC0;color:#fff}
+.lbl{font-size:12px;font-weight:600;letter-spacing:.06em;color:#5A6068}
+.mut{color:#565B62}
+.ring{display:inline-block;flex:none;width:12px;height:12px;border:3px solid #C4262B;border-radius:50%;box-sizing:border-box}
+.tri{display:inline-block;flex:none;width:0;height:0;border-left:7px solid transparent;border-right:7px solid transparent;border-bottom:12px solid #D99A00}
+.sq{display:inline-block;flex:none;width:9px;height:9px;background:#1E8A47}
+.h1{margin:0;font-size:24px;line-height:30px;font-weight:700}
+.h2{margin:0;font-size:16px;line-height:22px;font-weight:600}
+.card{background:#fff;border:1px solid #D5D8DC}
+.cardh{display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:1px solid #E3E5E8}
+th{text-align:left;font-size:12px;font-weight:600;letter-spacing:.06em;color:#5A6068;padding:10px 12px;border-bottom:1px solid #D5D8DC;background:#F8F9F8}
+td{padding:10px 12px;border-bottom:1px solid #E3E5E8;vertical-align:middle}
+.chip{display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 8px;font-size:12px;font-weight:700}
+.ok{background:#E4F3E9;color:#17703A} .warn{background:#FCF1D6;color:#7A5200} .bad{background:#FBE5E5;color:#A41E24} .gray{background:#ECEEF0;color:#454A51}
+.field{display:flex;flex-direction:column;gap:4px}
+.field input,.field select{height:40px;border:1px solid #6B7178;border-radius:2px;padding:0 10px;font:inherit;background:#fff;color:#16191D}
+.snav a{display:flex;align-items:center;gap:8px;min-height:36px;margin:0 8px;padding:0 10px;color:#A9AEB4;text-decoration:none;font-weight:600;border-radius:2px}
+.snav a[aria-current]{background:#1F6FC0;color:#fff} .snav .g{color:#A9AEB4}
+.snav .g{padding:14px 16px 4px}
+.new{display:inline-block;padding:0 6px;border:1px solid #1F6FC0;color:#1A5FA6;font-size:11px;font-weight:700;line-height:16px}
+</style>
+</helmet>
+<div style="width:1536px;height:960px;box-sizing:border-box;background:#F2F3F1;color:#16191D;font-family:Barlow,'Noto Sans SC','Microsoft YaHei UI',sans-serif;font-size:14px;line-height:20px;font-variant-numeric:tabular-nums;display:flex;flex-direction:column">
+  <header style="height:60px;flex:none;display:flex;align-items:center;gap:16px;padding:0 16px;border-bottom:1px solid #2E333A;background:#0A0C0E;color:#ECEDEA">
+    <div style="display:flex;flex-direction:column;line-height:14px"><b style="font-size:13px;letter-spacing:.12em">NEXUS</b><span style="font-size:11px;letter-spacing:.12em;color:#B4B8BE">WARDEN</span></div>
+    <span style="color:#B4B8BE">estate-1</span>
+    <nav aria-label="Main navigation" style="display:flex;margin-left:8px">
+      <a href="#" style="height:60px;display:flex;align-items:center;padding:0 14px;color:#B4B8BE;text-decoration:none;font-weight:600">Monitoring</a>
+      <a href="#" style="height:60px;display:flex;align-items:center;padding:0 14px;color:#B4B8BE;text-decoration:none;font-weight:600">Events & Recordings</a>
+      <a href="#" aria-current="page" style="height:60px;display:flex;align-items:center;padding:0 14px;color:#ECEDEA;text-decoration:none;font-weight:700;box-shadow:inset 0 -3px 0 #1F6FC0">Site Setup</a>
+    </nav>
+    <div style="flex:1"></div>
+    <span style="display:inline-flex;align-items:center;gap:8px;height:32px;padding:0 12px;background:#20242A;color:#ECEDEA;font-weight:600">Disarmed · Arms 19:00</span>
+    <span style="display:inline-flex;align-items:center;gap:8px;height:32px;padding:0 12px;background:#20242A;font-weight:600">Robots 2/2 online</span>
+    <a href="#" style="display:inline-flex;align-items:center;gap:8px;height:32px;padding:0 12px;background:#20242A;color:#B4B8BE;font-weight:600;text-decoration:none">Open 0</a>
+    <span style="font-size:16px;font-weight:600">10:20</span>
+    <span style="color:#B4B8BE">demo · Administrator</span>
+    <button class="btn stop" type="button"><span style="width:12px;height:12px;border:2px solid #fff;border-radius:50%;box-sizing:border-box"></span>E-STOP ALL</button>
+  </header>
+  <div style="flex:1;min-height:0;display:grid;grid-template-columns:232px minmax(0,1fr)">
+    <nav class="snav" aria-label="Site Setup" style="background:#15181B;border-right:1px solid #15181B;padding:8px 0;overflow:auto">
+      <div class="g lbl">Daily</div>
+      <a href="#"><span style="flex:1">Overview</span><span class="chip" style="height:20px;background:#1F6FC0;color:#fff">6</span></a>
+      <a href="#"><span style="flex:1">Robots</span></a>
+      <a href="#"><span style="flex:1">Users</span></a>
+      <div class="g lbl">Site</div>
+      <a href="#"><span style="flex:1">Layout</span></a>
+      <a href="#"><span style="flex:1">Arming & patrols</span></a>
+      <a href="#"><span style="flex:1">Access</span></a>
+      <div class="g lbl">Records</div>
+      <a href="#" aria-current="page"><span style="flex:1">Reports</span></a>
+      <div class="g lbl">Advanced</div>
+      <a href="#"><span style="flex:1">Maintenance</span></a>
+    </nav>
+    <main style="min-width:0;min-height:0;overflow:hidden;display:flex;flex-direction:column">
+
+<div style="flex:none;display:flex;align-items:center;gap:16px;padding:0 28px;min-height:74px;background:#fff;border-bottom:1px solid #D5D8DC">
+      <h1 style="margin:0;font-size:28px;line-height:34px">Reports</h1>
+      <p style="margin:0;font-size:15px;min-width:0">Who did what on this site, newest first. 214 entries, 11-09 to 11-15.</p>
+      <span style="flex:1"></span><div class="seg" role="tablist" aria-label="View"><button class="btn" type="button" role="tab" aria-selected="false">Reports</button><button class="btn on" type="button" role="tab" aria-selected="true">Audit log</button></div></div>
+<div style="flex:1;min-height:0;overflow:auto;background:#fff;display:flex;flex-direction:column">
+  <div style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;padding:14px 28px;border-bottom:1px solid #D5D8DC">
+    <div class="field"><label class="lbl">From</label><input style="height:40px;border:1px solid #6B7178;border-radius:2px;padding:0 10px;font:inherit;background:#fff;color:#16191D;width:130px" value="2026-11-09"></div>
+    <div class="field"><label class="lbl">To</label><input style="height:40px;border:1px solid #6B7178;border-radius:2px;padding:0 10px;font:inherit;background:#fff;color:#16191D;width:130px" value="2026-11-15"></div>
+    <div class="field"><label class="lbl">User</label><select style="height:40px;border:1px solid #6B7178;border-radius:2px;padding:0 10px;font:inherit;background:#fff;color:#16191D;width:170px"><option>All users</option></select></div>
+    <div class="field"><label class="lbl">Operate</label><select style="height:40px;border:1px solid #6B7178;border-radius:2px;padding:0 10px;font:inherit;background:#fff;color:#16191D;width:170px"><option>All</option><option>Alarm handling</option><option>Arming</option><option>Robots</option><option>Site layout</option><option>Accounts</option></select></div>
+    <span style="flex:1"></span><button class="btn" type="button">Export CSV</button>
+  </div>
+  <section aria-label="Records" style="background:#fff;border-bottom:1px solid #D5D8DC">
+    <table style="width:100%;border-collapse:collapse"><thead><tr><th style="width:150px">Time</th><th style="width:140px">User</th><th style="width:130px">Category</th><th>Action</th></tr></thead><tbody>
+      <tr><td class="mut">11-15 10:20</td><td><b>demo</b></td><td class="mut">Arming</td><td>Temporary disarm, south wall, until 12:30</td></tr>
+      <tr><td class="mut">11-15 10:12</td><td><b>demo</b></td><td class="mut">Site layout</td><td>Reduced keep-out zone "Pond" · pending confirmation</td></tr>
+      <tr><td class="mut">11-15 09:40</td><td><b>Lin (engineer)</b></td><td class="mut">Accounts</td><td>Signed in (temporary engineer account)</td></tr>
+      <tr><td class="mut">11-15 09:31</td><td><b>demo</b></td><td class="mut">Accounts</td><td>Created temporary engineer account Lin · 4 h</td></tr>
+      <tr><td class="mut">11-15 07:00</td><td><b>System</b></td><td class="mut">Arming</td><td>Disarmed by schedule</td></tr>
+      <tr><td class="mut">11-15 06:52</td><td><b>—</b></td><td class="mut">Robots</td><td>B returned to dock</td></tr>
+      <tr><td class="mut">11-14 23:55</td><td><b>gina</b></td><td class="mut">Alarm handling</td><td>Disposition: confirmed intrusion · Perimeter breach, north gate</td></tr>
+      <tr><td class="mut">11-14 23:49</td><td><b>gina</b></td><td class="mut">Robots</td><td>Dispatched A to north gate</td></tr>
+      <tr><td class="mut">11-14 23:48</td><td><b>gina</b></td><td class="mut">Alarm handling</td><td>Took ownership of alarm "Perimeter breach, north gate"</td></tr>
+      <tr><td class="mut">11-14 22:09</td><td><b>gina</b></td><td class="mut">Alarm handling</td><td>Closed "Vehicle loitering, car park" · False alarm</td></tr>
+      <tr><td class="mut">11-14 19:02</td><td><b>gina</b></td><td class="mut">Arming</td><td>Armed</td></tr>
+      <tr><td class="mut">11-14 18:30</td><td><b>olga</b></td><td class="mut">Arming</td><td>Added exception 12-31, disarmed all day</td></tr>
+    </tbody></table>
+    <div style="display:flex;align-items:center;gap:10px;padding:10px 20px;border-top:1px solid #E3E5E8"><span class="mut" style="flex:1">1–12 of 214</span><button class="btn sm" type="button" disabled style="color:#9AA0A6;border-color:#C7CACE">Previous</button><button class="btn sm" type="button">Next</button></div>
+  </section>
+</div>
+
+    </main>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1536,"height":960}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

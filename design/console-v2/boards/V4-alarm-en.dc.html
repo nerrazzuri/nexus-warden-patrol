@@ -1,0 +1,240 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>V4-B Alarm in progress</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&display=swap">
+<style>
+body{margin:0}
+a{color:#5AA2E6}a:hover{color:#CFE4FA}
+.btn{height:40px;padding:0 16px;border:1px solid #9A9FA6;border-radius:2px;background:#16191D;color:#ECEDEA;font:600 14px Barlow,"Noto Sans SC","Microsoft YaHei UI",sans-serif;display:inline-flex;align-items:center;gap:8px;cursor:pointer;white-space:nowrap}
+.btn.sm{height:32px;padding:0 12px;font-size:13px}
+.btn.pri{background:#1F6FC0;border-color:#1F6FC0;color:#fff;font-weight:700}
+.btn.stop{background:#D42F33;border-color:#D42F33;color:#fff;font-weight:700}
+.btn.off{border-style:dashed;color:#9A9FA6;background:transparent;cursor:not-allowed}
+.seg{display:inline-flex;border:1px solid #2E333A}
+.seg .btn{border:0;background:transparent;border-radius:0}
+.seg .btn+.btn{border-left:1px solid #2E333A}
+.seg .btn.on{background:#1F6FC0;color:#fff}
+.lbl{font-size:12px;font-weight:600;letter-spacing:.06em;color:#9A9FA6}
+.ring{display:inline-block;flex:none;width:12px;height:12px;border:3px solid #FF6166;border-radius:50%;box-sizing:border-box}
+.tri{display:inline-block;flex:none;width:0;height:0;border-left:7px solid transparent;border-right:7px solid transparent;border-bottom:12px solid #F2B01E}
+.sq{display:inline-block;flex:none;width:9px;height:9px;background:#3DC46E}
+.disc{display:inline-block;flex:none;width:10px;height:10px;border-radius:50%;background:#fff}
+.h2{margin:0;font-size:15px;line-height:22px;font-weight:600}
+.sec{padding:12px 16px;border-bottom:1px solid #2E333A}
+.vid{position:relative;background:#000;border:1px solid #2E333A;min-height:0;overflow:hidden}
+.vid .noise{position:absolute;inset:0;background:#07080A}
+.vid .cap{position:absolute;left:0;right:0;top:0;display:flex;align-items:center;gap:8px;padding:6px 10px;background:rgba(0,0,0,.65)}
+.new{display:inline-block;padding:0 6px;border:1px solid #5AA2E6;color:#5AA2E6;font-size:11px;font-weight:700;line-height:16px}
+</style>
+</helmet>
+<div style="width:1536px;height:960px;box-sizing:border-box;background:#0E1013;color:#ECEDEA;font-family:Barlow,'Noto Sans SC','Microsoft YaHei UI',sans-serif;font-size:14px;line-height:20px;font-variant-numeric:tabular-nums;display:flex;flex-direction:column">
+
+  <header style="height:60px;flex:none;display:flex;align-items:center;gap:16px;padding:0 16px;border-bottom:1px solid #2E333A;background:#0A0C0E">
+    <div style="display:flex;flex-direction:column;line-height:14px"><b style="font-size:13px;letter-spacing:.12em">NEXUS</b><span style="font-size:11px;letter-spacing:.12em;color:#B4B8BE">WARDEN</span></div>
+    <span style="color:#B4B8BE">estate-1</span>
+    <nav aria-label="Main navigation" style="display:flex;margin-left:8px">
+      <a href="#" aria-current="page" style="height:60px;display:flex;align-items:center;padding:0 14px;color:#ECEDEA;text-decoration:none;font-weight:700;box-shadow:inset 0 -3px 0 #1F6FC0">Monitoring</a>
+      <a href="#" style="height:60px;display:flex;align-items:center;padding:0 14px;color:#B4B8BE;text-decoration:none;font-weight:600">Events & Recordings</a>
+    </nav>
+    <div style="flex:1"></div>
+    <span style="display:inline-flex;align-items:center;gap:8px;height:32px;padding:0 12px;background:#16281D;color:#3DC46E;font-weight:600"><span class="sq"></span>Armed · until 07:00</span>
+    <span style="display:inline-flex;align-items:center;gap:8px;height:32px;padding:0 12px;background:#20242A;font-weight:600">Robots 2/2 online</span>
+    <span style="display:inline-flex;align-items:center;gap:8px;height:32px;padding:0 12px;background:#33191B;color:#FF6166;font-weight:700;box-shadow:inset 0 0 0 1px #FF6166"><span class="ring" style="width:11px;height:11px;border-width:2px"></span>Open 3</span>
+    <span style="font-size:16px;font-weight:600">23:48</span>
+    <span style="color:#B4B8BE">gina · Guard</span>
+    <button class="btn stop" type="button" title="All robots stop in place; manual reset required"><span style="width:12px;height:12px;border:2px solid #fff;border-radius:50%;box-sizing:border-box"></span>E-STOP ALL</button>
+  </header>
+
+  <div style="flex:1;min-height:0;display:grid;grid-template-columns:338px minmax(0,1fr) 338px">
+
+    <!-- 左：事件，分两组 -->
+    <aside aria-label="Events" style="border-right:1px solid #2E333A;display:flex;flex-direction:column;min-height:0">
+      <section class="sec">
+        <div style="display:flex;align-items:center;justify-content:space-between"><h2 class="h2">Security events 1</h2><span class="lbl">Intrusion, fire</span></div>
+        <a href="#" aria-current="true" style="margin:8px -16px 0;padding:10px 16px;display:block;background:#33191B;box-shadow:inset 0 0 0 2px #FF6166;color:#ECEDEA;text-decoration:none">
+          <span style="display:flex;gap:10px;align-items:center"><span class="ring"></span><b style="font-size:15px;flex:1">Perimeter breach, north gate</b><span style="color:#FF6166;font-weight:700">P1</span></span>
+          <span style="display:block;margin-left:22px;color:#B4B8BE">Camera 3 · 23:47 · 1 min ago</span>
+          <span style="display:block;margin-left:22px;color:#FF6166;font-weight:600">Unassigned</span>
+        </a>
+      </section>
+      <section class="sec">
+        <div style="display:flex;align-items:center;justify-content:space-between"><h2 class="h2">Equipment & operations 2</h2><span class="lbl">Robots, patrols</span></div>
+        <a href="#" style="margin:8px -16px 0;padding:10px 16px;display:block;color:#ECEDEA;text-decoration:none;border-bottom:1px solid #2E333A">
+          <span style="display:flex;gap:10px;align-items:center"><span class="ring"></span><b style="flex:1">B awaiting battery swap</b><span style="color:#FF6166;font-weight:700">P1</span></span>
+          <span style="display:block;margin-left:22px;color:#B4B8BE">Dock 1 · 23:31 · olga handling</span>
+        </a>
+        <a href="#" style="margin:0 -16px;padding:10px 16px;display:block;color:#ECEDEA;text-decoration:none">
+          <span style="display:flex;gap:10px;align-items:center"><span class="tri"></span><b style="flex:1">A battery below 30%</b><span style="color:#F2B01E;font-weight:700">P2</span></span>
+          <span style="display:block;margin-left:22px;color:#B4B8BE">Patrolling · 23:12</span>
+        </a>
+      </section>
+      <section class="sec" style="flex:1;min-height:0;overflow:auto">
+        <h2 class="h2" style="margin-bottom:8px">Closed this shift: 4</h2>
+        <ul style="list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px;color:#B4B8BE">
+          <li style="display:flex;gap:8px"><span style="width:40px;color:#ECEDEA">22:05</span><span style="flex:1">Vehicle loitering, car park</span><span>False alarm</span></li>
+          <li style="display:flex;gap:8px"><span style="width:40px;color:#ECEDEA">21:40</span><span style="flex:1">Person approaching, south wall</span><span>Confirmed intrusion</span></li>
+          <li style="display:flex;gap:8px"><span style="width:40px;color:#ECEDEA">20:52</span><span style="flex:1">A obstructed, recovered</span><span>Resolved</span></li>
+        </ul>
+      </section>
+      <section class="sec" style="border-bottom:0;border-top:1px solid #2E333A">
+        <div class="lbl" style="margin-bottom:4px">Handover note · olga 19:05</div>
+        <p style="margin:0">Contractor vehicles in the car park; expected until 22:00.</p>
+      </section>
+    </aside>
+
+    <!-- 中：这件事 -->
+    <main style="min-width:0;display:flex;flex-direction:column;min-height:0">
+      <div style="padding:12px 20px;display:flex;align-items:center;gap:16px;background:#16191D;box-shadow:inset 0 4px 0 #D42F33;border-bottom:1px solid #2E333A">
+        <span style="width:32px;height:32px;border:8px solid #FF6166;border-radius:50%;box-sizing:border-box;flex:none"></span>
+        <div style="flex:1;min-width:0"><h1 style="margin:0;font-size:22px;line-height:28px">Perimeter breach, north gate</h1><div style="color:#B4B8BE">P1 · Security event · North sector, north gate · Camera 3 · 23:47:12 · heading toward Building 2</div></div>
+        <button class="btn pri" type="button" style="height:44px"><span class="disc"></span>Take ownership</button>
+      </div>
+      <ol aria-label="Response steps" style="list-style:none;margin:0;padding:10px 20px;display:flex;border-bottom:1px solid #2E333A;font-weight:600">
+        <li style="flex:1;display:flex;align-items:center;gap:8px;color:#3DC46E"><span class="sq"></span>Detected 23:47</li>
+        <li style="flex:1;display:flex;align-items:center;gap:8px"><span style="width:10px;height:10px;border:2px solid #5AA2E6;border-radius:50%;box-sizing:border-box"></span>Assigned</li>
+        <li style="flex:1;color:#9A9FA6">Dispatched</li>
+        <li style="flex:1;color:#9A9FA6">On site</li>
+        <li style="flex:1;color:#9A9FA6">Verified</li>
+        <li style="flex:1;color:#9A9FA6">Closed</li>
+      </ol>
+
+      <div style="flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,3fr) minmax(0,2fr);gap:12px;padding:12px 20px 0">
+        <!-- 画面 60% -->
+        <section aria-label="Video" style="display:flex;flex-direction:column;gap:8px;min-height:0">
+          <div style="display:flex;align-items:center;gap:8px">
+            <div class="seg" role="group" aria-label="Video layout">
+              <button class="btn sm" type="button">Single</button>
+              <button class="btn sm on" type="button" aria-pressed="true">Dual</button>
+              <button class="btn sm" type="button">Quad</button>
+              <button class="btn sm" type="button">Video wall</button>
+            </div>
+            <span style="flex:1"></span>
+            <button class="btn sm" type="button">−30 s replay</button>
+          </div>
+          <figure class="vid" style="margin:0;flex:2">
+            <div class="noise"></div>
+            <div style="position:absolute;left:42%;top:28%;width:70px;height:120px;border:2px solid #FF6166"></div>
+            <div style="position:absolute;left:42%;top:calc(28% + 124px);background:#000;color:#FF6166;font-weight:700;padding:2px 8px">Person · 0.93</div>
+            <figcaption class="cap"><span>Camera 3 · North gate · Event footage</span><span style="flex:1"></span><span style="color:#ECEDEA;font-weight:700;letter-spacing:.06em">Live</span></figcaption>
+          </figure>
+          <figure class="vid" style="margin:0;flex:1">
+            <div class="noise"></div>
+            <figcaption class="cap"><b>A</b><span>Front camera · 48 m from north gate</span><span style="flex:1"></span><span style="color:#ECEDEA;font-weight:700;letter-spacing:.06em">Live</span></figcaption>
+          </figure>
+        </section>
+        <!-- 地图 40% -->
+        <figure style="margin:0;position:relative;background:#15181C;border:1px solid #2E333A;min-height:0;overflow:hidden">
+          <svg viewBox="0 0 400 420" preserveAspectRatio="xMidYMid meet" style="position:absolute;inset:0;width:100%;height:100%" role="img" aria-label="Incident map: alarm at north gate, A 48 m east, approx. 1 min route">
+            <path d="M30 40 H370 V150 H280 V390 H130 V150 H30 Z" fill="#232830" stroke="#6A7078" stroke-width="2"/>
+            <rect x="150" y="200" width="110" height="110" fill="#1B1F24" stroke="#5F646A" stroke-dasharray="5 4"/>
+            <text x="205" y="260" fill="#9A9FA6" font-size="12" text-anchor="middle">Building 2</text>
+            <path d="M300 90 C 230 90, 160 80, 112 74" fill="none" stroke="#5AA2E6" stroke-width="3.5" stroke-dasharray="7 5"/>
+            <circle cx="300" cy="90" r="9" fill="#3DC46E" stroke="#0E1013" stroke-width="2"/>
+            <text x="300" y="76" fill="#ECEDEA" font-size="13" font-weight="700" text-anchor="middle">A</text>
+            <circle cx="92" cy="70" r="18" fill="none" stroke="#FF6166" stroke-width="6"/>
+            <circle cx="92" cy="70" r="30" fill="none" stroke="#FF6166" stroke-opacity=".35" stroke-width="1.5"/>
+            <text x="92" y="118" fill="#FF6166" font-size="12" font-weight="700" text-anchor="middle">North gate</text>
+            <path d="M120 100 L150 170" stroke="#FF6166" stroke-width="1.5" stroke-dasharray="3 3" fill="none"/>
+            <text x="160" y="186" fill="#FF6166" font-size="11">To Building 2</text>
+          </svg>
+          <figcaption style="position:absolute;left:0;right:0;top:0;padding:8px 10px;display:flex;align-items:center;gap:8px;background:rgba(14,16,19,.8)"><b>North sector</b><span style="flex:1"></span><span style="color:#B4B8BE">A 48 m · ETA 1 min</span></figcaption>
+          <button class="btn sm" type="button" style="position:absolute;right:10px;bottom:10px">Site map</button>
+        </figure>
+      </div>
+
+      <!-- 操作 + 经过 -->
+      <section aria-label="Response" style="padding:12px 20px;display:flex;flex-direction:column;gap:12px">
+        <div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.4fr) minmax(0,1fr);gap:0 20px;align-items:start">
+          <div style="display:flex;flex-direction:column;gap:6px"><span class="lbl">Dispatch robot</span><button class="btn" type="button" style="width:100%;justify-content:center">Dispatch A to north gate</button><span style="color:#B4B8BE;font-size:13px;display:inline-flex;gap:6px;align-items:center">A at 28%; round trip uses approx. 6% — sufficient</span></div>
+          <div style="display:flex;flex-direction:column;gap:6px;border-left:1px solid #2E333A;padding-left:20px"><span class="lbl">Deterrence · A's speaker and strobe</span><div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px"><button class="btn" type="button" style="width:100%;justify-content:center">Announce warning</button><button class="btn" type="button" style="width:100%;justify-content:center">Strobe 30 s</button></div><span style="color:#B4B8BE;font-size:13px">Use once A is on site to deter the intruder</span></div>
+          <div style="display:flex;flex-direction:column;gap:6px;border-left:1px solid #2E333A;padding-left:20px"><span class="lbl">Notify</span><button class="btn" type="button" style="width:100%;justify-content:center">Notify manager olga</button><span style="color:#B4B8BE;font-size:13px">App push + phone call</span></div>
+        </div>
+        <div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px;border-top:1px solid #2E333A;padding-top:12px">
+          <span class="lbl">Disposition</span>
+          <div class="seg" role="group" aria-label="Disposition"><button class="btn sm" type="button">Confirmed intrusion</button><button class="btn sm" type="button">False alarm</button></div>
+          <button class="btn sm off" type="button" disabled title="Take ownership, then record a disposition">Closed</button>
+          <span style="flex:1"></span>
+          <span class="lbl">Timeline</span>
+          <span style="color:#B4B8BE">23:47:12 Camera 3 detected person · 23:47:15 notified gina, olga</span>
+        </div>
+      </section>
+    </main>
+
+    <!-- 右：位置不变，内容按事件排序 -->
+    <aside aria-label="Robots & patrols" style="border-left:1px solid #2E333A;display:flex;flex-direction:column;min-height:0">
+      <section class="sec"><h2 class="h2">Robots · nearest to incident first</h2></section>
+      <section class="sec" style="display:flex;flex-direction:column;gap:6px;background:#14273D">
+        <div style="display:flex;align-items:center;gap:8px"><b style="font-size:17px">A</b><span style="display:inline-flex;align-items:center;gap:6px;color:#3DC46E;font-weight:600"><span class="sq"></span>Patrolling</span><span style="flex:1"></span><span style="color:#F2B01E;font-weight:700">28%</span></div>
+        <div style="height:4px;background:#20242A"><div style="width:28%;height:4px;background:#F2B01E"></div></div>
+        <div style="color:#ECEDEA">48 m from north gate · ETA 1 min</div>
+        <div style="color:#B4B8BE">guard-1 lap 3 · Localized</div>
+      </section>
+      <section class="sec" style="display:flex;flex-direction:column;gap:6px">
+        <div style="display:flex;align-items:center;gap:8px"><b style="font-size:17px">B</b><span style="display:inline-flex;align-items:center;gap:6px;color:#FF6166;font-weight:600"><span class="ring" style="width:10px;height:10px;border-width:2px"></span>Awaiting swap</span><span style="flex:1"></span><span style="color:#FF6166;font-weight:700">6%</span></div>
+        <div style="height:4px;background:#20242A"><div style="width:6%;height:4px;background:#FF6166"></div></div>
+        <div style="color:#B4B8BE">Dock 1 · Unavailable</div>
+      </section>
+      <section class="sec">
+        <h2 class="h2" style="margin-bottom:8px">Tonight's patrols</h2>
+        <ul style="list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px;color:#B4B8BE">
+          <li style="display:flex;gap:8px"><span style="width:40px;color:#ECEDEA">22:00</span><span style="flex:1">guard-1 · A</span><span style="color:#ECEDEA">Lap 3</span></li>
+          <li style="display:flex;gap:8px"><span style="width:40px;color:#ECEDEA">01:00</span><span style="flex:1">guard-1 · B</span><span style="color:#F2B01E">Low battery — at risk</span></li>
+          <li style="display:flex;gap:8px"><span style="width:40px;color:#ECEDEA">04:00</span><span style="flex:1">guard-1 · A</span><span>Scheduled</span></li>
+        </ul>
+      </section>
+      <section class="sec" style="flex:1;min-height:0;overflow:auto;border-bottom:0">
+        <h2 class="h2" style="margin-bottom:8px">Recent activity</h2>
+        <ul style="list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px;color:#B4B8BE">
+          <li style="display:flex;gap:8px"><span style="width:40px;color:#ECEDEA">23:47</span><span>Camera 3 detected person (north gate)</span></li>
+          <li style="display:flex;gap:8px"><span style="width:40px;color:#ECEDEA">23:31</span><span>B at 6%, parked at dock</span></li>
+          <li style="display:flex;gap:8px"><span style="width:40px;color:#ECEDEA">23:31</span><span>olga took ownership: B awaiting battery swap</span></li>
+          <li style="display:flex;gap:8px"><span style="width:40px;color:#ECEDEA">23:12</span><span>A battery 30%</span></li>
+        </ul>
+      </section>
+    </aside>
+  </div>
+
+  <section aria-label="Shift timeline" style="height:88px;flex:none;border-top:1px solid #2E333A;background:#0A0C0E;padding:8px 16px;box-sizing:border-box;display:flex;flex-direction:column;gap:4px">
+    <div style="display:flex;align-items:center;gap:16px" class="lbl">
+      <span style="color:#ECEDEA">Shift 19:00 → 07:00</span>
+      <span style="display:inline-flex;align-items:center;gap:6px"><span style="width:16px;height:6px;background:#1F6FC0"></span>Patrol</span>
+      <span style="display:inline-flex;align-items:center;gap:6px"><span style="width:16px;height:6px;background:#9A9FA6"></span>Charging</span>
+      <span style="display:inline-flex;align-items:center;gap:6px"><span style="width:16px;height:6px;background:repeating-linear-gradient(90deg,#FF6166 0 3px,transparent 3px 5px)"></span>Offline</span>
+      <span style="display:inline-flex;align-items:center;gap:6px"><span class="ring" style="width:9px;height:9px;border-width:2px"></span>Security events</span>
+      <span style="display:inline-flex;align-items:center;gap:6px"><span class="tri" style="border-left-width:5px;border-right-width:5px;border-bottom-width:8px"></span>Equipment fault</span>
+      <span style="flex:1"></span><span>Select any point to review footage (video is marked "Playback")</span>
+    </div>
+    <div style="position:relative;flex:1">
+      <div style="position:absolute;left:30px;top:2px;color:#9A9FA6;font-size:12px;font-weight:700">A</div>
+      <div style="position:absolute;left:30px;top:22px;color:#9A9FA6;font-size:12px;font-weight:700">B</div>
+      <div style="position:absolute;left:56px;right:0;top:4px;height:12px;background:#16191D"></div>
+      <div style="position:absolute;left:56px;right:0;top:24px;height:12px;background:#16191D"></div>
+      <div style="position:absolute;left:56px;width:9%;top:4px;height:12px;background:#1F6FC0"></div>
+      <div style="position:absolute;left:calc(56px + 25%);width:14.6%;top:4px;height:12px;background:#1F6FC0"></div>
+      <div style="position:absolute;left:calc(56px + 3.5%);width:1.2%;top:24px;height:12px;background:repeating-linear-gradient(90deg,#FF6166 0 3px,transparent 3px 5px)"></div>
+      <div style="position:absolute;left:calc(56px + 30.5%);width:9.1%;top:24px;height:12px;background:#9A9FA6"></div>
+      <span class="ring" style="position:absolute;left:calc(56px + 22%);top:40px;width:10px;height:10px;border-width:2px"></span>
+      <span class="tri" style="position:absolute;left:calc(56px + 35%);top:40px;border-left-width:5px;border-right-width:5px;border-bottom-width:9px"></span>
+      <span class="ring" style="position:absolute;left:calc(56px + 37.6%);top:40px;width:10px;height:10px;border-width:2px"></span>
+      <span class="ring" style="position:absolute;left:calc(56px + 39.4%);top:38px;width:14px;height:14px;border-width:3px"></span>
+      <div style="position:absolute;left:calc(56px + 39.6%);top:0;bottom:0;width:2px;background:#ECEDEA"></div>
+      <span style="position:absolute;left:calc(56px + 39.6% + 14px);top:38px;font-size:12px;font-weight:700">Now 23:48</span>
+      <div style="position:absolute;left:56px;right:0;bottom:0;display:flex;justify-content:space-between;color:#9A9FA6;font-size:11px"><span>19:00</span><span>21:00</span><span>23:00</span><span>01:00</span><span>03:00</span><span>05:00</span><span>07:00</span></div>
+    </div>
+  </section>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1536,"height":960}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>现场设置 授权与临时撤防</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&display=swap">
+<style>
+body{margin:0}
+a{color:#1A5FA6}a:hover{color:#0E3F70}
+.btn{height:40px;padding:0 16px;border:1px solid #6B7178;border-radius:2px;background:#fff;color:#16191D;font:600 14px Barlow,"Noto Sans SC","Microsoft YaHei UI",sans-serif;display:inline-flex;align-items:center;gap:8px;cursor:pointer;white-space:nowrap;text-decoration:none}
+.btn.sm{height:32px;padding:0 12px;font-size:13px}
+.btn.pri{background:#1F6FC0;border-color:#1F6FC0;color:#fff;font-weight:700}
+.btn.danger{border-color:#C4262B;color:#B0202A}
+.btn.stop{background:#D42F33;border-color:#D42F33;color:#fff;font-weight:700}
+.seg{display:inline-flex;border:1px solid #C9CDD2}
+.seg .btn{border:0;background:transparent;border-radius:0}
+.seg .btn+.btn{border-left:1px solid #C9CDD2}
+.seg .btn.on{background:#1F6FC0;color:#fff}
+.lbl{font-size:12px;font-weight:600;letter-spacing:.06em;color:#5A6068}
+.mut{color:#565B62}
+.ring{display:inline-block;flex:none;width:12px;height:12px;border:3px solid #C4262B;border-radius:50%;box-sizing:border-box}
+.tri{display:inline-block;flex:none;width:0;height:0;border-left:7px solid transparent;border-right:7px solid transparent;border-bottom:12px solid #D99A00}
+.sq{display:inline-block;flex:none;width:9px;height:9px;background:#1E8A47}
+.h1{margin:0;font-size:24px;line-height:30px;font-weight:700}
+.h2{margin:0;font-size:16px;line-height:22px;font-weight:600}
+.card{background:#fff;border:1px solid #D5D8DC}
+.cardh{display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:1px solid #E3E5E8}
+th{text-align:left;font-size:12px;font-weight:600;letter-spacing:.06em;color:#5A6068;padding:10px 12px;border-bottom:1px solid #D5D8DC;background:#F8F9F8}
+td{padding:10px 12px;border-bottom:1px solid #E3E5E8;vertical-align:middle}
+.chip{display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 8px;font-size:12px;font-weight:700}
+.ok{background:#E4F3E9;color:#17703A} .warn{background:#FCF1D6;color:#7A5200} .bad{background:#FBE5E5;color:#A41E24} .gray{background:#ECEEF0;color:#454A51}
+.field{display:flex;flex-direction:column;gap:4px}
+.field input,.field select{height:40px;border:1px solid #6B7178;border-radius:2px;padding:0 10px;font:inherit;background:#fff;color:#16191D}
+.snav a{display:flex;align-items:center;gap:8px;min-height:36px;margin:0 8px;padding:0 10px;color:#A9AEB4;text-decoration:none;font-weight:600;border-radius:2px}
+.snav a[aria-current]{background:#1F6FC0;color:#fff} .snav .g{color:#A9AEB4}
+.snav .g{padding:14px 16px 4px}
+.new{display:inline-block;padding:0 6px;border:1px solid #1F6FC0;color:#1A5FA6;font-size:11px;font-weight:700;line-height:16px}
+</style>
+</helmet>
+<div style="width:1536px;height:960px;box-sizing:border-box;background:#F2F3F1;color:#16191D;font-family:Barlow,'Noto Sans SC','Microsoft YaHei UI',sans-serif;font-size:14px;line-height:20px;font-variant-numeric:tabular-nums;display:flex;flex-direction:column">
+  <header style="height:60px;flex:none;display:flex;align-items:center;gap:16px;padding:0 16px;border-bottom:1px solid #2E333A;background:#0A0C0E;color:#ECEDEA">
+    <div style="display:flex;flex-direction:column;line-height:14px"><b style="font-size:13px;letter-spacing:.12em">NEXUS</b><span style="font-size:11px;letter-spacing:.12em;color:#B4B8BE">WARDEN</span></div>
+    <span style="color:#B4B8BE">estate-1</span>
+    <nav aria-label="主导航" style="display:flex;margin-left:8px">
+      <a href="#" style="height:60px;display:flex;align-items:center;padding:0 14px;color:#B4B8BE;text-decoration:none;font-weight:600">值班</a>
+      <a href="#" style="height:60px;display:flex;align-items:center;padding:0 14px;color:#B4B8BE;text-decoration:none;font-weight:600">记录与录像</a>
+      <a href="#" aria-current="page" style="height:60px;display:flex;align-items:center;padding:0 14px;color:#ECEDEA;text-decoration:none;font-weight:700;box-shadow:inset 0 -3px 0 #1F6FC0">现场设置</a>
+    </nav>
+    <div style="flex:1"></div>
+    <span style="display:inline-flex;align-items:center;gap:8px;height:32px;padding:0 12px;background:#20242A;color:#ECEDEA;font-weight:600">撤防 · 19:00 布防</span>
+    <span style="display:inline-flex;align-items:center;gap:8px;height:32px;padding:0 12px;background:#20242A;font-weight:600">机器人 2/2 在线</span>
+    <a href="#" style="display:inline-flex;align-items:center;gap:8px;height:32px;padding:0 12px;background:#20242A;color:#B4B8BE;font-weight:600;text-decoration:none">未处理 0</a>
+    <span style="font-size:16px;font-weight:600">10:20</span>
+    <span style="color:#B4B8BE">demo · 管理员</span>
+    <button class="btn stop" type="button"><span style="width:12px;height:12px;border:2px solid #fff;border-radius:50%;box-sizing:border-box"></span>全部急停</button>
+  </header>
+  <div style="flex:1;min-height:0;display:grid;grid-template-columns:232px minmax(0,1fr)">
+    <nav class="snav" aria-label="现场设置" style="background:#15181B;border-right:1px solid #15181B;padding:8px 0;overflow:auto">
+      <div class="g lbl">日常</div>
+      <a href="#"><span style="flex:1">概况</span><span class="chip" style="height:20px;background:#1F6FC0;color:#fff">6</span></a>
+      <a href="#"><span style="flex:1">机器人</span></a>
+      <a href="#"><span style="flex:1">人员</span></a>
+      <div class="g lbl">现场</div>
+      <a href="#"><span style="flex:1">布置</span></a>
+      <a href="#"><span style="flex:1">布防与巡逻</span></a>
+      <a href="#" aria-current="page"><span style="flex:1">授权</span></a>
+      <div class="g lbl">记录</div>
+      <a href="#"><span style="flex:1">报告</span></a>
+      <div class="g lbl">高级</div>
+      <a href="#"><span style="flex:1">维护</span></a>
+    </nav>
+    <main style="min-width:0;min-height:0;overflow:hidden;display:flex;flex-direction:column">
+
+<div style="flex:none;display:flex;align-items:center;gap:16px;padding:0 28px;min-height:74px;background:#fff;border-bottom:1px solid #D5D8DC">
+      <h1 style="margin:0;font-size:28px;line-height:34px">授权</h1>
+      <p style="margin:0;font-size:15px;min-width:0"><b>现在 1 条授权在生效</b>：空调维修，到 12:00。</p>
+      <span style="flex:1"></span><button class="btn" type="button">按防区临时撤防…</button></div>
+<div style="flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,1fr) 380px">
+  <div style="min-width:0;overflow:auto;display:flex;flex-direction:column;background:#fff">
+    <section aria-label="现在生效" style="background:#fff;border-bottom:1px solid #D5D8DC">
+      <div style="padding:12px 20px"><h2 class="h2" style="font-size:17px">现在生效</h2></div>
+      <div style="display:grid;grid-template-columns:120px minmax(0,1fr) auto;column-gap:14px;align-items:center">
+        <div style="grid-column:1/-1;height:1px;background:#E3E5E8"></div><span class="lbl" style="padding-left:20px">授权</span>
+        <div style="padding:12px 0"><b>空调维修</b> · 停车场、北区通道 · 09:00 → 12:00<div class="mut" style="font-size:13px">这两个防区里发现有人不报紧急报警，只记录</div></div>
+        <button class="btn sm" type="button" style="margin-right:20px">提前结束</button>
+        <div style="grid-column:1/-1;height:1px;background:#E3E5E8"></div><span class="lbl" style="padding-left:20px">临时撤防</span>
+        <div style="padding:12px 0" class="mut">没有。现在全站撤防到 19:00；布防期间可以按防区临时撤防几小时，到点自动恢复。</div><span></span>
+      </div>
+    </section>
+    <section aria-label="全部授权" style="background:#fff;border-bottom:1px solid #D5D8DC">
+      <div style="display:flex;align-items:baseline;gap:12px;padding:12px 20px"><h2 class="h2" style="font-size:17px">全部授权 4</h2><span class="mut" style="font-size:13px">每周重复的按星期画，底下有黑线的是今天</span></div>
+      <div style="display:grid;grid-template-columns:150px 150px minmax(0,1fr) 110px auto;column-gap:16px;align-items:center">
+        <div style="grid-column:1/-1;height:1px;background:#E3E5E8"></div><span class="lbl" style="padding:8px 0 8px 20px">人员</span><span class="lbl">范围</span><span class="lbl">星期和时间</span><span class="lbl">有效到</span><span></span><div style="grid-column:1/-1;height:1px;background:#E3E5E8"></div>
+        <div style="display:contents"><div style="padding:12px 0 12px 20px"><b>空调维修</b><div class="mut" style="font-size:13px">厂家 2 人</div></div>
+      <div style="padding:12px 0">停车场、北区通道</div><div style="padding:12px 0"><div style="display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:3px"><span style="height:26px;display:flex;align-items:center;justify-content:center;font-size:12.5px;font-weight:600;background:#F2F3F1;color:#8A9097;">一</span><span style="height:26px;display:flex;align-items:center;justify-content:center;font-size:12.5px;font-weight:600;background:#F2F3F1;color:#8A9097;">二</span><span style="height:26px;display:flex;align-items:center;justify-content:center;font-size:12.5px;font-weight:600;background:#F2F3F1;color:#8A9097;">三</span><span style="height:26px;display:flex;align-items:center;justify-content:center;font-size:12.5px;font-weight:600;background:#F2F3F1;color:#8A9097;">四</span><span style="height:26px;display:flex;align-items:center;justify-content:center;font-size:12.5px;font-weight:600;background:#F2F3F1;color:#8A9097;">五</span><span style="height:26px;display:flex;align-items:center;justify-content:center;font-size:12.5px;font-weight:600;background:#F2F3F1;color:#8A9097;">六</span><span style="height:26px;display:flex;align-items:center;justify-content:center;font-size:12.5px;font-weight:600;background:#2A2F35;color:#fff;box-shadow:inset 0 -3px 0 #16191D;">日</span></div><div class="mut" style="font-size:12.5px;margin-top:3px">11-15 09:00–12:00</div></div>
+      <div style="padding:12px 0" class="mut">今天</div><div style="padding:9px 20px 9px 0;display:flex;justify-content:flex-end"><button class="btn sm" type="button">删除…</button></div></div><div style="grid-column:1/-1;height:1px;background:#E3E5E8"></div>
+        <div style="display:contents"><div style="padding:12px 0 12px 20px"><b>保洁</b></div>
+      <div style="padding:12px 0">2 号楼周边</div><div style="padding:12px 0"><div style="display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:3px"><span style="height:26px;display:flex;align-items:center;justify-content:center;font-size:12.5px;font-weight:600;background:#2A2F35;color:#fff;">一</span><span style="height:26px;display:flex;align-items:center;justify-content:center;font-size:12.5px;font-weight:600;background:#F2F3F1;color:#8A9097;">二</span><span style="height:26px;display:flex;align-items:center;justify-content:center;font-size:12.5px;font-weight:600;background:#2A2F35;color:#fff;">三</span><span style="height:26px;display:flex;align-items:center;justify-content:center;font-size:12.5px;font-weight:600;background:#F2F3F1;color:#8A9097;">四</span><span style="height:26px;display:flex;align-items:center;justify-content:center;font-size:12.5px;font-weight:600;background:#2A2F35;color:#fff;">五</span><span style="height:26px;display:flex;align-items:center;justify-content:center;font-size:12.5px;font-weight:600;background:#F2F3F1;color:#8A9097;">六</span><span style="height:26px;display:flex;align-items:center;justify-content:center;font-size:12.5px;font-weight:600;background:#2A2F35;color:#fff;box-shadow:inset 0 -3px 0 #16191D;">日</span></div><div class="mut" style="font-size:12.5px;margin-top:3px">一、三、五、日 14:00–17:00</div></div>
+      <div style="padding:12px 0" class="mut">2026-12-31</div><div style="padding:9px 20px 9px 0;display:flex;justify-content:flex-end"><button class="btn sm" type="button">删除…</button></div></div><div style="grid-column:1/-1;height:1px;background:#E3E5E8"></div>
+        <div style="display:contents"><div style="padding:12px 0 12px 20px"><b>垃圾车</b></div>
+      <div style="padding:12px 0">南墙</div><div style="padding:12px 0"><div style="display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:3px"><span style="height:26px;display:flex;align-items:center;justify-content:center;font-size:12.5px;font-weight:600;background:#F2F3F1;color:#8A9097;">一</span><span style="height:26px;display:flex;align-items:center;justify-content:center;font-size:12.5px;font-weight:600;background:#F2F3F1;color:#8A9097;">二</span><span style="height:26px;display:flex;align-items:center;justify-content:center;font-size:12.5px;font-weight:600;background:#2A2F35;color:#fff;">三</span><span style="height:26px;display:flex;align-items:center;justify-content:center;font-size:12.5px;font-weight:600;background:#F2F3F1;color:#8A9097;">四</span><span style="height:26px;display:flex;align-items:center;justify-content:center;font-size:12.5px;font-weight:600;background:#F2F3F1;color:#8A9097;">五</span><span style="height:26px;display:flex;align-items:center;justify-content:center;font-size:12.5px;font-weight:600;background:#F2F3F1;color:#8A9097;">六</span><span style="height:26px;display:flex;align-items:center;justify-content:center;font-size:12.5px;font-weight:600;background:#F2F3F1;color:#8A9097;box-shadow:inset 0 -3px 0 #16191D;">日</span></div><div class="mut" style="font-size:12.5px;margin-top:3px">每周三 07:00–08:00</div></div>
+      <div style="padding:12px 0" class="mut">长期</div><div style="padding:9px 20px 9px 0;display:flex;justify-content:flex-end"><button class="btn sm" type="button">删除…</button></div></div><div style="grid-column:1/-1;height:1px;background:#E3E5E8"></div>
+        <div style="display:contents"><div style="padding:12px 0 12px 20px"><b>夜班保安巡场</b><div class="mut" style="font-size:13px">人走动不报</div></div>
+      <div style="padding:12px 0">全站</div><div style="padding:12px 0"><div style="display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:3px"><span style="height:26px;display:flex;align-items:center;justify-content:center;font-size:12.5px;font-weight:600;background:#2A2F35;color:#fff;">一</span><span style="height:26px;display:flex;align-items:center;justify-content:center;font-size:12.5px;font-weight:600;background:#2A2F35;color:#fff;">二</span><span style="height:26px;display:flex;align-items:center;justify-content:center;font-size:12.5px;font-weight:600;background:#2A2F35;color:#fff;">三</span><span style="height:26px;display:flex;align-items:center;justify-content:center;font-size:12.5px;font-weight:600;background:#2A2F35;color:#fff;">四</span><span style="height:26px;display:flex;align-items:center;justify-content:center;font-size:12.5px;font-weight:600;background:#2A2F35;color:#fff;">五</span><span style="height:26px;display:flex;align-items:center;justify-content:center;font-size:12.5px;font-weight:600;background:#2A2F35;color:#fff;">六</span><span style="height:26px;display:flex;align-items:center;justify-content:center;font-size:12.5px;font-weight:600;background:#2A2F35;color:#fff;box-shadow:inset 0 -3px 0 #16191D;">日</span></div><div class="mut" style="font-size:12.5px;margin-top:3px">每天 22:00–02:00（跨午夜）</div></div>
+      <div style="padding:12px 0" class="mut">长期</div><div style="padding:9px 20px 9px 0;display:flex;justify-content:flex-end"><button class="btn sm" type="button">删除…</button></div></div><div style="grid-column:1/-1;height:1px;background:#E3E5E8"></div>
+      </div>
+    </section>
+  </div>
+  <aside aria-label="加授权" style="background:#fff;border-left:1px solid #D5D8DC;display:flex;flex-direction:column;min-height:0">
+    <div style="padding:16px 20px;border-bottom:1px solid #D5D8DC">
+      <h2 class="h2" style="font-size:17px">加授权</h2>
+      <p class="mut" style="margin:4px 0 0;font-size:13px">授权生效期间，在授权的防区里发现有人不报紧急报警：摄像头入侵只记录，机器人看到的只记一条普通记录。</p>
+    </div>
+    <form onsubmit="return false" style="flex:1;min-height:0;display:flex;flex-direction:column"><div style="flex:1;min-height:0;overflow:auto;padding:16px 20px;display:flex;flex-direction:column;gap:14px">
+      <div class="field"><label class="lbl">人员</label><input style="height:40px;border:1px solid #6B7178;border-radius:2px;padding:0 10px;font:inherit;background:#fff;color:#16191D" placeholder="比如：维修人员"></div>
+      <div class="field"><span class="lbl">范围</span><div class="seg" role="tablist" aria-label="范围" style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));width:100%"><button class="btn" type="button" role="tab" aria-selected="false" style="justify-content:center;padding:0 6px">全站</button><button class="btn on" type="button" role="tab" aria-selected="true" style="justify-content:center;padding:0 6px">选定的防区</button></div>
+        <div style="margin-top:8px"><div role="group" aria-label="防区" style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px"><button type="button" aria-pressed="false" style="height:36px;min-width:0;padding:0 6px;border:1px solid #9AA0A6;background:#fff;color:#16191D;border-radius:2px;font:600 14px Barlow,'Noto Sans SC',sans-serif;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">北门</button><button type="button" aria-pressed="true" style="height:36px;min-width:0;padding:0 6px;border:1px solid #1F6FC0;background:#1F6FC0;color:#fff;border-radius:2px;font:600 14px Barlow,'Noto Sans SC',sans-serif;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">北区通道</button><button type="button" aria-pressed="true" style="height:36px;min-width:0;padding:0 6px;border:1px solid #1F6FC0;background:#1F6FC0;color:#fff;border-radius:2px;font:600 14px Barlow,'Noto Sans SC',sans-serif;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">停车场</button><button type="button" aria-pressed="false" style="height:36px;min-width:0;padding:0 6px;border:1px solid #9AA0A6;background:#fff;color:#16191D;border-radius:2px;font:600 14px Barlow,'Noto Sans SC',sans-serif;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">南墙</button><button type="button" aria-pressed="false" style="height:36px;min-width:0;padding:0 6px;border:1px solid #9AA0A6;background:#fff;color:#16191D;border-radius:2px;font:600 14px Barlow,'Noto Sans SC',sans-serif;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">2 号楼周边</button></div></div></div>
+      <div class="field"><span class="lbl">什么时候</span><div class="seg" role="tablist" aria-label="重复" style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));width:100%"><button class="btn" type="button" role="tab" aria-selected="false" style="justify-content:center;padding:0 6px">某一天</button><button class="btn on" type="button" role="tab" aria-selected="true" style="justify-content:center;padding:0 6px">每周重复</button></div>
+        <div style="margin-top:8px"><div role="group" aria-label="星期" style="display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:6px"><button type="button" aria-pressed="true" style="height:36px;min-width:0;padding:0 6px;border:1px solid #1F6FC0;background:#1F6FC0;color:#fff;border-radius:2px;font:600 14px Barlow,'Noto Sans SC',sans-serif;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">一</button><button type="button" aria-pressed="true" style="height:36px;min-width:0;padding:0 6px;border:1px solid #1F6FC0;background:#1F6FC0;color:#fff;border-radius:2px;font:600 14px Barlow,'Noto Sans SC',sans-serif;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">二</button><button type="button" aria-pressed="true" style="height:36px;min-width:0;padding:0 6px;border:1px solid #1F6FC0;background:#1F6FC0;color:#fff;border-radius:2px;font:600 14px Barlow,'Noto Sans SC',sans-serif;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">三</button><button type="button" aria-pressed="true" style="height:36px;min-width:0;padding:0 6px;border:1px solid #1F6FC0;background:#1F6FC0;color:#fff;border-radius:2px;font:600 14px Barlow,'Noto Sans SC',sans-serif;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">四</button><button type="button" aria-pressed="true" style="height:36px;min-width:0;padding:0 6px;border:1px solid #1F6FC0;background:#1F6FC0;color:#fff;border-radius:2px;font:600 14px Barlow,'Noto Sans SC',sans-serif;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">五</button><button type="button" aria-pressed="false" style="height:36px;min-width:0;padding:0 6px;border:1px solid #9AA0A6;background:#fff;color:#16191D;border-radius:2px;font:600 14px Barlow,'Noto Sans SC',sans-serif;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">六</button><button type="button" aria-pressed="false" style="height:36px;min-width:0;padding:0 6px;border:1px solid #9AA0A6;background:#fff;color:#16191D;border-radius:2px;font:600 14px Barlow,'Noto Sans SC',sans-serif;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">日</button></div></div>
+        <div style="margin-top:6px;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px"><button class="btn sm" type="button" style="justify-content:center">每天</button><button class="btn sm" type="button" style="justify-content:center">工作日</button><button class="btn sm" type="button" style="justify-content:center">周末</button></div></div>
+      <div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px"><div class="field"><label class="lbl">从</label><input style="height:40px;border:1px solid #6B7178;border-radius:2px;padding:0 10px;font:inherit;background:#fff;color:#16191D;min-width:0" value="22:00"></div><div class="field"><label class="lbl">到</label><input style="height:40px;border:1px solid #6B7178;border-radius:2px;padding:0 10px;font:inherit;background:#fff;color:#16191D;min-width:0" value="06:00"></div></div>
+      <p class="mut" style="margin:-6px 0 0;font-size:12.5px">结束早于开始就是跨午夜。</p>
+      <div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px"><div class="field"><label class="lbl">有效到 <span style="font-weight:400">· 可选</span></label><input style="height:40px;border:1px solid #6B7178;border-radius:2px;padding:0 10px;font:inherit;background:#fff;color:#16191D;min-width:0" placeholder="不填就一直有效"></div><div class="field"><label class="lbl">备注 <span style="font-weight:400">· 可选</span></label><input style="height:40px;border:1px solid #6B7178;border-radius:2px;padding:0 10px;font:inherit;background:#fff;color:#16191D;min-width:0"></div></div>
+      </div>
+      <div style="flex:none;padding:12px 20px;border-top:1px solid #D5D8DC;background:#fff"><div style="display:grid;grid-template-columns:minmax(0,2fr) minmax(0,1fr);gap:8px"><button class="btn pri" type="button" style="justify-content:center">加上授权</button><button class="btn" type="button" style="justify-content:center">清空</button></div></div>
+    </form>
+  </aside>
+</div>
+
+    </main>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1536,"height":960}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

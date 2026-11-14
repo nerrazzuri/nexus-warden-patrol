@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Guard Playback</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&display=swap">
+<style>
+body{margin:0}
+a{color:#5AA2E6}a:hover{color:#CFE4FA}
+.btn{height:40px;padding:0 16px;border:1px solid #9A9FA6;border-radius:2px;background:#16191D;color:#ECEDEA;font:600 14px Barlow,"Noto Sans SC","Microsoft YaHei UI",sans-serif;display:inline-flex;align-items:center;gap:8px;cursor:pointer;white-space:nowrap}
+.btn.sm{height:32px;padding:0 12px;font-size:13px}
+.btn.pri{background:#1F6FC0;border-color:#1F6FC0;color:#fff;font-weight:700}
+.btn.stop{background:#D42F33;border-color:#D42F33;color:#fff;font-weight:700}
+.seg{display:inline-flex;border:1px solid #2E333A}
+.seg .btn{border:0;background:transparent;border-radius:0}
+.seg .btn+.btn{border-left:1px solid #2E333A}
+.seg .btn.on{background:#1F6FC0;color:#fff}
+.lbl{font-size:12px;font-weight:600;letter-spacing:.06em;color:#9A9FA6}
+.ring{display:inline-block;flex:none;width:12px;height:12px;border:3px solid #FF6166;border-radius:50%;box-sizing:border-box}
+.tri{display:inline-block;flex:none;width:0;height:0;border-left:7px solid transparent;border-right:7px solid transparent;border-bottom:12px solid #F2B01E}
+.sq{display:inline-block;flex:none;width:9px;height:9px;background:#3DC46E}
+.h2{margin:0;font-size:15px;line-height:22px;font-weight:600}
+.sec{padding:12px 16px;border-bottom:1px solid #2E333A}
+.vid{position:relative;background:#000;border:1px solid #2E333A;min-height:0;overflow:hidden}
+.vid .noise{position:absolute;inset:0;background:#07080A}
+.vid .cap{position:absolute;left:0;right:0;top:0;display:flex;align-items:center;gap:8px;padding:6px 10px;background:rgba(0,0,0,.65)}
+.past{display:inline-flex;align-items:center;gap:6px;padding:2px 10px;background:#F2B01E;color:#1A1200;font-weight:700}
+</style>
+</helmet>
+<div style="width:1536px;height:960px;box-sizing:border-box;background:#0E1013;color:#ECEDEA;font-family:Barlow,'Noto Sans SC','Microsoft YaHei UI',sans-serif;font-size:14px;line-height:20px;font-variant-numeric:tabular-nums;display:flex;flex-direction:column">
+
+  <header style="height:60px;flex:none;display:flex;align-items:center;gap:16px;padding:0 16px;border-bottom:1px solid #2E333A;background:#0A0C0E">
+    <div style="display:flex;flex-direction:column;line-height:14px"><b style="font-size:13px;letter-spacing:.12em">NEXUS</b><span style="font-size:11px;letter-spacing:.12em;color:#B4B8BE">WARDEN</span></div>
+    <span style="color:#B4B8BE">estate-1</span>
+    <nav aria-label="Main navigation" style="display:flex;margin-left:8px">
+      <a href="#" aria-current="page" style="height:60px;display:flex;align-items:center;padding:0 14px;color:#ECEDEA;text-decoration:none;font-weight:700;box-shadow:inset 0 -3px 0 #1F6FC0">Monitoring</a>
+      <a href="#" style="height:60px;display:flex;align-items:center;padding:0 14px;color:#B4B8BE;text-decoration:none;font-weight:600">Events & Recordings</a>
+    </nav>
+    <div style="flex:1"></div>
+    <span style="display:inline-flex;align-items:center;gap:8px;height:32px;padding:0 12px;background:#16281D;color:#3DC46E;font-weight:600"><span class="sq"></span>Armed · until 07:00</span>
+    <span style="display:inline-flex;align-items:center;gap:8px;height:32px;padding:0 12px;background:#20242A;font-weight:600">Robots 2/2 online</span>
+    <span style="display:inline-flex;align-items:center;gap:8px;height:32px;padding:0 12px;background:#20242A;color:#B4B8BE;font-weight:600">Open 0</span>
+    <span style="font-size:16px;font-weight:600">23:40</span>
+    <span style="color:#B4B8BE">gina · Guard</span>
+    <button class="btn stop" type="button"><span style="width:12px;height:12px;border:2px solid #fff;border-radius:50%;box-sizing:border-box"></span>E-STOP ALL</button>
+  </header>
+
+  <div style="flex:1;min-height:0;display:grid;grid-template-columns:338px minmax(0,1fr) 338px">
+    <aside aria-label="Events" style="border-right:1px solid #2E333A;display:flex;flex-direction:column;min-height:0">
+      <section class="sec"><h2 class="h2">Security events</h2><p style="margin:8px 0 0;display:flex;align-items:center;gap:8px;color:#3DC46E;font-weight:600"><span class="sq"></span>None open</p></section>
+      <section class="sec"><h2 class="h2">Equipment & operations</h2><p style="margin:8px 0 0;display:flex;align-items:center;gap:8px;color:#3DC46E;font-weight:600"><span class="sq"></span>None open</p></section>
+      <section class="sec" style="flex:1">
+        <h2 class="h2" style="margin-bottom:8px">Closed this shift: 4</h2>
+        <ul style="list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:2px;color:#B4B8BE">
+          <li style="display:flex;gap:8px;margin:0 -16px;padding:8px 16px;background:#14273D;box-shadow:inset 0 0 0 2px #1F6FC0;color:#ECEDEA"><span style="width:40px">22:05</span><span style="flex:1">Vehicle loitering, car park</span><span>False alarm</span></li>
+          <li style="display:flex;gap:8px;padding:6px 0"><span style="width:40px;color:#ECEDEA">21:40</span><span style="flex:1">Person approaching, south wall</span><span>Confirmed intrusion</span></li>
+          <li style="display:flex;gap:8px;padding:6px 0"><span style="width:40px;color:#ECEDEA">20:52</span><span style="flex:1">A obstructed, recovered</span><span>Resolved</span></li>
+          <li style="display:flex;gap:8px;padding:6px 0"><span style="width:40px;color:#ECEDEA">19:30</span><span style="flex:1">B offline 2 min</span><span>Resolved</span></li>
+        </ul>
+      </section>
+    </aside>
+
+    <!-- 中：回放模式。整块加黄框、标题条写「历史回放」，「实时」字样全部换掉 -->
+    <main style="min-width:0;display:flex;flex-direction:column;min-height:0;box-shadow:inset 0 0 0 3px #F2B01E">
+      <div style="padding:12px 20px;display:flex;align-items:center;gap:16px;border-bottom:1px solid #2E333A;background:#2D2512">
+        <span class="past">▌▌ PLAYBACK · 22:05:14</span>
+        <div style="flex:1;min-width:0"><h1 style="margin:0;font-size:20px;line-height:26px">Vehicle loitering, car park · Closed: false alarm</h1><div style="color:#ECEDEA">You are viewing footage from 1 h 35 min ago, not live video</div></div>
+        <button class="btn pri" type="button">Return to live</button>
+      </div>
+      <div style="flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,3fr) minmax(0,2fr);gap:12px;padding:12px 20px">
+        <section aria-label="Recordings" style="display:flex;flex-direction:column;gap:8px;min-height:0">
+          <div style="display:flex;align-items:center;gap:8px">
+            <div class="seg" role="group" aria-label="Video layout"><button class="btn sm" type="button">Single</button><button class="btn sm on" type="button" aria-pressed="true">Dual</button><button class="btn sm" type="button">Quad</button></div>
+            <span style="flex:1"></span>
+            <div class="seg" role="group" aria-label="Speed"><button class="btn sm" type="button">0.5×</button><button class="btn sm on" type="button" aria-pressed="true">1×</button><button class="btn sm" type="button">2×</button><button class="btn sm" type="button">4×</button></div>
+          </div>
+          <figure class="vid" style="margin:0;flex:2"><div class="noise"></div><figcaption class="cap"><span>Camera 2 · Car park</span><span style="flex:1"></span><span class="past" style="padding:0 8px">Playback 22:05:14</span></figcaption></figure>
+          <figure class="vid" style="margin:0;flex:1"><div class="noise"></div><figcaption class="cap"><b>A</b><span>Front camera</span><span style="flex:1"></span><span class="past" style="padding:0 8px">Playback 22:05:14</span></figcaption></figure>
+          <div style="display:flex;align-items:center;gap:8px">
+            <button class="btn sm" type="button" aria-label="Back 10 s">−10 s</button>
+            <button class="btn sm" type="button">Pause</button>
+            <button class="btn sm" type="button" aria-label="Forward 10 s">+10 s</button>
+            <span style="flex:1"></span>
+            <button class="btn sm" type="button">Snapshot</button>
+            <button class="btn sm" type="button">Export clip (22:04–22:09)</button>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px">
+            <input aria-label="Go to time" placeholder="Go to hh:mm:ss" style="height:32px;width:140px;background:#0E1013;color:#ECEDEA;border:1px solid #4A5058;border-radius:2px;padding:0 8px;font:inherit">
+            <span style="flex:1"></span>
+            <button class="btn sm" type="button" title="Kept beyond the retention period">Retain clip</button>
+          </div>
+        </section>
+        <figure style="margin:0;position:relative;background:#15181C;border:1px solid #2E333A;min-height:0;overflow:hidden">
+          <svg viewBox="0 0 400 420" preserveAspectRatio="xMidYMid meet" style="position:absolute;inset:0;width:100%;height:100%" role="img" aria-label="Position at 22:05: A on the east side of the car park">
+            <path d="M30 40 H370 V150 H280 V390 H130 V150 H30 Z" fill="#232830" stroke="#6A7078" stroke-width="2"/>
+            <rect x="290" y="300" width="80" height="80" fill="none" stroke="#9A9FA6" stroke-dasharray="4 3"/><text x="330" y="396" fill="#9A9FA6" font-size="11" text-anchor="middle">Car park</text>
+            <path d="M60 110 H260 V200" fill="none" stroke="#5AA2E6" stroke-width="3" stroke-opacity=".5"/>
+            <circle cx="260" cy="200" r="9" fill="#9A9FA6" stroke="#0E1013" stroke-width="2"/><text x="260" y="186" fill="#ECEDEA" font-size="13" font-weight="700" text-anchor="middle">A</text>
+            <path d="M318 316 l14 0 l0 10 l-14 0 z" fill="#F2B01E"/>
+          </svg>
+          <figcaption style="position:absolute;left:0;right:0;top:0;padding:8px 10px;display:flex;gap:8px;background:rgba(45,37,18,.92)"><b>Positions at 22:05</b><span style="flex:1"></span><span style="color:#B4B8BE">Grey = at that time</span></figcaption>
+        </figure>
+      </div>
+    </main>
+
+    <aside aria-label="Robots & patrols" style="border-left:1px solid #2E333A;display:flex;flex-direction:column;min-height:0">
+      <section class="sec"><h2 class="h2">Robots · Live</h2><p class="lbl" style="margin:4px 0 0">Right panel always shows live status</p></section>
+      <section class="sec" style="display:flex;flex-direction:column;gap:6px">
+        <div style="display:flex;align-items:center;gap:8px"><b style="font-size:17px">A</b><span style="display:inline-flex;align-items:center;gap:6px;color:#3DC46E;font-weight:600"><span class="sq"></span>Patrolling</span><span style="flex:1"></span><span style="font-weight:700">62%</span></div>
+        <div style="color:#B4B8BE">North sector · guard-1 lap 3</div>
+      </section>
+      <section class="sec" style="display:flex;flex-direction:column;gap:6px">
+        <div style="display:flex;align-items:center;gap:8px"><b style="font-size:17px">B</b><span style="color:#B4B8BE;font-weight:600">Charging</span><span style="flex:1"></span><span style="color:#F2B01E;font-weight:700">18%</span></div>
+        <div style="color:#B4B8BE">Dock 1 · 80% by approx. 01:00</div>
+      </section>
+      <section class="sec" style="flex:1;border-bottom:0">
+        <h2 class="h2" style="margin-bottom:8px">Alarm history</h2>
+        <ul style="list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px;color:#B4B8BE">
+          <li style="display:flex;gap:8px"><span style="width:56px;color:#ECEDEA">22:05:14</span><span>Camera 2: vehicle stationary over 10 min</span></li>
+          <li style="display:flex;gap:8px"><span style="width:56px;color:#ECEDEA">22:05:40</span><span>gina took ownership</span></li>
+          <li style="display:flex;gap:8px"><span style="width:56px;color:#ECEDEA">22:07:02</span><span>gina reviewed footage: contractor vehicle</span></li>
+          <li style="display:flex;gap:8px"><span style="width:56px;color:#ECEDEA">22:09:11</span><span>Closed: false alarm · "Contractor vehicle, per olga's handover note"</span></li>
+        </ul>
+      </section>
+    </aside>
+  </div>
+
+  <section aria-label="Shift timeline" style="height:88px;flex:none;border-top:1px solid #2E333A;background:#0A0C0E;padding:8px 16px;box-sizing:border-box;display:flex;flex-direction:column;gap:4px">
+    <div style="display:flex;align-items:center;gap:16px" class="lbl"><span style="color:#ECEDEA">Shift 19:00 → 07:00</span><span style="flex:1"></span><span style="color:#F2B01E">Yellow line = playback position · White line = now</span></div>
+    <div style="position:relative;flex:1">
+      <div style="position:absolute;left:30px;top:2px;color:#9A9FA6;font-size:12px;font-weight:700">A</div>
+      <div style="position:absolute;left:30px;top:22px;color:#9A9FA6;font-size:12px;font-weight:700">B</div>
+      <div style="position:absolute;left:56px;right:0;top:4px;height:12px;background:#16191D"></div>
+      <div style="position:absolute;left:56px;right:0;top:24px;height:12px;background:#16191D"></div>
+      <div style="position:absolute;left:56px;width:9%;top:4px;height:12px;background:#1F6FC0"></div>
+      <div style="position:absolute;left:calc(56px + 25%);width:13%;top:4px;height:12px;background:#1F6FC0"></div>
+      <div style="position:absolute;left:calc(56px + 30.5%);width:7.5%;top:24px;height:12px;background:#9A9FA6"></div>
+      <span style="position:absolute;left:calc(56px + 25.6%);top:40px;width:9px;height:9px;border:2px solid #9A9FA6;box-sizing:border-box"></span>
+      <div style="position:absolute;left:calc(56px + 25.7%);top:0;bottom:0;width:3px;background:#F2B01E"></div>
+      <span style="position:absolute;left:calc(56px + 25.7% + 8px);top:38px;font-size:12px;font-weight:700;color:#F2B01E">Playback 22:05</span>
+      <div style="position:absolute;left:calc(56px + 38.6%);top:0;bottom:0;width:2px;background:#ECEDEA"></div>
+      <span style="position:absolute;left:calc(56px + 38.6% + 6px);top:38px;font-size:12px;font-weight:700">Now 23:40</span>
+      <div style="position:absolute;left:56px;right:0;bottom:0;display:flex;justify-content:space-between;color:#9A9FA6;font-size:11px"><span>19:00</span><span>21:00</span><span>23:00</span><span>01:00</span><span>03:00</span><span>05:00</span><span>07:00</span></div>
+    </div>
+  </section>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1536,"height":960}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

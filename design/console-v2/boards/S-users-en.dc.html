@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Site Setup Users</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&display=swap">
+<style>
+body{margin:0}
+a{color:#1A5FA6}a:hover{color:#0E3F70}
+.btn{height:40px;padding:0 16px;border:1px solid #6B7178;border-radius:2px;background:#fff;color:#16191D;font:600 14px Barlow,"Noto Sans SC","Microsoft YaHei UI",sans-serif;display:inline-flex;align-items:center;gap:8px;cursor:pointer;white-space:nowrap;text-decoration:none}
+.btn.sm{height:32px;padding:0 12px;font-size:13px}
+.btn.pri{background:#1F6FC0;border-color:#1F6FC0;color:#fff;font-weight:700}
+.btn.danger{border-color:#C4262B;color:#B0202A}
+.btn.stop{background:#D42F33;border-color:#D42F33;color:#fff;font-weight:700}
+.seg{display:inline-flex;border:1px solid #C9CDD2}
+.seg .btn{border:0;background:transparent;border-radius:0}
+.seg .btn+.btn{border-left:1px solid #C9CDD2}
+.seg .btn.on{background:#1F6FC0;color:#fff}
+.lbl{font-size:12px;font-weight:600;letter-spacing:.06em;color:#5A6068}
+.mut{color:#565B62}
+.ring{display:inline-block;flex:none;width:12px;height:12px;border:3px solid #C4262B;border-radius:50%;box-sizing:border-box}
+.tri{display:inline-block;flex:none;width:0;height:0;border-left:7px solid transparent;border-right:7px solid transparent;border-bottom:12px solid #D99A00}
+.sq{display:inline-block;flex:none;width:9px;height:9px;background:#1E8A47}
+.h1{margin:0;font-size:24px;line-height:30px;font-weight:700}
+.h2{margin:0;font-size:16px;line-height:22px;font-weight:600}
+.card{background:#fff;border:1px solid #D5D8DC}
+.cardh{display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:1px solid #E3E5E8}
+th{text-align:left;font-size:12px;font-weight:600;letter-spacing:.06em;color:#5A6068;padding:10px 12px;border-bottom:1px solid #D5D8DC;background:#F8F9F8}
+td{padding:10px 12px;border-bottom:1px solid #E3E5E8;vertical-align:middle}
+.chip{display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 8px;font-size:12px;font-weight:700}
+.ok{background:#E4F3E9;color:#17703A} .warn{background:#FCF1D6;color:#7A5200} .bad{background:#FBE5E5;color:#A41E24} .gray{background:#ECEEF0;color:#454A51}
+.field{display:flex;flex-direction:column;gap:4px}
+.field input,.field select{height:40px;border:1px solid #6B7178;border-radius:2px;padding:0 10px;font:inherit;background:#fff;color:#16191D}
+.snav a{display:flex;align-items:center;gap:8px;min-height:36px;margin:0 8px;padding:0 10px;color:#A9AEB4;text-decoration:none;font-weight:600;border-radius:2px}
+.snav a[aria-current]{background:#1F6FC0;color:#fff} .snav .g{color:#A9AEB4}
+.snav .g{padding:14px 16px 4px}
+.new{display:inline-block;padding:0 6px;border:1px solid #1F6FC0;color:#1A5FA6;font-size:11px;font-weight:700;line-height:16px}
+</style>
+</helmet>
+<div style="width:1536px;height:960px;box-sizing:border-box;background:#F2F3F1;color:#16191D;font-family:Barlow,'Noto Sans SC','Microsoft YaHei UI',sans-serif;font-size:14px;line-height:20px;font-variant-numeric:tabular-nums;display:flex;flex-direction:column">
+  <header style="height:60px;flex:none;display:flex;align-items:center;gap:16px;padding:0 16px;border-bottom:1px solid #2E333A;background:#0A0C0E;color:#ECEDEA">
+    <div style="display:flex;flex-direction:column;line-height:14px"><b style="font-size:13px;letter-spacing:.12em">NEXUS</b><span style="font-size:11px;letter-spacing:.12em;color:#B4B8BE">WARDEN</span></div>
+    <span style="color:#B4B8BE">estate-1</span>
+    <nav aria-label="Main navigation" style="display:flex;margin-left:8px">
+      <a href="#" style="height:60px;display:flex;align-items:center;padding:0 14px;color:#B4B8BE;text-decoration:none;font-weight:600">Monitoring</a>
+      <a href="#" style="height:60px;display:flex;align-items:center;padding:0 14px;color:#B4B8BE;text-decoration:none;font-weight:600">Events & Recordings</a>
+      <a href="#" aria-current="page" style="height:60px;display:flex;align-items:center;padding:0 14px;color:#ECEDEA;text-decoration:none;font-weight:700;box-shadow:inset 0 -3px 0 #1F6FC0">Site Setup</a>
+    </nav>
+    <div style="flex:1"></div>
+    <span style="display:inline-flex;align-items:center;gap:8px;height:32px;padding:0 12px;background:#20242A;color:#ECEDEA;font-weight:600">Disarmed · Arms 19:00</span>
+    <span style="display:inline-flex;align-items:center;gap:8px;height:32px;padding:0 12px;background:#20242A;font-weight:600">Robots 2/2 online</span>
+    <a href="#" style="display:inline-flex;align-items:center;gap:8px;height:32px;padding:0 12px;background:#20242A;color:#B4B8BE;font-weight:600;text-decoration:none">Open 0</a>
+    <span style="font-size:16px;font-weight:600">10:20</span>
+    <span style="color:#B4B8BE">demo · Administrator</span>
+    <button class="btn stop" type="button"><span style="width:12px;height:12px;border:2px solid #fff;border-radius:50%;box-sizing:border-box"></span>E-STOP ALL</button>
+  </header>
+  <div style="flex:1;min-height:0;display:grid;grid-template-columns:232px minmax(0,1fr)">
+    <nav class="snav" aria-label="Site Setup" style="background:#15181B;border-right:1px solid #15181B;padding:8px 0;overflow:auto">
+      <div class="g lbl">Daily</div>
+      <a href="#"><span style="flex:1">Overview</span><span class="chip" style="height:20px;background:#1F6FC0;color:#fff">6</span></a>
+      <a href="#"><span style="flex:1">Robots</span></a>
+      <a href="#" aria-current="page"><span style="flex:1">Users</span></a>
+      <div class="g lbl">Site</div>
+      <a href="#"><span style="flex:1">Layout</span></a>
+      <a href="#"><span style="flex:1">Arming & patrols</span></a>
+      <a href="#"><span style="flex:1">Access</span></a>
+      <div class="g lbl">Records</div>
+      <a href="#"><span style="flex:1">Reports</span></a>
+      <div class="g lbl">Advanced</div>
+      <a href="#"><span style="flex:1">Maintenance</span></a>
+    </nav>
+    <main style="min-width:0;min-height:0;overflow:hidden;display:flex;flex-direction:column">
+
+<div style="flex:none;display:flex;align-items:center;gap:16px;padding:0 28px;min-height:74px;background:#fff;border-bottom:1px solid #D5D8DC">
+      <h1 style="margin:0;font-size:28px;line-height:34px">Users</h1>
+      <p style="margin:0;font-size:15px;min-width:0"><span style="display:inline-flex;vertical-align:-1px;margin-right:8px"><span aria-hidden="true" style="display:inline-block;flex:none;width:12px;height:12px;border-radius:50%;background:#1F6FC0"></span></span>5 accounts, 1 temporary engineer account. <b>1 request awaiting approval.</b></p>
+      <span style="flex:1"></span><button class="btn" type="button">Temporary engineer account…</button><button class="btn" type="button">Add user</button></div>
+<div style="flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,1fr) 440px">
+  <div style="min-width:0;overflow:auto;display:flex;flex-direction:column;background:#fff">
+    <section aria-label="Pending approval" style="background:#fff;border-bottom:1px solid #D5D8DC">
+      <div style="display:flex;align-items:center;gap:10px;padding:12px 20px"><span aria-hidden="true" style="display:inline-block;flex:none;width:12px;height:12px;border-radius:50%;background:#1F6FC0"></span><h2 class="h2" style="font-size:17px">Pending approval 1</h2><span class="mut" style="font-size:13px">Account requests from the mobile app</span></div>
+      <div style="display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center"><div style="grid-column:1/-1;height:1px;background:#E3E5E8"></div>
+        <div style="padding:12px 20px"><b>Ravi</b> requests role <b>Guard</b><div class="mut" style="font-size:13px">11-15 09:58 · vivo phone</div></div>
+        <div style="display:flex;gap:8px;padding-right:20px"><button class="btn sm pri" type="button">Approve…</button><button class="btn sm" type="button">Reject</button></div></div>
+    </section>
+    <section aria-label="All accounts" style="background:#fff;border-bottom:1px solid #D5D8DC">
+      <div style="display:flex;align-items:baseline;gap:12px;padding:12px 20px"><h2 class="h2" style="font-size:17px">All accounts</h2><span class="mut" style="font-size:13px">One account per person; select a row for role and activity</span></div>
+      <div style="display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr) minmax(0,1fr) minmax(0,1.2fr)">
+        <div style="grid-column:1/-1;height:1px;background:#E3E5E8"></div><span class="lbl" style="padding:8px 0 8px 20px">User</span><span class="lbl" style="padding:8px 0">Role</span><span class="lbl" style="padding:8px 0">Last sign-in</span><span class="lbl" style="padding:8px 0">Status</span><div style="grid-column:1/-1;height:1px;background:#E3E5E8"></div>
+        <a href="#" style="display:contents;color:#16191D;text-decoration:none">
+      <span style="padding:12px 0 12px 20px;"><b>demo</b> <span class="mut" style="font-size:13px">demo</span></span>
+      <span style="padding:12px 0;">Administrator</span><span style="padding:12px 0;" class="mut">Today 10:02</span>
+      <span style="padding:12px 20px 12px 0;color:#16191D;">Active</span></a><div style="grid-column:1/-1;height:1px;background:#E3E5E8"></div>
+        <a href="#" style="display:contents;color:#16191D;text-decoration:none">
+      <span style="padding:12px 0 12px 20px;"><b>olga</b> <span class="mut" style="font-size:13px">olga</span></span>
+      <span style="padding:12px 0;">Manager</span><span style="padding:12px 0;" class="mut">Today 07:05</span>
+      <span style="padding:12px 20px 12px 0;color:#16191D;">Active</span></a><div style="grid-column:1/-1;height:1px;background:#E3E5E8"></div>
+        <a href="#" style="display:contents;color:#16191D;text-decoration:none">
+      <span style="padding:12px 0 12px 20px;background:#E3EEF9;"><b>gina</b> <span class="mut" style="font-size:13px">gina</span></span>
+      <span style="padding:12px 0;background:#E3EEF9;">Guard</span><span style="padding:12px 0;background:#E3EEF9;" class="mut">Yesterday</span>
+      <span style="padding:12px 20px 12px 0;color:#16191D;background:#E3EEF9;">Active</span></a><div style="grid-column:1/-1;height:1px;background:#E3E5E8"></div>
+        <a href="#" style="display:contents;color:#16191D;text-decoration:none">
+      <span style="padding:12px 0 12px 20px;"><b>vic</b> <span class="mut" style="font-size:13px">vic</span></span>
+      <span style="padding:12px 0;">View only</span><span style="padding:12px 0;" class="mut">4 days ago</span>
+      <span style="padding:12px 20px 12px 0;color:#16191D;">Active</span></a><div style="grid-column:1/-1;height:1px;background:#E3E5E8"></div>
+        <a href="#" style="display:contents;color:#16191D;text-decoration:none">
+      <span style="padding:12px 0 12px 20px;"><b>Lin (engineer)</b> <span class="mut" style="font-size:13px">eng-0415</span></span>
+      <span style="padding:12px 0;">Engineer (temporary)</span><span style="padding:12px 0;" class="mut">Today 09:40</span>
+      <span style="padding:12px 20px 12px 0;color:#16191D;">Expires in 3 h 12 min</span></a><div style="grid-column:1/-1;height:1px;background:#E3E5E8"></div>
+        <a href="#" style="display:contents;color:#16191D;text-decoration:none">
+      <span style="padding:12px 0 12px 20px;"><b>Ahmad</b> <span class="mut" style="font-size:13px">ahmad</span></span>
+      <span style="padding:12px 0;">Guard</span><span style="padding:12px 0;" class="mut">11-02</span>
+      <span style="padding:12px 20px 12px 0;color:#5A6068;">Disabled</span></a><div style="grid-column:1/-1;height:1px;background:#E3E5E8"></div>
+      </div>
+    </section>
+    <details style="background:#fff;border-bottom:1px solid #D5D8DC"><summary style="list-style:none;padding:12px 20px;cursor:pointer;font-weight:600;display:flex;gap:6px;align-items:center">Role permissions <svg width="12" height="12" viewBox="0 0 20 20" aria-hidden="true"><polyline points="4,7 10,13 16,7" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="square"/></svg></summary>
+      <p class="mut" style="margin:0;padding:0 20px 14px;font-size:13px">Administrator: full access. Manager: handle alarms, E-stop, arm/disarm, edit schedules; Robots and Reports read-only. Guard: handle alarms, E-stop, arm/disarm, dispatch and teleoperate robots. View only: read access. Engineer (temporary): administrator access except account management; expires automatically.</p></details>
+  </div>
+  <aside aria-label="gina" style="background:#fff;border-left:1px solid #D5D8DC;display:flex;flex-direction:column;min-height:0;overflow:auto">
+    <div style="padding:24px 24px 20px;border-bottom:1px solid #D5D8DC;display:flex;flex-direction:column;align-items:center;text-align:center;gap:14px">
+      <div><h2 style="margin:0;font-size:24px;line-height:30px">gina</h2><span class="mut">Username gina · Active</span></div>
+      <div style="width:100%;display:flex;flex-direction:column;gap:6px;align-items:stretch"><span class="lbl">Role</span><div class="seg" role="tablist" aria-label="Role" style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));width:100%"><button class="btn" type="button" role="tab" aria-selected="false" style="justify-content:center;padding:0 6px">Manager</button><button class="btn on" type="button" role="tab" aria-selected="true" style="justify-content:center;padding:0 6px">Guard</button><button class="btn" type="button" role="tab" aria-selected="false" style="justify-content:center;padding:0 6px">View only</button></div></div>
+      <div style="width:100%;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px"><button class="btn sm" type="button" style="justify-content:center">Reset password…</button><button class="btn sm danger" type="button" style="justify-content:center">Disable…</button><button class="btn sm danger" type="button" style="justify-content:center">Delete…</button></div>
+      <p class="mut" style="margin:0;font-size:12.5px;max-width:34em">Disabling signs the user out immediately and blocks sign-in until re-enabled. Deleting retains the audit history.</p>
+    </div>
+    <div style="padding:16px 24px">
+      <h3 class="h2" style="margin-bottom:6px">Activity: gina</h3>
+      <ul style="list-style:none;margin:0;padding:0">
+        <li style="display:grid;grid-template-columns:96px 1fr;gap:10px;padding:8px 0;border-top:1px solid #E3E5E8"><span class="mut">11-14 23:48</span><span>Took ownership of alarm "Perimeter breach, north gate"</span></li>
+        <li style="display:grid;grid-template-columns:96px 1fr;gap:10px;padding:8px 0;border-top:1px solid #E3E5E8"><span class="mut">11-14 23:49</span><span>Dispatched A to north gate · interrupted guard&#8209;1</span></li>
+        <li style="display:grid;grid-template-columns:96px 1fr;gap:10px;padding:8px 0;border-top:1px solid #E3E5E8"><span class="mut">11-14 23:55</span><span>Disposition: confirmed intrusion · olga notified</span></li>
+        <li style="display:grid;grid-template-columns:96px 1fr;gap:10px;padding:8px 0;border-top:1px solid #E3E5E8"><span class="mut">11-14 22:09</span><span>Closed alarm "Vehicle loitering, car park" · Disposition: false alarm</span></li>
+        <li style="display:grid;grid-template-columns:96px 1fr;gap:10px;padding:8px 0;border-top:1px solid #E3E5E8"><span class="mut">11-14 19:02</span><span>Armed</span></li>
+        <li style="display:grid;grid-template-columns:96px 1fr;gap:10px;padding:8px 0;border-top:1px solid #E3E5E8"><span class="mut">11-14 02:14</span><span>E-STOP ALL · reset 02:16</span></li>
+      </ul>
+      <a href="#" style="display:inline-block;margin-top:10px">View all in audit log</a>
+    </div>
+  </aside>
+</div>
+
+    </main>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1536,"height":960}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

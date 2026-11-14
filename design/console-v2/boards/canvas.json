@@ -1,0 +1,549 @@
+{
+  "v": 3,
+  "createdOnFiles": {
+    "v": 1,
+    "at": "2026-11-15T00:30:00Z"
+  },
+  "title": "值班台重做方案",
+  "launch": {
+    "view": "canvas"
+  },
+  "pages": [],
+  "boards": {
+    "Main.dc.html": {
+      "x": 0,
+      "y": 0,
+      "w": 1440,
+      "h": 900,
+      "title": "方案 A · 事件处理台"
+    },
+    "B-map.dc.html": {
+      "x": 1520,
+      "y": 0,
+      "w": 1440,
+      "h": 900,
+      "title": "方案 B · 现场地图台"
+    },
+    "C-wall.dc.html": {
+      "x": 3040,
+      "y": 0,
+      "w": 1440,
+      "h": 900,
+      "title": "方案 C · 监控墙"
+    },
+    "V4-normal.dc.html": {
+      "x": 0,
+      "y": 1900,
+      "w": 1536,
+      "h": 960,
+      "title": "V4-A · 正常值班"
+    },
+    "V4-alarm.dc.html": {
+      "x": 1616,
+      "y": 1900,
+      "w": 1536,
+      "h": 960,
+      "title": "V4-B · 告警处理中"
+    },
+    "G-playback.dc.html": {
+      "x": 0,
+      "y": 3300,
+      "w": 1536,
+      "h": 960,
+      "title": "保安 · 历史回放 22:05"
+    },
+    "G-multi.dc.html": {
+      "x": 1616,
+      "y": 3300,
+      "w": 1536,
+      "h": 960,
+      "title": "保安 · 多个告警同时"
+    },
+    "G-compact.dc.html": {
+      "x": 3232,
+      "y": 3300,
+      "w": 1366,
+      "h": 768,
+      "title": "保安 · 1366×768 小屏"
+    },
+    "G-records.dc.html": {
+      "x": 4678,
+      "y": 3300,
+      "w": 1536,
+      "h": 960,
+      "title": "记录与录像"
+    },
+    "R-A.dc.html": {
+      "x": 0,
+      "y": 8380,
+      "w": 1536,
+      "h": 960,
+      "title": "现场设置 · 机器人 · 操作"
+    },
+    "R-A2.dc.html": {
+      "x": 1616,
+      "y": 8380,
+      "w": 1536,
+      "h": 960,
+      "title": "现场设置 · 机器人 · 设置"
+    },
+    "S-home.dc.html": {
+      "x": 0,
+      "y": 7200,
+      "w": 1536,
+      "h": 960,
+      "title": "现场设置 · 概况"
+    },
+    "S-layout.dc.html": {
+      "x": 1616,
+      "y": 7200,
+      "w": 1536,
+      "h": 960,
+      "title": "现场设置 · 现场布置（图层）"
+    },
+    "S-arming.dc.html": {
+      "x": 3232,
+      "y": 7200,
+      "w": 1536,
+      "h": 960,
+      "title": "现场设置 · 布防与巡逻"
+    },
+    "S-access.dc.html": {
+      "x": 4848,
+      "y": 7200,
+      "w": 1536,
+      "h": 960,
+      "title": "现场设置 · 授权与临时撤防"
+    },
+    "S-users.dc.html": {
+      "x": 3232,
+      "y": 8380,
+      "w": 1536,
+      "h": 960,
+      "title": "现场设置 · 人员"
+    },
+    "S-system.dc.html": {
+      "x": 4848,
+      "y": 8380,
+      "w": 1536,
+      "h": 960,
+      "title": "现场设置 · 高级 · 软件升级"
+    },
+    "S-reports.dc.html": {
+      "x": 0,
+      "y": 9560,
+      "w": 1536,
+      "h": 960,
+      "title": "现场设置 · 报告"
+    },
+    "S-log.dc.html": {
+      "x": 1616,
+      "y": 9560,
+      "w": 1536,
+      "h": 960,
+      "title": "现场设置 · 操作记录"
+    },
+    "V4-normal-en.dc.html": {
+      "x": 0,
+      "y": 12200,
+      "w": 1536,
+      "h": 960,
+      "title": "Monitoring · Normal"
+    },
+    "V4-alarm-en.dc.html": {
+      "x": 1616,
+      "y": 12200,
+      "w": 1536,
+      "h": 960,
+      "title": "Monitoring · Alarm in progress"
+    },
+    "G-playback-en.dc.html": {
+      "x": 3232,
+      "y": 12200,
+      "w": 1536,
+      "h": 960,
+      "title": "Guard · Playback"
+    },
+    "G-multi-en.dc.html": {
+      "x": 4848,
+      "y": 12200,
+      "w": 1536,
+      "h": 960,
+      "title": "Guard · Multiple alarms"
+    },
+    "G-compact-en.dc.html": {
+      "x": 0,
+      "y": 13380,
+      "w": 1366,
+      "h": 768,
+      "title": "Guard · 1366×768"
+    },
+    "G-records-en.dc.html": {
+      "x": 1616,
+      "y": 13380,
+      "w": 1536,
+      "h": 960,
+      "title": "Events & Recordings"
+    },
+    "S-home-en.dc.html": {
+      "x": 3232,
+      "y": 13380,
+      "w": 1536,
+      "h": 960,
+      "title": "Site Setup · Overview"
+    },
+    "S-layout-en.dc.html": {
+      "x": 4848,
+      "y": 13380,
+      "w": 1536,
+      "h": 960,
+      "title": "Site Setup · Site layout"
+    },
+    "S-arming-en.dc.html": {
+      "x": 0,
+      "y": 14560,
+      "w": 1536,
+      "h": 960,
+      "title": "Site Setup · Arming & patrols"
+    },
+    "S-access-en.dc.html": {
+      "x": 1616,
+      "y": 14560,
+      "w": 1536,
+      "h": 960,
+      "title": "Site Setup · Access & temporary disarm"
+    },
+    "R-A-en.dc.html": {
+      "x": 3232,
+      "y": 14560,
+      "w": 1536,
+      "h": 960,
+      "title": "Site Setup · Robots · Operate"
+    },
+    "R-A2-en.dc.html": {
+      "x": 4848,
+      "y": 14560,
+      "w": 1536,
+      "h": 960,
+      "title": "Site Setup · Robots · Settings"
+    },
+    "S-users-en.dc.html": {
+      "x": 0,
+      "y": 15740,
+      "w": 1536,
+      "h": 960,
+      "title": "Site Setup · Users"
+    },
+    "S-system-en.dc.html": {
+      "x": 1616,
+      "y": 15740,
+      "w": 1536,
+      "h": 960,
+      "title": "Site Setup · Advanced"
+    },
+    "S-reports-en.dc.html": {
+      "x": 3232,
+      "y": 15740,
+      "w": 1536,
+      "h": 960,
+      "title": "Site Setup · Reports"
+    },
+    "S-log-en.dc.html": {
+      "x": 4848,
+      "y": 15740,
+      "w": 1536,
+      "h": 960,
+      "title": "Site Setup · Audit log"
+    },
+    "G-check.dc.html": {
+      "x": 0,
+      "y": 4480,
+      "w": 1536,
+      "h": 960,
+      "title": "保安 · 派去看一眼（地图上点）"
+    },
+    "G-route.dc.html": {
+      "x": 1616,
+      "y": 4480,
+      "w": 1536,
+      "h": 960,
+      "title": "保安 · 临时路线"
+    },
+    "G-robot.dc.html": {
+      "x": 3232,
+      "y": 4480,
+      "w": 1536,
+      "h": 960,
+      "title": "保安 · 单台机器人（右栏「详情」进来）"
+    },
+    "G-estop.dc.html": {
+      "x": 4848,
+      "y": 4480,
+      "w": 1536,
+      "h": 960,
+      "title": "保安 · 全部急停后"
+    },
+    "M-alarm.dc.html": {
+      "x": 1616,
+      "y": 6000,
+      "w": 1536,
+      "h": 960,
+      "title": "经理 · 告警处理中（不能派机器人、不能警示）"
+    },
+    "V-alarm.dc.html": {
+      "x": 3232,
+      "y": 6000,
+      "w": 1536,
+      "h": 960,
+      "title": "只读 · 告警处理中（只能看，没有急停）"
+    },
+    "M-robot.dc.html": {
+      "x": 4848,
+      "y": 6000,
+      "w": 1536,
+      "h": 960,
+      "title": "经理 · 现场设置 · 机器人（只看，可派巡逻）"
+    },
+    "P-parity.dc.html": {
+      "x": 6464,
+      "y": 3300,
+      "w": 1536,
+      "h": 2200,
+      "title": "老网页功能 → 新稿对照"
+    },
+    "G-check-en.dc.html": {
+      "x": 0,
+      "y": 16920,
+      "w": 1536,
+      "h": 960,
+      "title": "Guard · Spot check"
+    },
+    "G-route-en.dc.html": {
+      "x": 1616,
+      "y": 16920,
+      "w": 1536,
+      "h": 960,
+      "title": "Guard · One-off route"
+    },
+    "G-robot-en.dc.html": {
+      "x": 3232,
+      "y": 16920,
+      "w": 1536,
+      "h": 960,
+      "title": "Guard · Robot control"
+    },
+    "G-estop-en.dc.html": {
+      "x": 4848,
+      "y": 16920,
+      "w": 1536,
+      "h": 960,
+      "title": "Guard · After E-STOP ALL"
+    },
+    "M-alarm-en.dc.html": {
+      "x": 0,
+      "y": 18100,
+      "w": 1536,
+      "h": 960,
+      "title": "Manager · Alarm in progress"
+    },
+    "V-alarm-en.dc.html": {
+      "x": 1616,
+      "y": 18100,
+      "w": 1536,
+      "h": 960,
+      "title": "View only · Alarm in progress"
+    },
+    "M-robot-en.dc.html": {
+      "x": 3232,
+      "y": 18100,
+      "w": 1536,
+      "h": 960,
+      "title": "Manager · Robots (view)"
+    },
+    "M-home.dc.html": {
+      "x": 0,
+      "y": 6000,
+      "w": 1536,
+      "h": 960,
+      "title": "经理 · 概况（只读，新开）"
+    },
+    "M-home-en.dc.html": {
+      "x": 4848,
+      "y": 18100,
+      "w": 1536,
+      "h": 960,
+      "title": "Manager · Overview (read-only)"
+    }
+  },
+  "order": [
+    "Main.dc.html",
+    "B-map.dc.html",
+    "C-wall.dc.html",
+    "V4-normal.dc.html",
+    "V4-alarm.dc.html",
+    "G-playback.dc.html",
+    "G-multi.dc.html",
+    "G-compact.dc.html",
+    "G-records.dc.html",
+    "S-home.dc.html",
+    "S-layout.dc.html",
+    "S-arming.dc.html",
+    "S-access.dc.html",
+    "R-A.dc.html",
+    "R-A2.dc.html",
+    "S-users.dc.html",
+    "S-system.dc.html",
+    "S-reports.dc.html",
+    "S-log.dc.html",
+    "V4-normal-en.dc.html",
+    "V4-alarm-en.dc.html",
+    "G-playback-en.dc.html",
+    "G-multi-en.dc.html",
+    "G-compact-en.dc.html",
+    "G-records-en.dc.html",
+    "S-home-en.dc.html",
+    "S-layout-en.dc.html",
+    "S-arming-en.dc.html",
+    "S-access-en.dc.html",
+    "R-A-en.dc.html",
+    "R-A2-en.dc.html",
+    "S-users-en.dc.html",
+    "S-system-en.dc.html",
+    "S-reports-en.dc.html",
+    "S-log-en.dc.html",
+    "G-check.dc.html",
+    "G-route.dc.html",
+    "G-robot.dc.html",
+    "G-estop.dc.html",
+    "M-alarm.dc.html",
+    "V-alarm.dc.html",
+    "M-robot.dc.html",
+    "P-parity.dc.html",
+    "G-check-en.dc.html",
+    "G-route-en.dc.html",
+    "G-robot-en.dc.html",
+    "G-estop-en.dc.html",
+    "M-alarm-en.dc.html",
+    "V-alarm-en.dc.html",
+    "M-robot-en.dc.html",
+    "M-home.dc.html",
+    "M-home-en.dc.html"
+  ],
+  "notes": {
+    "t1": {
+      "x": 0,
+      "y": -300,
+      "text": "保安端三个方案 · 同一时刻：23:47 北门有人翻越，A 在附近巡逻",
+      "kind": "title1",
+      "maxW": 4480
+    },
+    "nA": {
+      "x": 0,
+      "y": 960,
+      "w": 420,
+      "text": "A 事件处理台：报警是工作的单位。左边队列，中间是选中事件的全部（视频、地图、处理步骤、结论），一屏做完不切页。平时中间显示全场概况。适合：保安一人值班、事件多。",
+      "size": "m",
+      "fill": "blue"
+    },
+    "nB": {
+      "x": 1520,
+      "y": 960,
+      "w": 420,
+      "text": "B 现场地图台：地图铺满，机器人、摄像头、报警都长在地图上，画面挂在机器人旁边；底部是整班时间轴，拖动就看录像。适合：场地大、要靠空间判断去哪。",
+      "size": "m",
+      "fill": "teal"
+    },
+    "nC": {
+      "x": 3040,
+      "y": 960,
+      "w": 420,
+      "text": "C 监控墙：画面优先，所有机器人和固定摄像头一墙排开，出事的画面自动放大到左上并加红框，右边是处理栏。适合：大屏或第二块屏、习惯看监控墙的保安。",
+      "size": "m",
+      "fill": "purple"
+    },
+    "t2": {
+      "x": 0,
+      "y": 1600,
+      "text": "V4 融合：A 三栏 + B 地图和时间轴 + C 多画面 · 同一布局两种状态",
+      "kind": "title1",
+      "maxW": 3152
+    },
+    "nV": {
+      "x": 3232,
+      "y": 1900,
+      "w": 440,
+      "text": "两张图同一套布局，只换中间的优先级：\n· 正常：中间是全场地图 + 机器人画面\n· 告警：中间换成这件事（画面 60% + 地图 40% + 步骤 + 操作）\n左栏、右栏、底部时间轴位置不动。\n\n标「新」的是现在后端没有的功能：派机器人前按电量算能不能去再回桩。\n\n「全部急停」= 现在的「全部叫停」，代码里就是急停：原地停，要人工恢复。",
+      "size": "m",
+      "fill": "gray"
+    },
+    "t3": {
+      "x": 0,
+      "y": 3000,
+      "text": "全站静态稿 · 保安端的其余状态",
+      "kind": "title1",
+      "maxW": 6200
+    },
+    "t4": {
+      "x": 0,
+      "y": 6900,
+      "text": "全站静态稿 · 管理端（现场设置，浅色）",
+      "kind": "title1",
+      "maxW": 6380
+    },
+    "nRA": {
+      "x": 3232,
+      "y": 10560,
+      "w": 700,
+      "text": "机器人页：名字右边「操作 / 设置」切换，同一个页框，不弹窗。\n· 操作：实时画面（云台、雨刷叠在画面上）+ 喊话警示；右边按状态只给能用的操作。\n· 设置：一张连续的体检清单，要处理的排最前（蓝圆 = 要你批准，黄三角 = 提醒），正常的收成一行可展开；名字和派单方式在页头下的表单条；重启、解绑单独放右边。",
+      "size": "m",
+      "fill": "blue"
+    },
+    "nS2": {
+      "x": 0,
+      "y": 10660,
+      "w": 1500,
+      "size": "m",
+      "fill": "gray",
+      "text": "管理端这一轮全部按同一套重画（同一页框、同一页头：标题 + 一句话现状 + 右边操作；连续列表不堆卡片；蓝圆 = 要你批准，黄三角 = 提醒，红圈 = 确认有人/危险）。\n· 概况：待处理（知道了 / 已处理 / 技术细节）+ 今天的安排（布防、授权、巡逻三条时间带，现在线）+ 机器人 + 这周。\n· 现场布置：原 7 个标签 → 同一张图上 8 个图层，左边选层改，其余层淡显；删除、缩小禁行区要密码确认，确认前仍避开原范围。\n· 布防与巡逻：布防时段、布防时巡逻、排好的巡逻画在同一张周表；右边是布防时巡逻的设置和今晚预计。\n· 授权与临时撤防：现在生效的放最上，可提前结束；全部授权按星期显示；右边加授权。\n· 人员：待批准申请、账号表、选中一人看角色和操作记录；工程师临时账号在页头。\n· 报告 / 操作记录：同一页两个视图。\n· 高级：地图、定位、诊断、升级、站点五项竖排切换（画的是升级）。\n图上数字是演示数据。"
+    },
+    "t5": {
+      "x": 0,
+      "y": 11900,
+      "text": "English (default UI language) · same layouts, professional terminology",
+      "kind": "title1",
+      "maxW": 6380
+    },
+    "nEN": {
+      "x": 0,
+      "y": 19100,
+      "w": 1500,
+      "size": "m",
+      "fill": "gray",
+      "text": "Terminology (replaces the colloquial strings in the current en dictionary): Armed / Disarmed · E-STOP ALL · Temporary disarm · Authorized access · Keep-out zone / Speed zone / Virtual wall / Detection exclusion zone · Standby point / Charging dock · Navigation graph · Take ownership · Disposition: Confirmed intrusion / False alarm · Acknowledge / Resolved · Dispatch · Deterrence: Strobe / Siren / Announcement · PTZ · Audit log · Enrolment · Roll back.\nThe current en dictionary still uses e.g. \"Someone is there\", \"Help it localize\", \"Handled\", \"Stop all\"; to be replaced when coding."
+    },
+    "t6": {
+      "x": 0,
+      "y": 5700,
+      "text": "同一页，不同角色看到的（按代码权限）",
+      "kind": "title1",
+      "maxW": 6380
+    }
+  },
+  "designSystems": [],
+  "attachments": {},
+  "noteOrder": [
+    "t1",
+    "nA",
+    "nB",
+    "nC",
+    "t2",
+    "nV",
+    "t3",
+    "t4",
+    "nRA",
+    "nS2",
+    "t5",
+    "nEN",
+    "t6"
+  ]
+}
