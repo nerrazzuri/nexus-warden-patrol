@@ -27,6 +27,11 @@ describe("控件高度三档", () => {
     [".btn", "var(--ctl-md)"], [".btn.sm", "var(--ctl-sm)"], [".login-card .btn", "var(--ctl-lg)"], [".alarm-actions .btn", "var(--ctl-lg)"],
     ["select", "var(--ctl-md)"], [".field input", "var(--ctl-md)"], [".field select", "var(--ctl-md)"], [".login-card input", "var(--ctl-lg)"],
     [".field-inline select", "var(--ctl-sm)"], [".me-tools button", "var(--ctl-sm)"],
+    // 截图核对:用户表里角色下拉 40、同一行按钮 32 —— 表格里的下拉跟行里按钮一样用 sm
+    ["table select", "var(--ctl-sm)"],
+    // 截图量出来的剩余:顶栏布防 / 报警胶囊 30、账号按钮 36、分段按钮 30、表单外的文字框 36
+    [".armstate", "var(--ctl-sm)"], [".alarmcount", "var(--ctl-sm)"], [".usermenu > .who", "var(--ctl-sm)"], [".seg button", "var(--ctl-sm)"],
+    ['input[type="text"]', "var(--ctl-md)"],
   ])("%s 高 %s", (sel, want) => {
     expect(last(sel, "height")).toBe(want);
   });
@@ -39,5 +44,11 @@ describe("控件高度三档", () => {
   it("复选框、单选框一个尺寸 18px", () => {
     expect(last('input[type="checkbox"]', "width")).toBe("18px");
     expect(last('input[type="checkbox"]', "height")).toBe("18px");
+  });
+});
+
+describe("输入框底子", () => {
+  it("全站输入框的最小高是 sm(以前 36,把行内 32 的框撑成 36)", () => {
+    expect(flat).toMatch(/:where\(input:not[^{]*\{[^}]*min-height: ?var\(--ctl-sm\)/);
   });
 });
