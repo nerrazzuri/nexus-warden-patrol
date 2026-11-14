@@ -237,6 +237,8 @@ describe("W6-05 顶栏点布防状态切模式", () => {
     const { c } = bar("viewer");
     expect(c.querySelector("button.armstate")).toBeNull();
     expect(c.querySelector(".armstate")!.getAttribute("title")).toContain("只能看");
+    // UIUX-034:只读的不像按钮 —— 带「只看」小字
+    expect(c.querySelector(".armstate [data-ro]")!.textContent).toBe("只看");
   });
   it("连不上站点:不给切", () => {
     lang.value = "zh";
