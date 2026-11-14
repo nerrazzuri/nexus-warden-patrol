@@ -2,13 +2,13 @@
 .routesplit { display: flex; flex-wrap: wrap; }
 .routemap { flex: 999 1 560px; min-width: 0; background: var(--c-mapBg); display: flex; flex-direction: column; }
 .routemap .mapwrap { flex: none; height: 600px; }
-.routeside { flex: 1 1 340px; max-width: 440px; scroll-padding-bottom: 72px; padding: 12px 16px; border-left: 1px solid var(--c-outline); display: flex; flex-direction: column; gap: 12px; }
+.routeside { flex: 1 1 340px; max-width: 440px; scroll-padding-bottom: 72px; padding: 12px 16px; border-left: 1px solid var(--c-outline); display: flex; flex-direction: column; gap: var(--sp-3); }
 .routeside ul { list-style: none; margin: 0; padding: 0; }
-.routelist li, .pointlist li { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-top: 1px solid var(--c-outline); }
+.routelist li, .pointlist li { display: flex; align-items: center; gap: var(--sp-2); padding: 6px 0; border-top: 1px solid var(--c-outline); }
 .routelist li[aria-current="true"], .pointlist li[aria-current="true"] { background: color-mix(in srgb, var(--c-tertiary) 12%, transparent); }
 .pointlist .num { flex: none; width: 22px; height: 22px; border-radius: 50%; background: var(--c-text); color: var(--c-surface); font: 600 12px/22px var(--font-mono); text-align: center; }
 .pointlist .bad { color: var(--c-error); font-size: 13px; }
-.pointform { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.pointform { display: grid; grid-template-columns: 1fr 1fr; gap: var(--sp-2); }
 .pointform .wide { grid-column: 1 / -1; }
 .pointform input { height: var(--ctl-sm); }
 .route-line { fill: none; stroke: var(--c-tertiary); stroke-width: 3; vector-effect: non-scaling-stroke; stroke-linejoin: round; }
@@ -34,29 +34,29 @@
 .route-handle { cursor: grab; touch-action: none; }
 .route-handle:hover .pm-nose { filter: brightness(1.15); }
 .map.drawing .route-pt { cursor: grab; }
-.posebar { padding: 10px 16px; border-top: 1px solid var(--c-outline); display: flex; flex-direction: column; gap: 8px; }
-.posebar .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.posebar { padding: 10px 16px; border-top: 1px solid var(--c-outline); display: flex; flex-direction: column; gap: var(--sp-2); }
+.posebar .row { display: flex; flex-wrap: wrap; gap: var(--sp-2); align-items: center; }
 .pose-pin text { fill: var(--c-text); font: 700 12px var(--font-mono); text-anchor: middle; paint-order: stroke; stroke: var(--c-surface); stroke-width: 4px; }
 
 /* 路线列表(2026-10-15):一行一条,点了图上只画这一条 */
 .routerow { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; width: 100%; padding: 4px 8px;
-  background: none; border: 0; color: inherit; font: inherit; text-align: left; cursor: pointer; border-radius: 6px; }
+  background: none; border: 0; color: inherit; font: inherit; text-align: left; cursor: pointer; border-radius: var(--r-r8); }
 .routerow:hover { background: color-mix(in srgb, var(--c-tertiary) 8%, transparent); }
 .routerow-name { font-weight: 600; }
 .routelist li { padding: 2px 0; }
 .routelist li[aria-current="true"] .routerow-name { color: var(--c-tertiary); }
 .routepick-hint { position: absolute; top: 12px; left: 50%; transform: translateX(-50%); margin: 0; padding: 6px 12px;
-  background: var(--c-surface); border: 1px solid var(--c-outline); border-radius: 6px; box-shadow: 0 1px 4px rgb(0 0 0 / 15%); }
-.field-check { display: flex; align-items: center; gap: 6px; }
+  background: var(--c-surface); border: 1px solid var(--c-outline); border-radius: var(--r-r8); box-shadow: 0 1px 4px rgb(0 0 0 / 15%); }
+.field-check { display: flex; align-items: center; gap: var(--sp-2); }
 /* UIUX-013:说明文字跟标签同一段,不被拆成第二列 */
 .field-check > .fc-text { flex: 1 1 auto; min-width: 0; }
 /* UIUX-014:点位名左对齐、一行放不下用省略号(悬停看全名);上移 / 下移 / 删除按钮收窄 */
 .pointlist .link { display: flex; align-items: center; flex: 1 1 auto; min-width: 0; text-align: left; justify-content: flex-start; }
 .pointlist .link .pname { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pointlist .btn.sm { min-width: 32px; padding: 0 6px; }
-.routeside-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.routeside-head { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-2); }
 .routeback { align-self: flex-start; }
-.routename { display: flex; flex-direction: column; gap: 4px; }
+.routename { display: flex; flex-direction: column; gap: var(--sp-1); }
 /* 11-05 现场第 15、35 条:要原地转又贴墙的点(只提醒) */
 .route-pt.warn .pm-body { stroke: var(--c-warning); }
 .route-pt.warn .pm-nose { fill: var(--c-warning); }
@@ -66,8 +66,8 @@ p.warn { color: var(--c-warning); }
 .routename .bad { color: var(--c-error); }
 /* 第 2 轮 config N3:日程列表排成一行一行(原来挤成「r2cfg-demo21:30mon tue…Remove」);输入框不铺满整行 */
 .sched-list { list-style: none; padding: 0; margin: 4px 0 10px; }
-.sched-list li { display: grid; grid-template-columns: minmax(8em, auto) 4em 1fr auto auto auto; gap: 4px 12px; align-items: center; padding: 6px 0; border-bottom: 1px solid var(--c-outline); }
+.sched-list li { display: grid; grid-template-columns: minmax(8em, auto) 4em 1fr auto auto auto; gap: var(--sp-1) var(--sp-3); align-items: center; padding: 6px 0; border-bottom: 1px solid var(--c-outline); }
 /* UIUX-016:字段按网格排(宽屏一行几个),不再单列竖排 586px;星期、说明、按钮占整行;数字框才限宽 */
-.form.sched-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px 16px; align-items: start; }
+.form.sched-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: var(--sp-3) var(--sp-4); align-items: start; }
 .sched-form > fieldset, .sched-form > p, .sched-form > .sched-add { grid-column: 1 / -1; }
 .sched-form input[type="number"] { max-width: 8em; }
