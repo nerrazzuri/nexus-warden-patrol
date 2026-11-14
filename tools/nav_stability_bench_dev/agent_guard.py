@@ -193,6 +193,8 @@ def main() -> int:
     ap.add_argument("--tight", default="false")
     ap.add_argument("--mode", default="A", choices=("A", "B", "C", "D", "DE1", "DE2", "DE3", "DC", "DE3C", "DE4C", "DE5C", "N"))
     ap.add_argument("--delay-ms", type=float, default=0.0)
+    # 用户 11-14 晚:盲带严格策略 / 旧策略隔离对照(正式代码 nexwar_agent.obstacles.BAND_POLICIES)
+    ap.add_argument("--band", default="strict", choices=("strict", "legacy"))
     args = ap.parse_args()
     K = _prod_consts()
     mode = args.mode
@@ -227,7 +229,7 @@ def main() -> int:
           "soft_slow_ticks": 0, "vis_capped_ticks": 0, "occ_capped_ticks": 0, "hist": [],
           "look": None, "look_tries": 0, "look_ticks": 0, "look_at": (0.0, 0.0)}
     log = open(args.log, "a", encoding="utf-8") if args.log else None
-    view = ObstacleView(monotonic=lambda: st["now"] or 0.0)
+    view = ObstacleView(monotonic=lambda: st["now"] or 0.0, band_policy=args.band)
     view.on_connect()
     guard = ObstacleGuard()
     tight_on = args.tight.lower() == "true"

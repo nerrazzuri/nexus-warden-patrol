@@ -205,3 +205,41 @@ def test_正在急转弯_收到直走_还在转的那段照样查():
     v = _view(lambda x, y: abs(x) <= 0.4 and abs(y) > 0.2)
     verdict = G.check(0.2, 0.0, 0.4, v, (0, 0, 0), w_now=(0.0, 1.5), moving=((0.4, 1.5),))
     assert verdict.cause == "blind" and verdict.stops, verdict
+
+
+# ---- 用户 11-14 晚:严格盲带策略撤出默认候选,先在隔离仿真里跟旧策略对照(A/B 只差这一项)
+
+def _legacy(v):
+    v.band_policy = "legacy"
+    return v
+
+
+def test_旧策略_原地转盲带看不见_降速走不停():
+    v = G.check(0.0, 0.6, 0.0, _legacy(_view(_band)), (0, 0, 0))
+    assert v.cause == "unknown" and not v.stops and not v.band_only, v
+
+
+def test_旧策略_没后雷达后退_身后看不见_也是降速():
+    v = _legacy(_view(_behind))
+    verdict = G.check(-0.2, 0.0, 0.0, v, (0, 0, 0))
+    assert verdict.cause == "unknown" and not verdict.stops, verdict
+
+
+def test_旧策略_站着十秒以前的帧说空_照样算空():
+    t = [0.0]
+    v = _legacy(ObstacleView(monotonic=lambda: t[0], latency_s=0.0))
+    v.note_odom(0.0, 0.0, 0.0)
+    v.on_grid(_grid(cells_occ=[(10, 2)], size=20))
+    front_only = [(r, k) for r in range(15, 20) for k in range(20)]
+    for i in range(1, int(MEMORY_S) + 6):
+        t[0] = float(i)
+        v.note_odom(0.0, 0.0, 0.0)
+        v.on_grid(_grid(cells_known=front_only, seq=i + 1, size=20))
+    hit, unk = v.lookup([(0.05, 0.75), (0.05, -0.75)], (0.0, 0.0, 0.0))
+    assert unk == [] and hit == [1], "旧策略:站着留下的旧帧说空也算空"
+
+
+def test_默认还是严格策略_只认这两个名字():
+    from nexwar_agent.obstacles import BAND_POLICIES
+    assert ObstacleView().band_policy == "strict"
+    assert BAND_POLICIES == ("strict", "legacy")
