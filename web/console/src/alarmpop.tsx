@@ -154,18 +154,19 @@ export function AlarmPop(props: {
       <div class="alarm-pop-head">
         <Shape kind={p1 ? "P1" : "P2"} />
         <b>{alertHeadline(top)}</b>
-        <button type="button" class="alarm-pop-x" aria-label={t("close")}
-          onClick={() => setClosed(new Set([...closed, top.key]))}>×</button>
+        {/* UIUX-048:× 把眼下这几条一起收起(以前只关一条、下一条马上补上来);再来新的照样弹,没确认的照样响 */}
+        <button type="button" class="alarm-pop-x" aria-label={t("popHideAll")} title={t("popHideAll")}
+          onClick={() => setClosed(new Set([...closed, ...shown.map((a) => a.key)]))}>×</button>
       </div>
-      <span class="alarm-pop-sub">{[top.robot ? nameOf(top.robot) : "", where, hm(top.first_ms)].filter(Boolean).join(" · ")}</span>
-      {shown.length > 1 && <span class="alarm-pop-sub">{t("dutyMore", { n: shown.length - 1 })}</span>}
+      <span class="alarm-pop-sub">{[top.robot ? nameOf(top.robot) : "", where, hm(top.first_ms),
+        shown.length > 1 ? t("dutyMore", { n: shown.length - 1 }) : ""].filter(Boolean).join(" · ")}</span>
       {can && !alarmSound.value && <span class="alarm-pop-note">{t("popSoundOff")}</span>}
       {ring && !beeper.ready() && (
         <button type="button" class="btn sm" onClick={() => { beeper.unlock(); setTick((n) => n + 1); }}>{t("popUnlock")}</button>
       )}
       <div class="alarm-pop-acts">
-        {can && <button type="button" class="btn onsolid" onClick={() => props.onAck(top)}>{t("dutyTake")}</button>}
-        <button type="button" class="btn onsolid ghost" onClick={props.onGo}>{t("popGo")}</button>
+        {can && <button type="button" class="btn sm onsolid" onClick={() => props.onAck(top)}>{t("dutyTake")}</button>}
+        <button type="button" class="btn sm onsolid ghost" onClick={props.onGo}>{t("popGo")}</button>
       </div>
     </div>
   );
