@@ -61,3 +61,15 @@ describe("UIUX-008 禁用按钮看得清", () => {
     }
   });
 });
+
+describe("第二档 样式", () => {
+  it("UIUX-025:活动日志的时间不折成两行", () => {
+    expect(decl(".user-audit li > time")).toMatch(/white-space: ?nowrap/);
+  });
+  it("UIUX-044:向导吸底按钮栏贴到对话框底边(抵掉对话框的下内边距)", () => {
+    expect(decl(".modal.armwiz .wiz-actions")).toMatch(/bottom: ?-20px/);
+  });
+  it("UIUX-029:视频卡底栏每一段都能截出省略号", () => {
+    expect(flat).toMatch(/\.slot-foot > span \{[^}]*text-overflow: ?ellipsis/);
+  });
+});
