@@ -503,6 +503,20 @@ class PersonWatch:
         """狗现在在哪个防区(B1c:按地图上画的防区多边形算);说不清、不在防区里都是 ``None``。"""
         return self._where(rid)[1]
 
+    def _fresh_pose(self, rid: str) -> Any:
+        """可靠的现在位置:狗说定位正常(``ready.loc_ok``),站点 ``stale_ms`` 以内收到过它的位置;
+        不然 ``None``。"""
+        c = self.dispatcher.clients.get(rid)
+        if c is None or c.telemetry is None or c.status is None:
+            return None
+        if not getattr(getattr(c.status, "ready", None), "loc_ok", False):
+            return None
+        at = getattr(self.dispatcher, "telemetry_at", {}).get(rid)
+        stale = getattr(self.dispatcher, "stale_ms", None)
+        if at is None or stale is None or self._now() - at > stale:
+            return None
+        return c.telemetry.pose
+
     def _where(self, rid: str) -> tuple[bool, str | None]:
         """→ (位置可不可靠, 在哪个防区)。可靠但不在任何防区里是 ``(True, None)``。
 
@@ -511,17 +525,7 @@ class PersonWatch:
         不代表它还在那块地上:按说不清算(只认全站授权)。"""
         if self.areas is None:
             return False, None
-        c = self.dispatcher.clients.get(rid)
-        if c is None or c.telemetry is None or c.status is None:
-            return False, None
-        ready = getattr(c.status, "ready", None)
-        if not getattr(ready, "loc_ok", False):
-            return False, None
-        at = getattr(self.dispatcher, "telemetry_at", {}).get(rid)
-        stale = getattr(self.dispatcher, "stale_ms", None)
-        if at is None or stale is None or self._now() - at > stale:
-            return False, None
-        pose = c.telemetry.pose
+        pose = self._fresh_pose(rid)
         if pose is None:
             return False, None
         if self.watching is not None:
@@ -574,7 +578,8 @@ class PersonWatch:
             context["last_seen"] = self._pose(rid, now)
             self._tracked[rid] = now
             b = p.get("bearing_deg")
-            if _num(near) and _num(b):
+            # 外审 W77-10 #1:定位丢了、位置过期了不标(旧位置、旧朝向推出来的会把保安引错地方)
+            if _num(near) and _num(b) and self._fresh_pose(rid) is not None:
                 # 用户 11-15:人在地图上的位置直接标出来(机器人位置 + 方向 + 距离);跟起来以后
                 # 按跟人的轨迹更新(on_event)。没方向或没距离不标,不瞎猜
                 a = pose.yaw + math.radians(float(b))

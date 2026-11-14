@@ -422,9 +422,15 @@ async def test_用户1115_没接警笛的_照旧灯加话术(台):
     assert "siren" not in {p["output"] for _, p, _ in d.sent}
 
 
+def _定位好(t):
+    t.d.clients["A"].status.ready = SimpleNamespace(loc_ok=True)
+    t.d.telemetry_at, t.d.stale_ms = {"A": t.ms[0]}, 10_000
+
+
 def test_用户1115_报警时就把人在地图上的位置放进去_按机器人位置加方向距离(台):
     import math
     t = 台
+    _定位好(t)
     t.d.clients["A"].telemetry.pose.yaw = math.pi / 2          # 机器人朝北
     t.d.persons("A", present=True, count=1, nearest_m=6.0, bearing_deg=-90.0)   # 人在它右手边
     t.w.tick()
@@ -637,3 +643,23 @@ async def test_外审W77_9_1_受力占着警笛时保安开了驱离_受力那�
     t.ms[0] += 5000
     await _拍(w)
     assert {p["output"] for _, p, _ in d.sent if not p["on"]} == {"siren"}
+
+
+def test_外审W77_10_1_定位丢了_不标人的位置_照样报P1(台):
+    t = 台
+    _定位好(t)
+    t.d.clients["A"].status.ready.loc_ok = False
+    t.d.persons("A", present=True, count=1, nearest_m=6.0, bearing_deg=-90.0)
+    t.w.tick()
+    [a] = t.w.alerts.raised
+    assert "person" not in a["context"]
+
+
+def test_外审W77_10_1_位置过期_不标人的位置_照样报P1(台):
+    t = 台
+    _定位好(t)
+    t.d.telemetry_at["A"] = t.ms[0] - 60_000              # 位置停更了
+    t.d.persons("A", present=True, count=1, nearest_m=6.0, bearing_deg=-90.0)
+    t.w.tick()
+    [a] = t.w.alerts.raised
+    assert "person" not in a["context"]
