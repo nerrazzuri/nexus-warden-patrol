@@ -408,7 +408,7 @@ function VersionCard(p: {
                 {tr("Open draft (preview, publish)…", "打开草稿（预览、发布）…")}</a>
             // W6-12:四个版本都是蓝色主按钮,看不出该用哪个 —— 只有最新那版是主按钮
             : <button type="button" class={v.latest ? "btn sm primary" : "btn sm"} onClick={p.onPublish}>{tr("Send to robots…", "下发到机器人…")}</button>}
-          <button type="button" class="btn sm" disabled={!!whyNot} title={whyNot} onClick={p.onDelete}>{tr("Delete", "删除")}</button>
+          <button type="button" class="btn sm danger" disabled={!!whyNot} title={whyNot} onClick={p.onDelete}>{tr("Delete", "删除")}</button>
           {p.onNoise && <button type="button" class="btn sm" disabled={!v.has_raster} onClick={p.onNoise}>{tr("Clean noise…", "清噪点…")}</button>}
           {/* W44 第四期:地图编辑器(橡皮擦、画障碍、区域名、特殊地面、摆正、底图),另存成新的一版 */}
           {v.has_raster && !v.draft && <a class="btn sm" href={`#/admin/mapedit?map=${enc(p.map_id)}&version=${enc(v.version)}`}>{tr("Edit…", "编辑…")}</a>}

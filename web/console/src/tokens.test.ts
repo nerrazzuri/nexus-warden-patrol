@@ -21,4 +21,20 @@ describe("UIUX-010 圆角、间距走变量", () => {
       .filter((v) => v.split(/\s+/).some((x) => !/^(var\(--sp-[1-6]\)|0|2px)$/.test(x))).map((v) => `${f}: ${v}`));
     expect(bad).toEqual([]);
   });
+  // liang-d5 复测 29aa88b2:002 / 031 / 004 还剩的几处
+  const rule = (sel: string) => {
+    for (const [, s] of css) {
+      const m = s.match(new RegExp(`(?:^|[}\\s])${sel.replace(/[.()]/g, "\\$&")}\\s*\\{([^}]*)\\}`));
+      if (m) return m[1];
+    }
+    return "";
+  };
+  it("卡片、分组、小节标题都是 15px;「现在」是 h2 17px;状态小字 12px", () => {
+    for (const sel of [".dcard-h", ".kpi-group-h", ".today-h", ".mm-mapid"]) expect(rule(sel), sel).toMatch(/font-size:\s*15px/);
+    expect(rule(".arm-now-text h2")).toMatch(/font-size:\s*17px/);
+    expect(rule(".rd-facts dd small")).toMatch(/font-size:\s*12px/);
+  });
+  it("视频卡按钮用控件小档高", () => {
+    expect(rule(".slot-btn")).toMatch(/height:\s*var\(--ctl-sm\)/);
+  });
 });
