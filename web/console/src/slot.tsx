@@ -48,7 +48,7 @@ export function SlotFoot({ u, scene }: { u: UnitInfo; scene?: Scene }) {
   if (u.state === "offline" || u.stale) return null;
   const loc = locText(u);
   const bits = [u.task, u.battery != null ? `${Math.round(u.battery)}%` : "", loc ? t("slotLoc", { q: t(loc) }) : ""].filter(Boolean);
-  return bits.length ? <div class="slot-foot">{bits.map((b) => <span key={b}>{b}</span>)}</div> : null;
+  return bits.length ? <div class="slot-foot">{bits.map((b) => <span key={b} title={b}>{b}</span>)}</div> : null;
 }
 
 export function VideoSlot(props: {

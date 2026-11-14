@@ -1477,8 +1477,9 @@ input[type="date"]:not(.field input) { height: 36px; padding: 0 8px; border-radi
   color: var(--c-textMuted); background: transparent; border-color: var(--c-outline); opacity: 1; border-style: dashed; }
 /* 第 2 轮 P1-10:画面底栏一行放不下就截(…),不折成两行压住「● 实时」 */
 .slot-foot { flex-wrap: nowrap; overflow: hidden; white-space: nowrap; }
-.slot-foot > span { flex: none; }
-.slot-foot > span:last-child { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+/* UIUX-029:每一段都能截出省略号(最后一段先缩,英文「Localization Good」以前被硬切),title 里有全文 */
+.slot-foot > span { flex: 0 1 auto; min-width: 2.5em; overflow: hidden; text-overflow: ellipsis; }
+.slot-foot > span:last-child { flex-shrink: 8; min-width: 0; }
 .me-newver { margin: 0 0 8px; padding: 8px 12px; border: 1px solid var(--c-outline); border-radius: var(--r-r8); background: var(--c-surface); }
 .user-audit .audit-why { flex-basis: 100%; color: var(--c-error); }
 /* 第 2 轮 P1-71 / 72:柱状图左边的刻度;日期填错时仍显示上一段(淡一点);起止两个框顶端对齐 */
@@ -1620,11 +1621,13 @@ input[type="file"] { max-width: 100%; min-width: 0; }            /* 上传按钮
 /* 第 3 轮 P1-66:活动记录跟面板标题一样留边距 */
 .user-audit ul.plain, .user-audit > p { padding: 12px 16px; }
 /* 第 4 轮 P1-66:活动记录每行时间一列、内容一列,换行对齐 */
-.user-audit li { display: grid; grid-template-columns: 9.5em 1fr; column-gap: 10px; align-items: baseline; }
+.user-audit li { display: grid; grid-template-columns: max-content 1fr; column-gap: 10px; align-items: baseline; }
 /* W6-14:活动日志窄屏上下排(时间一行,内容一行);要在上面这条之后才压得住 */
 @media (max-width: 480px) {
   .user-audit li { grid-template-columns: 1fr; row-gap: 2px; }
 }
+/* UIUX-025:时间一行写完(日期 + 时分秒),不折成两行 */
+.user-audit li > time { white-space: nowrap; }
 .user-audit .audit-body { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: baseline; min-width: 0; }
 /* 第 4 轮 admin N1:起了名字的机器人卡片:名字 + 编号一行,状态第二行;编号不在连字符处折 */
 .fleet-head.named { flex-wrap: wrap; row-gap: 2px; }
@@ -1707,7 +1710,8 @@ input[aria-invalid="true"] { border-color: var(--c-error); outline-color: var(--
 .wiz-sum dt { color: var(--c-textMuted); }
 .wiz-sum dd { margin: 0; }
 /* UIUX-037:编辑器高度按屏幕剩下的算;「上一步 / 下一步」贴在对话框底部,一直看得见 */
-.modal.armwiz .wiz-actions { position: sticky; bottom: 0; z-index: 2; margin: 12px -20px -20px; padding: 12px 20px;
+/* UIUX-044:bottom 抵掉对话框 20px 的下内边距,按钮栏下面不再露一条缝 */
+.modal.armwiz .wiz-actions { position: sticky; bottom: -20px; z-index: 2; margin: 12px -20px -20px; padding: 12px 20px;
   background: var(--c-surface); border-top: 1px solid var(--c-outline); }
 .wiz-editor { height: min(calc(100dvh - 360px), 640px); min-height: 320px; display: flex; flex-direction: column; border-top: 1px solid var(--c-outline); padding-top: 8px; }
 .wiz-editor .layout { flex: 1; min-height: 0; }
