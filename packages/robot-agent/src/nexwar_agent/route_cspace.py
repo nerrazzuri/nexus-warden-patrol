@@ -41,6 +41,9 @@ PAD_M = 0.4
 EXTRA_M = 0.02
 #: 一块窗最多这么多格(行 × 列),再大就不搜(机器人上每次出发都要查)。
 MAX_CELLS = 40_000
+#: 小窗搜不到时整条路线一次搜(仿真 11-15:过门转弯、终点贴墙要多退一点才转得过来),窗最多这么多格
+#: (整张 18 × 18 m 的仿真图 13 万格,搜一次约 0.3 s)。
+WHOLE_MAX_CELLS = 200_000
 #: 后退一步的代价是前进的几倍(能不倒车就不倒车:倒车看得少)。
 REVERSE_COST = 3
 #: 原地转一档(5°)的代价,按格算(车身外角转 5° 走 6 cm,约一格)。
@@ -112,8 +115,8 @@ def _bin(yaw: float) -> int:
 def search_path(entry: Sequence[float], exit_: Sequence[float], walls: Any, res: float,
                 origin: tuple[float, float], need: float, *,
                 span: Sequence[Sequence[float]] = (), goal_end: bool = False,
-                goal_shift: float = 0.10, goal_yaw_bins: int = 1
-                ) -> list[tuple[float, float, float]] | None:
+                goal_shift: float = 0.10, goal_yaw_bins: int = 1,
+                max_cells: int = MAX_CELLS) -> list[tuple[float, float, float]] | None:
     """从 ``entry`` 走到 ``exit_``(都是 (x, y, 朝向))的一条不横移的路,每处车身(基础余量那一层
     + 每边 ``need``)都放得下;找不到回 None。``span`` = 原路线这一段的位姿(决定截窗)。
     返回的头尾就是 ``entry``、``exit_``(终点那一段:找到的那个落点)。"""
@@ -128,7 +131,7 @@ def search_path(entry: Sequence[float], exit_: Sequence[float], walls: Any, res:
     c1 = min(W, int(math.ceil((max(xs) + rad - ox) / res)) + 1)
     r0 = max(0, int(math.floor((min(ys) - rad - oy) / res)))
     r1 = min(H, int(math.ceil((max(ys) + rad - oy) / res)) + 1)
-    if r1 <= r0 or c1 <= c0 or (r1 - r0) * (c1 - c0) > MAX_CELLS:
+    if r1 <= r0 or c1 <= c0 or (r1 - r0) * (c1 - c0) > max_cells:
         return None
     win = np.asarray(walls[r0:r1, c0:c1], dtype=bool)
     h, w = win.shape

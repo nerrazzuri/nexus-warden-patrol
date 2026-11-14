@@ -109,3 +109,45 @@ def test_搜一次不慢():
     t0 = time.perf_counter()
     check_route(_smac_l(1.2), walls, RES, (0.0, 0.0))
     assert time.perf_counter() - t0 < 3.0
+
+
+def test_窄的那一小段周围搜不到_整条路线再搜一次_照样整条查过才放行(monkeypatch):
+    """仿真 11-15(C 组):过门转弯、终点贴墙,在窄的那一小段周围截的窗里搜不到(要多退一点、绕
+    远一点才转得过来);整条路线一次搜能找到、整条查也过。小窗搜不到时整条再搜一次。"""
+    from nexwar_agent import route_check as rck
+    from nexwar_agent import route_cspace as rcs
+    real = rcs.search_path
+    calls = []
+
+    def fake(entry, exit_, walls, res, origin, need, *, span=(), goal_end=False, **kw):
+        whole = math.dist(entry[:2], (1.2, 1.6)) < 1e-6 and goal_end
+        calls.append("整条" if whole else "小窗")
+        if not whole:
+            return None                                    # 小窗搜不到
+        return real(entry, exit_, walls, res, origin, need, span=span, goal_end=goal_end, **kw)
+    monkeypatch.setattr(rck, "search_path", fake)
+    walls = _lmap(1.2)
+    r = check_route(_smac_l(1.2), walls, RES, (0.0, 0.0))
+    assert calls[0] == "小窗" and calls[-1] == "整条", calls
+    assert r.ok and r.path is not None, r
+    dense = densify(r.path)
+    m = pose_margins([q for q in dense if math.dist(q[:2], (1.2, 1.6)) > 0.5], walls, RES,
+                     (0.0, 0.0))
+    assert m.min() >= ROUTE_MARGIN_MIN - 1e-9
+
+
+def test_整条也搜不到_照旧拒(monkeypatch):
+    from nexwar_agent import route_check as rck
+    monkeypatch.setattr(rck, "search_path", lambda *a, **k: None)
+    r = check_route(_smac_l(1.2), _lmap(1.2), RES, (0.0, 0.0))
+    assert r.status == "refused" and r.path is None
+
+
+def test_小窗拼好的整条查不过_也整条再搜一次(monkeypatch):
+    from nexwar_agent import route_check as rck
+    real = rck._spliced
+    monkeypatch.setattr(rck, "_spliced", lambda segs, dense, *a: [*dense[:5], (3.4, 1.0, 0.0),
+                                                                *dense[5:]])   # 拼出一条压墙的
+    r = check_route(_smac_l(1.2), _lmap(1.2), RES, (0.0, 0.0))
+    assert r.ok and r.path is not None and (3.4, 1.0, 0.0) not in r.path
+    monkeypatch.setattr(rck, "_spliced", real)
