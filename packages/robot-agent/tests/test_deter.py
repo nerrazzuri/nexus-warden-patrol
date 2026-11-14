@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import pytest
 from test_runtime_maps import REG, T, _cmd, _跑, 耳朵, 钟
 
 from nexwar_adapter_sim.robot import SimRobot
@@ -43,7 +44,7 @@ async def test_能力里报接了哪几路_能放哪些话术(tmp_path):
     broker, c, ears, dog, rt = await _台(tmp_path)
     d = ears.by["capabilities"][-1]["tasks"]["deter"]
     assert d == {"outputs": ["strobe", "siren", "spotlight", "speaker"], "max_s": 600.0,
-                 "clips": ["warn-zh", "warn-en"], "tts": False,
+                 "clips": ["warn-zh", "warn-en"], "tts": True, "tts_langs": ["zh", "en"],
                  # W40:仿真上装是 V1.2 那套
                  "spotlight_sides": ["left", "right"],
                  "strobe_colors": ["red", "yellow", "green", "blue", "white"],
@@ -328,3 +329,241 @@ async def test_W40_HAL不报左右_颜色_代理回unsupported_不碰设备():
     assert calls == []
     assert await desk.handle(cmd({"output": "strobe", "on": True, "max_s": 5})) == ""
     assert calls == [("strobe", "warn")]
+
+
+async def test_POC1105_接上了_导航报被挡_有任务在跑_每拍里自己放blocked(tmp_path, monkeypatch):
+    broker, c, ears, dog, rt = await _台(tmp_path)
+    monkeypatch.setattr(dog, "clips", ("warn-zh", "warn-en", "blocked"))
+    monkeypatch.setattr(rt, "_tasks_idle", lambda: False)
+    rt._nav_event("nav_blocked", {"reason": "x"})
+    await rt.step(0.1)
+    await broker.drain()
+    auto = [d for d in _事件(ears) if d.get("auto")]
+    assert auto and auto[0]["clip"] == "blocked" and auto[0]["auto"] == "nav_blocked"
+    await rt.close()
+
+
+# ---------------------------------------------------------------- POC 11-06:竞品云台、雨刷、按钮
+
+
+class _竞品云台:
+    def __init__(self):
+        self.calls: list = []
+        self.button = None
+
+    def hal_capabilities(self):
+        from types import SimpleNamespace
+        return SimpleNamespace(actuators={"strobe": True, "wiper": True, "ptz": True})
+
+    async def ptz(self, pan, tilt):
+        self.calls.append(("ptz", pan, tilt))
+
+    async def wiper(self, on, max_s):
+        self.calls.append(("wiper", on, max_s))
+
+    def set_button_listener(self, fn):
+        self.button = fn
+
+
+def _命令(p):
+    from nexwar_contract.messages import Command
+    return Command(command_id="c", task_id="deter-c", kind="deter", issued_at=1, expires_at=2,
+                   control_epoch=1, payload=p)
+
+
+async def test_POC1106_云台雨刷_派到HAL_记事件_能力里有():
+    from nexwar_agent.deter import DeterDesk
+    hal, ev = _竞品云台(), []
+    desk = DeterDesk(hal, emit=lambda k, d: ev.append((k, d)))
+    assert desk.caps()["outputs"] == ["strobe", "wiper", "ptz"]
+    assert await desk.handle(_命令({"output": "ptz", "on": True, "pan": 30, "tilt": -5})) == ""
+    assert await desk.handle(_命令({"output": "wiper", "on": True, "max_s": 10})) == ""
+    assert hal.calls == [("ptz", 30.0, -5.0), ("wiper", True, 10.0)]
+    assert ev[0] == ("deter", {"task_id": "deter-c", "output": "ptz", "on": True,
+                               "pan": 30.0, "tilt": -5.0})
+
+
+async def test_POC1106_按钮按下_记payload_button事件():
+    from nexwar_agent.deter import DeterDesk
+    hal, ev = _竞品云台(), []
+    DeterDesk(hal, emit=lambda k, d: ev.append((k, d)))
+    hal.button("sos")
+    hal.button("estop")
+    assert ev == [("payload_button", {"button": "sos"}), ("payload_button", {"button": "estop"})]
+
+
+async def test_POC1106_看见人_云台转过去_朝左的人是负的水平角_没云台不动():
+    from nexwar_agent.deter import DeterDesk
+    hal, ev = _竞品云台(), []
+    desk = DeterDesk(hal, emit=lambda k, d: ev.append((k, d)))
+    await desk.aim_at(40.0)
+    await desk.aim_at(-200.0)
+    assert hal.calls == [("ptz", -40.0, 0.0), ("ptz", -160.0, 0.0)], \
+        "左 40° → 云台 -40;右 200° = 左 160°"
+    assert ev[0] == ("deter", {"output": "ptz", "on": True, "pan": -40.0, "tilt": 0.0,
+                               "auto": "person_seen"})
+    hal2, ev2 = _有回调的喇叭(), []
+    await DeterDesk(hal2, emit=lambda k, d: ev2.append((k, d))).aim_at(10.0)
+    assert ev2 == []
+
+
+# ---------------------------------------- 外审 POC r1 C1:上装急停在机器人本地锁住
+
+
+class _带急停按钮的狗(SimRobot):
+    """竞品上装那种:有急停按钮,HAL 本地锁(这里只记着),站点恢复时解。"""
+
+    def __init__(self, *a, **kw):
+        super().__init__(*a, **kw)
+        self.button = None
+        self.latched, self.gen = False, 0
+
+    def set_button_listener(self, fn):
+        def on(name):
+            if name == "estop":
+                self.latched, self.gen = True, self.gen + 1
+            fn(name)
+        self.button = on
+
+    def payload_estop_supported(self):
+        return True
+
+    def payload_estop_state(self):
+        return self.latched, self.gen
+
+    async def payload_estop_release(self, gen):
+        if gen != self.gen:
+            return False
+        self.latched = False
+        return True
+
+
+async def _急停台(tmp_path):
+    broker, c = MemoryBroker(), 钟()
+    ears = 耳朵()
+    st = MemoryTransport(broker, "site")
+    await st.connect()
+    await st.subscribe(f"{T.prefix}/#", ears)
+    dog = _带急停按钮的狗(now_ms=c, max_vx=1.0, max_wz=1.5, stop_latency_s=0.2, payload=True)
+    rt = AgentRuntime(transport=MemoryTransport(broker, "dog"), registration=REG, hal=dog,
+                      store_dir=tmp_path, now_ms=c, loaded_map=("m", "1"), boot_id="b",
+                      home=Pose.from_xy_yaw(0.0, 0.0), monotonic=lambda: c.mono,
+                      odom_identity=True, telemetry_period_ms=100)
+    await rt.start()
+    await broker.drain()
+    return broker, c, ears, dog, rt
+
+
+async def test_外审POC_C1_上装急停_代理当场中止任务_不等站点叫停(tmp_path):
+    broker, c, ears, dog, rt = await _急停台(tmp_path)
+    assert ears.by["capabilities"][-1]["tasks"]["estop_release"] == {"latched": False, "gen": 0}
+    await rt._on_cmd(_cmd("goto", {"target": MapPose(map_id="m", map_version="1", frame_id="map",
+                                                     x=3.0, y=0.0, yaw=0.0).to_wire()}, "g1", c))
+    await _跑(rt, broker, n=5, r=dog, c=c)
+    assert rt.processor.current is not None and not rt.processor.current.done
+    dog.button("estop")
+    await _跑(rt, broker, n=20, r=dog, c=c)
+    aborted = [e["data"] for e in ears.by.get("event", []) if e["kind"] == "task_aborted"]
+    assert aborted and aborted[-1]["task_id"] == "goto-g1", aborted
+    assert rt.processor.current is None or rt.processor.current.done
+    assert _事件(ears, "payload_button") == [{"button": "estop"}]
+    await rt.close()
+
+
+async def test_外审POC_C1_站点恢复发解锁命令_代理解开上装急停的锁(tmp_path):
+    broker, c, ears, dog, rt = await _急停台(tmp_path)
+    dog.button("estop")
+    await _跑(rt, broker, n=5, r=dog, c=c)
+    assert ears.by["capabilities"][-1]["tasks"]["estop_release"] == {"latched": True, "gen": 1}, \
+        "锁上了要马上告诉站点(站点恢复时带上这一次的代次)"
+    await rt._on_cmd(_cmd("estop_release", {"gen": 1}, "r1", c))
+    await broker.drain()
+    ack = ears.by["cmd/ack"][-1]
+    assert ack["result"] == "accepted", ack
+    assert not dog.latched
+    # 外审 POC r2 #1:又按了一次;上一条解锁命令重投(同一个号)、或者带旧代次的,都解不开
+    dog.button("estop")
+    await _跑(rt, broker, n=5, r=dog, c=c)
+    await rt._on_cmd(_cmd("estop_release", {"gen": 1}, "r1", c))
+    await broker.drain()
+    assert ears.by["cmd/ack"][-1]["result"] == "duplicate" and dog.latched
+    await rt._on_cmd(_cmd("estop_release", {"gen": 1}, "r2", c))
+    await broker.drain()
+    ack = ears.by["cmd/ack"][-1]
+    assert ack["result"] == "rejected" and dog.latched, ack
+    await rt._on_cmd(_cmd("estop_release", {}, "r3", c))
+    await broker.drain()
+    assert ears.by["cmd/ack"][-1]["result"] == "rejected" and dog.latched, "不带代次的不认"
+    await rt.close()
+
+
+async def test_外审POC_C1_没有上装急停的狗_不报能力_解锁命令回unsupported(tmp_path):
+    broker, c, ears, dog, rt = await _台(tmp_path)
+    assert "estop_release" not in ears.by["capabilities"][-1]["tasks"]
+    await rt._on_cmd(_cmd("estop_release", {}, "r1", c))
+    await broker.drain()
+    ack = ears.by["cmd/ack"][-1]
+    assert ack["result"] == "rejected" and ack["reason"] == "unsupported", ack
+    await rt.close()
+
+
+async def test_外审POC_r3_断网时按的急停_重连以后马上补报锁住了(tmp_path):
+    """codex POC r3 #4:断网期间能力变了,代理把「报过了」先记上,重连时没变化就不再发,
+    站点一直以为没锁。"""
+    broker, c, ears, dog, rt = await _急停台(tmp_path)
+    assert ears.by["capabilities"][-1]["tasks"]["estop_release"] == {"latched": False, "gen": 0}
+    broker.disconnect("dog")
+    await broker.drain()
+    dog.button("estop")
+    await _跑(rt, broker, n=5, r=dog, c=c)
+    await rt.transport.connect()
+    await _跑(rt, broker, n=5, r=dog, c=c)
+    assert ears.by["capabilities"][-1]["tasks"]["estop_release"] == {"latched": True, "gen": 1}
+    await rt.close()
+
+
+@pytest.mark.parametrize("path", ["重连", "每拍"])
+async def test_外审POC_r4_发能力的时候又按了急停_下一拍照样补报新的代次(tmp_path, path):
+    """codex POC r4 #2:重连补报能力那一下又按了急停,发完把新代次记成「报过了」,
+    实际发出去的是旧的。"""
+    broker, c, ears, dog, rt = await _急停台(tmp_path)
+    if path == "重连":
+        broker.disconnect("dog")
+        await broker.drain()
+        dog.button("estop")                                # 断网时按的:第 1 次
+        await _跑(rt, broker, n=3, r=dog, c=c)
+    real = rt.transport.publish
+    armed = [True]
+
+    async def 发(topic, payload, **kw):
+        if armed[0] and topic == rt.topics.capabilities:
+            armed[0] = False
+            dog.button("estop")                            # 这一包已经按代次 1 装好了
+            rt._extra_tasks()                              # r5:同时在处理别的命令(对时查询等)
+        return await real(topic, payload, **kw)
+    rt.transport.publish = 发
+    if path == "重连":
+        await rt.transport.connect()
+    else:
+        dog.button("estop")
+    await _跑(rt, broker, n=10, r=dog, c=c)
+    assert dog.gen == 2
+    assert ears.by["capabilities"][-1]["tasks"]["estop_release"] == {"latched": True, "gen": 2}
+    await rt.close()
+
+
+def test_第三档41_HAL说了能念哪几种语言就报tts_langs_不说就不报():
+    from types import SimpleNamespace
+
+    from nexwar_agent.deter import DeterDesk
+
+    def hal(langs):
+        caps = SimpleNamespace(actuators={"speaker": True})
+        h = SimpleNamespace(hal_capabilities=lambda: caps, sound_clips=lambda: (),
+                            sound_tts=lambda: True)
+        if langs is not None:
+            h.sound_tts_langs = lambda: langs
+        return h
+
+    assert DeterDesk(hal(["zh", "en"]), emit=lambda *a: None).caps()["tts_langs"] == ["zh", "en"]
+    assert "tts_langs" not in DeterDesk(hal(None), emit=lambda *a: None).caps()

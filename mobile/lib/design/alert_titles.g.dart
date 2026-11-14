@@ -47,6 +47,7 @@ const Map<String, (String, String)> alertTitles = <String, (String, String)>{
   'payload_strobe': ('Strobe failed', '警示灯故障'),
   'payload_siren': ('Siren failed', '警笛故障'),
   'payload_spotlight': ('Spotlight failed', '探照灯故障'),
+  'deter_failed': ('Announcement not played', '喊话没放出来'),
   'payload_amp': ('Amplifier failed', '功放故障'),
   'board_hot': ('Payload running hot', '上装温度偏高'),
   'board_overheat': ('Payload overheating, robot returned', '上装严重过热，机器人已返回'),
@@ -94,5 +95,7 @@ const Map<String, (String, String)> alertTitles = <String, (String, String)>{
   'swap_overdue': ('Battery swap overdue', '换电超时未处理'),
   'swap_stuck': ('Battery out but robot still moving', '拔着电池机器人还在走'),
   'guard_prep': ('Charge before arming', '布防前先补能'),
+  'payload_sos': ('Help button pressed on site', '现场有人按了求助按钮'),
+  'payload_estop': ('Payload e-stop pressed', '上装急停按钮被按下'),
   'preflight_refused': ('Pre-departure check failed, robot did not leave', '出发前检查未通过，机器人未出发'),
 };

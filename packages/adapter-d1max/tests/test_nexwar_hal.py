@@ -63,7 +63,8 @@ def test_能力_控制权不可释放_没有横移_只有灯():
     assert math.isclose(caps.max_vx, 0.2) and math.isclose(caps.max_wz, 0.5)
     assert caps.deadband_vx == 0.05
     assert caps.actuators == {"light": True, "strobe": False, "siren": False, "speaker": False,
-                              "spotlight": False, "head": False}
+                              "spotlight": False, "head": False, "ptz": False,
+                              "wiper": False}
     assert [k for k, v in caps.sensing.items() if v is True] == ["imu"], "W26:姿态与受力走旁路进程"
     assert caps.sensing["imu_hz"] == 20, "W41:报姿态帧的频率"
 
@@ -658,3 +659,49 @@ async def test_遥控临时档3秒没续_旁路回低速_HAL也按低速换算()
 
 async def _异(v):
     return v
+
+
+async def _有(sim, cmd):
+    return any(c == cmd for c, _ in sim.commands)
+
+
+class _按钮上装:
+    """只有按钮的上装(竞品转接那种):``on_button`` 由 HAL 挂上。"""
+
+    def __init__(self):
+        self.on_button = None
+
+    def has(self, name):
+        return False
+
+
+async def test_外审POC_C1_上装急停_本地锁住_后面的速度一律拒_明确解除才放():
+    """codex POC r1 C1:急停按钮只调一次 stop(),站点叫停回来之前、断网时,下一条导航速度照样能走。"""
+    async with _台子() as (sim, hal):
+        assert not (await hal.set_velocity(_v(vx=0.36))).rejected
+        hal._payload = _按钮上装()
+        got: list = []
+        hal.set_button_listener(got.append)
+        hal._payload.on_button("estop")
+        assert got == ["estop"]
+        assert hal.payload_estop_latched()
+        r = await hal.set_velocity(_v(vx=0.36))
+        assert r.rejected and r.reason == "estop", r
+        assert await hal.estop_status() and (await hal.health()).estop
+        assert await _等(lambda: _有(sim, "halt")), "当场停"
+        hal._payload.on_button("sos")                   # 别的按钮不解锁
+        assert (await hal.set_velocity(_v(vx=0.36))).rejected
+        assert hal.payload_estop_state() == (True, 1)
+        # 外审 POC r3 #1:锁着再按也是新的一次 —— 按之前发出、还没到的恢复解不开
+        hal._payload.on_button("estop")
+        assert hal.payload_estop_state() == (True, 2)
+        assert not await hal.payload_estop_release(1), "按之前那次的恢复不算"
+        assert not await hal.payload_estop_release(0), "代次不对不解"
+        assert await hal.payload_estop_release(2)
+        assert not hal.payload_estop_latched()
+        assert not (await hal.set_velocity(_v(vx=0.36))).rejected
+        # 外审 POC r2 #1:解过以后又按了一次,上一次的解锁命令重投不许解开这一次
+        hal._payload.on_button("estop")
+        assert hal.payload_estop_state() == (True, 3)
+        assert not await hal.payload_estop_release(2)
+        assert hal.payload_estop_latched()

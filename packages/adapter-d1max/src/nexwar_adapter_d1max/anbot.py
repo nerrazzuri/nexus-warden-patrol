@@ -1,0 +1,869 @@
+"""POC 上装转接(11-05,用户批准):V2 上装到之前,借竞品上装的警灯和喇叭。
+
+竞品主控上跑 ROS1(master 一般在 ``http://192.168.113.203:11311``),Orin 跟它同一个网段、网线直连。
+Orin 上不装 ROS1:这里用标准库实现最小的 ROS1 发布端(XML-RPC 注册 + TCPROS 握手),现场 11-05 验过:
+
+- 警灯 ``/sensor/strobeLightSwitch``(std_msgs/Bool,订阅端 led_control):两边爆闪一起亮灭。
+- 喊话 ``/anbot/voice/play``(std_msgs/String,订阅端 anbotControl):竞品自己把文字念出来。
+
+跟 W21 继电器上装(``payload.py``)一样的入口,HAL、代理、站点、网页、手机都不用改。区别:
+
+- **警灯**:竞品自己的程序也发这个话题,可能把我们的盖掉 —— 开着的时候每 ``republish_s`` 秒重发一次;
+  到点、关、代理收尾都发一次「关」,关着就不再发(不跟竞品自己的用法抢)。latching:竞品灯控程序重启了
+  也拿得到现在该亮还是灭。
+- **喊话**:``tts:zh:<文字>`` 交给竞品念(它只有中文音库)。别的语言(第三档 #41,用户 11-14:竞品念不了
+  英文)在 Orin 上用 Piper 合成成 wav(``piper_voices``,11-05 现场定的 Ryan 男声、同一套参数),走录好的
+  话术那条路(SSH + aplay)放;同一句合成过放缓存(``tts_cache_dir``)。
+  没配那种语言当场拒,不拿中文嗓子念。
+  **不 latching**:不然竞品重连会把上一句再念一遍。**念到一半停不下来**(没找到停播的话题):
+  「关喇叭」只是不回调、不再发新的。念完没有回执,按字数估(``secs_per_char``,现场 12 字约 3 秒)。
+  没连上竞品(主控没开、订阅端没连上)当场报错,不让站点以为已经喊了。
+- 没有警笛、聚光灯;云台、``/anbot/light/control`` 没接(取值没验过)。
+- **风险**(写进 POC 说明):竞品主控得一直开着,它的 dog_control 能抢运动控制(10-19 撞玻璃门)。
+
+配置(``/etc/nexwar/payload.json``)::
+
+    {"kind": "anbot_ros1", "master": "http://192.168.113.203:11311", "host": "192.168.113.159"}
+
+``host`` 是 Orin 在那个网段上的地址:竞品要按它连回来(XML-RPC 与 TCPROS 都只开在这个地址上)。
+"""
+
+from __future__ import annotations
+
+import asyncio
+import contextlib
+import hashlib
+import http.client
+import json
+import logging
+import os
+import re
+import signal
+import socket
+import struct
+import tempfile
+import threading
+import time
+import xmlrpc.client
+from collections.abc import Callable, Mapping
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any
+from urllib.parse import urlsplit
+from xmlrpc.server import SimpleXMLRPCRequestHandler, SimpleXMLRPCServer
+
+from nexwar_adapter_d1max.payload import (
+    MAX_ON_S,
+    MAX_TTS_CHARS,
+    Payload,
+    PayloadConfig,
+    PayloadError,
+)
+
+log = logging.getLogger(__name__)
+
+BOOL_MD5 = "8b94c1b53db61fb6aed406028ad6332a"
+STRING_MD5 = "992ce8a1687cec8c8bd883ec73ca41d1"
+#: std_msgs/Float32MultiArray(按 ROS1 的规则算过:MultiArrayDimension → MultiArrayLayout → 它)。
+F32MA_MD5 = "6a40e0ffa6a17a503ac3f8616991b1f6"
+F32MA_DEF = ("std_msgs/MultiArrayLayout layout\nfloat32[] data\n" + "=" * 80
+             + "\nMSG: std_msgs/MultiArrayLayout\nstd_msgs/MultiArrayDimension[] dim\n"
+             "uint32 data_offset\n" + "=" * 80
+             + "\nMSG: std_msgs/MultiArrayDimension\nstring label\nuint32 size\nuint32 stride\n")
+#: POC 11-06:竞品主控日志里认这两句(11-05 现场按过):求助按钮(CAN 板)、上装急停按钮按下(松开是 1)。
+SOS_LINE = "[sos] receive a trigger event"
+ESTOP_LINE = "Emergency btn status change: 0"
+#: 同一个按钮这么多秒以内又出现的那一行不再报(竞品日志里一次按下常常连写两行)。
+BUTTON_QUIET_S = 3.0
+KIND = "anbot_ros1"
+HOST_ENV = "NEXWAR_ANBOT_SSH_HOST"
+USER_ENV = "NEXWAR_ANBOT_SSH_USER"
+PASSWORD_ENV = "NEXWAR_ANBOT_SSH_PASSWORD"
+_HOST = re.compile(r"[A-Za-z0-9_][A-Za-z0-9_.-]{0,31}@[A-Za-z0-9][A-Za-z0-9_.-]{0,63}")
+_DEV = re.compile(r"[A-Za-z0-9_][A-Za-z0-9_:,.-]{0,63}")
+_PATH = re.compile(r"[A-Za-z0-9_./-]{0,200}")
+_CTL = re.compile(r"[A-Za-z0-9][A-Za-z0-9 _-]{0,63}")
+_LANG = re.compile(r"[a-z]{2,3}")
+#: 合成缓存最多留几句(按最近用过的留)。
+TTS_CACHE_N = 200
+#: Piper、ffmpeg 一步最多等多久(秒);Orin 上一句十几个字不到 1 秒。
+SYNTH_TIMEOUT_S = 30.0
+_CLIP = re.compile(r"[A-Za-z0-9_-][A-Za-z0-9_.-]{0,63}")
+
+
+# ---------------------------------------------------------------- 最小 ROS1 发布端
+
+
+class _Transport(xmlrpc.client.Transport):
+    """带超时的 XML-RPC:竞品主控没开、网线拔了,不能把调用的线程卡死。"""
+
+    def __init__(self, timeout_s: float) -> None:
+        super().__init__()
+        self._timeout = timeout_s
+
+    def make_connection(self, host: Any) -> http.client.HTTPConnection:
+        conn = super().make_connection(host)
+        conn.timeout = self._timeout
+        return conn
+
+
+def _header(fields: dict[str, str]) -> bytes:
+    body = b"".join(struct.pack("<I", len(f)) + f
+                    for f in (f"{k}={v}".encode() for k, v in fields.items()))
+    return struct.pack("<I", len(body)) + body
+
+
+def _recv_exact(s: socket.socket, n: int) -> bytes:
+    b = b""
+    while len(b) < n:
+        d = s.recv(n - len(b))
+        if not d:
+            raise ConnectionError("对方关了连接")
+        b += d
+    return b
+
+
+class _QuietHandler(SimpleXMLRPCRequestHandler):
+    def log_message(self, format: str, *args: Any) -> None:
+        pass
+
+
+class Ros1Publisher:
+    """一个话题的发布端:XML-RPC 节点接口(竞品的订阅端来问 TCPROS 地址)+ TCPROS 监听。
+    方法都是阻塞的(套接字带超时),异步那头用 ``asyncio.to_thread`` 调。"""
+
+    def __init__(self, *, master: str, host: str, caller: str, topic: str, mtype: str,
+                 md5: str, definition: str, latching: bool, timeout_s: float = 1.0) -> None:
+        self.master, self.host, self.caller, self.topic = master, host, caller, topic
+        self.mtype, self.md5, self.definition = mtype, md5, definition
+        self.latching, self.timeout_s = latching, timeout_s
+        self._lock = threading.Lock()
+        self._conns: list[socket.socket] = []
+        self._last: bytes | None = None
+        self._tcp: socket.socket | None = None
+        self._rpc: SimpleXMLRPCServer | None = None
+        self.api = ""
+        self.registered = False
+        self.error = "还没注册"
+
+    # 起、停
+
+    def open(self) -> None:
+        """开 TCPROS 监听和 XML-RPC 节点接口(只开在 ``host`` 上)。
+        开不了抛 OSError(网口还没起来)。"""
+        if self._rpc is not None:
+            return
+        tcp = socket.socket()
+        tcp.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        try:
+            tcp.bind((self.host, 0))
+            tcp.listen(8)
+            rpc = SimpleXMLRPCServer((self.host, 0), requestHandler=_QuietHandler,
+                                     logRequests=False, allow_none=True)
+        except OSError:
+            tcp.close()
+            raise
+        port = tcp.getsockname()[1]
+        rpc.register_function(
+            lambda c, t, protos: [1, "", ["TCPROS", self.host, port]]
+            if t == self.topic and any(p and p[0] == "TCPROS" for p in protos)
+            else [0, "只有 TCPROS", []], "requestTopic")
+        rpc.register_function(lambda c: [1, "", 0], "getPid")
+        rpc.register_function(lambda c: [1, "", []], "getBusInfo")
+        rpc.register_function(lambda c: [1, "", self.master], "getMasterUri")
+        rpc.register_function(lambda c, t, p: [1, "", 0], "publisherUpdate")
+        rpc.register_function(lambda c, k, v: [1, "", 0], "paramUpdate")
+        rpc.register_function(lambda c, m="": [1, "", 0], "shutdown")
+        self._tcp, self._rpc = tcp, rpc
+        self.api = f"http://{self.host}:{rpc.server_address[1]}/"
+        threading.Thread(target=self._accept, daemon=True, name=f"ros1-{self.topic}").start()
+        threading.Thread(target=rpc.serve_forever, daemon=True).start()
+
+    def _proxy(self) -> xmlrpc.client.ServerProxy:
+        return xmlrpc.client.ServerProxy(self.master, transport=_Transport(self.timeout_s))
+
+    def register(self) -> bool:
+        """向 master 注册(可以重复:竞品主控重启以后注册就丢了,定时再来一次)。"""
+        try:
+            code, msg, _ = self._proxy().registerPublisher(self.caller, self.topic, self.mtype,
+                                                           self.api)
+        except (OSError, xmlrpc.client.Error, ValueError) as exc:
+            self.registered, self.error = False, f"连不上竞品主控 {self.master}: {exc}"
+            return False
+        self.registered = code == 1
+        self.error = "" if self.registered else f"竞品主控拒绝注册: {msg}"
+        return self.registered
+
+    def close(self) -> None:
+        if self.registered:
+            with contextlib.suppress(OSError, xmlrpc.client.Error, ValueError):
+                self._proxy().unregisterPublisher(self.caller, self.topic, self.api)
+        self.registered = False
+        rpc, tcp, self._rpc, self._tcp = self._rpc, self._tcp, None, None
+        if rpc is not None:
+            rpc.shutdown()
+            rpc.server_close()
+        if tcp is not None:
+            with contextlib.suppress(OSError):
+                tcp.shutdown(socket.SHUT_RDWR)
+            tcp.close()
+        with self._lock:
+            conns, self._conns = self._conns, []
+        for c in conns:
+            c.close()
+
+    # 订阅端
+
+    def _accept(self) -> None:
+        tcp = self._tcp
+        while tcp is not None and self._tcp is tcp:
+            try:
+                c, _ = tcp.accept()
+            except OSError:
+                return
+            threading.Thread(target=self._handshake, args=(c,), daemon=True).start()
+
+    def _handshake(self, c: socket.socket) -> None:
+        try:
+            c.settimeout(self.timeout_s * 2)
+            _recv_exact(c, struct.unpack("<I", _recv_exact(c, 4))[0])     # 订阅端的头不看
+            c.sendall(_header({"callerid": self.caller, "topic": self.topic, "type": self.mtype,
+                               "md5sum": self.md5, "message_definition": self.definition,
+                               "latching": "1" if self.latching else "0"}))
+            c.settimeout(self.timeout_s)
+            with self._lock:
+                if self.latching and self._last is not None:
+                    c.sendall(self._last)
+                self._conns.append(c)
+        except OSError:
+            c.close()
+
+    def connections(self) -> int:
+        with self._lock:
+            return len(self._conns)
+
+    def publish(self, msg: bytes) -> int:
+        """发给所有连着的订阅端;发不出去的连接扔掉。→ 发到了几个。"""
+        frame = struct.pack("<I", len(msg)) + msg
+        with self._lock:
+            if self.latching:
+                self._last = frame
+            ok = []
+            for c in self._conns:
+                try:
+                    c.sendall(frame)
+                    ok.append(c)
+                except OSError:
+                    c.close()
+            self._conns = ok
+            return len(ok)
+
+
+def bool_msg(v: bool) -> bytes:
+    return b"\x01" if v else b"\x00"
+
+
+def string_msg(s: str) -> bytes:
+    b = s.encode("utf-8")
+    return struct.pack("<I", len(b)) + b
+
+
+def f32ma_msg(values: tuple[float, ...]) -> bytes:
+    """std_msgs/Float32MultiArray:布局空(没有维度、data_offset 0),后面是数。"""
+    return struct.pack("<III", 0, 0, len(values)) + struct.pack(f"<{len(values)}f", *values)
+
+
+# ---------------------------------------------------------------- 上装
+
+
+@dataclass(frozen=True)
+class AnbotConfig:
+    master: str
+    host: str
+    strobe_topic: str = "/sensor/strobeLightSwitch"
+    voice_topic: str = "/anbot/voice/play"
+    #: POC 11-06:云台 [水平, 俯仰](度;水平正 = 向右,俯仰正 = 向下)、雨刷(刷可见光镜头)。
+    ptz_topic: str = "/anbot/ptz/pose/set"
+    wiper_topic: str = "/anbot/ptz/wiper/enable"
+    #: POC 11-06:登录竞品主控盯的两份日志(求助按钮在 CAN 板日志里,急停按钮在灯控日志里)。
+    #: 没配登录(``audio_host``)就不盯。
+    sos_log: str = "/logs/current/can.log"
+    estop_log: str = "/logs/current/led_control.log"
+    #: POC 11-06(第 7、30 条):竞品重启后音量偏小,我们起来时登录竞品主控调一次(``amixer -q [-c 卡]
+    #: sset <控件> <百分比>%``)。空 = 不调(控件名按现场 ``amixer`` 列出来的填)。
+    volume_control: str = ""
+    volume_percent: int = 70
+    volume_card: str = ""
+    #: 第三档 #41:竞品念不了的语言在 Orin 上用 Piper 合成。
+    #: ``{"en": "/opt/piper/en_US-ryan-medium.onnx"}``;
+    #: 要配了 ``audio_host`` 才放得出去。空 = 只能念中文。
+    piper: str = "piper"
+    piper_voices: Mapping[str, str] | None = None
+    ffmpeg: str = "ffmpeg"
+    tts_cache_dir: str = "/var/lib/nexwar/tts-cache"
+    caller: str = "/nexwar_agent"
+    #: 念一个字大约多久(现场 11-05:12 个字约 3 秒)。
+    secs_per_char: float = 0.25
+    #: 警灯开着多久重发一次(竞品自己的程序可能发「关」把我们盖掉)。
+    republish_s: float = 1.0
+    #: 多久重新注册一次(竞品主控重启了注册就丢了)。
+    reregister_s: float = 10.0
+    #: 录好的话术(英文)放在哪台竞品主控上:``账号@地址``(11-05 用户批准 POC 阶段登录竞品主控放音频)。
+    #: 空 = 不放录好的话术,只念文字。登录用 SSH 密钥(``ssh_key``),密码不存在我们这边任何地方。
+    audio_host: str = ""
+    ssh_key: str = "/home/robot/.nexwar/anbot_ssh"
+    #: 竞品 /etc/asound.conf 里跟它自己的讯飞 TTS 同一条的 dmix。
+    aplay_device: str = "dmix_oneway_play"
+    ssh: str = "ssh"
+    # HAL 看这两个:能 TTS;录好的话术在哪(没配 audio_host 就当没有)
+    tts_command: str = "anbot"
+    clips_dir: str = "/var/lib/nexwar/clips"
+    #: 代理入口看这个:没有继电器板输入(W56 风扇报警不接)
+    inputs_reg: int = -1
+
+    def __post_init__(self) -> None:
+        u = urlsplit(self.master)
+        if u.scheme != "http" or not u.hostname:
+            raise PayloadError(f"master 要写成 http://<地址>:<端口>: {self.master!r}")
+        if not self.host or not isinstance(self.host, str):
+            raise PayloadError("host 要写 Orin 在竞品网段上的地址")
+        for t in (self.strobe_topic, self.voice_topic, self.ptz_topic, self.wiper_topic,
+                  self.caller):
+            if not isinstance(t, str) or not t.startswith("/"):
+                raise PayloadError(f"话题、节点名要以 / 开头: {t!r}")
+        for k in ("secs_per_char", "republish_s", "reregister_s"):
+            v = getattr(self, k)
+            if not isinstance(v, (int, float)) or not 0 < v <= 60:
+                raise PayloadError(f"{k} 要在 0–60 之间: {v!r}")
+        if self.audio_host and not _HOST.fullmatch(str(self.audio_host)):
+            raise PayloadError(f"audio_host 要写成 账号@地址: {self.audio_host!r}")
+        if not _DEV.fullmatch(str(self.aplay_device)):
+            raise PayloadError(f"aplay_device 只许字母、数字、_ : , . -: {self.aplay_device!r}")
+        for k in ("ssh_key", "ssh", "clips_dir", "sos_log", "estop_log"):
+            v = getattr(self, k)
+            if not isinstance(v, str) or any(ch.isspace() for ch in v) or v.startswith("-"):
+                raise PayloadError(f"{k} 写错了: {v!r}")
+        for k in ("sos_log", "estop_log"):
+            if not _PATH.fullmatch(getattr(self, k)):
+                raise PayloadError(f"{k} 只许字母、数字、_ . / -: {getattr(self, k)!r}")
+        if self.volume_control and not _CTL.fullmatch(str(self.volume_control)):
+            raise PayloadError(f"volume_control 只许字母、数字、空格、_ -: {self.volume_control!r}")
+        if self.volume_card and not str(self.volume_card).isalnum():
+            raise PayloadError(f"volume_card 只许字母、数字: {self.volume_card!r}")
+        if not isinstance(self.volume_percent, int) or not 0 <= self.volume_percent <= 100:
+            raise PayloadError(f"volume_percent 要在 0–100: {self.volume_percent!r}")
+        voices = self.piper_voices or {}
+        if not isinstance(voices, Mapping) or not all(
+                isinstance(k, str) and _LANG.fullmatch(k) and k != "zh" and isinstance(v, str)
+                and v.startswith("/") and _PATH.fullmatch(v) for k, v in voices.items()):
+            raise PayloadError('piper_voices 要写成 {"en": "/音色/文件.onnx"}'
+                               "(语言 2–3 个小写字母,不含 zh)")
+        object.__setattr__(self, "piper_voices", dict(voices))
+        for k in ("piper", "ffmpeg", "tts_cache_dir"):
+            v = getattr(self, k)
+            if not isinstance(v, str) or not v or v.startswith("-") \
+                    or any(ch.isspace() for ch in v):
+                raise PayloadError(f"{k} 写错了: {v!r}")
+        if not self.audio_host:
+            object.__setattr__(self, "clips_dir", "")
+
+    @classmethod
+    def from_dict(cls, d: dict[str, Any]) -> AnbotConfig:
+        known = {"master", "host", "strobe_topic", "voice_topic", "caller", "secs_per_char",
+                 "republish_s", "reregister_s", "audio_host", "ssh_key", "aplay_device",
+                 "clips_dir", "ssh", "ptz_topic", "wiper_topic", "sos_log", "estop_log",
+                 "volume_control", "volume_percent", "volume_card",
+                 "piper", "piper_voices", "ffmpeg", "tts_cache_dir"}
+        extra = set(d) - known - {"kind"}
+        if extra:
+            raise PayloadError(f"竞品上装配置里有不认识的项: {', '.join(sorted(extra))}")
+        if "master" not in d or "host" not in d:
+            raise PayloadError("竞品上装配置要有 master 和 host")
+        try:
+            return cls(**{k: d[k] for k in known if k in d})
+        except TypeError as exc:
+            raise PayloadError(f"竞品上装配置写错了: {exc}") from exc
+
+
+class AnbotPayload:
+    """竞品上装的异步入口(HAL 调它,跟 :class:`Payload` 同一套方法)。"""
+
+    def __init__(self, cfg: AnbotConfig, *, password: str = "") -> None:
+        self.cfg = cfg
+        #: 登录竞品主控的密码(11-05 用户定:不改竞品,POC 存密码)。只放内存、只经环境变量交给
+        #: SSH_ASKPASS;不进命令行、不进日志、不进 ``cfg``(repr 不带)。空 = 用 ``ssh_key``。
+        self._password = password
+        self._askpass: Path | None = None
+        self.on_sound_end: Callable[[bool, str], Any] | None = None
+        # 外审 POC I7:每个发布端一个节点名(各开各的 XML-RPC 地址;共用一个名字,master 当成同一个
+        # 节点重启了,互相清掉注册)
+        self._strobe = Ros1Publisher(master=cfg.master, host=cfg.host,
+                                     caller=f"{cfg.caller}_strobe",
+                                     topic=cfg.strobe_topic, mtype="std_msgs/Bool",
+                                     md5=BOOL_MD5, definition="bool data\n", latching=True)
+        self._voice = Ros1Publisher(master=cfg.master, host=cfg.host,
+                                    caller=f"{cfg.caller}_voice",
+                                    topic=cfg.voice_topic, mtype="std_msgs/String",
+                                    md5=STRING_MD5, definition="string data\n", latching=False)
+        self._ptz = Ros1Publisher(master=cfg.master, host=cfg.host,
+                                  caller=f"{cfg.caller}_ptz",
+                                  topic=cfg.ptz_topic, mtype="std_msgs/Float32MultiArray",
+                                  md5=F32MA_MD5, definition=F32MA_DEF, latching=False)
+        self._wiper = Ros1Publisher(master=cfg.master, host=cfg.host,
+                                    caller=f"{cfg.caller}_wiper",
+                                    topic=cfg.wiper_topic, mtype="std_msgs/Bool",
+                                    md5=BOOL_MD5, definition="bool data\n", latching=True)
+        self._pubs = (self._strobe, self._voice, self._ptz, self._wiper)
+        self._until: float | None = None              # 警灯开着:到这个时刻(monotonic)
+        self._wiper_until: float | None = None        # 雨刷开着:到这个时刻
+        #: POC 11-06:竞品的求助、急停按钮按下了(``"sos"`` / ``"estop"``);HAL 挂上。
+        self.on_button: Callable[[str], Any] | None = None
+        self._buttons_task: asyncio.Task[None] | None = None
+        self._volume_task: asyncio.Task[None] | None = None
+        self._button_at: dict[str, float] = {}
+        self._guard: asyncio.Task[None] | None = None
+        self._speech: asyncio.Task[None] | None = None
+        self._open_error = ""
+        self._next_register = 0.0
+
+    # 能力
+
+    def has(self, output: str) -> bool:
+        return output in ("strobe", "speaker", "wiper", "ptz")
+
+    def options(self) -> dict[str, Any]:
+        return {}
+
+    def tts_langs(self) -> list[str]:
+        """能念哪几种语言(第三档 #41):中文竞品念;合成的要放得出去(配了 ``audio_host``)。"""
+        extra = sorted(self.cfg.piper_voices or {}) if self.cfg.audio_host else []
+        return ["zh", *extra]
+
+    def input_bits(self) -> int | None:
+        return None
+
+    def connections(self, topic: str) -> int:
+        return sum(p.connections() for p in self._pubs if p.topic == topic)
+
+    # 起、停
+
+    async def start(self) -> None:
+        """开监听、注册、先发一次「关」;看护循环接着重发、到点关、定时重新注册。不等竞品主控。"""
+        self._until = None
+        await self._publish_strobe(False)
+        if self._guard is None or self._guard.done():
+            self._guard = asyncio.get_running_loop().create_task(self._watch())
+        if self.cfg.audio_host and (self.cfg.sos_log or self.cfg.estop_log) \
+                and (self._buttons_task is None or self._buttons_task.done()):
+            self._buttons_task = asyncio.get_running_loop().create_task(self._buttons())
+        if self.cfg.audio_host and self.cfg.volume_control and self._volume_task is None:
+            self._volume_task = asyncio.get_running_loop().create_task(self._set_volume())
+
+    async def _ensure(self) -> None:
+        now = time.monotonic()
+        if now < self._next_register:
+            return
+        self._next_register = now + self.cfg.reregister_s
+        try:
+            for p in self._pubs:
+                await asyncio.to_thread(p.open)
+            self._open_error = ""
+        except OSError as exc:
+            self._open_error = f"Orin 上 {self.cfg.host} 开不了端口(网口没起来?): {exc}"
+            return
+        for p in self._pubs:
+            await asyncio.to_thread(p.register)
+
+    async def _watch(self) -> None:
+        while True:
+            try:
+                await self._ensure()
+                if self._until is not None:
+                    if time.monotonic() >= self._until:
+                        self._until = None
+                        await self._publish_strobe(False)
+                    else:
+                        await self._publish_strobe(True)
+                if self._wiper_until is not None and time.monotonic() >= self._wiper_until:
+                    self._wiper_until = None
+                    await asyncio.to_thread(self._wiper.publish, bool_msg(False))
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                log.exception("竞品上装看护循环出错(接着跑)")
+            await asyncio.sleep(self.cfg.republish_s)
+
+    async def close(self) -> None:
+        """全关:警灯发「关」,不再估喊话,注销,关端口。"""
+        for t in (self._guard, self._buttons_task, self._volume_task):
+            if t is not None:
+                t.cancel()
+                with contextlib.suppress(asyncio.CancelledError):
+                    await t
+        self._guard = self._buttons_task = None
+        await self.stop_sound()
+        self._until = self._wiper_until = None
+        try:
+            await self._publish_strobe(False)
+            await asyncio.to_thread(self._wiper.publish, bool_msg(False))
+        except Exception:
+            log.exception("竞品上装收尾时发不出「关警灯」「关雨刷」")
+        for p in self._pubs:
+            await asyncio.to_thread(p.close)
+        self._next_register = 0.0
+
+    # 警灯
+
+    async def _publish_strobe(self, on: bool) -> int:
+        await self._ensure()
+        return await asyncio.to_thread(self._strobe.publish, bool_msg(on))
+
+    async def set(self, output: str, on: bool, max_s: float, *, side: str = "both",
+                  color: str = "") -> None:
+        if output == "wiper":
+            await self._set_wiper(on, max_s)
+            return
+        if output != "strobe":
+            raise PayloadError(f"竞品上装只有警灯、雨刷和喇叭,没有 {output}")
+        if not on:
+            self._until = None
+            await self._publish_strobe(False)
+            return
+        if not 0 < max_s <= MAX_ON_S:
+            raise PayloadError(f"max_s 要在 0–{MAX_ON_S:.0f} 秒之间")
+        await self._ensure()
+        if self._open_error or not self._strobe.registered:
+            # 11-05 现场:原来收下、事后才报故障,站点回「已接受」,保安以为开了
+            raise PayloadError(f"警灯没开:{self._why_down(self._strobe)}")
+        self._until = time.monotonic() + max_s
+        await self._publish_strobe(True)
+
+    # 雨刷、云台(POC 11-06)
+
+    async def _set_wiper(self, on: bool, max_s: float) -> None:
+        if not on:
+            self._wiper_until = None
+            await asyncio.to_thread(self._wiper.publish, bool_msg(False))
+            return
+        if not 0 < max_s <= MAX_ON_S:
+            raise PayloadError(f"max_s 要在 0–{MAX_ON_S:.0f} 秒之间")
+        await self._ensure()
+        if self._open_error or self._wiper.connections() == 0:
+            raise PayloadError(f"雨刷没开:{self._why_down(self._wiper)}")
+        self._wiper_until = time.monotonic() + max_s
+        await asyncio.to_thread(self._wiper.publish, bool_msg(True))
+
+    async def aim(self, pan: float, tilt: float) -> None:
+        """云台转到 ``pan``(水平,度,正 = 向右)、``tilt``(俯仰,度,正 = 向下)。转过去就停在那。"""
+        await self._ensure()
+        if self._open_error or self._ptz.connections() == 0:
+            raise PayloadError(f"云台没转:{self._why_down(self._ptz) or '竞品的云台程序没连上'}")
+        if await asyncio.to_thread(self._ptz.publish, f32ma_msg((float(pan), float(tilt)))) == 0:
+            raise PayloadError("云台没转:竞品的云台程序断开了")
+
+    # 求助、急停按钮(POC 11-06)
+
+    async def _buttons(self) -> None:
+        """登录竞品主控 ``tail -F`` 两份日志,认出按下就回调 ``on_button``;断了 5 秒后重连。"""
+        while True:
+            logs = " ".join(x for x in (self.cfg.sos_log, self.cfg.estop_log) if x)
+            cmd, env = self._ssh_cmd(f"tail -n0 -F {logs}")
+            proc = None
+            try:
+                proc = await asyncio.create_subprocess_exec(
+                    *cmd, stdin=asyncio.subprocess.DEVNULL, stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.DEVNULL, start_new_session=True, env=env)
+                assert proc.stdout is not None
+                async for raw in proc.stdout:
+                    self._button_line(raw.decode("utf-8", "replace"))
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                log.exception("盯竞品按钮日志出错,5 秒后重连")
+            finally:
+                if proc is not None and proc.returncode is None:
+                    with contextlib.suppress(ProcessLookupError, PermissionError):
+                        os.killpg(proc.pid, signal.SIGKILL)
+                    with contextlib.suppress(Exception):
+                        await proc.wait()
+            await asyncio.sleep(5.0)
+
+    async def _set_volume(self) -> None:
+        """起来时调一次竞品音量(第 7、30 条:竞品重启后偏小);连不上 1 分钟后再试,最多 10 回。"""
+        card = f"-c {self.cfg.volume_card} " if self.cfg.volume_card else ""
+        ctl = self.cfg.volume_control.replace("'", "")
+        remote = f"amixer -q {card}sset '{ctl}' {self.cfg.volume_percent}%"
+        for _ in range(10):
+            cmd, env = self._ssh_cmd(remote)
+            try:
+                proc = await asyncio.create_subprocess_exec(
+                    *cmd, stdin=asyncio.subprocess.DEVNULL, stdout=asyncio.subprocess.DEVNULL,
+                    stderr=asyncio.subprocess.PIPE, start_new_session=True, env=env)
+                _, err = await asyncio.wait_for(proc.communicate(), 20)
+                if proc.returncode == 0:
+                    log.info("竞品音量调到 %d%%", self.cfg.volume_percent)
+                    return
+                log.warning("调竞品音量没成(退出码 %s): %s", proc.returncode,
+                            err.decode("utf-8", "replace").strip()[-200:])
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                log.exception("调竞品音量出错")
+            await asyncio.sleep(60)
+
+    def _button_line(self, line: str) -> None:
+        name = "sos" if SOS_LINE in line else "estop" if ESTOP_LINE in line else ""
+        if not name:
+            return
+        now = time.monotonic()
+        if now - self._button_at.get(name, -1e9) < BUTTON_QUIET_S:
+            return
+        self._button_at[name] = now
+        log.warning("竞品上装的%s按钮按下了", "求助" if name == "sos" else "急停")
+        fn = self.on_button
+        if fn is not None:
+            try:
+                fn(name)
+            except Exception:
+                log.exception("按钮回调出错")
+
+    def _ssh_cmd(self, remote: str) -> tuple[list[str], dict[str, str] | None]:
+        """登录竞品主控跑 ``remote`` 的命令行和环境(密码走 SSH_ASKPASS,不进命令行)。"""
+        common = ["-o", "ConnectTimeout=3", "-o", "StrictHostKeyChecking=accept-new"]
+        env = None
+        if self._password:
+            auth = ["-o", "PubkeyAuthentication=no",
+                    "-o", "PreferredAuthentications=password,keyboard-interactive",
+                    "-o", "NumberOfPasswordPrompts=1"]
+            env = dict(os.environ) | {"SSH_ASKPASS": str(self._askpass_script()),
+                                      "SSH_ASKPASS_REQUIRE": "force",
+                                      "DISPLAY": os.environ.get("DISPLAY", ":0"),
+                                      PASSWORD_ENV: self._password}
+        else:
+            auth = ["-i", self.cfg.ssh_key, "-o", "BatchMode=yes"]
+        return [self.cfg.ssh, *auth, *common, self.cfg.audio_host, remote], env
+
+    # 喊话
+
+    async def sound(self, clip_or_tts: str, max_s: float) -> None:
+        if not clip_or_tts.startswith("tts:"):
+            await self._clip(clip_or_tts, max_s)
+            return
+        _, _, rest = clip_or_tts.partition(":")
+        lang, _, text = rest.partition(":")
+        if not text.strip() or len(text) > MAX_TTS_CHARS:
+            raise PayloadError(f"TTS 要写成 tts:<语言>:<文字>(文字 1–{MAX_TTS_CHARS} 字)")
+        if not 0 < max_s <= MAX_ON_S:
+            raise PayloadError(f"max_s 要在 0–{MAX_ON_S:.0f} 秒之间")
+        lang = re.split(r"[-_]", lang, maxsplit=1)[0].lower()
+        if lang != "zh":
+            if lang not in self.tts_langs():
+                raise PayloadError(f"竞品只会念中文;{lang} 要先在 Orin 上配 Piper 音色"
+                                   "(payload.json 的 piper_voices,还要配 audio_host)")
+            wav = await self._synth(lang, text.strip())
+            await self._play(wav, max_s)
+            return
+        await self._ensure()
+        await self.stop_sound()
+        if self._voice.connections() == 0:
+            raise PayloadError(self._why_down(self._voice) or "竞品主控的播音程序没连上")
+        if await asyncio.to_thread(self._voice.publish, string_msg(text)) == 0:
+            raise PayloadError("竞品主控的播音程序断开了,没念出来")
+        est = min(max_s, len(text) * self.cfg.secs_per_char)
+        self._speech = asyncio.get_running_loop().create_task(self._speak_end(est))
+
+    async def _clip(self, name: str, max_s: float) -> None:
+        """录好的话术:SSH 到竞品主控跑 ``aplay``,wav 从管道送过去(文件不用拷到竞品上;关喇叭掐 ssh,
+        那头 aplay 读到头就停)。放完、放坏了、到点都回调;被关的不回调。"""
+        if not self.cfg.audio_host:
+            raise PayloadError("竞品上装只能念文字(tts:<语言>:<文字>):"
+                               "没配 audio_host,不放录好的话术")
+        if not _CLIP.fullmatch(name) or name.startswith("."):
+            raise PayloadError(f"话术名只许字母、数字、. _ -: {name!r}")
+        path = Path(self.cfg.clips_dir) / f"{name}.wav"
+        if not path.is_file():
+            raise PayloadError(f"没有这段话术: {name}")
+        if not 0 < max_s <= MAX_ON_S:
+            raise PayloadError(f"max_s 要在 0–{MAX_ON_S:.0f} 秒之间")
+        await self._play(path, max_s)
+
+    async def _play(self, path: Path, max_s: float) -> None:
+        await self.stop_sound()
+        # 密码:ssh 没有终端(新会话)时找 SSH_ASKPASS 要;那个小脚本从环境变量里念出来
+        cmd, env = self._ssh_cmd(f"aplay -q -D {self.cfg.aplay_device} -")
+        try:
+            with path.open("rb") as f:
+                proc = await asyncio.create_subprocess_exec(
+                    *cmd, stdin=f, stdout=asyncio.subprocess.DEVNULL,
+                    stderr=asyncio.subprocess.PIPE, start_new_session=True, env=env)
+        except OSError as exc:
+            raise PayloadError(f"放不了录好的话术(ssh 起不来): {exc}") from exc
+        self._speech = asyncio.get_running_loop().create_task(self._clip_end(proc, max_s))
+
+    async def _synth(self, lang: str, text: str) -> Path:
+        """Piper 合成 → ffmpeg 转成竞品 dmix 要的 48 kHz 双声道 s16、前后各 0.3 秒静音
+        (11-05 现场定的参数)。
+        同一句(语言 + 文字)只合成一次;失败的不进缓存。"""
+        d = Path(self.cfg.tts_cache_dir)
+        key = hashlib.sha256(f"{lang}\n{text}".encode()).hexdigest()[:24]
+        out = d / f"{lang}-{key}.wav"
+        if out.is_file():
+            with contextlib.suppress(OSError):
+                os.utime(out)
+            return out
+        try:
+            d.mkdir(parents=True, exist_ok=True)
+        except OSError as exc:
+            raise PayloadError(f"英文合成失败:缓存目录建不了({exc})") from exc
+        model = (self.cfg.piper_voices or {})[lang]
+        with tempfile.TemporaryDirectory(dir=d) as tmp:
+            raw, fin = Path(tmp) / "raw.wav", Path(tmp) / "out.wav"
+            await self._run([self.cfg.piper, "--model", model, "--length-scale", "1.1",
+                             "--sentence-silence", "0.3", "--output_file", str(raw)], text.encode())
+            await self._run([self.cfg.ffmpeg, "-nostdin", "-y", "-loglevel", "error",
+                             "-i", str(raw),
+                             "-af", "adelay=300|300,apad=pad_dur=0.3", "-ar", "48000", "-ac", "2",
+                             "-sample_fmt", "s16", str(fin)], None)
+            if not fin.is_file() or fin.stat().st_size == 0:
+                raise PayloadError("英文合成失败:没生成音频")
+            fin.replace(out)
+        self._prune_cache(d)
+        return out
+
+    @staticmethod
+    async def _run(cmd: list[str], stdin: bytes | None) -> None:
+        name = Path(cmd[0]).name
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                *cmd,
+                stdin=asyncio.subprocess.PIPE if stdin is not None else asyncio.subprocess.DEVNULL,
+                stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.PIPE)
+        except OSError as exc:
+            raise PayloadError(f"英文合成失败:{name} 起不来({exc})") from exc
+        try:
+            _, err = await asyncio.wait_for(proc.communicate(stdin), SYNTH_TIMEOUT_S)
+        except asyncio.TimeoutError as exc:
+            with contextlib.suppress(ProcessLookupError):
+                proc.kill()
+            raise PayloadError(f"英文合成失败:{name} 超过 {SYNTH_TIMEOUT_S:.0f} 秒") from exc
+        if proc.returncode != 0:
+            raise PayloadError(f"英文合成失败:{name} 退出码 {proc.returncode}:"
+                               + (err or b"").decode("utf-8", "replace").strip()[:150])
+
+    @staticmethod
+    def _prune_cache(d: Path) -> None:
+        files = sorted(d.glob("*.wav"), key=lambda f: f.stat().st_mtime, reverse=True)
+        for f in files[TTS_CACHE_N:]:
+            with contextlib.suppress(OSError):
+                f.unlink()
+
+    def _askpass_script(self) -> Path:
+        """只念环境变量的小脚本(私有临时目录,0700)。密码本身不落盘。"""
+        if self._askpass is None or not self._askpass.exists():
+            d = Path(tempfile.mkdtemp(prefix="nexwar_askpass-"))
+            p = d / "askpass"
+            p.write_text(f'#!/bin/sh\nprintf \'%s\\n\' "${PASSWORD_ENV}"\n', encoding="utf-8")
+            p.chmod(0o700)
+            self._askpass = p
+        return self._askpass
+
+    async def _clip_end(self, proc: Any, max_s: float) -> None:
+        try:
+            try:
+                _, err = await asyncio.wait_for(proc.communicate(), max_s)
+            except asyncio.TimeoutError:                # 3.10 上它不是内建的 TimeoutError
+                ok, why = True, "到点了"
+            else:
+                rc = proc.returncode
+                ok = rc == 0
+                why = "放完了" if ok else (
+                    f"竞品主控放不出来(ssh/aplay 退出码 {rc}):"
+                    + (err or b"").decode("utf-8", "replace").strip()[:150])
+        finally:
+            if proc.returncode is None:
+                with contextlib.suppress(ProcessLookupError, PermissionError):
+                    os.killpg(proc.pid, signal.SIGKILL)       # 连子进程一起(管道才会关)
+                with contextlib.suppress(Exception):
+                    await proc.wait()
+        self._speech = None
+        fn = self.on_sound_end
+        if fn is not None:
+            fn(ok, why)
+
+    async def _speak_end(self, est: float) -> None:
+        await asyncio.sleep(est)
+        self._speech = None
+        fn = self.on_sound_end
+        if fn is not None:
+            fn(True, "放完了(按字数估)")
+
+    async def stop_sound(self) -> None:
+        """不再估这一句(竞品那头念到一半停不下来:没找到停播的话题)。被关的不回调。"""
+        t, self._speech = self._speech, None
+        if t is not None and not t.done():
+            t.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await t
+
+    def playing(self) -> bool:
+        return self._speech is not None and not self._speech.done()
+
+    # 健康
+
+    def _why_down(self, p: Ros1Publisher) -> str:
+        if self._open_error:
+            return self._open_error
+        if not p.registered:
+            return f"竞品主控连不上:{p.error}"
+        if p.connections() == 0:
+            return "竞品主控上的订阅端还没连上(竞品程序没起来?)"
+        return ""
+
+    def faults(self) -> dict[str, str]:
+        """警灯开着却发不到竞品那头:按路报(站点出 ``payload_strobe`` 告警)。"""
+        if self._until is None:
+            return {}
+        why = self._why_down(self._strobe)
+        return {"strobe": f"警灯命令发不到竞品主控:{why}"} if why else {}
+
+    def health(self) -> list[dict[str, Any]]:
+        from nexwar_contract.devices import device
+        why = self._why_down(self._strobe) or self._why_down(self._voice)
+        if self._open_error or not all(p.registered for p in (self._strobe, self._voice)):
+            return [device("link:anbot", "offline", why)]
+        if why:
+            return [device("link:anbot", "degraded", why)]
+        # POC 11-06:云台、雨刷是附带的,没连上不算降级,说一声
+        extra = "" if self._ptz.connections() and self._wiper.connections() else \
+            ";云台、雨刷程序还没连上"
+        return [device("link:anbot", "online", "竞品主控上的警灯、播音程序都连上了" + extra)]
+
+
+def load_payload(path: str | Path,
+                 env: Mapping[str, str] | None = None) -> Payload | AnbotPayload:
+    """按 ``kind`` 选上装:``anbot_ros1`` 是竞品转接,没写就是 W21 继电器上装。
+
+    竞品转接放录好的话术要登录竞品主控:``/etc/nexwar/env`` 里的 ``NEXWAR_ANBOT_SSH_HOST``、
+    ``NEXWAR_ANBOT_SSH_USER``、``NEXWAR_ANBOT_SSH_PASSWORD``(systemd 交给代理;
+    仓库里、日志里都没有)。
+    三样要么都给,要么都不给(不给 = 只念文字,或者 payload.json 里写 ``audio_host`` 用钥匙)。"""
+    env = os.environ if env is None else env
+    try:
+        d = json.loads(Path(path).read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        raise PayloadError(f"上装配置无法读取: {exc}") from exc
+    if not isinstance(d, dict):
+        raise PayloadError("上装配置要是 JSON 对象")
+    kind = d.get("kind", "relay")
+    if kind == KIND:
+        keys = (HOST_ENV, USER_ENV, PASSWORD_ENV)
+        have = [k for k in keys if env.get(k)]
+        if have and len(have) != len(keys):
+            raise PayloadError("登录竞品主控要 " + "、".join(keys) + " 三样都给,缺 "
+                               + "、".join(k for k in keys if k not in have))
+        if have:
+            d = d | {"audio_host": f"{env[USER_ENV]}@{env[HOST_ENV]}"}
+        return AnbotPayload(AnbotConfig.from_dict(d), password=env.get(PASSWORD_ENV, ""))
+    if kind != "relay":
+        raise PayloadError(f"上装 kind 只认 relay、{KIND}: {kind!r}")
+    return Payload(PayloadConfig.load(path))

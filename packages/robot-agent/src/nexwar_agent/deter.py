@@ -28,7 +28,8 @@ log = logging.getLogger(__name__)
 
 class DeterDesk:
     def __init__(self, hal: Any, *, emit: Callable[[str, dict[str, Any]], Any],
-                 monotonic: Callable[[], float] = time.monotonic) -> None:
+                 monotonic: Callable[[], float] = time.monotonic,
+                 on_estop: Callable[[], Any] | None = None) -> None:
         self.hal = hal
         self._emit = emit
         self._mono = monotonic
@@ -39,6 +40,14 @@ class DeterDesk:
         listen = getattr(hal, "set_sound_listener", None)
         if callable(listen):
             listen(self._sound_ended)
+        # POC 11-06:竞品上装的求助、急停按钮按下了 → 一条 ``payload_button`` 事件(站点出告警、叫停)
+        buttons = getattr(hal, "set_button_listener", None)
+        if callable(buttons):
+            def pressed(name: str) -> None:
+                self._emit("payload_button", {"button": name})
+                if name == "estop" and on_estop is not None:
+                    on_estop()                       # 外审 POC r1 C1:代理当场中止任务,不等站点
+            buttons(pressed)
 
     def _sound_ended(self, ok: bool, why: str) -> None:
         self._sound = None
@@ -61,6 +70,11 @@ class DeterDesk:
             tts = getattr(self.hal, "sound_tts", None)
             d["clips"] = list(clips()) if callable(clips) else []
             d["tts"] = bool(tts()) if callable(tts) else False
+            # 第三档 #41:能念哪几种语言(竞品只会中文,英文靠 Orin 上合成);HAL 不说就不报(老站点照旧)
+            langs = getattr(self.hal, "sound_tts_langs", None)
+            got = langs() if callable(langs) else None
+            if got is not None:
+                d["tts_langs"] = [str(x) for x in got]
         return d
 
     def options(self) -> dict[str, Any]:
@@ -70,10 +84,47 @@ class DeterDesk:
         return {k: opts[k] for k in ("spotlight_sides", "strobe_colors", "strobe_default",
                                      "siren_via") if k in opts}
 
+    async def aim_at(self, bearing_deg: float) -> None:
+        """POC 11-06:确认看见人,云台转过去(``bearing_deg`` 狗身系,朝左为正;云台向右为正)。
+        没云台不动;转不了记日志,不打断别的。"""
+        if "ptz" not in self.outputs():
+            return
+        pan = -float(bearing_deg)
+        pan = (pan + 180.0) % 360.0 - 180.0
+        try:
+            await self.hal.ptz(pan, 0.0)
+        except Exception as exc:                     # noqa: BLE001 - 自己转的没转成:记日志
+            log.warning("看见人,云台没转过去: %s", exc)
+            return
+        self._emit("deter", {"output": "ptz", "on": True, "pan": pan, "tilt": 0.0,
+                             "auto": "person_seen"})
+
     def playing(self) -> tuple[int, float] | None:
         if self._sound is not None and self._mono() >= self._sound[1]:
             self._sound = None
         return self._sound
+
+    async def auto_sound(self, clip: str, *, priority: int, max_s: float, why: str) -> bool:
+        """机器人自己按情况放一段录好的话术(POC 11-05,:mod:`nexwar_agent.autovoice`)。
+        这台没有这段、没接喇叭、正在放的不比它低:不放(回 False,不报错)。放了记一条 ``deter`` 事件,
+        带 ``auto`` = 为什么放的。"""
+        if "speaker" not in self.outputs():
+            return False
+        clips = getattr(self.hal, "sound_clips", None)
+        if not callable(clips) or clip not in clips():
+            return False
+        cur = self.playing()
+        if cur is not None and cur[0] >= priority:
+            return False
+        try:
+            await self.hal.sound(clip, max_s)
+        except Exception as exc:                     # noqa: BLE001 - 自己放的没放成:记日志,不打断别的
+            log.warning("自动放 %s 没放成: %s", clip, exc)
+            return False
+        self._sound = (priority, self._mono() + max_s)
+        self._emit("deter", {"output": "speaker", "on": True, "max_s": max_s, "clip": clip,
+                             "priority": priority, "auto": why})
+        return True
 
     async def handle(self, cmd: Command) -> str:
         """回空串 = 做了;否则拒收的理由。"""
@@ -102,6 +153,10 @@ class DeterDesk:
                 await self.hal.spotlight_side(req.side, req.on, req.max_s)
             elif req.output == "spotlight":
                 await self.hal.spotlight(req.on, req.max_s)
+            elif req.output == "wiper":
+                await self.hal.wiper(req.on, req.max_s)
+            elif req.output == "ptz":
+                await self.hal.ptz(req.pan, req.tilt)
             else:
                 await self.hal.sound(req.clip if req.on else "", req.max_s)
         except HalUnsupported:
@@ -112,7 +167,9 @@ class DeterDesk:
         if req.output == "speaker":
             self._sound = (req.priority, self._mono() + req.max_s) if req.on else None
         data: dict[str, Any] = {"task_id": cmd.task_id, "output": req.output, "on": req.on}
-        if req.on:
+        if req.output == "ptz":
+            data |= {"pan": req.pan, "tilt": req.tilt}
+        elif req.on:
             data["max_s"] = req.max_s
         if req.side != "both":
             data["side"] = req.side

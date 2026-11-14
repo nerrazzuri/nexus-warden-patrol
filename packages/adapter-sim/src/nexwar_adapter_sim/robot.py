@@ -54,7 +54,7 @@ class SimRobot:
                  battery_drain_pct_per_h: float = 8.0, frame_id: str = "odom",
                  latency_s: float = 0.0, gait_start_s: float = 0.0,
                  max_decel: float = math.inf, require_clearance: bool = False,
-                 payload: bool = False,
+                 payload: bool = False, tts_langs: tuple[str, ...] = ("zh", "en"),
                  charger: tuple[float, float, float] | None = None,
                  charge_pct_per_h: float = 60.0, imu: bool = False,
                  lateral: bool = False, max_vy: float = 0.5, max_vx_mid: float = 0.0,
@@ -88,6 +88,8 @@ class SimRobot:
         self.undock_calls = 0
         #: 上装(W21):开了就有警灯、警笛、聚光灯、喇叭。每一路记「开到几点」(按仿真的钟),到点算关。
         self.payload = payload
+        #: 第三档 #41:喇叭能念哪几种语言(演示上「念不了的那句灰掉」要看得到)
+        self.tts_langs = tuple(tts_langs)
         self.deter_until: dict[str, int] = {}
         self.deter_clip = ""
         self.deter_color = ""
@@ -457,6 +459,12 @@ class SimRobot:
 
     def sound_clips(self) -> tuple[str, ...]:
         return self.clips
+
+    def sound_tts(self) -> bool:
+        return self.payload
+
+    def sound_tts_langs(self) -> list[str] | None:
+        return list(self.tts_langs) if self.payload else None
 
     async def spotlight(self, on: bool, max_s: float) -> None:
         self._deter("spotlight", on, max_s)

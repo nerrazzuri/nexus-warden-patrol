@@ -113,6 +113,12 @@ VENDOR_PAUSE_MATCH = (
     "navigo_charging_alignment",
     "launch robot_nav2 ",
 )
+#: POC(竞品上装,只在 poc-anbot-payload 分支):竞品的 ros1 桥在 Orin 上跟我们抢话题,以前 SSH 手工停。
+#: 跟着「开机暂停厂家进程」一起暂停(能恢复);**关自启不用这张单子**,竞品的设置不动(用户 11-06)。
+COMPETITOR_PAUSE_MATCH = (
+    "bridge_start.sh",
+    "ros1_bridge/parameter_bridge",
+)
 #: 第 32 条(用户 11-06:「先默认关掉,直到我们 V2 上装有了」):关自启时记下关了哪些(开回去、卸载按它)。
 VENDOR_OFF_RECORD = "vendor-autostart-off.json"
 #: 进程所在的 systemd 单元(``/proc/<pid>/cgroup`` 里 ``….service`` 结尾的那一段)。
@@ -711,7 +717,7 @@ class Ops:
                          mode=0o644)
         return {"disabled": disabled, "skipped": skipped}
 
-    def _vendor_pids(self) -> list[tuple[int, str]]:
+    def _vendor_pids(self, match: tuple[str, ...] = VENDOR_PAUSE_MATCH) -> list[tuple[int, str]]:
         """命令行含 :data:`VENDOR_PAUSE_MATCH` 某一段的进程,连它们的子孙。"""
         cmds: dict[int, str] = {}
         parent: dict[int, int] = {}
@@ -725,7 +731,7 @@ class Ops:
             except (OSError, ValueError, IndexError):
                 continue
             cmds[int(d.name)] = cmd.strip()
-        hit = {p for p, c in cmds.items() if any(m in c for m in VENDOR_PAUSE_MATCH)}
+        hit = {p for p, c in cmds.items() if any(m in c for m in match)}
         grew = True
         while grew:
             more = {p for p, pp in parent.items() if pp in hit and p not in hit}
@@ -747,7 +753,7 @@ class Ops:
 
     def _signal_vendor(self, sig: int) -> list[dict[str, Any]]:
         out = []
-        for pid, cmd in self._vendor_pids():
+        for pid, cmd in self._vendor_pids(VENDOR_PAUSE_MATCH + COMPETITOR_PAUSE_MATCH):
             try:
                 self.kill(pid, sig)
             except ProcessLookupError:

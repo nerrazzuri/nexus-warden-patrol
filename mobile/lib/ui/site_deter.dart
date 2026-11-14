@@ -32,13 +32,26 @@ class SiteDeterPage extends StatefulWidget {
   State<SiteDeterPage> createState() => _SiteDeterPageState();
 }
 
+/// 话术名说人话（POC 11-05：竞品转接的 4 段英文）；别的原样。
+String deterClipLabel(String c) => switch (c) {
+      'blocked' => tr('Path blocked (EN)', '请让路（英文）'),
+      'passing' => tr('Passing through (EN)', '巡逻经过（英文）'),
+      'distance' => tr('Keep distance (EN)', '保持距离（英文）'),
+      'restricted' => tr('Restricted area (EN)', '禁区警告（英文）'),
+      _ => c,
+    };
+
 /// 每一路的名字、默认开多久（秒）。
 Map<String, (String, double)> get deterOutputs => <String, (String, double)>{
       'strobe': (tr('Strobe light', '警灯'), 60),
       'siren': (tr('Siren', '警笛'), 10),
       'spotlight': (tr('Spotlight', '聚光灯'), 120),
       'speaker': (tr('Speaker', '喇叭'), 30),
+      'wiper': (tr('Wiper', '雨刷'), 10), // POC 11-06 竞品上装：刷可见光镜头
     };
+
+/// POC 11-06 竞品云台：每按一下转多少度、角度上限（跟站点的 nexwar_contract.deter 一致）。
+const double ptzPanStep = 15, ptzTiltStep = 10, ptzPanMax = 180, ptzTiltMax = 90;
 
 /// 警灯颜色名说人话（狗的配置里起的名字；不认识的原样显示）。
 String strobeColorText(String c) => switch (c) {
@@ -79,9 +92,37 @@ class _SiteDeterPageState extends State<SiteDeterPage> {
   List<String> get _colors => ((widget.caps['strobe_colors'] as List?) ?? const []).map((e) => '$e').toList();
   String? _color;
 
+  /// 云台：没有回读角度，按「上次按到哪」算（看见人自己转过去以后，先点回正再调）。
+  double _pan = 0, _tilt = 0;
+
+  Future<void> _turn(double dp, double dt) async {
+    final center = dp == 0 && dt == 0;
+    final pan = center ? 0.0 : (_pan + dp).clamp(-ptzPanMax, ptzPanMax).toDouble();
+    final tilt = center ? 0.0 : (_tilt + dt).clamp(-ptzTiltMax, ptzTiltMax).toDouble();
+    setState(() {
+      _pan = pan;
+      _tilt = tilt;
+    });
+    final what = tr('Camera head to pan ${pan.toStringAsFixed(0)}°, tilt ${tilt.toStringAsFixed(0)}°',
+        '云台转到水平 ${pan.toStringAsFixed(0)}°、俯仰 ${tilt.toStringAsFixed(0)}°');
+    String msg;
+    try {
+      final r = await widget.api.deter(widget.robotId, 'ptz', true, pan: pan, tilt: tilt);
+      final ack = r['ack'];
+      final res = ack is Map ? '${ack['result']}' : 'accepted';
+      msg = res == 'accepted'
+          ? tr('$what: done', '$what：完成')
+          : tr('$what failed: ${deterReasonText(ack is Map ? '${ack['reason'] ?? res}' : res)}',
+              '$what失败：${deterReasonText(ack is Map ? '${ack['reason'] ?? res}' : res)}');
+    } on SiteError catch (e) {
+      msg = tr('$what failed: $e', '$what失败：$e');
+    }
+    if (mounted) setState(() => _msg = msg);
+  }
+
   /// 喇叭以外的每一行。聚光灯分左右的：「两边」一行，再加左、右各一行。
   List<_Row> get _rows => <_Row>[
-        for (final o in _outputs.where((o) => o != 'speaker')) ...[
+        for (final o in _outputs.where((o) => o != 'speaker' && o != 'ptz')) ...[
           (key: o, output: o, side: null, name: deterOutputs[o]?.$1 ?? o),
           if (o == 'spotlight' && _sides.contains('left'))
             (key: 'spotlight-left', output: o, side: 'left', name: tr('Left spotlight', '左聚光灯')),
@@ -115,6 +156,31 @@ class _SiteDeterPageState extends State<SiteDeterPage> {
     _clip = _clips.isEmpty ? null : _clips.first;
     final def = '${widget.caps['strobe_default'] ?? ''}';
     _color = _colors.isEmpty ? null : (_colors.contains(def) ? def : _colors.first);
+    if (_outputs.contains('speaker') && widget.caps['tts'] == true) unawaited(_loadPresets());
+  }
+
+  /// 机器人报了能念哪几种语言（`tts_langs`，竞品只会中文）；没报 = 不知道，不挡。
+  bool _canSay(String? lang) {
+    final l = widget.caps['tts_langs'];
+    return l is! List || l.contains(lang);
+  }
+
+  static String _langName(String? l) => switch (l) {
+        'zh' => tr('Chinese', '中文'),
+        'en' => tr('English', '英文'),
+        'ms' => tr('Malay', '马来文'),
+        _ => l ?? '',
+      };
+
+  /// 常用喊话（第三档 #41）：站点那张表；老站点没有这个接口就不出这一行。
+  List<Map<String, String>>? _presets;
+  Future<void> _loadPresets() async {
+    try {
+      final p = await widget.api.voicePresets();
+      if (mounted) setState(() => _presets = p);
+    } on SiteError {
+      // 老站点：没有常用喊话
+    }
   }
 
   @override
@@ -214,6 +280,26 @@ class _SiteDeterPageState extends State<SiteDeterPage> {
                       trailing: narrow ? null : buttons,
                     );
                   }))),
+        if (outs.contains('ptz'))
+          Padding(
+              padding: const EdgeInsets.only(bottom: Nw.s8),
+              child: NwCard(
+                  padding: const EdgeInsets.all(12),
+                  child: Wrap(spacing: Nw.s8, runSpacing: Nw.s8, crossAxisAlignment: WrapCrossAlignment.center, children: [
+                    Text(tr('Camera head: ', '云台：'), style: NwText.titleSmall.copyWith(color: c.text)),
+                    for (final (k, label, dp, dt) in <(String, String, double, double)>[
+                      ('left', tr('Left', '向左'), -ptzPanStep, 0),
+                      ('right', tr('Right', '向右'), ptzPanStep, 0),
+                      ('up', tr('Up', '向上'), 0, -ptzTiltStep),
+                      ('down', tr('Down', '向下'), 0, ptzTiltStep),
+                    ])
+                      NwButton(
+                          buttonKey: Key('ptz-$k'),
+                          variant: NwButtonVariant.outline,
+                          onPressed: () => _turn(dp, dt),
+                          label: label),
+                    NwButton(buttonKey: const Key('ptz-center'), onPressed: () => _turn(0, 0), label: tr('Center', '回正')),
+                  ]))),
         if (outs.contains('speaker')) ...[
           NwCard(
               padding: const EdgeInsets.all(12),
@@ -232,7 +318,7 @@ class _SiteDeterPageState extends State<SiteDeterPage> {
                       value: _clip,
                       items: [
                         for (final c in _clips)
-                          DropdownMenuItem(value: c, child: Text(c, maxLines: 1, overflow: TextOverflow.ellipsis)),
+                          DropdownMenuItem(value: c, child: Text(deterClipLabel(c), maxLines: 1, overflow: TextOverflow.ellipsis)),
                       ],
                       onChanged: (v) => setState(() => _clip = v),
                     );
@@ -287,6 +373,27 @@ class _SiteDeterPageState extends State<SiteDeterPage> {
                     },
                     label: tr('Say', '播报')),
               ]),
+            ],
+            if (widget.caps['tts'] == true && (_presets?.isNotEmpty ?? false)) ...[
+              const SizedBox(height: Nw.s16),
+              Text(tr('Common messages', '常用喊话'), style: NwText.titleSmall.copyWith(color: c.text)),
+              const SizedBox(height: Nw.s8),
+              for (final (i, p) in _presets!.indexed) ...[
+                if (i > 0) const SizedBox(height: Nw.s8),
+                NwButton(
+                    buttonKey: Key('deter-preset-$i'),
+                    variant: NwButtonVariant.outline,
+                    fullWidth: true,
+                    onPressed: _canSay(p['lang'])
+                        ? () => _go('speaker', true, clip: 'tts:${p['lang']}:${p['text']}')
+                        : null,
+                    label: p['text'] ?? ''),
+                if (!_canSay(p['lang']))
+                  Text(
+                      tr('${widget.robotId} cannot speak ${_langName(p['lang'])} (not set up on it)',
+                          '这台机器人念不了${_langName(p['lang'])}（${widget.robotId} 上没配）'),
+                      style: NwText.bodySmall.copyWith(color: c.textSecondary)),
+              ],
             ],
           ])),
         ],

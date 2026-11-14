@@ -185,6 +185,45 @@ def test_W40_设备健康_狗带上来_单狗视图里看得到(站点):
     assert s.req("GET", "/api/robots/A", token=gina)[1]["devices"]["stale"] is True
 
 
+def test_POC1105_竞品主控连不上_开当场409说清楚_关照发(站点):
+    """断网测试:link:anbot 已经 offline,站点还回 200 accepted,失败几秒后才由机器人报回来。"""
+    s = 站点
+    gina = _登(s, "gina")
+    _新鲜(s, gina)
+    disp = s.disp
+    disp.devices["A"] = ([{"id": "link:anbot", "state": "offline",
+                           "detail": "竞品主控连不上:http://192.168.113.203:11311"}], disp._now())
+    code, d = s.req("POST", "/api/robots/A/deter",
+                    {"output": "siren", "on": True, "max_s": 5}, token=gina)
+    assert code == 409 and "竞品主控连不上" in str(d), d
+    assert not s.dog.deter_on("siren")
+    code, d = s.req("POST", "/api/robots/A/deter", {"output": "siren", "on": False}, token=gina)
+    assert code == 200, d
+
+
+def test_POC1106_云台角度带到派遣器_没云台的狗回409(站点):
+    s = 站点
+    gina = _登(s, "gina")
+    _新鲜(s, gina)
+    body = {"output": "ptz", "on": True, "pan": 30, "tilt": -5}
+    code, d = s.req("POST", "/api/robots/A/deter", body, token=gina)
+    assert code == 409 and "ptz" in str(d), "仿真狗没云台"
+    got: list = []
+    real = s.disp.deter
+
+    async def deter(rid, payload, **kw):
+        got.append(payload)
+        return {"ack": {"result": "accepted"}}
+    s.disp.deter = deter
+    try:
+        assert s.req("POST", "/api/robots/A/deter", body, token=gina)[0] == 200
+    finally:
+        s.disp.deter = real
+    assert got == [body]
+    assert s.req("POST", "/api/robots/A/deter", {"output": "ptz", "on": True, "pan": 999},
+                 token=gina)[0] == 400
+
+
 def test_用户1113_布防看见人_真派单到仿真狗_警灯亮_喇叭放话术(站点):
     """站点 → 代理 → 仿真上装:布防时看见人,警灯开、喇叭放 warn-<语言>(真派单、真代理)。"""
     from test_site_api import _等 as 等

@@ -726,6 +726,89 @@ def test_现场1105_请求体没被读走_同一条连接的下一个请求照�
     conn.close()
 
 
+def test_外审POC_C1_恢复_给有上装急停的机器人发解锁_没有的不发(tmp_path, monkeypatch):
+    """codex POC r1 C1:上装急停在机器人本地锁住,要人在站点点「恢复」才解。"""
+    from nexwar_adapter_sim.robot import SimRobot
+    released: list = []
+    ok = [False]
+
+    async def 解(self, gen):
+        released.append(gen)
+        return ok[0]
+    monkeypatch.setattr(SimRobot, "payload_estop_supported", lambda self: True, raising=False)
+    monkeypatch.setattr(SimRobot, "payload_estop_state", lambda self: (True, 3), raising=False)
+    monkeypatch.setattr(SimRobot, "payload_estop_release", 解, raising=False)
+    s = 站(tmp_path)
+    try:
+        alice = s.login()
+        _等(lambda: s.req("GET", "/api/robots/A", token=alice)[1].get("fresh"))
+        assert s.req("POST", "/api/robots/A/halt", {}, token=alice)[0] == 200
+        # 外审 POC r2 #5:机器人没解开 → 报错,叫停照旧留着(恢复按钮还在,可以再点)
+        code, d = s.req("POST", "/api/robots/A/resume", {}, token=alice)
+        assert code == 502 and "急停" in d["error"], (code, d)
+        assert s.req("GET", "/api/robots/A", token=alice)[1]["held"] is not None
+        ok[0] = True
+        code, d = s.req("POST", "/api/robots/A/resume", {}, token=alice)
+        assert code == 200 and d["estop_released"] is True, d
+        assert released == [3, 3], "带上机器人报的这一次的代次"
+        assert s.req("GET", "/api/robots/A", token=alice)[1]["held"] is None
+    finally:
+        s.close()
+
+
+def test_外审POC_C1_没有上装急停的机器人_恢复不发解锁(站点):
+    s = 站点
+    alice = s.login()
+    _等(lambda: s.req("GET", "/api/robots/A", token=alice)[1].get("fresh"))
+    code, d = s.req("POST", "/api/robots/A/resume", {}, token=alice)
+    assert code == 200 and d["estop_released"] is None, d
+
+
+@pytest.mark.parametrize("ack", [{"result": "expired"},
+                                 {"result": "duplicate", "original": {"result": "rejected"}},
+                                 {"result": "rejected"}])
+def test_外审POC_r3_解锁回执不是成功_一律当没解开_叫停留着(tmp_path, monkeypatch, ack):
+    """codex POC r3 #3:回执不是 accepted、又没带原因(过期、重复)时,原来当成解开了。"""
+    from nexwar_adapter_sim.robot import SimRobot
+    monkeypatch.setattr(SimRobot, "payload_estop_supported", lambda self: True, raising=False)
+    monkeypatch.setattr(SimRobot, "payload_estop_state", lambda self: (True, 1), raising=False)
+    s = 站(tmp_path)
+    try:
+        alice = s.login()
+        _等(lambda: s.req("GET", "/api/robots/A", token=alice)[1].get("fresh"))
+        assert s.req("POST", "/api/robots/A/halt", {}, token=alice)[0] == 200
+
+        async def 假解(robot_id, gen, *, issued_by):
+            return {"ack": dict(ack)}
+        monkeypatch.setattr(s.disp, "estop_release", 假解)
+        code, d = s.req("POST", "/api/robots/A/resume", {}, token=alice)
+        assert code == 502, (code, d)
+        assert s.req("GET", "/api/robots/A", token=alice)[1]["held"] is not None
+    finally:
+        s.close()
+
+
+def test_外审POC_r3_站点记的是没锁_恢复照样先问机器人解锁(tmp_path, monkeypatch):
+    """codex POC r3 #4:只凭站点手里旧的「没锁」就撤叫停,机器人可能其实锁着。"""
+    from nexwar_adapter_sim.robot import SimRobot
+    sent: list = []
+
+    async def 解(self, gen):
+        sent.append(gen)
+        return True
+    monkeypatch.setattr(SimRobot, "payload_estop_supported", lambda self: True, raising=False)
+    monkeypatch.setattr(SimRobot, "payload_estop_state", lambda self: (False, 0), raising=False)
+    monkeypatch.setattr(SimRobot, "payload_estop_release", 解, raising=False)
+    s = 站(tmp_path)
+    try:
+        alice = s.login()
+        _等(lambda: s.req("GET", "/api/robots/A", token=alice)[1].get("fresh"))
+        code, d = s.req("POST", "/api/robots/A/resume", {}, token=alice)
+        assert code == 200 and d["estop_released"] is True and sent == [0], (code, d, sent)
+    finally:
+        s.close()
+
+
 def test_W76_派巡逻带圈数_全站电量线写进任务_圈数不对400(站点, tmp_path):
     tok = 站点.login()
     _等(lambda: 站点.req("GET", "/api/robots/A", token=tok)[1].get("fresh"))

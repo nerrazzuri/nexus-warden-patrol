@@ -57,6 +57,7 @@ class SiteMappingTrailPage extends StatefulWidget {
   static const Key refreshKey = Key('trail-refresh');
   static const Key previewKey = Key('mapping-preview');
   static const Key statusKey = Key('mapping-status');
+  static const Key recInfoKey = Key('mapping-rec-info');
 
   @override
   State<SiteMappingTrailPage> createState() => _SiteMappingTrailPageState();
@@ -71,6 +72,7 @@ class _SiteMappingTrailPageState extends State<SiteMappingTrailPage> with Widget
   bool _starting = false;
   bool _full = false;
   int _jumps = 0;
+  String _recInfo = '';
 
   /// 狗上的「第几趟」（W00c6h 内审）：变了就是重新开录了，从头取。
   int? _epoch;
@@ -241,6 +243,7 @@ class _SiteMappingTrailPageState extends State<SiteMappingTrailPage> with Widget
         _starting = d['starting'] == true;
         _full = d['full'] == true;
         _jumps = (d['jumps'] as num?)?.toInt() ?? 0;
+        _recInfo = recordInfoText(d);
         _asked = true;
         _err = '';
       });
@@ -362,6 +365,12 @@ class _SiteMappingTrailPageState extends State<SiteMappingTrailPage> with Widget
             padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
             child: Text(_trailStatus(),
                 key: SiteMappingTrailPage.statusKey, style: NwText.bodyMedium.copyWith(color: Nw.of(context).text))),
+        if (_recInfo.isNotEmpty)
+          Padding(
+              padding: const EdgeInsets.fromLTRB(12, 0, 12, 4),
+              child: Text(_recInfo,
+                  key: SiteMappingTrailPage.recInfoKey,
+                  style: NwText.bodyMedium.copyWith(color: Nw.of(context).text))),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 12),
           child: Text(
@@ -1663,4 +1672,26 @@ class StandbyPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(StandbyPainter old) => old.pixels != pixels || old.homes != homes;
+}
+
+/// POC Top Glove（跟竞品一起录）：在录时按剩余空间说还能录多久；停了说上一个包录了多久、多大，
+/// 哪个话题一条都没录到（雷达断了、线松了一眼看出来）。狗没给（老代理）就是空。
+String recordInfoText(Map<String, dynamic> d) {
+  if (d['recording'] == true) {
+    final m = (d['est_minutes'] as num?)?.toInt() ?? 0;
+    return m > 0 ? tr('About $m min of recording left on the robot disk', '按机器人剩余空间，大约还能录 $m 分钟') : '';
+  }
+  final r = d['last_record'];
+  if (r is! Map || r['bag'] is! String) return '';
+  final min = (r['minutes'] as num?)?.toDouble() ?? 0;
+  final gb = ((r['bytes'] as num?) ?? 0) / 1e9;
+  final empty = [for (final t in (r['empty_topics'] as List? ?? const [])) '$t'];
+  final head = tr('Last bag ${r['bag']}: ${min.toStringAsFixed(1)} min, ${gb.toStringAsFixed(1)} GB',
+      '上一个包 ${r['bag']}：录了 ${min.toStringAsFixed(1)} 分钟，${gb.toStringAsFixed(1)} GB');
+  if (r['metadata'] == false) {
+    return '$head\n${tr('The bag index is missing: the recording may not have closed properly.', '包的索引文件缺失，录包可能没有正常结束。')}';
+  }
+  return empty.isEmpty
+      ? '$head\n${tr('Every topic has data.', '每个话题都录到了数据。')}'
+      : '$head\n${tr('No data on: ${empty.join(', ')}. Check those sensors and cables.', '这些话题一条都没录到：${empty.join('、')}。请检查对应的传感器和连线。')}';
 }

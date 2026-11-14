@@ -313,7 +313,7 @@ class AgentRuntime:
             from nexwar_agent.pers_server import PersonBridgeServer
             from nexwar_agent.persons import PersonView
             self.person_view = PersonView(
-                emit=lambda kind, data: self.events.emit(kind, data),
+                emit=self._on_person_event,
                 monotonic=monotonic or time.monotonic,
                 snapshot_dir=persons_snapshots or store_dir / "person-snapshots",
                 save_snapshot=self._save_person_snapshot)
@@ -385,7 +385,15 @@ class AgentRuntime:
         #: 上装(W21):警灯、警笛、聚光灯、喇叭。不是任务;喇叭的优先级仲裁在 ``DeterDesk`` 里。
         from nexwar_agent.deter import DeterDesk
         self.deter = DeterDesk(self.hal, emit=self.events.emit,
-                               monotonic=monotonic or time.monotonic)
+                               monotonic=monotonic or time.monotonic,
+                               on_estop=self._payload_estop_pressed)
+        # POC 11-05:被挡、有人太近、人多时自己放录好的话术(有那段才放)
+        from nexwar_agent.autovoice import AutoVoice
+        self.autovoice = AutoVoice(self.deter, monotonic=monotonic or time.monotonic)
+        from nexwar_agent.bootvoice import BootVoice
+        self.bootvoice = BootVoice(self.deter, monotonic=monotonic or time.monotonic)
+        self._bootvoice_at = -1e9
+        self._bootvoice_mono = monotonic or time.monotonic
         self.processor.deter_hook = self.deter.handle
         #: 站立、趴下、蹲下(POC 2026-11):适配器报了能做哪几种才接。
         if self.hal.hal_capabilities().postures:
@@ -395,6 +403,9 @@ class AgentRuntime:
         self._speed_cap_told: tuple = (None,)              # 起来时没限速:不用多发一次能力
         if self.parts is not None:
             self.processor.speed_cap_hook = self._on_speed_cap
+        #: 外审 POC r1 C1:上装急停按钮(竞品转接)本地锁住,站点「恢复」发 ``estop_release`` 解
+        if self._payload_estop_ok():
+            self.processor.estop_release_hook = self._on_estop_release
         #: 充电桩(W13 外审):此刻在不在桩上(实测;``None`` = 还没读到)、「桩上危险」(出桩、停对桩
         #: 确认不了时 dock 任务挂上,实测离桩稳 5 秒才摘)。会对桩的狗才有运动闸。
         self._on_dock: bool | None = None
@@ -573,6 +584,20 @@ class AgentRuntime:
         if not path.is_file():
             return None
         return f"{ref.map_id}:{ref.version}", json.loads(path.read_text("utf-8"))
+
+    def _on_person_event(self, kind: str, data: dict[str, Any]) -> None:
+        """人员检测的事件照发;POC 11-06:确认看见人(``person_seen``)有竞品云台就转过去。"""
+        self.events.emit(kind, data)
+        if kind != "person_seen":
+            return
+        pv, deter = self.person_view, getattr(self, "deter", None)
+        b = pv.bearing() if pv is not None else None
+        if b is None or deter is None:
+            return
+        try:
+            asyncio.get_running_loop().create_task(deter.aim_at(b))
+        except RuntimeError:
+            pass                                       # 没在事件循环里(测试):不转
 
     def _person_ignored(self, bearing_deg: float, range_m: float) -> bool:
         """检测到的人(狗身系:方向°、距离 m)落在正用着的那张图的人员忽略区里(W41)。定位不可信、没有
@@ -1035,6 +1060,8 @@ class AgentRuntime:
             out["follow"] = self._follow_caps()       # W74:在不在跟、在不在回最后位置
         if self.parts is not None:
             out["speed_cap"] = self._speed_cap_caps()  # W29:全狗限速(站点下雨、雷暴时发)
+        if self._payload_estop_ok():
+            out["estop_release"] = self._estop_caps()  # 外审 POC C1:站点恢复时带代次发解锁
         if self.hal.hal_capabilities().recharge_mode != "none":
             out["dock"] = self._dock_caps()         # W13:会对桩;在不在桩上、桩上危险
         if self.evidence_sealed is not None:
@@ -1111,6 +1138,49 @@ class AgentRuntime:
             return f"failed: {exc}"
         log.info("姿态换成 %s", mode)
         return "", {"mode": mode}
+
+    def _payload_estop_ok(self) -> bool:
+        fn = getattr(self.hal, "payload_estop_supported", None)
+        return bool(fn()) if callable(fn) else False
+
+    def _payload_estop_pressed(self) -> None:
+        """上装急停按钮按下(外审 POC r1 C1):HAL 已经锁住、停车;这里当场中止会动的任务,
+        不等站点那一圈(断网也一样)。"""
+        from nexwar_agent.commands import _MOTION_KINDS
+
+        async def go() -> None:
+            try:
+                await self.processor.abort_kinds(_MOTION_KINDS, "payload_estop")
+            except Exception:
+                log.exception("上装急停:中止任务没成")
+            try:
+                await self._stop_motion()
+            except Exception:
+                log.exception("上装急停:停车没成")
+        try:
+            asyncio.get_running_loop().create_task(go())
+        except RuntimeError:
+            log.error("上装急停:没在事件循环里,任务没中止(HAL 的锁照样拦着速度)")
+
+    async def _on_estop_release(self, cmd: Command) -> str:
+        """站点「恢复」:人确认现场安全了,解开上装急停的本地锁。机器人不会自己动,等再派。
+        要带 ``gen``(这一次锁上的代次,能力里报的):解过以后又按过,旧命令解不开(外审 POC r2 #1)。"""
+        gen = cmd.payload.get("gen") if isinstance(cmd.payload, dict) else None
+        if not isinstance(gen, int) or isinstance(gen, bool):
+            return "payload: 要带 gen(这一次急停的代次)"
+        try:
+            ok = await self.hal.payload_estop_release(gen)
+        except Exception as exc:  # noqa: BLE001 - 解不开:原因带回去
+            log.warning("上装急停解锁没成:%s", exc)
+            return f"failed: {exc}"
+        if not ok:
+            return "stale_estop: 急停之后又按过,请重新确认现场再点恢复"
+        log.info("上装急停解锁(%s,第 %d 次)", cmd.command_id, gen)
+        return ""
+
+    def _estop_caps(self) -> dict[str, Any]:
+        latched, gen = self.hal.payload_estop_state()
+        return {"latched": bool(latched), "gen": int(gen)}
 
     def _on_speed_cap(self, cmd: Command) -> str:
         """全狗限速(W29):记下、马上用上。``null`` 取消。"""
@@ -1363,8 +1433,12 @@ class AgentRuntime:
             if isinstance(n, bool) or not isinstance(n, int) or n < 0:
                 return "payload: since 要是不小于 0 的整数"
             starting = self._running(self._rec_job) and self._rec_action == "start"
+            # POC Top Glove:开录时估的还能录几分钟、上一个包录完的小结(编排器给;仿真的没有)
+            orch = getattr(self.mapper, "orch", None)
+            extra = {"est_minutes": int(getattr(orch, "est_minutes", 0) or 0),
+                     "last_record": dict(getattr(orch, "last_record", None) or {})}
             return "", self.trail.since(n) | {"recording": bool(self.mapper.recording),
-                                              "starting": starting}
+                                              "starting": starting} | extra
         if kind == "mapping_preview":
             n = cmd.payload.get("since", 0)
             if isinstance(n, bool) or not isinstance(n, int) or n < 0:
@@ -2366,6 +2440,7 @@ class AgentRuntime:
             await self._publish_caps()
 
     def _nav_event(self, kind: str, data: dict) -> None:
+        self.autovoice.on_nav_event(kind, data)
         m = self.loaded_map or ("", "")
         self.events.emit(kind, dict(data) | {"map_id": m[0], "map_version": m[1]})
 
@@ -2452,8 +2527,15 @@ class AgentRuntime:
             extra_tasks=self._extra_tasks(),
             nav_path=getattr(self.parts.nav, "PATH_KIND", "straight") if self.parts else "straight",
             autonomy=self.autonomy)
-        await self.transport.publish(self.topics.capabilities, _dumps(caps.to_wire()),
+        wire = caps.to_wire()
+        # 外审 POC r4 #2 / r5:记的是这一包里实际装进去的急停状态 —— 发之前取成局部快照,
+        # 发的时候又按了、或者别的命令又装了一遍能力,都不影响;下一拍发现不一样再发
+        sent = (wire.get("tasks") or {}).get("estop_release")
+        sent = dict(sent) if isinstance(sent, dict) else None
+        await self.transport.publish(self.topics.capabilities, _dumps(wire),
                                      qos=1, retain=True)
+        if sent is not None:
+            self._estop_told = sent
 
     def _video_live(self) -> bool:
         """遥控「没画面不许动」在狗这头的那一道:本机推流器至少一路在推。站点那头还有一道。"""
@@ -2737,6 +2819,9 @@ class AgentRuntime:
                        task=self.processor.task_summary(), unacked_from_seq=lo, unacked_to_seq=hi)
         await self.transport.publish(self.topics.reconcile, _dumps(rc.to_wire()), qos=1)
         await self._flush_events()
+        if self._started and self._payload_estop_ok():
+            # 外审 POC r3 #4:断网时按过上装急停,重连马上补报能力(站点恢复要带这一次的代次)
+            await self._publish_caps()
         if self._started:
             if self.processor.current is not None:
                 await self.processor.current.on_online()
@@ -3064,6 +3149,15 @@ class AgentRuntime:
                 self._pers_state_told = pst
                 if self.transport.connected:
                     await self._publish_caps()
+        pv = self.person_view
+        try:
+            await self.autovoice.tick(
+                moving=not self._tasks_idle(),
+                persons=getattr(pv, "count", None) if pv is not None else None,
+                nearest_m=getattr(pv, "nearest_m", None) if pv is not None else None)
+        except Exception:                                # 自动放话术坏了不拖每拍
+            log.exception("自动放话术出错")
+        await self._boot_voice()
         if self.processor.motion_gate is not None:
             await self._sense_dock()             # W13 外审:实测在不在桩上、摘桩上危险
             dt = (self._on_dock, self._dock_hazard)
@@ -3071,6 +3165,11 @@ class AgentRuntime:
                 self._dock_told = dt
                 if self.transport.connected:
                     await self._publish_caps()
+        if self._payload_estop_ok():
+            es = self._estop_caps()              # 外审 POC r2 #1:锁上、解开都马上告诉站点
+            # 发出去了才算报过(外审 POC r3 #4:断网时先记上「报过了」,重连后就不再发)
+            if es != getattr(self, "_estop_told", None) and self.transport.connected:
+                await self._publish_caps()
         if self.parts is not None:
             sc = self._apply_speed_cap()         # W29:全狗限速到点取消
             if sc != self._speed_cap_told:
@@ -3233,6 +3332,22 @@ class AgentRuntime:
         elif policy.on_disconnect == "stop_and_wait":
             await cur.on_offline(False)
         # execute_locally:什么都不做
+
+    async def _boot_voice(self) -> None:
+        """开机就绪播报(POC 11-05,:mod:`nexwar_agent.bootvoice`):一秒判一次,报完就不再判。"""
+        bv = self.bootvoice
+        now = self._bootvoice_mono()
+        if bv.done or now - self._bootvoice_at < 1.0:
+            return
+        self._bootvoice_at = now
+        try:
+            h = await self.hal.health()
+            n2 = self._nav2_caps()
+            await bv.tick(site=bool(self.transport.connected), control=bool(h.control),
+                          loc=await self._loc_ok(h) is True,
+                          nav2=n2 is None or bool(n2.get("ready")))
+        except Exception:                                # 播报坏了不拖每拍
+            log.exception("开机就绪播报出错")
 
     async def _loc_ok(self, h) -> bool | None:
         """定位可不可信(W00c6e):看锚定;没有引擎零件(没加载地图)就是 ``None``(按运控的里程新鲜)。"""
