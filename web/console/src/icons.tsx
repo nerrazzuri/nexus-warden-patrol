@@ -1,9 +1,9 @@
 // 图标(redesign 11-14:ISO 7010 安全标识的几何):P1 红色粗圆环(「出事了」)、P2 黄色警告三角(深色描边)、P3 细的中性圆、
-// 离线 = 禁止标志(圆环加斜杠,「没在工作」);正常 = 绿色方块(安全条件,样式表画在状态字前面,不进 DOM);
+// 离线 = 禁止标志(圆环加斜杠,「没在工作」);指令 = 实心圆(放在主按钮里);正常 = 绿色方块(安全条件,样式表画在状态字前面,不进 DOM);
 // 急停八边形,外加几个线条图标(Lucide 风格,ISC 许可的样子手画)。形状永远跟文字一起出现,不单独表意。
 import type { JSX } from "preact";
 
-export type ShapeKind = "P1" | "P2" | "P3" | "offline";
+export type ShapeKind = "P1" | "P2" | "P3" | "offline" | "mandatory";
 
 export function Shape({ kind, size = 12 }: { kind: ShapeKind; size?: number }): JSX.Element {
   return (
@@ -12,6 +12,8 @@ export function Shape({ kind, size = 12 }: { kind: ShapeKind; size?: number }): 
       {kind === "P1" && <path fill-rule="evenodd" d="M6 .25a5.75 5.75 0 1 0 0 11.5a5.75 5.75 0 1 0 0-11.5zm0 2.9a2.85 2.85 0 1 1 0 5.7a2.85 2.85 0 1 1 0-5.7z" />}
       {kind === "P2" && <path stroke-linejoin="round" d="M6 1.1l5.2 9.4H.8z" />}
       {kind === "P3" && <circle cx="6" cy="6" r="4.5" fill="none" stroke-width="1.5" />}
+      {/* 指令标志(ISO 7010 M 类的蓝圆):只放在「你要做的那一件事」的按钮上 */}
+      {kind === "mandatory" && <circle cx="6" cy="6" r="5" />}
       {kind === "offline" && (
         <g fill="none" stroke-width="1.5" stroke-linecap="round">
           <circle cx="6" cy="6" r="4.5" />

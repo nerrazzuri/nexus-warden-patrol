@@ -157,7 +157,10 @@ button.navgroup-title[aria-expanded="true"]::after { content: " ▾"; }
 .sidenav a[aria-current="page"] { color: #FFFFFF; background: var(--c-railActive); font-weight: 600; }
 .sidenav .badge { margin-left: auto; min-width: 20px; padding: 0 6px; border-radius: var(--r-r2); font-size: 12px; line-height: 20px; text-align: center; font-weight: 700;
   background: var(--c-surfaceVariant); color: var(--c-text); }
-.sidenav .badge.alarm { background: var(--c-errorFill); color: var(--c-onErrorFill); }
+/* 报警数 = 红圆环 + 数字(方块在这套标识里是「正常」,不能拿来装报警) */
+.sidenav { --c-error: #FF6166; }
+.sidenav .badge.alarm { display: inline-flex; align-items: center; gap: var(--sp-1); padding: 0; background: none; color: var(--c-error); }
+.badge.alarm .shape.P1 { fill: var(--c-error); }
 .topbar { min-height: 60px; padding: 0 24px; background: var(--c-bg); border-bottom: 1px solid var(--c-outline); display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-3); position: sticky; top: 0; z-index: 5; }
 .pagetitle { display: flex; flex-direction: column; line-height: 18px; min-width: 0; margin-right: auto; }
 .pagetitle-sec { font-size: 12px; color: var(--c-textMuted); }
@@ -585,8 +588,9 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--c-brand); }
 /* 顶栏两块牌子:报警数(有就红底白字的牌)、布防状态(布防 = 绿方块的安全牌;在家、访客 = 中性牌) */
 .alarmcount { display: inline-flex; align-items: center; gap: var(--sp-2); height: var(--ctl-sm); padding: 0 12px; border-radius: var(--r-r2); font-size: 14px; font-weight: 600;
   color: var(--c-textSecondary); background: var(--c-surfaceVariant); white-space: nowrap; transition: background-color 120ms ease; }
-.alarmcount.on { color: var(--c-onErrorFill); background: var(--c-errorFill); }
-.alarmcount.on:hover { background: color-mix(in srgb, var(--c-errorFill) 86%, black); }
+.alarmcount.on { color: var(--c-error); background: var(--c-errorSoft); box-shadow: inset 0 0 0 1px var(--c-error); }
+.alarmcount.on:hover { background: color-mix(in srgb, var(--c-errorSoft) 70%, var(--c-error)); }
+.alarmcount .shape.P1 { fill: var(--c-error); }
 .armstate { display: inline-flex; align-items: center; gap: var(--sp-2); height: var(--ctl-sm); padding: 0 12px; border-radius: var(--r-r2); font-size: 14px; font-weight: 600;
   color: var(--c-success); background: var(--c-successSoft); white-space: nowrap; }
 .armstate.home, .armstate.visitor { color: var(--c-textSecondary); background: var(--c-surfaceVariant); }
@@ -683,17 +687,20 @@ button.armstate:focus-visible { outline: 2px solid var(--c-primary); outline-off
 .dcard-h { display: flex; align-items: center; gap: var(--sp-2); margin: 0; padding: 12px 16px; border-bottom: 1px solid var(--c-outline);
   font-family: var(--font-sans); font-size: 15px; line-height: 22px; font-weight: 600; }
 .dcard-empty { margin: 0; padding: 16px; }
-/* P1 横幅:红实底白字的整条标识(全屏最显眼的东西);P2:浅黄底、黄三角、黄框 */
-.banner { display: flex; align-items: center; gap: var(--sp-4); padding: 14px 18px; border-radius: var(--r-r12); background: var(--c-errorFill); color: var(--c-onErrorFill); }
-.banner .btn.onsolid:hover:not(:disabled) { background: rgba(255, 255, 255, 0.14); }
-.banner .shape.P1, .banner .shape.P2 { fill: currentColor; }
+/* P1 横幅 = 一块标识牌:深底、4px 红框、32px 红圆环,「我来处理」是蓝色指令按钮(带蓝圆)。
+   整块红实底留给浮条和急停(UIUX-E006:原来总览首屏五块一样的红);P2:浅黄底、黄三角、黄框 */
+.banner { display: flex; align-items: center; gap: var(--sp-4); padding: 12px 18px; border-radius: var(--r-r12); background: var(--c-surface); color: var(--c-text); border: 4px solid var(--c-errorFill); }
+.banner .shape.P1 { fill: var(--c-error); flex: none; }
+.banner .btn.primary .shape.mandatory { fill: var(--c-onBrand); width: 10px; height: 10px; }
 .banner.p2 { background: var(--c-warningSoft); color: var(--c-text); border: 1px solid var(--c-warningFill); }
 .banner.p2 .shape.P2 { fill: var(--c-warningFill); }
-.banner.p2 .btn.onsolid { color: var(--c-text); border-color: var(--c-textMuted); }
 .banner-text { flex: 1; display: flex; align-items: baseline; flex-wrap: wrap; gap: var(--sp-2) var(--sp-4); min-width: 0; }
 .banner-text b { font-family: var(--font-display); font-size: 20px; line-height: 26px; }
 /* UIUX-E010:原来黑 25% 叠在红上只有 3.8:1;改成白字白框 */
-.banner-more { padding: 1px 8px; border-radius: var(--r-r2); border: 1px solid currentColor; font-size: 13px; font-weight: 600; }
+.banner-more { padding: 1px 8px; border-radius: var(--r-r2); border: 1px solid var(--c-textMuted); color: var(--c-textSecondary); font-size: 13px; font-weight: 600; }
+.banner-text > span, .banner-who { color: var(--c-textSecondary); }
+/* 手机上按钮放到字下面(原来标题被挤成「机器人等 / 待换电」) */
+@media (max-width: 600px) { .banner { flex-wrap: wrap; } .banner-text { flex: 1 1 calc(100% - 56px); } .banner-acts { flex: 1 1 100%; } .banner-acts .btn { flex: 1; } }
 .banner-acts { display: flex; gap: var(--sp-2); flex-wrap: wrap; }
 /* 第三档 #40:别的页上来了新报警,右下角弹卡片(值守页有横幅,不弹);右上角会盖住各页的主按钮。
    在对话框、账号菜单下面,页面上面 */
@@ -844,8 +851,9 @@ button.armstate:focus-visible { outline: 2px solid var(--c-primary); outline-off
 .alarmlog .box { min-width: 130px; padding: 12px 18px; border: 1px solid var(--c-outline); border-radius: var(--r-r12); background: var(--c-surface); }
 .alarmlog .box b { display: block; font-size: 26px; font-variant-numeric: tabular-nums; }
 .alarmlog .box span { color: var(--c-textSecondary); font-size: 13px; }
-.alarmlog .box.r b { color: var(--c-error); }
-.alarmlog .box.o b { color: var(--c-warning); }
+/* 是 0 就不上色(红、黄只说「有事」) */
+.alarmlog .box.r.has b { color: var(--c-error); }
+.alarmlog .box.o.has b { color: var(--c-warning); }
 .alarmlog .note { flex: 1; min-width: 280px; padding: 12px 18px; border: 1px solid var(--c-outline); border-radius: var(--r-r12); background: var(--c-surface); }
 .alarmlog .note h2 { margin: 0 0 4px; font-size: 13px; font-weight: 600; color: var(--c-textSecondary); }
 .alarmlog .note p { margin: 0 0 8px; }
