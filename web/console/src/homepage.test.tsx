@@ -94,6 +94,16 @@ describe("现场概况", () => {
     expect(d.textContent).toContain("原文：起飞前检查未通过：home（没站起来）");
   });
 
+  it("UIUX-032:英文界面里收起来的站点原话标明是中文原文", () => {
+    lang.value = "en";
+    try {
+      const { container: c } = page([alert({ key: "p1", kind: "preflight_refused", robot: "A", title: "起飞前检查未通过",
+        detail: "先让它站起来;原文:起飞前检查未通过: home(没站起来)" })]);
+      const d = c.querySelector(".home-todo .todo-detail")!;
+      expect(d.querySelector("[data-raw-note]")!.textContent!.trim()).toBe("Site message in Chinese:");
+    } finally { lang.value = "zh"; }
+  });
+
   it("备份提醒带去系统页的按钮", () => {
     const { container: c } = page([alert({ key: "b1", kind: "backup_stale", title: "备份太久" })]);
     const a = c.querySelector('.home-todo a[href="#/admin/system"]');

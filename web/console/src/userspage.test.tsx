@@ -156,6 +156,17 @@ describe("用户页", () => {
     expect(au.textContent).not.toContain("/api/");
   });
 
+  it("UIUX-032:英文界面里被拒原因的悬停不是中文原话", async () => {
+    lang.value = "en";
+    try {
+      const { container: c } = page();
+      await waitFor(() => expect(tr(c, "gina")).not.toBeNull());
+      fireEvent.click(tr(c, "gina").querySelector(".user-name")!);
+      const why = await waitFor(() => { const x = c.querySelector(".user-audit [data-why]"); expect(x).not.toBeNull(); return x!; });
+      expect(why.getAttribute("title") ?? "").not.toMatch(/[\u4e00-\u9fff]/);
+    } finally { lang.value = "zh"; }
+  });
+
   it("删人要确认", async () => {
     const { container: c } = page();
     await waitFor(() => expect(tr(c, "gina")).not.toBeNull());
