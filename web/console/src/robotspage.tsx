@@ -543,7 +543,9 @@ function DeterPanel({ r, d, id, busy, off, send, path, admin, say }: {
         }}>
           <input name="say" aria-label={t("rdSpeakText")} placeholder={t("rdSpeakPh")} maxLength={300} value={text}
             onInput={(e) => setText(e.currentTarget.value)} />
-          <button type="submit" class="btn sm primary" disabled={busy || off || !words}>{t("rdSpeakSend")}</button>
+          {/* UIUX-E019:点不了的时候说为什么(别的禁用按钮都有) */}
+          <button type="submit" class="btn sm primary" disabled={busy || off || !words}
+            title={busy ? t("rdWhySending") : off ? t(r.ever_seen === false ? "rdNeverNoCtl" : "rdOfflineNoCtl") : !words ? t("rdSpeakNeedText") : undefined}>{t("rdSpeakSend")}</button>
         </form>
       )}
       {tts && presets !== null && (
