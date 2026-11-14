@@ -211,7 +211,7 @@ function PageTitle({ page }: { page: Page }) {
   return (
     <div class="pagetitle">
       {l && <span class="pagetitle-sec">{t(l.section)}</span>}
-      <span class="pagetitle-name">{l ? t(l.page) : ""}</span>
+      <span class="pagetitle-name" title={l ? t(l.page) : undefined}>{l ? t(l.page) : ""}</span>
     </div>
   );
 }
@@ -308,7 +308,9 @@ function ArmState({ mode, role, stale, onMode }: { mode: Mode; role: string; sta
   const label = <><i class="dot" aria-hidden="true" />{stale ? t("lastKnown", { s: text }) : text}</>;
   const can = !!onMode && canArm(role);
   if (!can) {
-    return <span class={`armstate ${cls}`} data-stale={stale || undefined} title={stale ? t("armStaleTip") : t("armStateTipViewer")}>{label}</span>;
+    return <span class={`armstate ${cls}`} data-stale={stale || undefined} title={stale ? t("armStaleTip") : t("armStateTipViewer")}>
+      {/* UIUX-034:切不了的不像按钮:写「只看」,样式去掉按钮感(styles.css span.armstate) */}
+      {label}{!stale && <small class="armstate-ro" data-ro="1">{t("armViewOnly")}</small>}</span>;
   }
   const items: { m: Mode["mode"]; key: Key }[] = [{ m: "armed", key: "modeArmed" }, { m: "home", key: "modeHome" }, { m: "visitor", key: "modeVisitorAll" }];   // UIUX-035:顶栏这一项是全站 4 小时
   return (

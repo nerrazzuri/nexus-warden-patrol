@@ -61,3 +61,28 @@ describe("UIUX-008 禁用按钮看得清", () => {
     }
   });
 });
+
+describe("第二档 样式", () => {
+  it("UIUX-025:活动日志的时间不折成两行", () => {
+    expect(decl(".user-audit li > time")).toMatch(/white-space: ?nowrap/);
+  });
+  it("UIUX-044:向导吸底按钮栏贴到对话框底边(抵掉对话框的下内边距)", () => {
+    expect(decl(".modal.armwiz .wiz-actions")).toMatch(/bottom: ?-20px/);
+  });
+  it("UIUX-029:视频卡底栏每一段都能截出省略号", () => {
+    expect(flat).toMatch(/\.slot-foot > span \{[^}]*text-overflow: ?ellipsis/);
+  });
+  it("UIUX-028:禁行区状态条空着就不显示", () => {
+    expect(decl(".nogo-status:empty")).toMatch(/display: ?none/);
+  });
+  it("UIUX-030:弹窗表单最后一行按钮贴住底边", () => {
+    expect(decl(".modal form > .row.end:last-child")).toMatch(/position: ?sticky/);
+  });
+});
+
+describe("UIUX-024 报警行", () => {
+  it("描述列至少 240px、结果列可缩;1100px 以下换成两行排", () => {
+    expect(decl(".it")).toMatch(/grid-template-columns: ?140px 70px minmax\(240px, ?1fr\) minmax\(160px, ?220px\) auto/);
+    expect(flat).toMatch(/@media \(max-width: 1100px\) \{ ?\.it \{ ?grid-template-columns: 100px 1fr/);
+  });
+});

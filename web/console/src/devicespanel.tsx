@@ -70,8 +70,8 @@ export function DevicesPanel({ canEdit, say }: { canEdit: boolean; say: (s: stri
           {list.map((d) => (
             <li key={d.id} class="device-row">
               <b>{d.id}</b> · {kind(d.kind)} · {dt("dView", { x: d.view_x.toFixed(1), y: d.view_y.toFixed(1) })} · {d.zone ? dt("dZone", { z: d.zone }) : dt("dNoZone")}
-              {canEdit && <> <button type="button" onClick={() => act(d.id, "rotate")}>{dt("dRotate")}</button>
-                <button type="button" onClick={() => act(d.id, "remove")}>{dt("dRemove")}</button></>}
+              {canEdit && <> <button type="button" class="btn sm" onClick={() => act(d.id, "rotate")}>{dt("dRotate")}</button>
+                <button class="btn sm danger" type="button" onClick={() => act(d.id, "remove")}>{dt("dRemove")}</button></>}
             </li>
           ))}
         </ul>

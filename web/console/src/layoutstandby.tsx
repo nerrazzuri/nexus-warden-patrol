@@ -161,7 +161,7 @@ export function StandbyTab(p: TabProps) {
           </>} />
       </div>
       <div class="ly-side">
-        <button type="button" class="btn primary" disabled={p.data.robots.length === 0} onClick={() => { setAdding("pick"); setSel(null); }}>{t("lyAddStandby")}</button>
+        <button type="button" class="btn primary ly-new" disabled={p.data.robots.length === 0} onClick={() => { setAdding("pick"); setSel(null); }}>{t("lyAddStandby")}</button>
         {p.data.robots.length === 0 && <span class="muted small" data-why-no-add="1">{t("lyStandbyNoRobots")}</span>}
         {adding === "pick" && <p class="muted small">{t("lyAddStandbyHint")} <button type="button" class="link" onClick={() => setAdding(null)}>{t("cancel")}</button></p>}
         <p class="muted small">{t("lyStandbyHint")}</p>
@@ -203,7 +203,7 @@ export function StandbyTab(p: TabProps) {
               const on = e.currentTarget.checked;
               setPts((all) => all.map((x) => (x.robot_id !== cur.robot_id ? x : { ...x, default: key(x) === key(cur) ? on : on ? false : x.default })));
             }} />{t("lyStandbyDefault")}</label>
-            <div class="row end"><button type="button" class="btn sm" onClick={() => setRemoving(cur)}>{t("remove")}</button></div>
+            <div class="row end"><button type="button" class="btn sm danger" onClick={() => setRemoving(cur)}>{t("remove")}</button></div>
           </section>
         )}
       </div>

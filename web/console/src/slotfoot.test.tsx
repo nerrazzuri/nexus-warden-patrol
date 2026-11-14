@@ -27,4 +27,8 @@ describe("画面底下那条", () => {
     expect(c.textContent).toBe("固定摄像头 · 北门 1 号");
     expect(c.querySelector(".slot-foot.scene")).not.toBeNull();
   });
+  it("UIUX-029:每一段都带 title(被截了悬停能看全)", () => {
+    const c = render(<SlotFoot u={unit()} />).container;
+    expect(Array.from(c.querySelectorAll(".slot-foot > span")).map((x) => x.getAttribute("title"))).toEqual(["巡逻中", "82%", "定位良好"]);
+  });
 });

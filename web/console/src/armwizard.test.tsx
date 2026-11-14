@@ -69,7 +69,7 @@ afterEach(cleanup);
 /** UIUX-038 起第 3 步默认「手动」:要定时得自己选「每天 … 到 …」那一项。 */
 function pickDaily() {
   const radio = [...document.querySelectorAll<HTMLInputElement>("input[name=wiz-time]")]
-    .find((x) => x.parentElement?.querySelector("input[type=time]"));
+    .find((x) => x.parentElement?.querySelector("select[data-wiz-from]"));
   fireEvent.click(radio!);
 }
 
@@ -311,6 +311,41 @@ describe("布防向导", () => {
     fireEvent.click(r.getByText("只布防，不让机器人巡逻"));
     await waitFor(() => expect(closed).toBe(true));
     expect(posted.map((p) => p.url)).toEqual(["/api/mode"]);
+  });
+});
+
+describe("第二档:向导细节", () => {
+  it("UIUX-040:时间表关着(手动布防)第 3 步也打勾;打勾的步骤留着序号", async () => {
+    const r = render(<ArmWizard say={() => {}} onClose={() => {}} arming />);
+    const doc = r.container.ownerDocument;
+    await waitFor(() => expect(doc.querySelector("[data-wiz-step=who]")).not.toBeNull());
+    const items = [...doc.querySelectorAll(".wiz-steps li")];
+    expect(items[2].classList.contains("done")).toBe(true);
+    expect(items[2].textContent).toMatch(/^✓ 3\. /);
+  });
+
+  it("UIUX-041:第 3 步的时间一律 24 小时制(半小时一档的下拉,不用浏览器的时间框)", async () => {
+    ready.missing = [];
+    const r = render(<ArmWizard say={() => {}} onClose={() => {}} />);
+    const doc = r.container.ownerDocument;
+    await waitFor(() => expect(doc.querySelector("[data-wiz-step=confirm]")).not.toBeNull());
+    fireEvent.click(r.getByText(/什么时候布防/));
+    const from = await waitFor(() => { const x = doc.querySelector<HTMLSelectElement>("select[data-wiz-from]"); expect(x).not.toBeNull(); return x!; });
+    expect(doc.querySelector("input[type=time]")).toBeNull();
+    const opts = [...from.options].map((o) => o.textContent);
+    expect(opts).toContain("21:30");
+    expect(opts).toContain("00:00");
+    expect(opts.some((o) => /AM|PM|上午|下午/.test(o ?? ""))).toBe(false);
+    expect(doc.querySelector("select[data-wiz-to]")).not.toBeNull();
+  });
+
+  it("UIUX-042:机器人一行名字不写两遍;UIUX-043:「去机器人页」带 ?robot=", async () => {
+    ready.robots = [{ id: "A", code: "manual_only", why: "A 设成只许手动派" }, { id: "B", code: "offline", why: "B 离线" }];
+    const r = render(<ArmWizard say={() => {}} onClose={() => {}} arming />);
+    const doc = r.container.ownerDocument;
+    await waitFor(() => expect(doc.querySelector("[data-wiz-robot=A]")).not.toBeNull());
+    expect(doc.querySelector("[data-wiz-robot=A]")!.textContent).not.toMatch(/^A\s+A/);
+    expect(doc.querySelector("[data-wiz-robot=B] a")!.getAttribute("href")).toBe("#/admin/robots?robot=B");
   });
 });
 

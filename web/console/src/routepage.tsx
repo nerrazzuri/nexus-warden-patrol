@@ -444,7 +444,7 @@ export function RoutesPage({ say, embed, kind = "patrol" }: { say: Say; embed?: 
               <h2>{guardKind ? rt("guardTitle") : rt("routesTitle")}</h2>
               {guardKind && <button type="button" class="btn sm" data-guard-gen="1" onClick={() => setGenOpen(!genOpen)} disabled={!sel || !meta}
                 aria-pressed={genOpen}>{rt("guardGenBtn")}</button>}
-              <button type="button" class="btn sm primary" onClick={startNew} disabled={!sel || !meta}>{rt("routeNewBtn")}</button>
+              <button type="button" class="btn primary ly-new" onClick={startNew} disabled={!sel || !meta}>{rt("routeNewBtn")}</button>
             </div>
             {guardKind && <p class="muted small">{rt("guardOnlyArmed")}</p>}
             {genOpen && sel && <GuardGenerate map={sel} taken={routes.map((r) => r.id)} say={say} onDone={fromGenerated} onClose={() => setGenOpen(false)} />}
@@ -826,8 +826,11 @@ function SchedulePanel({ route, view, schedules, say, reload, inPanel }: {
                 <span class="strong" title={s.title ? s.id : undefined}>{routeLabel(s)}</span>
                 <span class="mono small">{s.at}</span>
                 <span class="muted small">{s.days.map((d) => t(d as Key)).join(" ")}</span>
+                {/* UIUX-019:列表里也写可迟到几分钟、错过怎么办(以前只在新增表单里看得到) */}
+                <span class="muted small" data-sched-policy="1">{rt("schedPolicy", { n: s.window_min,
+                  how: rt(s.on_missed === "alarm" ? "schedAlarm" : s.on_missed === "run_late" ? "schedRunLate" : "schedSkip") })}</span>
                 <span class="muted small" data-sched-robot="1">{s.robot ? rt("schedByRobot", { id: s.robot }) : rt("schedAnyRobot")}</span>
-                <button type="button" class="link push" aria-label={`${rt("schedRemove")} ${routeLabel(s)}`} onClick={() => setRemoving(s)}>{t("remove")}</button>
+                <button type="button" class="btn sm danger push" aria-label={`${rt("schedRemove")} ${routeLabel(s)}`} onClick={() => setRemoving(s)}>{t("remove")}</button>
               </li>
             ))}
           </ul>
@@ -875,7 +878,7 @@ function SchedulePanel({ route, view, schedules, say, reload, inPanel }: {
             </label>
             <p class="muted small">{rt("schedNote")}</p>
             {sameTime && <p class="warn small" data-sched-same="1">{rt("schedSameTime", { at })}</p>}
-            <button type="submit" class="btn sm sched-add" disabled={idTaken || missing.length > 0}>{rt("schedAdd")}</button>
+            <button type="submit" class="btn primary sched-add" disabled={idTaken || missing.length > 0}>{rt("schedAdd")}</button>
             {missing.length > 0 && <p class="small muted" role="status" data-sched-missing="1">{rt("schedMissing", { what: joinList(missing) })}</p>}
           </form>
         </>

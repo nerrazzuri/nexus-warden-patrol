@@ -687,10 +687,30 @@ describe("路线页:站点的回答", () => {
     expect(form.querySelector("[data-sched-missing]")!.textContent).toBe("Still missing: Start at, Days, Late window (min)");
   });
 
-  it("UIUX-017:排程一行的「删除」跟别的在同一行(5 列网格)", async () => {
+  it("UIUX-017:排程一行的「删除」跟别的在同一行(网格列数 = 一行的子元素数)", async () => {
+    installScreenCTM();
+    const sch = { id: "n1", mission: "loop", at: "22:00", days: ["mon"], window_min: 30, on_missed: "skip", revision: 7 };
+    routesApi({ meta: META, routes: [ROUTE], timezone: "UTC", schedules: [sch] });
+    const r = render(<RoutesPage say={() => {}} />);
+    await ready(r.container);
+    await waitFor(() => expect(r.getByText("loop")).toBeTruthy());
+    fireEvent.click(r.getByText("loop"));
+    const li = await waitFor(() => { const x = r.container.querySelector(".sched-list li"); expect(x).not.toBeNull(); return x!; });
     const css = (await import("node:fs")).readFileSync(`${process.cwd()}/src/routes.css`, "utf8");
     const rule = /\.sched-list li \{[^}]*grid-template-columns:\s*([^;]+);/.exec(css)![1].trim().split(/\s+(?![^(]*\))/);
-    expect(rule.length).toBe(5);
+    expect(rule.length).toBe(li.children.length);
+  });
+
+  it("UIUX-019:排程一行写可迟到几分钟、错过怎么办", async () => {
+    installScreenCTM();
+    const sch = { id: "n1", mission: "loop", at: "22:00", days: ["mon"], window_min: 45, on_missed: "alarm", revision: 7 };
+    routesApi({ meta: META, routes: [ROUTE], timezone: "UTC", schedules: [sch] });
+    const r = render(<RoutesPage say={() => {}} />);
+    await ready(r.container);
+    await waitFor(() => expect(r.getByText("loop")).toBeTruthy());
+    fireEvent.click(r.getByText("loop"));
+    const p = await waitFor(() => { const x = r.container.querySelector(".sched-list [data-sched-policy]"); expect(x).not.toBeNull(); return x!; });
+    expect(p.textContent).toBe("Up to 45 min late · if missed: Alarm");
   });
 
   it("第 2 轮 config N2 / N3:编号自动给;用过的当场说、不发;同一时间重复排有提醒", async () => {
