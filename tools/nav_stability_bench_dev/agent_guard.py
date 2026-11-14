@@ -215,7 +215,7 @@ def main() -> int:
     rclpy.init()
     node = Node("nav_bench_agent_guard")
     pub = node.create_publisher(Twist, "/cmd_vel", 10)
-    st = {"now": None, "pose": None, "v": 0.0, "w": 0.0, "last_wz": 0.0, "actors": [], "seq": 0,
+    st = {"now": None, "pose": None, "v": 0.0, "w": 0.0, "last_wz": 0.0, "last_vx": 0.0, "actors": [], "seq": 0,
           "blocked_ticks": 0, "ticks": 0, "tight_ticks": 0, "turn_map_ticks": 0, "slowed_ticks": 0,
           "soft_slow_ticks": 0, "vis_capped_ticks": 0, "occ_capped_ticks": 0, "hist": []}
     log = open(args.log, "a", encoding="utf-8") if args.log else None
@@ -408,13 +408,14 @@ def main() -> int:
         return max(v, V_CREEP)
 
     def check(g: ObstacleGuard, vx: float, wz: float):
-        return g.check(vx, wz, st["v"], view, st["pose"], w_now=(st["last_wz"], st["w"]))
+        return g.check(vx, wz, st["v"], view, st["pose"], w_now=(st["last_wz"], st["w"]),
+                       moving=((st["last_vx"], st["last_wz"]), (st["v"], st["w"])))
 
     def send(vx: float, wz: float, vy: float = 0.0) -> None:
         t = Twist()
         t.linear.x, t.linear.y, t.angular.z = float(vx), float(vy), float(wz)
         pub.publish(t)
-        st["last_wz"] = wz
+        st["last_wz"], st["last_vx"] = wz, vx
 
     def on_cmd(m):
         if st["pose"] is None or st["now"] is None:
