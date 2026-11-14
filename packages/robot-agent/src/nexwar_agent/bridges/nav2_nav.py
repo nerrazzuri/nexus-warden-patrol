@@ -34,6 +34,7 @@ from typing import Any
 
 import numpy as np
 
+from nexwar_agent import obstacles as obstacles_mod
 from nexwar_agent import route_check
 from nexwar_agent.bridges.hal_nav import HalNavBackend
 from nexwar_agent.bridges.planned_nav import PlannedNavBackend, _heading
@@ -485,8 +486,9 @@ class Nav2NavBackend(PlannedNavBackend):
         # W48:有路网就先在路网上找路,途经点交给 Nav2(NavigateThroughPoses,只是路过)
         via = route(self.route_net, (here.x, here.y), goal_xy) \
             if self.route_net is not None and here is not None else []
+        got = None
         if here is not None and self.urgent:
-            log.info("%s:紧急任务,不做路线检查,直接交给 Nav2", op)
+            got = route_check.unchecked("urgent", "紧急任务不做路线检查(用户 11-09:走最快的路)")
         elif here is not None:
             # 导航 V1 第 2 节:出发前查路线几何;拒了不交给 Nav2,原因码给引擎、不重试。
             # 外审 POC I5:有路网时查沿路网(途经点)走的那条,不是跳过
@@ -496,7 +498,20 @@ class Nav2NavBackend(PlannedNavBackend):
                              else self._route_check(here, pose, op))
             finally:
                 self._planning = False
-            if got is not None and not got.ok:
+        if got is not None and got.status == "unchecked":
+            # 外审 11-14(用户定):没查成不等于通过。降级规则:运行时守卫健康(障碍数据新鲜)
+            # 才继续,并上报 route_unchecked;守卫不健康就不出发(不是最终失败,可以再派)
+            healthy, why_g = self._guard_healthy()
+            log.warning("%s:路线没查成 code=%s:%s;守卫%s", op, got.code, got.why,
+                        "健康,继续" if healthy else f"不健康({why_g}),不出发")
+            if self.on_event is not None:
+                self.on_event("route_unchecked", {"code": got.code, "reason": got.why[:200],
+                                                  "guard_ok": healthy})
+            if not healthy:
+                raise NavRequestError(
+                    op, f"路线没查成({got.why}),运行时防护也不健康({why_g}),不出发",
+                    code="robot_not_ready")
+        elif got is not None and not got.ok:
                 log.warning("%s:路线检查不过 code=%s:%s", op,
                             errcodes.tag(errcodes.nav(got.code)) if got.code else "-", got.why)
                 if self.on_event is not None:
@@ -540,13 +555,24 @@ class Nav2NavBackend(PlannedNavBackend):
                  pose.position.y)
         await HalNavBackend.goto(self, pose)
 
+    def _guard_healthy(self) -> tuple[bool, str]:
+        """路线没查成时能不能继续:有守卫、有障碍数据,而且数据此刻新鲜。"""
+        if self.guard is None or self.obstacles is None:
+            return False, "没有避障守卫"
+        st = self.obstacles.state()
+        if st != "ok":
+            return False, f"障碍数据{obstacles_mod.describe(st)}"
+        return True, ""
+
     async def _route_check(self, here: Any, pose: Pose, op: str) -> Any:
         """导航 V1 第 2 节 Route Validator V1.0:向转接节点要一条路线(``plan``),沿路线查有效车身离
         地图墙的余量(:mod:`nexwar_agent.route_check`)。查不成(转接节点不支持、不回、规划器忙或说没路、
-        没地图)回 None —— 不挡路,Nav2 自己还有守卫和恢复;没路的由 Nav2 报 ``goal_unreachable``。"""
+        没地图、出错)回 ``status == "unchecked"`` 的结果 —— 不等于通过,:meth:`goto` 按降级规则处理;
+        规划器说没路的照常交给 Nav2,由它报 ``goal_unreachable``。"""
         results = getattr(self.link, "plan_results", None)
         if results is None or self._map_dir is None:
-            return None
+            return route_check.unchecked("route_check_unavailable",
+                                         "转接节点不支持规划请求或没有地图")
         self._plan_req = getattr(self, "_plan_req", 0) + 1
         rid = self._plan_req
         results.pop(rid, None)
@@ -558,33 +584,34 @@ class Nav2NavBackend(PlannedNavBackend):
             await asyncio.sleep(PLAN_POLL_S)
         m = results.pop(rid, None)
         if m is None:
-            log.warning("%s:路线检查 %g 秒没等到规划结果,不查了", op, PLAN_WAIT_S)
-            return None
+            return route_check.unchecked("route_check_timeout",
+                                         f"{PLAN_WAIT_S:g} 秒没等到规划结果")
         if not m["ok"]:
-            log.info("%s:路线检查拿不到路线(%s),交给 Nav2", op, m.get("reason", ""))
-            return None
+            return route_check.unchecked("no_route",
+                                         f"规划器没给路线({m.get('reason', '')})")
         try:
             walls = await self._route_walls()
             return await asyncio.to_thread(route_check.check_route, m["poses"], *walls)
-        except Exception:                                 # 查不了不挡路
-            log.exception("%s:路线检查出错,不查了", op)
-            return None
+        except Exception as exc:                          # 查不了:算没查成
+            log.exception("%s:路线检查出错", op)
+            return route_check.unchecked("route_check_error", f"路线检查出错:{exc}"[:200])
 
     async def _via_check(self, here: Any, pose: Pose, via: list, op: str) -> Any:
         """有路网时的路线检查(外审 POC I5):沿 当前位置 → 途经点 → 目标 这条折线查余量;直段朝向不变、
         拐角原地转(:func:`_corner_poses`)。转接节点不会规划(老的)、没地图时跟
         :meth:`_route_check` 一样不查。"""
         if getattr(self.link, "plan_results", None) is None or self._map_dir is None:
-            return None
+            return route_check.unchecked("route_check_unavailable",
+                                         "转接节点不支持规划请求或没有地图")
         pts = [(here.x, here.y), *[(float(x), float(y)) for x, y in via],
                (pose.position.x, pose.position.y)]
         poses = _corner_poses(pts, here.yaw, pose.yaw)
         try:
             walls = await self._route_walls()
             return await asyncio.to_thread(route_check.check_route, poses, *walls)
-        except Exception:                                 # 查不了不挡路
-            log.exception("%s:路线检查(路网)出错,不查了", op)
-            return None
+        except Exception as exc:                          # 查不了:算没查成
+            log.exception("%s:路线检查(路网)出错", op)
+            return route_check.unchecked("route_check_error", f"路线检查出错:{exc}"[:200])
 
     async def _route_walls(self) -> tuple[Any, float, tuple[float, float]]:
         """地图墙(原分辨率,不降采样:余量只差 0.2 m,粗格子会错一格);按地图目录缓存。"""

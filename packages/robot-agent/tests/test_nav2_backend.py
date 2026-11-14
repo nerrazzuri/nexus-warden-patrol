@@ -1699,6 +1699,73 @@ async def test_V1_路线检查_规划器说没路_照常交给Nav2_由它报失�
 
 
 
+def _没查成(t):
+    return [d for k, d in t.events if k == "route_unchecked"]
+
+
+async def test_外审_路线没查成_守卫健康_上报没查成_照常交给Nav2(tmp_path, monkeypatch):
+    """外审 11-14(用户定):超时、检查不可用 → 标「未完成检查」;只在运行时守卫健康时继续。"""
+    from nexwar_agent.bridges import nav2_nav
+    monkeypatch.setattr(nav2_nav, "PLAN_WAIT_S", 0.3)
+    link = 会规划的转接(answer="silent")
+    t = _台(tmp_path, link, walls=_窄走廊(1.4))
+    await t.start(1.5, 4.0)
+    link.here = (1.5, 4.0)
+    await t.nav.goto(Pose.from_xy_yaw(9.0, 4.0))
+    assert link.kinds("goal")
+    [ev] = _没查成(t)
+    assert ev["code"] == "route_check_timeout" and ev["guard_ok"] is True, ev
+
+
+async def test_外审_路线没查成_守卫不健康_不出发_可以再派(tmp_path, monkeypatch):
+    from nexwar_agent.bridges import nav2_nav
+    from nexwar_patrol.backends.base import NavRequestError
+    monkeypatch.setattr(nav2_nav, "PLAN_WAIT_S", 0.3)
+    link = 会规划的转接(answer="silent")
+    t = _台(tmp_path, link, walls=_窄走廊(1.4))
+    await t.start(1.5, 4.0)
+    link.here = (1.5, 4.0)
+    monkeypatch.setattr(t.nav.obstacles, "state", lambda: "lost")
+    with pytest.raises(NavRequestError) as e:
+        await t.nav.goto(Pose.from_xy_yaw(9.0, 4.0))
+    assert e.value.code == "robot_not_ready" and not e.value.final, e.value
+    assert "没查成" in str(e.value) and "障碍数据" in str(e.value)
+    assert not link.kinds("goal")
+    assert _没查成(t)[0]["guard_ok"] is False
+    assert t.nav._status is NavStatus.STANDBY and not t.nav._planning
+
+
+async def test_外审_紧急任务不查路线_也算没查成_要守卫健康(tmp_path, monkeypatch):
+    from nexwar_patrol.backends.base import NavRequestError
+    link = 会规划的转接()
+    t = _台(tmp_path, link, walls=_窄走廊(0.7))
+    await t.start(1.5, 4.0)
+    link.here = (1.5, 4.0)
+    await t.nav.set_urgent(True)
+    await t.nav.goto(Pose.from_xy_yaw(9.0, 4.0))
+    assert _没查成(t)[0]["code"] == "urgent"
+    link2 = 会规划的转接()
+    (tmp_path / "2").mkdir()
+    t2 = _台(tmp_path / "2", link2, walls=_窄走廊(0.7))
+    await t2.start(1.5, 4.0)
+    link2.here = (1.5, 4.0)
+    await t2.nav.set_urgent(True)
+    monkeypatch.setattr(t2.nav.obstacles, "state", lambda: "stale")
+    with pytest.raises(NavRequestError) as e:
+        await t2.nav.goto(Pose.from_xy_yaw(9.0, 4.0))
+    assert e.value.code == "robot_not_ready" and not link2.kinds("goal")
+
+
+async def test_外审_规划器说没路_算没查成_守卫健康时交给Nav2报失败(tmp_path):
+    link = 会规划的转接(answer={"ok": False, "poses": [], "reason": "no_path"})
+    t = _台(tmp_path, link, walls=_窄走廊(1.4))
+    await t.start(1.5, 4.0)
+    link.here = (1.5, 4.0)
+    await t.nav.goto(Pose.from_xy_yaw(9.0, 4.0))
+    assert link.kinds("goal")
+    assert _没查成(t)[0]["code"] == "no_route"
+
+
 # ---------------------------------------- 导航 V1 第 3、4 节:卡住了自己脱困(恢复链)
 
 
