@@ -290,7 +290,7 @@ export function Console({ me, onOut }: { me: Me; onOut: (note?: string) => void 
       {pending?.kind === "cam" && <FullCamera robot={pending.robot} cam={pending.cam} now={now} onClose={() => setPending(null)}
         cams={robotCams(units.find((u) => u.robot.robot_id === pending.robot)?.robot)} />}
       {/* 第三档 #40:新报警弹卡片、出声(值守页有横幅,只出声) */}
-      <AlarmPop alerts={active} role={me.role} onDuty={route.page === "duty"} onAck={(a) => void ack(a)}
+      <AlarmPop alerts={active} role={me.role} onDuty={route.page === "duty" || route.page === "alarms"} onAck={(a) => void ack(a)}
         onGo={() => { location.hash = "#/duty"; }} />
       <div class="toast" role="status" aria-live="polite" ref={toastRef} {...(CAN_POPOVER ? { popover: "manual" } : {})}>{toast}
         {toast && toastAct && <button type="button" class="btn sm toast-act" data-toast-act="1"

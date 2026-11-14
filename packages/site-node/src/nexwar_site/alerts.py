@@ -256,10 +256,12 @@ _CHANNEL_BY_TIER: tuple[Channel, ...] = (Channel.SCREEN, Channel.PUSH, Channel.S
 
 #: 新起一条时从哪一档开始(没登记的从 0 档)。入侵一来就到最高档:弹通知、一直响到有人确认(W17,
 #: 决策 29)。有人闯进来,等 5 分钟才响就晚了;别的 P1 照旧 2/5 分钟升档。确认过的不再吸收新事件,
-#: 之后再有入侵另起一条、照样从最高档响。
+#: 之后再有入侵另起一条、照样从最高档响。布防时机器人看见人(dog_sees_person)也一样。
 START_TIER: dict[str, int] = {
     "intrusion": len(_CHANNEL_BY_TIER) - 1,
     "intrusion_unanswered": len(_CHANNEL_BY_TIER) - 1,
+    # 用户 11-14:布防时机器人看见人跟入侵一样一来就响(以前要 5 分钟没人确认才响)
+    "dog_sees_person": len(_CHANNEL_BY_TIER) - 1,
 }
 
 
