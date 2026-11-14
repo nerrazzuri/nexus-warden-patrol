@@ -845,7 +845,7 @@ button.armstate:focus-visible { outline: 2px solid var(--c-primary); outline-off
 .alarmlog .box.r b { color: var(--c-error); }
 .alarmlog .box.o b { color: var(--c-warning); }
 .alarmlog .note { flex: 1; min-width: 280px; padding: 12px 18px; border: 1px solid var(--c-outline); border-radius: var(--r-r12); background: var(--c-surface); }
-.alarmlog .note h4 { margin: 0 0 4px; font-size: 13px; font-weight: 600; color: var(--c-textSecondary); }
+.alarmlog .note h2 { margin: 0 0 4px; font-size: 13px; font-weight: 600; color: var(--c-textSecondary); }
 .alarmlog .note p { margin: 0 0 8px; }
 .note-write { display: flex; gap: var(--sp-2); align-items: flex-end; }
 .note-write textarea { flex: 1; resize: vertical; padding: 6px 10px; border-radius: var(--r-r8); border: 1px solid var(--c-outline); background: var(--c-bg); color: var(--c-text); font: inherit; }
@@ -859,10 +859,10 @@ button.armstate:focus-visible { outline: 2px solid var(--c-primary); outline-off
 .it.open { background: var(--c-warningSoft); }
 .it .shot { width: 140px; height: 79px; object-fit: cover; border-radius: var(--r-r8); background: var(--c-well); display: block; }
 .it time { color: var(--c-textSecondary); font-size: 15px; }
-.it h5 { margin: 0 0 4px; font-size: 16px; }
-.it h5.r { color: var(--c-error); }
-.it h5.o { color: var(--c-warning); }
-.it h5.g { color: var(--c-textSecondary); }
+.it h2 { margin: 0 0 4px; font-size: 16px; }
+.it h2.r { color: var(--c-error); }
+.it h2.o { color: var(--c-warning); }
+.it h2.g { color: var(--c-textSecondary); }
 .it .what p { margin: 0; color: var(--c-textSecondary); font-size: 13px; }
 .it .res { font-size: 14px; }
 .it .res small { display: block; margin-top: 2px; color: var(--c-textMuted); font-size: 12px; }
@@ -886,7 +886,8 @@ button.armstate:focus-visible { outline: 2px solid var(--c-primary); outline-off
 /* W44 第二期:「管理」左边一列(三组,高级默认收着) */
 .adminwrap { display: block; }
 /* UIUX-009:表单、列表页在大屏上限宽 1280px(地图、布置、值班这些铺满一屏的页不限) */
-.console:not(.fill) .adminbody, .alarmlog { max-width: 1280px; }
+/* UIUX-E017:管理页在大屏上多用一些宽度(原来 1920 下右边空 392px);读的文字另有 65ch 上限 */
+.console:not(.fill) .adminbody, .alarmlog { max-width: 1600px; }
 .adminbody { min-width: 0; }
 @media print { .sidenav { display: none !important; } .console { display: block; } }
 
@@ -1138,7 +1139,8 @@ p.warn { color: var(--c-text); background: var(--c-warningSoft); padding: 8px 12
 .nogo-status p { margin: 0; }
 .ok-text { color: var(--c-success); font-weight: 600; }
 .route-line.bad-seg { stroke: var(--c-error); stroke-dasharray: 6 4; stroke-width: 3; }
-.routes-embed .routesplit { display: grid; grid-template-columns: minmax(0, 1fr) clamp(340px, 28vw, 440px); gap: var(--sp-4); }
+/* UIUX-E011:属性面板跟着屏幕变宽(原来封顶 440,1920 下地图 1200 / 面板 440,表单挤) */
+.routes-embed .routesplit { display: grid; grid-template-columns: minmax(0, 1fr) clamp(360px, 30vw, 560px); gap: var(--sp-4); }
 @media (max-width: 1000px) { .routes-embed .routesplit { grid-template-columns: minmax(0, 1fr); } }
 .standby-pt .pm-body, .standby-pt circle:first-of-type { fill: var(--c-surface); }
 .standby-pt.default .pm-body { fill: var(--c-success); }
@@ -1277,7 +1279,8 @@ details.ops > summary { cursor: pointer; font-weight: 600; padding: 6px 0; }
 .kpi-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: var(--sp-3); }
 .kpi { display: flex; flex-direction: column; gap: var(--sp-1); padding: 16px; border: 1px solid var(--c-outline); border-radius: var(--r-r12); background: var(--c-surface); }
 .kpi-l { font-size: 13px; font-weight: 600; color: var(--c-textSecondary); }
-.kpi-v { font-family: var(--font-display); font-size: 34px; line-height: 42px; font-weight: 600; font-variant-numeric: tabular-nums; }
+/* UIUX-E013:大数字不折行(「86.9%」「3972 秒」),窄的时候字号往下收 */
+.kpi-v { font-family: var(--font-display); font-size: clamp(26px, 2.1vw, 34px); line-height: 1.25; font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .kpi-v small { margin-left: 4px; font-size: 16px; font-weight: 500; color: var(--c-textSecondary); }
 .kpi-d { font-size: 13px; font-weight: 600; color: var(--c-textMuted); }
 .kpi-d.good { color: var(--c-success); }
@@ -1357,6 +1360,8 @@ input.invalid { border-color: var(--c-error); }
   /* 第 2 轮 P1-84:剩下不到 44 的 —— 账号按钮、「?」、画面上的按钮、报警筛选片、下拉框和日期框、账号菜单里的项、
      「高级」、用户表里的名字、「重建地图 ▸」这类文字按钮 */
   .who, .help-btn { min-height: 44px; min-width: 44px; }
+  /* UIUX-E026:布防牌、报警数、浮条按钮也到 44 */
+  .armstate, .alarmcount, .alarm-pop .btn { min-height: 44px; }
   .osd .btn, .slot .btn, .chip, .filter-chip, .al-filters button { min-height: 44px; }
   select, input[type="date"], input[type="time"], input[type="datetime-local"] { min-height: 44px; }
   .usermenu .menu button, .usermenu .menu a { min-height: 44px; }
@@ -1368,7 +1373,9 @@ input.invalid { border-color: var(--c-error); }
      (父级不限高,100% 等于不限) —— 写得更具体 */
   .console .ly-main .routesplit > .routeside { max-height: calc(100vh - 220px); overflow-y: auto; }
 }
-.routeside .route-acts { position: sticky; bottom: 0; background: var(--c-surface); padding: 8px 0; z-index: 1; }
+/* UIUX-E012:粘底的操作条有一道上边线,面板底下多留出它的高度,最后一行能滚到它上面 */
+.routeside .route-acts { position: sticky; bottom: 0; background: var(--c-surface); padding: 8px 0; z-index: 1; border-top: 1px solid var(--c-outline); margin-top: auto; }
+.routeside { scroll-padding-bottom: 104px; }
 /* 第 8 轮 W8-01:英文按钮长,放不下就换行(以前「派巡逻」被挤出屏幕) */
 .route-acts { flex-wrap: wrap; row-gap: var(--sp-2); }
 /* P1-66:活动日志的结果 */

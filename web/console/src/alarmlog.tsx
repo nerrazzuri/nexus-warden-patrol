@@ -96,6 +96,8 @@ export function AlarmLogPage(props: { now: number; role: string; me?: string }) 
     .filter((a) => !openOnly || a.resolved_ms == null)
     .sort((a, b) => b.first_ms - a.first_ms);
   const inShift = mine.filter((a) => a.first_ms >= shift);
+  // UIUX-E003:顶栏写「报警 3」、本班却是 0 条 —— 说清还有本班之前没处理的,一下能看到
+  const olderOpen = mine.filter((a) => a.first_ms < shift && a.resolved_ms == null);
 
   async function leave() {
     setErr("");
@@ -119,7 +121,7 @@ export function AlarmLogPage(props: { now: number; role: string; me?: string }) 
         <div class="box r"><b>{alerts == null ? "–" : inShift.filter((a) => a.audience === "intrusion").length}</b><span>{t("alSumIntrusion")}</span></div>
         <div class="note">
           {/* P1-20:自己刚写的不叫「上一班留言」;能改(再发一条顶替,先把原文放进框里) */}
-          <h4>{note ? t(note.author === props.me ? "alNoteMine" : "alNoteFrom", { who: note.author, t: hm(note.at_ms) }) : t("alNoteNone")}</h4>
+          <h2>{note ? t(note.author === props.me ? "alNoteMine" : "alNoteFrom", { who: note.author, t: hm(note.at_ms) }) : t("alNoteNone")}</h2>
           {note && <p>{note.text}</p>}
           {note && note.author === props.me && canNote(props.role) && !draft && (
             <button type="button" class="btn sm" onClick={() => setDraft(note.text)}>{t("alNoteEdit")}</button>
@@ -149,6 +151,16 @@ export function AlarmLogPage(props: { now: number; role: string; me?: string }) 
         <button type="button" class={openOnly ? "chip on" : "chip"} aria-pressed={openOnly} onClick={() => setOpenOnly(!openOnly)}>{t("alOpenOnly")}</button>
       </div>
       {scope === "shift" && truncated && <p class="muted small">{t("alTruncated", { n: LIMIT })}</p>}
+      {scope === "shift" && olderOpen.length > 0 && (
+        <p class="row small al-older" data-al-older="1">
+          <span>{t("alOlderOpen", { n: olderOpen.length })}</span>
+          <button type="button" class="btn sm" onClick={() => {
+            const first = Math.min(...olderOpen.map((a) => a.first_ms));
+            setOpenOnly(true);
+            if (first >= today.since) setScope("today"); else { setDate(dateInput(first)); setScope("date"); }
+          }}>{t("alOlderShow")}</button>
+        </p>
+      )}
       {scope !== "shift" && day && day.key === dayKey && day.total > LIMIT && (
         <p class="row small al-pages" data-al-pages="1">
           <span class="muted">{t("alPageOf", { a: page * LIMIT + 1, b: Math.min((page + 1) * LIMIT, day.total), n: day.total })}</span>
@@ -184,7 +196,7 @@ function Row({ a, onOpen, canHandle }: { a: Alert; onOpen: () => void; canHandle
       )}
       <time class="mono">{hm(a.first_ms)}</time>
       <div class="what">
-        <h5 class={tone}><button type="button" class="linkish" onClick={onOpen}>{alertHeadline(a)}</button></h5>
+        <h2 class={tone}><button type="button" class="linkish" onClick={onOpen}>{alertHeadline(a)}</button></h2>
         {(a.detail || a.context?.where) && <p>{[a.context?.where && !a.context?.zone ? t("atWhere", { w: a.context.where }) : "", a.detail ? siteStr(a.detail) : ""].filter(Boolean).join(" · ")}</p>}
       </div>
       <div class="res">

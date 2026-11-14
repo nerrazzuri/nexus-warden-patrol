@@ -7,11 +7,14 @@ export function Modal({ label, onClose, wide, children, cls }: { label: string; 
   const ref = useRef<HTMLDialogElement>(null);
   useEffect(() => {
     const d = ref.current;
+    // UIUX-E004:记住是谁打开的,关掉以后焦点回到那个按钮(原来掉到 body,键盘用户要从头 Tab)
+    const opener = document.activeElement instanceof HTMLElement && document.activeElement !== document.body ? document.activeElement : null;
     if (d && !d.open) d.showModal();
     // 第 2 轮 setup N12:有要填的就把焦点放在第一个框(标了 autofocus 的优先),不停在右上角关闭按钮上
     const f = d?.querySelector<HTMLElement>("[autofocus]")
       ?? d?.querySelector<HTMLElement>(":scope > :not(.modal-head) :is(input:not([type=hidden]):not([type=checkbox]):not([type=radio]):not([disabled]), select:not([disabled]), textarea:not([disabled]))");
     f?.focus();
+    return () => { if (opener?.isConnected) opener.focus(); };
   }, []);
   return (
     <dialog ref={ref} class={`${wide ? "modal wide" : "modal"}${cls ? ` ${cls}` : ""}`} aria-label={label}
