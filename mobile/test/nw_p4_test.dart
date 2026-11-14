@@ -344,7 +344,7 @@ void main() {
       Map<String, dynamic> row(String key, String kind, String audience, String title) => <String, dynamic>{
             ...base, 'key': key, 'kind': kind, 'audience': audience, 'title': title, 'level': 'P2',
             'acked_by': '', 'acked_ms': null, 'resolved_ms': null, 'robot': 'A'};
-      final api = FakeApi('owner')
+      final api = FakeApi('admin')
         ..alertRows = [
           row('A/disk_80#7', 'disk_80', 'owner', '机器人存储空间不足'),
           row('A/offline#1', 'offline', 'offline', '机器人离线'),
@@ -356,6 +356,35 @@ void main() {
       expect(find.byKey(AlarmLogPage.rowKey('A/disk_80#7')), findsNothing);
       expect(find.byKey(AlarmLogPage.rowKey('A/offline#1')), findsOneWidget);
       expect(find.text('未处理'), findsOneWidget, reason: '只有离线那条是报警');
+      await t.pumpWidget(Container());
+    });
+
+    testWidgets('第 13 轮 W13-02：保安不看管理员的待处理事项；同类合成一条；报警部分有标题和空状态', (t) async {
+      final base = Map<String, dynamic>.from((siteFixture('site_alerts')['alerts'] as List).first as Map);
+      Map<String, dynamic> row(String key, String kind, String audience, String title, {int? resolved, int first = 1}) =>
+          <String, dynamic>{
+            ...base, 'key': key, 'kind': kind, 'audience': audience, 'title': title, 'level': 'P2',
+            'acked_by': '', 'acked_ms': null, 'resolved_ms': resolved, 'robot': 'A', 'first_ms': first};
+      final rows = [
+        for (var i = 0; i < 6; i++)
+          row('A/schedule_blocked#$i', 'schedule_blocked', 'owner', '排程「demo-night」派不了：A 只许手动派', first: 1000 + i),
+        row('-/account_request#1', 'account_request', 'admin', '王小明 申请账号，等你批准'),
+        row('A/offline#1', 'offline', 'offline', '机器人离线', resolved: 5),
+      ];
+      final guard = FakeApi('guard')..alertRows = rows;
+      await t.pumpWidget(MaterialApp(home: Scaffold(body: AlarmLogPage(api: guard))));
+      await t.pumpAndSettle();
+      expect(find.byKey(AlarmLogPage.todoKey), findsNothing, reason: '网页对保安不显示这些');
+      expect(find.text('报警'), findsOneWidget);
+      expect(find.text('没有未处理的报警。'), findsOneWidget);
+      expect(find.byKey(AlarmLogPage.rowKey('A/offline#1')), findsOneWidget, reason: '已解决的照样列在下面');
+      await t.pumpWidget(Container());
+      final admin = FakeApi('admin')..alertRows = rows;
+      await t.pumpWidget(MaterialApp(home: Scaffold(body: AlarmLogPage(api: admin))));
+      await t.pumpAndSettle();
+      expect(find.text('待处理事项（2 条，不是报警）'), findsOneWidget);
+      expect(find.textContaining('共 6 次'), findsOneWidget);
+      expect(find.byKey(AlarmLogPage.todoRowKey('A/schedule_blocked#5')), findsOneWidget, reason: '合成一条，点开最新那次');
       await t.pumpWidget(Container());
     });
 
