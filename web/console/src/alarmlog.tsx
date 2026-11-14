@@ -1,7 +1,7 @@
 // 报警记录页(W44 第一期,设计 §4.5)。上面:本班出的事、还没处理、有人闯入三个数,上一班留的话(谁、几点),
 // 下班前可以给下一班留话。筛选:本班 / 今天 / 选日期 × 全部 / 有人闯入 / 机器人需要帮忙 / 机器人掉线 × 只看没处理的。
 // 每行:抓拍(录像那一刻的一帧)、时间、什么事、结论和谁处理的、看录像 / 去处理。技术类(给管理员的)不列。
-import { siteStr, byText } from "./sitetext";
+import { siteKnown, siteStr, byText } from "./sitetext";
 import { useEffect, useState } from "preact/hooks";
 import { useStored } from "./stored";
 import { AlertDetail, type ToastAction } from "./alertdetail";
@@ -191,7 +191,7 @@ function Row({ a, onOpen, canHandle }: { a: Alert; onOpen: () => void; canHandle
         {/* 第 3 轮 duty N8:有人接手了写谁在处理;处理完带上写的备注 */}
         {open ? (a.acked_by ? t("dutyTakenBy", { who: byText(a.acked_by) }) : t("evOpen")) : verdictText(a)}
         {!open && <small>{[byText(a.resolved_by), a.resolved_ms ? hm(a.resolved_ms) : ""].filter(Boolean).join(" · ")}</small>}
-        {!open && (a.context as { note?: string } | undefined)?.note && <small class="al-note" data-note="1">{(a.context as { note?: string }).note}</small>}
+        {!open && (a.context as { note?: string } | undefined)?.note && <small class="al-note" data-note="1">{siteKnown((a.context as { note?: string }).note)}</small>}
       </div>
       <div>
         {/* 第 2 轮 P0-20:只读账号处理不了,按钮就叫「详情」、不用蓝色主按钮 */}
