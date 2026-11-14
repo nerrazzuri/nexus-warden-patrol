@@ -94,6 +94,12 @@ _TERMINAL = {"task_done": "done", "task_failed": "failed", "task_aborted": "abor
              "task_preempted": "preempted"}
 
 
+def late_note(late_min: int, on_missed: str) -> str:
+    """第 13 轮:过了窗口没跑的那一轮怎么写(以前露 ``on_missed=skip``)。"""
+    then = {"alarm": "已报警", "run_late": "等着补跑"}.get(on_missed, "这一轮不跑了")
+    return f"迟了 {late_min} 分钟，过了时间窗，{then}"
+
+
 class SiteScheduler:
     def __init__(self, db: SiteDB, dispatcher: Dispatcher, *, now_ms: Callable[[], int],
                  time_reference: Callable[[], tuple[int, str] | None] | None = None,
@@ -136,7 +142,7 @@ class SiteScheduler:
             # (只许手动派、没有能派的机器人……)要一起写出来,不然巡逻记录页看着像机器人迟到
             why = self._blocked_note(entry.id, scheduled_ms)
             if why and why not in note:
-                note = f"{note};之前没派出去:{why}"
+                note = f"{note}；之前没派出去：{why}"
         with self.db.tx() as c:
             cur = c.execute("INSERT OR IGNORE INTO schedule_runs(entry_id, scheduled_ms, outcome, "
                             "robot_id, task_id, note, decided_at, told_ms) "
@@ -307,7 +313,7 @@ class SiteScheduler:
         for e, d in decisions:
             if d.kind in (DecisionKind.SKIP, DecisionKind.ALARM) and d.scheduled_ms is not None:
                 self._record(e, d.scheduled_ms, d.kind.value,
-                             note=f"迟了 {d.late_min} 分钟,按 on_missed={e.on_missed}")
+                             note=late_note(d.late_min, e.on_missed))
         for e in act.schedule.entries:
             self._catch_up(e, act, now, now_ms)
         ref = self._ref() if self._ref is not None else None
@@ -355,9 +361,9 @@ class SiteScheduler:
                     (entry.id, occ_ms, *_SETTLED)):
                 continue
             kind = "alarm" if entry.on_missed == "alarm" else "skip"
-            note = (f"迟了 {late} 分钟,按 on_missed={entry.on_missed}(站点那时未在排程:补记)"
+            note = (late_note(late, entry.on_missed) + "（站点那时没在运行，事后补记）"
                     if entry.on_missed != "run_late" else
-                    f"迟了 {late} 分钟,后面还有一轮,run_late 只补最近一轮(补记)")
+                    f"迟了 {late} 分钟，后面还有一轮，只补跑最近一轮（事后补记）")
             self._record(entry, occ_ms, kind, note=note)
 
     def _candidates(self, act: ActiveBundle, entry: ScheduleEntry,
@@ -378,9 +384,9 @@ class SiteScheduler:
             if not reason and self.dispatcher.autonomy(rid) != "autonomous":
                 # W00c6i:避障真机验收之前真狗要人监护 —— 排程是没人在场时也会到点的东西,不派。
                 # W33:站点设成只许手动派的也不派。
-                reason, kind = (f"{rid} 站点设成只许手动派,不接排程"
+                reason, kind = (f"{rid} 站点设成只许手动派，不接排程"
                                 if self.dispatcher.autonomy(rid) == "manual_only"
-                                else f"{rid} 要人监护,不接排程"), "supervised"
+                                else f"{rid} 要人监护，不接排程"), "supervised"
             running = self.dispatcher.busy(rid)
             if not reason and running is not None and not running.startswith(FOREVER_PREFIX):
                 reason, kind = f"{rid} 正在执行{self._task_text(running)}", "busy"
@@ -520,11 +526,10 @@ class SiteScheduler:
                 from nexwar_site.names import schedule_name
                 self._record(entry, scheduled_ms, "displaced",
                              # 第 12 轮 W10-04:写日程名(以前露编号 route-2-1)
-                             note="; ".join(f"{r} 这一拍给了更优先的"
+                             note="；".join(f"{r} 这一拍给了更优先的"
                                             f"「{schedule_name(self.db, claimed[r])}」"
                                             for r in taken)
-                             + (f"(on_missed={entry.on_missed})"
-                                if entry.on_missed == "alarm" else ""))
+                             + ("（错过会报警）" if entry.on_missed == "alarm" else ""))
             elif "busy" in kinds:
                 # 有狗在跑别的任务:等它跑完多半就派得出去(W00c6c 内审阻断 1),不当「没跑」。
                 self._record(entry, scheduled_ms, "busy", note=why)

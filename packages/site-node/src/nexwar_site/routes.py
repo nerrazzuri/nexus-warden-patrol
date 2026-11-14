@@ -216,6 +216,10 @@ class RouteStore:
             # 第 11 轮 W11-01:删掉过的编号。网页、App 新建时跳过它们
             "retired_routes": self._retired("route"),
             "retired_schedules": self._retired("schedule"),
+            # 第 13 轮 W13-03 ①:填了用过的编号时说清是哪条删掉的用过(不是「已经有这个名字」)
+            "retired_titles": {k: {r["id"]: r["title"] for r in self.db.query(
+                "SELECT id, title FROM retired_ids WHERE kind=? AND title != ''", (k,))}
+                for k in ("route", "schedule")},
         }
 
     def _retired(self, kind: str) -> list[str]:
@@ -587,7 +591,7 @@ class RouteStore:
                 raise RouteConflict(f"排程 {entry_id} 已被修改(现在是第 {row['revision']} 版,"
                                     f"你看到的是第 {base} 版):请刷新后再删")
             _retire(tx, "schedule", entry_id,
-                    "SELECT title FROM route_schedules WHERE entry_id=?", now)
+                    "SELECT title, definition FROM route_schedules WHERE entry_id=?", now)
             tx.execute("DELETE FROM route_schedules WHERE entry_id=?", (entry_id,))
             self._touch(tx, by, now)
 
@@ -641,10 +645,14 @@ class RouteStore:
 
 
 def _retire(tx: Any, kind: str, key: str, title_sql: str, now: int) -> None:
-    """第 11 轮 W11-01:删之前记下编号和名字。"""
+    """第 11 轮 W11-01:删之前记下编号和名字。第 13 轮 W13-01:排程连定义一起留(路线、机器人、
+    窗口),今天到过点没跑的那一轮删了以后照样列。"""
     row = tx.execute(title_sql, (key,)).fetchone()
-    tx.execute("INSERT OR REPLACE INTO retired_ids(kind, id, title, deleted_ms) VALUES (?,?,?,?)",
-               (kind, key, str(row["title"] or "") if row is not None else "", now))
+    keys = row.keys() if row is not None else []
+    tx.execute("INSERT OR REPLACE INTO retired_ids(kind, id, title, deleted_ms, definition) "
+               "VALUES (?,?,?,?,?)",
+               (kind, key, str(row["title"] or "") if row is not None else "", now,
+                str(row["definition"] or "") if "definition" in keys else ""))
 
 
 def _not_retired(tx: Any, kind: str, key: str, what: str) -> None:

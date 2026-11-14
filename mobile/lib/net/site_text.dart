@@ -97,7 +97,29 @@ String _preflightList(String s) {
 
 typedef _Rule = (RegExp, String Function(RegExpMatch m));
 
+String _lateEn(String min, String how) {
+  final then = how == 'alarm' ? 'an alarm was raised' : how == 'run_late' ? 'it will run late' : 'this round was skipped';
+  return '$min min late and past the time window, so $then';
+}
+
+const Map<String, String> _lateZh = {'这一轮不跑了': 'skip', '已报警': 'alarm', '等着补跑': 'run_late'};
+const String _afterNote = '; recorded afterwards because the site was not running then';
+
 final List<_Rule> _rules = [
+  // 第 13 轮：排程没跑的说明（站点 scheduler.py；新写法不露 on_missed，老记录照样认）
+  (RegExp(r'^([\s\S]+?)[;；]之前没派出去[:：]([\s\S]+)$'),
+      (m) => '${_en(m[1]!)}. Before that, no robot could be sent: ${_lc(_en(m[2]!))}'),
+  (RegExp(r'^迟了 (\d+) 分钟[,，]按 on_missed=(\w+)[(（]站点那时未在排程[:：]补记[)）]$'),
+      (m) => '${_lateEn(m[1]!, m[2]!)}$_afterNote'),
+  (RegExp(r'^迟了 (\d+) 分钟[,，]按 on_missed=(\w+)$'), (m) => _lateEn(m[1]!, m[2]!)),
+  (RegExp(r'^迟了 (\d+) 分钟[,，]过了时间窗[,，](这一轮不跑了|已报警|等着补跑)[(（]站点那时没在运行[,，]事后补记[)）]$'),
+      (m) => '${_lateEn(m[1]!, _lateZh[m[2]!]!)}$_afterNote'),
+  (RegExp(r'^迟了 (\d+) 分钟[,，]过了时间窗[,，](这一轮不跑了|已报警|等着补跑)$'),
+      (m) => _lateEn(m[1]!, _lateZh[m[2]!]!)),
+  (RegExp(r'^迟了 (\d+) 分钟[,，]后面还有一轮[,，](?:run_late 只补最近一轮|只补跑最近一轮)[(（](?:事后)?补记[)）]$'),
+      (m) => '${m[1]} min late and a later round followed; only the latest round is run late (recorded afterwards)'),
+  (RegExp(r'^(\S+) 站点设成只许手动派[,，]不接排程$'), (m) => '${m[1]} is set to manual dispatch only, so schedules do not send it'),
+  (RegExp(r'^(\S+) 要人监护[,，]不接排程$'), (m) => '${m[1]} needs a person present, so schedules do not send it'),
   (RegExp(r'^跳过 (\d+) 个点[(（]([^)）]*)[)）][:：]\s*([\s\S]*)$'),
       (m) => 'Skipped ${m[1]} ${_pl(m[1]!, 'point', 'points')} (${m[2]}): ${_lc(_en(m[3]!))}'),
   (RegExp(r'^导航拒了[:：]\s*([\s\S]*)$'), (m) => 'Navigation refused: ${_lc(_en(m[1]!))}'),

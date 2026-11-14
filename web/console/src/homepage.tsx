@@ -83,7 +83,10 @@ export function HomePage(props: {
                     {robots.length > 0 && <span class="small">{t("homeTodoRobots", { r: joinList(robots) })}</span>}
                     {/* P2-44:站点原话(带文件路径的技术说明)收起来,要看再点开 */}
                     {a.detail && (adv || pf || siteText(a.detail).raw
-                      ? <details class="todo-detail small"><summary>{t("homeTodoDetail")}</summary><span class="muted">{lang.value === "zh" ? zhPunct(a.detail) : a.detail}</span></details>
+                      ? <details class="todo-detail small"><summary>{t("homeTodoDetail")}</summary>
+                        {/* UIUX-032:英文界面里这是站点的中文原话,先说一声(跟活动日志一样) */}
+                        {lang.value !== "zh" && /[\u4e00-\u9fff]/.test(a.detail) && <span data-raw-note="1">{t("homeRawNote")} </span>}
+                        <span class="muted">{lang.value === "zh" ? zhPunct(a.detail) : a.detail}</span></details>
                       : <span class="muted small">{siteStr(a.detail)}</span>)}
                     <span>{pf ? alertAdvice(a) : t(adv ? adv.todo : "advCallEngineer")}</span>
                   </div>
@@ -142,7 +145,7 @@ export function HomePage(props: {
               </div>
               {/* P0-09:临时撤防要选防区,在授权页做(这里原来一点就整站临时撤防,确认框却说「选中的防区」) */}
               <a class={m.mode === "visitor" ? "btn sm on" : "btn sm"} href="#/admin/access">{t("armNowVisitor")}</a>
-              {props.onWizard && m.state !== "disarmed" && m.mode === "armed" && <PatrolReason onWizard={props.onWizard} />}
+              {m.state !== "disarmed" && m.mode === "armed" && <PatrolReason onWizard={props.onWizard} />}
             </div>
           )}
         </div>

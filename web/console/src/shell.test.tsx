@@ -225,7 +225,8 @@ describe("W6-05 顶栏点布防状态切模式", () => {
     fireEvent.click(c.querySelector("button.armstate")!);
     const menu = c.querySelector("[data-mode-menu]")!;
     const items = Array.from(menu.querySelectorAll("button")).map((b) => b.textContent);
-    expect(items).toEqual(["布防", "留守", "临时撤防"]);
+    // UIUX-035:顶栏这一项是全站 4 小时,跟授权页「按防区临时撤防」分开叫
+    expect(items).toEqual(["布防", "留守", "全站临时撤防 4 小时"]);
     expect((menu.querySelector("button[aria-pressed=true]") as HTMLButtonElement).textContent).toBe("布防");
     fireEvent.click(Array.from(menu.querySelectorAll("button")).find((b) => b.textContent === "留守")!);
     expect(onMode).toHaveBeenCalledWith("home");

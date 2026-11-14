@@ -3,7 +3,7 @@
 import { cleanup, fireEvent, render, waitFor } from "@testing-library/preact";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { setFetch } from "./api";
-import { afterLines, ArmWizard, dailySlots, missingText, needsWizard, PatrolReason, wholeMap, type Readiness } from "./armwizard";
+import { afterLines, ArmWizard, dailySlots, missingText, needsWizard, PatrolReason, patrolHint, wholeMap, type Readiness } from "./armwizard";
 import { lang } from "./i18n";
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
@@ -65,6 +65,13 @@ beforeEach(() => {
   }) as typeof fetch);
 });
 afterEach(cleanup);
+
+/** UIUX-038 起第 3 步默认「手动」:要定时得自己选「每天 … 到 …」那一项。 */
+function pickDaily() {
+  const radio = [...document.querySelectorAll<HTMLInputElement>("input[name=wiz-time]")]
+    .find((x) => x.parentElement?.querySelector("input[type=time]"));
+  fireEvent.click(radio!);
+}
 
 describe("布防向导的小函数", () => {
   it("每天 21:30 到 06:00:跨半夜拆成两段,一周 14 段;不跨半夜一周 7 段", () => {
@@ -182,11 +189,24 @@ describe("布防向导", () => {
     expect(changes).toBe(1);   // 外审 3:背后的布置页要重读,不然再存「全场」会盖掉这个
   });
 
+  it("UIUX-038:时间表关着(手动布防)时第 3 步默认「手动」;不改选项点下一步,时间表不动", async () => {
+    ready.missing = [];
+    const r = render(<ArmWizard say={() => {}} onClose={() => {}} />);
+    await waitFor(() => expect(r.container.ownerDocument.querySelector("[data-wiz-step=confirm]")).not.toBeNull());
+    fireEvent.click(r.getByText(/什么时候布防/));
+    const manual = r.container.ownerDocument.querySelectorAll<HTMLInputElement>("input[name=wiz-time]");
+    expect([...manual].find((x) => x.checked)?.parentElement?.textContent).toContain("手动");
+    fireEvent.click(r.getByText("下一步"));
+    await waitFor(() => expect(r.container.ownerDocument.querySelector("[data-wiz-step=who]")).not.toBeNull());
+    expect(posted.some((p) => p.url === "/api/arming/schedule")).toBe(false);
+  });
+
   it("布防时间:选「每天 21:30 到 06:00」存成启用的时间表", async () => {
     ready.missing = [];
     const r = render(<ArmWizard say={() => {}} onClose={() => {}} />);
     await waitFor(() => expect(r.container.ownerDocument.querySelector("[data-wiz-step=confirm]")).not.toBeNull());
     fireEvent.click(r.getByText(/什么时候布防/));
+    pickDaily();
     fireEvent.click(r.getByText("下一步"));
     await waitFor(() => expect(posted.some((p) => p.url === "/api/arming/schedule")).toBe(true));
     const s = posted.find((p) => p.url === "/api/arming/schedule")!.body;
@@ -239,6 +259,7 @@ describe("布防向导", () => {
     const r = render(<ArmWizard say={() => {}} onClose={() => {}} />);
     await waitFor(() => expect(r.container.ownerDocument.querySelector("[data-wiz-step=confirm]")).not.toBeNull());
     fireEvent.click(r.getByText(/什么时候布防/));
+    pickDaily();
     fireEvent.click(r.getByText("下一步"));
     await waitFor(() => expect(r.getAllByText("保存这个时间").length).toBeGreaterThan(0));
     expect(posted.some((p) => p.url === "/api/arming/schedule")).toBe(false);
@@ -264,6 +285,7 @@ describe("布防向导", () => {
     const r = render(<ArmWizard say={(s) => { said = s; }} onClose={() => {}} />);
     await waitFor(() => expect(r.container.ownerDocument.querySelector("[data-wiz-step=confirm]")).not.toBeNull());
     fireEvent.click(r.getByText(/什么时候布防/));
+    pickDaily();
     fireEvent.click(r.getByText("下一步"));
     await waitFor(() => expect(said).toContain("预演坏了"));
     expect(posted.some((p) => p.url === "/api/arming/schedule")).toBe(false);
@@ -304,5 +326,18 @@ describe("布防着却不巡逻:说原因", () => {
     const r2 = render(<PatrolReason onWizard={() => {}} />);
     await new Promise((ok) => setTimeout(ok, 50));
     expect(r2.container.querySelector("[data-patrol-reason]")).toBeNull();
+  });
+
+  it("UIUX-039:经理 / 保安(开不了向导)也看到原因,不带向导按钮,写找管理员", async () => {
+    const r = render(<PatrolReason />);
+    await waitFor(() => expect(r.container.textContent).toContain("布防着，但机器人不会自己巡逻：值守方案里没有给机器人分配防区路线。"));
+    expect(r.container.textContent).toContain("请联系管理员");
+    expect(r.queryByText("打开布防向导")).toBeNull();
+  });
+
+  it("UIUX-039:顶栏布防后提示 —— patrolHint 缺东西时给一句,齐了给空", async () => {
+    expect(await patrolHint()).toContain("机器人不会自己巡逻");
+    ready.missing = [];
+    expect(await patrolHint()).toBe("");
   });
 });

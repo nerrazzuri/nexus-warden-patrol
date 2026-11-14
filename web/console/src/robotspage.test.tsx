@@ -334,8 +334,42 @@ describe("W71 Nav2 没起来", () => {
     fireEvent.click(cardOf(c, "A"));
     const d = c.querySelector(".robot-detail")!;
     await waitFor(() => expect((d.querySelector('option[value="west-loop"]') as HTMLOptionElement | null)?.disabled).toBe(true));
-    expect(d.querySelector('option[value="west-loop"]')!.textContent).toContain("画在 v11 上，A 用的是 v7");
+    expect(d.querySelector("[data-route-why]")!.textContent).toContain("画在 v11 上，A 用的是 v7");   // UIUX-022:写在下拉外
     expect((d.querySelector('option[value="east-loop"]') as HTMLOptionElement).disabled).toBe(false);
+  });
+
+  it("UIUX-008:机器人详情里灰着的按钮,悬停都说为什么(在巡逻、没原点、没待命点、名字没改)", async () => {
+    robots[0] = card({ task: "sched-1", task_what: "patrol", postures: ["stand", "lie"], home: false, standby: false });
+    const { container: c } = render(<RobotsPage say={(s) => said.push(s)} now={NOW} role="admin" />);
+    await waitFor(() => expect(cardOf(c, "A")).not.toBeNull());
+    fireEvent.click(cardOf(c, "A"));
+    const d = await waitFor(() => { const x = c.querySelector(".robot-detail"); expect(x?.querySelector(".rd-actions")).not.toBeNull(); return x!; });
+    await new Promise((r) => setTimeout(r, 20));
+    const off = Array.from(d.querySelectorAll<HTMLButtonElement>("button:disabled")).filter((b) => !b.closest("dialog"));
+    expect(off.length).toBeGreaterThan(0);
+    for (const b of off) expect(b.title, `「${b.textContent}」灰着却不说为什么`).not.toBe("");
+  });
+
+  it("UIUX-022:唯一一条路线派不了 —— 不默认选上;原因在下拉外整句写出;「派巡逻」灰着", async () => {
+    robots[0] = card({ map: { id: "estate-1", version: "7", match: true } });
+    setFetch(((url: string, init?: RequestInit) => {
+      if (url.startsWith("/api/routes")) return Promise.resolve(json({ routes: [{ id: "demo-loop", map_id: "estate-1", map_version: "11" }] }));
+      if (url.startsWith("/api/robots/overview")) return Promise.resolve(json({ robots, open_revoked: [] }));
+      if (url === "/api/schedule") return Promise.resolve(json({ missions: ["demo-loop"] }));
+      void init;
+      return Promise.resolve(json({}, 404));
+    }) as typeof fetch);
+    const { container: c } = render(<RobotsPage say={(s) => said.push(s)} now={NOW} role="admin" />);
+    await waitFor(() => expect(cardOf(c, "A")).not.toBeNull());
+    fireEvent.click(cardOf(c, "A"));
+    const d = c.querySelector(".robot-detail")!;
+    const why = await waitFor(() => { const x = d.querySelector("[data-route-why]"); expect(x).not.toBeNull(); return x!; });
+    expect(why.textContent).toContain("demo-loop");
+    expect(why.textContent).toContain("画在 v11 上，A 用的是 v7");
+    const opt = d.querySelector('option[value="demo-loop"]')!;
+    expect(opt.textContent).toBe("demo-loop");
+    expect((d.querySelector('select[name="route"]') as HTMLSelectElement).value).toBe("");
+    expect(btn(d, "派巡逻").disabled).toBe(true);
   });
 
   it("W76 开始巡逻可选循环次数(一直巡逻带 loops 0);在跑几圈的巡逻显示第几圈", async () => {

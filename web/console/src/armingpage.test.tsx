@@ -15,6 +15,7 @@ let mode: Record<string, unknown>;
 let posted: { url: string; body: Record<string, unknown> }[];
 let missing: string[] | null;
 
+let fake: typeof fetch;
 beforeEach(() => {
   lang.value = "zh";
   posted = [];
@@ -23,7 +24,7 @@ beforeEach(() => {
   // 中午 12 点:时间表(周一 22–24 点)此刻是撤防
   mode = { mode: "home", label: "按时间表:撤防", source: "schedule", state: "disarmed", next_change_ms: at(22), manual_until_ms: null,
     zones: [{ zone: "北区", armed: true, home_armed: true }] };
-  setFetch(((url: string, init?: RequestInit) => {
+  fake = ((url: string, init?: RequestInit) => {
     if (init?.method === "POST") {
       const body = JSON.parse(String(init.body ?? "{}"));
       posted.push({ url, body });
@@ -46,7 +47,8 @@ beforeEach(() => {
       routes: [{ id: "night", waypoints: [] }, { id: "day", waypoints: [] }],
       schedules: [{ id: "n22", mission: "night", at: "22:00", days: ["mon"], window_min: 30, on_missed: "skip", revision: 1 }] }));
     return Promise.resolve(json({}, 404));
-  }) as typeof fetch);
+  }) as typeof fetch;
+  setFetch(fake);
 });
 afterEach(cleanup);
 
@@ -233,6 +235,37 @@ describe("布防时间页", () => {
     await waitFor(() => expect(posted.find((p) => p.url === "/api/duty-settings")?.body).toEqual({ patrol_return_pct: 40 }));
   });
 
+  it("UIUX-020:电量线还没读到时不标红、不说「要填 20–60」,输入框先灰着", async () => {
+    const waiting: (() => void)[] = [];
+    const release = () => waiting.splice(0).forEach((f) => f());
+    const real = fake;
+    setFetch(((url: string, init?: RequestInit) => {
+      if (url.startsWith("/api/duty-settings") && init?.method !== "POST") {
+        return new Promise<Response>((ok) => { waiting.push(() => ok(json({ shift_hours: [7, 19], stale_hours: 2, patrol_return_pct: 30 }))); });
+      }
+      return (real as typeof fetch)(url, init);
+    }) as typeof fetch);
+    const { container: c } = page();
+    await waitFor(() => expect(c.querySelector('[data-arm-tab="patrols"]')).not.toBeNull());
+    fireEvent.click(c.querySelector('[data-arm-tab="patrols"]')!);
+    const box = await waitFor(() => c.querySelector('input[name="patrolReturn"]') as HTMLInputElement);
+    expect(box.disabled).toBe(true);
+    expect(box.getAttribute("aria-invalid")).not.toBe("true");
+    expect(c.querySelector('[data-patrol-line] [role="alert"]')).toBeNull();
+    release();
+    await waitFor(() => expect(box.value).toBe("30"));
+    expect(box.disabled).toBe(false);
+  });
+
+  it("UIUX-039:经理在布防时间页也看到「不会巡逻」的原因,没有向导按钮,写找管理员", async () => {
+    missing = ["plan"];
+    mode = { ...mode, mode: "armed", source: "manual", state: "armed" };
+    const { container: c } = render(<ArmingPage say={() => {}} now={at(12)} role="owner" />);
+    const bar = await waitFor(() => { const x = c.querySelector("[data-patrol-reason]"); expect(x).not.toBeNull(); return x!; });
+    expect(bar.textContent).toContain("请联系管理员");
+    expect(bar.querySelector("button")).toBeNull();
+  });
+
   it("没存离开有提示", async () => {
     const { container: c } = page();
     await waitFor(() => expect(row(c, 0).querySelector(".armblock")).not.toBeNull());
@@ -265,7 +298,7 @@ describe("布防时间页", () => {
     await waitFor(() => expect(document.querySelector(".modal")).not.toBeNull());
     fireEvent.click(btn(document.querySelector(".modal")!, "布防"));
     await waitFor(() => expect(posted.filter((p) => p.url === "/api/mode").map((p) => p.body.mode)).toEqual(["home", "armed"]));
-    expect(now().querySelector('a[href="#/admin/access"]')!.textContent).toContain("临时撤防");
+    expect(now().querySelector('a[href="#/admin/access"]')!.textContent).toBe("按防区临时撤防…");
   });
 
   it("外审 1 #3:这页有没存的布防时间,打开向导先问(向导存的不会被旧草稿盖回去)", async () => {
@@ -469,6 +502,8 @@ describe("第 2 轮 config N4", () => {
     const { container: c } = render(<ArmingPage say={() => {}} now={Date.now()} role="owner" />);
     await waitFor(() => expect(c.querySelector("[data-no-visitor]")).not.toBeNull());
     expect(c.querySelector('a[href="#/admin/access"]')).toBeNull();
+    // UIUX-035:写清经理能做的(顶栏全站 4 小时)和不能做的(按防区)
+    expect(c.querySelector("[data-no-visitor]")!.textContent).toBe("按防区临时撤防（来访、施工）由管理员设置；要全站临时撤防 4 小时，用顶栏的布防菜单。");
   });
 });
 

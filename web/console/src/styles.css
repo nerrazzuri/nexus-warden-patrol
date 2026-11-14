@@ -1245,7 +1245,7 @@ details.ops > summary { cursor: pointer; font-weight: 600; padding: 6px 0; }
 .guard-tl-duty { background: var(--c-success, #3a8f5c); }
 .guard-tl-topup { background: var(--c-warning); }
 /* W73 第五期 外部设备 */
-.device-form { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.device-form { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; align-items: flex-end; }
 .device-form input { width: 9em; }
 .device-secret { word-break: break-all; font-family: var(--font-mono, monospace); font-size: 0.9em; }
 
@@ -1474,7 +1474,7 @@ input[type="date"]:not(.field input) { height: 36px; padding: 0 8px; border-radi
 .duty-row-more, .duty-list > li > [data-robot-patrol] { align-self: center; flex: none; }
 /* 第 2 轮 P1-28 / admin N7:红色按钮禁用后看着跟能点一样 —— 跟别的禁用按钮一样变灰 */
 .btn.danger:disabled, .btn.stop:disabled, .rd-actions .rd-danger:disabled, .btn.rd-danger:disabled {
-  color: var(--c-textMuted); background: transparent; border-color: var(--c-outline); opacity: 0.7; }
+  color: var(--c-textMuted); background: transparent; border-color: var(--c-outline); opacity: 1; border-style: dashed; }
 /* 第 2 轮 P1-10:画面底栏一行放不下就截(…),不折成两行压住「● 实时」 */
 .slot-foot { flex-wrap: nowrap; overflow: hidden; white-space: nowrap; }
 .slot-foot > span { flex: none; }
@@ -1542,7 +1542,9 @@ input[type="file"] { max-width: 100%; min-width: 0; }            /* 上传按钮
 .nogo-line.vwall-line, .draft-line.vwall { stroke: var(--c-warning); }
 /* 第 3 轮 config N9:普通按钮不能点时只换了字色,跟能点时几乎一样(导出表格、重启站点服务、发测试推送)。
    统一变淡 + 禁止光标;主按钮(灰底)那条更具体,不受影响 */
-.btn:disabled { opacity: 0.5; cursor: not-allowed; }
+/* UIUX-008:以前再叠 opacity 0.5,灰字叠半透明只有约 2.2:1,看不清写的是什么 —— 字色用 textMuted 原色(够对比度),
+   换成虚线边框跟能点的区分开;为什么不能点写在 title / 旁注里 */
+.btn:disabled { opacity: 1; cursor: not-allowed; color: var(--c-textMuted); border-style: dashed; }
 /* 第 3 轮 config N10:KPI 卡片下面紧接着「巡逻 / 误报 / 机器人问题」一排,卡片加了说明变高后上下贴住 */
 .kpi-groups + .rep-stats, .kpi-groups ~ .rep-stats { margin-top: 16px; }
 .rep-stats + * { margin-top: 16px; }

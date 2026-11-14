@@ -245,6 +245,18 @@ describe("第 3 轮 duty N8", () => {
     expect(c.textContent).toContain("gina");
     expect(c.querySelector('[data-note]')!.textContent).toBe("门没锁好");
   });
+
+  it("UIUX-032:英文界面里站点写的备注(「B 补跑了」)翻成英文;人写的照原样", async () => {
+    lang.value = "en";
+    try {
+      alerts = [
+        alert({ key: "b", resolved_ms: NOW - 1000, resolved_by: "system", verdict: "handled", context: { note: "B 补跑了" } } as Partial<Alert>),
+      ];
+      const { container: c } = page();
+      await waitFor(() => expect(c.querySelector("[data-note]")).not.toBeNull());
+      expect(c.querySelector("[data-note]")!.textContent).toBe("B ran it late");
+    } finally { lang.value = "zh"; }
+  });
 });
 
 describe("第 4 轮 layout r3-N3 / N6", () => {

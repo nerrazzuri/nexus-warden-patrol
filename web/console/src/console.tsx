@@ -19,7 +19,7 @@ import { FELL_KINDS, forGuard, isOwnerLike, queue, robotCams, robotState, type A
 import { AlarmLogPage } from "./alarmlog";
 import { HelpDialog, WEB_TOUR } from "./guide";
 import { ArmingPage } from "./armingpage";
-import { ArmWizard, needsWizard, wt } from "./armwizard";
+import { ArmWizard, needsWizard, patrolHint, wt } from "./armwizard";
 import { DutyPage } from "./duty";
 import { LiveWall } from "./livewall";
 import { DrillNote } from "./alerttest";
@@ -111,12 +111,14 @@ export function Console({ me, onOut }: { me: Me; onOut: (note?: string) => void 
     toastTimer.current = window.setTimeout(() => { setToast(""); setToastAct(null); },
       act ? 20_000 : Math.min(15_000, Math.max(6000, s.length * 90)));
   };
-  const act = async (fn: () => Promise<unknown>) => {
+  const act = async (fn: () => Promise<unknown>): Promise<boolean> => {
     try {
       await fn();
       await refresh();
+      return true;
     } catch (e) {
       say(t("failed", { why: e instanceof ApiError ? e.message : String(e) }));
+      return false;
     }
   };
 
@@ -263,9 +265,15 @@ export function Console({ me, onOut }: { me: Me; onOut: (note?: string) => void 
 
       {pending?.kind === "mode" && (
         <Confirm text={t(pending.mode === "armed" ? "modeArmConfirm" : pending.mode === "home" ? "modeHomeConfirm" : "modeVisitorAllConfirm")}
-          yes={t(pending.mode === "armed" ? "modeArmed" : pending.mode === "home" ? "modeHome" : "modeVisitor")}
+          yes={t(pending.mode === "armed" ? "modeArmed" : pending.mode === "home" ? "modeHome" : "modeVisitorAll")}
           onNo={() => setPending(null)}
-          onYes={() => { const m = pending.mode; setPending(null); void act(() => api("POST", "/api/mode", { mode: m })); }} />
+          onYes={() => {
+            const m = pending.mode; setPending(null);
+            void act(() => api("POST", "/api/mode", { mode: m })).then((ok) => {
+              // UIUX-039:开不了向导的角色布防后,机器人不会自己巡逻也要说一声(管理员缺东西时上面就进了向导)
+              if (ok && m === "armed" && !admin) void patrolHint().then((h) => { if (h) say(h); });
+            });
+          }} />
       )}
       {wiz && <ArmWizard say={say} arming={wiz === "arm"} onChanged={() => { wizChanged.current = true; }}
         onClose={() => { setWiz(null); if (wizChanged.current) { wizChanged.current = false; setPageGen((g) => g + 1); } }} />}

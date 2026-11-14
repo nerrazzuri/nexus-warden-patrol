@@ -128,7 +128,8 @@ function Visitor({ mode, zones, say, onDone }: { mode: ModeView | null; zones: s
   }
   return (
     <section class="panel acc-visitor">
-      <h2>{t("modeVisitor")}</h2>
+      {/* UIUX-035:这一块是按防区的,跟顶栏「全站临时撤防 4 小时」分开叫 */}
+      <h2>{t("accVisitorTitle")}</h2>
       <p class="muted small">{t("accVisitorHint")}</p>
       {on ? (
         <div class="row">

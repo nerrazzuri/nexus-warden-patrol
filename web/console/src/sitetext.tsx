@@ -89,16 +89,26 @@ function notReadyList(s: string): string {
   }).join("; ");
 }
 
+const LATE_ZH: Record<string, string> = { "这一轮不跑了": "skip", "已报警": "alarm", "等着补跑": "run_late" };
+function lateEn(min: string, how: string): string {
+  const then = how === "alarm" ? "an alarm was raised" : how === "run_late" ? "it will run late" : "this round was skipped";
+  return `${min} min late and past the time window, so ${then}`;
+}
+
 type Rule = [RegExp, (m: RegExpMatchArray) => string];
 
 const RULES: Rule[] = [
   // 日志设计 第 2 条(用户 11-10「为什么只显示中文」):日程没跑、被挡下的原因(site scheduler.py、dispatcher.py)
   [/^([\s\S]+?)[;；]之前没派出去[:：]([\s\S]+)$/, (m) => `${trParts(m[1])}. Before that, no robot could be sent: ${lc(trParts(m[2]))}`],
+  // 第 13 轮:不再露 on_missed=skip(老记录照样认,也说人话)
   [/^迟了 (\d+) 分钟[,，]按 on_missed=(\w+)[(（]站点那时未在排程[:：]补记[)）]$/,
-    (m) => `${m[1]} min late, so not run (on_missed=${m[2]}); recorded afterwards because the site was not running then`],
-  [/^迟了 (\d+) 分钟[,，]按 on_missed=(\w+)$/, (m) => `${m[1]} min late, so not run (on_missed=${m[2]})`],
-  [/^迟了 (\d+) 分钟[,，]后面还有一轮[,，]run_late 只补最近一轮[(（]补记[)）]$/,
-    (m) => `${m[1]} min late and a later round followed; run_late only catches up the latest round (recorded afterwards)`],
+    (m) => `${lateEn(m[1], m[2])}; recorded afterwards because the site was not running then`],
+  [/^迟了 (\d+) 分钟[,，]按 on_missed=(\w+)$/, (m) => lateEn(m[1], m[2])],
+  [/^迟了 (\d+) 分钟[,，]过了时间窗[,，](这一轮不跑了|已报警|等着补跑)[(（]站点那时没在运行[,，]事后补记[)）]$/,
+    (m) => `${lateEn(m[1], LATE_ZH[m[2]])}; recorded afterwards because the site was not running then`],
+  [/^迟了 (\d+) 分钟[,，]过了时间窗[,，](这一轮不跑了|已报警|等着补跑)$/, (m) => lateEn(m[1], LATE_ZH[m[2]])],
+  [/^迟了 (\d+) 分钟[,，]后面还有一轮[,，](?:run_late 只补最近一轮|只补跑最近一轮)[(（](?:事后)?补记[)）]$/,
+    (m) => `${m[1]} min late and a later round followed; only the latest round is run late (recorded afterwards)`],
   [/^(\S+) 站点设成只许手动派[,，]不接排程$/, (m) => `${m[1]} is set to manual dispatch only, so schedules do not send it`],
   [/^(\S+) 要人监护[,，]不接排程$/, (m) => `${m[1]} needs a person present, so schedules do not send it`],
   // 第 12 轮 W10-04:站点改写人话(日程名 / 一直巡逻 / 临时巡逻);老的编号照旧
@@ -131,7 +141,7 @@ const RULES: Rule[] = [
   [/^(\S+) 的状态不新鲜/, (m) => `${m[1]} has not reported recently`],
   [/^(\S+) 被 (\S+) 叫停了/, (m) => `${m[1]} was stopped by ${m[2]}; press Resume before sending it`],
   [/^(\S+) 未就绪[:：]\s*(.*)$/, (m) => `${m[1]} is not ready (${notReadyList(m[2])})`],
-  [/^(\S+) 这一拍给了更优先的「([^」]*)」(?:[(（]on_missed=\w+[)）])?$/, (m) => `${m[1]} was given to the higher-priority schedule “${m[2]}”`],
+  [/^(\S+) 这一拍给了更优先的「([^」]*)」(?:[(（](?:on_missed=\w+|错过会报警)[)）])?$/, (m) => `${m[1]} was given to the higher-priority schedule “${m[2]}”`],
   [/^(\S+) 这一拍给了更优先的 (\S+)$/, (m) => `${m[1]} was given to the higher-priority ${m[2]}`],
   [/^(\S+) 加载的地图是 '([^']*)'[,，]任务要 '([^']*)'$/, (m) => `${m[1]} has map “${m[2]}” loaded; the patrol needs “${m[3]}”`],
   [/^站点的钟跟 (\S+) 差 (\d+) 秒$/, (m) => `The site clock is ${m[2]} s off from ${m[1]}`],

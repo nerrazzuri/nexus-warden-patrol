@@ -6,7 +6,7 @@ import { useCallback, useEffect, useRef, useState } from "preact/hooks";
 import { api, ApiError, enc } from "./api";
 import { Confirm } from "./dialogs";
 import { startDrag, clickGuard, swallowClick } from "./dragpt";
-import { colon, t, type Key } from "./i18n";
+import { colon, joinList, t, type Key } from "./i18n";
 import { SaveCancelled, type OwnLayer } from "./layoutpage";
 import { MapCanvas } from "./mapcanvas";
 import { PoseMarker } from "./posemarker";
@@ -141,6 +141,7 @@ export function RoutesPage({ say, embed, kind = "patrol" }: { say: Say; embed?: 
 
   const routes = view?.routes ?? [];
   const [allIds, setAllIds] = useState<string[]>([]);
+  const [retired, setRetired] = useState<{ ids: string[]; titles: Record<string, string> }>({ ids: [], titles: {} });
   const autoId = () => freeId("route", [...allIds, ...routes.map((r) => r.id)], view, "route");
   // 第 8 轮 W8-08:这一版上没有路线时,看同一张图的别的版本上有没有(有就说在哪一版,客户以为路线丢了)
   const [elsewhere, setElsewhere] = useState<Route[]>([]);
@@ -199,8 +200,10 @@ export function RoutesPage({ say, embed, kind = "patrol" }: { say: Say; embed?: 
     setDraft({ id: "", title: "", isNew: true, base: 0, points: [], policy: {}, map: mapKey });
     // 第 8 轮 W8-11:写中文名时自动给编号 —— 编号全站唯一(别的图、别的版本上的也算)
     // 第 11 轮 W11-01:删掉过的编号也算用过
-    api<RouteView>("GET", "/api/routes").then((v) => setAllIds([...v.routes.map((x) => x.id), ...(v.retired_routes ?? [])]))
-      .catch(() => setAllIds([]));
+    api<RouteView>("GET", "/api/routes").then((v) => {
+      setAllIds([...v.routes.map((x) => x.id), ...(v.retired_routes ?? [])]);
+      setRetired({ ids: v.retired_routes ?? [], titles: v.retired_titles?.route ?? {} });
+    }).catch(() => { setAllIds([]); setRetired({ ids: [], titles: {} }); });
     setOrig(undefined);
     setPi(null);
     setProblems([]);
@@ -338,13 +341,17 @@ export function RoutesPage({ say, embed, kind = "patrol" }: { say: Say; embed?: 
 
   // 第 12 轮 W11-01:查全站(别的版本上的、删掉用过的编号),不是只查这一版
   const nameTaken = !!draft?.isNew && (routes.some((r) => r.id === draft.id) || allIds.includes(draft.id));
+  // 第 13 轮 W13-03 ①:撞的是删掉的那条用过的编号 —— 站点上没有这条路线,说清是谁用过
+  const retiredHit = nameTaken && !!draft && retired.ids.includes(draft.id) && !routes.some((r) => r.id === draft.id);
+  const takenMsg = !retiredHit ? rt("routeNameTaken")
+    : retired.titles[draft!.id] ? rt("routeIdRetired", { title: retired.titles[draft!.id] }) : rt("routeIdRetiredNoName");
   const canSave = !!draft && dirty && pts.length > 0 && NAME_RE.test(draft.id) && !nameTaken;
   useEffect(() => { embed?.setDirty(dirty); }, [dirty]);
   useEffect(() => {
     if (!embed) return;
     // 第 2 轮 P1-39 / layout N3:有改动但存不了(名字不对、重名、没有点)时按顶上「保存」说清为什么,不是没反应
     const why = !draft || !dirty ? null
-      : nameTaken ? rt("routeNameTaken")
+      : nameTaken ? takenMsg
       : !NAME_RE.test(draft.id) ? rt("routeNameHint")
       : pts.length === 0 ? rt("routeNoPoints") : null;
     embed.registerSave(canSave ? () => save(true)
@@ -482,13 +489,14 @@ export function RoutesPage({ say, embed, kind = "patrol" }: { say: Say; embed?: 
                   <label class="routename">
                     <span class="small">{rt("routeName")}</span>
                     <input aria-label={rt("routeName")} placeholder={rt("routeName")} value={draft.title || draft.id} maxLength={40} ref={nameBox}
+                      aria-invalid={nameTaken || undefined}
                       onInput={(e) => {
                         // 第 8 轮 W8-11:只有字母数字的当编号;写了中文(或别的)当显示名,编号自动给
                         const v = e.currentTarget.value.trim();
                         setDraft((d) => (d ? (NAME_RE.test(v) || !v ? { ...d, id: v, title: "" } : { ...d, id: autoId(), title: v }) : d));
                       }} />
                     <span class={`small${nameTaken ? " bad" : " muted"}`} data-route-id-hint="1">
-                      {nameTaken ? rt("routeNameTaken") : draft.title ? rt("routeAutoId", { id: draft.id }) : rt("routeNameHint")}
+                      {nameTaken ? takenMsg : draft.title ? rt("routeAutoId", { id: draft.id }) : rt("routeNameHint")}
                     </span>
                   </label>
                 ) : (
@@ -782,6 +790,20 @@ function SchedulePanel({ route, view, schedules, say, reload, inPanel }: {
   };
   const idTaken = all.some((x) => x.id === id.trim()) || (view?.retired_schedules ?? []).includes(id.trim());
   const sameTime = schedules.some((x) => x.at === at && x.days.some((d) => days.includes(d)));
+  // UIUX-018:哪一格不对就在那一格下面说;动过的格子才说(刚加完清空的「几点开始」不当场标红),
+  // 「加排程」灰着时旁边写还差哪几样
+  const [touched, setTouched] = useState<Set<string>>(new Set());
+  const touch = (k: string) => setTouched((s) => (s.has(k) ? s : new Set(s).add(k)));
+  const bad = {
+    id: !NAME_RE.test(id.trim()) ? rt("schedErrId") : "",
+    at: !/^([01][0-9]|2[0-3]):[0-5][0-9]$/.test(at) ? rt("schedErrAt") : "",
+    days: days.length === 0 ? rt("schedErrDays") : "",
+    win: !(win >= 1 && win <= 1440) ? rt("schedErrWin") : "",
+  };
+  const label = { id: rt("schedId"), at: rt("schedAt"), days: rt("schedDays"), win: rt("schedWindow") };
+  const missing = (Object.keys(bad) as (keyof typeof bad)[]).filter((k) => bad[k]).map((k) => label[k]);
+  const err = (k: keyof typeof bad) => touched.has(k) && bad[k]
+    ? <span class="error small" data-sched-err={k}>{bad[k]}</span> : null;
   return (
     <>
       {/* 第 4 轮 r2-config-N3:放在「巡逻日程」面板里时面板已有标题,不再标一次 */}
@@ -814,25 +836,30 @@ function SchedulePanel({ route, view, schedules, say, reload, inPanel }: {
             if (idTaken) return;
             void call(`/api/route-schedules/${enc(id.trim())}`, { mission: route, at, days, window_min: win, on_missed: missed, base_revision: 0, ...(robot ? { robot } : {}), ...(title ? { title } : {}) }, rt("schedSaved"))
               // 加好了换下一个编号(列表刷新后挑),不留着旧的;第 4 轮 r3-config-N6:开始时间也清掉(不然黄字「这个时间已有」指的就是刚加的)
-              .then((ok) => { if (ok) { setAutoId(true); setAt(""); setTitle(""); } });
+              .then((ok) => { if (ok) { setAutoId(true); setAt(""); setTitle(""); setTouched(new Set()); } });
           }}>
-            <label class="field">{rt("schedId")}<input value={title || id} maxLength={64} aria-invalid={idTaken || undefined} onInput={(e) => {
+            <label class="field">{rt("schedId")}<input value={title || id} maxLength={64} aria-invalid={idTaken || (touched.has("id") && !!bad.id) || undefined} onInput={(e) => {
               const v = e.currentTarget.value;
+              touch("id");
               if (!v.trim() || NAME_RE.test(v.trim())) { setTitle(""); setAutoId(false); setId(v); } else { setTitle(v.trim()); setAutoId(true); }
             }} />
               {title && <span class="muted small" data-sched-auto-id="1">{rt("routeAutoId", { id })}</span>}
-              {idTaken && <span class="error small" role="alert" data-sched-dup="1">{rt("schedIdTaken")}</span>}</label>
+              {idTaken && <span class="error small" role="alert" data-sched-dup="1">{rt("schedIdTaken")}</span>}
+              {!idTaken && err("id")}</label>
             {/* P1-03:时间一律 24 小时制(浏览器的时间框可能按系统显示成上午 / 下午) */}
             <label class="field">{rt("schedAt")}<input name="at" type="text" inputMode="numeric" pattern="([01][0-9]|2[0-3]):[0-5][0-9]" placeholder="21:00"
-              maxLength={5} value={at} onInput={(e) => setAt(e.currentTarget.value)} /></label>
+              maxLength={5} value={at} aria-invalid={(touched.has("at") && !!bad.at) || undefined}
+              onInput={(e) => { touch("at"); setAt(e.currentTarget.value); }} />{err("at")}</label>
             <fieldset class="checks row-wrap">
               <legend>{rt("schedDays")}</legend>
               {DAYS.map((d) => (
                 <label key={d}><input type="checkbox" checked={days.includes(d)}
-                  onChange={() => setDays(days.includes(d) ? days.filter((x) => x !== d) : [...days, d])} /> {t(d)}</label>
+                  onChange={() => { touch("days"); setDays(days.includes(d) ? days.filter((x) => x !== d) : [...days, d]); }} /> {t(d)}</label>
               ))}
+              {err("days")}
             </fieldset>
-            <label class="field">{rt("schedWindow")}<input type="number" min="1" max="1440" value={win} onInput={(e) => setWin(Number(e.currentTarget.value))} /></label>
+            <label class="field">{rt("schedWindow")}<input type="number" min="1" max="1440" value={win} aria-invalid={(touched.has("win") && !!bad.win) || undefined}
+              onInput={(e) => { touch("win"); setWin(Number(e.currentTarget.value)); }} />{err("win")}</label>
             <label class="field">{rt("schedRobot")}
               <select name="schedRobot" value={robot} onChange={(e) => setRobot(e.currentTarget.value)}>
                 <option value="">{rt("schedAnyRobot")}</option>
@@ -848,7 +875,8 @@ function SchedulePanel({ route, view, schedules, say, reload, inPanel }: {
             </label>
             <p class="muted small">{rt("schedNote")}</p>
             {sameTime && <p class="warn small" data-sched-same="1">{rt("schedSameTime", { at })}</p>}
-            <button type="submit" class="btn sm sched-add" disabled={!NAME_RE.test(id.trim()) || idTaken || days.length === 0 || !(win >= 1) || !/^([01][0-9]|2[0-3]):[0-5][0-9]$/.test(at)}>{rt("schedAdd")}</button>
+            <button type="submit" class="btn sm sched-add" disabled={idTaken || missing.length > 0}>{rt("schedAdd")}</button>
+            {missing.length > 0 && <p class="small muted" role="status" data-sched-missing="1">{rt("schedMissing", { what: joinList(missing) })}</p>}
           </form>
         </>
       )}

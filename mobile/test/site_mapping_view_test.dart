@@ -195,6 +195,23 @@ void main() {
     expect(recordInfoText({'recording': false, 'last_record': <String, dynamic>{}}), '', reason: '老代理没给');
   });
 
+  testWidgets('第 13 轮 W13-03 ③：标题写「estate-1 · 第 9 版」；还没画区域说「还没画禁行区」、不说「区域第 0 版」', (t) async {
+    final api = FakeApi('admin')
+      ..zonesView = <String, dynamic>{'revision': 0, 'zones': <dynamic>[], 'confirmed': null, 'confirm_text': 'x'};
+    await t.pumpWidget(MaterialApp(home: SiteMapPreviewPage(api: api, mapId: 'estate-1', version: '9')));
+    await t.pumpAndSettle();
+    expect(find.text('estate-1 · 第 9 版'), findsOneWidget);
+    expect(find.textContaining('estate-1:9'), findsNothing);
+    expect(find.textContaining('区域第 0 版'), findsNothing);
+    expect(find.textContaining('还没画禁行区'), findsOneWidget);
+    api.zonesView = <String, dynamic>{'revision': 3, 'zones': <dynamic>[], 'confirm_text': 'x',
+        'confirmed': {'revision': 2, 'by': 'alice', 'at_ms': 1, 'current': false}};
+    await t.pumpWidget(const SizedBox());
+    await t.pumpWidget(MaterialApp(home: SiteMapPreviewPage(api: api, mapId: 'estate-1', version: '9')));
+    await t.pumpAndSettle();
+    expect(find.textContaining('区域第 3 版 · 改过没确认：确认后才能下发'), findsOneWidget);
+  });
+
   test('轨迹画布：点按比例缩进画布、起点在里面', () {
     final p = TrailPainter(const [Offset(0, 0), Offset(10, 0), Offset(10, 5)]);
     final m = p.layout(const Size(220, 120));

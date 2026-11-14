@@ -148,10 +148,10 @@ const MAPS = { maps: [{ map_id: "m1", version: "1", note: "", created_ms: 0, sou
 
 type Posted = { path: string; body: any };
 function routesApi(opts: { meta: PreviewMeta; routes?: any[]; timezone?: string | null; schedules?: any[]; post?: (path: string, body: any) => Response | undefined;
-  check?: (body: any) => Response; retired?: string[] }) {
+  check?: (body: any) => Response; retired?: string[]; retiredTitles?: Record<string, string> }) {
   const posted: Posted[] = [];
   const view = () => ({ revision: 3, timezone: opts.timezone ?? null, routes: opts.routes ?? [], schedules: opts.schedules ?? [],
-    retired_routes: opts.retired ?? [] });
+    retired_routes: opts.retired ?? [], retired_titles: { route: opts.retiredTitles ?? {} } });
   setFetch((async (url: RequestInfo | URL, init?: RequestInit) => {
     const u = String(url);
     if (u.endsWith("/api/maps")) return json(MAPS);
@@ -200,10 +200,21 @@ describe("第 12 轮 W11-01 新建路线编号查全站", () => {
     await waitFor(() => expect(r.getByText("A route with this name already exists on the site.")).toBeTruthy());
     fireEvent.input(r.getByPlaceholderText("Route name"), { target: { value: "route-1" } });
     await tick();
-    expect(r.getByText("A route with this name already exists on the site.")).toBeTruthy();
+    // 第 13 轮 W13-03 ①:删掉用过的说清是删掉的那条用过
+    expect(r.getByText("This number was used by a deleted route. Pick another.")).toBeTruthy();
     fireEvent.input(r.getByPlaceholderText("Route name"), { target: { value: "fresh" } });
     await tick();
     expect(r.queryByText("A route with this name already exists on the site.")).toBeNull();
+  });
+});
+
+// 第 13 轮 W13-03 ①:删掉的路线用过的编号 —— 不说「已经有这个名字」(站点上并没有),说清是谁用过
+describe("第 13 轮 W13-03 删掉用过的编号", () => {
+  it("提示写已删的那条叫什么;输入框标 aria-invalid", async () => {
+    const { r } = await openNew(META, "route-1", { retired: ["route-1"], retiredTitles: { "route-1": "二楼夜巡" } });
+    await waitFor(() => expect(r.getByText("This number was used by the deleted route “二楼夜巡”. Pick another.")).toBeTruthy());
+    expect(r.queryByText("A route with this name already exists on the site.")).toBeNull();
+    expect(r.getByPlaceholderText("Route name").getAttribute("aria-invalid")).toBe("true");
   });
 });
 
@@ -653,6 +664,33 @@ describe("路线页:站点的回答", () => {
     await waitFor(() => expect(posted.length).toBe(2));
     expect(posted[1].path).toContain("/api/route-schedules/n1/delete");
     expect(posted[1].body).toEqual({ base_revision: 7 });
+  });
+
+  it("UIUX-018:填错的格子各自说为什么;「加排程」变灰时旁边写还差什么", async () => {
+    installScreenCTM();
+    routesApi({ meta: META, routes: [ROUTE], timezone: "UTC", schedules: [] });
+    const r = render(<RoutesPage say={() => {}} />);
+    await ready(r.container);
+    await waitFor(() => expect(r.getByText("loop")).toBeTruthy());
+    fireEvent.click(r.getByText("loop"));
+    await waitFor(() => expect(r.getByText("Add schedule")).toBeTruthy());
+    const form = r.container.querySelector(".sched-form")!;
+    expect(form.querySelectorAll("[data-sched-err]").length).toBe(0);
+    fireEvent.input(form.querySelector('input[type="number"]')!, { target: { value: "0" } });
+    for (const box of Array.from(form.querySelectorAll<HTMLInputElement>('fieldset input[type="checkbox"]'))) fireEvent.click(box);
+    fireEvent.input(form.querySelector('input[name="at"]')!, { target: { value: "25:00" } });
+    await tick();
+    const errs = Array.from(form.querySelectorAll("[data-sched-err]")).map((x) => x.textContent);
+    expect(errs).toEqual(["Write it as 21:00 (24-hour clock).", "Pick at least one day.", "Enter 1 to 1440 minutes."]);
+    expect(form.querySelector('input[type="number"]')!.getAttribute("aria-invalid")).toBe("true");
+    expect((r.getByText("Add schedule") as HTMLButtonElement).disabled).toBe(true);
+    expect(form.querySelector("[data-sched-missing]")!.textContent).toBe("Still missing: Start at, Days, Late window (min)");
+  });
+
+  it("UIUX-017:排程一行的「删除」跟别的在同一行(5 列网格)", async () => {
+    const css = (await import("node:fs")).readFileSync(`${process.cwd()}/src/routes.css`, "utf8");
+    const rule = /\.sched-list li \{[^}]*grid-template-columns:\s*([^;]+);/.exec(css)![1].trim().split(/\s+(?![^(]*\))/);
+    expect(rule.length).toBe(5);
   });
 
   it("第 2 轮 config N2 / N3:编号自动给;用过的当场说、不发;同一时间重复排有提醒", async () => {

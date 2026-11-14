@@ -25,7 +25,10 @@ from typing import Any
 #: 74 W74 三期:地图标注 map_marks —— 出口线、易藏点(只加表);外审 r2:值守进度 guard_runs.follow
 #:    记看见人这一回的跟人(只加列)。
 #: 75 第 8 轮 W8-11:路线、排程的显示名 routes.title / route_schedules.title(能写中文;只加列)。
-SCHEMA_VERSION = 76
+#: 76 第 11 轮 W11-01:删掉的路线、排程 retired_ids(只加表)。
+#: 77 第 13 轮 W13-01:删掉的排程留着当时的定义 retired_ids.definition
+#:    (今天没跑的那一轮删了照样列;只加列)。
+SCHEMA_VERSION = 77
 
 _DDL = """
 CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
@@ -621,6 +624,7 @@ CREATE TABLE IF NOT EXISTS retired_ids (
     id          TEXT NOT NULL,
     title       TEXT NOT NULL DEFAULT '',
     deleted_ms  INTEGER NOT NULL,
+    definition  TEXT NOT NULL DEFAULT '',
     PRIMARY KEY (kind, id)
 );
 -- 运营可视化(库 59):定位丢了 / 变差的每一段(loc_history.py)。有界:每台机器人 500 段、全站 5000 段、
@@ -1014,6 +1018,7 @@ _ADDED_COLUMNS = (
     # 第 8 轮 W8-11(库 75):给人看的名字(能写中文);编号还是 ASCII(照片文件名、任务包里用)
     ("routes", "title", "TEXT NOT NULL DEFAULT ''"),
     ("route_schedules", "title", "TEXT NOT NULL DEFAULT ''"),
+    ("retired_ids", "definition", "TEXT NOT NULL DEFAULT ''"),           # 库 77 第 13 轮 W13-01
 )
 
 
