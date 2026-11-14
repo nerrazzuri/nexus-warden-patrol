@@ -78,7 +78,7 @@ async def test_外审R1_导航把实测转速和上一拍发的转速都交给�
     seen = []
 
     class 守卫:
-        def check(self, vx, wz, v_meas, view, pose, *, w_now=(), moving=()):
+        def check(self, vx, wz, v_meas, view, pose, *, w_now=(), moving=(), free_s=None):
             seen.append(tuple(w_now))
             return NS(ok=True, reason="", hits=(), unknown=0)
 

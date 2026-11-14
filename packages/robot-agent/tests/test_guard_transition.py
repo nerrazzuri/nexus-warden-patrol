@@ -78,7 +78,7 @@ def test_check_把正在做的运动一路传进去(monkeypatch):
         def state(self):
             return "ok"
 
-        def lookup(self, pts, pose):
+        def lookup(self, pts, pose, **kw):
             return [], []
 
     G.check(-0.2, 0.0, 0.8, V(), (0.0, 0.0, 0.0), moving=((0.8, 0.0),))
@@ -117,7 +117,7 @@ def test_守卫结论带原因枚举():
         def state(self):
             return self.st
 
-        def lookup(self, pts, pose):
+        def lookup(self, pts, pose, **kw):
             return list(self.hit), list(self.unk)
 
     pose = (0.0, 0.0, 0.0)

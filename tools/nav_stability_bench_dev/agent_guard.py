@@ -78,7 +78,8 @@ def _prod_consts() -> dict:
     import ast
     src = (ROOT / "packages/robot-agent/src/nexwar_agent/bridges/nav2_nav.py").read_text(encoding="utf-8")
     want = {"V_FAST", "V_BASE", "VIS_SLOW_MPS", "VIS_LOOK_M", "VIS_SIDE_M", "VIS_TIERS", "STATIC_NEAR_M",
-            "FRONT_BLIND_M", "CLEAR_MARGIN_M"}
+            "FRONT_BLIND_M", "CLEAR_MARGIN_M", "SOFT_CREEP_MPS", "LOOK_M", "LOOK_MPS", "LOOK_S",
+            "LOOK_TRIES", "LOOK_RESET_M", "MANEUVER_CLEAR_M"}
     out: dict = {}
     for node in ast.parse(src).body:
         if isinstance(node, ast.Assign) and len(node.targets) == 1 and isinstance(node.targets[0], ast.Name):
@@ -218,7 +219,8 @@ def main() -> int:
     st = {"now": None, "pose": None, "v": 0.0, "w": 0.0, "last_wz": 0.0, "last_vx": 0.0,
           "actors": [], "seq": 0,
           "blocked_ticks": 0, "ticks": 0, "tight_ticks": 0, "turn_map_ticks": 0, "slowed_ticks": 0,
-          "soft_slow_ticks": 0, "vis_capped_ticks": 0, "occ_capped_ticks": 0, "hist": []}
+          "soft_slow_ticks": 0, "vis_capped_ticks": 0, "occ_capped_ticks": 0, "hist": [],
+          "look": None, "look_tries": 0, "look_ticks": 0, "look_at": (0.0, 0.0)}
     log = open(args.log, "a", encoding="utf-8") if args.log else None
     view = ObstacleView(monotonic=lambda: st["now"] or 0.0)
     view.on_connect()
@@ -412,6 +414,48 @@ def main() -> int:
         return g.check(vx, wz, st["v"], view, st["pose"], w_now=(st["last_wz"], st["w"]),
                        moving=((st["last_vx"], st["last_wz"]), (st["v"], st["w"])))
 
+    def look_go(v) -> bool:
+        """跟正式代码 ``_look_go`` 一样(外审 11-14、用户定):转身只因两侧盲带看不见被拦 → 先往地图上
+        放得下、守卫放行的一侧直走 LOOK_M,看清再转。这一拍发了挪的速度回 True。"""
+        lk = st["look"]
+        now, (x, y, th) = st["now"], st["pose"]
+
+        def step_ok(vx):
+            s_ = vx * 1.0
+            nxt = (x + s_ * math.cos(th), y + s_ * math.sin(th), th)
+            if map_clearance(nxt) < K["MANEUVER_CLEAR_M"]:
+                return False
+            v2 = check(guard, vx, 0.0)
+            return v2.ok or (v2.cause == "unknown" and abs(vx) <= UNKNOWN_SLOW_MPS + 1e-9)
+        if lk is None:
+            if v is None or st["look_tries"] >= K["LOOK_TRIES"]:
+                return False
+
+            def room(d):
+                return all(map_clearance((x + d * K["LOOK_M"] * k / 12 * math.cos(th),
+                                          y + d * K["LOOK_M"] * k / 12 * math.sin(th), th))
+                           >= K["MANEUVER_CLEAR_M"] for k in range(1, 13))
+            for d in sorted((1, -1), key=lambda d: not room(d)):
+                if step_ok(d * K["LOOK_MPS"]):
+                    lk = st["look"] = {"dir": d, "from": (x, y), "t": now}
+                    st["look_tries"] += 1
+                    st["look_at"] = (x, y)
+                    note("look", f"{v.reason};先{'往前' if d > 0 else '往后'}直走看清")
+                    break
+            else:
+                return False
+        far = math.hypot(x - lk["from"][0], y - lk["from"][1]) >= K["LOOK_M"]
+        if far or now - lk["t"] > K["LOOK_S"]:
+            st["look"] = None
+            return False
+        vx = lk["dir"] * K["LOOK_MPS"]
+        if not step_ok(vx):
+            st["look"] = None
+            return False
+        st["look_ticks"] += 1
+        send(vx, 0.0)
+        return True
+
     def send(vx: float, wz: float, vy: float = 0.0) -> None:
         t = Twist()
         t.linear.x, t.linear.y, t.angular.z = float(vx), float(vy), float(wz)
@@ -459,7 +503,7 @@ def main() -> int:
             return
         if abs(vx) > 1e-6 or abs(wz) > 1e-6:
             v = check(g, vx, wz)
-            if mode == "C" and v.cause == "unknown":
+            if mode == "C" and v.cause in ("unknown", "blind"):
                 send(vx, wz)                            # 只管紧急停:看不见的不管
                 return
             if v.cause == "unknown" and abs(vx) > UNKNOWN_SLOW_MPS:
@@ -488,11 +532,17 @@ def main() -> int:
                         st["soft_slow_ticks"] += 1
                         send(v2x, v2z)
                         return
+            if mode == "D" and v.band_only and look_go(v):
+                return
             if v.stops:
                 st["blocked_ticks"] += 1
                 note("guard", v.reason)
                 send(0.0, 0.0)
                 return
+            st["look"] = None
+            gone = math.hypot(st["pose"][0] - st["look_at"][0], st["pose"][1] - st["look_at"][1])
+            if st["look_tries"] and gone >= K["LOOK_RESET_M"]:
+                st["look_tries"] = 0                    # 离上回挪的地方走远了:下回再被拦还能挪
         send(vx, wz)
 
     node.create_subscription(Clock, "/clock", on_clock, 10)
@@ -507,7 +557,7 @@ def main() -> int:
     finally:
         if log:
             log.write(json.dumps({"summary": {k: st[k] for k in ("ticks", "tight_ticks", "blocked_ticks", "turn_map_ticks",
-                                                                  "slowed_ticks", "soft_slow_ticks",
+                                                                  "slowed_ticks", "soft_slow_ticks", "look_ticks",
                                                                   "vis_capped_ticks", "occ_capped_ticks")}}) + "\n")
             log.close()
         node.destroy_node()

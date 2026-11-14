@@ -28,11 +28,15 @@ from nexwar_contract.obsbridge import Grid
 #: 被挡等了几秒再绕,5 s 不够(仿真里绕障转身就卡住)。取 10 s,真机调(人 10 s 内横着走进那条带的风险
 #: 写进已知限制)。
 MEMORY_S = 10.0
-#: 工单 21(2026-10-28 C40221 下午):狗一停下超过 10 s 两侧就算没看过,之后哪怕转 5° 都要先挪、挪不了
-#: 就原地等 20 s 放弃。狗站着没挪窝(离那一帧的位置不到 :data:`MEMORY_STILL_M`,原地转也算没挪)时,
-#: 那一帧留到这么久;挪了窝照旧 :data:`MEMORY_S`。(站着的时候人从正侧面走进盲带,本来就看不见 ——
-#: 原来的 10 s 也一样,写进已知限制。)
+#: 工单 21(2026-10-28 C40221 下午):狗站着没挪窝(离那一帧的位置不到 :data:`MEMORY_STILL_M`,原地转
+#: 也算没挪)时,那一帧留到这么久;挪了窝照旧 :data:`MEMORY_S`。外审 11-14 起超过 :data:`MEMORY_S` 的
+#: 旧帧只认「有东西」、不认「空」(站着的时候人可能从侧面走进盲带)—— 站久了再转身要先挪、看清
+#: 再转(守卫按刹停角度多查,小角度转身车角也扫进盲带)。
 MEMORY_STILL_S = 60.0
+#: 用户 11-14:脱困动作进行中(机器人在动、看得见、有声音)盲带「空」的记忆认这么久 —— 1.3 m 死胡同
+#: 掉头(先挪 1.2 m 看清、再原地转 180° 要 8 s 多)按 10 s 会转到一半斜卡在走廊里。平时照旧
+#: :data:`MEMORY_S`。走着的时候旧帧也留到这么久(超过 MEMORY_S 的平时只认「有东西」)。
+REC_FREE_S = 15.0
 MEMORY_STILL_M = 0.15
 FRESH_S = 0.3
 LOST_S = 2.0
@@ -140,7 +144,7 @@ class ObstacleView:
                                       suspect=np.frombuffer(g.suspect_bits(), dtype=np.uint8)))
         while self.frames:
             f, age = self.frames[-1], now - self.frames[-1].at
-            if age <= self.memory_s or (age <= MEMORY_STILL_S
+            if age <= max(self.memory_s, REC_FREE_S) or (age <= MEMORY_STILL_S
                                         and self._still_since <= f.at + self.memory_s):
                 break                                   # 工单 21:它过期之前狗就站住了、一直没挪窝
             self.frames.pop()
@@ -216,7 +220,8 @@ class ObstacleView:
         return float((np.broadcast_to(x, band.shape)[band] - half_len).min())
 
     def lookup(self, pts: list[tuple[float, float]], pose_now: tuple[float, float, float],
-               *, max_age: float | None = None) -> tuple[list[int], list[int]]:
+               *, max_age: float | None = None,
+               free_s: float | None = None) -> tuple[list[int], list[int]]:
         """此刻狗身系的点 → (挡的点的下标, 未知的点的下标)。numpy 一批算(内审应修 7:逐点逐帧
         在狗上一拍要几十毫秒,事件循环上)。``max_age``:只认这么多秒以内的帧(遮挡限速用)。"""
         if not pts:
@@ -226,13 +231,17 @@ class ObstacleView:
         wx = pose_now[0] + c0 * P[:, 0] - s0 * P[:, 1]
         wy = pose_now[1] + s0 * P[:, 0] + c0 * P[:, 1]
         res = np.full(len(P), -1, dtype=np.int8)          # -1 没看见过、0 空、1 挡
-        oldest = -math.inf if max_age is None else self.monotonic() - max_age
+        now = self.monotonic()
+        oldest = -math.inf if max_age is None else now - max_age
         for f in list(self.frames):
             if f.at < oldest:
                 break
             todo = res < 0
             if not todo.any():
                 break
+            # 外审 11-14:站着不动留下来的旧帧(超过 memory_s)只能说「那儿有东西」,不能单独证明
+            # 「那儿现在是空的」—— 站着的时候人可能从侧面走进盲带
+            stale = now - f.at > (self.memory_s if free_s is None else free_s)
             c, s = math.cos(f.pose[2]), math.sin(f.pose[2])
             dx, dy = wx - f.pose[0], wy - f.pose[1]
             lx, ly = c * dx + s * dy, -s * dx + c * dy
@@ -241,6 +250,8 @@ class ObstacleView:
             inb = todo & (r >= 0) & (r < f.size) & (cc >= 0) & (cc < f.size)
             k = np.where(inb, r * f.size + cc, 0)
             seen = inb & (f.known[k] == 1)
+            if stale:
+                seen &= f.occ[k] == 1
             res[seen] = f.occ[k[seen]]
             if f.suspect is not None:
                 # 这一帧说这一格可疑(孤立凸起点,可能是细杆子):当挡,不往更旧的帧找(决策 42)
@@ -270,7 +281,11 @@ class ObstacleView:
 
 
 #: 守卫结论的原因(外审 11-14:上层按这个决定停不停,不匹配原因文字)。
-CAUSES = ("clear", "hit", "unknown", "data", "blocked")
+#: ``unknown`` = 只有前进方向雷达视野里看不见(被挡住后面),降速可走;``blind`` = 看不见的在两侧盲带、
+#: 或者后退 / 原地转时扫过区里有看不见的 —— 停(外审 11-14、用户定:按方向、按动作分规则)。
+CAUSES = ("clear", "hit", "unknown", "blind", "data", "blocked")
+#: 两侧盲带:机身前后沿(各再放这么多)之间,前后雷达都看不见(实测锥形视野 obs-3f4)。
+BAND_TOL_M = 0.05
 
 
 @dataclass(frozen=True)
@@ -283,19 +298,28 @@ class Verdict:
     #: :data:`CAUSES` 之一;不填按 ok / hits 推:放行 = ``clear``,有挡点 = ``hit``,
     #: 别的不放行(地图墙、脱困步扫墙、没动……)= ``blocked``(一律当挡)
     kind: str = ""
+    #: 看不见的里有几处在两侧盲带(外审 11-14:转身被它拦住时先直着挪、看清再转)。
+    band: int = 0
 
     @property
     def cause(self) -> str:
-        """``clear`` 放行;``hit`` 扫过区有挡;``unknown`` 只有看不见的;``data`` 障碍数据不新鲜 /
-        断了 / 自检没过;``blocked`` 别的明确不放行。"""
+        """``clear`` 放行;``hit`` 扫过区有挡;``unknown`` 只有前进方向视野里看不见的;``blind``
+        看不见的在两侧盲带、或后退 / 原地转时有看不见的;``data`` 障碍数据不新鲜 / 断了 / 自检没过;
+        ``blocked`` 别的明确不放行。"""
         if self.kind:
             return self.kind
         return "clear" if self.ok else ("hit" if self.hits else "blocked")
 
     @property
+    def band_only(self) -> bool:
+        """只因为两侧盲带看不见才拦(外审 11-14:这种先直着挪看清再转;后面没雷达这类挪了也看不清)。"""
+        return self.cause == "blind" and 0 < self.band == self.unknown
+
+    @property
     def stops(self) -> bool:
-        """一定要停:有挡、数据不可用、别的明确不放行(只有看不见的另按降级规则)。"""
-        return self.cause in ("hit", "data", "blocked")
+        """一定要停:有挡、盲带 / 后退 / 原地转看不见、数据不可用、别的明确不放行(只有前进方向
+        视野里看不见的另按降速规则)。"""
+        return self.cause in ("hit", "blind", "data", "blocked")
 
 
 @dataclass
@@ -440,19 +464,39 @@ class ObstacleGuard:
 
     def check(self, vx: float, wz: float, v_meas: float, view: ObstacleView,
               pose_now: tuple[float, float, float], *, w_now: Sequence[float] = (),
-              moving: Sequence[tuple[float, float]] = ()) -> Verdict:
+              moving: Sequence[tuple[float, float]] = (),
+              free_s: float | None = None) -> Verdict:
         if abs(vx) < 1e-6 and abs(wz) < 1e-6:
             return Verdict(True)                     # 原地等:不动就不会撞
         st = view.state()
         if st != "ok":
             return Verdict(False, f"障碍数据{_STATE_TEXT.get(st, st)}", kind="data")
         pts = self.swept(vx, wz, v_meas, w_now, moving=moving)
-        hit, unknown = view.lookup(pts, pose_now)
+        hit, unknown = view.lookup(pts, pose_now, free_s=free_s)
         if not hit and not unknown:
             return Verdict(True)
         hits = tuple(pts[i] for i in hit)
-        return Verdict(False, f"扫过区有挡 {len(hit)} 处、看不见 {len(unknown)} 处{_nearest(hits)}",
-                       hits=hits, unknown=len(unknown), kind="hit" if hit else "unknown")
+        ups = [pts[i] for i in unknown]
+        front = self.body_len / 2 + BAND_TOL_M
+        band = sum(1 for x, _ in ups if abs(x) <= front)
+        kind = "hit" if hit else self._unknown_kind(vx, ups, view)
+        where = {"blind": f"(盲带 {band} 处 / 后退 / 原地转,不降速放行)"}.get(kind, "")
+        return Verdict(False, f"扫过区有挡 {len(hit)} 处、看不见 {len(unknown)} 处{where}"
+                              f"{_nearest(hits)}",
+                       hits=hits, unknown=len(unknown), kind=kind, band=band)
+
+    def _unknown_kind(self, vx: float, ups: Sequence[tuple[float, float]], view: Any) -> str:
+        """外审 11-14:只有看不见的时候按方向、按动作分。前进、看不见的全在车头前雷达视野里(机身
+        前沿 + :data:`BAND_TOL_M` 之外)→ ``unknown``(降速走,人一进视野就看得见);后退同理,但要
+        有后雷达、外参标过。别的 → ``blind``:两侧盲带里转身、急弯车角甩进去看不见人;没后雷达
+        往后退是瞎退;原地转降速也不让车角撞人变安全。"""
+        front = self.body_len / 2 + BAND_TOL_M
+        if vx >= self.still_mps and all(x > front for x, _ in ups):
+            return "unknown"
+        if vx <= -self.still_mps and all(x < -front for x, _ in ups) \
+                and getattr(view, "rear", False) and getattr(view, "rear_cal", False):
+            return "unknown"
+        return "blind"
 
 
 def _nearest(hits: tuple[tuple[float, float], ...]) -> str:

@@ -78,10 +78,10 @@ def test_记忆_按里程挪_从新到旧_都没看见是未知():
     assert v.state() == "stale"
     t[0] = 3.0
     assert v.state() == "lost"
-    t[0] = 11.0
+    t[0] = 16.0
     v.note_odom(2.0, 0.0, 0.0)                       # 在走(挪了窝;站着不动的见工单 21 那条)
     v.on_grid(_grid(seq=4))
-    assert len(v.frames) == 1, "10 s 以前的帧丢掉"
+    assert len(v.frames) == 1, "15 s 以前的帧丢掉(用户 11-14:脱困时盲带空的记忆认 15 s,留到 15 s)"
 
 
 def test_记忆_自检没过不用_状态说清楚():
@@ -275,7 +275,7 @@ class 台子:
 
 
 class _放行:
-    def check(self, vx, wz, v_meas, view, pose, *, w_now=(), moving=()):
+    def check(self, vx, wz, v_meas, view, pose, *, w_now=(), moving=(), free_s=None):
         from nexwar_agent.obstacles import Verdict
         return Verdict(True)
 
@@ -1003,8 +1003,9 @@ async def test_工单14_机头前045米有箱子_判往前挪不了_身后有挡
 # ------------------------------------------------------------ 2026-10-28 下午 工单 21 / 23
 
 
-def test_工单21_站着不动_两侧看过的记忆不过期_挪了窝照旧10秒():
-    """狗一停下超过 10 s 两侧就算没看过,之后哪怕转 5° 都要先挪。站着(含原地转)不过期,挪了窝照旧。"""
+def test_工单21_站着不动_旧帧留着但超过10秒只认有东西_挪了窝照旧10秒():
+    """工单 21:站着(含原地转)旧帧留到 60 s。外审 11-14、用户定:超过 10 s 的旧帧只能说「有东西」、
+    不能证明「空」(站着的时候人可能从侧面走进盲带);挪了窝照旧 10 s 就扔。"""
     from nexwar_agent.obstacles import MEMORY_STILL_S
     t = [0.0]
     v = ObstacleView(monotonic=lambda: t[0], latency_s=0.0)
@@ -1016,7 +1017,7 @@ def test_工单21_站着不动_两侧看过的记忆不过期_挪了窝照旧10�
         v.note_odom(0.0, 0.0, 0.002 * i)                       # 站着,慢慢原地转一点
         v.on_grid(_grid(cells_known=front_only, seq=i + 1))
     _, unk = v.lookup([(0.0, 0.6)], (0.0, 0.0, 0.0))
-    assert unk == [], "站着不动:侧面那格还记得是空的"
+    assert unk == [0], "站着超过 10 s:侧面那格旧帧说空,不算数"
     t[0] += 1.0
     v.note_odom(0.5, 0.0, 0.0)                                 # 挪了窝
     v.on_grid(_grid(cells_known=front_only, seq=999))
