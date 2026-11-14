@@ -142,7 +142,7 @@ export function HomePage(props: {
               </div>
               {/* P0-09:临时撤防要选防区,在授权页做(这里原来一点就整站临时撤防,确认框却说「选中的防区」) */}
               <a class={m.mode === "visitor" ? "btn sm on" : "btn sm"} href="#/admin/access">{t("armNowVisitor")}</a>
-              {props.onWizard && m.state !== "disarmed" && m.mode === "armed" && <PatrolReason onWizard={props.onWizard} />}
+              {m.state !== "disarmed" && m.mode === "armed" && <PatrolReason onWizard={props.onWizard} />}
             </div>
           )}
         </div>

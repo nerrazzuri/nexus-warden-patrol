@@ -257,6 +257,15 @@ describe("布防时间页", () => {
     expect(box.disabled).toBe(false);
   });
 
+  it("UIUX-039:经理在布防时间页也看到「不会巡逻」的原因,没有向导按钮,写找管理员", async () => {
+    missing = ["plan"];
+    mode = { ...mode, mode: "armed", source: "manual", state: "armed" };
+    const { container: c } = render(<ArmingPage say={() => {}} now={at(12)} role="owner" />);
+    const bar = await waitFor(() => { const x = c.querySelector("[data-patrol-reason]"); expect(x).not.toBeNull(); return x!; });
+    expect(bar.textContent).toContain("请联系管理员");
+    expect(bar.querySelector("button")).toBeNull();
+  });
+
   it("没存离开有提示", async () => {
     const { container: c } = page();
     await waitFor(() => expect(row(c, 0).querySelector(".armblock")).not.toBeNull());
