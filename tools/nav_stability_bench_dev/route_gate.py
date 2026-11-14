@@ -2,7 +2,8 @@
 
 goal_driver 每个目标出发前:向 Nav2 要一条路线(ComputePathToPose,只规划不走),用**正式代码**的
 ``nexwar_agent.route_check`` 查有效车身离地图墙的余量;不过就不发这个目标,记成「主动拒绝」。
-跟真机一样:规划不出、超时 → 不挡路,照常交给 Nav2。
+跟真机一样:规划不出、超时 → 不挡路,照常交给 Nav2。靠局部搜索放行的(``path``)跟真机代理一样
+照那条路走(FollowPath,见 goal_driver)。
 
 地图用这一趟目录里的 map.yaml / map.pgm(只有地图墙;地图外的箱子、人、车不在里面)。
 """
@@ -83,4 +84,6 @@ class RouteGate:
         v = check_route(pts, *self.walls)
         return {"checked": True, "ok": v.ok, "tight": v.tight, "code": v.code, "why": v.why,
                 "margin": round(v.margin, 3), "at": None if v.at is None else [round(a, 2) for a in v.at],
-                "poses": len(pts)}
+                "poses": len(pts), "searched": v.path is not None,
+                # 外审 11-14:靠局部搜索放行时要执行的路(goal_driver 交给 FollowPath;不写进结果)
+                "path": None if v.path is None else [list(q) for q in v.path]}
