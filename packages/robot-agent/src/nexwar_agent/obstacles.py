@@ -293,6 +293,8 @@ class ObstacleGuard:
     extra_rad: float = 0.2
     #: 低于这个的实测 / 上一拍转速当没在转(里程转速的噪声)。
     still_rps: float = 0.05
+    #: 低于这个的实测 / 上一拍前进速度当没在走(外审 11-14 查运动过渡时用)。
+    still_mps: float = 0.05
 
     def turn_reach(self, wz: float) -> float:
         w = abs(wz)
@@ -320,44 +322,59 @@ class ObstacleGuard:
         return lo, hi
 
     def swept(self, vx: float, wz: float, v_meas: float,
-              w_now: Sequence[float] = ()) -> list[tuple[float, float]]:
-        """这条命令扫过的机身区域里的采样点(此刻狗身系)。往前走:沿这条命令的圆弧推
-        ``reach(max(实测, 命令))`` 米,每一步一个机身矩形(往后退就往后推);原地转(前进 ≈ 0、在转):
-        :meth:`turn_span` 那段扇形,过半圈查外接圆。"""
+              w_now: Sequence[float] = (), *,
+              moving: Sequence[tuple[float, float]] = ()) -> list[tuple[float, float]]:
+        """这一拍扫过的机身区域里的采样点(此刻狗身系) = **新命令**的扫掠区 ∪ **正在做的运动**的
+        扫掠区(外审 11-14:查运动过渡,不是只查新命令)。
+
+        - 新命令:往前走沿这条命令的圆弧推 ``reach(max(实测, 命令))`` 米,每一步一个机身矩形(往后退
+          就往后推);原地转(前进 ≈ 0、在转)::meth:`turn_span` 那段扇形,过半圈查外接圆。
+        - 正在做的运动 ``moving`` = ``[(vx, wz), …]``(里程实测、上一拍发的命令 —— 实测滞后或没有时
+          靠上一拍命令兜):每一份按它自己的方向和弯在延迟里接着走、再刹停(``reach``),也扫一遍;
+          还在转的(``w_now`` 和 ``moving`` 里的转速)按延迟里接着转、刹停的扇形也并进来。
+          这样前进中收到倒车、倒车中收到前进、走着收到原地转、转向反过来,都查到还没停下来的那一段。"""
         hl, hw = self.body_len / 2 + self.margin, self.body_wid / 2 + self.margin
-        pts: set[tuple[float, float]] = set()
+        pts = self._swept_cmd(vx, wz, v_meas, w_now, hl, hw)
+        for mv, mw in moving:
+            if abs(mv) >= self.still_mps:
+                pts |= self._arc(mv, mw, self.reach(mv), hl, hw)
+        spins = [w for w in (*w_now, *(mw for _, mw in moving)) if abs(w) >= self.still_rps]
+        if spins:
+            lo, hi = self.turn_span(0.0, spins)
+            if hi - lo > 1e-6:
+                pts |= self._sector(lo, hi, hl, hw)
+        return self._outside_body(pts, hl, hw)
+
+    def _sector(self, lo: float, hi: float, hl: float, hw: float) -> set[tuple[float, float]]:
+        """原地从朝向 0 转到 lo → hi 的某一刻落在机身矩形里的采样点;过半圈查整个外接圆。"""
         s = self.step
-        lo, hi = self.turn_span(wz, w_now)
-        if abs(vx) < 1e-6 and abs(wz) > 1e-6 and hi - lo < math.pi:
-            # 扇形:外接圆里的采样点(跟整圈一样取格子中间),转到 lo → hi 的某一刻落在机身矩形里就算
-            # 扫到;角步长让外接圆上相邻两刻不超过一格
-            r = math.hypot(hl, hw)
-            n = int(r / s) + 1
-            g = (np.arange(-n, n) + 0.5) * s
-            X, Y = np.meshgrid(g, g, indexing="ij")
-            X, Y = X.ravel(), Y.ravel()
-            keep = X * X + Y * Y <= r * r
-            X, Y = X[keep], Y[keep]
+        r = math.hypot(hl, hw)
+        n = int(r / s) + 1
+        g = (np.arange(-n, n) + 0.5) * s                 # 取格子中间,不压在格边上
+        X, Y = np.meshgrid(g, g, indexing="ij")
+        X, Y = X.ravel(), Y.ravel()
+        keep = X * X + Y * Y <= r * r
+        X, Y = X[keep], Y[keep]
+        if hi - lo >= math.pi:
+            hit = np.ones(len(X), dtype=bool)
+        else:
             hit = np.zeros(len(X), dtype=bool)
+            # 角步长让外接圆上相邻两刻不超过一格
             k = max(1, int(math.ceil((hi - lo) * r / s)))
             for i in range(k + 1):
                 a = lo + (hi - lo) * i / k              # 机身转了 a:把点转回 −a 看在不在矩形里
                 c, sn = math.cos(a), math.sin(a)
                 lx, ly = c * X + sn * Y, -sn * X + c * Y
                 hit |= (np.abs(lx) <= hl) & (np.abs(ly) <= hw)
-            for x, y in zip(X[hit], Y[hit], strict=True):
-                pts.add((round(float(x), 3), round(float(y), 3)))
-            return self._outside_body(pts, hl, hw)
-        if abs(vx) < 1e-6 and abs(wz) > 1e-6:
-            r = math.hypot(hl, hw)
-            n = int(r / s) + 1
-            for i in range(-n, n):
-                for j in range(-n, n):
-                    x, y = (i + 0.5) * s, (j + 0.5) * s     # 取格子中间,不压在格边上
-                    if x * x + y * y <= r * r:
-                        pts.add((round(x, 3), round(y, 3)))
-            return self._outside_body(pts, hl, hw)
-        dist = self.reach(max(abs(v_meas), abs(vx)))
+        return {(round(float(x), 3), round(float(y), 3))
+                for x, y in zip(X[hit], Y[hit], strict=True)}
+
+    def _arc(self, vx: float, wz: float, dist: float, hl: float, hw: float
+             ) -> set[tuple[float, float]]:
+        """按 (vx, wz) 的方向和弯走 ``dist`` 米,每一步机身轮廓线落下的点;弯比机身对角线还急就并上
+        外接圆(跟原地转差不多)。"""
+        s = self.step
+        pts: set[tuple[float, float]] = set()
         corner = math.hypot(hl, hw)
         # 角点走过的弧长只在转弯半径比机身对角线还小时才比中心的长 —— 那种急转下面直接并上外接圆
         # (内审应修 3;突变里「按角点弧长取步数」跟「并外接圆」互相顶替,只留后一条)
@@ -382,14 +399,16 @@ class ObstacleGuard:
             for x, y in edge:
                 pts.add((round(px + c * x - sn * y, 3), round(py + sn * x + c * y, 3)))
         if abs(wz) > 1e-6 and abs(vx / wz) < corner:
-            # 转弯半径比机身对角线还小:跟原地转差不多,把外接圆也并进来
-            n = int(corner / s) + 1
-            for i in range(-n, n):
-                for j in range(-n, n):
-                    x, y = (i + 0.5) * s, (j + 0.5) * s
-                    if x * x + y * y <= corner * corner:
-                        pts.add((round(x, 3), round(y, 3)))
-        return self._outside_body(pts, hl, hw)
+            pts |= self._sector(0.0, 2 * math.pi, hl, hw)
+        return pts
+
+    def _swept_cmd(self, vx: float, wz: float, v_meas: float, w_now: Sequence[float],
+                   hl: float, hw: float) -> set[tuple[float, float]]:
+        """新命令的扫掠区(见 :meth:`swept`)。"""
+        if abs(vx) < 1e-6 and abs(wz) > 1e-6:
+            lo, hi = self.turn_span(wz, w_now)
+            return self._sector(lo, hi, hl, hw)
+        return self._arc(vx, wz, self.reach(max(abs(v_meas), abs(vx))), hl, hw)
 
     @staticmethod
     def _outside_body(pts: set[tuple[float, float]], hl: float, hw: float
@@ -400,13 +419,14 @@ class ObstacleGuard:
         return sorted(p for p in pts if abs(p[0]) > hl + 1e-9 or abs(p[1]) > hw + 1e-9)
 
     def check(self, vx: float, wz: float, v_meas: float, view: ObstacleView,
-              pose_now: tuple[float, float, float], *, w_now: Sequence[float] = ()) -> Verdict:
+              pose_now: tuple[float, float, float], *, w_now: Sequence[float] = (),
+              moving: Sequence[tuple[float, float]] = ()) -> Verdict:
         if abs(vx) < 1e-6 and abs(wz) < 1e-6:
             return Verdict(True)                     # 原地等:不动就不会撞
         st = view.state()
         if st != "ok":
             return Verdict(False, f"障碍数据{_STATE_TEXT.get(st, st)}")
-        pts = self.swept(vx, wz, v_meas, w_now)
+        pts = self.swept(vx, wz, v_meas, w_now, moving=moving)
         hit, unknown = view.lookup(pts, pose_now)
         if not hit and not unknown:
             return Verdict(True)

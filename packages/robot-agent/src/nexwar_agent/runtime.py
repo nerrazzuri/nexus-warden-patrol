@@ -673,8 +673,10 @@ class AgentRuntime:
             return StandoffTask(
                 task_id=cmd.task_id, req=parse_standoff(cmd.payload), hal=self.hal,
                 now_ms=self._mono_ms, target=self.person_view.target,
+                # 外审 11-14:里程实测的运动(还没停下来的那段)也查
                 check=lambda vx, wz: nav.guard.check(vx, wz, nav._v_meas, nav.obstacles,
-                                                     nav._odom_pose),
+                                                     nav._odom_pose, w_now=(nav._w_meas,),
+                                                     moving=((nav._v_meas, nav._w_meas),)),
                 here=self._standoff_here, nogo=self._standoff_nogo, priority=cmd.priority)
         assert self.parts is not None, "有 loaded_map 就一定装了引擎"
         if cmd.kind == "follow":
