@@ -5,6 +5,8 @@
 import { useEffect, useRef, useState } from "preact/hooks";
 import { api, ApiError } from "./api";
 import type { Me } from "./app";
+import { alarmSound, setAlarmSound, testChime } from "./alarmpop";
+import { canHandleAlerts } from "./alertinfo";
 import { modeLabel } from "./armingpage";
 import { Confirm, Modal } from "./dialogs";
 import { hm, siteClock } from "./data";
@@ -382,6 +384,17 @@ function UserMenu(props: { me: Me; pref: ThemePref; onPref: (p: ThemePref) => vo
               ))}
             </div>
           </div>
+          {/* 第三档 #40:报警声音记在这台浏览器上;打开时响一声试听(顺带在这次点击里解锁出声) */}
+          {canHandleAlerts(props.me.role) && (
+            <div class="menu-row">
+              <span class="muted small">{t("menuAlarmSound")}</span>
+              <div class="seg" role="group" aria-label={t("menuAlarmSound")}>
+                <button type="button" data-alarm-sound="on" aria-pressed={alarmSound.value}
+                  onClick={() => { setAlarmSound(true); testChime(); }}>{t("soundOnShort")}</button>
+                <button type="button" data-alarm-sound="off" aria-pressed={!alarmSound.value} onClick={() => setAlarmSound(false)}>{t("soundOffShort")}</button>
+              </div>
+            </div>
+          )}
           <button type="button" class="menu-item" role="menuitem" onClick={() => { setOpen(false); setPw(true); }}>{t("changePassword")}</button>
           {/* P2-22:第三方声明在对话框里看(原来是开一个原始 txt) */}
           <button type="button" class="menu-item" role="menuitem" onClick={() => {

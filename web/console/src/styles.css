@@ -664,6 +664,23 @@ button.armstate:focus-visible { outline: 2px solid var(--c-primary); outline-off
 .banner-text b { font-family: var(--font-display); font-size: 20px; line-height: 26px; }
 .banner-more { padding: 2px 10px; border-radius: var(--r-rPill); background: rgba(0, 0, 0, 0.25); font-size: 13px; font-weight: 600; }
 .banner-acts { display: flex; gap: var(--sp-2); flex-wrap: wrap; }
+/* 第三档 #40:别的页上来了新报警,右下角弹卡片(值守页有横幅,不弹);右上角会盖住各页的主按钮。
+   在对话框、账号菜单下面,页面上面 */
+.alarm-pop { position: fixed; bottom: var(--sp-5); right: var(--sp-5); z-index: 4; width: min(380px, calc(100% - 32px));
+  display: flex; flex-direction: column; gap: var(--sp-2); padding: var(--sp-3) var(--sp-4); border-radius: var(--r-r12);
+  background: var(--c-error); color: var(--c-onError); box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45); }
+.alarm-pop.p2 { background: var(--c-warningSoft); color: var(--c-text); border: 1px solid var(--c-warning); }
+.alarm-pop .shape.P1 { fill: currentColor; }
+.alarm-pop.p2 .shape.P2 { fill: var(--c-warning); }
+.alarm-pop-head { display: flex; align-items: center; gap: var(--sp-2); }
+.alarm-pop-head b { flex: 1; min-width: 0; font-size: 16px; line-height: 22px; overflow-wrap: anywhere; }
+.alarm-pop-x { width: var(--ctl-sm); height: var(--ctl-sm); border: 0; border-radius: var(--r-r8); background: transparent;
+  color: inherit; font-size: 20px; line-height: 1; cursor: pointer; }
+.alarm-pop-x:hover { background: rgba(0, 0, 0, 0.2); }
+.alarm-pop-sub { font-size: 13px; opacity: 0.9; }
+.alarm-pop-note { font-size: 13px; font-weight: 600; }
+.alarm-pop-acts { display: flex; gap: var(--sp-2); flex-wrap: wrap; }
+.alarm-pop.p2 .btn.onsolid { color: var(--c-text); border-color: var(--c-textMuted); }
 .allclear { margin: 0; display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2) var(--sp-4); padding: 4px 2px; font-size: 14px; color: var(--c-textSecondary); }
 .allclear b { color: var(--c-text); font-weight: 600; }
 .allclear .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--c-success); margin-right: -8px; }
