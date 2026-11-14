@@ -111,6 +111,9 @@ export function testChime(): void {
   window.setTimeout(() => b.chime("P1"), 150);
 }
 
+/** 整张卡片挂多久缩成小条(UIUX-048) */
+export const MINI_AFTER_MS = 15_000;
+
 export function AlarmPop(props: {
   /** 没搁置的报警(console 的 active)。 */
   alerts: Alert[];
@@ -130,11 +133,20 @@ export function AlarmPop(props: {
   const ring = loud && open.some(wantsRing);
   // 只为重画:点了「开声音」以后把那一行收掉
   const [, setTick] = useState(0);
+  // UIUX-048:整张卡片挂 15 秒就缩成一条小条(少挡页面上的按钮),点一下展开;来了新的再整张弹
+  const [mini, setMini] = useState(false);
+  const [wake, setWake] = useState(0);
+  useEffect(() => {
+    if (mini) return;
+    const h = setTimeout(() => setMini(true), MINI_AFTER_MS);
+    return () => clearTimeout(h);
+  }, [mini, wake]);
 
   // 新来的(这个标签页里第一次见到)响一声;P1 先响(guardAlarms 已经排好),一次只响一声
   useEffect(() => {
     const fresh = open.filter((a) => !chimed.current.has(a.key));
     for (const a of fresh) chimed.current.add(a.key);
+    if (fresh.length) { setMini(false); setWake((n) => n + 1); }
     if (loud && fresh.length) beeper.chime(fresh.some((a) => a.level === "P1") ? "P1" : "P2");
   }, [open, loud]);
 
@@ -149,6 +161,16 @@ export function AlarmPop(props: {
   if (!top) return null;
   const p1 = top.level === "P1";
   const where = top.context?.zone ?? (top.context?.where ? t("atWhere", { w: top.context.where }) : "");
+  if (mini) {
+    return (
+      <button type="button" class={p1 ? "alarm-pop mini" : "alarm-pop mini p2"} data-alarm-pop="1" data-level={top.level}
+        aria-label={t("popExpand")} title={t("popExpand")} onClick={() => { setMini(false); setWake((n) => n + 1); }}>
+        <Shape kind={p1 ? "P1" : "P2"} />
+        <b>{alertHeadline(top)}</b>
+        {shown.length > 1 && <span class="alarm-pop-sub">{t("dutyMore", { n: shown.length - 1 })}</span>}
+      </button>
+    );
+  }
   return (
     <div class={p1 ? "alarm-pop" : "alarm-pop p2"} role="alert" data-alarm-pop="1" data-level={top.level}>
       <div class="alarm-pop-head">

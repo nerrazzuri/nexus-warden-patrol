@@ -2,7 +2,8 @@
 // 第三档 #40(用户 11-14):网页的报警弹窗和声音。跟站点的升档走:新来一条 P1 / P2 弹卡片、响一声;
 // 升到「声音」档(入侵一来就是,别的 P1 没人确认 5 分钟)一直响到有人确认。P3 不弹不响。
 import { cleanup, fireEvent, render } from "@testing-library/preact";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { act } from "preact/test-utils";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AlarmPop, alarmSound, setAlarmSound, type Beeper } from "./alarmpop";
 import { lang } from "./i18n";
 import type { Me } from "./app";
@@ -87,6 +88,27 @@ describe("报警弹窗", () => {
     const card = r.container.querySelector("[data-alarm-pop]")!;
     expect(card.textContent).toContain("C 卡住了");
     expect(card.textContent).not.toContain("另有");
+  });
+
+  it("UIUX-048:15 秒后缩成一条小条(少挡页面),点一下展开;再来新的又是整张卡片;一直响不受影响", () => {
+    vi.useFakeTimers();
+    try {
+      const r = render(pop([alert({ channel: "sound" }), alert({ key: "k2", title: "B 摔倒了" })]));
+      expect(r.container.querySelector("[data-alarm-pop]")?.classList.contains("mini")).toBe(false);
+      act(() => { vi.advanceTimersByTime(15_000); });
+      const mini = r.container.querySelector("[data-alarm-pop]")!;
+      expect(mini.classList.contains("mini")).toBe(true);
+      expect(mini.textContent).toContain("另有 1 件");
+      expect(mini.querySelector("button.btn")).toBeNull();
+      expect(b.ringing).toBe(true);
+      fireEvent.click(r.getByLabelText("展开报警"));
+      expect(r.container.querySelector("[data-alarm-pop]")?.classList.contains("mini")).toBe(false);
+      act(() => { vi.advanceTimersByTime(15_000); });
+      r.rerender(pop([alert({ channel: "sound" }), alert({ key: "k2", title: "B 摔倒了" }), alert({ key: "k3", title: "C 卡住了" })]));
+      expect(r.container.querySelector("[data-alarm-pop]")?.classList.contains("mini")).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("好几条:先给最要紧的(没确认的 P1 在 P2 前),写「另有 N 件」", () => {
