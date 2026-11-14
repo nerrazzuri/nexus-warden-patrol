@@ -2093,3 +2093,27 @@ async def test_外审1114_先挪的次数用完_不再自己挪_正常走出3米
         link.cmd = (link.now, 1, 0.5, 0.0, 0.0)
         await t.一拍()
     assert t.r.x - x0 >= LOOK_RESET_M and t.nav._look_tries == 0
+
+
+async def test_外审1114_低速抬到死区_转向同比例抬_弯不变(tmp_path):
+    """外审 11-14:原来只把前进抬到死区、转向不动 —— 弯变缓(半径变大)。低速正发生在墙边、窄处、
+    终点前,不是小事(用户纠正)。前进抬 k 倍,转向也抬 k 倍。"""
+    t = _台(tmp_path, 假转接())
+    vx, wz = t.nav._deband(0.08, 0.2)
+    assert vx == pytest.approx(0.13) and wz / vx == pytest.approx(0.2 / 0.08)
+    vx, wz = t.nav._deband(-0.065, 0.1)
+    assert vx == pytest.approx(-0.13) and wz == pytest.approx(0.2)
+    assert t.nav._deband(0.3, 0.02) == (0.3, 0.02), "够快的不动"
+
+
+async def test_外审1114_抬完转速超上限_走着的截到上限_原地转的照旧不转(tmp_path):
+    t = _台(tmp_path, 假转接())
+    await t.start(1.5, 4)
+    await t.nav.set_speed(0.6, z=0.25)
+    vx, wz = t.nav._fit(0.08, 0.2, cap=0.6)              # 抬到 0.13 / 0.325,转速上限 0.25
+    assert vx == pytest.approx(0.13) and wz == pytest.approx(0.25), "最接近的弯,不改成直走"
+    await t.nav.set_speed(0.6, z=0.05)
+    assert t.nav._fit(0.0, 0.5, cap=0.6) == (0.0, 0.0), "原地转:上限比死区还低,不转(外审 R5)"
+    await t.nav.set_speed(0.1)
+    vx, wz = t.nav._fit(0.5, 0.3, cap=0.1)
+    assert vx == 0.0, "限速比死区还低:不往前(外审 R5)"

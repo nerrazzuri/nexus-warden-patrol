@@ -116,8 +116,12 @@ def soft_guard(vx: float, wz: float) -> ObstacleGuard:
 
 
 def _deband(vx: float, wz: float) -> tuple[float, float]:
-    if 0.0 < abs(vx) < MIN_TRAVEL_MPS:
-        vx = 0.0 if abs(vx) < DEBAND_FLOOR else math.copysign(MIN_TRAVEL_MPS, vx)
+    if 0.0 < abs(vx) < MIN_TRAVEL_MPS:          # 跟正式代码:前进抬 k 倍,转向也抬 k 倍
+        if abs(vx) < DEBAND_FLOOR:
+            vx = 0.0
+        else:
+            wz *= MIN_TRAVEL_MPS / abs(vx)
+            vx = math.copysign(MIN_TRAVEL_MPS, vx)
     if vx == 0.0 and 0.0 < abs(wz) < MIN_TURN_RPS:
         wz = 0.0 if abs(wz) < DEBAND_FLOOR else math.copysign(MIN_TURN_RPS, wz)
     return vx, wz

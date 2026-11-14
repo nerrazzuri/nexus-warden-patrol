@@ -878,18 +878,7 @@ class Nav2NavBackend(PlannedNavBackend):
         cap = min(self._vlim(), self._zone_cap_to(here, sign), self._vis, self._slow)
         # 工单 11-02-9:压前进、压转向都按同一个比例,走的还是 Nav2 算的那条弯(只压前进弯就变急,
         # 11-02 回程急拐向方块角、守卫一直拦)
-        k = 1.0
-        if abs(vx) > cap:
-            k = cap / abs(vx)
-        if abs(wz) * k > self._wmax:
-            k = self._wmax / abs(wz)
-        vx, wz = vx * k, wz * k
-        vx, wz = self._deband(vx, wz, rev_max=MPPI_REVERSE_RATIO * self._nav2_speed)
-        # 外审 R5:整形抬到死区以后又超了上限(限速比死区还低)—— 走不了这么慢,停,不往上抬
-        if abs(vx) > cap + 1e-9:
-            vx = 0.0
-        if abs(wz) > self._wmax + 1e-9:
-            wz = 0.0
+        vx, wz = self._fit(vx, wz, cap)
         if self._turn_hits_map(vx, wz, here):
             from nexwar_agent.obstacles import Verdict
             self._guarded(Verdict(False, "原地转会扫到地图上的墙(窄处不转)"), here)
@@ -1668,11 +1657,30 @@ class Nav2NavBackend(PlannedNavBackend):
             self._turn_blocked_at, self._turn_err = None, None
             await self._enter_terminal(NavStatus.SUCCEED)
 
+    def _fit(self, vx: float, wz: float, cap: float) -> tuple[float, float]:
+        """Nav2 的速度 → 这一拍真发的:限速、转速上限按同一比例压(工单 11-02-9,走的还是 Nav2 那条弯),
+        再整形到死区(:meth:`_deband`,转向同比例抬)。外审 R5:抬到死区以后超了限速(限速比死区还低)
+        —— 不往前走;原地转抬完超了转速上限 —— 不转;走着的抬完转速超了上限 —— 截到上限
+        (最接近的弯)。"""
+        k = 1.0
+        if abs(vx) > cap:
+            k = cap / abs(vx)
+        if abs(wz) * k > self._wmax:
+            k = self._wmax / abs(wz)
+        vx, wz = vx * k, wz * k
+        v1, w1 = self._deband(vx, wz, rev_max=MPPI_REVERSE_RATIO * self._nav2_speed)
+        if abs(v1) > cap + 1e-9:
+            v1, w1 = self._deband(0.0, wz)
+        if abs(w1) > self._wmax + 1e-9:
+            w1 = math.copysign(self._wmax, w1) if abs(v1) > 1e-6 else 0.0
+        return v1, w1
+
     def _deband(self, vx: float, wz: float, *,
                 rev_max: float = math.inf) -> tuple[float, float]:
         """运控有死区(低于它的前进速度 HAL 直接拒、转速发了也不转):Nav2 起步、收尾、贴着障碍时会发很
-        小的速度。:data:`DEBAND_FLOOR` 以下当 0,以上抬到死区(工单 11-02-10)。转向只在原地转时整形
-        (走着的时候小转向照样转)。
+        小的速度。:data:`DEBAND_FLOOR` 以下当 0,以上抬到死区(工单 11-02-10)。走着的时候前进抬了
+        k 倍,转向也抬 k 倍(外审 11-14:原来转向不动,弯变缓 —— 低速正发生在墙边、窄处、终点前);
+        原地转的转向单独整形。
 
         复查 P3:``rev_max`` = MPPI 这会儿最多倒多快(限速 × :data:`MPPI_REVERSE_RATIO`)。
         它被限速压到死区以下时,门槛改成它的一半 —— Nav2 要的倒车照最小能走的倒车执行
@@ -1680,7 +1688,11 @@ class Nav2NavBackend(PlannedNavBackend):
         db = max(float(getattr(self._caps, "deadband_vx", 0.0) or 0.0), MIN_TRAVEL_MPS)
         if 0.0 < abs(vx) < db:
             thr = DEBAND_FLOOR if vx > 0 else min(DEBAND_FLOOR, rev_max / 2)
-            vx = 0.0 if abs(vx) < thr else math.copysign(db, vx)
+            if abs(vx) < thr:
+                vx = 0.0
+            else:
+                wz *= db / abs(vx)
+                vx = math.copysign(db, vx)
         dbw = max(float(getattr(self._caps, "deadband_wz", 0.0) or 0.0), MIN_TURN_RPS)
         if vx == 0.0 and 0.0 < abs(wz) < dbw:
             wz = 0.0 if abs(wz) < DEBAND_FLOOR else math.copysign(dbw, wz)
