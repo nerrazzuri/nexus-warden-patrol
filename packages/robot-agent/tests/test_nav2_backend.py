@@ -2137,3 +2137,78 @@ async def test_外审1114_先挪开始了_Nav2中间几拍要倒车撞墙_照样
         link.cmd = (link.now, 1, 0.0, 0.0, 0.6) if i % 4 == 0 else (link.now, 1, -0.5, 0.0, 0.0)
         await t.一拍()
     assert t.r.x - x0 > 1.0, ("挪完一个车身长", t.r.x - x0)
+
+
+# ---------------------------------------- 外审 11-14:局部搜索给的路,Nav2 照着走(用户定)
+
+def _L走廊():
+    """横臂 y 3.4–4.6(1.2 m 宽)、x 0.5–6.0;竖臂 x 4.8–6.0、y 3.4–7.5。"""
+    return [(0.1, 0.1, 11.9, 3.4), (0.1, 4.6, 4.8, 7.9), (6.0, 3.4, 11.9, 7.9),
+            (0.1, 7.5, 6.0, 7.9)]
+
+
+def _L路线():
+    """Smac 的样子:直走到拐角正中、原地转 90°、直走上去(拐角原地转只剩几厘米)。"""
+    pts = [[1.5 + 0.025 * i, 4.0, 0.0] for i in range(157)]
+    pts += [[5.4, 4.0, math.pi / 2 * i / 18] for i in range(1, 19)]
+    pts += [[5.4, 4.0 + 0.025 * i, math.pi / 2] for i in range(1, 101)]
+    return pts
+
+
+async def _L台(tmp_path):
+    link = 会规划的转接(answer={"ok": True, "poses": _L路线()})
+    t = _台(tmp_path, link, walls=_L走廊())
+    await t.start(1.5, 4.0)
+    link.here = (1.5, 4.0)
+    await t.nav.goto(Pose.from_xy_yaw(5.4, 6.5, math.pi / 2))
+    return t, link
+
+
+async def test_外审1114_拐角原地转余量不够_局部搜索给了路_带着这条路交给转接节点(tmp_path):
+    t, link = await _L台(tmp_path)
+    [g] = link.kinds("goal")
+    assert g.get("path") and "via" not in g and "controller" not in g
+    p = g["path"]
+    assert math.dist(p[0][:2], (1.5, 4.0)) < 0.01
+    assert math.dist(p[-1][:2], (5.4, 6.5)) <= 0.11
+    from nexwar_agent.route_check import pose_margins
+    from nexwar_contract.footprint import ROUTE_MARGIN_MIN
+    walls, res, org = await t.nav._route_walls()
+    tail = [tuple(q) for q in p if math.dist(q[:2], (1.5, 4.0)) > 0.5]
+    assert pose_margins(tail, walls, res, org).min() >= ROUTE_MARGIN_MIN - 1e-6
+    assert t.nav.planned_length_m > 0
+
+
+async def test_外审1114_照路走_控制器放弃了_先换RPP跟同一条(tmp_path):
+    t, link = await _L台(tmp_path)
+    g = link.kinds("goal")[-1]
+    await t.跑(0.5)
+    link.goal_states.append({"type": "goal_state", "goal_id": g["goal_id"], "state": "aborted",
+                             "reason": "x"})
+    await t.跑(0.5)
+    g2 = link.kinds("goal")[-1]
+    assert g2["goal_id"] != g["goal_id"] and g2.get("controller") == "RPP"
+    assert g2["path"] == g["path"]
+    assert NavStatus.FAILED not in t.status
+
+
+async def test_外审1114_RPP也放弃了_从这儿重新查路线再走_两次还不行才按原来的失败处理(tmp_path):
+    t, link = await _L台(tmp_path)
+    plans0 = len(link.kinds("plan"))
+    for _ in range(2):                                     # MPPI、RPP 都放弃
+        await t.跑(0.5)
+        g = link.kinds("goal")[-1]
+        link.goal_states.append({"type": "goal_state", "goal_id": g["goal_id"],
+                                 "state": "aborted", "reason": "x"})
+    await t.跑(0.5)
+    assert len(link.kinds("plan")) == plans0 + 1, "从当前位置重新要一条路线来查"
+    g = link.kinds("goal")[-1]
+    assert g.get("path") and "controller" not in g, "重查过的新路:又从 MPPI 开始"
+    for _ in range(4):                                     # 第二次重查以后也一直放弃
+        await t.跑(0.5)
+        g = link.kinds("goal")[-1]
+        link.goal_states.append({"type": "goal_state", "goal_id": g["goal_id"],
+                                 "state": "aborted", "reason": "x"})
+    await t.跑(1.0)
+    assert len(link.kinds("plan")) == plans0 + 2
+    assert NavStatus.FAILED in t.status or t.nav._man is not None, "最后按原来的失败处理"
