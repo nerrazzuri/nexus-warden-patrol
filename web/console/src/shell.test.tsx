@@ -7,7 +7,7 @@ import type { Me } from "./app";
 import { Console } from "./console";
 import { lang } from "./i18n";
 import type { Alert } from "./model";
-import { pageAllowed, pageScheme, readRoute, roleLabel, schemeFor, SideNav, TopBar } from "./shell";
+import { pageAllowed, pageScheme, readRoute, roleLabel, schemeFor, SetupNav, TopBar } from "./shell";
 import { applyTheme } from "./theme";
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
@@ -99,44 +99,57 @@ describe("新外壳", () => {
 
   const groups = (c: Element) => Array.from(c.querySelectorAll(".sidenav .navgroup-title")).map((x) => x.textContent);
   const hrefs = (c: Element) => Array.from(c.querySelectorAll(".sidenav a")).map((x) => x.getAttribute("href"));
+  const top = (c: Element) => Array.from(c.querySelectorAll(".topnav a")).map((x) => [x.textContent, x.getAttribute("href")]);
 
-  it("W60 左侧导航:保安只有值班一组(没有管理功能)", () => {
+  it("redesign 第二轮:顶栏三大块;保安只有值班、记录与录像,没有现场设置,也没有左栏", () => {
     const g = render(<Console me={me("guard")} onOut={() => {}} />);
-    expect(groups(g.container)).toEqual(["值班"]);
-    expect(hrefs(g.container)).toEqual(["#/duty", "#/live", "#/map", "#/alarms", "#/recordings"]);
-    expect(g.container.querySelector(".topbar .tabsnav")).toBeNull();
+    expect(top(g.container)).toEqual([["值班", "#/duty"], ["记录与录像", "#/alarms"]]);
+    expect(g.container.querySelector(".sidenav")).toBeNull();
+    expect(g.container.querySelector('.topnav a[aria-current="page"]')!.textContent).toBe("值班");
   });
 
-  it("W60 管理员:值班、管理、系统三组,高级默认收着、点开才有", () => {
+  it("管理员:现场设置左栏 日常[概况, 机器人, 人员] 现场[布置, 布防与巡逻, 授权] 记录[报告] 高级[维护]", () => {
+    location.hash = "#/admin/home";
     const a = render(<Console me={me("admin")} onOut={() => {}} />);
-    expect(groups(a.container)).toEqual(["值班", "管理", "系统", "高级"]);
-    expect(hrefs(a.container)).toEqual(expect.arrayContaining(["#/admin/robots", "#/admin/layout", "#/admin/arming", "#/admin/access",
-      "#/admin/users", "#/admin/reports", "#/admin/home"]));
-    expect(hrefs(a.container)).not.toContain("#/admin/system");
-    fireEvent.click(Array.from(a.container.querySelectorAll(".sidenav .navgroup-title")).find((x) => x.textContent === "高级")!);
-    expect(hrefs(a.container)).toEqual(expect.arrayContaining(["#/admin/maps", "#/admin/localization", "#/admin/diag", "#/admin/upgrade", "#/admin/system"]));
+    expect(top(a.container).map((x) => x[0])).toEqual(["值班", "记录与录像", "现场设置"]);
+    expect(top(a.container)[2][1]).toBe("#/admin/home");
+    expect(groups(a.container)).toEqual(["日常", "现场", "记录", "高级 · 安装与支持"]);
+    expect(hrefs(a.container)).toEqual(["#/admin/home", "#/admin/robots", "#/admin/users", "#/admin/layout", "#/admin/arming",
+      "#/admin/access", "#/admin/reports", "#/admin/system"]);
   });
 
-  it("在高级的页里,高级是展开的;顶栏标题写组名和页名", () => {
-    location.hash = "#/admin/system";
+  it("维护下面的几页:左栏亮「维护」,页里一排小标签;浏览器标签写页名", () => {
+    location.hash = "#/admin/diag";
     const a = render(<Console me={me("admin")} onOut={() => {}} />);
-    expect(a.container.querySelector('.sidenav a[href="#/admin/system"]')!.getAttribute("aria-current")).toBe("page");
-    expect(a.container.querySelector(".topbar .pagetitle")!.textContent).toBe("高级系统");   // P2-19:组名跟侧栏一样
+    expect(a.container.querySelector('.sidenav a[aria-current="page"]')!.getAttribute("href")).toBe("#/admin/system");
+    const tabs = Array.from(a.container.querySelectorAll(".subtabs a")).map((x) => x.getAttribute("href"));
+    expect(tabs).toEqual(["#/admin/system", "#/admin/upgrade", "#/admin/maps", "#/admin/localization", "#/admin/diag"]);
+    expect(a.container.querySelector('.subtabs a[aria-current="page"]')!.getAttribute("href")).toBe("#/admin/diag");
+    expect(document.title).toBe("诊断 · Nexus Warden");
   });
 
-  it("工程师看得到管理、看不到用户", () => {
+  it("工程师看得到现场设置、看不到人员", () => {
+    location.hash = "#/admin/robots";
     const e = render(<Console me={me("engineer")} onOut={() => {}} />);
     expect(hrefs(e.container)).not.toContain("#/admin/users");
     expect(hrefs(e.container)).toContain("#/admin/robots");
   });
 
-  it("W60 经理:机器人(只看)、布防时间、报表;进得去(原来布防时间进去是空白页)", () => {
+  it("经理:机器人(只看)、布防与巡逻、报告;进得去", () => {
     location.hash = "#/admin/arming";
     const f = render(<Console me={me("owner")} onOut={() => {}} />);
-    expect(groups(f.container)).toEqual(["值班", "管理", "系统"]);
-    expect(hrefs(f.container).filter((h) => h!.startsWith("#/admin/"))).toEqual(["#/admin/robots", "#/admin/arming", "#/admin/reports"]);
+    expect(groups(f.container)).toEqual(["日常", "现场", "记录"]);
+    expect(hrefs(f.container)).toEqual(["#/admin/robots", "#/admin/arming", "#/admin/reports"]);
+    expect(top(f.container)[2]).toEqual(["现场设置", "#/admin/robots"]);
     expect(f.container.querySelector(".adminbody")).not.toBeNull();
     expect(f.container.querySelector(".noaccess")).toBeNull();
+  });
+
+  it("记录与录像:事件、录像两个小标签", () => {
+    location.hash = "#/recordings";
+    const g = render(<Console me={me("guard")} onOut={() => {}} />);
+    expect(Array.from(g.container.querySelectorAll(".subtabs a")).map((x) => x.textContent)).toEqual(["事件", "录像"]);
+    expect(g.container.querySelector('.topnav a[aria-current="page"]')!.textContent).toBe("记录与录像");
   });
 
   it("没权限的管理页写清楚,不渲染页面", () => {
@@ -150,11 +163,12 @@ describe("新外壳", () => {
     expect(g.container.querySelector("[data-noaccess-home]")!.getAttribute("href")).toBe("#/duty");
   });
 
-  it("UIUX-033:顶栏页名带 title(窄屏被省略号截了也能看全)", () => {
+  it("顶栏右边:布防状态、机器人在线、未处理数、时间、账号 · 角色、全部急停", async () => {
     const c = render(<Console me={me("guard")} onOut={() => {}} />);
-    const n = c.container.querySelector(".topbar .pagetitle-name")!;
-    expect(n.getAttribute("title")).toBe(n.textContent);
-    expect(n.textContent).not.toBe("");
+    await waitFor(() => expect(c.container.querySelector(".topbar .armstate")).not.toBeNull());
+    expect(c.container.querySelector(".topbar .alarmcount")!.textContent).toBe("未处理 0");
+    expect(c.container.querySelector(".topbar .who-name")!.textContent).toBe("王 · 保安");
+    expect(c.container.querySelector(".topbar .btn.stop")!.textContent).toBe("全部急停");
   });
 
   it("顶栏没有语言按钮,在用户菜单里", () => {
@@ -279,13 +293,13 @@ describe("第 2 轮 duty N10 / N11:顶栏", () => {
   const mode = { mode: "armed", label: "布防", source: "manual", state: "armed" } as never;
   const bar = (o: { page?: string; held?: number; stale?: boolean }) => render(<TopBar me={me("guard")} page={(o.page ?? "map") as never} mode={mode} alarms={0} now={0}
     pref="system" onPref={() => {}} onStop={() => {}} onSignOut={() => {}} onSay={() => {}} held={o.held} stale={o.stale} />).container;
-  it("有叫停的:别的页也显示「n 台已叫停 · 去恢复」,点了去总览;总览本页不重复", () => {
+  it("有叫停的:哪一页都在顶栏显示(G-estop 稿:换掉「机器人在线」那一格),点了去值班", () => {
     lang.value = "zh";
     const c = bar({ held: 2 });
     expect(c.querySelector("[data-held-chip]")!.textContent).toBe("2 台已叫停 · 去恢复");
     expect(c.querySelector("[data-held-chip]")!.getAttribute("href")).toBe("#/duty");
     cleanup();
-    expect(bar({ held: 2, page: "duty" }).querySelector("[data-held-chip]")).toBeNull();
+    expect(bar({ held: 2, page: "duty" }).querySelector("[data-held-chip]")).not.toBeNull();
     cleanup();
     expect(bar({ held: 0 }).querySelector("[data-held-chip]")).toBeNull();
   });
@@ -299,15 +313,15 @@ describe("第 2 轮 duty N10 / N11:顶栏", () => {
 
 describe("第 2 轮 layout N11:手机菜单", () => {
   it("开着时 Esc、点外面都收起", () => {
-    const c = render(<SideNav me={me("admin")} page="duty" alarms={0} notices={0} />).container;
+    const c = render(<SetupNav me={me("admin")} page="admin/home" notices={0} />).container;
     const toggle = c.querySelector(".nav-toggle") as HTMLButtonElement;
     fireEvent.click(toggle);
-    expect(c.querySelector("#mainnav")!.className).toContain("open");
+    expect(c.querySelector("#setupnav")!.className).toContain("open");
     fireEvent.keyDown(window, { key: "Escape" });
-    expect(c.querySelector("#mainnav")!.className).not.toContain("open");
+    expect(c.querySelector("#setupnav")!.className).not.toContain("open");
     fireEvent.click(toggle);
     fireEvent.pointerDown(document.body);
-    expect(c.querySelector("#mainnav")!.className).not.toContain("open");
+    expect(c.querySelector("#setupnav")!.className).not.toContain("open");
   });
 });
 
@@ -318,7 +332,7 @@ describe("第 3 轮 admin N1", () => {
     HTMLElement.prototype.scrollIntoView = spy;
     try {
       const me = { name: "alice", role: "admin" } as Me;
-      render(<SideNav me={me} page="admin/users" alarms={0} notices={0} />);
+      render(<SetupNav me={me} page="admin/users" notices={0} />);
       expect(spy).not.toHaveBeenCalled();
     } finally {
       HTMLElement.prototype.scrollIntoView = old;
