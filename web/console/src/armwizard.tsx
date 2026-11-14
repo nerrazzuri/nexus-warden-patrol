@@ -285,7 +285,7 @@ export function ArmWizard({ say, onClose, arming = false, onChanged }: { say: Sa
   const [route, setRoute] = useState("");
   const [robot, setRobot] = useState("");
   const [gap, setGap] = useState(0);
-  const [time, setTime] = useState<"keep" | "manual" | "daily">("daily");
+  const [time, setTime] = useState<"keep" | "manual" | "daily">("manual");
   const [from, setFrom] = useState("21:30");
   const [to, setTo] = useState("06:00");
   const [note, setNote] = useState("");
@@ -312,7 +312,8 @@ export function ArmWizard({ say, onClose, arming = false, onChanged }: { say: Sa
       const e = p.entries.find((x) => x.route === mine?.id);
       if (first) {
         if (e) { setRobot(e.robot); setGap(e.gap_min); }
-        if (s.enabled && s.slots.length) setTime("keep");
+        // UIUX-038:默认保持现状 —— 时间表开着「照现在的」,关着(手动布防)「手动」;要改成每天定时得自己选
+        setTime(s.enabled && s.slots.length ? "keep" : "manual");
         const order: Missing[] = ["zones", "route", "plan", "robot"];
         const at = order.findIndex((k) => got.missing.includes(k));
         setStep(at < 0 ? 4 : at < 2 ? at : 3);
