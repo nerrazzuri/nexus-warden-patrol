@@ -30,7 +30,8 @@ Nav2 规划出路线(``plan_result``,带朝向、不抽稀)之后、出发之前
 接 :data:`CONTEXT_M`,在周围按「沿车头前进 / 后退、原地转」找一条每处都留够底线的走法
 (:func:`nexwar_agent.route_cspace.search_path`),拼回路线,**整条再按上面的规矩逐个位姿查一遍**;
 过了才放行,``path`` 就是这条拼好的路(调用方让 Nav2 的控制器照它走,不再让 Smac 另规划)。
-没过照旧拒。
+小窗里搜不到(仿真 11-15:过门转弯、终点贴墙要多退一点、绕远一点才转得过来)就从起点到终点整条
+再搜一次,同样整条查过才放行。都不行照旧拒。
 """
 
 from __future__ import annotations
@@ -42,7 +43,7 @@ from typing import Any
 
 import numpy as np
 
-from nexwar_agent.route_cspace import search_path
+from nexwar_agent.route_cspace import WHOLE_MAX_CELLS, search_path
 from nexwar_contract.footprint import (
     BASE_HALF_LEN,
     BASE_HALF_WID,
@@ -222,6 +223,26 @@ def _searched(dense: list[tuple[float, float, float]], along: np.ndarray, idx: n
         else:
             segs.append([lo, hi])
         k = e + 1
+    tries = (lambda: _spliced(segs, dense, idx, walls, res, origin, need),
+             # 小窗搜不到(或拼好的整条查不过):整条路线一次搜(起点就是机器人此刻站的地方)
+             lambda: search_path(dense[0], dense[-1], walls, res, origin, need, span=dense,
+                                 goal_end=True, max_cells=WHOLE_MAX_CELLS))
+    for attempt in tries:
+        out = attempt()
+        if out is None:
+            continue
+        path, cidx, cm = _checked(out, walls, res, origin)
+        if float(cm.min()) >= need:
+            j = int(np.argmin(cm))
+            return RouteCheck(True, float(cm[j]), path[int(cidx[j])], tight=True,
+                              path=tuple(path))
+    return None
+
+
+def _spliced(segs: list[list[int]], dense: list[tuple[float, float, float]], idx: np.ndarray,
+             walls: Any, res: float, origin: tuple[float, float],
+             need: float) -> list[tuple[float, float, float]] | None:
+    """每段在小窗里搜、拼回原路线;有一段搜不到回 None。"""
     out: list[tuple[float, float, float]] = []
     pos = 0                                                # ``dense`` 里拼到哪儿了
     for lo, hi in segs:
@@ -234,9 +255,4 @@ def _searched(dense: list[tuple[float, float, float]], along: np.ndarray, idx: n
             return None
         out += dense[pos:a] + sp
         pos = b + 1
-    out += dense[pos:]
-    path, cidx, cm = _checked(out, walls, res, origin)
-    if float(cm.min()) < need:
-        return None
-    j = int(np.argmin(cm))
-    return RouteCheck(True, float(cm[j]), path[int(cidx[j])], tight=True, path=tuple(path))
+    return out + dense[pos:]
