@@ -630,3 +630,14 @@ def test_11_11_W6_04_从没有禁行区的老版本编辑_草稿不会把更新�
     v = s.req("GET", f"/api/maps/{MAP[0]}/{draft}/zones", token=tok)[1]
     assert v["zones"] == []
     assert not (v.get("proposal") or {}).get("zones"), v.get("proposal")
+
+
+def test_易用性r7_编辑说明只写改了的_不写0平方米():
+    from nexwar_site.maps_admin import edit_summary
+    assert edit_summary({"erased_m2": 0.09, "obstacle_m2": 0.0}) == "擦了 0.09 平方米"
+    assert edit_summary({"erased_m2": 0, "obstacle_m2": 1.5}) == "画了 1.5 平方米障碍"
+    both = edit_summary({"erased_m2": 0.5, "obstacle_m2": 1.5})
+    assert both == "擦了 0.5 平方米、画了 1.5 平方米障碍"
+    assert edit_summary({"erased_m2": 0.0, "obstacle_m2": 0.0}) == "只改了禁行区、显示"
+    only = edit_summary({"erased_m2": 3, "obstacle_m2": 0}, only_layers=True)
+    assert only == "只改了禁行区、显示"

@@ -322,5 +322,14 @@ String taskKindText(String taskId) {
 String alertSourceText(String robot) {
   if (robot == 'site') return tr('Site', '站点');
   if (robot.startsWith('cctv:')) return tr('Camera ${robot.substring(5)}', '摄像头 ${robot.substring(5)}');
+  // 易用性 r7:防区没巡到的报警挂在「zone:防区」上,别把内部写法给人看
+  if (robot.startsWith('zone:')) return tr('Zone ${robot.substring(5)}', '防区 ${robot.substring(5)}');
   return robot;
+}
+
+/// 报警一行:「来源 · 标题」;标题已经以来源开头(「A 已到换电位」)就不再重复写来源(易用性 r7)。
+String alertLine(String robot, String kind, String siteTitle) {
+  final src = alertSourceText(robot);
+  final title = alertTitle(kind, siteTitle);
+  return title == src || title.startsWith('$src ') ? title : '$src · $title';
 }
