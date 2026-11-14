@@ -495,3 +495,24 @@ async def test_外审W77_4_2_站点设了不自动鸣笛_受力警报只管警�
     assert outputs == {"strobe": True}
     assert force.held("A") == {"strobe"}, "只开了警灯:警笛不归它"
     db.close()
+
+
+async def test_外审W77_9_1_驱离不要警笛_受力还占着_先不关_受力放手了驱离去关(tmp_path):
+    db = SiteDB(tmp_path / "s.db")
+    now, outputs = [NOW], {}
+    d = 假派遣(outputs)
+    deter = DeterrenceDesk(db, d, now_ms=lambda: now[0])
+    held = {"A": {"siren", "strobe"}}
+    deter.held_by_others = lambda rid: held.get(rid, set())
+    outputs["siren"] = True                              # 受力警报 / 见人开着的警笛
+    s = Session(robot_id="A", incident_id=0, zone="here", task_id="incident-a", level=1,
+                started_ms=now[0], level_ms=now[0])
+    deter.sessions["A"] = s
+    deter._save(s)
+    await deter._apply(s)
+    assert outputs["siren"] is True, "受力还占着:不关"
+    held["A"] = set()                                    # 受力放手了
+    now[0] += 1000
+    await deter._apply(s)
+    assert outputs["siren"] is False, "L1 不要警笛:驱离这边关(不能当成早就关过了)"
+    db.close()

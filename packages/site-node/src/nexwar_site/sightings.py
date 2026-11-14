@@ -200,8 +200,12 @@ class PersonWatch:
                     # 外审 W77-5 #2:受力警报放手了,它的期限可能把见人开的缩短了:人还在就马上续开
                     self._warned.pop(rid, None)
             if rid in busy:
-                if self._lit_of(rid):
-                    self._set_lit(rid, {})             # 驱离那一场接手了灯笛:这边不再关
+                lit = self._lit_of(rid)
+                keep = {o: g for o, g in lit.items() if o in (held or set())}
+                if lit != keep:
+                    # 驱离那一场接手了灯笛:这边不再关;受力警报占着的那几样关的责任留在这边
+                    # (外审 W77-9 #1:驱离不关别人占着的,受力放手了没人关)
+                    self._set_lit(rid, keep)
             elif present is False:
                 self._unwarn(rid, now)
             if present is False and rid in seen:
