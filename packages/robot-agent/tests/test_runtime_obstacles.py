@@ -145,6 +145,47 @@ async def test_运行时_能力里报避障状态_外参没过带原因(tmp_path
         await rt.close()
 
 
+async def test_外审1114_能力里报帧龄可不可信(tmp_path):
+    """感知带帧头时刻、钟估稳了 → ``stamp_ok`` 真;老感知不带(stamp_ns = 0)→ 假(真机验证 F26)。"""
+    import dataclasses
+    for stamped, want in ((True, True), (False, False)):
+        broker = MemoryBroker()
+        ears = 耳朵()
+        st = MemoryTransport(broker, "site")
+        await st.connect()
+        await st.subscribe(f"{T.prefix}/#", ears)
+        r = SimRobot(now_ms=lambda: 1_000_000)
+        d = tmp_path / str(stamped)
+        rt = AgentRuntime(transport=MemoryTransport(broker, "dog"), registration=REG, hal=r,
+                          store_dir=d / "agent", now_ms=lambda: 1_000_000,
+                          loaded_map=("m", "1"), boot_id="b", home=Pose.from_xy_yaw(0, 0, 0),
+                          nav="planned", obstacles="bridge", obs_socket=d / "o.sock")
+        d.mkdir()
+        await rt.start()
+        try:
+            rd, w = await _连(d / "o.sock")
+            w.write(encode(Hello(proto=1)))
+            await w.drain()
+            await rd.readline()
+            o = {}
+            for i in range(1, 40):
+                g = _grid(i)
+                if stamped:
+                    g = dataclasses.replace(g, stamp_ns=int((5000.0 + 0.1 * i) * 1e9))
+                w.write(encode(g))
+                await w.drain()
+                await rt.step(0.1)
+                await asyncio.sleep(0.01)
+                await broker.drain()
+                o = Capabilities.from_wire(ears.caps[-1]).tasks["obstacles"]
+                if o.get("stamp_ok") is want:
+                    break
+            assert o.get("stamp_ok") is want, o
+            w.close()
+        finally:
+            await rt.close()
+
+
 def test_避障要配规划后端(tmp_path):
     r = SimRobot(now_ms=lambda: 0)
     with pytest.raises(ValueError, match="nav planned"):
