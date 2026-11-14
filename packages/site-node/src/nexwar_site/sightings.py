@@ -95,6 +95,8 @@ class PersonWatch:
         self._unwarn_busy: set[tuple[str, str]] = set()
         #: 外审 W77-1 #7:别的来源(受力警报)此刻管着的输出;``main`` 接上 ``ForceWatch.held``。
         self.held_by_others: Callable[[str], set[str]] | None = None
+        #: 外审 W77-5 #2:上一拍受力警报管着的(放手了要么续开、要么这边关)。
+        self._held_prev: dict[str, set[str]] = {}
         self._warn_n: dict[str, int] = {}
         self._warn_jobs: set[asyncio.Task[None]] = set()
         #: W74 二期:地图上一个点在哪(命名区域、没命名用防区名;``{map_id, map_version, x, y}``)。
@@ -190,6 +192,13 @@ class PersonWatch:
             if p is None:
                 continue                                  # 说不清:不报、不删
             present = p.get("present")
+            held = self._held(rid)
+            prev = self._held_prev.get(rid, set())
+            if held is not None:
+                self._held_prev[rid] = held
+                if prev - held and set(self._lit_of(rid)) & (prev - held):
+                    # 外审 W77-5 #2:受力警报放手了,它的期限可能把见人开的缩短了:人还在就马上续开
+                    self._warned.pop(rid, None)
             if rid in busy:
                 if self._lit_of(rid):
                     self._set_lit(rid, {})             # 驱离那一场接手了灯笛:这边不再关
@@ -313,24 +322,29 @@ class PersonWatch:
                        "outputs=excluded.outputs, updated_ms=excluded.updated_ms",
                        (rid, body, self._now()))
 
+    def _held(self, rid: str) -> set[str] | None:
+        """受力警报此刻管着的输出;读不出来 ``None``(先不关)。"""
+        if self.held_by_others is None:
+            return set()
+        try:
+            return set(self.held_by_others(rid))
+        except Exception:
+            log.exception("%s 受力警报管着哪几样读不出来:先不关", rid)
+            return None
+
     def _unwarn(self, rid: str, now: int) -> None:
         """用户 11-15:人走了(看不到了),见人开的警灯、警笛当场关(不等 :data:`WARN_STROBE_S` 到点)。
         外审 W77-1:开着的落库,关成了(回执收下)才销账,没成隔 :data:`UNWARN_RETRY_MS` 再关
-        (#6);受力警报此刻还管着的不关、这边的账撤掉(#7)。"""
+        (#6);受力警报此刻还管着的先不关(#7),账留着,它放手了这边再关(外审 W77-5 #2:见人开的
+        期限可能比它长)。"""
         outs = self._lit_of(rid)
         if not outs:
             return
-        held: set[str] = set()
-        if self.held_by_others is not None:
-            try:
-                held = set(self.held_by_others(rid))
-            except Exception:
-                log.exception("%s 受力警报管着哪几样读不出来:先不关", rid)
-                return
-        if set(outs) & held:
-            outs = {o: g for o, g in outs.items() if o not in held}
-            self._set_lit(rid, outs)                      # 交给受力警报那边:这边不再关
-        todo = [o for o in sorted(outs) if (rid, o) not in self._unwarn_busy]
+        held = self._held(rid)
+        if held is None:
+            return
+        todo = [o for o in sorted(outs)
+                if o not in held and (rid, o) not in self._unwarn_busy]
         if not todo or now < self._unwarn_at.get(rid, 0):
             return
         try:
