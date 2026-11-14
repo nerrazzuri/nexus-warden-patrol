@@ -33,6 +33,7 @@ W74 一期(设计 docs/W74-看见人处置-设计.md §六、§九):
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import math
 from collections.abc import Callable
@@ -53,6 +54,8 @@ WARN_POC_CLIP = "restricted"
 WARN_CLIP_S = 15.0
 #: 喇叭优先级:低于保安手动喊话(``MANUAL`` 60)、驱离(80),高于机器人自己的提醒(40)。
 WARN_PRIORITY = 55
+#: 外审 W77-1 #6:见人开的警灯、警笛,人走了关没关成(断网、拒收),隔这么久再关一次。
+UNWARN_RETRY_MS = 5_000
 
 PERSON_KIND = "dog_sees_person"
 OVERDUE_KIND = "person_overdue"
@@ -86,8 +89,12 @@ class PersonWatch:
         self._tracked: dict[str, int] = {}
         #: 每台最后一次见人喊话、开灯的时刻;轮到第几段话术(内存)。
         self._warned: dict[str, int] = {}
-        #: 用户 11-15:见人开着的警灯、警笛(人走了当场关)。
-        self._lit: dict[str, set[str]] = {}
+        #: 外审 W77-1 #6:关灯笛下一次能发的时刻、正在发的(机器人, 输出)。开着的那几样落库
+        #: (``person_warn_lit``),重启认得回来。
+        self._unwarn_at: dict[str, int] = {}
+        self._unwarn_busy: set[tuple[str, str]] = set()
+        #: 外审 W77-1 #7:别的来源(受力警报)此刻管着的输出;``main`` 接上 ``ForceWatch.held``。
+        self.held_by_others: Callable[[str], set[str]] | None = None
         self._warn_n: dict[str, int] = {}
         self._warn_jobs: set[asyncio.Task[None]] = set()
         #: W74 二期:地图上一个点在哪(命名区域、没命名用防区名;``{map_id, map_version, x, y}``)。
@@ -184,9 +191,10 @@ class PersonWatch:
                 continue                                  # 说不清:不报、不删
             present = p.get("present")
             if rid in busy:
-                self._lit.pop(rid, None)                  # 驱离那一场接手了灯笛:这边不再关
+                if self._lit_of(rid):
+                    self._set_lit(rid, set())             # 驱离那一场接手了灯笛:这边不再关
             elif present is False:
-                self._unwarn(rid)
+                self._unwarn(rid, now)
             if present is False and rid in seen:
                 open_ = self._open(rid)
                 if seen[rid] == "p1" and open_ is not None:
@@ -252,7 +260,9 @@ class PersonWatch:
         for out, on in (("strobe", strobe), ("siren", siren)):
             if on:
                 payloads.append({"output": out, "on": True, "max_s": WARN_STROBE_S})
-                self._lit.setdefault(rid, set()).add(out)
+        lit = {p["output"] for p in payloads if p["output"] in ("strobe", "siren")}
+        if lit:
+            self._set_lit(rid, self._lit_of(rid) | lit)
         if pool:
             n = self._warn_n.get(rid, 0)
             self._warn_n[rid] = n + 1
@@ -270,20 +280,70 @@ class PersonWatch:
             self._warn_jobs.add(job)
             job.add_done_callback(self._warn_jobs.discard)
 
-    def _unwarn(self, rid: str) -> None:
-        """用户 11-15:人走了(看不到了),见人开的警灯、警笛当场关
-        (不等 :data:`WARN_STROBE_S` 到点)。"""
-        outs = self._lit.pop(rid, None)
+    def _lit_of(self, rid: str) -> set[str]:
+        rows = self.db.query("SELECT outputs FROM person_warn_lit WHERE robot_id=?", (rid,))
+        if not rows:
+            return set()
+        try:
+            got = json.loads(rows[0]["outputs"])
+        except ValueError:
+            return set()
+        return {str(x) for x in got} if isinstance(got, list) else set()
+
+    def _set_lit(self, rid: str, outs: set[str]) -> None:
+        with self.db.tx() as tx:
+            if outs:
+                tx.execute("INSERT INTO person_warn_lit(robot_id, outputs, updated_ms) "
+                           "VALUES (?,?,?) ON CONFLICT(robot_id) DO UPDATE SET "
+                           "outputs=excluded.outputs, updated_ms=excluded.updated_ms",
+                           (rid, json.dumps(sorted(outs)), self._now()))
+            else:
+                tx.execute("DELETE FROM person_warn_lit WHERE robot_id=?", (rid,))
+
+    def _unwarn(self, rid: str, now: int) -> None:
+        """用户 11-15:人走了(看不到了),见人开的警灯、警笛当场关(不等 :data:`WARN_STROBE_S` 到点)。
+        外审 W77-1:开着的落库,关成了(回执收下)才销账,没成隔 :data:`UNWARN_RETRY_MS` 再关
+        (#6);受力警报此刻还管着的不关、这边的账撤掉(#7)。"""
+        outs = self._lit_of(rid)
         if not outs:
+            return
+        held: set[str] = set()
+        if self.held_by_others is not None:
+            try:
+                held = set(self.held_by_others(rid))
+            except Exception:
+                log.exception("%s 受力警报管着哪几样读不出来:先不关", rid)
+                return
+        if outs & held:
+            outs -= held
+            self._set_lit(rid, outs)                      # 交给受力警报那边:这边不再关
+        todo = [o for o in sorted(outs) if (rid, o) not in self._unwarn_busy]
+        if not todo or now < self._unwarn_at.get(rid, 0):
             return
         try:
             loop = asyncio.get_running_loop()
         except RuntimeError:
             return
-        for out in sorted(outs):
-            job = loop.create_task(self._warn_one(rid, {"output": out, "on": False}))
+        self._unwarn_at[rid] = now + UNWARN_RETRY_MS
+        for out in todo:
+            self._unwarn_busy.add((rid, out))
+            job = loop.create_task(self._unwarn_one(rid, out))
             self._warn_jobs.add(job)
             job.add_done_callback(self._warn_jobs.discard)
+
+    async def _unwarn_one(self, rid: str, out: str) -> None:
+        try:
+            r = await self.dispatcher.deter(rid, {"output": out, "on": False},
+                                            issued_by="site:person_warn", priority=WARN_PRIORITY)
+            ack = (r or {}).get("ack") if isinstance(r, dict) else None
+            if isinstance(ack, dict) and ack.get("result") == "accepted":
+                self._set_lit(rid, self._lit_of(rid) - {out})
+            else:
+                log.warning("%s 见人开的%s没关成(%s):过一会儿再关", rid, out, ack)
+        except Exception as exc:  # noqa: BLE001 - 关不掉:过一会儿再关
+            log.warning("%s 见人开的%s没关成:%s;过一会儿再关", rid, out, exc)
+        finally:
+            self._unwarn_busy.discard((rid, out))
 
     async def _warn_one(self, rid: str, payload: dict[str, Any]) -> None:
         try:

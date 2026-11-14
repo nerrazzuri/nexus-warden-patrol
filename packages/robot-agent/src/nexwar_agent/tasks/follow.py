@@ -11,7 +11,8 @@
 (:data:`GATE_M` + :data:`PERSON_MAX_MPS` × 隔了多久)的那个;旁边有更近的别人也不换。被跟的人
 :data:`SWITCH_S` 秒没看到以后才谁近跟谁。只有方向、没测到距离的不算(不知道在哪)。
 
-**收尾时守住距离**(外审 r1 #8):到上限往回收尾那一段,人回头走近到 ``keep_m`` 以内就停下。
+**到上限**(外审 W77-1 #4,原来外审 r1 #8 的往回收尾去掉了):不再往前追,原地守着,人靠近照样退,
+人看不到 ``lost_s`` 秒才收尾(``result: limit``)。
 
 **跟丢**(``lost_s`` 秒没看到被跟的人、规划不出去人那儿的路)、**到上限**(``max_s`` / ``max_m``)→
 走着的
@@ -105,8 +106,11 @@ class FollowTask(Task):
         #: ``""`` 没在退;``retreat`` 在退;``cornered`` 退不了、原地站定。
         self._backing = ""
         self._vseq = 0
-        #: 退着的时候要收尾:等停稳了多久(秒);``None`` 不用等。
+        #: 退过以后发了停车、还没确认停稳:等了多久(秒);``None`` 不用等(外审 W77-1 #3:停稳之前
+        #: 不起导航段、不进终态;停车出错也不清这一笔)。
         self._stop_wait: float | None = None
+        #: 不安全的断线(外审 W77-1 #2):停车、不退、不起新的一段,连回来再接着。
+        self._paused = False
 
     @property
     def aborting(self) -> bool:
@@ -138,11 +142,16 @@ class FollowTask(Task):
             await self._leg.abort(self._abort_reason)
 
     async def on_offline(self, safe: bool) -> None:
-        # 跟随在机器人上做:断网照样跟(设计 §三)。不安全的断线才让那一段暂停。
+        # 跟随在机器人上做:断网照样跟(设计 §三)。不安全的断线才暂停:那一段交给它自己,
+        # 往后退的这边停车、不再退(外审 W77-1 #2)。
+        if not safe:
+            self._paused = True
+            await self._stop_backing()
         if self._leg is not None and not self._leg.done:
             await self._leg.on_offline(safe)
 
     async def on_online(self) -> None:
+        self._paused = False
         if self._leg is not None and not self._leg.done:
             await self._leg.on_online()
 
@@ -178,11 +187,19 @@ class FollowTask(Task):
             return
         self._observe(now, here)
         self._send_track(now)
+        if self._paused:
+            await self._stop_backing()
+            await self._stop_confirmed(dt_s)
+            return
         if await self._keep_off(now, here):
             return
-        await self._keep_back(now, here)
+        if not await self._stop_confirmed(dt_s):
+            return                                       # 退过的那一下停稳了,才起导航段
         if self.phase == "follow":
             await self._follow(now, here)
+        elif self.phase == "keep":
+            if self._leg is not None and not self._leg.aborting:
+                await self._leg.abort("follow_limit")     # 到上限:不再往前追
         elif self._pending_back and self._final is None:
             if self._leg is not None:
                 if not self._leg.aborting:
@@ -232,6 +249,11 @@ class FollowTask(Task):
                 if self.phase == "back" and self._result == "lost":
                     log.info("跟人 %s:又看见了,接着跟", self.task_id)
                     self.phase, self._result, self._pending_back = "follow", "", False
+        if self.phase == "keep" and self._final is None \
+                and now - self._seen_ms >= self.req.lost_s * 1000:
+            log.info("跟人 %s:到上限以后守着,人看不到了,收尾", self.task_id)
+            self._final = (TaskState.DONE, {"result": "limit", **self._report()})
+            return
         if self.phase != "follow" or self._final is not None:
             return
         if now - self._seen_ms >= self.req.lost_s * 1000:
@@ -249,18 +271,6 @@ class FollowTask(Task):
         prev = self._person
         best = min(pts, key=lambda q: math.dist(q, prev))
         return best if math.dist(best, prev) <= GATE_M + PERSON_MAX_MPS * gap_s else None
-
-    async def _keep_back(self, now: int, here: tuple[float, float, float] | None) -> None:
-        """到上限往回收尾的那一段:人走近到 ``keep_m`` 以内就停下收尾,不往人身上走(外审 r1 #8)。"""
-        if self.phase != "back" or self._result != "limit" or self._final is not None \
-                or self._leg is None or self._leg.aborting or self._person is None \
-                or here is None or now - self._seen_ms > SWITCH_S * 1000:
-            return
-        if math.dist(self._person, here[:2]) > self.req.keep_m:
-            return
-        log.info("跟人 %s:收尾时人走近了,停下", self.task_id)
-        self._final = (TaskState.DONE, {"result": self._result, **self._report()})
-        await self._leg.abort("follow_keep")
 
     async def _keep_off(self, now: int, here: tuple[float, float, float] | None) -> bool:
         """用户 11-15:人走近到 :data:`BACK_M` 以内 → 停下这一段、往远离人的方向退,
@@ -293,7 +303,7 @@ class FollowTask(Task):
                 self._events.emit("follow_cornered", {"task_id": self.task_id,
                                                       "range_m": round(d, 2), "why": why,
                                                       **self._last()})
-                await self._halt()
+                await self._halt_pending()
             self._backing = "cornered"
             return True
         from nexwar_contract.hal import VelocityCommand
@@ -305,34 +315,42 @@ class FollowTask(Task):
             log.warning("跟人 %s:退的速度被 HAL 拒了(%s)", self.task_id, getattr(got, "reason", ""))
         return True
 
-    async def _halt(self) -> None:
+    async def _halt_pending(self) -> None:
+        """发停车,记一笔「待停稳」(停车出错也记着,外审 W77-1 #3)。"""
+        if self._stop_wait is None:
+            self._stop_wait = 0.0
         try:
             await self._hal.stop()
         except Exception:
             log.exception("跟人 %s:停车失败", self.task_id)
 
-    async def _settled(self, dt_s: float) -> bool:
-        """要收尾了:在退就先停车、等停稳(最多 :data:`STOP_CONFIRM_TIMEOUT_S`)。"""
-        if self._backing:
-            await self._stop_backing()
-            self._stop_wait = 0.0
+    async def _stop_backing(self) -> None:
+        if self._backing == "retreat":
+            await self._halt_pending()
+        self._backing = ""
+
+    async def _stop_confirmed(self, dt_s: float) -> bool:
+        """退过以后停稳了没有(最多等 :data:`STOP_CONFIRM_TIMEOUT_S`);不用等回 True。"""
         if self._stop_wait is None:
             return True
         try:
-            stopped = await self._hal.stopped()
+            stopped = bool(await self._hal.stopped())
         except Exception:
             log.exception("跟人 %s:问停没停失败", self.task_id)
             stopped = False
         self._stop_wait += dt_s
         if not stopped and self._stop_wait < STOP_CONFIRM_TIMEOUT_S:
             return False
+        if not stopped:
+            log.warning("跟人 %s:等了 %.0f 秒没确认停稳,照常往下", self.task_id,
+                        STOP_CONFIRM_TIMEOUT_S)
         self._stop_wait = None
         return True
 
-    async def _stop_backing(self) -> None:
-        if self._backing == "retreat":
-            await self._halt()
-        self._backing = ""
+    async def _settled(self, dt_s: float) -> bool:
+        """要收尾了:在退就先停车;退过的都要停稳(最多 :data:`STOP_CONFIRM_TIMEOUT_S`)。"""
+        await self._stop_backing()
+        return await self._stop_confirmed(dt_s)
 
     def _heading(self) -> float | None:
         """人往哪走(弧度):最近 :data:`HEADING_SPAN_S` 秒的头尾连线;走得太近算不出。"""
@@ -391,7 +409,14 @@ class FollowTask(Task):
         self._retarget_at = self._mono()
 
     def _lose(self, result: str) -> None:
-        """跟丢 / 到上限:停下这一段,回最后看见人的地方、朝人离开的方向。"""
+        """跟丢:停下这一段,回最后看见人的地方、朝人离开的方向。到上限(外审 W77-1 #4):不再往前追,
+        原地守着(人靠近照样退),人看不到 ``lost_s`` 秒才收尾。"""
+        if result == "limit":
+            self.phase, self._result = "keep", result
+            log.info("跟人 %s:到上限了,不再追,原地守着", self.task_id)
+            self._events.emit("follow_lost", {"task_id": self.task_id, "result": result,
+                                              **self._last()})
+            return
         self.phase, self._result = "back", result
         log.info("跟人 %s:%s,回最后看见人的地方", self.task_id,
                  "跟丢了" if result == "lost" else "到上限了")
@@ -403,22 +428,13 @@ class FollowTask(Task):
         self._pending_back = True
 
     async def _go_back(self) -> None:
-        """跟丢:去最后看见人的那个点。到上限(人可能还在眼前):停在离那个点 ``keep_m`` 的地方,
-        不往人身上走。朝人离开的方向;算不出方向就朝那个点。"""
+        """跟丢:去最后看见人的那个点,朝人离开的方向;算不出方向就朝那个点。"""
         here = self._here()
         px, py = self._person  # type: ignore[misc]
         h = self._heading()
         if h is None:
             h = math.atan2(py - here[1], px - here[0]) if here is not None else 0.0
-        goal = (px, py)
-        if self._result == "limit" and here is not None:
-            d = math.dist((px, py), here[:2])
-            k = max(0.0, d - self.req.keep_m) / d if d > 1e-6 else 0.0
-            goal = (here[0] + (px - here[0]) * k, here[1] + (py - here[1]) * k)
-            if k == 0.0:
-                self._final = (TaskState.DONE, {"result": self._result, **self._report()})
-                return
-        await self._start_leg(goal, h)
+        await self._start_leg((px, py), h)
 
     # ------------------------------------------------------------ 报告
 

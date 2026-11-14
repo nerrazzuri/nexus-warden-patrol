@@ -650,9 +650,15 @@ class AgentRuntime:
                                w_now=(nav._w_meas,), moving=((nav._v_meas, nav._w_meas),))
 
     def _standoff_nogo(self, x: float, y: float, d: float) -> str:
-        """地图上 (x, y) 离禁行区不到 ``d`` 米:回原因。"""
-        z = self.parts.nav.nogo_near(x, y, d)
-        return f"再退就碰禁行区「{z.label or z.id}」" if z is not None else ""
+        """地图上 (x, y) 离禁行区不到 ``d`` 米、或者出了地图(外审 W77-1 #1):回原因。"""
+        nav = self.parts.nav
+        z = nav.nogo_near(x, y, d)
+        if z is not None:
+            return f"再退就碰禁行区「{z.label or z.id}」"
+        off = getattr(nav, "off_map", None)
+        if callable(off) and off(x, y):
+            return "再退就出地图"
+        return ""
 
     def _make_task(self, cmd: Command) -> Task:
         if cmd.kind == "teleop":

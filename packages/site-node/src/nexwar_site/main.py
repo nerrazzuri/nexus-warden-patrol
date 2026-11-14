@@ -939,6 +939,7 @@ class Server:
         self.force.siren_allowed = lambda: bool(_st.duty()["self_protect_siren"])   # W74 四期
         self.force.alerts = self.alerts
         self.deterrence.held_by_others = self.force.held   # 系统审查 S04:驱离不关受力警报的灯
+        self.sightings.held_by_others = self.force.held    # 外审 W77-1 #7:人走了也不关它的
         self.charge.busy = self.deterrence.busy
         self.scheduler.site_busy = self.deterrence.busy    # 系统审查 S05:排程不抢在驱离的狗
         self.incidents.charging = self.charge.refuse

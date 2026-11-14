@@ -380,6 +380,16 @@ class PlannedNavBackend(HalNavBackend):
                 return z
         return None
 
+    def off_map(self, x: float, y: float) -> bool:
+        """(x, y) 在图外、或者在图上不可通行(墙、没扫到的)的格里(外审 W77-1 #1:往后退不出地图)。
+        没装规划栅格说不清,回 False(交给守卫)。"""
+        if self._base is None:
+            return False
+        blocked, res, origin = self._base
+        c, r = int(math.floor((x - origin[0]) / res)), int(math.floor((y - origin[1]) / res))
+        h, w = blocked.shape
+        return not (0 <= r < h and 0 <= c < w) or bool(blocked[r, c])
+
     def nogo_at(self, x: float, y: float) -> Zone | None:
         return self.nogo_near(x, y, 0.0)
 

@@ -1739,3 +1739,18 @@ async def test_用户1115_跟人那一趟还在跑_人看不到了也先不接�
     t.duty.alerts.amend_open("A", "dog_sees_person", context={"lost_ms": t.clock()})
     await _跑(t, 5)
     assert len(_patrols(t)) == n, "机器人还在回最后位置:等它停了"
+
+
+async def test_外审W77_1_5_跟人一开始人就已经在防区外_照样判离开_停跟(站):
+    t = 站
+    tid = await _跟着(t)                                 # 在东区看见的
+    t.duty._on_event("A", _事("follow_track", task_id=tid, points=_点(6.0, 7.0)))
+    [a] = [a for a in t.duty.alerts.open if a["kind"] == "person_left"]
+    assert a["context"]["zone"] == "东区"
+    await _跑(t, 1)
+    assert any(c["kind"] == "abort" and c["task_id"] == tid for c in t.site.commands("A", 500))
+    t.box["run"] = ""
+    await _跑(t, 3)
+    [g] = _gotos(t, "follow-exit-")
+    p = g["payload"]["target"]
+    assert 0.0 <= p["x"] <= 5.0, "没有防区里的轨迹点:回机器人看见人时站的地方(在东区里)"
