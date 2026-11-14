@@ -585,3 +585,21 @@ async def test_外审W77_12_3_往后退也守地图限速区(空台):
     await _跑(空台, t, 3, 逼近)
     back = [x for x in sent if x < 0]
     assert back and min(back) >= -0.2 - 1e-9, f"限速区 0.2:退的最快 {min(back) if back else None}"
+
+
+async def test_外审W77_13_2_keep_m给小了_也不追近退开来回打转(空台):
+    c, r, parts = 空台
+    p = 人(r, 7.0, 4.0)
+    t, _ = _退的任务(空台, p, keep_m=3.0)
+    n = {"退": 0, "prev": ""}
+    await t.start()
+
+    def 数():
+        s = t.caps()["state"]
+        if s == "retreat" and n["prev"] != "retreat":
+            n["退"] += 1
+        n["prev"] = s
+    await _跑(空台, t, 60, 数)
+    assert n["退"] <= 1, f"人不动:退了 {n['退']} 回"
+    d = math.hypot(p.x - r.x, p.y - r.y)
+    assert 4.0 <= d <= 5.6, d

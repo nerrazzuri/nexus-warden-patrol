@@ -336,6 +336,13 @@ class FollowTask(Task):
             log.warning("跟人 %s:退的速度被 HAL 拒了(%s)", self.task_id, getattr(got, "reason", ""))
         return True
 
+    def _keep(self) -> float:
+        """跟在人后面多远:会往后退的时候不比 ``BACK_M + 0.5``(4.5 m)近,不然追近了马上又退
+        (外审 W77-13 #2:契约还收 1.5 m 起的 ``keep_m``)。"""
+        if self._backoff is not None and self._hal is not None:
+            return max(self.req.keep_m, BACK_M + 0.5)
+        return self.req.keep_m
+
     def _back_speed(self, here: tuple[float, float, float]) -> float:
         """往后退的限速:任务限速和身边(退一下能到的范围)地图限速区里低的那个
         (外审 W77-11 #4、12 #3)。"""
@@ -432,10 +439,11 @@ class FollowTask(Task):
         px, py = self._person
         d = math.dist((px, py), here[:2])
         yaw = math.atan2(py - here[1], px - here[0])
-        k = max(0.0, d - self.req.keep_m) / d if d > 1e-6 else 0.0
+        keep = self._keep()
+        k = max(0.0, d - keep) / d if d > 1e-6 else 0.0
         goal = (here[0] + (px - here[0]) * k, here[1] + (py - here[1]) * k)
         if self._leg is None:
-            if d < self.req.keep_m + START_EXTRA_M:
+            if d < keep + START_EXTRA_M:
                 return
             await self._start_leg(goal, yaw)
             return
