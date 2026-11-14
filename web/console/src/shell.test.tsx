@@ -149,6 +149,13 @@ describe("新外壳", () => {
     expect(g.container.querySelector("[data-noaccess-home]")!.getAttribute("href")).toBe("#/duty");
   });
 
+  it("UIUX-033:顶栏页名带 title(窄屏被省略号截了也能看全)", () => {
+    const c = render(<Console me={me("guard")} onOut={() => {}} />);
+    const n = c.container.querySelector(".topbar .pagetitle-name")!;
+    expect(n.getAttribute("title")).toBe(n.textContent);
+    expect(n.textContent).not.toBe("");
+  });
+
   it("顶栏没有语言按钮,在用户菜单里", () => {
     const c = render(<Console me={me("guard")} onOut={() => {}} />);
     const bar = c.container.querySelector(".topbar")!;
