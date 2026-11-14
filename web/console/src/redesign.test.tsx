@@ -46,3 +46,12 @@ describe("redesign 焦点", () => {
     expect(document.activeElement?.textContent).toBe("我来处理");
   });
 });
+
+describe("redesign 列表文字", () => {
+  it("E021:名字里有种类就不重复", async () => {
+    const { zoneSub } = await import("./mapedit");
+    expect(zoneSub("禁行区 2", "禁行区")).toBe("");
+    expect(zoneSub("禁行区", "禁行区 · 硬")).toBe("硬");
+    expect(zoneSub("仓库门口", "禁行区 · 硬")).toBe("禁行区 · 硬");
+  });
+});

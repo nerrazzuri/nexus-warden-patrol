@@ -12,6 +12,12 @@ import { api, apiUpload, ApiError, enc } from "./api";
 import { ConfirmPassword } from "./confirmpw";
 import { t, type Key } from "./i18n";
 import { type Draw, NogoForm, nogoLine, NogoStatus, newZone, RenameNogo, zoneLegend, zoneName, zoneShape } from "./layoutnogo";
+
+/** UIUX-E021:名字已经说了种类(「禁行区 2」)就不再在后面重复「禁行区」,只留硬 / 临时这些。 */
+export function zoneSub(name: string, line: string): string {
+  const [kind, ...rest] = line.split(" · ");
+  return name.startsWith(kind) ? rest.join(" · ") : line;
+}
 import { closesLoop, type NavZones, polyPx, toMap, type OwnLayer } from "./layoutpage";
 import { MapCanvas } from "./mapcanvas";
 import { DiffDialog } from "./mapmgmt";
@@ -450,7 +456,7 @@ function Editor({ say, target, Canvas }: { say: Say; target: Target; Canvas?: Fu
               {zonesNow.map((z) => (
                 <li key={z.id} class={z.id === sel ? "row on" : "row"}>
                   <span><button type="button" class={z.id === sel ? "linklike on" : "linklike"} data-pick-zone={z.id}
-                    onClick={() => setSel(z.id === sel ? null : z.id)}><b>{siteKnown(z.label) || z.id}</b></button> <span class="muted small nowrap">{nogoLine(z)}</span></span>
+                    onClick={() => setSel(z.id === sel ? null : z.id)}><b>{siteKnown(z.label) || z.id}</b></button> <span class="muted small nowrap">{zoneSub(siteKnown(z.label) || z.id, nogoLine(z))}</span></span>
                   {z.id === sel && <button type="button" class="btn sm push" data-rename="1" onClick={() => setRenaming(true)}>{t("lyRename")}</button>}
                   <button type="button" class={z.id === sel ? "btn sm danger" : "btn sm danger push"} data-remove-zone={z.id}
                     onClick={() => { change((st) => ({ ...st, zones: st.zones.filter((o) => o.id !== z.id) })); setSel(null); }}>{t("remove")}</button>
