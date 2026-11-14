@@ -925,7 +925,11 @@ class GuardDuty:
             self._held_zone[rid] = z
         # 新一回:从头记(用户 11-15:在哪个防区看见的,人出了这个防区就不跟)
         key = getattr(a, "key", "") if a is not None else ""
-        self._put_fs(rid, {"alert": key, "zone": list(z) if z is not None else None})
+        # 外审 W77-13 #1:这一回的回返点 = 看见人时机器人站的地方(位置可靠、定了防区才记)
+        pose = getattr(getattr(self._client(rid), "telemetry", None), "pose", None)
+        back = [float(pose.x), float(pose.y)] if z is not None and pose is not None else None
+        self._put_fs(rid, {"alert": key, "zone": list(z) if z is not None else None,
+                           "back": back})
         self._amend(key, resumed_ms=None)
         self._log("person_hold", robot=rid, entry=eid, zone=run["watch_zone"],
                   detail="看见人:原地停下盯着,等保安处理")
@@ -1182,21 +1186,30 @@ class GuardDuty:
             self._fs_set(rid, inside=inside, zone_out=out)
         return False
 
-    def _hold_point(self, rid: str, ref: tuple[str, str]) -> tuple[float, float]:
-        a = self._person_alert(rid)
-        p = (getattr(a, "context", None) or {}).get("pose") if a is not None else None
-        if isinstance(p, dict) and (p.get("map_id"), p.get("map_version")) == ref \
-                and _num(p.get("x")) and _num(p.get("y")):
-            return float(p["x"]), float(p["y"])
-        pose = getattr(getattr(self._client(rid), "telemetry", None), "pose", None)
-        return (float(pose.x), float(pose.y)) if pose is not None else (0.0, 0.0)
+    def _hold_point(self, rid: str, ref: tuple[str, str]) -> tuple[float, float] | None:
+        """这一回的回返点(新一回开账时记的,外审 W77-13 #1:不拿同一条告警上一回的位置);
+        还得在这个防区里。没有 ``None``(只停跟,不回)。"""
+        fs = self._fs(rid)
+        b, z = fs.get("back"), fs.get("zone")
+        if not (isinstance(b, list) and len(b) == 2 and _num(b[0]) and _num(b[1])
+                and isinstance(z, list) and len(z) == 3 and (z[0], z[1]) == ref):
+            return None
+        try:
+            ok = self.areas.contains(ref[0], ref[1], z[2], float(b[0]), float(b[1]))
+        except Exception:
+            log.exception("%s 回返点在不在防区里算不出来", rid)
+            return None
+        return (float(b[0]), float(b[1])) if ok else None
 
-    def _left_zone(self, rid: str, eid: int, zone: str, inside: tuple[float, float],
+    def _left_zone(self, rid: str, eid: int, zone: str, inside: tuple[float, float] | None,
                    cur: tuple[float, float], d: dict[str, Any], ref: tuple[str, str]) -> None:
-        yaw = math.atan2(cur[1] - inside[1], cur[0] - inside[0])
-        pose = MapPose(map_id=ref[0], map_version=ref[1], frame_id="map", x=inside[0],
-                       y=inside[1], yaw=yaw)
-        fs = self._fs_set(rid, left=True, todo=["exit", pose.to_wire(), zone])
+        if inside is None:
+            fs = self._fs_set(rid, left=True, todo=["halt", zone])   # 没有回返点:只停跟
+        else:
+            yaw = math.atan2(cur[1] - inside[1], cur[0] - inside[0])
+            pose = MapPose(map_id=ref[0], map_version=ref[1], frame_id="map", x=inside[0],
+                           y=inside[1], yaw=yaw)
+            fs = self._fs_set(rid, left=True, todo=["exit", pose.to_wire(), zone])
         self._amend(fs.get("alert", ""), follow_left=True)
         ctx: dict[str, Any] = {"zone": zone, "at": {"x": round(cur[0], 2), "y": round(cur[1], 2),
                                                     "at_ms": self._now()}}
@@ -1205,8 +1218,9 @@ class GuardDuty:
             ctx["heading_deg"] = float(h)
         self.alerts.raise_alert(
             kind="person_left", robot=rid, title=f"人离开防区:{zone}",
-            detail=f"被跟的人离开了防区「{zone}」。机器人不再跟,回到防区里最后看见人的地方、"
-                   "朝人走的方向看着;请保安到场查看", context=ctx)
+            detail=f"被跟的人离开了防区「{zone}」。机器人不再跟," + (
+                "原地停下;请保安到场查看" if inside is None else
+                "回到防区里最后看见人的地方、朝人走的方向看着;请保安到场查看"), context=ctx)
         self._log("person_left", robot=rid, entry=eid,
                   detail=f"被跟的人离开防区「{zone}」:不再跟,回防区里最后看见人的地方")
 
@@ -1285,8 +1299,11 @@ class GuardDuty:
             return                                        # 外审 W77-6 #1:上一趟没确认停稳
         ftid = fs.get("task") or ""
         if ftid and not self._stopped(rid, ftid, running, now):
-            if todo[0] == "exit":
+            if todo[0] in ("exit", "halt"):
                 await self._abort_follow(rid, eid, ftid)  # 停了下一拍再派回线内
+            return
+        if todo[0] == "halt":
+            self._fs_set(rid, todo=None)                  # 只要停跟:停了就办完
             return
         from nexwar_contract.follow import FOLLOW_PRIORITY, TASK_PREFIX
         from nexwar_site.dispatcher import DispatchRefused

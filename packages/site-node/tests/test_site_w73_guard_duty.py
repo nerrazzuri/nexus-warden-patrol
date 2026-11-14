@@ -1920,3 +1920,17 @@ def test_外审W77_12_2_定位丢了或位置过期_不拿旧位置定看见人�
     assert t.duty._zone_now("A", {"state": "watch"})[2] == "东区"
     t.site.telemetry_at = {"A": t.clock() - 600_000}
     assert t.duty._zone_now("A", {"state": "watch"}) is None, "位置过期"
+
+
+async def test_外审W77_13_1_这一回没有合法的回返点_出防区只停跟_不回上一回的地方(站):
+    t = 站
+    tid = await _跟着(t)
+    t.duty._fs_set("A", zone=[MAP[0], MAP[1], "西区"], back=None)   # 这一回在西区看见、没记回返点
+    t.duty._on_event("A", _事("follow_track", task_id=tid, points=_点(2.0, 3.0)))
+    assert t.duty.alerts.has_open("A", "person_left")
+    await _跑(t, 1)
+    assert any(c["kind"] == "abort" and c["task_id"] == tid for c in t.site.commands("A", 500))
+    t.box["run"] = ""
+    await _跑(t, 3)
+    assert _gotos(t, "follow-exit-") == [], "不拿上一回(东区)的位置回去"
+    assert not t.duty._fs("A").get("todo"), "停了就算办完"
