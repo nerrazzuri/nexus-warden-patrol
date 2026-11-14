@@ -524,3 +524,21 @@ async def test_外审W77_4_1_跟人途中返航_导航段停不稳_先别交出�
         r.stopped = real_stopped
         await _跑(空台, t, 2)
     assert t.state is TaskState.FAILED and "返航" in t.detail["reason"]
+
+
+async def test_外审W77_5_1_退着的时候电量掉到停止线下_停车_停稳了收尾(空台):
+    c, r, parts = 空台
+    p = 人(r, 6.0, 4.0)
+    t, _ = _退的任务(空台, p)
+    await t.start()
+
+    def 逼近():
+        p.x = max(p.x - 0.06, 5.0)
+    await _跑(空台, t, 3, 逼近)
+    assert t.caps()["state"] == "retreat" and t._leg is None
+    r.inject_battery(14.0)
+    await _跑(空台, t, 0.5, 逼近)
+    x = r.x
+    await _跑(空台, t, 2, 逼近)
+    assert abs(r.x - x) < 0.05, "电量到停止线:不再退"
+    assert t.state is TaskState.FAILED and "电量" in t.detail["reason"]

@@ -513,7 +513,8 @@ async def test_外审W77_1_7_受力警报还管着灯笛_人走了不关_只撤�
     assert d.sent == [], "受力警报还管着:不关"
     w.held_by_others = lambda rid: set()
     await _拍(w)
-    assert d.sent == [], "交给受力警报那边了,这边的账已经撤了"
+    assert {p["output"] for _, p, _ in d.sent if not p["on"]} == {"strobe", "siren"}, \
+        "外审 W77-5 #2:受力警报放手了,见人开的(期限可能比它长)这边关"
 
 
 async def test_外审W77_2_2_关的回执迟到_人又出现灯笛重开了_旧回执不销新账(台):
@@ -585,3 +586,18 @@ async def test_外审W77_3_2_关的回执迟到_中间驱离接管又结束_重�
     for _ in range(5):
         await asyncio.sleep(0)
     assert {p["output"] for _, p, _ in d.sent if not p["on"]} == {"strobe", "siren"}
+
+
+async def test_外审W77_5_2_人一直在_受力警报放手了_马上续开_不留空档(台):
+    t = 台
+    d, w = _上装台(t, outputs=("strobe", "siren", "speaker"))
+    d.persons("A", present=True, count=1)
+    await _拍(w)
+    w.held_by_others = lambda rid: {"siren", "strobe"}
+    t.ms[0] += 2000
+    await _拍(w)
+    d.sent.clear()
+    w.held_by_others = lambda rid: set()                 # 受力警报到期(它的期限可能把灯笛缩短了)
+    t.ms[0] += 1000
+    await _拍(w)
+    assert {p["output"] for _, p, _ in d.sent if p["on"]} >= {"strobe", "siren"}, "马上续开"

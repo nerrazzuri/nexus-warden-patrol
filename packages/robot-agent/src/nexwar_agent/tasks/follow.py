@@ -30,8 +30,10 @@ from collections.abc import Callable
 from typing import Any
 
 from nexwar_agent.assembly import EngineParts
+from nexwar_agent.engine.mission import Policy
 from nexwar_agent.tasks.base import Task
 from nexwar_agent.tasks.engine_goto import EngineGotoTask
+from nexwar_contract.charging import ALARM_FLOOR_PCT, ALARM_PRIORITY
 from nexwar_contract.follow import BACK_M, CLEAR_M, TRACK_EVERY_S, TRACK_KEEP, FollowRequest
 from nexwar_contract.messages import MapPose, TaskState
 
@@ -193,6 +195,15 @@ class FollowTask(Task):
             await self._stop_backing()
             await self._stop_confirmed(dt_s)
             return
+        if self._leg is None:
+            low = await self._battery_low()
+            if low:
+                # 外审 W77-5 #1:没有导航段(在退、在守着)时电量也要管;有导航段的引擎自己管
+                log.warning("跟人 %s:%s,原地停下收尾", self.task_id, low)
+                await self._stop_backing()
+                self._final = (TaskState.FAILED, {"reason": f"跟人途中{low},原地停下"[:200],
+                                                  **self._report()})
+                return
         if await self._keep_off(now, here, dt_s):
             return
         if not await self._stop_confirmed(dt_s):
@@ -322,6 +333,21 @@ class FollowTask(Task):
         if getattr(got, "rejected", False):
             log.warning("跟人 %s:退的速度被 HAL 拒了(%s)", self.task_id, getattr(got, "reason", ""))
         return True
+
+    async def _battery_low(self) -> str:
+        """电量低于导航段用的停止线(报警级 ``ALARM_FLOOR_PCT``,别的按任务默认):回原因;
+        不低回 ``""``。"""
+        if self._hal is None:
+            return ""
+        line = ALARM_FLOOR_PCT if self.priority >= ALARM_PRIORITY else Policy().battery_abort_pct
+        try:
+            pct = getattr(await self._hal.battery(), "percent", None)
+        except Exception:
+            log.exception("跟人 %s:读电量失败", self.task_id)
+            return ""
+        if isinstance(pct, (int, float)) and pct < line:
+            return f"电量 {pct:.0f}% 低于停止线 {line:.0f}%"
+        return ""
 
     async def _halt_pending(self) -> None:
         """发停车,记一笔「待停稳」(停车出错也记着,外审 W77-1 #3)。"""
