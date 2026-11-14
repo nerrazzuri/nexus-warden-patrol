@@ -193,7 +193,7 @@ class FollowTask(Task):
             await self._stop_backing()
             await self._stop_confirmed(dt_s)
             return
-        if await self._keep_off(now, here):
+        if await self._keep_off(now, here, dt_s):
             return
         if not await self._stop_confirmed(dt_s):
             return                                       # 退过的那一下停稳了,才起导航段
@@ -214,6 +214,8 @@ class FollowTask(Task):
         """一段走完了;回 True = 任务这一拍已经收尾。"""
         if leg.state is TaskState.FAILED:
             why = str(leg.detail.get("reason", ""))
+            if why == "stop_unconfirmed" and self._stop_wait is None:
+                self._stop_wait = 0.0                     # 外审 W77-3 #1:接着等停稳,别的都先不动
             if self._parts.engine.returned or "返航" in why:
                 self.state = TaskState.FAILED
                 self.detail = {"reason": f"跟人途中电量到线、返航:{why}"[:200], **self._report()}
@@ -274,7 +276,8 @@ class FollowTask(Task):
         best = min(pts, key=lambda q: math.dist(q, prev))
         return best if math.dist(best, prev) <= GATE_M + PERSON_MAX_MPS * gap_s else None
 
-    async def _keep_off(self, now: int, here: tuple[float, float, float] | None) -> bool:
+    async def _keep_off(self, now: int, here: tuple[float, float, float] | None,
+                        dt_s: float = 0.0) -> bool:
         """用户 11-15:人走近到 :data:`BACK_M` 以内 → 停下这一段、往远离人的方向退,
         退到 :data:`CLEAR_M` 以外再接着跟;退不了原地站定、发 ``follow_cornered``(一次)。
         回 True = 这一拍在退(别的不办)。"""
@@ -295,6 +298,8 @@ class FollowTask(Task):
                     self._pending_back = True            # 退完再接着回最后位置
                 await self._leg.abort("follow_backoff")
             return True                                  # 这一段停稳了再退
+        if not await self._stop_confirmed(dt_s):
+            return True                                  # 上一下(导航段或后退)还没停稳:先不退
         assert here is not None and self._person is not None
         b = math.degrees(math.atan2(self._person[1] - here[1], self._person[0] - here[0]) - here[2])
         b = (b + 180.0) % 360.0 - 180.0

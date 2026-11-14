@@ -473,3 +473,30 @@ async def test_外审W77_2_1_一直确认不了停稳_不放行_重发停车_报
     hal.never = False
     await _跑(空台, t, 2)
     assert t.state is TaskState.PREEMPTED
+
+
+async def test_外审W77_3_1_导航段停不稳收尾_不往后退_停稳了再退(空台):
+    c, r, parts = 空台
+    p = 人(r, 9.0, 4.0)
+    t, _ = _退的任务(空台, p)
+    assert parts.hal is r
+    await t.start()
+    await _跑(空台, t, 2)
+    assert t._leg is not None, "人在 8 m 外:起导航段跟"
+    real_stopped, real_vel = r.stopped, r.set_velocity
+    sent = []
+
+    async def 没停():
+        return False
+
+    async def 记(cmd):
+        sent.append(cmd.vx)
+        return await real_vel(cmd)
+    r.stopped, r.set_velocity = 没停, 记
+    p.x = r.x + 3.5                                      # 人一下走近到 3.5 m
+    await _跑(空台, t, 10)
+    assert not [v for v in sent if v < 0], "导航段还没确认停稳:不发后退速度"
+    assert t._leg is None
+    r.stopped = real_stopped
+    await _跑(空台, t, 2)
+    assert [v for v in sent if v < 0], "停稳了:接着退"

@@ -262,8 +262,8 @@ class PersonWatch:
                 payloads.append({"output": out, "on": True, "max_s": WARN_STROBE_S})
         lit = {p["output"] for p in payloads if p["output"] in ("strobe", "siren")}
         if lit:
-            cur = self._lit_of(rid)                       # 每开一次换一代(外审 W77-2 #2)
-            self._set_lit(rid, {**cur, **{o: cur.get(o, 0) + 1 for o in lit}})
+            cur, seq = self._lit_row(rid)                 # 每开一次换一代(外审 W77-2 #2)
+            self._set_lit(rid, {**cur, **{o: seq + 1 for o in lit}}, seq + 1)
         if pool:
             n = self._warn_n.get(rid, 0)
             self._warn_n[rid] = n + 1
@@ -281,29 +281,37 @@ class PersonWatch:
             self._warn_jobs.add(job)
             job.add_done_callback(self._warn_jobs.discard)
 
-    def _lit_of(self, rid: str) -> dict[str, int]:
-        """见人开着、还没确认关掉的输出 → 开的第几代(外审 W77-2 #2:关的回执只销它关的那一代)。"""
+    def _lit_row(self, rid: str) -> tuple[dict[str, int], int]:
+        """见人开着、还没确认关掉的输出 → 开的第几代;外加这台机器人用到第几代了。代号只增不复用
+        (清账、驱离接管以后也不复用,外审 W77-3 #2):关的回执只销它关的那一代。"""
         rows = self.db.query("SELECT outputs FROM person_warn_lit WHERE robot_id=?", (rid,))
         if not rows:
-            return {}
+            return {}, 0
         try:
             got = json.loads(rows[0]["outputs"])
         except ValueError:
-            return {}
-        if isinstance(got, list):
-            return {str(x): 0 for x in got}
-        return {str(k): int(v) for k, v in got.items() if isinstance(v, int)} \
-            if isinstance(got, dict) else {}
+            return {}, 0
+        if not isinstance(got, dict):
+            return {}, 0
+        lit = got.get("lit")
+        seq = got.get("seq")
+        outs = {str(k): v for k, v in lit.items() if isinstance(v, int)} \
+            if isinstance(lit, dict) else {}
+        return outs, max([seq if isinstance(seq, int) else 0, *outs.values()])
 
-    def _set_lit(self, rid: str, outs: dict[str, int]) -> None:
+    def _lit_of(self, rid: str) -> dict[str, int]:
+        return self._lit_row(rid)[0]
+
+    def _set_lit(self, rid: str, outs: dict[str, int], seq: int | None = None) -> None:
+        """记下开着的;清空了也留着这一行(记着代号用到哪了)。"""
+        if seq is None:
+            seq = self._lit_row(rid)[1]
+        body = json.dumps({"seq": seq, "lit": dict(sorted(outs.items()))})
         with self.db.tx() as tx:
-            if outs:
-                tx.execute("INSERT INTO person_warn_lit(robot_id, outputs, updated_ms) "
-                           "VALUES (?,?,?) ON CONFLICT(robot_id) DO UPDATE SET "
-                           "outputs=excluded.outputs, updated_ms=excluded.updated_ms",
-                           (rid, json.dumps(dict(sorted(outs.items()))), self._now()))
-            else:
-                tx.execute("DELETE FROM person_warn_lit WHERE robot_id=?", (rid,))
+            tx.execute("INSERT INTO person_warn_lit(robot_id, outputs, updated_ms) "
+                       "VALUES (?,?,?) ON CONFLICT(robot_id) DO UPDATE SET "
+                       "outputs=excluded.outputs, updated_ms=excluded.updated_ms",
+                       (rid, body, self._now()))
 
     def _unwarn(self, rid: str, now: int) -> None:
         """用户 11-15:人走了(看不到了),见人开的警灯、警笛当场关(不等 :data:`WARN_STROBE_S` 到点)。
