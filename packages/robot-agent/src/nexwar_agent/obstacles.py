@@ -1,18 +1,22 @@
 """代理这一侧的障碍(W11 设计稿 §3–5,W08 决定 8):感知给的局部栅格 → 滚动记忆 → 守卫。
 
-- :class:`ObstacleView`:收感知的栅格(``on_grid``,记下**代理收到时的单调钟**)与每拍的里程
+- :class:`ObstacleView`:收感知的栅格(``on_grid``,记下**采集时刻**,代理单调钟上的)与每拍的里程
   (``note_odom``);留最近 :data:`MEMORY_S` 秒的栅格,查一个点(此刻狗身系)时按里程换到每一帧当时的
   狗身系,**从新到旧**找第一个「看见过」它的帧:那一帧说挡就挡、说空就空;都没看见过 = 未知(当挡)。
   转身时身后、身侧刚看过的格子靠这个;狗自己刚站过的地方算空。
 - :class:`ObstacleGuard`:一条速度命令发出去之前,按这条命令把机身矩形(+ 余量)往前推「链路延迟 +
   刹停距离 + 余量」那么远(刹停按**里程实测速度**,W08 决定 8),原地转是外接圆;扫过的格子有挡或
   未知 → 不发。机身此刻占着的那块不查。往后退(狗尾为前,W09i)一样,往后推。
-- 新鲜度按代理收到时的单调钟:最新一帧 ≤ :data:`FRESH_S` 算新鲜;没新鲜的 → 守卫当挡(原地等);
-  超过 :data:`LOST_S` → 「雷达掉线」(后端发 13331,引擎中止)。
+- 采集时刻(外审 11-14):帧头时刻是感知的钟,不跟单调钟直接减;按「收到 − 帧头」比参考值多出来的
+  算这一帧多等了多久(:data:`CLOCK_DRIFT`);重复、乱序、积压超过 :data:`LOST_S` 的丢;seq 从头来、
+  帧头倒退 → 重新估钟。里程位姿按采集时刻插。
+- 新鲜度:最新一帧采集以后 ≤ 固定延迟 + :data:`FRESH_S` 算新鲜(正常收到以后有 FRESH_S 的余量);
+  没新鲜的 → 守卫当挡(原地等);超过固定延迟 + :data:`LOST_S` → 「雷达掉线」(后端发 13331,引擎中止)。
 """
 
 from __future__ import annotations
 
+import logging
 import math
 import time
 from collections import deque
@@ -41,7 +45,8 @@ MEMORY_STILL_M = 0.15
 FRESH_S = 0.3
 LOST_S = 2.0
 ODOM_KEEP_S = 12.0
-#: 感知链路的延迟(秒,雷达帧 → 代理收到;待真机量):栅格配「收到时刻 − 它」那一刻的里程位姿
+#: 感知链路**最快那一路**的延迟(秒,雷达采集 → 代理收到;待真机量,写进 docs/真机验证.md):多等的
+#: 按帧头时刻另算(:data:`CLOCK_DRIFT`),采集时刻 = 收到 − 多等的 − 它;里程位姿按采集时刻配
 #: (内审应修 4:配收到时刻的位姿,障碍会被往前多算 v·延迟)。
 PERCEPTION_LATENCY_S = 0.15
 #: 「狗自己刚站过的地方算空」只信这么久(内审再议:人可能跟着走进来)。
@@ -52,6 +57,20 @@ WALL_SPAN_S = 1.2
 WALL_STILL_M = 0.05
 WALL_STILL_RAD = 0.035
 WALL_MAX_AGE_S = 2.5
+#: 外审 11-14:帧按**采集时刻**算。帧头 ``stamp_ns`` 是感知那边的钟,跟代理单调钟不能直接减;只看
+#: 「收到 − 帧头」的变化:见过最小的当参考(一路最快),这一帧比参考多出来的 = 多等的(积压、卡顿)。
+#: 参考往下随时跟;往上每秒最多涨这么多秒(吸收两边钟的漂移,远大于晶振的几十 ppm;持续卡着的
+#: 不会过几秒就被当成正常)。
+CLOCK_DRIFT = 1e-3
+#: 刚开始 / 重新估钟以后,攒够这么多帧才算帧龄可信(``stamp_trusted``)。
+CLOCK_MIN_FRAMES = 5
+#: seq 退回到这么小当感知重启(重新估钟);别的 seq 不往前的当重复 / 乱序,丢掉。
+RESTART_SEQ = 3
+#: 多等超过这么久(积压、卡顿)记一条告警,最多每 :data:`DELAY_LOG_S` 秒一条。
+DELAY_WARN_S = 0.1
+DELAY_LOG_S = 10.0
+
+log = logging.getLogger(__name__)
 
 
 def _compose(a: tuple[float, float, float], p: tuple[float, float]) -> tuple[float, float]:
@@ -102,6 +121,16 @@ class ObstacleView:
     #: 工单 21:狗最近一次挪窝(离上次站的地方超过 :data:`MEMORY_STILL_M`)的位置和时刻。
     _still_at: tuple[float, float] | None = None
     _still_since: float = -math.inf
+    #: 外审 11-14 采集时刻:最近一帧估的「采集 → 收到」(秒)、帧龄可不可信(没有帧头时刻、刚重新估钟
+    #: 的不可信:照固定延迟算)。
+    delay_s: float = 0.0
+    stamp_trusted: bool = False
+    _clk_ref: float | None = None          # 「收到 − 帧头」的参考值
+    _clk_rx: float = 0.0
+    _clk_n: int = 0
+    _last_seq: int = 0
+    _last_stamp: float = -math.inf
+    _delay_logged: float = -math.inf
 
     # ------------------------------------------------------------ 喂进来
 
@@ -130,14 +159,52 @@ class ObstacleView:
             prev = (at, p)
         return self.odom[-1][1]
 
+    def _acquired(self, g: Grid, rx: float) -> float | None:
+        """这一帧在代理单调钟上的采集时刻;重复、乱序、积压超过 :data:`LOST_S` 的回 None(丢)。"""
+        if g.stamp_ns <= 0:                          # 老感知没帧头时刻:照固定延迟
+            self.stamp_trusted, self.delay_s = False, self.latency_s
+            return rx - self.latency_s
+        st = g.stamp_ns / 1e9
+        if g.seq < self._last_seq and g.seq <= RESTART_SEQ:
+            self._clk_ref = None                     # 感知重启:重新估
+        elif g.seq <= self._last_seq:
+            return None                              # 重复 / 乱序
+        elif st <= self._last_stamp:
+            self._clk_ref = None                     # seq 往前、帧头倒退:对方换了钟
+        self._last_seq, self._last_stamp = g.seq, st
+        d = rx - st
+        if self._clk_ref is None:
+            self._clk_ref, self._clk_n = d, 0
+        else:
+            self._clk_ref = min(d, self._clk_ref + CLOCK_DRIFT * max(0.0, rx - self._clk_rx))
+        self._clk_rx = rx
+        self._clk_n += 1
+        self.stamp_trusted = self._clk_n >= CLOCK_MIN_FRAMES
+        extra = d - self._clk_ref
+        self.delay_s = extra + self.latency_s
+        if extra > DELAY_WARN_S and rx - self._delay_logged >= DELAY_LOG_S:
+            self._delay_logged = rx
+            log.warning("感知帧多等了 %.2f s(采集 → 收到共 %.2f s;积压或卡顿)%s", extra,
+                        self.delay_s, ",超过掉线时长,丢掉" if self.delay_s > LOST_S else "")
+        if self.delay_s > LOST_S:
+            return None                              # 积压太久:里程早配不上了
+        return rx - self.delay_s
+
+    def fresh(self) -> bool:
+        """最新一帧新鲜(采集以后 ≤ 固定延迟 + :data:`FRESH_S`;正常收到以后有 FRESH_S 的余量)。"""
+        return bool(self.frames) and self.age() <= FRESH_S + self.latency_s
+
     def on_grid(self, g: Grid) -> None:
         now = self.monotonic()
         self.check, self.reason, self.rear, self.rear_cal = g.check, g.reason, g.rear, g.rear_cal
-        pose = self.pose_at(now - self.latency_s)
+        at = self._acquired(g, now)
+        if at is None:
+            return
+        pose = self.pose_at(at)
         if pose is None or g.check != "ok":
             return                                   # 没有里程配不上;自检没过的不用
         occ, known = g.bits()
-        self.frames.appendleft(_Frame(at=now, pose=pose,
+        self.frames.appendleft(_Frame(at=at, pose=pose,
                                       occ=np.frombuffer(occ, dtype=np.uint8),
                                       known=np.frombuffer(known, dtype=np.uint8),
                                       size=g.size, res=g.res,
@@ -192,7 +259,7 @@ class ObstacleView:
         ``initializing``。"""
         if self.check == "extrinsic_bad":
             return "extrinsic_bad"
-        a = self.age()
+        a = self.age() - self.latency_s
         if a <= FRESH_S:
             return "ok"
         if a <= LOST_S:
@@ -206,7 +273,7 @@ class ObstacleView:
         「挡」离前沿多远(米);没有是 inf。只看「挡」:「看不见」守卫管,
         算进来的话侧面盲带会让狗一直慢。
         近障降速用(W12),不管安全 —— 帧是此刻之前 ≤ :data:`FRESH_S` 的,差几厘米无所谓。"""
-        if not self.frames or self.age() > FRESH_S:
+        if not self.fresh():
             return math.inf
         f = self.frames[0]
         n = f.size

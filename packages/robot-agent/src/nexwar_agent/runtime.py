@@ -1043,6 +1043,8 @@ class AgentRuntime:
             o: dict[str, Any] = {"state": self.obs_view.state(), "rear": self.obs_view.rear}
             if self.obs_view.reason:
                 o["reason"] = self.obs_view.reason[:200]
+            if self.obs_view.frames:
+                o["stamp_ok"] = self.obs_view.stamp_trusted   # 外审 11-14:帧龄可不可信
             out["obstacles"] = o
         n2 = self._nav2_caps()
         if n2 is not None:
@@ -3133,6 +3135,8 @@ class AgentRuntime:
             st = self.obs_view.state()
             # 只在「能用 / 不能用 / 原因」变了时重发(ok 与 stale 之间来回翻不发,内审小)
             st = "ok" if st == "stale" else st
+            if self.obs_view.frames:
+                st += "/stamp_ok" if self.obs_view.stamp_trusted else "/stamp_bad"   # 外审 11-14
             if st != self._obs_state_told:
                 self._obs_state_told = st
                 if self.transport.connected:

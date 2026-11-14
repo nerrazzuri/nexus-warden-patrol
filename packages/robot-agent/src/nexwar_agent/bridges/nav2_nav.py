@@ -1713,8 +1713,7 @@ class Nav2NavBackend(PlannedNavBackend):
         view, g = self.obstacles, self.guard
         if view is None or g is None or not getattr(view, "frames", None):
             return V_BASE
-        from nexwar_agent.obstacles import FRESH_S
-        if view.age() > FRESH_S:
+        if not view.fresh():
             return V_BASE
         f = view.frames[0]
         n, res = f.size, f.res
@@ -1758,8 +1757,7 @@ class Nav2NavBackend(PlannedNavBackend):
         view, g = self.obstacles, self.guard
         if not algo or view is None or g is None or not getattr(view, "frames", None):
             return V_FAST
-        from nexwar_agent.obstacles import FRESH_S
-        if view.age() > FRESH_S:
+        if not view.fresh():
             return V_FAST
         f = view.frames[0]
         n, res = f.size, f.res

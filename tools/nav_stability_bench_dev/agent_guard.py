@@ -321,7 +321,7 @@ def main() -> int:
 
     def vis_cap(travel: int) -> float:
         """正式代码 ``_vis_cap`` 的同一套算法(看得清多远 + 地图之外的东西多近)。"""
-        if not view.frames or view.age() > 0.3:
+        if not view.fresh():
             return K["V_BASE"]
         f = view.frames[0]
         n, res = f.size, f.res
@@ -396,7 +396,7 @@ def main() -> int:
 
     def occ_cap(travel: int) -> float:
         """遮挡限速。E1:按冒出点离机身的距离分档;E2:按「反应 + 刹车」在冒出点之前停得住。"""
-        if not occ_algo or not view.frames or view.age() > 0.3:
+        if not occ_algo or not view.fresh():
             return K["V_FAST"]
         x, gp = emergence(view.frames[0], 1.0 if travel >= 0 else -1.0)
         if occ_algo == "E1":
