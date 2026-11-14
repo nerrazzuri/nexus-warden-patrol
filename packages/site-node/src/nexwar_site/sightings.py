@@ -360,6 +360,12 @@ class PersonWatch:
 
     async def _unwarn_one(self, rid: str, out: str, gen: int) -> None:
         try:
+            # 外审 W77-6 #2:真发之前再核一遍 —— 排队这会儿驱离接手了 / 受力警报占了 /
+            # 又重开了,就不关
+            held = self._held(rid)
+            if rid in set(getattr(self.deterrence, "sessions", {}) or {}) \
+                    or held is None or out in held or self._lit_of(rid).get(out) != gen:
+                return
             r = await self.dispatcher.deter(rid, {"output": out, "on": False},
                                             issued_by="site:person_warn", priority=WARN_PRIORITY)
             ack = (r or {}).get("ack") if isinstance(r, dict) else None
