@@ -1,0 +1,128 @@
+19:00 起布防|Arms 19:00
+2 台已急停|2 robots E-stopped
+2 台机器人已急停|2 robots E-stopped
+2 号楼东门|Building 2 east door
+4 走不到|4 unreachable
+62% · 约 2 小时 40 分|62% · approx. 2 h 40 min
+A 28%，来回约用 6%，够|A at 28%; round trip uses approx. 6% — sufficient
+App 推送 + 电话|App push + phone call
+A 会先暂停 guard-1 第 3 圈|A will pause guard-1, lap 3
+A 到场后用，驱离闯入的人|Use once A is on site to deter the intruder
+A 的任务|A task
+A 的画面|A video
+A · 约 9 分钟走完|A · approx. 9 min to complete
+B · 在充电，18%|B · charging, 18%
+gina 23:52 按了全部急停。它们原地不动，直到恢复；恢复后不会自己接着跑，要再派。|E-STOP ALL triggered by gina at 23:52. Robots hold position until reset; after reset they remain idle until dispatched.
+guard-1 走完|guard-1 completed
+olga · 经理|olga · Manager
+vic · 只读|vic · View only
+一直巡逻|Continuous
+中文|Chinese
+云台|PTZ
+云台、喊话、警灯、停下和遥控由值班保安在「值班」页做。|PTZ, announcements, strobe, stop and teleoperation are performed by the guard on duty in Monitoring.
+低于这个电量就回去充电，另一台接上|Below this level the robot returns to charge and the other takes over
+保安 临时路线|Guard One-off route
+保安 单台机器人|Guard Robot control
+保安 急停后|Guard After E-stop
+保安 派去看一眼|Guard Spot check
+保留这段|Retain clip
+值班：gina（在线）|On duty: gina (online)
+停下后它等你下一步；回待命点会中止这一圈|Stop holds position for further instructions; Return to standby aborts the current lap
+停车场一圈 · 约 25 分|Car park loop · approx. 25 min
+停车场入口|Car park entrance
+停车场北侧|Car park, north side
+催 gina 处理|Escalate to gina
+先挪开或撤销第 4 个点|Move or remove point 4 first
+← 全场|← Site view
+全部切热像|All thermal
+全部恢复…|Reset all…
+其余 9 项正常|9 other checks normal
+其余 9 项正常。|9 other checks normal.
+到了以后在下面画面里看；不会产生报警|View on arrival in the video panel below; no alarm is raised
+前|Front
+加上授权|Add authorization
+北区 · guard-1 第 3 圈 · 62% · 定位好 · 上次联系 1 秒前|North sector · guard-1 lap 3 · 62% · Localized · Last contact 1 s ago
+取消|Cancel
+只读 告警处理中|View only Alarm in progress
+只读账号：可以看画面和录像，处理由值班人员做|View-only account: video and recordings are visible; response is handled by the duty team
+后|Rear
+喊话：请离开|Announce: leave the area
+回中|Center
+回待命点|Return to standby
+圆圈：排好的单次巡逻和开始时间|Circle: scheduled patrol run and start time
+圈数|Laps
+在地图上点要看的位置，可以再点别处换位置|Click the location to inspect; click elsewhere to change it
+在墙外，和机器人那边不连通。挪开或撤销。|Outside the wall; not connected to the robot's area. Move or remove it.
+在空白处拖动加布防时段，拖两端改时间。|Drag on empty space to add an armed period; drag the ends to adjust.
+（在线），|(online),
+在跑 guard-1 第 3 圈，还要约 12 分钟。|Running guard-1, lap 3; approx. 12 min remaining.
+在跑停车场一圈，还要约 25 分钟。|Running car park loop; approx. 25 min remaining.
+地图、定位、诊断、软件升级。安装和售后用，平时不用来这里。|Maps, localization, diagnostics, software updates. For installation and support; not needed in daily operation.
+姿态：|Posture:
+它现在没在跑任务，可以重启。|No task running; safe to restart.
+定了会显示在这里|Shown here once recorded
+定位：|Localization:
+定位好|Localized
+巡逻电量线|Patrol battery threshold
+布置|Layout
+布防到 07:00|Armed until 07:00
+布防时连续巡逻|Continuous patrol while armed
+开始|Start
+开始停车场一圈 · gina 派的|Started car park loop · dispatched by gina
+开警灯 30 秒|Strobe 30 s
+排好的巡逻 01:00|Scheduled patrol 01:00
+排好的巡逻 04:00|Scheduled patrol 04:00
+排好的巡逻 20:00|Scheduled patrol 20:00
+排好的巡逻 22:00|Scheduled patrol 22:00
+换一台跑 01:00|Reassign 01:00 run
+接着巡逻|Resume patrol
+撤销上一个点|Undo last point
+日志、配置和最近 10 分钟的状态，打包给工程师|Logs, configuration and the last 10 min of status, packaged for an engineer
+星期|Weekdays
+最近的 A 离北门 48 米|Nearest: A, 48 m from north gate
+最近的：A · 约 2 分钟到|Nearest: A · ETA approx. 2 min
+最近能去的是 A：离北门 48 米，约 1 分钟|Nearest available: A, 48 m from north gate, ETA 1 min
+机器人能走到 · 离 A 约 60 米|Reachable · approx. 60 m from A
+派去看一眼|Spot check
+派哪台|Robot
+派它|Dispatch
+派它去看一眼…|Spot check…
+派机器人|Dispatch robot
+派机器人、喊话、警灯由值班保安做。现在值班：|Robot dispatch, announcements and strobe are handled by the guard on duty. On duty:
+热像|Thermal
+现在值班：gina（在线）|On duty: gina (online)
+现在的任务|Current task
+现场控制|On-site control
+现场 · 由值班保安做|On site · handled by the guard on duty
+现场警示 · 用 A 的喇叭和警灯|Deterrence · A's speaker and strobe
+看完以后|After inspection
+约 1 分钟，期间不能派|Approx. 1 min; unavailable for dispatch meanwhile
+约 4 分钟，期间不能派|Approx. 4 min; unavailable for dispatch meanwhile
+粗条：布防时段|Thick bar: armed period
+细线：布防期间连续巡逻，断开处在充电或换车|Thin line: continuous patrol while armed; gaps = charging or handover
+经理 告警处理中|Manager Alarm in progress
+经理 机器人|Manager Robots
+维护|Maintenance
+证书马上作废，所有机器人断开约 10 秒。要输入密码。|Revokes the certificate immediately; all robots disconnect for approx. 10 s. Password required.
+诊断包|Support bundle
+语言|Language
+谁在处理|Owner
+走完回到原来的任务；日程到点时日程优先|Resumes the previous task when done; scheduled runs take priority
+超过保留期也不删|Kept beyond the retention period
+跑 1 圈|1 lap
+跑 3 圈|3 laps
+跳到 时:分:秒|Go to hh:mm:ss
+跳到时间|Go to time
+还没人接手|Unassigned
+还没定|Pending
+还没接手|not yet assigned
+还没派|Not dispatched
+这一圈跑完再开始；日程到点时日程优先|Starts after the current run; scheduled runs take priority
+这一圈跑完再开始；日程到点时日程优先。|Starts after the current run; scheduled runs take priority.
+退出|Exit
+通知|Notify
+通知经理 olga|Notify manager olga
+重新定位|Re-localize
+镜头|Camera
+临时路线|One-off route
+按顺序在地图上点，已点 4 个。只走这一次，不保存。|Click points in order; 4 placed. Runs once and is not saved.

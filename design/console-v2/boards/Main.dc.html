@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>方案 A 事件处理台</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&display=swap">
+<style>
+body{margin:0}
+a{color:#5AA2E6}a:hover{color:#CFE4FA}
+.btn{height:40px;padding:0 16px;border:1px solid #9A9FA6;border-radius:2px;background:#16191D;color:#ECEDEA;font:600 14px Barlow,"Noto Sans SC","Microsoft YaHei UI",sans-serif;display:inline-flex;align-items:center;gap:8px;cursor:pointer;white-space:nowrap}
+.btn.sm{height:32px;padding:0 12px;font-size:13px}
+.btn.pri{background:#1F6FC0;border-color:#1F6FC0;color:#fff;font-weight:700}
+.btn.stop{background:#D42F33;border-color:#D42F33;color:#fff;font-weight:700}
+.lbl{font-size:12px;font-weight:600;letter-spacing:.06em;color:#9A9FA6}
+.ring{display:inline-block;flex:none;width:12px;height:12px;border:3px solid #FF6166;border-radius:50%;box-sizing:border-box}
+.tri{display:inline-block;flex:none;width:0;height:0;border-left:7px solid transparent;border-right:7px solid transparent;border-bottom:12px solid #F2B01E}
+.sq{display:inline-block;flex:none;width:9px;height:9px;background:#3DC46E}
+.disc{display:inline-block;flex:none;width:10px;height:10px;border-radius:50%;background:#fff}
+</style>
+</helmet>
+<div style="width:1440px;height:900px;box-sizing:border-box;background:#0E1013;color:#ECEDEA;font-family:Barlow,'Noto Sans SC','Microsoft YaHei UI',sans-serif;font-size:14px;line-height:20px;font-variant-numeric:tabular-nums;display:flex;flex-direction:column">
+
+  <!-- 顶栏：没有侧栏，三个去处 -->
+  <header style="height:56px;flex:none;display:flex;align-items:center;gap:16px;padding:0 16px;border-bottom:1px solid #2E333A;background:#0A0C0E">
+    <div style="display:flex;flex-direction:column;line-height:14px"><b style="font-size:13px;letter-spacing:.12em">NEXUS</b><span style="font-size:11px;letter-spacing:.12em;color:#B4B8BE">WARDEN</span></div>
+    <nav aria-label="主导航" style="display:flex;gap:4px;margin-left:16px">
+      <a href="#" aria-current="page" style="height:56px;display:flex;align-items:center;padding:0 14px;color:#ECEDEA;text-decoration:none;font-weight:700;box-shadow:inset 0 -3px 0 #1F6FC0">值班</a>
+      <a href="#" style="height:56px;display:flex;align-items:center;padding:0 14px;color:#B4B8BE;text-decoration:none;font-weight:600">记录与录像</a>
+      <a href="#" style="height:56px;display:flex;align-items:center;padding:0 14px;color:#B4B8BE;text-decoration:none;font-weight:600">现场设置</a>
+    </nav>
+    <div style="flex:1"></div>
+    <span style="display:inline-flex;align-items:center;gap:8px;height:32px;padding:0 12px;background:#16281D;color:#3DC46E;font-weight:600"><span class="sq"></span>布防中 · 到 07:00</span>
+    <span style="color:#B4B8BE">estate-1</span>
+    <span style="font-size:15px">11-15 周六 23:48</span>
+    <span style="color:#B4B8BE">gina · 保安</span>
+    <button class="btn stop" type="button"><span style="width:12px;height:12px;border:2px solid #fff;border-radius:50%;box-sizing:border-box"></span>全部叫停</button>
+  </header>
+
+  <div style="flex:1;min-height:0;display:grid;grid-template-columns:320px minmax(0,1fr) 300px">
+
+    <!-- 左：事件队列 -->
+    <aside style="border-right:1px solid #2E333A;display:flex;flex-direction:column;min-height:0">
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid #2E333A">
+        <h2 style="margin:0;font-size:15px">待处理 3</h2>
+        <span class="lbl">本班 19:00 起 · 共 7</span>
+      </div>
+      <ol style="list-style:none;margin:0;padding:0;flex:1;overflow:auto">
+        <li style="padding:12px 16px;background:#33191B;box-shadow:inset 0 0 0 2px #FF6166">
+          <div style="display:flex;gap:10px;align-items:center"><span class="ring"></span><b style="font-size:15px;flex:1">北门有人翻越</b><span style="color:#FF6166;font-weight:700">P1</span></div>
+          <div style="margin:4px 0 0 22px;color:#B4B8BE">北区 · 摄像头 3 · 23:47 · 1 分钟前</div>
+          <div style="margin:4px 0 0 22px;color:#FF6166;font-weight:600">没人接手</div>
+        </li>
+        <li style="padding:12px 16px;border-bottom:1px solid #2E333A">
+          <div style="display:flex;gap:10px;align-items:center"><span class="ring"></span><b style="font-size:15px;flex:1">B 等待换电</b><span style="color:#FF6166;font-weight:700">P1</span></div>
+          <div style="margin:4px 0 0 22px;color:#B4B8BE">充电桩 1 · 23:31 · 17 分钟前</div>
+          <div style="margin:4px 0 0 22px;color:#B4B8BE">olga 处理中</div>
+        </li>
+        <li style="padding:12px 16px;border-bottom:1px solid #2E333A">
+          <div style="display:flex;gap:10px;align-items:center"><span class="tri"></span><b style="font-size:15px;flex:1">A 电量低于 30%</b><span style="color:#F2B01E;font-weight:700">P2</span></div>
+          <div style="margin:4px 0 0 22px;color:#B4B8BE">巡逻中 · 23:12 · 36 分钟前</div>
+        </li>
+        <li style="padding:10px 16px;color:#9A9FA6" class="lbl">今晚已关闭 4</li>
+        <li style="padding:8px 16px;display:flex;gap:10px;color:#B4B8BE;border-bottom:1px solid #2E333A"><span style="width:12px"></span><span style="flex:1">停车场车辆滞留</span><span>22:05 · 误报</span></li>
+        <li style="padding:8px 16px;display:flex;gap:10px;color:#B4B8BE;border-bottom:1px solid #2E333A"><span style="width:12px"></span><span style="flex:1">南墙有人靠近</span><span>21:40 · 确认有人</span></li>
+        <li style="padding:8px 16px;display:flex;gap:10px;color:#B4B8BE;border-bottom:1px solid #2E333A"><span style="width:12px"></span><span style="flex:1">A 卡住，已脱困</span><span>20:52 · 已处理</span></li>
+        <li style="padding:8px 16px;display:flex;gap:10px;color:#B4B8BE"><span style="width:12px"></span><span style="flex:1">B 离线 2 分钟</span><span>19:30 · 已处理</span></li>
+      </ol>
+      <div style="padding:12px 16px;border-top:1px solid #2E333A">
+        <div class="lbl" style="margin-bottom:4px">上一班留言 · olga 19:05</div>
+        <p style="margin:0;color:#ECEDEA">白天正常。停车场有施工车辆进出，22:00 前算正常。</p>
+      </div>
+    </aside>
+
+    <!-- 中：选中事件的工作区 -->
+    <main style="min-width:0;display:flex;flex-direction:column;min-height:0">
+      <div style="padding:14px 20px;border-bottom:1px solid #2E333A;display:flex;align-items:center;gap:16px;background:#16191D;box-shadow:inset 0 4px 0 #D42F33">
+        <span style="width:32px;height:32px;border:8px solid #FF6166;border-radius:50%;box-sizing:border-box;flex:none"></span>
+        <div style="flex:1;min-width:0">
+          <h1 style="margin:0;font-size:22px;line-height:28px">北门有人翻越</h1>
+          <div style="color:#B4B8BE">P1 · 北区 北门 · 摄像头 3 先发现 · 23:47:12 · 有人在墙内，往 2 号楼走</div>
+        </div>
+        <button class="btn pri" type="button"><span class="disc"></span>我来处理</button>
+      </div>
+
+      <!-- 处理步骤 -->
+      <ol aria-label="处理步骤" style="list-style:none;margin:0;padding:10px 20px;display:flex;gap:0;border-bottom:1px solid #2E333A;font-weight:600">
+        <li style="flex:1;display:flex;align-items:center;gap:8px;color:#3DC46E"><span class="sq"></span>1 发现 23:47</li>
+        <li style="flex:1;display:flex;align-items:center;gap:8px;color:#ECEDEA"><span style="width:10px;height:10px;border:2px solid #5AA2E6;border-radius:50%;box-sizing:border-box"></span>2 接手</li>
+        <li style="flex:1;color:#9A9FA6">3 派机器人去看</li>
+        <li style="flex:1;color:#9A9FA6">4 有人到场</li>
+        <li style="flex:1;color:#9A9FA6">5 下结论、关闭</li>
+      </ol>
+
+      <div style="flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,1.35fr) minmax(0,1fr);grid-template-rows:minmax(0,1fr) auto;gap:12px;padding:12px 20px">
+        <!-- 画面 -->
+        <figure style="margin:0;position:relative;background:#000;border:1px solid #2E333A;min-height:0">
+          <div style="position:absolute;inset:0;background:repeating-linear-gradient(135deg,#0b0d10 0 14px,#0f1216 14px 28px)"></div>
+          <div style="position:absolute;left:0;right:0;top:0;display:flex;align-items:center;gap:8px;padding:8px 10px;background:rgba(0,0,0,.6)">
+            <span style="color:#ECEDEA;font-weight:700;letter-spacing:.06em">实时</span><span>摄像头 3 · 北门</span><span style="flex:1"></span>
+            <button class="btn sm" type="button">−30 秒回放</button><button class="btn sm" type="button">全屏</button>
+          </div>
+          <div style="position:absolute;left:38%;top:34%;width:90px;height:150px;border:2px solid #FF6166"></div>
+          <div style="position:absolute;left:38%;top:calc(34% + 154px);color:#FF6166;font-weight:700;background:#000;padding:2px 8px">人 · 0.93</div>
+          <figcaption style="position:absolute;left:10px;bottom:8px;color:#B4B8BE">画面占位 · 真实视频在这里</figcaption>
+        </figure>
+        <!-- 地图 -->
+        <figure style="margin:0;position:relative;background:#1B1F24;border:1px solid #2E333A;min-height:0;overflow:hidden">
+          <svg viewBox="0 0 400 320" preserveAspectRatio="xMidYMid meet" style="position:absolute;inset:0;width:100%;height:100%" aria-hidden="true">
+            <path d="M40 40 H360 V120 H260 V280 H140 V120 H40 Z" fill="#2A2F36" stroke="#5F646A" stroke-width="2"/>
+            <rect x="150" y="150" width="100" height="70" fill="none" stroke="#5F646A" stroke-dasharray="4 3"/>
+            <text x="200" y="190" fill="#9A9FA6" font-size="12" text-anchor="middle">2 号楼</text>
+            <path d="M300 80 C 240 80, 220 100, 200 140" fill="none" stroke="#5AA2E6" stroke-width="3" stroke-dasharray="6 4"/>
+            <circle cx="300" cy="80" r="9" fill="#3DC46E" stroke="#0E1013" stroke-width="2"/>
+            <text x="300" y="66" fill="#ECEDEA" font-size="13" font-weight="700" text-anchor="middle">A</text>
+            <circle cx="120" cy="60" r="16" fill="none" stroke="#FF6166" stroke-width="5"/>
+            <text x="120" y="98" fill="#FF6166" font-size="12" font-weight="700" text-anchor="middle">北门</text>
+            <circle cx="70" cy="250" r="9" fill="#3DC46E" stroke="#0E1013" stroke-width="2"/>
+            <text x="70" y="236" fill="#ECEDEA" font-size="13" font-weight="700" text-anchor="middle">B</text>
+          </svg>
+          <figcaption style="position:absolute;left:10px;top:8px;right:10px;display:flex;justify-content:space-between;color:#B4B8BE"><span>北区</span><span>A 最近：48 米 · 约 1 分钟</span></figcaption>
+        </figure>
+
+        <!-- 动作 -->
+        <section aria-label="处理" style="grid-column:1 / -1;display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding-top:4px">
+          <button class="btn" type="button">派 A 过去（48 米）</button>
+          <button class="btn" type="button">A 喊话</button>
+          <button class="btn" type="button">A 开警灯</button>
+          <button class="btn" type="button">通知经理 olga</button>
+          <span style="flex:1"></span>
+          <span class="lbl">结论</span>
+          <div role="group" aria-label="结论" style="display:inline-flex;border:1px solid #9A9FA6">
+            <button class="btn" type="button" style="border:0">确认有人</button>
+            <button class="btn" type="button" style="border:0;border-left:1px solid #2E333A">误报</button>
+          </div>
+          <button class="btn" type="button" disabled title="先选结论" style="border-style:dashed;color:#9A9FA6;background:transparent">关闭报警</button>
+        </section>
+      </div>
+      <div style="padding:8px 20px 12px;border-top:1px solid #2E333A;display:flex;gap:16px;color:#B4B8BE">
+        <span class="lbl">经过</span>
+        <span>23:47:12 摄像头 3 发现人</span><span>23:47:15 推送给 gina、olga</span><span>23:47:40 A 在 48 米外巡逻</span>
+      </div>
+    </main>
+
+    <!-- 右：机器人和全场 -->
+    <aside style="border-left:1px solid #2E333A;display:flex;flex-direction:column;min-height:0">
+      <div style="padding:12px 16px;border-bottom:1px solid #2E333A"><h2 style="margin:0;font-size:15px">机器人 2</h2></div>
+      <div style="padding:12px 16px;border-bottom:1px solid #2E333A;display:flex;flex-direction:column;gap:6px">
+        <div style="display:flex;align-items:center;gap:8px"><b style="font-size:16px">A</b><span style="display:inline-flex;align-items:center;gap:6px;color:#3DC46E;font-weight:600"><span class="sq"></span>巡逻中</span><span style="flex:1"></span><span style="color:#F2B01E;font-weight:600">28%</span></div>
+        <div style="color:#B4B8BE">guard-1 第 3 圈 · 北区 · 定位好</div>
+        <div style="height:72px;background:#000;border:1px solid #2E333A;display:flex;align-items:flex-end;padding:4px 6px;color:#9A9FA6;font-size:12px">A 前摄像头</div>
+      </div>
+      <div style="padding:12px 16px;border-bottom:1px solid #2E333A;display:flex;flex-direction:column;gap:6px">
+        <div style="display:flex;align-items:center;gap:8px"><b style="font-size:16px">B</b><span style="display:inline-flex;align-items:center;gap:6px;color:#FF6166;font-weight:600"><span class="ring" style="width:10px;height:10px;border-width:2px"></span>等换电</span><span style="flex:1"></span><span style="color:#FF6166;font-weight:600">6%</span></div>
+        <div style="color:#B4B8BE">充电桩 1 · 不能派</div>
+      </div>
+      <div style="padding:12px 16px;border-bottom:1px solid #2E333A">
+        <h2 style="margin:0 0 8px;font-size:15px">今晚巡逻</h2>
+        <ul style="list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px;color:#B4B8BE">
+          <li style="display:flex;gap:8px"><span>19:00</span><span style="flex:1">guard-1 · A</span><span style="color:#3DC46E">走完</span></li>
+          <li style="display:flex;gap:8px"><span>22:00</span><span style="flex:1">guard-1 · A</span><span style="color:#ECEDEA">进行中</span></li>
+          <li style="display:flex;gap:8px"><span>01:00</span><span style="flex:1">guard-1 · B</span><span style="color:#F2B01E">B 没电，可能跑不了</span></li>
+        </ul>
+      </div>
+      <div style="padding:12px 16px;margin-top:auto;border-top:1px solid #2E333A">
+        <label for="note" class="lbl">给下一班留言</label>
+        <textarea id="note" rows="2" style="margin-top:4px;width:100%;box-sizing:border-box;background:#0E1013;color:#ECEDEA;border:1px solid #9A9FA6;border-radius:2px;font:inherit;padding:6px 8px">23:47 北门有人翻越，处理中…</textarea>
+      </div>
+    </aside>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>保安 历史回放</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&display=swap">
+<style>
+body{margin:0}
+a{color:#5AA2E6}a:hover{color:#CFE4FA}
+.btn{height:40px;padding:0 16px;border:1px solid #9A9FA6;border-radius:2px;background:#16191D;color:#ECEDEA;font:600 14px Barlow,"Noto Sans SC","Microsoft YaHei UI",sans-serif;display:inline-flex;align-items:center;gap:8px;cursor:pointer;white-space:nowrap}
+.btn.sm{height:32px;padding:0 12px;font-size:13px}
+.btn.pri{background:#1F6FC0;border-color:#1F6FC0;color:#fff;font-weight:700}
+.btn.stop{background:#D42F33;border-color:#D42F33;color:#fff;font-weight:700}
+.seg{display:inline-flex;border:1px solid #2E333A}
+.seg .btn{border:0;background:transparent;border-radius:0}
+.seg .btn+.btn{border-left:1px solid #2E333A}
+.seg .btn.on{background:#1F6FC0;color:#fff}
+.lbl{font-size:12px;font-weight:600;letter-spacing:.06em;color:#9A9FA6}
+.ring{display:inline-block;flex:none;width:12px;height:12px;border:3px solid #FF6166;border-radius:50%;box-sizing:border-box}
+.tri{display:inline-block;flex:none;width:0;height:0;border-left:7px solid transparent;border-right:7px solid transparent;border-bottom:12px solid #F2B01E}
+.sq{display:inline-block;flex:none;width:9px;height:9px;background:#3DC46E}
+.h2{margin:0;font-size:15px;line-height:22px;font-weight:600}
+.sec{padding:12px 16px;border-bottom:1px solid #2E333A}
+.vid{position:relative;background:#000;border:1px solid #2E333A;min-height:0;overflow:hidden}
+.vid .noise{position:absolute;inset:0;background:#07080A}
+.vid .cap{position:absolute;left:0;right:0;top:0;display:flex;align-items:center;gap:8px;padding:6px 10px;background:rgba(0,0,0,.65)}
+.past{display:inline-flex;align-items:center;gap:6px;padding:2px 10px;background:#F2B01E;color:#1A1200;font-weight:700}
+</style>
+</helmet>
+<div style="width:1536px;height:960px;box-sizing:border-box;background:#0E1013;color:#ECEDEA;font-family:Barlow,'Noto Sans SC','Microsoft YaHei UI',sans-serif;font-size:14px;line-height:20px;font-variant-numeric:tabular-nums;display:flex;flex-direction:column">
+
+  <header style="height:60px;flex:none;display:flex;align-items:center;gap:16px;padding:0 16px;border-bottom:1px solid #2E333A;background:#0A0C0E">
+    <div style="display:flex;flex-direction:column;line-height:14px"><b style="font-size:13px;letter-spacing:.12em">NEXUS</b><span style="font-size:11px;letter-spacing:.12em;color:#B4B8BE">WARDEN</span></div>
+    <span style="color:#B4B8BE">estate-1</span>
+    <nav aria-label="主导航" style="display:flex;margin-left:8px">
+      <a href="#" aria-current="page" style="height:60px;display:flex;align-items:center;padding:0 14px;color:#ECEDEA;text-decoration:none;font-weight:700;box-shadow:inset 0 -3px 0 #1F6FC0">值班</a>
+      <a href="#" style="height:60px;display:flex;align-items:center;padding:0 14px;color:#B4B8BE;text-decoration:none;font-weight:600">记录与录像</a>
+    </nav>
+    <div style="flex:1"></div>
+    <span style="display:inline-flex;align-items:center;gap:8px;height:32px;padding:0 12px;background:#16281D;color:#3DC46E;font-weight:600"><span class="sq"></span>布防中 · 到 07:00</span>
+    <span style="display:inline-flex;align-items:center;gap:8px;height:32px;padding:0 12px;background:#20242A;font-weight:600">机器人 2/2 在线</span>
+    <span style="display:inline-flex;align-items:center;gap:8px;height:32px;padding:0 12px;background:#20242A;color:#B4B8BE;font-weight:600">未处理 0</span>
+    <span style="font-size:16px;font-weight:600">23:40</span>
+    <span style="color:#B4B8BE">gina · 保安</span>
+    <button class="btn stop" type="button"><span style="width:12px;height:12px;border:2px solid #fff;border-radius:50%;box-sizing:border-box"></span>全部急停</button>
+  </header>
+
+  <div style="flex:1;min-height:0;display:grid;grid-template-columns:338px minmax(0,1fr) 338px">
+    <aside aria-label="事件" style="border-right:1px solid #2E333A;display:flex;flex-direction:column;min-height:0">
+      <section class="sec"><h2 class="h2">安全事件</h2><p style="margin:8px 0 0;display:flex;align-items:center;gap:8px;color:#3DC46E;font-weight:600"><span class="sq"></span>没有待处理</p></section>
+      <section class="sec"><h2 class="h2">设备与运营</h2><p style="margin:8px 0 0;display:flex;align-items:center;gap:8px;color:#3DC46E;font-weight:600"><span class="sq"></span>没有待处理</p></section>
+      <section class="sec" style="flex:1">
+        <h2 class="h2" style="margin-bottom:8px">本班已关闭 4</h2>
+        <ul style="list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:2px;color:#B4B8BE">
+          <li style="display:flex;gap:8px;margin:0 -16px;padding:8px 16px;background:#14273D;box-shadow:inset 0 0 0 2px #1F6FC0;color:#ECEDEA"><span style="width:40px">22:05</span><span style="flex:1">停车场车辆滞留</span><span>误报</span></li>
+          <li style="display:flex;gap:8px;padding:6px 0"><span style="width:40px;color:#ECEDEA">21:40</span><span style="flex:1">南墙有人靠近</span><span>确认有人</span></li>
+          <li style="display:flex;gap:8px;padding:6px 0"><span style="width:40px;color:#ECEDEA">20:52</span><span style="flex:1">A 卡住，已脱困</span><span>已处理</span></li>
+          <li style="display:flex;gap:8px;padding:6px 0"><span style="width:40px;color:#ECEDEA">19:30</span><span style="flex:1">B 离线 2 分钟</span><span>已处理</span></li>
+        </ul>
+      </section>
+    </aside>
+
+    <!-- 中：回放模式。整块加黄框、标题条写「历史回放」，「实时」字样全部换掉 -->
+    <main style="min-width:0;display:flex;flex-direction:column;min-height:0;box-shadow:inset 0 0 0 3px #F2B01E">
+      <div style="padding:12px 20px;display:flex;align-items:center;gap:16px;border-bottom:1px solid #2E333A;background:#2D2512">
+        <span class="past">▌▌ 历史回放 · 22:05:14</span>
+        <div style="flex:1;min-width:0"><h1 style="margin:0;font-size:20px;line-height:26px">停车场车辆滞留 · 已关闭（误报，gina 22:09）</h1><div style="color:#ECEDEA">你在看 1 小时 35 分钟前的录像，不是现在的画面</div></div>
+        <button class="btn pri" type="button">回到实时</button>
+      </div>
+      <div style="flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,3fr) minmax(0,2fr);gap:12px;padding:12px 20px">
+        <section aria-label="录像" style="display:flex;flex-direction:column;gap:8px;min-height:0">
+          <div style="display:flex;align-items:center;gap:8px">
+            <div class="seg" role="group" aria-label="画面模式"><button class="btn sm" type="button">单画面</button><button class="btn sm on" type="button" aria-pressed="true">双画面</button><button class="btn sm" type="button">四画面</button></div>
+            <span style="flex:1"></span>
+            <div class="seg" role="group" aria-label="速度"><button class="btn sm" type="button">0.5×</button><button class="btn sm on" type="button" aria-pressed="true">1×</button><button class="btn sm" type="button">2×</button><button class="btn sm" type="button">4×</button></div>
+          </div>
+          <figure class="vid" style="margin:0;flex:2"><div class="noise"></div><figcaption class="cap"><span>摄像头 2 · 停车场</span><span style="flex:1"></span><span class="past" style="padding:0 8px">回放 22:05:14</span></figcaption></figure>
+          <figure class="vid" style="margin:0;flex:1"><div class="noise"></div><figcaption class="cap"><b>A</b><span>前摄像头</span><span style="flex:1"></span><span class="past" style="padding:0 8px">回放 22:05:14</span></figcaption></figure>
+          <div style="display:flex;align-items:center;gap:8px">
+            <button class="btn sm" type="button" aria-label="后退 10 秒">−10 秒</button>
+            <button class="btn sm" type="button">暂停</button>
+            <button class="btn sm" type="button" aria-label="前进 10 秒">+10 秒</button>
+            <span style="flex:1"></span>
+            <button class="btn sm" type="button">截图</button>
+            <button class="btn sm" type="button">导出这段（22:04–22:09）</button>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px">
+            <input aria-label="跳到时间" placeholder="跳到 时:分:秒" style="height:32px;width:140px;background:#0E1013;color:#ECEDEA;border:1px solid #4A5058;border-radius:2px;padding:0 8px;font:inherit">
+            <span style="flex:1"></span>
+            <button class="btn sm" type="button" title="超过保留期也不删">保留这段</button>
+          </div>
+        </section>
+        <figure style="margin:0;position:relative;background:#15181C;border:1px solid #2E333A;min-height:0;overflow:hidden">
+          <svg viewBox="0 0 400 420" preserveAspectRatio="xMidYMid meet" style="position:absolute;inset:0;width:100%;height:100%" role="img" aria-label="22:05 时的位置：A 在停车场东侧">
+            <path d="M30 40 H370 V150 H280 V390 H130 V150 H30 Z" fill="#232830" stroke="#6A7078" stroke-width="2"/>
+            <rect x="290" y="300" width="80" height="80" fill="none" stroke="#9A9FA6" stroke-dasharray="4 3"/><text x="330" y="396" fill="#9A9FA6" font-size="11" text-anchor="middle">停车场</text>
+            <path d="M60 110 H260 V200" fill="none" stroke="#5AA2E6" stroke-width="3" stroke-opacity=".5"/>
+            <circle cx="260" cy="200" r="9" fill="#9A9FA6" stroke="#0E1013" stroke-width="2"/><text x="260" y="186" fill="#ECEDEA" font-size="13" font-weight="700" text-anchor="middle">A</text>
+            <path d="M318 316 l14 0 l0 10 l-14 0 z" fill="#F2B01E"/>
+          </svg>
+          <figcaption style="position:absolute;left:0;right:0;top:0;padding:8px 10px;display:flex;gap:8px;background:rgba(45,37,18,.92)"><b>22:05 时的位置</b><span style="flex:1"></span><span style="color:#B4B8BE">灰色 = 当时</span></figcaption>
+        </figure>
+      </div>
+    </main>
+
+    <aside aria-label="机器人和巡逻" style="border-left:1px solid #2E333A;display:flex;flex-direction:column;min-height:0">
+      <section class="sec"><h2 class="h2">机器人 · 现在</h2><p class="lbl" style="margin:4px 0 0">右栏一直是实时的</p></section>
+      <section class="sec" style="display:flex;flex-direction:column;gap:6px">
+        <div style="display:flex;align-items:center;gap:8px"><b style="font-size:17px">A</b><span style="display:inline-flex;align-items:center;gap:6px;color:#3DC46E;font-weight:600"><span class="sq"></span>巡逻中</span><span style="flex:1"></span><span style="font-weight:700">62%</span></div>
+        <div style="color:#B4B8BE">北区 · guard-1 第 3 圈</div>
+      </section>
+      <section class="sec" style="display:flex;flex-direction:column;gap:6px">
+        <div style="display:flex;align-items:center;gap:8px"><b style="font-size:17px">B</b><span style="color:#B4B8BE;font-weight:600">充电中</span><span style="flex:1"></span><span style="color:#F2B01E;font-weight:700">18%</span></div>
+        <div style="color:#B4B8BE">充电桩 1 · 约 01:00 到 80%</div>
+      </section>
+      <section class="sec" style="flex:1;border-bottom:0">
+        <h2 class="h2" style="margin-bottom:8px">这条报警的经过</h2>
+        <ul style="list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px;color:#B4B8BE">
+          <li style="display:flex;gap:8px"><span style="width:56px;color:#ECEDEA">22:05:14</span><span>摄像头 2：车停留超过 10 分钟</span></li>
+          <li style="display:flex;gap:8px"><span style="width:56px;color:#ECEDEA">22:05:40</span><span>gina 接手</span></li>
+          <li style="display:flex;gap:8px"><span style="width:56px;color:#ECEDEA">22:07:02</span><span>gina 看录像：施工车</span></li>
+          <li style="display:flex;gap:8px"><span style="width:56px;color:#ECEDEA">22:09:11</span><span>结案：误报 · 「施工车，olga 留言说过」</span></li>
+        </ul>
+      </section>
+    </aside>
+  </div>
+
+  <section aria-label="本班时间轴" style="height:88px;flex:none;border-top:1px solid #2E333A;background:#0A0C0E;padding:8px 16px;box-sizing:border-box;display:flex;flex-direction:column;gap:4px">
+    <div style="display:flex;align-items:center;gap:16px" class="lbl"><span style="color:#ECEDEA">本班 19:00 → 07:00</span><span style="flex:1"></span><span style="color:#F2B01E">黄色竖线 = 正在回放的时刻 · 白线 = 现在</span></div>
+    <div style="position:relative;flex:1">
+      <div style="position:absolute;left:30px;top:2px;color:#9A9FA6;font-size:12px;font-weight:700">A</div>
+      <div style="position:absolute;left:30px;top:22px;color:#9A9FA6;font-size:12px;font-weight:700">B</div>
+      <div style="position:absolute;left:56px;right:0;top:4px;height:12px;background:#16191D"></div>
+      <div style="position:absolute;left:56px;right:0;top:24px;height:12px;background:#16191D"></div>
+      <div style="position:absolute;left:56px;width:9%;top:4px;height:12px;background:#1F6FC0"></div>
+      <div style="position:absolute;left:calc(56px + 25%);width:13%;top:4px;height:12px;background:#1F6FC0"></div>
+      <div style="position:absolute;left:calc(56px + 30.5%);width:7.5%;top:24px;height:12px;background:#9A9FA6"></div>
+      <span style="position:absolute;left:calc(56px + 25.6%);top:40px;width:9px;height:9px;border:2px solid #9A9FA6;box-sizing:border-box"></span>
+      <div style="position:absolute;left:calc(56px + 25.7%);top:0;bottom:0;width:3px;background:#F2B01E"></div>
+      <span style="position:absolute;left:calc(56px + 25.7% + 8px);top:38px;font-size:12px;font-weight:700;color:#F2B01E">回放 22:05</span>
+      <div style="position:absolute;left:calc(56px + 38.6%);top:0;bottom:0;width:2px;background:#ECEDEA"></div>
+      <span style="position:absolute;left:calc(56px + 38.6% + 6px);top:38px;font-size:12px;font-weight:700">现在 23:40</span>
+      <div style="position:absolute;left:56px;right:0;bottom:0;display:flex;justify-content:space-between;color:#9A9FA6;font-size:11px"><span>19:00</span><span>21:00</span><span>23:00</span><span>01:00</span><span>03:00</span><span>05:00</span><span>07:00</span></div>
+    </div>
+  </section>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1536,"height":960}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>方案 C 监控墙</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&display=swap">
+<style>
+body{margin:0}
+a{color:#5AA2E6}a:hover{color:#CFE4FA}
+.btn{height:40px;padding:0 16px;border:1px solid #9A9FA6;border-radius:2px;background:#16191D;color:#ECEDEA;font:600 14px Barlow,"Noto Sans SC","Microsoft YaHei UI",sans-serif;display:inline-flex;align-items:center;gap:8px;cursor:pointer;white-space:nowrap}
+.btn.sm{height:32px;padding:0 12px;font-size:13px}
+.btn.pri{background:#1F6FC0;border-color:#1F6FC0;color:#fff;font-weight:700}
+.btn.stop{background:#D42F33;border-color:#D42F33;color:#fff;font-weight:700}
+.lbl{font-size:12px;font-weight:600;letter-spacing:.06em;color:#9A9FA6}
+.ring{display:inline-block;flex:none;width:12px;height:12px;border:3px solid #FF6166;border-radius:50%;box-sizing:border-box}
+.tri{display:inline-block;flex:none;width:0;height:0;border-left:7px solid transparent;border-right:7px solid transparent;border-bottom:12px solid #F2B01E}
+.sq{display:inline-block;flex:none;width:9px;height:9px;background:#3DC46E}
+.disc{display:inline-block;flex:none;width:10px;height:10px;border-radius:50%;background:#fff}
+.tile{position:relative;background:#000;border:1px solid #2E333A;min-height:0;overflow:hidden}
+.tile .noise{position:absolute;inset:0;background:#07080A}
+.tile .cap{position:absolute;left:0;right:0;bottom:0;display:flex;align-items:center;gap:8px;padding:5px 8px;background:rgba(0,0,0,.7);font-size:13px}
+</style>
+</helmet>
+<div style="width:1440px;height:900px;box-sizing:border-box;background:#0E1013;color:#ECEDEA;font-family:Barlow,'Noto Sans SC','Microsoft YaHei UI',sans-serif;font-size:14px;line-height:20px;font-variant-numeric:tabular-nums;display:flex;flex-direction:column">
+
+  <header style="height:48px;flex:none;display:flex;align-items:center;gap:16px;padding:0 12px;border-bottom:1px solid #2E333A;background:#0A0C0E">
+    <div style="display:flex;flex-direction:column;line-height:13px"><b style="font-size:13px;letter-spacing:.12em">NEXUS</b><span style="font-size:11px;letter-spacing:.12em;color:#B4B8BE">WARDEN</span></div>
+    <div role="group" aria-label="墙的排法" style="display:inline-flex;border:1px solid #2E333A">
+      <button class="btn sm" type="button" aria-pressed="true" style="border:0;background:#1F6FC0;color:#fff">3 × 3</button>
+      <button class="btn sm" type="button" style="border:0;background:transparent">4 × 4</button>
+      <button class="btn sm" type="button" style="border:0;background:transparent">只看机器人</button>
+      <button class="btn sm" type="button" style="border:0;background:transparent">轮播 10 秒</button>
+    </div>
+    <span class="lbl">出事的画面自动放到左上</span>
+    <div style="flex:1"></div>
+    <span style="display:inline-flex;align-items:center;gap:8px;height:32px;padding:0 12px;background:#16281D;color:#3DC46E;font-weight:600"><span class="sq"></span>布防中</span>
+    <span style="font-size:15px">23:48</span>
+    <a href="#" style="color:#B4B8BE">记录</a><a href="#" style="color:#B4B8BE">设置</a>
+    <button class="btn stop sm" type="button"><span style="width:11px;height:11px;border:2px solid #fff;border-radius:50%;box-sizing:border-box"></span>全部叫停</button>
+  </header>
+
+  <div style="flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,1fr) 340px">
+    <!-- 墙 -->
+    <section aria-label="画面墙" style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));grid-template-rows:repeat(3,minmax(0,1fr));gap:4px;padding:4px;min-height:0">
+      <figure class="tile" style="margin:0;grid-column:span 2;grid-row:span 2;border:4px solid #D42F33">
+        <div class="noise"></div>
+        <div style="position:absolute;left:44%;top:30%;width:80px;height:140px;border:2px solid #FF6166"></div>
+        <div style="position:absolute;left:0;right:0;top:0;display:flex;align-items:center;gap:10px;padding:8px 10px;background:#33191B">
+          <span class="ring"></span><b style="font-size:16px">北门有人翻越</b><span style="color:#B4B8BE">摄像头 3 · 23:47 · 1 分钟前</span><span style="flex:1"></span><span style="color:#ECEDEA;font-weight:700;letter-spacing:.06em">实时</span>
+        </div>
+        <figcaption class="cap"><span>摄像头 3 · 北门</span><span style="flex:1"></span><button class="btn sm" type="button">−30 秒</button><button class="btn sm" type="button">全屏</button></figcaption>
+      </figure>
+      <figure class="tile" style="margin:0"><div class="noise"></div><figcaption class="cap"><b>A</b><span style="color:#3DC46E;display:inline-flex;align-items:center;gap:6px"><span class="sq"></span>巡逻中</span><span style="flex:1"></span><span style="color:#B4B8BE">前 · 北区</span></figcaption></figure>
+      <figure class="tile" style="margin:0"><div class="noise"></div><figcaption class="cap"><b>A</b><span style="color:#B4B8BE">后</span><span style="flex:1"></span><span style="color:#F2B01E">28%</span></figcaption></figure>
+      <figure class="tile" style="margin:0"><div class="noise"></div><figcaption class="cap"><b>B</b><span style="color:#FF6166;display:inline-flex;align-items:center;gap:6px"><span class="ring" style="width:10px;height:10px;border-width:2px"></span>等换电</span><span style="flex:1"></span><span style="color:#B4B8BE">充电桩 1</span></figcaption></figure>
+      <figure class="tile" style="margin:0"><div class="noise"></div><figcaption class="cap"><span>摄像头 1 · 大门</span></figcaption></figure>
+      <figure class="tile" style="margin:0"><div class="noise"></div><figcaption class="cap"><span>摄像头 2 · 停车场</span></figcaption></figure>
+      <figure class="tile" style="margin:0;display:flex;align-items:center;justify-content:center;background:#16191D">
+        <div style="text-align:center;color:#9A9FA6"><span style="display:inline-block;width:24px;height:24px;border:3px solid #9A9FA6;border-radius:50%;position:relative"></span><div style="margin-top:6px">摄像头 5 · 南墙 · 离线 6 分钟</div></div>
+      </figure>
+    </section>
+
+    <!-- 处理栏 -->
+    <aside style="border-left:1px solid #2E333A;display:flex;flex-direction:column;min-height:0;background:#0E1013">
+      <section style="padding:14px 16px;border-bottom:1px solid #2E333A;background:#16191D;box-shadow:inset 0 4px 0 #D42F33">
+        <div style="display:flex;align-items:center;gap:10px"><span style="width:26px;height:26px;border:7px solid #FF6166;border-radius:50%;box-sizing:border-box"></span><h1 style="margin:0;font-size:20px;line-height:26px">北门有人翻越</h1></div>
+        <p style="margin:6px 0 10px;color:#B4B8BE">P1 · 没人接手 · 往 2 号楼方向</p>
+        <button class="btn pri" type="button" style="width:100%;justify-content:center;height:44px"><span class="disc"></span>我来处理</button>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px">
+          <button class="btn" type="button">派 A（48 米）</button>
+          <button class="btn" type="button">A 喊话</button>
+          <button class="btn" type="button">A 开警灯</button>
+          <button class="btn" type="button">详情和结论</button>
+        </div>
+      </section>
+      <figure style="margin:0;padding:12px 16px;border-bottom:1px solid #2E333A">
+        <div class="lbl" style="margin-bottom:6px">位置</div>
+        <svg viewBox="0 0 300 160" style="width:100%;height:150px;background:#1B1F24;border:1px solid #2E333A" role="img" aria-label="小地图：北门报警点，A 在东北 48 米">
+          <path d="M20 20 H280 V70 H200 V150 H100 V70 H20 Z" fill="#2A2F36" stroke="#5F646A" stroke-width="2"/>
+          <circle cx="70" cy="34" r="11" fill="none" stroke="#FF6166" stroke-width="4"/>
+          <path d="M220 40 C 170 40, 120 40, 82 36" fill="none" stroke="#5AA2E6" stroke-width="2.5" stroke-dasharray="5 4"/>
+          <circle cx="220" cy="40" r="7" fill="#3DC46E" stroke="#0E1013" stroke-width="2"/>
+          <text x="220" y="30" fill="#ECEDEA" font-size="11" font-weight="700" text-anchor="middle">A</text>
+        </svg>
+      </figure>
+      <section style="padding:12px 16px;border-bottom:1px solid #2E333A">
+        <h2 style="margin:0 0 8px;font-size:15px">还有 2 件</h2>
+        <div style="display:flex;gap:10px;align-items:center;padding:6px 0"><span class="ring"></span><span style="flex:1">B 等待换电</span><span style="color:#B4B8BE">olga 处理中</span></div>
+        <div style="display:flex;gap:10px;align-items:center;padding:6px 0"><span class="tri"></span><span style="flex:1">A 电量低于 30%</span><span style="color:#B4B8BE">23:12</span></div>
+      </section>
+      <section style="padding:12px 16px;flex:1;min-height:0;overflow:auto">
+        <h2 style="margin:0 0 8px;font-size:15px">事件流</h2>
+        <ul style="list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px;color:#B4B8BE">
+          <li style="display:flex;gap:10px"><span style="width:44px;color:#ECEDEA">23:47</span><span>摄像头 3 发现人</span></li>
+          <li style="display:flex;gap:10px"><span style="width:44px;color:#ECEDEA">23:31</span><span>B 电量 6%，停在充电桩</span></li>
+          <li style="display:flex;gap:10px"><span style="width:44px;color:#ECEDEA">23:12</span><span>A 电量 30%</span></li>
+          <li style="display:flex;gap:10px"><span style="width:44px;color:#ECEDEA">22:00</span><span>A 开始 guard-1</span></li>
+          <li style="display:flex;gap:10px"><span style="width:44px;color:#ECEDEA">22:05</span><span>停车场车辆滞留 · 误报 · gina</span></li>
+        </ul>
+      </section>
+    </aside>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

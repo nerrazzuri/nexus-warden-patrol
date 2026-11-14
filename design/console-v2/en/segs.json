@@ -1,0 +1,2740 @@
+{
+"V4-A 正常值班": [
+"V4-normal"
+],
+"值班": [
+"G-compact",
+"G-multi",
+"G-playback",
+"G-records",
+"R-A",
+"R-A2",
+"S-access",
+"S-arming",
+"S-home",
+"S-layout",
+"S-log",
+"S-reports",
+"S-system",
+"S-users",
+"V4-alarm",
+"V4-normal"
+],
+"记录与录像": [
+"G-compact",
+"G-multi",
+"G-playback",
+"G-records",
+"R-A",
+"R-A2",
+"S-access",
+"S-arming",
+"S-home",
+"S-layout",
+"S-log",
+"S-reports",
+"S-system",
+"S-users",
+"V4-alarm",
+"V4-normal"
+],
+"布防中 · 到 07:00": [
+"G-playback",
+"V4-alarm",
+"V4-normal"
+],
+"机器人 2/2 在线": [
+"G-playback",
+"R-A",
+"R-A2",
+"S-access",
+"S-arming",
+"S-home",
+"S-layout",
+"S-log",
+"S-reports",
+"S-system",
+"S-users",
+"V4-alarm",
+"V4-normal"
+],
+"未处理 0": [
+"G-playback",
+"R-A",
+"R-A2",
+"S-access",
+"S-arming",
+"S-home",
+"S-layout",
+"S-log",
+"S-reports",
+"S-system",
+"S-users",
+"V4-normal"
+],
+"gina · 保安": [
+"G-multi",
+"G-playback",
+"G-records",
+"V4-alarm",
+"V4-normal"
+],
+"全部急停": [
+"G-compact",
+"G-multi",
+"G-playback",
+"G-records",
+"R-A",
+"R-A2",
+"S-access",
+"S-arming",
+"S-home",
+"S-layout",
+"S-log",
+"S-reports",
+"S-system",
+"S-users",
+"V4-alarm",
+"V4-normal"
+],
+"安全事件": [
+"G-playback",
+"V4-alarm",
+"V4-normal"
+],
+"有人、火情": [
+"V4-alarm",
+"V4-normal"
+],
+"没有待处理": [
+"G-playback",
+"V4-normal"
+],
+"设备与运营": [
+"G-playback",
+"V4-normal"
+],
+"机器人、巡逻": [
+"G-multi",
+"V4-alarm",
+"V4-normal"
+],
+"B 电量 18%": [
+"V4-normal"
+],
+"22:40 自动回桩充电 · 01:00 前能充到 80%": [
+"V4-normal"
+],
+"本班已关闭 4": [
+"G-playback",
+"V4-alarm",
+"V4-normal"
+],
+"停车场车辆滞留": [
+"G-playback",
+"G-records",
+"V4-alarm",
+"V4-normal"
+],
+"误报": [
+"G-compact",
+"G-playback",
+"G-records",
+"S-home",
+"S-reports",
+"V4-alarm",
+"V4-normal"
+],
+"南墙有人靠近": [
+"G-multi",
+"G-playback",
+"G-records",
+"V4-alarm",
+"V4-normal"
+],
+"确认有人": [
+"G-compact",
+"G-playback",
+"G-records",
+"S-reports",
+"V4-alarm",
+"V4-normal"
+],
+"A 卡住，已脱困": [
+"G-playback",
+"V4-alarm",
+"V4-normal"
+],
+"已处理": [
+"G-playback",
+"G-records",
+"S-home",
+"S-reports",
+"V4-alarm",
+"V4-normal"
+],
+"B 离线 2 分钟": [
+"G-playback",
+"G-records",
+"V4-normal"
+],
+"上一班留言 · olga 19:05": [
+"V4-alarm",
+"V4-normal"
+],
+"停车场有施工车辆进出，22:00 前算正常。": [
+"V4-alarm",
+"V4-normal"
+],
+"给下一班留言": [
+"V4-normal"
+],
+"全场正常": [
+"V4-normal"
+],
+"A 在跑 guard-1 第 3 圈 · 下一次巡逻 01:00 由 B 跑": [
+"V4-normal"
+],
+"全部": [
+"G-records",
+"S-log",
+"V4-normal"
+],
+"巡逻路线": [
+"S-layout",
+"V4-normal"
+],
+"防区": [
+"S-layout",
+"V4-normal"
+],
+"摄像头": [
+"S-layout",
+"V4-normal"
+],
+"2 号楼": [
+"G-multi",
+"S-layout",
+"V4-alarm",
+"V4-normal"
+],
+"北区 · 布防": [
+"V4-normal"
+],
+"充电桩 1": [
+"G-records",
+"V4-normal"
+],
+"A 已走的路线": [
+"V4-normal"
+],
+"固定摄像头": [
+"S-layout",
+"V4-normal"
+],
+"20 米 ▁▁▁▁": [
+"V4-normal"
+],
+"画面": [
+"G-multi",
+"G-records",
+"V4-alarm",
+"V4-normal"
+],
+"单画面": [
+"G-compact",
+"G-playback",
+"V4-alarm",
+"V4-normal"
+],
+"双画面": [
+"G-compact",
+"G-playback",
+"V4-alarm",
+"V4-normal"
+],
+"四画面": [
+"G-compact",
+"G-playback",
+"V4-alarm",
+"V4-normal"
+],
+"全屏墙": [
+"V4-alarm",
+"V4-normal"
+],
+"前摄像头": [
+"G-playback",
+"R-A",
+"V4-normal"
+],
+"实时": [
+"G-compact",
+"R-A",
+"V4-alarm",
+"V4-normal"
+],
+"摄像头 1 · 大门": [
+"V4-normal"
+],
+"机器人": [
+"G-multi",
+"R-A",
+"R-A2",
+"S-access",
+"S-arming",
+"S-home",
+"S-layout",
+"S-log",
+"S-reports",
+"S-system",
+"S-users",
+"V4-normal"
+],
+"巡逻中": [
+"G-playback",
+"R-A",
+"V4-alarm",
+"V4-normal"
+],
+"北区 · guard-1 第 3 圈 · 定位好": [
+"V4-normal"
+],
+"看画面": [
+"V4-normal"
+],
+"详情": [
+"V4-normal"
+],
+"充电中": [
+"G-playback",
+"V4-normal"
+],
+"充电桩 1 · 约 01:00 到 80%": [
+"G-playback",
+"V4-normal"
+],
+"今晚巡逻": [
+"G-compact",
+"V4-alarm",
+"V4-normal"
+],
+"走完": [
+"V4-normal"
+],
+"第 3 圈": [
+"V4-alarm",
+"V4-normal"
+],
+"等充电": [
+"V4-normal"
+],
+"排好了": [
+"V4-alarm",
+"V4-normal"
+],
+"最新活动": [
+"G-compact",
+"G-multi",
+"V4-alarm",
+"V4-normal"
+],
+"A 过 2 号楼北侧": [
+"V4-normal"
+],
+"B 回桩充电": [
+"V4-normal"
+],
+"gina 关闭：停车场车辆滞留": [
+"V4-normal"
+],
+"A 开始 guard-1": [
+"V4-normal"
+],
+"本班 19:00 → 07:00": [
+"G-multi",
+"G-playback",
+"V4-alarm",
+"V4-normal"
+],
+"巡逻": [
+"G-compact",
+"S-home",
+"V4-alarm",
+"V4-normal"
+],
+"充电": [
+"V4-alarm",
+"V4-normal"
+],
+"离线": [
+"V4-alarm",
+"V4-normal"
+],
+"设备异常": [
+"V4-alarm",
+"V4-normal"
+],
+"点任一处看那时的录像": [
+"V4-normal"
+],
+"现在 23:40": [
+"G-playback",
+"V4-normal"
+],
+"主导航": [
+"G-compact",
+"G-multi",
+"G-playback",
+"G-records",
+"R-A",
+"R-A2",
+"S-access",
+"S-arming",
+"S-home",
+"S-layout",
+"S-log",
+"S-reports",
+"S-system",
+"S-users",
+"V4-alarm",
+"V4-normal"
+],
+"所有机器人原地停下，要人工恢复": [
+"V4-alarm",
+"V4-normal"
+],
+"事件": [
+"G-compact",
+"G-multi",
+"G-playback",
+"G-records",
+"S-home",
+"S-reports",
+"V4-alarm",
+"V4-normal"
+],
+"交班前写": [
+"V4-normal"
+],
+"地图层": [
+"V4-normal"
+],
+"全场地图：A 在北区巡逻，B 在充电桩": [
+"V4-normal"
+],
+"放大": [
+"V4-normal"
+],
+"缩小": [
+"V4-normal"
+],
+"画面模式": [
+"G-compact",
+"G-playback",
+"V4-alarm",
+"V4-normal"
+],
+"机器人和巡逻": [
+"G-playback",
+"V4-alarm",
+"V4-normal"
+],
+"本班时间轴": [
+"G-compact",
+"G-multi",
+"G-playback",
+"V4-alarm",
+"V4-normal"
+],
+"V4-B 告警处理中": [
+"V4-alarm"
+],
+"未处理 3": [
+"G-compact",
+"V4-alarm"
+],
+"安全事件 1": [
+"G-compact",
+"V4-alarm"
+],
+"北门有人翻越": [
+"G-compact",
+"G-multi",
+"G-records",
+"S-reports",
+"V4-alarm"
+],
+"摄像头 3 · 23:47 · 1 分钟前": [
+"V4-alarm"
+],
+"没人接手": [
+"V4-alarm"
+],
+"设备与运营 2": [
+"G-compact",
+"G-multi",
+"V4-alarm"
+],
+"B 等待换电": [
+"G-compact",
+"G-records",
+"V4-alarm"
+],
+"充电桩 1 · 23:31 · olga 处理中": [
+"V4-alarm"
+],
+"A 电量低于 30%": [
+"G-compact",
+"G-records",
+"V4-alarm"
+],
+"巡逻中 · 23:12": [
+"V4-alarm"
+],
+"P1 · 安全事件 · 北区 北门 · 摄像头 3 · 23:47:12 · 往 2 号楼方向": [
+"V4-alarm"
+],
+"我来处理": [
+"G-compact",
+"G-multi",
+"V4-alarm"
+],
+"发现 23:47": [
+"V4-alarm"
+],
+"接手": [
+"G-compact",
+"V4-alarm"
+],
+"派遣": [
+"G-compact",
+"V4-alarm"
+],
+"到场": [
+"G-compact",
+"V4-alarm"
+],
+"确认": [
+"G-compact",
+"V4-alarm"
+],
+"结案": [
+"G-compact",
+"V4-alarm"
+],
+"−30 秒回放": [
+"V4-alarm"
+],
+"人 · 0.93": [
+"G-compact",
+"V4-alarm"
+],
+"摄像头 3 · 北门 · 事件画面": [
+"V4-alarm"
+],
+"前摄像头 · 离北门 48 米": [
+"V4-alarm"
+],
+"北门": [
+"S-access",
+"S-layout",
+"V4-alarm"
+],
+"往 2 号楼": [
+"V4-alarm"
+],
+"北区": [
+"G-records",
+"V4-alarm"
+],
+"A 48 米 · 约 1 分钟": [
+"G-compact",
+"V4-alarm"
+],
+"全场地图": [
+"V4-alarm"
+],
+"派 A 过去": [
+"G-compact",
+"V4-alarm"
+],
+"新": [
+"V4-alarm"
+],
+"A 28%：去北门再回桩约用 6%，够": [
+"V4-alarm"
+],
+"A 喊话": [
+"V4-alarm"
+],
+"A 开警灯": [
+"V4-alarm"
+],
+"通知经理": [
+"V4-alarm"
+],
+"结论": [
+"G-compact",
+"S-reports",
+"V4-alarm"
+],
+"经过": [
+"G-records",
+"V4-alarm"
+],
+"23:47:12 摄像头 3 发现人 · 23:47:15 推送 gina、olga": [
+"V4-alarm"
+],
+"机器人 · 按离事发点远近": [
+"V4-alarm"
+],
+"离北门 48 米 · 约 1 分钟": [
+"V4-alarm"
+],
+"guard-1 第 3 圈 · 定位好": [
+"V4-alarm"
+],
+"等换电": [
+"V4-alarm"
+],
+"充电桩 1 · 不能派": [
+"V4-alarm"
+],
+"B 没电，可能跑不了": [
+"V4-alarm"
+],
+"摄像头 3 发现人（北门）": [
+"G-multi",
+"V4-alarm"
+],
+"B 电量 6%，停在充电桩": [
+"V4-alarm"
+],
+"olga 接手：B 等待换电": [
+"V4-alarm"
+],
+"A 电量 30%": [
+"V4-alarm"
+],
+"点任一处看那时的录像（画面会标「历史回放」）": [
+"V4-alarm"
+],
+"现在 23:48": [
+"V4-alarm"
+],
+"处理步骤": [
+"G-compact",
+"V4-alarm"
+],
+"事件地图：北门报警点，A 在东边 48 米，路线约 1 分钟": [
+"V4-alarm"
+],
+"处理": [
+"V4-alarm"
+],
+"先接手、选结论": [
+"G-compact",
+"V4-alarm"
+],
+"保安 历史回放": [
+"G-playback"
+],
+"▌▌ 历史回放 · 22:05:14": [
+"G-playback"
+],
+"停车场车辆滞留 · 已关闭（误报，gina 22:09）": [
+"G-playback"
+],
+"你在看 1 小时 35 分钟前的录像，不是现在的画面": [
+"G-playback"
+],
+"回到实时": [
+"G-playback"
+],
+"摄像头 2 · 停车场": [
+"G-playback"
+],
+"回放 22:05:14": [
+"G-playback"
+],
+"−10 秒": [
+"G-playback"
+],
+"暂停": [
+"G-playback"
+],
+"+10 秒": [
+"G-playback"
+],
+"截图": [
+"G-playback"
+],
+"导出这段（22:04–22:09）": [
+"G-playback"
+],
+"停车场": [
+"G-playback",
+"S-access",
+"S-layout"
+],
+"22:05 时的位置": [
+"G-playback"
+],
+"灰色 = 当时": [
+"G-playback"
+],
+"机器人 · 现在": [
+"G-playback"
+],
+"右栏一直是实时的": [
+"G-playback"
+],
+"北区 · guard-1 第 3 圈": [
+"G-playback"
+],
+"这条报警的经过": [
+"G-playback"
+],
+"摄像头 2：车停留超过 10 分钟": [
+"G-playback"
+],
+"gina 接手": [
+"G-playback",
+"G-records"
+],
+"gina 看录像：施工车": [
+"G-playback"
+],
+"结案：误报 · 「施工车，olga 留言说过」": [
+"G-playback"
+],
+"黄色竖线 = 正在回放的时刻 · 白线 = 现在": [
+"G-playback"
+],
+"回放 22:05": [
+"G-playback"
+],
+"录像": [
+"G-playback",
+"G-records"
+],
+"速度": [
+"G-playback"
+],
+"后退 10 秒": [
+"G-playback"
+],
+"前进 10 秒": [
+"G-playback"
+],
+"22:05 时的位置：A 在停车场东侧": [
+"G-playback"
+],
+"保安 多个告警同时": [
+"G-multi"
+],
+"布防中": [
+"G-compact",
+"G-multi",
+"G-records"
+],
+"机器人 1/2 在线": [
+"G-multi"
+],
+"未处理 4": [
+"G-multi"
+],
+"安全事件 2": [
+"G-multi"
+],
+"按先后": [
+"G-multi"
+],
+"02:12 · gina 处理中 · A 在路上": [
+"G-multi"
+],
+"02:13 · 没人接手": [
+"G-multi"
+],
+"B 离线": [
+"G-multi"
+],
+"02:10 起 · 最后在东侧通道": [
+"G-multi"
+],
+"01:00 巡逻没跑": [
+"G-multi"
+],
+"B 电量不够，已跳过": [
+"G-multi"
+],
+"一起来的报警按「谁去管」分派，见中间": [
+"G-multi"
+],
+"2 分钟内 3 件事": [
+"G-multi"
+],
+"2 件有人、1 台机器人离线。先定谁去哪，再逐件处理。": [
+"G-multi"
+],
+"叫增援（通知 olga、值班经理）": [
+"G-multi"
+],
+"① 北门": [
+"G-multi"
+],
+"② 南墙": [
+"G-multi"
+],
+"只剩 A 能动；南墙只有固定摄像头 6 能看": [
+"G-multi"
+],
+"谁在管": [
+"G-multi"
+],
+"谁去现场": [
+"G-multi"
+],
+"下一步": [
+"G-multi"
+],
+"① 北门有人翻越": [
+"G-multi"
+],
+"A · 还有 20 秒": [
+"G-multi"
+],
+"摄像头 3 · A 前": [
+"G-multi"
+],
+"打开": [
+"G-multi"
+],
+"② 南墙有人靠近": [
+"G-multi"
+],
+"没人": [
+"G-multi",
+"G-records"
+],
+"没有空闲机器人 · 需要人去": [
+"G-multi"
+],
+"摄像头 6": [
+"G-multi"
+],
+"无": [
+"G-multi"
+],
+"稍后，先管有人的": [
+"G-multi"
+],
+"去 ① 北门": [
+"G-multi"
+],
+"还有 20 秒 · 巡逻已暂停": [
+"G-multi"
+],
+"离线 4 分钟": [
+"G-multi"
+],
+"最后 02:10 在东侧通道 · Wi-Fi 信号弱": [
+"G-multi"
+],
+"看离线前 1 分钟录像": [
+"G-multi"
+],
+"摄像头 6 发现人（南墙）": [
+"G-multi"
+],
+"gina 派 A 去北门": [
+"G-multi"
+],
+"B 断开连接": [
+"G-multi"
+],
+"02:10–02:14 有 4 个标记，已合成一组「4」，放大看": [
+"G-multi"
+],
+"全场：北门和南墙两个报警点，A 在去北门的路上，B 离线在东侧通道": [
+"G-multi"
+],
+"分派": [
+"G-multi"
+],
+"保安 1366 小屏": [
+"G-compact"
+],
+"23:47 · 没人接手": [
+"G-compact"
+],
+"本班已关闭 4 · 留言在「记录与录像」": [
+"G-compact"
+],
+"P1 · 北门 · 摄像头 3 · 23:47 · 往 2 号楼": [
+"G-compact"
+],
+"发现": [
+"G-compact"
+],
+"−30 秒": [
+"G-compact"
+],
+"地图 ▸": [
+"G-compact"
+],
+"摄像头 3 · 北门": [
+"G-compact"
+],
+"喊话": [
+"G-compact",
+"R-A"
+],
+"警灯": [
+"G-compact"
+],
+"活动": [
+"G-compact"
+],
+"展开时间轴": [
+"G-compact"
+],
+"账号和站点": [
+"G-compact"
+],
+"A 在北门东边 48 米": [
+"G-compact"
+],
+"右栏（已折起）": [
+"G-compact"
+],
+"机器人 A 28%": [
+"G-compact"
+],
+"机器人 B 6% 等换电": [
+"G-compact"
+],
+"未处理 3 · 回值班": [
+"G-records"
+],
+"报警": [
+"G-records"
+],
+"交班留言": [
+"G-records"
+],
+"时间": [
+"G-records",
+"R-A2",
+"S-log",
+"S-reports"
+],
+"本班（19:00 起）": [
+"G-records"
+],
+"今天": [
+"G-records",
+"R-A",
+"S-access",
+"S-arming",
+"S-reports"
+],
+"最近 7 天": [
+"G-records"
+],
+"选日期…": [
+"G-records"
+],
+"2026-11-15 19:00 → 现在": [
+"G-records"
+],
+"种类": [
+"G-records",
+"S-layout"
+],
+"有人闯入 / 火情 · 3": [
+"G-records"
+],
+"机器人需要协助 · 3": [
+"G-records"
+],
+"机器人离线 · 1": [
+"G-records"
+],
+"状态": [
+"G-records",
+"S-system",
+"S-users"
+],
+"没处理的": [
+"G-records"
+],
+"已关闭": [
+"G-records"
+],
+"机器人 / 摄像头": [
+"G-records"
+],
+"摄像头 1–6": [
+"G-records"
+],
+"清除筛选": [
+"G-records"
+],
+"本班": [
+"G-records"
+],
+"没处理": [
+"G-records"
+],
+"本班报警 7 条": [
+"G-records"
+],
+"导出表格": [
+"G-records",
+"S-reports"
+],
+"在哪": [
+"G-records"
+],
+"谁处理": [
+"G-records"
+],
+"结果": [
+"G-records"
+],
+"北门 · 摄像头 3": [
+"G-records"
+],
+"去处理": [
+"G-records"
+],
+"处理中": [
+"G-records"
+],
+"停车场 · 摄像头 2": [
+"G-records"
+],
+"南墙 · 摄像头 6": [
+"G-records"
+],
+"A 卡住": [
+"G-records"
+],
+"东侧通道": [
+"G-records"
+],
+"系统": [
+"G-records",
+"S-log"
+],
+"自动恢复": [
+"G-records"
+],
+"22:05:14 · 摄像头 2 · 已关闭：误报（gina 22:09）": [
+"G-records"
+],
+"摄像头 2": [
+"G-records"
+],
+"录像 22:05:14": [
+"G-records"
+],
+"播放": [
+"G-records"
+],
+"同一时刻 A 的画面": [
+"G-records"
+],
+"导出这段": [
+"G-records"
+],
+"车停留超过 10 分钟": [
+"G-records"
+],
+"结案：误报 ·「施工车，olga 留言说过」": [
+"G-records"
+],
+"撤销关闭（到 22:19 前）": [
+"G-records"
+],
+"筛选": [
+"G-records"
+],
+"看什么": [
+"G-records"
+],
+"选中的记录": [
+"G-records"
+],
+"现场设置 概况": [
+"S-home"
+],
+"现场设置": [
+"R-A",
+"R-A2",
+"S-access",
+"S-arming",
+"S-home",
+"S-layout",
+"S-log",
+"S-reports",
+"S-system",
+"S-users"
+],
+"撤防 · 19:00 布防": [
+"R-A",
+"R-A2",
+"S-access",
+"S-arming",
+"S-home",
+"S-layout",
+"S-log",
+"S-reports",
+"S-system",
+"S-users"
+],
+"demo · 管理员": [
+"R-A",
+"R-A2",
+"S-access",
+"S-arming",
+"S-home",
+"S-layout",
+"S-log",
+"S-reports",
+"S-system",
+"S-users"
+],
+"日常": [
+"R-A",
+"R-A2",
+"S-access",
+"S-arming",
+"S-home",
+"S-layout",
+"S-log",
+"S-reports",
+"S-system",
+"S-users"
+],
+"概况": [
+"R-A",
+"R-A2",
+"S-access",
+"S-arming",
+"S-home",
+"S-layout",
+"S-log",
+"S-reports",
+"S-system",
+"S-users"
+],
+"人员": [
+"R-A",
+"R-A2",
+"S-access",
+"S-arming",
+"S-home",
+"S-layout",
+"S-log",
+"S-reports",
+"S-system",
+"S-users"
+],
+"现场": [
+"R-A",
+"R-A2",
+"S-access",
+"S-arming",
+"S-home",
+"S-layout",
+"S-log",
+"S-reports",
+"S-system",
+"S-users"
+],
+"现场布置": [
+"R-A",
+"R-A2",
+"S-access",
+"S-arming",
+"S-home",
+"S-layout",
+"S-log",
+"S-reports",
+"S-system",
+"S-users"
+],
+"布防与巡逻": [
+"R-A",
+"R-A2",
+"S-access",
+"S-arming",
+"S-home",
+"S-layout",
+"S-log",
+"S-reports",
+"S-system",
+"S-users"
+],
+"授权与临时撤防": [
+"R-A",
+"R-A2",
+"S-access",
+"S-arming",
+"S-home",
+"S-layout",
+"S-log",
+"S-reports",
+"S-system",
+"S-users"
+],
+"记录": [
+"R-A",
+"R-A2",
+"S-access",
+"S-arming",
+"S-home",
+"S-layout",
+"S-log",
+"S-reports",
+"S-system",
+"S-users"
+],
+"报告与操作记录": [
+"R-A",
+"R-A2",
+"S-access",
+"S-arming",
+"S-home",
+"S-layout",
+"S-log",
+"S-reports",
+"S-system",
+"S-users"
+],
+"高级 · 安装和售后用": [
+"R-A",
+"R-A2",
+"S-access",
+"S-arming",
+"S-home",
+"S-layout",
+"S-log",
+"S-reports",
+"S-system",
+"S-users"
+],
+"地图、定位、诊断、升级": [
+"R-A",
+"R-A2",
+"S-access",
+"S-arming",
+"S-home",
+"S-layout",
+"S-log",
+"S-reports",
+"S-system",
+"S-users"
+],
+"现在撤防，19:00 按时间表布防。机器人 2 台都在线。": [
+"S-home"
+],
+"4 件等你批准，2 条提醒。": [
+"S-home"
+],
+"看报告": [
+"S-home"
+],
+"待处理 6": [
+"S-home"
+],
+"蓝圆 = 等你批准，去对应页面做；黄三角 = 提醒：「知道了」留着，「已处理」拿掉": [
+"S-home"
+],
+"机器人 C40388 请求加入": [
+"S-home"
+],
+"olga 的手机 09:41 发起 · 要核对 6 位码": [
+"S-home"
+],
+"去机器人页批准": [
+"S-home"
+],
+"B 要换到 Wi-Fi estate-iot": [
+"S-home"
+],
+"08:12 从机器人发起": [
+"S-home"
+],
+"去 B 的设置批准": [
+"S-home"
+],
+"Ravi 申请保安账号": [
+"S-home"
+],
+"09:58 从手机 App 发起": [
+"S-home"
+],
+"去人员页批准": [
+"S-home"
+],
+"禁行区「水池」缩小了": [
+"S-home"
+],
+"demo 10:12 改 · 确认前仍避开原范围": [
+"S-home"
+],
+"去现场布置确认": [
+"S-home"
+],
+"B 的电池在变差": [
+"S-home"
+],
+"涉及机器人：B · 11-14 起 · 满电能跑 2 小时 10 分，上个月 3 小时": [
+"S-home"
+],
+"技术细节": [
+"S-home"
+],
+"知道了": [
+"S-home"
+],
+"站点磁盘用了 71%": [
+"S-home"
+],
+"录像保留 30 天，按现在的速度约 40 天后满": [
+"S-home"
+],
+"今天的安排 · 11-15 周日": [
+"S-home"
+],
+"切换模式…": [
+"S-arming",
+"S-home"
+],
+"按防区临时撤防…": [
+"S-access",
+"S-home"
+],
+"布防": [
+"S-arming",
+"S-home",
+"S-log",
+"S-users"
+],
+"全部防区": [
+"S-home"
+],
+"时间表开着": [
+"S-home"
+],
+"授权": [
+"S-access",
+"S-home"
+],
+"空调维修": [
+"S-access",
+"S-home"
+],
+"保洁": [
+"S-access",
+"S-home"
+],
+"2 条 · 空调维修在生效": [
+"S-home"
+],
+"4 轮 · A 现在在跑": [
+"S-home"
+],
+"现在 10:20": [
+"S-home"
+],
+"深色 = 布防；斜线框 = 授权（区内发现有人不报紧急报警）；灰 = 巡逻。点一段去改。": [
+"S-home"
+],
+"去机器人页": [
+"S-home"
+],
+"在跑停车场一圈 · 今天第 2 次": [
+"S-home"
+],
+"正常": [
+"S-home",
+"S-system",
+"S-users"
+],
+"在线 · 今天巡逻 1 次": [
+"S-home"
+],
+"电池变差": [
+"S-home"
+],
+"这周 11-09 起": [
+"S-home"
+],
+"23 次": [
+"S-home"
+],
+"比上周多 3 次": [
+"S-home"
+],
+"9 次": [
+"S-home"
+],
+"与上周持平": [
+"S-home"
+],
+"巡逻走完": [
+"S-home"
+],
+"2 次电量不够": [
+"S-home"
+],
+"待处理事项": [
+"S-home"
+],
+"看到了，解决前留在这里": [
+"S-home"
+],
+"已经解决，从这里拿掉": [
+"S-home"
+],
+"今天的安排": [
+"S-home"
+],
+"这周": [
+"S-home",
+"S-reports"
+],
+"现场设置 现场布置": [
+"S-layout"
+],
+"地图第 4 版 · 在用。": [
+"S-layout"
+],
+"禁行区有 1 处改动等你确认。": [
+"S-layout"
+],
+"历史版本…": [
+"S-layout"
+],
+"保存": [
+"R-A2",
+"S-arming",
+"S-layout"
+],
+"禁行区和限速": [
+"S-layout"
+],
+"1 处缩小了，等你确认": [
+"S-layout"
+],
+"布防时巡逻路线": [
+"S-layout"
+],
+"路网": [
+"S-layout"
+],
+"41 点 · 1.2 公里": [
+"S-layout"
+],
+"待命点和充电桩": [
+"S-layout"
+],
+"第 3 版带过来 2 个，还没留下": [
+"S-layout"
+],
+"报警设备": [
+"S-layout"
+],
+"门磁、报警按钮": [
+"S-layout"
+],
+"其余图层淡着显示": [
+"S-layout"
+],
+"选择": [
+"S-layout"
+],
+"画禁行区": [
+"S-layout"
+],
+"画限速区": [
+"S-layout"
+],
+"画虚拟墙": [
+"S-layout"
+],
+"画忽略区": [
+"S-layout"
+],
+"撤销": [
+"S-layout"
+],
+"北区通道": [
+"S-access",
+"S-layout"
+],
+"南墙": [
+"S-access",
+"S-layout"
+],
+"水池": [
+"S-layout"
+],
+"虚线 = 原范围，确认前仍避开": [
+"S-layout"
+],
+"限速 0.5": [
+"S-layout"
+],
+"虚拟墙": [
+"S-layout"
+],
+"忽略区": [
+"S-layout"
+],
+"拖角上的点改形状 · 1 格 = 5 米 · 每次保存留一个版本，可回退；新增、扩大保存即生效，删除、缩小要你确认": [
+"S-layout"
+],
+"等你确认": [
+"S-layout"
+],
+"你把「水池」缩小了。确认前机器人继续避开原来的范围（虚线）。": [
+"S-layout"
+],
+"确认前再看一遍：水池、楼梯、陡坡、落差都还在禁行区里。": [
+"S-layout"
+],
+"输入密码确认…": [
+"S-layout"
+],
+"名字": [
+"R-A2",
+"S-layout"
+],
+"禁行": [
+"S-layout"
+],
+"限速": [
+"S-layout"
+],
+"硬禁区": [
+"S-layout"
+],
+"水体、落差：遥控也进不去": [
+"S-layout"
+],
+"临时": [
+"S-layout"
+],
+"到期站点自动删除": [
+"S-layout"
+],
+"20 × 16 米 · 第 4 版地图 · demo 10:12 改": [
+"S-layout"
+],
+"删除这个区域…": [
+"S-layout"
+],
+"没有没保存的改动": [
+"S-layout"
+],
+"图层": [
+"S-layout"
+],
+"正在改哪一层": [
+"S-layout"
+],
+"工具": [
+"S-layout"
+],
+"第 4 版地图：禁行区图层，水池禁行区被缩小，等你确认": [
+"S-layout"
+],
+"选中的区域": [
+"S-layout"
+],
+"现场设置 布防与巡逻": [
+"S-arming"
+],
+"按时间表：现在撤防，": [
+"S-arming"
+],
+"今天 19:00 布防": [
+"S-arming"
+],
+"。": [
+"S-arming"
+],
+"使用时间表": [
+"S-arming"
+],
+"全站一起": [
+"S-arming"
+],
+"按防区分开": [
+"S-arming"
+],
+"一周": [
+"S-arming"
+],
+"布防时巡逻": [
+"S-arming"
+],
+"排好的一轮巡逻": [
+"S-arming"
+],
+"在空白处拖动加布防时段": [
+"S-arming"
+],
+"周一": [
+"S-arming"
+],
+"周二": [
+"S-arming"
+],
+"周三": [
+"S-arming"
+],
+"周四": [
+"S-arming"
+],
+"周五": [
+"S-arming"
+],
+"周六": [
+"S-arming"
+],
+"周日": [
+"S-arming"
+],
+"把选中那天复制到：": [
+"S-arming"
+],
+"工作日": [
+"S-access",
+"S-arming"
+],
+"周末": [
+"S-access",
+"S-arming"
+],
+"其余全部": [
+"S-arming"
+],
+"巡逻日程": [
+"S-arming"
+],
+"加一条": [
+"S-arming"
+],
+"几点": [
+"S-arming"
+],
+"路线": [
+"S-arming"
+],
+"错过了": [
+"S-arming"
+],
+"每天 01:00": [
+"S-arming"
+],
+"哪台空就哪台": [
+"S-arming"
+],
+"迟 15 分内补跑": [
+"S-arming"
+],
+"每天 04:00": [
+"S-arming"
+],
+"跳过": [
+"S-arming"
+],
+"每天 22:00": [
+"S-arming"
+],
+"周末 20:00": [
+"S-arming"
+],
+"停车场一圈": [
+"S-arming"
+],
+"例外日期": [
+"S-arming"
+],
+"加例外": [
+"S-arming"
+],
+"全天布防": [
+"S-arming"
+],
+"删除": [
+"S-arming"
+],
+"全天撤防": [
+"S-arming"
+],
+"加、删例外马上生效，不用按保存。": [
+"S-arming"
+],
+"布防期间机器人一圈接一圈地走，中间停下歇着、充电、换车。": [
+"S-arming"
+],
+"guard-1 · 一圈约 18 分": [
+"S-arming"
+],
+"A、B 轮换": [
+"S-arming"
+],
+"两圈之间歇": [
+"S-arming"
+],
+"10 分钟": [
+"S-arming"
+],
+"每圈顺序": [
+"S-arming"
+],
+"打乱": [
+"S-arming"
+],
+"固定": [
+"S-arming"
+],
+"撤防时回待命点": [
+"S-arming"
+],
+"今晚会怎么跑": [
+"S-arming"
+],
+"一次充电": [
+"S-arming"
+],
+"A 约 7 圈，B 约 4 圈": [
+"S-arming"
+],
+"换车": [
+"S-arming"
+],
+"22:00 A 跑日程那轮时 B 接上；之后轮流": [
+"S-arming"
+],
+"每个防区": [
+"S-arming"
+],
+"至少 25 分钟经过一次": [
+"S-arming"
+],
+"昨晚": [
+"S-arming"
+],
+"跑了 31 圈，每个防区最长 22 分钟没人经过。": [
+"S-arming"
+],
+"看每一圈的记录": [
+"S-arming"
+],
+"布防范围": [
+"S-arming"
+],
+"现场设置 授权与临时撤防": [
+"S-access"
+],
+"现在 1 条授权在生效": [
+"S-access"
+],
+"：空调维修，到 12:00。": [
+"S-access"
+],
+"现在生效": [
+"S-access"
+],
+"· 停车场、北区通道 · 09:00 → 12:00": [
+"S-access"
+],
+"这两个防区里发现有人不报紧急报警，只记录": [
+"S-access"
+],
+"提前结束": [
+"S-access"
+],
+"临时撤防": [
+"S-access"
+],
+"没有。现在全站撤防到 19:00；布防期间可以按防区临时撤防几小时，到点自动恢复。": [
+"S-access"
+],
+"全部授权 4": [
+"S-access"
+],
+"每周重复的按星期画，底下有黑线的是今天": [
+"S-access"
+],
+"范围": [
+"S-access"
+],
+"星期和时间": [
+"S-access"
+],
+"有效到": [
+"S-access"
+],
+"厂家 2 人": [
+"S-access"
+],
+"停车场、北区通道": [
+"S-access"
+],
+"一": [
+"S-access"
+],
+"二": [
+"S-access"
+],
+"三": [
+"S-access"
+],
+"四": [
+"S-access"
+],
+"五": [
+"S-access"
+],
+"六": [
+"S-access"
+],
+"日": [
+"S-access"
+],
+"删除…": [
+"S-access",
+"S-users"
+],
+"2 号楼周边": [
+"S-access"
+],
+"一、三、五、日 14:00–17:00": [
+"S-access"
+],
+"垃圾车": [
+"S-access"
+],
+"每周三 07:00–08:00": [
+"S-access"
+],
+"长期": [
+"S-access"
+],
+"夜班保安巡场": [
+"S-access"
+],
+"人走动不报": [
+"S-access"
+],
+"全站": [
+"S-access"
+],
+"每天 22:00–02:00（跨午夜）": [
+"S-access"
+],
+"加授权": [
+"S-access"
+],
+"授权生效期间，在授权的防区里发现有人不报紧急报警：摄像头入侵只记录，机器人看到的只记一条普通记录。": [
+"S-access"
+],
+"选定的防区": [
+"S-access"
+],
+"什么时候": [
+"S-access"
+],
+"某一天": [
+"S-access"
+],
+"每周重复": [
+"S-access"
+],
+"每天": [
+"S-access"
+],
+"从": [
+"S-access",
+"S-log",
+"S-reports"
+],
+"到": [
+"S-access",
+"S-log",
+"S-reports"
+],
+"结束早于开始就是跨午夜。": [
+"S-access"
+],
+"· 可选": [
+"S-access"
+],
+"备注": [
+"S-access"
+],
+"加上": [
+"S-access"
+],
+"清空": [
+"S-access"
+],
+"全部授权": [
+"S-access"
+],
+"比如：维修人员": [
+"S-access"
+],
+"重复": [
+"S-access"
+],
+"不填就一直有效": [
+"S-access"
+],
+"机器人 操作": [
+"R-A"
+],
+"机器人 2": [
+"R-A",
+"R-A2"
+],
+"添加": [
+"R-A",
+"R-A2"
+],
+"巡逻 停车场一圈": [
+"R-A",
+"R-A2"
+],
+"充电中 · 换网待批": [
+"R-A",
+"R-A2"
+],
+"1 台请求加入": [
+"R-A",
+"R-A2"
+],
+"C40388 · olga 的手机 · 09:41": [
+"R-A",
+"R-A2"
+],
+"核对码": [
+"R-A",
+"R-A2"
+],
+"核对后批准…": [
+"R-A",
+"R-A2"
+],
+"拒绝": [
+"R-A",
+"R-A2",
+"S-users"
+],
+"C40221 · 定位好 · 派单自动 · 上次联系 2 秒前": [
+"R-A"
+],
+"操作": [
+"R-A",
+"R-A2",
+"S-log",
+"S-system"
+],
+"设置": [
+"R-A",
+"R-A2"
+],
+"云台 水平 0° · 俯仰 −10°": [
+"R-A"
+],
+"雨刷 10 秒": [
+"R-A"
+],
+"私人区域，请离开": [
+"R-A"
+],
+"已录像，保安马上到": [
+"R-A"
+],
+"请出示通行证": [
+"R-A"
+],
+"编辑常用话": [
+"R-A"
+],
+"念": [
+"R-A"
+],
+"停止": [
+"R-A"
+],
+"警示": [
+"R-A"
+],
+"警灯 30 秒": [
+"R-A"
+],
+"60 秒": [
+"R-A"
+],
+"一直开": [
+"R-A"
+],
+"开警灯": [
+"R-A"
+],
+"关": [
+"R-A"
+],
+"放警报声": [
+"R-A"
+],
+"放英文警告": [
+"R-A"
+],
+"在跑停车场一圈，": [
+"R-A"
+],
+"还要约 25 分钟。": [
+"R-A"
+],
+"gina 10:05 派的": [
+"R-A"
+],
+"原地停下": [
+"R-A"
+],
+"停下并回家": [
+"R-A"
+],
+"原地停下：停在这里等你下一步。停下并回家：走回充电桩。": [
+"R-A"
+],
+"guard-1 · 约 18 分": [
+"R-A"
+],
+"排上": [
+"R-A"
+],
+"这一圈跑完再开始。": [
+"R-A"
+],
+"现在": [
+"R-A"
+],
+"站着": [
+"R-A"
+],
+"趴下": [
+"R-A"
+],
+"30 天报警 4 条": [
+"R-A"
+],
+"开始停车场一圈": [
+"R-A"
+],
+"卡住，东侧通道 · 2 分钟后脱困": [
+"R-A"
+],
+"开始 guard-1": [
+"R-A"
+],
+"身体状况": [
+"R-A"
+],
+"电池": [
+"R-A"
+],
+"62% · 约 2 小时 40 分 · 健康 94%": [
+"R-A"
+],
+"网络": [
+"R-A",
+"R-A2"
+],
+"Wi-Fi 好": [
+"R-A"
+],
+"存储": [
+"R-A",
+"R-A2"
+],
+"64% · 3 段待上传": [
+"R-A"
+],
+"设备": [
+"R-A"
+],
+"云台、警灯、喇叭 正常": [
+"R-A"
+],
+"软件": [
+"R-A"
+],
+"v1.20 · 地图第 4 版": [
+"R-A"
+],
+"改名、激活码、Wi-Fi、维护、解绑在上面「设置」。": [
+"R-A"
+],
+"机队": [
+"R-A",
+"R-A2"
+],
+"A 的视图": [
+"R-A"
+],
+"A 的画面和对外": [
+"R-A"
+],
+"云台上": [
+"R-A"
+],
+"云台左": [
+"R-A"
+],
+"云台回中": [
+"R-A"
+],
+"云台右": [
+"R-A"
+],
+"云台下": [
+"R-A"
+],
+"临时说一句": [
+"R-A"
+],
+"临时说一句，回车就念": [
+"R-A"
+],
+"警灯时长": [
+"R-A"
+],
+"A 的任务和状况": [
+"R-A"
+],
+"派一次巡逻": [
+"R-A"
+],
+"会马上动身体，先确认旁边没人": [
+"R-A"
+],
+"机器人 设置": [
+"R-A2"
+],
+"充电中 18%": [
+"R-A2"
+],
+"C40011 · 定位好 · 上次联系 1 秒前": [
+"R-A2"
+],
+"派单方式": [
+"R-A2"
+],
+"自动": [
+"R-A2"
+],
+"只手动": [
+"R-A2"
+],
+"自动：日程和报警都能派它": [
+"R-A2"
+],
+"2 件要处理。": [
+"R-A2"
+],
+"其余 8 项正常。": [
+"R-A2"
+],
+"要处理": [
+"R-A2"
+],
+"要换到 estate-iot，等你批准": [
+"R-A2"
+],
+"现在 estate-staff · 08:12 从机器人发起 · 批准后约 30 秒断开再连上": [
+"R-A2"
+],
+"批准换网": [
+"R-A2"
+],
+"电量": [
+"R-A2"
+],
+"18%，充电中": [
+"R-A2"
+],
+"约 01:10 充到 80%；01:00 那一轮可能跑不完": [
+"R-A2"
+],
+"去「布防与巡逻」换一台": [
+"R-A2"
+],
+"其余 8 项正常": [
+"R-A2"
+],
+"收起": [
+"R-A2"
+],
+"连接": [
+"R-A2"
+],
+"证书": [
+"R-A2"
+],
+"有效，到 2027-10-03": [
+"R-A2"
+],
+"还有 687 天，到期前 30 天会提醒": [
+"R-A2"
+],
+"现在续": [
+"R-A2"
+],
+"激活码": [
+"R-A2"
+],
+"没有在用的": [
+"R-A2"
+],
+"重装系统、要重新加入时才需要": [
+"R-A2"
+],
+"发新激活码…": [
+"R-A2"
+],
+"机身": [
+"R-A2"
+],
+"和站点差 0.2 秒": [
+"R-A2"
+],
+"差超过 2 秒才需要对时": [
+"R-A2"
+],
+"对时": [
+"R-A2"
+],
+"用了 41%，没有待上传的录像": [
+"R-A2"
+],
+"清理…": [
+"R-A2"
+],
+"软件和地图": [
+"R-A2"
+],
+"v1.20 · 地图第 4 版，和站点一致": [
+"R-A2"
+],
+"机器人参数": [
+"R-A2"
+],
+"速度、音量、避障距离": [
+"R-A2"
+],
+"改参数…": [
+"R-A2"
+],
+"排查": [
+"R-A2"
+],
+"日志": [
+"R-A2"
+],
+"巡逻程序": [
+"R-A2"
+],
+"视频": [
+"R-A2"
+],
+"最近 1 小时": [
+"R-A2"
+],
+"最近 24 小时": [
+"R-A2"
+],
+"看日志": [
+"R-A2"
+],
+"调试": [
+"R-A2"
+],
+"关着": [
+"R-A2"
+],
+"打开后 30 分钟自动关，售后远程排查用": [
+"R-A2"
+],
+"打开 30 分钟": [
+"R-A2"
+],
+"下载诊断包": [
+"R-A2"
+],
+"这台的经过": [
+"R-A2"
+],
+"申请换 Wi-Fi 到 estate-iot": [
+"R-A2"
+],
+"换到地图第 4 版": [
+"R-A2"
+],
+"升级到 v1.20": [
+"R-A2"
+],
+"olga 用手机登记加入 · demo 批准": [
+"R-A2"
+],
+"重启和移除": [
+"R-A2"
+],
+"它现在没在跑任务，可以重启。重启要几分钟，期间不能派。": [
+"R-A2"
+],
+"重启巡逻程序…": [
+"R-A2"
+],
+"重启机器人…": [
+"R-A2"
+],
+"解绑后证书马上作废，站点消息服务重启，所有机器人断开约 10 秒。要输入密码。": [
+"R-A2"
+],
+"解绑 B…": [
+"R-A2"
+],
+"B 的视图": [
+"R-A2"
+],
+"B 的状况": [
+"R-A2"
+],
+"日志种类": [
+"R-A2"
+],
+"时间范围": [
+"R-A2"
+],
+"B 的经过和移除": [
+"R-A2"
+],
+"现场设置 人员": [
+"S-users"
+],
+"5 个账号，1 个工程师临时账号。": [
+"S-users"
+],
+"1 个申请等你批准。": [
+"S-users"
+],
+"给工程师开临时账号…": [
+"S-users"
+],
+"添加人员": [
+"S-users"
+],
+"待批准 1": [
+"S-users"
+],
+"从手机 App 申请的账号": [
+"S-users"
+],
+"申请当": [
+"S-users"
+],
+"保安": [
+"S-users"
+],
+"11-15 09:58 · 手机 vivo": [
+"S-users"
+],
+"批准…": [
+"S-users"
+],
+"全部账号": [
+"S-users"
+],
+"每人一个账号；点一行看这个人的角色和操作记录": [
+"S-users"
+],
+"人": [
+"S-log",
+"S-users"
+],
+"角色": [
+"S-users"
+],
+"最后登录": [
+"S-users"
+],
+"管理员": [
+"S-users"
+],
+"今天 10:02": [
+"S-users"
+],
+"经理": [
+"S-users"
+],
+"今天 07:05": [
+"S-users"
+],
+"昨天": [
+"S-users"
+],
+"只读": [
+"S-users"
+],
+"4 天前": [
+"S-users"
+],
+"林工": [
+"S-log",
+"S-users"
+],
+"工程师（临时）": [
+"S-users"
+],
+"今天 09:40": [
+"S-users"
+],
+"还剩 3 小时 12 分": [
+"S-users"
+],
+"已停用": [
+"S-users"
+],
+"每个角色能做什么": [
+"S-users"
+],
+"管理员：全部。经理：处理报警、急停、布防、排时间表，机器人页和报告只看。保安：处理报警、急停、布防、派机器人、遥控。只读：只看。工程师（临时）：同管理员，但不能管账号，到期自动失效。": [
+"S-users"
+],
+"登录名 gina · 正常": [
+"S-users"
+],
+"重设密码…": [
+"S-users"
+],
+"停用…": [
+"S-users"
+],
+"停用会马上退出登录，重新启用前不能登录。删除后操作记录仍保留。": [
+"S-users"
+],
+"gina 的操作记录": [
+"S-users"
+],
+"昨天 23:48": [
+"S-users"
+],
+"接手报警「北门有人翻越」": [
+"S-log",
+"S-users"
+],
+"昨天 23:49": [
+"S-users"
+],
+"派 A 去北门 · 当时在跑 guard-1": [
+"S-users"
+],
+"昨天 23:55": [
+"S-users"
+],
+"结论：确认有人 · 通知到 olga": [
+"S-users"
+],
+"昨天 22:09": [
+"S-users"
+],
+"关闭报警「停车场车辆滞留」· 结论：误报": [
+"S-users"
+],
+"昨天 19:02": [
+"S-users"
+],
+"全部急停 · 02:16 恢复": [
+"S-users"
+],
+"在操作记录里看全部": [
+"S-users"
+],
+"待批准": [
+"S-users"
+],
+"现场设置 高级": [
+"S-system"
+],
+"安装和售后用。平时不用来这里。": [
+"S-system"
+],
+"地图": [
+"S-system"
+],
+"家具大量移动，或机器人经常迷路": [
+"S-system"
+],
+"定位": [
+"S-system"
+],
+"机器人说不知道自己在哪": [
+"S-system"
+],
+"诊断": [
+"S-system"
+],
+"出现异常，或工程师要日志": [
+"S-system"
+],
+"软件升级": [
+"S-system"
+],
+"公司发了新版本，或升级后要回退": [
+"S-system"
+],
+"站点": [
+"S-system"
+],
+"主机状态、备份、遥控速度档": [
+"S-system"
+],
+"现在的版本": [
+"S-system"
+],
+"装在哪": [
+"S-system"
+],
+"版本": [
+"S-system"
+],
+"和站点一致": [
+"S-system"
+],
+"回退到上一版本…": [
+"S-system"
+],
+"20 已下载": [
+"S-system"
+],
+"排好了：充电且空闲时切换": [
+"S-system"
+],
+"立即切换…": [
+"S-system"
+],
+"站点上的升级包": [
+"S-system"
+],
+"上传升级包…": [
+"S-system"
+],
+"用公司提供的升级包（.tar.gz）。签名校验不通过的包会被拒绝。在线下载要站点能连上互联网（这个站点还没设置）。": [
+"S-system"
+],
+"11-10 上传 · 签名通过 · 312 MB": [
+"S-system"
+],
+"A 已装 · B 已下载": [
+"S-system"
+],
+"10-28 上传 · 签名通过 · 回退用": [
+"S-system"
+],
+"登录着的 App": [
+"S-system"
+],
+"各 App 登录时上报；旧版 App 不上报": [
+"S-system"
+],
+"登录过": [
+"S-system"
+],
+"网页值班台": [
+"S-system"
+],
+"41 次": [
+"S-system"
+],
+"手机 App": [
+"S-system"
+],
+"17 次": [
+"S-system"
+],
+"2 次": [
+"S-system"
+],
+"版本过旧，不兼容此站点": [
+"S-system"
+],
+"高级": [
+"S-system"
+],
+"现场设置 报告": [
+"S-reports"
+],
+"11-09 到 11-15：": [
+"S-reports"
+],
+"事件 23 次": [
+"S-reports"
+],
+"（比上周多 3），误报 9 次（7 次来自停车场摄像头）；巡逻派出 28 走完 26，7% 要人帮忙。": [
+"S-reports"
+],
+"报告": [
+"S-log",
+"S-reports"
+],
+"操作记录": [
+"S-log",
+"S-reports"
+],
+"时间段": [
+"S-reports"
+],
+"上周": [
+"S-reports"
+],
+"这个月": [
+"S-reports"
+],
+"最长 31 天": [
+"S-reports"
+],
+"导出 PDF": [
+"S-reports"
+],
+"按天": [
+"S-reports"
+],
+"其中误报": [
+"S-reports"
+],
+"事件 23": [
+"S-reports"
+],
+"点一行去「记录与录像」看录像": [
+"S-reports"
+],
+"停车场（摄像头）车辆滞留": [
+"S-reports"
+],
+"南墙有人": [
+"S-reports"
+],
+"停车场（摄像头）有人": [
+"S-reports"
+],
+"北区通道有人": [
+"S-reports"
+],
+"只列出前 5 件，导出表格看全部。": [
+"S-reports"
+],
+"看哪个": [
+"S-log",
+"S-reports"
+],
+"事件 3": [
+"S-reports"
+],
+"误报 1": [
+"S-reports"
+],
+"事件 5": [
+"S-reports"
+],
+"误报 2": [
+"S-reports"
+],
+"事件 2": [
+"S-reports"
+],
+"误报 0": [
+"S-reports"
+],
+"事件 4": [
+"S-reports"
+],
+"现场设置 操作记录": [
+"S-log"
+],
+"这个站点上谁做了什么，新的在前。11-09 到 11-15 共 214 条。": [
+"S-log"
+],
+"所有人": [
+"S-log"
+],
+"报警处理": [
+"S-log"
+],
+"布防撤防": [
+"S-log"
+],
+"账号": [
+"S-log"
+],
+"导出 CSV": [
+"S-log"
+],
+"类别": [
+"S-log"
+],
+"做了什么": [
+"S-log"
+],
+"南墙临时撤防到 12:30": [
+"S-log"
+],
+"缩小禁行区「水池」· 等确认": [
+"S-log"
+],
+"登录（工程师临时账号）": [
+"S-log"
+],
+"给工程师开临时账号 林工 · 4 小时": [
+"S-log"
+],
+"按时间表撤防": [
+"S-log"
+],
+"B 回到充电桩": [
+"S-log"
+],
+"结论：确认有人 · 北门有人翻越": [
+"S-log"
+],
+"派 A 去北门": [
+"S-log"
+],
+"关闭「停车场车辆滞留」· 误报": [
+"S-log"
+],
+"加例外 12-31 全天撤防": [
+"S-log"
+],
+"第 1–12 条，共 214 条": [
+"S-log"
+],
+"上一页": [
+"S-log"
+],
+"下一页": [
+"S-log"
+]
+}

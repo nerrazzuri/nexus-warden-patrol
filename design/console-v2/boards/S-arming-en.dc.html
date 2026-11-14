@@ -1,0 +1,173 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Site Setup Arming & patrols</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&display=swap">
+<style>
+body{margin:0}
+a{color:#1A5FA6}a:hover{color:#0E3F70}
+.btn{height:40px;padding:0 16px;border:1px solid #6B7178;border-radius:2px;background:#fff;color:#16191D;font:600 14px Barlow,"Noto Sans SC","Microsoft YaHei UI",sans-serif;display:inline-flex;align-items:center;gap:8px;cursor:pointer;white-space:nowrap;text-decoration:none}
+.btn.sm{height:32px;padding:0 12px;font-size:13px}
+.btn.pri{background:#1F6FC0;border-color:#1F6FC0;color:#fff;font-weight:700}
+.btn.danger{border-color:#C4262B;color:#B0202A}
+.btn.stop{background:#D42F33;border-color:#D42F33;color:#fff;font-weight:700}
+.seg{display:inline-flex;border:1px solid #C9CDD2}
+.seg .btn{border:0;background:transparent;border-radius:0}
+.seg .btn+.btn{border-left:1px solid #C9CDD2}
+.seg .btn.on{background:#1F6FC0;color:#fff}
+.lbl{font-size:12px;font-weight:600;letter-spacing:.06em;color:#5A6068}
+.mut{color:#565B62}
+.ring{display:inline-block;flex:none;width:12px;height:12px;border:3px solid #C4262B;border-radius:50%;box-sizing:border-box}
+.tri{display:inline-block;flex:none;width:0;height:0;border-left:7px solid transparent;border-right:7px solid transparent;border-bottom:12px solid #D99A00}
+.sq{display:inline-block;flex:none;width:9px;height:9px;background:#1E8A47}
+.h1{margin:0;font-size:24px;line-height:30px;font-weight:700}
+.h2{margin:0;font-size:16px;line-height:22px;font-weight:600}
+.card{background:#fff;border:1px solid #D5D8DC}
+.cardh{display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:1px solid #E3E5E8}
+th{text-align:left;font-size:12px;font-weight:600;letter-spacing:.06em;color:#5A6068;padding:10px 12px;border-bottom:1px solid #D5D8DC;background:#F8F9F8}
+td{padding:10px 12px;border-bottom:1px solid #E3E5E8;vertical-align:middle}
+.chip{display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 8px;font-size:12px;font-weight:700}
+.ok{background:#E4F3E9;color:#17703A} .warn{background:#FCF1D6;color:#7A5200} .bad{background:#FBE5E5;color:#A41E24} .gray{background:#ECEEF0;color:#454A51}
+.field{display:flex;flex-direction:column;gap:4px}
+.field input,.field select{height:40px;border:1px solid #6B7178;border-radius:2px;padding:0 10px;font:inherit;background:#fff;color:#16191D}
+.snav a{display:flex;align-items:center;gap:8px;min-height:36px;margin:0 8px;padding:0 10px;color:#A9AEB4;text-decoration:none;font-weight:600;border-radius:2px}
+.snav a[aria-current]{background:#1F6FC0;color:#fff} .snav .g{color:#A9AEB4}
+.snav .g{padding:14px 16px 4px}
+.new{display:inline-block;padding:0 6px;border:1px solid #1F6FC0;color:#1A5FA6;font-size:11px;font-weight:700;line-height:16px}
+</style>
+</helmet>
+<div style="width:1536px;height:960px;box-sizing:border-box;background:#F2F3F1;color:#16191D;font-family:Barlow,'Noto Sans SC','Microsoft YaHei UI',sans-serif;font-size:14px;line-height:20px;font-variant-numeric:tabular-nums;display:flex;flex-direction:column">
+  <header style="height:60px;flex:none;display:flex;align-items:center;gap:16px;padding:0 16px;border-bottom:1px solid #2E333A;background:#0A0C0E;color:#ECEDEA">
+    <div style="display:flex;flex-direction:column;line-height:14px"><b style="font-size:13px;letter-spacing:.12em">NEXUS</b><span style="font-size:11px;letter-spacing:.12em;color:#B4B8BE">WARDEN</span></div>
+    <span style="color:#B4B8BE">estate-1</span>
+    <nav aria-label="Main navigation" style="display:flex;margin-left:8px">
+      <a href="#" style="height:60px;display:flex;align-items:center;padding:0 14px;color:#B4B8BE;text-decoration:none;font-weight:600">Monitoring</a>
+      <a href="#" style="height:60px;display:flex;align-items:center;padding:0 14px;color:#B4B8BE;text-decoration:none;font-weight:600">Events & Recordings</a>
+      <a href="#" aria-current="page" style="height:60px;display:flex;align-items:center;padding:0 14px;color:#ECEDEA;text-decoration:none;font-weight:700;box-shadow:inset 0 -3px 0 #1F6FC0">Site Setup</a>
+    </nav>
+    <div style="flex:1"></div>
+    <span style="display:inline-flex;align-items:center;gap:8px;height:32px;padding:0 12px;background:#20242A;color:#ECEDEA;font-weight:600">Disarmed · Arms 19:00</span>
+    <span style="display:inline-flex;align-items:center;gap:8px;height:32px;padding:0 12px;background:#20242A;font-weight:600">Robots 2/2 online</span>
+    <a href="#" style="display:inline-flex;align-items:center;gap:8px;height:32px;padding:0 12px;background:#20242A;color:#B4B8BE;font-weight:600;text-decoration:none">Open 0</a>
+    <span style="font-size:16px;font-weight:600">10:20</span>
+    <span style="color:#B4B8BE">demo · Administrator</span>
+    <button class="btn stop" type="button"><span style="width:12px;height:12px;border:2px solid #fff;border-radius:50%;box-sizing:border-box"></span>E-STOP ALL</button>
+  </header>
+  <div style="flex:1;min-height:0;display:grid;grid-template-columns:232px minmax(0,1fr)">
+    <nav class="snav" aria-label="Site Setup" style="background:#15181B;border-right:1px solid #15181B;padding:8px 0;overflow:auto">
+      <div class="g lbl">Daily</div>
+      <a href="#"><span style="flex:1">Overview</span><span class="chip" style="height:20px;background:#1F6FC0;color:#fff">6</span></a>
+      <a href="#"><span style="flex:1">Robots</span></a>
+      <a href="#"><span style="flex:1">Users</span></a>
+      <div class="g lbl">Site</div>
+      <a href="#"><span style="flex:1">Layout</span></a>
+      <a href="#" aria-current="page"><span style="flex:1">Arming & patrols</span></a>
+      <a href="#"><span style="flex:1">Access</span></a>
+      <div class="g lbl">Records</div>
+      <a href="#"><span style="flex:1">Reports</span></a>
+      <div class="g lbl">Advanced</div>
+      <a href="#"><span style="flex:1">Maintenance</span></a>
+    </nav>
+    <main style="min-width:0;min-height:0;overflow:hidden;display:flex;flex-direction:column">
+
+<div style="flex:none;display:flex;align-items:center;gap:16px;padding:0 28px;min-height:74px;background:#fff;border-bottom:1px solid #D5D8DC">
+      <h1 style="margin:0;font-size:28px;line-height:34px">Arming & patrols</h1>
+      <p style="margin:0;font-size:15px;min-width:0">By schedule: disarmed now; <b>arms today at 19:00</b>。</p>
+      <span style="flex:1"></span><label style="display:flex;gap:8px;align-items:center;font-weight:600"><input type="checkbox" checked style="width:18px;height:18px">Use schedule</label><div class="seg" role="tablist" aria-label="Arming scope"><button class="btn on" type="button" role="tab" aria-selected="true">Whole site</button><button class="btn" type="button" role="tab" aria-selected="false">Per zone</button></div><button class="btn" type="button">Change mode…</button><button class="btn pri" type="button">Save</button></div>
+<div style="flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,1fr) 380px">
+  <div style="min-width:0;overflow:auto;display:flex;flex-direction:column;background:#fff">
+    <section aria-label="Week" style="background:#fff;border-bottom:1px solid #D5D8DC">
+      <div style="display:flex;align-items:center;gap:18px;padding:12px 20px;flex-wrap:wrap">
+        <h2 class="h2" style="font-size:17px;flex:1">Week</h2>
+        <span style="display:inline-flex;gap:6px;align-items:center" class="mut"><span style="width:18px;height:12px;background:#D5D8DC"></span>Armed</span>
+        <span style="display:inline-flex;gap:6px;align-items:center" class="mut"><span style="width:18px;height:12px;background:#2A2F35"></span>Armed, robot patrolling</span>
+        <span style="display:inline-flex;gap:6px;align-items:center" class="mut"><span style="width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;border-top:7px solid #16191D"></span>Scheduled patrol run</span>
+        
+      </div>
+      <div style="display:grid;grid-template-columns:72px minmax(0,1fr) 16px;column-gap:12px">
+        <div style="grid-column:1/-1;height:1px;background:#E3E5E8"></div><span></span><div style="position:relative;height:22px;font-size:11px;color:#5A6068;margin-top:6px"><span style="position:absolute;left:0.0%;transform:translateX(-50%)">00:00</span><span style="position:absolute;left:25.0%;transform:translateX(-50%)">06:00</span><span style="position:absolute;left:50.0%;transform:translateX(-50%)">12:00</span><span style="position:absolute;left:75.0%;transform:translateX(-50%)">18:00</span><span style="position:absolute;left:100.0%;transform:translateX(-50%)">24:00</span></div><span></span><div style="grid-column:1/-1;height:1px;background:#E3E5E8"></div>
+        <div style="display:contents"><span style="padding:20px 0 0 20px;font-weight:600;">Mon</span>
+      <div style="position:relative;height:44px;margin:6px 0"><div title="Armed" style="position:absolute;left:0.000%;width:29.167%;top:20px;height:20px;background:#D5D8DC"></div><div title="Armed" style="position:absolute;left:79.167%;width:20.833%;top:20px;height:20px;background:#D5D8DC"></div><div title="Robot patrolling" style="position:absolute;left:0.000%;width:3.333%;top:20px;height:20px;background:#2A2F35"></div><div title="Robot patrolling" style="position:absolute;left:6.250%;width:8.750%;top:20px;height:20px;background:#2A2F35"></div><div title="Robot patrolling" style="position:absolute;left:19.167%;width:9.167%;top:20px;height:20px;background:#2A2F35"></div><div title="Robot patrolling" style="position:absolute;left:79.167%;width:9.167%;top:20px;height:20px;background:#2A2F35"></div><div title="Robot patrolling" style="position:absolute;left:89.583%;width:10.417%;top:20px;height:20px;background:#2A2F35"></div><span style="position:absolute;left:calc(4.167% - 20px);top:0;width:40px;text-align:center;font-size:10.5px;line-height:11px;color:#16191D;font-weight:600">01:00</span><span title="Scheduled patrol 01:00" style="position:absolute;left:calc(4.167% - 5px);top:12px;width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;border-top:7px solid #16191D"></span><span style="position:absolute;left:calc(16.667% - 20px);top:0;width:40px;text-align:center;font-size:10.5px;line-height:11px;color:#16191D;font-weight:600">04:00</span><span title="Scheduled patrol 04:00" style="position:absolute;left:calc(16.667% - 5px);top:12px;width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;border-top:7px solid #16191D"></span><span style="position:absolute;left:calc(91.667% - 20px);top:0;width:40px;text-align:center;font-size:10.5px;line-height:11px;color:#16191D;font-weight:600">22:00</span><span title="Scheduled patrol 22:00" style="position:absolute;left:calc(91.667% - 5px);top:12px;width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;border-top:7px solid #16191D"></span></div><span></span></div><div style="grid-column:1/-1;height:1px;background:#E3E5E8"></div><div style="display:contents"><span style="padding:20px 0 0 20px;font-weight:600;">Tue</span>
+      <div style="position:relative;height:44px;margin:6px 0"><div title="Armed" style="position:absolute;left:0.000%;width:29.167%;top:20px;height:20px;background:#D5D8DC"></div><div title="Armed" style="position:absolute;left:79.167%;width:20.833%;top:20px;height:20px;background:#D5D8DC"></div><div title="Robot patrolling" style="position:absolute;left:0.000%;width:3.333%;top:20px;height:20px;background:#2A2F35"></div><div title="Robot patrolling" style="position:absolute;left:6.250%;width:8.750%;top:20px;height:20px;background:#2A2F35"></div><div title="Robot patrolling" style="position:absolute;left:19.167%;width:9.167%;top:20px;height:20px;background:#2A2F35"></div><div title="Robot patrolling" style="position:absolute;left:79.167%;width:9.167%;top:20px;height:20px;background:#2A2F35"></div><div title="Robot patrolling" style="position:absolute;left:89.583%;width:10.417%;top:20px;height:20px;background:#2A2F35"></div><span style="position:absolute;left:calc(4.167% - 20px);top:0;width:40px;text-align:center;font-size:10.5px;line-height:11px;color:#16191D;font-weight:600">01:00</span><span title="Scheduled patrol 01:00" style="position:absolute;left:calc(4.167% - 5px);top:12px;width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;border-top:7px solid #16191D"></span><span style="position:absolute;left:calc(16.667% - 20px);top:0;width:40px;text-align:center;font-size:10.5px;line-height:11px;color:#16191D;font-weight:600">04:00</span><span title="Scheduled patrol 04:00" style="position:absolute;left:calc(16.667% - 5px);top:12px;width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;border-top:7px solid #16191D"></span><span style="position:absolute;left:calc(91.667% - 20px);top:0;width:40px;text-align:center;font-size:10.5px;line-height:11px;color:#16191D;font-weight:600">22:00</span><span title="Scheduled patrol 22:00" style="position:absolute;left:calc(91.667% - 5px);top:12px;width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;border-top:7px solid #16191D"></span></div><span></span></div><div style="grid-column:1/-1;height:1px;background:#E3E5E8"></div><div style="display:contents"><span style="padding:20px 0 0 20px;font-weight:600;">Wed</span>
+      <div style="position:relative;height:44px;margin:6px 0"><div title="Armed" style="position:absolute;left:0.000%;width:29.167%;top:20px;height:20px;background:#D5D8DC"></div><div title="Armed" style="position:absolute;left:79.167%;width:20.833%;top:20px;height:20px;background:#D5D8DC"></div><div title="Robot patrolling" style="position:absolute;left:0.000%;width:3.333%;top:20px;height:20px;background:#2A2F35"></div><div title="Robot patrolling" style="position:absolute;left:6.250%;width:8.750%;top:20px;height:20px;background:#2A2F35"></div><div title="Robot patrolling" style="position:absolute;left:19.167%;width:9.167%;top:20px;height:20px;background:#2A2F35"></div><div title="Robot patrolling" style="position:absolute;left:79.167%;width:9.167%;top:20px;height:20px;background:#2A2F35"></div><div title="Robot patrolling" style="position:absolute;left:89.583%;width:10.417%;top:20px;height:20px;background:#2A2F35"></div><span style="position:absolute;left:calc(4.167% - 20px);top:0;width:40px;text-align:center;font-size:10.5px;line-height:11px;color:#16191D;font-weight:600">01:00</span><span title="Scheduled patrol 01:00" style="position:absolute;left:calc(4.167% - 5px);top:12px;width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;border-top:7px solid #16191D"></span><span style="position:absolute;left:calc(16.667% - 20px);top:0;width:40px;text-align:center;font-size:10.5px;line-height:11px;color:#16191D;font-weight:600">04:00</span><span title="Scheduled patrol 04:00" style="position:absolute;left:calc(16.667% - 5px);top:12px;width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;border-top:7px solid #16191D"></span><span style="position:absolute;left:calc(91.667% - 20px);top:0;width:40px;text-align:center;font-size:10.5px;line-height:11px;color:#16191D;font-weight:600">22:00</span><span title="Scheduled patrol 22:00" style="position:absolute;left:calc(91.667% - 5px);top:12px;width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;border-top:7px solid #16191D"></span></div><span></span></div><div style="grid-column:1/-1;height:1px;background:#E3E5E8"></div><div style="display:contents"><span style="padding:20px 0 0 20px;font-weight:600;">Thu</span>
+      <div style="position:relative;height:44px;margin:6px 0"><div title="Armed" style="position:absolute;left:0.000%;width:29.167%;top:20px;height:20px;background:#D5D8DC"></div><div title="Armed" style="position:absolute;left:79.167%;width:20.833%;top:20px;height:20px;background:#D5D8DC"></div><div title="Robot patrolling" style="position:absolute;left:0.000%;width:3.333%;top:20px;height:20px;background:#2A2F35"></div><div title="Robot patrolling" style="position:absolute;left:6.250%;width:8.750%;top:20px;height:20px;background:#2A2F35"></div><div title="Robot patrolling" style="position:absolute;left:19.167%;width:9.167%;top:20px;height:20px;background:#2A2F35"></div><div title="Robot patrolling" style="position:absolute;left:79.167%;width:9.167%;top:20px;height:20px;background:#2A2F35"></div><div title="Robot patrolling" style="position:absolute;left:89.583%;width:10.417%;top:20px;height:20px;background:#2A2F35"></div><span style="position:absolute;left:calc(4.167% - 20px);top:0;width:40px;text-align:center;font-size:10.5px;line-height:11px;color:#16191D;font-weight:600">01:00</span><span title="Scheduled patrol 01:00" style="position:absolute;left:calc(4.167% - 5px);top:12px;width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;border-top:7px solid #16191D"></span><span style="position:absolute;left:calc(16.667% - 20px);top:0;width:40px;text-align:center;font-size:10.5px;line-height:11px;color:#16191D;font-weight:600">04:00</span><span title="Scheduled patrol 04:00" style="position:absolute;left:calc(16.667% - 5px);top:12px;width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;border-top:7px solid #16191D"></span><span style="position:absolute;left:calc(91.667% - 20px);top:0;width:40px;text-align:center;font-size:10.5px;line-height:11px;color:#16191D;font-weight:600">22:00</span><span title="Scheduled patrol 22:00" style="position:absolute;left:calc(91.667% - 5px);top:12px;width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;border-top:7px solid #16191D"></span></div><span></span></div><div style="grid-column:1/-1;height:1px;background:#E3E5E8"></div><div style="display:contents"><span style="padding:20px 0 0 20px;font-weight:600;">Fri</span>
+      <div style="position:relative;height:44px;margin:6px 0"><div title="Armed" style="position:absolute;left:0.000%;width:29.167%;top:20px;height:20px;background:#D5D8DC"></div><div title="Armed" style="position:absolute;left:79.167%;width:20.833%;top:20px;height:20px;background:#D5D8DC"></div><div title="Robot patrolling" style="position:absolute;left:0.000%;width:3.333%;top:20px;height:20px;background:#2A2F35"></div><div title="Robot patrolling" style="position:absolute;left:6.250%;width:8.750%;top:20px;height:20px;background:#2A2F35"></div><div title="Robot patrolling" style="position:absolute;left:19.167%;width:9.167%;top:20px;height:20px;background:#2A2F35"></div><div title="Robot patrolling" style="position:absolute;left:79.167%;width:9.167%;top:20px;height:20px;background:#2A2F35"></div><div title="Robot patrolling" style="position:absolute;left:89.583%;width:10.417%;top:20px;height:20px;background:#2A2F35"></div><span style="position:absolute;left:calc(4.167% - 20px);top:0;width:40px;text-align:center;font-size:10.5px;line-height:11px;color:#16191D;font-weight:600">01:00</span><span title="Scheduled patrol 01:00" style="position:absolute;left:calc(4.167% - 5px);top:12px;width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;border-top:7px solid #16191D"></span><span style="position:absolute;left:calc(16.667% - 20px);top:0;width:40px;text-align:center;font-size:10.5px;line-height:11px;color:#16191D;font-weight:600">04:00</span><span title="Scheduled patrol 04:00" style="position:absolute;left:calc(16.667% - 5px);top:12px;width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;border-top:7px solid #16191D"></span><span style="position:absolute;left:calc(91.667% - 20px);top:0;width:40px;text-align:center;font-size:10.5px;line-height:11px;color:#16191D;font-weight:600">22:00</span><span title="Scheduled patrol 22:00" style="position:absolute;left:calc(91.667% - 5px);top:12px;width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;border-top:7px solid #16191D"></span></div><span></span></div><div style="grid-column:1/-1;height:1px;background:#E3E5E8"></div><div style="display:contents"><span style="padding:20px 0 0 20px;font-weight:600;">Sat</span>
+      <div style="position:relative;height:44px;margin:6px 0"><div title="Armed" style="position:absolute;left:0.000%;width:29.167%;top:20px;height:20px;background:#D5D8DC"></div><div title="Armed" style="position:absolute;left:79.167%;width:20.833%;top:20px;height:20px;background:#D5D8DC"></div><div title="Robot patrolling" style="position:absolute;left:0.000%;width:3.333%;top:20px;height:20px;background:#2A2F35"></div><div title="Robot patrolling" style="position:absolute;left:6.250%;width:8.750%;top:20px;height:20px;background:#2A2F35"></div><div title="Robot patrolling" style="position:absolute;left:19.167%;width:9.167%;top:20px;height:20px;background:#2A2F35"></div><div title="Robot patrolling" style="position:absolute;left:79.167%;width:9.167%;top:20px;height:20px;background:#2A2F35"></div><div title="Robot patrolling" style="position:absolute;left:89.583%;width:10.417%;top:20px;height:20px;background:#2A2F35"></div><span style="position:absolute;left:calc(4.167% - 20px);top:0;width:40px;text-align:center;font-size:10.5px;line-height:11px;color:#16191D;font-weight:600">01:00</span><span title="Scheduled patrol 01:00" style="position:absolute;left:calc(4.167% - 5px);top:12px;width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;border-top:7px solid #16191D"></span><span style="position:absolute;left:calc(16.667% - 20px);top:0;width:40px;text-align:center;font-size:10.5px;line-height:11px;color:#16191D;font-weight:600">04:00</span><span title="Scheduled patrol 04:00" style="position:absolute;left:calc(16.667% - 5px);top:12px;width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;border-top:7px solid #16191D"></span><span style="position:absolute;left:calc(83.333% - 20px);top:0;width:40px;text-align:center;font-size:10.5px;line-height:11px;color:#16191D;font-weight:600">20:00</span><span title="Scheduled patrol 20:00" style="position:absolute;left:calc(83.333% - 5px);top:12px;width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;border-top:7px solid #16191D"></span><span style="position:absolute;left:calc(91.667% - 20px);top:0;width:40px;text-align:center;font-size:10.5px;line-height:11px;color:#16191D;font-weight:600">22:00</span><span title="Scheduled patrol 22:00" style="position:absolute;left:calc(91.667% - 5px);top:12px;width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;border-top:7px solid #16191D"></span></div><span></span></div><div style="grid-column:1/-1;height:1px;background:#E3E5E8"></div><div style="display:contents"><span style="padding:20px 0 0 20px;font-weight:700;text-decoration:underline 3px;text-underline-offset:5px;">Sun<span class="mut" style="font-weight:400;font-size:12px;display:block;text-decoration:none">Today</span></span>
+      <div style="position:relative;height:44px;margin:6px 0"><div title="Armed" style="position:absolute;left:0.000%;width:29.167%;top:20px;height:20px;background:#D5D8DC"></div><div title="Armed" style="position:absolute;left:79.167%;width:20.833%;top:20px;height:20px;background:#D5D8DC"></div><div title="Robot patrolling" style="position:absolute;left:0.000%;width:3.333%;top:20px;height:20px;background:#2A2F35"></div><div title="Robot patrolling" style="position:absolute;left:6.250%;width:8.750%;top:20px;height:20px;background:#2A2F35"></div><div title="Robot patrolling" style="position:absolute;left:19.167%;width:9.167%;top:20px;height:20px;background:#2A2F35"></div><div title="Robot patrolling" style="position:absolute;left:79.167%;width:9.167%;top:20px;height:20px;background:#2A2F35"></div><div title="Robot patrolling" style="position:absolute;left:89.583%;width:10.417%;top:20px;height:20px;background:#2A2F35"></div><span style="position:absolute;left:calc(4.167% - 20px);top:0;width:40px;text-align:center;font-size:10.5px;line-height:11px;color:#16191D;font-weight:600">01:00</span><span title="Scheduled patrol 01:00" style="position:absolute;left:calc(4.167% - 5px);top:12px;width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;border-top:7px solid #16191D"></span><span style="position:absolute;left:calc(16.667% - 20px);top:0;width:40px;text-align:center;font-size:10.5px;line-height:11px;color:#16191D;font-weight:600">04:00</span><span title="Scheduled patrol 04:00" style="position:absolute;left:calc(16.667% - 5px);top:12px;width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;border-top:7px solid #16191D"></span><span style="position:absolute;left:calc(83.333% - 20px);top:0;width:40px;text-align:center;font-size:10.5px;line-height:11px;color:#16191D;font-weight:600">20:00</span><span title="Scheduled patrol 20:00" style="position:absolute;left:calc(83.333% - 5px);top:12px;width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;border-top:7px solid #16191D"></span><span style="position:absolute;left:calc(91.667% - 20px);top:0;width:40px;text-align:center;font-size:10.5px;line-height:11px;color:#16191D;font-weight:600">22:00</span><span title="Scheduled patrol 22:00" style="position:absolute;left:calc(91.667% - 5px);top:12px;width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;border-top:7px solid #16191D"></span></div><span></span></div><div style="grid-column:1/-1;height:1px;background:#E3E5E8"></div>
+      </div>
+      <div style="display:flex;gap:10px;align-items:center;padding:10px 20px"><span class="mut" style="font-size:13px;flex:1">Drag on empty space to add an armed period; drag the ends to adjust.</span><span class="mut" style="font-size:13px">Copy selected day to:</span><button class="btn sm" type="button">Weekdays</button><button class="btn sm" type="button">Weekend</button><button class="btn sm" type="button">All other days</button></div>
+    </section>
+    <div style="display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr);border-bottom:1px solid #D5D8DC">
+      <section aria-label="Patrol schedules" style="background:#fff;border-bottom:1px solid #D5D8DC">
+        <div style="display:flex;align-items:center;padding:12px 20px"><h2 class="h2" style="font-size:17px;flex:1">Patrol schedules</h2><button class="btn sm" type="button">Add schedule</button></div>
+        <table style="width:100%;border-collapse:collapse"><thead><tr><th>Start</th><th>Route</th><th>Robots</th><th>If missed</th></tr></thead><tbody>
+          <tr><td>Daily 01:00</td><td>guard-1</td><td>First available</td><td class="mut">Run if ≤15 min late</td></tr>
+          <tr><td>Daily 04:00</td><td>guard-1</td><td>A</td><td class="mut">Skip</td></tr>
+          <tr><td>Daily 22:00</td><td>guard-1</td><td>A</td><td class="mut">Skip</td></tr>
+          <tr><td>Weekends 20:00</td><td>Car park loop</td><td>First available</td><td class="mut">Skip</td></tr>
+        </tbody></table>
+      </section>
+      <section aria-label="Exception dates" style="background:#fff;border-bottom:1px solid #D5D8DC">
+        <div style="display:flex;align-items:center;padding:12px 20px"><h2 class="h2" style="font-size:17px;flex:1">Exception dates</h2><button class="btn sm" type="button">Add exception</button></div>
+        <div style="display:grid;grid-template-columns:auto minmax(0,1fr) auto;column-gap:12px;align-items:center">
+          <div style="grid-column:1/-1;height:1px;background:#E3E5E8"></div><b style="padding:10px 0 10px 20px">12-24 → 12-26</b><span>Armed all day</span><button class="btn sm" type="button" style="margin-right:20px">Delete</button>
+          <div style="grid-column:1/-1;height:1px;background:#E3E5E8"></div><b style="padding:10px 0 10px 20px">12-31</b><span>Disarmed all day</span><button class="btn sm" type="button" style="margin-right:20px">Delete</button>
+        </div>
+        <p class="mut" style="margin:0;padding:8px 20px 12px;font-size:13px">Exceptions take effect immediately; no save required.</p>
+      </section>
+    </div>
+  </div>
+  <aside aria-label="Armed patrol" style="background:#fff;border-left:1px solid #D5D8DC;display:flex;flex-direction:column;min-height:0;overflow:auto">
+    <div style="padding:16px 20px;border-bottom:1px solid #D5D8DC">
+      <h2 class="h2" style="font-size:17px">Armed patrol</h2>
+      <p class="mut" style="margin:4px 0 0;font-size:13px">While armed, robots patrol continuously, pausing between laps to rest, recharge and hand over.</p>
+    </div>
+    <div style="padding:16px 20px;display:flex;flex-direction:column;gap:14px">
+      <div class="field"><label class="lbl">Route</label><select style="height:40px;border:1px solid #6B7178;border-radius:2px;padding:0 10px;font:inherit;background:#fff;color:#16191D"><option>guard-1 · approx. 18 min per lap</option></select></div>
+      <div class="field"><label class="lbl">Robots</label><select style="height:40px;border:1px solid #6B7178;border-radius:2px;padding:0 10px;font:inherit;background:#fff;color:#16191D"><option>A and B in rotation</option></select></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        <div class="field"><label class="lbl">Pause between laps</label><select style="height:40px;border:1px solid #6B7178;border-radius:2px;padding:0 10px;font:inherit;background:#fff;color:#16191D"><option>10 min</option></select></div>
+        <div class="field"><label class="lbl">Waypoint order</label><select style="height:40px;border:1px solid #6B7178;border-radius:2px;padding:0 10px;font:inherit;background:#fff;color:#16191D"><option>Randomized</option><option>Fixed</option></select></div>
+      </div>
+      <div class="field"><label class="lbl">Patrol battery threshold</label><div style="display:grid;grid-template-columns:120px minmax(0,1fr);gap:10px;align-items:center"><select style="height:40px;border:1px solid #6B7178;border-radius:2px;padding:0 10px;font:inherit;background:#fff;color:#16191D"><option>30%</option></select><span class="mut" style="font-size:13px">Below this level the robot returns to charge and the other takes over</span></div></div>
+      <label style="display:flex;gap:10px;align-items:center"><input type="checkbox" checked style="width:18px;height:18px">Return to standby on disarm</label>
+      <div style="border-top:1px solid #E3E5E8;padding-top:14px">
+        <h3 class="h2" style="margin-bottom:8px">Tonight's forecast</h3>
+        <dl style="margin:0;display:grid;grid-template-columns:100px 1fr;gap:6px 10px">
+          <dt class="mut">Per charge</dt><dd style="margin:0">A approx. 7 laps, B approx. 4 laps</dd>
+          <dt class="mut">Handover</dt><dd style="margin:0">B takes over at 22:00 while A runs the scheduled patrol; alternating thereafter</dd>
+          <dt class="mut">Per zone</dt><dd style="margin:0">Visited at least every 25 min</dd>
+        </dl>
+        <div style="position:relative;height:28px;margin-top:12px;background:#F2F3F1">
+          <div style="position:absolute;left:0;width:36%;top:0;height:13px;background:#2A2F35"></div><span style="position:absolute;left:4px;top:0;font-size:10.5px;color:#fff;font-weight:700">A</span>
+          <div style="position:absolute;left:36%;width:44%;top:15px;height:13px;background:#2A2F35"></div><span style="position:absolute;left:calc(36% + 4px);top:15px;font-size:10.5px;color:#fff;font-weight:700">B</span>
+          <div style="position:absolute;left:80%;width:20%;top:0;height:13px;background:#2A2F35"></div>
+        </div>
+        <div class="mut" style="display:flex;justify-content:space-between;font-size:11px;margin-top:2px"><span>19:00</span><span>01:00</span><span>07:00</span></div>
+      </div>
+      <div style="border-top:1px solid #E3E5E8;padding-top:14px;display:flex;flex-direction:column;gap:6px">
+        <h3 class="h2">Last night</h3>
+        <p style="margin:0">31 laps; maximum gap per zone 22 min.</p>
+        <a href="#">View lap log</a>
+      </div>
+    </div>
+  </aside>
+</div>
+
+    </main>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1536,"height":960}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

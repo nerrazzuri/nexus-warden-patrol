@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>现场设置 机器人管理</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&display=swap">
+<style>
+body{margin:0}
+a{color:#1A5FA6}a:hover{color:#0E3F70}
+.btn{height:40px;padding:0 16px;border:1px solid #6B7178;border-radius:2px;background:#fff;color:#16191D;font:600 14px Barlow,"Noto Sans SC","Microsoft YaHei UI",sans-serif;display:inline-flex;align-items:center;gap:8px;cursor:pointer;white-space:nowrap;text-decoration:none}
+.btn.sm{height:32px;padding:0 12px;font-size:13px}
+.btn.pri{background:#1F6FC0;border-color:#1F6FC0;color:#fff;font-weight:700}
+.btn.danger{border-color:#C4262B;color:#B0202A}
+.btn.stop{background:#D42F33;border-color:#D42F33;color:#fff;font-weight:700}
+.seg{display:inline-flex;border:1px solid #C9CDD2}
+.seg .btn{border:0;background:transparent;border-radius:0}
+.seg .btn+.btn{border-left:1px solid #C9CDD2}
+.seg .btn.on{background:#1F6FC0;color:#fff}
+.lbl{font-size:12px;font-weight:600;letter-spacing:.06em;color:#5A6068}
+.mut{color:#565B62}
+.ring{display:inline-block;flex:none;width:12px;height:12px;border:3px solid #C4262B;border-radius:50%;box-sizing:border-box}
+.tri{display:inline-block;flex:none;width:0;height:0;border-left:7px solid transparent;border-right:7px solid transparent;border-bottom:12px solid #D99A00}
+.sq{display:inline-block;flex:none;width:9px;height:9px;background:#1E8A47}
+.h1{margin:0;font-size:24px;line-height:30px;font-weight:700}
+.h2{margin:0;font-size:16px;line-height:22px;font-weight:600}
+.card{background:#fff;border:1px solid #D5D8DC}
+.cardh{display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:1px solid #E3E5E8}
+th{text-align:left;font-size:12px;font-weight:600;letter-spacing:.06em;color:#5A6068;padding:10px 12px;border-bottom:1px solid #D5D8DC;background:#F8F9F8}
+td{padding:10px 12px;border-bottom:1px solid #E3E5E8;vertical-align:middle}
+.chip{display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 8px;font-size:12px;font-weight:700}
+.ok{background:#E4F3E9;color:#17703A} .warn{background:#FCF1D6;color:#7A5200} .bad{background:#FBE5E5;color:#A41E24} .gray{background:#ECEEF0;color:#454A51}
+.field{display:flex;flex-direction:column;gap:4px}
+.field input,.field select{height:40px;border:1px solid #6B7178;border-radius:2px;padding:0 10px;font:inherit;background:#fff;color:#16191D}
+.snav a{display:flex;align-items:center;gap:8px;min-height:36px;margin:0 8px;padding:0 10px;color:#A9AEB4;text-decoration:none;font-weight:600;border-radius:2px}
+.snav a[aria-current]{background:#1F6FC0;color:#fff} .snav .g{color:#A9AEB4}
+.snav .g{padding:14px 16px 4px}
+.new{display:inline-block;padding:0 6px;border:1px solid #1F6FC0;color:#1A5FA6;font-size:11px;font-weight:700;line-height:16px}
+</style>
+</helmet>
+<div style="width:1536px;height:960px;box-sizing:border-box;background:#F2F3F1;color:#16191D;font-family:Barlow,'Noto Sans SC','Microsoft YaHei UI',sans-serif;font-size:14px;line-height:20px;font-variant-numeric:tabular-nums;display:flex;flex-direction:column">
+  <header style="height:60px;flex:none;display:flex;align-items:center;gap:16px;padding:0 16px;border-bottom:1px solid #2E333A;background:#0A0C0E;color:#ECEDEA">
+    <div style="display:flex;flex-direction:column;line-height:14px"><b style="font-size:13px;letter-spacing:.12em">NEXUS</b><span style="font-size:11px;letter-spacing:.12em;color:#B4B8BE">WARDEN</span></div>
+    <span style="color:#B4B8BE">estate-1</span>
+    <nav aria-label="主导航" style="display:flex;margin-left:8px">
+      <a href="#" style="height:60px;display:flex;align-items:center;padding:0 14px;color:#B4B8BE;text-decoration:none;font-weight:600">值班</a>
+      <a href="#" style="height:60px;display:flex;align-items:center;padding:0 14px;color:#B4B8BE;text-decoration:none;font-weight:600">记录与录像</a>
+      <a href="#" aria-current="page" style="height:60px;display:flex;align-items:center;padding:0 14px;color:#ECEDEA;text-decoration:none;font-weight:700;box-shadow:inset 0 -3px 0 #1F6FC0">现场设置</a>
+    </nav>
+    <div style="flex:1"></div>
+    <span style="display:inline-flex;align-items:center;gap:8px;height:32px;padding:0 12px;background:#16281D;color:#3DC46E;font-weight:600"><span class="sq" style="background:#3DC46E"></span>布防中 · 到 07:00</span>
+    <span style="display:inline-flex;align-items:center;gap:8px;height:32px;padding:0 12px;background:#20242A;font-weight:600">机器人 2/2 在线</span>
+    <a href="#" style="display:inline-flex;align-items:center;gap:8px;height:32px;padding:0 12px;background:#20242A;color:#B4B8BE;font-weight:600;text-decoration:none">未处理 0</a>
+    <span style="font-size:16px;font-weight:600">10:20</span>
+    <span style="color:#B4B8BE">demo · 管理员</span>
+    <button class="btn stop" type="button"><span style="width:12px;height:12px;border:2px solid #fff;border-radius:50%;box-sizing:border-box"></span>全部急停</button>
+  </header>
+  <div style="flex:1;min-height:0;display:grid;grid-template-columns:232px minmax(0,1fr)">
+    <nav class="snav" aria-label="现场设置" style="background:#15181B;border-right:1px solid #15181B;padding:8px 0;overflow:auto">
+      <div class="g lbl">日常</div>
+      <a href="#"><span style="flex:1">概况</span><span class="chip warn" style="height:20px">2</span></a>
+      <a href="#" aria-current="page"><span style="flex:1">机器人</span></a>
+      <a href="#"><span style="flex:1">人员与权限</span></a>
+      <div class="g lbl">现场</div>
+      <a href="#"><span style="flex:1">现场布置</span></a>
+      <a href="#"><span style="flex:1">布防与巡逻</span></a>
+      <a href="#"><span style="flex:1">来访与授权</span></a>
+      <div class="g lbl">记录</div>
+      <a href="#"><span style="flex:1">报告与操作记录</span></a>
+      <div class="g lbl">高级 · 安装和售后用</div>
+      <a href="#"><span style="flex:1">地图版本、定位、诊断、升级</span></a>
+    </nav>
+    <main style="min-width:0;min-height:0;overflow:auto;padding:24px 32px;display:flex;flex-direction:column;gap:20px">
+
+<div style="display:flex;align-items:flex-end;gap:16px"><div style="flex:1"><h1 class="h1">机器人</h1><p class="mut" style="margin:4px 0 0">派它干活、喊话警示、改设置、远程维护，都在这里。</p></div><button class="btn pri" type="button">添加机器人</button></div>
+<section class="card" style="flex:none">
+  <div style="display:flex;align-items:center;gap:12px;padding:10px 16px;background:#FCF1D6;border-bottom:1px solid #E3E5E8"><span class="tri"></span><b>1 台机器人请求加入</b><span style="color:#4A3600;flex:1">C40388 · 11-15 09:41 从 olga 的手机 · 核对码 482 913</span><button class="btn sm" type="button">核对后批准…</button><button class="btn sm" type="button">拒绝</button></div>
+  <table style="width:100%;border-collapse:collapse"><thead><tr><th>机器人</th><th>现在</th><th style="text-align:right">电量</th><th>定位</th><th>网络</th><th>今天</th><th>派单</th><th>软件</th><th>要注意</th></tr></thead><tbody>
+    <tr><td><b>A</b> <span class="mut">C40221</span></td><td><span class="chip ok"><span class="sq"></span>巡逻 guard-1</span></td><td style="text-align:right;font-weight:700">62%</td><td>好</td><td>Wi-Fi 好</td><td>巡逻 3 轮 · 卡住 1 次</td><td>自动</td><td>v1.20</td><td class="mut">—</td></tr>
+    <tr aria-selected="true" style="background:#E3EEF9;box-shadow:inset 0 0 0 2px #1F6FC0"><td><b>B</b> <span class="mut">C40011</span></td><td><span class="chip gray">充电中</span></td><td style="text-align:right;font-weight:700;color:#7A5200">18%</td><td>好</td><td><span class="chip warn">Wi-Fi 换网待批</span></td><td>巡逻 1 轮</td><td>自动</td><td>v1.20</td><td><span class="chip warn">2 件</span></td></tr>
+  </tbody></table>
+</section>
+
+<section class="card" style="flex:none">
+<div class="cardh"><h2 class="h2" style="font-size:20px">B</h2><span class="chip gray">充电中</span><span class="mut">18% · 在充电桩 1 · 上次联系 1 秒前</span><span style="flex:1"></span></div>
+<div role="tablist" aria-label="B 的功能" style="display:flex;border-bottom:1px solid #D5D8DC;padding:0 16px"><button type="button" role="tab" aria-selected="false" style="height:44px;padding:0 16px;border:0;background:transparent;font:600 14px Barlow,'Noto Sans SC',sans-serif;color:#454A51;box-shadow:none;cursor:pointer">控制与喊话</button><button type="button" role="tab" aria-selected="false" style="height:44px;padding:0 16px;border:0;background:transparent;font:600 14px Barlow,'Noto Sans SC',sans-serif;color:#454A51;box-shadow:none;cursor:pointer">设备和报警记录</button><button type="button" role="tab" aria-selected="true" style="height:44px;padding:0 16px;border:0;background:transparent;font:600 14px Barlow,'Noto Sans SC',sans-serif;color:#0E3F70;box-shadow:inset 0 -3px 0 #1F6FC0;cursor:pointer">管理与维护</button></div>
+  <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr))">
+    <div style="padding:16px;border-right:1px solid #E3E5E8;display:flex;flex-direction:column;gap:14px">
+      <h3 class="h2">管理</h3>
+      <div style="display:flex;align-items:center;gap:12px;padding:10px 12px;background:#FCF1D6"><span class="tri"></span><div style="flex:1"><b>Wi-Fi 换网等你批准</b><div style="color:#4A3600">从 estate-staff 换到 estate-iot · 11-15 08:12 申请</div></div><button class="btn sm" type="button">批准</button><button class="btn sm" type="button">拒绝</button></div>
+      <div class="field"><label class="lbl">名字</label><div style="display:flex;gap:8px"><input style="flex:1" value="B"><button class="btn" type="button">保存名字</button></div><span class="mut" style="font-size:12px">1/24 个字 · 清空就显示编号 C40011</span></div>
+      <div class="field"><span class="lbl">派单方式</span><div class="seg" role="radiogroup" style="align-self:flex-start"><button class="btn sm on" type="button" role="radio" aria-checked="true">自动（按日程、报警派）</button><button class="btn sm" type="button" role="radio">只手动</button></div></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <div><div class="lbl">登记于</div>10-04</div><div><div class="lbl">证书到期</div>2027-10-03</div>
+        <div><div class="lbl">地图</div>第 4 版 · 和站点一致</div><div><div class="lbl">软件</div>v1.20</div>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn sm" type="button">发新激活码…</button><span class="mut" style="align-self:center">旧码马上失效</span></div>
+      <div style="border-top:1px solid #E3E5E8;padding-top:12px;display:flex;align-items:center;gap:12px"><div style="flex:1"><b>解绑 B</b><div class="mut">证书马上作废。站点的消息服务会重启，所有机器人断开约 10 秒。要输入密码。</div></div><button class="btn danger" type="button">解绑…</button></div>
+    </div>
+    <div style="padding:16px;display:flex;flex-direction:column;gap:14px">
+      <h3 class="h2">维护 <span class="mut" style="font-weight:400;font-size:13px">· 安装和售后用</span></h3>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px">
+        <div><div class="lbl">存储</div>64% · 3 段待上传</div><div><div class="lbl">时间</div>和站点差 0.2 秒</div><div><div class="lbl">网络</div>Wi-Fi 好</div>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:8px">
+        <button class="btn sm" type="button">对时</button><button class="btn sm" type="button">清理存储…</button><button class="btn sm" type="button">续证书</button><button class="btn sm" type="button">改机器人设置…</button>
+      </div>
+      <div class="field"><label class="lbl">看日志</label><div style="display:flex;gap:8px"><select style="flex:1"><option>巡逻程序</option><option>视频</option><option>网络</option></select><select><option>最近 1 小时</option></select><button class="btn" type="button">看</button></div></div>
+      <div style="display:flex;flex-wrap:wrap;gap:8px"><button class="btn sm" type="button">打开调试 30 分钟</button><button class="btn sm" type="button">下载诊断包</button></div>
+      <div style="border-top:1px solid #E3E5E8;padding-top:12px;display:flex;flex-wrap:wrap;gap:8px;align-items:center"><span class="mut" style="flex:1;min-width:200px">重启会让它停下几分钟，确认没在跑任务。</span><button class="btn danger" type="button">重启巡逻程序…</button><button class="btn danger" type="button">重启机器人…</button></div>
+    </div>
+  </div>
+</section>
+
+    </main>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1536,"height":960}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

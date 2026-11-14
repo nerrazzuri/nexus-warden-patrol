@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Site Setup Advanced</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&display=swap">
+<style>
+body{margin:0}
+a{color:#1A5FA6}a:hover{color:#0E3F70}
+.btn{height:40px;padding:0 16px;border:1px solid #6B7178;border-radius:2px;background:#fff;color:#16191D;font:600 14px Barlow,"Noto Sans SC","Microsoft YaHei UI",sans-serif;display:inline-flex;align-items:center;gap:8px;cursor:pointer;white-space:nowrap;text-decoration:none}
+.btn.sm{height:32px;padding:0 12px;font-size:13px}
+.btn.pri{background:#1F6FC0;border-color:#1F6FC0;color:#fff;font-weight:700}
+.btn.danger{border-color:#C4262B;color:#B0202A}
+.btn.stop{background:#D42F33;border-color:#D42F33;color:#fff;font-weight:700}
+.seg{display:inline-flex;border:1px solid #C9CDD2}
+.seg .btn{border:0;background:transparent;border-radius:0}
+.seg .btn+.btn{border-left:1px solid #C9CDD2}
+.seg .btn.on{background:#1F6FC0;color:#fff}
+.lbl{font-size:12px;font-weight:600;letter-spacing:.06em;color:#5A6068}
+.mut{color:#565B62}
+.ring{display:inline-block;flex:none;width:12px;height:12px;border:3px solid #C4262B;border-radius:50%;box-sizing:border-box}
+.tri{display:inline-block;flex:none;width:0;height:0;border-left:7px solid transparent;border-right:7px solid transparent;border-bottom:12px solid #D99A00}
+.sq{display:inline-block;flex:none;width:9px;height:9px;background:#1E8A47}
+.h1{margin:0;font-size:24px;line-height:30px;font-weight:700}
+.h2{margin:0;font-size:16px;line-height:22px;font-weight:600}
+.card{background:#fff;border:1px solid #D5D8DC}
+.cardh{display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:1px solid #E3E5E8}
+th{text-align:left;font-size:12px;font-weight:600;letter-spacing:.06em;color:#5A6068;padding:10px 12px;border-bottom:1px solid #D5D8DC;background:#F8F9F8}
+td{padding:10px 12px;border-bottom:1px solid #E3E5E8;vertical-align:middle}
+.chip{display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 8px;font-size:12px;font-weight:700}
+.ok{background:#E4F3E9;color:#17703A} .warn{background:#FCF1D6;color:#7A5200} .bad{background:#FBE5E5;color:#A41E24} .gray{background:#ECEEF0;color:#454A51}
+.field{display:flex;flex-direction:column;gap:4px}
+.field input,.field select{height:40px;border:1px solid #6B7178;border-radius:2px;padding:0 10px;font:inherit;background:#fff;color:#16191D}
+.snav a{display:flex;align-items:center;gap:8px;min-height:36px;margin:0 8px;padding:0 10px;color:#A9AEB4;text-decoration:none;font-weight:600;border-radius:2px}
+.snav a[aria-current]{background:#1F6FC0;color:#fff} .snav .g{color:#A9AEB4}
+.snav .g{padding:14px 16px 4px}
+.new{display:inline-block;padding:0 6px;border:1px solid #1F6FC0;color:#1A5FA6;font-size:11px;font-weight:700;line-height:16px}
+</style>
+</helmet>
+<div style="width:1536px;height:960px;box-sizing:border-box;background:#F2F3F1;color:#16191D;font-family:Barlow,'Noto Sans SC','Microsoft YaHei UI',sans-serif;font-size:14px;line-height:20px;font-variant-numeric:tabular-nums;display:flex;flex-direction:column">
+  <header style="height:60px;flex:none;display:flex;align-items:center;gap:16px;padding:0 16px;border-bottom:1px solid #2E333A;background:#0A0C0E;color:#ECEDEA">
+    <div style="display:flex;flex-direction:column;line-height:14px"><b style="font-size:13px;letter-spacing:.12em">NEXUS</b><span style="font-size:11px;letter-spacing:.12em;color:#B4B8BE">WARDEN</span></div>
+    <span style="color:#B4B8BE">estate-1</span>
+    <nav aria-label="Main navigation" style="display:flex;margin-left:8px">
+      <a href="#" style="height:60px;display:flex;align-items:center;padding:0 14px;color:#B4B8BE;text-decoration:none;font-weight:600">Monitoring</a>
+      <a href="#" style="height:60px;display:flex;align-items:center;padding:0 14px;color:#B4B8BE;text-decoration:none;font-weight:600">Events & Recordings</a>
+      <a href="#" aria-current="page" style="height:60px;display:flex;align-items:center;padding:0 14px;color:#ECEDEA;text-decoration:none;font-weight:700;box-shadow:inset 0 -3px 0 #1F6FC0">Site Setup</a>
+    </nav>
+    <div style="flex:1"></div>
+    <span style="display:inline-flex;align-items:center;gap:8px;height:32px;padding:0 12px;background:#20242A;color:#ECEDEA;font-weight:600">Disarmed · Arms 19:00</span>
+    <span style="display:inline-flex;align-items:center;gap:8px;height:32px;padding:0 12px;background:#20242A;font-weight:600">Robots 2/2 online</span>
+    <a href="#" style="display:inline-flex;align-items:center;gap:8px;height:32px;padding:0 12px;background:#20242A;color:#B4B8BE;font-weight:600;text-decoration:none">Open 0</a>
+    <span style="font-size:16px;font-weight:600">10:20</span>
+    <span style="color:#B4B8BE">demo · Administrator</span>
+    <button class="btn stop" type="button"><span style="width:12px;height:12px;border:2px solid #fff;border-radius:50%;box-sizing:border-box"></span>E-STOP ALL</button>
+  </header>
+  <div style="flex:1;min-height:0;display:grid;grid-template-columns:232px minmax(0,1fr)">
+    <nav class="snav" aria-label="Site Setup" style="background:#15181B;border-right:1px solid #15181B;padding:8px 0;overflow:auto">
+      <div class="g lbl">Daily</div>
+      <a href="#"><span style="flex:1">Overview</span><span class="chip" style="height:20px;background:#1F6FC0;color:#fff">6</span></a>
+      <a href="#"><span style="flex:1">Robots</span></a>
+      <a href="#"><span style="flex:1">Users</span></a>
+      <div class="g lbl">Site</div>
+      <a href="#"><span style="flex:1">Layout</span></a>
+      <a href="#"><span style="flex:1">Arming & patrols</span></a>
+      <a href="#"><span style="flex:1">Access</span></a>
+      <div class="g lbl">Records</div>
+      <a href="#"><span style="flex:1">Reports</span></a>
+      <div class="g lbl">Advanced</div>
+      <a href="#" aria-current="page"><span style="flex:1">Maintenance</span></a>
+    </nav>
+    <main style="min-width:0;min-height:0;overflow:hidden;display:flex;flex-direction:column">
+
+<div style="flex:none;display:flex;align-items:center;gap:16px;padding:0 28px;min-height:74px;background:#fff;border-bottom:1px solid #D5D8DC">
+      <h1 style="margin:0;font-size:28px;line-height:34px">Maintenance</h1>
+      <p style="margin:0;font-size:15px;min-width:0">Maps, localization, diagnostics, software updates. For installation and support; not needed in daily operation.</p>
+      <span style="flex:1"></span></div>
+<div style="flex:1;min-height:0;display:grid;grid-template-columns:240px minmax(0,1fr)">
+  <div role="tablist" aria-orientation="vertical" aria-label="Advanced" style="background:#fff;border-right:1px solid #D5D8DC;overflow:auto">
+    <button type="button" role="tab" aria-selected="false" style="display:block;width:100%;text-align:left;border:0;border-bottom:1px solid #E3E5E8;background-color:#fff;padding:12px 16px;font:14px/20px Barlow,'Noto Sans SC',sans-serif;color:#16191D;cursor:pointer"><b>Maps</b><span class="mut" style="display:block;font-size:12.5px">Major layout changes, or robots frequently lose position</span></button>
+    <button type="button" role="tab" aria-selected="false" style="display:block;width:100%;text-align:left;border:0;border-bottom:1px solid #E3E5E8;background-color:#fff;padding:12px 16px;font:14px/20px Barlow,'Noto Sans SC',sans-serif;color:#16191D;cursor:pointer"><b>Localization</b><span class="mut" style="display:block;font-size:12.5px">A robot reports it cannot localize</span></button>
+    <button type="button" role="tab" aria-selected="false" style="display:block;width:100%;text-align:left;border:0;border-bottom:1px solid #E3E5E8;background-color:#fff;padding:12px 16px;font:14px/20px Barlow,'Noto Sans SC',sans-serif;color:#16191D;cursor:pointer"><b>Diagnostics</b><span class="mut" style="display:block;font-size:12.5px">Faults, or an engineer requests logs</span></button>
+    <button type="button" role="tab" aria-selected="true" style="background:#E3EEF9;box-shadow:inset 3px 0 0 #1F6FC0;display:block;width:100%;text-align:left;border:0;border-bottom:1px solid #E3E5E8;background-color:#E3EEF9;padding:12px 16px;font:14px/20px Barlow,'Noto Sans SC',sans-serif;color:#16191D;cursor:pointer"><b>Software updates</b><span class="mut" style="display:block;font-size:12.5px">New release available, or roll back after an update</span></button>
+    <button type="button" role="tab" aria-selected="false" style="display:block;width:100%;text-align:left;border:0;border-bottom:1px solid #E3E5E8;background-color:#fff;padding:12px 16px;font:14px/20px Barlow,'Noto Sans SC',sans-serif;color:#16191D;cursor:pointer"><b>Site</b><span class="mut" style="display:block;font-size:12.5px">Server status, backups, teleoperation speeds</span></button>
+  </div>
+  <div style="min-width:0;overflow:auto;background:#fff;display:flex;flex-direction:column">
+    <section aria-label="Installed versions" style="background:#fff;border-bottom:1px solid #D5D8DC">
+      <div style="padding:12px 20px"><h2 class="h2" style="font-size:17px">Installed versions</h2></div>
+      <table style="width:100%;border-collapse:collapse"><thead><tr><th>Installed on</th><th>Version</th><th>Status</th><th style="text-align:right">Operate</th></tr></thead><tbody>
+        <tr><td><b>Site</b></td><td>build 20 · 11-10</td><td class="mut">—</td><td></td></tr>
+        <tr><td><b>A</b></td><td>build 20</td><td><span style="display:inline-flex;gap:6px;align-items:center"><span class="sq"></span>Matches site</span></td><td style="text-align:right"><button class="btn sm" type="button">Roll back…</button></td></tr>
+        <tr><td><b>B</b></td><td>build 19 → <b>20 downloaded</b></td><td>Scheduled: switch when charging and idle</td><td style="text-align:right;white-space:nowrap"><button class="btn sm" type="button">Switch now…</button></td></tr>
+      </tbody></table>
+    </section>
+    <section aria-label="Packages on site" style="background:#fff;border-bottom:1px solid #D5D8DC">
+      <div style="display:flex;align-items:center;gap:12px;padding:12px 20px"><h2 class="h2" style="font-size:17px;flex:1">Packages on site</h2><button class="btn sm" type="button">Upload package…</button></div>
+      <p class="mut" style="margin:0;padding:0 20px 10px;font-size:13px">Use vendor-supplied packages (.tar.gz). Packages failing signature verification are rejected. Online download requires internet access (not configured on this site).</p>
+      <div style="display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center"><div style="grid-column:1/-1;height:1px;background:#E3E5E8"></div>
+        <div style="padding:12px 20px"><b>robot-build-20.tar.gz</b><div class="mut" style="font-size:13px">Uploaded 11-10 · Signature verified · 312 MB</div></div>
+        <span class="mut" style="padding-right:20px">A installed · B downloaded</span><div style="grid-column:1/-1;height:1px;background:#E3E5E8"></div>
+        <div style="padding:12px 20px"><b>robot-build-19.tar.gz</b><div class="mut" style="font-size:13px">Uploaded 10-28 · Signature verified · Rollback</div></div><span></span>
+      </div>
+    </section>
+    <section aria-label="Connected apps" style="background:#fff;border-bottom:1px solid #D5D8DC">
+      <div style="display:flex;align-items:baseline;gap:12px;padding:12px 20px"><h2 class="h2" style="font-size:17px">Connected apps</h2><span class="mut" style="font-size:13px">Reported by each app at sign-in; older apps do not report</span></div>
+      <table style="width:100%;border-collapse:collapse"><thead><tr><th>App</th><th>Version</th><th>Sign-ins</th><th>Status</th></tr></thead><tbody>
+        <tr><td>Web console</td><td>build 20</td><td>41</td><td class="mut">Normal</td></tr>
+        <tr><td>Mobile app</td><td>build 20</td><td>17</td><td class="mut">Normal</td></tr>
+        <tr><td>Mobile app</td><td>build 15</td><td>2</td><td><span style="display:inline-flex;gap:6px;align-items:center"><span class="tri"></span>Outdated; incompatible with this site</span></td></tr>
+      </tbody></table>
+    </section>
+  </div>
+</div>
+
+    </main>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1536,"height":960}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

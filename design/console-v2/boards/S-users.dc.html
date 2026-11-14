@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>现场设置 人员</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&display=swap">
+<style>
+body{margin:0}
+a{color:#1A5FA6}a:hover{color:#0E3F70}
+.btn{height:40px;padding:0 16px;border:1px solid #6B7178;border-radius:2px;background:#fff;color:#16191D;font:600 14px Barlow,"Noto Sans SC","Microsoft YaHei UI",sans-serif;display:inline-flex;align-items:center;gap:8px;cursor:pointer;white-space:nowrap;text-decoration:none}
+.btn.sm{height:32px;padding:0 12px;font-size:13px}
+.btn.pri{background:#1F6FC0;border-color:#1F6FC0;color:#fff;font-weight:700}
+.btn.danger{border-color:#C4262B;color:#B0202A}
+.btn.stop{background:#D42F33;border-color:#D42F33;color:#fff;font-weight:700}
+.seg{display:inline-flex;border:1px solid #C9CDD2}
+.seg .btn{border:0;background:transparent;border-radius:0}
+.seg .btn+.btn{border-left:1px solid #C9CDD2}
+.seg .btn.on{background:#1F6FC0;color:#fff}
+.lbl{font-size:12px;font-weight:600;letter-spacing:.06em;color:#5A6068}
+.mut{color:#565B62}
+.ring{display:inline-block;flex:none;width:12px;height:12px;border:3px solid #C4262B;border-radius:50%;box-sizing:border-box}
+.tri{display:inline-block;flex:none;width:0;height:0;border-left:7px solid transparent;border-right:7px solid transparent;border-bottom:12px solid #D99A00}
+.sq{display:inline-block;flex:none;width:9px;height:9px;background:#1E8A47}
+.h1{margin:0;font-size:24px;line-height:30px;font-weight:700}
+.h2{margin:0;font-size:16px;line-height:22px;font-weight:600}
+.card{background:#fff;border:1px solid #D5D8DC}
+.cardh{display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:1px solid #E3E5E8}
+th{text-align:left;font-size:12px;font-weight:600;letter-spacing:.06em;color:#5A6068;padding:10px 12px;border-bottom:1px solid #D5D8DC;background:#F8F9F8}
+td{padding:10px 12px;border-bottom:1px solid #E3E5E8;vertical-align:middle}
+.chip{display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 8px;font-size:12px;font-weight:700}
+.ok{background:#E4F3E9;color:#17703A} .warn{background:#FCF1D6;color:#7A5200} .bad{background:#FBE5E5;color:#A41E24} .gray{background:#ECEEF0;color:#454A51}
+.field{display:flex;flex-direction:column;gap:4px}
+.field input,.field select{height:40px;border:1px solid #6B7178;border-radius:2px;padding:0 10px;font:inherit;background:#fff;color:#16191D}
+.snav a{display:flex;align-items:center;gap:8px;min-height:36px;margin:0 8px;padding:0 10px;color:#A9AEB4;text-decoration:none;font-weight:600;border-radius:2px}
+.snav a[aria-current]{background:#1F6FC0;color:#fff} .snav .g{color:#A9AEB4}
+.snav .g{padding:14px 16px 4px}
+.new{display:inline-block;padding:0 6px;border:1px solid #1F6FC0;color:#1A5FA6;font-size:11px;font-weight:700;line-height:16px}
+</style>
+</helmet>
+<div style="width:1536px;height:960px;box-sizing:border-box;background:#F2F3F1;color:#16191D;font-family:Barlow,'Noto Sans SC','Microsoft YaHei UI',sans-serif;font-size:14px;line-height:20px;font-variant-numeric:tabular-nums;display:flex;flex-direction:column">
+  <header style="height:60px;flex:none;display:flex;align-items:center;gap:16px;padding:0 16px;border-bottom:1px solid #2E333A;background:#0A0C0E;color:#ECEDEA">
+    <div style="display:flex;flex-direction:column;line-height:14px"><b style="font-size:13px;letter-spacing:.12em">NEXUS</b><span style="font-size:11px;letter-spacing:.12em;color:#B4B8BE">WARDEN</span></div>
+    <span style="color:#B4B8BE">estate-1</span>
+    <nav aria-label="主导航" style="display:flex;margin-left:8px">
+      <a href="#" style="height:60px;display:flex;align-items:center;padding:0 14px;color:#B4B8BE;text-decoration:none;font-weight:600">值班</a>
+      <a href="#" style="height:60px;display:flex;align-items:center;padding:0 14px;color:#B4B8BE;text-decoration:none;font-weight:600">记录与录像</a>
+      <a href="#" aria-current="page" style="height:60px;display:flex;align-items:center;padding:0 14px;color:#ECEDEA;text-decoration:none;font-weight:700;box-shadow:inset 0 -3px 0 #1F6FC0">现场设置</a>
+    </nav>
+    <div style="flex:1"></div>
+    <span style="display:inline-flex;align-items:center;gap:8px;height:32px;padding:0 12px;background:#20242A;color:#ECEDEA;font-weight:600">撤防 · 19:00 布防</span>
+    <span style="display:inline-flex;align-items:center;gap:8px;height:32px;padding:0 12px;background:#20242A;font-weight:600">机器人 2/2 在线</span>
+    <a href="#" style="display:inline-flex;align-items:center;gap:8px;height:32px;padding:0 12px;background:#20242A;color:#B4B8BE;font-weight:600;text-decoration:none">未处理 0</a>
+    <span style="font-size:16px;font-weight:600">10:20</span>
+    <span style="color:#B4B8BE">demo · 管理员</span>
+    <button class="btn stop" type="button"><span style="width:12px;height:12px;border:2px solid #fff;border-radius:50%;box-sizing:border-box"></span>全部急停</button>
+  </header>
+  <div style="flex:1;min-height:0;display:grid;grid-template-columns:232px minmax(0,1fr)">
+    <nav class="snav" aria-label="现场设置" style="background:#15181B;border-right:1px solid #15181B;padding:8px 0;overflow:auto">
+      <div class="g lbl">日常</div>
+      <a href="#"><span style="flex:1">概况</span><span class="chip" style="height:20px;background:#1F6FC0;color:#fff">6</span></a>
+      <a href="#"><span style="flex:1">机器人</span></a>
+      <a href="#" aria-current="page"><span style="flex:1">人员</span></a>
+      <div class="g lbl">现场</div>
+      <a href="#"><span style="flex:1">布置</span></a>
+      <a href="#"><span style="flex:1">布防与巡逻</span></a>
+      <a href="#"><span style="flex:1">授权</span></a>
+      <div class="g lbl">记录</div>
+      <a href="#"><span style="flex:1">报告</span></a>
+      <div class="g lbl">高级</div>
+      <a href="#"><span style="flex:1">维护</span></a>
+    </nav>
+    <main style="min-width:0;min-height:0;overflow:hidden;display:flex;flex-direction:column">
+
+<div style="flex:none;display:flex;align-items:center;gap:16px;padding:0 28px;min-height:74px;background:#fff;border-bottom:1px solid #D5D8DC">
+      <h1 style="margin:0;font-size:28px;line-height:34px">人员</h1>
+      <p style="margin:0;font-size:15px;min-width:0"><span style="display:inline-flex;vertical-align:-1px;margin-right:8px"><span aria-hidden="true" style="display:inline-block;flex:none;width:12px;height:12px;border-radius:50%;background:#1F6FC0"></span></span>5 个账号，1 个工程师临时账号。<b>1 个申请等你批准。</b></p>
+      <span style="flex:1"></span><button class="btn" type="button">给工程师开临时账号…</button><button class="btn" type="button">添加人员</button></div>
+<div style="flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,1fr) 440px">
+  <div style="min-width:0;overflow:auto;display:flex;flex-direction:column;background:#fff">
+    <section aria-label="待批准" style="background:#fff;border-bottom:1px solid #D5D8DC">
+      <div style="display:flex;align-items:center;gap:10px;padding:12px 20px"><span aria-hidden="true" style="display:inline-block;flex:none;width:12px;height:12px;border-radius:50%;background:#1F6FC0"></span><h2 class="h2" style="font-size:17px">待批准 1</h2><span class="mut" style="font-size:13px">从手机 App 申请的账号</span></div>
+      <div style="display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center"><div style="grid-column:1/-1;height:1px;background:#E3E5E8"></div>
+        <div style="padding:12px 20px"><b>Ravi</b> 申请当 <b>保安</b><div class="mut" style="font-size:13px">11-15 09:58 · 手机 vivo</div></div>
+        <div style="display:flex;gap:8px;padding-right:20px"><button class="btn sm pri" type="button">批准…</button><button class="btn sm" type="button">拒绝</button></div></div>
+    </section>
+    <section aria-label="全部账号" style="background:#fff;border-bottom:1px solid #D5D8DC">
+      <div style="display:flex;align-items:baseline;gap:12px;padding:12px 20px"><h2 class="h2" style="font-size:17px">全部账号</h2><span class="mut" style="font-size:13px">每人一个账号；点一行看这个人的角色和操作记录</span></div>
+      <div style="display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr) minmax(0,1fr) minmax(0,1.2fr)">
+        <div style="grid-column:1/-1;height:1px;background:#E3E5E8"></div><span class="lbl" style="padding:8px 0 8px 20px">人</span><span class="lbl" style="padding:8px 0">角色</span><span class="lbl" style="padding:8px 0">最后登录</span><span class="lbl" style="padding:8px 0">状态</span><div style="grid-column:1/-1;height:1px;background:#E3E5E8"></div>
+        <a href="#" style="display:contents;color:#16191D;text-decoration:none">
+      <span style="padding:12px 0 12px 20px;"><b>demo</b> <span class="mut" style="font-size:13px">demo</span></span>
+      <span style="padding:12px 0;">管理员</span><span style="padding:12px 0;" class="mut">今天 10:02</span>
+      <span style="padding:12px 20px 12px 0;color:#16191D;">正常</span></a><div style="grid-column:1/-1;height:1px;background:#E3E5E8"></div>
+        <a href="#" style="display:contents;color:#16191D;text-decoration:none">
+      <span style="padding:12px 0 12px 20px;"><b>olga</b> <span class="mut" style="font-size:13px">olga</span></span>
+      <span style="padding:12px 0;">经理</span><span style="padding:12px 0;" class="mut">今天 07:05</span>
+      <span style="padding:12px 20px 12px 0;color:#16191D;">正常</span></a><div style="grid-column:1/-1;height:1px;background:#E3E5E8"></div>
+        <a href="#" style="display:contents;color:#16191D;text-decoration:none">
+      <span style="padding:12px 0 12px 20px;background:#E3EEF9;"><b>gina</b> <span class="mut" style="font-size:13px">gina</span></span>
+      <span style="padding:12px 0;background:#E3EEF9;">保安</span><span style="padding:12px 0;background:#E3EEF9;" class="mut">昨天</span>
+      <span style="padding:12px 20px 12px 0;color:#16191D;background:#E3EEF9;">正常</span></a><div style="grid-column:1/-1;height:1px;background:#E3E5E8"></div>
+        <a href="#" style="display:contents;color:#16191D;text-decoration:none">
+      <span style="padding:12px 0 12px 20px;"><b>vic</b> <span class="mut" style="font-size:13px">vic</span></span>
+      <span style="padding:12px 0;">只读</span><span style="padding:12px 0;" class="mut">4 天前</span>
+      <span style="padding:12px 20px 12px 0;color:#16191D;">正常</span></a><div style="grid-column:1/-1;height:1px;background:#E3E5E8"></div>
+        <a href="#" style="display:contents;color:#16191D;text-decoration:none">
+      <span style="padding:12px 0 12px 20px;"><b>林工</b> <span class="mut" style="font-size:13px">eng-0415</span></span>
+      <span style="padding:12px 0;">工程师（临时）</span><span style="padding:12px 0;" class="mut">今天 09:40</span>
+      <span style="padding:12px 20px 12px 0;color:#16191D;">还剩 3 小时 12 分</span></a><div style="grid-column:1/-1;height:1px;background:#E3E5E8"></div>
+        <a href="#" style="display:contents;color:#16191D;text-decoration:none">
+      <span style="padding:12px 0 12px 20px;"><b>Ahmad</b> <span class="mut" style="font-size:13px">ahmad</span></span>
+      <span style="padding:12px 0;">保安</span><span style="padding:12px 0;" class="mut">11-02</span>
+      <span style="padding:12px 20px 12px 0;color:#5A6068;">已停用</span></a><div style="grid-column:1/-1;height:1px;background:#E3E5E8"></div>
+      </div>
+    </section>
+    <details style="background:#fff;border-bottom:1px solid #D5D8DC"><summary style="list-style:none;padding:12px 20px;cursor:pointer;font-weight:600;display:flex;gap:6px;align-items:center">每个角色能做什么 <svg width="12" height="12" viewBox="0 0 20 20" aria-hidden="true"><polyline points="4,7 10,13 16,7" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="square"/></svg></summary>
+      <p class="mut" style="margin:0;padding:0 20px 14px;font-size:13px">管理员：全部。经理：处理报警、急停、布防、排时间表，机器人页和报告只看。保安：处理报警、急停、布防、派机器人、遥控。只读：只看。工程师（临时）：同管理员，但不能管账号，到期自动失效。</p></details>
+  </div>
+  <aside aria-label="gina" style="background:#fff;border-left:1px solid #D5D8DC;display:flex;flex-direction:column;min-height:0;overflow:auto">
+    <div style="padding:24px 24px 20px;border-bottom:1px solid #D5D8DC;display:flex;flex-direction:column;align-items:center;text-align:center;gap:14px">
+      <div><h2 style="margin:0;font-size:24px;line-height:30px">gina</h2><span class="mut">登录名 gina · 正常</span></div>
+      <div style="width:100%;display:flex;flex-direction:column;gap:6px;align-items:stretch"><span class="lbl">角色</span><div class="seg" role="tablist" aria-label="角色" style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));width:100%"><button class="btn" type="button" role="tab" aria-selected="false" style="justify-content:center;padding:0 6px">经理</button><button class="btn on" type="button" role="tab" aria-selected="true" style="justify-content:center;padding:0 6px">保安</button><button class="btn" type="button" role="tab" aria-selected="false" style="justify-content:center;padding:0 6px">只读</button></div></div>
+      <div style="width:100%;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px"><button class="btn sm" type="button" style="justify-content:center">重设密码…</button><button class="btn sm danger" type="button" style="justify-content:center">停用…</button><button class="btn sm danger" type="button" style="justify-content:center">删除…</button></div>
+      <p class="mut" style="margin:0;font-size:12.5px;max-width:34em">停用会马上退出登录，重新启用前不能登录。删除后操作记录仍保留。</p>
+    </div>
+    <div style="padding:16px 24px">
+      <h3 class="h2" style="margin-bottom:6px">gina 的操作记录</h3>
+      <ul style="list-style:none;margin:0;padding:0">
+        <li style="display:grid;grid-template-columns:96px 1fr;gap:10px;padding:8px 0;border-top:1px solid #E3E5E8"><span class="mut">昨天 23:48</span><span>接手报警「北门有人翻越」</span></li>
+        <li style="display:grid;grid-template-columns:96px 1fr;gap:10px;padding:8px 0;border-top:1px solid #E3E5E8"><span class="mut">昨天 23:49</span><span>派 A 去北门 · 当时在跑 guard-1</span></li>
+        <li style="display:grid;grid-template-columns:96px 1fr;gap:10px;padding:8px 0;border-top:1px solid #E3E5E8"><span class="mut">昨天 23:55</span><span>结论：确认有人 · 通知到 olga</span></li>
+        <li style="display:grid;grid-template-columns:96px 1fr;gap:10px;padding:8px 0;border-top:1px solid #E3E5E8"><span class="mut">昨天 22:09</span><span>关闭报警「停车场车辆滞留」· 结论：误报</span></li>
+        <li style="display:grid;grid-template-columns:96px 1fr;gap:10px;padding:8px 0;border-top:1px solid #E3E5E8"><span class="mut">昨天 19:02</span><span>布防</span></li>
+        <li style="display:grid;grid-template-columns:96px 1fr;gap:10px;padding:8px 0;border-top:1px solid #E3E5E8"><span class="mut">11-14 02:14</span><span>全部急停 · 02:16 恢复</span></li>
+      </ul>
+      <a href="#" style="display:inline-block;margin-top:10px">在操作记录里看全部</a>
+    </div>
+  </aside>
+</div>
+
+    </main>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1536,"height":960}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

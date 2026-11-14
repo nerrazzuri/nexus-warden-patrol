@@ -1,0 +1,235 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>只读 告警处理中</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&display=swap">
+<style>
+body{margin:0}
+a{color:#5AA2E6}a:hover{color:#CFE4FA}
+.btn{height:40px;padding:0 16px;border:1px solid #9A9FA6;border-radius:2px;background:#16191D;color:#ECEDEA;font:600 14px Barlow,"Noto Sans SC","Microsoft YaHei UI",sans-serif;display:inline-flex;align-items:center;gap:8px;cursor:pointer;white-space:nowrap}
+.btn.sm{height:32px;padding:0 12px;font-size:13px}
+.btn.pri{background:#1F6FC0;border-color:#1F6FC0;color:#fff;font-weight:700}
+.btn.stop{background:#D42F33;border-color:#D42F33;color:#fff;font-weight:700}
+.btn.off{border-style:dashed;color:#9A9FA6;background:transparent;cursor:not-allowed}
+.seg{display:inline-flex;border:1px solid #2E333A}
+.seg .btn{border:0;background:transparent;border-radius:0}
+.seg .btn+.btn{border-left:1px solid #2E333A}
+.seg .btn.on{background:#1F6FC0;color:#fff}
+.lbl{font-size:12px;font-weight:600;letter-spacing:.06em;color:#9A9FA6}
+.ring{display:inline-block;flex:none;width:12px;height:12px;border:3px solid #FF6166;border-radius:50%;box-sizing:border-box}
+.tri{display:inline-block;flex:none;width:0;height:0;border-left:7px solid transparent;border-right:7px solid transparent;border-bottom:12px solid #F2B01E}
+.sq{display:inline-block;flex:none;width:9px;height:9px;background:#3DC46E}
+.disc{display:inline-block;flex:none;width:10px;height:10px;border-radius:50%;background:#fff}
+.h2{margin:0;font-size:15px;line-height:22px;font-weight:600}
+.sec{padding:12px 16px;border-bottom:1px solid #2E333A}
+.vid{position:relative;background:#000;border:1px solid #2E333A;min-height:0;overflow:hidden}
+.vid .noise{position:absolute;inset:0;background:#07080A}
+.vid .cap{position:absolute;left:0;right:0;top:0;display:flex;align-items:center;gap:8px;padding:6px 10px;background:rgba(0,0,0,.65)}
+.new{display:inline-block;padding:0 6px;border:1px solid #5AA2E6;color:#5AA2E6;font-size:11px;font-weight:700;line-height:16px}
+</style>
+</helmet>
+<div style="width:1536px;height:960px;box-sizing:border-box;background:#0E1013;color:#ECEDEA;font-family:Barlow,'Noto Sans SC','Microsoft YaHei UI',sans-serif;font-size:14px;line-height:20px;font-variant-numeric:tabular-nums;display:flex;flex-direction:column">
+
+  <header style="height:60px;flex:none;display:flex;align-items:center;gap:16px;padding:0 16px;border-bottom:1px solid #2E333A;background:#0A0C0E">
+    <div style="display:flex;flex-direction:column;line-height:14px"><b style="font-size:13px;letter-spacing:.12em">NEXUS</b><span style="font-size:11px;letter-spacing:.12em;color:#B4B8BE">WARDEN</span></div>
+    <span style="color:#B4B8BE">estate-1</span>
+    <nav aria-label="主导航" style="display:flex;margin-left:8px">
+      <a href="#" aria-current="page" style="height:60px;display:flex;align-items:center;padding:0 14px;color:#ECEDEA;text-decoration:none;font-weight:700;box-shadow:inset 0 -3px 0 #1F6FC0">值班</a>
+      <a href="#" style="height:60px;display:flex;align-items:center;padding:0 14px;color:#B4B8BE;text-decoration:none;font-weight:600">记录与录像</a>
+    </nav>
+    <div style="flex:1"></div>
+    <span style="display:inline-flex;align-items:center;gap:8px;height:32px;padding:0 12px;background:#16281D;color:#3DC46E;font-weight:600"><span class="sq"></span>布防中 · 到 07:00</span>
+    <span style="display:inline-flex;align-items:center;gap:8px;height:32px;padding:0 12px;background:#20242A;font-weight:600">机器人 2/2 在线</span>
+    <span style="display:inline-flex;align-items:center;gap:8px;height:32px;padding:0 12px;background:#33191B;color:#FF6166;font-weight:700;box-shadow:inset 0 0 0 1px #FF6166"><span class="ring" style="width:11px;height:11px;border-width:2px"></span>未处理 3</span>
+    <span style="font-size:16px;font-weight:600">23:48</span>
+    <span style="color:#B4B8BE">vic · 只读</span>
+  </header>
+
+  <div style="flex:1;min-height:0;display:grid;grid-template-columns:338px minmax(0,1fr) 338px">
+
+    <!-- 左：事件，分两组 -->
+    <aside aria-label="事件" style="border-right:1px solid #2E333A;display:flex;flex-direction:column;min-height:0">
+      <section class="sec">
+        <div style="display:flex;align-items:center;justify-content:space-between"><h2 class="h2">安全事件 1</h2><span class="lbl">有人、火情</span></div>
+        <a href="#" aria-current="true" style="margin:8px -16px 0;padding:10px 16px;display:block;background:#33191B;box-shadow:inset 0 0 0 2px #FF6166;color:#ECEDEA;text-decoration:none">
+          <span style="display:flex;gap:10px;align-items:center"><span class="ring"></span><b style="font-size:15px;flex:1">北门有人翻越</b><span style="color:#FF6166;font-weight:700">P1</span></span>
+          <span style="display:block;margin-left:22px;color:#B4B8BE">摄像头 3 · 23:47 · 1 分钟前</span>
+          <span style="display:block;margin-left:22px;color:#FF6166;font-weight:600">没人接手</span>
+        </a>
+      </section>
+      <section class="sec">
+        <div style="display:flex;align-items:center;justify-content:space-between"><h2 class="h2">设备与运营 2</h2><span class="lbl">机器人、巡逻</span></div>
+        <a href="#" style="margin:8px -16px 0;padding:10px 16px;display:block;color:#ECEDEA;text-decoration:none;border-bottom:1px solid #2E333A">
+          <span style="display:flex;gap:10px;align-items:center"><span class="ring"></span><b style="flex:1">B 等待换电</b><span style="color:#FF6166;font-weight:700">P1</span></span>
+          <span style="display:block;margin-left:22px;color:#B4B8BE">充电桩 1 · 23:31 · olga 处理中</span>
+        </a>
+        <a href="#" style="margin:0 -16px;padding:10px 16px;display:block;color:#ECEDEA;text-decoration:none">
+          <span style="display:flex;gap:10px;align-items:center"><span class="tri"></span><b style="flex:1">A 电量低于 30%</b><span style="color:#F2B01E;font-weight:700">P2</span></span>
+          <span style="display:block;margin-left:22px;color:#B4B8BE">巡逻中 · 23:12</span>
+        </a>
+      </section>
+      <section class="sec" style="flex:1;min-height:0;overflow:auto">
+        <h2 class="h2" style="margin-bottom:8px">本班已关闭 4</h2>
+        <ul style="list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px;color:#B4B8BE">
+          <li style="display:flex;gap:8px"><span style="width:40px;color:#ECEDEA">22:05</span><span style="flex:1">停车场车辆滞留</span><span>误报</span></li>
+          <li style="display:flex;gap:8px"><span style="width:40px;color:#ECEDEA">21:40</span><span style="flex:1">南墙有人靠近</span><span>确认有人</span></li>
+          <li style="display:flex;gap:8px"><span style="width:40px;color:#ECEDEA">20:52</span><span style="flex:1">A 卡住，已脱困</span><span>已处理</span></li>
+        </ul>
+      </section>
+      <section class="sec" style="border-bottom:0;border-top:1px solid #2E333A">
+        <div class="lbl" style="margin-bottom:4px">上一班留言 · olga 19:05</div>
+        <p style="margin:0">停车场有施工车辆进出，22:00 前算正常。</p>
+      </section>
+    </aside>
+
+    <!-- 中：这件事 -->
+    <main style="min-width:0;display:flex;flex-direction:column;min-height:0">
+      <div style="padding:12px 20px;display:flex;align-items:center;gap:16px;background:#16191D;box-shadow:inset 0 4px 0 #D42F33;border-bottom:1px solid #2E333A">
+        <span style="width:32px;height:32px;border:8px solid #FF6166;border-radius:50%;box-sizing:border-box;flex:none"></span>
+        <div style="flex:1;min-width:0"><h1 style="margin:0;font-size:22px;line-height:28px">北门有人翻越</h1><div style="color:#B4B8BE">P1 · 安全事件 · 北区 北门 · 摄像头 3 · 23:47:12 · 往 2 号楼方向</div></div>
+        <span style="color:#FF8A8D;font-weight:700">还没人接手</span>
+      </div>
+      <ol aria-label="处理步骤" style="list-style:none;margin:0;padding:10px 20px;display:flex;border-bottom:1px solid #2E333A;font-weight:600">
+        <li style="flex:1;display:flex;align-items:center;gap:8px;color:#3DC46E"><span class="sq"></span>发现 23:47</li>
+        <li style="flex:1;display:flex;align-items:center;gap:8px"><span style="width:10px;height:10px;border:2px solid #5AA2E6;border-radius:50%;box-sizing:border-box"></span>接手</li>
+        <li style="flex:1;color:#9A9FA6">派遣</li>
+        <li style="flex:1;color:#9A9FA6">到场</li>
+        <li style="flex:1;color:#9A9FA6">确认</li>
+        <li style="flex:1;color:#9A9FA6">结案</li>
+      </ol>
+
+      <div style="flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,3fr) minmax(0,2fr);gap:12px;padding:12px 20px 0">
+        <!-- 画面 60% -->
+        <section aria-label="画面" style="display:flex;flex-direction:column;gap:8px;min-height:0">
+          <div style="display:flex;align-items:center;gap:8px">
+            <div class="seg" role="group" aria-label="画面模式">
+              <button class="btn sm" type="button">单画面</button>
+              <button class="btn sm on" type="button" aria-pressed="true">双画面</button>
+              <button class="btn sm" type="button">四画面</button>
+              <button class="btn sm" type="button">全屏墙</button>
+            </div>
+            <span style="flex:1"></span>
+            <button class="btn sm" type="button">−30 秒回放</button>
+          </div>
+          <figure class="vid" style="margin:0;flex:2">
+            <div class="noise"></div>
+            <div style="position:absolute;left:42%;top:28%;width:70px;height:120px;border:2px solid #FF6166"></div>
+            <div style="position:absolute;left:42%;top:calc(28% + 124px);background:#000;color:#FF6166;font-weight:700;padding:2px 8px">人 · 0.93</div>
+            <figcaption class="cap"><span>摄像头 3 · 北门 · 事件画面</span><span style="flex:1"></span><span style="color:#ECEDEA;font-weight:700;letter-spacing:.06em">实时</span></figcaption>
+          </figure>
+          <figure class="vid" style="margin:0;flex:1">
+            <div class="noise"></div>
+            <figcaption class="cap"><b>A</b><span>前摄像头 · 离北门 48 米</span><span style="flex:1"></span><span style="color:#ECEDEA;font-weight:700;letter-spacing:.06em">实时</span></figcaption>
+          </figure>
+        </section>
+        <!-- 地图 40% -->
+        <figure style="margin:0;position:relative;background:#15181C;border:1px solid #2E333A;min-height:0;overflow:hidden">
+          <svg viewBox="0 0 400 420" preserveAspectRatio="xMidYMid meet" style="position:absolute;inset:0;width:100%;height:100%" role="img" aria-label="事件地图：北门报警点，A 在东边 48 米，路线约 1 分钟">
+            <path d="M30 40 H370 V150 H280 V390 H130 V150 H30 Z" fill="#232830" stroke="#6A7078" stroke-width="2"/>
+            <rect x="150" y="200" width="110" height="110" fill="#1B1F24" stroke="#5F646A" stroke-dasharray="5 4"/>
+            <text x="205" y="260" fill="#9A9FA6" font-size="12" text-anchor="middle">2 号楼</text>
+            <path d="M300 90 C 230 90, 160 80, 112 74" fill="none" stroke="#5AA2E6" stroke-width="3.5" stroke-dasharray="7 5"/>
+            <circle cx="300" cy="90" r="9" fill="#3DC46E" stroke="#0E1013" stroke-width="2"/>
+            <text x="300" y="76" fill="#ECEDEA" font-size="13" font-weight="700" text-anchor="middle">A</text>
+            <circle cx="92" cy="70" r="18" fill="none" stroke="#FF6166" stroke-width="6"/>
+            <circle cx="92" cy="70" r="30" fill="none" stroke="#FF6166" stroke-opacity=".35" stroke-width="1.5"/>
+            <text x="92" y="118" fill="#FF6166" font-size="12" font-weight="700" text-anchor="middle">北门</text>
+            <path d="M120 100 L150 170" stroke="#FF6166" stroke-width="1.5" stroke-dasharray="3 3" fill="none"/>
+            <text x="160" y="186" fill="#FF6166" font-size="11">往 2 号楼</text>
+          </svg>
+          <figcaption style="position:absolute;left:0;right:0;top:0;padding:8px 10px;display:flex;align-items:center;gap:8px;background:rgba(14,16,19,.8)"><b>北区</b><span style="flex:1"></span><span style="color:#B4B8BE">A 48 米 · 约 1 分钟</span></figcaption>
+          <button class="btn sm" type="button" style="position:absolute;right:10px;bottom:10px">全场地图</button>
+        </figure>
+      </div>
+
+      <!-- 操作 + 经过 -->
+      <section aria-label="处理" style="padding:12px 20px;display:flex;flex-direction:column;gap:12px">
+        <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:0 20px;align-items:start">
+          <div style="display:flex;flex-direction:column;gap:4px"><span class="lbl">谁在处理</span><b style="color:#FF8A8D;font-size:15px">还没人接手</b><span style="color:#B4B8BE;font-size:13px">值班：gina（在线）</span></div>
+          <div style="display:flex;flex-direction:column;gap:4px;border-left:1px solid #2E333A;padding-left:20px"><span class="lbl">机器人</span><b style="font-size:15px">还没派</b><span style="color:#B4B8BE;font-size:13px">最近的 A 离北门 48 米</span></div>
+          <div style="display:flex;flex-direction:column;gap:4px;border-left:1px solid #2E333A;padding-left:20px"><span class="lbl">结论</span><b style="font-size:15px">还没定</b><span style="color:#B4B8BE;font-size:13px">定了会显示在这里</span></div>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;border-top:1px solid #2E333A;padding-top:12px">
+          <span class="lbl">经过</span><span style="color:#B4B8BE;flex:1">23:47:12 摄像头 3 发现人 · 23:47:15 推送 gina、olga</span>
+          <span style="color:#B4B8BE">只读账号：可以看画面和录像，处理由值班人员做</span>
+        </div>
+      </section>
+    </main>
+
+    <!-- 右：位置不变，内容按事件排序 -->
+    <aside aria-label="机器人和巡逻" style="border-left:1px solid #2E333A;display:flex;flex-direction:column;min-height:0">
+      <section class="sec"><h2 class="h2">机器人 · 按离事发点远近</h2></section>
+      <section class="sec" style="display:flex;flex-direction:column;gap:6px;background:#14273D">
+        <div style="display:flex;align-items:center;gap:8px"><b style="font-size:17px">A</b><span style="display:inline-flex;align-items:center;gap:6px;color:#3DC46E;font-weight:600"><span class="sq"></span>巡逻中</span><span style="flex:1"></span><span style="color:#F2B01E;font-weight:700">28%</span></div>
+        <div style="height:4px;background:#20242A"><div style="width:28%;height:4px;background:#F2B01E"></div></div>
+        <div style="color:#ECEDEA">离北门 48 米 · 约 1 分钟</div>
+        <div style="color:#B4B8BE">guard-1 第 3 圈 · 定位好</div>
+      </section>
+      <section class="sec" style="display:flex;flex-direction:column;gap:6px">
+        <div style="display:flex;align-items:center;gap:8px"><b style="font-size:17px">B</b><span style="display:inline-flex;align-items:center;gap:6px;color:#FF6166;font-weight:600"><span class="ring" style="width:10px;height:10px;border-width:2px"></span>等换电</span><span style="flex:1"></span><span style="color:#FF6166;font-weight:700">6%</span></div>
+        <div style="height:4px;background:#20242A"><div style="width:6%;height:4px;background:#FF6166"></div></div>
+        <div style="color:#B4B8BE">充电桩 1 · 不能派</div>
+      </section>
+      <section class="sec">
+        <h2 class="h2" style="margin-bottom:8px">今晚巡逻</h2>
+        <ul style="list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px;color:#B4B8BE">
+          <li style="display:flex;gap:8px"><span style="width:40px;color:#ECEDEA">22:00</span><span style="flex:1">guard-1 · A</span><span style="color:#ECEDEA">第 3 圈</span></li>
+          <li style="display:flex;gap:8px"><span style="width:40px;color:#ECEDEA">01:00</span><span style="flex:1">guard-1 · B</span><span style="color:#F2B01E">B 没电，可能跑不了</span></li>
+          <li style="display:flex;gap:8px"><span style="width:40px;color:#ECEDEA">04:00</span><span style="flex:1">guard-1 · A</span><span>排好了</span></li>
+        </ul>
+      </section>
+      <section class="sec" style="flex:1;min-height:0;overflow:auto;border-bottom:0">
+        <h2 class="h2" style="margin-bottom:8px">最新活动</h2>
+        <ul style="list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px;color:#B4B8BE">
+          <li style="display:flex;gap:8px"><span style="width:40px;color:#ECEDEA">23:47</span><span>摄像头 3 发现人（北门）</span></li>
+          <li style="display:flex;gap:8px"><span style="width:40px;color:#ECEDEA">23:31</span><span>B 电量 6%，停在充电桩</span></li>
+          <li style="display:flex;gap:8px"><span style="width:40px;color:#ECEDEA">23:31</span><span>olga 接手：B 等待换电</span></li>
+          <li style="display:flex;gap:8px"><span style="width:40px;color:#ECEDEA">23:12</span><span>A 电量 30%</span></li>
+        </ul>
+      </section>
+    </aside>
+  </div>
+
+  <section aria-label="本班时间轴" style="height:88px;flex:none;border-top:1px solid #2E333A;background:#0A0C0E;padding:8px 16px;box-sizing:border-box;display:flex;flex-direction:column;gap:4px">
+    <div style="display:flex;align-items:center;gap:16px" class="lbl">
+      <span style="color:#ECEDEA">本班 19:00 → 07:00</span>
+      <span style="display:inline-flex;align-items:center;gap:6px"><span style="width:16px;height:6px;background:#1F6FC0"></span>巡逻</span>
+      <span style="display:inline-flex;align-items:center;gap:6px"><span style="width:16px;height:6px;background:#9A9FA6"></span>充电</span>
+      <span style="display:inline-flex;align-items:center;gap:6px"><span style="width:16px;height:6px;background:repeating-linear-gradient(90deg,#FF6166 0 3px,transparent 3px 5px)"></span>离线</span>
+      <span style="display:inline-flex;align-items:center;gap:6px"><span class="ring" style="width:9px;height:9px;border-width:2px"></span>安全事件</span>
+      <span style="display:inline-flex;align-items:center;gap:6px"><span class="tri" style="border-left-width:5px;border-right-width:5px;border-bottom-width:8px"></span>设备异常</span>
+      <span style="flex:1"></span><span>点任一处看那时的录像（画面会标「历史回放」）</span>
+    </div>
+    <div style="position:relative;flex:1">
+      <div style="position:absolute;left:30px;top:2px;color:#9A9FA6;font-size:12px;font-weight:700">A</div>
+      <div style="position:absolute;left:30px;top:22px;color:#9A9FA6;font-size:12px;font-weight:700">B</div>
+      <div style="position:absolute;left:56px;right:0;top:4px;height:12px;background:#16191D"></div>
+      <div style="position:absolute;left:56px;right:0;top:24px;height:12px;background:#16191D"></div>
+      <div style="position:absolute;left:56px;width:9%;top:4px;height:12px;background:#1F6FC0"></div>
+      <div style="position:absolute;left:calc(56px + 25%);width:14.6%;top:4px;height:12px;background:#1F6FC0"></div>
+      <div style="position:absolute;left:calc(56px + 3.5%);width:1.2%;top:24px;height:12px;background:repeating-linear-gradient(90deg,#FF6166 0 3px,transparent 3px 5px)"></div>
+      <div style="position:absolute;left:calc(56px + 30.5%);width:9.1%;top:24px;height:12px;background:#9A9FA6"></div>
+      <span class="ring" style="position:absolute;left:calc(56px + 22%);top:40px;width:10px;height:10px;border-width:2px"></span>
+      <span class="tri" style="position:absolute;left:calc(56px + 35%);top:40px;border-left-width:5px;border-right-width:5px;border-bottom-width:9px"></span>
+      <span class="ring" style="position:absolute;left:calc(56px + 37.6%);top:40px;width:10px;height:10px;border-width:2px"></span>
+      <span class="ring" style="position:absolute;left:calc(56px + 39.4%);top:38px;width:14px;height:14px;border-width:3px"></span>
+      <div style="position:absolute;left:calc(56px + 39.6%);top:0;bottom:0;width:2px;background:#ECEDEA"></div>
+      <span style="position:absolute;left:calc(56px + 39.6% + 14px);top:38px;font-size:12px;font-weight:700">现在 23:48</span>
+      <div style="position:absolute;left:56px;right:0;bottom:0;display:flex;justify-content:space-between;color:#9A9FA6;font-size:11px"><span>19:00</span><span>21:00</span><span>23:00</span><span>01:00</span><span>03:00</span><span>05:00</span><span>07:00</span></div>
+    </div>
+  </section>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1536,"height":960}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Manager Overview</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&display=swap">
+<style>
+body{margin:0}
+a{color:#1A5FA6}a:hover{color:#0E3F70}
+.btn{height:40px;padding:0 16px;border:1px solid #6B7178;border-radius:2px;background:#fff;color:#16191D;font:600 14px Barlow,"Noto Sans SC","Microsoft YaHei UI",sans-serif;display:inline-flex;align-items:center;gap:8px;cursor:pointer;white-space:nowrap;text-decoration:none}
+.btn.sm{height:32px;padding:0 12px;font-size:13px}
+.btn.pri{background:#1F6FC0;border-color:#1F6FC0;color:#fff;font-weight:700}
+.btn.danger{border-color:#C4262B;color:#B0202A}
+.btn.stop{background:#D42F33;border-color:#D42F33;color:#fff;font-weight:700}
+.seg{display:inline-flex;border:1px solid #C9CDD2}
+.seg .btn{border:0;background:transparent;border-radius:0}
+.seg .btn+.btn{border-left:1px solid #C9CDD2}
+.seg .btn.on{background:#1F6FC0;color:#fff}
+.lbl{font-size:12px;font-weight:600;letter-spacing:.06em;color:#5A6068}
+.mut{color:#565B62}
+.ring{display:inline-block;flex:none;width:12px;height:12px;border:3px solid #C4262B;border-radius:50%;box-sizing:border-box}
+.tri{display:inline-block;flex:none;width:0;height:0;border-left:7px solid transparent;border-right:7px solid transparent;border-bottom:12px solid #D99A00}
+.sq{display:inline-block;flex:none;width:9px;height:9px;background:#1E8A47}
+.h1{margin:0;font-size:24px;line-height:30px;font-weight:700}
+.h2{margin:0;font-size:16px;line-height:22px;font-weight:600}
+.card{background:#fff;border:1px solid #D5D8DC}
+.cardh{display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:1px solid #E3E5E8}
+th{text-align:left;font-size:12px;font-weight:600;letter-spacing:.06em;color:#5A6068;padding:10px 12px;border-bottom:1px solid #D5D8DC;background:#F8F9F8}
+td{padding:10px 12px;border-bottom:1px solid #E3E5E8;vertical-align:middle}
+.chip{display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 8px;font-size:12px;font-weight:700}
+.ok{background:#E4F3E9;color:#17703A} .warn{background:#FCF1D6;color:#7A5200} .bad{background:#FBE5E5;color:#A41E24} .gray{background:#ECEEF0;color:#454A51}
+.field{display:flex;flex-direction:column;gap:4px}
+.field input,.field select{height:40px;border:1px solid #6B7178;border-radius:2px;padding:0 10px;font:inherit;background:#fff;color:#16191D}
+.snav a{display:flex;align-items:center;gap:8px;min-height:36px;margin:0 8px;padding:0 10px;color:#A9AEB4;text-decoration:none;font-weight:600;border-radius:2px}
+.snav a[aria-current]{background:#1F6FC0;color:#fff} .snav .g{color:#A9AEB4}
+.snav .g{padding:14px 16px 4px}
+.new{display:inline-block;padding:0 6px;border:1px solid #1F6FC0;color:#1A5FA6;font-size:11px;font-weight:700;line-height:16px}
+</style>
+</helmet>
+<div style="width:1536px;height:960px;box-sizing:border-box;background:#F2F3F1;color:#16191D;font-family:Barlow,'Noto Sans SC','Microsoft YaHei UI',sans-serif;font-size:14px;line-height:20px;font-variant-numeric:tabular-nums;display:flex;flex-direction:column">
+  <header style="height:60px;flex:none;display:flex;align-items:center;gap:16px;padding:0 16px;border-bottom:1px solid #2E333A;background:#0A0C0E;color:#ECEDEA">
+    <div style="display:flex;flex-direction:column;line-height:14px"><b style="font-size:13px;letter-spacing:.12em">NEXUS</b><span style="font-size:11px;letter-spacing:.12em;color:#B4B8BE">WARDEN</span></div>
+    <span style="color:#B4B8BE">estate-1</span>
+    <nav aria-label="Main navigation" style="display:flex;margin-left:8px">
+      <a href="#" style="height:60px;display:flex;align-items:center;padding:0 14px;color:#B4B8BE;text-decoration:none;font-weight:600">Monitoring</a>
+      <a href="#" style="height:60px;display:flex;align-items:center;padding:0 14px;color:#B4B8BE;text-decoration:none;font-weight:600">Events & Recordings</a>
+      <a href="#" aria-current="page" style="height:60px;display:flex;align-items:center;padding:0 14px;color:#ECEDEA;text-decoration:none;font-weight:700;box-shadow:inset 0 -3px 0 #1F6FC0">Site Setup</a>
+    </nav>
+    <div style="flex:1"></div>
+    <span style="display:inline-flex;align-items:center;gap:8px;height:32px;padding:0 12px;background:#20242A;color:#ECEDEA;font-weight:600">Disarmed · Arms 19:00</span>
+    <span style="display:inline-flex;align-items:center;gap:8px;height:32px;padding:0 12px;background:#20242A;font-weight:600">Robots 2/2 online</span>
+    <a href="#" style="display:inline-flex;align-items:center;gap:8px;height:32px;padding:0 12px;background:#20242A;color:#B4B8BE;font-weight:600;text-decoration:none">Open 0</a>
+    <span style="font-size:16px;font-weight:600">10:20</span>
+    <span style="color:#B4B8BE">olga · Manager</span>
+    <button class="btn stop" type="button"><span style="width:12px;height:12px;border:2px solid #fff;border-radius:50%;box-sizing:border-box"></span>E-STOP ALL</button>
+  </header>
+  <div style="flex:1;min-height:0;display:grid;grid-template-columns:232px minmax(0,1fr)">
+    <nav class="snav" aria-label="Site Setup" style="background:#15181B;border-right:1px solid #15181B;padding:8px 0;overflow:auto">
+      <div class="g lbl">Daily</div>
+      <a href="#" aria-current="page"><span style="flex:1">Overview</span></a>
+      <a href="#"><span style="flex:1">Robots</span></a>
+      <div class="g lbl">Site</div>
+      <a href="#"><span style="flex:1">Arming & patrols</span></a>
+      <div class="g lbl">Records</div>
+      <a href="#"><span style="flex:1">Reports</span></a>
+    </nav>
+    <main style="min-width:0;min-height:0;overflow:hidden;display:flex;flex-direction:column">
+
+<div style="flex:none;display:flex;align-items:center;gap:16px;padding:0 28px;min-height:74px;background:#fff;border-bottom:1px solid #D5D8DC">
+      <h1 style="margin:0;font-size:28px;line-height:34px">Overview</h1>
+      <p style="margin:0;font-size:15px;min-width:0">Disarmed; scheduled to arm at 19:00. Both robots online. <b>4 alarms last night, 2 confirmed intrusions; all closed.</b></p>
+      <span style="flex:1"></span><a class="btn" href="#">View reports</a></div>
+<div style="flex:1;min-height:0;overflow:auto;display:grid;grid-template-columns:minmax(0,1fr) 400px;background:#fff">
+  <div style="display:flex;flex-direction:column;min-width:0">
+    <section aria-label="Alarms, last 24 h" style="background:#fff;border-bottom:1px solid #D5D8DC">
+      <div style="display:flex;align-items:baseline;gap:12px;padding:14px 20px"><h2 class="h2" style="font-size:17px;flex:1">Alarms, last 24 h · 4</h2><a href="#">View all events</a></div>
+      <div style="display:grid;grid-template-columns:96px 20px minmax(0,1fr) 110px 180px;gap:12px;padding:0 20px 6px" class="lbl"><span>Time</span><span></span><span>Events</span><span>Handled by</span><span>Disposition</span></div>
+      <ul style="list-style:none;margin:0;padding:0">
+        <li style="display:grid;grid-template-columns:96px 20px minmax(0,1fr) 110px 180px;gap:12px;align-items:center;padding:10px 20px;border-top:1px solid #E3E5E8"><span class="mut">11-14 23:47</span><span><span class="ring"></span></span><span>Perimeter breach, north gate · A on site</span><span class="mut">gina</span><b style="font-weight:600">Confirmed intrusion</b></li>
+        <li style="display:grid;grid-template-columns:96px 20px minmax(0,1fr) 110px 180px;gap:12px;align-items:center;padding:10px 20px;border-top:1px solid #E3E5E8"><span class="mut">11-14 22:05</span><span><span class="tri"></span></span><span>Vehicle loitering, car park</span><span class="mut">gina</span><b style="font-weight:600">False alarm</b></li>
+        <li style="display:grid;grid-template-columns:96px 20px minmax(0,1fr) 110px 180px;gap:12px;align-items:center;padding:10px 20px;border-top:1px solid #E3E5E8"><span class="mut">11-14 21:40</span><span><span class="ring"></span></span><span>Person approaching, south wall</span><span class="mut">gina</span><b style="font-weight:600">Confirmed intrusion</b></li>
+        <li style="display:grid;grid-template-columns:96px 20px minmax(0,1fr) 110px 180px;gap:12px;align-items:center;padding:10px 20px;border-top:1px solid #E3E5E8"><span class="mut">11-14 20:52</span><span><span class="tri"></span></span><span>A obstructed, east corridor</span><span class="mut">System</span><b style="font-weight:600">Recovered automatically</b></li>
+      </ul>
+    </section>
+    <section aria-label="Today's schedule" style="background:#fff;border-bottom:1px solid #D5D8DC;padding:16px 20px 18px">
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px"><h2 class="h2" style="font-size:17px;flex:1">Today's schedule · Sun 11-15</h2><a href="#">Edit in Arming & patrols</a></div>
+      <div style="display:grid;grid-template-columns:72px minmax(0,1fr) 170px;column-gap:14px;align-items:center;position:relative">
+        <span></span><div style="position:relative;height:16px;font-size:11px;color:#5A6068"><span style="position:absolute;left:0.0%;transform:translateX(-50%)">00</span><span style="position:absolute;left:12.5%;transform:translateX(-50%)">03</span><span style="position:absolute;left:25.0%;transform:translateX(-50%)">06</span><span style="position:absolute;left:37.5%;transform:translateX(-50%)">09</span><span style="position:absolute;left:50.0%;transform:translateX(-50%)">12</span><span style="position:absolute;left:62.5%;transform:translateX(-50%)">15</span><span style="position:absolute;left:75.0%;transform:translateX(-50%)">18</span><span style="position:absolute;left:87.5%;transform:translateX(-50%)">21</span><span style="position:absolute;left:100.0%;transform:translateX(-50%)">24</span></div><span></span>
+        <div style="display:contents"><span style="font-weight:600;padding:6px 0">Armed</span>
+      <div style="position:relative;height:26px;background:#F2F3F1;margin:4px 0"><div style="position:absolute;left:0.000%;width:29.167%;top:0;bottom:0;background:#2A2F35;color:#fff;font-size:12px;font-weight:600;display:flex;align-items:center;padding-left:6px;overflow:hidden;white-space:nowrap">All zones</div><div style="position:absolute;left:79.167%;width:20.833%;top:0;bottom:0;background:#2A2F35;color:#fff;font-size:12px;font-weight:600;display:flex;align-items:center;padding-left:6px;overflow:hidden;white-space:nowrap">All zones</div></div><span class="mut" style="font-size:13px;padding:6px 0">Schedule active</span></div>
+        <div style="display:contents"><span style="font-weight:600;padding:6px 0">Access</span>
+      <div style="position:relative;height:26px;background:#F2F3F1;margin:4px 0"><div style="position:absolute;left:37.500%;width:12.500%;top:0;bottom:0;background:repeating-linear-gradient(135deg,#fff 0 4px,#D5D8DC 4px 5px);box-shadow:inset 0 0 0 2px #2A2F35;font-size:12px;font-weight:600;display:flex;align-items:center;padding-left:6px;overflow:hidden;white-space:nowrap">HVAC maintenance</div><div style="position:absolute;left:58.333%;width:12.500%;top:0;bottom:0;background:repeating-linear-gradient(135deg,#fff 0 4px,#D5D8DC 4px 5px);box-shadow:inset 0 0 0 2px #2A2F35;font-size:12px;font-weight:600;display:flex;align-items:center;padding-left:6px;overflow:hidden;white-space:nowrap">Cleaning</div></div><span class="mut" style="font-size:13px;padding:6px 0">2 · HVAC maintenance active</span></div>
+        <div style="display:contents"><span style="font-weight:600;padding:6px 0">Patrol</span>
+      <div style="position:relative;height:26px;background:#F2F3F1;margin:4px 0"><div style="position:absolute;left:4.167%;width:10.417%;top:0;bottom:0;background:#9AA0A6;color:#fff;font-size:12px;font-weight:600;display:flex;align-items:center;padding-left:6px;overflow:hidden;white-space:nowrap">B</div><div style="position:absolute;left:16.667%;width:10.417%;top:0;bottom:0;background:#9AA0A6;color:#fff;font-size:12px;font-weight:600;display:flex;align-items:center;padding-left:6px;overflow:hidden;white-space:nowrap">A</div><div style="position:absolute;left:42.000%;width:1.750%;top:0;bottom:0;background:#9AA0A6;color:#fff;font-size:12px;font-weight:600;display:flex;align-items:center;padding-left:6px;overflow:hidden;white-space:nowrap"></div><div style="position:absolute;left:91.667%;width:8.333%;top:0;bottom:0;background:#9AA0A6;color:#fff;font-size:12px;font-weight:600;display:flex;align-items:center;padding-left:6px;overflow:hidden;white-space:nowrap">A</div></div><span class="mut" style="font-size:13px;padding:6px 0">4 runs · A running now</span></div>
+        <span></span><div style="position:relative;height:0"><div style="position:absolute;left:43.06%;top:-118px;height:122px;width:2px;background:#16191D"></div><span style="position:absolute;left:43.06%;top:6px;transform:translateX(-50%);font-size:12px;font-weight:700">Now 10:20</span></div><span></span>
+      </div>
+      <p class="mut" style="margin:26px 0 0;font-size:13px">Dark = armed; hatched = authorized access (no urgent alarm for persons in the zone); grey = patrol.</p>
+    </section>
+    <section aria-label="With administrator" style="background:#fff;border-bottom:1px solid #D5D8DC">
+      <div style="display:flex;align-items:baseline;gap:12px;padding:14px 20px"><h2 class="h2" style="font-size:17px">With administrator · 4</h2><span class="mut" style="font-size:13px">Approvals and equipment notices are handled by administrator demo; status only</span></div>
+      <ul style="list-style:none;margin:0;padding:0">
+        <li style="display:grid;grid-template-columns:20px minmax(0,1fr) 190px;gap:4px 12px;padding:11px 20px;border-top:1px solid #E3E5E8;align-items:center"><span><span aria-hidden="true" style="display:inline-block;flex:none;width:12px;height:12px;border-radius:50%;background:#1F6FC0"></span></span><div><b>Robot C40388 requests enrolment</b><div class="mut" style="font-size:13px">Requested from your phone 09:41</div></div><span class="mut" style="font-size:13px">Awaiting verification by demo</span></li>
+        <li style="display:grid;grid-template-columns:20px minmax(0,1fr) 190px;gap:4px 12px;padding:11px 20px;border-top:1px solid #E3E5E8;align-items:center"><span><span aria-hidden="true" style="display:inline-block;flex:none;width:12px;height:12px;border-radius:50%;background:#1F6FC0"></span></span><div><b>Ravi requests a Guard account</b><div class="mut" style="font-size:13px">Submitted from the mobile app 09:58</div></div><span class="mut" style="font-size:13px">Awaiting approval by demo</span></li>
+        <li style="display:grid;grid-template-columns:20px minmax(0,1fr) 190px;gap:4px 12px;padding:11px 20px;border-top:1px solid #E3E5E8;align-items:center"><span><span class="tri"></span></span><div><b>B battery health degrading</b><div class="mut" style="font-size:13px">Full-charge runtime 2 h 10 min; 3 h last month</div></div><span class="mut" style="font-size:13px">Acknowledged by demo · 11-14</span></li>
+        <li style="display:grid;grid-template-columns:20px minmax(0,1fr) 190px;gap:4px 12px;padding:11px 20px;border-top:1px solid #E3E5E8;align-items:center"><span><span class="tri"></span></span><div><b>Site storage 71% used</b><div class="mut" style="font-size:13px">30-day retention; full in approx. 40 days</div></div><span class="mut" style="font-size:13px">Acknowledged by demo · 11-15</span></li>
+      </ul>
+    </section>
+  </div>
+  <div style="display:flex;flex-direction:column;border-left:1px solid #D5D8DC">
+    <section aria-label="Robots" style="background:#fff;border-bottom:1px solid #D5D8DC">
+      <div style="display:flex;align-items:baseline;padding:14px 20px"><h2 class="h2" style="font-size:17px;flex:1">Robots</h2><a href="#">Go to Robots</a></div>
+      <div style="display:grid;grid-template-columns:44px 24px minmax(0,1fr) auto;gap:0 8px;align-items:center">
+        <div style="grid-column:1/-1;height:1px;background:#E3E5E8"></div><span style="padding:12px 0 12px 20px"><span class="sq"></span></span><b style="font-size:16px">A</b><span>Car park loop · 2nd run today</span><span class="mut" style="padding-right:20px">Normal</span>
+        <div style="grid-column:1/-1;height:1px;background:#E3E5E8"></div><span style="padding:12px 0 12px 20px"><span class="tri"></span></span><b style="font-size:16px">B</b><span>Online · 1 patrol today</span><span style="padding-right:20px;color:#7A5200;font-weight:600">Battery degrading</span>
+      </div>
+    </section>
+    <section aria-label="This week" style="background:#fff;border-bottom:1px solid #D5D8DC">
+      <div style="display:flex;align-items:baseline;padding:14px 20px"><h2 class="h2" style="font-size:17px;flex:1">This week, from 11-09</h2><a href="#">View reports</a></div>
+      <dl style="margin:0;display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:0 14px">
+        <div style="grid-column:1/-1;height:1px;background:#E3E5E8"></div><dt style="padding:10px 0 10px 20px">Events</dt><dd style="margin:0;padding:10px 0;font-weight:700;text-align:right">23</dd><dd class="mut" style="margin:0;padding:10px 20px 10px 0">3 more than last week</dd>
+        <div style="grid-column:1/-1;height:1px;background:#E3E5E8"></div><dt style="padding:10px 0 10px 20px">False alarm</dt><dd style="margin:0;padding:10px 0;font-weight:700;text-align:right">9</dd><dd class="mut" style="margin:0;padding:10px 20px 10px 0">Same as last week</dd>
+        <div style="grid-column:1/-1;height:1px;background:#E3E5E8"></div><dt style="padding:10px 0 10px 20px">Patrols completed</dt><dd style="margin:0;padding:10px 0;font-weight:700;text-align:right">26 / 28</dd><dd class="mut" style="margin:0;padding:10px 20px 10px 0">2 aborted, low battery</dd>
+      </dl>
+    </section>
+    <section aria-label="On duty" style="background:#fff;border-bottom:1px solid #D5D8DC">
+      <div style="display:flex;align-items:baseline;padding:14px 20px"><h2 class="h2" style="font-size:17px;flex:1">On duty</h2></div>
+      <dl style="margin:0;display:grid;grid-template-columns:96px minmax(0,1fr);gap:0 12px">
+        <div style="grid-column:1/-1;height:1px;background:#E3E5E8"></div><dt class="mut" style="padding:10px 0 10px 20px">Last night</dt><dd style="margin:0;padding:10px 20px 10px 0">gina · 19:00–07:00</dd>
+        <div style="grid-column:1/-1;height:1px;background:#E3E5E8"></div><dt class="mut" style="padding:10px 0 10px 20px">Tonight</dt><dd style="margin:0;padding:10px 20px 10px 0">gina · from 19:00</dd>
+      </dl>
+      <div style="padding:12px 20px 16px;border-top:1px solid #E3E5E8"><div class="lbl" style="margin-bottom:6px">Handover note · gina 07:02</div><p style="margin:0">The 23:47 north gate intruder has left; footage retained. A section at the top of the north gate fence is loose — recommend repair during the day.</p></div>
+    </section>
+  </div>
+</div>
+
+    </main>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1536,"height":960}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>老网页功能对照</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&display=swap">
+<style>
+body{margin:0}
+a{color:#1A5FA6}a:hover{color:#0E3F70}
+.btn{height:40px;padding:0 16px;border:1px solid #6B7178;border-radius:2px;background:#fff;color:#16191D;font:600 14px Barlow,"Noto Sans SC","Microsoft YaHei UI",sans-serif;display:inline-flex;align-items:center;gap:8px;cursor:pointer;white-space:nowrap;text-decoration:none}
+.btn.sm{height:32px;padding:0 12px;font-size:13px}
+.btn.pri{background:#1F6FC0;border-color:#1F6FC0;color:#fff;font-weight:700}
+.btn.danger{border-color:#C4262B;color:#B0202A}
+.btn.stop{background:#D42F33;border-color:#D42F33;color:#fff;font-weight:700}
+.seg{display:inline-flex;border:1px solid #C9CDD2}
+.seg .btn{border:0;background:transparent;border-radius:0}
+.seg .btn+.btn{border-left:1px solid #C9CDD2}
+.seg .btn.on{background:#1F6FC0;color:#fff}
+.lbl{font-size:12px;font-weight:600;letter-spacing:.06em;color:#5A6068}
+.mut{color:#565B62}
+.ring{display:inline-block;flex:none;width:12px;height:12px;border:3px solid #C4262B;border-radius:50%;box-sizing:border-box}
+.tri{display:inline-block;flex:none;width:0;height:0;border-left:7px solid transparent;border-right:7px solid transparent;border-bottom:12px solid #D99A00}
+.sq{display:inline-block;flex:none;width:9px;height:9px;background:#1E8A47}
+.h1{margin:0;font-size:24px;line-height:30px;font-weight:700}
+.h2{margin:0;font-size:16px;line-height:22px;font-weight:600}
+.card{background:#fff;border:1px solid #D5D8DC}
+.cardh{display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:1px solid #E3E5E8}
+th{text-align:left;font-size:12px;font-weight:600;letter-spacing:.06em;color:#5A6068;padding:10px 12px;border-bottom:1px solid #D5D8DC;background:#F8F9F8}
+td{padding:10px 12px;border-bottom:1px solid #E3E5E8;vertical-align:middle}
+.chip{display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 8px;font-size:12px;font-weight:700}
+.ok{background:#E4F3E9;color:#17703A} .warn{background:#FCF1D6;color:#7A5200} .bad{background:#FBE5E5;color:#A41E24} .gray{background:#ECEEF0;color:#454A51}
+.field{display:flex;flex-direction:column;gap:4px}
+.field input,.field select{height:40px;border:1px solid #6B7178;border-radius:2px;padding:0 10px;font:inherit;background:#fff;color:#16191D}
+.snav a{display:flex;align-items:center;gap:8px;min-height:36px;margin:0 8px;padding:0 10px;color:#A9AEB4;text-decoration:none;font-weight:600;border-radius:2px}
+.snav a[aria-current]{background:#1F6FC0;color:#fff} .snav .g{color:#A9AEB4}
+.snav .g{padding:14px 16px 4px}
+.new{display:inline-block;padding:0 6px;border:1px solid #1F6FC0;color:#1A5FA6;font-size:11px;font-weight:700;line-height:16px}
+</style>
+</helmet>
+<div style="background:#fff;color:#16191D;font:15px/22px Barlow,'Noto Sans SC',sans-serif;padding:32px 40px;min-height:100vh;box-sizing:border-box">
+<h1 style="margin:0 0 6px;font-size:28px">老网页功能 → 新稿对照</h1>
+<p class="mut" style="margin:0 0 18px">逐项对照老网页代码（duty、mappage、robotspage、recpage、alarmlog、layout*、arming*、users 等）。已画 15 · 本轮补画 11 · 只画了一部分 14 · 还没画 8。没画的不等于去掉：写代码时照老功能保留。</p>
+<table style="width:100%;border-collapse:collapse">
+<thead><tr><th style="width:36%">老网页的功能</th><th style="width:22%">新稿在哪</th><th style="width:10%">状态</th><th>说明</th></tr></thead>
+<tbody><tr><th colspan="4" style="background:#EEF0EE;font-size:15px;color:#16191D;padding:12px 16px">值班（保安）</th></tr><tr><td>报警：我来处理、定结论、结案写备注、撤销关闭</td><td>V4-B 告警处理中 · 记录与录像</td><td style="white-space:nowrap;color:#1E8A47;font-weight:700">已画</td><td class="mut"></td></tr><tr><td>报警：已到场</td><td>V4-B 步骤条</td><td style="white-space:nowrap;color:#B07800;font-weight:700">只画了一部分</td><td class="mut">步骤条里有「到场」，按钮没单独画</td></tr><tr><td>报警：别的页面也弹出、另有 n 件、开报警声音</td><td>—</td><td style="white-space:nowrap;color:#C4262B;font-weight:700">还没画</td><td class="mut">要画一个全站报警条</td></tr><tr><td>机器人跟着目标 / 看不到人了、去向不明</td><td>—</td><td style="white-space:nowrap;color:#C4262B;font-weight:700">还没画</td><td class="mut">告警页的状态变化，要补一张</td></tr><tr><td>地图上点一处，派最近的机器人去看</td><td>保安 · 派去看一眼</td><td style="white-space:nowrap;color:#1F6FC0;font-weight:700">本轮补画</td><td class="mut">可选看完接着巡逻或回待命点</td></tr><tr><td>临时路线：按顺序点几个点巡逻一次</td><td>保安 · 临时路线</td><td style="white-space:nowrap;color:#1F6FC0;font-weight:700">本轮补画</td><td class="mut">走不到的点就地标出</td></tr><tr><td>派路线巡逻、圈数、一直巡逻、排队</td><td>保安 · 单台机器人</td><td style="white-space:nowrap;color:#1F6FC0;font-weight:700">本轮补画</td><td class="mut"></td></tr><tr><td>停止任务、回待命点</td><td>保安 · 单台机器人</td><td style="white-space:nowrap;color:#1F6FC0;font-weight:700">本轮补画</td><td class="mut"></td></tr><tr><td>中止并回原点</td><td>—</td><td style="white-space:nowrap;color:#B07800;font-weight:700">只画了一部分</td><td class="mut">单台机器人页只有回待命点，回原点没画</td></tr><tr><td>全部急停后：全部恢复</td><td>保安 · 急停后</td><td style="white-space:nowrap;color:#1F6FC0;font-weight:700">本轮补画</td><td class="mut"></td></tr><tr><td>协助定位（在地图上点它的实际位置）</td><td>保安 · 单台机器人</td><td style="white-space:nowrap;color:#B07800;font-weight:700">只画了一部分</td><td class="mut">只有「重新定位」按钮，地图上点的那一步没画</td></tr><tr><td>姿态 站立/趴下；云台、雨刷、前/后/热像</td><td>保安 · 单台机器人</td><td style="white-space:nowrap;color:#1F6FC0;font-weight:700">本轮补画</td><td class="mut"></td></tr><tr><td>喊话：常用话、临时一句、停止、语言</td><td>保安 · 单台机器人</td><td style="white-space:nowrap;color:#1F6FC0;font-weight:700">本轮补画</td><td class="mut"></td></tr><tr><td>编辑常用话（全站共用，最多 12 句，多语言）</td><td>—</td><td style="white-space:nowrap;color:#B07800;font-weight:700">只画了一部分</td><td class="mut">入口有，编辑面板没画</td></tr><tr><td>警灯时长/开关、警报声、英文警告</td><td>保安 · 单台机器人</td><td style="white-space:nowrap;color:#1F6FC0;font-weight:700">本轮补画</td><td class="mut"></td></tr><tr><td>多画面、监控墙、全部切热像</td><td>V4-A 正常值班</td><td style="white-space:nowrap;color:#1E8A47;font-weight:700">已画</td><td class="mut">全部切热像本轮补上</td></tr><tr><td>今天的巡逻；看别的日子</td><td>V4-A 右栏</td><td style="white-space:nowrap;color:#B07800;font-weight:700">只画了一部分</td><td class="mut">今晚的有，别的日子没画</td></tr><tr><td>交班留言</td><td>V4-A 左下</td><td style="white-space:nowrap;color:#1E8A47;font-weight:700">已画</td><td class="mut"></td></tr><tr><td>本班事件：筛选、只看未处理、分页</td><td>记录与录像</td><td style="white-space:nowrap;color:#1E8A47;font-weight:700">已画</td><td class="mut"></td></tr><tr><td>录像：速度、±10 秒、截图、导出</td><td>保安 · 历史回放</td><td style="white-space:nowrap;color:#1E8A47;font-weight:700">已画</td><td class="mut"></td></tr><tr><td>录像：跳到时间、保留这段</td><td>保安 · 历史回放</td><td style="white-space:nowrap;color:#1F6FC0;font-weight:700">本轮补画</td><td class="mut"></td></tr><tr><td>录像：上一段/下一段、换日期、时间轴缩放、机器人当时位置</td><td>保安 · 历史回放</td><td style="white-space:nowrap;color:#B07800;font-weight:700">只画了一部分</td><td class="mut">当时位置有，其余没画</td></tr><tr><td>报警演练（测试模式）</td><td>—</td><td style="white-space:nowrap;color:#C4262B;font-weight:700">还没画</td><td class="mut"></td></tr><tr><td>账号菜单：语言、改密码、外观、报警声音、退出</td><td>—</td><td style="white-space:nowrap;color:#C4262B;font-weight:700">还没画</td><td class="mut"></td></tr><tr><td>连不上站点的提示</td><td>—</td><td style="white-space:nowrap;color:#C4262B;font-weight:700">还没画</td><td class="mut"></td></tr><tr><td>开站清单、帮助、教程</td><td>—</td><td style="white-space:nowrap;color:#C4262B;font-weight:700">还没画</td><td class="mut"></td></tr><tr><th colspan="4" style="background:#EEF0EE;font-size:15px;color:#16191D;padding:12px 16px">现场设置（管理员）</th></tr><tr><td>概况：待处理、今天的安排、机器人、这周</td><td>概况</td><td style="white-space:nowrap;color:#1E8A47;font-weight:700">已画</td><td class="mut"></td></tr><tr><td>布置：7 个标签 → 8 个图层</td><td>布置</td><td style="white-space:nowrap;color:#B07800;font-weight:700">只画了一部分</td><td class="mut">只画了禁行区那层；巡逻路线（点位、停留、拍照、热像、按防区生成、估时）、防区（查看点、值守位、出口线、易藏点）、路网、待命点（带过来的留下/丢掉）、摄像头、报警设备的编辑面板没画</td></tr><tr><td>地图版本：历史、回退、有人同时改</td><td>布置 · 历史版本…</td><td style="white-space:nowrap;color:#B07800;font-weight:700">只画了一部分</td><td class="mut">只有入口</td></tr><tr><td>布防时间表、例外、巡逻日程、布防时巡逻、巡逻电量线</td><td>布防与巡逻</td><td style="white-space:nowrap;color:#1E8A47;font-weight:700">已画</td><td class="mut">电量线本轮补上</td></tr><tr><td>按防区分开设、切换模式、布防向导</td><td>布防与巡逻</td><td style="white-space:nowrap;color:#B07800;font-weight:700">只画了一部分</td><td class="mut">只有入口</td></tr><tr><td>授权：现在生效、全部、加授权</td><td>授权</td><td style="white-space:nowrap;color:#1E8A47;font-weight:700">已画</td><td class="mut"></td></tr><tr><td>按防区临时撤防</td><td>授权 · 页头按钮</td><td style="white-space:nowrap;color:#B07800;font-weight:700">只画了一部分</td><td class="mut">面板没画</td></tr><tr><td>人员：列表、改角色、停用、重设密码、删除、待批准、操作记录</td><td>人员</td><td style="white-space:nowrap;color:#1E8A47;font-weight:700">已画</td><td class="mut"></td></tr><tr><td>添加人员；工程师临时账号（VPN 配置、密码只显示一次）</td><td>人员 · 页头按钮</td><td style="white-space:nowrap;color:#B07800;font-weight:700">只画了一部分</td><td class="mut">面板没画</td></tr><tr><td>机器人：批准加入（核对码）、换 Wi-Fi、改名、派单方式、开通码、解绑</td><td>机器人 · 操作 / 设置</td><td style="white-space:nowrap;color:#1E8A47;font-weight:700">已画</td><td class="mut"></td></tr><tr><td>机器人：远程运维（重启、日志、对时、续证书、清理、参数、诊断包）</td><td>机器人 · 设置</td><td style="white-space:nowrap;color:#1E8A47;font-weight:700">已画</td><td class="mut"></td></tr><tr><td>添加机器人（手机 / 开通码 / 命令行）</td><td>机器人 · 添加</td><td style="white-space:nowrap;color:#B07800;font-weight:700">只画了一部分</td><td class="mut">只有按钮</td></tr><tr><td>报告：汇总、按天、事件表、导出</td><td>报告</td><td style="white-space:nowrap;color:#1E8A47;font-weight:700">已画</td><td class="mut"></td></tr><tr><td>值班日报、报警 CSV、巡逻 CSV</td><td>报告</td><td style="white-space:nowrap;color:#B07800;font-weight:700">只画了一部分</td><td class="mut">只有「导出表格 / PDF」</td></tr><tr><td>操作记录</td><td>报告 · 操作记录</td><td style="white-space:nowrap;color:#1E8A47;font-weight:700">已画</td><td class="mut"></td></tr><tr><td>维护：软件升级</td><td>维护</td><td style="white-space:nowrap;color:#1E8A47;font-weight:700">已画</td><td class="mut"></td></tr><tr><td>维护：地图（重新建图清单）、定位（设原点、定位历史）、诊断</td><td>维护</td><td style="white-space:nowrap;color:#C4262B;font-weight:700">还没画</td><td class="mut">左边有入口，内容没画</td></tr><tr><td>站点：主机状态、备份、遥控速度档</td><td>维护</td><td style="white-space:nowrap;color:#C4262B;font-weight:700">还没画</td><td class="mut"></td></tr><tr><th colspan="4" style="background:#EEF0EE;font-size:15px;color:#16191D;padding:12px 16px">四种角色</th></tr><tr><td>保安：值班全部操作，没有现场设置</td><td>V4 / 保安 系列</td><td style="white-space:nowrap;color:#1E8A47;font-weight:700">已画</td><td class="mut"></td></tr><tr><td>经理：处理报警、急停、布防、派巡逻；不能派机器人去报警点、不能遥控</td><td>经理 · 告警处理中 / 经理 · 机器人</td><td style="white-space:nowrap;color:#1F6FC0;font-weight:700">本轮补画</td><td class="mut">现场设置只有 机器人（只看）、布防与巡逻、报告</td></tr><tr><td>经理看不到概况</td><td>—</td><td style="white-space:nowrap;color:#B07800;font-weight:700">只画了一部分</td><td class="mut">代码就是这样；建议给经理开只读概况，要你定</td></tr><tr><td>只读：只能看，不能处理、不能急停</td><td>只读 · 告警处理中</td><td style="white-space:nowrap;color:#1F6FC0;font-weight:700">本轮补画</td><td class="mut"></td></tr></tbody></table></div>
+<style>table td,table th{text-align:left;padding:9px 16px;border-bottom:1px solid #E3E5E8;vertical-align:top}thead th{font-size:12px;letter-spacing:.06em;color:#5A6068;border-bottom:2px solid #16191D}</style>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1536,"height":2200}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>
