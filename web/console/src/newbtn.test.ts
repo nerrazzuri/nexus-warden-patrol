@@ -16,3 +16,12 @@ describe("UIUX-027 新建按钮一个样子", () => {
     expect(flat).toMatch(/\.ly-new \{[^}]*align-self: ?flex-start[^}]*width: ?auto/);
   });
 });
+
+describe("UIUX-016 日程新增表单", () => {
+  const routesCss = src("routes.css").replace(/\/\*[\s\S]*?\*\//g, "").replace(/\s+/g, " ");
+  it("字段按网格排(一行放几个),星期 / 说明 / 按钮占整行;「加排程」是主按钮", () => {
+    expect(routesCss).toMatch(/\.sched-form \{[^}]*display: ?grid[^}]*grid-template-columns: ?repeat\(auto-fit, ?minmax\(220px, ?1fr\)\)/);
+    expect(routesCss).toMatch(/\.sched-form > fieldset, ?\.sched-form > p, ?\.sched-form > \.sched-add \{[^}]*grid-column: ?1 ?\/ ?-1/);
+    expect(src("routepage.tsx")).toMatch(/class="btn primary sched-add"/);
+  });
+});
