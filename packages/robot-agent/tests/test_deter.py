@@ -44,7 +44,7 @@ async def test_能力里报接了哪几路_能放哪些话术(tmp_path):
     broker, c, ears, dog, rt = await _台(tmp_path)
     d = ears.by["capabilities"][-1]["tasks"]["deter"]
     assert d == {"outputs": ["strobe", "siren", "spotlight", "speaker"], "max_s": 600.0,
-                 "clips": ["warn-zh", "warn-en"], "tts": False,
+                 "clips": ["warn-zh", "warn-en"], "tts": True, "tts_langs": ["zh", "en"],
                  # W40:仿真上装是 V1.2 那套
                  "spotlight_sides": ["left", "right"],
                  "strobe_colors": ["red", "yellow", "green", "blue", "white"],

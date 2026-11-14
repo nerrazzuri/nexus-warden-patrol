@@ -441,6 +441,9 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--backup", action="store_true",
                     help="开备份(备份目录、口令密钥、备份密钥都放在 --dir 下面,不碰 /etc):"
                          "试备份、解开备份、演练、托管包用")
+    ap.add_argument("--sim-payload", action="store_true",
+                    help="仿真机器人装上上装(警灯、警笛、喇叭);A 能念中英文,别的只会中文"
+                         "(看常用喊话、念不了的那句灰掉)")
     ap.add_argument("--persons-sim", action="store_true",
                     help="仿真机器人开本机人员桥;tools/demo_person.py 让某台「看见人」"
                          "(布防时站点报 dog_sees_person,测响铃、处置)")
@@ -572,6 +575,8 @@ def _run(a, home: Path, logs: Path, names: list[str], bport: int, fp: str, procs
                                   "--store-dir", str(a.dir / f"agent{sub}"),
                                   *([] if a.nav == "planned" or a.w54
                                     else ["--runs-root", str(a.dir / f"runs{sub}")]),
+                                  *(["--sim-payload", "--sim-tts-langs",
+                                     "zh,en" if n == "A" else "zh"] if a.sim_payload else []),
                                   "--map", "estate-1:7", "--home", f"{i * 1.0},0,0",
                                   "--nav", a.nav,
                                   # 11-09 临时路线 P4–P7 被跳过:站点按 0.40 m 判通,

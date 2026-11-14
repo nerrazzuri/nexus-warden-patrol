@@ -238,3 +238,11 @@ async def test_分档许可_按vmax限前进_最新的说了算_老许可不限(
     r.clear(300)                                 # 老许可:不带速度
     _步(c, r)
     assert r.speed[0] == pytest.approx(0.8)
+
+
+def test_第三档41_仿真喇叭报能念的语言_没上装不报():
+    r = SimRobot(now_ms=lambda: 0, payload=True, tts_langs=("zh",))
+    assert r.sound_tts() is True and r.sound_tts_langs() == ["zh"]
+    assert SimRobot(now_ms=lambda: 0, payload=True).sound_tts_langs() == ["zh", "en"]
+    bare = SimRobot(now_ms=lambda: 0)
+    assert bare.sound_tts() is False and bare.sound_tts_langs() is None

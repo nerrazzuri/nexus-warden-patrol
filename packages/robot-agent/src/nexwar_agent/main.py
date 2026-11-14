@@ -201,6 +201,8 @@ def build_parser() -> argparse.ArgumentParser:
                          "文件不在就不看(厂商 Orin 上、老机器人)")
     pl.add_argument("--sim-payload", action="store_true",
                     help="仿真机器人装上上装(警灯、警笛、聚光灯、喇叭;演示与测试用)")
+    pl.add_argument("--sim-tts-langs", default="zh,en", metavar="zh,en",
+                    help="仿真喇叭能念哪几种语言(逗号分开;第三档 #41)")
     rk = p.add_argument_group("RTK(W09e;决策 21:自己的为主、厂家的可选)")
     rk.add_argument("--rtk", choices=("none", "own", "vendor"), default="none",
                     help="none = 不接;own = 我们自己的串口驱动(**要先停厂家的 sixents_gps_driver**,"
@@ -561,7 +563,9 @@ def build(args: argparse.Namespace) -> Assembled:
             from nexwar_adapter_sim.robot import SimRobot
             from nexwar_agent.bridges.sim_media import sim_media
             # 仿真能遥控换到中速档(POC 11-05):演示上 1.3 / 1.6 / 2.0 的速度档点得到
-            hal: Any = SimRobot(now_ms=wall_ms, payload=args.sim_payload, lateral=True,
+            langs = tuple(x.strip() for x in args.sim_tts_langs.split(",") if x.strip())
+            hal: Any = SimRobot(now_ms=wall_ms, payload=args.sim_payload, tts_langs=langs,
+                                lateral=True,
                                 max_vx_mid=2.0)
             media = sim_media(wall_ms)
             if args.video_source == "file" and args.video_dir is not None:
