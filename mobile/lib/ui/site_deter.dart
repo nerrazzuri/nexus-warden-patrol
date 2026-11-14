@@ -347,10 +347,11 @@ class _SiteDeterPageState extends State<SiteDeterPage> {
                 DropdownButton<String>(
                   key: const Key('deter-lang'),
                   value: _lang,
+                  // 外审：机器人报了能念哪几种，念不了的选不了（没报照旧都能选）
                   items: [
-                    // 外审：机器人报了能念哪几种，念不了的选不了（没报照旧都能选）
-                    for (final (v, n) in const [('zh', '中文'), ('en', 'English'), ('ms', 'Melayu')])
-                      DropdownMenuItem(value: v, enabled: _canSay(v), child: Text(n)),
+                    DropdownMenuItem(value: 'zh', enabled: _canSay('zh'), child: const Text('中文')),
+                    DropdownMenuItem(value: 'en', enabled: _canSay('en'), child: const Text('English')),
+                    DropdownMenuItem(value: 'ms', enabled: _canSay('ms'), child: const Text('Melayu')),
                   ],
                   onChanged: (v) => setState(() => _lang = v ?? _lang),
                 ),
