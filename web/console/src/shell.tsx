@@ -26,51 +26,68 @@ export type Page = GuardPage | AdminPage;
 
 export const GUARD_PAGES: GuardPage[] = ["duty", "live", "map", "recordings", "alarms"];
 
-/** 左侧导航的一组(W60)。``fold``:默认收着,在组里的页时展开。``badge``:右边的数(报警、技术提醒)。 */
-export interface NavSection {
-  id: "duty" | "manage" | "system" | "advanced";
-  key: Key;
-  fold?: boolean;
-  items: { id: Page; key: Key; badge?: "alarms" | "notices" }[];
-}
-/** 一级菜单要短(W60 约束):地图管理、定位、诊断、升级、系统这些工程向的收进「高级」。 */
-export const NAV_SECTIONS: NavSection[] = [
-  { id: "duty", key: "navDuty", items: [
-    { id: "duty", key: "tabOverview" }, { id: "live", key: "tabLive" }, { id: "map", key: "tabMap" },
-    { id: "alarms", key: "tabAlarms", badge: "alarms" }, { id: "recordings", key: "tabRecordings" },
-  ] },
-  { id: "manage", key: "navManage", items: [
-    { id: "admin/robots", key: "tabRobotsAdmin" }, { id: "admin/layout", key: "lyTitle" }, { id: "admin/arming", key: "tabArming" },
-    { id: "admin/access", key: "tabAccess" }, { id: "admin/users", key: "tabUsers" },
-  ] },
-  { id: "system", key: "navSystem", items: [
-    { id: "admin/reports", key: "tabReports" }, { id: "admin/activity", key: "tabActivity" }, { id: "admin/home", key: "tabHome", badge: "notices" },
-  ] },
-  { id: "advanced", key: "navAdvanced", fold: true, items: [
-    { id: "admin/maps", key: "tabMapMgmt" }, { id: "admin/localization", key: "tabLocalization" }, { id: "admin/diag", key: "tabDiag" },
-    { id: "admin/upgrade", key: "tabUpgrade" }, { id: "admin/system", key: "tabSystem" },
-  ] },
-];
-/** 不在导航里、从别的页打开的(地图编辑器从「高级 → 地图」每一版的「编辑…」进)。 */
-const ADMIN_PAGES: AdminPage[] = [
-  ...NAV_SECTIONS.flatMap((g) => g.items.map((p) => p.id)).filter((p): p is AdminPage => p.startsWith("admin/")),
-  "admin/mapedit",
+/** 顶栏的三个大块(redesign 第二轮,design/console-v2/HANDOFF.md):值班 / 记录与录像 / 现场设置。 */
+export type Section = "monitor" | "events" | "setup";
+export const SECTIONS: { id: Section; key: Key }[] = [
+  { id: "monitor", key: "secMonitor" }, { id: "events", key: "secEvents" }, { id: "setup", key: "secSetup" },
 ];
 
-/** 这个角色在左侧导航里看得到哪几组、每组哪几页(没权限的页不列,空的组不列)。 */
-export function navFor(role: string): NavSection[] {
-  return NAV_SECTIONS.map((g) => ({ ...g, items: g.items.filter((x) => pageAllowed(x.id, role)) }))
-    .filter((g) => g.items.length > 0);
+/** 现场设置左栏的一项:点了去 ``id``;``also`` 里的页也算在这一项下面(页里有一排小标签切换)。 */
+export interface SetupItem { id: AdminPage; key: Key; badge?: "notices"; also?: AdminPage[] }
+export interface SetupGroup { id: "daily" | "site" | "records" | "advanced"; key: Key; items: SetupItem[] }
+/** 现场设置左栏(HANDOFF):日常[概况, 机器人, 人员] 现场[布置, 布防与巡逻, 授权] 记录[报告] 高级[维护]。 */
+export const SETUP_NAV: SetupGroup[] = [
+  { id: "daily", key: "setDaily", items: [
+    { id: "admin/home", key: "setOverview", badge: "notices" }, { id: "admin/robots", key: "setRobots" }, { id: "admin/users", key: "setUsers" },
+  ] },
+  { id: "site", key: "setSite", items: [
+    { id: "admin/layout", key: "setLayout" }, { id: "admin/arming", key: "setArming" }, { id: "admin/access", key: "setAccess" },
+  ] },
+  { id: "records", key: "setRecords", items: [{ id: "admin/reports", key: "setReports", also: ["admin/activity"] }] },
+  { id: "advanced", key: "setAdvanced", items: [
+    { id: "admin/system", key: "setMaint", also: ["admin/maps", "admin/localization", "admin/diag", "admin/upgrade", "admin/mapedit"] },
+  ] },
+];
+/** 一个大块(或现场设置的一项)里的几页,页头下面一排小标签切换。 */
+export const SUBPAGES: { pages: Page[]; keys: Key[] }[] = [
+  { pages: ["duty", "live", "map"], keys: ["tabOverview", "tabLive", "tabMap"] },
+  { pages: ["alarms", "recordings"], keys: ["subEvents", "subRecordings"] },
+  { pages: ["admin/reports", "admin/activity"], keys: ["tabReports", "subAudit"] },
+  { pages: ["admin/system", "admin/upgrade", "admin/maps", "admin/localization", "admin/diag"],
+    keys: ["subSite", "tabUpgrade", "tabMapMgmt", "tabLocalization", "tabDiag"] },
+];
+const ADMIN_PAGES: AdminPage[] = SETUP_NAV.flatMap((g) => g.items.flatMap((x) => [x.id, ...(x.also ?? [])]));
+
+export function sectionOf(p: Page): Section {
+  if (p === "alarms" || p === "recordings") return "events";
+  return isAdminPage(p) ? "setup" : "monitor";
 }
 
-/** 页面在导航里的名字(顶栏左边的标题用)和所在组。 */
+/** 这一页在现场设置左栏里算哪一项。 */
+export function setupItemOf(p: Page): SetupItem | null {
+  for (const g of SETUP_NAV) for (const x of g.items) if (x.id === p || x.also?.includes(p as AdminPage)) return x;
+  return null;
+}
+
+/** 这个角色在现场设置左栏里看得到的组、项(没权限的不列,空组不列)。 */
+export function setupNavFor(role: string): SetupGroup[] {
+  return SETUP_NAV.map((g) => ({ ...g, items: g.items.filter((x) => pageAllowed(x.id, role)) })).filter((g) => g.items.length > 0);
+}
+
+/** 点顶栏「现场设置」去哪一页(这个角色能开的第一项);一项都开不了是 ``null``(顶栏不放这一块)。 */
+export function setupHome(role: string): AdminPage | null {
+  return setupNavFor(role)[0]?.items[0]?.id ?? null;
+}
+
+/** 页面的名字(浏览器标签、帮助用):所在大块 + 页名。 */
 export function navLabel(page: Page): { section: Key; page: Key } | null {
-  for (const g of NAV_SECTIONS) {
-    const x = g.items.find((i) => i.id === page);
-    // P2-19:标题里的组名跟侧栏一样(地图管理在「高级」下面,不再写「系统」)
-    if (x) return { section: g.key, page: x.key };
-  }
-  return page === "admin/mapedit" ? { section: "navAdvanced", page: "tabMapMgmt" } : null;
+  const sec = SECTIONS.find((x) => x.id === sectionOf(page))!.key;
+  const sub = SUBPAGES.find((g) => g.pages.includes(page));
+  if (sub && !isAdminPage(page)) return { section: sec, page: sub.keys[sub.pages.indexOf(page)] };
+  const it = setupItemOf(page);
+  if (!it) return null;
+  if (sub && page !== it.id) return { section: sec, page: sub.keys[sub.pages.indexOf(page)] };
+  return { section: sec, page: page === "admin/mapedit" ? "tabMapMgmt" : it.key };
 }
 /** 改版前的地址(书签、手机分享的链接)。 */
 const LEGACY: Record<string, Page> = {
@@ -100,6 +117,12 @@ export function isAdminPage(p: Page): p is AdminPage {
 /** 角色的界面名字(设计 §3):admin 叫管理员,owner 叫经理,engineer 是工程师(临时)。 */
 export function roleLabel(role: string): Key {
   return role === "admin" ? "roleOwner" : role === "guard" ? "roleGuard" : role === "engineer" ? "roleEngineer"
+    : role === "viewer" ? "roleViewer" : "roleFamily";
+}
+
+/** 顶栏账号后面的短角色名(「gina · Guard」)。 */
+export function roleShort(role: string): Key {
+  return role === "admin" ? "roleShortAdmin" : role === "guard" ? "roleGuard" : role === "engineer" ? "roleShortEngineer"
     : role === "viewer" ? "roleViewer" : "roleFamily";
 }
 
@@ -151,19 +174,22 @@ export function saveThemePref(v: ThemePref): void {
   }
 }
 
+/** 顶栏(redesign 第二轮,HANDOFF「结构」):左 品牌、站点名、三个大块;右 布防状态、机器人在线、未处理数、时间、账号、全部急停。 */
 export function TopBar(props: {
   me: Me;
   page: Page;
   mode: Mode | null;
   /** 给保安看的未解决 P1、P2 有几条;数据过期时是 null(说不清)。 */
   alarms: number | null;
+  /** 机器人在线几台 / 一共几台;没数据是 null。 */
+  robots?: { on: number; all: number } | null;
   now: number;
   pref: ThemePref;
   onPref: (p: ThemePref) => void;
   onStop: () => void;
   /** 易用性第 6 轮 W6-05:顶栏点布防状态切模式(外壳弹确认、发请求);不给就只显示。 */
   onMode?: (m: Mode["mode"]) => void;
-  /** 第 2 轮 duty N10:有几台被叫停、等人点恢复(哪一页都看得见,点了去总览恢复)。 */
+  /** 第 2 轮 duty N10:有几台被叫停、等人点恢复(哪一页都看得见,点了去值班恢复)。 */
   held?: number;
   stale?: boolean;
   onSignOut: (note?: string) => void;
@@ -171,32 +197,42 @@ export function TopBar(props: {
   /** 「?」:使用教程、常见问题(W53)。 */
   onHelp?: () => void;
 }) {
+  const cur = sectionOf(props.page);
+  const setup = setupHome(props.me.role);
+  const href: Record<Section, string | null> = { monitor: "#/duty", events: "#/alarms", setup: setup ? `#/${setup}` : null };
+  useEffect(() => { document.title = tabTitle(props.page); }, [props.page, lang.value]);
+  const clock = siteClock(props.now, props.mode?.timezone);
   return (
     <header class="topbar">
-      <PageTitle page={props.page} />
+      <BrandMark />
+      <span class="topbar-site" title={props.me.site_name}>{props.me.site_name}</span>
+      <nav class="topnav" aria-label={t("mainNav")}>
+        {SECTIONS.filter((x) => href[x.id]).map((x) => (
+          <a key={x.id} href={href[x.id]!} aria-current={cur === x.id ? "page" : undefined}>{t(x.key)}</a>
+        ))}
+      </nav>
+      <span class="topbar-gap" />
       {props.mode && <ArmState mode={props.mode} role={props.me.role} stale={props.stale} onMode={props.onMode} />}
-      {!!props.held && props.page !== "duty" && (
-        <a href="#/duty" class="heldchip" data-held-chip="1">{t("topHeld", { n: props.held })}</a>
-      )}
-      <a href="#/alarms" class={props.alarms ? "alarmcount on" : "alarmcount"} aria-live="polite">
-        {!!props.alarms && <Shape kind="P1" />}
-        {t("alarmCount", { n: props.alarms == null ? "?" : props.alarms })}
+      {props.held
+        ? <a href="#/duty" class="chip-top bad" data-held-chip="1"><Shape kind="P1" size={12} />{t("topHeld", { n: props.held })}</a>
+        : props.robots && (
+          <span class="chip-top" data-robots-online="1">{t("robotsOnline", { a: props.robots.on, b: props.robots.all })}</span>
+        )}
+      <a href="#/alarms" class={props.alarms ? "chip-top alarmcount bad" : "chip-top alarmcount"} aria-live="polite">
+        {!!props.alarms && <Shape kind="P1" size={12} />}
+        {t("openCount", { n: props.alarms == null ? "?" : props.alarms })}
       </a>
-      {/* P2-27:小一点,带上日期(值夜班跨零点看得清是哪天) */}
+      {/* P2-27:带上日期(值夜班跨零点看得清是哪天),日期放在悬停里 */}
       <span class="clock mono" data-tz={props.mode?.timezone ?? ""} title={(() => {
         const o: Intl.DateTimeFormatOptions = { weekday: "long", year: "numeric", month: "long", day: "numeric" };
         const loc = lang.value === "zh" ? "zh-CN" : "en-GB";
         try { return new Date(props.now).toLocaleDateString(loc, props.mode?.timezone ? { ...o, timeZone: props.mode.timezone } : o); } catch { return new Date(props.now).toLocaleDateString(loc, o); }
       })()}>
-        <span class="clock-date">{siteClock(props.now, props.mode?.timezone).md}</span>{" "}
-        {siteClock(props.now, props.mode?.timezone).hm}
+        <span class="clock-date">{clock.md}</span>{" "}{clock.hm}
       </span>
-      {props.onHelp && (
-        <button type="button" class="btn sm help-btn" aria-label={t("helpTitle")} title={t("helpTitle")} onClick={props.onHelp}>?</button>
-      )}
-      <UserMenu me={props.me} pref={props.pref} onPref={props.onPref} onSignOut={props.onSignOut} onSay={props.onSay} />
+      <UserMenu me={props.me} pref={props.pref} onPref={props.onPref} onSignOut={props.onSignOut} onSay={props.onSay} onHelp={props.onHelp} />
       {(canDispatch(props.me.role) || props.me.role === "owner") && (
-        <button type="button" class="btn stop" onClick={props.onStop}><Icon name="octagon" />{t("stopAll")}</button>
+        <button type="button" class="btn stop" onClick={props.onStop}><Shape kind="P1" size={12} />{t("stopAllTop")}</button>
       )}
     </header>
   );
@@ -206,18 +242,6 @@ export function TopBar(props: {
 export function tabTitle(page: Page): string {
   const l = navLabel(page);
   return l ? `${t(l.page)} · Nexus Warden` : "Nexus Warden";
-}
-
-/** 顶栏左边:组名(小字)+ 页名。 */
-function PageTitle({ page }: { page: Page }) {
-  const l = navLabel(page);
-  useEffect(() => { document.title = tabTitle(page); }, [page, lang.value]);
-  return (
-    <div class="pagetitle">
-      {l && <span class="pagetitle-sec">{t(l.section)}</span>}
-      <span class="pagetitle-name" title={l ? t(l.page) : undefined}>{l ? t(l.page) : ""}</span>
-    </div>
-  );
 }
 
 /** 品牌标识(W60):外部设计的标志到了以后只换这一个组件。现在是文字。 */
@@ -230,17 +254,12 @@ export function BrandMark() {
   );
 }
 
-/** 左侧导航(W60):品牌、站点名,按角色分组;高级默认收着(在高级的页里就展开)。 */
-export function SideNav(props: { me: Me; page: Page; alarms: number | null; notices: number }) {
-  const groups = navFor(props.me.role);
-  const inAdvanced = NAV_SECTIONS.find((g) => g.id === "advanced")!.items.some((p) => p.id === props.page)
-    || props.page === "admin/mapedit";
-  const [open, setOpen] = useState(inAdvanced);
-  useEffect(() => { if (inAdvanced) setOpen(true); }, [inAdvanced]);
-  // P0-16:手机上导航收在「菜单」按钮里(宽屏这个按钮不显示,导航一直在);点了哪页就收起
+/** 现场设置的左栏(HANDOFF):分组标题 + 项;当前项蓝底(蓝只给选中)。窄屏收进「菜单」。 */
+export function SetupNav(props: { me: Me; page: Page; notices: number }) {
+  const groups = setupNavFor(props.me.role);
+  const cur = setupItemOf(props.page);
   const [menu, setMenu] = useState(false);
   useEffect(() => setMenu(false), [props.page]);
-  // 第 2 轮 layout N11:菜单开着时 Esc、点侧栏外面都收起(原来只能再点一次「菜单」)
   const side = useRef<HTMLElement>(null);
   useEffect(() => {
     if (!menu) return;
@@ -250,44 +269,46 @@ export function SideNav(props: { me: Me; page: Page; alarms: number | null; noti
     window.addEventListener("pointerdown", down);
     return () => { window.removeEventListener("keydown", key); window.removeEventListener("pointerdown", down); };
   }, [menu]);
-  // 第 2 轮 P1-85:矮屏上侧栏要自己滚,当前这一页在侧栏里要看得见
-  // 第 3 轮 admin N1:不对链接调 scrollIntoView(Chrome 会把「下一个 Tab 从哪开始」挪到它,第一下 Tab 就跳过了
-  // 「跳到内容」和当前项),只滚侧栏里能滚的那一层
+  // 第 3 轮 admin N1:不对链接调 scrollIntoView,只滚侧栏里能滚的那一层
   useEffect(() => {
     const a = document.querySelector<HTMLElement>('.sidenav a[aria-current="page"]');
     if (a) revealInScroller(a);
-  }, [props.page, open]);
-  const badge = (b: "alarms" | "notices" | undefined) => {
-    const n = b === "alarms" ? props.alarms : b === "notices" ? props.notices : null;
-    return n ? <span class={b === "alarms" ? "badge alarm mono" : "badge mono"}>{b === "alarms" && <Shape kind="P1" size={10} />}{n}</span> : null;
-  };
+  }, [props.page]);
   return (
     <aside class="sidenav" ref={side}>
-      <div class="sidenav-brand">
-        <BrandMark />
-        <span class="sidenav-site" title={props.me.site_name}>{t("sideSite", { n: props.me.site_name })}</span>
-      </div>
-      <button type="button" class="btn sm nav-toggle" aria-expanded={menu} aria-controls="mainnav" onClick={() => setMenu(!menu)}>
-        ☰ {t("navMenu")}{props.alarms ? <span class="badge alarm mono">{props.alarms}</span> : null}
+      <button type="button" class="btn sm nav-toggle" aria-expanded={menu} aria-controls="setupnav" onClick={() => setMenu(!menu)}>
+        {t("navMenu")}
       </button>
-      <nav id="mainnav" class={menu ? "sidenav-nav open" : "sidenav-nav"} aria-label={t("mainNav")}>
-        {groups.map((g) => {
-          const shown = !g.fold || open;
-          return (
-            <div key={g.id} class="navgroup">
-              {g.fold
-                ? <button type="button" class="navgroup-title" aria-expanded={open} onClick={() => setOpen(!open)}>{t(g.key)}</button>
-                : <div class="navgroup-title">{t(g.key)}</div>}
-              {shown && g.items.map((x) => (
-                <a key={x.id} href={`#/${x.id}`} aria-current={props.page === x.id ? "page" : undefined}>
-                  <span>{t(x.key)}</span>{badge(x.badge)}
-                </a>
-              ))}
-            </div>
-          );
-        })}
+      <nav id="setupnav" class={menu ? "sidenav-nav open" : "sidenav-nav"} aria-label={t("secSetup")}>
+        {groups.map((g) => (
+          <div key={g.id} class="navgroup">
+            <div class="navgroup-title">{t(g.key)}</div>
+            {g.items.map((x) => (
+              <a key={x.id} href={`#/${x.id}`} aria-current={cur?.id === x.id ? "page" : undefined}>
+                <span>{t(x.key)}</span>
+                {x.badge === "notices" && props.notices > 0 && <span class="badge mono">{props.notices}</span>}
+              </a>
+            ))}
+          </div>
+        ))}
       </nav>
     </aside>
+  );
+}
+
+/** 一个大块(或现场设置一项)里几页之间的小标签;只列这个角色开得了的;只有一页就不放。 */
+export function SubTabs({ page, role }: { page: Page; role: string }) {
+  const g = SUBPAGES.find((x) => x.pages.includes(page));
+  if (!g) return null;
+  const items = g.pages.map((p, i) => ({ p, key: g.keys[i] })).filter((x) => pageAllowed(x.p, role));
+  if (items.length < 2) return null;
+  const on = page === "admin/mapedit" ? "admin/maps" : page;
+  return (
+    <nav class="subtabs" aria-label={t(navLabel(page)?.section ?? "mainNav")}>
+      {items.map((x) => (
+        <a key={x.p} href={`#/${x.p}`} aria-current={on === x.p ? "page" : undefined}>{t(x.key)}</a>
+      ))}
+    </nav>
   );
 }
 
@@ -333,7 +354,8 @@ function ArmState({ mode, role, stale, onMode }: { mode: Mode; role: string; sta
   );
 }
 
-function UserMenu(props: { me: Me; pref: ThemePref; onPref: (p: ThemePref) => void; onSignOut: (note?: string) => void; onSay: (s: string) => void }) {
+function UserMenu(props: { me: Me; pref: ThemePref; onPref: (p: ThemePref) => void; onSignOut: (note?: string) => void; onSay: (s: string) => void;
+  onHelp?: () => void }) {
   const [open, setOpen] = useState(false);
   const [pw, setPw] = useState(false);
   // undefined = 没开;"" = 读着;null = 读不到
@@ -363,7 +385,7 @@ function UserMenu(props: { me: Me; pref: ThemePref; onPref: (p: ThemePref) => vo
       {/* 网页易用性第 1 轮 P0-16:窄屏只剩一个圆头像(首字),菜单还在:退出、语言、改密码都从这里 */}
       <button type="button" class="who" aria-haspopup="menu" aria-expanded={open} aria-label={t("userMenu")} onClick={() => setOpen(!open)}>
         <span class="who-initial" aria-hidden="true">{(props.me.display_name || props.me.name).slice(0, 1).toUpperCase()}</span>
-        <span class="who-name">{props.me.display_name || props.me.name} ▾</span>
+        <span class="who-name">{props.me.display_name || props.me.name}<span class="who-role"> · {t(roleShort(props.me.role))}</span></span>
       </button>
       {open && (
         <div class="menu" role="menu">
@@ -396,6 +418,9 @@ function UserMenu(props: { me: Me; pref: ThemePref; onPref: (p: ThemePref) => vo
                 <button type="button" data-alarm-sound="off" aria-pressed={!alarmSound.value} onClick={() => setAlarmSound(false)}>{t("soundOffShort")}</button>
               </div>
             </div>
+          )}
+          {props.onHelp && (
+            <button type="button" class="menu-item" role="menuitem" data-menu-help="1" onClick={() => { setOpen(false); props.onHelp!(); }}>{t("helpTitle")}</button>
           )}
           <button type="button" class="menu-item" role="menuitem" onClick={() => { setOpen(false); setPw(true); }}>{t("changePassword")}</button>
           {/* P2-22:第三方声明在对话框里看(原来是开一个原始 txt) */}

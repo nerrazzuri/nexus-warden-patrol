@@ -27,29 +27,23 @@ function media(cond: string): string {
 }
 
 describe("顶栏一行放得下(样式表)", () => {
-  it("Stop all 不缩;顶栏里的东西默认都不缩", () => {
-    expect(rule(".topbar > .btn.stop")).toMatch(/flex-shrink: 0/);
+  it("顶栏里的东西默认都不缩;站点名能缩、省略号", () => {
     expect(rule(".topbar > *")).toMatch(/flex-shrink: 0/);
-  });
-
-  it("W60 页名能缩:min-width 0、不折行、省略号(站点名挪到左侧导航)", () => {
-    expect(rule(".topbar > .pagetitle")).toMatch(/flex: 0 1 auto/);
-    expect(rule(".pagetitle")).toMatch(/min-width: 0/);
-    const r = rule(".pagetitle-name");
-    expect(r).toMatch(/white-space: nowrap/);
-    expect(r).toMatch(/overflow: hidden/);
+    const r = rule(".topbar-site");
+    expect(r).toMatch(/flex-shrink: 1/);
     expect(r).toMatch(/text-overflow: ellipsis/);
   });
 
-  it("≥ 1024 顶栏不折行(Stop all 不会掉到第二行)", () => {
-    expect(rule(".topbar", media("(min-width: 1024px)"))).toMatch(/flex-wrap: nowrap/);
+  it("≥ 900 顶栏一行(只有窄屏才折行)", () => {
+    expect(rule(".topbar")).not.toMatch(/flex-wrap: wrap/);
+    expect(rule(".topbar", media("(max-width: 899px)"))).toMatch(/flex-wrap: wrap/);
   });
 
-  it("窄一点只藏用户名;Stop all、模式、报警数、时钟、语言从来不藏", () => {
-    expect(media("(max-width: 1199px)")).toMatch(/\.topbar > \.who \{ display: none; \}/);
+  it("往窄了收只藏站点名、角色、日期;全部急停、布防、未处理数、时钟、大块导航从来不藏", () => {
+    expect(media("(max-width: 1279px)")).toMatch(/\.topbar-site, \.who-role, \.clock-date \{ display: none; \}/);
     for (const m of flat.matchAll(/([^{}]+)\{[^{}]*display: none[^{}]*\}/g)) {
       const sel = m[1];
-      for (const keep of [".btn.stop", ".alarmcount", ".armstate", ".seg", ".counts", ".clock", ".pri"]) {
+      for (const keep of [".btn.stop", ".alarmcount", ".armstate", ".chip-top", ".topnav", ".clock "]) {
         if (!sel.includes(keep)) continue;
         // 只有打印的时候整个顶栏不印;别的地方不许藏这些
         expect(sel, `藏了 ${keep}`).toMatch(/\.topbar, \.subnav/);
