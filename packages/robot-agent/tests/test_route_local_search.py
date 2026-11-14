@@ -1,0 +1,111 @@
+"""外审 11-14、用户定:路线检查的局部搜索不能横移,而且要输出一条查过余量的路,Nav2 就按这条走。
+
+Smac 规划的路只保证车身不碰墙(1.2 m 宽的 L 形走廊在拐角正中原地转,只剩 0 cm),达不到每边 0.10 m
+的底线;其实边走边转、往外侧让一让就过得去。局部搜索在窄的那一段周围,按 (x, y, 朝向) 只用
+「沿车头前进 / 后退」和「原地转」找一条每处都留够余量的走法,拼回路线里,整条再按原来的规矩
+逐个位姿查一遍 —— 查过的就是要执行的。
+"""
+from __future__ import annotations
+
+import math
+
+import numpy as np
+import pytest
+
+from nexwar_agent.route_check import check_route, densify, pose_margins
+from nexwar_agent.route_cspace import search_path
+from nexwar_contract.footprint import ROUTE_MARGIN_MIN
+
+RES = 0.05
+
+
+def _lmap(w: float) -> np.ndarray:
+    """6 × 6 m:横臂 y∈[1, 1+w]、x∈[0.5, 4];竖臂 x∈[4−w, 4]、y∈[1, 5]。"""
+    walls = np.ones((120, 120), dtype=bool)
+
+    def free(x0, x1, y0, y1):
+        walls[round(y0 / RES):round(y1 / RES), round(x0 / RES):round(x1 / RES)] = False
+    free(0.5, 4.0, 1.0, 1.0 + w)
+    free(4.0 - w, 4.0, 1.0, 5.0)
+    return walls
+
+
+def _smac_l(w: float):
+    """Smac 的样子:直走到拐角正中、原地转 90°、直走上去。"""
+    cx, cy = 4.0 - w / 2, 1.0 + w / 2
+    return [(1.2, cy, 0.0), (cx, cy, 0.0), (cx, cy, math.pi / 2), (cx, 4.3, math.pi / 2)]
+
+
+def _no_strafe(path, tol_deg=3.0):
+    """相邻两个位姿:要么原地转(位置不动),要么沿车头(前 / 后)走,横向分量只许插值误差那么点。"""
+    bad = []
+    for a, b in zip(path, path[1:], strict=False):
+        dx, dy = b[0] - a[0], b[1] - a[1]
+        d = math.hypot(dx, dy)
+        if d < 1e-6:
+            continue
+        yaw = a[2] if abs(math.remainder(b[2] - a[2], 2 * math.pi)) < 1e-6 else None
+        if yaw is None:
+            bad.append((a, b, "边走边转的一步"))
+            continue
+        lat = abs(-math.sin(yaw) * dx + math.cos(yaw) * dy)
+        if lat > d * math.tan(math.radians(tol_deg)) + 0.036:
+            bad.append((a, b, round(lat, 3)))
+    return bad
+
+
+def test_L形1米2_拐角原地转余量不够_局部搜索找到不横移的路_整条查过():
+    walls = _lmap(1.2)
+    r = check_route(_smac_l(1.2), walls, RES, (0.0, 0.0))
+    assert r.ok and r.status == "ok" and r.tight, r
+    assert r.path is not None, "放行靠的是局部搜索:要执行的路得给出来"
+    p = r.path
+    assert math.dist(p[0][:2], (1.2, 1.6)) < 1e-6 and p[0][2] == pytest.approx(0.0)
+    assert math.dist(p[-1][:2], (3.4, 4.3)) <= 0.1 + 1e-6
+    assert abs(math.remainder(p[-1][2] - math.pi / 2, 2 * math.pi)) <= math.radians(5.1)
+    assert not _no_strafe(p), _no_strafe(p)[:3]
+    dense = densify(p)
+    along = np.concatenate([[0.0], np.cumsum([math.dist(a[:2], b[:2])
+                                              for a, b in zip(dense, dense[1:], strict=False)])])
+    m = pose_margins([q for q, s in zip(dense, along, strict=True) if s >= 0.5], walls, RES,
+                     (0.0, 0.0))
+    assert m.min() >= ROUTE_MARGIN_MIN - 1e-9, "拼好的整条路每处都留够底线"
+    assert r.margin == pytest.approx(float(m.min()))
+
+
+def test_L形1米0_不横移过不去_照旧拒():
+    r = check_route(_smac_l(1.0), _lmap(1.0), RES, (0.0, 0.0))
+    assert r.status == "refused" and r.path is None, r
+
+
+def test_原路线本来就够宽_不搜_不给路():
+    r = check_route(_smac_l(1.6), _lmap(1.6), RES, (0.0, 0.0))
+    assert r.ok and r.path is None
+
+
+def test_开阔地_搜出来的路不倒车():
+    walls = np.zeros((80, 80), dtype=bool)
+    walls[38:42, 36:48] = True                             # 正前方 x 1.8–2.4 一道矮墙,绕过去
+    p = search_path((1.0, 2.0, 0.0), (3.4, 2.0, 0.0), walls, RES, (0.0, 0.0),
+                    ROUTE_MARGIN_MIN, span=[(1.0, 2.0, 0.0), (3.4, 2.0, 0.0)])
+    assert p is not None
+    for i, (a, b) in enumerate(zip(p, p[1:], strict=False)):
+        dx, dy = b[0] - a[0], b[1] - a[1]
+        if i in (0, len(p) - 2) and math.hypot(dx, dy) <= 1.5 * RES:
+            continue                                       # 头尾拼回原位姿那一下:对格子,不到一格
+        assert math.cos(a[2]) * dx + math.sin(a[2]) * dy >= -1e-6, ("倒车了", a, b)
+
+
+def test_窗口太大_不搜():
+    walls = np.zeros((2000, 2000), dtype=bool)
+    p = search_path((1.0, 1.0, 0.0), (90.0, 90.0, 0.0), walls, RES, (0.0, 0.0),
+                    ROUTE_MARGIN_MIN, span=[(1.0, 1.0, 0.0), (90.0, 90.0, 0.0)])
+    assert p is None
+
+
+def test_搜一次不慢():
+    import time
+    walls = _lmap(1.2)
+    t0 = time.perf_counter()
+    check_route(_smac_l(1.2), walls, RES, (0.0, 0.0))
+    assert time.perf_counter() - t0 < 3.0
