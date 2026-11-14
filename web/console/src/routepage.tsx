@@ -141,6 +141,7 @@ export function RoutesPage({ say, embed, kind = "patrol" }: { say: Say; embed?: 
 
   const routes = view?.routes ?? [];
   const [allIds, setAllIds] = useState<string[]>([]);
+  const [retired, setRetired] = useState<{ ids: string[]; titles: Record<string, string> }>({ ids: [], titles: {} });
   const autoId = () => freeId("route", [...allIds, ...routes.map((r) => r.id)], view, "route");
   // 第 8 轮 W8-08:这一版上没有路线时,看同一张图的别的版本上有没有(有就说在哪一版,客户以为路线丢了)
   const [elsewhere, setElsewhere] = useState<Route[]>([]);
@@ -199,8 +200,10 @@ export function RoutesPage({ say, embed, kind = "patrol" }: { say: Say; embed?: 
     setDraft({ id: "", title: "", isNew: true, base: 0, points: [], policy: {}, map: mapKey });
     // 第 8 轮 W8-11:写中文名时自动给编号 —— 编号全站唯一(别的图、别的版本上的也算)
     // 第 11 轮 W11-01:删掉过的编号也算用过
-    api<RouteView>("GET", "/api/routes").then((v) => setAllIds([...v.routes.map((x) => x.id), ...(v.retired_routes ?? [])]))
-      .catch(() => setAllIds([]));
+    api<RouteView>("GET", "/api/routes").then((v) => {
+      setAllIds([...v.routes.map((x) => x.id), ...(v.retired_routes ?? [])]);
+      setRetired({ ids: v.retired_routes ?? [], titles: v.retired_titles?.route ?? {} });
+    }).catch(() => { setAllIds([]); setRetired({ ids: [], titles: {} }); });
     setOrig(undefined);
     setPi(null);
     setProblems([]);
@@ -338,13 +341,17 @@ export function RoutesPage({ say, embed, kind = "patrol" }: { say: Say; embed?: 
 
   // 第 12 轮 W11-01:查全站(别的版本上的、删掉用过的编号),不是只查这一版
   const nameTaken = !!draft?.isNew && (routes.some((r) => r.id === draft.id) || allIds.includes(draft.id));
+  // 第 13 轮 W13-03 ①:撞的是删掉的那条用过的编号 —— 站点上没有这条路线,说清是谁用过
+  const retiredHit = nameTaken && !!draft && retired.ids.includes(draft.id) && !routes.some((r) => r.id === draft.id);
+  const takenMsg = !retiredHit ? rt("routeNameTaken")
+    : retired.titles[draft!.id] ? rt("routeIdRetired", { title: retired.titles[draft!.id] }) : rt("routeIdRetiredNoName");
   const canSave = !!draft && dirty && pts.length > 0 && NAME_RE.test(draft.id) && !nameTaken;
   useEffect(() => { embed?.setDirty(dirty); }, [dirty]);
   useEffect(() => {
     if (!embed) return;
     // 第 2 轮 P1-39 / layout N3:有改动但存不了(名字不对、重名、没有点)时按顶上「保存」说清为什么,不是没反应
     const why = !draft || !dirty ? null
-      : nameTaken ? rt("routeNameTaken")
+      : nameTaken ? takenMsg
       : !NAME_RE.test(draft.id) ? rt("routeNameHint")
       : pts.length === 0 ? rt("routeNoPoints") : null;
     embed.registerSave(canSave ? () => save(true)
@@ -482,13 +489,14 @@ export function RoutesPage({ say, embed, kind = "patrol" }: { say: Say; embed?: 
                   <label class="routename">
                     <span class="small">{rt("routeName")}</span>
                     <input aria-label={rt("routeName")} placeholder={rt("routeName")} value={draft.title || draft.id} maxLength={40} ref={nameBox}
+                      aria-invalid={nameTaken || undefined}
                       onInput={(e) => {
                         // 第 8 轮 W8-11:只有字母数字的当编号;写了中文(或别的)当显示名,编号自动给
                         const v = e.currentTarget.value.trim();
                         setDraft((d) => (d ? (NAME_RE.test(v) || !v ? { ...d, id: v, title: "" } : { ...d, id: autoId(), title: v }) : d));
                       }} />
                     <span class={`small${nameTaken ? " bad" : " muted"}`} data-route-id-hint="1">
-                      {nameTaken ? rt("routeNameTaken") : draft.title ? rt("routeAutoId", { id: draft.id }) : rt("routeNameHint")}
+                      {nameTaken ? takenMsg : draft.title ? rt("routeAutoId", { id: draft.id }) : rt("routeNameHint")}
                     </span>
                   </label>
                 ) : (

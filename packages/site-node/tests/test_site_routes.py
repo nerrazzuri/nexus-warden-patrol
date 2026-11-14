@@ -151,6 +151,9 @@ def test_第11轮_W11_01_删掉的路线日程_名字留着_编号不再发(台)
     assert names.schedule_name(台.db, "route-1-1") == "夜巡测试"
     v = s.view()
     assert v["retired_routes"] == ["route-1"] and v["retired_schedules"] == ["route-1-1"]
+    # 第 13 轮 W13-03 ①:网页填了用过的编号时写「已删的「一楼夜巡」用过」
+    assert v["retired_titles"] == {"route": {"route-1": "一楼夜巡"},
+                                   "schedule": {"route-1-1": "夜巡测试"}}
     with pytest.raises(RouteError, match="用过了（那条已经删了，旧记录还指着它），请换一个编号。$"):
         s.put_route("route-1", body(), by="demo")
     s.put_route("route-2", body(), by="demo")
