@@ -66,7 +66,11 @@ export function stateOf(s: string, skipped = 0): [string, string] {
 /** 有在跑的几圈巡逻时多久刷一次。 */
 export const LAP_MS = 5_000;
 
-export function TodayPatrols({ retryMs = 5_000, canFix = false }: { retryMs?: number; canFix?: boolean } = {}) {
+export function TodayPatrols({ retryMs = 5_000, canFix = false, onItems, title }: { retryMs?: number; canFix?: boolean;
+  /** 值班页拿今天的这几趟画时间轴、写最近活动(只给今天的,看往天时不给)。 */
+  onItems?: (items: TodayItem[]) => void;
+  /** 标题(值班页写「今晚巡逻」)。 */
+  title?: string } = {}) {
   const [items, setItems] = useState<TodayItem[] | null>(null);
   const [off, setOff] = useState<number | null>(null);
   // liang-d5 第 5 轮前:往天的每一趟也能查(选个日期;空 = 今天)
@@ -80,7 +84,7 @@ export function TodayPatrols({ retryMs = 5_000, canFix = false }: { retryMs?: nu
     setItems(null);
     const load = () => api<{ items: TodayItem[]; utc_offset_min?: number; date?: string }>("GET", day ? `/api/patrols/day?date=${day}` : "/api/patrols/today")
       .then((d) => {
-        if (live) { setItems(d.items ?? []); setOff(d.utc_offset_min ?? null); setFailed(false); if (!day && d.date) setToday(d.date); }
+        if (live) { setItems(d.items ?? []); setOff(d.utc_offset_min ?? null); setFailed(false); if (!day && d.date) setToday(d.date); if (!day) onItems?.(d.items ?? []); }
         // 第 9 轮 W8-04:有在跑的几圈巡逻时 5 秒一刷(跟实时画面的第几圈对得上),平时 30 秒
         return (d.items ?? []).some((x) => x.state === "running" && x.lap) ? LAP_MS : 30_000;
       })
@@ -93,7 +97,7 @@ export function TodayPatrols({ retryMs = 5_000, canFix = false }: { retryMs?: nu
   return (
     <section class="today" aria-label={t("tdTitle")}>
       <h3 class="today-h row">
-        <span>{past ? t("tdTitleDay", { d: day }) : t("tdTitle")}</span>
+        <span>{past ? t("tdTitleDay", { d: day }) : title ?? t("tdTitle")}</span>
         <input type="date" class="push small" aria-label={t("tdPickDay")} title={t("tdPickDay")} value={day || today}
           max={today || undefined} onChange={(e) => setDay(e.currentTarget.value === today ? "" : e.currentTarget.value)} />
         {past && <button type="button" class="btn sm" onClick={() => setDay("")}>{t("alToday")}</button>}
