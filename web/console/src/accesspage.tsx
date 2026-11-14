@@ -90,7 +90,7 @@ export function AccessPage({ say, now }: { say: Say; now: number }) {
                 <td>{daysText(r.days)}</td>
                 <td class="mono">{r.start}–{r.end}</td>
                 <td class="mono">{r.until_ms ? new Date(r.until_ms).toLocaleDateString("sv-SE") : "—"}</td>
-                <td class="actions"><button type="button" class="btn sm" onClick={() => setRemoving(r)}>{t("remove")}</button></td>
+                <td class="actions"><button type="button" class="btn sm danger" onClick={() => setRemoving(r)}>{t("remove")}</button></td>
               </tr>
             ))}
           </tbody>
@@ -103,7 +103,7 @@ export function AccessPage({ say, now }: { say: Say; now: number }) {
           onYes={() => { const a = ending; setEnding(null); void post(`/api/lists/authorizations/${enc(String(a.id))}/end`, {}); }} />
       )}
       {removing && (
-        <Confirm text={t("removeAuthzConfirm", { name: removing.name })} yes={t("remove")} onNo={() => setRemoving(null)}
+        <Confirm text={t("removeAuthzConfirm", { name: removing.name })} yes={t("remove")} danger onNo={() => setRemoving(null)}
           onYes={() => { const r = removing; setRemoving(null); void post(`/api/lists/authorizations/${enc(String(r.id))}/remove`, {}); }} />
       )}
     </section>

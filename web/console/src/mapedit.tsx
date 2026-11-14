@@ -452,7 +452,7 @@ function Editor({ say, target, Canvas }: { say: Say; target: Target; Canvas?: Fu
                   <span><button type="button" class={z.id === sel ? "linklike on" : "linklike"} data-pick-zone={z.id}
                     onClick={() => setSel(z.id === sel ? null : z.id)}><b>{siteKnown(z.label) || z.id}</b></button> <span class="muted small nowrap">{nogoLine(z)}</span></span>
                   {z.id === sel && <button type="button" class="btn sm push" data-rename="1" onClick={() => setRenaming(true)}>{t("lyRename")}</button>}
-                  <button type="button" class={z.id === sel ? "btn sm" : "btn sm push"} data-remove-zone={z.id}
+                  <button type="button" class={z.id === sel ? "btn sm danger" : "btn sm danger push"} data-remove-zone={z.id}
                     onClick={() => { change((st) => ({ ...st, zones: st.zones.filter((o) => o.id !== z.id) })); setSel(null); }}>{t("remove")}</button>
                 </li>
               ))}
@@ -462,13 +462,13 @@ function Editor({ say, target, Canvas }: { say: Say; target: Target; Canvas?: Fu
             <ul class="plain ly-list">
               {now.display.regions.map((r) => (
                 <li key={`r-${r.name}`} class="row"><span>{r.name}</span>
-                  <button type="button" class="btn sm push" onClick={() => change((s) => ({ ...s, display: { ...s.display, regions: s.display.regions.filter((x) => x.name !== r.name) } }))}>{t("remove")}</button></li>
+                  <button type="button" class="btn sm danger push" onClick={() => change((s) => ({ ...s, display: { ...s.display, regions: s.display.regions.filter((x) => x.name !== r.name) } }))}>{t("remove")}</button></li>
               ))}
               {now.display.terrain.map((tr) => (
                 <li key={tr.id} class="row me-terr-row" data-terrain={tr.id}><span class="me-tname">{t(`terr_${tr.kind}` as Key)}</span>
                   <label class="small">{t("meSlow")}<input type="number" class="me-slow" name={`slow_${tr.id}`} min={0} max={2} step={0.1} value={tr.slow_mps ?? 0}
                     onChange={(e) => { const v = Number(e.currentTarget.value); change((s) => ({ ...s, display: { ...s.display, terrain: s.display.terrain.map((x) => (x.id === tr.id ? { ...x, slow_mps: v > 0 ? v : null } : x)) } })); }} /></label>
-                  <button type="button" class="btn sm push" onClick={() => change((s) => ({ ...s, display: { ...s.display, terrain: s.display.terrain.filter((x) => x.id !== tr.id) } }))}>{t("remove")}</button></li>
+                  <button type="button" class="btn sm danger push" onClick={() => change((s) => ({ ...s, display: { ...s.display, terrain: s.display.terrain.filter((x) => x.id !== tr.id) } }))}>{t("remove")}</button></li>
               ))}
             </ul>
           )}

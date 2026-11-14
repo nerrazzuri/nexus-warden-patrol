@@ -171,7 +171,7 @@ export function ProblemList() {
               <span class="muted small">{toLocalInput(p.at_ms).replace("T", " ")} · {p.robot ? nameOf(p.robot) + " · " : ""}{p.by}{p.device ? " · " + p.device : ""}</span>
               {p.note && <span>{p.note}</span>}
               <a class="btn push" href={`/api/problem-reports/${p.code}/bundle`} download={`nexwar_${p.code}.tar.gz`}>{t("supportBundle")}</a>
-              <button type="button" class="btn" onClick={() => setDel(p)}>{t("remove")}</button>
+              <button type="button" class="btn danger" onClick={() => setDel(p)}>{t("remove")}</button>
             </li>
           ))}
         </ul>

@@ -830,7 +830,7 @@ function SchedulePanel({ route, view, schedules, say, reload, inPanel }: {
                 <span class="muted small" data-sched-policy="1">{rt("schedPolicy", { n: s.window_min,
                   how: rt(s.on_missed === "alarm" ? "schedAlarm" : s.on_missed === "run_late" ? "schedRunLate" : "schedSkip") })}</span>
                 <span class="muted small" data-sched-robot="1">{s.robot ? rt("schedByRobot", { id: s.robot }) : rt("schedAnyRobot")}</span>
-                <button type="button" class="link push" aria-label={`${rt("schedRemove")} ${routeLabel(s)}`} onClick={() => setRemoving(s)}>{t("remove")}</button>
+                <button type="button" class="btn sm danger push" aria-label={`${rt("schedRemove")} ${routeLabel(s)}`} onClick={() => setRemoving(s)}>{t("remove")}</button>
               </li>
             ))}
           </ul>
