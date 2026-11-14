@@ -411,7 +411,7 @@ async def test_看不见的地方快了就慢下来_看得见的挡才停(tmp_pa
     def guard(vx, wz):
         calls.append(vx)
         if abs(vx) > UNKNOWN_SLOW_MPS + 1e-9:
-            return Verdict(False, "看不见 3 处", hits=(), unknown=3)
+            return Verdict(False, "看不见 3 处", hits=(), unknown=3, kind="unknown")
         return Verdict(True)
     t.nav._guard_check = guard
     for _ in range(15):
@@ -1377,73 +1377,21 @@ def _按余量答(full_hits, soft_ok_at):
     return guard, calls
 
 
-async def test_V1_D守卫_挡的全是地图墙_降速少留余量走过去_不硬停(tmp_path):
-    """导航 V1 设计第 1 节(仿真 runs/nav-sweep-ab-1107 的 D 组):
-    全余量查到的挡全在地图墙边上(墙不会动)
-    → SLOW:余量跟速度挂钩、前进和转向同比例压到 0.3 再查,过得去就按 0.3 走,不停、不报被挡。"""
+async def test_外审1114_挡的全是地图墙_也按全余量停_不再软放行(tmp_path):
+    """外审 11-14、用户定:删掉贴墙软放行。原来全余量查到的挡全在地图墙 0.2 m 以内,就降速、少留余量
+    放过去 —— 墙边站着的人、箱子也被当墙,定位偏了更说不准。看得见的挡一律按全余量停。"""
     link = 假转接()
-    walls = [(0.1, 4.6, 11.9, 4.7)]                          # 机身左边 0.6 m 有一道地图墙
-    t = _台(tmp_path, link, walls=walls)
+    t = _台(tmp_path, link, walls=[(0.1, 4.6, 11.9, 4.7)])  # 机身左边 0.6 m 有一道地图墙
     await t.start(1.5, 4.0)
     await t.nav.goto(Pose.from_xy_yaw(9.0, 4.0))
-    guard, calls = _按余量答(full_hits=((1.0, 0.62),), soft_ok_at=0.3)   # 挡在墙上
+    guard, calls = _按余量答(full_hits=((1.0, 0.62),), soft_ok_at=0.6)   # 挡在墙上,少留余量就过得去
     t.nav._guard_check = guard
-    for _ in range(12):                                     # 再久机身转偏了,假挡点就离开墙了
+    for _ in range(12):
         link.now += 0.1
         link.cmd = (link.now, 1, 0.6, 0.0, 0.3)
         await t.一拍()
-    assert ("soft" in {c[2] for c in calls}), calls[-4:]
-    assert 0.2 < t.r.speed[0] <= 0.3 + 1e-6, t.r.speed
-    assert t.r.speed[1] == pytest.approx(0.3 * 0.3 / 0.6, abs=0.02), "转向同比例压,走的还是那条弯"
-    assert "nav_blocked" not in [k for k, _ in t.events]
-
-
-async def test_V1_D守卫_挡里有地图之外的东西_按全余量停(tmp_path):
-    link = 假转接()
-    t = _台(tmp_path, link, walls=[(0.1, 4.6, 11.9, 4.7)])
-    await t.start(1.5, 4.0)
-    await t.nav.goto(Pose.from_xy_yaw(9.0, 4.0))
-    # 一个在墙上、一个在路中间
-    guard, calls = _按余量答(full_hits=((1.0, 0.62), (1.0, 0.0)), soft_ok_at=0.6)
-    t.nav._guard_check = guard
-    for _ in range(10):
-        link.now += 0.1
-        link.cmd = (link.now, 1, 0.6, 0.0, 0.0)
-        await t.一拍()
-    assert abs(t.r.speed[0]) < 0.05, "人、箱子:停"
-    assert "soft" not in {c[2] for c in calls}, "有地图之外的挡就不试软余量"
-
-
-async def test_V1_D守卫_降到蠕行还过不去就停(tmp_path):
-    link = 假转接()
-    t = _台(tmp_path, link, walls=[(0.1, 4.6, 11.9, 4.7)])
-    await t.start(1.5, 4.0)
-    await t.nav.goto(Pose.from_xy_yaw(9.0, 4.0))
-    guard, calls = _按余量答(full_hits=((1.0, 0.62),), soft_ok_at=0.1)   # 0.2 也过不去
-    t.nav._guard_check = guard
-    for _ in range(10):
-        link.now += 0.1
-        link.cmd = (link.now, 1, 0.6, 0.0, 0.0)
-        await t.一拍()
-    assert abs(t.r.speed[0]) < 0.05
-    tried = {c[0] for c in calls if c[2] == "soft"}
-    assert {0.3, 0.2} <= tried, ("一档档压到蠕行都试过", tried)
-
-
-def test_V1_D守卫_软余量跟速度挂钩():
-    """蠕行 0.2 m/s 多留 0.05 m、0.6 m/s 以上多留到全余量 0.3 m;
-    原地转 0.15 rad/s 多留 0.05 rad、0.6 以上 0.2。"""
-    from nexwar_agent.bridges.nav2_nav import soft_guard
-    from nexwar_agent.obstacles import ObstacleGuard
-    full = ObstacleGuard()
-    assert soft_guard(full, 0.2, 0.0).extra == pytest.approx(0.05)
-    assert soft_guard(full, 0.4, 0.0).extra == pytest.approx(0.175)
-    assert soft_guard(full, 0.9, 0.0).extra == pytest.approx(full.extra)
-    assert soft_guard(full, 0.0, 0.15).extra_rad == pytest.approx(0.05)
-    assert soft_guard(full, 0.0, 1.0).extra_rad == pytest.approx(full.extra_rad)
-    g = soft_guard(full, 0.2, 0.0)
-    assert (g.body_len, g.body_wid, g.margin, g.latency, g.decel) == \
-        (full.body_len, full.body_wid, full.margin, full.latency, full.decel), "只改多留的,别的照旧"
+    assert abs(t.r.speed[0]) < 0.05 and abs(t.r.speed[1]) < 0.05, t.r.speed
+    assert "soft" not in {c[2] for c in calls}, "不再试少留余量"
 
 
 async def test_V1_看不见的只降速时_转向同比例压(tmp_path):
@@ -1456,7 +1404,7 @@ async def test_V1_看不见的只降速时_转向同比例压(tmp_path):
 
     def guard(vx, wz, g=None):
         if abs(vx) > UNKNOWN_SLOW_MPS + 1e-9:
-            return Verdict(False, "看不见 3 处", hits=(), unknown=3)
+            return Verdict(False, "看不见 3 处", hits=(), unknown=3, kind="unknown")
         return Verdict(True)
     t.nav._guard_check = guard
     for _ in range(15):
@@ -1902,9 +1850,9 @@ async def test_脱困_走着走着卡住_重新规划不管用_沿原路退回�
 # ---------------------------------------- 外审 POC r1 C2:脱困动作统一过最后一道安全检查
 
 
-async def _脱困台(tmp_path, x, y, yaw, monkeypatch, verdict=None, static=True, **kw):
-    """机器人放在 1.4 m 走廊里;守卫按 ``verdict`` 回(``None`` 就照真的雷达查),挡点算不算地图墙按
-    ``static``。回 ``(t, sent)``:``sent`` 收后端发出去的每条速度。"""
+async def _脱困台(tmp_path, x, y, yaw, monkeypatch, verdict=None, **kw):
+    """机器人放在 1.4 m 走廊里;守卫按 ``verdict`` 回(``None`` 就照真的雷达查)。
+    回 ``(t, sent)``:``sent`` 收后端发出去的每条速度。"""
     from nexwar_agent.obstacles import Verdict
     t = _台(tmp_path, 假转接(), walls=_窄走廊(1.4), **kw)
     await t.start(x, y, yaw)
@@ -1917,7 +1865,6 @@ async def _脱困台(tmp_path, x, y, yaw, monkeypatch, verdict=None, static=True
     monkeypatch.setattr(t.nav, "_send", 发)
     if verdict is not None:
         monkeypatch.setattr(t.nav, "_guard_check", lambda vx, wz, g=None: Verdict(*verdict))
-        monkeypatch.setattr(t.nav, "_hits_all_static", lambda hits, here: static)
     return t, sent
 
 
@@ -1979,8 +1926,17 @@ async def test_外审POC_r2_C2_挡点全是墙_同时后面看不见_也不许�
     t, sent = await _脱困台(tmp_path, 5.0, 4.0, 0.0, monkeypatch, rear=False)
     monkeypatch.setattr(t.nav, "_guard_check", lambda vx, wz, g=None: Verdict(
         False, "扫过区有挡 1 处、看不见 50 处", hits=((-0.9, 0.6),), unknown=50))
-    monkeypatch.setattr(t.nav, "_hits_all_static", lambda hits, here: True)
     _退(t, [(4.6, 4.0), (3.5, 4.0)])
+    here = await t.nav._here()
+    await t.nav._back_step(here, 0.1)
+    assert sent and sent[-1] == (0.0, 0.0), sent
+
+
+async def test_外审1114_脱困_挡点全是地图墙_车身扫过也不压墙_照样不动(tmp_path, monkeypatch):
+    """外审 11-14:脱困一步原来「守卫挡点全是地图墙 + 车身按地图查过不压墙」就放行 —— 定位偏了,
+    地图说不压、雷达看见的墙其实就在那。看得见的挡一律不动。"""
+    t, sent = await _脱困台(tmp_path, 5.0, 4.0, 0.0, monkeypatch, (False, "挡住", ((-0.9, 0.0),)))
+    _退(t, [(4.6, 4.0), (3.5, 4.0)])                       # 走廊中间,按地图车尾扫不到墙
     here = await t.nav._here()
     await t.nav._back_step(here, 0.1)
     assert sent and sent[-1] == (0.0, 0.0), sent

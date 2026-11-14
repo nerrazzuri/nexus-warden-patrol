@@ -19,8 +19,8 @@
 - **B** 软守卫:多留的那段跟速度挂钩(蠕行 0.2 m/s 时 0.05 m、0.6 m/s 以上 0.3 m;原地转的多留角度同理
   0.05–0.2 rad),输出三级 —— 放行 / 减速(同比例压前进和转向,走的还是 Nav2 那条弯)/ 停。
   挡的全是地图上的墙(离墙 ≤ 0.2 m)才许降到 0.3、0.2 再查;有地图之外的东西(人、箱子会动)照旧停。
-- **D** 组合(11-07 A/B/C 跑完后加):先按 A 的全余量查;挡的全是地图上的墙 → 走 B 的软处理
-  (按 B 的余量在当前速度查,不行再降到 0.3、0.2);有地图之外的东西 → 停(人、车按 A 的全余量)。
+- **D** 交付用的:按 A 的全余量查,看得见的挡一律停(外审 11-14 起不再「挡的全是地图墙就走 B 的
+  软处理」;11-14 以前的 D 组结果含软放行)。
 - **N** 不开守卫:只做正式代码里一直有的死区整形(横移原样转发,给全向那组用)。
 - **C** 只管紧急停:只按刹停距离推(不多留),只有真看到挡才停,看不见的不管。
 - ``--delay-ms``:守卫收到的栅格是这么久以前的世界(感知延迟)。
@@ -471,12 +471,12 @@ def main() -> int:
                         g = soft_guard(vx, wz)
                 st["slowed_ticks"] += 1
                 v = check(g, vx, wz)
-            if mode in ("B", "D") and not v.ok and v.hits and hits_all_static(v.hits):
-                # 挡的全是地图上的墙:降速、少留,再查(墙不会动);人、箱子照旧停
+            if mode == "B" and not v.ok and v.hits and hits_all_static(v.hits):
+                # 只剩 B(11-07 对比用):挡的全是地图上的墙就降速、少留再查。D 跟交付代码一样不再
+                # 软放行(外审 11-14、用户定:贴墙软放行删掉)
                 lead = abs(vx) if abs(vx) > 1e-6 else abs(wz)
-                steps = ((lead,) if mode == "D" else ()) + SLOW_STEPS   # D:先按 B 的余量在原速试
-                for i, target in enumerate(steps):
-                    if lead <= target + 1e-9 and not (mode == "D" and i == 0):
+                for target in SLOW_STEPS:
+                    if lead <= target + 1e-9:
                         continue
                     k = target / lead
                     v2x, v2z = _deband(vx * k, wz * k)
