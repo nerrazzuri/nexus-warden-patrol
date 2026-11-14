@@ -114,7 +114,9 @@ def run_one(job: dict, slot: int, args) -> dict:
             try:
                 gate = ["--route-gate"] if cfg.get("route_gate") == "true" else []
                 subprocess.run([sys.executable, str(HERE / "goal_driver.py"), "--case", str(d / "case.json"),
-                                "--out", str(d / "metrics.json"), *gate], cwd=ROOT, env=env, timeout=budget,
+                                "--out", str(d / "metrics.json"), *gate,
+                                "--path-controller", cfg.get("pathctl", "FollowPath")],
+                               cwd=ROOT, env=env, timeout=budget,
                                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             except subprocess.TimeoutExpired:
                 pass

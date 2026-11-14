@@ -81,6 +81,7 @@ def main() -> int:
             super().__init__("nav_stability_goal_driver")
             self.case = case
             self.route_gate_dir = None
+            self.path_controller = "FollowPath"
             self.route_refused = False
             self.route_checks = []
             self.client = ActionClient(self, NavigateToPose, "navigate_to_pose")
@@ -337,7 +338,7 @@ def main() -> int:
                 # 外审 11-14:跟真机代理一样 —— 路线靠局部搜索放行就让控制器照那条路走(FollowPath);
                 # 控制器放弃了先换 RPP 跟同一条,还不行从当前位置重新查路线,最多 ROUTE_RECHECKS 次
                 path = (chk or {}).get("path")
-                controller, rechecks, followed = "FollowPath", 0, False
+                controller, rechecks, followed = self.path_controller, 0, False
                 self._deadline_s, self._deadline = timeout, None    # 收下第一个目标时起算
                 while True:
                     if path:
@@ -360,7 +361,7 @@ def main() -> int:
                     if chk.get("checked") and not chk.get("ok"):
                         out = {"success": False, "reason": "route_refused", "code": chk.get("code")}
                         break
-                    path, controller = chk.get("path"), "FollowPath"
+                    path, controller = chk.get("path"), self.path_controller
                 results.append({"goal": idx, **out, "followed_path": followed,
                                 "rechecks": rechecks,
                                 "elapsed_s": round(time.monotonic() - self.active_since, 3)})
@@ -408,11 +409,14 @@ def main() -> int:
     ap.add_argument("--case", type=Path, required=True)
     ap.add_argument("--out", type=Path, required=True)
     ap.add_argument("--route-gate", action="store_true", help="每个目标出发前查路线几何(Route Validator)")
+    ap.add_argument("--path-controller", default="FollowPath",
+                    help="照查过的路走时先用哪个控制器(11-15 跟路试验;放弃了照旧换 RPP)")
     args = ap.parse_args()
     case = json.loads(args.case.read_text(encoding="utf-8"))
     rclpy.init()
     node = Driver(case)
     node.route_gate_dir = args.case.parent if args.route_gate else None
+    node.path_controller = args.path_controller
     try:
         metrics = node.run()
     finally:
