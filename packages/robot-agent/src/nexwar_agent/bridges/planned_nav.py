@@ -53,6 +53,7 @@ from nexwar_agent.planning import costmap as cmod
 from nexwar_agent.planning.astar import PlanError
 from nexwar_agent.planning.costmap import Costmap, CostmapError
 from nexwar_agent.planning.planner import PlannedPath, Planner
+from nexwar_contract.footprint import BODY_LEN, BODY_WID
 from nexwar_contract.hal import RobotHAL
 from nexwar_contract.routenet import RouteNet, route
 from nexwar_contract.zones import Zone, ZoneSet, distance_to_polygon
@@ -1030,8 +1031,9 @@ class PlannedNavBackend(HalNavBackend):
             return math.inf
         g = self.guard
         margin = getattr(g, "margin", 0.05)
-        near = self.obstacles.near_ahead(d, getattr(g, "body_len", 0.93) / 2 + margin,
-                                         getattr(g, "body_wid", 0.48) / 2 + margin + NEAR_BAND_M)
+        hl = getattr(g, "body_len", BODY_LEN) / 2 + margin
+        hw = getattr(g, "body_wid", BODY_WID) / 2 + margin + NEAR_BAND_M
+        near = self.obstacles.near_ahead(d, hl, hw)
         # 限着速(W29 下雨)时近障从更远就开始减速:湿地刹车距离长
         start = NEAR_SLOW_FROM_M * (WET_NEAR_SCALE if math.isfinite(self.speed_cap) else 1.0)
         if near >= start:

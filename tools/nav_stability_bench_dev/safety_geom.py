@@ -8,8 +8,17 @@
 from __future__ import annotations
 
 import math
+import sys
+from pathlib import Path
 
-BODY_HX, BODY_HY = 0.465, 0.24          # 真实车身半长、半宽
+_SRC = Path(__file__).resolve().parents[2] / "packages" / "contract" / "src"
+if str(_SRC) not in sys.path:
+    sys.path.insert(0, str(_SRC))
+from nexwar_contract.footprint import BASE_HALF_LEN, BASE_HALF_WID, BODY_LEN, BODY_WID  # noqa: E402
+
+BODY_HX, BODY_HY = BODY_LEN / 2, BODY_WID / 2          # 真实车身半长、半宽
+#: 车身 + 基础余量(守卫、Nav2 footprint 用的)
+BASE_HX, BASE_HY = BASE_HALF_LEN, BASE_HALF_WID
 MARGIN_BANDS = (0.05, 0.10)             # 余量侵入的两档
 
 

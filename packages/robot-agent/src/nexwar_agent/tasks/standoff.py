@@ -20,6 +20,7 @@ from collections.abc import Callable
 from typing import Any
 
 from nexwar_agent.tasks.base import Task
+from nexwar_contract.footprint import BODY_LEN, BODY_WID
 from nexwar_contract.hal import RobotHAL, VelocityCommand
 from nexwar_contract.messages import TaskState
 from nexwar_contract.standoff import CLEAR_M, TOO_CLOSE_M, StandoffRequest
@@ -39,8 +40,6 @@ STOP_EXTRA_S = 0.5
 SWEEP_DT_S = 0.1
 SWEEP_STEP_M = 0.15
 NOGO_MARGIN_M = 0.15
-#: 机身(跟避障守卫一样)。
-BODY_LEN, BODY_WID = 0.93, 0.48
 #: 每拍下的速度命令的有效期(毫秒):一拍不来 HAL 自己停。
 CMD_TTL_MS = 300
 STOP_CONFIRM_TIMEOUT_S = 5.0

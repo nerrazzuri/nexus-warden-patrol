@@ -8,10 +8,10 @@ import math
 import time
 from pathlib import Path
 
-from safety_geom import SafetyTracker
+from safety_geom import BASE_HX, BASE_HY, SafetyTracker
 
 
-def _corners(x, y, yaw, hx=0.515, hy=0.29):
+def _corners(x, y, yaw, hx=BASE_HX, hy=BASE_HY):
     c, s = math.cos(yaw), math.sin(yaw)
     out = []
     for lx, ly in ((hx, hy), (hx, -hy), (-hx, -hy), (-hx, hy)):
@@ -122,8 +122,8 @@ def main() -> int:
             for i, (ax, ay) in enumerate(self.actor_xy[:len(self.actors)]):
                 a = self.actors[i]
                 box = {"x": ax, "y": ay, "sx": float(a["sx"]), "sy": float(a["sy"])}
-                # 粗量间隙:中心距减去两边半宽(机身取半宽 0.29)
-                gap = math.hypot(wx - ax, wy - ay) - 0.29 - max(box["sx"], box["sy"]) / 2.0
+                # 粗量间隙:中心距减去两边半宽(机身取加余量的半宽)
+                gap = math.hypot(wx - ax, wy - ay) - BASE_HY - max(box["sx"], box["sy"]) / 2.0
                 self.min_actor_gap = min(self.min_actor_gap, gap)
                 if _poly_intersects_box(poly, box):
                     if self.robot_speed > 0.05:

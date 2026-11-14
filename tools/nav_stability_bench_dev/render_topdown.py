@@ -15,6 +15,7 @@ import rosbag2_py
 from geometry_msgs.msg import PoseArray
 from nav_msgs.msg import Odometry, Path as NavPath
 from PIL import Image, ImageDraw, ImageFont
+from safety_geom import BASE_HX, BASE_HY
 from rclpy.serialization import deserialize_message
 from sensor_msgs.msg import LaserScan
 
@@ -66,7 +67,7 @@ def box_poly(b):
             to_px(b["x"] + hx, b["y"] + hy), to_px(b["x"] - hx, b["y"] + hy)]
 
 
-def body(x, y, yaw, hx=0.515, hy=0.29):
+def body(x, y, yaw, hx=BASE_HX, hy=BASE_HY):
     c, s = math.cos(yaw), math.sin(yaw)
     return [to_px(x + c * lx - s * ly, y + s * lx + c * ly) for lx, ly in ((hx, hy), (hx, -hy), (-hx, -hy), (-hx, hy))]
 
