@@ -10,6 +10,8 @@
 
 每一趟的仿真条件(按种子抽,写进 case.json 的 sim):执行误差、定位噪声 2–6 cm / 0.5–1.5°、
 障碍数据延迟 0/100/200 ms;定位故障类场景另带故障。
+
+另有过不去的三类(:func:`impassable`):终点贴墙、终点被占、半路堵死。
 """
 from __future__ import annotations
 
@@ -63,6 +65,47 @@ def width_case(fid, w, start, goals_ok, goal_in, obstacles, extra=None, timeout=
     if extra:
         sc.update(extra)
     return sc
+
+
+#: 机器人中心离墙至少这么远,终点才放得下(半宽 0.29 + 底线 0.10)。
+GOAL_WALL_NEED = 0.39
+
+
+def impassable():
+    """过不去的三类(用户 11-14 「按这三类补」):PASS = 不撞、停住(expect: blocked);
+    放得下的边界档照常要到。终点故意贴墙、压在东西上,所以起终点不查离障碍多远。"""
+    out = []
+    base = {"timeout_s": 90, "min_pose_clearance_m": -9.0, "defaults": TIGHT_DEFAULTS, "sim": dict(SIM)}
+    # 1 终点贴墙:一面 10 m 长的墙,终点在墙边、跟墙平行,中心离墙 d
+    wall = [{"x": 1.0, "y": 2.2, "sx": 10.0, "sy": 0.4}]
+    for d in (0.15, 0.25, 0.35, 0.45):
+        sc = {"id": f"p0_goal_wall_d{tag(d)}", "family": "p0_goal_wall", "gap_m": d, **base,
+              "start": [-6.0, -2.0, 0.0], "goals": [[3.0, 2.0 - d, 0.0]], "obstacles": wall}
+        if d < GOAL_WALL_NEED:
+            sc["expect"] = "blocked"
+        else:
+            sc["timeout_s"] = 120
+        out.append(sc)
+    # 2 终点被占:地图上就有的一堆货 / 建图后才停到终点上的车 / 建图后才堆上的货(压住半个终点)
+    occ = {"mapped": {"x": 3.0, "y": 0.0, "sx": 1.0, "sy": 1.0, "h": 0.8},
+           "car": {"x": 3.0, "y": 0.0, "sx": 4.5, "sy": 1.8, "h": 1.5, "unmapped": True},
+           "pile": {"x": 3.0, "y": 0.25, "sx": 0.8, "sy": 0.8, "h": 0.6, "unmapped": True}}
+    for k, o in occ.items():
+        out.append({"id": f"p0_goal_occupied_{k}", "family": "p0_goal_occupied", **base,
+                    "start": [-6.0, 0.0, 0.0], "goals": [[3.0, 0.0, 0.0]], "obstacles": [o],
+                    "expect": "blocked"})
+    # 3 半路堵死:12 m 长的走廊,中间有建图后才放的东西;全堵,或只留比车身窄的缝(缝靠 +y 墙)
+    for w, gap in ((1.2, 0.0), (2.0, 0.0), (2.0, 0.5), (2.0, 0.7)):
+        h = w / 2
+        walls = carve((-6.0, 6.0, -8.8, 8.8), [(-6.0, 6.0, -h, h)])
+        sy = w - gap
+        block = {"x": 0.0, "y": round(-h + sy / 2, 3), "sx": 0.5, "sy": round(sy, 3), "h": 1.0,
+                 "unmapped": True}
+        name = f"p0_midblock_w{tag(w)}_" + ("full" if gap == 0 else f"gap{tag(gap)}")
+        out.append({"id": name, "family": "p0_midblock", "width_m": w, "gap_m": gap, **base,
+                    "start": [-7.5, 0.0, 0.0], "goals": [[7.5, 0.0, 0.0]],
+                    "obstacles": walls + [block], "expect": "blocked"})
+    return out
 
 
 def main() -> int:
@@ -159,6 +202,7 @@ def main() -> int:
     out.append({"id": "p0_plaza_gap", "family": "p0_plaza_gap", "timeout_s": 120, "min_pose_clearance_m": 0.05,
                 "defaults": {**TIGHT_DEFAULTS, "start_jitter_xy_m": 0.1}, "sim": dict(SIM), "site_map": site,
                 "start": [29.77, -15.88, -1.209], "goals": [[21.57, -15.59, 3.106]], "obstacles": []})
+    out += impassable()
     base = yaml.safe_load((HERE / "scenarios.yaml").read_text(encoding="utf-8"))
     doc = {"version": 1, "defaults": base["defaults"], "scenarios": out}
     (HERE / "scenarios_p0.yaml").write_text(
