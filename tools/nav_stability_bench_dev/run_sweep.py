@@ -112,14 +112,18 @@ def run_one(job: dict, slot: int, args) -> dict:
             bag = subprocess.Popen(["ros2", "bag", "record", "-o", str(d / "bag"), *BAG_TOPICS], cwd=ROOT, env=env,
                                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
             time.sleep(10)
-            budget = float(case.get("timeout_s", 90)) * len(case["goals"]) + 60
+            # 用户 11-15:每个目标最多走三次(一次、重试一次、一圈完了回头补一次),外加倒退
+            budget = float(case.get("timeout_s", 90)) * len(case["goals"]) * 3 + 120
             try:
                 gate = ["--route-gate"] if cfg.get("route_gate") == "true" else []
                 subprocess.run([sys.executable, str(HERE / "goal_driver.py"), "--case", str(d / "case.json"),
                                 "--out", str(d / "metrics.json"), *gate,
-                                "--path-controller", cfg.get("pathctl", "FollowPath")],
+                                *(["--path-controller", cfg["pathctl"]] if cfg.get("pathctl") else []),
+                                *(["--no-search"] if cfg.get("search") == "false" else []),
+                                *(["--no-recover"] if cfg.get("recover") == "false" else [])],
                                cwd=ROOT, env=env, timeout=budget,
-                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                               stdout=subprocess.DEVNULL,
+                               stderr=(d / "driver.log").open("w", encoding="utf-8"))
             except subprocess.TimeoutExpired:
                 pass
         finally:

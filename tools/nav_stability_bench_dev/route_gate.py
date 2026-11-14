@@ -15,7 +15,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-for p in ("packages/robot-agent/src", "packages/contract/src"):
+for p in ("packages/robot-agent/src", "packages/contract/src", "src"):
     if str(ROOT / p) not in sys.path:
         sys.path.insert(0, str(ROOT / p))
 

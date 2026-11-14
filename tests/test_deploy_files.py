@@ -1905,10 +1905,11 @@ def test_导航V1第4步_MPPI走不动换RPP_两棵行为树都改_RPP不倒车_
     import yaml
     d = yaml.safe_load((DEPLOY / "nav2" / "params.yaml").read_text(encoding="utf-8"))
     cs = d["controller_server"]["ros__parameters"]
-    assert cs["controller_plugins"] == ["FollowPath", "RPP"]
+    # FollowTight:照查过的路走时用的跟紧路线的 MPPI(用户 11-15),不进行为树
+    assert cs["controller_plugins"] == ["FollowPath", "RPP", "FollowTight"]
     r = cs["RPP"]
     assert r["plugin"] == "nav2_regulated_pure_pursuit_controller::RegulatedPurePursuitController"
-    assert r["allow_reversing"] is False, "倒车看不见后面(两侧、后方盲区)"
+    assert r["allow_reversing"] is False, "RPP 倒车和原地转向只能二选一,要原地转"
     assert r["use_collision_detection"] is True
     low = min(r["min_approach_linear_velocity"], r["regulated_linear_scaling_min_speed"])
     assert low >= 0.13, \

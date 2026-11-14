@@ -134,3 +134,39 @@ async def test_半路重查也过不去_沿来路倒退出来_退完再查_过�
 
 async def test_倒退最多退这么远(tmp_path):
     assert 2.0 <= RETREAT_ROUTE_M <= 3.0, "用户 11-15:2–3 m"
+
+
+def test_倒退一拍_纯函数_真机和仿真共用():
+    from nexwar_agent.bridges.nav2_nav import RETREAT_MPS, retreat_cmd
+    path = [(1.6, 0.0), (1.2, 0.0), (0.8, 0.0)]           # 车头朝 +x,来路在身后
+    vx, wz = retreat_cmd(2.0, 0.0, 0.0, path)
+    assert vx == pytest.approx(-RETREAT_MPS) and abs(wz) < 1e-9
+    assert path[0] == (1.2, 0.0), "前瞻以内的点弹掉了"
+    vx, wz = retreat_cmd(2.0, 0.05, 0.0, [(1.2, 0.0), (0.8, 0.0)])
+    assert vx < 0 and wz != 0.0, "偏了往回拉"
+    assert retreat_cmd(0.85, 0.0, 0.0, [(0.8, 0.0)]) is None, "到了"
+    vx, wz = retreat_cmd(0.0, 0.0, 0.0, [(1.0, 0.0)])
+    assert vx == 0.0 and wz != 0.0, "那一点跑到前面去了:原地先转"
+
+
+def test_交付配置里有跟紧路线的控制器_协议认它_代理照路走用它():
+    """仿真 11-15 跟路试验 T2(MPPI 看路线朝向、加重贴路线、限速 0.4、收窄采样、缩短预测):
+    偏离 95% 分位中位 0.079 m(原来 0.132),53 个里到 36(原来 33)。
+    照查过的路走时用它,平常导航不变。"""
+    from pathlib import Path
+
+    import yaml
+
+    from nexwar_agent.bridges.nav2_nav import PATH_CONTROLLER
+    from nexwar_contract.navbridge import CONTROLLERS
+    root = Path(__file__).resolve().parents[3]
+    cs = yaml.safe_load((root / "deploy/nav2/params.yaml").read_text())["controller_server"][
+        "ros__parameters"]
+    assert PATH_CONTROLLER == "FollowTight" and PATH_CONTROLLER in CONTROLLERS
+    assert PATH_CONTROLLER in cs["controller_plugins"]
+    t, base = cs[PATH_CONTROLLER], cs["FollowPath"]
+    assert t["plugin"] == base["plugin"] == "nav2_mppi_controller::MPPIController"
+    assert t["vx_max"] <= 0.4 and t["vy_max"] == 0.0, "照路走:慢一点,不横移"
+    assert t["PathAlignCritic"]["use_path_orientations"] is True
+    assert "PreferForwardCritic" not in t["critics"], "路里有倒车那段"
+    assert base["vx_max"] == 1.0, "平常导航不变"
