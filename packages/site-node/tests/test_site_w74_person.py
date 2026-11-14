@@ -156,6 +156,30 @@ def test_人看不到了_不再自动收掉_改成去向不明_又看见改回�
     assert _记(t) == {"A": "p1"} and len(t.desk.book.all()) == 1
 
 
+def test_易用性r7_去向不明不写坐标_说得出地方就说地方(看):
+    t = 看
+    t.w.where_of = lambda p: "东门附近" if p.get("map_id") else None
+    t.d.persons(present=True, count=1)
+    t.w.tick()
+    t.c.ms += 30_000
+    t.d.persons(present=False)
+    t.w.tick()
+    [b] = _开着的(t)
+    assert b.title == "看不到了,去向不明,最后在东门附近", b.title
+    assert "(" not in b.title
+
+
+def test_易用性r7_去向不明_说不出地方就不写_不写坐标(看):
+    t = 看
+    t.d.persons(present=True, count=1)
+    t.w.tick()
+    t.c.ms += 30_000
+    t.d.persons(present=False)
+    t.w.tick()
+    [b] = _开着的(t)
+    assert b.title == "看不到了,去向不明", b.title
+
+
 def test_保安到场处置完了_人走了才清记录_再看见另起一条(看):
     t = 看
     t.d.persons(present=True, count=1)

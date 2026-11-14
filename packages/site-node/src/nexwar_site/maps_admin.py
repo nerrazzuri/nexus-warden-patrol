@@ -37,6 +37,15 @@ PENDING_MAX_MS = 40 * 60_000
 DIFF_CACHE = 4
 
 
+
+def edit_summary(stats: dict, *, only_layers: bool = False) -> str:
+    """地图编辑另存时的说明:只写改了的(易用性 r7:以前写「画了 0.0 平方米障碍」)。"""
+    parts = [] if only_layers else [
+        *([f"擦了 {stats['erased_m2']} 平方米"] if stats.get("erased_m2") else []),
+        *([f"画了 {stats['obstacle_m2']} 平方米障碍"] if stats.get("obstacle_m2") else []),
+    ]
+    return "、".join(parts) or "只改了禁行区、显示"
+
 class AdminError(ValueError):
     """管理动作做不了。``status`` 是给 HTTP 的状态码,``text`` 给人看;``extra`` 跟着回给客户端
     (``reason`` 是给程序看的原因代码)。"""
@@ -427,8 +436,7 @@ class MapAdmin:
         src = self.cat.root / map_id / version
         tmp = Path(tempfile.mkdtemp(prefix="edit-", dir=self.cat.root))
         text = str(note or "")[:120]
-        what = ("只改了禁行区、显示" if only_layers else
-                f"擦了 {stats['erased_m2']} 平方米、画了 {stats['obstacle_m2']} 平方米障碍")
+        what = edit_summary(stats, only_layers=only_layers)
         try:
             for f in self.ref(map_id, version).files:
                 if f.name != image:              # 栅格要改:不链接,下面写新的(不然原版跟着变)

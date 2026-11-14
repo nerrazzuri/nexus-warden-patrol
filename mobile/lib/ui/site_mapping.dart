@@ -1088,16 +1088,18 @@ class _SiteMapPreviewPageState extends State<SiteMapPreviewPage> {
     final text = _zones == null
         ? (_zonesError != null ? tr('Zones unavailable', '无法加载区域') : tr('Loading zones…', '正在加载区域…'))
         : confirmed
-            ? tr('Zones rev $_rev · confirmed', '区域第 $_rev 版 · 已确认')
+            // 易用性 r7:不写「区域第 N 版」(从 0 数、客户看不懂)
+            ? (_rev == 0
+                ? tr('No no-go zones · confirmed', '没有禁行区 · 已确认')
+                : tr('No-go zones confirmed', '禁行区已确认'))
             // 第 13 轮 W13-03 ③：一块都没画过的说「还没画禁行区」（以前写「区域第 0 版 · 未确认」，看不懂）；
             // 改过没再确认的说「改过没确认」
             : _rev == 0
                 ? tr('No no-go zones drawn yet · confirm before sending to robots', '还没画禁行区 · 确认后才能下发')
                 : conf != null
-                    ? tr('Zones rev $_rev · changed since confirmed: confirm before sending to robots',
-                        '区域第 $_rev 版 · 改过没确认：确认后才能下发')
-                    : tr('Zones rev $_rev · not confirmed: confirm before sending to robots',
-                        '区域第 $_rev 版 · 未确认：确认后才能下发');
+                    ? tr('No-go zones changed since confirmed: confirm before sending to robots',
+                        '禁行区改过没确认：确认后才能下发')
+                    : tr('No-go zones not confirmed: confirm before sending to robots', '禁行区未确认：确认后才能下发');
     return Align(
       alignment: Alignment.topLeft,
       child: Material(

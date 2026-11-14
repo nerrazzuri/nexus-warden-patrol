@@ -290,6 +290,7 @@ async def test_太久没看_报防区没巡到_看到了自动解决(站):
     alerts = {a["robot"]: a for a in t.duty.alerts.open if a["kind"] == "zone_unwatched"}
     assert set(alerts) == {"zone:东区", "zone:西区"}
     assert "B" in alerts["zone:东区"]["detail"]
+    assert alerts["zone:东区"]["title"].startswith("防区 东区 已 "), "易用性 r7:标题说是防区"
     n = len(t.duty.alerts.open)
     await _跑(t, 2)
     assert len(t.duty.alerts.open) == n, "挂着的不重复报"
