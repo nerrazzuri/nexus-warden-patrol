@@ -171,8 +171,9 @@ def test_发出去了_记账之前站点崩了_重启再发_标记一样(tmp_pat
 def test_不同的告警_各自一条_升档也另起一条(tmp_path):
     net = _网()
     desk, p, clock, db = _台(tmp_path, net)
-    desk.raise_alert(kind="dog_sees_person", robot="A", title="机器人看见人了")
-    desk.raise_alert(kind="dog_sees_person", robot="B", title="机器人看见人了")
+    # 看见人一来就最高档,升档用别的 P1
+    desk.raise_alert(kind="stuck", robot="A", title="机器人卡住了")
+    desk.raise_alert(kind="stuck", robot="B", title="机器人卡住了")
     p.tick()
     clock[0] += 3 * 60_000
     desk.escalate()
