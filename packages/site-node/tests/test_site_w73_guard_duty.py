@@ -1887,6 +1887,36 @@ def test_外审W77_11_2_去值守位路上_按位置算在哪个防区_到了值
     from types import SimpleNamespace
     t = 站
     pose = SimpleNamespace(map_id=MAP[0], map_version=MAP[1], x=7.0, y=0.0)   # 在西区
-    t.duty._client = lambda rid: SimpleNamespace(telemetry=SimpleNamespace(pose=pose))
+    t.duty._client = lambda rid: SimpleNamespace(
+        telemetry=SimpleNamespace(pose=pose),
+        status=SimpleNamespace(ready=SimpleNamespace(loc_ok=True)))
+    t.site.telemetry_at = {"A": t.clock()}
     assert t.duty._zone_now("A", {"state": "watch", "watch_zone": "东区"})[2] == "西区"
     assert t.duty._zone_now("A", {"state": "post", "watch_zone": "东区"})[2] == "东区"
+
+
+async def test_外审W77_12_1_同一批轨迹先过出口线再出防区_按先发生的出口线办(站):
+    t = 站
+    tid = await _跟着(t)
+    t.duty.marks.set(MAP[0], MAP[1], {"kind": "exit", "name": "东门",
+                                      "points": [[3.0, -2.0], [3.0, 2.0]]}, by="alice")
+    t.duty._on_event("A", _事("follow_track", task_id=tid, points=[
+        {"x": 2.0, "y": 0.5, "at_ms": 1}, {"x": 3.5, "y": 0.5, "at_ms": 2},
+        {"x": 6.0, "y": 0.5, "at_ms": 3}, {"x": 7.0, "y": 0.5, "at_ms": 4}]))
+    [a] = [a for a in t.duty.alerts.open if a["kind"] == "person_left"]
+    assert a["context"].get("exit") == "东门", "先过的出口线"
+
+
+def test_外审W77_12_2_定位丢了或位置过期_不拿旧位置定看见人的防区(站):
+    from types import SimpleNamespace
+    t = 站
+    pose = SimpleNamespace(map_id=MAP[0], map_version=MAP[1], x=2.0, y=0.0)
+    cli = SimpleNamespace(telemetry=SimpleNamespace(pose=pose),
+                          status=SimpleNamespace(ready=SimpleNamespace(loc_ok=False)))
+    t.duty._client = lambda rid: cli
+    t.site.telemetry_at = {"A": t.clock()}
+    assert t.duty._zone_now("A", {"state": "watch"}) is None, "定位丢了"
+    cli.status.ready.loc_ok = True
+    assert t.duty._zone_now("A", {"state": "watch"})[2] == "东区"
+    t.site.telemetry_at = {"A": t.clock() - 600_000}
+    assert t.duty._zone_now("A", {"state": "watch"}) is None, "位置过期"
