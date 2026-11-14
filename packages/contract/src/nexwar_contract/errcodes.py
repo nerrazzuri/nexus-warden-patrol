@@ -210,7 +210,7 @@ _T: tuple[tuple[int, str, str, str, str, str, str, str], ...] = (
     (0x0518, "robot.payload_siren", "error", "engineer", "警笛坏了", "Siren failed", "检查上装", "Check the payload"),
     (0x0519, "robot.payload_spotlight", "error", "engineer", "探照灯坏了", "Spotlight failed", "检查上装", "Check the payload"),
     (0x051A, "robot.payload_amp", "warn", "engineer", "功放坏了", "Amplifier failed", "检查上装", "Check the payload"),
-    # POC 分支(竞品上装):求助、急停按钮,喊话没放出来
+    # 竞品上装:求助、急停按钮,喊话没放出来
     (0x051B, "robot.payload_sos", "error", "user", "现场有人按了求助按钮", "Help button pressed on site", "马上去现场", "Go on site now"),
     (0x051C, "robot.payload_estop", "error", "user", "上装急停按钮被按下", "Payload e-stop pressed", "确认安全后在机器人详情点「恢复」", "When safe, press Resume on the robot page"),
     (0x051D, "robot.deter_failed", "warn", "engineer", "喊话没放出来", "Announcement not played", "检查上装音频", "Check the payload audio"),

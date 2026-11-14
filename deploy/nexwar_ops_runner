@@ -113,7 +113,7 @@ VENDOR_PAUSE_MATCH = (
     "navigo_charging_alignment",
     "launch robot_nav2 ",
 )
-#: POC(竞品上装,只在 poc-anbot-payload 分支):竞品的 ros1 桥在 Orin 上跟我们抢话题,以前 SSH 手工停。
+#: 竞品上装(payload.json kind=anbot_ros1):竞品的 ros1 桥在 Orin 上跟我们抢话题,以前 SSH 手工停;没装就没这进程。
 #: 跟着「开机暂停厂家进程」一起暂停(能恢复);**关自启不用这张单子**,竞品的设置不动(用户 11-06)。
 COMPETITOR_PAUSE_MATCH = (
     "bridge_start.sh",
