@@ -703,7 +703,7 @@ class AnbotPayload:
         try:
             wav = await self._synth(lang, text)
             proc = await self._spawn(wav)
-        except PayloadError as exc:
+        except Exception as exc:                 # noqa: BLE001 - 盘满等也要回调(外审 2);取消不在这里
             log.warning("英文喊话没放成: %s", exc)
             self._speech = None
             fn = self.on_sound_end

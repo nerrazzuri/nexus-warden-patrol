@@ -66,7 +66,7 @@ def _record_summary(bag: Path, wall_s: float,
             counts = {t["topic_metadata"]["name"]: t.get("message_count") or 0
                       for t in info.get("topics_with_message_count") or []}
             ns = (info.get("duration") or {}).get("nanoseconds")
-        except (OSError, yaml.YAMLError, AttributeError, KeyError, TypeError) as exc:
+        except (OSError, ValueError, yaml.YAMLError, AttributeError, KeyError, TypeError) as exc:
             log.warning("录包索引读不出来 %s: %s", meta, exc)
         else:
             ok = True
@@ -469,7 +469,7 @@ class MappingOrchestrator:
                                                self._rec_topics)
         except Exception:
             log.exception("录包小结算不出来(包照旧在)")
-            self.last_record = {"bag": bag.name}
+            self.last_record = {"bag": bag.name, "metadata": False}   # 算不出 = 没法确认录全
         for g in got:
             if isinstance(g, BaseException):
                 raise g

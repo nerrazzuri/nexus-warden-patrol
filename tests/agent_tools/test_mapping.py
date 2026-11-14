@@ -239,6 +239,14 @@ async def test_外审_索引读不出来_算没法确认录全(orch):
     assert s["bag"] == "shadow5" and s["metadata"] is False
 
 
+async def test_外审2_索引有乱码_也算没法确认录全(orch):
+    path = await orch.start_record("shadow7")
+    path.mkdir(parents=True, exist_ok=True)
+    (path / "metadata.yaml").write_bytes(b"rosbag2_bagfile_information:\xff\xfe\n")
+    await orch.stop_record()
+    assert orch.to_wire()["last_record"]["metadata"] is False
+
+
 async def test_外审_录着时还能录多久按现在的剩余空间算(orch, monkeypatch):
     import nexwar_patrol.app.mapping as M
     free = {"b": 24 * 10**9}

@@ -761,6 +761,24 @@ async def test_第三档41_合成失败_回调说清楚_不进缓存(master, tmp
     await p.close()
 
 
+async def test_外审2_合成时盘满了_也回调说没放成(master, tmp_path, monkeypatch):
+    import nexwar_adapter_d1max.anbot as A
+    ssh, _, _ = _假ssh(tmp_path)
+    ends: list = []
+    p = AnbotPayload(_英文cfg(master, tmp_path, ssh))
+    p.on_sound_end = lambda ok, why: ends.append((ok, why))
+    (tmp_path / "tts-cache").mkdir()
+
+    def full(*a, **k):
+        raise OSError(28, "No space left on device")
+    monkeypatch.setattr(A.tempfile, "TemporaryDirectory", full)
+    await p.sound("tts:en:Please leave.", 30)
+    await _等(lambda: ends)
+    assert ends[0][0] is False and "No space" in ends[0][1]
+    assert not p.playing()
+    await p.close()
+
+
 async def test_外审_英文合成在后台_不占命令锁_停掉就不放(master, tmp_path):
     """合成慢(Piper 几秒):sound() 马上回(代理的命令锁不被占着),停喊话把合成一起掐掉、不再起播放。"""
     import time
