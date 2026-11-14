@@ -647,6 +647,39 @@ def test_第12轮_W12_03_只许手动派过了点_不写等待机器人(台):
     assert (over["state"], over["reason"]) == ("missed", "manual_only"), over
 
 
+def test_第13轮_W12_03_窗口过后排程器记了跳过_仍写只许手动派(台):
+    """liang-d5 r13:窗口过后约 2 分钟排程器记下 skip,这一行又变回
+    「迟了 2 分钟,按 on_missed=skip;之前没派出去:…」。记了跳过也要写 manual_only。"""
+    from nexwar_site.today import _schedule_item
+    t = 台
+    e = SimpleNamespace(id="demo-night", mission="demo-loop", robot="A", window_min=1)
+    with t.db.tx() as c:
+        c.execute("INSERT INTO schedule_runs(entry_id, scheduled_ms, outcome, robot_id, note, "
+                  "decided_at) VALUES ('demo-night', ?, 'supervised', NULL, "
+                  "'A 站点设成只许手动派,不接排程', ?)", (毫秒(22, 0), 毫秒(22, 0)))
+        c.execute("INSERT INTO schedule_runs(entry_id, scheduled_ms, outcome, robot_id, note, "
+                  "decided_at) VALUES ('demo-night', ?, 'skip', NULL, "
+                  "'迟了 2 分钟,按 on_missed=skip;之前没派出去:A 站点设成只许手动派,不接排程', ?)",
+                  (毫秒(22, 0), 毫秒(22, 3)))
+    # 机器人后来又改回能接排程:这一轮当时就是因为只许手动派没跑,照记录写
+    item = _schedule_item(t.db, e, 毫秒(22, 0), 毫秒(22, 5))
+    assert (item["state"], item["reason"]) == ("missed", "manual_only"), item
+
+
+def test_第13轮_跳过的说明不露on_missed_标点全角(台):
+    """r13:报警详情「派,不接排程」半角逗号;系统事件露出 on_missed=skip。"""
+    from nexwar_site.today import _schedule_item
+    t = 台
+    e = SimpleNamespace(id="n", mission="loop", robot="", window_min=1)
+    with t.db.tx() as c:
+        c.execute("INSERT INTO schedule_runs(entry_id, scheduled_ms, outcome, robot_id, note, "
+                  "decided_at) VALUES ('n', ?, 'skip', NULL, '迟了 2 分钟,按 on_missed=skip', ?)",
+                  (毫秒(22, 0), 毫秒(22, 3)))
+    item = _schedule_item(t.db, e, 毫秒(22, 0), 毫秒(22, 5))
+    assert item["state"] == "missed"
+    assert "on_missed" not in item["reason"] and "," not in item["reason"], item
+
+
 def test_易用性第7轮_不会跑写上路线画在哪一版_机器人用哪一版(台):
     """liang-d5 r7:「不会跑」只写「A 只许手动派」,没提路线画在 v11 上 ——
     版本对不上也是到点不会跑的原因。"""

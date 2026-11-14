@@ -570,7 +570,7 @@ async def test_W14_skip的错过轮次记skip_run_late只补最近一轮_老的�
     await _拍(t)
     got = {r["scheduled_ms"]: (r["outcome"], r["note"]) for r in t.sched.runs("late", limit=50)}
     assert set(got) == {_次日(1, 0), _次日(2, 0)}, "导入之前的 22、23、0 点不补"
-    assert got[_次日(1, 0)][0] == "skip" and "只补最近一轮" in got[_次日(1, 0)][1]
+    assert got[_次日(1, 0)][0] == "skip" and "只补跑最近一轮" in got[_次日(1, 0)][1]
     assert got[_次日(2, 0)][0] == "started", "最近一轮 run_late 照补"
 
 

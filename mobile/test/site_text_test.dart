@@ -65,4 +65,15 @@ void main() {
     expect(siteText('布防中,机器人不在驱离;看现场照片,要驱离就点「就地驱离」'),
         startsWith('The site is armed and the robot is not deterring'));
   });
+
+  test('第 13 轮：排程没跑的说明（新写法、老写法）英文界面整句翻', () {
+    expect(siteText('迟了 2 分钟，过了时间窗，这一轮不跑了；之前没派出去：A 站点设成只许手动派，不接排程'),
+        '2 min late and past the time window, so this round was skipped. Before that, no robot could be sent: '
+        'A is set to manual dispatch only, so schedules do not send it');
+    expect(siteText('迟了 31 分钟,按 on_missed=skip;之前没派出去:A 要人监护,不接排程'),
+        '31 min late and past the time window, so this round was skipped. Before that, no robot could be sent: '
+        'A needs a person present, so schedules do not send it');
+    expect(siteText('迟了 5 分钟，过了时间窗，已报警（站点那时没在运行，事后补记）'),
+        '5 min late and past the time window, so an alarm was raised; recorded afterwards because the site was not running then');
+  });
 }
