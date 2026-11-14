@@ -36,7 +36,7 @@ import { editTarget, MapEditPage } from "./mapedit";
 import { AccessPage } from "./accesspage";
 import { LayoutPage } from "./layoutpage";
 import { LAYOUT_TABS } from "./layouttabs";
-import { isAdminPage, loadThemePref, navLabel, pageAllowed, pinFor, readRoute, roleLabel, saveThemePref, SideNav, TopBar, type Page, type ThemePref } from "./shell";
+import { isAdminPage, loadThemePref, navLabel, pageAllowed, pinFor, readRoute, roleLabel, saveThemePref, sectionOf, SetupNav, setupHome, SubTabs, TopBar, type Page, type ThemePref } from "./shell";
 import { pinScheme, systemIsDark } from "./theme";
 
 
@@ -173,14 +173,14 @@ export function Console({ me, onOut }: { me: Me; onOut: (note?: string) => void 
   };
 
   // 带地图的页整页一屏(地图撑满顶栏以下):地图、防区、巡检路线
+  const section = sectionOf(route.page);
   const fill = route.page === "duty" || route.page === "map" || route.page === "admin/layout" || route.page === "admin/mapedit";
   return (
-    <div class={fill ? (route.page === "duty" ? "console fill fill-duty" : "console fill") : "console"}>
+    <div class={`console sec-${section}${fill ? (route.page === "duty" ? " fill fill-duty" : " fill") : ""}`} data-section={section}>
       {/* P2-01:「跳到内容」是第一个焦点;不改地址(地址是页面路由) */}
       <a class="skip" href="#main" onClick={(e) => { e.preventDefault(); document.getElementById("main")?.focus(); }}>{t("skipToContent")}</a>
-      <SideNav me={me} page={route.page} alarms={stale ? null : guardAlarms} notices={admin ? notices : 0} />
-      <div class="workspace">
       <TopBar me={me} page={route.page} mode={data?.mode ?? null} alarms={stale ? null : guardAlarms} now={now}
+        robots={data && !stale ? { on: online.length, all: units.length } : null}
         pref={pref} onPref={(p) => { saveThemePref(p); setPref(p); }}
         onStop={() => setPending({ kind: "stop" })} onSay={say} stale={stale}
         onMode={askMode}
@@ -202,7 +202,10 @@ export function Console({ me, onOut }: { me: Me; onOut: (note?: string) => void 
         </div>
       )}
 
+      <div class="workspace">
+      {section === "setup" && <SetupNav me={me} page={route.page} notices={admin ? notices : 0} />}
       <main class="page" id="main" tabIndex={-1} data-page={route.page}>
+        <SubTabs page={route.page} role={me.role} />
         {/* P2-02:值班这几页本身没有大标题,给读屏一个 */}
         {(["duty", "live", "map", "alarms", "recordings"] as Page[]).includes(route.page) && navLabel(route.page) && (
           <h1 class="sr-only">{t(navLabel(route.page)!.page)}</h1>
@@ -222,8 +225,8 @@ export function Console({ me, onOut }: { me: Me; onOut: (note?: string) => void 
           <section class="empty noaccess" role="alert">
             <h2>{t("noAccessTitle")}</h2>
             <p>{t("noAccessWho", { who: (["guard", "owner", "admin"] as const).filter((r) => pageAllowed(route.page, r)).map((r) => t(roleLabel(r))).join(" / ") })}</p>
-            {pageAllowed("admin/home", me.role)
-              ? <a class="btn primary" href="#/admin/home" data-noaccess-home="1">{t("noAccessHome")}</a>
+            {setupHome(me.role)
+              ? <a class="btn primary" href={`#/${setupHome(me.role)}`} data-noaccess-home="1">{t("noAccessHome")}</a>
               : <a class="btn primary" href="#/duty" data-noaccess-home="1">{t("noAccessDuty")}</a>}
           </section>
         )}
