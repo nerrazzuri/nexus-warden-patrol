@@ -1157,11 +1157,14 @@ class GuardDuty:
         for p in pts:
             cur = (float(p["x"]), float(p["y"]))
             try:
-                z = self.areas.zone_at(ref[0], ref[1], *cur)
+                # 外审 W77-11 #3:直接看在不在这个防区里(防区重叠时 zone_at 只回排第一的)
+                hit = self.areas.contains(ref[0], ref[1], held[2], *cur)
             except Exception:
-                log.exception("%s 人在哪个防区算不出来", rid)
+                log.exception("%s 人在不在防区里算不出来", rid)
                 return False
-            if z == held[2]:
+            if hit is None:
+                return False                              # 防区删了:不判
+            if hit:
                 inside, out = [cur[0], cur[1]], 0
                 continue
             out += 1
@@ -1410,7 +1413,8 @@ class GuardDuty:
         pose = getattr(getattr(c, "telemetry", None), "pose", None)
         if pose is None:
             return None
-        if run.get("watch_zone"):
+        if run.get("watch_zone") and run.get("state") == "post":
+            # 外审 W77-11 #2:到了值守位才按它看着的防区;去值守位的路上按位置算
             return pose.map_id, pose.map_version, run["watch_zone"]
         try:
             z = self.areas.zone_at(pose.map_id, pose.map_version, pose.x, pose.y)

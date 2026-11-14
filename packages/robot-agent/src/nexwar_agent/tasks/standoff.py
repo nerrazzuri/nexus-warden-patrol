@@ -89,18 +89,21 @@ class Backoff:
         self._nogo = nogo
 
     def choose(self, bearing_deg: float, range_m: float, *, center: MapPose | None = None,
-               leash_m: float | None = None) -> tuple[tuple[float, float] | None, str]:
+               leash_m: float | None = None,
+               max_v: float | None = None) -> tuple[tuple[float, float] | None, str]:
         """人在狗身系 ``(方向°, 距离 m)``:挑一个退法 ``((vx, wz), "")``;都不行 ``(None, 原因)``。
         给了 ``center``、``leash_m`` 就不出拴绳(保持距离);跟人不拴
-        (不出地图、不进禁行区靠守卫和禁行区)。"""
+        (不出地图、不进禁行区靠守卫和禁行区)。``max_v``:任务限速(外审 W77-11 #4),比
+        :data:`RETREAT_V` 低就按它退。"""
         b = math.radians(bearing_deg)
         px, py = range_m * math.cos(b), range_m * math.sin(b)
         sign = -1.0 if math.cos(b) >= 0 else 1.0           # 人在前半边就往后退,在后半边就往前走
         here = self._here()
         whys: list[str] = []
         best: tuple[float, tuple[float, float]] | None = None
+        speed = RETREAT_V if max_v is None else max(0.0, min(RETREAT_V, max_v))
         for wz in (0.0, RETREAT_W, -RETREAT_W):
-            vx = sign * RETREAT_V
+            vx = sign * speed
             ex, ey, _ = _ahead(vx, wz, HORIZON_S)
             d = math.hypot(px - ex, py - ey)
             if d < range_m + GAIN_M:
