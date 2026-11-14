@@ -318,6 +318,9 @@ function Controls({ r, u, role, say, onChanged }: { r: RobotCard; u?: UnitInfo; 
   };
   useEffect(() => setErr(null), [r.robot_id]);
   const id = r.name || r.robot_id;
+  // UIUX-022:派不了的路线(画在别的地图版本上):不当默认选中,「派巡逻」也不能点
+  const cantRoutes = (routes ?? []).map((m) => [m, otherMap(m)] as const).filter((x): x is readonly [string, string] => x[1] !== null);
+  const pickOk = !!pick && otherMap(pick) === null;
   const send = async (fn: () => Promise<(CommandReply & { queued?: boolean; start_after_ms?: number; because?: string; utc_offset_min?: number }) | null>,
     ok: string) => {
     setBusy(true);
@@ -357,13 +360,16 @@ function Controls({ r, u, role, say, onChanged }: { r: RobotCard; u?: UnitInfo; 
   // 第 2 轮 N2:没原点、没默认待命点的先灰掉,写原因、给去处理的链接(不是点了才报红字)
   const noHome = r.home_set === false;
   const noStandby = r.standby_set === false;
+  // UIUX-008:灰着的按钮悬停说为什么(按先后挑第一条成立的)
+  const whyOff = (...xs: [boolean, string][]): string | undefined => xs.find((x) => x[0])?.[1];
+  const offWhy = t(r.ever_seen === false ? "rdNeverNoCtl" : "rdOfflineNoCtl");
   return (
     <section class="rd-sec rd-control">
       <h3 class="rd-h">{t("rdControl")}</h3>
       {r.held && (
         <div class="note warn rd-held">
           <span>{t("rdHeld", { by: r.held.by, t: when(r.held.at_ms) })}</span>
-          {dispatch && <button type="button" class="btn sm" disabled={busy}
+          {dispatch && <button type="button" class="btn sm" disabled={busy} title={whyOff([busy, t("rdWhySending")])}
             onClick={() => void send(() => api("POST", path("resume"), {}), t("rdSent", { id, what: t("rdResume") }))}>{t("rdResume")}</button>}
         </div>
       )}
@@ -373,21 +379,26 @@ function Controls({ r, u, role, say, onChanged }: { r: RobotCard; u?: UnitInfo; 
           <label class="rd-label" for={`rd-route-${r.robot_id}`}>{t("rdRoute")}</label>
           {routes !== null && routes.length === 0 ? <p class="muted small">{t(isOwnerLike(role) ? "rdNoRoutes" : "rdNoRoutesAsk")}</p> : (
             <div class="rd-inline">
-              <select id={`rd-route-${r.robot_id}`} name="route" value={pick} onChange={(e) => setPick(e.currentTarget.value)}>
+              <select id={`rd-route-${r.robot_id}`} name="route" value={pickOk ? pick : ""} onChange={(e) => setPick(e.currentTarget.value)}>
                 <option value="">{t("rdPickRoute")}</option>
-                {(routes ?? []).map((m) => {
-                  const o = otherMap(m);
-                  const name = drawn[m]?.title || m;             // 第 8 轮 W8-11:写显示名
-                  return <option key={m} value={m} disabled={o !== null}>{o === null ? name : `${name} — ${t("rdRouteOtherMap", { at: o, id, v: `v${r.map?.version ?? ""}` })}`}</option>;
-                })}
+                {(routes ?? []).map((m) => (
+                  // UIUX-022:选项只写路线名(原生下拉放不下整句、也没有省略号);派不了的灰掉,原因写在下拉下面
+                  <option key={m} value={m} disabled={otherMap(m) !== null}>{drawn[m]?.title || m}</option>
+                ))}
               </select>
               <LoopsSelect value={loops} onChange={setLoops} />
-              <button type="button" class="btn sm primary" disabled={busy || off || !pick}
+              <button type="button" class="btn sm primary" disabled={busy || off || !pickOk}
+                title={whyOff([busy, t("rdWhySending")], [off, offWhy], [!!pick && !pickOk, t("rdRouteOtherMap", { at: otherMap(pick) ?? "", id, v: `v${r.map?.version ?? ""}` })], [!pickOk, t("rdWhyPickRoute")])}
                 onClick={() => void send(() => api("POST", path("patrol"), { mission_id: pick, loops }),
                   t("rdPatrolSent", { id, route: drawn[pick]?.title || pick }))}>
                 {t("rdStartPatrol")}
               </button>
             </div>
+          )}
+          {cantRoutes.length > 0 && (
+            <ul class="plain small warn" data-route-why="1">
+              {cantRoutes.map(([m, o]) => <li key={m}>{drawn[m]?.title || m} {t("rdRouteOtherMap", { at: o, id, v: `v${r.map?.version ?? ""}` })}</li>)}
+            </ul>
           )}
         </div>
       )}
@@ -399,18 +410,20 @@ function Controls({ r, u, role, say, onChanged }: { r: RobotCard; u?: UnitInfo; 
       )}
       <div class="rd-actions">
         {dispatch && <button type="button" class="btn sm" disabled={busy || off || noStandby}
+          title={whyOff([busy, t("rdWhySending")], [off, offWhy], [noStandby, t("rdNoStandby")])}
           onClick={() => void send(() => api("POST", path("standby/return"), {}), t("rdSent", { id, what: t("rdReturn") }))}>{t("rdReturn")}</button>}
         {dispatch && <button type="button" class="btn sm" disabled={busy || off || !!r.task || noHome}
-          title={r.task ? t("rdHomeBusy") : undefined}
+          title={whyOff([busy, t("rdWhySending")], [off, offWhy], [!!r.task, t("rdHomeBusy")], [noHome, t("rdNoHome")])}
           onClick={() => void send(() => api("POST", path("home/return"), {}), t("rdSent", { id, what: t("rdHome") }))}>{t("rdHome")}</button>}
         {dispatch && r.task && <button type="button" class="btn sm rd-danger" disabled={busy || off}
+          title={whyOff([busy, t("rdWhySending")], [off, offWhy])}
           onClick={() => setAskHome(true)}>{t("rdAbortHome")}</button>}
         {dispatch && <button type="button" class="btn sm" disabled={busy || off || !findable}
-          title={!findable ? t("rdNoAutoLoc") : undefined}
+          title={whyOff([busy, t("rdWhySending")], [off, offWhy], [!findable, t("rdNoAutoLoc")])}
           onClick={() => void send(() => api("POST", path("relocalize"), { global: true }), t("rdSent", { id, what: t("rdAutoLoc") }))}>{t("rdAutoLoc")}</button>}
         {/* P1-28:站点说了它空闲(task 是 null)就灰掉;没带这一项的老站点照旧能点(点了现问) */}
         {patrol && <button type="button" class="btn sm rd-danger" disabled={busy || r.task === null}
-          title={r.task === null ? t("rdIdle") : undefined} onClick={() => void abort()}>{t("rdAbort")}</button>}
+          title={whyOff([busy, t("rdWhySending")], [r.task === null, t("rdIdle")])} onClick={() => void abort()}>{t("rdAbort")}</button>}
       </div>
       {dispatch && why && <p class="muted small rd-why">{why}</p>}
       {err && <p class="error small" role="alert">{err}</p>}
@@ -420,6 +433,7 @@ function Controls({ r, u, role, say, onChanged }: { r: RobotCard; u?: UnitInfo; 
           <div class="rd-actions">
             {(r.postures ?? []).map((m) => (
               <button key={m} type="button" class="btn sm" disabled={busy || off || !!r.task || !!r.held}
+                title={whyOff([busy, t("rdWhySending")], [off, offWhy], [!!r.task, t("rdPostureBusy", { id, what: taskWhat(r.task_what) })], [!!r.held, t("rdPostureHeld")])}
                 onClick={() => setAsk(m)}>{t(POSTURE_KEY[m])}</button>
             ))}
           </div>
@@ -550,7 +564,7 @@ function RobotDetail({ r, u, now, role, say, onChanged, onCode, onClose, readOnl
             <div class="rd-inline">
               <input id={`rd-name-${r.robot_id}`} name="name" value={name} maxLength={32} placeholder={r.robot_id}
                 onInput={(e) => setName(e.currentTarget.value)} />
-              <button type="submit" class="btn sm" disabled={name === r.name}>{t("robotNameSave")}</button>
+              <button type="submit" class="btn sm" disabled={name === r.name} title={name === r.name ? t("rdWhyNameSame") : undefined}>{t("robotNameSave")}</button>
             </div>
             {/* P2-12:写明最多几个字(原来超了悄悄截掉) */}
             <small class={name.length >= 32 ? "warn-text" : "muted"} data-name-count="1">{t("robotNameCount", { n: name.length, max: 32 })}</small>

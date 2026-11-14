@@ -79,14 +79,15 @@ export function DevicesPanel({ canEdit, say }: { canEdit: boolean; say: (s: stri
       {secret && <p class="device-secret" role="status">{secret}</p>}
       {canEdit && (
         <div class="device-form">
-          <input name="dev-id" placeholder={dt("dId")} value={f.id} onInput={(e) => setF({ ...f, id: e.currentTarget.value })} />
-          <select name="dev-kind" value={f.kind} onChange={(e) => setF({ ...f, kind: e.currentTarget.value })}>
+          {/* UIUX-026:每格一个看得见的标签(以前只有 placeholder,填了字就看不出这格是什么) */}
+          <label class="field">{dt("dId")}<input name="dev-id" value={f.id} onInput={(e) => setF({ ...f, id: e.currentTarget.value })} /></label>
+          <label class="field">{dt("dKind")}<select name="dev-kind" value={f.kind} onChange={(e) => setF({ ...f, kind: e.currentTarget.value })}>
             <option value="contact">{dt("kContact")}</option><option value="alarm">{dt("kAlarm")}</option><option value="other">{dt("kOther")}</option>
-          </select>
-          <input name="dev-map" placeholder={dt("dMap")} value={f.map_id} onInput={(e) => setF({ ...f, map_id: e.currentTarget.value })} />
-          <input name="dev-ver" placeholder={dt("dVer")} value={f.map_version} onInput={(e) => setF({ ...f, map_version: e.currentTarget.value })} />
-          <input name="dev-x" type="number" step="0.1" placeholder={dt("dX")} value={f.x} onInput={(e) => setF({ ...f, x: e.currentTarget.value })} />
-          <input name="dev-y" type="number" step="0.1" placeholder={dt("dY")} value={f.y} onInput={(e) => setF({ ...f, y: e.currentTarget.value })} />
+          </select></label>
+          <label class="field">{dt("dMap")}<input name="dev-map" value={f.map_id} onInput={(e) => setF({ ...f, map_id: e.currentTarget.value })} /></label>
+          <label class="field">{dt("dVer")}<input name="dev-ver" value={f.map_version} onInput={(e) => setF({ ...f, map_version: e.currentTarget.value })} /></label>
+          <label class="field">{dt("dX")}<input name="dev-x" type="number" step="0.1" value={f.x} onInput={(e) => setF({ ...f, x: e.currentTarget.value })} /></label>
+          <label class="field">{dt("dY")}<input name="dev-y" type="number" step="0.1" value={f.y} onInput={(e) => setF({ ...f, y: e.currentTarget.value })} /></label>
           <button type="button" onClick={add} disabled={!f.id || !f.map_id || !f.map_version || f.x === "" || f.y === ""}>{dt("dAdd")}</button>
         </div>
       )}

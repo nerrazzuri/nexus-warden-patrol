@@ -49,3 +49,15 @@ describe("第 10 轮 W10-02:总览机器人列表 1440 宽不折行", () => {
     expect(decl(".duty-row [data-row-task]")).toMatch(/text-overflow: ?ellipsis/);
   });
 });
+
+// UIUX-008:禁用按钮不再叠半透明(灰字叠 opacity 0.5 只有约 2.2:1);凡是 :disabled 的按钮规则都不许 opacity < 1
+describe("UIUX-008 禁用按钮看得清", () => {
+  it("styles.css 里 .btn…:disabled 的规则没有 opacity 小于 1", () => {
+    const rules = [...flat.matchAll(/([^{}]*\.btn[^{}]*:disabled[^{}]*)\{([^}]*)\}/g)];
+    expect(rules.length).toBeGreaterThan(0);
+    for (const [, sel, body] of rules) {
+      const o = /opacity:\s*([\d.]+)/.exec(body);
+      if (o && !sel.includes(":hover")) expect(Number(o[1]), sel.trim()).toBeGreaterThanOrEqual(1);
+    }
+  });
+});
