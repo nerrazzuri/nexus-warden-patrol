@@ -269,6 +269,10 @@ class ObstacleView:
         return out
 
 
+#: 守卫结论的原因(外审 11-14:上层按这个决定停不停,不匹配原因文字)。
+CAUSES = ("clear", "hit", "unknown", "data", "blocked")
+
+
 @dataclass(frozen=True)
 class Verdict:
     ok: bool
@@ -276,6 +280,22 @@ class Verdict:
     #: 挡住的点(此刻狗身系)—— 被挡久了后端把它们记进临时障碍层。
     hits: tuple[tuple[float, float], ...] = ()
     unknown: int = 0
+    #: :data:`CAUSES` 之一;不填按 ok / hits 推:放行 = ``clear``,有挡点 = ``hit``,
+    #: 别的不放行(地图墙、脱困步扫墙、没动……)= ``blocked``(一律当挡)
+    kind: str = ""
+
+    @property
+    def cause(self) -> str:
+        """``clear`` 放行;``hit`` 扫过区有挡;``unknown`` 只有看不见的;``data`` 障碍数据不新鲜 /
+        断了 / 自检没过;``blocked`` 别的明确不放行。"""
+        if self.kind:
+            return self.kind
+        return "clear" if self.ok else ("hit" if self.hits else "blocked")
+
+    @property
+    def stops(self) -> bool:
+        """一定要停:有挡、数据不可用、别的明确不放行(只有看不见的另按降级规则)。"""
+        return self.cause in ("hit", "data", "blocked")
 
 
 @dataclass
@@ -425,14 +445,14 @@ class ObstacleGuard:
             return Verdict(True)                     # 原地等:不动就不会撞
         st = view.state()
         if st != "ok":
-            return Verdict(False, f"障碍数据{_STATE_TEXT.get(st, st)}")
+            return Verdict(False, f"障碍数据{_STATE_TEXT.get(st, st)}", kind="data")
         pts = self.swept(vx, wz, v_meas, w_now, moving=moving)
         hit, unknown = view.lookup(pts, pose_now)
         if not hit and not unknown:
             return Verdict(True)
         hits = tuple(pts[i] for i in hit)
         return Verdict(False, f"扫过区有挡 {len(hit)} 处、看不见 {len(unknown)} 处{_nearest(hits)}",
-                       hits=hits, unknown=len(unknown))
+                       hits=hits, unknown=len(unknown), kind="hit" if hit else "unknown")
 
 
 def _nearest(hits: tuple[tuple[float, float], ...]) -> str:

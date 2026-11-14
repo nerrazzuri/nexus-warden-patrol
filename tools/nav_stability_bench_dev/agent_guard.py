@@ -459,10 +459,10 @@ def main() -> int:
             return
         if abs(vx) > 1e-6 or abs(wz) > 1e-6:
             v = check(g, vx, wz)
-            if mode == "C" and not v.ok and not v.hits and "障碍数据" not in v.reason:
+            if mode == "C" and v.cause == "unknown":
                 send(vx, wz)                            # 只管紧急停:看不见的不管
                 return
-            if not v.ok and not v.hits and "障碍数据" not in v.reason and abs(vx) > UNKNOWN_SLOW_MPS:
+            if v.cause == "unknown" and abs(vx) > UNKNOWN_SLOW_MPS:
                 k = UNKNOWN_SLOW_MPS / abs(vx)
                 vx = math.copysign(UNKNOWN_SLOW_MPS, vx)
                 if mode in ("B", "D"):                  # B/D:同比例压,走同一条弯
@@ -484,11 +484,11 @@ def main() -> int:
                     if turn_hits_map(v2x, v2z, g2):
                         continue
                     v2 = check(g2, v2x, v2z)
-                    if v2.ok or (not v2.hits and "障碍数据" not in v2.reason):
+                    if v2.ok or v2.cause == "unknown":
                         st["soft_slow_ticks"] += 1
                         send(v2x, v2z)
                         return
-            if not v.ok and (v.hits or "障碍数据" in v.reason):
+            if v.stops:
                 st["blocked_ticks"] += 1
                 note("guard", v.reason)
                 send(0.0, 0.0)

@@ -275,7 +275,7 @@ class 台子:
 
 
 class _放行:
-    def check(self, vx, wz, v_meas, view, pose, *, w_now=()):
+    def check(self, vx, wz, v_meas, view, pose, *, w_now=(), moving=()):
         from nexwar_agent.obstacles import Verdict
         return Verdict(True)
 
