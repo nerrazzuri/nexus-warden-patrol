@@ -826,6 +826,9 @@ function SchedulePanel({ route, view, schedules, say, reload, inPanel }: {
                 <span class="strong" title={s.title ? s.id : undefined}>{routeLabel(s)}</span>
                 <span class="mono small">{s.at}</span>
                 <span class="muted small">{s.days.map((d) => t(d as Key)).join(" ")}</span>
+                {/* UIUX-019:列表里也写可迟到几分钟、错过怎么办(以前只在新增表单里看得到) */}
+                <span class="muted small" data-sched-policy="1">{rt("schedPolicy", { n: s.window_min,
+                  how: rt(s.on_missed === "alarm" ? "schedAlarm" : s.on_missed === "run_late" ? "schedRunLate" : "schedSkip") })}</span>
                 <span class="muted small" data-sched-robot="1">{s.robot ? rt("schedByRobot", { id: s.robot }) : rt("schedAnyRobot")}</span>
                 <button type="button" class="link push" aria-label={`${rt("schedRemove")} ${routeLabel(s)}`} onClick={() => setRemoving(s)}>{t("remove")}</button>
               </li>

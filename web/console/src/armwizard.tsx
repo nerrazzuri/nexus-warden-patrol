@@ -6,7 +6,7 @@ import { api, ApiError } from "./api";
 import { robotNames } from "./data";
 import { Confirm, Modal } from "./dialogs";
 import { siteStr } from "./sitetext";
-import { lang, type Lang } from "./i18n";
+import { colon, joinList, lang, type Lang } from "./i18n";
 import { LayoutPage } from "./layoutpage";
 import { GuardRoutesTab } from "./layoutroutes";
 import { ZonesTab } from "./layoutzones";
@@ -202,6 +202,12 @@ const ROBOT_EN: Record<string, string> = {
   reserved: "{id} is assigned to another route in the guard plan",
 };
 /** 这台为什么派不了:中文界面用站点原话,英文界面按原因代号说。 */
+/** 半小时一档的 00:00–23:30;现有值不在档上(时间表里存的 21:15)也放进去,不会被悄悄改掉。 */
+const HALF_HOURS = Array.from({ length: 48 }, (_, i) => `${String(Math.floor(i / 2)).padStart(2, "0")}:${i % 2 ? "30" : "00"}`);
+function halfHours(cur: string): string[] {
+  return !cur || HALF_HOURS.includes(cur) ? HALF_HOURS : [...HALF_HOURS, cur].sort();
+}
+
 export function robotWhy(x: ReadyRobot): string {
   if (lang.value === "zh" || !ROBOT_EN[x.code]) return x.why;
   return ROBOT_EN[x.code].split("{id}").join(who(x.id));
@@ -329,7 +335,8 @@ export function ArmWizard({ say, onClose, arming = false, onChanged }: { say: Sa
     pickMap().then((m) => { setMap(m); if (m) void load(m, true); else setErr(wt("zonesNone")); }).catch((x) => setErr(errText(x)));
   }, []);
 
-  const done = [!!r?.zones.length, !!route, !!sched?.enabled && !!sched.slots.length, !!r && !r.missing.includes("plan") && !r.missing.includes("robot"), false];
+  // UIUX-040:第 3 步选「手动布防」也算这一步定了(以前只认时间表开着)
+  const done = [!!r?.zones.length, !!route, !!sched && (time === "manual" || (sched.enabled && sched.slots.length > 0)), !!r && !r.missing.includes("plan") && !r.missing.includes("robot"), false];
   const base = map ? `/api/maps/${enc(map.map_id)}/${enc(map.version)}` : "";
 
   /** 嵌着的编辑器存好了:重新查,也告诉外面。 */
@@ -487,7 +494,7 @@ export function ArmWizard({ say, onClose, arming = false, onChanged }: { say: Sa
         {steps.map((k, i) => (
           <li key={k} aria-current={i === step ? "step" : undefined} class={done[i] ? "done" : ""}>
             <button type="button" class="wiz-step" disabled={!started || busy} onClick={() => guarded(() => { closeEditor(); setNote(""); setStep(i); })}>
-              {done[i] ? "✓ " : `${i + 1}. `}{wt(k)}
+              {done[i] ? "✓ " : ""}{`${i + 1}. `}{wt(k)}
             </button>
           </li>
         ))}
@@ -495,7 +502,7 @@ export function ArmWizard({ say, onClose, arming = false, onChanged }: { say: Sa
       {err && <p class="bad" role="alert">{err}</p>}
       {r && step === 0 && (
         <section data-wiz-step="zones">
-          <p>{r.zones.length ? wt("zonesHave", { list: r.zones.join("、") }) : wt("zonesNone")}</p>
+          <p>{r.zones.length ? wt("zonesHave", { list: joinList(r.zones) }) : wt("zonesNone")}</p>
           <div class="row wrap">
             {!r.zones.length && <button type="button" class="btn primary" disabled={busy} onClick={() => void wholeZone()}>{wt("zoneWhole")}</button>}
             <button type="button" class="btn" onClick={() => (editor === "zones" ? guarded(closeEditor) : setEditor("zones"))}>
@@ -511,7 +518,7 @@ export function ArmWizard({ say, onClose, arming = false, onChanged }: { say: Sa
               {r.routes.map((x) => (
                 <label key={x.id}><input type="radio" name="wiz-route" checked={route === x.id} disabled={!x.zones.length} onChange={() => setRoute(x.id)} />
                   {" "}{x.title || x.id}{" "}
-                  {x.zones.length ? <span class="muted small">{wt("routeVia", { zones: x.zones.join("、") })}</span>
+                  {x.zones.length ? <span class="muted small">{wt("routeVia", { zones: joinList(x.zones) })}</span>
                     : <span class="bad small" data-route-nozone="1">{wt("routeNoZone")}</span>}</label>
               ))}
             </fieldset>
@@ -533,9 +540,14 @@ export function ArmWizard({ say, onClose, arming = false, onChanged }: { say: Sa
             )}
             <label><input type="radio" name="wiz-time" checked={time === "daily"} onChange={() => setTime("daily")} />{" "}
               {wt("schedEvery")}{" "}
-              <input type="time" step="1800" aria-label={wt("schedEvery")} value={from} onInput={(e) => setFrom(e.currentTarget.value)} />
+              {/* UIUX-041:浏览器的时间框会按系统显示成 09:30 PM;跟授权页一样用半小时一档的 24 小时制下拉 */}
+              <select data-wiz-from="1" aria-label={wt("schedEvery")} value={from} onChange={(e) => setFrom(e.currentTarget.value)}>
+                {halfHours(from).map((h) => <option key={h} value={h}>{h}</option>)}
+              </select>
               {" "}{wt("schedTo")}{" "}
-              <input type="time" step="1800" aria-label={wt("schedTo")} value={to} onInput={(e) => setTo(e.currentTarget.value)} />
+              <select data-wiz-to="1" aria-label={wt("schedTo")} value={to} onChange={(e) => setTo(e.currentTarget.value)}>
+                {halfHours(to).map((h) => <option key={h} value={h}>{h}</option>)}
+              </select>
               {wt("schedArmed") && ` ${wt("schedArmed")}`}</label>
             <label><input type="radio" name="wiz-time" checked={time === "manual"} onChange={() => setTime("manual")} /> {wt("schedManual")}</label>
           </fieldset>
@@ -545,7 +557,7 @@ export function ArmWizard({ say, onClose, arming = false, onChanged }: { say: Sa
       )}
       {r && step === 3 && (
         <section data-wiz-step="who">
-          <p>{wt("sumRoute")}：{sel ? sel.title || sel.id : "—"}</p>
+          <p>{wt("sumRoute")}{colon()}{sel ? sel.title || sel.id : "—"}</p>
           <div class="row wrap">
             <label class="field-inline">{wt("who")}
               <select value={robot} onChange={(e) => setRobot(e.currentTarget.value)}>
@@ -563,10 +575,10 @@ export function ArmWizard({ say, onClose, arming = false, onChanged }: { say: Sa
             {robots.length === 0 && <li class="bad">{wt("noRobot")}</li>}
             {robots.filter((x) => !robot || x.id === robot).map((x) => (
               <li key={x.id} data-wiz-robot={x.id}>
-                <b>{who(x.id)}</b>{" "}
-                {x.code ? <span class="bad">{robotWhy(x)}</span> : <span class="ok">✓ {wt("robotOk")}</span>}
+                {/* UIUX-042:原因句里已经带名字,不在前面再写一遍 */}
+                {x.code ? <span class="bad">{robotWhy(x)}</span> : <><b>{who(x.id)}</b> <span class="ok">✓ {wt("robotOk")}</span></>}
                 {x.code === "manual_only" && <button type="button" class="btn sm" disabled={busy} onClick={() => void allowAuto(x.id)}>{wt("robotFix")}</button>}
-                {x.code && x.code !== "manual_only" && <a class="btn sm" href={`#/admin/robots/${enc(x.id)}`} onClick={onClose}>{wt("robotPage")}</a>}
+                {x.code && x.code !== "manual_only" && <a class="btn sm" href={`#/admin/robots?robot=${enc(x.id)}`} onClick={onClose}>{wt("robotPage")}</a>}
               </li>
             ))}
           </ul>
@@ -576,7 +588,7 @@ export function ArmWizard({ say, onClose, arming = false, onChanged }: { say: Sa
         <section data-wiz-step="confirm">
           <dl class="wiz-sum">
             <dt>{wt("sumMap")}</dt><dd>{map?.map_id} · v{map?.version}</dd>
-            <dt>{wt("sumZones")}</dt><dd>{r.zones.join("、") || "—"}</dd>
+            <dt>{wt("sumZones")}</dt><dd>{joinList(r.zones) || "—"}</dd>
             <dt>{wt("sumRoute")}</dt><dd>{sel ? sel.title || sel.id : "—"}</dd>
             <dt>{wt("sumTime")}</dt><dd>{sched.enabled && sched.slots.length ? wt("sumSlots", { n: sched.slots.length }) : wt("sumManual")}</dd>
             <dt>{wt("sumWho")}</dt><dd>{robot ? who(robot) : wt("whoAny")}</dd>
