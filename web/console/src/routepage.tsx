@@ -444,7 +444,7 @@ export function RoutesPage({ say, embed, kind = "patrol" }: { say: Say; embed?: 
               <h2>{guardKind ? rt("guardTitle") : rt("routesTitle")}</h2>
               {guardKind && <button type="button" class="btn sm" data-guard-gen="1" onClick={() => setGenOpen(!genOpen)} disabled={!sel || !meta}
                 aria-pressed={genOpen}>{rt("guardGenBtn")}</button>}
-              <button type="button" class="btn sm primary" onClick={startNew} disabled={!sel || !meta}>{rt("routeNewBtn")}</button>
+              <button type="button" class="btn primary ly-new" onClick={startNew} disabled={!sel || !meta}>{rt("routeNewBtn")}</button>
             </div>
             {guardKind && <p class="muted small">{rt("guardOnlyArmed")}</p>}
             {genOpen && sel && <GuardGenerate map={sel} taken={routes.map((r) => r.id)} say={say} onDone={fromGenerated} onClose={() => setGenOpen(false)} />}

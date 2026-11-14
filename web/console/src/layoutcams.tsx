@@ -78,7 +78,7 @@ export function CamerasTab(p: TabProps) {
           })} />
       </div>
       <div class="ly-side">
-        <button type="button" class="btn primary" onClick={() => setForm("new")}>{t("lyAddCam")}</button>
+        <button type="button" class="btn primary ly-new" onClick={() => setForm("new")}>{t("lyAddCam")}</button>
         <p class="muted small">{t("lyCamsHint")}</p>
         {/* P1-43:跟别的标签不一样,摄像头改了马上就存 */}
         <p class="muted small">{t("lyCamsSavesNow")}</p>
