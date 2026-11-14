@@ -242,7 +242,7 @@ export function ArmingPage({ say, now, role = "admin" }: { say: Say; now: number
         <div class="arm-now-text">
           <h2>{t("armNow")}</h2>
           <p class="arm-who">{whoText(mode, loaded?.enabled ?? enabled)}</p>
-          {mode?.state === "armed" && canDuty && <PatrolReason onWizard={() => openWiz("open")} />}
+          {mode?.state === "armed" && <PatrolReason onWizard={canDuty ? () => openWiz("open") : undefined} />}
           {mode?.timezone && browserTz() && mode.timezone !== browserTz() && (
             <p class="muted small" data-site-tz={mode.timezone}>{t("armTzNote", { tz: mode.timezone, now: hmSite(now, mode.timezone) })}</p>
           )}

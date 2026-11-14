@@ -88,6 +88,7 @@ const en = {
   needPlan: "no zone route is assigned to a robot",
   needRobot: "no robot can be dispatched",
   openWizard: "Open the arming wizard",
+  askAdmin: "Ask an administrator to set this up.",
   routeNoZone: "passes through no zone, robots will not run it",
   dropEdits: "The editor has unsaved changes. Discard them?",
   dropPage: "This page has unsaved changes. The arming wizard may change the same settings, so these changes will be discarded.",
@@ -163,6 +164,7 @@ const zh: Record<WKey, string> = {
   needPlan: "值守方案里没有给机器人分配防区路线",
   needRobot: "没有能派的机器人",
   openWizard: "打开布防向导",
+  askAdmin: "请联系管理员处理。",
   routeNoZone: "一个防区都不经过，机器人不会去跑",
   dropEdits: "编辑器里有没保存的修改，要丢掉吗？",
   dropPage: "这页还有没保存的修改。布防向导可能改同样的设置，打开向导会丢掉这些修改。",
@@ -614,7 +616,20 @@ export function ArmWizard({ say, onClose, arming = false, onChanged }: { say: Sa
 }
 
 /** 布防着却不会自己巡逻时说为什么(用户 11-13:配好了却没走,系统没说原因),带「打开布防向导」。 */
-export function PatrolReason({ onWizard }: { onWizard: () => void }) {
+/** UIUX-039:顶栏布防后(开不了向导的角色)说一句机器人会不会自己巡逻;齐了 / 读不到给空。 */
+export async function patrolHint(): Promise<string> {
+  try {
+    const m = await pickMap();
+    const r = m ? await readiness(m) : null;
+    const why = r ? missingText(r) : "";
+    return why ? `${wt("notPatrolling", { why })} ${wt("askAdmin")}` : "";
+  } catch {
+    return "";
+  }
+}
+
+/** 布防着却不巡逻时说原因。onWizard 不给(经理 / 保安开不了向导,UIUX-039)就写找管理员。 */
+export function PatrolReason({ onWizard }: { onWizard?: () => void }) {
   const [why, setWhy] = useState("");
   useEffect(() => {
     let live = true;
@@ -628,7 +643,7 @@ export function PatrolReason({ onWizard }: { onWizard: () => void }) {
   return (
     <p class="note warn small" role="status" data-patrol-reason="1">
       {wt("notPatrolling", { why })}{" "}
-      <button type="button" class="btn sm" onClick={onWizard}>{wt("openWizard")}</button>
+      {onWizard ? <button type="button" class="btn sm" onClick={onWizard}>{wt("openWizard")}</button> : wt("askAdmin")}
     </p>
   );
 }
