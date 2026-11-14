@@ -1789,3 +1789,62 @@ async def test_外审W77_6_1_回线内那一趟停不稳收尾_不派看易藏�
     await _跑(t, 5)
     assert not [c for c in t.site.commands("A", 500)[n:] if c["kind"] == "goto"], "不派下一趟"
     assert t.duty.alerts.has_open("A", "guard_stuck")
+
+
+async def test_外审W77_7_1_人还在_回线内那一趟停不稳_马上叫保安(站):
+    t = 站
+    tid = await _跟着(t)
+    t.duty._on_event("A", _事("follow_track", task_id=tid, points=_点(6.0, 7.0)))
+    await _跑(t, 1)
+    t.box["run"] = ""
+    await _跑(t, 3)
+    [g] = _gotos(t, "follow-exit-")
+    own = g["task_id"]
+    real = t.duty._terminal
+    bad = ("task_failed", {"task_id": own, "reason": "stop_unconfirmed"})
+    t.duty._terminal = lambda rid, x: bad if x == own else real(rid, x)
+    await _跑(t, 2)
+    assert t.duty.alerts.has_open("A", "guard_stuck"), "人还在、没到盯人期限:也马上报"
+
+
+async def test_外审W77_7_1_在停看易藏点那一趟_它停不稳收尾_不接着值守(站):
+    t = 站
+    tid = await _跟着(t)
+    t.duty.marks.set(MAP[0], MAP[1], {"kind": "hide", "name": "北楼梯", "points": [[4.0, 1.5]],
+                                      "yaw": 0.5}, by="alice")
+    t.duty._on_event("A", _事("follow_lost", task_id=tid, result="lost",
+                              last={"x": 3.0, "y": 0.0, "at_ms": 3}, heading_deg=90.0))
+    await _跑(t, 1)
+    t.box["run"] = ""
+    await _跑(t, 3)
+    [sw] = [c for c in _patrols(t) if c["task_id"].startswith("follow-sweep-")]
+    own = sw["task_id"]
+    t.box["run"] = own                                   # 机器人在看易藏点
+    t.duty.alerts.resolve_all("A", "dog_sees_person", who="gina")
+    await _跑(t, 0.5)
+    assert t.duty._run_of("A")["state"] == "stopping"
+    n = len(_patrols(t))
+    real = t.duty._terminal
+    bad = ("task_failed", {"task_id": own, "reason": "stop_unconfirmed"})
+    t.duty._terminal = lambda rid, x: bad if x == own else real(rid, x)
+    t.box["run"] = ""
+    await _跑(t, 5)
+    assert len(_patrols(t)) == n, "没确认停稳:不接着值守"
+    assert t.duty.alerts.has_open("A", "guard_stuck")
+
+
+async def test_外审W77_7_1_保安看过_关了那条停车没确认_接着巡逻(站):
+    t = 站
+    tid = await _跟着(t)
+    n = len(_patrols(t))
+    real = t.duty._terminal
+    bad = ("task_failed", {"task_id": tid, "reason": "stop_unconfirmed"})
+    t.duty._terminal = lambda rid, x: bad if x == tid else real(rid, x)
+    t.box["run"] = ""
+    t.duty.alerts.amend_open("A", "dog_sees_person", context={"lost_ms": t.clock()})
+    await _跑(t, 3)
+    assert len(_patrols(t)) == n and t.duty.alerts.has_open("A", "guard_stuck")
+    t.duty.alerts.resolve_all("A", "guard_stuck", who="gina")
+    await _跑(t, 3)
+    assert len(_patrols(t)) == n + 1, "保安看过了:接着巡逻"
+    assert not t.duty.alerts.has_open("A", "guard_stuck"), "不再报"
