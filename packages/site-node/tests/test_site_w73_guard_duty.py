@@ -1754,3 +1754,38 @@ async def test_外审W77_1_5_跟人一开始人就已经在防区外_照样判�
     [g] = _gotos(t, "follow-exit-")
     p = g["payload"]["target"]
     assert 0.0 <= p["x"] <= 5.0, "没有防区里的轨迹点:回机器人看见人时站的地方(在东区里)"
+
+
+async def test_外审W77_6_1_跟人那几趟停不稳收尾_不自动接着巡逻_叫保安(站):
+    t = 站
+    tid = await _跟着(t)
+    n = len(_patrols(t))
+    real = t.duty._terminal
+    bad = ("task_failed", {"task_id": tid, "reason": "stop_unconfirmed"})
+    t.duty._terminal = lambda rid, x: bad if x == tid else real(rid, x)
+    t.box["run"] = ""
+    t.duty.alerts.amend_open("A", "dog_sees_person", context={"lost_ms": t.clock()})
+    await _跑(t, 5)
+    assert len(_patrols(t)) == n, "没确认停稳:不自动派巡逻"
+    assert t.duty.alerts.has_open("A", "guard_stuck"), "叫保安看一下"
+    await _跑(t, 5)
+    assert len([a for a in t.duty.alerts.open if a["kind"] == "guard_stuck"]) == 1, "只报一次"
+
+
+async def test_外审W77_6_1_回线内那一趟停不稳收尾_不派看易藏点(站):
+    t = 站
+    tid = await _跟着(t)
+    t.duty._on_event("A", _事("follow_track", task_id=tid, points=_点(6.0, 7.0)))
+    await _跑(t, 1)
+    t.box["run"] = ""
+    await _跑(t, 3)
+    [g] = _gotos(t, "follow-exit-")
+    own = g["task_id"]
+    real = t.duty._terminal
+    bad = ("task_failed", {"task_id": own, "reason": "stop_unconfirmed"})
+    t.duty._terminal = lambda rid, x: bad if x == own else real(rid, x)
+    t.duty._fs_set("A", todo=["sweep", ["m", "1"], [3.0, 0.5, 0.0], [{"x": 1, "y": 1}]])
+    n = len(t.site.commands("A", 500))
+    await _跑(t, 5)
+    assert not [c for c in t.site.commands("A", 500)[n:] if c["kind"] == "goto"], "不派下一趟"
+    assert t.duty.alerts.has_open("A", "guard_stuck")

@@ -897,6 +897,8 @@ class GuardDuty:
                 await self._maybe_follow(eid, rid)
                 await self._follow_todo(eid, rid)
                 return True
+            if self._unsure_stop(rid, fs):
+                return True                               # 外审 W77-6 #1:没确认停稳,等保安
             timed_out = now >= run["until_ms"] and a is not None and key == fs.get("alert")
             if timed_out:
                 self._amend(key, hold_done=True)         # 这一条不再拦(落在告警上,重启也认)
@@ -939,7 +941,25 @@ class GuardDuty:
         ctx = getattr(a, "context", None)
         if not isinstance(ctx, dict) or not ctx.get("lost_ms") or fs.get("todo"):
             return False
-        return self._pending_follow(rid, running, now) == ""
+        if self._pending_follow(rid, running, now) != "":
+            return False
+        return not self._unsure_stop(rid, fs)
+
+    def _unsure_stop(self, rid: str, fs: dict[str, Any]) -> bool:
+        """外审 W77-6 #1:这一回派的跟人、回防区、看易藏点哪一趟以「停车没确认」收尾 ——
+        不自动接着巡逻、不派下一趟,报一次 ``guard_stuck`` 叫保安看(保安接管、撤防都能解开)。"""
+        bad = next((t for t in (fs.get("task"), fs.get("own")) if isinstance(t, str) and t
+                    and (r := self._terminal(rid, t)) is not None
+                    and r[1].get("reason") == "stop_unconfirmed"), None)
+        if bad is None:
+            return False
+        if self.alerts is not None and not self.alerts.has_open(rid, "guard_stuck"):
+            self._log("stop_unconfirmed", robot=rid, detail=f"{bad} 收尾时停车没确认")
+            self.alerts.raise_alert(
+                kind="guard_stuck", robot=rid, title=f"{rid} 停车没确认",
+                detail="看见人以后派的那一趟收尾时机器人没确认停稳:没自动接着巡逻。"
+                       "请看机器人是否停住了,必要时到现场或用遥控器接管")
+        return True
 
     # ------------------------------------------------------------ 跟人的账(落库,外审 r2)
 
@@ -1236,6 +1256,8 @@ class GuardDuty:
             fs = self._fs_set(rid, own="", own_unsure=False)
         elif now < int(fs.get("todo_retry") or 0):
             return
+        if self._unsure_stop(rid, fs):
+            return                                        # 外审 W77-6 #1:上一趟没确认停稳
         ftid = fs.get("task") or ""
         if ftid and not self._stopped(rid, ftid, running, now):
             if todo[0] == "exit":

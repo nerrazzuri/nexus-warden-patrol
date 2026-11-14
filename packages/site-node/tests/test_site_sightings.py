@@ -601,3 +601,18 @@ async def test_外审W77_5_2_人一直在_受力警报放手了_马上续开_不
     t.ms[0] += 1000
     await _拍(w)
     assert {p["output"] for _, p, _ in d.sent if p["on"]} >= {"strobe", "siren"}, "马上续开"
+
+
+async def test_外审W77_6_2_关灯笛排着队_保安开了驱离_不关驱离的灯(台):
+    import asyncio
+    t = 台
+    d, w = _上装台(t, outputs=("strobe", "siren", "speaker"))
+    d.persons("A", present=True, count=1)
+    await _拍(w)
+    d.sent.clear()
+    d.persons("A", present=False)
+    w.tick()                                             # 关的协程排上了,还没跑
+    t.det.sessions["A"] = object()                       # 保安点了就地驱离
+    for _ in range(5):
+        await asyncio.sleep(0)
+    assert not [p for _, p, _ in d.sent if not p["on"]], "驱离接手了:排着的关不发"
