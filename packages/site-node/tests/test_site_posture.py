@@ -128,6 +128,11 @@ def test_POC1105_概览卡片带上装能力_网页按它出警灯喊话(站点)
     c.capabilities = type(c.capabilities)(**{**c.capabilities.__dict__, "tasks": tasks})
     assert card()["deter"] == {"outputs": ["strobe", "speaker"], "max_s": 600.0, "tts": True,
                                "clips": ["blocked", "passing"]}
+    # 第三档 #41:机器人报了能念哪几种语言就带上(网页、App 按它灰掉念不了的常用喊话)
+    tasks["deter"] = {"outputs": ["speaker"], "max_s": 600.0, "tts": True, "clips": [],
+                      "tts_langs": ["zh", "en"]}
+    c.capabilities = type(c.capabilities)(**{**c.capabilities.__dict__, "tasks": tasks})
+    assert card()["deter"]["tts_langs"] == ["zh", "en"]
     tasks.pop("deter")
     c.capabilities = type(c.capabilities)(**{**c.capabilities.__dict__, "tasks": tasks})
     assert card()["deter"] is None

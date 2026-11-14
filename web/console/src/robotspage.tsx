@@ -46,7 +46,9 @@ export interface RobotCard {
   /** W76:正在跑几圈的巡逻 —— 第几圈、共几圈(0 = 一直巡逻)。一圈的、老站点没有。 */
   lap?: { n: number; of: number } | null;
 }
-export interface Deter { outputs: string[]; max_s: number; tts: boolean; clips: string[] }
+export interface Deter { outputs: string[]; max_s: number; tts: boolean; clips: string[];
+  /** 第三档 #41:能念哪几种语言(竞品只会中文;英文靠 Orin 上合成)。没报 = 不知道,不挡。 */
+  tts_langs?: string[] }
 const STROBE_S = [30, 60, 120, 300];
 const CLIP_KEY: Record<string, "clip_blocked" | "clip_passing" | "clip_distance" | "clip_restricted"> = {
   blocked: "clip_blocked", passing: "clip_passing", distance: "clip_distance", restricted: "clip_restricted",
@@ -448,7 +450,7 @@ function Controls({ r, u, role, say, onChanged }: { r: RobotCard; u?: UnitInfo; 
           {!r.task && r.held && <p class="muted small">{t("rdPostureHeld")}</p>}
         </div>
       )}
-      {dispatch && r.deter && <DeterPanel r={r} d={r.deter} id={id} busy={busy} off={off} send={send} path={path} />}
+      {dispatch && r.deter && <DeterPanel r={r} d={r.deter} id={id} busy={busy} off={off} send={send} path={path} admin={isOwnerLike(role)} say={say} />}
       {askHome && (
         <Confirm text={t("rdAbortHomeAsk", { id, what: taskWhat(r.task_what) })} yes={t("rdAbortHome")} danger
           onNo={() => setAskHome(false)}
@@ -474,10 +476,22 @@ function Controls({ r, u, role, say, onChanged }: { r: RobotCard; u?: UnitInfo; 
 const PAN_STEP = 15, TILT_STEP = 10, PAN_MAX = 180, TILT_MAX = 90, WIPER_S = 10;
 
 /** POC 11-05:警灯开关(带时长)、喊话(打字、录好的话术)。保安、管理员;狗报了 deter 才有。 */
-function DeterPanel({ r, d, id, busy, off, send, path }: {
+function DeterPanel({ r, d, id, busy, off, send, path, admin, say }: {
   r: RobotCard; d: Deter; id: string; busy: boolean; off: boolean;
   send: (fn: () => Promise<CommandReply | null>, ok: string) => Promise<void>; path: (a: string) => string;
+  admin: boolean; say: Say;
 }) {
+  // 第三档 #41:常用喊话(全站一张,站点 /api/voice-presets);老站点没有这个接口就不出这一行
+  const [presets, setPresets] = useState<VoicePreset[] | null>(null);
+  const [editing, setEditing] = useState(false);
+  const tts = d.outputs.includes("speaker") && d.tts;
+  useEffect(() => {
+    if (!tts) return;
+    let live = true;
+    api<{ presets: VoicePreset[] }>("GET", "/api/voice-presets").then((x) => live && setPresets(x.presets ?? []))
+      .catch(() => live && setPresets(null));
+    return () => { live = false; };
+  }, [tts]);
   const [secs, setSecs] = useState(60);
   const [text, setText] = useState("");
   useEffect(() => setText(""), [r.robot_id]);
@@ -532,6 +546,29 @@ function DeterPanel({ r, d, id, busy, off, send, path }: {
           <button type="submit" class="btn sm primary" disabled={busy || off || !words}>{t("rdSpeakSend")}</button>
         </form>
       )}
+      {tts && presets !== null && (
+        <div class="rd-presets" data-voice-presets="1">
+          <span class="muted small">{t("rdPresets")}</span>
+          <div class="rd-actions">
+            {presets.map((p) => {
+              const cant = d.tts_langs != null && !d.tts_langs.includes(p.lang);
+              return (
+              <button key={p.lang + p.text} type="button" class="btn sm rd-preset" disabled={busy || off || cant}
+                title={cant ? `${p.text}\n${t("rdPresetCantLang", { id, lang: langName(p.lang) })}` : p.text}
+                onClick={() => void send(deter({ output: "speaker", on: true, max_s: 60, clip: `tts:${p.lang}:${p.text}` }), t("rdSpeakDone", { id }))}>
+                {p.text}
+              </button>
+              );
+            })}
+            {presets.length === 0 && <span class="muted small">{t("rdPresetsNone")}</span>}
+            {admin && <button type="button" class="btn sm" data-voice-edit="1" onClick={() => setEditing(true)}>{t("rdPresetsEdit")}</button>}
+          </div>
+        </div>
+      )}
+      {editing && presets !== null && (
+        <PresetEditor init={presets} onClose={() => setEditing(false)}
+          onSaved={(p) => { setPresets(p); setEditing(false); say(t("rdPresetsSaved")); }} />
+      )}
       {speaker && d.clips.length > 0 && (
         <div class="rd-actions" aria-label={t("rdClips")}>
           {d.clips.map((c) => (
@@ -549,6 +586,63 @@ function DeterPanel({ r, d, id, busy, off, send, path }: {
         </div>
       )}
     </div>
+  );
+}
+
+interface VoicePreset { lang: string; text: string }
+const PRESET_LANGS: [string, string][] = [["zh", "中文"], ["en", "English"], ["ms", "Melayu"]];
+const PRESETS_MAX = 12;
+/** 句子里的语言名跟界面语言走(下拉框里写各自的本名)。 */
+const LANG_NAME: Record<string, [string, string]> = { zh: ["Chinese", "中文"], en: ["English", "英文"], ms: ["Malay", "马来文"] };
+const langName = (l: string) => LANG_NAME[l]?.[lang.value === "zh" ? 1 : 0] ?? l;
+
+/** 第三档 #41:管理员编辑常用喊话(整张换)。空的、重复的当场说,不发。 */
+function PresetEditor({ init, onClose, onSaved }: { init: VoicePreset[]; onClose: () => void; onSaved: (p: VoicePreset[]) => void }) {
+  const [rows, setRows] = useState<VoicePreset[]>(init.map((p) => ({ ...p })));
+  const [err, setErr] = useState("");
+  const [busy, setBusy] = useState(false);
+  const put = (i: number, p: Partial<VoicePreset>) => setRows(rows.map((x, j) => (j === i ? { ...x, ...p } : x)));
+  async function save(e: Event) {
+    e.preventDefault();
+    const out = rows.map((x) => ({ lang: x.lang, text: x.text.trim() }));
+    const empty = out.findIndex((x) => !x.text);
+    if (empty >= 0) return setErr(t("rdPresetEmpty", { n: empty + 1 }));
+    const dup = out.findIndex((x, i) => out.findIndex((y) => y.text === x.text) < i);
+    if (dup >= 0) return setErr(t("rdPresetDup", { n: dup + 1 }));
+    setBusy(true);
+    try {
+      const r = await api<{ presets: VoicePreset[] }>("POST", "/api/voice-presets", { presets: out });
+      onSaved(r.presets ?? out);
+    } catch (x) {
+      setErr(x instanceof ApiError ? x.message : String(x));
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <Modal label={t("rdPresetsEdit")} wide onClose={onClose}>
+      <form class="form preset-form" onSubmit={save}>
+        <p class="muted small">{t("rdPresetsHint")}</p>
+        {rows.map((x, i) => (
+          <div class="preset-row" key={i}>
+            <select data-voice-lang="1" aria-label={`${t("rdPresetLang")} ${i + 1}`} value={x.lang} onChange={(e) => put(i, { lang: e.currentTarget.value })}>
+              {PRESET_LANGS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+            </select>
+            <input data-voice-text="1" aria-label={`${t("rdPresetText")} ${i + 1}`} maxLength={300} value={x.text}
+              onInput={(e) => put(i, { text: e.currentTarget.value })} />
+            <button type="button" class="btn sm danger" data-voice-del="1" onClick={() => setRows(rows.filter((_, j) => j !== i))}>{t("rdPresetDel")}</button>
+          </div>
+        ))}
+        {rows.length < PRESETS_MAX && (
+          <button type="button" class="btn sm ly-new" onClick={() => setRows([...rows, { lang: lang.value === "zh" ? "zh" : "en", text: "" }])}>{t("rdPresetAdd")}</button>
+        )}
+        {err && <p class="error small" role="alert" data-form-error="1">{err}</p>}
+        <div class="row end">
+          <button type="button" class="btn" onClick={onClose}>{t("cancel")}</button>
+          <button type="submit" class="btn primary" disabled={busy}>{t("save")}</button>
+        </div>
+      </form>
+    </Modal>
   );
 }
 

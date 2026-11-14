@@ -22,6 +22,17 @@ PATROL_RETURN_RANGE = (20, 60)
 #: 中速档;机器人到不了的档手机上不显示。
 DEFAULT_TELEOP_SPEEDS: tuple[float, ...] = (0.3, 0.6, 1.0, 1.3, 1.6, 2.0)
 TELEOP_SPEEDS_MAX_N = 8
+#: 常用喊话(第三档 #41,用户 11-14):保安在「警灯与喊话」里点一下机器人就念(``tts:<语言>:<文字>``)。
+#: 管理员整张换。竞品上装不看语言、一律用中文嗓子念(英文念得清不清是真机项)。
+DEFAULT_VOICE_PRESETS: list[dict[str, str]] = [
+    {"lang": "zh", "text": "警告，您已进入受限制区域，请立即离开。"},
+    {"lang": "zh", "text": "这里是监控区域，请勿逗留。"},
+    {"lang": "zh", "text": "保安已收到通知，正在赶来。"},
+    {"lang": "en",
+     "text": "Warning. You have entered a restricted area. Please leave immediately."},
+]
+VOICE_PRESETS_MAX_N = 12
+VOICE_LANGS = ("zh", "en", "ms")
 
 
 class SettingsError(ValueError):
@@ -123,6 +134,42 @@ class SiteSettings:
         out = list(got)
         self.put("teleop_speeds", out)
         return out
+
+    def voice_presets(self) -> list[dict[str, str]]:
+        """常用喊话(第三档 #41)。没设、存的不成形按缺省。"""
+        got = self.get("voice_presets", None)
+        try:
+            return _presets(got)
+        except SettingsError:
+            return [dict(p) for p in DEFAULT_VOICE_PRESETS]
+
+    def set_voice_presets(self, d: Any, *, by: str) -> list[dict[str, str]]:
+        """整张换掉:``{"presets": [{"lang", "text"}, ...]}``,0–12 句;文字两头空白去掉、1–300 字、
+        单行、不重复。"""
+        out = _presets(d.get("presets") if isinstance(d, dict) else None)
+        self.put("voice_presets", out)
+        return out
+
+
+def _presets(v: Any) -> list[dict[str, str]]:
+    from nexwar_contract.deter import MAX_TTS_CHARS
+    if not isinstance(v, list) or len(v) > VOICE_PRESETS_MAX_N:
+        raise SettingsError(f"常用喊话要一个列表,最多 {VOICE_PRESETS_MAX_N} 句")
+    out: list[dict[str, str]] = []
+    for p in v:
+        lang = p.get("lang") if isinstance(p, dict) else None
+        text = p.get("text") if isinstance(p, dict) else None
+        if lang not in VOICE_LANGS:
+            raise SettingsError(f"语言要是 {' / '.join(VOICE_LANGS)} 之一")
+        if not isinstance(text, str) or not 1 <= len(text.strip()) <= MAX_TTS_CHARS:
+            raise SettingsError(f"每句 1–{MAX_TTS_CHARS} 个字")
+        text = text.strip()
+        if any(ord(ch) < 32 for ch in text):
+            raise SettingsError("每句写成一行")
+        if any(o["text"] == text for o in out):
+            raise SettingsError(f"重复了:{text}")
+        out.append({"lang": lang, "text": text})
+    return out
 
 
 def _speeds_ok(vs: Any) -> bool:

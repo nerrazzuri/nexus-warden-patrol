@@ -70,6 +70,11 @@ class DeterDesk:
             tts = getattr(self.hal, "sound_tts", None)
             d["clips"] = list(clips()) if callable(clips) else []
             d["tts"] = bool(tts()) if callable(tts) else False
+            # 第三档 #41:能念哪几种语言(竞品只会中文,英文靠 Orin 上合成);HAL 不说就不报(老站点照旧)
+            langs = getattr(self.hal, "sound_tts_langs", None)
+            got = langs() if callable(langs) else None
+            if got is not None:
+                d["tts_langs"] = [str(x) for x in got]
         return d
 
     def options(self) -> dict[str, Any]:

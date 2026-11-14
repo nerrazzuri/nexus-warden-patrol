@@ -903,6 +903,8 @@ class _Handler(TlsHandlerMixin):
                 return self._shift_notes(method, user)
             if path == "/api/duty-settings":
                 return self._duty_settings(method, user)
+            if path == "/api/voice-presets":
+                return self._voice_presets(method, user)
             if path == "/api/teleop-speeds":
                 return self._teleop_speeds(method, user)
             m = _HIST.match(path)
@@ -1524,6 +1526,26 @@ class _Handler(TlsHandlerMixin):
             self._audit_detail = {"speeds": d.get("speeds")}
         try:
             return self._send_json(200, {"speeds": st.set_teleop_speeds(d, by=str(user))})
+        except SettingsError as exc:
+            raise HttpError(400, str(exc)) from exc
+
+    def _voice_presets(self, method: str, user) -> None:
+        """常用喊话(第三档 #41):``GET`` 谁都能看(保安点了让机器人念),``POST`` 管理员整张换。"""
+        from nexwar_site.site_settings import SettingsError
+        st = self.site.settings
+        if st is None:
+            raise HttpError(404, "此站点未启用设置")
+        if method == "GET":
+            self._need(user, VIEW)
+            return self._send_json(200, {"presets": st.voice_presets()})
+        if method != "POST":
+            raise HttpError(405, "只支持 GET/POST")
+        self._need(user, MANAGE)
+        d = self._body()
+        if isinstance(d, dict) and isinstance(d.get("presets"), list):
+            self._audit_detail = {"n": len(d["presets"])}
+        try:
+            return self._send_json(200, {"presets": st.set_voice_presets(d, by=str(user))})
         except SettingsError as exc:
             raise HttpError(400, str(exc)) from exc
 

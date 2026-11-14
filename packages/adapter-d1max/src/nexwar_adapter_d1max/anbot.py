@@ -11,7 +11,10 @@ Orin 上不装 ROS1:这里用标准库实现最小的 ROS1 发布端(XML-RPC 注
 - **警灯**:竞品自己的程序也发这个话题,可能把我们的盖掉 —— 开着的时候每 ``republish_s`` 秒重发一次;
   到点、关、代理收尾都发一次「关」,关着就不再发(不跟竞品自己的用法抢)。latching:竞品灯控程序重启了
   也拿得到现在该亮还是灭。
-- **喊话**:只认 ``tts:<语言>:<文字>``(竞品只收文字,不放录好的话术;语言不看,竞品念中文)。
+- **喊话**:``tts:zh:<文字>`` 交给竞品念(它只有中文音库)。别的语言(第三档 #41,用户 11-14:竞品念不了
+  英文)在 Orin 上用 Piper 合成成 wav(``piper_voices``,11-05 现场定的 Ryan 男声、同一套参数),走录好的
+  话术那条路(SSH + aplay)放;同一句合成过放缓存(``tts_cache_dir``)。
+  没配那种语言当场拒,不拿中文嗓子念。
   **不 latching**:不然竞品重连会把上一句再念一遍。**念到一半停不下来**(没找到停播的话题):
   「关喇叭」只是不回调、不再发新的。念完没有回执,按字数估(``secs_per_char``,现场 12 字约 3 秒)。
   没连上竞品(主控没开、订阅端没连上)当场报错,不让站点以为已经喊了。
@@ -29,6 +32,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import hashlib
 import http.client
 import json
 import logging
@@ -79,6 +83,11 @@ _HOST = re.compile(r"[A-Za-z0-9_][A-Za-z0-9_.-]{0,31}@[A-Za-z0-9][A-Za-z0-9_.-]{
 _DEV = re.compile(r"[A-Za-z0-9_][A-Za-z0-9_:,.-]{0,63}")
 _PATH = re.compile(r"[A-Za-z0-9_./-]{0,200}")
 _CTL = re.compile(r"[A-Za-z0-9][A-Za-z0-9 _-]{0,63}")
+_LANG = re.compile(r"[a-z]{2,3}")
+#: 合成缓存最多留几句(按最近用过的留)。
+TTS_CACHE_N = 200
+#: Piper、ffmpeg 一步最多等多久(秒);Orin 上一句十几个字不到 1 秒。
+SYNTH_TIMEOUT_S = 30.0
 _CLIP = re.compile(r"[A-Za-z0-9_-][A-Za-z0-9_.-]{0,63}")
 
 
@@ -285,6 +294,13 @@ class AnbotConfig:
     volume_control: str = ""
     volume_percent: int = 70
     volume_card: str = ""
+    #: 第三档 #41:竞品念不了的语言在 Orin 上用 Piper 合成。
+    #: ``{"en": "/opt/piper/en_US-ryan-medium.onnx"}``;
+    #: 要配了 ``audio_host`` 才放得出去。空 = 只能念中文。
+    piper: str = "piper"
+    piper_voices: Mapping[str, str] | None = None
+    ffmpeg: str = "ffmpeg"
+    tts_cache_dir: str = "/var/lib/nexwar/tts-cache"
     caller: str = "/nexwar_agent"
     #: 念一个字大约多久(现场 11-05:12 个字约 3 秒)。
     secs_per_char: float = 0.25
@@ -336,6 +352,18 @@ class AnbotConfig:
             raise PayloadError(f"volume_card 只许字母、数字: {self.volume_card!r}")
         if not isinstance(self.volume_percent, int) or not 0 <= self.volume_percent <= 100:
             raise PayloadError(f"volume_percent 要在 0–100: {self.volume_percent!r}")
+        voices = self.piper_voices or {}
+        if not isinstance(voices, Mapping) or not all(
+                isinstance(k, str) and _LANG.fullmatch(k) and k != "zh" and isinstance(v, str)
+                and v.startswith("/") and _PATH.fullmatch(v) for k, v in voices.items()):
+            raise PayloadError('piper_voices 要写成 {"en": "/音色/文件.onnx"}'
+                               "(语言 2–3 个小写字母,不含 zh)")
+        object.__setattr__(self, "piper_voices", dict(voices))
+        for k in ("piper", "ffmpeg", "tts_cache_dir"):
+            v = getattr(self, k)
+            if not isinstance(v, str) or not v or v.startswith("-") \
+                    or any(ch.isspace() for ch in v):
+                raise PayloadError(f"{k} 写错了: {v!r}")
         if not self.audio_host:
             object.__setattr__(self, "clips_dir", "")
 
@@ -344,7 +372,8 @@ class AnbotConfig:
         known = {"master", "host", "strobe_topic", "voice_topic", "caller", "secs_per_char",
                  "republish_s", "reregister_s", "audio_host", "ssh_key", "aplay_device",
                  "clips_dir", "ssh", "ptz_topic", "wiper_topic", "sos_log", "estop_log",
-                 "volume_control", "volume_percent", "volume_card"}
+                 "volume_control", "volume_percent", "volume_card",
+                 "piper", "piper_voices", "ffmpeg", "tts_cache_dir"}
         extra = set(d) - known - {"kind"}
         if extra:
             raise PayloadError(f"竞品上装配置里有不认识的项: {', '.join(sorted(extra))}")
@@ -404,6 +433,11 @@ class AnbotPayload:
 
     def options(self) -> dict[str, Any]:
         return {}
+
+    def tts_langs(self) -> list[str]:
+        """能念哪几种语言(第三档 #41):中文竞品念;合成的要放得出去(配了 ``audio_host``)。"""
+        extra = sorted(self.cfg.piper_voices or {}) if self.cfg.audio_host else []
+        return ["zh", *extra]
 
     def input_bits(self) -> int | None:
         return None
@@ -616,11 +650,19 @@ class AnbotPayload:
             await self._clip(clip_or_tts, max_s)
             return
         _, _, rest = clip_or_tts.partition(":")
-        _, _, text = rest.partition(":")
+        lang, _, text = rest.partition(":")
         if not text.strip() or len(text) > MAX_TTS_CHARS:
             raise PayloadError(f"TTS 要写成 tts:<语言>:<文字>(文字 1–{MAX_TTS_CHARS} 字)")
         if not 0 < max_s <= MAX_ON_S:
             raise PayloadError(f"max_s 要在 0–{MAX_ON_S:.0f} 秒之间")
+        lang = re.split(r"[-_]", lang, maxsplit=1)[0].lower()
+        if lang != "zh":
+            if lang not in self.tts_langs():
+                raise PayloadError(f"竞品只会念中文;{lang} 要先在 Orin 上配 Piper 音色"
+                                   "(payload.json 的 piper_voices,还要配 audio_host)")
+            wav = await self._synth(lang, text.strip())
+            await self._play(wav, max_s)
+            return
         await self._ensure()
         await self.stop_sound()
         if self._voice.connections() == 0:
@@ -643,6 +685,9 @@ class AnbotPayload:
             raise PayloadError(f"没有这段话术: {name}")
         if not 0 < max_s <= MAX_ON_S:
             raise PayloadError(f"max_s 要在 0–{MAX_ON_S:.0f} 秒之间")
+        await self._play(path, max_s)
+
+    async def _play(self, path: Path, max_s: float) -> None:
         await self.stop_sound()
         # 密码:ssh 没有终端(新会话)时找 SSH_ASKPASS 要;那个小脚本从环境变量里念出来
         cmd, env = self._ssh_cmd(f"aplay -q -D {self.cfg.aplay_device} -")
@@ -654,6 +699,63 @@ class AnbotPayload:
         except OSError as exc:
             raise PayloadError(f"放不了录好的话术(ssh 起不来): {exc}") from exc
         self._speech = asyncio.get_running_loop().create_task(self._clip_end(proc, max_s))
+
+    async def _synth(self, lang: str, text: str) -> Path:
+        """Piper 合成 → ffmpeg 转成竞品 dmix 要的 48 kHz 双声道 s16、前后各 0.3 秒静音
+        (11-05 现场定的参数)。
+        同一句(语言 + 文字)只合成一次;失败的不进缓存。"""
+        d = Path(self.cfg.tts_cache_dir)
+        key = hashlib.sha256(f"{lang}\n{text}".encode()).hexdigest()[:24]
+        out = d / f"{lang}-{key}.wav"
+        if out.is_file():
+            with contextlib.suppress(OSError):
+                os.utime(out)
+            return out
+        try:
+            d.mkdir(parents=True, exist_ok=True)
+        except OSError as exc:
+            raise PayloadError(f"英文合成失败:缓存目录建不了({exc})") from exc
+        model = (self.cfg.piper_voices or {})[lang]
+        with tempfile.TemporaryDirectory(dir=d) as tmp:
+            raw, fin = Path(tmp) / "raw.wav", Path(tmp) / "out.wav"
+            await self._run([self.cfg.piper, "--model", model, "--length-scale", "1.1",
+                             "--sentence-silence", "0.3", "--output_file", str(raw)], text.encode())
+            await self._run([self.cfg.ffmpeg, "-nostdin", "-y", "-loglevel", "error",
+                             "-i", str(raw),
+                             "-af", "adelay=300|300,apad=pad_dur=0.3", "-ar", "48000", "-ac", "2",
+                             "-sample_fmt", "s16", str(fin)], None)
+            if not fin.is_file() or fin.stat().st_size == 0:
+                raise PayloadError("英文合成失败:没生成音频")
+            fin.replace(out)
+        self._prune_cache(d)
+        return out
+
+    @staticmethod
+    async def _run(cmd: list[str], stdin: bytes | None) -> None:
+        name = Path(cmd[0]).name
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                *cmd,
+                stdin=asyncio.subprocess.PIPE if stdin is not None else asyncio.subprocess.DEVNULL,
+                stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.PIPE)
+        except OSError as exc:
+            raise PayloadError(f"英文合成失败:{name} 起不来({exc})") from exc
+        try:
+            _, err = await asyncio.wait_for(proc.communicate(stdin), SYNTH_TIMEOUT_S)
+        except asyncio.TimeoutError as exc:
+            with contextlib.suppress(ProcessLookupError):
+                proc.kill()
+            raise PayloadError(f"英文合成失败:{name} 超过 {SYNTH_TIMEOUT_S:.0f} 秒") from exc
+        if proc.returncode != 0:
+            raise PayloadError(f"英文合成失败:{name} 退出码 {proc.returncode}:"
+                               + (err or b"").decode("utf-8", "replace").strip()[:150])
+
+    @staticmethod
+    def _prune_cache(d: Path) -> None:
+        files = sorted(d.glob("*.wav"), key=lambda f: f.stat().st_mtime, reverse=True)
+        for f in files[TTS_CACHE_N:]:
+            with contextlib.suppress(OSError):
+                f.unlink()
 
     def _askpass_script(self) -> Path:
         """只念环境变量的小脚本(私有临时目录,0700)。密码本身不落盘。"""

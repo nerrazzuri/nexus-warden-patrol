@@ -550,3 +550,20 @@ async def test_外审POC_r4_发能力的时候又按了急停_下一拍照样补
     assert dog.gen == 2
     assert ears.by["capabilities"][-1]["tasks"]["estop_release"] == {"latched": True, "gen": 2}
     await rt.close()
+
+
+def test_第三档41_HAL说了能念哪几种语言就报tts_langs_不说就不报():
+    from types import SimpleNamespace
+
+    from nexwar_agent.deter import DeterDesk
+
+    def hal(langs):
+        caps = SimpleNamespace(actuators={"speaker": True})
+        h = SimpleNamespace(hal_capabilities=lambda: caps, sound_clips=lambda: (),
+                            sound_tts=lambda: True)
+        if langs is not None:
+            h.sound_tts_langs = lambda: langs
+        return h
+
+    assert DeterDesk(hal(["zh", "en"]), emit=lambda *a: None).caps()["tts_langs"] == ["zh", "en"]
+    assert "tts_langs" not in DeterDesk(hal(None), emit=lambda *a: None).caps()

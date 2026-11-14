@@ -676,3 +676,105 @@ async def test_外审POC_I7_四个发布端各用各的节点名_注册完四个
         assert all(master.owner[t].startswith(p.cfg.caller) for t in (STROBE, VOICE, PTZ, WIPER))
     finally:
         await p.close()
+
+
+# ------------------------------------------------ 第三档 #41(用户 11-14):英文喊话现合成
+# 竞品自己的 TTS 只有中文音库,念英文口音差(11-05 现场)。英文在 Orin 上用 Piper(Ryan)合成成 wav、
+# 走跟录好的话术同一条路(SSH + aplay)放;同一句合成过就直接放缓存。
+
+
+def _假piper(tmp_path, *, rc: int = 0):
+    """假 piper:记参数,把 stdin 的文字写进 --output_file;
+    假 ffmpeg:记参数,把输入拷成输出(最后一个参数)。"""
+    plog, flog = tmp_path / "piper.log", tmp_path / "ffmpeg.log"
+    pp = tmp_path / "piper"
+    pp.write_text("#!/bin/sh\n"
+                  f'echo "$@" >> "{plog}"\n'
+                  'out=""; prev=""\n'
+                  'for a in "$@"; do [ "$prev" = "--output_file" ] && out="$a"; prev="$a"; done\n'
+                  '{ printf RIFF; cat; } > "$out"\n'
+                  f"exit {rc}\n")
+    ff = tmp_path / "ffmpeg"
+    ff.write_text("#!/bin/sh\n"
+                  f'echo "$@" >> "{flog}"\n'
+                  'in=""; prev=""; last=""\n'
+                  'for a in "$@"; do [ "$prev" = "-i" ] && in="$a"; prev="$a"; last="$a"; done\n'
+                  'cp "$in" "$last"\n')
+    pp.chmod(0o755)
+    ff.chmod(0o755)
+    return pp, ff, plog, flog
+
+
+def _英文cfg(master, tmp_path, ssh, **kw):
+    pp, ff, _, _ = _假piper(tmp_path, **kw)
+    return _cfg(master.url, clips_dir=str(_clips(tmp_path)), ssh=str(ssh),
+                audio_host="firefly@192.168.113.101", piper=str(pp), ffmpeg=str(ff),
+                piper_voices={"en": "/opt/piper/en_US-ryan-medium.onnx"},
+                tts_cache_dir=str(tmp_path / "tts-cache"))
+
+
+async def test_第三档41_英文_Piper合成转48k_走aplay放_第二次用缓存(master, tmp_path):
+    ssh, log, got = _假ssh(tmp_path, sleep=0.05)
+    ends: list = []
+    p = AnbotPayload(_英文cfg(master, tmp_path, ssh))
+    p.on_sound_end = lambda ok, why: ends.append((ok, why))
+    assert p.tts_langs() == ["zh", "en"]
+    await p.sound("tts:en:Please leave immediately.", 30)
+    await _等(lambda: ends)
+    assert ends == [(True, "放完了")]
+    assert got.read_bytes() == b"RIFFPlease leave immediately."
+    plog = (tmp_path / "piper.log").read_text()
+    assert "--model /opt/piper/en_US-ryan-medium.onnx" in plog
+    assert "--length-scale 1.1" in plog and "--sentence-silence 0.3" in plog
+    flog = (tmp_path / "ffmpeg.log").read_text()
+    assert "-nostdin" in flog and "adelay=300|300,apad=pad_dur=0.3" in flog
+    assert "-ar 48000 -ac 2 -sample_fmt s16" in flog
+    assert "aplay -q -D dmix_oneway_play -" in log.read_text()
+    assert len(list((tmp_path / "tts-cache").glob("*.wav"))) == 1
+    await p.sound("tts:en:Please leave immediately.", 30)
+    await _等(lambda: len(ends) == 2)
+    assert plog == (tmp_path / "piper.log").read_text(), "同一句第二次不再合成"
+    await p.close()
+
+
+async def test_第三档41_中文竞品念_没配的语言当场拒(master, tmp_path):
+    p = AnbotPayload(_cfg(master.url))
+    assert p.tts_langs() == ["zh"]
+    with pytest.raises(PayloadError, match="竞品只会念中文"):
+        await p.sound("tts:en:Please leave.", 30)
+    with pytest.raises(PayloadError, match="竞品只会念中文"):
+        await p.sound("tts:ms:Sila keluar.", 30)
+    await p.close()
+
+
+async def test_第三档41_合成失败_当场报错说清楚(master, tmp_path):
+    ssh, _, _ = _假ssh(tmp_path)
+    p = AnbotPayload(_英文cfg(master, tmp_path, ssh, rc=3))
+    with pytest.raises(PayloadError, match="英文合成失败"):
+        await p.sound("tts:en:Please leave.", 30)
+    assert not list((tmp_path / "tts-cache").glob("*.wav")), "失败的不进缓存"
+    await p.close()
+
+
+def test_第三档41_配置_Piper音色要有audio_host_语言名对(tmp_path):
+    from nexwar_adapter_d1max.anbot import AnbotConfig
+    base = {"kind": "anbot_ros1", "master": "http://192.168.113.203:11311",
+            "host": "192.168.113.159"}
+    c = AnbotConfig.from_dict(base | {"piper_voices": {"en": "/opt/piper/en_US-ryan-medium.onnx"}})
+    p = AnbotPayload(c)
+    assert p.tts_langs() == ["zh"], "没配 audio_host 放不了合成的 wav"
+    with pytest.raises(PayloadError):
+        AnbotConfig.from_dict(base | {"piper_voices": {"english!": "/x.onnx"}})
+    with pytest.raises(PayloadError):
+        AnbotConfig.from_dict(base | {"piper_voices": {"en": "rel path.onnx"}})
+    with pytest.raises(PayloadError):
+        AnbotConfig.from_dict(base | {"piper_voices": ["en"]})
+
+
+async def test_第三档41_接到HAL上_能力报能念哪几种语言(master, tmp_path):
+    from nexwar_adapter_d1max.hal import D1MaxHal
+    ssh, _, _ = _假ssh(tmp_path)
+    p = AnbotPayload(_英文cfg(master, tmp_path, ssh))
+    hal = D1MaxHal(mps_per_unit=0.4, radps_per_unit=1.0, deadband_mps=0.05, max_fraction=0.5,
+                   payload=p)
+    assert hal.sound_tts_langs() == ["zh", "en"]

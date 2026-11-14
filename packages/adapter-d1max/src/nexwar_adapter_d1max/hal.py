@@ -595,6 +595,11 @@ class D1MaxHal:
     def sound_tts(self) -> bool:
         return self._payload is not None and bool(self._payload.cfg.tts_command)
 
+    def sound_tts_langs(self) -> list[str] | None:
+        """能念哪几种语言(第三档 #41);上装不说就是 None(不知道,站点、网页不挡)。"""
+        fn = getattr(self._payload, "tts_langs", None)
+        return list(fn()) if callable(fn) and self.sound_tts() else None
+
     async def spotlight(self, on: bool, max_s: float) -> None:
         await self._up("spotlight").set("spotlight", on and max_s > 0, max_s)
 

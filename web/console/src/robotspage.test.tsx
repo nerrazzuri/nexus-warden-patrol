@@ -20,6 +20,7 @@ let posted: { url: string; body: Record<string, unknown> }[];
 let pending: Record<string, unknown>[];
 let said: string[];
 let task: string | null;
+let presets: { lang: string; text: string }[] | null = null;
 let openRevoked: string[] = [];
 
 beforeEach(() => {
@@ -28,6 +29,7 @@ beforeEach(() => {
   said = [];
   pending = [];
   task = null;
+  presets = [{ lang: "zh", text: "警告，您已进入受限制区域，请立即离开。" }, { lang: "en", text: "Please leave." }];
   openRevoked = [];
   robotNames.value = {};
   robots = [card({}), card({ robot_id: "B", online: false, battery_pct: null, patrols_today: 0,
@@ -40,6 +42,11 @@ beforeEach(() => {
       if (/\/(patrol|standby\/return|abort|relocalize)$/.test(url)) return Promise.resolve(json({ command_id: "c1", ack: { command_id: "c1", result: "accepted" } }));
       if (url.endsWith("/name")) robots = robots.map((r) => (url.includes(`/${r.robot_id}/`) ? { ...r, name: body.name } : r));
       if (url.endsWith("/revoke")) return Promise.resolve(json({ robot_id: "A", summary: "CRL", robot_wipe: "offline", broker_restart: "systemctl restart x" }));
+      if (url === "/api/voice-presets") {
+        if (!body.presets.every((p: { text: string }) => p.text.trim())) return Promise.resolve(json({ error: "每句 1–300 个字" }, 400));
+        presets = body.presets;
+        return Promise.resolve(json({ presets }));
+      }
       if (url.startsWith("/api/admin/bind/")) {
         if (url.endsWith("/approve") && body.confirm_password !== "pw") return Promise.resolve(json({ error: "密码不对" }, 403));
         pending = [];
@@ -51,6 +58,7 @@ beforeEach(() => {
     if (url === "/api/schedule") return Promise.resolve(json({ missions: ["east-loop", "west-loop"] }));
     if (url === "/api/robots/A") return Promise.resolve(json({ robot_id: "A", status: { online: true, task: task ? { task_id: task, kind: "patrol", state: "running" } : null } }));
     if (url === "/api/admin/bind") return Promise.resolve(json({ requests: pending }));
+    if (url === "/api/voice-presets" && presets) return Promise.resolve(json({ presets }));
     return Promise.resolve(json({}, 404));
   }) as typeof fetch);
 });
@@ -455,6 +463,71 @@ describe("W71 Nav2 没起来", () => {
     await waitFor(() => expect(cardOf(c3, "A")).not.toBeNull());
     fireEvent.click(cardOf(c3, "A"));
     expect(c3.querySelector(".rd-deter")).toBeNull();
+  });
+
+  it("第三档 #41 常用喊话:点一下念那一句(按它的语言);保安没有「编辑」;老站点没有这张表就不出这一行", async () => {
+    robots[0] = card({ deter: { outputs: ["speaker"], max_s: 600, tts: true, clips: [] } });
+    const { container: c } = render(<RobotsPage say={(s) => said.push(s)} now={NOW} role="guard" />);
+    await waitFor(() => expect(cardOf(c, "A")).not.toBeNull());
+    fireEvent.click(cardOf(c, "A"));
+    const d = c.querySelector(".robot-detail")!;
+    const row = await waitFor(() => { const x = d.querySelector("[data-voice-presets]"); expect(x).not.toBeNull(); return x!; });
+    expect(row.textContent).toContain("常用喊话");
+    await waitFor(() => expect(btn(row, "警告，您已进入受限制区域，请立即离开。").disabled).toBe(false));
+    fireEvent.click(btn(row, "警告，您已进入受限制区域，请立即离开。"));
+    await waitFor(() => expect(posted.filter((p) => p.url === "/api/robots/A/deter").at(-1)?.body)
+      .toEqual({ output: "speaker", on: true, max_s: 60, clip: "tts:zh:警告，您已进入受限制区域，请立即离开。" }));
+    await waitFor(() => expect(btn(row, "Please leave.").disabled).toBe(false));
+    fireEvent.click(btn(row, "Please leave."));
+    await waitFor(() => expect(posted.filter((p) => p.url === "/api/robots/A/deter").at(-1)?.body?.clip).toBe("tts:en:Please leave."));
+    expect(d.querySelector("[data-voice-edit]")).toBeNull();
+    cleanup();
+    // 用户 11-14:竞品只会念中文;机器人报了能念哪几种(tts_langs),念不了的灰掉、说原因
+    robots[0] = card({ deter: { outputs: ["speaker"], max_s: 600, tts: true, clips: [], tts_langs: ["zh"] } });
+    const { container: c1 } = render(<RobotsPage say={(s) => said.push(s)} now={NOW} role="guard" />);
+    await waitFor(() => expect(cardOf(c1, "A")).not.toBeNull());
+    fireEvent.click(cardOf(c1, "A"));
+    const row1 = await waitFor(() => { const x = c1.querySelector("[data-voice-presets]"); expect(x).not.toBeNull(); return x!; });
+    await waitFor(() => expect(btn(row1, "警告，您已进入受限制区域，请立即离开。").disabled).toBe(false));
+    expect(btn(row1, "Please leave.").disabled).toBe(true);
+    expect(btn(row1, "Please leave.").title).toContain("这台机器人念不了英文");
+    cleanup();
+    presets = null;      // 老站点:接口 404
+    const { container: c2 } = render(<RobotsPage say={(s) => said.push(s)} now={NOW} role="guard" />);
+    await waitFor(() => expect(cardOf(c2, "A")).not.toBeNull());
+    fireEvent.click(cardOf(c2, "A"));
+    const d2 = c2.querySelector(".robot-detail")!;
+    await waitFor(() => expect(d2.querySelector('input[name="say"]')).not.toBeNull());
+    expect(d2.querySelector("[data-voice-presets]")).toBeNull();
+  });
+
+  it("第三档 #41 常用喊话:管理员能编辑 —— 改字、删一句、加一句(选语言)、存;空的那句当场说", async () => {
+    robots[0] = card({ deter: { outputs: ["speaker"], max_s: 600, tts: true, clips: [] } });
+    const { container: c } = render(<RobotsPage say={(s) => said.push(s)} now={NOW} role="admin" />);
+    await waitFor(() => expect(cardOf(c, "A")).not.toBeNull());
+    fireEvent.click(cardOf(c, "A"));
+    const d = c.querySelector(".robot-detail")!;
+    const edit = await waitFor(() => { const x = d.querySelector("[data-voice-edit]") as HTMLButtonElement; expect(x).not.toBeNull(); return x; });
+    fireEvent.click(edit);
+    const dlg = await waitFor(() => { const x = c.querySelector("dialog"); expect(x).toBeTruthy(); return x!; });
+    const texts = () => Array.from(dlg.querySelectorAll<HTMLInputElement>("input[data-voice-text]"));
+    expect(texts().map((i) => i.value)).toEqual(["警告，您已进入受限制区域，请立即离开。", "Please leave."]);
+    fireEvent.input(texts()[0], { target: { value: "请离开这里" } });
+    fireEvent.click(dlg.querySelectorAll<HTMLButtonElement>("button[data-voice-del]")[1]);
+    fireEvent.click(btn(dlg, "加一句"));
+    expect(texts()).toHaveLength(2);
+    fireEvent.click(btn(dlg, "保存"));
+    await waitFor(() => expect(dlg.querySelector("[data-form-error]")?.textContent).toContain("第 2 句没写字"));
+    expect(posted.some((p) => p.url === "/api/voice-presets")).toBe(false);
+    const lang = dlg.querySelectorAll<HTMLSelectElement>("select[data-voice-lang]")[1];
+    fireEvent.change(lang, { target: { value: "ms" } });
+    fireEvent.input(texts()[1], { target: { value: "Sila keluar." } });
+    fireEvent.click(btn(dlg, "保存"));
+    await waitFor(() => expect(posted.find((p) => p.url === "/api/voice-presets")?.body)
+      .toEqual({ presets: [{ lang: "zh", text: "请离开这里" }, { lang: "ms", text: "Sila keluar." }] }));
+    await waitFor(() => expect(c.querySelector("dialog")).toBeNull());
+    const row = d.querySelector("[data-voice-presets]")!;
+    await waitFor(() => expect(btn(row, "Sila keluar.")).toBeTruthy());
   });
 
   it("POC 11-06 云台、雨刷:报了才有;方向键按步转、到头不超;回正;雨刷开 10 秒", async () => {

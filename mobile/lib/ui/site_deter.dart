@@ -156,6 +156,31 @@ class _SiteDeterPageState extends State<SiteDeterPage> {
     _clip = _clips.isEmpty ? null : _clips.first;
     final def = '${widget.caps['strobe_default'] ?? ''}';
     _color = _colors.isEmpty ? null : (_colors.contains(def) ? def : _colors.first);
+    if (_outputs.contains('speaker') && widget.caps['tts'] == true) unawaited(_loadPresets());
+  }
+
+  /// 机器人报了能念哪几种语言（`tts_langs`，竞品只会中文）；没报 = 不知道，不挡。
+  bool _canSay(String? lang) {
+    final l = widget.caps['tts_langs'];
+    return l is! List || l.contains(lang);
+  }
+
+  static String _langName(String? l) => switch (l) {
+        'zh' => tr('Chinese', '中文'),
+        'en' => tr('English', '英文'),
+        'ms' => tr('Malay', '马来文'),
+        _ => l ?? '',
+      };
+
+  /// 常用喊话（第三档 #41）：站点那张表；老站点没有这个接口就不出这一行。
+  List<Map<String, String>>? _presets;
+  Future<void> _loadPresets() async {
+    try {
+      final p = await widget.api.voicePresets();
+      if (mounted) setState(() => _presets = p);
+    } on SiteError {
+      // 老站点：没有常用喊话
+    }
   }
 
   @override
@@ -348,6 +373,27 @@ class _SiteDeterPageState extends State<SiteDeterPage> {
                     },
                     label: tr('Say', '播报')),
               ]),
+            ],
+            if (widget.caps['tts'] == true && (_presets?.isNotEmpty ?? false)) ...[
+              const SizedBox(height: Nw.s16),
+              Text(tr('Common messages', '常用喊话'), style: NwText.titleSmall.copyWith(color: c.text)),
+              const SizedBox(height: Nw.s8),
+              for (final (i, p) in _presets!.indexed) ...[
+                if (i > 0) const SizedBox(height: Nw.s8),
+                NwButton(
+                    buttonKey: Key('deter-preset-$i'),
+                    variant: NwButtonVariant.outline,
+                    fullWidth: true,
+                    onPressed: _canSay(p['lang'])
+                        ? () => _go('speaker', true, clip: 'tts:${p['lang']}:${p['text']}')
+                        : null,
+                    label: p['text'] ?? ''),
+                if (!_canSay(p['lang']))
+                  Text(
+                      tr('${widget.robotId} cannot speak ${_langName(p['lang'])} (not set up on it)',
+                          '这台机器人念不了${_langName(p['lang'])}（${widget.robotId} 上没配）'),
+                      style: NwText.bodySmall.copyWith(color: c.textSecondary)),
+              ],
             ],
           ])),
         ],

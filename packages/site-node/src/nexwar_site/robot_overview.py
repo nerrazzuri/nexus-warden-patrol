@@ -100,9 +100,13 @@ def _deter(caps: Any) -> dict[str, Any] | None:
     d = (getattr(caps, "tasks", None) or {}).get("deter")
     if not isinstance(d, dict) or not d.get("outputs"):
         return None
-    return {"outputs": [str(o) for o in d.get("outputs") or []],
-            "max_s": float(d.get("max_s") or 600.0), "tts": bool(d.get("tts")),
-            "clips": [str(x) for x in d.get("clips") or []]}
+    out = {"outputs": [str(o) for o in d.get("outputs") or []],
+           "max_s": float(d.get("max_s") or 600.0), "tts": bool(d.get("tts")),
+           "clips": [str(x) for x in d.get("clips") or []]}
+    # 第三档 #41:机器人报了能念哪几种语言才带(没报 = 不知道,网页、App 不挡)
+    if isinstance(d.get("tts_langs"), list):
+        out["tts_langs"] = [str(x) for x in d["tts_langs"]]
+    return out
 
 
 def _return_targets(db: Any, rid: str, caps: Any) -> dict[str, Any]:

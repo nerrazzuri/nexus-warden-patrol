@@ -374,6 +374,14 @@ class FakeApi implements SiteApi {
   }
   /// 上装（W21）：记在 [calls] 里；[deterAck] 是狗回的回执。
   Map<String, dynamic> deterAck = <String, dynamic>{'result': 'accepted'};
+  /// 常用喊话（第三档 #41）；null = 老站点没有这个接口（抛错）。
+  List<Map<String, String>>? voicePresetList = <Map<String, String>>[];
+  @override
+  Future<List<Map<String, String>>> voicePresets() async {
+    final v = voicePresetList;
+    if (v == null) throw SiteError(404, 'not found');
+    return v;
+  }
   @override
   Future<Map<String, dynamic>> deter(String robotId, String output, bool on,
       {double? maxS, String? clip, String? side, String? color, double? pan, double? tilt}) async {

@@ -85,6 +85,51 @@ void main() {
     expect(api.calls.last, 'deter A speaker false');
   });
 
+  testWidgets('第三档 #41 常用喊话：站点那张表一句一个按钮，点了按那句的语言念；长句不溢出', (t) async {
+    final api = FakeApi('guard')
+      ..voicePresetList = <Map<String, String>>[
+        {'lang': 'zh', 'text': '警告，您已进入受限制区域，请立即离开。'},
+        {'lang': 'en', 'text': 'Warning. You have entered a restricted area. Please leave immediately. ' * 3},
+      ];
+    await _open(t, api);
+    expect(find.text('常用喊话'), findsOneWidget);
+    await t.ensureVisible(find.byKey(const Key('deter-preset-0')));
+    await t.pumpAndSettle();
+    await t.tap(find.byKey(const Key('deter-preset-0')));
+    await t.pumpAndSettle();
+    expect(api.calls.last, 'deter A speaker true 30.0 tts:zh:警告，您已进入受限制区域，请立即离开。');
+    await t.ensureVisible(find.byKey(const Key('deter-preset-1')));
+    await t.pumpAndSettle();
+    await t.tap(find.byKey(const Key('deter-preset-1')));
+    await t.pumpAndSettle();
+    expect(api.calls.last, startsWith('deter A speaker true 30.0 tts:en:Warning.'));
+    expect(t.takeException(), isNull);
+  });
+
+  testWidgets('第三档 #41 常用喊话：机器人报了只会念中文，英文那句灰掉、写原因', (t) async {
+    final api = FakeApi('guard')
+      ..voicePresetList = <Map<String, String>>[
+        {'lang': 'zh', 'text': '请离开'},
+        {'lang': 'en', 'text': 'Please leave.'},
+      ];
+    await _open(t, api, caps: <String, dynamic>{..._caps, 'tts_langs': <String>['zh']});
+    await t.ensureVisible(find.byKey(const Key('deter-preset-1')));
+    await t.pumpAndSettle();
+    final b = t.widget<ButtonStyleButton>(find.byKey(const Key('deter-preset-1')));
+    expect(b.onPressed, isNull);
+    expect(find.textContaining('念不了英文'), findsOneWidget);
+    final a = t.widget<ButtonStyleButton>(find.byKey(const Key('deter-preset-0')));
+    expect(a.onPressed, isNotNull);
+  });
+
+  testWidgets('第三档 #41 常用喊话：老站点没有这张表（接口报错）、机器人没配 TTS：都不出这一行', (t) async {
+    await _open(t, FakeApi('guard')..voicePresetList = null);
+    expect(find.text('常用喊话'), findsNothing);
+    expect(find.byKey(const Key('deter-tts')), findsOneWidget);
+    await _open(t, FakeApi('guard'), caps: <String, dynamic>{..._caps, 'tts': false});
+    expect(find.text('常用喊话'), findsNothing);
+  });
+
   testWidgets('机器人没配 TTS：没有现打那一行', (t) async {
     await _open(t, FakeApi('guard'), caps: <String, dynamic>{..._caps, 'tts': false});
     expect(find.byKey(const Key('deter-tts')), findsNothing);

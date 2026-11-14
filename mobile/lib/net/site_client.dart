@@ -869,6 +869,10 @@ abstract class SiteApi {
   /// [tilt]（俯仰，度，正 = 向下），`on` 恒为 true、不带时长。
   Future<Map<String, dynamic>> deter(String robotId, String output, bool on,
       {double? maxS, String? clip, String? side, String? color, double? pan, double? tilt});
+  /// 常用喊话（第三档 #41，`GET /api/voice-presets`）：`[{lang, text}]`，点一下按 `tts:<lang>:<text>` 念。
+  /// 老站点没有这个接口抛 [SiteError]。
+  Future<List<Map<String, String>>> voicePresets();
+
 
   /// 在当前位置标原点（W00c6f，管理员）：狗用它此刻的位置当原点（定位不好就拒），站点登记成默认待命点（名字
   /// [name]，空就是 `home`）。返回 `{ack, standby}`。
@@ -2023,6 +2027,15 @@ class SiteClient implements SiteApi {
   @override
   Future<Map<String, dynamic>> deterStart(String robotId) async => _map(await _send(
       'POST', '/api/deterrence/${Uri.encodeComponent(robotId)}/start', <String, dynamic>{}));
+
+  @override
+  Future<List<Map<String, String>>> voicePresets() async {
+    final d = _map(await _send('GET', '/api/voice-presets'));
+    return <Map<String, String>>[
+      for (final p in (d['presets'] as List?) ?? const <dynamic>[])
+        if (p is Map && p['lang'] is String && p['text'] is String) {'lang': p['lang'] as String, 'text': p['text'] as String},
+    ];
+  }
 
   @override
   Future<Map<String, dynamic>> deter(String robotId, String output, bool on,
