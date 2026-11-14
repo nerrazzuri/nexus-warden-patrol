@@ -48,6 +48,8 @@ START_EXTRA_M = 1.0
 #: 退过以后等停稳:这么久(秒)还没确认停稳,重发停车、报一次 ``follow_stop_unconfirmed``;一直不放行
 #: (不起导航段、不进终态,外审 W77-2 #1)。
 STOP_CONFIRM_TIMEOUT_S = 5.0
+#: 查限速区时看身边多远(米):退一下(1.5 秒 × 0.3 m/s)加机身。
+BACK_REACH_M = 1.0
 #: 退的时候,人要是这么久(毫秒)以内看到的才算数;看不到了就不退(不知道往哪退)。
 BACK_FRESH_MS = 500
 #: 退的速度命令有效期(毫秒):一拍不来 HAL 自己停。
@@ -315,7 +317,7 @@ class FollowTask(Task):
         assert here is not None and self._person is not None
         b = math.degrees(math.atan2(self._person[1] - here[1], self._person[0] - here[0]) - here[2])
         b = (b + 180.0) % 360.0 - 180.0
-        cmd, why = self._backoff.choose(b, d, max_v=self.req.max_speed_mps)
+        cmd, why = self._backoff.choose(b, d, max_v=self._back_speed(here))
         if cmd is None:
             if self._backing != "cornered":
                 log.warning("跟人 %s:人在 %.1f m,退不了,原地站定(%s)", self.task_id, d, why)
@@ -333,6 +335,21 @@ class FollowTask(Task):
         if getattr(got, "rejected", False):
             log.warning("跟人 %s:退的速度被 HAL 拒了(%s)", self.task_id, getattr(got, "reason", ""))
         return True
+
+    def _back_speed(self, here: tuple[float, float, float]) -> float:
+        """往后退的限速:任务限速和身边(退一下能到的范围)地图限速区里低的那个
+        (外审 W77-11 #4、12 #3)。"""
+        v = self.req.max_speed_mps
+        cap = getattr(getattr(self._parts, "nav", None), "speed_cap_near", None)
+        if callable(cap):
+            try:
+                z = cap(here[0], here[1], BACK_REACH_M)
+            except Exception:
+                log.exception("跟人 %s:限速区查不出来,按最慢退", self.task_id)
+                z = 0.0
+            if z is not None:
+                v = min(v, float(z))
+        return v
 
     async def _battery_low(self) -> str:
         """电量低于导航段用的停止线(报警级 ``ALARM_FLOOR_PCT``,别的按任务默认):回原因;

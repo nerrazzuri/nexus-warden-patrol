@@ -380,6 +380,14 @@ class PlannedNavBackend(HalNavBackend):
                 return z
         return None
 
+    def speed_cap_near(self, x: float, y: float, d: float = 0.0) -> float | None:
+        """离 (x, y) 不到 ``d`` 米的限速区里最低的限速;没有 ``None``(外审 W77-12 #3:往后退也守)。"""
+        zs = self.zones
+        caps = [float(z.max_speed_mps) for z in (zs.zones if zs is not None else ())
+                if z.kind == "slow" and z.max_speed_mps is not None
+                and distance_to_polygon(x, y, z.polygon) <= d]
+        return min(caps) if caps else None
+
     def off_map(self, x: float, y: float) -> bool:
         """(x, y) 在图外、或者在图上不可通行(墙、没扫到的)的格里(外审 W77-1 #1:往后退不出地图)。
         没装规划栅格说不清,回 False(交给守卫)。"""

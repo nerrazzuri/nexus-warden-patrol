@@ -561,3 +561,27 @@ async def test_外审W77_11_4_往后退也守任务限速(空台):
     await _跑(空台, t, 3, 逼近)
     back = [v for v in sent if v < 0]
     assert back and min(back) >= -0.2 - 1e-9, f"限速 0.2:退的最快 {min(back) if back else None}"
+
+
+async def test_外审W77_12_3_往后退也守地图限速区(空台):
+    from nexwar_contract.zones import Zone, ZoneSet
+    c, r, parts = 空台
+    p = 人(r, 6.0, 4.0)
+    t, _ = _退的任务(空台, p)
+    m, v = t._map
+    await parts.nav.set_zones(ZoneSet(map_id=m, map_version=v, revision=1, zones=(
+        Zone(id="slow", kind="slow", polygon=((0.0, 0.0), (12.0, 0.0), (12.0, 8.0), (0.0, 8.0)),
+             max_speed_mps=0.2),)))
+    real_vel, sent = r.set_velocity, []
+
+    async def 记(cmd):
+        sent.append(cmd.vx)
+        return await real_vel(cmd)
+    r.set_velocity = 记
+    await t.start()
+
+    def 逼近():
+        p.x = max(p.x - 0.06, 5.0)
+    await _跑(空台, t, 3, 逼近)
+    back = [x for x in sent if x < 0]
+    assert back and min(back) >= -0.2 - 1e-9, f"限速区 0.2:退的最快 {min(back) if back else None}"

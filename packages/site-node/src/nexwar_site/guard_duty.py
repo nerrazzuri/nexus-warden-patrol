@@ -1131,15 +1131,19 @@ class GuardDuty:
             pts = sorted((p for p in d.get("points") or [] if isinstance(p, dict)
                           and _num(p.get("x")) and _num(p.get("y"))),
                          key=lambda p: p.get("at_ms") if _num(p.get("at_ms")) else 0)
-            if self._zone_left(rid, run["entry"], fs, pts, d, ref) or self.marks is None:
-                return
+            # 外审 W77-12 #1:一个点一个点按时间看,出口线和出防区哪个先发生按哪个办
             trail = dict(fs.get("trail") or {})
             for p in pts:
                 cur = (float(p["x"]), float(p["y"]))
-                hit = self.marks.track(ref[0], ref[1], trail, cur)
-                if hit is not None:
-                    self._fs_set(rid, trail=trail)
-                    self._crossed(rid, run["entry"], hit[0], (hit[1], hit[2]), cur, d, ref)
+                if self.marks is not None:
+                    hit = self.marks.track(ref[0], ref[1], trail, cur)
+                    if hit is not None:
+                        self._fs_set(rid, trail=trail)
+                        self._crossed(rid, run["entry"], hit[0], (hit[1], hit[2]), cur, d, ref)
+                        return
+                if self._zone_left(rid, run["entry"], self._fs(rid), [p], d, ref):
+                    if trail != fs.get("trail"):
+                        self._fs_set(rid, trail=trail)
                     return
             if trail != fs.get("trail"):
                 self._fs_set(rid, trail=trail)
@@ -1408,10 +1412,11 @@ class GuardDuty:
         return {"mission": "跟丢后看易藏点", "map_id": m, "map_version": v, "waypoints": wps}
 
     def _zone_now(self, rid: str, run: dict[str, Any]) -> tuple[str, str, str] | None:
-        """机器人此刻在哪个防区:站在值守位上按它看着的;不然按位置算。说不清 ``None``。"""
+        """机器人此刻在哪个防区:站在值守位上按它看着的;不然按位置算。说不清 ``None``
+        (外审 W77-12 #2:定位丢了、位置过期了也说不清,不拿旧位置定)。"""
         c = self._client(rid)
         pose = getattr(getattr(c, "telemetry", None), "pose", None)
-        if pose is None:
+        if pose is None or not self._pose_fresh(rid, c):
             return None
         if run.get("watch_zone") and run.get("state") == "post":
             # 外审 W77-11 #2:到了值守位才按它看着的防区;去值守位的路上按位置算
@@ -1422,6 +1427,14 @@ class GuardDuty:
             log.exception("%s 在哪个防区算不出来", rid)
             return None
         return (pose.map_id, pose.map_version, z) if z else None
+
+    def _pose_fresh(self, rid: str, c: Any) -> bool:
+        """位置可靠:机器人说定位正常、站点 ``stale_ms`` 以内收到过它的位置。"""
+        if not getattr(getattr(getattr(c, "status", None), "ready", None), "loc_ok", False):
+            return False
+        at = getattr(self.dispatcher, "telemetry_at", {}).get(rid)
+        stale = getattr(self.dispatcher, "stale_ms", None)
+        return at is not None and stale is not None and self._now() - at <= stale
 
     def _start_intense(self, eid: int, rid: str, now: int) -> None:
         held = self._held_zone.pop(rid, None)
