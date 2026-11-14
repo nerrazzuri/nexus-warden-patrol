@@ -103,3 +103,45 @@ async def test_导航每拍查守卫_把实测和上一拍命令都当正在做�
     nav._guard_check(-0.2, 0.0)
     assert got["moving"] == ((0.8, 0.1), (0.6, 0.2))
     assert got["w_now"] == (0.1, 0.2)
+
+
+# ---- 外审 11-14:守卫结论带原因枚举,上层不靠「障碍数据」几个字决定停不停 ----
+
+def test_守卫结论带原因枚举():
+    from nexwar_agent.obstacles import ObstacleView
+
+    class V:
+        def __init__(self, st, hit=(), unk=()):
+            self.st, self.hit, self.unk = st, hit, unk
+
+        def state(self):
+            return self.st
+
+        def lookup(self, pts, pose):
+            return list(self.hit), list(self.unk)
+
+    pose = (0.0, 0.0, 0.0)
+    assert G.check(0.0, 0.0, 0.0, V("ok"), pose).cause == "clear"
+    assert G.check(0.3, 0.0, 0.0, V("stale"), pose).cause == "data"
+    assert G.check(0.3, 0.0, 0.0, V("ok", hit=[0]), pose).cause == "hit"
+    assert G.check(0.3, 0.0, 0.0, V("ok", unk=[0]), pose).cause == "unknown"
+    assert G.check(0.3, 0.0, 0.0, V("ok"), pose).cause == "clear"
+    assert ObstacleView is not None
+
+
+async def test_导航按枚举停_原因文字怎么写都一样(tmp_path):
+    from test_nav2_backend import _台, 假转接
+
+    from nexwar_agent.obstacles import Verdict
+    from nexwar_patrol.protocol.nav_types import Pose
+
+    link = 假转接()
+    t = _台(tmp_path, link)
+    await t.start(1.5, 4.0)
+    await t.nav.goto(Pose.from_xy_yaw(9.0, 4.0))
+    t.nav._guard_check = lambda vx, wz, g=None: Verdict(False, "随便写的原因", kind="data")
+    for _ in range(3):
+        link.now += 0.1
+        link.cmd = (link.now, 1, 0.25, 0.0, 0.0)
+        await t.一拍()
+    assert t.r.speed[0] == 0.0, "数据不新鲜:停,不看原因文字"

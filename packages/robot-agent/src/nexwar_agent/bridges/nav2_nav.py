@@ -902,7 +902,7 @@ class Nav2NavBackend(PlannedNavBackend):
         if self.guard is not None and self.obstacles is not None and (abs(vx) > 1e-6
                                                                      or abs(wz) > 1e-6):
             v = self._guard_check(vx, wz)
-            if not v.ok and not v.hits and "障碍数据" not in v.reason \
+            if v.cause == "unknown" \
                     and abs(vx) > UNKNOWN_SLOW_MPS:
                 # 只有看不见的:快了就慢下来再查一遍;转向同比例压(导航 V1:走的还是 Nav2 那条弯)
                 wz *= UNKNOWN_SLOW_MPS / abs(vx)
@@ -913,7 +913,7 @@ class Nav2NavBackend(PlannedNavBackend):
                 if soft is not None:
                     vx, wz = soft
                     v = v.__class__(True)
-            if not v.ok and (v.hits or "障碍数据" in v.reason):
+            if v.stops:
                 self._guarded(v, here)
                 await self._send(0.0, 0.0, dt_s)
                 return
@@ -972,7 +972,7 @@ class Nav2NavBackend(PlannedNavBackend):
             blocked = False
             if not done and self.guard is not None and self.obstacles is not None:
                 v = self._guard_check(vx, 0.0)
-                blocked = not v.ok and bool(v.hits or "障碍数据" in v.reason)
+                blocked = v.stops
             if not (done or blocked or now - e["t"] > EDGE_STEP_S):
                 await self._send(vx, 0.0, dt_s)
                 return
@@ -988,7 +988,7 @@ class Nav2NavBackend(PlannedNavBackend):
         blocked = self._turn_hits_map(0.0, wz, here)
         if not blocked and self.guard is not None and self.obstacles is not None:
             v = self._guard_check(0.0, wz)
-            blocked = not v.ok and bool(v.hits or "障碍数据" in v.reason)
+            blocked = v.stops
         if abs(err) > TURN_DONE_RAD * 2 and not blocked and now - e["t"] <= EDGE_STEP_S:
             await self._send(0.0, wz, dt_s)
             return
@@ -1175,7 +1175,7 @@ class Nav2NavBackend(PlannedNavBackend):
         vx, wz = self._deband(cur["v"], cur["w"])
         v = await self._rec_safe(here, vx, wz)
         if v is not None:
-            if "障碍数据" in v.reason:
+            if v.cause == "data":
                 await self._send(0.0, 0.0, dt_s)           # 看不清就等,不瞎挪
                 return
             self._guarded(v, here)                         # 挡着 / 看不见 / 扫到墙:下一拍重挑
@@ -1208,7 +1208,7 @@ class Nav2NavBackend(PlannedNavBackend):
             v = self._guard_check(vx, wz)
             if v.ok:
                 return None
-            if "障碍数据" in v.reason:
+            if v.cause == "data":
                 return v
             if v.hits and not self._hits_all_static(v.hits, here):
                 return v                                   # 有人、有东西
@@ -1604,7 +1604,7 @@ class Nav2NavBackend(PlannedNavBackend):
             blocked = Verdict(False, "原地转会扫到地图上的墙(窄处不转)")
         elif self.guard is not None and self.obstacles is not None:
             v = self._guard_check(0.0, wz)
-            if not v.ok and (v.hits or "障碍数据" in v.reason):
+            if v.stops:
                 blocked = v
         if blocked is None:
             self._turn_blocked_at = None
@@ -1793,7 +1793,7 @@ class Nav2NavBackend(PlannedNavBackend):
             if self._turn_hits_map(v2x, v2z, here):
                 continue
             v2 = self._guard_check(v2x, v2z, soft_guard(self.guard, v2x, v2z))
-            if v2.ok or (not v2.hits and "障碍数据" not in v2.reason):
+            if v2.ok or v2.cause == "unknown":
                 return v2x, v2z
         return None
 

@@ -78,13 +78,13 @@ async def test_外审R1_导航把实测转速和上一拍发的转速都交给�
     seen = []
 
     class 守卫:
-        def check(self, vx, wz, v_meas, view, pose, *, w_now=()):
+        def check(self, vx, wz, v_meas, view, pose, *, w_now=(), moving=()):
             seen.append(tuple(w_now))
             return NS(ok=True, reason="", hits=(), unknown=0)
 
     nav = PlannedNavBackend.__new__(PlannedNavBackend)
     nav.guard, nav.obstacles = 守卫(), None
-    nav._v_meas = nav._w_meas = nav._last_wz = 0.0
+    nav._v_meas = nav._w_meas = nav._last_wz = nav._last_vx = 0.0
     nav._odom_pose = (0.0, 0.0, 0.0)
     nav._odom_seen(NS(x=0.0, y=0.0, yaw=0.0, vx=0.0, wz=0.9))
     nav._last_wz = 1.5
