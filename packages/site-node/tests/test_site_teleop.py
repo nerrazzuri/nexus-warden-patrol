@@ -46,8 +46,9 @@ class 手机:
             body = b""
             while len(body) < n:
                 body += self.sock.recv(n - len(body))
-            self.error = json.loads(body or b"{}").get("error", "")
-            self.reason = json.loads(body or b"{}").get("reason", "")
+            self.body = json.loads(body or b"{}")
+            self.error = self.body.get("error", "")
+            self.reason = self.body.get("reason", "")
         self.buf = b""
         self.seq = 0
 
@@ -395,6 +396,18 @@ def test_急停按着不给租约(站点):
     _等(lambda: not s.disp.clients["A"].status.ready.estop_clear, timeout=5)
     ph = 手机(s, tok)
     assert ph.status == 409 and "急停按着" in ph.error, (ph.status, ph.error)
+
+
+def test_minor7_趴着不给租约_带原因码not_standing_手机才出站起按钮(站点):
+    s = 站点
+    tok = _登(s)
+    _新鲜(s, tok)
+    s.loop.call(lambda: s.dog.set_motion_mode("lie"))
+    _等(lambda: s.disp.clients["A"].status.ready.motion is False, timeout=5)
+    ph = 手机(s, tok)
+    assert ph.status == 409 and "没站起来" in ph.error, (ph.status, ph.error)
+    assert ph.body.get("reason_code") == "not_standing", ph.body
+    s.loop.call(lambda: s.dog.set_motion_mode("stand"))
 
 
 def test_halt接到了狗的停车上(站点):
