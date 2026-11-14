@@ -148,10 +148,10 @@ const MAPS = { maps: [{ map_id: "m1", version: "1", note: "", created_ms: 0, sou
 
 type Posted = { path: string; body: any };
 function routesApi(opts: { meta: PreviewMeta; routes?: any[]; timezone?: string | null; schedules?: any[]; post?: (path: string, body: any) => Response | undefined;
-  check?: (body: any) => Response; retired?: string[] }) {
+  check?: (body: any) => Response; retired?: string[]; retiredTitles?: Record<string, string> }) {
   const posted: Posted[] = [];
   const view = () => ({ revision: 3, timezone: opts.timezone ?? null, routes: opts.routes ?? [], schedules: opts.schedules ?? [],
-    retired_routes: opts.retired ?? [] });
+    retired_routes: opts.retired ?? [], retired_titles: { route: opts.retiredTitles ?? {} } });
   setFetch((async (url: RequestInfo | URL, init?: RequestInit) => {
     const u = String(url);
     if (u.endsWith("/api/maps")) return json(MAPS);
@@ -200,10 +200,21 @@ describe("第 12 轮 W11-01 新建路线编号查全站", () => {
     await waitFor(() => expect(r.getByText("A route with this name already exists on the site.")).toBeTruthy());
     fireEvent.input(r.getByPlaceholderText("Route name"), { target: { value: "route-1" } });
     await tick();
-    expect(r.getByText("A route with this name already exists on the site.")).toBeTruthy();
+    // 第 13 轮 W13-03 ①:删掉用过的说清是删掉的那条用过
+    expect(r.getByText("This number was used by a deleted route. Pick another.")).toBeTruthy();
     fireEvent.input(r.getByPlaceholderText("Route name"), { target: { value: "fresh" } });
     await tick();
     expect(r.queryByText("A route with this name already exists on the site.")).toBeNull();
+  });
+});
+
+// 第 13 轮 W13-03 ①:删掉的路线用过的编号 —— 不说「已经有这个名字」(站点上并没有),说清是谁用过
+describe("第 13 轮 W13-03 删掉用过的编号", () => {
+  it("提示写已删的那条叫什么;输入框标 aria-invalid", async () => {
+    const { r } = await openNew(META, "route-1", { retired: ["route-1"], retiredTitles: { "route-1": "二楼夜巡" } });
+    await waitFor(() => expect(r.getByText("This number was used by the deleted route “二楼夜巡”. Pick another.")).toBeTruthy());
+    expect(r.queryByText("A route with this name already exists on the site.")).toBeNull();
+    expect(r.getByPlaceholderText("Route name").getAttribute("aria-invalid")).toBe("true");
   });
 });
 

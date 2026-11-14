@@ -60,6 +60,8 @@ export interface RouteView {
   /** 第 11 轮 W11-01:删掉过的编号(旧记录还指着,站点不让再用) */
   retired_routes?: string[];
   retired_schedules?: string[];
+  /** 第 13 轮 W13-03:删掉的那条当时叫什么(编号 → 名字;没起名的不在里面)。 */
+  retired_titles?: { route?: Record<string, string>; schedule?: Record<string, string> };
 }
 
 /** 第 11 轮 W11-01:新建时自动给的编号 ``<base>-N``:跳过 ``taken`` 和站点说删掉过的。 */

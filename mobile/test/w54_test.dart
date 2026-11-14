@@ -559,8 +559,8 @@ void main() {
       };
     await t.pumpWidget(MaterialApp(home: MapManagePage(api: api)));
     await t.pumpAndSettle();
-    expect(find.text('能用'), findsOneWidget);
-    expect(find.text('有问题'), findsOneWidget);
+    expect(find.text('建图能用'), findsOneWidget);   // 第 13 轮 W13-03 ③：写明是建图质量
+    expect(find.text('建图有问题'), findsOneWidget);
     expect(find.text('A 在用'), findsOneWidget);
     expect(find.textContaining('未回到起点闭合'), findsOneWidget);
     expect(find.byKey(MapManagePage.deleteKey('main', '20261031-2')), findsNothing);

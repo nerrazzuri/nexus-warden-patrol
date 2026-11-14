@@ -306,7 +306,9 @@ class _MapManagePageState extends State<MapManagePage> {
                   key: MapManagePage.draftKey(mapId, version), label: tr('Draft', '草稿'), tone: NwTone.warning),
               const SizedBox(width: Nw.s4),
             ],
-            if (verdict != 'unknown') NwStatusPill(label: verdictText(verdict), tone: verdictTone(verdict)),
+            // 第 13 轮 W13-03 ③：这是建图质量，不是能不能下发（下发要先确认禁行区）—— 写明「建图」
+            if (verdict != 'unknown')
+              NwStatusPill(label: tr('Mapping: ${verdictText(verdict)}', '建图${verdictText(verdict)}'), tone: verdictTone(verdict)),
             if (on.isNotEmpty) ...[
               const SizedBox(width: Nw.s4),
               NwStatusPill(label: tr('In use: ${on.join(', ')}', '${on.join('、')} 在用'), tone: NwTone.info),

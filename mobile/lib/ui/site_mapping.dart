@@ -21,6 +21,7 @@ import 'package:flutter/material.dart';
 
 import '../l10n.dart';
 import '../net/site_client.dart';
+import 'map_manage.dart' show versionLabel;
 import 'map_view.dart';
 import 'nw/nw_map_raster.dart';
 import 'nw/nw_theme.dart';
@@ -895,7 +896,8 @@ class _SiteMapPreviewPageState extends State<SiteMapPreviewPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text('${widget.mapId}:${widget.version}')),
+      // 第 13 轮 W13-03 ③：标题写「estate-1 · 第 9 版」（以前 estate-1:9）
+      appBar: AppBar(title: Text('${widget.mapId} · ${versionLabel(widget.version)}')),
       body: FutureBuilder<(Map<String, dynamic>, Uint8List, bool)>(
         future: _data,
         builder: (context, snap) {
@@ -1087,8 +1089,15 @@ class _SiteMapPreviewPageState extends State<SiteMapPreviewPage> {
         ? (_zonesError != null ? tr('Zones unavailable', '无法加载区域') : tr('Loading zones…', '正在加载区域…'))
         : confirmed
             ? tr('Zones rev $_rev · confirmed', '区域第 $_rev 版 · 已确认')
-            : tr('Zones rev $_rev · not confirmed: cannot be sent to robots',
-                '区域第 $_rev 版 · 未确认：无法下发');
+            // 第 13 轮 W13-03 ③：一块都没画过的说「还没画禁行区」（以前写「区域第 0 版 · 未确认」，看不懂）；
+            // 改过没再确认的说「改过没确认」
+            : _rev == 0
+                ? tr('No no-go zones drawn yet · confirm before sending to robots', '还没画禁行区 · 确认后才能下发')
+                : conf != null
+                    ? tr('Zones rev $_rev · changed since confirmed: confirm before sending to robots',
+                        '区域第 $_rev 版 · 改过没确认：确认后才能下发')
+                    : tr('Zones rev $_rev · not confirmed: confirm before sending to robots',
+                        '区域第 $_rev 版 · 未确认：确认后才能下发');
     return Align(
       alignment: Alignment.topLeft,
       child: Material(

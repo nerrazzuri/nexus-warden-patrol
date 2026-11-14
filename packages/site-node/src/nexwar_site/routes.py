@@ -216,6 +216,10 @@ class RouteStore:
             # 第 11 轮 W11-01:删掉过的编号。网页、App 新建时跳过它们
             "retired_routes": self._retired("route"),
             "retired_schedules": self._retired("schedule"),
+            # 第 13 轮 W13-03 ①:填了用过的编号时说清是哪条删掉的用过(不是「已经有这个名字」)
+            "retired_titles": {k: {r["id"]: r["title"] for r in self.db.query(
+                "SELECT id, title FROM retired_ids WHERE kind=? AND title != ''", (k,))}
+                for k in ("route", "schedule")},
         }
 
     def _retired(self, kind: str) -> list[str]:
