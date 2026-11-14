@@ -73,12 +73,12 @@ a { color: var(--c-tertiary); }
 
 /* 按钮(手机的 NwButton):主按钮用品牌蓝(W60)、描边按钮;红色只给 Stop all 和破坏性操作 */
 .btn {
-  height: 40px; padding: 0 16px; border-radius: var(--r-r8); border: 1px solid var(--c-outline);
+  height: var(--ctl-md); padding: 0 16px; border-radius: var(--r-r8); border: 1px solid var(--c-outline);
   background: var(--c-surface); color: var(--c-text); font-family: var(--font-sans); font-size: 14px; font-weight: 600; cursor: pointer;
   display: inline-flex; align-items: center; justify-content: center; gap: 8px; white-space: nowrap;
 }
 .btn:hover:not(:disabled) { background: var(--c-surfaceVariant); }
-.btn.sm { height: 32px; padding: 0 12px; font-size: 13px; }
+.btn.sm { height: var(--ctl-sm); padding: 0 12px; font-size: 13px; }
 .btn:disabled { color: var(--c-textMuted); background: transparent; border-color: var(--c-outline); cursor: default; }
 .btn.primary { background: var(--c-brand); color: var(--c-onBrand); border-color: var(--c-brand); font-weight: 700; }
 .btn.primary:hover:not(:disabled) { background: var(--c-brand); opacity: 0.9; }
@@ -107,9 +107,9 @@ a { color: var(--c-tertiary); }
 .login-card { width: min(400px, 100%); padding: 32px; border-radius: var(--r-r12); border: 1px solid var(--c-outline); background: var(--c-surface); display: flex; flex-direction: column; gap: 16px; }
 .login-card h1 { font-size: 28px; line-height: 35px; font-weight: 600; }
 .login-card label { display: flex; flex-direction: column; gap: 6px; font-size: 14px; font-weight: 600; color: var(--c-textSecondary); }
-.login-card input, .field input { height: 44px; padding: 0 12px; border-radius: var(--r-r8); border: 1px solid var(--c-textMuted); background: var(--c-surface); color: var(--c-text); font: inherit; }
+.login-card input, .field input { height: var(--ctl-md); padding: 0 12px; border-radius: var(--r-r8); border: 1px solid var(--c-textMuted); background: var(--c-surface); color: var(--c-text); font: inherit; }
 .login-card input:focus-visible, .field input:focus-visible { outline: 0; border: 2px solid var(--c-focus); padding: 0 11px; }
-.login-card .btn { height: 44px; }
+.login-card .btn { height: var(--ctl-lg); }
 .brand { display: flex; align-items: center; gap: 10px; font-family: var(--font-display); font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.14em; color: var(--c-textSecondary); }
 .mark { display: none; }
 .note { margin: 0; padding: 8px 12px; border-radius: var(--r-r8); background: var(--c-warningSoft); color: var(--c-text); }
@@ -212,7 +212,7 @@ button.navgroup-title[aria-expanded="true"]::after { content: " ▾"; }
 .alarm-head .shape.P1 { fill: var(--c-onError); }
 .alarm-title { font-family: var(--font-display); font-size: 22px; line-height: 28px; font-weight: 700; }
 .alarm-actions { padding: 10px 16px; background: var(--c-errorSoft); display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
-.alarm-actions .btn { height: 44px; }
+.alarm-actions .btn { height: var(--ctl-lg); }
 
 @keyframes p1flash { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
 .alarm-tile.unacked { animation: p1border 1.6s step-end infinite; }
@@ -225,7 +225,7 @@ button.navgroup-title[aria-expanded="true"]::after { content: " ▾"; }
 
 /* 跳转条(狗 > 4 只) */
 .jump { position: sticky; top: 56px; z-index: 4; min-height: 40px; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 4px 0; background: var(--c-bg); }
-.jumpbtn { display: inline-flex; align-items: center; gap: 4px; height: 32px; padding: 0 10px; border: 1px solid var(--c-outline); border-radius: var(--r-r8); background: var(--c-surface); color: var(--c-text); text-decoration: none; font-family: var(--font-sans); font-size: 13px; font-weight: 600; }
+.jumpbtn { display: inline-flex; align-items: center; gap: 4px; height: var(--ctl-sm); padding: 0 10px; border: 1px solid var(--c-outline); border-radius: var(--r-r8); background: var(--c-surface); color: var(--c-text); text-decoration: none; font-family: var(--font-sans); font-size: 13px; font-weight: 600; }
 .jumpbtn.p1 { background: var(--c-error); color: var(--c-onError); border-color: var(--c-errorFrame); }
 
 /* 报警队列(底部常驻) */
@@ -312,7 +312,7 @@ button.navgroup-title[aria-expanded="true"]::after { content: " ▾"; }
 .grid td.actions { display: flex; flex-wrap: wrap; gap: 6px; }
 .grid .bad { color: var(--c-warning); font-weight: 600; }
 .scrollbox { max-height: 420px; overflow: auto; }
-select { height: 36px; padding: 0 8px; border-radius: var(--r-r8); border: 1px solid var(--c-textMuted); background: var(--c-surface); color: var(--c-text); font: inherit; font-size: 14px; }
+select { height: var(--ctl-md); padding: 0 8px; border-radius: var(--r-r8); border: 1px solid var(--c-textMuted); background: var(--c-surface); color: var(--c-text); font: inherit; font-size: 14px; }
 .form { display: flex; flex-direction: column; gap: 12px; }
 .field select, .field input { width: 100%; }
 .codebox { width: 100%; padding: 8px; border-radius: var(--r-r8); border: 1px solid var(--c-textMuted); background: var(--c-bg); color: var(--c-text); font-size: 14px; word-break: break-all; resize: none; }
@@ -457,7 +457,7 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--c-primary); }
 .recpage { display: flex; flex-direction: column; gap: 12px; }
 .recbar { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 16px; }
 .recbar label { display: flex; flex-direction: column; gap: 4px; font-size: 14px; color: var(--c-textSecondary); }
-.recbar input { height: 36px; padding: 0 8px; border-radius: var(--r-r8); border: 1px solid var(--c-textMuted); background: var(--c-surface); color: var(--c-text); font: inherit; }
+.recbar input { height: var(--ctl-sm); padding: 0 8px; border-radius: var(--r-r8); border: 1px solid var(--c-textMuted); background: var(--c-surface); color: var(--c-text); font: inherit; }
 /* 画面按窗口高度收着:时间轴要跟画面同屏(下面还有常驻的报警队列) */
 .recview { display: flex; flex-direction: column; gap: 8px; width: min(100%, max(360px, calc((100vh - 470px) * 16 / 9))); }
 .well.rec { border-radius: var(--r-r12); }
@@ -938,10 +938,10 @@ p.warn { color: var(--c-text); background: var(--c-warningSoft); padding: 8px 12
 .rd-name { display: flex; flex-direction: column; gap: 6px; }
 .rd-label { font-size: 12px; line-height: 16px; color: var(--c-textMuted); }
 .rd-inline { display: flex; gap: 8px; align-items: center; }
-.rd-inline input { flex: 1; min-width: 0; height: 36px; padding: 0 12px; border-radius: var(--r-r8); border: 1px solid var(--c-outline);
+.rd-inline input { flex: 1; min-width: 0; height: var(--ctl-sm); padding: 0 12px; border-radius: var(--r-r8); border: 1px solid var(--c-outline);
   background: var(--c-bg, var(--c-surface)); color: var(--c-text); font: inherit; }
 .rd-inline input:focus-visible { outline: 0; border: 2px solid var(--c-focus); padding: 0 11px; }
-.rd-inline .btn { height: 36px; }
+.rd-inline .btn { height: var(--ctl-sm); }
 .rd-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .rd-actions .rd-danger { color: var(--c-error); border-color: var(--c-error); background: transparent; }
 .rd-actions .rd-danger:hover:not(:disabled) { background: var(--c-errorSoft); }
@@ -963,7 +963,7 @@ p.warn { color: var(--c-text); background: var(--c-warningSoft); padding: 8px 12
 .rd-tag { font-size: 12px; line-height: 18px; padding: 0 6px; border-radius: 4px; white-space: nowrap; background: var(--c-surfaceVariant); color: var(--c-textSecondary); }
 .rd-tag.open { background: var(--c-errorSoft); color: var(--c-error); }
 .rd-tag.auto { background: var(--c-successSoft); color: var(--c-success); }
-.rd-inline select { flex: 1; min-width: 0; height: 36px; padding: 0 10px; border-radius: var(--r-r8); border: 1px solid var(--c-outline);
+.rd-inline select { flex: 1; min-width: 0; height: var(--ctl-sm); padding: 0 10px; border-radius: var(--r-r8); border: 1px solid var(--c-outline);
   background: var(--c-bg, var(--c-surface)); color: var(--c-text); font: inherit; }
 .rd-held { display: flex; align-items: center; gap: 12px; justify-content: space-between; }
 .rd-bad { color: var(--c-error); font-weight: 600; }
@@ -1330,7 +1330,7 @@ input.invalid { border-color: var(--c-error); }
 :where(textarea) { padding: 8px; }
 input[type="file"] { font: inherit; font-size: 14px; color: var(--c-textSecondary); }
 input[type="file"]::file-selector-button {
-  height: 36px; padding: 0 14px; margin-right: 10px; border-radius: var(--r-r8); border: 1px solid var(--c-outline);
+  height: var(--ctl-sm); padding: 0 14px; margin-right: 10px; border-radius: var(--r-r8); border: 1px solid var(--c-outline);
   background: var(--c-surface); color: var(--c-text); font: inherit; font-weight: 600; cursor: pointer;
 }
 /* P1-59:时间轴图例 */
@@ -1413,7 +1413,7 @@ input[type="file"]::file-selector-button {
 .routeside-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .routeside-head h2 { flex: 1 1 auto; min-width: 0; }
 /* P2-41:表单里下拉框跟输入框一样高,标签在同一条线上 */
-.field select { height: 44px; }
+.field select { height: var(--ctl-md); }
 /* 第 2 轮 P1-83:「.wrap」原来只管长字断行(overflow-wrap),「row wrap」的行其实从来不换行 ——
    手机上布防例外那一行把下拉框压成 18px、备注和「添加」挤到卡片外面 */
 .row.wrap { flex-wrap: wrap; }
@@ -1433,7 +1433,7 @@ input[type="file"]::file-selector-button {
 .layers label { min-height: 32px; min-width: 0; overflow-wrap: anywhere; }
 .layers input[type="checkbox"] { width: 18px; height: 18px; flex: none; margin: 0; }
 /* P2-10:单独放的日期框跟别的控件一个样 */
-input[type="date"]:not(.field input) { height: 36px; padding: 0 8px; border-radius: var(--r-r8); border: 1px solid var(--c-textMuted); background: var(--c-surface); color: var(--c-text); font: inherit; font-size: 14px; color-scheme: light dark; }
+input[type="date"]:not(.field input) { height: var(--ctl-md); padding: 0 8px; border-radius: var(--r-r8); border: 1px solid var(--c-textMuted); background: var(--c-surface); color: var(--c-text); font: inherit; font-size: 14px; color-scheme: light dark; }
 /* P2-26:窄屏刻度隔着显示 */
 /* 第 2 轮:1024 宽(769–1279)25 个小时标签也挤成一串,一样隔着显示 */
 @media (max-width: 1279px) { .ticks span.m2 { display: none; } }
@@ -1447,7 +1447,7 @@ input[type="date"]:not(.field input) { height: 36px; padding: 0 8px; border-radi
 .range-ends { display: flex; justify-content: space-between; font-weight: 400; }
 /* P2-20:「使用此日程」开关大一点 */
 .arm-enabled { min-height: 36px; display: inline-flex; align-items: center; gap: 8px; font-weight: 600; cursor: pointer; }
-.arm-enabled input[type="checkbox"] { width: 20px; height: 20px; margin: 0; }
+.arm-enabled input[type="checkbox"] { width: 18px; height: 18px; margin: 0; }
 .arm-patrols-body { padding: 0 16px 16px; }
 /* P2-23:趋势图的坐标轴 */
 .spark-axis { stroke: var(--c-outline); stroke-width: 1; }
@@ -1728,3 +1728,22 @@ input[aria-invalid="true"] { border-color: var(--c-error); outline-color: var(--
   background: var(--c-surface); border-top: 1px solid var(--c-outline); }
 /* UIUX-027:布置页各页签的「新建」按钮一个样子:普通高主按钮、左对齐、按内容宽(以前有的撑满 320px、有的是小按钮) */
 .ly-new { align-self: flex-start; width: auto; }
+/* UIUX-004 / UIUX-005(第二档 #25 #26):控件三档高 —— sm 32(行内、工具条、表格里)/ md 40(表单、普通按钮)/
+   lg 44(登录、报警处理这类要一下点中的)。按钮、输入框、下拉框都引用这三个变量,不再各写各的 30/36/38/44。
+   按钮字两档:普通 14、小号 13,都 600。复选框、单选框一个尺寸 18px(触屏 22,见下面 pointer: coarse)。 */
+:root { --ctl-sm: 32px; --ctl-md: 40px; --ctl-lg: 44px; }
+.btn { height: var(--ctl-md); font-size: 14px; font-weight: 600; }
+.btn.sm { height: var(--ctl-sm); font-size: 13px; }
+.login-card .btn, .alarm-actions .btn { height: var(--ctl-lg); }
+select, .field input, .field select { height: var(--ctl-md); }
+input[type="date"]:not(.field input) { height: var(--ctl-md); }
+.login-card input { height: var(--ctl-lg); }
+.field-inline select { height: var(--ctl-sm); }
+.field input[type="file"] { height: auto; }
+.field input[type="checkbox"], .field input[type="radio"] { width: 18px; height: 18px; }
+/* 地图编辑工具条以前是另一套按钮(16px 字、38 高、写死 8px 圆角、没有悬停 / 禁用样子):跟 .btn.sm 一样 */
+.me-tools button { height: var(--ctl-sm); padding: 0 12px; border-radius: var(--r-r8); font-size: 13px; font-weight: 600; }
+.me-tools button:hover:not(:disabled):not([aria-pressed="true"]) { background: var(--c-surfaceVariant); }
+.me-tools button:disabled { cursor: not-allowed; color: var(--c-textMuted); border-style: dashed; }
+input[type="checkbox"], input[type="radio"] { width: 18px; height: 18px; }
+@media (pointer: coarse) { input[type="checkbox"], input[type="radio"] { width: 22px; height: 22px; } }
