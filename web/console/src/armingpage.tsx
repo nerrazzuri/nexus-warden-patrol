@@ -588,7 +588,9 @@ function PatrolLine({ say }: { say: Say }) {
       .catch(() => { setSaved(25); setV("25"); });
   }, []);
   const n = Number(v);
-  const ok = v.trim() !== "" && Number.isInteger(n) && n >= 20 && n <= 60;
+  // UIUX-020:还没读到站点的值(saved 是 null)不算填错 —— 网慢时先看到红框和「要填 20–60」不对
+  const loading = saved === null;
+  const ok = loading || (v.trim() !== "" && Number.isInteger(n) && n >= 20 && n <= 60);
   const save = async () => {
     setBusy(true);
     try {
@@ -607,9 +609,10 @@ function PatrolLine({ say }: { say: Say }) {
       <div class="row wrap">
         <label class="field">{t("armPatrolLineField")}
           <input name="patrolReturn" type="number" min={20} max={60} step={1} value={v} aria-invalid={ok ? "false" : "true"}
+            disabled={loading} placeholder={loading ? "…" : undefined}
             class={ok ? undefined : "bad"} onInput={(e) => setV(e.currentTarget.value)} />
         </label>
-        <button type="button" class="btn primary" data-patrol-line-save="1" disabled={busy || !ok || n === saved}
+        <button type="button" class="btn primary" data-patrol-line-save="1" disabled={busy || loading || !ok || n === saved}
           onClick={() => void save()}>{t("save")}</button>
       </div>
       {!ok && <p class="small bad" role="alert">{t("armPatrolLineBad")}</p>}

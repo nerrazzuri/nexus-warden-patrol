@@ -66,6 +66,13 @@ beforeEach(() => {
 });
 afterEach(cleanup);
 
+/** UIUX-038 起第 3 步默认「手动」:要定时得自己选「每天 … 到 …」那一项。 */
+function pickDaily() {
+  const radio = [...document.querySelectorAll<HTMLInputElement>("input[name=wiz-time]")]
+    .find((x) => x.parentElement?.querySelector("input[type=time]"));
+  fireEvent.click(radio!);
+}
+
 describe("布防向导的小函数", () => {
   it("每天 21:30 到 06:00:跨半夜拆成两段,一周 14 段;不跨半夜一周 7 段", () => {
     const s = dailySlots(21 * 60 + 30, 6 * 60);
@@ -182,11 +189,24 @@ describe("布防向导", () => {
     expect(changes).toBe(1);   // 外审 3:背后的布置页要重读,不然再存「全场」会盖掉这个
   });
 
+  it("UIUX-038:时间表关着(手动布防)时第 3 步默认「手动」;不改选项点下一步,时间表不动", async () => {
+    ready.missing = [];
+    const r = render(<ArmWizard say={() => {}} onClose={() => {}} />);
+    await waitFor(() => expect(r.container.ownerDocument.querySelector("[data-wiz-step=confirm]")).not.toBeNull());
+    fireEvent.click(r.getByText(/什么时候布防/));
+    const manual = r.container.ownerDocument.querySelectorAll<HTMLInputElement>("input[name=wiz-time]");
+    expect([...manual].find((x) => x.checked)?.parentElement?.textContent).toContain("手动");
+    fireEvent.click(r.getByText("下一步"));
+    await waitFor(() => expect(r.container.ownerDocument.querySelector("[data-wiz-step=who]")).not.toBeNull());
+    expect(posted.some((p) => p.url === "/api/arming/schedule")).toBe(false);
+  });
+
   it("布防时间:选「每天 21:30 到 06:00」存成启用的时间表", async () => {
     ready.missing = [];
     const r = render(<ArmWizard say={() => {}} onClose={() => {}} />);
     await waitFor(() => expect(r.container.ownerDocument.querySelector("[data-wiz-step=confirm]")).not.toBeNull());
     fireEvent.click(r.getByText(/什么时候布防/));
+    pickDaily();
     fireEvent.click(r.getByText("下一步"));
     await waitFor(() => expect(posted.some((p) => p.url === "/api/arming/schedule")).toBe(true));
     const s = posted.find((p) => p.url === "/api/arming/schedule")!.body;
@@ -239,6 +259,7 @@ describe("布防向导", () => {
     const r = render(<ArmWizard say={() => {}} onClose={() => {}} />);
     await waitFor(() => expect(r.container.ownerDocument.querySelector("[data-wiz-step=confirm]")).not.toBeNull());
     fireEvent.click(r.getByText(/什么时候布防/));
+    pickDaily();
     fireEvent.click(r.getByText("下一步"));
     await waitFor(() => expect(r.getAllByText("保存这个时间").length).toBeGreaterThan(0));
     expect(posted.some((p) => p.url === "/api/arming/schedule")).toBe(false);
@@ -264,6 +285,7 @@ describe("布防向导", () => {
     const r = render(<ArmWizard say={(s) => { said = s; }} onClose={() => {}} />);
     await waitFor(() => expect(r.container.ownerDocument.querySelector("[data-wiz-step=confirm]")).not.toBeNull());
     fireEvent.click(r.getByText(/什么时候布防/));
+    pickDaily();
     fireEvent.click(r.getByText("下一步"));
     await waitFor(() => expect(said).toContain("预演坏了"));
     expect(posted.some((p) => p.url === "/api/arming/schedule")).toBe(false);
