@@ -1848,3 +1848,26 @@ async def test_外审W77_7_1_保安看过_关了那条停车没确认_接着巡�
     await _跑(t, 3)
     assert len(_patrols(t)) == n + 1, "保安看过了:接着巡逻"
     assert not t.duty.alerts.has_open("A", "guard_stuck"), "不再报"
+
+
+async def test_外审W77_8_1_停车没确认的告警没报成_不当保安看过_接着拦_再报(站):
+    t = 站
+    tid = await _跟着(t)
+    n = len(_patrols(t))
+    real = t.duty._terminal
+    bad = ("task_failed", {"task_id": tid, "reason": "stop_unconfirmed"})
+    t.duty._terminal = lambda rid, x: bad if x == tid else real(rid, x)
+    real_raise = t.duty.alerts.raise_alert
+    boom = {"n": 1}
+
+    def 报(**kw):
+        if kw.get("kind") == "guard_stuck" and boom["n"]:
+            boom["n"] -= 1
+            raise RuntimeError("库忙")
+        return real_raise(**kw)
+    t.duty.alerts.raise_alert = 报
+    t.box["run"] = ""
+    t.duty.alerts.amend_open("A", "dog_sees_person", context={"lost_ms": t.clock()})
+    await _跑(t, 5)
+    assert len(_patrols(t)) == n, "没人看过:接着拦"
+    assert t.duty.alerts.has_open("A", "guard_stuck"), "下一拍再报"

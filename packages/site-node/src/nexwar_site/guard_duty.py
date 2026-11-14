@@ -954,18 +954,29 @@ class GuardDuty:
                     and r[1].get("reason") == "stop_unconfirmed"), None)
         if bad is None or fs.get("stuck_ok") == bad:
             return False
-        open_ = self.alerts is not None and self.alerts.has_open(rid, "guard_stuck")
-        if fs.get("stuck") == bad and not open_:
+        if self.alerts is None:
+            return True
+        # 外审 W77-8 #1:亲眼看到这条告警开着才记 ``stuck``;记过、后来不开了 = 保安关了,才解开。
+        # 没报成(出错、报到一半重启)不记,下一拍再报
+        if self.alerts.has_open(rid, "guard_stuck"):
+            if fs.get("stuck") != bad:
+                self._fs_set(rid, stuck=bad)
+            return True
+        if fs.get("stuck") == bad:
             self._fs_set(rid, stuck_ok=bad)               # 保安看过、关了那一条:接着
             self._log("stop_unconfirmed_ok", robot=rid, detail=f"{bad}:保安关了停车没确认")
             return False
-        if self.alerts is not None and not open_:
-            self._fs_set(rid, stuck=bad)
-            self._log("stop_unconfirmed", robot=rid, detail=f"{bad} 收尾时停车没确认")
+        self._log("stop_unconfirmed", robot=rid, detail=f"{bad} 收尾时停车没确认")
+        try:
             self.alerts.raise_alert(
                 kind="guard_stuck", robot=rid, title=f"{rid} 停车没确认",
                 detail="看见人以后派的那一趟收尾时机器人没确认停稳:没自动接着巡逻。"
                        "请看机器人是否停住了,必要时到现场或用遥控器接管")
+        except Exception:
+            log.exception("%s 停车没确认的告警报不出去:接着拦,下一拍再报", rid)
+            return True
+        if self.alerts.has_open(rid, "guard_stuck"):
+            self._fs_set(rid, stuck=bad)
         return True
 
     # ------------------------------------------------------------ 跟人的账(落库,外审 r2)
