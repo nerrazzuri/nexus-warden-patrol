@@ -93,6 +93,7 @@ def generate_launch_description():
         DeclareLaunchArgument("guard_mode", default_value="A"),
         # true:Nav2 的障碍数据去掉机身两侧盲带(跟真机一样)
         DeclareLaunchArgument("blind_band", default_value="false"),
+        DeclareLaunchArgument("band_policy", default_value="strict"),
         DeclareLaunchArgument("guard_log", default_value=""),
         DeclareLaunchArgument("guard_tight", default_value="false"),
         # 执行误差(exec_model.py)、定位噪声、按位置/转身触发的定位故障(faulted_tf.py)
@@ -138,7 +139,8 @@ def generate_launch_description():
              parameters=[params], condition=UnlessCondition(agent_guard)),
         ExecuteProcess(cmd=["/usr/bin/python3", str(here / "agent_guard.py"), "--case", case_json,
                             "--log", guard_log, "--tight", guard_tight, "--mode", guard_mode,
-                            "--delay-ms", obs_delay], output="screen", condition=IfCondition(agent_guard)),
+                            "--delay-ms", obs_delay, "--band", LaunchConfiguration("band_policy")],
+                     output="screen", condition=IfCondition(agent_guard)),
         nav2("nav2_planner", "planner_server"),
         nav2("nav2_bt_navigator", "bt_navigator"),
         Node(package="nav2_lifecycle_manager", executable="lifecycle_manager",

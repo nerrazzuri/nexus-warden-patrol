@@ -42,6 +42,12 @@ MEMORY_STILL_S = 60.0
 #: 掉头(先挪 1.2 m 看清、再原地转 180° 要 8 s 多)按 10 s 会转到一半斜卡在走廊里。平时照旧
 #: :data:`MEMORY_S`。走着的时候旧帧也留到这么久(超过 MEMORY_S 的平时只认「有东西」)。
 REC_FREE_S = 15.0
+#: 看不见的格子按哪套规矩(用户 11-14 晚:严格策略撤出默认候选,先在隔离仿真里跟旧策略对照):
+#: ``strict`` = 外审 11-14 第六批(两侧盲带、原地转、没后雷达后退看不见 → 停;超过 :data:`MEMORY_S`
+#: 的旧帧只认「有东西」;走着的时候旧帧留到 :data:`REC_FREE_S`);``legacy`` = 第六批以前(看不见的
+#: 一律降到 0.3 m/s 接着走,站着留下的旧帧说空也算空,旧帧只留 :data:`MEMORY_S`)。旧策略也**没有**
+#: 真机发布认可,只做对照。
+BAND_POLICIES = ("strict", "legacy")
 MEMORY_STILL_M = 0.15
 FRESH_S = 0.3
 LOST_S = 2.0
@@ -122,6 +128,8 @@ class ObstacleView:
     wall_still: bool = False
     wall_pose: tuple[float, float, float] | None = None
     wall_seq: int = 0
+    #: 看不见的按哪套规矩(:data:`BAND_POLICIES`)。
+    band_policy: str = "strict"
     #: 工单 21:狗最近一次挪窝(离上次站的地方超过 :data:`MEMORY_STILL_M`)的位置和时刻。
     _still_at: tuple[float, float] | None = None
     _still_since: float = -math.inf
@@ -215,7 +223,8 @@ class ObstacleView:
                                       suspect=np.frombuffer(g.suspect_bits(), dtype=np.uint8)))
         while self.frames:
             f, age = self.frames[-1], now - self.frames[-1].at
-            if age <= max(self.memory_s, REC_FREE_S) or (age <= MEMORY_STILL_S
+            keep = max(self.memory_s, REC_FREE_S) if self.band_policy == "strict" else self.memory_s
+            if age <= keep or (age <= MEMORY_STILL_S
                                         and self._still_since <= f.at + self.memory_s):
                 break                                   # 工单 21:它过期之前狗就站住了、一直没挪窝
             self.frames.pop()
@@ -312,7 +321,8 @@ class ObstacleView:
                 break
             # 外审 11-14:站着不动留下来的旧帧(超过 memory_s)只能说「那儿有东西」,不能单独证明
             # 「那儿现在是空的」—— 站着的时候人可能从侧面走进盲带
-            stale = now - f.at > (self.memory_s if free_s is None else free_s)
+            stale = (self.band_policy == "strict"
+                     and now - f.at > (self.memory_s if free_s is None else free_s))
             c, s = math.cos(f.pose[2]), math.sin(f.pose[2])
             dx, dy = wx - f.pose[0], wy - f.pose[1]
             lx, ly = c * dx + s * dy, -s * dx + c * dy
@@ -577,6 +587,8 @@ class ObstacleGuard:
         前沿 + :data:`BAND_TOL_M` 之外)→ ``unknown``(降速走,人一进视野就看得见);后退同理,但要
         有后雷达、外参标过。别的 → ``blind``:两侧盲带里转身、急弯车角甩进去看不见人;没后雷达
         往后退是瞎退;原地转降速也不让车角撞人变安全。"""
+        if getattr(view, "band_policy", "strict") == "legacy":
+            return "unknown"                      # 第六批以前:看不见的一律降速走(只做对照)
         front = self.body_len / 2 + BAND_TOL_M
         if vx >= self.still_mps and all(x > front for x, _ in ups):
             return "unknown"
