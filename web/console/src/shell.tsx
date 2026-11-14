@@ -310,7 +310,7 @@ function ArmState({ mode, role, stale, onMode }: { mode: Mode; role: string; sta
   if (!can) {
     return <span class={`armstate ${cls}`} data-stale={stale || undefined} title={stale ? t("armStaleTip") : t("armStateTipViewer")}>{label}</span>;
   }
-  const items: { m: Mode["mode"]; key: Key }[] = [{ m: "armed", key: "modeArmed" }, { m: "home", key: "modeHome" }, { m: "visitor", key: "modeVisitor" }];
+  const items: { m: Mode["mode"]; key: Key }[] = [{ m: "armed", key: "modeArmed" }, { m: "home", key: "modeHome" }, { m: "visitor", key: "modeVisitorAll" }];   // UIUX-035:顶栏这一项是全站 4 小时
   return (
     <div class="armmenu" ref={box}>
       <button type="button" class={`armstate ${cls}`} data-stale={stale || undefined} disabled={stale} aria-haspopup="menu" aria-expanded={open}

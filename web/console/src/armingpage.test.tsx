@@ -298,7 +298,7 @@ describe("布防时间页", () => {
     await waitFor(() => expect(document.querySelector(".modal")).not.toBeNull());
     fireEvent.click(btn(document.querySelector(".modal")!, "布防"));
     await waitFor(() => expect(posted.filter((p) => p.url === "/api/mode").map((p) => p.body.mode)).toEqual(["home", "armed"]));
-    expect(now().querySelector('a[href="#/admin/access"]')!.textContent).toContain("临时撤防");
+    expect(now().querySelector('a[href="#/admin/access"]')!.textContent).toBe("按防区临时撤防…");
   });
 
   it("外审 1 #3:这页有没存的布防时间,打开向导先问(向导存的不会被旧草稿盖回去)", async () => {
@@ -502,6 +502,8 @@ describe("第 2 轮 config N4", () => {
     const { container: c } = render(<ArmingPage say={() => {}} now={Date.now()} role="owner" />);
     await waitFor(() => expect(c.querySelector("[data-no-visitor]")).not.toBeNull());
     expect(c.querySelector('a[href="#/admin/access"]')).toBeNull();
+    // UIUX-035:写清经理能做的(顶栏全站 4 小时)和不能做的(按防区)
+    expect(c.querySelector("[data-no-visitor]")!.textContent).toBe("按防区临时撤防（来访、施工）由管理员设置；要全站临时撤防 4 小时，用顶栏的布防菜单。");
   });
 });
 
