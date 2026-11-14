@@ -826,10 +826,17 @@ button.armstate:focus-visible { outline: 2px solid var(--c-primary); outline-off
 .linkish { background: none; border: 0; padding: 0; margin: 0; font: inherit; color: inherit; text-align: left; cursor: pointer; }
 .linkish:hover { text-decoration: underline; }
 .linkish:focus-visible { outline: 2px solid var(--c-focus); outline-offset: 2px; border-radius: var(--r-r2); }
+/* UIUX-046:≤1100 宽 时间和标题同一行、结果在标题下、按钮在右;没照片不留照片位(以前一条约 240px 高) */
 @media (max-width: 1100px) {
-  .it { grid-template-columns: 100px 1fr; gap: var(--sp-2) var(--sp-3); }
-  .it .shot { width: 100px; height: 56px; }
-  .it > .what, .it > .res, .it > div:last-child { grid-column: 1 / -1; }
+  .it { grid-template-columns: 100px 48px minmax(0, 1fr) auto; grid-template-areas: "shot time what act" "shot time res act";
+    gap: var(--sp-1) var(--sp-3); align-items: start; }
+  .it:has(> .shot.none) { grid-template-columns: 48px minmax(0, 1fr) auto; grid-template-areas: "time what act" "time res act"; }
+  .it .shot { grid-area: shot; width: 100px; height: 56px; }
+  .it .shot.none { display: none; }
+  .it > time { grid-area: time; line-height: 22px; }
+  .it > .what { grid-area: what; }
+  .it > .res { grid-area: res; }
+  .it > div:last-child { grid-area: act; align-self: center; }
 }
 
 /* W44 第二期:「管理」左边一列(三组,高级默认收着) */
@@ -1737,7 +1744,17 @@ input[aria-invalid="true"] { border-color: var(--c-error); outline-color: var(--
 .modal.armwiz .wiz-actions { position: sticky; bottom: -20px; z-index: 2; margin: 12px -20px -20px; padding: 12px 20px;
   background: var(--c-surface); border-top: 1px solid var(--c-outline); }
 .wiz-editor { height: min(calc(100dvh - 360px), 640px); min-height: 320px; display: flex; flex-direction: column; border-top: 1px solid var(--c-outline); padding-top: 8px; }
-.wiz-editor .layout { flex: 1; min-height: 0; }
+.wiz-editor .layout { flex: 1; min-height: 0; overflow: hidden; }
+/* UIUX-045:编辑器里的地图按整个窗口算高(路线 600px、防区 100vh − 280px),比向导给的框高、画到框外 ——
+   框里一层层撑满、地图吃剩下的高度,侧栏放不下自己滚 */
+.wiz-editor .ly-body { flex: 1; grid-template-rows: minmax(0, 1fr); }
+.wiz-editor .ly-main, .wiz-editor .routes-embed, .wiz-editor .routes-embed > section { height: 100%; min-height: 0; display: flex; flex-direction: column; }
+.wiz-editor .routes-embed .routesplit { flex: 1; min-height: 0; grid-template-rows: minmax(0, 1fr); }
+.wiz-editor .routemap, .wiz-editor .layout-map { flex: 1; min-height: 0; }
+.wiz-editor .ly-tab { flex: 1; min-height: 0; height: 100%; grid-template-rows: minmax(0, 1fr); align-items: stretch; }
+.wiz-editor .ly-tab > .ly-side { min-height: 0; overflow-y: auto; }
+.wiz-editor .routemap .mapwrap, .wiz-editor .layout-map .mapwrap { flex: 1; height: auto; min-height: 0; }
+.console .wiz-editor .routeside, .wiz-editor .routeside { max-height: none; min-height: 0; overflow-y: auto; }
 .row.wrap { flex-wrap: wrap; }
 /* UIUX-028:禁行区状态没话说时(当前版本已确认)不留一条带底色的空条 */
 .nogo-status:empty { display: none; }
