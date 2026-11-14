@@ -68,7 +68,7 @@ def test_一帧误检不算_三帧里两帧才算有人_只报一次():
     v.on_persons(_帧(7.0))
     assert len(ev) == 1, "一直有人不重报"
     assert v.caps() == {"state": "ok", "present": True, "near": False, "count": 1,
-                        "nearest_m": 7.0}
+                        "nearest_m": 7.0, "bearing_deg": 5.0}, "用户 11-15:带方向,站点在地图上标人"
 
 
 def test_进5米算近_退到6米外才算不近():
