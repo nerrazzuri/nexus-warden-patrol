@@ -10,6 +10,9 @@ from pathlib import Path
 
 from safety_geom import BASE_HX, BASE_HY, SafetyTracker
 
+#: 照路走控制器都放弃以后重查路线最多几次(跟正式代码 nav2_nav.ROUTE_RECHECKS 一样)。
+ROUTE_RECHECKS = 2
+
 
 def _corners(x, y, yaw, hx=BASE_HX, hy=BASE_HY):
     c, s = math.cos(yaw), math.sin(yaw)
@@ -66,7 +69,8 @@ def main() -> int:
     import rclpy
     from action_msgs.msg import GoalStatus
     from geometry_msgs.msg import PoseArray, PoseStamped, Twist
-    from nav2_msgs.action import NavigateToPose
+    from nav2_msgs.action import FollowPath, NavigateToPose
+    from nav_msgs.msg import Path as PathMsg
     from nav_msgs.msg import Odometry
     from rclpy.action import ActionClient
     from rclpy.node import Node
@@ -80,6 +84,8 @@ def main() -> int:
             self.route_refused = False
             self.route_checks = []
             self.client = ActionClient(self, NavigateToPose, "navigate_to_pose")
+            #: 外审 11-14:路线靠局部搜索放行时照那条路走(跟真机代理 → 转接节点一样)
+            self.follow = ActionClient(self, FollowPath, "follow_path")
             self.min_clearance = float("inf")
             self.last_odom_speed = 0.0
             self.last_cmd_mag = 0.0
@@ -245,6 +251,60 @@ def main() -> int:
             msg.pose.orientation.w = math.cos(float(yaw) / 2.0)
             return msg
 
+        def _wait(self, handle) -> dict:
+            """等一个收下了的动作:撞了、超时就取消。"""
+            if self._deadline is None:
+                self._deadline = time.monotonic() + self._deadline_s
+            future = handle.get_result_async()
+            while rclpy.ok() and not future.done() and time.monotonic() < self._deadline:
+                rclpy.spin_once(self, timeout_sec=0.05)
+                if self.collision:
+                    handle.cancel_goal_async()
+                    break
+            if self.collision:
+                why = f"hit moving actor {self.actor_hit}" if self.actor_hit else "geometric collision"
+                return {"success": False, "reason": why}
+            if not future.done():
+                handle.cancel_goal_async()
+                return {"success": False, "reason": "timeout"}
+            wrapped = future.result()
+            ok = wrapped is not None and wrapped.status == GoalStatus.STATUS_SUCCEEDED
+            return {"success": ok, "status": None if wrapped is None else int(wrapped.status)}
+
+        def _drive_nav(self, goal, idx) -> dict:
+            request = NavigateToPose.Goal()
+            request.pose = self.pose(goal)
+            # Nav2 的 action 服务比 bt_navigator 激活早出现;没激活时目标会被拒。
+            # 第一个目标被拒就每秒重发,最多等 30 s,不把启动慢算成导航失败。
+            retry_until = time.monotonic() + (30.0 if idx == 0 else 0.0)
+            while True:
+                send = self.client.send_goal_async(request)
+                rclpy.spin_until_future_complete(self, send, timeout_sec=10.0)
+                handle = send.result()
+                if (handle is not None and handle.accepted) or time.monotonic() >= retry_until:
+                    break
+                time.sleep(1.0)
+            if handle is None or not handle.accepted:
+                return {"success": False, "reason": "goal rejected"}
+            return self._wait(handle)
+
+        def _drive_path(self, path, controller) -> dict:
+            if not self.follow.wait_for_server(timeout_sec=30.0):
+                return {"success": False, "reason": "follow_path action unavailable"}
+            request = FollowPath.Goal()
+            request.path = PathMsg()
+            request.path.header.frame_id = "map"
+            request.path.header.stamp = self.get_clock().now().to_msg()
+            request.path.poses = [self.pose([x, y, yaw]) for x, y, yaw in path]
+            request.controller_id = controller
+            request.goal_checker_id = "general_goal_checker"
+            send = self.follow.send_goal_async(request)
+            rclpy.spin_until_future_complete(self, send, timeout_sec=10.0)
+            handle = send.result()
+            if handle is None or not handle.accepted:
+                return {"success": False, "reason": "path goal rejected"}
+            return self._wait(handle)
+
         def run(self):
             timeout = float(self.case.get("timeout_s", 90))
             if not self.client.wait_for_server(timeout_sec=30.0):
@@ -258,56 +318,49 @@ def main() -> int:
             total_start = time.monotonic()
             for idx, goal in enumerate(self.case["goals"]):
                 self.active_since = time.monotonic()
-                request = NavigateToPose.Goal()
-                request.pose = self.pose(goal)
+                chk = None
                 if gate is not None:
                     chk = gate.check(self.pose(goal))
                     chk.pop("poses", None)
-                    self.route_checks.append({"goal": idx, **chk})
+                    self.route_checks.append({"goal": idx, **{k: v for k, v in chk.items()
+                                                             if k != "path"}})
                     if chk.get("checked") and not chk.get("ok"):
                         self.route_refused = True
                         results.append({"goal": idx, "success": False, "reason": "route_refused",
                                         "code": chk.get("code")})
                         break
-                # Nav2 的 action 服务比 bt_navigator 激活早出现;没激活时目标会被拒。
-                # 第一个目标被拒就每秒重发,最多等 30 s,不把启动慢算成导航失败。
-                retry_until = time.monotonic() + (30.0 if idx == 0 else 0.0)
+                # 外审 11-14:跟真机代理一样 —— 路线靠局部搜索放行就让控制器照那条路走(FollowPath);
+                # 控制器放弃了先换 RPP 跟同一条,还不行从当前位置重新查路线,最多 ROUTE_RECHECKS 次
+                path = (chk or {}).get("path")
+                controller, rechecks, followed = "FollowPath", 0, False
+                self._deadline_s, self._deadline = timeout, None    # 收下第一个目标时起算
                 while True:
-                    send = self.client.send_goal_async(request)
-                    rclpy.spin_until_future_complete(self, send, timeout_sec=10.0)
-                    handle = send.result()
-                    if (handle is not None and handle.accepted) or time.monotonic() >= retry_until:
+                    if path:
+                        followed = True
+                        out = self._drive_path(path, controller)
+                    else:
+                        out = self._drive_nav(goal, idx)
+                    if out.get("reason") or out["success"] or not path:
                         break
-                    time.sleep(1.0)
-                self.active_since = time.monotonic()
-                if handle is None or not handle.accepted:
-                    results.append({"goal": idx, "success": False, "reason": "goal rejected"})
-                    break
-                future = handle.get_result_async()
-                deadline = time.monotonic() + timeout
-                while rclpy.ok() and not future.done() and time.monotonic() < deadline:
-                    rclpy.spin_once(self, timeout_sec=0.05)
-                    if self.collision:
-                        handle.cancel_goal_async()
+                    if controller != "RPP":
+                        controller = "RPP"
+                        continue
+                    if rechecks >= ROUTE_RECHECKS or gate is None:
                         break
-                if self.collision:
-                    why = f"hit moving actor {self.actor_hit}" if self.actor_hit else "geometric collision"
-                    results.append({"goal": idx, "success": False, "reason": why})
-                    break
-                if not future.done():
-                    handle.cancel_goal_async()
-                    results.append({"goal": idx, "success": False, "reason": "timeout"})
-                    break
-                wrapped = future.result()
-                ok = wrapped is not None and wrapped.status == GoalStatus.STATUS_SUCCEEDED
-                results.append({
-                    "goal": idx,
-                    "success": ok,
-                    "status": None if wrapped is None else int(wrapped.status),
-                    "elapsed_s": round(time.monotonic() - self.active_since, 3),
-                })
+                    rechecks += 1
+                    chk = gate.check(self.pose(goal))
+                    chk.pop("poses", None)
+                    self.route_checks.append({"goal": idx, "recheck": rechecks,
+                                              **{k: v for k, v in chk.items() if k != "path"}})
+                    if chk.get("checked") and not chk.get("ok"):
+                        out = {"success": False, "reason": "route_refused", "code": chk.get("code")}
+                        break
+                    path, controller = chk.get("path"), "FollowPath"
+                results.append({"goal": idx, **out, "followed_path": followed,
+                                "rechecks": rechecks,
+                                "elapsed_s": round(time.monotonic() - self.active_since, 3)})
                 self.active_since = None
-                if not ok:
+                if not out["success"]:
                     break
             if self.stall_started is not None:
                 self.max_stall = max(self.max_stall, time.monotonic() - self.stall_started)
