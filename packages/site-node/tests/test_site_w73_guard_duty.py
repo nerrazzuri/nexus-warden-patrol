@@ -1871,3 +1871,22 @@ async def test_外审W77_8_1_停车没确认的告警没报成_不当保安看�
     await _跑(t, 5)
     assert len(_patrols(t)) == n, "没人看过:接着拦"
     assert t.duty.alerts.has_open("A", "guard_stuck"), "下一拍再报"
+
+
+async def test_外审W77_11_3_防区重叠_人在重叠那块_还在原防区里_不判离开(站):
+    t = 站
+    t.areas.set(MAP[0], MAP[1], "A门厅", [[3.0, -2.0], [8.0, -2.0], [8.0, 2.0], [3.0, 2.0]],
+                by="alice")                              # 跟东区重叠,名字排在前面
+    tid = await _跟着(t)
+    assert t.duty._fs("A")["zone"][2] == "东区"
+    t.duty._on_event("A", _事("follow_track", task_id=tid, points=_点(3.5, 4.0, 4.5)))
+    assert not t.duty.alerts.has_open("A", "person_left"), "人还在东区里(只是也在门厅里)"
+
+
+def test_外审W77_11_2_去值守位路上_按位置算在哪个防区_到了值守位才按值守的防区(站):
+    from types import SimpleNamespace
+    t = 站
+    pose = SimpleNamespace(map_id=MAP[0], map_version=MAP[1], x=7.0, y=0.0)   # 在西区
+    t.duty._client = lambda rid: SimpleNamespace(telemetry=SimpleNamespace(pose=pose))
+    assert t.duty._zone_now("A", {"state": "watch", "watch_zone": "东区"})[2] == "西区"
+    assert t.duty._zone_now("A", {"state": "post", "watch_zone": "东区"})[2] == "东区"

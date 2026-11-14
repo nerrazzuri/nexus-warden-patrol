@@ -29,11 +29,11 @@ class 钟:
 _seq = [0]
 
 
-def _帧(*ranges, camera="front", check="ok", snapshot=""):
+def _帧(*ranges, camera="front", check="ok", snapshot="", bearing=5.0):
     _seq[0] += 1
     return Persons(seq=_seq[0], stamp_ns=0, camera=camera, check=check,
                    reason="" if check == "ok" else "没模型",
-                   people=tuple(Person(bearing_deg=5.0, range_m=r, score=0.9) for r in ranges),
+                   people=tuple(Person(bearing_deg=bearing, range_m=r, score=0.9) for r in ranges),
                    snapshot=snapshot)
 
 
@@ -243,6 +243,56 @@ async def test_端到端(tmp_path):
             await 跑(1)
         assert 能力()["present"] is False
         assert "person_gone" in [e["kind"] for e in ears.events]
+        w.close()
+    finally:
+        await rt.close()
+
+
+async def test_外审W77_11_1_人一直在_方向距离变了_能力跟着更新_最多一秒一次(tmp_path):
+    broker = MemoryBroker()
+    ears = 耳朵()
+    st = MemoryTransport(broker, "site")
+    await st.connect()
+    await st.subscribe(f"{T.prefix}/#", ears)
+    c = 钟()
+    r = SimRobot(now_ms=lambda: 1_000_000)
+    rt = AgentRuntime(transport=MemoryTransport(broker, "dog"), registration=REG, hal=r,
+                      store_dir=tmp_path / "agent", now_ms=lambda: 1_000_000,
+                      loaded_map=("m", "1"), boot_id="b", home=Pose.from_xy_yaw(0, 0, 0),
+                      persons="bridge", persons_socket=tmp_path / "p.sock", monotonic=c)
+    await rt.start()
+
+    async def 跑(n):
+        for _ in range(n):
+            await rt.step(0.1)
+            await asyncio.sleep(0.01)
+            await broker.drain()
+
+    def 能力():
+        return Capabilities.from_wire(ears.caps[-1]).tasks["persons"]
+    try:
+        rd, w = await _连(tmp_path / "p.sock")
+        w.write(encode(Hello(proto=PROTO, name="fake")))
+        await w.drain()
+        await rd.readline()
+        for _ in range(2):
+            w.write(encode(_帧(6.0)))
+        await w.drain()
+        await 跑(5)
+        assert 能力()["present"] is True and 能力()["bearing_deg"] == 5.0
+        for _ in range(4):                                # 人绕到左边、远了
+            c.t += 0.5
+            w.write(encode(_帧(8.0, bearing=90.0)))
+            await w.drain()
+            await 跑(1)
+        assert 能力()["bearing_deg"] == 90.0 and 能力()["nearest_m"] == 8.0
+        n = len(ears.caps)
+        for _ in range(5):                                # 0.1 秒一帧来回抖:不是每帧都发
+            c.t += 0.1
+            w.write(encode(_帧(8.0, bearing=90.0 + 30.0 * (_ % 2))))
+            await w.drain()
+            await 跑(1)
+        assert len(ears.caps) - n <= 1, "最多一秒一次"
         w.close()
     finally:
         await rt.close()

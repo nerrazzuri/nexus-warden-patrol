@@ -162,6 +162,14 @@ class PersonView:
         return [t for k, c in self._cams.items() if self._healthy(k) and c.sees()
                 for t in c.ranged]
 
+    def target_key(self) -> tuple:
+        """最近那个人粗一点的方向、距离(15°、0.5 m 一档):变了能力要重发(外审 W77-11 #1:
+        站点拿它在地图上标人,不能一直是刚看见时的那个)。"""
+        t = self.target()
+        if t is None or self.nearest_m is None:
+            return ()
+        return (round(t[0] / 15.0), round(self.nearest_m / 0.5))
+
     def key(self) -> tuple:
         """能力该重发的时候(这几样变了)。人数、距离天天变,不在里面(站点按 ``near`` 判)。"""
         return (self.state(), self.present, self.present is True and self.near)

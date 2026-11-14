@@ -113,6 +113,14 @@ class AreaBook:
                 return a["zone"]
         return None
 
+    def contains(self, map_id: str, version: str, zone: str, x: float, y: float) -> bool | None:
+        """点 (x, y) 在不在这个防区里(重叠的别的防区不管);这张图这一版没有这个防区 ``None``。"""
+        rows = self.db.query("SELECT points FROM zone_areas WHERE map_id=? AND map_version=? "
+                             "AND zone=?", (map_id, version, zone))
+        if not rows:
+            return None
+        return inside(x, y, json.loads(rows[0]["points"]))
+
     def neighbours(self, map_id: str, version: str, zone: str,
                    within_m: float = NEIGHBOUR_M) -> list[str]:
         """这个防区和跟它相邻的(边界相距 ``within_m`` 以内),它自己排第一个,别的按名字。"""

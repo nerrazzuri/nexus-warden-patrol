@@ -309,6 +309,9 @@ class AgentRuntime:
         self.person_view: Any = None
         self._pers_srv: Any = None
         self._pers_state_told: tuple = ()
+        #: 外审 W77-11 #1:人的方向、距离(粗档)上次报的、什么时候报的(最多一秒一次)。
+        self._pers_target_told: tuple = ()
+        self._pers_target_at = -1e9
         if persons == "bridge":
             from nexwar_agent.pers_server import PersonBridgeServer
             from nexwar_agent.persons import PersonView
@@ -3167,8 +3170,15 @@ class AgentRuntime:
             pst = self.person_view.key() + (
                 tuple(self._standoff_caps().values()) if self._standoff_ok() else ()) + (
                 (self._follow_caps().get("state"),) if self._standoff_ok() else ())
+            tk = self.person_view.target_key()
             if pst != self._pers_state_told:     # 在不在看、有没有人、近不近变了:站点据此对账驱离
                 self._pers_state_told = pst
+                self._pers_target_told, self._pers_target_at = tk, self._mono()
+                if self.transport.connected:
+                    await self._publish_caps()
+            elif tk != self._pers_target_told and self._mono() - self._pers_target_at >= 1.0:
+                # 人还在、方向距离变了:站点在地图上标人要用新的(最多一秒一次)
+                self._pers_target_told, self._pers_target_at = tk, self._mono()
                 if self.transport.connected:
                     await self._publish_caps()
         pv = self.person_view

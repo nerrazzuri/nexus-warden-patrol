@@ -315,7 +315,7 @@ class FollowTask(Task):
         assert here is not None and self._person is not None
         b = math.degrees(math.atan2(self._person[1] - here[1], self._person[0] - here[0]) - here[2])
         b = (b + 180.0) % 360.0 - 180.0
-        cmd, why = self._backoff.choose(b, d)
+        cmd, why = self._backoff.choose(b, d, max_v=self.req.max_speed_mps)
         if cmd is None:
             if self._backing != "cornered":
                 log.warning("跟人 %s:人在 %.1f m,退不了,原地站定(%s)", self.task_id, d, why)
