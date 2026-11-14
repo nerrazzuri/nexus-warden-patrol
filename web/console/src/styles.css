@@ -569,6 +569,9 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--c-primary); }
 .armstate .dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
 /* 易用性第 6 轮 W6-05:顶栏布防状态点开切模式 */
 .armmenu { position: relative; display: inline-flex; }
+/* UIUX-034:只看的布防状态不像按钮:小字「只看」,虚线框、不带底色的点按感 */
+span.armstate { box-shadow: none; outline: 1px dashed var(--c-outline); outline-offset: -1px; }
+.armstate-ro { font-size: 12px; font-weight: 400; color: var(--c-textSecondary); }
 button.armstate { border: 0; cursor: pointer; font: inherit; font-size: 14px; font-weight: 600; }
 button.armstate:disabled { cursor: default; }
 button.armstate:focus-visible { outline: 2px solid var(--c-primary); outline-offset: 2px; }
