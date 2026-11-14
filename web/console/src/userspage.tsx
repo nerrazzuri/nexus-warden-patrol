@@ -97,7 +97,7 @@ const ACTIONS: [RegExp, string][] = [
   [/^POST \/api\/arming\/exceptions\/\d+\/remove$/, "actArmExceptionDel"],
   [/^(POST|DELETE) \/api\/arming\/exceptions/, "actArmExceptionAdd"],
   // 第 4 轮 P1-66:巡逻日程真正的接口是 route-schedules;遥控速度
-  [/^POST \/api\/route-schedules/, "actPatrolSched"], [/^POST \/api\/teleop-speeds/, "actTeleopSpeeds"],
+  [/^POST \/api\/route-schedules/, "actPatrolSched"], [/^POST \/api\/teleop-speeds/, "actTeleopSpeeds"], [/^POST \/api\/voice-presets/, "actVoicePresets"],
   [/^POST \/api\/problem-reports\/[^/]+\/delete$/, "actProblemDel"], [/^POST \/api\/problem-reports$/, "actProblemSent"],
   // 第 9 轮 W9-07:遥控开始、结束(站点记的是 teleop_start / teleop_end)
   [/^teleop_start$/, "actTeleopStart"], [/^teleop_end$/, "actTeleopEnd"],

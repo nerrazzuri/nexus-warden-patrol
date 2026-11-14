@@ -903,6 +903,8 @@ class _Handler(TlsHandlerMixin):
                 return self._shift_notes(method, user)
             if path == "/api/duty-settings":
                 return self._duty_settings(method, user)
+            if path == "/api/voice-presets":
+                return self._voice_presets(method, user)
             if path == "/api/teleop-speeds":
                 return self._teleop_speeds(method, user)
             m = _HIST.match(path)
@@ -1524,6 +1526,26 @@ class _Handler(TlsHandlerMixin):
             self._audit_detail = {"speeds": d.get("speeds")}
         try:
             return self._send_json(200, {"speeds": st.set_teleop_speeds(d, by=str(user))})
+        except SettingsError as exc:
+            raise HttpError(400, str(exc)) from exc
+
+    def _voice_presets(self, method: str, user) -> None:
+        """常用喊话(第三档 #41):``GET`` 谁都能看(保安点了让机器人念),``POST`` 管理员整张换。"""
+        from nexwar_site.site_settings import SettingsError
+        st = self.site.settings
+        if st is None:
+            raise HttpError(404, "此站点未启用设置")
+        if method == "GET":
+            self._need(user, VIEW)
+            return self._send_json(200, {"presets": st.voice_presets()})
+        if method != "POST":
+            raise HttpError(405, "只支持 GET/POST")
+        self._need(user, MANAGE)
+        d = self._body()
+        if isinstance(d, dict) and isinstance(d.get("presets"), list):
+            self._audit_detail = {"n": len(d["presets"])}
+        try:
+            return self._send_json(200, {"presets": st.set_voice_presets(d, by=str(user))})
         except SettingsError as exc:
             raise HttpError(400, str(exc)) from exc
 
@@ -3204,8 +3226,41 @@ class _Handler(TlsHandlerMixin):
         self._audit_target = robot_id
         if self.site.dispatcher.registry.get(robot_id) is None:
             raise HttpError(404, "机器人不存在")
-        was = self.site.dispatcher.resume(robot_id, by=str(user))
-        return self._send_json(200, {"robot_id": robot_id, "was_held": was})
+        disp = self.site.dispatcher
+        # 外审 POC C1:上装急停在机器人本地锁着 —— 先让机器人解开(带它报的这一次的代次),解开了才
+        # 撤叫停;没解开回 502、叫停照旧留着,恢复按钮还在(外审 POC r2 #5)。没有上装急停的是 None
+        t0 = disp._now()
+        released: bool | None = None
+        latch = disp.estop_latch(robot_id)
+        # 外审 POC r3 #4:不凭站点手里的「没锁」跳过 —— 有上装急停就总问机器人解锁
+        # (没锁的它当场回成功)
+        if latch is not None:
+            ok, why = False, ""
+            try:
+                gen = int(latch.get("gen", 0))
+                r = self.site.loop.call(lambda: disp.estop_release(robot_id, gen,
+                                                                   issued_by=str(user)),
+                                        timeout_s=disp.ack_timeout_s + 5)
+                ack = r.get("ack") if isinstance(r, dict) else None
+                # 外审 POC r3 #3:只认明确成功(重复的看原来那条);过期、拒绝、没原因的都是没解开
+                if isinstance(ack, dict) and ack.get("result") == "duplicate":
+                    orig = ack.get("original")
+                    ok = isinstance(orig, dict) and orig.get("result") == "accepted"
+                else:
+                    ok = isinstance(ack, dict) and ack.get("result") == "accepted"
+                if not ok:
+                    why = (str(ack.get("reason") or ack.get("result") or "")
+                           if isinstance(ack, dict) else "") or "没回执"
+            except Exception as exc:                       # 没解开:照实说
+                log.warning("%s 恢复:上装急停解锁没成", robot_id, exc_info=True)
+                why = str(exc) or type(exc).__name__
+            if not ok:
+                raise HttpError(502, f"机器人没解开上装急停的锁({why[:120]}):叫停照旧保留,"
+                                     "确认机器人在线、现场安全后再点恢复")
+            released = True
+        was = disp.resume(robot_id, by=str(user), not_after_ms=t0)
+        return self._send_json(200, {"robot_id": robot_id, "was_held": was,
+                                     "estop_released": released})
 
     def _service(self, robot_id: str, user) -> None:
         """只许手动派 / 接自动派遣(W33):``{manual_only: bool, note?}``。设成只许手动要 ``dispatch``
@@ -3236,7 +3291,8 @@ class _Handler(TlsHandlerMixin):
         d = self._body()
         if not isinstance(d, dict):
             raise HttpError(400, "要一个对象")
-        d = {k: d[k] for k in ("output", "on", "max_s", "clip", "side", "color") if k in d}
+        d = {k: d[k] for k in ("output", "on", "max_s", "clip", "side", "color", "pan", "tilt")
+             if k in d}                               # pan/tilt:POC 11-06 竞品云台
         self._audit_detail = {k: str(v)[:80] for k, v in d.items()}
         from nexwar_contract.deter import parse_deter
         from nexwar_contract.errors import ContractError

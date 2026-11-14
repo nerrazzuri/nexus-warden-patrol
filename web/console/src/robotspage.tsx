@@ -39,11 +39,20 @@ export interface RobotCard {
   enrolled_at?: number | null; manual_note?: string; held?: { by: string; at_ms: number } | null;
   /** POC:能换哪几种姿态、正在跑的任务(老站点没有)。 */
   postures?: Posture[]; task?: string | null;
+  /** POC 11-05:上装能开哪几路、有哪些话术、能不能打字(老站点没有)。 */
+  deter?: Deter | null;
   /** 第 9 轮 W9-06:正在跑的任务给人看的说法(不露 adhoc-forever-… 这种编号)。 */
   task_what?: { kind: string; route: string; forever: boolean } | null;
   /** W76:正在跑几圈的巡逻 —— 第几圈、共几圈(0 = 一直巡逻)。一圈的、老站点没有。 */
   lap?: { n: number; of: number } | null;
 }
+export interface Deter { outputs: string[]; max_s: number; tts: boolean; clips: string[];
+  /** 第三档 #41:能念哪几种语言(竞品只会中文;英文靠 Orin 上合成)。没报 = 不知道,不挡。 */
+  tts_langs?: string[] }
+const STROBE_S = [30, 60, 120, 300];
+const CLIP_KEY: Record<string, "clip_blocked" | "clip_passing" | "clip_distance" | "clip_restricted"> = {
+  blocked: "clip_blocked", passing: "clip_passing", distance: "clip_distance", restricted: "clip_restricted",
+};
 export type Posture = "stand" | "lie" | "crawl";
 const POSTURE_KEY: Record<Posture, "rdStand" | "rdLie" | "rdCrawl"> = { stand: "rdStand", lie: "rdLie", crawl: "rdCrawl" };
 export interface Wifi {
@@ -441,6 +450,7 @@ function Controls({ r, u, role, say, onChanged }: { r: RobotCard; u?: UnitInfo; 
           {!r.task && r.held && <p class="muted small">{t("rdPostureHeld")}</p>}
         </div>
       )}
+      {dispatch && r.deter && <DeterPanel r={r} d={r.deter} id={id} busy={busy} off={off} send={send} path={path} admin={isOwnerLike(role)} say={say} />}
       {askHome && (
         <Confirm text={t("rdAbortHomeAsk", { id, what: taskWhat(r.task_what) })} yes={t("rdAbortHome")} danger
           onNo={() => setAskHome(false)}
@@ -459,6 +469,196 @@ function Controls({ r, u, role, say, onChanged }: { r: RobotCard; u?: UnitInfo; 
           }} />
       )}
     </section>
+  );
+}
+
+/** POC 11-06 竞品云台:每按一下转多少度、角度上限(跟 nexwar_contract.deter 一致)、雨刷刷多久。 */
+const PAN_STEP = 15, TILT_STEP = 10, PAN_MAX = 180, TILT_MAX = 90, WIPER_S = 10;
+
+/** POC 11-05:警灯开关(带时长)、喊话(打字、录好的话术)。保安、管理员;狗报了 deter 才有。 */
+function DeterPanel({ r, d, id, busy, off, send, path, admin, say }: {
+  r: RobotCard; d: Deter; id: string; busy: boolean; off: boolean;
+  send: (fn: () => Promise<CommandReply | null>, ok: string) => Promise<void>; path: (a: string) => string;
+  admin: boolean; say: Say;
+}) {
+  // 第三档 #41:常用喊话(全站一张,站点 /api/voice-presets);老站点没有这个接口就不出这一行
+  const [presets, setPresets] = useState<VoicePreset[] | null>(null);
+  const [editing, setEditing] = useState(false);
+  const tts = d.outputs.includes("speaker") && d.tts;
+  useEffect(() => {
+    if (!tts) return;
+    let live = true;
+    api<{ presets: VoicePreset[] }>("GET", "/api/voice-presets").then((x) => live && setPresets(x.presets ?? []))
+      .catch(() => live && setPresets(null));
+    return () => { live = false; };
+  }, [tts]);
+  const [secs, setSecs] = useState(60);
+  const [text, setText] = useState("");
+  useEffect(() => setText(""), [r.robot_id]);
+  const deter = (body: Record<string, unknown>) => () => api<CommandReply>("POST", path("deter"), body);
+  const strobe = d.outputs.includes("strobe");
+  const speaker = d.outputs.includes("speaker");
+  const words = text.trim();
+  // POC 11-06 竞品云台:没有回读角度,按「上次按到哪」算(看见人自己转过去以后,先点回正再调)
+  const [aim, setAim] = useState<[number, number]>([0, 0]);
+  useEffect(() => setAim([0, 0]), [r.robot_id]);
+  const turn = (dp: number, dt: number) => {
+    const pan = dp === 0 && dt === 0 ? 0 : Math.max(-PAN_MAX, Math.min(PAN_MAX, aim[0] + dp));
+    const tilt = dp === 0 && dt === 0 ? 0 : Math.max(-TILT_MAX, Math.min(TILT_MAX, aim[1] + dt));
+    setAim([pan, tilt]);
+    void send(deter({ output: "ptz", on: true, pan, tilt }), t("rdPtzDone", { id, pan, tilt }));
+  };
+  return (
+    <div class="rd-name rd-deter">
+      <span class="rd-label">{t("rdDeter")}</span>
+      {strobe && (
+        <div class="rd-inline">
+          <select name="strobe_s" aria-label={t("rdStrobeFor")} value={String(secs)} onChange={(e) => setSecs(Number(e.currentTarget.value))}>
+            {STROBE_S.filter((s) => s <= d.max_s).map((s) => <option key={s} value={String(s)}>{s} s</option>)}
+          </select>
+          <button type="button" class="btn sm primary" disabled={busy || off}
+            onClick={() => void send(deter({ output: "strobe", on: true, max_s: secs }), t("rdStrobeOnDone", { id, s: secs }))}>{t("rdStrobeOn")}</button>
+          <button type="button" class="btn sm" disabled={busy || off}
+            onClick={() => void send(deter({ output: "strobe", on: false }), t("rdStrobeOffDone", { id }))}>{t("rdStrobeOff")}</button>
+        </div>
+      )}
+      {d.outputs.includes("ptz") && (
+        <div class="rd-actions rd-ptz" aria-label={t("rdPtz")}>
+          <button type="button" class="btn sm" disabled={busy || off} onClick={() => turn(-PAN_STEP, 0)}>{t("rdPtzLeft")}</button>
+          <button type="button" class="btn sm" disabled={busy || off} onClick={() => turn(PAN_STEP, 0)}>{t("rdPtzRight")}</button>
+          <button type="button" class="btn sm" disabled={busy || off} onClick={() => turn(0, -TILT_STEP)}>{t("rdPtzUp")}</button>
+          <button type="button" class="btn sm" disabled={busy || off} onClick={() => turn(0, TILT_STEP)}>{t("rdPtzDown")}</button>
+          <button type="button" class="btn sm" disabled={busy || off} onClick={() => turn(0, 0)}>{t("rdPtzCenter")}</button>
+          {d.outputs.includes("wiper") && (
+            <button type="button" class="btn sm" disabled={busy || off}
+              onClick={() => void send(deter({ output: "wiper", on: true, max_s: WIPER_S }), t("rdWiperDone", { id, s: WIPER_S }))}>{t("rdWiper")}</button>
+          )}
+        </div>
+      )}
+      {speaker && d.tts && (
+        <form class="rd-inline" onSubmit={(e) => {
+          e.preventDefault();
+          if (!words) return;
+          void send(deter({ output: "speaker", on: true, max_s: 60, clip: `tts:zh:${words}` }), t("rdSpeakDone", { id }));
+        }}>
+          <input name="say" aria-label={t("rdSpeakText")} placeholder={t("rdSpeakPh")} maxLength={300} value={text}
+            onInput={(e) => setText(e.currentTarget.value)} />
+          <button type="submit" class="btn sm primary" disabled={busy || off || !words}>{t("rdSpeakSend")}</button>
+        </form>
+      )}
+      {tts && presets !== null && (
+        <div class="rd-presets" data-voice-presets="1">
+          <span class="muted small">{t("rdPresets")}</span>
+          <div class="rd-actions">
+            {presets.map((p) => {
+              const cant = d.tts_langs != null && !d.tts_langs.includes(p.lang);
+              return (
+              <button key={p.lang + p.text} type="button" class="btn sm rd-preset" disabled={busy || off || cant}
+                title={cant ? `${p.text}\n${t("rdPresetCantLang", { id, lang: langName(p.lang) })}` : p.text}
+                onClick={() => void send(deter({ output: "speaker", on: true, max_s: 60, clip: `tts:${p.lang}:${p.text}` }), t("rdSpeakDone", { id }))}>
+                <span class="rd-preset-t">{p.text}</span>
+              </button>
+              );
+            })}
+            {presets.length === 0 && <span class="muted small">{t("rdPresetsNone")}</span>}
+            {admin && <button type="button" class="btn sm" data-voice-edit="1" onClick={() => setEditing(true)}>{t("rdPresetsEdit")}</button>}
+          </div>
+          {/* UIUX-047:念不了的原因直接写出来(title 触屏、键盘看不到) */}
+          {[...new Set(presets.map((p) => p.lang))].filter((l) => d.tts_langs != null && !d.tts_langs.includes(l)).map((l) => (
+            <span key={l} class="muted small" data-preset-cant={l}>{t("rdPresetCantLang", { id, lang: langName(l) })}</span>
+          ))}
+        </div>
+      )}
+      {editing && presets !== null && (
+        <PresetEditor init={presets} onClose={() => setEditing(false)}
+          onSaved={(p) => { setPresets(p); setEditing(false); say(t("rdPresetsSaved")); }} />
+      )}
+      {speaker && d.clips.length > 0 && (
+        <div class="rd-actions" aria-label={t("rdClips")}>
+          {d.clips.map((c) => (
+            <button key={c} type="button" class="btn sm" disabled={busy || off}
+              onClick={() => void send(deter({ output: "speaker", on: true, max_s: 60, clip: c }), t("rdSpeakDone", { id }))}>
+              {CLIP_KEY[c] ? t(CLIP_KEY[c]) : c}
+            </button>
+          ))}
+        </div>
+      )}
+      {speaker && (
+        <div class="rd-actions">
+          <button type="button" class="btn sm" disabled={busy || off}
+            onClick={() => void send(deter({ output: "speaker", on: false }), t("rdSpeakStopped", { id }))}>{t("rdSpeakStop")}</button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+interface VoicePreset { lang: string; text: string }
+const PRESET_LANGS: [string, string][] = [["zh", "中文"], ["en", "English"], ["ms", "Melayu"]];
+const PRESETS_MAX = 12;
+/** 句子里的语言名跟界面语言走(下拉框里写各自的本名)。 */
+const LANG_NAME: Record<string, [string, string]> = { zh: ["Chinese", "中文"], en: ["English", "英文"], ms: ["Malay", "马来文"] };
+const langName = (l: string) => LANG_NAME[l]?.[lang.value === "zh" ? 1 : 0] ?? l;
+
+/** 第三档 #41:管理员编辑常用喊话(整张换)。空的、重复的当场说,不发。 */
+function PresetEditor({ init, onClose, onSaved }: { init: VoicePreset[]; onClose: () => void; onSaved: (p: VoicePreset[]) => void }) {
+  const [rows, setRows] = useState<VoicePreset[]>(init.map((p) => ({ ...p })));
+  const [err, setErr] = useState("");
+  const [bad, setBad] = useState(-1);       // UIUX-049:出错的是第几句(标 aria-invalid、焦点放过去)
+  const [busy, setBusy] = useState(false);
+  const form = useRef<HTMLFormElement>(null);
+  const put = (i: number, p: Partial<VoicePreset>) => {
+    if (i === bad) setBad(-1);
+    setRows(rows.map((x, j) => (j === i ? { ...x, ...p } : x)));
+  };
+  const flag = (i: number, msg: string) => {
+    setBad(i);
+    setErr(msg);
+    form.current?.querySelectorAll<HTMLInputElement>("input[data-voice-text]")[i]?.focus();
+  };
+  async function save(e: Event) {
+    e.preventDefault();
+    const out = rows.map((x) => ({ lang: x.lang, text: x.text.trim() }));
+    const empty = out.findIndex((x) => !x.text);
+    if (empty >= 0) return flag(empty, t("rdPresetEmpty", { n: empty + 1 }));
+    const dup = out.findIndex((x, i) => out.findIndex((y) => y.text === x.text) < i);
+    if (dup >= 0) return flag(dup, t("rdPresetDup", { n: dup + 1 }));
+    setBad(-1);
+    setBusy(true);
+    try {
+      const r = await api<{ presets: VoicePreset[] }>("POST", "/api/voice-presets", { presets: out });
+      onSaved(r.presets ?? out);
+    } catch (x) {
+      setErr(x instanceof ApiError ? x.message : String(x));
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <Modal label={t("rdPresetsEdit")} wide onClose={onClose}>
+      <form class="form preset-form" ref={form} onSubmit={save}>
+        <p class="muted small">{t("rdPresetsHint")}</p>
+        {rows.map((x, i) => (
+          <div class="preset-row" key={i}>
+            <select data-voice-lang="1" aria-label={`${t("rdPresetLang")} ${i + 1}`} value={x.lang} onChange={(e) => put(i, { lang: e.currentTarget.value })}>
+              {PRESET_LANGS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+            </select>
+            <input data-voice-text="1" aria-label={`${t("rdPresetText")} ${i + 1}`} maxLength={300} value={x.text}
+              aria-invalid={i === bad ? true : undefined} aria-describedby={i === bad ? "preset-err" : undefined}
+              onInput={(e) => put(i, { text: e.currentTarget.value })} />
+            <button type="button" class="btn sm danger" data-voice-del="1" onClick={() => setRows(rows.filter((_, j) => j !== i))}>{t("rdPresetDel")}</button>
+          </div>
+        ))}
+        {rows.length < PRESETS_MAX && (
+          <button type="button" class="btn sm ly-new" onClick={() => setRows([...rows, { lang: lang.value === "zh" ? "zh" : "en", text: "" }])}>{t("rdPresetAdd")}</button>
+        )}
+        {err && <p class="error small" role="alert" id="preset-err" data-form-error="1">{err}</p>}
+        <div class="row end">
+          <button type="button" class="btn" onClick={onClose}>{t("cancel")}</button>
+          <button type="submit" class="btn primary" disabled={busy}>{t("save")}</button>
+        </div>
+      </form>
+    </Modal>
   );
 }
 

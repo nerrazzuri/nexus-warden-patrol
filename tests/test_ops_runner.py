@@ -659,3 +659,26 @@ def test_开机准备_路由_对时_厂家自启_一起做_没齐每分钟再来
     slept.clear()
     R.boot(R.Ops(cfg, run=run, etc=tmp_path / "etc", proc=proc), sleep=slept.append)
     assert len(slept) == 9 and tries["n"] == -90
+
+
+def test_POC1106_暂停厂家进程也停竞品的ros1桥_关自启不碰竞品的单元(tmp_path):
+    """POC 网络(竞品上装,没有 V2):竞品的 ros1_bridge 在 Orin 上跟我们抢话题,以前 SSH 手工停。
+    跟着「开机暂停厂家进程」一起暂停(能恢复);关自启只管厂家的,竞品的设置不动(用户 11-06)。"""
+    import signal
+    cfg = _cfg(tmp_path)
+    proc = _proc_cg(tmp_path, {
+        10: (1, "/bin/bash /home/anbot/bridge_start.sh", "anbot_bridge.service"),
+        11: (10, "/opt/ros/foxy/lib/ros1_bridge/parameter_bridge __name:=x",
+             "anbot_bridge.service"),
+        20: (1, "/opt/robot/robot_slam/install/robot_slam/lib/robot_slam/robot_slam",
+             "robot_slam.service"),
+    })
+    killed: list = []
+    ops = R.Ops(cfg, run=Rec(), proc=proc, kill=lambda pid, sig: killed.append((pid, sig)))
+    ops.do("vendor_pause", {})
+    assert sorted(p for p, s in killed if s == signal.SIGSTOP) == [10, 11, 20]
+    sysd = Sys(enabled={"anbot_bridge.service", "robot_slam.service"})
+    out = R.Ops(cfg, run=sysd, etc=tmp_path / "etc", proc=proc).do("vendor_autostart",
+                                                                    {"on": False})
+    assert out["disabled"] == ["robot_slam.service"]
+    assert not any("anbot_bridge" in " ".join(c) for c in sysd.calls), "竞品的自启不动"

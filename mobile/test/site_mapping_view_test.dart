@@ -182,6 +182,21 @@ void main() {
     expect(find.textContaining('没有栅格'), findsOneWidget);
   });
 
+  test('POC Top Glove：录着说还能录多久；停了说录了多久、多大、哪个话题没录到', () {
+    appLang.value = AppLang.zh;
+    expect(recordInfoText({'recording': true, 'est_minutes': 37}), '按机器人剩余空间，大约还能录 37 分钟');
+    expect(recordInfoText({'recording': true}), '');
+    expect(recordInfoText({'recording': true, 'est_minutes': 0}), contains('机器人盘快满了'),
+        reason: '外审：录着时剩 0 分钟要说出来，不能什么都不写');
+    const r = {'bag': 'b1', 'minutes': 12.6, 'bytes': 2900000000, 'empty_topics': ['/rear_lidar'], 'metadata': true};
+    final s = recordInfoText({'recording': false, 'last_record': r});
+    expect(s, contains('上一个包 b1：录了 12.6 分钟，2.9 GB'));
+    expect(s, contains('这些话题一条都没录到：/rear_lidar'));
+    expect(recordInfoText({'recording': false, 'last_record': {...r, 'empty_topics': []}}), contains('每个话题都录到了数据'));
+    expect(recordInfoText({'recording': false, 'last_record': {...r, 'metadata': false}}), contains('索引文件缺失'));
+    expect(recordInfoText({'recording': false, 'last_record': <String, dynamic>{}}), '', reason: '老代理没给');
+  });
+
   testWidgets('第 13 轮 W13-03 ③：标题写「estate-1 · 第 9 版」；还没画区域说「还没画禁行区」、不说「区域第 0 版」', (t) async {
     final api = FakeApi('admin')
       ..zonesView = <String, dynamic>{'revision': 0, 'zones': <dynamic>[], 'confirmed': null, 'confirm_text': 'x'};

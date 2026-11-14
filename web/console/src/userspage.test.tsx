@@ -227,6 +227,7 @@ describe("第 3 轮 P1-66 活动记录", () => {
     expect(actionText("POST /api/arming/exceptions/2/remove")).toBe("删了布防例外");
     expect(actionText("POST /api/route-schedules/s1")).toBe("改了巡逻日程");
     expect(actionText("POST /api/teleop-speeds")).toBe("改了遥控速度");
+    expect(actionText("POST /api/voice-presets")).toBe("改了常用喊话");
     expect(actionText("POST /api/problem-reports")).toBe("传了问题单");                   // 用户 11-11
     expect(actionText("POST /api/problem-reports/NW-1111-1871/delete")).toBe("删了问题单");
     expect(targetText("estate-1:7/R4M-Zone2")).toBe(`${targetText("estate-1:7/" + "a".repeat(12)).trim()} · R4M-Zone2`);

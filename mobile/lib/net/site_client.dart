@@ -409,7 +409,7 @@ List<String> robotCameras(Map<String, dynamic>? view) {
   final video = tasks is Map ? tasks['video'] : null;
   final cams = video is Map ? video['cameras'] : null;
   if (cams is! List) return const <String>['front', 'back'];
-  final got = <String>[for (final c in const ['front', 'back', 'thermal']) if (cams.contains(c)) c];
+  final got = <String>[for (final c in const ['front', 'back', 'thermal', 'payload']) if (cams.contains(c)) c];
   return got.isEmpty ? const <String>['front', 'back'] : got;
 }
 
@@ -466,6 +466,7 @@ String cameraName(String c) => switch (c) {
       'front' => tr('Front camera', '前摄像头'),
       'back' => tr('Rear camera', '后摄像头'),
       'thermal' => tr('Thermal', '热像'),
+      'payload' => tr('Payload', '上装'),
       _ => c,
     };
 
@@ -864,8 +865,14 @@ abstract class SiteApi {
   /// `speaker` 喇叭（开要 [clip]：话术名或 `tts:<语言>:<文字>`）。返回 `{ack}`。
   /// W40：聚光灯可以只开、关一边（[side] `left`/`right`，狗报了 `spotlight_sides` 才给）；开警灯可以挑颜色
   /// （[color]，狗报的 `strobe_colors` 之一）。
+  /// POC 11-06（竞品上装）：`wiper` 雨刷（同警灯，带时长）；`ptz` 云台转到 [pan]（水平，度，正 = 向右）、
+  /// [tilt]（俯仰，度，正 = 向下），`on` 恒为 true、不带时长。
   Future<Map<String, dynamic>> deter(String robotId, String output, bool on,
-      {double? maxS, String? clip, String? side, String? color});
+      {double? maxS, String? clip, String? side, String? color, double? pan, double? tilt});
+  /// 常用喊话（第三档 #41，`GET /api/voice-presets`）：`[{lang, text}]`，点一下按 `tts:<lang>:<text>` 念。
+  /// 老站点没有这个接口抛 [SiteError]。
+  Future<List<Map<String, String>>> voicePresets();
+
 
   /// 在当前位置标原点（W00c6f，管理员）：狗用它此刻的位置当原点（定位不好就拒），站点登记成默认待命点（名字
   /// [name]，空就是 `home`）。返回 `{ack, standby}`。
@@ -2022,8 +2029,17 @@ class SiteClient implements SiteApi {
       'POST', '/api/deterrence/${Uri.encodeComponent(robotId)}/start', <String, dynamic>{}));
 
   @override
+  Future<List<Map<String, String>>> voicePresets() async {
+    final d = _map(await _send('GET', '/api/voice-presets'));
+    return <Map<String, String>>[
+      for (final p in (d['presets'] as List?) ?? const <dynamic>[])
+        if (p is Map && p['lang'] is String && p['text'] is String) {'lang': p['lang'] as String, 'text': p['text'] as String},
+    ];
+  }
+
+  @override
   Future<Map<String, dynamic>> deter(String robotId, String output, bool on,
-          {double? maxS, String? clip, String? side, String? color}) async =>
+          {double? maxS, String? clip, String? side, String? color, double? pan, double? tilt}) async =>
       _map(await _send('POST', '/api/robots/${Uri.encodeComponent(robotId)}/deter', <String, dynamic>{
         'output': output,
         'on': on,
@@ -2031,6 +2047,8 @@ class SiteClient implements SiteApi {
         if (on) 'clip': ?clip,
         'side': ?side,
         if (on) 'color': ?color,
+        'pan': ?pan,
+        'tilt': ?tilt,
       }));
 
   @override

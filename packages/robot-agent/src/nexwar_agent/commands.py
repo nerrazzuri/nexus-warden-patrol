@@ -120,6 +120,8 @@ class CommandProcessor:
         self.deter_hook: Callable[[Command], Any] | None = None
         #: 全狗限速(W29):收下回空串,不收回原因。
         self.speed_cap_hook: Callable[[Command], Any] | None = None
+        #: 外审 POC r1 C1:上装急停解锁(站点「恢复」发;没有上装急停的狗没有)
+        self.estop_release_hook: Callable[[Command], Any] | None = None
         #: 站立、趴下、蹲下(POC 2026-11):不是任务;回拒绝原因或 ``(原因, 数据)``。
         self.posture_hook: Callable[[Command], Any] | None = None
         #: 运动闸(W13 外审):会让狗动的任务**收的时候、起跑的时候**都问它;回原因就不收 / 不起跑
@@ -245,6 +247,13 @@ class CommandProcessor:
             why = self.speed_cap_hook(cmd)
             return self._rej(cmd, why) if why else Ack(cmd.command_id, cmd.task_id,
                                                          AckResult.ACCEPTED)
+        if cmd.kind == "estop_release":
+            # 进幂等记录(外审 POC r2 #1:重投的同一条回 duplicate,不再解一次);再加代次核对
+            if self.estop_release_hook is None:
+                return self._finish(self._rej(cmd, "unsupported"))
+            why = await self.estop_release_hook(cmd)
+            return self._finish(self._rej(cmd, why) if why else Ack(
+                cmd.command_id, cmd.task_id, AckResult.ACCEPTED))
         if cmd.kind == "posture":
             return self._finish(await self._posture(cmd))
         if cmd.kind in MAP_KINDS:

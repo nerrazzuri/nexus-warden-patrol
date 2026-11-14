@@ -88,9 +88,24 @@ def overview(dispatcher: Any, db: Any, *, now_ms: int, tz: tzinfo) -> list[dict[
                     "postures": list(((getattr(caps, "tasks", None) or {}).get("posture") or {})
                                      .get("modes", [])) if fresh else [],
                     "task": _task(c), "lap": _lap(db, rid, _task(c)),
+                    # POC 11-05:网页上开关警灯、喊话(狗报了接上哪几路、有哪些话术、能不能打字)
+                    "deter": _deter(caps) if fresh else None,
                     "task_what": task_what(db, rid, _task(c)),
                     "manual_note": (reg.manual_only(rid) or {}).get("note", ""),
                     **_return_targets(db, rid, caps)})
+    return out
+
+
+def _deter(caps: Any) -> dict[str, Any] | None:
+    d = (getattr(caps, "tasks", None) or {}).get("deter")
+    if not isinstance(d, dict) or not d.get("outputs"):
+        return None
+    out = {"outputs": [str(o) for o in d.get("outputs") or []],
+           "max_s": float(d.get("max_s") or 600.0), "tts": bool(d.get("tts")),
+           "clips": [str(x) for x in d.get("clips") or []]}
+    # 第三档 #41:机器人报了能念哪几种语言才带(没报 = 不知道,网页、App 不挡)
+    if isinstance(d.get("tts_langs"), list):
+        out["tts_langs"] = [str(x) for x in d["tts_langs"]]
     return out
 
 

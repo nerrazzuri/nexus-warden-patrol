@@ -210,6 +210,10 @@ _T: tuple[tuple[int, str, str, str, str, str, str, str], ...] = (
     (0x0518, "robot.payload_siren", "error", "engineer", "警笛坏了", "Siren failed", "检查上装", "Check the payload"),
     (0x0519, "robot.payload_spotlight", "error", "engineer", "探照灯坏了", "Spotlight failed", "检查上装", "Check the payload"),
     (0x051A, "robot.payload_amp", "warn", "engineer", "功放坏了", "Amplifier failed", "检查上装", "Check the payload"),
+    # 竞品上装:求助、急停按钮,喊话没放出来
+    (0x051B, "robot.payload_sos", "error", "user", "现场有人按了求助按钮", "Help button pressed on site", "马上去现场", "Go on site now"),
+    (0x051C, "robot.payload_estop", "error", "user", "上装急停按钮被按下", "Payload e-stop pressed", "确认安全后在机器人详情点「恢复」", "When safe, press Resume on the robot page"),
+    (0x051D, "robot.deter_failed", "warn", "engineer", "喊话没放出来", "Announcement not played", "检查上装音频", "Check the payload audio"),
     # ---- 0x06 定位与建图
     (0x0601, "loc.degraded", "warn", "user", "定位变差，原地等恢复", "Localization degraded; waiting", "", ""),
     (0x0602, "loc.lost_paused", "error", "user", "定位丢了，暂停", "Localization lost; paused", "帮它重新定位", "Re-localize it"),
@@ -267,6 +271,8 @@ BY_NUM: dict[int, ErrCode] = {c.num: c for c in CODES.values()}
 #: 告警种类 → 码名(``alerts.LEVEL_OF`` 里每一种都要有，测试看着)。
 ALERT: dict[str, str] = {
     "stuck": "dispatch.stuck", "intrusion": "sense.intrusion",
+    "payload_sos": "robot.payload_sos", "payload_estop": "robot.payload_estop",
+    "deter_failed": "robot.deter_failed",
     "intrusion_unanswered": "sense.intrusion_unanswered", "intrusion_person": "sense.intrusion_person",
     "deter_cornered": "sense.deter_cornered", "battery_abort": "robot.battery_abort",
     "preflight_refused": "dispatch.preflight_refused", "run_abort": "dispatch.run_abort",

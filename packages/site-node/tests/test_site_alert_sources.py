@@ -302,3 +302,90 @@ def test_W41_定位不可信时报的位置不算出了禁行区(tmp_path):
     报(far)
     报(far)
     assert not _开着的(desk, "nogo")
+
+
+def test_POC1105_竞品警灯发不到_报警说竞品主控_不说继电器板(tmp_path):
+    from nexwar_contract.hal import Fault
+    from nexwar_contract.messages import Event, fault_event_data
+    from nexwar_site.alert_sources import SiteAlertSources
+    from nexwar_site.alert_store import AlertDesk
+    from nexwar_site.db import SiteDB
+    desk = AlertDesk(SiteDB(tmp_path / "s.db"), now_ms=lambda: 1)
+    src = SiteAlertSources(desk, now_ms=lambda: 1)
+    why = "警灯命令发不到竞品主控:竞品主控连不上:http://192.168.113.203:11311"
+    src.on_event("A", Event(event_id="e1", seq=1, boot_id="b", stamp=1, kind="robot_fault",
+                            data=fault_event_data((Fault(code="payload_strobe", fatal=False,
+                                                         text=why),))))
+    [a] = _开着的(desk, "payload_strobe")
+    assert "竞品主控连不上" in a["detail"] and "继电器" not in a["detail"], a["detail"]
+
+
+def _喊话事件(seq, **d):
+    from nexwar_contract.messages import Event
+    return Event(event_id=f"d{seq}", seq=seq, boot_id="b", stamp=1, kind="deter",
+                 data={"output": "speaker", "on": False} | d)
+
+
+def test_POC1105_话术没放出来_出一条报警_原因原样_下一段放完了就解决(tmp_path):
+    from nexwar_site.alert_sources import SiteAlertSources
+    from nexwar_site.alert_store import AlertDesk
+    from nexwar_site.alerts import LEVEL_OF, Level
+    from nexwar_site.db import SiteDB
+    desk = AlertDesk(SiteDB(tmp_path / "s.db"), now_ms=lambda: 1)
+    src = SiteAlertSources(desk, now_ms=lambda: 1)
+    why = "竞品主控放不出来(ssh/aplay 退出码 255): connect to 192.168.113.101 port 22 timed out"
+    src.on_event("A", _喊话事件(1, ended="failed", reason=why))
+    [a] = _开着的(desk, "deter_failed")
+    assert a["detail"] == why and "喊话" in a["title"]
+    assert LEVEL_OF["deter_failed"] is Level.P2
+    src.on_event("A", _喊话事件(2, ended="done", reason="放完了"))
+    assert not _开着的(desk, "deter_failed")
+
+
+# ---------------------------------------------------------------- POC 11-06:竞品的求助、急停按钮
+
+
+def _按钮事件(seq, button):
+    from nexwar_contract.messages import Event
+    return Event(event_id=f"b{seq}", seq=seq, boot_id="b", stamp=1, kind="payload_button",
+                 data={"button": button})
+
+
+async def test_POC1106_求助按钮_P1_要人处理_不自己消失(tmp_path):
+    from nexwar_site.alert_audience import audience
+    from nexwar_site.alert_sources import SiteAlertSources
+    from nexwar_site.alert_store import AlertDesk
+    from nexwar_site.alerts import LEVEL_OF, Level
+    from nexwar_site.db import SiteDB
+    desk = AlertDesk(SiteDB(tmp_path / "s.db"), now_ms=lambda: 1)
+    src = SiteAlertSources(desk, now_ms=lambda: 1)
+    src.on_event("A", _按钮事件(1, "sos"))
+    [a] = _开着的(desk, "payload_sos")
+    assert "求助" in a["title"] and LEVEL_OF["payload_sos"] is Level.P1
+    assert audience("payload_sos") == "help"
+    src.on_event("A", _按钮事件(2, "sos"))
+    assert len(_开着的(desk, "payload_sos")) == 1, "再按合进那一条"
+
+
+async def test_POC1106_急停按钮_P1_站点叫停这台(tmp_path):
+    import asyncio
+
+    from nexwar_site.alert_sources import SiteAlertSources
+    from nexwar_site.alert_store import AlertDesk
+    from nexwar_site.alerts import LEVEL_OF, Level
+    from nexwar_site.db import SiteDB
+    desk = AlertDesk(SiteDB(tmp_path / "s.db"), now_ms=lambda: 1)
+    src = SiteAlertSources(desk, now_ms=lambda: 1)
+    halts: list = []
+
+    class 假派遣:
+        async def halt(self, rid, *, issued_by, reason="operator"):
+            halts.append((rid, issued_by, reason))
+            return {"ack": {"result": "accepted"}}
+    src._disp = 假派遣()
+    src.on_event("A", _按钮事件(1, "estop"))
+    await asyncio.sleep(0)
+    await asyncio.sleep(0)
+    [a] = _开着的(desk, "payload_estop")
+    assert "急停" in a["title"] and "叫停" in a["detail"] and LEVEL_OF["payload_estop"] is Level.P1
+    assert halts == [("A", "上装急停按钮", "payload_estop")]

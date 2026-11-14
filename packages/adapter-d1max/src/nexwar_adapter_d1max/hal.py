@@ -33,12 +33,17 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
+import logging
 import math
 import time
 from collections.abc import Callable
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from nexwar_adapter_d1max.payload import Payload
+
+if TYPE_CHECKING:
+    from nexwar_adapter_d1max.anbot import AnbotPayload
 from nexwar_contract.hal import (
     Battery,
     ControlStatus,
@@ -63,6 +68,8 @@ from nexwar_patrol.backends.sidecar_device import (
 )
 from nexwar_patrol.protocol.agent_frames import MAX_FORWARD_FRACTION, EmergencyStatus
 from nexwar_patrol.protocol.agent_frames import MotionStatus as SdkMotion
+
+log = logging.getLogger(__name__)
 
 ADAPTER_ID = "nexwar/0.1.0"
 
@@ -116,7 +123,7 @@ class D1MaxHal:
                  frame_id: str = "odom",
                  now_ms: Callable[[], int] = wall_ms,
                  backend: SidecarDeviceBackend | None = None,
-                 payload: Payload | None = None,
+                 payload: Payload | AnbotPayload | None = None,
                  token_file: str | None = None) -> None:
         """``token_file``:旁路进程的令牌(协议 9,S11)。代理给缺省的 ``~/.nexwar/sidecar.token``;
         旁路进程要令牌而读不了、不对,``connect`` 就抛(开不了车的代理不该假装能开)。"""
@@ -155,6 +162,10 @@ class D1MaxHal:
         self._monotonic: Callable[[], float] = time.monotonic
         #: 最近一条被接受的速度到什么时候(monotonic)还有效。有效期里不算停。
         self._vel_until: float | None = None
+        #: 外审 POC r1 C1:上装急停按钮按过、还没在站点恢复(本地锁,按急停算)
+        self._payload_estop = False
+        #: 第几次锁上(外审 POC r2 #1):解锁命令要带上这一次的代次,旧命令重投解不开后来的急停
+        self._payload_estop_gen = 0
 
     def _sdk_caps(self) -> tuple[float, float]:
         """SDK 比例的(往前, 往后)上限。往前:自己配的 ``max_fraction`` 和旁路进程 ``--max-fraction``
@@ -391,6 +402,8 @@ class D1MaxHal:
     def _estop_now(self) -> bool:
         """软、硬两路**都**报「已解除」才算没急停。没状态帧、任一路 ``Unknown``(旁路进程在
         客户端刚连上时会先补一帧全零的占位状态)都按急停算:不知道,放行等于赌运气。"""
+        if self._payload_estop:
+            return True                               # 外审 POC r1 C1:上装急停按过、还没解除
         st = self._b.last_state
         if st is None:
             return True
@@ -488,7 +501,7 @@ class D1MaxHal:
             raise ValueError(f"灯只有 front/back/both,收到 {channel!r}")
         await setter(on)
 
-    def _up(self, output: str) -> Payload:
+    def _up(self, output: str) -> Payload | AnbotPayload:
         if self._payload is None or not self._payload.has(output):
             raise HalUnsupported(f"未安装上装的 {output}")
         return self._payload
@@ -515,6 +528,8 @@ class D1MaxHal:
         if self._payload is None or not self._payload.has("speaker"):
             return ()
         from pathlib import Path
+        if not self._payload.cfg.clips_dir:           # 竞品转接:没有录好的话术(别去扫当前目录)
+            return ()
         d = Path(self._payload.cfg.clips_dir)
         return tuple(sorted(p.stem for p in d.glob("*.wav"))) if d.is_dir() else ()
 
@@ -523,8 +538,67 @@ class D1MaxHal:
         if self._payload is not None:
             self._payload.on_sound_end = fn
 
+    # POC 11-06(竞品上装):云台、雨刷;求助、急停按钮
+
+    async def ptz(self, pan: float, tilt: float) -> None:
+        """云台转到 ``pan``(水平,度,正 = 向右)、``tilt``(俯仰,度,正 = 向下)。"""
+        await self._up("ptz").aim(pan, tilt)
+
+    async def wiper(self, on: bool, max_s: float) -> None:
+        await self._up("wiper").set("wiper", on and max_s > 0, max_s)
+
+    def set_button_listener(self, fn: Callable[[str], Any]) -> None:
+        """上装的按钮按下了回调 ``fn("sos" | "estop")``(代理报事件、站点出告警、叫停)。
+        急停按钮:HAL 先当场停(速度作废),不等站点那一圈。"""
+        if self._payload is None or not hasattr(self._payload, "on_button"):
+            return
+
+        def on_button(name: str) -> None:
+            if name == "estop":
+                # 外审 POC r1 C1:本地锁住 —— 之后的速度一律拒(按急停算),不靠站点那一圈、断网也锁着;
+                # 只有明确解除(站点「恢复」→ :meth:`payload_estop_release`)才放
+                # 每按一次(上装那头已经去抖)都是新的一次,锁着再按也换代次(外审 POC r3 #1:
+                # 按之前发出、还没送到的恢复不许解开这一次)
+                self._payload_estop_gen += 1
+                log.warning("上装急停按钮按下:本地锁住运动(第 %d 次),等人确认安全后恢复",
+                            self._payload_estop_gen)
+                self._payload_estop = True
+                self._vel_until = None
+                with contextlib.suppress(RuntimeError):
+                    asyncio.get_running_loop().create_task(self.stop())
+            fn(name)
+        self._payload.on_button = on_button
+
+    def payload_estop_supported(self) -> bool:
+        """有上装急停按钮(竞品转接):站点「恢复」要连带给机器人解锁。"""
+        return self._payload is not None and hasattr(self._payload, "on_button")
+
+    def payload_estop_latched(self) -> bool:
+        return self._payload_estop
+
+    def payload_estop_state(self) -> tuple[bool, int]:
+        """``(锁着没有, 第几次锁上)``:代理报给站点,站点恢复时带上代次。"""
+        return self._payload_estop, self._payload_estop_gen
+
+    async def payload_estop_release(self, gen: int) -> bool:
+        """人确认现场安全、在站点点了恢复:解开第 ``gen`` 次锁上的那把锁(机器人自己不会动,等再派)。
+        代次不是现在这一次(解过以后又按过)→ 不解、回 False。"""
+        if gen != self._payload_estop_gen:
+            log.warning("上装急停解锁带的代次 %s 不是现在这一次(%d):不解", gen,
+                        self._payload_estop_gen)
+            return False
+        if self._payload_estop:
+            log.warning("上装急停的本地锁解开(第 %d 次,站点恢复)", gen)
+        self._payload_estop = False
+        return True
+
     def sound_tts(self) -> bool:
         return self._payload is not None and bool(self._payload.cfg.tts_command)
+
+    def sound_tts_langs(self) -> list[str] | None:
+        """能念哪几种语言(第三档 #41);上装不说就是 None(不知道,站点、网页不挡)。"""
+        fn = getattr(self._payload, "tts_langs", None)
+        return list(fn()) if callable(fn) and self.sound_tts() else None
 
     async def spotlight(self, on: bool, max_s: float) -> None:
         await self._up("spotlight").set("spotlight", on and max_s > 0, max_s)
@@ -588,4 +662,4 @@ class D1MaxHal:
                      "imu_hz": IMU_HZ, "joint_effort": False, "foot_force": False},
             actuators={"light": True, "head": False} | {
                 k: self._payload is not None and self._payload.has(k)
-                for k in ("strobe", "siren", "speaker", "spotlight")})
+                for k in ("strobe", "siren", "speaker", "spotlight", "wiper", "ptz")})

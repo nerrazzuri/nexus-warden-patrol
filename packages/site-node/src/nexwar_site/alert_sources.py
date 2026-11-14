@@ -226,6 +226,8 @@ class SiteAlertSources:
         self._skew = ClockSkew(now_ms=now_ms)
         self._skew_of = skew_of
         self._site_errors: dict[str, str] = {}
+        #: POC 11-06:上装急停按钮按下了,站点叫停这台(``attach`` 时接上派遣器)。
+        self._disp: Any = None
         #: 排程告警合并进来的排程 id(按告警的键),拼标题用(W00c6c 内审)。
         self._sched_entries: dict[str, list[str]] = {}
         #: 入侵告警合并进来的防区(按告警的键),拼标题用(W16)。
@@ -238,6 +240,8 @@ class SiteAlertSources:
         #: 报、解决失败了下一拍再来;站点起来时从事件库读回每台狗最近一条 ``robot_fault``。
         self._payload: dict[str, frozenset[str]] = {}
         self._payload_loaded = False
+        #: 每台狗每一路上装故障机器人说的原文(POC 11-05:竞品转接报「竞品主控连不上」,不是继电器板)
+        self._payload_text: dict[str, dict[str, str]] = {}
         #: 某一版图上在生效的禁行区、限速区(``NavZones.effective``,W41)。主程序接上;``None`` =
         #: 「狗在禁行区里」不自己解决。
         self.nav_zones: Callable[[str, str], Any] | None = None
@@ -277,12 +281,32 @@ class SiteAlertSources:
                 self.seed(row["robot_id"], Status.from_wire(json.loads(row["status"])))
             except (_CE, ValueError, TypeError):
                 log.warning("%s 库里的状态读不懂,不做种", row["robot_id"])
+        self._disp = dispatcher
         dispatcher.on_status(self.on_status)
         dispatcher.on_event(self.on_event)
         dispatcher.on_telemetry(self.on_telemetry)
         # 站点自己推的「没回待命点」(W00c6b):以前只进 SSE 事件流,告警簿不收、值守屏看不见。
         dispatcher.feed.listen(self.on_feed)
         self._is_stale = self._is_stale or dispatcher.is_stale
+
+    def _payload_button(self, rid: str, button: str) -> None:
+        """POC 11-06:竞品上装的按钮。求助 → P1 要人处理(不自己消失);急停 → P1 + 站点叫停这台
+        (跟手机上点「叫停」一样:停住、不再派,要人点恢复)。急停只是辅助:机器人那头已经先停了。"""
+        if button == "sos":
+            self.desk.raise_alert(kind="payload_sos", robot=rid, title="现场有人按了求助按钮",
+                                  detail="上装的求助按钮被按下,请马上派人到机器人所在位置")
+        elif button == "estop":
+            self.desk.raise_alert(kind="payload_estop", robot=rid, title="上装急停按钮被按下",
+                                  detail="机器人已停住,站点已叫停这台;确认现场安全后在机器人页点恢复")
+            disp = self._disp
+            if disp is None:
+                return
+            import asyncio
+            try:
+                asyncio.get_running_loop().create_task(
+                    disp.halt(rid, issued_by="上装急停按钮", reason="payload_estop"))
+            except RuntimeError:
+                log.error("%s 上装急停按钮:没在事件循环里,站点没叫停", rid)
 
     def _m(self, rid: str) -> _Mem:
         return self._mem.setdefault(rid, _Mem())
@@ -551,6 +575,8 @@ class SiteAlertSources:
         if e.kind == "task_done":
             if not _teleop(tid):                         # 第 11 轮 W10-04:遥控结束不报「已完成」
                 self.desk.raise_alert(kind="run_done", robot=rid, title=f"已完成:{tid}")
+        elif e.kind == "payload_button":
+            self._payload_button(rid, str(d.get("button", "")))
         elif e.kind == "task_failed":
             reason = str(d.get("reason", ""))
             # 站点自己派的回待命点那一趟(回程巡检)失败,狗停在半路;标题别说「整趟中止」
@@ -742,6 +768,13 @@ class SiteAlertSources:
             self._waypoint_missed(rid, d)
         elif e.kind == "patrol_waypoint" and d.get("ok") is True:
             self._waypoint_reached(rid, str(d.get("name", "?")))
+        elif e.kind == "deter" and d.get("ended") in ("failed", "done"):
+            # POC 11-05:话术没放出来(竞品主控连不上、ssh 失败)保安要知道;下一段放完了就解决
+            if d["ended"] == "failed":
+                self.desk.raise_alert(kind="deter_failed", robot=rid, title="喊话没放出来",
+                                      detail=str(d.get("reason") or "")[:200])
+            elif self.desk.has_open(rid, "deter_failed"):
+                self.desk.resolve_all(rid, "deter_failed", who="site:deter_ok")
         elif e.kind == "robot_fault":
             try:
                 faults = parse_fault_event_data(d)
@@ -756,6 +789,8 @@ class SiteAlertSources:
             m.fallen = fallen
             # 先记下全集(事件已经落库,重投会被去重跳过:告警这一下没成,只能靠每拍对账补)
             self._payload[rid] = frozenset(f.code for f in faults if f.code.startswith("payload_"))
+            self._payload_text[rid] = {f.code: f.text for f in faults
+                                       if f.code.startswith("payload_")}
             try:
                 self._payload_faults(rid, self._payload[rid])
             except Exception:
@@ -780,6 +815,8 @@ class SiteAlertSources:
                 continue
             self._payload[r["robot_id"]] = frozenset(
                 f.code for f in faults if f.code.startswith("payload_"))
+            self._payload_text[r["robot_id"]] = {f.code: f.text for f in faults
+                                                 if f.code.startswith("payload_")}
         self._payload_loaded = True
 
     def reconcile_payload(self) -> None:
@@ -801,13 +838,17 @@ class SiteAlertSources:
         **告警簿说了算**(同 W19 摄像头):
         这一路在故障里、簿子里还没挂着就报;不在了就解决 —— 重复上报不重复报,站点重启后也对得上。
         ``robot_fault`` 是整个集合(变了才发、代理起来先发一次全集),所以没出现就是好了。"""
+        texts = self._payload_text.get(rid, {})
         for out, name in PAYLOAD_OUTPUTS.items():
             kind = f"payload_{out}"
+            said = texts.get(kind, "")
             if kind in present:
                 if not self.desk.has_open(rid, kind):
                     self.desk.raise_alert(
                         kind=kind, robot=rid, title=f"上装{name}无法关闭或状态不明",
-                        detail="继电器板未确认(串口、板子供电?);机器人上在接着关。去现场看是不是还开着"
+                        detail=f"{said[:160]}(查网线、竞品主控开着没有)" if "竞品主控" in said
+                        else ("继电器板未确认(串口、板子供电?);机器人上在接着关。"
+                              "去现场看是不是还开着")
                         if out != "siren" else
                         "继电器板未确认,或者喇叭警笛无法播放(声卡、警笛声文件?);去现场看")
             else:

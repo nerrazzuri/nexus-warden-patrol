@@ -25,6 +25,7 @@ import os
 import re
 import shutil
 import signal
+import time
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, replace
 from pathlib import Path
@@ -34,6 +35,47 @@ from nexwar_contract.maps import GEOMETRY_FILES
 from nexwar_patrol.app.procs import ProcError, ProcManager, ProcSpec
 
 log = logging.getLogger(__name__)
+
+#: POC Top Glove(用户 11-13):竞品在同一台机器人上建图时我们只录包 —— 录包降到这个 nice,IO 降到
+#: best-effort 最低档,不跟竞品(和转给它雷达的 bridge)抢 CPU、盘。边走边建不降(要实时)。
+SHADOW_NICE = ("nice", "-n", "10", "ionice", "-c", "2", "-n", "7")
+#: 开录至少要留这么多盘(点云几十 MB/s,一分钟就是几 GB)。
+RECORD_MIN_FREE_BYTES = 20 * 10**9
+#: 估能录多久按这个速率(两台雷达 + IMU,保守按 40 MB/s;周一演练实测后再改)。
+RECORD_EST_BPS = 40 * 10**6
+
+
+def _disk_free(path: Path) -> int:
+    return shutil.disk_usage(path).free
+
+
+def _record_summary(bag: Path, wall_s: float,
+                    topics: tuple[str, ...] = ()) -> dict[str, object]:
+    """录完的包录了多久、多大、哪个话题一条都没录到(雷达断了、bridge 抢了的话一眼看出来)。
+    ``topics`` 是这次要录的:包里压根没出现的也算没录到(外审:从没发过的话题不进 metadata)。
+    时长按包自己记的(``metadata.yaml``);没有、读不出来就按墙钟,
+    ``metadata`` 记 False(没法确认录全)。"""
+    size = sum(f.stat().st_size for f in bag.rglob("*") if f.is_file()) if bag.is_dir() else 0
+    secs, empty, ok = wall_s, [], False
+    meta = bag / "metadata.yaml"
+    if meta.is_file():
+        import yaml
+        try:
+            info = (yaml.safe_load(meta.read_text(encoding="utf-8")) or {}).get(
+                "rosbag2_bagfile_information") or {}
+            counts = {t["topic_metadata"]["name"]: t.get("message_count") or 0
+                      for t in info.get("topics_with_message_count") or []}
+            ns = (info.get("duration") or {}).get("nanoseconds")
+        except (OSError, ValueError, yaml.YAMLError, AttributeError, KeyError, TypeError) as exc:
+            log.warning("录包索引读不出来 %s: %s", meta, exc)
+        else:
+            ok = True
+            if isinstance(ns, int | float) and ns > 0:
+                secs = ns / 1e9
+            empty = [n for n in (*topics, *(n for n in counts if n not in topics))
+                     if not counts.get(n)]
+    return {"bag": bag.name, "minutes": round(secs / 60, 1), "bytes": size,
+            "empty_topics": empty, "metadata": ok}
 
 #: 录包按这么大切成一个个文件(W00c5d:点云几十 MB/s,十分钟不切就过了站点单文件 8 GiB 的上限,
 #: 永远传不上去)。逐字照抄文档 §2 (a)。
@@ -172,6 +214,10 @@ class MappingOrchestrator:
         #: 这一趟的预览没起来的原因(W09f);起来了是空串。
         self.preview_error = ""
         self._retry: asyncio.Task[None] | None = None
+        #: POC:开录时估的能录几分钟、开录时刻、上一个包录完的小结(给人核对录全了没有)。
+        self._rec_t0 = 0.0
+        self._rec_topics: tuple[str, ...] = ()
+        self.last_record: dict[str, object] = {}
         #: 调用方给的关键帧目录(W75 站点打包):图号 → 目录。
         self._kf_dirs: dict[str, Path] = {}
 
@@ -283,6 +329,18 @@ class MappingOrchestrator:
         """
         return self._error
 
+    @property
+    def est_minutes(self) -> int:
+        """录着时按**现在**的剩余空间、保守速率估还能录几分钟
+        (外审:不能停在开录时那个数);没在录是 0。"""
+        if self._phase != "recording":
+            return 0
+        try:
+            free = _disk_free(self._cfg.bags_dir)
+        except OSError:
+            return 0
+        return max(0, int(free / RECORD_EST_BPS / 60))
+
     def to_wire(self) -> dict[str, object]:
         return {
             "phase": self._phase,
@@ -291,6 +349,8 @@ class MappingOrchestrator:
             "last_error": self._error,
             "bags": self.list_bags(),
             "maps": self.list_maps(),
+            "est_minutes": self.est_minutes,
+            "last_record": self.last_record,
         }
 
     def list_bags(self) -> list[str]:
@@ -326,6 +386,10 @@ class MappingOrchestrator:
         if bag.exists():
             raise MappingArgError(f"{name} 此包已存在,换个名字 —— 覆盖等于丢一段路")
         self._cfg.bags_dir.mkdir(parents=True, exist_ok=True)
+        free = _disk_free(self._cfg.bags_dir)
+        if free < RECORD_MIN_FREE_BYTES:
+            raise MappingArgError(f"机器人盘只剩 {free / 1e9:.1f} GB,录包至少要 "
+                                  f"{RECORD_MIN_FREE_BYTES // 10**9} GB:先清理再录")
         if live_map_id is not None:
             out, work = self._out(live_map_id)
             for d in (out, work.parent):                   # 同 rebuild:旧的产物、中间文件不混进来
@@ -341,7 +405,8 @@ class MappingOrchestrator:
         if slio:
             await self._pause_on()                         # 先让出 CPU 再起(工单 21)
         try:
-            await self._start(self.spec_for_record(bag, with_lio=slio))
+            await self._start(self.spec_for_record(bag, with_lio=slio,
+                                                   shadow=live_map_id is None))
             if live_map_id is not None:
                 spec = self.spec_for_live(live_map_id, front=front)
                 (work / "mola.json").write_text(json.dumps(
@@ -377,6 +442,8 @@ class MappingOrchestrator:
         self._bag = bag
         self._live = live_map_id
         self._error = ""
+        self._rec_t0 = time.monotonic()
+        self._rec_topics = (*RECORD_TOPICS, *((SUPERLIO_ODOM,) if slio else ()))
         return bag
 
     async def stop_record(self) -> Path:
@@ -397,6 +464,12 @@ class MappingOrchestrator:
             await self._resume()                           # 没暂停过(没有标记)就什么也不做
         except Exception:
             log.exception("停录后恢复暂停的服务出错")
+        try:
+            self.last_record = _record_summary(bag, time.monotonic() - self._rec_t0,
+                                               self._rec_topics)
+        except Exception:
+            log.exception("录包小结算不出来(包照旧在)")
+            self.last_record = {"bag": bag.name, "metadata": False}   # 算不出 = 没法确认录全
         for g in got:
             if isinstance(g, BaseException):
                 raise g
@@ -506,13 +579,15 @@ class MappingOrchestrator:
 
     # ------------------------------------------------------------------ 命令
 
-    def spec_for_record(self, bag: Path, *, with_lio: bool = False) -> ProcSpec:
+    def spec_for_record(self, bag: Path, *, with_lio: bool = False,
+                        shadow: bool = False) -> ProcSpec:
         """文档 §2 (a)。录包走**实时域**,它要听的是真机现在发的话题。``with_lio``:Super-LIO 边走边建
-        的位姿一起录(打包用它,不用再算一遍)。"""
+        的位姿一起录(打包用它,不用再算一遍)。``shadow``(POC):只录包,降优先级(:data:`SHADOW_NICE`)。"""
         extra = (SUPERLIO_ODOM,) if with_lio else ()
         return ProcSpec(
             name=self.RECORD,
-            argv=(str(self._cfg.ros_wrapper), "ros2", "bag", "record", "-s", "mcap", "-b",
+            argv=(*(SHADOW_NICE if shadow else ()),
+                  str(self._cfg.ros_wrapper), "ros2", "bag", "record", "-s", "mcap", "-b",
                   str(RECORD_SPLIT_BYTES),
                   "-o", str(bag), *RECORD_TOPICS, *extra),
             env=self._live_env(),

@@ -128,11 +128,34 @@ async def test_录包时记轨迹_since只回新增_停了不再记_再录清空
     d3 = _ack(ears, "q3")["data"]
     assert d3["recording"] is False and d3["total"] == n + 1, \
         "停了:轨迹留着(看最后录的那一趟),不再记"
+
+
+async def test_POC_轨迹回执带能录几分钟和上一个包的小结(tmp_path):
+    """Top Glove 跟竞品一起录:手机上看得到还能录多久、录完录了多久、哪个话题没录到。"""
+    from types import SimpleNamespace
+    broker, c, ears, dog, rt, m = await _台(tmp_path)
+    m.orch = SimpleNamespace(est_minutes=37, last_record={"bag": "b1", "minutes": 12.6,
+                                                         "bytes": 3, "empty_topics": []})
+    await rt._on_cmd(_cmd("mapping_trail", {}, "q9", c))
+    await broker.drain()
+    d = _ack(ears, "q9")["data"]
+    assert d["est_minutes"] == 37 and d["last_record"]["minutes"] == 12.6
     m.recording = True
     await _跑(rt, broker, n=1, r=dog, c=c)
     await rt._on_cmd(_cmd("mapping_trail", {}, "q4", c))
     await broker.drain()
     assert _ack(ears, "q4")["data"]["points"] == [[0.0, 0.0]], "再录:从头记"
+    await rt.close()
+
+
+async def test_外审_没有建图编排器_不报还能录多久(tmp_path):
+    """仿真狗没有编排器:不报 est_minutes(报 0 手机会当成盘满了)。"""
+    broker, c, ears, dog, rt, m = await _台(tmp_path)
+    m.orch = None
+    await rt._on_cmd(_cmd("mapping_trail", {}, "q1", c))
+    await broker.drain()
+    d = _ack(ears, "q1")["data"]
+    assert "est_minutes" not in d and "last_record" not in d
     await rt.close()
 
 

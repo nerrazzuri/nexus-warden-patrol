@@ -455,10 +455,15 @@ class Dispatcher:
                              (robot_id,))
         return dict(rows[0]) if rows else None
 
-    def resume(self, robot_id: str, *, by: str) -> bool:
-        """解除叫停。返回之前是不是真的停着。"""
+    def resume(self, robot_id: str, *, by: str, not_after_ms: int | None = None) -> bool:
+        """解除叫停。返回之前是不是真的停着。``not_after_ms``:只解这一刻以前的叫停(外审 POC r2 #5:
+        等机器人解锁那几秒里又按了急停、站点又叫停了一次,那一次不能顺手解掉)。"""
         with self.db.tx() as tx:
-            n = tx.execute("DELETE FROM robot_holds WHERE robot_id=?", (robot_id,)).rowcount
+            if not_after_ms is None:
+                n = tx.execute("DELETE FROM robot_holds WHERE robot_id=?", (robot_id,)).rowcount
+            else:
+                n = tx.execute("DELETE FROM robot_holds WHERE robot_id=? AND at_ms<=?",
+                               (robot_id, int(not_after_ms))).rowcount
         return n > 0
 
     def _hold(self, robot_id: str, *, by: str, reason: str) -> None:
@@ -1055,6 +1060,24 @@ class Dispatcher:
                                 issued_by=issued_by, task_id=f"halt-{uuid.uuid4().hex[:12]}",
                                 priority=TELEOP_PRIORITY)
 
+    def estop_latch(self, robot_id: str) -> dict[str, Any] | None:
+        """这台有上装急停(本地锁,外审 POC C1):机器人报的 ``{latched, gen}``;没有上装急停是 None。"""
+        c = self.clients.get(robot_id)
+        if c is None or c.capabilities is None:
+            return None
+        got = c.capabilities.tasks.get("estop_release")
+        return got if isinstance(got, dict) else None
+
+    async def estop_release(self, robot_id: str, gen: int, *, issued_by: str) -> dict[str, Any]:
+        """给机器人解开第 ``gen`` 次上装急停的本地锁(人在站点点了恢复之后才发)。"""
+        c = self._client_for(robot_id)
+        if c.capabilities is None or "estop_release" not in c.capabilities.tasks:
+            raise Unsupported(f"{robot_id} 没有上装急停")
+        return await self._send(c, robot_id, "estop_release", {"gen": int(gen)},
+                                issued_by=issued_by,
+                                task_id=f"estop_release-{uuid.uuid4().hex[:12]}",
+                                priority=TELEOP_PRIORITY)
+
     # ------------------------------------------------------------ 地图(W00c5d 第二部分)
 
     async def map_command(self, robot_id: str, kind: str, payload: dict[str, Any], *,
@@ -1095,6 +1118,15 @@ class Dispatcher:
             raise Unsupported(f"{robot_id} 的警灯没有 {req.color} 色")
         if req.on and not self._fresh(c):
             raise DispatchRefused(f"{robot_id} 不在线或状态不新鲜")
+        if req.on:
+            # POC 11-05 断网测试:竞品转接报了 link:anbot 离线,开就当场拒(原来回「已接受」,几秒后
+            # 机器人才报没放出来)。关照发
+            for dv in (self.devices.get(robot_id) or ([], 0))[0]:
+                if isinstance(dv, dict) and dv.get("id") == "link:anbot" \
+                        and dv.get("state") == "offline":
+                    why = str(dv.get("detail") or "")[:120]
+                    raise DispatchRefused(f"竞品主控连不上,{req.output} 开不了({why});"
+                                          "查网线、竞品主控开着没有")
         return await self._send(c, robot_id, "deter", req.to_payload(), issued_by=issued_by,
                                 task_id=f"deter-{req.output}-{uuid.uuid4().hex[:8]}",
                                 ttl_ms=VIDEO_COMMAND_TTL_MS)
