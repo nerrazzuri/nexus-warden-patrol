@@ -13,6 +13,7 @@ W40:聚光灯可以只开一边(``side``)、警灯可以挑颜色(``color``);狗
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import time
 from collections.abc import Callable
@@ -35,6 +36,8 @@ class DeterDesk:
         self._mono = monotonic
         #: 正在放的那一段:(优先级, 放到单调钟几点)。放完了、被关了就是 None。
         self._sound: tuple[int, float] | None = None
+        #: 外审:喇叭的仲裁(看优先级 → 起播 / 关 → 记下)一把锁做完,自动播报和手动喊话、关喇叭不交错
+        self._speaker_lock = asyncio.Lock()
         #: 喇叭放完、放坏了、到点了(W21 外审):HAL 回调过来,当场放开优先级、记一条事件。
         #: HAL 不报(仿真狗)就按 ``max_s`` 算。
         listen = getattr(hal, "set_sound_listener", None)
@@ -113,15 +116,16 @@ class DeterDesk:
         clips = getattr(self.hal, "sound_clips", None)
         if not callable(clips) or clip not in clips():
             return False
-        cur = self.playing()
-        if cur is not None and cur[0] >= priority:
-            return False
-        try:
-            await self.hal.sound(clip, max_s)
-        except Exception as exc:                     # noqa: BLE001 - 自己放的没放成:记日志,不打断别的
-            log.warning("自动放 %s 没放成: %s", clip, exc)
-            return False
-        self._sound = (priority, self._mono() + max_s)
+        async with self._speaker_lock:
+            cur = self.playing()
+            if cur is not None and cur[0] >= priority:
+                return False
+            try:
+                await self.hal.sound(clip, max_s)
+            except Exception as exc:                 # noqa: BLE001 - 自己放的没放成:记日志,不打断别的
+                log.warning("自动放 %s 没放成: %s", clip, exc)
+                return False
+            self._sound = (priority, self._mono() + max_s)
         self._emit("deter", {"output": "speaker", "on": True, "max_s": max_s, "clip": clip,
                              "priority": priority, "auto": why})
         return True
@@ -139,6 +143,12 @@ class DeterDesk:
             return "unsupported: 此机器人的聚光灯不分左右"
         if req.color and req.color not in opts.get("strobe_colors", []):
             return f"unsupported: 警灯没有 {req.color} 色"
+        if req.output == "speaker":
+            async with self._speaker_lock:
+                return await self._do(cmd, req)
+        return await self._do(cmd, req)
+
+    async def _do(self, cmd: Command, req: Any) -> str:
         if req.output == "speaker" and req.on:
             cur = self.playing()
             if cur is not None and req.priority < cur[0]:

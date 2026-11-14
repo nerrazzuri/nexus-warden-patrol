@@ -148,6 +148,17 @@ async def test_POC_轨迹回执带能录几分钟和上一个包的小结(tmp_pa
     await rt.close()
 
 
+async def test_外审_没有建图编排器_不报还能录多久(tmp_path):
+    """仿真狗没有编排器:不报 est_minutes(报 0 手机会当成盘满了)。"""
+    broker, c, ears, dog, rt, m = await _台(tmp_path)
+    m.orch = None
+    await rt._on_cmd(_cmd("mapping_trail", {}, "q1", c))
+    await broker.drain()
+    d = _ack(ears, "q1")["data"]
+    assert "est_minutes" not in d and "last_record" not in d
+    await rt.close()
+
+
 @pytest.mark.parametrize("bad", [-1, "3", 1.5, True])
 async def test_since不像话_拒(tmp_path, bad):
     broker, c, ears, dog, rt, m = await _台(tmp_path)

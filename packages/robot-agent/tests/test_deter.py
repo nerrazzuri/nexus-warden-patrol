@@ -4,6 +4,8 @@
 
 from __future__ import annotations
 
+import asyncio
+
 import pytest
 from test_runtime_maps import REG, T, _cmd, _跑, 耳朵, 钟
 
@@ -567,3 +569,52 @@ def test_第三档41_HAL说了能念哪几种语言就报tts_langs_不说就不�
 
     assert DeterDesk(hal(["zh", "en"]), emit=lambda *a: None).caps()["tts_langs"] == ["zh", "en"]
     assert "tts_langs" not in DeterDesk(hal(None), emit=lambda *a: None).caps()
+
+
+class _慢喇叭(_有回调的喇叭):
+    """起播要等一下(拉起播放器、等功放):放行前 ``sound`` 卡着。"""
+
+    def __init__(self):
+        super().__init__()
+        self.go = asyncio.Event()
+
+    def sound_clips(self):
+        return ["auto-warn"]
+
+    async def sound(self, clip, max_s):
+        if clip == "auto-warn":
+            await self.go.wait()
+        self.clips.append(clip)
+
+
+async def test_外审_自动播报起播时来了手动喊话_手动排在后面_优先级不被盖():
+    from nexwar_agent.deter import DeterDesk
+    hal = _慢喇叭()
+    desk = DeterDesk(hal, emit=lambda k, d: None)
+    auto = asyncio.ensure_future(desk.auto_sound("auto-warn", priority=40, max_s=30, why="t"))
+    await asyncio.sleep(0.05)
+    manual = asyncio.ensure_future(desk.handle(_喇叭命令("warn-zh", 60)))
+    await asyncio.sleep(0.05)
+    hal.go.set()
+    assert await auto is True
+    assert await manual == ""
+    assert hal.clips == ["auto-warn", "warn-zh"], "手动的等自动的起完再放,不同时放两段"
+    assert desk.playing()[0] == 60
+
+
+async def test_外审_自动播报起播时来了停止_停得掉():
+    from nexwar_agent.deter import DeterDesk
+    from nexwar_contract.messages import Command
+    hal = _慢喇叭()
+    desk = DeterDesk(hal, emit=lambda k, d: None)
+    auto = asyncio.ensure_future(desk.auto_sound("auto-warn", priority=40, max_s=30, why="t"))
+    await asyncio.sleep(0.05)
+    stop = Command(command_id="s", task_id="deter-s", kind="deter", issued_at=1, expires_at=2,
+                   control_epoch=1, payload={"output": "speaker", "on": False, "max_s": 1})
+    stopping = asyncio.ensure_future(desk.handle(stop))
+    await asyncio.sleep(0.05)
+    hal.go.set()
+    await auto
+    assert await stopping == ""
+    assert hal.clips[-1] == "", "停止排在自动起播之后,最后一下是关"
+    assert desk.playing() is None

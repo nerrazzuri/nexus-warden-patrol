@@ -1678,8 +1678,12 @@ class StandbyPainter extends CustomPainter {
 /// 哪个话题一条都没录到（雷达断了、线松了一眼看出来）。狗没给（老代理）就是空。
 String recordInfoText(Map<String, dynamic> d) {
   if (d['recording'] == true) {
-    final m = (d['est_minutes'] as num?)?.toInt() ?? 0;
-    return m > 0 ? tr('About $m min of recording left on the robot disk', '按机器人剩余空间，大约还能录 $m 分钟') : '';
+    final est = d['est_minutes'];
+    if (est is! num) return ''; // 老代理、仿真不报
+    final m = est.toInt();
+    return m > 0
+        ? tr('About $m min of recording left on the robot disk', '按机器人剩余空间，大约还能录 $m 分钟')
+        : tr('The robot disk is almost full: stop recording now.', '机器人盘快满了：请马上停录。');
   }
   final r = d['last_record'];
   if (r is! Map || r['bag'] is! String) return '';

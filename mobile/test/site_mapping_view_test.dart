@@ -186,6 +186,8 @@ void main() {
     appLang.value = AppLang.zh;
     expect(recordInfoText({'recording': true, 'est_minutes': 37}), '按机器人剩余空间，大约还能录 37 分钟');
     expect(recordInfoText({'recording': true}), '');
+    expect(recordInfoText({'recording': true, 'est_minutes': 0}), contains('机器人盘快满了'),
+        reason: '外审：录着时剩 0 分钟要说出来，不能什么都不写');
     const r = {'bag': 'b1', 'minutes': 12.6, 'bytes': 2900000000, 'empty_topics': ['/rear_lidar'], 'metadata': true};
     final s = recordInfoText({'recording': false, 'last_record': r});
     expect(s, contains('上一个包 b1：录了 12.6 分钟，2.9 GB'));

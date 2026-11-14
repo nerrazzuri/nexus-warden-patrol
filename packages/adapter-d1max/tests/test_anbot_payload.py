@@ -683,7 +683,7 @@ async def test_外审POC_I7_四个发布端各用各的节点名_注册完四个
 # 走跟录好的话术同一条路(SSH + aplay)放;同一句合成过就直接放缓存。
 
 
-def _假piper(tmp_path, *, rc: int = 0):
+def _假piper(tmp_path, *, rc: int = 0, sleep: float = 0.0):
     """假 piper:记参数,把 stdin 的文字写进 --output_file;
     假 ffmpeg:记参数,把输入拷成输出(最后一个参数)。"""
     plog, flog = tmp_path / "piper.log", tmp_path / "ffmpeg.log"
@@ -693,6 +693,7 @@ def _假piper(tmp_path, *, rc: int = 0):
                   'out=""; prev=""\n'
                   'for a in "$@"; do [ "$prev" = "--output_file" ] && out="$a"; prev="$a"; done\n'
                   '{ printf RIFF; cat; } > "$out"\n'
+                  f"sleep {sleep}\n"
                   f"exit {rc}\n")
     ff = tmp_path / "ffmpeg"
     ff.write_text("#!/bin/sh\n"
@@ -747,12 +748,35 @@ async def test_第三档41_中文竞品念_没配的语言当场拒(master, tmp_
     await p.close()
 
 
-async def test_第三档41_合成失败_当场报错说清楚(master, tmp_path):
-    ssh, _, _ = _假ssh(tmp_path)
+async def test_第三档41_合成失败_回调说清楚_不进缓存(master, tmp_path):
+    ssh, log, _ = _假ssh(tmp_path)
+    ends: list = []
     p = AnbotPayload(_英文cfg(master, tmp_path, ssh, rc=3))
-    with pytest.raises(PayloadError, match="英文合成失败"):
-        await p.sound("tts:en:Please leave.", 30)
+    p.on_sound_end = lambda ok, why: ends.append((ok, why))
+    await p.sound("tts:en:Please leave.", 30)
+    await _等(lambda: ends)
+    assert ends[0][0] is False and "英文合成失败" in ends[0][1]
     assert not list((tmp_path / "tts-cache").glob("*.wav")), "失败的不进缓存"
+    assert not log.exists() or "aplay" not in log.read_text(), "没合成出来就不放"
+    await p.close()
+
+
+async def test_外审_英文合成在后台_不占命令锁_停掉就不放(master, tmp_path):
+    """合成慢(Piper 几秒):sound() 马上回(代理的命令锁不被占着),停喊话把合成一起掐掉、不再起播放。"""
+    import time
+    ssh, log, _ = _假ssh(tmp_path)
+    ends: list = []
+    p = AnbotPayload(_英文cfg(master, tmp_path, ssh, sleep=3))
+    p.on_sound_end = lambda ok, why: ends.append((ok, why))
+    t0 = time.monotonic()
+    await p.sound("tts:en:Please leave.", 30)
+    assert time.monotonic() - t0 < 1.0, "不在命令里等合成"
+    assert p.playing(), "合成中也算在放(停得掉)"
+    await p.stop_sound()
+    await asyncio.sleep(3.5)
+    assert not log.exists() or "aplay" not in log.read_text(), "停了就不再起播放"
+    assert ends == [], "被停的不回调"
+    assert not list((tmp_path / "tts-cache").glob("*.wav")), "合成被掐的不进缓存"
     await p.close()
 
 

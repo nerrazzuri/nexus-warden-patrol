@@ -660,8 +660,11 @@ class AnbotPayload:
             if lang not in self.tts_langs():
                 raise PayloadError(f"竞品只会念中文;{lang} 要先在 Orin 上配 Piper 音色"
                                    "(payload.json 的 piper_voices,还要配 audio_host)")
-            wav = await self._synth(lang, text.strip())
-            await self._play(wav, max_s)
+            # 外审:合成(Piper 几秒)放后台,不在命令里等 ——
+            # 代理的命令锁被占着时,停喊话、遥控续租都得排队
+            await self.stop_sound()
+            self._speech = asyncio.get_running_loop().create_task(
+                self._synth_play(lang, text.strip(), max_s))
             return
         await self._ensure()
         await self.stop_sound()
@@ -689,6 +692,27 @@ class AnbotPayload:
 
     async def _play(self, path: Path, max_s: float) -> None:
         await self.stop_sound()
+        proc = await self._spawn(path)
+        self._speech = asyncio.get_running_loop().create_task(self._clip_end(proc, max_s))
+
+    async def _synth_play(self, lang: str, text: str, max_s: float) -> None:
+        """后台:合成 → 放。合成失败回调 ``on_sound_end(False, 原因)``;
+        被停掉(取消)不回调、不起播放。"""
+        loop = asyncio.get_running_loop()
+        deadline = loop.time() + max_s
+        try:
+            wav = await self._synth(lang, text)
+            proc = await self._spawn(wav)
+        except PayloadError as exc:
+            log.warning("英文喊话没放成: %s", exc)
+            self._speech = None
+            fn = self.on_sound_end
+            if fn is not None:
+                fn(False, str(exc))
+            return
+        await self._clip_end(proc, max(0.1, deadline - loop.time()))
+
+    async def _spawn(self, path: Path) -> Any:
         # 密码:ssh 没有终端(新会话)时找 SSH_ASKPASS 要;那个小脚本从环境变量里念出来
         cmd, env = self._ssh_cmd(f"aplay -q -D {self.cfg.aplay_device} -")
         try:
@@ -698,7 +722,7 @@ class AnbotPayload:
                     stderr=asyncio.subprocess.PIPE, start_new_session=True, env=env)
         except OSError as exc:
             raise PayloadError(f"放不了录好的话术(ssh 起不来): {exc}") from exc
-        self._speech = asyncio.get_running_loop().create_task(self._clip_end(proc, max_s))
+        return proc
 
     async def _synth(self, lang: str, text: str) -> Path:
         """Piper 合成 → ffmpeg 转成竞品 dmix 要的 48 kHz 双声道 s16、前后各 0.3 秒静音
@@ -746,6 +770,12 @@ class AnbotPayload:
             with contextlib.suppress(ProcessLookupError):
                 proc.kill()
             raise PayloadError(f"英文合成失败:{name} 超过 {SYNTH_TIMEOUT_S:.0f} 秒") from exc
+        except asyncio.CancelledError:                   # 停喊话:合成进程一起掐
+            with contextlib.suppress(ProcessLookupError):
+                proc.kill()
+            with contextlib.suppress(Exception):
+                await proc.wait()
+            raise
         if proc.returncode != 0:
             raise PayloadError(f"英文合成失败:{name} 退出码 {proc.returncode}:"
                                + (err or b"").decode("utf-8", "replace").strip()[:150])

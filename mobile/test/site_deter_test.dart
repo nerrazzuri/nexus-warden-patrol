@@ -122,6 +122,18 @@ void main() {
     expect(a.onPressed, isNotNull);
   });
 
+  testWidgets('外审：手动输入也按机器人报的语言，念不了的语言选不了', (t) async {
+    await _open(t, FakeApi('guard'), caps: <String, dynamic>{..._caps, 'tts_langs': <String>['zh']});
+    final dd = t.widget<DropdownButton<String>>(find.byKey(const Key('deter-lang')));
+    bool on(String v) => dd.items!.firstWhere((i) => i.value == v).enabled;
+    expect(on('zh'), isTrue);
+    expect(on('en'), isFalse);
+    expect(on('ms'), isFalse);
+    await _open(t, FakeApi('guard'));
+    final old = t.widget<DropdownButton<String>>(find.byKey(const Key('deter-lang')));
+    expect(old.items!.every((i) => i.enabled), isTrue, reason: '机器人没报能念哪几种：照旧都能选');
+  });
+
   testWidgets('第三档 #41 常用喊话：老站点没有这张表（接口报错）、机器人没配 TTS：都不出这一行', (t) async {
     await _open(t, FakeApi('guard')..voicePresetList = null);
     expect(find.text('常用喊话'), findsNothing);

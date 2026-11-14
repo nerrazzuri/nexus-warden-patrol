@@ -49,23 +49,33 @@ def _disk_free(path: Path) -> int:
     return shutil.disk_usage(path).free
 
 
-def _record_summary(bag: Path, wall_s: float) -> dict[str, object]:
-    """POC:录完的包录了多久、多大、哪个话题一条都没录到(雷达断了、bridge 抢了的话一眼看出来)。
-    时长按包自己记的(``metadata.yaml``);没有就按墙钟。"""
+def _record_summary(bag: Path, wall_s: float,
+                    topics: tuple[str, ...] = ()) -> dict[str, object]:
+    """录完的包录了多久、多大、哪个话题一条都没录到(雷达断了、bridge 抢了的话一眼看出来)。
+    ``topics`` 是这次要录的:包里压根没出现的也算没录到(外审:从没发过的话题不进 metadata)。
+    时长按包自己记的(``metadata.yaml``);没有、读不出来就按墙钟,
+    ``metadata`` 记 False(没法确认录全)。"""
     size = sum(f.stat().st_size for f in bag.rglob("*") if f.is_file()) if bag.is_dir() else 0
-    secs, empty = wall_s, []
+    secs, empty, ok = wall_s, [], False
     meta = bag / "metadata.yaml"
     if meta.is_file():
         import yaml
-        info = (yaml.safe_load(meta.read_text(encoding="utf-8")) or {}).get(
-            "rosbag2_bagfile_information") or {}
-        ns = (info.get("duration") or {}).get("nanoseconds")
-        if isinstance(ns, int | float) and ns > 0:
-            secs = ns / 1e9
-        empty = [t["topic_metadata"]["name"] for t in info.get("topics_with_message_count") or []
-                 if not t.get("message_count")]
+        try:
+            info = (yaml.safe_load(meta.read_text(encoding="utf-8")) or {}).get(
+                "rosbag2_bagfile_information") or {}
+            counts = {t["topic_metadata"]["name"]: t.get("message_count") or 0
+                      for t in info.get("topics_with_message_count") or []}
+            ns = (info.get("duration") or {}).get("nanoseconds")
+        except (OSError, yaml.YAMLError, AttributeError, KeyError, TypeError) as exc:
+            log.warning("录包索引读不出来 %s: %s", meta, exc)
+        else:
+            ok = True
+            if isinstance(ns, int | float) and ns > 0:
+                secs = ns / 1e9
+            empty = [n for n in (*topics, *(n for n in counts if n not in topics))
+                     if not counts.get(n)]
     return {"bag": bag.name, "minutes": round(secs / 60, 1), "bytes": size,
-            "empty_topics": empty, "metadata": meta.is_file()}
+            "empty_topics": empty, "metadata": ok}
 
 #: 录包按这么大切成一个个文件(W00c5d:点云几十 MB/s,十分钟不切就过了站点单文件 8 GiB 的上限,
 #: 永远传不上去)。逐字照抄文档 §2 (a)。
@@ -205,8 +215,8 @@ class MappingOrchestrator:
         self.preview_error = ""
         self._retry: asyncio.Task[None] | None = None
         #: POC:开录时估的能录几分钟、开录时刻、上一个包录完的小结(给人核对录全了没有)。
-        self.est_minutes = 0
         self._rec_t0 = 0.0
+        self._rec_topics: tuple[str, ...] = ()
         self.last_record: dict[str, object] = {}
         #: 调用方给的关键帧目录(W75 站点打包):图号 → 目录。
         self._kf_dirs: dict[str, Path] = {}
@@ -319,6 +329,18 @@ class MappingOrchestrator:
         """
         return self._error
 
+    @property
+    def est_minutes(self) -> int:
+        """录着时按**现在**的剩余空间、保守速率估还能录几分钟
+        (外审:不能停在开录时那个数);没在录是 0。"""
+        if self._phase != "recording":
+            return 0
+        try:
+            free = _disk_free(self._cfg.bags_dir)
+        except OSError:
+            return 0
+        return max(0, int(free / RECORD_EST_BPS / 60))
+
     def to_wire(self) -> dict[str, object]:
         return {
             "phase": self._phase,
@@ -368,8 +390,6 @@ class MappingOrchestrator:
         if free < RECORD_MIN_FREE_BYTES:
             raise MappingArgError(f"机器人盘只剩 {free / 1e9:.1f} GB,录包至少要 "
                                   f"{RECORD_MIN_FREE_BYTES // 10**9} GB:先清理再录")
-        #: 按保守速率估这块盘能录几分钟(开录时给人看)。
-        self.est_minutes = int(free / RECORD_EST_BPS / 60)
         if live_map_id is not None:
             out, work = self._out(live_map_id)
             for d in (out, work.parent):                   # 同 rebuild:旧的产物、中间文件不混进来
@@ -423,6 +443,7 @@ class MappingOrchestrator:
         self._live = live_map_id
         self._error = ""
         self._rec_t0 = time.monotonic()
+        self._rec_topics = (*RECORD_TOPICS, *((SUPERLIO_ODOM,) if slio else ()))
         return bag
 
     async def stop_record(self) -> Path:
@@ -444,7 +465,8 @@ class MappingOrchestrator:
         except Exception:
             log.exception("停录后恢复暂停的服务出错")
         try:
-            self.last_record = _record_summary(bag, time.monotonic() - self._rec_t0)
+            self.last_record = _record_summary(bag, time.monotonic() - self._rec_t0,
+                                               self._rec_topics)
         except Exception:
             log.exception("录包小结算不出来(包照旧在)")
             self.last_record = {"bag": bag.name}

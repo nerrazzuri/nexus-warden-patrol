@@ -347,10 +347,10 @@ class _SiteDeterPageState extends State<SiteDeterPage> {
                 DropdownButton<String>(
                   key: const Key('deter-lang'),
                   value: _lang,
-                  items: const [
-                    DropdownMenuItem(value: 'zh', child: Text('中文')),
-                    DropdownMenuItem(value: 'en', child: Text('English')),
-                    DropdownMenuItem(value: 'ms', child: Text('Melayu')),
+                  items: [
+                    // 外审：机器人报了能念哪几种，念不了的选不了（没报照旧都能选）
+                    for (final (v, n) in const [('zh', '中文'), ('en', 'English'), ('ms', 'Melayu')])
+                      DropdownMenuItem(value: v, enabled: _canSay(v), child: Text(n)),
                   ],
                   onChanged: (v) => setState(() => _lang = v ?? _lang),
                 ),
@@ -366,11 +366,13 @@ class _SiteDeterPageState extends State<SiteDeterPage> {
                 const SizedBox(width: Nw.s8),
                 NwButton(
                     buttonKey: const Key('deter-say'),
-                    onPressed: () {
-                      final t = _tts.text.trim();
-                      if (t.isEmpty) return;
-                      _go('speaker', true, clip: 'tts:$_lang:$t');
-                    },
+                    onPressed: _canSay(_lang)
+                        ? () {
+                            final t = _tts.text.trim();
+                            if (t.isEmpty) return;
+                            _go('speaker', true, clip: 'tts:$_lang:$t');
+                          }
+                        : null,
                     label: tr('Say', '播报')),
               ]),
             ],
