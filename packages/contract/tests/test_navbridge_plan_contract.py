@@ -11,7 +11,7 @@ from nexwar_contract.errors import ContractError
 
 
 def test_协议号升到5():
-    assert nb.PROTO == 5
+    assert nb.PROTO >= 5                                   # 6(外审 11-14):goal 可带 path
 
 
 def test_plan只许代理发_plan_result只许转接节点发():

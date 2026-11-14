@@ -39,7 +39,7 @@ from nexwar_agent.bridges.hal_nav import HalNavBackend
 from nexwar_agent.bridges.planned_nav import PlannedNavBackend, _heading
 from nexwar_contract import errcodes
 from nexwar_contract.footprint import BASE_MARGIN, BODY_LEN, BODY_WID
-from nexwar_contract.navbridge import MAX_VIA
+from nexwar_contract.navbridge import MAX_GOAL_PATH, MAX_VIA
 from nexwar_contract.obsbridge import pack_bits
 from nexwar_contract.planning import costmap as cmod
 from nexwar_contract.routenet import densify, route
@@ -177,6 +177,9 @@ NO_PROGRESS_M = 0.3
 #: 脱困里的 Wait 是 5 s,规划失败两三次在 10 s 内。
 NAV2_STALL_S = 20.0
 NAV2_RESENDS = 2
+#: 外审 11-14:照查过的路走(``goal.path``)时控制器放弃了 —— 先换 RPP 跟同一条;还不行从当前位置
+#: 重新查路线(Smac 按此刻的代价地图重规划,路上新放的东西绕得开),最多这么多次,再按原来的失败处理。
+ROUTE_RECHECKS = 2
 #: W71 台阶脱困(11-03 商场 P2→P3,用户:「轮胎和阶梯角度不够大,轮胎一直卡在阶梯边缘出不来…要把角度
 #: 调大才能出来」):Nav2 一直让往前、:data:`EDGE_STALL_S` 秒没走出 :data:`EDGE_PROGRESS_M`、
 #: 机身横滚超过 :data:`EDGE_ROLL_RAD`(一边的腿在台阶下面) —— 先往目标那边(目标就在正前方时往低的
@@ -520,7 +523,13 @@ class Nav2NavBackend(PlannedNavBackend):
         self.link.cmd = None                 # 外审 R7:上一个目标晚到的速度不许驱动这一个
         msg: dict[str, Any] = {"type": "goal", "goal_id": self._goal_id, "x": pose.position.x,
                                "y": pose.position.y, "yaw": pose.yaw}
-        if via:
+        if got is not None and got.ok and got.path:
+            # 外审 11-14:路线靠局部搜索放行 —— 让控制器照这条查过的路走,不让 Smac 另规划
+            # (有路网时查的就是沿途经点那条,拼好的路已经沿着路网走)
+            msg["path"] = _wire_path(got.path)
+            log.info("%s:路线靠局部搜索放行(最窄处剩 %.2f m),照查过的这条走(%d 个位姿)", op,
+                     got.margin, len(msg["path"]))
+        elif via:
             # 沿路加密(每隔不到 1 m):Nav2 离途经点 1.5 m 内就算经过、直奔下一个,点稀了拐角切一块
             # 点数按实际加密结果管(外审 W48-M1:每段各自向上取整,按总长算的间距保不住 500 个以内):
             # 超了就把间隔放大;放到不加密(原来的点)还超,只留最后 MAX_VIA 个
@@ -536,6 +545,7 @@ class Nav2NavBackend(PlannedNavBackend):
         self._look, self._look_tries = None, 0
         self._rec_level, self._rec_at, self._man, self._back = 0, None, None, None
         self._rec_tried = set()
+        self._rechecks = 0
         if self._avoid:
             self._avoid = []
             self._send_map()
@@ -1364,6 +1374,40 @@ class Nav2NavBackend(PlannedNavBackend):
         self._near_best = None
         return True
 
+    async def _recheck_route(self, here: Any, tgt: Pose, raw: str) -> None:
+        """照路走的控制器都放弃了:从这儿重新要路线、重新查(外审 11-14);查的规矩跟出发前一样。"""
+        log.warning("照查过的路走:MPPI、RPP 都放弃了(%s),从 (%.2f, %.2f) 重新查路线(第 %d 次)",
+                    raw, here.x, here.y, self._rechecks)
+        await self._send(0.0, 0.0, 0.0)
+        self._planning = True
+        try:
+            got = await self._route_check(here, tgt, "重查路线")
+        finally:
+            self._planning = False
+        msg = {k: v for k, v in self._goal_msg.items() if k not in ("path", "controller")}
+        if got.status == "unchecked":
+            healthy, why_g = self._guard_healthy()
+            if self.on_event is not None:
+                self.on_event("route_unchecked", {"code": got.code, "reason": got.why[:200],
+                                                  "guard_ok": healthy})
+            if not healthy:
+                await self._fail(f"路线没查成({got.why}),运行时防护也不健康({why_g})"[:200],
+                                 code="robot_not_ready")
+                return
+        elif not got.ok:
+            if self.on_event is not None:
+                self.on_event("route_rejected", {"code": got.code, "reason": got.why[:200],
+                                                 "x": round(got.at[0], 2) if got.at else None,
+                                                 "y": round(got.at[1], 2) if got.at else None})
+            self.fail_final = True
+            await self._fail(got.why[:200], code=got.code)
+            return
+        elif got.path:
+            msg["path"] = _wire_path(got.path)
+        self._goal_msg = msg
+        self._goal_from = (here.x, here.y)
+        self._resend_goal()
+
     def _resend_goal(self) -> None:
         """把这次 goto 的目标重新交给 Nav2(新目标号)。"""
         msg = getattr(self, "_goal_msg", None)
@@ -1457,6 +1501,18 @@ class Nav2NavBackend(PlannedNavBackend):
         35 s 就到了)。"""
         raw = f"Nav2 {m['state']}:{m.get('reason', '') or '没说原因'}"
         tgt = self._target
+        msg0 = getattr(self, "_goal_msg", None)
+        if msg0 is not None and msg0.get("path"):
+            if msg0.get("controller") != "RPP":
+                # 跟行为树里 MPPI 走不动换 RPP 一样(导航 V1 第 4 步),跟的还是这条查过的路
+                log.warning("照查过的路走:MPPI 放弃了(%s),换 RPP 跟同一条", raw)
+                self._goal_msg = {**msg0, "controller": "RPP"}
+                self._resend_goal()
+                return
+            if getattr(self, "_rechecks", 0) < ROUTE_RECHECKS and tgt is not None:
+                self._rechecks = getattr(self, "_rechecks", 0) + 1
+                await self._recheck_route(here, tgt, raw)
+                return
         if self._avoid and getattr(self, "_goal_msg", None) is not None:
             log.warning("绕开刚才卡住的地方就规划不出(%s):只有那一条路,撤掉临时标记、还走那条", raw)
             self._avoid = []
@@ -1882,3 +1938,12 @@ class Nav2NavBackend(PlannedNavBackend):
             self.on_event("nav_blocked", {"reason": v.reason[:200], "x": round(here.x, 2),
                                           "y": round(here.y, 2),
                                           "waited_s": round(now - self._guard_since, 1)})
+
+
+def _wire_path(path: Any) -> list[list[float]]:
+    """查过的路 → ``goal.path``(协议 6):取三位小数;太长就等间隔挑(头尾都留)。"""
+    pts = [[round(float(x), 3), round(float(y), 3), round(float(yaw), 4)] for x, y, yaw in path]
+    if len(pts) > MAX_GOAL_PATH:
+        k = (len(pts) - 1) / (MAX_GOAL_PATH - 1)
+        pts = [pts[round(i * k)] for i in range(MAX_GOAL_PATH)]
+    return pts

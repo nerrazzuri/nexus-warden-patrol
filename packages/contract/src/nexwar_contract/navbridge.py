@@ -24,7 +24,10 @@ Nav2 一律 ``use_sim_time``,转接节点按代理送来的时刻发 ``/clock``�
   ``pose`` 是拍下这一帧时的里程 ``[x, y, yaw]``;位图同障碍桥(``obsbridge.pack_bits``)。
 - ``goal {goal_id, x, y, yaw, via?}`` / ``cancel {goal_id}``。``via`` = 路网上的途经点
   ``[[x, y], …]``(协议 4,W48):有就走 ``NavigateThroughPoses``(途经点只是路过),没有走
-  ``NavigateToPose``。
+  ``NavigateToPose``。``path`` = ``[[x, y, yaw], …]``(协议 6,外审 11-14):路线检查靠局部搜索放行、
+  已逐个位姿查过的那条路(≤ 5 cm 一个,最多 :data:`MAX_GOAL_PATH` 个),转接节点交给控制器
+  ``FollowPath`` 照着走、不另规划;``controller`` = ``FollowPath``(MPPI,默认)/ ``RPP``,只跟
+  ``path`` 一起用。``path`` 和 ``via`` 不同时带。
 - ``plan {req_id, goal, start?}``(协议 5,导航 V1 第 2 节):只要一条路线、不走。``goal`` /
   ``start`` = ``[x, y, yaw]``(地图系);没给 ``start`` 用此刻位姿。``req_id`` 自己一套号,跟
   ``goal_id`` 无关;Route Validator 出发前拿它查路线几何。
@@ -56,13 +59,18 @@ from typing import Any
 from nexwar_contract.errors import ContractError
 
 #: 2(W47 外审 R7):``cmd`` 带 ``goal_id``;3(复查第三轮 P4):``cmd`` 带 ``src``;
-#: 4(W48):``goal`` 可带 ``via``;5(导航 V1 第 2 节):``plan`` / ``plan_result``。
+#: 4(W48):``goal`` 可带 ``via``;5(导航 V1 第 2 节):``plan`` / ``plan_result``;
+#: 6(外审 11-14):``goal`` 可带 ``path`` / ``controller``。
 #: 两头同一个发布包里,对不上握手就拒(代理退回自己的规划)。
-PROTO = 5
+PROTO = 6
 #: ``cmd.src``:控制器 / 脱困动作。
 CMD_SRCS = ("ctl", "beh")
 #: 途经点最多几个(路网最多 500 个点)。
 MAX_VIA = 500
+#: ``goal.path`` 最多几个位姿(5 cm 一个 ≈ 200 m;一行约 110 KB,在 MAX_LINE 里)。
+MAX_GOAL_PATH = 4000
+#: ``goal.controller``:params.yaml 里配着的两个控制器。
+CONTROLLERS = ("FollowPath", "RPP")
 MAX_LINE = 256 * 1024
 GOAL_STATES = ("accepted", "succeeded", "aborted", "canceled", "rejected")
 #: 每种报文必须有的字段(多出来的拒:加字段要升协议)。
@@ -72,7 +80,7 @@ FIELDS: dict[str, tuple[set[str], set[str]]] = {
     "map": ({"req", "map_id", "map_version", "dir"}, {"nogo", "speed"}),
     "tick": ({"t_ms", "odom", "vel"}, {"map_odom", "speed"}),
     "grid": ({"t_ms", "pose", "res", "size", "occ", "known"}, set()),
-    "goal": ({"goal_id", "x", "y", "yaw"}, {"via"}),
+    "goal": ({"goal_id", "x", "y", "yaw"}, {"via", "path", "controller"}),
     "cancel": ({"goal_id"}, set()),
     "hb": ({"seq"}, set()),
     "ready": ({"ok"}, {"reason"}),
@@ -179,6 +187,17 @@ def check(msg: dict[str, Any]) -> dict[str, Any]:
                     raise ContractError("Nav2 转接:途经点要是 [x, y]")
                 _num(q[0], "via.x")
                 _num(q[1], "via.y")
+            path = msg.get("path")
+            if path is not None:
+                if not isinstance(path, list) or not 2 <= len(path) <= MAX_GOAL_PATH:
+                    raise ContractError(f"Nav2 转接:goal.path 要是 2–{MAX_GOAL_PATH} 个位姿")
+                if via:
+                    raise ContractError("Nav2 转接:goal.path 和 via 不同时带")
+                for i, q in enumerate(path):
+                    _triple(q, f"path[{i}]")
+            if "controller" in msg and (path is None or msg["controller"] not in CONTROLLERS):
+                raise ContractError(f"Nav2 转接:controller 只能是 {'/'.join(CONTROLLERS)},"
+                                    "而且要跟 path 一起")
         if t == "goal_state" and msg["state"] not in GOAL_STATES:
             raise ContractError(f"Nav2 转接:state 要是 {'/'.join(GOAL_STATES)}")
     elif t == "path":

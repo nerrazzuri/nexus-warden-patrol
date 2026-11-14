@@ -12,7 +12,9 @@ ROS 那一侧(系统 Python + rclpy),跟 Nav2 一起起(``nexwar_nav2.service``)
 - ``map`` → 读地图目录的 ``floor.pgm/.yaml``,禁行区烧成占用,发 ``/map``(transient local);清一遍两张
   代价地图。
 - ``goal`` / ``cancel`` → ``NavigateToPose`` 动作(带路网途经点 ``via`` 的走
-  ``NavigateThroughPoses``,W48);结果回 ``goal_state``。
+  ``NavigateThroughPoses``,W48);带 ``path``(路线检查靠局部搜索放行、已逐个位姿查过的那条,
+  外审 11-14)的直接交给控制器 ``FollowPath`` 照着走,不让 Smac 另规划,收下时把这条路回报成
+  ``path``;结果回 ``goal_state``。
 - 订 ``/cmd_vel``(Nav2 速度平滑器、脱困动作的出口)→ ``cmd`` 给代理。
 - ``tick`` 里带的 ``speed``(代理按「看得清就快」算的)→ ``/speed_limit``(变了才发)。
 - 每秒看一次 Nav2 就没就绪(动作服务在、地图发过、时钟在走),变了发 ``ready``。
@@ -248,7 +250,12 @@ class Nav2Bridge:
     def __init__(self, sock: Path, *, name: str = "nexwar_nav2bridge") -> None:
         import rclpy
         from geometry_msgs.msg import TransformStamped, Twist
-        from nav2_msgs.action import ComputePathToPose, NavigateThroughPoses, NavigateToPose
+        from nav2_msgs.action import (
+            ComputePathToPose,
+            FollowPath,
+            NavigateThroughPoses,
+            NavigateToPose,
+        )
         from nav2_msgs.msg import SpeedLimit
         from nav2_msgs.srv import ClearEntireCostmap
         from nav_msgs.msg import OccupancyGrid, Odometry
@@ -265,7 +272,7 @@ class Nav2Bridge:
                    "Odometry": Odometry, "Clock": Clock, "NavigateToPose": NavigateToPose,
                    "NavigateThroughPoses": NavigateThroughPoses,
                    "ClearEntireCostmap": ClearEntireCostmap,
-                   "ComputePathToPose": ComputePathToPose}
+                   "ComputePathToPose": ComputePathToPose, "FollowPath": FollowPath}
         rclpy.init()
         self.node = rclpy.create_node("nexwar_nav2bridge")
         latched = QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL,
@@ -287,6 +294,8 @@ class Nav2Bridge:
         self.thru = ActionClient(self.node, NavigateThroughPoses, "navigate_through_poses")
         #: 导航 V1 第 2 节:Route Validator 出发前要一条路线(只规划、不走)
         self.planner = ActionClient(self.node, ComputePathToPose, "compute_path_to_pose")
+        #: 外审 11-14:路线检查给了查过的路就让控制器照它走(不经行为树、不另规划)
+        self.follow = ActionClient(self.node, FollowPath, "follow_path")
         self.clear = [self.node.create_client(ClearEntireCostmap, s) for s in (
             "/local_costmap/clear_entirely_local_costmap",
             "/global_costmap/clear_entirely_global_costmap")]
@@ -356,6 +365,8 @@ class Nav2Bridge:
         self.active_since_ms = 0
         #: 每个目标的终点(复查 N6:核路线是不是它的)。
         self.goal_xy: dict[int, tuple[float, float]] = {}
+        #: 照查过的路走的目标:收下时回报给代理的那条路(代理收到这个目标的路线才认控制器的速度)。
+        self.goal_path: dict[int, list[list[float]]] = {}
         self._mono = time.monotonic
         self._cmd_quiet_until = 0.0
         #: 上一个目标在 Nav2 里结束(有终态结果)时的 ``/clock``:这个时刻及以前规划的路线不是新目标的
@@ -685,7 +696,19 @@ class Nav2Bridge:
         gx, gy = float(m["x"]), float(m["y"])
         end = self._pose(gx, gy, float(m["yaw"]))
         via = [(float(x), float(y)) for x, y in m.get("via") or []]
-        if via:
+        path = m.get("path") or []
+        if path:
+            # 外审 11-14:控制器照这条查过的路走。一个点不少(已经 ≤ 5 cm 一个,原地转也拆开了)
+            from nav_msgs.msg import Path
+            goal = self._m["FollowPath"].Goal()
+            goal.path = Path()
+            goal.path.header.frame_id = "map"
+            goal.path.header.stamp = self._stamp(self.t_ms)
+            goal.path.poses = [self._pose(float(x), float(y), float(yaw)) for x, y, yaw in path]
+            goal.controller_id = str(m.get("controller") or "FollowPath")
+            goal.goal_checker_id = "general_goal_checker"
+            client, name = self.follow, "跟路"
+        elif via:
             # W48:途经点只是路过,朝向对着下一个点(Nav2 不在途经点上对朝向,给个顺的免得规划绕)
             nxt = [*via[1:], (gx, gy)]
             goal = self._m["NavigateThroughPoses"].Goal()
@@ -703,6 +726,9 @@ class Nav2Bridge:
         with self._goal_lock:
             self.pending[gid] = False
             self.goal_xy[gid] = (gx, gy)
+            if path:
+                self.goal_path[gid] = [list(p) for p in decimate(
+                    [(float(x), float(y)) for x, y, _ in path])]
         fut = client.send_goal_async(goal)
         fut.add_done_callback(lambda f: self._accepted(gid, f))
 
@@ -726,6 +752,7 @@ class Nav2Bridge:
                     self._cmd_quiet_until = self._mono() + CMD_QUIET_S
             else:
                 self.goal_xy.pop(gid, None)
+            own = self.goal_path.pop(gid, None)
         if why:
             self.send_threadsafe({"type": "goal_state", "goal_id": gid, "state": "rejected",
                                   "reason": why})
@@ -734,6 +761,9 @@ class Nav2Bridge:
         if canceled:
             h.get_result_async().add_done_callback(lambda f: self._done(gid, f))
             return
+        if own:
+            # 照查过的路走:Smac 不规划,/plan 不会有这个目标的路线 —— 这条就是
+            self.send_threadsafe({"type": "path", "goal_id": gid, "pts": own})
         self.send_threadsafe({"type": "goal_state", "goal_id": gid, "state": "accepted"})
         h.get_result_async().add_done_callback(lambda f: self._done(gid, f))
 
