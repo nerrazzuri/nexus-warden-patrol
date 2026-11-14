@@ -123,6 +123,10 @@ class PersonView:
             d["count"] = self.count
             if self.nearest_m is not None:
                 d["nearest_m"] = round(self.nearest_m, 1)
+            t = self.target()
+            if t is not None:
+                # 用户 11-15:最近那个人的方向(狗身系,朝前 0°、朝左为正),站点据此在地图上标人
+                d["bearing_deg"] = round(t[0], 1)
         if self.reason and d["state"] not in ("ok", "off", "stale"):
             d["reason"] = self.reason[:200]
         return d

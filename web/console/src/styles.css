@@ -753,6 +753,10 @@ button.armstate:focus-visible { outline: 2px solid var(--c-primary); outline-off
 .standby-mark rect { fill: var(--c-surface); stroke: var(--c-textSecondary); }
 .standby-mark text { fill: var(--c-textSecondary); font-size: 11px; }
 .event-pin { cursor: pointer; }
+/* 用户 11-15:看见人的告警,人在地图上哪儿(报警色,不用选中的蓝) */
+.person-mark circle { fill: var(--c-error); stroke: var(--c-surface); stroke-width: 2; }
+.person-mark polyline { fill: none; stroke: var(--c-error); stroke-width: 2; stroke-dasharray: 4 3; opacity: .8; }
+.person-mark text { fill: var(--c-error); font-size: 11px; font-weight: 600; text-anchor: middle; paint-order: stroke; stroke: var(--c-surface); stroke-width: 3px; }
 .event-pin line { stroke: var(--c-warning); stroke-width: 2; }
 .event-pin text { fill: var(--c-warning); font-size: 11px; font-weight: 600; text-anchor: middle; paint-order: stroke; stroke: var(--c-surface); stroke-width: 3px; }
 .event-pin.intrusion line, .event-pin.fire line { stroke: var(--c-error); }

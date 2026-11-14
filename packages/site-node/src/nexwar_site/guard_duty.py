@@ -74,6 +74,9 @@ POST_NEAR_M = 1.5
 #: 看见人(P1 ``dog_sees_person``)以后原地盯着等保安下结论,最多这么久,之后接着值守(外审 r1 #5)。
 #: W74 §九:30 分钟(10 分钟没人到场推给经理,在 :mod:`nexwar_site.sightings`);告警照样开着。
 PERSON_HOLD_MS = 30 * 60_000
+#: 用户 11-15:被跟的人连着这么多个轨迹点不在看见人的那个防区里,算「人出了防区」
+#: (一个点不算:边界上抖)。
+ZONE_OUT_N = 2
 #: W74 §九:看见人以后接着值守的头这么久**加密巡查** —— 一圈只跑最后看见人那个防区和相邻的
 #: (:meth:`~nexwar_site.areas.AreaBook.neighbours`),从那个防区先跑,每圈之间不歇(不去值守位)。
 INTENSE_MS = 60 * 60_000
@@ -859,7 +862,12 @@ class GuardDuty:
             return False
         a = self._person_alert(rid)
         ctx = getattr(a, "context", None) if a is not None else None
-        return not (isinstance(ctx, dict) and ctx.get("hold_done"))
+        if not isinstance(ctx, dict):
+            return True
+        if ctx.get("hold_done"):
+            return False
+        # 用户 11-15:人走了、自动接着巡逻了的这一条,人再出现(``lost_ms`` 清了)才再拦
+        return not (ctx.get("resumed_ms") and ctx.get("lost_ms"))
 
     async def _person_hold(self, e: dict[str, Any], run: dict[str, Any], running: str) -> bool:
         """看见人(设计 §5.4):停在原地盯着,等保安下结论;处理了、或盯满 :data:`PERSON_HOLD_MS`
@@ -875,6 +883,16 @@ class GuardDuty:
             key = getattr(a, "key", "") if a is not None else ""
             if a is not None and not fs.get("alert"):
                 fs = self._fs_set(rid, alert=key)        # 老进度(没记是哪一条):认现在这条
+            if a is not None and key == fs.get("alert") and self._gone(rid, a, fs, running, now):
+                # 用户 11-15:人走了 → 自动接着巡逻(警灯、警笛人走了当场关,在 sightings)。
+                # 告警不关:还是要保安到场才能关;人再出现(lost_ms 清了)再停下来跟
+                self._amend(key, resumed_ms=now)
+                self._log("person_gone", robot=rid, entry=eid,
+                          detail="人走了(机器人一阵没看到人,跟人那几趟都停了):关警灯警笛,"
+                                 "接着巡逻;告警还开着,等保安到场")
+                self._start_intense(eid, rid, now)
+                self._set_run(eid, state="resume", until_ms=now)
+                return True
             if self._person_open(rid) and key == fs.get("alert") and now < run["until_ms"]:
                 await self._maybe_follow(eid, rid)
                 await self._follow_todo(eid, rid)
@@ -903,8 +921,10 @@ class GuardDuty:
         z = self._zone_now(rid, run)
         if z is not None:
             self._held_zone[rid] = z
-        # 新一回:从头记
-        self._put_fs(rid, {"alert": getattr(a, "key", "") if a is not None else ""})
+        # 新一回:从头记(用户 11-15:在哪个防区看见的,人出了这个防区就不跟)
+        key = getattr(a, "key", "") if a is not None else ""
+        self._put_fs(rid, {"alert": key, "zone": list(z) if z is not None else None})
+        self._amend(key, resumed_ms=None)
         self._log("person_hold", robot=rid, entry=eid, zone=run["watch_zone"],
                   detail="看见人:原地停下盯着,等保安处理")
         if running and running == run["task_id"]:        # 一圈 / 去值守位的路上:停在原地
@@ -912,6 +932,14 @@ class GuardDuty:
         else:
             self._set_run(eid, state="held", until_ms=now + PERSON_HOLD_MS)
         return True
+
+    def _gone(self, rid: str, a: Any, fs: dict[str, Any], running: str, now: int) -> bool:
+        """用户 11-15:人走了、可以接着巡逻了 —— 机器人确认一阵没看到人(那条告警记了 ``lost_ms``),
+        跟人、回防区 / 线内、看易藏点那几趟都确认停了,也没有下一拍要办的。"""
+        ctx = getattr(a, "context", None)
+        if not isinstance(ctx, dict) or not ctx.get("lost_ms") or fs.get("todo"):
+            return False
+        return self._pending_follow(rid, running, now) == ""
 
     # ------------------------------------------------------------ 跟人的账(落库,外审 r2)
 
@@ -1060,11 +1088,13 @@ class GuardDuty:
             if e.kind == "follow_lost":
                 self._follow_lost(rid, run["entry"], fs, d, ref)
                 return
-            if self.marks is None or ref is None or fs.get("left"):
+            if ref is None or fs.get("left"):
                 return
             pts = sorted((p for p in d.get("points") or [] if isinstance(p, dict)
                           and _num(p.get("x")) and _num(p.get("y"))),
                          key=lambda p: p.get("at_ms") if _num(p.get("at_ms")) else 0)
+            if self._zone_left(rid, run["entry"], fs, pts, d, ref) or self.marks is None:
+                return
             trail = dict(fs.get("trail") or {})
             for p in pts:
                 cur = (float(p["x"]), float(p["y"]))
@@ -1077,6 +1107,51 @@ class GuardDuty:
                 self._fs_set(rid, trail=trail)
         except Exception:
             log.exception("%s 跟人的 %s 处理不了", rid, e.kind)
+
+    def _zone_left(self, rid: str, eid: int, fs: dict[str, Any], pts: list[dict[str, Any]],
+                   d: dict[str, Any], ref: tuple[str, str]) -> bool:
+        """用户 11-15:被跟的人出了看见他的那个防区(连着 :data:`ZONE_OUT_N` 个点不在里面)→ 报 P1
+        「人离开防区」、停跟人、回防区里最后看见人的那个点朝人走的方向看(同越过出口线那一套)。"""
+        held = fs.get("zone")
+        if not isinstance(held, list) or len(held) != 3 or (held[0], held[1]) != ref:
+            return False
+        inside, out = fs.get("inside"), int(fs.get("zone_out") or 0)
+        for p in pts:
+            cur = (float(p["x"]), float(p["y"]))
+            try:
+                z = self.areas.zone_at(ref[0], ref[1], *cur)
+            except Exception:
+                log.exception("%s 人在哪个防区算不出来", rid)
+                return False
+            if z == held[2]:
+                inside, out = [cur[0], cur[1]], 0
+                continue
+            out += 1
+            if out >= ZONE_OUT_N and inside is not None:
+                self._left_zone(rid, eid, held[2], (inside[0], inside[1]), cur, d, ref)
+                return True
+        if inside != fs.get("inside") or out != int(fs.get("zone_out") or 0):
+            self._fs_set(rid, inside=inside, zone_out=out)
+        return False
+
+    def _left_zone(self, rid: str, eid: int, zone: str, inside: tuple[float, float],
+                   cur: tuple[float, float], d: dict[str, Any], ref: tuple[str, str]) -> None:
+        yaw = math.atan2(cur[1] - inside[1], cur[0] - inside[0])
+        pose = MapPose(map_id=ref[0], map_version=ref[1], frame_id="map", x=inside[0],
+                       y=inside[1], yaw=yaw)
+        fs = self._fs_set(rid, left=True, todo=["exit", pose.to_wire(), zone])
+        self._amend(fs.get("alert", ""), follow_left=True)
+        ctx: dict[str, Any] = {"zone": zone, "at": {"x": round(cur[0], 2), "y": round(cur[1], 2),
+                                                    "at_ms": self._now()}}
+        h = d.get("heading_deg")
+        if _num(h):
+            ctx["heading_deg"] = float(h)
+        self.alerts.raise_alert(
+            kind="person_left", robot=rid, title=f"人离开防区:{zone}",
+            detail=f"被跟的人离开了防区「{zone}」。机器人不再跟,回到防区里最后看见人的地方、"
+                   "朝人走的方向看着;请保安到场查看", context=ctx)
+        self._log("person_left", robot=rid, entry=eid,
+                  detail=f"被跟的人离开防区「{zone}」:不再跟,回防区里最后看见人的地方")
 
     def _map_of(self, rid: str) -> tuple[str, str] | None:
         pose = getattr(getattr(self._client(rid), "telemetry", None), "pose", None)

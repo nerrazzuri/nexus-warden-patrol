@@ -1673,3 +1673,69 @@ def test_外审1_5_唯一一台被另一张图的方案指定了_任意一台的
     assert got["missing"] == ["robot"]
     assert got["robots"] == [{"id": "A", "code": "reserved",
                               "why": "A 指定给了值守方案里的另一条路线 other-map"}]
+
+
+# ---------------------------------------------------------------- 用户 11-15:全自动处置
+
+
+def _点(*xs, t0=100):
+    return [{"x": x, "y": 0.5, "at_ms": t0 + i} for i, x in enumerate(xs)]
+
+
+async def test_用户1115_被跟的人出了防区_停跟人_报人离开防区_回防区里最后看见人的地方(站):
+    t = 站
+    tid = await _跟着(t)                                 # 在东区(x 0–5)看见的
+    t.duty._on_event("A", _事("follow_track", task_id=tid, points=_点(3.0, 4.5, 5.5)))
+    assert not t.duty.alerts.has_open("A", "person_left"), "出去一个点不算(边界上抖)"
+    t.duty._on_event("A", _事("follow_track", task_id=tid, points=_点(6.0, t0=200),
+                              last={"x": 6.0, "y": 0.5, "at_ms": 200}, heading_deg=0.0))
+    [a] = [a for a in t.duty.alerts.open if a["kind"] == "person_left"]
+    assert "东区" in a["title"] and a["context"]["zone"] == "东区"
+    await _跑(t, 1)
+    assert any(c["kind"] == "abort" and c["task_id"] == tid for c in t.site.commands("A", 500))
+    t.box["run"] = ""                                    # 跟人那一趟停了
+    await _跑(t, 3)
+    [g] = _gotos(t, "follow-exit-")
+    p = g["payload"]["target"]
+    assert (p["x"], p["y"]) == (4.5, 0.5) and abs(p["yaw"]) < 1e-6, "防区里最后那个点,朝人走的方向"
+    assert _log(t, "person_left")
+    t.duty._on_event("A", _事("follow_track", task_id=tid, points=_点(7.0, 8.0, t0=300)))
+    assert len([a for a in t.duty.alerts.open if a["kind"] == "person_left"]) == 1, "只报一次"
+
+
+async def test_用户1115_人一直在防区里_不报离开(站):
+    t = 站
+    tid = await _跟着(t)
+    t.duty._on_event("A", _事("follow_track", task_id=tid, points=_点(1.0, 2.0, 3.0, 4.0, 4.8)))
+    assert not t.duty.alerts.has_open("A", "person_left")
+
+
+async def test_用户1115_人走了_跟人那一趟也停了_自动接着巡逻_告警还开着_又看见又停下来跟(站):
+    t = 站
+    tid = await _跟着(t)
+    n = len(_patrols(t))
+    t.duty._on_event("A", _事("follow_lost", task_id=tid, result="lost",
+                              last={"x": 3.0, "y": 0.5, "at_ms": 5}))
+    t.box["run"] = ""                                    # 回到最后位置,跟人那一趟结束了
+    await _跑(t, 3)
+    assert len(_patrols(t)) == n, "机器人还没确认人走了:接着盯"
+    t.duty.alerts.amend_open("A", "dog_sees_person", context={"lost_ms": t.clock()})
+    await _跑(t, 3)
+    assert len(_patrols(t)) == n + 1 and _log(t, "person_gone"), "人走了:自动接着巡逻"
+    assert t.duty.alerts.has_open("A", "dog_sees_person"), "告警还开着,等保安到场"
+    t.box["run"] = None
+    await _跑(t, 3)
+    assert t.duty.status()["runs"][0]["state"] != "held", "同一条、人还没再出现:不再拦"
+    t.duty.alerts.amend_open("A", "dog_sees_person", context={"lost_ms": None})   # 又看见了
+    await _跑(t, 3)
+    assert t.duty.status()["runs"][0]["state"] == "held"
+    assert len(t.sent) == 2, "又看见:再跟"
+
+
+async def test_用户1115_跟人那一趟还在跑_人看不到了也先不接着巡逻(站):
+    t = 站
+    await _跟着(t)
+    n = len(_patrols(t))
+    t.duty.alerts.amend_open("A", "dog_sees_person", context={"lost_ms": t.clock()})
+    await _跑(t, 5)
+    assert len(_patrols(t)) == n, "机器人还在回最后位置:等它停了"
