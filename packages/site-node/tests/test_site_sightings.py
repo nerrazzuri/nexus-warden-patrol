@@ -616,3 +616,24 @@ async def test_外审W77_6_2_关灯笛排着队_保安开了驱离_不关驱离�
     for _ in range(5):
         await asyncio.sleep(0)
     assert not [p for _, p, _ in d.sent if not p["on"]], "驱离接手了:排着的关不发"
+
+
+async def test_外审W77_9_1_受力占着警笛时保安开了驱离_受力那几样账留着_都结束了照样关(台):
+    t = 台
+    d, w = _上装台(t, outputs=("strobe", "siren", "speaker"))
+    held = {"siren"}
+    w.held_by_others = lambda rid: set(held)
+    d.persons("A", present=True, count=1)
+    await _拍(w)
+    t.det.sessions["A"] = object()                       # 保安开了驱离
+    await _拍(w)
+    assert set(w._lit_of("A")) == {"siren"}, "受力占着的那一样:关的责任留在这边"
+    del t.det.sessions["A"]                              # 驱离结束
+    d.sent.clear()
+    d.persons("A", present=False)
+    await _拍(w)
+    assert not [p for _, p, _ in d.sent if not p["on"]], "受力还占着:先不关"
+    held.clear()
+    t.ms[0] += 5000
+    await _拍(w)
+    assert {p["output"] for _, p, _ in d.sent if not p["on"]} == {"siren"}

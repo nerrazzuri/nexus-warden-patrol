@@ -662,8 +662,9 @@ class DeterrenceDesk:
     async def _off(self, s: Session, out: str) -> None:
         held = self.held_by_others(s.robot_id) if self.held_by_others is not None else set()
         if out in held:
-            # 系统审查 S04:这一路别的来源(被抱起来的警报)还要着:驱离只撤自己的需求,不关它
-            s.off.add(out)
+            # 系统审查 S04:这一路别的来源(被抱起来的警报)还要着:驱离只撤自己的需求,不关它。
+            # 外审 W77-9 #1:不记成「关过了」—— 它放手了这边再关(见人开的期限可能比它长)
+            s.off.discard(out)
             s.sent.pop(out, None)
             return
         if out in s.off:
