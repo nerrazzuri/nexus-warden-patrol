@@ -1716,3 +1716,8 @@ input[aria-invalid="true"] { border-color: var(--c-error); outline-color: var(--
 .wiz-editor { height: min(calc(100dvh - 360px), 640px); min-height: 320px; display: flex; flex-direction: column; border-top: 1px solid var(--c-outline); padding-top: 8px; }
 .wiz-editor .layout { flex: 1; min-height: 0; }
 .row.wrap { flex-wrap: wrap; }
+/* UIUX-028:禁行区状态没话说时(当前版本已确认)不留一条带底色的空条 */
+.nogo-status:empty { display: none; }
+/* UIUX-030:长弹窗(添加摄像头、添加授权…)在矮屏上要内部滚动时,底下「取消 / 提交」一行贴住对话框底边,一直看得见 */
+.modal form > .row.end:last-child { position: sticky; bottom: -20px; z-index: 2; margin: 12px -20px -20px; padding: 12px 20px;
+  background: var(--c-surface); border-top: 1px solid var(--c-outline); }

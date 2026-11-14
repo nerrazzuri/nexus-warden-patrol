@@ -72,4 +72,10 @@ describe("第二档 样式", () => {
   it("UIUX-029:视频卡底栏每一段都能截出省略号", () => {
     expect(flat).toMatch(/\.slot-foot > span \{[^}]*text-overflow: ?ellipsis/);
   });
+  it("UIUX-028:禁行区状态条空着就不显示", () => {
+    expect(decl(".nogo-status:empty")).toMatch(/display: ?none/);
+  });
+  it("UIUX-030:弹窗表单最后一行按钮贴住底边", () => {
+    expect(decl(".modal form > .row.end:last-child")).toMatch(/position: ?sticky/);
+  });
 });
