@@ -852,6 +852,7 @@ class MissionEngine(EventEmitter[RunSnapshot]):
             pol = live.mission.policy
             while pol.forever or live.laps < pol.loops:
                 reached = 0
+                missed: list[tuple[int, MissionWaypoint, WaypointResult]] = []
                 for i, wp in enumerate(live.mission.waypoints):
                     live.index = i
                     self._publish()
@@ -866,6 +867,10 @@ class MissionEngine(EventEmitter[RunSnapshot]):
                     if result.ok:
                         reached += 1
                         live.trail.append((i, wp.pose))
+                    else:
+                        missed.append((i, wp, result))
+                if pol.on_waypoint_failed == "retry_then_skip":
+                    reached += await self._revisit(missed)
                 live.laps += 1
                 if pol.forever and reached == 0:
                     # W76:一直巡逻却一整圈一个点都没到 —— 停下,不空转到没电
@@ -892,6 +897,36 @@ class MissionEngine(EventEmitter[RunSnapshot]):
             await self._do_abort(f"引擎内部异常: {type(exc).__name__}: {exc}")
         finally:
             await self._finish()
+
+    async def _revisit(self, missed: list[tuple[int, MissionWaypoint, WaypointResult]]) -> int:
+        """用户 11-15(最高优先:整趟走完):一圈走完,回头把这一圈没到的点按顺序再去一次(从别的方向
+        过来路线往往不一样,当时挡着的也可能走了)。补到了替换掉原来那条结果(一个点一条,不多出来);
+        还没到原来那条照旧记没到,说明补过。回补到了几个。"""
+        live = self._live
+        assert live is not None
+        got = 0
+        for i, wp, old in missed:
+            live.index = i
+            self._publish()
+            self._note("revisit", waypoint=wp.name)
+            log.info("一圈走完,回头补没到的点 %s", wp.name)
+            logsetup.set_context(pt=i, point=wp.name)
+            again = await self._do_waypoint(wp, once=True)
+            logsetup.set_context(pt=None, point=None)
+            if again.ok:
+                got += 1
+                live.trail.append((i, wp.pose))
+                new = replace(again, note=(f"一圈走完回头补到的(第一次没到:{old.note})"
+                                           if old.note else "一圈走完回头补到的")[:300])
+            else:
+                new = replace(old, note=f"{old.note};回头补也没到:{again.note}"[:300],
+                              code=again.code or old.code)
+            at = next((k for k, r in enumerate(live.results) if r is old), None)
+            if at is None:                                 # 一直巡逻:那条已经滚出去了
+                live.results.append(new)
+            else:
+                live.results[at] = new
+        return got
 
     async def _do_abort(self, reason: str) -> None:
         """中止 = 停止导航 + 记录 + 告警。**不含任何位移**(主规范 §6.4)。
@@ -1215,13 +1250,13 @@ class MissionEngine(EventEmitter[RunSnapshot]):
 
     # ------------------------------------------------------------------ 点位
 
-    async def _do_waypoint(self, wp: MissionWaypoint) -> WaypointResult:
+    async def _do_waypoint(self, wp: MissionWaypoint, *, once: bool = False) -> WaypointResult:
         live = self._live
         assert live is not None
         policy = live.mission.policy
-        # 只有 retry_then_skip 才重试。abort / skip 都是一次定生死。
+        # 只有 retry_then_skip 才重试。abort / skip 都是一次定生死;回头补(``once``)也只去一次。
         attempts = 1 + (policy.waypoint_retry
-                        if policy.on_waypoint_failed == "retry_then_skip" else 0)
+                        if policy.on_waypoint_failed == "retry_then_skip" and not once else 0)
         started = self._clock()
         note, code = "", ""
         tried = 0

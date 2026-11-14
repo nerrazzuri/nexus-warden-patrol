@@ -219,7 +219,8 @@ async def test_重试次数用完才算这个点失败(make_engine, nav):
     mission = make_mission(policy=policy(on_waypoint_failed="retry_then_skip",
                                          waypoint_retry=2))
     await run_to_end(engine, mission)
-    assert len(nav.goto_calls) == 6, "两个点,每个点 1 次加 2 次重试"
+    # 两个点,每个点 1 次加 2 次重试;一圈完了回头各补 1 次(用户 11-15)
+    assert len(nav.goto_calls) == 8
 
 
 async def test_W70_导航说再试也一样_不按重试次数再来(make_engine, nav):
@@ -232,7 +233,7 @@ async def test_W70_导航说再试也一样_不按重试次数再来(make_engine
     mission = make_mission(policy=policy(on_waypoint_failed="retry_then_skip",
                                          waypoint_retry=2))
     await run_to_end(engine, mission)
-    assert len(nav.goto_calls) == 2, "两个点各一次,不重试"
+    assert len(nav.goto_calls) == 4, "两个点各一次,不重试;回头各补 1 次(用户 11-15)"
     assert "目标点被占" in engine.snapshot.results[0].note
 
 
@@ -262,7 +263,7 @@ async def test_V1_路线检查拒了_点位带原因码_不按重试再来(make_
     engine = make_engine()
     await run_to_end(engine, make_mission(policy=policy(on_waypoint_failed="retry_then_skip",
                                                         waypoint_retry=2)))
-    assert len(nav.goto_calls) == 2, "两个点各一次,不重试"
+    assert len(nav.goto_calls) == 4, "两个点各一次,不重试;回头各补 1 次(用户 11-15)"
     r = engine.snapshot.results[0]
     assert r.code == "route_too_narrow" and "离墙只剩" in r.note
 
