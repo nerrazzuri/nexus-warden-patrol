@@ -1,10 +1,10 @@
-# ruff: noqa: E501 —— 码表一行一个码,中英文说明并排,拆行反而难查
-"""错误码总表(日志设计 第 7 条,用户 11-10 定:十六进制 ``0xMMRR``)。
+# ruff: noqa: E501 —— 码表一行一个码，中英文说明并排，拆行反而难查
+"""错误码总表(日志设计 第 7 条，用户 11-10 定:十六进制 ``0xMMRR``)。
 
-- 高两位 ``MM`` 是模块,低两位 ``RR`` 是这个模块里的第几种原因。码一旦定下**不改、不重复用**;
+- 高两位 ``MM`` 是模块，低两位 ``RR`` 是这个模块里的第几种原因。码一旦定下**不改、不重复用**;
   不用了标 ``retired``,留在表里。
 - 每个码有英文名(``dispatch.offline``,日志里跟十六进制写在一起)、中英文的「怎么回事」和
-  「该做什么」、级别(提示 / 警告 / 严重,单独一栏,不编进码里)、谁来处理(用户自己 / 工程师)。
+  「该做什么」、级别(提示 / 警告 / 严重，单独一栏，不编进码里)、谁来处理(用户自己 / 工程师)。
 - 界面、手册显示十六进制;日志写 ``code=0x0201 dispatch.offline``(:func:`tag`)。
 - 告警种类、派单被拒的代号、导航失败码都在这里有对应的码(``ALERT``、``REFUSAL``、``NAV``),
   测试看着每一种都有。
@@ -61,7 +61,7 @@ _T: tuple[tuple[int, str, str, str, str, str, str, str], ...] = (
     (0x0101, "site.disk_low", "warn", "engineer", "站点硬盘快满了", "Site disk is nearly full",
      "到诊断页看哪些占地方;删旧录像或加硬盘", "Check usage on the Diagnostics page; delete old recordings or add disk"),
     (0x0102, "site.disk_80", "warn", "engineer", "站点硬盘用了八成", "Site disk is 80% used",
-     "留意空间,必要时清理", "Keep an eye on space; clean up if needed"),
+     "留意空间，必要时清理", "Keep an eye on space; clean up if needed"),
     (0x0103, "site.backup_verify_failed", "warn", "engineer", "站点备份校验没通过", "Site backup failed verification",
      "到系统页重新做一次备份", "Run a new backup on the System page"),
     (0x0104, "site.backup_stale", "warn", "engineer", "站点很久没备份了", "Site has not been backed up for a long time",
@@ -72,7 +72,7 @@ _T: tuple[tuple[int, str, str, str, str, str, str, str], ...] = (
      "重启站点服务;仍出现就把诊断包发给工程师", "Restart the site service; if it recurs send a diagnostics bundle"),
     (0x0107, "site.too_old", "warn", "engineer", "站点版本比机器人旧", "Site software is older than the robot's",
      "升级站点", "Upgrade the site"),
-    (0x0108, "site.incident_flood", "warn", "user", "短时间内事件太多,已合并", "Too many events in a short time; merged",
+    (0x0108, "site.incident_flood", "warn", "user", "短时间内事件太多，已合并", "Too many events in a short time; merged",
      "看活动日志里是什么在反复触发", "See what keeps triggering in the activity log"),
     (0x0109, "site.lease_expired", "error", "engineer", "控制权租约过期", "Control lease expired",
      "检查站点和机器人的连接", "Check the site–robot connection"),
@@ -88,7 +88,7 @@ _T: tuple[tuple[int, str, str, str, str, str, str, str], ...] = (
     (0x0202, "dispatch.held", "warn", "user", "机器人被人叫停了", "Robot was stopped by someone",
      "先点「恢复」再派", "Press Resume before sending it"),
     (0x0203, "dispatch.manual_only", "warn", "user", "机器人设成只许手动派", "Robot is set to manual dispatch only",
-     "要排程能派,到机器人页关掉「只许手动派」", "Turn off manual-only on the Robots page to let schedules send it"),
+     "要排程能派，到机器人页关掉「只许手动派」", "Turn off manual-only on the Robots page to let schedules send it"),
     (0x0204, "dispatch.supervision", "warn", "user", "机器人要人在现场监护", "Robot needs a person present",
      "先打开「我在监护」", "Turn on \"I'm supervising\" first"),
     (0x0205, "dispatch.teleop", "warn", "user", "机器人正在遥控", "Robot is being driven by hand",
@@ -98,7 +98,7 @@ _T: tuple[tuple[int, str, str, str, str, str, str, str], ...] = (
     (0x0207, "dispatch.not_ready", "warn", "user", "机器人还没准备好", "Robot is not ready yet",
      "等它站起来、启动完或充完电", "Wait until it has stood up, finished starting or charging"),
     (0x0208, "dispatch.map_mismatch", "warn", "user", "路线画在另一张图(或旧版本)上", "Route was drawn on a different map or version",
-     "换成机器人现在用的图,或重画路线", "Switch to the robot's current map, or redraw the route"),
+     "换成机器人现在用的图，或重画路线", "Switch to the robot's current map, or redraw the route"),
     (0x0209, "dispatch.obstacles", "error", "engineer", "机器人避障不可用", "Robot obstacle avoidance is not working",
      "到诊断页看避障", "Check obstacle avoidance on the Diagnostics page"),
     (0x020A, "dispatch.clock", "warn", "engineer", "机器人和站点的钟对不上", "Robot and site clocks disagree",
@@ -109,24 +109,24 @@ _T: tuple[tuple[int, str, str, str, str, str, str, str], ...] = (
     (0x020D, "dispatch.heading", "error", "engineer", "机器人头尾方向没设对", "Robot front/back direction is wrong",
      "工程师重新设头尾方向", "An engineer re-sets the front/back direction"),
     (0x020E, "dispatch.unreachable", "warn", "user", "有一个点机器人到不了", "Robot cannot reach one of the points",
-     "把点挪到空处,或改路线", "Move the point into open space or change the route"),
+     "把点挪到空处，或改路线", "Move the point into open space or change the route"),
     (0x020F, "dispatch.zones_unconfirmed", "warn", "user", "地图上的禁行区还没确认", "No-go zones on this map are not confirmed",
      "管理员到地图页确认禁行区", "An administrator confirms the zones on the Map page"),
     (0x0210, "dispatch.busy", "info", "user", "机器人正在执行别的任务", "Robot is busy with another task",
-     "等它做完,或先叫停", "Wait until it finishes, or stop it first"),
+     "等它做完，或先叫停", "Wait until it finishes, or stop it first"),
     (0x0211, "dispatch.unregistered", "error", "engineer", "机器人没登记或登记已吊销", "Robot is not registered or was revoked",
      "到机器人页重新添加", "Add it again on the Robots page"),
     (0x0212, "dispatch.bad_mission", "error", "engineer", "任务定义不对(太多点、太大或格式错)", "Mission definition is invalid (too many points, too large, malformed)",
      "检查路线", "Check the route"),
     (0x0213, "dispatch.refused", "warn", "user", "派单被拒(其他原因)", "Dispatch refused (other reason)",
      "看原因说明", "See the reason text"),
-    (0x0214, "dispatch.preflight_refused", "warn", "user", "出发前检查没通过,机器人没出发", "Pre-departure check failed; the robot did not leave",
+    (0x0214, "dispatch.preflight_refused", "warn", "user", "出发前检查没通过，机器人没出发", "Pre-departure check failed; the robot did not leave",
      "按说明处理(标原点、定位、电量…)", "Fix what the message says (origin, localization, battery…)"),
     (0x0215, "dispatch.run_abort", "error", "user", "巡逻中途中止", "Patrol aborted part-way",
      "看原因;去现场看看机器人", "See the reason; check the robot on site"),
     (0x0216, "dispatch.stuck", "error", "user", "机器人卡住动不了", "Robot is stuck",
      "去现场看看", "Go and check on site"),
-    (0x0217, "dispatch.waypoint_missed", "warn", "user", "巡逻点没到达,已跳过", "Patrol point not reached; skipped",
+    (0x0217, "dispatch.waypoint_missed", "warn", "user", "巡逻点没到达，已跳过", "Patrol point not reached; skipped",
      "看路上是否被挡;连续几趟到不了要改路线", "Check if the way is blocked; change the route if it keeps happening"),
     (0x0218, "dispatch.lane_stuck", "warn", "user", "机器人在通道里卡住", "Robot stuck in a passage", "去现场看看", "Go and check on site"),
     (0x0219, "dispatch.standby_failed", "warn", "user", "回不到待命点", "Could not return to the standby point",
@@ -144,28 +144,28 @@ _T: tuple[tuple[int, str, str, str, str, str, str, str], ...] = (
     (0x0301, "sched.started", "info", "user", "日程到点开始巡逻", "Schedule started a patrol", "", ""),
     (0x0302, "sched.missed", "warn", "user", "日程这一轮没跑(过了时间窗)", "Scheduled round did not run (window passed)",
      "看「之前没派出去」的原因", "See why no robot could be sent earlier"),
-    (0x0303, "sched.missed_alarm", "error", "user", "日程这一轮没跑,按设置报警", "Scheduled round did not run; alarm as configured",
-     "看原因,必要时手动派", "See the reason; dispatch by hand if needed"),
+    (0x0303, "sched.missed_alarm", "error", "user", "日程这一轮没跑，按设置报警", "Scheduled round did not run; alarm as configured",
+     "看原因，必要时手动派", "See the reason; dispatch by hand if needed"),
     (0x0304, "sched.no_robot", "warn", "user", "到点没有能派的机器人", "No robot could be sent when due",
      "看各机器人的原因", "See each robot's reason"),
-    (0x0305, "sched.busy", "info", "user", "到点机器人在忙,等它", "Robot busy when due; waiting", "", ""),
-    (0x0306, "sched.supervised", "warn", "user", "机器人只许手动派或要人监护,不接排程", "Robot is manual-only or needs supervision; schedules do not send it",
+    (0x0305, "sched.busy", "info", "user", "到点机器人在忙，等它", "Robot busy when due; waiting", "", ""),
+    (0x0306, "sched.supervised", "warn", "user", "机器人只许手动派或要人监护，不接排程", "Robot is manual-only or needs supervision; schedules do not send it",
      "到机器人页改设置", "Change the setting on the Robots page"),
     (0x0307, "sched.dispatch_failed", "error", "user", "日程派出去被机器人拒了", "Robot refused the scheduled patrol",
      "看原因", "See the reason"),
     (0x0308, "sched.displaced", "info", "user", "这一拍给了更优先的日程", "Given to a higher-priority schedule", "", ""),
-    (0x0309, "sched.weather", "info", "user", "雷暴,排程巡逻暂停", "Thunderstorm; scheduled patrols paused", "", ""),
-    (0x030A, "sched.clock", "error", "engineer", "站点的钟不可信,日程不起", "Site clock not trusted; schedules held",
+    (0x0309, "sched.weather", "info", "user", "雷暴，排程巡逻暂停", "Thunderstorm; scheduled patrols paused", "", ""),
+    (0x030A, "sched.clock", "error", "engineer", "站点的钟不可信，日程不起", "Site clock not trusted; schedules held",
      "检查对时", "Check time sync"),
     (0x030B, "sched.died", "error", "engineer", "日程执行器停了", "The scheduler stopped",
      "重启站点服务", "Restart the site service"),
     (0x030C, "sched.interrupted", "warn", "user", "日程巡逻被打断", "Scheduled patrol was interrupted", "看原因", "See the reason"),
     (0x030D, "sched.bundle_lag", "warn", "engineer", "任务包没同步到机器人", "Mission bundle not synced to the robot",
      "检查连接", "Check the connection"),
-    # ---- 0x04 导航(与 navcodes.FAIL_CODES 一一对应,另加过程事件)
-    (0x0401, "nav.route_too_narrow", "warn", "user", "路线太窄,过不去", "Route too narrow to pass",
-     "改路线,或在地图上把这段标成不可通行", "Change the route, or mark this passage impassable"),
-    (0x0402, "nav.goal_too_close_to_wall", "warn", "user", "目标点贴墙,站不下或转不开", "Goal too close to a wall",
+    # ---- 0x04 导航(与 navcodes.FAIL_CODES 一一对应，另加过程事件)
+    (0x0401, "nav.route_too_narrow", "warn", "user", "路线太窄，过不去", "Route too narrow to pass",
+     "改路线，或在地图上把这段标成不可通行", "Change the route, or mark this passage impassable"),
+    (0x0402, "nav.goal_too_close_to_wall", "warn", "user", "目标点贴墙，站不下或转不开", "Goal too close to a wall",
      "把这个点往空处挪一点", "Move the waypoint into open space"),
     (0x0403, "nav.goal_occupied", "warn", "user", "目标点被东西占住", "Goal is occupied", "清走东西或挪点", "Clear it or move the point"),
     (0x0404, "nav.goal_unreachable", "warn", "user", "到不了目标点", "Goal unreachable", "改路线", "Change the route"),
@@ -173,7 +173,7 @@ _T: tuple[tuple[int, str, str, str, str, str, str, str], ...] = (
      "清走障碍", "Clear the obstacle"),
     (0x0406, "nav.robot_trapped", "error", "user", "机器人被困住", "Robot is trapped", "去现场把它带出来", "Go and free it"),
     (0x0407, "nav.controller_stalled", "warn", "engineer", "控制器卡住不动", "Controller stalled", "看诊断", "Check diagnostics"),
-    (0x0408, "nav.localization_unreliable", "error", "user", "定位不可靠,停下了", "Localization unreliable; stopped",
+    (0x0408, "nav.localization_unreliable", "error", "user", "定位不可靠，停下了", "Localization unreliable; stopped",
      "帮它重新定位", "Re-localize it"),
     (0x0409, "nav.sensor_lost", "error", "engineer", "传感器数据断了", "Sensor data lost", "检查雷达、相机", "Check lidar and cameras"),
     (0x040A, "nav.robot_not_ready", "warn", "user", "机器人没准备好", "Robot not ready", "等它准备好", "Wait until it is ready"),
@@ -182,14 +182,14 @@ _T: tuple[tuple[int, str, str, str, str, str, str, str], ...] = (
     (0x040D, "nav.blocked", "warn", "user", "机器人被挡在原地超过一分钟", "Robot blocked in place over a minute",
      "看路上是不是有东西", "Check the way for obstacles"),
     (0x040E, "nav.nogo", "error", "user", "机器人进了禁行区", "Robot entered a no-go zone", "去现场看看", "Go and check on site"),
-    (0x040F, "nav.fallback_planner", "info", "engineer", "Nav2 没就绪,退回备用规划", "Nav2 not ready; using the fallback planner", "", ""),
+    (0x040F, "nav.fallback_planner", "info", "engineer", "Nav2 没就绪，退回备用规划", "Nav2 not ready; using the fallback planner", "", ""),
     # ---- 0x05 机器人本体
     (0x0501, "robot.estop_pressed", "error", "user", "急停按下了", "Emergency stop pressed", "确认安全后松开急停", "Release it once safe"),
     (0x0502, "robot.fallen", "error", "user", "机器人倒了", "Robot has fallen", "去现场扶起来", "Go and help it up"),
-    (0x0503, "robot.battery_abort", "error", "user", "电量低,中止巡逻", "Battery low; patrol aborted", "去充电", "Charge it"),
+    (0x0503, "robot.battery_abort", "error", "user", "电量低，中止巡逻", "Battery low; patrol aborted", "去充电", "Charge it"),
     (0x0504, "robot.charge_failed", "error", "user", "自动回充没成", "Auto-charging failed", "去看充电桩", "Check the charging dock"),
-    (0x0505, "robot.dock_stuck", "error", "user", "可能还在充电桩上,动不了", "May still be on the dock and locked", "去现场挪开", "Move it by hand"),
-    (0x0506, "robot.charge_overlap", "warn", "user", "两台同时去充电,区域没机器人守", "Two robots charging; area unguarded", "", ""),
+    (0x0505, "robot.dock_stuck", "error", "user", "可能还在充电桩上，动不了", "May still be on the dock and locked", "去现场挪开", "Move it by hand"),
+    (0x0506, "robot.charge_overlap", "warn", "user", "两台同时去充电，区域没机器人守", "Two robots charging; area unguarded", "", ""),
     (0x0507, "robot.offline", "error", "user", "机器人离线", "Robot went offline", "看机器人是否开机、网络是否通", "Check power and network"),
     (0x0508, "robot.offline_idle", "warn", "user", "空闲的机器人离线", "Idle robot went offline", "看机器人是否开机", "Check it is on"),
     (0x0509, "robot.online", "info", "user", "机器人上线", "Robot came online", "", ""),
@@ -197,9 +197,9 @@ _T: tuple[tuple[int, str, str, str, str, str, str, str], ...] = (
     (0x050B, "robot.board_overheat", "error", "engineer", "上装主板过热", "Payload board overheating", "停用并检查散热", "Stop and check cooling"),
     (0x050C, "robot.fault", "error", "engineer", "机器人报故障", "Robot reported a fault", "看故障说明", "See the fault text"),
     (0x050D, "robot.swap_soon", "warn", "user", "快要换电池了", "Battery swap soon", "准备电池", "Get a battery ready"),
-    (0x050E, "robot.swap_needed", "error", "user", "到换电位了,请来换电池", "At the swap point; please swap the battery", "去换电池", "Swap the battery"),
+    (0x050E, "robot.swap_needed", "error", "user", "到换电位了，请来换电池", "At the swap point; please swap the battery", "去换电池", "Swap the battery"),
     (0x050F, "robot.swap_overdue", "error", "user", "等换电池超过 30 分钟", "Battery swap overdue", "马上去换", "Swap it now"),
-    (0x0510, "robot.swap_stuck", "error", "user", "拔着一块电池机器人还在走", "Robot moving with a battery out", "别靠近,用遥控器或急停", "Keep clear; use the remote or e-stop"),
+    (0x0510, "robot.swap_stuck", "error", "user", "拔着一块电池机器人还在走", "Robot moving with a battery out", "别靠近，用遥控器或急停", "Keep clear; use the remote or e-stop"),
     (0x0511, "robot.battery_swap", "info", "user", "换了电池", "Battery swapped", "", ""),
     (0x0512, "robot.force_flipped", "error", "user", "机器人被掀翻", "Robot was flipped", "去现场", "Go on site"),
     (0x0513, "robot.force_lifted", "error", "user", "机器人被抬起", "Robot was lifted", "去现场", "Go on site"),
@@ -211,8 +211,8 @@ _T: tuple[tuple[int, str, str, str, str, str, str, str], ...] = (
     (0x0519, "robot.payload_spotlight", "error", "engineer", "探照灯坏了", "Spotlight failed", "检查上装", "Check the payload"),
     (0x051A, "robot.payload_amp", "warn", "engineer", "功放坏了", "Amplifier failed", "检查上装", "Check the payload"),
     # ---- 0x06 定位与建图
-    (0x0601, "loc.degraded", "warn", "user", "定位变差,原地等恢复", "Localization degraded; waiting", "", ""),
-    (0x0602, "loc.lost_paused", "error", "user", "定位丢了,暂停", "Localization lost; paused", "帮它重新定位", "Re-localize it"),
+    (0x0601, "loc.degraded", "warn", "user", "定位变差，原地等恢复", "Localization degraded; waiting", "", ""),
+    (0x0602, "loc.lost_paused", "error", "user", "定位丢了，暂停", "Localization lost; paused", "帮它重新定位", "Re-localize it"),
     (0x0603, "loc.lost_idle", "warn", "user", "空闲时定位不可信", "Localization untrusted while idle", "到定位页设位置", "Set its position"),
     (0x0604, "loc.rtk", "warn", "engineer", "RTK 不可用", "RTK unavailable", "检查 RTK 和改正数据", "Check RTK and corrections"),
     (0x0605, "loc.map_failed", "warn", "engineer", "地图下发或切换失败", "Map delivery or switch failed", "重试", "Retry"),
@@ -233,7 +233,7 @@ _T: tuple[tuple[int, str, str, str, str, str, str, str], ...] = (
     (0x0802, "sense.intrusion_unanswered", "error", "user", "入侵没有机器人去", "Intrusion with no robot responding", "派人去", "Send a person"),
     (0x0803, "sense.intrusion_person", "error", "user", "拦截点看到人", "Person seen at the intercept point", "看现场画面", "Check the live view"),
     (0x0804, "sense.deter_cornered", "error", "user", "驱离中无路可退", "Cornered while deterring", "派人去", "Send a person"),
-    (0x0805, "sense.robot_sees_person", "error", "user", "机器人看见人", "Robot sees a person", "看现场,决定要不要驱离", "Check and decide whether to deter"),
+    (0x0805, "sense.robot_sees_person", "error", "user", "机器人看见人", "Robot sees a person", "看现场，决定要不要驱离", "Check and decide whether to deter"),
     (0x0806, "sense.person_overdue", "error", "user", "看见人 10 分钟没人到场", "Person seen; nobody arrived in 10 min", "马上派人", "Send someone now"),
     (0x0807, "sense.person_left", "error", "user", "被跟的人越过出口线", "Followed person crossed the exit line", "", ""),
     (0x0808, "sense.authorized_person", "info", "user", "看见的是授权人员", "Authorized person seen", "", ""),
@@ -256,7 +256,7 @@ _T: tuple[tuple[int, str, str, str, str, str, str, str], ...] = (
     (0x0B07, "evidence.upload_backlog", "warn", "engineer", "机器人上待传的东西积压", "Upload backlog on the robot", "检查网络", "Check the network"),
     (0x0B08, "evidence.recording_failed", "warn", "engineer", "录像失败", "Recording failed", "看诊断", "Check diagnostics"),
     (0x0B09, "evidence.recording_dropped", "warn", "engineer", "录像丢了一段", "Part of a recording was dropped", "", ""),
-    (0x0B0A, "evidence.recording_trimmed", "warn", "user", "录像空间满,删了最旧的", "Recording space full; oldest removed", "", ""),
+    (0x0B0A, "evidence.recording_trimmed", "warn", "user", "录像空间满，删了最旧的", "Recording space full; oldest removed", "", ""),
     (0x0B0B, "evidence.recording_delete_failed", "error", "engineer", "录像删不掉", "Recording could not be deleted", "看诊断", "Check diagnostics"),
 )
 
@@ -264,7 +264,7 @@ CODES: dict[str, ErrCode] = {n: ErrCode(c, n, lv, w, zh, en, dz, de)
                              for c, n, lv, w, zh, en, dz, de in _T}
 BY_NUM: dict[int, ErrCode] = {c.num: c for c in CODES.values()}
 
-#: 告警种类 → 码名(``alerts.LEVEL_OF`` 里每一种都要有,测试看着)。
+#: 告警种类 → 码名(``alerts.LEVEL_OF`` 里每一种都要有，测试看着)。
 ALERT: dict[str, str] = {
     "stuck": "dispatch.stuck", "intrusion": "sense.intrusion",
     "intrusion_unanswered": "sense.intrusion_unanswered", "intrusion_person": "sense.intrusion_person",

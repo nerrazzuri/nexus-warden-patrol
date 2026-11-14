@@ -205,10 +205,21 @@ describe("用户 11-10「为什么只显示中文」:日程没跑、被挡下的
   it("迟了 + 之前没派出去 + 只许手动派", () => {
     lang.value = "en";
     const v = siteText("迟了 31 分钟,按 on_missed=skip;之前没派出去:A 站点设成只许手动派,不接排程");
-    expect(v.text).toBe("31 min late, so not run (on_missed=skip). Before that, no robot could be sent: A is set to manual dispatch only, so schedules do not send it");
+    expect(v.text).toBe("31 min late and past the time window, so this round was skipped. Before that, no robot could be sent: A is set to manual dispatch only, so schedules do not send it");
     expect(siteStr("B 不在线")).toBe("B is offline");
     expect(siteStr("雷暴:排程巡检暂停")).toBe("Thunderstorm: scheduled patrols paused");
     expect(siteStr("A 要人监护,不接排程")).toBe("A needs a person present, so schedules do not send it");
+    lang.value = "zh";
+  });
+  it("第 13 轮:站点新写法(不露 on_missed、全角标点)英文也翻", () => {
+    lang.value = "en";
+    expect(siteStr("迟了 2 分钟，过了时间窗，这一轮不跑了；之前没派出去：A 站点设成只许手动派，不接排程"))
+      .toBe("2 min late and past the time window, so this round was skipped. Before that, no robot could be sent: A is set to manual dispatch only, so schedules do not send it");
+    expect(siteStr("迟了 5 分钟，过了时间窗，已报警（站点那时没在运行，事后补记）"))
+      .toBe("5 min late and past the time window, so an alarm was raised; recorded afterwards because the site was not running then");
+    expect(siteStr("迟了 70 分钟，后面还有一轮，只补跑最近一轮（事后补记）"))
+      .toBe("70 min late and a later round followed; only the latest round is run late (recorded afterwards)");
+    expect(siteStr("A 这一拍给了更优先的「vip」（错过会报警）")).toBe("A was given to the higher-priority schedule “vip”");
     lang.value = "zh";
   });
 });

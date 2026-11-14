@@ -183,15 +183,18 @@ def today_view(db: Any, *, now_ms: int, adhoc: Any = None,
 def _deleted_schedule_items(db: Any, act: Any, a_ms: int, b_ms: int,
                             now_ms: int) -> list[dict[str, Any]]:
     """第 12 轮 W11-01:今天已经跑过、后来日程被删了的那几趟 —— 照排程账补回来(不然从列表里消失)。
-    路线编号从派单命令里取。"""
+    路线编号从派单命令里取。第 13 轮 W13-01:到过点没跑的那一轮也补(路线、机器人取删的时候
+    留下的定义 ``retired_ids.definition``;老库删的没留,那几轮不列)。"""
     from types import SimpleNamespace
     live = {e.id for e in act.schedule.entries} if act is not None else set()
     out = []
+    started: set[tuple[str, int]] = set()
     for r in db.query("SELECT entry_id, scheduled_ms, robot_id, task_id FROM schedule_runs "
                       "WHERE outcome='started' AND scheduled_ms BETWEEN ? AND ? "
                       "ORDER BY scheduled_ms", (a_ms, b_ms)):
         if r["entry_id"] in live:
             continue
+        started.add((str(r["entry_id"]), int(r["scheduled_ms"])))
         mission = ""
         cmd = db.query("SELECT payload FROM commands WHERE task_id=? ORDER BY issued_at LIMIT 1",
                        (r["task_id"] or "",))
@@ -204,6 +207,31 @@ def _deleted_schedule_items(db: Any, act: Any, a_ms: int, b_ms: int,
         e = SimpleNamespace(id=r["entry_id"], mission=mission, robot=r["robot_id"] or "",
                             window_min=0)
         out.append(_schedule_item(db, e, int(r["scheduled_ms"]), now_ms))
+    for r in db.query("SELECT DISTINCT s.entry_id, s.scheduled_ms, t.definition "
+                      "FROM schedule_runs s JOIN retired_ids t "
+                      "ON t.kind='schedule' AND t.id=s.entry_id "
+                      "WHERE s.scheduled_ms BETWEEN ? AND ? AND s.scheduled_ms <= ? "
+                      "AND t.definition != '' ORDER BY s.scheduled_ms", (a_ms, b_ms, now_ms)):
+        key = (str(r["entry_id"]), int(r["scheduled_ms"]))
+        if key[0] in live or key in started:
+            continue
+        try:
+            d = json.loads(r["definition"])
+        except ValueError:
+            continue
+        if not isinstance(d, dict):
+            continue
+        e = SimpleNamespace(id=key[0], mission=str(d.get("mission") or ""),
+                            robot=str(d.get("robot") or ""),
+                            window_min=int(d.get("window_min") or 0),
+                            on_missed=str(d.get("on_missed") or ""))
+        item = _schedule_item(db, e, key[1], now_ms)
+        if item["state"] in ("later", "waiting", "blocked"):
+            # 删掉了就不会再跑:还没定论的写「没跑」
+            item["state"] = "missed"
+            if not item["reason"]:
+                item["reason"] = "日程已删除"
+        out.append(item)
     return out
 
 
@@ -274,16 +302,53 @@ def _schedule_item(db: Any, e: Any, occ_ms: int, now_ms: int, *,
         # 窗口里写「不会跑」,窗口过了写「没跑」,原因都是 manual_only
         item.update(state="missed" if window_over else "blocked", reason="manual_only")
         return item
+    late_ok = settled is None or settled["outcome"] in ("skip", "alarm")
+    if late_ok and (window_over or settled is not None) and \
+            any("只许手动派" in (r["note"] or "") for r in rows):
+        # 第 13 轮 W12-03:窗口过后排程器记了「跳过」,这一行又变回记录里的原话 ——
+        # 这一轮当时就是因为只许手动派没跑,照样写 manual_only(网页、App 都有现成写法)
+        item.update(state="missed", reason="manual_only")
+        return item
     if window_over and settled is None and _late_runnable(e, occ_ms, now_ms, tz):
         window_over = False                              # minor #37:run_late 还会补跑这一轮
     if settled is not None or window_over:
         item["state"] = "missed"
-        item["reason"] = ((settled or last or {}).get("note") or "到点没有能派的机器人")[:200]
+        note = (settled or last or {}).get("note") or "到点没有能派的机器人"
+        item["reason"] = plain_note(note)[:200]
     else:
         item["state"] = "waiting"
-        item["reason"] = ((last or {}).get("note") or "")[:200] if last and \
+        item["reason"] = plain_note((last or {}).get("note") or "")[:200] if last and \
             last["outcome"] in _PENDING else ""
     return item
+
+
+# 第 13 轮:老记录里的排程说明写的是开发用语(on_missed=skip)和半角标点;
+# 新记录 scheduler.py 直接写这套人话。
+_OLD_NOTE = (
+    (re.compile(r"按 on_missed=skip"), "过了时间窗，这一轮不跑了"),
+    (re.compile(r"按 on_missed=alarm"), "过了时间窗，已报警"),
+    (re.compile(r"按 on_missed=run_late"), "过了时间窗"),
+    (re.compile(r"[(（]站点那时未在排程[:：]补记[)）]"), "（站点那时没在运行，事后补记）"),
+    (re.compile(r"后面还有一轮[,，]run_late 只补最近一轮[(（]补记[)）]"),
+     "后面还有一轮，只补跑最近一轮（事后补记）"),
+    (re.compile(r"[(（]on_missed=alarm[)）]"), "（错过会报警）"),
+)
+_CJK = "\u3400-\u9fff「」（）"
+
+
+def plain_note(note: str) -> str:
+    """排程说明给人看:去掉 on_missed=…,中文句子里的半角 , ; : ( ) 换全角(时间 22:00 不动)。"""
+    s = note
+    for rx, to in _OLD_NOTE:
+        s = rx.sub(to, s)
+    if not re.search(f"[{_CJK}]", s):
+        return s
+    s = re.sub(r"\s*,\s*", "，", s)
+    s = re.sub(r"\s*;\s*", "；", s)
+    s = re.sub(r"(?<!\d):(?!//)|:(?!\d)", "：", s)
+    s = re.sub(f"(?<=[{_CJK}])\\(|\\((?=[{_CJK}])", "（", s)
+    s = re.sub(f"(?<=[{_CJK}])\\)|\\)(?=[{_CJK}]|$)", "）", s)
+    return s
 
 
 def _adhoc_item(db: Any, r: dict[str, Any], now_ms: int) -> dict[str, Any]:

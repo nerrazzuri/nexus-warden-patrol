@@ -187,6 +187,36 @@ def test_第12轮_W11_01_删掉的路线日程_今天的巡逻还写名字_跑�
             for x in after] == [(at, "A", "sched-1", "一楼夜巡", "夜巡测试")], after
 
 
+def test_第13轮_W13_01_删掉的日程_没跑的那一轮也留在今天的巡逻里(台):
+    """liang-d5 r13:21:44 的「A手动测试」没跑,删日程之前总览列着这一行,删掉后就不见了。
+    经理事后查「今晚哪一轮没跑」会漏掉。"""
+    from nexwar_site.today import today_view
+    s = 台.store
+    s.set_timezone("Asia/Kuala_Lumpur", by="demo")
+    s.put_route("route-1", body(title="一楼夜巡"), by="demo")
+    s.put_schedule("route-1-1", {"mission": "route-1", "at": "22:00", "robot": "A",
+                                 "days": ["mon", "tue", "wed", "thu", "fri", "sat", "sun"],
+                                 "window_min": 1, "on_missed": "skip", "base_revision": 0,
+                                 "title": "A手动测试"}, by="demo")
+    at = 毫秒(22, 0)
+    with 台.db.tx() as c:
+        c.execute("INSERT INTO schedule_runs(entry_id, scheduled_ms, outcome, robot_id, note, "
+                  "decided_at) VALUES ('route-1-1', ?, 'supervised', NULL, "
+                  "'A 站点设成只许手动派，不接排程', ?)", (at, at))
+    now = 毫秒(22, 3)
+    before = [x for x in today_view(台.db, now_ms=now)["items"] if x["kind"] == "schedule"]
+    assert [(x["state"], x["title"], x["schedule_title"]) for x in before] == \
+        [("missed", "一楼夜巡", "A手动测试")], before
+    s.delete_schedule("route-1-1", base_revision=1, by="demo")
+    after = [x for x in today_view(台.db, now_ms=now)["items"] if x["kind"] == "schedule"]
+    assert [(x["at_ms"], x["robot"], x["state"], x["reason"], x["title"], x["schedule_title"])
+            for x in after] == [(at, "A", "missed", "manual_only", "一楼夜巡", "A手动测试")], after
+    # 删掉之后不再排新的轮次(明天这时候不列)
+    tomorrow = [x for x in today_view(台.db, now_ms=now + 86_400_000)["items"]
+                if x["kind"] == "schedule"]
+    assert tomorrow == [], tomorrow
+
+
 # ------------------------------------------------------------ 校验
 
 
