@@ -25,3 +25,9 @@ describe("UIUX-016 日程新增表单", () => {
     expect(src("routepage.tsx")).toMatch(/class="btn primary sched-add"/);
   });
 });
+
+describe("UIUX-033 报表 KPI", () => {
+  it("一组里的卡片按宽度自动折行(每张至少 200px),不硬塞 3 列", () => {
+    expect(flat).toMatch(/\.kpi-row \{[^}]*grid-template-columns: ?repeat\(auto-fit, ?minmax\(200px, ?1fr\)\)/);
+  });
+});

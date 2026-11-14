@@ -39,7 +39,7 @@ const en = {
   navAdvanced: "Advanced",
   tabHome: "System status",
   tabArming: "Arming times",
-  tabAccess: "Authorizations & temporary disarm",
+  tabAccess: "Access & disarm",
   alarmCount: "Alarms {n}",
   armArmed: "Armed",
   armHome: "Stay",

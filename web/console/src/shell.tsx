@@ -211,7 +211,7 @@ function PageTitle({ page }: { page: Page }) {
   return (
     <div class="pagetitle">
       {l && <span class="pagetitle-sec">{t(l.section)}</span>}
-      <span class="pagetitle-name">{l ? t(l.page) : ""}</span>
+      <span class="pagetitle-name" title={l ? t(l.page) : undefined}>{l ? t(l.page) : ""}</span>
     </div>
   );
 }
