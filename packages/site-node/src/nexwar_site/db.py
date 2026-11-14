@@ -521,8 +521,9 @@ CREATE TABLE IF NOT EXISTS person_sightings (
     -- (授权失效、机器人走出授权区、位置说不清了而人还在,要补报一次 P1)。
     kind       TEXT NOT NULL DEFAULT 'p1'
 );
--- W77(用户 11-15,外审 W77-1 #6):布防见人时开的警灯、警笛(JSON 列表),人走了要关;
--- 关成了(机器人回执收下)才删。站点重启、关的命令没发成都接着关。
+-- W77(用户 11-15,外审 W77-1 #6):布防见人时开的警灯、警笛,人走了要关;关成了(机器人回执收下)
+-- 才销。站点重启、关的命令没发成都接着关。outputs = {"seq": 用到第几代, "lit": {输出: 第几代}}
+-- (外审 W77-3 #2:代号只增不复用,迟到的旧回执销不掉后来重开的)。
 CREATE TABLE IF NOT EXISTS person_warn_lit (
     robot_id   TEXT PRIMARY KEY,
     outputs    TEXT NOT NULL DEFAULT '[]',
