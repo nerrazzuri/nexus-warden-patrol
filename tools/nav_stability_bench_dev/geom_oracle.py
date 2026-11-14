@@ -12,7 +12,17 @@
 - 同一档里可以前后走、横移(D1 能横移):8 邻接连通。
 - 起点所在的连通块里有终点 → 可行。
 
-只用 numpy(CI 环境没有 scipy)。栅格约定跟 ``nexwar_contract.planning.costmap`` 一样:
+**两种运动能力**(``motion``,外审 11-14、用户定:本轮禁止横移):
+
+- ``omni``(上面那套):同一档里 8 邻接走,含横移。只做能力探索,**不进**当前版本的误拒率、
+  必须通过率结论。
+- ``diff``:跟正式控制器一样不能横移(Nav2 MPPI ``DiffDrive``、``vy_max: 0``,Smac 用 diff 运动
+  基元,HAL 下发 ``vy`` 恒为 0)。同一档里只能**沿车头方向**前进、后退:每档取一个整数格位移
+  (方向跟这一档的朝向差不超过半档),一步走过去中间每处车身都要放得下;档之间照旧原地转。
+  到点按 Nav2 的到点容差的一半算:位置 ±:data:`GOAL_XY_TOL_M`、朝向 ±:data:`GOAL_YAW_TOL_BINS` 档。
+  连通块用 scipy(仿真台的系统 Python 有);没有 scipy 时退回纯 numpy(慢,只适合测试里的小图)。
+
+omni 只用 numpy(CI 环境没有 scipy)。栅格约定跟 ``nexwar_contract.planning.costmap`` 一样:
 ``blocked[r, c]``,``x = origin_x + (c + 0.5) * res``,``y = origin_y + (r + 0.5) * res``。
 地图外当障碍。
 """
@@ -48,6 +58,11 @@ SAMPLES_PER_BIN = 5
 #: 起点放不下有效车身时,在这么远以内找一个放得下的(同一档朝向)。跟 Route Validator 一样:
 #: 出发后头 0.5 m 不查(机器人就站在那儿,贴墙也得先走出来)。
 START_SLACK_M = 0.5
+#: diff 模式到点容差:Nav2 ``xy_goal_tolerance`` 0.2 / ``yaw_goal_tolerance`` 0.15 rad 取严一点。
+GOAL_XY_TOL_M = 0.10
+GOAL_YAW_TOL_BINS = 1
+#: diff 模式沿车头走一步最多几格(找跟朝向差不到半档的整数位移)。
+MAX_STEP_CELLS = 16
 
 
 @dataclass(frozen=True)
@@ -200,12 +215,120 @@ def _bin(yaw: float, nb: int) -> int:
     return int(round((yaw % (2 * math.pi)) / step)) % nb
 
 
+def _heading_step(theta: float, tol: float) -> tuple[int, int]:
+    """朝 ``theta`` 走一步的整数格位移 (行, 列):方向差 ≤ ``tol`` 里最短的那个。"""
+    for n in range(1, MAX_STEP_CELLS + 1):
+        dc, dr = int(round(n * math.cos(theta))), int(round(n * math.sin(theta)))
+        if (dc or dr) and abs(_wrap(math.atan2(dr, dc) - theta)) <= tol + 1e-9:
+            g = math.gcd(abs(dr), abs(dc))
+            return dr // g, dc // g
+    raise ValueError(f"朝向 {math.degrees(theta):.1f}° 在 {MAX_STEP_CELLS} 格内找不到合适的位移")
+
+
+def _wrap(a: float) -> float:
+    return (a + math.pi) % (2 * math.pi) - math.pi
+
+
+def _shift(a: np.ndarray, dr: int, dc: int) -> np.ndarray:
+    """``b[r, c] = a[r + dr, c + dc]``,出界当 False。"""
+    h, w = a.shape
+    b = np.zeros_like(a)
+    r0, r1 = max(0, -dr), min(h, h - dr)
+    c0, c1 = max(0, -dc), min(w, w - dc)
+    if r0 < r1 and c0 < c1:
+        b[r0:r1, c0:c1] = a[r0 + dr:r1 + dr, c0 + dc:c1 + dc]
+    return b
+
+
+def _components(n: int, src: np.ndarray, dst: np.ndarray) -> np.ndarray:
+    """无向图的连通块标号。"""
+    try:
+        from scipy.sparse import coo_matrix
+        from scipy.sparse.csgraph import connected_components
+    except ImportError:
+        lab = np.arange(n)
+        while True:
+            m = np.minimum(lab[src], lab[dst])
+            new = lab.copy()
+            np.minimum.at(new, src, m)
+            np.minimum.at(new, dst, m)
+            new = new[new]
+            if np.array_equal(new, lab):
+                return lab
+            lab = new
+    g = coo_matrix((np.ones(len(src), dtype=bool), (src, dst)), shape=(n, n))
+    return connected_components(g, directed=False)[1]
+
+
+def _diff_labels(free: np.ndarray, sweep: np.ndarray) -> np.ndarray:
+    """diff 模式:节点 (档, 行, 列),边 = 沿车头前进 / 后退一步 + 原地转一档。返回每个节点的块号
+    (形状同 ``free``;放不下的节点也有号,用的时候先看 ``free``)。"""
+    nb, h, w = free.shape
+    step = 2 * math.pi / nb
+    ids = np.arange(nb * h * w).reshape(nb, h, w)
+    src, dst = [], []
+    for k in range(nb):
+        dr, dc = _heading_step(k * step, step / 2)
+        m = int(math.ceil(math.hypot(dr, dc)))
+        ok = free[k].copy()
+        for i in range(1, m + 1):                       # 一步走过去,中间每处车身都放得下
+            ok &= _shift(free[k], int(round(dr * i / m)), int(round(dc * i / m)))
+        rr, cc = np.nonzero(ok)
+        src.append(ids[k, rr, cc])
+        dst.append(ids[k, rr + dr, cc + dc])
+        k2 = (k + 1) % nb
+        rot = sweep[k] & free[k] & free[k2]
+        rr, cc = np.nonzero(rot)
+        src.append(ids[k, rr, cc])
+        dst.append(ids[k2, rr, cc])
+    return _components(nb * h * w, np.concatenate(src), np.concatenate(dst)).reshape(nb, h, w)
+
+
+def _judge_diff(free: np.ndarray, sweep: np.ndarray, res: float, sc: tuple[int, int],
+                gc: tuple[int, int], start_yaw: float | None, goal_yaw: float | None,
+                goal_xy: tuple[float, float], origin: tuple[float, float]) -> Verdict:
+    nb, h, w = free.shape
+    lab = _diff_labels(free, sweep)
+    sks = range(nb) if start_yaw is None else [_bin(start_yaw, nb)]
+    starts = [lab[k, sc[0], sc[1]] for k in sks if free[k, sc[0], sc[1]]]
+    if not starts:
+        n = int(round(START_SLACK_M / res))
+        r0, c0 = sc
+        ra, rb, ca, cb = max(0, r0 - n), min(h, r0 + n + 1), max(0, c0 - n), min(w, c0 + n + 1)
+        for k in sks:
+            rr, cc = np.nonzero(free[k, ra:rb, ca:cb])
+            if len(rr):
+                d2 = (rr + ra - r0) ** 2 + (cc + ca - c0) ** 2
+                j = int(d2.argmin())
+                if d2[j] <= n * n:
+                    starts.append(lab[k, rr[j] + ra, cc[j] + ca])
+    if not starts:
+        return Verdict(False, "start_blocked")
+    rr, cc = np.mgrid[0:h, 0:w]
+    gx = origin[0] + (cc + 0.5) * res
+    gy = origin[1] + (rr + 0.5) * res
+    near = (gx - goal_xy[0]) ** 2 + (gy - goal_xy[1]) ** 2 <= max(GOAL_XY_TOL_M, res) ** 2
+    near[gc[0], gc[1]] = True
+    if goal_yaw is None:
+        gks = list(range(nb))
+    else:
+        b0 = _bin(goal_yaw, nb)
+        gks = [(b0 + d) % nb for d in range(-GOAL_YAW_TOL_BINS, GOAL_YAW_TOL_BINS + 1)]
+    goals = np.concatenate([lab[k][near & free[k]] for k in gks])
+    if not len(goals):
+        return Verdict(False, "goal_blocked")
+    if np.isin(goals, np.asarray(starts)).any():
+        return Verdict(True, "ok")
+    return Verdict(False, "no_path")
+
+
 def judge(blocked: np.ndarray, res: float, origin: tuple[float, float],
           start: tuple[float, float, float | None], goal: tuple[float, float, float | None], *,
           half_len: float = HALF_LEN, half_wid: float = HALF_WID,
-          yaw_bins: int = YAW_BINS) -> Verdict:
+          yaw_bins: int = YAW_BINS, motion: str = "omni") -> Verdict:
     """``start``、``goal`` = (x, y, 朝向或 None)。起点 None = 哪个朝向站得下都行(机器人原地能转到
-    的那几档算同一块);终点 None = 到了就行,朝向不限。"""
+    的那几档算同一块);终点 None = 到了就行,朝向不限。``motion``:``omni``(含横移)/ ``diff``
+    (不能横移,见模块说明)。"""
     blocked = np.asarray(blocked, dtype=bool)
     h, w = blocked.shape
 
@@ -223,6 +346,10 @@ def judge(blocked: np.ndarray, res: float, origin: tuple[float, float],
              for k in range(yaw_bins)]
     cs = _cspace(blocked, exact + turns)
     free, sweep = ~cs[:yaw_bins], ~cs[yaw_bins:]
+    if motion == "diff":
+        return _judge_diff(free, sweep, res, sc, gc, start[2], goal[2], (goal[0], goal[1]), origin)
+    if motion != "omni":
+        raise ValueError(f"motion 只能是 omni / diff:{motion!r}")
     uf, layers = _label(free, sweep)
     sks = range(yaw_bins) if start[2] is None else [_bin(start[2], yaw_bins)]
     sns = [n for n in (_node(layers, k, *sc) for k in sks) if n is not None]

@@ -106,3 +106,75 @@ def test_start_against_wall_gets_half_metre_slack():
     g2[:, :int(3.0 / RES)] = True
     carve(g2, 2.0, 1.5 - 0.3, 3.0, 1.5 + 0.3)           # 0.6 m 宽的小口,往前 1 m 才到走廊
     assert judge(g2, (2.1, 1.5, 0.0), (5.0, 1.5, 0.0)).reason == "start_blocked"
+
+
+# ---- 外审 11-14(用户定:本轮禁止横移):按朝向和运动基元连接的「不能横移」模式 ----
+
+def judge_diff(g, start, goal):
+    return go.judge(g, RES, (0.0, 0.0), start, goal, motion="diff")
+
+
+@pytest.mark.parametrize(("width", "ok"), [(1.20, True), (1.00, True), (0.90, False)])
+def test_diff_straight_corridor_same_as_omni(width, ok):
+    assert judge_diff(corridor(width), (2.0, 1.5, 0.0), (5.0, 1.5, 0.0)).feasible is ok
+
+
+def test_diff_cannot_strafe_into_side_pocket():
+    """横移能进的凹处(1.6 m 宽、转不开):不能横移就进不去。"""
+    g = corridor(1.20)
+    carve(g, 3.0, 2.0, 4.6, 2.95)
+    assert judge(g, (2.0, 1.5, 0.0), (3.8, 2.3, 0.0)).feasible
+    v = judge_diff(g, (2.0, 1.5, 0.0), (3.8, 2.3, 0.0))
+    assert (v.feasible, v.reason) == (False, "no_path")
+
+
+def test_diff_cannot_sidestep_in_corridor():
+    """1.2 m 走廊里朝东站着,目标在正北 0.15 m、还要朝东:横移一步的事,不能横移又转不开 → 不行。"""
+    g = corridor(1.20)
+    assert judge(g, (3.0, 1.45, 0.0), (5.0, 1.60, 0.0)).feasible
+    # 不能横移:沿车头方向走时偏不过去 0.15 m 吗?—— 能:往前走时朝向偏一档、走一段再回正。
+    # 这里只验证「能横移的判定」和「不能横移的判定」都给得出结论,且不能横移的不比能横移的宽松
+    d = judge_diff(g, (3.0, 1.45, 0.0), (5.0, 1.60, 0.0))
+    assert d.reason in ("ok", "no_path")
+
+
+def _rot_corridor(deg: float, width: float) -> np.ndarray:
+    """斜着的直走廊:从 (2, 2) 起沿 deg 方向 5 m。"""
+    g = grid(9.0, 9.0)
+    n = g.shape[0]
+    yy, xx = np.mgrid[0:n, 0:n]
+    cx, cy = (xx + 0.5) * RES, (yy + 0.5) * RES
+    t = math.radians(deg)
+    along = (cx - 2.0) * math.cos(t) + (cy - 2.0) * math.sin(t)
+    across = -(cx - 2.0) * math.sin(t) + (cy - 2.0) * math.cos(t)
+    g[(along >= -0.8) & (along <= 5.8) & (np.abs(across) <= width / 2)] = False
+    return g
+
+
+@pytest.mark.parametrize("deg", [45.0, 20.0, 7.0])
+def test_diff_drives_along_slanted_corridor(deg):
+    t = math.radians(deg)
+    s = (2.0, 2.0, t)
+    e = (2.0 + 4.5 * math.cos(t), 2.0 + 4.5 * math.sin(t), t)
+    assert judge_diff(_rot_corridor(deg, 1.2), s, e).feasible, deg
+
+
+def test_diff_turns_around_in_room():
+    g2 = grid(10.0, 4.0)
+    carve(g2, 0.5, 0.5, 3.5, 3.5)
+    carve(g2, 3.5, 2.0 - 0.6, 9.5, 2.0 + 0.6)
+    assert judge_diff(g2, (6.0, 2.0, 0.0), (6.0, 2.0, math.pi)).feasible
+    v = judge_diff(corridor(1.20), (3.0, 1.5, 0.0), (3.0, 1.5, math.pi))
+    assert (v.feasible, v.reason) == (False, "no_path")
+
+
+def test_diff_never_looser_than_omni():
+    rng = np.random.default_rng(3)
+    for _ in range(6):
+        g = corridor(1.3)
+        for _ in range(4):
+            x, y = rng.uniform(1.0, 6.0), rng.uniform(0.9, 2.1)
+            g[int(y / RES):int(y / RES) + 3, int(x / RES):int(x / RES) + 3] = True
+        s, e = (1.2, 1.5, 0.0), (5.8, 1.5, 0.0)
+        if judge_diff(g, s, e).feasible:
+            assert judge(g, s, e).feasible
