@@ -647,7 +647,8 @@ def _ffmpeg(frames: bytes, then_sleep: float = 0.0):
 
 def test_W19外审_ffmpeg自己退了_回收进程_关文件_删清单(tmp_path):
     import os
-    popen, procs = _ffmpeg(b"\xff\xd8A\xff\xd9")
+    # 出完帧多挂半秒:不然读的人还没取走,进程就先收了(CI 上偶发)
+    popen, procs = _ffmpeg(b"\xff\xd8A\xff\xd9", then_sleep=0.5)
     v = CctvView(_cam(rtsp_url="rtsp://10.0.0.9/s1"), popen=popen, major=lambda f: 4)
     it = v.frames()
     assert next(it) == b"\xff\xd8A\xff\xd9"
@@ -660,7 +661,8 @@ def test_W19外审_ffmpeg自己退了_回收进程_关文件_删清单(tmp_path)
 
 
 def test_W19外审_重起不给上一轮的旧画面(tmp_path):
-    popen, procs = _ffmpeg(b"\xff\xd8OLD\xff\xd9")
+    # 同上:多挂半秒
+    popen, procs = _ffmpeg(b"\xff\xd8OLD\xff\xd9", then_sleep=0.5)
     v = CctvView(_cam(rtsp_url="rtsp://10.0.0.9/s1"), popen=popen, major=lambda f: 4)
     assert next(v.frames()) == b"\xff\xd8OLD\xff\xd9"
     _等(lambda: v._proc is None)
