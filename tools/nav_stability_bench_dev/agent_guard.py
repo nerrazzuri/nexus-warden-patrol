@@ -425,13 +425,20 @@ def main() -> int:
         lk = st["look"]
         now, (x, y, th) = st["now"], st["pose"]
 
-        def step_ok(vx):
+        def step_why(vx) -> str:
+            """这一步能挪回空串,不能挪回原因(诊断用,记进 guard.jsonl)。"""
             s_ = vx * 1.0
             nxt = (x + s_ * math.cos(th), y + s_ * math.sin(th), th)
-            if map_clearance(nxt) < K["MANEUVER_CLEAR_M"]:
-                return False
+            c = map_clearance(nxt)
+            if c < K["MANEUVER_CLEAR_M"]:
+                return f"地图离墙 {c:.2f} m"
             v2 = check(guard, vx, 0.0)
-            return v2.ok or (v2.cause == "unknown" and abs(vx) <= UNKNOWN_SLOW_MPS + 1e-9)
+            if v2.ok or (v2.cause == "unknown" and abs(vx) <= UNKNOWN_SLOW_MPS + 1e-9):
+                return ""
+            return f"守卫 {v2.cause}:{v2.reason[:60]}(实测 v={st['v']:.2f} w={st['w']:.2f})"
+
+        def step_ok(vx):
+            return not step_why(vx)
         if lk is None:
             if v is None or st["look_tries"] >= K["LOOK_TRIES"]:
                 return False
@@ -445,16 +452,24 @@ def main() -> int:
                     lk = st["look"] = {"dir": d, "from": (x, y), "t": now}
                     st["look_tries"] += 1
                     st["look_at"] = (x, y)
-                    note("look", f"{v.reason};先{'往前' if d > 0 else '往后'}直走看清")
+                    rm = (f"(前 {'有' if room(1) else '没'}地方、"
+                          f"后 {'有' if room(-1) else '没'}地方)")
+                    note("look", f"{v.reason};先{'往前' if d > 0 else '往后'}直走看清{rm}")
                     break
             else:
+                fw = (step_why(K["LOOK_MPS"]) or "能挪") + ("" if room(1) else "(地图没地方)")
+                bw = (step_why(-K["LOOK_MPS"]) or "能挪") + ("" if room(-1) else "(地图没地方)")
+                note("look_no", f"前:{fw};后:{bw}")
                 return False
         far = math.hypot(x - lk["from"][0], y - lk["from"][1]) >= K["LOOK_M"]
         if far or now - lk["t"] > K["LOOK_S"]:
             st["look"] = None
             return False
         vx = lk["dir"] * K["LOOK_MPS"]
-        if not step_ok(vx):
+        why = step_why(vx)
+        if why:
+            moved = math.hypot(x - lk["from"][0], y - lk["from"][1])
+            note("look_end", f"挪了 {moved:.2f} m 停:{why}")
             st["look"] = None
             return False
         st["look_ticks"] += 1
@@ -537,7 +552,7 @@ def main() -> int:
                         st["soft_slow_ticks"] += 1
                         send(v2x, v2z)
                         return
-            if mode == "D" and v.band_only and look_go(v):
+            if mode == "D" and (st["look"] is not None or v.band_only) and look_go(v):
                 return
             if v.stops:
                 st["blocked_ticks"] += 1

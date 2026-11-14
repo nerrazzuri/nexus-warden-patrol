@@ -164,3 +164,44 @@ def test_脱困掉头时_盲带空的记忆认15秒_平时10秒():
     pose = (0.24, 0.0, 0.0)
     assert G.check(0.0, 0.6, 0.0, v, pose).cause == "blind", "平时:12 s 前的不算"
     assert G.check(0.0, 0.6, 0.0, v, pose, free_s=REC_FREE_S).ok, "脱困:15 s 以内的算"
+
+
+def test_直着走_实测转速只有噪声_不扫进盲带():
+    """仿真 11-14:往前直走 0.2,里程实测转速 −0.004(噪声)也按圆弧扫 —— 车身两侧多出 1–3 mm 一条
+    落进盲带,盲带没看过就停(先直走看清都走不了)。低于「算在转」的门槛按直的算。
+    盲带从车身边上就看不见(感知把自己车身那一圈当看不见,仿真也是)。"""
+    v = _view(lambda x, y: abs(x) <= 0.4 and abs(y) > 0.2)
+    verdict = G.check(0.2, 0.0, 0.1, v, (0, 0, 0), w_now=(0.0, -0.004),
+                      moving=((0.2, 0.0), (0.1, -0.004)))
+    assert verdict.ok, verdict
+    verdict = G.check(-0.2, 0.0, -0.1, v, (0, 0, 0), w_now=(0.0, 0.004),
+                      moving=((-0.2, 0.0), (-0.1, 0.004)))
+    assert verdict.cause != "blind", verdict
+
+
+def test_走着真在转_车尾甩进盲带照样查():
+    v = _view(_band)
+    verdict = G.check(0.3, 0.0, 0.3, v, (0, 0, 0), w_now=(0.0, 1.0), moving=((0.3, 1.0),))
+    assert verdict.cause == "blind" and verdict.stops, verdict
+
+
+def test_命令的转速只有零点零几_也按直的扫():
+    v = _view(lambda x, y: abs(x) <= 0.4 and abs(y) > 0.2)
+    verdict = G.check(0.2, 0.01, 0.0, v, (0, 0, 0))
+    assert verdict.ok, verdict
+
+
+def test_直着走_起步时实测转速晃到零点零六_不当成一直弯着走():
+    """仿真 11-14:四足起步时实测转速晃到 ±0.06(过了「算在转」的门槛)。原来「正在做的运动」按这个弯
+    推 reach(含 0.3 m 前向余量)那么远,车尾甩出 9 cm 进盲带 → 停。接着转的只有延迟 + 刹车那一段,
+    余量按直线往前接。"""
+    v = _view(lambda x, y: abs(x) <= 0.4 and abs(y) > 0.2)
+    verdict = G.check(0.2, 0.0, 0.11, v, (0, 0, 0), w_now=(0.0, -0.06),
+                      moving=((0.2, 0.0), (0.11, -0.06)))
+    assert verdict.ok, verdict
+
+
+def test_正在急转弯_收到直走_还在转的那段照样查():
+    v = _view(lambda x, y: abs(x) <= 0.4 and abs(y) > 0.2)
+    verdict = G.check(0.2, 0.0, 0.4, v, (0, 0, 0), w_now=(0.0, 1.5), moving=((0.4, 1.5),))
+    assert verdict.cause == "blind" and verdict.stops, verdict

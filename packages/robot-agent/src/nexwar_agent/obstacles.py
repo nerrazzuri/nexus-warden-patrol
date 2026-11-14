@@ -65,6 +65,9 @@ WALL_MAX_AGE_S = 2.5
 CLOCK_DRIFT = 1e-3
 #: 刚开始 / 重新估钟以后,攒够这么多帧才算帧龄可信(``stamp_trusted``)。
 CLOCK_MIN_FRAMES = 5
+#: 守卫不查贴着机身(含余量)两侧外面这么窄的一条(米):采样间距 5 cm 本来就分不出,而且落在 5 cm 的
+#: 基础余量里(物理车身侧挪这么多还离余量的外沿 3 cm)。
+BODY_EDGE_TOL_M = 0.02
 #: seq 退回到这么小当感知重启(重新估钟);别的 seq 不往前的当重复 / 乱序,丢掉。
 RESTART_SEQ = 3
 #: 多等超过这么久(积压、卡顿)记一条告警,最多每 :data:`DELAY_LOG_S` 秒一条。
@@ -449,8 +452,18 @@ class ObstacleGuard:
         pts = self._swept_cmd(vx, wz, v_meas, w_now, hl, hw)
         for mv, mw in moving:
             if abs(mv) >= self.still_mps:
-                pts |= self._arc(mv, mw, self.reach(mv), hl, hw)
-        spins = [w for w in (*w_now, *(mw for _, mw in moving)) if abs(w) >= self.still_rps]
+                # 低于「算在转」的门槛按直的算(仿真 11-14:实测 −0.004 rad/s 的噪声按圆弧扫,车身两侧
+                # 多出 1–3 mm 落进盲带,盲带没看过就停)
+                mw = mw if abs(mw) >= self.still_rps else 0.0
+                # 接着弯的只有延迟 + 刹车那一段;前向余量 extra 按直线往前接(仿真 11-14:四足起步
+                # 实测转速晃到 0.06,整段 reach 都按弯推,车尾甩出 9 cm 进盲带)
+                d = self.reach(mv)
+                pts |= self._arc(mv, mw, d, hl, hw, turn_dist=d - self.extra)
+        # 原地接着转的扇形:只算没在平移的那几份(走着的转速已经在上面的弧里了;再按原地转扫一遍
+        # 又重复又偏悲观,仿真 11-14:起步晃 0.06 rad/s 扫出 7 mm 进盲带)。
+        # 没给 moving 的老调用照旧看 w_now
+        spun = ((mw for mv, mw in moving if abs(mv) < self.still_mps) if moving else w_now)
+        spins = [w for w in spun if abs(w) >= self.still_rps]
         if spins:
             lo, hi = self.turn_span(0.0, spins)
             if hi - lo > 1e-6:
@@ -481,10 +494,10 @@ class ObstacleGuard:
         return {(round(float(x), 3), round(float(y), 3))
                 for x, y in zip(X[hit], Y[hit], strict=True)}
 
-    def _arc(self, vx: float, wz: float, dist: float, hl: float, hw: float
-             ) -> set[tuple[float, float]]:
+    def _arc(self, vx: float, wz: float, dist: float, hl: float, hw: float, *,
+             turn_dist: float | None = None) -> set[tuple[float, float]]:
         """按 (vx, wz) 的方向和弯走 ``dist`` 米,每一步机身轮廓线落下的点;弯比机身对角线还急就并上
-        外接圆(跟原地转差不多)。"""
+        外接圆(跟原地转差不多)。``turn_dist``:只弯这么远,再往后顺着那时的朝向直着走。"""
         s = self.step
         pts: set[tuple[float, float]] = set()
         corner = math.hypot(hl, hw)
@@ -504,8 +517,10 @@ class ObstacleGuard:
                 px, py, th = d, 0.0, 0.0
             else:
                 rad = vx / wz
-                th = d / rad
+                a = d if turn_dist is None or abs(d) <= turn_dist else math.copysign(turn_dist, d)
+                th = a / rad
                 px, py = rad * math.sin(th), rad * (1 - math.cos(th))
+                px, py = px + (d - a) * math.cos(th), py + (d - a) * math.sin(th)
             c, sn = math.cos(th), math.sin(th)
             # 每一步机身的轮廓线(采样间距不大于一格,轮廓线扫过的就是整个扫掠区;起点那块是狗自己)
             for x, y in edge:
@@ -520,15 +535,19 @@ class ObstacleGuard:
         if abs(vx) < 1e-6 and abs(wz) > 1e-6:
             lo, hi = self.turn_span(wz, w_now)
             return self._sector(lo, hi, hl, hw)
+        wz = wz if abs(wz) >= self.still_rps else 0.0       # 跟下面「正在做的运动」同一个门槛
         return self._arc(vx, wz, self.reach(max(abs(v_meas), abs(vx))), hl, hw)
 
     @staticmethod
     def _outside_body(pts: set[tuple[float, float]], hl: float, hw: float
                       ) -> list[tuple[float, float]]:
         """机身此刻占着的那块(含余量)不查:那里只能是狗自己,雷达也看不见机身底下(感知把机身的点
-        滤掉了,那些格子永远是「未知」)。**分辨率**:采样间距 5 cm,紧贴这块边上不到 2 cm 的窄条可能
-        漏查 —— 落在 5 cm 的余量里(内审应修 3 的复核)。"""
-        return sorted(p for p in pts if abs(p[0]) > hl + 1e-9 or abs(p[1]) > hw + 1e-9)
+        滤掉了,那些格子永远是「未知」)。**分辨率**:采样间距 5 cm,紧贴这块边上不到
+        :data:`BODY_EDGE_TOL_M` 的窄条(两侧)不查 —— 落在 5 cm 的余量里(内审应修 3 的复核)。
+        外审 11-14 起写成明确的容差:朝向变 1°,车尾角侧挪 1 cm,原来这一条细缝落进盲带就停
+        (盲带看不见要停)。"""
+        t = BODY_EDGE_TOL_M                   # 只用在两侧:车头车尾外第一排采样点只出去 1 cm,不能丢
+        return sorted(p for p in pts if abs(p[0]) > hl + 1e-9 or abs(p[1]) > hw + t)
 
     def check(self, vx: float, wz: float, v_meas: float, view: ObstacleView,
               pose_now: tuple[float, float, float], *, w_now: Sequence[float] = (),

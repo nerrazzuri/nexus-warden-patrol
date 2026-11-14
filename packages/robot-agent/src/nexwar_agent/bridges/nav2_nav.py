@@ -893,7 +893,8 @@ class Nav2NavBackend(PlannedNavBackend):
                 wz *= UNKNOWN_SLOW_MPS / abs(vx)
                 vx = math.copysign(UNKNOWN_SLOW_MPS, vx)
                 v = self._guard_check(vx, wz)
-            if v.band_only and await self._look_go(v, here, dt_s):
+            # 开始挪了就挪完:中间几拍 Nav2 发别的(倒车撞墙之类)也接着挪(仿真 11-14:只挪了 0.1 m)
+            if (self._look is not None or v.band_only) and await self._look_go(v, here, dt_s):
                 return
             if v.stops:
                 self._guarded(v, here)
@@ -1166,7 +1167,7 @@ class Nav2NavBackend(PlannedNavBackend):
             if v.cause == "data":
                 await self._send(0.0, 0.0, dt_s)           # 看不清就等,不瞎挪
                 return
-            if v.band_only and await self._look_go(v, here, dt_s):
+            if (self._look is not None or v.band_only) and await self._look_go(v, here, dt_s):
                 m["cur"] = None
                 return
             self._guarded(v, here)                         # 挡着 / 看不见 / 扫到墙:下一拍重挑

@@ -2117,3 +2117,20 @@ async def test_外审1114_抬完转速超上限_走着的截到上限_原地转�
     await t.nav.set_speed(0.1)
     vx, wz = t.nav._fit(0.5, 0.3, cap=0.1)
     assert vx == 0.0, "限速比死区还低:不往前(外审 R5)"
+
+
+async def test_外审1114_先挪开始了_Nav2中间几拍要倒车撞墙_照样挪完(tmp_path):
+    """仿真 11-14:挪的过程中 Nav2 有几拍发「倒车」(身后真有墙,不是只因盲带被拦),原来这几拍
+    就不接着挪,10 s 到了只挪了 0.1 m,两次机会用完一直卡着。开始挪了就挪完(挪的这一步自己
+    安全就行)。"""
+    link = 假转接()
+    t = _台(tmp_path, link)
+    t.world.dyn["box"] = (2.0, 3.6, 2.2, 4.4)             # 车尾后 0.35 m:原地转扫不到,倒车撞上
+    await t.start(3.0, 4.0)
+    await t.nav.goto(Pose.from_xy_yaw(1.0, 4.0))
+    x0 = t.r.x
+    for i in range(70):
+        link.now += 0.1
+        link.cmd = (link.now, 1, 0.0, 0.0, 0.6) if i % 4 == 0 else (link.now, 1, -0.5, 0.0, 0.0)
+        await t.一拍()
+    assert t.r.x - x0 > 1.0, ("挪完一个车身长", t.r.x - x0)
