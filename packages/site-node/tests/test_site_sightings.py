@@ -319,7 +319,8 @@ async def test_用户1113_布防看见人_开警灯放话术_人一直在每30�
     await _拍(w)
     t.ms[0] += WARN_EVERY_MS
     await _拍(w)
-    assert len(d.sent) == 2 * n, "人走了不再喊"
+    ons = [p for _, p, _ in d.sent if p["on"]]
+    assert len(ons) == 2 * n, "人走了不再喊(用户 11-15:人走了警灯当场关)"
 
 
 async def test_用户1113_撤防_授权在场_驱离中_都不喊不开灯(台):
@@ -389,3 +390,68 @@ async def test_用户1113_有警灯没喇叭_只开灯_不推进话术轮次(台
     await _拍(w)
     assert [p["output"] for _, p, _ in d.sent] == ["strobe"]
     assert w._warn_n == {}
+
+
+# ------------------------------------------------ 用户 11-15:见人还要开警笛;人走了关
+
+
+async def test_用户1115_布防看见人_警灯警笛话术一起开_人走了警灯警笛当场关(台):
+    t = 台
+    d, w = _上装台(t, outputs=("strobe", "siren", "speaker"))
+    d.persons("A", present=True, count=1, nearest_m=6.0)
+    await _拍(w)
+    on = {p["output"]: p for _, p, _ in d.sent}
+    assert on["siren"]["on"] is True and on["strobe"]["on"] is True and "speaker" in on
+    [a] = w.alerts.raised
+    assert "警笛" in a["detail"]
+    d.sent.clear()
+    d.persons("A", present=False)
+    await _拍(w)
+    off = {p["output"]: p for _, p, _ in d.sent}
+    assert set(off) == {"strobe", "siren"} and not any(p["on"] for p in off.values())
+    d.sent.clear()
+    await _拍(w)
+    assert d.sent == [], "关过了不重复关"
+
+
+async def test_用户1115_没接警笛的_照旧灯加话术(台):
+    t = 台
+    d, w = _上装台(t)
+    d.persons("A", present=True, count=1)
+    await _拍(w)
+    assert "siren" not in {p["output"] for _, p, _ in d.sent}
+
+
+def test_用户1115_报警时就把人在地图上的位置放进去_按机器人位置加方向距离(台):
+    import math
+    t = 台
+    t.d.clients["A"].telemetry.pose.yaw = math.pi / 2          # 机器人朝北
+    t.d.persons("A", present=True, count=1, nearest_m=6.0, bearing_deg=-90.0)   # 人在它右手边
+    t.w.tick()
+    [a] = t.w.alerts.raised
+    p = a["context"]["person"]
+    assert abs(p["x"] - 9.0) < 0.01 and abs(p["y"] - 4.0) < 0.01, p
+    assert p["at_ms"] == t.ms[0]
+
+
+def test_用户1115_没方向或没距离_不瞎标人的位置(台):
+    t = 台
+    t.d.persons("A", present=True, count=1, nearest_m=6.0)
+    t.w.tick()
+    [a] = t.w.alerts.raised
+    assert "person" not in a["context"]
+
+
+async def test_用户1115_保安开了驱离_人走了不关灯笛_归驱离那一场管(台):
+    t = 台
+    d, w = _上装台(t, outputs=("strobe", "siren", "speaker"))
+    d.persons("A", present=True, count=1)
+    await _拍(w)
+    t.det.sessions["A"] = object()                       # 保安点了「就地驱离」
+    d.sent.clear()
+    d.persons("A", present=False)
+    await _拍(w)
+    assert d.sent == [], "驱离中的灯笛归驱离管"
+    del t.det.sessions["A"]
+    await _拍(w)
+    assert d.sent == [], "驱离接手过,这边的账清了,不补关"

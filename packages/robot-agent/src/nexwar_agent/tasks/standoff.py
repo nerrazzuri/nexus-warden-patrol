@@ -1,8 +1,8 @@
 """保持距离任务(W25,决策 40;规矩见 :mod:`nexwar_contract.standoff`)。
 
-每拍:人在 3 m 内就从几个退法里挑一个(远离人的那头直退、往左带弧、往右带弧),每个都要
+每拍:人在 4 m 内(用户 11-15)就从几个退法里挑一个(远离人的那头直退、往左带弧、往右带弧),每个都要
 - 过避障守卫(``check``:扫过区没挡、障碍数据新鲜、看得见);
-- 不出拴绳:落点离**拦截点**(``center``,站点给的地图位姿,同一场固定)不超过 ``leash_m``;
+- 不出拴绳(有拴绳时):落点离**拦截点**(``center``,站点给的地图位姿,同一场固定)不超过 ``leash_m``;
 - **整段扫过区不碰禁行区**(W25 外审 3):从现在到前推再加一段停车的时间,每一步的机身轮廓(带余量)
   都按地图位姿查禁行区,不只查落点;定位不可信也算不行;
 - 往前推 :data:`HORIZON_S` 秒,离人的距离真的变大(人当它站着不动)。
@@ -22,7 +22,7 @@ from typing import Any
 from nexwar_agent.tasks.base import Task
 from nexwar_contract.footprint import BODY_LEN, BODY_WID
 from nexwar_contract.hal import RobotHAL, VelocityCommand
-from nexwar_contract.messages import TaskState
+from nexwar_contract.messages import MapPose, TaskState
 from nexwar_contract.standoff import CLEAR_M, TOO_CLOSE_M, StandoffRequest
 
 log = logging.getLogger(__name__)
@@ -77,6 +77,71 @@ def _compose(a: tuple[float, float, float], b: tuple[float, float, float]
     return (a[0] + c * b[0] - s * b[1], a[1] + s * b[0] + c * b[1], a[2] + b[2])
 
 
+class Backoff:
+    """往远离人的方向退一拍怎么退(保持距离、跟人共用):直退、往左带弧、往右带弧,挑离人最远、
+    过守卫、不碰禁行区、真拉得开的那个。"""
+
+    def __init__(self, *, check: Callable[[float, float], Any],
+                 here: Callable[[], tuple[float, float, float] | None],
+                 nogo: Callable[[float, float, float], str]) -> None:
+        self._check = check
+        self._here = here
+        self._nogo = nogo
+
+    def choose(self, bearing_deg: float, range_m: float, *, center: MapPose | None = None,
+               leash_m: float | None = None) -> tuple[tuple[float, float] | None, str]:
+        """人在狗身系 ``(方向°, 距离 m)``:挑一个退法 ``((vx, wz), "")``;都不行 ``(None, 原因)``。
+        给了 ``center``、``leash_m`` 就不出拴绳(保持距离);跟人不拴
+        (不出地图、不进禁行区靠守卫和禁行区)。"""
+        b = math.radians(bearing_deg)
+        px, py = range_m * math.cos(b), range_m * math.sin(b)
+        sign = -1.0 if math.cos(b) >= 0 else 1.0           # 人在前半边就往后退,在后半边就往前走
+        here = self._here()
+        whys: list[str] = []
+        best: tuple[float, tuple[float, float]] | None = None
+        for wz in (0.0, RETREAT_W, -RETREAT_W):
+            vx = sign * RETREAT_V
+            ex, ey, _ = _ahead(vx, wz, HORIZON_S)
+            d = math.hypot(px - ex, py - ey)
+            if d < range_m + GAIN_M:
+                whys.append("拉不开距离")
+                continue
+            if here is None:
+                whys.append("定位不可信,无法检查拴绳和禁行区")
+                continue
+            mx, my, _ = _compose(here, (ex, ey, 0.0))
+            if center is not None and leash_m is not None \
+                    and math.hypot(mx - center.x, my - center.y) > leash_m:
+                whys.append(f"再退就离拦截点超过 {leash_m:g} m")
+                continue
+            z = self._swept_nogo(here, vx, wz)
+            if z:
+                whys.append(z)
+                continue
+            v = self._check(vx, wz)
+            if not getattr(v, "ok", False):
+                whys.append(str(getattr(v, "reason", "") or "避障不让走"))
+                continue
+            if best is None or d > best[0]:
+                best = (d, (vx, wz))
+        if best is not None:
+            return best[1], ""
+        uniq = list(dict.fromkeys(whys))
+        return None, ";".join(uniq)[:200]
+
+    def _swept_nogo(self, here: tuple[float, float, float], vx: float, wz: float) -> str:
+        """从现在到前推再加停车的时间,每一步机身轮廓碰不碰禁行区(地图系)。碰了回原因。"""
+        n = int((HORIZON_S + STOP_EXTRA_S) / SWEEP_DT_S)
+        for k in range(n + 1):
+            pose = _compose(here, _ahead(vx, wz, k * SWEEP_DT_S))
+            for p in _OUTLINE:
+                x, y, _ = _compose(pose, (p[0], p[1], 0.0))
+                z = self._nogo(x, y, NOGO_MARGIN_M)
+                if z:
+                    return z
+        return ""
+
+
 class StandoffTask(Task):
     def __init__(self, *, task_id: str, req: StandoffRequest, hal: RobotHAL,
                  now_ms: Callable[[], int],
@@ -90,9 +155,7 @@ class StandoffTask(Task):
         self._hal = hal
         self._now = now_ms
         self._target = target
-        self._check = check
-        self._here = here
-        self._nogo = nogo
+        self._backoff = Backoff(check=check, here=here, nogo=nogo)
         self._until: int | None = None
         self.mode = "hold"
         #: 无路可退的原因(给人看)。
@@ -166,54 +229,8 @@ class StandoffTask(Task):
 
     def _choose(self, bearing_deg: float, range_m: float
                 ) -> tuple[tuple[float, float] | None, str]:
-        """挑一个退法:``((vx, wz), "")``;都不行 ``(None, 原因)``。"""
-        b = math.radians(bearing_deg)
-        px, py = range_m * math.cos(b), range_m * math.sin(b)
-        sign = -1.0 if math.cos(b) >= 0 else 1.0           # 人在前半边就往后退,在后半边就往前走
-        here = self._here()
-        c0 = self.req.center
-        whys: list[str] = []
-        best: tuple[float, tuple[float, float]] | None = None
-        for wz in (0.0, RETREAT_W, -RETREAT_W):
-            vx = sign * RETREAT_V
-            ex, ey, _ = _ahead(vx, wz, HORIZON_S)
-            d = math.hypot(px - ex, py - ey)
-            if d < range_m + GAIN_M:
-                whys.append("拉不开距离")
-                continue
-            if here is None:
-                whys.append("定位不可信,无法检查拴绳和禁行区")
-                continue
-            mx, my, _ = _compose(here, (ex, ey, 0.0))
-            if math.hypot(mx - c0.x, my - c0.y) > self.req.leash_m:
-                whys.append(f"再退就离拦截点超过 {self.req.leash_m:g} m")
-                continue
-            z = self._swept_nogo(here, vx, wz)
-            if z:
-                whys.append(z)
-                continue
-            v = self._check(vx, wz)
-            if not getattr(v, "ok", False):
-                whys.append(str(getattr(v, "reason", "") or "避障不让走"))
-                continue
-            if best is None or d > best[0]:
-                best = (d, (vx, wz))
-        if best is not None:
-            return best[1], ""
-        uniq = list(dict.fromkeys(whys))
-        return None, ";".join(uniq)[:200]
-
-    def _swept_nogo(self, here: tuple[float, float, float], vx: float, wz: float) -> str:
-        """从现在到前推再加停车的时间,每一步机身轮廓碰不碰禁行区(地图系)。碰了回原因。"""
-        n = int((HORIZON_S + STOP_EXTRA_S) / SWEEP_DT_S)
-        for k in range(n + 1):
-            pose = _compose(here, _ahead(vx, wz, k * SWEEP_DT_S))
-            for p in _OUTLINE:
-                x, y, _ = _compose(pose, (p[0], p[1], 0.0))
-                z = self._nogo(x, y, NOGO_MARGIN_M)
-                if z:
-                    return z
-        return ""
+        return self._backoff.choose(bearing_deg, range_m, center=self.req.center,
+                                    leash_m=self.req.leash_m)
 
     async def _finish(self, dt_s: float) -> None:
         if not self._stop_sent:

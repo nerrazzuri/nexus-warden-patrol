@@ -407,6 +407,17 @@ export function MapPage(props: {
                 </g>
               )];
             })}
+            {on("events") && shown.map && personMarks(props.p1, shown.map).map((m) => {
+              const [x, y] = s.map(m.x, m.y);
+              const line = m.track.map(([tx, ty]) => s.map(tx, ty).join(",")).join(" ");
+              return (
+                <g key={`person:${m.key}`} class="person-mark" data-person-mark="1">
+                  {m.track.length > 1 && <polyline points={line} />}
+                  <circle cx={x} cy={y} r={7} />
+                  <text x={x} y={y - 11}>{t("mapPerson")}</text>
+                </g>
+              );
+            })}
             {(route ?? sentRoute?.pts ?? []).map(([mx, my], i) => {
               const [x, y] = s.map(mx, my);
               return <g key={`tr:${i}`} class={route ? "temp-pt" : "temp-pt sent"}><circle cx={x} cy={y} r="9" /><text x={x} y={y + 4}>{i + 1}</text></g>;
@@ -490,6 +501,18 @@ export function MapPage(props: {
 }
 
 /** 结论说成人话(报警记录页也用)。 */
+/** 用户 11-15:看见人的告警,地图上直接标人在哪(站点按机器人位置 + 方向 + 距离算,跟起来按跟人的轨迹)。
+ *  人的位置跟机器人那一刻的位置同一张图;别的图上的不画。 */
+export function personMarks(p1: Alert[], map: { map_id: string; version: string }): { key: string; x: number; y: number; track: [number, number][] }[] {
+  return p1.flatMap((a) => {
+    const c = a.context;
+    if ((a.kind !== "dog_sees_person" && a.kind !== "person_left") || !c?.person || !c.pose) return [];
+    if (c.pose.map_id !== map.map_id || c.pose.map_version !== map.version) return [];
+    const track = (c.person_track ?? []).map(([x, y]) => [x, y] as [number, number]);
+    return [{ key: a.key, x: c.person.x, y: c.person.y, track }];
+  });
+}
+
 export function verdictText(a: Alert): string {
   // 第 4 轮 duty N5:跳过一次的点没到过,不是「自己恢复了」
   if (a.resolved_by === "site:skipped") return t("vSkipped");

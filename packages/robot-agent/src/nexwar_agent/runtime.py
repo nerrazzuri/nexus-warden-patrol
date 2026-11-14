@@ -642,6 +642,13 @@ class AgentRuntime:
             return est, False, nav.anchor.why_not(odom_ok) or "定位不可信"
         return est, True, ""
 
+    def _backoff_check(self, vx: float, wz: float) -> Any:
+        """往后退的那一拍过不过守卫(保持距离、跟人共用)。外审 11-14:里程实测的运动
+        (还没停下来的那段)也查。"""
+        nav = self.parts.nav
+        return nav.guard.check(vx, wz, nav._v_meas, nav.obstacles, nav._odom_pose,
+                               w_now=(nav._w_meas,), moving=((nav._v_meas, nav._w_meas),))
+
     def _standoff_nogo(self, x: float, y: float, d: float) -> str:
         """地图上 (x, y) 离禁行区不到 ``d`` 米:回原因。"""
         z = self.parts.nav.nogo_near(x, y, d)
@@ -669,24 +676,25 @@ class AgentRuntime:
         if cmd.kind == "standoff":
             from nexwar_agent.tasks.standoff import StandoffTask
             from nexwar_contract.standoff import parse_standoff
-            nav = self.parts.nav
             return StandoffTask(
                 task_id=cmd.task_id, req=parse_standoff(cmd.payload), hal=self.hal,
                 now_ms=self._mono_ms, target=self.person_view.target,
-                # 外审 11-14:里程实测的运动(还没停下来的那段)也查
-                check=lambda vx, wz: nav.guard.check(vx, wz, nav._v_meas, nav.obstacles,
-                                                     nav._odom_pose, w_now=(nav._w_meas,),
-                                                     moving=((nav._v_meas, nav._w_meas),)),
-                here=self._standoff_here, nogo=self._standoff_nogo, priority=cmd.priority)
+                check=self._backoff_check, here=self._standoff_here, nogo=self._standoff_nogo,
+                priority=cmd.priority)
         assert self.parts is not None, "有 loaded_map 就一定装了引擎"
         if cmd.kind == "follow":
             from nexwar_agent.tasks.follow import FollowTask
+            from nexwar_agent.tasks.standoff import Backoff
             from nexwar_contract.follow import parse_follow
             assert self.loaded_map is not None
+            # 用户 11-15:人走近就退(退法同保持距离,过守卫、不进禁行区)
+            backoff = Backoff(check=self._backoff_check, here=self._standoff_here,
+                              nogo=self._standoff_nogo)
             return FollowTask(task_id=cmd.task_id, req=parse_follow(cmd.payload), parts=self.parts,
                               events=self.events, now_ms=self._mono_ms, wall_ms=self._now,
                               targets=self.person_view.targets, here=self._standoff_here,
-                              map_ref=self.loaded_map, priority=cmd.priority)
+                              map_ref=self.loaded_map, priority=cmd.priority,
+                              hal=self.hal, backoff=backoff)
         if cmd.kind == "patrol":
             from nexwar_agent.tasks.patrol import PatrolTask
             from nexwar_contract.mission import parse_mission

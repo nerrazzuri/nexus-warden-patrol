@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { setFetch } from "./api";
 import { lang } from "./i18n";
 import type { UnitInfo } from "./live";
-import { camMarks, camsOnMap, camWorld, GoLookCard, mapAreas, MapPage, TempRoutePanel } from "./mappage";
+import { camMarks, camsOnMap, camWorld, GoLookCard, mapAreas, MapPage, personMarks, TempRoutePanel } from "./mappage";
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
 const MAP = { map_id: "m", version: "1" };
@@ -169,5 +169,21 @@ describe("地图上画编辑器里起的区域名(W44 第四期)", () => {
         { name: "西区", polygon: [[0, 0], [1, 0], [1, 1]] as [number, number][] }] } };
     const got = mapAreas(meta, [{ zone: "西区", points: [[2, 2], [3, 2], [3, 3]] }]);
     expect(got.map((a) => a.name)).toEqual(["西区", "A区"]);
+  });
+});
+
+describe("用户 11-15:看见人的告警,地图上直接标人在哪", () => {
+  const 告警 = (ctx: Record<string, unknown>, kind = "dog_sees_person") =>
+    ({ key: "k1", kind, title: "机器人看见人了", first_ms: 0, context: { pose: { map_id: "m", map_version: "1", x: 1, y: 2 }, ...ctx } }) as never;
+  it("有人的位置就标;跟人的轨迹一起画;别的图上的不画;没位置不画", () => {
+    const got = personMarks([
+      告警({ person: { x: 5, y: 6 }, person_track: [[3, 4, 1], [5, 6, 2]] }),
+      告警({}),
+      告警({ person: { x: 9, y: 9 }, pose: { map_id: "别的", map_version: "1", x: 0, y: 0 } }),
+    ], MAP);
+    expect(got).toEqual([{ key: "k1", x: 5, y: 6, track: [[3, 4], [5, 6]] }]);
+  });
+  it("别的告警(不是看见人)有 person 也不画", () => {
+    expect(personMarks([告警({ person: { x: 5, y: 6 } }, "low_battery")], MAP)).toEqual([]);
   });
 });
