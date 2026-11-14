@@ -187,8 +187,9 @@ export function AlertDetail(props: {
         )}
         <div class="row wrap ad-acts">
           {!site && <a class="btn sm" href={recordingLink(a)} onClick={props.onClose}>{dt("dRec")}</a>}
+          {/* UIUX-E027:打开详情先停在「我来处理」(原来跳到下面的备注框) */}
           {open && can && a.acked_ms == null && (
-            <button type="button" class="btn sm" disabled={busy} onClick={() => post("ack", {})}>{t("dutyTake")}</button>
+            <button type="button" class="btn sm" autoFocus disabled={busy} onClick={() => post("ack", {})}>{t("dutyTake")}</button>
           )}
           {open && can && mustArrive && (
             <button type="button" class="btn sm" disabled={busy} onClick={() => post("arrive", {})}>{t("dutyArrive")}</button>
