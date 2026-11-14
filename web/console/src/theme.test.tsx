@@ -3,7 +3,7 @@
 // 当前这一套;状态的颜色按 mobile.json 的 usage(红 P1 / 离线,橙 P2,绿正常,别的中性)。
 import { cleanup, render } from "@testing-library/preact";
 import { afterEach, describe, expect, it } from "vitest";
-import mobile from "../../../design/mobile.json";
+import web from "../../../design/web.json";
 import { lang } from "./i18n";
 import { StateText } from "./live";
 import { pinFor } from "./shell";
@@ -38,8 +38,8 @@ describe("主题跟着系统走(prefers-color-scheme)", () => {
       const s = dark ? "dark" : "light";
       expect(root.dataset.theme).toBe(s);
       expect(scheme.value).toBe(s);
-      expect(css(root, "--c-bg")).toBe(mobile.color[s].bg);
-      expect(css(root, "--c-text")).toBe(mobile.color[s].text);
+      expect(css(root, "--c-bg")).toBe(web.color[s].bg);
+      expect(css(root, "--c-text")).toBe(web.color[s].text);
       expect(css(root, "color-scheme")).toBe(s);
       stop();
     }
@@ -49,13 +49,13 @@ describe("主题跟着系统走(prefers-color-scheme)", () => {
     const root = document.createElement("div");
     const q = fakeQuery(false);
     const stop = followSystem(root, q as unknown as MediaQueryList);
-    expect(css(root, "--c-surface")).toBe(mobile.color.light.surface);
+    expect(css(root, "--c-surface")).toBe(web.color.light.surface);
     q.flip(true);
     expect(root.dataset.theme).toBe("dark");
-    expect(css(root, "--c-surface")).toBe(mobile.color.dark.surface);
-    expect(css(root, "--c-error")).toBe(mobile.color.dark.error);
+    expect(css(root, "--c-surface")).toBe(web.color.dark.surface);
+    expect(css(root, "--c-error")).toBe(web.color.dark.error);
     q.flip(false);
-    expect(css(root, "--c-surface")).toBe(mobile.color.light.surface);
+    expect(css(root, "--c-surface")).toBe(web.color.light.surface);
     stop();
     expect(q.listeners).toBe(0);
     q.flip(true);
@@ -72,20 +72,20 @@ describe("主题跟着系统走(prefers-color-scheme)", () => {
     expect(root.dataset.theme).toBe("light");
     q.flip(true);
     expect(root.dataset.theme).toBe("dark");
-    pinScheme(pinFor("admin/users", "auto", false), root);          // 回到默认:深色(W60 全站深色),不跟系统
+    pinScheme(pinFor("admin/users", "auto", true), root);           // 回到默认:管理页浅色(redesign 11-14),不跟系统
     q.flip(false);
     q.flip(true);
-    expect(root.dataset.theme).toBe("dark");
+    expect(root.dataset.theme).toBe("light");
     pinScheme(null, root);
     stop();
   });
 
-  it("两套的每个颜色都挂上了(键跟 mobile.json 一样),字体是手机那三种", () => {
+  it("两套的每个颜色都挂上了(键跟 web.json 一样),字体是 Barlow + JetBrains Mono", () => {
     const root = document.createElement("div");
     applyTheme("dark", root);
-    for (const [k, v] of Object.entries(mobile.color.dark)) expect(css(root, `--c-${k}`)).toBe(v);
-    expect(css(root, "--font-display")).toContain("Space Grotesk");
-    expect(css(root, "--font-sans")).toContain("Inter");
+    for (const [k, v] of Object.entries(web.color.dark)) expect(css(root, `--c-${k}`)).toBe(v);
+    expect(css(root, "--font-display")).toContain("Barlow");
+    expect(css(root, "--font-sans")).toContain("Barlow");
     expect(css(root, "--font-mono")).toContain("JetBrains Mono");
   });
 });
@@ -93,13 +93,13 @@ describe("主题跟着系统走(prefers-color-scheme)", () => {
 describe("地图、时间轴、画面的颜色取当前这一套", () => {
   it("地图的底、机器人的颜色(正常绿、P1 红)跟着主题换", () => {
     applyTheme("light");
-    expect(themeColor("mapBg")).toBe(mobile.color.light.surfaceVariant);
-    expect(toneColor("idle")).toBe(mobile.color.light.success);
-    expect(toneColor("deterring")).toBe(mobile.color.light.error);
+    expect(themeColor("mapBg")).toBe(web.color.light.surfaceVariant);
+    expect(toneColor("idle")).toBe(web.color.light.success);
+    expect(toneColor("deterring")).toBe(web.color.light.error);
     applyTheme("dark");
-    expect(themeColor("mapBg")).toBe(mobile.color.dark.surfaceVariant);
-    expect(toneColor("idle")).toBe(mobile.color.dark.success);
-    expect(toneColor("deterring")).toBe(mobile.color.dark.error);
+    expect(themeColor("mapBg")).toBe(web.color.dark.surfaceVariant);
+    expect(toneColor("idle")).toBe(web.color.dark.success);
+    expect(toneColor("deterring")).toBe(web.color.dark.error);
   });
 
   it("栅格底图:浅色原样;深色反亮度(手机 ColorFilter 的意思:空地变暗、墙变亮),滤镜挂在 --map-raster 上", () => {
@@ -172,14 +172,14 @@ describe("状态的颜色(mobile.json usage;决策 64)", () => {
 
   it("颜色值就是当前这一套的 success / error / warning;中性用正文色", () => {
     applyTheme("dark");
-    expect(toneColor("online")).toBe(mobile.color.dark.success);
-    expect(toneColor("P1")).toBe(mobile.color.dark.error);
-    expect(toneColor("P2")).toBe(mobile.color.dark.warning);
-    expect(toneColor("offline")).toBe(mobile.color.dark.error);
-    expect(toneColor("unknown")).toBe(mobile.color.dark.text);
+    expect(toneColor("online")).toBe(web.color.dark.success);
+    expect(toneColor("P1")).toBe(web.color.dark.error);
+    expect(toneColor("P2")).toBe(web.color.dark.warning);
+    expect(toneColor("offline")).toBe(web.color.dark.error);
+    expect(toneColor("unknown")).toBe(web.color.dark.text);
     applyTheme("light");
-    expect(toneColor("online")).toBe(mobile.color.light.success);
-    expect(toneColor("unknown")).toBe(mobile.color.light.text);
+    expect(toneColor("online")).toBe(web.color.light.success);
+    expect(toneColor("unknown")).toBe(web.color.light.text);
   });
 });
 

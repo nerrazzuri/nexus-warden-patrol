@@ -1,33 +1,24 @@
-// 值班台的外观(C-B6,决策 64):跟手机 App 同一套设计系统。数值的唯一来源是 design/mobile.json
-// (手机从它生成 nw_tokens.g.dart);浅色、深色两套,跟着系统(prefers-color-scheme)走,系统一换当场换,
-// 不用刷新。颜色挂成 CSS 变量 --c-<名字>;用 CSSOM 设(不是内联 style 属性),站点的 CSP(style-src 'self')允许。
+// 值班台的外观(redesign/console-v2,2026-11-14):网页自己的设计源头 design/web.json(ISO 7010 安全标识方向)。
+// 手机仍用 design/mobile.json;两边只共用「颜色的用法」(mobile.json 的 usage:红只给 P1/急停/离线/破坏性,橙/黄只给 P2/低电量,
+// 绿给正常)。保安页深色(夜间值班室)、管理页浅色(白天办公室),由外壳按页面定(pinScheme)。
+// 颜色挂成 CSS 变量 --c-<名字>;用 CSSOM 设(不是内联 style 属性),站点的 CSP(style-src 'self')允许。
 // 地图、时间轴都是 SVG,颜色走 CSS 变量,换主题时跟着变;地图底图(栅格)在深色下用 --map-raster 滤镜反亮度。
 import { signal } from "@preact/signals";
 import mobile from "../../../design/mobile.json";
+import web from "../../../design/web.json";
 
 export type Scheme = "light" | "dark";
 export type Palette = Record<string, string>;
 
-/** 品牌色(W60):只用在导航选中、焦点、主按钮、地图上选中的东西 —— 不表示健康(绿)、也不表示提示。 */
-//  品牌蓝本身就是设计系统的 tertiary(design/mobile.json,手机网页同一个值);这里只补网页要的软底和字色。
-const BRAND: Record<Scheme, { brandSoft: string; onBrand: string; brandText: string }> = {
-  dark: { brandSoft: "#14263A", onBrand: "#04121F", brandText: "#E8F3FE" },
-  light: { brandSoft: "#E3EFFB", onBrand: "#FFFFFF", brandText: "#0B3A66" },
-};
-
-/** 网页多出来的几样(手机没有对应的):视频底两套都是黑的;地图的底跟手机一样用 surfaceVariant;侧栏比底亮一点。 */
+/** 网页多出来的几样:视频底两套都是黑的;地图的底用 surfaceVariant;侧栏 = 标识牌的立柱色(两套都是深石墨,
+ *  深浅页面之间靠它连成一个系统);出口线、藏匿点用紫(不跟禁区红、选中蓝撞)。 */
 function webExtras(p: Palette, s: Scheme): Palette {
-  const b = BRAND[s];
-  return { well: "#000000", mapBg: p.surfaceVariant, brand: p.tertiary, focus: p.tertiary, ...b,
-    sidebar: s === "dark" ? "#0F1218" : "#ECEEF1",
-    // 第 2 轮 setup N8:出口线、藏匿点的颜色(紫):不跟禁区红、虚拟墙橙、选中蓝撞
-    mark: s === "dark" ? "#C9A2E8" : "#7B3FA0",
-    // 网页易用性 P2-29:浅色下浅灰字放在灰底、侧栏上只有 3.7–4.1:1;网页用深一点的灰(≥ 4.7:1)
-    ...(s === "light" ? { textMuted: "#5F626A" } : {}) };
+  return { well: "#000000", mapBg: p.surfaceVariant, sidebar: p.rail,
+    mark: s === "dark" ? "#C9A2E8" : "#7B3FA0" };
 }
 
 export function palette(s: Scheme): Palette {
-  const base = (mobile.color as Record<Scheme, Palette>)[s];
+  const base = (web.color as Record<Scheme, Palette>)[s];
   return { ...base, ...webExtras(base, s) };
 }
 
@@ -104,11 +95,11 @@ export function themeColor(name: string): string {
 
 export function applyTheme(s: Scheme, root: HTMLElement = document.documentElement): void {
   for (const [k, v] of Object.entries(palette(s))) root.style.setProperty(`--c-${k}`, v);
-  for (const [k, v] of Object.entries(mobile.radius)) root.style.setProperty(`--r-${k}`, `${v}px`);
-  const fb = mobile.font.fallback.map((f) => `'${f}'`).join(", ");
-  root.style.setProperty("--font-display", `'${mobile.font.display}', ${fb}, system-ui, sans-serif`);
-  root.style.setProperty("--font-sans", `'${mobile.font.sans}', ${fb}, system-ui, sans-serif`);
-  root.style.setProperty("--font-mono", `'${mobile.font.mono}', ${fb}, ui-monospace, monospace`);
+  for (const [k, v] of Object.entries(web.radius)) root.style.setProperty(`--r-${k}`, `${v}px`);
+  const fb = web.font.fallback.map((f) => `'${f}'`).join(", ");
+  root.style.setProperty("--font-display", `'${web.font.display}', ${fb}, system-ui, sans-serif`);
+  root.style.setProperty("--font-sans", `'${web.font.sans}', ${fb}, system-ui, sans-serif`);
+  root.style.setProperty("--font-mono", `'${web.font.mono}', ${fb}, ui-monospace, monospace`);
   if (s === "dark") ensureRasterFilter();
   root.style.setProperty("--map-raster", mapRasterFilter(s));
   // 第 2 轮 P1-52:地图编辑「看结果」—— 擦掉的画成这一套下的空地色、加的障碍画成墙色(原来写死白 / 黑,深色下反了)
