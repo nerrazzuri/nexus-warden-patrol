@@ -217,9 +217,10 @@ class FollowTask(Task):
             if why == "stop_unconfirmed" and self._stop_wait is None:
                 self._stop_wait = 0.0                     # 外审 W77-3 #1:接着等停稳,别的都先不动
             if self._parts.engine.returned or "返航" in why:
-                self.state = TaskState.FAILED
-                self.detail = {"reason": f"跟人途中电量到线、返航:{why}"[:200], **self._report()}
-                return True
+                # 外审 W77-4 #1:跟别的收尾一样,停稳了才进终态
+                self._final = (TaskState.FAILED, {"reason": f"跟人途中电量到线、返航:{why}"[:200],
+                                                  **self._report()})
+                return False
             if self.phase == "back":
                 # 回最后位置也走不到:停在这儿,照样算跟丢收尾
                 self._final = (TaskState.DONE, {"result": self._result or "lost",

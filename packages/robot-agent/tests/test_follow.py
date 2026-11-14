@@ -500,3 +500,27 @@ async def test_外审W77_3_1_导航段停不稳收尾_不往后退_停稳了再�
     r.stopped = real_stopped
     await _跑(空台, t, 2)
     assert [v for v in sent if v < 0], "停稳了:接着退"
+
+
+async def test_外审W77_4_1_跟人途中返航_导航段停不稳_先别交出去(空台):
+    c, r, parts = 空台
+    p = 人(r, 9.0, 4.0)
+    t, _ = _退的任务(空台, p)
+    await t.start()
+    await _跑(空台, t, 2)
+    assert t._leg is not None
+    leg = t._leg
+    real_stopped = r.stopped
+
+    async def 没停():
+        return False
+    from unittest import mock
+    r.stopped = 没停
+    leg.state, leg.detail = TaskState.FAILED, {"reason": "stop_unconfirmed"}
+    with mock.patch.object(type(parts.engine), "returned", new_callable=mock.PropertyMock,
+                           return_value="电量到线"):
+        await _跑(空台, t, 6)
+        assert t.state is TaskState.RUNNING, "没停稳:不交出去"
+        r.stopped = real_stopped
+        await _跑(空台, t, 2)
+    assert t.state is TaskState.FAILED and "返航" in t.detail["reason"]

@@ -481,3 +481,17 @@ async def test_PR88_续发时前一路等回执跨过了截止_后一路不再�
     await force.tick()
     assert [p["output"] for _, p in sent] == ["siren"], "第二路发之前过了 45 秒:不发"
     db.close()
+
+
+async def test_外审W77_4_2_站点设了不自动鸣笛_受力警报只管警灯_不占警笛(tmp_path):
+    db = SiteDB(tmp_path / "s.db")
+    now, outputs = [NOW], {}
+    d = 假派遣(outputs)
+    arming = ArmingDesk(db, now_ms=lambda: now[0])
+    arming.set_mode("armed", by="guard")
+    force = ForceWatch(db, d, now_ms=lambda: now[0], arming=arming)
+    force.siren_allowed = lambda: False
+    await force.tick()
+    assert outputs == {"strobe": True}
+    assert force.held("A") == {"strobe"}, "只开了警灯:警笛不归它"
+    db.close()

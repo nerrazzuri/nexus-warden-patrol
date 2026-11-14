@@ -171,7 +171,8 @@ class ForceWatch:
         if not rows or rows[0]["siren"] not in (1, 2) or self._now() - rows[0]["started_ms"] \
                 >= _SIREN_S.get(rows[0]["state"], SIREN_S) * 1000:
             return set()
-        return {"siren", "strobe"}
+        # 外审 W77-4 #2:站点设了不自动鸣笛只开警灯,警笛不归它(不认上装,宁可多占)
+        return {"siren", "strobe"} if self._loud() else {"strobe"}
 
     def _outputs(self, rid: str) -> list[str]:
         c = self.dispatcher.clients.get(rid)
