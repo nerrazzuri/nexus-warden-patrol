@@ -37,4 +37,11 @@ describe("UIUX-010 圆角、间距走变量", () => {
   it("视频卡按钮用控件小档高", () => {
     expect(rule(".slot-btn")).toMatch(/height:\s*var\(--ctl-sm\)/);
   });
+  it("UIUX-045 向导里的编辑器撑满框、侧栏自己滚;UIUX-046 窄屏报警行时间和标题同一行、没照片不留位", () => {
+    const all = css.map(([, s]) => s).join("\n");
+    expect(all).toMatch(/\.wiz-editor \.routemap \.mapwrap, \.wiz-editor \.layout-map \.mapwrap \{[^}]*height: auto/);
+    expect(all).toMatch(/\.wiz-editor \.ly-tab > \.ly-side \{[^}]*overflow-y: auto/);
+    expect(all).toMatch(/\.it \{ grid-template-columns: 100px 48px[^}]*"shot time what act"/);
+    expect(all).toMatch(/\.it \.shot\.none \{ display: none; \}/);
+  });
 });
