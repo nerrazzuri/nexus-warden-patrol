@@ -236,6 +236,9 @@ TRAIL_STEP_M = 0.2
 TRAIL_KEEP_M = 10.0
 TRAIL_JUMP_M = 1.0
 RETREAT_M = 1.5
+#: 用户 11-15(最高优先:整趟走完):照路走半路重查也过不去(钻进窄处、原地转不过来)时沿来路倒退这么远
+#: (米,原路不够就退到头),退出来再查一次。
+RETREAT_ROUTE_M = 2.5
 RETREAT_MIN_M = 0.5
 RETREAT_MPS = 0.2
 RETREAT_LOOK_M = 0.4
@@ -480,6 +483,9 @@ class Nav2NavBackend(PlannedNavBackend):
             return
         pose = await self._snap_for_nav2(here, pose, op)
         goal_xy = (pose.position.x, pose.position.y)
+        if self._avoid:                                    # 上一趟留下的临时绕开:先撤,再查这一趟的路
+            self._avoid = []
+            self._send_map()
         # W48:有路网就先在路网上找路,途经点交给 Nav2(NavigateThroughPoses,只是路过)
         via = route(self.route_net, (here.x, here.y), goal_xy) \
             if self.route_net is not None and here is not None else []
@@ -515,7 +521,16 @@ class Nav2NavBackend(PlannedNavBackend):
                     self.on_event("route_rejected", {"code": got.code, "reason": got.why[:200],
                                                      "x": round(got.at[0], 2) if got.at else None,
                                                      "y": round(got.at[1], 2) if got.at else None})
-                raise NavRequestError(op, got.why, code=got.code, final=True)
+                alt = None
+                if not via:
+                    self._planning = True
+                    try:
+                        alt = await self._detour(here, pose, got, op)
+                    finally:
+                        self._planning = False
+                if alt is None:
+                    raise NavRequestError(op, got.why, code=got.code, final=True)
+                got = alt
         self._goal_id += 1
         self._nav2_goal = self._goal_id
         self._goal_from = (here.x, here.y) if here is not None else None
@@ -546,9 +561,6 @@ class Nav2NavBackend(PlannedNavBackend):
         self._rec_level, self._rec_at, self._man, self._back = 0, None, None, None
         self._rec_tried = set()
         self._rechecks = 0
-        if self._avoid:
-            self._avoid = []
-            self._send_map()
         self._osc.clear()
         self._prog_reset()                                 # W72:新目标,进展从头算
         if here is not None:
@@ -600,6 +612,32 @@ class Nav2NavBackend(PlannedNavBackend):
         except Exception as exc:                          # 查不了:算没查成
             log.exception("%s:路线检查出错", op)
             return route_check.unchecked("route_check_error", f"路线检查出错:{exc}"[:200])
+
+    async def _detour(self, here: Any, pose: Pose, got: Any, op: str) -> Any:
+        """路线检查卡在一处(用户 11-15:整趟走完优先):本趟把那一处(半径 :data:`AVOID_R`)临时标成
+        绕开,送图,重新要路线、重新查。过了回新的检查结果(标记留着,Nav2 自己规划也绕);不过、没查成
+        都撤掉标记回 None。卡的地方离机器人、离终点太近不标(不许把自己、终点圈进去)。"""
+        if here is None or got.at is None:
+            return None
+        ax, ay = float(got.at[0]), float(got.at[1])
+        if (math.dist((ax, ay), (here.x, here.y)) < AVOID_R + 0.6
+                or math.dist((ax, ay), (pose.position.x, pose.position.y)) < AVOID_R + 0.6
+                or any(math.dist((ax, ay), p) < AVOID_R for p in self._avoid)):
+            return None
+        self._avoid.append((ax, ay))
+        self._send_map()
+        log.warning("%s:卡在 (%.2f, %.2f),本趟把那一处标成绕开,重新查一条", op, ax, ay)
+        alt = await self._route_check(here, pose, f"{op}(绕开)")
+        if alt.status == "ok":
+            log.info("%s:绕开 (%.2f, %.2f) 的那条过了(最窄处剩 %.2f m)", op, ax, ay, alt.margin)
+            if self.on_event is not None:
+                self.on_event("route_detour", {"x": round(ax, 2), "y": round(ay, 2),
+                                               "margin": round(float(alt.margin), 3)})
+            return alt
+        log.warning("%s:绕开那一处也不行(%s),撤掉标记", op, alt.why[:120])
+        self._avoid.remove((ax, ay))
+        self._send_map()
+        return None
 
     async def _via_check(self, here: Any, pose: Pose, via: list, op: str) -> Any:
         """有路网时的路线检查(外审 POC I5):沿 当前位置 → 途经点 → 目标 这条折线查余量;直段朝向不变、
@@ -1271,18 +1309,21 @@ class Nav2NavBackend(PlannedNavBackend):
         return sum(math.dist(a, b) for a, b in zip(tr, tr[1:], strict=False))
 
     def _start_retreat(self, here: Any, why: str, *, level: int,
-                       fail: tuple[str, str] | None = None) -> None:
-        """恢复链:沿原路倒退 :data:`RETREAT_M`(用户 11-10),退完再交给 Nav2。"""
-        self._rec_tried.add("retreat")
+                       fail: tuple[str, str] | None = None, metres: float = RETREAT_M,
+                       after: str | None = None) -> None:
+        """恢复链:沿原路倒退 ``metres``(卡住不动时 :data:`RETREAT_M`,用户 11-10),退完再交给 Nav2;
+        ``after == "recheck"``:退完从那儿重新查路线(用户 11-15)。"""
+        if after is None:
+            self._rec_tried.add("retreat")
         self._cancel_nav2()
         pts, acc = [(here.x, here.y)], 0.0
         for p in reversed(self._trail):
             acc += math.dist(pts[-1], p)
             pts.append(p)
-            if acc >= RETREAT_M:
+            if acc >= metres:
                 break
         self._back = {"path": pts[1:], "t0": self._secs(), "level": level, "why": why,
-                      "fail": fail, "blocked": None, "stuck": (here.x, here.y)}
+                      "fail": fail, "blocked": None, "stuck": (here.x, here.y), "after": after}
         log.warning("%s:恢复链 %d 级 —— 沿原路倒退 %.1f m 回到 (%.2f, %.2f),再交给 Nav2", why,
                     level, acc, pts[-1][0], pts[-1][1])
         self._step_event(level, "retreat", None, here, why)
@@ -1294,6 +1335,14 @@ class Nav2NavBackend(PlannedNavBackend):
         took = now - b["t0"]
         self._step_event(b["level"], "retreat", ok, here, b["why"], took)
         self._rec_at = now
+        if b.get("after") == "recheck" and self._target is not None:
+            # 用户 11-15:退出来了(没退完也一样,能退多少退多少)—— 从这儿重新查路线
+            log.info("沿来路退了 %.0f 秒(%s):从 (%.2f, %.2f) 重新查路线", took,
+                     "退完" if ok else "没退完", here.x, here.y)
+            self._trail.clear()
+            self._prog_reset()
+            await self._recheck_route(here, self._target, "沿来路退出来了")
+            return
         if ok:
             sx, sy = b["stuck"]
             tgt = self._target
@@ -1376,7 +1425,7 @@ class Nav2NavBackend(PlannedNavBackend):
 
     async def _recheck_route(self, here: Any, tgt: Pose, raw: str) -> None:
         """照路走的控制器都放弃了:从这儿重新要路线、重新查(外审 11-14);查的规矩跟出发前一样。"""
-        log.warning("照查过的路走:MPPI、RPP 都放弃了(%s),从 (%.2f, %.2f) 重新查路线(第 %d 次)",
+        log.warning("照查过的路走:%s,从 (%.2f, %.2f) 重新查路线(第 %d 次)",
                     raw, here.x, here.y, self._rechecks)
         await self._send(0.0, 0.0, 0.0)
         self._planning = True
@@ -1399,10 +1448,24 @@ class Nav2NavBackend(PlannedNavBackend):
                 self.on_event("route_rejected", {"code": got.code, "reason": got.why[:200],
                                                  "x": round(got.at[0], 2) if got.at else None,
                                                  "y": round(got.at[1], 2) if got.at else None})
-            self.fail_final = True
-            await self._fail(got.why[:200], code=got.code)
-            return
-        elif got.path:
+            if "route_retreat" not in self._rec_tried and self._trail_len() >= RETREAT_MIN_M:
+                # 用户 11-15:钻进窄处转不过来 —— 沿来路退出来,退完再查(:meth:`_back_finish`)
+                self._rec_tried.add("route_retreat")
+                self._start_retreat(here, f"重查路线也过不去({got.why[:60]})",
+                                    level=self._rec_level + 1, metres=RETREAT_ROUTE_M,
+                                    after="recheck")
+                return
+            self._planning = True
+            try:
+                alt = await self._detour(here, tgt, got, "重查路线")
+            finally:
+                self._planning = False
+            if alt is None:
+                self.fail_final = True
+                await self._fail(got.why[:200], code=got.code)
+                return
+            got = alt
+        if got.ok and got.path:
             msg["path"] = _wire_path(got.path)
         self._goal_msg = msg
         self._goal_from = (here.x, here.y)
@@ -1511,7 +1574,7 @@ class Nav2NavBackend(PlannedNavBackend):
                 return
             if getattr(self, "_rechecks", 0) < ROUTE_RECHECKS and tgt is not None:
                 self._rechecks = getattr(self, "_rechecks", 0) + 1
-                await self._recheck_route(here, tgt, raw)
+                await self._recheck_route(here, tgt, f"MPPI、RPP 都放弃了({raw})")
                 return
         if self._avoid and getattr(self, "_goal_msg", None) is not None:
             log.warning("绕开刚才卡住的地方就规划不出(%s):只有那一条路,撤掉临时标记、还走那条", raw)
