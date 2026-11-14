@@ -137,7 +137,7 @@ export function DutyPage(props: {
     <div class="duty">
       {top ? (
         <div class={top.level === "P1" ? "banner" : "banner p2"} role="alert">
-          <Shape kind={top.level === "P1" ? "P1" : "P2"} />
+          <Shape kind={top.level === "P1" ? "P1" : "P2"} size={32} />
           <div class="banner-text">
             <b>{alertHeadline(top)}</b>
             <span>{[top.context?.zone ?? (top.context?.where ? t("atWhere", { w: top.context.where }) : ""), hm(top.first_ms)].filter(Boolean).join(" · ")}</span>
@@ -150,12 +150,12 @@ export function DutyPage(props: {
             {alarms.length > 1 && <span class="banner-more">{t("dutyMore", { n: alarms.length - 1 })}</span>}
           </div>
           <div class="banner-acts">
-            {can && top.acked_ms == null && <button type="button" class="btn onsolid" onClick={() => ack(top)}>{t("dutyTake")}</button>}
-            {can && mustArrive(top) && <button type="button" class="btn onsolid" onClick={() => arrive(top)}>{t("dutyArrive")}</button>}
+            {can && top.acked_ms == null && <button type="button" class="btn primary" onClick={() => ack(top)}><Shape kind="mandatory" />{t("dutyTake")}</button>}
+            {can && mustArrive(top) && <button type="button" class="btn" onClick={() => arrive(top)}>{t("dutyArrive")}</button>}
             {can && LOST.has(top.kind) && (
-              <button type="button" class="btn onsolid" onClick={() => { setFinding(top.robot); setSelected(top.robot); }}>{t("dutyFindPose")}</button>
+              <button type="button" class="btn" onClick={() => { setFinding(top.robot); setSelected(top.robot); }}>{t("dutyFindPose")}</button>
             )}
-            <button type="button" class="btn onsolid ghost" onClick={() => setDetail(top.key)}>{t(can && !mustArrive(top) ? "dutyDetailClose" : "dutyDetail")}</button>
+            <button type="button" class="btn ghost" onClick={() => setDetail(top.key)}>{t(can && !mustArrive(top) ? "dutyDetailClose" : "dutyDetail")}</button>
           </div>
         </div>
       ) : props.stale ? (

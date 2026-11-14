@@ -117,8 +117,8 @@ export function AlarmLogPage(props: { now: number; role: string; me?: string }) 
       <AlertTestBar role={props.role} onCleared={() => setAlerts((a) => (a ?? []).filter((x) => !x.title.startsWith("测试：")))} />
       <div class="sum">
         <div class="box"><b>{alerts == null ? "–" : inShift.length}</b><span>{t("alSumShift", { t: hm(shift) })}</span></div>
-        <div class="box o"><b>{alerts == null ? "–" : inShift.filter((a) => a.resolved_ms == null).length}</b><span>{t("alSumOpen")}</span></div>
-        <div class="box r"><b>{alerts == null ? "–" : inShift.filter((a) => a.audience === "intrusion").length}</b><span>{t("alSumIntrusion")}</span></div>
+        <div class={inShift.some((a) => a.resolved_ms == null) ? "box o has" : "box o"}><b>{alerts == null ? "–" : inShift.filter((a) => a.resolved_ms == null).length}</b><span>{t("alSumOpen")}</span></div>
+        <div class={inShift.some((a) => a.audience === "intrusion") ? "box r has" : "box r"}><b>{alerts == null ? "–" : inShift.filter((a) => a.audience === "intrusion").length}</b><span>{t("alSumIntrusion")}</span></div>
         <div class="note">
           {/* P1-20:自己刚写的不叫「上一班留言」;能改(再发一条顶替,先把原文放进框里) */}
           <h2>{note ? t(note.author === props.me ? "alNoteMine" : "alNoteFrom", { who: note.author, t: hm(note.at_ms) }) : t("alNoteNone")}</h2>
