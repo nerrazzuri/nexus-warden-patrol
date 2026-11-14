@@ -239,6 +239,9 @@ RETREAT_M = 1.5
 #: 用户 11-15(最高优先:整趟走完):照路走半路重查也过不去(钻进窄处、原地转不过来)时沿来路倒退这么远
 #: (米,原路不够就退到头),退出来再查一次。
 RETREAT_ROUTE_M = 2.5
+#: 照查过的路走时交给哪个控制器(params.yaml 里跟紧路线的那套 MPPI,仿真 11-15 跟路试验 T2);
+#: 它放弃了照旧换 RPP 跟同一条。
+PATH_CONTROLLER = "FollowTight"
 RETREAT_MIN_M = 0.5
 RETREAT_MPS = 0.2
 RETREAT_LOOK_M = 0.4
@@ -254,6 +257,26 @@ AVOID_SIDES = 8
 TURN_ONLY_MAX_RPS = 0.6
 #: 前进速度不到这个(米/秒)就当「原地转」,按地图上的墙核一道(:meth:`Nav2NavBackend._turn_hits_map`)。
 TURN_VX = 0.05
+
+
+def retreat_cmd(x: float, y: float, yaw: float,
+                path: list[tuple[float, float]]) -> tuple[float, float] | None:
+    """沿原路倒退的一拍(真机代理和仿真共用):``path`` 是还要退过去的点,前瞻 :data:`RETREAT_LOOK_M`
+    以内退过的就地弹掉;退完(只剩最后一点、差 :data:`RETREAT_DONE_M` 以内)回 None,否则回
+    ``(vx, wz)``(倒着 :data:`RETREAT_MPS` 走、纯跟踪拉回原路;还没去死区、没过守卫)。"""
+    while len(path) > 1 and math.dist(path[0], (x, y)) < RETREAT_LOOK_M:
+        path.pop(0)
+    if not path or (len(path) == 1 and math.dist(path[0], (x, y)) <= RETREAT_DONE_M):
+        return None
+    px, py = path[0]
+    c, sn = math.cos(yaw), math.sin(yaw)
+    lx = c * (px - x) + sn * (py - y)
+    ly = -sn * (px - x) + c * (py - y)
+    if lx > 0.05:                      # 那一点跑到前面去了(偏得厉害):原地先转过来
+        return 0.0, math.copysign(MANEUVER_RPS, -ly)
+    vx = -RETREAT_MPS
+    k = 2.0 * ly / max(1e-6, lx * lx + ly * ly)
+    return vx, max(-MANEUVER_RPS, min(MANEUVER_RPS, vx * k))
 
 
 def _overlap(a: tuple[tuple[float, float], ...], b: tuple[tuple[float, float], ...]) -> bool:
@@ -542,6 +565,7 @@ class Nav2NavBackend(PlannedNavBackend):
             # 外审 11-14:路线靠局部搜索放行 —— 让控制器照这条查过的路走,不让 Smac 另规划
             # (有路网时查的就是沿途经点那条,拼好的路已经沿着路网走)
             msg["path"] = _wire_path(got.path)
+            msg["controller"] = PATH_CONTROLLER
             log.info("%s:路线靠局部搜索放行(最窄处剩 %.2f m),照查过的这条走(%d 个位姿)", op,
                      got.margin, len(msg["path"]))
         elif via:
@@ -1369,27 +1393,14 @@ class Nav2NavBackend(PlannedNavBackend):
     async def _back_step(self, here: Any, dt_s: float) -> None:
         """沿原路倒退的一拍:倒着走,跟原路(前瞻 :data:`RETREAT_LOOK_M`)。"""
         b, now = self._back, self._secs()
-        path = b["path"]
-        while len(path) > 1 and math.dist(path[0], (here.x, here.y)) < RETREAT_LOOK_M:
-            path.pop(0)
-        if not path or (len(path) == 1 and math.dist(path[0], (here.x, here.y)) <= RETREAT_DONE_M):
+        cmd = retreat_cmd(here.x, here.y, here.yaw, b["path"])
+        if cmd is None:
             await self._back_finish(here, True, dt_s)
             return
         if now - b["t0"] > RETREAT_MAX_S:
             await self._back_finish(here, False, dt_s)
             return
-        px, py = path[0]
-        c, sn = math.cos(here.yaw), math.sin(here.yaw)
-        lx = c * (px - here.x) + sn * (py - here.y)
-        ly = -sn * (px - here.x) + c * (py - here.y)
-        vx = -RETREAT_MPS
-        if lx > 0.05:                  # 那一点跑到前面去了(偏得厉害):原地先转过来
-            vx = 0.0
-            wz = math.copysign(MANEUVER_RPS, -ly)
-        else:
-            k = 2.0 * ly / max(1e-6, lx * lx + ly * ly)
-            wz = max(-MANEUVER_RPS, min(MANEUVER_RPS, vx * k))
-        vx, wz = self._deband(vx, wz)
+        vx, wz = self._deband(*cmd)
         v = await self._rec_safe(here, vx, wz)
         if v is not None:
             if b["blocked"] is None:
@@ -1467,6 +1478,7 @@ class Nav2NavBackend(PlannedNavBackend):
             got = alt
         if got.ok and got.path:
             msg["path"] = _wire_path(got.path)
+            msg["controller"] = PATH_CONTROLLER
         self._goal_msg = msg
         self._goal_from = (here.x, here.y)
         self._resend_goal()

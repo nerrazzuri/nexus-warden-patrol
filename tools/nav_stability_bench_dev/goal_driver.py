@@ -71,7 +71,13 @@ def main() -> int:
     from geometry_msgs.msg import PoseArray, PoseStamped, Twist
     from nav2_msgs.action import FollowPath, NavigateToPose
     from nav_msgs.msg import Path as PathMsg
-    from nav_msgs.msg import Odometry
+    from nav_msgs.msg import OccupancyGrid, Odometry
+    from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy
+
+    import route_gate  # noqa: F401  导入时把正式代码(packages/*/src)加进 sys.path
+    from nexwar_agent.bridges.nav2_nav import (AVOID_R, RETREAT_MAX_S, RETREAT_MIN_M,
+                                               RETREAT_ROUTE_M, TRAIL_JUMP_M, TRAIL_KEEP_M,
+                                               TRAIL_STEP_M, retreat_cmd)
     from rclpy.action import ActionClient
     from rclpy.node import Node
     from sensor_msgs.msg import LaserScan
@@ -82,8 +88,21 @@ def main() -> int:
             self.case = case
             self.route_gate_dir = None
             self.path_controller = "FollowPath"
+            self.recover = True
             self.route_refused = False
             self.route_checks = []
+            # 用户 11-15(最高优先:整趟走完):跟真机代理同一套恢复 —— 来路(世界系,倒退用)、本趟临时
+            # 绕开的地方、退过几次;没到的点跳过接着走,重试一次,一圈完了回头补
+            self.trail: list = []
+            self.avoid: list = []
+            self.retreats: list = []
+            self.detours: list = []
+            self.map0 = None
+            latched = QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL,
+                                 reliability=ReliabilityPolicy.RELIABLE)
+            self.create_subscription(OccupancyGrid, "/map", self._on_map, latched)
+            self.map_pub = self.create_publisher(OccupancyGrid, "/map", latched)
+            self.cmd_pub = self.create_publisher(Twist, "/cmd_vel_nav", 10)
             self.client = ActionClient(self, NavigateToPose, "navigate_to_pose")
             #: 外审 11-14:路线靠局部搜索放行时照那条路走(跟真机代理 → 转接节点一样)
             self.follow = ActionClient(self, FollowPath, "follow_path")
@@ -156,6 +175,13 @@ def main() -> int:
             yaw += syaw
             xy = (wx, wy)
             self.last_world = (wx, wy, yaw)
+            tr = self.trail                                # 记来路(跟真机代理 _trail_note 一样)
+            d = math.dist(tr[-1], xy) if tr else math.inf
+            if tr and d > TRAIL_JUMP_M:
+                tr.clear()
+            if not tr or d >= TRAIL_STEP_M:
+                tr.append(xy)
+                del tr[:max(0, len(tr) - max(2, round(TRAIL_KEEP_M / TRAIL_STEP_M)))]
             if self.first_world is None:
                 self.first_world = (wx, wy, yaw)
             if self.last_xy is not None:
@@ -241,6 +267,150 @@ def main() -> int:
                 self.max_stall = max(self.max_stall, now - self.stall_started)
                 self.stall_started = None
 
+        def _on_map(self, msg):
+            if self.map0 is None and msg.header.frame_id:
+                self.map0 = msg
+
+        def _send_map(self):
+            """本趟临时绕开的地方(半径 AVOID_R)盖成障碍发 /map(真机:代理送图 nogo,转接节点盖进地图)。"""
+            if self.map0 is None:
+                return
+            import copy
+
+            import numpy as np
+            m = copy.deepcopy(self.map0)
+            info = m.info
+            a = np.array(m.data, dtype=np.int8).reshape(info.height, info.width)
+            res, ox, oy = info.resolution, info.origin.position.x, info.origin.position.y
+            yy, xx = np.mgrid[0:info.height, 0:info.width]
+            cx, cy = ox + (xx + 0.5) * res, oy + (yy + 0.5) * res
+            for ax, ay in self.avoid:
+                a[(cx - ax) ** 2 + (cy - ay) ** 2 <= AVOID_R ** 2] = 100
+            m.data = a.ravel().tolist()
+            m.header.stamp = self.get_clock().now().to_msg()
+            self.map_pub.publish(m)
+            t_end = time.monotonic() + 1.5                 # 等代价地图吃进去
+            while time.monotonic() < t_end:
+                rclpy.spin_once(self, timeout_sec=0.05)
+
+        def _trail_len(self):
+            return sum(math.dist(a, b) for a, b in zip(self.trail, self.trail[1:]))
+
+        def _retreat(self, idx, metres):
+            """沿来路倒退(跟真机代理 _start_retreat / _back_step 同一个 retreat_cmd);速度照样过守卫。"""
+            x, y, _ = self.last_world
+            pts, acc = [(x, y)], 0.0
+            for p in reversed(self.trail[:-1]):
+                acc += math.dist(pts[-1], p)
+                pts.append(p)
+                if acc >= metres:
+                    break
+            path, t0, ok = pts[1:], time.monotonic(), False
+            while rclpy.ok() and not self.collision:
+                now = time.monotonic()
+                cmd = retreat_cmd(*self.last_world, path)
+                if cmd is None:
+                    ok = True
+                    break
+                if now - t0 > RETREAT_MAX_S or (self._deadline is not None and now > self._deadline):
+                    break
+                tw = Twist()
+                tw.linear.x, tw.angular.z = float(cmd[0]), float(cmd[1])
+                self.cmd_pub.publish(tw)
+                rclpy.spin_once(self, timeout_sec=0.05)
+            self.cmd_pub.publish(Twist())
+            self.trail.clear()
+            self.retreats.append({"goal": idx, "planned_m": round(acc, 2), "ok": ok,
+                                  "took_s": round(time.monotonic() - t0, 1),
+                                  "moved_m": round(math.dist((x, y), self.last_world[:2]), 2)})
+
+        def _check(self, gate, goal, idx, **tag):
+            chk = gate.check(self.pose(goal))
+            chk.pop("poses", None)
+            self.route_checks.append({"goal": idx, **tag, **{k: v for k, v in chk.items()
+                                                             if k != "path"}})
+            return chk
+
+        def _detour(self, gate, goal, idx, chk):
+            """路线卡在一处:本趟把那一处标成绕开、重新查(跟真机代理 _detour 同一套规矩)。"""
+            at = chk.get("at")
+            if not at or self.last_world is None:
+                return None
+            ax, ay = float(at[0]), float(at[1])
+            if (math.dist((ax, ay), self.last_world[:2]) < AVOID_R + 0.6
+                    or math.dist((ax, ay), goal[:2]) < AVOID_R + 0.6
+                    or any(math.dist((ax, ay), p) < AVOID_R for p in self.avoid)):
+                return None
+            self.avoid.append((ax, ay))
+            self._send_map()
+            alt = self._check(gate, goal, idx, detour=[round(ax, 2), round(ay, 2)])
+            ok = bool(alt.get("checked") and alt.get("ok"))
+            self.detours.append({"goal": idx, "at": [round(ax, 2), round(ay, 2)], "ok": ok})
+            if ok:
+                return alt
+            self.avoid.remove((ax, ay))
+            self._send_map()
+            return None
+
+        def _go(self, idx, goal, gate, timeout):
+            """一个目标走一次(真机代理 goto 一次)→ (结果, 是不是最终失败:引擎不再按重试来)。"""
+            self.active_since = time.monotonic()
+            self._deadline_s, self._deadline = timeout, None    # 收下第一个目标时起算
+            if self.avoid:                                       # 上一趟的临时绕开:先撤再查路
+                self.avoid = []
+                self._send_map()
+            tried: set = set()
+            chk, final = None, False
+            if gate is not None:
+                chk = self._check(gate, goal, idx)
+                if chk.get("checked") and not chk.get("ok"):
+                    alt = self._detour(gate, goal, idx, chk) if self.recover else None
+                    if alt is None:
+                        self.route_refused = True
+                        return {"goal": idx, "success": False, "reason": "route_refused",
+                                "code": chk.get("code"), "elapsed_s": 0.0}, True
+                    chk = alt
+            # 外审 11-14:路线靠局部搜索放行就让控制器照那条路走(FollowPath);控制器放弃了先换 RPP 跟
+            # 同一条,还不行从当前位置重新查路线,最多 ROUTE_RECHECKS 次;重查也过不去先沿来路退出来再查,
+            # 还不过试绕开那一处(用户 11-15)
+            path = (chk or {}).get("path")
+            controller, rechecks, followed = self.path_controller, 0, False
+            while True:
+                if path:
+                    followed = True
+                    out = self._drive_path(path, controller)
+                else:
+                    out = self._drive_nav(goal, idx)
+                if out.get("reason") or out["success"] or not path:
+                    break
+                if controller != "RPP":
+                    controller = "RPP"
+                    continue
+                if rechecks >= ROUTE_RECHECKS or gate is None:
+                    break
+                rechecks += 1
+                chk = self._check(gate, goal, idx, recheck=rechecks)
+                if chk.get("checked") and not chk.get("ok") and "route_retreat" not in tried \
+                        and self.recover and self._trail_len() >= RETREAT_MIN_M:
+                    tried.add("route_retreat")
+                    self._retreat(idx, RETREAT_ROUTE_M)
+                    chk = self._check(gate, goal, idx, recheck=rechecks, after="retreat")
+                if chk.get("checked") and not chk.get("ok"):
+                    alt = self._detour(gate, goal, idx, chk) if self.recover else None
+                    if alt is None:
+                        out, final = {"success": False, "reason": "route_refused",
+                                      "code": chk.get("code")}, True
+                        break
+                    chk = alt
+                path, controller = chk.get("path"), self.path_controller
+            if self.avoid:
+                self.avoid = []
+                self._send_map()
+            res = {"goal": idx, **out, "followed_path": followed, "rechecks": rechecks,
+                   "elapsed_s": round(time.monotonic() - self.active_since, 3)}
+            self.active_since = None
+            return res, final
+
         def pose(self, p):
             x, y, yaw = p
             msg = PoseStamped()
@@ -322,52 +492,26 @@ def main() -> int:
                 from route_gate import RouteGate
                 gate = RouteGate(self, self.route_gate_dir)
             total_start = time.monotonic()
-            for idx, goal in enumerate(self.case["goals"]):
-                self.active_since = time.monotonic()
-                chk = None
-                if gate is not None:
-                    chk = gate.check(self.pose(goal))
-                    chk.pop("poses", None)
-                    self.route_checks.append({"goal": idx, **{k: v for k, v in chk.items()
-                                                             if k != "path"}})
-                    if chk.get("checked") and not chk.get("ok"):
-                        self.route_refused = True
-                        results.append({"goal": idx, "success": False, "reason": "route_refused",
-                                        "code": chk.get("code")})
-                        break
-                # 外审 11-14:跟真机代理一样 —— 路线靠局部搜索放行就让控制器照那条路走(FollowPath);
-                # 控制器放弃了先换 RPP 跟同一条,还不行从当前位置重新查路线,最多 ROUTE_RECHECKS 次
-                path = (chk or {}).get("path")
-                controller, rechecks, followed = self.path_controller, 0, False
-                self._deadline_s, self._deadline = timeout, None    # 收下第一个目标时起算
-                while True:
-                    if path:
-                        followed = True
-                        out = self._drive_path(path, controller)
-                    else:
-                        out = self._drive_nav(goal, idx)
-                    if out.get("reason") or out["success"] or not path:
-                        break
-                    if controller != "RPP":
-                        controller = "RPP"
-                        continue
-                    if rechecks >= ROUTE_RECHECKS or gate is None:
-                        break
-                    rechecks += 1
-                    chk = gate.check(self.pose(goal))
-                    chk.pop("poses", None)
-                    self.route_checks.append({"goal": idx, "recheck": rechecks,
-                                              **{k: v for k, v in chk.items() if k != "path"}})
-                    if chk.get("checked") and not chk.get("ok"):
-                        out = {"success": False, "reason": "route_refused", "code": chk.get("code")}
-                        break
-                    path, controller = chk.get("path"), self.path_controller
-                results.append({"goal": idx, **out, "followed_path": followed,
-                                "rechecks": rechecks,
-                                "elapsed_s": round(time.monotonic() - self.active_since, 3)})
-                self.active_since = None
-                if not out["success"]:
+            goals = self.case["goals"]
+            results: list = [None] * len(goals)
+            for idx, goal in enumerate(goals):             # 引擎 retry_then_skip:重试一次,再不行跳过
+                if self.collision:
                     break
+                r, final = self._go(idx, goal, gate, timeout)
+                if not r["success"] and not final and not self.collision:
+                    r, _ = self._go(idx, goal, gate, timeout)
+                    r["retried"] = True
+                results[idx] = r
+            for idx, goal in enumerate(goals):             # 一圈走完回头补没到的(只去一次)
+                if self.collision or not self.recover:
+                    break
+                r0 = results[idx]
+                if r0 is None or r0["success"]:
+                    continue
+                r, _ = self._go(idx, goal, gate, timeout)
+                results[idx] = ({**r, "revisited": True, "first": r0} if r["success"]
+                                else {**r0, "revisit_failed": True, "revisit": r})
+            results = [r for r in results if r is not None]
             if self.stall_started is not None:
                 self.max_stall = max(self.max_stall, time.monotonic() - self.stall_started)
             threshold = float(self.case.get("safety_min_clearance_m", 0.08))
@@ -380,6 +524,10 @@ def main() -> int:
                 "goal_results": results,
                 "route_refused": self.route_refused,
                 "route_checks": self.route_checks,
+                "goals_reached": sum(bool(r.get("success")) for r in results),
+                "goals_total": len(self.case["goals"]),
+                "retreats": self.retreats,
+                "detours": self.detours,
                 "elapsed_s": round(time.monotonic() - total_start, 3),
                 "max_stall_s": round(self.max_stall, 3),
                 "min_clearance_m": clearance,
@@ -409,14 +557,23 @@ def main() -> int:
     ap.add_argument("--case", type=Path, required=True)
     ap.add_argument("--out", type=Path, required=True)
     ap.add_argument("--route-gate", action="store_true", help="每个目标出发前查路线几何(Route Validator)")
-    ap.add_argument("--path-controller", default="FollowPath",
-                    help="照查过的路走时先用哪个控制器(11-15 跟路试验;放弃了照旧换 RPP)")
+    ap.add_argument("--no-search", action="store_true",
+                    help="对照用:路线检查不做局部搜索(跟 A 组一样,窄的直接拒)")
+    ap.add_argument("--no-recover", action="store_true",
+                    help="对照用:不退出来再查、不绕开、不回头补(只按交付引擎重试一次再跳过)")
+    ap.add_argument("--path-controller", default=None,
+                    help="照查过的路走时先用哪个控制器(缺省跟真机代理一样;放弃了照旧换 RPP)")
     args = ap.parse_args()
     case = json.loads(args.case.read_text(encoding="utf-8"))
     rclpy.init()
     node = Driver(case)
     node.route_gate_dir = args.case.parent if args.route_gate else None
-    node.path_controller = args.path_controller
+    from nexwar_agent.bridges.nav2_nav import PATH_CONTROLLER
+    node.path_controller = args.path_controller or PATH_CONTROLLER
+    node.recover = not args.no_recover
+    if args.no_search:
+        from nexwar_agent import route_check as _rc
+        _rc._searched = lambda *a, **k: None                # 局部搜索永远找不到 → 窄的照旧拒
     try:
         metrics = node.run()
     finally:

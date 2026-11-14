@@ -19,6 +19,7 @@ def test_协议号升到6():
 def test_目标带路_每个点三个数_有上限():
     nb.check(_goal(path=[[0.0, 0.0, 0.0], [0.05, 0.0, 0.0]]))
     nb.check(_goal(path=[[0.0, 0.0, 0.0], [0.05, 0.0, 0.0]], controller="RPP"))
+    nb.check(_goal(path=[[0.0, 0.0, 0.0], [0.05, 0.0, 0.0]], controller="FollowTight"))
     for bad in ([[0.0, 0.0]], [[0.0, 0.0, 0.0]], "x",
                 [[0.0, 0.0, 0.0]] * (nb.MAX_GOAL_PATH + 1)):
         with pytest.raises(ContractError):

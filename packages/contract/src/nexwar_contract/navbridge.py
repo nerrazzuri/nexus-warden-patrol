@@ -71,8 +71,9 @@ CMD_SRCS = ("ctl", "beh")
 MAX_VIA = 500
 #: ``goal.path`` 最多几个位姿(5 cm 一个 ≈ 200 m;一行约 110 KB,在 MAX_LINE 里)。
 MAX_GOAL_PATH = 4000
-#: ``goal.controller``:params.yaml 里配着的两个控制器。
-CONTROLLERS = ("FollowPath", "RPP")
+#: ``goal.controller``:params.yaml 里配着的控制器(``FollowTight``:照查过的路走时用、跟紧路线的 MPPI,
+#: 仿真 11-15 跟路试验 T2)。
+CONTROLLERS = ("FollowPath", "RPP", "FollowTight")
 MAX_LINE = 256 * 1024
 GOAL_STATES = ("accepted", "succeeded", "aborted", "canceled", "rejected")
 #: 每种报文必须有的字段(多出来的拒:加字段要升协议)。

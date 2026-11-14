@@ -2167,7 +2167,8 @@ async def _L台(tmp_path):
 async def test_外审1114_拐角原地转余量不够_局部搜索给了路_带着这条路交给转接节点(tmp_path):
     t, link = await _L台(tmp_path)
     [g] = link.kinds("goal")
-    assert g.get("path") and "via" not in g and "controller" not in g
+    assert g.get("path") and "via" not in g
+    assert g.get("controller") == "FollowTight", "照查过的路走:用跟紧路线的那套(仿真 11-15 T2)"
     p = g["path"]
     assert math.dist(p[0][:2], (1.5, 4.0)) < 0.01
     assert math.dist(p[-1][:2], (5.4, 6.5)) <= 0.11
@@ -2203,7 +2204,7 @@ async def test_外审1114_RPP也放弃了_从这儿重新查路线再走_两次�
     await t.跑(0.5)
     assert len(link.kinds("plan")) == plans0 + 1, "从当前位置重新要一条路线来查"
     g = link.kinds("goal")[-1]
-    assert g.get("path") and "controller" not in g, "重查过的新路:又从 MPPI 开始"
+    assert g.get("path") and g.get("controller") == "FollowTight", "重查过的新路:又从 MPPI 开始"
     for _ in range(4):                                     # 第二次重查以后也一直放弃
         await t.跑(0.5)
         g = link.kinds("goal")[-1]
