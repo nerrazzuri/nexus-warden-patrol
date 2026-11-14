@@ -25,6 +25,12 @@ Nav2 规划出路线(``plan_result``,带朝向、不抽稀)之后、出发之前
 
 起步那一小段(:data:`SKIP_START_M`)不查:机器人本来就站在那儿(停在墙边、桩上),不该因此走不了。
 只看地图墙;人、车、临时障碍归守卫管。
+
+**余量不够的那一段先局部搜索**(外审 11-14、用户定:不横移、输出要执行的路):每段前后各往外
+接 :data:`CONTEXT_M`,在周围按「沿车头前进 / 后退、原地转」找一条每处都留够底线的走法
+(:func:`nexwar_agent.route_cspace.search_path`),拼回路线,**整条再按上面的规矩逐个位姿查一遍**;
+过了才放行,``path`` 就是这条拼好的路(调用方让 Nav2 的控制器照它走,不再让 Smac 另规划)。
+没过照旧拒。
 """
 
 from __future__ import annotations
@@ -36,6 +42,7 @@ from typing import Any
 
 import numpy as np
 
+from nexwar_agent.route_cspace import search_path
 from nexwar_contract.footprint import (
     BASE_HALF_LEN,
     BASE_HALF_WID,
@@ -51,6 +58,8 @@ GOAL_ZONE_M = 0.3
 CAP_M = 0.5
 #: 插值时角点按这个半径算弧长(目标余量那一层的车身外角):比它近的墙都查得到。
 CORNER_R = math.hypot(BASE_HALF_LEN + ROUTE_MARGIN, BASE_HALF_WID + ROUTE_MARGIN)
+#: 局部搜索:余量不够的那一段前后各往外接这么长(沿路线,米),入口、出口落在够宽的位姿上。
+CONTEXT_M = 0.5
 
 
 @dataclass(frozen=True, slots=True)
@@ -67,6 +76,9 @@ class RouteCheck:
     tight: bool = False
     #: ``ok`` / ``refused`` / ``unchecked``(见模块说明)
     status: str = "ok"
+    #: 靠局部搜索放行时:要执行的整条路(地图系 (x, y, 朝向),≤ 5 cm 一个,已逐个查过);
+    #: 原路线本身就够的是 None(照常交给 Nav2 规划)
+    path: tuple[tuple[float, float, float], ...] | None = None
 
 
 def unchecked(code: str, why: str) -> RouteCheck:
@@ -148,6 +160,9 @@ def check_route(poses: Sequence[Sequence[float]], walls: Any, res: float,
     worst, at = float(m[j]), dense[int(idx[j])]
     if worst >= need:
         return RouteCheck(True, worst, at, tight=worst < want)
+    found = _searched(dense, along, idx, m, walls, res, origin, need)
+    if found is not None:
+        return found
     # 终点本身就放不下,而且连着终点的那段窄处是从终点附近(一个车身长 + GOAL_ZONE_M 以内)才开始的
     # → 墙在终点边上,报终点;整条都窄(窄通道里的终点)照旧报路线
     run = len(m) - 1
@@ -166,3 +181,62 @@ def check_route(poses: Sequence[Sequence[float]], walls: Any, res: float,
            f"(要求每边 ≥ {need:.2f} m,直通道约需 {2 * (BASE_HALF_WID + need):.2f} m 净宽),"
            "无法安全通过")
     return RouteCheck(False, worst, at, "route_too_narrow", why, status="refused")
+
+
+def _checked(path: Sequence[tuple[float, float, float]], walls: Any, res: float,
+             origin: tuple[float, float]) -> tuple[list[tuple[float, float, float]], np.ndarray,
+                                                   np.ndarray]:
+    """插值、跳过起步那一段,逐个位姿算余量 → (插值后的路, 查的那些下标, 余量)。"""
+    dense = densify(path)
+    along = np.concatenate([[0.0], np.cumsum([math.dist(a[:2], b[:2])
+                                              for a, b in zip(dense, dense[1:], strict=False)])])
+    keep = along >= min(SKIP_START_M, along[-1])
+    keep[-1] = True
+    idx = np.flatnonzero(keep)
+    return dense, idx, pose_margins([dense[i] for i in idx], walls, res, origin)
+
+
+def _searched(dense: list[tuple[float, float, float]], along: np.ndarray, idx: np.ndarray,
+              m: np.ndarray, walls: Any, res: float, origin: tuple[float, float],
+              need: float) -> RouteCheck | None:
+    """余量不够的每一段做局部搜索、拼回去、整条再查(见模块说明);不行回 None。"""
+    bad = m < need
+    segs: list[list[int]] = []                             # [入口, 出口](``idx`` 里的位置)
+    k = 0
+    while k < len(idx):
+        if not bad[k]:
+            k += 1
+            continue
+        e = k
+        while e + 1 < len(idx) and bad[e + 1]:
+            e += 1
+        lo = k - 1
+        while lo > 0 and along[idx[k]] - along[idx[lo - 1]] <= CONTEXT_M and not bad[lo - 1]:
+            lo -= 1
+        hi = e + 1
+        while (hi < len(idx) - 1 and along[idx[hi + 1]] - along[idx[e]] <= CONTEXT_M
+               and not bad[hi + 1]):
+            hi += 1
+        if segs and lo <= segs[-1][1]:
+            segs[-1][1] = hi                               # 跟上一段接上了:并成一段
+        else:
+            segs.append([lo, hi])
+        k = e + 1
+    out: list[tuple[float, float, float]] = []
+    pos = 0                                                # ``dense`` 里拼到哪儿了
+    for lo, hi in segs:
+        goal_end = hi >= len(idx)
+        a = int(idx[lo]) if lo >= 0 else 0
+        b = len(dense) - 1 if goal_end else int(idx[hi])
+        sp = search_path(dense[a], dense[b], walls, res, origin, need, span=dense[a:b + 1],
+                         goal_end=goal_end)
+        if sp is None:
+            return None
+        out += dense[pos:a] + sp
+        pos = b + 1
+    out += dense[pos:]
+    path, cidx, cm = _checked(out, walls, res, origin)
+    if float(cm.min()) < need:
+        return None
+    j = int(np.argmin(cm))
+    return RouteCheck(True, float(cm[j]), path[int(cidx[j])], tight=True, path=tuple(path))
