@@ -31,7 +31,7 @@ from typing import Any
 from nexwar_agent.assembly import EngineParts
 from nexwar_agent.tasks.base import Task
 from nexwar_agent.tasks.engine_goto import EngineGotoTask
-from nexwar_contract.follow import TRACK_EVERY_S, TRACK_KEEP, FollowRequest
+from nexwar_contract.follow import BACK_M, CLEAR_M, TRACK_EVERY_S, TRACK_KEEP, FollowRequest
 from nexwar_contract.messages import MapPose, TaskState
 
 log = logging.getLogger(__name__)
@@ -39,8 +39,15 @@ log = logging.getLogger(__name__)
 #: 目标挪开这么多(米)才换目标;最快多久换一次(秒)。
 RETARGET_M = 1.0
 RETARGET_EVERY_S = 1.0
-#: 离人比 ``keep_m`` 远这么多(米)才起新的一段。
+#: 离人比 ``keep_m`` 远这么多(米)才起新的一段。要比退到的 :data:`CLEAR_M` 远(4.5 + 1 = 5.5 m),
+#: 不然刚退到 5 m 又往前跟。
 START_EXTRA_M = 1.0
+#: 退着的时候收尾:先停车,最多等这么久(秒)停稳再进终态(同保持距离)。
+STOP_CONFIRM_TIMEOUT_S = 5.0
+#: 退的时候,人要是这么久(毫秒)以内看到的才算数;看不到了就不退(不知道往哪退)。
+BACK_FRESH_MS = 500
+#: 退的速度命令有效期(毫秒):一拍不来 HAL 自己停。
+BACK_CMD_TTL_MS = 300
 #: 认同一个人:人最快走多快(米/秒)、再宽出这么多(米)。
 PERSON_MAX_MPS = 3.0
 GATE_M = 1.5
@@ -59,7 +66,8 @@ class FollowTask(Task):
                  now_ms: Callable[[], int], wall_ms: Callable[[], int],
                  targets: Callable[[], list[tuple[float, float]]],
                  here: Callable[[], tuple[float, float, float] | None],
-                 map_ref: tuple[str, str], priority: int = 80) -> None:
+                 map_ref: tuple[str, str], priority: int = 80,
+                 hal: Any = None, backoff: Any = None) -> None:
         super().__init__(task_id=task_id, kind="follow", priority=priority)
         self.req = req
         self._parts = parts
@@ -90,6 +98,15 @@ class FollowTask(Task):
         self._final: tuple[TaskState, dict[str, Any]] | None = None
         #: 跟丢 / 到上限了、还没起回最后位置的那一段。
         self._pending_back = False
+        #: 用户 11-15:人走近就退(:class:`~nexwar_agent.tasks.standoff.Backoff`)。
+        #: 没给就不退(老装配)。
+        self._hal = hal
+        self._backoff = backoff
+        #: ``""`` 没在退;``retreat`` 在退;``cornered`` 退不了、原地站定。
+        self._backing = ""
+        self._vseq = 0
+        #: 退着的时候要收尾:等停稳了多久(秒);``None`` 不用等。
+        self._stop_wait: float | None = None
 
     @property
     def aborting(self) -> bool:
@@ -98,7 +115,7 @@ class FollowTask(Task):
     # ------------------------------------------------------------ 能力里给站点看的
 
     def caps(self) -> dict[str, Any]:
-        d: dict[str, Any] = {"state": self.phase if not self.done else "idle"}
+        d: dict[str, Any] = {"state": "idle" if self.done else (self._backing or self.phase)}
         if self._person is not None:
             d["person"] = {"x": round(self._person[0], 2), "y": round(self._person[1], 2)}
         return d
@@ -146,6 +163,9 @@ class FollowTask(Task):
                 leg, self._leg, self._leg_goal = self._leg, None, None
                 if self._leg_finished(leg):
                     return
+        if (self._abort_reason is not None or self._final is not None) \
+                and not await self._settled(dt_s):
+            return
         if self._abort_reason is not None:
             if self._leg is None:
                 self.state = (TaskState.PREEMPTED if self._abort_reason == "preempted"
@@ -157,8 +177,10 @@ class FollowTask(Task):
                 self.state, self.detail = self._final
             return
         self._observe(now, here)
-        await self._keep_back(now, here)
         self._send_track(now)
+        if await self._keep_off(now, here):
+            return
+        await self._keep_back(now, here)
         if self.phase == "follow":
             await self._follow(now, here)
         elif self._pending_back and self._final is None:
@@ -239,6 +261,78 @@ class FollowTask(Task):
         log.info("跟人 %s:收尾时人走近了,停下", self.task_id)
         self._final = (TaskState.DONE, {"result": self._result, **self._report()})
         await self._leg.abort("follow_keep")
+
+    async def _keep_off(self, now: int, here: tuple[float, float, float] | None) -> bool:
+        """用户 11-15:人走近到 :data:`BACK_M` 以内 → 停下这一段、往远离人的方向退,
+        退到 :data:`CLEAR_M` 以外再接着跟;退不了原地站定、发 ``follow_cornered``(一次)。
+        回 True = 这一拍在退(别的不办)。"""
+        if self._backoff is None or self._hal is None or self._final is not None:
+            return False
+        d = None
+        if self._person is not None and here is not None and now - self._seen_ms <= BACK_FRESH_MS:
+            d = math.dist(self._person, here[:2])
+        if d is None or d >= (CLEAR_M if self._backing else BACK_M):
+            if self._backing:
+                log.info("跟人 %s:离人够远了,接着跟", self.task_id)
+                await self._stop_backing()
+            return False
+        if self._leg is not None:
+            if not self._leg.aborting:
+                log.info("跟人 %s:人走近到 %.1f m,停下往后退", self.task_id, d)
+                if self.phase == "back":
+                    self._pending_back = True            # 退完再接着回最后位置
+                await self._leg.abort("follow_backoff")
+            return True                                  # 这一段停稳了再退
+        assert here is not None and self._person is not None
+        b = math.degrees(math.atan2(self._person[1] - here[1], self._person[0] - here[0]) - here[2])
+        b = (b + 180.0) % 360.0 - 180.0
+        cmd, why = self._backoff.choose(b, d)
+        if cmd is None:
+            if self._backing != "cornered":
+                log.warning("跟人 %s:人在 %.1f m,退不了,原地站定(%s)", self.task_id, d, why)
+                self._events.emit("follow_cornered", {"task_id": self.task_id,
+                                                      "range_m": round(d, 2), "why": why,
+                                                      **self._last()})
+                await self._halt()
+            self._backing = "cornered"
+            return True
+        from nexwar_contract.hal import VelocityCommand
+        self._backing = "retreat"
+        self._vseq += 1
+        got = await self._hal.set_velocity(VelocityCommand(
+            seq=self._vseq, ttl_ms=BACK_CMD_TTL_MS, frame="base", vx=cmd[0], vy=0.0, wz=cmd[1]))
+        if getattr(got, "rejected", False):
+            log.warning("跟人 %s:退的速度被 HAL 拒了(%s)", self.task_id, getattr(got, "reason", ""))
+        return True
+
+    async def _halt(self) -> None:
+        try:
+            await self._hal.stop()
+        except Exception:
+            log.exception("跟人 %s:停车失败", self.task_id)
+
+    async def _settled(self, dt_s: float) -> bool:
+        """要收尾了:在退就先停车、等停稳(最多 :data:`STOP_CONFIRM_TIMEOUT_S`)。"""
+        if self._backing:
+            await self._stop_backing()
+            self._stop_wait = 0.0
+        if self._stop_wait is None:
+            return True
+        try:
+            stopped = await self._hal.stopped()
+        except Exception:
+            log.exception("跟人 %s:问停没停失败", self.task_id)
+            stopped = False
+        self._stop_wait += dt_s
+        if not stopped and self._stop_wait < STOP_CONFIRM_TIMEOUT_S:
+            return False
+        self._stop_wait = None
+        return True
+
+    async def _stop_backing(self) -> None:
+        if self._backing == "retreat":
+            await self._halt()
+        self._backing = ""
 
     def _heading(self) -> float | None:
         """人往哪走(弧度):最近 :data:`HEADING_SPAN_S` 秒的头尾连线;走得太近算不出。"""
