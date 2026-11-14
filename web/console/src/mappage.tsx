@@ -13,12 +13,12 @@ import { Modal } from "./dialogs";
 import { alertTitle, andList, lang, refusalText, t, type Key } from "./i18n";
 import { pageAllowed } from "./shell";
 import { locText, type UnitInfo } from "./live";
-import { botLayout, type Box, ENGINEERING_LAYERS, etaNext, eventLabelY, LAYERS, textHalfW, layersFor, loadLayers, saveLayers, mapPins, mapTodo, olderOpen, shiftStart, staleAfter, staleCells, tonightEvents, zoneDecor,
+import { botLayout, type Box, ENGINEERING_LAYERS, etaNext, eventLabelY, textHalfW, layersFor, loadLayers, saveLayers, mapPins,  shiftStart, staleAfter, staleCells, zoneDecor,
   type AuthzRow, type Cell, type Layer, type ModeView } from "./maplayers";
 import { fanPath } from "./layoutpage";
 import { MapCanvas, type CanvasArea, type LegendKey, type Screen } from "./mapcanvas";
 import { heading, namedAreas, onMap, toPx, type PreviewMeta, type Pt } from "./mapview";
-import { abnormal, alarmState, autoResolved, canArm, canDispatch, canFindPose, canPatrol, robotMap, type Alert } from "./model";
+import { abnormal, alarmState, autoResolved, canDispatch, canFindPose, canPatrol, robotMap, type Alert } from "./model";
 import { notAccepted, usePosePick, type CommandReply } from "./posepick";
 import { pxToMap, yawToward } from "./routes";
 import { RunLegendItems, VizWorld, vizAvoid, vizHas, vizMarks, vizOnMap } from "./runlayers";
@@ -255,20 +255,40 @@ export function SiteMap(props: {
   );
 }
 
+/** 值班页地图上面那一排(redesign 第二轮 V4 稿):全部 / 巡逻路线 / 防区 / 摄像头。 */
+export type MapPreset = "all" | "route" | "zones" | "cameras";
+export const PRESETS: Record<MapPreset, Layer[]> = {
+  all: ["zones", "cameras", "route", "events", "nogo", "standby"],
+  route: ["route", "events"],
+  zones: ["zones", "nogo", "events"],
+  cameras: ["cameras", "events"],
+};
+/** 地图上的工具(V4 稿页头两个按钮):派去看一眼、临时路线。 */
+export type MapTool = "look" | "route" | null;
+
+/** 值班页中间的地图(redesign 第二轮:原来的地图页并进值班页)。 */
 export function MapPage(props: {
   units: UnitInfo[];
   p1: Alert[];
   now: number;
   selected: string | null;
   onSelect: (id: string) => void;
-  onVideo: (id: string) => void;
   role?: string;
   mode: ModeView | null;
-  /** 保安的「全部布防」(设计 §11 第 14 条):模式不是布防时才有。 */
-  onArm: () => void;
   say?: (s: string) => void;
   /** 连不上站点(第 2 轮:没有数据时不说「没有地图」)。 */
   stale?: boolean;
+  preset?: MapPreset;
+  tool?: MapTool;
+  onTool?: (t: MapTool) => void;
+  /** 本班的告警(值班页拉了就给,地图不再自己拉)。 */
+  recent?: Alert[];
+  /** 帮它找位置(值班页):点图设这台的位置。 */
+  finding?: string | null;
+  onLocated?: (id: string) => void;
+  /** 标红的防区(报警的那几个)。 */
+  hot?: Set<string>;
+  onAreas?: (areas: CanvasArea[]) => void;
 }) {
   const say = props.say ?? (() => {});
   const duty = useDutySettings();
@@ -289,7 +309,7 @@ export function MapPage(props: {
   useEffect(() => {
     api<{ cameras: PlacedCam[] }>("GET", "/api/cameras").then((d) => setCams(d.cameras ?? [])).catch(() => setCams([]));
   }, []);
-  const active = layersFor(layers, props.role ?? "");
+  const active = layersFor(new Set([...PRESETS[props.preset ?? "all"], ...[...layers].filter((l) => ENGINEERING_LAYERS.includes(l))]), props.role ?? "");
   const on = (l: Layer) => active.has(l);
   const flip = (l: Layer) => {
     const n = new Set(layers);
@@ -303,6 +323,7 @@ export function MapPage(props: {
   // 本班出的事(含已处理的):30 秒一拉;第 4 轮 duty N4:顶栏的报警一变(推过来的)马上再拉,不等 30 秒
   const p1Key = props.p1.map((a) => `${a.key}:${a.count ?? 1}:${a.resolved_ms ?? ""}`).join(",");
   useEffect(() => {
+    if (props.recent) return;
     let live = true;
     const pull = () => api<{ alerts: Alert[] }>("GET", "/api/alerts?all=1&limit=200").then((d) => live && setRecent(d.alerts ?? [])).catch(() => {});
     void pull();
@@ -338,10 +359,16 @@ export function MapPage(props: {
   }, [mapKey, props.units.length]);
 
   const since = shiftStart(props.now, duty.shift_hours);
-  const events = tonightEvents(recent, since);
-  const pins = mapPins(recent, since);
-  const todo = mapTodo(recent, since);
-  const older = olderOpen(recent, since);
+  const shiftAlerts = props.recent ?? recent;
+  const pins = mapPins(shiftAlerts, since);
+  // 工具跟着页头的按钮走:开临时路线就从空的开始点,关了就收
+  const tool = props.tool ?? null;
+  useEffect(() => {
+    if (tool === "route") { setLook(null); setRoute((r) => r ?? []); }
+    else setRoute(null);
+    if (tool !== "look") setLook(null);
+  }, [tool]);
+  const exit = () => { props.onTool?.(null); setLook(null); setRoute(null); };
   const stale = cells ? staleCells(cells.cells, props.now, staleAfter(duty.stale_hours)) : [];
   const onThisMap = (u: UnitInfo) => { const m = robotMap(u.robot); return !!(m && shown.map && m.map_id === shown.map.map_id && m.version === shown.map.version); };
   const robotsHere = props.units.filter((u) => u.state !== "offline" && onThisMap(u)).map((u) => u.robot.robot_id);
@@ -350,16 +377,18 @@ export function MapPage(props: {
     events: "layerEvents", stale: "layerStale", nogo: "layerNoGo", loc: "layerLoc" };
 
   return (
-    <div class="mappage">
+    <div class="mappage" data-preset={props.preset ?? "all"}>
       <SiteMap units={props.units} p1={props.p1} now={props.now} selected={props.selected} onSelect={props.onSelect} role={props.role} stale={props.stale}
         episodes={on("loc")} navZones={on("nogo")} route={on("route")} eta={on("route")}
         areaDecor={on("zones") ? (n) => zoneDecor(n, props.mode, authz) : (n) => ({ label: n, tone: "armed" })}
         onMapShown={(map, meta) => setShown({ map, meta })}
-        onPickMap={canDispatch(props.role ?? "") ? (x, y, map) => {
+        hot={props.hot} onAreas={props.onAreas}
+        pick={props.finding ? true : undefined} onLocated={props.onLocated}
+        onPickMap={props.finding ? undefined : canDispatch(props.role ?? "") ? (x, y, map) => {
           if (route) setRoute([...route, [x, y]]);
           else setLook({ at: [x, y], map });
         } : canPatrol(props.role ?? "") && route ? (x, y) => setRoute([...route, [x, y]]) : undefined}
-        hint={route ? t("trHint", { n: route.length }) : null}
+        hint={props.finding ? t("dutyFindHint", { id: props.finding }) : tool === "look" && !look ? t("lookHint") : null}
         extraWorld={(meta) => (
           <>
             <defs>
@@ -424,73 +453,52 @@ export function MapPage(props: {
             })}
           </>
         )} />
-      <aside class="sidebar maprp" aria-label={t("tabMap")}>
-        <h3>{t("mapShow")}</h3>
-        <div class="layers">
-          {LAYERS.map((l) => (
-            <label key={l}><input type="checkbox" checked={on(l)} onChange={() => flip(l)} />{t(names[l])}</label>
-          ))}
-        </div>
-        {props.role === "engineer" && (
-          <details class="eng-layers">
-            <summary>{t("layerEngineering")}</summary>
-            <div class="layers">
-              {ENGINEERING_LAYERS.map((l) => (
-                <label key={l}><input type="checkbox" checked={on(l)} onChange={() => flip(l)} />{t(names[l])}</label>
-              ))}
-            </div>
-          </details>
-        )}
-        {props.mode && props.mode.mode !== "armed" && canArm(props.role ?? "") && (
-          <button type="button" class="btn primary arm-all" onClick={props.onArm}>{t("armAll")}</button>
-        )}
-        {/* W72(用户 11-03):侧栏只列还要人处理的,最多几条;已解决、自动恢复的去报警记录看 */}
-        {/* 第 3 轮 layout N3:连不上站点时不说「没有要处理的」,说状态未知、计数写 ? */}
-        <h3>{t("mapTodoN", { n: props.stale && todo.length === 0 ? "?" : todo.length })}</h3>
-        {older > 0 && <p class="small"><a href="#/alarms">{t("mapTodoOlder", { n: older })}</a></p>}
-        {todo.length === 0 ? (props.stale ? <p class="warn small" data-stale="1">{t("dutyStaleAlarms")}</p> : <p class="muted small">{t(older > 0 ? "mapTodoNoneShift" : "mapTodoNone")}</p>) : (
-          <ul class="evlist">
-            {todo.map((a) => (
-              <li key={a.key}>
-                <button type="button" class="evrow" onClick={() => toRec(a)}>
-                  <time class="mono">{hm(a.first_ms)}</time>
-                  <span class={`ev-what ${a.audience ?? ""}`}>{alertTitle(lang.value, a.kind, a.title)}</span>
-                  <small class="muted">{t("evOpen")}{a.robot && a.robot !== "site" && !a.robot.includes(":") ? ` · ${t("evToRec")}` : ""}</small>
-                </button>
-              </li>
+      {props.role === "engineer" && (
+        <details class="map-eng">
+          <summary>{t("layerEngineering")}</summary>
+          <div class="layers">
+            {ENGINEERING_LAYERS.map((l) => (
+              <label key={l}><input type="checkbox" checked={on(l)} onChange={() => flip(l)} />{t(names[l])}</label>
             ))}
-          </ul>
-        )}
-        {events.length > 0 && <a class="small" href="#/alarms">{t("mapAllShift", { n: events.length })}</a>}
-        {route ? (
-          shown.map && <TempRoutePanel canFix={pageAllowed("admin/localization", props.role ?? "")} map={shown.map} points={route} robots={robotsHere} say={say}
-            onUndo={() => setRoute(route.slice(0, -1))} onCancel={() => setRoute(null)}
-            onSent={(robot, check) => {
-              setSentRoute({ robot, pts: route, at: Date.now() });
-              if (!on("route")) flip("route");            // 看得到它走到哪了
-              setRoute(null);
-              void check?.then((r) => {
-                if (r.state === "refused") setSentRoute((s) => (s && s.robot === robot ? { ...s, refused: joinWhyAct(r.why, r.act) } : s));
-              });
-            }} />
-        ) : sentRoute ? (
-          <div class={sentRoute.refused ? "tip warn" : "tip"} data-sent-tip={sentRoute.refused ? "refused" : "1"}>
-            <p>{sentRoute.refused ? t("trSentRefused", { id: nameOf(sentRoute.robot), why: sentRoute.refused }) : t("trSentShown", { id: nameOf(sentRoute.robot) })}</p>
-            {/* 第 4 轮 r3-duty-N3:派出以后跳过了点,侧栏说一声(原来一直写「在临时路线上」) */}
-            {!sentRoute.refused && (() => {
-              const sk = recent.filter((a) => a.robot === sentRoute.robot && a.resolved_by === "site:skipped" && a.first_ms >= (sentRoute.at ?? 0) - 5_000);
-              return sk.length > 0 ? <p class="warn-text small" data-sent-skipped="1">{t("trSentSkipped", { id: nameOf(sentRoute.robot), why: siteStr(sk[0].detail || sk[0].title) })}</p> : null;
-            })()}
-            <button type="button" class="btn sm" onClick={() => setSentRoute(null)}>{t("trSentHide")}</button>
           </div>
-        ) : canPatrol(props.role ?? "") && (
-          <div class="tip">
-            <p>{t("mapTip")}</p>
-            <button type="button" class="btn sm" onClick={() => { setLook(null); setRoute([]); }}>{t("trStart")}</button>
-          </div>
-        )}
-      </aside>
-      {look && <GoLookCard canFix={pageAllowed("admin/localization", props.role ?? "")} map={look.map} at={look.at} units={props.units} say={say} onClose={() => setLook(null)} />}
+        </details>
+      )}
+      {(route || look || tool === "look" || sentRoute) && (
+        <div class="map-tool" data-map-tool={route ? "route" : look || tool === "look" ? "look" : "sent"}>
+          {route && shown.map ? (
+            <>
+              <div class="map-tool-h"><b>{t("trTitle")}</b><span>{t("trHint", { n: route.length })}</span>
+                <button type="button" class="btn sm push" onClick={exit}>{t("toolExit")}</button></div>
+              <TempRoutePanel canFix={pageAllowed("admin/localization", props.role ?? "")} map={shown.map} points={route} robots={robotsHere} say={say}
+                onUndo={() => setRoute(route.slice(0, -1))} onCancel={exit}
+                onSent={(robot, check) => {
+                  setSentRoute({ robot, pts: route, at: Date.now() });
+                  props.onTool?.(null);
+                  setRoute(null);
+                  void check?.then((r) => {
+                    if (r.state === "refused") setSentRoute((s) => (s && s.robot === robot ? { ...s, refused: joinWhyAct(r.why, r.act) } : s));
+                  });
+                }} />
+            </>
+          ) : look || tool === "look" ? (
+            <>
+              <div class="map-tool-h"><b>{t("lookTitle")}</b>{!look && <span>{t("lookHint")}</span>}
+                <button type="button" class="btn sm push" onClick={exit}>{t("toolExit")}</button></div>
+              {look && <GoLookCard canFix={pageAllowed("admin/localization", props.role ?? "")} map={look.map} at={look.at} units={props.units} say={say} onClose={exit} />}
+            </>
+          ) : sentRoute && (
+            <div class={sentRoute.refused ? "tip warn" : "tip"} data-sent-tip={sentRoute.refused ? "refused" : "1"}>
+              <p>{sentRoute.refused ? t("trSentRefused", { id: nameOf(sentRoute.robot), why: sentRoute.refused }) : t("trSentShown", { id: nameOf(sentRoute.robot) })}</p>
+              {/* 第 4 轮 r3-duty-N3:派出以后跳过了点,说一声(原来一直写「在临时路线上」) */}
+              {!sentRoute.refused && (() => {
+                const sk = shiftAlerts.filter((a) => a.robot === sentRoute.robot && a.resolved_by === "site:skipped" && a.first_ms >= (sentRoute.at ?? 0) - 5_000);
+                return sk.length > 0 ? <p class="warn-text small" data-sent-skipped="1">{t("trSentSkipped", { id: nameOf(sentRoute.robot), why: siteStr(sk[0].detail || sk[0].title) })}</p> : null;
+              })()}
+              <button type="button" class="btn sm" onClick={() => setSentRoute(null)}>{t("trSentHide")}</button>
+            </div>
+          )}
+        </div>
+      )}
       {liveCam && (
         <Modal label={liveCam} onClose={() => setLiveCam(null)} wide>
           <img class="cam-live" alt={liveCam} src={`/api/cameras/${enc(liveCam)}/live`} />

@@ -47,8 +47,7 @@ afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 describe("点地图派机器人", () => {
   it("点的地方有标记", async () => {
     installScreenCTM();
-    const { container: c } = render(<MapPage units={[unitA] as never} p1={[]} now={0} selected={null} onSelect={() => {}} onVideo={() => {}}
-      role="admin" mode={null} onArm={() => {}} />);
+    const { container: c } = render(<MapPage units={[unitA] as never} p1={[]} now={0} selected={null} onSelect={() => {}} role="admin" mode={null} />);
     await waitFor(() => expect(c.querySelector("g.map-world")).not.toBeNull());
     expect(c.querySelector("[data-look-mark]")).toBeNull();
     const svg = c.querySelector("svg.map")!;
