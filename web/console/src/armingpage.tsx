@@ -549,7 +549,7 @@ function Exceptions({ list, say, onChange, on, mode, saved }: { list: Exception[
               <span class="mono">{x.first_day === x.last_day ? x.first_day : `${x.first_day} – ${x.last_day}`}</span>
               <b>{t(x.state === "armed" ? "armExArmed" : "armExDisarmed")}</b>
               {x.note && <span class="muted">{x.note}</span>}
-              <button type="button" class="btn sm push" onClick={() => void askRemove(x)}>{t("remove")}</button>
+              <button type="button" class="btn sm danger push" onClick={() => void askRemove(x)}>{t("remove")}</button>
             </li>
           ))}
         </ul>

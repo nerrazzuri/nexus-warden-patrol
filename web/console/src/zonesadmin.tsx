@@ -333,7 +333,7 @@ export function MapsZonesPage({ say }: { say: Say }) {
                 <li key={a.zone}>
                   <span class="strong">{a.zone}</span>
                   <span class="muted small">{t("points", { n: a.points.length })}</span>
-                  <button type="button" class="link push" onClick={() => setRemoving(a.zone)}>{t("remove")}</button>
+                  <button type="button" class="btn sm danger push" onClick={() => setRemoving(a.zone)}>{t("remove")}</button>
                 </li>
               ))}
             </ul>
@@ -345,7 +345,7 @@ export function MapsZonesPage({ say }: { say: Say }) {
                 <li key={z.id}>
                   <span class="strong">{siteKnown(z.label) || z.id}</span>
                   <span class="muted small">{t("points", { n: z.polygon.length })}</span>
-                  <button type="button" class="link push" onClick={() => setUnerasing(z)}>{t("remove")}</button>
+                  <button type="button" class="btn sm danger push" onClick={() => setUnerasing(z)}>{t("remove")}</button>
                 </li>
               ))}
             </ul>
@@ -371,7 +371,7 @@ export function MapsZonesPage({ say }: { say: Say }) {
           onNo={() => setUnerasing(null)} onYes={() => void unerase(unerasing)} />
       )}
       {removing && (
-        <Confirm text={t("removeZoneConfirm", { zone: removing })} yes={t("remove")} onNo={() => setRemoving(null)}
+        <Confirm text={t("removeZoneConfirm", { zone: removing })} yes={t("remove")} danger onNo={() => setRemoving(null)}
           onYes={() => {
             const z = removing;
             setRemoving(null);
@@ -437,7 +437,7 @@ function NavPanel({ nav, list, onRemove, onConfirm }: {
           <li key={z.id} data-navzone={z.id}>
             <span class="strong">{siteKnown(z.label) || z.id}</span>
             <span class="muted small">{navZoneLine(z)}</span>
-            <button type="button" class="link push" onClick={() => onRemove(z)}>{t("remove")}</button>
+            <button type="button" class="btn sm danger push" onClick={() => onRemove(z)}>{t("remove")}</button>
           </li>
         ))}
       </ul>

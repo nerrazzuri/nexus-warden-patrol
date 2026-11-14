@@ -203,7 +203,7 @@ export function StandbyTab(p: TabProps) {
               const on = e.currentTarget.checked;
               setPts((all) => all.map((x) => (x.robot_id !== cur.robot_id ? x : { ...x, default: key(x) === key(cur) ? on : on ? false : x.default })));
             }} />{t("lyStandbyDefault")}</label>
-            <div class="row end"><button type="button" class="btn sm" onClick={() => setRemoving(cur)}>{t("remove")}</button></div>
+            <div class="row end"><button type="button" class="btn sm danger" onClick={() => setRemoving(cur)}>{t("remove")}</button></div>
           </section>
         )}
       </div>

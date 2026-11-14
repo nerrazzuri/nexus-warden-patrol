@@ -231,7 +231,7 @@ export function ZonesTab(p: TabProps) {
                 setPostEdit(next);
               }} />
             <a href="#/admin/arming" class="small">{t("lyZoneArming")}</a>
-            <div class="row end"><button type="button" class="btn sm" onClick={() => setRemoving(cur.zone)}>{t("remove")}</button></div>
+            <div class="row end"><button type="button" class="btn sm danger" onClick={() => setRemoving(cur.zone)}>{t("remove")}</button></div>
           </section>
         )}
       </div>
@@ -309,7 +309,7 @@ function MarksBox({ marks, draft, busy, onStart, onCancel, onRemove }: {
           <li key={m.id ?? `new${i}`} class="row">
             <span>{m.name}</span>
             <span class="muted small">{m.kind === "exit" ? t("lyMarkExit") : t("lyMarkHide")}</span>
-            <button type="button" class="btn sm" onClick={() => onRemove(i)}>{t("remove")}</button>
+            <button type="button" class="btn sm danger" onClick={() => onRemove(i)}>{t("remove")}</button>
           </li>
         ))}
       </ul>

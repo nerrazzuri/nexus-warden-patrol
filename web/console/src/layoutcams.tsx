@@ -111,7 +111,7 @@ export function CamerasTab(p: TabProps) {
             {cur.rtsp_url ? <img class="cam-live" alt={cur.name} src={`/api/cameras/${enc(cur.name)}/live`} /> : <p class="muted small">{t("lyCamNoLive")}</p>}
             <div class="row wrap">
               <button type="button" class="btn sm" onClick={() => setForm(cur)}>{t("lyCamEdit")}</button>
-              <button type="button" class="btn sm" onClick={() => setRemoving(cur.name)}>{t("remove")}</button>
+              <button type="button" class="btn sm danger" onClick={() => setRemoving(cur.name)}>{t("remove")}</button>
             </div>
           </section>
         )}

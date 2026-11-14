@@ -77,7 +77,7 @@ export function CamerasPanel({ say }: { say: Say }) {
                 <td>{l ? (l.connected ? <span class="state tone-success">{L("Connected", "已连上")}</span> : <span class="state p2"><Shape kind="P2" />{L("Not connected", "没连上")}</span>) : <span class="muted small">{L("Waiting for the site to pick it up", "等站点接上")}</span>}</td>
                 <td class="actions">
                   <button type="button" class="btn sm" onClick={() => setForm(c)}>{L("Edit", "改")}</button>
-                  <button type="button" class="btn sm" onClick={() => setRemoving(c.name)}>{L("Remove", "删除")}</button>
+                  <button type="button" class="btn sm danger" onClick={() => setRemoving(c.name)}>{L("Remove", "删除")}</button>
                 </td>
               </tr>
             );
