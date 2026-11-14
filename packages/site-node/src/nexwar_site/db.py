@@ -28,7 +28,8 @@ from typing import Any
 #: 76 第 11 轮 W11-01:删掉的路线、排程 retired_ids(只加表)。
 #: 77 第 13 轮 W13-01:删掉的排程留着当时的定义 retired_ids.definition
 #:    (今天没跑的那一轮删了照样列;只加列)。
-SCHEMA_VERSION = 77
+#: 78 W77(外审 W77-1 #6):见人开的警灯、警笛还没确认关掉的 person_warn_lit(只加表)。
+SCHEMA_VERSION = 78
 
 _DDL = """
 CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
@@ -519,6 +520,13 @@ CREATE TABLE IF NOT EXISTS person_sightings (
     -- B 阶段外审 I1:这一回记成了什么。'p1' = 报过 P1;'authorized' = 授权在场只记了 P3
     -- (授权失效、机器人走出授权区、位置说不清了而人还在,要补报一次 P1)。
     kind       TEXT NOT NULL DEFAULT 'p1'
+);
+-- W77(用户 11-15,外审 W77-1 #6):布防见人时开的警灯、警笛(JSON 列表),人走了要关;
+-- 关成了(机器人回执收下)才删。站点重启、关的命令没发成都接着关。
+CREATE TABLE IF NOT EXISTS person_warn_lit (
+    robot_id   TEXT PRIMARY KEY,
+    outputs    TEXT NOT NULL DEFAULT '[]',
+    updated_ms INTEGER NOT NULL
 );
 -- W42(库 67):机器人自己来挂的绑定申请(手机扫贴纸配网后,机器人连上站点挂一条,等人批准)。
 -- state:pending 等批 / approved 批了(机器人轮询拿开通码) / rejected 拒了 /

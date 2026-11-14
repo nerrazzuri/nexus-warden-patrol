@@ -111,15 +111,23 @@ async def test_人消失10秒_回最后看见的地方_朝人走的方向_结束
     assert t.detail["track"]
 
 
-async def test_跟到时限_按跟丢办(台子):  # noqa: F811
+async def test_跟到时限_不再追_原地守着_人不见了才收尾(台子):  # noqa: F811
+    """外审 W77-1 #4:到上限不再往前追,原地守着(人靠近照样退,见下面);人看不到 ``lost_s`` 才收尾。"""
     c, r, parts = 台子
     p = 人(r, 3.0, 3.0)
-    t, _ = _任务(台子, p, max_s=10)
+    t, emits = _任务(台子, p, max_s=10, keep_m=3.0)
 
     def 走():
-        p.y = min(p.y + 0.05, 7.0)
+        p.y = min(p.y + 0.05, 9.0)
     await t.start()
-    await _跑(台子, t, 60, 走)
+    await _跑(台子, t, 30, 走)
+    assert t.state is TaskState.RUNNING and t.phase == "keep"
+    assert [d["result"] for k, d in emits if k == "follow_lost"] == ["limit"]
+    y = r.y
+    await _跑(台子, t, 5, 走)
+    assert abs(r.y - y) < 0.05, "到上限:不再往前追"
+    p.seen = False
+    await _跑(台子, t, 30)
     assert t.state is TaskState.DONE and t.detail["result"] == "limit"
 
 
@@ -176,25 +184,21 @@ async def test_运行时_能力里有跟人_收命令_能力报在跟(tmp_path):
         await rt.close()
 
 
-async def test_外审8_到上限往回收尾_人回头靠近_不往人身上走(台子):  # noqa: F811
+async def test_外审8_到上限_人回头靠近_不往人身上走(台子):  # noqa: F811
     c, r, parts = 台子
     p = 人(r, 2.0, 5.0)
-    t, _ = _任务(台子, p, max_s=6)
+    t, _ = _任务(台子, p, max_s=6, keep_m=3.0)
     await t.start()
-    back = {}
 
     def 走():
         if t.phase == "follow":
             p.y = min(p.y + 0.15, 9.0)                    # 1.5 m/s 往北,机器人跟不上
-        elif t._leg_goal is not None:
-            back.setdefault("goal", t._leg_goal)
-            gy = back["goal"][1] + 1.0                    # 人回头,停在收尾目标前 1 m
-            p.y = max(p.y - 0.15, gy)
+        else:
+            p.y = max(p.y - 0.15, r.y + 2.0)              # 人回头走到机器人前面 2 m
     await _跑(台子, t, 40, 走)
-    assert "goal" in back, "到上限时离人远过 keep_m,要往前收尾"
-    assert t.state is TaskState.DONE and t.detail["result"] == "limit"
+    assert t.phase == "keep"
     d = math.hypot(p.x - r.x, p.y - r.y)
-    assert d >= 2.0, f"人回头靠近了还往前走:只剩 {d:.2f} m"
+    assert d >= 1.9, f"人回头靠近了还往前走:只剩 {d:.2f} m"
 
 
 async def test_外审9_两个人_被跟的还看得见_旁边更近的不抢(台子):  # noqa: F811
@@ -332,3 +336,116 @@ async def test_退着的时候被中止_停稳再终态(空台):
     assert t.state is TaskState.ABORTED
     o = await r.odometry()
     assert abs(o.vx) < 0.05
+
+
+# ---------------------------------------------------------------- 外审 W77-1
+
+
+class 慢停的狗:
+    """包一层仿真狗:``stopped()`` 一直说没停(看收尾等不等停稳)。"""
+
+    def __init__(self, r):
+        self.r, self.stop_n, self.never = r, 0, True
+
+    async def set_velocity(self, cmd):
+        return await self.r.set_velocity(cmd)
+
+    async def stop(self):
+        self.stop_n += 1
+        return await self.r.stop()
+
+    async def stopped(self):
+        return False if self.never else await self.r.stopped()
+
+
+async def test_外审1_2_退着的时候不安全断线_马上停车_不再退_连回来接着退(空台):
+    c, r, parts = 空台
+    p = 人(r, 6.0, 4.0)
+    t, _ = _退的任务(空台, p)
+    await t.start()
+
+    def 逼近():
+        p.x = max(p.x - 0.06, 5.0)
+    await _跑(空台, t, 3, 逼近)
+    assert t.caps()["state"] == "retreat"
+    await t.on_offline(False)
+    await _跑(空台, t, 3)
+    x = r.x
+    await _跑(空台, t, 3)
+    assert abs(r.x - x) < 0.02 and abs((await r.odometry()).vx) < 0.05, "断线:停住不退"
+    await t.on_online()
+    await _跑(空台, t, 3)
+    assert r.x < x - 0.2, "连回来:人还近,接着退"
+
+
+async def test_外审1_3_退完了还没停稳就被抢占_等停稳再终态(空台):
+    c, r, parts = 空台
+    p = 人(r, 6.0, 4.0)
+    t, _ = _退的任务(空台, p)
+    hal = 慢停的狗(r)
+    t._hal = hal
+    await t.start()
+
+    def 逼近():
+        p.x = max(p.x - 0.06, 5.0)
+    await _跑(空台, t, 3, 逼近)
+    assert t.caps()["state"] == "retreat"
+    p.seen = False                                       # 看不到人了:停下不退
+    await _跑(空台, t, 1.0)
+    assert t.caps()["state"] != "retreat"
+    await t.abort("preempted")
+    await _跑(空台, t, 2)
+    assert t.state is TaskState.RUNNING, "还没停稳:不能交接"
+    hal.never = False
+    await _跑(空台, t, 2)
+    assert t.state is TaskState.PREEMPTED
+
+
+async def test_外审1_3_退完了没停稳_不起往前跟的那一段(空台):
+    c, r, parts = 空台
+    p = 人(r, 6.0, 4.0)
+    t, _ = _退的任务(空台, p)
+    hal = 慢停的狗(r)
+    t._hal = hal
+    await t.start()
+
+    def 逼近():
+        p.x = max(p.x - 0.06, 5.0)
+    await _跑(空台, t, 3, 逼近)
+    p.x = 11.0                                           # 人一下走远了:该往前跟
+    await _跑(空台, t, 2)
+    assert t._leg is None, "上一下退还没停稳:先不起导航段"
+    hal.never = False
+    await _跑(空台, t, 3)
+    assert t._leg is not None or r.x > 1.5, "停稳了接着跟"
+
+
+async def test_外审1_4_到上限时人还近_守着照样退_不卡死_人走了收尾(空台):
+    c, r, parts = 空台
+    p = 人(r, 6.0, 4.0)
+    t, _ = _退的任务(空台, p, max_s=3)
+    await t.start()
+
+    def 逼近():
+        p.x = max(p.x - 0.06, 6.3)
+    await _跑(空台, t, 6, 逼近)
+    assert t.phase == "keep"
+    d = math.hypot(p.x - r.x, p.y - r.y)
+    assert d >= 4.9, "到上限以后人靠近照样退"
+    p.seen = False
+    await _跑(空台, t, 20)
+    assert t.state is TaskState.DONE and t.detail["result"] == "limit"
+
+
+async def test_外审1_1_往后退_查出不出地图(tmp_path):
+    from test_planned_engine import 画图
+    from test_standoff import _真台
+    broker, c, ears, dog, rt = await _真台(tmp_path)
+    try:
+        画图(tmp_path)
+        rt.parts.nav.load_grid(tmp_path)
+        assert "地图" in rt._standoff_nogo(-0.5, 3.0, 0.15), "图外"
+        assert "地图" in rt._standoff_nogo(0.05, 3.0, 0.15), "图边的墙"
+        assert rt._standoff_nogo(3.0, 3.0, 0.15) == ""
+    finally:
+        await rt.close()

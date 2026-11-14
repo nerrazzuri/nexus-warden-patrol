@@ -1127,12 +1127,24 @@ class GuardDuty:
                 inside, out = [cur[0], cur[1]], 0
                 continue
             out += 1
-            if out >= ZONE_OUT_N and inside is not None:
-                self._left_zone(rid, eid, held[2], (inside[0], inside[1]), cur, d, ref)
+            if out >= ZONE_OUT_N:
+                # 外审 W77-1 #5:一开始人就已经在防区外(没有防区里的轨迹点)照样停跟,回机器人看见人时
+                # 站的地方(那条告警的 pose;没有就机器人现在的位置)
+                back = (inside[0], inside[1]) if inside is not None else self._hold_point(rid, ref)
+                self._left_zone(rid, eid, held[2], back, cur, d, ref)
                 return True
         if inside != fs.get("inside") or out != int(fs.get("zone_out") or 0):
             self._fs_set(rid, inside=inside, zone_out=out)
         return False
+
+    def _hold_point(self, rid: str, ref: tuple[str, str]) -> tuple[float, float]:
+        a = self._person_alert(rid)
+        p = (getattr(a, "context", None) or {}).get("pose") if a is not None else None
+        if isinstance(p, dict) and (p.get("map_id"), p.get("map_version")) == ref \
+                and _num(p.get("x")) and _num(p.get("y")):
+            return float(p["x"]), float(p["y"])
+        pose = getattr(getattr(self._client(rid), "telemetry", None), "pose", None)
+        return (float(pose.x), float(pose.y)) if pose is not None else (0.0, 0.0)
 
     def _left_zone(self, rid: str, eid: int, zone: str, inside: tuple[float, float],
                    cur: tuple[float, float], d: dict[str, Any], ref: tuple[str, str]) -> None:
@@ -1187,7 +1199,7 @@ class GuardDuty:
         result = d.get("result")
         self._log("follow_lost", robot=rid, entry=eid,
                   detail="跟丢了:回最后看见人的地方" if result == "lost"
-                  else "跟到上限了:停在人后面")
+                  else "跟满了:不再追,原地守着,人靠近就退")
         last = d.get("last")
         if result != "lost" or fs.get("left") or fs.get("todo") or fs.get("own") \
                 or self.marks is None or ref is None \

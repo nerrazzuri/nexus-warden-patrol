@@ -455,3 +455,62 @@ async def test_用户1115_保安开了驱离_人走了不关灯笛_归驱离那�
     del t.det.sessions["A"]
     await _拍(w)
     assert d.sent == [], "驱离接手过,这边的账清了,不补关"
+
+
+# -------------------- 外审 W77-1 #6 #7:灯笛关不掉要重试、重启认得回来、不关别人的
+
+
+async def test_外审W77_1_6_关灯笛没成_过一会儿再关_关成了才销账(台):
+    from nexwar_site.sightings import UNWARN_RETRY_MS
+    t = 台
+    d, w = _上装台(t, outputs=("strobe", "siren", "speaker"))
+    d.persons("A", present=True, count=1)
+    await _拍(w)
+    real = d.deter
+
+    async def 断了(rid, payload, *, issued_by, priority):
+        if not payload["on"]:
+            raise RuntimeError("断网")
+        return await real(rid, payload, issued_by=issued_by, priority=priority)
+    d.deter = 断了
+    d.persons("A", present=False)
+    await _拍(w)
+    d.deter = real
+    d.sent.clear()
+    await _拍(w)
+    assert d.sent == [], "没到重试的点"
+    t.ms[0] += UNWARN_RETRY_MS
+    await _拍(w)
+    assert {p["output"] for _, p, _ in d.sent if not p["on"]} == {"strobe", "siren"}
+    d.sent.clear()
+    t.ms[0] += UNWARN_RETRY_MS
+    await _拍(w)
+    assert d.sent == [], "关成了:不再关"
+
+
+async def test_外审W77_1_6_开着灯笛站点重启_人走了照样关(台):
+    t = 台
+    d, w = _上装台(t, outputs=("strobe", "siren", "speaker"))
+    d.persons("A", present=True, count=1)
+    await _拍(w)
+    w2 = PersonWatch(t.db, d, now_ms=lambda: t.ms[0], arming=t.arming, deterrence=t.det)
+    w2.alerts = w.alerts
+    d.sent.clear()
+    d.persons("A", present=False)
+    await _拍(w2)
+    assert {p["output"] for _, p, _ in d.sent if not p["on"]} == {"strobe", "siren"}
+
+
+async def test_外审W77_1_7_受力警报还管着灯笛_人走了不关_只撤自己的(台):
+    t = 台
+    d, w = _上装台(t, outputs=("strobe", "siren", "speaker"))
+    w.held_by_others = lambda rid: {"siren", "strobe"}
+    d.persons("A", present=True, count=1)
+    await _拍(w)
+    d.sent.clear()
+    d.persons("A", present=False)
+    await _拍(w)
+    assert d.sent == [], "受力警报还管着:不关"
+    w.held_by_others = lambda rid: set()
+    await _拍(w)
+    assert d.sent == [], "交给受力警报那边了,这边的账已经撤了"
