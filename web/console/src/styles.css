@@ -962,7 +962,9 @@ p.warn { color: var(--c-text); background: var(--c-warningSoft); padding: 8px 12
 .rd-inline .btn { height: var(--ctl-sm); }
 /* 第三档 #41:常用喊话 —— 按钮写整句,太长截掉(悬停看全);编辑框一行:语言、内容、删除 */
 .rd-presets { display: flex; flex-direction: column; gap: var(--sp-1); }
-.rd-preset { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* UIUX-047:.btn 是 inline-flex,省略号要加在里面的 span 上 */
+.rd-preset { max-width: 100%; min-width: 0; justify-content: flex-start; }
+.rd-preset-t { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .preset-row { display: grid; grid-template-columns: 120px minmax(0, 1fr) auto; gap: var(--sp-2); align-items: center; }
 .rd-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2); }
 .rd-actions .rd-danger { color: var(--c-error); border-color: var(--c-error); background: transparent; }

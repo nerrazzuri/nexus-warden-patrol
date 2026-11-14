@@ -556,13 +556,17 @@ function DeterPanel({ r, d, id, busy, off, send, path, admin, say }: {
               <button key={p.lang + p.text} type="button" class="btn sm rd-preset" disabled={busy || off || cant}
                 title={cant ? `${p.text}\n${t("rdPresetCantLang", { id, lang: langName(p.lang) })}` : p.text}
                 onClick={() => void send(deter({ output: "speaker", on: true, max_s: 60, clip: `tts:${p.lang}:${p.text}` }), t("rdSpeakDone", { id }))}>
-                {p.text}
+                <span class="rd-preset-t">{p.text}</span>
               </button>
               );
             })}
             {presets.length === 0 && <span class="muted small">{t("rdPresetsNone")}</span>}
             {admin && <button type="button" class="btn sm" data-voice-edit="1" onClick={() => setEditing(true)}>{t("rdPresetsEdit")}</button>}
           </div>
+          {/* UIUX-047:念不了的原因直接写出来(title 触屏、键盘看不到) */}
+          {[...new Set(presets.map((p) => p.lang))].filter((l) => d.tts_langs != null && !d.tts_langs.includes(l)).map((l) => (
+            <span key={l} class="muted small" data-preset-cant={l}>{t("rdPresetCantLang", { id, lang: langName(l) })}</span>
+          ))}
         </div>
       )}
       {editing && presets !== null && (
@@ -600,15 +604,26 @@ const langName = (l: string) => LANG_NAME[l]?.[lang.value === "zh" ? 1 : 0] ?? l
 function PresetEditor({ init, onClose, onSaved }: { init: VoicePreset[]; onClose: () => void; onSaved: (p: VoicePreset[]) => void }) {
   const [rows, setRows] = useState<VoicePreset[]>(init.map((p) => ({ ...p })));
   const [err, setErr] = useState("");
+  const [bad, setBad] = useState(-1);       // UIUX-049:出错的是第几句(标 aria-invalid、焦点放过去)
   const [busy, setBusy] = useState(false);
-  const put = (i: number, p: Partial<VoicePreset>) => setRows(rows.map((x, j) => (j === i ? { ...x, ...p } : x)));
+  const form = useRef<HTMLFormElement>(null);
+  const put = (i: number, p: Partial<VoicePreset>) => {
+    if (i === bad) setBad(-1);
+    setRows(rows.map((x, j) => (j === i ? { ...x, ...p } : x)));
+  };
+  const flag = (i: number, msg: string) => {
+    setBad(i);
+    setErr(msg);
+    form.current?.querySelectorAll<HTMLInputElement>("input[data-voice-text]")[i]?.focus();
+  };
   async function save(e: Event) {
     e.preventDefault();
     const out = rows.map((x) => ({ lang: x.lang, text: x.text.trim() }));
     const empty = out.findIndex((x) => !x.text);
-    if (empty >= 0) return setErr(t("rdPresetEmpty", { n: empty + 1 }));
+    if (empty >= 0) return flag(empty, t("rdPresetEmpty", { n: empty + 1 }));
     const dup = out.findIndex((x, i) => out.findIndex((y) => y.text === x.text) < i);
-    if (dup >= 0) return setErr(t("rdPresetDup", { n: dup + 1 }));
+    if (dup >= 0) return flag(dup, t("rdPresetDup", { n: dup + 1 }));
+    setBad(-1);
     setBusy(true);
     try {
       const r = await api<{ presets: VoicePreset[] }>("POST", "/api/voice-presets", { presets: out });
@@ -621,7 +636,7 @@ function PresetEditor({ init, onClose, onSaved }: { init: VoicePreset[]; onClose
   }
   return (
     <Modal label={t("rdPresetsEdit")} wide onClose={onClose}>
-      <form class="form preset-form" onSubmit={save}>
+      <form class="form preset-form" ref={form} onSubmit={save}>
         <p class="muted small">{t("rdPresetsHint")}</p>
         {rows.map((x, i) => (
           <div class="preset-row" key={i}>
@@ -629,6 +644,7 @@ function PresetEditor({ init, onClose, onSaved }: { init: VoicePreset[]; onClose
               {PRESET_LANGS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
             </select>
             <input data-voice-text="1" aria-label={`${t("rdPresetText")} ${i + 1}`} maxLength={300} value={x.text}
+              aria-invalid={i === bad ? true : undefined} aria-describedby={i === bad ? "preset-err" : undefined}
               onInput={(e) => put(i, { text: e.currentTarget.value })} />
             <button type="button" class="btn sm danger" data-voice-del="1" onClick={() => setRows(rows.filter((_, j) => j !== i))}>{t("rdPresetDel")}</button>
           </div>
@@ -636,7 +652,7 @@ function PresetEditor({ init, onClose, onSaved }: { init: VoicePreset[]; onClose
         {rows.length < PRESETS_MAX && (
           <button type="button" class="btn sm ly-new" onClick={() => setRows([...rows, { lang: lang.value === "zh" ? "zh" : "en", text: "" }])}>{t("rdPresetAdd")}</button>
         )}
-        {err && <p class="error small" role="alert" data-form-error="1">{err}</p>}
+        {err && <p class="error small" role="alert" id="preset-err" data-form-error="1">{err}</p>}
         <div class="row end">
           <button type="button" class="btn" onClick={onClose}>{t("cancel")}</button>
           <button type="submit" class="btn primary" disabled={busy}>{t("save")}</button>

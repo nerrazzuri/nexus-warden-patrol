@@ -491,6 +491,9 @@ describe("W71 Nav2 没起来", () => {
     await waitFor(() => expect(btn(row1, "警告，您已进入受限制区域，请立即离开。").disabled).toBe(false));
     expect(btn(row1, "Please leave.").disabled).toBe(true);
     expect(btn(row1, "Please leave.").title).toContain("这台机器人念不了英文");
+    // UIUX-047:原因直接写出来(触屏、键盘看不到 title);字放在能省略的 span 里
+    expect(row1.querySelector("[data-preset-cant]")?.textContent).toContain("这台机器人念不了英文");
+    expect(btn(row1, "Please leave.").querySelector(".rd-preset-t")).not.toBeNull();
     cleanup();
     presets = null;      // 老站点:接口 404
     const { container: c2 } = render(<RobotsPage say={(s) => said.push(s)} now={NOW} role="guard" />);
@@ -518,10 +521,14 @@ describe("W71 Nav2 没起来", () => {
     expect(texts()).toHaveLength(2);
     fireEvent.click(btn(dlg, "保存"));
     await waitFor(() => expect(dlg.querySelector("[data-form-error]")?.textContent).toContain("第 2 句没写字"));
+    // UIUX-049:出错那句标 aria-invalid、焦点放过去
+    expect(texts()[1].getAttribute("aria-invalid")).toBe("true");
+    expect(document.activeElement).toBe(texts()[1]);
     expect(posted.some((p) => p.url === "/api/voice-presets")).toBe(false);
     const lang = dlg.querySelectorAll<HTMLSelectElement>("select[data-voice-lang]")[1];
     fireEvent.change(lang, { target: { value: "ms" } });
     fireEvent.input(texts()[1], { target: { value: "Sila keluar." } });
+    expect(texts()[1].getAttribute("aria-invalid")).toBeNull();
     fireEvent.click(btn(dlg, "保存"));
     await waitFor(() => expect(posted.find((p) => p.url === "/api/voice-presets")?.body)
       .toEqual({ presets: [{ lang: "zh", text: "请离开这里" }, { lang: "ms", text: "Sila keluar." }] }));
