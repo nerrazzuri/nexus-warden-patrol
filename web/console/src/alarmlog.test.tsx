@@ -65,6 +65,17 @@ const rows = (c: Element) => Array.from(c.querySelectorAll(".it"));
 const chip = (c: Element, text: string) => Array.from(c.querySelectorAll(".chip")).find((b) => b.textContent === text) as HTMLButtonElement;
 
 describe("报警记录页", () => {
+  it("UIUX-E003:本班 0 条但之前还有没处理的,写出来,点「显示出来」切到那天并只看没处理的", async () => {
+    alerts = [alert({ key: "old", first_ms: at(17, 0) }), alert({ key: "done", first_ms: at(16, 0), resolved_ms: at(16, 5) })];
+    const { container: c } = page();
+    const hint = await waitFor(() => { const x = c.querySelector("[data-al-older]"); expect(x).not.toBeNull(); return x!; });
+    expect(hint.textContent).toContain("本班之前还有 1 条没处理");
+    expect(rows(c).length).toBe(0);
+    fireEvent.click(hint.querySelector("button")!);
+    await waitFor(() => expect(rows(c).length).toBe(1));
+    expect(c.querySelector("[data-al-older]")).toBeNull();
+  });
+
   it("实测查出:站点给的「在哪」写在那一行", async () => {
     duty = null;
     alerts = [alert({ key: "w", kind: "robot_offline_idle", audience: "offline", robot: "A", title: "机器人离线", detail: "", context: { where: "A区" } as never, first_ms: at(21, 50) })];
@@ -117,10 +128,10 @@ describe("报警记录页", () => {
       alert({ key: "c", kind: "robot_offline", audience: "offline", title: "B 掉线", first_ms: at(19, 31) })];
     const { container: c } = page();
     await waitFor(() => expect(rows(c).length).toBe(3));
-    const titles = () => rows(c).map((r) => r.querySelector("h5")!.textContent);
+    const titles = () => rows(c).map((r) => r.querySelector("h2")!.textContent);
     fireEvent.click(chip(c, "机器人需协助"));
     expect(titles()).toEqual([alertTitle("zh", "stuck", "C 被挡住了")]);
-    expect(rows(c)[0].querySelector("h5")!.classList.contains("o")).toBe(true);
+    expect(rows(c)[0].querySelector("h2")!.classList.contains("o")).toBe(true);
     fireEvent.click(chip(c, "全部"));
     expect(rows(c).length).toBe(3);
     expect(titles()[0]).toBe(alertTitle("zh", "stuck", "C 被挡住了"));

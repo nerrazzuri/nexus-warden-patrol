@@ -687,7 +687,7 @@ describe("路线页:站点的回答", () => {
     expect(form.querySelector("[data-sched-missing]")!.textContent).toBe("Still missing: Start at, Days, Late window (min)");
   });
 
-  it("UIUX-017:排程一行的「删除」跟别的在同一行(网格列数 = 一行的子元素数)", async () => {
+  it("UIUX-017 / E001:「删除」跟名字、时间在第一行;星期、策略、机器人在第二行,窄面板里不再一字一行", async () => {
     installScreenCTM();
     const sch = { id: "n1", mission: "loop", at: "22:00", days: ["mon"], window_min: 30, on_missed: "skip", revision: 7 };
     routesApi({ meta: META, routes: [ROUTE], timezone: "UTC", schedules: [sch] });
@@ -697,8 +697,10 @@ describe("路线页:站点的回答", () => {
     fireEvent.click(r.getByText("loop"));
     const li = await waitFor(() => { const x = r.container.querySelector(".sched-list li"); expect(x).not.toBeNull(); return x!; });
     const css = (await import("node:fs")).readFileSync(`${process.cwd()}/src/routes.css`, "utf8");
-    const rule = /\.sched-list li \{[^}]*grid-template-columns:\s*([^;]+);/.exec(css)![1].trim().split(/\s+(?![^(]*\))/);
-    expect(rule.length).toBe(li.children.length);
+    expect(css).toMatch(/\.sched-list li \{[^}]*grid-template-areas: "name at del" "meta meta meta"/);
+    expect([...li.children].map((c) => c.className.split(" ").find((k) => /^(strong|sched-at|sched-meta|btn)$/.test(k))))
+      .toEqual(["strong", "sched-at", "sched-meta", "btn"]);
+    expect(css).toMatch(/\.sched-meta > span \{ white-space: nowrap; \}/);
   });
 
   it("UIUX-019:排程一行写可迟到几分钟、错过怎么办", async () => {
@@ -762,7 +764,7 @@ describe("路线页:站点的回答", () => {
     expect((r.container.querySelector('input[name="at"]') as HTMLInputElement).value).toBe("");
     expect(r.container.querySelector("[data-sched-same]")).toBeNull();
     expect((r.getByText("Add schedule") as HTMLButtonElement).disabled).toBe(true);
-    expect(r.container.querySelector(".sched-list .muted.small")!.textContent).toBe("Mon");   // 星期写成 Mon,不是 mon
+    expect(r.container.querySelector(".sched-list .sched-meta > span")!.textContent).toBe("Mon");   // 星期写成 Mon,不是 mon
   });
 });
 
