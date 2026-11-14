@@ -97,7 +97,8 @@ def run_one(job: dict, slot: int, args) -> dict:
                    f"seed:={job['seed']}", f"case_json:={d / 'case.json'}",
                    f"agent_guard:={cfg.get('guard', 'false')}", f"guard_tight:={cfg.get('tight', 'false')}",
                    f"guard_log:={d / 'guard.jsonl'}", f"guard_mode:={cfg.get('mode', 'A')}",
-                   f"blind_band:={cfg.get('blind', 'false')}"]
+                   f"blind_band:={cfg.get('blind', 'false')}",
+                   f"band_policy:={cfg.get('band', 'strict')}"]
     for k, v in (case.get("sim") or {}).items():
         if k in SIM_ARGS:
             launch_args.append(f"{SIM_ARGS[k]}:={_arg(v)}")
@@ -154,6 +155,8 @@ def main() -> int:
     ap.add_argument("--parallel", type=int, default=12)
     ap.add_argument("--domain-base", type=int, default=100)
     ap.add_argument("--out", type=Path, required=True)
+    # 用户 11-14 晚:A/B/C 三组跑同一批「场景 + 种子」(一行一个 场景/s000),逐场对比
+    ap.add_argument("--cases", type=Path, default=None, help="只跑这些 场景/sNNN(覆盖 --ids、--seeds)")
     args = ap.parse_args()
     args.scenarios = args.scenarios.resolve()
     import yaml
@@ -173,7 +176,15 @@ def main() -> int:
 
     configs = [_cfg(c) for c in args.config]
     jobs = []
-    for seed in range(max(nseeds(i) for i in ids)):
+    pairs = None
+    if args.cases is not None:
+        pairs = [ln.strip().split("/") for ln in args.cases.read_text().splitlines() if ln.strip()]
+        ids = sorted({sid for sid, _ in pairs})
+        for sid, s in pairs:
+            for cname, cfg in configs:
+                jobs.append({"scenario": sid, "seed": int(s[1:]), "config_name": cname, "config": cfg,
+                             "first": True, "dir": args.out / cname / sid / s})
+    for seed in range(0 if pairs is not None else max(nseeds(i) for i in ids)):
         for sid in ids:
             if seed >= nseeds(sid):
                 continue
