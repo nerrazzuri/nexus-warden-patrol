@@ -756,14 +756,9 @@ void main() {
             scrollable: find.descendant(of: find.byType(SiteDirectory), matching: find.byType(Scrollable)).first);
         expect(find.byKey(SiteDirectory.itemKey(d)), findsOneWidget, reason: d.name);
         expect(t.getRect(find.byKey(SiteDirectory.itemKey(d))).bottom, lessThanOrEqualTo(844), reason: d.name);
+        expect(find.descendant(of: find.byKey(SiteDirectory.itemKey(d)), matching: find.byType(Text)), findsWidgets,
+            reason: '${d.name} 带文字');
       }
-      expect(
-          find.descendant(
-              of: find.byKey(SiteDirectory.itemKey(SiteDest.layout), skipOffstage: false),
-              matching: find.byType(Text),
-              skipOffstage: false),
-          findsWidgets,
-          reason: '每一项带文字');
       await openDir(t, SiteDest.runs);
       expect(find.byType(SiteRunsPage), findsOneWidget);
       await t.pageBack();
