@@ -265,7 +265,7 @@ void main() {
       expect(runStats(const [], now), (today: 0, anomalies: 0));
     });
 
-    testWidgets('两个数值格 + 一趟一张卡；有异常的那一格、那张卡标出来；点卡进这一趟', (t) async {
+    testWidgets('分段今天 / 异常 / 全部 + 一趟一行；有异常的标出来；点一行进这一趟', (t) async {
       _size(t);
       final api = _Api('guard')
         ..runRows = [
@@ -275,14 +275,20 @@ void main() {
         ];
       await _pump(t, SiteRunsPage(api: api, embedded: true, now: () => DateTime(2026, 9, 25, 12)));
       expect(find.byType(AppBar), findsNothing, reason: '嵌在记录栏里：页头是记录栏的');
-      expect(find.descendant(of: find.byKey(SiteRunsPage.todayKey), matching: find.text('2')), findsOneWidget);
-      expect(find.descendant(of: find.byKey(SiteRunsPage.anomalyKey), matching: find.text('1')), findsOneWidget);
-      expect(t.widget<NwStatTile>(find.byKey(SiteRunsPage.anomalyKey)).tone, NwTone.error);
-      expect(find.byType(NwPatrolCard), findsNWidgets(3));
-      final cards = t.widgetList<NwPatrolCard>(find.byType(NwPatrolCard)).toList();
-      expect(cards.map((c) => c.anomaly), [false, true, true]);
-      expect(cards.map((c) => c.thumbs.length).toSet(), {0}, reason: '列表里站点没给照片：不摆缩略图那一行');
+      // App V2 稿 S-runs：分段「今天 2 / 异常 1 / 全部」，默认看今天
+      expect(t.widget<Text>(find.byKey(SiteRunsPage.todayKey)).data, '今天 2');
+      expect(t.widget<Text>(find.byKey(SiteRunsPage.anomalyKey)).data, '异常 1');
+      expect(t.widget<Text>(find.byKey(SiteRunsPage.anomalyKey)).style?.color, isNotNull, reason: '有异常标色');
+      expect(find.byKey(SiteRunsPage.runKey(3)), findsNothing, reason: '昨天那趟不在「今天」里');
+      expect(find.byIcon(Icons.report), findsOneWidget);
+      await t.tap(find.byKey(SiteRunsPage.allKey));
+      await t.pumpAndSettle();
+      expect(find.byKey(SiteRunsPage.runKey(3)), findsOneWidget);
       expect(find.byIcon(Icons.report), findsNWidgets(2));
+      await t.tap(find.byKey(SiteRunsPage.anomalyKey));
+      await t.pumpAndSettle();
+      expect(find.byKey(SiteRunsPage.runKey(1)), findsNothing);
+      expect(find.byKey(SiteRunsPage.runKey(2)), findsOneWidget);
       expect(api.calls.where((c) => c.startsWith('photo ') || c.startsWith('run ')), isEmpty,
           reason: '不为了缩略图多问站点');
       await t.tap(find.byKey(SiteRunsPage.runKey(2)));
@@ -295,8 +301,8 @@ void main() {
       _size(t);
       final api = _Api('owner')..runRows = [_run(1, DateTime(2026, 9, 25, 8))];
       await _pump(t, SiteRunsPage(api: api, embedded: true, now: () => DateTime(2026, 9, 25, 12)));
-      expect(find.descendant(of: find.byKey(SiteRunsPage.anomalyKey), matching: find.text('0')), findsOneWidget);
-      expect(t.widget<NwStatTile>(find.byKey(SiteRunsPage.anomalyKey)).tone, NwTone.neutral);
+      expect(t.widget<Text>(find.byKey(SiteRunsPage.anomalyKey)).data, '异常 0');
+      expect(t.widget<Text>(find.byKey(SiteRunsPage.anomalyKey)).style, isNull, reason: '不上色');
       expect(find.byIcon(Icons.report), findsNothing);
       await t.pumpWidget(Container());
     });
