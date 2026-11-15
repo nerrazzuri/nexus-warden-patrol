@@ -154,7 +154,7 @@ abstract final class SiteAlertScenePageSpan {
   }
 }
 
-class _SiteAlertScenePageState extends State<SiteAlertScenePage> {
+class _SiteAlertScenePageState extends State<SiteAlertScenePage> with EstopMissReveal {
   late Alert _a = widget.alert;
 
   /// 在这一页点了「我来处理」之后站点回的（或者本地记的）确认人、时刻；刷新拿到新的告警就用新的。

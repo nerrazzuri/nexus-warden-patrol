@@ -931,10 +931,20 @@ class _SchedulePageState extends State<SchedulePage> {
   /// 就地编辑（App V2 不弹窗）：null = 没在编；{} = 新加的；别的 = 在编的那一条。
   Map<String, dynamic>? _editing;
 
-  void _edit([Map<String, dynamic>? old]) => setState(() => _editing = old ?? const <String, dynamic>{});
+  /// 新加的那一条的号：开编辑器时定下，连点、重试都是同一条（外审 App-V2-1 #10）。
+  String? _newId;
+
+  /// 保存 / 删除在路上：再点不发第二次。
+  bool _saving = false;
+
+  void _edit([Map<String, dynamic>? old]) => setState(() {
+        _editing = old ?? const <String, dynamic>{};
+        if (old == null) _newId = 'app-${DateTime.now().millisecondsSinceEpoch}';
+      });
 
   Future<void> _save(Map<String, dynamic>? old, Map<String, dynamic> got) async {
-    final id = old != null ? '${old['id']}' : 'app-${DateTime.now().millisecondsSinceEpoch}';
+    if (_saving) return;
+    final id = old != null ? '${old['id']}' : (_newId ??= 'app-${DateTime.now().millisecondsSinceEpoch}');
     // 外审 W53-1 #9：编辑器没有的字段（每隔几分钟、到几点、优先级、回哪个待命点……）原样带回去，
     // 站点是整条替换的；选了「任一台」就把原来的 robot 去掉
     const meta = {'id', 'revision', 'active_from_ms', 'updated_ms', 'updated_by', 'source'};
@@ -948,26 +958,34 @@ class _SchedulePageState extends State<SchedulePage> {
       'base_revision': old?['revision'] ?? 0,
     };
     if (!got.containsKey('robot')) body.remove('robot');
+    _saving = true;
     try {
       await widget.api.saveSchedule(id, body);
       if (mounted) {
         setState(() {
           _msg = tr('Saved', '已保存');
           _editing = null;
+          if (old == null) _newId = null;
         });
       }
     } on SiteError catch (e) {
       if (mounted) setState(() => _msg = refusalText(e));
+    } finally {
+      _saving = false;
     }
     await _load();
   }
 
   Future<void> _delete(Map<String, dynamic> e) async {
+    if (_saving) return;
+    _saving = true;
     try {
       await widget.api.deleteSchedule('${e['id']}', (e['revision'] as num?)?.toInt() ?? 0);
       if (mounted) setState(() => _editing = null);
     } on SiteError catch (err) {
       if (mounted) setState(() => _msg = refusalText(err));
+    } finally {
+      _saving = false;
     }
     await _load();
   }

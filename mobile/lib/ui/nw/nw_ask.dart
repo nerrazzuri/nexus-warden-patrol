@@ -36,6 +36,23 @@ class _AskReq {
       {this.ownButtons = false});
 }
 
+/// 把这一页里的第一个滚动列表滚回顶（页顶插进来的警示、确认条要看得见）。
+void scrollPageToTop(BuildContext context) {
+  ScrollableState? found;
+  void visit(Element e) {
+    if (found != null) return;
+    if (e is StatefulElement && e.state is ScrollableState) {
+      found = e.state as ScrollableState;
+      return;
+    }
+    e.visitChildElements(visit);
+  }
+
+  (context as Element).visitChildElements(visit);
+  final pos = found?.position;
+  if (pos != null && pos.pixels > pos.minScrollExtent) pos.jumpTo(pos.minScrollExtent);
+}
+
 mixin NwAsk<W extends StatefulWidget> on State<W> {
   _AskReq? _askReq;
   final GlobalKey _askKey = GlobalKey();
@@ -71,19 +88,7 @@ mixin NwAsk<W extends StatefulWidget> on State<W> {
       unawaited(Scrollable.ensureVisible(ctx, alignment: 0.05, duration: const Duration(milliseconds: 150)));
       return;
     }
-    ScrollableState? found;
-    void visit(Element e) {
-      if (found != null) return;
-      if (e is StatefulElement && e.state is ScrollableState) {
-        found = e.state as ScrollableState;
-        return;
-      }
-      e.visitChildElements(visit);
-    }
-
-    (context as Element).visitChildElements(visit);
-    final pos = found?.position;
-    if (pos != null && pos.pixels > pos.minScrollExtent) pos.jumpTo(pos.minScrollExtent);
+    scrollPageToTop(context);
     // 列表在第一行上面插进一条时会把滚动位置往下修正（保住原来看着的那一行）：下一帧再对一次
     if (again) {
       WidgetsBinding.instance.addPostFrameCallback((_) => _reveal(again: false));
@@ -113,6 +118,9 @@ mixin NwAsk<W extends StatefulWidget> on State<W> {
           choices: const [],
           ownButtons: true,
           content: _FieldsForm(fields: fields, confirm: confirm, confirmKey: confirmKey, onDone: _pick));
+
+  /// 收掉正在问的那一句（算取消）：问的前提变了（会话换了、数据改了）时调。
+  void askCancel() => _pick(null);
 
   void _pick(Object? v) {
     final r = _askReq;

@@ -10,6 +10,7 @@ import '../site_cameras.dart';
 import '../site_intercepts.dart';
 import '../site_recordings.dart' show clipTime;
 import '../site_standby.dart';
+import 'nw_layout_hub.dart' show robotMapOf;
 import 'nw_theme.dart';
 
 class SitePointsPage extends StatefulWidget {
@@ -168,7 +169,11 @@ class _SitePointsPageState extends State<SitePointsPage> {
                       ?trailing,
                     ]))));
     final robot = _robot;
-    final origin = _homes.isNotEmpty;
+    // 外审 App-V2-1 #12：点是挂在某一版地图上的；机器人在用哪版看得见，别的版本的点标出来、不能设默认
+    final cur = robotMapOf(_robotView);
+    bool onCur(Map<String, dynamic> p) => cur == null || ('${p['map_id']}' == cur.$1 && '${p['map_version']}' == cur.$2);
+    String mapOf(Map<String, dynamic> p) => '${p['map_id']} v${p['map_version']}';
+    final origin = cur == null ? _homes.isNotEmpty : _homes.any(onCur);
     final linked = <String, List<String>>{};
     for (final z in _zones) {
       final i = '${z['intercept'] ?? ''}';
@@ -219,8 +224,12 @@ class _SitePointsPageState extends State<SitePointsPage> {
                       key: SitePointsPage.standbyKey('${p['name']}'),
                       icon: Icons.place_outlined,
                       title: standbyName(p),
-                      sub2: p['default'] == true ? tr('Default · return here after patrol', '默认 · 巡逻结束回这里') : '',
-                      trailing: _maps && p['default'] != true
+                      sub2: [
+                        if (p['default'] == true) tr('Default · return here after patrol', '默认 · 巡逻结束回这里'),
+                        mapOf(p),
+                        if (!onCur(p)) tr('not the map ${_robot ?? ''} uses now', '不是 ${_robot ?? ''} 现在用的图'),
+                      ].join(' · '),
+                      trailing: _maps && p['default'] != true && onCur(p)
                           ? OutlinedButton(
                               key: SitePointsPage.defaultKey('${p['name']}'),
                               style: small,

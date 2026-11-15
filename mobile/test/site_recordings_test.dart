@@ -45,11 +45,17 @@ void main() {
     expect(api.calls.first, 'recordings A * - -');
     expect(find.byKey(SiteRecordingsPage.clipKey(10)), findsOneWidget);
     expect(find.textContaining('30.0 MB'), findsNWidgets(3));
+    // 外审 App-V2-1 #9：人滚在下面点播放，问流量的那一条要自己滚出来（测试不替它滚）
+    await t.drag(find.byType(ListView).first, const Offset(0, -3000));
+    await t.pumpAndSettle();
+    await t.ensureVisible(find.byKey(SiteRecordingsPage.clipKey(11)));
+    await t.pumpAndSettle();
     await t.tap(find.byKey(SiteRecordingsPage.clipKey(11)));
     await t.pumpAndSettle();
     expect(api.calls, isNot(contains('recording-bytes 11')), reason: 'M34：30 MB 先问流量');
     expect(find.byType(AlertDialog), findsNothing, reason: 'App V2：就地问');
-    await t.ensureVisible(find.byKey(SiteRecordingsPage.dataOkKey));
+    final okAt = t.getRect(find.byKey(SiteRecordingsPage.dataOkKey));
+    expect(okAt.top >= 0 && okAt.bottom <= 360, isTrue, reason: '确认条在屏幕里（$okAt）');
     await t.tap(find.byKey(SiteRecordingsPage.dataOkKey));
     await t.pumpAndSettle();
     expect(api.calls, contains('recording-bytes 11'));

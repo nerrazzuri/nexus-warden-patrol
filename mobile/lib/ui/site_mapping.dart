@@ -795,6 +795,16 @@ class _SiteMapPreviewPageState extends State<SiteMapPreviewPage> with NwAsk {
 
   Future<void> _confirm() async {
     final prop = _proposal;
+    // 外审 App-V2-1 #1：问的时候是哪一版、勾了哪些，确认的就是这些；问着的时候改了区域或勾选，旧的确认作废
+    final rev = _rev;
+    final adoptAt = Set<String>.of(_adopt);
+    bool stale() {
+      if (_rev == rev && _adopt.length == adoptAt.length && _adopt.containsAll(adoptAt)) return false;
+      setState(() => _msg = tr('The zones changed while you were confirming. Check them and confirm again.',
+          '确认期间区域有改动，请检查后重新确认。'));
+      return true;
+    }
+
     final zoneIds = [
       for (final z in _propList('zones'))
         if (_adopt.contains('zone:${z['id']}')) '${z['id']}'
@@ -820,7 +830,7 @@ class _SiteMapPreviewPageState extends State<SiteMapPreviewPage> with NwAsk {
         cancel: tr('Review again', '返回检查'),
         ok: tr('Confirm', '确认'),
         okKey: SiteMapPreviewPage.confirmOkKey);
-    if (!ok || !mounted) return;
+    if (!ok || !mounted || stale()) return;
     var emptyOk = false;
     if (_zoneList.isEmpty && zoneIds.isEmpty) {
       // R2：一个区域都没有的那一版再问一道 —— 重建图之后，上一版画的泳池可能悄悄没了
@@ -833,7 +843,7 @@ class _SiteMapPreviewPageState extends State<SiteMapPreviewPage> with NwAsk {
           cancel: tr('Review again', '返回检查'),
           ok: tr('Yes, there are none', '确认没有'),
           okKey: SiteMapPreviewPage.confirmEmptyKey);
-      if (!ok2 || !mounted) return;
+      if (!ok2 || !mounted || stale()) return;
       emptyOk = true;
     }
     setState(() {
@@ -841,7 +851,7 @@ class _SiteMapPreviewPageState extends State<SiteMapPreviewPage> with NwAsk {
       _msg = null;
     });
     try {
-      final r = await widget.api.confirmZones(widget.mapId, widget.version, _rev,
+      final r = await widget.api.confirmZones(widget.mapId, widget.version, rev,
           emptyOk: emptyOk,
           adopt: prop == null
               ? null
