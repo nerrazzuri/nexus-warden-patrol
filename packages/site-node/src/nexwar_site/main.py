@@ -863,6 +863,8 @@ class Server:
         self.supervision = SupervisionDesk(self.dispatcher, self.loop, now_ms=wall_ms)
         self.standby = StandbyManager(self.db, self.dispatcher, now_ms=wall_ms,
                                       refusal=self.supervision.refusal)
+        from nexwar_site.look import LookDesk
+        self.look = LookDesk(self.db, self.standby, now_ms=wall_ms)   # 用户 11-15:看一眼看完后回去
         from nexwar_site.incidents import IncidentDesk
         self.incidents = IncidentDesk(self.db, self.dispatcher, now_ms=wall_ms)
         # W00c5a:告警台挂上派遣器(状态、事件、遥测),经 SSE 推给值守屏。
@@ -1386,6 +1388,10 @@ class Server:
             except Exception as exc:
                 self.scheduler.last_error = f"{type(exc).__name__}: {exc}"
                 log.exception("排程这一拍没办成")
+            try:
+                await self.look.tick()        # 用户 11-15:派去看一眼,看完回待命点 / 原点
+            except Exception:
+                log.exception("看一眼的后续这一拍没办成")
             try:
                 await self.adhoc.tick()                    # W53:排队的临时巡逻
             except Exception as exc:
