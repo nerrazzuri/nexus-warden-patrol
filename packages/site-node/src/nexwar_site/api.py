@@ -271,6 +271,7 @@ class SiteApi:
     def __init__(self, *, host: str, port: int, loop: LoopThread, dispatcher: Dispatcher,
                  accounts: Accounts, tls: tuple[Path, Path] | None = None,
                  scheduler: Any = None, standby: Any = None, incidents: Any = None,
+                 look: Any = None,
                  alerts: Any = None, video: Any = None, teleop: Any = None,
                  runs: Any = None, backup: Any = None, maps: Any = None,
                  releases: Any = None, supervision: Any = None, zones: Any = None,
@@ -286,6 +287,7 @@ class SiteApi:
         self.scheduler = scheduler
         self.standby = standby
         self.incidents = incidents
+        self.look = look                     # 用户 11-15:派去看一眼的「看完后动作」
         #: W73 第五期:外部设备按位置绑定(``devices.DeviceBook``;没接是 None)。
         self.devices: Any = None
         self.alerts = alerts
