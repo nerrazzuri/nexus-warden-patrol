@@ -4,7 +4,6 @@ import 'dart:typed_data';
 
 import 'package:nexwar_patrol/l10n.dart';
 import 'package:nexwar_patrol/net/site_client.dart';
-import 'package:nexwar_patrol/ui/nw/nw_cards.dart';
 import 'package:nexwar_patrol/ui/nw/nw_shell.dart';
 import 'package:nexwar_patrol/ui/nw/nw_theme.dart';
 import 'package:nexwar_patrol/ui/nw/nw_widgets.dart';
@@ -420,25 +419,23 @@ void main() {
       await t.pumpAndSettle();
     }
 
-    testWidgets('版本格子：站点、每台机器人、每台登录着的客户端各一格', (t) async {
+    String line(WidgetTester t, String k) => t
+        .widgetList<Text>(find.descendant(of: find.byKey(SiteHealthPage.versionKey(k)), matching: find.byType(Text)))
+        .map((x) => x.data)
+        .join(' | ');
+
+    testWidgets('App V2 稿 S-health 版本对照：站点、每台机器人、每台登录着的客户端各一行，版本在右边', (t) async {
       final api = FakeApi('admin');
       await health(t, api);
-      final cards = t.widgetList<NwVersionCard>(find.byType(NwVersionCard)).toList();
-      expect(cards.map((c) => c.entity), ['站点', 'A', 'gina']);
-      expect(cards.map((c) => c.version), ['1.4.0', '代理 1.4.0 · 级别 2 · 在线', '手机 App 1.0.0 · android']);
-      // 配不配的小标压在格子右上角，不跟版本那一句抢地方
-      final pills = t.widgetList<NwStatusPill>(find.byType(NwStatusPill)).toList();
-      expect(pills.map((p) => (p.label, p.tone)), [('正常', NwTone.success)]);
-      final card = t.getRect(find.widgetWithText(NwVersionCard, 'A'));
-      final pill = t.getRect(find.byType(NwStatusPill));
-      expect(card.contains(pill.topLeft) && card.contains(pill.bottomRight), isTrue);
-      expect(pill.bottom, lessThanOrEqualTo(t.getRect(find.text('代理 1.4.0 · 级别 2 · 在线')).top));
-      expect(t.getSize(find.text('代理 1.4.0 · 级别 2 · 在线')).width, greaterThan(card.width * 0.8),
-          reason: '版本那一句有整行的宽');
+      expect(line(t, 'site'), '站点 | 1.4.0');
+      expect(line(t, 'robot-A'), 'A | 代理 1.4.0 · 级别 2 · 在线');
+      expect(line(t, 'client-gina'), 'gina 的手机 App | 1.0.0 · android');
+      expect(find.descendant(of: find.byKey(SiteHealthPage.versionKey('robot-A')), matching: find.byIcon(Icons.square)),
+          findsOneWidget, reason: '配得上：绿方块');
       await t.pumpWidget(Container());
     });
 
-    testWidgets('版本格子：机器人太老、App 太老是橙色的小标；不清楚的不上色', (t) async {
+    testWidgets('版本对照：机器人太老、App 太老是橙色三角 + 一句话；不清楚的不标橙', (t) async {
       final api = FakeApi('admin')
         ..versionsBody = <String, dynamic>{
           'site': <String, dynamic>{'version': '2', 'min_app_level': 2},
@@ -452,29 +449,28 @@ void main() {
           ],
         };
       await health(t, api);
-      final cards = t.widgetList<NwVersionCard>(find.byType(NwVersionCard)).toList();
-      expect(cards.map((c) => c.entity), ['站点', 'A', 'B', 'gina', 'alice']);
-      final pills = t.widgetList<NwStatusPill>(find.byType(NwStatusPill)).toList();
-      expect(pills.map((p) => (p.label, p.tone)), [
-        ('机器人版本过旧', NwTone.warning),
-        ('未知', NwTone.neutral),
-        ('版本过旧', NwTone.warning),
-      ]);
-      // 小标各在各的格子里
-      for (final (entity, label) in [('A', '机器人版本过旧'), ('B', '未知'), ('GINA', '版本过旧')]) {
-        final card = t.getRect(find.widgetWithText(NwVersionCard, entity));
-        expect(card.contains(t.getCenter(find.text(label))), isTrue, reason: '$entity $label');
-      }
+      Finder warn(String k) =>
+          find.descendant(of: find.byKey(SiteHealthPage.versionKey(k)), matching: find.byIcon(Icons.warning_rounded));
+      expect(warn('robot-A'), findsOneWidget);
+      expect(line(t, 'robot-A'), contains('机器人版本过旧'));
+      expect(warn('robot-B'), findsNothing);
+      expect(line(t, 'robot-B'), contains('未知'));
+      expect(warn('client-gina'), findsOneWidget);
+      expect(line(t, 'client-gina'), contains('比站点老'));
+      expect(warn('client-alice'), findsNothing);
+      expect(line(t, 'client-alice'), startsWith('alice 的网页值班台'));
       await t.pumpWidget(Container());
     });
 
-    testWidgets('三个小节；没有「重启站点」（站点没有这个功能）；诊断包的说明和按钮在维护那一节', (t) async {
+    testWidgets('三个小节（站点、版本对照、诊断包）；没有「重启站点」（站点没有这个功能）；诊断包两个按钮一排等宽', (t) async {
       for (final lang in AppLang.values) {
         appLang.value = lang;
         addTearDown(() => appLang.value = AppLang.zh);
         await health(t, FakeApi('admin'));
         final labels = t.widgetList<NwSectionLabel>(find.byType(NwSectionLabel)).map((l) => l.text).toList();
-        expect(labels, lang == AppLang.zh ? ['站点状态', '固件与软件', '维护'] : ['Site status', 'Firmware & software', 'Maintenance']);
+        expect(labels, lang == AppLang.zh ? ['站点', '版本对照', '诊断包'] : ['Site', 'Version compatibility', 'Support bundle']);
+        final save = t.getRect(find.byKey(SiteHealthPage.bundleKey)), share = t.getRect(find.byKey(SiteHealthPage.shareKey));
+        expect((save.top, save.width), (share.top, share.width), reason: '一排等宽');
         expect(find.textContaining('重启'), findsNothing);
         expect(find.textContaining(RegExp('reboot', caseSensitive: false)), findsNothing);
         expect(find.byKey(SiteHealthPage.bundleKey), findsOneWidget);

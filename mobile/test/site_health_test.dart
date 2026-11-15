@@ -70,8 +70,9 @@ void main() {
     expect(find.text('证书'), findsOneWidget);
     expect(find.text('站点盘还剩 62%'), findsOneWidget);
     expect(find.text('代理 1.4.0 · 级别 2 · 在线'), findsOneWidget);
-    expect(find.text('手机 App 1.0.0 · android'), findsOneWidget);
-    expect(find.text('版本过旧'), findsNothing);
+    expect(find.text('gina 的手机 App'), findsOneWidget);
+    expect(find.text('1.0.0 · android'), findsOneWidget);
+    expect(find.textContaining('比站点老'), findsNothing);
   });
 
   testWidgets('要紧的一项没过：整体说有要紧的问题；没过的排在前面（要紧的最前），写没过', (t) async {
@@ -127,12 +128,11 @@ void main() {
         ],
       };
     await _open(t, api);
-    expect(find.text('机器人版本过旧'), findsOneWidget);
-    expect(find.text('未知'), findsOneWidget);
-    expect(find.text('代理 0.9 · 级别 1 · 离线'), findsOneWidget);
-    expect(find.text('版本过旧'), findsOneWidget, reason: '只有 gina 那一个：没报级别的、网页的都不算');
-    expect(find.text('网页值班台'), findsOneWidget);
-    expect(find.text('手机 App ?'), findsOneWidget);
+    expect(find.text('代理 0.9 · 级别 1 · 离线 · 机器人版本过旧'), findsOneWidget);
+    expect(find.textContaining('未知'), findsOneWidget);
+    expect(find.textContaining('比站点老'), findsOneWidget, reason: '只有 gina 那一个：没报级别的、网页的都不算');
+    expect(find.textContaining('的网页值班台'), findsOneWidget);
+    expect(find.textContaining('的手机 App'), findsWidgets);
   });
 
   testWidgets('体检读不到：说读不到，不显示各项；版本一览照样看。刷新后读到了就显示', (t) async {
@@ -140,7 +140,7 @@ void main() {
     await _open(t, api);
     expect(find.textContaining('无法读取站点体检结果'), findsOneWidget);
     expect(find.byKey(SiteHealthPage.overallKey), findsNothing);
-    expect(find.text('机器人上的软件'), findsOneWidget);
+    expect(find.text('版本对照'), findsOneWidget);
     api.healthError = null;
     await t.tap(find.byKey(SiteHealthPage.refreshKey));
     await t.pumpAndSettle();
@@ -159,7 +159,7 @@ void main() {
     await t.pumpAndSettle();
     expect(find.byKey(SiteHealthPage.overallKey), findsNothing);
     expect(find.byKey(SiteHealthPage.checkKey('db')), findsNothing);
-    expect(find.text('机器人上的软件'), findsNothing);
+    expect(find.text('版本对照'), findsNothing);
     expect(find.textContaining('无法读取站点体检结果'), findsOneWidget);
   });
 
@@ -263,7 +263,7 @@ void main() {
     expect(find.byKey(SiteHealthPage.overallKey), findsNothing);
     expect(find.text('全部正常'), findsNothing);
     expect(find.byKey(SiteHealthPage.checkKey('db')), findsNothing);
-    expect(find.text('机器人上的软件'), findsNothing);
+    expect(find.text('版本对照'), findsNothing);
     expect(find.byKey(SiteHealthPage.loadingKey), findsOneWidget);
     // 体检坏了、版本一览还卡着：错马上显示
     api.healthError = const SocketException('down');
@@ -273,11 +273,11 @@ void main() {
     expect(find.textContaining('无法读取站点体检结果'), findsOneWidget);
     expect(find.byKey(SiteHealthPage.loadingKey), findsNothing);
     expect(find.byKey(SiteHealthPage.overallKey), findsNothing);
-    expect(find.text('机器人上的软件'), findsNothing, reason: '版本一览还没回来');
+    expect(find.text('版本对照'), findsNothing, reason: '版本一览还没回来');
     api.versionsGate!.complete();
     await t.pump();
     await t.pump();
-    expect(find.text('机器人上的软件'), findsOneWidget);
+    expect(find.text('版本对照'), findsOneWidget);
     expect(find.textContaining('无法读取站点体检结果'), findsOneWidget);
   });
 
@@ -289,10 +289,10 @@ void main() {
     await t.pump();
     expect(find.byKey(SiteHealthPage.overallKey), findsOneWidget);
     expect(find.byKey(SiteHealthPage.loadingKey), findsNothing);
-    expect(find.text('机器人上的软件'), findsNothing);
+    expect(find.text('版本对照'), findsNothing);
     api.versionsGate!.complete();
     await t.pumpAndSettle();
-    expect(find.text('机器人上的软件'), findsOneWidget);
+    expect(find.text('版本对照'), findsOneWidget);
   });
 
   testWidgets('正在读的时候刷新按钮按不了（不会同时问两次）', (t) async {
