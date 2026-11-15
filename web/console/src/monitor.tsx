@@ -20,7 +20,7 @@ import { autoResolved, canDispatch, forGuard, robotCams, type Alert, type Mode, 
 import { pageAllowed } from "./shell";
 import { byText } from "./sitetext";
 import { VideoSlot, type Scene } from "./slot";
-import { Sign, stateSign, type VideoLayout } from "./signs";
+import { fitLayout, Sign, stateSign, videoLayoutsFor, type VideoLayout } from "./signs";
 import { awayText, IncidentView, responder, type FixedCam } from "./incident";
 import { type ChargeSpan, isSecurity, recentActivity, ShiftTimeline } from "./shifttl";
 import { TodayPatrols, type TodayItem } from "./todaypatrols";
@@ -67,7 +67,8 @@ export function MonitorPage(props: {
   const since = shiftStart(props.now, duty.shift_hours);
   const until = since + 12 * 3_600_000;
   const [preset, setPreset] = useState<MapPreset>(() => load(PRESET_KEY, ["all", "route", "zones", "cameras"] as const, "all"));
-  const [layout, setLayout] = useState<VideoLayout>(() => load(LAYOUT_KEY, ["single", "dual", "quad", "wall"] as const, "dual"));
+  const [layoutRaw, setLayout] = useState<VideoLayout>(() => load(LAYOUT_KEY, ["single", "dual", "multi", "wall"] as const, "dual"));
+  const layout = fitLayout(layoutRaw, props.units.length);
   const [tool, setToolRaw] = useState<MapTool>(null);
   const [lookRobot, setLookRobot] = useState<string | null>(null);
   // 第 8 期:充电时段(站点 charge_log),画在时间轴上;每分钟刷一次
@@ -236,13 +237,18 @@ export function MonitorPage(props: {
   };
   const put = (robot: string) => setPins((p) => (p[0] == null || p[1] != null && p[0] !== robot ? [robot, p[1]] : [p[0], robot]));
   const anyThermal = props.units.some((u) => robotCams(u.robot).includes("thermal"));
-  const quad = [
-    ...ranked.filter((u) => u.state !== "offline").map((u) => ({ key: `r:${u.robot.robot_id}`, label: camLabel(u.robot.robot_id, "front"),
-      el: <CameraWell robot={u.robot.robot_id} cam={thermal && robotCams(u.robot).includes("thermal") ? "thermal" : "front"} now={props.now} variant="main" /> })),
-    ...cams.map((c) => ({ key: `c:${c.name}`, label: c.name,
-      el: <CameraWell robot={c.name} cam="front" now={props.now} variant="main" feed={{ label: c.name, src: `/api/cameras/${enc(c.name)}/live`, health: `/api/cameras/${enc(c.name)}/health` }} /> })),
-  ].slice(0, 4);
-  const layouts: { v: VideoLayout; key: Key }[] = [{ v: "single", key: "monSingle" }, { v: "dual", key: "monDual" }, { v: "quad", key: "monQuad" }, { v: "wall", key: "monWall" }];
+  const LAYOUT_KEYS: Record<VideoLayout, Key> = { single: "monSingle", dual: "monDual", multi: "monMulti", wall: "monWall" };
+  const layouts: { v: VideoLayout; key: Key }[] = videoLayoutsFor(props.units.length).map((v) => ({ v, key: LAYOUT_KEYS[v] }));
+  // 单:只有一台 —— 前、后两路分开放(有热像、点了「全部热像」时前面那格换热像)
+  const one = ranked[0];
+  const oneAlarm = !!slots[0]?.alert;
+  const singleTiles = one ? (["front", "back"] as const).map((cam) => {
+    const id = one.robot.robot_id;
+    const c = cam === "front" && thermal && robotCams(one.robot).includes("thermal") ? "thermal" : cam;
+    return { key: `${id}:${c}`, label: camLabel(id, c),
+      el: one.state === "offline" ? <div class="slot-off">{t("st_offline")}</div>
+        : <CameraWell robot={id} cam={c} now={props.now} variant="main" forceLive={oneAlarm} onOpen={() => props.onZoom(id)} /> };
+  }) : [];
   const presets: { v: MapPreset; key: Key }[] = [{ v: "all", key: "monPAll" }, { v: "route", key: "monPRoutes" }, { v: "zones", key: "monPZones" }, { v: "cameras", key: "monPCams" }];
   const byIncident = focus && focus.resolved_ms == null ? [...ranked].sort((x, y) => near(x) - near(y)) : ranked;
   function near(u: typeof ranked[number]): number {
@@ -361,10 +367,19 @@ export function MonitorPage(props: {
             {anyThermal && layout !== "wall" && <button type="button" class="btn" aria-pressed={thermal} onClick={() => setThermal(!thermal)}>{t("monAllThermal")}</button>}
           </div>
           {layout === "wall" ? <LiveWall units={props.units} alerts={props.alerts} now={props.now} onZoom={props.onZoom} />
-            : layout === "quad" ? (
-              <div class="mon-tiles quad">
-                {quad.length === 0 && <p class="muted">{t("dutyNoRobots")}</p>}
-                {quad.map((q) => <figure key={q.key} class="mon-tile"><figcaption>{q.label}</figcaption>{q.el}</figure>)}
+            : layout === "single" ? (
+              <div class="mon-tiles single">
+                {singleTiles.length === 0 && <p class="muted">{t("dutyNoRobots")}</p>}
+                {singleTiles.map((q) => <figure key={q.key} class="mon-tile"><figcaption>{q.label}</figcaption>{q.el}</figure>)}
+              </div>
+            ) : layout === "multi" ? (
+              // 多:每台一格(大画面 + 小画面,跟双一样),两列,超出的滚
+              <div class="mon-tiles multi">
+                {ranked.map((u) => {
+                  const al = alarms.find((a) => a.robot === u.robot.robot_id);
+                  return <VideoSlot key={`m:${u.robot.robot_id}`} u={u} now={props.now} pinned={false} thermal={thermal}
+                    onZoom={() => props.onZoom(u.robot.robot_id)} forceLive={!!al} alarm={!!al} />;
+                })}
               </div>
             ) : (
               <div class={`mon-tiles ${layout}`}>
@@ -398,7 +413,7 @@ export function MonitorPage(props: {
                   {u.battery != null && <div class={u.battery < 30 ? "mon-bar low" : "mon-bar"}><i style={{ width: `${Math.max(0, Math.min(100, u.battery))}%` }} /></div>}
                   {sub && <p class="mon-robot-sub" title={sub}>{sub}</p>}
                   <div class="mon-robot-acts">
-                    <button type="button" class="btn sm" onClick={() => { put(id); setSelected(id); if (layout === "wall" || layout === "quad") { setLayout("dual"); keep(LAYOUT_KEY, "dual"); } }}>{t("monViewVideo")}</button>
+                    <button type="button" class="btn sm" onClick={() => { put(id); setSelected(id); if (layout === "wall") { setLayout("dual"); keep(LAYOUT_KEY, "dual"); } }}>{t("monViewVideo")}</button>
                     <button type="button" class="btn sm" data-robot-more={id} aria-pressed={ctl === id}
                       onClick={() => { setSelected(id); setCtl(ctl === id ? null : id); }}>{t("dutyDetails")}</button>
                   </div>

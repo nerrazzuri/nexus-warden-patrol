@@ -14,7 +14,7 @@ import { LiveWall } from "./livewall";
 import type { CanvasArea } from "./mapcanvas";
 import { GoLookCard, MapPage, verdictText } from "./mappage";
 import { autoResolved, canDispatch, robotCams, type Alert, type Mode } from "./model";
-import { Sign, type VideoLayout } from "./signs";
+import { fitLayout, Sign, videoLayoutsFor, type VideoLayout } from "./signs";
 import { NAV_FAIL_CODES } from "./navcodes.g";
 import { recordingLink } from "./recordings";
 import { pageAllowed } from "./shell";
@@ -165,8 +165,16 @@ export function IncidentView(props: {
         el: <CameraWell robot={u.robot.robot_id} cam="front" now={props.now} variant="main" onOpen={() => props.onZoom(u.robot.robot_id)} /> });
     }
   }
-  const n = props.layout === "single" ? 1 : props.layout === "dual" ? 2 : 4;
-  const layouts: { v: VideoLayout; key: Key }[] = [{ v: "single", key: "monSingle" }, { v: "dual", key: "monDual" }, { v: "quad", key: "monQuad" }, { v: "wall", key: "monWall" }];
+  // 布局按机器人台数(用户 11-15):一台 = 单(它的前、后两路);两台 = 双;三台以上 = 多(全摆出来、能滚)
+  const layout = fitLayout(props.layout, props.units.length);
+  if (layout === "single" && resp) {
+    const at = tiles.findIndex((x) => x.key === `r:${rid}`);
+    tiles.splice(at + 1, 0, { key: `b:${rid}`, label: camLabel(rid, "back"),
+      el: <CameraWell robot={rid} cam="back" now={props.now} variant="main" forceLive /> });
+  }
+  const n = layout === "multi" ? tiles.length : 2;
+  const LAYOUT_KEYS: Record<VideoLayout, Key> = { single: "monSingle", dual: "monDual", multi: "monMulti", wall: "monWall" };
+  const layouts: { v: VideoLayout; key: Key }[] = videoLayoutsFor(props.units.length).map((v) => ({ v, key: LAYOUT_KEYS[v] }));
 
   // ---- 三组操作 ----
   const nameR = rid ? nameOf(rid) : "";
@@ -242,10 +250,10 @@ export function IncidentView(props: {
           </li>
         ))}
       </ol>
-      {props.layout === "wall" ? (
+      {layout === "wall" ? (
         <div class="inc-wall">
           <div class="mon-video-h">
-            <LayoutSeg layouts={layouts} v={props.layout} on={props.onLayout} />
+            <LayoutSeg layouts={layouts} v={layout} on={props.onLayout} />
             <span class="push" />
             {!site && <a class="btn" href={recordingLink(a)}>{t("incReplay")}</a>}
             <button type="button" class="btn" onClick={props.onSite}>{t("incSiteMap")}</button>
@@ -256,11 +264,11 @@ export function IncidentView(props: {
         <div class="inc-body">
           <section class="inc-video" aria-label={t("monVideo")}>
             <div class="mon-video-h">
-              <LayoutSeg layouts={layouts} v={props.layout} on={props.onLayout} />
+              <LayoutSeg layouts={layouts} v={layout} on={props.onLayout} />
               <span class="push" />
               {!site && <a class="btn" href={recordingLink(a)}>{t("incReplay")}</a>}
             </div>
-            <div class={`mon-tiles ${props.layout}`}>
+            <div class={`mon-tiles ${layout}`}>
               {tiles.length === 0 && <p class="muted">{t("incNoVideo")}</p>}
               {tiles.slice(0, n).map((x) => <figure key={x.key} class="mon-tile"><figcaption>{x.label}</figcaption>{x.el}</figure>)}
             </div>
