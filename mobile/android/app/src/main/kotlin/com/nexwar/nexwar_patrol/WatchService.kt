@@ -60,6 +60,9 @@ class WatchService : Service() {
         const val EXTRA_RING_SITE = "ring_site"
         const val EXTRA_RING_URL = "ring_url"
         const val EXTRA_RING_FP = "ring_fp"
+        private const val W_SITE = "_watch_site"
+        private const val W_URL = "_watch_url"
+        private const val W_FP = "_watch_fp"
         const val PREFS = "nexwar_watch"
         private const val TAG = "D1MaxWatch"
         private const val CERT_MISMATCH = "证书指纹对不上"
@@ -83,6 +86,11 @@ class WatchService : Service() {
     @Volatile
     private var stopping = false
     private var worker: Thread? = null
+
+    /** 外审 App-V2-4 N2:连哪个站点的代次。换站点(地址、指纹、令牌变了)就加一:旧线程读到的帧不算、自己退出。 */
+    @Volatile private var gen = 0
+    private var workerGen = -1
+    @Volatile private var conn: HttpURLConnection? = null
     private var wake: PowerManager.WakeLock? = null
     private var site = ""
     private var url = ""
@@ -139,6 +147,7 @@ class WatchService : Service() {
                 .apply()
             // null:系统杀掉之后按 START_STICKY 重启，照存着的接着值守
         }
+        val was = "$url|$fingerprint|$token"
         site = prefs.getString("site", "") ?: ""
         url = (prefs.getString("url", "") ?: "").trimEnd('/')
         fingerprint = prefs.getString("fingerprint", "") ?: ""
@@ -151,7 +160,16 @@ class WatchService : Service() {
             return START_NOT_STICKY
         }
         foreground(t("Connecting to the site…", "连站点中…"))
-        if (worker?.isAlive != true) {
+        if (worker?.isAlive == true && was != "$url|$fingerprint|$token") {
+            // 换了站点:旧连接断掉、旧站点的铃收掉,按新的重连(不然旧线程还读旧站点、报警却贴着新站点的身份)
+            gen++
+            dropConn()
+            worker?.interrupt()
+            val nm = getSystemService(NotificationManager::class.java)
+            for (k in bell.clear()) nm.cancel(k.hashCode())
+            synchronized(last) { last.clear() }
+        }
+        if (worker?.isAlive != true || workerGen != gen) {
             stopping = false
             running = true
             val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
@@ -159,7 +177,9 @@ class WatchService : Service() {
                 it.setReferenceCounted(false)
                 it.acquire()
             }
-            worker = Thread({ loop() }, "nexwar_watch").also { it.start() }
+            val g = gen
+            workerGen = g
+            worker = Thread({ loop(g) }, "nexwar_watch").also { it.start() }
         }
         return START_STICKY
     }
@@ -172,9 +192,18 @@ class WatchService : Service() {
         super.onDestroy()
     }
 
+    /** 断开正在读的事件流(断开要走网络:不在主线程做)。 */
+    private fun dropConn() {
+        val c = conn ?: return
+        conn = null
+        Thread { try { c.disconnect() } catch (e: Exception) {} }.start()
+    }
+
     private fun stopWatch(revoke: Boolean) {
         stopping = true
         running = false
+        gen++
+        dropConn()
         val prefs = getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         val oldUrl = (prefs.getString("url", "") ?: "").trimEnd('/')
         val oldToken = prefs.getString("token", "") ?: ""
@@ -206,16 +235,24 @@ class WatchService : Service() {
 
     // ------------------------------------------------------------ 连接
 
-    private fun loop() {
+    private fun loop(myGen: Int) {
+        // 这一条线程连的站点(定死:换站点另起一条线程)
+        val wSite = site
+        val wUrl = url
+        val wFp = fingerprint
+        val wTok = token
+        fun alive() = !stopping && gen == myGen
         var lostSince = 0L
         var lostTold = false
-        while (!stopping) {
+        while (alive()) {
             try {
-                val c = open("$url/api/watch/events", token, fingerprint)
+                val c = open("$wUrl/api/watch/events", wTok, wFp)
+                conn = c
                 c.readTimeout = READ_TIMEOUT_MS
                 val code = c.responseCode
                 if (code == 401 || code == 403) {
                     c.disconnect()
+                    if (!alive()) return
                     tell(ID_STATE, CH_STATE, t("Background watch stopped", "后台值守停了"),
                         t("The watch sign-in is no longer valid (signed out, password changed, disabled or expired). Open the app and sign in again.",
                             "值守令牌失效了（注销、改口令、停用或到期）：打开 App 重新登录"))
@@ -231,11 +268,12 @@ class WatchService : Service() {
                 }
                 foreground(t("Connected to the site", "连着站点"))
                 BufferedReader(InputStreamReader(c.inputStream, Charsets.UTF_8)).use { r ->
-                    while (!stopping) {
+                    while (alive()) {
                         val line = r.readLine() ?: break
                         if (!line.startsWith("data: ")) continue
+                        if (!alive()) break
                         try {
-                            frame(JSONObject(line.substring(6)))
+                            frame(JSONObject(line.substring(6)), wSite, wUrl, wFp)
                         } catch (e: Exception) {
                             Log.w(TAG, "读不懂的一帧", e)
                         }
@@ -243,11 +281,11 @@ class WatchService : Service() {
                 }
                 c.disconnect()
             } catch (e: Exception) {
-                if (stopping) return
+                if (!alive()) return
                 Log.w(TAG, "事件流断了", e)
                 certBad = isCertMismatch(e)
             }
-            if (stopping) return
+            if (!alive()) return
             val now = System.currentTimeMillis()
             if (lostSince == 0L) lostSince = now
             val mins = (now - lostSince) / 60_000
@@ -263,11 +301,11 @@ class WatchService : Service() {
                 lostTold = true
                 if (certBad) {
                     tell(ID_STATE, CH_STATE, t("Watch interrupted", "值守断了"),
-                        t("The certificate of $site changed: this phone gets no alarms until it is fixed. Open the app, tap ⋮ on the site card → Update site code.",
-                            "$site 的站点证书变了：这期间的告警手机收不到。打开 App，在站点卡片上点 ⋮ →「更新站点码」"))
+                        t("The certificate of $wSite changed: this phone gets no alarms until it is fixed. Open the app, tap ⋮ on the site card → Update site code.",
+                            "$wSite 的站点证书变了：这期间的告警手机收不到。打开 App，在站点卡片上点 ⋮ →「更新站点码」"))
                 } else {
                     tell(ID_STATE, CH_STATE, t("Watch interrupted", "值守断了"),
-                        t("$site has been unreachable for two minutes: this phone gets no alarms meanwhile.", "$site 连不上已经两分钟：这期间的告警手机收不到"))
+                        t("$wSite has been unreachable for two minutes: this phone gets no alarms meanwhile.", "$wSite 连不上已经两分钟：这期间的告警手机收不到"))
                 }
             }
             try {
@@ -279,10 +317,10 @@ class WatchService : Service() {
     }
 
     /** 首帧（`snapshot`）是没解决的告警全量：连上、重连上都会来，断线期间漏的、升了档的靠它补。 */
-    private fun frame(f: JSONObject) {
+    private fun frame(f: JSONObject, wSite: String, wUrl: String, wFp: String) {
         when (f.optString("kind")) {
             "alert" -> f.optJSONObject("alert")?.let { a ->
-                remember(a)
+                remember(a, wSite, wUrl, wFp)
                 apply(bell.onAlert(facts(a)))
             }
             "snapshot" -> {
@@ -290,7 +328,7 @@ class WatchService : Service() {
                 val list = ArrayList<AlertFacts>()
                 for (i in 0 until rows.length()) {
                     val a = rows.getJSONObject(i)
-                    remember(a)
+                    remember(a, wSite, wUrl, wFp)
                     list.add(facts(a))
                 }
                 for (act in bell.onSnapshot(list)) apply(act)
@@ -306,7 +344,9 @@ class WatchService : Service() {
         sound = a.optString("channel") == "sound",
     )
 
-    private fun remember(a: JSONObject) {
+    /** 记下这条告警,连同它是从哪个站点(那条连接)来的:全屏报警带的站点身份用这个,不用此刻的配置。 */
+    private fun remember(a: JSONObject, wSite: String, wUrl: String, wFp: String) {
+        a.put(W_SITE, wSite).put(W_URL, wUrl).put(W_FP, wFp)
         val key = a.optString("key")
         if (key.isNotEmpty()) synchronized(last) { last[key] = a }
     }
@@ -453,9 +493,9 @@ class WatchService : Service() {
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
             .putExtra(EXTRA_RING_KEY, key)
             .putExtra(EXTRA_RING_ALERT, a.toString())
-            .putExtra(EXTRA_RING_SITE, site)
-            .putExtra(EXTRA_RING_URL, url)
-            .putExtra(EXTRA_RING_FP, fingerprint)
+            .putExtra(EXTRA_RING_SITE, a.optString(W_SITE, site))
+            .putExtra(EXTRA_RING_URL, a.optString(W_URL, url))
+            .putExtra(EXTRA_RING_FP, a.optString(W_FP, fingerprint))
         return PendingIntent.getActivity(this, key.hashCode(), i,
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
     }

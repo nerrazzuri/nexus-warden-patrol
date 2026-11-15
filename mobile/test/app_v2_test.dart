@@ -397,6 +397,10 @@ void main() {
       expect(find.byKey(SiteAlertScenePage.sirenKey), findsNothing);
       expect(find.byKey(SiteAlertScenePage.estopKey), findsOneWidget, reason: '经理能急停');
       expect(find.textContaining('现场警示由保安操作'), findsOneWidget);
+      // 外审 App-V2-4 R1：站点「解除驱离」按叫停权限：经理在这页就能结束
+      await t.ensureVisible(find.byKey(SiteAlertScenePage.endDeterKey));
+      expect(find.byKey(SiteAlertScenePage.endDeterKey), findsOneWidget);
+      expect(find.byKey(SiteAlertScenePage.allOffKey), findsNothing, reason: '一路路开关仍要能派');
       expect(_enabled(t, SiteAlertScenePage.ackKey), isTrue);
       await t.tap(find.byKey(SiteAlertScenePage.falseKey));
       await t.pumpAndSettle();

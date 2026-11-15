@@ -52,6 +52,12 @@ void main() {
             'ready': {'estop_clear': false}
           })),
           RobotPhase.estop);
+      expect(
+          robotPhase(_robot('A', status: {
+            'ready': {'estop_clear': false}
+          }), deterring: true),
+          RobotPhase.estop,
+          reason: '外审 App-V2-4 N1：机身急停盖过驱离（驱离那一场还在）');
       expect(robotPhase(_robot('A', over: {'held': {'by': 'olga'}})), RobotPhase.held);
       expect(robotPhase(_robot('A', status: {'task': _dock})), RobotPhase.charging);
       expect(robotPhase(_robot('A', status: {'task': _toCharge})), RobotPhase.charging);

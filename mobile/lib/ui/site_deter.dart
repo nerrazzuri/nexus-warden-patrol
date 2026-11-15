@@ -155,7 +155,8 @@ Future<String?> deterQuietFirst(SiteApi api, String robotId) async {
     return tr("Can't tell whether deterrence is running: $e", '不知道是否还在驱离：$e');
   }
   final mine = live.where((x) => '${x['robot_id']}' == robotId).firstOrNull;
-  if (mine == null || mine['level'] == 0) return null;
+  // 外审 App-V2-4 R2：自动的 L0（刚到拦截点）到点还会自己升：只有人工定的 L0 才算已经静了
+  if (mine == null || (mine['level'] == 0 && mine['auto'] == false)) return null;
   try {
     await api.deterLevel(robotId, 0);
     return null;

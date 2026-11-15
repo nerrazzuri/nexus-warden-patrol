@@ -153,12 +153,12 @@ class _RingPageState extends State<RingPage> {
     }
   }
 
-  /// 还没登录：关掉这一页（不算处理完，锁屏上还亮着）、去登录；登上了外壳接着弹这一条。
+  /// 还没登录：关掉这一页、去登录；登上了外壳接着弹这一条。
+  /// 外审 App-V2-4 N4：登录页不显示在锁屏上 —— 这一页一关就收锁屏显示（[_finish]），要登录先解锁手机。
   void _signIn() {
     if (_left || !mounted) return;
     _left = true;
-    _finished = true; // 不收锁屏显示：登录页、外壳的来报警页还要在锁屏上
-    _live.remove(this);
+    _finish();
     Navigator.of(context).pop();
     widget.onSignIn?.call();
   }
@@ -271,7 +271,9 @@ class _RingPageState extends State<RingPage> {
                         if (signedOut && widget.onSignIn != null)
                           _btn(RingPage.signInKey, tr('Sign in to handle', '登录后处理'), _signIn, primary: true),
                         if (signedOut && widget.onSignIn == null)
-                          Text(tr('This site is not saved on this phone. Handle it on the duty console.', '这台手机没存这个站点，请在值班台处理。'),
+                          Text(
+                              tr('Not signed in to ${widget.site} on this phone. Handle it on the duty console, or sign in to that site.',
+                                  '这台手机没登录 ${widget.site}。请在值班台处理，或登录那个站点。'),
                               style: NwText.bodyMedium.copyWith(color: c.textSecondary)),
                         const SizedBox(height: Nw.s8),
                         Row(children: [

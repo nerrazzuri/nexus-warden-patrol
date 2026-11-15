@@ -398,7 +398,8 @@ class _NowPageState extends State<NowPage> with EstopMissReveal {
 
   /// 驱离还在的：一台一条红框，写到第几级；能派的点进驱离页（降级、转人工、结束）。有这一条就不说「全场正常」。
   Widget _deterStrip(NwColors c, String id, Map<String, dynamic> d) {
-    final can = widget.api.session?.canDispatch ?? false;
+    // 外审 App-V2-4 R1：经理（能叫停）也进得去结束驱离；驱离页自己按权限摆按钮
+    final can = (widget.api.session?.canDispatch ?? false) || (widget.api.session?.canAbort ?? false);
     return Material(
         color: c.surface,
         shape: Border(left: BorderSide(color: c.error, width: 4), bottom: BorderSide(color: c.outline)),
@@ -419,7 +420,7 @@ class _NowPageState extends State<NowPage> with EstopMissReveal {
                         style: NwText.titleSmall.copyWith(color: c.text, fontWeight: FontWeight.w700)),
                     Text(
                         can
-                            ? tr('Lights and sound may still be on. Tap to change level or end.', '声光可能还开着。点进去降级或结束。')
+                            ? tr('Lights and sound may still be on. Tap to see or end it.', '声光可能还开着。点进去查看或结束。')
                             : tr('Lights and sound may still be on. Guards can end it.', '声光可能还开着。由保安结束。'),
                         style: NwText.bodySmall.copyWith(color: c.textSecondary)),
                   ])),

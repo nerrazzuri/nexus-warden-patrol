@@ -51,6 +51,17 @@ void main() {
         contains('喇叭正在播放'));
   });
 
+  testWidgets('外审 App-V2-4 R2：自动的 L0（到点还会自己升）也先定成人工 L0；已经是人工 L0 就不再发', (t) async {
+    final api = FakeApi('guard')
+      ..deterRows = <Map<String, dynamic>>[<String, dynamic>{'robot_id': 'A', 'level': 0, 'auto': true}];
+    expect(await deterQuietFirst(api, 'A'), isNull);
+    expect(api.calls, contains('deter-level A 0'));
+    final api2 = FakeApi('guard')
+      ..deterRows = <Map<String, dynamic>>[<String, dynamic>{'robot_id': 'A', 'level': 0, 'auto': false}];
+    expect(await deterQuietFirst(api2, 'A'), isNull);
+    expect(api2.calls, isNot(contains('deter-level A 0')));
+  });
+
   testWidgets('外审 App-V2-3 I7：还在驱离时「全部关」先退到 L0 观察（不然站点下一拍又打开），再一路路关', (t) async {
     final api = FakeApi('guard')
       ..deterRows = <Map<String, dynamic>>[<String, dynamic>{'robot_id': 'A', 'level': 3, 'auto': true}];
