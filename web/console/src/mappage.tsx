@@ -594,6 +594,16 @@ export function GoLookCard(props: { map: { map_id: string; version: string }; at
   }).map((u) => u.robot.robot_id);
   const choice = pick ?? (props.prefer && (props.prefer === nearest?.robot_id || others.includes(props.prefer)) ? props.prefer : nearest?.robot_id ?? null);
   const busyWith = choice ? props.units.find((u) => u.robot.robot_id === choice)?.task || "" : "";
+  // 第 8 期(稿 V4-alarm):派之前按电量算来回够不够
+  const [plan, setPlan] = useState<{ battery_pct: number | null; cost_pct: number | null; enough: boolean | null } | null>(null);
+  useEffect(() => {
+    setPlan(null);
+    if (!choice) return;
+    let live = true;
+    api<{ battery_pct: number | null; cost_pct: number | null; enough: boolean | null }>("GET", `/api/robots/${enc(choice)}/goto-plan?x=${x}&y=${y}`)
+      .then((p) => live && setPlan(p)).catch(() => {});
+    return () => { live = false; };
+  }, [choice, x, y]);
   async function send(id: string) {
     setBusy(true);
     const p = props.units.find((u) => u.robot.robot_id === id)?.robot.loc?.pose;
@@ -627,6 +637,9 @@ export function GoLookCard(props: { map: { map_id: string; version: string }; at
             {others.map((id) => <option key={id} value={id}>{nameOf(id)}</option>)}
           </select>
           {choice && busyWith && <p class="muted small" data-look-pause="1">{t("lookPause", { id: nameOf(choice), what: busyWith })}</p>}
+          {choice && plan && (plan.enough == null
+            ? <p class="muted small" data-look-batt="unknown">{t("lookBattUnknown", { id: nameOf(choice) })}</p>
+            : <p class={plan.enough ? "small" : "small warn-text"} data-look-batt={plan.enough ? "ok" : "low"}>{t("lookBatt", { id: nameOf(choice), p: plan.battery_pct ?? "–", c: plan.cost_pct ?? "–", ok: t(plan.enough ? "lookBattOk" : "lookBattLow") })}</p>)}
         </>
       )}
       {why && got !== "error" && <p class="error">{why}</p>}

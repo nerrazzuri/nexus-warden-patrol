@@ -324,6 +324,8 @@ class ChargeDesk:
             else:
                 c.execute("UPDATE charge_cycles SET state=?, until_ms=? WHERE robot_id=?",
                           (state, until_ms, rid))
+            c.execute("INSERT INTO charge_log(robot_id, state, at_ms) VALUES (?,?,?)",
+                      (rid, state or "idle", self._now()))
 
     def _manual(self, rid: str) -> bool:
         """W33 外审:续派(接着充、走到了对桩)之前再看一次「只许手动派」;是就先不派,这一轮的进度留着,
@@ -347,6 +349,8 @@ class ChargeDesk:
             c.execute("INSERT OR REPLACE INTO charge_cycles(robot_id, state, task_id, sent_ms, "
                       "started_ms, until_ms) VALUES (?,?,?,?,?,NULL)",
                       (rid, "goto", tid, now, cyc["started_ms"] if cyc else now))
+            c.execute("INSERT INTO charge_log(robot_id, state, at_ms) VALUES (?,?,?)",
+                      (rid, "goto", now))
             if overlap:
                 queue(c, kind="charge_overlap", robot=rid,
                       title="两台机器人同时在充:此机器人的区域暂时无机器人守",

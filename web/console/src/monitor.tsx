@@ -22,7 +22,7 @@ import { byText } from "./sitetext";
 import { VideoSlot, type Scene } from "./slot";
 import { Sign, stateSign, type VideoLayout } from "./signs";
 import { awayText, IncidentView, responder, type FixedCam } from "./incident";
-import { isSecurity, recentActivity, ShiftTimeline } from "./shifttl";
+import { type ChargeSpan, isSecurity, recentActivity, ShiftTimeline } from "./shifttl";
 import { TodayPatrols, type TodayItem } from "./todaypatrols";
 import { RobotControl } from "./robotctl";
 import { MultiView } from "./multi";
@@ -70,6 +70,16 @@ export function MonitorPage(props: {
   const [layout, setLayout] = useState<VideoLayout>(() => load(LAYOUT_KEY, ["single", "dual", "quad", "wall"] as const, "dual"));
   const [tool, setToolRaw] = useState<MapTool>(null);
   const [lookRobot, setLookRobot] = useState<string | null>(null);
+  // 第 8 期:充电时段(站点 charge_log),画在时间轴上;每分钟刷一次
+  const [charging, setCharging] = useState<ChargeSpan[]>([]);
+  useEffect(() => {
+    let live = true;
+    const load = () => api<{ spans: ChargeSpan[] }>("GET", `/api/robots/charging?since=${since}&until=${until}`)
+      .then((d) => live && setCharging(d.spans ?? [])).catch(() => {});
+    void load();
+    const h = window.setInterval(load, 60_000);
+    return () => { live = false; window.clearInterval(h); };
+  }, [since, until]);
   const setTool = (x: MapTool) => { setToolRaw(x); if (x !== "look") setLookRobot(null); };
   const [thermal, setThermal] = useState(false);
   const [selected, setSelected] = useState<string | null>(null);
@@ -426,7 +436,7 @@ export function MonitorPage(props: {
         <button type="button" class="mon-railbtn" aria-pressed={rail === "activity"} onClick={() => setRail(rail === "activity" ? null : "activity")}>{t("monRailActivity")}</button>
       </nav>
 
-      <ShiftTimeline robots={ranked.map((u) => u.robot.robot_id)} patrols={patrols} alerts={recent} from={since} to={until} now={props.now}
+      <ShiftTimeline robots={ranked.map((u) => u.robot.robot_id)} patrols={patrols} alerts={recent} from={since} to={until} now={props.now} charging={charging}
         play={play ? playHead ?? play.at : null}
         onPick={(robot, at) => { setCtl(null); setPlay({ key: null, robot, at }); setPlayHead(at); }} />
 

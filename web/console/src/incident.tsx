@@ -110,6 +110,7 @@ export function IncidentView(props: {
       await api("POST", `/api/alerts/${enc(a.key)}/${action}`, body);
       if (action === "resolve") props.say(t("incClosedUndo", { t: hm(Date.now() + REOPEN_MS) }));
       if (action === "reopen") props.say(t("incReopened"));
+      if (action === "backup") props.say(t("incBackupSent"));
       await props.refresh();
     } catch (e) {
       if (e instanceof ApiError && e.status === 404) { props.say(t("incGone")); await props.refresh(); props.onSite(); }
@@ -211,6 +212,9 @@ export function IncidentView(props: {
         <h3 class="lbl">{t("incNotifyH")}</h3>
         <p class="inc-state">{t(a.level === "P1" ? "incPushedP1" : "incPushedP2")}</p>
         <p class="inc-note">{t("incPushHint")}</p>
+        {/* 第 8 期:请求支援 —— 站点给经理、管理员推一条,这里记下谁几点叫的 */}
+        {a.context?.backup_by ? <p class="inc-state" data-backup-done="1">{t("incBackupDone", { who: String(a.context.backup_by), t: hm(Number(a.context.backup_ms ?? a.last_ms)) })}</p>
+          : can && <button type="button" class="btn" data-backup="1" disabled={busy} onClick={() => void post("backup", {})}>{t("incBackup")}</button>}
       </section>,
     );
   }
