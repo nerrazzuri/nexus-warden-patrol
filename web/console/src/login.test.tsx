@@ -74,5 +74,5 @@ describe("第 3 轮 admin N6 / N8", () => {
     await waitFor(() => expect(c.querySelector("[data-site-down]")).not.toBeNull());
     expect(c.querySelector("form")).toBeNull();
     await waitFor(() => expect(c.querySelector("form")).not.toBeNull(), { timeout: 5000 });
-  });
+  }, 10_000);   // 站点 3 秒后重试 + 动态加载整个 App:默认的 5 秒总时限不够
 });
