@@ -51,6 +51,19 @@ void main() {
         contains('喇叭正在播放'));
   });
 
+  testWidgets('外审 App-V2-3 I7：还在驱离时「全部关」先退到 L0 观察（不然站点下一拍又打开），再一路路关', (t) async {
+    final api = FakeApi('guard')
+      ..deterRows = <Map<String, dynamic>>[<String, dynamic>{'robot_id': 'A', 'level': 3, 'auto': true}];
+    await _open(t, api);
+    await t.ensureVisible(find.byKey(SiteDeterPage.allOffKey));
+    await t.tap(find.byKey(SiteDeterPage.allOffKey));
+    await t.pumpAndSettle();
+    final level = api.calls.indexOf('deter-level A 0');
+    expect(level, greaterThanOrEqualTo(0));
+    expect(api.calls.indexWhere((c) => c.startsWith('deter A') && c.endsWith('false')), greaterThan(level), reason: '先退级再关');
+    expect(find.textContaining('全部关：完成'), findsOneWidget);
+  });
+
   testWidgets('外审 App-V2-2 N4：「全部关」有一路机器人拒了，说没关上', (t) async {
     final api = FakeApi('guard')..deterAck = <String, dynamic>{'result': 'rejected', 'reason': 'device: relay stuck'};
     await _open(t, api);

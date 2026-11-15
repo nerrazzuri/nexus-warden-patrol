@@ -106,9 +106,22 @@ class RingRequest {
   final String key;
   final Map<String, dynamic> alert;
 
-  /// 值守的站点名（跟外壳的标题比：别的站点的不在这个站点里弹）。
+  /// 值守的站点名（给人看）。
   final String site;
-  const RingRequest(this.key, this.alert, this.site);
+
+  /// 值守连的地址、站点证书指纹：认是哪个站点用这两样，不用名字（外审 App-V2-3 I6：两个站点可以同名）。
+  final String url;
+  final String fingerprint;
+  const RingRequest(this.key, this.alert, this.site, {this.url = '', this.fingerprint = ''});
+
+  /// 这一条是不是这个站点的：有指纹比指纹；没有比地址（[urls] 里任一个）；都没有（老版本原生）才比名字。
+  bool isFor({required String name, required List<String> urls, required String fingerprint}) {
+    String norm(String u) => u.trim().replaceAll(RegExp(r'/+$'), '').toLowerCase();
+    String fp(String f) => f.replaceAll(':', '').trim().toLowerCase();
+    if (this.fingerprint.isNotEmpty && fingerprint.isNotEmpty) return fp(this.fingerprint) == fp(fingerprint);
+    if (url.isNotEmpty && urls.any((u) => u.isNotEmpty)) return urls.any((u) => norm(u) == norm(url));
+    return site.isEmpty || name.isEmpty || site == name;
+  }
 
   static RingRequest? fromChannel(Object? raw) {
     if (raw is! Map) return null;
@@ -121,9 +134,13 @@ class RingRequest {
     } on FormatException {
       alert = <String, dynamic>{};
     }
-    return RingRequest(key, alert, '${raw['site'] ?? ''}');
+    return RingRequest(key, alert, '${raw['site'] ?? ''}',
+        url: '${raw['url'] ?? ''}', fingerprint: '${raw['fingerprint'] ?? ''}');
   }
 }
+
+/// 登录了的站点外壳有几个开着（没有 = 还在站点列表 / 登录页：来报警由站点列表接，外审 App-V2-3 I5）。
+int liveShells = 0;
 
 /// 等着弹的来报警（外壳在的时候接走、清掉）。
 final ValueNotifier<RingRequest?> pendingRing = ValueNotifier<RingRequest?>(null);

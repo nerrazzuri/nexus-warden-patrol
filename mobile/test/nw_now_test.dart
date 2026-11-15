@@ -9,6 +9,7 @@ import 'package:nexwar_patrol/ui/site_alert_scene.dart';
 import 'package:nexwar_patrol/ui/site_robot.dart';
 import 'package:nexwar_patrol/ui/site_video.dart';
 import 'package:flutter/material.dart';
+import 'package:nexwar_patrol/ui/site_deterrence.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'site_page_test.dart' show FakeApi;
@@ -63,6 +64,34 @@ void main() {
     expect(txt, contains('2'));
     expect(txt, contains('急停'));
     expect(txt, contains('离线'));
+    await t.pumpWidget(Container());
+  });
+
+  testWidgets('外审 App-V2-3 I4：报警结案了驱离还在 —— 不说「全场正常」，一条红框写驱离到第几级，保安点进驱离页', (t) async {
+    _size(t, const Size(390, 2000));
+    final healthy = [
+      for (final r in (siteFixture('site_robots')['robots'] as List).cast<Map<String, dynamic>>())
+        <String, dynamic>{
+          ...r,
+          'status': <String, dynamic>{
+            ...(r['status'] as Map).cast<String, dynamic>(),
+            'ready': <String, dynamic>{...((r['status'] as Map)['ready'] as Map? ?? {}).cast<String, dynamic>(), 'estop_clear': true},
+          },
+        },
+    ];
+    final api = FakeApi('guard')
+      ..alertRows = <Map<String, dynamic>>[]
+      ..robotsOverride = healthy
+      ..deterRows = <Map<String, dynamic>>[
+        <String, dynamic>{'robot_id': 'A', 'level': 2, 'auto': true, 'next_in_s': 30, 'started_ms': 1, 'level_ms': 1},
+      ];
+    await _show(t, api);
+    expect(find.byKey(NowPage.okKey), findsNothing);
+    expect(find.byKey(NowPage.deterKey('A')), findsOneWidget);
+    expect(find.textContaining('A 驱离中'), findsOneWidget);
+    await t.tap(find.byKey(NowPage.deterKey('A')));
+    await t.pumpAndSettle();
+    expect(find.byType(SiteDeterrencePage), findsOneWidget);
     await t.pumpWidget(Container());
   });
 
