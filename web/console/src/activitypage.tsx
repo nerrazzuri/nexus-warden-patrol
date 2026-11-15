@@ -3,6 +3,7 @@
 import { useEffect, useState } from "preact/hooks";
 import { api } from "./api";
 import { t, type Key } from "./i18n";
+import { SubTabs } from "./shell";
 import { dateInput, dayRange } from "./recordings";
 import { AuditLine, mergeAudit, type AuditRow } from "./userspage";
 
@@ -25,7 +26,7 @@ export function activityQuery(f: { from: string; to: string; actor: string; grou
   return q.toString();
 }
 
-export function ActivityPage({ now }: { now: number }) {
+export function ActivityPage({ now, role = "admin" }: { now: number; role?: string }) {
   const today = dateInput(now);
   const [from, setFrom] = useState(today);
   const [to, setTo] = useState(today);
@@ -47,32 +48,36 @@ export function ActivityPage({ now }: { now: number }) {
     return () => { live = false; };
   }, [qs, page]);
   return (
-    <section class="activity panel">
-      <div class="panel-head"><h1>{t("tabActivity")}</h1></div>
-      <p class="muted lead">{t("actLead")}</p>
-      <div class="filters row">
-        <label class="small">{t("actFrom")} <input type="date" value={from} max={today} onChange={(e) => setFrom(e.currentTarget.value)} /></label>
-        <label class="small">{t("actTo")} <input type="date" value={to} max={today} onChange={(e) => setTo(e.currentTarget.value)} /></label>
-        <label class="small">{t("actWho")} <input type="text" value={actor} placeholder={t("actWhoAny")} onChange={(e) => setActor(e.currentTarget.value)} /></label>
-        <label class="small">{t("actWhat")} <select value={group} onChange={(e) => setGroup(e.currentTarget.value)}>
+    // 第六期 S-log:页头一句话 + 报告 / 操作记录切换;一行筛选(起止、人、类别、导出);列表;底下翻页
+    <section class="activity sp rp al">
+      <header class="sp-head">
+        <h1>{t("rpTitle")}</h1>
+        <p class="sp-status">{got ? t("alStatus", { n: got.total, a: from.slice(5), b: to.slice(5) }) : t("actLead")}</p>
+        <SubTabs page="admin/activity" role={role} rail />
+      </header>
+      <div class="rp-bar filters">
+        <label class="rp-field"><span class="lbl">{t("actFrom")}</span><input type="date" value={from} max={today} onChange={(e) => setFrom(e.currentTarget.value)} /></label>
+        <label class="rp-field"><span class="lbl">{t("actTo")}</span><input type="date" value={to} max={today} onChange={(e) => setTo(e.currentTarget.value)} /></label>
+        <label class="rp-field"><span class="lbl">{t("alUser")}</span><input type="text" value={actor} placeholder={t("alAllUsers")} onChange={(e) => setActor(e.currentTarget.value)} /></label>
+        <label class="rp-field"><span class="lbl">{t("alOperate")}</span><select value={group} onChange={(e) => setGroup(e.currentTarget.value)}>
           {GROUPS.map((g) => <option key={g.v} value={g.v}>{t(g.key)}</option>)}
         </select></label>
-        {qs != null && <a class="btn sm push" href={`/api/audit?${qs}&format=csv`} download data-export="1">{t("actExport")}</a>}
+        <span class="rp-acts">{qs != null && <a class="btn" href={`/api/audit?${qs}&format=csv`} download data-export="1">{t("actExport")}</a>}</span>
       </div>
-      {qs == null && <p class="error small">{t("actBadRange")}</p>}
-      {failed && <p class="empty warn" data-load-failed="1">{t("loadRetry")}</p>}
-      {qs != null && !failed && got == null && <p class="muted">{t("loading")}</p>}
-      {got && got.total === 0 && <p class="empty">{t("actNone")}</p>}
+      {qs == null && <p class="error small sp-pad">{t("actBadRange")}</p>}
+      {failed && <p class="empty warn sp-pad" data-load-failed="1">{t("loadRetry")}</p>}
+      {qs != null && !failed && got == null && <p class="muted sp-pad">{t("loading")}</p>}
+      {got && got.total === 0 && <p class="empty sp-pad">{t("actNone")}</p>}
       {got && got.total > 0 && (
         <>
-          <p class="row small" data-act-pages="1">
+          <ul class="plain user-audit al-list">{mergeAudit(got.audit).map((r) => <AuditLine key={r.id} r={r} who />)}</ul>
+          <p class="al-pager small" data-act-pages="1">
             <span class="muted">{t("actPageOf", { a: page * PAGE + 1, b: Math.min((page + 1) * PAGE, got.total), n: got.total })}</span>
-            {got.total > PAGE && <>
-              <button type="button" class="btn sm" disabled={page === 0} onClick={() => setPage(page - 1)}>{t("alPagePrev")}</button>
-              <button type="button" class="btn sm" disabled={(page + 1) * PAGE >= got.total} onClick={() => setPage(page + 1)}>{t("alPageNext")}</button>
-            </>}
+            {got.total > PAGE && <span class="rb-row">
+              <button type="button" class="btn" disabled={page === 0} onClick={() => setPage(page - 1)}>{t("alPagePrev")}</button>
+              <button type="button" class="btn" disabled={(page + 1) * PAGE >= got.total} onClick={() => setPage(page + 1)}>{t("alPageNext")}</button>
+            </span>}
           </p>
-          <ul class="plain user-audit">{mergeAudit(got.audit).map((r) => <AuditLine key={r.id} r={r} who />)}</ul>
         </>
       )}
     </section>

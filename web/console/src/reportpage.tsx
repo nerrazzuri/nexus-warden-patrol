@@ -2,6 +2,7 @@
 // 四个大数字(巡了多少趟、出了几次事、误报几次、机器人出问题几次),按天柱状图,事件列表(点一下看录像)。
 // 导出 PDF = 浏览器打印(打印样式只留标题、时间段、四个数、柱子、事件表);导出表格 = 事件的 CSV。
 // 数是站点按站点时区数的,网页不凑;读到的那一份只在它就是现在选的那一段时才显示、才能导出(外审 I2 同一条规矩)。
+import { SubTabs } from "./shell";
 import { byText } from "./sitetext";
 import { useEffect, useState } from "preact/hooks";
 import { api } from "./api";
@@ -86,7 +87,7 @@ function ymd(ms: number): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
-export function ReportsPage({ now }: { now: number }) {
+export function ReportsPage({ now, role = "admin" }: { now: number; role?: string }) {
   const [kind, setKind] = useState<ReportKind>("week");
   const [from, setFrom] = useState(ymd(now - 6 * 86_400_000));
   const [to, setTo] = useState(ymd(now));
@@ -117,39 +118,44 @@ export function ReportsPage({ now }: { now: number }) {
   const title = (k: string, tt: string) => alertTitle(lang.value, k, tt);
   // 摄像头、站点自己报的事(robot 是 "site"):写哪个防区,不写 site(演示站点实测查出)
   const who = (e: SummaryEvent) => (e.robot === "site" ? (e.zone ? t("rsCamZone", { z: e.zone }) : "—") : nameOf(e.robot));
+  // 第六期 S-reports:页头一句话 + 报告 / 操作记录切换;一行工具条(时段、起止、导出);左按天的柱子、右事件表
+  const st = d ?? shown;
   return (
-    <section class="reports">
-      <div class="panel-head noprint">
-        <h1>{t("tabReports")}</h1>
-        <button type="button" class="btn push" disabled={!d} onClick={() => d && save(reportFileName(d.since_ms, d.until_ms),
-          reportCsv(d, (r) => title(r.kind, r.title), (v) => verdictText(v) || v, who))}>{t("rsCsv")}</button>
-        <button type="button" class="btn primary" disabled={!d} onClick={() => window.print()}>{t("rsPdf")}</button>
-      </div>
+    <section class="reports sp rp">
+      <header class="sp-head noprint">
+        <h1>{t("rpTitle")}</h1>
+        <p class="sp-status">{st ? t("rpStatus", { a: ymd(st.since_ms).slice(5), b: ymd(st.until_ms - 1).slice(5), n: st.totals.incidents, f: st.totals.false_alarms, p: st.totals.patrols }) : ""}</p>
+        <SubTabs page="admin/reports" role={role} rail />
+      </header>
       <h1 class="only-print">{t("tabReports")}</h1>
-      <div class="row wrap noprint">
-        <div class="seg" role="group" aria-label={t("rsPeriod")}>
-          {KINDS.map((k) => <button key={k.v} type="button" aria-pressed={kind === k.v} onClick={() => setKind(k.v)}>{t(k.key)}</button>)}
-        </div>
-        {kind === "custom" && (
-          <>
-            <label class="field">{t("from")}<input name="from" type="date" value={from} max={ymd(now)} aria-invalid={badFrom || undefined}
-              class={badFrom ? "invalid" : undefined} onInput={(e) => setFrom(e.currentTarget.value)} />
-              {badFrom && <span class="error small">{rangeMsg}</span>}</label>
-            <label class="field">{t("to")}<input name="to" type="date" value={to} max={ymd(now)} aria-invalid={badTo || undefined}
-              class={badTo ? "invalid" : undefined} onInput={(e) => setTo(e.currentTarget.value)} />
-              {badTo && <span class="error small">{rangeMsg}</span>}</label>
-          </>
-        )}
+      <div class="rp-bar noprint">
+        <div class="rp-field"><span class="lbl">{t("rsPeriod")}</span>
+          <div class="seg" role="group" aria-label={t("rsPeriod")}>
+            {KINDS.map((k) => <button key={k.v} type="button" aria-pressed={kind === k.v} onClick={() => setKind(k.v)}>{t(k.key)}</button>)}
+          </div></div>
+        <label class="rp-field"><span class="lbl">{t("from")}</span><input name="from" type="date" value={kind === "custom" ? from : ymd(p?.since ?? now)} max={ymd(now)} aria-invalid={badFrom || undefined}
+          class={badFrom ? "invalid" : undefined} onInput={(e) => { setKind("custom"); setFrom(e.currentTarget.value); }} />
+          {badFrom && <span class="error small">{rangeMsg}</span>}</label>
+        <label class="rp-field"><span class="lbl">{t("to")}</span><input name="to" type="date" value={kind === "custom" ? to : ymd((p?.until ?? now + 1) - 1)} max={ymd(now)} aria-invalid={badTo || undefined}
+          class={badTo ? "invalid" : undefined} onInput={(e) => { setKind("custom"); setTo(e.currentTarget.value); }} />
+          {badTo && <span class="error small">{rangeMsg}</span>}</label>
+        <span class="muted small rp-max">{t("rpMax")}</span>
+        <span class="rp-acts">
+          <button type="button" class="btn" disabled={!d} onClick={() => d && save(reportFileName(d.since_ms, d.until_ms),
+            reportCsv(d, (r) => title(r.kind, r.title), (v) => verdictText(v) || v, who))}>{t("rsCsv")}</button>
+          <button type="button" class="btn" disabled={!d} onClick={() => window.print()}>{t("rsPdf")}</button>
+        </span>
       </div>
-      {!p ? (kind === "custom" ? null : <p class="error">{t("rsTooLong")}</p>) : (
-        <p class="muted">{t("rsRange", { a: ymd(p.since), b: ymd(p.until - 1) })}</p>
+      {!p ? (kind === "custom" ? null : <p class="error sp-pad">{t("rsTooLong")}</p>) : (
+        <p class="muted only-print">{t("rsRange", { a: ymd(p.since), b: ymd(p.until - 1) })}</p>
       )}
       {p && failed && <p class="error">{t("repFailed")}</p>}
       {p && !d && !failed && <p class="muted">…</p>}
       {!p && shown && <p class="muted small" data-stale-range="1">{t("rsShowingLast", { a: ymd(shown.since_ms), b: ymd(shown.until_ms - 1) })}</p>}
       {shown && (p ? d : true) && ((d2: Summary) => (
-        <div class={d ? undefined : "rep-stale"}>
-          {d2.kpis && <KpiCards cur={d2.kpis} prev={d2.kpis_prev} />}
+        <div class={d ? "rp-body" : "rep-stale rp-body"}>
+          <div class="rp-left">
+          <h2 class="sp-h"><span>{t("rpDaily")}</span><small class="rep-legend"><span><i class="seg-pat" /> {t("rsPatrols")}</span> <span><i class="seg-inc" /> {t("rsIncidents")}</span> <span><i class="seg-help" /> {t("rsProblems")}</span></small></h2>
           <div class="rep-stats">
             <div class="stat"><span class="stat-n">{d2.totals.patrols}</span><span class="stat-l">{t("rsPatrols")}</span></div>
             <div class="stat"><span class="stat-n">{d2.totals.incidents}</span><span class="stat-l">{t("rsIncidents")}</span></div>
@@ -177,13 +183,13 @@ export function ReportsPage({ now }: { now: number }) {
             })}
           </div>
           </div>
-          <p class="rep-legend small muted">
-            <span><i class="seg-pat" /> {t("rsPatrols")}</span> <span><i class="seg-inc" /> {t("rsIncidents")}</span> <span><i class="seg-help" /> {t("rsProblems")}</span>
-          </p>
-          <h2>{t("rsEvents")}</h2>
-          {d2.events.length === 0 ? <p class="muted">{t(d2.totals.patrols > 0 ? "rsNoEventsButPatrols" : "rsNoEvents", { n: d2.totals.patrols })}</p> : (
-            <table class="grid rep-events">
-              <thead><tr><th>{t("colTime")}</th><th>{t("robotsShort")}</th><th>{t("rsWhat")}</th><th>{t("rsVerdict")}</th></tr></thead>
+          {d2.kpis && <KpiCards cur={d2.kpis} prev={d2.kpis_prev} />}
+          </div>
+          <div class="rp-right">
+          <h2 class="sp-h"><span>{t("rpEventsN", { n: d2.events.length })}</span><small>{t("rpEventsHint")}</small></h2>
+          {d2.events.length === 0 ? <p class="muted sp-pad">{t(d2.totals.patrols > 0 ? "rsNoEventsButPatrols" : "rsNoEvents", { n: d2.totals.patrols })}</p> : (
+            <table class="sp-table rep-events">
+              <thead><tr><th>{t("colTime")}</th><th>{t("robotsShort")}</th><th>{t("rsWhat")}</th><th>{t("rpColDisp")}</th></tr></thead>
               <tbody>
                 {d2.events.map((e) => (
                   <tr key={e.key} data-key={e.key} class={e.robot === "site" ? undefined : "clickable"} tabIndex={e.robot === "site" ? undefined : 0}
@@ -198,7 +204,8 @@ export function ReportsPage({ now }: { now: number }) {
               </tbody>
             </table>
           )}
-          {d2.truncated && <p class="muted small">{t("rsTruncated", { n: d2.events.length })}</p>}
+          {d2.truncated && <p class="muted small sp-pad">{t("rsTruncated", { n: d2.events.length })}</p>}
+          </div>
         </div>
       ))(shown)}
     </section>

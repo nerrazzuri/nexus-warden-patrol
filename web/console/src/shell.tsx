@@ -306,13 +306,19 @@ export function SubTabs({ page, role, rail }: { page: Page; role: string; rail?:
   if (!g) return null;
   // 记录与录像(G-records):三个标签在左栏最上面(页面自己放,rail),不在页头
   if (sectionOf(page) === "events" && !rail) return null;
+  // 第六期 S-reports:报告 / 操作记录的切换在页头(页面自己放,rail)
+  const reports = g.pages[0] === "admin/reports";
+  if (reports && !rail) return null;
   const items = g.pages.map((p, i) => ({ p, key: g.keys[i] })).filter((x) => pageAllowed(x.p, role));
   if (items.length < 2) return null;
   const on = page === "admin/mapedit" ? "admin/maps" : page;
+  // 第六期 S-system:维护五项在左栏,每项一句什么时候用
+  const maint = g.pages[0] === "admin/system";
+  const DESC: Partial<Record<Page, Key>> = { "admin/system": "mtSiteD", "admin/upgrade": "mtUpgradeD", "admin/maps": "mtMapsD", "admin/localization": "mtLocD", "admin/diag": "mtDiagD" };
   return (
-    <nav class={rail ? "subtabs ev-tabs" : "subtabs"} aria-label={t(navLabel(page)?.section ?? "mainNav")}>
+    <nav class={rail ? (reports ? "subtabs rp-seg seg" : "subtabs ev-tabs") : maint ? "subtabs mt-rail" : "subtabs"} aria-label={t(navLabel(page)?.section ?? "mainNav")}>
       {items.map((x) => (
-        <a key={x.p} href={`#/${x.p}`} aria-current={on === x.p ? "page" : undefined}>{t(x.key)}</a>
+        <a key={x.p} href={`#/${x.p}`} aria-current={on === x.p ? "page" : undefined}>{t(x.key)}{maint && DESC[x.p] && <small>{t(DESC[x.p]!)}</small>}</a>
       ))}
     </nav>
   );
