@@ -68,6 +68,38 @@ Color priorityColor(String level, [NwColors c = NwColors.light]) => switch (leve
       _ => c.textSecondary,
     };
 
+/// 急停没确认的一台（稿 N-refuse 红框）：站点发出去的时间、没确认的原因。
+class EstopMiss {
+  final String robot;
+  final DateTime at;
+  final SiteError error;
+  const EstopMiss(this.robot, this.at, this.error);
+
+  /// 504 = 站点发了、机器人没回执（不知道停没停）；别的 = 机器人或站点说没停成。
+  bool get noAck => error.status == 504;
+}
+
+/// 急停没确认的那几台（App V2）：全部急停 / 再发一次时更新；「现在」页、「这件事」页摆红框。
+final ValueNotifier<List<EstopMiss>> estopMisses = ValueNotifier<List<EstopMiss>>(const <EstopMiss>[]);
+
+void _missed(String id, SiteError? e, DateTime at) {
+  final rest = estopMisses.value.where((m) => m.robot != id).toList();
+  estopMisses.value = e == null ? rest : [...rest, EstopMiss(id, at, e)];
+}
+
+/// 「再发一次急停」：成了从红框里去掉，没成换成这一次的时间和原因。
+Future<bool> resendEstop(SiteApi api, String id, {DateTime Function() now = DateTime.now}) async {
+  final at = now();
+  try {
+    await api.halt(id);
+    _missed(id, null, at);
+    return true;
+  } on SiteError catch (e) {
+    _missed(id, e, at);
+    return false;
+  }
+}
+
 /// 「全部急停」：红底 + 2px 报警框（红色只给急停这一类）。按了先问一遍，再对每台在线的狗
 /// 发急停；哪台没停住说出来（叫人去按它身上的急停）。
 class StopAllButton extends StatelessWidget {
@@ -117,11 +149,14 @@ class StopAllButton extends StatelessWidget {
             ));
     if (ok != true) return;
     final bad = <String>[];
+    final at = DateTime.now();
     await Future.wait(robots.map((r) async {
       final id = '${r['robot_id']}';
       try {
         await api.halt(id);
+        _missed(id, null, at);
       } on SiteError catch (e) {
+        _missed(id, e, at); // 稿 N-refuse：红框「急停没确认」+ 再发一次
         bad.add(tr("$id didn't stop: $e. Use the E-stop on the robot.", '$id 未能停止：$e。请按机身急停。'));
       }
     }));

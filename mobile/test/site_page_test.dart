@@ -1335,6 +1335,8 @@ void main() {
     await t.tap(find.byKey(patrolRouteKey('loop')));
     await t.pumpAndSettle();
     expect(find.byKey(patrolLoopsKey(3)), findsOneWidget);
+    await t.ensureVisible(find.byKey(patrolLoopsKey(3)));   // App V2：派巡逻是整页，上面有画面
+    await t.pumpAndSettle();
     await t.tap(find.byKey(patrolLoopsKey(3)));
     await t.pumpAndSettle();
     expect(api.calls, contains('patrolPlan A loop loops=3'));
@@ -1374,6 +1376,8 @@ void main() {
     await t.tap(find.byKey(patrolSendKey), warnIfMissed: false);
     await t.pumpAndSettle();
     expect(api.calls.where((c) => c.startsWith('patrol A ')), isEmpty, reason: '别的版本的路线选不上');
+    await t.ensureVisible(find.byKey(patrolRouteKey('loop')));
+    await t.pumpAndSettle();
     await t.tap(find.byKey(patrolRouteKey('loop')));
     await t.pumpAndSettle();
     await t.tap(find.byKey(patrolSendKey));
