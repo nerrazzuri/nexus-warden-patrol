@@ -689,12 +689,15 @@ class _SiteRobotPageState extends State<SiteRobotPage> with NwAsk {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: NwText.titleLarge.copyWith(color: c.text, fontWeight: FontWeight.w700)),
-                  if (sub.isNotEmpty || !dispatch)
-                    Text(
-                        (s?.canPatrol ?? false) && !dispatch
-                            ? tr('Managers view status and dispatch patrols', '经理看状态、派巡逻')
-                            : sub,
+                  // 外审 App-V2-6 N1：实际状态（急停）谁都看得见；经理的权限说明另起一行，不顶掉状态
+                  if (sub.isNotEmpty)
+                    Text(sub,
                         key: const Key('robot-phase'),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: NwText.bodySmall.copyWith(color: c.textSecondary)),
+                  if ((s?.canPatrol ?? false) && !dispatch)
+                    Text(tr('Managers view status and dispatch patrols', '经理看状态、派巡逻'),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: NwText.bodySmall.copyWith(color: c.textSecondary)),
