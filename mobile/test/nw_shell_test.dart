@@ -4,6 +4,7 @@ import 'package:nexwar_patrol/l10n.dart';
 import 'package:nexwar_patrol/net/site_client.dart';
 import 'package:nexwar_patrol/store/site_store.dart';
 import 'package:nexwar_patrol/ui/alarm_log.dart';
+import 'package:nexwar_patrol/ui/nw/nw_estop_miss.dart';
 import 'package:nexwar_patrol/ui/nw/nw_now.dart';
 import 'package:nexwar_patrol/ui/nw/nw_site_dir.dart';
 import 'package:nexwar_patrol/ui/nw/nw_theme.dart';
@@ -62,6 +63,19 @@ void main() {
       expect(sq.bottom, 844 - 16);
       expect(sq.width, greaterThanOrEqualTo(80));
       await t.pumpWidget(Container());
+    });
+
+    testWidgets('外审 App-V2-3 I2：在「现场」按全部急停有一台没停成，红框就钉在这一层顶上', (t) async {
+      _size(t);
+      await _show(t, FakeApi('admin'));
+      await _tap(t, NwShell.siteKey);
+      expect(find.byKey(EstopMissCards.cardKey('A')), findsNothing);
+      estopMisses.value = [EstopMiss('A', DateTime(2026, 11, 15, 23, 50), SiteError(504, 'no ack'))];
+      await t.pumpAndSettle();
+      expect(find.byKey(EstopMissCards.cardKey('A')), findsOneWidget);
+      expect(find.byType(SiteDirectory), findsOneWidget, reason: '还在「现场」，不用回「现在」');
+      await t.pumpWidget(Container());
+      expect(estopMisses.value, isEmpty, reason: '外壳关了清掉');
     });
 
     testWidgets('外审 App-V2-1 #7：只读账号哪一层都没有急停（方块、小红按钮都不给）', (t) async {

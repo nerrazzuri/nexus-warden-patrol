@@ -16,6 +16,15 @@ Map<String, dynamic> _pt(String name, double x, {bool def = false}) => <String, 
 
 FakeApi _api(String role) {
   final api = FakeApi(role);
+  // 机器人报了在用 m 第 1 版（设默认之前现问一次）
+  final v = Map<String, dynamic>.from(api.view);
+  final caps = Map<String, dynamic>.from((v['capabilities'] as Map?) ?? const <String, dynamic>{});
+  final tasks = Map<String, dynamic>.from((caps['tasks'] as Map?) ?? const <String, dynamic>{});
+  tasks.remove('running_config');
+  tasks['patrol'] = <String, dynamic>{...((tasks['patrol'] as Map?)?.cast<String, dynamic>() ?? const {}), 'map_id': 'm', 'map_version': '1'};
+  caps['tasks'] = tasks;
+  v['capabilities'] = caps;
+  api.view = v;
   api.standby = <String, dynamic>{
     'points': <Map<String, dynamic>>[_pt('gate', 1.0, def: true), _pt('yard', 2.0)],
     'homes': <Map<String, dynamic>>[

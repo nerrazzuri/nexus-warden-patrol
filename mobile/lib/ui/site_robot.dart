@@ -15,6 +15,7 @@ import '../net/site_text.dart';
 import 'nw/nw_ask.dart';
 import 'nw/nw_button.dart';
 import 'nw/nw_p3_robots.dart';
+import 'nw/nw_estop_miss.dart';
 import 'nw/nw_theme.dart';
 import 'nw/nw_widgets.dart';
 import 'robot_events.dart';
@@ -785,6 +786,8 @@ class _SiteRobotPageState extends State<SiteRobotPage> with NwAsk {
                           unawaited(_abort());
                         },
                         onAck: () => setState(() => _stopErr = null)))),
+          // 外审 App-V2-3 I2：这一页按的全部急停，没停成的那几台也钉在这里
+          EstopMissPinned(api: widget.api),
           if (dispatch && robotNeedsSupervision(v) && !_settings)
             SupervisionSwitch(key: ValueKey('supervise-${widget.robotId}'), api: widget.api, robotId: widget.robotId),
           Expanded(

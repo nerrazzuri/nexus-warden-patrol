@@ -1455,7 +1455,8 @@ class _SiteAlertScenePageState extends State<SiteAlertScenePage> with EstopMissR
                       ),
                     ),
                   ),
-                if (dispatch)
+                // 外审 App-V2-3 I3：急停按叫停权限（经理也能急停），不按派遣权限
+                if (widget.api.session?.canAbort ?? false)
                   Positioned(
                     right: Nw.s16,
                     bottom: Nw.s16,
