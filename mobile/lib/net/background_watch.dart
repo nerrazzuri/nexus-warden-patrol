@@ -114,6 +114,9 @@ class RingRequest {
   final String fingerprint;
   const RingRequest(this.key, this.alert, this.site, {this.url = '', this.fingerprint = ''});
 
+  /// 哪个站点的哪一条（同一条报警去重用）。
+  String get id => '$fingerprint|$url|$key';
+
   /// 这一条是不是这个站点的：有指纹比指纹；没有比地址（[urls] 里任一个）；都没有（老版本原生）才比名字。
   bool isFor({required String name, required List<String> urls, required String fingerprint}) {
     String norm(String u) => u.trim().replaceAll(RegExp(r'/+$'), '').toLowerCase();
