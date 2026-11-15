@@ -199,6 +199,9 @@ export function Console({ me, onOut }: { me: Me; onOut: (note?: string) => void 
       <div class="workspace">
       {section === "setup" && <SetupNav me={me} page={route.page} notices={admin ? notices : 0} />}
       <main class="page" id="main" tabIndex={-1} data-page={route.page}>
+        {(["admin/system", "admin/upgrade", "admin/maps", "admin/localization", "admin/diag", "admin/mapedit"] as Page[]).includes(route.page) && (
+          <header class="sp-head mt-head"><h1>{t("setMaint")}</h1><p class="sp-status">{t("mtSub")}</p></header>
+        )}
         <SubTabs page={route.page} role={me.role} />
         {/* P2-02:值班这几页本身没有大标题,给读屏一个 */}
         {(["duty", "live", "map", "alarms", "recordings", "notes"] as Page[]).includes(route.page) && navLabel(route.page) && (
@@ -234,14 +237,14 @@ export function Console({ me, onOut }: { me: Me; onOut: (note?: string) => void 
               {route.page === "admin/robots" && <RobotsPage key={route.robot ?? ""} say={say} now={now} units={units} readOnly={!admin} role={me.role} robot={route.robot} alerts={alerts} refresh={refresh} />}
               {route.page === "admin/system" && <SystemPage2 me={me} now={now} say={say} />}
               {route.page === "admin/diag" && <DiagPage say={say} />}
-              {route.page === "admin/activity" && pageAllowed(route.page, me.role) && <ActivityPage now={now} />}
+              {route.page === "admin/activity" && pageAllowed(route.page, me.role) && <ActivityPage now={now} role={me.role} />}
               {route.page === "admin/mapedit" && <MapEditPage say={say} target={editTarget(location.hash)} />}
               {route.page === "admin/upgrade" && <UpgradePage say={say} />}
               {route.page === "admin/layout" && <LayoutPage say={say} robots={units.map((u) => u.robot.robot_id)} tabs={LAYOUT_TABS} />}
               {route.page === "admin/maps" && <AdvMapsPage say={say} />}
               {route.page === "admin/access" && <AccessPage say={say} now={now} />}
               {route.page === "admin/localization" && <LocPage units={units} alerts={alerts} now={now} role={me.role} />}
-              {route.page === "admin/reports" && <ReportsPage now={now} />}
+              {route.page === "admin/reports" && <ReportsPage now={now} role={me.role} />}
             </div>
           </div>
         )}
