@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>App · Guard · After E-STOP ALL</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&display=swap">
+<style>
+body{margin:0}
+*{box-sizing:border-box}
+.btn{height:44px;padding:0 14px;border:1px solid #9A9FA6;border-radius:2px;background:#16191D;color:#ECEDEA;font:600 15px Barlow,'Noto Sans SC','Microsoft YaHei UI',sans-serif;display:inline-flex;align-items:center;justify-content:center;gap:8px;white-space:nowrap;min-width:0}
+.btn.sm{height:36px;padding:0 10px;font-size:14px}
+.btn.pri{background:#1F6FC0;border-color:#1F6FC0;color:#fff;font-weight:700}
+.btn.danger{background:transparent;border-color:#FF6166;color:#FF6166}
+.btn.stop{background:#D42F33;border-color:#D42F33;color:#fff;font-weight:700}
+.btn.ghost{background:transparent;border-color:transparent;color:#5AA2E6}
+.row{display:grid;gap:8px}
+.lbl{font-size:12px;font-weight:600;letter-spacing:.06em;color:#9A9FA6}
+.mut{color:#B4B8BE}
+.ring{display:inline-block;flex:none;width:14px;height:14px;border:3px solid #FF6166;border-radius:50%}
+.ring.lg{width:26px;height:26px;border-width:5px}
+.tri{display:inline-block;flex:none;width:0;height:0;border-left:7px solid transparent;border-right:7px solid transparent;border-bottom:12px solid #F2B01E}
+.tri.lg{border-left-width:12px;border-right-width:12px;border-bottom-width:21px}
+.sq{display:inline-block;flex:none;width:9px;height:9px;background:#3DC46E}
+.off{display:inline-block;flex:none;width:14px;height:14px;border:2px solid #9A9FA6;border-radius:50%;background:linear-gradient(135deg,transparent 45%,#9A9FA6 45%,#9A9FA6 58%,transparent 58%)}
+.disc{display:inline-block;flex:none;width:12px;height:12px;border-radius:50%;background:#fff}
+.discb{display:inline-block;flex:none;width:12px;height:12px;border-radius:50%;background:#1F6FC0}
+.p3{display:inline-block;flex:none;width:12px;height:12px;border:1.5px solid #9A9FA6;border-radius:50%}
+.sec{padding:14px 16px;border-bottom:1px solid #2E333A}
+.h2{margin:0;font-size:17px;line-height:24px;font-weight:600}
+.h1{margin:0;font-size:22px;line-height:28px;font-weight:700}
+.li{display:flex;align-items:center;gap:12px;min-height:56px;padding:8px 16px;border-bottom:1px solid #2E333A;color:#ECEDEA;text-decoration:none}
+.li .b{flex:1;min-width:0}
+.li .s{font-size:13px;line-height:18px;color:#B4B8BE}
+.seg{display:grid;border:1px solid #2E333A;border-radius:2px;padding:3px;gap:3px}
+.seg button{height:36px;border:0;border-radius:2px;background:transparent;color:#B4B8BE;font:600 14px Barlow,'Noto Sans SC','Microsoft YaHei UI',sans-serif}
+.seg button.on{background:#1F6FC0;color:#fff}
+.chip{display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 8px;border-radius:2px;font-size:13px;font-weight:600;white-space:nowrap}
+.c-ok{background:#16281D;color:#3DC46E} .c-warn{background:#2D2512;color:#F2B01E} .c-bad{background:#33191B;color:#FF6166} .c-n{background:#20242A;color:#B4B8BE}
+.vid{position:relative;background:#000;overflow:hidden}
+.vid .cap{position:absolute;left:0;right:0;top:0;display:flex;align-items:center;gap:8px;padding:6px 10px;background:rgba(0,0,0,.65);color:#ECEDEA;font-size:13px}
+.inp{height:44px;border:1px solid #9A9FA6;border-radius:2px;padding:0 12px;background:#16191D;color:#ECEDEA;font:400 15px Barlow,'Noto Sans SC','Microsoft YaHei UI',sans-serif;display:flex;align-items:center;width:100%}
+.sw{width:44px;height:26px;border-radius:2px;background:#20242A;border:1px solid #9A9FA6;position:relative;flex:none}
+.sw::after{content:"";position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:1px;background:#9A9FA6}
+.sw.on{background:#1F6FC0;border-color:#1F6FC0} .sw.on::after{left:21px;background:#fff}
+.note{font-size:13px;line-height:18px;color:#B4B8BE}
+.tag{display:inline-block;padding:0 6px;border:1px solid #5AA2E6;color:#5AA2E6;font-size:11px;font-weight:700;line-height:16px}
+
+</style>
+</helmet>
+<div style="width:390px;height:844px;position:relative;overflow:hidden;background:#0E1013;color:#ECEDEA;font-family:Barlow,'Noto Sans SC','Microsoft YaHei UI',sans-serif;font-size:15px;line-height:22px;font-variant-numeric:tabular-nums;display:flex;flex-direction:column">
+<header style="flex:none;background:#0A0C0E;color:#ECEDEA;padding:10px 16px 10px">
+  <div style="display:flex;align-items:center;gap:10px;min-height:40px">
+    <div style="flex:1;min-width:0"><div style="display:flex;align-items:center;gap:4px;font-size:17px;font-weight:700">estate-1<svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="#9A9FA6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><polyline points="5,9 12,16 19,9"/></svg></div>
+    <div style="display:flex;align-items:center;gap:6px;font-size:13px;color:#B4B8BE"><span class="ring"></span>Armed · 2 robots stopped</div></div>
+    <b style="font-size:17px">23:41</b>
+  </div>
+  <div class="seg" role="tablist" aria-label="Layer" style="grid-template-columns:1fr 1fr;margin-top:10px;border-color:#2E333A">
+    <button type="button" role="tab" class="on" style="display:inline-flex;align-items:center;justify-content:center">Now</button>
+    <button type="button" role="tab" class="">Site</button>
+  </div>
+</header>
+<div style="flex:1;min-height:0">
+  <section style="margin:12px 16px;border:4px solid #D42F33;background:#16191D;padding:12px">
+    <div style="display:flex;gap:12px"><span class="ring lg"></span><div style="flex:1"><b style="font-size:20px;line-height:26px">2 robots E-stopped</b><div class="note">Triggered by gina at 23:40. After reset, robots remain idle until dispatched.</div></div></div>
+    <div style="margin-top:12px;padding:12px;border:1px solid #2E333A;background:#0E1013">
+      <b>Reset all robots?</b><div class="note" style="margin:4px 0 10px">A is stopped in the North sector aisle, B is at Dock 1. After reset both return to standby; patrols must be dispatched again.</div>
+      <div class="row" style="grid-template-columns:repeat(2,minmax(0,1fr));gap:8px"><button class="btn pri" type="button" style="">Confirm reset</button><button class="btn" type="button" style="">Not now</button></div></div></section>
+  <div style="padding:0 16px 12px;border-bottom:1px solid #2E333A"><div class="row" style="grid-template-columns:1fr 1fr"><a href="#" style="display:block;padding:10px 12px;background:#14273D;border:1px solid #1F6FC0;border-radius:2px;color:#ECEDEA;text-decoration:none;min-width:0">
+  <div style="display:flex;align-items:center;gap:8px"><b style="font-size:20px;line-height:24px">A</b><span class="ring"></span><span style="font-weight:600">E-stopped</span><span style="flex:1"></span><b style="color:#ECEDEA">62%</b></div>
+  <div class="note" style="margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Stopped in north corridor · guard-1 lap 3 interrupted</div>
+  <div style="display:flex;align-items:center;gap:4px;margin-top:6px;font-size:14px;font-weight:600;color:#5AA2E6">Control<svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><polyline points="9,5 16,12 9,19"/></svg></div></a><a href="#" style="display:block;padding:10px 12px;background:#16191D;border:1px solid #2E333A;border-radius:2px;color:#ECEDEA;text-decoration:none;min-width:0">
+  <div style="display:flex;align-items:center;gap:8px"><b style="font-size:20px;line-height:24px">B</b><span class="ring"></span><span style="font-weight:600">E-stopped</span><span style="flex:1"></span><b style="color:#ECEDEA">18%</b></div>
+  <div class="note" style="margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">At dock 1 · charging continues</div>
+  <div style="display:flex;align-items:center;gap:4px;margin-top:6px;font-size:14px;font-weight:600;color:#5AA2E6">Control<svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><polyline points="9,5 16,12 9,19"/></svg></div></a></div></div>
+  <div class="vid" style="height:200px"><div style="position:absolute;inset:0;background:radial-gradient(ellipse at 40% 70%,#1d2328 0%,#07080A 70%)"></div>
+  <div class="cap"><b style="font-weight:600">A · Front camera</b><span style="color:#B4B8BE">Live</span><span style="flex:1"></span><span style="padding:2px 8px;border:1px solid #5AA2E6;background:#1F6FC0;border-color:#1F6FC0;border-radius:2px;font-size:12px;font-weight:600">Front</span><span style="padding:2px 8px;border:1px solid #6B7178;border-radius:2px;font-size:12px;font-weight:600">Rear</span><span style="padding:2px 8px;border:1px solid #6B7178;border-radius:2px;font-size:12px;font-weight:600">Thermal</span></div></div>
+</div><button type="button" aria-label="E-STOP ALL" style="position:absolute;right:16px;bottom:24px;width:92px;height:92px;border:2px solid #fff;border-radius:2px;background:#D42F33;color:#fff;font:700 15px/18px Barlow,'Noto Sans SC','Microsoft YaHei UI',sans-serif;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;box-shadow:0 8px 24px rgba(0,0,0,.45);z-index:5"><svg width="28" height="28" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><polygon points="8,2 16,2 22,8 22,16 16,22 8,22 2,16 2,8"/><line x1="7" y1="12" x2="17" y2="12"/></svg><span>E-STOP ALL</span></button>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>
