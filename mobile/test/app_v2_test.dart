@@ -381,7 +381,7 @@ void main() {
       await t.pumpWidget(Container());
     });
 
-    testWidgets('管理员能确认、记误报，但没有警笛和全部急停（没有派遣权限）；误报先选结论再结案，关了留在这页能撤销', (t) async {
+    testWidgets('经理能确认、记误报、能全部急停（外审 App-V2-3 I3），但没有警笛（没有派遣权限）；误报先选结论再结案，关了留在这页能撤销', (t) async {
       final api = FakeApi('owner')..deterRows = [_session()];
       _tallPortrait(t);
       api.alertRows = <Map<String, dynamic>>[];
@@ -395,7 +395,7 @@ void main() {
       await t.tap(find.text('open'));
       await t.pumpAndSettle();
       expect(find.byKey(SiteAlertScenePage.sirenKey), findsNothing);
-      expect(find.byKey(SiteAlertScenePage.estopKey), findsNothing);
+      expect(find.byKey(SiteAlertScenePage.estopKey), findsOneWidget, reason: '经理能急停');
       expect(find.textContaining('现场警示由保安操作'), findsOneWidget);
       expect(_enabled(t, SiteAlertScenePage.ackKey), isTrue);
       await t.tap(find.byKey(SiteAlertScenePage.falseKey));

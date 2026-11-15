@@ -10,6 +10,7 @@ import 'package:flutter/material.dart';
 import '../l10n.dart';
 import '../net/site_client.dart';
 import 'nw/nw_ask.dart';
+import 'nw/nw_points.dart' show standbyDefaultBlocked;
 import 'nw/nw_theme.dart';
 import 'nw/nw_widgets.dart';
 import 'widget/bar_actions.dart';
@@ -96,6 +97,20 @@ class _SiteStandbyPageState extends State<SiteStandbyPage> with NwAsk {
     if (!mounted) return;
     setState(() => _msg = msg);
     await _load();
+  }
+
+  Future<void> _setDefault(Map<String, dynamic> p) async {
+    try {
+      final why = await standbyDefaultBlocked(widget.api, widget.robotId, p);
+      if (why != null) {
+        if (mounted) setState(() => _msg = why);
+        return;
+      }
+    } on SiteError catch (e) {
+      if (mounted) setState(() => _msg = tr('Make default failed: $e', '设默认失败：$e'));
+      return;
+    }
+    await _run(() => widget.api.setStandbyDefault(widget.robotId, p), tr('Make ${p['name']} default', '设 ${p['name']} 为默认'));
   }
 
   Future<void> _here() async {
@@ -253,10 +268,7 @@ class _SiteStandbyPageState extends State<SiteStandbyPage> with NwAsk {
                                 if (manage && p['default'] != true)
                                   OutlinedButton(
                                     key: Key('standby-default-${p['name']}'),
-                                    onPressed: () => _run(
-                                      () => widget.api.setStandbyDefault(widget.robotId, p),
-                                      tr('Make ${p['name']} default', '设 ${p['name']} 为默认'),
-                                    ),
+                                    onPressed: () => _setDefault(p),
                                     child: Text(tr('Make default', '设默认')),
                                   ),
                                 if (manage)

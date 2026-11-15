@@ -13,6 +13,19 @@ import '../site_standby.dart';
 import 'nw_layout_hub.dart' show robotMapOf;
 import 'nw_theme.dart';
 
+/// 设默认待命点之前现问机器人在用哪张图：点不在那一版上（或不知道在用哪张）就不设，回原因；能设回 null。
+/// 合并页和待命点管理页共用（外审 App-V2-2 R4 / App-V2-3 I1）。
+Future<String?> standbyDefaultBlocked(SiteApi api, String robotId, Map<String, dynamic> p) async {
+  final now = robotMapOf(await api.robot(robotId));
+  if (now == null) {
+    return tr("Don't know which map $robotId uses now; not set.", '不知道 $robotId 现在用哪张图，没设。');
+  }
+  if ('${p['map_id']}' != now.$1 || '${p['map_version']}' != now.$2) {
+    return tr('${standbyName(p)} is not on the map $robotId uses now; not set.', '${standbyName(p)} 不在 $robotId 现在用的图上，没设。');
+  }
+  return null;
+}
+
 class SitePointsPage extends StatefulWidget {
   final SiteApi api;
   const SitePointsPage({super.key, required this.api});
@@ -111,12 +124,9 @@ class _SitePointsPageState extends State<SitePointsPage> {
     setState(() => _busy = true);
     try {
       // 设之前现问机器人在用哪张图：页面开着的时候它可能换过图（外审 App-V2-2 R4）
-      final now = robotMapOf(await widget.api.robot(id));
-      if (now == null || '${p['map_id']}' != now.$1 || '${p['map_version']}' != now.$2) {
-        if (mounted) {
-          setState(() => _msg = tr('${standbyName(p)} is not on the map $id uses now; not set.',
-              '${standbyName(p)} 不在 $id 现在用的图上，没设。'));
-        }
+      final why = await standbyDefaultBlocked(widget.api, id, p);
+      if (why != null) {
+        if (mounted) setState(() => _msg = why);
         unawaited(_load());
         return;
       }

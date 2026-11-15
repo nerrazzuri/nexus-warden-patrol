@@ -34,6 +34,7 @@ import '../site_robots.dart';
 import '../site_tabs.dart' show AdminHomeTab;
 import '../widget/alarm_widgets.dart' show StopAllButton, clearEstopMisses;
 import 'nw_site_dir.dart';
+import 'nw_estop_miss.dart';
 import 'nw_theme.dart';
 
 /// 外壳里的三层。
@@ -285,6 +286,9 @@ class _NwShellState extends State<NwShell> {
                               builder: (context, p1, _) => p1.isEmpty
                                   ? const SizedBox.shrink()
                                   : _P1Bar(titles: p1.values.toList(), onTap: () => setState(() => _layer = ShellLayer.now))),
+                        // 外审 App-V2-3 I2：浅色层顶栏按的全部急停，没停成的红框就钉在这里（不用回「现在」才看得见）
+                        if (!dark)
+                          EstopMissPinned(api: api),
                         Expanded(
                             child: Stack(children: [
                           IndexedStack(
