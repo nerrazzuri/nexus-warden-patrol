@@ -422,7 +422,7 @@ void main() {
     await t.pump();
     await t.tap(find.byKey(SiteMapPreviewPage.cancelKey));
     await t.pump();
-    expect(find.byKey(SiteMapPreviewPage.menuKey), findsOneWidget, reason: '不画了回到菜单按钮');
+    expect(find.byKey(SiteMapPreviewPage.statusKey), findsOneWidget, reason: '不画了回到确认状态');
   });
 
   // ------------------------------------------------------------ 决策 65、66，R2（2026-10-14）
@@ -439,11 +439,6 @@ void main() {
   /// 说明栏能滚：先滚到看得见再点。不在眼前的先开说明栏找，还没有就是菜单里的。
   Future<void> tapVis(WidgetTester t, Finder f) async {
     if (f.evaluate().isEmpty) await openZonePanel(t);
-    if (f.evaluate().isEmpty) {
-      await closeZonePanel(t);
-      await t.tap(find.byKey(SiteMapPreviewPage.menuKey));
-      await t.pump();
-    }
     await t.ensureVisible(f);
     await t.pumpAndSettle();
     await t.tap(f);
