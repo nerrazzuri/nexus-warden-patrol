@@ -434,6 +434,12 @@ void main() {
     // 点位标记跟网页一样的定位箭头（2026-10-15）：地图栏选了一个位置、转了 30°；路线编辑页三个点
     '15-map-pose': _Shot(_phone, () => NwShell(api: Rot23Api('admin'), title: 'East Gate Estate', ring: () {}),
         ready: _then(_then(_go(SiteDest.layout), _decoded), _pickPose)),
+    // App V2 页内确认条（不弹窗）：地图上设位置
+    '38-ask-pose': _Shot(_phone, () => NwShell(api: Rot23Api('admin'), title: 'East Gate Estate', ring: () {}),
+        ready: _then(_then(_then(_go(SiteDest.layout), _decoded), _pickPose), (t) async {
+          await t.tap(find.byKey(PoseBar.setKey));
+          await t.pumpAndSettle();
+        })),
     '16-route-points': _Shot(
         const Size(900, 700),
         () => SiteRouteEditorPage(
