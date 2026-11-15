@@ -56,6 +56,39 @@ const page = () => render(<LayoutPage say={() => {}} robots={["A"]} tabs={TABS} 
 const btn = (root: Element, text: string) => Array.from(root.querySelectorAll("button")).find((b) => b.textContent?.trim() === text) as HTMLButtonElement;
 const tabBtn = (c: Element, text: string) => Array.from(c.querySelectorAll(".ly-tabs button")).find((b) => b.querySelector(".ly-tabname")!.textContent === text) as HTMLButtonElement;
 
+// 用户 11-15「Site Layout 一直是 v7」:站点的地图目录没有 active,只有 loaded_on(机器人在用)和 created_ms;
+// 目录按新到旧排,以前取最后一条 = 最老的那版
+describe("默认选哪一版", () => {
+  const withMaps = (maps: unknown[]) => setFetch(((url: string) => {
+    if (url === "/api/maps") return Promise.resolve(json({ maps }));
+    if (url.endsWith("/preview")) return Promise.resolve(json(META));
+    return Promise.resolve(json({ routes: [], areas: [], zones: [], cameras: [], points: [], history: [] }));
+  }) as typeof fetch);
+  const shown = async () => {
+    const { container: c } = page();
+    await waitFor(() => expect((c.querySelector("select") as HTMLSelectElement)?.value).toBeTruthy());
+    return { c, v: (c.querySelector("select") as HTMLSelectElement).value.split("\u0000")[1] };
+  };
+  it("机器人在用的那版;状态写在用", async () => {
+    lang.value = "en";
+    withMaps([{ map_id: "e", version: "10", created_ms: 20, loaded_on: ["A", "B"], note: "" },
+      { map_id: "e", version: "7", created_ms: 10, loaded_on: [], note: "" }]);
+    const { c, v } = await shown();
+    expect(v).toBe("10");
+    expect(c.querySelector(".ly-status, h1 + *")?.textContent ?? c.textContent).not.toContain("Not in service");
+  });
+  it("都没在用:最新建的那版(不是列表最后一条)", async () => {
+    withMaps([{ map_id: "e", version: "10", created_ms: 20, loaded_on: [], note: "" },
+      { map_id: "e", version: "7", created_ms: 10, loaded_on: [], note: "" }]);
+    expect((await shown()).v).toBe("10");
+  });
+  it("两版都有机器人在用:新建的那版", async () => {
+    withMaps([{ map_id: "e", version: "7", created_ms: 10, loaded_on: ["B"], note: "" },
+      { map_id: "e", version: "10", created_ms: 20, loaded_on: ["A"], note: "" }]);
+    expect((await shown()).v).toBe("10");
+  });
+});
+
 describe("布置外框", () => {
   it("七个标签(W48 加了路网,W73 加了防区路线)、地址带tab", async () => {
     const { container: c } = page();
