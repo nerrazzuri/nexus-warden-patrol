@@ -82,7 +82,17 @@ class EstopMiss {
 /// 急停没确认的那几台（App V2）：全部急停 / 再发一次时更新；「现在」页、「这件事」页摆红框。
 final ValueNotifier<List<EstopMiss>> estopMisses = ValueNotifier<List<EstopMiss>>(const <EstopMiss>[]);
 
-void _missed(String id, SiteError? e, DateTime at) {
+/// 换站点 / 退出时加一：之前发出去、晚回来的急停结果不再记（外审 App-V2-1 #4，别把上一个站点的红框带到下一个站点）。
+int _estopEpoch = 0;
+
+/// 换站点 / 退出：清掉红框，并让还在路上的急停结果作废。
+void clearEstopMisses() {
+  _estopEpoch++;
+  estopMisses.value = const <EstopMiss>[];
+}
+
+void _missed(String id, SiteError? e, DateTime at, int epoch) {
+  if (epoch != _estopEpoch) return;
   final rest = estopMisses.value.where((m) => m.robot != id).toList();
   estopMisses.value = e == null ? rest : [...rest, EstopMiss(id, at, e)];
 }
@@ -90,12 +100,13 @@ void _missed(String id, SiteError? e, DateTime at) {
 /// 「再发一次急停」：成了从红框里去掉，没成换成这一次的时间和原因。
 Future<bool> resendEstop(SiteApi api, String id, {DateTime Function() now = DateTime.now}) async {
   final at = now();
+  final epoch = _estopEpoch;
   try {
     await api.halt(id);
-    _missed(id, null, at);
+    _missed(id, null, at, epoch);
     return true;
   } on SiteError catch (e) {
-    _missed(id, e, at);
+    _missed(id, e, at, epoch);
     return false;
   }
 }
@@ -116,6 +127,7 @@ class StopAllButton extends StatelessWidget {
 
   /// App V2 外壳的「全部急停」方块也走这一套(查在线、确认、逐台发、报没停住的)。
   static Future<void> press(BuildContext context, SiteApi api, void Function(String message) onResult) async {
+    final epoch = _estopEpoch;
     final List<Map<String, dynamic>> robots;
     try {
       // 在线 = 狗报在线、并且站点最近收到过它的消息（跟狗列表、网页值班台同一个判据）
@@ -154,9 +166,9 @@ class StopAllButton extends StatelessWidget {
       final id = '${r['robot_id']}';
       try {
         await api.halt(id);
-        _missed(id, null, at);
+        _missed(id, null, at, epoch);
       } on SiteError catch (e) {
-        _missed(id, e, at); // 稿 N-refuse：红框「急停没确认」+ 再发一次
+        _missed(id, e, at, epoch); // 稿 N-refuse：红框「急停没确认」+ 再发一次
         bad.add(tr("$id didn't stop: $e. Use the E-stop on the robot.", '$id 未能停止：$e。请按机身急停。'));
       }
     }));

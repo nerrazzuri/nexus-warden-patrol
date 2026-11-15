@@ -8,7 +8,37 @@ import '../../l10n.dart';
 import '../../net/site_client.dart';
 import '../site_robot.dart';
 import '../widget/alarm_widgets.dart';
+import 'nw_ask.dart' show scrollPageToTop;
 import 'nw_theme.dart';
+
+/// 外审 App-V2-1 #3：新来一块「急停没确认」时，这一页滚回顶，让红框看得见（人可能正滚在下面）。
+/// 放红框的那一页的 State 混入它。
+mixin EstopMissReveal<W extends StatefulWidget> on State<W> {
+  int _misses = 0;
+
+  void _onMiss() {
+    final n = estopMisses.value.length;
+    final grew = n > _misses;
+    _misses = n;
+    if (!grew || !mounted) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) scrollPageToTop(context);
+    });
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _misses = estopMisses.value.length;
+    estopMisses.addListener(_onMiss);
+  }
+
+  @override
+  void dispose() {
+    estopMisses.removeListener(_onMiss);
+    super.dispose();
+  }
+}
 
 class EstopMissCards extends StatefulWidget {
   final SiteApi api;

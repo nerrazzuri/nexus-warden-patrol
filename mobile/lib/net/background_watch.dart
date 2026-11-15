@@ -147,6 +147,19 @@ Future<void> initRingChannel() async {
 }
 
 /// 「静音 2 分钟」：后台值守那边这台手机先不出声，到点没人确认接着响。没在值守（桌面版、没开）回 false。
+/// 前台响铃的静音（外审 App-V2-1 #5）：告警键 → 静到几点（毫秒）。来报警页「静音 2 分钟」写这里，
+/// 前台一直响的那一套（机器人列表页的铃）看这里，跟后台通知的静音同一个截止时间。
+final Map<String, int> ringMutedUntil = <String, int>{};
+
+/// 这一条现在是不是静着（过了点就不算，顺手清掉）。
+bool ringMuted(String key, [DateTime Function() now = DateTime.now]) {
+  final until = ringMutedUntil[key];
+  if (until == null) return false;
+  if (now().millisecondsSinceEpoch < until) return true;
+  ringMutedUntil.remove(key);
+  return false;
+}
+
 Future<bool> muteRing(String key) async {
   if (!Platform.isAndroid) return false;
   try {
