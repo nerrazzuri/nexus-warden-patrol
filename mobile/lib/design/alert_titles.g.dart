@@ -67,6 +67,7 @@ const Map<String, (String, String)> alertTitles = <String, (String, String)>{
   'upload_refused': ('Site refused an upload', '站点拒收上传'),
   'account_request': ('Someone applied for an account', '账号申请待批准'),
   'adhoc_patrol': ('One-off patrol sent', '临时巡逻已派出'),
+  'backup_requested': ('Backup requested', '请求支援'),
   'adhoc_queue': ('Your queued patrol', '排队中的临时巡逻'),
   'map_ready': ('Map built', '地图已建成'),
   'bind_request': ('Robot waiting to join the site', '机器人申请加入站点'),
