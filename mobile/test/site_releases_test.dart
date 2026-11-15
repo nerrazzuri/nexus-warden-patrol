@@ -6,6 +6,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'site_page_test.dart' show FakeApi;
+import 'support/shell_nav.dart';
+import 'package:nexwar_patrol/ui/nw/nw_site_dir.dart';
 
 void main() {
   testWidgets('每台机器人在跑哪一版；管理员装一版、切过去（要确认）、退回', (t) async {
@@ -89,10 +91,7 @@ void main() {
     addTearDown(() => t.binding.setSurfaceSize(null));
     await t.pumpWidget(MaterialApp(home: NwShell(api: api, title: '站点')));
     await t.pumpAndSettle();
-    await t.tap(find.byKey(NwShell.adminKey));
-    await t.pumpAndSettle();
-    await t.tap(find.byKey(AdminHomeTab.entryKey('releases')));
-    await t.pumpAndSettle();
+    await openSiteDir(t, SiteDest.updates);
     expect(find.byType(SiteReleasesPage), findsOneWidget);
   });
 }

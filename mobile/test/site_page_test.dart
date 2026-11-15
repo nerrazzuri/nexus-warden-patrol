@@ -22,6 +22,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'support/fake_site.dart';
+import 'support/shell_nav.dart';
+import 'package:nexwar_patrol/ui/nw/nw_site_dir.dart';
 
 /// 1×1 的 PNG：照片解得出来（测试里的图片解码认真的）。
 final Uint8List onePixelPng = Uint8List.fromList(<int>[
@@ -409,6 +411,15 @@ class FakeApi implements SiteApi {
   Map<String, dynamic> readinessView = <String, dynamic>{'missing': <String>[], 'robots': <dynamic>[]};
   @override
   Future<Map<String, dynamic>> guardReadiness() async => readinessView;
+  List<Map<String, dynamic>> notes = <Map<String, dynamic>>[];
+  @override
+  Future<List<Map<String, dynamic>>> shiftNotes({int recent = 50}) async => notes;
+  @override
+  Future<void> postShiftNote(String text) async {
+    calls.add('note $text');
+    notes = [<String, dynamic>{'text': text, 'author': 'u', 'at_ms': 1794119713298}, ...notes];
+  }
+
   @override
   Future<Map<String, dynamic>> mode() async {
     if (modeError != null) throw modeError!;
@@ -1540,16 +1551,14 @@ void main() {
       await t.enterText(find.byKey(const Key('site-password')), 'pw');
       await t.tap(find.text('登录'));
       await t.pumpAndSettle();
-      // 2026-10-14 重做：登录进去是带底部导航的外壳，狗列表是其中一栏（进来先看值守）
+      // App V2：登录进去是「现在 | 现场」外壳，机器人列表在现场目录里
       expect(find.byType(NwShell), findsOneWidget);
-      await t.tap(find.byKey(NwShell.dogsKey));
-      await t.pumpAndSettle();
+      await openSiteDir(t, SiteDest.robots);
       expect(find.byType(SiteRobotsPage), findsOneWidget);
-      // W55：推送状态在「设置」页（我的 → 设置）
-      await t.tap(find.byKey(NwShell.moreKey));
+      await t.tap(find.byKey(NwShell.backKey));
       await t.pumpAndSettle();
-      await t.tap(find.byKey(MeTab.settingsKey));
-      await t.pumpAndSettle();
+      // W55：推送状态在「设置」页（现场 → 本机 → 设置）
+      await openDir(t, SiteDest.settings);
       final tip = find.byKey(AppSettingsPage.pushKey);
       if (push.supported) {
         expect(find.descendant(of: tip, matching: find.text('已就绪')), findsOneWidget, reason: '设置页上看得见推送就绪了');
@@ -1558,11 +1567,12 @@ void main() {
       }
       await t.pageBack();
       await t.pumpAndSettle();
-      // 手机 App 测试 M01：离开站点走「我的 → 退出站点」，要确认
-      // 列表是懒建的：「报问题」加进来以后「退出站点」在 800x600 下看不到，先滚过去
-      await t.scrollUntilVisible(find.byKey(MeTab.leaveKey), 200,
-          scrollable: find.descendant(of: find.byType(MeTab), matching: find.byType(Scrollable)).first);
-      await t.tap(find.byKey(MeTab.leaveKey));
+      // 手机 App 测试 M01：离开站点走目录底部「退出站点」，要确认
+      await t.scrollUntilVisible(find.byKey(SiteDirectory.leaveKey), 200,
+          scrollable: find.descendant(of: find.byType(SiteDirectory), matching: find.byType(Scrollable)).first);
+      await Scrollable.ensureVisible(t.element(find.byKey(SiteDirectory.leaveKey)), alignment: 0.5);
+      await t.pumpAndSettle();
+      await t.tap(find.byKey(SiteDirectory.leaveKey));
       await t.pumpAndSettle();
       await t.tap(find.byKey(leaveConfirmKey));
       await t.pumpAndSettle();

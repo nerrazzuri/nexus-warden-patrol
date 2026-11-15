@@ -16,15 +16,16 @@ import '../guide.dart';
 import '../map_manage.dart';
 import '../problem_report.dart';
 import '../site_health.dart' show SiteHealthPage, shareBundle;
-import '../site_maps.dart';
+import '../site_incidents.dart';
 import '../site_mode.dart';
+import '../site_recordings.dart';
 import '../site_releases.dart';
 import '../site_runs.dart';
 import '../site_tabs.dart' show AccountsPage, leaveSite;
 import 'nw_theme.dart';
 
 /// 目录里一行要去哪。
-enum SiteDest { overview, robots, users, layout, arming, alarms, recordings, runs, notes, maps, health, updates, settings, help, report }
+enum SiteDest { overview, robots, users, layout, arming, alarms, events, recordings, runs, notes, maps, health, updates, settings, help, report }
 
 class SiteDirectory extends StatelessWidget {
   final SiteApi api;
@@ -35,13 +36,21 @@ class SiteDirectory extends StatelessWidget {
 
   /// 概况（管理员的「要你处理 + 开站清单」）也在外壳里。
   final VoidCallback onOverview;
-  const SiteDirectory({super.key, required this.api, this.entry, required this.onRobots, required this.onOverview});
+
+  /// 全屏地图(老的「地图」栏 [SiteMapTab]:狗正在用的图、图例、缩放、点一下派去看一眼)也在外壳里。
+  final VoidCallback onLayout;
+  const SiteDirectory(
+      {super.key, required this.api, this.entry, required this.onRobots, required this.onOverview, required this.onLayout});
 
   static Key itemKey(SiteDest d) => Key('site-${d.name}');
   static const Key leaveKey = Key('site-leave');
 
   void _push(BuildContext context, Widget page) =>
       Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => page));
+
+  /// 老的「栏」(自己没有顶栏的那几页)推出去时套一个顶栏,好有返回。
+  void _pushBar(BuildContext context, String title, Widget body) =>
+      _push(context, Scaffold(appBar: AppBar(title: Text(title)), body: body));
 
   @override
   Widget build(BuildContext context) {
@@ -61,7 +70,7 @@ class SiteDirectory extends StatelessWidget {
       groups.add((tr('Site', '现场'), [
         _Row(SiteDest.layout, Icons.map_outlined, tr('Map & layout', '地图与布置'),
             tr('Zones, no-go zones, patrol routes, standby points, cameras, intercept points', '防区、禁行区、巡逻路线、待命点、摄像头、拦截点'),
-            () => _push(context, SiteMapsPage(api: api))),
+            onLayout),
         _Row(SiteDest.arming, Icons.shield_outlined, tr('Arming & patrols', '布防与巡逻'),
             tr('Arming mode, temporary disarm, arming schedule, patrol schedules, weather', '布防模式、临时撤防、布防时间、巡逻日程、天气'),
             () => _push(context, SiteModePage(api: api))),
@@ -72,15 +81,28 @@ class SiteDirectory extends StatelessWidget {
         _Row(SiteDest.robots, Icons.smart_toy_outlined, tr('Robots', '机器人'), tr('Status; dispatch patrols', '看状态、派巡逻'), onRobots),
       ]));
       groups.add((tr('Site', '现场'), [
+        _Row(SiteDest.layout, Icons.map_outlined, tr('Map', '地图'), tr('Where the robots are now', '机器人现在在哪'), onLayout),
         _Row(SiteDest.arming, Icons.shield_outlined, tr('Arming & patrols', '布防与巡逻'),
             tr('Arming mode, temporary disarm, arming schedule, patrol schedules', '布防模式、临时撤防、布防时间、巡逻日程'),
             () => _push(context, SiteModePage(api: api))),
       ]));
     }
     final readOnly = role == 'viewer';
+    if (!manage && !owner) {
+      // 第 1 期:「现在」还是老值班页,保安 / 只读要看机器人、看图只能从目录进;第 2 期「现在」重排后这一组去掉
+      groups.add((tr('Daily', '日常'), [
+        _Row(SiteDest.robots, Icons.smart_toy_outlined, tr('Robots', '机器人'),
+            readOnly ? tr('View only', '只看') : tr('Status and control', '状态、控制'), onRobots),
+        _Row(SiteDest.layout, Icons.map_outlined, tr('Map', '地图'), tr('Where the robots are now', '机器人现在在哪'), onLayout),
+      ]));
+    }
     groups.add((tr('Records', '记录'), [
       _Row(SiteDest.alarms, Icons.notifications_none_rounded, tr('Alarm log', '报警记录'),
-          readOnly ? tr('View only', '只看') : tr('This shift and before', '本班和之前'), () => _push(context, AlarmLogPage(api: api))),
+          readOnly ? tr('View only', '只看') : tr('This shift and before', '本班和之前'), () => _pushBar(context, tr('Alarm log', '报警记录'), AlarmLogPage(api: api))),
+      if (!readOnly)
+        _Row(SiteDest.events, Icons.history_rounded, tr('Events', '事件账'),
+            tr('Robot events, cameras, intercept points', '机器人事件、摄像头、拦截点'),
+            () => _pushBar(context, tr('Events', '事件账'), SiteIncidentsPage(api: api, embedded: true))),
       _Row(SiteDest.recordings, Icons.videocam_outlined, tr('Recordings', '录像'),
           readOnly ? tr('View only', '只看') : tr('One-minute segments per robot, kept 30 days', '每台机器人一分钟一段，留 30 天'),
           () => _push(context, _RecordingsPick(api: api))),

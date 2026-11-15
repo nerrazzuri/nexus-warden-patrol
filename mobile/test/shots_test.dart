@@ -30,6 +30,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'site_page_test.dart' show FakeApi;
 import 'support/fake_map.dart';
 import 'support/fake_site.dart' show siteFixture;
+import 'support/shell_nav.dart';
+import 'package:nexwar_patrol/ui/nw/nw_site_dir.dart';
 
 final _out = Platform.environment['NEXWAR_SHOTS'];
 final _langs = switch (Platform.environment['NEXWAR_SHOTS_LANG']) {
@@ -109,7 +111,7 @@ FakeApi _deteringOnMap() => Rot23Api('guard')
 
 /// 地图栏放大两下（比例尺、片区名字跟着变）。
 Future<void> _mapZoomed(WidgetTester t) async {
-  await _tab(NwShell.mapKey)(t);
+  await _go(SiteDest.layout)(t);
   await t.tap(find.byKey(SiteMapTab.zoomInKey));
   await t.pump();
   await t.tap(find.byKey(SiteMapTab.zoomInKey));
@@ -135,6 +137,12 @@ Future<void> Function(WidgetTester) _then(
 Future<void> _settle(WidgetTester t) => t.pumpAndSettle();
 
 /// 外壳里点到某一栏。
+/// App V2：目录里走到某一页（现场 → 那一行）。
+Future<void> Function(WidgetTester) _go(SiteDest d) => (t) async {
+      await t.pumpAndSettle();
+      await openSiteDir(t, d);
+    };
+
 Future<void> Function(WidgetTester) _tab(Key k) => (t) async {
       await t.pumpAndSettle();
       await t.tap(find.byKey(k));
@@ -266,33 +274,33 @@ void main() {
             api: _deterring(), alert: Alert.fromWire(_p1Row()), now: () => DateTime.fromMillisecondsSinceEpoch(_t0 + 42000)),
         ready: _toMiniMap),
     '06-dogs': _Shot(_phone, () => NwShell(api: _clear('guard'), title: 'East Gate Estate', ring: () {}),
-        ready: _tab(NwShell.dogsKey)),
+        ready: _go(SiteDest.robots)),
     '07-robot-guard': _Shot(_phone, () => SiteRobotPage(api: FakeApi('guard'), robotId: 'A')),
     '08-map': _Shot(_phone, () => NwShell(api: _clear('admin'), title: 'East Gate Estate', ring: () {}),
-        ready: _tab(NwShell.mapKey)),
+        ready: _go(SiteDest.layout)),
     '09-history': _Shot(_phone, () => NwShell(api: _clear('admin'), title: 'East Gate Estate', ring: () {}),
-        ready: _tab(NwShell.historyKey)),
+        ready: _go(SiteDest.runs)),
     '10-admin': _Shot(_phone, () => NwShell(api: _clear('admin'), title: 'East Gate Estate', ring: () {}),
-        ready: _tab(NwShell.adminKey)),
+        ready: _go(SiteDest.overview)),
     '11-teleop': _Shot(_wide, () => SiteTeleopPage(api: _teleopApi = FakeApi('guard'), robotId: 'A'),
         ready: _granted, themes: const [Brightness.dark]),
     '12-duty-landscape': _Shot(_wide, () => NwShell(api: _busy('guard'), title: 'East Gate Estate', ring: () {})),
     // 地图给客户看得懂：转 23° 摆正、平面图、片区名字、图例、比例尺
     '13-map-plan': _Shot(_phone, () => NwShell(api: Rot23Api('admin'), title: 'East Gate Estate', ring: () {}),
-        ready: _then(_tab(NwShell.mapKey), _decoded)),
+        ready: _then(_go(SiteDest.layout), _decoded)),
     '13b-map-raster': _Shot(
         _phone, () => NwShell(api: Rot23Api('admin', plan: false), title: 'East Gate Estate', ring: () {}),
-        ready: _then(_tab(NwShell.mapKey), _decoded)),
+        ready: _then(_go(SiteDest.layout), _decoded)),
     '13c-map-zoomed': _Shot(_phone, () => NwShell(api: Rot23Api('admin'), title: 'East Gate Estate', ring: () {}),
         ready: _then(_mapZoomed, _decoded)),
     '13d-map-landscape': _Shot(_wide, () => NwShell(api: Rot23Api('admin'), title: 'East Gate Estate', ring: () {}),
-        ready: _then(_tab(NwShell.mapKey), _decoded)),
+        ready: _then(_go(SiteDest.layout), _decoded)),
     '13e-map-desktop': _Shot(
         const Size(1280, 720), () => NwShell(api: Rot23Api('admin'), title: 'East Gate Estate', ring: () {}),
-        ready: _then(_tab(NwShell.mapKey), _decoded)),
+        ready: _then(_go(SiteDest.layout), _decoded)),
     // 点位标记跟网页一样的定位箭头（2026-10-15）：地图栏选了一个位置、转了 30°；路线编辑页三个点
     '15-map-pose': _Shot(_phone, () => NwShell(api: Rot23Api('admin'), title: 'East Gate Estate', ring: () {}),
-        ready: _then(_then(_tab(NwShell.mapKey), _decoded), _pickPose)),
+        ready: _then(_then(_go(SiteDest.layout), _decoded), _pickPose)),
     '16-route-points': _Shot(
         const Size(900, 700),
         () => SiteRouteEditorPage(

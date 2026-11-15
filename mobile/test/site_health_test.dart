@@ -14,6 +14,8 @@ import 'package:flutter/services.dart' show MissingPluginException;
 import 'package:flutter_test/flutter_test.dart';
 
 import 'site_page_test.dart' show FakeApi;
+import 'support/shell_nav.dart';
+import 'package:nexwar_patrol/ui/nw/nw_site_dir.dart';
 
 void _portrait(WidgetTester t) {
   t.view.physicalSize = const Size(390 * 2, 844 * 2);
@@ -314,30 +316,17 @@ void main() {
     await t.pumpWidget(MaterialApp(theme: nwTheme(Brightness.dark), home: NwShell(api: api)));
     await t.pumpAndSettle();
     expect(find.byType(SiteHealthPage), findsNothing);
-    await t.tap(find.byKey(const Key('open-health')));
-    await t.pumpAndSettle();
-    // W53：管理栏里「体检」是一个入口
-    await t.scrollUntilVisible(find.byKey(AdminHomeTab.entryKey('health')), 200,
-        scrollable: find.descendant(of: find.byType(AdminHomeTab), matching: find.byType(Scrollable)).first);
-    await t.drag(find.descendant(of: find.byType(AdminHomeTab), matching: find.byType(Scrollable)).first,
-        const Offset(0, -200));
-    await t.pumpAndSettle();
-    await t.tap(find.byKey(AdminHomeTab.entryKey('health')), warnIfMissed: true);
-    await t.pumpAndSettle();
+    // App V2：「现场 → 高级 → 站点体检」
+    await openSiteDir(t, SiteDest.health);
     expect(find.byType(SiteHealthPage), findsOneWidget);
     for (final role in ['guard', 'owner']) {
       await t.pumpWidget(Container());
       await t.pumpWidget(MaterialApp(theme: nwTheme(Brightness.dark), home: NwShell(api: FakeApi(role))));
       await t.pumpAndSettle();
-      expect(find.byKey(const Key('open-health')), findsNothing, reason: role);
-      // W53：第 5 栏保安是「我的」、经理是「日程」
-      await t.tap(find.byKey(role == 'owner' ? NwShell.planKey : NwShell.moreKey));
-      await t.pumpAndSettle();
-      expect(find.byKey(const Key('open-health')), findsNothing, reason: role);
+      await openSite(t);
+      expect(find.byKey(SiteDirectory.itemKey(SiteDest.health)), findsNothing, reason: '$role 的目录里没有体检');
       expect(find.byType(SiteHealthPage, skipOffstage: false), findsNothing, reason: role);
-      await t.tap(find.byKey(NwShell.historyKey));
-      await t.pumpAndSettle();
-      expect(find.byKey(NwShell.alarmsKey), findsOneWidget);
+      expect(find.byKey(SiteDirectory.itemKey(SiteDest.alarms)), findsOneWidget);
     }
     await t.pumpWidget(Container());
   });

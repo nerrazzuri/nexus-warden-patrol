@@ -8,6 +8,8 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'site_page_test.dart' show FakeApi;
 import 'support/fake_site.dart';
+import 'support/shell_nav.dart';
+import 'package:nexwar_patrol/ui/nw/nw_site_dir.dart';
 
 void main() {
   testWidgets('这台机器人在这张图上没有原点（W13a）：说后果，确认了才照样下发', (t) async {
@@ -218,10 +220,9 @@ void main() {
   // （SiteMapTab），这个列表页从它右上角进。
   testWidgets('进了站点有「地图」入口', (t) async {
     final api = FakeApi('owner');
-    await t.pumpWidget(MaterialApp(home: NwShell(api: api, title: '庄园')));
-    await t.pump();
-    await t.tap(find.byKey(const Key('open-maps')));
+    await t.pumpWidget(MaterialApp(home: NwShell(api: api, title: '庄园', updater: null)));
     await t.pumpAndSettle();
+    await openSiteDir(t, SiteDest.layout);
     expect(find.byType(SiteMapTab), findsOneWidget);
     await t.tap(find.byKey(SiteMapTab.listKey));
     await t.pumpAndSettle();

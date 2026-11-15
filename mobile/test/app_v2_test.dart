@@ -10,7 +10,7 @@ import 'package:nexwar_patrol/net/site_client.dart';
 import 'package:nexwar_patrol/store/site_store.dart';
 import 'package:nexwar_patrol/ui/site_add.dart';
 import 'package:nexwar_patrol/ui/site_alert_scene.dart';
-import 'package:nexwar_patrol/ui/site_runs.dart' show SiteRunPage;
+import 'package:nexwar_patrol/ui/site_runs.dart' show SiteRunPage, SiteRunsPage;
 import 'package:nexwar_patrol/ui/site_mapping.dart' show zoneLabelText;
 import 'package:nexwar_patrol/ui/site_page.dart';
 import 'package:nexwar_patrol/ui/site_standby.dart';
@@ -25,6 +25,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'site_page_test.dart' show FakeApi;
+import 'support/shell_nav.dart';
+import 'package:nexwar_patrol/ui/nw/nw_site_dir.dart';
 
 // 站点的 nexwar_site.pairing.encode 真出的码（见 pairing_test.dart）。
 const _code = 'D1MAXSITE1.eyJmIjoiYWJhYmFiYWJhYmFiYWJhYmFiYWJhYmFiYWJhYmFiYWJhYmFiYWJhYmFiYWJhYmFiYWJhYmFiYWJhYmFiYWJhYiIsIm4iOiLluoTlm63kuIDlj7ciLCJ1IjoiaHR0cHM6Ly8xOTIuMTY4LjEuNTo4NDQzIn0';
@@ -191,15 +193,16 @@ void main() {
     testWidgets('主题（2026-10-14 重做）：浅色深色两套、主色和底色是设计稿的、字体是 Inter（等宽只给编号）', (t) async {
       final th = nwTheme(Brightness.dark);
       expect(th.brightness, Brightness.dark);
-      expect(th.colorScheme.primary, const Color(0xFFD1E4FF));
-      expect(th.scaffoldBackgroundColor, const Color(0xFF0A0C10));
+      // App V2(2026-11-15):跟网页同一套「牌子」调色板
+      expect(th.colorScheme.primary, const Color(0xFF1F6FC0));
+      expect(th.scaffoldBackgroundColor, const Color(0xFF0E1013));
       expect(th.textTheme.bodyMedium!.fontFamily, 'Inter');
       expect(th.textTheme.bodyMedium!.fontSize, 14);
       expect(NwText.labelSmall.fontFamily, 'Inter'); // W60:标签用常规字
       final light = nwTheme(Brightness.light);
       expect(light.brightness, Brightness.light);
-      expect(light.colorScheme.primary, const Color(0xFF1A1C1E));
-      expect(light.scaffoldBackgroundColor, const Color(0xFFFDFDFD));
+      expect(light.colorScheme.primary, const Color(0xFF0B5FA5));
+      expect(light.scaffoldBackgroundColor, const Color(0xFFF5F6F4));
       for (final s in [th.textTheme.bodySmall!, th.textTheme.labelSmall!, light.textTheme.bodySmall!, light.textTheme.labelSmall!, ...NwText.all]) {
         expect(s.fontSize, greaterThanOrEqualTo(12), reason: '用户定的：最小 12');
       }
@@ -740,27 +743,33 @@ void main() {
       expect(find.byKey(SiteStandbyPage.hereKey), findsOneWidget);
     });
 
-    // 2026-10-14 重做：去别的页面的入口从狗列表顶栏的「⋮」菜单挪到了底部导航 —— 值守、地图、记录各是
-    // 一栏，事件、排程是记录栏的分段，版本在管理栏里。竖屏也都摆在外面、带文字，不用再点开菜单。
-    testWidgets('进了站点：竖屏时去别的页面的入口都在底部导航上、带文字', (t) async {
+    // App V2（2026-11-15）：去别的页面的入口都在「现场」目录里，一行一项带一句说明；没有收起来的菜单。
+    testWidgets('进了站点：竖屏时去别的页面的入口都在「现场」目录上、带文字', (t) async {
       _portrait(t);
       await t.pumpWidget(MaterialApp(
-          theme: nwTheme(Brightness.dark), home: NwShell(api: FakeApi('admin'), title: 'East Gate Estate')));
+          theme: nwTheme(Brightness.dark), home: NwShell(api: FakeApi('admin'), title: 'East Gate Estate', updater: null)));
       await t.pumpAndSettle();
       expect(find.byKey(barMoreKey), findsNothing, reason: '没有收起来的菜单了');
-      for (final k in ['open-watch', 'open-maps', 'open-runs', 'open-health']) {
-        expect(find.byKey(Key(k)), findsOneWidget, reason: k);
-        expect(t.getRect(find.byKey(Key(k))).bottom, lessThanOrEqualTo(844), reason: k);
+      await openSite(t);
+      for (final d in [SiteDest.robots, SiteDest.layout, SiteDest.runs, SiteDest.health]) {
+        await t.scrollUntilVisible(find.byKey(SiteDirectory.itemKey(d)), 200,
+            scrollable: find.descendant(of: find.byType(SiteDirectory), matching: find.byType(Scrollable)).first);
+        expect(find.byKey(SiteDirectory.itemKey(d)), findsOneWidget, reason: d.name);
+        expect(t.getRect(find.byKey(SiteDirectory.itemKey(d))).bottom, lessThanOrEqualTo(844), reason: d.name);
       }
-      expect(find.descendant(of: find.byKey(const Key('open-maps')), matching: find.text('地图')), findsOneWidget);
-      await t.tap(find.byKey(const Key('open-runs')));
+      expect(
+          find.descendant(
+              of: find.byKey(SiteDirectory.itemKey(SiteDest.layout), skipOffstage: false),
+              matching: find.byType(Text),
+              skipOffstage: false),
+          findsWidgets,
+          reason: '每一项带文字');
+      await openDir(t, SiteDest.runs);
+      expect(find.byType(SiteRunsPage), findsOneWidget);
+      await t.pageBack();
       await t.pumpAndSettle();
-      for (final k in ['open-incidents', 'history-alarms']) {
-        expect(find.byKey(Key(k)), findsOneWidget, reason: k);
-      }
-      // W53：管理栏是「要你处理 + 开站清单 + 三组入口」
-      await t.tap(find.byKey(const Key('open-health')));
-      await t.pumpAndSettle();
+      // 概况 = 「要你处理 + 开站清单 + 三组入口」
+      await openDir(t, SiteDest.overview);
       expect(find.byKey(const Key('admin-entry-routes')), findsOneWidget);
       await t.pumpWidget(Container());
     });
