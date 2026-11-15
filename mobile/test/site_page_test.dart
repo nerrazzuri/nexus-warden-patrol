@@ -648,9 +648,19 @@ class FakeApi implements SiteApi {
     return _acked(key);
   }
   @override
-  Future<Map<String, dynamic>> resolveAlert(String key, {String verdict = ''}) async {
-    calls.add(verdict.isEmpty ? 'resolve $key' : 'resolve $key $verdict');
+  Future<Map<String, dynamic>> resolveAlert(String key, {String verdict = '', String note = ''}) async {
+    calls.add([verdict.isEmpty ? 'resolve $key' : 'resolve $key $verdict', if (note.isNotEmpty) 'note=$note'].join(' '));
     return _acked(key);
+  }
+  @override
+  Future<Map<String, dynamic>> backupAlert(String key) async {
+    calls.add('backup $key');
+    return <String, dynamic>{};
+  }
+  @override
+  Future<Map<String, dynamic>> reopenAlert(String key) async {
+    calls.add('reopen $key');
+    return <String, dynamic>{};
   }
   @override
   Future<Map<String, dynamic>> arriveAlert(String key) async {

@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'site_page_test.dart' show FakeApi;
+import 'support/scene.dart';
 
 Alert _person({Map<String, dynamic> extra = const <String, dynamic>{}}) =>
     Alert.fromWire(<String, dynamic>{
@@ -28,38 +29,37 @@ Future<void> _tall(WidgetTester t) async {
 
 void main() {
   m04Tests();
-  testWidgets('我来处理、已到场都在；没到场误报点不了；点了发 arrive', (t) async {
+  testWidgets('我来处理、已到场都在；没到场没有结论可选；点了发 arrive，结论才出来', (t) async {
     await _tall(t);
     final api = FakeApi('guard');
     await t.pumpWidget(MaterialApp(home: SiteAlertScenePage(api: api, alert: _person())));
     await t.pumpAndSettle();
     expect(find.byKey(SiteAlertScenePage.ackKey), findsOneWidget);
-    final arrive = find.byKey(SiteAlertScenePage.arriveKey);
-    expect(arrive, findsOneWidget);
-    expect(find.textContaining('点「已到场」后才能关闭'), findsOneWidget);
-    await t.tap(find.byKey(SiteAlertScenePage.falseKey));
-    await t.pumpAndSettle();
-    expect(api.calls.where((c) => c.startsWith('resolve')), isEmpty, reason: '误报要先到场');
-    await t.tap(arrive);
-    await t.pumpAndSettle();
+    expect(await sceneShow(t, find.byKey(SiteAlertScenePage.arriveKey)), findsOneWidget);
+    expect(await sceneShow(t, find.textContaining('有人到场后才能结案')), findsOneWidget);
+    expect(find.byKey(SiteAlertScenePage.falseKey), findsNothing, reason: '误报要先到场');
+    expect(find.byKey(SiteAlertScenePage.doneKey), findsNothing);
+    await sceneTap(t, SiteAlertScenePage.arriveKey);
     expect(api.calls, contains('arrive A/dog_sees_person#1'));
-    expect(find.byKey(SiteAlertScenePage.doneKey), findsOneWidget, reason: '到场了：换成「处置完成」');
+    expect(await sceneShow(t, find.byKey(SiteAlertScenePage.doneKey)), findsOneWidget, reason: '到场了：能定结论结案');
+    expect(find.byKey(SiteAlertScenePage.falseKey), findsOneWidget);
   });
 
-  testWidgets('到场了：处置完成要确认，确认了才发 resolve', (t) async {
+  testWidgets('到场了：先选结论才能结案；备注一起发', (t) async {
     await _tall(t);
     final api = FakeApi('guard');
     await t.pumpWidget(MaterialApp(
         home: SiteAlertScenePage(
             api: api, alert: _person(extra: <String, dynamic>{'arrived_by': '张三', 'arrived_ms': 3000}))));
     await t.pumpAndSettle();
-    expect(find.textContaining('张三 已到场'), findsOneWidget);
-    await t.tap(find.byKey(SiteAlertScenePage.doneKey));
-    await t.pumpAndSettle();
-    expect(api.calls.where((c) => c.startsWith('resolve')), isEmpty);
-    await t.tap(find.byKey(SiteAlertScenePage.doneGoKey));
-    await t.pumpAndSettle();
-    expect(api.calls, contains('resolve A/dog_sees_person#1 handled'));
+    expect(await sceneShow(t, find.textContaining('张三 已到场')), findsOneWidget);
+    await sceneShow(t, find.byKey(SiteAlertScenePage.doneKey));
+    final done = t.widget<FilledButton>(find.descendant(of: find.byKey(SiteAlertScenePage.doneKey), matching: find.byType(FilledButton), matchRoot: true));
+    expect(done.onPressed, isNull, reason: '没选结论，结案按不了');
+    await sceneTap(t, SiteAlertScenePage.handledKey);
+    await t.enterText(find.byKey(SiteAlertScenePage.noteKey), '外卖员找错门');
+    await sceneTap(t, SiteAlertScenePage.doneKey);
+    expect(api.calls, contains('resolve A/dog_sees_person#1 handled note=外卖员找错门'));
   });
 
   testWidgets('去向不明：写出几点起看不到；最后位置用最后看见的那一处', (t) async {
@@ -68,8 +68,8 @@ void main() {
     await t.pumpWidget(MaterialApp(
         home: SiteAlertScenePage(api: api, alert: _person(extra: <String, dynamic>{'lost_ms': 4000}))));
     await t.pumpAndSettle();
-    expect(find.textContaining('看不到人了，去向不明'), findsWidgets);
-    expect(find.textContaining('(5.0, 6.0)'), findsOneWidget);
+    expect(await sceneShow(t, find.textContaining('看不到人了，去向不明')), findsWidgets);
+    expect(await sceneShow(t, find.textContaining('(5.0, 6.0)')), findsOneWidget);
     final (_, _, marks) = sceneMarks(_person())!;
     expect((marks.first.x, marks.first.y), (5.0, 6.0));
   });
@@ -81,14 +81,14 @@ void main() {
         home: SiteAlertScenePage(api: api, alert: _person(extra: <String, dynamic>{
       'follow': 'follow', 'person': <String, dynamic>{'x': 7.0, 'y': 8.0, 'at_ms': 3000}}))));
     await t.pumpAndSettle();
-    expect(find.textContaining('机器人正跟着这个人'), findsOneWidget);
+    expect(await sceneShow(t, find.textContaining('机器人正跟着这个人')), findsOneWidget);
     final lost = _person(extra: <String, dynamic>{
       'follow': 'lost', 'lost_ms': 4000,
       'person': <String, dynamic>{'x': 7.0, 'y': 8.0, 'at_ms': 3500, 'where': '东门附近'}});
     await t.pumpWidget(MaterialApp(home: SiteAlertScenePage(api: api, alert: lost)));
     await t.pumpAndSettle();
     expect(find.textContaining('机器人正跟着这个人'), findsNothing);
-    expect(find.textContaining('跟丢了，人最后在 东门附近'), findsOneWidget);
+    expect(await sceneShow(t, find.textContaining('跟丢了，人最后在 东门附近')), findsOneWidget);
     final (_, _, marks) = sceneMarks(lost)!;
     expect(marks.map((m) => (m.x, m.y)), contains((7.0, 8.0)));
   });
@@ -119,17 +119,19 @@ void m04Tests() {
     final api = FakeApi('guard');
     await t.pumpWidget(MaterialApp(home: SiteAlertScenePage(api: api, alert: fault('preflight_refused', 'owner'))));
     await t.pumpAndSettle();
+    await sceneShow(t, find.byKey(SiteAlertScenePage.doneKey));
     expect(find.byKey(SiteAlertScenePage.falseKey), findsNothing);
+    expect(find.byKey(SiteAlertScenePage.intruderKey), findsNothing);
     expect(find.text('对讲：暂不支持'), findsNothing);
-    await t.tap(find.byKey(SiteAlertScenePage.doneKey));
-    await t.pumpAndSettle();
-    await t.tap(find.byKey(SiteAlertScenePage.doneGoKey));
-    await t.pumpAndSettle();
+    await sceneTap(t, SiteAlertScenePage.handledKey);
+    await sceneTap(t, SiteAlertScenePage.doneKey);
     expect(api.calls, contains('resolve A/preflight_refused#1 handled'));
     await t.pumpWidget(const SizedBox());
     await t.pumpWidget(MaterialApp(home: SiteAlertScenePage(api: FakeApi('guard'), alert: fault('cctv_motion', 'intrusion'))));
     await t.pumpAndSettle();
+    await sceneShow(t, find.byKey(SiteAlertScenePage.doneKey));
     expect(find.byKey(SiteAlertScenePage.falseKey), findsOneWidget);
+    expect(find.byKey(SiteAlertScenePage.intruderKey), findsOneWidget, reason: '入侵三种结论');
     expect(find.byKey(SiteAlertScenePage.doneKey), findsOneWidget);
   });
 }

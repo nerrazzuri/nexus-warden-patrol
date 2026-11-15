@@ -39,32 +39,36 @@ Alert _p1() => Alert.fromWire(<String, dynamic>{
 
 void main() {
   for (final lang in AppLang.values) {
-    testWidgets('告警页底栏：390×844 上四个按钮的字都是一行（${lang.name}）', (t) async {
+    testWidgets('「这件事」：390 宽上主要按钮的字都是一行、不小于 14（${lang.name}）', (t) async {
       await _realFonts(t);
       appLang.value = lang;
       addTearDown(() => appLang.value = AppLang.zh);
-      t.view.physicalSize = const Size(390, 844) * 2;
+      // 拉高：整页一次建出来（只看宽 390 下折不折行）
+      t.view.physicalSize = const Size(390, 2600) * 2;
       t.view.devicePixelRatio = 2.0;
       addTearDown(t.view.reset);
       final api = FakeApi('guard')
         ..deterRows = [
-          <String, dynamic>{'robot_id': 'A', 'level': 1, 'auto': true, 'next_in_s': 30, 'started_ms': 2000}
+          <String, dynamic>{'robot_id': 'A', 'level': 1, 'auto': true, 'next_in_s': 30, 'started_ms': 2000,
+            'active': ['strobe'], 'outputs': ['siren', 'speaker', 'strobe']}
         ];
       await t.pumpWidget(MaterialApp(
           home: SiteAlertScenePage(api: api, alert: _p1(), now: () => DateTime.fromMillisecondsSinceEpoch(40000))));
       await t.pumpAndSettle();
       final labels = [
-        tr("I'll handle it", '我来处理'),
+        tr('Take ownership', '我来处理'),
         tr('Sound siren (level 3)', '开警笛（第 3 级）'),
-        tr('False alarm', '误报'),
-        tr("I'm on site", '已到场'), // W74：看见人那一类第四个位置
+        tr('Strobe 30 s', '开警灯 30 秒'),
+        tr('All off', '全部关'),
+        tr('Request backup', '请求支援'),
+        tr('On scene', '已到场'), // W74：看见人那一类要先到场
       ];
       for (final l in labels) {
-        final f = find.descendant(of: find.byKey(SiteAlertScenePage.barKey), matching: find.text(l));
+        final f = find.descendant(of: find.byType(SiteAlertScenePage), matching: find.text(l));
         expect(f, findsOneWidget, reason: l);
         final style = t.widget<Text>(f).style ?? DefaultTextStyle.of(t.element(f)).style;
         final fontSize = DefaultTextStyle.of(t.element(f)).style.merge(style).fontSize!;
-        expect(fontSize, greaterThanOrEqualTo(14), reason: '告警页按钮的字不低于 14');
+        expect(fontSize, greaterThanOrEqualTo(14), reason: '「这件事」按钮的字不低于 14');
         expect(t.getSize(f).height, lessThan(fontSize * 2), reason: '"$l" 折成了两行');
       }
     });

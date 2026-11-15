@@ -10,6 +10,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'site_page_test.dart' show FakeApi;
 import 'support/fake_site.dart';
+import 'support/scene.dart';
 
 const int t0 = 1791077400000; // 2026-10-04 01:30:00 UTC
 
@@ -108,9 +109,7 @@ void main() {
           'first_ms': t0, 'context': <String, dynamic>{}});
     await t.pumpWidget(MaterialApp(home: SiteAlertScenePage(api: api, alert: alert('A'))));
     await t.pumpAndSettle();
-    await t.ensureVisible(find.byKey(SiteAlertScenePage.videoKey));
-    await t.tap(find.byKey(SiteAlertScenePage.videoKey));
-    await t.pumpAndSettle();
+    await sceneTap(t, SiteAlertScenePage.videoKey);
     final page = t.widget<SiteRecordingsPage>(find.byType(SiteRecordingsPage));
     expect((page.robotId, page.aroundMs), ('A', t0));
     await t.pumpWidget(Container());
