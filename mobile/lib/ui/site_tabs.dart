@@ -928,13 +928,12 @@ class _SchedulePageState extends State<SchedulePage> {
     }
   }
 
-  Future<void> _edit([Map<String, dynamic>? old]) async {
-    final got = await showDialog<Map<String, dynamic>>(
-        context: context,
-        builder: (_) => _ScheduleEditor(
-            api: widget.api, routes: _routes, robots: _robots, old: old,
-            titles: _titles, blocked: _blocked, manual: _manual));
-    if (got == null) return;
+  /// 就地编辑（App V2 不弹窗）：null = 没在编；{} = 新加的；别的 = 在编的那一条。
+  Map<String, dynamic>? _editing;
+
+  void _edit([Map<String, dynamic>? old]) => setState(() => _editing = old ?? const <String, dynamic>{});
+
+  Future<void> _save(Map<String, dynamic>? old, Map<String, dynamic> got) async {
     final id = old != null ? '${old['id']}' : 'app-${DateTime.now().millisecondsSinceEpoch}';
     // 外审 W53-1 #9：编辑器没有的字段（每隔几分钟、到几点、优先级、回哪个待命点……）原样带回去，
     // 站点是整条替换的；选了「任一台」就把原来的 robot 去掉
@@ -951,7 +950,12 @@ class _SchedulePageState extends State<SchedulePage> {
     if (!got.containsKey('robot')) body.remove('robot');
     try {
       await widget.api.saveSchedule(id, body);
-      if (mounted) setState(() => _msg = tr('Saved', '已保存'));
+      if (mounted) {
+        setState(() {
+          _msg = tr('Saved', '已保存');
+          _editing = null;
+        });
+      }
     } on SiteError catch (e) {
       if (mounted) setState(() => _msg = refusalText(e));
     }
@@ -959,21 +963,9 @@ class _SchedulePageState extends State<SchedulePage> {
   }
 
   Future<void> _delete(Map<String, dynamic> e) async {
-    final ok = await showDialog<bool>(
-        context: context,
-        builder: (c) => AlertDialog(
-              content: Text(tr('Delete the ${e['at']} "${schedName(e, _titles)}" schedule?', '删除日程 ${e['at']}「${schedName(e, _titles)}」？')),
-              actions: [
-                TextButton(onPressed: () => Navigator.pop(c, false), child: Text(tr('Cancel', '取消'))),
-                FilledButton(
-                    key: const Key('sched-delete-go'),
-                    onPressed: () => Navigator.pop(c, true),
-                    child: Text(tr('Delete', '删除'))),
-              ],
-            ));
-    if (ok != true) return;
     try {
       await widget.api.deleteSchedule('${e['id']}', (e['revision'] as num?)?.toInt() ?? 0);
+      if (mounted) setState(() => _editing = null);
     } on SiteError catch (err) {
       if (mounted) setState(() => _msg = refusalText(err));
     }
@@ -990,6 +982,11 @@ class _SchedulePageState extends State<SchedulePage> {
       onRefresh: _load,
       child: NwListView(children: [
         SegmentedButton<bool>(
+          showSelectedIcon: false,
+          style: SegmentedButton.styleFrom(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(2)),
+              selectedBackgroundColor: c.primary,
+              selectedForegroundColor: c.onPrimary),
           segments: [
             ButtonSegment(value: false, label: Text(tr('Today', '今天'), key: SchedulePage.todayTabKey)),
             ButtonSegment(value: true, label: Text(tr('Weekly', '每周'), key: SchedulePage.weekTabKey)),
@@ -1004,43 +1001,65 @@ class _SchedulePageState extends State<SchedulePage> {
         else ...[
           if (rows.isEmpty)
             Text(tr('No schedule yet.', '暂无日程。'), style: NwText.bodyMedium.copyWith(color: c.textSecondary)),
+          // App V2 稿 S-schedule：一行一个（几点、名字、哪台 · 哪几天），点一行在下面就地编辑
           for (final e in rows)
-            Padding(
-              padding: const EdgeInsets.only(bottom: Nw.s8),
-              child: NwCard(
-                key: SchedulePage.rowKey('${e['id']}'),
-                onTap: can ? () => _edit(e) : null,
+            InkWell(
+              key: SchedulePage.rowKey('${e['id']}'),
+              onTap: can ? () => _edit(e) : null,
+              child: Container(
+                padding: const EdgeInsets.symmetric(vertical: 10),
+                decoration: BoxDecoration(
+                    color: identical(_editing, e) ? c.surfaceVariant : null,
+                    border: Border(bottom: BorderSide(color: c.outline))),
                 child: Row(children: [
                   SizedBox(
-                      width: 56,
-                      child: Text('${e['at']}', style: NwText.titleSmall.copyWith(color: c.text))),
+                      width: 60,
+                      child: Text('${e['at']}', style: NwText.titleSmall.copyWith(color: c.text, fontWeight: FontWeight.w700))),
                   Expanded(
-                      child: Text(
-                          [
-                            // 第 9 轮 W9-01：先写排程名，再写路线名（起了名的写显示名）
-                            if ('${e['title'] ?? ''}'.isNotEmpty) '${e['title']}',
-                            _titles['${e['mission']}'] ?? '${e['mission']}',
-                            if ('${e['robot'] ?? ''}'.isNotEmpty) '${e['robot']}' else tr('any free robot', '哪台空就哪台'),
-                            daysText(e['days'] as List? ?? const []),
-                            if ((e['every_min'] as num? ?? 0) > 0) scheduleWhen(e),
-                          ].join(' · '),
-                          style: NwText.bodyMedium.copyWith(color: c.text))),
-                  if (can)
-                    IconButton(
-                        key: Key('sched-delete-${e['id']}'),
-                        tooltip: tr('Delete', '删除'),
-                        icon: const Icon(Icons.delete_outline_rounded),
-                        onPressed: () => _delete(e)),
+                      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    // 第 9 轮 W9-01：先写排程名，再写路线名（起了名的写显示名）
+                    Text(
+                        [
+                          if ('${e['title'] ?? ''}'.isNotEmpty) '${e['title']}',
+                          _titles['${e['mission']}'] ?? '${e['mission']}',
+                        ].join(' · '),
+                        style: NwText.titleSmall.copyWith(color: c.text, fontWeight: FontWeight.w700)),
+                    Text(
+                        [
+                          if ('${e['robot'] ?? ''}'.isNotEmpty) '${e['robot']}' else tr('any free robot', '哪台空就哪台'),
+                          daysText(e['days'] as List? ?? const []),
+                          if ((e['every_min'] as num? ?? 0) > 0) scheduleWhen(e),
+                        ].join(' · '),
+                        style: NwText.bodySmall.copyWith(color: c.textSecondary)),
+                  ])),
+                  if (can) Icon(Icons.chevron_right_rounded, color: c.textSecondary),
                 ]),
               ),
             ),
-          if (can)
+          if (can && _editing != null) ...[
+            const SizedBox(height: Nw.s16),
+            _ScheduleEditor(
+                key: ValueKey('sched-edit-${_editing!['id'] ?? 'new'}'),
+                api: widget.api,
+                routes: _routes,
+                robots: _robots,
+                old: _editing!.isEmpty ? null : _editing,
+                titles: _titles,
+                blocked: _blocked,
+                manual: _manual,
+                onSave: (got) => _save(_editing!.isEmpty ? null : _editing, got),
+                onCancel: () => setState(() => _editing = null),
+                onDelete: _editing!.isEmpty ? null : () => _delete(_editing!)),
+          ],
+          if (can && _editing == null) ...[
+            const SizedBox(height: Nw.s16),
             NwButton(
                 buttonKey: SchedulePage.addKey,
                 icon: Icons.add_rounded,
                 variant: NwButtonVariant.outline,
-                label: tr('Add a schedule', '添加日程'),
+                label: tr('Add schedule', '添加日程'),
                 onPressed: _routes.isEmpty ? null : () => _edit()),
+          ],
           const SizedBox(height: Nw.s16),
           Text(
               tr('Arming times (when the site arms and disarms by itself) are set on the web console.',
@@ -1068,7 +1087,7 @@ class _SchedulePageState extends State<SchedulePage> {
         Expanded(child: body),
       ]));
     }
-    return Scaffold(appBar: AppBar(title: Text(tr('Schedule', '日程'))), body: body);
+    return Scaffold(appBar: AppBar(title: Text(tr('Patrol schedules', '巡逻日程'))), body: body);
   }
 }
 
@@ -1087,7 +1106,15 @@ class _ScheduleEditor extends StatefulWidget {
       this.old,
       this.titles = const {},
       this.blocked = const {},
-      this.manual = const {}});
+      this.manual = const {},
+      required this.onSave,
+      required this.onCancel,
+      this.onDelete,
+      super.key});
+
+  final ValueChanged<Map<String, dynamic>> onSave;
+  final VoidCallback onCancel;
+  final VoidCallback? onDelete;
 
   @override
   State<_ScheduleEditor> createState() => _ScheduleEditorState();
@@ -1096,17 +1123,29 @@ class _ScheduleEditor extends StatefulWidget {
 class _ScheduleEditorState extends State<_ScheduleEditor> {
   // 第 9 轮 A9-01：新加的默认选第一条跑得了的路线
   late String _route = widget.old?['mission'] as String? ??
-      widget.routes.firstWhere((r) => !widget.blocked.containsKey(r), orElse: () => widget.routes.first);
+      widget.routes.firstWhere((r) => !widget.blocked.containsKey(r), orElse: () => widget.routes.firstOrNull ?? '');
   late final TextEditingController _name = TextEditingController(text: '${widget.old?['title'] ?? ''}');
   late String _robot = widget.old?['robot'] as String? ?? '';
-  late TimeOfDay _at = _parse('${widget.old?['at'] ?? '08:00'}');
+  late final TextEditingController _at = TextEditingController(text: '${widget.old?['at'] ?? '08:00'}');
+  bool _askDelete = false;
+
+  /// 「1:5」「01:05」都认；认不出 = null。
+  static String? _hhmm(String s) {
+    final m = RegExp(r'^\s*(\d{1,2}):(\d{1,2})\s*$').firstMatch(s);
+    if (m == null) return null;
+    final h = int.parse(m[1]!), mi = int.parse(m[2]!);
+    if (h > 23 || mi > 59) return null;
+    return '${h.toString().padLeft(2, '0')}:${mi.toString().padLeft(2, '0')}';
+  }
+
+  @override
+  void dispose() {
+    _name.dispose();
+    _at.dispose();
+    super.dispose();
+  }
   late final Set<String> _picked = {for (final d in (widget.old?['days'] as List? ?? _allDays)) '$d'};
   int? _est;
-
-  static TimeOfDay _parse(String s) {
-    final p = s.split(':');
-    return TimeOfDay(hour: int.tryParse(p.first) ?? 8, minute: p.length > 1 ? int.tryParse(p[1]) ?? 0 : 0);
-  }
 
   @override
   void initState() {
@@ -1127,96 +1166,166 @@ class _ScheduleEditorState extends State<_ScheduleEditor> {
 
   @override
   Widget build(BuildContext context) {
-    String two(int v) => v.toString().padLeft(2, '0');
-    return AlertDialog(
-      title: Text(widget.old == null ? tr('Add a schedule', '添加日程') : tr('Edit schedule', '编辑日程')),
-      content: SingleChildScrollView(
-        child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-          TextField(
-              key: const Key('sched-name'),
-              controller: _name,
-              maxLength: 40,
-              decoration: InputDecoration(
-                  labelText: tr('Schedule name', '日程名'), hintText: tr('e.g. Night patrol', '例如：夜巡'))),
-          DropdownButtonFormField<String>(
-              key: const Key('sched-route'),
-              initialValue: _route,
-              isExpanded: true,
-              decoration: InputDecoration(labelText: tr('Route', '路线')),
-              // 第 9 轮 W9-01 / A9-01：写显示名；跑不了的灰掉，写为什么
-              items: [
-                for (final r in widget.routes)
-                  DropdownMenuItem(
-                      value: r,
-                      enabled: !widget.blocked.containsKey(r) || r == widget.old?['mission'],
-                      child: Text(
-                          widget.blocked.containsKey(r)
-                              ? tr('${widget.titles[r] ?? r} (${widget.blocked[r]})', '${widget.titles[r] ?? r}（${widget.blocked[r]}）')
-                              : widget.titles[r] ?? r,
-                          overflow: TextOverflow.ellipsis)),
-              ],
-              onChanged: (v) {
-                setState(() => _route = v ?? _route);
-                unawaited(_estimate());
-              }),
-          DropdownButtonFormField<String>(
-              key: const Key('sched-robot'),
-              initialValue: _robot,
-              decoration: InputDecoration(labelText: tr('Robot', '机器人')),
-              items: [
-                DropdownMenuItem(value: '', child: Text(tr('Any free robot', '哪台空就哪台'))),
-                for (final r in widget.robots)
-                  DropdownMenuItem(
-                      value: r,
-                      child: Text(
-                          widget.manual.contains(r)
-                              ? tr('$r (manual dispatch only: schedules will not send it)', '$r（只许手动派，日程不会派它）')
-                              : r,
-                          overflow: TextOverflow.ellipsis)),
-              ],
-              onChanged: (v) {
-                setState(() => _robot = v ?? '');
-                unawaited(_estimate());
-              }),
-          const SizedBox(height: Nw.s8),
-          OutlinedButton.icon(
-              key: const Key('sched-time'),
-              icon: const Icon(Icons.schedule_rounded),
-              label: Text('${two(_at.hour)}:${two(_at.minute)}'),
-              onPressed: () async {
-                final t = await showTimePicker(context: context, initialTime: _at);
-                if (t != null) setState(() => _at = t);
-              }),
-          const SizedBox(height: Nw.s8),
-          Wrap(spacing: 4, children: [
-            for (final d in _allDays)
-              FilterChip(
-                  key: Key('sched-day-$d'),
-                  label: Text(dayName(d)),
-                  selected: _picked.contains(d),
-                  onSelected: (on) => setState(() => on ? _picked.add(d) : _picked.remove(d))),
-          ]),
-          if (_est != null) ...[
-            const SizedBox(height: Nw.s8),
-            Text(tr('${minutesText(_est!)} per patrol (including the walk back).', '每趟${minutesText(_est!)}（含返回）。')),
+    final c = Nw.of(context);
+    final shape = RoundedRectangleBorder(borderRadius: BorderRadius.circular(2));
+    final at = _hhmm(_at.text);
+    Widget label(String t) => Padding(
+        padding: const EdgeInsets.only(top: Nw.s16, bottom: Nw.s4),
+        child: Text(t, style: NwText.labelMedium.copyWith(color: c.textSecondary)));
+    // App V2 稿 S-schedule：就地编辑，不弹窗
+    return Container(
+      key: const Key('sched-editor'),
+      padding: const EdgeInsets.all(Nw.s16),
+      decoration: BoxDecoration(color: c.surface, border: Border.all(color: c.outline)),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        Text(
+            widget.old == null
+                ? tr('Add schedule', '添加日程')
+                : tr('Edit: ${widget.old!['at']} ${widget.titles['${widget.old!['mission']}'] ?? widget.old!['mission']}',
+                    '编辑：${widget.old!['at']} ${widget.titles['${widget.old!['mission']}'] ?? widget.old!['mission']}'),
+            style: NwText.titleMedium.copyWith(color: c.text, fontWeight: FontWeight.w700)),
+        label(tr('Start', '开始时间')),
+        TextField(
+            key: const Key('sched-time'),
+            controller: _at,
+            keyboardType: TextInputType.datetime,
+            decoration: InputDecoration(
+                hintText: '19:00', errorText: at == null ? tr('Write it as 19:00', '写成 19:00 这样') : null),
+            onChanged: (_) => setState(() {})),
+        label(tr('Days', '哪几天')),
+        Row(children: [
+          for (final (i, d) in _allDays.indexed) ...[
+            if (i > 0) const SizedBox(width: 4),
+            Expanded(
+                child: Material(
+                    color: _picked.contains(d) ? c.primary : c.surface,
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(2), side: BorderSide(color: _picked.contains(d) ? c.primary : c.outline)),
+                    child: InkWell(
+                        key: Key('sched-day-$d'),
+                        onTap: () => setState(() => _picked.contains(d) ? _picked.remove(d) : _picked.add(d)),
+                        child: SizedBox(
+                            height: 40,
+                            child: Center(
+                                child: Text(dayName(d),
+                                    style: NwText.labelMedium.copyWith(
+                                        color: _picked.contains(d) ? c.onPrimary : c.text, fontWeight: FontWeight.w700)))))))
           ],
         ]),
-      ),
-      actions: [
-        TextButton(onPressed: () => Navigator.pop(context), child: Text(tr('Cancel', '取消'))),
-        FilledButton(
-            key: const Key('sched-save'),
-            onPressed: _picked.isEmpty
-                ? null
-                : () => Navigator.pop(context, <String, dynamic>{
-                      'mission': _route,
-                      'title': _name.text.trim(),
-                      if (_robot.isNotEmpty) 'robot': _robot,
-                      'at': '${two(_at.hour)}:${two(_at.minute)}',
-                      'days': [for (final d in _allDays) if (_picked.contains(d)) d],
-                    }),
-            child: Text(tr('Save', '保存'))),
-      ],
+        label(tr('Route · Robot', '路线 · 机器人')),
+        DropdownButtonFormField<String>(
+            key: const Key('sched-route'),
+            initialValue: _route,
+            isExpanded: true,
+            decoration: InputDecoration(labelText: tr('Route', '路线')),
+            // 第 9 轮 W9-01 / A9-01：写显示名；跑不了的灰掉，写为什么
+            items: [
+              // 日程指着的路线已经删了 / 不在这张图上：照样列出来，写明找不到（不然下拉框没有这一项就崩）
+              if (!widget.routes.contains(_route))
+                DropdownMenuItem(
+                    value: _route,
+                    child: Text(tr('$_route (route not found)', '$_route（找不到这条路线）'), overflow: TextOverflow.ellipsis)),
+              for (final r in widget.routes)
+                DropdownMenuItem(
+                    value: r,
+                    enabled: !widget.blocked.containsKey(r) || r == widget.old?['mission'],
+                    child: Text(
+                        widget.blocked.containsKey(r)
+                            ? tr('${widget.titles[r] ?? r} (${widget.blocked[r]})', '${widget.titles[r] ?? r}（${widget.blocked[r]}）')
+                            : widget.titles[r] ?? r,
+                        overflow: TextOverflow.ellipsis)),
+            ],
+            onChanged: (v) {
+              setState(() => _route = v ?? _route);
+              unawaited(_estimate());
+            }),
+        const SizedBox(height: Nw.s8),
+        DropdownButtonFormField<String>(
+            key: const Key('sched-robot'),
+            initialValue: _robot,
+            isExpanded: true,
+            decoration: InputDecoration(labelText: tr('Robot', '机器人')),
+            items: [
+              DropdownMenuItem(value: '', child: Text(tr('Any free robot', '哪台空就哪台'))),
+              if (_robot.isNotEmpty && !widget.robots.contains(_robot))
+                DropdownMenuItem(value: _robot, child: Text(tr('$_robot (not on this site)', '$_robot（站点上没有）'))),
+              for (final r in widget.robots)
+                DropdownMenuItem(
+                    value: r,
+                    child: Text(
+                        widget.manual.contains(r)
+                            ? tr('$r (manual dispatch only: schedules will not send it)', '$r（只许手动派，日程不会派它）')
+                            : r,
+                        overflow: TextOverflow.ellipsis)),
+            ],
+            onChanged: (v) {
+              setState(() => _robot = v ?? '');
+              unawaited(_estimate());
+            }),
+        const SizedBox(height: Nw.s8),
+        TextField(
+            key: const Key('sched-name'),
+            controller: _name,
+            maxLength: 40,
+            decoration:
+                InputDecoration(labelText: tr('Schedule name', '日程名'), hintText: tr('e.g. Night patrol', '例如：夜巡'))),
+        if (_est != null)
+          Text(tr('${minutesText(_est!)} per run (incl. return).', '每趟${minutesText(_est!)}（含返回）。'),
+              style: NwText.bodySmall.copyWith(color: c.textSecondary)),
+        const SizedBox(height: Nw.s16),
+        Row(children: [
+          Expanded(
+              child: FilledButton(
+                  key: const Key('sched-save'),
+                  style: FilledButton.styleFrom(minimumSize: const Size(48, 48), shape: shape),
+                  onPressed: _picked.isEmpty || at == null
+                      ? null
+                      : () => widget.onSave(<String, dynamic>{
+                            'mission': _route,
+                            'title': _name.text.trim(),
+                            if (_robot.isNotEmpty) 'robot': _robot,
+                            'at': at,
+                            'days': [for (final d in _allDays) if (_picked.contains(d)) d],
+                          }),
+                  child: Text(tr('Save', '保存')))),
+          const SizedBox(width: Nw.s8),
+          Expanded(
+              child: widget.onDelete != null
+                  ? OutlinedButton(
+                      key: Key('sched-delete-${widget.old!['id']}'),
+                      style: OutlinedButton.styleFrom(
+                          minimumSize: const Size(48, 48), shape: shape, foregroundColor: c.error, side: BorderSide(color: c.error)),
+                      onPressed: () => setState(() => _askDelete = true),
+                      child: Text(tr('Delete', '删除')))
+                  : OutlinedButton(
+                      key: const Key('sched-cancel'),
+                      style: OutlinedButton.styleFrom(minimumSize: const Size(48, 48), shape: shape),
+                      onPressed: widget.onCancel,
+                      child: Text(tr('Cancel', '取消')))),
+        ]),
+        if (_askDelete) ...[
+          const SizedBox(height: Nw.s8),
+          Text(tr('Delete this schedule? Patrols at this time stop from tonight.', '删掉这条日程？从今晚起这个时间不再派巡逻。'),
+              style: NwText.bodySmall.copyWith(color: c.text)),
+          const SizedBox(height: Nw.s8),
+          Row(children: [
+            Expanded(
+                child: OutlinedButton(
+                    style: OutlinedButton.styleFrom(minimumSize: const Size(48, 48), shape: shape),
+                    onPressed: () => setState(() => _askDelete = false),
+                    child: Text(tr('Keep', '不删')))),
+            const SizedBox(width: Nw.s8),
+            Expanded(
+                child: FilledButton(
+                    key: const Key('sched-delete-go'),
+                    style: FilledButton.styleFrom(minimumSize: const Size(48, 48), shape: shape, backgroundColor: c.error),
+                    onPressed: widget.onDelete,
+                    child: Text(tr('Delete', '删除')))),
+          ]),
+        ],
+        if (widget.onDelete != null)
+          TextButton(key: const Key('sched-cancel'), onPressed: widget.onCancel, child: Text(tr('Close', '收起'))),
+      ]),
     );
   }
 }
