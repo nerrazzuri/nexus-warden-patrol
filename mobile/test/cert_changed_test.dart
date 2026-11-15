@@ -101,15 +101,16 @@ void main() {
     await t.pumpWidget(Container());
   });
 
-  testWidgets('站点卡片菜单：有「更新站点码」，删除不再叫人删掉重加', (t) async {
+  testWidgets('登录页上就有「新站点码 | 其他地址」一排等宽（原来卡片的 ⋮ 菜单）；删除不再叫人删掉重加', (t) async {
     final store = MemorySiteStore([
       SiteEntry(name: '庄园', url: 'https://h:1', fingerprint: 'ab' * 32, username: 'gina')
     ]);
     await t.pumpWidget(MaterialApp(home: SiteListPage(store: store, apiFactory: (_) => FakeApi('guard'))));
     await t.pumpAndSettle();
-    await t.tap(find.byKey(const Key('site-menu-庄园')));
+    await t.tap(find.byKey(const Key('site-enter-庄园')));
     await t.pumpAndSettle();
-    expect(find.byKey(const Key('site-code-庄园')), findsOneWidget);
+    final a = t.getRect(find.byKey(SiteLoginPage.newCodeKey)), b = t.getRect(find.byKey(SiteLoginPage.altsKey));
+    expect((a.top, a.width), (b.top, b.width));
     expect(find.textContaining('删除重加'), findsNothing);
   });
 }

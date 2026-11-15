@@ -192,6 +192,8 @@ void main() {
     await _show(t, SiteListPage(store: MemorySiteStore()));
     await t.tap(find.byKey(const Key('site-add')));
     await t.pumpAndSettle();
+    await t.tap(find.byKey(const Key('site-manual')));
+    await t.pumpAndSettle();
     t.view.viewInsets = const FakeViewPadding(bottom: 400); // 横屏时键盘占掉一大半
     await t.pumpAndSettle();
     await t.enterText(find.byKey(const Key('site-name')), '庄园');

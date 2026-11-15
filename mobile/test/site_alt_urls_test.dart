@@ -72,15 +72,15 @@ void main() {
     await t.pumpWidget(const SizedBox());
   });
 
-  testWidgets('站点卡菜单：编辑备用地址，一行一个；不是 https:// 开头的不存', (t) async {
+  testWidgets('登录页「其他地址」：就地编辑备用地址，一行一个；不是 https:// 开头的不存', (t) async {
     final store = MemorySiteStore([
       const SiteEntry(name: '商场', url: 'https://a:1', fingerprint: 'ab', username: 'gina')
     ]);
     await t.pumpWidget(MaterialApp(home: SiteListPage(store: store, push: const NoPush())));
     await t.pumpAndSettle();
-    await t.tap(find.byKey(const Key('site-menu-商场')));
+    await t.tap(find.byKey(const Key('site-enter-商场')));
     await t.pumpAndSettle();
-    await t.tap(find.byKey(const Key('site-alts-商场')));
+    await t.tap(find.byKey(SiteLoginPage.altsKey));
     await t.pumpAndSettle();
     await t.enterText(find.byKey(const Key('site-alts-field')), 'http://c:2');
     await t.tap(find.byKey(const Key('site-alts-save')));
@@ -91,6 +91,7 @@ void main() {
     await t.tap(find.byKey(const Key('site-alts-save')));
     await t.pumpAndSettle();
     expect(store.sites.single.alts, ['https://c:2', 'https://d:3']);
+    expect(find.byKey(SiteLoginPage.msgKey), findsOneWidget, reason: '存好了说一声，还在登录页');
     expect(store.sites.single.url, 'https://a:1');
   });
 }

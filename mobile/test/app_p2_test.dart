@@ -60,6 +60,8 @@ void main() {
     final have = SiteEntry(name: 'demo', url: 'https://10.0.0.5:8520', fingerprint: 'ab' * 32, username: '');
     await t.pumpWidget(MaterialApp(home: SiteAddPage(existing: [have])));
     await t.pumpAndSettle();
+    await t.tap(find.byKey(const Key('site-manual')));
+    await t.pumpAndSettle();
     await t.enterText(find.byKey(const Key('site-name')), 'demo 2');
     await t.enterText(find.byKey(const Key('site-url')), 'https://10.0.0.5:8520');
     await t.enterText(find.byKey(const Key('site-fp')), 'ab' * 32);

@@ -18,6 +18,8 @@ import 'package:nexwar_patrol/ui/nw/nw_widgets.dart';
 import 'package:nexwar_patrol/ui/site_alert_scene.dart';
 import 'package:nexwar_patrol/ui/site_mapping.dart' show MapMark, SiteMapPreviewPage;
 import 'package:nexwar_patrol/ui/site_maps.dart' show SiteMapTab;
+import 'package:nexwar_patrol/net/site_client.dart' show SiteError;
+import 'package:nexwar_patrol/ui/site_add.dart';
 import 'package:nexwar_patrol/ui/site_page.dart';
 import 'package:nexwar_patrol/ui/site_pose_pick.dart' show PoseBar;
 import 'package:nexwar_patrol/ui/site_routes.dart' show SiteRouteEditorPage;
@@ -189,6 +191,9 @@ Future<void> _granted(WidgetTester t) async {
   await t.pump(const Duration(milliseconds: 300));
 }
 
+// 站点的 nexwar_site.pairing.encode 真出的码（见 pairing_test.dart）。
+const _pairCode = 'D1MAXSITE1.eyJmIjoiYWJhYmFiYWJhYmFiYWJhYmFiYWJhYmFiYWJhYmFiYWJhYmFiYWJhYmFiYWJhYmFiYWJhYmFiYWJhYmFiYWJhYiIsIm4iOiLluoTlm63kuIDlj7ciLCJ1IjoiaHR0cHM6Ly8xOTIuMTY4LjEuNTo4NDQzIn0';
+
 class _Shot {
   final Size size;
   final Widget Function() build;
@@ -263,6 +268,34 @@ void main() {
     '00-gallery': _Shot(const Size(390, 2000), _gallery),
     '01-sites': _Shot(_phone, () => SiteListPage(store: MemorySiteStore([_site]))),
     '02-login': _Shot(_phone, () => SiteLoginPage(site: _site, signIn: (_, _) async => FakeApi('guard'))),
+    '02b-login-cert': _Shot(
+        _phone,
+        () => SiteLoginPage(
+            site: _site,
+            signIn: (_, _) async => throw const SiteError(0, 'cert', kind: 'cert'),
+            updateCode: (_) async => _site,
+            saveAlts: (_) async => _site,
+            apply: (_, _, _) async {},
+            openAnon: () => FakeApi('guard')),
+        ready: (t) async {
+          await t.pumpAndSettle();
+          await t.enterText(find.byKey(const Key('site-password')), 'secret-pass');
+          await t.tap(find.byKey(const Key('site-login')));
+          await t.pumpAndSettle();
+        }),
+    '02c-add': _Shot(_phone, () => SiteAddPage(scanner: (_) async => _pairCode), ready: (t) async {
+      await t.pumpAndSettle();
+      await t.tap(find.byKey(const Key('site-scan')));
+      await t.pumpAndSettle();
+    }),
+    '02d-apply': _Shot(_phone, () => AccountApplyPage(site: _site, apply: (_, _, _) async {}), ready: (t) async {
+      await t.pumpAndSettle();
+      await t.enterText(find.byKey(AccountApplyPage.nameKey), 'Vic Tan');
+      await t.enterText(find.byKey(AccountApplyPage.accountKey), 'vic');
+      await t.enterText(find.byKey(AccountApplyPage.passwordKey), 'secret-pass-1');
+      await t.tap(find.byKey(AccountApplyPage.submitKey));
+      await t.pumpAndSettle();
+    }),
     '03-duty-p1': _Shot(_phone, () => NwShell(api: _busy('guard'), title: 'East Gate Estate', ring: () {})),
     '04-duty-clear': _Shot(_phone, () => NwShell(api: _clear('guard'), title: 'East Gate Estate', ring: () {})),
     '05-alarm': _Shot(
@@ -281,7 +314,7 @@ void main() {
         () => SiteAlertScenePage(
             api: _deterring(), alert: Alert.fromWire(_p1Row()), now: () => DateTime.fromMillisecondsSinceEpoch(_t0 + 42000)),
         ready: _toMiniMap),
-    '06-dogs': _Shot(_phone, () => NwShell(api: _clear('guard'), title: 'East Gate Estate', ring: () {}),
+    '06-dogs': _Shot(_phone, () => NwShell(api: _clear('admin'), title: 'East Gate Estate', ring: () {}),
         ready: _go(SiteDest.robots)),
     '07-robot-guard': _Shot(_phone, () => SiteRobotPage(api: FakeApi('guard'), robotId: 'A')),
     // App V2 第 5 期：现场各页

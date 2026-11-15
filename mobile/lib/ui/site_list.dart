@@ -3,7 +3,10 @@
 /// 2026-10-14 按设计稿重做（P1）：选站点是设计稿的 Site Selection，登录从弹窗改成一页（[SiteLoginPage]）。
 library;
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../l10n.dart';
 import '../net/background_watch.dart';
@@ -11,8 +14,6 @@ import '../net/push.dart';
 import '../net/site_client.dart';
 import '../store/site_store.dart';
 import 'app_settings.dart';
-import 'nw/nw_button.dart';
-import 'nw/nw_cards.dart';
 import 'nw/nw_p1_entry.dart';
 import 'nw/nw_shell.dart';
 import 'nw/nw_theme.dart';
@@ -79,136 +80,14 @@ class _SiteListPageState extends State<SiteListPage> {
     });
   }
 
-  Future<void> _remove(SiteEntry s) async {
-    // 手机 App 测试 M22：以前一点就删、不能撤销
-    final ok = await showDialog<bool>(
-        context: context,
-        builder: (c) => AlertDialog(
-              title: Text(tr('Remove ${s.name} from this phone?', '从这台手机上删掉「${s.name}」？')),
-              content: Text(tr('The site itself is not affected. To add it back you need its site code again.',
-                  '站点本身不受影响。要再加回来，得重新扫或粘贴它的站点码。')),
-              actions: [
-                TextButton(onPressed: () => Navigator.pop(c, false), child: Text(tr('Cancel', '取消'))),
-                FilledButton(
-                    key: SiteListPage.removeOkKey,
-                    onPressed: () => Navigator.pop(c, true),
-                    child: Text(tr('Remove', '删除'))),
-              ],
-            ));
-    if (ok != true || !mounted) return;
-    final next = [..._sites]..remove(s);
+  /// 换掉列表里的一条（按身份找；找不到就不动）、存下来。
+  Future<void> _replace(SiteEntry old, SiteEntry? upd) async {
+    final next = [
+      for (final x in _sites)
+        if (!identical(x, old)) x else ?upd,
+    ];
     await widget.store.save(next);
     if (mounted) setState(() => _sites = next);
-  }
-
-  /// 备用地址（POC 11-05）：一行一个，`https://` 开头；证书指纹同一个，所以只是换个路走到同一台站点主机。
-  Future<void> _editAlts(SiteEntry s) async {
-    final ctl = TextEditingController(text: s.alts.join('\n'));
-    String? err;
-    final got = await showDialog<List<String>>(
-        context: context,
-        builder: (ctx) => StatefulBuilder(
-            builder: (ctx, set) => AlertDialog(
-                  title: Text(tr('Other addresses of ${s.name}', '${s.name} 的其他地址')),
-                  content: SingleChildScrollView(
-                      child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    Text(tr('Same site on other networks (e.g. robot hotspot, office Wi-Fi). One per line. '
-                            'Login tries ${s.url} first, then these in order.',
-                        '同一个站点在别的网里的地址（比如机器人热点、办公室 Wi-Fi），一行一个。登录时先试 ${s.url}，连不上按顺序试这些。')),
-                    TextField(
-                        key: const Key('site-alts-field'),
-                        controller: ctl,
-                        minLines: 2,
-                        maxLines: 5,
-                        decoration: InputDecoration(hintText: tr('https://address:port', 'https://地址:端口'), errorText: err)),
-                  ])),
-                  actions: [
-                    TextButton(onPressed: () => Navigator.pop(ctx), child: Text(tr('Cancel', '取消'))),
-                    FilledButton(
-                        key: const Key('site-alts-save'),
-                        onPressed: () {
-                          final lines = ctl.text.split('\n').map((l) => l.trim()).where((l) => l.isNotEmpty).toList();
-                          final bad = lines.where((l) => Uri.tryParse(l)?.scheme != 'https' || Uri.parse(l).host.isEmpty);
-                          if (bad.isNotEmpty) {
-                            set(() => err = tr('Must start with https:// : ${bad.first}', '要以 https:// 开头：${bad.first}'));
-                            return;
-                          }
-                          Navigator.pop(ctx, lines);
-                        },
-                        child: Text(tr('Save', '保存'))),
-                  ],
-                )));
-    // 控制器不当场 dispose：对话框关的动画还在用它（等回收）
-    if (got == null || !mounted) return;
-    final upd = s.copyWith(alts: got.where((u) => u != s.url).toList());
-    final next = [for (final x in _sites) identical(x, s) ? upd : x];
-    await widget.store.save(next);
-    if (mounted) setState(() => _sites = next);
-  }
-
-  /// 手机 App 测试 M03：站点重装、重签了证书 —— 扫或粘贴新的站点码，只换这个站点的地址和指纹
-  /// （名字、账号、备用地址留着）。不用再「删掉重加」。回更新后的那一条（没换回 null）。
-  Future<SiteEntry?> _newCode(SiteEntry s) async {
-    final code = TextEditingController();
-    final scan = widget.scanner ?? (canScanCodes ? scanSiteCode : null);
-    final raw = await showDialog<String>(
-        context: context,
-        builder: (c) => AlertDialog(
-              title: Text(tr('Update site code of ${s.name}', '更新 ${s.name} 的站点码')),
-              content: SingleChildScrollView(
-                  child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text(tr(
-                    'Use this after an administrator reinstalled the site or renewed its certificate. Get the new code from '
-                        'the duty console (Add to phone). If nobody changed the site, stop and ask the administrator first.',
-                    '管理员重装站点或更换证书后用这个。新的站点码在值班台的「加到手机」页上。如果没人动过站点，先停下，问管理员。')),
-                const SizedBox(height: Nw.s16),
-                NwField(
-                    fieldKey: newCodeFieldKey,
-                    controller: code,
-                    autocorrect: false,
-                    enableSuggestions: false,
-                    maxLines: 4,
-                    minLines: 2,
-                    mono: true,
-                    hint: '$pairingPrefix…'),
-                if (scan != null) ...[
-                  const SizedBox(height: Nw.s8),
-                  NwButton(
-                      buttonKey: newCodeScanKey,
-                      variant: NwButtonVariant.outline,
-                      icon: Icons.qr_code_scanner_rounded,
-                      label: tr('Scan new code', '扫新码'),
-                      onPressed: () async {
-                        final got = await scan(c);
-                        if (got != null && c.mounted) Navigator.pop(c, got);
-                      }),
-                ],
-              ])),
-              actions: [
-                TextButton(onPressed: () => Navigator.pop(c), child: Text(tr('Cancel', '取消'))),
-                FilledButton(
-                    key: newCodeOkKey,
-                    onPressed: () => Navigator.pop(c, code.text),
-                    child: Text(tr('Use this code', '用这个码'))),
-              ],
-            ));
-    if (raw == null || raw.trim().isEmpty || !mounted) return null;
-    final PairingInfo p;
-    try {
-      p = decodePairing(raw);
-    } on PairingException catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
-      return null;
-    }
-    final upd = s.copyWith(
-        url: p.url, fingerprint: p.fingerprint, alts: s.alts.where((u) => u != p.url).toList());
-    final next = [for (final x in _sites) identical(x, s) ? upd : x];
-    await widget.store.save(next);
-    if (!mounted) return upd;
-    setState(() => _sites = next);
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text(tr('Site code of ${s.name} updated. Sign in again.', '${s.name} 的站点码已更新，请重新登录。'))));
-    return upd;
   }
 
   /// 添加站点（App V2）：扫码、粘贴配对码或手填，都在 `SiteAddPage`；这里只管存。
@@ -221,14 +100,13 @@ class _SiteListPageState extends State<SiteListPage> {
     await widget.store.save(next);
     if (!mounted) return;
     setState(() => _sites = next);
-    ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(tr('Added ${entry.name}. Tap it to sign in.', '已添加「${entry.name}」，点它登录。'))));
+    // 稿 E-add「保存并登录」：存好直接去登录页
+    await _open(entry);
   }
 
   Future<void> _open(SiteEntry s) async {
     String? account0;
     String? used;
-    var wantNewCode = false;
     final messenger = ScaffoldMessenger.of(context);
     final nav = Navigator.of(context);
     // 口令在登录页上收（2026-10-14 重做：原来是弹窗）。登录不了人留在那一页、原因摆在那一页上，
@@ -260,8 +138,24 @@ class _SiteListPageState extends State<SiteListPage> {
               }
               throw SiteError(0, errs.join('\n'));
             },
-            // 手机 App 测试 M03：证书变了，登录页上直接给「扫新码 / 粘贴新码」
-            onNewCode: () => wantNewCode = true,
+            // 手机 App 测试 M03：证书变了，登录页上直接「新站点码」：只换地址和指纹（名字、账号、备用地址留着）。
+            // 下面登录用的是换过的 s（闭包抓的是变量）。
+            scanner: widget.scanner ?? (canScanCodes ? scanSiteCode : null),
+            updateCode: (raw) async {
+              final p = decodePairing(raw);
+              final upd = s.copyWith(url: p.url, fingerprint: p.fingerprint, alts: s.alts.where((u) => u != p.url).toList());
+              await _replace(s, upd);
+              s = upd;
+              return upd;
+            },
+            // POC 11-05：同一个站点在别的网里的地址
+            saveAlts: (alts) async {
+              final upd = s.copyWith(alts: alts.where((u) => u != s.url).toList());
+              await _replace(s, upd);
+              s = upd;
+              return upd;
+            },
+            remove: () => _replace(s, null),
             openAnon: () => widget.apiFactory(s),
             // W52：没有账号就在这里申请（不用登录），管理员批了直接用这个账号登录
             apply: (name, display, password) async {
@@ -272,20 +166,12 @@ class _SiteListPageState extends State<SiteListPage> {
                 api.close();
               }
             })));
-    if (api == null) {
-      if (wantNewCode && mounted) {
-        final upd = await _newCode(s);
-        if (upd != null && mounted) await _open(upd);
-      }
-      return;
-    }
+    if (api == null) return;
     final a = api;
     // 记下这次登录用的账号（下次登录页自动填好）、登上的地址（下次先试它）
     if ((account0 != null && account0 != s.username) || (used != null && used != s.url)) {
       final upd = (used == null ? s : s.preferring(used!)).copyWith(username: account0);
-      final next = [for (final x in _sites) identical(x, s) ? upd : x];
-      await widget.store.save(next);
-      if (mounted) setState(() => _sites = next);
+      await _replace(s, upd);
       s = upd;
     }
     // 商业化 A6：进了站点就收这个站点的 P1 推送。登记不上不挡进站点（后台值守照旧），退避一直重试，
@@ -308,118 +194,141 @@ class _SiteListPageState extends State<SiteListPage> {
     if (why != null) messenger.showSnackBar(SnackBar(content: Text(why)));
   }
 
+  Future<void> _problem() => Navigator.push(
+      context, MaterialPageRoute<void>(builder: (_) => ProblemReportPage(api: null, share: shareBundle)));
+
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => nwEntryTheme(Builder(builder: _build));
+
+  Widget _build(BuildContext context) {
     final c = Nw.of(context);
     final broken = _loadError != null;
+    final shape = RoundedRectangleBorder(borderRadius: BorderRadius.circular(2));
+    // App V2 稿 E-sites：深色；一个站点一行（名字、账号、地址），底下「扫码添加站点 | 报问题」一排等宽
     return Scaffold(
       backgroundColor: c.bg,
-      // 页头、底栏各占 Scaffold 的一格（不是 body 里的 Column）：登录页键盘还弹着就退回来的那一下，
-      // body 可以只剩零高，这样摆不溢出。
-      appBar: nwHeaderBar(
-          context,
-          NwHeader(overline: 'Nexus Warden', title: tr('Select site', '选择站点'), trailing: [
-            // W55：语言、工程师工具（解绑令）、App 版本都在「设置」里
-            IconButton(
-                key: SiteListPage.settingsKey,
-                tooltip: tr('Settings', '设置'),
-                icon: Icon(Icons.settings_rounded, color: c.text),
-                onPressed: () => Navigator.push(context,
-                    MaterialPageRoute<void>(builder: (_) => AppSettingsPage(langStore: widget.langStore)))),
-            if (!broken)
-              IconButton(
-                  key: const Key('site-add-top'),
-                  tooltip: tr('Add site', '添加站点'),
-                  icon: Icon(Icons.add_circle_outline_rounded, size: 28, color: c.text),
-                  onPressed: _add),
-          ])),
-      // 站点文件坏了不给添加（见 _loadError）
-      bottomNavigationBar: broken
-          ? null
-          : Container(
-              decoration:
-                  BoxDecoration(color: c.surface, border: Border(top: BorderSide(color: c.outline))),
-              child: SafeArea(
-                  top: false,
-                  child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: Nw.s24, vertical: Nw.s16),
-                      child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-                        Flexible(
-                            child: ConstrainedBox(
-                                constraints: const BoxConstraints(maxWidth: _maxWidth - 2 * Nw.s24),
-                                child: NwButton(
-                                    buttonKey: const Key('site-add'),
-                                    label: tr('Add site', '添加站点'),
-                                    icon: Icons.qr_code_scanner_rounded,
-                                    variant: NwButtonVariant.outline,
-                                    fullWidth: true,
-                                    onPressed: _add))),
-                      ])))),
       body: SafeArea(
-          top: false,
-          bottom: false,
-          child: broken
-              ? Center(
-                  child: SingleChildScrollView(
-                      padding: const EdgeInsets.all(Nw.s24),
-                      child: Column(mainAxisSize: MainAxisSize.min, children: [
-                        Icon(Icons.error_outline_rounded, size: 48, color: c.error),
-                        const SizedBox(height: Nw.s16),
-                        Text(tr("Can't read the site list: $_loadError", '无法读取站点列表：$_loadError'),
-                            key: const Key('site-load-error'),
-                            textAlign: TextAlign.center,
-                            style: NwText.bodyMedium.copyWith(color: c.text)),
-                      ])))
-              : _sites.isEmpty
-                  ? NwEmpty(
-                      icon: Icons.domain_add_rounded,
-                      text: tr('No sites yet. Tap "Add site" below.',
-                          '暂无站点，请点击下方「添加站点」。'),
-                      hint: tr('Scan the site code shown on the duty console, or enter the address by hand.',
-                          '扫描值班台上的配对码，或手动输入站点地址。'))
-                  // 宽屏（桌面版）上卡片不拉满一整行
-                  : Align(
-                      alignment: Alignment.topCenter,
-                      child: ConstrainedBox(
-                          constraints: const BoxConstraints(maxWidth: _maxWidth),
-                          child: ListView.separated(
-                              padding: const EdgeInsets.all(Nw.s24),
-                              itemCount: _sites.length,
-                              separatorBuilder: (_, _) => const SizedBox(height: Nw.s16),
-                              itemBuilder: (_, i) => _card(c, _sites[i]))))),
+          child: Align(
+              alignment: Alignment.topCenter,
+              child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: _maxWidth),
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                    Padding(
+                        padding: const EdgeInsets.fromLTRB(Nw.s16, Nw.s16, Nw.s16, Nw.s8),
+                        child: Row(children: [
+                          Expanded(
+                              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                            Text('NEXUS WARDEN',
+                                style: NwText.labelSmall.copyWith(
+                                    color: c.textSecondary, fontWeight: FontWeight.w700, letterSpacing: 1.2)),
+                            Text(tr('Select site', '选择站点'),
+                                style: NwText.headlineSmall.copyWith(color: c.text, fontWeight: FontWeight.w700)),
+                          ])),
+                          // W55：语言、工程师工具（解绑令）、App 版本都在「设置」里
+                          SizedBox(
+                              width: 44,
+                              height: 36,
+                              child: OutlinedButton(
+                                  key: SiteListPage.settingsKey,
+                                  style: OutlinedButton.styleFrom(
+                                      padding: EdgeInsets.zero, shape: shape, side: BorderSide(color: c.textMuted)),
+                                  onPressed: () => Navigator.push(context,
+                                      MaterialPageRoute<void>(builder: (_) => AppSettingsPage(langStore: widget.langStore))),
+                                  child: Icon(Icons.settings_outlined,
+                                      size: 20, color: c.text, semanticLabel: tr('Settings', '设置')))),
+                        ])),
+                    Expanded(
+                        child: broken
+                            ? Center(
+                                child: SingleChildScrollView(
+                                    padding: const EdgeInsets.all(Nw.s24),
+                                    child: Column(mainAxisSize: MainAxisSize.min, children: [
+                                      Icon(Icons.error_outline_rounded, size: 48, color: c.error),
+                                      const SizedBox(height: Nw.s16),
+                                      Text(tr("Can't read the site list: $_loadError", '无法读取站点列表：$_loadError'),
+                                          key: const Key('site-load-error'),
+                                          textAlign: TextAlign.center,
+                                          style: NwText.bodyMedium.copyWith(color: c.text)),
+                                    ])))
+                            : ListView(padding: const EdgeInsets.fromLTRB(Nw.s16, Nw.s8, Nw.s16, Nw.s16), children: [
+                                if (_sites.isEmpty)
+                                  Padding(
+                                      padding: const EdgeInsets.symmetric(vertical: Nw.s24),
+                                      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                                        Text(tr('No sites yet.', '还没有站点。'),
+                                            style: NwText.titleMedium.copyWith(color: c.text, fontWeight: FontWeight.w700)),
+                                        const SizedBox(height: Nw.s4),
+                                        Text(
+                                            tr('Tap "Scan to add site" below and scan the site code on the duty console, or enter the address by hand.',
+                                                '点下面「扫码添加站点」，扫值班台上的站点码，或者手填地址。'),
+                                            style: NwText.bodyMedium.copyWith(color: c.textSecondary)),
+                                      ])),
+                                for (final s in _sites) ...[_row(c, s), const SizedBox(height: Nw.s8)],
+                                if (_sites.isNotEmpty)
+                                  Text(tr('Passwords are not stored on the phone; enter yours at each sign-in.', '密码不存在手机上，每次登录都要输。'),
+                                      style: NwText.bodySmall.copyWith(color: c.textSecondary)),
+                              ])),
+                    Padding(
+                        padding: const EdgeInsets.all(Nw.s16),
+                        child: Row(children: [
+                          // 站点文件坏了不给添加（见 _loadError）
+                          if (!broken) ...[
+                            Expanded(
+                                child: FilledButton.icon(
+                                    key: const Key('site-add'),
+                                    style: FilledButton.styleFrom(
+                                        minimumSize: const Size(48, 48),
+                                        shape: shape,
+                                        padding: const EdgeInsets.symmetric(horizontal: Nw.s8)),
+                                    icon: const Icon(Icons.qr_code_scanner_rounded, size: 18),
+                                    label: Text(tr('Scan to add site', '扫码添加站点'), overflow: TextOverflow.ellipsis),
+                                    onPressed: _add)),
+                            const SizedBox(width: Nw.s8),
+                          ],
+                          Expanded(
+                              child: OutlinedButton(
+                                  key: const Key('site-problem'),
+                                  style: OutlinedButton.styleFrom(
+                                      minimumSize: const Size(48, 48),
+                                      shape: shape,
+                                      foregroundColor: c.text,
+                                      side: BorderSide(color: c.textMuted)),
+                                  onPressed: _problem,
+                                  child: Text(tr('Report a problem', '报问题'), overflow: TextOverflow.ellipsis))),
+                        ])),
+                  ])))),
     );
   }
 
-  /// 一个站点一张卡。登录之前不知道连没连上、有没有 P1：卡上不显示这两样（不编）。
-  Widget _card(NwColors c, SiteEntry s) => NwSiteCard(
-      name: s.name,
-      address: s.username.isEmpty ? s.url : '${s.url} · ${s.username}',
-      enterKey: Key('site-enter-${s.name}'),
-      onEnter: () => _open(s),
-      menu: PopupMenuButton<String>(
-          key: Key('site-menu-${s.name}'),
-          tooltip: tr('More', '更多'),
-          icon: Icon(Icons.more_vert_rounded, color: c.textSecondary),
-          onSelected: (v) => switch (v) {
-                'alts' => _editAlts(s),
-                'code' => _newCode(s),
-                _ => _remove(s),
-              },
-          itemBuilder: (_) => [
-                PopupMenuItem<String>(
-                    key: Key('site-alts-${s.name}'),
-                    value: 'alts',
-                    child: Text(tr('Other addresses of this site…', '这个站点的其他地址…'))),
-                PopupMenuItem<String>(
-                    key: Key('site-code-${s.name}'),
-                    value: 'code',
-                    child: Text(tr('Update site code (certificate changed)…', '更新站点码（证书变了）…'))),
-                PopupMenuItem<String>(
-                    key: Key('site-remove-${s.name}'),
-                    value: 'remove',
-                    child: Text(tr('Remove', '删除'), style: NwText.bodyMedium.copyWith(color: c.error))),
-              ]));
+  /// 一个站点一行。登录之前不知道连没连上、有没有 P1、是什么角色：不显示这几样（不编）。
+  Widget _row(NwColors c, SiteEntry s) => Material(
+      color: c.surface,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(2), side: BorderSide(color: c.outline)),
+      child: InkWell(
+          key: Key('site-enter-${s.name}'),
+          onTap: () => _open(s),
+          child: Padding(
+              padding: const EdgeInsets.all(Nw.s16),
+              child: Row(children: [
+                Expanded(
+                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text(s.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: NwText.titleMedium.copyWith(color: c.text, fontWeight: FontWeight.w700)),
+                  if (s.username.isNotEmpty)
+                    Text(s.username, style: NwText.bodySmall.copyWith(color: c.textSecondary)),
+                  Text(s.url,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: NwText.bodySmall.copyWith(color: c.textSecondary)),
+                ])),
+                Icon(Icons.chevron_right_rounded, color: c.textSecondary),
+              ]))));
 }
+
+/// 进入页（App V2 稿 E-*）一律深色，不跟系统。
+Widget nwEntryTheme(Widget child) => Theme(data: nwTheme(Brightness.dark), child: child);
 
 /// 登录这个站点：拿口令去登，登上了回连好的客户端，登不上抛（原因给人看）。
 /// 用账号、口令登录（账号添加站点时不填，第一次登录时输，之后记着；用户 10-30）。
@@ -440,35 +349,59 @@ typedef SiteSignIn = Future<SiteApi> Function(String account, String password);
 /// 申请账号（W52）：账号名、给管理员看的名字、密码。
 typedef SiteApply = Future<void> Function(String name, String display, String password);
 
-/// 登录页（2026-10-14 重做，原来是弹窗）：品牌、要登的是哪个站点、口令。账号是加站点时存下的，这里
-/// 只填口令。登上了带着客户端退回去（`Navigator.pop(context, api)`）；登不上留在这一页说原因。
-/// 设计稿上的数字键盘、指纹、「Emergency Station Reset」没有做（用户 2026-10-14 定的）。
+/// 登录页（App V2 稿 E-login，深色）：顶栏站点名和地址；账号、密码、登录；证书变了琥珀一条 +「扫新码 | 其他地址」；
+/// 底下「申请账号 | 报问题」一排等宽。站点卡上原来的「⋮」菜单（其他地址、更新站点码、删除）都在这一页上就地做，不弹窗。
+/// 登上了带着客户端退回去（`Navigator.pop(context, api)`）；登不上留在这一页说原因。
 class SiteLoginPage extends StatefulWidget {
   final SiteEntry site;
   final SiteSignIn signIn;
   /// 给了就有「申请账号」（W52）。
   final SiteApply? apply;
 
-  /// 手机 App 测试 M03：证书变了时登录页上「更新站点码」按钮调它（调完登录页退出、站点列表接着换码）。
-  final VoidCallback? onNewCode;
+  /// 手机 App 测试 M03：换站点码（扫的或贴的那一行）。回换好的那一条；认不出来抛 [PairingException]。
+  final Future<SiteEntry> Function(String raw)? updateCode;
+
+  /// 备用地址（POC 11-05），一行一个。回换好的那一条。
+  final Future<SiteEntry> Function(List<String> alts)? saveAlts;
+
+  /// 从这台手机上删掉这个站点（删完这一页退出）。
+  final Future<void> Function()? remove;
+
+  /// 扫新码用；不给就只能贴。
+  final CodeScanner? scanner;
 
   /// 日志设计 第 6 条：登不进去也能「上传日志」—— 给一个还没登录的站点连接（用完关掉）。
   final SiteApi Function()? openAnon;
   const SiteLoginPage(
-      {super.key, required this.site, required this.signIn, this.apply, this.onNewCode, this.openAnon});
+      {super.key,
+      required this.site,
+      required this.signIn,
+      this.apply,
+      this.updateCode,
+      this.saveAlts,
+      this.remove,
+      this.scanner,
+      this.openAnon});
 
   static const Key problemKey = Key('login-problem');
-
   static const Key applyKey = Key('login-apply');
   static const Key newCodeKey = Key('login-new-code');
+  static const Key altsKey = Key('login-alts');
+  static const Key removeKey = Key('login-remove');
+  static const Key msgKey = Key('login-msg');
 
   @override
   State<SiteLoginPage> createState() => _SiteLoginPageState();
 }
 
+enum _Panel { none, code, alts }
+
 class _SiteLoginPageState extends State<SiteLoginPage> {
+  late SiteEntry _site = widget.site;
   late final _account = TextEditingController(text: widget.site.username);
   final _pw = TextEditingController();
+  final _code = TextEditingController();
+  late final _alts = TextEditingController(text: widget.site.alts.join('\n'));
 
   /// 正在登：这时候不收第二次提交，也不许退出去（退了登上的那个会话就没人管了）。
   bool _busy = false;
@@ -478,10 +411,18 @@ class _SiteLoginPageState extends State<SiteLoginPage> {
   bool _notPassword = false;
   bool _certChanged = false;
 
+  _Panel _panel = _Panel.none;
+  String? _panelErr;
+  bool _askRemove = false;
+
+  /// 换好码、存好地址之后的那句话。
+  String? _msg;
+
   @override
   void dispose() {
-    _account.dispose();
-    _pw.dispose();
+    for (final c in [_account, _pw, _code, _alts]) {
+      c.dispose();
+    }
     super.dispose();
   }
 
@@ -494,6 +435,7 @@ class _SiteLoginPageState extends State<SiteLoginPage> {
     setState(() {
       _busy = true;
       _error = null;
+      _msg = null;
     });
     final SiteApi api;
     try {
@@ -507,7 +449,8 @@ class _SiteLoginPageState extends State<SiteLoginPage> {
           _error = e is SiteError && e.body['apply'] is String
               ? applyStateText(e.message)
               : _certChanged
-                  ? certChangedText
+                  ? tr('The site certificate has changed. Scan the new code only if you have confirmed this is your site; otherwise do not sign in.',
+                      '站点证书变了。确认是你们的站点才扫新码；不确定就先不要登录。')
                   : tr("Can't sign in: $e", '登录失败：$e');
         });
       }
@@ -534,153 +477,262 @@ class _SiteLoginPageState extends State<SiteLoginPage> {
     }
   }
 
+  void _toggle(_Panel p) => setState(() {
+        _panel = _panel == p ? _Panel.none : p;
+        _panelErr = null;
+        _askRemove = false;
+        if (_panel == _Panel.code) {
+          // 手机 App 测试 M21：剪贴板里就是站点码就先填进框里
+          unawaited(Clipboard.getData(Clipboard.kTextPlain).then((d) {
+            final t = d?.text?.trim() ?? '';
+            if (mounted && t.startsWith(pairingPrefix) && _code.text.isEmpty) _code.text = t;
+          }, onError: (Object _) {}));
+        }
+      });
+
+  Future<void> _useCode(String raw) async {
+    if (raw.trim().isEmpty) return;
+    try {
+      final upd = await widget.updateCode!(raw);
+      if (!mounted) return;
+      setState(() {
+        _site = upd;
+        _panel = _Panel.none;
+        _error = null;
+        _certChanged = false;
+        _code.clear();
+        _msg = tr('Site code of ${upd.name} updated. Sign in again.', '${upd.name} 的站点码已更新，请重新登录。');
+      });
+    } on PairingException catch (e) {
+      if (mounted) setState(() => _panelErr = e.message);
+    }
+  }
+
+  Future<void> _scanCode() async {
+    final got = await widget.scanner!(context);
+    if (got != null && mounted) await _useCode(got);
+  }
+
+  Future<void> _saveAlts() async {
+    final lines = _alts.text.split('\n').map((l) => l.trim()).where((l) => l.isNotEmpty).toList();
+    final bad = lines.where((l) => Uri.tryParse(l)?.scheme != 'https' || Uri.parse(l).host.isEmpty);
+    if (bad.isNotEmpty) {
+      setState(() => _panelErr = tr('Must start with https:// : ${bad.first}', '要以 https:// 开头：${bad.first}'));
+      return;
+    }
+    final upd = await widget.saveAlts!(lines);
+    if (!mounted) return;
+    setState(() {
+      _site = upd;
+      _panel = _Panel.none;
+      _msg = tr('Other addresses saved.', '其他地址已保存。');
+    });
+  }
+
+  Future<void> _remove() async {
+    await widget.remove!();
+    if (mounted) Navigator.pop(context);
+  }
+
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => nwEntryTheme(Builder(builder: _build));
+
+  Widget _build(BuildContext context) {
     final c = Nw.of(context);
-    final s = widget.site;
+    final s = _site;
     final error = _error;
+    final shape = RoundedRectangleBorder(borderRadius: BorderRadius.circular(2));
+    ButtonStyle out([Color? fg]) => OutlinedButton.styleFrom(
+        minimumSize: const Size(48, 44),
+        shape: shape,
+        padding: const EdgeInsets.symmetric(horizontal: Nw.s8),
+        foregroundColor: fg ?? c.text,
+        side: BorderSide(color: fg ?? c.textMuted));
+    Widget two(Widget a, Widget b) =>
+        Row(children: [Expanded(child: a), const SizedBox(width: Nw.s8), Expanded(child: b)]);
+    Widget btn(Key key, String label, VoidCallback? on, [Color? fg]) => OutlinedButton(
+        key: key,
+        style: out(fg),
+        onPressed: on,
+        child: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, textAlign: TextAlign.center));
+    final sub = NwText.bodySmall.copyWith(color: c.textSecondary);
+    final hasCode = widget.updateCode != null, hasAlts = widget.saveAlts != null;
     return PopScope(
       canPop: !_busy,
       child: Scaffold(
         backgroundColor: c.bg,
+        appBar: AppBar(
+            backgroundColor: c.bg,
+            leading: IconButton(
+                key: const Key('login-switch'),
+                tooltip: tr('Back to site list', '回站点列表'),
+                icon: Icon(Icons.arrow_back_rounded, color: c.text),
+                onPressed: _busy ? null : () => Navigator.pop(context)),
+            title: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(s.name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: NwText.titleMedium.copyWith(color: c.text, fontWeight: FontWeight.w700)),
+              Text(s.url, maxLines: 1, overflow: TextOverflow.ellipsis, style: sub),
+            ])),
         // 横屏弹键盘剩不了多高：整页能滚
         body: SafeArea(
-            child: Center(
+            child: Align(
+                alignment: Alignment.topCenter,
                 child: SingleChildScrollView(
-                    padding: const EdgeInsets.all(Nw.s24),
+                    padding: const EdgeInsets.all(Nw.s16),
                     child: ConstrainedBox(
-                        constraints: const BoxConstraints(maxWidth: 420),
-                        child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
-                              // 品牌
-                              Center(
-                                  child: Container(
-                                      width: 64,
-                                      height: 64,
-                                      alignment: Alignment.center,
-                                      decoration: BoxDecoration(
-                                          color: c.surface,
-                                          borderRadius: BorderRadius.circular(Nw.r12),
-                                          border: Border.all(color: c.outline)),
-                                      child: Icon(Icons.security_rounded, size: 32, color: c.primary))),
-                              const SizedBox(height: Nw.s16),
-                              Text('Nexus Warden',
-                                  textAlign: TextAlign.center,
-                                  style: NwText.titleLarge.copyWith(color: c.text, fontWeight: FontWeight.w700)),
+                        constraints: const BoxConstraints(maxWidth: 480),
+                        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                          NwField(
+                              fieldKey: const Key('site-account'),
+                              controller: _account,
+                              label: tr('Account', '账号'),
+                              autocorrect: false,
+                              enableSuggestions: false,
+                              autofocus: s.username.isEmpty),
+                          const SizedBox(height: Nw.s16),
+                          NwField(
+                              fieldKey: const Key('site-password'),
+                              controller: _pw,
+                              label: tr('Password', '密码'),
+                              obscureText: true,
+                              autofocus: s.username.isNotEmpty, // 桌面版（W15）：一进来就能打字，回车就登录
+                              autocorrect: false,
+                              enableSuggestions: false,
+                              error: error != null && !_notPassword,
+                              textInputAction: TextInputAction.go,
+                              onSubmitted: (_) => _submit()),
+                          const SizedBox(height: Nw.s16),
+                          FilledButton(
+                              key: const Key('site-login'),
+                              style: FilledButton.styleFrom(minimumSize: const Size(48, 48), shape: shape),
+                              onPressed: _busy ? null : _submit,
+                              child: Text(_busy ? tr('Signing in…', '正在登录…') : tr('Sign in', '登录'))),
+                          if (error != null) ...[
+                            const SizedBox(height: Nw.s16),
+                            NwNotice(
+                                key: const Key('site-login-error'),
+                                text: error,
+                                tone: _certChanged ? NwTone.warning : NwTone.error),
+                          ],
+                          if (_msg != null) ...[
+                            const SizedBox(height: Nw.s16),
+                            NwNotice(key: SiteLoginPage.msgKey, text: _msg!, tone: NwTone.success),
+                          ],
+                          if (hasCode || hasAlts) ...[
+                            const SizedBox(height: Nw.s16),
+                            two(
+                                hasCode
+                                    ? btn(SiteLoginPage.newCodeKey, tr('New site code…', '新站点码…'),
+                                        _busy ? null : () => _toggle(_Panel.code))
+                                    : const SizedBox.shrink(),
+                                hasAlts
+                                    ? btn(SiteLoginPage.altsKey, tr('Other site addresses…', '其他地址…'),
+                                        _busy ? null : () => _toggle(_Panel.alts))
+                                    : const SizedBox.shrink()),
+                          ],
+                          if (_panel == _Panel.code) ...[
+                            const SizedBox(height: Nw.s16),
+                            Text(
+                                tr('Use this after an administrator reinstalled the site or renewed its certificate. The new code is on the duty console (Add to phone). If nobody changed the site, stop and ask the administrator first.',
+                                    '管理员重装站点或更换证书后用这个。新的站点码在值班台的「加到手机」页上。如果没人动过站点，先停下，问管理员。'),
+                                style: sub),
+                            const SizedBox(height: Nw.s8),
+                            NwField(
+                                fieldKey: newCodeFieldKey,
+                                controller: _code,
+                                autocorrect: false,
+                                enableSuggestions: false,
+                                maxLines: 4,
+                                minLines: 2,
+                                mono: true,
+                                error: _panelErr != null,
+                                hint: '$pairingPrefix…'),
+                            if (_panelErr != null) ...[
                               const SizedBox(height: Nw.s4),
-                              Text(tr('Security Command', '安防指挥'),
-                                  textAlign: TextAlign.center,
-                                  style: NwText.bodySmall.copyWith(color: c.textSecondary)),
-                              const SizedBox(height: Nw.s32),
-                              // 要登的是哪个站点；「换站点」回列表
-                              Container(
-                                  padding: const EdgeInsets.fromLTRB(Nw.s16, Nw.s8, Nw.s8, Nw.s8),
-                                  decoration: BoxDecoration(
-                                      color: c.surface,
-                                      borderRadius: BorderRadius.circular(Nw.r8),
-                                      border: Border.all(color: c.outline)),
-                                  child: Row(children: [
-                                    Icon(Icons.location_on_rounded, size: 20, color: c.textSecondary),
-                                    const SizedBox(width: Nw.s16),
-                                    Expanded(
-                                        child: Column(
-                                            mainAxisSize: MainAxisSize.min,
-                                            crossAxisAlignment: CrossAxisAlignment.start,
-                                            children: [
-                                          Text(s.name,
-                                              maxLines: 1,
-                                              overflow: TextOverflow.ellipsis,
-                                              style: NwText.labelLarge.copyWith(color: c.text)),
-                                          const SizedBox(height: Nw.s4),
-                                          // 站点地址长了折一行（两行为止）
-                                          Text(s.url,
-                                              maxLines: 2,
-                                              overflow: TextOverflow.ellipsis,
-                                              style: NwText.labelSmall.copyWith(color: c.textSecondary)),
-                                        ])),
-                                    const SizedBox(width: Nw.s8),
-                                    NwButton(
-                                        buttonKey: const Key('login-switch'),
-                                        label: tr('Switch', '换站点'),
-                                        variant: NwButtonVariant.ghost,
-                                        size: NwButtonSize.small,
-                                        onPressed: _busy ? null : () => Navigator.pop(context)),
-                                  ])),
-                              const SizedBox(height: Nw.s32),
-                              NwField(
-                                  fieldKey: const Key('site-account'),
-                                  controller: _account,
-                                  label: tr('Account', '账号'),
-                                  icon: Icons.person_outline_rounded,
-                                  autocorrect: false,
-                                  enableSuggestions: false,
-                                  autofocus: s.username.isEmpty),
-                              const SizedBox(height: Nw.s16),
-                              NwField(
-                                  fieldKey: const Key('site-password'),
-                                  controller: _pw,
-                                  label: tr('Password', '密码'),
-                                  icon: Icons.lock_outline_rounded,
-                                  obscureText: true,
-                                  autofocus: s.username.isNotEmpty, // 桌面版（W15）：一进来就能打字，回车就登录
-                                  autocorrect: false,
-                                  enableSuggestions: false,
-                                  error: error != null && !_notPassword,
-                                  textInputAction: TextInputAction.go,
-                                  onSubmitted: (_) => _submit()),
-                              if (error != null) ...[
-                                const SizedBox(height: Nw.s16),
-                                NwNotice(key: const Key('site-login-error'), text: error, tone: NwTone.error),
-                                if (_certChanged && widget.onNewCode != null) ...[
-                                  const SizedBox(height: Nw.s8),
-                                  NwButton(
-                                      buttonKey: SiteLoginPage.newCodeKey,
-                                      variant: NwButtonVariant.outline,
-                                      icon: Icons.qr_code_scanner_rounded,
-                                      label: tr('Update site code', '更新站点码'),
-                                      fullWidth: true,
-                                      onPressed: () {
-                                        widget.onNewCode!();
-                                        Navigator.pop(context);
-                                      }),
-                                ],
-                              ],
+                              Text(_panelErr!, style: NwText.bodySmall.copyWith(color: c.error)),
+                            ],
+                            const SizedBox(height: Nw.s8),
+                            two(
+                                widget.scanner != null
+                                    ? btn(newCodeScanKey, tr('Scan new code', '扫新码'), _scanCode)
+                                    : btn(const Key('login-code-cancel'), tr('Cancel', '取消'), () => _toggle(_Panel.code)),
+                                FilledButton(
+                                    key: newCodeOkKey,
+                                    style: FilledButton.styleFrom(minimumSize: const Size(48, 44), shape: shape),
+                                    onPressed: () => _useCode(_code.text),
+                                    child: Text(tr('Use this code', '用这个码')))),
+                          ],
+                          if (_panel == _Panel.alts) ...[
+                            const SizedBox(height: Nw.s16),
+                            Text(
+                                tr('Same site on other networks (e.g. robot hotspot, office Wi-Fi). One per line. Sign-in tries ${s.url} first, then these in order.',
+                                    '同一个站点在别的网里的地址（比如机器人热点、办公室 Wi-Fi），一行一个。登录时先试 ${s.url}，连不上按顺序试这些。'),
+                                style: sub),
+                            const SizedBox(height: Nw.s8),
+                            NwField(
+                                fieldKey: const Key('site-alts-field'),
+                                controller: _alts,
+                                minLines: 2,
+                                maxLines: 5,
+                                autocorrect: false,
+                                enableSuggestions: false,
+                                error: _panelErr != null,
+                                hint: tr('https://address:port', 'https://地址:端口')),
+                            if (_panelErr != null) ...[
+                              const SizedBox(height: Nw.s4),
+                              Text(_panelErr!, style: NwText.bodySmall.copyWith(color: c.error)),
+                            ],
+                            const SizedBox(height: Nw.s8),
+                            two(
+                                btn(const Key('site-alts-cancel'), tr('Cancel', '取消'), () => _toggle(_Panel.alts)),
+                                FilledButton(
+                                    key: const Key('site-alts-save'),
+                                    style: FilledButton.styleFrom(minimumSize: const Size(48, 44), shape: shape),
+                                    onPressed: _saveAlts,
+                                    child: Text(tr('Save', '保存')))),
+                            if (widget.remove != null) ...[
                               const SizedBox(height: Nw.s24),
-                              NwButton(
-                                  buttonKey: const Key('site-login'),
-                                  label: _busy ? tr('Signing in…', '正在登录…') : tr('Sign in', '登录'),
-                                  size: NwButtonSize.large,
-                                  fullWidth: true,
-                                  onPressed: _busy ? null : _submit),
-                              if (widget.apply != null) ...[
-                                const SizedBox(height: Nw.s16),
-                                Center(
-                                  child: NwButton(
-                                      buttonKey: SiteLoginPage.applyKey,
-                                      variant: NwButtonVariant.ghost,
-                                      label: tr('New Account Registration', '新账号注册'),
-                                      onPressed: _busy
-                                          ? null
-                                          : () => Navigator.push(
-                                              context,
-                                              MaterialPageRoute<void>(
-                                                  builder: (_) => AccountApplyPage(site: s, apply: widget.apply!)))),
-                                ),
-                              ],
-                              if (widget.openAnon != null) ...[
+                              if (!_askRemove)
+                                btn(SiteLoginPage.removeKey, tr('Remove this site from this phone', '从这台手机上删掉这个站点'),
+                                    () => setState(() => _askRemove = true), c.error)
+                              else ...[
+                                Text(
+                                    tr('Remove ${s.name} from this phone? The site itself is not affected. To add it back you need its site code again.',
+                                        '从这台手机上删掉「${s.name}」？站点本身不受影响。要再加回来，得重新扫或粘贴它的站点码。'),
+                                    style: NwText.bodySmall.copyWith(color: c.text)),
                                 const SizedBox(height: Nw.s8),
-                                Center(
-                                  child: NwButton(
-                                      buttonKey: SiteLoginPage.problemKey,
-                                      variant: NwButtonVariant.ghost,
-                                      size: NwButtonSize.small,
-                                      label: tr("Can't sign in? Report a problem", '登不上？报问题'),
-                                      onPressed: _busy ? null : _problem),
-                                ),
+                                two(
+                                    btn(const Key('login-remove-cancel'), tr('Keep', '不删'), () => setState(() => _askRemove = false)),
+                                    FilledButton(
+                                        key: SiteListPage.removeOkKey,
+                                        style: FilledButton.styleFrom(
+                                            minimumSize: const Size(48, 44), shape: shape, backgroundColor: c.error),
+                                        onPressed: _remove,
+                                        child: Text(tr('Remove', '删除')))),
                               ],
-                            ]))))),
+                            ],
+                          ],
+                          if (widget.apply != null || widget.openAnon != null) ...[
+                            const SizedBox(height: Nw.s32),
+                            two(
+                                widget.apply != null
+                                    ? btn(
+                                        SiteLoginPage.applyKey,
+                                        tr('Request account', '申请账号'),
+                                        _busy
+                                            ? null
+                                            : () => Navigator.push(
+                                                context,
+                                                MaterialPageRoute<void>(
+                                                    builder: (_) => AccountApplyPage(site: s, apply: widget.apply!))))
+                                    : const SizedBox.shrink(),
+                                widget.openAnon != null
+                                    ? btn(SiteLoginPage.problemKey, tr('Report a problem', '报问题'), _busy ? null : _problem)
+                                    : const SizedBox.shrink()),
+                          ],
+                        ]))))),
       ),
     );
   }
@@ -689,11 +741,13 @@ class _SiteLoginPageState extends State<SiteLoginPage> {
 
 // ------------------------------------------------------------ W52：申请账号
 
-/// 申请账号（W52）：名字（给管理员看）、账号、密码。交了就等管理员批准，批了在登录页用这个账号登录。
+/// 申请账号（W52，稿 E-register）：名字（给管理员看）、账号、密码。交了就等管理员批准，批了在登录页用这个账号登录。
+/// 角色是管理员批的时候选（站点不收「想要的角色」），这里不让选。
 class AccountApplyPage extends StatefulWidget {
   final SiteEntry site;
   final SiteApply apply;
-  const AccountApplyPage({super.key, required this.site, required this.apply});
+  final DateTime Function() now;
+  const AccountApplyPage({super.key, required this.site, required this.apply, this.now = DateTime.now});
 
   static const Key nameKey = Key('apply-display');
   static const Key accountKey = Key('apply-account');
@@ -710,7 +764,7 @@ class _AccountApplyPageState extends State<AccountApplyPage> {
   final _account = TextEditingController();
   final _pw = TextEditingController();
   bool _busy = false;
-  bool _done = false;
+  DateTime? _sent;
   String? _error;
 
   @override
@@ -737,7 +791,7 @@ class _AccountApplyPageState extends State<AccountApplyPage> {
     });
     try {
       await widget.apply(name, display, _pw.text);
-      if (mounted) setState(() => _done = true);
+      if (mounted) setState(() => _sent = widget.now());
     } on SiteError catch (e) {
       if (mounted) setState(() => _error = e.message);
     } catch (e) {
@@ -748,66 +802,87 @@ class _AccountApplyPageState extends State<AccountApplyPage> {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => nwEntryTheme(Builder(builder: _build));
+
+  Widget _build(BuildContext context) {
     final c = Nw.of(context);
+    final sent = _sent;
+    final locked = _busy || sent != null;
+    String two(int v) => v.toString().padLeft(2, '0');
     return Scaffold(
-      appBar: AppBar(title: Text(tr('New Account Registration', '新账号注册'))),
+      backgroundColor: c.bg,
+      appBar: AppBar(
+          backgroundColor: c.bg,
+          title: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(tr('Request account', '申请账号'),
+                style: NwText.titleMedium.copyWith(color: c.text, fontWeight: FontWeight.w700)),
+            Text(widget.site.name, style: NwText.bodySmall.copyWith(color: c.textSecondary)),
+          ])),
       body: SafeArea(
-        child: Center(
+        child: Align(
+          alignment: Alignment.topCenter,
           child: SingleChildScrollView(
-            padding: const EdgeInsets.all(Nw.s24),
+            padding: const EdgeInsets.all(Nw.s16),
             child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 420),
-              child: _done
-                  ? Column(key: AccountApplyPage.doneKey, mainAxisSize: MainAxisSize.min, children: [
-                      Icon(Icons.hourglass_top_rounded, size: 48, color: c.primary),
-                      const SizedBox(height: Nw.s16),
-                      Text(
-                          tr('Submitted. Waiting for an administrator of ${widget.site.name} to approve. Then sign in as "${_account.text.trim()}".',
-                              '已提交，待「${widget.site.name}」管理员批准。批准后使用账号「${_account.text.trim()}」登录。'),
-                          textAlign: TextAlign.center,
-                          style: NwText.bodyLarge.copyWith(color: c.text)),
-                      const SizedBox(height: Nw.s24),
-                      NwButton(label: tr('Back to sign in', '回到登录'), onPressed: () => Navigator.pop(context)),
-                    ])
-                  : Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-                      Text(tr('The administrator assigns your role based on your name.', '管理员根据你的姓名分配权限。'),
-                          style: NwText.bodyMedium.copyWith(color: c.textSecondary)),
-                      const SizedBox(height: Nw.s16),
-                      NwField(
-                          fieldKey: AccountApplyPage.nameKey,
-                          controller: _display,
-                          label: tr('Your name (shown to the administrator)', '姓名（供管理员识别）'),
-                          icon: Icons.badge_outlined),
-                      const SizedBox(height: Nw.s16),
-                      NwField(
-                          fieldKey: AccountApplyPage.accountKey,
-                          controller: _account,
-                          label: tr('Account name (letters, digits)', '账号（字母、数字）'),
-                          icon: Icons.person_outline_rounded,
-                          autocorrect: false,
-                          enableSuggestions: false),
-                      const SizedBox(height: Nw.s16),
-                      NwField(
-                          fieldKey: AccountApplyPage.passwordKey,
-                          controller: _pw,
-                          label: tr('Password (at least 10 characters)', '密码（至少 10 个字符）'),
-                          icon: Icons.lock_outline_rounded,
-                          obscureText: true,
-                          autocorrect: false,
-                          enableSuggestions: false),
-                      if (_error != null) ...[
-                        const SizedBox(height: Nw.s16),
-                        NwNotice(text: _error!, tone: NwTone.error),
-                      ],
-                      const SizedBox(height: Nw.s24),
-                      NwButton(
-                          buttonKey: AccountApplyPage.submitKey,
-                          size: NwButtonSize.large,
-                          fullWidth: true,
-                          label: _busy ? tr('Sending…', '正在提交…') : tr('Send application', '提交申请'),
-                          onPressed: _busy ? null : _submit),
-                    ]),
+              constraints: const BoxConstraints(maxWidth: 480),
+              child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                Text(
+                    tr('You can sign in after an administrator approves and picks your role. Until then this phone receives no alarms.',
+                        '管理员批准并选好权限后才能登录。在那之前这台手机收不到报警。'),
+                    style: NwText.bodySmall.copyWith(color: c.textSecondary)),
+                const SizedBox(height: Nw.s16),
+                NwField(
+                    fieldKey: AccountApplyPage.nameKey,
+                    controller: _display,
+                    enabled: !locked,
+                    label: tr('Your name (shown to the administrator)', '姓名（供管理员识别）')),
+                const SizedBox(height: Nw.s16),
+                NwField(
+                    fieldKey: AccountApplyPage.accountKey,
+                    controller: _account,
+                    enabled: !locked,
+                    label: tr('Username (letters, digits)', '账号（字母、数字）'),
+                    autocorrect: false,
+                    enableSuggestions: false),
+                const SizedBox(height: Nw.s16),
+                NwField(
+                    fieldKey: AccountApplyPage.passwordKey,
+                    controller: _pw,
+                    enabled: !locked,
+                    label: tr('Password (at least 10 characters)', '密码（至少 10 个字符）'),
+                    obscureText: true,
+                    autocorrect: false,
+                    enableSuggestions: false),
+                if (_error != null) ...[
+                  const SizedBox(height: Nw.s16),
+                  NwNotice(text: _error!, tone: NwTone.error),
+                ],
+                const SizedBox(height: Nw.s16),
+                FilledButton(
+                    key: AccountApplyPage.submitKey,
+                    style: FilledButton.styleFrom(
+                        minimumSize: const Size(48, 48), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(2))),
+                    onPressed: locked ? null : _submit,
+                    child: Text(_busy ? tr('Sending…', '正在提交…') : tr('Send request', '提交申请'))),
+                if (sent != null) ...[
+                  const SizedBox(height: Nw.s16),
+                  Container(
+                      key: AccountApplyPage.doneKey,
+                      padding: const EdgeInsets.all(Nw.s16),
+                      decoration: BoxDecoration(color: c.surface, border: Border.all(color: c.outline)),
+                      child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                        Padding(
+                            padding: const EdgeInsets.only(top: 4),
+                            child: Icon(Icons.circle, size: 12, color: c.primary)),
+                        const SizedBox(width: Nw.s8),
+                        Expanded(
+                            child: Text(
+                                tr('Sent ${two(sent.hour)}:${two(sent.minute)} · Awaiting administrator approval. Then sign in as "${_account.text.trim()}".',
+                                    '${two(sent.hour)}:${two(sent.minute)} 已提交 · 等管理员批准。批准后用账号「${_account.text.trim()}」登录。'),
+                                style: NwText.bodyMedium.copyWith(color: c.text))),
+                      ])),
+                ],
+              ]),
             ),
           ),
         ),

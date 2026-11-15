@@ -7,7 +7,6 @@ import 'dart:async';
 import 'package:nexwar_patrol/l10n.dart';
 import 'package:nexwar_patrol/net/site_client.dart';
 import 'package:nexwar_patrol/store/site_store.dart';
-import 'package:nexwar_patrol/ui/nw/nw_cards.dart';
 import 'package:nexwar_patrol/ui/nw/nw_theme.dart';
 import 'package:nexwar_patrol/ui/site_add.dart';
 import 'package:nexwar_patrol/ui/site_page.dart';
@@ -66,31 +65,27 @@ final _themes = <String, ThemeData? Function()>{
 
 void main() {
   group('选站点', () {
-    testWidgets('页头：小标、标题、设置、加号；一个站点一张卡，卡上是名字、地址和账号，没有编出来的状态', (t) async {
+    testWidgets('页头：小标、标题、设置；一个站点一行，写名字、账号、地址，没有编出来的状态（App V2 稿 E-sites）', (t) async {
       await t.pumpWidget(MaterialApp(home: SiteListPage(store: MemorySiteStore([_site(), _site('别院')]))));
       await t.pumpAndSettle();
       expect(find.text('NEXUS WARDEN'), findsOneWidget);
       expect(find.text('选择站点'), findsOneWidget);
       expect(find.byKey(const Key('open-settings')), findsOneWidget, reason: 'W55：语言、工程师工具在设置里');
-      expect(find.byType(NwSiteCard), findsNWidgets(2));
-      final card = t.widget<NwSiteCard>(find.byType(NwSiteCard).first);
-      expect(card.name, '庄园');
-      expect(card.address, contains('https://192.168.100.200:8443'));
-      expect(card.address, contains('gina'));
-      expect(card.status, isNull, reason: '登录之前不知道连没连上：不显示');
-      expect(card.p1Count, isNull, reason: '登录之前不知道有没有 P1：不显示');
+      expect(find.byKey(const Key('site-enter-庄园')), findsOneWidget);
+      expect(find.byKey(const Key('site-enter-别院')), findsOneWidget);
+      expect(find.text('https://192.168.100.200:8443'), findsNWidgets(2));
+      expect(find.text('gina'), findsNWidgets(2));
+      expect(find.byIcon(Icons.circle_outlined), findsNothing, reason: '登录之前不知道有没有 P1：不显示');
+      expect(find.byType(PopupMenuButton<String>), findsNothing, reason: '⋮ 菜单挪到登录页上了');
     });
 
-    testWidgets('页头的加号和底下的「添加站点」进的是同一页', (t) async {
+    testWidgets('底下「扫码添加站点 | 报问题」一排等宽；扫码添加进添加站点页', (t) async {
       await t.pumpWidget(MaterialApp(home: SiteListPage(store: MemorySiteStore())));
       await t.pumpAndSettle();
-      expect(find.descendant(of: find.byKey(const Key('site-add')), matching: find.text('添加站点')),
+      expect(find.descendant(of: find.byKey(const Key('site-add')), matching: find.text('扫码添加站点')),
           findsOneWidget);
-      await t.tap(find.byKey(const Key('site-add-top')));
-      await t.pumpAndSettle();
-      expect(find.byType(SiteAddPage), findsOneWidget);
-      await t.pageBack();
-      await t.pumpAndSettle();
+      final a = t.getRect(find.byKey(const Key('site-add'))), b = t.getRect(find.byKey(const Key('site-problem')));
+      expect((a.top, a.width), (b.top, b.width));
       await t.tap(find.byKey(const Key('site-add')));
       await t.pumpAndSettle();
       expect(find.byType(SiteAddPage), findsOneWidget);
@@ -104,29 +99,32 @@ void main() {
       expect(find.byType(SiteLoginPage), findsOneWidget);
     });
 
-    testWidgets('删除在卡片的菜单里：只删点的那一个，没点「删掉」不删', (t) async {
+    testWidgets('删除在登录页「其他地址」里：只删点的那一个，没点「删除」不删，不弹窗', (t) async {
       final store = MemorySiteStore([_site(), _site('别院')]);
       await t.pumpWidget(MaterialApp(home: SiteListPage(store: store)));
       await t.pumpAndSettle();
-      expect(find.byKey(const Key('site-remove-别院')), findsNothing, reason: '收在菜单里，平时看不见');
-      await t.tap(find.byKey(const Key('site-menu-别院')));
+      await t.tap(find.byKey(const Key('site-enter-别院')));
       await t.pumpAndSettle();
-      expect(store.sites.length, 2, reason: '只是打开菜单');
-      await t.tap(find.byKey(const Key('site-remove-别院')));
+      expect(find.byKey(SiteLoginPage.removeKey), findsNothing, reason: '收在「其他地址」里，平时看不见');
+      await t.tap(find.byKey(SiteLoginPage.altsKey));
+      await t.pumpAndSettle();
+      await t.ensureVisible(find.byKey(SiteLoginPage.removeKey));
+      await t.tap(find.byKey(SiteLoginPage.removeKey));
       await t.pumpAndSettle();
       expect(store.sites.length, 2, reason: 'M22：先问一句');
+      expect(find.byType(AlertDialog), findsNothing);
+      await t.ensureVisible(find.byKey(SiteListPage.removeOkKey));
       await t.tap(find.byKey(SiteListPage.removeOkKey));
       await t.pumpAndSettle();
       expect(store.sites.map((s) => s.name), ['庄园']);
-      expect(find.text('别院'), findsNothing);
-      expect(find.byType(SiteLoginPage), findsNothing, reason: '点菜单不算点卡片');
+      expect(find.byType(SiteLoginPage), findsNothing, reason: '删完回列表');
+      expect(find.byKey(const Key('site-enter-别院')), findsNothing);
     });
 
     testWidgets('站点文件坏了：页头的加号也没有', (t) async {
       await t.pumpWidget(MaterialApp(home: SiteListPage(store: _BrokenStore())));
       await t.pumpAndSettle();
       expect(find.byKey(const Key('site-load-error')), findsOneWidget);
-      expect(find.byKey(const Key('site-add-top')), findsNothing);
       expect(find.byKey(const Key('site-add')), findsNothing);
     });
   });
@@ -136,7 +134,6 @@ void main() {
       await _openLogin(t, () => FakeApi('guard'));
       expect(find.byType(SiteLoginPage), findsOneWidget);
       expect(find.byType(AlertDialog), findsNothing);
-      expect(find.text('Nexus Warden'), findsOneWidget);
       expect(find.text('庄园'), findsOneWidget);
       expect(find.text('https://192.168.100.200:8443'), findsOneWidget);
       final field = t.widget<TextField>(find.byKey(const Key('site-password')));
@@ -173,7 +170,7 @@ void main() {
       await t.tap(find.byKey(const Key('login-switch')));
       await t.pumpAndSettle();
       expect(find.byType(SiteLoginPage), findsNothing);
-      expect(find.byType(NwSiteCard), findsOneWidget);
+      expect(find.byKey(const Key('site-enter-庄园')), findsOneWidget);
       expect(api.tried, isEmpty);
       expect(find.byType(SnackBar), findsNothing);
     });
@@ -185,7 +182,7 @@ void main() {
       await t.tap(find.byKey(const Key('site-login')));
       await t.pump();
       expect(t.widget<FilledButton>(find.byKey(const Key('site-login'))).onPressed, isNull);
-      expect(t.widget<TextButton>(find.byKey(const Key('login-switch'))).onPressed, isNull);
+      expect(t.widget<IconButton>(find.byKey(const Key('login-switch'))).onPressed, isNull);
       await t.testTextInput.receiveAction(TextInputAction.done);
       await t.pump();
       expect(api.logins, 1);
@@ -276,18 +273,44 @@ void main() {
       }
     }
 
-    testWidgets('四栏还是带 controller 的 TextField；按钮的 Key 在标准按钮上', (t) async {
+    testWidgets('App V2 稿 E-add：取景框；「粘贴配对码 | 手动输入地址」一排等宽；手填才摆出几栏，贴码就地不弹窗', (t) async {
       await t.pumpWidget(MaterialApp(home: SiteAddPage(scanner: (_) async => null)));
       await t.pumpAndSettle();
-      for (final k in ['site-name', 'site-url', 'site-fp']) {
+      expect(t.widget(find.byKey(const Key('site-scan'))), isA<InkWell>());
+      final a = t.getRect(find.byKey(const Key('site-paste'))), b = t.getRect(find.byKey(const Key('site-manual')));
+      expect((a.top, a.width), (b.top, b.width));
+      expect(find.byKey(const Key('site-name')), findsNothing, reason: '没扫、没手填之前不摆表单');
+      await t.tap(find.byKey(const Key('site-manual')));
+      await t.pumpAndSettle();
+      for (final k in ['site-name', 'site-url', 'site-fp', 'site-user']) {
         expect(t.widget<TextField>(find.byKey(Key(k))).controller, isNotNull, reason: k);
       }
       expect(t.widget<TextField>(find.byKey(const Key('site-url'))).controller!.text, 'https://');
-      expect(t.widget(find.byKey(const Key('site-scan'))), isA<FilledButton>());
-      expect(t.widget(find.byKey(const Key('site-paste'))), isA<OutlinedButton>());
       expect(t.widget(find.byKey(const Key('site-save'))), isA<FilledButton>());
-      // 桌面版的小窗口（800×600）上不滚就点得到「保存」：老测试是直接点的
-      expect(t.getRect(find.byKey(const Key('site-save'))).bottom, lessThanOrEqualTo(600));
+      await t.tap(find.byKey(const Key('site-paste')));
+      await t.pumpAndSettle();
+      expect(find.byType(AlertDialog), findsNothing);
+      expect(find.byKey(const Key('pair-code')), findsOneWidget);
+    });
+
+    testWidgets('账号在加站点时填了就记着（登录页自动填好）', (t) async {
+      SiteEntry? got;
+      await t.pumpWidget(MaterialApp(
+          home: Builder(
+              builder: (c) => TextButton(
+                  onPressed: () async => got = await Navigator.push<SiteEntry>(
+                      c, MaterialPageRoute<SiteEntry>(builder: (_) => SiteAddPage(scanner: (_) async => _code))),
+                  child: const Text('go')))));
+      await t.tap(find.text('go'));
+      await t.pumpAndSettle();
+      await t.tap(find.byKey(const Key('site-scan')));
+      await t.pumpAndSettle();
+      await t.enterText(find.byKey(const Key('site-user')), 'gina');
+      await t.ensureVisible(find.byKey(const Key('site-save')));
+      await t.tap(find.byKey(const Key('site-save')));
+      await t.pumpAndSettle();
+      expect(got!.username, 'gina');
+      expect(got!.name, '庄园一号');
     });
   });
 }
