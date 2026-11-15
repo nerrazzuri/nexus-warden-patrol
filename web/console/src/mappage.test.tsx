@@ -32,6 +32,7 @@ beforeEach(() => {
       return Promise.resolve(json(OK));
     }
     if (url.startsWith("/api/robots/nearest")) return Promise.resolve(json(nearest.body, nearest.status));
+    if (url.startsWith("/api/robots/A/goto-plan")) return Promise.resolve(json({ battery_pct: 28, dist_m: 12.5, cost_pct: 6, line_pct: 20, enough: true }));
     return Promise.resolve(json({}, 404));
   }) as typeof fetch);
 });
@@ -207,5 +208,15 @@ describe("用户 11-15:看见人的告警,地图上直接标人在哪", () => {
   });
   it("别的告警(不是看见人)有 person 也不画", () => {
     expect(personMarks([告警({ person: { x: 5, y: 6 } }, "low_battery")], MAP)).toEqual([]);
+  });
+});
+
+describe("第 8 期:派前电量", () => {
+  it("选了哪台就写它的电量、来回约用几 %、够不够", async () => {
+    const { container: c } = render(<GoLookCard map={MAP} at={[3, 4]} units={[unitA]} onClose={() => {}} say={() => {}} />);
+    await waitFor(() => expect(c.querySelector("[data-look-batt]")).not.toBeNull());
+    expect(c.querySelector("[data-look-batt]")!.getAttribute("data-look-batt")).toBe("ok");
+    expect(c.querySelector("[data-look-batt]")!.textContent).toContain("28%");
+    expect(c.querySelector("[data-look-batt]")!.textContent).toContain("6%");
   });
 });

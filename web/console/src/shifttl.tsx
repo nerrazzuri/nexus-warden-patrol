@@ -15,7 +15,8 @@ const RUNNING = new Set(["running", "done", "failed", "aborted", "handed_over"])
 /** 安全事件:有人闯入、火情(站点 alert_audience);上装的求助按钮也算。其余给保安的(机器人要帮忙、掉线)是设备与运营。 */
 export const isSecurity = (a: { audience?: string; kind: string }) => a.audience === "intrusion" || a.audience === "fire" || a.kind === "payload_sos";
 
-export interface Span { robot: string; from: number; to: number; kind: "patrol" | "offline" }
+export interface Span { robot: string; from: number; to: number; kind: "patrol" | "offline" | "charge" }
+export interface ChargeSpan { robot: string; from_ms: number; to_ms: number | null }
 export interface Mark { key: string; robot: string; at: number; kind: "security" | "equipment"; title: string }
 
 /** 时间轴上画什么:巡逻(今天的巡逻里跑过、在跑的)、离线(离线告警的起止)、事件。只取 [from, to) 里的。 */
@@ -49,12 +50,15 @@ export function ShiftTimeline(props: {
   onPick: (robot: string, at: number) => void;
   /** 回放位置(第五期 G-playback):画一根黄线。 */
   play?: number | null;
+  /** 第 8 期:站点记的充电时段(灰条)。 */
+  charging?: ChargeSpan[];
 }) {
   const { from, to } = props;
   const playing = props.play != null && props.play >= from && props.play <= to;
   const span = Math.max(1, to - from);
   const pct = (ms: number) => `${(100 * (Math.min(Math.max(ms, from), to) - from)) / span}%`;
-  const { spans, marks } = shiftSpans(props.robots, props.patrols, props.alerts, from, to, props.now);
+  const { spans: base, marks } = shiftSpans(props.robots, props.patrols, props.alerts, from, to, props.now);
+  const spans: Span[] = [...base, ...(props.charging ?? []).map((c) => ({ robot: c.robot, from: Math.max(c.from_ms, from), to: Math.min(c.to_ms ?? props.now, to), kind: "charge" as const })).filter((c) => c.to > c.from)];
   // G-compact:窄屏收成一条(全部机器人),展开看每台;宽屏一直展开(样式管)
   const [open, setOpen] = useState(false);
   const ticks: number[] = [];

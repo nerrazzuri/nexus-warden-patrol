@@ -6,6 +6,14 @@ import alertCatalog from "../../../design/i18n/alerts.json";
 export type Lang = "en" | "zh";
 
 const en = {
+  incBackup: "Request backup (notify manager)",
+  incBackupDone: "Backup requested by {who} at {t}; managers and administrators were notified.",
+  incBackupSent: "Backup requested; managers and administrators notified.",
+  lookBatt: "{id} {p}% · round trip about {c}% · {ok}",
+  lookBattOk: "enough",
+  lookBattLow: "not enough; pick another robot",
+  lookBattUnknown: "{id}: battery or position unknown; the robot checks before it leaves.",
+  tlChargeKey: "charging",
   rpTitle: "Reports & audit log",
   rpStatus: "{a} to {b}: {n} events, {f} false alarms; {p} patrols.",
   rpMax: "Max. 31 days",
@@ -2260,6 +2268,14 @@ const en = {
 type Key = keyof typeof en;
 
 const zh: Partial<Record<Key, string>> = {
+  incBackup: "请求支援（通知经理）",
+  incBackupDone: "{who} {t} 请求了支援，已推送给经理和管理员。",
+  incBackupSent: "已请求支援，经理和管理员已收到推送。",
+  lookBatt: "{id} {p}% · 来回约用 {c}% · {ok}",
+  lookBattOk: "够",
+  lookBattLow: "不够，换一台",
+  lookBattUnknown: "{id}：电量或位置不明，机器人出发前自己会查。",
+  tlChargeKey: "充电",
   rpTitle: "报告与操作记录",
   rpStatus: "{a} 到 {b}：{n} 件事件、{f} 次误报；{p} 次巡逻。",
   rpMax: "最多 31 天",

@@ -381,6 +381,8 @@ PUSH_ROUTES: dict[str, tuple[tuple[str, ...] | None, str]] = {
     # W75:走完一圈等着用图的人要知道建好了、没建成
     "map_ready": (MANAGE_ROLES, "地图已建成"),
     "map_failed": (MANAGE_ROLES, "建图失败"),
+    # redesign 第 8 期:保安在告警页「请求支援」—— 推经理和管理员
+    "backup_requested": (("owner", "admin"), "请求支援"),
 }
 #: 按角色推的这几种,那几种角色**一部登记了的手机都没有**时改推给谁(W76 外审 #10:站点没有保安账号、
 #: 保安没登记手机,换电提醒原来谁都收不到也不报)。
