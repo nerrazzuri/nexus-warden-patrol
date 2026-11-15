@@ -7,7 +7,6 @@ import 'package:nexwar_patrol/net/site_client.dart';
 import 'package:nexwar_patrol/ui/app_settings.dart';
 import 'package:nexwar_patrol/ui/arrival_alert.dart';
 import 'package:nexwar_patrol/ui/nw/nw_shell.dart';
-import 'package:nexwar_patrol/ui/site_tabs.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 

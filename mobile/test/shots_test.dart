@@ -143,11 +143,6 @@ Future<void> Function(WidgetTester) _go(SiteDest d) => (t) async {
       await openSiteDir(t, d);
     };
 
-Future<void> Function(WidgetTester) _tab(Key k) => (t) async {
-      await t.pumpAndSettle();
-      await t.tap(find.byKey(k));
-      await t.pumpAndSettle();
-    };
 
 /// 地图栏点一处、左转两下（30°）。
 Future<void> _pickPose(WidgetTester t) async {

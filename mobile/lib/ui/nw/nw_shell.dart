@@ -1,7 +1,7 @@
 /// 登录之后的外壳（App V2，design/app-v2：结构 B「现在 / 现场」两层，用户 2026-11-15 批准）。
 ///
 /// - 顶栏：站点名 + 布防状态（牌子：绿方块 / 红圈）+ 时钟；下面一条两段开关「现在 | 现场」。
-/// - 「现在」：深色；值班内容（第 1 期先沿用 [SiteDutyPage]，第 2 期按 N-normal 重排）；右下角拇指区一个
+/// - 「现在」：深色；[NowPage](第 2 期按 N-normal 重排)；右下角拇指区一个
 ///   大红方块「全部急停」—— 手机上唯一的整块红底，每个「现在」屏都有。
 /// - 「现场」：浅色目录（[SiteDirectory]，按角色四套），顶栏放小红「急停」。
 /// - 「机器人」：目录里点「机器人」切到一直活着的 [SiteRobotsPage]（事件流、响铃、后台值守、登录过期都在它身上，
@@ -22,10 +22,11 @@ import '../../net/push.dart';
 import '../../net/site_client.dart';
 import '../../store/site_store.dart';
 import '../app_settings.dart';
-import '../app_update_ui.dart';
+import '../app_update_ui.dart' show runAppUpdate;
 import '../guide.dart';
 import '../map_wizard.dart' show maybeOfferMapping;
-import '../site_duty_page.dart';
+import '../site_duty_page.dart' show DutyTargets;
+import 'nw_now.dart';
 import '../site_maps.dart' show SiteMapTab;
 import '../site_robots.dart';
 import '../site_tabs.dart' show AdminHomeTab;
@@ -82,6 +83,10 @@ class NwShell extends StatefulWidget {
   static const Key armKey = Key('shell-arm');
   static const Key clockKey = Key('shell-clock');
   static const Key p1BarKey = Key('shell-p1-bar');
+  static const Key badgeKey = Key('now-badge');
+  static const Key updateBarKey = Key('app-update-bar');
+  static const Key updateGoKey = Key('app-update-go');
+  static const Key updateLaterKey = Key('app-update-later');
 
   @override
   State<NwShell> createState() => _NwShellState();
@@ -99,6 +104,10 @@ class _NwShellState extends State<NwShell> {
   DateTime _now = DateTime.now();
   Timer? _tick;
   bool _tourChecked = false;
+
+  /// W55 / App V2:站点上有新版 App → 「现在」底部一条(不弹窗);「以后」这次打开不再提。
+  Map<String, dynamic>? _update;
+  AppUpdater? _updater;
   bool _replay = false;
 
   @override
@@ -107,9 +116,10 @@ class _NwShellState extends State<NwShell> {
     ErrorLog.instance.attach(widget.api);
     final u = widget.updater?.call(widget.api);
     if (u != null) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) unawaited(offerAppUpdate(context, u));
-      });
+      _updater = u;
+      unawaited(u.check().then((info) {
+        if (mounted && info != null) setState(() => _update = info);
+      }, onError: (Object _) {}));
     }
     replayTour = () async {
       _replay = true;
@@ -225,10 +235,14 @@ class _NwShellState extends State<NwShell> {
                 data: theme,
                 child: Builder(builder: (context) {
                   final c = Nw.of(context);
+                  // 横屏高度不够:浅色页的 P1 红条并进顶栏(一个红块),地图还能占住大半屏
+                  final short = MediaQuery.sizeOf(context).height < 480;
                   return Scaffold(
                       backgroundColor: c.bg,
                       body: Column(children: [
                         _TopBar(
+                            p1: !dark && short ? _openP1 : null,
+                            onP1: () => setState(() => _layer = ShellLayer.now),
                             title: widget.title ?? widget.entry?.name ?? api.session?.name ?? '',
                             arm: _armText(),
                             now: _now,
@@ -242,8 +256,11 @@ class _NwShellState extends State<NwShell> {
                             onBack: _sub ? () => setState(() => _layer = ShellLayer.site) : null,
                             onEstop: dark ? null : () => StopAllButton.press(context, api, _say)),
                         if (_layer == ShellLayer.now || _layer == ShellLayer.site)
-                          _Segment(layer: _layer, onPick: (l) => setState(() => _layer = l)),
-                        if (!dark)
+                          ValueListenableBuilder<Map<String, String>>(
+                              valueListenable: _openP1,
+                              builder: (context, p1, _) =>
+                                  _Segment(layer: _layer, open: p1.length, onPick: (l) => setState(() => _layer = l))),
+                        if (!dark && !short)
                           ValueListenableBuilder<Map<String, String>>(
                               valueListenable: _openP1,
                               builder: (context, p1, _) => p1.isEmpty
@@ -266,8 +283,13 @@ class _NwShellState extends State<NwShell> {
                                     control: _watchCtl,
                                     openP1: _openP1),
                                 switch (_layer) {
-                                  ShellLayer.now => SiteDutyPage(
-                                      key: const ValueKey('now'), api: api, title: widget.title, onReady: _onDutyReady),
+                                  ShellLayer.now => NowPage(
+                                      key: const ValueKey('now'),
+                                      api: api,
+                                      onReady: _onDutyReady,
+                                      openP1: _openP1,
+                                      onOpenMap: () => setState(() => _layer = ShellLayer.map),
+                                      onOpenRecords: () => setState(() => _layer = ShellLayer.site)),
                                   ShellLayer.site => SiteDirectory(
                                       key: const ValueKey('site'),
                                       api: api,
@@ -284,11 +306,23 @@ class _NwShellState extends State<NwShell> {
                                   ShellLayer.robots => const SizedBox.shrink(),
                                 },
                               ]),
-                          if (dark)
+                          if (dark && (api.session?.canAbort ?? false))
                             Positioned(
                                 right: Nw.s16,
-                                bottom: Nw.s16,
+                                bottom: Nw.s16 + (_update != null ? 64 : 0),
                                 child: SafeArea(child: _EstopSquare(onPressed: () => StopAllButton.press(context, api, _say)))),
+                          if (dark && _update != null)
+                            Positioned(
+                                left: 0,
+                                right: 0,
+                                bottom: 0,
+                                child: _UpdateBar(
+                                    version: '${_update!['version'] ?? ''}',
+                                    onUpdate: () {
+                                      final u = _updater, info = _update;
+                                      if (u != null && info != null) unawaited(runAppUpdate(context, u, info));
+                                    },
+                                    onLater: () => setState(() => _update = null))),
                         ])),
                       ]));
                 }))));
@@ -306,7 +340,10 @@ class _TopBar extends StatelessWidget {
   final String? sub;
   final VoidCallback? onBack;
   final VoidCallback? onEstop;
-  const _TopBar({required this.title, required this.arm, required this.now, required this.dark, this.sub, this.onBack, this.onEstop});
+  final ValueNotifier<Map<String, String>>? p1;
+  final VoidCallback? onP1;
+  const _TopBar(
+      {required this.title, required this.arm, required this.now, required this.dark, this.sub, this.onBack, this.onEstop, this.p1, this.onP1});
 
   @override
   Widget build(BuildContext context) {
@@ -341,6 +378,33 @@ class _TopBar extends StatelessWidget {
                               maxLines: 1, overflow: TextOverflow.ellipsis, style: NwText.bodySmall.copyWith(color: c.textSecondary))),
                     ]),
                   ])),
+                  if (p1 != null)
+                    ValueListenableBuilder<Map<String, String>>(
+                        valueListenable: p1!,
+                        builder: (context, open, _) => open.isEmpty
+                            ? const SizedBox.shrink()
+                            : Padding(
+                                padding: const EdgeInsets.only(right: Nw.s8),
+                                child: Material(
+                                    key: NwShell.p1BarKey,
+                                    color: c.error,
+                                    borderRadius: BorderRadius.circular(2),
+                                    child: InkWell(
+                                        onTap: onP1,
+                                        child: Container(
+                                            height: 36,
+                                            padding: const EdgeInsets.symmetric(horizontal: 10),
+                                            alignment: Alignment.center,
+                                            child: Row(mainAxisSize: MainAxisSize.min, children: [
+                                              Container(
+                                                  width: 12,
+                                                  height: 12,
+                                                  decoration: BoxDecoration(
+                                                      shape: BoxShape.circle, border: Border.all(color: c.onError, width: 2.5))),
+                                              const SizedBox(width: 6),
+                                              Text(open.length == 1 ? 'P1' : 'P1 × ${open.length}',
+                                                  style: NwText.labelLarge.copyWith(color: c.onError, fontWeight: FontWeight.w700)),
+                                            ])))))),
                   if (onEstop != null)
                     _EstopSmall(onPressed: onEstop!)
                   else
@@ -390,12 +454,15 @@ class _TriPainter extends CustomPainter {
 /// 「现在 | 现场」两段开关：等宽,选中的蓝底。
 class _Segment extends StatelessWidget {
   final ShellLayer layer;
+
+  /// 没关的 P1 有几件:「现在」那一段上一个红圈 + 数。
+  final int open;
   final ValueChanged<ShellLayer> onPick;
-  const _Segment({required this.layer, required this.onPick});
+  const _Segment({required this.layer, this.open = 0, required this.onPick});
   @override
   Widget build(BuildContext context) {
     final c = Nw.of(context);
-    Widget seg(ShellLayer l, Key key, String label) {
+    Widget seg(ShellLayer l, Key key, String label, {int badge = 0}) {
       final on = layer == l;
       return Expanded(
           child: Semantics(
@@ -408,8 +475,21 @@ class _Segment extends StatelessWidget {
                       height: 40,
                       alignment: Alignment.center,
                       decoration: BoxDecoration(color: on ? c.primary : Colors.transparent, borderRadius: BorderRadius.circular(2)),
-                      child: Text(label,
-                          style: NwText.labelLarge.copyWith(color: on ? c.onPrimary : c.textSecondary, fontWeight: FontWeight.w600))))));
+                      child: Row(mainAxisSize: MainAxisSize.min, children: [
+                        Text(label, style: NwText.labelLarge.copyWith(color: on ? c.onPrimary : c.textSecondary, fontWeight: FontWeight.w600)),
+                        if (badge > 0) ...[
+                          const SizedBox(width: 8),
+                          Container(
+                              width: 12,
+                              height: 12,
+                              decoration: BoxDecoration(
+                                  shape: BoxShape.circle, border: Border.all(color: on ? c.onPrimary : c.error, width: 2.5))),
+                          const SizedBox(width: 5),
+                          Text('$badge',
+                              key: NwShell.badgeKey,
+                              style: NwText.labelLarge.copyWith(color: on ? c.onPrimary : c.error, fontWeight: FontWeight.w700)),
+                        ],
+                      ])))));
     }
 
     return Padding(
@@ -418,7 +498,7 @@ class _Segment extends StatelessWidget {
             padding: const EdgeInsets.all(3),
             decoration: BoxDecoration(border: Border.all(color: c.outline), borderRadius: BorderRadius.circular(2), color: c.surface),
             child: Row(children: [
-              seg(ShellLayer.now, NwShell.nowKey, tr('Now', '现在')),
+              seg(ShellLayer.now, NwShell.nowKey, tr('Now', '现在'), badge: open),
               const SizedBox(width: 3),
               seg(ShellLayer.site, NwShell.siteKey, tr('Site', '现场')),
             ])));
@@ -507,5 +587,35 @@ class _P1Bar extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+/// 「现在」底部的「App 有新版本」:蓝点 + 一句 + 「更新」「以后」(W55 原来是底部提示条;App V2 不弹窗、留在页上)。
+class _UpdateBar extends StatelessWidget {
+  final String version;
+  final VoidCallback onUpdate;
+  final VoidCallback onLater;
+  const _UpdateBar({required this.version, required this.onUpdate, required this.onLater});
+  @override
+  Widget build(BuildContext context) {
+    final c = Nw.of(context);
+    return Material(
+        key: NwShell.updateBarKey,
+        color: c.surface,
+        child: SafeArea(
+            top: false,
+            child: Container(
+                padding: const EdgeInsets.fromLTRB(Nw.s16, 10, Nw.s16, 10),
+                decoration: BoxDecoration(border: Border(top: BorderSide(color: c.outline))),
+                child: Row(children: [
+                  Container(width: 10, height: 10, decoration: BoxDecoration(shape: BoxShape.circle, color: c.primary)),
+                  const SizedBox(width: 10),
+                  Expanded(
+                      child: Text(tr('App update $version available', 'App 有新版本 $version'),
+                          maxLines: 1, overflow: TextOverflow.ellipsis, style: NwText.bodyMedium.copyWith(color: c.text))),
+                  OutlinedButton(key: NwShell.updateGoKey, onPressed: onUpdate, child: Text(tr('Update', '更新'))),
+                  const SizedBox(width: Nw.s8),
+                  OutlinedButton(key: NwShell.updateLaterKey, onPressed: onLater, child: Text(tr('Later', '以后'))),
+                ]))));
   }
 }

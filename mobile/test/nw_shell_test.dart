@@ -4,10 +4,9 @@ import 'package:nexwar_patrol/l10n.dart';
 import 'package:nexwar_patrol/net/site_client.dart';
 import 'package:nexwar_patrol/store/site_store.dart';
 import 'package:nexwar_patrol/ui/alarm_log.dart';
-import 'package:nexwar_patrol/ui/nw/nw_shell.dart';
+import 'package:nexwar_patrol/ui/nw/nw_now.dart';
 import 'package:nexwar_patrol/ui/nw/nw_site_dir.dart';
 import 'package:nexwar_patrol/ui/nw/nw_theme.dart';
-import 'package:nexwar_patrol/ui/site_duty_page.dart';
 import 'package:nexwar_patrol/ui/site_page.dart';
 import 'package:nexwar_patrol/ui/site_tabs.dart';
 import 'package:nexwar_patrol/ui/widget/alarm_widgets.dart';
@@ -49,7 +48,7 @@ void main() {
       await _show(t, FakeApi('admin'));
       expect(find.byKey(NwShell.nowKey), findsOneWidget);
       expect(find.byKey(NwShell.siteKey), findsOneWidget);
-      expect(find.byType(SiteDutyPage), findsOneWidget);
+      expect(find.byType(NowPage), findsOneWidget);
       expect(find.byKey(NwShell.estopKey), findsOneWidget, reason: '「现在」的拇指区方块');
       expect(find.byKey(NwShell.estopSmallKey), findsNothing);
       expect(find.byKey(NwShell.clockKey), findsOneWidget);
@@ -70,12 +69,12 @@ void main() {
       await _show(t, FakeApi('admin'));
       await _tap(t, NwShell.siteKey);
       expect(find.byType(SiteDirectory), findsOneWidget);
-      expect(find.byType(SiteDutyPage), findsNothing);
+      expect(find.byType(NowPage), findsNothing);
       expect(find.byKey(NwShell.estopSmallKey), findsOneWidget);
       expect(find.byKey(NwShell.estopKey), findsNothing);
       expect(_bg(t), NwColors.light.bg, reason: '「现场」浅色');
       await _tap(t, NwShell.nowKey);
-      expect(find.byType(SiteDutyPage), findsOneWidget);
+      expect(find.byType(NowPage), findsOneWidget);
       expect(_bg(t), NwColors.dark.bg);
       await t.pumpWidget(Container());
     });
@@ -85,12 +84,13 @@ void main() {
       const all = SiteDest.values;
       final want = <String, Set<SiteDest>>{
         'admin': all.toSet(),
-        'owner': {SiteDest.overview, SiteDest.robots, SiteDest.layout, SiteDest.arming, SiteDest.alarms, SiteDest.events,
+        // 稿 S-mgr:日常(概况、机器人)、现场(布防与巡逻)、记录、本机
+        'owner': {SiteDest.overview, SiteDest.robots, SiteDest.arming, SiteDest.alarms, SiteDest.events,
           SiteDest.recordings, SiteDest.runs, SiteDest.notes, SiteDest.settings, SiteDest.help, SiteDest.report},
-        // 第 1 期保安 / 只读还从目录进机器人、地图(第 2 期「现在」重排后去掉)
-        'guard': {SiteDest.robots, SiteDest.layout, SiteDest.alarms, SiteDest.events, SiteDest.recordings, SiteDest.runs,
+        // 稿 S-guard / S-viewer:没有「日常」,机器人和地图在「现在」页上
+        'guard': {SiteDest.alarms, SiteDest.events, SiteDest.recordings, SiteDest.runs,
           SiteDest.notes, SiteDest.settings, SiteDest.help, SiteDest.report},
-        'viewer': {SiteDest.robots, SiteDest.layout, SiteDest.alarms, SiteDest.recordings, SiteDest.runs, SiteDest.settings,
+        'viewer': {SiteDest.alarms, SiteDest.recordings, SiteDest.runs, SiteDest.settings,
           SiteDest.help, SiteDest.report},
       };
       for (final e in want.entries) {
@@ -159,7 +159,7 @@ void main() {
   group('机器人列表身上的站点级逻辑切层不断', () {
     testWidgets('在「现场」，事件来了照样刷新机器人列表；进机器人列表看到的是新的；它一直是同一个', (t) async {
       _size(t);
-      final api = FakeApi('guard');
+      final api = FakeApi('admin');
       await _show(t, api);
       final state = _robotsState(t);
       await _tap(t, NwShell.siteKey);
@@ -241,7 +241,7 @@ void main() {
       expect(find.byKey(NwShell.p1BarKey), findsOneWidget);
       await t.tap(find.byKey(NwShell.p1BarKey));
       await t.pumpAndSettle();
-      expect(find.byType(SiteDutyPage), findsOneWidget);
+      expect(find.byType(NowPage), findsOneWidget);
       expect(find.byKey(NwShell.p1BarKey), findsNothing);
       await t.pumpWidget(Container());
     });
@@ -268,7 +268,7 @@ void main() {
       expect(find.byType(SiteDirectory), findsOneWidget, reason: '机器人列表按返回回目录');
       await t.binding.handlePopRoute();
       await t.pumpAndSettle();
-      expect(find.byType(SiteDutyPage), findsOneWidget, reason: '目录按返回回「现在」');
+      expect(find.byType(NowPage), findsOneWidget, reason: '目录按返回回「现在」');
       expect(toBack, 0);
       await t.binding.handlePopRoute();
       await t.pumpAndSettle();
@@ -327,8 +327,14 @@ void main() {
               await _tap(t, NwShell.siteKey);
               expect(t.takeException(), isNull, reason: 'site');
               expect(_bg(t), NwColors.light.bg);
-              await _dir(t, SiteDest.robots);
-              expect(t.takeException(), isNull, reason: 'robots');
+              if (role == 'guard') {
+                // 保安没有机器人列表:看地图层(「现在」小地图进的那一层)
+                await openNowMap(t);
+                expect(t.takeException(), isNull, reason: 'map');
+              } else {
+                await _dir(t, SiteDest.robots);
+                expect(t.takeException(), isNull, reason: 'robots');
+              }
               await _tap(t, NwShell.backKey);
               await _tap(t, NwShell.nowKey);
               expect(t.takeException(), isNull, reason: 'now again');

@@ -378,7 +378,7 @@ void main() {
       _size(t);
       await t.pumpWidget(MaterialApp(home: NwShell(api: Rot23Api('guard'), ring: () {})));
       await t.pumpAndSettle();
-      await openSiteDir(t, SiteDest.layout);
+      await openNowMap(t);
       expect(find.byKey(SiteMapTab.legendKey), findsOneWidget);
       expect(inLegend('地面'), findsNothing);
       expect(inLegend('图例'), findsOneWidget);
