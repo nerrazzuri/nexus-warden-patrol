@@ -532,7 +532,7 @@ class _AdminHomeTabState extends State<AdminHomeTab> {
       case 'accounts':
         _push(context, AccountsPage(api: widget.api));
       case 'push' || 'arming':
-        _push(context, HelpPage(role: widget.api.session?.role ?? ''));
+        _push(context, HelpPage(role: widget.api.session?.role ?? '', api: widget.api));
     }
   }
 
@@ -1397,7 +1397,7 @@ class MeTab extends StatelessWidget {
                 title: tr('FAQ', '常见问题'),
                 hint: tr('Handling alarms, robots that won\'t go, and more.',
                     '报警处理、机器人无法派出等常见问题。'),
-                onTap: () => _push(context, HelpPage(role: s?.role ?? ''))),
+                onTap: () => _push(context, HelpPage(role: s?.role ?? '', api: api))),
             const SizedBox(height: Nw.s16),
             NwButton(
                 buttonKey: leaveKey,

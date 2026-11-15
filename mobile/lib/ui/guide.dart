@@ -372,64 +372,124 @@ class _Faq {
   const _Faq(this.roles, this.q, this.a);
 }
 
-List<_Faq> _faqs() => [
-      // 手机 App 测试 M15：常见问题按角色写（只读账号处理不了报警、经理不能恢复）
+const _handlers = {'guard', 'owner', 'admin', 'engineer'};
+const _admins = {'admin', 'engineer'};
+
+/// 「怎么做」（稿 S-help 中段）：一件事一行，点开就地展开。
+List<_Faq> _howTo() => [
+      // 手机 App 测试 M15：按角色写（只读账号处理不了报警、经理不能恢复）
       _Faq({'viewer'}, tr('What can I do with an alarm?', '收到报警我能做什么'),
-          tr('A read-only account can watch the snapshot, live video and map, but cannot handle alarms. Call the guard on duty.',
+          tr('A view-only account can watch the snapshot, live video and map, but cannot respond. Call the guard on duty.',
               '只读账号能看抓拍、实时画面和地图，处理不了报警。请联系值班保安。')),
-      _Faq({'guard', 'owner', 'admin', 'engineer'}, tr('How to handle an alarm', '收到报警如何处理'),
-          tr('Tap the red bar → check the snapshot and live video → tap "Take ownership". If someone is there, go to the site with a colleague or call the police; then record Confirmed intrusion / False alarm / Resolved.',
-              '点红条 → 查看抓拍和实时画面 → 点「我来处理」。确认有人时叫上同事到现场或报警；处理后记录结论：真实入侵 / 误报 / 已处理。')),
-      _Faq({'guard', 'owner', 'admin', 'engineer'}, tr('How to stop a robot immediately', '如何立即停止机器人'),
-          tr('Duty page → Stop. The robot stops where it is and is not dispatched again until someone taps Resume. The emergency stop on the robot always works.',
-              '值守页 →「叫停」。机器人原地停止，点「恢复」后才会再被派出。机器人上的急停按钮随时可用。')),
-      _Faq({'guard', 'admin', 'engineer'}, tr("Robot can't be dispatched", '机器人无法派出'),
-          tr('The message explains why and offers a fix. Common causes: no-go zones not confirmed (contact the administrator), robot not localized (set its position), robot stopped (Resume), offline or charging.',
-              '弹窗会说明原因并提供处理按钮。常见原因：禁行区未确认（联系管理员）、机器人未定位（设位置）、已被叫停（恢复）、离线或正在充电。')),
-      _Faq({'owner'}, tr("Robot can't be dispatched", '机器人无法派出'),
-          tr('The message explains why. Common causes: robot stopped (a guard or administrator taps Resume), no-go zones not confirmed (contact the administrator), offline or charging.',
-              '弹窗会说明原因。常见原因：已被叫停（要保安或管理员点「恢复」）、禁行区未确认（联系管理员）、离线或正在充电。')),
-      _Faq({'guard', 'owner'}, tr('Why is my patrol queued?', '巡逻为何排队'),
-          tr('Scheduled patrols take priority. A one-off patrol that clashes with the schedule starts after it, and you are notified when it starts. To check right away, use Drive.',
-              '日程巡逻优先。临时巡逻与日程冲突时，在日程巡逻结束后开始，开始时会通知你。需要立即查看请用「遥控」。')),
-      _Faq(null, tr('A robot is offline', '机器人离线'),
-          tr('Check the robot is powered on and the WiFi works. If the WiFi changed, an administrator reconfigures it under Robot → Change WiFi.',
-              '检查机器人是否开机、WiFi 是否正常。如更换过 WiFi，请管理员在「机器人 → 换 WiFi」中重新配置。')),
-      _Faq(null, tr('How to find recordings', '如何查看录像'),
-          tr('Robots → pick a robot → Recordings, or History → Patrols for the photos of each patrol.',
-              '机器人 → 点一台 → 录像；每趟巡逻拍的照片在「记录 → 巡逻」。')),
-      _Faq({'admin', 'engineer'}, tr('How to add accounts', '如何添加账号'),
-          tr('Applicants tap New Account Registration on the app sign-in page; administrators approve under Admin → Accounts and choose the role (View only by default).',
-              '申请人在 App 登录页点「新账号注册」；管理员在「管理 → 账号」中审批并选择权限（默认「只看」）。')),
-      _Faq({'admin', 'engineer'}, tr('Getting started', '从哪里开始'),
-          tr('Admin → Site setup checklist. Complete it in order; each item has a Do it button.',
-              '「管理」页的开站清单，按顺序完成，每项都有「前往」按钮。')),
+      _Faq(_handlers, tr('Respond to an alarm', '收到报警如何处理'),
+          tr('On Now, tap the red bar → check the snapshot and live video → tap Take ownership. If someone is there, go with a colleague or call the police; then record Confirmed intrusion / False alarm / Resolved and close the incident.',
+              '在「现在」页点红框 → 看抓拍和实时画面 → 点「我来处理」。确认有人时叫上同事到现场或报警；处理完选结论（确认有人 / 误报 / 已处理）再结案。')),
+      _Faq(_handlers, tr('Dispatch patrols, remote control, E-STOP', '派巡逻、遥控、急停'),
+          tr('On Now, tap a robot → Dispatch patrol, Stop here, Return to standby, or Remote (landscape only; the robot stops when you leave). E-STOP ALL (bottom right on Now, top right elsewhere) stops every robot until someone resets it. The emergency stop button on the robot always works.',
+              '在「现在」页点一台机器人 → 派巡逻、原地停下、回待命点，或遥控（只能横屏，离开遥控页机器人就停）。「全部急停」（「现在」页右下、别的页右上）让所有机器人原地停住，直到有人恢复。机器人身上的急停按钮随时可用。')),
+      _Faq(null, tr('Find recordings', '如何查看录像'),
+          tr('Site → Recordings: one-minute segments per robot, kept 30 days. Photos of each patrol are under Site → Patrol log.',
+              '「现场 → 录像」：每台机器人一分钟一段，留 30 天。每趟巡逻拍的照片在「现场 → 巡逻记录」。')),
+      _Faq(_admins, tr('Add accounts', '如何添加账号'),
+          tr('Applicants tap Request account on the sign-in page; an administrator approves under Site → Users and picks the role (View only by default). New accounts with a set role are added on the web console.',
+              '申请人在登录页点「申请账号」；管理员在「现场 → 人员」批准并选权限（默认只看）。直接建账号、改权限在网页上做。')),
+      _Faq(_admins, tr('Getting started with a new site', '新站点从哪里开始'),
+          tr('Site → Overview → Site setup. Complete it in order; each item opens the page where it is done.',
+              '「现场 → 概况」里的开站清单，按顺序做，每项点进去就是要做的那一页。')),
     ];
 
+/// 常见问题（稿 S-help 下段）。
+List<_Faq> _faqs() => [
+      _Faq({'guard', 'owner'}, tr('Why is my patrol queued?', '巡逻为何排队'),
+          tr('Scheduled patrols take priority. A one-off patrol that clashes with the schedule starts after it, and you are notified when it starts. To check right away, use Remote.',
+              '日程巡逻优先。临时巡逻与日程冲突时，在日程巡逻结束后开始，开始时会通知你。需要立即查看请用「遥控」。')),
+      _Faq(_handlers.difference({'owner'}), tr("Robot can't be dispatched", '机器人无法派出'),
+          tr('An amber note at the top of the robot page says why and offers a fix. Common causes: no-go zones not confirmed (contact the administrator), robot not localized (set its position), robot E-stopped (reset), offline or charging.',
+              '机器人页顶上琥珀一条会说原因并给处理按钮。常见原因：禁行区未确认（联系管理员）、机器人未定位（设位置）、已急停（恢复）、离线或正在充电。')),
+      _Faq({'owner'}, tr("Robot can't be dispatched", '机器人无法派出'),
+          tr('An amber note says why. Common causes: robot E-stopped (a guard or administrator resets it), no-go zones not confirmed (contact the administrator), offline or charging.',
+              '琥珀一条会说原因。常见原因：已急停（要保安或管理员恢复）、禁行区未确认（联系管理员）、离线或正在充电。')),
+      _Faq(null, tr('What if a robot goes offline?', '机器人离线怎么办'),
+          tr('Check the robot is powered on and the Wi-Fi works. If the Wi-Fi changed, an administrator reconfigures it under the robot\'s Settings → Network.',
+              '检查机器人是否开机、Wi-Fi 是否正常。如更换过 Wi-Fi，请管理员在这台机器人的「设置 → 网络」里重新配置。')),
+      _Faq(null, tr('False alarm vs Confirmed intrusion', '误报和确认有人有什么区别'),
+          tr('Confirmed intrusion: you saw a person who should not be there. False alarm: nobody, or someone allowed (staff, a resident). Resolved: something real that was dealt with (a gate left open). The outcome is kept in the alarm log and the shift report.',
+              '确认有人：看到了不该在的人。误报：没人，或是允许的人（员工、住户）。已处理：确有其事、已经处理好（比如门没关）。结论记在报警记录和交班报告里。')),
+      _Faq(null, tr('How arming and weather affect patrols', '布防和天气怎么影响巡逻'),
+          tr('Patrol schedules run whether the site is armed or not; arming decides which detections raise alarms. In rain or strong wind the site can hold scheduled patrols; Site → Arming & patrols shows the current weather rule.',
+              '巡逻日程不管布防没布防都照跑；布防决定哪些检测会报警。下雨、大风时站点可以暂停日程巡逻；「现场 → 布防与巡逻」里能看到现在的天气规则。')),
+    ];
+
+/// 使用教程与常见问题（App V2 稿 S-help）：入门（值守导览、报警演练）、怎么做、常见问题。一行一件，点开就地展开。
 class HelpPage extends StatelessWidget {
   final String role;
-  const HelpPage({super.key, required this.role});
+
+  /// 给了才有「值守导览」（要站点连接）。
+  final SiteApi? api;
+  const HelpPage({super.key, required this.role, this.api});
+
+  static const Key tourKey = Key('help-tour');
+  static const Key drillKey = Key('help-drill');
 
   @override
   Widget build(BuildContext context) {
     final c = Nw.of(context);
-    final list = [for (final f in _faqs()) if (f.roles == null || f.roles!.contains(role)) f];
+    final api = this.api;
+    final can = _handlers.contains(role);
+    Widget label(String t) => Padding(
+        padding: const EdgeInsets.fromLTRB(Nw.s16, Nw.s24, Nw.s16, Nw.s8),
+        child: Text(t, style: NwText.labelMedium.copyWith(color: c.textSecondary, fontWeight: FontWeight.w700)));
+    Widget link(Key key, IconData icon, String title, String sub, VoidCallback on) => Material(
+        color: c.surface,
+        child: InkWell(
+            key: key,
+            onTap: on,
+            child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: Nw.s16, vertical: 12),
+                decoration: BoxDecoration(border: Border(bottom: BorderSide(color: c.outline))),
+                child: Row(children: [
+                  Icon(icon, size: 22, color: c.text),
+                  const SizedBox(width: Nw.s16),
+                  Expanded(
+                      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Text(title, style: NwText.titleSmall.copyWith(color: c.text, fontWeight: FontWeight.w700)),
+                    Text(sub, style: NwText.bodySmall.copyWith(color: c.textSecondary)),
+                  ])),
+                  Icon(Icons.chevron_right_rounded, color: c.textSecondary),
+                ]))));
+    var n = 0;
+    Widget faq(_Faq f) => Material(
+        key: Key('faq-${n++}'),
+        color: c.surface,
+        shape: Border(bottom: BorderSide(color: c.outline)),
+        child: ExpansionTile(
+            shape: const Border(),
+            collapsedShape: const Border(),
+            title: Text(f.q, style: NwText.titleSmall.copyWith(color: c.text, fontWeight: FontWeight.w700)),
+            childrenPadding: const EdgeInsets.fromLTRB(Nw.s16, 0, Nw.s16, Nw.s16),
+            expandedAlignment: Alignment.centerLeft,
+            children: [Text(f.a, style: NwText.bodyMedium.copyWith(color: c.text))]));
+    bool mine(_Faq f) => f.roles == null || f.roles!.contains(role);
     return Scaffold(
-      appBar: AppBar(title: Text(tr('FAQ', '常见问题'))),
-      body: NwListView(children: [
-        for (var i = 0; i < list.length; i++)
-          Padding(
-            padding: const EdgeInsets.only(bottom: Nw.s8),
-            child: NwCard(
-              key: Key('faq-$i'),
-              padding: EdgeInsets.zero,
-              child: ExpansionTile(
-                title: Text(list[i].q, style: NwText.titleSmall.copyWith(color: c.text)),
-                childrenPadding: const EdgeInsets.fromLTRB(Nw.s16, 0, Nw.s16, Nw.s16),
-                children: [Text(list[i].a, style: NwText.bodyMedium.copyWith(color: c.text))],
-              ),
-            ),
-          ),
+      backgroundColor: c.bg,
+      appBar: AppBar(title: Text(tr('Guides & FAQ', '使用教程与常见问题'))),
+      body: ListView(padding: const EdgeInsets.only(bottom: Nw.s24), children: [
+        if (api != null || can) ...[
+          label(tr('Getting started', '入门')),
+          if (api != null)
+            link(tourKey, Icons.play_arrow_rounded, tr('Monitoring tour', '值守导览'),
+                tr('A walkthrough on the live screens: Now, incident, E-STOP', '在真页面上走一遍：现在、这件事、急停'),
+                () => restartTour(context, api)),
+          if (can)
+            link(drillKey, Icons.notifications_none_rounded, tr('Alarm drill', '报警演练'),
+                tr('A simulated alarm visible only to you; practise the response. Nothing is sent to the site.',
+                    '模拟报警，只有你看得到，练一遍处理步骤；不发到站点。'),
+                () => Navigator.push(context, MaterialPageRoute<void>(builder: (_) => const PracticeAlarmPage()))),
+        ],
+        label(tr('How to', '怎么做')),
+        for (final f in _howTo()) if (mine(f)) faq(f),
+        label(tr('FAQ', '常见问题')),
+        for (final f in _faqs()) if (mine(f)) faq(f),
       ]),
     );
   }
