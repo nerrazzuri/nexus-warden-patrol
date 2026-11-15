@@ -123,32 +123,36 @@ class _AppSettingsPageState extends State<AppSettingsPage> {
         NwSectionLabel(tr('General', '通用')),
         nwGap8,
         NwListCard(children: [
-          ListTile(
-            leading: const Icon(Icons.language_rounded),
-            title: Text(tr('Language', '语言')),
-            // 手机 App 测试 M40：整行都能点（以前只有右边的下拉能点）
-            onTap: () => _setLang(appLang.value == AppLang.zh ? AppLang.en : AppLang.zh),
-            trailing: DropdownButton<AppLang>(
-                key: AppSettingsPage.langKey,
-                value: appLang.value,
-                underline: const SizedBox.shrink(),
-                onChanged: (l) {
-                  if (l != null) _setLang(l);
-                },
-                items: const [
-                  DropdownMenuItem(value: AppLang.en, child: Text('English')),
-                  DropdownMenuItem(value: AppLang.zh, child: Text('中文')),
-                ]),
-          ),
-          ListTile(
-            leading: const Icon(Icons.contrast_rounded),
-            title: Text(tr('Appearance', '外观')),
-            subtitle: Text(tr('Light and dark follow the system setting', '浅色、深色跟随系统设置'), style: sub()),
+          // App V2 稿 S-settings：语言是两段等宽开关；外观按页面定（「现在」深色、设置类页面浅色）
+          Padding(
+            padding: const EdgeInsets.fromLTRB(Nw.s16, Nw.s16, Nw.s16, Nw.s8),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+              Text(tr('Language', '语言'), style: NwText.labelMedium.copyWith(color: c.textSecondary)),
+              const SizedBox(height: Nw.s8),
+              SegmentedButton<AppLang>(
+                  key: AppSettingsPage.langKey,
+                  showSelectedIcon: false,
+                  style: SegmentedButton.styleFrom(
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(2)),
+                      selectedBackgroundColor: c.primary,
+                      selectedForegroundColor: c.onPrimary),
+                  segments: const [
+                    ButtonSegment(value: AppLang.en, label: Text('English')),
+                    ButtonSegment(value: AppLang.zh, label: Text('中文')),
+                  ],
+                  selected: {appLang.value},
+                  onSelectionChanged: (v) => _setLang(v.first)),
+              const SizedBox(height: Nw.s16),
+              Text(tr('Appearance', '外观'), style: NwText.labelMedium.copyWith(color: c.textSecondary)),
+              const SizedBox(height: Nw.s4),
+              Text(tr('Per screen: Now is dark, setup screens are light.', '按页面：「现在」是深色，设置类页面是浅色。'),
+                  style: NwText.bodyMedium.copyWith(color: c.text)),
+            ]),
           ),
         ]),
         if (api != null) ...[
           nwGap16,
-          NwSectionLabel(tr('Notifications and watch', '通知与值守')),
+          NwSectionLabel(tr('Notifications & monitoring', '通知与值守')),
           nwGap8,
           NwListCard(children: [
             if (watch != null && watch.available)
@@ -158,7 +162,7 @@ class _AppSettingsPageState extends State<AppSettingsPage> {
                         key: AppSettingsPage.watchKey,
                         secondary: Icon(watch.on ? Icons.shield : Icons.shield_outlined,
                             color: watch.on ? c.success : c.textSecondary),
-                        title: Text(tr('Background watch', '后台值守')),
+                        title: Text(tr('Background monitoring', '后台值守')),
                         subtitle: Text(
                             tr('Keep receiving P1 alarms when the app is in the background',
                                 'App 在后台时继续接收 P1 报警'),
@@ -197,7 +201,7 @@ class _AppSettingsPageState extends State<AppSettingsPage> {
           ]),
         ],
         nwGap16,
-        NwSectionLabel(tr('About and updates', '关于与更新')),
+        NwSectionLabel(tr('About & updates', '关于与更新')),
         nwGap8,
         NwListCard(children: [
           ListTile(

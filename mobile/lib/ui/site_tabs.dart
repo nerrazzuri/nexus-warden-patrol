@@ -41,7 +41,7 @@ Future<void> leaveSite(BuildContext context) async {
       builder: (c) => AlertDialog(
             title: Text(tr('Leave this site?', '退出这个站点？')),
             content: Text(tr(
-                'You will be signed out. Background watch stops, so this phone will no longer get alarms from this site.',
+                'You will be signed out. Background monitoring stops, so this phone will no longer get alarms from this site.',
                 '退出后会注销登录，后台值守也会停止，这台手机将收不到这个站点的报警。')),
             actions: [
               TextButton(onPressed: () => Navigator.pop(c, false), child: Text(tr('Cancel', '取消'))),
