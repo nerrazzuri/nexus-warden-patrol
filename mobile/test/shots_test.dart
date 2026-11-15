@@ -311,6 +311,15 @@ void main() {
             api: _deterring(), alert: Alert.fromWire(_p1Row()), now: () => DateTime.fromMillisecondsSinceEpoch(_t0 + 42000)),
         ready: _decoded,
         themes: const [Brightness.dark]),
+    '05d-alarm-closed': _Shot(
+        const Size(390, 2000),
+        () => SiteAlertScenePage(
+            api: FakeApi('guard'),
+            alert: Alert.fromWire(<String, dynamic>{..._p1Row(), 'acked': true, 'acked_by': 'gina', 'acked_ms': _t0 + 30000,
+              'resolved_ms': _t0 + 700000, 'resolved_by': 'gina', 'verdict': 'intruder'}),
+            now: () => DateTime.fromMillisecondsSinceEpoch(_t0 + 760000)),
+        ready: _decoded,
+        themes: const [Brightness.dark]),
     '05b-alarm-map': _Shot(
         _phone,
         () => SiteAlertScenePage(
