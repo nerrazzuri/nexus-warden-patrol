@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>App · Guard · Robot A control</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&display=swap">
+<style>
+body{margin:0}
+*{box-sizing:border-box}
+.btn{height:44px;padding:0 14px;border:1px solid #9A9FA6;border-radius:2px;background:#16191D;color:#ECEDEA;font:600 15px Barlow,'Noto Sans SC','Microsoft YaHei UI',sans-serif;display:inline-flex;align-items:center;justify-content:center;gap:8px;white-space:nowrap;min-width:0}
+.btn.sm{height:36px;padding:0 10px;font-size:14px}
+.btn.pri{background:#1F6FC0;border-color:#1F6FC0;color:#fff;font-weight:700}
+.btn.danger{background:transparent;border-color:#FF6166;color:#FF6166}
+.btn.stop{background:#D42F33;border-color:#D42F33;color:#fff;font-weight:700}
+.btn.ghost{background:transparent;border-color:transparent;color:#5AA2E6}
+.row{display:grid;gap:8px}
+.lbl{font-size:12px;font-weight:600;letter-spacing:.06em;color:#9A9FA6}
+.mut{color:#B4B8BE}
+.ring{display:inline-block;flex:none;width:14px;height:14px;border:3px solid #FF6166;border-radius:50%}
+.ring.lg{width:26px;height:26px;border-width:5px}
+.tri{display:inline-block;flex:none;width:0;height:0;border-left:7px solid transparent;border-right:7px solid transparent;border-bottom:12px solid #F2B01E}
+.tri.lg{border-left-width:12px;border-right-width:12px;border-bottom-width:21px}
+.sq{display:inline-block;flex:none;width:9px;height:9px;background:#3DC46E}
+.off{display:inline-block;flex:none;width:14px;height:14px;border:2px solid #9A9FA6;border-radius:50%;background:linear-gradient(135deg,transparent 45%,#9A9FA6 45%,#9A9FA6 58%,transparent 58%)}
+.disc{display:inline-block;flex:none;width:12px;height:12px;border-radius:50%;background:#fff}
+.discb{display:inline-block;flex:none;width:12px;height:12px;border-radius:50%;background:#1F6FC0}
+.p3{display:inline-block;flex:none;width:12px;height:12px;border:1.5px solid #9A9FA6;border-radius:50%}
+.sec{padding:14px 16px;border-bottom:1px solid #2E333A}
+.h2{margin:0;font-size:17px;line-height:24px;font-weight:600}
+.h1{margin:0;font-size:22px;line-height:28px;font-weight:700}
+.li{display:flex;align-items:center;gap:12px;min-height:56px;padding:8px 16px;border-bottom:1px solid #2E333A;color:#ECEDEA;text-decoration:none}
+.li .b{flex:1;min-width:0}
+.li .s{font-size:13px;line-height:18px;color:#B4B8BE}
+.seg{display:grid;border:1px solid #2E333A;border-radius:2px;padding:3px;gap:3px}
+.seg button{height:36px;border:0;border-radius:2px;background:transparent;color:#B4B8BE;font:600 14px Barlow,'Noto Sans SC','Microsoft YaHei UI',sans-serif}
+.seg button.on{background:#1F6FC0;color:#fff}
+.chip{display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 8px;border-radius:2px;font-size:13px;font-weight:600;white-space:nowrap}
+.c-ok{background:#16281D;color:#3DC46E} .c-warn{background:#2D2512;color:#F2B01E} .c-bad{background:#33191B;color:#FF6166} .c-n{background:#20242A;color:#B4B8BE}
+.vid{position:relative;background:#000;overflow:hidden}
+.vid .cap{position:absolute;left:0;right:0;top:0;display:flex;align-items:center;gap:8px;padding:6px 10px;background:rgba(0,0,0,.65);color:#ECEDEA;font-size:13px}
+.inp{height:44px;border:1px solid #9A9FA6;border-radius:2px;padding:0 12px;background:#16191D;color:#ECEDEA;font:400 15px Barlow,'Noto Sans SC','Microsoft YaHei UI',sans-serif;display:flex;align-items:center;width:100%}
+.sw{width:44px;height:26px;border-radius:2px;background:#20242A;border:1px solid #9A9FA6;position:relative;flex:none}
+.sw::after{content:"";position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:1px;background:#9A9FA6}
+.sw.on{background:#1F6FC0;border-color:#1F6FC0} .sw.on::after{left:21px;background:#fff}
+.note{font-size:13px;line-height:18px;color:#B4B8BE}
+.tag{display:inline-block;padding:0 6px;border:1px solid #5AA2E6;color:#5AA2E6;font-size:11px;font-weight:700;line-height:16px}
+
+</style>
+</helmet>
+<div style="width:390px;height:2120px;position:relative;overflow:hidden;background:#0E1013;color:#ECEDEA;font-family:Barlow,'Noto Sans SC','Microsoft YaHei UI',sans-serif;font-size:15px;line-height:22px;font-variant-numeric:tabular-nums;display:flex;flex-direction:column">
+<header style="flex:none;display:flex;align-items:center;gap:6px;min-height:56px;padding:6px 12px 6px 4px;background:#0A0C0E;border-bottom:1px solid #2E333A">
+  <button type="button" aria-label="Back" style="width:44px;height:44px;border:0;background:transparent;color:#ECEDEA;display:flex;align-items:center;justify-content:center"><svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><polyline points="15,4 7,12 15,20"/></svg></button>
+  <div style="flex:1;min-width:0"><div style="font-size:18px;font-weight:700;line-height:24px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">A · C40221</div><div style="font-size:13px;line-height:18px;color:#B4B8BE;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Patrolling · 62%</div></div>
+  <button class="btn sm" type="button" aria-label="More" style="width:44px;padding:0"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><circle cx="12" cy="5" r="1.4" fill="currentColor"/><circle cx="12" cy="12" r="1.4" fill="currentColor"/><circle cx="12" cy="19" r="1.4" fill="currentColor"/></svg></button>
+</header><div style="display:flex;align-items:center;gap:10px;padding:12px 16px;border-bottom:1px solid #2E333A"><span class="sq" style="width:12px;height:12px"></span><div style="flex:1"><b style="font-size:17px">Patrolling · guard-1 loop 3</b><div class="note">North sector · Localized · Ends approx. 23:58 · Battery 62%</div></div></div>
+<div style="flex:1;min-height:0">
+  <div class="vid" style="height:210px"><div style="position:absolute;inset:0;background:radial-gradient(ellipse at 40% 70%,#1d2328 0%,#07080A 70%)"></div>
+  <div class="cap"><b style="font-weight:600">A · Front camera</b><span style="color:#B4B8BE">Live</span><span style="flex:1"></span><span style="padding:2px 8px;border:1px solid #5AA2E6;background:#1F6FC0;border-color:#1F6FC0;border-radius:2px;font-size:12px;font-weight:600">Front</span><span style="padding:2px 8px;border:1px solid #6B7178;border-radius:2px;font-size:12px;font-weight:600">Rear</span><span style="padding:2px 8px;border:1px solid #6B7178;border-radius:2px;font-size:12px;font-weight:600">Thermal</span></div></div>
+  <section style="padding:14px 16px;border-bottom:1px solid #2E333A">
+  <h2 class="h2">Tasks</h2><div style="height:10px"></div><div class="row" style="grid-template-columns:repeat(2,minmax(0,1fr));gap:8px"><button class="btn pri" type="button" style=""><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><circle cx="6" cy="18" r="2"/><circle cx="18" cy="6" r="2"/><path d="M8 18h6a3 3 0 0 0 0-6h-4a3 3 0 0 1 0-6h6"/></svg>Dispatch patrol…</button><button class="btn" type="button" style=""><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><line x1="9" y1="5" x2="9" y2="19"/><line x1="15" y1="5" x2="15" y2="19"/></svg>Stop in place</button></div><div style="height:8px"></div><div class="row" style="grid-template-columns:repeat(2,minmax(0,1fr));gap:8px"><button class="btn sm" type="button" style="">Return to standby</button><button class="btn sm" type="button" style="">Return to origin</button></div><div style="height:8px"></div><div class="row" style="grid-template-columns:repeat(1,minmax(0,1fr));gap:8px"><button class="btn sm" type="button" style="">Abort and return to origin…</button></div></section>
+  <section style="padding:14px 16px;border-bottom:1px solid #2E333A">
+  <h2 class="h2">Remote control & posture</h2><div class="note" style="margin-bottom:10px">Remote control is landscape-only; the robot stops when you leave this screen</div><div class="row" style="grid-template-columns:repeat(3,minmax(0,1fr));gap:8px"><button class="btn" type="button" style=""><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><rect x="4" y="8" width="16" height="9" rx="1"/><line x1="7" y1="17" x2="6" y2="21"/><line x1="17" y1="17" x2="18" y2="21"/><circle cx="16" cy="11" r="1.2"/><line x1="20" y1="10" x2="22" y2="9"/></svg>Remote</button><button class="btn" type="button" style=""><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><rect x="5" y="6" width="14" height="6" rx="1"/><line x1="7" y1="12" x2="7" y2="20"/><line x1="17" y1="12" x2="17" y2="20"/></svg>Stand up</button><button class="btn" type="button" style="">Lie down</button></div><div style="height:8px"></div><div class="row" style="grid-template-columns:repeat(2,minmax(0,1fr));gap:8px"><button class="btn sm" type="button" style="">Re-localize</button><button class="btn sm" type="button" style="">Assist localization…</button></div></section>
+  <section style="padding:14px 16px;border-bottom:1px solid #2E333A">
+  <h2 class="h2">PTZ & camera</h2><div style="height:10px"></div><div style="display:flex;gap:16px;align-items:flex-start"><div style="display:grid;grid-template-columns:repeat(3,52px);gap:6px"><span></span><button class="btn" type="button" aria-label="Tilt up" style="width:52px;height:52px;padding:0"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><polyline points="5,15 12,8 19,15"/></svg></button><span></span><button class="btn" type="button" aria-label="Pan left" style="width:52px;height:52px;padding:0"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><polyline points="15,4 7,12 15,20"/></svg></button><button class="btn" type="button" aria-label="Center" style="width:52px;height:52px;padding:0"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><polyline points="4,11 12,4 20,11"/><path d="M6 10v10h12V10"/></svg></button><button class="btn" type="button" aria-label="Pan right" style="width:52px;height:52px;padding:0"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><polyline points="9,5 16,12 9,19"/></svg></button><span></span><button class="btn" type="button" aria-label="Tilt down" style="width:52px;height:52px;padding:0"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><polyline points="5,9 12,16 19,9"/></svg></button><span></span></div><div style="flex:1;display:flex;flex-direction:column;gap:8px"><button class="btn sm" type="button" style="">Wiper</button><button class="btn sm" type="button" style="">Preset: North gate</button><button class="btn sm" type="button" style="">Edit presets</button></div></div></section>
+  <section style="padding:14px 16px;border-bottom:1px solid #2E333A">
+  <h2 class="h2">Announce</h2><div class="note" style="margin-bottom:10px">Saved messages are site-wide; typed messages use the selected language</div><div class="seg" style="grid-template-columns:repeat(3,1fr);margin-bottom:8px"><button class="on" type="button">English</button><button type="button">Chinese</button><button type="button">Malay</button></div><div class="row" style="grid-template-columns:repeat(3,minmax(0,1fr));gap:8px"><button class="btn sm" type="button" style="">Leave now</button><button class="btn sm" type="button" style="">Restricted area</button><button class="btn sm" type="button" style="">Keep distance</button></div><div style="height:8px"></div><div style="display:grid;grid-template-columns:1fr auto;gap:8px"><div class="inp" style="color:#9A9FA6">Type a message…</div><button class="btn pri" type="button" style="">Speak</button></div><div style="height:8px"></div><div class="row" style="grid-template-columns:repeat(2,minmax(0,1fr));gap:8px"><button class="btn sm" type="button" style="">Stop announcement</button><button class="btn sm" type="button" style="">Edit presets</button></div></section>
+  <section style="padding:14px 16px;border-bottom:1px solid #2E333A">
+  <h2 class="h2">Deterrence</h2><div class="note" style="margin-bottom:10px">Each output runs for a set time and turns off automatically</div><div class="row" style="grid-template-columns:repeat(2,minmax(0,1fr));gap:8px"><button class="btn" type="button" style=""><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><path d="M9 18h6"/><path d="M10 21h4"/><path d="M12 3a6 6 0 0 0-4 10.5c.7.7 1 1.5 1 2.5h6c0-1 .3-1.8 1-2.5A6 6 0 0 0 12 3z"/></svg>Strobe 30 s</button><button class="btn" type="button" style=""><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><path d="M6 16V11a6 6 0 0 1 12 0v5l2 2H4z"/><path d="M10 20a2 2 0 0 0 4 0"/></svg>Siren 10 s</button></div><div style="height:8px"></div><div class="row" style="grid-template-columns:repeat(3,minmax(0,1fr));gap:8px"><button class="btn sm" type="button" style="">Left spotlight</button><button class="btn sm" type="button" style="">Right spotlight</button><button class="btn sm" type="button" style="">All off</button></div></section>
+  <section style="padding:14px 16px;border-bottom:1px solid #2E333A">
+  <h2 class="h2">Recent events</h2><div style="height:10px"></div><div style="display:grid;grid-template-columns:52px 1fr;gap:8px;min-height:32px"><span class="mut">23:38</span><span>Passed Building 2 north side</span></div><div style="display:grid;grid-template-columns:52px 1fr;gap:8px;min-height:32px"><span class="mut">23:12</span><span>Battery below 30%</span></div><div style="display:grid;grid-template-columns:52px 1fr;gap:8px;min-height:32px"><span class="mut">22:00</span><span>Started guard-1</span></div></section>
+</div><button type="button" aria-label="E-STOP ALL" style="position:absolute;right:16px;top:728px;width:92px;height:92px;border:2px solid #fff;border-radius:2px;background:#D42F33;color:#fff;font:700 15px/18px Barlow,'Noto Sans SC','Microsoft YaHei UI',sans-serif;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;box-shadow:0 8px 24px rgba(0,0,0,.45);z-index:5"><svg width="28" height="28" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><polygon points="8,2 16,2 22,8 22,16 16,22 8,22 2,16 2,8"/><line x1="7" y1="12" x2="17" y2="12"/></svg><span>E-STOP ALL</span></button><div aria-hidden="true" style="position:absolute;left:0;right:0;top:844px;border-top:1px dashed #5AA2E6;z-index:6"><span style="position:absolute;right:4px;top:-18px;font-size:11px;font-weight:600;color:#5AA2E6">First screen ends here</span></div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":2120}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

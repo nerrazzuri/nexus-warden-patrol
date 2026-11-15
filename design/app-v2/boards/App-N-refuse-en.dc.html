@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>App · Dispatch refused, E-stop unconfirmed</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&display=swap">
+<style>
+body{margin:0}
+*{box-sizing:border-box}
+.btn{height:44px;padding:0 14px;border:1px solid #9A9FA6;border-radius:2px;background:#16191D;color:#ECEDEA;font:600 15px Barlow,'Noto Sans SC','Microsoft YaHei UI',sans-serif;display:inline-flex;align-items:center;justify-content:center;gap:8px;white-space:nowrap;min-width:0}
+.btn.sm{height:36px;padding:0 10px;font-size:14px}
+.btn.pri{background:#1F6FC0;border-color:#1F6FC0;color:#fff;font-weight:700}
+.btn.danger{background:transparent;border-color:#FF6166;color:#FF6166}
+.btn.stop{background:#D42F33;border-color:#D42F33;color:#fff;font-weight:700}
+.btn.ghost{background:transparent;border-color:transparent;color:#5AA2E6}
+.row{display:grid;gap:8px}
+.lbl{font-size:12px;font-weight:600;letter-spacing:.06em;color:#9A9FA6}
+.mut{color:#B4B8BE}
+.ring{display:inline-block;flex:none;width:14px;height:14px;border:3px solid #FF6166;border-radius:50%}
+.ring.lg{width:26px;height:26px;border-width:5px}
+.tri{display:inline-block;flex:none;width:0;height:0;border-left:7px solid transparent;border-right:7px solid transparent;border-bottom:12px solid #F2B01E}
+.tri.lg{border-left-width:12px;border-right-width:12px;border-bottom-width:21px}
+.sq{display:inline-block;flex:none;width:9px;height:9px;background:#3DC46E}
+.off{display:inline-block;flex:none;width:14px;height:14px;border:2px solid #9A9FA6;border-radius:50%;background:linear-gradient(135deg,transparent 45%,#9A9FA6 45%,#9A9FA6 58%,transparent 58%)}
+.disc{display:inline-block;flex:none;width:12px;height:12px;border-radius:50%;background:#fff}
+.discb{display:inline-block;flex:none;width:12px;height:12px;border-radius:50%;background:#1F6FC0}
+.p3{display:inline-block;flex:none;width:12px;height:12px;border:1.5px solid #9A9FA6;border-radius:50%}
+.sec{padding:14px 16px;border-bottom:1px solid #2E333A}
+.h2{margin:0;font-size:17px;line-height:24px;font-weight:600}
+.h1{margin:0;font-size:22px;line-height:28px;font-weight:700}
+.li{display:flex;align-items:center;gap:12px;min-height:56px;padding:8px 16px;border-bottom:1px solid #2E333A;color:#ECEDEA;text-decoration:none}
+.li .b{flex:1;min-width:0}
+.li .s{font-size:13px;line-height:18px;color:#B4B8BE}
+.seg{display:grid;border:1px solid #2E333A;border-radius:2px;padding:3px;gap:3px}
+.seg button{height:36px;border:0;border-radius:2px;background:transparent;color:#B4B8BE;font:600 14px Barlow,'Noto Sans SC','Microsoft YaHei UI',sans-serif}
+.seg button.on{background:#1F6FC0;color:#fff}
+.chip{display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 8px;border-radius:2px;font-size:13px;font-weight:600;white-space:nowrap}
+.c-ok{background:#16281D;color:#3DC46E} .c-warn{background:#2D2512;color:#F2B01E} .c-bad{background:#33191B;color:#FF6166} .c-n{background:#20242A;color:#B4B8BE}
+.vid{position:relative;background:#000;overflow:hidden}
+.vid .cap{position:absolute;left:0;right:0;top:0;display:flex;align-items:center;gap:8px;padding:6px 10px;background:rgba(0,0,0,.65);color:#ECEDEA;font-size:13px}
+.inp{height:44px;border:1px solid #9A9FA6;border-radius:2px;padding:0 12px;background:#16191D;color:#ECEDEA;font:400 15px Barlow,'Noto Sans SC','Microsoft YaHei UI',sans-serif;display:flex;align-items:center;width:100%}
+.sw{width:44px;height:26px;border-radius:2px;background:#20242A;border:1px solid #9A9FA6;position:relative;flex:none}
+.sw::after{content:"";position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:1px;background:#9A9FA6}
+.sw.on{background:#1F6FC0;border-color:#1F6FC0} .sw.on::after{left:21px;background:#fff}
+.note{font-size:13px;line-height:18px;color:#B4B8BE}
+.tag{display:inline-block;padding:0 6px;border:1px solid #5AA2E6;color:#5AA2E6;font-size:11px;font-weight:700;line-height:16px}
+
+</style>
+</helmet>
+<div style="width:390px;height:844px;position:relative;overflow:hidden;background:#0E1013;color:#ECEDEA;font-family:Barlow,'Noto Sans SC','Microsoft YaHei UI',sans-serif;font-size:15px;line-height:22px;font-variant-numeric:tabular-nums;display:flex;flex-direction:column">
+<header style="flex:none;display:flex;align-items:center;gap:6px;min-height:56px;padding:6px 12px 6px 4px;background:#0A0C0E;border-bottom:1px solid #2E333A">
+  <button type="button" aria-label="Back" style="width:44px;height:44px;border:0;background:transparent;color:#ECEDEA;display:flex;align-items:center;justify-content:center"><svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><polyline points="15,4 7,12 15,20"/></svg></button>
+  <div style="flex:1;min-width:0"><div style="font-size:18px;font-weight:700;line-height:24px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">A · C40221</div><div style="font-size:13px;line-height:18px;color:#B4B8BE;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Patrolling · 62%</div></div>
+  
+</header>
+<div style="flex:1;min-height:0;padding:12px 16px;display:flex;flex-direction:column;gap:12px">
+  <section style="border:1px solid #F2B01E;background:#2D2512;padding:12px">
+    <div style="display:flex;gap:10px"><span class="tri lg"></span><div style="flex:1"><b style="font-size:17px">Not dispatched: A is not standing</b><div class="note" style="margin-top:2px">A is lying down. Stand it up, then dispatch again.</div></div></div>
+    <div style="height:10px"></div><div class="row" style="grid-template-columns:repeat(2,minmax(0,1fr));gap:8px"><button class="btn pri" type="button" style="">Stand A up</button><button class="btn" type="button" style="">Acknowledge</button></div></section>
+  <section style="border:4px solid #D42F33;background:#16191D;padding:12px">
+    <div style="display:flex;gap:10px"><span class="ring lg"></span><div style="flex:1"><b style="font-size:17px">E-stop not confirmed</b><div class="note" style="margin-top:2px">The site received it at 23:41:05 but B has not acknowledged. B may still be moving; check video or go on site.</div></div></div>
+    <div style="height:10px"></div><div class="row" style="grid-template-columns:repeat(2,minmax(0,1fr));gap:8px"><button class="btn stop" type="button" style="">Send E-stop again</button><button class="btn" type="button" style="">View B video</button></div></section>
+</div><button type="button" aria-label="E-STOP ALL" style="position:absolute;right:16px;bottom:24px;width:92px;height:92px;border:2px solid #fff;border-radius:2px;background:#D42F33;color:#fff;font:700 15px/18px Barlow,'Noto Sans SC','Microsoft YaHei UI',sans-serif;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;box-shadow:0 8px 24px rgba(0,0,0,.45);z-index:5"><svg width="28" height="28" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><polygon points="8,2 16,2 22,8 22,16 16,22 8,22 2,16 2,8"/><line x1="7" y1="12" x2="17" y2="12"/></svg><span>E-STOP ALL</span></button>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>
