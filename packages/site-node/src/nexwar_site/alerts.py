@@ -397,6 +397,15 @@ class AlertBook:
         #: 修剪时内存里保留多少条已解决的(挂账 75)。剪掉的库里一条不少。
         self._keep_closed = keep_closed
 
+    def snapshot(self) -> tuple[dict[str, Alert], dict[str, str], dict[str, int]]:
+        """外审 3 #1:一组改动要跟库一起成败 —— 改之前照一张,事务失败用
+        :meth:`restore_snapshot` 退回。"""
+        return dict(self._by_key), dict(self._active), dict(self._seq)
+
+    def restore_snapshot(self, snap: tuple[dict[str, Alert], dict[str, str], dict[str, int]]
+                         ) -> None:
+        self._by_key, self._active, self._seq = dict(snap[0]), dict(snap[1]), dict(snap[2])
+
     def restore(self, alerts: Iterable[Alert], *, max_seq: dict[str, int] | None = None) -> None:
         """站点重启:把库里的告警读回来(调用方只给未解决的与最近的,不是整张历史表)。未解决、未确认
         的那条重新当作「正在吸收」的那条;序号从每个 ``robot/kind`` 见过的最大号往后走(``max_seq``

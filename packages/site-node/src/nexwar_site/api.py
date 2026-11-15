@@ -1820,31 +1820,35 @@ class _Handler(TlsHandlerMixin):
         fresh_fn = getattr(self.site.dispatcher, "_fresh", None)
         pct = battery_pct(c, fresh=bool(fresh_fn(c)) if fresh_fn else True)
         t = getattr(c, "telemetry", None)
+        # 外审 3(边界):比较用原始电量,显示才取整(29.5 对 29.5 的线机器人是拒的)
+        raw = getattr(t, "battery_pct", None) if pct is not None else None
+        raw = (float(raw) if isinstance(raw, (int, float))
+               else (float(pct) if pct is not None else None))
         pose = getattr(t, "pose", None)
         if pose is not None and map_id and getattr(pose, "map_id", map_id) != map_id:
             pose = None                              # 机器人在别的图上:不算直线
         nothing = {"battery_pct": pct, "dist_m": None, "cost_pct": None, "line_pct": None,
                    "enough": None}
+        # 外审 3 #2:要的是**原点**(homes 表),待命点 / 换电位不能代替 —— 机器人上没原点就不放行
+        if not map_id:
+            return self._send_json(200, {**nothing, "reason": "no_map"})
+        db = self.site.alerts.db
+        home_rows = db.query("SELECT x, y FROM homes WHERE robot_id=? AND map_id=? "
+                             "AND map_version=?", (robot_id, map_id, version))
+        if not home_rows:
+            return self._send_json(200, {**nothing, "reason": "no_home"})
         if pose is None:
-            return self._send_json(200, nothing)
+            return self._send_json(200, {**nothing, "reason": "no_pose"})
         here = (float(pose.x), float(pose.y))
         dist = math.hypot(here[0] - x, here[1] - y)
-        # 外审 2 #3:网页派的是普通手动 goto,机器人上的出发线是 preflight.departure_line_pct:
-        #   max(返航线 25, 中止线 15) + 全程耗电 × 1.5,全程 = 现在位置 → 目标 → 回原点
-        #   (直线后端:沿来路回到出发点再回原点;会规划的:目标直线回原点);
-        #   耗电 = 米 × 1.4 / 0.4 m/s ÷ 3600 × 22.3,
-        #   最少 3%。没原点算不出线 —— 机器人也不会放行(「不确定不放行」),
-        #   这里回 enough=null。
+        homes = [(float(r["x"]), float(r["y"])) for r in home_rows]
         homes_fn = getattr(self.site.incidents, "homes", None) if self.site.incidents else None
-        homes: list[tuple[float, float]] = []
-        if homes_fn is not None and map_id:
-            try:
-                homes = [(float(hx), float(hy))
-                         for hx, hy in (homes_fn(robot_id, map_id, version) or [])]
+        if homes_fn is not None:
+            try:                              # 回程算到原点、换电位里远的那个(跟报警出动一样)
+                homes += [(float(hx), float(hy))
+                          for hx, hy in (homes_fn(robot_id, map_id, version) or [])]
             except Exception:
-                log.exception("%s 回哪查不到", robot_id)
-        if not homes:
-            return self._send_json(200, {**nothing, "dist_m": round(dist, 1)})
+                log.exception("%s 换电位查不到", robot_id)
         caps = c.capabilities.tasks.get("goto", {}) if c.capabilities else {}
         retrace = str(caps.get("path", "straight")) != "planned"
         total = 0.0
@@ -1856,7 +1860,7 @@ class _Handler(TlsHandlerMixin):
         line = max(GOTO_RETURN_PCT, GOTO_ABORT_PCT) + cost * GOTO_SLACK
         return self._send_json(200, {"battery_pct": pct, "dist_m": round(dist, 1),
                                      "cost_pct": round(cost, 1), "line_pct": round(line, 1),
-                                     "enough": None if pct is None else bool(pct > line)})
+                                     "enough": None if raw is None else bool(raw > line)})
 
     def _charging_spans(self) -> None:
         """redesign 第 8 期:哪台几点到几点在充(``charge_log`` 流水 → 时段;没结束的 ``to_ms``
