@@ -612,6 +612,11 @@ export function GoLookCard(props: { map: { map_id: string; version: string }; at
       .then((p) => live && setPlan(p)).catch(() => {});
     return () => { live = false; };
   }, [choice, x, y]);
+  // 用户 11-15:看完后自己回去(默认回待命点;这台没有默认待命点就回原点),也可以停在那里
+  const chosenUnit = choice ? props.units.find((u) => u.robot.robot_id === choice) : undefined;
+  const noStandby = (chosenUnit?.robot as { standby_set?: boolean } | undefined)?.standby_set === false;
+  const [thenPick, setThenPick] = useState<"standby" | "home" | "stay" | null>(null);
+  const then = thenPick ?? (noStandby ? "home" : "standby");
   async function send(id: string) {
     setBusy(true);
     const p = props.units.find((u) => u.robot.robot_id === id)?.robot.loc?.pose;
@@ -619,7 +624,7 @@ export function GoLookCard(props: { map: { map_id: string; version: string }; at
     try {
       const sentAt = Date.now();
       const r = await api<CommandReply>("POST", `/api/robots/${enc(id)}/goto`,
-        { target: { map_id: props.map.map_id, map_version: props.map.version, frame_id: "map", x, y, yaw } });
+        { target: { map_id: props.map.map_id, map_version: props.map.version, frame_id: "map", x, y, yaw }, then });
       const no = notAccepted(r);
       // 网页易用性第 1 轮 P0-03:收下 ≠ 出发了(出发前检查在后头),确认完再说
       if (no) props.say(no);
@@ -651,13 +656,23 @@ export function GoLookCard(props: { map: { map_id: string; version: string }; at
         </>
       )}
       {why && got !== "error" && <p class="error">{why}</p>}
+      {nearest && choice && (
+        <div class="golook-then">
+          <span class="lbl">{t("lookThen")}</span>
+          <div class="seg" role="group" aria-label={t("lookThen")}>
+            {(["standby", "home", "stay"] as const).map((k) => (
+              <button key={k} type="button" data-then={k} aria-pressed={then === k} onClick={() => setThenPick(k)}>{t(k === "standby" ? "lookThenStandby" : k === "home" ? "lookThenHome" : "lookThenStay")}</button>
+            ))}
+          </div>
+        </div>
+      )}
       <div class="golook-acts">
         {nearest && choice && (
           <button type="button" class="btn primary" disabled={busy} onClick={() => send(choice)}>{t("lookSendTo", { id: nameOf(choice) })}</button>
         )}
         <button type="button" class="btn" onClick={props.onClose}>{t("cancel")}</button>
       </div>
-      {nearest && <p class="muted small">{t("lookNoAlarm")}</p>}
+      {nearest && <p class="muted small">{t("lookNoAlarm2")}</p>}
     </div>
   );
 }

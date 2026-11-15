@@ -6,6 +6,11 @@ import alertCatalog from "../../../design/i18n/alerts.json";
 export type Lang = "en" | "zh";
 
 const en = {
+  lookThen: "After the check",
+  lookThenStandby: "Return to standby",
+  lookThenHome: "Return home",
+  lookThenStay: "Wait there",
+  lookNoAlarm2: "View on arrival in the video panel; no alarm is raised.",
   mapVer: "Map {id} · v{v}",
   mapVerMixed: "Robots are on different map versions: {list}. The map follows the selected robot.",
   rcNoCam: "This robot reports no {cam} camera.",
@@ -2282,6 +2287,11 @@ const en = {
 type Key = keyof typeof en;
 
 const zh: Partial<Record<Key, string>> = {
+  lookThen: "看完后",
+  lookThenStandby: "回待命点",
+  lookThenHome: "回原点",
+  lookThenStay: "停在那里",
+  lookNoAlarm2: "到了在画面里看；不产生报警。",
   mapVer: "地图 {id} · v{v}",
   mapVerMixed: "机器人用的地图版本不一致：{list}。地图跟着选中的那台。",
   rcNoCam: "这台机器人没报 {cam}。",
