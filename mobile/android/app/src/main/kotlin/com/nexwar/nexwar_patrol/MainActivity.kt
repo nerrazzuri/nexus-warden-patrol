@@ -77,6 +77,10 @@ class MainActivity : FlutterActivity() {
                     if (Build.VERSION.SDK_INT >= 27) {
                         setShowWhenLocked(false)
                         setTurnScreenOn(false)
+                    } else {
+                        // 外审 App-V2-2 N5:24–26 走的是窗口标志,也要清掉(不然以后的页面一直显示在锁屏上)
+                        @Suppress("DEPRECATION")
+                        window.clearFlags(WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON)
                     }
                     result.success(true)
                 }
@@ -93,6 +97,11 @@ class MainActivity : FlutterActivity() {
                         if (Build.VERSION.SDK_INT >= 26) startForegroundService(i) else startService(i)
                     }
                     result.success(true)
+                }
+                // 通知上点过静音的:告警键 → 静到几点(前台的铃对一下)
+                "mutes" -> {
+                    val now = System.currentTimeMillis()
+                    result.success(HashMap(WatchService.mutedUntil.filterValues { it > now }))
                 }
                 "running" -> result.success(WatchService.running)
                 // 手机 App 测试 M01:底部导航页按返回键 = 退到后台,不结束 Activity(结束会退出登录)

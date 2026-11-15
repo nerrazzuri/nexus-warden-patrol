@@ -56,16 +56,28 @@ class _RingPageState extends State<RingPage> {
   bool _busy = false;
   bool _left = false;
 
+  /// 还开着的来报警页（可能叠着几件）：最后一页收掉才让锁屏不再显示 App（外审 App-V2-2 R2）。
+  static final Set<_RingPageState> _live = <_RingPageState>{};
+  bool _finished = false;
+
+  void _finish() {
+    if (_finished) return;
+    _finished = true;
+    _live.remove(this);
+    if (_live.isEmpty) unawaited(widget.done());
+  }
+
   @override
   void initState() {
     super.initState();
+    _live.add(this);
     _poll = Timer.periodic(widget.every, (_) => unawaited(_check()));
   }
 
   @override
   void dispose() {
     _poll?.cancel();
-    if (!_left) unawaited(widget.done());
+    _finish();
     super.dispose();
   }
 
@@ -89,7 +101,7 @@ class _RingPageState extends State<RingPage> {
   void _leave() {
     if (_left || !mounted) return;
     _left = true;
-    unawaited(widget.done());
+    _finish();
     // 外审 App-V2-1 #6：只关自己这一页。上面可能压着另一件报警的来报警页，不能弹栈顶
     final route = ModalRoute.of(context);
     if (route == null) return;
@@ -101,10 +113,17 @@ class _RingPageState extends State<RingPage> {
   }
 
   void _open() {
+    if (_left || !mounted) return;
     _left = true;
-    unawaited(widget.done());
-    Navigator.of(context).pushReplacement(
-        MaterialPageRoute<void>(builder: (_) => SiteAlertScenePage(api: widget.api, alert: _a)));
+    _finish();
+    // 外审 App-V2-2 N1：换掉的是自己这一页（上面可能已经压着另一件的来报警页），不是栈顶
+    final route = ModalRoute.of(context);
+    final next = MaterialPageRoute<void>(builder: (_) => SiteAlertScenePage(api: widget.api, alert: _a));
+    if (route == null || route.isCurrent) {
+      Navigator.of(context).pushReplacement(next);
+    } else if (route.isActive) {
+      Navigator.of(context).replace(oldRoute: route, newRoute: next);
+    }
   }
 
   Future<void> _take() async {

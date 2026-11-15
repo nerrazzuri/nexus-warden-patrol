@@ -160,6 +160,22 @@ bool ringMuted(String key, [DateTime Function() now = DateTime.now]) {
   return false;
 }
 
+/// 把通知上点的静音对到前台（外审 App-V2-2 R1）：原生那边记的截止时间合进 [ringMutedUntil]（取晚的）。
+Future<void> syncNativeMutes() async {
+  if (!Platform.isAndroid) return;
+  try {
+    final m = await const MethodChannel('nexwar/watch').invokeMapMethod<String, dynamic>('mutes');
+    for (final e in (m ?? const <String, dynamic>{}).entries) {
+      final until = (e.value as num).toInt();
+      if (until > (ringMutedUntil[e.key] ?? 0)) ringMutedUntil[e.key] = until;
+    }
+  } on PlatformException {
+    return;
+  } on MissingPluginException {
+    return;
+  }
+}
+
 Future<bool> muteRing(String key) async {
   if (!Platform.isAndroid) return false;
   try {

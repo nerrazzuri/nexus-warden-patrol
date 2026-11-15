@@ -23,6 +23,7 @@ import 'robot_bind_page.dart';
 import 'patrol_dispatch.dart';
 import 'refusal.dart';
 import 'site_deter.dart';
+import 'site_deterrence.dart';
 import 'site_logs.dart';
 import 'site_mapping.dart';
 import 'site_recordings.dart';
@@ -113,6 +114,7 @@ class SiteRobotPage extends StatefulWidget {
   static const Key operateTabKey = Key('robot-tab-operate');
   static const Key settingsTabKey = Key('robot-tab-settings');
   static const Key menuKey = Key('robot-menu');
+  static const Key deterBannerKey = Key('robot-deter-banner');
   static const Key estopKey = Key('robot-estop');
   static const Key tonightKey = Key('robot-tonight');
   static const Key lieKey = Key('btn-posture-lie');
@@ -231,6 +233,21 @@ class _SiteRobotPageState extends State<SiteRobotPage> with NwAsk {
       if (mounted) setState(() => _view = v);
     } on SiteError catch (e) {
       if (mounted && !quiet) _say(e.toString());
+    }
+    unawaited(_loadDeter());
+  }
+
+  /// 这台正在驱离的那一场（外审 App-V2-2 N3：保安从机器人页也能进完整的驱离页：降级、转人工、结束）。
+  Map<String, dynamic>? _deterSession;
+
+  Future<void> _loadDeter() async {
+    if (!(widget.api.session?.canDispatch ?? false)) return;
+    try {
+      final d = await widget.api.deterrence();
+      final mine = d.where((x) => '${x['robot_id']}' == widget.robotId).firstOrNull;
+      if (mounted) setState(() => _deterSession = mine);
+    } on SiteError {
+      return; // 老站点没有驱离
     }
   }
 
@@ -702,7 +719,18 @@ class _SiteRobotPageState extends State<SiteRobotPage> with NwAsk {
               ]))),
     );
 
+    final deterNow = _deterSession;
     final body = <Widget>[
+      if (deterNow != null && (s?.canDispatch ?? false) && !_settings)
+        Padding(
+            padding: const EdgeInsets.fromLTRB(Nw.s16, 12, Nw.s16, 0),
+            child: NwBanner(
+                key: SiteRobotPage.deterBannerKey,
+                tone: NwTone.error,
+                icon: Icons.campaign_rounded,
+                title: tr('Deterring · ${deterSessionText(deterNow)}', '驱离中 · ${deterSessionText(deterNow)}'),
+                subtitle: tr('Tap to change level, take over or end', '点进去降级、转人工或结束'),
+                onTap: () => go(() => SiteDeterrencePage(api: widget.api, robotId: widget.robotId)))),
       if (light)
         Padding(
             padding: const EdgeInsets.fromLTRB(Nw.s16, 12, Nw.s16, 12),

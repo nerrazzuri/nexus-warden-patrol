@@ -89,6 +89,13 @@ class SiteDirectory extends StatelessWidget {
             () => _push(context, SiteModePage(api: api))),
       ]));
     }
+    if (role == 'guard') {
+      // 外审 App-V2-2 N2：保安能布防、留守、临时撤防（canArm / canSetMode），要有入口
+      groups.add((tr('Site', '现场'), [
+        _Row(SiteDest.arming, Icons.shield_outlined, tr('Arming', '布防'),
+            tr('Arming mode, temporary disarm', '布防模式、临时撤防'), () => _push(context, SiteModePage(api: api))),
+      ]));
+    }
     final readOnly = role == 'viewer';
     // 稿 S-guard / S-viewer:保安、只读没有「日常」—— 机器人和地图都在「现在」页上(格子「控制」、小地图进全屏)
     groups.add((tr('Records', '记录'), [

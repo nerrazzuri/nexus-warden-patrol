@@ -43,6 +43,24 @@ Future<void> _robotPage(WidgetTester t, FakeApi api) async {
 
 void main() {
   pocClipNames();
+  test('外审 App-V2-2 N4：回执不是 accepted / duplicate 就是没成（HTTP 200 不算数）', () {
+    expect(deterAckFailure(<String, dynamic>{'ack': <String, dynamic>{'result': 'accepted'}}), isNull);
+    expect(deterAckFailure(<String, dynamic>{'ack': <String, dynamic>{'result': 'duplicate'}}), isNull);
+    expect(deterAckFailure(<String, dynamic>{}), isNull, reason: '老站点没带回执');
+    expect(deterAckFailure(<String, dynamic>{'ack': <String, dynamic>{'result': 'rejected', 'reason': 'busy'}}),
+        contains('喇叭正在播放'));
+  });
+
+  testWidgets('外审 App-V2-2 N4：「全部关」有一路机器人拒了，说没关上', (t) async {
+    final api = FakeApi('guard')..deterAck = <String, dynamic>{'result': 'rejected', 'reason': 'device: relay stuck'};
+    await _open(t, api);
+    await t.ensureVisible(find.byKey(SiteDeterPage.allOffKey));
+    await t.tap(find.byKey(SiteDeterPage.allOffKey));
+    await t.pumpAndSettle();
+    expect(find.textContaining('全部关失败'), findsOneWidget);
+    expect(find.textContaining('relay stuck'), findsOneWidget);
+  });
+
   testWidgets('只列接上的几路；开带默认时长；「全部关」把每一路关掉；同一排等宽', (t) async {
     final api = FakeApi('guard');
     await _open(t, api);
