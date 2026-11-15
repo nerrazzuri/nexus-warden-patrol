@@ -49,12 +49,12 @@ export interface RobotCard {
 export interface Deter { outputs: string[]; max_s: number; tts: boolean; clips: string[];
   /** 第三档 #41:能念哪几种语言(竞品只会中文;英文靠 Orin 上合成)。没报 = 不知道,不挡。 */
   tts_langs?: string[] }
-const STROBE_S = [30, 60, 120, 300];
-const CLIP_KEY: Record<string, "clip_blocked" | "clip_passing" | "clip_distance" | "clip_restricted"> = {
+export const STROBE_S = [30, 60, 120, 300];
+export const CLIP_KEY: Record<string, "clip_blocked" | "clip_passing" | "clip_distance" | "clip_restricted"> = {
   blocked: "clip_blocked", passing: "clip_passing", distance: "clip_distance", restricted: "clip_restricted",
 };
 export type Posture = "stand" | "lie" | "crawl";
-const POSTURE_KEY: Record<Posture, "rdStand" | "rdLie" | "rdCrawl"> = { stand: "rdStand", lie: "rdLie", crawl: "rdCrawl" };
+export const POSTURE_KEY: Record<Posture, "rdStand" | "rdLie" | "rdCrawl"> = { stand: "rdStand", lie: "rdLie", crawl: "rdCrawl" };
 export interface Wifi {
   ssid: string; link: "wifi" | "4g" | "none";
   change: { id: string; ssid: string; mode: "online" | "trial"; expires_ms: number | null } | null;
@@ -595,15 +595,15 @@ function DeterPanel({ r, d, id, busy, off, send, path, admin, say }: {
   );
 }
 
-interface VoicePreset { lang: string; text: string }
-const PRESET_LANGS: [string, string][] = [["zh", "中文"], ["en", "English"], ["ms", "Melayu"]];
+export interface VoicePreset { lang: string; text: string }
+export const PRESET_LANGS: [string, string][] = [["zh", "中文"], ["en", "English"], ["ms", "Melayu"]];
 const PRESETS_MAX = 12;
 /** 句子里的语言名跟界面语言走(下拉框里写各自的本名)。 */
 const LANG_NAME: Record<string, [string, string]> = { zh: ["Chinese", "中文"], en: ["English", "英文"], ms: ["Malay", "马来文"] };
-const langName = (l: string) => LANG_NAME[l]?.[lang.value === "zh" ? 1 : 0] ?? l;
+export const langName = (l: string) => LANG_NAME[l]?.[lang.value === "zh" ? 1 : 0] ?? l;
 
 /** 第三档 #41:管理员编辑常用喊话(整张换)。空的、重复的当场说,不发。 */
-function PresetEditor({ init, onClose, onSaved }: { init: VoicePreset[]; onClose: () => void; onSaved: (p: VoicePreset[]) => void }) {
+export function PresetEditor({ init, onClose, onSaved }: { init: VoicePreset[]; onClose: () => void; onSaved: (p: VoicePreset[]) => void }) {
   const [rows, setRows] = useState<VoicePreset[]>(init.map((p) => ({ ...p })));
   const [err, setErr] = useState("");
   const [bad, setBad] = useState(-1);       // UIUX-049:出错的是第几句(标 aria-invalid、焦点放过去)

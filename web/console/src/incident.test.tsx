@@ -4,8 +4,8 @@
 import { cleanup, fireEvent, render, waitFor } from "@testing-library/preact";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { setFetch } from "./api";
-import { incidentSteps, responder } from "./incident";
-import { lang } from "./i18n";
+import { IncidentView, incidentSteps, responder } from "./incident";
+import { lang, t } from "./i18n";
 import type { UnitInfo } from "./live";
 import type { Alert, RobotState } from "./model";
 import { MonitorPage } from "./monitor";
@@ -112,8 +112,13 @@ describe("有告警:中间是这件事", () => {
     fireEvent.click(btn(inc(r.c), "全场地图")!);
     expect(r.c.querySelector(".inc")).toBeNull();
     expect(r.c.querySelector(".mon-head h1")!.textContent).toContain("发现入侵");
-    r.rerender(<MonitorPage units={[unit("A", "patrolling")]} alerts={[alert({ key: "k9", first_ms: 9, last_ms: 9 }), ...two]} now={2000} role="guard" say={r.say} refresh={r.refresh} onZoom={() => {}} />);
+    // 来了新的:只有它一件安全事件就切到它;已经有别的安全事件开着(第 4 期 G-multi)先看总览
+    r.rerender(<MonitorPage units={[unit("A", "patrolling")]} alerts={[alert({ key: "k9", first_ms: 9, last_ms: 9 }), ...two.slice(1)]} now={2000} role="guard" say={r.say} refresh={r.refresh} onZoom={() => {}} />);
     expect(inc(r.c).getAttribute("data-key")).toBe("k9");
+    fireEvent.click(btn(inc(r.c), "全场地图")!);
+    r.rerender(<MonitorPage units={[unit("A", "patrolling")]} alerts={[alert({ key: "k10", first_ms: 10, last_ms: 10 }), alert({ key: "k9", first_ms: 9, last_ms: 9 }), ...two.slice(1)]} now={2000} role="guard" say={r.say} refresh={r.refresh} onZoom={() => {}} />);
+    expect(r.c.querySelector(".inc")).toBeNull();
+    expect(Array.from(r.c.querySelectorAll(".multi-table tbody tr")).map((x) => x.getAttribute("data-key"))).toEqual(["k9", "k10"]);
   });
 
   it("技术类(给管理员的)不打开这件事", () => {
@@ -215,5 +220,15 @@ describe("进度条", () => {
     expect(inc(c).querySelectorAll(".inc-steps li.done").length).toBe(4);
     fireEvent.click(btn(inc(c), "重新打开")!);
     await waitFor(() => expect(posts).toContainEqual({ url: "/api/alerts/k1/reopen", body: {} }));
+  });
+});
+
+describe("监控墙", () => {
+  it("告警视图切到监控墙:还能点「全场地图」回去(地图那一栏收起来了)", () => {
+    const onSite = vi.fn();
+    const c = render(<IncidentView a={alert({})} units={[]} alerts={[]} now={1} role="guard" mode={null} cams={[]} layout="wall" onLayout={() => {}}
+      say={() => {}} refresh={async () => {}} onSite={onSite} onZoom={() => {}} onFindPose={() => {}} onAreas={() => {}} />).container;
+    fireEvent.click(Array.from(c.querySelectorAll(".inc-wall button")).find((b) => b.textContent === t("incSiteMap"))!);
+    expect(onSite).toHaveBeenCalled();
   });
 });

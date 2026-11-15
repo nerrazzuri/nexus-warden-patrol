@@ -17,7 +17,7 @@ import { botLayout, type Box, ENGINEERING_LAYERS, etaNext, eventLabelY, textHalf
   type AuthzRow, type Cell, type Layer, type ModeView } from "./maplayers";
 import { fanPath } from "./layoutpage";
 import { MapCanvas, type CanvasArea, type LegendKey, type Screen } from "./mapcanvas";
-import { heading, namedAreas, onMap, toPx, type PreviewMeta, type Pt } from "./mapview";
+import { heading, namedAreas, onMap, pointInPolygon, toPx, type PreviewMeta, type Pt } from "./mapview";
 import { abnormal, alarmState, autoResolved, canDispatch, canFindPose, canPatrol, robotMap, type Alert } from "./model";
 import { notAccepted, usePosePick, type CommandReply } from "./posepick";
 import { pxToMap, yawToward } from "./routes";
@@ -289,8 +289,12 @@ export function MapPage(props: {
   /** 标红的防区(报警的那几个)。 */
   hot?: Set<string>;
   onAreas?: (areas: CanvasArea[]) => void;
+  /** 派去看一眼时先选这台(从单台机器人控制进来的)。 */
+  lookRobot?: string | null;
 }) {
   const say = props.say ?? (() => {});
+  // 点在哪个防区(派去看一眼的卡片写地点)
+  const [areas, setAreas] = useState<CanvasArea[]>([]);
   const duty = useDutySettings();
   const [layers, setLayers] = useState<Set<Layer>>(loadLayers);
   const [shown, setShown] = useState<{ map: { map_id: string; version: string } | null; meta: PreviewMeta | null }>({ map: null, meta: null });
@@ -382,7 +386,7 @@ export function MapPage(props: {
         episodes={on("loc")} navZones={on("nogo")} route={on("route")} eta={on("route")}
         areaDecor={on("zones") ? (n) => zoneDecor(n, props.mode, authz) : (n) => ({ label: n, tone: "armed" })}
         onMapShown={(map, meta) => setShown({ map, meta })}
-        hot={props.hot} onAreas={props.onAreas}
+        hot={props.hot} onAreas={(a) => { setAreas(a); props.onAreas?.(a); }}
         pick={props.finding ? true : undefined} onLocated={props.onLocated}
         onPickMap={props.finding ? undefined : canDispatch(props.role ?? "") ? (x, y, map) => {
           if (route) setRoute([...route, [x, y]]);
@@ -484,7 +488,8 @@ export function MapPage(props: {
             <>
               <div class="map-tool-h"><b>{t("lookTitle")}</b>{!look && <span>{t("lookHint")}</span>}
                 <button type="button" class="btn sm push" onClick={exit}>{t("toolExit")}</button></div>
-              {look && <GoLookCard canFix={pageAllowed("admin/localization", props.role ?? "")} map={look.map} at={look.at} units={props.units} say={say} onClose={exit} />}
+              {look && <GoLookCard key={`${look.at[0]},${look.at[1]}`} canFix={pageAllowed("admin/localization", props.role ?? "")} map={look.map} at={look.at} units={props.units} say={say} onClose={exit}
+                where={areas.find((a) => pointInPolygon(look.at, a.pts))?.name} prefer={props.lookRobot ?? undefined} />}
             </>
           ) : sentRoute && (
             <div class={sentRoute.refused ? "tip warn" : "tip"} data-sent-tip={sentRoute.refused ? "refused" : "1"}>
@@ -553,10 +558,14 @@ export function camMarks(s: Screen, cams: PlacedCam[], open: (name: string) => v
   });
 }
 
-export function GoLookCard(props: { map: { map_id: string; version: string }; at: Pt; units: UnitInfo[]; onClose: () => void; say: (s: string) => void; canFix?: boolean; exclude?: string }) {
+/** 派去看一眼(G-check):地点、默认最近的那台(可改派别的)、它会暂停什么、派出 / 取消;不产生报警。
+ * ``prefer``:从单台机器人控制进来的那台;``exclude``:告警里求助的那台(它自己去不了);``where``:点在哪个防区。 */
+export function GoLookCard(props: { map: { map_id: string; version: string }; at: Pt; units: UnitInfo[]; onClose: () => void; say: (s: string) => void; canFix?: boolean; exclude?: string;
+  where?: string; prefer?: string }) {
   const [got, setGot] = useState<{ robot_id: string; eta_s: number } | null | "none" | "error">(null);
   const [why, setWhy] = useState("");
   const [busy, setBusy] = useState(false);
+  const [pick, setPick] = useState<string | null>(null);
   const [x, y] = props.at;
   useEffect(() => {
     let live = true;
@@ -575,6 +584,16 @@ export function GoLookCard(props: { map: { map_id: string; version: string }; at
       });
     return () => { live = false; };
   }, [x, y, props.map.map_id, props.map.version, props.exclude]);
+  const nearest = got && typeof got === "object" ? got : null;
+  // 也能改派别的(在线、没被叫停、不是求助的那台、图对得上或不知道);站点照样会查走不走得到
+  const others = props.units.filter((u) => {
+    const id = u.robot.robot_id;
+    if (id === nearest?.robot_id || id === props.exclude || u.state === "offline" || u.robot.held != null) return false;
+    const m = robotMap(u.robot);
+    return !m || (m.map_id === props.map.map_id && m.version === props.map.version);
+  }).map((u) => u.robot.robot_id);
+  const choice = pick ?? (props.prefer && (props.prefer === nearest?.robot_id || others.includes(props.prefer)) ? props.prefer : nearest?.robot_id ?? null);
+  const busyWith = choice ? props.units.find((u) => u.robot.robot_id === choice)?.task || "" : "";
   async function send(id: string) {
     setBusy(true);
     const p = props.units.find((u) => u.robot.robot_id === id)?.robot.loc?.pose;
@@ -595,20 +614,29 @@ export function GoLookCard(props: { map: { map_id: string; version: string }; at
     }
   }
   return (
-    <div class="golook" role="dialog" aria-label={t("lookTitle")}>
+    <div class="golook" role="group" aria-label={t("lookTitle")}>
+      <h3>{props.where || t("lookPoint")}</h3>
       {got === null && <p class="muted">{t("lookAsking")}</p>}
       {got === "none" && <p>{props.exclude ? t("lookOnlySelf", { id: nameOf(props.exclude) }) : t("lookNone")}</p>}
       {got === "error" && <p class="error">{why}</p>}
-      {got && typeof got === "object" && (
-        <p>{t("lookWho", { id: nameOf(got.robot_id), n: Math.max(1, Math.round(got.eta_s / 60)) })}</p>
+      {nearest && (
+        <>
+          <label class="lbl" for="look-robot">{t("lookRobot")}</label>
+          <select id="look-robot" name="look_robot" value={choice ?? ""} onChange={(e) => setPick(e.currentTarget.value)}>
+            <option value={nearest.robot_id}>{t("lookNearest", { id: nameOf(nearest.robot_id), n: Math.max(1, Math.round(nearest.eta_s / 60)) })}</option>
+            {others.map((id) => <option key={id} value={id}>{nameOf(id)}</option>)}
+          </select>
+          {choice && busyWith && <p class="muted small" data-look-pause="1">{t("lookPause", { id: nameOf(choice), what: busyWith })}</p>}
+        </>
       )}
       {why && got !== "error" && <p class="error">{why}</p>}
-      <div class="row end">
-        <button type="button" class="btn" onClick={props.onClose}>{t("cancel")}</button>
-        {got && typeof got === "object" && (
-          <button type="button" class="btn primary" disabled={busy} onClick={() => send(got.robot_id)}>{t("lookSend")}</button>
+      <div class="golook-acts">
+        {nearest && choice && (
+          <button type="button" class="btn primary" disabled={busy} onClick={() => send(choice)}>{t("lookSendTo", { id: nameOf(choice) })}</button>
         )}
+        <button type="button" class="btn" onClick={props.onClose}>{t("cancel")}</button>
       </div>
+      {nearest && <p class="muted small">{t("lookNoAlarm")}</p>}
     </div>
   );
 }

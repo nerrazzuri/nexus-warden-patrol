@@ -45,6 +45,8 @@ beforeEach(() => {
     if (url.startsWith("/api/cameras")) return Promise.resolve(json({ cameras: [] }));
     if (url.startsWith("/api/routes?")) return Promise.resolve(json({ revision: 1, timezone: "UTC", routes: [{ id: "loop-test", map_id: "m1", map_version: "1", title: "一楼夜巡" }], schedules: [] }));
     if (url === "/api/robots") return Promise.resolve(json({ robots: [{ ...realRobots.robots[0], robot_id: "B", running: { ...realRobots.robots[0].running, map_id: "m1", map_version: "1" } }] }));
+    if (url === "/api/schedule") return Promise.resolve(json({ missions: ["loop-test"] }));
+    if (url === "/api/robots/overview") return Promise.resolve(json({ robots: [{ robot_id: "A", online: true }, { robot_id: "B", online: true, map: { id: "m1", version: "1", match: true } }] }));
     if (url.startsWith("/api/robots/B/patrol-plan")) return Promise.resolve(json({ estimate_s: 600, start_ms: 0, queued: false, because: "", loops: 3 }));
     return Promise.resolve(json({}, 404));
   }) as typeof fetch);
@@ -169,7 +171,7 @@ describe("最近活动、整班时间轴", () => {
 });
 
 describe("右栏机器人(从老值班页搬来)", () => {
-  const held = (id: string) => unit(id, "estop", { robot: { robot_id: id, active: true, fresh: true, revoked: false, held: { by: "gina" }, status: { online: true, last_seen: 0 } } as never });
+  const held = (id: string) => unit(id, "manual", { robot: { robot_id: id, active: true, fresh: true, revoked: false, held: { by: "gina", at_ms: NOW - 60_000 }, status: { online: true, last_seen: 0 } } as never });
   const noHome = (id: string) => unit(id, "idle", { robot: { robot_id: id, active: true, fresh: true, revoked: false, held: null, home_set: false, status: { online: true, last_seen: 0 } } as never });
 
   it("数据过期:状态写未知", () => {
@@ -178,12 +180,20 @@ describe("右栏机器人(从老值班页搬来)", () => {
     expect(c.querySelector(".mon-robot")!.textContent).not.toContain("巡逻中");
   });
 
-  it("全部急停后:先确认再全部恢复;只读没有恢复按钮", async () => {
+  it("G-estop 全部急停后:页头写谁几点按的;先在页头原地确认(不弹窗)再全部恢复;卡片写急停;只读没有恢复按钮", async () => {
     const c = page([], "guard", [held("A"), held("B"), unit("C", "idle")]);
     expect(c.querySelector(".mon-head h1")!.textContent).toBe("2 台机器人已急停");
+    expect(c.querySelector(".mon-head p")!.textContent).toContain("gina");
+    expect(c.querySelector('[data-robot="A"] .mon-state')!.textContent).toBe("急停");
+    expect(c.querySelector('[data-robot="A"] .mon-state')!.className).toContain("bad");
     fireEvent.click(Array.from(c.querySelectorAll(".mon-head button")).find((b) => b.textContent === "全部恢复…")!);
     expect(posts).toEqual([]);
-    fireEvent.click(Array.from(document.querySelectorAll(".modal button")).find((b) => b.textContent?.includes("全部恢复"))!);
+    expect(document.querySelector(".modal")).toBeNull();
+    expect(c.querySelector(".mon-ask")!.textContent).toContain("恢复全部 2 台");
+    fireEvent.click(Array.from(c.querySelectorAll(".mon-ask button")).find((b) => b.textContent === "取消")!);
+    expect(c.querySelector(".mon-ask")).toBeNull();
+    fireEvent.click(Array.from(c.querySelectorAll(".mon-head button")).find((b) => b.textContent === "全部恢复…")!);
+    fireEvent.click(c.querySelector(".mon-ask .btn.primary")!);
     await waitFor(() => expect(posts.map((p) => p.url).sort()).toEqual(["/api/robots/A/resume", "/api/robots/B/resume"]));
     cleanup();
     const d = page([], "viewer", [held("A")]);
@@ -199,24 +209,43 @@ describe("右栏机器人(从老值班页搬来)", () => {
     expect(page([]).querySelector(".slot-pin")!.getAttribute("aria-pressed")).toBe("true");
   });
 
-  it("详情:保安在本页选中它(不跳页),管理员去机器人页", () => {
+  it("详情:在中间打开这台的控制(不跳页、不弹窗);再点或点「全场」回来;管理员里面有去机器人设置的链接", async () => {
     const c = page([]);
-    const more = c.querySelector('[data-robot-more="B"]') as HTMLAnchorElement;
-    fireEvent.click(more);
+    fireEvent.click(c.querySelector('[data-robot-more="B"]')!);
     expect(c.querySelector('.mon-robot.on')!.getAttribute("data-robot")).toBe("B");
+    expect(c.querySelector('.mon-center .rc')!.getAttribute("data-robot")).toBe("B");
+    expect(c.querySelector(".mon-head")).toBeNull();
+    expect(c.querySelector(".rc-head a")).toBeNull();
+    fireEvent.click(c.querySelector('[data-robot-more="B"]')!);
+    expect(c.querySelector(".mon-center .rc")).toBeNull();
     cleanup();
-    expect(page([], "admin").querySelector('[data-robot-more="A"]')!.getAttribute("href")).toBe("#/admin/robots?robot=A");
+    const d = page([], "admin");
+    fireEvent.click(d.querySelector('[data-robot-more="A"]')!);
+    expect(d.querySelector(".rc-head a")!.getAttribute("href")).toBe("#/admin/robots?robot=A");
+    fireEvent.click(Array.from(d.querySelectorAll(".rc-head button")).find((b) => b.textContent === "全场")!);
+    expect(d.querySelector(".mon-head")).not.toBeNull();
   });
 
-  it("W8-09:保安每台有「派巡逻」:选路线、圈数,派出", async () => {
+  it("W8-09:保安在「详情」里派巡逻:选路线、圈数,写预计多久,派出", async () => {
     const c = page([]);
-    fireEvent.click(c.querySelector('[data-robot-patrol="B"]')!);
-    const route = await waitFor(() => { const x = document.querySelector('select[name="route"]') as HTMLSelectElement; expect(x.options.length).toBe(2); return x; });
+    fireEvent.click(c.querySelector('[data-robot-more="B"]')!);
+    const route = await waitFor(() => { const x = c.querySelector('.rc select[name="route"]') as HTMLSelectElement; expect(x.options.length).toBe(2); return x; });
     fireEvent.change(route, { target: { value: "loop-test" } });
-    fireEvent.change(document.querySelector('select[name="loops"]')!, { target: { value: "3" } });
-    await waitFor(() => expect(document.querySelector("[data-plan]")).not.toBeNull());
-    fireEvent.click(Array.from(document.querySelectorAll("dialog button")).find((b) => b.textContent === "派出")!);
+    fireEvent.change(c.querySelector('.rc select[name="loops"]')!, { target: { value: "3" } });
+    await waitFor(() => expect(c.querySelector("[data-plan]")!.textContent).toContain("10"));
+    fireEvent.click(Array.from(c.querySelectorAll(".rc-dispatch button")).find((b) => b.textContent === "开始巡逻")!);
     await waitFor(() => expect(posts).toContainEqual({ url: "/api/robots/B/patrol", body: { mission_id: "loop-test", loops: 3 } }));
+  });
+
+  it("新告警来了:控制视图让位给告警", () => {
+    const units = [unit("A", "patrolling"), unit("B", "charging", { battery: 18 })];
+    const say = vi.fn();
+    const r = render(<MonitorPage units={units} alerts={[]} now={NOW} role="guard" me="gina" say={say} refresh={vi.fn(async () => {})} onZoom={() => {}} />);
+    fireEvent.click(r.container.querySelector('[data-robot-more="A"]')!);
+    expect(r.container.querySelector(".rc")).not.toBeNull();
+    r.rerender(<MonitorPage units={units} alerts={[alert({})]} now={NOW} role="guard" me="gina" say={say} refresh={vi.fn(async () => {})} onZoom={() => {}} />);
+    expect(r.container.querySelector(".rc")).toBeNull();
+    expect(r.container.querySelector(".inc")).not.toBeNull();
   });
 
   it("W8-04:在跑几圈的那台写第几圈", () => {
@@ -235,5 +264,64 @@ describe("右栏机器人(从老值班页搬来)", () => {
     cleanup();
     const off = unit("A", "offline", { robot: { robot_id: "A", active: true, fresh: false, revoked: false, held: null, home_set: false, status: { online: false, last_seen: 0 } } as never });
     expect(page([], "guard", [off]).querySelector(".mon-head h1")!.textContent).not.toContain("出不了发");
+  });
+});
+
+describe("G-compact 1366×768:右栏收成窄栏、时间轴收成一条(样式按宽度切,结构两份都在)", () => {
+  it("窄栏:每台一个小块(名字、电量),点开这台的控制;巡逻 / 活动在原地展开右栏那一段", () => {
+    const c = page([]);
+    const chips = c.querySelectorAll(".mon-rail .mon-chip");
+    expect(Array.from(chips).map((x) => x.textContent)).toEqual(["A80%", "B18%"]);
+    expect(chips[1].className).toContain("low");
+    fireEvent.click(chips[1]);
+    expect(c.querySelector(".mon-center .rc")!.getAttribute("data-robot")).toBe("B");
+    const [patrolBtn, actBtn] = Array.from(c.querySelectorAll(".mon-rail .mon-railbtn"));
+    fireEvent.click(patrolBtn);
+    expect(c.querySelector(".mon-right")!.getAttribute("data-rail")).toBe("patrol");
+    fireEvent.click(actBtn);
+    expect(c.querySelector(".mon-right")!.getAttribute("data-rail")).toBe("activity");
+    fireEvent.click(actBtn);
+    expect(c.querySelector(".mon-right")!.hasAttribute("data-rail")).toBe(false);
+  });
+
+  it("时间轴:收起时一条(全部机器人的巡逻、事件),「展开时间轴」看每台", () => {
+    const c = page([]);
+    expect(c.querySelector(".tl-mini")).not.toBeNull();
+    expect(c.querySelector(".shifttl")!.className).not.toContain("open");
+    fireEvent.click(c.querySelector(".tl-mini .btn")!);
+    expect(c.querySelector(".shifttl")!.className).toContain("open");
+    expect(c.querySelector(".tl-mini .btn")!.textContent).toBe("收起时间轴");
+  });
+});
+
+describe("G-multi 同时几件事", () => {
+  const two = () => [alert({ key: "n", title: "北门有人", first_ms: NOW - 120_000, last_ms: NOW - 120_000, acked_ms: NOW - 100_000, acked_by: "gina" }),
+    alert({ key: "s", title: "南墙有人", robot: "B", first_ms: NOW - 60_000, last_ms: NOW - 60_000, context: { zone: "南区" } })];
+  it("两件以上安全事件没点哪一件:中间是总览(地图 + 每件谁管、谁去、下一步);没人管的那件「接手」是唯一的主按钮", () => {
+    const c = page(two());
+    expect(c.querySelector(".multi")).not.toBeNull();
+    expect(c.querySelector(".inc")).toBeNull();
+    expect(c.querySelector(".multi-head h1")!.textContent).toBe("同时 2 件事");
+    const rows = Array.from(c.querySelectorAll(".multi-table tbody tr"));
+    expect(rows.length).toBe(2);
+    expect(rows[0].textContent).toContain("北区");
+    expect(rows[0].textContent).toContain("gina");
+    expect(rows[1].querySelector(".multi-none")!.textContent).toBe("没人接");
+    expect(c.querySelectorAll(".multi .btn.primary").length).toBe(1);
+    expect(rows[1].querySelector(".btn.primary")!.textContent).toBe("接手");
+  });
+
+  it("接手发 ack;「打开」进这一件;点左栏哪一件也进那一件", async () => {
+    const c = page(two());
+    fireEvent.click(c.querySelector(".multi-table tbody tr:nth-child(2) .btn.primary")!);
+    await waitFor(() => expect(posts.map((p) => p.url)).toContain("/api/alerts/s/ack"));
+    fireEvent.click(Array.from(c.querySelectorAll(".multi-table tbody tr:first-child button")).find((b) => b.textContent === "打开")!);
+    expect(c.querySelector(".inc")!.getAttribute("data-key")).toBe("n");
+  });
+
+  it("只读:没有接手按钮,只能打开看", () => {
+    const c = page(two(), "viewer");
+    expect(c.querySelectorAll(".multi .btn.primary").length).toBe(0);
+    expect(Array.from(c.querySelectorAll(".multi-table button")).map((b) => b.textContent)).toEqual(["打开", "打开"]);
   });
 });

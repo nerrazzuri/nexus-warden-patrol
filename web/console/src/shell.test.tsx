@@ -296,7 +296,7 @@ describe("第 2 轮 duty N10 / N11:顶栏", () => {
   it("有叫停的:哪一页都在顶栏显示(G-estop 稿:换掉「机器人在线」那一格),点了去值班", () => {
     lang.value = "zh";
     const c = bar({ held: 2 });
-    expect(c.querySelector("[data-held-chip]")!.textContent).toBe("2 台已叫停 · 去恢复");
+    expect(c.querySelector("[data-held-chip]")!.textContent).toBe("2 台已急停");
     expect(c.querySelector("[data-held-chip]")!.getAttribute("href")).toBe("#/duty");
     cleanup();
     expect(bar({ held: 2, page: "duty" }).querySelector("[data-held-chip]")).not.toBeNull();
