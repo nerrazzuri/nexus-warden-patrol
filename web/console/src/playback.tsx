@@ -63,7 +63,9 @@ export function PlaybackView(props: {
   const [gen, setGen] = useState(0);
   const [playing, setPlaying] = useState(true);
   const [speed, setSpeed] = useState(1);
-  const [layout, setLayout] = useState<PbLayout>("dual");
+  const [layoutRaw, setLayout] = useState<PbLayout>("dual");
+  // 用户 11-15:只有一台机器人 = 前、后两路分开放,不给单 / 双 / 四画面的选择
+  const layout: PbLayout = props.robots.length <= 1 ? "dual" : layoutRaw;
   const [goto, setGoto] = useState("");
   const [gotoBad, setGotoBad] = useState(false);
   const [cur, setCur] = useState<Recording | null>(null);
@@ -135,10 +137,12 @@ export function PlaybackView(props: {
       <div class="pb-body">
         <div class="pb-video">
           <div class="pb-bar">
-            <div class="seg" role="tablist" aria-label={t("monVideo")}>
-              {layouts.map((l) => <button key={l.v} type="button" role="tab" aria-selected={layout === l.v} class={layout === l.v ? "on" : ""}
-                onClick={() => setLayout(l.v)}>{t(l.key)}</button>)}
-            </div>
+            {props.robots.length > 1 && (
+              <div class="seg" role="tablist" aria-label={t("monVideo")}>
+                {layouts.map((l) => <button key={l.v} type="button" role="tab" aria-selected={layout === l.v} class={layout === l.v ? "on" : ""}
+                  onClick={() => setLayout(l.v)}>{t(l.key)}</button>)}
+              </div>
+            )}
             {props.robots.length > 1 && (
               <div class="seg" role="group" aria-label={t("pbRobot")}>
                 {props.robots.map((r) => <button key={r} type="button" aria-pressed={r === robot} onClick={() => { setRobot(r); setGen((g) => g + 1); }}>{nameOf(r)}</button>)}
