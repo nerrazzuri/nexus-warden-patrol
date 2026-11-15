@@ -12,7 +12,6 @@ import '../net/site_client.dart';
 import '../net/site_text.dart' show siteKnown;
 import 'map_wizard.dart';
 import 'nw/nw_button.dart';
-import 'nw/nw_p4_admin.dart' show nwGap8, NwListView;
 import 'nw/nw_theme.dart';
 import 'nw/nw_widgets.dart';
 import 'site_mapping.dart' show SiteMapPreviewPage;
@@ -59,6 +58,7 @@ class MapManagePage extends StatefulWidget {
   static Key deleteKey(String m, String v) => Key('mapver-delete-$m-$v');
   static Key rollbackKey(String r) => Key('map-rollback-$r');
   static const Key bagsKey = Key('maps-bags');
+  static Key mapViewKey(String m) => Key('map-view-$m');
   static Key progressKey(String r) => Key('map-progress-$r');
 
   @override
@@ -291,75 +291,68 @@ class _MapManagePageState extends State<MapManagePage> {
     final unusable = '${v['unusable'] ?? ''}';
     // 11-11：编辑、去噪出来的草稿只在站点上，网页预览、发布到站点后才能下发
     final draft = v['draft'] == true;
-    return Padding(
-      padding: const EdgeInsets.only(bottom: Nw.s8),
-      child: NwCard(
-        key: MapManagePage.versionKey(mapId, version),
-        tone: on.isNotEmpty ? NwTone.success : NwTone.neutral,
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+    final sub = NwText.bodySmall.copyWith(color: c.textSecondary);
+    final info = [
+      _when(v['created_ms']),
+      if (path is num) tr('walked ${path.round()} m', '走了 ${path.round()} 米'),
+      ...reasons,
+    ].where((s) => s.isNotEmpty).join(' · ');
+    Widget btn(Key key, String label, VoidCallback on) => Expanded(
+        child: NwButton(buttonKey: key, label: label, size: NwButtonSize.small, variant: NwButtonVariant.outline, onPressed: on));
+    // App V2 稿 S-maps：一版一行 —— 在用的绿方块、别的空心圈；第几版 · 说明；建图结论、谁在用、日期；按钮一排等宽
+    return Container(
+      key: MapManagePage.versionKey(mapId, version),
+      padding: const EdgeInsets.symmetric(vertical: 10),
+      decoration: BoxDecoration(border: Border(top: BorderSide(color: c.outline))),
+      child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Padding(
+            padding: const EdgeInsets.only(top: 4, right: Nw.s8),
+            child: on.isNotEmpty
+                ? Icon(Icons.square, size: 12, color: c.success)
+                : Icon(Icons.circle_outlined, size: 12, color: c.textSecondary)),
+        Expanded(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
           Row(children: [
             Expanded(
                 child: Text(note.isNotEmpty ? '${versionLabel(version)} · ${versionNoteText(note)}' : versionLabel(version),
                     style: NwText.titleSmall.copyWith(color: c.text, fontWeight: FontWeight.w700))),
-            if (draft) ...[
-              NwStatusPill(
-                  key: MapManagePage.draftKey(mapId, version), label: tr('Draft', '草稿'), tone: NwTone.warning),
-              const SizedBox(width: Nw.s4),
-            ],
+            if (draft)
+              NwStatusPill(key: MapManagePage.draftKey(mapId, version), label: tr('Draft', '草稿'), tone: NwTone.warning),
+          ]),
+          Wrap(children: [
             // 第 13 轮 W13-03 ③：这是建图质量，不是能不能下发（下发要先确认禁行区）—— 写明「建图」
             if (verdict != 'unknown')
-              NwStatusPill(label: tr('Mapping: ${verdictText(verdict)}', '建图${verdictText(verdict)}'), tone: verdictTone(verdict)),
+              Text(tr('Mapping: ${verdictText(verdict)}', '建图${verdictText(verdict)}'),
+                  style: sub.copyWith(color: c.fg(verdictTone(verdict)), fontWeight: FontWeight.w600)),
             if (on.isNotEmpty) ...[
-              const SizedBox(width: Nw.s4),
-              NwStatusPill(label: tr('In use: ${on.join(', ')}', '${on.join('、')} 在用'), tone: NwTone.info),
+              if (verdict != 'unknown') Text(' · ', style: sub),
+              Text(tr('In use: ${on.join(', ')}', '${on.join('、')} 在用'), style: sub.copyWith(color: c.text)),
             ],
           ]),
-          const SizedBox(height: 2),
-          Text(
-              [
-                _when(v['created_ms']),
-                if (path is num) tr('walked ${path.round()} m', '走了 ${path.round()} 米'),
-                ...reasons,
-              ].where((s) => s.isNotEmpty).join(' · '),
-              style: NwText.bodySmall.copyWith(color: c.textSecondary)),
-          if (draft) ...[
-            const SizedBox(height: 2),
+          if (info.isNotEmpty) Text(info, style: sub),
+          if (draft)
             Text(
                 tr('Draft: preview it in the web map editor and publish it to the site before sending it to robots',
                     '草稿：在网页地图编辑器里预览、发布到站点后才能下发'),
-                style: NwText.bodySmall.copyWith(color: c.textSecondary)),
-          ],
-          if (unusable.isNotEmpty) ...[
-            const SizedBox(height: 2),
+                style: sub),
+          if (unusable.isNotEmpty)
             Text(tr("This version lacks localization files, robots can't use it: $unusable", '这一版缺定位文件，机器人用不了：$unusable'),
                 style: NwText.bodySmall.copyWith(color: c.error)),
-          ],
           const SizedBox(height: Nw.s8),
-          Wrap(spacing: Nw.s8, runSpacing: Nw.s4, children: [
-            NwButton(
-                buttonKey: MapManagePage.viewKey(mapId, version),
-                label: tr('View', '看图'),
-                size: NwButtonSize.small,
-                variant: NwButtonVariant.outline,
-                onPressed: () => Navigator.push(context,
-                    MaterialPageRoute<void>(builder: (_) => SiteMapPreviewPage(api: api, mapId: mapId, version: version)))),
-            if (!draft)
-              NwButton(
-                buttonKey: MapManagePage.sendKey(mapId, version),
-                label: tr('Send to…', '下发给…'),
-                size: NwButtonSize.small,
-                variant: NwButtonVariant.outline,
-                onPressed: () => _send(mapId, version)),
-            if (canDelete)
-              NwButton(
-                  buttonKey: MapManagePage.deleteKey(mapId, version),
-                  label: tr('Delete', '删除'),
-                  size: NwButtonSize.small,
-                  variant: NwButtonVariant.ghost,
-                  onPressed: () => _delete(mapId, version)),
+          Row(children: [
+            btn(MapManagePage.viewKey(mapId, version), tr('View', '看图'), () => Navigator.push(context,
+                MaterialPageRoute<void>(builder: (_) => SiteMapPreviewPage(api: api, mapId: mapId, version: version)))),
+            if (!draft) ...[
+              const SizedBox(width: Nw.s8),
+              btn(MapManagePage.sendKey(mapId, version), tr('Deploy to…', '下发给…'), () => _send(mapId, version)),
+            ],
+            if (canDelete) ...[
+              const SizedBox(width: Nw.s8),
+              btn(MapManagePage.deleteKey(mapId, version), tr('Delete', '删除'), () => _delete(mapId, version)),
+            ],
           ]),
-        ]),
-      ),
+        ])),
+      ]),
     );
   }
 
@@ -369,47 +362,89 @@ class _MapManagePageState extends State<MapManagePage> {
     final ov = _ov;
     final maps = [for (final m in (ov?['maps'] as List? ?? const [])) if (m is Map) m.cast<String, dynamic>()];
     final robots = [for (final r in (ov?['robots'] as List? ?? const [])) if (r is Map) r.cast<String, dynamic>()];
+    Future<void> wizard() async {
+      await openMapWizard(context, api);
+      await _load();
+    }
+
+    final newLabel = _wizardActive
+        ? tr('Continue mapping', '继续建图')
+        : (maps.isEmpty ? tr('Build the first map', '建第一张图') : tr('Build new version', '重新建一版'));
+    Widget section(List<Widget> kids, {String? title}) => Container(
+        margin: const EdgeInsets.only(top: Nw.s8),
+        color: c.surface,
+        padding: const EdgeInsets.fromLTRB(Nw.s16, Nw.s16, Nw.s16, Nw.s16),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          if (title != null) ...[
+            Text(title, style: NwText.titleMedium.copyWith(color: c.text, fontWeight: FontWeight.w700)),
+            const SizedBox(height: Nw.s8),
+          ],
+          ...kids,
+        ]));
     return Scaffold(
-      appBar: AppBar(title: Text(tr('Map management', '地图管理'))),
+      appBar: AppBar(
+          title: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text(tr('Map management', '地图管理')),
+        Text(tr('Versions of each map', '每张图的各个版本'), style: NwText.bodySmall.copyWith(color: c.textSecondary)),
+      ])),
       body: RefreshIndicator(
         onRefresh: _load,
-        child: NwListView(children: [
-          NwButton(
-              buttonKey: MapManagePage.newKey,
-              label: _wizardActive
-                  ? tr('Continue mapping', '继续建图')
-                  : (maps.isEmpty ? tr('Build the first map', '建第一张图') : tr('Build a new version', '重新建一版')),
-              icon: Icons.add_location_alt_rounded,
-              fullWidth: true,
-              size: NwButtonSize.large,
-              onPressed: () async {
-                await openMapWizard(context, api);
-                await _load();
-              }),
-          if (_err.isNotEmpty) ...[nwGap8, NwNotice(tone: NwTone.error, text: _err)],
+        child: ListView(padding: const EdgeInsets.only(bottom: Nw.s24), children: [
+          if (_err.isNotEmpty) Padding(padding: const EdgeInsets.all(Nw.s16), child: NwNotice(tone: NwTone.error, text: _err)),
           if (ov == null && _err.isEmpty) const Padding(padding: EdgeInsets.all(Nw.s24), child: Center(child: CircularProgressIndicator())),
-          for (final m in maps) ...[
-            const SizedBox(height: Nw.s16),
-            NwSectionLabel(tr('${m['map_id']} · ${(m['versions'] as List? ?? const []).length == 1 ? '1 version' : '${(m['versions'] as List? ?? const []).length} versions'}',
-                '${m['map_id']} · ${(m['versions'] as List? ?? const []).length} 个版本')),
-            nwGap8,
-            for (final v in (m['versions'] as List? ?? const []))
-              if (v is Map) _version(c, '${m['map_id']}', v.cast<String, dynamic>()),
-          ],
-          if (robots.isNotEmpty) ...[
-            const SizedBox(height: Nw.s16),
-            NwSectionLabel(tr('Which version each robot uses', '机器人在用哪一版')),
-            nwGap8,
-            NwCard(
-              child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-                for (final r in robots)
-                  Padding(
-                    padding: const EdgeInsets.symmetric(vertical: Nw.s4),
-                    child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          if (ov != null && maps.isEmpty)
+            Padding(
+                padding: const EdgeInsets.all(Nw.s16),
+                child: NwButton(
+                    buttonKey: MapManagePage.newKey,
+                    label: newLabel,
+                    icon: Icons.add_location_alt_rounded,
+                    fullWidth: true,
+                    size: NwButtonSize.large,
+                    onPressed: wizard)),
+          for (final (mi, m) in maps.indexed)
+            () {
+              final vs = [for (final v in (m['versions'] as List? ?? const [])) if (v is Map) v.cast<String, dynamic>()];
+              final latest = vs.where((v) => v['latest'] == true).firstOrNull ?? vs.firstOrNull;
+              return section(title: '${m['map_id']}', [
+                for (final v in vs) _version(c, '${m['map_id']}', v),
+                const SizedBox(height: Nw.s8),
+                // 建图一次只能建一张（向导是全站一个）：按钮放在第一张图下面
+                Row(children: [
+                  if (mi == 0)
+                    Expanded(
+                        child: NwButton(buttonKey: MapManagePage.newKey, label: newLabel, onPressed: wizard)),
+                  if (mi == 0 && latest != null) const SizedBox(width: Nw.s8),
+                  if (latest != null)
+                    Expanded(
+                        child: NwButton(
+                            buttonKey: MapManagePage.mapViewKey('${m['map_id']}'),
+                            label: tr('View map', '看图'),
+                            variant: NwButtonVariant.outline,
+                            onPressed: () => Navigator.push(
+                                context,
+                                MaterialPageRoute<void>(
+                                    builder: (_) =>
+                                        SiteMapPreviewPage(api: api, mapId: '${m['map_id']}', version: '${latest['version']}'))))),
+                ]),
+              ]);
+            }(),
+          if (robots.isNotEmpty)
+            section(title: tr('Version per robot', '各机器人在用哪一版'), [
+              for (final r in robots)
+                Container(
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  decoration: BoxDecoration(border: Border(top: BorderSide(color: c.outline))),
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
                     Row(children: [
+                      SizedBox(
+                          width: 32,
+                          child: Text('${r['robot_id']}', style: NwText.titleSmall.copyWith(color: c.text, fontWeight: FontWeight.w700))),
                       Expanded(
                           child: Text(
-                              '${r['robot_id']}  ${r['loaded'] is Map ? '${r['loaded']['map_id']}:${r['loaded']['version']}' : tr('(no map)', '（没有图）')}',
+                              r['loaded'] is Map
+                                  ? '${r['loaded']['map_id']} · ${versionLabel('${r['loaded']['version']}')}'
+                                  : tr('(no map)', '（没有图）'),
                               style: NwText.bodyMedium.copyWith(color: c.text))),
                       if (r['rollback'] is Map)
                         NwButton(
@@ -429,18 +464,22 @@ class _MapManagePageState extends State<MapManagePage> {
                             key: MapManagePage.progressKey('${r['robot_id']}'),
                             style: NwText.bodySmall.copyWith(color: c.textSecondary)),
                       ),
-                    ]),
-                  ),
-              ]),
+                  ]),
+                ),
+            ]),
+          Padding(
+              padding: const EdgeInsets.fromLTRB(Nw.s16, Nw.s16, Nw.s16, Nw.s8),
+              child: Text(tr('Engineer', '工程师'), style: NwText.labelMedium.copyWith(color: c.textSecondary))),
+          Material(
+            color: c.surface,
+            child: ListTile(
+              key: MapManagePage.bagsKey,
+              leading: Icon(Icons.description_outlined, color: c.textSecondary),
+              title: Text(tr('Mapping recordings', '建图录包'), style: NwText.bodyMedium.copyWith(color: c.text, fontWeight: FontWeight.w700)),
+              subtitle: Text(tr('Record, rebuild from recordings', '录包、用录包重建'), style: NwText.bodySmall.copyWith(color: c.textSecondary)),
+              trailing: Icon(Icons.chevron_right_rounded, color: c.textSecondary),
+              onTap: () => Navigator.push(context, MaterialPageRoute<void>(builder: (_) => SiteMapsPage(api: api))),
             ),
-          ],
-          const SizedBox(height: Nw.s16),
-          ListTile(
-            key: MapManagePage.bagsKey,
-            leading: Icon(Icons.fiber_smart_record_rounded, color: c.textSecondary),
-            title: Text(tr('Recordings and rebuild (engineer)', '录包与重建（工程师）'), style: NwText.bodyMedium.copyWith(color: c.text)),
-            trailing: Icon(Icons.chevron_right_rounded, color: c.textSecondary),
-            onTap: () => Navigator.push(context, MaterialPageRoute<void>(builder: (_) => SiteMapsPage(api: api))),
           ),
         ]),
       ),

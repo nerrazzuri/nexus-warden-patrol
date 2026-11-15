@@ -291,7 +291,7 @@ void main() {
     '23-users': _Shot(_phone, () => AccountsPage(api: FakeApi('admin'))),
     '25-health': _Shot(const Size(390, 1200), () => SiteHealthPage(api: FakeApi('admin'), canShare: true, save: (n, b) async => n)),
     '26-updates': _Shot(const Size(390, 1200), () => SiteReleasesPage(api: FakeApi('admin'))),
-    '27-maps': _Shot(const Size(390, 1200), () => MapManagePage(api: FakeApi('admin'))),
+    '27-maps': _Shot(const Size(390, 1200), () => MapManagePage(api: FakeApi('admin')..overview = _mapsOverview)),
     '24-overview': _Shot(const Size(390, 1200), () => Scaffold(body: AdminHomeTab(api: FakeApi('admin'), switchTab: (_) {}))),
     // App V2 第 4 期：深色控制页（保安、经理）、浅色设置页签、添加机器人
     '07b-robot-guard-v2': _Shot(const Size(390, 1900), () => SiteRobotPage(api: FakeApi('guard', robotView: busyView()), robotId: 'A')),
@@ -381,3 +381,24 @@ void main() {
     }
   }
 }
+
+/// 地图管理出图用：一张图三版（在用、能用没在用、有问题），两台机器人。
+final Map<String, dynamic> _mapsOverview = <String, dynamic>{
+  'maps': <dynamic>[
+    <String, dynamic>{'map_id': 'estate-1', 'versions': <dynamic>[
+      <String, dynamic>{'version': '8', 'note': '', 'created_ms': 1794700000000, 'latest': true,
+        'loaded_on': <dynamic>['A', 'B'], 'quality': <String, dynamic>{'verdict': 'usable', 'path_m': 410.0}},
+      <String, dynamic>{'version': '7', 'note': '', 'created_ms': 1793600000000, 'latest': false,
+        'loaded_on': <dynamic>[], 'quality': <String, dynamic>{'verdict': 'usable'}},
+      <String, dynamic>{'version': '6', 'note': '', 'created_ms': 1793200000000, 'latest': false,
+        'loaded_on': <dynamic>[], 'quality': <String, dynamic>{'verdict': 'problem', 'reasons': <dynamic>['no_loop']}},
+    ]},
+  ],
+  'robots': <dynamic>[
+    <String, dynamic>{'robot_id': 'A', 'can_activate': true,
+      'loaded': <String, dynamic>{'map_id': 'estate-1', 'version': '8'},
+      'rollback': <String, dynamic>{'map_id': 'estate-1', 'version': '7'}},
+    <String, dynamic>{'robot_id': 'B', 'can_activate': true,
+      'loaded': <String, dynamic>{'map_id': 'estate-1', 'version': '8'}},
+  ],
+};
