@@ -21,6 +21,8 @@ class AlarmLogPage extends StatefulWidget {
   const AlarmLogPage({super.key, required this.api});
 
   static Key rowKey(String key) => Key('alarm-log-$key');
+  static Key filterKey(String id) => Key('alarm-filter-$id');
+  static Key stateKey(String key) => Key('alarm-state-$key');
   static const Key todoKey = Key('alarm-log-todo');
   static Key todoRowKey(String key) => Key('alarm-log-todo-$key');
 
@@ -61,6 +63,9 @@ class _AlarmLogPageState extends State<AlarmLogPage> {
   Map<String, dynamic>? _test;
 
   Timer? _poll;
+
+  /// 筛选（稿 S-alarms 顶上一排）：all 全部、open 没结的、p1。
+  String _filter = 'all';
 
   @override
   void initState() {
@@ -119,10 +124,46 @@ class _AlarmLogPageState extends State<AlarmLogPage> {
     return '${t.month.toString().padLeft(2, '0')}-${t.day.toString().padLeft(2, '0')} ${hhmm(ms)}';
   }
 
+  /// 右边的状态小块：没结的红，误报 / 确认入侵 / 已解决灰底。
+  Widget _state(NwColors c, Alert a) {
+    final (String t, bool open) = a.resolvedMs == null
+        ? (a.ackedBy.isNotEmpty ? (tr('Handling', '处理中'), true) : (tr('Open', '未处理'), true))
+        : switch (a.verdict) {
+            'false_alarm' => (tr('False alarm', '误报'), false),
+            'intruder' => (tr('Confirmed intrusion', '确认入侵'), false),
+            _ => (tr('Resolved', '已解决'), false),
+          };
+    return Container(
+        key: AlarmLogPage.stateKey(a.key),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(color: open ? c.errorSoft : c.surfaceVariant, borderRadius: BorderRadius.circular(2)),
+        child: Text(t,
+            style: NwText.labelMedium.copyWith(color: open ? c.error : c.textSecondary, fontWeight: FontWeight.w700)));
+  }
+
   @override
   Widget build(BuildContext context) {
     final c = Nw.of(context);
-    final rows = _rows;
+    final all = _rows;
+    final open = all?.where((a) => a.resolvedMs == null).length ?? 0;
+    final p1 = all?.where((a) => a.level == 'P1').length ?? 0;
+    final rows = all?.where((a) => switch (_filter) {
+          'open' => a.resolvedMs == null,
+          'p1' => a.level == 'P1',
+          _ => true,
+        }).toList();
+    Widget chip(String id, String label) {
+      final on = _filter == id;
+      return Padding(
+          padding: const EdgeInsets.only(right: Nw.s8),
+          child: ChoiceChip(
+              key: AlarmLogPage.filterKey(id),
+              label: Text(label),
+              selected: on,
+              showCheckmark: false,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(2)),
+              onSelected: (_) => setState(() => _filter = id)));
+    }
     return RefreshIndicator(
       onRefresh: _load,
       child: NwListView(children: [
@@ -168,41 +209,52 @@ class _AlarmLogPageState extends State<AlarmLogPage> {
         if (rows != null) ...[
           Text(tr('Alarms', '报警'), style: NwText.titleSmall.copyWith(color: c.text)),
           const SizedBox(height: Nw.s8),
+          // App V2 稿 S-alarms：顶上一排筛选
+          SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(children: [
+                chip('all', tr('All ${all!.length}', '全部 ${all.length}')),
+                chip('open', tr('Open $open', '未处理 $open')),
+                chip('p1', tr('P1 $p1', 'P1 $p1')),
+              ])),
+          const SizedBox(height: Nw.s8),
         ],
         if (rows != null && rows.isEmpty)
           Text(tr('No alarms.', '没有报警。'), style: NwText.bodyMedium.copyWith(color: c.textSecondary)),
-        if (rows != null && rows.isNotEmpty && rows.every((a) => a.resolvedMs != null))
+        if (rows != null && rows.isNotEmpty && _filter == 'all' && rows.every((a) => a.resolvedMs != null))
           Padding(
             padding: const EdgeInsets.only(bottom: Nw.s8),
             child: Text(tr('No open alarms.', '没有未处理的报警。'),
                 style: NwText.bodyMedium.copyWith(color: c.textSecondary)),
           ),
+        // 一行一条：级别、标题、时间 · 防区 · 谁处理；右边状态
         for (final a in rows ?? const <Alert>[])
-          Padding(
-            padding: const EdgeInsets.only(bottom: Nw.s8),
-            child: NwCard(
-              key: AlarmLogPage.rowKey(a.key),
-              onTap: () => Navigator.push(context,
-                  MaterialPageRoute<void>(builder: (_) => SiteAlertScenePage(api: widget.api, alert: a))),
+          InkWell(
+            key: AlarmLogPage.rowKey(a.key),
+            onTap: () => Navigator.push(context,
+                MaterialPageRoute<void>(builder: (_) => SiteAlertScenePage(api: widget.api, alert: a))),
+            child: Container(
+              padding: const EdgeInsets.symmetric(vertical: 10),
+              decoration: BoxDecoration(border: Border(bottom: BorderSide(color: c.outline))),
               child: Row(children: [
-                NwLevelBox(level: a.level),
+                NwLevelBox(level: a.level, size: 28),
                 const SizedBox(width: Nw.s8),
                 Expanded(
                     child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                   Text(alertLine(a.robot, a.kind, a.title),
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
-                      style: NwText.bodyMedium.copyWith(color: c.text, fontWeight: FontWeight.w600)),
+                      style: NwText.bodyMedium.copyWith(color: c.text, fontWeight: FontWeight.w700)),
                   Text(
-                      a.resolvedMs != null
-                          ? tr('Resolved${a.ackedBy.isEmpty ? '' : ' · handled by ${a.ackedBy}'}',
-                              '已解决${a.ackedBy.isEmpty ? '' : ' · ${a.ackedBy} 处理'}')
-                          : a.ackedBy.isNotEmpty
-                              ? tr('${a.ackedBy} is handling it', '${a.ackedBy} 在处理')
-                              : tr('Not handled yet', '未处理'),
+                      [
+                        _day(a.firstMs),
+                        if ('${a.context['zone'] ?? ''}'.isNotEmpty) '${a.context['zone']}',
+                        if (a.ackedBy.isNotEmpty) a.ackedBy,
+                      ].join(' · '),
                       style: NwText.bodySmall.copyWith(color: c.textSecondary)),
                 ])),
-                Text(_day(a.firstMs), style: NwText.labelSmall.copyWith(color: c.textSecondary)),
+                const SizedBox(width: Nw.s8),
+                _state(c, a),
               ]),
             ),
           ),
