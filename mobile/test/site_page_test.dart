@@ -1562,7 +1562,7 @@ void main() {
   testWidgets('打开就是站点列表：没有直连入口（W00c5e）', (t) async {
     await t.pumpWidget(PatrolApp(siteStore: MemorySiteStore()));
     await t.pumpAndSettle();
-    expect(find.text('暂无站点，请点击下方「添加站点」。'), findsOneWidget);
+    expect(find.text('还没有站点。'), findsOneWidget);
     expect(find.byKey(const Key('mode-direct')), findsNothing);
     expect(find.textContaining('直连'), findsNothing);
   });
@@ -1573,10 +1573,14 @@ void main() {
     await t.pumpAndSettle();
     await t.tap(find.byKey(const Key('site-add')));
     await t.pumpAndSettle();
+    await t.tap(find.byKey(const Key('site-manual')));
+    await t.pumpAndSettle();
     await t.enterText(find.byKey(const Key('site-name')), '庄园');
     await t.enterText(find.byKey(const Key('site-url')), 'https://site.local:8443');
     await t.enterText(find.byKey(const Key('site-fp')), 'AB:' * 31 + 'AB');
-    await t.tap(find.text('保存'));
+    await t.ensureVisible(find.text('保存并登录'));
+    await t.pumpAndSettle();
+    await t.tap(find.text('保存并登录'));
     await t.pumpAndSettle();
     expect(store.sites.single.fingerprint, 'ab' * 32);
     expect(store.sites.single.toJson().keys, isNot(contains('password')));
@@ -1743,10 +1747,14 @@ void main() {
     await t.pumpAndSettle();
     await t.tap(find.byKey(const Key('site-add')));
     await t.pumpAndSettle();
+    await t.tap(find.byKey(const Key('site-manual')));
+    await t.pumpAndSettle();
     await t.enterText(find.byKey(const Key('site-name')), '庄园');
     await t.enterText(find.byKey(const Key('site-url')), 'https://site.local:8443');
     await t.enterText(find.byKey(const Key('site-fp')), 'abc');
-    await t.tap(find.text('保存'));
+    await t.ensureVisible(find.text('保存并登录'));
+    await t.pumpAndSettle();
+    await t.tap(find.text('保存并登录'));
     await t.pumpAndSettle();
     expect(store.sites, isEmpty);
     expect(find.textContaining('未保存'), findsOneWidget);
@@ -1762,11 +1770,15 @@ void main() {
     ]);
     await t.pumpWidget(MaterialApp(home: SiteListPage(key: const Key('fresh'), store: store)));
     await t.pumpAndSettle();
-    // 2026-10-14 重做：删除收进了卡片的菜单，先点开菜单
-    await t.tap(find.byKey(const Key('site-menu-a')));
+    // App V2：删除在登录页「其他地址」里，就地确认
+    await t.tap(find.byKey(const Key('site-enter-a')));
     await t.pumpAndSettle();
-    await t.tap(find.byKey(const Key('site-remove-a')));
+    await t.tap(find.byKey(SiteLoginPage.altsKey));
     await t.pumpAndSettle();
+    await t.ensureVisible(find.byKey(SiteLoginPage.removeKey));
+    await t.tap(find.byKey(SiteLoginPage.removeKey));
+    await t.pumpAndSettle();
+    await t.ensureVisible(find.byKey(SiteListPage.removeOkKey));
     await t.tap(find.byKey(SiteListPage.removeOkKey));
     await t.pumpAndSettle();
     expect(store.sites, isEmpty);

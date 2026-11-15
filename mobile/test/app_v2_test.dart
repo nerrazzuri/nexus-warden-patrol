@@ -153,7 +153,7 @@ void main() {
       await t.pumpAndSettle();
       // 2026-10-14 重做：这一页的标题按设计稿叫 Site Selection（原来是 Sites / 站点）
       expect(find.text('Select site'), findsOneWidget);
-      expect(find.text('No sites yet. Tap "Add site" below.'), findsOneWidget);
+      expect(find.text('No sites yet.'), findsOneWidget);
       // W55：语言在「设置」里（站点列表右上角齿轮）
       await t.tap(find.byKey(const Key('open-settings')));
       await t.pumpAndSettle();
@@ -242,14 +242,15 @@ void main() {
       expect(t.widget<TextField>(find.byKey(const Key('site-name'))).controller!.text, '庄园一号');
       expect(t.widget<TextField>(find.byKey(const Key('site-url'))).controller!.text, 'https://192.168.1.5:8443');
       expect(t.widget<TextField>(find.byKey(const Key('site-fp'))).controller!.text, 'ab' * 32);
-      expect(find.byKey(const Key('site-user')), findsNothing, reason: '加站点时还没有账号，不问');
+      expect(t.widget<TextField>(find.byKey(const Key('site-user'))).controller!.text, '',
+          reason: '账号可以不填（第一次登录时输）');
       await t.ensureVisible(find.byKey(const Key('site-save')));
       await t.tap(find.byKey(const Key('site-save')));
       await t.pumpAndSettle();
       final s = store.sites.single;
       expect((s.name, s.url, s.fingerprint, s.username), ('庄园一号', 'https://192.168.1.5:8443', 'ab' * 32, ''));
       expect(s.toJson().keys, isNot(contains('password')));
-      expect(find.text('庄园一号'), findsOneWidget, reason: '回到站点列表，新站点在');
+      expect(find.byType(SiteLoginPage), findsOneWidget, reason: '稿 E-add「保存并登录」：存好直接去登录页');
     });
 
     testWidgets('粘贴配对码跟扫码一样；退出相机没扫到什么都不变', (t) async {
@@ -257,7 +258,7 @@ void main() {
       await t.tap(find.byKey(const Key('site-scan')));
       await t.pumpAndSettle();
       expect(find.byKey(const Key('site-check-note')), findsNothing);
-      expect(t.widget<TextField>(find.byKey(const Key('site-url'))).controller!.text, 'https://');
+      expect(find.byKey(const Key('site-url')), findsNothing, reason: '没扫到：表单还没摆出来');
       await t.tap(find.byKey(const Key('site-paste')));
       await t.pumpAndSettle();
       await t.enterText(find.byKey(const Key('pair-code')), '  $_code \n');
@@ -274,14 +275,14 @@ void main() {
       await t.pumpAndSettle();
       expect(find.textContaining('机器人的开通码'), findsOneWidget);
       expect(find.byKey(const Key('site-check-note')), findsNothing);
-      expect(t.widget<TextField>(find.byKey(const Key('site-name'))).controller!.text, '');
+      expect(find.byKey(const Key('site-name')), findsNothing);
       next = 'https://evil.example/login';
       ScaffoldMessenger.of(t.element(find.byType(SiteAddPage))).clearSnackBars();
       await t.pumpAndSettle();
       await t.tap(find.byKey(const Key('site-scan')));
       await t.pumpAndSettle();
       expect(find.textContaining('不是 Nexus Warden 站点的配对码'), findsOneWidget);
-      expect(t.widget<TextField>(find.byKey(const Key('site-url'))).controller!.text, 'https://');
+      expect(find.byKey(const Key('site-url')), findsNothing);
     });
 
     testWidgets('桌面版没有相机：没有「扫码」按钮，粘贴照样在；手机上有', (t) async {

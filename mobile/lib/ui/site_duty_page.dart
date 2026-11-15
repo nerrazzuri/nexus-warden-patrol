@@ -858,8 +858,8 @@ class _SiteDutyPageState extends State<SiteDutyPage> {
                     tone: NwTone.error,
                     icon: Icons.gpp_bad_rounded,
                     text: tr(
-                        "$certChangedText Robot status here is out of date and alerts won't arrive. To update the code: leave this site, then on the site card tap ⋮ → Update site code.",
-                        '$certChangedText这里机器人的状态是旧的，报警也收不到。更新站点码：退出这个站点，在站点卡片上点 ⋮ →「更新站点码」。')),
+                        "$certChangedText Robot status here is out of date and alerts won't arrive. To update the code: leave this site, open it in the site list, then tap New site code on the sign-in page.",
+                        '$certChangedText这里机器人的状态是旧的，报警也收不到。更新站点码：退出这个站点，在站点列表里点它，登录页上点「新站点码」。')),
                 nwGap8,
               ] else if (_downSince != null && _downShown) ...[
                 NwNotice(

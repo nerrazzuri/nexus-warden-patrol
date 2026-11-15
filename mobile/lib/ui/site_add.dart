@@ -16,7 +16,6 @@ import '../l10n.dart';
 import '../net/pairing.dart';
 import '../net/site_client.dart';
 import '../store/site_store.dart';
-import 'nw/nw_button.dart';
 import 'nw/nw_p1_entry.dart';
 import 'nw/nw_theme.dart';
 import 'nw/nw_widgets.dart';
@@ -46,14 +45,22 @@ class _SiteAddPageState extends State<SiteAddPage> {
   final _name = TextEditingController();
   final _url = TextEditingController(text: 'https://');
   final _fp = TextEditingController();
+  final _user = TextEditingController();
+  final _code = TextEditingController();
   String? _err;
 
   /// 表单里这三样是从配对码来的（提示人去核对）。
   bool _fromCode = false;
 
+  /// 手填（稿上「手动输入地址」）：三栏摆出来。扫到、贴上码也摆出来（让人核对、能改）。
+  bool _manual = false;
+
+  /// 贴配对码那一栏开着（就地，不弹窗）。
+  bool _pasting = false;
+
   @override
   void dispose() {
-    for (final c in [_name, _url, _fp]) {
+    for (final c in [_name, _url, _fp, _user, _code]) {
       c.dispose();
     }
     super.dispose();
@@ -74,6 +81,8 @@ class _SiteAddPageState extends State<SiteAddPage> {
       _url.text = p.url;
       _fp.text = p.fingerprint;
       _fromCode = true;
+      _pasting = false;
+      _err = null;
     });
   }
 
@@ -84,50 +93,14 @@ class _SiteAddPageState extends State<SiteAddPage> {
     _take(raw);
   }
 
-  Future<void> _paste() async {
-    final code = TextEditingController();
+  void _paste() {
+    setState(() => _pasting = !_pasting);
+    if (!_pasting) return;
     // 手机 App 测试 M21：剪贴板里就是站点码就先填进框里（以前要长按 → 粘贴），点「用这个码」就行
     unawaited(Clipboard.getData(Clipboard.kTextPlain).then((d) {
       final t = d?.text?.trim() ?? '';
-      if (t.startsWith(pairingPrefix) && code.text.isEmpty) code.text = t;
+      if (mounted && t.startsWith(pairingPrefix) && _code.text.isEmpty) _code.text = t;
     }, onError: (Object _) {}));
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (c) {
-        final nw = Nw.of(c);
-        return AlertDialog(
-          scrollable: true,
-          backgroundColor: nw.surface,
-          shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(Nw.r12), side: BorderSide(color: nw.outline)),
-          title: Text(tr('Paste site code', '粘贴配对码'), style: NwText.titleLarge.copyWith(color: nw.text)),
-          content: NwField(
-            fieldKey: const Key('pair-code'),
-            controller: code,
-            autofocus: true,
-            autocorrect: false,
-            enableSuggestions: false,
-            maxLines: 4,
-            minLines: 2,
-            mono: true,
-            hint: '$pairingPrefix…',
-          ),
-          actions: [
-            NwButton(
-                label: tr('Cancel', '取消'),
-                variant: NwButtonVariant.ghost,
-                onPressed: () => Navigator.pop(c, false)),
-            NwButton(
-              buttonKey: const Key('pair-code-ok'),
-              label: tr('Use code', '用这个码'),
-              onPressed: () => Navigator.pop(c, true),
-            ),
-          ],
-        );
-      },
-    );
-    if (ok != true || !mounted) return;
-    _take(code.text);
   }
 
   void _save() {
@@ -152,25 +125,47 @@ class _SiteAddPageState extends State<SiteAddPage> {
         name: _name.text.trim(),
         url: _url.text.trim(),
         fingerprint: normalizeFingerprint(_fp.text),
-        username: '',                   // 账号第一次登录时再输（用户 10-30：加站点时还没有账号，填什么）
+        // 账号可以现在填，也可以第一次登录时再输（用户 10-30：加站点时可能还没有账号）
+        username: _user.text.trim(),
       ),
     );
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => Theme(data: nwTheme(Brightness.dark), child: Builder(builder: _build));
+
+  Widget _build(BuildContext context) {
     final scan = widget.scanner != null || canScanCodes;
     final c = Nw.of(context);
     const gap = SizedBox(height: Nw.s16);
+    final shape = RoundedRectangleBorder(borderRadius: BorderRadius.circular(2));
+    final out = OutlinedButton.styleFrom(
+        minimumSize: const Size(48, 44),
+        shape: shape,
+        padding: const EdgeInsets.symmetric(horizontal: Nw.s8),
+        foregroundColor: c.text,
+        side: BorderSide(color: c.textMuted));
+    final label = NwText.labelMedium.copyWith(color: c.textSecondary, fontWeight: FontWeight.w700);
+    final showForm = _manual || _fromCode;
+    // App V2 稿 E-add（深色）：取景框、「粘贴配对码 | 手动输入地址」、扫到的三样、账号、「保存并登录」
     return Scaffold(
       backgroundColor: c.bg,
-      appBar: nwHeaderBar(
-          context, NwHeader(leading: BackButton(color: c.text), title: tr('Add site', '添加站点'))),
+      appBar: AppBar(
+          backgroundColor: c.bg,
+          title: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(tr('Add site', '添加站点'), style: NwText.titleMedium.copyWith(color: c.text, fontWeight: FontWeight.w700)),
+            Text(
+                tr('The site code is on the duty console: System → Add this site to the phone app',
+                    '站点码在值班台「系统」页的「把这个站点加到手机 App」里'),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: NwText.bodySmall.copyWith(color: c.textSecondary)),
+          ])),
       // 不用懒加载的列表：横屏弹键盘时剩不了多高，表单要整个都在（能滚到），不然光标落不到输入框上。
       body: SafeArea(
         top: false,
         child: SingleChildScrollView(
-          padding: const EdgeInsets.all(Nw.s24),
+          padding: const EdgeInsets.all(Nw.s16),
           child: Center(
             // 宽屏（桌面版）上表单不拉满一整行
             child: ConstrainedBox(
@@ -178,94 +173,131 @@ class _SiteAddPageState extends State<SiteAddPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Text(
-                    tr(
-                      'The site code is on the duty console: System page → "Add this site to the phone app".',
-                      '站点码在值班台「系统」页的「把这个站点加到手机 App」里。',
-                    ),
-                    style: NwText.bodySmall.copyWith(color: c.textSecondary),
-                  ),
-                  gap,
-                  Wrap(
-                    spacing: Nw.s16,
-                    runSpacing: Nw.s8,
-                    children: [
-                      if (scan)
-                        NwButton(
-                          buttonKey: const Key('site-scan'),
-                          onPressed: _scan,
-                          icon: Icons.qr_code_scanner_rounded,
-                          label: tr('Scan code', '扫码'),
-                        ),
-                      NwButton(
-                        buttonKey: const Key('site-paste'),
-                        onPressed: _paste,
-                        icon: Icons.content_paste_rounded,
-                        label: tr('Paste code', '粘贴配对码'),
-                        variant: NwButtonVariant.outline,
-                      ),
-                    ],
-                  ),
-                  gap,
-                  if (_fromCode)
-                    Padding(
-                      key: const Key('site-check-note'),
-                      padding: const EdgeInsets.only(bottom: Nw.s16),
-                      child: NwNotice(
-                        text: tr(
-                          'Check that the site name and certificate fingerprint match the duty console, then save.',
-                          '请核对下方站点名称和证书指纹与值班台一致后再保存。',
+                  // 取景框：点了开相机（桌面版没有相机，不摆）
+                  if (scan)
+                    Material(
+                      color: Colors.black,
+                      child: InkWell(
+                        key: const Key('site-scan'),
+                        onTap: _scan,
+                        child: SizedBox(
+                          height: 240,
+                          child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+                            Container(
+                                width: 150,
+                                height: 150,
+                                alignment: Alignment.center,
+                                decoration: BoxDecoration(border: Border.all(color: Colors.white, width: 3)),
+                                child: const Icon(Icons.qr_code_scanner_rounded, size: 40, color: Colors.white70)),
+                            const SizedBox(height: Nw.s8),
+                            Text(tr('Tap to scan the QR code', '点这里扫二维码'),
+                                style: NwText.bodySmall.copyWith(color: Colors.white70)),
+                          ]),
                         ),
                       ),
                     ),
-                  NwField(fieldKey: const Key('site-name'), controller: _name, label: tr('Name', '名字')),
-                  gap,
-                  NwField(
-                    fieldKey: const Key('site-url'),
-                    controller: _url,
-                    keyboardType: TextInputType.url,
-                    autocorrect: false,
-                    label: tr('Full site address, with port (https://…)', '站点的完整地址，含端口（https://…）'),
-                  ),
-                  gap,
-                  NwField(
-                    fieldKey: const Key('site-fp'),
-                    controller: _fp,
-                    autocorrect: false,
-                    enableSuggestions: false,
-                    minLines: 1,
-                    maxLines: 3,
-                    mono: true,
-                    label: tr(
-                      'Certificate fingerprint (shown next to the site code on the console)',
-                      '证书指纹（值班台上站点码旁边有）',
-                    ),
-                  ),
-                  if (_err != null) ...[
+                  if (scan) const SizedBox(height: Nw.s8),
+                  Row(children: [
+                    Expanded(
+                        child: OutlinedButton(
+                            key: const Key('site-paste'),
+                            style: out,
+                            onPressed: _paste,
+                            child: Text(tr('Paste pairing code', '粘贴配对码'), maxLines: 1, overflow: TextOverflow.ellipsis))),
+                    const SizedBox(width: Nw.s8),
+                    Expanded(
+                        child: OutlinedButton(
+                            key: const Key('site-manual'),
+                            style: out,
+                            onPressed: () => setState(() => _manual = true),
+                            child: Text(tr('Enter address manually', '手动输入地址'), maxLines: 1, overflow: TextOverflow.ellipsis))),
+                  ]),
+                  if (_pasting) ...[
                     gap,
-                    NwNotice(key: SiteAddPage.errorKey, tone: NwTone.error, text: _err!),
+                    NwField(
+                      fieldKey: const Key('pair-code'),
+                      controller: _code,
+                      autofocus: true,
+                      autocorrect: false,
+                      enableSuggestions: false,
+                      maxLines: 4,
+                      minLines: 2,
+                      mono: true,
+                      hint: '$pairingPrefix…',
+                    ),
+                    const SizedBox(height: Nw.s8),
+                    Row(children: [
+                      Expanded(
+                          child: OutlinedButton(
+                              style: out, onPressed: () => setState(() => _pasting = false), child: Text(tr('Cancel', '取消')))),
+                      const SizedBox(width: Nw.s8),
+                      Expanded(
+                          child: FilledButton(
+                              key: const Key('pair-code-ok'),
+                              style: FilledButton.styleFrom(minimumSize: const Size(48, 44), shape: shape),
+                              onPressed: () => _take(_code.text),
+                              child: Text(tr('Use code', '用这个码')))),
+                    ]),
                   ],
-                  const SizedBox(height: Nw.s24),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.end,
-                    children: [
-                      Flexible(
-                        child: NwButton(
-                          label: tr('Cancel', '取消'),
-                          variant: NwButtonVariant.ghost,
-                          onPressed: () => Navigator.pop(context),
+                  if (showForm) ...[
+                    gap,
+                    Text(_fromCode ? tr('Scanned', '扫到的') : tr('Site', '站点'), style: label),
+                    const SizedBox(height: Nw.s8),
+                    if (_fromCode)
+                      Padding(
+                        key: const Key('site-check-note'),
+                        padding: const EdgeInsets.only(bottom: Nw.s16),
+                        child: NwNotice(
+                          tone: NwTone.warning,
+                          text: tr(
+                            'Check that the site name and certificate fingerprint match the duty console, then save.',
+                            '请核对下方站点名称和证书指纹与值班台一致后再保存。',
+                          ),
                         ),
                       ),
-                      const SizedBox(width: Nw.s16),
-                      Flexible(
-                        child: NwButton(
-                          buttonKey: const Key('site-save'),
-                          label: tr('Save', '保存'),
-                          onPressed: _save,
-                        ),
+                    NwField(fieldKey: const Key('site-name'), controller: _name, label: tr('Site', '站点名')),
+                    gap,
+                    NwField(
+                      fieldKey: const Key('site-url'),
+                      controller: _url,
+                      keyboardType: TextInputType.url,
+                      autocorrect: false,
+                      label: tr('Address, with port (https://…)', '地址，含端口（https://…）'),
+                    ),
+                    gap,
+                    NwField(
+                      fieldKey: const Key('site-fp'),
+                      controller: _fp,
+                      autocorrect: false,
+                      enableSuggestions: false,
+                      minLines: 1,
+                      maxLines: 3,
+                      mono: true,
+                      label: tr(
+                        'Certificate fingerprint (shown next to the site code on the console)',
+                        '证书指纹（值班台上站点码旁边有）',
                       ),
+                    ),
+                    gap,
+                    NwField(
+                      fieldKey: const Key('site-user'),
+                      controller: _user,
+                      autocorrect: false,
+                      enableSuggestions: false,
+                      label: tr('Account (optional, or enter it at sign-in)', '账号（可以不填，登录时再输）'),
+                    ),
+                    if (_err != null) ...[
+                      gap,
+                      NwNotice(key: SiteAddPage.errorKey, tone: NwTone.error, text: _err!),
                     ],
-                  ),
+                    gap,
+                    FilledButton(
+                      key: const Key('site-save'),
+                      style: FilledButton.styleFrom(minimumSize: const Size(48, 48), shape: shape),
+                      onPressed: _save,
+                      child: Text(tr('Save and sign in', '保存并登录')),
+                    ),
+                  ],
                 ],
               ),
             ),
