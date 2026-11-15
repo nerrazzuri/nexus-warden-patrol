@@ -13,7 +13,6 @@ import 'package:nexwar_patrol/ui/pose_marker.dart';
 import 'package:nexwar_patrol/ui/site_maps.dart';
 import 'package:nexwar_patrol/ui/site_pose_pick.dart';
 import 'package:nexwar_patrol/ui/refusal.dart' show refusalActionKey;
-import 'package:nexwar_patrol/ui/site_robot.dart' show SiteRobotPage;
 import 'package:nexwar_patrol/ui/site_routes.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -154,12 +153,14 @@ void main() {
     await _tapMap(t, c, -4.25, 2.5);
     await t.tap(find.byKey(SiteRouteEditorPage.tempSendKey));
     await t.pumpAndSettle();
-    await t.tap(find.byKey(refusalActionKey));                 // 「去机器人页」
+    // App V2 稿 N-refuse：不弹框，顶上一条说明；就地「让 A 站起来」（说明里先叫人看旁边有没有人）
+    expect(find.byType(AlertDialog), findsNothing);
+    expect(find.textContaining('Make sure no one is right next to it'), findsOneWidget);
+    expect(find.text('Stand A up'), findsOneWidget);
+    api.view = view(motion: true);
+    await t.tap(find.byKey(refusalActionKey));
     await t.pumpAndSettle();
-    expect(find.byType(SiteRobotPage), findsOneWidget);
-    api.view = view(motion: true);                            // 在机器人页站起来了
-    Navigator.of(t.element(find.byType(SiteRobotPage))).pop();
-    await t.pumpAndSettle();
+    expect(api.calls, contains('posture A stand'));
     expect(find.textContaining(refusalText(api.patrolError!)), findsNothing, reason: '旧提示不留着');
     expect(find.textContaining('A is standing now'), findsOneWidget);
     await t.pumpWidget(Container());

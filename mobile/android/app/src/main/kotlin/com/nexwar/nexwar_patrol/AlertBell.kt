@@ -29,19 +29,60 @@ class AlertBell {
     private val shown = HashMap<String, Int>()
     /** 还没确认、没解决的 P1：键 → 最近一次的事实。重弹用。 */
     private val active = HashMap<String, AlertFacts>()
+    /**
+     * App V2 来报警全屏页「静音 2 分钟」：键 → 静到几点（毫秒）。只是这台手机这一会儿不出声：通知照挂、
+     * 照样划不掉；到点还没人确认就接着响（[unmuteDue]）。确认了、解决了就忘掉。
+     */
+    private val muted = HashMap<String, Long>()
+
+    private fun loud(a: AlertFacts, nowMs: Long): Boolean {
+        val until = muted[a.key] ?: return a.sound
+        if (nowMs >= until) {
+            muted.remove(a.key)
+            return a.sound
+        }
+        return false
+    }
 
     @Synchronized
-    fun onAlert(a: AlertFacts): BellAction {
+    fun onAlert(a: AlertFacts, nowMs: Long = System.currentTimeMillis()): BellAction {
         if (a.key.isEmpty()) return BellAction.None
         if (!a.p1 || a.done) {
             active.remove(a.key)
+            muted.remove(a.key)
             return if (shown.remove(a.key) != null) BellAction.Cancel(a.key) else BellAction.None
         }
         active[a.key] = a
         val before = shown[a.key]
         if (before != null && before >= a.tier) return BellAction.None
         shown[a.key] = a.tier
-        return BellAction.Post(a.key, a.sound)
+        return BellAction.Post(a.key, loud(a, nowMs))
+    }
+
+    /** 静音 [forMs]：响铃档的才有用 —— 不出声地重弹一次（通知还挂着）；别的档、已经没了的：什么都不做。 */
+    @Synchronized
+    fun mute(key: String, nowMs: Long, forMs: Long): BellAction {
+        val a = active[key] ?: return BellAction.None
+        if (!a.sound) return BellAction.None
+        muted[key] = nowMs + forMs
+        shown[key] = a.tier
+        return BellAction.Post(key, false)
+    }
+
+    /** 到点了还没人确认的：接着响（出声重弹）。 */
+    @Synchronized
+    fun unmuteDue(nowMs: Long): List<BellAction> {
+        val out = ArrayList<BellAction>()
+        for ((k, until) in muted.entries.toList()) {
+            if (nowMs < until) continue
+            muted.remove(k)
+            val a = active[k] ?: continue
+            if (a.sound) {
+                shown[k] = a.tier
+                out.add(BellAction.Post(k, true))
+            }
+        }
+        return out
     }
 
     /**
@@ -49,19 +90,21 @@ class AlertBell {
      * [onAlert] 走（断线期间升了档的补弹、确认了的收）。
      */
     @Synchronized
-    fun onSnapshot(alerts: List<AlertFacts>): List<BellAction> {
+    fun onSnapshot(alerts: List<AlertFacts>, nowMs: Long = System.currentTimeMillis()): List<BellAction> {
         val keys = alerts.map { it.key }.toSet()
         val out = ArrayList<BellAction>()
         for (k in shown.keys.toList()) {
             if (k !in keys) {
                 shown.remove(k)
                 active.remove(k)
+                muted.remove(k)
                 out.add(BellAction.Cancel(k))
             }
         }
         for (k in active.keys.toList()) if (k !in keys) active.remove(k)
+        for (k in muted.keys.toList()) if (k !in keys) muted.remove(k)
         for (a in alerts) {
-            val act = onAlert(a)
+            val act = onAlert(a, nowMs)
             if (act != BellAction.None) out.add(act)
         }
         return out
@@ -72,12 +115,12 @@ class AlertBell {
      * 之后升档、重连的首帧会再弹）。确认过、解决过的：什么都不做。
      */
     @Synchronized
-    fun onDismissed(key: String): BellAction {
+    fun onDismissed(key: String, nowMs: Long = System.currentTimeMillis()): BellAction {
         shown.remove(key)
         val a = active[key] ?: return BellAction.None
         if (!a.sound) return BellAction.None
         shown[key] = a.tier
-        return BellAction.Post(key, true)
+        return BellAction.Post(key, loud(a, nowMs))
     }
 
     /** 停值守：挂着的全收。回要收的键。 */
@@ -86,6 +129,7 @@ class AlertBell {
         val keys = shown.keys.toList()
         shown.clear()
         active.clear()
+        muted.clear()
         return keys
     }
 }

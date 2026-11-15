@@ -100,3 +100,72 @@ class WatchControl extends ChangeNotifier {
 
   Future<void> toggle() async => _toggle?.call();
 }
+
+/// App V2 来报警全屏页：后台值守的全屏通知拉起 App 时交过来的那一条（原生 `MainActivity`）。
+class RingRequest {
+  final String key;
+  final Map<String, dynamic> alert;
+
+  /// 值守的站点名（跟外壳的标题比：别的站点的不在这个站点里弹）。
+  final String site;
+  const RingRequest(this.key, this.alert, this.site);
+
+  static RingRequest? fromChannel(Object? raw) {
+    if (raw is! Map) return null;
+    final key = '${raw['key'] ?? ''}';
+    if (key.isEmpty) return null;
+    Map<String, dynamic> alert;
+    try {
+      final j = jsonDecode('${raw['alert'] ?? '{}'}');
+      alert = j is Map ? Map<String, dynamic>.from(j) : <String, dynamic>{};
+    } on FormatException {
+      alert = <String, dynamic>{};
+    }
+    return RingRequest(key, alert, '${raw['site'] ?? ''}');
+  }
+}
+
+/// 等着弹的来报警（外壳在的时候接走、清掉）。
+final ValueNotifier<RingRequest?> pendingRing = ValueNotifier<RingRequest?>(null);
+
+/// App 启动时接上：原生拉起时那一条、之后 App 开着又来的。只有 Android 有。
+Future<void> initRingChannel() async {
+  if (!Platform.isAndroid) return;
+  const ch = MethodChannel('nexwar/watch');
+  ch.setMethodCallHandler((call) async {
+    if (call.method == 'ring') pendingRing.value = RingRequest.fromChannel(call.arguments) ?? pendingRing.value;
+    return null;
+  });
+  try {
+    final r = RingRequest.fromChannel(await ch.invokeMethod<Object?>('pendingRing'));
+    if (r != null) pendingRing.value = r;
+  } on PlatformException {
+    return;
+  } on MissingPluginException {
+    return;
+  }
+}
+
+/// 「静音 2 分钟」：后台值守那边这台手机先不出声，到点没人确认接着响。没在值守（桌面版、没开）回 false。
+Future<bool> muteRing(String key) async {
+  if (!Platform.isAndroid) return false;
+  try {
+    return await const MethodChannel('nexwar/watch').invokeMethod<bool>('mute', <String, String>{'key': key}) ?? false;
+  } on PlatformException {
+    return false;
+  } on MissingPluginException {
+    return false;
+  }
+}
+
+/// 来报警这一页处理完了：锁屏上不再显示 App。
+Future<void> ringDone() async {
+  if (!Platform.isAndroid) return;
+  try {
+    await const MethodChannel('nexwar/watch').invokeMethod<bool>('ringDone');
+  } on PlatformException {
+    return;
+  } on MissingPluginException {
+    return;
+  }
+}

@@ -49,6 +49,13 @@ class WatchService : Service() {
         const val ACTION_STOP = "com.nexwar.watch.STOP"
         /** 一条告警通知被划掉了（deleteIntent），extra `key`。 */
         const val ACTION_DISMISSED = "com.nexwar.watch.DISMISSED"
+        /** App V2 来报警全屏页 / 通知上的「静音 2 分钟」，extra `key`。 */
+        const val ACTION_MUTE = "com.nexwar.watch.MUTE"
+        const val MUTE_MS = 2 * 60_000L
+        /** 拉起 [MainActivity] 的来报警全屏页：extra 里的键、报文、站点名。 */
+        const val EXTRA_RING_KEY = "ring_key"
+        const val EXTRA_RING_ALERT = "ring_alert"
+        const val EXTRA_RING_SITE = "ring_site"
         const val PREFS = "nexwar_watch"
         private const val TAG = "D1MaxWatch"
         private const val CERT_MISMATCH = "证书指纹对不上"
@@ -84,6 +91,8 @@ class WatchService : Service() {
     private fun t(en: String, zh: String) = if (lang == "zh") zh else en
     private var token = ""
 
+    private val ui = android.os.Handler(android.os.Looper.getMainLooper())
+
     /** 该弹、该收、该重弹（纯判断，JUnit 测）。 */
     private val bell = AlertBell()
     /** 每条挂着的告警最近一次的报文：重弹时照着写标题。 */
@@ -99,6 +108,13 @@ class WatchService : Service() {
                 // 服务一直在跑（通知是它弹的）:只处理这一条,不动连接
                 val key = intent.getStringExtra("key") ?: ""
                 apply(bell.onDismissed(key))
+                return START_STICKY
+            }
+            ACTION_MUTE -> {
+                // 只是这台手机先不出声;到点还没人确认接着响(站点说有人确认了才收)
+                val key = intent.getStringExtra("key") ?: ""
+                apply(bell.mute(key, System.currentTimeMillis(), MUTE_MS))
+                ui.postDelayed({ for (act in bell.unmuteDue(System.currentTimeMillis())) apply(act) }, MUTE_MS + 500)
                 return START_STICKY
             }
             ACTION_STOP -> {
@@ -333,6 +349,14 @@ class WatchService : Service() {
             b.setPriority(Notification.PRIORITY_MAX)
             if (sound) b.setSound(RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM))
         }
+        if (a.optString("channel") == "sound") {
+            // App V2 来报警全屏页:锁屏 / 后台时亮屏直接拉起 App 的那一页;通知上也能「静音 2 分钟」
+            b.setFullScreenIntent(ring(key, a), true)
+            val mute = Intent(this, WatchService::class.java).setAction(ACTION_MUTE).putExtra("key", key)
+            val pi = PendingIntent.getService(this, key.hashCode() xor 0x5a5a, mute,
+                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+            b.addAction(Notification.Action.Builder(null, t("Mute 2 min", "静音 2 分钟"), pi).build())
+        }
         val n = b.build()
         if (sound) n.flags = n.flags or Notification.FLAG_INSISTENT   // 声音一直循环
         nm.notify(key.hashCode(), n)
@@ -417,6 +441,16 @@ class WatchService : Service() {
     private fun builder(ch: String): Notification.Builder =
         if (Build.VERSION.SDK_INT >= 26) Notification.Builder(this, ch)
         else @Suppress("DEPRECATION") Notification.Builder(this)
+
+    private fun ring(key: String, a: JSONObject): PendingIntent {
+        val i = Intent(this, MainActivity::class.java)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+            .putExtra(EXTRA_RING_KEY, key)
+            .putExtra(EXTRA_RING_ALERT, a.toString())
+            .putExtra(EXTRA_RING_SITE, site)
+        return PendingIntent.getActivity(this, key.hashCode(), i,
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+    }
 
     private fun openApp(): PendingIntent {
         val i = Intent(this, MainActivity::class.java)
