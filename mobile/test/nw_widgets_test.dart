@@ -325,7 +325,7 @@ void main() {
             theme: nwTheme(b));
         expect((card().shape! as RoundedRectangleBorder).side, BorderSide(color: c.outline));
         expect(find.byIcon(Icons.warning_rounded), findsNothing);
-        expect(find.byIcon(Icons.smart_toy_rounded), findsOneWidget);
+        // App V2 稿 S-robots：正常是一个小方块，不画机器人图标
         expect(_textColor(t, '在线'), c.success);
         expect(find.text('42%'), findsOneWidget);
       });

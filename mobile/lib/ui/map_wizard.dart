@@ -1488,7 +1488,7 @@ class _MapWizardPageState extends State<MapWizardPage> {
         if (mounted) setState(() => _busy = false);
       }
     } else {
-      await Navigator.push(context, MaterialPageRoute<void>(builder: (_) => SiteRobotPage(api: api, robotId: _robotId)));
+      await Navigator.push(context, MaterialPageRoute<void>(builder: (_) => SiteRobotPage(api: api, robotId: _robotId, light: true)));
     }
     await _pollRobot();
   }

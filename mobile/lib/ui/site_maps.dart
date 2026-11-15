@@ -1059,7 +1059,7 @@ class _SiteMapTabState extends State<SiteMapTab> {
                     onTap: () => Navigator.push(
                         context,
                         MaterialPageRoute<void>(
-                            builder: (_) => SiteRobotPage(api: widget.api, robotId: '${r['robot_id']}'))),
+                            builder: (_) => SiteRobotPage(api: widget.api, robotId: '${r['robot_id']}', light: true))),
                     child: Row(children: [
                       Expanded(
                           child: Column(

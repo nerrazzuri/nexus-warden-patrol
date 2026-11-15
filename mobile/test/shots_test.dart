@@ -27,7 +27,7 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'site_page_test.dart' show FakeApi;
+import 'site_page_test.dart' show FakeApi, busyView;
 import 'support/fake_map.dart';
 import 'support/fake_site.dart' show siteFixture;
 import 'support/shell_nav.dart';
@@ -278,6 +278,11 @@ void main() {
     '06-dogs': _Shot(_phone, () => NwShell(api: _clear('guard'), title: 'East Gate Estate', ring: () {}),
         ready: _go(SiteDest.robots)),
     '07-robot-guard': _Shot(_phone, () => SiteRobotPage(api: FakeApi('guard'), robotId: 'A')),
+    // App V2 第 4 期：深色控制页（保安、经理）、浅色设置页签、添加机器人
+    '07b-robot-guard-v2': _Shot(const Size(390, 1900), () => SiteRobotPage(api: FakeApi('guard', robotView: busyView()), robotId: 'A')),
+    '07c-robot-manager': _Shot(const Size(390, 1200), () => SiteRobotPage(api: FakeApi('owner', robotView: busyView()), robotId: 'A')),
+    '07d-robot-settings': _Shot(const Size(390, 1500),
+        () => SiteRobotPage(api: FakeApi('admin', robotView: busyView()), robotId: 'A', light: true, settings: true)),
     '08-map': _Shot(_phone, () => NwShell(api: _clear('admin'), title: 'East Gate Estate', ring: () {}),
         ready: _go(SiteDest.layout)),
     '09-history': _Shot(_phone, () => NwShell(api: _clear('admin'), title: 'East Gate Estate', ring: () {}),
@@ -325,7 +330,8 @@ void main() {
   for (final lang in _langs) {
     for (final e in pages.entries) {
       for (final b in e.value.themes) {
-        testWidgets('出图 ${lang.name} ${b.name} ${e.key}', skip: _out == null, (t) async {
+        final only = Platform.environment['NEXWAR_SHOTS_ONLY'];
+        testWidgets('出图 ${lang.name} ${b.name} ${e.key}', skip: _out == null || (only != null && !e.key.startsWith(only)), (t) async {
           await t.runAsync(() async {
             final root = Directory.current.path;
             await _font(NwFont.display, '$root/assets/fonts/SpaceGrotesk.ttf');

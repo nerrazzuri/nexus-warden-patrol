@@ -446,7 +446,11 @@ class _RobotAddPageState extends State<RobotAddPage> with _StickerScan<RobotAddP
     final c = Nw.of(context);
     final s = sticker, st = _st;
     final waiting = st != null && st['state'] == 'pending' && st['phase'] == 'waiting';
+    // App V2 稿 S-add：四步一列，做完的打勾、正在做的蓝底序号
+    final at = _approved ? 4 : st != null ? 3 : _nets != null ? 2 : s != null ? 1 : 0;
     return _Frame(title: tr('Add robot', '添加机器人'), children: [
+      AddRobotSteps(at: at, serial: s?.serial),
+      _gap,
       Text(tr(
           'At the robot: scan the QR sticker on the robot, choose the WiFi it should use and enter the password.',
           '在机器人旁：扫机器人身上的二维码贴纸，选它要连的 WiFi、输入密码。'),
@@ -513,6 +517,56 @@ class _RobotAddPageState extends State<RobotAddPage> with _StickerScan<RobotAddP
         _gap,
         NwButton(buttonKey: const Key('bind-approve-retry'), label: tr('Approve', '去批准'), onPressed: _approve),
       ],
+    ]);
+  }
+}
+
+/// 添加机器人的四步（稿 S-add）。[at] = 做完了几步（0–4）。
+class AddRobotSteps extends StatelessWidget {
+  final int at;
+  final String? serial;
+  const AddRobotSteps({super.key, required this.at, this.serial});
+
+  static Key stepKey(int i) => Key('add-step-$i');
+
+  @override
+  Widget build(BuildContext context) {
+    final c = Nw.of(context);
+    final steps = [
+      (tr('Scan the robot sticker', '扫机器人贴纸'), serial == null ? '' : tr('$serial · Scanned', '$serial · 已扫')),
+      (tr('Connect to the robot hotspot', '连机器人的热点'), tr('The phone will leave its current network temporarily', '手机会暂时离开现在的网络')),
+      (tr("Choose the robot's Wi-Fi", '选机器人要连的 Wi-Fi'), ''),
+      (tr('Wait for it to join the site', '等它加入站点'), tr('An administrator verifies the code and approves', '管理员核对验证码后批准')),
+    ];
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      Text(tr('Step ${at < 4 ? at + 1 : 4} of 4', '第 ${at < 4 ? at + 1 : 4} 步，共 4 步'),
+          key: const Key('add-step-of'), style: NwText.labelLarge.copyWith(color: c.textSecondary)),
+      for (var i = 0; i < steps.length; i++)
+        Container(
+            key: stepKey(i + 1),
+            padding: const EdgeInsets.symmetric(vertical: 10),
+            decoration: BoxDecoration(border: Border(top: BorderSide(color: c.outline))),
+            child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Container(
+                  width: 26,
+                  height: 26,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: i < at ? c.successSoft : i == at ? c.primary : null,
+                      border: i > at ? Border.all(color: c.textMuted) : null),
+                  child: i < at
+                      ? Icon(Icons.check_rounded, size: 16, color: c.success)
+                      : Text('${i + 1}',
+                          style: NwText.labelLarge.copyWith(color: i == at ? c.onPrimary : c.text, fontWeight: FontWeight.w700))),
+              const SizedBox(width: 12),
+              Expanded(
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text(steps[i].$1, style: NwText.titleSmall.copyWith(color: c.text, fontWeight: FontWeight.w700)),
+                if (steps[i].$2.isNotEmpty)
+                  Text(steps[i].$2, style: NwText.bodySmall.copyWith(color: c.textSecondary)),
+              ])),
+            ])),
     ]);
   }
 }

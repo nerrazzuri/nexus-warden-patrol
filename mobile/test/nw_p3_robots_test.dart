@@ -158,8 +158,14 @@ void main() {
       await t.pumpWidget(const SizedBox());
     });
 
-    testWidgets('这一格里一只都没有：说出来', (t) async {
-      final api = FakeApi('guard')..robotsOverride = <Map<String, dynamic>>[_robot('A')];
+    testWidgets('App V2：一两台不给筛选；三台以上才有，这一格里一只都没有就说出来', (t) async {
+      final one = FakeApi('guard')..robotsOverride = <Map<String, dynamic>>[_robot('A'), _robot('B')];
+      await t.pumpWidget(MaterialApp(home: SiteRobotsPage(api: one)));
+      await t.pumpAndSettle();
+      expect(find.byKey(NwFleet.filterKey(FleetFilter.all)), findsNothing);
+      expect(card('A'), findsOneWidget);
+      await t.pumpWidget(const SizedBox());
+      final api = FakeApi('guard')..robotsOverride = <Map<String, dynamic>>[_robot('A'), _robot('B'), _robot('E')];
       await t.pumpWidget(MaterialApp(home: SiteRobotsPage(api: api)));
       await t.pumpAndSettle();
       expect(find.byKey(NwFleet.emptyKey), findsNothing);
@@ -179,6 +185,7 @@ void main() {
       api.robotsOverride = <Map<String, dynamic>>[
         _robot('A', status: {'task': _patrol}),
         _robot('B'),
+        _robot('E'),
       ];
       api.sse.add(<String, dynamic>{'kind': 'robot'});
       await t.pump(const Duration(milliseconds: 600));
@@ -207,66 +214,68 @@ void main() {
   });
 
   group('单机器人页', () {
-    testWidgets('叫停在页头、红的；这一页看着没任务时也按得动（外审 I1）', (t) async {
+    testWidgets('App V2：深色页右下角全部急停、红的、不跟着滚；「原地停下」这一页看着没任务时也按得动（外审 I1）', (t) async {
       await t.pumpWidget(MaterialApp(
           home: SiteRobotPage(api: FakeApi('guard', robotView: busyView()), robotId: 'A')));
       await t.pumpAndSettle();
-      final stop = t.widget<FilledButton>(find.byKey(const Key('btn-abort')));
-      expect(stop.onPressed, isNotNull);
-      expect(stop.style!.backgroundColor!.resolve(<WidgetState>{}), NwColors.light.error);
-      expect(find.ancestor(of: find.byKey(const Key('btn-abort')), matching: find.byType(NwHeader)),
-          findsOneWidget, reason: '在页头，不跟着滚');
-      expect(find.ancestor(of: find.byKey(const Key('btn-abort')), matching: find.byType(Scrollable)),
-          findsNothing);
-      expect(t.widget<NwStatusPill>(find.byKey(const Key('robot-phase'))).tone, NwTone.success);
+      expect(find.byKey(SiteRobotPage.estopKey), findsOneWidget);
+      expect(find.ancestor(of: find.byKey(SiteRobotPage.estopKey), matching: find.byType(Scrollable)), findsNothing,
+          reason: '钉在右下角，不跟着滚');
+      final m = t.widget<Material>(find.ancestor(of: find.byKey(SiteRobotPage.estopKey), matching: find.byType(Material)).first);
+      expect(m.color, NwColors.dark.error);
+      expect(t.widget<ButtonStyleButton>(find.byKey(const Key('btn-abort'))).onPressed, isNotNull);
+      expect(find.text('原地停下'), findsOneWidget);
 
       final idle = Map<String, dynamic>.of(siteFixture('site_robot'));
       idle['status'] = Map<String, dynamic>.of(idle['status'] as Map<String, dynamic>)..['task'] = null;
       await t.pumpWidget(MaterialApp(
           home: SiteRobotPage(key: UniqueKey(), api: FakeApi('guard', robotView: idle), robotId: 'A')));
       await t.pumpAndSettle();
-      expect(t.widget<FilledButton>(find.byKey(const Key('btn-abort'))).onPressed, isNotNull);
-      expect(find.byKey(const Key('btn-abort-off')), findsNothing);
+      expect(t.widget<ButtonStyleButton>(find.byKey(const Key('btn-abort'))).onPressed, isNotNull);
       await t.pumpWidget(const SizedBox());
     });
 
-    testWidgets('电量读不到写「--」；W53：诊断卡去掉了（工程师在 管理 → 体检 看）', (t) async {
-      await t.pumpWidget(MaterialApp(
-          home: SiteRobotPage(api: FakeApi('admin', robotView: busyView()), robotId: 'A')));
+    testWidgets('电量读不到不写电量；W53：诊断卡去掉了（工程师在 管理 → 体检 看）', (t) async {
+      final v = Map<String, dynamic>.of(busyView());
+      await t.pumpWidget(MaterialApp(home: SiteRobotPage(api: FakeApi('admin', robotView: v), robotId: 'A')));
       await t.pumpAndSettle();
-      expect(find.text('--'), findsOneWidget);
+      expect(find.textContaining('电量'), findsNothing);
       expect(find.byKey(const Key('robot-diagnostics')), findsNothing);
       expect(find.byType(NwDiagnosticRow), findsNothing);
       await t.pumpWidget(const SizedBox());
     });
 
-    testWidgets('管理员的那几个单独一组；保安没有这一组', (t) async {
+    testWidgets('App V2 S-robot-set：浅色页「操作 | 设置」；管理员的设置页签有位置、排查与维护；保安没有这些', (t) async {
       await t.pumpWidget(MaterialApp(
-          home: SiteRobotPage(api: FakeApi('admin', robotView: busyView()), robotId: 'A')));
+          home: SiteRobotPage(api: FakeApi('admin', robotView: busyView()), robotId: 'A', light: true)));
       await t.pumpAndSettle();
-      expect(find.text('操作'), findsOneWidget);
-      expect(find.text('管理'), findsOneWidget);
-      for (final k in ['btn-record-start', 'btn-record-stop', 'btn-mark-home', 'btn-mapping-trail']) {
+      expect(find.byKey(SiteRobotPage.operateTabKey), findsOneWidget);
+      expect(find.byKey(const Key('btn-record-start')), findsNothing, reason: '操作页签不放维护');
+      await t.tap(find.byKey(SiteRobotPage.settingsTabKey));
+      await t.pumpAndSettle();
+      for (final k in ['btn-record-start', 'btn-record-stop', 'btn-mark-home', 'btn-mapping-trail', 'btn-standby-list']) {
         expect(find.byKey(Key(k)), findsOneWidget, reason: k);
       }
+      expect(find.text('排查与维护'), findsOneWidget);
       await t.pumpWidget(MaterialApp(
-          home: SiteRobotPage(key: UniqueKey(), api: FakeApi('guard', robotView: busyView()), robotId: 'A')));
+          home: SiteRobotPage(key: UniqueKey(), api: FakeApi('guard', robotView: busyView()), robotId: 'A', light: true, settings: true)));
       await t.pumpAndSettle();
-      expect(find.text('操作'), findsOneWidget);
-      expect(find.text('管理'), findsNothing);
       expect(find.byKey(const Key('btn-record-start')), findsNothing);
+      expect(find.byKey(const Key('btn-mark-home')), findsNothing);
+      expect(find.byKey(SiteRobotPage.unbindKey), findsNothing);
       await t.pumpWidget(const SizedBox());
     });
 
-    testWidgets('竖屏手机（390×844）：叫停一进来就在屏幕里', (t) async {
+    testWidgets('竖屏手机（390×844）：全部急停一进来就在屏幕里', (t) async {
       t.view.physicalSize = const Size(390 * 2, 844 * 2);
       t.view.devicePixelRatio = 2.0;
       addTearDown(t.view.reset);
       await t.pumpWidget(MaterialApp(
           home: SiteRobotPage(api: FakeApi('admin', robotView: busyView()), robotId: 'A')));
       await t.pumpAndSettle();
-      final r = t.getRect(find.byKey(const Key('btn-abort')));
+      final r = t.getRect(find.byKey(SiteRobotPage.estopKey));
       expect(r.top, greaterThanOrEqualTo(0));
+      expect(r.bottom, lessThanOrEqualTo(844));
       expect(r.right, lessThanOrEqualTo(390));
       expect(r.height, greaterThanOrEqualTo(Nw.touch));
       await t.pumpWidget(const SizedBox());
@@ -418,7 +427,7 @@ void main() {
             await show(t, size, SiteRobotPage(key: UniqueKey(), api: FakeApi('admin', robotView: v), robotId: 'D1-02'));
             await t.pumpAndSettle();
             expect(t.takeException(), isNull);
-            final stop = t.getRect(find.byKey(const Key('btn-abort')));
+            final stop = t.getRect(find.byKey(SiteRobotPage.estopKey));
             expect(stop.bottom, lessThanOrEqualTo(size.height));
             expect(stop.right, lessThanOrEqualTo(size.width));
           }

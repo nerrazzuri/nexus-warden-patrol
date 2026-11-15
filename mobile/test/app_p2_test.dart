@@ -27,7 +27,8 @@ void main() {
       {'robot_id': 'T51', 'revoked': true},
     ], deterring: const {}, activityOf: (_) => '', onOpen: (_) {})))));
     await t.pumpAndSettle();
-    expect(find.text('全部 1'), findsOneWidget);
+    expect(find.byKey(const Key('robot-A')), findsOneWidget);
+    expect(find.text('全部 1'), findsNothing, reason: 'App V2：一台不给筛选');
     expect(find.text('已解绑（1）'), findsOneWidget);
     expect(find.byKey(const Key('robot-T51')), findsNothing, reason: '收着');
   });

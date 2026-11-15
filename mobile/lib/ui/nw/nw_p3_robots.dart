@@ -274,8 +274,11 @@ class _NwFleetState extends State<NwFleet> {
     final robots = [for (final r in widget.robots) if (r['revoked'] != true) _withBattery(r)];
     final gone = [for (final r in widget.robots) if (r['revoked'] == true) '${r['robot_id']}'];
     int count(FleetFilter f) => robots.where((r) => fleetFilterMatch(f, r)).length;
-    final shown = robots.where((r) => fleetFilterMatch(_filter, r)).toList();
+    // App V2（用户 11-15：先照顾一台、两台的客户）：三台以上才给筛选
+    final filters = robots.length >= 3;
+    final shown = filters ? robots.where((r) => fleetFilterMatch(_filter, r)).toList() : robots;
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, mainAxisSize: MainAxisSize.min, children: [
+      if (filters) ...[
       NwSegment<FleetFilter>(
           values: FleetFilter.values,
           selected: _filter,
@@ -287,6 +290,7 @@ class _NwFleetState extends State<NwFleet> {
                 FleetFilter.charging => tr('Charging ${count(f)}', '充电 ${count(f)}'),
               }),
       const SizedBox(height: Nw.s16),
+      ],
       if (shown.isEmpty && robots.isNotEmpty)
         Padding(
             key: NwFleet.emptyKey,
