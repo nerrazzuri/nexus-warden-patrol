@@ -296,6 +296,11 @@ export function RoutesPage({ say, embed, kind = "patrol" }: { say: Say; embed?: 
     setRemoving(false);
     const tk = ticket();
     try {
+      // 用户 11-15:有排程在用的,确认里写了连排程一起删 —— 先删排程(站点不许删还被排程用着的路线)
+      for (const sc of mySchedules) {
+        await api("POST", `/api/route-schedules/${enc(sc.id)}/delete`, { base_revision: sc.revision });
+        if (!still(tk)) return;
+      }
       await api("POST", `/api/routes/${enc(draft.id)}/delete`, { base_revision: draft.base });
       if (!still(tk)) return;
       say(rt("routeDeleted"));
@@ -573,7 +578,10 @@ export function RoutesPage({ say, embed, kind = "patrol" }: { say: Say; embed?: 
         </div>
       </section>
       {removing && draft && (
-        <Confirm text={rt("routeDeleteConfirm", { name: draft.title || draft.id })} yes={rt("routeDelete")} danger onNo={() => setRemoving(false)} onYes={() => void del()} />
+        <Confirm text={mySchedules.length
+          ? rt("routeDeleteWithSched", { name: draft.title || draft.id, n: mySchedules.length, list: mySchedules.map((sc) => routeLabel(sc)).join(", ") })
+          : rt("routeDeleteConfirm", { name: draft.title || draft.id })}
+          yes={mySchedules.length ? rt("routeDeleteBoth") : rt("routeDelete")} danger onNo={() => setRemoving(false)} onYes={() => void del()} />
       )}
     </div>
   );
