@@ -11,6 +11,7 @@ import 'package:flutter/material.dart';
 import '../l10n.dart';
 import '../net/site_client.dart';
 import 'nw/nw_p4_admin.dart';
+import 'nw/nw_ask.dart';
 import 'nw/nw_theme.dart';
 import 'widget/bar_actions.dart';
 import 'widget/fields_dialog.dart';
@@ -27,7 +28,7 @@ class SiteInterceptsPage extends StatefulWidget {
   State<SiteInterceptsPage> createState() => _SiteInterceptsPageState();
 }
 
-class _SiteInterceptsPageState extends State<SiteInterceptsPage> {
+class _SiteInterceptsPageState extends State<SiteInterceptsPage> with NwAsk {
   List<Map<String, dynamic>> _points = const [];
   List<Map<String, dynamic>> _zones = const [];
   String _msg = '';
@@ -94,20 +95,14 @@ class _SiteInterceptsPageState extends State<SiteInterceptsPage> {
     }
     final robot = robots.length == 1
         ? '${robots.first['robot_id']}'
-        : await showDialog<String>(
-            context: context,
-            builder: (c) => SimpleDialog(
-                title: Text(tr("Use which robot's current position?", '使用哪台机器人的当前位置？')),
-                children: [
+        : await ask<String>(
+            title: tr("Use which robot's current position?", '使用哪台机器人的当前位置？'),
+            choices: [
               for (final r in robots)
-                SimpleDialogOption(
-                    key: Key('intercept-robot-${r['robot_id']}'),
-                    onPressed: () => Navigator.pop(c, '${r['robot_id']}'),
-                    child: Text('${r['robot_id']}')),
-            ]),
-          );
+                AskChoice('${r['robot_id']}', '${r['robot_id']}', key: Key('intercept-robot-${r['robot_id']}')),
+            ]);
     if (robot == null || !mounted) return;
-    final got = await showFieldsDialog(context,
+    final got = await askFields(
         title: tr("Set intercept point at $robot's current position", '在 $robot 现在的位置设拦截点'),
         fields: [
           DialogField(tr('Intercept point name (letters, digits, . _ -)', '拦截点名字（字母、数字、. _ -）'))
@@ -126,58 +121,34 @@ class _SiteInterceptsPageState extends State<SiteInterceptsPage> {
     }
     String? point = '${_points.first['name']}';
     final zone = TextEditingController();
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (c) => StatefulBuilder(
-        builder: (c, set) => AlertDialog(
-          scrollable: true, // 横屏弹键盘
-          title: Text(tr('Link zone to intercept point', '关联防区与拦截点')),
-          content: Column(mainAxisSize: MainAxisSize.min, children: [
-            TextField(
-                key: const Key('zone-name'),
-                controller: zone,
-                decoration: InputDecoration(
-                    labelText: tr('Zone name (same as the camera or NVR reports)',
-                        '防区名（与摄像头、NVR 上报的一致）'))),
-            DropdownButton<String>(
-              key: const Key('zone-intercept'),
-              isExpanded: true,
-              value: point,
-              items: [
-                for (final p in _points)
-                  DropdownMenuItem(value: '${p['name']}', child: Text('${p['name']}')),
-              ],
-              onChanged: (v) => set(() => point = v),
-            ),
-          ]),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(c, false), child: Text(tr('Cancel', '取消'))),
-            FilledButton(
-                key: const Key('zone-go'),
-                onPressed: () => Navigator.pop(c, true),
-                child: Text(tr('Link', '关联'))),
-          ],
-        ),
-      ),
-    );
+    final ok = await askYes(tr('Link zone to intercept point', '关联防区与拦截点'),
+        content: StatefulBuilder(
+            builder: (c, set) => Column(mainAxisSize: MainAxisSize.min, children: [
+                  TextField(
+                      key: const Key('zone-name'),
+                      controller: zone,
+                      decoration: InputDecoration(
+                          labelText: tr('Zone name (same as the camera or NVR reports)', '防区名（与摄像头、NVR 上报的一致）'))),
+                  DropdownButton<String>(
+                    key: const Key('zone-intercept'),
+                    isExpanded: true,
+                    value: point,
+                    items: [
+                      for (final p in _points) DropdownMenuItem(value: '${p['name']}', child: Text('${p['name']}')),
+                    ],
+                    onChanged: (v) => set(() => point = v),
+                  ),
+                ])),
+        ok: tr('Link', '关联'),
+        okKey: const Key('zone-go'));
     final z = zone.text.trim();
-    if (ok != true || z.isEmpty || point == null) return;
+    if (!ok || z.isEmpty || point == null) return;
     await _run(() => widget.api.mapZone(z, point!),
         tr('Link zone $z to $point', '将防区 $z 关联到 $point'));
   }
 
   Future<void> _confirm(String title, Future<void> Function() go, Key key) async {
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (c) => AlertDialog(
-        title: Text(title),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(c, false), child: Text(tr('Cancel', '取消'))),
-          FilledButton(key: key, onPressed: () => Navigator.pop(c, true), child: Text(tr('Yes', '是'))),
-        ],
-      ),
-    );
-    if (ok == true) await go();
+    if (await askYes(title, ok: tr('Yes', '是'), okKey: key, danger: true)) await go();
   }
 
   @override
@@ -199,6 +170,7 @@ class _SiteInterceptsPageState extends State<SiteInterceptsPage> {
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : NwListView(children: [
+              askStrip(margin: const EdgeInsets.only(bottom: Nw.s16)),
               if (_msg.isNotEmpty) ...[
                 // 刚做的那一步成没成（Key 在 Text 上）
                 Container(

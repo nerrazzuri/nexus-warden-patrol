@@ -19,6 +19,7 @@ import '../l10n.dart';
 import '../net/site_client.dart';
 import '../net/site_text.dart';
 import 'map_view.dart';
+import 'nw/nw_ask.dart';
 import 'nw/nw_button.dart';
 import 'nw/nw_map_raster.dart';
 import 'nw/nw_p4_admin.dart';
@@ -114,7 +115,7 @@ class SiteRoutesPage extends StatefulWidget {
   State<SiteRoutesPage> createState() => _SiteRoutesPageState();
 }
 
-class _SiteRoutesPageState extends State<SiteRoutesPage> {
+class _SiteRoutesPageState extends State<SiteRoutesPage> with NwAsk {
   List<Map<String, dynamic>> _maps = const [];
   Map<String, dynamic>? _sel;
   Map<String, dynamic>? _view;
@@ -230,7 +231,7 @@ class _SiteRoutesPageState extends State<SiteRoutesPage> {
       _allIds = {for (final r in _routes) '${r['id']}'};
     }
     if (!mounted) return;
-    final got = await showFieldsDialog(context,
+    final got = await askFields(
         title: tr('New route', '新路线'),
         fields: [
           DialogField(tr('Route name (any language)', '路线名（可以写中文）'),
@@ -274,6 +275,7 @@ class _SiteRoutesPageState extends State<SiteRoutesPage> {
         body: _loading
             ? const Center(child: CircularProgressIndicator())
             : ListView(padding: const EdgeInsets.only(bottom: Nw.s24), children: [
+                askStrip(),
                 if (_error != null)
                   Padding(
                       padding: const EdgeInsets.all(Nw.s16),
@@ -403,7 +405,7 @@ class SiteRouteEditorPage extends StatefulWidget {
   State<SiteRouteEditorPage> createState() => _SiteRouteEditorPageState();
 }
 
-class _SiteRouteEditorPageState extends State<SiteRouteEditorPage> {
+class _SiteRouteEditorPageState extends State<SiteRouteEditorPage> with NwAsk {
   late final Future<(Map<String, dynamic>, Uint8List, bool)> _data = _load();
   final TransformationController _zoom = TransformationController();
   late String _id;
@@ -607,25 +609,19 @@ class _SiteRouteEditorPageState extends State<SiteRouteEditorPage> {
       // 读不到今天的巡逻：照旧问
     }
     if (!mounted) return;
-    final ok = await showDialog<bool>(
-        context: context,
-        builder: (c) => AlertDialog(
-              title: Text(tr('Delete route $_id?', '删除路线 $_id？')),
-              content: Text([
-                if (running.isNotEmpty)
-                  tr('${running.join(', ')} is on this route right now. Deleting it stops that run.',
-                      '${running.join('、')} 正在跑这条路线，删掉它会让这一趟停下。'),
-                tr('Schedules that use it must be removed first.', '请先删除使用此路线的排程。'),
-              ].join('\n\n'), key: SiteRouteEditorPage.deleteWarnKey),
-              actions: [
-                TextButton(onPressed: () => Navigator.pop(c, false), child: Text(tr('Cancel', '取消'))),
-                FilledButton(
-                    key: SiteRouteEditorPage.deleteOkKey,
-                    onPressed: () => Navigator.pop(c, true),
-                    child: Text(tr('Delete', '删除'))),
-              ],
-            ));
-    if (ok != true || !mounted) return;
+    final ok = await askYes(tr('Delete route $_id?', '删除路线 $_id？'),
+        content: Text(
+            [
+              if (running.isNotEmpty)
+                tr('${running.join(', ')} is on this route right now. Deleting it stops that run.',
+                    '${running.join('、')} 正在跑这条路线，删掉它会让这一趟停下。'),
+              tr('Schedules that use it must be removed first.', '请先删除使用此路线的排程。'),
+            ].join('\n\n'),
+            key: SiteRouteEditorPage.deleteWarnKey),
+        ok: tr('Delete', '删除'),
+        okKey: SiteRouteEditorPage.deleteOkKey,
+        danger: true);
+    if (!ok || !mounted) return;
     try {
       await widget.api.deleteRoute(_id, _revision);
       if (mounted) Navigator.pop(context);
@@ -652,15 +648,9 @@ class _SiteRouteEditorPageState extends State<SiteRouteEditorPage> {
       setState(() => _msg = tr('No robot can patrol right now', '当前没有可巡逻的机器人'));
       return;
     }
-    final id = await showDialog<String>(
-        context: context,
-        builder: (c) => SimpleDialog(title: Text(tr('Send $_id to which robot', '将 $_id 派给哪台机器人')), children: [
-              for (final r in robots)
-                SimpleDialogOption(
-                    key: Key('route-send-${r['robot_id']}'),
-                    onPressed: () => Navigator.pop(c, '${r['robot_id']}'),
-                    child: Text('${r['robot_id']}')),
-            ]));
+    final id = await ask<String>(title: tr('Send $_id to which robot', '将 $_id 派给哪台机器人'), choices: [
+      for (final r in robots) AskChoice('${r['robot_id']}', '${r['robot_id']}', key: Key('route-send-${r['robot_id']}')),
+    ]);
     if (id == null || !mounted) return;
     // POC 第 5 项：派之前先看预计多久、派给谁、现在走还是排在日程后面；确认了才派
     Map<String, dynamic> plan;
@@ -675,27 +665,18 @@ class _SiteRouteEditorPageState extends State<SiteRouteEditorPage> {
     final queued = plan['queued'] == true;
     final off = (plan['utc_offset_min'] as num?)?.toInt();
     final at = plan['start_ms'];
-    final go = await showDialog<bool>(
-        context: context,
-        builder: (c) => AlertDialog(
-              title: Text(tr('Send $_id to $id', '派 $id 巡逻 $_id')),
-              content: Text([
-                if (est is num) tr('Takes ${minutesText(est)} (back to standby included)', '预计${minutesText(est)}（含回待命点）'),
-                if (queued)
-                  tr('A schedule comes first: it starts after ${at is num ? hhmm(at.toInt(), off) : '?'} ${plan['because'] ?? ''}',
-                      '日程优先：${at is num ? hhmm(at.toInt(), off) : '?'} 之后开始 ${plan['because'] ?? ''}')
-                else
-                  tr('Starts now', '现在就走'),
-              ].join('\n')),
-              actions: [
-                TextButton(onPressed: () => Navigator.pop(c, false), child: Text(tr('Cancel', '取消'))),
-                FilledButton(
-                    key: const Key('route-send-go'),
-                    onPressed: () => Navigator.pop(c, true),
-                    child: Text(queued ? tr('Queue it', '排队派出') : tr('Send', '派出'))),
-              ],
-            ));
-    if (go != true || !mounted) return;
+    final go = await askYes(tr('Send $_id to $id', '派 $id 巡逻 $_id'),
+        body: [
+          if (est is num) tr('Takes ${minutesText(est)} (back to standby included)', '预计${minutesText(est)}（含回待命点）'),
+          if (queued)
+            tr('A schedule comes first: it starts after ${at is num ? hhmm(at.toInt(), off) : '?'} ${plan['because'] ?? ''}',
+                '日程优先：${at is num ? hhmm(at.toInt(), off) : '?'} 之后开始 ${plan['because'] ?? ''}')
+          else
+            tr('Starts now', '现在就走'),
+        ].join('\n'),
+        ok: queued ? tr('Queue it', '排队派出') : tr('Send', '派出'),
+        okKey: const Key('route-send-go'));
+    if (!go || !mounted) return;
     try {
       final r = await widget.api.patrol(id, _id);
       if (r['queued'] == true) {
@@ -882,6 +863,7 @@ class _SiteRouteEditorPageState extends State<SiteRouteEditorPage> {
     return Material(
         color: c.surface,
         child: ListView(padding: const EdgeInsets.all(Nw.s16), children: [
+          askStrip(margin: const EdgeInsets.only(bottom: Nw.s16)),
           Text(tr('Points are measured on map version ${widget.version}. A new map version needs its own route.',
               '这些点基于地图第 ${widget.version} 版。地图更新后需重新绘制路线。'),
               style: sub),

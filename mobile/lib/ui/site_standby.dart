@@ -9,6 +9,7 @@ import 'package:flutter/material.dart';
 
 import '../l10n.dart';
 import '../net/site_client.dart';
+import 'nw/nw_ask.dart';
 import 'nw/nw_theme.dart';
 import 'nw/nw_widgets.dart';
 import 'widget/bar_actions.dart';
@@ -45,7 +46,7 @@ class SiteStandbyPage extends StatefulWidget {
   State<SiteStandbyPage> createState() => _SiteStandbyPageState();
 }
 
-class _SiteStandbyPageState extends State<SiteStandbyPage> {
+class _SiteStandbyPageState extends State<SiteStandbyPage> with NwAsk {
   List<Map<String, dynamic>> _points = const [];
   List<Map<String, dynamic>> _homes = const [];
   String _msg = '';
@@ -100,45 +101,28 @@ class _SiteStandbyPageState extends State<SiteStandbyPage> {
   Future<void> _here() async {
     final name = TextEditingController();
     var isDefault = _points.isEmpty;
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (c) => StatefulBuilder(
-        builder: (c, set) => AlertDialog(
-          scrollable: true, // 横屏时键盘占掉一大半高：整个对话框能滚（同 fields_dialog）
-          title: Text(tr('Set standby point here', '在这儿设待命点')),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(tr(
-                "Sets the robot's current position as a standby point (origin unchanged). Not possible if the position isn't set, the error is large, or a task is running.",
-                '将机器人当前位置设为待命点（原点不变）。未设置位置、偏差过大或执行任务时无法设置。',
-              )),
-              TextField(
-                key: SiteStandbyPage.nameKey,
-                controller: name,
-                decoration: InputDecoration(
-                    labelText: tr('Name (letters, digits, . _ -)', '名字（字母、数字、. _ -）')),
-              ),
-              CheckboxListTile(
-                key: SiteStandbyPage.defaultKey,
-                contentPadding: EdgeInsets.zero,
-                value: isDefault,
-                onChanged: (v) => set(() => isDefault = v ?? false),
-                title: Text(tr('Make default (the robot returns here after a task)', '设为默认（任务结束后返回此处）')),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(c, false), child: Text(tr('Cancel', '取消'))),
-            FilledButton(
-              key: SiteStandbyPage.goKey,
-              onPressed: () => Navigator.pop(c, true),
-              child: Text(tr('Set', '设置')),
-            ),
-          ],
-        ),
-      ),
-    );
+    // App V2：页内问，不弹窗
+    final ok = await askYes(tr('Set standby point here', '在这儿设待命点'),
+        body: tr(
+            "Sets the robot's current position as a standby point (origin unchanged). Not possible if the position isn't set, the error is large, or a task is running.",
+            '将机器人当前位置设为待命点（原点不变）。未设置位置、偏差过大或执行任务时无法设置。'),
+        content: StatefulBuilder(
+            builder: (c, set) => Column(mainAxisSize: MainAxisSize.min, children: [
+                  TextField(
+                    key: SiteStandbyPage.nameKey,
+                    controller: name,
+                    decoration: InputDecoration(labelText: tr('Name (letters, digits, . _ -)', '名字（字母、数字、. _ -）')),
+                  ),
+                  CheckboxListTile(
+                    key: SiteStandbyPage.defaultKey,
+                    contentPadding: EdgeInsets.zero,
+                    value: isDefault,
+                    onChanged: (v) => set(() => isDefault = v ?? false),
+                    title: Text(tr('Make default (the robot returns here after a task)', '设为默认（任务结束后返回此处）')),
+                  ),
+                ])),
+        ok: tr('Set', '设置'),
+        okKey: SiteStandbyPage.goKey);
     final n = name.text.trim();
     if (ok != true || n.isEmpty) return;
     await _run(() => widget.api.standbyHere(widget.robotId, n, isDefault: isDefault),
@@ -146,21 +130,9 @@ class _SiteStandbyPageState extends State<SiteStandbyPage> {
   }
 
   Future<void> _remove(String n) async {
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (c) => AlertDialog(
-        title: Text(tr('Delete standby point $n?', '删除待命点 $n？')),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(c, false), child: Text(tr('Cancel', '取消'))),
-          FilledButton(
-            key: Key('standby-remove-go-$n'),
-            onPressed: () => Navigator.pop(c, true),
-            child: Text(tr('Delete', '删除')),
-          ),
-        ],
-      ),
-    );
-    if (ok == true) {
+    final ok = await askYes(tr('Delete standby point $n?', '删除待命点 $n？'),
+        ok: tr('Delete', '删除'), okKey: Key('standby-remove-go-$n'), danger: true);
+    if (ok) {
       await _run(() => widget.api.removeStandby(widget.robotId, n),
           tr('Delete standby point $n', '删除待命点 $n'));
     }
@@ -172,25 +144,14 @@ class _SiteStandbyPageState extends State<SiteStandbyPage> {
 
   /// W13：狗现在站的地方登记成充电桩对准点（领到桩前约 1.5 米、正对桩）。
   Future<void> _charger() async {
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (c) => AlertDialog(
-        scrollable: true,
-        title: Text(tr("Set the robot's current position as the dock alignment point?",
-            '把机器人现在的位置设成充电桩对准点？')),
-        content: Text(tr(
+    final ok = await askYes(
+        tr("Set the robot's current position as the dock alignment point?", '把机器人现在的位置设成充电桩对准点？'),
+        body: tr(
             'Lead the robot to about 1.5 m in front of the dock, facing it. Below 30% battery it docks to charge automatically.',
-            '请将机器人引导到充电桩正前方约 1.5 米处，朝向充电桩。电量低于 30% 时将自动回充。')),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(c, false), child: Text(tr('Cancel', '取消'))),
-          FilledButton(
-              key: const Key('standby-charger-go'),
-              onPressed: () => Navigator.pop(c, true),
-              child: Text(tr('Set', '设置'))),
-        ],
-      ),
-    );
-    if (ok != true) return;
+            '请将机器人引导到充电桩正前方约 1.5 米处，朝向充电桩。电量低于 30% 时将自动回充。'),
+        ok: tr('Set', '设置'),
+        okKey: const Key('standby-charger-go'));
+    if (!ok) return;
     String msg;
     try {
       final d = await widget.api.setChargerHere(widget.robotId);
@@ -232,6 +193,7 @@ class _SiteStandbyPageState extends State<SiteStandbyPage> {
           : ListView(
               padding: const EdgeInsets.all(Nw.s16),
               children: [
+                askStrip(margin: const EdgeInsets.only(bottom: Nw.s16)),
                 if (_msg.isNotEmpty)
                   Padding(
                       padding: const EdgeInsets.only(bottom: Nw.s16),
