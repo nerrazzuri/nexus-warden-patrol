@@ -1081,7 +1081,7 @@ class Server:
             detail=f"{why}(那一趟留在机器人上,不会自己删)")
         self.api = SiteApi(host=api_host, port=api_port, loop=self.loop,
                            dispatcher=self.dispatcher, accounts=self.accounts, tls=tls,
-                           scheduler=self.scheduler, standby=self.standby,
+                           scheduler=self.scheduler, standby=self.standby, look=self.look,
                            incidents=self.incidents, alerts=self.alerts, video=self.video,
                            teleop=self.teleop, runs=self.runs, backup=self.backup,
                            maps=self.maps, releases=self.releases,
