@@ -159,6 +159,8 @@ class _RingPageState extends State<RingPage> {
     if (_left || !mounted) return;
     _left = true;
     _finish();
+    // 外审 App-V2-5 R1：下面还压着别的报警页也要收（登录页要在锁屏下面）
+    if (_live.isNotEmpty) unawaited(widget.done());
     Navigator.of(context).pop();
     widget.onSignIn?.call();
   }
