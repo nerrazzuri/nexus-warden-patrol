@@ -6,7 +6,7 @@ import { api, ApiError } from "./api";
 import { robotNames } from "./data";
 import { Confirm, Modal } from "./dialogs";
 import { siteStr } from "./sitetext";
-import { colon, joinList, lang, type Lang } from "./i18n";
+import { colon, joinList, lang, t, type Lang } from "./i18n";
 import { LayoutPage } from "./layoutpage";
 import { GuardRoutesTab } from "./layoutroutes";
 import { ZonesTab } from "./layoutzones";
@@ -25,7 +25,7 @@ type Say = (s: string) => void;
 
 const en = {
   title: "Arming wizard",
-  lead: "Set up what the robots do while armed, step by step from the start. Nothing is changed until you confirm it.",
+  lead: "Set up what the robots do while armed, step by step from the start. Each step is saved when you finish it; closing the wizard keeps what was saved.",
   s1: "Zones", s2: "Patrol route", s3: "When to arm", s4: "Who patrols", s5: "Confirm",
   map: "Map: {map} v{ver}",
   zonesHave: "Zones on this map: {list}",
@@ -99,7 +99,7 @@ const en = {
   dropArming: "This page has unsaved arming-time changes. The wizard may change arming times too, so these changes will be discarded.",
   dropYes: "Discard",
   timeGoOn: "Save these times",
-  schedOverwrite: "This replaces the current arming times ({n} blocks a week).",
+  schedOverwrite: "This replaces the current arming times ({n} blocks a week): {list}.",
   schedOffAsk: "This turns off the current arming timetable ({n} blocks a week); you arm and disarm by hand.",
   schedPickOne: "Choose one.",
   planOverwrite: "The guard plan already has: {list}. Replace it with “{route}” ({robot})?",
@@ -109,7 +109,7 @@ const en = {
 type WKey = keyof typeof en;
 const zh: Record<WKey, string> = {
   title: "布防向导",
-  lead: "从头一步步设置布防时机器人做什么。确认之前不会改动任何设置。",
+  lead: "从头一步步设置布防时机器人做什么。每一步做完就保存；中途关掉，已保存的保留。",
   s1: "防区", s2: "巡逻路线", s3: "什么时候布防", s4: "谁去巡逻", s5: "确认",
   map: "地图：{map} 第 {ver} 版",
   zonesHave: "这张图上的防区：{list}",
@@ -183,7 +183,7 @@ const zh: Record<WKey, string> = {
   dropArming: "这页的布防时间还有没保存的修改。布防向导也会改布防时间，打开向导会丢掉这些修改。",
   dropYes: "丢掉",
   timeGoOn: "保存这个时间",
-  schedOverwrite: "会替换现在的布防时间（每周 {n} 段）。",
+  schedOverwrite: "会替换现在的布防时间（每周 {n} 段）：{list}。",
   schedOffAsk: "会关掉现在的布防时间表（每周 {n} 段），改成自己手动布防、撤防。",
   schedPickOne: "请选一项。",
   planOverwrite: "值守方案里已经有：{list}。换成「{route}」（{robot}）吗？",
@@ -275,6 +275,25 @@ export function afterLines(entries: GuardEntry[], st: Status, title: (route: str
   return [out, all];
 }
 
+const DAY_KEYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"] as const;
+
+/** 现在的布防时间写成一行(覆盖前给人看):同一时段的几天并一起,如「周一、周二 22:00–24:00；周二 00:00–06:00」。 */
+export function slotsText(slots: WireSlot[]): string {
+  const zh = lang.value === "zh";
+  const groups = new Map<string, number[]>();
+  for (const x of slots) {
+    const k = `${x.zone ? `${x.zone} ` : ""}${x.start}–${x.end}`;
+    groups.set(k, [...(groups.get(k) ?? []), x.day]);
+  }
+  return [...groups.entries()]
+    .map(([k, days]) => {
+      const ds = [...new Set(days)].sort((a, b) => a - b);
+      const d = ds.length === 7 ? t("everyDay") : ds.map((i) => t(DAY_KEYS[i] ?? "mon")).join(zh ? "、" : ", ");
+      return `${d} ${k}`;
+    })
+    .join(zh ? "；" : "; ");
+}
+
 /** 每天 from–to 布防(跨半夜的拆成两段),全部防区一样。 */
 export function dailySlots(from: number, to: number): WireSlot[] {
   let s: Slot[] = [];
@@ -343,7 +362,12 @@ export function ArmWizard({ say, onClose, arming = false, onChanged }: { say: Sa
       setR(got);
       setPlan(p);
       setSched(s);
-      setRoute((cur) => (got.routes.some((x) => x.id === cur && x.zones.length) ? cur : ""));
+      // 笔记本复测 11-15:只有一条能用的路线就默认选上
+      setRoute((cur) => {
+        if (got.routes.some((x) => x.id === cur && x.zones.length)) return cur;
+        const ok = got.routes.filter((x) => x.zones.length);
+        return ok.length === 1 ? ok[0].id : "";
+      });
       if (first) {
         setStep(0);
         setStarted(true);
@@ -437,7 +461,7 @@ export function ArmWizard({ say, onClose, arming = false, onChanged }: { say: Sa
       const warn = previewChanges(p.before, p.after);
       // 用户 11-15:要覆盖现在的布防时间先问
       const n = sched.enabled ? sched.slots.length : 0;
-      const over = n === 0 ? "" : wt(time === "manual" ? "schedOffAsk" : "schedOverwrite", { n });
+      const over = n === 0 ? "" : wt(time === "manual" ? "schedOffAsk" : "schedOverwrite", { n, list: slotsText(sched.slots) });
       const ask = [over, warn].filter(Boolean).join(" ");
       if (ask) { setAskTime({ text: ask, body }); return false; }
       await putTime(body);
@@ -499,6 +523,7 @@ export function ArmWizard({ say, onClose, arming = false, onChanged }: { say: Sa
       await api("POST", "/api/mode", { mode: "armed" });
       say(wt("armed"));
       setArmedOk(true);
+      onChanged?.();
       if (!withPatrol) { onClose(); return; }
       setAfter(wt("watching"));
       // 布防后十几秒内说清楚:谁出发了,或者为什么没出发

@@ -144,9 +144,9 @@ describe("值班 · 中间", () => {
   it("三台以上:多画面,每台一格(大画面 + 小画面),全摆出来、能滚;没有固定按钮", () => {
     const c = page([], "guard", ["A", "B", "C", "D"].map((id) => unit(id, "patrolling")));
     expect(Array.from(c.querySelectorAll(".mon-video-h .seg button")).map((b) => b.textContent)).toEqual(["多画面", "监控墙"]);
-    expect(c.querySelectorAll(".mon-tiles.multi > .slot").length).toBe(4);
-    expect(c.querySelectorAll(".mon-tiles.multi .slot-pip").length).toBe(4);
-    expect(c.querySelector(".mon-tiles.multi .slot-pin")).toBeNull();
+    expect(c.querySelectorAll(".mon-tiles.many > .slot").length).toBe(4);
+    expect(c.querySelectorAll(".mon-tiles.many .slot-pip").length).toBe(4);
+    expect(c.querySelector(".mon-tiles.many .slot-pin")).toBeNull();
   });
 
   it("全部急停后:写几台已急停,保安有「全部恢复…」", () => {
