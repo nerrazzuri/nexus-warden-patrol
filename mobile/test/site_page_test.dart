@@ -14,7 +14,7 @@ import 'package:nexwar_patrol/ui/nw/nw_widgets.dart' show NwStatusPill;
 import 'package:nexwar_patrol/ui/patrol_dispatch.dart';
 import 'package:nexwar_patrol/ui/refusal.dart';
 import 'package:nexwar_patrol/ui/site_page.dart';
-import 'package:nexwar_patrol/ui/site_tabs.dart' show MeTab, leaveConfirmKey;
+import 'package:nexwar_patrol/ui/site_tabs.dart' show leaveConfirmKey;
 import 'package:nexwar_patrol/ui/site_teleop.dart' show SiteTeleopPage;
 import 'package:nexwar_patrol/ui/site_video.dart';
 import 'package:nexwar_patrol/ui/widget/live_video.dart';
@@ -23,6 +23,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'support/fake_site.dart';
 import 'support/shell_nav.dart';
+import 'package:nexwar_patrol/ui/nw/nw_now.dart';
 import 'package:nexwar_patrol/ui/nw/nw_site_dir.dart';
 
 /// 1×1 的 PNG：照片解得出来（测试里的图片解码认真的）。
@@ -1553,10 +1554,8 @@ void main() {
       await t.pumpAndSettle();
       // App V2：登录进去是「现在 | 现场」外壳，机器人列表在现场目录里
       expect(find.byType(NwShell), findsOneWidget);
-      await openSiteDir(t, SiteDest.robots);
-      expect(find.byType(SiteRobotsPage), findsOneWidget);
-      await t.tap(find.byKey(NwShell.backKey));
-      await t.pumpAndSettle();
+      expect(find.byType(NowPage), findsOneWidget, reason: '保安进来是「现在」;机器人在「现在」页的格子上');
+      await openSite(t);
       // W55：推送状态在「设置」页（现场 → 本机 → 设置）
       await openDir(t, SiteDest.settings);
       final tip = find.byKey(AppSettingsPage.pushKey);

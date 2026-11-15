@@ -8,7 +8,6 @@ import 'package:nexwar_patrol/ui/site_health.dart';
 import 'package:nexwar_patrol/ui/site_page.dart';
 import 'package:nexwar_patrol/ui/nw/nw_theme.dart';
 import 'package:nexwar_patrol/ui/widget/alarm_widgets.dart';
-import 'package:nexwar_patrol/ui/site_tabs.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show MissingPluginException;
 import 'package:flutter_test/flutter_test.dart';

@@ -1,7 +1,6 @@
 // 站点模式的版本（W00c5d 第三部分）：管理员给狗装、切、退；切、退要确认；别的角色只看。
 import 'package:nexwar_patrol/ui/site_page.dart';
 import 'package:nexwar_patrol/ui/site_releases.dart';
-import 'package:nexwar_patrol/ui/site_tabs.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
