@@ -57,13 +57,11 @@ describe("授权和临时撤防页", () => {
   });
 
   it("不重复的授权只占那一天", async () => {
-    const { container: c } = page();
-    await waitFor(() => expect(btn(c, "添加授权")).toBeTruthy());
-    fireEvent.click(btn(c, "添加授权"));
-    const f = document.querySelector("form.acc-add")!;
+    page();
+    const f = await waitFor(() => { const x = document.querySelector('form.acc-add:has([data-scope="zones"]:not([disabled]))'); expect(x).not.toBeNull(); return x!; });
     fireEvent.input(f.querySelector('input[name="who"]')!, { target: { value: "客人" } });
-    fireEvent.click(f.querySelectorAll('input[name="scope"]')[0]);       // P1-62:范围要自己选
-    fireEvent.click(f.querySelector('input[name="repeat"]')!);          // 关掉每周重复
+    fireEvent.click(f.querySelector('[data-scope="site"]')!);       // P1-62:范围要自己选
+    fireEvent.click(f.querySelector('[data-repeat="0"]')!);            // 单日,不每周重复
     fireEvent.input(f.querySelector('input[name="date"]')!, { target: { value: "2026-10-30" } });
     fireEvent.submit(f);
     await waitFor(() => expect(posted.some((p) => p.url === "/api/lists/authorizations")).toBe(true));
@@ -74,13 +72,11 @@ describe("授权和临时撤防页", () => {
   });
 
   it("每周重复按选的星期", async () => {
-    const { container: c } = page();
-    await waitFor(() => expect(btn(c, "添加授权")).toBeTruthy());
-    fireEvent.click(btn(c, "添加授权"));
-    const f = document.querySelector("form.acc-add")!;
+    page();
+    const f = await waitFor(() => { const x = document.querySelector('form.acc-add:has([data-scope="zones"]:not([disabled]))'); expect(x).not.toBeNull(); return x!; });
     fireEvent.input(f.querySelector('input[name="who"]')!, { target: { value: "维修工" } });
-    fireEvent.click(f.querySelectorAll('input[name="scope"]')[0]);       // P1-62:范围要自己选
-    fireEvent.click(f.querySelector('input[name="day1"]')!);            // 默认工作日;再勾上星期二以外的都不动
+    fireEvent.click(f.querySelector('[data-scope="site"]')!);       // P1-62:范围要自己选
+    fireEvent.click(f.querySelector('button[name="day1"]')!);            // 默认工作日;再勾上星期二以外的都不动
     fireEvent.submit(f);
     await waitFor(() => expect(posted.some((p) => p.url === "/api/lists/authorizations")).toBe(true));
     const b = posted.find((p) => p.url === "/api/lists/authorizations")!.body;
@@ -90,6 +86,8 @@ describe("授权和临时撤防页", () => {
 
   it("开始临时撤防带防区和小时", async () => {
     const { container: c } = page();
+    await waitFor(() => expect(btn(c, "按防区临时撤防…")).toBeTruthy());
+    fireEvent.click(btn(c, "按防区临时撤防…"));
     await waitFor(() => expect(c.querySelector(".acc-visitor")!.textContent).toContain("北区"));
     fireEvent.click(c.querySelector('.acc-visitor input[value="北区"]')!);
     fireEvent.change(c.querySelector('.acc-visitor select[name="hours"]')!, { target: { value: "2" } });
@@ -104,6 +102,8 @@ describe("授权和临时撤防页", () => {
   it("第 2 轮 config N8:开始后说撤了哪儿、到几点,不只「已保存」", async () => {
     const said: string[] = [];
     const { container: c } = render(<AccessPage say={(s: string) => said.push(s)} now={at(10)} />);
+    await waitFor(() => expect(btn(c, "按防区临时撤防…")).toBeTruthy());
+    fireEvent.click(btn(c, "按防区临时撤防…"));
     await waitFor(() => expect(c.querySelector(".acc-visitor")!.textContent).toContain("北区"));
     fireEvent.click(c.querySelector('.acc-visitor input[value="北区"]')!);
     fireEvent.click(btn(c, "开始临时撤防"));
@@ -113,6 +113,8 @@ describe("授权和临时撤防页", () => {
 
   it("网页易用性第 1 轮 P0-09:没选防区不能开始", async () => {
     const { container: c } = page();
+    await waitFor(() => expect(btn(c, "按防区临时撤防…")).toBeTruthy());
+    fireEvent.click(btn(c, "按防区临时撤防…"));
     await waitFor(() => expect(c.querySelector(".acc-visitor")!.textContent).toContain("北区"));
     expect(btn(c, "开始临时撤防").disabled).toBe(true);
     expect(c.querySelector(".acc-visitor")!.textContent).toContain("至少选一个防区");
@@ -129,12 +131,10 @@ describe("授权和临时撤防页", () => {
 
 describe("网页易用性第 1 轮 P1-62", () => {
   it("有防区时范围不默认全站;不选不发;时间是 24 小时制", async () => {
-    const { container: c } = page();
-    await waitFor(() => expect(btn(c, "添加授权")).toBeTruthy());
-    fireEvent.click(btn(c, "添加授权"));
-    const f = document.querySelector("form.acc-add") as HTMLFormElement;
+    page();
+    const f = await waitFor(() => { const x = document.querySelector('form.acc-add:has([data-scope="zones"]:not([disabled]))'); expect(x).not.toBeNull(); return x as HTMLFormElement; });
     fireEvent.input(f.querySelector('input[name="who"]')!, { target: { value: "客人" } });
-    expect(Array.from(f.querySelectorAll('input[name="scope"]')).some((r) => (r as HTMLInputElement).checked)).toBe(false);
+    expect(f.querySelector('[data-scope][aria-pressed="true"]')).toBeNull();
     fireEvent.submit(f);
     await new Promise((r) => setTimeout(r, 20));
     expect(posted.some((p) => p.url === "/api/lists/authorizations")).toBe(false);
