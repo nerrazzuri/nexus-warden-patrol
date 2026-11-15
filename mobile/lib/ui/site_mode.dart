@@ -17,6 +17,7 @@ import 'package:flutter/material.dart';
 
 import '../l10n.dart';
 import '../net/site_client.dart';
+import 'nw/nw_ask.dart';
 import 'nw/nw_button.dart';
 import 'nw/nw_p2_duty.dart';
 import 'nw/nw_theme.dart';
@@ -88,7 +89,7 @@ class SiteModePage extends StatefulWidget {
 /// 临时撤防能挑的时长（小时）。
 const List<int> visitorHours = <int>[1, 2, 4, 8, 12, 24];
 
-class _SiteModePageState extends State<SiteModePage> {
+class _SiteModePageState extends State<SiteModePage> with NwAsk {
   Map<String, dynamic>? _mode;
   String _msg = '';
   StreamSubscription<Map<String, dynamic>>? _sub;
@@ -175,21 +176,12 @@ class _SiteModePageState extends State<SiteModePage> {
   /// 从布防切出去之前问一句（M07：以前不确认，只提示「切换为留守：完成」）。
   Future<bool> _leaveArmed(String now) async {
     if (now != 'armed') return true;
-    final ok = await showDialog<bool>(
-        context: context,
-        builder: (c) => AlertDialog(
-              content: Text(tr(
-                  'Leave Armed? Zones that are disarmed in Stay stop dispatching robots and ringing.',
-                  '退出布防？「留守时撤防」的防区发生入侵时，不派机器人、不响铃。')),
-              actions: [
-                TextButton(onPressed: () => Navigator.pop(c, false), child: Text(tr('Cancel', '取消'))),
-                FilledButton(
-                    key: SiteModePage.leaveArmedKey,
-                    onPressed: () => Navigator.pop(c, true),
-                    child: Text(tr('Leave Armed', '退出布防'))),
-              ],
-            ));
-    return ok == true && mounted;
+    final ok = await askYes(tr('Leave Armed?', '退出布防？'),
+        body: tr('Zones that are disarmed in Stay stop dispatching robots and ringing.',
+            '「留守时撤防」的防区发生入侵时，不派机器人、不响铃。'),
+        ok: tr('Leave Armed', '退出布防'),
+        okKey: SiteModePage.leaveArmedKey);
+    return ok && mounted;
   }
 
   Future<void> _toHome(String now) async {
@@ -209,45 +201,36 @@ class _SiteModePageState extends State<SiteModePage> {
     final picked = <String>{};
     var hours = 4;
     final zones = _zones.map((z) => '${z['zone']}').toList();
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (c) => StatefulBuilder(
-        builder: (c, set) => AlertDialog(
-          scrollable: true, // 横屏
-          title: Text(tr('Temporary disarm', '临时撤防')),
-          content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-            // 手机 App 测试 M07：原来标题一长句、超出右边；说明挪到正文
-            Text(tr('Works like Stay. Also disarm these zones for a while:', '跟「留守」一样，另外再撤防这些防区一段时间：')),
-            const SizedBox(height: Nw.s8),
-            if (zones.isEmpty) Text(tr('No zones yet (disarms as in Stay only)', '暂无防区（仅按「留守」撤防）')),
-            Wrap(spacing: 6, children: [
-              for (final z in zones)
-                FilterChip(
-                  key: Key('visitor-zone-$z'),
-                  label: Text(z),
-                  selected: picked.contains(z),
-                  onSelected: (v) => set(() => v ? picked.add(z) : picked.remove(z)),
-                ),
-            ]),
-            Wrap(crossAxisAlignment: WrapCrossAlignment.center, children: [
-              Text(tr('Duration: ', '时长：')),
-              DropdownButton<int>(
-                key: const Key('visitor-hours'),
-                value: hours,
-                items: [for (final h in visitorHours) DropdownMenuItem(value: h, child: Text(tr('$h h', '$h 小时')))],
-                onChanged: (v) => set(() => hours = v ?? hours),
-              ),
-              Text(tr(', then reverts automatically', '，到期自动恢复')),
-            ]),
-          ]),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(c, false), child: Text(tr('Cancel', '取消'))),
-            FilledButton(key: const Key('visitor-go'), onPressed: () => Navigator.pop(c, true), child: Text(tr('Start temp disarm', '开始临时撤防'))),
-          ],
-        ),
-      ),
-    );
-    if (ok != true) return;
+    final ok = await askYes(tr('Temporary disarm', '临时撤防'),
+        content: StatefulBuilder(
+            builder: (c, set) => Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  // 手机 App 测试 M07：原来标题一长句、超出右边；说明挪到正文
+                  Text(tr('Works like Stay. Also disarm these zones for a while:', '跟「留守」一样，另外再撤防这些防区一段时间：')),
+                  const SizedBox(height: Nw.s8),
+                  if (zones.isEmpty) Text(tr('No zones yet (disarms as in Stay only)', '暂无防区（仅按「留守」撤防）')),
+                  Wrap(spacing: 6, children: [
+                    for (final z in zones)
+                      FilterChip(
+                        key: Key('visitor-zone-$z'),
+                        label: Text(z),
+                        selected: picked.contains(z),
+                        onSelected: (v) => set(() => v ? picked.add(z) : picked.remove(z)),
+                      ),
+                  ]),
+                  Wrap(crossAxisAlignment: WrapCrossAlignment.center, children: [
+                    Text(tr('Duration: ', '时长：')),
+                    DropdownButton<int>(
+                      key: const Key('visitor-hours'),
+                      value: hours,
+                      items: [for (final h in visitorHours) DropdownMenuItem(value: h, child: Text(tr('$h h', '$h 小时')))],
+                      onChanged: (v) => set(() => hours = v ?? hours),
+                    ),
+                    Text(tr(', then reverts automatically', '，到期自动恢复')),
+                  ]),
+                ])),
+        ok: tr('Start temp disarm', '开始临时撤防'),
+        okKey: const Key('visitor-go'));
+    if (!ok) return;
     final list = picked.toList()..sort();
     await _run(() => widget.api.setMode('visitor', zones: list, minutes: hours * 60),
         tr('Start temp disarm for $hours h', '开始临时撤防 $hours 小时'));
@@ -269,6 +252,7 @@ class _SiteModePageState extends State<SiteModePage> {
           // 横屏的手机只有 360 高：内距、间距收紧一点，常用的那几样不用滚就点得到
           padding: const EdgeInsets.symmetric(horizontal: Nw.s16, vertical: Nw.s8),
           children: [
+          askStrip(margin: const EdgeInsets.only(bottom: Nw.s8)),
           if (_msg.isNotEmpty)
             Container(
                 margin: const EdgeInsets.only(bottom: Nw.s8),
@@ -467,7 +451,7 @@ class SiteModeBar extends StatefulWidget {
   State<SiteModeBar> createState() => _SiteModeBarState();
 }
 
-class _SiteModeBarState extends State<SiteModeBar> {
+class _SiteModeBarState extends State<SiteModeBar> with NwAsk {
   Map<String, dynamic>? _mode;
 
   /// [_mode] 是不是**现在**的：最近一次读取没成就不是。
@@ -581,21 +565,12 @@ class _SiteModeBarState extends State<SiteModeBar> {
   }
 
   Future<void> _home() async {
-    final ok = await showDialog<bool>(
-        context: context,
-        builder: (c) => AlertDialog(
-              content: Text(tr(
-                  'Switch to Stay? Zones marked "Disarmed in Stay mode" stop dispatching robots and ringing.',
-                  '切换到留守？标为「留守时撤防」的防区发生入侵时，不派机器人、不响铃。')),
-              actions: [
-                TextButton(onPressed: () => Navigator.pop(c, false), child: Text(tr('Cancel', '取消'))),
-                FilledButton(
-                    key: SiteModeBar.homeGoKey,
-                    onPressed: () => Navigator.pop(c, true),
-                    child: Text(tr('Switch to Stay', '切换为留守'))),
-              ],
-            ));
-    if (ok != true || !mounted) return;
+    final ok = await askYes(tr('Switch to Stay?', '切换到留守？'),
+        body: tr('Zones marked "Disarmed in Stay mode" stop dispatching robots and ringing.',
+            '标为「留守时撤防」的防区发生入侵时，不派机器人、不响铃。'),
+        ok: tr('Switch to Stay', '切换为留守'),
+        okKey: SiteModeBar.homeGoKey);
+    if (!ok || !mounted) return;
     await _run(() => widget.api.setMode('home'), tr('Switch to Stay', '切换为留守'));
   }
 
@@ -637,6 +612,7 @@ class _SiteModeBarState extends State<SiteModeBar> {
             selected: now == 'visitor',
             onTap: !canSet || _busy ? null : _visitor),
       ]),
+      askStrip(margin: const EdgeInsets.only(top: Nw.s8)),
       const SizedBox(height: Nw.s4),
       if (m != null)
         Text(tr('Now: ${modeText(m)}', '现在：${modeText(m)}'),
