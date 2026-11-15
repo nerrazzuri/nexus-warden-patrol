@@ -376,22 +376,19 @@ class _RecordingsPickState extends State<_RecordingsPick> {
   @override
   Widget build(BuildContext context) {
     final c = Nw.of(context);
+    // 稿 S-video：一页，顶上切机器人（解绑了的也列着：录像还在）
+    final ids = [for (final r in _robots ?? const <Map<String, dynamic>>[]) '${r['robot_id']}'];
+    if (ids.isNotEmpty) return SiteRecordingsPage(api: widget.api, robotId: ids.first, robots: ids);
     return Scaffold(
         appBar: AppBar(title: Text(tr('Recordings', '录像'))),
         body: _err != null
             ? Center(child: Text(_err!, style: NwText.bodyMedium.copyWith(color: c.error)))
             : _robots == null
                 ? const Center(child: CircularProgressIndicator())
-                : ListView(children: [
-                    for (final r in _robots!)
-                      ListTile(
-                          key: Key('rec-robot-${r['robot_id']}'),
-                          title: Text('${r['name'] ?? r['robot_id']}', style: NwText.titleSmall.copyWith(color: c.text)),
-                          subtitle: Text('${r['robot_id']}', style: NwText.bodySmall.copyWith(color: c.textSecondary)),
-                          trailing: Icon(Icons.chevron_right_rounded, color: c.textMuted),
-                          onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(
-                              builder: (_) => SiteRecordingsPage(api: widget.api, robotId: '${r['robot_id']}')))),
-                  ]));
+                : Padding(
+                    padding: const EdgeInsets.all(Nw.s16),
+                    child: Text(tr('No robots on this site yet, so there are no recordings.', '站点上还没有机器人，所以没有录像。'),
+                        style: NwText.bodyMedium.copyWith(color: c.textSecondary))));
   }
 }
 
