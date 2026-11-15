@@ -27,15 +27,18 @@ import { siteKnown } from "./sitetext";
 
 type Say = (s: string) => void;
 type ZoneTool = "nogo" | "wall" | "slow" | "nzErase" | "ignore";
-type Tool = "erase" | "obstacle" | ZoneTool | "region" | "terrain" | "rotate" | "basemap";
+type Tool = "erase" | "obstacle" | "noise" | ZoneTool | "region" | "terrain" | "rotate" | "basemap";
+/** 清噪点(用户 11-15:做成编辑器里的一个工具,不另开窗)—— 站点找出来的小黑点候选。 */
+interface Speck { id: number; x: number; y: number; px: number }
+interface NoiseList { digest: string; res: number; max_m2: number; ring_m: number; specks: Speck[] }
 type Shape = GridOp["shape"];
 const TERRAIN: TerrainKind[] = ["stairs", "step", "slope", "grass", "gravel"];
 const TOOL_KEY: Record<Tool, Key> = {
-  erase: "meErase", obstacle: "meObstacle", nogo: "drawNoGo", wall: "drawVWall", slow: "drawSlow", nzErase: "drawErase", ignore: "drawIgnore",
+  erase: "meErase", obstacle: "meObstacle", noise: "meNoise", nogo: "drawNoGo", wall: "drawVWall", slow: "drawSlow", nzErase: "drawErase", ignore: "drawIgnore",
   region: "meRegion", terrain: "meTerrain", rotate: "meRotate", basemap: "meBasemap",
 };
 const GROUPS: [Key, Tool[]][] = [
-  ["meGroupMap", ["erase", "obstacle"]], ["meGroupMove", ["nogo", "wall", "slow", "nzErase"]], ["meGroupPeople", ["ignore"]],
+  ["meGroupMap", ["erase", "obstacle", "noise"]], ["meGroupMove", ["nogo", "wall", "slow", "nzErase"]], ["meGroupPeople", ["ignore"]],
   ["meGroupShow", ["region", "terrain", "rotate", "basemap"]],
 ];
 const ZONE_DRAW: Record<ZoneTool, Draw> = { nogo: "nogo", wall: "wall", slow: "slow", nzErase: "erase", ignore: "ignore" };
@@ -151,6 +154,33 @@ function Editor({ say, target, Canvas }: { say: Say; target: Target; Canvas?: Fu
   const origin = drafted?.from ?? target.from ?? target.version;
   const now = hist?.now;
   const dirty = !!hist && hist.past.length > 0;
+  // 清噪点工具:选上就去站点要候选;圈点一下 = 留着;「清掉」= 站点另存新草稿,编辑器跳过去
+  const [noise, setNoise] = useState<NoiseList | null>(null);
+  const [noiseSkip, setNoiseSkip] = useState<Set<number>>(new Set());
+  const [noiseErr, setNoiseErr] = useState("");
+  const [noiseBusy, setNoiseBusy] = useState(false);
+  useEffect(() => {
+    if (tool !== "noise") return;
+    let live = true;
+    setNoise(null); setNoiseErr(""); setNoiseSkip(new Set());
+    api<NoiseList>("GET", `${adm}/noise`).then((d) => live && setNoise(d)).catch((e) => live && setNoiseErr(errText(e)));
+    return () => { live = false; };
+  }, [tool, adm]);
+  const noiseLeft = noise ? noise.specks.filter((x) => !noiseSkip.has(x.id)).length : 0;
+  const toggleSpeck = (id: number) => setNoiseSkip((cur) => { const n = new Set(cur); if (n.has(id)) n.delete(id); else n.add(id); return n; });
+  async function denoise() {
+    if (!noise) return;
+    setNoiseBusy(true);
+    try {
+      const r = await api<{ version: string; cleaned: number }>("POST", `${adm}/denoise`, { digest: noise.digest, skip: [...noiseSkip] });
+      say(t("meNoiseDone", { n: r.cleaned, v: r.version }));
+      location.hash = `#/admin/mapedit?map=${enc(target.map_id)}&version=${enc(r.version)}&from=${enc(target.version)}&tool=noise`;
+    } catch (e) {
+      setNoiseErr(errText(e));
+    } finally {
+      setNoiseBusy(false);
+    }
+  }
   useUnsaved("mapedit", dirty);
   const sum = now ? summary(now) : { erased: 0, obstacle: 0 };
   const change = (f: Parameters<typeof apply>[1]) => setHist((h) => (h ? apply(h, f) : h));
@@ -292,6 +322,7 @@ function Editor({ say, target, Canvas }: { say: Say; target: Target; Canvas?: Fu
         <h1>{t("meTitle")} · <span class="mono">{target.map_id}:{target.version}</span></h1>
         <a class="btn push" href="#/admin/maps">{t("meBack")}</a>
         <button type="button" class="btn" disabled={!hist?.past.length} onClick={() => setHist((h) => (h ? undo(h) : h))}>{t("meUndo")}</button>
+
         <button type="button" class="btn" disabled={!hist?.future.length} onClick={() => setHist((h) => (h ? redo(h) : h))}>{t("meRedo")}</button>
         <button type="button" class="btn primary me-save" disabled={!dirty || busy || !ready || preview} onClick={() => void save()}>{t("meSaveDraft")}</button>
       </div>
@@ -327,6 +358,12 @@ function Editor({ say, target, Canvas }: { say: Say; target: Target; Canvas?: Fu
             legend: zoneLegend(zonesNow),
             marks: (sc) => <>
               {zonesNow.map((z) => zoneName(sc, z))}
+              {tool === "noise" && noise?.specks.map((x) => {
+                const [sx, sy] = sc.map(x.x, x.y);
+                const kept = noiseSkip.has(x.id);
+                return <circle key={`sp-${x.id}`} data-speck={x.id} data-kept={kept ? "1" : "0"} cx={sx} cy={sy} r={Math.max(8, 0.4 * sc.k / (meta?.m_per_px ?? 0.05))}
+                  class={kept ? "me-speck kept" : "me-speck"} pointer-events="all" onClick={(e) => { e.stopPropagation(); toggleSpeck(x.id); }}><title>{`#${x.id} (${x.x}, ${x.y})`}</title></circle>;
+              })}
               {(isZone(tool) || tool === "region" || tool === "terrain") && pts.map(([x, y], i) => { const [sx, sy] = sc.map(x, y); return <circle key={i} cx={sx} cy={sy} r={5} class="draft-pt" />; })}
               {/* 第 9 轮 W9-13:橡皮擦 / 画障碍每点一下画一个笔刷大小的圆(第一下就看得到、看得出会擦多宽);
                   颜色跟笔画一样,描一圈对比色。第 10 轮 W10-06:画在屏幕这一层,半径至少 5 像素(默认笔刷缩小看
@@ -427,6 +464,17 @@ function Editor({ say, target, Canvas }: { say: Say; target: Target; Canvas?: Fu
             : tool === "nzErase" ? t("eraseDrawHint", { n: pts.length }) : t("navDrawHint", { n: pts.length })}</p>}
           {tool === "nzErase" && <p class="muted small" data-erase-tip="1">{t("drawEraseTip")}</p>}
           {tool === null && !preview && <p class="muted small">{t("mePickTool")}</p>}
+          {tool === "noise" && (
+            <div class="me-noise" data-noise-panel="1">
+              {noiseErr && <p class="error small" role="alert">{noiseErr}</p>}
+              {!noise && !noiseErr && <p class="muted small">{t("meNoiseLooking")}</p>}
+              {noise && (noise.specks.length === 0 ? <p class="muted small">{t("meNoiseNone")}</p>
+                : <p class="muted small">{t("meNoiseHint", { a: noise.max_m2, r: noise.ring_m })}</p>)}
+              {dirty && <p class="muted small" data-noise-dirty="1">{t("meNoiseDirty")}</p>}
+              <button type="button" class="btn primary" data-denoise="1" disabled={!noise || noiseLeft === 0 || noiseBusy || dirty || busy}
+                onClick={() => void denoise()}>{t("meNoiseApply", { n: noiseLeft })}</button>
+            </div>
+          )}
           {tool === "rotate" && now && (
             <>
               <label class="field">{t("meRotateDeg", { d: Math.round(now.display.rotate_deg ?? meta?.rotation_deg ?? 0) })}
