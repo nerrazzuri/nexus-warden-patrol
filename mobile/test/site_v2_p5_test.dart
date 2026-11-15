@@ -159,4 +159,23 @@ void main() {
     expect(find.textContaining('重新登录'), findsWidgets);
     expect(find.byKey(ChangePasswordPage.reloginKey), findsOneWidget);
   });
+
+  testWidgets('经理的概况（稿 S-home-m）：只看；24 小时报警写谁处理、结论；最新交班留言；今天的安排', (t) async {
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final api = FakeApi('owner')
+      ..alertRows = <Map<String, dynamic>>[
+        {'key': 'a', 'kind': 'intrusion', 'level': 'P1', 'robot': 'A', 'first_ms': now, 'last_ms': now, 'count': 1,
+          'acked_by': 'gina', 'resolved_ms': now, 'verdict': 'intruder'},
+        {'key': 'old', 'kind': 'intrusion', 'level': 'P1', 'robot': 'A', 'first_ms': now - 2 * 86400000, 'last_ms': now, 'count': 1},
+      ];
+    await t.binding.setSurfaceSize(const Size(390, 1400));
+    addTearDown(() => t.binding.setSurfaceSize(null));
+    await t.pumpWidget(MaterialApp(home: AdminHomeTab(api: api, switchTab: (_) {})));
+    await t.pumpAndSettle();
+    expect(find.text('只看'), findsOneWidget);
+    expect(find.byKey(const Key('overview-alarm-a')), findsOneWidget);
+    expect(find.byKey(const Key('overview-alarm-old')), findsNothing, reason: '超过 24 小时');
+    expect(find.text('gina · 确认入侵'), findsOneWidget);
+    expect(find.byKey(AdminHomeTab.todoKey), findsNothing, reason: '经理不处理待办');
+  });
 }

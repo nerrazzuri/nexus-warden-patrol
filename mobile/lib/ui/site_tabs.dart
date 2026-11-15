@@ -12,6 +12,8 @@ import 'package:flutter/material.dart';
 
 import '../l10n.dart';
 import '../model/alert.dart';
+import '../net/site_text.dart' show alertLine;
+import 'alarm_log.dart' show AlarmLogPage;
 import '../net/site_client.dart';
 import '../store/site_store.dart';
 import 'app_settings.dart';
@@ -307,6 +309,13 @@ class _AdminHomeTabState extends State<AdminHomeTab> {
   ({int alarms, int open, int falseAlarms, int patrols, List<String> times})? _today;
   List<Map<String, dynamic>> _robots = const [];
 
+  /// 经理那一版（稿 S-home-m）：24 小时的报警、最新一条交班留言、站点的布防模式。
+  List<Alert> _day = const [];
+  Map<String, dynamic>? _note;
+  Map<String, dynamic>? _mode;
+
+  bool get _manager => !(widget.api.session?.canManageMaps ?? false);
+
   @override
   void initState() {
     super.initState();
@@ -381,7 +390,11 @@ class _AdminHomeTabState extends State<AdminHomeTab> {
         widget.api.patrolsToday().catchError((Object _) => <String, dynamic>{}),
         widget.api.robots().catchError((Object _) => <Map<String, dynamic>>[]),
       ]);
-      final alerts = (got[0] as List<Alert>).where((a) => a.firstMs >= midnight).toList();
+      final all = got[0] as List<Alert>;
+      final alerts = all.where((a) => a.firstMs >= midnight).toList();
+      final since = now.millisecondsSinceEpoch - const Duration(hours: 24).inMilliseconds;
+      final day = [for (final a in all) if (a.firstMs >= since && AlarmLogPage.isAlarm(a)) a]
+        ..sort((a, b) => b.firstMs.compareTo(a.firstMs));
       final items = [for (final x in ((got[1] as Map)['items'] as List? ?? const [])) if (x is Map) x];
       String hm(Object? ms) {
         if (ms is! num) return '';
@@ -398,10 +411,110 @@ class _AdminHomeTabState extends State<AdminHomeTab> {
           times: [for (final x in items) if (hm(x['start_ms'] ?? x['at_ms']).isNotEmpty) hm(x['start_ms'] ?? x['at_ms'])],
         );
         _robots = [for (final r in got[2] as List<Map<String, dynamic>>) if (r['revoked'] != true) r];
+        _day = day;
       });
     } on SiteError {
       // 读不到就不摆「今天」
     }
+    if (!_manager) return;
+    try {
+      final notes = await widget.api.shiftNotes(recent: 1);
+      if (mounted) setState(() => _note = notes.firstOrNull);
+    } on SiteError {
+      // 老站点没有交班留言
+    }
+    try {
+      final m = await widget.api.mode();
+      if (mounted) setState(() => _mode = m);
+    } on SiteError {
+      // 同上
+    }
+  }
+
+  static String _hm(Object? ms) {
+    if (ms is! num) return '';
+    final d = DateTime.fromMillisecondsSinceEpoch(ms.toInt());
+    return '${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}';
+  }
+
+  /// 经理的概况（稿 S-home-m）：只看。24 小时报警（谁处理、结论）、管理员那边的事（只写状态）、值班（最新交班留言）、
+  /// 今天的安排（布防、巡逻几点）。
+  Widget _managerView(BuildContext context) {
+    final c = Nw.of(context);
+    final sub = NwText.bodySmall.copyWith(color: c.textSecondary);
+    String outcome(Alert a) => a.resolvedMs == null
+        ? (a.ackedBy.isNotEmpty ? tr('Handling', '处理中') : tr('Open', '未处理'))
+        : switch (a.verdict) {
+            'false_alarm' => tr('False alarm', '误报'),
+            'intruder' => tr('Confirmed intrusion', '确认入侵'),
+            _ => tr('Resolved', '已解决'),
+          };
+    final t = _today;
+    final m = _mode;
+    final armed = m == null ? '' : (m['state'] ?? m['mode']) == 'armed' ? tr('Armed', '布防中') : tr('Disarmed', '撤防');
+    final next = m?['next_change_ms'];
+    final plan = [
+      if (m != null) next is num ? tr('$armed · changes at ${_hm(next)}', '$armed · ${_hm(next)} 切换') : armed,
+      if (t != null && t.times.isNotEmpty) tr('Patrols ${t.times.join(' / ')}', '巡逻 ${t.times.join(' / ')}'),
+    ];
+    return Scaffold(
+      backgroundColor: c.bg,
+      body: Column(children: [
+        NwHeader(title: tr('Overview', '概况'), subtitle: tr('View only', '只看')),
+        Expanded(
+            child: RefreshIndicator(
+                onRefresh: _load,
+                child: ListView(padding: const EdgeInsets.only(bottom: Nw.s24), children: [
+                  nwRobotSection(c, tr('Alarms, last 24 h: ${_day.length}', '24 小时报警：${_day.length}'), key: const Key('overview-day'), [
+                    if (_day.isEmpty) Text(tr('No alarms.', '没有报警。'), style: sub),
+                    for (final a in _day)
+                      Container(
+                          key: Key('overview-alarm-${a.key}'),
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                          decoration: BoxDecoration(border: Border(top: BorderSide(color: c.outline))),
+                          child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                            SizedBox(width: 52, child: Text(_hm(a.firstMs), style: NwText.bodyMedium.copyWith(color: c.textSecondary))),
+                            Padding(
+                                padding: const EdgeInsets.only(top: 3, right: Nw.s8),
+                                child: Icon(a.level == 'P1' ? Icons.radio_button_checked : Icons.circle_outlined,
+                                    size: 16, color: a.level == 'P1' ? c.error : c.textSecondary)),
+                            Expanded(
+                                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                              Text(alertLine(a.robot, a.kind, a.title),
+                                  style: NwText.titleSmall.copyWith(color: c.text, fontWeight: FontWeight.w700)),
+                              Text([if (a.ackedBy.isNotEmpty) a.ackedBy, outcome(a)].join(' · '), style: sub),
+                            ])),
+                          ])),
+                  ]),
+                  if (_todo.isNotEmpty)
+                    nwRobotSection(c, tr('With administrator', '在管理员那边'), key: const Key('overview-admin'), [
+                      Text(tr('Status only.', '只看状态。'), style: sub),
+                      for (final it in _todo)
+                        Container(
+                            padding: const EdgeInsets.symmetric(vertical: 8),
+                            decoration: BoxDecoration(border: Border(top: BorderSide(color: c.outline))),
+                            child: Row(children: [
+                              Container(width: 10, height: 10, decoration: BoxDecoration(color: c.primary, shape: BoxShape.circle)),
+                              const SizedBox(width: 10),
+                              Expanded(child: Text(it.$2, style: NwText.bodyMedium.copyWith(color: c.text, fontWeight: FontWeight.w600))),
+                            ])),
+                    ]),
+                  if (_note != null)
+                    nwRobotSection(c, tr('On duty', '值班'), key: const Key('overview-duty'), [
+                      Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                        SizedBox(width: 96, child: Text(tr('Handover notes', '交班留言'), style: sub)),
+                        Expanded(
+                            child: Text('${_note!['author'] ?? ''} ${_hm(_note!['at_ms'])}${tr(': ', '：')}${_note!['text'] ?? ''}',
+                                style: NwText.bodyMedium.copyWith(color: c.text))),
+                      ]),
+                    ]),
+                  if (plan.isNotEmpty)
+                    nwRobotSection(c, tr("Today's schedule", '今天的安排'), key: const Key('overview-plan'), [
+                      Text(plan.join(' · '), style: sub),
+                    ]),
+                ]))),
+      ]),
+    );
   }
 
   void _go(BuildContext context, String id) {
@@ -425,6 +538,7 @@ class _AdminHomeTabState extends State<AdminHomeTab> {
 
   @override
   Widget build(BuildContext context) {
+    if (_manager) return _managerView(context);
     final c = Nw.of(context);
     // App V2 稿 S-home：待处理、开站清单、今天、机器人。路线、日程、摄像头、拦截点在「地图与布置」，天气在「布防与巡逻」，
     // 设置、教程在「现场」目录的「本机」那一组。
