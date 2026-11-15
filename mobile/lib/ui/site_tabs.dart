@@ -529,6 +529,7 @@ class AccountsPage extends StatefulWidget {
 
 class _AccountsPageState extends State<AccountsPage> {
   List<Map<String, dynamic>>? _reqs;
+  List<Map<String, dynamic>> _all = const [];
   final Map<String, String> _roles = <String, String>{};
   String? _msg;
 
@@ -544,6 +545,12 @@ class _AccountsPageState extends State<AccountsPage> {
       if (mounted) setState(() => _reqs = r);
     } on SiteError catch (e) {
       if (mounted) setState(() => _msg = refusalText(e));
+    }
+    try {
+      final a = await widget.api.accounts();
+      if (mounted) setState(() => _all = a);
+    } on SiteError {
+      // 老站点、没权限：不列
     }
   }
 
@@ -591,30 +598,54 @@ class _AccountsPageState extends State<AccountsPage> {
     await _load();
   }
 
+  /// 账号那一行右边写什么：本机、停用、到期、最近登录。
+  String _state(Map<String, dynamic> a) {
+    if (a['disabled'] == true) return tr('Disabled', '已停用');
+    if (a['expired'] == true) return tr('Expired', '已过期');
+    final until = a['expires_ms'];
+    if (until is num) {
+      final d = DateTime.fromMillisecondsSinceEpoch(until.toInt());
+      String two(int x) => x.toString().padLeft(2, '0');
+      return tr('Until ${two(d.month)}-${two(d.day)} ${two(d.hour)}:${two(d.minute)}', '到 ${two(d.month)}-${two(d.day)} ${two(d.hour)}:${two(d.minute)}');
+    }
+    if (a['name'] == widget.api.session?.name) return tr('This phone', '本机');
+    return a['last_login_ms'] == null ? tr('Never signed in', '没登录过') : '';
+  }
+
   @override
   Widget build(BuildContext context) {
     final c = Nw.of(context);
     final reqs = _reqs;
     const roles = <String>['viewer', 'guard', 'owner', 'admin'];
+    final shape = RoundedRectangleBorder(borderRadius: BorderRadius.circular(2));
+    // App V2 稿 S-people：待批准在上（一排等宽「批准 / 拒绝」），下面全部账号一行一个
     return Scaffold(
-      appBar: AppBar(title: Text(tr('Accounts', '账号'))),
-      body: NwListView(children: [
-        if (_msg != null) ...[NwNotice(text: _msg!), nwGap8],
-        NwSectionLabel(tr('Waiting for approval', '待批准')),
-        nwGap8,
-        if (reqs == null)
-          const Center(child: CircularProgressIndicator())
-        else if (reqs.isEmpty)
-          Text(tr('No pending applications.', '没有待批准的申请。'), style: NwText.bodyMedium.copyWith(color: c.textSecondary))
-        else
-          for (final r in reqs)
-            Padding(
-              padding: const EdgeInsets.only(bottom: Nw.s8),
-              child: NwCard(
-                tone: NwTone.warning,
+      appBar: AppBar(
+          title: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text(tr('Users', '人员')),
+        Text(
+            tr('${_all.length} accounts · ${reqs?.length ?? 0} pending approval', '${_all.length} 个账号 · ${reqs?.length ?? 0} 个待批准'),
+            style: NwText.bodySmall.copyWith(color: c.textSecondary)),
+      ])),
+      body: ListView(padding: const EdgeInsets.only(bottom: Nw.s24), children: [
+        if (_msg != null) Padding(padding: const EdgeInsets.all(Nw.s16), child: NwNotice(text: _msg!)),
+        nwRobotSection(c, tr('Pending approval ${reqs?.length ?? 0}', '待批准 ${reqs?.length ?? 0}'), key: const Key('acct-pending'), [
+          if (reqs == null)
+            const Center(child: CircularProgressIndicator())
+          else if (reqs.isEmpty)
+            Text(tr('No pending applications.', '没有待批准的申请。'), style: NwText.bodyMedium.copyWith(color: c.textSecondary))
+          else
+            for (final r in reqs)
+              Padding(
+                padding: const EdgeInsets.only(bottom: Nw.s16),
                 child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-                  Text('${r['display']} · ${r['name']}', style: NwText.titleSmall.copyWith(color: c.text)),
-                  nwGap8,
+                  Row(children: [
+                    Container(width: 10, height: 10, decoration: BoxDecoration(color: c.primary, shape: BoxShape.circle)),
+                    const SizedBox(width: 10),
+                    Expanded(
+                        child: Text('${r['display']} · ${r['name']}',
+                            style: NwText.titleSmall.copyWith(color: c.text, fontWeight: FontWeight.w700))),
+                  ]),
                   Row(children: [
                     Text(tr('Role', '权限'), style: NwText.bodyMedium.copyWith(color: c.textSecondary)),
                     const SizedBox(width: Nw.s16),
@@ -624,26 +655,48 @@ class _AccountsPageState extends State<AccountsPage> {
                         items: [for (final x in roles) DropdownMenuItem(value: x, child: Text(roleName(x)))],
                         onChanged: (v) => setState(() => _roles['${r['id']}'] = v ?? 'viewer')),
                   ]),
-                  Row(mainAxisAlignment: MainAxisAlignment.end, children: [
-                    TextButton(
-                        key: AccountsPage.rejectKey('${r['id']}'),
-                        onPressed: () => _reject(r),
-                        child: Text(tr('Reject', '拒绝'))),
+                  Row(children: [
+                    Expanded(
+                        child: FilledButton(
+                            key: AccountsPage.approveKey('${r['id']}'),
+                            style: FilledButton.styleFrom(minimumSize: const Size(48, 48), shape: shape),
+                            onPressed: () => _approve(r),
+                            child: Text(tr('Approve', '批准')))),
                     const SizedBox(width: Nw.s8),
-                    NwButton(
-                        buttonKey: AccountsPage.approveKey('${r['id']}'),
-                        size: NwButtonSize.small,
-                        label: tr('Approve', '批准'),
-                        onPressed: () => _approve(r)),
+                    Expanded(
+                        child: OutlinedButton(
+                            key: AccountsPage.rejectKey('${r['id']}'),
+                            style: OutlinedButton.styleFrom(minimumSize: const Size(48, 48), shape: shape),
+                            onPressed: () => _reject(r),
+                            child: Text(tr('Reject', '拒绝')))),
                   ]),
                 ]),
               ),
-            ),
-        const SizedBox(height: Nw.s16),
-        Text(
-            tr('To change roles, reset passwords or disable accounts, use Users on the web console.',
-                '修改权限、重设密码、停用账号请在网页值班台「用户」中操作。'),
-            style: NwText.bodySmall.copyWith(color: c.textSecondary)),
+        ]),
+        if (_all.isNotEmpty)
+          nwRobotSection(c, tr('All accounts ${_all.length}', '全部账号 ${_all.length}'), key: const Key('acct-all'), [
+            for (final a in _all)
+              Container(
+                  key: Key('acct-row-${a['name']}'),
+                  padding: const EdgeInsets.symmetric(vertical: 10),
+                  decoration: BoxDecoration(border: Border(top: BorderSide(color: c.outline))),
+                  child: Row(children: [
+                    Icon(Icons.person_outline_rounded, color: c.textSecondary),
+                    const SizedBox(width: 12),
+                    Expanded(
+                        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      Text('${a['name']}', style: NwText.titleSmall.copyWith(color: c.text, fontWeight: FontWeight.w700)),
+                      Text(roleName('${a['role']}'), style: NwText.bodySmall.copyWith(color: c.textSecondary)),
+                    ])),
+                    Text(_state(a), style: NwText.bodyMedium.copyWith(color: a['disabled'] == true ? c.textMuted : c.text)),
+                  ])),
+          ]),
+        Padding(
+            padding: const EdgeInsets.all(Nw.s16),
+            child: Text(
+                tr('To add accounts, create a temporary engineer account, change roles, reset passwords or disable accounts, use Users on the web console.',
+                    '加账号、开临时工程师账号、改权限、重设密码、停用账号请在网页值班台「用户」中操作。'),
+                style: NwText.bodySmall.copyWith(color: c.textSecondary))),
       ]),
     );
   }
