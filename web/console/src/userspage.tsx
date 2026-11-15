@@ -6,7 +6,8 @@ import { api, ApiError, enc } from "./api";
 import { ConfirmPassword } from "./confirmpw";
 import { routeName } from "./bundlepanel";
 import { hm, hms, md, nameOf, siteDown } from "./data";
-import { Confirm, Modal } from "./dialogs";
+import { Modal } from "./dialogs";
+import { Sign } from "./signs";
 import { alertTitle, colon, lang, t } from "./i18n";
 import { roleLabel } from "./shell";
 import { siteStr, zhPunct } from "./sitetext";
@@ -248,15 +249,21 @@ function useAccounts(say: Say): [Account[], () => void, (a: Account[]) => void] 
 
 export function UsersPage({ me, say, now }: { me: string; say: Say; now: number }) {
   const [rows, reload, setRows] = useAccounts(say);
+  const [reqs, setReqs] = useState<AccountRequest[]>([]);
   const [adding, setAdding] = useState(false);
   const [eng, setEng] = useState<"form" | { display: string; hours: number; vpn: boolean } | null>(null);
   const [made, setMade] = useState<{ name: string; password: string; expires_ms: number;
     vpn?: { conf?: string; address?: string; error?: string; warning?: string } } | null>(null);
   const [resetFor, setResetFor] = useState<string | null>(null);
-  const [removing, setRemoving] = useState<Account | null>(null);
   const [who, setWho] = useState<string | null>(null);
-  // P1-05 / P1-63:改角色、停用、提前关工程师账号都先确认
+  // P1-05 / P1-63:改角色、停用、删除、提前关工程师账号都先确认 —— 第六期:在右栏原地确认,不弹窗
   const [ask, setAsk] = useState<{ text: string; yes: string; danger?: boolean; go: () => void } | null>(null);
+  const loadReqs = useCallback(() => {
+    api<{ requests: AccountRequest[] }>("GET", "/api/account-requests").then((d) => setReqs(d.requests ?? [])).catch(() => setReqs([]));
+  }, []);
+  useEffect(loadReqs, [loadReqs]);
+  useEffect(() => { if (!who && rows.length) setWho(rows.find((r) => r.name === me)?.name ?? rows[0].name); }, [rows.length]);
+  useEffect(() => setAsk(null), [who]);
 
   const change = async (name: string, body: Record<string, unknown>, msg = t("saved")) => {
     try {
@@ -268,72 +275,99 @@ export function UsersPage({ me, say, now }: { me: string; say: Say; now: number 
       reload();
     }
   };
+  const cur = rows.find((r) => r.name === who) ?? null;
+  const engs = rows.filter((r) => r.role === "engineer" && !r.disabled && !r.expired).length;
+  const status = [t("usAccounts", { n: rows.length - engs }), engs ? t(engs === 1 ? "usEng1" : "usEngN", { n: engs }) : ""].filter(Boolean).join(", ");
+  const nm = (a: Account) => a.display_name || a.name;
+  const statusText = (a: Account) => a.role === "engineer" && !a.disabled && !a.expired && a.expires_ms ? leftText(a.expires_ms, now)
+    : a.expired ? t("engExpired") : a.disabled ? t("disabled") : t("active");
 
   return (
-    <div class="users">
-      <div class="panel-head">
+    <section class="sp users us">
+      <header class="sp-head">
         <h1>{t("users")}</h1>
-        <button type="button" class="btn push" onClick={() => setEng("form")}>{t("engOpen")}</button>
+        <p class="sp-status"><Sign kind={reqs.length ? "info" : "ok"} /><span>{status}. {reqs.length > 0 && <b>{t(reqs.length === 1 ? "usReq1" : "usReqN", { n: reqs.length })}</b>}</span></p>
+        <button type="button" class="btn" onClick={() => setEng("form")}>{t("engOpen")}…</button>
         <button type="button" class="btn primary" onClick={() => setAdding(true)}>{t("addUser")}</button>
-      </div>
-      <p class="muted lead">{t("usersLead")}</p>
-      <Requests say={say} onDone={reload} />
-      {ask && <Confirm text={ask.text} yes={ask.yes} danger={ask.danger} onNo={() => setAsk(null)} onYes={() => { const g = ask.go; setAsk(null); g(); }} />}
-      <div class={who ? "users-split" : undefined}>
-        <table class="grid users-table">
-          <thead><tr><th>{t("name")}</th><th>{t("role")}</th><th>{t("lastLogin")}</th><th>{t("status")}</th><th>{t("colActions")}</th></tr></thead>
-          <tbody>
-            {rows.length === 0 && siteDown.value && <tr><td colSpan={5} class="warn" data-load-failed="1">{t("loadRetry")}</td></tr>}
-            {rows.map((a) => {
-              const isEng = a.role === "engineer";
-              const self = a.name === me;
-              const off = a.disabled || a.expired;
-              return (
-                <tr key={a.name} data-name={a.name} class={off ? "off" : undefined}>
-                  <td>
-                    <button type="button" class="linklike user-name" onClick={() => setWho(a.name)}>{a.display_name || a.name}</button>
-                    <div class="muted small mono">{a.name}</div>
-                  </td>
-                  <td data-label={t("role")}>
-                    {isEng || self ? t(roleLabel(a.role)) : (
-                      <select aria-label={`${t("role")} ${a.name}`} value={a.role} onChange={(e) => {
-                        const r = e.currentTarget.value;
-                        e.currentTarget.value = a.role;           // 确认了才改
-                        setAsk({ text: t(r === "admin" ? "roleAskAdmin" : "roleAsk", { who: a.display_name || a.name, role: t(roleLabel(r)) }),
-                          yes: t("roleAskYes"), danger: r === "admin", go: () => void change(a.name, { role: r }, t("roleChanged", { who: a.display_name || a.name, role: t(roleLabel(r)) })) });
-                      }}>
-                        {ROLES.map((r) => <option key={r} value={r}>{t(roleLabel(r))}</option>)}
-                      </select>
-                    )}
-                  </td>
-                  <td data-label={t("lastLogin")}>{lastLoginText(a.last_login_ms, now)}</td>
-                  <td data-label={t("status")}>
-                    {isEng && !off && a.expires_ms ? leftText(a.expires_ms, now)
-                      : a.expired ? t("engExpired") : a.disabled ? t("disabled") : t("active")}
-                  </td>
-                  <td class="actions">
-                    {isEng ? (
-                      <>
-                        {!off && <button type="button" class="btn sm" onClick={() => setAsk({ text: t("engCloseAsk", { who: a.display_name || a.name }), yes: t("engClose"), danger: true,
-                          go: () => void change(a.name, { disabled: true }, t("engClosed")) })}>{t("engClose")}</button>}
-                        <button type="button" class="btn sm danger" onClick={() => setRemoving(a)}>{t("remove")}</button>
-                      </>
-                    ) : !self && (
-                      <>
-                        <button type="button" class="btn sm" onClick={() => (a.disabled ? void change(a.name, { disabled: false }, t("userEnabled", { who: a.display_name || a.name }))
-                          : setAsk({ text: t("disableAsk", { who: a.display_name || a.name }), yes: t("disable"), danger: true,
-                            go: () => void change(a.name, { disabled: true }, t("userDisabled", { who: a.display_name || a.name })) }))}>{a.disabled ? t("enable") : t("disable")}</button>
-                        <button type="button" class="btn sm" onClick={() => setResetFor(a.name)}>{t("resetPassword")}</button>
-                        <button type="button" class="btn sm danger" onClick={() => setRemoving(a)}>{t("remove")}</button>
-                      </>
-                    )}
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-        {who && <UserAudit name={who} account={rows.find((r) => r.name === who)} onClose={() => setWho(null)} />}
+      </header>
+      <div class="sp-body us-body">
+        <div class="sp-main">
+          {reqs.length > 0 && <Requests rows={reqs} say={say} onDone={() => { loadReqs(); reload(); }} />}
+          <section class="sp-sec us-all">
+            <h2 class="sp-h"><span>{t("usAll")}</span><small>{t("usAllHint")}</small></h2>
+            <table class="sp-table users-table">
+              <thead><tr><th>{t("usColUser")}</th><th>{t("role")}</th><th>{t("lastLogin")}</th><th>{t("status")}</th></tr></thead>
+              <tbody>
+                {rows.length === 0 && siteDown.value && <tr><td colSpan={4} class="warn" data-load-failed="1">{t("loadRetry")}</td></tr>}
+                {rows.map((a) => {
+                  const off = a.disabled || a.expired;
+                  return (
+                    <tr key={a.name} data-name={a.name} class={[off ? "off" : "", a.name === who ? "on" : ""].filter(Boolean).join(" ") || undefined}
+                      aria-selected={a.name === who} onClick={() => setWho(a.name)}>
+                      <td><button type="button" class="linklike user-name" onClick={() => setWho(a.name)}>{nm(a)}</button> <span class="muted mono small">{a.name}</span></td>
+                      <td>{t(roleLabel(a.role))}</td>
+                      <td class="muted">{lastLoginText(a.last_login_ms, now)}</td>
+                      <td class={off ? "muted" : undefined}>{statusText(a)}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+            <details class="us-perms sp-pad">
+              <summary>{t("usPerms")}</summary>
+              <ul class="plain small">
+                {(["usPermAdmin", "usPermOwner", "usPermGuard", "usPermViewer", "usPermEng"] as const).map((k) => <li key={k}>{t(k)}</li>)}
+              </ul>
+            </details>
+          </section>
+        </div>
+        <aside class="sp-side us-side">
+          {cur && (
+            <>
+              <section class="sp-sec us-card">
+                <h2 class="us-name">{nm(cur)}</h2>
+                <p class="muted us-sub">{t("usUsername", { name: cur.name })} · {statusText(cur)}</p>
+                {cur.role === "engineer" ? <p class="sp-pad muted small">{t("usEngHint")}</p> : cur.name === me ? <p class="sp-pad muted small">{t("usSelfHint")}</p> : (
+                  <div class="us-role">
+                    <span class="lbl">{t("usRole")}</span>
+                    <div class="seg" role="group" aria-label={`${t("role")} ${cur.name}`}>
+                      {ROLES.map((r) => (
+                        <button key={r} type="button" aria-pressed={cur.role === r} onClick={() => cur.role !== r && setAsk({
+                          text: t(r === "admin" ? "roleAskAdmin" : "roleAsk", { who: nm(cur), role: t(roleLabel(r)) }), yes: t("roleAskYes"), danger: r === "admin",
+                          go: () => void change(cur.name, { role: r }, t("roleChanged", { who: nm(cur), role: t(roleLabel(r)) })) })}>{t(roleLabel(r))}</button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {cur.name !== me && (
+                  <div class="us-acts">
+                    {cur.role !== "engineer" && <button type="button" class="btn" onClick={() => setResetFor(cur.name)}>{t("usReset")}</button>}
+                    {cur.role === "engineer" ? (!cur.disabled && !cur.expired && <button type="button" class="btn danger" onClick={() => setAsk({ text: t("engCloseAsk", { who: nm(cur) }), yes: t("engClose"), danger: true,
+                      go: () => void change(cur.name, { disabled: true }, t("engClosed")) })}>{t("usEndNow")}</button>)
+                      : cur.disabled ? <button type="button" class="btn" onClick={() => void change(cur.name, { disabled: false }, t("userEnabled", { who: nm(cur) }))}>{t("enable")}</button>
+                      : <button type="button" class="btn danger" onClick={() => setAsk({ text: t("disableAsk", { who: nm(cur) }), yes: t("disable"), danger: true,
+                        go: () => void change(cur.name, { disabled: true }, t("userDisabled", { who: nm(cur) })) })}>{t("usDisable")}</button>}
+                    <button type="button" class="btn danger" onClick={() => setAsk({ text: t("userRemoveConfirm", { name: nm(cur) }), yes: t("remove"), danger: true,
+                      go: () => void api<{ accounts: Account[] }>("POST", `/api/accounts/${enc(cur.name)}/remove`, {})
+                        .then((d) => { setRows(d.accounts ?? []); setWho(null); say(t("userRemovedMsg", { name: nm(cur) })); })
+                        .catch((e) => say(errText(e))) })}>{t("usDelete")}</button>
+                  </div>
+                )}
+                {ask && (
+                  <div class="rb-ask us-ask" role="group">
+                    <p>{ask.text}</p>
+                    <span class="rb-row">
+                      <button type="button" class={ask.danger ? "btn danger" : "btn primary"} onClick={() => { const g = ask.go; setAsk(null); g(); }}>{ask.yes}</button>
+                      <button type="button" class="btn" onClick={() => setAsk(null)}>{t("cancel")}</button>
+                    </span>
+                  </div>
+                )}
+                {cur.name !== me && cur.role !== "engineer" && <p class="sp-pad muted small us-hint">{t("usDisableHint")}</p>}
+              </section>
+              <UserAudit name={cur.name} account={cur} />
+            </>
+          )}
+        </aside>
       </div>
 
       {adding && <AddUser onClose={() => setAdding(false)} say={say} onDone={() => { setAdding(false); say(t("userAddedMsg")); reload(); }} />}
@@ -375,17 +409,7 @@ export function UsersPage({ me, say, now }: { me: string; say: Say; now: number 
         <PasswordDialog name={resetFor} onClose={() => setResetFor(null)}
           onSave={(pw) => { const n = resetFor; setResetFor(null); void change(n, { password: pw }, t("passwordReset", { name: n })); }} />
       )}
-      {removing && (
-        <Confirm text={t("userRemoveConfirm", { name: removing.display_name || removing.name })} yes={t("remove")} danger onNo={() => setRemoving(null)}
-          onYes={() => {
-            const a = removing;
-            setRemoving(null);
-            api<{ accounts: Account[] }>("POST", `/api/accounts/${enc(a.name)}/remove`, {})
-              .then((d) => { setRows(d.accounts ?? []); if (who === a.name) setWho(null); say(t("userRemovedMsg", { name: a.display_name || a.name })); })
-              .catch((e) => say(errText(e)));
-          }} />
-      )}
-    </div>
+    </section>
   );
 }
 
@@ -426,24 +450,22 @@ export function AuditLine({ r, who }: { r: AuditRow; who?: boolean }) {
   );
 }
 
-function UserAudit({ name, account, onClose }: { name: string; account?: Account; onClose: () => void }) {
+function UserAudit({ name, account }: { name: string; account?: Account }) {
   const [rows, setRows] = useState<AuditRow[] | null>(null);
   useEffect(() => {
     setRows(null);
     api<{ audit: AuditRow[] }>("GET", `/api/audit?actor=${encodeURIComponent(name)}`).then((d) => setRows(d.audit ?? [])).catch(() => setRows([]));
   }, [name]);
   return (
-    <aside class="panel user-audit" aria-label={t("userDid", { name })}>
-      <div class="panel-head">
-        <h2>{t("userDid", { name: account?.display_name || name })}</h2>
-        <button type="button" class="btn sm push" onClick={onClose}>{t("close")}</button>
-      </div>
-      {rows == null ? <p class="muted">…</p> : rows.length === 0 ? <p class="muted">{t("userDidNone")}</p> : (
-        <ul class="plain">
-          {mergeAudit(rows.slice(0, 200)).map((r) => <AuditLine key={r.id} r={r} />)}
+    <section class="sp-sec user-audit" aria-label={t("userDid", { name })}>
+      <h2 class="sp-h"><span>{t("usActivity", { name: account?.display_name || name })}</span></h2>
+      {rows == null ? <p class="sp-pad muted">…</p> : rows.length === 0 ? <p class="sp-pad muted">{t("userDidNone")}</p> : (
+        <ul class="plain us-audit">
+          {mergeAudit(rows.slice(0, 50)).map((r) => <AuditLine key={r.id} r={r} />)}
         </ul>
       )}
-    </aside>
+      <p class="sp-pad"><a href={`#/admin/log?actor=${encodeURIComponent(name)}`}>{t("usAllAudit")}</a></p>
+    </section>
   );
 }
 
@@ -535,42 +557,34 @@ function PasswordDialog({ name, onClose, onSave }: { name: string; onClose: () =
 /** W52:App 上申请的账号,等管理员批准(选权限,默认只看;批准再输一次密码)。没有就不占地方。 */
 interface AccountRequest { id: string; name: string; display: string; created_ms: number }
 
-export function Requests({ say, onDone }: { say: Say; onDone: () => void }) {
-  const [rows, setRows] = useState<AccountRequest[]>([]);
+export function Requests({ rows, say, onDone }: { rows: AccountRequest[]; say: Say; onDone: () => void }) {
   const [roles, setRoles] = useState<Record<string, string>>({});
   const [approving, setApproving] = useState<AccountRequest | null>(null);
-  const load = useCallback(() => {
-    api<{ requests: AccountRequest[] }>("GET", "/api/account-requests").then((d) => setRows(d.requests ?? [])).catch(() => setRows([]));
-  }, []);
-  useEffect(load, [load]);
-  if (rows.length === 0) return null;
   const roleOf = (r: AccountRequest) => roles[r.id] ?? "viewer";
   return (
-    <section class="panel requests" aria-label={t("reqTitle")}>
-      <h2>{t("reqTitle")}</h2>
-      <table class="grid users-table">
-        <tbody>
-          {rows.map((r) => (
-            <tr key={r.id} data-req={r.id}>
-              <td><b>{r.display}</b><div class="muted small mono">{r.name}</div></td>
-              <td class="muted small">{hm(r.created_ms)}</td>
-              <td>
+    <section class="sp-sec requests" aria-label={t("reqTitle")}>
+      <h2 class="sp-h"><span><Sign kind="info" /> {t("usPending", { n: rows.length })}</span><small>{t("usPendingHint")}</small></h2>
+      <ul class="sp-list">
+        {rows.map((r) => (
+          <li key={r.id} data-req={r.id} class="us-req">
+            <span class="us-reqwho">
+              <span><b>{r.display}</b> <span class="muted mono small">{r.name}</span> · {t("usReqRole", { who: "" }).trim()}{" "}
                 <select aria-label={`${t("role")} ${r.name}`} value={roleOf(r)} onChange={(e) => setRoles({ ...roles, [r.id]: e.currentTarget.value })}>
                   {ROLES.map((x) => <option key={x} value={x}>{t(roleLabel(x))}</option>)}
-                </select>
-              </td>
-              <td class="actions">
-                <button type="button" class="btn sm" onClick={async () => {
-                  try { await api("POST", `/api/account-requests/${enc(r.id)}/reject`, {}); say(t("reqRejected", { name: r.name })); }
-                  catch (e) { say(errText(e)); }
-                  load();
-                }}>{t("reqReject")}</button>
-                <button type="button" class="btn sm primary" onClick={() => setApproving(r)}>{t("reqApprove")}</button>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+                </select></span>
+              <span class="muted small">{md(r.created_ms)} {hm(r.created_ms)}</span>
+            </span>
+            <span class="rb-row">
+              <button type="button" class="btn primary" onClick={() => setApproving(r)}>{t("usApprove")}</button>
+              <button type="button" class="btn" onClick={async () => {
+                try { await api("POST", `/api/account-requests/${enc(r.id)}/reject`, {}); say(t("reqRejected", { name: r.name })); }
+                catch (e) { say(errText(e)); }
+                onDone();
+              }}>{t("reqReject")}</button>
+            </span>
+          </li>
+        ))}
+      </ul>
       {approving && (
         <ConfirmPassword title={t("reqApproveTitle", { name: approving.display, role: t(roleLabel(roleOf(approving))) })}
           onClose={() => setApproving(null)}
@@ -578,7 +592,6 @@ export function Requests({ say, onDone }: { say: Say; onDone: () => void }) {
             await api("POST", `/api/account-requests/${enc(approving.id)}/approve`, { role: roleOf(approving), confirm_password: pw });
             say(t("reqApproved", { name: approving.name }));
             setApproving(null);
-            load();
             onDone();
           }} />
       )}

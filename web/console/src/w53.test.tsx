@@ -9,7 +9,7 @@ import { lang, refusalText } from "./i18n";
 import { canPatrol, canSchedule } from "./model";
 import { pageAllowed, roleLabel } from "./shell";
 import { siteHm, TodayPatrols } from "./todaypatrols";
-import { Requests } from "./userspage";
+import { Requests, UsersPage } from "./userspage";
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
 let posted: { url: string; body: Record<string, unknown> }[];
@@ -62,12 +62,12 @@ describe("W53 网页", () => {
   });
 
   it("账号申请:权限默认只看,选保安、再输密码批准", async () => {
-    const { container: c } = render(<Requests say={() => {}} onDone={() => {}} />);
-    await waitFor(() => expect(c.querySelector('tr[data-req="r1"]')).not.toBeNull());
+    const { container: c } = render(<Requests rows={reqs as never} say={() => {}} onDone={() => {}} />);
+    await waitFor(() => expect(c.querySelector('[data-req="r1"]')).not.toBeNull());
     const sel = c.querySelector("select") as HTMLSelectElement;
     expect(sel.value).toBe("viewer");
     fireEvent.change(sel, { target: { value: "guard" } });
-    fireEvent.click(btn(c, "批准"));
+    fireEvent.click(btn(c, "批准…"));
     const pw = await waitFor(() => document.querySelector("dialog input[type=password]") as HTMLInputElement);
     fireEvent.input(pw, { target: { value: "my-password" } });
     fireEvent.submit(pw.closest("form")!);
@@ -76,11 +76,11 @@ describe("W53 网页", () => {
     expect(p.body).toEqual({ role: "guard", confirm_password: "my-password" });
   });
 
-  it("没有申请就不占地方", async () => {
+  it("没有申请就不占地方(用户页只在有申请时才挂这一块)", async () => {
     reqs = [];
-    const { container: c } = render(<Requests say={() => {}} onDone={() => {}} />);
+    const { container: c } = render(<UsersPage me="alice" say={() => {}} now={0} />);
     await new Promise((r) => setTimeout(r, 20));
-    expect(c.textContent).toBe("");
+    expect(c.querySelector(".requests")).toBeNull();
   });
 
   it("开站清单:做完的打勾,没做的能「不用了」、能「去做」,能收起", async () => {
