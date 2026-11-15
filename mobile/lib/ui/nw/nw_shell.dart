@@ -32,7 +32,7 @@ import 'nw_ring.dart';
 import '../site_maps.dart' show SiteMapTab;
 import '../site_robots.dart';
 import '../site_tabs.dart' show AdminHomeTab;
-import '../widget/alarm_widgets.dart' show StopAllButton;
+import '../widget/alarm_widgets.dart' show StopAllButton, estopMisses;
 import 'nw_site_dir.dart';
 import 'nw_theme.dart';
 
@@ -166,6 +166,7 @@ class _NwShellState extends State<NwShell> {
   void dispose() {
     _tick?.cancel();
     pendingRing.removeListener(_onRing);
+    estopMisses.value = const []; // 换站点 / 退出:上一个站点的急停没确认不带过去
     unawaited(ErrorLog.instance.flush());
     ErrorLog.instance.detach(widget.api);
     _watchCtl.dispose();

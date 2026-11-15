@@ -34,6 +34,7 @@ import 'nw_button.dart';
 import 'nw_p2_duty.dart' show NwMapThumb;
 import 'nw_p3_robots.dart';
 import 'nw_site_dir.dart' show ShiftNotesPage;
+import 'nw_estop_miss.dart';
 import 'nw_theme.dart';
 import 'nw_widgets.dart';
 
@@ -1038,6 +1039,8 @@ class _NowPageState extends State<NowPage> {
                   text: tr(
                       'Alarm drill until ${_drillEnd()}: alarms whose title starts with "TEST:" are the drill. Handle them as usual.',
                       '报警演练中（到 ${_drillEnd()}）：标题带「测试：」的报警是演练，照常处理即可。'))),
+        // 急停没确认(稿 N-refuse):比别的都先说
+        EstopMissCards(api: widget.api),
         // 顶上那一条:P1 事件条 > 急停卡 > 全场正常
         KeyedSubtree(
             key: _t.mode,
