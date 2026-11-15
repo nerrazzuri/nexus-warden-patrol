@@ -336,6 +336,10 @@ function Voice({ r, name, busy, off, send, post, admin, say }: {
                 {admin && <button type="button" class="linkish" data-voice-edit="1" onClick={() => setEditing(true)}>{t("rcEditPresets")}</button>}
               </div>
             )}
+            {editing && presets !== null && (
+              <PresetEditor init={presets} onClose={() => setEditing(false)}
+                onSaved={(p) => { setPresets(p); setEditing(false); say(t("rdPresetsSaved")); }} inline />
+            )}
             {tts && (
               <form class="rc-say" onSubmit={(e) => {
                 e.preventDefault();
@@ -378,10 +382,6 @@ function Voice({ r, name, busy, off, send, post, admin, say }: {
             ))}
           </div>
         </section>
-      )}
-      {editing && presets !== null && (
-        <PresetEditor init={presets} onClose={() => setEditing(false)}
-          onSaved={(p) => { setPresets(p); setEditing(false); say(t("rdPresetsSaved")); }} />
       )}
     </>
   );
