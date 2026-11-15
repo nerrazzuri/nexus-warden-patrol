@@ -292,6 +292,18 @@ void main() {
     '25-health': _Shot(const Size(390, 1200), () => SiteHealthPage(api: FakeApi('admin'), canShare: true, save: (n, b) async => n)),
     '26-updates': _Shot(const Size(390, 1200), () => SiteReleasesPage(api: FakeApi('admin'))),
     '27-maps': _Shot(const Size(390, 1200), () => MapManagePage(api: FakeApi('admin')..overview = _mapsOverview)),
+    '28-dir-mgr': _Shot(const Size(390, 1300), () => NwShell(api: _clear('owner'), title: 'estate-1', ring: () {}), ready: (t) async {
+      await t.pumpAndSettle();
+      await openSite(t);
+    }),
+    '29-dir-viewer': _Shot(const Size(390, 1300), () => NwShell(api: _clear('viewer'), title: 'estate-1', ring: () {}), ready: (t) async {
+      await t.pumpAndSettle();
+      await openSite(t);
+    }),
+    '30-dir-admin': _Shot(const Size(390, 1600), () => NwShell(api: _clear('admin'), title: 'estate-1', ring: () {}), ready: (t) async {
+      await t.pumpAndSettle();
+      await openSite(t);
+    }),
     '24-overview': _Shot(const Size(390, 1200), () => Scaffold(body: AdminHomeTab(api: FakeApi('admin'), switchTab: (_) {}))),
     // App V2 第 4 期：深色控制页（保安、经理）、浅色设置页签、添加机器人
     '07b-robot-guard-v2': _Shot(const Size(390, 1900), () => SiteRobotPage(api: FakeApi('guard', robotView: busyView()), robotId: 'A')),
