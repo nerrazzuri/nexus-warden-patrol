@@ -650,7 +650,7 @@ button.armstate:focus-visible { outline: 2px solid var(--c-primary); outline-off
 .slot-pip:disabled { cursor: default; }
 .slot-bar { position: absolute; left: 0; right: 0; top: 0; display: flex; align-items: center; gap: var(--sp-3); padding: 10px 14px 18px;
   background: linear-gradient(rgba(10, 14, 20, 0.85), rgba(10, 14, 20, 0)); color: #fff; }
-.slot-name { font-size: 20px; font-weight: 700; }
+.slot-name { flex: none; white-space: nowrap; font-size: 20px; font-weight: 700; }
 .slot-mid { display: flex; gap: var(--sp-4); margin: 0 auto; padding: 3px 14px; border-radius: var(--r-rPill); background: rgba(0, 0, 0, 0.45); font-size: 15px; }
 .slot-mid:empty { display: none; }
 /* P1-10:画面自己的「● 实时」抬到底栏(任务 · 电量 · 定位)上面,不跟电量叠在一起 */
@@ -1868,9 +1868,10 @@ input[type="checkbox"], input[type="radio"] { width: 18px; height: 18px; }
 .mon-tiles.single { grid-template-columns: minmax(0, 1fr); }
 .mon-tiles.dual { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .mon-tiles.single:has(> .mon-tile + .mon-tile) { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-/* 多(三台以上):每台一格跟双一样,两列,格子按 16:9,放不下的滚 */
-.mon-tiles.multi { grid-template-columns: repeat(2, minmax(0, 1fr)); grid-auto-rows: auto; align-content: start; overflow-y: auto; overscroll-behavior: contain; }
-.mon-tiles.multi > .slot, .mon-tiles.multi > .mon-tile { aspect-ratio: 16 / 9; }
+/* 多(三台以上):每台一格跟双一样,两列,格子按 16:9,放不下的滚。类名用 many —— .multi 是「几件同时」那一页的
+   (笔记本复测 11-15:撞名后被它的 flex 一列盖掉,排成一列细条) */
+.mon-tiles.many { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-auto-rows: auto; align-content: start; overflow-y: auto; overscroll-behavior: contain; }
+.mon-tiles.many > .slot, .mon-tiles.many > .mon-tile { aspect-ratio: 16 / 9; }
 .mon-tiles > .slot { min-height: 0; }
 .mon-tile { margin: 0; min-height: 0; display: flex; flex-direction: column; background: var(--c-well); border: 1px solid var(--c-outline); }
 .mon-tile figcaption { padding: 6px 10px; font-weight: 600; background: #000; color: #ECEDEA; }
@@ -2001,7 +2002,7 @@ input[type="checkbox"], input[type="radio"] { width: 18px; height: 18px; }
 .inc-video { min-height: 0; display: flex; flex-direction: column; }
 .inc-video .mon-video-h { padding: 0 0 8px; }
 .inc-video .mon-tiles.dual, .inc-video .mon-tiles.single { grid-template-columns: minmax(0, 1fr); grid-template-rows: repeat(2, minmax(0, 1fr)); }
-.inc-video .mon-tiles.multi { grid-template-columns: minmax(0, 1fr); }
+.inc-video .mon-tiles.many { grid-template-columns: minmax(0, 1fr); }
 .inc-map { min-height: 0; display: flex; flex-direction: column; border: 1px solid var(--c-outline); }
 .inc-map-h { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-2); padding: 8px 10px; border-bottom: 1px solid var(--c-outline); }
 .inc-map .mon-map { flex: 1; min-height: 200px; }

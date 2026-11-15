@@ -268,7 +268,7 @@ export function IncidentView(props: {
               <span class="push" />
               {!site && <a class="btn" href={recordingLink(a)}>{t("incReplay")}</a>}
             </div>
-            <div class={`mon-tiles ${layout}`}>
+            <div class={`mon-tiles ${layout === "multi" ? "many" : layout}`}>
               {tiles.length === 0 && <p class="muted">{t("incNoVideo")}</p>}
               {tiles.slice(0, n).map((x) => <figure key={x.key} class="mon-tile"><figcaption>{x.label}</figcaption>{x.el}</figure>)}
             </div>

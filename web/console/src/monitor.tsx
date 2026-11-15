@@ -374,7 +374,7 @@ export function MonitorPage(props: {
               </div>
             ) : layout === "multi" ? (
               // 多:每台一格(大画面 + 小画面,跟双一样),两列,超出的滚
-              <div class="mon-tiles multi">
+              <div class="mon-tiles many">
                 {ranked.map((u) => {
                   const al = alarms.find((a) => a.robot === u.robot.robot_id);
                   return <VideoSlot key={`m:${u.robot.robot_id}`} u={u} now={props.now} pinned={false} thermal={thermal}
