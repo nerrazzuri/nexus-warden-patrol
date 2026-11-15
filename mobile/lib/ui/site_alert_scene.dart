@@ -33,6 +33,7 @@ import 'nw/nw_shell.dart' show EstopSquare;
 import 'site_tabs.dart' show AccountsPage;
 import 'site_mapping.dart';
 import 'site_deter.dart' show deterAckFailure, deterQuietFirst;
+import 'site_deterrence.dart' show deterSessionText;
 import 'site_recordings.dart';
 import 'site_runs.dart';
 import 'site_video.dart';
@@ -995,8 +996,19 @@ class _SiteAlertScenePageState extends State<SiteAlertScenePage> with EstopMissR
     // 外审 App-V2-2 N3：结案不等于驱离结束（站点结案不解除驱离）：还在驱离就照样摆着「结束驱离」
     if ((!_open && _d == null) || !_isRobot || !_security) return null;
     final dispatch = widget.api.session?.canDispatch ?? false;
+    // 外审 App-V2-4 R1：「结束驱离」站点按叫停权限（经理也有）；升级、喊话、警灯仍要能派
+    final abort = widget.api.session?.canAbort ?? false;
     if (!dispatch) {
-      return _section(c, tr('On-site warning', '现场警示'), [
+      final d0 = _d;
+      return _section(c, tr('On-site warning', '现场警示'), key: SiteAlertScenePage.warnKey, [
+        if (d0 != null && abort) ...[
+          Text(tr('Deterrence running: ${deterSessionText(d0)}', '正在驱离：${deterSessionText(d0)}'),
+              key: SiteAlertScenePage.deterLevelKey,
+              style: NwText.labelLarge.copyWith(color: c.text, fontWeight: FontWeight.w700)),
+          const SizedBox(height: Nw.s8),
+          _act(SiteAlertScenePage.endDeterKey, tr('End deterrence', '结束驱离'), _endDeter),
+          const SizedBox(height: Nw.s8),
+        ],
         Text(
           tr('Dispatching robots to the alarm and on-site warnings are handled by guards', '派机器人去报警点和现场警示由保安操作'),
           style: NwText.bodyMedium.copyWith(color: c.textSecondary),
