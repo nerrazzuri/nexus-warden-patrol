@@ -151,7 +151,8 @@ def _range_args(q: dict[str, list[str]], *, limit_max: int) -> tuple[int, int, i
         raise HttpError(400, f"limit 要是 1–{limit_max} 的整数")
     return since, until, limit, offset
 #: 告警键 ``robot/kind#seq`` 里有 ``/`` 与 ``#``:客户端整个键编码成一段(``%2F``、``%23``)。
-_ALERT = re.compile(r"^/api/alerts/([^/]{1,256})/(ack|arrive|resolve|reopen|shelve|unshelve)$")
+_ALERT = re.compile(r"^/api/alerts/([^/]{1,256})/"
+                    r"(ack|arrive|resolve|reopen|shelve|unshelve|backup)$")
 #: W00c5c:``/api/robots/<id>/teleop``(WebSocket)与 ``/api/robots/<id>/halt``。
 _TELEOP = re.compile(r"^/api/robots/([^/]{1,64})/"
                      r"(teleop|halt|resume|supervise|relocalize|home/here|deter|service|posture)$")
@@ -217,7 +218,7 @@ TEMP_ROUTE_MAX = 20
 TRACK_SPAN_MAX_MS = 86_400_000
 _ROBOT = re.compile(
     r"^/api/robots/([^/]+)"
-    r"(?:/(goto|abort|patrol|patrol-plan|standby|standby/return|standby/here|intercept/here"
+    r"(?:/(goto|abort|patrol|patrol-plan|goto-plan|standby|standby/return|standby/here|intercept/here"
     r"|home/return))?$")
 
 
@@ -835,6 +836,8 @@ class _Handler(TlsHandlerMixin):
                 return self._send_json(200, {"robots": self.site.dispatcher.robots_view()})
             if method == "GET" and path == "/api/video/ws":
                 return self._video_ws(user)               # W51:网页的多路画面走一条 WebSocket
+            if method == "GET" and path.split("?", 1)[0] == "/api/robots/charging":
+                return self._charging_spans()
             if method == "GET" and path == "/api/robots/overview":
                 # W44 第二期:机器人卡片(今天几趟、毛病、电量)。
                 # W60:经理也看(以看为主;改动的接口照旧要 manage)
@@ -1250,6 +1253,20 @@ class _Handler(TlsHandlerMixin):
             elif m.group(2) == "arrive":
                 # W74:保安到场(看见人的那几种要先到场才能关);到场人取登录账号
                 a = self.site.loop.call(lambda: _sync(self.site.alerts.arrive, key, who=str(user)))
+            elif m.group(2) == "backup":
+                # redesign 第 8 期:请求支援 —— 给经理、管理员推一条(P3,只记录),
+                # 原告警记下谁几点叫的人
+                orig = self.site.loop.call(lambda: _sync(self.site.alerts.book.get, key))
+                if orig is None:
+                    raise HttpError(404, "没有这条告警")
+                now = self.site._now()
+                self.site.loop.call(lambda: _sync(
+                    self.site.alerts.raise_alert, kind="backup_requested", robot=orig.robot,
+                    title=f"请求支援：{orig.title}", detail=f"{user} 正在处理，请求支援",
+                    context={"for": key, "by": str(user)}, merge=False))
+                a = self.site.loop.call(lambda: _sync(
+                    self.site.alerts.amend, key,
+                    context={**orig.context, "backup_by": str(user), "backup_ms": now})) or orig
             else:
                 # W44:结论(确认有人 / 误报 / 处理好了);不给 = 空(老客户端照旧能用),别的值 400
                 verdict = d.get("verdict", "")
@@ -1304,7 +1321,8 @@ class _Handler(TlsHandlerMixin):
         return self._send_json(200, {"cell_m": CELL_M, "cells": cells})
 
     def _shift_notes(self, method: str, user) -> None:
-        """交班留言(W44):``GET`` 最近一条(``view``;带 ``?recent=N`` 再给最近 N 条,新的在前);``POST {"text"}`` 写一条(``handle_alerts``,
+        """交班留言(W44):``GET`` 最近一条(``view``;带 ``?recent=N`` 再给最近 N 条,新的在前);
+        ``POST {"text"}`` 写一条(``handle_alerts``,
         作者取登录账号)。"""
         notes = self.site.shift_notes
         if notes is None:
@@ -1640,6 +1658,8 @@ class _Handler(TlsHandlerMixin):
             return self._intercept_here(robot_id, user)
         if action == "patrol-plan":
             return self._patrol_plan(method, robot_id, user)
+        if action == "goto-plan":
+            return self._goto_plan(method, robot_id, user)
         if method != "POST":
             raise HttpError(405, "只支持 POST")
         d = self._body()
@@ -1771,6 +1791,70 @@ class _Handler(TlsHandlerMixin):
         desk = self._adhoc()
         got = self.site.loop.call(lambda: _sync(desk.plan, robot_id, wire))
         self._send_json(200, {**got, "label": label})
+
+    def _goto_plan(self, method: str, robot_id: str, user) -> None:
+        """redesign 第 8 期(稿 V4-alarm):派去一个点之前按电量算来回够不够。``GET ?x=&y=`` →
+        电量、直线距离、来回约用几 %、出动线、够不够(没位姿 / 没电量 = null,不猜)。"""
+        if method != "GET":
+            raise HttpError(405, "只支持 GET")
+        self._need(user, PATROL)
+        c = self.site.dispatcher.clients.get(robot_id)
+        if c is None:
+            raise HttpError(404, f"没有登记过 {robot_id}")
+        q = parse_qs(self.path.split("?", 1)[1] if "?" in self.path else "")
+        try:
+            x, y = float((q.get("x") or [""])[0]), float((q.get("y") or [""])[0])
+        except ValueError:
+            raise HttpError(400, "要 x、y(数)") from None
+        if not (math.isfinite(x) and math.isfinite(y)):
+            raise HttpError(400, "要 x、y(数)")
+        from nexwar_site.dispatcher import battery_pct
+        from nexwar_site.energy import COST_FLOOR_PCT, RETURN_FACTOR, alarm_line, drain_pct, walk_s
+        fresh_fn = getattr(self.site.dispatcher, "_fresh", None)
+        pct = battery_pct(c, fresh=bool(fresh_fn(c)) if fresh_fn else True)
+        t = getattr(c, "telemetry", None)
+        pose = getattr(t, "pose", None)
+        if pose is None:
+            return self._send_json(200, {"battery_pct": pct, "dist_m": None, "cost_pct": None,
+                                         "line_pct": None, "enough": None})
+        dist = math.hypot(float(pose.x) - x, float(pose.y) - y)
+        go = walk_s(dist)
+        cost = max(COST_FLOOR_PCT, drain_pct(go * 2) * RETURN_FACTOR)
+        line = alarm_line(go, go)
+        return self._send_json(200, {"battery_pct": pct, "dist_m": round(dist, 1),
+                                     "cost_pct": round(cost, 1), "line_pct": round(line, 1),
+                                     "enough": None if pct is None else bool(pct >= line)})
+
+    def _charging_spans(self) -> None:
+        """redesign 第 8 期:哪台几点到几点在充(``charge_log`` 流水 → 时段;没结束的 ``to_ms``
+        = null)。
+        ``?since=&until=``(毫秒,默认最近 24 小时,最长 7 天)。"""
+        q = parse_qs(self.path.split("?", 1)[1] if "?" in self.path else "")
+        now = self.site._now()
+        try:
+            until = int((q.get("until") or [str(now)])[0])
+            since = int((q.get("since") or [str(until - 86_400_000)])[0])
+        except ValueError:
+            raise HttpError(400, "since、until 要是毫秒") from None
+        if until <= since or until - since > 7 * 86_400_000:
+            raise HttpError(400, "时间段要在 7 天以内")
+        from nexwar_site.charging import _CHARGING
+        rows = self.site.alerts.db.query(
+            "SELECT robot_id, state, at_ms FROM charge_log WHERE at_ms >= ? AND at_ms <= ? "
+            "ORDER BY at_ms", (since - 86_400_000, until))
+        spans: list[dict[str, Any]] = []
+        open_: dict[str, int] = {}
+        for r in rows:
+            rid, st, at = r["robot_id"], r["state"], int(r["at_ms"])
+            if st in _CHARGING:
+                open_.setdefault(rid, at)
+            elif rid in open_:
+                a0 = open_.pop(rid)
+                if at >= since:
+                    spans.append({"robot": rid, "from_ms": max(a0, since), "to_ms": at})
+        for rid, a0 in open_.items():
+            spans.append({"robot": rid, "from_ms": max(a0, since), "to_ms": None})
+        return self._send_json(200, {"spans": spans})
 
     def _temp_mission(self, d: dict[str, Any]) -> Any:
         """保安的临时路线(W44,用户选的):按顺序的 1–20 个点,走一趟,**不进路线库**。校验跟存路线同一套

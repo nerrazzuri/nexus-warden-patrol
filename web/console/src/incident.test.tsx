@@ -261,3 +261,28 @@ describe("监控墙", () => {
     expect(onSite).toHaveBeenCalled();
   });
 });
+
+describe("第 8 期:请求支援", () => {
+  it("能处理报警的在「通知」那一组有「请求支援」,点了 POST /backup;已经叫过人的写谁几点叫的", async () => {
+    const posted: { url: string }[] = [];
+    setFetch(((url: string, init?: RequestInit) => {
+      if (init?.method === "POST") posted.push({ url });
+      return Promise.resolve(json({}));
+    }) as typeof fetch);
+    const c = render(<IncidentView a={alert({})} units={[]} alerts={[]} now={1} role="guard" mode={null} cams={[]} layout="single" onLayout={() => {}}
+      say={() => {}} refresh={async () => {}} onSite={() => {}} onZoom={() => {}} onFindPose={() => {}} onAreas={() => {}} />).container;
+    const b = c.querySelector("[data-backup]") as HTMLButtonElement;
+    expect(b).not.toBeNull();
+    fireEvent.click(b);
+    await waitFor(() => expect(posted.some((p) => p.url.endsWith("/backup"))).toBe(true));
+    cleanup();
+    const d = render(<IncidentView a={alert({ context: { backup_by: "gina", backup_ms: 1 } })} units={[]} alerts={[]} now={1} role="guard" mode={null} cams={[]} layout="single" onLayout={() => {}}
+      say={() => {}} refresh={async () => {}} onSite={() => {}} onZoom={() => {}} onFindPose={() => {}} onAreas={() => {}} />).container;
+    expect(d.querySelector("[data-backup]")).toBeNull();
+    expect(d.querySelector("[data-backup-done]")!.textContent).toContain("gina");
+    cleanup();
+    const v = render(<IncidentView a={alert({})} units={[]} alerts={[]} now={1} role="viewer" mode={null} cams={[]} layout="single" onLayout={() => {}}
+      say={() => {}} refresh={async () => {}} onSite={() => {}} onZoom={() => {}} onFindPose={() => {}} onAreas={() => {}} />).container;
+    expect(v.querySelector("[data-backup]")).toBeNull();
+  });
+});

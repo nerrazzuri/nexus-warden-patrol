@@ -2548,3 +2548,7 @@ input[type="checkbox"], input[type="radio"] { width: 18px; height: 18px; }
 .preset-inline { margin-top: 8px; padding: 12px; border: 1px solid var(--c-outline); display: flex; flex-direction: column; gap: var(--sp-2); }
 .preset-inline h4 { margin: 0; }
 .preset-inline .preset-form { gap: var(--sp-2); }
+
+/* 第 8 期:时间轴充电灰条 */
+.tl-lane .tl-charge, .tl-key .tl-charge { position: absolute; top: 50%; height: 6px; transform: translateY(-50%); background: var(--c-textSecondary); opacity: 0.55; }
+.tl-key .tl-charge { position: static; display: inline-block; width: 14px; height: 6px; transform: none; vertical-align: middle; }

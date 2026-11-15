@@ -236,6 +236,7 @@ LEVEL_OF: dict[str, Level] = {
     "authorized_person": Level.P3,
     # W53:有人手动派了临时巡逻(告诉经理、管理员);排队的那一趟起跑了、作废了(告诉派的人)。
     "adhoc_patrol": Level.P3,
+    "backup_requested": Level.P3,     # redesign 第 8 期:保安请求支援(推经理、管理员;只记录)
     "adhoc_queue": Level.P3,
     # W75:站点出完一张图(推给管理员、工程师:可以用了)
     "map_ready": Level.P3,

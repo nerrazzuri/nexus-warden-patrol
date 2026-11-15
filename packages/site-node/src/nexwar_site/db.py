@@ -29,7 +29,7 @@ from typing import Any
 #: 77 第 13 轮 W13-01:删掉的排程留着当时的定义 retired_ids.definition
 #:    (今天没跑的那一轮删了照样列;只加列)。
 #: 78 W77(外审 W77-1 #6):见人开的警灯、警笛还没确认关掉的 person_warn_lit(只加表)。
-SCHEMA_VERSION = 78
+SCHEMA_VERSION = 79
 
 _DDL = """
 CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
@@ -407,6 +407,13 @@ CREATE TABLE IF NOT EXISTS charge_cycles (
     started_ms INTEGER NOT NULL,
     until_ms   INTEGER
 );
+-- redesign 第 8 期:充电状态的流水(值班时间轴画灰条;charge_cycles 只有当前这一轮)。
+CREATE TABLE IF NOT EXISTS charge_log (
+    robot_id TEXT NOT NULL,
+    state    TEXT NOT NULL,
+    at_ms    INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS charge_log_at ON charge_log(at_ms);
 -- W13 外审:机器人报「桩上危险」(运动锁住)报过 P1 的(一次挂一次;机器人上摘了就删)。
 -- W30b(决策 51):机器人报证据没封(没装站点公钥)报过 P2 的(装好了删)。
 CREATE TABLE IF NOT EXISTS evidence_plain (
