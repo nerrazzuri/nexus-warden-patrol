@@ -18,9 +18,10 @@ EXPIRE_MS = 2 * 3_600_000
 
 
 class LookDesk:
-    def __init__(self, db: Any, standby: Any, *, now_ms) -> None:
+    def __init__(self, db: Any, standby: Any, *, now_ms, alerts: Any = None) -> None:
         self.db = db
         self.standby = standby
+        self.alerts = alerts
         self._now = now_ms
         #: task_id -> {"robot", "then", "by", "at_ms"}
         self.pending: dict[str, dict[str, Any]] = {}
@@ -54,12 +55,29 @@ class LookDesk:
             if kind != "task_done":
                 log.info("%s 看一眼那一趟 %s,不派后续", rid, kind)
                 continue
+            await self._send_back(rid, p)
+
+    async def _send_back(self, rid: str, p: dict[str, Any]) -> None:
+        """回待命点派不成(待命点登记在别的图上、没有默认待命点……)就改回原点;再不成报一条
+        ``standby_failed``,让值班的人看到它停在那里了、为什么。"""
+        why = ""
+        order = ["home"] if p["then"] == "home" else ["standby", "home"]
+        for what in order:
+            label = "回原点" if what == "home" else "回待命点"
             try:
-                if p["then"] == "home":
+                if what == "home":
                     r = await self.standby.return_home(rid, issued_by=p["by"])
                 else:
                     r = await self.standby.return_to(rid, issued_by=p["by"])
-                log.info("%s 看完了,派%s:%s", rid, "回原点" if p["then"] == "home" else "回待命点",
-                         json.dumps(r, ensure_ascii=False)[:200])
+                log.info("%s 看完了,派%s:%s", rid, label, json.dumps(r, ensure_ascii=False)[:200])
+                return
+            except Exception as exc:         # 站点拒了(DispatchRefused)或别的:记下、试下一招
+                why = f"{why}; " if why else ""
+                why += f"{label}:{exc}"
+                log.warning("%s 看完了,派%s没成:%s", rid, label, exc)
+        if self.alerts is not None:
+            try:
+                self.alerts.raise_alert(kind="standby_failed", robot=rid, title="看完后没能回去,停在原地",
+                                        detail=why[:300], context={"look_task": p.get("task_id", "")})
             except Exception:
-                log.exception("%s 看完了,派后续没成", rid)
+                log.exception("%s 回不去的告警没报成", rid)
