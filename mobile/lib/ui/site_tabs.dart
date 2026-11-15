@@ -11,6 +11,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../l10n.dart';
+import '../model/alert.dart';
 import '../net/site_client.dart';
 import '../store/site_store.dart';
 import 'app_settings.dart';
@@ -21,13 +22,12 @@ import 'nw/nw_p4_admin.dart' show nwGap8, NwListView;
 import 'nw/nw_theme.dart';
 import 'nw/nw_widgets.dart';
 import 'patrol_dispatch.dart';
-import 'site_cameras.dart';
-import 'site_health.dart';
+import 'nw/nw_p3_robots.dart' show robotBattery, robotPhase, robotPhaseTone;
+import 'site_deter.dart' show nwRobotSection;
 import 'site_intercepts.dart';
+import 'site_robot.dart' show robotStatusLine;
 import 'site_mapping.dart';
-import 'site_releases.dart';
 import 'site_routes.dart';
-import 'site_weather.dart';
 
 void _push(BuildContext context, Widget page) =>
     Navigator.push(context, MaterialPageRoute<void>(builder: (_) => page));
@@ -303,6 +303,10 @@ class AdminHomeTab extends StatefulWidget {
 class _AdminHomeTabState extends State<AdminHomeTab> {
   List<(String, String, VoidCallback)> _todo = const [];
 
+  /// 今天（App V2 稿 S-home）：报警几条（几条没结）、巡逻跑完几趟、误报几条；今晚的巡逻几点。
+  ({int alarms, int open, int falseAlarms, int patrols, List<String> times})? _today;
+  List<Map<String, dynamic>> _robots = const [];
+
   @override
   void initState() {
     super.initState();
@@ -365,6 +369,39 @@ class _AdminHomeTabState extends State<AdminHomeTab> {
       // 站点没开
     }
     if (mounted) setState(() => _todo = todo);
+    await _loadToday();
+  }
+
+  Future<void> _loadToday() async {
+    final now = DateTime.now();
+    final midnight = DateTime(now.year, now.month, now.day).millisecondsSinceEpoch;
+    try {
+      final got = await Future.wait<Object>([
+        widget.api.alerts(all: true),
+        widget.api.patrolsToday().catchError((Object _) => <String, dynamic>{}),
+        widget.api.robots().catchError((Object _) => <Map<String, dynamic>>[]),
+      ]);
+      final alerts = (got[0] as List<Alert>).where((a) => a.firstMs >= midnight).toList();
+      final items = [for (final x in ((got[1] as Map)['items'] as List? ?? const [])) if (x is Map) x];
+      String hm(Object? ms) {
+        if (ms is! num) return '';
+        final d = DateTime.fromMillisecondsSinceEpoch(ms.toInt());
+        return '${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}';
+      }
+      if (!mounted) return;
+      setState(() {
+        _today = (
+          alarms: alerts.length,
+          open: alerts.where((a) => !a.resolved).length,
+          falseAlarms: alerts.where((a) => a.verdict == 'false_alarm').length,
+          patrols: items.where((x) => x['state'] == 'done').length,
+          times: [for (final x in items) if (hm(x['start_ms'] ?? x['at_ms']).isNotEmpty) hm(x['start_ms'] ?? x['at_ms'])],
+        );
+        _robots = [for (final r in got[2] as List<Map<String, dynamic>>) if (r['revoked'] != true) r];
+      });
+    } on SiteError {
+      // 读不到就不摆「今天」
+    }
   }
 
   void _go(BuildContext context, String id) {
@@ -389,131 +426,85 @@ class _AdminHomeTabState extends State<AdminHomeTab> {
   @override
   Widget build(BuildContext context) {
     final c = Nw.of(context);
-    final s = widget.api.session;
-    final api = widget.api;
-    Widget group(String label, List<Widget> entries) => Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [NwSectionLabel(label), nwGap8, ...entries, const SizedBox(height: Nw.s8)]);
+    // App V2 稿 S-home：待处理、开站清单、今天、机器人。路线、日程、摄像头、拦截点在「地图与布置」，天气在「布防与巡逻」，
+    // 设置、教程在「现场」目录的「本机」那一组。
+    final t = _today;
+    Widget stat(String n, String label, Key key) => Expanded(
+        child: Container(
+            key: key,
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(border: Border.all(color: c.outline)),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(n, style: NwText.headlineSmall.copyWith(color: c.text, fontWeight: FontWeight.w700)),
+              Text(label, style: NwText.bodySmall.copyWith(color: c.textSecondary)),
+            ])));
     return Scaffold(
+      backgroundColor: c.bg,
       body: Column(children: [
-        NwHeader(overline: 'Nexus Warden', title: tr('Admin', '管理')),
+        NwHeader(
+            title: tr('Overview', '概况'),
+            subtitle: _todo.isEmpty ? null : tr('${_todo.length} pending', '${_todo.length} 件待处理')),
         Expanded(
           child: RefreshIndicator(
             onRefresh: _load,
-            child: NwListView(children: [
+            child: ListView(padding: const EdgeInsets.only(bottom: Nw.s24), children: [
               if (_todo.isNotEmpty)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: Nw.s16),
-                  child: NwCard(
-                    key: AdminHomeTab.todoKey,
-                    tone: NwTone.warning,
-                    child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-                      Text(tr('Needs you', '待处理'),
-                          style: NwText.titleSmall.copyWith(color: c.text, fontWeight: FontWeight.w700)),
-                      for (final t in _todo)
-                        Padding(
-                          padding: const EdgeInsets.only(top: Nw.s8),
-                          child: Row(children: [
-                            Expanded(child: Text(t.$2, style: NwText.bodyMedium.copyWith(color: c.text))),
-                            NwButton(
-                                buttonKey: Key('todo-${t.$1}'),
-                                size: NwButtonSize.small,
-                                label: tr('Go', '去处理'),
-                                onPressed: t.$3),
-                          ]),
-                        ),
-                    ]),
-                  ),
-                ),
-              SetupChecklist(api: api, go: _go),
-              group(tr('Patrols', '巡逻'), [
-                _Entry(
-                    entryKey: AdminHomeTab.entryKey('routes'),
-                    icon: Icons.route_rounded,
-                    title: tr('Patrol routes', '巡逻路线'),
-                    hint: tr('Draw routes on the map: which points, how long to stop, what to photograph.',
-                        '在地图上绘制路线：途经点、停留时长、拍摄内容。'),
-                    onTap: () => _push(context, SiteRoutesPage(api: api))),
-                _Entry(
-                    entryKey: AdminHomeTab.entryKey('schedule'),
-                    icon: Icons.event_rounded,
-                    title: tr('Schedule', '日程'),
-                    hint: tr('What time, which route, which robot.', '执行时间、路线和机器人。'),
-                    onTap: () => _push(context, SchedulePage(api: api))),
-              ]),
-              group(tr('Alarm response', '报警联动'), [
-                _Entry(
-                    entryKey: AdminHomeTab.entryKey('cameras'),
-                    icon: Icons.videocam_rounded,
-                    title: tr('Cameras', '摄像头'),
-                    hint: tr('Fixed cameras: watch them, and send a robot when they report an intruder.',
-                        '登记固定摄像头：查看画面，报入侵时派机器人。'),
-                    onTap: () => _push(context, SiteCamerasPage(api: api))),
-                _Entry(
-                    entryKey: AdminHomeTab.entryKey('intercepts'),
-                    icon: Icons.fence_rounded,
-                    title: tr('Intercept points', '拦截点'),
-                    hint: tr('Where a robot goes when a zone reports an intrusion: mark the point, then link zones.',
-                        '防区报入侵时机器人前往的位置：先标点，再关联防区。'),
-                    onTap: () => _push(context, SiteInterceptsPage(api: api))),
-                _Entry(
-                    entryKey: AdminHomeTab.entryKey('weather'),
-                    icon: Icons.cloud_rounded,
-                    title: tr('Weather', '天气'),
-                    hint: tr('Slow down in rain, pause patrols in thunderstorms; set the site location.',
-                        '雨天限速、雷暴暂停巡逻；设置站点坐标。'),
-                    onTap: () => _push(context, SiteWeatherPage(api: api))),
-              ]),
-              group(tr('People and system', '人员与系统'), [
-                if (s?.canManageAccounts ?? false)
-                  _Entry(
-                      entryKey: AdminHomeTab.entryKey('accounts'),
-                      icon: Icons.people_alt_rounded,
-                      title: tr('Accounts', '账号'),
-                      hint: tr('Approve account applications. Roles and disabling are on the web console.', '审批账号申请。改权限、停用账号请到网页值班台。'),
-                      onTap: () => _push(context, AccountsPage(api: api))),
-                _Entry(
-                    entryKey: AdminHomeTab.entryKey('health'),
-                    icon: Icons.monitor_heart_rounded,
-                    title: tr('Health check', '体检'),
-                    hint: tr('Robots online, disk, backups, certificates; versions and clock offset of each robot.',
-                        '机器人在线、磁盘、备份、证书；各机器人的版本和时钟偏差。'),
-                    onTap: () => _push(context, SiteHealthPage(api: api))),
-                _Entry(
-                    entryKey: AdminHomeTab.entryKey('releases'),
-                    icon: Icons.system_update_rounded,
-                    title: tr('Software updates', '软件升级'),
-                    hint: tr('Install new versions on the robots, roll back if something goes wrong.',
-                        '为机器人安装新版本，出现问题可回退。'),
-                    onTap: () => _push(context, SiteReleasesPage(api: api))),
-                _Entry(
-                    entryKey: AdminHomeTab.entryKey('settings'),
-                    icon: Icons.settings_rounded,
-                    title: tr('Settings', '设置'),
-                    hint: tr('Language, background watch and push, app version and updates.',
-                        '语言、后台值守与推送、App 版本与更新。'),
-                    onTap: () => openSettings(context, api)),
-                _Entry(
-                    entryKey: AdminHomeTab.entryKey('tour'),
-                    icon: Icons.school_rounded,
-                    title: tr('How to use', '使用教程'),
-                    hint: tr('Replay the duty page tour.', '重新观看值守页导览。'),
-                    onTap: () => restartTour(context, api)),
-                _Entry(
-                    entryKey: AdminHomeTab.entryKey('help'),
-                    icon: Icons.help_outline_rounded,
-                    title: tr('Common questions', '常见问题'),
-                    hint: tr('Handling alarms, robots that won\'t go, and more.',
-                        '报警处理、机器人无法派出等常见问题。'),
-                    onTap: () => _push(context, HelpPage(role: s?.role ?? ''))),
-                _Entry(
-                    entryKey: leaveSiteKey,
-                    icon: Icons.logout_rounded,
-                    title: tr('Leave this site', '退出站点'),
-                    hint: tr('Signed in as ${s?.name ?? ''} (${roleName(s?.role ?? '')}).',
-                        '当前登录：${s?.name ?? ''}（${roleName(s?.role ?? '')}）。'),
-                    onTap: () => leaveSite(context)),
-              ]),
+                nwRobotSection(c, tr('Pending ${_todo.length}', '待处理 ${_todo.length}'), key: AdminHomeTab.todoKey, [
+                  for (final it in _todo)
+                    Container(
+                      padding: const EdgeInsets.symmetric(vertical: 10),
+                      decoration: BoxDecoration(border: Border(top: BorderSide(color: c.outline))),
+                      child: Row(children: [
+                        Container(width: 10, height: 10, decoration: BoxDecoration(color: c.primary, shape: BoxShape.circle)),
+                        const SizedBox(width: 10),
+                        Expanded(child: Text(it.$2, style: NwText.bodyMedium.copyWith(color: c.text, fontWeight: FontWeight.w600))),
+                        const SizedBox(width: Nw.s8),
+                        FilledButton(
+                            key: Key('todo-${it.$1}'),
+                            style: FilledButton.styleFrom(
+                                minimumSize: const Size(48, 40),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(2))),
+                            onPressed: it.$3,
+                            child: Text(tr('Go', '去处理'))),
+                      ]),
+                    ),
+                ]),
+              SetupChecklist(api: widget.api, go: _go),
+              if (t != null)
+                nwRobotSection(c, tr('Today', '今天'), key: const Key('overview-today'), [
+                  Row(children: [
+                    stat('${t.alarms}', t.open > 0 ? tr('Alarms (${t.open} open)', '报警（${t.open} 条没结）') : tr('Alarms', '报警'),
+                        const Key('overview-alarms')),
+                    stat('${t.patrols}', tr('Patrols completed', '巡逻跑完'), const Key('overview-patrols')),
+                    stat('${t.falseAlarms}', tr('False alarms', '误报'), const Key('overview-false')),
+                  ]),
+                  if (t.times.isNotEmpty) ...[
+                    const SizedBox(height: Nw.s8),
+                    Text(tr('Patrols ${t.times.join(' / ')}', '巡逻 ${t.times.join(' / ')}'),
+                        style: NwText.bodySmall.copyWith(color: c.textSecondary)),
+                  ],
+                ]),
+              if (_robots.isNotEmpty)
+                nwRobotSection(c, tr('Robots', '机器人'), key: const Key('overview-robots'), [
+                  for (final r in _robots)
+                    InkWell(
+                        key: Key('overview-robot-${r['robot_id']}'),
+                        onTap: () => widget.switchTab(1),
+                        child: Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 8),
+                            child: Row(children: [
+                              Container(width: 10, height: 10, color: c.fg(robotPhaseTone(robotPhase(r)))),
+                              const SizedBox(width: 10),
+                              Text('${r['robot_id']}', style: NwText.titleSmall.copyWith(color: c.text, fontWeight: FontWeight.w700)),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                  child: Text(robotStatusLine(r),
+                                      maxLines: 1, overflow: TextOverflow.ellipsis, style: NwText.bodyMedium.copyWith(color: c.text))),
+                              if (robotBattery(r) != null)
+                                Text('${robotBattery(r)!.round()}%',
+                                    style: NwText.titleSmall.copyWith(color: c.text, fontWeight: FontWeight.w700)),
+                            ]))),
+                ]),
             ]),
           ),
         ),

@@ -500,7 +500,7 @@ void main() {
       }
     });
 
-    testWidgets('W53 外壳里的管理栏：要你处理、开站清单在上，下面三组入口、每项一句说明；没有第二个顶栏', (t) async {
+    testWidgets('App V2 稿 S-home 概况：待处理、开站清单、今天、机器人；没有第二个顶栏', (t) async {
       _size(t);
       await t.pumpWidget(MaterialApp(home: NwShell(api: FakeApi('admin'), ring: () {})));
       await t.pumpAndSettle();
@@ -509,7 +509,8 @@ void main() {
       expect(find.byKey(AdminHomeTab.todoKey), findsOneWidget, reason: '假站点的禁行区没确认');
       expect(find.byKey(SetupChecklist.cardKey), findsOneWidget);
       final card = t.getRect(find.byKey(SetupChecklist.cardKey));
-      expect(t.getRect(find.byKey(AdminHomeTab.entryKey('routes'))).top, greaterThan(card.bottom));
+      expect(t.getRect(find.byKey(AdminHomeTab.todoKey)).bottom, lessThanOrEqualTo(card.top), reason: '待处理在清单上面');
+      expect(find.byKey(AdminHomeTab.entryKey('routes')), findsNothing, reason: '路线在「地图与布置」');
       await t.pumpWidget(Container());
     });
   });
