@@ -10,6 +10,7 @@ goal_driver 每个目标出发前:向 Nav2 要一条路线(ComputePathToPose,只
 from __future__ import annotations
 
 import math
+import os
 import sys
 from pathlib import Path
 
@@ -63,6 +64,9 @@ class RouteGate:
         import rclpy
 
         from nexwar_agent.route_check import check_route
+        if os.environ.get("NAV_ROUTE_SEARCH", "true") == "false":   # A/B 组:不做局部搜索
+            import nexwar_agent.route_check as rc
+            rc._searched = lambda *a, **k: None
         if not self.client.wait_for_server(timeout_sec=10.0):
             return {"checked": False, "why": "compute_path_to_pose unavailable"}
         g = self.goal_t()
