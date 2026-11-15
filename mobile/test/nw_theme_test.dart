@@ -64,10 +64,10 @@ void main() {
         expect(th.cardTheme.color, c.surface);
         expect(th.colorScheme.shadow, Colors.transparent, reason: '设计稿没有阴影');
       }
-      expect(NwColors.light.bg, const Color(0xFFFDFDFD));
-      expect(NwColors.light.primary, const Color(0xFF1A1C1E));
-      expect(NwColors.dark.bg, const Color(0xFF0A0C10));
-      expect(NwColors.dark.primary, const Color(0xFFD1E4FF));
+      expect(NwColors.light.bg, const Color(0xFFF5F6F4));   // App V2:牌子白(跟网页同一套)
+      expect(NwColors.light.primary, const Color(0xFF0B5FA5));
+      expect(NwColors.dark.bg, const Color(0xFF0E1013));
+      expect(NwColors.dark.primary, const Color(0xFF1F6FC0));
     });
 
     test('正文 Inter 14；标题 Space Grotesk；标签也是 Inter（W60：等宽只给编号、数字）；中文落到系统字体', () {
