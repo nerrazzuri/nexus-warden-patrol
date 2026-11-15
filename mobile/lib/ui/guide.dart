@@ -299,13 +299,13 @@ class _PracticeAlarmPageState extends State<PracticeAlarmPage> {
                     style: NwText.bodySmall.copyWith(color: Colors.white70)))),
         nwGap8,
         Text(
-            tr('The alarm page shows the snapshot, live video and map location. Tap "I\'ll handle it" so others see it is being handled.',
+            tr('The alarm page shows the snapshot, live video and map location. Tap "Take ownership" so others see someone is responding.',
                 '报警页显示抓拍、实时画面和地图位置。点「我来处理」，其他人会看到已有人处理。'),
             style: NwText.bodyMedium.copyWith(color: c.text)),
         nwGap8,
         NwButton(
             buttonKey: PracticeAlarmPage.takeKey,
-            label: tr("I'll handle it", '我来处理'),
+            label: tr('Take ownership', '我来处理'),
             onPressed: () => setState(() => _step = 2)),
       ]),
       // 2：写结论
@@ -318,7 +318,7 @@ class _PracticeAlarmPageState extends State<PracticeAlarmPage> {
           for (final (o, label) in [
             ('real', tr('Real person', '真有人')),
             ('false', tr('False alarm', '误报')),
-            ('handled', tr('Handled', '已处理')),
+            ('handled', tr('Resolved', '已处理')),
           ])
             NwButton(
                 buttonKey: PracticeAlarmPage.outcomeKey(o),
@@ -378,7 +378,7 @@ List<_Faq> _faqs() => [
           tr('A read-only account can watch the snapshot, live video and map, but cannot handle alarms. Call the guard on duty.',
               '只读账号能看抓拍、实时画面和地图，处理不了报警。请联系值班保安。')),
       _Faq({'guard', 'owner', 'admin', 'engineer'}, tr('How to handle an alarm', '收到报警如何处理'),
-          tr('Tap the red bar → check the snapshot and live video → tap "I\'ll handle it". If someone is there, go to the site with a colleague or call the police; then record Real intrusion / False alarm / Handled.',
+          tr('Tap the red bar → check the snapshot and live video → tap "Take ownership". If someone is there, go to the site with a colleague or call the police; then record Confirmed intrusion / False alarm / Resolved.',
               '点红条 → 查看抓拍和实时画面 → 点「我来处理」。确认有人时叫上同事到现场或报警；处理后记录结论：真实入侵 / 误报 / 已处理。')),
       _Faq({'guard', 'owner', 'admin', 'engineer'}, tr('How to stop a robot immediately', '如何立即停止机器人'),
           tr('Duty page → Stop. The robot stops where it is and is not dispatched again until someone taps Resume. The emergency stop on the robot always works.',
@@ -415,7 +415,7 @@ class HelpPage extends StatelessWidget {
     final c = Nw.of(context);
     final list = [for (final f in _faqs()) if (f.roles == null || f.roles!.contains(role)) f];
     return Scaffold(
-      appBar: AppBar(title: Text(tr('Common questions', '常见问题'))),
+      appBar: AppBar(title: Text(tr('FAQ', '常见问题'))),
       body: NwListView(children: [
         for (var i = 0; i < list.length; i++)
           Padding(

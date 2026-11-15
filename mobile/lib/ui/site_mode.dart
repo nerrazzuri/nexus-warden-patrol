@@ -308,7 +308,7 @@ class _SiteModePageState extends State<SiteModePage> {
                       () => _arm()),
                 if (canSet) ...[
                   btn(SiteModePage.homeKey, 'home', tr('Stay', '留守'), () => _toHome(now)),
-                  btn(SiteModePage.visitorKey, 'visitor', tr('Temp disarm', '临时撤防'), () => _visitorAsk(now)),
+                  btn(SiteModePage.visitorKey, 'visitor', tr('Temporary disarm', '临时撤防'), () => _visitorAsk(now)),
                 ],
               ];
               // App V2：同一排等宽（窄屏也一排三个）
@@ -633,7 +633,7 @@ class _SiteModeBarState extends State<SiteModeBar> {
         NwChoice(
             key: SiteModeBar.visitorKey,
             icon: Icons.people_rounded,
-            label: tr('Temp disarm', '临时撤防').toUpperCase(),
+            label: tr('Temporary disarm', '临时撤防').toUpperCase(),
             selected: now == 'visitor',
             onTap: !canSet || _busy ? null : _visitor),
       ]),

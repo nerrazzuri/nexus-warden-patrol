@@ -47,7 +47,7 @@ Future<void> showStopFailed(BuildContext context, {String? robot, Object? error}
               FilledButton(
                   style: FilledButton.styleFrom(backgroundColor: c.error, foregroundColor: c.onError),
                   onPressed: () => Navigator.pop(ctx),
-                  child: Text(tr('OK', '知道了'))),
+                  child: Text(tr('Acknowledge', '知道了'))),
             ],
           ));
 }

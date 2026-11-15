@@ -418,7 +418,7 @@ class _NowPageState extends State<NowPage> {
           const SizedBox(width: 10),
           Expanded(
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(tr('All clear', '全场正常'), style: NwText.titleSmall.copyWith(color: c.text, fontWeight: FontWeight.w700)),
+            Text(tr('All systems normal', '全场正常'), style: NwText.titleSmall.copyWith(color: c.text, fontWeight: FontWeight.w700)),
             Text(_okNote(), maxLines: 2, overflow: TextOverflow.ellipsis, style: NwText.bodySmall.copyWith(color: c.textSecondary)),
           ])),
         ]),
@@ -707,7 +707,7 @@ class _NowPageState extends State<NowPage> {
         RobotPhase.charging => tr('Charging', '充电中'),
         RobotPhase.idle => tr('Standby', '待命'),
         RobotPhase.held => tr('Stopped', '已急停'),
-        RobotPhase.estop => tr('E-stop', '急停'),
+        RobotPhase.estop => tr('E-STOP', '急停'),
         RobotPhase.lowBattery => tr('Low battery', '低电'),
         RobotPhase.offline => tr('Offline', '离线'),
         RobotPhase.deterring => tr('Deterring', '驱离中'),
@@ -828,7 +828,7 @@ class _NowPageState extends State<NowPage> {
           height: 200,
           load: () => loadMapPicture(widget.api, m.$1, m.$2),
           label: label,
-          action: tr('Full map', '全屏地图'),
+          action: tr('Full-screen map', '全屏地图'),
           onTap: () => widget.onOpenMap?.call()),
       if (can) ...[
         const SizedBox(height: Nw.s8),
@@ -964,7 +964,7 @@ class _NowPageState extends State<NowPage> {
     final rows = all.take(4).toList();
     return _section(
         c,
-        tr('Latest activity', '最新活动'),
+        tr('Recent activity', '最新活动'),
         key: NowPage.activityKey,
         right: InkWell(
             key: NowPage.recordsKey,

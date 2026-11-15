@@ -77,7 +77,7 @@ List<(String, String)> diagLines(Map<String, dynamic> d) {
         s == true ? tr('Synced', '已同步') : s == false ? tr('Not synced', '未同步') : tr('Unknown', '未知')));
   }
   final cert = d['cert'];
-  if (cert is Map) out.add((tr('Certificate expires', '证书到期'), '${cert['not_after'] ?? cert['error'] ?? '—'}'));
+  if (cert is Map) out.add((tr('Certificate expiry', '证书到期'), '${cert['not_after'] ?? cert['error'] ?? '—'}'));
   if (d['busy'] is String && (d['busy'] as String).isNotEmpty) out.add((tr('Busy', '忙'), '${d['busy']}'));
   final svcs = d['services'];
   if (svcs is List) {
