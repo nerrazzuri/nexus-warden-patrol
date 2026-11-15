@@ -312,7 +312,7 @@ describe("布防向导", () => {
   it("在地图上改防区:就地嵌布置页的防区编辑器,不跳页面、没有别的标签", async () => {
     const before = location.hash;
     const r = await openWiz();
-    fireEvent.click(r.getByText("在地图上修改防区"));
+    fireEvent.click(r.getByText("在地图上新画或修改防区"));
     const doc = r.container.ownerDocument;
     await waitFor(() => expect(doc.querySelector(".wiz-editor .layout")).not.toBeNull());
     expect(doc.querySelector(".wiz-editor .ly-tabs")).toBeNull();
