@@ -497,7 +497,9 @@ void main() {
       await t.pumpAndSettle();
       await t.tap(find.byKey(SchedulePage.weekTabKey));
       await t.pumpAndSettle();
-      expect(find.textContaining('夜巡测试 · 一楼夜巡 · B'), findsOneWidget);
+      // App V2 稿 S-schedule：一行两句 —— 「日程名 · 路线」，下面「哪台 · 哪几天」
+      expect(find.text('夜巡测试 · 一楼夜巡'), findsOneWidget);
+      expect(find.textContaining('B · '), findsOneWidget);
       expect(find.textContaining('route-1'), findsNothing);
       await t.tap(find.byKey(SchedulePage.addKey));
       await t.pumpAndSettle();

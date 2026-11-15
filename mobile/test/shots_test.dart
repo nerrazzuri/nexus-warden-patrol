@@ -27,7 +27,7 @@ import 'package:nexwar_patrol/ui/site_health.dart';
 import 'package:nexwar_patrol/ui/site_releases.dart';
 import 'package:nexwar_patrol/ui/map_manage.dart';
 import 'package:nexwar_patrol/ui/site_runs.dart';
-import 'package:nexwar_patrol/ui/site_tabs.dart' show AccountsPage, AdminHomeTab;
+import 'package:nexwar_patrol/ui/site_tabs.dart' show AccountsPage, AdminHomeTab, SchedulePage;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
@@ -304,6 +304,7 @@ void main() {
       await t.pumpAndSettle();
       await openSite(t);
     }),
+    '31-schedule': _Shot(const Size(390, 1200), () => SchedulePage(api: FakeApi('admin'))),
     '24-overview': _Shot(const Size(390, 1200), () => Scaffold(body: AdminHomeTab(api: FakeApi('admin'), switchTab: (_) {}))),
     // App V2 第 4 期：深色控制页（保安、经理）、浅色设置页签、添加机器人
     '07b-robot-guard-v2': _Shot(const Size(390, 1900), () => SiteRobotPage(api: FakeApi('guard', robotView: busyView()), robotId: 'A')),
