@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 // App V2 第 4 期：机器人页（稿 N-robot / M-robot / S-robot-set）。深色页 ⋮ 去设置；浅色页「操作 | 设置」；
 // 改名、派遣方式、解绑（再输一次密码）都在设置页签里就地做，不弹窗。
 import 'package:flutter/material.dart';
@@ -81,6 +83,13 @@ void main() {
     await t.pumpAndSettle();
     expect(find.byKey(const Key('robot-general')), findsOneWidget);
     await _open(t, FakeApi('owner', robotView: busyView()), light: false, settings: false);
+    expect(find.text('经理看状态、派巡逻'), findsOneWidget);
+    // 外审 App-V2-6 N1：经理也看得见机身急停（权限说明不顶掉状态）
+    final estop = jsonDecode(jsonEncode(busyView())) as Map<String, dynamic>;
+    final st = estop['status'] as Map<String, dynamic>;
+    st['ready'] = <String, dynamic>{...((st['ready'] as Map?) ?? const {}).cast<String, dynamic>(), 'estop_clear': false};
+    await _open(t, FakeApi('owner', robotView: estop), light: false, settings: false);
+    expect(t.widget<Text>(find.byKey(const Key('robot-phase'))).data, contains('急停'));
     expect(find.text('经理看状态、派巡逻'), findsOneWidget);
     expect(find.byKey(SiteRobotPage.tonightKey), findsOneWidget);
     expect(find.textContaining('由保安、管理员操作'), findsOneWidget);
