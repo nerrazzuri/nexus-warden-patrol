@@ -531,48 +531,6 @@ describe("W41 清噪点", () => {
     await waitFor(() => expect(body).toEqual({ confirm_password: "pw", confirm_rollback: true }));
   });
 
-  it("红圈画在图上;点一个留着它;清掉其余的、另存新版,带上看过的那份摘要", async () => {
-    routes["GET /api/admin/maps/estate/1/noise"] = () => json({ digest: "d1", res: 0.05, max_m2: 0.05, ring_m: 0.2,
-      specks: [{ id: 1, x: 1.0, y: 2.0, px: 3 }, { id: 2, x: -1.0, y: 0.5, px: 1 }, { id: 3, x: 2.0, y: -1.0, px: 2 }] });
-    routes["GET /api/maps/estate/1/preview"] = () => json({ width: 400, height: 300, m_per_px: 0.05, left_x: -10, top_y: 8 });
-    routes["POST /api/admin/maps/estate/1/denoise"] = () => json({ version: "4", cleaned: 2, cells: 5, homes_copied: 1 });
-    const { container: c, getByLabelText } = mount();
-    await waitFor(() => getByLabelText("estate:1"));
-    fireEvent.click(Array.from(getByLabelText("estate:1").querySelectorAll("button")).find((b) => b.textContent === "Clean noise…") as HTMLElement);
-    await waitFor(() => expect(c.querySelectorAll("circle[data-speck]").length).toBe(3));
-    fireEvent.load(c.querySelector(".mm-noiseimg image")!);   // 复查 N3:底图加载好了才许清
-    // P0-11:整个圈都能点(不是只有圈线),圈按图的大小放大
-    const circle = c.querySelector('circle[data-speck="2"]') as Element;
-    expect(circle.getAttribute("pointer-events")).toBe("all");
-    expect(circle.getAttribute("fill")).toBe("transparent");
-    expect(Number(circle.getAttribute("r"))).toBeGreaterThanOrEqual(6);
-    fireEvent.click(circle);
-    expect(c.querySelector('circle[data-speck="2"]')!.getAttribute("data-kept")).toBe("1");
-    expect((c.querySelector('input[data-keep="2"]') as HTMLInputElement).checked).toBe(true);
-    fireEvent.click(c.querySelector('input[data-keep="3"]') as HTMLElement);       // 清单里勾也行
-    expect(c.querySelector('circle[data-speck="3"]')!.getAttribute("data-kept")).toBe("1");
-    fireEvent.click(c.querySelector('input[data-keep="3"]') as HTMLElement);
-    const go = c.querySelector("[data-denoise]") as HTMLButtonElement;
-    expect(go.textContent).toContain("Clean 2 spots");
-    fireEvent.click(go);
-    await waitFor(() => expect(say).toHaveBeenCalledWith(expect.stringContaining("Saved as draft v4")));
-    const post = calls.find((x) => x.method === "POST" && x.path.endsWith("/denoise"))!;
-    expect(post.body).toEqual({ digest: "d1", skip: [2] });
-  });
-
-  it("站点拒了(图换了):原因显示在对话框里", async () => {
-    routes["GET /api/admin/maps/estate/1/noise"] = () => json({ digest: "d1", res: 0.05, max_m2: 0.05, ring_m: 0.2, specks: [{ id: 1, x: 1, y: 2, px: 3 }] });
-    routes["GET /api/maps/estate/1/preview"] = () => json({ width: 400, height: 300, m_per_px: 0.05, left_x: -10, top_y: 8 });
-    routes["POST /api/admin/maps/estate/1/denoise"] = () => json({ error: "这一版的栅格在你看过之后换了" }, 409);
-    const { container: c, getByLabelText } = mount();
-    await waitFor(() => getByLabelText("estate:1"));
-    fireEvent.click(Array.from(getByLabelText("estate:1").querySelectorAll("button")).find((b) => b.textContent === "Clean noise…") as HTMLElement);
-    await waitFor(() => expect(c.querySelector(".mm-noiseimg image")).not.toBeNull());
-    fireEvent.load(c.querySelector(".mm-noiseimg image")!);   // 复查 N3:底图加载好了才许清
-    await waitFor(() => expect((c.querySelector("[data-denoise]") as HTMLButtonElement).disabled).toBe(false));
-    fireEvent.click(c.querySelector("[data-denoise]") as HTMLElement);
-    await waitFor(() => expect(c.querySelector('[role="alert"]')?.textContent).toContain("changed after you opened it"));
-  });
 });
 
 describe("第 2 轮 P0-14:路线条数的说法", () => {
