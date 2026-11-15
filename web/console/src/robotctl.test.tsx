@@ -58,9 +58,9 @@ const alerts: Alert[] = [{
   key: "k1", kind: "obstructed", level: "P2", robot: "A", title: "Obstructed, east corridor", detail: "", first_ms: NOW - 3_600_000,
   last_ms: NOW - 3_600_000, count: 1, acked_by: "", acked_ms: null, resolved_ms: NOW - 3_500_000, audience: "help",
 }];
-const show = (role = "guard", u = unit(), o: { onBack?: () => void; onLook?: (id: string) => void } = {}) =>
+const show = (role = "guard", u = unit(), o: { onBack?: () => void; onLook?: (id: string) => void; onFind?: (id: string) => void } = {}) =>
   render(<RobotControl u={u} role={role} now={NOW} alerts={alerts} patrols={[]} since={NOW - 5 * 3_600_000} say={vi.fn()}
-    refresh={vi.fn(async () => {})} onBack={o.onBack ?? (() => {})} onLook={o.onLook ?? (() => {})} />).container;
+    refresh={vi.fn(async () => {})} onBack={o.onBack ?? (() => {})} onLook={o.onLook ?? (() => {})} onFind={o.onFind} />).container;
 const btn = (c: Element, text: string) => {
   const b = Array.from(c.querySelectorAll("button")).find((x) => x.textContent === text);
   if (!b) throw new Error(`no button ${text}: ${Array.from(c.querySelectorAll("button")).map((x) => x.textContent).join(" | ")}`);
@@ -78,6 +78,17 @@ const pressSel = async (c: Element, sel: string) => {
 const posted = (path: string) => posts.filter((p) => p.url === path).map((p) => p.body);
 
 describe("单台机器人控制 · 保安", () => {
+  it("协助定位(对齐老值班页):回全场地图在地图上点它;经理、只读没有", () => {
+    const onFind = vi.fn();
+    const c = show("guard", unit(), { onFind });
+    fireEvent.click(c.querySelector("[data-find]")!);
+    expect(onFind).toHaveBeenCalledWith("A");
+    cleanup();
+    expect(show("owner", unit(), { onFind }).querySelector("[data-find]")).toBeNull();
+    cleanup();
+    expect(show("viewer", unit(), { onFind }).querySelector("[data-find]")).toBeNull();
+  });
+
   it("页头:回全场、名字、状态、在做什么;画面按这台有的摄像头分前 / 后 / 热成像", async () => {
     const back = vi.fn();
     const c = show("guard", unit(), { onBack: back });

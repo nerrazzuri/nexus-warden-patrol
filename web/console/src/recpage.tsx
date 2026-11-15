@@ -34,6 +34,7 @@ import {
   type TrackPt,
 } from "./recordings";
 import { pxToMap } from "./routes";
+import { SubTabs } from "./shell";
 
 const CAMS: Cam[] = ["front", "back"];
 const SPEEDS = [1, 2, 4];
@@ -245,8 +246,9 @@ export function RecordingsPage(props: { robots: string[]; role: string; now: num
   const ls = range ? lanes(allRobots, allRows, alerts, range, segS).filter((l) => l.segs.length || l.marks.length || l.robot === robot) : [];
   const [jumpBad, setJumpBad] = useState(false);
   return (
-    <div class="recpage">
-      <div class="recbar">
+    <div class="ev recpage">
+      <aside class="ev-left recbar">
+        <SubTabs page="recordings" role={props.role} rail />
         {/* 第 3 轮 zh N14:浏览器的日期框按浏览器语言显示(英文浏览器写 11/08/2026),跟页面别处的
             2026-11-08 不一样:换成固定格式的文字框 + 前一天 / 后一天 */}
         <DateBox value={date} max={dateInput(props.now)} onChange={setDate} />
@@ -274,11 +276,12 @@ export function RecordingsPage(props: { robots: string[]; role: string; now: num
         <div class="seg" role="group" aria-label={t("recCamera")}>
           {cams.map((c) => <button key={c} type="button" aria-pressed={c === cam} onClick={() => { if (cur && head != null) want.current = head; setCam(c); }}>{t(c)}</button>)}
         </div>
-        <span class="muted push">
+        <span class="muted small">
           {state === "ok" && rows && t("recSummary", { d: duration(total), n: rows.length, k: kept })}
         </span>
-      </div>
+      </aside>
 
+      <section class="ev-main rec-main">
       <div class="recbody">
         <div class="recview">
           <div class={shown && !broken ? "well rec" : "well rec idle"}>
@@ -377,12 +380,13 @@ export function RecordingsPage(props: { robots: string[]; role: string; now: num
         <Timeline lanes={ls} robot={robot} day={range} view={view} head={head}
           onView={setView} onPick={(id, ms) => switchTo(id, ms)} />
       )}
+      </section>
     </div>
   );
 }
 
 /** 右边的地图:那一刻在哪(之前实线、之后虚线),点轨迹跳到经过那里的时刻。 */
-function RecMap(props: { robot: string; track: TrackPt[]; failed?: boolean; head: number | null; onSeek: (ms: number) => void }) {
+export function RecMap(props: { robot: string; track: TrackPt[]; failed?: boolean; head: number | null; onSeek: (ms: number) => void }) {
   const here = props.head != null ? poseAt(props.track, props.head) : null;
   const ref = here ?? props.track[0] ?? null;
   const key = ref ? `${ref.map_id}/${ref.map_version}` : "";

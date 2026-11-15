@@ -16,6 +16,7 @@ import { RecordingsPage } from "./recpage";
 import { ReportsPage } from "./reportpage";
 import { FELL_KINDS, forGuard, isOwnerLike, queue, robotCams, robotState, type Alert, type Mode } from "./model";
 import { AlarmLogPage } from "./alarmlog";
+import { NotesPage } from "./notes";
 import { HelpDialog, WEB_TOUR } from "./guide";
 import { ArmingPage } from "./armingpage";
 import { ArmWizard, needsWizard, patrolHint, wt } from "./armwizard";
@@ -200,16 +201,17 @@ export function Console({ me, onOut }: { me: Me; onOut: (note?: string) => void 
       <main class="page" id="main" tabIndex={-1} data-page={route.page}>
         <SubTabs page={route.page} role={me.role} />
         {/* P2-02:值班这几页本身没有大标题,给读屏一个 */}
-        {(["duty", "live", "map", "alarms", "recordings"] as Page[]).includes(route.page) && navLabel(route.page) && (
+        {(["duty", "live", "map", "alarms", "recordings", "notes"] as Page[]).includes(route.page) && navLabel(route.page) && (
           <h1 class="sr-only">{t(navLabel(route.page)!.page)}</h1>
         )}
         {/* W6-13 / minor #25:演练开着,保安的值班、实时画面、地图页也说一句(以前只有管理员总览、报警记录页) */}
         {(["duty", "live", "map"] as Page[]).includes(route.page) && <DrillNote role={me.role} />}
         {route.page === "duty" && (
-          <MonitorPage units={units} alerts={alerts} now={now} role={me.role} me={me.name} say={say} refresh={refresh} mode={data?.mode ?? null} stale={stale}
+          <MonitorPage openKey={route.alarm ?? null} units={units} alerts={alerts} now={now} role={me.role} me={me.name} say={say} refresh={refresh} mode={data?.mode ?? null} stale={stale}
             onZoom={(id) => setPending({ kind: "cam", robot: id, cam: "front" })} />
         )}
         {route.page === "alarms" && <AlarmLogPage now={now} role={me.role} me={me.name} />}
+        {route.page === "notes" && <NotesPage role={me.role} me={me.name} />}
         {/* UIUX-034:无权限页说清楚给谁用,给一个回去的按钮 */}
         {!pageAllowed(route.page, me.role) && (
           <section class="empty noaccess" role="alert">

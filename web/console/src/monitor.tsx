@@ -26,6 +26,8 @@ import { isSecurity, recentActivity, ShiftTimeline } from "./shifttl";
 import { TodayPatrols, type TodayItem } from "./todaypatrols";
 import { RobotControl } from "./robotctl";
 import { MultiView } from "./multi";
+import { PlaybackView, playRobot, type Playback } from "./playback";
+import { hms, incidentLog, REOPEN_MS } from "./alertdetail";
 
 /** 迷路了的两种(站点 alerts.LEVEL_OF):多一个「帮它找位置」。 */
 const LOST = new Set(["loc_lost_paused", "loc_lost_idle"]);
@@ -58,6 +60,8 @@ export function MonitorPage(props: {
   onZoom: (robot: string) => void;
   mode?: Mode | null;
   stale?: boolean;
+  /** 报警记录页「去处理」带过来的那一件(#/duty?alarm=)。 */
+  openKey?: string | null;
 }) {
   const duty = useDutySettings();
   const since = shiftStart(props.now, duty.shift_hours);
@@ -115,10 +119,17 @@ export function MonitorPage(props: {
   const [ctl, setCtl] = useState<string | null>(null);
   // G-compact(≤1439 宽):右栏收成窄栏,巡逻 / 活动点开在原地盖一层
   const [rail, setRail] = useState<"patrol" | "activity" | null>(null);
-  if ((top?.key ?? null) !== seenTop) { setSeenTop(top?.key ?? null); if (top && top.key !== seenTop) { setSiteView(false); setCtl(null); } }
+  // 回放(第五期 G-playback):点「本班已关闭」的一件或时间轴某一刻;来了新的告警回到实时
+  const [play, setPlay] = useState<Playback | null>(null);
+  const [playHead, setPlayHead] = useState<number | null>(null);
+  if ((top?.key ?? null) !== seenTop) { setSeenTop(top?.key ?? null); if (top && top.key !== seenTop) { setSiteView(false); setCtl(null); setPlay(null); } }
   const picked = detail ? props.alerts.find((a) => a.key === detail) ?? recent.find((a) => a.key === detail) ?? null : null;
   const focus = picked ?? (!siteView ? top ?? null : null);
-  const openAlarm = (a: Alert) => { setSelected(a.robot); setDetail(a.key); setSiteView(false); setCtl(null); };
+  const openAlarm = (a: Alert) => { setSelected(a.robot); setDetail(a.key); setSiteView(false); setCtl(null); setPlay(null); };
+  useEffect(() => { if (props.openKey) { setDetail(props.openKey); setSiteView(false); setCtl(null); setPlay(null); } }, [props.openKey]);
+  const robotIds = props.units.map((u) => u.robot.robot_id);
+  const replay = (a: Alert) => { setCtl(null); setPlay({ key: a.key, robot: playRobot(a, robotIds), at: a.first_ms }); setPlayHead(a.first_ms); };
+  const playAlert = play?.key ? recent.find((a) => a.key === play.key) ?? props.alerts.find((a) => a.key === play.key) ?? null : null;
   const held = props.units.filter((u) => u.robot.held != null);
   const noHome = props.units.filter((u) => u.state !== "offline" && u.robot.home_set === false);
   const fixHome = pageAllowed("admin/localization", props.role);
@@ -246,7 +257,7 @@ export function MonitorPage(props: {
           <h2 class="mon-h"><span>{t("monClosed", { n: closed.length })}</span></h2>
           <ul class="mon-closedlist">
             {closed.slice(0, 12).map((a) => (
-              <li key={a.key} class={focus?.key === a.key ? "on" : ""}><button type="button" onClick={() => openAlarm(a)}>
+              <li key={a.key} class={play?.key === a.key ? "on" : ""}><button type="button" onClick={() => replay(a)}>
                 <time class="mono">{hm(a.resolved_ms ?? a.first_ms)}</time>
                 <span>{alertTitle(lang.value, a.kind, a.title)}</span>
                 <span class="muted">{autoResolved(a) ? t("monAuto") : verdictText(a) || t("monResolved")}</span>
@@ -258,10 +269,14 @@ export function MonitorPage(props: {
       </aside>
 
       <section class="mon-center" aria-label={t("secMonitor")}>
-        {ctlUnit ? (
+        {play ? (
+          <PlaybackView play={play} alert={playAlert} robots={robotIds} role={props.role} now={props.now} say={props.say}
+            onHead={setPlayHead} onLive={() => { setPlay(null); setPlayHead(null); }} />
+        ) : ctlUnit ? (
           <RobotControl u={ctlUnit} role={props.role} now={props.now} alerts={recent} patrols={patrols} since={since} say={props.say} refresh={props.refresh}
             onBack={() => setCtl(null)}
-            onLook={(id) => { setCtl(null); setDetail(null); setSiteView(true); setSelected(id); setLookRobot(id); setTool("look"); }} />
+            onLook={(id) => { setCtl(null); setDetail(null); setSiteView(true); setSelected(id); setLookRobot(id); setTool("look"); }}
+            onFind={(id) => { setCtl(null); setDetail(null); setSiteView(true); setSelected(id); setFinding(id); }} />
         ) : multi ? (
           <MultiView events={security} units={props.units} cams={cams} canTake={can} onOpen={openAlarm}
             onTake={(a) => void post(`/api/alerts/${enc(a.key)}/ack`)} map={(
@@ -344,7 +359,8 @@ export function MonitorPage(props: {
 
       <aside class="mon-right" aria-label={t("monRobots")} data-rail={rail ?? undefined}>
         <section class="mon-sec mon-robots-sec">
-          <h2 class="mon-h"><span>{t(focus && focus.resolved_ms == null && !ctlUnit && !multi ? "monRobotsNearest" : "monRobots")}</span></h2>
+          <h2 class="mon-h"><span>{t(play ? "pbRobotsLive" : focus && focus.resolved_ms == null && !ctlUnit && !multi ? "monRobotsNearest" : "monRobots")}</span>
+            {play && <small>{t("pbRobotsLiveSub")}</small>}</h2>
           {ranked.length === 0 && <p class={props.stale ? "warn mon-pad" : "muted mon-pad"}>{t(props.stale ? "dutyStaleRobots" : "dutyNoRobots")}</p>}
           <ul class="mon-robots">
             {byIncident.map((u) => {
@@ -372,6 +388,17 @@ export function MonitorPage(props: {
             })}
           </ul>
         </section>
+        {playAlert && (
+          <section class="mon-sec mon-pbhist" aria-label={t("pbHistory")}>
+            <h2 class="mon-h"><span>{t("pbHistory")}</span></h2>
+            <ol class="mon-activity">{incidentLog(playAlert).map((x, i) => <li key={i}><time class="mono">{hms(x.at)}</time><span>{x.text}</span></li>)}</ol>
+            {can && playAlert.resolved_ms != null && props.now < playAlert.resolved_ms + REOPEN_MS && !autoResolved(playAlert) && (
+              <button type="button" class="btn mon-pad" onClick={() => void post(`/api/alerts/${enc(playAlert.key)}/reopen`).then(() => { props.say(t("incReopened")); setPlay(null); openAlarm(playAlert); })}>
+                {t("evReopenUntil", { t: hm(playAlert.resolved_ms + REOPEN_MS) })}
+              </button>
+            )}
+          </section>
+        )}
         <section class="mon-sec mon-tonight">
           <TodayPatrols canFix={pageAllowed("admin/robots", props.role)} onItems={setPatrols} title={t("monTonight")} />
         </section>
@@ -400,7 +427,8 @@ export function MonitorPage(props: {
       </nav>
 
       <ShiftTimeline robots={ranked.map((u) => u.robot.robot_id)} patrols={patrols} alerts={recent} from={since} to={until} now={props.now}
-        onPick={(robot, at) => { location.hash = `#/recordings?robot=${enc(robot)}&t=${Math.round(at)}`; }} />
+        play={play ? playHead ?? play.at : null}
+        onPick={(robot, at) => { setCtl(null); setPlay({ key: null, robot, at }); setPlayHead(at); }} />
 
     </div>
   );

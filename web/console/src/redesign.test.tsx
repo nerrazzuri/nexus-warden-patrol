@@ -1,13 +1,11 @@
 // @vitest-environment happy-dom
-// redesign/console-v2(2026-11-14):审计 UIUX-E004 关对话框焦点回到打开它的按钮;E027 报警详情先聚焦「我来处理」。
+// redesign/console-v2(2026-11-14):审计 UIUX-E004 关对话框焦点回到打开它的按钮;E027(报警详情弹窗第五期换成报警记录页右栏,不再弹)。
 import { cleanup, fireEvent, render } from "@testing-library/preact";
 import { useState } from "preact/hooks";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { AlertDetail } from "./alertdetail";
 import { setFetch } from "./api";
 import { Modal } from "./dialogs";
 import { lang } from "./i18n";
-import type { Alert } from "./model";
 
 beforeEach(() => {
   lang.value = "zh";
@@ -38,13 +36,6 @@ describe("redesign 焦点", () => {
     expect(document.activeElement).toBe(r.getByText("打开"));
   });
 
-  it("E027:没人接手的报警,打开详情焦点在「我来处理」,不在备注框", async () => {
-    const a = { key: "A/intrusion#1", kind: "intrusion", level: "P1", robot: "A", title: "有人闯入", detail: "", first_ms: 1, last_ms: 1, count: 1,
-      acked_by: "", acked_ms: null, resolved_ms: null, context: {} } as unknown as Alert;
-    render(<AlertDetail a={a} role="guard" now={0} units={[]} onClose={() => {}} refresh={async () => {}} say={() => {}} />);
-    await new Promise((x) => setTimeout(x, 0));
-    expect(document.activeElement?.textContent).toBe("我来处理");
-  });
 });
 
 describe("redesign 列表文字", () => {

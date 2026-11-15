@@ -137,3 +137,24 @@ def test_交班留言接口_长度和没登录(站点):
     assert s.req("POST", "/api/shift-notes", {"text": "字" * 501}, token=gina)[0] == 400
     assert s.req("POST", "/api/shift-notes", {"text": 3}, token=gina)[0] == 400
     assert s.req("GET", "/api/shift-notes")[0] == 401
+
+
+def test_交班留言接口_要历史时给最近几条_新的在前(站点):
+    s = 站点
+    gina, vic = _登(s, "gina"), _登(s, "alice")
+    for x in ("一", "二", "三"):
+        assert s.req("POST", "/api/shift-notes", {"text": x}, token=gina)[0] == 200
+    code, d = s.req("GET", "/api/shift-notes?recent=2", token=vic)
+    assert code == 200 and d["latest"]["text"] == "三"
+    assert [n["text"] for n in d["recent"]] == ["三", "二"]
+    assert s.req("GET", "/api/shift-notes?recent=x", token=vic)[0] == 400
+
+
+def test_留言历史最多给_200_条(tmp_path):
+    db = SiteDB(tmp_path / "s.db")
+    n = ShiftNotes(db, now_ms=lambda: 5)
+    for i in range(3):
+        n.add("gina", f"第{i}条")
+    assert [x["text"] for x in n.recent(10)] == ["第2条", "第1条", "第0条"]
+    assert n.recent(0) == []
+    assert len(n.recent(10_000)) == 3

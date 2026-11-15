@@ -32,6 +32,16 @@ class ShiftNotes:
             nid = int(cur.lastrowid)
         return {"id": nid, "at_ms": now, "author": author, "text": body}
 
+    def recent(self, limit: int) -> list[dict[str, Any]]:
+        """最近 ``limit`` 条(新的在前,最多 200 条):交班留言页列历史用。"""
+        n = max(0, min(int(limit), 200))
+        if n == 0:
+            return []
+        rows = self.db.query(
+            "SELECT id, at_ms, author, text FROM shift_notes ORDER BY id DESC LIMIT ?", (n,))
+        return [{"id": r["id"], "at_ms": r["at_ms"], "author": r["author"], "text": r["text"]}
+                for r in rows]
+
     def latest(self) -> dict[str, Any] | None:
         rows = self.db.query(
             "SELECT id, at_ms, author, text FROM shift_notes ORDER BY id DESC LIMIT 1")
