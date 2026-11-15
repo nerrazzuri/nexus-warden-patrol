@@ -871,6 +871,7 @@ class Server:
         from nexwar_site.alert_sources import SiteAlertSources
         from nexwar_site.alert_store import AlertDesk
         self.alerts = AlertDesk(self.db, now_ms=wall_ms, publish=self.dispatcher.feed.publish)
+        self.look.alerts = self.alerts              # 看完后回不去要报一条(告警簿在它后面才建)
         self.alert_sources = SiteAlertSources(self.alerts, now_ms=wall_ms,
                                               skew_of=self.dispatcher.clock_skew_s)   # W09d:同一份
         self.alert_sources.attach(self.dispatcher)
