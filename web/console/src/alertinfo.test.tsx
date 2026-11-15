@@ -3,7 +3,7 @@
 // P0-04 关了的 10 分钟内能撤销;定位页能标原点。
 import { cleanup, fireEvent, render, waitFor } from "@testing-library/preact";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { AlertDetail } from "./alertdetail";
+import { EventPanel } from "./alertdetail";
 import { alertAdvice, alertHeadline, reportStart, watchStart } from "./alertinfo";
 import { LocPage } from "./advloc";
 import { setFetch } from "./api";
@@ -92,49 +92,45 @@ describe("P0-03 派出后如实说", () => {
   });
 });
 
-describe("P0-04 关了能撤销", () => {
+describe("P0-04 关了能重新打开(第五期:报警记录页右栏)", () => {
   const show = (a: Alert, n: number, role = "guard") => render(
-    <AlertDetail a={a} role={role} now={n} units={[]} onClose={() => {}} refresh={async () => {}} say={() => {}} />);
+    <EventPanel a={a} role={role} now={n} refresh={async () => {}} say={() => {}} />);
 
-  it("10 分钟内有撤销,点了发 reopen;写着谁关的、备注", async () => {
+  it("10 分钟内有「重新打开」,写到几点,点了发 reopen;经过里写着谁关的、备注", async () => {
     const a = alert({ kind: "stuck", resolved_ms: 100_000, resolved_by: "gina", verdict: "false_alarm",
       context: { note: "纸箱" } as never });
     const { container: c } = show(a, 100_000 + 9 * 60_000);
-    const m = c.ownerDocument.querySelector(".alertdetail")!;
+    const m = c.querySelector(".evp")!;
     expect(m.textContent).toContain("gina");
     expect(m.textContent).toContain("纸箱");
-    fireEvent.click(btn(m, "撤销关闭")!);
+    const b = Array.from(m.querySelectorAll("button")).find((x) => x.textContent!.startsWith("重新打开"))!;
+    expect(b.textContent).toMatch(/\d\d:\d\d 前/);
+    fireEvent.click(b);
     await waitFor(() => expect(posts).toContainEqual({ url: `/api/alerts/${encodeURIComponent(a.key)}/reopen`, body: {} }));
   });
 
-  it("第 2 轮 duty N8:关掉以后提示写能撤销到几点,带「撤销关闭」,点了发 reopen", async () => {
-    const said: { s: string; act?: { label: string; run: () => void } }[] = [];
-    const a = alert({ kind: "stuck" });
-    render(<AlertDetail a={a} role="guard" now={0} units={[]} onClose={() => {}} refresh={async () => {}}
-      say={(s: string, act?: { label: string; run: () => void }) => said.push({ s, act })} />);
-    const m = document.querySelector(".alertdetail")!;
-    fireEvent.click(m.querySelector('.seg button')!);
-    fireEvent.click(btn(m, "关闭报警")!);
-    await waitFor(() => expect(said.some((x) => x.act)).toBe(true));
-    const x = said.find((y) => y.act)!;
-    expect(x.s).toMatch(/前可以撤销/);
-    expect(x.act!.label).toBe("撤销关闭");
-    x.act!.run();
-    await waitFor(() => expect(posts).toContainEqual({ url: `/api/alerts/${encodeURIComponent(a.key)}/reopen`, body: {} }));
-  });
-
-  it("过了 10 分钟、只读账号:没有撤销", () => {
+  it("过了 10 分钟、只读账号:没有重新打开", () => {
     const a = alert({ kind: "stuck", resolved_ms: 100_000, resolved_by: "gina", verdict: "handled" });
+    const re = (c: Element) => Array.from(c.querySelectorAll("button")).find((x) => x.textContent!.startsWith("重新打开"));
     const { container: c } = show(a, 100_000 + 11 * 60_000);
-    expect(btn(c.ownerDocument.querySelector(".alertdetail")!, "撤销关闭")).toBeUndefined();
+    expect(re(c)).toBeUndefined();
     cleanup();
     const { container: d } = show(a, 100_001, "viewer");
-    expect(btn(d.ownerDocument.querySelector(".alertdetail")!, "撤销关闭")).toBeUndefined();
+    expect(re(d)).toBeUndefined();
+  });
+
+  it("没关的:「去处理」跳值班页那一件;只读账号没有", () => {
+    const a = alert({ kind: "intrusion" });
+    const { container: c } = show(a, 1000);
+    expect(c.querySelector("a[data-respond]")!.getAttribute("href")).toBe(`#/duty?alarm=${encodeURIComponent(a.key)}`);
+    cleanup();
+    const { container: d } = show(a, 1000, "viewer");
+    expect(d.querySelector("a[data-respond]")).toBeNull();
   });
 
   it("详情里写该做什么", () => {
     const { container: c } = show(alert({}), 20_000);
-    expect(c.ownerDocument.querySelector(".ad-do")!.textContent).toContain("在这儿标原点");
+    expect(c.querySelector(".ad-do")!.textContent).toContain("在这儿标原点");
   });
 });
 
@@ -171,18 +167,12 @@ describe("P1-14 今日巡逻的原因说人话", () => {
   });
 });
 
-describe("第 2 轮 P0-05:详情里有位置、接手后说下一步", () => {
-  const show = (a: Alert) => render(
-    <AlertDetail a={a} role="guard" now={1000} units={[]} onClose={() => {}} refresh={async () => {}} say={() => {}} />);
-  it("只有地图坐标、没有区域名:写「在地图上标着」并能跳过去", () => {
-    const r = show(alert({ kind: "intrusion", context: { pose: { map_id: "m", map_version: "1", x: 1, y: 2 } } }));
+describe("第 2 轮 P0-05:详情里有位置", () => {
+  it("只有地图坐标、没有区域名:写「在地图上标着」,点了去值班页那一件", () => {
+    const a = alert({ kind: "intrusion", context: { pose: { map_id: "m", map_version: "1", x: 1, y: 2 } } });
+    const r = render(<EventPanel a={a} role="guard" now={1000} refresh={async () => {}} say={() => {}} />);
     const link = r.container.querySelector("a[data-where-map]") as HTMLAnchorElement;
-    expect(link).not.toBeNull();
-    expect(link.getAttribute("href")).toBe("#/map");
-  });
-  it("已接手、还开着:写下一步(派机器人看、看画面或录像、选结论关闭)", () => {
-    const r = show(alert({ kind: "intrusion", acked_by: "gina", acked_ms: 500 }));
-    expect(r.container.querySelector("[data-next-step]")!.textContent).toContain("选结论");
+    expect(link.getAttribute("href")).toBe(`#/duty?alarm=${encodeURIComponent(a.key)}`);
   });
 });
 
@@ -212,7 +202,7 @@ describe("第 2 轮 duty N2 残留", () => {
 
 describe("导航 V1 第 5 节:报警详情按原因码写「怎么回事 + 该做什么」", () => {
   const show = (a: Alert) => render(
-    <AlertDetail a={a} role="guard" now={20_000} units={[]} onClose={() => {}} refresh={async () => {}} say={() => {}} />);
+    <EventPanel a={a} role="guard" now={20_000} refresh={async () => {}} say={() => {}} />);
 
   it("认得的码:中文写原因和处理建议;切英文跟着换", () => {
     const a = alert({ kind: "stuck", title: "点位 P4 未到达,已跳过", detail: "终点贴墙", context: { code: "goal_too_close_to_wall" } as never });

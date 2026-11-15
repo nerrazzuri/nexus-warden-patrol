@@ -1304,14 +1304,21 @@ class _Handler(TlsHandlerMixin):
         return self._send_json(200, {"cell_m": CELL_M, "cells": cells})
 
     def _shift_notes(self, method: str, user) -> None:
-        """交班留言(W44):``GET`` 最近一条(``view``);``POST {"text"}`` 写一条(``handle_alerts``,
+        """交班留言(W44):``GET`` 最近一条(``view``;带 ``?recent=N`` 再给最近 N 条,新的在前);``POST {"text"}`` 写一条(``handle_alerts``,
         作者取登录账号)。"""
         notes = self.site.shift_notes
         if notes is None:
             raise HttpError(404, "此站点未启用交班留言")
         if method == "GET":
             self._need(user, VIEW)
-            return self._send_json(200, {"latest": notes.latest()})
+            q = parse_qs(self.path.split("?", 1)[1] if "?" in self.path else "")
+            if "recent" not in q:
+                return self._send_json(200, {"latest": notes.latest()})
+            try:
+                n = int(q["recent"][0])
+            except ValueError as exc:
+                raise HttpError(400, "recent 要是整数") from exc
+            return self._send_json(200, {"latest": notes.latest(), "recent": notes.recent(n)})
         if method != "POST":
             raise HttpError(405, "只支持 GET/POST")
         self._need(user, HANDLE_ALERTS)

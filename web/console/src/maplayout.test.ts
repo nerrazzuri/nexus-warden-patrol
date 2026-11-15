@@ -80,9 +80,9 @@ describe("第二档 样式", () => {
   });
 });
 
-describe("UIUX-024 报警行", () => {
-  it("描述列至少 240px、结果列可缩;1100px 以下换成两行排(UIUX-046:时间和标题同一行)", () => {
-    expect(decl(".it")).toMatch(/grid-template-columns: ?140px 70px minmax\(240px, ?1fr\) minmax\(160px, ?220px\) auto/);
-    expect(flat).toMatch(/@media \(max-width: 1100px\) \{ ?\.it \{ ?grid-template-columns: 100px 48px minmax\(0, ?1fr\) auto/);
+describe("UIUX-024 报警行(第五期换成表格)", () => {
+  it("1439 宽以下表格去掉画面列、右栏变窄;1099 以下三栏叠成一列", () => {
+    expect(flat).toMatch(/@media \(max-width: 1439px\) \{ ?\.ev \{ ?grid-template-columns: 232px minmax\(0, ?1fr\) 400px; ?\} ?\.ev-table \.ev-shot \{ ?display: none/);
+    expect(flat).toMatch(/@media \(max-width: 1099px\) \{ ?\.ev, \.ev\.recpage, \.ev\.notes \{ ?grid-template-columns: 1fr/);
   });
 });

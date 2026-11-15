@@ -3,7 +3,7 @@
 // (派机器人 / 现场警示 / 通知)、结论和这件事的经过。原来的报警详情弹窗(AlertDetail)在值班页不再用:不弹窗,
 // 同一个页框里切换。只读账号看得到进度(谁在处理、哪台机器人、结论),没有操作。
 import { useEffect, useState } from "preact/hooks";
-import { REOPEN_MS, verdictsFor } from "./alertdetail";
+import { hms, incidentLog, REOPEN_MS, verdictsFor } from "./alertdetail";
 import { alertAdvice, alertHeadline, canHandleAlerts } from "./alertinfo";
 import { api, ApiError, enc } from "./api";
 import { CameraWell, camLabel } from "./camera";
@@ -216,13 +216,7 @@ export function IncidentView(props: {
   }
 
   // ---- 经过 ----
-  const log: { at: number; text: string }[] = [{ at: a.first_ms, text: alertHeadline(a) }];
-  if (a.count > 1) log.push({ at: a.last_ms, text: t("incRepeat", { n: a.count }) });
-  if (a.acked_ms != null && a.acked_by) log.push({ at: a.acked_ms, text: t("actTook", { who: byText(a.acked_by), what: "" }).replace(/[:：]\s*$/, "") });
-  if (a.context?.arrived_ms != null) log.push({ at: a.context.arrived_ms, text: t("incArrivedBy", { who: a.context.arrived_by ?? "—" }) });
-  if (a.context?.lost_ms != null) log.push({ at: a.context.lost_ms, text: t("dutyLost") });
-  if (a.resolved_ms != null) log.push({ at: a.resolved_ms, text: `${t("incClosed")} · ${verdictText(a)}${a.resolved_by ? ` · ${byText(a.resolved_by)}` : ""}` });
-  log.sort((x, y) => x.at - y.at);
+  const log = incidentLog(a);
 
   return (
     <div class="inc" data-key={a.key} data-level={a.level}>
@@ -336,8 +330,3 @@ function LayoutSeg({ layouts, v, on }: { layouts: { v: VideoLayout; key: Key }[]
   );
 }
 
-function hms(ms: number): string {
-  const d = new Date(ms);
-  const p = (n: number) => String(n).padStart(2, "0");
-  return `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
-}

@@ -47,8 +47,11 @@ export function ShiftTimeline(props: {
   now: number;
   /** 这一刻看哪台的录像(点空白行是那一行的机器人;事件行是第一台)。 */
   onPick: (robot: string, at: number) => void;
+  /** 回放位置(第五期 G-playback):画一根黄线。 */
+  play?: number | null;
 }) {
   const { from, to } = props;
+  const playing = props.play != null && props.play >= from && props.play <= to;
   const span = Math.max(1, to - from);
   const pct = (ms: number) => `${(100 * (Math.min(Math.max(ms, from), to) - from)) / span}%`;
   const { spans, marks } = shiftSpans(props.robots, props.patrols, props.alerts, from, to, props.now);
@@ -74,6 +77,7 @@ export function ShiftTimeline(props: {
               aria-label={`${hm(m.at)} ${m.title}`} onClick={(e) => { e.stopPropagation(); props.onPick(m.robot, m.at); }} />
           ))}
           <i class="tl-now" style={{ left: pct(props.now) }} />
+          {playing && <i class="tl-play" style={{ left: pct(props.play!) }} />}
         </div>
         <span class="mono">{hm(to)}</span>
         <button type="button" class="btn sm" aria-expanded={open} onClick={() => setOpen(!open)}>{t(open ? "tlCollapse" : "tlExpand")}</button>
@@ -84,7 +88,7 @@ export function ShiftTimeline(props: {
         <span class="tl-key offline">{t("tlOffline")}</span>
         <span class="tl-key security">{t("tlSecurity")}</span>
         <span class="tl-key equipment">{t("tlEquipment")}</span>
-        <span class="push muted">{t("tlHint")}</span>
+        <span class={playing ? "push tl-playkey" : "push muted"}>{t(playing ? "tlPlayKey" : "tlHint")}</span>
       </div>
       <div class="shifttl-rows">
         {props.robots.map((id) => (
@@ -95,6 +99,7 @@ export function ShiftTimeline(props: {
                 <i key={i} class={`tl-span ${s.kind}`} style={{ left: pct(s.from), width: `calc(${pct(s.to)} - ${pct(s.from)})` }} />
               ))}
               <i class="tl-now" style={{ left: pct(props.now) }} />
+              {playing && <i class="tl-play" style={{ left: pct(props.play!) }} />}
             </div>
           </div>
         ))}
@@ -107,6 +112,7 @@ export function ShiftTimeline(props: {
                 aria-label={`${hm(m.at)} ${m.title}`} onClick={() => props.onPick(m.robot, m.at)} />
             ))}
             <span class="tl-nowlabel mono" style={{ left: pct(props.now) }}>{t("tlNow", { t: hm(props.now) })}</span>
+            {playing && <span class="tl-playlabel mono" style={{ left: pct(props.play!) }}>{t("tlPlayAt", { t: hm(props.play!) })}</span>}
           </div>
         </div>
       </div>
