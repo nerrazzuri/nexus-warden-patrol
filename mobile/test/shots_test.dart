@@ -388,6 +388,19 @@ void main() {
         <String, dynamic>{'name': 'Camera 1 · Main gate', 'connected': true, 'last_event_ms': DateTime.now().millisecondsSinceEpoch - 3600000},
         <String, dynamic>{'name': 'Camera 2 · Car park', 'connected': true},
       ])),
+    '37-zones': _Shot(_phone, () => SiteMapPreviewPage(
+        api: FakeApi('admin')
+          ..zonesView = <String, dynamic>{
+            'revision': 2, 'confirm_text': 'x',
+            'confirmed': {'revision': 2, 'by': 'demo', 'at_ms': 1, 'current': true},
+            'zones': <dynamic>[
+              {'id': 'sw', 'kind': 'nogo', 'label': 'Switch room', 'polygon': [[0, 0], [2, 0], [2, 2], [0, 2]]},
+              {'id': 'cw', 'kind': 'nogo', 'label': 'Construction area', 'until_ms': 1800000000000,
+                'polygon': [[4, 0], [6, 0], [6, 2]]},
+            ],
+          },
+        mapId: 'estate-1',
+        version: '8')),
     '32-help': _Shot(const Size(390, 1200), () => HelpPage(role: 'guard', api: FakeApi('guard'))),
     '33-report': _Shot(_phone, () => ProblemReportPage(api: FakeApi('guard'), robots: const ['A', 'B'], share: (_, _) async => true)),
     '24-overview': _Shot(const Size(390, 1200), () => Scaffold(body: AdminHomeTab(api: FakeApi('admin'), switchTab: (_) {}))),
