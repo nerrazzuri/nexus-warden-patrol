@@ -101,17 +101,22 @@ class _SiteListPageState extends State<SiteListPage> {
   /// 照样整屏弹来报警页（能看、能静音），「登录后处理」去那个站点的登录页；登上了外壳接着弹这一条。
   void _onRing() {
     final r = pendingRing.value;
-    if (r == null || !mounted || !_sitesLoaded || liveShells > 0 || _ringShown == r.key) return;
+    if (r == null || !mounted || !_sitesLoaded || liveShells > 0 || _ringShown == r.id) return;
     final site = _sites.where((e) => r.isFor(name: e.name, urls: e.urls, fingerprint: e.fingerprint)).firstOrNull;
-    _ringShown = r.key;
+    final id = r.id;
+    _ringShown = id;
     final a = Alert.fromWire(<String, dynamic>{...r.alert, 'key': r.key});
-    unawaited(Navigator.of(context).push(MaterialPageRoute<void>(
+    // 外审 App-V2-7 N1：只在那一页开着时去重；关了（返回、去登录又取消）再点同一条通知照样弹
+    unawaited(Navigator.of(context).push<void>(MaterialPageRoute<void>(
         fullscreenDialog: true,
         builder: (_) => RingPage(
             api: null,
             alert: a,
             site: site?.name ?? r.site,
-            onSignIn: site == null ? null : () => unawaited(_open(site))))));
+            onSignIn: site == null ? null : () => unawaited(_open(site)))))
+        .whenComplete(() {
+      if (_ringShown == id) _ringShown = null;
+    }));
   }
 
   /// 换掉列表里的一条（按身份找；找不到就不动）、存下来。

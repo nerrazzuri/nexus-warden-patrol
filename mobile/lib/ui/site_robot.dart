@@ -241,8 +241,8 @@ class _SiteRobotPageState extends State<SiteRobotPage> with NwAsk {
   /// 这台正在驱离的那一场（外审 App-V2-2 N3：保安从机器人页也能进完整的驱离页：降级、转人工、结束）。
   Map<String, dynamic>? _deterSession;
 
+  // 外审 App-V2-7 N2：看驱离谁都行（站点只要 VIEW）；能不能点进去另看权限
   Future<void> _loadDeter() async {
-    if (!(widget.api.session?.canDispatch ?? false)) return;
     try {
       final d = await widget.api.deterrence();
       final mine = d.where((x) => '${x['robot_id']}' == widget.robotId).firstOrNull;
@@ -655,7 +655,7 @@ class _SiteRobotPageState extends State<SiteRobotPage> with NwAsk {
     final s = widget.api.session;
     final v = _view;
     final events = compactEvents((v?['events'] as List? ?? const []).whereType<Map>().toList());
-    final phase = v == null ? null : robotPhase(v);
+    final phase = v == null ? null : robotPhase(v, deterring: _deterSession != null);
     final dispatch = s?.canDispatch ?? false;
     final light = widget.light;
     final name = '${v?['name'] ?? ''}';
@@ -725,7 +725,7 @@ class _SiteRobotPageState extends State<SiteRobotPage> with NwAsk {
 
     final deterNow = _deterSession;
     final body = <Widget>[
-      if (deterNow != null && (s?.canDispatch ?? false) && !_settings)
+      if (deterNow != null && !_settings)
         Padding(
             padding: const EdgeInsets.fromLTRB(Nw.s16, 12, Nw.s16, 0),
             child: NwBanner(
@@ -733,8 +733,14 @@ class _SiteRobotPageState extends State<SiteRobotPage> with NwAsk {
                 tone: NwTone.error,
                 icon: Icons.campaign_rounded,
                 title: tr('Deterring · ${deterSessionText(deterNow)}', '驱离中 · ${deterSessionText(deterNow)}'),
-                subtitle: tr('Tap to change level, take over or end', '点进去降级、转人工或结束'),
-                onTap: () => go(() => SiteDeterrencePage(api: widget.api, robotId: widget.robotId)))),
+                subtitle: (s?.canDispatch ?? false)
+                    ? tr('Tap to change level, take over or end', '点进去降级、转人工或结束')
+                    : (s?.canAbort ?? false)
+                        ? tr('Tap to see or end it', '点进去查看或结束')
+                        : tr('Lights and sound may still be on. Guards can end it.', '声光可能还开着。由保安结束。'),
+                onTap: (s?.canDispatch ?? false) || (s?.canAbort ?? false)
+                    ? () => go(() => SiteDeterrencePage(api: widget.api, robotId: widget.robotId))
+                    : null)),
       if (light)
         Padding(
             padding: const EdgeInsets.fromLTRB(Nw.s16, 12, Nw.s16, 12),
