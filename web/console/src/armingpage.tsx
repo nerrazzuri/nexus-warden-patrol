@@ -76,6 +76,8 @@ export function whoText(m: ModeView | null, enabled: boolean): string {
   if (!m) return "";
   const s = modeLabel(m);
   if (m.source === "schedule") {
+    // 笔记本复测 11-15:句子本身就说「按时间表」,状态只写布防 / 撤防(以前「按时间表：按时间表：撤防」)
+    const s = t(m.state === "armed" ? "armStArmed" : m.state === "disarmed" ? "armStDisarmed" : "armStPartial");
     return m.next_change_ms ? t("armWhoSchedule", { s, t: hmSite(m.next_change_ms, m.timezone) }) : t("armWhoScheduleNoNext", { s });
   }
   if (enabled && m.manual_until_ms) return t("armWhoManual", { s, t: hmSite(m.manual_until_ms, m.timezone) });
