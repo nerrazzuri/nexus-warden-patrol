@@ -12,6 +12,7 @@ import 'package:flutter/material.dart';
 import '../l10n.dart';
 import '../net/site_client.dart';
 import '../net/site_text.dart';
+import 'nw/nw_ask.dart';
 import 'nw/nw_button.dart';
 import 'nw/nw_p3_robots.dart';
 import 'nw/nw_theme.dart';
@@ -132,7 +133,7 @@ class SiteRobotPage extends StatefulWidget {
   State<SiteRobotPage> createState() => _SiteRobotPageState();
 }
 
-class _SiteRobotPageState extends State<SiteRobotPage> {
+class _SiteRobotPageState extends State<SiteRobotPage> with NwAsk {
   Map<String, dynamic>? _view;
 
   /// 「设置」页签（浅色页才有两页签）。
@@ -342,7 +343,7 @@ class _SiteRobotPageState extends State<SiteRobotPage> {
   /// 录包（W00c5d 第二部分，管理员）：给包起个名，之后经站点遥控开着狗走一圈，再停。
   /// 填了地图号与版本就边走边建（W09c2）：停下之后狗上直接打包成这一版，不用再点「重建」。
   Future<void> _startRecord() async {
-    final got = await showFieldsDialog(context,
+    final got = await askFields(
         title: tr('Start bag recording', '开始录包'),
         fields: [
           DialogField(tr('Bag name (letters, digits, . _ -)', '包名（字母、数字、. _ -）'),
@@ -375,29 +376,16 @@ class _SiteRobotPageState extends State<SiteRobotPage> {
 
   /// 设位置（W00c6e）：「狗在原点」一键，或者输地图坐标（朝向按度输）。
   Future<void> _relocalize([String? pick]) async {
-    final how = pick ?? await showDialog<String>(
-      context: context,
-      builder: (c) => SimpleDialog(title: Text(tr('Where is the robot now', '机器人当前位置')), children: [
-        SimpleDialogOption(
-            key: const Key('reloc-home'),
-            onPressed: () => Navigator.pop(c, 'home'),
-            child: Text(tr('At the origin (dock)', '在原点（充电桩）'))),
-        // 手机 App 测试 M28：在地图上点（以前只有地图栏有，这里没指过去）
-        SimpleDialogOption(
-            key: const Key('reloc-map'),
-            onPressed: () => Navigator.pop(c, 'map'),
-            child: Text(tr('Pick it on the map', '在地图上点出位置'))),
-        SimpleDialogOption(
-            key: const Key('reloc-xy'),
-            onPressed: () => Navigator.pop(c, 'xy'),
-            child: Text(tr('Enter map coordinates', '输地图坐标'))),
-        if (robotCanFindPose(_view))
-          SimpleDialogOption(
-              key: const Key('reloc-find'),
-              onPressed: () => Navigator.pop(c, 'find'),
-              child: Text(tr('Auto-localize (match the scanned walls to the map)', '自动定位（用扫描到的墙体匹配地图）'))),
-      ]),
-    );
+    final how = pick ??
+        await ask<String>(title: tr('Where is the robot now', '机器人当前位置'), choices: [
+          AskChoice(tr('At the origin (dock)', '在原点（充电桩）'), 'home', key: const Key('reloc-home')),
+          // 手机 App 测试 M28：在地图上点（以前只有地图栏有，这里没指过去）
+          AskChoice(tr('Pick it on the map', '在地图上点出位置'), 'map', key: const Key('reloc-map')),
+          AskChoice(tr('Enter map coordinates', '输地图坐标'), 'xy', key: const Key('reloc-xy')),
+          if (robotCanFindPose(_view))
+            AskChoice(tr('Auto-localize (match the scanned walls to the map)', '自动定位（用扫描到的墙体匹配地图）'), 'find',
+                key: const Key('reloc-find')),
+        ]);
     if (how == null || !mounted) return;
     if (how == 'map') {
       await Navigator.push(
@@ -418,27 +406,17 @@ class _SiteRobotPageState extends State<SiteRobotPage> {
     }
     if (how == 'home') {
       // 点错了狗就按错的位置走（W00c6e 内审）：再确认一次。
-      final sure = await showDialog<bool>(
-        context: context,
-        builder: (c) => AlertDialog(
-          title: Text(tr('Is the robot at the origin now?', '机器人当前在原点？')),
-          content: Text(tr(
+      final sure = await askYes(tr('Is the robot at the origin now?', '机器人当前在原点？'),
+          body: tr(
               'The robot must be on the origin (dock), facing as when the origin was marked; otherwise navigation will be wrong.',
-              '机器人须站在原点（充电桩）上，朝向与标原点时一致，否则导航会出错。')),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(c, false), child: Text(tr('Cancel', '取消'))),
-            FilledButton(
-                key: const Key('reloc-home-go'),
-                onPressed: () => Navigator.pop(c, true),
-                child: Text(tr('At the origin', '在原点'))),
-          ],
-        ),
-      );
-      if (sure != true) return;
+              '机器人须站在原点（充电桩）上，朝向与标原点时一致，否则导航会出错。'),
+          ok: tr('At the origin', '在原点'),
+          okKey: const Key('reloc-home-go'));
+      if (!sure) return;
       await _do(() => widget.api.relocalize(widget.robotId, atHome: true), tr('Set position', '设位置'));
       return;
     }
-    final got = await showFieldsDialog(context,
+    final got = await askFields(
         title: tr('Where is the robot on the map', '机器人在地图上的当前位置'),
         fields: [
           DialogField(tr('x (m)', 'x（米）'), key: const Key('reloc-x')),
@@ -465,27 +443,17 @@ class _SiteRobotPageState extends State<SiteRobotPage> {
   /// 在当前位置标原点（W00c6f，管理员）：确认之后狗用它此刻的位置当这张图上的原点（W13a：原点跟待命点
   /// 分开了 —— 这张图上还没有待命点时，站点顺手用它建一个默认的）。
   Future<void> _markHome() async {
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (c) => AlertDialog(
-        title: Text(tr('Mark origin here', '在这儿标原点')),
-        content: Text(tr(
+    final ok = await askYes(tr('Mark origin here', '在这儿标原点'),
+        body: tr(
             'Set the origin of ${widget.robotId} on this map to its current position? Standby points are unchanged.\n'
                 'This applies to the whole map and cannot be undone (only by marking again). Return home and "At the origin" will use the new spot.\n'
                 'The robot verifies its localization first and won\'t mark it if the position isn\'t set, the error is large, or it is busy or switching maps.',
             '将 ${widget.robotId} 在此地图上的原点改为当前位置？待命点不变。\n'
                 '对整张地图生效，不能撤销（只能重新标）。「回原点」「在原点」以后都按新的位置。\n'
-                '机器人会先核验定位：未设置位置、偏差过大、正在执行任务或换图时不会标记。')),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(c, false), child: Text(tr('Cancel', '取消'))),
-          FilledButton(
-              key: const Key('mark-home-go'),
-              onPressed: () => Navigator.pop(c, true),
-              child: Text(tr('Mark', '标记'))),
-        ],
-      ),
-    );
-    if (ok != true) return;
+                '机器人会先核验定位：未设置位置、偏差过大、正在执行任务或换图时不会标记。'),
+        ok: tr('Mark', '标记'),
+        okKey: const Key('mark-home-go'));
+    if (!ok) return;
     String msg;
     try {
       Map<String, dynamic> r;
@@ -496,24 +464,14 @@ class _SiteRobotPageState extends State<SiteRobotPage> {
         if (e.status != 409 || taken is! Map || !mounted) rethrow;
         // 同名的点登记在别的图上（比如重建之前那一版）：问清楚再搬（W00c6f 内审）。
         final where = '${taken['map_id']}:${taken['map_version']}';
-        final move = await showDialog<bool>(
-          context: context,
-          builder: (c) => AlertDialog(
-            title: Text(tr('Replace the old standby point?', '替换旧的待命点？')),
-            content: Text(tr(
+        final move = await askYes(tr('Replace the old standby point?', '替换旧的待命点？'),
+            body: tr(
                 'Standby point home is registered on $where. Move it to the map the robot is using now '
                     '(it is removed from $where)?',
-                '待命点 home 目前登记在 $where 上。是否移到机器人当前使用的地图？（$where 上将删除）')),
-            actions: [
-              TextButton(onPressed: () => Navigator.pop(c, false), child: Text(tr('Cancel', '取消'))),
-              FilledButton(
-                  key: const Key('mark-home-replace'),
-                  onPressed: () => Navigator.pop(c, true),
-                  child: Text(tr('Replace', '替换'))),
-            ],
-          ),
-        );
-        if (move != true) {
+                '待命点 home 目前登记在 $where 上。是否移到机器人当前使用的地图？（$where 上将删除）'),
+            ok: tr('Replace', '替换'),
+            okKey: const Key('mark-home-replace'));
+        if (!move) {
           if (mounted) {
             _say(tr('Not marked: standby point home is still on $where',
                 '未标记：待命点 home 仍在 $where 上'));
@@ -804,7 +762,7 @@ class _SiteRobotPageState extends State<SiteRobotPage> {
                   child: SingleChildScrollView(
                       physics: const AlwaysScrollableScrollPhysics(),
                       padding: EdgeInsets.only(bottom: light ? Nw.s24 : 120),
-                      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: body)))),
+                      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [askStrip(), ...body])))),
         ]),
         // 深色页：右下角拇指区「全部急停」（经理也能按）
         if (!light && (s?.canAbort ?? false))

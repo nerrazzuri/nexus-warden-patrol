@@ -14,6 +14,7 @@ import '../net/site_client.dart';
 import 'app_update_ui.dart';
 import 'arrival_alert.dart';
 import 'nw/nw_p4_admin.dart' show NwListView, NwListCard, nwGap8, nwGap16;
+import 'nw/nw_ask.dart';
 import 'nw/nw_theme.dart';
 import 'nw/nw_widgets.dart';
 import 'problem_report.dart';
@@ -71,7 +72,7 @@ class AppSettingsPage extends StatefulWidget {
   State<AppSettingsPage> createState() => _AppSettingsPageState();
 }
 
-class _AppSettingsPageState extends State<AppSettingsPage> {
+class _AppSettingsPageState extends State<AppSettingsPage> with NwAsk {
   bool _checking = false;
 
   Future<void> _setLang(AppLang lang) async {
@@ -97,16 +98,12 @@ class _AppSettingsPageState extends State<AppSettingsPage> {
       return;
     }
     final v = '${info['version'] ?? ''}';
-    final go = await showDialog<bool>(
-        context: context,
-        builder: (c) => AlertDialog(
-              content: Text(tr('Version $v is available. Download and install it now?', '有新版本 $v，是否立即下载安装？')),
-              actions: [
-                TextButton(onPressed: () => Navigator.pop(c, false), child: Text(tr('Later', '稍后'))),
-                FilledButton(onPressed: () => Navigator.pop(c, true), child: Text(tr('Update', '更新'))),
-              ],
-            ));
-    if (go == true && mounted) await runAppUpdate(context, u, info);
+    final go = await askYes(tr('Version $v is available', '有新版本 $v'),
+        body: tr('Download and install it now?', '是否立即下载安装？'),
+        cancel: tr('Later', '稍后'),
+        ok: tr('Update', '更新'),
+        okKey: const Key('app-update-go'));
+    if (go && mounted) await runAppUpdate(context, u, info);
   }
 
   @override
@@ -120,6 +117,7 @@ class _AppSettingsPageState extends State<AppSettingsPage> {
     return Scaffold(
       appBar: AppBar(title: Text(tr('Settings', '设置'))),
       body: NwListView(children: [
+        askStrip(margin: const EdgeInsets.only(bottom: Nw.s16)),
         NwSectionLabel(tr('General', '通用')),
         nwGap8,
         NwListCard(children: [

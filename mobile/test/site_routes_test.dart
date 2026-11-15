@@ -575,8 +575,8 @@ void main() {
       expect(t.widget<Text>(find.byKey(PoseBar.textKey)).data, contains('heading 30°'));
       await t.tap(find.byKey(PoseBar.setKey));
       await t.pumpAndSettle();
-      expect(find.descendant(of: find.byType(AlertDialog), matching: find.textContaining('x 2.5 m, y -3.75 m, heading 30°')), findsOneWidget,
-          reason: '确认框写着坐标');
+      expect(find.byType(AlertDialog), findsNothing, reason: 'App V2：页内问');
+      expect(find.textContaining("Set A's position to x 2.5 m, y -3.75 m, heading 30°"), findsOneWidget, reason: '确认那一条写着坐标');
       expect(api.calls.where((x) => x.startsWith('relocalize')), isEmpty);
       await t.tap(find.text('Cancel'));
       await t.pumpAndSettle();

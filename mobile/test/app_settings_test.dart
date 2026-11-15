@@ -91,7 +91,8 @@ void main() {
     })));
     await t.tap(find.byKey(AppSettingsPage.checkUpdateKey));
     await t.pumpAndSettle();
-    expect(find.text('有新版本 1.2.0+9，是否立即下载安装？'), findsOneWidget);
+    expect(find.text('有新版本 1.2.0+9'), findsOneWidget);
+    expect(find.byType(AlertDialog), findsNothing, reason: 'App V2：页内问');
     await t.tap(find.text('稍后'));
     await t.pumpAndSettle();
     expect(installs, 0);

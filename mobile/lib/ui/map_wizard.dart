@@ -19,6 +19,7 @@ import '../l10n.dart';
 import '../net/site_client.dart';
 import 'nw/nw_button.dart';
 import 'nw/nw_p3_robots.dart' show robotActive, robotBattery, robotOnline;
+import 'nw/nw_ask.dart';
 import 'nw/nw_theme.dart';
 import 'nw/nw_widgets.dart';
 import 'site_mapping.dart' show PreviewPainter, SiteMapPreviewPage;
@@ -366,7 +367,7 @@ class MapWizardPage extends StatefulWidget {
   State<MapWizardPage> createState() => _MapWizardPageState();
 }
 
-class _MapWizardPageState extends State<MapWizardPage> {
+class _MapWizardPageState extends State<MapWizardPage> with NwAsk {
   SiteApi get api => widget.api;
 
   /// 站点上的向导（没开始是 null）；做完了留一份给「完成」那一步。
@@ -542,25 +543,14 @@ class _MapWizardPageState extends State<MapWizardPage> {
       if (mounted) Navigator.pop(context);
       return;
     }
-    final choice = await showDialog<String>(
-      context: context,
-      builder: (c) => AlertDialog(
-        title: Text(tr('Pause mapping?', '暂停建图？')),
-        content: Text(tr('Progress is saved on the site; you can continue from this step later.',
-            '进度已保存在站点，下次可从此步继续。')),
-        actions: [
-          TextButton(
-              key: MapWizardPage.exitAbandonKey,
-              onPressed: () => Navigator.pop(c, 'abandon'),
-              child: Text(tr('Abandon mapping', '放弃建图'))),
-          TextButton(onPressed: () => Navigator.pop(c), child: Text(tr('Continue', '继续'))),
-          FilledButton(
-              key: MapWizardPage.exitPauseKey,
-              onPressed: () => Navigator.pop(c, 'pause'),
-              child: Text(tr('Pause', '暂停'))),
-        ],
-      ),
-    );
+    final choice = await ask<String>(
+        title: tr('Pause mapping?', '暂停建图？'),
+        body: tr('Progress is saved on the site; you can continue from this step later.', '进度已保存在站点，下次可从此步继续。'),
+        cancel: tr('Continue', '继续'),
+        choices: [
+          AskChoice(tr('Abandon mapping', '放弃建图'), 'abandon', key: MapWizardPage.exitAbandonKey, danger: true),
+          AskChoice(tr('Pause', '暂停'), 'pause', key: MapWizardPage.exitPauseKey, primary: true),
+        ]);
     if (!mounted || choice == null) return;
     if (choice == 'abandon') {
       // 在走一圈：先停录（预览可能还没回来，不看它）。机器人说本来就没在录也算停了；别的不放弃，说原因
@@ -912,25 +902,16 @@ class _MapWizardPageState extends State<MapWizardPage> {
   Future<void> _doneWalking() async {
     final (path, from) = _walked();
     final warn = path < 15 || from > 2;
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (c) => AlertDialog(
-        title: Text(tr('Finish walking?', '结束行走？')),
-        content: Text([
+    final ok = await askYes(tr('Finish walking?', '结束行走？'),
+        body: [
           tr('The robot stops recording and builds the map (a few minutes).', '机器人将停止录制并开始建图（约几分钟）。'),
           if (warn)
             tr('Walked ${path.round()} m, ${from.round()} m from the start. Return to the start before finishing.', '已行走 ${path.round()} 米，距起点 ${from.round()} 米。请回到起点后结束。'),
-        ].join('\n\n')),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(c, false), child: Text(tr('Keep walking', '继续行走'))),
-          FilledButton(
-              key: MapWizardPage.doneWalkOkKey,
-              onPressed: () => Navigator.pop(c, true),
-              child: Text(tr('Build the map', '建图'))),
-        ],
-      ),
-    );
-    if (ok != true || !mounted) return;
+        ].join('\n\n'),
+        cancel: tr('Keep walking', '继续行走'),
+        ok: tr('Build the map', '建图'),
+        okKey: MapWizardPage.doneWalkOkKey);
+    if (!ok || !mounted) return;
     setState(() {
       _busy = true;
       _err = '';
@@ -1507,22 +1488,13 @@ class _MapWizardPageState extends State<MapWizardPage> {
     } on SiteError catch (e) {
       final taken = e.body['name_taken'];
       if (e.status == 409 && taken != null && taken != false && !replace && mounted) {
-        final ok = await showDialog<bool>(
-          context: context,
-          builder: (c) => AlertDialog(
-            content: Text(tr('The origin is registered on an older map version. Replace it with this version?',
-                '原点已登记在旧版本地图上，是否替换为此版本？')),
-            actions: [
-              TextButton(onPressed: () => Navigator.pop(c, false), child: Text(tr('Cancel', '取消'))),
-              FilledButton(
-                  key: MapWizardPage.replaceHomeKey,
-                  onPressed: () => Navigator.pop(c, true),
-                  child: Text(tr('Replace', '替换'))),
-            ],
-          ),
-        );
         if (mounted) setState(() => _busy = false);
-        if (ok == true) await _markHome(replace: true);
+        final ok = await askYes(tr('Replace the origin?', '替换原点？'),
+            body: tr('The origin is registered on an older map version. Replace it with this version?',
+                '原点已登记在旧版本地图上，是否替换为此版本？'),
+            ok: tr('Replace', '替换'),
+            okKey: MapWizardPage.replaceHomeKey);
+        if (ok) await _markHome(replace: true);
         return;
       }
       if (mounted) setState(() => _err = refusalText(e));
@@ -1765,6 +1737,11 @@ class _MapWizardPageState extends State<MapWizardPage> {
                     style: NwText.bodySmall.copyWith(color: c.textSecondary)),
               ]),
             ),
+            // 页内确认（退出、结束行走、替换原点）：钉在步骤条下面，不弹窗
+            if (asking)
+              ConstrainedBox(
+                  constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(context).height * 0.6),
+                  child: SingleChildScrollView(child: askStrip())),
             Expanded(
               child: _loading
                   ? const Center(child: CircularProgressIndicator())

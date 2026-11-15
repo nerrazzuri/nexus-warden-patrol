@@ -125,7 +125,8 @@ mixin NwAsk<W extends StatefulWidget> on State<W> {
   Widget askStrip({EdgeInsets margin = const EdgeInsets.fromLTRB(Nw.s16, Nw.s8, Nw.s16, Nw.s8)}) {
     final r = _askReq;
     if (r == null) return const SizedBox.shrink();
-    return _AskStrip(key: _askKey, req: r, margin: margin, onPick: _pick);
+    // 占满宽（放在 crossAxisAlignment.start 的 Column 里也一样宽）
+    return SizedBox(width: double.infinity, child: _AskStrip(key: _askKey, req: r, margin: margin, onPick: _pick));
   }
 
   @override

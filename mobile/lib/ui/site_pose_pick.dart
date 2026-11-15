@@ -15,6 +15,7 @@ import '../net/site_client.dart';
 import '../net/site_text.dart';
 import 'map_view.dart';
 import 'nw/nw_button.dart';
+import 'nw/nw_ask.dart';
 import 'nw/nw_theme.dart';
 import 'pose_marker.dart';
 
@@ -159,7 +160,7 @@ class PoseBar extends StatefulWidget {
   State<PoseBar> createState() => _PoseBarState();
 }
 
-class _PoseBarState extends State<PoseBar> {
+class _PoseBarState extends State<PoseBar> with NwAsk {
   String? _robot;
   String? _msg;
   bool _busy = false;
@@ -277,22 +278,13 @@ class _PoseBarState extends State<PoseBar> {
     if (id == null || at == null) return;
     final yaw = widget.controller.yaw;
     final mapId = widget.mapId, version = widget.version, mine = _gen;
-    final ok = await showDialog<bool>(
-        context: context,
-        builder: (c) => AlertDialog(
-              title: Text(tr('Set the position of $id here?', '将 $id 的位置设在这里？')),
-              content: Text(tr(
+    final ok = await askYes(tr('Set the position of $id here?', '将 $id 的位置设在这里？'),
+        body: tr(
                   'Set $id\'s position to x ${at.dx} m, y ${at.dy} m, heading ${yawDegText(yaw)}°. A wrong position makes the robot navigate incorrectly. Keep the robot still for about 10 s while it localizes.',
-                  '设置 $id 的当前位置：x ${at.dx} 米、y ${at.dy} 米、朝向 ${yawDegText(yaw)}°。位置错误会导致机器人导航出错。设置后机器人须静止约 10 秒完成定位。')),
-              actions: [
-                TextButton(onPressed: () => Navigator.pop(c, false), child: Text(tr('Cancel', '取消'))),
-                FilledButton(
-                    key: PoseBar.setOkKey,
-                    onPressed: () => Navigator.pop(c, true),
-                    child: Text(tr('Set position', '设位置'))),
-              ],
-            ));
-    if (ok != true || !mounted) return;
+            '设置 $id 的当前位置：x ${at.dx} 米、y ${at.dy} 米、朝向 ${yawDegText(yaw)}°。位置错误会导致机器人导航出错。设置后机器人须静止约 10 秒完成定位。'),
+        ok: tr('Set position', '设位置'),
+        okKey: PoseBar.setOkKey);
+    if (!ok || !mounted) return;
     // 确认框开着的时候图、狗、点换了：不发（外审 W39-I2）。换了图的狗由站点按带上的图号拒
     if (mine != _gen || _selected != id || widget.controller.at != at || widget.controller.yaw != yaw) {
       setState(() => _msg = tr('The map, robot or spot changed — choose again.', '地图、机器人或位置已变化，请重新选择。'));
@@ -318,6 +310,8 @@ class _PoseBarState extends State<PoseBar> {
                   decoration: BoxDecoration(border: Border(top: BorderSide(color: c.outline))),
                   padding: const EdgeInsets.symmetric(horizontal: Nw.s16, vertical: Nw.s8),
                   child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+                    // 页内确认（设位置）：在这一条里，不弹窗
+                    askStrip(margin: const EdgeInsets.only(bottom: Nw.s8)),
                     if (at == null)
                       Text(tr('Tap the map to choose a spot; drag the round handle to set the heading.',
                           '点地图选择位置，拖动圆形手柄设置朝向。'),
