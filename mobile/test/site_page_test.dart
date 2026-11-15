@@ -969,6 +969,15 @@ class FakeApi implements SiteApi {
     return <String, dynamic>{'request_id': 'r1', 'expires_ms': 1};
   }
 
+  List<Map<String, dynamic>> accountRows = <Map<String, dynamic>>[
+    {'name': 'admin', 'role': 'admin', 'disabled': false, 'display_name': '', 'expires_ms': null, 'last_login_ms': 1},
+  ];
+  @override
+  Future<List<Map<String, dynamic>>> accounts() async {
+    calls.add('accounts');
+    return accountRows;
+  }
+
   @override
   Future<List<Map<String, dynamic>>> accountRequests() async {
     calls.add('accountRequests');
