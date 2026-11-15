@@ -6,7 +6,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:nexwar_patrol/model/alert.dart';
 import 'package:nexwar_patrol/net/background_watch.dart';
 import 'package:nexwar_patrol/ui/nw/nw_ring.dart';
+import 'package:nexwar_patrol/store/site_store.dart';
 import 'package:nexwar_patrol/ui/nw/nw_shell.dart';
+import 'package:nexwar_patrol/ui/site_list.dart';
 import 'package:nexwar_patrol/ui/site_alert_scene.dart';
 
 import 'site_page_test.dart' show FakeApi;
@@ -57,6 +59,43 @@ Future<_Calls> _open(WidgetTester t, FakeApi api, {bool canMute = true}) async {
 }
 
 void main() {
+  test('外审 App-V2-3 I6：认站点按证书指纹（同名不算），没有指纹按地址，都没有才按名字', () {
+    final fa = 'ab' * 32, fb = 'cd' * 32;
+    final r = RingRequest('k', const <String, dynamic>{}, '庄园', url: 'https://a:8443', fingerprint: fa);
+    expect(r.isFor(name: '庄园', urls: ['https://b:8443'], fingerprint: fb), isFalse, reason: '同名的另一个站点');
+    expect(r.isFor(name: '别的名字', urls: ['https://x'], fingerprint: fa.toUpperCase()), isTrue, reason: '指纹一样就是它');
+    final noFp = RingRequest('k', const <String, dynamic>{}, '庄园', url: 'https://a:8443/');
+    expect(noFp.isFor(name: '庄园', urls: ['https://b:8443'], fingerprint: fa), isFalse);
+    expect(noFp.isFor(name: '庄园', urls: ['https://b:8443', 'https://A:8443'], fingerprint: fa), isTrue, reason: '备用地址也算');
+    const legacy = RingRequest('k', <String, dynamic>{}, '庄园');
+    expect(legacy.isFor(name: '庄园', urls: ['https://a'], fingerprint: fa), isTrue);
+    expect(legacy.isFor(name: '别的', urls: ['https://a'], fingerprint: fa), isFalse);
+  });
+
+  testWidgets('外审 App-V2-3 I5：没登录（冷启动）来报警也整屏弹；「登录后处理」去那个站点的登录页', (t) async {
+    t.view.physicalSize = const Size(390 * 2, 844 * 2);
+    t.view.devicePixelRatio = 2;
+    addTearDown(t.view.reset);
+    final store = MemorySiteStore([
+      SiteEntry(name: '庄园', url: 'https://a:8443', fingerprint: 'ab' * 32, username: 'gina'),
+      SiteEntry(name: '庄园', url: 'https://b:8443', fingerprint: 'cd' * 32, username: 'olga'),
+    ]);
+    pendingRing.value = RingRequest('cctv:3/intrusion#9', _wire(), '庄园', url: 'https://b:8443', fingerprint: 'cd' * 32);
+    addTearDown(() => pendingRing.value = null);
+    await t.pumpWidget(MaterialApp(home: SiteListPage(store: store, apiFactory: (_) => FakeApi('guard'))));
+    await t.pumpAndSettle();
+    expect(find.byType(RingPage), findsOneWidget);
+    expect(find.byKey(RingPage.takeKey), findsNothing, reason: '没登录不能接手');
+    expect(find.byKey(RingPage.muteKey), findsOneWidget, reason: '能静音');
+    await t.tap(find.byKey(RingPage.signInKey));
+    await t.pumpAndSettle();
+    expect(find.byType(RingPage), findsNothing);
+    expect(find.byType(SiteLoginPage), findsOneWidget);
+    expect(t.widget<SiteLoginPage>(find.byType(SiteLoginPage)).site.username, 'olga', reason: '同名的两个里按指纹挑对的那个');
+    expect(pendingRing.value, isNotNull, reason: '留着：登上了外壳接着弹');
+    await t.pumpWidget(Container());
+  });
+
   testWidgets('照稿：站点 · 几点、标题、P1 · 摄像头 · 防区 · 往哪去、派了谁、一直响到有人接手；三个按钮', (t) async {
     await _open(t, FakeApi('guard'));
     expect(find.text('estate-1 · 23:47'), findsOneWidget);

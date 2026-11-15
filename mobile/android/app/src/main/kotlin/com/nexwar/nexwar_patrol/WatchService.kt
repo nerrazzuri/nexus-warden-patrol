@@ -58,6 +58,8 @@ class WatchService : Service() {
         const val EXTRA_RING_KEY = "ring_key"
         const val EXTRA_RING_ALERT = "ring_alert"
         const val EXTRA_RING_SITE = "ring_site"
+        const val EXTRA_RING_URL = "ring_url"
+        const val EXTRA_RING_FP = "ring_fp"
         const val PREFS = "nexwar_watch"
         private const val TAG = "D1MaxWatch"
         private const val CERT_MISMATCH = "证书指纹对不上"
@@ -452,6 +454,8 @@ class WatchService : Service() {
             .putExtra(EXTRA_RING_KEY, key)
             .putExtra(EXTRA_RING_ALERT, a.toString())
             .putExtra(EXTRA_RING_SITE, site)
+            .putExtra(EXTRA_RING_URL, url)
+            .putExtra(EXTRA_RING_FP, fingerprint)
         return PendingIntent.getActivity(this, key.hashCode(), i,
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
     }

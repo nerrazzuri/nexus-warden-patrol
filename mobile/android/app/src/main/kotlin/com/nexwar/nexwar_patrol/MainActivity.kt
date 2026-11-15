@@ -43,7 +43,9 @@ class MainActivity : FlutterActivity() {
     private fun takeRing(i: Intent?): Boolean {
         val key = i?.getStringExtra(WatchService.EXTRA_RING_KEY) ?: return false
         ring = mapOf("key" to key, "alert" to (i.getStringExtra(WatchService.EXTRA_RING_ALERT) ?: "{}"),
-            "site" to (i.getStringExtra(WatchService.EXTRA_RING_SITE) ?: ""))
+            "site" to (i.getStringExtra(WatchService.EXTRA_RING_SITE) ?: ""),
+            "url" to (i.getStringExtra(WatchService.EXTRA_RING_URL) ?: ""),
+            "fingerprint" to (i.getStringExtra(WatchService.EXTRA_RING_FP) ?: ""))
         if (Build.VERSION.SDK_INT >= 27) {
             setShowWhenLocked(true)
             setTurnScreenOn(true)
