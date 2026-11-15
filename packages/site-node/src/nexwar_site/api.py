@@ -1832,7 +1832,8 @@ class _Handler(TlsHandlerMixin):
         # 外审 2 #3:网页派的是普通手动 goto,机器人上的出发线是 preflight.departure_line_pct:
         #   max(返航线 25, 中止线 15) + 全程耗电 × 1.5,全程 = 现在位置 → 目标 → 回原点
         #   (直线后端:沿来路回到出发点再回原点;会规划的:目标直线回原点);
-        #   耗电 = 米 × 1.4 / 0.4 m/s ÷ 3600 × 22.3,最少 3%。没原点算不出线 —— 机器人也不会放行(「不确定不放行」),
+        #   耗电 = 米 × 1.4 / 0.4 m/s ÷ 3600 × 22.3,
+        #   最少 3%。没原点算不出线 —— 机器人也不会放行(「不确定不放行」),
         #   这里回 enough=null。
         homes_fn = getattr(self.site.incidents, "homes", None) if self.site.incidents else None
         homes: list[tuple[float, float]] = []
