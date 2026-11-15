@@ -20,7 +20,6 @@ import '../l10n.dart';
 import '../net/site_client.dart';
 import '../net/site_text.dart';
 import 'nw/nw_button.dart';
-import 'nw/nw_cards.dart';
 import 'nw/nw_p4_admin.dart';
 import 'nw/nw_theme.dart';
 import 'nw/nw_widgets.dart';
@@ -136,6 +135,7 @@ class SiteHealthPage extends StatefulWidget {
   static const Key msgKey = Key('health-msg');
   static const Key loadingKey = Key('health-loading');
   static Key checkKey(String name) => Key('health-check-$name');
+  static Key versionKey(String who) => Key('health-version-$who');
 
   @override
   State<SiteHealthPage> createState() => _SiteHealthPageState();
@@ -289,70 +289,70 @@ class _SiteHealthPageState extends State<SiteHealthPage> {
     ];
   }
 
-  /// 版本格子：站点一格、每只狗一格、每台登录着的客户端一格。跟站点配不上的（狗太老、App 太老）是橙色的小标。
+  /// 版本对照（App V2 稿 S-health）：站点、每台机器人、每台登录着的客户端各一行 —— 前面绿方块 / 橙三角，
+  /// 名字，右边版本（配不上的接一句「比站点老」那样的话）。
   List<Widget> _versionRows(Map<String, dynamic> v) {
     final nw = Nw.of(context);
     final site = v['site'] is Map ? v['site'] as Map : null;
     final robots = v['robots'] is List ? (v['robots'] as List).whereType<Map>().toList() : const <Map>[];
     final clients = v['clients'] is List ? (v['clients'] as List).whereType<Map>().toList() : const <Map>[];
     final minApp = site?['min_app_level'];
-    final heading = NwText.titleSmall.copyWith(color: nw.text);
-    final none = NwText.bodyMedium.copyWith(color: nw.textSecondary);
-    // 一格：是谁、哪一版；小标（配不配）压在右上角那一行 —— 放进版本格自己的那一行会把版本那句挤掉一半
-    Widget tile(String entity, String version, {String? note, NwTone tone = NwTone.neutral}) =>
-        Stack(fit: StackFit.passthrough, children: [
-          NwVersionCard(entity: entity, version: version),
-          if (note != null)
-            Positioned(top: Nw.s8, right: Nw.s8, child: NwStatusPill(label: note, tone: tone)),
-        ]);
+    Widget row(String key, String who, String version, {String? note, bool warn = false, bool known = true}) => Container(
+        key: SiteHealthPage.versionKey(key),
+        padding: const EdgeInsets.symmetric(horizontal: Nw.s16, vertical: 10),
+        decoration: BoxDecoration(border: Border(top: BorderSide(color: nw.outline))),
+        child: Row(children: [
+          SizedBox(
+              width: 20,
+              child: warn
+                  ? Icon(Icons.warning_rounded, size: 18, color: nw.warning)
+                  : Icon(Icons.square, size: 12, color: known ? nw.success : nw.textMuted)),
+          const SizedBox(width: Nw.s8),
+          Expanded(child: Text(who, style: NwText.bodyMedium.copyWith(color: nw.text))),
+          const SizedBox(width: Nw.s8),
+          Flexible(
+              flex: 2,
+              child: Text(note == null ? version : '$version · $note',
+                  textAlign: TextAlign.end,
+                  style: NwText.bodySmall.copyWith(color: warn ? nw.warning : nw.textSecondary))),
+        ]));
     return [
-      if (site != null) ...[
-        NwGrid(minTile: _versionTile, children: [tile(tr('Site', '站点'), '${site['version'] ?? '?'}')]),
-        nwGap16,
-      ],
-      Text(tr('Robot software', '机器人上的软件'), style: heading),
-      nwGap8,
-      if (robots.isEmpty) Text(tr('No robots.', '暂无机器人。'), style: none),
-      NwGrid(minTile: _versionTile, children: [
-        for (final r in robots)
-          () {
-            final bad = r['verdict'] == 'agent_too_old' || r['verdict'] == 'site_too_old';
-            return tile(
-                '${r['robot_id']}',
-                [
-                  if (r['agent'] != null) tr('agent ${r['agent']}', '代理 ${r['agent']}'),
-                  if (r['level'] != null) tr('level ${r['level']}', '级别 ${r['level']}'),
-                  r['online'] == true ? tr('online', '在线') : tr('offline', '离线'),
-                ].join(' · '),
-                note: verdictLabel(r['verdict']),
-                tone: bad ? NwTone.warning : (r['verdict'] == 'ok' ? NwTone.success : NwTone.neutral));
-          }(),
-      ]),
-      nwGap16,
-      Text(tr('Signed-in apps', '登录着的 App'), style: heading),
-      nwGap8,
+      if (site != null) row('site', tr('Site', '站点'), '${site['version'] ?? '?'}'),
+      for (final r in robots)
+        () {
+          final bad = r['verdict'] == 'agent_too_old' || r['verdict'] == 'site_too_old';
+          return row(
+              'robot-${r['robot_id']}',
+              '${r['robot_id']}',
+              [
+                if (r['agent'] != null) tr('agent ${r['agent']}', '代理 ${r['agent']}'),
+                if (r['level'] != null) tr('level ${r['level']}', '级别 ${r['level']}'),
+                r['online'] == true ? tr('online', '在线') : tr('offline', '离线'),
+              ].join(' · '),
+              note: r['verdict'] == 'ok' ? null : verdictLabel(r['verdict']),
+              warn: bad,
+              known: r['verdict'] == 'ok');
+        }(),
+      for (final c in clients)
+        () {
+          final old = c['kind'] == 'app' && c['api_level'] is int && minApp is int && (c['api_level'] as int) < minApp;
+          return row(
+              'client-${c['name']}',
+              c['kind'] == 'web' ? tr('${c['name']}\'s web console', '${c['name']} 的网页值班台') : tr('${c['name']}\'s phone app', '${c['name']} 的手机 App'),
+              [
+                if (c['kind'] != 'web') '${c['version'] ?? '?'}',
+                if (c['platform'] != null) '${c['platform']}',
+              ].join(' · '),
+              note: old ? tr('older than site', '比站点老') : null,
+              warn: old);
+        }(),
       if (clients.isEmpty)
-        Text(tr('No app has reported its version yet (older apps do not).', '尚无 App 上报版本（旧版 App 不上报）。'),
-            style: none),
-      NwGrid(minTile: _versionTile, children: [
-        for (final c in clients)
-          () {
-            final old = c['kind'] == 'app' && c['api_level'] is int && minApp is int && (c['api_level'] as int) < minApp;
-            return tile(
-                '${c['name']}',
-                [
-                  c['kind'] == 'web' ? tr('Web console', '网页值班台') : tr('Phone app ${c['version'] ?? '?'}', '手机 App ${c['version'] ?? '?'}'),
-                  if (c['platform'] != null) '${c['platform']}',
-                ].join(' · '),
-                note: old ? tr('Too old', '版本过旧') : null,
-                tone: NwTone.warning);
-          }(),
-      ]),
+        Padding(
+            padding: const EdgeInsets.fromLTRB(Nw.s16, Nw.s8, Nw.s16, 0),
+            child: Text(tr('No app has reported its version yet (older apps do not).', '尚无 App 上报版本（旧版 App 不上报）。'),
+                style: NwText.bodySmall.copyWith(color: nw.textSecondary))),
     ];
   }
-
-  /// 版本格最窄这么宽：「代理 1.4.0 · 级别 2 · 在线」那一句摆得下。
-  static const double _versionTile = 320;
 
   @override
   Widget build(BuildContext context) {
@@ -370,7 +370,7 @@ class _SiteHealthPageState extends State<SiteHealthPage> {
       return SingleChildScrollView(
           padding: EdgeInsets.fromLTRB(side, Nw.s16, side, Nw.s24),
           child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-            NwSectionLabel(tr('Site status', '站点状态')),
+            NwSectionLabel(tr('Site', '站点')),
             nwGap8,
             if (_loading)
               NwListCard(children: [
@@ -390,12 +390,12 @@ class _SiteHealthPageState extends State<SiteHealthPage> {
             // 版本一览还没读到、读不到：这一节整个不显示（体检照样看），不拿上一次的当现在的
             if (v != null) ...[
               nwGap24,
-              NwSectionLabel(tr('Firmware & software', '固件与软件')),
+              NwSectionLabel(tr('Version compatibility', '版本对照')),
               nwGap8,
-              ..._versionRows(v),
+              NwListCard(children: _versionRows(v)),
             ],
             nwGap24,
-            NwSectionLabel(tr('Maintenance', '维护')),
+            NwSectionLabel(tr('Support bundle', '诊断包')),
             nwGap8,
             NwCard(
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
@@ -418,20 +418,23 @@ class _SiteHealthPageState extends State<SiteHealthPage> {
                 ])),
               ]),
               nwGap16,
-              Wrap(spacing: Nw.s8, runSpacing: Nw.s8, children: [
-                NwButton(
-                    buttonKey: SiteHealthPage.bundleKey,
-                    variant: NwButtonVariant.outline,
-                    icon: Icons.download_rounded,
-                    label: _saving && !_sharing ? tr('Saving…', '正在保存…') : tr('Save diagnostics bundle', '保存诊断包'),
-                    onPressed: _saving ? null : _bundle),
-                if (widget.canShare ?? (Platform.isAndroid || Platform.isIOS))
-                  NwButton(
-                      buttonKey: SiteHealthPage.shareKey,
-                      variant: NwButtonVariant.outline,
-                      icon: Icons.share_rounded,
-                      label: _saving && _sharing ? tr('Preparing…', '正在准备…') : tr('Share…', '分享…'),
-                      onPressed: _saving ? null : () => _bundle(share: true)),
+              // App V2：一排等宽
+              Row(children: [
+                Expanded(
+                    child: NwButton(
+                        buttonKey: SiteHealthPage.bundleKey,
+                        variant: NwButtonVariant.outline,
+                        label: _saving && !_sharing ? tr('Saving…', '正在保存…') : tr('Save diagnostics bundle', '保存诊断包'),
+                        onPressed: _saving ? null : _bundle)),
+                if (widget.canShare ?? (Platform.isAndroid || Platform.isIOS)) ...[
+                  const SizedBox(width: Nw.s8),
+                  Expanded(
+                      child: NwButton(
+                          buttonKey: SiteHealthPage.shareKey,
+                          variant: NwButtonVariant.outline,
+                          label: _saving && _sharing ? tr('Preparing…', '正在准备…') : tr('Share…', '分享…'),
+                          onPressed: _saving ? null : () => _bundle(share: true))),
+                ],
               ]),
               if (_msg.isNotEmpty) ...[
                 nwGap16,
@@ -447,8 +450,18 @@ class _SiteHealthPageState extends State<SiteHealthPage> {
         Expanded(child: body),
       ]);
     }
+    final bad = h == null || h['checks'] is! Map
+        ? 0
+        : (h['checks'] as Map).values.where((c) => !(c is Map && c['ok'] == true)).length;
     return Scaffold(
-      appBar: AppBar(title: Text(tr('Site health', '站点体检')), actions: [refresh]),
+      appBar: AppBar(
+          title: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(tr('Site health', '站点体检')),
+            if (h != null)
+              Text(bad == 0 ? tr('All checks passed', '全部正常') : tr('$bad items need attention', '$bad 项要看一下'),
+                  style: NwText.bodySmall.copyWith(color: nw.textSecondary)),
+          ]),
+          actions: [refresh]),
       body: body,
     );
   }
