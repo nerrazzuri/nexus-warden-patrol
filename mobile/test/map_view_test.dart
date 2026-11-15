@@ -22,6 +22,8 @@ import 'site_page_test.dart' show FakeApi;
 import 'support/fake_map.dart';
 import 'support/fake_site.dart';
 import 'support/zone_ui.dart';
+import 'support/shell_nav.dart';
+import 'package:nexwar_patrol/ui/nw/nw_site_dir.dart';
 
 /// FakeApi 那张图：200 × 100 像素、一像素 0.1 m、左边缘 x = -10、上边缘 y = 5；[extra] 并进预览 JSON。
 class _GeoApi extends FakeApi {
@@ -376,8 +378,7 @@ void main() {
       _size(t);
       await t.pumpWidget(MaterialApp(home: NwShell(api: Rot23Api('guard'), ring: () {})));
       await t.pumpAndSettle();
-      await t.tap(find.byKey(NwShell.mapKey));
-      await t.pumpAndSettle();
+      await openSiteDir(t, SiteDest.layout);
       expect(find.byKey(SiteMapTab.legendKey), findsOneWidget);
       expect(inLegend('地面'), findsNothing);
       expect(inLegend('图例'), findsOneWidget);
@@ -541,8 +542,7 @@ void main() {
             _size(t, size);
             await t.pumpWidget(MaterialApp(theme: nwTheme(b), home: NwShell(api: Rot23Api('admin'), ring: () {})));
             await t.pumpAndSettle();
-            await t.tap(find.byKey(NwShell.mapKey));
-            await t.pumpAndSettle();
+            await openSiteDir(t, SiteDest.layout);
             expect(t.takeException(), isNull);
             await t.tap(find.byKey(SiteMapTab.legendToggleKey));
             await t.pumpAndSettle();

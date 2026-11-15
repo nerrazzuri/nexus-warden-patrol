@@ -7,6 +7,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'site_page_test.dart' show FakeApi;
+import 'support/shell_nav.dart';
+import 'package:nexwar_patrol/ui/nw/nw_site_dir.dart';
 
 Future<void> _pumpRuns(WidgetTester t, FakeApi api) async {
   await t.pumpWidget(MaterialApp(home: SiteRunsPage(key: UniqueKey(), api: api)));
@@ -179,10 +181,9 @@ void main() {
   // 2026-10-14 重做：入口从狗列表的顶栏挪到了底部导航的「记录」栏。
   testWidgets('进了站点有「记录」入口', (t) async {
     final api = FakeApi('owner');
-    await t.pumpWidget(MaterialApp(home: NwShell(api: api, title: '庄园')));
-    await t.pump();
-    await t.tap(find.byKey(const Key('open-runs')));
+    await t.pumpWidget(MaterialApp(home: NwShell(api: api, title: '庄园', updater: null)));
     await t.pumpAndSettle();
+    await openSiteDir(t, SiteDest.runs);
     expect(find.byType(SiteRunsPage), findsOneWidget);
     await t.pumpWidget(Container());
   });
