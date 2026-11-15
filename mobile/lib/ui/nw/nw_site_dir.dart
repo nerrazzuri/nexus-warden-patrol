@@ -299,7 +299,12 @@ class _ShiftNotesPageState extends State<ShiftNotesPage> {
     final c = Nw.of(context);
     final can = widget.api.session?.canHandleAlerts ?? false;
     return Scaffold(
-        appBar: AppBar(title: Text(tr('Handover notes', '交班留言'))),
+        appBar: AppBar(
+            title: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(tr('Handover notes', '交班留言')),
+          if (_notes != null && _notes!.isNotEmpty)
+            Text(tr('Latest ${_notes!.length}', '最近 ${_notes!.length} 条'), style: NwText.bodySmall.copyWith(color: c.textSecondary)),
+        ])),
         body: Column(children: [
           if (can)
             Padding(
@@ -310,9 +315,14 @@ class _ShiftNotesPageState extends State<ShiftNotesPage> {
                       controller: _text,
                       maxLines: 3,
                       maxLength: 300,
-                      decoration: InputDecoration(hintText: tr('Leave a note for the next shift', '给下一班留一句'))),
+                      decoration: InputDecoration(hintText: tr('Note for the next shift…', '给下一班留一句…'))),
                   const SizedBox(height: Nw.s8),
-                  FilledButton(key: const Key('note-send'), onPressed: _busy ? null : _send, child: Text(tr('Leave note', '留言'))),
+                  FilledButton(
+                      key: const Key('note-send'),
+                      style: FilledButton.styleFrom(
+                          minimumSize: const Size(48, 48), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(2))),
+                      onPressed: _busy ? null : _send,
+                      child: Text(tr('Post', '发出'))),
                 ])),
           if (_err != null) Padding(padding: const EdgeInsets.all(Nw.s16), child: Text(_err!, style: NwText.bodyMedium.copyWith(color: c.error))),
           Expanded(
@@ -327,10 +337,27 @@ class _ShiftNotesPageState extends State<ShiftNotesPage> {
                             final n = _notes![i];
                             final at = DateTime.fromMillisecondsSinceEpoch((n['at_ms'] as num?)?.toInt() ?? 0);
                             final hm = '${at.hour.toString().padLeft(2, '0')}:${at.minute.toString().padLeft(2, '0')}';
-                            return ListTile(
-                                title: Text('${n['text'] ?? ''}', style: NwText.bodyMedium.copyWith(color: c.text)),
-                                subtitle: Text('${n['author'] ?? ''} · ${at.month}-${at.day} $hm',
-                                    style: NwText.bodySmall.copyWith(color: c.textSecondary)));
+                            final now = DateTime.now();
+                            final days = DateTime(now.year, now.month, now.day).difference(DateTime(at.year, at.month, at.day)).inDays;
+                            final when = switch (days) {
+                              0 => tr('Today $hm', '今天 $hm'),
+                              1 => tr('Yesterday $hm', '昨天 $hm'),
+                              _ => '${at.month.toString().padLeft(2, '0')}-${at.day.toString().padLeft(2, '0')} $hm',
+                            };
+                            // App V2 稿 S-notes：上面「谁 …… 什么时候」，下面留言
+                            return Padding(
+                                key: Key('note-${n['id']}'),
+                                padding: const EdgeInsets.symmetric(horizontal: Nw.s16, vertical: 12),
+                                child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                                  Row(children: [
+                                    Expanded(
+                                        child: Text('${n['author'] ?? ''}',
+                                            style: NwText.labelLarge.copyWith(color: c.text, fontWeight: FontWeight.w700))),
+                                    Text(when, style: NwText.bodySmall.copyWith(color: c.textSecondary)),
+                                  ]),
+                                  const SizedBox(height: Nw.s4),
+                                  Text('${n['text'] ?? ''}', style: NwText.bodyMedium.copyWith(color: c.text)),
+                                ]));
                           })),
         ]));
   }
