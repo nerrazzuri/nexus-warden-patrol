@@ -144,7 +144,6 @@ export function MapManagePage({ say, pollMs = 5000 }: { say: Say; pollMs?: numbe
   const [rolling, setRolling] = useState<Dog | null>(null);
   const [pick, setPick] = useState<string[]>([]);
   const [diff, setDiff] = useState<{ map_id: string; a: string; b: string; derived?: boolean } | null>(null);
-  const [noise, setNoise] = useState<{ map_id: string; version: string } | null>(null);
   const gen = useRef(0);
 
   const load = useCallback(async () => {
@@ -227,7 +226,6 @@ export function MapManagePage({ say, pollMs = 5000 }: { say: Say; pollMs?: numbe
                   onNote={(n) => void saveNote(m.map_id, v.version, n)}
                   onPublish={() => setPublish({ map_id: m.map_id, version: v.version, unusable: v.unusable ?? "", source: v.source, zonesOk: v.counts.zones_confirmed })}
                   onDelete={() => setDeleting({ map_id: m.map_id, version: v.version, back: v.previous_on, latest: v.latest })}
-                  onNoise={() => setNoise({ map_id: m.map_id, version: v.version })}
                 />
               ))}
             </div>
@@ -288,8 +286,6 @@ export function MapManagePage({ say, pollMs = 5000 }: { say: Say; pollMs?: numbe
               : tr("The robot may not have it any more and will download it again.", "机器人上可能已经没有这一版，会重新下载。"))} />
       )}
       {diff && <DiffDialog target={diff} onClose={() => setDiff(null)} />}
-      {noise && <NoiseDialog target={noise} onClose={() => setNoise(null)}
-        onDone={(r) => { setNoise(null); say(tr(`Saved as draft v${r.version}: ${r.cleaned} spots cleaned. Open the draft to preview it and publish it to the site; then it can be sent to robots.`, `已另存为草稿 v${r.version}：清了 ${r.cleaned} 处。打开草稿预览、发布到站点后才能下发。`)); void load(); }} />}
     </div>
   );
 }
@@ -328,7 +324,7 @@ function RunningCell({ r }: { r: Running | null }) {
 
 function VersionCard(p: {
   map_id: string; v: Version; picked: boolean; onPick: (on: boolean) => void; onNote: (n: string) => void;
-  onPublish: () => void; onDelete: () => void; onNoise?: () => void;
+  onPublish: () => void; onDelete: () => void;
 }) {
   const { v } = p;
   // 没改过就跟着站点的备注走;改过的是草稿(存了、站点那边的备注变成它,草稿就等于它,按钮自然灰掉)
@@ -409,7 +405,6 @@ function VersionCard(p: {
             // W6-12:四个版本都是蓝色主按钮,看不出该用哪个 —— 只有最新那版是主按钮
             : <button type="button" class={v.latest ? "btn sm primary" : "btn sm"} onClick={p.onPublish}>{tr("Send to robots…", "下发到机器人…")}</button>}
           <button type="button" class="btn sm danger" disabled={!!whyNot} title={whyNot} onClick={p.onDelete}>{tr("Delete", "删除")}</button>
-          {p.onNoise && <button type="button" class="btn sm" disabled={!v.has_raster} onClick={p.onNoise}>{tr("Clean noise…", "清噪点…")}</button>}
           {/* W44 第四期:地图编辑器(橡皮擦、画障碍、区域名、特殊地面、摆正、底图),另存成新的一版 */}
           {v.has_raster && !v.draft && <a class="btn sm" href={`#/admin/mapedit?map=${enc(p.map_id)}&version=${enc(v.version)}`}>{tr("Edit…", "编辑…")}</a>}
           <label class="field-inline small">
@@ -739,7 +734,8 @@ interface Speck { id: number; x: number; y: number; px: number }
 interface NoiseList { digest: string; res: number; max_m2: number; ring_m: number; specks: Speck[] }
 export interface DenoiseResult { version: string; cleaned: number; cells: number; homes_copied: number; draft?: boolean; from?: string }
 
-/** 这一版里「零星噪点」的候选画在图上(红圈),点一下去掉、再点加回;确认后清掉、另存成新的一版。 */
+/** 这一版里「零星噪点」的候选画在图上(红圈),点一下去掉、再点加回;确认后清掉、另存成新的一版。
+ *  用户 11-15:地图页不再单独放入口,清噪点是地图编辑器里的一个工具(mapedit);这个对话框留给老的调用方。 */
 export function NoiseDialog({ target, onClose, onDone }: {
   target: { map_id: string; version: string }; onClose: () => void; onDone: (r: DenoiseResult) => void;
 }) {
