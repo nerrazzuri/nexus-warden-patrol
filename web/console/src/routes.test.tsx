@@ -582,6 +582,48 @@ describe("路线页:站点的回答", () => {
     expect(posted[0].body).toEqual({ base_revision: 4 });
   });
 
+  // 用户 11-15:有排程在用的路线删不掉(站点拒,英文界面还显示中文原句)—— 确认里写清连排程一起删,确定后先删排程再删路线
+  it("删有排程的路线:确认里列出排程,确定后先删排程(带修订号)再删路线", async () => {
+    installScreenCTM();
+    const sch = { id: "n1", title: "Night", mission: "loop", at: "22:00", days: ["mon"], window_min: 30, on_missed: "skip", revision: 7 };
+    const posted = routesApi({ meta: META, routes: [ROUTE], timezone: "Asia/Kuala_Lumpur", schedules: [sch] });
+    const r = render(<RoutesPage say={() => {}} />);
+    await ready(r.container);
+    await waitFor(() => expect(r.getByText("loop")).toBeTruthy());
+    fireEvent.click(r.getByText("loop"));
+    await tick();
+    fireEvent.click(r.getByText("Delete route"));
+    await tick();
+    const dlg = r.container.ownerDocument.querySelector("dialog")!;
+    expect(dlg.textContent).toContain("1 schedule");
+    expect(dlg.textContent).toContain("Night");
+    const yes = dlg.querySelector(".btn.danger") as HTMLButtonElement;
+    expect(yes.textContent).toBe("Delete route and schedules");
+    fireEvent.click(yes);
+    await waitFor(() => expect(posted.length).toBe(2));
+    expect(posted[0].path).toContain("/api/route-schedules/n1/delete");
+    expect(posted[0].body).toEqual({ base_revision: 7 });
+    expect(posted[1].path).toContain("/api/routes/loop/delete");
+  });
+
+  it("站点拒删(值守方案在用):英文界面写英文原因,不显示中文原句", async () => {
+    installScreenCTM();
+    const said: string[] = [];
+    routesApi({ meta: META, routes: [ROUTE], post: (u) => (u.endsWith("/api/routes/loop/delete")
+      ? json({ error: "布防的值守方案还在用路线「loop」:先从值守方案里去掉" }, 400) : undefined) });
+    const r = render(<RoutesPage say={(m: string) => said.push(m)} />);
+    await ready(r.container);
+    await waitFor(() => expect(r.getByText("loop")).toBeTruthy());
+    fireEvent.click(r.getByText("loop"));
+    await tick();
+    fireEvent.click(r.getByText("Delete route"));
+    await tick();
+    fireEvent.click(r.container.ownerDocument.querySelector("dialog .btn.danger")!);
+    await waitFor(() => expect(said.length).toBeGreaterThan(0));
+    expect(said.at(-1)).toContain("The arming guard plan still uses route “loop”");
+    expect(said.at(-1)).not.toMatch(/[\u4e00-\u9fff]/);
+  });
+
   it("排程:没设时区先设;加排程带这条路线和基准 0;删排程带它的修订号", async () => {
     installScreenCTM();
     const sch = { id: "n1", mission: "loop", at: "22:00", days: ["mon"], window_min: 30, on_missed: "skip", revision: 7 };

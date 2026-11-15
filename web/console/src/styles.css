@@ -1078,9 +1078,12 @@ p.warn { color: var(--c-text); background: var(--c-warningSoft); padding: 8px 12
 .ok-text { color: var(--c-success); font-weight: 600; }
 .route-line.bad-seg { stroke: var(--c-error); stroke-dasharray: 6 4; stroke-width: 3; }
 /* UIUX-E011:属性面板跟着屏幕变宽(原来封顶 440,1920 下地图 1200 / 面板 440,表单挤) */
-.routes-embed .routesplit { display: grid; grid-template-columns: minmax(0, 1fr) clamp(360px, 30vw, 560px); gap: var(--sp-4); }
+/* 用户 11-15「Zone routes / Patrol routes 右边还有空」:跟别的布置标签(.ly-tab)同宽的右栏,栏里不再限宽、不另画竖线 */
+.routes-embed .routesplit { display: grid; grid-template-columns: minmax(0, 1fr) clamp(340px, 28vw, 440px); gap: var(--sp-4); }
+.routes-embed .routesplit > .routeside { max-width: none; border-left: 0; padding: 0 0 12px; }
 @media (max-width: 1000px) { .routes-embed .routesplit { grid-template-columns: minmax(0, 1fr); } }
-.standby-pt .pm-body, .standby-pt circle:first-of-type { fill: var(--c-surface); }
+/* 用户 11-15「待命点朝向箭头是白的看不见」:以前多写了「第一个圆填白」,选中时把光圈和箭头上的抓手圆都填成白、盖住箭头 —— 只填底座 */
+.standby-pt .pm-body { fill: var(--c-surface); }
 .standby-pt.default .pm-body { fill: var(--c-success); }
 .standby-pt.carried { opacity: 0.5; pointer-events: none; }
 /* 第 10 轮 W10-06:几台的待命点叠在同一处,上面写「A、B」 */
