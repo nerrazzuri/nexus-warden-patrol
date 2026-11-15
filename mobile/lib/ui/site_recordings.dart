@@ -15,6 +15,7 @@ import 'package:video_player/video_player.dart';
 
 import '../l10n.dart';
 import '../net/site_client.dart';
+import 'nw/nw_ask.dart';
 import 'nw/nw_theme.dart';
 import 'nw/nw_widgets.dart';
 
@@ -131,12 +132,12 @@ class SiteRecordingsPage extends StatefulWidget {
   State<SiteRecordingsPage> createState() => _SiteRecordingsPageState();
 }
 
-class _SiteRecordingsPageState extends State<SiteRecordingsPage> {
+class _SiteRecordingsPageState extends State<SiteRecordingsPage> with NwAsk {
   late String _robotId = widget.robotId;
   List<Map<String, dynamic>> _rows = const [];
 
-  /// 等人点「播放」的那一段（M34：大的先说流量；App V2 就地问，不弹窗）。
-  Map<String, dynamic>? _askData;
+  /// 第几次读录像列表：晚回来的旧一次不覆盖新的（外审 App-V2-1 #8）。
+  int _gen = 0;
   String? _camera;
   String _msg = '';
   bool _loading = true;
@@ -156,15 +157,17 @@ class _SiteRecordingsPageState extends State<SiteRecordingsPage> {
   }
 
   Future<void> _loadCams() async {
+    final id = _robotId;
     try {
-      final cams = robotCameras(await widget.api.robot(_robotId));
-      if (mounted && cams.join(',') != _cams.join(',')) setState(() => _cams = cams);
+      final cams = robotCameras(await widget.api.robot(id));
+      if (mounted && id == _robotId && cams.join(',') != _cams.join(',')) setState(() => _cams = cams);
     } on Object {
       // 读不到：照前后两路
     }
   }
 
   Future<void> _load() async {
+    final gen = ++_gen;
     setState(() => _loading = true);
     try {
       final until = _until;
@@ -174,14 +177,14 @@ class _SiteRecordingsPageState extends State<SiteRecordingsPage> {
           until: until,
           since: until == null ? null : until - SiteRecordingsPage.windowMin * 60000,
           limit: until == null ? 60 : null);
-      if (!mounted) return;
+      if (!mounted || gen != _gen) return;
       setState(() {
         _rows = rows;
         _loading = false;
         _msg = '';
       });
     } on SiteError catch (e) {
-      if (mounted) {
+      if (mounted && gen == _gen) {
         setState(() {
           _loading = false;
           _msg = e.status == 404
@@ -206,11 +209,17 @@ class _SiteRecordingsPageState extends State<SiteRecordingsPage> {
     final mb = ((r['bytes'] as num? ?? 0) / 1048576).toStringAsFixed(1);
     // M34：一段好几 MB，用手机流量看先说一声（这一页问一次；就地问，不弹窗）
     if (!_dataOk && (r['bytes'] as num? ?? 0) > 2 * 1048576) {
-      setState(() => _askData = r);
-      return;
+      // 外审 App-V2-1 #9：页内确认条（滚到看得见）；问着的时候换了机器人就作废
+      final robot = _robotId;
+      final ok = await askYes(tr('Play on mobile data?', '用手机流量播放？'),
+          body: tr('Each clip is about $mb MB. On mobile data that is used per minute of video.',
+              '每段约 $mb MB，用手机流量看每看一分钟就用这么多。'),
+          ok: tr('Play', '播放'),
+          okKey: SiteRecordingsPage.dataOkKey);
+      if (!ok || !mounted || robot != _robotId) return;
+      _dataOk = true;
     }
     setState(() {
-      _askData = null;
       _busyId = id;
       _msg = tr('Downloading $mb MB…', '下载中（$mb MB）…');
     });
@@ -249,8 +258,9 @@ class _SiteRecordingsPageState extends State<SiteRecordingsPage> {
     setState(() {
       _robotId = id;
       _camera = null;
-      _askData = null;
+      _rows = const [];
       _cams = const <String>['front', 'back'];
+      if (asking) askCancel();
     });
     unawaited(_load());
     unawaited(_loadCams());
@@ -279,7 +289,6 @@ class _SiteRecordingsPageState extends State<SiteRecordingsPage> {
         minimumSize: const Size(48, 44), shape: shape, padding: const EdgeInsets.symmetric(horizontal: Nw.s8));
     final sub = NwText.bodySmall.copyWith(color: c.textSecondary);
     final (from, to) = _window();
-    final ask = _askData;
     // App V2 稿 S-video：切机器人、相机；时间轴；一分钟一段一行；底下「← 30 分钟 | 30 分钟 →」
     return Scaffold(
       backgroundColor: c.bg,
@@ -289,6 +298,7 @@ class _SiteRecordingsPageState extends State<SiteRecordingsPage> {
         Text(tr('One-minute segments · tap to play', '一分钟一段 · 点一段播放'), style: sub),
       ])),
       body: ListView(padding: const EdgeInsets.only(bottom: Nw.s24), children: [
+        askStrip(),
         Container(
             color: c.surface,
             padding: const EdgeInsets.all(Nw.s16),
@@ -351,33 +361,6 @@ class _SiteRecordingsPageState extends State<SiteRecordingsPage> {
           Padding(
               padding: const EdgeInsets.fromLTRB(Nw.s16, Nw.s8, Nw.s16, 0),
               child: Text(_msg, key: SiteRecordingsPage.msgKey, style: NwText.bodyMedium.copyWith(color: c.text))),
-        if (ask != null)
-          Container(
-              margin: const EdgeInsets.fromLTRB(Nw.s16, Nw.s8, Nw.s16, 0),
-              padding: const EdgeInsets.all(Nw.s16),
-              decoration: BoxDecoration(color: c.surface, border: Border.all(color: c.warning)),
-              child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-                Text(
-                    tr('Each clip is about ${((ask['bytes'] as num) / 1048576).toStringAsFixed(1)} MB. On mobile data that is used per minute of video.',
-                        '每段约 ${((ask['bytes'] as num) / 1048576).toStringAsFixed(1)} MB，用手机流量看每看一分钟就用这么多。'),
-                    style: NwText.bodyMedium.copyWith(color: c.text)),
-                const SizedBox(height: Nw.s8),
-                Row(children: [
-                  Expanded(
-                      child: OutlinedButton(
-                          style: out, onPressed: () => setState(() => _askData = null), child: Text(tr('Cancel', '取消')))),
-                  const SizedBox(width: Nw.s8),
-                  Expanded(
-                      child: FilledButton(
-                          key: SiteRecordingsPage.dataOkKey,
-                          style: FilledButton.styleFrom(minimumSize: const Size(48, 44), shape: shape),
-                          onPressed: () {
-                            _dataOk = true;
-                            unawaited(_play(ask));
-                          },
-                          child: Text(tr('Play', '播放')))),
-                ]),
-              ])),
         if (_loading) const Padding(padding: EdgeInsets.all(16), child: Center(child: CircularProgressIndicator())),
         if (!_loading && _rows.isEmpty && _msg.isEmpty)
           Padding(

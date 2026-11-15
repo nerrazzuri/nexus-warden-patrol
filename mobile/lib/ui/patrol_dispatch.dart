@@ -561,18 +561,13 @@ class TodayPatrolList extends StatefulWidget {
 
 /// App V2：点一行在下面展开详情和按钮（不弹窗），再点收起。
 class _TodayPatrolListState extends State<TodayPatrolList> {
-  int? _open;
+  /// 展开的那一趟（按稳定的身份记，不按行号：外审 App-V2-1 #11，重读后插进、挪动了也不会展开到别的那一趟上）。
+  String? _open;
+  static String _idOf(Map<String, dynamic> it) =>
+      '${it['kind']}|${it['adhoc_id'] ?? ''}|${it['schedule_id'] ?? ''}|${it['at_ms']}';
   SiteApi get api => widget.api;
   List<Map<String, dynamic>> get items => widget.items;
   int? get offsetMin => widget.offsetMin;
-
-  @override
-  void didUpdateWidget(TodayPatrolList old) {
-    super.didUpdateWidget(old);
-    // 重读了：展开的那一行按时间对一下，对不上就收起（别展开到别的那一趟上）
-    final i = _open;
-    if (i != null && (i >= items.length || i >= old.items.length || items[i]['at_ms'] != old.items[i]['at_ms'])) _open = null;
-  }
 
   Widget _details(BuildContext context, Map<String, dynamic> it) {
     final c = Nw.of(context);
@@ -665,7 +660,7 @@ class _TodayPatrolListState extends State<TodayPatrolList> {
         for (var i = 0; i < items.length; i++) ...[
           InkWell(
             key: todayRowKey(i),
-            onTap: () => setState(() => _open = _open == i ? null : i),
+            onTap: () => setState(() => _open = _open == _idOf(items[i]) ? null : _idOf(items[i])),
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: Nw.s8),
               child: Row(children: [
@@ -704,7 +699,7 @@ class _TodayPatrolListState extends State<TodayPatrolList> {
               ]),
             ),
           ),
-          if (_open == i) _details(context, items[i]),
+          if (_open == _idOf(items[i])) _details(context, items[i]),
         ],
       ]),
     );

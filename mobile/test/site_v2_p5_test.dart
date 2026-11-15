@@ -255,6 +255,28 @@ void main() {
     expect(t.widget<SiteStandbyPage>(find.byType(SiteStandbyPage)).robotId, 'B');
   });
 
+  testWidgets('外审 App-V2-1 #12：写出每个点在哪版图上；不是机器人在用的那版标出来、不能设默认', (t) async {
+    await t.binding.setSurfaceSize(const Size(390, 1400));
+    addTearDown(() => t.binding.setSurfaceSize(null));
+    final api = pointsApi('admin')
+      ..robotsOverride = <Map<String, dynamic>>[
+        <String, dynamic>{
+          'robot_id': 'A',
+          'name': 'A',
+          'capabilities': <String, dynamic>{
+            'tasks': <String, dynamic>{'patrol': <String, dynamic>{'map_id': 'm', 'map_version': '2'}}
+          },
+        },
+      ];
+    await t.pumpWidget(MaterialApp(home: SitePointsPage(api: api)));
+    await t.pumpAndSettle();
+    expect(find.descendant(of: find.byKey(SitePointsPage.standbyKey('gate')), matching: find.textContaining('m v1')), findsOneWidget);
+    expect(find.descendant(of: find.byKey(SitePointsPage.standbyKey('gate')), matching: find.textContaining('不是 A 现在用的图')),
+        findsOneWidget);
+    expect(find.byKey(SitePointsPage.defaultKey('gate')), findsNothing, reason: '旧图上的点不能设默认（回去时站点会拒）');
+    expect(find.text('尚未标原点'), findsOneWidget, reason: '原点只在旧版图上');
+  });
+
   testWidgets('稿 S-points：保安只看原点、待命点，不能设默认', (t) async {
     await t.binding.setSurfaceSize(const Size(390, 1400));
     addTearDown(() => t.binding.setSurfaceSize(null));

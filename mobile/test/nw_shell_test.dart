@@ -64,6 +64,15 @@ void main() {
       await t.pumpWidget(Container());
     });
 
+    testWidgets('外审 App-V2-1 #7：只读账号哪一层都没有急停（方块、小红按钮都不给）', (t) async {
+      _size(t);
+      await _show(t, FakeApi('viewer'));
+      expect(find.byKey(NwShell.estopKey), findsNothing);
+      await _tap(t, NwShell.siteKey);
+      expect(find.byKey(NwShell.estopSmallKey), findsNothing);
+      await t.pumpWidget(Container());
+    });
+
     testWidgets('切到「现场」：浅色目录、顶栏换成小红「急停」、方块没了；再切回来', (t) async {
       _size(t);
       await _show(t, FakeApi('admin'));

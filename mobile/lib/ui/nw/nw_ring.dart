@@ -90,7 +90,14 @@ class _RingPageState extends State<RingPage> {
     if (_left || !mounted) return;
     _left = true;
     unawaited(widget.done());
-    Navigator.of(context).maybePop();
+    // 外审 App-V2-1 #6：只关自己这一页。上面可能压着另一件报警的来报警页，不能弹栈顶
+    final route = ModalRoute.of(context);
+    if (route == null) return;
+    if (route.isCurrent) {
+      Navigator.of(context).pop();
+    } else if (route.isActive) {
+      Navigator.of(context).removeRoute(route);
+    }
   }
 
   void _open() {
@@ -117,16 +124,15 @@ class _RingPageState extends State<RingPage> {
   }
 
   Future<void> _mute() async {
-    final ok = await widget.mute(_a.key);
+    // 前台的铃（App 开着时机器人列表页那一套）和后台通知的铃静到同一个点（外审 App-V2-1 #5）
+    final until = widget.now().add(const Duration(minutes: 2)).millisecondsSinceEpoch;
+    bg.ringMutedUntil[_a.key] = until;
+    await widget.mute(_a.key);
     if (!mounted) return;
     setState(() {
-      if (ok) {
-        _mutedUntil = widget.now().add(const Duration(minutes: 2)).millisecondsSinceEpoch;
-        _msg = tr('Muted on this phone until ${_hm(_mutedUntil!)}. It rings again if no one takes ownership.',
-            '这台手机静音到 ${_hm(_mutedUntil!)}，到时还没人接手会接着响。');
-      } else {
-        _msg = tr('Background monitoring is off on this phone, so there is nothing to mute.', '这台手机没开后台值守，没有可静音的铃声。');
-      }
+      _mutedUntil = until;
+      _msg = tr('Muted on this phone until ${_hm(until)}. It rings again if no one takes ownership.',
+          '这台手机静音到 ${_hm(until)}，到时还没人接手会接着响。');
     });
   }
 

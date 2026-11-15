@@ -264,7 +264,8 @@ class _SiteRobotsPageState extends State<SiteRobotsPage> {
       _bell ??= Timer.periodic(widget.ringEvery, (_) {
         // 退到后台了由后台值守的通知响（闹钟声一直响），这边不叠着响
         final state = WidgetsBinding.instance.lifecycleState;
-        if (_ringing.isNotEmpty && (state == null || state == AppLifecycleState.resumed)) {
+        // 来报警页上点了「静音 2 分钟」的那几条前台也不响（全静了才不响）
+        if (_ringing.any((k) => !ringMuted(k)) && (state == null || state == AppLifecycleState.resumed)) {
           widget.ring();
         }
       });

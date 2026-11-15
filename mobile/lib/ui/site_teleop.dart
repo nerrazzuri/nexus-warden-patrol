@@ -416,6 +416,7 @@ class _SiteTeleopPageState extends State<SiteTeleopPage> with WidgetsBindingObse
     _sub = null;
     final old = _link;
     _link = null;
+    if (asking) askCancel();
     if (old != null) unawaited(old.close());
     _clearKeys();
     setState(() {
@@ -612,7 +613,8 @@ class _SiteTeleopPageState extends State<SiteTeleopPage> with WidgetsBindingObse
         tr('I am on site', '我在现场'))) {
       return;
     }
-    if (!mounted) return;
+    // 外审 App-V2-1 #2：两次确认只算这一条遥控连接；问着的时候停了、换了连接，作废
+    if (!mounted || _ended || _link != link) return;
     if (!await twice(
         tr('Confirm again', '再确认一次'),
         tr('Speed goes up to 1.0 m/s and hard no-go zones (water, drops) are no longer avoided automatically. Only for this remote-control session; your name is recorded.',
@@ -621,7 +623,7 @@ class _SiteTeleopPageState extends State<SiteTeleopPage> with WidgetsBindingObse
         tr('Turn on', '确认打开'))) {
       return;
     }
-    if (mounted && !_ended) _link?.setInSight(true);
+    if (mounted && !_ended && _link == link) link.setInSight(true);
   }
 
   /// 遥控页里换姿势（用户 11-05）：确认才发；推着杆不能按（机器人那头也拒）。
@@ -744,6 +746,7 @@ class _SiteTeleopPageState extends State<SiteTeleopPage> with WidgetsBindingObse
   Future<void> _halt() async {
     // 先在本机收手：不再发杆值、放租。halt 万一没发出去，手指还按在杆上也不会接着开。
     _stopTicking();
+    if (asking) askCancel(); // 停了：问到一半的（我在现场、站起来）都作废
     _clearKeys();
     final link = _link;
     if (link != null) {

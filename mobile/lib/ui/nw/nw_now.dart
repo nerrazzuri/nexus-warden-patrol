@@ -95,7 +95,7 @@ class NowPage extends StatefulWidget {
 /// 每个站点上次选的哪台（这一次打开 App 里记着；按站点地址分）。
 final Map<String, String> _picked = {};
 
-class _NowPageState extends State<NowPage> {
+class _NowPageState extends State<NowPage> with EstopMissReveal {
   final DutyTargets _t = DutyTargets();
   List<Map<String, dynamic>> _robots = const [];
   final Map<String, Map<String, dynamic>> _views = {};

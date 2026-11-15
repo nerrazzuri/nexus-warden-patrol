@@ -1,4 +1,6 @@
 // App V2 来报警全屏页（稿 N-ring）：我来处理 / 只看画面 / 静音 2 分钟；别人接手了自己关；外壳接住后台值守拉起来的那一条。
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:nexwar_patrol/model/alert.dart';
@@ -91,18 +93,44 @@ void main() {
     await t.pumpWidget(Container());
   });
 
-  testWidgets('静音 2 分钟：交给后台值守、说静到几点、按钮灰掉；没开后台值守就说静不了', (t) async {
+  testWidgets('静音 2 分钟：交给后台值守、前台的铃也静（同一个截止时间）、说静到几点、按钮灰掉', (t) async {
+    ringMutedUntil.clear();
     final calls = await _open(t, FakeApi('guard'));
     await t.tap(find.byKey(RingPage.muteKey));
     await t.pumpAndSettle();
     expect(calls.muted, ['cctv:3/intrusion#9']);
     expect(find.textContaining('静音到 23:50'), findsOneWidget);
     expect(t.widget<OutlinedButton>(find.byKey(RingPage.muteKey)).onPressed, isNull);
+    expect(ringMutedUntil['cctv:3/intrusion#9'], _t0 + 60000 + 120000, reason: '外审 App-V2-1 #5：前台铃看同一个截止时间');
+    expect(ringMuted('cctv:3/intrusion#9', () => DateTime.fromMillisecondsSinceEpoch(_t0 + 61000)), isTrue);
+    expect(ringMuted('cctv:3/intrusion#9', () => DateTime.fromMillisecondsSinceEpoch(_t0 + 181000)), isFalse);
     await t.pumpWidget(Container());
+    // 没开后台值守：前台的铃照样静
+    ringMutedUntil.clear();
     await _open(t, FakeApi('guard'), canMute: false);
     await t.tap(find.byKey(RingPage.muteKey));
     await t.pumpAndSettle();
-    expect(find.textContaining('没开后台值守'), findsOneWidget);
+    expect(find.textContaining('静音到 23:50'), findsOneWidget);
+    expect(ringMutedUntil, contains('cctv:3/intrusion#9'));
+    ringMutedUntil.clear();
+    await t.pumpWidget(Container());
+  });
+
+  testWidgets('外审 App-V2-1 #6：别人接手了，只关自己这一页，不弹掉压在上面的另一件', (t) async {
+    final api = FakeApi('guard');
+    final calls = await _open(t, api);
+    final nav = t.state<NavigatorState>(find.byType(Navigator));
+    unawaited(nav.push(MaterialPageRoute<void>(builder: (_) => const Scaffold(body: Text('another ring')))));
+    await t.pumpAndSettle();
+    api.alertRows = [_wire(ackedBy: 'olga', ackedMs: _t0 + 70000)];
+    await t.pump(const Duration(seconds: 3));
+    await t.pumpAndSettle();
+    expect(find.text('another ring'), findsOneWidget, reason: '上面那一页还在');
+    expect(find.byType(RingPage, skipOffstage: false), findsNothing, reason: '自己这一页移走了');
+    expect(calls.done, 1);
+    nav.pop();
+    await t.pumpAndSettle();
+    expect(find.text('home'), findsOneWidget);
     await t.pumpWidget(Container());
   });
 

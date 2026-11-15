@@ -703,15 +703,6 @@ class _SiteRobotPageState extends State<SiteRobotPage> with NwAsk {
     );
 
     final body = <Widget>[
-      if (_stopErr != null)
-        StopFailedCard(
-            robot: widget.robotId,
-            error: _stopErr,
-            onAgain: () {
-              setState(() => _stopErr = null);
-              unawaited(_abort());
-            },
-            onAck: () => setState(() => _stopErr = null)),
       if (light)
         Padding(
             padding: const EdgeInsets.fromLTRB(Nw.s16, 12, Nw.s16, 12),
@@ -753,6 +744,19 @@ class _SiteRobotPageState extends State<SiteRobotPage> with NwAsk {
           header,
           // 「我在现场监护」钉在列表外面（W00c6i 内审）：放在按需构建的列表里，上面插一行提示或者往下一翻，
           // 它的状态就被换掉、发出放租 —— 刚派出去的任务随即被中止。
+          // 外审 App-V2-1 #3：停车没成的红框钉在列表外面（滚到哪都看得见），横屏太矮时自己滚
+          if (_stopErr != null)
+            ConstrainedBox(
+                constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(context).height * 0.5),
+                child: SingleChildScrollView(
+                    child: StopFailedCard(
+                        robot: widget.robotId,
+                        error: _stopErr,
+                        onAgain: () {
+                          setState(() => _stopErr = null);
+                          unawaited(_abort());
+                        },
+                        onAck: () => setState(() => _stopErr = null)))),
           if (dispatch && robotNeedsSupervision(v) && !_settings)
             SupervisionSwitch(key: ValueKey('supervise-${widget.robotId}'), api: widget.api, robotId: widget.robotId),
           Expanded(

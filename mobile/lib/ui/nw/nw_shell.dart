@@ -32,7 +32,7 @@ import 'nw_ring.dart';
 import '../site_maps.dart' show SiteMapTab;
 import '../site_robots.dart';
 import '../site_tabs.dart' show AdminHomeTab;
-import '../widget/alarm_widgets.dart' show StopAllButton, estopMisses;
+import '../widget/alarm_widgets.dart' show StopAllButton, clearEstopMisses;
 import 'nw_site_dir.dart';
 import 'nw_theme.dart';
 
@@ -166,7 +166,7 @@ class _NwShellState extends State<NwShell> {
   void dispose() {
     _tick?.cancel();
     pendingRing.removeListener(_onRing);
-    estopMisses.value = const []; // 换站点 / 退出:上一个站点的急停没确认不带过去
+    clearEstopMisses(); // 换站点 / 退出:上一个站点的急停没确认不带过去
     unawaited(ErrorLog.instance.flush());
     ErrorLog.instance.detach(widget.api);
     _watchCtl.dispose();
@@ -272,7 +272,8 @@ class _NwShellState extends State<NwShell> {
                               _ => null,
                             },
                             onBack: _sub ? () => setState(() => _layer = ShellLayer.site) : null,
-                            onEstop: dark ? null : () => StopAllButton.press(context, api, _say)),
+                            // 外审 App-V2-1 #7：没有急停权限的（只读）不给急停
+                            onEstop: dark || !(api.session?.canAbort ?? false) ? null : () => StopAllButton.press(context, api, _say)),
                         if (_layer == ShellLayer.now || _layer == ShellLayer.site)
                           ValueListenableBuilder<Map<String, String>>(
                               valueListenable: _openP1,
