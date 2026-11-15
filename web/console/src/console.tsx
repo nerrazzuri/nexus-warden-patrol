@@ -226,7 +226,7 @@ export function Console({ me, onOut }: { me: Me; onOut: (note?: string) => void 
           <div class="adminwrap">
             <div class="adminbody" key={pageGen}>
               {route.page === "admin/home" && (
-                <HomePage alerts={alerts} mode={data?.mode ?? null} now={now} onAck={ack} onDone={(a) => resolve(a, "handled")}
+                <HomePage alerts={alerts} mode={data?.mode ?? null} now={now} role={me.role} onAck={ack} onDone={(a) => resolve(a, "handled")}
                   onMode={askMode} onWizard={admin ? () => openWiz("open") : undefined} />
               )}
               {route.page === "admin/arming" && <ArmingPage say={say} now={now} role={me.role} />}

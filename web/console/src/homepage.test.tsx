@@ -39,6 +39,14 @@ beforeEach(() => {
       return Promise.resolve(json({ robots: [{ robot_id: "A", name: "南区", revoked: false, expires_at: 0, online: true, battery_pct: 80, patrols_today: 4,
         problems: [], recent_problems: [], agent: "1", compat: "ok", manual_only: false }] }));
     }
+    if (url.startsWith("/api/alerts?since=")) {
+      return Promise.resolve(json({ alerts: [
+        alert({ key: "i1", kind: "intrusion", level: "P1", robot: "A", title: "北门有人", audience: "intrusion", first_ms: NOW - 3_600_000,
+          resolved_ms: NOW - 3_000_000, resolved_by: "gina", verdict: "intruder" }),
+        alert({ key: "c1", first_ms: NOW - 1000 }),
+      ] }));
+    }
+    if (url.startsWith("/api/shift-notes")) return Promise.resolve(json({ latest: { id: 1, at_ms: NOW - 9000, author: "gina", text: "北门围栏松了" } }));
     if (url.startsWith("/api/reports/summary")) {
       const since = Number(new URLSearchParams(url.split("?")[1]).get("since"));
       const isThis = since > NOW - 7 * 86_400_000;
@@ -52,8 +60,8 @@ afterEach(cleanup);
 
 const mode: Mode = { mode: "armed", until_ms: null, label: "按时间表:布防", source: "schedule", next_change_ms: new Date(2026, 9, 28, 22).getTime() } as Mode;
 type Fn = (x: never) => void;
-const page = (alerts: Alert[] = [], m: Mode | null = mode, on: Partial<Record<"ack" | "done" | "mode", Fn>> = {}) =>
-  render(<HomePage alerts={alerts} mode={m} now={NOW} onAck={(on.ack ?? (() => {})) as (a: Alert) => void}
+const page = (alerts: Alert[] = [], m: Mode | null = mode, on: Partial<Record<"ack" | "done" | "mode", Fn>> = {}, role = "admin") =>
+  render(<HomePage alerts={alerts} mode={m} now={NOW} role={role} onAck={(on.ack ?? (() => {})) as (a: Alert) => void}
     onDone={(on.done ?? (() => {})) as (a: Alert) => void} onMode={(on.mode ?? (() => {})) as (m: Mode["mode"]) => void} />);
 const btn = (root: Element, text: string) => Array.from(root.querySelectorAll("button")).find((b) => b.textContent?.trim() === text) as HTMLButtonElement;
 
@@ -130,15 +138,16 @@ describe("现场概况", () => {
   it("切模式交出去(确认在外面)", async () => {
     const m = vi.fn();
     const { container: c } = page([], mode, { mode: m });
+    fireEvent.click(btn(c.querySelector(".home-today")!, "切换模式…"));
     fireEvent.click(btn(c.querySelector(".home-today")!, "留守"));
     expect(m).toHaveBeenCalledWith("home");
   });
 
-  it("机器人小卡片点了去机器人页", async () => {
+  it("机器人一行点了去机器人页那一台", async () => {
     const { container: c } = page();
-    await waitFor(() => expect(c.querySelector(".home-robots a")).not.toBeNull());
-    const a = c.querySelector(".home-robots a")!;
-    expect(a.getAttribute("href")).toBe("#/admin/robots");
+    await waitFor(() => expect(c.querySelector(".home-robots a.home-robot")).not.toBeNull());
+    const a = c.querySelector(".home-robots a.home-robot")!;
+    expect(a.getAttribute("href")).toMatch(/^#\/admin\/robots\?robot=/);
     expect(a.textContent).toContain("南区");
     expect(a.textContent).toContain("80%");
   });
@@ -193,5 +202,23 @@ describe("W6-02 日程无法派单", () => {
     const li = await waitFor(() => c.querySelector('li[data-kind="schedule_blocked"]')!);
     expect(li.textContent).toContain("监护");
     expect(li.textContent).not.toContain("联系工程师");
+  });
+});
+
+describe("第六期 M-home:经理看的概况(只读)", () => {
+  it("过去 24 小时的报警表(给保安的、写结论),在管理员那里的事只看进度,交班留言;没有处理按钮、没有切模式", async () => {
+    const { container: c } = page([alert({ key: "cert" })], mode, {}, "owner");
+    await waitFor(() => expect(c.querySelector(".home-24 tbody tr")).not.toBeNull());
+    const rows = Array.from(c.querySelectorAll(".home-24 tbody tr"));
+    expect(rows.length).toBe(1);
+    expect(rows[0].textContent).toContain("gina");
+    expect(rows[0].textContent).toContain("确认有人");
+    const admin = c.querySelector(".home-admin")!;
+    expect(admin.textContent).toContain("等管理员处理");
+    expect(admin.querySelectorAll("button").length).toBe(0);
+    expect(c.querySelector(".home-todo")).toBeNull();
+    expect(btn(c, "切换模式…")).toBeUndefined();
+    expect(c.querySelector('.home-today a[href="#/admin/arming"]')).not.toBeNull();
+    await waitFor(() => expect(c.querySelector(".home-note")!.textContent).toContain("北门围栏松了"));
   });
 });

@@ -135,12 +135,12 @@ describe("新外壳", () => {
     expect(hrefs(e.container)).toContain("#/admin/robots");
   });
 
-  it("经理:机器人(只看)、布防与巡逻、报告;进得去", () => {
+  it("经理:概况(只读)、机器人(只看)、布防与巡逻、报告;进得去(第六期 M-home)", () => {
     location.hash = "#/admin/arming";
     const f = render(<Console me={me("owner")} onOut={() => {}} />);
     expect(groups(f.container)).toEqual(["日常", "现场", "记录"]);
-    expect(hrefs(f.container)).toEqual(["#/admin/robots", "#/admin/arming", "#/admin/reports"]);
-    expect(top(f.container)[2]).toEqual(["现场设置", "#/admin/robots"]);
+    expect(hrefs(f.container)).toEqual(["#/admin/home", "#/admin/robots", "#/admin/arming", "#/admin/reports"]);
+    expect(top(f.container)[2]).toEqual(["现场设置", "#/admin/home"]);
     expect(f.container.querySelector(".adminbody")).not.toBeNull();
     expect(f.container.querySelector(".noaccess")).toBeNull();
   });
