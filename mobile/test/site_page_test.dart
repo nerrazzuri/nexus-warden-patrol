@@ -10,7 +10,6 @@ import 'package:nexwar_patrol/net/push.dart';
 import 'package:nexwar_patrol/net/site_client.dart';
 import 'package:nexwar_patrol/store/site_store.dart';
 import 'package:nexwar_patrol/ui/app_settings.dart';
-import 'package:nexwar_patrol/ui/nw/nw_widgets.dart' show NwStatusPill;
 import 'package:nexwar_patrol/ui/patrol_dispatch.dart';
 import 'package:nexwar_patrol/ui/refusal.dart';
 import 'package:nexwar_patrol/ui/site_page.dart';
@@ -1016,6 +1015,23 @@ class FakeApi implements SiteApi {
     return <String, dynamic>{'ack': <String, dynamic>{'result': 'accepted'}};
   }
   @override
+  Future<Map<String, dynamic>> renameRobot(String robotId, String name) async {
+    calls.add('rename $robotId $name');
+    return <String, dynamic>{'robot_id': robotId, 'name': name};
+  }
+  @override
+  Future<Map<String, dynamic>> setManualOnly(String robotId, bool on) async {
+    calls.add('manual $robotId $on');
+    return <String, dynamic>{'robot_id': robotId, 'manual_only': on};
+  }
+  SiteError? revokeError;
+  @override
+  Future<Map<String, dynamic>> revokeRobot(String robotId, String password) async {
+    calls.add('revoke $robotId');
+    if (revokeError != null) throw revokeError!;
+    return <String, dynamic>{'robot_id': robotId};
+  }
+  @override
   Future<Map<String, dynamic>> resume(String robotId) async {
     calls.add('resume $robotId');
     return <String, dynamic>{'robot_id': robotId, 'was_held': true};
@@ -1199,6 +1215,8 @@ void main() {
     await openRobot(t, api);
     expect(find.byKey(const Key('btn-home-abort')), findsNothing);
     await t.ensureVisible(find.byKey(const Key('btn-home')));
+    await t.ensureVisible(find.byKey(const Key('btn-home')));
+    await t.pump();
     await t.tap(find.byKey(const Key('btn-home')));
     await t.pumpAndSettle();
     expect(api.calls, ['home A']);
@@ -1208,6 +1226,8 @@ void main() {
     await openRobot(t, busy);
     expect(find.byKey(const Key('btn-home')), findsNothing);
     await t.ensureVisible(find.byKey(const Key('btn-home-abort')));
+    await t.ensureVisible(find.byKey(const Key('btn-home-abort')));
+    await t.pump();
     await t.tap(find.byKey(const Key('btn-home-abort')));
     await t.pumpAndSettle();
     expect(busy.calls, isEmpty, reason: '先确认');
@@ -1231,6 +1251,8 @@ void main() {
     expect(find.byKey(standUpKey), findsOneWidget);
     expect(find.textContaining('没站起来'), findsWidgets);
     await t.ensureVisible(find.byKey(standUpKey));
+    await t.ensureVisible(find.byKey(standUpKey));
+    await t.pump();
     await t.tap(find.byKey(standUpKey));
     await t.pumpAndSettle();
     expect(api.calls.where((c) => c.startsWith('posture')), isEmpty, reason: '先确认');
@@ -1276,23 +1298,25 @@ void main() {
     final api = FakeApi('guard', robotView: view(task: teleop));
     await openRobot(t, api);
     await t.ensureVisible(find.byKey(const Key('btn-teleop')));
+    await t.ensureVisible(find.byKey(const Key('btn-teleop')));
+    await t.pump();
     await t.tap(find.byKey(const Key('btn-teleop')));
     await t.pump();
     await t.pump(const Duration(milliseconds: 500));
     Navigator.of(t.element(find.byType(SiteTeleopPage))).pop();
     await t.pump();
     await t.pump(const Duration(milliseconds: 300));
-    String phase() => t.widget<NwStatusPill>(find.byKey(const Key('robot-phase'))).label;
-    expect(phase(), '执行中', reason: '站点还没收掉');
+    String phase() => '${t.widget<Text>(find.byKey(const Key('robot-phase'))).data}';
+    expect(phase(), startsWith('执行中'), reason: '站点还没收掉');
     api.view = view();                                    // 站点收掉了
     await t.pump(const Duration(milliseconds: 1600));
     await t.pump();
-    expect(phase(), isNot('执行中'));
+    expect(phase(), isNot(startsWith('执行中')));
     await t.pumpWidget(Container());
     await t.pump(const Duration(seconds: 6));
   });
 
-  testWidgets('用户 11-08：机器人页没有单独的「姿态…」，遥控那格写「遥控 · 姿态」；经理没有', (t) async {
+  testWidgets('用户 11-08 / App V2：没有单独的「姿态…」菜单；「遥控与姿态」一排是遥控、站起、趴下；经理没有', (t) async {
     Map<String, dynamic> withPosture(Map<String, dynamic> v) {
       final out = jsonDecode(jsonEncode(v)) as Map<String, dynamic>;
       ((out['capabilities'] as Map)['tasks'] as Map)['posture'] = {'modes': ['stand', 'lie', 'crawl']};
@@ -1302,7 +1326,18 @@ void main() {
     final api = FakeApi('guard', robotView: withPosture(busyView()));
     await openRobot(t, api);
     expect(find.byKey(const Key('btn-posture')), findsNothing);
-    expect(find.text('遥控 · 姿态'), findsOneWidget);
+    expect(find.text('遥控与姿态'), findsOneWidget);
+    expect(find.byKey(const Key('btn-posture-stand')), findsOneWidget);
+    expect(find.byKey(SiteRobotPage.lieKey), findsOneWidget);
+    // 趴下不弹窗：就地问一句，确认了才发
+    await t.ensureVisible(find.byKey(SiteRobotPage.lieKey));
+    await t.pump();
+    await t.tap(find.byKey(SiteRobotPage.lieKey));
+    await t.pump();
+    expect(api.calls.where((c) => c.startsWith('posture')), isEmpty);
+    await t.tap(find.byKey(SiteRobotPage.lieConfirmKey));
+    await t.pumpAndSettle();
+    expect(api.calls, contains('posture A lie'));
     await t.pumpWidget(Container());
     final owner = FakeApi('owner', robotView: withPosture(busyView()));
     await openRobot(t, owner);
@@ -1314,10 +1349,14 @@ void main() {
     await openRobot(t, api);
     expect(find.byKey(const Key('btn-patrol')), findsOneWidget);
     expect(find.byKey(const Key('btn-standby')), findsOneWidget);
+    await t.ensureVisible(find.byKey(const Key('btn-abort')));
+    await t.pump();
     await t.tap(find.byKey(const Key('btn-abort')));
     await t.pumpAndSettle();
     expect(api.calls, ['abort A ${busyTaskId()}']);
     // W53：派巡逻是底部弹框（估时、撞日程排队）
+    await t.ensureVisible(find.byKey(const Key('btn-patrol')));
+    await t.pump();
     await t.tap(find.byKey(const Key('btn-patrol')));
     await t.pumpAndSettle();
     await t.tap(find.byKey(patrolRouteKey('loop')));
@@ -1330,6 +1369,8 @@ void main() {
   testWidgets('W76 派巡逻可选循环次数：一直巡逻说清楚会怎样，派出带 loops 0', (t) async {
     final api = FakeApi('guard', robotView: busyView());
     await openRobot(t, api);
+    await t.ensureVisible(find.byKey(const Key('btn-patrol')));
+    await t.pump();
     await t.tap(find.byKey(const Key('btn-patrol')));
     await t.pumpAndSettle();
     await t.tap(find.byKey(patrolRouteKey('loop')));
@@ -1355,6 +1396,8 @@ void main() {
   testWidgets('W76 外审：老站点不认圈数，不给选', (t) async {
     final api = FakeApi('guard', robotView: busyView())..sitesLoops = false;
     await openRobot(t, api);
+    await t.ensureVisible(find.byKey(const Key('btn-patrol')));
+    await t.pump();
     await t.tap(find.byKey(const Key('btn-patrol')));
     await t.pumpAndSettle();
     expect(find.byKey(patrolLoopsKey(0)), findsNothing);
@@ -1368,6 +1411,8 @@ void main() {
         <String, dynamic>{'id': 'demo-loop', 'map_id': 'estate-1', 'map_version': '11'}]};
     api.scheduleBody = <String, dynamic>{...siteFixture('site_schedule'), 'missions': <String>['loop', 'demo-loop']};
     await openRobot(t, api);
+    await t.ensureVisible(find.byKey(const Key('btn-patrol')));
+    await t.pump();
     await t.tap(find.byKey(const Key('btn-patrol')));
     await t.pumpAndSettle();
     expect(find.textContaining('v11'), findsOneWidget);
@@ -1394,6 +1439,8 @@ void main() {
           <String, dynamic>{'id': 'demo-loop', 'map_id': 'estate-1', 'map_version': '11'}]};
       api.scheduleBody = <String, dynamic>{...siteFixture('site_schedule'), 'missions': <String>['loop', 'demo-loop']};
       await openRobot(t, api);
+      await t.ensureVisible(find.byKey(const Key('btn-patrol')));
+      await t.pump();
       await t.tap(find.byKey(const Key('btn-patrol')));
       await t.pumpAndSettle();
       final row = find.byKey(patrolRouteKey('demo-loop'));
@@ -1421,6 +1468,8 @@ void main() {
     final v = <String, dynamic>{...busyView(), 'manual_only': <String, dynamic>{'by': 'olga', 'at_ms': 1, 'note': ''}};
     final api = FakeApi('guard', robotView: v);
     await openRobot(t, api);
+    await t.ensureVisible(find.byKey(const Key('btn-patrol')));
+    await t.pump();
     await t.tap(find.byKey(const Key('btn-patrol')));
     await t.pumpAndSettle();
     expect(find.textContaining('结束后不会自己回待命点'), findsOneWidget);
@@ -1457,6 +1506,8 @@ void main() {
     expect(find.byKey(const Key('robot-held')), findsOneWidget);
     expect(find.textContaining('已被 olga 叫停'), findsOneWidget);
     expect(find.textContaining('已叫停'), findsOneWidget);
+    await t.ensureVisible(find.byKey(const Key('btn-resume')));
+    await t.pump();
     await t.tap(find.byKey(const Key('btn-resume')));
     await t.pumpAndSettle();
     expect(guard.calls, contains('resume A'));
@@ -1477,6 +1528,8 @@ void main() {
     final api = FakeApi('guard', robotView: idle);
     await openRobot(t, api);
     expect(find.byKey(const Key('btn-abort')), findsOneWidget);
+    await t.ensureVisible(find.byKey(const Key('btn-abort')));
+    await t.pump();
     await t.tap(find.byKey(const Key('btn-abort')));
     await t.pumpAndSettle();
     expect(find.textContaining('机器人当前无任务'), findsOneWidget);
@@ -1514,6 +1567,8 @@ void main() {
     later['status'] = st;
     final api = FakeApi('guard', robotView: busyView())..laterView = later;
     await openRobot(t, api);
+    await t.ensureVisible(find.byKey(const Key('btn-abort')));
+    await t.pump();
     await t.tap(find.byKey(const Key('btn-abort')));
     await t.pumpAndSettle();
     expect(api.calls, ['abort A task-new']);
@@ -1522,6 +1577,8 @@ void main() {
   testWidgets('站点回 403：错误原样显示，不假装成功', (t) async {
     final api = FakeApi('guard')..patrolError = const SiteError(403, 'guard 没有 dispatch 权限');
     await openRobot(t, api);
+    await t.ensureVisible(find.byKey(const Key('btn-patrol')));
+    await t.pump();
     await t.tap(find.byKey(const Key('btn-patrol')));
     await t.pumpAndSettle();
     await t.tap(find.byKey(patrolRouteKey('loop')));

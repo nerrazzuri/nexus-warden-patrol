@@ -344,18 +344,6 @@ class _SiteRobotsPageState extends State<SiteRobotsPage> {
             title: tr('Robots', '机器人'),
             // 手机 App 测试 M01：底部导航的页面不给返回箭头（以前点了就退出登录、停掉后台值守）；退出站点在第 5 栏
             trailing: [
-              // W42：添加机器人（扫贴纸配网；站点上批准要管理权限）。W53：挪到右上角
-              // 易用性第 6 轮 A6-09：只有能管机器人的才给（保安、业主点了站点也批不了）
-              if (widget.entry != null && (widget.api.session?.canManageRobots ?? false))
-                IconButton(
-                    key: SiteRobotsPage.addKey,
-                    tooltip: tr('Add robot', '添加机器人'),
-                    icon: const Icon(Icons.add_rounded),
-                    onPressed: () async {
-                      await Navigator.push(context, MaterialPageRoute<void>(
-                          builder: (_) => RobotAddPage(api: widget.api, site: widget.entry!)));
-                      await _reload();
-                    }),
               // W55：P1 推送状态、后台值守开关挪到「设置」页（AppSettingsPage）
             ]),
         Expanded(
@@ -392,9 +380,6 @@ class _SiteRobotsPageState extends State<SiteRobotsPage> {
                               builder: (_) => SiteDeterrencePage(api: widget.api, robotId: e.key))),
                     )),
               if (_deter.isNotEmpty) const SizedBox(height: Nw.s8),
-              // W42：等待批准加入的机器人（有管理权限的人才看得到、才批得了）
-              if (widget.api.session?.canManageRobots == true)
-                BindApprovals(key: const Key('bind-approvals-host'), api: widget.api),
               // 筛选、一只狗一张卡（Key 是 robot-<编号>）。**要带 Key**：上面的横幅多一条少一条，它在列表里
               // 的位置就变了，不带 Key 的话它的状态（选的哪一格）会被换掉。
               NwFleet(
@@ -404,7 +389,29 @@ class _SiteRobotsPageState extends State<SiteRobotsPage> {
                   activityOf: robotStatusLine,
                   loadSummary: widget.api.watchSummary,
                   onOpen: (id) => Navigator.push(context,
-                      MaterialPageRoute<void>(builder: (_) => SiteRobotPage(api: widget.api, robotId: id)))),
+                      MaterialPageRoute<void>(builder: (_) => SiteRobotPage(api: widget.api, robotId: id, light: true)))),
+              // W42：等待批准加入的机器人（有管理权限的人才看得到、才批得了）。App V2 稿 S-robots：在列表下面
+              if (widget.api.session?.canManageRobots == true) ...[
+                const SizedBox(height: Nw.s16),
+                BindApprovals(key: const Key('bind-approvals-host'), api: widget.api),
+              ],
+              // W42：添加机器人（扫贴纸配网；站点上批准要管理权限）。App V2：最底下一个整宽按钮
+              // 易用性第 6 轮 A6-09：只有能管机器人的才给（保安、业主点了站点也批不了）
+              if (widget.entry != null && (widget.api.session?.canManageRobots ?? false)) ...[
+                const SizedBox(height: Nw.s16),
+                OutlinedButton.icon(
+                    key: SiteRobotsPage.addKey,
+                    style: OutlinedButton.styleFrom(
+                        minimumSize: const Size(48, 48),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(2))),
+                    icon: const Icon(Icons.add_rounded),
+                    label: Text(tr('Add robot', '添加机器人')),
+                    onPressed: () async {
+                      await Navigator.push(context, MaterialPageRoute<void>(
+                          builder: (_) => RobotAddPage(api: widget.api, site: widget.entry!)));
+                      await _reload();
+                    }),
+              ],
             ]),
           ),
         ),

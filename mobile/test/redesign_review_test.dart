@@ -27,10 +27,12 @@ void main() {
       testWidgets('$role：进来时空闲，之后被别处派走，不刷新直接按叫停：撤的是现在这一趟', (t) async {
         final api = FakeApi(role, robotView: _idle());
         await _robotPage(t, api);
-        final stop = t.widget<FilledButton>(find.byKey(const Key('btn-abort')));
+        final stop = t.widget<ButtonStyleButton>(find.byKey(const Key('btn-abort')));
         expect(stop.onPressed, isNotNull, reason: '有叫停权限就按得动，不拿进来时那一眼说了算');
         api.view = busyView();                               // 排程、入侵、另一台手机把它派走了
         await t.pump(const Duration(seconds: 60));           // 这一页没有人手动刷新
+        await t.ensureVisible(find.byKey(const Key('btn-abort')));
+        await t.pump();
         await t.tap(find.byKey(const Key('btn-abort')));
         await t.pumpAndSettle();
         final tid = ((busyView()['status'] as Map)['task'] as Map)['task_id'];
@@ -42,6 +44,8 @@ void main() {
     testWidgets('真的空闲：按了说它现在没在跑任务，不发撤任务', (t) async {
       final api = FakeApi('guard', robotView: _idle());
       await _robotPage(t, api);
+      await t.ensureVisible(find.byKey(const Key('btn-abort')));
+      await t.pump();
       await t.tap(find.byKey(const Key('btn-abort')));
       await t.pumpAndSettle();
       expect(find.textContaining('机器人当前无任务'), findsOneWidget);

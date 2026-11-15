@@ -25,8 +25,10 @@ Map<String, dynamic> _view({bool can = true}) {
 void main() {
   testWidgets('管理员：确认之后标，显示标在哪', (t) async {
     final api = FakeApi('admin', robotView: _view());
-    await t.pumpWidget(MaterialApp(home: SiteRobotPage(api: api, robotId: 'A')));
+    await t.pumpWidget(MaterialApp(home: SiteRobotPage(api: api, robotId: 'A', light: true, settings: true)));
     await t.pumpAndSettle();
+    await t.ensureVisible(find.byKey(const Key('btn-mark-home')));
+    await t.pump();
     await t.tap(find.byKey(const Key('btn-mark-home')));
     await t.pumpAndSettle();
     expect(api.calls.where((c) => c.startsWith('markHome')), isEmpty, reason: '没确认之前不发');
@@ -38,8 +40,10 @@ void main() {
 
   testWidgets('点「算了」：不发', (t) async {
     final api = FakeApi('admin', robotView: _view());
-    await t.pumpWidget(MaterialApp(home: SiteRobotPage(api: api, robotId: 'A')));
+    await t.pumpWidget(MaterialApp(home: SiteRobotPage(api: api, robotId: 'A', light: true, settings: true)));
     await t.pumpAndSettle();
+    await t.ensureVisible(find.byKey(const Key('btn-mark-home')));
+    await t.pump();
     await t.tap(find.byKey(const Key('btn-mark-home')));
     await t.pumpAndSettle();
     await t.tap(find.text('取消'));
@@ -49,22 +53,24 @@ void main() {
 
   testWidgets('保安、机器人不支持：没有按钮', (t) async {
     final guard = FakeApi('guard', robotView: _view());
-    await t.pumpWidget(MaterialApp(home: SiteRobotPage(api: guard, robotId: 'A')));
+    await t.pumpWidget(MaterialApp(home: SiteRobotPage(api: guard, robotId: 'A', light: true, settings: true)));
     await t.pumpAndSettle();
     expect(find.byKey(const Key('btn-mark-home')), findsNothing);
   });
 
   testWidgets('机器人不支持：没有按钮', (t) async {
     final admin = FakeApi('admin', robotView: _view(can: false));
-    await t.pumpWidget(MaterialApp(home: SiteRobotPage(api: admin, robotId: 'A')));
+    await t.pumpWidget(MaterialApp(home: SiteRobotPage(api: admin, robotId: 'A', light: true, settings: true)));
     await t.pumpAndSettle();
     expect(find.byKey(const Key('btn-mark-home')), findsNothing);
   });
 
   testWidgets('机器人拒了：原因说人话', (t) async {
     final api = _RefuseApi();
-    await t.pumpWidget(MaterialApp(home: SiteRobotPage(api: api, robotId: 'A')));
+    await t.pumpWidget(MaterialApp(home: SiteRobotPage(api: api, robotId: 'A', light: true, settings: true)));
     await t.pumpAndSettle();
+    await t.ensureVisible(find.byKey(const Key('btn-mark-home')));
+    await t.pump();
     await t.tap(find.byKey(const Key('btn-mark-home')));
     await t.pumpAndSettle();
     await t.tap(find.byKey(const Key('mark-home-go')));
@@ -85,8 +91,10 @@ void main() {
 
   testWidgets('同名的点在别的图上：再问一次，说了替换才搬', (t) async {
     final api = _TakenApi();
-    await t.pumpWidget(MaterialApp(home: SiteRobotPage(api: api, robotId: 'A')));
+    await t.pumpWidget(MaterialApp(home: SiteRobotPage(api: api, robotId: 'A', light: true, settings: true)));
     await t.pumpAndSettle();
+    await t.ensureVisible(find.byKey(const Key('btn-mark-home')));
+    await t.pump();
     await t.tap(find.byKey(const Key('btn-mark-home')));
     await t.pumpAndSettle();
     await t.tap(find.byKey(const Key('mark-home-go')));
@@ -101,8 +109,10 @@ void main() {
 
   testWidgets('同名的点在别的图上：点「算了」不搬', (t) async {
     final api = _TakenApi();
-    await t.pumpWidget(MaterialApp(home: SiteRobotPage(api: api, robotId: 'A')));
+    await t.pumpWidget(MaterialApp(home: SiteRobotPage(api: api, robotId: 'A', light: true, settings: true)));
     await t.pumpAndSettle();
+    await t.ensureVisible(find.byKey(const Key('btn-mark-home')));
+    await t.pump();
     await t.tap(find.byKey(const Key('btn-mark-home')));
     await t.pumpAndSettle();
     await t.tap(find.byKey(const Key('mark-home-go')));
@@ -118,8 +128,10 @@ void main() {
         body: <String, dynamic>{
           'data': <String, dynamic>{'map_id': 'm', 'map_version': '1', 'x': 4.2, 'y': 1.0, 'yaw': 0.5},
         }));
-    await t.pumpWidget(MaterialApp(home: SiteRobotPage(api: api, robotId: 'A')));
+    await t.pumpWidget(MaterialApp(home: SiteRobotPage(api: api, robotId: 'A', light: true, settings: true)));
     await t.pumpAndSettle();
+    await t.ensureVisible(find.byKey(const Key('btn-mark-home')));
+    await t.pump();
     await t.tap(find.byKey(const Key('btn-mark-home')));
     await t.pumpAndSettle();
     await t.tap(find.byKey(const Key('mark-home-go')));
@@ -130,8 +142,10 @@ void main() {
 
   testWidgets('等回话超时：照站点说的（机器人可能已经标了）', (t) async {
     final api = _ErrApi(const SiteError(504, '等机器人回话超时:机器人可能已经标了 —— 过一会儿刷新看看'));
-    await t.pumpWidget(MaterialApp(home: SiteRobotPage(api: api, robotId: 'A')));
+    await t.pumpWidget(MaterialApp(home: SiteRobotPage(api: api, robotId: 'A', light: true, settings: true)));
     await t.pumpAndSettle();
+    await t.ensureVisible(find.byKey(const Key('btn-mark-home')));
+    await t.pump();
     await t.tap(find.byKey(const Key('btn-mark-home')));
     await t.pumpAndSettle();
     await t.tap(find.byKey(const Key('mark-home-go')));

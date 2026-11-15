@@ -51,3 +51,63 @@ Future<void> showStopFailed(BuildContext context, {String? robot, Object? error}
             ],
           ));
 }
+
+/// App V2（不弹窗）：叫停没成功的红框，钉在机器人页顶上直到人按「知道了」；带「再停一次」。
+const stopFailedCardKey = Key('stop-failed-card');
+const stopAgainKey = Key('stop-failed-again');
+const stopAckKey = Key('stop-failed-ack');
+
+class StopFailedCard extends StatelessWidget {
+  final String robot;
+  final Object? error;
+  final VoidCallback onAgain;
+  final VoidCallback onAck;
+  const StopFailedCard({super.key = stopFailedCardKey, required this.robot, this.error, required this.onAgain, required this.onAck});
+
+  @override
+  Widget build(BuildContext context) {
+    final c = Nw.of(context);
+    final detail = stopFailedDetail(error);
+    Widget btn(Key k, String label, VoidCallback on, {bool red = false}) => Expanded(
+        child: red
+            ? FilledButton(
+                key: k,
+                style: FilledButton.styleFrom(
+                    backgroundColor: c.error,
+                    foregroundColor: c.onError,
+                    minimumSize: const Size(48, 48),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(2))),
+                onPressed: on,
+                child: Text(label))
+            : OutlinedButton(
+                key: k,
+                style: OutlinedButton.styleFrom(
+                    foregroundColor: c.text,
+                    side: BorderSide(color: c.textMuted),
+                    minimumSize: const Size(48, 48),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(2))),
+                onPressed: on,
+                child: Text(label)));
+    return Container(
+        margin: const EdgeInsets.fromLTRB(Nw.s16, 12, Nw.s16, 0),
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(color: c.errorSoft, border: Border.all(color: c.error, width: 2)),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          Text(tr('Stop did not get through', '叫停没有成功'),
+              style: NwText.titleMedium.copyWith(color: c.error, fontWeight: FontWeight.w700)),
+          const SizedBox(height: Nw.s4),
+          Text(
+              tr('$robot did not get the stop command and may still be moving. Press the emergency stop on the robot now.',
+                  '$robot没有收到停车指令，可能还在走。请立刻按机身上的急停按钮。'),
+              style: NwText.bodyMedium.copyWith(color: c.text)),
+          if (detail.isNotEmpty)
+            Text(tr('Reason: $detail', '原因：$detail'), style: NwText.bodySmall.copyWith(color: c.textSecondary)),
+          const SizedBox(height: Nw.s8),
+          Row(children: [
+            btn(stopAgainKey, tr('Stop again', '再停一次'), onAgain, red: true),
+            const SizedBox(width: Nw.s8),
+            btn(stopAckKey, tr('Acknowledge', '知道了'), onAck),
+          ]),
+        ]));
+  }
+}

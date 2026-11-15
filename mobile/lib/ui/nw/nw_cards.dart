@@ -150,25 +150,25 @@ class NwDogCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = Nw.of(context);
+    // App V2 稿 S-robots：一台一行，左边状态记号（正常方块、要注意三角），直角
+    final mark = p1 || tone == NwTone.warning || tone == NwTone.error;
     return Material(
         color: c.surface,
         shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(Nw.r12),
+            borderRadius: BorderRadius.circular(2),
             side: p1 ? BorderSide(color: c.errorFrame, width: 2) : BorderSide(color: c.outline)),
         clipBehavior: Clip.antiAlias,
         child: InkWell(
             onTap: onTap,
             child: Padding(
-                padding: const EdgeInsets.all(Nw.s16),
+                padding: const EdgeInsets.symmetric(horizontal: Nw.s16, vertical: 12),
                 child: Row(children: [
-                  Container(
-                      width: 48,
-                      height: 48,
-                      decoration: BoxDecoration(
-                          color: p1 ? c.errorSoft : c.surfaceVariant, borderRadius: BorderRadius.circular(Nw.r8)),
-                      child: Icon(p1 ? Icons.warning_rounded : Icons.smart_toy_rounded,
-                          size: 28, color: p1 ? c.error : c.textSecondary)),
-                  const SizedBox(width: Nw.s16),
+                  SizedBox(
+                      width: 20,
+                      child: mark
+                          ? Icon(Icons.warning_rounded, size: 20, color: p1 || tone == NwTone.error ? c.error : c.warning)
+                          : Center(child: Container(width: 10, height: 10, color: c.fg(tone)))),
+                  const SizedBox(width: 12),
                   Expanded(
                       child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
                     Row(children: [

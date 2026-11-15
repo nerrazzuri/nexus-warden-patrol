@@ -125,6 +125,8 @@ void main() {
     await _open(t, api);
     await t.tap(find.byKey(SupervisionSwitch.switchKey));
     await t.pump();
+    await t.ensureVisible(find.byKey(const Key('btn-standby')));
+    await t.pump();
     await t.tap(find.byKey(const Key('btn-standby')));
     await t.pump();
     await t.pump();
@@ -167,6 +169,8 @@ void main() {
   testWidgets('派单被机器人以 unsupervised 拒：说人话', (t) async {
     final api = _RejectingApi('guard', robotView: _view('supervised'));
     await _open(t, api);
+    await t.ensureVisible(find.byKey(const Key('btn-standby')));
+    await t.pump();
     await t.tap(find.byKey(const Key('btn-standby')));
     await t.pump();
     await t.pump();

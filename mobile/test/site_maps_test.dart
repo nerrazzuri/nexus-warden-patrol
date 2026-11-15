@@ -173,7 +173,9 @@ void main() {
 
   testWidgets('单机器人页：管理员有录包开始、停止；保安没有', (t) async {
     final admin = FakeApi('admin');
-    await t.pumpWidget(MaterialApp(home: SiteRobotPage(api: admin, robotId: 'A')));
+    await t.pumpWidget(MaterialApp(home: SiteRobotPage(api: admin, robotId: 'A', light: true, settings: true)));
+    await t.pump();
+    await t.ensureVisible(find.byKey(const Key('btn-record-start')));
     await t.pump();
     await t.tap(find.byKey(const Key('btn-record-start')));
     await t.pumpAndSettle();
@@ -184,18 +186,22 @@ void main() {
     expect(find.byType(SiteMappingTrailPage), findsOneWidget, reason: '收下了就打开录包轨迹（W00c6h）');
     await t.pageBack();
     await t.pumpAndSettle();
+    await t.ensureVisible(find.byKey(const Key('btn-record-stop')));
+    await t.pump();
     await t.tap(find.byKey(const Key('btn-record-stop')));
     await t.pumpAndSettle();
     expect(admin.calls, contains('mapping A stop '));
     final guard = FakeApi('guard');
-    await t.pumpWidget(MaterialApp(home: SiteRobotPage(key: UniqueKey(), api: guard, robotId: 'A')));
+    await t.pumpWidget(MaterialApp(home: SiteRobotPage(key: UniqueKey(), api: guard, robotId: 'A', light: true, settings: true)));
     await t.pump();
     expect(find.byKey(const Key('btn-record-start')), findsNothing);
   });
 
   testWidgets('录包时填了地图号与版本就边走边建；只填一个不发、说清楚', (t) async {
     final admin = FakeApi('admin');
-    await t.pumpWidget(MaterialApp(home: SiteRobotPage(api: admin, robotId: 'A')));
+    await t.pumpWidget(MaterialApp(home: SiteRobotPage(api: admin, robotId: 'A', light: true, settings: true)));
+    await t.pump();
+    await t.ensureVisible(find.byKey(const Key('btn-record-start')));
     await t.pump();
     await t.tap(find.byKey(const Key('btn-record-start')));
     await t.pumpAndSettle();
@@ -205,6 +211,8 @@ void main() {
     await t.pumpAndSettle();
     expect(admin.calls.where((c) => c.startsWith('mapping')), isEmpty);
     expect(find.textContaining('地图号和版本需同时填写'), findsOneWidget);
+    await t.ensureVisible(find.byKey(const Key('btn-record-start')));
+    await t.pump();
     await t.tap(find.byKey(const Key('btn-record-start')));
     await t.pumpAndSettle();
     await t.enterText(find.byKey(const Key('record-name')), 'yard');
