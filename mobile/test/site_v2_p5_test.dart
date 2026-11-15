@@ -178,4 +178,34 @@ void main() {
     expect(find.text('gina · 确认入侵'), findsOneWidget);
     expect(find.byKey(AdminHomeTab.todoKey), findsNothing, reason: '经理不处理待办');
   });
+
+  testWidgets('巡逻日程：点一行就地编辑（不弹窗）；删除要再点一次；时间写错不让存', (t) async {
+    final api = FakeApi('admin')
+      ..schedules = <String, dynamic>{'timezone': 'UTC', 'revision': 1, 'schedules': <dynamic>[
+        <String, dynamic>{'id': 'n1', 'title': '', 'mission': 'route-1', 'at': '01:00', 'days': <dynamic>['mon'], 'robot': 'A', 'revision': 3},
+      ]};
+    await t.binding.setSurfaceSize(const Size(390, 1600));
+    addTearDown(() => t.binding.setSurfaceSize(null));
+    await t.pumpWidget(MaterialApp(home: SchedulePage(api: api)));
+    await t.pumpAndSettle();
+    await t.tap(find.byKey(SchedulePage.weekTabKey));
+    await t.pumpAndSettle();
+    await t.tap(find.byKey(SchedulePage.rowKey('n1')));
+    await t.pumpAndSettle();
+    expect(find.byType(AlertDialog), findsNothing);
+    expect(find.byKey(const Key('sched-editor')), findsOneWidget);
+    await t.enterText(find.byKey(const Key('sched-time')), '25:00');
+    await t.pump();
+    expect(t.widget<FilledButton>(find.byKey(const Key('sched-save'))).onPressed, isNull);
+    final save = t.getRect(find.byKey(const Key('sched-save'))), del = t.getRect(find.byKey(const Key('sched-delete-n1')));
+    expect((save.top, save.width), (del.top, del.width), reason: '保存 / 删除一排等宽');
+    await t.tap(find.byKey(const Key('sched-delete-n1')));
+    await t.pumpAndSettle();
+    expect(api.calls.where((c) => c.startsWith('deleteSchedule')), isEmpty, reason: '还没确认');
+    await t.ensureVisible(find.byKey(const Key('sched-delete-go')));
+    await t.tap(find.byKey(const Key('sched-delete-go')));
+    await t.pumpAndSettle();
+    expect(api.calls.where((c) => c.startsWith('deleteSchedule')), isNotEmpty);
+    expect(find.byKey(const Key('sched-editor')), findsNothing);
+  });
 }
