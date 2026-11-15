@@ -80,7 +80,10 @@ class StopAllButton extends StatelessWidget {
   static const Key buttonKey = Key('stop-all');
   static const Key confirmKey = Key('stop-all-go');
 
-  Future<void> _press(BuildContext context) async {
+  Future<void> _press(BuildContext context) => press(context, api, onResult);
+
+  /// App V2 外壳的「全部急停」方块也走这一套(查在线、确认、逐台发、报没停住的)。
+  static Future<void> press(BuildContext context, SiteApi api, void Function(String message) onResult) async {
     final List<Map<String, dynamic>> robots;
     try {
       // 在线 = 狗报在线、并且站点最近收到过它的消息（跟狗列表、网页值班台同一个判据）
@@ -101,7 +104,7 @@ class StopAllButton extends StatelessWidget {
         context: context,
         builder: (c) => AlertDialog(
               content: Text(tr(
-                  'Stop all $n robots now? Each one halts where it is until you resume it.',
+                  'E-stop all $n robots now? Each one halts where it is until you reset it.',
                   '让全部 $n 台机器人立即急停？每台原地停止，直到你恢复。')),
               actions: [
                 TextButton(onPressed: () => Navigator.pop(c, false), child: Text(tr('Cancel', '取消'))),
@@ -109,7 +112,7 @@ class StopAllButton extends StatelessWidget {
                     key: confirmKey,
                     style: _stopStyle(c),
                     onPressed: () => Navigator.pop(c, true),
-                    child: Text(tr('Stop all', '全部急停'))),
+                    child: Text(tr('E-STOP ALL', '全部急停'))),
               ],
             ));
     if (ok != true) return;
@@ -143,5 +146,5 @@ class StopAllButton extends StatelessWidget {
           style: _stopStyle(context),
           onPressed: () => _press(context),
           icon: const Icon(Icons.report, size: 18),
-          label: Text(tr('Stop all', '全部急停'))));
+          label: Text(tr('E-STOP ALL', '全部急停'))));
 }
