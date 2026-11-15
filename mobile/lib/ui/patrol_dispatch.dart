@@ -1,6 +1,6 @@
 /// 派巡逻（W53）和「今天的巡逻」。
 ///
-/// **派巡逻**是底部弹框：每条路线写预计多久（站点估，含走完回待命点那一段）；跟日程撞了先说清楚「日程优先，
+/// **派巡逻**是一整页（App V2 稿 N-dispatch，原来是底部弹层；深色，上面这台的状态和画面）：每条路线写预计多久（站点估，含走完回待命点那一段）；跟日程撞了先说清楚「日程优先，
 /// 你这趟排到几点」。派出去会通知经理和管理员；这是临时巡逻，不进日程。被站点拒了弹「为什么 + 去处理」。
 ///
 /// **今天的巡逻**：日程的每一轮和临时巡逻按时间排，一行一趟；没走完的点开看原因；排队中的临时巡逻派的人、
@@ -20,6 +20,7 @@ import 'nw/nw_theme.dart';
 import 'nw/nw_widgets.dart';
 import 'refusal.dart';
 import 'site_robot.dart' show SiteRobotPage;
+import 'site_video.dart' show SiteVideo;
 import 'site_routes.dart' show SiteRouteEditorPage;
 
 /// 时刻 `14:05`。给了 [offsetMin]（站点时区离 UTC 几分钟，站点回的 `utc_offset_min`）就按站点的钟，
@@ -65,13 +66,10 @@ String dispatchResultText(Map<String, dynamic> r, String label) {
 /// 第 8 轮 A8-06：派出去（或排上了）一趟就加一。首页「今天的巡逻」听它马上重读（在机器人页、路线页派的也算）。
 final ValueNotifier<int> patrolSent = ValueNotifier<int>(0);
 
-/// 弹派巡逻框。派出去（或排上了）回给人看的那一句；没派回 null。
+/// 打开派巡逻页。派出去（或排上了）回给人看的那一句；没派回 null。
 Future<String?> showPatrolSheet(BuildContext context, SiteApi api, String robotId) async {
-  final msg = await showModalBottomSheet<String>(
-      context: context,
-      isScrollControlled: true,
-      showDragHandle: true,
-      builder: (_) => _PatrolSheet(api: api, robotId: robotId));
+  final msg = await Navigator.push<String>(
+      context, MaterialPageRoute<String>(builder: (_) => _PatrolSheet(api: api, robotId: robotId)));
   if (msg != null) patrolSent.value++;
   return msg;
 }
@@ -128,6 +126,9 @@ class _PatrolSheetState extends State<_PatrolSheet> {
   /// A7-03：这台只许手动派（结束后不自己回）；没读到是 null。
   bool? _manualOnly;
 
+  /// 稿 N-dispatch 页头：这台在做什么、电量（读机器人时顺手拿）。
+  String _status = '';
+
   /// 易用性第 6 轮 A6-03：画在别的地图版本上的路线 → 画在哪一版（派不了，灰掉写明）。
   final Map<String, String> _otherMap = <String, String>{};
   /// 第 8 轮 W8-11：路线编号 → 显示名（起了名字的）。
@@ -140,6 +141,9 @@ class _PatrolSheetState extends State<_PatrolSheet> {
         setState(() {
           if (v['held'] is Map) _held = v['held'] as Map;
           _manualOnly = v['manual_only'] is Map;
+          final name = '${v['name'] ?? ''}';
+          final batt = v['battery_pct'];
+          _status = [if (name.isNotEmpty && name != widget.robotId) name, if (batt is num) '${batt.round()}%'].join(' · ');
         });
       }
       final caps = v['capabilities'];
@@ -260,8 +264,12 @@ class _PatrolSheetState extends State<_PatrolSheet> {
     if (msg != null && mounted) Navigator.pop(context, msg);
   }
 
+  // 稿 N-dispatch 在「现在」那一层：深色
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) =>
+      Theme(data: nwTheme(Brightness.dark), child: Builder(builder: _page));
+
+  Widget _page(BuildContext context) {
     final c = Nw.of(context);
     final rs = _routes;
     final plan = _pick == null ? null : _plans[_pick];
@@ -269,12 +277,28 @@ class _PatrolSheetState extends State<_PatrolSheet> {
     final startAt = plan != null && plan['start_ms'] is num
         ? hhmm((plan['start_ms'] as num).toInt(), (plan['utc_offset_min'] as num?)?.toInt())
         : '?';
-    return SafeArea(
-      child: Padding(
-        padding: EdgeInsets.fromLTRB(Nw.s16, 0, Nw.s16, Nw.s16 + MediaQuery.viewInsetsOf(context).bottom),
-        child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-          Text(tr('Dispatch ${widget.robotId} on patrol', '派 ${widget.robotId} 巡逻'),
-              style: NwText.titleMedium.copyWith(color: c.text, fontWeight: FontWeight.w700)),
+    return Scaffold(
+      backgroundColor: c.bg,
+      appBar: AppBar(
+          title: Text(tr('Dispatch ${widget.robotId} on patrol', '派 ${widget.robotId} 巡逻')),
+          bottom: _status.isEmpty
+              ? null
+              : PreferredSize(
+                  preferredSize: const Size.fromHeight(24),
+                  child: Padding(
+                      padding: const EdgeInsets.fromLTRB(Nw.s16, 0, Nw.s16, Nw.s8),
+                      child: Align(
+                          alignment: Alignment.centerLeft,
+                          child: Text(_status, style: NwText.bodySmall.copyWith(color: c.textSecondary)))))),
+      body: SafeArea(
+      child: SingleChildScrollView(
+        padding: EdgeInsets.fromLTRB(Nw.s16, Nw.s8, Nw.s16, Nw.s16 + MediaQuery.viewInsetsOf(context).bottom),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          // 稿 N-dispatch：先看一眼它现在看到什么
+          SiteVideo(api: widget.api, robotId: widget.robotId),
+          nwGap8,
+          Text(tr('Ad hoc patrol, not added to the schedule', '临时巡逻，不进日程'),
+              style: NwText.bodyMedium.copyWith(color: c.textSecondary)),
           nwGap8,
           if (_held != null) ...[
             NwNotice(
@@ -295,9 +319,7 @@ class _PatrolSheetState extends State<_PatrolSheet> {
                     ? tr('No patrol routes yet. Add them under Admin → Patrol routes.', '暂无巡逻路线，请在「管理 → 巡逻路线」中添加。')
                     : tr('No patrol routes yet. Ask an administrator to add them.', '暂无巡逻路线，请找管理员添加。'))
           else
-            ConstrainedBox(
-              constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(context).height * 0.45),
-              child: ListView(shrinkWrap: true, children: [
+            Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
                 for (final r in rs)
                   Padding(
                     padding: const EdgeInsets.only(bottom: Nw.s8),
@@ -344,7 +366,6 @@ class _PatrolSheetState extends State<_PatrolSheet> {
                     ),
                   ),
               ]),
-            ),
           // 外审 W76-1 #8：站点回的「先看会怎样」里有 `loops` 才认圈数（老站点不认，选了也白选）
           if (rs != null && rs.isNotEmpty && _plans.values.any((p) => p.containsKey('loops'))) ...[
             nwGap8,
@@ -392,22 +413,27 @@ class _PatrolSheetState extends State<_PatrolSheet> {
               '${widget.api.session?.role == 'owner' ? tr('One-off patrols are not saved to the schedule. The administrator is notified. ', '临时巡逻不保存到日程，派出后通知管理员。') : tr('One-off patrols are not saved to the schedule. The manager and administrator are notified. ', '临时巡逻不保存到日程，派出后通知经理和管理员。')}'
               '${adhocEndText(robot: widget.robotId, manualOnly: _manualOnly)}',
               style: NwText.bodySmall.copyWith(color: c.textSecondary)),
-          nwGap8,
-          Row(children: [
-            Expanded(
-                child: NwButton(
-                    variant: NwButtonVariant.outline,
-                    label: tr('Cancel', '取消'),
-                    onPressed: _busy ? null : () => Navigator.pop(context))),
-            const SizedBox(width: Nw.s8),
-            Expanded(
-                child: NwButton(
-                    buttonKey: _PatrolSheet.sendKey,
-                    label: queued ? tr('Queue it', '排队派出') : tr('Send', '派出'),
-                    onPressed: _pick == null || _busy || _held != null ? null : _send)),
-          ]),
         ]),
       ),
+    ),
+      // 稿 N-dispatch：「派出 / 取消」钉在底下，一排等宽
+      bottomNavigationBar: SafeArea(
+          child: Container(
+              padding: const EdgeInsets.fromLTRB(Nw.s16, Nw.s8, Nw.s16, Nw.s8),
+              decoration: BoxDecoration(color: c.surface, border: Border(top: BorderSide(color: c.outline))),
+              child: Row(children: [
+                Expanded(
+                    child: NwButton(
+                        variant: NwButtonVariant.outline,
+                        label: tr('Cancel', '取消'),
+                        onPressed: _busy ? null : () => Navigator.pop(context))),
+                const SizedBox(width: Nw.s8),
+                Expanded(
+                    child: NwButton(
+                        buttonKey: _PatrolSheet.sendKey,
+                        label: queued ? tr('Queue', '排队派出') : tr('Dispatch', '派出'),
+                        onPressed: _pick == null || _busy || _held != null ? null : _send)),
+              ]))),
     );
   }
 }

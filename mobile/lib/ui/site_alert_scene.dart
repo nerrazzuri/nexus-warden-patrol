@@ -27,6 +27,7 @@ import '../net/site_client.dart';
 import '../net/site_text.dart';
 import 'map_view.dart' show loadMapPicture;
 import 'nw/nw_p2_duty.dart';
+import 'nw/nw_estop_miss.dart';
 import 'nw/nw_theme.dart';
 import 'nw/nw_shell.dart' show EstopSquare;
 import 'site_tabs.dart' show AccountsPage;
@@ -1398,6 +1399,7 @@ class _SiteAlertScenePageState extends State<SiteAlertScenePage> {
                 ListView(
                   padding: EdgeInsets.only(bottom: 120, right: MediaQuery.sizeOf(context).aspectRatio > 1.3 ? 120 : 0),
                   children: [
+                    EstopMissCards(api: widget.api), // 急停没确认(稿 N-refuse)
                     _header(c),
                     ..._media(c),
                     ?map,
