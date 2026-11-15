@@ -96,8 +96,9 @@ void main() {
         // 稿 S-mgr:日常(概况、机器人)、现场(布防与巡逻)、记录、本机
         'owner': {SiteDest.overview, SiteDest.robots, SiteDest.arming, SiteDest.alarms, SiteDest.events,
           SiteDest.recordings, SiteDest.runs, SiteDest.notes, SiteDest.settings, SiteDest.help, SiteDest.report},
-        // 稿 S-guard / S-viewer:没有「日常」,机器人和地图在「现在」页上
-        'guard': {SiteDest.alarms, SiteDest.events, SiteDest.recordings, SiteDest.runs,
+        // 稿 S-guard / S-viewer:没有「日常」,机器人和地图在「现在」页上;
+        // 保安多一行「布防」(外审 App-V2-2 N2:保安能布防、临时撤防,稿上没画入口)
+        'guard': {SiteDest.arming, SiteDest.alarms, SiteDest.events, SiteDest.recordings, SiteDest.runs,
           SiteDest.notes, SiteDest.settings, SiteDest.help, SiteDest.report},
         'viewer': {SiteDest.alarms, SiteDest.recordings, SiteDest.runs, SiteDest.settings,
           SiteDest.help, SiteDest.report},

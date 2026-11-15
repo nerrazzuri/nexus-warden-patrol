@@ -219,19 +219,21 @@ class _SiteRecordingsPageState extends State<SiteRecordingsPage> with NwAsk {
       if (!ok || !mounted || robot != _robotId) return;
       _dataOk = true;
     }
+    // 外审 App-V2-2 R3：下载在路上时换了机器人，回来的这一段不放（标题也写上是哪台）
+    final robot = _robotId;
     setState(() {
       _busyId = id;
       _msg = tr('Downloading $mb MB…', '下载中（$mb MB）…');
     });
     try {
       final bytes = await widget.api.recordingBytes(id);
-      if (!mounted) return;
+      if (!mounted || robot != _robotId) return;
       setState(() => _msg = '');
-      await widget.player.play(context, bytes, '${cameraName('${r['camera']}')} · ${clipTime((r['start_ms'] as num).toInt())}');
+      await widget.player.play(context, bytes, '$robot · ${cameraName('${r['camera']}')} · ${clipTime((r['start_ms'] as num).toInt())}');
     } on SiteError catch (e) {
-      if (mounted) setState(() => _msg = tr("Can't download: $e", '下载失败：$e'));
+      if (mounted && robot == _robotId) setState(() => _msg = tr("Can't download: $e", '下载失败：$e'));
     } on Exception catch (e) {
-      if (mounted) setState(() => _msg = tr("Can't play: $e", '无法播放：$e'));
+      if (mounted && robot == _robotId) setState(() => _msg = tr("Can't play: $e", '无法播放：$e'));
     } finally {
       if (mounted) setState(() => _busyId = null);
     }
@@ -259,6 +261,7 @@ class _SiteRecordingsPageState extends State<SiteRecordingsPage> with NwAsk {
       _robotId = id;
       _camera = null;
       _rows = const [];
+      _msg = '';
       _cams = const <String>['front', 'back'];
       if (asking) askCancel();
     });
