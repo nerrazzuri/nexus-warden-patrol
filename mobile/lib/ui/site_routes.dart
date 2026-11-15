@@ -252,70 +252,92 @@ class _SiteRoutesPageState extends State<SiteRoutesPage> {
     final c = Nw.of(context);
     final admin = widget.api.session?.canManageRoutes ?? false;
     final sub = NwText.bodySmall.copyWith(color: c.textSecondary);
+    final sel = _sel;
+    // App V2 稿 S-routes：顶栏「新建」、图号版本在副标题；不止一张图才摆选图；一条路线一行
     return Scaffold(
-        appBar: AppBar(title: Text(tr('Patrol routes', '巡逻路线'))),
+        appBar: AppBar(
+            title: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(tr('Patrol routes', '巡逻路线')),
+              if (sel != null) Text('${sel['map_id']} v${sel['version']}', style: sub),
+            ]),
+            actions: [
+              if (admin && sel != null)
+                Padding(
+                    padding: const EdgeInsets.only(right: Nw.s8),
+                    child: OutlinedButton(
+                        key: SiteRoutesPage.newKey,
+                        style: OutlinedButton.styleFrom(
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(2)), minimumSize: const Size(48, 40)),
+                        onPressed: _new,
+                        child: Text(tr('New', '新建')))),
+            ]),
         body: _loading
             ? const Center(child: CircularProgressIndicator())
-            : NwListView(children: [
-                if (_error != null) NwNotice(tone: NwTone.error, text: tr('Routes unavailable: $_error', '无法加载路线：$_error')),
+            : ListView(padding: const EdgeInsets.only(bottom: Nw.s24), children: [
+                if (_error != null)
+                  Padding(
+                      padding: const EdgeInsets.all(Nw.s16),
+                      child: NwNotice(tone: NwTone.error, text: tr('Routes unavailable: $_error', '无法加载路线：$_error'))),
                 if (_maps.isEmpty && _error == null)
                   NwEmpty(icon: Icons.map_outlined, text: tr('No maps on the site yet', '站点暂无地图'))
-                else if (_sel != null) ...[
-                  Row(children: [
-                    Text(tr('Map version', '地图版本'), style: sub),
-                    const SizedBox(width: Nw.s8),
-                    Expanded(
-                        child: DropdownButton<String>(
-                            key: SiteRoutesPage.mapPickKey,
-                            isExpanded: true,
-                            value: '${_sel!['map_id']}:${_sel!['version']}',
-                            items: [
-                              for (final m in _maps)
-                                DropdownMenuItem(
-                                    value: '${m['map_id']}:${m['version']}',
-                                    child: Text('${m['map_id']} · v${m['version']}')),
-                            ],
-                            onChanged: (v) {
-                              if (v == null) return;
-                              setState(() => _sel = _maps.firstWhere((m) => '${m['map_id']}:${m['version']}' == v));
-                              _loadRoutes();
-                            })),
-                  ]),
-                  nwGap8,
-                  if (admin)
-                    NwButton(
-                        buttonKey: SiteRoutesPage.newKey,
-                        label: tr('New route', '新路线'),
-                        icon: Icons.add_rounded,
-                        onPressed: _new),
-                  nwGap16,
+                else if (sel != null) ...[
+                  if (_maps.length > 1)
+                    Padding(
+                        padding: const EdgeInsets.fromLTRB(Nw.s16, Nw.s8, Nw.s16, 0),
+                        child: Row(children: [
+                          Text(tr('Map version', '地图版本'), style: sub),
+                          const SizedBox(width: Nw.s8),
+                          Expanded(
+                              child: DropdownButton<String>(
+                                  key: SiteRoutesPage.mapPickKey,
+                                  isExpanded: true,
+                                  value: '${sel['map_id']}:${sel['version']}',
+                                  items: [
+                                    for (final m in _maps)
+                                      DropdownMenuItem(
+                                          value: '${m['map_id']}:${m['version']}',
+                                          child: Text('${m['map_id']} · v${m['version']}')),
+                                  ],
+                                  onChanged: (v) {
+                                    if (v == null) return;
+                                    setState(() => _sel = _maps.firstWhere((m) => '${m['map_id']}:${m['version']}' == v));
+                                    _loadRoutes();
+                                  })),
+                        ])),
                   if (_routes.isEmpty && _error == null)
                     NwEmpty(
                         key: SiteRoutesPage.emptyKey,
                         icon: Icons.route_rounded,
                         text: tr('No routes on this map version yet', '此版本地图上暂无路线'))
-                  else
+                  else ...[
+                    Padding(
+                        padding: const EdgeInsets.fromLTRB(Nw.s16, Nw.s16, Nw.s16, Nw.s8),
+                        child: Text(tr('Routes ${_routes.length}', '路线 ${_routes.length}'),
+                            style: NwText.labelLarge.copyWith(color: c.textSecondary, fontWeight: FontWeight.w600))),
                     for (final r in _routes)
-                      Padding(
-                          padding: const EdgeInsets.only(bottom: Nw.s8),
-                          child: NwCard(
+                      Material(
+                          color: c.surface,
+                          child: InkWell(
                               key: SiteRoutesPage.routeKey('${r['id']}'),
-                              radius: Nw.r8,
-                              padding: const EdgeInsets.symmetric(horizontal: Nw.s16, vertical: Nw.s8),
                               onTap: () => _open(route: r),
-                              child: Row(children: [
-                                Expanded(
-                                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                                  Text('${(r['title'] ?? '') != '' ? r['title'] : r['id']}',
-                                      style: NwText.titleSmall.copyWith(color: c.text, fontWeight: FontWeight.w700)),
-                                  nwGap4,
-                                  Text(
-                                      tr('${(r['waypoints'] as List? ?? const []).length} points · version ${r['revision']}',
-                                          '${(r['waypoints'] as List? ?? const []).length} 个点 · 第 ${r['revision']} 版'),
-                                      style: sub),
-                                ])),
-                                Icon(Icons.chevron_right_rounded, size: 24, color: c.textSecondary),
-                              ]))),
+                              child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: Nw.s16, vertical: 12),
+                                  decoration: BoxDecoration(border: Border(bottom: BorderSide(color: c.outline))),
+                                  child: Row(children: [
+                                    Icon(Icons.route_outlined, size: 22, color: c.textSecondary),
+                                    const SizedBox(width: Nw.s16),
+                                    Expanded(
+                                        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                                      Text('${(r['title'] ?? '') != '' ? r['title'] : r['id']}',
+                                          style: NwText.titleSmall.copyWith(color: c.text, fontWeight: FontWeight.w700)),
+                                      Text(
+                                          tr('${(r['waypoints'] as List? ?? const []).length} points · version ${r['revision']}',
+                                              '${(r['waypoints'] as List? ?? const []).length} 个点 · 第 ${r['revision']} 版'),
+                                          style: sub),
+                                    ])),
+                                    Icon(Icons.chevron_right_rounded, size: 24, color: c.textSecondary),
+                                  ])))),
+                  ],
                 ],
               ]));
   }
