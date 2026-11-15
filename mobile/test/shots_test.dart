@@ -21,6 +21,7 @@ import 'package:nexwar_patrol/ui/site_maps.dart' show SiteMapTab;
 import 'package:nexwar_patrol/net/site_client.dart' show SiteError;
 import 'package:nexwar_patrol/ui/site_add.dart';
 import 'package:nexwar_patrol/ui/map_wizard.dart';
+import 'package:nexwar_patrol/ui/nw/nw_points.dart';
 import 'package:nexwar_patrol/ui/site_page.dart';
 import 'package:nexwar_patrol/ui/site_recordings.dart';
 import 'package:nexwar_patrol/ui/problem_report.dart';
@@ -366,6 +367,27 @@ void main() {
       ..wizard = <String, dynamic>{'step': 'walk', 'robot_id': 'A', 'site_type': 'indoor', 'drive': 'phone',
         'map_id': 'main', 'version': '20261115-01', 'tried': <dynamic>[], 'label': 'estate-1', 'by': 'demo', 'started_ms': 0}
       ..wizardBuild = <String, dynamic>{'state': 'pending'})),
+    '36-points': _Shot(_phone, () => SitePointsPage(api: FakeApi('admin')
+      ..robotsOverride = <Map<String, dynamic>>[<String, dynamic>{'robot_id': 'A', 'name': 'A'}, <String, dynamic>{'robot_id': 'B', 'name': 'B'}]
+      ..standby = <String, dynamic>{
+        'points': <Map<String, dynamic>>[
+          <String, dynamic>{'name': 'Dock 1', 'default': true, 'map_id': 'estate-1', 'map_version': '8', 'x': 0.0, 'y': 0.0},
+          <String, dynamic>{'name': 'East gate guardhouse', 'default': false, 'map_id': 'estate-1', 'map_version': '8', 'x': 12.0, 'y': 3.0},
+        ],
+        'homes': <Map<String, dynamic>>[<String, dynamic>{'name': 'home', 'map_id': 'estate-1', 'map_version': '8', 'x': 0.0, 'y': 0.0}],
+      }
+      ..intercepted = <String, dynamic>{
+        'intercepts': <Map<String, dynamic>>[<String, dynamic>{'name': 'Inside North gate'}, <String, dynamic>{'name': 'South wall centre'}],
+        'zones': <Map<String, dynamic>>[
+          <String, dynamic>{'zone': 'North sector', 'intercept': 'Inside North gate'},
+          <String, dynamic>{'zone': 'Car park', 'intercept': 'Inside North gate'},
+          <String, dynamic>{'zone': 'South sector', 'intercept': 'South wall centre'},
+        ],
+      }
+      ..cameraRows = <Map<String, dynamic>>[
+        <String, dynamic>{'name': 'Camera 1 · Main gate', 'connected': true, 'last_event_ms': DateTime.now().millisecondsSinceEpoch - 3600000},
+        <String, dynamic>{'name': 'Camera 2 · Car park', 'connected': true},
+      ])),
     '32-help': _Shot(const Size(390, 1200), () => HelpPage(role: 'guard', api: FakeApi('guard'))),
     '33-report': _Shot(_phone, () => ProblemReportPage(api: FakeApi('guard'), robots: const ['A', 'B'], share: (_, _) async => true)),
     '24-overview': _Shot(const Size(390, 1200), () => Scaffold(body: AdminHomeTab(api: FakeApi('admin'), switchTab: (_) {}))),

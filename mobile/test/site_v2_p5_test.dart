@@ -5,6 +5,8 @@ import 'package:nexwar_patrol/l10n.dart';
 import 'package:nexwar_patrol/ui/alarm_log.dart';
 import 'package:nexwar_patrol/net/site_client.dart' show SiteError;
 import 'package:nexwar_patrol/ui/nw/nw_layout_hub.dart';
+import 'package:nexwar_patrol/ui/nw/nw_points.dart';
+import 'package:nexwar_patrol/ui/site_standby.dart';
 import 'package:nexwar_patrol/ui/nw/nw_site_dir.dart' show ChangePasswordPage;
 import 'package:nexwar_patrol/ui/site_mode.dart';
 import 'package:nexwar_patrol/ui/site_releases.dart';
@@ -207,5 +209,60 @@ void main() {
     await t.pumpAndSettle();
     expect(api.calls.where((c) => c.startsWith('deleteSchedule')), isNotEmpty);
     expect(find.byKey(const Key('sched-editor')), findsNothing);
+  });
+
+  FakeApi pointsApi(String role) => FakeApi(role)
+    ..robotsOverride = <Map<String, dynamic>>[
+      <String, dynamic>{'robot_id': 'A', 'name': 'A'},
+      <String, dynamic>{'robot_id': 'B', 'name': 'B'},
+    ]
+    ..standby = <String, dynamic>{
+      'points': <Map<String, dynamic>>[
+        <String, dynamic>{'name': 'dock1', 'default': true, 'map_id': 'm', 'map_version': '1', 'x': 0.0, 'y': 0.0},
+        <String, dynamic>{'name': 'gate', 'default': false, 'map_id': 'm', 'map_version': '1', 'x': 1.0, 'y': 2.0},
+      ],
+      'homes': <Map<String, dynamic>>[<String, dynamic>{'name': 'home', 'map_id': 'm', 'map_version': '1', 'x': 0.0, 'y': 0.0}],
+    }
+    ..intercepted = <String, dynamic>{
+      'intercepts': <Map<String, dynamic>>[<String, dynamic>{'name': 'north'}],
+      'zones': <Map<String, dynamic>>[<String, dynamic>{'zone': 'Car park', 'intercept': 'north'}],
+    }
+    ..cameraRows = <Map<String, dynamic>>[<String, dynamic>{'name': 'cam1', 'connected': true}];
+
+  testWidgets('稿 S-points：一页四段；设为默认就地做；地图与布置那一行进这一页', (t) async {
+    await t.binding.setSurfaceSize(const Size(390, 1400));
+    addTearDown(() => t.binding.setSurfaceSize(null));
+    final api = pointsApi('admin');
+    await t.pumpWidget(MaterialApp(home: SiteLayoutPage(api: api, onRobots: () {}, onMap: () {})));
+    await t.pumpAndSettle();
+    await t.tap(find.byKey(SiteLayoutPage.rowKey('standby')));
+    await t.pumpAndSettle();
+    expect(find.byType(SitePointsPage), findsOneWidget);
+    expect(find.text('已标原点'), findsOneWidget);
+    expect(find.byKey(SitePointsPage.standbyKey('dock1')), findsOneWidget);
+    expect(find.byKey(SitePointsPage.defaultKey('dock1')), findsNothing, reason: '已经是默认');
+    expect(find.byKey(SitePointsPage.interceptKey('north')), findsOneWidget);
+    expect(find.descendant(of: find.byKey(SitePointsPage.interceptKey('north')), matching: find.text('Car park')), findsOneWidget);
+    expect(find.byKey(SitePointsPage.cameraKey('cam1')), findsOneWidget);
+    await t.tap(find.byKey(SitePointsPage.defaultKey('gate')));
+    await t.pumpAndSettle();
+    expect(api.calls, contains('standby-default A gate'));
+    expect(find.byType(AlertDialog), findsNothing);
+    await t.tap(find.byKey(SitePointsPage.robotKey('B')));
+    await t.pumpAndSettle();
+    await t.tap(find.byKey(SitePointsPage.manageStandbyKey));
+    await t.pumpAndSettle();
+    expect(t.widget<SiteStandbyPage>(find.byType(SiteStandbyPage)).robotId, 'B');
+  });
+
+  testWidgets('稿 S-points：保安只看原点、待命点，不能设默认', (t) async {
+    await t.binding.setSurfaceSize(const Size(390, 1400));
+    addTearDown(() => t.binding.setSurfaceSize(null));
+    await t.pumpWidget(MaterialApp(home: SitePointsPage(api: pointsApi('guard'))));
+    await t.pumpAndSettle();
+    expect(find.byKey(SitePointsPage.standbyKey('gate')), findsOneWidget);
+    expect(find.byKey(SitePointsPage.defaultKey('gate')), findsNothing);
+    expect(find.byKey(SitePointsPage.interceptKey('north')), findsNothing);
+    expect(find.byKey(SitePointsPage.cameraKey('cam1')), findsNothing);
   });
 }

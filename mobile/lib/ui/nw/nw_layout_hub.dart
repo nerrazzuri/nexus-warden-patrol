@@ -11,6 +11,7 @@ import '../site_cameras.dart';
 import '../site_intercepts.dart';
 import '../site_routes.dart';
 import 'nw_p2_duty.dart' show NwMapThumb;
+import 'nw_points.dart';
 import 'nw_theme.dart';
 
 /// 机器人在用哪张图（图号、版本）；没报就是 null。
@@ -29,7 +30,7 @@ import 'nw_theme.dart';
 class SiteLayoutPage extends StatefulWidget {
   final SiteApi api;
 
-  /// 待命点、原点按机器人设：去机器人列表（外壳那一层）。
+  /// 机器人列表（外壳那一层）。待命点、原点现在走 [SitePointsPage]，这个留着给外壳。
   final VoidCallback onRobots;
 
   /// 全屏地图（外壳的地图层：防区、禁行区在那里画）。
@@ -91,11 +92,6 @@ class _SiteLayoutPageState extends State<SiteLayoutPage> {
     widget.onMap();
   }
 
-  void _robots() {
-    Navigator.of(context).maybePop();
-    widget.onRobots();
-  }
-
   @override
   Widget build(BuildContext context) {
     final c = Nw.of(context);
@@ -152,8 +148,9 @@ class _SiteLayoutPageState extends State<SiteLayoutPage> {
             if (maps)
               row('routes', Icons.route_outlined, tr('Patrol routes', '巡逻路线'),
                   tr('Which points, how long to stop, what to photograph', '途经点、停多久、拍什么'), () => _push(SiteRoutesPage(api: widget.api))),
+            // 稿 S-points：待命点、原点、拦截点、摄像头一页
             row('standby', Icons.place_outlined, tr('Standby points & origin', '待命点与原点'),
-                tr('Set per robot: Robots → robot → Settings', '按机器人设：机器人 → 某台 → 设置'), _robots),
+                tr('Per robot · default point, origin', '按机器人 · 默认待命点、原点'), () => _push(SitePointsPage(api: widget.api))),
             if (maps)
               row('cameras', Icons.videocam_outlined, tr('Fixed cameras', '固定摄像头'),
                   _cameras == null ? '' : tr('$_cameras', '$_cameras 个'), () => _push(SiteCamerasPage(api: widget.api))),
