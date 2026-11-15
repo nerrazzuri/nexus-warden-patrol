@@ -2575,5 +2575,7 @@ input[type="checkbox"], input[type="radio"] { width: 18px; height: 18px; }
   background: var(--c-surface); border: 1px solid var(--c-outline); color: var(--c-textSecondary); pointer-events: auto; }
 
 /* 用户 11-15:派去看一眼 —— 看完后动作 */
-.golook-then { display: flex; align-items: center; gap: var(--sp-3); margin: 8px 0; }
-.golook-then .seg button { min-width: 0; padding: 0 10px; }
+/* 用户 11-15:英文「Return to standby / Return home / Wait there」三段放不下一行 —— 标签在上、三段等分撑满卡片 */
+.golook-then { display: flex; flex-direction: column; align-items: stretch; gap: var(--sp-1); margin: 8px 0; }
+.golook-then .seg { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); width: 100%; }
+.golook-then .seg button { min-width: 0; padding: 0 4px; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
