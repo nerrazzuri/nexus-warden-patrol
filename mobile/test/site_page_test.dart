@@ -972,6 +972,13 @@ class FakeApi implements SiteApi {
   List<Map<String, dynamic>> accountRows = <Map<String, dynamic>>[
     {'name': 'admin', 'role': 'admin', 'disabled': false, 'display_name': '', 'expires_ms': null, 'last_login_ms': 1},
   ];
+  SiteError? passwordError;
+  @override
+  Future<void> changeOwnPassword(String oldPassword, String newPassword) async {
+    calls.add('password $oldPassword $newPassword');
+    if (passwordError != null) throw passwordError!;
+  }
+
   @override
   Future<List<Map<String, dynamic>>> accounts() async {
     calls.add('accounts');
@@ -1659,6 +1666,9 @@ void main() {
       await Scrollable.ensureVisible(t.element(find.byKey(SiteDirectory.leaveKey)), alignment: 0.5);
       await t.pumpAndSettle();
       await t.tap(find.byKey(SiteDirectory.leaveKey));
+      await t.pumpAndSettle();
+      // 就地确认（不弹窗）：按钮展开在下面，先滚过去
+      await t.ensureVisible(find.byKey(leaveConfirmKey));
       await t.pumpAndSettle();
       await t.tap(find.byKey(leaveConfirmKey));
       await t.pumpAndSettle();
