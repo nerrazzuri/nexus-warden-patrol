@@ -15,7 +15,6 @@ import 'package:flutter/services.dart';
 import '../l10n.dart';
 import '../net/app_log.dart';
 import '../net/site_client.dart';
-import 'nw/nw_button.dart';
 import 'nw/nw_p1_entry.dart';
 import 'nw/nw_theme.dart';
 import 'nw/nw_widgets.dart';
@@ -167,126 +166,158 @@ class _ProblemReportPageState extends State<ProblemReportPage> {
     }
   }
 
-  Widget _appOnly() => NwButton(
-      buttonKey: ProblemReportPage.shareAppKey,
-      fullWidth: true,
-      variant: NwButtonVariant.ghost,
-      label: tr('Send the app log only', '只发 App 日志'),
-      onPressed: _busy ? null : () => _shareApp());
-
   @override
   Widget build(BuildContext context) {
     final c = Nw.of(context);
     final code = _code;
+    final shape = RoundedRectangleBorder(borderRadius: BorderRadius.circular(2));
+    final out = OutlinedButton.styleFrom(
+        minimumSize: const Size(48, 44), shape: shape, padding: const EdgeInsets.symmetric(horizontal: Nw.s8));
+    final sub = NwText.bodySmall.copyWith(color: c.textSecondary);
+    Widget section(List<Widget> kids, {Key? key}) => Container(
+        key: key,
+        margin: const EdgeInsets.only(top: Nw.s8),
+        padding: const EdgeInsets.all(Nw.s16),
+        color: c.surface,
+        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: kids));
+    Widget title(String t) => Padding(
+        padding: const EdgeInsets.only(bottom: Nw.s8),
+        child: Text(t, style: NwText.titleMedium.copyWith(color: c.text, fontWeight: FontWeight.w700)));
+    final appOnly = OutlinedButton(
+        key: ProblemReportPage.shareAppKey,
+        style: out,
+        onPressed: _busy ? null : () => _shareApp(),
+        child: Text(tr('Send app log only', '只发 App 日志'), maxLines: 1, overflow: TextOverflow.ellipsis));
+    // App V2 稿 S-report：一段「报问题」（出了什么事、哪台、发送），一段别的办法（站点连不上时）
     return Scaffold(
+      backgroundColor: c.bg,
       // 第 9 轮 A6-07 尾巴：入口都叫「报问题」，标题跟着叫（以前进来变成「上传日志」）
-      appBar: AppBar(title: Text(tr('Report a problem', '报问题'))),
+      appBar: AppBar(
+          title: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text(tr('Report a problem', '报问题')),
+        Text(tr('Also available from sign-in', '登录页上也有'), style: sub),
+      ])),
       body: SafeArea(
-        child: Center(
+        child: Align(
+          alignment: Alignment.topCenter,
           child: SingleChildScrollView(
-            padding: const EdgeInsets.all(Nw.s24),
+            padding: const EdgeInsets.only(bottom: Nw.s24),
             child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 480),
-              child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+              constraints: const BoxConstraints(maxWidth: 560),
+              child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
                 if (code == null) ...[
-                  // 易用性第 6 轮 A6-07 / A7-02：说明跟唯一的主按钮「发送」对得上；没登录站点时不提站点开单
-                  Text(
-                      widget.api != null
-                          ? tr('Something went wrong? Say what happened and tap "Send". The site opens a report with a number '
-                              'and the logs go to the engineer (WeChat / WhatsApp). No passwords or photos are sent.',
-                              '遇到问题了？写一句出了什么事，按「发送」。站点会开一张问题单、给一个编号，日志发给工程师（微信 / WhatsApp）。'
-                              '不会传密码和照片。')
-                          : tr('Something went wrong? Say what happened and tap "Send": the app log goes to the engineer '
-                              '(WeChat / WhatsApp). No passwords or photos are sent.',
-                              '遇到问题了？写一句出了什么事，按「发送」，App 日志发给工程师（微信 / WhatsApp）。不会传密码和照片。'),
-                      style: NwText.bodyMedium.copyWith(color: c.textSecondary)),
-                  const SizedBox(height: Nw.s16),
-                  NwField(
-                      fieldKey: ProblemReportPage.noteKey,
-                      controller: _note,
-                      label: tr('What happened', '出了什么事'),
-                      hint: tr('e.g. robot stopped at the gate around 9:30', '比如：9 点半左右机器人在大门口停住不走了'),
-                      minLines: 2,
-                      maxLines: 5),
-                  if (widget.robots.isNotEmpty) ...[
+                  section([
+                    title(tr('Report a problem', '报问题')),
+                    NwField(
+                        fieldKey: ProblemReportPage.noteKey,
+                        controller: _note,
+                        label: tr('What happened', '出了什么事'),
+                        hint: tr('e.g. robot stopped at the gate around 9:30', '比如：9 点半左右机器人在大门口停住不走了'),
+                        minLines: 3,
+                        maxLines: 6),
+                    if (widget.robots.isNotEmpty) ...[
+                      const SizedBox(height: Nw.s16),
+                      Text(tr('Robot (optional)', '哪台机器人（可不选）'),
+                          style: NwText.labelMedium.copyWith(color: c.textSecondary, fontWeight: FontWeight.w700)),
+                      const SizedBox(height: Nw.s8),
+                      // 三台以内一排分段；多了用下拉
+                      if (widget.robots.length <= 3)
+                        SegmentedButton<String>(
+                            key: ProblemReportPage.robotKey,
+                            showSelectedIcon: false,
+                            style: SegmentedButton.styleFrom(
+                                shape: shape, selectedBackgroundColor: c.primary, selectedForegroundColor: c.onPrimary),
+                            segments: [
+                              for (final r in widget.robots) ButtonSegment(value: r, label: Text(r)),
+                              ButtonSegment(value: '', label: Text(tr('Not a robot', '跟机器人无关'))),
+                            ],
+                            selected: {_robot},
+                            onSelectionChanged: _busy ? null : (v) => setState(() => _robot = v.first))
+                      else
+                        DropdownButtonFormField<String>(
+                            key: ProblemReportPage.robotKey,
+                            initialValue: _robot,
+                            items: [
+                              DropdownMenuItem<String>(value: '', child: Text(tr('Not a robot', '跟机器人无关'))),
+                              for (final r in widget.robots) DropdownMenuItem<String>(value: r, child: Text(r)),
+                            ],
+                            onChanged: _busy ? null : (v) => setState(() => _robot = v ?? '')),
+                    ],
+                    const SizedBox(height: Nw.s8),
+                    // 易用性第 6 轮 A6-07 / A7-02：说明跟唯一的主按钮「发送」对得上；没登录站点时不提站点开单
+                    Text(
+                        widget.api != null
+                            ? tr('Tap "Send": the site opens a report with a number and the logs go to the engineer (WeChat / WhatsApp). No passwords or photos are sent.',
+                                '按「发送」：站点开一张问题单、给一个编号，日志发给工程师（微信 / WhatsApp）。不会传密码和照片。')
+                            : tr('Tap "Send": the app log goes to the engineer (WeChat / WhatsApp). No passwords or photos are sent.',
+                                '按「发送」，App 日志发给工程师（微信 / WhatsApp）。不会传密码和照片。'),
+                        style: sub),
                     const SizedBox(height: Nw.s16),
-                    DropdownButtonFormField<String>(
-                        key: ProblemReportPage.robotKey,
-                        initialValue: _robot,
-                        decoration: InputDecoration(labelText: tr('Which robot (optional)', '哪台机器人（可不选）')),
-                        items: [
-                          DropdownMenuItem<String>(value: '', child: Text(tr('Not about a robot', '跟机器人无关'))),
-                          for (final r in widget.robots) DropdownMenuItem<String>(value: r, child: Text(r)),
-                        ],
-                        onChanged: _busy ? null : (v) => setState(() => _robot = v ?? '')),
-                  ],
-                  const SizedBox(height: Nw.s24),
-                  NwButton(
-                      buttonKey: ProblemReportPage.engineerKey,
-                      size: NwButtonSize.large,
-                      fullWidth: true,
-                      label: _busy ? tr('Sending…', '正在发送…') : tr('Send', '发送'),
-                      onPressed: _busy ? null : _sendToEngineer),
-                  // A6-07：别的方式收起来，客户一眼只看到一个该点的按钮
+                    FilledButton(
+                        key: ProblemReportPage.engineerKey,
+                        style: FilledButton.styleFrom(minimumSize: const Size(48, 48), shape: shape),
+                        onPressed: _busy ? null : _sendToEngineer,
+                        child: Text(_busy ? tr('Sending…', '正在发送…') : tr('Send', '发送'))),
+                  ]),
+                  // 别的办法：只传到站点（工程师远程取）、只发 App 日志。都是描边按钮，主按钮只有「发送」一个（A6-07）
                   if (widget.api != null)
-                    Theme(
-                      data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
-                      child: ExpansionTile(
-                          key: ProblemReportPage.otherKey,
-                          tilePadding: EdgeInsets.zero,
-                          title: Text(tr('Other ways', '其他方式'),
-                              style: NwText.bodyMedium.copyWith(color: c.textSecondary)),
-                          children: [
-                            NwButton(
-                                buttonKey: ProblemReportPage.sendKey,
-                                fullWidth: true,
-                                variant: NwButtonVariant.outline,
-                                label: tr('Upload to the site only (engineer fetches remotely)', '只传到站点（工程师远程取）'),
-                                onPressed: _busy ? null : () => _send()),
-                            const SizedBox(height: Nw.s8),
-                            _appOnly(),
-                          ]),
-                    ),
-                ] else ...[
-                  Icon(Icons.check_circle_rounded, size: 48, color: c.success),
-                  const SizedBox(height: Nw.s16),
-                  Text(tr('Report number', '问题单编号'),
-                      textAlign: TextAlign.center, style: NwText.bodyMedium.copyWith(color: c.textSecondary)),
-                  const SizedBox(height: Nw.s4),
-                  SelectableText(code,
-                      key: ProblemReportPage.codeKey,
-                      textAlign: TextAlign.center,
-                      style: NwText.titleLarge.copyWith(color: c.text, fontWeight: FontWeight.w700)),
-                  const SizedBox(height: Nw.s8),
-                  Center(
-                      child: NwButton(
-                          label: tr('Copy number', '复制编号'),
-                          variant: NwButtonVariant.ghost,
-                          size: NwButtonSize.small,
-                          onPressed: () {
-                            Clipboard.setData(ClipboardData(text: code));
-                            _say(tr('Copied', '已复制'));
-                          })),
-                  const SizedBox(height: Nw.s16),
-                  Text(
-                      tr('The site keeps this report. Tell the engineer the number, or send the package below.',
-                          '站点已留下这张单。把编号告诉工程师，或者用下面的按钮把日志发给工程师。'),
-                      textAlign: TextAlign.center,
-                      style: NwText.bodyMedium.copyWith(color: c.text)),
-                  const SizedBox(height: Nw.s24),
-                  if (_token != null)
-                    NwButton(
-                        buttonKey: ProblemReportPage.shareBundleKey,
-                        size: NwButtonSize.large,
-                        fullWidth: true,
-                        label: tr('Send package to engineer (WeChat / WhatsApp)', '整包发给工程师（微信 / WhatsApp）'),
-                        onPressed: _busy ? null : _shareBundle),
-                ],
-                if (code != null) ...[const SizedBox(height: Nw.s16), _appOnly()],
-                if (_msg != null) ...[
-                  const SizedBox(height: Nw.s16),
-                  NwNotice(key: ProblemReportPage.msgKey, text: _msg!, tone: _msgBad ? NwTone.error : NwTone.info),
-                ],
+                    section(key: ProblemReportPage.otherKey, [
+                      title(tr('Other ways', '其他方式')),
+                      Text(
+                          tr('Upload only, for the engineer to fetch remotely; or, if the site is unreachable, share this phone\'s app log.',
+                              '只传到站点，工程师远程取；站点连不上时，把这台手机的 App 日志分享出去。'),
+                          style: sub),
+                      const SizedBox(height: Nw.s8),
+                      Row(children: [
+                        Expanded(
+                            child: OutlinedButton(
+                                key: ProblemReportPage.sendKey,
+                                style: out,
+                                onPressed: _busy ? null : () => _send(),
+                                child: Text(tr('Upload to site only', '只传到站点'), maxLines: 1, overflow: TextOverflow.ellipsis))),
+                        const SizedBox(width: Nw.s8),
+                        Expanded(child: appOnly),
+                      ]),
+                    ]),
+                ] else
+                  section([
+                    Icon(Icons.square, size: 20, color: c.success),
+                    const SizedBox(height: Nw.s8),
+                    Text(tr('Report number', '问题单编号'), style: sub),
+                    SelectableText(code,
+                        key: ProblemReportPage.codeKey,
+                        style: NwText.titleLarge.copyWith(color: c.text, fontWeight: FontWeight.w700)),
+                    const SizedBox(height: Nw.s8),
+                    Text(
+                        tr('The site keeps this report. Tell the engineer the number, or send the package below.',
+                            '站点已留下这张单。把编号告诉工程师，或者用下面的按钮把日志发给工程师。'),
+                        style: NwText.bodyMedium.copyWith(color: c.text)),
+                    const SizedBox(height: Nw.s16),
+                    if (_token != null) ...[
+                      FilledButton(
+                          key: ProblemReportPage.shareBundleKey,
+                          style: FilledButton.styleFrom(minimumSize: const Size(48, 48), shape: shape),
+                          onPressed: _busy ? null : _shareBundle,
+                          child: Text(tr('Send package to engineer (WeChat / WhatsApp)', '整包发给工程师（微信 / WhatsApp）'))),
+                      const SizedBox(height: Nw.s8),
+                    ],
+                    Row(children: [
+                      Expanded(
+                          child: OutlinedButton(
+                              style: out,
+                              onPressed: () {
+                                Clipboard.setData(ClipboardData(text: code));
+                                _say(tr('Copied', '已复制'));
+                              },
+                              child: Text(tr('Copy number', '复制编号')))),
+                      const SizedBox(width: Nw.s8),
+                      Expanded(child: appOnly),
+                    ]),
+                  ]),
+                if (_msg != null)
+                  Padding(
+                      padding: const EdgeInsets.all(Nw.s16),
+                      child: NwNotice(key: ProblemReportPage.msgKey, text: _msg!, tone: _msgBad ? NwTone.error : NwTone.info)),
               ]),
             ),
           ),

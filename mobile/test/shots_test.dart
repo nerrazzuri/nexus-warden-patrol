@@ -21,6 +21,8 @@ import 'package:nexwar_patrol/ui/site_maps.dart' show SiteMapTab;
 import 'package:nexwar_patrol/net/site_client.dart' show SiteError;
 import 'package:nexwar_patrol/ui/site_add.dart';
 import 'package:nexwar_patrol/ui/site_page.dart';
+import 'package:nexwar_patrol/ui/problem_report.dart';
+import 'package:nexwar_patrol/ui/guide.dart' show HelpPage;
 import 'package:nexwar_patrol/ui/site_pose_pick.dart' show PoseBar;
 import 'package:nexwar_patrol/ui/site_routes.dart' show SiteRouteEditorPage;
 import 'package:nexwar_patrol/ui/site_teleop.dart';
@@ -338,6 +340,8 @@ void main() {
       await openSite(t);
     }),
     '31-schedule': _Shot(const Size(390, 1200), () => SchedulePage(api: FakeApi('admin'))),
+    '32-help': _Shot(const Size(390, 1200), () => HelpPage(role: 'guard', api: FakeApi('guard'))),
+    '33-report': _Shot(_phone, () => ProblemReportPage(api: FakeApi('guard'), robots: const ['A', 'B'], share: (_, _) async => true)),
     '24-overview': _Shot(const Size(390, 1200), () => Scaffold(body: AdminHomeTab(api: FakeApi('admin'), switchTab: (_) {}))),
     // App V2 第 4 期：深色控制页（保安、经理）、浅色设置页签、添加机器人
     '07b-robot-guard-v2': _Shot(const Size(390, 1900), () => SiteRobotPage(api: FakeApi('guard', robotView: busyView()), robotId: 'A')),
