@@ -22,6 +22,9 @@ import 'package:nexwar_patrol/ui/site_page.dart';
 import 'package:nexwar_patrol/ui/site_pose_pick.dart' show PoseBar;
 import 'package:nexwar_patrol/ui/site_routes.dart' show SiteRouteEditorPage;
 import 'package:nexwar_patrol/ui/site_teleop.dart';
+import 'package:nexwar_patrol/ui/alarm_log.dart';
+import 'package:nexwar_patrol/ui/site_runs.dart';
+import 'package:nexwar_patrol/ui/site_tabs.dart' show AccountsPage, AdminHomeTab;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
@@ -278,6 +281,12 @@ void main() {
     '06-dogs': _Shot(_phone, () => NwShell(api: _clear('guard'), title: 'East Gate Estate', ring: () {}),
         ready: _go(SiteDest.robots)),
     '07-robot-guard': _Shot(_phone, () => SiteRobotPage(api: FakeApi('guard'), robotId: 'A')),
+    // App V2 第 5 期：现场各页
+    '20-alarm-log': _Shot(_phone, () => Scaffold(body: AlarmLogPage(api: FakeApi('admin')))),
+    '21-runs': _Shot(_phone, () => SiteRunsPage(api: FakeApi('admin'))),
+    '22-notes': _Shot(_phone, () => ShiftNotesPage(api: FakeApi('admin'))),
+    '23-users': _Shot(_phone, () => AccountsPage(api: FakeApi('admin'))),
+    '24-overview': _Shot(const Size(390, 1200), () => Scaffold(body: AdminHomeTab(api: FakeApi('admin'), switchTab: (_) {}))),
     // App V2 第 4 期：深色控制页（保安、经理）、浅色设置页签、添加机器人
     '07b-robot-guard-v2': _Shot(const Size(390, 1900), () => SiteRobotPage(api: FakeApi('guard', robotView: busyView()), robotId: 'A')),
     '07c-robot-manager': _Shot(const Size(390, 1200), () => SiteRobotPage(api: FakeApi('owner', robotView: busyView()), robotId: 'A')),
