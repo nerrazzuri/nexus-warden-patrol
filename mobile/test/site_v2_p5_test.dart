@@ -2,6 +2,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:nexwar_patrol/l10n.dart';
+import 'package:nexwar_patrol/ui/alarm_log.dart';
 import 'package:nexwar_patrol/ui/nw/nw_layout_hub.dart';
 import 'package:nexwar_patrol/ui/site_mode.dart';
 import 'package:nexwar_patrol/ui/site_routes.dart';
@@ -90,5 +91,31 @@ void main() {
     expect(a.width, h.width, reason: '等宽');
     expect(find.byKey(SiteModePage.weatherKey), findsOneWidget);
     expect(find.byKey(SiteModePage.schedulesKey), findsOneWidget);
+  });
+
+  testWidgets('报警记录：右边写状态（未处理 / 误报 / 确认入侵），顶上筛「未处理」「P1」', (t) async {
+    final now = DateTime.now().millisecondsSinceEpoch;
+    Map<String, dynamic> row(String key, String level, {String? verdict}) => {
+          'key': key, 'kind': 'intrusion', 'level': level, 'robot': 'A', 'first_ms': now, 'last_ms': now, 'count': 1,
+          if (verdict != null) ...{'resolved_ms': now, 'verdict': verdict},
+        };
+    final api = FakeApi('guard')
+      ..alertRows = [row('a', 'P1'), row('b', 'P2', verdict: 'false_alarm'), row('c', 'P1', verdict: 'intruder')];
+    await t.binding.setSurfaceSize(const Size(390, 1200));
+    addTearDown(() => t.binding.setSurfaceSize(null));
+    await t.pumpWidget(MaterialApp(home: Scaffold(body: AlarmLogPage(api: api))));
+    await t.pumpAndSettle();
+    Text st(String k) => t.widget<Text>(find.descendant(of: find.byKey(AlarmLogPage.stateKey(k)), matching: find.byType(Text)));
+    expect(st('a').data, '未处理');
+    expect(st('b').data, '误报');
+    expect(st('c').data, '确认入侵');
+    await t.tap(find.byKey(AlarmLogPage.filterKey('open')));
+    await t.pumpAndSettle();
+    expect(find.byKey(AlarmLogPage.rowKey('a')), findsOneWidget);
+    expect(find.byKey(AlarmLogPage.rowKey('b')), findsNothing);
+    await t.tap(find.byKey(AlarmLogPage.filterKey('p1')));
+    await t.pumpAndSettle();
+    expect(find.byKey(AlarmLogPage.rowKey('c')), findsOneWidget);
+    expect(find.byKey(AlarmLogPage.rowKey('b')), findsNothing);
   });
 }

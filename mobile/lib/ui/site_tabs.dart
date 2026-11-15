@@ -472,12 +472,14 @@ class _AdminHomeTabState extends State<AdminHomeTab> {
               SetupChecklist(api: widget.api, go: _go),
               if (t != null)
                 nwRobotSection(c, tr('Today', '今天'), key: const Key('overview-today'), [
-                  Row(children: [
+                  // 三格一样高（某格字换行也不高低不齐）
+                  IntrinsicHeight(
+                      child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
                     stat('${t.alarms}', t.open > 0 ? tr('Alarms (${t.open} open)', '报警（${t.open} 条没结）') : tr('Alarms', '报警'),
                         const Key('overview-alarms')),
                     stat('${t.patrols}', tr('Patrols completed', '巡逻跑完'), const Key('overview-patrols')),
                     stat('${t.falseAlarms}', tr('False alarms', '误报'), const Key('overview-false')),
-                  ]),
+                  ])),
                   if (t.times.isNotEmpty) ...[
                     const SizedBox(height: Nw.s8),
                     Text(tr('Patrols ${t.times.join(' / ')}', '巡逻 ${t.times.join(' / ')}'),
