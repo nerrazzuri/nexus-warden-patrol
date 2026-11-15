@@ -23,7 +23,16 @@ const TAB_KEY: Record<LayoutTab, Key> = { zones: "lyZones", nogo: "lyNogo", guar
 // 路网(W48)第一版没有历史版本:那个标签上不显示「历史」
 const HISTORY_KIND: Partial<Record<LayoutTab, string>> = { zones: "zones", nogo: "nogo", guard: "route", routes: "route", standby: "standby", cameras: "cameras" };
 
-export interface MapRow { map_id: string; version: string; note: string; active?: boolean }
+export interface MapRow { map_id: string; version: string; note: string; active?: boolean; loaded_on?: string[]; created_ms?: number }
+
+/** 用户 11-15:站点的地图目录不给 active,机器人在用(loaded_on 不空)就是在用。 */
+export const inService = (m: MapRow): boolean => !!m.active || (m.loaded_on?.length ?? 0) > 0;
+
+/** 默认打开哪一版:机器人在用的(几版都在用取最新建的),都没在用取最新建的。 */
+export function defaultMap(maps: MapRow[]): MapRow | null {
+  const newest = (xs: MapRow[]) => xs.reduce<MapRow | null>((a, m) => (!a || (m.created_ms ?? 0) > (a.created_ms ?? 0) ? m : a), null);
+  return newest(maps.filter(inService)) ?? newest(maps);
+}
 export interface Area { zone: string; points: Pt[] }
 /** W73:防区的查看点(出事去哪看)、值守位(空档站哪儿盯,带朝向);``auto``:站点算的。 */
 export interface ZonePost {
@@ -166,7 +175,7 @@ export function LayoutPage({ say, robots, tabs, embed }: {
       const q = new URLSearchParams((typeof location === "undefined" ? "" : location.hash).split("?")[1] ?? "");
       const want = embed ? d.maps.find((m) => m.map_id === embed.map.map_id && m.version === embed.map.version)
         : d.maps.find((m) => m.map_id === q.get("map") && m.version === q.get("version"));
-      setSel((s) => s ?? want ?? d.maps.find((m) => m.active) ?? d.maps[d.maps.length - 1] ?? null);
+      setSel((s) => s ?? want ?? defaultMap(d.maps ?? []));
     }).catch((e) => {
       if (mapsTry === 0) say(errText(e));
       setMapsFailed(true);
@@ -297,7 +306,7 @@ export function LayoutPage({ say, robots, tabs, embed }: {
   const notes: Partial<Record<LayoutTab, string>> = {
     nogo: held ? `${held} ${t("lyRailAwait")}` : carried && data.nav?.proposal ? t("lyStCarried", { n: carried, v: data.nav.proposal.from_version }) : "",
   };
-  const status = sel ? [t("lyStMap", { id: sel.map_id, v: sel.version }), sel.active ? t("lyStActive") : t("lyStNotActive"),
+  const status = sel ? [t("lyStMap", { id: sel.map_id, v: sel.version }), inService(sel) ? t("lyStActive") : t("lyStNotActive"),
     held ? t(held === 1 ? "lyStPending1" : "lyStPendingN", { n: held }) : ""].filter(Boolean) : [];
   return (
     <section class={embed ? "layout" : "layout sp ly-sp"}>
@@ -312,7 +321,7 @@ export function LayoutPage({ say, robots, tabs, embed }: {
             if (dirty) { el.value = sel ? `${sel.map_id}\u0000${sel.version}` : ""; setAsk(() => () => setSel(next)); } else setSel(next);
           }}>
             {maps.map((m) => <option key={`${m.map_id}:${m.version}`} value={`${m.map_id}\u0000${m.version}`}>
-              {m.map_id} · v{m.version}{m.active ? ` · ${t("lyActive")}` : ""}{m.note ? ` · ${clip(siteKnown(m.note))}` : ""}</option>)}
+              {m.map_id} · v{m.version}{inService(m) ? ` · ${t("lyActive")}` : ""}{m.note ? ` · ${clip(siteKnown(m.note))}` : ""}</option>)}
           </select>
         </label>}
         {/* 第 4 轮 layout N5:不用空 span 顶开(窄屏上它折到下一行,在「历史」左边空出一块) */}
