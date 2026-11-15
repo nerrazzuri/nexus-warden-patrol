@@ -780,6 +780,10 @@ abstract class SiteApi {
 
   /// 布防模式（W20）：当前模式、临时撤防到几点、每个防区现在布不布防。站点没开回 404。
   Future<Map<String, dynamic>> mode();
+
+  /// 交班留言(App V2 现场 → 记录):最近 N 条,新的在前;写一条。跟网页同一个接口。
+  Future<List<Map<String, dynamic>>> shiftNotes({int recent = 50});
+  Future<void> postShiftNote(String text);
   /// 布防向导（用户 11-13）：布防时机器人会不会自己巡逻、缺哪样。`{map_id, map_version, zones, routes,
   /// robots: [{id, code, why}], missing: [zones|route|plan|robot]}`；站点按机器人在用的那张图查。老站点 404。
   Future<Map<String, dynamic>> guardReadiness();
@@ -1390,6 +1394,20 @@ class SiteClient implements SiteApi {
 
   @override
   Future<Map<String, dynamic>> mode() async => _map(await _send('GET', '/api/mode'));
+
+  @override
+  Future<List<Map<String, dynamic>>> shiftNotes({int recent = 50}) async {
+    final d = _map(await _send('GET', '/api/shift-notes?recent=$recent'));
+    final r = d['recent'];
+    if (r is List) return [for (final e in r) if (e is Map) Map<String, dynamic>.from(e)];
+    final latest = d['latest'];
+    return latest is Map ? [Map<String, dynamic>.from(latest)] : const [];
+  }
+
+  @override
+  Future<void> postShiftNote(String text) async {
+    await _send('POST', '/api/shift-notes', <String, dynamic>{'text': text});
+  }
 
   @override
   Future<Map<String, dynamic>> guardReadiness() async => _map(await _send('GET', '/api/guard/readiness'));
