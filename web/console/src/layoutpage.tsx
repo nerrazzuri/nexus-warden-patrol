@@ -9,6 +9,7 @@ import { useCallback, useEffect, useRef, useState } from "preact/hooks";
 import { api, ApiError, enc } from "./api";
 import { clip, hm, siteDown } from "./data";
 import { Confirm } from "./dialogs";
+import { Sign } from "./signs";
 import { t, type Key } from "./i18n";
 import { MapCanvas, type CanvasArea, type Screen, type LegendKey } from "./mapcanvas";
 import { toPx, type NavZone, type PreviewMeta, type Pt } from "./mapview";
@@ -286,10 +287,23 @@ export function LayoutPage({ say, robots, tabs, embed }: {
   ) : <p class="empty">{t(siteDown.value || mapsFailed ? "loadRetry" : "noMap")}</p>), [meta, sel, tab, data, base, mapsFailed]);
 
   const Tab = tabs[tab];
+  // 第六期 S-layout:左栏每层带个数、要确认的写一句;页头一句话说这一版的状态
+  const held = data.nav?.held?.length ?? 0;
+  const carried = data.nav?.proposal?.zones.length ?? 0;
+  const counts: Partial<Record<LayoutTab, number | string>> = {
+    zones: data.areas.length, nogo: data.nav?.zones.length ?? 0, guard: data.guardRoutes.length, routes: data.routes.length,
+    standby: data.standby.length, cameras: sel ? camsOn(data.cameras, sel).length : 0,
+  };
+  const notes: Partial<Record<LayoutTab, string>> = {
+    nogo: held ? `${held} ${t("lyRailAwait")}` : carried && data.nav?.proposal ? t("lyStCarried", { n: carried, v: data.nav.proposal.from_version }) : "",
+  };
+  const status = sel ? [t("lyStMap", { id: sel.map_id, v: sel.version }), sel.active ? t("lyStActive") : t("lyStNotActive"),
+    held ? t(held === 1 ? "lyStPending1" : "lyStPendingN", { n: held }) : ""].filter(Boolean) : [];
   return (
-    <section class="layout">
-      <div class="panel-head">
+    <section class={embed ? "layout" : "layout sp ly-sp"}>
+      <div class={embed ? "panel-head" : "sp-head ly-head"}>
         {!embed && <h1>{t("lyTitle")}</h1>}
+        {!embed && <p class="sp-status"><Sign kind={held || carried ? "info" : "ok"} /><span>{status.slice(0, 2).join(" · ")} {status[2] && <b>{status[2]}</b>}</span></p>}
         {embed ? <span class="field-inline">{t("mapLabel")} {embed.map.map_id} · v{embed.map.version}</span> : <label class="field-inline">{t("mapLabel")}
           <select value={sel ? `${sel.map_id}\u0000${sel.version}` : ""} onChange={(e) => {
             const [m, v] = e.currentTarget.value.split("\u0000");
@@ -302,18 +316,25 @@ export function LayoutPage({ say, robots, tabs, embed }: {
           </select>
         </label>}
         {/* 第 4 轮 layout N5:不用空 span 顶开(窄屏上它折到下一行,在「历史」左边空出一块) */}
-        {HISTORY_KIND[tab] && !embed && <button type="button" class="btn push" onClick={() => setHistory(!history)} aria-pressed={history}>{t("lyHistory")}</button>}
+        {HISTORY_KIND[tab] && !embed && <button type="button" class="btn push" onClick={() => setHistory(!history)} aria-pressed={history}>{t("lyVersions")}</button>}
         {/* P1-34:「没保存」写在保存按钮旁边,不另起一行把地图往下推 */}
         {/* 第 2 轮 setup N15:「还没保存」的位置一直留着,出现时「历史」按钮不跳 */}
         <span class={`${dirty ? "ly-dirty small" : "ly-dirty small hold"}${HISTORY_KIND[tab] && !embed ? "" : " push"}`} role="status" aria-hidden={!dirty || undefined}>{t("armDirty")}</span>
         <button type="button" class="btn primary ly-save" disabled={!dirty || busy} onClick={() => void save()}>{t("save")}</button>
       </div>
-      {!embed && <p class="muted lead">{t("lyLead")}</p>}
-      {!embed && <div class="ly-tabs" role="tablist">
+      <div class={embed ? undefined : "ly-grid"}>
+      {!embed && <div class="ly-tabs ly-rail" role="tablist">
         {LAYOUT_TABS.map((x) => (
-          <button key={x} type="button" role="tab" aria-selected={tab === x} onClick={() => tab !== x && switchTab(x)}>{t(TAB_KEY[x])}</button>
+          <button key={x} type="button" role="tab" aria-selected={tab === x} onClick={() => tab !== x && switchTab(x)}>
+            {notes[x] ? <Sign kind="info" /> : <span />}
+            <span class="ly-tabname">{t(TAB_KEY[x])}</span>
+            <span class="ly-count mono">{counts[x] ?? ""}</span>
+            {notes[x] && <small class="ly-note">{notes[x]}</small>}
+          </button>
         ))}
+        <p class="ly-lead muted small">{t("lyLead")}</p>
       </div>}
+      <div class="ly-stage">
       {conflict && (
         <div class="ly-conflict" role="alert">
           <span>{t("lyConflict")}</span>
@@ -332,6 +353,8 @@ export function LayoutPage({ say, robots, tabs, embed }: {
             routeKind={tab === "guard" ? "guard" : tab === "routes" ? "patrol" : undefined}
             onRestored={() => { setDirty(false); setGen((g) => g + 1); void reload(); }} onClose={() => setHistory(false)} />
         )}
+      </div>
+      </div>
       </div>
       {ask && (
         <Confirm text={t("lyDiscard")} yes={t("lyDiscardYes")} danger onNo={() => { setAsk(null); if (!embed) replaceHash(`#/admin/layout?tab=${tab}`); }}

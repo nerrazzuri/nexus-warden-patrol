@@ -54,13 +54,13 @@ function Fake(p: TabProps) {
 const TABS = { zones: Fake, nogo: Fake, routes: Fake, standby: Fake, cameras: Fake };
 const page = () => render(<LayoutPage say={() => {}} robots={["A"]} tabs={TABS} />);
 const btn = (root: Element, text: string) => Array.from(root.querySelectorAll("button")).find((b) => b.textContent?.trim() === text) as HTMLButtonElement;
-const tabBtn = (c: Element, text: string) => Array.from(c.querySelectorAll(".ly-tabs button")).find((b) => b.textContent === text) as HTMLButtonElement;
+const tabBtn = (c: Element, text: string) => Array.from(c.querySelectorAll(".ly-tabs button")).find((b) => b.querySelector(".ly-tabname")!.textContent === text) as HTMLButtonElement;
 
 describe("布置外框", () => {
   it("七个标签(W48 加了路网,W73 加了防区路线)、地址带tab", async () => {
     const { container: c } = page();
     await waitFor(() => expect(c.querySelector(".fake")).not.toBeNull());
-    expect(Array.from(c.querySelectorAll(".ly-tabs button")).map((b) => b.textContent)).toEqual(["防区", "禁行区", "防区路线", "巡逻路线", "路网", "待命点", "摄像头"]);
+    expect(Array.from(c.querySelectorAll(".ly-tabs button .ly-tabname")).map((b) => b.textContent)).toEqual(["防区", "禁行区", "防区路线", "巡逻路线", "路网", "待命点", "摄像头"]);
     expect(tabFromHash("#/admin/layout?tab=roadnet")).toBe("roadnet");
     expect(tabFromHash("#/admin/layout?tab=routes")).toBe("routes");
     expect(tabFromHash("#/admin/layout?tab=guard")).toBe("guard");
@@ -118,7 +118,7 @@ describe("布置外框", () => {
   it("历史抽屉能退回", async () => {
     const { container: c } = page();
     await waitFor(() => expect(c.querySelector(".fake")).not.toBeNull());
-    fireEvent.click(btn(c, "历史版本"));
+    fireEvent.click(btn(c, "历史版本…"));
     await waitFor(() => expect(c.querySelector(".ly-history")!.textContent).toContain("olga"));
     fireEvent.click(btn(c.querySelector(".ly-history")!, "回退到此版本"));
     fireEvent.click(btn(document.querySelector(".modal")!, "回退到此版本"));
@@ -128,7 +128,7 @@ describe("布置外框", () => {
   it("外审R3:退回带上是哪一层、哪张图", async () => {
     const { container: c } = page();
     await waitFor(() => expect(c.querySelector(".fake")).not.toBeNull());
-    fireEvent.click(btn(c, "历史版本"));
+    fireEvent.click(btn(c, "历史版本…"));
     await waitFor(() => expect(c.querySelector(".ly-history")!.textContent).toContain("olga"));
     fireEvent.click(btn(c.querySelector(".ly-history")!, "回退到此版本"));
     fireEvent.click(btn(document.querySelector(".modal")!, "回退到此版本"));
@@ -159,7 +159,7 @@ describe("布置外框", () => {
     }) as typeof fetch);
     const { container: c } = page();
     await waitFor(() => expect(c.querySelector(".fake")).not.toBeNull());
-    fireEvent.click(btn(c, "历史版本"));
+    fireEvent.click(btn(c, "历史版本…"));
     await waitFor(() => expect(c.querySelector(".ly-history")!.textContent).toContain("A-old"));
     fireEvent.click(btn(c.querySelector(".ly-history")!, "回退到此版本"));
     expect(document.querySelector(".modal")).not.toBeNull();
@@ -198,7 +198,7 @@ describe("布置外框", () => {
   it("实测查出:地址里的 tab 变了(浏览器后退、前进)跟着换标签;有没存的先问,不丢就把地址改回来", async () => {
     const { container: c } = page();
     await waitFor(() => expect(c.querySelector(".fake")).not.toBeNull());
-    const on = () => c.querySelector('.ly-tabs button[aria-selected="true"], .ly-tabs button.on')?.textContent;
+    const on = () => c.querySelector('.ly-tabs button[aria-selected="true"] .ly-tabname')?.textContent;
     location.hash = "#/admin/layout?tab=nogo";
     window.dispatchEvent(new HashChangeEvent("hashchange"));
     await waitFor(() => expect(on()).toBe("禁行区"));

@@ -6,6 +6,14 @@ import alertCatalog from "../../../design/i18n/alerts.json";
 export type Lang = "en" | "zh";
 
 const en = {
+  lyStMap: "Map {id} · version {v}",
+  lyStActive: "In service.",
+  lyStNotActive: "Not in service.",
+  lyStPending1: "1 no-go change awaiting confirmation.",
+  lyStPendingN: "{n} no-go changes awaiting confirmation.",
+  lyStCarried: "{n} carried over from version {v}; not yet kept.",
+  lyVersions: "Version history…",
+  lyRailAwait: "awaiting confirmation",
   usAccounts: "{n} accounts",
   usEng1: "1 temporary engineer account",
   usEngN: "{n} temporary engineer accounts",
@@ -1725,7 +1733,7 @@ const en = {
   armStArmed: "armed",
   armStPartial: "partly armed",
   armStDisarmed: "disarmed",
-  lyTitle: "Setup",
+  lyTitle: "Site layout",
   lyLead: "Pick a tab to edit that layer; others are shown faded. Every save is kept and can be restored.",
   lyZones: "Zones",
   lyNogo: "No-go areas",
@@ -2201,6 +2209,14 @@ const en = {
 type Key = keyof typeof en;
 
 const zh: Partial<Record<Key, string>> = {
+  lyStMap: "地图 {id} · 第 {v} 版",
+  lyStActive: "使用中。",
+  lyStNotActive: "未启用。",
+  lyStPending1: "1 处禁行区改动等确认。",
+  lyStPendingN: "{n} 处禁行区改动等确认。",
+  lyStCarried: "{n} 处从第 {v} 版带过来，还没保留。",
+  lyVersions: "历史版本…",
+  lyRailAwait: "等确认",
   usAccounts: "{n} 个账号",
   usEng1: "1 个工程师临时账号",
   usEngN: "{n} 个工程师临时账号",
