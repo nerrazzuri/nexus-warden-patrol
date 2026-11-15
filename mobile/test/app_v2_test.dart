@@ -99,10 +99,19 @@ Map<String, dynamic> _ackedWire(String key, {String by = 'alice'}) => <String, d
 String _btn(WidgetTester t, Key k) =>
     t.widget<Text>(find.descendant(of: find.byKey(k), matching: find.byType(Text))).data!;
 
-bool _enabled(WidgetTester t, Key k) => t.widget<ButtonStyleButton>(find.byKey(k)).onPressed != null;
+/// 按得了吗（App V2「这件事」用不了的按钮收起来：不在 = 按不了）。
+bool _enabled(WidgetTester t, Key k) =>
+    find.byKey(k).evaluate().isNotEmpty && t.widget<ButtonStyleButton>(find.byKey(k)).onPressed != null;
+
+/// 「这件事」是一条长列表：测试里把窗口拉高，整页一次建出来、都点得到。
+void _tallPortrait(WidgetTester t) {
+  t.view.physicalSize = const Size(390 * 2, 2600 * 2);
+  t.view.devicePixelRatio = 2.0;
+  addTearDown(t.view.reset);
+}
 
 Future<void> _alarm(WidgetTester t, FakeApi api, Alert a, {int afterS = 42}) async {
-  _portrait(t);
+  _tallPortrait(t);
   api.alertRows = <Map<String, dynamic>>[];
   await t.pumpWidget(MaterialApp(
       theme: nwTheme(Brightness.dark),
@@ -322,7 +331,7 @@ void main() {
         await t.pump(const Duration(milliseconds: 800));
         expect(_frameOpacity(t), 1.0, reason: '确认了就不闪');
       }
-      expect(t.widget<FilledButton>(find.byKey(SiteAlertScenePage.ackKey)).onPressed, isNull);
+      expect(_enabled(t, SiteAlertScenePage.ackKey), isFalse, reason: '接手了：「我来处理」收起来');
       await t.pumpWidget(Container());
     });
 
@@ -337,8 +346,9 @@ void main() {
       }
       await _alarm(t, api, _p1(resolvedMs: _t0 + 60000));
       expect(_text(t, SiteAlertScenePage.stateKey), '02:15:36 已关闭');
-      expect(t.widget<FilledButton>(find.byKey(SiteAlertScenePage.ackKey)).onPressed, isNull);
-      expect(t.widget<OutlinedButton>(find.byKey(SiteAlertScenePage.falseKey)).onPressed, isNull);
+      expect(_enabled(t, SiteAlertScenePage.ackKey), isFalse);
+      expect(_enabled(t, SiteAlertScenePage.falseKey), isFalse);
+      expect(find.byKey(SiteAlertScenePage.closedKey), findsOneWidget, reason: '关了：写谁、什么结论');
       await t.pumpWidget(Container());
     });
 
@@ -366,9 +376,9 @@ void main() {
       await t.pumpWidget(Container());
     });
 
-    testWidgets('管理员能确认、记误报，但没有警笛和全部急停（没有派遣权限）；误报要再问一遍，记了就回去', (t) async {
+    testWidgets('管理员能确认、记误报，但没有警笛和全部急停（没有派遣权限）；误报先选结论再结案，关了留在这页能撤销', (t) async {
       final api = FakeApi('owner')..deterRows = [_session()];
-      _portrait(t);
+      _tallPortrait(t);
       api.alertRows = <Map<String, dynamic>>[];
       await t.pumpWidget(MaterialApp(
           theme: nwTheme(Brightness.dark),
@@ -380,20 +390,20 @@ void main() {
       await t.tap(find.text('open'));
       await t.pumpAndSettle();
       expect(find.byKey(SiteAlertScenePage.sirenKey), findsNothing);
-      expect(find.byKey(StopAllButton.buttonKey), findsNothing);
-      expect(t.widget<FilledButton>(find.byKey(SiteAlertScenePage.ackKey)).onPressed, isNotNull);
+      expect(find.byKey(SiteAlertScenePage.estopKey), findsNothing);
+      expect(find.textContaining('现场警示由保安操作'), findsOneWidget);
+      expect(_enabled(t, SiteAlertScenePage.ackKey), isTrue);
       await t.tap(find.byKey(SiteAlertScenePage.falseKey));
       await t.pumpAndSettle();
-      expect(api.calls.where((c) => c.startsWith('resolve')), isEmpty, reason: '先问');
-      await t.tap(find.text('取消'));
-      await t.pumpAndSettle();
-      expect(find.byType(SiteAlertScenePage), findsOneWidget);
-      await t.tap(find.byKey(SiteAlertScenePage.falseKey));
-      await t.pumpAndSettle();
-      await t.tap(find.byKey(SiteAlertScenePage.falseGoKey));
+      expect(api.calls.where((c) => c.startsWith('resolve')), isEmpty, reason: '选结论不发，点「结案」才发');
+      await t.tap(find.byKey(SiteAlertScenePage.doneKey));
       await t.pumpAndSettle();
       expect(api.calls, contains('resolve A/dog_sees_person#1 false_alarm'));
-      expect(find.byType(SiteAlertScenePage), findsNothing, reason: '关了就回上一页');
+      expect(find.byType(SiteAlertScenePage), findsOneWidget, reason: '关了留在这页');
+      expect(find.byKey(SiteAlertScenePage.closedKey), findsOneWidget);
+      await t.tap(find.byKey(SiteAlertScenePage.reopenKey));
+      await t.pumpAndSettle();
+      expect(api.calls, contains('reopen A/dog_sees_person#1'));
     });
 
     testWidgets('别人在别处确认了：这一页过几秒自己跟上', (t) async {
@@ -418,9 +428,10 @@ void main() {
       expect(find.text('Person detected'), findsWidgets);
       expect(_text(t, SiteAlertScenePage.stateKey), 'Unacknowledged for 0:42');
       expect(find.text('Nearest person 6.2 m from A. Deterrence level 1.'), findsOneWidget);
-      expect(find.text("I'll handle it"), findsOneWidget);
+      expect(find.text('Take ownership'), findsOneWidget);
       expect(find.text('Sound siren (level 3)'), findsOneWidget);
-      expect(find.text("I'm on site"), findsOneWidget, reason: 'W74：看见人第四个位置是已到场');
+      expect(find.text('On scene'), findsOneWidget, reason: 'W74：看见人要先到场');
+      expect(find.text('Incident'), findsOneWidget);
       // 手机 App 测试 M05：站点给的中文原因按语言翻
       expect(find.text('Armed'), findsOneWidget);
       await t.pumpWidget(Container());
@@ -429,7 +440,7 @@ void main() {
     testWidgets('全部急停：先问；只对在线的机器人发；哪台没停住说出来', (t) async {
       final api = FakeApi('guard');
       await _alarm(t, api, _p1());
-      await t.tap(find.byKey(StopAllButton.buttonKey));
+      await t.tap(find.byKey(SiteAlertScenePage.estopKey));
       await t.pumpAndSettle();
       expect(api.calls.where((c) => c.startsWith('halt')), isEmpty, reason: '先问');
       await t.tap(find.byKey(StopAllButton.confirmKey));
@@ -677,26 +688,25 @@ void main() {
       await t.pumpWidget(Container());
     });
 
-    testWidgets('I3 上一条的「记成误报？」还开着就换了告警：对话框收掉，谁都不关', (t) async {
+    testWidgets('I3 上一条选好了「误报」还没结案就换了告警：选的、备注都作废，谁都不关', (t) async {
       final api = FakeApi('guard');
       await _alarm(t, api, _p1(arrived: true));
-      await t.ensureVisible(find.byKey(SiteAlertScenePage.falseKey));
       await t.tap(find.byKey(SiteAlertScenePage.falseKey));
+      await t.enterText(find.byKey(SiteAlertScenePage.noteKey), 'A 的备注');
       await t.pumpAndSettle();
-      expect(find.byKey(SiteAlertScenePage.falseGoKey), findsOneWidget);
+      expect(_enabled(t, SiteAlertScenePage.doneKey), isTrue);
       await t.pumpWidget(MaterialApp(
           theme: nwTheme(Brightness.dark),
           home: SiteAlertScenePage(
               api: api, alert: _p1b(arrived: true), now: () => DateTime.fromMillisecondsSinceEpoch(_t0 + 42000))));
       await t.pumpAndSettle();
-      expect(find.byKey(SiteAlertScenePage.falseGoKey), findsNothing, reason: '问的是上一条');
-      expect(find.byType(SiteAlertScenePage), findsOneWidget);
+      expect(_enabled(t, SiteAlertScenePage.doneKey), isFalse, reason: '选的是上一条');
+      expect(find.text('A 的备注'), findsNothing);
       expect(api.calls.where((c) => c.startsWith('resolve')), isEmpty);
       // 这一条自己的误报照常：关的是这一条
-      await t.ensureVisible(find.byKey(SiteAlertScenePage.falseKey));
       await t.tap(find.byKey(SiteAlertScenePage.falseKey));
       await t.pumpAndSettle();
-      await t.tap(find.byKey(SiteAlertScenePage.falseGoKey));
+      await t.tap(find.byKey(SiteAlertScenePage.doneKey));
       await t.pumpAndSettle();
       expect(api.calls.where((c) => c.startsWith('resolve')), ['resolve B/dog_sees_person#7 false_alarm']);
     });

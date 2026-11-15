@@ -14,13 +14,13 @@ import 'package:nexwar_patrol/ui/site_deter.dart';
 import 'package:nexwar_patrol/ui/site_deterrence.dart';
 import 'package:nexwar_patrol/ui/site_mode.dart';
 import 'package:nexwar_patrol/ui/site_watch_page.dart';
-import 'package:nexwar_patrol/ui/widget/alarm_widgets.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'site_page_test.dart' show FakeApi;
 import 'support/fake_site.dart';
+import 'support/scene.dart';
 
 Map<String, dynamic> _mode(String mode) => <String, dynamic>{
       ...siteFixture('site_mode'), 'mode': mode, 'visitor_zones': <String>[], 'until_ms': null};
@@ -50,7 +50,7 @@ Future<void> _duty(WidgetTester t, FakeApi api, {Size size = const Size(390, 844
 bool _canTap(WidgetTester t, Key k) => t.widget<InkWell>(find.byKey(k)).onTap != null;
 
 Alert _intrusion({Map<String, dynamic>? context}) => Alert.fromWire(<String, dynamic>{
-      'key': 'A/intrusion#1', 'level': 'P1', 'kind': 'intrusion', 'robot': 'A',
+      'key': 'A/intrusion#1', 'level': 'P1', 'kind': 'intrusion', 'audience': 'intrusion', 'robot': 'A',
       'title': '防区 front-yard 有入侵', 'detail': '事件源 nvr-1',
       'first_ms': 1, 'last_ms': 1, 'count': 1, 'acked_by': '', 'acked_ms': null,
       'resolved_by': '', 'resolved_ms': null, 'escalated': 2, 'channel': 'sound',
@@ -270,30 +270,32 @@ void main() {
 
     testWidgets('手机 App 测试 M15：只读账号的按钮灰着，下面说为什么', (t) async {
       await scene(t, FakeApi('viewer'), _intrusion(), const Size(390, 844));
-      expect(find.byKey(SiteAlertScenePage.whyKey), findsOneWidget);
+      expect(await sceneShow(t, find.byKey(SiteAlertScenePage.whyKey)), findsOneWidget);
       expect(find.textContaining('只读账号'), findsOneWidget);
+      expect(find.byKey(SiteAlertScenePage.ackKey), findsNothing, reason: '只读：没有「我来处理」');
+      expect(find.byKey(SiteAlertScenePage.estopKey), findsNothing);
     });
 
     for (final size in const [Size(390, 844), Size(800, 360)]) {
-      testWidgets('四个大按钮在底栏：不跟着滚、够高、字不小于 14（${size.width.toInt()}）', (t) async {
+      testWidgets('App V2「这件事」：全部急停钉在右下角不跟着滚；「我来处理」在第一屏；结论一排等宽（${size.width.toInt()}）', (t) async {
         final api = FakeApi('guard');
         await scene(t, api, _intrusion(), size, theme: nwTheme(Brightness.dark));
-        final buttons = find.byWidgetPredicate((w) =>
-            (w is FilledButton || w is OutlinedButton) &&
-            find.ancestor(of: find.byWidget(w), matching: find.byKey(SiteAlertScenePage.barKey)).evaluate().isNotEmpty);
-        // 手机 App 测试 M10：用不了的警笛不摆灰的占位；我来处理、误报、已处理
-        expect(buttons, findsNWidgets(3));
-        for (final k in [SiteAlertScenePage.ackKey, SiteAlertScenePage.falseKey, SiteAlertScenePage.doneKey]) {
-          expect(find.ancestor(of: find.byKey(k), matching: find.byKey(SiteAlertScenePage.barKey)), findsOneWidget);
-          expect(find.ancestor(of: find.byKey(k), matching: find.byType(Scrollable)), findsNothing);
-          final r = t.getRect(find.byKey(k));
-          expect(r.height, greaterThanOrEqualTo(48));
-          expect(r.bottom, lessThanOrEqualTo(size.height));
-          expect(r.top, greaterThan(size.height / 2), reason: '在屏幕下半边');
-          final text = t.widget<Text>(find.descendant(of: find.byKey(k), matching: find.byType(Text)));
-          final style = DefaultTextStyle.of(t.element(find.byWidget(text))).style.merge(text.style);
-          expect(style.fontSize, greaterThanOrEqualTo(14));
-        }
+        final estop = find.byKey(SiteAlertScenePage.estopKey);
+        expect(find.ancestor(of: estop, matching: find.byType(Scrollable)), findsNothing);
+        final e = t.getRect(estop);
+        expect((e.width, e.height), (88, 88));
+        expect(e.bottom, lessThanOrEqualTo(size.height));
+        expect(e.right, lessThanOrEqualTo(size.width));
+        expect(e.left, greaterThan(size.width / 2), reason: '右下角拇指区');
+        final ack = t.getRect(find.byKey(SiteAlertScenePage.ackKey));
+        expect(ack.height, greaterThanOrEqualTo(44));
+        expect(ack.bottom, lessThanOrEqualTo(size.height), reason: '不用滚就点得到');
+        await sceneShow(t, find.byKey(SiteAlertScenePage.doneKey));
+        final widths = [SiteAlertScenePage.intruderKey, SiteAlertScenePage.falseKey, SiteAlertScenePage.handledKey]
+            .map((k) => t.getRect(find.byKey(k)))
+            .toList();
+        expect(widths.map((r) => r.top).toSet().length, 1, reason: '一排');
+        expect(widths.map((r) => r.width.round()).toSet().length, 1, reason: '等宽');
         await t.pumpWidget(Container());
       });
     }
@@ -310,18 +312,14 @@ void main() {
       await t.pumpWidget(Container());
     });
 
-    testWidgets('小地图：深色下只有栅格底图过地图栏同一个反色滤镜，下面那行字不过；浅色没有滤镜', (t) async {
+    testWidgets('小地图：「这件事」是深色页（外面是浅色也一样），只有栅格底图过地图栏同一个反色滤镜，下面那行字不过', (t) async {
       for (final b in Brightness.values) {
         await scene(t, FakeApi('guard'), _intrusion(), const Size(390, 844), theme: nwTheme(b));
+        await sceneShow(t, find.byKey(SiteAlertScenePage.mapKey));
         expect(find.byKey(SiteAlertScenePage.mapKey), findsOneWidget);
         final thumb = find.byType(NwMapThumb);
         expect(find.descendant(of: thumb, matching: find.byType(Image)), findsOneWidget);
         final filter = find.byKey(NwMapThumb.darkRasterKey);
-        if (b == Brightness.light) {
-          expect(filter, findsNothing);
-          expect(find.descendant(of: thumb, matching: find.byType(ColorFiltered)), findsNothing);
-          continue;
-        }
         expect(filter, findsOneWidget);
         expect(t.widget<ColorFiltered>(filter).colorFilter, darkMapRaster);
         expect(find.descendant(of: filter, matching: find.byType(Image)), findsOneWidget);
@@ -421,18 +419,20 @@ void main() {
       }
     }
 
-    testWidgets('告警页按了之后的那句话很长：在底栏里自己滚，不把按钮挤出屏幕（横屏 800×360）', (t) async {
+    testWidgets('告警页按了之后的那句话很长：钉在底下自己滚，不盖满屏、不盖住急停（横屏 800×360）', (t) async {
       t.view.physicalSize = const Size(800, 360);
       t.view.devicePixelRatio = 1.0;
       addTearDown(t.view.reset);
       final api = deterring('guard')..robotsError = SiteError(502, '站点没回 ' * 120);
       await t.pumpWidget(MaterialApp(home: SiteAlertScenePage(api: api, alert: seen())));
       await t.pumpAndSettle();
-      await t.tap(find.byKey(StopAllButton.buttonKey));
+      await t.tap(find.byKey(SiteAlertScenePage.estopKey));
       await t.pumpAndSettle();
       expect(t.takeException(), isNull);
       expect(find.byKey(SiteAlertScenePage.msgKey), findsOneWidget);
-      expect(t.getRect(find.byKey(SiteAlertScenePage.ackKey)).bottom, lessThanOrEqualTo(360));
+      final m = t.getRect(find.ancestor(of: find.byKey(SiteAlertScenePage.msgKey), matching: find.byType(Container)).first);
+      expect(m.height, lessThanOrEqualTo(120), reason: '长了自己滚，不盖满屏');
+      expect(m.right, lessThan(t.getRect(find.byKey(SiteAlertScenePage.estopKey)).left), reason: '不盖住急停');
       await t.pumpWidget(Container());
     });
   });
