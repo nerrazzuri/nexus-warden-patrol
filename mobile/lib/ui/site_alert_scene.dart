@@ -695,7 +695,9 @@ class _SiteAlertScenePageState extends State<SiteAlertScenePage> {
     final follow = _followLine();
     final situation = _whereLine();
     final handle = widget.api.session?.canHandleAlerts ?? false;
-    final elapsed = span(widget.now().millisecondsSinceEpoch - _a.firstMs);
+    // 关了的不再走表：写开了多久（稿 S-alarm-rec）
+    final closedAt = _a.resolvedMs;
+    final elapsed = span((closedAt ?? widget.now().millisecondsSinceEpoch) - _a.firstMs);
     return AnimatedOpacity(
       opacity: _dim ? D1Motion.p1FlashMinOpacity : 1.0,
       duration: const Duration(milliseconds: D1Motion.fast),
@@ -705,14 +707,16 @@ class _SiteAlertScenePageState extends State<SiteAlertScenePage> {
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
           color: c.surface,
-          border: Border.all(color: p1 ? c.error : c.outline, width: p1 ? 4 : 1),
+          border: Border.all(color: p1 && _open ? c.error : c.outline, width: p1 && _open ? 4 : 1),
           borderRadius: BorderRadius.circular(2),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Text(
-              tr('Detected ${_hm(_a.firstMs)} · $elapsed elapsed', '${_hm(_a.firstMs)} 发现 · 已过 $elapsed'),
+              closedAt != null
+                  ? tr('Detected ${_hm(_a.firstMs)} · closed after $elapsed', '${_hm(_a.firstMs)} 发现 · $elapsed 后结案')
+                  : tr('Detected ${_hm(_a.firstMs)} · $elapsed elapsed', '${_hm(_a.firstMs)} 发现 · 已过 $elapsed'),
               style: NwText.bodySmall.copyWith(color: c.textSecondary),
             ),
             const SizedBox(height: 4),
@@ -1392,7 +1396,13 @@ class _SiteAlertScenePageState extends State<SiteAlertScenePage> {
                       onPressed: () => Navigator.maybePop(context),
                     )
                   : null,
-              title: Text(tr('Incident', '这件事')),
+              title: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text(tr('Incident', '这件事')),
+                // 稿 S-alarm-rec：关了的是一条记录，顶栏写「几点 · 已结案」
+                if (_a.resolvedMs != null)
+                  Text(tr('${_hm(_a.firstMs)} · Closed', '${_hm(_a.firstMs)} · 已结案'),
+                      style: NwText.bodySmall.copyWith(color: c.textSecondary)),
+              ]),
             ),
             body: Stack(
               children: [
