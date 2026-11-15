@@ -15,6 +15,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../l10n.dart';
+import '../../model/alert.dart';
 import '../../net/app_update.dart';
 import '../../net/background_watch.dart';
 import '../../net/error_log.dart';
@@ -27,6 +28,7 @@ import '../guide.dart';
 import '../map_wizard.dart' show maybeOfferMapping;
 import '../site_duty_page.dart' show DutyTargets;
 import 'nw_now.dart';
+import 'nw_ring.dart';
 import '../site_maps.dart' show SiteMapTab;
 import '../site_robots.dart';
 import '../site_tabs.dart' show AdminHomeTab;
@@ -133,6 +135,20 @@ class _NwShellState extends State<NwShell> {
     };
     unawaited(_refresh());
     _tick = Timer.periodic(widget.clockEvery, (_) => unawaited(_refresh()));
+    pendingRing.addListener(_onRing);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _onRing());
+  }
+
+  /// App V2 来报警全屏页：后台值守拉起来的那一条是这个站点的，就整屏弹出来（别的站点的留着不管）。
+  void _onRing() {
+    final r = pendingRing.value;
+    if (r == null || !mounted) return;
+    final name = widget.entry?.name ?? widget.title ?? '';
+    if (r.site.isNotEmpty && name.isNotEmpty && r.site != name) return;
+    pendingRing.value = null;
+    final a = Alert.fromWire(<String, dynamic>{...r.alert, 'key': r.key});
+    unawaited(Navigator.of(context).push(MaterialPageRoute<void>(
+        fullscreenDialog: true, builder: (_) => RingPage(api: widget.api, alert: a, site: name.isEmpty ? r.site : name))));
   }
 
   Future<void> _refresh() async {
@@ -149,6 +165,7 @@ class _NwShellState extends State<NwShell> {
   @override
   void dispose() {
     _tick?.cancel();
+    pendingRing.removeListener(_onRing);
     unawaited(ErrorLog.instance.flush());
     ErrorLog.instance.detach(widget.api);
     _watchCtl.dispose();

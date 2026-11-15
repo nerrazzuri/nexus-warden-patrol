@@ -60,4 +60,41 @@ class AlertBellTest {
         assertEquals(listOf("A/intrusion#1"), b.clear())
         assertEquals(BellAction.None, b.onDismissed("A/intrusion#1"))
     }
+
+    @Test
+    fun 静音2分钟_不出声重弹_通知照挂_到点没人确认接着响() {
+        val b = AlertBell()
+        b.onAlert(ring(), nowMs = 0)
+        assertEquals(BellAction.Post("A/intrusion#1", false), b.mute("A/intrusion#1", nowMs = 1_000, forMs = 120_000))
+        assertEquals("静音中被划掉:重弹但不出声", BellAction.Post("A/intrusion#1", false), b.onDismissed("A/intrusion#1", nowMs = 2_000))
+        assertEquals("没到点", emptyList<BellAction>(), b.unmuteDue(120_000))
+        assertEquals(listOf(BellAction.Post("A/intrusion#1", true)), b.unmuteDue(121_000))
+        assertEquals("响过了就不再记着", emptyList<BellAction>(), b.unmuteDue(300_000))
+    }
+
+    @Test
+    fun 静音中有人确认了_收掉_到点也不响() {
+        val b = AlertBell()
+        b.onAlert(ring(), nowMs = 0)
+        b.mute("A/intrusion#1", nowMs = 0, forMs = 120_000)
+        assertEquals(BellAction.Cancel("A/intrusion#1"), b.onAlert(ring(done = true), nowMs = 1_000))
+        assertEquals(emptyList<BellAction>(), b.unmuteDue(200_000))
+    }
+
+    @Test
+    fun 静音只管响铃档_屏幕档和没有的告警_什么都不做() {
+        val b = AlertBell()
+        b.onAlert(AlertFacts("A/stuck#1", p1 = true, done = false, tier = 0, sound = false), nowMs = 0)
+        assertEquals(BellAction.None, b.mute("A/stuck#1", nowMs = 0, forMs = 120_000))
+        assertEquals(BellAction.None, b.mute("nope", nowMs = 0, forMs = 120_000))
+    }
+
+    @Test
+    fun 静音中升了档_照样不出声_到点再响() {
+        val b = AlertBell()
+        b.onAlert(ring(tier = 2), nowMs = 0)
+        b.mute("A/intrusion#1", nowMs = 0, forMs = 120_000)
+        assertEquals(BellAction.Post("A/intrusion#1", false), b.onAlert(ring(tier = 3).copy(sound = true), nowMs = 60_000))
+        assertEquals(BellAction.Post("A/intrusion#1", true), b.onAlert(ring(tier = 4).copy(sound = true), nowMs = 130_000))
+    }
 }

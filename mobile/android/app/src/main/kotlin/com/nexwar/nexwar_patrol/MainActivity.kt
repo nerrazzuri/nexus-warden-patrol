@@ -5,6 +5,8 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
+import android.os.Bundle
+import android.view.WindowManager
 import android.os.PowerManager
 import android.provider.Settings
 import io.flutter.embedding.android.FlutterActivity
@@ -17,10 +19,67 @@ class MainActivity : FlutterActivity() {
      *  去找路由、找不到就白屏(极光插件说明)。我们不用深链接:关掉。 */
     override fun shouldHandleDeeplinking(): Boolean = false
 
+    private var watch: MethodChannel? = null
+    /** 后台值守拉起的来报警(还没交给 Dart 的那一条)。 */
+    private var ring: Map<String, String>? = null
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        takeRing(intent)
+        super.onCreate(savedInstanceState)
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        // App 开着(Dart 早就在听):直接交过去;引擎还没起来的留着等 Dart 启动时来拿
+        val ch = watch
+        if (takeRing(intent) && ch != null) {
+            ring?.let { r -> ch.invokeMethod("ring", r) }
+            ring = null
+        }
+    }
+
+    /** App V2 来报警全屏页:值守服务的全屏通知拉起来的 —— 锁屏上也显示、亮屏,把那一条记下给 Dart。 */
+    private fun takeRing(i: Intent?): Boolean {
+        val key = i?.getStringExtra(WatchService.EXTRA_RING_KEY) ?: return false
+        ring = mapOf("key" to key, "alert" to (i.getStringExtra(WatchService.EXTRA_RING_ALERT) ?: "{}"),
+            "site" to (i.getStringExtra(WatchService.EXTRA_RING_SITE) ?: ""))
+        if (Build.VERSION.SDK_INT >= 27) {
+            setShowWhenLocked(true)
+            setTurnScreenOn(true)
+        } else {
+            @Suppress("DEPRECATION")
+            window.addFlags(WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON)
+        }
+        return true
+    }
+
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
-        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "nexwar/watch").setMethodCallHandler { call, result ->
+        val ch = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "nexwar/watch")
+        watch = ch
+        ch.setMethodCallHandler { call, result ->
             when (call.method) {
+                // 启动时问一次:是不是被来报警拉起来的(拿了就清掉)
+                "pendingRing" -> {
+                    result.success(ring)
+                    ring = null
+                }
+                "mute" -> {
+                    if (WatchService.running) {
+                        startService(Intent(this, WatchService::class.java).setAction(WatchService.ACTION_MUTE)
+                            .putExtra("key", call.argument<String>("key") ?: ""))
+                    }
+                    result.success(WatchService.running)
+                }
+                // 页面处理完了:锁屏上不再显示
+                "ringDone" -> {
+                    if (Build.VERSION.SDK_INT >= 27) {
+                        setShowWhenLocked(false)
+                        setTurnScreenOn(false)
+                    }
+                    result.success(true)
+                }
                 "start" -> {
                     askOnce()
                     val i = Intent(this, WatchService::class.java).setAction(WatchService.ACTION_START)
