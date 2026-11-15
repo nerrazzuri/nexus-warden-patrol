@@ -25,6 +25,8 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'site_page_test.dart' show FakeApi, onePixelPng;
 import 'support/fake_site.dart';
+import 'support/shell_nav.dart';
+import 'package:nexwar_patrol/ui/nw/nw_site_dir.dart';
 
 void _size(WidgetTester t, [Size size = const Size(390, 844)]) {
   t.view.physicalSize = size * 2;
@@ -130,14 +132,12 @@ void main() {
       final api = _Api('admin')..robotsOverride = _robotsOn('8');
       await t.pumpWidget(MaterialApp(home: NwShell(api: api, ring: () {})));
       await t.pumpAndSettle();
-      await t.tap(find.byKey(NwShell.mapKey));
-      await t.pumpAndSettle();
+      await openSiteDir(t, SiteDest.layout);
       expect(t.takeException(), isNull);
       expect(t.getRect(find.byKey(SiteMapTab.canvasKey)).height, greaterThan(150), reason: '图要占住大半屏');
-      final nav = t.getRect(find.byType(NwBottomNav));
       for (final key in [SiteMapTab.legendKey, SiteMapTab.zoomInKey, SiteMapTab.zoomOutKey, SiteMapTab.recenterKey]) {
         final r = t.getRect(find.byKey(key));
-        expect(r.bottom, lessThanOrEqualTo(nav.top), reason: '$key');
+        expect(r.bottom, lessThanOrEqualTo(360), reason: '$key');
         expect(r.top, greaterThanOrEqualTo(0), reason: '$key');
       }
       await t.pumpWidget(Container());
@@ -301,24 +301,21 @@ void main() {
       await t.pumpWidget(Container());
     });
 
-    testWidgets('外壳里的记录栏：三个分段下面都没有第二个顶栏；事件那一段还有摄像头、拦截点的入口', (t) async {
+    testWidgets('App V2 目录的「记录」：巡逻记录、事件账（有摄像头、拦截点的入口）、报警记录各推一页', (t) async {
       _size(t);
-      await t.pumpWidget(MaterialApp(home: NwShell(api: FakeApi('guard'), ring: () {})));
+      await t.pumpWidget(MaterialApp(home: NwShell(api: FakeApi('guard'), ring: () {}, updater: null)));
       await t.pumpAndSettle();
-      await t.tap(find.byKey(NwShell.historyKey));
-      await t.pumpAndSettle();
-      expect(find.byType(AppBar), findsNothing);
+      await openSiteDir(t, SiteDest.runs);
       expect(find.byKey(SiteRunsPage.todayKey), findsOneWidget);
-      await t.tap(find.byKey(NwShell.incidentsKey));
+      await t.pageBack();
       await t.pumpAndSettle();
-      expect(find.byType(AppBar), findsNothing);
+      await openSiteDir(t, SiteDest.events);
       expect(find.byType(SiteIncidentsPage), findsOneWidget);
       expect(find.byKey(const Key('btn-cameras')), findsOneWidget);
       expect(find.byKey(const Key('btn-intercepts')), findsOneWidget);
-      // W53：第三段是报警记录（原来的排程挪到了日程页）
-      await t.tap(find.byKey(NwShell.alarmsKey));
+      await t.pageBack();
       await t.pumpAndSettle();
-      expect(find.byType(AppBar), findsNothing);
+      await openSiteDir(t, SiteDest.alarms);
       expect(find.byType(AlarmLogPage), findsOneWidget);
       await t.pumpWidget(Container());
     });
@@ -507,8 +504,7 @@ void main() {
       _size(t);
       await t.pumpWidget(MaterialApp(home: NwShell(api: FakeApi('admin'), ring: () {})));
       await t.pumpAndSettle();
-      await t.tap(find.byKey(NwShell.adminKey));
-      await t.pumpAndSettle();
+      await openSiteDir(t, SiteDest.overview);
       expect(find.byType(AppBar), findsNothing);
       expect(find.byKey(AdminHomeTab.todoKey), findsOneWidget, reason: '假站点的禁行区没确认');
       expect(find.byKey(SetupChecklist.cardKey), findsOneWidget);
@@ -536,12 +532,17 @@ void main() {
             final api = _Api('admin')..robotsOverride = _robotsOn('8');
             await t.pumpWidget(MaterialApp(theme: th.value, home: NwShell(api: api, ring: () {})));
             await t.pumpAndSettle();
-            for (final k in [
-              NwShell.mapKey, NwShell.historyKey, NwShell.incidentsKey, NwShell.alarmsKey, NwShell.adminKey, //
-            ]) {
-              await t.tap(find.byKey(k));
+            for (final d in [SiteDest.layout, SiteDest.overview, SiteDest.robots]) {
+              await openSiteDir(t, d);
+              expect(t.takeException(), isNull, reason: '$d');
+              await t.tap(find.byKey(NwShell.backKey));
               await t.pumpAndSettle();
-              expect(t.takeException(), isNull, reason: '$k');
+            }
+            for (final d in [SiteDest.runs, SiteDest.events, SiteDest.alarms]) {
+              await openSiteDir(t, d);
+              expect(t.takeException(), isNull, reason: '$d');
+              await t.pageBack();
+              await t.pumpAndSettle();
             }
             await t.pumpWidget(Container());
           });

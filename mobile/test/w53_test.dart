@@ -23,6 +23,8 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'site_page_test.dart' show FakeApi;
 import 'support/fake_site.dart';
+import 'support/shell_nav.dart';
+import 'package:nexwar_patrol/ui/nw/nw_site_dir.dart';
 
 void _size(WidgetTester t, [Size size = const Size(400, 1600)]) {
   t.view.physicalSize = size * 2;
@@ -567,13 +569,9 @@ void main() {
   });
 
   group('退出站点', () {
-    testWidgets('每个角色的第 5 栏都有「退出站点」，点了回站点列表', (t) async {
+    testWidgets('每个角色的目录底部都有「退出站点」，点了回站点列表', (t) async {
       _size(t, const Size(400, 1400));
-      for (final (role, tab) in [
-        ('admin', NwShell.adminKey),
-        ('owner', NwShell.planKey),
-        ('guard', NwShell.moreKey),
-      ]) {
+      for (final role in ['admin', 'owner', 'guard', 'viewer']) {
         await t.pumpWidget(MaterialApp(
             home: Builder(builder: (c) => Scaffold(body: Center(child: TextButton(
                 onPressed: () => Navigator.push(c, MaterialPageRoute<void>(
@@ -581,14 +579,11 @@ void main() {
                 child: const Text('站点列表')))))));
         await t.tap(find.text('站点列表'));
         await t.pumpAndSettle();
-        await t.tap(find.byKey(tab));
+        await openSite(t);
+        const leave = SiteDirectory.leaveKey;
+        await t.scrollUntilVisible(find.byKey(leave), 200,
+            scrollable: find.descendant(of: find.byType(SiteDirectory), matching: find.byType(Scrollable)).first);
         await t.pumpAndSettle();
-        final leave = role == 'guard' ? MeTab.leaveKey : leaveSiteKey;
-        if (role == 'admin') {
-          await t.scrollUntilVisible(find.byKey(leave), 200,
-              scrollable: find.descendant(of: find.byType(AdminHomeTab), matching: find.byType(Scrollable)).first);
-          await t.pumpAndSettle();
-        }
         await t.tap(find.byKey(leave));
         await t.pumpAndSettle();
         await t.tap(find.byKey(leaveConfirmKey));

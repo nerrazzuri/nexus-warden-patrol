@@ -26,6 +26,7 @@ import '../app_update_ui.dart';
 import '../guide.dart';
 import '../map_wizard.dart' show maybeOfferMapping;
 import '../site_duty_page.dart';
+import '../site_maps.dart' show SiteMapTab;
 import '../site_robots.dart';
 import '../site_tabs.dart' show AdminHomeTab;
 import '../widget/alarm_widgets.dart' show StopAllButton;
@@ -33,7 +34,7 @@ import 'nw_site_dir.dart';
 import 'nw_theme.dart';
 
 /// 外壳里的三层。
-enum ShellLayer { now, site, robots, overview }
+enum ShellLayer { now, site, robots, overview, map }
 
 class NwShell extends StatefulWidget {
   final SiteApi api;
@@ -99,7 +100,6 @@ class _NwShellState extends State<NwShell> {
   Timer? _tick;
   bool _tourChecked = false;
   bool _replay = false;
-  String _toast = '';
 
   @override
   void initState() {
@@ -166,7 +166,6 @@ class _NwShellState extends State<NwShell> {
 
   void _say(String s) {
     if (!mounted) return;
-    setState(() => _toast = s);
     ScaffoldMessenger.maybeOf(context)?.showSnackBar(SnackBar(content: Text(s)));
   }
 
@@ -198,6 +197,9 @@ class _NwShellState extends State<NwShell> {
 
   bool get _dark => _layer == ShellLayer.now;
 
+  /// 「现场」底下的子层(目录点进去的、留在外壳里的那几页)。
+  bool get _sub => _layer == ShellLayer.robots || _layer == ShellLayer.overview || _layer == ShellLayer.map;
+
   @override
   Widget build(BuildContext context) {
     final api = widget.api;
@@ -207,7 +209,7 @@ class _NwShellState extends State<NwShell> {
         canPop: false,
         onPopInvokedWithResult: (didPop, _) {
           if (didPop) return;
-          if (_layer == ShellLayer.robots || _layer == ShellLayer.overview) {
+          if (_sub) {
             setState(() => _layer = ShellLayer.site);
           } else if (_layer != ShellLayer.now) {
             setState(() => _layer = ShellLayer.now);
@@ -231,14 +233,13 @@ class _NwShellState extends State<NwShell> {
                             arm: _armText(),
                             now: _now,
                             dark: dark,
-                            sub: _layer == ShellLayer.robots
-                                ? tr('Robots', '机器人')
-                                : _layer == ShellLayer.overview
-                                    ? tr('Overview', '概况')
-                                    : null,
-                            onBack: _layer == ShellLayer.robots || _layer == ShellLayer.overview
-                                ? () => setState(() => _layer = ShellLayer.site)
-                                : null,
+                            sub: switch (_layer) {
+                              ShellLayer.robots => tr('Robots', '机器人'),
+                              ShellLayer.overview => tr('Overview', '概况'),
+                              ShellLayer.map => tr('Map', '地图'),
+                              _ => null,
+                            },
+                            onBack: _sub ? () => setState(() => _layer = ShellLayer.site) : null,
                             onEstop: dark ? null : () => StopAllButton.press(context, api, _say)),
                         if (_layer == ShellLayer.now || _layer == ShellLayer.site)
                           _Segment(layer: _layer, onPick: (l) => setState(() => _layer = l)),
@@ -272,12 +273,14 @@ class _NwShellState extends State<NwShell> {
                                       api: api,
                                       entry: widget.entry,
                                       onRobots: () => setState(() => _layer = ShellLayer.robots),
-                                      onOverview: () => setState(() => _layer = ShellLayer.overview)),
+                                      onOverview: () => setState(() => _layer = ShellLayer.overview),
+                                      onLayout: () => setState(() => _layer = ShellLayer.map)),
                                   ShellLayer.overview => AdminHomeTab(
                                       key: const ValueKey('overview'),
                                       api: api,
                                       entry: widget.entry,
                                       switchTab: (_) => setState(() => _layer = ShellLayer.robots)),
+                                  ShellLayer.map => SiteMapTab(key: const ValueKey('map'), api: api),
                                   ShellLayer.robots => const SizedBox.shrink(),
                                 },
                               ]),

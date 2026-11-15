@@ -12,6 +12,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'site_page_test.dart' show FakeApi;
+import 'support/shell_nav.dart';
+import 'package:nexwar_patrol/ui/nw/nw_site_dir.dart';
 
 Future<void> _show(WidgetTester t, Widget w) async {
   appLang.value = AppLang.zh;
@@ -109,18 +111,10 @@ void main() {
     appLang.value = AppLang.zh;
   });
 
-  testWidgets('入口：保安在「我的」、管理员在「管理」、经理在「日程」右上角', (t) async {
-    for (final (role, open) in <(String, List<Key>)>[
-      ('guard', <Key>[NwShell.moreKey, MeTab.settingsKey]),
-      ('admin', <Key>[NwShell.adminKey, AdminHomeTab.entryKey('settings')]),
-      ('owner', <Key>[NwShell.planKey, SchedulePage.settingsKey]),
-    ]) {
+  testWidgets('入口：每个角色都在「现场 → 本机 → 设置」', (t) async {
+    for (final role in ['guard', 'admin', 'owner', 'viewer']) {
       await _show(t, NwShell(api: FakeApi(role), updater: null));
-      for (final k in open) {
-        await t.ensureVisible(find.byKey(k));
-        await t.tap(find.byKey(k));
-        await t.pumpAndSettle();
-      }
+      await openSiteDir(t, SiteDest.settings);
       expect(find.byType(AppSettingsPage), findsOneWidget, reason: role);
       await t.pumpWidget(const SizedBox());
     }

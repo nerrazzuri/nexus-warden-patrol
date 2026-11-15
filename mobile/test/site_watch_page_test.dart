@@ -12,6 +12,8 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'site_page_test.dart' show FakeApi;
 import 'support/fake_site.dart';
+import 'support/shell_nav.dart';
+import 'package:nexwar_patrol/ui/nw/nw_site_dir.dart';
 
 Future<void> _open(WidgetTester t, FakeApi api) async {
   await t.pumpWidget(MaterialApp(home: SiteWatchPage(api: api)));
@@ -136,12 +138,13 @@ void main() {
     await t.pump();
     expect(rang, 1);
     await t.pump(const Duration(seconds: 1));
-    await t.tap(find.byKey(NwShell.dogsKey));
-    await t.pumpAndSettle();
+    await openSiteDir(t, SiteDest.robots);
     expect(find.byType(SiteDutyPage), findsNothing);
-    await t.tap(find.byKey(const Key('open-watch')));
+    await t.tap(find.byKey(NwShell.backKey));
     await t.pumpAndSettle();
-    expect(find.byType(SiteDutyPage), findsOneWidget, reason: 'W53：值守栏是新的值守页');
+    await t.tap(find.byKey(NwShell.nowKey));
+    await t.pumpAndSettle();
+    expect(find.byType(SiteDutyPage), findsOneWidget, reason: 'App V2：「现在」是值守页');
   });
 
   test('交接班那一张：三种局面的形状都在（真站点的夹具）', () {
