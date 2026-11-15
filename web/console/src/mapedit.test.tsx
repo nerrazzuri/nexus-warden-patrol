@@ -36,7 +36,7 @@ beforeEach(() => {
     if (url.endsWith("/zones")) return Promise.resolve(json(url.includes("/home/4/") ? { ...zones, revision: 7 } : zones));
     if (url.startsWith("/api/robots")) return Promise.resolve(json({ robots: [] }));
     if (url.endsWith("/preview")) return Promise.resolve(json(META));
-    if (url.endsWith("/noise")) return Promise.resolve(json({ digest: "abc", specks: [] }));
+    if (url.endsWith("/noise")) return Promise.resolve(json({ digest: "abc", res: 0.05, max_m2: 0.2, ring_m: 0.6, specks: [{ id: 1, x: 1, y: 2, px: 3 }, { id: 2, x: 4, y: 5, px: 2 }] }));
     if (url.endsWith("/display")) return Promise.resolve(json({ rotate_deg: null, basemap: null, regions: [], terrain: [] }));
     return Promise.resolve(json({}, 404));
   }) as typeof fetch);
@@ -615,5 +615,24 @@ describe("W6-11 编辑器好上手", () => {
     await waitFor(() => expect(ui.container.querySelector("[data-preview]")).not.toBeNull());
     fireEvent.click(ui.container.querySelector("[data-preview]")!);
     expect(ui.container.textContent).not.toContain("先在上面选一个工具");
+  });
+});
+
+
+describe("用户 11-15:清噪点是编辑器里的一个工具", () => {
+  it("选「清噪点」:候选画成红圈;点一个圈 = 留着;「清掉」发 denoise 带留着的编号,然后跳到新草稿", async () => {
+    const { container: c } = page();
+    await waitFor(() => expect(c.querySelector('[data-tool="noise"]')).not.toBeNull());
+    fireEvent.click(c.querySelector('[data-tool="noise"]')!);
+    await waitFor(() => expect(c.querySelectorAll("[data-speck]").length).toBe(2));
+    expect(document.querySelector(".modal")).toBeNull();
+    fireEvent.click(c.querySelector('[data-speck="1"]')!);
+    expect(c.querySelector('[data-speck="1"]')!.getAttribute("data-kept")).toBe("1");
+    const apply = c.querySelector("[data-denoise]") as HTMLButtonElement;
+    expect(apply.textContent).toContain("1");
+    expect(apply.disabled).toBe(false);
+    fireEvent.click(apply);
+    await waitFor(() => expect(posted.some((p) => p.url.endsWith("/denoise"))).toBe(true));
+    expect(posted.find((p) => p.url.endsWith("/denoise"))!.body).toEqual({ digest: "abc", skip: [1] });
   });
 });
