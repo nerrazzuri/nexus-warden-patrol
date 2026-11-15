@@ -1254,19 +1254,25 @@ class _Handler(TlsHandlerMixin):
                 # W74:保安到场(看见人的那几种要先到场才能关);到场人取登录账号
                 a = self.site.loop.call(lambda: _sync(self.site.alerts.arrive, key, who=str(user)))
             elif m.group(2) == "backup":
-                # redesign 第 8 期:请求支援 —— 给经理、管理员推一条(P3,只记录),
-                # 原告警记下谁几点叫的人
-                orig = self.site.loop.call(lambda: _sync(self.site.alerts.book.get, key))
-                if orig is None:
-                    raise HttpError(404, "没有这条告警")
-                now = self.site._now()
-                self.site.loop.call(lambda: _sync(
-                    self.site.alerts.raise_alert, kind="backup_requested", robot=orig.robot,
-                    title=f"请求支援：{orig.title}", detail=f"{user} 正在处理，请求支援",
-                    context={"for": key, "by": str(user)}, merge=False))
-                a = self.site.loop.call(lambda: _sync(
-                    self.site.alerts.amend, key,
-                    context={**orig.context, "backup_by": str(user), "backup_ms": now})) or orig
+                # redesign 第 8 期:请求支援 —— 给经理、管理员推一条(P3,只记录),原告警记下
+                # 谁几点叫的人。外审 1 #2:查、起、记在同一步里(loop 串行),只合进新字段;
+                # 叫过的不再起第二条;关了的 409
+                def backup():
+                    orig = self.site.alerts.book.get(key)
+                    if orig is None:
+                        raise HttpError(404, "没有这条告警")
+                    if orig.resolved_ms is not None:
+                        raise HttpError(409, "这条告警已经关闭,不用再叫人")
+                    if orig.context.get("backup_by"):
+                        return orig
+                    now = self.site._now()
+                    self.site.alerts.raise_alert(
+                        kind="backup_requested", robot=orig.robot, title=f"请求支援：{orig.title}",
+                        detail=f"{user} 正在处理，请求支援", context={"for": key, "by": str(user)},
+                        merge=False)
+                    return self.site.alerts.amend(
+                        key, context={"backup_by": str(user), "backup_ms": now}) or orig
+                a = self.site.loop.call(lambda: _sync(backup))
             else:
                 # W44:结论(确认有人 / 误报 / 处理好了);不给 = 空(老客户端照旧能用),别的值 400
                 verdict = d.get("verdict", "")
@@ -1793,8 +1799,11 @@ class _Handler(TlsHandlerMixin):
         self._send_json(200, {**got, "label": label})
 
     def _goto_plan(self, method: str, robot_id: str, user) -> None:
-        """redesign 第 8 期(稿 V4-alarm):派去一个点之前按电量算来回够不够。``GET ?x=&y=`` →
-        电量、直线距离、来回约用几 %、出动线、够不够(没位姿 / 没电量 = null,不猜)。"""
+        """redesign 第 8 期(稿 V4-alarm):派去一个点之前按电量算来回够不够。
+        ``GET ?x=&y=&map_id=&map_version=`` → 电量、直线距离、来回约用几 %、出动线、够不够
+        (没位姿 / 没电量 = null,不猜)。
+        外审 1 #3:回程跟报警出动一样算 —— 回原点 / 换电位里远的那个(直线走的机器人沿来路退回再回),
+        不是「回到现在站的地方」;门槛用同一个 ``alarm_line``。"""
         if method != "GET":
             raise HttpError(405, "只支持 GET")
         self._need(user, PATROL)
@@ -1808,19 +1817,43 @@ class _Handler(TlsHandlerMixin):
             raise HttpError(400, "要 x、y(数)") from None
         if not (math.isfinite(x) and math.isfinite(y)):
             raise HttpError(400, "要 x、y(数)")
+        map_id = (q.get("map_id") or [""])[0]
+        version = (q.get("map_version") or [""])[0]
+        from nexwar_site import energy
         from nexwar_site.dispatcher import battery_pct
-        from nexwar_site.energy import COST_FLOOR_PCT, RETURN_FACTOR, alarm_line, drain_pct, walk_s
         fresh_fn = getattr(self.site.dispatcher, "_fresh", None)
         pct = battery_pct(c, fresh=bool(fresh_fn(c)) if fresh_fn else True)
         t = getattr(c, "telemetry", None)
         pose = getattr(t, "pose", None)
+        if pose is not None and map_id and getattr(pose, "map_id", map_id) != map_id:
+            pose = None                              # 机器人在别的图上:不算直线
+        nothing = {"battery_pct": pct, "dist_m": None, "cost_pct": None, "line_pct": None,
+                   "enough": None}
         if pose is None:
-            return self._send_json(200, {"battery_pct": pct, "dist_m": None, "cost_pct": None,
-                                         "line_pct": None, "enough": None})
-        dist = math.hypot(float(pose.x) - x, float(pose.y) - y)
-        go = walk_s(dist)
-        cost = max(COST_FLOOR_PCT, drain_pct(go * 2) * RETURN_FACTOR)
-        line = alarm_line(go, go)
+            return self._send_json(200, nothing)
+        here = (float(pose.x), float(pose.y))
+        dist = math.hypot(here[0] - x, here[1] - y)
+        go = energy.walk_s(dist)
+        back_s: float | None = None
+        homes_fn = getattr(self.site.incidents, "homes", None) if self.site.incidents else None
+        homes = []
+        if homes_fn is not None and map_id:
+            try:
+                homes = list(homes_fn(robot_id, map_id, version) or [])
+            except Exception:
+                log.exception("%s 回哪查不到", robot_id)
+        if homes:
+            caps = c.capabilities.tasks.get("goto", {}) if c.capabilities else {}
+            retrace = str(caps.get("path", "straight")) != "planned"
+            back = 0.0
+            for hx, hy in homes:
+                m = ((dist + math.hypot(here[0] - hx, here[1] - hy)) if retrace
+                     else math.hypot(x - hx, y - hy))
+                back = max(back, m)
+            back_s = energy.walk_s(back)
+        line = energy.alarm_line(go, back_s)
+        total_s = go + (back_s if back_s is not None else go)
+        cost = max(energy.COST_FLOOR_PCT, energy.drain_pct(total_s) * energy.RETURN_FACTOR)
         return self._send_json(200, {"battery_pct": pct, "dist_m": round(dist, 1),
                                      "cost_pct": round(cost, 1), "line_pct": round(line, 1),
                                      "enough": None if pct is None else bool(pct >= line)})
@@ -1840,8 +1873,8 @@ class _Handler(TlsHandlerMixin):
             raise HttpError(400, "时间段要在 7 天以内")
         from nexwar_site.charging import _CHARGING
         rows = self.site.alerts.db.query(
-            "SELECT robot_id, state, at_ms FROM charge_log WHERE at_ms >= ? AND at_ms <= ? "
-            "ORDER BY at_ms", (since - 86_400_000, until))
+            "SELECT robot_id, state, at_ms FROM charge_log WHERE at_ms <= ? ORDER BY at_ms",
+            (until,))                    # 外审 1 #10:窗口前的最后一条也算(进窗口时还在充)
         spans: list[dict[str, Any]] = []
         open_: dict[str, int] = {}
         for r in rows:

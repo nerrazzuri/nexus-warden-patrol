@@ -182,7 +182,8 @@ export function IncidentView(props: {
         {dispatch ? (
           sending ? (
             <GoLookCard canFix={pageAllowed("admin/localization", props.role)} map={{ map_id: point.map_id, version: point.map_version }}
-              at={[point.x, point.y]} units={props.units} onClose={() => setSending(false)} say={props.say} />
+              at={[point.x, point.y]} units={props.units} onClose={() => setSending(false)} say={props.say}
+              exclude={a.audience === "help" && a.robot && a.robot !== "site" ? a.robot : undefined} />
           ) : (
             <button type="button" class="btn" onClick={() => setSending(true)}>{where ? t("incDispatchTo", { where }) : t("incDispatch")}</button>
           )

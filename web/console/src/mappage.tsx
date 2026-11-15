@@ -600,7 +600,7 @@ export function GoLookCard(props: { map: { map_id: string; version: string }; at
     setPlan(null);
     if (!choice) return;
     let live = true;
-    api<{ battery_pct: number | null; cost_pct: number | null; enough: boolean | null }>("GET", `/api/robots/${enc(choice)}/goto-plan?x=${x}&y=${y}`)
+    api<{ battery_pct: number | null; cost_pct: number | null; enough: boolean | null }>("GET", `/api/robots/${enc(choice)}/goto-plan?x=${x}&y=${y}&map_id=${enc(props.map.map_id)}&map_version=${enc(props.map.version)}`)
       .then((p) => live && setPlan(p)).catch(() => {});
     return () => { live = false; };
   }, [choice, x, y]);
