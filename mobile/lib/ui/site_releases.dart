@@ -14,6 +14,7 @@ import '../net/site_client.dart';
 import 'app_settings.dart' show openSettings;
 import 'nw/nw_button.dart';
 import 'nw/nw_p4_admin.dart';
+import 'nw/nw_ask.dart';
 import 'nw/nw_theme.dart';
 import 'nw/nw_widgets.dart';
 
@@ -29,21 +30,15 @@ class SiteReleasesPage extends StatefulWidget {
   State<SiteReleasesPage> createState() => _SiteReleasesPageState();
 }
 
-class _SiteReleasesPageState extends State<SiteReleasesPage> {
+class _SiteReleasesPageState extends State<SiteReleasesPage> with NwAsk {
   late Future<Map<String, dynamic>> _data = widget.api.releases();
 
   void _snack(String t) {
     if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(t)));
   }
 
-  Future<String?> _pick(List<String> names) => showDialog<String>(
-        context: context,
-        builder: (c) => SimpleDialog(title: Text(tr('Which release', '哪一版')), children: [
-          for (final n in names)
-            SimpleDialogOption(
-                key: Key('pick-rel-$n'), onPressed: () => Navigator.pop(c, n), child: Text(n)),
-        ]),
-      );
+  Future<String?> _pick(List<String> names) => ask<String>(
+      title: tr('Which release', '哪一版'), choices: [for (final n in names) AskChoice(n, n, key: Key('pick-rel-$n'))]);
 
   Future<void> _act(String robot, String action, List<String> names) async {
     var name = '';
@@ -69,24 +64,12 @@ class _SiteReleasesPageState extends State<SiteReleasesPage> {
       return;
     }
     if (action != 'install') {
-      final ok = await showDialog<bool>(
-        context: context,
-        builder: (c) => AlertDialog(
-          title: Text(tr('$robot: $what $name', '$robot $what $name')),
-          content: Text(tr(
-              'The robot restarts its software (tens of seconds) and refuses while a task is running. Continue?',
-              '机器人上的程序要重启（约几十秒），执行任务时会拒绝。确定继续？')),
-          actions: [
-            TextButton(
-                onPressed: () => Navigator.pop(c, false), child: Text(tr('Cancel', '取消'))),
-            FilledButton(
-                key: const Key('rel-confirm'),
-                onPressed: () => Navigator.pop(c, true),
-                child: Text(tr('Confirm', '确定'))),
-          ],
-        ),
-      );
-      if (ok != true) return;
+      final ok = await askYes(tr('$robot: $what $name', '$robot $what $name'),
+          body: tr('The robot restarts its software (tens of seconds) and refuses while a task is running. Continue?',
+              '机器人上的程序要重启（约几十秒），执行任务时会拒绝。确定继续？'),
+          ok: tr('Confirm', '确定'),
+          okKey: const Key('rel-confirm'));
+      if (!ok) return;
     }
     try {
       final r = await widget.api.releaseAction(robot, action, name: name);
@@ -111,15 +94,13 @@ class _SiteReleasesPageState extends State<SiteReleasesPage> {
     final checks = (r['checks'] as List? ?? const []).whereType<Map>().toList()
       ..sort((a, b) => _rank(a).compareTo(_rank(b)));
     final blocking = (r['blocking'] as List? ?? const []).length;
-    return showDialog<void>(
-      context: context,
-      builder: (c) {
-        final nw = Nw.of(c);
-        return AlertDialog(
-          title: Text(title),
-          content: SizedBox(
-            width: double.maxFinite,
-            child: ListView(shrinkWrap: true, children: [
+    final nw = Nw.of(context);
+    // App V2：清单就地摆在页面上面（不弹窗），「确定」收起
+    return ask<bool>(
+          title: title,
+          choices: const [],
+          cancel: tr('OK', '确定'),
+          content: Column(crossAxisAlignment: CrossAxisAlignment.stretch, mainAxisSize: MainAxisSize.min, children: [
               // 能切是绿的；不能切是红的（拦着的那几项也是红的，只是提示的是橙的）
               Text(
                   r['ok'] == true
@@ -144,12 +125,7 @@ class _SiteReleasesPageState extends State<SiteReleasesPage> {
                       style: NwText.bodyMedium.copyWith(color: nw.text)),
                   subtitle: Text('${ch['detail'] ?? ''}', style: NwText.bodySmall.copyWith(color: nw.textSecondary)),
                 ),
-            ]),
-          ),
-          actions: [TextButton(onPressed: () => Navigator.pop(c), child: Text(tr('OK', '确定')))],
-        );
-      },
-    );
+            ]));
   }
 
   /// 清单项的名字：狗与站点报的是英文键，给人看中文（不认识的原样显示）。
@@ -218,6 +194,7 @@ class _SiteReleasesPageState extends State<SiteReleasesPage> {
               await _data.catchError((Object _) => <String, dynamic>{});
             },
             child: ListView(padding: const EdgeInsets.only(bottom: Nw.s24), children: [
+              askStrip(),
               section(tr('Versions on the site', '站点上的版本'), [
                 if (rels.isEmpty) line(Text(tr('No releases registered yet', '暂无已登记版本'), style: sub)),
                 for (final r in rels)

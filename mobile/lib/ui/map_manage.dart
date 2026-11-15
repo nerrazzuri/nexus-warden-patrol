@@ -11,6 +11,7 @@ import '../l10n.dart';
 import '../net/site_client.dart';
 import '../net/site_text.dart' show siteKnown;
 import 'map_wizard.dart';
+import 'nw/nw_ask.dart';
 import 'nw/nw_button.dart';
 import 'nw/nw_theme.dart';
 import 'nw/nw_widgets.dart';
@@ -112,7 +113,7 @@ String mapSwitchText(Map<String, dynamic> a, {required int nowMs, double? rateBp
   }
 }
 
-class _MapManagePageState extends State<MapManagePage> {
+class _MapManagePageState extends State<MapManagePage> with NwAsk {
   /// 每台机器人上一次看到的下载量（字节、站点时刻），用来算速度。
   final Map<String, (num, int)> _lastDl = {};
   final Map<String, double> _rate = {};
@@ -193,13 +194,9 @@ class _MapManagePageState extends State<MapManagePage> {
       _snack(tr('No robot online can switch maps right now', '现在没有在线、能换图的机器人'));
       return;
     }
-    final robot = await showDialog<String>(
-      context: context,
-      builder: (c) => SimpleDialog(title: Text(tr('Send to which robot', '下发给哪台机器人')), children: [
-        for (final r in robots)
-          SimpleDialogOption(key: Key('send-to-$r'), onPressed: () => Navigator.pop(c, r), child: Text(r)),
-      ]),
-    );
+    final robot = await ask<String>(
+        title: tr('Send to which robot', '下发给哪台机器人'),
+        choices: [for (final r in robots) AskChoice(r, r, key: Key('send-to-$r'))]);
     if (robot == null || !mounted) return;
     try {
       Map<String, dynamic> r;
@@ -207,23 +204,13 @@ class _MapManagePageState extends State<MapManagePage> {
         r = await api.activateMap(robot, mapId, version);
       } on SiteError catch (e) {
         if (e.status != 409 || e.body['reason'] != 'no_home' || !mounted) rethrow;
-        final go = await showDialog<bool>(
-          context: context,
-          builder: (c) => AlertDialog(
-            title: Text(tr('$robot has no origin on this version', '$robot 在此版本上尚未标原点')),
-            content: Text(tr(
+        final go = await askYes(tr('$robot has no origin on this version', '$robot 在此版本上尚未标原点'),
+            body: tr(
                 'The robot takes no patrols until its origin is marked. Drive it in front of the dock and tap "Mark origin here" on its page.',
-                '标原点之前机器人不执行巡逻。请将机器人开到充电桩前，在机器人页点「在这儿标原点」。')),
-            actions: [
-              TextButton(onPressed: () => Navigator.pop(c, false), child: Text(tr('Cancel', '取消'))),
-              FilledButton(
-                  key: const Key('send-without-home'),
-                  onPressed: () => Navigator.pop(c, true),
-                  child: Text(tr('Send anyway', '仍然下发'))),
-            ],
-          ),
-        );
-        if (go != true) return;
+                '标原点之前机器人不执行巡逻。请将机器人开到充电桩前，在机器人页点「在这儿标原点」。'),
+            ok: tr('Send anyway', '仍然下发'),
+            okKey: const Key('send-without-home'));
+        if (!go) return;
         r = await api.activateMap(robot, mapId, version, withoutHome: true);
       }
       final ack = (r['ack'] as Map?) ?? const {};
@@ -237,18 +224,12 @@ class _MapManagePageState extends State<MapManagePage> {
   }
 
   Future<void> _delete(String mapId, String version) async {
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (c) => AlertDialog(
-        title: Text(tr('Delete this version?', '删除此版本？')),
-        content: Text(tr("This can't be undone. No robot is using this version.", '删除后无法恢复。当前没有机器人使用此版本。')),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(c, false), child: Text(tr('Cancel', '取消'))),
-          FilledButton(key: const Key('delete-ok'), onPressed: () => Navigator.pop(c, true), child: Text(tr('Delete', '删除'))),
-        ],
-      ),
-    );
-    if (ok != true) return;
+    final ok = await askYes(tr('Delete this version?', '删除此版本？'),
+        body: tr("This can't be undone. No robot is using this version.", '删除后无法恢复。当前没有机器人使用此版本。'),
+        ok: tr('Delete', '删除'),
+        okKey: const Key('delete-ok'),
+        danger: true);
+    if (!ok) return;
     try {
       await api.deleteMapVersion(mapId, version);
     } on SiteError catch (e) {
@@ -258,17 +239,11 @@ class _MapManagePageState extends State<MapManagePage> {
   }
 
   Future<void> _rollback(String robot, Map rb) async {
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (c) => AlertDialog(
-        title: Text(tr('Switch $robot to ${rb['map_id']} ${versionLabel('${rb['version']}')}?', '把 $robot 换回 ${rb['map_id']} ${versionLabel('${rb['version']}')}？')),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(c, false), child: Text(tr('Cancel', '取消'))),
-          FilledButton(key: const Key('rollback-ok'), onPressed: () => Navigator.pop(c, true), child: Text(tr('Roll back', '回退'))),
-        ],
-      ),
-    );
-    if (ok != true) return;
+    final ok = await askYes(
+        tr('Switch $robot to ${rb['map_id']} ${versionLabel('${rb['version']}')}?', '把 $robot 换回 ${rb['map_id']} ${versionLabel('${rb['version']}')}？'),
+        ok: tr('Roll back', '回退'),
+        okKey: const Key('rollback-ok'));
+    if (!ok) return;
     try {
       await api.rollbackMap(robot);
       _snack(tr('$robot is rolling back', '$robot 正在回退到上一版'));
@@ -390,6 +365,7 @@ class _MapManagePageState extends State<MapManagePage> {
       body: RefreshIndicator(
         onRefresh: _load,
         child: ListView(padding: const EdgeInsets.only(bottom: Nw.s24), children: [
+          askStrip(),
           if (_err.isNotEmpty) Padding(padding: const EdgeInsets.all(Nw.s16), child: NwNotice(tone: NwTone.error, text: _err)),
           if (ov == null && _err.isEmpty) const Padding(padding: EdgeInsets.all(Nw.s24), child: Center(child: CircularProgressIndicator())),
           if (ov != null && maps.isEmpty)
