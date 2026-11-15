@@ -88,6 +88,8 @@ def run_one(job: dict, slot: int, args) -> dict:
         return res
     case = json.loads((d / "case.json").read_text())
     cfg = job["config"]
+    # A/B/C 对照(11-16):search=false 关掉路线检查的局部搜索(拒了就拒,跟 master 一样);默认开
+    env["NAV_ROUTE_SEARCH"] = cfg.get("search", "true")
     try:                                       # 几何判定器的答案(导航 V1 第 2 节):这一趟该过还是该拒
         from oracle_label import label
         oracle = label(d)

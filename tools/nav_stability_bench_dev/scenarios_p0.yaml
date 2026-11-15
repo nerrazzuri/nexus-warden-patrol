@@ -1676,6 +1676,349 @@ scenarios:
     y: 3.75
     sx: 6.3
     sy: 0.5
+- id: p0_L90_w105
+  family: p0_L90
+  width_m: 1.05
+  timeout_s: 150
+  min_pose_clearance_m: 0.05
+  defaults: *id001
+  sim:
+    exec_noise: true
+    loc_noise_m: *id002
+    loc_noise_deg: *id003
+    obstacle_delay_ms: *id004
+  start:
+  - 2.525
+  - 4.5
+  - -1.5707963267948966
+  goals:
+  - - -6.0
+    - -2.475
+    - 3.141592653589793
+  - - 2.525
+    - 4.5
+    - 1.5707963267948966
+  obstacles:
+  - x: 0.0
+    y: -8.9
+    sx: 18.0
+    sy: 0.2
+  - x: 2.5
+    y: -5.9
+    sx: 13.0
+    sy: 5.8
+  - x: -8.9
+    y: -3.9
+    sx: 0.2
+    sy: 9.8
+  - x: -1.0
+    y: -0.475
+    sx: 6.0
+    sy: 2.95
+  - x: 6.025
+    y: -0.5
+    sx: 5.95
+    sy: 5.0
+  - x: -3.5
+    y: 1.5
+    sx: 11.0
+    sy: 1.0
+  - x: -5.0
+    y: 5.4
+    sx: 8.0
+    sy: 6.8
+  - x: 8.9
+    y: 5.4
+    sx: 0.2
+    sy: 6.8
+  - x: 0.0
+    y: 8.9
+    sx: 18.0
+    sy: 0.2
+- id: p0_S_w105
+  family: p0_S
+  width_m: 1.05
+  timeout_s: 150
+  min_pose_clearance_m: 0.05
+  defaults: *id001
+  sim:
+    exec_noise: true
+    loc_noise_m: *id002
+    loc_noise_deg: *id003
+    obstacle_delay_ms: *id004
+  start:
+  - -7.5
+  - -2.0
+  - 0.0
+  goals:
+  - - 7.5
+    - 2.0
+    - 0.0
+  - - -7.5
+    - -2.0
+    - 3.141592653589793
+  obstacles:
+  - x: 0.0
+    y: -8.9
+    sx: 18.0
+    sy: 0.2
+  - x: 0.0
+    y: -5.675
+    sx: 12.0
+    sy: 6.25
+  - x: 2.75
+    y: -0.55
+    sx: 6.5
+    sy: 4.0
+  - x: -3.775
+    y: 0.5
+    sx: 4.45
+    sy: 4.0
+  - x: -8.9
+    y: 0.0
+    sx: 0.2
+    sy: 17.6
+  - x: 8.9
+    y: 0.0
+    sx: 0.2
+    sy: 17.6
+  - x: 0.0
+    y: 5.65
+    sx: 12.0
+    sy: 6.3
+  - x: 0.0
+    y: 8.9
+    sx: 18.0
+    sy: 0.2
+- id: p0_deadend_w105
+  family: p0_deadend
+  width_m: 1.05
+  timeout_s: 150
+  min_pose_clearance_m: 0.05
+  defaults: *id001
+  sim:
+    exec_noise: true
+    loc_noise_m: *id002
+    loc_noise_deg: *id003
+    obstacle_delay_ms: *id004
+  start:
+  - -5.0
+  - 0.0
+  - 0.0
+  goals:
+  - - 3.2
+    - 0.0
+    - 0.0
+  - - -5.0
+    - 0.0
+    - 3.141592653589793
+  obstacles:
+  - x: 2.5
+    y: -1.775
+    sx: 5.0
+    sy: 2.45
+  - x: 4.5
+    y: -0.025
+    sx: 1.0
+    sy: 1.05
+  - x: 2.5
+    y: 1.75
+    sx: 5.0
+    sy: 2.5
+- id: p0_door_turn_w105
+  family: p0_door_turn
+  width_m: 1.05
+  timeout_s: 150
+  min_pose_clearance_m: 0.05
+  defaults: *id001
+  sim:
+    exec_noise: true
+    loc_noise_m: *id002
+    loc_noise_deg: *id003
+    obstacle_delay_ms: *id004
+  start:
+  - -5.0
+  - 0.0
+  - 0.0
+  goals:
+  - - 0.7000000000000001
+    - 7.0
+    - 1.5707963267948966
+  - - -5.0
+    - 0.0
+    - 3.141592653589793
+  obstacles:
+  - x: 4.425
+    y: -4.75
+    sx: 9.15
+    sy: 8.5
+  - x: 5.125
+    y: 2.25
+    sx: 7.75
+    sy: 5.5
+  - x: 0.0
+    y: 4.65
+    sx: 0.3
+    sy: 8.3
+  - x: 8.9
+    y: 6.9
+    sx: 0.2
+    sy: 3.8
+  - x: 4.425
+    y: 8.9
+    sx: 9.15
+    sy: 0.2
+- id: p0_corridor_oncoming_w105
+  family: p0_corridor_oncoming
+  width_m: 1.05
+  timeout_s: 180
+  min_pose_clearance_m: 0.05
+  defaults: *id001
+  sim:
+    exec_noise: true
+    loc_noise_m: *id002
+    loc_noise_deg: *id003
+    obstacle_delay_ms: *id004
+  start:
+  - -7.0
+  - 0.0
+  - 0.0
+  goals:
+  - - 7.0
+    - -3.0
+    - -1.5707963267948966
+  obstacles:
+  - x: 0.0
+    y: -4.75
+    sx: 10.0
+    sy: 8.5
+  - x: 0.0
+    y: 4.75
+    sx: 10.0
+    sy: 8.5
+  actors:
+  - name: p1
+    kind: person
+    sx: 0.45
+    sy: 0.45
+    h: 1.7
+    speed: 1.0
+    mode: once
+    path:
+    - - 8.0
+      - 0.0
+    - - 5.5
+      - 0.0
+    - - 1.5
+      - 0.0
+      - 12.0
+    - - 5.5
+      - 0.0
+    - - 8.0
+      - 3.0
+    start:
+      robot_within:
+      - -4.5
+      - 0.0
+      - 0.8
+- id: p0_loc_jump_corridor_w105
+  family: p0_loc_jump_corridor
+  width_m: 1.05
+  timeout_s: 150
+  min_pose_clearance_m: 0.05
+  defaults: *id001
+  sim:
+    exec_noise: true
+    loc_noise_m: *id002
+    loc_noise_deg: *id003
+    obstacle_delay_ms: *id004
+    fault_trigger: within:0.0,0.0,0.4
+    lateral_m:
+      choice:
+      - -0.5
+      - -0.35
+      - -0.2
+      - 0.2
+      - 0.35
+      - 0.5
+    fault_duration_s: 3.0
+  start:
+  - -7.0
+  - 0.0
+  - 0.0
+  goals:
+  - - 7.0
+    - 0.0
+    - 0.0
+  - - -7.0
+    - 0.0
+    - 3.141592653589793
+  obstacles:
+  - x: 0.0
+    y: -4.75
+    sx: 8.0
+    sy: 8.5
+  - x: 0.0
+    y: 4.75
+    sx: 8.0
+    sy: 8.5
+- id: p0_aisles_w105
+  family: p0_aisles
+  width_m: 1.05
+  timeout_s: 150
+  min_pose_clearance_m: 0.05
+  defaults: *id001
+  sim:
+    exec_noise: true
+    loc_noise_m: *id002
+    loc_noise_deg: *id003
+    obstacle_delay_ms: *id004
+  start:
+  - -7.0
+  - -3.0
+  - 0.0
+  goals:
+  - - 2.2
+    - -3.0
+    - 0.0
+  - - 2.2
+    - 0.0
+    - 0.0
+  - - 2.2
+    - 3.0
+    - 0.0
+  - - -7.0
+    - 0.0
+    - 3.141592653589793
+  obstacles:
+  - x: 0.15
+    y: -4.275
+    sx: 6.3
+    sy: 1.45
+  - x: 3.15
+    y: -3.025
+    sx: 0.3
+    sy: 1.05
+  - x: 0.15
+    y: -1.525
+    sx: 6.3
+    sy: 1.95
+  - x: 3.15
+    y: -0.025
+    sx: 0.3
+    sy: 1.05
+  - x: 0.15
+    y: 1.475
+    sx: 6.3
+    sy: 1.95
+  - x: 3.15
+    y: 2.975
+    sx: 0.3
+    sy: 1.05
+  - x: 0.15
+    y: 3.75
+    sx: 6.3
+    sy: 0.5
 - id: p0_L90_w110
   family: p0_L90
   width_m: 1.1
@@ -2015,6 +2358,349 @@ scenarios:
     y: 3.0
     sx: 0.3
     sy: 1.1
+  - x: 0.15
+    y: 3.775
+    sx: 6.3
+    sy: 0.45
+- id: p0_L90_w115
+  family: p0_L90
+  width_m: 1.15
+  timeout_s: 150
+  min_pose_clearance_m: 0.05
+  defaults: *id001
+  sim:
+    exec_noise: true
+    loc_noise_m: *id002
+    loc_noise_deg: *id003
+    obstacle_delay_ms: *id004
+  start:
+  - 2.575
+  - 4.5
+  - -1.5707963267948966
+  goals:
+  - - -6.0
+    - -2.425
+    - 3.141592653589793
+  - - 2.575
+    - 4.5
+    - 1.5707963267948966
+  obstacles:
+  - x: 0.0
+    y: -8.9
+    sx: 18.0
+    sy: 0.2
+  - x: 2.5
+    y: -5.9
+    sx: 13.0
+    sy: 5.8
+  - x: -8.9
+    y: -3.9
+    sx: 0.2
+    sy: 9.8
+  - x: -1.0
+    y: -0.425
+    sx: 6.0
+    sy: 2.85
+  - x: 6.075
+    y: -0.5
+    sx: 5.85
+    sy: 5.0
+  - x: -3.5
+    y: 1.5
+    sx: 11.0
+    sy: 1.0
+  - x: -5.0
+    y: 5.4
+    sx: 8.0
+    sy: 6.8
+  - x: 8.9
+    y: 5.4
+    sx: 0.2
+    sy: 6.8
+  - x: 0.0
+    y: 8.9
+    sx: 18.0
+    sy: 0.2
+- id: p0_S_w115
+  family: p0_S
+  width_m: 1.15
+  timeout_s: 150
+  min_pose_clearance_m: 0.05
+  defaults: *id001
+  sim:
+    exec_noise: true
+    loc_noise_m: *id002
+    loc_noise_deg: *id003
+    obstacle_delay_ms: *id004
+  start:
+  - -7.5
+  - -2.0
+  - 0.0
+  goals:
+  - - 7.5
+    - 2.0
+    - 0.0
+  - - -7.5
+    - -2.0
+    - 3.141592653589793
+  obstacles:
+  - x: 0.0
+    y: -8.9
+    sx: 18.0
+    sy: 0.2
+  - x: 0.0
+    y: -5.7
+    sx: 12.0
+    sy: 6.2
+  - x: 2.775
+    y: -0.6
+    sx: 6.45
+    sy: 4.0
+  - x: -3.8
+    y: 0.55
+    sx: 4.4
+    sy: 4.0
+  - x: -8.9
+    y: 0.0
+    sx: 0.2
+    sy: 17.6
+  - x: 8.9
+    y: 0.0
+    sx: 0.2
+    sy: 17.6
+  - x: 0.0
+    y: 5.675
+    sx: 12.0
+    sy: 6.25
+  - x: 0.0
+    y: 8.9
+    sx: 18.0
+    sy: 0.2
+- id: p0_deadend_w115
+  family: p0_deadend
+  width_m: 1.15
+  timeout_s: 150
+  min_pose_clearance_m: 0.05
+  defaults: *id001
+  sim:
+    exec_noise: true
+    loc_noise_m: *id002
+    loc_noise_deg: *id003
+    obstacle_delay_ms: *id004
+  start:
+  - -5.0
+  - 0.0
+  - 0.0
+  goals:
+  - - 3.2
+    - 0.0
+    - 0.0
+  - - -5.0
+    - 0.0
+    - 3.141592653589793
+  obstacles:
+  - x: 2.5
+    y: -1.8
+    sx: 5.0
+    sy: 2.4
+  - x: 4.5
+    y: -0.025
+    sx: 1.0
+    sy: 1.15
+  - x: 2.5
+    y: 1.775
+    sx: 5.0
+    sy: 2.45
+- id: p0_door_turn_w115
+  family: p0_door_turn
+  width_m: 1.15
+  timeout_s: 150
+  min_pose_clearance_m: 0.05
+  defaults: *id001
+  sim:
+    exec_noise: true
+    loc_noise_m: *id002
+    loc_noise_deg: *id003
+    obstacle_delay_ms: *id004
+  start:
+  - -5.0
+  - 0.0
+  - 0.0
+  goals:
+  - - 0.7000000000000001
+    - 7.0
+    - 1.5707963267948966
+  - - -5.0
+    - 0.0
+    - 3.141592653589793
+  obstacles:
+  - x: 4.425
+    y: -4.8
+    sx: 9.15
+    sy: 8.4
+  - x: 5.125
+    y: 2.2
+    sx: 7.75
+    sy: 5.6
+  - x: 0.0
+    y: 4.675
+    sx: 0.3
+    sy: 8.25
+  - x: 8.9
+    y: 6.9
+    sx: 0.2
+    sy: 3.8
+  - x: 4.425
+    y: 8.9
+    sx: 9.15
+    sy: 0.2
+- id: p0_corridor_oncoming_w115
+  family: p0_corridor_oncoming
+  width_m: 1.15
+  timeout_s: 180
+  min_pose_clearance_m: 0.05
+  defaults: *id001
+  sim:
+    exec_noise: true
+    loc_noise_m: *id002
+    loc_noise_deg: *id003
+    obstacle_delay_ms: *id004
+  start:
+  - -7.0
+  - 0.0
+  - 0.0
+  goals:
+  - - 7.0
+    - -3.0
+    - -1.5707963267948966
+  obstacles:
+  - x: 0.0
+    y: -4.8
+    sx: 10.0
+    sy: 8.4
+  - x: 0.0
+    y: 4.775
+    sx: 10.0
+    sy: 8.45
+  actors:
+  - name: p1
+    kind: person
+    sx: 0.45
+    sy: 0.45
+    h: 1.7
+    speed: 1.0
+    mode: once
+    path:
+    - - 8.0
+      - 0.0
+    - - 5.5
+      - 0.0
+    - - 1.5
+      - 0.0
+      - 12.0
+    - - 5.5
+      - 0.0
+    - - 8.0
+      - 3.0
+    start:
+      robot_within:
+      - -4.5
+      - 0.0
+      - 0.8
+- id: p0_loc_jump_corridor_w115
+  family: p0_loc_jump_corridor
+  width_m: 1.15
+  timeout_s: 150
+  min_pose_clearance_m: 0.05
+  defaults: *id001
+  sim:
+    exec_noise: true
+    loc_noise_m: *id002
+    loc_noise_deg: *id003
+    obstacle_delay_ms: *id004
+    fault_trigger: within:0.0,0.0,0.4
+    lateral_m:
+      choice:
+      - -0.5
+      - -0.35
+      - -0.2
+      - 0.2
+      - 0.35
+      - 0.5
+    fault_duration_s: 3.0
+  start:
+  - -7.0
+  - 0.0
+  - 0.0
+  goals:
+  - - 7.0
+    - 0.0
+    - 0.0
+  - - -7.0
+    - 0.0
+    - 3.141592653589793
+  obstacles:
+  - x: 0.0
+    y: -4.8
+    sx: 8.0
+    sy: 8.4
+  - x: 0.0
+    y: 4.775
+    sx: 8.0
+    sy: 8.45
+- id: p0_aisles_w115
+  family: p0_aisles
+  width_m: 1.15
+  timeout_s: 150
+  min_pose_clearance_m: 0.05
+  defaults: *id001
+  sim:
+    exec_noise: true
+    loc_noise_m: *id002
+    loc_noise_deg: *id003
+    obstacle_delay_ms: *id004
+  start:
+  - -7.0
+  - -3.0
+  - 0.0
+  goals:
+  - - 2.2
+    - -3.0
+    - 0.0
+  - - 2.2
+    - 0.0
+    - 0.0
+  - - 2.2
+    - 3.0
+    - 0.0
+  - - -7.0
+    - 0.0
+    - 3.141592653589793
+  obstacles:
+  - x: 0.15
+    y: -4.3
+    sx: 6.3
+    sy: 1.4
+  - x: 3.15
+    y: -3.0
+    sx: 0.3
+    sy: 1.2
+  - x: 0.15
+    y: -1.475
+    sx: 6.3
+    sy: 1.85
+  - x: 3.15
+    y: 0.0
+    sx: 0.3
+    sy: 1.1
+  - x: 0.15
+    y: 1.475
+    sx: 6.3
+    sy: 1.85
+  - x: 3.15
+    y: 2.975
+    sx: 0.3
+    sy: 1.15
   - x: 0.15
     y: 3.775
     sx: 6.3
@@ -2362,6 +3048,692 @@ scenarios:
     y: 3.8
     sx: 6.3
     sy: 0.4
+- id: p0_L90_w130
+  family: p0_L90
+  width_m: 1.3
+  timeout_s: 150
+  min_pose_clearance_m: 0.05
+  defaults: *id001
+  sim:
+    exec_noise: true
+    loc_noise_m: *id002
+    loc_noise_deg: *id003
+    obstacle_delay_ms: *id004
+  start:
+  - 2.65
+  - 4.5
+  - -1.5707963267948966
+  goals:
+  - - -6.0
+    - -2.35
+    - 3.141592653589793
+  - - 2.65
+    - 4.5
+    - 1.5707963267948966
+  obstacles:
+  - x: 0.0
+    y: -8.9
+    sx: 18.0
+    sy: 0.2
+  - x: 2.5
+    y: -5.9
+    sx: 13.0
+    sy: 5.8
+  - x: -8.9
+    y: -3.9
+    sx: 0.2
+    sy: 9.8
+  - x: -1.0
+    y: -0.35
+    sx: 6.0
+    sy: 2.7
+  - x: 6.15
+    y: -0.5
+    sx: 5.7
+    sy: 5.0
+  - x: -3.5
+    y: 1.5
+    sx: 11.0
+    sy: 1.0
+  - x: -5.0
+    y: 5.4
+    sx: 8.0
+    sy: 6.8
+  - x: 8.9
+    y: 5.4
+    sx: 0.2
+    sy: 6.8
+  - x: 0.0
+    y: 8.9
+    sx: 18.0
+    sy: 0.2
+- id: p0_S_w130
+  family: p0_S
+  width_m: 1.3
+  timeout_s: 150
+  min_pose_clearance_m: 0.05
+  defaults: *id001
+  sim:
+    exec_noise: true
+    loc_noise_m: *id002
+    loc_noise_deg: *id003
+    obstacle_delay_ms: *id004
+  start:
+  - -7.5
+  - -2.0
+  - 0.0
+  goals:
+  - - 7.5
+    - 2.0
+    - 0.0
+  - - -7.5
+    - -2.0
+    - 3.141592653589793
+  obstacles:
+  - x: 0.0
+    y: -8.9
+    sx: 18.0
+    sy: 0.2
+  - x: 0.0
+    y: -5.725
+    sx: 12.0
+    sy: 6.15
+  - x: 2.825
+    y: -0.65
+    sx: 6.35
+    sy: 4.0
+  - x: -3.825
+    y: 0.65
+    sx: 4.35
+    sy: 4.0
+  - x: -8.9
+    y: 0.0
+    sx: 0.2
+    sy: 17.6
+  - x: 8.9
+    y: 0.0
+    sx: 0.2
+    sy: 17.6
+  - x: 0.0
+    y: 5.725
+    sx: 12.0
+    sy: 6.15
+  - x: 0.0
+    y: 8.9
+    sx: 18.0
+    sy: 0.2
+- id: p0_deadend_w130
+  family: p0_deadend
+  width_m: 1.3
+  timeout_s: 150
+  min_pose_clearance_m: 0.05
+  defaults: *id001
+  sim:
+    exec_noise: true
+    loc_noise_m: *id002
+    loc_noise_deg: *id003
+    obstacle_delay_ms: *id004
+  start:
+  - -5.0
+  - 0.0
+  - 0.0
+  goals:
+  - - 3.2
+    - 0.0
+    - 0.0
+  - - -5.0
+    - 0.0
+    - 3.141592653589793
+  obstacles:
+  - x: 2.5
+    y: -1.825
+    sx: 5.0
+    sy: 2.35
+  - x: 4.5
+    y: 0.0
+    sx: 1.0
+    sy: 1.3
+  - x: 2.5
+    y: 1.825
+    sx: 5.0
+    sy: 2.35
+- id: p0_door_turn_w130
+  family: p0_door_turn
+  width_m: 1.3
+  timeout_s: 150
+  min_pose_clearance_m: 0.05
+  defaults: *id001
+  sim:
+    exec_noise: true
+    loc_noise_m: *id002
+    loc_noise_deg: *id003
+    obstacle_delay_ms: *id004
+  start:
+  - -5.0
+  - 0.0
+  - 0.0
+  goals:
+  - - 0.7000000000000001
+    - 7.0
+    - 1.5707963267948966
+  - - -5.0
+    - 0.0
+    - 3.141592653589793
+  obstacles:
+  - x: 4.425
+    y: -4.825
+    sx: 9.15
+    sy: 8.35
+  - x: 5.125
+    y: 2.175
+    sx: 7.75
+    sy: 5.65
+  - x: 0.0
+    y: 4.725
+    sx: 0.3
+    sy: 8.15
+  - x: 8.9
+    y: 6.9
+    sx: 0.2
+    sy: 3.8
+  - x: 4.425
+    y: 8.9
+    sx: 9.15
+    sy: 0.2
+- id: p0_corridor_oncoming_w130
+  family: p0_corridor_oncoming
+  width_m: 1.3
+  timeout_s: 180
+  min_pose_clearance_m: 0.05
+  defaults: *id001
+  sim:
+    exec_noise: true
+    loc_noise_m: *id002
+    loc_noise_deg: *id003
+    obstacle_delay_ms: *id004
+  start:
+  - -7.0
+  - 0.0
+  - 0.0
+  goals:
+  - - 7.0
+    - -3.0
+    - -1.5707963267948966
+  obstacles:
+  - x: 0.0
+    y: -4.825
+    sx: 10.0
+    sy: 8.35
+  - x: 0.0
+    y: 4.825
+    sx: 10.0
+    sy: 8.35
+  actors:
+  - name: p1
+    kind: person
+    sx: 0.45
+    sy: 0.45
+    h: 1.7
+    speed: 1.0
+    mode: once
+    path:
+    - - 8.0
+      - 0.0
+    - - 5.5
+      - 0.0
+    - - 1.5
+      - 0.0
+      - 12.0
+    - - 5.5
+      - 0.0
+    - - 8.0
+      - 3.0
+    start:
+      robot_within:
+      - -4.5
+      - 0.0
+      - 0.8
+- id: p0_loc_jump_corridor_w130
+  family: p0_loc_jump_corridor
+  width_m: 1.3
+  timeout_s: 150
+  min_pose_clearance_m: 0.05
+  defaults: *id001
+  sim:
+    exec_noise: true
+    loc_noise_m: *id002
+    loc_noise_deg: *id003
+    obstacle_delay_ms: *id004
+    fault_trigger: within:0.0,0.0,0.4
+    lateral_m:
+      choice:
+      - -0.5
+      - -0.35
+      - -0.2
+      - 0.2
+      - 0.35
+      - 0.5
+    fault_duration_s: 3.0
+  start:
+  - -7.0
+  - 0.0
+  - 0.0
+  goals:
+  - - 7.0
+    - 0.0
+    - 0.0
+  - - -7.0
+    - 0.0
+    - 3.141592653589793
+  obstacles:
+  - x: 0.0
+    y: -4.825
+    sx: 8.0
+    sy: 8.35
+  - x: 0.0
+    y: 4.825
+    sx: 8.0
+    sy: 8.35
+- id: p0_aisles_w130
+  family: p0_aisles
+  width_m: 1.3
+  timeout_s: 150
+  min_pose_clearance_m: 0.05
+  defaults: *id001
+  sim:
+    exec_noise: true
+    loc_noise_m: *id002
+    loc_noise_deg: *id003
+    obstacle_delay_ms: *id004
+  start:
+  - -7.0
+  - -3.0
+  - 0.0
+  goals:
+  - - 2.2
+    - -3.0
+    - 0.0
+  - - 2.2
+    - 0.0
+    - 0.0
+  - - 2.2
+    - 3.0
+    - 0.0
+  - - -7.0
+    - 0.0
+    - 3.141592653589793
+  obstacles:
+  - x: 0.15
+    y: -4.325
+    sx: 6.3
+    sy: 1.35
+  - x: 3.15
+    y: -3.0
+    sx: 0.3
+    sy: 1.3
+  - x: 0.15
+    y: -1.5
+    sx: 6.3
+    sy: 1.7
+  - x: 3.15
+    y: 0.0
+    sx: 0.3
+    sy: 1.3
+  - x: 0.15
+    y: 1.5
+    sx: 6.3
+    sy: 1.7
+  - x: 3.15
+    y: 3.0
+    sx: 0.3
+    sy: 1.3
+  - x: 0.15
+    y: 3.825
+    sx: 6.3
+    sy: 0.35
+- id: p0_L90_w140
+  family: p0_L90
+  width_m: 1.4
+  timeout_s: 150
+  min_pose_clearance_m: 0.05
+  defaults: *id001
+  sim:
+    exec_noise: true
+    loc_noise_m: *id002
+    loc_noise_deg: *id003
+    obstacle_delay_ms: *id004
+  start:
+  - 2.7
+  - 4.5
+  - -1.5707963267948966
+  goals:
+  - - -6.0
+    - -2.3
+    - 3.141592653589793
+  - - 2.7
+    - 4.5
+    - 1.5707963267948966
+  obstacles:
+  - x: 0.0
+    y: -8.9
+    sx: 18.0
+    sy: 0.2
+  - x: 2.5
+    y: -5.9
+    sx: 13.0
+    sy: 5.8
+  - x: -8.9
+    y: -3.9
+    sx: 0.2
+    sy: 9.8
+  - x: -1.0
+    y: -0.3
+    sx: 6.0
+    sy: 2.6
+  - x: 6.2
+    y: -0.5
+    sx: 5.6
+    sy: 5.0
+  - x: -3.5
+    y: 1.5
+    sx: 11.0
+    sy: 1.0
+  - x: -5.0
+    y: 5.4
+    sx: 8.0
+    sy: 6.8
+  - x: 8.9
+    y: 5.4
+    sx: 0.2
+    sy: 6.8
+  - x: 0.0
+    y: 8.9
+    sx: 18.0
+    sy: 0.2
+- id: p0_S_w140
+  family: p0_S
+  width_m: 1.4
+  timeout_s: 150
+  min_pose_clearance_m: 0.05
+  defaults: *id001
+  sim:
+    exec_noise: true
+    loc_noise_m: *id002
+    loc_noise_deg: *id003
+    obstacle_delay_ms: *id004
+  start:
+  - -7.5
+  - -2.0
+  - 0.0
+  goals:
+  - - 7.5
+    - 2.0
+    - 0.0
+  - - -7.5
+    - -2.0
+    - 3.141592653589793
+  obstacles:
+  - x: 0.0
+    y: -8.9
+    sx: 18.0
+    sy: 0.2
+  - x: 0.0
+    y: -5.75
+    sx: 12.0
+    sy: 6.1
+  - x: 2.85
+    y: -0.7
+    sx: 6.3
+    sy: 4.0
+  - x: -3.85
+    y: 0.7
+    sx: 4.3
+    sy: 4.0
+  - x: -8.9
+    y: 0.0
+    sx: 0.2
+    sy: 17.6
+  - x: 8.9
+    y: 0.0
+    sx: 0.2
+    sy: 17.6
+  - x: 0.0
+    y: 5.75
+    sx: 12.0
+    sy: 6.1
+  - x: 0.0
+    y: 8.9
+    sx: 18.0
+    sy: 0.2
+- id: p0_deadend_w140
+  family: p0_deadend
+  width_m: 1.4
+  timeout_s: 150
+  min_pose_clearance_m: 0.05
+  defaults: *id001
+  sim:
+    exec_noise: true
+    loc_noise_m: *id002
+    loc_noise_deg: *id003
+    obstacle_delay_ms: *id004
+  start:
+  - -5.0
+  - 0.0
+  - 0.0
+  goals:
+  - - 3.2
+    - 0.0
+    - 0.0
+  - - -5.0
+    - 0.0
+    - 3.141592653589793
+  obstacles:
+  - x: 2.5
+    y: -1.85
+    sx: 5.0
+    sy: 2.3
+  - x: 4.5
+    y: 0.0
+    sx: 1.0
+    sy: 1.4
+  - x: 2.5
+    y: 1.85
+    sx: 5.0
+    sy: 2.3
+- id: p0_door_turn_w140
+  family: p0_door_turn
+  width_m: 1.4
+  timeout_s: 150
+  min_pose_clearance_m: 0.05
+  defaults: *id001
+  sim:
+    exec_noise: true
+    loc_noise_m: *id002
+    loc_noise_deg: *id003
+    obstacle_delay_ms: *id004
+  start:
+  - -5.0
+  - 0.0
+  - 0.0
+  goals:
+  - - 0.7000000000000001
+    - 7.0
+    - 1.5707963267948966
+  - - -5.0
+    - 0.0
+    - 3.141592653589793
+  obstacles:
+  - x: 4.425
+    y: -4.85
+    sx: 9.15
+    sy: 8.3
+  - x: 5.125
+    y: 2.15
+    sx: 7.75
+    sy: 5.7
+  - x: 0.0
+    y: 4.75
+    sx: 0.3
+    sy: 8.1
+  - x: 8.9
+    y: 6.9
+    sx: 0.2
+    sy: 3.8
+  - x: 4.425
+    y: 8.9
+    sx: 9.15
+    sy: 0.2
+- id: p0_corridor_oncoming_w140
+  family: p0_corridor_oncoming
+  width_m: 1.4
+  timeout_s: 180
+  min_pose_clearance_m: 0.05
+  defaults: *id001
+  sim:
+    exec_noise: true
+    loc_noise_m: *id002
+    loc_noise_deg: *id003
+    obstacle_delay_ms: *id004
+  start:
+  - -7.0
+  - 0.0
+  - 0.0
+  goals:
+  - - 7.0
+    - -3.0
+    - -1.5707963267948966
+  obstacles:
+  - x: 0.0
+    y: -4.85
+    sx: 10.0
+    sy: 8.3
+  - x: 0.0
+    y: 4.85
+    sx: 10.0
+    sy: 8.3
+  actors:
+  - name: p1
+    kind: person
+    sx: 0.45
+    sy: 0.45
+    h: 1.7
+    speed: 1.0
+    mode: once
+    path:
+    - - 8.0
+      - 0.0
+    - - 5.5
+      - 0.0
+    - - 1.5
+      - 0.0
+      - 12.0
+    - - 5.5
+      - 0.0
+    - - 8.0
+      - 3.0
+    start:
+      robot_within:
+      - -4.5
+      - 0.0
+      - 0.8
+- id: p0_loc_jump_corridor_w140
+  family: p0_loc_jump_corridor
+  width_m: 1.4
+  timeout_s: 150
+  min_pose_clearance_m: 0.05
+  defaults: *id001
+  sim:
+    exec_noise: true
+    loc_noise_m: *id002
+    loc_noise_deg: *id003
+    obstacle_delay_ms: *id004
+    fault_trigger: within:0.0,0.0,0.4
+    lateral_m:
+      choice:
+      - -0.5
+      - -0.35
+      - -0.2
+      - 0.2
+      - 0.35
+      - 0.5
+    fault_duration_s: 3.0
+  start:
+  - -7.0
+  - 0.0
+  - 0.0
+  goals:
+  - - 7.0
+    - 0.0
+    - 0.0
+  - - -7.0
+    - 0.0
+    - 3.141592653589793
+  obstacles:
+  - x: 0.0
+    y: -4.85
+    sx: 8.0
+    sy: 8.3
+  - x: 0.0
+    y: 4.85
+    sx: 8.0
+    sy: 8.3
+- id: p0_aisles_w140
+  family: p0_aisles
+  width_m: 1.4
+  timeout_s: 150
+  min_pose_clearance_m: 0.05
+  defaults: *id001
+  sim:
+    exec_noise: true
+    loc_noise_m: *id002
+    loc_noise_deg: *id003
+    obstacle_delay_ms: *id004
+  start:
+  - -7.0
+  - -3.0
+  - 0.0
+  goals:
+  - - 2.2
+    - -3.0
+    - 0.0
+  - - 2.2
+    - 0.0
+    - 0.0
+  - - 2.2
+    - 3.0
+    - 0.0
+  - - -7.0
+    - 0.0
+    - 3.141592653589793
+  obstacles:
+  - x: 0.15
+    y: -4.35
+    sx: 6.3
+    sy: 1.3
+  - x: 3.15
+    y: -3.0
+    sx: 0.3
+    sy: 1.4
+  - x: 0.15
+    y: -1.5
+    sx: 6.3
+    sy: 1.6
+  - x: 3.15
+    y: 0.0
+    sx: 0.3
+    sy: 1.4
+  - x: 0.15
+    y: 1.5
+    sx: 6.3
+    sy: 1.6
+  - x: 3.15
+    y: 3.0
+    sx: 0.3
+    sy: 1.4
+  - x: 0.15
+    y: 3.85
+    sx: 6.3
+    sy: 0.3
 - id: p0_utrap_mapped
   family: p0_utrap
   timeout_s: 150
