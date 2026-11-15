@@ -2385,3 +2385,31 @@ input[type="checkbox"], input[type="radio"] { width: 18px; height: 18px; }
   .rb-check { grid-template-columns: 20px minmax(0, 1fr); }
   .rb-check .rb-cval, .rb-check .rb-cact { grid-column: 2; justify-content: flex-start; }
 }
+
+/* 第六期:现场设置 → 人员(S-users) */
+.us-body { grid-template-columns: minmax(0, 1fr) 440px; }
+.us .sp-table tbody tr { cursor: pointer; }
+.us .sp-table tbody tr:hover { background: var(--c-surfaceVariant); }
+.us .sp-table tbody tr.on { background: var(--c-surfaceVariant); box-shadow: inset 2px 0 0 var(--c-primary); }
+.us .sp-table tr.off td { color: var(--c-textSecondary); }
+.us .user-name { border: 0; background: none; padding: 0; font: inherit; font-weight: 600; color: var(--c-text); cursor: pointer; }
+.us-perms { border-top: 1px solid var(--c-outline); padding-top: 10px; padding-bottom: 6px; }
+.us-perms summary { font-weight: 600; cursor: pointer; }
+.us-perms ul { margin: 8px 0 0; display: flex; flex-direction: column; gap: var(--sp-1); color: var(--c-textSecondary); }
+.us-req { flex-wrap: wrap; justify-content: space-between; }
+.us-reqwho { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.us-reqwho select { height: var(--ctl-md); }
+.us-req .rb-row .btn { flex: none; min-width: 112px; }
+.us-card { display: flex; flex-direction: column; gap: var(--sp-2); padding: 20px 20px 14px; }
+.us-name { margin: 0; font-size: 24px; line-height: 30px; text-align: center; }
+.us-sub { margin: 0; text-align: center; }
+.us-role { display: flex; flex-direction: column; gap: var(--sp-1); align-items: center; margin-top: 8px; }
+.us-role .seg { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); width: 100%; }
+.us-role .seg button { min-width: 0; padding: 0 6px; }
+.us-acts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--sp-2); margin-top: 4px; }
+.us-acts .btn { min-width: 0; justify-content: center; }
+.us-hint { text-align: center; padding: 0; }
+.us-ask { margin-top: 4px; }
+.us-audit { display: flex; flex-direction: column; }
+.us-audit > li { padding: 10px 20px; border-top: 1px solid var(--c-outline); }
+@media (max-width: 1279px) { .us-body { grid-template-columns: minmax(0, 1fr); } }
