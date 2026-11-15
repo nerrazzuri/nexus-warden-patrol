@@ -127,7 +127,7 @@ class _AlarmLogPageState extends State<AlarmLogPage> {
   /// 右边的状态小块：没结的红，误报 / 确认入侵 / 已解决灰底。
   Widget _state(NwColors c, Alert a) {
     final (String t, bool open) = a.resolvedMs == null
-        ? (a.ackedBy.isNotEmpty ? (tr('Handling', '处理中'), true) : (tr('Open', '未处理'), true))
+        ? (a.ackedBy.isNotEmpty ? (tr('In progress', '处理中'), true) : (tr('Open', '未处理'), true))
         : switch (a.verdict) {
             'false_alarm' => (tr('False alarm', '误报'), false),
             'intruder' => (tr('Confirmed intrusion', '确认入侵'), false),

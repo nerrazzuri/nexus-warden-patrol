@@ -143,7 +143,7 @@ class _SiteLayoutPageState extends State<SiteLayoutPage> {
                       height: 200,
                       load: () => loadMapPicture(widget.api, m.$1, m.$2),
                       label: _robotsOnMap.isEmpty ? '' : tr('In use by ${_robotsOnMap.join(sep)}', '${_robotsOnMap.join(sep)} 在用'),
-                      action: tr('Full map', '全屏地图'),
+                      action: tr('Full-screen map', '全屏地图'),
                       onTap: _fullMap)),
             label(tr('Layers', '图层')),
             row('zones', Icons.shield_outlined, tr('Zones', '防区'), tr('Draw and edit zones on the map', '在地图上画、改防区'), _fullMap),

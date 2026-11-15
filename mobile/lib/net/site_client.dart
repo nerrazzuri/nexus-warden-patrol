@@ -265,7 +265,7 @@ String modeText(Map<String, dynamic> m) {
   final label = switch (m['mode']) {
     'armed' => tr('Armed', '布防'),
     'home' => tr('Stay', '留守'),
-    'visitor' => tr('Temp disarm', '临时撤防'),
+    'visitor' => tr('Temporary disarm', '临时撤防'),
     _ => '${m['mode']}',
   };
   final until = m['until_ms'];
@@ -1624,7 +1624,7 @@ class SiteClient implements SiteApi {
 
   @override
   Future<Uint8List> supportBundle() =>
-      _bytes('/api/support-bundle', maxBundleBytes, tr('Diagnostics bundle', '诊断包'));
+      _bytes('/api/support-bundle', maxBundleBytes, tr('Support bundle', '诊断包'));
 
   @override
   Future<Map<String, dynamic>> uploadProblem(Uint8List gz,

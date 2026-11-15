@@ -1303,7 +1303,7 @@ class _SiteAlertScenePageState extends State<SiteAlertScenePage> {
           )
         : null;
     return [
-      Text(tr('What happened', '事件经过'), style: NwText.titleSmall.copyWith(color: c.text)),
+      Text(tr('Timeline', '事件经过'), style: NwText.titleSmall.copyWith(color: c.text)),
       const SizedBox(height: 4),
       for (final r in rows)
         Padding(

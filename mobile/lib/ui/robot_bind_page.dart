@@ -752,7 +752,7 @@ class _RobotWifiPageState extends State<RobotWifiPage> with _StickerScan<RobotWi
     final c = Nw.of(context);
     final ch = _change;
     final manage = widget.api.session?.canManageRobots == true;
-    return _Frame(title: tr('Change WiFi', '换 WiFi'), children: [
+    return _Frame(title: tr('Change Wi-Fi', '换 WiFi'), children: [
       Text(tr(
           'Scan the sticker next to the robot. The new WiFi takes effect after it is approved on the site.',
           '在机器人旁扫描贴纸。新 WiFi 在站点确认后生效。'),

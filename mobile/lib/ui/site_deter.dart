@@ -46,7 +46,7 @@ String deterClipLabel(String c) => switch (c) {
 
 /// 每一路的名字、默认开多久（秒）。
 Map<String, (String, double)> get deterOutputs => <String, (String, double)>{
-      'strobe': (tr('Strobe light', '警灯'), 60),
+      'strobe': (tr('Strobe', '警灯'), 60),
       'siren': (tr('Siren', '警笛'), 10),
       'spotlight': (tr('Spotlight', '聚光灯'), 120),
       'speaker': (tr('Speaker', '喇叭'), 30),
@@ -412,7 +412,7 @@ class _SiteDeterPageState extends State<SiteDeterPage> {
               const SizedBox(width: Nw.s8),
               SizedBox(
                   width: 96,
-                  child: btn(const Key('deter-say'), tr('Speak', '喊话'), _canSay(_lang)
+                  child: btn(const Key('deter-say'), tr('Announce', '喊话'), _canSay(_lang)
                       ? () {
                           final t = _tts.text.trim();
                           if (t.isEmpty) return;
