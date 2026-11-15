@@ -139,9 +139,10 @@ class AlertDesk:
             enqueue(c, a, self._now())
 
     def backup(self, key: str, *, who: str) -> Alert:
-        """redesign 第 8 期 / 外审 2 #2:保安请求支援 —— 起一条 ``backup_requested``
-        (推经理、管理员)、原告警记下谁几点叫的人,**两笔写进同一个事务**(写到一半失败,重试不会多推一条);叫过的直接回原告警;
-        关了的、没有的抛 ``AlertNotFound`` / ``ValueError``。"""
+        """redesign 第 8 期 / 外审 2 #2 / 外审 3 #1:保安请求支援 —— 起一条 ``backup_requested``
+        (推经理、管理员)、原告警记下谁几点叫的人,**两笔写进同一个事务**;事务没提交成功就把告警簿的
+        内存也退回去(不然重试时内存里「已经叫过人」,数据库里却没有)。叫过的直接回原告警;关了的、
+        没有的抛 ``AlertNotFound`` / ``ValueError``。"""
         orig = self.book.get(key)
         if orig is None:
             raise AlertNotFound(key)
@@ -150,17 +151,34 @@ class AlertDesk:
         if orig.context.get("backup_by"):
             return orig
         now = self._now()
-        self._deferred = []
-        with self.db.tx() as c:
-            self._tx = c
+        ctx: dict[str, Any] = {}
+        if self.context_for is not None:
             try:
-                self.raise_alert(kind="backup_requested", robot=orig.robot,
-                                 title=f"请求支援：{orig.title}",
-                                 detail=f"{who} 正在处理，请求支援",
-                                 context={"for": key, "by": who}, merge=False)
-                a = self.book.amend(key, now_ms=now, context={"backup_by": who, "backup_ms": now})
-            finally:
-                self._tx = None
+                ctx.update(self.context_for(orig.robot) or {})
+            except Exception:
+                log.exception("%s 的现场拿不到", orig.robot)
+        ctx.update({"for": key, "by": who})
+        code = errcodes.for_alert("backup_requested")
+        if code is not None:
+            ctx.setdefault("err", code.hex)
+        snap = self.book.snapshot()
+        self._deferred = []
+        try:
+            with self.db.tx() as c:
+                self._tx = c
+                try:
+                    new = self.book.raise_alert(kind="backup_requested", robot=orig.robot,
+                                                title=f"请求支援：{orig.title}",
+                                                detail=f"{who} 正在处理，请求支援", now_ms=now,
+                                                context=ctx, merge=False)
+                    a = self.book.amend(key, now_ms=now,
+                                        context={"backup_by": who, "backup_ms": now})
+                finally:
+                    self._tx = None
+        except Exception:
+            self.book.restore_snapshot(snap)        # 外审 3 #1:库没写成,内存也退回去
+            self._deferred = []
+            raise
         pending, self._deferred = self._deferred, []
         if self._publish is not None:
             for w in pending:
@@ -168,6 +186,7 @@ class AlertDesk:
                     self._publish({"kind": "alert", "alert": w})
                 except Exception:
                     log.exception("告警推不出去(%s),库里已经记下", w.get("key"))
+        self._event("alert raised", new)
         return a
 
     # ------------------------------------------------------------ 操作

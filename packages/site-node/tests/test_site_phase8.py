@@ -41,7 +41,8 @@ def test_派前电量_有位姿就算来回_没有就都是null(站点):
     _等(lambda: s.req("GET", "/api/robots/A", token=gina)[1].get("fresh"))
     code, d = s.req("GET", "/api/robots/A/goto-plan?x=3&y=4", token=gina)
     assert code == 200, d
-    assert set(d) == {"battery_pct", "dist_m", "cost_pct", "line_pct", "enough"}
+    assert {"battery_pct", "dist_m", "cost_pct", "line_pct", "enough"} <= set(d)
+    assert d["reason"] == "no_map"          # 外审 3 #2:不带地图参数算不了,明说
     if d["dist_m"] is not None:
         assert d["cost_pct"] >= 3.0 and d["line_pct"] > d["cost_pct"] - 3.0
         assert d["enough"] in (True, False, None)
@@ -78,3 +79,58 @@ def test_充电时段_窗口前就在充的也算(站点):
     code, d = s.req("GET", f"/api/robots/charging?since={now - 3_600_000}&until={now}", token=gina)
     assert code == 200, d
     assert d["spans"] == [{"robot": "B", "from_ms": now - 3_600_000, "to_ms": None}]
+
+
+def test_请求支援_事务失败_内存也退回_重试才真的起一条(站点, monkeypatch):
+    s = 站点
+    alice, gina = _登(s, "alice"), _登(s, "gina")
+    _等(lambda: s.req("GET", "/api/robots/A", token=alice)[1].get("fresh"))
+    s.loop.call(lambda: s.dog.emergency_stop(True))
+    a = _等(lambda: _告警(s, gina, "estop_pressed"))
+    desk = s.api.alerts
+    real = desk.book.amend
+    calls = {"n": 0}
+
+    def boom(*args, **kw):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise RuntimeError("写原告警时断了")
+        return real(*args, **kw)
+    monkeypatch.setattr(desk.book, "amend", boom)
+    code, _ = s.req("POST", f"/api/alerts/{quote(a['key'], safe='')}/backup", {}, token=gina)
+    assert code >= 500
+    # 外审 3 #1:库里没有支援告警,内存里也没有;原告警没有「叫过人」的标记
+    assert not s.db.query("SELECT 1 FROM alerts WHERE kind='backup_requested'")
+    assert not [x for x in desk.open() if x["kind"] == "backup_requested"]
+    assert "backup_by" not in desk.book.get(a["key"]).context
+    code, d = s.req("POST", f"/api/alerts/{quote(a['key'], safe='')}/backup", {}, token=gina)
+    assert code == 200 and d["alert"]["context"]["backup_by"] == "gina"
+    assert len(s.db.query("SELECT 1 FROM alerts WHERE kind='backup_requested'")) == 1
+    assert len([x for x in desk.open() if x["kind"] == "backup_requested"]) == 1
+
+
+def test_派前电量_只有待命点没原点_不说够(站点):
+    s = 站点
+    alice, gina = _登(s, "alice"), _登(s, "gina")
+    _等(lambda: s.req("GET", "/api/robots/A", token=alice)[1].get("fresh"))
+    robots = s.req("GET", "/api/robots/overview", token=alice)[1]["robots"]
+    r = next(x for x in robots if x["robot_id"] == "A")
+    m = r.get("map") or {}
+    mid, ver = m.get("id") or "m", m.get("version") or "1"
+    from nexwar_site.standby import StandbyManager
+    stb = StandbyManager(s.db, s.disp, now_ms=wall)
+    stb.set("A", "dock", map_id=mid, map_version=ver, x=0.0, y=0.0, yaw=0.0, default=True)
+    assert stb.home("A", mid, ver) is None
+    url = f"/api/robots/A/goto-plan?x=1&y=0&map_id={mid}&map_version={ver}"
+    code, d = s.req("GET", url, token=gina)
+    assert code == 200, d
+    assert d["enough"] is None and d["reason"] == "no_home"
+    with s.db.tx() as c:
+        c.execute("INSERT INTO homes(robot_id, map_id, map_version, name, x, y, yaw) "
+                  "VALUES (?,?,?,?,?,?,?)", ("A", mid, ver, "home", 0.0, 0.0, 0.0))
+    code, d = s.req("GET", url, token=gina)
+    assert code == 200, d
+    if d.get("reason") == "no_pose":
+        assert d["enough"] is None
+    else:
+        assert d["line_pct"] >= 25.0 + 3.0 * 1.5 - 0.01 and d["enough"] in (True, False)

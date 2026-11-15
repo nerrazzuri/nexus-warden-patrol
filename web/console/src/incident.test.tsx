@@ -332,3 +332,19 @@ describe("外审 1(新网站)", () => {
     expect(texts).not.toContain(t("monLook"));
   });
 });
+
+describe("外审 3 #1:接手当前选中的那条,中央不跳", () => {
+  it("两条没确认的 P2,点开新的那条再接手它:排序把另一条顶到前面,中央还留在它身上", () => {
+    const older = alert({ key: "p-old", kind: "stuck", audience: "help", level: "P2", title: "A 被挡住", robot: "A", first_ms: 10 });
+    const newer = alert({ key: "p-new", kind: "stuck", audience: "help", level: "P2", title: "B 被挡住", robot: "B", first_ms: 20 });
+    const r = render(<MonitorPage units={[unit("A", "patrolling")]} alerts={[older, newer]} now={1000} role="guard" me="gina"
+      say={() => {}} refresh={async () => {}} onZoom={() => {}} />);
+    const rows = Array.from(r.container.querySelectorAll(".mon-qrow"));
+    const row = rows.find((li) => li.textContent?.includes("B"))!;
+    fireEvent.click(row.querySelector("button")!);
+    expect(r.container.querySelector(".inc")!.getAttribute("data-key")).toBe("p-new");
+    r.rerender(<MonitorPage units={[unit("A", "patrolling")]} alerts={[older, { ...newer, acked_by: "gina", acked_ms: 900 }]} now={1001} role="guard" me="gina"
+      say={() => {}} refresh={async () => {}} onZoom={() => {}} />);
+    expect(r.container.querySelector(".inc")!.getAttribute("data-key")).toBe("p-new");
+  });
+});
