@@ -10,6 +10,8 @@ import json
 import logging
 from typing import Any
 
+from nexwar_site.dispatcher import DispatchRefused
+
 log = logging.getLogger(__name__)
 
 THENS = ("stay", "standby", "home")
@@ -71,13 +73,18 @@ class LookDesk:
                     r = await self.standby.return_to(rid, issued_by=p["by"])
                 log.info("%s 看完了,派%s:%s", rid, label, json.dumps(r, ensure_ascii=False)[:200])
                 return
-            except Exception as exc:         # 站点拒了(DispatchRefused)或别的:记下、试下一招
+            except DispatchRefused as exc:          # 站点拒了:记下原因、试下一招
                 why = f"{why}; " if why else ""
                 why += f"{label}:{exc}"
                 log.warning("%s 看完了,派%s没成:%s", rid, label, exc)
+            except Exception as exc:
+                why = f"{why}; " if why else ""
+                why += f"{label}:{type(exc).__name__}"
+                log.exception("%s 看完了,派%s出错", rid, label)
         if self.alerts is not None:
             try:
-                self.alerts.raise_alert(kind="standby_failed", robot=rid, title="看完后没能回去,停在原地",
-                                        detail=why[:300], context={"look_task": p.get("task_id", "")})
+                self.alerts.raise_alert(kind="standby_failed", robot=rid,
+                                        title="看完后没能回去,停在原地", detail=why[:300],
+                                        context={"look_task": p.get("task_id", "")})
             except Exception:
                 log.exception("%s 回不去的告警没报成", rid)
