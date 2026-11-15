@@ -2431,3 +2431,40 @@ input[type="checkbox"], input[type="radio"] { width: 18px; height: 18px; }
 .ly-stage { display: flex; flex-direction: column; min-width: 0; min-height: 0; padding: 12px 16px; gap: var(--sp-3); }
 .console:not(.fill) .adminbody:has(> .ly-sp) { max-width: none; }
 @media (max-width: 1099px) { .ly-grid { grid-template-columns: minmax(0, 1fr); } .ly-rail { border-right: 0; border-bottom: 1px solid var(--c-outline); } .ly-lead { display: none; } }
+
+/* 第六期:现场设置 → 授权(S-access) */
+.ac-body { grid-template-columns: minmax(0, 1fr) 380px; }
+.ac-now { display: grid; grid-template-columns: 120px minmax(0, 1fr); margin: 0; }
+.ac-now dt { padding: 12px 20px; font-size: 12px; font-weight: 600; letter-spacing: 0.06em; color: var(--c-textSecondary); border-top: 1px solid var(--c-outline); }
+.ac-now dd { margin: 0; padding: 12px 20px 12px 0; border-top: 1px solid var(--c-outline); font-size: 14px; }
+.ac-live { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-3); }
+.ac-live .btn { min-width: 112px; justify-content: center; }
+.ac-ask { margin-top: 8px; }
+.ac-table td { vertical-align: top; }
+.ac-days { display: inline-flex; gap: 2px; margin-bottom: 4px; }
+.ac-days i { display: inline-block; min-width: 34px; padding: 2px 4px; text-align: center; font-style: normal; font-size: 12px; font-weight: 600; background: var(--c-surfaceVariant); color: var(--c-textSecondary); }
+.ac-days i.on { background: var(--c-text); color: var(--c-bg); }
+.ac-days i.today { text-decoration: underline; text-underline-offset: 3px; }
+.ac-table td .muted.small { display: block; }
+.ac-del { text-align: right; }
+.ac-del .btn { min-width: 96px; justify-content: center; }
+.acc-visitor .checks { padding: 0 20px; }
+.acc-visitor > .row, .acc-visitor > p { padding: 4px 20px; }
+.acc-add { border-bottom: 0; }
+.ac-form { display: flex; flex-direction: column; gap: var(--sp-2); padding: 4px 20px 12px; }
+.ac-form input, .ac-form select { height: var(--ctl-md); padding: 0 10px; border: 1px solid var(--c-outline); border-radius: var(--r-r2); background: var(--c-surface); color: var(--c-text); font: inherit; width: 100%; box-sizing: border-box; }
+.ac-form .lbl { margin-top: 6px; }
+.ac-form p { margin: 0; }
+.ac-seg2 { display: grid; grid-template-columns: 1fr 1fr; }
+.ac-zones { display: grid; grid-template-columns: 1fr 1fr; gap: var(--sp-2); }
+.ac-zones button, .ac-days-pick button { height: var(--ctl-md); border: 1px solid var(--c-outline); border-radius: var(--r-r2); background: var(--c-surface); color: var(--c-text); font: inherit; font-weight: 600; cursor: pointer; }
+.ac-zones button[aria-pressed="true"], .ac-days-pick button[aria-pressed="true"] { background: var(--c-primary); color: var(--c-onPrimary); border-color: var(--c-primary); }
+.ac-days-pick { display: grid; grid-template-columns: repeat(7, 1fr); gap: var(--sp-1); }
+.ac-days-quick { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--sp-2); }
+.ac-days-quick .btn { min-width: 0; justify-content: center; }
+.ac-two { display: grid; grid-template-columns: 1fr 1fr; gap: var(--sp-1) var(--sp-3); align-items: center; }
+.ac-submit { display: grid; grid-template-columns: 2fr 1fr; gap: var(--sp-2); padding: 12px 20px; border-top: 1px solid var(--c-outline); }
+.ac-submit .btn { min-width: 0; justify-content: center; }
+.arming.sp .arm-now, .arming.sp .panel { margin: 0; }
+.arm-tabs .ly-tabname { font-weight: 600; }
+@media (max-width: 1279px) { .ac-body { grid-template-columns: minmax(0, 1fr); } }

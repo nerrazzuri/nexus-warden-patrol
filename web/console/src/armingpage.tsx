@@ -13,6 +13,7 @@ import { hm, type DutySettings } from "./data";
 import { joinList, t, type Key } from "./i18n";
 import { pageAllowed } from "./shell";
 import { Confirm } from "./dialogs";
+import { Sign } from "./signs";
 import { useUnsaved } from "./unsaved";
 import { dateInput } from "./recordings";
 
@@ -206,37 +207,55 @@ export function ArmingPage({ say, now, role = "admin" }: { say: Say; now: number
   }
 
   // P1-57:一页三块,分标签:布防时间(顶上「保存」管这块)、守卫值勤(自己存)、报警设备(马上存)
+  // 第六期 S-arming:左栏四块(时间表 / 巡逻日程 / 布防时巡逻 / 报警设备),页头一句话写现在谁说了算 + 使用时间表 + 保存
   const tabs = (
-    <div class="ly-tabs arm-tabs" role="tablist">
+    <div class="ly-tabs ly-rail arm-tabs" role="tablist">
       {(["times", "patrols", "guard", "devices"] as const).map((x) => (
         <button key={x} type="button" role="tab" aria-selected={sec === x} data-arm-tab={x}
-          onClick={() => setSec(x)}>{t(x === "times" ? "armTabTimes" : x === "patrols" ? "armTabPatrols" : x === "guard" ? "armTabGuard" : "armTabDevices")}</button>
+          onClick={() => setSec(x)}><span /><span class="ly-tabname">{t(x === "times" ? "armTabTimes" : x === "patrols" ? "armTabPatrols" : x === "guard" ? "armTabGuard" : "armTabDevices")}</span></button>
       ))}
+      <p class="ly-lead muted small">{t("armLead")}</p>
     </div>
+  );
+  const head = (
+    <header class="sp-head">
+      <h1>{t("tabArming")}</h1>
+      <p class="sp-status"><Sign kind={mode?.state === "armed" ? "ok" : "info"} /><span>{whoText(mode, loaded?.enabled ?? enabled)}</span></p>
+      {wizBtn}
+      {sec === "times" && <>
+        {/* P2-20:大一点的开关;打开了却一个时段都没有(= 全天撤防)当场说(存的时候还会再确认) */}
+        <label class="switch arm-enabled">
+          <input id="arm-enabled" type="checkbox" checked={enabled} onChange={(e) => setEnabled(e.currentTarget.checked)} />
+          {t("armUseSchedule")}
+        </label>
+        <span class={dirty ? "ly-dirty small" : "ly-dirty small hold"} role="status" aria-hidden={!dirty || undefined}>{t("armDirty")}</span>
+        <button type="button" class="btn primary arm-save" disabled={busy || !dirty} onClick={trySave}>{t("save")}</button>
+      </>}
+    </header>
   );
   if (sec !== "times") {
     return (
-      <section class="arming">
-        <div class="panel-head"><h1>{t("tabArming")}</h1>{wizBtn}</div>
-        {wizBox}
-        {tabs}
-        {dirty && <p class="arm-dirty" role="status">{t("armDirtyOther")}</p>}
-        {sec === "patrols" ? <>{canDuty && <PatrolLine say={say} />}<PatrolSchedules say={say} canEdit={canSchedule(role)} /></>
-          : sec === "guard" ? <GuardPanel say={say} now={now} canEdit={canSchedule(role)} /> : <DevicesPanel say={say} canEdit={isOwnerLike(role)} />}
+      <section class="arming sp ly-sp">
+        {head}
+        <div class="ly-grid">
+          {tabs}
+          <div class="ly-stage">
+            {wizBox}
+            {dirty && <p class="arm-dirty" role="status">{t("armDirtyOther")}</p>}
+            {sec === "patrols" ? <>{canDuty && <PatrolLine say={say} />}<PatrolSchedules say={say} canEdit={canSchedule(role)} /></>
+              : sec === "guard" ? <GuardPanel say={say} now={now} canEdit={canSchedule(role)} /> : <DevicesPanel say={say} canEdit={isOwnerLike(role)} />}
+          </div>
+        </div>
       </section>
     );
   }
   return (
-    <section class="arming">
-      <div class="panel-head">
-        <h1>{t("tabArming")}</h1>
-        {wizBtn}
-        {dirty && <span class="ly-dirty small" role="status">{t("armDirty")}</span>}
-        <button type="button" class="btn primary push arm-save" disabled={busy || !dirty} onClick={trySave}>{t("save")}</button>
-      </div>
+    <section class="arming sp ly-sp">
+      {head}
+      <div class="ly-grid">
       {tabs}
+      <div class="ly-stage">
       {loaded == null && loadFailed && <p class="note warn" role="status" data-load-failed="1">{t("loadRetry")}</p>}
-      <p class="muted lead">{t("armLead")}</p>
       {/* W72(用户 11-03):在网页上要能直接布防 / 撤防,不用翻到「系统状态」页去找 */}
       <section class="panel arm-now">
         <div class="arm-now-text">
@@ -277,11 +296,6 @@ export function ArmingPage({ say, now, role = "admin" }: { say: Say; now: number
           }} />
       )}
 
-      {/* P2-20:大一点的开关;打开了却一个时段都没有(= 全天撤防)当场说(存的时候还会再确认) */}
-      <label class="switch arm-enabled">
-        <input id="arm-enabled" type="checkbox" checked={enabled} onChange={(e) => setEnabled(e.currentTarget.checked)} />
-        {t("armEnabled")}
-      </label>
       {enabled && slots.length === 0 && <p class="arm-dirty" role="status" data-arm-noslots="1">{t("armEnableNeedSlots")}</p>}
 
       <div class="seg arm-scope" role="group" aria-label={t("armScope")}>
@@ -364,6 +378,8 @@ export function ArmingPage({ say, now, role = "admin" }: { say: Say; now: number
         </label>
         <p class="muted small">{t("armDutyHint")}</p>
       </section>}
+      </div>
+      </div>
     </section>
   );
 }

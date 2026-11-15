@@ -276,9 +276,9 @@ describe("布防时间页", () => {
   it("没存离开有提示", async () => {
     const { container: c } = page();
     await waitFor(() => expect(row(c, 0).querySelector(".armblock")).not.toBeNull());
-    expect(c.querySelector(".ly-dirty")).toBeNull();
+    expect(c.querySelector(".ly-dirty:not(.hold)")).toBeNull();
     drag(row(c, 3).querySelector(".armtrack")!, 60, 120);
-    expect(c.querySelector(".ly-dirty")).not.toBeNull();
+    expect(c.querySelector(".ly-dirty:not(.hold)")).not.toBeNull();
     const ev = new Event("beforeunload", { cancelable: true });
     window.dispatchEvent(ev);
     expect(ev.defaultPrevented).toBe(true);

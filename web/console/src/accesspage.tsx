@@ -4,7 +4,8 @@
 import { useEffect, useState } from "preact/hooks";
 import { api, ApiError, enc } from "./api";
 import { hm, siteDown } from "./data";
-import { Confirm, Modal } from "./dialogs";
+import { Confirm } from "./dialogs";
+import { Sign } from "./signs";
 import { t, type Key, joinList } from "./i18n";
 
 type Say = (s: string) => void;
@@ -33,7 +34,7 @@ const where = (a: Authz) => (a.zones.length ? joinList(a.zones) : t("wholeSite")
 export function AccessPage({ say, now }: { say: Say; now: number }) {
   const [rows, setRows] = useState<Authz[]>([]);
   const [mode, setMode] = useState<ModeView | null>(null);
-  const [adding, setAdding] = useState(false);
+  const [showTemp, setShowTemp] = useState(false);
   const [ending, setEnding] = useState<Authz | null>(null);
   const [removing, setRemoving] = useState<Authz | null>(null);
   void now;
@@ -42,6 +43,7 @@ export function AccessPage({ say, now }: { say: Say; now: number }) {
   useEffect(() => { void load(); void loadMode(); }, []);
   const zones = (mode?.zones ?? []).map((z) => z.zone);
   const live = rows.filter((r) => r.active_now);
+  const visitorOn = mode?.mode === "visitor";
 
   async function post(path: string, body: unknown) {
     try {
@@ -52,60 +54,79 @@ export function AccessPage({ say, now }: { say: Say; now: number }) {
       say(errText(e));
     }
   }
+  const status = [live.length === 0 ? t("acStNone") : live.length === 1 ? t("acStActive1", { who: live[0].name, t: live[0].end }) : t("acStActiveN", { n: live.length }),
+    visitorOn && mode?.until_ms ? t("acStVisitor", { t: hm(mode.until_ms) }) : ""].filter(Boolean).join(" ");
+  const today = (new Date().getDay() + 6) % 7;
+  const ask = (x: Authz | null, text: string, yes: string, go: () => void, danger = false) => x && (
+    <div class="rb-ask ac-ask" role="group">
+      <p>{text}</p>
+      <span class="rb-row">
+        <button type="button" class={danger ? "btn danger" : "btn primary"} onClick={go}>{yes}</button>
+        <button type="button" class="btn" onClick={() => { setEnding(null); setRemoving(null); }}>{t("cancel")}</button>
+      </span>
+    </div>
+  );
 
   return (
-    <section class="access">
-      <div class="panel-head">
+    <section class="sp access ac">
+      <header class="sp-head">
         <h1>{t("tabAccess")}</h1>
-        <button type="button" class="btn primary push" onClick={() => setAdding(true)}>{t("addAuthorization")}</button>
+        <p class="sp-status"><Sign kind={live.length || visitorOn ? "info" : "ok"} /><span>{status}</span></p>
+        {mode && <button type="button" class="btn" aria-expanded={showTemp || visitorOn} onClick={() => setShowTemp(!showTemp)}>{t("acTempBtn")}</button>}
+      </header>
+      <div class="sp-body ac-body">
+        <div class="sp-main">
+          <section class="sp-sec acc-now">
+            <h2 class="sp-h"><span>{t("accNow")}</span></h2>
+            <dl class="ac-now">
+              <dt>{t("acRowAccess")}</dt>
+              <dd>
+                {live.length === 0 ? <span class="muted">{t("accNowNone")}</span> : (
+                  <ul class="plain">
+                    {live.map((a) => (
+                      <li key={a.id} class="ac-live">
+                        <span><b>{a.name}</b> · {where(a)} · <span class="mono">{a.start} → {a.end}</span><br /><small class="muted">{t("acRowAccessSub")}</small></span>
+                        <button type="button" class="btn" onClick={() => { setRemoving(null); setEnding(a); }}>{t("accEndNow")}</button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                {ask(ending, t("accEndConfirm", { name: ending?.name ?? "" }), t("accEndYes"), () => { const a = ending!; setEnding(null); void post(`/api/lists/authorizations/${enc(String(a.id))}/end`, {}); })}
+              </dd>
+              <dt>{t("acRowTemp")}</dt>
+              <dd>{visitorOn ? <b>{t("accVisitorOn", { t: mode?.until_ms ? hm(mode.until_ms) : "—" })}</b> : <span class="muted">{t("acTempNone")}</span>}</dd>
+            </dl>
+          </section>
+          {(showTemp || visitorOn) && <Visitor mode={mode} zones={zones} say={say} onDone={loadMode} />}
+          <section class="sp-sec acc-all">
+            <h2 class="sp-h"><span>{t("acAllN", { n: rows.length })}</span><small>{t("acAllHint")}</small></h2>
+            <table class="sp-table ac-table">
+              <thead><tr><th>{t("acColWho")}</th><th>{t("acColScope")}</th><th>{t("acColDays")}</th><th>{t("acColUntil")}</th><th /></tr></thead>
+              <tbody>
+                {rows.length === 0 && <tr><td colSpan={5} class="muted">{t(siteDown.value ? "loadRetry" : "noAuthorizations")}</td></tr>}
+                {rows.map((r) => (
+                  <tr key={r.id}>
+                    <td><b>{r.name}</b>{r.note ? <><br /><span class="muted small">{r.note}</span></> : null}</td>
+                    <td>{where(r)}</td>
+                    <td>
+                      <span class="ac-days">{DAY_KEYS.map((k, i) => <i key={k} class={[(r.days >> i) & 1 ? "on" : "", i === today ? "today" : ""].filter(Boolean).join(" ") || undefined}>{t(k)}</i>)}</span>
+                      <span class="muted small">{daysText(r.days)} <span class="mono">{r.start}–{r.end}</span></span>
+                    </td>
+                    <td class="mono">{r.until_ms ? new Date(r.until_ms).toLocaleDateString("sv-SE") : t("acNoExpiry")}</td>
+                    <td class="ac-del">
+                      {removing?.id === r.id ? ask(removing, t("removeAuthzConfirm", { name: r.name }), t("remove"), () => { setRemoving(null); void post(`/api/lists/authorizations/${enc(String(r.id))}/remove`, {}); }, true)
+                        : <button type="button" class="btn" onClick={() => { setEnding(null); setRemoving(r); }}>{t("acDelete")}</button>}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </section>
+        </div>
+        <aside class="sp-side ac-side">
+          <AddAuthz key={zones.join("|")} zones={zones} say={say} onDone={() => { void load(); say(t("authzAddedMsg")); }} />
+        </aside>
       </div>
-      <p class="muted lead">{t("authorizationsHint")}</p>
-
-      <section class="panel acc-now">
-        <h2>{t("accNow")}</h2>
-        {live.length === 0 ? <p class="muted">{t("accNowNone")}</p> : (
-          <ul class="plain">
-            {live.map((a) => (
-              <li key={a.id} class="row">
-                <b>{a.name}</b><span>{where(a)}</span><span class="muted">{t("accUntil", { t: a.end })}</span>
-                <button type="button" class="btn sm push" onClick={() => setEnding(a)}>{t("accEndNow")}</button>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
-
-      <Visitor mode={mode} zones={zones} say={say} onDone={loadMode} />
-
-      <section class="panel acc-all">
-        <h2>{t("accAll")}</h2>
-        <table class="grid">
-          <thead><tr><th>{t("who")}</th><th>{t("where")}</th><th>{t("days")}</th><th>{t("timeRange")}</th><th>{t("validUntil")}</th><th>{t("colActions")}</th></tr></thead>
-          <tbody>
-            {rows.length === 0 && <tr><td colSpan={6} class="muted">{t(siteDown.value ? "loadRetry" : "noAuthorizations")}</td></tr>}
-            {rows.map((r) => (
-              <tr key={r.id}>
-                <td class="strong">{r.name}{r.note ? <span class="muted small"> · {r.note}</span> : null}</td>
-                <td>{where(r)}</td>
-                <td>{daysText(r.days)}</td>
-                <td class="mono">{r.start}–{r.end}</td>
-                <td class="mono">{r.until_ms ? new Date(r.until_ms).toLocaleDateString("sv-SE") : "—"}</td>
-                <td class="actions"><button type="button" class="btn sm danger" onClick={() => setRemoving(r)}>{t("remove")}</button></td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </section>
-
-      {adding && <AddAuthz zones={zones} onClose={() => setAdding(false)} say={say} onDone={() => { setAdding(false); void load(); say(t("authzAddedMsg")); }} />}
-      {ending && (
-        <Confirm text={t("accEndConfirm", { name: ending.name })} yes={t("accEndYes")} onNo={() => setEnding(null)}
-          onYes={() => { const a = ending; setEnding(null); void post(`/api/lists/authorizations/${enc(String(a.id))}/end`, {}); }} />
-      )}
-      {removing && (
-        <Confirm text={t("removeAuthzConfirm", { name: removing.name })} yes={t("remove")} danger onNo={() => setRemoving(null)}
-          onYes={() => { const r = removing; setRemoving(null); void post(`/api/lists/authorizations/${enc(String(r.id))}/remove`, {}); }} />
-      )}
     </section>
   );
 }
@@ -127,10 +148,9 @@ function Visitor({ mode, zones, say, onDone }: { mode: ModeView | null; zones: s
     }
   }
   return (
-    <section class="panel acc-visitor">
+    <section class="sp-sec acc-visitor">
       {/* UIUX-035:这一块是按防区的,跟顶栏「全站临时撤防 4 小时」分开叫 */}
-      <h2>{t("accVisitorTitle")}</h2>
-      <p class="muted small">{t("accVisitorHint")}</p>
+      <h2 class="sp-h"><span>{t("accVisitorTitle")}</span><small>{t("accVisitorHint")}</small></h2>
       {on ? (
         <div class="row">
           <b>{t("accVisitorOn", { t: mode.until_ms ? hm(mode.until_ms) : "—" })}</b>
@@ -174,18 +194,12 @@ const todayYmd = () => new Date().toLocaleDateString("sv-SE");
 /** P1-62:时间用 24 小时制,半小时一档(浏览器的时间框按系统设置可能显示成上午/下午)。 */
 const HALF_HOURS = Array.from({ length: 48 }, (_, i) => `${String(Math.floor(i / 2)).padStart(2, "0")}:${i % 2 ? "30" : "00"}`);
 
-function AddAuthz({ zones, onClose, onDone, say }: { zones: string[]; onClose: () => void; onDone: () => void; say: Say }) {
-  const [name, setName] = useState("");
+function AddAuthz({ zones, onDone, say }: { zones: string[]; onDone: () => void; say: Say }) {
+  const blank = () => ({ name: "", site: (zones.length === 0 ? true : null) as boolean | null, picked: [] as string[], repeat: true, days: 0b0011111, date: "", start: "09:00", end: "18:00", until: "", note: "" });
+  const [f, setF] = useState(blank);
+  const put = (p: Partial<ReturnType<typeof blank>>) => setF((o) => ({ ...o, ...p }));
+  const { name, site, picked, repeat, days, date, start, end, until, note } = f;
   // P1-62:有防区时不默认「全站」(全站授权期间全站有人报警降级),要人自己选;没防区时只有全站,写明为什么
-  const [site, setSite] = useState<boolean | null>(zones.length === 0 ? true : null);
-  const [picked, setPicked] = useState<string[]>([]);
-  const [repeat, setRepeat] = useState(true);
-  const [days, setDays] = useState(0b0011111);
-  const [date, setDate] = useState("");
-  const [start, setStart] = useState("09:00");
-  const [end, setEnd] = useState("18:00");
-  const [until, setUntil] = useState("");
-  const [note, setNote] = useState("");
   async function submit(e: Event) {
     e.preventDefault();
     if (site === null || (site === false && picked.length === 0)) return;     // 回车提交也一样:没选范围不发
@@ -199,49 +213,69 @@ function AddAuthz({ zones, onClose, onDone, say }: { zones: string[]; onClose: (
     }
     try {
       await api("POST", "/api/lists/authorizations", { name, zones: site ? [] : picked, days: d, start, end, note, until_ms: untilMs });
+      setF(blank());
       onDone();
     } catch (x) {
       say(errText(x));
     }
   }
+  const seg = (on: boolean, label: string, go: () => void, extra?: Record<string, unknown>) =>
+    <button type="button" aria-pressed={on} onClick={go} {...extra}>{label}</button>;
   return (
-    <Modal label={t("addAuthorization")} onClose={onClose}>
-      <form class="form acc-add" onSubmit={submit}>
-        <label class="field">{t("who")}<input name="who" value={name} maxLength={64} required placeholder={t("whoPlaceholder")} onInput={(e) => setName(e.currentTarget.value)} /></label>
-        <fieldset class="checks">
-          <legend>{t("where")}</legend>
-          <label><input type="radio" name="scope" checked={site === true} onChange={() => setSite(true)} /> <span class="nowrap">{t("wholeSite")}</span>
-            <span class="muted small"> — {t("wholeSiteWarn")}</span></label>
-          <label><input type="radio" name="scope" checked={site === false} disabled={zones.length === 0} onChange={() => setSite(false)} /> {t("someZones")}
-            {zones.length === 0 && <span class="muted small"> — {t("noZonesYet")}</span>}</label>
-          {site === false && zones.map((z) => (
-            <label key={z} class="indent"><input type="checkbox" checked={picked.includes(z)}
-              onChange={(e) => setPicked(e.currentTarget.checked ? [...picked, z] : picked.filter((x) => x !== z))} /> {z}</label>
-          ))}
-        </fieldset>
-        <label class="switch"><input type="checkbox" name="repeat" checked={repeat} onChange={(e) => setRepeat(e.currentTarget.checked)} /> {t("accRepeat")}</label>
-        {repeat ? (
-          <fieldset class="checks row-wrap">
-            <legend>{t("days")}</legend>
-            {DAY_KEYS.map((k, i) => (
-              <label key={k}><input type="checkbox" name={`day${i}`} checked={!!(days >> i & 1)} onChange={() => setDays(days ^ (1 << i))} /> {t(k)}</label>
-            ))}
-          </fieldset>
-        ) : (
-          <label class="field">{t("accOnDay")}<input name="date" type="date" value={date} min={todayYmd()} required onInput={(e) => setDate(e.currentTarget.value)} /></label>
+    <form class="form acc-add sp-sec" onSubmit={submit}>
+      <h2 class="sp-h"><span>{t("acAddH")}</span><small>{t("acAddHint")}</small></h2>
+      <div class="ac-form">
+        <label class="lbl" for="ac-who">{t("who")}</label>
+        <input id="ac-who" name="who" value={name} maxLength={64} required placeholder={t("whoPlaceholder")} onInput={(e) => put({ name: e.currentTarget.value })} />
+        <span class="lbl">{t("acScope")}</span>
+        <div class="seg ac-seg2" role="group" aria-label={t("acScope")}>
+          {seg(site === true, t("wholeSite"), () => put({ site: true }), { name: "scope", "data-scope": "site" })}
+          {seg(site === false, t("acSelected"), () => put({ site: false }), { name: "scope", "data-scope": "zones", disabled: zones.length === 0 })}
+        </div>
+        {site === true && <p class="muted small">{t("wholeSiteWarn")}</p>}
+        {zones.length === 0 && <p class="muted small">{t("noZonesYet")}</p>}
+        {site === false && (
+          <div class="ac-zones">
+            {zones.map((z) => <button key={z} type="button" aria-pressed={picked.includes(z)} data-zone={z}
+              onClick={() => put({ picked: picked.includes(z) ? picked.filter((x) => x !== z) : [...picked, z] })}>{z}</button>)}
+          </div>
         )}
-        <div class="row">
-          <label class="field">{t("from")}<select name="start" value={start} onChange={(e) => setStart(e.currentTarget.value)}>{HALF_HOURS.map((h) => <option key={h} value={h}>{h}</option>)}</select></label>
-          <label class="field">{t("to")}<select name="end" value={end} onChange={(e) => setEnd(e.currentTarget.value)}>{HALF_HOURS.map((h) => <option key={h} value={h}>{h}</option>)}</select></label>
+        <span class="lbl">{t("acWhen")}</span>
+        <div class="seg ac-seg2" role="group" aria-label={t("acWhen")}>
+          {seg(!repeat, t("acSingle"), () => put({ repeat: false }), { name: "repeat", "data-repeat": "0" })}
+          {seg(repeat, t("acWeekly"), () => put({ repeat: true }), { name: "repeat", "data-repeat": "1" })}
+        </div>
+        {repeat ? (
+          <>
+            <div class="ac-days-pick">
+              {DAY_KEYS.map((k, i) => <button key={k} type="button" name={`day${i}`} aria-pressed={!!(days >> i & 1)} onClick={() => put({ days: days ^ (1 << i) })}>{t(k)}</button>)}
+            </div>
+            <div class="ac-days-quick">
+              <button type="button" class="btn" onClick={() => put({ days: 0b1111111 })}>{t("acDaily")}</button>
+              <button type="button" class="btn" onClick={() => put({ days: 0b0011111 })}>{t("acWeekdays")}</button>
+              <button type="button" class="btn" onClick={() => put({ days: 0b1100000 })}>{t("acWeekend")}</button>
+            </div>
+          </>
+        ) : (
+          <><label class="lbl" for="ac-date">{t("accOnDay")}</label><input id="ac-date" name="date" type="date" value={date} min={todayYmd()} required onInput={(e) => put({ date: e.currentTarget.value })} /></>
+        )}
+        <div class="ac-two">
+          <label class="lbl" for="ac-start">{t("from")}</label><label class="lbl" for="ac-end">{t("to")}</label>
+          <select id="ac-start" name="start" value={start} onChange={(e) => put({ start: e.currentTarget.value })}>{HALF_HOURS.map((h) => <option key={h} value={h}>{h}</option>)}</select>
+          <select id="ac-end" name="end" value={end} onChange={(e) => put({ end: e.currentTarget.value })}>{HALF_HOURS.map((h) => <option key={h} value={h}>{h}</option>)}</select>
         </div>
         <p class="muted small">{t("overnightHint")}</p>
-        {repeat && <label class="field">{t("validUntil")} ({t("optional")})<input type="date" value={until} min={todayYmd()} onInput={(e) => setUntil(e.currentTarget.value)} /></label>}
-        <label class="field">{t("note")} ({t("optional")})<input value={note} maxLength={200} onInput={(e) => setNote(e.currentTarget.value)} /></label>
-        <div class="row end">
-          <button type="button" class="btn" onClick={onClose}>{t("cancel")}</button>
-          <button type="submit" class="btn primary" disabled={!name.trim() || (repeat && days === 0) || (!repeat && !date) || site === null || (site === false && picked.length === 0)}>{t("addAuthorization")}</button>
+        <div class="ac-two">
+          {repeat ? <label class="lbl" for="ac-until">{t("validUntil")} · {t("optional")}</label> : <span />}
+          <label class="lbl" for="ac-note">{t("note")} · {t("optional")}</label>
+          {repeat ? <input id="ac-until" type="date" value={until} min={todayYmd()} onInput={(e) => put({ until: e.currentTarget.value })} /> : <span />}
+          <input id="ac-note" value={note} maxLength={200} onInput={(e) => put({ note: e.currentTarget.value })} />
         </div>
-      </form>
-    </Modal>
+      </div>
+      <div class="ac-submit">
+        <button type="submit" class="btn primary" disabled={!name.trim() || (repeat && days === 0) || (!repeat && !date) || site === null || (site === false && picked.length === 0)}>{t("acAddBtn")}</button>
+        <button type="button" class="btn" onClick={() => setF(blank())}>{t("acClear")}</button>
+      </div>
+    </form>
   );
 }
