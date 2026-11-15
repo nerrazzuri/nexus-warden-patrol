@@ -443,7 +443,7 @@ class _AdminHomeTabState extends State<AdminHomeTab> {
     final c = Nw.of(context);
     final sub = NwText.bodySmall.copyWith(color: c.textSecondary);
     String outcome(Alert a) => a.resolvedMs == null
-        ? (a.ackedBy.isNotEmpty ? tr('Handling', '处理中') : tr('Open', '未处理'))
+        ? (a.ackedBy.isNotEmpty ? tr('In progress', '处理中') : tr('Open', '未处理'))
         : switch (a.verdict) {
             'false_alarm' => tr('False alarm', '误报'),
             'intruder' => tr('Confirmed intrusion', '确认入侵'),
@@ -579,7 +579,7 @@ class _AdminHomeTabState extends State<AdminHomeTab> {
                                 minimumSize: const Size(48, 40),
                                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(2))),
                             onPressed: it.$3,
-                            child: Text(tr('Go', '去处理'))),
+                            child: Text(tr('Respond', '去处理'))),
                       ]),
                     ),
                 ]),
@@ -1026,7 +1026,7 @@ class _SchedulePageState extends State<SchedulePage> {
                         style: NwText.titleSmall.copyWith(color: c.text, fontWeight: FontWeight.w700)),
                     Text(
                         [
-                          if ('${e['robot'] ?? ''}'.isNotEmpty) '${e['robot']}' else tr('any free robot', '哪台空就哪台'),
+                          if ('${e['robot'] ?? ''}'.isNotEmpty) '${e['robot']}' else tr('first available', '哪台空就哪台'),
                           daysText(e['days'] as List? ?? const []),
                           if ((e['every_min'] as num? ?? 0) > 0) scheduleWhen(e),
                         ].join(' · '),
@@ -1080,7 +1080,7 @@ class _SchedulePageState extends State<SchedulePage> {
               onPressed: () => openSettings(context, widget.api)),
           IconButton(
               key: leaveSiteKey,
-              tooltip: tr('Leave this site', '退出站点'),
+              tooltip: tr('Leave site', '退出站点'),
               icon: const Icon(Icons.logout_rounded),
               onPressed: () => leaveSite(context)),
         ]),
@@ -1246,7 +1246,7 @@ class _ScheduleEditorState extends State<_ScheduleEditor> {
             isExpanded: true,
             decoration: InputDecoration(labelText: tr('Robot', '机器人')),
             items: [
-              DropdownMenuItem(value: '', child: Text(tr('Any free robot', '哪台空就哪台'))),
+              DropdownMenuItem(value: '', child: Text(tr('First available', '哪台空就哪台'))),
               if (_robot.isNotEmpty && !widget.robots.contains(_robot))
                 DropdownMenuItem(value: _robot, child: Text(tr('$_robot (not on this site)', '$_robot（站点上没有）'))),
               for (final r in widget.robots)
@@ -1381,7 +1381,7 @@ class MeTab extends StatelessWidget {
               _Entry(
                   entryKey: const Key('me-practice'),
                   icon: Icons.sports_score_rounded,
-                  title: tr('Practice an alarm', '报警演练'),
+                  title: tr('Alarm drill', '报警演练'),
                   hint: tr("A simulated alarm visible only to you; nothing is sent to the site.", '模拟报警，仅你可见，不发送到站点。'),
                   onTap: () => _push(context, const PracticeAlarmPage())),
             // 易用性第 6 轮 A6-07：保安出了问题直接在这儿报（以前要走「我的 → 设置 → 上传日志」三层）
@@ -1394,7 +1394,7 @@ class MeTab extends StatelessWidget {
             _Entry(
                 entryKey: const Key('me-help'),
                 icon: Icons.help_outline_rounded,
-                title: tr('Common questions', '常见问题'),
+                title: tr('FAQ', '常见问题'),
                 hint: tr('Handling alarms, robots that won\'t go, and more.',
                     '报警处理、机器人无法派出等常见问题。'),
                 onTap: () => _push(context, HelpPage(role: s?.role ?? ''))),
@@ -1403,7 +1403,7 @@ class MeTab extends StatelessWidget {
                 buttonKey: leaveKey,
                 variant: NwButtonVariant.outline,
                 icon: Icons.logout_rounded,
-                label: tr('Leave this site', '退出站点'),
+                label: tr('Leave site', '退出站点'),
                 onPressed: () => leaveSite(context)),
           ]),
         ),

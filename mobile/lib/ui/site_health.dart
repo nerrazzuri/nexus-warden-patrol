@@ -38,7 +38,7 @@ String checkLabel(String key) => switch (key) {
       'lanes' => tr('Background tasks', '后台任务'),
       'keys' => tr('Keys', '密钥'),
       'backup' => tr('Backup', '备份'),
-      'push' => tr('Push notifications', '推送'),
+      'push' => tr('Push alerts', '推送'),
       'robots' => tr('Robots', '四足机器人'),
       _ => key,
     };
@@ -408,7 +408,7 @@ class _SiteHealthPageState extends State<SiteHealthPage> {
                 const SizedBox(width: Nw.s16),
                 Expanded(
                     child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
-                  Text(tr('Diagnostics bundle', '诊断包'), style: NwText.titleSmall.copyWith(color: nw.text)),
+                  Text(tr('Support bundle', '诊断包'), style: NwText.titleSmall.copyWith(color: nw.text)),
                   nwGap4,
                   Text(
                       tr(
