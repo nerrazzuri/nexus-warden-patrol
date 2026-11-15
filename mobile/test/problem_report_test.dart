@@ -43,10 +43,10 @@ void main() {
           return true;
         })));
     // 第 9 轮 A6-07 尾巴：标题跟入口一样叫「报问题」
-    expect(find.text('报问题'), findsOneWidget);
+    expect(find.descendant(of: find.byType(AppBar), matching: find.text('报问题')), findsOneWidget);
     expect(find.text('上传日志'), findsNothing);
     await tester.enterText(find.byKey(ProblemReportPage.noteKey), '大门口停住');
-    await tester.tap(find.byKey(ProblemReportPage.otherKey));     // A6-07：「只传到站点」收在「其他方式」里
+    await tester.ensureVisible(find.byKey(ProblemReportPage.sendKey));   // App V2：「只传到站点」在下面「其他方式」一段
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(ProblemReportPage.sendKey));
     await tester.pumpAndSettle();
@@ -90,17 +90,16 @@ void main() {
     expect(gzip.decode(got!).isNotEmpty, isTrue);
   });
 
-  testWidgets('易用性第 6 轮 A6-07：只有一个主按钮「发送」，说明跟按钮对得上；别的方式收在「其他方式」里', (tester) async {
+  testWidgets('易用性第 6 轮 A6-07 + App V2 稿 S-report：主按钮只有「发送」一个；别的方式在下面一段，描边、一排等宽', (tester) async {
     await tester.pumpWidget(_wrap(ProblemReportPage(api: FakeApi('guard'), log: AppLog(), share: (_, _) async => true)));
     expect(find.textContaining('按「发送」'), findsOneWidget);
     expect(find.textContaining('按「上传」'), findsNothing);
     expect(find.descendant(of: find.byKey(ProblemReportPage.engineerKey), matching: find.text('发送')), findsOneWidget);
-    expect(find.byKey(ProblemReportPage.sendKey), findsNothing, reason: '收起来');
-    expect(find.byKey(ProblemReportPage.shareAppKey), findsNothing, reason: '收起来');
-    await tester.tap(find.byKey(ProblemReportPage.otherKey));
-    await tester.pumpAndSettle();
-    expect(find.byKey(ProblemReportPage.sendKey), findsOneWidget);
-    expect(find.byKey(ProblemReportPage.shareAppKey), findsOneWidget);
+    expect(find.byType(FilledButton), findsOneWidget, reason: '主按钮只有一个');
+    expect(tester.widget(find.byKey(ProblemReportPage.sendKey)), isA<OutlinedButton>());
+    expect(tester.widget(find.byKey(ProblemReportPage.shareAppKey)), isA<OutlinedButton>());
+    final a = tester.getRect(find.byKey(ProblemReportPage.sendKey)), b = tester.getRect(find.byKey(ProblemReportPage.shareAppKey));
+    expect((a.top, a.width), (b.top, b.width));
   });
 
   testWidgets('A7-02：没登录站点时说明不提「站点开单」，按钮还是「发送」（发 App 日志），没有「其他方式」', (tester) async {

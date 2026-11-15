@@ -125,7 +125,7 @@ class SiteDirectory extends StatelessWidget {
           () => openSettings(context, api)),
       _Row(SiteDest.help, Icons.help_outline_rounded, tr('Guides & FAQ', '使用教程与常见问题'),
           tr('Monitoring tour, handling alarms, alarm drill', '值班页导览、怎么处理报警、报警演练'),
-          () => _push(context, HelpPage(role: role))),
+          () => _push(context, HelpPage(role: role, api: api))),
       _Row(SiteDest.report, Icons.description_outlined, tr('Report a problem', '报问题'),
           tr('Describe the issue; logs are sent to the engineer', '写一句出了什么事，日志发给工程师'),
           () => _push(context, ProblemReportPage(api: api, share: shareBundle))),
