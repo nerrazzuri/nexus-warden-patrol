@@ -169,11 +169,15 @@ void main() {
       expect(find.text('选择站点'), findsOneWidget, reason: '后面那一页也换了');
       expect(find.text('Select site'), findsNothing);
       // 存盘是真的文件读写：得让真时钟走几步（见 support/pump.dart 的说明）
-      for (var i = 0; i < 10 && !File('${dir.path}/lang.json').existsSync(); i++) {
+      // 机器忙时写盘慢：等到读回来是中文为止（最多 3 秒），不是只看文件在不在
+      AppLang? got;
+      for (var i = 0; i < 60; i++) {
+        got = await t.runAsync(langs.load);
+        if (got == AppLang.zh) break;
         await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
         await t.pump();
       }
-      expect(await t.runAsync(langs.load), AppLang.zh);
+      expect(got, AppLang.zh);
     });
 
     test('语言文件坏了、内容不认识：当没选过（英文），不崩', () async {

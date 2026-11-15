@@ -14,7 +14,6 @@ import '../l10n.dart';
 import '../net/site_client.dart';
 import '../net/site_text.dart';
 import 'nw/nw_button.dart';
-import 'nw/nw_cards.dart';
 import 'nw/nw_p4_admin.dart';
 import 'nw/nw_theme.dart';
 import 'nw/nw_widgets.dart';
@@ -132,6 +131,7 @@ class SiteRunsPage extends StatefulWidget {
   static Key runKey(int id) => Key('run-$id');
   static const Key todayKey = Key('runs-today');
   static const Key anomalyKey = Key('runs-anomalies');
+  static const Key allKey = Key('runs-all');
 
   @override
   State<SiteRunsPage> createState() => _SiteRunsPageState();
@@ -139,6 +139,54 @@ class SiteRunsPage extends StatefulWidget {
 
 class _SiteRunsPageState extends State<SiteRunsPage> {
   late Future<List<Map<String, dynamic>>> _rows = _load();
+
+  /// 分段：today / anomalies / all；null = 还没选（今天有就看今天，没有看全部）。
+  String? _filter;
+
+  /// 一趟一行：前面结果记号（完成绿方块、有异常红标、没跑完红圈、进行中播放记号），标题「时间 路线 · 机器人」，
+  /// 下面结果和判读，右边照片张数。
+  Widget _row(NwColors c, Map<String, dynamic> r) {
+    final id = (r['id'] as num).toInt();
+    final photos = (r['photos'] as num? ?? 0).toInt();
+    final Widget mark = r['running'] == true
+        ? Icon(Icons.play_circle_outline_rounded, size: 20, color: c.primary)
+        : _abnormal(r)
+            ? Icon(Icons.report, size: 20, color: c.error)
+            : runFailed(r)
+                ? Icon(Icons.radio_button_unchecked, size: 20, color: c.error)
+                : r['ended'] == 'preempted'
+                    ? Icon(Icons.swap_horiz_rounded, size: 20, color: c.textSecondary)
+                    : Icon(Icons.square, size: 14, color: c.success);
+    return InkWell(
+        key: SiteRunsPage.runKey(id),
+        onTap: () => Navigator.push(
+            context, MaterialPageRoute<void>(builder: (_) => SiteRunPage(api: widget.api, runId: id))),
+        child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: Nw.s16, vertical: 10),
+            decoration: BoxDecoration(color: c.surface, border: Border(bottom: BorderSide(color: c.outline))),
+            child: Row(children: [
+              SizedBox(width: 24, child: Center(child: mark)),
+              const SizedBox(width: 12),
+              Expanded(
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text('${stampText('${r['stamp']}')} ${runTitle(r)} · ${r['robot_id']}',
+                    style: NwText.titleSmall.copyWith(color: c.text, fontWeight: FontWeight.w700)),
+                Text.rich(TextSpan(style: NwText.bodySmall.copyWith(color: c.textSecondary), children: [
+                  TextSpan(text: runResultText(r)),
+                  if (photos > 0 && _abnormal(r)) ...[
+                    const TextSpan(text: ' · '),
+                    TextSpan(text: _abnormalPart(r), style: TextStyle(color: c.error, fontWeight: FontWeight.w700)),
+                  ],
+                  if (photos > 0 && !_abnormal(r)) TextSpan(text: ' · ${_verdictSummary(r)}'),
+                  if ((r['reviewed'] as num? ?? 0) > 0)
+                    TextSpan(text: tr(' · ${r['reviewed']} checked by a person', ' · 人工复核 ${r['reviewed']} 张')),
+                ])),
+              ])),
+              const SizedBox(width: Nw.s8),
+              Text(photos > 0 ? tr('$photos photos', '$photos 张') : tr('No photos', '没有照片'),
+                  style: NwText.bodySmall.copyWith(color: c.textSecondary)),
+            ])));
+  }
 
   /// 第 10 轮 A10-01：列表里有正在跑的，隔 15 秒自己再取一次（不用人下拉刷新才看到跑完）。
   /// 第 11 轮 A10-01：没有在跑的也隔 30 秒取一次（打开以后才开跑的那一趟自己出来）。
@@ -191,70 +239,49 @@ class _SiteRunsPageState extends State<SiteRunsPage> {
           if (!snap.hasData) return const Center(child: CircularProgressIndicator());
           final rows = snap.data!;
           final stats = runStats(rows, widget.now());
-          return NwListView(children: [
-            NwSectionLabel(tr('Today', '今天')),
-            nwGap8,
-            Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Expanded(
-                  child: NwStatTile(
-                      key: SiteRunsPage.todayKey,
-                      icon: Icons.route_rounded,
-                      label: tr('Rounds', '巡逻次数'),
-                      value: '${stats.today}')),
-              const SizedBox(width: Nw.s8),
-              // 判成异常的照片是要人去看的：有就标红（跟下面卡片上的标记一个色），没有不上色
-              Expanded(
-                  child: NwStatTile(
-                      key: SiteRunsPage.anomalyKey,
-                      icon: Icons.warning_amber_rounded,
-                      label: tr('With anomalies', '有异常'),
-                      value: '${stats.anomalies}',
-                      tone: stats.anomalies > 0 ? NwTone.error : NwTone.neutral)),
-            ]),
-            nwGap24,
-            NwSectionLabel(tr('Recent rounds', '最近的巡逻')),
-            nwGap8,
-            if (rows.isEmpty)
-              NwCard(child: Text(tr('No records yet', '暂无记录'), style: NwText.bodyMedium.copyWith(color: c.textSecondary))),
+          final now = widget.now();
+          bool today(Map<String, dynamic> r) {
+            final t = _stampTime(r['stamp']);
+            return t != null && t.year == now.year && t.month == now.month && t.day == now.day;
+          }
+          // 默认看今天；今天一趟都没有就看全部（不让人对着空列表）
+          final filter = _filter ?? (stats.today > 0 ? 'today' : 'all');
+          final shown = [
             for (final r in rows)
+              if (switch (filter) { 'today' => today(r), 'anomalies' => today(r) && _abnormal(r), _ => true }) r,
+          ];
+          // App V2 稿 S-runs：顶上一排分段（今天 N / 异常 N / 全部），下面一趟一行，点进这一趟
+          return ListView(padding: const EdgeInsets.only(bottom: Nw.s24), children: [
+            Padding(
+              padding: const EdgeInsets.all(Nw.s16),
+              child: SizedBox(
+                  width: double.infinity,
+                  child: SegmentedButton<String>(
+                    showSelectedIcon: false,
+                    style: SegmentedButton.styleFrom(
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(2)),
+                        selectedBackgroundColor: c.primary,
+                        selectedForegroundColor: c.onPrimary),
+                    segments: [
+                      ButtonSegment(
+                          value: 'today', label: Text(tr('Today ${stats.today}', '今天 ${stats.today}'), key: SiteRunsPage.todayKey)),
+                      ButtonSegment(
+                          value: 'anomalies',
+                          label: Text(tr('Anomalies ${stats.anomalies}', '异常 ${stats.anomalies}'),
+                              key: SiteRunsPage.anomalyKey,
+                              style: stats.anomalies > 0 && filter != 'anomalies' ? TextStyle(color: c.error) : null)),
+                      ButtonSegment(value: 'all', label: Text(tr('All', '全部'), key: SiteRunsPage.allKey)),
+                    ],
+                    selected: {filter},
+                    onSelectionChanged: (v) => setState(() => _filter = v.first),
+                  )),
+            ),
+            if (shown.isEmpty)
               Padding(
-                  padding: const EdgeInsets.only(bottom: Nw.s8),
-                  // 站点的列表里没有照片（只有张数）：不摆缩略图那一行，点进去才取照片
-                  child: Stack(
-                      key: SiteRunsPage.runKey((r['id'] as num).toInt()),
-                      fit: StackFit.passthrough,
-                      children: [
-                        NwPatrolCard(
-                            // 手机 App 测试 M08：标题 = 路线名 · 机器人 · 本地时间；按结果打图标
-                            id: '${runTitle(r)} · ${r['robot_id']}',
-                            time: stampText('${r['stamp']}'),
-                            status: [
-                              if (runFailed(r) || r['running'] == true || r['ended'] == 'preempted')
-                                runResultText(r),
-                              // 第 9 轮 A9-02：没照片只说一次「没有照片」
-                              if ((r['photos'] as num? ?? 0) > 0) tr('${r['photos']} photos', '照片 ${r['photos']} 张'),
-                              _verdictSummary(r),
-                              if ((r['reviewed'] as num? ?? 0) > 0)
-                                tr('${r['reviewed']} checked by a person', '人工复核 ${r['reviewed']} 张'),
-                            ].join(' · '),
-                            failed: runFailed(r),
-                            inProgress: r['running'] == true,
-                            handedOver: r['ended'] == 'preempted',
-                            anomaly: _abnormal(r),
-                            tone: _abnormal(r) ? NwTone.error : NwTone.neutral,
-                            // 只把「异常 N」那一段标红，「正常 1 · 已复核 1」照常
-                            flagged: _abnormal(r) ? _abnormalPart(r) : null,
-                            onTap: () => Navigator.push(
-                                context,
-                                MaterialPageRoute<void>(
-                                    builder: (_) =>
-                                        SiteRunPage(api: widget.api, runId: (r['id'] as num).toInt())))),
-                        if (_abnormal(r))
-                          Positioned(
-                              top: Nw.s16,
-                              right: Nw.s16,
-                              child: IgnorePointer(child: Icon(Icons.report, size: 24, color: c.error))),
-                      ])),
+                  padding: const EdgeInsets.symmetric(horizontal: Nw.s16),
+                  child: Text(rows.isEmpty ? tr('No records yet', '暂无记录') : tr('Nothing here', '这里没有'),
+                      style: NwText.bodyMedium.copyWith(color: c.textSecondary))),
+            for (final r in shown) _row(c, r),
           ]);
         },
       ),
@@ -263,8 +290,8 @@ class _SiteRunsPageState extends State<SiteRunsPage> {
     return Scaffold(
       appBar: AppBar(
           title: Text(widget.robotId == null
-              ? tr('Records', '记录')
-              : tr('Records ${widget.robotId}', '记录 ${widget.robotId}'))),
+              ? tr('Patrol log', '巡逻记录')
+              : tr('Patrol log · ${widget.robotId}', '巡逻记录 · ${widget.robotId}'))),
       body: body,
     );
   }

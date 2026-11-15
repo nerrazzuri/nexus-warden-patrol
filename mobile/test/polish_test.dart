@@ -102,14 +102,14 @@ void main() {
           home: Scaffold(body: SiteRunsPage(api: FakeApi('guard'), embedded: true))));
       await t.pumpAndSettle();
       expect(find.byIcon(Icons.report), findsOneWidget);
-      final card = t.widget<NwPatrolCard>(find.byType(NwPatrolCard));
-      expect(card.anomaly, isTrue);
-      expect(card.flagged, '异常 1');
-      final parts = spanOf(t, card.status).children!.cast<TextSpan>();
-      final hot = parts.singleWhere((p) => p.style != null);
+      // App V2 稿 S-runs：一趟一行；结果那一行里只有「异常 1」那一段标红
+      final rich = t.widget<RichText>(find.descendant(
+          of: find.byKey(SiteRunsPage.runKey(1)), matching: find.byWidgetPredicate((w) => w is RichText && w.text.toPlainText().contains('异常 1'))));
+      final parts = (rich.text as TextSpan).children!.single as TextSpan;
+      final hot = parts.children!.cast<TextSpan>().singleWhere((p) => p.style != null);
       expect(hot.text, '异常 1');
       expect(hot.style!.color, NwColors.dark.error);
-      expect(t.widget<Text>(find.text(card.status)).style!.color, NwColors.dark.textSecondary);
+      expect(parts.style!.color, NwColors.dark.textSecondary);
     });
   });
 
