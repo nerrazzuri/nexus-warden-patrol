@@ -211,7 +211,7 @@ void main() {
     testWidgets('遥控器开：七步走完 —— 起地图号版本、开录带版本、走完停录、能用、没有禁行区、下发、标原点', (t) async {
       final api = _admin();
       await _wizard(t, api);
-      expect(find.text('1 / 7'), findsOneWidget);
+      expect(find.textContaining('第 1 步 / 共 7 步'), findsOneWidget);
       expect(find.byKey(MapWizardPage.checksKey), findsOneWidget);
       // 室外、玻璃多点不了
       await _tap(t, MapWizardPage.siteTypeKey('outdoor'));
@@ -220,7 +220,7 @@ void main() {
       expect(api.calls, containsAllInOrder(['wizard start remote', 'wizard step drive']));
       expect(api.wizard!['site_type'], 'indoor');
       expect(api.wizard!['label'], '一楼');
-      expect(find.text('2 / 7'), findsOneWidget);
+      expect(find.textContaining('第 2 步 / 共 7 步'), findsOneWidget);
       expect(find.textContaining('低速'), findsWidgets, reason: '遥控器要放低速档');
 
       api.previewReplies.addAll([
@@ -229,7 +229,7 @@ void main() {
       ]);
       await _tap(t, MapWizardPage.nextKey);
       expect(api.calls, containsAllInOrder(['wizard step walk remote', 'mapping A start map-20261031-1 main:20261031-1']));
-      expect(find.text('3 / 7'), findsOneWidget);
+      expect(find.textContaining('第 3 步 / 共 7 步'), findsOneWidget);
       await _tick(t);
       expect(find.byKey(MapWizardPage.controlKey), findsOneWidget);
       expect(find.textContaining('已回到起点'), findsOneWidget, reason: '走了 40 米、回到起点：提示可以点走完了');
@@ -247,7 +247,7 @@ void main() {
       await _tap(t, MapWizardPage.useKey);
       expect(api.calls, contains('wizard step zones'));
 
-      expect(find.text('5 / 7'), findsOneWidget);
+      expect(find.textContaining('第 5 步 / 共 7 步'), findsOneWidget);
       expect(t.widget<FilledButton>(find.byKey(MapWizardPage.nextKey)).onPressed, isNull, reason: '没确认不能往下');
       await _tap(t, MapWizardPage.zonesEmptyKey);
       expect(api.calls, contains('confirmZones main:20261031-1 rev=0'));
@@ -255,7 +255,7 @@ void main() {
       await _tap(t, MapWizardPage.nextKey);
       expect(api.calls, contains('wizard step origin'));
 
-      expect(find.text('6 / 7'), findsOneWidget);
+      expect(find.textContaining('第 6 步 / 共 7 步'), findsOneWidget);
       await _tap(t, MapWizardPage.sendMapKey);
       expect(api.calls, contains('map A main:20261031-1 without_home'));
       api.view = _robotA(map: 'main:20261031-1');
@@ -282,7 +282,7 @@ void main() {
       await _tap(t, MapWizardPage.rewalkKey);
       expect(api.calls, contains('wizard rewalk'));
       expect(api.wizard!['version'], '20261031-2');
-      expect(find.text('3 / 7'), findsOneWidget);
+      expect(find.textContaining('第 3 步 / 共 7 步'), findsOneWidget);
       expect(api.calls, contains('mapping A start map-20261031-2 main:20261031-2'), reason: '重走：换了版本、接着就开录');
     });
 
@@ -431,7 +431,7 @@ void main() {
       expect(api.wizard, isNotNull, reason: '先停下：站点上的向导留着');
       await t.tap(find.text('open'));
       await t.pumpAndSettle();
-      expect(find.text('2 / 7'), findsOneWidget, reason: '继续');
+      expect(find.textContaining('第 2 步 / 共 7 步'), findsOneWidget, reason: '继续');
       await _tap(t, MapWizardPage.exitKey);
       await _tap(t, MapWizardPage.exitAbandonKey);
       expect(api.calls, contains('wizard abandon'));

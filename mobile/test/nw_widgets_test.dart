@@ -209,9 +209,9 @@ void main() {
       }
     });
 
-    testWidgets('三种大小：圆角 4 / 8 / 12，越大越高；都不小于手指点得准的宽', (t) async {
+    testWidgets('三种大小：App V2 一律直角 2，越大越高；都不小于手指点得准的宽', (t) async {
       final heights = <double>[];
-      for (final (s, radius) in [(NwButtonSize.small, 4.0), (NwButtonSize.medium, 8.0), (NwButtonSize.large, 12.0)]) {
+      for (final (s, radius) in [(NwButtonSize.small, 2.0), (NwButtonSize.medium, 2.0), (NwButtonSize.large, 2.0)]) {
         await _pump(t, NwButton(buttonKey: const Key('b'), label: 'Arrived', size: s, onPressed: () {}),
             theme: nwTheme(Brightness.light));
         final style = t.widget<FilledButton>(find.byKey(const Key('b'))).style!;
@@ -290,7 +290,7 @@ void main() {
         final plain = t.widget<Material>(find.ancestor(of: find.text('x'), matching: find.byType(Material)).first);
         expect(plain.color, c.surface);
         expect((plain.shape! as RoundedRectangleBorder).side, BorderSide(color: c.outline));
-        expect((plain.shape! as RoundedRectangleBorder).borderRadius, BorderRadius.circular(12));
+        expect((plain.shape! as RoundedRectangleBorder).borderRadius, BorderRadius.circular(2));
       });
 
       testWidgets('[${b.name}] 健康标签：不行了才是红的', (t) async {
@@ -351,9 +351,9 @@ void main() {
       Color bgOf(String v) => t
           .widget<Material>(find.ancestor(of: find.byKey(Key('seg-$v')), matching: find.byType(Material)).first)
           .color!;
-      expect(bgOf('home'), NwColors.dark.surfaceVariant);
+      expect(bgOf('home'), NwColors.dark.primary, reason: 'App V2：选中蓝底');
       expect(bgOf('armed'), Colors.transparent);
-      expect(_textColor(t, 'HOME'), NwColors.dark.text);
+      expect(_textColor(t, 'HOME'), NwColors.dark.onPrimary);
       expect(_textColor(t, 'ARMED'), NwColors.dark.textSecondary);
       // 三格等宽，每格够手指点
       final w = [for (final v in ['armed', 'home', 'visitor']) t.getSize(find.byKey(Key('seg-$v')))];

@@ -67,7 +67,7 @@ class NwCard extends StatelessWidget {
       this.padding = const EdgeInsets.all(Nw.s16),
       this.tone = NwTone.neutral,
       this.onTap,
-      this.radius = Nw.r12});
+      this.radius = 2}); // App V2：直角
 
   @override
   Widget build(BuildContext context) {
@@ -188,7 +188,7 @@ class NwSegment<T> extends StatelessWidget {
         padding: const EdgeInsets.all(Nw.s4),
         decoration: BoxDecoration(
             color: c.surface,
-            borderRadius: BorderRadius.circular(Nw.r8),
+            borderRadius: BorderRadius.circular(2),
             border: Border.all(color: c.outline)),
         child: Row(children: [
           for (final v in values)
@@ -197,8 +197,9 @@ class NwSegment<T> extends StatelessWidget {
                     button: true,
                     selected: v == selected,
                     child: Material(
-                        color: v == selected ? c.surfaceVariant : Colors.transparent,
-                        borderRadius: BorderRadius.circular(Nw.r4),
+                        // App V2：选中蓝底白字（蓝 = 选中）、直角
+                        color: v == selected ? c.primary : Colors.transparent,
+                        borderRadius: BorderRadius.circular(2),
                         clipBehavior: Clip.antiAlias,
                         child: InkWell(
                             key: keyOf?.call(v),
@@ -211,7 +212,8 @@ class NwSegment<T> extends StatelessWidget {
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
                                     style: NwText.labelMedium.copyWith(
-                                        color: v == selected ? c.text : c.textSecondary))))))),
+                                        color: v == selected ? c.onPrimary : c.textSecondary,
+                                        fontWeight: v == selected ? FontWeight.w700 : null))))))),
         ]));
   }
 }
@@ -302,7 +304,7 @@ class NwActionTile extends StatelessWidget {
         child: Material(
             color: c.surface,
             shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(Nw.r12), side: BorderSide(color: c.outline)),
+                borderRadius: BorderRadius.circular(2), side: BorderSide(color: c.outline)),
             clipBehavior: Clip.antiAlias,
             child: InkWell(
                 key: tileKey,
@@ -481,7 +483,7 @@ class NwNotice extends StatelessWidget {
     final c = Nw.of(context);
     return Container(
         padding: const EdgeInsets.all(Nw.s16),
-        decoration: BoxDecoration(color: c.soft(tone), borderRadius: BorderRadius.circular(Nw.r8)),
+        decoration: BoxDecoration(color: c.soft(tone), borderRadius: BorderRadius.circular(2)),
         child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Icon(
               icon ??
