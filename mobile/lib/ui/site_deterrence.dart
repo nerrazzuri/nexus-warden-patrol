@@ -11,6 +11,7 @@ import 'package:flutter/material.dart';
 
 import '../l10n.dart';
 import '../net/site_client.dart';
+import 'nw/nw_ask.dart';
 import 'nw/nw_theme.dart';
 import 'nw/nw_widgets.dart';
 
@@ -76,7 +77,7 @@ class SiteDeterrencePage extends StatefulWidget {
   State<SiteDeterrencePage> createState() => _SiteDeterrencePageState();
 }
 
-class _SiteDeterrencePageState extends State<SiteDeterrencePage> {
+class _SiteDeterrencePageState extends State<SiteDeterrencePage> with NwAsk {
   Map<String, dynamic>? _s;
   bool _ended = false;
   String _msg = '';
@@ -134,19 +135,11 @@ class _SiteDeterrencePageState extends State<SiteDeterrencePage> {
   }
 
   Future<void> _release() async {
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (c) => AlertDialog(
-        title: Text(tr(
-            'End deterrence on ${widget.robotId}? (Lights and sound off; the robot returns to standby)',
-            '解除 ${widget.robotId} 的驱离？（关闭声光，机器人返回待命点）')),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(c, false), child: Text(tr('Cancel', '取消'))),
-          FilledButton(key: const Key('deterrence-release-go'), onPressed: () => Navigator.pop(c, true), child: Text(tr('End deterrence', '解除'))),
-        ],
-      ),
-    );
-    if (ok != true) return;
+    final ok = await askYes(tr('End deterrence on ${widget.robotId}?', '解除 ${widget.robotId} 的驱离？'),
+        body: tr('Lights and sound off; the robot returns to standby.', '关闭声光，机器人返回待命点。'),
+        ok: tr('End deterrence', '解除'),
+        okKey: const Key('deterrence-release-go'));
+    if (!ok) return;
     try {
       await widget.api.deterRelease(widget.robotId);
       if (mounted) {
@@ -188,6 +181,7 @@ class _SiteDeterrencePageState extends State<SiteDeterrencePage> {
           // 横屏的手机只有 360 高：内距、间距收紧一点，常用的那几样不用滚就点得到
           padding: const EdgeInsets.symmetric(horizontal: Nw.s16, vertical: Nw.s8),
           children: [
+        askStrip(margin: const EdgeInsets.only(bottom: Nw.s8)),
         if (_msg.isNotEmpty)
           Container(
               margin: const EdgeInsets.only(bottom: Nw.s8),

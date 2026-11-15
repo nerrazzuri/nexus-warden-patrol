@@ -26,6 +26,7 @@ import 'package:flutter/services.dart';
 
 import '../l10n.dart';
 import '../net/site_client.dart';
+import 'nw/nw_ask.dart';
 import 'nw/nw_theme.dart';
 import 'nw/nw_widgets.dart';
 import 'site_robot.dart' show postureIcon, postureLabel;
@@ -181,7 +182,7 @@ class SiteTeleopPage extends StatefulWidget {
   State<SiteTeleopPage> createState() => _SiteTeleopPageState();
 }
 
-class _SiteTeleopPageState extends State<SiteTeleopPage> with WidgetsBindingObserver {
+class _SiteTeleopPageState extends State<SiteTeleopPage> with WidgetsBindingObserver, NwAsk {
   TeleopLink? _link;
   StreamSubscription<Map<String, dynamic>>? _sub;
   Timer? _tick;
@@ -379,19 +380,12 @@ class _SiteTeleopPageState extends State<SiteTeleopPage> with WidgetsBindingObse
   /// 先问旁边有没有人，站起来，再接着要遥控。
   Future<void> _standUp() async {
     final what = tr('Stand up', '站起');
-    final yes = await showDialog<bool>(
-        context: context,
-        builder: (ctx) => AlertDialog(
-              title: Text(what),
-              content: Text(tr('${widget.robotId} will stand up where it is. Make sure no one is right next to it.',
-                  '${widget.robotId} 会原地站起来。先确认它旁边没有人。')),
-              actions: [
-                TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(tr('Cancel', '取消'))),
-                FilledButton(
-                    key: SiteTeleopPage.standUpConfirmKey, onPressed: () => Navigator.pop(ctx, true), child: Text(what)),
-              ],
-            ));
-    if (yes != true || !mounted) return;
+    final yes = await askYes(what,
+        body: tr('${widget.robotId} will stand up where it is. Make sure no one is right next to it.',
+            '${widget.robotId} 会原地站起来。先确认它旁边没有人。'),
+        ok: what,
+        okKey: SiteTeleopPage.standUpConfirmKey);
+    if (!yes || !mounted) return;
     try {
       await widget.api.posture(widget.robotId, 'stand');
     } on SiteError catch (e) {
@@ -608,19 +602,9 @@ class _SiteTeleopPageState extends State<SiteTeleopPage> with WidgetsBindingObse
       link.setInSight(false);
       return;
     }
-    Future<bool> ask(String title, String body, String okKey, String ok) async =>
-        await showDialog<bool>(
-            context: context,
-            builder: (ctx) => AlertDialog(
-                  title: Text(title),
-                  content: Text(body),
-                  actions: [
-                    TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(tr('Cancel', '取消'))),
-                    FilledButton(key: Key(okKey), onPressed: () => Navigator.pop(ctx, true), child: Text(ok)),
-                  ],
-                )) ==
-        true;
-    if (!await ask(
+    Future<bool> twice(String title, String body, String okKey, String ok) =>
+        askYes(title, body: body, ok: ok, okKey: Key(okKey));
+    if (!await twice(
         tr('Are you on site and can you see the robot?', '你在现场、看得见机器人吗？'),
         tr('Only turn this on when you are next to the robot and can see it with your own eyes. The robot does not know where it is right now.',
             '只有你本人就在机器人旁边、亲眼看得见它的时候才打开。机器人现在不知道自己在哪。'),
@@ -629,7 +613,7 @@ class _SiteTeleopPageState extends State<SiteTeleopPage> with WidgetsBindingObse
       return;
     }
     if (!mounted) return;
-    if (!await ask(
+    if (!await twice(
         tr('Confirm again', '再确认一次'),
         tr('Speed goes up to 1.0 m/s and hard no-go zones (water, drops) are no longer avoided automatically. Only for this remote-control session; your name is recorded.',
             '限速放开到 1.0 m/s，不再自动避开硬禁区（水体、落差）。只管这一次遥控，会记下是你打开的。'),
@@ -672,21 +656,13 @@ class _SiteTeleopPageState extends State<SiteTeleopPage> with WidgetsBindingObse
   /// 易用性第 6 轮 A6-02：蹲着、趴着的机器人派不了巡逻 —— 退出前问一句，能一键站起来再走。
   Future<void> _askLeave() async {
     final how = _posed == 'lie' ? tr('lying down', '趴着') : tr('crouching', '蹲着');
-    final pick = await showDialog<String>(
-        context: context,
-        builder: (ctx) => AlertDialog(
-              title: Text(tr('The robot is still $how', '机器人还$how')),
-              content: Text(tr('Patrols cannot be sent while it is $how. Make it stand up before you leave?',
-                  '$how的时候派不了巡逻。退出前让它站起来吗？')),
-              actions: [
-                TextButton(onPressed: () => Navigator.pop(ctx), child: Text(tr('Cancel', '取消'))),
-                TextButton(onPressed: () => Navigator.pop(ctx, 'leave'), child: Text(tr('Leave as is', '就这样退出'))),
-                FilledButton(
-                    key: SiteTeleopPage.standExitKey,
-                    onPressed: () => Navigator.pop(ctx, 'stand'),
-                    child: Text(tr('Stand up and leave', '站起来再退出'))),
-              ],
-            ));
+    final pick = await ask<String>(
+        title: tr('The robot is still $how', '机器人还$how'),
+        body: tr('Patrols cannot be sent while it is $how. Make it stand up before you leave?', '$how的时候派不了巡逻。退出前让它站起来吗？'),
+        choices: [
+          AskChoice(tr('Leave as is', '就这样退出'), 'leave'),
+          AskChoice(tr('Stand up and leave', '站起来再退出'), 'stand', key: SiteTeleopPage.standExitKey, primary: true),
+        ]);
     if (!mounted || pick == null) return;
     if (pick == 'stand' && !await _posture('stand')) return;
     if (!mounted) return;
@@ -1034,6 +1010,16 @@ class _SiteTeleopPageState extends State<SiteTeleopPage> with WidgetsBindingObse
                         right: stick + Nw.s16,
                         top: 64 + Nw.s16,
                         child: widget.overlay!),
+                  // 两根杆中间、底边上面：页内确认（站起来、我在现场、退出前），不弹窗
+                  if (asking)
+                    Positioned(
+                        left: stick + Nw.s16,
+                        right: stick + Nw.s16 + (_speeds.length > 1 ? _sliderW : 0),
+                        top: 64 + Nw.s8,
+                        bottom: 48,
+                        child: Align(
+                            alignment: Alignment.bottomCenter,
+                            child: SingleChildScrollView(child: askStrip(margin: EdgeInsets.zero)))),
                   // 底下两根杆中间：「我在现场」（姿态挪到左上，不挡前后镜头切换，用户 11-08）
                   Positioned(
                     left: stick + Nw.s16,

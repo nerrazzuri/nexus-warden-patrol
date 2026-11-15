@@ -543,7 +543,7 @@ Map<String, dynamic>? runningItem(List<Map<String, dynamic>> items, String robot
 
 Key todayRowKey(int i) => Key('today-row-$i');
 
-class TodayPatrolList extends StatelessWidget {
+class TodayPatrolList extends StatefulWidget {
   final SiteApi api;
   final List<Map<String, dynamic>> items;
   /// 取消了一条以后调（页面重读）。
@@ -555,7 +555,27 @@ class TodayPatrolList extends StatelessWidget {
 
   static const Key emptyKey = Key('today-empty');
 
-  Future<void> _open(BuildContext context, Map<String, dynamic> it) async {
+  @override
+  State<TodayPatrolList> createState() => _TodayPatrolListState();
+}
+
+/// App V2：点一行在下面展开详情和按钮（不弹窗），再点收起。
+class _TodayPatrolListState extends State<TodayPatrolList> {
+  int? _open;
+  SiteApi get api => widget.api;
+  List<Map<String, dynamic>> get items => widget.items;
+  int? get offsetMin => widget.offsetMin;
+
+  @override
+  void didUpdateWidget(TodayPatrolList old) {
+    super.didUpdateWidget(old);
+    // 重读了：展开的那一行按时间对一下，对不上就收起（别展开到别的那一趟上）
+    final i = _open;
+    if (i != null && (i >= items.length || i >= old.items.length || items[i]['at_ms'] != old.items[i]['at_ms'])) _open = null;
+  }
+
+  Widget _details(BuildContext context, Map<String, dynamic> it) {
+    final c = Nw.of(context);
     final s = api.session;
     final reason = '${it['reason'] ?? ''}';
     final adhoc = it['kind'] == 'adhoc';
@@ -579,29 +599,46 @@ class TodayPatrolList extends StatelessWidget {
       if (it['state'] == 'blocked') patrolFixText(it, s),
     ];
     final robotId = '${it['robot'] ?? ''}';
-    final cancel = await showDialog<bool>(
-        context: context,
-        builder: (c) => AlertDialog(
-              content: Text(lines.join('\n')),
-              actions: [
-                if (it['state'] == 'blocked' && robotId.isNotEmpty)
-                  TextButton(
-                      key: const Key('today-robot'),
-                      onPressed: () {
-                        Navigator.pop(c, false);
-                        Navigator.push(context,
-                            MaterialPageRoute<void>(builder: (_) => SiteRobotPage(api: api, robotId: robotId)));
-                      },
-                      child: Text(tr('Open robot', '去机器人页'))),
-                if (canCancel)
-                  TextButton(
-                      key: const Key('today-cancel'),
-                      onPressed: () => Navigator.pop(c, true),
-                      child: Text(tr('Cancel this patrol', '取消本次巡逻'))),
-                TextButton(onPressed: () => Navigator.pop(c, false), child: Text(tr('Close', '关闭'))),
+    final shape = RoundedRectangleBorder(borderRadius: BorderRadius.circular(2));
+    const size = Size(48, 44);
+    final buttons = <Widget>[
+      if (it['state'] == 'blocked' && robotId.isNotEmpty)
+        OutlinedButton(
+            key: const Key('today-robot'),
+            style: OutlinedButton.styleFrom(minimumSize: size, shape: shape),
+            onPressed: () {
+              setState(() => _open = null);
+              Navigator.push(context, MaterialPageRoute<void>(builder: (_) => SiteRobotPage(api: api, robotId: robotId)));
+            },
+            child: Text(tr('Open robot', '去机器人页'))),
+      if (canCancel)
+        OutlinedButton(
+            key: const Key('today-cancel'),
+            style: OutlinedButton.styleFrom(minimumSize: size, shape: shape, foregroundColor: c.error),
+            onPressed: () => unawaited(_cancel(context, it)),
+            child: Text(tr('Cancel this patrol', '取消本次巡逻'))),
+    ];
+    return Container(
+        key: Key('today-detail-${it['at_ms']}'),
+        width: double.infinity,
+        color: c.surfaceVariant,
+        padding: const EdgeInsets.fromLTRB(12, Nw.s8, 12, Nw.s8),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          Text(lines.where((l) => l.isNotEmpty).join('\n'), style: NwText.bodySmall.copyWith(color: c.text)),
+          if (buttons.isNotEmpty) ...[
+            const SizedBox(height: Nw.s8),
+            Row(children: [
+              for (var k = 0; k < buttons.length; k++) ...[
+                if (k > 0) const SizedBox(width: Nw.s8),
+                Expanded(child: buttons[k]),
               ],
-            ));
-    if (cancel != true) return;
+            ]),
+          ],
+        ]));
+  }
+
+  Future<void> _cancel(BuildContext context, Map<String, dynamic> it) async {
+    setState(() => _open = null);
     try {
       await api.cancelAdhoc('${it['adhoc_id']}');
     } on SiteError catch (e) {
@@ -609,7 +646,7 @@ class TodayPatrolList extends StatelessWidget {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(refusalText(e))));
       }
     }
-    onChanged?.call();
+    widget.onChanged?.call();
   }
 
   @override
@@ -617,7 +654,7 @@ class TodayPatrolList extends StatelessWidget {
     final c = Nw.of(context);
     if (items.isEmpty) {
       return Padding(
-          key: emptyKey,
+          key: TodayPatrolList.emptyKey,
           padding: const EdgeInsets.symmetric(vertical: Nw.s8),
           child: Text(tr('No patrols today.', '今天没有巡逻。'),
               style: NwText.bodyMedium.copyWith(color: c.textSecondary)));
@@ -625,10 +662,10 @@ class TodayPatrolList extends StatelessWidget {
     return NwCard(
       padding: EdgeInsets.zero,
       child: Column(mainAxisSize: MainAxisSize.min, children: [
-        for (var i = 0; i < items.length; i++)
+        for (var i = 0; i < items.length; i++) ...[
           InkWell(
             key: todayRowKey(i),
-            onTap: () => _open(context, items[i]),
+            onTap: () => setState(() => _open = _open == i ? null : i),
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: Nw.s8),
               child: Row(children: [
@@ -667,6 +704,8 @@ class TodayPatrolList extends StatelessWidget {
               ]),
             ),
           ),
+          if (_open == i) _details(context, items[i]),
+        ],
       ]),
     );
   }

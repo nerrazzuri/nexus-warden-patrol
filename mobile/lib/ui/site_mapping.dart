@@ -24,6 +24,7 @@ import '../net/site_client.dart';
 import 'map_manage.dart' show versionLabel;
 import 'map_view.dart';
 import 'nw/nw_map_raster.dart';
+import 'nw/nw_ask.dart';
 import 'nw/nw_theme.dart';
 import 'nw/nw_widgets.dart';
 
@@ -656,7 +657,7 @@ class SiteMapPreviewPage extends StatefulWidget {
   State<SiteMapPreviewPage> createState() => _SiteMapPreviewPageState();
 }
 
-class _SiteMapPreviewPageState extends State<SiteMapPreviewPage> {
+class _SiteMapPreviewPageState extends State<SiteMapPreviewPage> with NwAsk {
   /// （预览 JSON，底图，底图是不是平面图）。抹掉区改了重新取（站点把底图那一块抹了，平面图地址也变了）。
   late Future<(Map<String, dynamic>, Uint8List, bool)> _data = _load();
 
@@ -810,51 +811,29 @@ class _SiteMapPreviewPageState extends State<SiteMapPreviewPage> {
     final offered =
         _propList('zones').length + _propList('standby').length + _propList('intercepts').length;
     // 二次确认（W10 内审小 15）：把确认的那句话念一遍，别跟画区域的按钮误触
-    final ok = await showDialog<bool>(
-        context: context,
-        builder: (c) => AlertDialog(
-              scrollable: true,
-              title: Text(tr('Confirm zones revision $_rev', '确认第 $_rev 版区域')),
-              content: Text(tr(
+    final ok = await askYes(tr('Confirm zones revision $_rev', '确认第 $_rev 版区域'),
+        body: tr(
                   '${_zones?['confirm_text'] ?? ''}.\nThe map can be sent to robots only after you confirm.'
                       '${prop == null ? '' : '\nCopied from version ${prop['from_version']}: adopting the $picked ticked item(s) of $offered; the rest are dropped.'}',
                   '${_zones?['confirm_text'] ?? ''}。\n确认后此地图才能下发给机器人。'
-                      '${prop == null ? '' : '\n从第 ${prop['from_version']} 版带入的 $offered 项中，采纳已勾选的 $picked 项，其余放弃。'}')),
-              actions: [
-                TextButton(
-                    onPressed: () => Navigator.pop(c, false),
-                    child: Text(tr('Review again', '返回检查'))),
-                FilledButton(
-                    key: SiteMapPreviewPage.confirmOkKey,
-                    onPressed: () => Navigator.pop(c, true),
-                    child: Text(tr('Confirm', '确认'))),
-              ],
-            ));
-    if (ok != true || !mounted) return;
+                '${prop == null ? '' : '\n从第 ${prop['from_version']} 版带入的 $offered 项中，采纳已勾选的 $picked 项，其余放弃。'}'),
+        cancel: tr('Review again', '返回检查'),
+        ok: tr('Confirm', '确认'),
+        okKey: SiteMapPreviewPage.confirmOkKey);
+    if (!ok || !mounted) return;
     var emptyOk = false;
     if (_zoneList.isEmpty && zoneIds.isEmpty) {
       // R2：一个区域都没有的那一版再问一道 —— 重建图之后，上一版画的泳池可能悄悄没了
       final prev = _zones?['previous'] as Map<String, dynamic>?;
       final had = (prev?['zones'] as num? ?? 0).toInt();
-      final ok2 = await showDialog<bool>(
-          context: context,
-          builder: (c) => AlertDialog(
-                scrollable: true,
-                title: Text(tr('No zones at all', '一个区域都没有')),
-                content: Text(tr(
-                    'This version has no no-go or speed-limit zones${had > 0 ? ' (version ${prev?['version']} had $had)' : ''}. Confirm only if the map really has no water, stairs, steep slopes or drops.',
-                    '此版本没有任何禁行区和限速区${had > 0 ? '（上一版第 ${prev?['version']} 版有 $had 个）' : ''}。请确认地图上确实没有水池、高楼梯、陡坡和落差。')),
-                actions: [
-                  TextButton(
-                      onPressed: () => Navigator.pop(c, false),
-                      child: Text(tr('Review again', '返回检查'))),
-                  FilledButton(
-                      key: SiteMapPreviewPage.confirmEmptyKey,
-                      onPressed: () => Navigator.pop(c, true),
-                      child: Text(tr('Yes, there are none', '确认没有'))),
-                ],
-              ));
-      if (ok2 != true || !mounted) return;
+      final ok2 = await askYes(tr('No zones at all', '一个区域都没有'),
+          body: tr(
+              'This version has no no-go or speed-limit zones${had > 0 ? ' (version ${prev?['version']} had $had)' : ''}. Confirm only if the map really has no water, stairs, steep slopes or drops.',
+              '此版本没有任何禁行区和限速区${had > 0 ? '（上一版第 ${prev?['version']} 版有 $had 个）' : ''}。请确认地图上确实没有水池、高楼梯、陡坡和落差。'),
+          cancel: tr('Review again', '返回检查'),
+          ok: tr('Yes, there are none', '确认没有'),
+          okKey: SiteMapPreviewPage.confirmEmptyKey);
+      if (!ok2 || !mounted) return;
       emptyOk = true;
     }
     setState(() {
@@ -1193,6 +1172,7 @@ class _SiteMapPreviewPageState extends State<SiteMapPreviewPage> {
         key: SiteMapPreviewPage.panelKey,
         color: c.bg,
         child: ListView(padding: const EdgeInsets.only(bottom: Nw.s24), children: [
+          askStrip(),
           if (admin) _tools(c, admin),
           if (_drawing != null) _drawBar(c) else _statusBar(c),
           section(tr('Zones', '区域'), _zonePanel(zones)),
