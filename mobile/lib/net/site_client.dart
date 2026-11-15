@@ -804,7 +804,15 @@ abstract class SiteApi {
   Future<Map<String, dynamic>> alertTest();
   Future<Map<String, dynamic>> ackAlert(String key);
   /// [verdict]：`false_alarm` / `handled` / `intruder`（W44 结论，站点统计误报用）；空 = 不写结论。
-  Future<Map<String, dynamic>> resolveAlert(String key, {String verdict = ''});
+  /// [note]：给下一班看的一句（App V2「这件事」，跟网页一样；站点存 200 字）。
+  Future<Map<String, dynamic>> resolveAlert(String key, {String verdict = '', String note = ''});
+
+  /// 请求支援（网页 redesign 第 8 期）：站点给经理、管理员推一条，原告警记下谁几点叫的
+  /// （`context.backup_by` / `backup_ms`）。叫过的不再起第二条；关了的 409。
+  Future<Map<String, dynamic>> backupAlert(String key);
+
+  /// 撤销结案（网页第 1 轮 P0-04）：关了 10 分钟内能重新打开。
+  Future<Map<String, dynamic>> reopenAlert(String key);
 
   /// W74：保安到场了（看见人那一类要先到场才能关）。
   Future<Map<String, dynamic>> arriveAlert(String key);
@@ -1461,10 +1469,18 @@ class SiteClient implements SiteApi {
       'POST', '/api/alerts/${Uri.encodeComponent(key)}/ack', <String, dynamic>{}));
 
   @override
-  Future<Map<String, dynamic>> resolveAlert(String key, {String verdict = ''}) async => _map(await _send(
+  Future<Map<String, dynamic>> resolveAlert(String key, {String verdict = '', String note = ''}) async => _map(await _send(
       'POST',
       '/api/alerts/${Uri.encodeComponent(key)}/resolve',
-      <String, dynamic>{if (verdict.isNotEmpty) 'verdict': verdict}));
+      <String, dynamic>{if (verdict.isNotEmpty) 'verdict': verdict, if (note.trim().isNotEmpty) 'note': note.trim()}));
+
+  @override
+  Future<Map<String, dynamic>> backupAlert(String key) async => _map(await _send(
+      'POST', '/api/alerts/${Uri.encodeComponent(key)}/backup', <String, dynamic>{}));
+
+  @override
+  Future<Map<String, dynamic>> reopenAlert(String key) async => _map(await _send(
+      'POST', '/api/alerts/${Uri.encodeComponent(key)}/reopen', <String, dynamic>{}));
 
   @override
   Future<Map<String, dynamic>> arriveAlert(String key) async => _map(await _send(

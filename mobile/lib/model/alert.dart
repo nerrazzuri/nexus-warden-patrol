@@ -72,6 +72,12 @@ class Alert {
   /// 在处理」和「这事没了」是两回事（§5.3）。
   final int? resolvedMs;
 
+  /// 谁关的（`site:…` / `system` 是站点自己关的）。没关是空串。
+  final String resolvedBy;
+
+  /// 关的时候定的结论：`intruder` / `false_alarm` / `handled`；没定是空串（W44）。
+  final String verdict;
+
   /// 升到第几档通道了（0 = 只在大屏上）。
   final int escalated;
 
@@ -103,6 +109,8 @@ class Alert {
     required this.channel,
     this.context = const <String, dynamic>{},
     this.audience = '',
+    this.resolvedBy = '',
+    this.verdict = '',
   });
 
   factory Alert.fromWire(Map<String, dynamic> m) => Alert(
@@ -121,6 +129,8 @@ class Alert {
         // **不给缺省 0。** 见 [ackedMs]。
         ackedMs: (m['acked_ms'] as num?)?.toInt(),
         resolvedMs: (m['resolved_ms'] as num?)?.toInt(),
+        resolvedBy: (m['resolved_by'] as String?) ?? '',
+        verdict: (m['verdict'] as String?) ?? '',
         escalated: (m['escalated'] as num?)?.toInt() ?? 0,
         channel: (m['channel'] as String?) ?? '',
         context: (m['context'] is Map)

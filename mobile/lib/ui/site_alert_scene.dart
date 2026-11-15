@@ -26,10 +26,9 @@ import '../model/alert.dart';
 import '../net/site_client.dart';
 import '../net/site_text.dart';
 import 'map_view.dart' show loadMapPicture;
-import 'nw/nw_button.dart';
 import 'nw/nw_p2_duty.dart';
 import 'nw/nw_theme.dart';
-import 'nw/nw_widgets.dart';
+import 'nw/nw_shell.dart' show EstopSquare;
 import 'site_tabs.dart' show AccountsPage;
 import 'site_mapping.dart';
 import 'site_recordings.dart';
@@ -64,6 +63,25 @@ class SiteAlertScenePage extends StatefulWidget {
 
   /// 底栏：四个大按钮和按了之后的那句话。
   static const Key barKey = Key('scene-bar');
+  static const Key stepsKey = Key('scene-steps');
+  static const Key situationKey = Key('scene-situation');
+  static const Key warnKey = Key('scene-warn');
+  static const Key speakKey = Key('scene-speak');
+  static const Key strobeKey = Key('scene-strobe');
+  static const Key allOffKey = Key('scene-all-off');
+  static const Key endDeterKey = Key('scene-end-deter');
+  static const Key deterLevelKey = Key('scene-deter-level');
+  static const Key notifyKey = Key('scene-notify');
+  static const Key backupKey = Key('scene-backup');
+  static const Key backupDoneKey = Key('scene-backup-done');
+  static const Key verdictKey = Key('scene-verdict');
+  static const Key intruderKey = Key('scene-v-intruder');
+  static const Key handledKey = Key('scene-v-handled');
+  static const Key noteKey = Key('scene-note');
+  static const Key closedKey = Key('scene-closed');
+  static const Key reopenKey = Key('scene-reopen');
+  static const Key timelineKey = Key('scene-timeline');
+  static const Key estopKey = Key('scene-estop');
 
   @override
   State<SiteAlertScenePage> createState() => _SiteAlertScenePageState();
@@ -93,10 +111,15 @@ class SiteAlertScenePage extends StatefulWidget {
   // W74 二期：人最后在哪（机器人跟人时算的，跟机器人同一张图）
   final person = ctx['person'];
   if (person is Map && mapId != null) {
-    add(<String, dynamic>{'map_id': mapId, 'map_version': version, ...person.cast<String, dynamic>()},
-        tr('Person last seen', '人最后在这'), Colors.orange);
+    add(
+      <String, dynamic>{'map_id': mapId, 'map_version': version, ...person.cast<String, dynamic>()},
+      tr('Person last seen', '人最后在这'),
+      Colors.orange,
+    );
   }
-  if (point is Map) add(point, tr('Intercept point ${point['name'] ?? ''}', '拦截点 ${point['name'] ?? ''}'), Colors.purple);
+  if (point is Map) {
+    add(point, tr('Intercept point ${point['name'] ?? ''}', '拦截点 ${point['name'] ?? ''}'), Colors.purple);
+  }
   if (marks.isEmpty) return null;
   return (mapId!, version!, marks);
 }
@@ -156,8 +179,6 @@ class _SiteAlertScenePageState extends State<SiteAlertScenePage> {
   int _alertApplied = 0;
   int _deterApplied = 0;
 
-  bool _falseDialog = false;
-
   String _msg = '';
   bool _dim = false;
   int _ticks = 0;
@@ -216,11 +237,11 @@ class _SiteAlertScenePageState extends State<SiteAlertScenePage> {
       _deterKnown = false;
       _msg = '';
       _dim = false;
-      if (_falseDialog) {
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted && _falseDialog) Navigator.of(context, rootNavigator: true).pop(false);
-        });
-      }
+      _verdict = null;
+      _note.clear();
+      _closedHere = null;
+      _backupHere = null;
+      _caps = null;
     }
     unawaited(_refresh());
   }
@@ -237,6 +258,7 @@ class _SiteAlertScenePageState extends State<SiteAlertScenePage> {
   @override
   void dispose() {
     _timer?.cancel();
+    _note.dispose();
     super.dispose();
   }
 
@@ -258,6 +280,17 @@ class _SiteAlertScenePageState extends State<SiteAlertScenePage> {
       if (!current()) return; // 留着旧的
     }
     if (!isRobot) return;
+    if (_caps == null) {
+      // 这台机器人有哪几路上装（喊话、警灯、警笛）：只问一次
+      try {
+        final v = await widget.api.robot(robot);
+        if (!current()) return;
+        final d = (((v['capabilities'] as Map?)?['tasks'] as Map?)?['deter']);
+        setState(() => _caps = d is Map ? Map<String, dynamic>.from(d) : const <String, dynamic>{});
+      } on Object {
+        if (!current()) return;
+      }
+    }
     try {
       final rows = await widget.api.deterrence();
       if (!current() || seq <= _deterApplied) return;
@@ -286,8 +319,12 @@ class _SiteAlertScenePageState extends State<SiteAlertScenePage> {
       final got = r['alert'] is Map ? Alert.fromWire(Map<String, dynamic>.from(r['alert'] as Map)) : null;
       if (got != null && got.key != key) {
         // 站点明说回的是另一条：不能当成这一条确认上了
-        setState(() => _msg = tr("Not acknowledged: the site returned a different alarm (${got.key})",
-            '确认失败：站点返回的是另一条报警（${got.key}）'));
+        setState(
+          () => _msg = tr(
+            "Not acknowledged: the site returned a different alarm (${got.key})",
+            '确认失败：站点返回的是另一条报警（${got.key}）',
+          ),
+        );
         return;
       }
       // 站点回了确认之后的这一条：谁、几点以站点记的为准。老站点不回正文：先在本地记成「我、现在」，
@@ -319,10 +356,14 @@ class _SiteAlertScenePageState extends State<SiteAlertScenePage> {
         if (s != null) _gotDeter(s);
         _msg = switch (sirenState(s)) {
           SirenState.on => '',
-          SirenState.notFitted => tr('Level $sirenLevel is set, but this robot has no siren.',
-              '已到第 $sirenLevel 级，但此机器人没有警笛。'),
-          _ => tr('Level $sirenLevel requested. Waiting for the robot to confirm the siren.',
-              '已请求第 $sirenLevel 级，机器人尚未确认警笛开启。'),
+          SirenState.notFitted => tr(
+            'Level $sirenLevel is set, but this robot has no siren.',
+            '已到第 $sirenLevel 级，但此机器人没有警笛。',
+          ),
+          _ => tr(
+            'Level $sirenLevel requested. Waiting for the robot to confirm the siren.',
+            '已请求第 $sirenLevel 级，机器人尚未确认警笛开启。',
+          ),
         };
       });
     } on SiteError catch (e) {
@@ -349,54 +390,155 @@ class _SiteAlertScenePageState extends State<SiteAlertScenePage> {
     }
   }
 
-  Future<void> _done() async {
-    final gen = _gen, key = _a.key;
-    final ok = await showDialog<bool>(
-        context: context,
-        builder: (c) => AlertDialog(
-              content: Text(tr('Close this alarm as handled?', '已处理，关闭此报警？')),
-              actions: [
-                TextButton(onPressed: () => Navigator.pop(c, false), child: Text(tr('Cancel', '取消'))),
-                FilledButton(
-                    key: SiteAlertScenePage.doneGoKey,
-                    onPressed: () => Navigator.pop(c, true),
-                    child: Text(tr('Handled', '已处理'))),
-              ],
-            ));
-    if (ok != true || !mounted || gen != _gen) return;
+  /// 结论（跟网页一样）：入侵、起火给三种，别的给「已处理 / 误报」；不能误报的（机器人故障、派单被拒……
+  /// 是真事，手机 App 测试 M04）只给「已处理」。
+  List<String> get _verdicts {
+    final sec = _a.audience == 'intrusion' || _a.audience == 'fire';
+    final all = sec ? const ['intruder', 'false_alarm', 'handled'] : const ['handled', 'false_alarm'];
+    return [
+      for (final v in all)
+        if (v != 'false_alarm' || _canBeFalse) v,
+    ];
+  }
+
+  static String verdictWord(String v) => switch (v) {
+    'intruder' => tr('Confirmed intrusion', '确认有人'),
+    'false_alarm' => tr('False alarm', '误报'),
+    'handled' => tr('Resolved', '已处理'),
+    _ => tr('Closed', '已关闭'),
+  };
+
+  /// 选了结论、写了备注，点「结案」才关（App V2 不弹窗：结论这一段就是确认）。
+  String? _verdict;
+  final TextEditingController _note = TextEditingController();
+  bool _busy = false;
+
+  Future<void> _close() async {
+    final gen = _gen, key = _a.key, verdict = _verdict;
+    if (verdict == null || _busy) return;
+    setState(() => _busy = true);
     try {
-      await widget.api.resolveAlert(key, verdict: 'handled');
-      if (mounted && gen == _gen) Navigator.pop(context);
+      final r = await widget.api.resolveAlert(key, verdict: verdict, note: _note.text);
+      if (!mounted || gen != _gen) return;
+      final got = r['alert'] is Map ? Alert.fromWire(Map<String, dynamic>.from(r['alert'] as Map)) : null;
+      setState(() {
+        if (got != null && got.key == key) _a = got;
+        _closedHere = widget.now().millisecondsSinceEpoch;
+        _msg = tr('Alarm closed. You can reopen it within 10 minutes.', '报警已关闭。10 分钟内可以重新打开。');
+      });
     } on SiteError catch (e) {
       if (mounted && gen == _gen) setState(() => _msg = tr('Not closed: $e', '关闭失败：$e'));
+    } finally {
+      if (mounted && gen == _gen) setState(() => _busy = false);
     }
   }
 
-  Future<void> _falseAlarm() async {
+  /// 这一页上刚结的案（站点回包里没有关的时刻时，按本机时刻算撤销的 10 分钟）。
+  int? _closedHere;
+  static const int reopenMs = 10 * 60 * 1000;
+
+  bool get _canReopen {
+    final at = _a.resolvedMs ?? _closedHere;
+    if (at == null || _open && _closedHere == null) return false;
+    final by = _a.resolvedBy;
+    final auto =
+        _a.verdict.isEmpty &&
+        (by == 'system' ||
+            by.startsWith('site:') ||
+            by.startsWith('\u7ad9\u70b9:') ||
+            by.startsWith('\u7ad9\u70b9\uff1a'));
+    return !auto && widget.now().millisecondsSinceEpoch - at < reopenMs;
+  }
+
+  Future<void> _reopen() async {
     final gen = _gen, key = _a.key;
-    _falseDialog = true;
-    final ok = await showDialog<bool>(
-        context: context,
-        builder: (c) => AlertDialog(
-              content: Text(tr(
-                  'Mark as a false alarm? The alarm is closed; any running deterrence is not stopped here.',
-                  '标为误报？此报警将关闭，正在进行的驱离不会在此停止。')),
-              actions: [
-                TextButton(onPressed: () => Navigator.pop(c, false), child: Text(tr('Cancel', '取消'))),
-                FilledButton(
-                    key: SiteAlertScenePage.falseGoKey,
-                    onPressed: () => Navigator.pop(c, true),
-                    child: Text(tr('False alarm', '误报'))),
-              ],
-            ));
-    _falseDialog = false;
-    // 问的是那一条：这一页换了告警，这次的「是」不算数
-    if (ok != true || !mounted || gen != _gen) return;
     try {
-      await widget.api.resolveAlert(key, verdict: 'false_alarm');
-      if (mounted && gen == _gen) Navigator.pop(context);
+      final r = await widget.api.reopenAlert(key);
+      if (!mounted || gen != _gen) return;
+      final got = r['alert'] is Map ? Alert.fromWire(Map<String, dynamic>.from(r['alert'] as Map)) : null;
+      setState(() {
+        if (got != null && got.key == key) _a = got;
+        _closedHere = null;
+        _verdict = null;
+        _msg = tr('Alarm reopened.', '报警已重新打开。');
+      });
+      unawaited(_refresh());
     } on SiteError catch (e) {
-      if (mounted && gen == _gen) setState(() => _msg = tr('Not closed: $e', '关闭失败：$e'));
+      if (mounted && gen == _gen) setState(() => _msg = tr('Not reopened: $e', '没能重新打开：$e'));
+    }
+  }
+
+  Future<void> _backup() async {
+    final gen = _gen, key = _a.key;
+    try {
+      final r = await widget.api.backupAlert(key);
+      if (!mounted || gen != _gen) return;
+      final got = r['alert'] is Map ? Alert.fromWire(Map<String, dynamic>.from(r['alert'] as Map)) : null;
+      setState(() {
+        if (got != null && got.key == key) _a = got;
+        _backupHere ??= (widget.api.session?.name ?? '', widget.now().millisecondsSinceEpoch);
+        _msg = tr('Backup requested; managers and administrators notified.', '已请求支援，经理和管理员已收到推送。');
+      });
+    } on SiteError catch (e) {
+      if (mounted && gen == _gen) setState(() => _msg = tr('Backup not requested: $e', '没能请求支援：$e'));
+    }
+  }
+
+  (String, int)? _backupHere;
+
+  /// 这台机器人报的上装（`capabilities.tasks.deter`）：有哪几路、预录话术、能不能念字。
+  Map<String, dynamic>? _caps;
+  List<String> get _outputs => ((_caps?['outputs'] as List?) ?? const []).map((e) => '$e').toList();
+
+  /// 现场警示：开一路（喊话、警灯、警笛），带时长、到点机器人自己关。
+  Future<void> _warn(String output, {double? maxS, String? clip}) async {
+    final gen = _gen, robot = _a.robot;
+    try {
+      await widget.api.deter(robot, output, true, maxS: maxS, clip: clip);
+      if (!mounted || gen != _gen) return;
+      setState(
+        () => _msg = switch (output) {
+          'speaker' => tr('$robot: announcing.', '$robot 在喊话。'),
+          'strobe' => tr('$robot: strobe on for ${maxS?.round() ?? 30} s.', '$robot 警灯开 ${maxS?.round() ?? 30} 秒。'),
+          _ => tr('$robot: siren on for ${maxS?.round() ?? 10} s.', '$robot 警笛响 ${maxS?.round() ?? 10} 秒。'),
+        },
+      );
+    } on SiteError catch (e) {
+      if (mounted && gen == _gen) setState(() => _msg = tr('Not done: $e', '没执行：$e'));
+    }
+  }
+
+  /// 「全部关」：这台机器人上开着的警示一路路关掉。
+  Future<void> _allOff() async {
+    final gen = _gen, robot = _a.robot;
+    final fails = <String>[];
+    for (final o in _outputs.where((o) => const {'speaker', 'strobe', 'siren', 'spotlight'}.contains(o))) {
+      try {
+        await widget.api.deter(robot, o, false);
+      } on SiteError {
+        fails.add(o);
+      }
+      if (!mounted || gen != _gen) return;
+    }
+    setState(
+      () => _msg = fails.isEmpty
+          ? tr('$robot: all warnings off.', '$robot 警示全部关了。')
+          : tr('Some outputs did not turn off: ${fails.join(', ')}', '有几路没关上：${fails.join('、')}'),
+    );
+  }
+
+  /// 「结束驱离」：站点那一场解除，警示全关、机器人回待命点。
+  Future<void> _endDeter() async {
+    final gen = _gen, robot = _a.robot;
+    try {
+      await widget.api.deterRelease(robot);
+      if (!mounted || gen != _gen) return;
+      setState(() {
+        _gotDeter(null);
+        _msg = tr('Deterrence ended on $robot; it returns to standby.', '$robot 结束驱离，回待命点。');
+      });
+    } on SiteError catch (e) {
+      if (mounted && gen == _gen) setState(() => _msg = tr('Deterrence not ended: $e', '没能结束驱离：$e'));
     }
   }
 
@@ -413,15 +555,20 @@ class _SiteAlertScenePageState extends State<SiteAlertScenePage> {
     }
     if (!mounted || gen != _gen) return;
     if (runs.isEmpty) {
-      setState(() => _msg = tr(
+      setState(
+        () => _msg = tr(
           'The task record hasn\'t reached the site yet (it uploads after the robot arrives and takes photos)',
-          '该任务的记录尚未上传到站点（机器人到达并拍照后上传）'));
+          '该任务的记录尚未上传到站点（机器人到达并拍照后上传）',
+        ),
+      );
       return;
     }
     await Navigator.push(
-        context,
-        MaterialPageRoute<void>(
-            builder: (_) => SiteRunPage(api: widget.api, runId: (runs.first['id'] as num).toInt())));
+      context,
+      MaterialPageRoute<void>(
+        builder: (_) => SiteRunPage(api: widget.api, runId: (runs.first['id'] as num).toInt()),
+      ),
+    );
   }
 
   /// 就地驱离（W33，决策 48）：狗在跑的任务先撤掉，就在它这儿开一场、从 L1（灯光）起。
@@ -433,19 +580,14 @@ class _SiteAlertScenePageState extends State<SiteAlertScenePage> {
       final lv = s['session'] is Map ? (s['session'] as Map)['level'] : null;
       setState(() {
         if (s['session'] is Map) _gotDeter(Map<String, dynamic>.from(s['session'] as Map));
-        _msg = tr('Deterrence started on $robot (L${lv ?? 1}). Escalate or end it on the deterrence page',
-            '已在 $robot 启动驱离（L${lv ?? 1}），可在驱离页升级或解除');
+        _msg = tr(
+          'Deterrence started on $robot (L${lv ?? 1}). Escalate or end it on the deterrence page',
+          '已在 $robot 启动驱离（L${lv ?? 1}），可在驱离页升级或解除',
+        );
       });
     } on SiteError catch (e) {
       if (mounted && gen == _gen) setState(() => _msg = tr("Can't start deterrence: $e", '无法启动驱离：$e'));
     }
-  }
-
-  String _ago(int ms) {
-    final s = widget.now().difference(DateTime.fromMillisecondsSinceEpoch(ms)).inSeconds;
-    if (s < 60) return tr('$s s ago', '$s 秒前');
-    if (s < 3600) return tr('${s ~/ 60} min ago', '${s ~/ 60} 分钟前');
-    return tr('${s ~/ 3600} h ago', '${s ~/ 3600} 小时前');
   }
 
   static String _two(int n) => n.toString().padLeft(2, '0');
@@ -464,12 +606,12 @@ class _SiteAlertScenePageState extends State<SiteAlertScenePage> {
       final by = _a.ackedBy.isNotEmpty ? _a.ackedBy : (_ackedHere?.$1 ?? '');
       final at = hms(_a.ackedMs ?? _ackedHere!.$2);
       final me = by.isNotEmpty && by == widget.api.session?.name;
-      return me
-          ? tr('Acknowledged by you at $at', '你已于 $at 确认')
-          : tr('Acknowledged by $by at $at', '$by 已于 $at 确认');
+      return me ? tr('Acknowledged by you at $at', '你已于 $at 确认') : tr('Acknowledged by $by at $at', '$by 已于 $at 确认');
     }
-    return tr('Unacknowledged for ${span(widget.now().millisecondsSinceEpoch - _a.firstMs)}',
-        '已 ${span(widget.now().millisecondsSinceEpoch - _a.firstMs)} 无人确认');
+    return tr(
+      'Unacknowledged for ${span(widget.now().millisecondsSinceEpoch - _a.firstMs)}',
+      '已 ${span(widget.now().millisecondsSinceEpoch - _a.firstMs)} 无人确认',
+    );
   }
 
   Map? get _persons {
@@ -483,205 +625,595 @@ class _SiteAlertScenePageState extends State<SiteAlertScenePage> {
     final m = _persons?['nearest_m'];
     if (m is num && _isRobot) {
       // 站点只给最近的距离，没给方向（前后相机汇总的）：不说「前方」（外审 M1）
-      parts.add(tr('Nearest person ${m.toStringAsFixed(1)} m from ${_a.robot}.',
-          '最近的人距 ${_a.robot} ${m.toStringAsFixed(1)} 米。'));
+      parts.add(
+        tr(
+          'Nearest person ${m.toStringAsFixed(1)} m from ${_a.robot}.',
+          '最近的人距 ${_a.robot} ${m.toStringAsFixed(1)} 米。',
+        ),
+      );
     }
     final d = _d;
     if (d != null) {
       parts.add(tr('Deterrence level ${d['level']}.', '驱离第 ${d['level']} 级。'));
     } else if (_isRobot && !_deterFresh) {
       final old = _deter;
-      parts.add(old == null
-          ? tr('Deterrence status unknown.', '驱离状态未知。')
-          : tr('Deterrence status unknown (level ${old['level']} when last checked at ${hms(_deterAtMs)}).',
-              '驱离状态未知（${hms(_deterAtMs)} 最后查询时为第 ${old['level']} 级）。'));
+      parts.add(
+        old == null
+            ? tr('Deterrence status unknown.', '驱离状态未知。')
+            : tr(
+                'Deterrence status unknown (level ${old['level']} when last checked at ${hms(_deterAtMs)}).',
+                '驱离状态未知（${hms(_deterAtMs)} 最后查询时为第 ${old['level']} 级）。',
+              ),
+      );
     }
     return parts.join(' ');
   }
 
-  Widget _head() {
-    final c = Nw.of(context);
-    final p1 = _a.level == 'P1';
-    final solid = p1 && _open;
-    final fg = solid ? c.onError : c.text;
-    final mark = solid ? c.onError : priorityColor(_a.level, c);
-    return Container(
-        key: SiteAlertScenePage.headKey,
-        color: solid ? c.error : c.surface,
-        padding: const EdgeInsets.fromLTRB(Nw.s16, Nw.s8, Nw.s16, Nw.s8),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Row(crossAxisAlignment: CrossAxisAlignment.center, children: [
-            PriorityShape(level: _a.level, color: mark),
-            const SizedBox(width: 6),
-            Text(_a.level, style: NwText.labelLarge.copyWith(color: mark, fontWeight: FontWeight.w700)),
-            const SizedBox(width: 10),
-            Expanded(
-                child: Text(alertTitle(_a.kind, _a.title), style: NwText.titleMedium.copyWith(color: fg))),
-            const SizedBox(width: Nw.s8),
-            Text(hms(_a.firstMs), style: NwText.labelMedium.copyWith(color: fg)),
-          ]),
-          const SizedBox(height: 2),
-          Text(_stateLine(),
-              key: SiteAlertScenePage.stateKey,
-              style: NwText.labelLarge.copyWith(color: solid ? c.onError : c.textSecondary)),
-        ]));
+  // ------------------------------------------------------------ App V2「这件事」（稿 N-incident）
+
+  bool get _security =>
+      _a.audience == 'intrusion' || _a.audience == 'fire' || _a.kind == 'payload_sos' || _a.kind == 'dog_sees_person';
+
+  /// 步骤条（跟网页 incidentSteps 一样）：发现 → 接手 → 派出（安全事件、有机器人）→ 到场（要到场的那类）→ 关闭。
+  List<(String, int?, String)> _steps() {
+    final ackAt = _a.ackedMs ?? _ackedHere?.$2;
+    final ackBy = _a.ackedBy.isNotEmpty ? _a.ackedBy : (_ackedHere?.$1 ?? '');
+    final arrivedMs = _a.context['arrived_ms'] is num ? (_a.context['arrived_ms'] as num).toInt() : _arrivedHere?.$2;
+    return [
+      (tr('Detected', '发现'), _a.firstMs, ''),
+      (tr('Assigned', '接手'), ackAt, ackBy),
+      if (_security) (tr('Dispatched', '派出'), _isRobot ? _a.firstMs : null, _isRobot ? _a.robot : ''),
+      if (_needsArrive) (tr('On site', '到场'), arrivedMs, '${_a.context['arrived_by'] ?? _arrivedHere?.$1 ?? ''}'),
+      (tr('Closed', '结案'), _a.resolvedMs ?? _closedHere, _a.resolvedMs != null ? verdictWord(_a.verdict) : ''),
+    ];
   }
 
-  /// 报警块：头 + 实时画面，外面一圈报警框（没确认的 P1 闪）。
-  Widget _alarmBlock() {
-    final c = Nw.of(context);
+  static String _hm(int ms) {
+    final d = DateTime.fromMillisecondsSinceEpoch(ms);
+    return '${_two(d.hour)}:${_two(d.minute)}';
+  }
+
+  /// 跟随一行：「A 正在跟随，距离 4.6 米」/「看不到人了」。
+  String _followLine() {
+    final f = _a.context['follow'];
+    if (f == 'follow') return tr('${_a.robot} following', '${_a.robot} 正在跟随');
+    if (f == 'lost' || f == 'limit' || _a.context['lost_ms'] is num) return tr('Person no longer seen', '看不到人了');
+    return '';
+  }
+
+  /// 页头：标题 + P1、在哪 · 几点、谁在处理（或没人接手多久 +「我来处理」）、步骤条。没接手的 P1 红框闪。
+  Widget _header(NwColors c) {
     final p1 = _a.level == 'P1' && _open;
+    final ctx = _a.context;
+    final where = [
+      if ('${ctx['zone'] ?? ''}'.isNotEmpty) '${ctx['zone']}',
+      if ('${ctx['camera'] ?? ''}'.isNotEmpty) '${ctx['camera']}',
+      if (_isRobot) _a.robot,
+      if ('${ctx['exit'] ?? ''}'.isNotEmpty) tr('left via ${ctx['exit']}', '从 ${ctx['exit']} 离开'),
+    ].join(' · ');
+    final follow = _followLine();
+    final situation = _whereLine();
+    final handle = widget.api.session?.canHandleAlerts ?? false;
+    final elapsed = span(widget.now().millisecondsSinceEpoch - _a.firstMs);
     return AnimatedOpacity(
-        opacity: _dim ? D1Motion.p1FlashMinOpacity : 1.0,
-        duration: const Duration(milliseconds: D1Motion.fast),
-        child: Container(
-            clipBehavior: Clip.antiAlias,
-            decoration: BoxDecoration(
-                color: c.surface,
-                borderRadius: BorderRadius.circular(Nw.r12),
-                border: Border.all(color: p1 ? c.errorFrame : c.outline, width: p1 ? 2 : 1)),
-            child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-              _head(),
-              if (_a.context['task_id'] is String)
-                ScenePhoto(
-                    key: ValueKey<String>('scene-photo ${_a.key}'),
-                    api: widget.api,
-                    taskId: _a.context['task_id'] as String,
-                    onOpen: () => _photo(_a.context['task_id'] as String)),
-              if (_isRobot && _open) ...[
-                // 哪只狗的画面。前 / 后哪一路、连没连上是画面那一格自己说的（它管切换、管在线判定）
-                Padding(
-                    padding: const EdgeInsets.fromLTRB(Nw.s16, Nw.s8, Nw.s16, 0),
-                    child: Row(children: [
-                      Icon(Icons.videocam_rounded, size: 16, color: c.textSecondary),
-                      const SizedBox(width: Nw.s4),
-                      Expanded(
-                          child: Text(tr('CAMERA · ${_a.robot}', '画面 · ${_a.robot}'),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: NwText.labelMedium.copyWith(color: c.textSecondary))),
-                    ])),
-                Padding(
-                    padding: const EdgeInsets.all(Nw.s8), child: SiteVideo(api: widget.api, robotId: _a.robot)),
+      opacity: _dim ? D1Motion.p1FlashMinOpacity : 1.0,
+      duration: const Duration(milliseconds: D1Motion.fast),
+      child: Container(
+        key: SiteAlertScenePage.headKey,
+        margin: const EdgeInsets.fromLTRB(Nw.s16, 12, Nw.s16, 0),
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: c.surface,
+          border: Border.all(color: p1 ? c.error : c.outline, width: p1 ? 4 : 1),
+          borderRadius: BorderRadius.circular(2),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              tr('Detected ${_hm(_a.firstMs)} · $elapsed elapsed', '${_hm(_a.firstMs)} 发现 · 已过 $elapsed'),
+              style: NwText.bodySmall.copyWith(color: c.textSecondary),
+            ),
+            const SizedBox(height: 4),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Expanded(
+                  child: Text(
+                    alertTitle(_a.kind, _a.title),
+                    style: NwText.titleLarge.copyWith(color: c.text, fontWeight: FontWeight.w700),
+                  ),
+                ),
+                const SizedBox(width: Nw.s8),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  color: _a.level == 'P1' ? c.errorSoft : c.surfaceVariant,
+                  child: Text(
+                    _a.level,
+                    style: NwText.labelLarge.copyWith(color: priorityColor(_a.level, c), fontWeight: FontWeight.w700),
+                  ),
+                ),
               ],
-            ])));
+            ),
+            const SizedBox(height: 4),
+            Text(where, style: NwText.bodySmall.copyWith(color: c.textSecondary)),
+            if (situation.isNotEmpty) ...[
+              const SizedBox(height: 4),
+              Text(
+                situation,
+                key: SiteAlertScenePage.situationKey,
+                style: NwText.bodyMedium.copyWith(color: c.text),
+              ),
+            ],
+            const SizedBox(height: 6),
+            Text(
+              [_stateLine(), if (follow.isNotEmpty) follow].join(' · '),
+              key: SiteAlertScenePage.stateKey,
+              style: NwText.labelLarge.copyWith(
+                color: _open && !_acked ? c.error : c.text,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            if (handle && _open && !_acked && _a.kind != 'account_request') ...[
+              const SizedBox(height: 10),
+              _act(SiteAlertScenePage.ackKey, tr('Take ownership', '我来处理'), _ack, primary: true),
+            ],
+            const SizedBox(height: 12),
+            _stepBar(c),
+          ],
+        ),
+      ),
+    );
   }
 
-  /// 底栏的大按钮：高 56、字 14、摆不下折两行（不截掉）。Key 在标准按钮上（测试按类型认）。
-  /// 字用正文的比例字（Inter 14 半粗），不用等宽的标签字：390 宽的手机上四个按钮的字都摆得下一行。
-  Widget _big(Key? key, String label, VoidCallback? onPressed, {bool primary = false}) {
+  Widget _stepBar(NwColors c) {
+    final steps = _steps();
+    return Row(
+      key: SiteAlertScenePage.stepsKey,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // 按字数分宽（390 宽上「Dispatched」不截断）；格子之间留一点缝
+        for (final st in steps)
+          Expanded(
+            flex: st.$1.length < 5 ? 5 : st.$1.length,
+            child: Padding(
+              padding: const EdgeInsets.only(right: 4),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(height: 3, color: st.$2 != null ? c.success : c.outline),
+                  const SizedBox(height: 4),
+                  Text(
+                    st.$1,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: NwText.labelSmall.copyWith(
+                      color: st.$2 != null ? c.text : c.textMuted,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  if (st.$2 != null)
+                    Text(
+                      st.$3.isNotEmpty ? st.$3 : _hm(st.$2!),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: NwText.labelSmall.copyWith(color: c.textSecondary),
+                    ),
+                ],
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
+  /// 本页的动作按钮：字 14（正文半粗）、高 48、内距小 —— 390 宽两个一排也摆得下一行；夜里戴手套也点得中。
+  Widget _act(Key key, String label, VoidCallback? on, {bool primary = false, IconData? icon}) {
     final c = Nw.of(context);
-    const size = Size.fromHeight(56);
-    const padding = EdgeInsets.symmetric(horizontal: Nw.s4);
-    final shape = RoundedRectangleBorder(borderRadius: BorderRadius.circular(Nw.r12));
-    final child = Text(label, textAlign: TextAlign.center, maxLines: 2, overflow: TextOverflow.ellipsis);
+    const size = Size(48, 48);
+    const padding = EdgeInsets.symmetric(horizontal: Nw.s8);
+    final shape = RoundedRectangleBorder(borderRadius: BorderRadius.circular(2));
+    final child = Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (icon != null) ...[Icon(icon, size: 18), const SizedBox(width: 6)],
+        Flexible(
+          child: Text(label, textAlign: TextAlign.center, maxLines: 2, overflow: TextOverflow.ellipsis),
+        ),
+      ],
+    );
     return primary
         ? FilledButton(
             key: key,
             style: FilledButton.styleFrom(
-                backgroundColor: c.primary,
-                foregroundColor: c.onPrimary,
-                disabledBackgroundColor: c.surfaceVariant,
-                disabledForegroundColor: c.textMuted,
-                minimumSize: size,
-                padding: padding,
-                textStyle: NwText.titleSmall,
-                shape: shape),
-            onPressed: onPressed,
-            child: child)
+              backgroundColor: c.primary,
+              foregroundColor: c.onPrimary,
+              disabledBackgroundColor: c.surfaceVariant,
+              disabledForegroundColor: c.textMuted,
+              minimumSize: size,
+              padding: padding,
+              textStyle: NwText.titleSmall,
+              shape: shape,
+            ),
+            onPressed: on,
+            child: child,
+          )
         : OutlinedButton(
             key: key,
             style: OutlinedButton.styleFrom(
-                foregroundColor: c.text,
-                disabledForegroundColor: c.textMuted,
-                // 按钮的边要认得出是个按钮（非文字 3:1）：不用卡片那条淡边
-                side: BorderSide(color: c.textMuted),
-                minimumSize: size,
-                padding: padding,
-                textStyle: NwText.titleSmall,
-                shape: shape),
-            onPressed: onPressed,
-            child: child);
+              foregroundColor: c.text,
+              disabledForegroundColor: c.textMuted,
+              side: BorderSide(color: c.textMuted),
+              minimumSize: size,
+              padding: padding,
+              textStyle: NwText.titleSmall,
+              shape: shape,
+            ),
+            onPressed: on,
+            child: child,
+          );
   }
 
-  /// 四个大按钮。[oneRow]：横屏、平板四个一排；竖屏两排。
-  Widget _actions({bool oneRow = false}) {
-    final s = widget.api.session;
-    // 手机 App 测试 M38：账号申请不是报警：没有「误报 / 我来处理」，管理员直接去批，别人说谁批
-    if (_a.kind == 'account_request') {
-      if (s?.canManageAccounts ?? false) {
-        return _big(SiteAlertScenePage.accountsKey, tr('Review the application', '去审批'),
-            () => Navigator.push(context, MaterialPageRoute<void>(builder: (_) => AccountsPage(api: widget.api))),
-            primary: true);
-      }
-      return Text(tr('An administrator approves account applications. Nothing to do here.', '账号申请由管理员审批，这里不用处理。'),
-          key: SiteAlertScenePage.whyKey, style: NwText.bodyMedium.copyWith(color: Nw.of(context).textSecondary));
+  /// 一段的标题行（稿：小标题 + 右边一个说明）。
+  Widget _section(NwColors c, String title, List<Widget> children, {Key? key, String? note}) => Container(
+    key: key,
+    margin: const EdgeInsets.fromLTRB(Nw.s16, 16, Nw.s16, 0),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(
+          title,
+          style: NwText.titleSmall.copyWith(color: c.text, fontWeight: FontWeight.w700),
+        ),
+        if (note != null) ...[
+          const SizedBox(height: 2),
+          Text(note, style: NwText.bodySmall.copyWith(color: c.textSecondary)),
+        ],
+        const SizedBox(height: 8),
+        ...children,
+      ],
+    ),
+  );
+
+  Widget _row(List<Widget> xs) => Row(
+    children: [
+      for (var i = 0; i < xs.length; i++) ...[if (i > 0) const SizedBox(width: Nw.s8), Expanded(child: xs[i])],
+    ],
+  );
+
+  /// 现场照片 + 画面 + 回放（这一台机器人的；不是机器人报的没有画面）。
+  List<Widget> _media(NwColors c) {
+    final taskId = _a.context['task_id'] is String ? _a.context['task_id'] as String : null;
+    return [
+      if (taskId != null)
+        Padding(
+          padding: const EdgeInsets.fromLTRB(Nw.s16, 12, Nw.s16, 0),
+          child: ScenePhoto(
+            key: ValueKey<String>('scene-photo ${_a.key}'),
+            api: widget.api,
+            taskId: taskId,
+            onOpen: () => _photo(taskId),
+          ),
+        ),
+      if (_isRobot && _open) ...[
+        Padding(
+          padding: const EdgeInsets.fromLTRB(Nw.s16, 12, Nw.s16, 6),
+          child: Text(
+            [
+              tr('${_a.robot} · Live video', '${_a.robot} · 实时画面'),
+              if (_followLine().isNotEmpty && _a.context['follow'] == 'follow') tr('Following', '跟随中'),
+            ].join(' · '),
+            style: NwText.labelLarge.copyWith(color: c.text, fontWeight: FontWeight.w600),
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: Nw.s16),
+          child: SiteVideo(api: widget.api, robotId: _a.robot),
+        ),
+      ],
+      if (_isRobot || taskId != null)
+        Padding(
+          padding: const EdgeInsets.fromLTRB(Nw.s16, 8, Nw.s16, 0),
+          child: _row([
+            if (_isRobot)
+              _act(
+                SiteAlertScenePage.videoKey,
+                tr('−30 s replay', '回看 30 秒'),
+                () => Navigator.push(
+                  context,
+                  MaterialPageRoute<void>(
+                    builder: (_) => SiteRecordingsPage(api: widget.api, robotId: _a.robot, aroundMs: _a.firstMs),
+                  ),
+                ),
+                icon: Icons.replay_30_rounded,
+              ),
+            if (taskId != null)
+              _act(
+                SiteAlertScenePage.photoKey,
+                tr('Scene photos', '现场照片'),
+                () => _photo(taskId),
+                icon: Icons.photo_camera_outlined,
+              ),
+          ]),
+        ),
+    ];
+  }
+
+  /// 小地图（机器人、人最后在哪、拦截点），点了进全屏。
+  Widget? _mapBlock() {
+    final marks = sceneMarks(_a);
+    if (marks == null) return null;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(Nw.s16, 12, Nw.s16, 0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          NwMapThumb(
+            key: ValueKey<String>('scene-map-thumb ${marks.$1}:${marks.$2}'),
+            tapKey: SiteAlertScenePage.mapKey,
+            height: 180,
+            load: () => loadMapPicture(widget.api, marks.$1, marks.$2),
+            label: marks.$3.map((m) => m.label).join(' · '),
+            action: tr('Full-screen map', '全屏地图'),
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute<void>(
+                builder: (_) =>
+                    SiteMapPreviewPage(api: widget.api, mapId: marks.$1, version: marks.$2, marks: marks.$3),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// 现场警示：自动驱离到第几级 +「结束驱离」；喊话 / 警灯 / 警笛 / 全部关（这台机器人有的才摆）。
+  /// 只读、经理（不能派的）只说一句由保安操作。
+  Widget? _warning(NwColors c) {
+    if (!_open || !_isRobot || !_security) return null;
+    final dispatch = widget.api.session?.canDispatch ?? false;
+    if (!dispatch) {
+      return _section(c, tr('On-site warning', '现场警示'), [
+        Text(
+          tr('Dispatching robots to the alarm and on-site warnings are handled by guards', '派机器人去报警点和现场警示由保安操作'),
+          style: NwText.bodyMedium.copyWith(color: c.textSecondary),
+        ),
+      ]);
     }
-    final handle = s?.canHandleAlerts ?? false;
-    final dispatch = s?.canDispatch ?? false;
-    // 新鲜的才按它的状态摆；只剩旧快照时不猜警笛开没开，让人能再要求一次（没在驱离了站点会说）
     final d = _d;
-    final sound = tr('Sound siren (level $sirenLevel)', '开警笛（第 $sirenLevel 级）');
-    Widget? second;
-    if (d != null && dispatch) {
-      second = switch (sirenState(d)) {
-        SirenState.on => _big(SiteAlertScenePage.sirenKey, tr('Siren is on', '警笛已开'), null),
-        SirenState.notFitted =>
-          _big(SiteAlertScenePage.sirenKey, tr('No siren on this robot', '此机器人没有警笛'), null),
-        SirenState.requested =>
-          _big(SiteAlertScenePage.sirenKey, tr('Siren not confirmed. Retry', '警笛未确认，请重试'), _siren),
-        _ => _big(SiteAlertScenePage.sirenKey, sound, _siren),
-      };
-    } else if (_deter != null && !_deterFresh && dispatch) {
-      second = _big(SiteAlertScenePage.sirenKey, sound, _siren);
-    } else if (_a.kind == 'dog_sees_person' && _isRobot && dispatch) {
-      second = _big(SiteAlertScenePage.deterKey, tr('Deter here', '就地驱离'), _deterHere);
-    } else {
-      second = null; // 手机 App 测试 M10：用不了的按钮收起来，不摆灰的占位
-    }
-    final first = _big(SiteAlertScenePage.ackKey, tr("I'll handle it", '我来处理'),
-        handle && _open && !_acked ? _ack : null,
-        primary: true);
-    final canClose = !_needsArrive || _arrived;
-    final third = _canBeFalse
-        ? _big(SiteAlertScenePage.falseKey, tr('False alarm', '误报'), handle && _open && canClose ? _falseAlarm : null)
+    // 机器人没报上装（老机器人）：按站点那一场驱离报的几路
+    final out = _outputs.isNotEmpty ? _outputs : ((d?['outputs'] as List?) ?? const []).map((e) => '$e').toList();
+    final clips = ((_caps?['clips'] as List?) ?? const []).map((e) => '$e').toList();
+    final canSpeak = out.contains('speaker') && (clips.isNotEmpty || _caps?['tts'] == true);
+    final clip = clips.contains('restricted')
+        ? 'restricted'
+        : clips.isNotEmpty
+        ? clips.first
+        : 'tts:${appLang.value == AppLang.zh ? 'zh' : 'en'}:${tr('This is a restricted area. Please leave now.', '这里是禁区，请马上离开。')}';
+    final level = d?['level'];
+    final levelWord = switch (level) {
+      1 => tr('light', '灯光'),
+      2 => tr('voice warning', '语音警告'),
+      3 => tr('siren', '警笛'),
+      _ => tr('observe', '观察'),
+    };
+    // 在驱离（C-B2 外审）：警笛是站点那一场的第 3 级，按了升级；机器人接受了才写已开。旧快照不猜，让人能再要求一次。
+    // 没在驱离：机器人装了警笛才摆「警笛 10 秒」，直接响、到点自己关。
+    Widget siren(String label, VoidCallback? on) => _act(SiteAlertScenePage.sirenKey, label, on);
+    const lv = SiteAlertScenePageSiren.level;
+    final sound = tr('Sound siren (level $lv)', '开警笛（第 $lv 级）');
+    final Widget? sirenBtn = d != null
+        ? switch (SiteAlertScenePageSiren.of(d)) {
+            SirenState.on => siren(tr('Siren is on', '警笛已开'), null),
+            SirenState.notFitted => siren(tr('No siren on this robot', '此机器人没有警笛'), null),
+            SirenState.requested => siren(tr('Siren not confirmed. Retry', '警笛未确认，请重试'), _siren),
+            _ => siren(sound, _siren),
+          }
+        : _deter != null && !_deterFresh
+        ? siren(sound, _siren)
+        : out.contains('siren')
+        ? siren(tr('Siren 10 s', '警笛 10 秒'), () => _warn('siren', maxS: 10))
         : null;
-    // W74 看见人：「已到场」→「处置完成」（到场了才能关）；手机 App 测试 M04：别的告警都能直接「已处理」
-    final Widget fourth;
-    if (_needsArrive && !_arrived) {
-      fourth = _big(SiteAlertScenePage.arriveKey, tr("I'm on site", '已到场'), handle && _open ? _arrive : null);
-    } else {
-      fourth = _big(SiteAlertScenePage.doneKey, tr('Handled', '已处理'), handle && _open ? _done : null);
-    }
-    final all = <Widget>[first, ?second, ?third, fourth];
-    const gap = SizedBox(width: Nw.s8);
-    Widget row(List<Widget> xs) => Row(children: [
-          for (var i = 0; i < xs.length; i++) ...[if (i > 0) gap, Expanded(child: xs[i])],
-        ]);
-    // 手机 App 测试 M15：按钮灰着要说为什么
-    final why = !handle
-        ? tr('Read-only account: you can watch this alarm; a guard or administrator handles it.',
-            '只读账号：能看，处理要保安或管理员。')
-        : !_open
-            ? tr('This alarm is closed.', '这条报警已经关了。')
-            : _needsArrive && !_arrived && _canBeFalse
-                ? tr('Tap "I\'m on site" first, then you can close it.', '先点「已到场」，才能关掉它。')
-                : '';
-    final buttons = (oneRow || all.length <= 2)
-        ? row(all)
-        : Column(mainAxisSize: MainAxisSize.min, children: [
-            row(all.sublist(0, 2)),
-            const SizedBox(height: Nw.s8),
-            row(all.sublist(2)),
-          ]);
-    if (why.isEmpty) return buttons;
-    return Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-      buttons,
-      const SizedBox(height: Nw.s4),
-      Text(why,
-          key: SiteAlertScenePage.whyKey,
-          style: NwText.bodySmall.copyWith(color: Nw.of(context).textSecondary)),
+    final buttons = <Widget>[
+      if (canSpeak)
+        _act(
+          SiteAlertScenePage.speakKey,
+          tr('Announce warning', '喊话：请离开'),
+          () => _warn('speaker', maxS: 60, clip: clip),
+        ),
+      if (out.contains('strobe'))
+        _act(SiteAlertScenePage.strobeKey, tr('Strobe 30 s', '开警灯 30 秒'), () => _warn('strobe', maxS: 30)),
+      ?sirenBtn,
+      if (out.isNotEmpty) _act(SiteAlertScenePage.allOffKey, tr('All off', '全部关'), _allOff),
+    ];
+    final staleOld = d == null && _deter != null && !_deterFresh;
+    return _section(
+      c,
+      tr('On-site warning · ${_a.robot}', '现场警示 · 用 ${_a.robot} 的喇叭和警灯'),
+      key: SiteAlertScenePage.warnKey,
+      note: tr('Directed at the intruder; strobe and announcement work best together', '对着闯入的人；警灯和喊话一起用效果最好'),
+      [
+        if (d != null)
+          Container(
+            padding: const EdgeInsets.all(10),
+            margin: const EdgeInsets.only(bottom: 8),
+            decoration: BoxDecoration(
+              color: c.surface,
+              border: Border.all(color: c.outline),
+              borderRadius: BorderRadius.circular(2),
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        tr('Auto deterrence: Level $level, $levelWord', '自动驱离：第 $level 级 $levelWord'),
+                        key: SiteAlertScenePage.deterLevelKey,
+                        style: NwText.labelLarge.copyWith(color: c.text, fontWeight: FontWeight.w700),
+                      ),
+                      Text(
+                        tr('Observe → Light → Voice → Siren', '观察 → 灯光 → 语音 → 警笛'),
+                        style: NwText.bodySmall.copyWith(color: c.textSecondary),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: Nw.s8),
+                _act(SiteAlertScenePage.endDeterKey, tr('End deterrence', '结束驱离'), _endDeter),
+              ],
+            ),
+          )
+        else if (!staleOld && _a.kind == 'dog_sees_person')
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: _act(SiteAlertScenePage.deterKey, tr('Deter here', '就地驱离'), _deterHere),
+          ),
+        for (var i = 0; i < buttons.length; i += 2) ...[
+          if (i > 0) const SizedBox(height: Nw.s8),
+          _row(buttons.sublist(i, i + 2 > buttons.length ? buttons.length : i + 2)),
+        ],
+      ],
+    );
+  }
+
+  /// 通知：推给了谁；请求支援 / 已到场。
+  Widget? _notify(NwColors c) {
+    if (!_open || _a.kind == 'account_request') return null;
+    final handle = widget.api.session?.canHandleAlerts ?? false;
+    final by = '${_a.context['backup_by'] ?? _backupHere?.$1 ?? ''}';
+    final at = _a.context['backup_ms'] is num ? (_a.context['backup_ms'] as num).toInt() : _backupHere?.$2;
+    final buttons = <Widget>[
+      if (handle && by.isEmpty) _act(SiteAlertScenePage.backupKey, tr('Request backup', '请求支援'), _backup),
+      if (handle && _needsArrive && !_arrived) _act(SiteAlertScenePage.arriveKey, tr('On scene', '已到场'), _arrive),
+    ];
+    return _section(c, tr('Notify', '通知'), key: SiteAlertScenePage.notifyKey, [
+      Text(
+        _a.level == 'P1'
+            ? tr('Pushed to all signed-in phones', '已推送到所有登录的手机')
+            : tr('Shown on every console', '所有控制台都看得到'),
+        style: NwText.bodyMedium.copyWith(color: c.text),
+      ),
+      if (by.isNotEmpty)
+        Text(
+          tr(
+            'Backup requested by $by${at != null ? ' at ${_hm(at)}' : ''}; managers and administrators were notified.',
+            '$by${at != null ? ' ${_hm(at)}' : ''} 请求了支援，已推送给经理和管理员。',
+          ),
+          key: SiteAlertScenePage.backupDoneKey,
+          style: NwText.bodySmall.copyWith(color: c.textSecondary),
+        ),
+      if (buttons.isNotEmpty) ...[const SizedBox(height: 8), _row(buttons)],
+      const SizedBox(height: 4),
+      Text(
+        tr(
+          'Request backup notifies managers and administrators; On scene is logged in the timeline.',
+          '请求支援会推给经理和管理员；已到场写进经过。',
+        ),
+        style: NwText.bodySmall.copyWith(color: c.textSecondary),
+      ),
     ]);
+  }
+
+  /// 结论：选一个（等宽一排），可写一句备注，「结案」。要先到场的那类没到场只说一句；只读说一句。
+  /// 关了的：谁、什么结论、几点；10 分钟内能重新打开。
+  Widget _disposition(NwColors c) {
+    final handle = widget.api.session?.canHandleAlerts ?? false;
+    if (_a.kind == 'account_request') {
+      return _section(c, tr('Account application', '账号申请'), [
+        if (widget.api.session?.canManageAccounts ?? false)
+          _act(
+            SiteAlertScenePage.accountsKey,
+            tr('Review the application', '去审批'),
+            () => Navigator.push(context, MaterialPageRoute<void>(builder: (_) => AccountsPage(api: widget.api))),
+            primary: true,
+          )
+        else
+          Text(
+            tr('An administrator approves account applications. Nothing to do here.', '账号申请由管理员审批，这里不用处理。'),
+            key: SiteAlertScenePage.whyKey,
+            style: NwText.bodyMedium.copyWith(color: c.textSecondary),
+          ),
+      ]);
+    }
+    if (!_open || _closedHere != null && _a.resolvedMs == null) {
+      final at = _a.resolvedMs ?? _closedHere;
+      final who = _a.resolvedBy.isNotEmpty ? _a.resolvedBy : (widget.api.session?.name ?? '');
+      final v = _a.verdict.isNotEmpty ? _a.verdict : (_verdict ?? '');
+      return _section(c, tr('Disposition', '结论'), key: SiteAlertScenePage.verdictKey, [
+        Text(
+          tr(
+            'Closed: ${verdictWord(v)} · $who${at != null ? ' · ${_hm(at)}' : ''}',
+            '已结案：${verdictWord(v)} · $who${at != null ? ' · ${_hm(at)}' : ''}',
+          ),
+          key: SiteAlertScenePage.closedKey,
+          style: NwText.bodyMedium.copyWith(color: c.text, fontWeight: FontWeight.w600),
+        ),
+        if (handle && _canReopen) ...[
+          const SizedBox(height: 8),
+          _act(SiteAlertScenePage.reopenKey, tr('Reopen', '重新打开'), _reopen),
+        ],
+      ]);
+    }
+    if (!handle) {
+      return _section(c, tr('Disposition', '结论'), key: SiteAlertScenePage.verdictKey, [
+        Text(
+          tr('Read-only account: you can watch this alarm; a guard or administrator handles it.', '只读账号：能看，处理要保安或管理员。'),
+          key: SiteAlertScenePage.whyKey,
+          style: NwText.bodyMedium.copyWith(color: c.textSecondary),
+        ),
+      ]);
+    }
+    if (_needsArrive && !_arrived) {
+      return _section(c, tr('Disposition', '结论'), key: SiteAlertScenePage.verdictKey, [
+        Text(
+          tr('Close it only after someone is on site: tap On scene first.', '有人到场后才能结案：先点「已到场」。'),
+          key: SiteAlertScenePage.whyKey,
+          style: NwText.bodyMedium.copyWith(color: c.textSecondary),
+        ),
+      ]);
+    }
+    final vs = _verdicts;
+    return _section(
+      c,
+      tr('Disposition', '结论'),
+      key: SiteAlertScenePage.verdictKey,
+      note: tr('Set a disposition before closing', '定了结论才能结案'),
+      [
+        _row([
+          for (final v in vs)
+            _act(
+              v == 'false_alarm'
+                  ? SiteAlertScenePage.falseKey
+                  : v == 'handled'
+                  ? SiteAlertScenePage.handledKey
+                  : SiteAlertScenePage.intruderKey,
+              verdictWord(v),
+              () => setState(() => _verdict = v),
+              primary: _verdict == v,
+            ),
+        ]),
+        const SizedBox(height: 8),
+        TextField(
+          key: SiteAlertScenePage.noteKey,
+          controller: _note,
+          maxLength: 200,
+          decoration: InputDecoration(
+            hintText: tr('Note for the next shift (optional)', '备注（给下一班看，可不写）'),
+            counterText: '',
+          ),
+        ),
+        const SizedBox(height: 8),
+        _act(
+          SiteAlertScenePage.doneKey,
+          tr('Close incident', '结案'),
+          _verdict == null || _busy ? null : _close,
+          primary: true,
+        ),
+      ],
+    );
   }
 
   /// 事件经过：站点记下来的时刻，一行一条；最后一行是「接下来会自动发生什么」（提示色）。
@@ -691,8 +1223,10 @@ class _SiteAlertScenePageState extends State<SiteAlertScenePage> {
     final rows = <(int, String)>[
       (
         _a.firstMs,
-        [alertTitle(_a.kind, _a.title), if (_a.detail.isNotEmpty && appLang.value == AppLang.zh) siteText(_a.detail)]
-            .join(' · ')
+        [
+          alertTitle(_a.kind, _a.title),
+          if (_a.detail.isNotEmpty && appLang.value == AppLang.zh) siteText(_a.detail),
+        ].join(' · '),
       ),
       if (_a.count > 1 && _a.lastMs > _a.firstMs)
         (_a.lastMs, tr('Raised again (${_a.count} times in total).', '再次报警（共 ${_a.count} 次）。')),
@@ -706,7 +1240,7 @@ class _SiteAlertScenePageState extends State<SiteAlertScenePage> {
       if (d['level_ms'] is num && d['level'] is num && (d['level'] as num) > 1) {
         rows.add((
           (d['level_ms'] as num).toInt(),
-          tr('Deterrence raised to level ${d['level']}.', '驱离升至第 ${d['level']} 级。')
+          tr('Deterrence raised to level ${d['level']}.', '驱离升至第 ${d['level']} 级。'),
         ));
       }
     }
@@ -727,215 +1261,198 @@ class _SiteAlertScenePageState extends State<SiteAlertScenePage> {
       rows.add((pAt, tr('The robot is following this person.', '机器人正跟着这个人。')));
     } else if (follow == 'lost' || follow == 'limit') {
       final w = person?['where'] is String ? person!['where'] as String : '';
-      rows.add((pAt, w.isEmpty
-          ? tr('Robot stopped following.', '机器人不跟了，回到人最后出现的地方。')
-          : tr('Lost the person, last seen near $w.', '跟丢了，人最后在 $w。')));
+      rows.add((
+        pAt,
+        w.isEmpty
+            ? tr('Robot stopped following.', '机器人不跟了，回到人最后出现的地方。')
+            : tr('Lost the person, last seen near $w.', '跟丢了，人最后在 $w。'),
+      ));
     }
-    final arrivedMs = _a.context['arrived_ms'] is num
-        ? (_a.context['arrived_ms'] as num).toInt()
-        : _arrivedHere?.$2;
+    final arrivedMs = _a.context['arrived_ms'] is num ? (_a.context['arrived_ms'] as num).toInt() : _arrivedHere?.$2;
     if (arrivedMs != null) {
       final by = _a.context['arrived_by'] is String ? _a.context['arrived_by'] as String : (_arrivedHere?.$1 ?? '');
       rows.add((arrivedMs, tr('$by is on site.', '$by 已到场。')));
     }
-    if (_a.resolvedMs != null) rows.add((_a.resolvedMs!, tr('Closed.', '已关闭。')));
+    final bAt = _a.context['backup_ms'] is num ? (_a.context['backup_ms'] as num).toInt() : _backupHere?.$2;
+    if (bAt != null) {
+      final by = '${_a.context['backup_by'] ?? _backupHere?.$1 ?? ''}';
+      rows.add((bAt, tr('$by requested backup.', '$by 请求了支援。')));
+    }
+    if (_a.resolvedMs != null) {
+      final n = '${_a.context['note'] ?? ''}';
+      final who = _a.resolvedBy.isEmpty ? '' : ' ${_a.resolvedBy}';
+      rows.add((
+        _a.resolvedMs!,
+        _a.verdict.isEmpty
+            ? tr('Closed$who.', '$who 已关闭。'.trim())
+            : tr(
+                'Closed by${who.isEmpty ? ' ?' : who}: ${verdictWord(_a.verdict)}.${n.isEmpty ? '' : ' Note: $n'}',
+                '${who.trim()} 结案：${verdictWord(_a.verdict)}。${n.isEmpty ? '' : '备注：$n'}'.trim(),
+              ),
+      ));
+    }
     rows.sort((x, y) => x.$1.compareTo(y.$1));
     final staleNote = _isRobot && d != null && !_deterFresh
         ? tr('Deterrence status not updated since ${hms(_deterAtMs)}.', '驱离状态自 ${hms(_deterAtMs)} 起未更新。')
         : null;
     final next = _deterFresh && d != null && d['auto'] == true && d['next_in_s'] is num
-        ? tr('Next: level ${(d['level'] as num? ?? 0) + 1} in ${d['next_in_s']} s if no one responds.',
-            '下一步：若无人处理，${d['next_in_s']} 秒后升至第 ${(d['level'] as num? ?? 0) + 1} 级。')
+        ? tr(
+            'Next: level ${(d['level'] as num? ?? 0) + 1} in ${d['next_in_s']} s if no one responds.',
+            '下一步：若无人处理，${d['next_in_s']} 秒后升至第 ${(d['level'] as num? ?? 0) + 1} 级。',
+          )
         : null;
     return [
       Text(tr('What happened', '事件经过'), style: NwText.titleSmall.copyWith(color: c.text)),
       const SizedBox(height: 4),
       for (final r in rows)
         Padding(
-            padding: const EdgeInsets.symmetric(vertical: 2),
-            child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          padding: const EdgeInsets.symmetric(vertical: 2),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
               Text(hms(r.$1), style: NwText.labelMedium.copyWith(color: c.textSecondary)),
               const SizedBox(width: 12),
-              Expanded(child: Text(r.$2, style: NwText.bodyMedium.copyWith(color: c.text))),
-            ])),
+              Expanded(
+                child: Text(r.$2, style: NwText.bodyMedium.copyWith(color: c.text)),
+              ),
+            ],
+          ),
+        ),
       if (staleNote != null)
         Padding(
-            padding: const EdgeInsets.symmetric(vertical: 2),
-            child: Text(staleNote, key: SiteAlertScenePage.staleKey, style: note)),
+          padding: const EdgeInsets.symmetric(vertical: 2),
+          child: Text(staleNote, key: SiteAlertScenePage.staleKey, style: note),
+        ),
       if (next != null)
         Padding(
-            padding: const EdgeInsets.symmetric(vertical: 2),
-            child: Text(next, key: SiteAlertScenePage.nextKey, style: note)),
+          padding: const EdgeInsets.symmetric(vertical: 2),
+          child: Text(next, key: SiteAlertScenePage.nextKey, style: note),
+        ),
     ];
   }
 
-  /// 现场细节，和去录像、照片的两个入口（去地图的入口是小地图那一块）。
-  List<Widget> _details(Map? pose, Map? point, String? taskId) {
+  /// 现场数据（旧页的「现场细节」）：防区、拦截点、机器人最后在哪、那一趟。
+  List<Widget> _facts(NwColors c) {
     final ctx = _a.context;
-    final small = NwText.bodySmall.copyWith(color: Nw.of(context).text);
+    final small = NwText.bodySmall.copyWith(color: c.textSecondary);
+    final p0 = ctx['last_seen'] ?? ctx['pose'];
+    final pose = p0 is Map ? p0 : null;
+    final point = ctx['intercept'] is Map ? ctx['intercept'] as Map : null;
+    final taskId = ctx['task_id'] is String ? ctx['task_id'] as String : null;
+    String f(Object? v) => (v as num).toStringAsFixed(1);
     return [
-      if (appLang.value != AppLang.zh && _a.detail.isNotEmpty)
-        // 手机 App 测试 M05：站点给的原因按语言翻（以前是中文原文「原文:起飞前检查未通过…」）
-        Text(siteText(_a.detail), style: small),
       if (ctx['zone'] != null) Text(tr('Zone: ${ctx['zone']}', '防区：${ctx['zone']}'), style: small),
-      if (point != null)
+      if (point != null && point['x'] is num && point['y'] is num)
         Text(
-            tr(
-                'Intercept point: ${point['name']}  (${(point['x'] as num).toStringAsFixed(1)}, '
-                    '${(point['y'] as num).toStringAsFixed(1)})',
-                '拦截点：${point['name']}  (${(point['x'] as num).toStringAsFixed(1)}, '
-                    '${(point['y'] as num).toStringAsFixed(1)})'),
-            style: small),
-      if (pose != null)
+          tr(
+            'Intercept point: ${point['name']}  (${f(point['x'])}, ${f(point['y'])})',
+            '拦截点：${point['name']}  (${f(point['x'])}, ${f(point['y'])})',
+          ),
+          style: small,
+        ),
+      if (pose != null && pose['x'] is num && pose['y'] is num)
         Text(
-            tr(
-                'Robot last at: (${(pose['x'] as num).toStringAsFixed(1)}, '
-                    '${(pose['y'] as num).toStringAsFixed(1)})  map ${pose['map_id']}:${pose['map_version']}'
-                    '${pose['at_ms'] is num ? '  · reported ${_ago((pose['at_ms'] as num).toInt())}' : ''}',
-                '机器人最后位置：(${(pose['x'] as num).toStringAsFixed(1)}, ${(pose['y'] as num).toStringAsFixed(1)})  地图 ${pose['map_id']}:${pose['map_version']}${pose['at_ms'] is num ? '  · ${_ago((pose['at_ms'] as num).toInt())}上报' : ''}'),
-            style: small),
+          tr(
+            'Robot last at: (${f(pose['x'])}, ${f(pose['y'])})  map ${pose['map_id']}:${pose['map_version']}',
+            '机器人最后位置：(${f(pose['x'])}, ${f(pose['y'])})  地图 ${pose['map_id']}:${pose['map_version']}',
+          ),
+          style: small,
+        ),
       if (taskId != null) Text(tr('Task: $taskId', '那一趟：$taskId'), style: small),
       if (ctx.isEmpty)
         Text(
-            tr('This alarm has no scene data (older site, or a site-level alarm)',
-                '此报警没有现场数据（旧版站点或站点级报警）'),
-            style: small),
-      if (_isRobot || taskId != null) ...[
-        const SizedBox(height: Nw.s8),
-        Wrap(spacing: Nw.s8, runSpacing: Nw.s8, children: [
-          if (_isRobot)
-            NwButton(
-                buttonKey: SiteAlertScenePage.videoKey,
-                variant: NwButtonVariant.outline,
-                icon: Icons.videocam_outlined,
-                label: tr('Scene recording', '现场录像'),
-                onPressed: () => Navigator.push(
-                    context,
-                    MaterialPageRoute<void>(
-                        builder: (_) =>
-                            SiteRecordingsPage(api: widget.api, robotId: _a.robot, aroundMs: _a.firstMs)))),
-          if (taskId != null)
-            NwButton(
-                buttonKey: SiteAlertScenePage.photoKey,
-                variant: NwButtonVariant.outline,
-                icon: Icons.photo_camera_outlined,
-                label: tr('Scene photos', '现场照片'),
-                onPressed: () => _photo(taskId)),
-        ]),
-      ],
+          tr('This alarm has no scene data (older site, or a site-level alarm)', '此报警没有现场数据（旧版站点或站点级报警）'),
+          style: small,
+        ),
     ];
-  }
-
-  /// 底栏：按了之后的那句话（长了自己滚，不截掉）在上，四个大按钮在下。
-  Widget _bar(bool oneRow) {
-    final c = Nw.of(context);
-    return Material(
-        key: SiteAlertScenePage.barKey,
-        color: c.surface,
-        shape: Border(top: BorderSide(color: c.outline)),
-        child: SafeArea(
-            top: false,
-            child: Padding(
-                padding: const EdgeInsets.fromLTRB(Nw.s16, Nw.s8, Nw.s16, Nw.s8),
-                child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-                  if (_msg.isNotEmpty)
-                    ConstrainedBox(
-                        constraints: const BoxConstraints(maxHeight: 88),
-                        child: SingleChildScrollView(
-                            padding: const EdgeInsets.only(bottom: Nw.s8),
-                            child: Text(_msg,
-                                key: SiteAlertScenePage.msgKey,
-                                style: NwText.bodyMedium.copyWith(color: c.text, fontWeight: FontWeight.w600)))),
-                  if (_needsArrive && _open && !_arrived)
-                    Padding(
-                        padding: const EdgeInsets.only(bottom: Nw.s8),
-                        child: Text(
-                            tr('Go to the scene first: the alarm can only be closed after you tap "I\'m on site".',
-                                '先到现场：点「已到场」后才能关闭此报警。'),
-                            style: NwText.bodySmall.copyWith(color: c.textSecondary))),
-                  _actions(oneRow: oneRow),
-                ]))));
   }
 
   @override
   Widget build(BuildContext context) {
-    final c = Nw.of(context);
-    final ctx = _a.context;
-    final seenAt = ctx['last_seen'] ?? ctx['pose']; // W74：最后看见人时机器人在哪
-    final pose = seenAt is Map ? seenAt : null;
-    final point = ctx['intercept'] is Map ? ctx['intercept'] as Map : null;
-    final taskId = ctx['task_id'] is String ? ctx['task_id'] as String : null;
-    final marks = sceneMarks(_a);
-    final where = '${ctx['zone'] ?? (_isRobot ? _a.robot : tr('Site', '站点'))}';
-    final whereLine = _whereLine();
-    final rest = <Widget>[
-      NwCard(
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
-        Text(tr('LOCATION', '位置'), style: NwText.labelSmall.copyWith(color: c.textSecondary)),
-        const SizedBox(height: Nw.s4),
-        Text(where, style: NwText.titleLarge.copyWith(color: c.text)),
-        if (whereLine.isNotEmpty) ...[
-          const SizedBox(height: Nw.s4),
-          Text(whereLine, style: NwText.bodyLarge.copyWith(color: c.text)),
-        ],
-        const SizedBox(height: Nw.s8),
-        ..._details(pose, point, taskId),
-      ])),
-      if (marks != null) ...[
-        const SizedBox(height: 12),
-        // 换了一张图（换了一条告警）就是另一个小地图：上一张的图不留在这一条上
-        NwMapThumb(
-            key: ValueKey<String>('scene-map-thumb ${marks.$1}:${marks.$2}'),
-            tapKey: SiteAlertScenePage.mapKey,
-            load: () => loadMapPicture(widget.api, marks.$1, marks.$2),
-            label: marks.$3.map((m) => m.label).join(' · '),
-            action: tr('Show on map', '在图上看'),
-            onTap: () => Navigator.push(
-                context,
-                MaterialPageRoute<void>(
-                    builder: (_) => SiteMapPreviewPage(
-                        api: widget.api, mapId: marks.$1, version: marks.$2, marks: marks.$3)))),
-      ],
-      const SizedBox(height: 12),
-      NwCard(
-          child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: _timeline())),
-    ];
-    // 横屏、平板、桌面：报警块在左、其余在右各滚各的；竖屏的手机一列到底。都不用懒加载的列表 ——
-    // 现场细节不管滚到哪儿都得在（无障碍、测试按 key 找）。四个大按钮在底栏，不跟着滚。
-    final wide = MediaQuery.sizeOf(context).width >= 700;
-    return Scaffold(
-      appBar: AppBar(
-          leading: Navigator.canPop(context)
-              ? IconButton(
-                  icon: const Icon(Icons.close_rounded),
-                  tooltip: MaterialLocalizations.of(context).closeButtonTooltip,
-                  onPressed: () => Navigator.maybePop(context))
-              : null,
-          title: Text(tr('Alarm', '报警')),
-          actions: [
-            if (widget.api.session?.canDispatch ?? false)
-              StopAllButton(api: widget.api, onResult: (m) => setState(() => _msg = m)),
-          ]),
-      bottomNavigationBar: _bar(wide),
-      body: wide
-          ? Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Expanded(
-                  flex: 5,
-                  child: SingleChildScrollView(padding: const EdgeInsets.all(12), child: _alarmBlock())),
-              Expanded(
-                  flex: 4,
-                  child: SingleChildScrollView(
-                      padding: const EdgeInsets.fromLTRB(0, 12, 12, 12),
-                      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: rest))),
-            ])
-          : SingleChildScrollView(
-              padding: const EdgeInsets.all(12),
-              child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-                _alarmBlock(),
-                const SizedBox(height: 12),
-                ...rest,
-              ])),
+    final dark = nwTheme(Brightness.dark);
+    return Theme(
+      data: dark,
+      child: Builder(
+        builder: (context) {
+          final c = Nw.of(context);
+          final map = _mapBlock();
+          final warn = _warning(c);
+          final notify = _notify(c);
+          final dispatch = widget.api.session?.canDispatch ?? false;
+          final detail = appLang.value != AppLang.zh && _a.detail.isNotEmpty ? siteText(_a.detail) : '';
+          return Scaffold(
+            backgroundColor: c.bg,
+            appBar: AppBar(
+              backgroundColor: c.bg,
+              leading: Navigator.canPop(context)
+                  ? IconButton(
+                      icon: const Icon(Icons.arrow_back_ios_new_rounded),
+                      tooltip: MaterialLocalizations.of(context).backButtonTooltip,
+                      onPressed: () => Navigator.maybePop(context),
+                    )
+                  : null,
+              title: Text(tr('Incident', '这件事')),
+            ),
+            body: Stack(
+              children: [
+                ListView(
+                  padding: EdgeInsets.only(bottom: 120, right: MediaQuery.sizeOf(context).aspectRatio > 1.3 ? 120 : 0),
+                  children: [
+                    _header(c),
+                    ..._media(c),
+                    ?map,
+                    ?warn,
+                    ?notify,
+                    _disposition(c),
+                    _section(c, tr('Timeline', '经过'), key: SiteAlertScenePage.timelineKey, [
+                      ..._timeline().skip(2),
+                      const SizedBox(height: 8),
+                      if (detail.isNotEmpty) Text(detail, style: NwText.bodySmall.copyWith(color: c.textSecondary)),
+                      ..._facts(c),
+                    ]),
+                  ],
+                ),
+                // 按了之后的那句话：钉在底下（急停方块左边），滚到哪儿点的都看得到
+                if (_msg.isNotEmpty)
+                  Positioned(
+                    left: Nw.s16,
+                    right: dispatch ? Nw.s16 + 88 + Nw.s8 : Nw.s16,
+                    bottom: Nw.s16,
+                    child: SafeArea(
+                      child: Container(
+                        constraints: const BoxConstraints(minHeight: 48, maxHeight: 120),
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                        decoration: BoxDecoration(
+                          color: c.surfaceVariant,
+                          border: Border.all(color: c.outline),
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                        child: SingleChildScrollView(
+                          child: Text(
+                            _msg,
+                            key: SiteAlertScenePage.msgKey,
+                            style: NwText.bodyMedium.copyWith(color: c.text, fontWeight: FontWeight.w600),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                if (dispatch)
+                  Positioned(
+                    right: Nw.s16,
+                    bottom: Nw.s16,
+                    child: SafeArea(
+                      child: EstopSquare(
+                        buttonKey: SiteAlertScenePage.estopKey,
+                        onPressed: () => StopAllButton.press(context, widget.api, (m) => setState(() => _msg = m)),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          );
+        },
+      ),
     );
   }
 }
@@ -976,23 +1493,25 @@ class _ScenePhotoState extends State<ScenePhoto> {
   Widget build(BuildContext context) {
     final c = Nw.of(context);
     return FutureBuilder<Uint8List?>(
-        future: _bytes,
-        builder: (context, snap) {
-          final b = snap.data;
-          if (b == null) return const SizedBox.shrink();
-          return Padding(
-            padding: const EdgeInsets.fromLTRB(Nw.s8, Nw.s8, Nw.s8, 0),
-            child: Semantics(
-              button: true,
-              label: tr('Scene photo', '现场照片'),
-              child: InkWell(
-                key: ScenePhoto.photoKey,
-                onTap: widget.onOpen,
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(Nw.r8),
-                  child: AspectRatio(
-                    aspectRatio: 4 / 3,
-                    child: Stack(fit: StackFit.expand, children: [
+      future: _bytes,
+      builder: (context, snap) {
+        final b = snap.data;
+        if (b == null) return const SizedBox.shrink();
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(Nw.s8, Nw.s8, Nw.s8, 0),
+          child: Semantics(
+            button: true,
+            label: tr('Scene photo', '现场照片'),
+            child: InkWell(
+              key: ScenePhoto.photoKey,
+              onTap: widget.onOpen,
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(Nw.r8),
+                child: AspectRatio(
+                  aspectRatio: 4 / 3,
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
                       Image.memory(b, fit: BoxFit.cover, gaplessPlayback: true),
                       Positioned(
                         left: Nw.s8,
@@ -1003,12 +1522,14 @@ class _ScenePhotoState extends State<ScenePhoto> {
                           child: Text(tr('Scene photo', '现场照片'), style: NwText.bodySmall.copyWith(color: c.onScrim)),
                         ),
                       ),
-                    ]),
+                    ],
                   ),
                 ),
               ),
             ),
-          );
-        });
+          ),
+        );
+      },
+    );
   }
 }

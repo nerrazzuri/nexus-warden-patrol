@@ -263,6 +263,13 @@ void main() {
         _phone,
         () => SiteAlertScenePage(
             api: _deterring(), alert: Alert.fromWire(_p1Row()), now: () => DateTime.fromMillisecondsSinceEpoch(_t0 + 42000))),
+    // App V2「这件事」整页（拉高，一次看全：页头、步骤条、照片、画面、地图、现场警示、通知、结论、经过）
+    '05c-incident-full': _Shot(
+        const Size(390, 2300),
+        () => SiteAlertScenePage(
+            api: _deterring(), alert: Alert.fromWire(_p1Row()), now: () => DateTime.fromMillisecondsSinceEpoch(_t0 + 42000)),
+        ready: _decoded,
+        themes: const [Brightness.dark]),
     '05b-alarm-map': _Shot(
         _phone,
         () => SiteAlertScenePage(

@@ -310,7 +310,7 @@ class _NwShellState extends State<NwShell> {
                             Positioned(
                                 right: Nw.s16,
                                 bottom: Nw.s16 + (_update != null ? 64 : 0),
-                                child: SafeArea(child: _EstopSquare(onPressed: () => StopAllButton.press(context, api, _say)))),
+                                child: SafeArea(child: EstopSquare(onPressed: () => StopAllButton.press(context, api, _say)))),
                           if (dark && _update != null)
                             Positioned(
                                 left: 0,
@@ -506,9 +506,11 @@ class _Segment extends StatelessWidget {
 }
 
 /// 「现在」右下角的大红方块（拇指区）：手机上唯一的整块红底。
-class _EstopSquare extends StatelessWidget {
+/// 深色页右下角拇指区的大红「全部急停」方块（「现在」页、「这件事」页共用）。
+class EstopSquare extends StatelessWidget {
   final VoidCallback onPressed;
-  const _EstopSquare({required this.onPressed});
+  final Key buttonKey;
+  const EstopSquare({super.key, required this.onPressed, this.buttonKey = NwShell.estopKey});
   @override
   Widget build(BuildContext context) {
     final c = Nw.of(context);
@@ -518,7 +520,7 @@ class _EstopSquare extends StatelessWidget {
         elevation: 6,
         shadowColor: Colors.black54,
         child: InkWell(
-            key: NwShell.estopKey,
+            key: buttonKey,
             onTap: onPressed,
             child: SizedBox(
                 width: 88,
