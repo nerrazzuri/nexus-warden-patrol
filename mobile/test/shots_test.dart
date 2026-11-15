@@ -21,6 +21,7 @@ import 'package:nexwar_patrol/ui/site_maps.dart' show SiteMapTab;
 import 'package:nexwar_patrol/net/site_client.dart' show SiteError;
 import 'package:nexwar_patrol/ui/site_add.dart';
 import 'package:nexwar_patrol/ui/site_page.dart';
+import 'package:nexwar_patrol/ui/site_recordings.dart';
 import 'package:nexwar_patrol/ui/problem_report.dart';
 import 'package:nexwar_patrol/ui/guide.dart' show HelpPage;
 import 'package:nexwar_patrol/ui/site_pose_pick.dart' show PoseBar;
@@ -349,6 +350,16 @@ void main() {
       await openSite(t);
     }),
     '31-schedule': _Shot(const Size(390, 1200), () => SchedulePage(api: FakeApi('admin'))),
+    '34-video': _Shot(_phone, () {
+      final now = DateTime.now().millisecondsSinceEpoch ~/ 60000 * 60000;
+      final api = FakeApi('guard')
+        ..recordingRows = <Map<String, dynamic>>[
+          for (var i = 0; i < 6; i++)
+            <String, dynamic>{'id': 10 + i, 'robot_id': 'A', 'camera': 'front', 'stamp': 's$i',
+              'start_ms': now - i * 60000, 'bytes': 8 * 1048576, 'keep': i == 1 ? 1 : 0},
+        ];
+      return SiteRecordingsPage(api: api, robotId: 'A', robots: const ['A', 'B'], aroundMs: now - 90000);
+    }),
     '32-help': _Shot(const Size(390, 1200), () => HelpPage(role: 'guard', api: FakeApi('guard'))),
     '33-report': _Shot(_phone, () => ProblemReportPage(api: FakeApi('guard'), robots: const ['A', 'B'], share: (_, _) async => true)),
     '24-overview': _Shot(const Size(390, 1200), () => Scaffold(body: AdminHomeTab(api: FakeApi('admin'), switchTab: (_) {}))),

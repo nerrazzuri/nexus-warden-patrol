@@ -48,6 +48,8 @@ void main() {
     await t.tap(find.byKey(SiteRecordingsPage.clipKey(11)));
     await t.pumpAndSettle();
     expect(api.calls, isNot(contains('recording-bytes 11')), reason: 'M34：30 MB 先问流量');
+    expect(find.byType(AlertDialog), findsNothing, reason: 'App V2：就地问');
+    await t.ensureVisible(find.byKey(SiteRecordingsPage.dataOkKey));
     await t.tap(find.byKey(SiteRecordingsPage.dataOkKey));
     await t.pumpAndSettle();
     expect(api.calls, contains('recording-bytes 11'));
@@ -62,6 +64,7 @@ void main() {
     await t.pumpAndSettle();
     expect(find.byKey(SiteRecordingsPage.clipKey(12)), findsOneWidget);
     expect(find.byKey(SiteRecordingsPage.clipKey(10)), findsNothing);
+    await t.ensureVisible(find.byKey(SiteRecordingsPage.olderKey));
     await t.tap(find.byKey(SiteRecordingsPage.olderKey));
     await t.pumpAndSettle();
     final last = api.calls.last.split(' ');
@@ -72,10 +75,12 @@ void main() {
   testWidgets('值班的人标留着、取消', (t) async {
     final api = _api('guard');
     await _open(t, api);
+    await t.ensureVisible(find.byKey(SiteRecordingsPage.keepKey(10)));
     await t.tap(find.byKey(SiteRecordingsPage.keepKey(10)));
     await t.pumpAndSettle();
     expect(api.calls, contains('keep 10 true'));
     expect(find.textContaining('已标记保留'), findsOneWidget);
+    await t.ensureVisible(find.byKey(SiteRecordingsPage.keepKey(10)));
     await t.tap(find.byKey(SiteRecordingsPage.keepKey(10)));
     await t.pumpAndSettle();
     expect(api.calls, contains('keep 10 false'));
@@ -87,8 +92,9 @@ void main() {
     final q = api.calls.first.split(' ');
     expect(int.parse(q[4]), t0 - 30000 + 15 * 60000);
     expect(int.parse(q[3]), t0 - 30000 - 15 * 60000);
-    final tile = t.widget<ListTile>(find.byKey(SiteRecordingsPage.clipKey(11)));
-    expect(tile.selected, isTrue);
+    // App V2 稿 S-video：盖住那一刻的那一段写「报警」
+    expect(find.descendant(of: find.byKey(SiteRecordingsPage.clipKey(11)), matching: find.textContaining('报警')), findsOneWidget);
+    expect(find.descendant(of: find.byKey(SiteRecordingsPage.clipKey(10)), matching: find.textContaining('报警')), findsNothing);
     expect(find.textContaining('报警时刻'), findsOneWidget);
   });
 
@@ -116,6 +122,20 @@ void main() {
     await t.pumpWidget(MaterialApp(home: SiteAlertScenePage(api: api, alert: alert('site'))));
     await t.pumpAndSettle();
     expect(find.byKey(SiteAlertScenePage.videoKey), findsNothing);
+  });
+
+  testWidgets('App V2 稿 S-video：几台机器人在一页里切；只有一台不摆', (t) async {
+    final api = _api('guard');
+    await t.binding.setSurfaceSize(const Size(400, 900));
+    addTearDown(() => t.binding.setSurfaceSize(null));
+    await t.pumpWidget(MaterialApp(home: SiteRecordingsPage(api: api, robotId: 'A', robots: const ['A', 'B'], player: _Player())));
+    await t.pumpAndSettle();
+    await t.tap(find.byKey(SiteRecordingsPage.robotKey('B')));
+    await t.pumpAndSettle();
+    expect(api.calls.where((c) => c.startsWith('recordings')).last, startsWith('recordings B'));
+    await t.pumpWidget(const SizedBox());
+    await _open(t, _api('guard'));
+    expect(find.byKey(SiteRecordingsPage.robotKey('A')), findsNothing);
   });
 
   testWidgets('W40：机器人报了热像，录像能按热像筛；老机器人没有这一格', (t) async {
