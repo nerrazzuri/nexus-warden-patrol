@@ -4,6 +4,7 @@ import 'dart:convert';
 // 改名、派遣方式、解绑（再输一次密码）都在设置页签里就地做，不弹窗。
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:nexwar_patrol/ui/site_deterrence.dart';
 import 'package:nexwar_patrol/l10n.dart';
 import 'package:nexwar_patrol/net/site_client.dart';
 import 'package:nexwar_patrol/ui/site_robot.dart';
@@ -94,6 +95,20 @@ void main() {
     expect(find.byKey(SiteRobotPage.tonightKey), findsOneWidget);
     expect(find.textContaining('由保安、管理员操作'), findsOneWidget);
     expect(find.byKey(const Key('btn-teleop')), findsNothing);
+  });
+
+  testWidgets('外审 App-V2-7 N2：机器人页的驱离条谁都看得见；经理、保安点得进驱离页，只读点不进；页头写驱离中', (t) async {
+    final sess = <Map<String, dynamic>>[
+      <String, dynamic>{'robot_id': 'A', 'level': 2, 'auto': true, 'next_in_s': 30, 'started_ms': 1, 'level_ms': 1},
+    ];
+    for (final (role, tap) in [('owner', true), ('guard', true), ('viewer', false)]) {
+      await _open(t, FakeApi(role, robotView: busyView())..deterRows = sess, light: false, settings: false);
+      expect(find.byKey(SiteRobotPage.deterBannerKey), findsOneWidget, reason: role);
+      expect(t.widget<Text>(find.byKey(const Key('robot-phase'))).data, contains('驱离'), reason: role);
+      await t.tap(find.byKey(SiteRobotPage.deterBannerKey));
+      await t.pumpAndSettle();
+      expect(find.byType(SiteDeterrencePage), tap ? findsOneWidget : findsNothing, reason: role);
+    }
   });
 
   testWidgets('原地停下没成功：页顶红框（不弹窗），叫人按机身急停；「再停一次」重发，「知道了」才收', (t) async {

@@ -143,6 +143,13 @@ void main() {
     expect(find.byType(SiteLoginPage), findsOneWidget);
     expect(t.widget<SiteLoginPage>(find.byType(SiteLoginPage)).site.username, 'olga', reason: '同名的两个里按指纹挑对的那个');
     expect(pendingRing.value, isNotNull, reason: '留着：登上了外壳接着弹');
+    // 外审 App-V2-7 N1：登录取消了、回到站点列表，再点同一条通知（原生又交一次）照样弹
+    await t.binding.handlePopRoute();
+    await t.pumpAndSettle();
+    expect(find.byType(SiteLoginPage), findsNothing);
+    pendingRing.value = RingRequest('cctv:3/intrusion#9', _wire(), '庄园', url: 'https://b:8443', fingerprint: 'cd' * 32);
+    await t.pumpAndSettle();
+    expect(find.byType(RingPage), findsOneWidget);
     await t.pumpWidget(Container());
   });
 
