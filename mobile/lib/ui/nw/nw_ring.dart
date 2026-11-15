@@ -15,7 +15,12 @@ import '../site_alert_scene.dart';
 import 'nw_theme.dart';
 
 class RingPage extends StatefulWidget {
-  final SiteApi api;
+  /// 登录了的站点。null = 还没登录（App 被系统收了、报警把它冷启动起来，外审 App-V2-3 I5）：
+  /// 照样整屏显示这一条、能静音；「登录后处理」交给 [onSignIn]。
+  final SiteApi? api;
+
+  /// 还没登录时「登录后处理」：去这个站点的登录页（null = 手机上没存这个站点，只能看、静音）。
+  final VoidCallback? onSignIn;
   final Alert alert;
   final String site;
   final DateTime Function() now;
@@ -32,6 +37,7 @@ class RingPage extends StatefulWidget {
   const RingPage(
       {super.key,
       required this.api,
+      this.onSignIn,
       required this.alert,
       required this.site,
       this.now = DateTime.now,
@@ -43,6 +49,7 @@ class RingPage extends StatefulWidget {
   static const Key videoKey = Key('ring-video');
   static const Key muteKey = Key('ring-mute');
   static const Key msgKey = Key('ring-msg');
+  static const Key signInKey = Key('ring-sign-in');
 
   @override
   State<RingPage> createState() => _RingPageState();
@@ -71,7 +78,7 @@ class _RingPageState extends State<RingPage> {
   void initState() {
     super.initState();
     _live.add(this);
-    _poll = Timer.periodic(widget.every, (_) => unawaited(_check()));
+    if (widget.api != null) _poll = Timer.periodic(widget.every, (_) => unawaited(_check()));
   }
 
   @override
@@ -84,7 +91,9 @@ class _RingPageState extends State<RingPage> {
   /// 别人接手了、关了：这一页没事了，回去。
   Future<void> _check() async {
     try {
-      final rows = await widget.api.alerts(all: true);
+      final api = widget.api;
+      if (api == null) return;
+      final rows = await api.alerts(all: true);
       final now = rows.where((x) => x.key == _a.key);
       if (!mounted || now.isEmpty) return;
       final got = now.first;
@@ -113,12 +122,13 @@ class _RingPageState extends State<RingPage> {
   }
 
   void _open() {
-    if (_left || !mounted) return;
+    final api = widget.api;
+    if (_left || !mounted || api == null) return;
     _left = true;
     _finish();
     // 外审 App-V2-2 N1：换掉的是自己这一页（上面可能已经压着另一件的来报警页），不是栈顶
     final route = ModalRoute.of(context);
-    final next = MaterialPageRoute<void>(builder: (_) => SiteAlertScenePage(api: widget.api, alert: _a));
+    final next = MaterialPageRoute<void>(builder: (_) => SiteAlertScenePage(api: api, alert: _a));
     if (route == null || route.isCurrent) {
       Navigator.of(context).pushReplacement(next);
     } else if (route.isActive) {
@@ -127,10 +137,11 @@ class _RingPageState extends State<RingPage> {
   }
 
   Future<void> _take() async {
-    if (_busy) return;
+    final api = widget.api;
+    if (_busy || api == null) return;
     setState(() => _busy = true);
     try {
-      final r = await widget.api.ackAlert(_a.key);
+      final r = await api.ackAlert(_a.key);
       if (!mounted) return;
       final got = r['alert'] is Map ? Alert.fromWire(Map<String, dynamic>.from(r['alert'] as Map)) : null;
       if (got != null && got.key == _a.key) _a = got;
@@ -140,6 +151,16 @@ class _RingPageState extends State<RingPage> {
     } finally {
       if (mounted) setState(() => _busy = false);
     }
+  }
+
+  /// 还没登录：关掉这一页（不算处理完，锁屏上还亮着）、去登录；登上了外壳接着弹这一条。
+  void _signIn() {
+    if (_left || !mounted) return;
+    _left = true;
+    _finished = true; // 不收锁屏显示：登录页、外壳的来报警页还要在锁屏上
+    _live.remove(this);
+    Navigator.of(context).pop();
+    widget.onSignIn?.call();
   }
 
   Future<void> _mute() async {
@@ -210,7 +231,8 @@ class _RingPageState extends State<RingPage> {
               : point.isNotEmpty
                   ? tr('$robot dispatched to $point', '$robot 已派去 $point')
                   : tr('Robot $robot is on scene', '机器人 $robot 在现场');
-          final handle = widget.api.session?.canHandleAlerts ?? false;
+          final handle = widget.api?.session?.canHandleAlerts ?? false;
+          final signedOut = widget.api == null;
           return Scaffold(
               backgroundColor: c.bg,
               body: SafeArea(
@@ -246,10 +268,17 @@ class _RingPageState extends State<RingPage> {
                         if (handle)
                           _btn(RingPage.takeKey, tr('Take ownership', '我来处理'), _busy ? null : () => unawaited(_take()),
                               primary: true),
+                        if (signedOut && widget.onSignIn != null)
+                          _btn(RingPage.signInKey, tr('Sign in to handle', '登录后处理'), _signIn, primary: true),
+                        if (signedOut && widget.onSignIn == null)
+                          Text(tr('This site is not saved on this phone. Handle it on the duty console.', '这台手机没存这个站点，请在值班台处理。'),
+                              style: NwText.bodyMedium.copyWith(color: c.textSecondary)),
                         const SizedBox(height: Nw.s8),
                         Row(children: [
-                          Expanded(child: _btn(RingPage.videoKey, tr('View video only', '只看画面'), _open)),
-                          const SizedBox(width: Nw.s8),
+                          if (!signedOut) ...[
+                            Expanded(child: _btn(RingPage.videoKey, tr('View video only', '只看画面'), _open)),
+                            const SizedBox(width: Nw.s8),
+                          ],
                           Expanded(
                               child: _btn(RingPage.muteKey, tr('Mute 2 min', '静音 2 分钟'),
                                   _mutedUntil == null ? () => unawaited(_mute()) : null)),

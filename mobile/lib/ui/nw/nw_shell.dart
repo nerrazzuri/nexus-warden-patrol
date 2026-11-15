@@ -136,6 +136,7 @@ class _NwShellState extends State<NwShell> {
     };
     unawaited(_refresh());
     _tick = Timer.periodic(widget.clockEvery, (_) => unawaited(_refresh()));
+    liveShells++;
     pendingRing.addListener(_onRing);
     WidgetsBinding.instance.addPostFrameCallback((_) => _onRing());
   }
@@ -145,7 +146,8 @@ class _NwShellState extends State<NwShell> {
     final r = pendingRing.value;
     if (r == null || !mounted) return;
     final name = widget.entry?.name ?? widget.title ?? '';
-    if (r.site.isNotEmpty && name.isNotEmpty && r.site != name) return;
+    final e = widget.entry;
+    if (!r.isFor(name: name, urls: [widget.api.baseUrl, ...?e?.urls], fingerprint: e?.fingerprint ?? '')) return;
     pendingRing.value = null;
     final a = Alert.fromWire(<String, dynamic>{...r.alert, 'key': r.key});
     unawaited(Navigator.of(context).push(MaterialPageRoute<void>(
@@ -167,6 +169,7 @@ class _NwShellState extends State<NwShell> {
   void dispose() {
     _tick?.cancel();
     pendingRing.removeListener(_onRing);
+    liveShells--;
     clearEstopMisses(); // 换站点 / 退出:上一个站点的急停没确认不带过去
     unawaited(ErrorLog.instance.flush());
     ErrorLog.instance.detach(widget.api);

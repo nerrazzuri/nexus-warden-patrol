@@ -32,7 +32,7 @@ import 'nw/nw_theme.dart';
 import 'nw/nw_shell.dart' show EstopSquare;
 import 'site_tabs.dart' show AccountsPage;
 import 'site_mapping.dart';
-import 'site_deter.dart' show deterAckFailure;
+import 'site_deter.dart' show deterAckFailure, deterQuietFirst;
 import 'site_recordings.dart';
 import 'site_runs.dart';
 import 'site_video.dart';
@@ -518,7 +518,18 @@ class _SiteAlertScenePageState extends State<SiteAlertScenePage> with EstopMissR
   Future<void> _allOff() async {
     final gen = _gen, robot = _a.robot;
     final fails = <String>[];
-    for (final o in _outputs.where((o) => const {'speaker', 'strobe', 'siren', 'spotlight'}.contains(o))) {
+    // 外审 App-V2-3 I7：还在驱离先退到 L0（不然站点下一拍又把声光打开）；跟按钮用同一套「有哪几路」
+    final quiet = await deterQuietFirst(widget.api, robot);
+    if (!mounted || gen != _gen) return;
+    if (quiet != null) fails.add(quiet);
+    final outs = (_outputs.isNotEmpty ? _outputs : ((_d?['outputs'] as List?) ?? const []).map((e) => '$e').toList())
+        .where((o) => const {'speaker', 'strobe', 'siren', 'spotlight'}.contains(o))
+        .toList();
+    if (outs.isEmpty) {
+      setState(() => _msg = tr("Don't know which outputs $robot has; nothing was turned off.", '不知道 $robot 装了哪几路，没关任何一路。'));
+      return;
+    }
+    for (final o in outs) {
       try {
         if (deterAckFailure(await widget.api.deter(robot, o, false)) != null) fails.add(o);
       } on SiteError {

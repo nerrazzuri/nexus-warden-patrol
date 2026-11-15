@@ -27,6 +27,7 @@ import '../map_wizard.dart' show openMapWizard, wizardSteps;
 import '../patrol_dispatch.dart';
 import '../robot_events.dart';
 import '../site_alert_scene.dart';
+import '../site_deterrence.dart' show SiteDeterrencePage, deterSessionText;
 import '../site_duty_page.dart' show DutyTargets, dutyOrder, robotLabel, kSiteDownGrace;
 import '../site_robot.dart' show SiteRobotPage, robotStatusLine;
 import '../site_video.dart';
@@ -53,6 +54,7 @@ class NowPage extends StatefulWidget {
   const NowPage({super.key, required this.api, this.onReady, this.onOpenMap, this.onOpenRecords, this.openP1});
 
   static const Key okKey = Key('now-ok');
+  static Key deterKey(String id) => Key('now-deter-$id');
   static const Key attnKey = Key('now-attn');
   static Key p1Key(String key) => Key('now-p1-$key');
   static Key ackKey(String key) => Key('now-ack-$key');
@@ -136,7 +138,7 @@ class _NowPageState extends State<NowPage> with EstopMissReveal {
     unawaited(_reload());
     _sub = widget.api.events().listen((f) {
       final k = f['kind'];
-      if (k == 'alert' || k == 'status' || k == 'mode' || k == 'event' || k == 'robot') _soon();
+      if (k == 'alert' || k == 'status' || k == 'mode' || k == 'event' || k == 'robot' || k == 'deterrence') _soon();
     }, onError: (Object _) {});
     _poll = Timer.periodic(const Duration(seconds: 30), (_) => unawaited(_reload()));
     patrolSent.addListener(_onSent);
@@ -197,6 +199,7 @@ class _NowPageState extends State<NowPage> with EstopMissReveal {
       _try(widget.api.mapWizard),
       _try(widget.api.alertTest),
       _try(() => widget.api.shiftNotes(recent: 1)),
+      _try(widget.api.deterrence),
     ]);
     if (!mounted) return;
     final robots = got[0] is List ? dutyOrder((got[0] as List).cast<Map<String, dynamic>>()) : _robots;
@@ -223,6 +226,8 @@ class _NowPageState extends State<NowPage> with EstopMissReveal {
       }
       if (got[3] is Map) _mapWiz = (got[3] as Map).cast<String, dynamic>();
       if (got[4] is Map) _drill = (got[4] as Map)['active'] == true ? (got[4] as Map).cast<String, dynamic>() : null;
+      // 外审 App-V2-3 I4：正在驱离的（报警结案了驱离可能还在）；读不到就留着上一次的
+      if (got[6] is List) _deter = {for (final x in (got[6] as List)) if (x is Map) '${x['robot_id']}': x.cast<String, dynamic>()};
       if (got[5] is List) {
         final l = got[5] as List;
         _note = l.isEmpty ? null : (l.first as Map).cast<String, dynamic>();
@@ -385,10 +390,47 @@ class _NowPageState extends State<NowPage> with EstopMissReveal {
     return parts.join(' · ');
   }
 
+  /// 正在驱离的机器人（站点那一场）：号 → 那一场。
+  Map<String, Map<String, dynamic>> _deter = const {};
+
+  /// 机器人格、要看一下那一条用的状态：驱离中算进去（外审 App-V2-3 I4）。
+  RobotPhase _phaseOf(Map<String, dynamic> r) => robotPhase(r, deterring: _deter.containsKey('${r['robot_id']}'));
+
+  /// 驱离还在的：一台一条红框，写到第几级；能派的点进驱离页（降级、转人工、结束）。有这一条就不说「全场正常」。
+  Widget _deterStrip(NwColors c, String id, Map<String, dynamic> d) {
+    final can = widget.api.session?.canDispatch ?? false;
+    return Material(
+        color: c.surface,
+        shape: Border(left: BorderSide(color: c.error, width: 4), bottom: BorderSide(color: c.outline)),
+        child: InkWell(
+            key: NowPage.deterKey(id),
+            onTap: can
+                ? () => Navigator.push(
+                    context, MaterialPageRoute<void>(builder: (_) => SiteDeterrencePage(api: widget.api, robotId: id)))
+                : null,
+            child: Padding(
+                padding: const EdgeInsets.fromLTRB(Nw.s16, 12, Nw.s16, 12),
+                child: Row(children: [
+                  Icon(Icons.campaign_rounded, color: c.error, size: 20),
+                  const SizedBox(width: 10),
+                  Expanded(
+                      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Text(tr('$id deterring · ${deterSessionText(d)}', '$id 驱离中 · ${deterSessionText(d)}'),
+                        style: NwText.titleSmall.copyWith(color: c.text, fontWeight: FontWeight.w700)),
+                    Text(
+                        can
+                            ? tr('Lights and sound may still be on. Tap to change level or end.', '声光可能还开着。点进去降级或结束。')
+                            : tr('Lights and sound may still be on. Guards can end it.', '声光可能还开着。由保安结束。'),
+                        style: NwText.bodySmall.copyWith(color: c.textSecondary)),
+                  ])),
+                  if (can) Icon(Icons.chevron_right_rounded, color: c.textSecondary),
+                ]))));
+  }
+
   /// 急停、离线、吊销的机器人(被人叫停的走上面的急停卡)。有这些就不能说「全场正常」。
   List<Map<String, dynamic>> _needAttention() => [
         for (final r in _robots)
-          if (const {RobotPhase.estop, RobotPhase.offline, RobotPhase.revoked}.contains(robotPhase(r))) r,
+          if (const {RobotPhase.estop, RobotPhase.offline, RobotPhase.revoked}.contains(_phaseOf(r))) r,
       ];
 
   /// 截图核对 11-15:有机器人急停 / 离线时顶上一条琥珀「要看一下」,写清是哪台、什么状态。
@@ -403,7 +445,7 @@ class _NowPageState extends State<NowPage> with EstopMissReveal {
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text(tr('${bad.length} ${bad.length == 1 ? 'robot needs' : 'robots need'} attention', '${bad.length} 台机器人要看一下'),
                 style: NwText.titleSmall.copyWith(color: c.text, fontWeight: FontWeight.w700)),
-            Text([for (final r in bad) '${robotLabel(r)}: ${_phaseWord(robotPhase(r))}'].join(' · '),
+            Text([for (final r in bad) '${robotLabel(r)}: ${_phaseWord(_phaseOf(r))}'].join(' · '),
                 maxLines: 2, overflow: TextOverflow.ellipsis, style: NwText.bodySmall.copyWith(color: c.textSecondary)),
           ])),
         ]),
@@ -737,7 +779,7 @@ class _NowPageState extends State<NowPage> with EstopMissReveal {
   Widget _tile(NwColors c, Map<String, dynamic> r) {
     final id = '${r['robot_id']}';
     final on = id == _sel;
-    final p = robotPhase(r);
+    final p = _phaseOf(r);
     final b = robotBattery(r);
     final low = p == RobotPhase.lowBattery || (b != null && b < NwBattery.lowBelow);
     return Material(
@@ -819,7 +861,7 @@ class _NowPageState extends State<NowPage> with EstopMissReveal {
   Widget? _mapBlock(NwColors c) {
     final m = _mapOf(_selRobot) ?? _mapOf(_robots.isEmpty ? null : _robots.first);
     if (m == null) return null;
-    final label = [for (final r in _robots) '${robotLabel(r)} · ${_phaseWord(robotPhase(r))}'].join(' · ');
+    final label = [for (final r in _robots) '${robotLabel(r)} · ${_phaseWord(_phaseOf(r))}'].join(' · ');
     final can = widget.api.session?.canDispatch ?? false;
     return Column(key: _t.status, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
       NwMapThumb(
@@ -1059,10 +1101,11 @@ class _NowPageState extends State<NowPage> with EstopMissReveal {
                     ])),
               for (final a in p1) _p1Strip(c, a),
               if (held.isNotEmpty) _estopCard(c, held),
+              for (final e in _deter.entries) _deterStrip(c, e.key, e.value),
               ?noMap,
-              if (p1.isEmpty && held.isEmpty && _robotsKnown)
+              if (p1.isEmpty && held.isEmpty && _deter.isEmpty && _robotsKnown)
                 if (attn.isEmpty) _okStrip(c) else _attnStrip(c, attn)
-              else if (p1.isNotEmpty || held.isNotEmpty)
+              else if (p1.isNotEmpty || held.isNotEmpty || _deter.isNotEmpty)
                 const SizedBox(height: 12),
             ])),
         if (!_loaded)

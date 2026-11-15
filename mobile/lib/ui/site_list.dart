@@ -14,7 +14,9 @@ import '../net/push.dart';
 import '../net/site_client.dart';
 import '../store/site_store.dart';
 import 'app_settings.dart';
+import '../model/alert.dart';
 import 'nw/nw_p1_entry.dart';
+import 'nw/nw_ring.dart';
 import 'nw/nw_shell.dart';
 import 'nw/nw_theme.dart';
 import 'nw/nw_widgets.dart';
@@ -73,11 +75,43 @@ class _SiteListPageState extends State<SiteListPage> {
   @override
   void initState() {
     super.initState();
+    pendingRing.addListener(_onRing);
     widget.store.load().then((s) {
       if (mounted) setState(() => _sites = s);
+      _sitesLoaded = true;
+      _onRing(); // 冷启动：报警可能比站点列表先到
     }, onError: (Object e) {
       if (mounted) setState(() => _loadError = '$e');
+      _sitesLoaded = true;
+      _onRing();
     });
+  }
+
+  @override
+  void dispose() {
+    pendingRing.removeListener(_onRing);
+    super.dispose();
+  }
+
+  /// 已经整屏弹过的那一条（同一条不重复弹）。
+  String? _ringShown;
+  bool _sitesLoaded = false;
+
+  /// 外审 App-V2-3 I5：还没登录（没有外壳开着）时来了报警 —— App 被系统收了、报警把它冷启动起来 ——
+  /// 照样整屏弹来报警页（能看、能静音），「登录后处理」去那个站点的登录页；登上了外壳接着弹这一条。
+  void _onRing() {
+    final r = pendingRing.value;
+    if (r == null || !mounted || !_sitesLoaded || liveShells > 0 || _ringShown == r.key) return;
+    final site = _sites.where((e) => r.isFor(name: e.name, urls: e.urls, fingerprint: e.fingerprint)).firstOrNull;
+    _ringShown = r.key;
+    final a = Alert.fromWire(<String, dynamic>{...r.alert, 'key': r.key});
+    unawaited(Navigator.of(context).push(MaterialPageRoute<void>(
+        fullscreenDialog: true,
+        builder: (_) => RingPage(
+            api: null,
+            alert: a,
+            site: site?.name ?? r.site,
+            onSignIn: site == null ? null : () => unawaited(_open(site))))));
   }
 
   /// 换掉列表里的一条（按身份找；找不到就不动）、存下来。

@@ -143,6 +143,27 @@ String? deterAckFailure(Map<String, dynamic> r) {
   return deterReasonText('${ack['reason'] ?? res}');
 }
 
+/// 「全部关」之前：这台要是还在驱离（站点那一场会按级别续开声光、轮放话术），先退到 L0 观察
+/// （什么都不开、不再自动升级），不然刚关的下一拍又被打开（外审 App-V2-3 I7）。
+/// 回 null = 不在驱离或已退到 L0；回原因 = 没退成（这时不能说「全关了」）。
+Future<String?> deterQuietFirst(SiteApi api, String robotId) async {
+  final List<Map<String, dynamic>> live;
+  try {
+    live = await api.deterrence();
+  } on SiteError catch (e) {
+    if (e.status == 404) return null; // 老站点没有驱离
+    return tr("Can't tell whether deterrence is running: $e", '不知道是否还在驱离：$e');
+  }
+  final mine = live.where((x) => '${x['robot_id']}' == robotId).firstOrNull;
+  if (mine == null || mine['level'] == 0) return null;
+  try {
+    await api.deterLevel(robotId, 0);
+    return null;
+  } on SiteError catch (e) {
+    return tr('Deterrence is still running and could not be stepped down: $e', '还在驱离，没能退到观察：$e');
+  }
+}
+
 /// 狗回的拒绝理由说人话。
 String deterReasonText(String r) => switch (r) {
       'busy' => tr('The speaker is playing something more urgent (incident, deterrence). Wait for it to finish',
@@ -294,6 +315,8 @@ class _SiteDeterPageState extends State<SiteDeterPage> {
   Future<void> _allOff() async {
     final what = tr('All off', '全部关');
     final bad = <String>[];
+    final quiet = await deterQuietFirst(widget.api, widget.robotId);
+    if (quiet != null) bad.add(quiet);
     for (final o in _outputs.where((o) => o != 'ptz' && o != 'wiper')) {
       try {
         final why = deterAckFailure(await widget.api.deter(widget.robotId, o, false));
