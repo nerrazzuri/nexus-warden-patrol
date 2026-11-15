@@ -156,7 +156,8 @@ export function pageAllowed(p: Page, role: string): boolean {
   if (!isAdminPage(p)) return true;
   if (p === "admin/users") return role === "admin";
   // W53:经理能排布防时间(App 里排巡逻日程,布防时间在这里)。W60:经理也看机器人(只看)、报表
-  if (p === "admin/arming" || p === "admin/robots" || p === "admin/reports") return isOwnerLike(role) || role === "owner";
+  // redesign 第六期(HANDOFF):经理的现场设置 = 概况(只读,M-home)、机器人(只看)、布防与巡逻、报告
+  if (p === "admin/home" || p === "admin/arming" || p === "admin/robots" || p === "admin/reports") return isOwnerLike(role) || role === "owner";
   return isOwnerLike(role);
 }
 
