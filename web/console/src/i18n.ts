@@ -6,6 +6,13 @@ import alertCatalog from "../../../design/i18n/alerts.json";
 export type Lang = "en" | "zh";
 
 const en = {
+  meNoiseHint: "Red circles are tiny isolated specks (≤ {a} m², open floor within {r} m) left by people walking during mapping; they block the planner. Click a circle to keep that one (e.g. a thin post).",
+  meNoiseNone: "No noise found in this version.",
+  meNoiseLooking: "Looking for noise…",
+  meNoiseApply: "Clean {n} spots → new draft",
+  meNoise: "Clean noise…",
+  meNoiseDirty: "Save the draft first, then clean noise.",
+  meNoiseDone: "Noise cleaned: {n} spots. Opened draft v{v}.",
   incBackup: "Request backup (notify manager)",
   incBackupDone: "Backup requested by {who} at {t}; managers and administrators were notified.",
   incBackupSent: "Backup requested; managers and administrators notified.",
@@ -2268,6 +2275,13 @@ const en = {
 type Key = keyof typeof en;
 
 const zh: Partial<Record<Key, string>> = {
+  meNoiseHint: "红圈是很小、四周 {r} 米都是空地的小黑点（每处不超过 {a} 平方米），多半是建图时有人走动留下的，会挡住路线。真东西（比如细杆子）就点一下那个圈，留着它。",
+  meNoiseNone: "这一版没找到噪点。",
+  meNoiseLooking: "正在找噪点…",
+  meNoiseApply: "清掉 {n} 处 → 新草稿",
+  meNoise: "清噪点…",
+  meNoiseDirty: "先存草稿，再清噪点。",
+  meNoiseDone: "清了 {n} 处噪点，已打开草稿 v{v}。",
   incBackup: "请求支援（通知经理）",
   incBackupDone: "{who} {t} 请求了支援，已推送给经理和管理员。",
   incBackupSent: "已请求支援，经理和管理员已收到推送。",

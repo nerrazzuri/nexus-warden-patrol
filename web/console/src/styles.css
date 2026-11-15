@@ -2553,3 +2553,8 @@ input[type="checkbox"], input[type="radio"] { width: 18px; height: 18px; }
 /* 第 8 期:时间轴充电灰条 */
 .tl-lane .tl-charge, .tl-key .tl-charge { position: absolute; top: 50%; height: 6px; transform: translateY(-50%); background: var(--c-textSecondary); opacity: 0.55; }
 .tl-key .tl-charge { position: static; display: inline-block; width: 14px; height: 6px; transform: none; vertical-align: middle; }
+/* 用户 11-15:清噪点做成编辑器里的一个工具 —— 候选红圈,点一下留着(灰虚线) */
+.me-speck { fill: transparent; stroke: var(--c-error); stroke-width: 3; cursor: pointer; }
+.me-speck.kept { stroke: var(--c-textSecondary); stroke-dasharray: 4 3; }
+.me-noise { display: flex; flex-direction: column; gap: var(--sp-2); }
+.me-noise .btn { align-self: flex-start; }
