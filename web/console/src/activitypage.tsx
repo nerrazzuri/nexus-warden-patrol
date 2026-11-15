@@ -30,7 +30,8 @@ export function ActivityPage({ now, role = "admin" }: { now: number; role?: stri
   const today = dateInput(now);
   const [from, setFrom] = useState(today);
   const [to, setTo] = useState(today);
-  const [actor, setActor] = useState("");
+  // 外审 1 #11:从人员页「去操作记录看全部」带着 ?actor= 进来
+  const [actor, setActor] = useState(() => new URLSearchParams((typeof location === "undefined" ? "" : location.hash).split("?")[1] ?? "").get("actor") ?? "");
   const [group, setGroup] = useState("");
   const [page, setPage] = useState(0);
   const [got, setGot] = useState<{ audit: AuditRow[]; total: number } | null>(null);

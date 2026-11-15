@@ -88,11 +88,16 @@ export function PlaybackView(props: {
       : [robot, ...others.slice(0, 1)].flatMap((r) => [{ robot: r, cam: "front" as const }, { robot: r, cam: "back" as const }]);
   const clipFrom = a ? a.first_ms - 60_000 : head;
   const clipTo = a ? Math.min(Math.max(a.resolved_ms ?? a.last_ms, a.first_ms) + 60_000, a.first_ms + 30 * 60_000) : head + 5 * 60_000;
+  // 外审 1 #6:按录像编号记「保留」,跳走再跳回来不回退(子格缓存里的那份还是旧的)
+  const [kept, setKept] = useState<Record<string, boolean>>({});
+  const curKeep = cur ? (kept[String(cur.id)] ?? !!cur.keep) : false;
   const keep = async () => {
     if (!cur) return;
+    const id = cur.id;
     try {
-      const d = await api<{ recording: Recording }>("POST", `/api/recordings/${cur.id}/keep`, { keep: !cur.keep });
-      setCur(d.recording);
+      const d = await api<{ recording: Recording }>("POST", `/api/recordings/${id}/keep`, { keep: !curKeep });
+      setKept((k) => ({ ...k, [String(id)]: !!d.recording.keep }));
+      setCur((c) => (c && c.id === id ? d.recording : c));
     } catch (e) {
       props.say(t("failed", { why: e instanceof Error ? e.message : String(e) }));
     }
@@ -178,8 +183,8 @@ export function PlaybackView(props: {
             </label>
             <span class="push" />
             {canReview(props.role) && (
-              <button type="button" class="btn" aria-pressed={!!cur?.keep} disabled={!cur} onClick={() => void keep()} title={t("recKeepHint")}>
-                {t(cur?.keep ? "pbKept" : "pbKeep")}
+              <button type="button" class="btn" aria-pressed={curKeep} disabled={!cur} onClick={() => void keep()} title={t("recKeepHint")}>
+                {t(curKeep ? "pbKept" : "pbKeep")}
               </button>
             )}
           </div>

@@ -1108,6 +1108,12 @@ class SiteDB:
                     "INSERT OR IGNORE INTO homes(robot_id, map_id, map_version, name, x, y, yaw) "
                     "SELECT robot_id, map_id, map_version, name, x, y, yaw FROM standby_points "
                     "WHERE map_version != '' ORDER BY is_default DESC, name")
+            if row is not None and str(row[0]).isdigit() and int(row[0]) < 79:
+                # redesign 第 8 期:充电流水是新表 —— 升上来时把正在进行的回充周期补一笔起点,
+                # 不然下一次状态变化前时间轴上看不到它在充
+                self._conn.execute(
+                    "INSERT INTO charge_log(robot_id, state, at_ms) "
+                    "SELECT robot_id, state, started_ms FROM charge_cycles")
             if row is not None and str(row[0]).isdigit() and int(row[0]) < 56:
                 # 升到 56 之前发了一半的推送:那时候只记「哪个通道发完了」(done),没有逐台的账。
                 # 56 起只认逐台的账:把发完了的通道名下现在的推送号补记成发过,不然升级后重发一遍。

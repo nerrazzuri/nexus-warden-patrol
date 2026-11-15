@@ -66,6 +66,8 @@ export function VideoSlot(props: {
   scene?: Scene;
   /** 报警现场的那一位:外框标红。 */
   alarm?: boolean;
+  /** 外审 1 #7:「全部热像」—— 有热像的这一格大画面切热像(不重挂组件,不丢手动选择)。 */
+  thermal?: boolean;
 }) {
   const [swapped, setSwapped] = useState(false);
   // 大画面换成哪一路额外的相机(热像、上装):同时只一路
@@ -74,7 +76,8 @@ export function VideoSlot(props: {
   const cams = robotCams(props.u.robot);
   const hasThermal = cams.includes("thermal");
   const hasPayload = cams.includes("payload");
-  const useExtra = extra !== null && cams.includes(extra) && !props.scene ? extra : null;
+  const want = props.thermal && hasThermal ? "thermal" : extra;
+  const useExtra = want !== null && cams.includes(want) && !props.scene ? want : null;
   const main: Cam = useExtra ?? (swapped ? "back" : "front");
   const pip: Cam = useExtra ? "front" : props.scene ? "front" : swapped ? "front" : "back";
   const toggle = (c: "thermal" | "payload") => ({ on: useExtra === c, toggle: () => setExtra(extra === c ? null : c) });
