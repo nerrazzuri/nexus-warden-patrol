@@ -96,6 +96,32 @@ void main() {
     expect((done, signIn), (1, 1));
   });
 
+  testWidgets('外审 App-V2-5 R1：没登录、叠着两件报警，在上面那件点「登录后处理」也收锁屏显示', (t) async {
+    var done = 0;
+    RingPage page(String k) => RingPage(
+        api: null,
+        alert: Alert.fromWire({..._wire(), 'key': k}),
+        site: '庄园',
+        onSignIn: () {},
+        mute: (_) async => true,
+        done: () async => done++);
+    await t.pumpWidget(MaterialApp(
+        home: Builder(
+            builder: (c) => TextButton(
+                onPressed: () {
+                  Navigator.push(c, MaterialPageRoute<void>(builder: (_) => page('a')));
+                  Navigator.push(c, MaterialPageRoute<void>(builder: (_) => page('b')));
+                },
+                child: const Text('home')))));
+    await t.tap(find.text('home'));
+    await t.pumpAndSettle();
+    await t.tap(find.byKey(RingPage.signInKey));
+    await t.pumpAndSettle();
+    expect(find.byType(RingPage), findsOneWidget, reason: '下面那件还在');
+    expect(done, 1);
+    await t.pumpWidget(Container());
+  });
+
   testWidgets('外审 App-V2-3 I5：没登录（冷启动）来报警也整屏弹；「登录后处理」去那个站点的登录页', (t) async {
     t.view.physicalSize = const Size(390 * 2, 844 * 2);
     t.view.devicePixelRatio = 2;

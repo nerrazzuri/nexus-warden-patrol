@@ -1104,7 +1104,8 @@ class _NowPageState extends State<NowPage> with EstopMissReveal {
               if (held.isNotEmpty) _estopCard(c, held),
               for (final e in _deter.entries) _deterStrip(c, e.key, e.value),
               ?noMap,
-              if (p1.isEmpty && held.isEmpty && _deter.isEmpty && _robotsKnown)
+              // 外审 App-V2-5 M1：驱离时机身急停、离线照样提示
+              if (p1.isEmpty && held.isEmpty && _robotsKnown && (attn.isNotEmpty || _deter.isEmpty))
                 if (attn.isEmpty) _okStrip(c) else _attnStrip(c, attn)
               else if (p1.isNotEmpty || held.isNotEmpty || _deter.isNotEmpty)
                 const SizedBox(height: 12),
