@@ -3,6 +3,7 @@
 // 右边当前任务(停下 / 回待命点 / 回原点)、派巡逻(忙时排队)、派去看一眼、姿态、定位、今天这台的事。
 // 权限跟老机器人页一样:派巡逻、停下 = 能派巡逻的(含经理);回待命、回原点、定位、恢复、姿态、云台、喊话、警示 = 能派单的。
 // 只读只看。换姿态、停下回原点在原地确认(老页面是弹窗)。
+import type { ComponentChildren } from "preact";
 import { useEffect, useState } from "preact/hooks";
 import { api, ApiError, enc } from "./api";
 import { CameraWell } from "./camera";
@@ -34,8 +35,11 @@ export function RobotControl(props: {
   say: Say;
   refresh: () => Promise<void>;
   onBack: () => void;
-  /** 「派去看一眼…」:回全场地图、开看一眼工具。 */
-  onLook: (robot: string) => void;
+  /** 「派去看一眼…」:回全场地图、开看一眼工具。没有 = 不给(现场设置 → 机器人里)。 */
+  onLook?: (robot: string) => void;
+  /** 第六期 R-A:嵌在现场设置 → 机器人「操作」里 —— 不画自己的页头(那页有),右栏末尾接健康状况。 */
+  embedded?: boolean;
+  sideExtra?: ComponentChildren;
   /** 「协助定位」:回全场地图,在地图上点它的实际位置(老值班页的「帮它找位置」)。 */
   onFind?: (robot: string) => void;
 }) {
@@ -103,13 +107,13 @@ export function RobotControl(props: {
 
   return (
     <div class="rc" data-robot={id}>
-      <header class="rc-head">
+      {!props.embedded && <header class="rc-head">
         <button type="button" class="btn" onClick={props.onBack}>{t("rcSiteView")}</button>
         <b class="rc-name">{name}</b>
         <span class={`mon-state ${sign}`}><Sign kind={sign} />{u.stale ? t("stUnknown") : t(`st_${u.state}` as Key)}</span>
         <span class="rc-sub" title={sub}>{sub}</span>
         {pageAllowed("admin/robots", props.role) && <a class="btn push" href={`#/admin/robots?robot=${enc(id)}`}>{t("rcSettings")}</a>}
-      </header>
+      </header>}
       <div class="rc-body">
         <div class="rc-main">
           <Video u={u} now={props.now} deter={dispatch ? r.deter ?? null : null} busy={busy} off={off} send={send} post={post} name={name} />
@@ -149,9 +153,16 @@ export function RobotControl(props: {
               )
             )}
             {(patrol || dispatch) && <p class="muted small">{t(dispatch ? "rcTaskHint" : "rcTaskHintMgr")}</p>}
+            {/* 第 2 轮 N2(老机器人页):没原点、没待命点 —— 写为什么灰着,管理员给去处理的链接 */}
+            {dispatch && !off && (r.home_set === false || r.standby_set === false) && (
+              <ul class="plain rd-why small muted" data-setup-why="1">
+                {r.home_set === false && <li>{t("rdNoHome")} {isOwnerLike(props.role) && <a href="#/admin/localization">{t("rdNoHomeGo")}</a>}</li>}
+                {r.standby_set === false && <li>{t("rdNoStandby")} {isOwnerLike(props.role) && <a href="#/admin/layout?tab=standby">{t("rdNoStandbyGo")}</a>}</li>}
+              </ul>
+            )}
           </section>
           {patrol && <Dispatch r={r} id={id} name={name} busy={busy} off={off} send={send} busyTask={!!task}
-            onLook={dispatch && !off ? () => props.onLook(id) : undefined} />}
+            onLook={dispatch && !off && props.onLook ? () => props.onLook!(id) : undefined} />}
           {(r.postures ?? []).length > 0 || loc ? (
             <section class="rc-sec rc-state">
               {(r.postures ?? []).length > 0 && (
@@ -190,6 +201,7 @@ export function RobotControl(props: {
               <ul class="mon-activity">{today.map((x, i) => <li key={i}><time class="mono">{hm(x.at)}</time><span>{x.text}</span></li>)}</ul>
             )}
           </section>
+          {props.sideExtra}
         </aside>
       </div>
     </div>
@@ -426,6 +438,12 @@ function Dispatch({ r, id, name, busy, off, send, busyTask, onLook }: {
               onClick={() => void send(() => api<Reply>("POST", `/api/robots/${enc(id)}/patrol`, { mission_id: pick, loops }),
                 t("rdPatrolSent", { id: name, route: drawn[pick]?.title || pick }))}>{t(queued ? "rcQueue" : "rcStart")}</button>
           </div>
+          {/* W8-02 / UIUX-022(老机器人页):画在别的地图版本上的路线,原因整句写在下拉外面 */}
+          {(routes ?? []).some((m) => otherMap(m) !== null) && (
+            <ul class="plain small warn" data-route-why="1">
+              {(routes ?? []).filter((m) => otherMap(m) !== null).map((m) => <li key={m}>{drawn[m]?.title || m} {t("rdRouteOtherMap", { at: otherMap(m) ?? "", id: name, v: `v${r.map?.version ?? ""}` })}</li>)}
+            </ul>
+          )}
           {plan && (
             <p class="muted small" data-plan="1">
               {plan.forever ? (plan.return_pct != null ? t("doForeverPct", { n: plan.return_pct }) : t("doForever"))
