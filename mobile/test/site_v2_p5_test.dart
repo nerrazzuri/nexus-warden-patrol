@@ -5,6 +5,7 @@ import 'package:nexwar_patrol/l10n.dart';
 import 'package:nexwar_patrol/ui/alarm_log.dart';
 import 'package:nexwar_patrol/ui/nw/nw_layout_hub.dart';
 import 'package:nexwar_patrol/ui/site_mode.dart';
+import 'package:nexwar_patrol/ui/site_releases.dart';
 import 'package:nexwar_patrol/ui/site_routes.dart';
 import 'package:nexwar_patrol/ui/site_tabs.dart';
 
@@ -117,5 +118,20 @@ void main() {
     await t.pumpAndSettle();
     expect(find.byKey(AlarmLogPage.rowKey('c')), findsOneWidget);
     expect(find.byKey(AlarmLogPage.rowKey('b')), findsNothing);
+  });
+
+  testWidgets('软件升级：站点上的版本写哪台在跑 / 没装；每台机器人四个按钮一排等宽；有手机 App 一段', (t) async {
+    await t.binding.setSurfaceSize(const Size(390, 1200));
+    addTearDown(() => t.binding.setSurfaceSize(null));
+    await t.pumpWidget(MaterialApp(home: SiteReleasesPage(api: FakeApi('admin'))));
+    await t.pumpAndSettle();
+    expect(find.text('软件升级'), findsOneWidget);
+    expect(find.textContaining('没装'), findsOneWidget);
+    final w = {
+      for (final a in ['install', 'precheck', 'activate', 'rollback']) t.getRect(find.byKey(SiteReleasesPage.actionKey('A', a))),
+    };
+    expect(w.map((r) => r.width.round()).toSet().length, 1, reason: '等宽');
+    expect(w.map((r) => r.top).toSet().length, 1, reason: '一排');
+    expect(find.byKey(SiteReleasesPage.appKey), findsOneWidget);
   });
 }
