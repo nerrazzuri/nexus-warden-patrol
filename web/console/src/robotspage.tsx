@@ -529,7 +529,7 @@ const LANG_NAME: Record<string, [string, string]> = { zh: ["Chinese", "中文"],
 export const langName = (l: string) => LANG_NAME[l]?.[lang.value === "zh" ? 1 : 0] ?? l;
 
 /** 第三档 #41:管理员编辑常用喊话(整张换)。空的、重复的当场说,不发。 */
-export function PresetEditor({ init, onClose, onSaved }: { init: VoicePreset[]; onClose: () => void; onSaved: (p: VoicePreset[]) => void }) {
+export function PresetEditor({ init, onClose, onSaved, inline }: { init: VoicePreset[]; onClose: () => void; onSaved: (p: VoicePreset[]) => void; inline?: boolean }) {
   const [rows, setRows] = useState<VoicePreset[]>(init.map((p) => ({ ...p })));
   const [err, setErr] = useState("");
   const [bad, setBad] = useState(-1);       // UIUX-049:出错的是第几句(标 aria-invalid、焦点放过去)
@@ -562,8 +562,8 @@ export function PresetEditor({ init, onClose, onSaved }: { init: VoicePreset[]; 
       setBusy(false);
     }
   }
-  return (
-    <Modal label={t("rdPresetsEdit")} wide onClose={onClose}>
+  // 第七期(HANDOFF 不弹窗):单台控制里就地展开编辑,不开对话框
+  const body = (
       <form class="form preset-form" ref={form} onSubmit={save}>
         <p class="muted small">{t("rdPresetsHint")}</p>
         {rows.map((x, i) => (
@@ -586,8 +586,9 @@ export function PresetEditor({ init, onClose, onSaved }: { init: VoicePreset[]; 
           <button type="submit" class="btn primary" disabled={busy}>{t("save")}</button>
         </div>
       </form>
-    </Modal>
   );
+  if (inline) return <div class="preset-inline" role="group" aria-label={t("rdPresetsEdit")} data-preset-inline="1"><h4 class="lbl">{t("rdPresetsEdit")}</h4>{body}</div>;
+  return <Modal label={t("rdPresetsEdit")} wide onClose={onClose}>{body}</Modal>;
 }
 
 /** 机器人编号(站点 ca.SAFE_ID)。 */

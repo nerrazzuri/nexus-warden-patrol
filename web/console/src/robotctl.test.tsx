@@ -278,3 +278,15 @@ describe("单台机器人控制 · 从老机器人页搬过来的(第六期)", (
     expect(c.querySelector(".rc-side")!.lastElementChild!.getAttribute("data-extra")).toBe("1");
   });
 });
+
+describe("第七期:常用话就地编辑(不弹窗)", () => {
+  it("管理员点「编辑常用话」在喊话区里展开编辑表单,没有对话框;存了回到按钮", async () => {
+    const c = show("admin", idle());
+    await waitFor(() => expect(c.querySelector("[data-voice-edit]")).not.toBeNull());
+    fireEvent.click(c.querySelector("[data-voice-edit]")!);
+    expect(c.querySelector(".rc-voice [data-preset-inline] form.preset-form")).not.toBeNull();
+    expect(document.querySelector(".modal")).toBeNull();
+    fireEvent.submit(c.querySelector("[data-preset-inline] form")!);
+    await waitFor(() => expect(posts.some((p) => p.url === "/api/voice-presets")).toBe(true));
+  });
+});
