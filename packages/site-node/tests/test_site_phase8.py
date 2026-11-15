@@ -48,7 +48,8 @@ def test_充电时段_按流水拼_没结束的to是null(站点):
         log = (("goto", now - 3_600_000), ("dock", now - 3_000_000), ("idle", now - 1_800_000),
                ("goto", now - 600_000))
         for st, at in log:
-            c.execute("INSERT INTO charge_log(robot_id, state, at_ms) VALUES (?,?,?)", ("A", st, at))
+            c.execute("INSERT INTO charge_log(robot_id, state, at_ms) VALUES (?,?,?)",
+                      ("A", st, at))
     code, d = s.req("GET", f"/api/robots/charging?since={now - 7_200_000}&until={now}",
                     token=gina)
     assert code == 200, d
