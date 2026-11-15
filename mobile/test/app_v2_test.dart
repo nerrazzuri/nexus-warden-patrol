@@ -773,9 +773,10 @@ void main() {
       expect(find.byType(SiteRunsPage), findsOneWidget);
       await t.pageBack();
       await t.pumpAndSettle();
-      // 概况 = 「要你处理 + 开站清单 + 三组入口」
+      // App V2 稿 S-home：概况 = 待处理 + 开站清单 + 今天 + 机器人；路线等入口在「地图与布置」
       await openDir(t, SiteDest.overview);
-      expect(find.byKey(const Key('admin-entry-routes')), findsOneWidget);
+      expect(find.text('概况'), findsWidgets);
+      expect(find.byKey(const Key('admin-entry-routes')), findsNothing);
       await t.pumpWidget(Container());
     });
 

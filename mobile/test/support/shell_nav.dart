@@ -1,6 +1,7 @@
 // App V2 外壳里走到某一页:切到「现场」、滚到目录里那一行、点它。各页的测试都用这一份。
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:nexwar_patrol/ui/nw/nw_layout_hub.dart';
 import 'package:nexwar_patrol/ui/nw/nw_now.dart';
 import 'package:nexwar_patrol/ui/nw/nw_shell.dart';
 import 'package:nexwar_patrol/ui/nw/nw_site_dir.dart';
@@ -30,6 +31,14 @@ Future<void> openDir(WidgetTester t, SiteDest d) async {
 Future<void> openSiteDir(WidgetTester t, SiteDest d) async {
   await openSite(t);
   await openDir(t, d);
+  // App V2 稿 S-layout：「地图与布置」先是入口页，点「防区」回到外壳的全屏地图层
+  if (d == SiteDest.layout) {
+    await t.scrollUntilVisible(find.byKey(SiteLayoutPage.rowKey('zones')), 200,
+        scrollable: find.descendant(of: find.byType(SiteLayoutPage), matching: find.byType(Scrollable)).first);
+    await t.pumpAndSettle();
+    await t.tap(find.byKey(SiteLayoutPage.rowKey('zones')));
+    await t.pumpAndSettle();
+  }
 }
 
 /// 保安、经理、只读的目录里没有「地图」:从「现在」页的小地图进全屏地图层。

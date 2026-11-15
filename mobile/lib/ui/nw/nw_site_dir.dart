@@ -22,6 +22,7 @@ import '../site_recordings.dart';
 import '../site_releases.dart';
 import '../site_runs.dart';
 import '../site_tabs.dart' show AccountsPage, leaveSite;
+import 'nw_layout_hub.dart';
 import 'nw_theme.dart';
 
 /// 目录里一行要去哪。
@@ -70,7 +71,8 @@ class SiteDirectory extends StatelessWidget {
       groups.add((tr('Site', '现场'), [
         _Row(SiteDest.layout, Icons.map_outlined, tr('Map & layout', '地图与布置'),
             tr('Zones, no-go zones, patrol routes, standby points, cameras, intercept points', '防区、禁行区、巡逻路线、待命点、摄像头、拦截点'),
-            onLayout),
+            // App V2 稿 S-layout：先到「地图与布置」入口页（小地图 + 一层一行）
+            () => _push(context, SiteLayoutPage(api: api, onRobots: onRobots, onMap: onLayout))),
         _Row(SiteDest.arming, Icons.shield_outlined, tr('Arming & patrols', '布防与巡逻'),
             tr('Arming mode, temporary disarm, arming schedule, patrol schedules, weather', '布防模式、临时撤防、布防时间、巡逻日程、天气'),
             () => _push(context, SiteModePage(api: api))),

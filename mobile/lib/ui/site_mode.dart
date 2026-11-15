@@ -21,6 +21,8 @@ import 'nw/nw_button.dart';
 import 'nw/nw_p2_duty.dart';
 import 'nw/nw_theme.dart';
 import 'nw/nw_widgets.dart';
+import 'site_tabs.dart' show SchedulePage;
+import 'site_weather.dart';
 
 String? _robotWhy(String code, String id) => switch (code) {
       'unregistered' => tr('$id is not registered', '$id 没登记'),
@@ -70,6 +72,9 @@ class SiteModePage extends StatefulWidget {
   final SiteApi api;
   const SiteModePage({super.key, required this.api});
 
+  static const Key scheduleKey = Key('mode-schedule');
+  static const Key schedulesKey = Key('mode-patrol-schedules');
+  static const Key weatherKey = Key('mode-weather');
   static const Key armKey = Key('mode-armed');
   static const Key homeKey = Key('mode-home');
   static const Key visitorKey = Key('mode-visitor');
@@ -129,7 +134,13 @@ class _SiteModePageState extends State<SiteModePage> {
     super.dispose();
   }
 
+  /// 布防时间表（只读汇总，改在网页）；老站点没有就不摆。
+  Map<String, dynamic>? _sched;
+
   Future<void> _load() async {
+    unawaited(widget.api.armingSchedule().then((v) {
+      if (mounted) setState(() => _sched = v);
+    }, onError: (Object _) {}));
     try {
       final m = await widget.api.mode();
       if (mounted) setState(() => _mode = m);
@@ -251,7 +262,7 @@ class _SiteModePageState extends State<SiteModePage> {
     final manage = s?.canManageMaps ?? false;
     final m = _mode;
     return Scaffold(
-      appBar: AppBar(title: Text(tr('Arming mode', '布防模式'))),
+      appBar: AppBar(title: Text(tr('Arming & patrols', '布防与巡逻'))),
       body: RefreshIndicator(
         onRefresh: _load,
         child: ListView(
@@ -300,11 +311,7 @@ class _SiteModePageState extends State<SiteModePage> {
                   btn(SiteModePage.visitorKey, 'visitor', tr('Temp disarm', '临时撤防'), () => _visitorAsk(now)),
                 ],
               ];
-              if (box.maxWidth < 420) {
-                return Column(children: [
-                  for (var i = 0; i < buttons.length; i++) ...[if (i > 0) const SizedBox(height: Nw.s8), buttons[i]],
-                ]);
-              }
+              // App V2：同一排等宽（窄屏也一排三个）
               return Row(children: [
                 for (var i = 0; i < buttons.length; i++) ...[
                   if (i > 0) const SizedBox(width: Nw.s8),
@@ -352,10 +359,74 @@ class _SiteModePageState extends State<SiteModePage> {
                             : null,
                       ),
                   ])),
+            if (_sched != null) ..._schedule(c, _sched!),
+            const SizedBox(height: Nw.s16),
+            Text(tr('Patrol', '巡逻'), style: NwText.labelMedium.copyWith(color: c.textSecondary)),
+            const SizedBox(height: Nw.s8),
+            NwCard(
+                padding: EdgeInsets.zero,
+                child: Column(mainAxisSize: MainAxisSize.min, children: [
+                  if (manage)
+                    ListTile(
+                        key: SiteModePage.schedulesKey,
+                        leading: const Icon(Icons.schedule_rounded),
+                        title: Text(tr('Patrol schedules', '巡逻日程')),
+                        subtitle: Text(tr('What time, which route, which robot', '几点、哪条路线、哪台机器人')),
+                        trailing: const Icon(Icons.chevron_right_rounded),
+                        onTap: () => Navigator.push(context, MaterialPageRoute<void>(builder: (_) => SchedulePage(api: widget.api)))),
+                  ListTile(
+                      key: SiteModePage.weatherKey,
+                      leading: const Icon(Icons.cloud_outlined),
+                      title: Text(tr('Weather', '天气')),
+                      subtitle: Text(tr('Slow down in rain, pause patrols in thunderstorms', '雨天限速、雷暴暂停巡逻')),
+                      trailing: const Icon(Icons.chevron_right_rounded),
+                      onTap: () => Navigator.push(context, MaterialPageRoute<void>(builder: (_) => SiteWeatherPage(api: widget.api)))),
+                ])),
           ],
         ]),
       ),
     );
+  }
+
+  /// 布防时间（只读）：同一时段的几天并一行（「周一–周五 19:00 → 07:00」那样），例外列在下面；改在网页。
+  List<Widget> _schedule(NwColors c, Map<String, dynamic> v) {
+    final days = [tr('Mon', '周一'), tr('Tue', '周二'), tr('Wed', '周三'), tr('Thu', '周四'), tr('Fri', '周五'), tr('Sat', '周六'), tr('Sun', '周日')];
+    final groups = <String, List<int>>{};
+    for (final x in (v['slots'] as List? ?? const [])) {
+      if (x is! Map) continue;
+      final k = '${'${x['zone'] ?? ''}'.isEmpty ? '' : '${x['zone']} '}${x['start']} → ${x['end']}';
+      (groups[k] ??= <int>[]).add((x['day'] as num?)?.toInt() ?? 0);
+    }
+    String dayText(List<int> ds) {
+      final d = ds.toSet().toList()..sort();
+      if (d.length == 7) return tr('Every day', '每天');
+      return d.map((i) => days[i % 7]).join(tr(', ', '、'));
+    }
+    Widget line(String a, String b) => Padding(
+        padding: const EdgeInsets.symmetric(vertical: 6),
+        child: Row(children: [
+          Expanded(child: Text(a, style: NwText.bodyMedium.copyWith(color: c.text))),
+          Text(b, style: NwText.bodyMedium.copyWith(color: c.text, fontWeight: FontWeight.w700)),
+        ]));
+    return [
+      const SizedBox(height: Nw.s16),
+      Text(tr('Arming schedule', '布防时间'), style: NwText.labelMedium.copyWith(color: c.textSecondary)),
+      const SizedBox(height: Nw.s8),
+      NwCard(
+          key: SiteModePage.scheduleKey,
+          child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            if (v['enabled'] != true)
+              Text(tr('Off: the site switches only when someone changes the mode', '没开：只有人手动切换模式'),
+                  style: NwText.bodyMedium.copyWith(color: c.textSecondary))
+            else
+              for (final g in groups.entries) line(dayText(g.value), g.key),
+            for (final e in (v['exceptions'] as List? ?? const []))
+              if (e is Map) line(tr('Exception · ${e['date'] ?? ''}', '例外 · ${e['date'] ?? ''}'), '${e['note'] ?? e['label'] ?? ''}'),
+            const SizedBox(height: Nw.s4),
+            Text(tr('Edit the arming schedule on the web console.', '改布防时间请到网页值班台。'),
+                style: NwText.bodySmall.copyWith(color: c.textSecondary)),
+          ])),
+    ];
   }
 }
 
