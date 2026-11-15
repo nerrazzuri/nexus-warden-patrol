@@ -603,9 +603,9 @@ def _run(a, home: Path, logs: Path, names: list[str], bport: int, fp: str, procs
         fresh = _unbound(a, logs, start) if a.unbound else []
         base = f"https://{a.host}:{a.api_port}"
         seeded = _seed_w53(base, a.password, names) if a.w53 and not reuse else []
-        if a.nav == "planned" and not a.w54:      # W54:站点上还没有图,建好了再下发
-            # 用户 11-15:--reuse 重启不再把自带的 v7 下发一遍(会把人刚发布的新版顶掉);机器人留在自己那一版
-        if not reuse:
+        # W54:站点上还没有图,建好了再下发。用户 11-15:--reuse 重启不再把自带的 v7 下发一遍
+        # (会把人刚发布的新版顶掉),机器人留在自己那一版
+        if a.nav == "planned" and not a.w54 and not reuse:
             seeded += _send_maps(base, a.password, names)
         print(f"演示站点起来了(日志在 {logs}):\n"
               f"  地址  https://{a.host}:{a.api_port}\n"
