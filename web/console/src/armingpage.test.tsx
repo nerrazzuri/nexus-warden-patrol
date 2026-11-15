@@ -4,7 +4,7 @@ import { cleanup, fireEvent, render, waitFor } from "@testing-library/preact";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { setFetch } from "./api";
 import { armedAt, fromWire, type WireSlot } from "./armgrid";
-import { ArmingPage } from "./armingpage";
+import { ArmingPage, whoText } from "./armingpage";
 import { lang } from "./i18n";
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
@@ -457,6 +457,14 @@ describe("布防时间页", () => {
   });
 });
 
+
+describe("笔记本复测 11-15", () => {
+  it("按时间表时「当前」一句不重复「按时间表」", () => {
+    lang.value = "zh";
+    const m = { mode: "home", source: "schedule", state: "disarmed" } as unknown as Parameters<typeof whoText>[0];
+    expect(whoText(m, true)).toBe("当前按时间表：撤防。");
+  });
+});
 
 describe("网页易用性第 1 轮 P1-59", () => {
   it("单击不拖:说要按住拖;有图例", async () => {
