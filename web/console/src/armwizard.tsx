@@ -1,7 +1,7 @@
 // 布防向导(用户 11-13):布防要先画防区 → 防区路线 → 布防时间 → 值守方案,散在三个页面,用户自己配都卡住了
 // (存了防区路线没进值守方案,机器人又只许手动派,系统也没说为什么不走)。点「布防」时缺哪样就开这个向导,
 // 一步步做完;已经做好的步骤打勾,可以直接往下。画防区、改路线就地嵌布置页的编辑器,不跳页面。
-import { useEffect, useState } from "preact/hooks";
+import { useEffect, useRef, useState } from "preact/hooks";
 import { api, ApiError } from "./api";
 import { robotNames } from "./data";
 import { Confirm, Modal } from "./dialogs";
@@ -25,10 +25,12 @@ type Say = (s: string) => void;
 
 const en = {
   title: "Arming wizard",
-  lead: "Set up what the robots do while armed. Finished steps are ticked; you can skip ahead.",
+  lead: "Set up what the robots do while armed, step by step from the start. Nothing is changed until you confirm it.",
   s1: "Zones", s2: "Patrol route", s3: "When to arm", s4: "Who patrols", s5: "Confirm",
   map: "Map: {map} v{ver}",
   zonesHave: "Zones on this map: {list}",
+  zonesPick: "Pick the zones the robots guard, or draw a new one:",
+  zonesPicked: "{n} selected",
   zonesNone: "This map has no zones yet.",
   zoneWhole: "Use the whole map as one zone",
   zoneWholeName: "Whole site",
@@ -38,8 +40,9 @@ const en = {
   routeHave: "Zone routes on this map (pick the one the robots run):",
   routeNone: "No zone route on this map yet.",
   routeVia: "via {zones}",
-  routeGen: "Generate from the zones",
-  routeGenAgain: "Generate a new one from the zones",
+  routeGen: "Generate from the selected zones",
+  routeGenAgain: "Generate a new one from the selected zones",
+  routePick: "Generate a route through the selected zones ({zones}), or pick an existing one:",
   routeEdit: "Edit routes on the map",
   routeGenTitle: "Zone patrol ({map} v{ver})",
   routeGenNone: "No reachable points in the zones: {why}",
@@ -96,15 +99,22 @@ const en = {
   dropArming: "This page has unsaved arming-time changes. The wizard may change arming times too, so these changes will be discarded.",
   dropYes: "Discard",
   timeGoOn: "Save these times",
+  schedOverwrite: "This replaces the current arming times ({n} blocks a week).",
+  schedOffAsk: "This turns off the current arming timetable ({n} blocks a week); you arm and disarm by hand.",
+  schedPickOne: "Choose one.",
+  planOverwrite: "The guard plan already has: {list}. Replace it with “{route}” ({robot})?",
+  planReplace: "Replace the guard plan",
   notPatrolling: "Armed, but robots will not patrol on their own: {why}.",
 };
 type WKey = keyof typeof en;
 const zh: Record<WKey, string> = {
   title: "布防向导",
-  lead: "设置布防时机器人做什么。做好的步骤已打勾，可以直接往下。",
+  lead: "从头一步步设置布防时机器人做什么。确认之前不会改动任何设置。",
   s1: "防区", s2: "巡逻路线", s3: "什么时候布防", s4: "谁去巡逻", s5: "确认",
   map: "地图：{map} 第 {ver} 版",
   zonesHave: "这张图上的防区：{list}",
+  zonesPick: "选机器人要守的防区，或者新画一个：",
+  zonesPicked: "已选 {n} 个",
   zonesNone: "这张图上还没有防区。",
   zoneWhole: "整张图作为一个防区",
   zoneWholeName: "全场",
@@ -114,8 +124,9 @@ const zh: Record<WKey, string> = {
   routeHave: "这张图上的防区路线（选一条让机器人跑）：",
   routeNone: "这张图上还没有防区路线。",
   routeVia: "经过 {zones}",
-  routeGen: "按防区自动生成",
-  routeGenAgain: "按防区重新生成一条",
+  routeGen: "按选的防区自动生成",
+  routeGenAgain: "按选的防区重新生成一条",
+  routePick: "按选的防区（{zones}）生成一条路线，或者选一条已有的：",
   routeEdit: "在地图上修改路线",
   routeGenTitle: "防区巡逻（{map} 第 {ver} 版）",
   routeGenNone: "防区里没有机器人走得到的点：{why}",
@@ -172,6 +183,11 @@ const zh: Record<WKey, string> = {
   dropArming: "这页的布防时间还有没保存的修改。布防向导也会改布防时间，打开向导会丢掉这些修改。",
   dropYes: "丢掉",
   timeGoOn: "保存这个时间",
+  schedOverwrite: "会替换现在的布防时间（每周 {n} 段）。",
+  schedOffAsk: "会关掉现在的布防时间表（每周 {n} 段），改成自己手动布防、撤防。",
+  schedPickOne: "请选一项。",
+  planOverwrite: "值守方案里已经有：{list}。换成「{route}」（{robot}）吗？",
+  planReplace: "替换值守方案",
   notPatrolling: "布防着，但机器人不会自己巡逻：{why}。",
 };
 const DICTS: Record<Lang, Record<WKey, string>> = { en, zh };
@@ -293,7 +309,13 @@ export function ArmWizard({ say, onClose, arming = false, onChanged }: { say: Sa
   const [route, setRoute] = useState("");
   const [robot, setRobot] = useState("");
   const [gap, setGap] = useState(0);
-  const [time, setTime] = useState<"keep" | "manual" | "daily">("manual");
+  // 用户 11-15:每次打开都是一次新的向导 —— 不预选、不预先打勾;防区自己选,时间自己选
+  const [time, setTime] = useState<"keep" | "manual" | "daily" | "">("");
+  const [picked, setPicked] = useState<string[]>([]);
+  const zonesSeen = useRef<string[] | null>(null);
+  const [reached, setReached] = useState(0);
+  const [armedOk, setArmedOk] = useState(false);
+  const [askPlan, setAskPlan] = useState<{ text: string; entries: GuardEntry[] } | null>(null);
   const [from, setFrom] = useState("21:30");
   const [to, setTo] = useState("06:00");
   const [note, setNote] = useState("");
@@ -311,20 +333,19 @@ export function ArmWizard({ say, onClose, arming = false, onChanged }: { say: Sa
     try {
       const [got, p, s] = await Promise.all([readiness(m), api<Plan>("GET", "/api/guard/plan"),
         api<Sched>("GET", "/api/arming/schedule")]);
+      // 嵌着的编辑器新画的防区(或「全场」)自动勾上;删掉的去掉
+      const prev = zonesSeen.current;
+      zonesSeen.current = got.zones;
+      if (prev && !first) {
+        const fresh = got.zones.filter((z) => !prev.includes(z));
+        setPicked((cur) => [...cur.filter((z) => got.zones.includes(z)), ...fresh.filter((z) => !cur.includes(z))]);
+      }
       setR(got);
       setPlan(p);
       setSched(s);
-      const usable = got.routes.filter((x) => x.zones.length);
-      const mine = usable.find((x) => x.in_plan) ?? usable[0];
-      setRoute((cur) => (usable.some((x) => x.id === cur) ? cur : mine?.id ?? ""));
-      const e = p.entries.find((x) => x.route === mine?.id);
+      setRoute((cur) => (got.routes.some((x) => x.id === cur && x.zones.length) ? cur : ""));
       if (first) {
-        if (e) { setRobot(e.robot); setGap(e.gap_min); }
-        // UIUX-038:默认保持现状 —— 时间表开着「照现在的」,关着(手动布防)「手动」;要改成每天定时得自己选
-        setTime(s.enabled && s.slots.length ? "keep" : "manual");
-        const order: Missing[] = ["zones", "route", "plan", "robot"];
-        const at = order.findIndex((k) => got.missing.includes(k));
-        setStep(at < 0 ? 4 : at < 2 ? at : 3);
+        setStep(0);
         setStarted(true);
       }
     } catch (x) {
@@ -335,8 +356,8 @@ export function ArmWizard({ say, onClose, arming = false, onChanged }: { say: Sa
     pickMap().then((m) => { setMap(m); if (m) void load(m, true); else setErr(wt("zonesNone")); }).catch((x) => setErr(errText(x)));
   }, []);
 
-  // UIUX-040:第 3 步选「手动布防」也算这一步定了(以前只认时间表开着)
-  const done = [!!r?.zones.length, !!route, !!sched && (time === "manual" || (sched.enabled && sched.slots.length > 0)), !!r && !r.missing.includes("plan") && !r.missing.includes("robot"), false];
+  // 用户 11-15:勾只打在这一次走过的步骤上;第 5 步布防成功了才打勾
+  const done = [reached > 0, reached > 1, reached > 2, reached > 3, armedOk];
   const base = map ? `/api/maps/${enc(map.map_id)}/${enc(map.version)}` : "";
 
   /** 嵌着的编辑器存好了:重新查,也告诉外面。 */
@@ -347,7 +368,7 @@ export function ArmWizard({ say, onClose, arming = false, onChanged }: { say: Sa
     try {
       const meta = await api<PreviewMeta>("GET", `${base}/preview`);
       await api("POST", `${base}/areas`, { zone: wt("zoneWholeName"), points: wholeMap(meta) });
-      await changed();   // 外审 3:背后的页要重读
+      await changed();   // 外审 3:背后的页要重读(新建的「全场」自动勾上)
     } catch (x) { say(errText(x)); } finally { setBusy(false); }
   }
 
@@ -358,7 +379,7 @@ export function ArmWizard({ say, onClose, arming = false, onChanged }: { say: Sa
     try {
       const g = await api<{ waypoints: unknown[]; problems?: unknown[]; zones: { zone: string; points: number; note?: string }[] }>(
         "POST", "/api/guard-routes/generate", { map_id: map.map_id, map_version: map.version, spacing_m: 6,
-          zones: r.zones.map((z) => ({ zone: z, laps: 1, dwell_s: 0, photos: 1 })) });
+          zones: picked.map((z) => ({ zone: z, laps: 1, dwell_s: 0, photos: 1 })) });
       if (!g.waypoints.length) {
         setNote(wt("routeGenNone", { why: g.zones.map((z) => z.note).filter(Boolean).join("；") }));
         return;
@@ -406,7 +427,7 @@ export function ArmWizard({ say, onClose, arming = false, onChanged }: { say: Sa
 
   /** 第 3 步的「下一步」:按选的存布防时间。 */
   async function saveTime(): Promise<boolean> {
-    if (!sched || time === "keep") return true;
+    if (!sched || time === "" || time === "keep") return time !== "";
     if (time === "manual" && !sched.enabled) return true;
     const body: Sched = time === "manual" ? { enabled: false, slots: sched.slots } : { enabled: true, slots: dailySlots(minutes(from), minutes(to)) };
     try {
@@ -414,7 +435,11 @@ export function ArmWizard({ say, onClose, arming = false, onChanged }: { say: Sa
         "POST", "/api/arming/schedule/preview", body);
       // 外审 2 #2:预演失败不当成「没变化」,停下说原因(人可以再点一次)
       const warn = previewChanges(p.before, p.after);
-      if (warn) { setAskTime({ text: warn, body }); return false; }
+      // 用户 11-15:要覆盖现在的布防时间先问
+      const n = sched.enabled ? sched.slots.length : 0;
+      const over = n === 0 ? "" : wt(time === "manual" ? "schedOffAsk" : "schedOverwrite", { n });
+      const ask = [over, warn].filter(Boolean).join(" ");
+      if (ask) { setAskTime({ text: ask, body }); return false; }
       await putTime(body);
       return true;
     } catch (x) { say(errText(x)); return false; }
@@ -432,7 +457,18 @@ export function ArmWizard({ say, onClose, arming = false, onChanged }: { say: Sa
     // 界面上没有的选项(打乱、每圈回待命点)保留原来的
     const old = plan.entries.find((e) => e.route === route);
     const mine: GuardEntry = { route, robot, gap_min: gap, shuffle: old?.shuffle ?? false, end_standby: old?.end_standby ?? true };
-    const entries: GuardEntry[] = old ? plan.entries.map((e) => (e === old ? mine : e)) : [...plan.entries, mine];
+    // 用户 11-15:新的一次设置 = 值守方案换成这一条;方案里本来有别的(或这条换了人、换了休息),先列出来问
+    const same = plan.entries.length === 1 && old && old.robot === robot && old.gap_min === gap;
+    if (plan.entries.length && !same) {
+      const list = plan.entries.map((e) => `${routeTitle(e.route)}${lang.value === "zh" ? "（" : " ("}${e.robot ? who(e.robot) : wt("whoAny")}${lang.value === "zh" ? "）" : ")"}`)
+        .join(lang.value === "zh" ? "；" : "; ");
+      setAskPlan({ text: wt("planOverwrite", { list, route: routeTitle(route), robot: robot ? who(robot) : wt("whoAny") }), entries: [mine] });
+      return false;
+    }
+    return putPlan([mine]);
+  }
+  async function putPlan(entries: GuardEntry[]): Promise<boolean> {
+    if (!plan) return false;
     try {
       await api("POST", "/api/guard/plan", { entries: entries.map(({ route, robot, gap_min, shuffle, end_standby }) =>
         ({ route, robot, gap_min, shuffle, end_standby: end_standby !== false })), limits: plan.limits, base_revision: plan.revision });
@@ -447,10 +483,14 @@ export function ArmWizard({ say, onClose, arming = false, onChanged }: { say: Sa
     try {
       if (step === 2 && !(await saveTime())) return;
       if (step === 3 && !(await savePlan())) return;
-      closeEditor();
-      setNote("");
-      setStep((s) => Math.min(4, s + 1));
+      advance();
     } finally { setBusy(false); }
+  }
+  function advance() {
+    closeEditor();
+    setNote("");
+    setReached((x) => Math.max(x, step + 1));
+    setStep((s) => Math.min(4, s + 1));
   }
 
   async function arm(withPatrol: boolean) {
@@ -458,6 +498,7 @@ export function ArmWizard({ say, onClose, arming = false, onChanged }: { say: Sa
     try {
       await api("POST", "/api/mode", { mode: "armed" });
       say(wt("armed"));
+      setArmedOk(true);
       if (!withPatrol) { onClose(); return; }
       setAfter(wt("watching"));
       // 布防后十几秒内说清楚:谁出发了,或者为什么没出发
@@ -485,7 +526,7 @@ export function ArmWizard({ say, onClose, arming = false, onChanged }: { say: Sa
   const robots = r?.robots ?? [];
   const sel = r?.routes.find((x) => x.id === route);
   const routeTitle = (id: string) => r?.routes.find((x) => x.id === id)?.title || id;
-  const canNext = step === 0 ? !!r?.zones.length : step === 1 ? !!route : step === 3 ? !!route && !!plan : true;
+  const canNext = step === 0 ? picked.length > 0 : step === 1 ? !!route : step === 2 ? time !== "" : step === 3 ? !!route && !!plan : true;
   return (
     <Modal label={wt("title")} onClose={() => guarded(onClose)} wide cls="armwiz">
       <p class="muted small">{wt("lead")}</p>
@@ -493,7 +534,7 @@ export function ArmWizard({ say, onClose, arming = false, onChanged }: { say: Sa
       <ol class="wiz-steps" aria-label={wt("title")}>
         {steps.map((k, i) => (
           <li key={k} aria-current={i === step ? "step" : undefined} class={done[i] ? "done" : ""}>
-            <button type="button" class="wiz-step" disabled={!started || busy} onClick={() => guarded(() => { closeEditor(); setNote(""); setStep(i); })}>
+            <button type="button" class="wiz-step" disabled={!started || busy || i > reached} onClick={() => guarded(() => { closeEditor(); setNote(""); setStep(i); })}>
               {done[i] ? "✓ " : ""}{`${i + 1}. `}{wt(k)}
             </button>
           </li>
@@ -502,7 +543,16 @@ export function ArmWizard({ say, onClose, arming = false, onChanged }: { say: Sa
       {err && <p class="bad" role="alert">{err}</p>}
       {r && step === 0 && (
         <section data-wiz-step="zones">
-          <p>{r.zones.length ? wt("zonesHave", { list: joinList(r.zones) }) : wt("zonesNone")}</p>
+          {r.zones.length ? (
+            <fieldset class="wiz-pick" data-wiz-zones="1">
+              <legend>{wt("zonesPick")}</legend>
+              {r.zones.map((z) => (
+                <label key={z}><input type="checkbox" checked={picked.includes(z)}
+                  onChange={(e) => { const on = e.currentTarget.checked; setPicked((cur) => (on ? [...cur, z] : cur.filter((x) => x !== z))); }} />{" "}{z}</label>
+              ))}
+              <p class="muted small">{wt("zonesPicked", { n: picked.length })}</p>
+            </fieldset>
+          ) : <p>{wt("zonesNone")}</p>}
           <div class="row wrap">
             {!r.zones.length && <button type="button" class="btn primary" disabled={busy} onClick={() => void wholeZone()}>{wt("zoneWhole")}</button>}
             <button type="button" class="btn" onClick={() => (editor === "zones" ? guarded(closeEditor) : setEditor("zones"))}>
@@ -514,7 +564,7 @@ export function ArmWizard({ say, onClose, arming = false, onChanged }: { say: Sa
         <section data-wiz-step="route">
           {r.routes.length ? (
             <fieldset class="wiz-pick">
-              <legend>{wt("routeHave")}</legend>
+              <legend>{wt("routePick", { zones: joinList(picked) })}</legend>
               {r.routes.map((x) => (
                 <label key={x.id}><input type="radio" name="wiz-route" checked={route === x.id} disabled={!x.zones.length} onChange={() => setRoute(x.id)} />
                   {" "}{x.title || x.id}{" "}
@@ -524,7 +574,7 @@ export function ArmWizard({ say, onClose, arming = false, onChanged }: { say: Sa
             </fieldset>
           ) : <p>{wt("routeNone")}</p>}
           <div class="row wrap">
-            <button type="button" class={r.routes.length ? "btn" : "btn primary"} disabled={busy || !r.zones.length} onClick={() => void genRoute()}>
+            <button type="button" class={r.routes.length ? "btn" : "btn primary"} disabled={busy || !picked.length} onClick={() => void genRoute()}>
               {wt(r.routes.length ? "routeGenAgain" : "routeGen")}</button>
             <button type="button" class="btn" onClick={() => (editor === "guard" ? guarded(closeEditor) : setEditor("guard"))}>
               {editor === "guard" ? wt("hideEditor") : wt("routeEdit")}</button>
@@ -588,7 +638,7 @@ export function ArmWizard({ say, onClose, arming = false, onChanged }: { say: Sa
         <section data-wiz-step="confirm">
           <dl class="wiz-sum">
             <dt>{wt("sumMap")}</dt><dd>{map?.map_id} · v{map?.version}</dd>
-            <dt>{wt("sumZones")}</dt><dd>{joinList(r.zones) || "—"}</dd>
+            <dt>{wt("sumZones")}</dt><dd>{joinList(picked) || "—"}</dd>
             <dt>{wt("sumRoute")}</dt><dd>{sel ? sel.title || sel.id : "—"}</dd>
             <dt>{wt("sumTime")}</dt><dd>{sched.enabled && sched.slots.length ? wt("sumSlots", { n: sched.slots.length }) : wt("sumManual")}</dd>
             <dt>{wt("sumWho")}</dt><dd>{robot ? who(robot) : wt("whoAny")}</dd>
@@ -614,7 +664,14 @@ export function ArmWizard({ say, onClose, arming = false, onChanged }: { say: Sa
           const b = askTime.body;
           setAskTime(null);
           setBusy(true);
-          putTime(b).then(() => setStep(3)).catch((x) => say(errText(x))).finally(() => setBusy(false));
+          putTime(b).then(advance).catch((x) => say(errText(x))).finally(() => setBusy(false));
+        }} />}
+      {askPlan && <Confirm text={askPlan.text} yes={wt("planReplace")} danger onNo={() => setAskPlan(null)}
+        onYes={() => {
+          const es = askPlan.entries;
+          setAskPlan(null);
+          setBusy(true);
+          putPlan(es).then((ok) => { if (ok) advance(); }).catch((x) => say(errText(x))).finally(() => setBusy(false));
         }} />}
       <div class="row end wiz-actions">
         {arming && step < 4 && <button type="button" class="btn" disabled={busy} onClick={() => guarded(() => void arm(false))}>{wt("armOnly")}</button>}
