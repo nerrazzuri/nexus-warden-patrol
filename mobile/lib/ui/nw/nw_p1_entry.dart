@@ -75,7 +75,7 @@ class NwField extends StatelessWidget {
     final c = Nw.of(context);
     // 框的边要认得出是个框（非文字 3:1）：用最淡的字色，不用卡片那条淡边（跟 nwTheme 一个规矩）。
     OutlineInputBorder border(Color color, [double width = 1]) => OutlineInputBorder(
-        borderRadius: BorderRadius.circular(Nw.r8), borderSide: BorderSide(color: color, width: width));
+        borderRadius: BorderRadius.circular(2), borderSide: BorderSide(color: color, width: width));
     final idle = border(error ? c.error : c.textMuted);
     final label = this.label;
     return Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
