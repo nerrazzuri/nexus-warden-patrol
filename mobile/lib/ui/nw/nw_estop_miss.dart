@@ -40,6 +40,22 @@ mixin EstopMissReveal<W extends StatefulWidget> on State<W> {
   }
 }
 
+/// 钉在页面列表外面的那一版（外审 App-V2-3 I2）：没有没停成的就什么都不占（也不多出一个滚动区）；
+/// 有就限高、自己滚。
+class EstopMissPinned extends StatelessWidget {
+  final SiteApi api;
+  const EstopMissPinned({super.key, required this.api});
+
+  @override
+  Widget build(BuildContext context) => ValueListenableBuilder<List<EstopMiss>>(
+      valueListenable: estopMisses,
+      builder: (context, misses, _) => misses.isEmpty
+          ? const SizedBox.shrink()
+          : ConstrainedBox(
+              constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(context).height * 0.4),
+              child: SingleChildScrollView(child: EstopMissCards(api: api))));
+}
+
 class EstopMissCards extends StatefulWidget {
   final SiteApi api;
   const EstopMissCards({super.key, required this.api});
