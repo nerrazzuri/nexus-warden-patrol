@@ -17,6 +17,7 @@ import 'package:flutter/material.dart';
 
 import '../l10n.dart';
 import '../net/site_client.dart';
+import 'nw/nw_ask.dart';
 import 'nw/nw_button.dart';
 import 'nw/nw_map_raster.dart';
 import 'nw/nw_p3_robots.dart' show robotOnline;
@@ -49,7 +50,7 @@ class SiteMapsPage extends StatefulWidget {
   State<SiteMapsPage> createState() => _SiteMapsPageState();
 }
 
-class _SiteMapsPageState extends State<SiteMapsPage> {
+class _SiteMapsPageState extends State<SiteMapsPage> with NwAsk {
   late Future<Map<String, dynamic>> _data = widget.api.maps();
 
   void _snack(String t) {
@@ -82,16 +83,9 @@ class _SiteMapsPageState extends State<SiteMapsPage> {
           '没有可$what的机器人（机器人离线或不支持）'));
       return null;
     }
-    return showDialog<String>(
-      context: context,
-      builder: (c) => SimpleDialog(title: Text(tr('Send to which robot', '下发给哪台机器人')), children: [
-        for (final r in robots)
-          SimpleDialogOption(
-              key: Key('pick-${r['robot_id']}'),
-              onPressed: () => Navigator.pop(c, '${r['robot_id']}'),
-              child: Text('${r['robot_id']}')),
-      ]),
-    );
+    return ask<String>(title: tr('Send to which robot', '下发给哪台机器人'), choices: [
+      for (final r in robots) AskChoice('${r['robot_id']}', '${r['robot_id']}', key: Key('pick-${r['robot_id']}')),
+    ]);
   }
 
   Future<void> _activate(Map<String, dynamic> m) async {
@@ -99,24 +93,13 @@ class _SiteMapsPageState extends State<SiteMapsPage> {
     if (robot == null || !mounted) return;
     final label = '${m['map_id']}:${m['version']}';
     // 换图会换坐标系：点位、待命点都得是这张图上的。点错了狗就在错的图上走，所以要再确认一次。
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (c) => AlertDialog(
-        title: Text(tr('Switch $robot to $label?', '将 $robot 切换到 $label？')),
-        content: Text(tr(
+    final ok = await askYes(tr('Switch $robot to $label?', '将 $robot 切换到 $label？'),
+        body: tr(
             'The robot downloads and verifies the map, then switches after its current task. It accepts no new tasks while switching.',
-            '机器人下载并核对地图后，在当前任务结束时切换，切换期间不接新任务。')),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(c, false), child: Text(tr('Cancel', '取消'))),
-          FilledButton(
-              key: const Key('activate-go'),
-              onPressed: () => Navigator.pop(c, true),
-              child: Text(tr('Switch', '换'))),
-        ],
-      ),
-    );
-    if (ok != true) return;
+            '机器人下载并核对地图后，在当前任务结束时切换，切换期间不接新任务。'),
+        ok: tr('Switch', '换'),
+        okKey: const Key('activate-go'));
+    if (!ok) return;
     try {
       Map<String, dynamic> r;
       try {
@@ -124,24 +107,13 @@ class _SiteMapsPageState extends State<SiteMapsPage> {
       } on SiteError catch (e) {
         // W13a：这台狗在这张图上还没有原点。说清楚后果，管理员确认了才照样下发（标原点要狗先载上这张图）。
         if (e.status != 409 || e.body['reason'] != 'no_home' || !mounted) rethrow;
-        final go = await showDialog<bool>(
-          context: context,
-          builder: (c) => AlertDialog(
-            title: Text(tr('$robot has no origin on $label', '$robot 在 $label 上尚未标原点')),
-            content: Text(tr(
+        final go = await askYes(tr('$robot has no origin on $label', '$robot 在 $label 上尚未标原点'),
+            body: tr(
                 'Without an origin, the robot won\'t navigate or patrol on this map; remote control and set position still work. Drive it to the dock, set its position, then tap "Mark origin here".',
-                '没有原点时，机器人在此地图上不执行导航和巡逻，遥控和设位置不受影响。请将机器人开到充电桩前，设好位置后点「在这儿标原点」。')),
-            actions: [
-              TextButton(
-                  onPressed: () => Navigator.pop(c, false), child: Text(tr('Cancel', '取消'))),
-              FilledButton(
-                  key: const Key('activate-without-home'),
-                  onPressed: () => Navigator.pop(c, true),
-                  child: Text(tr('Send anyway', '仍然下发'))),
-            ],
-          ),
-        );
-        if (go != true) {
+                '没有原点时，机器人在此地图上不执行导航和巡逻，遥控和设位置不受影响。请将机器人开到充电桩前，设好位置后点「在这儿标原点」。'),
+            ok: tr('Send anyway', '仍然下发'),
+            okKey: const Key('activate-without-home'));
+        if (!go) {
           _snack(tr('Not sent: $robot has no origin on $label', '未下发：$robot 在 $label 上尚未标原点'));
           return;
         }
@@ -170,7 +142,7 @@ class _SiteMapsPageState extends State<SiteMapsPage> {
       return;
     }
     if (!mounted) return;
-    final got = await showFieldsDialog(context,
+    final got = await askFields(
         title: tr('Rebuild from ${b['name']}', '用 ${b['name']} 重建'),
         fields: [
           DialogField(tr('Map ID', '地图号'), initial: 'estate-1'),
@@ -220,6 +192,7 @@ class _SiteMapsPageState extends State<SiteMapsPage> {
             final title = NwText.titleSmall.copyWith(color: c.text);
             final sub = NwText.bodySmall.copyWith(color: c.textSecondary);
             return NwListView(children: [
+              askStrip(margin: const EdgeInsets.only(bottom: Nw.s16)),
               NwSectionLabel(tr('Maps', '地图')),
               nwGap8,
               NwListCard(children: [
