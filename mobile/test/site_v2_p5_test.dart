@@ -98,6 +98,16 @@ void main() {
     expect(find.byKey(SiteModePage.schedulesKey), findsOneWidget);
   });
 
+  testWidgets('外审 App-V2-5 N1：经理在布防与巡逻页也有巡逻日程（排程权限）；保安没有', (t) async {
+    for (final (role, want) in [('owner', findsOneWidget), ('guard', findsNothing)]) {
+      await t.pumpWidget(MaterialApp(home: SiteModePage(api: FakeApi(role))));
+      await t.pumpAndSettle();
+      await t.scrollUntilVisible(find.text('巡逻'), 200);
+      expect(find.byKey(SiteModePage.schedulesKey), want, reason: role);
+      await t.pumpWidget(Container());
+    }
+  });
+
   testWidgets('报警记录：右边写状态（未处理 / 误报 / 确认入侵），顶上筛「未处理」「P1」', (t) async {
     final now = DateTime.now().millisecondsSinceEpoch;
     Map<String, dynamic> row(String key, String level, {String? verdict}) => {

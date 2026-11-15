@@ -243,6 +243,8 @@ class _SiteModePageState extends State<SiteModePage> with NwAsk {
     final canArm = s?.canArm ?? false;
     final canSet = s?.canSetMode ?? false;
     final manage = s?.canManageMaps ?? false;
+    // 外审 App-V2-5 N1：日程入口按排程权限（经理也有），不按管地图
+    final schedule = s?.canSchedule ?? false;
     final m = _mode;
     return Scaffold(
       appBar: AppBar(title: Text(tr('Arming & patrols', '布防与巡逻'))),
@@ -350,7 +352,7 @@ class _SiteModePageState extends State<SiteModePage> with NwAsk {
             NwCard(
                 padding: EdgeInsets.zero,
                 child: Column(mainAxisSize: MainAxisSize.min, children: [
-                  if (manage)
+                  if (schedule)
                     ListTile(
                         key: SiteModePage.schedulesKey,
                         leading: const Icon(Icons.schedule_rounded),

@@ -173,6 +173,7 @@ class WatchService : Service() {
             stopping = false
             running = true
             val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
+            wake?.let { if (it.isHeld) it.release() } // 换站点另起线程：旧的那把先放掉
             wake = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "nexwar:watch").also {
                 it.setReferenceCounted(false)
                 it.acquire()
@@ -383,7 +384,8 @@ class WatchService : Service() {
             .setContentText(text)
             .setStyle(Notification.BigTextStyle().bigText(text))
             .setSmallIcon(R.drawable.ic_stat_watch)
-            .setContentIntent(openApp())
+            // 外审 App-V2-5 N2：响铃档点通知本身也进来报警页（带这条报警和它的站点身份）
+            .setContentIntent(if (sound) ring(key, a) else openApp())
             // 响铃档：点开不收、划不掉（Android 14 起常驻的也划得掉 —— 划掉了 deleteIntent 叫回来重弹）；
             // 只有站点推来确认、解决才收。别的档：点开就收，划掉也行（之后升档会再弹）。
             .setAutoCancel(!sound)
