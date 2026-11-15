@@ -1685,8 +1685,18 @@ class _Handler(TlsHandlerMixin):
             # 网页、手机发的目标点只有图号、版本、坐标(2026-10-15 点「去这里」被拒「缺 schema」):
             # 契约版本站点补上;给了别的版本照旧按契约拒。发给狗的报文照旧带 schema。
             target = {"schema": CONTRACT_SCHEMA, **target}
+            # 用户 11-15:派去看一眼可以带「看完后动作」:standby 回待命点 / home 回原点 /
+            # stay 停在那里
+            then = d.get("then", "stay")
+            from nexwar_site.look import THENS
+            if then not in THENS:
+                raise HttpError(400, f"then 只能是 {' / '.join(THENS)}")
+            self._audit_detail = {"then": then}
             result = self.site.dispatch(lambda: disp.goto(
                 robot_id, target, speed, issued_by=str(user), priority=MANUAL))
+            look = getattr(self.site, "look", None)
+            if look is not None and isinstance(result, dict) and result.get("task_id"):
+                look.register(robot_id, str(result["task_id"]), then, by=str(user))
         elif action == "patrol":
             # W53:手动派的巡逻都是临时巡逻 —— 估时、撞日程就排在日程后面、通知经理和管理员
             wire, label = self._patrol_wire(d)

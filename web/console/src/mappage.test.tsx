@@ -220,3 +220,15 @@ describe("第 8 期:派前电量", () => {
     expect(c.querySelector("[data-look-batt]")!.textContent).toContain("6%");
   });
 });
+
+describe("用户 11-15:派去看一眼,看完后回去", () => {
+  it("默认回待命点;选「回原点」后派出的 goto 带 then=home", async () => {
+    const { container: c } = render(<GoLookCard map={MAP} at={[3, 4]} units={[unitA]} onClose={() => {}} say={() => {}} />);
+    await waitFor(() => expect(c.querySelector('[data-then="standby"]')).not.toBeNull());
+    expect(c.querySelector('[data-then="standby"]')!.getAttribute("aria-pressed")).toBe("true");
+    fireEvent.click(c.querySelector('[data-then="home"]')!);
+    fireEvent.click(btn(c, "派出")!);
+    await waitFor(() => expect(posts.length).toBe(1));
+    expect(posts[0].body).toMatchObject({ then: "home" });
+  });
+});

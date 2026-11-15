@@ -134,3 +134,28 @@ def test_派前电量_只有待命点没原点_不说够(站点):
         assert d["enough"] is None
     else:
         assert d["line_pct"] >= 25.0 + 3.0 * 1.5 - 0.01 and d["enough"] in (True, False)
+
+
+def test_看一眼_看完后回原点_站点自动派(站点):
+    s = 站点
+    alice, gina = _登(s, "alice"), _登(s, "gina")
+    _等(lambda: s.req("GET", "/api/robots/A", token=alice)[1].get("fresh"))
+    code, d = s.req("POST", "/api/robots/A/goto",
+                    {"target": {"map_id": "m", "map_version": "1", "frame_id": "map", "x": 0.5,
+                                "y": 0.0, "yaw": 0.0}, "then": "nope"}, token=gina)
+    assert code == 400
+    # 登记了就排在后续名单里(到点那一拍由主循环派;这里只验登记和到点后的派发逻辑)
+    look = s.api.look if hasattr(s.api, "look") else None
+    if look is None:
+        from nexwar_site.look import LookDesk
+        from nexwar_site.standby import StandbyManager
+        s.api.look = look = LookDesk(s.db, StandbyManager(s.db, s.disp, now_ms=wall), now_ms=wall)
+    look.register("A", "t-look-1", "home", by="gina")
+    assert "t-look-1" in look.pending
+    with s.db.tx() as c:
+        c.execute("INSERT INTO events(robot_id, boot_id, seq, event_id, kind, data, stamp, "
+                  "received_at) VALUES (?,?,?,?,?,?,?,?)",
+                  ("A", "b1", 1, "e-look-1", "task_aborted", '{"task_id": "t-look-1"}', wall(),
+                   wall()))
+    s.loop.call(lambda: look.tick())
+    assert "t-look-1" not in look.pending          # 中止了就不派后续
