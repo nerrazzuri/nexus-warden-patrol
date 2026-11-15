@@ -247,6 +247,9 @@ export function IncidentView(props: {
         <div class="inc-wall">
           <div class="mon-video-h">
             <LayoutSeg layouts={layouts} v={props.layout} on={props.onLayout} />
+            <span class="push" />
+            {!site && <a class="btn" href={recordingLink(a)}>{t("incReplay")}</a>}
+            <button type="button" class="btn" onClick={props.onSite}>{t("incSiteMap")}</button>
           </div>
           <LiveWall units={props.units} alerts={props.alerts} now={props.now} onZoom={props.onZoom} />
         </div>

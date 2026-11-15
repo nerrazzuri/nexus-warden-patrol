@@ -75,6 +75,29 @@ describe("让最近的机器人过去看看", () => {
   });
 });
 
+describe("G-check 派去看一眼的卡片", () => {
+  const unitB: UnitInfo = { ...unitA, robot: { ...unitA.robot, robot_id: "B" }, state: "idle", task: "" };
+  const busyA: UnitInfo = { ...unitA, task: "guard-1 · 第 3 圈" };
+  it("写地点、默认最近的那台、它会暂停什么;说不产生报警;派出、取消一样宽在一排", async () => {
+    const { container: c } = render(<GoLookCard map={MAP} at={[3, 4]} where="停车场北侧" units={[busyA, unitB]} onClose={() => {}} say={() => {}} />);
+    await waitFor(() => expect((c.querySelector("select[name=look_robot]") as HTMLSelectElement).value).toBe("A"));
+    expect(c.querySelector(".golook h3")!.textContent).toBe("停车场北侧");
+    expect(Array.from(c.querySelectorAll("select[name=look_robot] option")).map((o) => o.textContent)).toEqual(["最近：A · 约 1 分钟", "B"]);
+    expect(c.querySelector("[data-look-pause]")!.textContent).toContain("guard-1 · 第 3 圈");
+    expect(c.textContent).toContain("不产生报警");
+    expect(Array.from(c.querySelectorAll(".golook-acts button")).map((b) => b.textContent)).toEqual(["派出 A", "取消"]);
+  });
+
+  it("改派别的那台:按选的那台发;从机器人控制进来的先选那台", async () => {
+    const { container: c } = render(<GoLookCard map={MAP} at={[3, 4]} units={[busyA, unitB]} prefer="B" onClose={() => {}} say={() => {}} />);
+    await waitFor(() => expect(c.querySelectorAll("select[name=look_robot] option").length).toBe(2));
+    expect((c.querySelector("select[name=look_robot]") as HTMLSelectElement).value).toBe("B");
+    expect(c.querySelector("[data-look-pause]")).toBeNull();
+    fireEvent.click(btn(c, "派出 B")!);
+    await waitFor(() => expect(posts.map((p) => p.url)).toEqual(["/api/robots/B/goto"]));
+  });
+});
+
 describe("保安的临时路线", () => {
   it("临时路线按顺序发点,派给选的那台", async () => {
     const sent = vi.fn();
