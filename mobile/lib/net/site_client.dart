@@ -687,6 +687,9 @@ abstract class SiteApi {
   /// 全部账号（管理员；App V2「人员」）：`[{name, role, disabled, display_name, expires_ms, last_login_ms, expired}]`。
   Future<List<Map<String, dynamic>>> accounts();
 
+  /// 改自己的密码（要旧密码）。成功后站点吊销这个账号的所有会话。
+  Future<void> changeOwnPassword(String oldPassword, String newPassword);
+
   /// 批准（要再输一次自己的密码；[role] 默认只看）、拒绝。
   Future<Map<String, dynamic>> approveAccount(String id, String role, String password);
   Future<void> rejectAccount(String id);
@@ -1978,6 +1981,11 @@ class SiteClient implements SiteApi {
   Future<Map<String, dynamic>> applyAccount(String name, String display, String password) async =>
       _map(await _send('POST', '/api/account-requests',
           <String, dynamic>{'name': name, 'display': display, 'password': password}));
+
+  @override
+  Future<void> changeOwnPassword(String oldPassword, String newPassword) async {
+    await _send('POST', '/api/me/password', <String, dynamic>{'old': oldPassword, 'new': newPassword});
+  }
 
   @override
   Future<List<Map<String, dynamic>>> accounts() async {

@@ -586,6 +586,9 @@ void main() {
         await t.pumpAndSettle();
         await t.tap(find.byKey(leave));
         await t.pumpAndSettle();
+        // 就地确认（不弹窗）：按钮展开在下面，先滚过去
+        await t.ensureVisible(find.byKey(leaveConfirmKey));
+        await t.pumpAndSettle();
         await t.tap(find.byKey(leaveConfirmKey));
         await t.pumpAndSettle();
         expect(find.byType(NwShell), findsNothing, reason: role);

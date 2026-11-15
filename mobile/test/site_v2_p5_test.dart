@@ -3,7 +3,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:nexwar_patrol/l10n.dart';
 import 'package:nexwar_patrol/ui/alarm_log.dart';
+import 'package:nexwar_patrol/net/site_client.dart' show SiteError;
 import 'package:nexwar_patrol/ui/nw/nw_layout_hub.dart';
+import 'package:nexwar_patrol/ui/nw/nw_site_dir.dart' show ChangePasswordPage;
 import 'package:nexwar_patrol/ui/site_mode.dart';
 import 'package:nexwar_patrol/ui/site_releases.dart';
 import 'package:nexwar_patrol/ui/site_routes.dart';
@@ -133,5 +135,28 @@ void main() {
     expect(w.map((r) => r.width.round()).toSet().length, 1, reason: '等宽');
     expect(w.map((r) => r.top).toSet().length, 1, reason: '一排');
     expect(find.byKey(SiteReleasesPage.appKey), findsOneWidget);
+  });
+
+  testWidgets('改密码：两遍不一样不发；旧密码错写原因；改好了说要重新登录、给回去的按钮', (t) async {
+    final api = FakeApi('owner');
+    await t.pumpWidget(MaterialApp(home: ChangePasswordPage(api: api)));
+    await t.enterText(find.byKey(ChangePasswordPage.oldKey), 'a');
+    await t.enterText(find.byKey(ChangePasswordPage.newKey), 'b1234567');
+    await t.enterText(find.byKey(ChangePasswordPage.againKey), 'b7654321');
+    await t.tap(find.byKey(ChangePasswordPage.goKey));
+    await t.pumpAndSettle();
+    expect(find.text('两次新密码不一样。'), findsOneWidget);
+    expect(api.calls.where((c) => c.startsWith('password')), isEmpty);
+    api.passwordError = SiteError(400, '旧密码不对');
+    await t.enterText(find.byKey(ChangePasswordPage.againKey), 'b1234567');
+    await t.tap(find.byKey(ChangePasswordPage.goKey));
+    await t.pumpAndSettle();
+    expect(find.textContaining('没改成'), findsOneWidget);
+    api.passwordError = null;
+    await t.tap(find.byKey(ChangePasswordPage.goKey));
+    await t.pumpAndSettle();
+    expect(api.calls, contains('password a b1234567'));
+    expect(find.textContaining('重新登录'), findsWidgets);
+    expect(find.byKey(ChangePasswordPage.reloginKey), findsOneWidget);
   });
 }

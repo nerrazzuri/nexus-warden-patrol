@@ -21,7 +21,7 @@ import '../site_mode.dart';
 import '../site_recordings.dart';
 import '../site_releases.dart';
 import '../site_runs.dart';
-import '../site_tabs.dart' show AccountsPage, leaveSite;
+import '../site_tabs.dart' show AccountsPage, leaveConfirmKey;
 import 'nw_layout_hub.dart';
 import 'nw_theme.dart';
 
@@ -45,6 +45,7 @@ class SiteDirectory extends StatelessWidget {
 
   static Key itemKey(SiteDest d) => Key('site-${d.name}');
   static const Key leaveKey = Key('site-leave');
+  static const Key passwordKey = Key('site-password');
 
   void _push(BuildContext context, Widget page) =>
       Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => page));
@@ -59,7 +60,6 @@ class SiteDirectory extends StatelessWidget {
     final role = s?.role ?? '';
     final manage = s?.canManageMaps ?? false;              // 管理员、工程师
     final owner = role == 'owner';
-    final c = Nw.of(context);
     final groups = <(String, List<_Row>)>[];
     if (manage) {
       groups.add((tr('Daily', '日常'), [
@@ -137,23 +137,174 @@ class SiteDirectory extends StatelessWidget {
         for (var i = 0; i < rows.length; i++) rows[i],
       ],
       const SizedBox(height: Nw.s8),
-      Container(
-          decoration: BoxDecoration(border: Border(top: BorderSide(color: c.outline))),
-          child: Column(children: [
-            ListTile(
-                leading: Icon(Icons.person_outline, color: c.textSecondary),
-                title: Text(s?.name ?? '', style: NwText.titleSmall.copyWith(color: c.text, fontWeight: FontWeight.w700)),
-                subtitle: Text('${roleName(role)} · ${entry?.name ?? ''}',
-                    style: NwText.bodySmall.copyWith(color: c.textSecondary))),
-            Divider(height: 1, thickness: 1, color: c.outline),
-            ListTile(
-                key: leaveKey,
-                title: Text(tr('Leave site', '退出站点'), style: NwText.titleSmall.copyWith(color: c.text, fontWeight: FontWeight.w600)),
-                subtitle: Text(tr("Return to the site list; this phone stops receiving this site's alerts", '回到站点列表；这台手机不再收这个站点的报警'),
-                    style: NwText.bodySmall.copyWith(color: c.textSecondary)),
-                onTap: () => leaveSite(context)),
-          ])),
+      _AccountBlock(api: api, entry: entry),
     ]);
+  }
+}
+
+/// 目录最下面：我是谁、改密码、退出站点（就地确认，不弹窗）。
+class _AccountBlock extends StatefulWidget {
+  final SiteApi api;
+  final SiteEntry? entry;
+  const _AccountBlock({required this.api, this.entry});
+  @override
+  State<_AccountBlock> createState() => _AccountBlockState();
+}
+
+class _AccountBlockState extends State<_AccountBlock> {
+  bool _leaving = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = Nw.of(context);
+    final s = widget.api.session;
+    final site = widget.entry?.name ?? '';
+    final shape = RoundedRectangleBorder(borderRadius: BorderRadius.circular(2));
+    Widget row(Key key, String title, String? sub, VoidCallback on) => ListTile(
+        key: key,
+        title: Text(title, style: NwText.titleSmall.copyWith(color: c.text, fontWeight: FontWeight.w600)),
+        subtitle: sub == null ? null : Text(sub, style: NwText.bodySmall.copyWith(color: c.textSecondary)),
+        trailing: Icon(Icons.chevron_right_rounded, color: c.textSecondary),
+        onTap: on);
+    return Material(
+        color: c.surface,
+        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          Divider(height: 1, thickness: 1, color: c.outline),
+          ListTile(
+              leading: Icon(Icons.person_outline, color: c.textSecondary),
+              title: Text(s?.name ?? '', style: NwText.titleSmall.copyWith(color: c.text, fontWeight: FontWeight.w700)),
+              subtitle: Text(site.isEmpty ? roleName(s?.role ?? '') : '${roleName(s?.role ?? '')} · $site',
+                  style: NwText.bodySmall.copyWith(color: c.textSecondary))),
+          Divider(height: 1, thickness: 1, color: c.outline),
+          row(SiteDirectory.passwordKey, tr('Change password', '改密码'), null,
+              () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => ChangePasswordPage(api: widget.api)))),
+          Divider(height: 1, thickness: 1, color: c.outline),
+          row(SiteDirectory.leaveKey, tr('Leave site', '退出站点'),
+              tr("Return to the site list; this phone stops receiving this site's alerts", '回到站点列表；这台手机不再收这个站点的报警'),
+              () => setState(() => _leaving = !_leaving)),
+          if (_leaving)
+            Padding(
+                padding: const EdgeInsets.fromLTRB(Nw.s16, 0, Nw.s16, Nw.s16),
+                child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                  Text(
+                      tr('You will be signed out. Background monitoring stops, so this phone will no longer get alarms from this site.',
+                          '退出后会注销登录，后台值守也会停止，这台手机将收不到这个站点的报警。'),
+                      style: NwText.bodySmall.copyWith(color: c.text)),
+                  const SizedBox(height: Nw.s8),
+                  Row(children: [
+                    Expanded(
+                        child: OutlinedButton(
+                            style: OutlinedButton.styleFrom(minimumSize: const Size(48, 48), shape: shape),
+                            onPressed: () => setState(() => _leaving = false),
+                            child: Text(tr('Cancel', '取消')))),
+                    const SizedBox(width: Nw.s8),
+                    Expanded(
+                        child: FilledButton(
+                            key: leaveConfirmKey,
+                            style: FilledButton.styleFrom(minimumSize: const Size(48, 48), shape: shape),
+                            onPressed: () => Navigator.of(context, rootNavigator: true).pop(),
+                            child: Text(tr('Leave', '退出')))),
+                  ]),
+                ])),
+          Divider(height: 1, thickness: 1, color: c.outline),
+        ]));
+  }
+}
+
+/// 改自己的密码（稿 S-mgr「改密码」）：旧密码、新密码两遍；改好了站点吊销所有会话，要重新登录。
+class ChangePasswordPage extends StatefulWidget {
+  final SiteApi api;
+  const ChangePasswordPage({super.key, required this.api});
+
+  static const Key oldKey = Key('pw-old');
+  static const Key newKey = Key('pw-new');
+  static const Key againKey = Key('pw-again');
+  static const Key goKey = Key('pw-go');
+  static const Key msgKey = Key('pw-msg');
+  static const Key reloginKey = Key('pw-relogin');
+
+  @override
+  State<ChangePasswordPage> createState() => _ChangePasswordPageState();
+}
+
+class _ChangePasswordPageState extends State<ChangePasswordPage> {
+  final _old = TextEditingController(), _new = TextEditingController(), _again = TextEditingController();
+  String _msg = '';
+  bool _busy = false, _done = false;
+
+  @override
+  void dispose() {
+    _old.dispose();
+    _new.dispose();
+    _again.dispose();
+    super.dispose();
+  }
+
+  Future<void> _go() async {
+    if (_new.text != _again.text) {
+      setState(() => _msg = tr("The two new passwords don't match.", '两次新密码不一样。'));
+      return;
+    }
+    if (_new.text.isEmpty || _old.text.isEmpty) {
+      setState(() => _msg = tr('Fill in all three fields.', '三栏都要填。'));
+      return;
+    }
+    setState(() {
+      _busy = true;
+      _msg = '';
+    });
+    try {
+      await widget.api.changeOwnPassword(_old.text, _new.text);
+      if (mounted) {
+        setState(() {
+          _done = true;
+          _msg = tr('Password changed. All sessions are signed out; sign in again with the new password.',
+              '密码改好了。所有登录都已注销，请用新密码重新登录。');
+        });
+      }
+    } on SiteError catch (e) {
+      if (mounted) setState(() => _msg = tr('Not changed: ${refusalText(e)}', '没改成：${refusalText(e)}'));
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final c = Nw.of(context);
+    final shape = RoundedRectangleBorder(borderRadius: BorderRadius.circular(2));
+    InputDecoration dec(String l) => InputDecoration(labelText: l);
+    return Scaffold(
+        appBar: AppBar(title: Text(tr('Change password', '改密码'))),
+        body: ListView(padding: const EdgeInsets.all(Nw.s16), children: [
+          if (!_done) ...[
+            TextField(key: ChangePasswordPage.oldKey, controller: _old, obscureText: true, decoration: dec(tr('Current password', '现在的密码'))),
+            const SizedBox(height: Nw.s8),
+            TextField(key: ChangePasswordPage.newKey, controller: _new, obscureText: true, decoration: dec(tr('New password', '新密码'))),
+            const SizedBox(height: Nw.s8),
+            TextField(
+                key: ChangePasswordPage.againKey, controller: _again, obscureText: true, decoration: dec(tr('New password again', '再输一遍新密码'))),
+            const SizedBox(height: Nw.s16),
+            FilledButton(
+                key: ChangePasswordPage.goKey,
+                style: FilledButton.styleFrom(minimumSize: const Size(48, 48), shape: shape),
+                onPressed: _busy ? null : _go,
+                child: Text(tr('Change password', '改密码'))),
+          ],
+          if (_msg.isNotEmpty) ...[
+            const SizedBox(height: Nw.s16),
+            Text(_msg, key: ChangePasswordPage.msgKey, style: NwText.bodyMedium.copyWith(color: _done ? c.text : c.error)),
+          ],
+          if (_done) ...[
+            const SizedBox(height: Nw.s16),
+            FilledButton(
+                key: ChangePasswordPage.reloginKey,
+                style: FilledButton.styleFrom(minimumSize: const Size(48, 48), shape: shape),
+                // 回到站点列表（站点已经把这台手机的登录吊销了）
+                onPressed: () => Navigator.of(context, rootNavigator: true).popUntil((r) => r.isFirst),
+                child: Text(tr('Back to sign in', '回去重新登录'))),
+          ],
+        ]));
   }
 }
 
