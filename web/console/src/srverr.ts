@@ -31,6 +31,9 @@ const PATTERNS: [RegExp, (m: RegExpMatchArray) => string][] = [
   [/未收到文件|文件未传完/, () => "The file did not upload completely. Try again."],
   [/处不能用/, () => "Some points cannot be used. See the marked points."],
   [/名字只许|路线名只许/, () => "Names may only use letters, digits and . _ -"],
+  // 用户 11-15「Patrol routes 无法删除」:站点拒删路线的两种原因(routes.py delete_route)
+  [/排程(.+?)还在用路线「([^」]*)」/, (m) => `Schedules ${m[1].replace(/「([^」]*)」/g, "“$1”").replace(/、/g, ", ")} still use route “${m[2]}”. Delete or change those schedules first.`],
+  [/布防的值守方案还在用路线「([^」]*)」/, (m) => `The arming guard plan still uses route “${m[1]}”. Remove it from the guard plan under Arming & patrols first.`],
   [/机器人未执行[:：]\s*(.*)$/, (m) => `The robot did not do it${tail(m[1])}.`],
   [/机器人未检查[:：]\s*(.*)$/, (m) => `The robot did not run the check${tail(m[1])}.`],
   [/机器人没换姿势[:：]\s*(.*)$/, (m) => `The robot did not change posture${tail(m[1])}.`],
