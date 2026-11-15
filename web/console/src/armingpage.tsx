@@ -101,7 +101,6 @@ export function ArmingPage({ say, now, role = "admin" }: { say: Say; now: number
   const [switching, setSwitching] = useState<"armed" | "home" | null>(null);
   const [wiz, setWiz] = useState<"open" | "arm" | null>(null);
   const [askWiz, setAskWiz] = useState<"open" | "arm" | null>(null);
-  const wizChanged = useRef(false);
 
   const loadMode = () => api<ModeView>("GET", "/api/mode").then(setMode).catch(() => setMode(null));
   // 第 4 轮 layout r3-N3:读不到不画成空日程 —— 写「读取失败,正在重试」,隔 5 秒再读(保存一直是灰的)
@@ -139,8 +138,9 @@ export function ArmingPage({ say, now, role = "admin" }: { say: Say; now: number
   const openWiz = (k: "open" | "arm") => (dirty ? setAskWiz(k) : setWiz(k));
   const wizBtn = canDuty && <button type="button" class="btn" data-open-wizard="1" onClick={() => openWiz("open")}>{wt("title")}</button>;
   const wizBox = <>
-    {wiz && <ArmWizard say={say} arming={wiz === "arm"} onChanged={() => { wizChanged.current = true; }}
-      onClose={() => { setWiz(null); if (wizChanged.current) { wizChanged.current = false; setRetry((n) => n + 1); } else void loadMode(); }} />}
+    {/* 笔记本复测 11-15:向导每存一步,背后这页马上重读(以前关掉向导才读,开着时还写「时间表未启用」) */}
+    {wiz && <ArmWizard say={say} arming={wiz === "arm"} onChanged={() => { setRetry((n) => n + 1); }}
+      onClose={() => { setWiz(null); void loadMode(); }} />}
     {askWiz && <Confirm text={wt("dropArming")} yes={wt("dropYes")} danger onNo={() => setAskWiz(null)}
       onYes={() => { const k = askWiz; setAskWiz(null); setEnabled(loaded!.enabled); setSlots(loaded!.slots); setDuty(loaded!.duty); setWiz(k); }} />}
   </>;

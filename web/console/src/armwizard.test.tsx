@@ -76,6 +76,12 @@ describe("布防向导的小函数", () => {
     expect(s).toContainEqual({ zone: "", day: 0, start: "00:00", end: "06:00" });
     expect(dailySlots(8 * 60, 18 * 60)).toHaveLength(7);
   });
+  it("笔记本复测 11-15:覆盖前列出旧时间 —— 同一时段的几天并一起,七天写「每天」", async () => {
+    const { slotsText } = await import("./armwizard");
+    const week = [0, 1, 2, 3, 4, 5, 6].map((day) => ({ zone: "", day, start: "22:00", end: "24:00" }));
+    expect(slotsText([...week, { zone: "", day: 5, start: "00:00", end: "06:00" }, { zone: "", day: 6, start: "00:00", end: "06:00" }]))
+      .toBe("每天 22:00–24:00；周六、周日 00:00–06:00");
+  });
   it("整张图的外框按地图元数据算(米)", () => {
     expect(wholeMap(META)).toEqual([[-2, -2], [8, -2], [8, 3], [-2, 3]]);
   });
@@ -198,8 +204,9 @@ describe("布防向导", () => {
     pickZone(r, "1");
     expect(nextOn(r)).toBe(true);
     await next(r, "route");
-    expect([...r.container.ownerDocument.querySelectorAll<HTMLInputElement>("input[name=wiz-route]")].some((x) => x.checked)).toBe(false);
-    expect(nextOn(r)).toBe(false);
+    // 笔记本复测 11-15:只有一条能用的路线时默认选上(防区照样不预选)
+    expect([...r.container.ownerDocument.querySelectorAll<HTMLInputElement>("input[name=wiz-route]")].map((x) => x.checked)).toEqual([true]);
+    expect(nextOn(r)).toBe(true);
     expect(items[0].classList.contains("done")).toBe(true);
   });
 
@@ -283,7 +290,7 @@ describe("布防向导", () => {
     await toTime(r);
     pickTime(r, "daily");
     fireEvent.click(r.getByText("下一步"));
-    await waitFor(() => expect(r.getByText(/会替换现在的布防时间（每周 2 段）/)).toBeTruthy());
+    await waitFor(() => expect(r.getByText(/会替换现在的布防时间（每周 2 段）：周一 20:00–24:00；周二 00:00–05:00。/)).toBeTruthy());
     expect(posted.some((p) => p.url === "/api/arming/schedule")).toBe(false);
     fireEvent.click(r.getAllByText("保存这个时间").find((el: HTMLElement) => el.tagName === "BUTTON")!);
     await waitFor(() => expect(q(r, "[data-wiz-step=who]")).not.toBeNull());
@@ -367,7 +374,9 @@ describe("布防向导", () => {
     await next(r, "route");
     await waitFor(() => expect(q(r, "[data-route-nozone]")?.textContent).toBe("一个防区都不经过，机器人不会去跑"));
     const radios = r.container.ownerDocument.querySelectorAll<HTMLInputElement>("input[name=wiz-route]");
-    expect([...radios].map((x) => [x.checked, x.disabled])).toEqual([[false, false], [false, true]]);
+    // 笔记本复测 11-15:只有一条能用就默认选上,能直接下一步
+    expect([...radios].map((x) => [x.checked, x.disabled])).toEqual([[true, false], [false, true]]);
+    expect((r.getByText("下一步") as HTMLButtonElement).disabled).toBe(false);
   });
 
   it("外审 2 #2:预演失败不存,说原因", async () => {
