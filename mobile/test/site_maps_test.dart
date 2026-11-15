@@ -9,7 +9,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'site_page_test.dart' show FakeApi;
 import 'support/fake_site.dart';
 import 'support/shell_nav.dart';
-import 'package:nexwar_patrol/ui/nw/nw_site_dir.dart';
 
 void main() {
   testWidgets('这台机器人在这张图上没有原点（W13a）：说后果，确认了才照样下发', (t) async {
@@ -222,7 +221,7 @@ void main() {
     final api = FakeApi('owner');
     await t.pumpWidget(MaterialApp(home: NwShell(api: api, title: '庄园', updater: null)));
     await t.pumpAndSettle();
-    await openSiteDir(t, SiteDest.layout);
+    await openNowMap(t);   // 经理的目录里没有「地图」(稿 S-mgr):从「现在」的小地图进
     expect(find.byType(SiteMapTab), findsOneWidget);
     await t.tap(find.byKey(SiteMapTab.listKey));
     await t.pumpAndSettle();

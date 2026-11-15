@@ -80,22 +80,15 @@ class SiteDirectory extends StatelessWidget {
         _Row(SiteDest.overview, Icons.home_outlined, tr('Overview', '概况'), tr('Read-only · alarms and outcomes, last 24 h', '只读 · 24 小时报警和处理结果'), onOverview),
         _Row(SiteDest.robots, Icons.smart_toy_outlined, tr('Robots', '机器人'), tr('Status; dispatch patrols', '看状态、派巡逻'), onRobots),
       ]));
+      // 稿 S-mgr:经理的「现场」只有布防与巡逻;看图从「现在」的小地图进全屏
       groups.add((tr('Site', '现场'), [
-        _Row(SiteDest.layout, Icons.map_outlined, tr('Map', '地图'), tr('Where the robots are now', '机器人现在在哪'), onLayout),
         _Row(SiteDest.arming, Icons.shield_outlined, tr('Arming & patrols', '布防与巡逻'),
             tr('Arming mode, temporary disarm, arming schedule, patrol schedules', '布防模式、临时撤防、布防时间、巡逻日程'),
             () => _push(context, SiteModePage(api: api))),
       ]));
     }
     final readOnly = role == 'viewer';
-    if (!manage && !owner) {
-      // 第 1 期:「现在」还是老值班页,保安 / 只读要看机器人、看图只能从目录进;第 2 期「现在」重排后这一组去掉
-      groups.add((tr('Daily', '日常'), [
-        _Row(SiteDest.robots, Icons.smart_toy_outlined, tr('Robots', '机器人'),
-            readOnly ? tr('View only', '只看') : tr('Status and control', '状态、控制'), onRobots),
-        _Row(SiteDest.layout, Icons.map_outlined, tr('Map', '地图'), tr('Where the robots are now', '机器人现在在哪'), onLayout),
-      ]));
-    }
+    // 稿 S-guard / S-viewer:保安、只读没有「日常」—— 机器人和地图都在「现在」页上(格子「控制」、小地图进全屏)
     groups.add((tr('Records', '记录'), [
       _Row(SiteDest.alarms, Icons.notifications_none_rounded, tr('Alarm log', '报警记录'),
           readOnly ? tr('View only', '只看') : tr('This shift and before', '本班和之前'), () => _pushBar(context, tr('Alarm log', '报警记录'), AlarmLogPage(api: api))),
@@ -327,7 +320,7 @@ class _ShiftNotesPageState extends State<ShiftNotesPage> {
                       ? Center(child: Text(tr('No notes yet.', '还没有留言。'), style: NwText.bodyMedium.copyWith(color: c.textSecondary)))
                       : ListView.separated(
                           itemCount: _notes!.length,
-                          separatorBuilder: (_, __) => Divider(height: 1, thickness: 1, color: c.outline),
+                          separatorBuilder: (_, _) => Divider(height: 1, thickness: 1, color: c.outline),
                           itemBuilder: (_, i) {
                             final n = _notes![i];
                             final at = DateTime.fromMillisecondsSinceEpoch((n['at_ms'] as num?)?.toInt() ?? 0);

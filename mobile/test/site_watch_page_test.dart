@@ -4,7 +4,7 @@ import 'dart:async';
 import 'package:nexwar_patrol/model/alert.dart';
 import 'package:nexwar_patrol/model/site_watch.dart';
 import 'package:nexwar_patrol/net/site_client.dart' show SiteError;
-import 'package:nexwar_patrol/ui/site_duty_page.dart';
+import 'package:nexwar_patrol/ui/nw/nw_now.dart';
 import 'package:nexwar_patrol/ui/site_page.dart';
 import 'package:nexwar_patrol/ui/site_watch_page.dart';
 import 'package:flutter/material.dart';
@@ -138,13 +138,12 @@ void main() {
     await t.pump();
     expect(rang, 1);
     await t.pump(const Duration(seconds: 1));
-    await openSiteDir(t, SiteDest.robots);
-    expect(find.byType(SiteDutyPage), findsNothing);
-    await t.tap(find.byKey(NwShell.backKey));
+    await openSiteDir(t, SiteDest.alarms);
+    await t.pageBack();
     await t.pumpAndSettle();
     await t.tap(find.byKey(NwShell.nowKey));
     await t.pumpAndSettle();
-    expect(find.byType(SiteDutyPage), findsOneWidget, reason: 'App V2：「现在」是值守页');
+    expect(find.byType(NowPage), findsOneWidget, reason: 'App V2：「现在」是值守页');
   });
 
   test('交接班那一张：三种局面的形状都在（真站点的夹具）', () {

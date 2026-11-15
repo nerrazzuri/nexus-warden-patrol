@@ -5,7 +5,7 @@ import 'package:nexwar_patrol/net/site_client.dart';
 import 'package:nexwar_patrol/ui/map_manage.dart';
 import 'package:nexwar_patrol/ui/map_wizard.dart';
 import 'package:nexwar_patrol/ui/nw/nw_shell.dart';
-import 'package:nexwar_patrol/ui/site_duty_page.dart';
+import 'package:nexwar_patrol/ui/nw/nw_now.dart';
 import 'package:nexwar_patrol/ui/site_teleop.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -104,7 +104,7 @@ void main() {
       await t.pumpWidget(MaterialApp(home: NwShell(api: api, title: '站点', ring: () {})));
       await t.pumpAndSettle();
       expect(find.byKey(mapOfferKey), findsNothing, reason: '点过稍后');
-      expect(find.byKey(SiteDutyPage.mapWizardKey), findsOneWidget, reason: '值守页上那一行还在，能从这儿开');
+      expect(find.byKey(NowPage.mapWizardKey), findsOneWidget, reason: '值守页上那一行还在，能从这儿开');
     });
 
     testWidgets('有没做完的向导：改问「接着做」，稍后不记', (t) async {
@@ -145,13 +145,13 @@ void main() {
       await t.pumpWidget(MaterialApp(home: NwShell(api: guard, title: '站点', ring: () {})));
       await t.pumpAndSettle();
       expect(find.byKey(mapOfferKey), findsNothing);
-      expect(find.byKey(SiteDutyPage.noMapKey), findsOneWidget);
+      expect(find.byKey(NowPage.noMapKey), findsOneWidget);
       expect(find.textContaining('请管理员'), findsOneWidget);
-      expect(find.byKey(SiteDutyPage.mapWizardKey), findsNothing);
+      expect(find.byKey(NowPage.mapWizardKey), findsNothing);
       await t.pumpWidget(Container());
-      await t.pumpWidget(MaterialApp(home: SiteDutyPage(api: FakeApi('guard'), title: '站点')));
+      await t.pumpWidget(MaterialApp(home: NowPage(api: FakeApi('guard'))));
       await t.pumpAndSettle();
-      expect(find.byKey(SiteDutyPage.noMapKey), findsNothing);
+      expect(find.byKey(NowPage.noMapKey), findsNothing);
     });
   });
 

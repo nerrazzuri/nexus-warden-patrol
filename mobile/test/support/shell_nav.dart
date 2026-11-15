@@ -1,6 +1,7 @@
 // App V2 外壳里走到某一页:切到「现场」、滚到目录里那一行、点它。各页的测试都用这一份。
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:nexwar_patrol/ui/nw/nw_now.dart';
 import 'package:nexwar_patrol/ui/nw/nw_shell.dart';
 import 'package:nexwar_patrol/ui/nw/nw_site_dir.dart';
 
@@ -29,4 +30,18 @@ Future<void> openDir(WidgetTester t, SiteDest d) async {
 Future<void> openSiteDir(WidgetTester t, SiteDest d) async {
   await openSite(t);
   await openDir(t, d);
+}
+
+/// 保安、经理、只读的目录里没有「地图」:从「现在」页的小地图进全屏地图层。
+Future<void> openNowMap(WidgetTester t) async {
+  if (find.byType(NowPage).evaluate().isEmpty) {
+    await t.tap(find.byKey(NwShell.nowKey));
+    await t.pumpAndSettle();
+  }
+  final sc = find.descendant(of: find.byType(NowPage), matching: find.byType(Scrollable)).first;
+  await t.scrollUntilVisible(find.byKey(NowPage.mapKey), 200, scrollable: sc);
+  await Scrollable.ensureVisible(t.element(find.byKey(NowPage.mapKey)), alignment: 0.5);
+  await t.pumpAndSettle();
+  await t.tap(find.byKey(NowPage.mapKey));
+  await t.pumpAndSettle();
 }
