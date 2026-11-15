@@ -707,8 +707,6 @@ button.armstate:focus-visible { outline: 2px solid var(--c-primary); outline-off
   display: flex; flex-direction: column; gap: var(--sp-1); padding: var(--sp-2) var(--sp-3); border-radius: var(--r-r12);
   background: var(--c-errorFill); color: var(--c-onErrorFill); box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45); }
 /* UIUX-E002:浮条在的时候,页面底部留出它的高度(原来盖住「删除」「上传」「复制到…」这些按钮,26 处) */
-.console:has(.alarm-pop) .page { padding-bottom: calc(var(--ctl-sm) + var(--sp-4) * 2 + var(--sp-2)); }
-.console:has(.alarm-pop) .routeside .route-acts { margin-bottom: calc(var(--ctl-sm) + var(--sp-4)); }
 .alarm-pop.mini { flex-direction: row; align-items: center; width: auto; max-width: min(320px, calc(100% - 32px)); min-height: var(--ctl-sm);
   padding: var(--sp-1) var(--sp-3); border: 0; font: inherit; text-align: left; cursor: pointer; }
 .alarm-pop.mini b { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; }
@@ -2505,3 +2503,48 @@ input[type="checkbox"], input[type="radio"] { width: 18px; height: 18px; }
 @media (max-width: 1099px) { .rp-body { grid-template-columns: minmax(0, 1fr); } .rp-left { border-right: 0; } .page:has(> .mt-rail) { grid-template-columns: minmax(0, 1fr); } .mt-rail { min-height: 0; border-right: 0; border-bottom: 1px solid var(--c-outline); } }
 .mt-rail a { align-items: flex-start; text-align: left; }
 .mt-rail a[aria-current="page"] { box-shadow: none; border-bottom: 0; }
+
+/* 第七期:全站报警牌(impeccable,沿用 P1 横幅的「红框不红底」):别的页右上角、顶栏下面,深色牌 + 4px 红框 + 红圈,
+   不再是右下角的红底卡片(原来盖住各页底部按钮,要留白垫着)。P2 = 琥珀框 + 三角。15 秒后缩成一行。 */
+.alarm-pop { position: fixed; bottom: var(--sp-4); right: var(--sp-4); z-index: 4; width: min(420px, calc(100% - 32px));
+  display: flex; flex-direction: column; gap: var(--sp-2); padding: var(--sp-3) var(--sp-4); border-radius: var(--r-r2);
+  background: var(--c-surface); color: var(--c-text); border: 4px solid var(--c-error); box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45); }
+.alarm-pop.p2 { background: var(--c-surface); color: var(--c-text); border: 1px solid var(--c-warningFill); padding: calc(var(--sp-3) + 3px) calc(var(--sp-4) + 3px); }
+.alarm-pop .shape.P1 { fill: var(--c-error); width: 24px; height: 24px; }
+.alarm-pop .shape.P2 { width: 24px; height: 24px; }
+.alarm-pop-head b { font-size: 17px; line-height: 24px; font-weight: 600; }
+.alarm-pop-sub { font-size: 13px; opacity: 1; color: var(--c-textSecondary); }
+.alarm-pop-x { border-radius: var(--r-r2); color: var(--c-textSecondary); }
+.alarm-pop-x:hover { background: var(--c-surfaceVariant); color: var(--c-text); }
+.alarm-pop .btn.onsolid { color: var(--c-text); border-color: var(--c-outline); background: var(--c-surface); }
+.alarm-pop .btn.onsolid:first-child { background: var(--c-primary); color: var(--c-onPrimary); border-color: var(--c-primary); font-weight: 700; }
+.alarm-pop .btn.onsolid:first-child::before { content: ""; width: 10px; height: 10px; border-radius: 50%; background: var(--c-onPrimary); margin-right: 8px; }
+.alarm-pop.p2 .btn.onsolid { color: var(--c-text); border-color: var(--c-outline); }
+.alarm-pop-acts .btn { min-width: 128px; justify-content: center; }
+.alarm-pop.mini { flex-direction: row; align-items: center; width: auto; max-width: min(420px, calc(100% - 32px)); min-height: var(--ctl-md);
+  padding: 0 var(--sp-3) 0 var(--sp-2); border-width: 2px; font: inherit; text-align: left; cursor: pointer; gap: var(--sp-2); }
+.alarm-pop.mini .shape { width: 16px; height: 16px; }
+.alarm-pop.mini b { font-size: 14px; }
+@media (prefers-reduced-motion: no-preference) { .alarm-pop:not(.mini):not(.p2) { animation: pop-frame 1.6s steps(1) infinite; } }
+@keyframes pop-frame { 50% { border-color: var(--c-surface); box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45), inset 0 0 0 4px var(--c-error); } }
+/* UIUX-E002:牌子在的时候页面底部留出它的高度,不盖住各页底部的按钮 */
+.console:has(.alarm-pop) .page { padding-bottom: calc(var(--ctl-md) + var(--sp-4) * 2 + var(--sp-2)); }
+.console:has(.alarm-pop) .routeside .route-acts { margin-bottom: calc(var(--ctl-md) + var(--sp-4)); }
+/* 断线提示:同一套牌子 —— 琥珀三角 + 1px 琥珀框,不是整条黄底 */
+.stalebar { min-height: var(--ctl-md); padding: 6px 16px; background: var(--c-surface); color: var(--c-text); border-bottom: 1px solid var(--c-warningFill);
+  box-shadow: inset 4px 0 0 var(--c-warningFill); font-weight: 600; top: 60px; }
+/* 账号菜单:方角、1px 线、行 = 标签 + 分段 */
+.usermenu > .who { border-radius: var(--r-r2); }
+.menu { border-radius: var(--r-r2); padding: 0; gap: 0; min-width: 340px; }
+.usermenu .menu .seg { flex-wrap: nowrap; }
+.menu-head { padding: 12px 16px; }
+.menu-row { padding: 8px 16px; border-bottom: 1px solid var(--c-outline); }
+.menu-item { height: var(--ctl-md); padding: 0 16px; border-radius: 0; border-bottom: 1px solid var(--c-outline); }
+.menu-item:last-child { border-bottom: 0; }
+/* 演练条:灰底一行,开着时琥珀框 */
+.alert-test { padding: 8px 20px; border-bottom: 1px solid var(--c-outline); font-size: 13px; }
+.alert-test[data-alert-test="on"] { background: var(--c-surface); border: 1px solid var(--c-warningFill); box-shadow: inset 4px 0 0 var(--c-warningFill); }
+/* 常用话就地编辑 */
+.preset-inline { margin-top: 8px; padding: 12px; border: 1px solid var(--c-outline); display: flex; flex-direction: column; gap: var(--sp-2); }
+.preset-inline h4 { margin: 0; }
+.preset-inline .preset-form { gap: var(--sp-2); }
