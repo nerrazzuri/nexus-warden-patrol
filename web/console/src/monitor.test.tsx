@@ -120,16 +120,33 @@ describe("值班 · 中间", () => {
     expect(localStorage.getItem("nexwar.mappreset")).toBe("zones");
   });
 
-  it("画面:单 / 双 / 四画面 / 监控墙;监控墙收起地图", () => {
+  it("画面按机器人台数(用户 11-15):两台只有「双画面」;监控墙收起地图", () => {
     const c = page([]);
     const tabs = () => Array.from(c.querySelectorAll(".mon-video-h .seg button"));
-    expect(tabs().map((b) => b.textContent)).toEqual(["单画面", "双画面", "四画面", "监控墙"]);
+    expect(tabs().map((b) => b.textContent)).toEqual(["双画面", "监控墙"]);
     expect(c.querySelectorAll(".mon-tiles.dual > .slot").length).toBe(2);
-    fireEvent.click(tabs()[0]);
-    expect(c.querySelectorAll(".mon-tiles.single > .slot").length).toBe(1);
-    fireEvent.click(tabs()[3]);
+    fireEvent.click(tabs()[1]);
     expect(c.querySelector(".mon-map")).toBeNull();
     expect(c.querySelector(".livewall")).not.toBeNull();
+  });
+
+  it("只有一台:默认单画面,前、后两路分开放;没有双画面、四画面", () => {
+    localStorage.setItem("nexwar.monvideo", "dual"); // 存着的「双」也换成单
+    const c = page([], "guard", [unit("A", "patrolling")]);
+    const tabs = Array.from(c.querySelectorAll(".mon-video-h .seg button")).map((b) => b.textContent);
+    expect(tabs).toEqual(["单画面", "监控墙"]);
+    const caps = Array.from(c.querySelectorAll(".mon-tiles.single > .mon-tile figcaption")).map((x) => x.textContent);
+    expect(caps.length).toBe(2);
+    expect(caps[0]).not.toBe(caps[1]);
+    expect(c.querySelectorAll(".mon-tiles .slot-pip").length).toBe(0);
+  });
+
+  it("三台以上:多画面,每台一格(大画面 + 小画面),全摆出来、能滚;没有固定按钮", () => {
+    const c = page([], "guard", ["A", "B", "C", "D"].map((id) => unit(id, "patrolling")));
+    expect(Array.from(c.querySelectorAll(".mon-video-h .seg button")).map((b) => b.textContent)).toEqual(["多画面", "监控墙"]);
+    expect(c.querySelectorAll(".mon-tiles.multi > .slot").length).toBe(4);
+    expect(c.querySelectorAll(".mon-tiles.multi .slot-pip").length).toBe(4);
+    expect(c.querySelector(".mon-tiles.multi .slot-pin")).toBeNull();
   });
 
   it("全部急停后:写几台已急停,保安有「全部恢复…」", () => {

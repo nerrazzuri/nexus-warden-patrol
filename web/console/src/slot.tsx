@@ -60,7 +60,8 @@ export function VideoSlot(props: {
   u: UnitInfo;
   now: number;
   pinned: boolean;
-  onPin: () => void;
+  /** 不给 = 没有「固定」(多画面每台一格,不用换位)。 */
+  onPin?: () => void;
   onZoom: () => void;
   forceLive?: boolean;
   scene?: Scene;
