@@ -15,7 +15,6 @@ const _allowed = <String, List<String>>{
   'lib/ui/app_settings.dart': ["Text('中文')"],
   'lib/ui/site_list.dart': ["site.contains('等管理员批准')", "site.contains('拒')",
     "site.contains('过期')"],
-  'lib/ui/site_deter.dart': ["Text('中文')"],
   // 跟站点回的报错原文对：剥掉开头那几个字
   'lib/ui/site_robot.dart': [r"RegExp(r'^机器人标记失败[:：]')", "why.contains('未标原点')"],
   'lib/ui/site_standby.dart': [r"RegExp(r'^机器人标记失败[:：]')"],

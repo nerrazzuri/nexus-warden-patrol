@@ -130,9 +130,11 @@ void main() {
 
   testWidgets('单机器人页：管理员有「录包轨迹」；开始录包成功就打开轨迹页', (t) async {
     final api = FakeApi('admin', robotView: _view())..trailReplies = [_trail([], 0, 0)];
-    await t.pumpWidget(MaterialApp(home: SiteRobotPage(api: api, robotId: 'A')));
+    await t.pumpWidget(MaterialApp(home: SiteRobotPage(api: api, robotId: 'A', light: true, settings: true)));
     await t.pumpAndSettle();
     expect(find.byKey(const Key('btn-mapping-trail')), findsOneWidget);
+    await t.ensureVisible(find.byKey(const Key('btn-record-start')));
+    await t.pump();
     await t.tap(find.byKey(const Key('btn-record-start')));
     await t.pumpAndSettle();
     await t.tap(find.byKey(const Key('record-go')));
@@ -141,7 +143,7 @@ void main() {
     expect(find.byType(SiteMappingTrailPage), findsOneWidget);
     await t.pumpWidget(const SizedBox());
     final guard = FakeApi('guard', robotView: _view());
-    await t.pumpWidget(MaterialApp(home: SiteRobotPage(api: guard, robotId: 'A')));
+    await t.pumpWidget(MaterialApp(home: SiteRobotPage(api: guard, robotId: 'A', light: true, settings: true)));
     await t.pumpAndSettle();
     expect(find.byKey(const Key('btn-mapping-trail')), findsNothing);
   });

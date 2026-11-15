@@ -116,7 +116,7 @@ void main() {
     await t.binding.setSurfaceSize(const Size(800, 360));
     addTearDown(() => t.binding.setSurfaceSize(null));
     final api = _api('guard');
-    await t.pumpWidget(MaterialApp(home: SiteRobotPage(api: api, robotId: 'A')));
+    await t.pumpWidget(MaterialApp(home: SiteRobotPage(api: api, robotId: 'A', light: true, settings: true)));
     await t.pumpAndSettle();
     final btn = find.byKey(const Key('btn-standby-list'));
     await t.scrollUntilVisible(btn, 100);

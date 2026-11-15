@@ -14,9 +14,7 @@ import 'package:flutter/material.dart';
 
 import '../l10n.dart';
 import '../net/site_client.dart';
-import 'nw/nw_button.dart';
 import 'nw/nw_theme.dart';
-import 'nw/nw_widgets.dart';
 
 class SiteDeterPage extends StatefulWidget {
   final SiteApi api;
@@ -24,9 +22,14 @@ class SiteDeterPage extends StatefulWidget {
 
   /// 狗报的 `capabilities.tasks.deter`：`outputs`、`clips`、`tts`、`max_s`。
   final Map<String, dynamic> caps;
-  const SiteDeterPage({super.key, required this.api, required this.robotId, required this.caps});
+  /// App V2：嵌在机器人控制页里（不带页头、不自己滚），分「云台与相机」「喊话」「警示」三块。
+  final bool embedded;
+  const SiteDeterPage({super.key, required this.api, required this.robotId, required this.caps, this.embedded = false});
 
   static const Key msgKey = Key('deter-msg');
+  static const Key allOffKey = Key('deter-all-off');
+  static Key langKey(String l) => Key('deter-lang-$l');
+  static Key clipKey(String c) => Key('deter-clip-$c');
 
   @override
   State<SiteDeterPage> createState() => _SiteDeterPageState();
@@ -49,6 +52,68 @@ Map<String, (String, double)> get deterOutputs => <String, (String, double)>{
       'speaker': (tr('Speaker', '喇叭'), 30),
       'wiper': (tr('Wiper', '雨刷'), 10), // POC 11-06 竞品上装：刷可见光镜头
     };
+
+/// App V2 机器人控制页的一块：标题、一句说明、内容；上面一道分隔线。
+Widget nwRobotSection(NwColors c, String title, List<Widget> children, {String note = '', Key? key}) => Container(
+    key: key,
+    padding: const EdgeInsets.fromLTRB(Nw.s16, Nw.s16, Nw.s16, Nw.s16),
+    decoration: BoxDecoration(border: Border(top: BorderSide(color: c.outline))),
+    child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      Text(title, style: NwText.titleMedium.copyWith(color: c.text, fontWeight: FontWeight.w700)),
+      if (note.isNotEmpty) ...[
+        const SizedBox(height: Nw.s4),
+        Text(note, style: NwText.bodySmall.copyWith(color: c.textSecondary)),
+      ],
+      const SizedBox(height: 12),
+      ...children,
+    ]));
+
+/// 一排等宽的按钮（App V2 规矩）：每排最多 [per] 个，最后一排不够也一样宽。
+Widget nwButtonRows(List<Widget> buttons, {int per = 3}) {
+  final rows = <Widget>[];
+  for (var i = 0; i < buttons.length; i += per) {
+    final row = buttons.sublist(i, (i + per).clamp(0, buttons.length));
+    rows.add(Padding(
+        padding: EdgeInsets.only(top: i == 0 ? 0 : Nw.s8),
+        child: Row(children: [
+          for (final (j, b) in row.indexed) ...[
+            if (j > 0) const SizedBox(width: Nw.s8),
+            Expanded(child: b),
+          ],
+        ])));
+  }
+  return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: rows);
+}
+
+/// 控制页上的按钮：深色页上的描边 / 实心，最小 48 高，字 14。
+Widget nwOpButton(NwColors c, Key key, String label, VoidCallback? on, {IconData? icon, bool primary = false}) {
+  final shape = RoundedRectangleBorder(borderRadius: BorderRadius.circular(2));
+  final child = Row(mainAxisAlignment: MainAxisAlignment.center, mainAxisSize: MainAxisSize.min, children: [
+    if (icon != null) ...[Icon(icon, size: 18), const SizedBox(width: 6)],
+    Flexible(child: Text(label, textAlign: TextAlign.center, maxLines: 2, overflow: TextOverflow.ellipsis)),
+  ]);
+  return primary
+      ? FilledButton(
+          key: key,
+          style: FilledButton.styleFrom(
+              minimumSize: const Size(48, 48),
+              padding: const EdgeInsets.symmetric(horizontal: Nw.s8),
+              textStyle: NwText.titleSmall,
+              shape: shape),
+          onPressed: on,
+          child: child)
+      : OutlinedButton(
+          key: key,
+          style: OutlinedButton.styleFrom(
+              foregroundColor: c.text,
+              side: BorderSide(color: c.textMuted),
+              minimumSize: const Size(48, 48),
+              padding: const EdgeInsets.symmetric(horizontal: Nw.s8),
+              textStyle: NwText.titleSmall,
+              shape: shape),
+          onPressed: on,
+          child: child);
+}
 
 /// POC 11-06 竞品云台：每按一下转多少度、角度上限（跟站点的 nexwar_contract.deter 一致）。
 const double ptzPanStep = 15, ptzTiltStep = 10, ptzPanMax = 180, ptzTiltMax = 90;
@@ -82,9 +147,8 @@ String deterReasonText(String r) => switch (r) {
 
 class _SiteDeterPageState extends State<SiteDeterPage> {
   String _msg = '';
-  String? _clip;
   final TextEditingController _tts = TextEditingController();
-  String _lang = 'zh';
+  String _lang = appLang.value == AppLang.zh ? 'zh' : 'en';
 
   List<String> get _outputs => ((widget.caps['outputs'] as List?) ?? const []).map((e) => '$e').toList();
   List<String> get _clips => ((widget.caps['clips'] as List?) ?? const []).map((e) => '$e').toList();
@@ -153,7 +217,6 @@ class _SiteDeterPageState extends State<SiteDeterPage> {
   void initState() {
     super.initState();
     _listen();
-    _clip = _clips.isEmpty ? null : _clips.first;
     final def = '${widget.caps['strobe_default'] ?? ''}';
     _color = _colors.isEmpty ? null : (_colors.contains(def) ? def : _colors.first);
     if (_outputs.contains('speaker') && widget.caps['tts'] == true) unawaited(_loadPresets());
@@ -217,190 +280,198 @@ class _SiteDeterPageState extends State<SiteDeterPage> {
     if (mounted) setState(() => _msg = msg);
   }
 
+  /// 「全部关」：警灯、警笛、聚光灯、喇叭各发一次关（雨刷、云台不算）。
+  Future<void> _allOff() async {
+    final what = tr('All off', '全部关');
+    final bad = <String>[];
+    for (final o in _outputs.where((o) => o != 'ptz' && o != 'wiper')) {
+      try {
+        await widget.api.deter(widget.robotId, o, false);
+      } on SiteError catch (e) {
+        bad.add('${deterOutputs[o]?.$1 ?? o}: $e');
+      }
+    }
+    if (mounted) setState(() => _msg = bad.isEmpty ? tr('$what: done', '$what：完成') : tr('$what failed: ${bad.join('; ')}', '$what失败：${bad.join('；')}'));
+  }
+
+  List<Widget> _sections(NwColors c) {
+    final outs = _outputs;
+    final tts = widget.caps['tts'] == true;
+    Widget btn(Key k, String label, VoidCallback? on, {IconData? icon, bool primary = false}) =>
+        nwOpButton(c, k, label, on, icon: icon, primary: primary);
+    final ptz = outs.contains('ptz');
+    final wiper = outs.contains('wiper');
+    final rows = _rows.where((r) => r.output != 'wiper').toList();
+    return [
+      if (_msg.isNotEmpty)
+        Container(
+            margin: const EdgeInsets.fromLTRB(Nw.s16, Nw.s8, Nw.s16, Nw.s8),
+            padding: const EdgeInsets.symmetric(horizontal: Nw.s16, vertical: Nw.s8),
+            decoration: BoxDecoration(color: c.infoSoft, borderRadius: BorderRadius.circular(2)),
+            child: Text(_msg, key: SiteDeterPage.msgKey, style: NwText.bodyMedium.copyWith(color: c.text))),
+      if (outs.isEmpty)
+        Padding(
+            padding: const EdgeInsets.all(Nw.s16),
+            child: Text(tr('No payload fitted on this robot', '此机器人未安装上装'), style: NwText.bodyLarge.copyWith(color: c.text))),
+      if (ptz || wiper)
+        nwRobotSection(c, tr('PTZ & camera', '云台与相机'), key: const Key('deter-ptz'), [
+          Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            if (ptz)
+              SizedBox(
+                  width: 3 * 48 + 2 * 6,
+                  child: Column(children: [
+                    for (final line in <List<(String, IconData, double, double)?>>[
+                      [null, ('up', Icons.keyboard_arrow_up_rounded, 0, -ptzTiltStep), null],
+                      [
+                        ('left', Icons.keyboard_arrow_left_rounded, -ptzPanStep, 0),
+                        ('center', Icons.home_outlined, 0, 0),
+                        ('right', Icons.keyboard_arrow_right_rounded, ptzPanStep, 0),
+                      ],
+                      [null, ('down', Icons.keyboard_arrow_down_rounded, 0, ptzTiltStep), null],
+                    ])
+                      Padding(
+                          padding: const EdgeInsets.only(bottom: 6),
+                          child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+                            for (final k in line)
+                              k == null
+                                  ? const SizedBox(width: 48, height: 48)
+                                  : SizedBox(
+                                      width: 48,
+                                      height: 48,
+                                      child: OutlinedButton(
+                                          key: Key('ptz-${k.$1}'),
+                                          style: OutlinedButton.styleFrom(
+                                              padding: EdgeInsets.zero,
+                                              foregroundColor: c.text,
+                                              side: BorderSide(color: c.textMuted),
+                                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(2))),
+                                          onPressed: () => _turn(k.$3, k.$4),
+                                          child: Icon(k.$2,
+                                              semanticLabel: switch (k.$1) {
+                                                'up' => tr('Up', '向上'),
+                                                'down' => tr('Down', '向下'),
+                                                'left' => tr('Left', '向左'),
+                                                'right' => tr('Right', '向右'),
+                                                _ => tr('Center', '回正'),
+                                              }))),
+                          ])),
+                  ])),
+            if (ptz && wiper) const SizedBox(width: Nw.s16),
+            if (wiper)
+              Expanded(
+                  child: btn(const Key('deter-on-wiper'), tr('Wiper', '雨刷'), () => _go('wiper', true))),
+          ]),
+        ]),
+      if (outs.contains('speaker'))
+        nwRobotSection(c, tr('Announce', '喊话'), key: const Key('deter-speaker'),
+            note: tts ? tr('Saved messages are site-wide; typed messages use the selected language', '常用话全站通用；现打的字按选的语言念') : '', [
+          if (tts) ...[
+            SegmentedButton<String>(
+                showSelectedIcon: false,
+                segments: [
+                  for (final l in const ['en', 'zh', 'ms'])
+                    ButtonSegment<String>(
+                        value: l, enabled: _canSay(l), label: Text(_langName(l), key: SiteDeterPage.langKey(l))),
+                ],
+                selected: {_lang},
+                onSelectionChanged: (v) => setState(() => _lang = v.first)),
+            const SizedBox(height: Nw.s8),
+          ],
+          // 录好的话术（竞品转接的几段、没配 TTS 的机器人）：点了就放
+          if (_clips.isNotEmpty) ...[
+            nwButtonRows([
+              for (final k in _clips)
+                btn(SiteDeterPage.clipKey(k), deterClipLabel(k), () => _go('speaker', true, clip: k)),
+            ]),
+            const SizedBox(height: Nw.s8),
+          ],
+          if (tts && (_presets?.isNotEmpty ?? false)) ...[
+            nwButtonRows([
+              for (final (i, p) in _presets!.indexed)
+                btn(Key('deter-preset-$i'), p['text'] ?? '',
+                    _canSay(p['lang']) ? () => _go('speaker', true, clip: 'tts:${p['lang']}:${p['text']}') : null),
+            ]),
+            for (final l in {for (final p in _presets!) if (!_canSay(p['lang'])) p['lang']})
+              Padding(
+                  padding: const EdgeInsets.only(top: Nw.s4),
+                  child: Text(
+                      tr('${widget.robotId} cannot speak ${_langName(l)} (not set up on it)',
+                          '这台机器人念不了${_langName(l)}（${widget.robotId} 上没配）'),
+                      style: NwText.bodySmall.copyWith(color: c.textSecondary))),
+            const SizedBox(height: Nw.s8),
+          ],
+          if (tts) ...[
+            Row(children: [
+              Expanded(
+                  child: TextField(
+                      key: const Key('deter-tts'),
+                      controller: _tts,
+                      maxLength: 300,
+                      decoration: InputDecoration(
+                          hintText: tr('Type a message…', '输入要喊的话…'), counterText: '', border: const OutlineInputBorder()))),
+              const SizedBox(width: Nw.s8),
+              SizedBox(
+                  width: 96,
+                  child: btn(const Key('deter-say'), tr('Speak', '喊话'), _canSay(_lang)
+                      ? () {
+                          final t = _tts.text.trim();
+                          if (t.isEmpty) return;
+                          _go('speaker', true, clip: 'tts:$_lang:$t');
+                        }
+                      : null,
+                      primary: true)),
+            ]),
+            const SizedBox(height: Nw.s8),
+          ],
+          if (_clips.isEmpty && !tts)
+            Padding(
+                padding: const EdgeInsets.only(bottom: Nw.s8),
+                child: Text(tr('No recorded clips on the robot', '机器人上没有预录话术'),
+                    style: NwText.bodyMedium.copyWith(color: c.textSecondary))),
+          btn(const Key('deter-off-speaker'), tr('Stop announcement', '停止喊话'), () => _go('speaker', false)),
+        ]),
+      if (rows.isNotEmpty)
+        nwRobotSection(c, tr('Deterrence', '警示'), key: const Key('deter-outputs'),
+            note: tr('Each output runs for a set time and turns off automatically', '每一路开一段时间后自动关'), [
+          if (_colors.isNotEmpty)
+            Row(children: [
+              Text(tr('Strobe colour', '警灯颜色'), style: NwText.bodyMedium.copyWith(color: c.textSecondary)),
+              const SizedBox(width: Nw.s8),
+              DropdownButton<String>(
+                key: const Key('deter-color'),
+                value: _color,
+                items: [for (final k in _colors) DropdownMenuItem(value: k, child: Text(strobeColorText(k)))],
+                onChanged: (v) => setState(() => _color = v ?? _color),
+              ),
+            ]),
+          nwButtonRows([
+            for (final r in rows)
+              btn(Key('deter-on-${r.key}'),
+                  r.side == null && r.output == 'spotlight' && _sides.isNotEmpty
+                      ? tr('Both spotlights ${deterOutputs['spotlight']!.$2.toStringAsFixed(0)} s',
+                          '双侧聚光灯 ${deterOutputs['spotlight']!.$2.toStringAsFixed(0)} 秒')
+                      : tr('${r.name} ${deterOutputs[r.output]?.$2.toStringAsFixed(0) ?? ''} s',
+                          '${r.name} ${deterOutputs[r.output]?.$2.toStringAsFixed(0) ?? ''} 秒'),
+                  () => _go(r.output, true, side: r.side, name: r.name),
+                  icon: switch (r.output) {
+                    'strobe' => Icons.lightbulb_outline_rounded,
+                    'siren' => Icons.notifications_none_rounded,
+                    _ => null,
+                  }),
+            btn(SiteDeterPage.allOffKey, tr('All off', '全部关'), () => unawaited(_allOff())),
+          ]),
+        ]),
+    ];
+  }
+
   @override
   Widget build(BuildContext context) {
     final c = Nw.of(context);
-    final outs = _outputs;
+    final parts = _sections(c);
+    if (widget.embedded) return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: parts);
     return Scaffold(
       appBar: AppBar(title: Text(tr('${widget.robotId} · Payload', '${widget.robotId} · 上装'))),
-      body: ListView(
-          // 横屏的手机只有 360 高：内距、间距收紧一点，常用的那几样不用滚就点得到
-          padding: const EdgeInsets.symmetric(horizontal: Nw.s16, vertical: Nw.s8),
-          children: [
-        if (_msg.isNotEmpty)
-          Container(
-              margin: const EdgeInsets.only(bottom: Nw.s8),
-              padding: const EdgeInsets.symmetric(horizontal: Nw.s16, vertical: Nw.s8),
-              decoration: BoxDecoration(color: c.infoSoft, borderRadius: BorderRadius.circular(Nw.r8)),
-              child: Text(_msg, key: SiteDeterPage.msgKey, style: NwText.bodyMedium.copyWith(color: c.text))),
-        if (outs.isEmpty)
-          Text(tr('No payload fitted on this robot', '此机器人未安装上装'),
-              style: NwText.bodyLarge.copyWith(color: c.text)),
-        for (final r in _rows)
-          Padding(
-              padding: const EdgeInsets.only(bottom: Nw.s8),
-              child: NwCard(
-                  padding: EdgeInsets.zero,
-                  // 竖屏的手机一行摆不下「名字 + 开 + 关」（名字会被挤成几个字一行）：按钮放到下面一行
-                  child: LayoutBuilder(builder: (context, box) {
-                    final narrow = box.maxWidth < 520;
-                    final o = r.output;
-                    final buttons = Wrap(spacing: Nw.s8, crossAxisAlignment: WrapCrossAlignment.center, children: [
-                      if (o == 'strobe' && _colors.isNotEmpty)
-                        DropdownButton<String>(
-                          key: const Key('deter-color'),
-                          value: _color,
-                          items: [
-                            for (final k in _colors) DropdownMenuItem(value: k, child: Text(strobeColorText(k))),
-                          ],
-                          onChanged: (v) => setState(() => _color = v ?? _color),
-                        ),
-                      NwButton(
-                          buttonKey: Key('deter-on-${r.key}'),
-                          onPressed: () => _go(o, true, side: r.side, name: r.name),
-                          label: tr('On', '开')),
-                      NwButton(
-                          buttonKey: Key('deter-off-${r.key}'),
-                          variant: NwButtonVariant.outline,
-                          onPressed: () => _go(o, false, side: r.side, name: r.name),
-                          label: tr('Off', '关')),
-                    ]);
-                    final secs = deterOutputs[o]?.$2.toStringAsFixed(0);
-                    return ListTile(
-                      key: Key('deter-${r.key}'),
-                      dense: true,
-                      title: Text(
-                          r.side == null && o == 'spotlight' && _sides.isNotEmpty
-                              ? tr('Both spotlights (on for $secs s, then off automatically)',
-                                  '双侧聚光灯（开启 $secs 秒后自动关闭）')
-                              : tr('${r.name} (on for $secs s, then off automatically)',
-                                  '${r.name}（开启 $secs 秒后自动关闭）'),
-                          style: NwText.bodyMedium.copyWith(color: c.text)),
-                      subtitle: narrow ? Align(alignment: Alignment.centerRight, child: buttons) : null,
-                      trailing: narrow ? null : buttons,
-                    );
-                  }))),
-        if (outs.contains('ptz'))
-          Padding(
-              padding: const EdgeInsets.only(bottom: Nw.s8),
-              child: NwCard(
-                  padding: const EdgeInsets.all(12),
-                  child: Wrap(spacing: Nw.s8, runSpacing: Nw.s8, crossAxisAlignment: WrapCrossAlignment.center, children: [
-                    Text(tr('Camera head: ', '云台：'), style: NwText.titleSmall.copyWith(color: c.text)),
-                    for (final (k, label, dp, dt) in <(String, String, double, double)>[
-                      ('left', tr('Left', '向左'), -ptzPanStep, 0),
-                      ('right', tr('Right', '向右'), ptzPanStep, 0),
-                      ('up', tr('Up', '向上'), 0, -ptzTiltStep),
-                      ('down', tr('Down', '向下'), 0, ptzTiltStep),
-                    ])
-                      NwButton(
-                          buttonKey: Key('ptz-$k'),
-                          variant: NwButtonVariant.outline,
-                          onPressed: () => _turn(dp, dt),
-                          label: label),
-                    NwButton(buttonKey: const Key('ptz-center'), onPressed: () => _turn(0, 0), label: tr('Center', '回正')),
-                  ]))),
-        if (outs.contains('speaker')) ...[
-          NwCard(
-              padding: const EdgeInsets.all(12),
-              child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
-            // 话术的名字可能很长：下拉框占剩下的宽度、名字摆不下就截。竖屏的手机一行摆不下
-            // 「喇叭 + 话术 + 放 + 停」：话术一行，放、停在下面一行。
-            LayoutBuilder(builder: (context, box) {
-              final narrow = box.maxWidth < 520;
-              final name = Text(tr('Speaker: ', '喇叭：'), style: NwText.titleSmall.copyWith(color: c.text));
-              final clip = _clips.isEmpty
-                  ? Text(tr('No recorded clips on the robot', '机器人上没有预录话术'),
-                      style: NwText.bodyMedium.copyWith(color: c.textSecondary))
-                  : DropdownButton<String>(
-                      key: const Key('deter-clip'),
-                      isExpanded: true,
-                      value: _clip,
-                      items: [
-                        for (final c in _clips)
-                          DropdownMenuItem(value: c, child: Text(deterClipLabel(c), maxLines: 1, overflow: TextOverflow.ellipsis)),
-                      ],
-                      onChanged: (v) => setState(() => _clip = v),
-                    );
-              final play = NwButton(
-                  buttonKey: const Key('deter-play'),
-                  onPressed: _clip == null ? null : () => _go('speaker', true, clip: _clip),
-                  label: tr('Play', '播放'));
-              final stop = NwButton(
-                  buttonKey: const Key('deter-off-speaker'),
-                  variant: NwButtonVariant.outline,
-                  onPressed: () => _go('speaker', false),
-                  label: tr('Stop', '停'));
-              const gap = SizedBox(width: Nw.s8);
-              return narrow
-                  ? Column(crossAxisAlignment: CrossAxisAlignment.stretch, mainAxisSize: MainAxisSize.min, children: [
-                      name,
-                      clip,
-                      const SizedBox(height: Nw.s8),
-                      Row(mainAxisAlignment: MainAxisAlignment.end, children: [play, gap, stop]),
-                    ])
-                  : Row(children: [name, Expanded(child: clip), gap, play, gap, stop]);
-            }),
-            if (widget.caps['tts'] == true) ...[
-              const SizedBox(height: Nw.s8),
-              Row(children: [
-                DropdownButton<String>(
-                  key: const Key('deter-lang'),
-                  value: _lang,
-                  // 外审：机器人报了能念哪几种，念不了的选不了（没报照旧都能选）
-                  items: [
-                    DropdownMenuItem(value: 'zh', enabled: _canSay('zh'), child: const Text('中文')),
-                    DropdownMenuItem(value: 'en', enabled: _canSay('en'), child: const Text('English')),
-                    DropdownMenuItem(value: 'ms', enabled: _canSay('ms'), child: const Text('Melayu')),
-                  ],
-                  onChanged: (v) => setState(() => _lang = v ?? _lang),
-                ),
-                const SizedBox(width: Nw.s8),
-                Expanded(
-                    child: TextField(
-                        key: const Key('deter-tts'),
-                        controller: _tts,
-                        maxLength: 300,
-                        decoration: InputDecoration(
-                            labelText: tr('Type a message (synthesized and played on the robot)',
-                                '输入文字（机器人合成后播放）')))),
-                const SizedBox(width: Nw.s8),
-                NwButton(
-                    buttonKey: const Key('deter-say'),
-                    onPressed: _canSay(_lang)
-                        ? () {
-                            final t = _tts.text.trim();
-                            if (t.isEmpty) return;
-                            _go('speaker', true, clip: 'tts:$_lang:$t');
-                          }
-                        : null,
-                    label: tr('Say', '播报')),
-              ]),
-            ],
-            if (widget.caps['tts'] == true && (_presets?.isNotEmpty ?? false)) ...[
-              const SizedBox(height: Nw.s16),
-              Text(tr('Common messages', '常用喊话'), style: NwText.titleSmall.copyWith(color: c.text)),
-              const SizedBox(height: Nw.s8),
-              for (final (i, p) in _presets!.indexed) ...[
-                if (i > 0) const SizedBox(height: Nw.s8),
-                NwButton(
-                    buttonKey: Key('deter-preset-$i'),
-                    variant: NwButtonVariant.outline,
-                    fullWidth: true,
-                    onPressed: _canSay(p['lang'])
-                        ? () => _go('speaker', true, clip: 'tts:${p['lang']}:${p['text']}')
-                        : null,
-                    label: p['text'] ?? ''),
-                if (!_canSay(p['lang']))
-                  Text(
-                      tr('${widget.robotId} cannot speak ${_langName(p['lang'])} (not set up on it)',
-                          '这台机器人念不了${_langName(p['lang'])}（${widget.robotId} 上没配）'),
-                      style: NwText.bodySmall.copyWith(color: c.textSecondary)),
-              ],
-            ],
-          ])),
-        ],
-      ]),
+      body: ListView(children: parts),
     );
   }
 }

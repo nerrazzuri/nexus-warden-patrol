@@ -1,5 +1,5 @@
-// 上装（W21）：单狗页的入口按角色和狗的能力出；只列接上的几路；开带时长、关随时；喇叭放话术、现打一段（狗配了 TTS 才有）；
-// 狗拒了说人话。横屏 800×360。
+// 上装（W21）：只列接上的几路；开带时长、全部关；喇叭放话术、现打一段（狗配了 TTS 才有）；狗拒了说人话。
+// App V2：分「云台与相机」「喊话」「警示」三块（嵌进机器人控制页，也能单独一页）。竖屏 390×1400。
 import 'package:nexwar_patrol/ui/site_deter.dart';
 import 'package:nexwar_patrol/ui/site_page.dart';
 import 'package:flutter/material.dart';
@@ -16,7 +16,7 @@ const Map<String, dynamic> _caps = <String, dynamic>{
 };
 
 Future<void> _open(WidgetTester t, FakeApi api, {Map<String, dynamic> caps = _caps}) async {
-  await t.binding.setSurfaceSize(const Size(800, 360));
+  await t.binding.setSurfaceSize(const Size(390, 1400));
   addTearDown(() => t.binding.setSurfaceSize(null));
   await t.pumpWidget(MaterialApp(home: SiteDeterPage(api: api, robotId: 'A', caps: caps)));
   await t.pumpAndSettle();
@@ -32,48 +32,40 @@ Map<String, dynamic> _view({bool deter = true}) {
   return v;
 }
 
+/// App V2：设备健康在浅色页「设置」页签的「检查」里。
 Future<void> _robotPage(WidgetTester t, FakeApi api) async {
   await t.binding.setSurfaceSize(const Size(800, 360));
   addTearDown(() => t.binding.setSurfaceSize(null));
   await t.pumpWidget(const SizedBox()); // 同一个测试里开几次：不复用上一次的页面状态
-  await t.pumpWidget(MaterialApp(home: SiteRobotPage(api: api, robotId: 'A')));
+  await t.pumpWidget(MaterialApp(home: SiteRobotPage(api: api, robotId: 'A', light: true, settings: true)));
   await t.pumpAndSettle();
 }
 
 void main() {
   pocClipNames();
-  testWidgets('单机器人页：保安、机器人报了上装才有入口；管理员没有；机器人没装没有', (t) async {
-    await _robotPage(t, FakeApi('guard', robotView: _view()));
-    expect(find.byKey(const Key('btn-deter')), findsOneWidget);
-    await _robotPage(t, FakeApi('owner', robotView: _view()));
-    expect(find.byKey(const Key('btn-deter')), findsNothing);
-    await _robotPage(t, FakeApi('guard', robotView: _view(deter: false)));
-    expect(find.byKey(const Key('btn-deter')), findsNothing);
-  });
-
-  testWidgets('只列接上的几路；开带默认时长，关随时', (t) async {
+  testWidgets('只列接上的几路；开带默认时长；「全部关」把每一路关掉；同一排等宽', (t) async {
     final api = FakeApi('guard');
     await _open(t, api);
-    expect(find.byKey(const Key('deter-strobe')), findsOneWidget);
-    expect(find.byKey(const Key('deter-siren')), findsOneWidget);
-    expect(find.byKey(const Key('deter-spotlight')), findsNothing, reason: '机器人没接聚光灯');
+    expect(find.byKey(const Key('deter-on-strobe')), findsOneWidget);
+    expect(find.byKey(const Key('deter-on-siren')), findsOneWidget);
+    expect(find.byKey(const Key('deter-on-spotlight')), findsNothing, reason: '机器人没接聚光灯');
+    expect(find.text('警示'), findsOneWidget);
+    expect(find.text('喊话'), findsWidgets);
+    expect(t.getSize(find.byKey(const Key('deter-on-siren'))).width, t.getSize(find.byKey(SiteDeterPage.allOffKey)).width);
     await t.tap(find.byKey(const Key('deter-on-siren')));
     await t.pumpAndSettle();
     expect(api.calls.last, 'deter A siren true 10.0');
     expect(find.text('开启警笛 10 秒：完成'), findsOneWidget);
-    await t.tap(find.byKey(const Key('deter-off-strobe')));
+    await t.tap(find.byKey(SiteDeterPage.allOffKey));
     await t.pumpAndSettle();
-    expect(api.calls.last, 'deter A strobe false');
+    expect(api.calls.sublist(api.calls.length - 3), ['deter A strobe false', 'deter A siren false', 'deter A speaker false']);
+    expect(find.text('全部关：完成'), findsOneWidget);
   });
 
   testWidgets('喇叭：挑话术放、现打一段、停', (t) async {
     final api = FakeApi('guard');
     await _open(t, api);
-    await t.tap(find.byKey(const Key('deter-clip')));
-    await t.pumpAndSettle();
-    await t.tap(find.text('warn-en').last);
-    await t.pumpAndSettle();
-    await t.tap(find.byKey(const Key('deter-play')));
+    await t.tap(find.byKey(SiteDeterPage.clipKey('warn-en')));
     await t.pumpAndSettle();
     expect(api.calls.last, 'deter A speaker true 30.0 warn-en');
     await t.enterText(find.byKey(const Key('deter-tts')), '请马上离开');
@@ -92,7 +84,6 @@ void main() {
         {'lang': 'en', 'text': 'Warning. You have entered a restricted area. Please leave immediately. ' * 3},
       ];
     await _open(t, api);
-    expect(find.text('常用喊话'), findsOneWidget);
     await t.ensureVisible(find.byKey(const Key('deter-preset-0')));
     await t.pumpAndSettle();
     await t.tap(find.byKey(const Key('deter-preset-0')));
@@ -124,34 +115,33 @@ void main() {
 
   testWidgets('外审：手动输入也按机器人报的语言，念不了的语言选不了', (t) async {
     await _open(t, FakeApi('guard'), caps: <String, dynamic>{..._caps, 'tts_langs': <String>['zh']});
-    final dd = t.widget<DropdownButton<String>>(find.byKey(const Key('deter-lang')));
-    bool on(String v) => dd.items!.firstWhere((i) => i.value == v).enabled;
+    List<ButtonSegment<String>> segs() => t.widget<SegmentedButton<String>>(find.byType(SegmentedButton<String>)).segments;
+    bool on(String v) => segs().firstWhere((x) => x.value == v).enabled;
     expect(on('zh'), isTrue);
     expect(on('en'), isFalse);
     expect(on('ms'), isFalse);
     await _open(t, FakeApi('guard'));
-    final old = t.widget<DropdownButton<String>>(find.byKey(const Key('deter-lang')));
-    expect(old.items!.every((i) => i.enabled), isTrue, reason: '机器人没报能念哪几种：照旧都能选');
+    expect(segs().every((x) => x.enabled), isTrue, reason: '机器人没报能念哪几种：照旧都能选');
   });
 
   testWidgets('第三档 #41 常用喊话：老站点没有这张表（接口报错）、机器人没配 TTS：都不出这一行', (t) async {
     await _open(t, FakeApi('guard')..voicePresetList = null);
-    expect(find.text('常用喊话'), findsNothing);
+    expect(find.byKey(const Key('deter-preset-0')), findsNothing);
     expect(find.byKey(const Key('deter-tts')), findsOneWidget);
     await _open(t, FakeApi('guard'), caps: <String, dynamic>{..._caps, 'tts': false});
-    expect(find.text('常用喊话'), findsNothing);
+    expect(find.byKey(const Key('deter-preset-0')), findsNothing);
   });
 
   testWidgets('机器人没配 TTS：没有现打那一行', (t) async {
     await _open(t, FakeApi('guard'), caps: <String, dynamic>{..._caps, 'tts': false});
     expect(find.byKey(const Key('deter-tts')), findsNothing);
-    expect(find.byKey(const Key('deter-play')), findsOneWidget);
+    expect(find.byKey(SiteDeterPage.clipKey('warn-zh')), findsOneWidget);
   });
 
   testWidgets('机器人拒了说人话：喇叭忙、设备没回', (t) async {
     final api = FakeApi('guard')..deterAck = <String, dynamic>{'result': 'rejected', 'reason': 'busy'};
     await _open(t, api);
-    await t.tap(find.byKey(const Key('deter-play')));
+    await t.tap(find.byKey(SiteDeterPage.clipKey('warn-zh')));
     await t.pumpAndSettle();
     expect(find.textContaining('更紧急'), findsOneWidget);
     api.deterAck = <String, dynamic>{'result': 'rejected', 'reason': 'device: 继电器板(站号 1):没回'};
@@ -169,16 +159,13 @@ void main() {
       'strobe_colors': <String>['red', 'yellow', 'green'],
       'strobe_default': 'yellow',
     });
-    expect(find.byKey(const Key('deter-spotlight')), findsOneWidget);
-    expect(find.byKey(const Key('deter-spotlight-left')), findsOneWidget);
-    expect(find.byKey(const Key('deter-spotlight-right')), findsOneWidget);
+    expect(find.byKey(const Key('deter-on-spotlight')), findsOneWidget);
+    expect(find.byKey(const Key('deter-on-spotlight-left')), findsOneWidget);
+    expect(find.byKey(const Key('deter-on-spotlight-right')), findsOneWidget);
     await t.tap(find.byKey(const Key('deter-on-spotlight-left')));
     await t.pumpAndSettle();
     expect(api.calls.last, 'deter A spotlight true 120.0 side=left');
     expect(find.text('开启左聚光灯 120 秒：完成'), findsOneWidget);
-    await t.tap(find.byKey(const Key('deter-off-spotlight-right')));
-    await t.pumpAndSettle();
-    expect(api.calls.last, 'deter A spotlight false side=right');
     await t.tap(find.byKey(const Key('deter-on-strobe')));
     await t.pumpAndSettle();
     expect(api.calls.last, 'deter A strobe true 60.0 color=yellow', reason: '缺省颜色按机器人报的');
@@ -189,15 +176,15 @@ void main() {
     await t.tap(find.byKey(const Key('deter-on-strobe')));
     await t.pumpAndSettle();
     expect(api.calls.last, 'deter A strobe true 60.0 color=green');
-    await t.tap(find.byKey(const Key('deter-off-strobe')));
+    await t.tap(find.byKey(SiteDeterPage.allOffKey));
     await t.pumpAndSettle();
-    expect(api.calls.last, 'deter A strobe false', reason: '关不带颜色');
+    expect(api.calls, contains('deter A strobe false'), reason: '关不带颜色');
   });
 
   testWidgets('W40：老机器人没报左右、颜色：跟原来一样', (t) async {
     final api = FakeApi('guard');
     await _open(t, api, caps: <String, dynamic>{..._caps, 'outputs': <String>['strobe', 'spotlight']});
-    expect(find.byKey(const Key('deter-spotlight-left')), findsNothing);
+    expect(find.byKey(const Key('deter-on-spotlight-left')), findsNothing);
     expect(find.byKey(const Key('deter-color')), findsNothing);
     await t.tap(find.byKey(const Key('deter-on-strobe')));
     await t.pumpAndSettle();
@@ -219,7 +206,7 @@ void main() {
         'stale': false,
       };
     await _robotPage(t, FakeApi('guard', robotView: v));
-    await t.scrollUntilVisible(find.byKey(const Key('robot-devices')), 200);
+    await t.scrollUntilVisible(find.byKey(const Key('robot-devices')), 200, scrollable: find.byType(Scrollable).first);
     expect(find.text('路由器：离线 · 连不上 192.168.10.1:80'), findsOneWidget);
     expect(find.text('相机 热像：故障 · 录像断了'), findsOneWidget);
     expect(find.text('RTK：降级 · 浮点解'), findsOneWidget);
@@ -229,7 +216,7 @@ void main() {
     expect(ys, [...ys]..sort(), reason: '故障、离线、降级、在线');
     (v['devices'] as Map)['stale'] = true;
     await _robotPage(t, FakeApi('guard', robotView: v));
-    await t.scrollUntilVisible(find.byKey(const Key('robot-devices')), 200);
+    await t.scrollUntilVisible(find.byKey(const Key('robot-devices')), 200, scrollable: find.byType(Scrollable).first);
     expect(find.text('设备（长时间未更新）'), findsOneWidget);
   });
 
@@ -237,7 +224,7 @@ void main() {
     final api = FakeApi('guard');
     await _open(t, api);
     expect(api.eventsOpened, 1);
-    await t.tap(find.byKey(const Key('deter-play')));
+    await t.tap(find.byKey(SiteDeterPage.clipKey('warn-zh')));
     await t.pumpAndSettle();
     expect(find.textContaining('已开始'), findsOneWidget, reason: '收下不等于放出来了');
     api.sse.add(<String, dynamic>{'kind': 'alert', 'alert': <String, dynamic>{
@@ -259,12 +246,8 @@ void pocClipNames() {
   testWidgets('POC 11-05：竞品转接的 4 段英文话术显示中文名，发的还是原名', (t) async {
     final api = FakeApi('guard');
     await _open(t, api, caps: <String, dynamic>{..._caps, 'clips': <String>['blocked', 'restricted', 'zz']});
-    await t.tap(find.byKey(const Key('deter-clip')));
-    await t.pumpAndSettle();
     expect(find.text('zz'), findsWidgets);
-    await t.tap(find.text('禁区警告（英文）').last);
-    await t.pumpAndSettle();
-    await t.tap(find.byKey(const Key('deter-play')));
+    await t.tap(find.text('禁区警告（英文）'));
     await t.pumpAndSettle();
     expect(api.calls.last, 'deter A speaker true 30.0 restricted');
   });
@@ -277,7 +260,7 @@ void pocClipNames() {
       'tts': false,
       'max_s': 600.0,
     });
-    expect(find.byKey(const Key('deter-ptz')), findsNothing, reason: '云台不是一行开关');
+    expect(find.text('云台与相机'), findsOneWidget);
     await t.ensureVisible(find.byKey(const Key('ptz-right')));
     await t.tap(find.byKey(const Key('ptz-right')));
     await t.pumpAndSettle();

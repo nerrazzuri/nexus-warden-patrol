@@ -106,6 +106,8 @@ void main() {
     final api = FakeApi('guard', robotView: _view({'anchored': false, 'reason': 'x'}));
     await t.pumpWidget(MaterialApp(home: SiteRobotPage(api: api, robotId: 'A')));
     await t.pumpAndSettle();
+    await t.ensureVisible(find.byKey(const Key('btn-relocalize')));
+    await t.pump();
     await t.tap(find.byKey(const Key('btn-relocalize')));
     await t.pumpAndSettle();
     await t.tap(find.byKey(const Key('reloc-home')));
@@ -120,6 +122,8 @@ void main() {
     final api = FakeApi('guard', robotView: _view({'anchored': false, 'reason': 'x'}));
     await t.pumpWidget(MaterialApp(home: SiteRobotPage(api: api, robotId: 'A')));
     await t.pumpAndSettle();
+    await t.ensureVisible(find.byKey(const Key('btn-relocalize')));
+    await t.pump();
     await t.tap(find.byKey(const Key('btn-relocalize')));
     await t.pumpAndSettle();
     await t.tap(find.byKey(const Key('reloc-home')));
@@ -133,6 +137,8 @@ void main() {
     final api = FakeApi('admin', robotView: _view({'anchored': false, 'reason': 'x'}));
     await t.pumpWidget(MaterialApp(home: SiteRobotPage(api: api, robotId: 'A')));
     await t.pumpAndSettle();
+    await t.ensureVisible(find.byKey(const Key('btn-relocalize')));
+    await t.pump();
     await t.tap(find.byKey(const Key('btn-relocalize')));
     await t.pumpAndSettle();
     await t.tap(find.byKey(const Key('reloc-xy')));
@@ -143,6 +149,8 @@ void main() {
     await t.pumpAndSettle();
     expect(api.calls.where((c) => c.startsWith('relocalize')), isEmpty);
     expect(find.textContaining('数字'), findsOneWidget);
+    await t.ensureVisible(find.byKey(const Key('btn-relocalize')));
+    await t.pump();
     await t.tap(find.byKey(const Key('btn-relocalize')));
     await t.pumpAndSettle();
     await t.tap(find.byKey(const Key('reloc-xy')));
@@ -182,6 +190,8 @@ void main() {
     final no = FakeApi('guard', robotView: _view({'anchored': false, 'reason': 'x'}));
     await t.pumpWidget(MaterialApp(home: SiteRobotPage(api: no, robotId: 'A')));
     await t.pumpAndSettle();
+    await t.ensureVisible(find.byKey(const Key('btn-relocalize')));
+    await t.pump();
     await t.tap(find.byKey(const Key('btn-relocalize')));
     await t.pumpAndSettle();
     expect(find.byKey(const Key('reloc-find')), findsNothing);
@@ -190,6 +200,8 @@ void main() {
     final api = FakeApi('guard', robotView: _view({'anchored': false, 'reason': 'x'}, canFind: true));
     await t.pumpWidget(MaterialApp(home: SiteRobotPage(api: api, robotId: 'A', key: UniqueKey())));
     await t.pumpAndSettle();
+    await t.ensureVisible(find.byKey(const Key('btn-relocalize')));
+    await t.pump();
     await t.tap(find.byKey(const Key('btn-relocalize')));
     await t.pumpAndSettle();
     await t.tap(find.byKey(const Key('reloc-find')));

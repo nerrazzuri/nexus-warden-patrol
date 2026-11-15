@@ -28,8 +28,10 @@ Map<String, dynamic> _view({bool can = true}) {
 void main() {
   testWidgets('管理员：单机器人页 →「建图日志」→ 列表 → 点开看尾巴 → 刷新再取一次', (t) async {
     final api = FakeApi('admin', robotView: _view());
-    await t.pumpWidget(MaterialApp(home: SiteRobotPage(api: api, robotId: 'A')));
+    await t.pumpWidget(MaterialApp(home: SiteRobotPage(api: api, robotId: 'A', light: true, settings: true)));
     await t.pumpAndSettle();
+    await t.ensureVisible(find.byKey(const Key('btn-proc-logs')));
+    await t.pump();
     await t.tap(find.byKey(const Key('btn-proc-logs')));
     await t.pumpAndSettle();
     expect(api.calls, contains('procLogs A'));

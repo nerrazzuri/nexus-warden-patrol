@@ -255,8 +255,8 @@ void main() {
 
   testWidgets('横屏不溢出：单机器人页（管理员、在跑任务）', (t) async {
     await _show(t, SiteRobotPage(api: FakeApi('admin', robotView: busyView()), robotId: 'A'));
-    expect(t.getRect(find.byKey(const Key('btn-abort'))).bottom, lessThanOrEqualTo(_h),
-        reason: '叫停一进来就看得见');
+    expect(t.getRect(find.byKey(SiteRobotPage.estopKey)).bottom, lessThanOrEqualTo(_h),
+        reason: '全部急停一进来就看得见');
     final v = t.getRect(find.byType(LiveVideo));
     expect(v.height, lessThanOrEqualTo(_h * 0.6 + 0.5), reason: '画面不比屏幕还高（滚到它能看全）');
     expect(v.width / v.height, closeTo(16 / 9, 0.01), reason: '不拉伸');

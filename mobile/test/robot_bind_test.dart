@@ -94,10 +94,14 @@ Widget host(Widget w) => MaterialApp(home: w);
 
 /// 机器人扫到的列表里点一个、填密码、发出去。
 Future<void> pick(WidgetTester t, String ssid, [String psk = '']) async {
+  await t.ensureVisible(find.byKey(Key('wifi-net-$ssid')));
+  await t.pump();
   await t.tap(find.byKey(Key('wifi-net-$ssid')));
   await t.pump();
   if (psk.isNotEmpty) await t.enterText(find.byKey(const Key('wifi-pick-psk')), psk);
   await t.ensureVisible(find.byKey(const Key('wifi-pick-send')));
+  await t.ensureVisible(find.byKey(const Key('wifi-pick-send')));
+  await t.pump();
   await t.tap(find.byKey(const Key('wifi-pick-send')));
   await t.pumpAndSettle();
 }
@@ -136,27 +140,41 @@ void main() {
 
   group('添加机器人', () {
     testWidgets('扫贴纸、连机器人、从它扫到的 WiFi 里选、填密码、发出去、核对码、离开热点去批准', (t) async {
+      await t.binding.setSurfaceSize(const Size(800, 1200)); // 底下的提示条不挡「发送」
+      addTearDown(() => t.binding.setSurfaceSize(null));
       final api = FakeApi('admin');
       final link = FakeLink();
       final joiner = FakeJoiner();
       await t.pumpWidget(host(RobotAddPage(api: api, site: site, scanner: (_) async => sticker(),
           joiner: joiner, link: (_) => link, pollEvery: const Duration(milliseconds: 100))));
+      String step() => '${t.widget<Text>(find.byKey(const Key('add-step-of'))).data}';
+      expect(step(), '第 1 步，共 4 步', reason: 'App V2 稿 S-add：四步一列');
+      await t.ensureVisible(find.byKey(const Key('bind-scan')));
+      await t.pump();
       await t.tap(find.byKey(const Key('bind-scan')));
       await t.pumpAndSettle();
-      expect(find.textContaining('D1M-1'), findsOneWidget);
+      expect(find.textContaining('D1M-1'), findsWidgets);
+      expect(find.text('D1M-1 · 已扫'), findsOneWidget);
+      expect(step(), '第 2 步，共 4 步');
+      await t.ensureVisible(find.byKey(const Key('bind-join')));
+      await t.pump();
       await t.tap(find.byKey(const Key('bind-join')));
       await t.pumpAndSettle();
+      expect(step(), '第 3 步，共 4 步');
       expect(joiner.calls, ['join NW-1 hotspotpw1234567']);
       expect(link.calls, ['status', 'scan']);
       expect(find.byKey(const Key('wifi-net-Guest')), findsOneWidget);
       await pick(t, 'Estate', '123');
       expect(link.calls, ['status', 'scan'], reason: 'WiFi 密码不对，不发');
       await t.enterText(find.byKey(const Key('wifi-pick-psk')), '12345678');
+      await t.ensureVisible(find.byKey(const Key('wifi-pick-send')));
+      await t.pump();
       await t.tap(find.byKey(const Key('wifi-pick-send')));
       await t.pumpAndSettle();
       expect(link.calls.take(3), ['status', 'scan', 'bind Estate 12345678 https://192.168.1.10:8443 庄园']);
       expect(link.calls.skip(3).toSet(), {'status'}, reason: '之后一直问状态');
       expect(find.byKey(const Key('bind-phase')), findsOneWidget);
+      expect(step(), '第 4 步，共 4 步');
       link.st = <String, dynamic>{...link.st, 'phase': 'waiting', 'check': '042917'};
       await t.pump(const Duration(milliseconds: 150));
       await t.pump();
@@ -164,6 +182,8 @@ void main() {
       api.binds = <Map<String, dynamic>>[
         <String, dynamic>{'id': 'ab12', 'serial': 'D1M-1', 'check': '042917', 'source': '192.168.1.20'}
       ];
+      await t.ensureVisible(find.byKey(const Key('bind-leave')));
+      await t.pump();
       await t.tap(find.byKey(const Key('bind-leave')));
       await t.pumpAndSettle();
       expect(joiner.calls.last, 'leave');
@@ -179,8 +199,12 @@ void main() {
       final link = FakeLink()..st = <String, dynamic>{'state': 'bound'};
       await t.pumpWidget(host(RobotAddPage(api: FakeApi('guard'), site: site, scanner: (_) async => sticker(),
           joiner: FakeJoiner(), link: (_) => link)));
+      await t.ensureVisible(find.byKey(const Key('bind-scan')));
+      await t.pump();
       await t.tap(find.byKey(const Key('bind-scan')));
       await t.pumpAndSettle();
+      await t.ensureVisible(find.byKey(const Key('bind-join')));
+      await t.pump();
       await t.tap(find.byKey(const Key('bind-join')));
       await t.pumpAndSettle();
       expect(link.calls, ['status']);
@@ -191,8 +215,12 @@ void main() {
       final link = FakeLink();
       await t.pumpWidget(host(RobotAddPage(api: FakeApi('guard'), site: site, scanner: (_) async => sticker(),
           joiner: FakeJoiner(auto: false), link: (_) => link)));
+      await t.ensureVisible(find.byKey(const Key('bind-scan')));
+      await t.pump();
       await t.tap(find.byKey(const Key('bind-scan')));
       await t.pumpAndSettle();
+      await t.ensureVisible(find.byKey(const Key('bind-join')));
+      await t.pump();
       await t.tap(find.byKey(const Key('bind-join')));
       await t.pumpAndSettle();
       expect(find.textContaining('NW-1'), findsWidgets);
@@ -208,8 +236,12 @@ void main() {
       final link = FakeLink();
       await t.pumpWidget(host(RobotAddPage(api: api, site: site, scanner: (_) async => sticker(),
           joiner: FakeJoiner(auto: false), link: (_) => link, pollEvery: const Duration(milliseconds: 100))));
+      await t.ensureVisible(find.byKey(const Key('bind-scan')));
+      await t.pump();
       await t.tap(find.byKey(const Key('bind-scan')));
       await t.pumpAndSettle();
+      await t.ensureVisible(find.byKey(const Key('bind-join')));
+      await t.pump();
       await t.tap(find.byKey(const Key('bind-join')));
       await t.pumpAndSettle();
       await t.tap(find.byKey(const Key('hotspot-joined')));
@@ -217,6 +249,8 @@ void main() {
       await pick(t, 'Estate', '12345678');
       link.st = <String, dynamic>{...link.st, 'phase': 'waiting', 'check': '042917'};
       await t.pump(const Duration(milliseconds: 150));
+      await t.pump();
+      await t.ensureVisible(find.byKey(const Key('bind-leave')));
       await t.pump();
       await t.tap(find.byKey(const Key('bind-leave')));
       await t.pumpAndSettle();
@@ -228,6 +262,8 @@ void main() {
         <String, dynamic>{'id': 'ab12', 'serial': 'D1M-1', 'check': '042917', 'source': 'x'}
       ];
       await t.ensureVisible(find.byKey(const Key('bind-approve-retry')));
+      await t.ensureVisible(find.byKey(const Key('bind-approve-retry')));
+      await t.pump();
       await t.tap(find.byKey(const Key('bind-approve-retry')));
       await t.pumpAndSettle();
       expect(find.byKey(const Key('approve-check')), findsOneWidget);
@@ -236,6 +272,8 @@ void main() {
     testWidgets('桌面版没相机：粘贴贴纸码', (t) async {
       await t.pumpWidget(host(RobotAddPage(api: FakeApi('guard'), site: site,
           joiner: FakeJoiner(), link: (_) => FakeLink())));
+      await t.ensureVisible(find.byKey(const Key('bind-paste')));
+      await t.pump();
       await t.tap(find.byKey(const Key('bind-paste')));
       await t.pumpAndSettle();
       await t.enterText(find.byKey(const Key('sticker-code')), sticker());
@@ -249,6 +287,8 @@ void main() {
       RobotSticker? got;
       await t.pumpWidget(host(RobotAddPage(api: FakeApi('guard'), site: site,
           joiner: FakeJoiner(), link: (s) { got = s; return link; })));
+      await t.ensureVisible(find.byKey(const Key('bind-manual')));
+      await t.pump();
       await t.tap(find.byKey(const Key('bind-manual')));
       await t.pumpAndSettle();
       await t.enterText(find.byKey(const Key('manual-serial')), 'D1M-000123');
@@ -256,14 +296,20 @@ void main() {
       await t.tap(find.byKey(const Key('manual-ok')));
       await t.pumpAndSettle();
       expect(find.byKey(const Key('bind-serial')), findsOneWidget);
+      await t.ensureVisible(find.byKey(const Key('bind-join')));
+      await t.pump();
       await t.tap(find.byKey(const Key('bind-join')));
       await t.pumpAndSettle();
       expect(got?.ssid, 'NW-000123');
+      await t.ensureVisible(find.byKey(const Key('wifi-manual')));
+      await t.pump();
       await t.tap(find.byKey(const Key('wifi-manual')));
       await t.pump();
       await t.enterText(find.byKey(const Key('wifi-manual-ssid')), 'Hidden');
       await t.enterText(find.byKey(const Key('wifi-pick-psk')), '12345678');
       await t.ensureVisible(find.byKey(const Key('wifi-pick-send')));
+      await t.ensureVisible(find.byKey(const Key('wifi-pick-send')));
+      await t.pump();
       await t.tap(find.byKey(const Key('wifi-pick-send')));
       await t.pumpAndSettle();
       expect(link.calls.take(3).last, startsWith('bind Hidden 12345678'), reason: '隐藏的 WiFi 手输名字');
@@ -273,12 +319,18 @@ void main() {
       final link = FakeLink()..nets = <Map<String, dynamic>>[];
       await t.pumpWidget(host(RobotAddPage(api: FakeApi('guard'), site: site, scanner: (_) async => sticker(),
           joiner: FakeJoiner(), link: (_) => link)));
+      await t.ensureVisible(find.byKey(const Key('bind-scan')));
+      await t.pump();
       await t.tap(find.byKey(const Key('bind-scan')));
       await t.pumpAndSettle();
+      await t.ensureVisible(find.byKey(const Key('bind-join')));
+      await t.pump();
       await t.tap(find.byKey(const Key('bind-join')));
       await t.pumpAndSettle();
       expect(find.byKey(const Key('wifi-none')), findsOneWidget);
       link.nets = <Map<String, dynamic>>[<String, dynamic>{'ssid': 'Estate', 'signal': -60, 'secured': true}];
+      await t.ensureVisible(find.byKey(const Key('wifi-rescan')));
+      await t.pump();
       await t.tap(find.byKey(const Key('wifi-rescan')));
       await t.pumpAndSettle();
       expect(find.byKey(const Key('wifi-net-Estate')), findsOneWidget);
@@ -287,6 +339,8 @@ void main() {
     testWidgets('不是机器人贴纸：说清楚', (t) async {
       await t.pumpWidget(host(RobotAddPage(api: FakeApi('guard'), site: site,
           scanner: (_) async => 'D1MAXSITE1.xx', joiner: FakeJoiner(), link: (_) => FakeLink())));
+      await t.ensureVisible(find.byKey(const Key('bind-scan')));
+      await t.pump();
       await t.tap(find.byKey(const Key('bind-scan')));
       await t.pumpAndSettle();
       expect(find.textContaining('不是有效的机器人贴纸码'), findsOneWidget);
@@ -300,19 +354,29 @@ void main() {
       var serial = 'D1M-2';
       await t.pumpWidget(host(RobotWifiPage(api: api, robotId: 'D1M-1', scanner: (_) async => sticker(serial: serial),
           joiner: FakeJoiner(), link: (_) => link, watchEvery: const Duration(milliseconds: 100))));
+      await t.ensureVisible(find.byKey(const Key('bind-scan')));
+      await t.pump();
       await t.tap(find.byKey(const Key('bind-scan')));
       await t.pumpAndSettle();
       expect(find.textContaining('不是 D1M-1'), findsOneWidget);
       serial = 'D1M-1';
+      await t.ensureVisible(find.byKey(const Key('bind-scan')));
+      await t.pump();
       await t.tap(find.byKey(const Key('bind-scan')));
       await t.pumpAndSettle();
+      await t.ensureVisible(find.byKey(const Key('wifi-join')));
+      await t.pump();
       await t.tap(find.byKey(const Key('wifi-join')));
       await t.pumpAndSettle();
       link.nets = <Map<String, dynamic>>[<String, dynamic>{'ssid': 'New', 'signal': -40, 'secured': true}];
+      await t.ensureVisible(find.byKey(const Key('wifi-rescan')));
+      await t.pump();
       await t.tap(find.byKey(const Key('wifi-rescan')));
       await t.pumpAndSettle();
       await pick(t, 'New', 'abcdefgh');
       expect(link.calls, ['scan', 'scan', 'wifi New']);
+      await t.ensureVisible(find.byKey(const Key('wifi-confirm')));
+      await t.pump();
       await t.tap(find.byKey(const Key('wifi-confirm')));
       await t.pumpAndSettle();
       expect(api.calls, contains('confirmRobotWifi D1M-1 0a1b2c3d4e5f true'));
@@ -323,6 +387,8 @@ void main() {
       await t.pumpAndSettle();
       expect(find.byKey(const Key('wifi-result')), findsOneWidget);
       expect(find.textContaining('已恢复原网络'), findsOneWidget);
+      await t.ensureVisible(find.byKey(const Key('wifi-again')));
+      await t.pump();
       await t.tap(find.byKey(const Key('wifi-again')));
       await t.pumpAndSettle();
       expect(find.byKey(const Key('wifi-join')), findsOneWidget, reason: '没换成：再连机器人、再选');
@@ -333,14 +399,20 @@ void main() {
       final link = FakeLink();
       await t.pumpWidget(host(RobotWifiPage(api: api, robotId: 'D1M-1', scanner: (_) async => sticker(),
           joiner: FakeJoiner(), link: (_) => link, watchEvery: const Duration(hours: 1))));
+      await t.ensureVisible(find.byKey(const Key('bind-scan')));
+      await t.pump();
       await t.tap(find.byKey(const Key('bind-scan')));
       await t.pumpAndSettle();
+      await t.ensureVisible(find.byKey(const Key('wifi-join')));
+      await t.pump();
       await t.tap(find.byKey(const Key('wifi-join')));
       await t.pumpAndSettle();
       await pick(t, 'Estate', '12345678');
       link.st = <String, dynamic>{...link.st,
         'change_result': <String, dynamic>{'id': '0a1b2c3d4e5f', 'result': 'expired'}};
       await t.ensureVisible(find.byKey(const Key('wifi-ask-robot')));
+      await t.ensureVisible(find.byKey(const Key('wifi-ask-robot')));
+      await t.pump();
       await t.tap(find.byKey(const Key('wifi-ask-robot')));
       await t.pumpAndSettle();
       expect(find.byKey(const Key('wifi-result')), findsOneWidget);
@@ -352,6 +424,8 @@ void main() {
       await t.pumpWidget(host(EngineerUnbindPage(scanner: (_) async => sticker(), joiner: FakeJoiner(),
           link: (_) => link)));
       await t.enterText(find.byKey(const Key('unbind-token')), 'D1MAXUNBIND1.a.b');
+      await t.ensureVisible(find.byKey(const Key('bind-scan')));
+      await t.pump();
       await t.tap(find.byKey(const Key('bind-scan')));
       await t.pumpAndSettle();
       await t.ensureVisible(find.byKey(const Key('unbind-send')));
@@ -371,6 +445,8 @@ void main() {
       await t.pumpWidget(host(SiteRobotsPage(api: api, title: 'S')));
       await t.pumpAndSettle();
       expect(find.byKey(const Key('bind-req-D1M-7')), findsOneWidget);
+      await t.ensureVisible(find.byKey(const Key('bind-reject-D1M-7')));
+      await t.pump();
       await t.tap(find.byKey(const Key('bind-reject-D1M-7')));
       await t.pumpAndSettle();
       expect(api.calls, contains('rejectBind ab12'));
@@ -405,6 +481,8 @@ void main() {
       await t.pumpWidget(host(SiteRobotPage(api: api, robotId: 'A')));
       await t.pumpAndSettle();
       expect(find.textContaining('正在尝试 WiFi「New」'), findsOneWidget);
+      await t.ensureVisible(find.byKey(const Key('btn-wifi-approve')));
+      await t.pump();
       await t.tap(find.byKey(const Key('btn-wifi-approve')));
       await t.pumpAndSettle();
       expect(api.calls, contains('confirmRobotWifi A 0a1b2c3d4e5f true'));

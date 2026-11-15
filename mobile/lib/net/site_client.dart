@@ -845,6 +845,15 @@ abstract class SiteApi {
   /// 解除叫停（W00c5e）：之后站点才重新给这只狗派单。管理员、保安。
   Future<Map<String, dynamic>> resume(String robotId);
 
+  /// App V2 机器人设置（跟网页同一套接口）：改显示名（管理员）。
+  Future<Map<String, dynamic>> renameRobot(String robotId, String name);
+
+  /// 只许手动派 / 接自动派遣（W33）：设成只许手动保安也行，接回自动派遣要管理员。
+  Future<Map<String, dynamic>> setManualOnly(String robotId, bool on);
+
+  /// 解绑（管理员，要再输一次密码）：站点吊销它的登记，录像留着。
+  Future<Map<String, dynamic>> revokeRobot(String robotId, String password);
+
   /// 监护心跳（W00c6i）：[action] 是 `renew`（开着的时候每秒一次）或 `release`；[session] 每次打开
   /// 开关新起一个，[seq] 在会话里单调递增（狗据此不认迟到的旧心跳）。管理员、保安。**短超时**：
   /// 慢了就当这一次没成，下一次再来。
@@ -2009,6 +2018,15 @@ class SiteClient implements SiteApi {
   @override
   Future<Map<String, dynamic>> resume(String robotId) async => _map(await _send(
       'POST', '/api/robots/${Uri.encodeComponent(robotId)}/resume', <String, dynamic>{}));
+  @override
+  Future<Map<String, dynamic>> renameRobot(String robotId, String name) async => _map(await _send(
+      'POST', '/api/admin/robots/${Uri.encodeComponent(robotId)}/name', <String, dynamic>{'name': name}));
+  @override
+  Future<Map<String, dynamic>> setManualOnly(String robotId, bool on) async => _map(await _send(
+      'POST', '/api/robots/${Uri.encodeComponent(robotId)}/service', <String, dynamic>{'manual_only': on}));
+  @override
+  Future<Map<String, dynamic>> revokeRobot(String robotId, String password) async => _map(await _send('POST',
+      '/api/admin/robots/${Uri.encodeComponent(robotId)}/revoke', <String, dynamic>{'confirm_password': password}));
   @override
   Future<Map<String, dynamic>> supervise(String robotId, String action,
           {required String session, required int seq}) async =>
