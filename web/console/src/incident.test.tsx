@@ -288,7 +288,7 @@ describe("第 8 期:请求支援", () => {
 });
 
 describe("外审 1(新网站)", () => {
-  it("#1 点开一条 P2 后来了新的 P1:中央切到新的 P1,不停在旧的那件", () => {
+  it("#1 点开一条 P2 后来了新的 P1:中央切到新的 P1,不停在旧的那件;只是确认了别的一条、顺序变了不跳", () => {
     const a2 = alert({ key: "k2", kind: "stuck", audience: "help", level: "P2", title: "B 被挡住", first_ms: 20 });
     const r = render(<MonitorPage units={[unit("A", "patrolling")]} alerts={[a2]} now={1000} role="guard" me="gina"
       say={() => {}} refresh={async () => {}} onZoom={() => {}} />);
@@ -297,6 +297,13 @@ describe("外审 1(新网站)", () => {
     r.rerender(<MonitorPage units={[unit("A", "patrolling")]} alerts={[a1, a2]} now={1000} role="guard" me="gina"
       say={() => {}} refresh={async () => {}} onZoom={() => {}} />);
     expect(r.container.querySelector(".inc")!.getAttribute("data-key")).toBe("k1");
+    // 外审 2 #1:明确点开 k2 后,k1 被接手(acked)→ 排序把没确认的 k2 排到前面,这不是新告警,中央留在 k2
+    fireEvent.click(r.container.querySelectorAll(".mon-qrow button")[1]);   // 第二行 = 设备那一组里的 k2
+    const k2First = r.container.querySelector(".inc")!.getAttribute("data-key");
+    expect(k2First).toBe("k2");
+    r.rerender(<MonitorPage units={[unit("A", "patrolling")]} alerts={[{ ...a1, acked_by: "gina", acked_ms: 900 }, a2]} now={1001} role="guard" me="gina"
+      say={() => {}} refresh={async () => {}} onZoom={() => {}} />);
+    expect(r.container.querySelector(".inc")!.getAttribute("data-key")).toBe("k2");
   });
 
   it("#4 设备求助(被挡住)派人去看:最近机器人接口排除报警的那台自己", async () => {

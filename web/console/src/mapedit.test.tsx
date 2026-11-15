@@ -636,3 +636,25 @@ describe("用户 11-15:清噪点是编辑器里的一个工具", () => {
     expect(posted.find((p) => p.url.endsWith("/denoise"))!.body).toEqual({ digest: "abc", skip: [1] });
   });
 });
+
+describe("外审 2 #4:看不到地图不许清噪点", () => {
+  it("预览元数据拿不到:「清掉」灰着、说预览没出来", async () => {
+    setFetch(((url: string, init?: RequestInit) => {
+      if (init?.method === "POST") return Promise.resolve(json({}));
+      if (url.endsWith("/preview")) return Promise.resolve(json({ error: "boom" }, 500));
+      if (url.endsWith("/noise")) return Promise.resolve(json({ digest: "abc", res: 0.05, max_m2: 0.2, ring_m: 0.6, specks: [{ id: 1, x: 1, y: 2, px: 3 }] }));
+      if (url.endsWith("/history")) return Promise.resolve(json({ versions: [] }));
+      if (url.endsWith("/zones")) return Promise.resolve(json({ revision: 1, zones: [] }));
+      if (url.endsWith("/display")) return Promise.resolve(json({ rotate_deg: null, basemap: null, regions: [], terrain: [] }));
+      if (url.endsWith("/draft")) return Promise.resolve(json({ draft: null }));
+      return Promise.resolve(json({}, 404));
+    }) as typeof fetch);
+    const { container: c } = render(<MapEditPage say={() => {}} target={{ map_id: "home", version: "3" }} Canvas={Fake} />);
+    await waitFor(() => expect(c.querySelector('[data-tool="noise"]')).not.toBeNull());
+    fireEvent.click(c.querySelector('[data-tool="noise"]')!);
+    await waitFor(() => expect(c.querySelector("[data-denoise]")).not.toBeNull());
+    await new Promise((r) => setTimeout(r, 30));
+    expect((c.querySelector("[data-denoise]") as HTMLButtonElement).disabled).toBe(true);
+    expect(c.querySelector("[data-noise-blind]")).not.toBeNull();
+  });
+});

@@ -216,6 +216,10 @@ _TRACK = re.compile(r"^/api/robots/([^/]{1,64})/track$")
 TEMP_ROUTE_MAX = 20
 #: 轨迹一次最多问多长(毫秒)。
 TRACK_SPAN_MAX_MS = 86_400_000
+#: 普通手动 goto 的出发线(跟机器人 ``nexwar_agent.engine.preflight.departure_line_pct`` /
+#: ``homing.ReturnParams`` 一样的数:站点不装 nexwar_agent,这里抄一份;改那边记得改这边)。
+GOTO_RETURN_PCT, GOTO_ABORT_PCT, GOTO_SLACK = 25.0, 15.0, 1.5
+GOTO_SPEED, GOTO_DRAIN, GOTO_DETOUR, GOTO_FLOOR_PCT = 0.4, 22.3, 1.4, 3.0
 _ROBOT = re.compile(
     r"^/api/robots/([^/]+)"
     r"(?:/(goto|abort|patrol|patrol-plan|goto-plan|standby|standby/return|standby/here|intercept/here"
@@ -1258,20 +1262,13 @@ class _Handler(TlsHandlerMixin):
                 # 谁几点叫的人。外审 1 #2:查、起、记在同一步里(loop 串行),只合进新字段;
                 # 叫过的不再起第二条;关了的 409
                 def backup():
-                    orig = self.site.alerts.book.get(key)
-                    if orig is None:
-                        raise HttpError(404, "没有这条告警")
-                    if orig.resolved_ms is not None:
-                        raise HttpError(409, "这条告警已经关闭,不用再叫人")
-                    if orig.context.get("backup_by"):
-                        return orig
-                    now = self.site._now()
-                    self.site.alerts.raise_alert(
-                        kind="backup_requested", robot=orig.robot, title=f"请求支援：{orig.title}",
-                        detail=f"{user} 正在处理，请求支援", context={"for": key, "by": str(user)},
-                        merge=False)
-                    return self.site.alerts.amend(
-                        key, context={"backup_by": str(user), "backup_ms": now}) or orig
+                    from nexwar_site.alerts import AlertNotFound
+                    try:
+                        return self.site.alerts.backup(key, who=str(user))
+                    except AlertNotFound:
+                        raise HttpError(404, "没有这条告警") from None
+                    except ValueError as exc:
+                        raise HttpError(409, str(exc)) from None
                 a = self.site.loop.call(lambda: _sync(backup))
             else:
                 # W44:结论(确认有人 / 误报 / 处理好了);不给 = 空(老客户端照旧能用),别的值 400
@@ -1819,7 +1816,6 @@ class _Handler(TlsHandlerMixin):
             raise HttpError(400, "要 x、y(数)")
         map_id = (q.get("map_id") or [""])[0]
         version = (q.get("map_version") or [""])[0]
-        from nexwar_site import energy
         from nexwar_site.dispatcher import battery_pct
         fresh_fn = getattr(self.site.dispatcher, "_fresh", None)
         pct = battery_pct(c, fresh=bool(fresh_fn(c)) if fresh_fn else True)
@@ -1833,30 +1829,33 @@ class _Handler(TlsHandlerMixin):
             return self._send_json(200, nothing)
         here = (float(pose.x), float(pose.y))
         dist = math.hypot(here[0] - x, here[1] - y)
-        go = energy.walk_s(dist)
-        back_s: float | None = None
+        # 外审 2 #3:网页派的是普通手动 goto,机器人上的出发线是 preflight.departure_line_pct:
+        #   max(返航线 25, 中止线 15) + 全程耗电 × 1.5,全程 = 现在位置 → 目标 → 回原点
+        #   (直线后端:沿来路回到出发点再回原点;会规划的:目标直线回原点);
+        #   耗电 = 米 × 1.4 / 0.4 m/s ÷ 3600 × 22.3,最少 3%。没原点算不出线 —— 机器人也不会放行(「不确定不放行」),
+        #   这里回 enough=null。
         homes_fn = getattr(self.site.incidents, "homes", None) if self.site.incidents else None
-        homes = []
+        homes: list[tuple[float, float]] = []
         if homes_fn is not None and map_id:
             try:
-                homes = list(homes_fn(robot_id, map_id, version) or [])
+                homes = [(float(hx), float(hy))
+                         for hx, hy in (homes_fn(robot_id, map_id, version) or [])]
             except Exception:
                 log.exception("%s 回哪查不到", robot_id)
-        if homes:
-            caps = c.capabilities.tasks.get("goto", {}) if c.capabilities else {}
-            retrace = str(caps.get("path", "straight")) != "planned"
-            back = 0.0
-            for hx, hy in homes:
-                m = ((dist + math.hypot(here[0] - hx, here[1] - hy)) if retrace
-                     else math.hypot(x - hx, y - hy))
-                back = max(back, m)
-            back_s = energy.walk_s(back)
-        line = energy.alarm_line(go, back_s)
-        total_s = go + (back_s if back_s is not None else go)
-        cost = max(energy.COST_FLOOR_PCT, energy.drain_pct(total_s) * energy.RETURN_FACTOR)
+        if not homes:
+            return self._send_json(200, {**nothing, "dist_m": round(dist, 1)})
+        caps = c.capabilities.tasks.get("goto", {}) if c.capabilities else {}
+        retrace = str(caps.get("path", "straight")) != "planned"
+        total = 0.0
+        for hx, hy in homes:
+            m = dist + (dist + math.hypot(here[0] - hx, here[1] - hy) if retrace
+                        else math.hypot(x - hx, y - hy))
+            total = max(total, m)
+        cost = max(GOTO_FLOOR_PCT, total * GOTO_DETOUR / GOTO_SPEED / 3600.0 * GOTO_DRAIN)
+        line = max(GOTO_RETURN_PCT, GOTO_ABORT_PCT) + cost * GOTO_SLACK
         return self._send_json(200, {"battery_pct": pct, "dist_m": round(dist, 1),
                                      "cost_pct": round(cost, 1), "line_pct": round(line, 1),
-                                     "enough": None if pct is None else bool(pct >= line)})
+                                     "enough": None if pct is None else bool(pct > line)})
 
     def _charging_spans(self) -> None:
         """redesign 第 8 期:哪台几点到几点在充(``charge_log`` 流水 → 时段;没结束的 ``to_ms``

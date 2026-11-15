@@ -11,7 +11,9 @@ import { hm, nameOf } from "./data";
 import { refusalText, t, type Key } from "./i18n";
 import { locText, type UnitInfo } from "./live";
 import { lapText, LoopsSelect } from "./loops";
-import { canDispatch, canFindPose, canPatrol, canTeleop, forGuard, isOwnerLike, robotCams, type Alert } from "./model";
+import { canDispatch, canFindPose, canPatrol, canTeleop, forGuard, isOwnerLike, robotCams, robotMap, type Alert } from "./model";
+import { MapCanvas } from "./mapcanvas";
+import { type PreviewMeta } from "./mapview";
 import { recentActivity } from "./shifttl";
 import { notAccepted, type CommandReply } from "./posepick";
 import { CLIP_KEY, langName, POSTURE_KEY, PresetEditor, STROBE_S, taskWhat, type Posture, type RobotCard, type VoicePreset } from "./robotspage";
@@ -116,7 +118,11 @@ export function RobotControl(props: {
       </header>}
       <div class="rc-body">
         <div class="rc-main">
-          <Video u={u} now={props.now} deter={dispatch ? r.deter ?? null : null} busy={busy} off={off} send={send} post={post} name={name} />
+          {/* 用户 11-15:画面占 2/3、右边 1/3 是这台在地图上的位置 */}
+          <div class="rc-top">
+            <Video u={u} now={props.now} deter={dispatch ? r.deter ?? null : null} busy={busy} off={off} send={send} post={post} name={name} />
+            <RobotMiniMap u={u} />
+          </div>
           {dispatch && r.deter ? <Voice r={r} name={name} busy={busy} off={off} send={send} post={post} admin={isOwnerLike(props.role)} say={props.say} />
             : r.deter && <p class="rc-guard-only muted">{t("rcGuardOnly")}</p>}
         </div>
@@ -208,6 +214,40 @@ export function RobotControl(props: {
   );
 }
 
+/** 用户 11-15:操作页右上角的小地图 —— 这台报的那张图 + 它现在的位置和朝向。 */
+function RobotMiniMap({ u }: { u: UnitInfo }) {
+  const m = robotMap(u.robot);
+  const key = m ? `${m.map_id}/${m.version}` : "";
+  const [got, setGot] = useState<{ key: string; meta: PreviewMeta | null; failed?: boolean }>({ key: "", meta: null });
+  useEffect(() => {
+    if (!m) return;
+    let live = true;
+    api<PreviewMeta>("GET", `/api/maps/${enc(m.map_id)}/${enc(m.version)}/preview`)
+      .then((meta) => live && setGot({ key, meta })).catch(() => live && setGot({ key, meta: null, failed: true }));
+    return () => { live = false; };
+  }, [key]);
+  const pose = u.robot.loc?.pose ?? null;
+  const meta = got.key === key ? got.meta : null;
+  return (
+    <section class="rc-map" aria-label={t("rcMapH")}>
+      <h3 class="lbl">{t("rcMapH")}{m && <span class="muted"> · {m.map_id} v{m.version}</span>}</h3>
+      {!m ? <p class="muted small">{t("rcMapNone")}</p>
+        : !meta ? <p class="muted small">{got.failed && got.key === key ? t("loadRetry") : t("rcMapLoading")}</p> : (
+          <MapCanvas meta={meta} raster={`/api/maps/${enc(m.map_id)}/${enc(m.version)}/preview.png`} label={t("rcMapH")}
+            marks={(sc) => {
+              if (!pose) return null;
+              const [sx, sy] = sc.map(pose.x, pose.y);
+              const yaw = pose.yaw ?? 0;
+              return <g class="rc-robot-mark" data-robot-mark="1">
+                <line x1={sx} y1={sy} x2={sx + 18 * Math.cos(yaw)} y2={sy - 18 * Math.sin(yaw)} />
+                <circle cx={sx} cy={sy} r={7} />
+              </g>;
+            }} />
+        )}
+    </section>
+  );
+}
+
 /** 从实时数据(``/api/robots`` 的一台)推出控制要用的:在线、叫停、任务号、原点、第几圈、地图、能换的姿态、警示能力。 */
 export function cardFromUnit(u: UnitInfo): RobotCard {
   const rb = u.robot as UnitInfo["robot"] & { lap?: RobotCard["lap"]; running?: { map_id?: string | null; map_version?: string | null } | null };
@@ -242,11 +282,13 @@ type Post = (a: string, body?: Record<string, unknown>) => () => Promise<Reply>;
 function Video({ u, now, deter, busy, off, send, post, name }: {
   u: UnitInfo; now: number; deter: RobotCard["deter"] | null; busy: boolean; off: boolean; send: Send; post: Post; name: string;
 }) {
-  const cams = robotCams(u.robot);
-  const [cam, setCam] = useState(cams[0] ?? "front");
+  // 用户 11-15:至少前 / 后 / 热成像三路都列出来;这台没报的那一路画面上写明,不藏
+  const has = robotCams(u.robot);
+  const cams = [...(["front", "back", "thermal"] as const), ...has.filter((c) => c === "payload")] as ("front" | "back" | "thermal" | "payload")[];
+  const [cam, setCam] = useState<typeof cams[number]>("front");
   const [aim, setAim] = useState<[number, number]>([0, 0]);
   const id = u.robot.robot_id;
-  useEffect(() => { setCam(cams[0] ?? "front"); setAim([0, 0]); }, [id]);
+  useEffect(() => { setCam("front"); setAim([0, 0]); }, [id]);
   const ptz = !!deter?.outputs.includes("ptz");
   const wiper = !!deter?.outputs.includes("wiper");
   // 竞品云台没有回读角度:按「上次按到哪」算
@@ -267,7 +309,8 @@ function Video({ u, now, deter, busy, off, send, post, name }: {
         {ptz && <span class="rc-ptz-read mono push">{t("rcPtzRead", { pan: aim[0], tilt: aim[1] })}</span>}
       </div>
       <div class="rc-video-well">
-        <CameraWell key={`${id}:${cam}`} robot={id} cam={cam} now={now} variant="main" />
+        {has.includes(cam) ? <CameraWell key={`${id}:${cam}`} robot={id} cam={cam} now={now} variant="main" />
+          : <div class="rc-nocam" data-nocam={cam}>{t("rcNoCam", { cam: t(cam) })}</div>}
         {ptz && (
           <div class="rc-ptz" aria-label={t("rdPtz")}>
             <button type="button" class="btn" data-ptz="up" aria-label={t("rdPtzUp")} disabled={dis} onClick={() => turn(0, -TILT_STEP)}><Arrow d="up" /></button>

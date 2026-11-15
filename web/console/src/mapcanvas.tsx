@@ -122,6 +122,8 @@ export function MapCanvas(props: {
   drawing?: boolean;
   /** 点了图(不是拖):点的那一处的预览像素。 */
   onPick?: (px: number, py: number) => void;
+  /** 底图(栅格 / 平面图)真的加载出来了没有(外审 2 #4:看不到图不许清噪点)。 */
+  onRaster?: (ok: boolean) => void;
   /** 第 2 轮 P1-53:给了就按住拖出方框(起点、当前点,预览像素;松手 done),不平移地图。 */
   onDragRect?: (a: [number, number], b: [number, number], done: boolean) => void;
   /** 浮在地图上的东西(比如「去这里」小卡片),放在图框里、不占图下面的高。 */
@@ -249,7 +251,8 @@ export function MapCanvas(props: {
             {plan && scheme.value === "dark" && <rect x="0" y="0" width={meta.width} height={meta.height} fill={rasterShade(SHADE.raster.unknown, "dark")} data-plan-backdrop="1" />}
             <image key={plan ? plan.url : props.raster} href={plan ? plan.url : props.raster} x="0" y="0" width={meta.width} height={meta.height}
               preserveAspectRatio="none" class={plan ? "mapimg plan" : "mapimg"}
-              onError={plan ? () => setPlanBad(plan.url) : undefined} />
+              onLoad={() => props.onRaster?.(true)}
+              onError={() => { props.onRaster?.(false); if (plan) setPlanBad(plan.url); }} />
             {/* 虚拟墙(2026-10-15)画成一条粗线(画的那条),不画站点算的那条窄带子 */}
             {zones.map((z) => (z.kind === "nogo" || z.kind === "slow" || z.kind === "erase" || z.kind === "ignore") && !z.wall && (
               <polygon key={z.id} points={polyAttr(meta, z.polygon)}
