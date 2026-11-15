@@ -247,3 +247,34 @@ describe("单台机器人控制 · 经理、只读", () => {
     expect(Array.from(c.querySelectorAll("button")).map((b) => b.textContent).filter((x) => !["Front", "Rear", "Thermal"].includes(x ?? ""))).toEqual(["Site view"]);
   });
 });
+
+describe("单台机器人控制 · 从老机器人页搬过来的(第六期)", () => {
+  it("W8-02 / UIUX-022:画在别的地图版本上的路线选不了,原因整句写在下拉外面", async () => {
+    card = { ...CARD, map: { id: "m1", version: "2", match: true } };
+    const c = show("guard", idle());
+    await waitFor(() => expect(c.querySelector("[data-route-why]")).not.toBeNull());
+    expect(c.querySelector("[data-route-why]")!.textContent).toContain("guard-1");
+    expect((c.querySelector('select[name="route"] option[value="guard-1"]') as HTMLOptionElement).disabled).toBe(true);
+  });
+
+  it("第 2 轮 N2:没原点、没待命点 —— 写为什么灰着;管理员给去处理的链接,保安只有文字", async () => {
+    card = { ...CARD, home_set: false, standby_set: false };
+    const c = show("admin", idle());
+    await waitFor(() => expect(c.querySelector("[data-setup-why]")).not.toBeNull());
+    expect(c.querySelector('[data-setup-why] a[href="#/admin/localization"]')).not.toBeNull();
+    expect(c.querySelector('[data-setup-why] a[href="#/admin/layout?tab=standby"]')).not.toBeNull();
+    cleanup();
+    const g = show("guard", idle());
+    await waitFor(() => expect(g.querySelector("[data-setup-why]")).not.toBeNull());
+    expect(g.querySelector("[data-setup-why] a")).toBeNull();
+  });
+
+  it("嵌在现场设置 → 机器人里:没有自己的页头、没有「派去看一眼」,右栏末尾接别的内容", async () => {
+    const c = render(<RobotControl u={idle()} role="admin" now={NOW} alerts={[]} patrols={[]} since={NOW - 3_600_000} say={vi.fn()}
+      refresh={vi.fn(async () => {})} onBack={() => {}} embedded sideExtra={<p data-extra="1">x</p>} />).container;
+    await waitFor(() => expect(c.querySelector(".rc-dispatch")).not.toBeNull());
+    expect(c.querySelector(".rc-head")).toBeNull();
+    expect(c.querySelector(".rc-look")).toBeNull();
+    expect(c.querySelector(".rc-side")!.lastElementChild!.getAttribute("data-extra")).toBe("1");
+  });
+});

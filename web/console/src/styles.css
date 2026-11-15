@@ -938,27 +938,7 @@ p.warn { color: var(--c-text); background: var(--c-warningSoft); padding: 8px 12
 @media (max-width: 900px) { .users-split { grid-template-columns: minmax(0, 1fr); } }
 
 /* W44 第二期:机器人页 */
-.robots { display: flex; flex-direction: column; gap: var(--sp-3); }
-.robots .lead { margin: 0; }
-/* 详情面板在右边一栏(用户 11-03 定:位置不动,只改里面的排版);页面滚动时停在原位 */
-.robots-split { display: grid; grid-template-columns: minmax(0, 1fr) 460px; gap: var(--sp-4); align-items: start; }
-.robots-split > .robot-detail { position: sticky; top: 72px; max-height: calc(100vh - 88px); overflow-y: auto; }
-/* W60 机器人卡片:第一层名字、状态、在做什么、电量;第二层定位、网络、今天几趟;出毛病才多一条琥珀色提示 */
-.robot-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: var(--sp-4); }
-.robot-card { display: flex; flex-direction: column; align-items: stretch; gap: var(--sp-3); padding: 18px 20px; border: 1px solid var(--c-outline);
-  border-radius: var(--r-r12); background: var(--c-surface); color: var(--c-text); text-align: left; cursor: pointer; font: inherit; }
-.robot-card:hover { border-color: var(--c-textMuted); }
-.robot-card.on { border-color: var(--c-brand); box-shadow: 0 0 0 1px var(--c-brand); }
-.robot-card.warn { border-color: var(--c-warning); }
-.fleet-head { display: flex; align-items: baseline; gap: var(--sp-2); }
-.robot-name { font-family: var(--font-display); font-size: 22px; line-height: 28px; font-weight: 600; }
-.fleet-state { margin-left: auto; }
-.fleet-doing { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2) var(--sp-3); font-size: 15px; font-weight: 500; }
-.fleet-batt { display: grid; grid-template-columns: auto 1fr; align-items: baseline; gap: var(--sp-2); }
-.fleet-pct { justify-self: end; font-size: 20px; font-weight: 600; }
-.fleet-bar { grid-column: 1 / -1; height: 6px; border-radius: var(--r-r4); background: var(--c-surfaceVariant); overflow: hidden; }
-.fleet-bar i { display: block; height: 6px; border-radius: var(--r-r4); background: var(--c-textSecondary); }
-.fleet-warn { display: flex; align-items: center; gap: var(--sp-2); padding: 8px 10px; border-radius: var(--r-r8); background: var(--c-warningSoft); color: var(--c-text); font-size: 14px; }
+/* 机器人页(第六期 R-A / R-A2):老的 .robots-split / 卡片网格换成左栏列表 + 右边操作 / 设置,见文件末 .rb */
 .fleet-warn .shape.P2 { fill: var(--c-warning); }
 .fleet-facts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--sp-2); padding-top: 10px; border-top: 1px solid var(--c-outline); font-size: 14px; }
 .fleet-facts > span { display: flex; flex-direction: column; min-width: 0; }
@@ -2321,4 +2301,87 @@ input[type="checkbox"], input[type="radio"] { width: 18px; height: 18px; }
 @media (max-width: 760px) {
   .sp-head { flex-wrap: wrap; padding: 12px 16px; }
   .sp-list > li { flex-wrap: wrap; }
+}
+
+/* 第六期:现场设置 → 机器人(R-A / R-A2 / M-robot) */
+.rb { min-height: calc(100vh - 60px); }
+.rb-grid { flex: 1; display: grid; grid-template-columns: 248px minmax(0, 1fr); min-height: 0; }
+.rb-list { display: flex; flex-direction: column; border-right: 1px solid var(--c-outline); min-width: 0; }
+.rb-listhead { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-3); padding: 14px 16px; }
+.rb-listhead h1 { margin: 0; font-size: 20px; line-height: 28px; }
+.rb-listhead .btn { min-width: 64px; justify-content: center; }
+.rb .robot-cards { display: flex; flex-direction: column; }
+.rb .robot-card { display: grid; grid-template-columns: 20px minmax(0, 1fr) auto; grid-template-areas: "s n p" ". d d" ". w w"; align-items: center;
+  gap: 2px var(--sp-2); width: 100%; padding: 12px 16px; border: 0; border-top: 1px solid var(--c-outline); border-left: 2px solid transparent;
+  background: var(--c-surface); color: var(--c-text); text-align: left; cursor: pointer; font: inherit; }
+.rb .robot-card:hover { background: var(--c-surfaceVariant); }
+.rb .robot-card.on { border-left-color: var(--c-primary); background: var(--c-surfaceVariant); }
+.rb .robot-card > .sign { grid-area: s; }
+.rb .rb-name { grid-area: n; display: flex; align-items: baseline; gap: var(--sp-2); min-width: 0; }
+.rb .rb-name b { font-size: 15px; }
+.rb .fleet-pct { grid-area: p; font-size: 14px; font-weight: 600; }
+.rb .fleet-doing { grid-area: d; display: block; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rb .fleet-warn { grid-area: w; display: block; padding: 0; border: 0; background: none; font-size: 13px; color: var(--c-warning); font-weight: 600; }
+.rb-enrol { margin-top: auto; padding: 14px 16px; border-top: 1px solid var(--c-outline); }
+.rb-enrol h2 { display: flex; align-items: center; gap: var(--sp-2); margin: 0 0 4px; font-size: 15px; }
+.rb-enrol ul { display: flex; flex-direction: column; gap: var(--sp-3); }
+.rb-enrol .bind-req { display: flex; flex-direction: column; gap: var(--sp-2); border: 0; padding: 0; font-size: 13px; }
+.rb-row { display: flex; flex-wrap: wrap; gap: var(--sp-2); }
+.rb-row .btn { flex: 1; min-width: 96px; justify-content: center; }
+.rb-ask { display: flex; flex-direction: column; gap: var(--sp-2); padding: 10px 12px; border: 1px solid var(--c-outline); }
+.rb-ask p { margin: 0; }
+.rb-main { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+.rb-head { display: flex; align-items: center; flex-wrap: wrap; gap: var(--sp-3) var(--sp-4); padding: 12px 24px; border-bottom: 1px solid var(--c-outline); }
+.rb-head h2 { margin: 0; font-size: 26px; line-height: 32px; }
+.rb-sub { flex: 1; min-width: 200px; font-size: 14px; }
+.rb-views button { min-width: 88px; }
+.rb-tag { display: inline-flex; align-items: center; gap: var(--sp-2); padding: 2px 8px; font-size: 13px; font-weight: 600; border: 1px solid var(--c-outline); }
+.rb-tag.ok { color: var(--c-success); }
+.rb-tag.warn { color: var(--c-warning); background: var(--c-warningSoft); border-color: var(--c-warningFill); }
+.rb-tag.bad { color: var(--c-error); }
+.rb-tag.idle { color: var(--c-textSecondary); }
+.rb-main .rc { flex: 1; }
+.rb-main .rc-body { height: calc(100vh - 60px - 57px); grid-template-columns: minmax(0, 1fr) 340px; }
+.rb-kv { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: var(--sp-2) var(--sp-3); margin: 0; font-size: 13px; }
+.rb-kv dt { color: var(--c-textSecondary); }
+.rb-kv dd { margin: 0; overflow-wrap: anywhere; }
+.rb-off { display: flex; flex-direction: column; }
+.rb-off .rb-health { max-width: 520px; border-top: 0; }
+/* 设置视图 */
+.rb-set { flex: 1; display: grid; grid-template-columns: minmax(0, 1fr) 300px; min-height: 0; }
+.rb-setmain { min-width: 0; border-right: 1px solid var(--c-outline); padding-bottom: 24px; }
+.rb-setside { min-width: 0; }
+.rb-setside .rd-sec { padding: 16px 20px; }
+.rb-setside .rd-sec:first-child { border-top: 0; }
+.rb-setbar { display: flex; flex-wrap: wrap; align-items: flex-end; gap: var(--sp-4) var(--sp-6); padding: 14px 20px; border-bottom: 1px solid var(--c-outline); }
+.rb-namef { display: grid; grid-template-columns: auto minmax(160px, 220px) auto; grid-template-areas: "l i b" ". c c"; align-items: center; gap: 2px var(--sp-2); }
+.rb-namef label { grid-area: l; }
+.rb-namef input { grid-area: i; height: var(--ctl-md); padding: 0 10px; border: 1px solid var(--c-outline); border-radius: var(--r-r2); background: var(--c-surface); color: var(--c-text); font: inherit; }
+.rb-namef button { grid-area: b; }
+.rb-namef small { grid-area: c; }
+.rb-dispatch { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2) var(--sp-3); }
+.rb-sum { margin: 0; padding: 14px 20px 8px; font-size: 17px; font-weight: 400; }
+.rb-checks { list-style: none; margin: 0; padding: 0; }
+.rb-check { display: grid; grid-template-columns: 20px 140px minmax(0, 1fr) auto; align-items: center; gap: var(--sp-3); padding: 12px 20px; border-top: 1px solid var(--c-outline); }
+.rb-check b { font-size: 14px; }
+.rb-cval { display: flex; flex-direction: column; gap: 2px; min-width: 0; font-size: 14px; }
+.rb-cval small { font-size: 12px; }
+.rb-cact { display: flex; gap: var(--sp-2); justify-content: flex-end; }
+.rb-cact .btn, .rb-col .btn { min-width: 168px; justify-content: center; }
+.rb-col { display: flex; flex-direction: column; gap: var(--sp-2); }
+.rb-okbar { display: flex; align-items: center; gap: var(--sp-3); padding: 10px 20px; border-top: 1px solid var(--c-outline); background: var(--c-surfaceVariant); font-size: 13px; }
+.linkbtn { border: 0; background: none; padding: 0; color: var(--c-text); font: inherit; font-weight: 600; text-decoration: underline; cursor: pointer; }
+.rb-ops .robot-ops { display: flex; flex-direction: column; gap: var(--sp-3); }
+.rb-removal .btn { align-self: flex-start; min-width: 168px; justify-content: center; }
+@media (max-width: 1279px) {
+  .rb-grid { grid-template-columns: 208px minmax(0, 1fr); }
+  .rb-set { grid-template-columns: minmax(0, 1fr); }
+  .rb-setmain { border-right: 0; }
+  .rb-main .rc-body { height: auto; }
+}
+@media (max-width: 760px) {
+  .rb-grid { grid-template-columns: minmax(0, 1fr); }
+  .rb-list { border-right: 0; border-bottom: 1px solid var(--c-outline); }
+  .rb-check { grid-template-columns: 20px minmax(0, 1fr); }
+  .rb-check .rb-cval, .rb-check .rb-cact { grid-column: 2; justify-content: flex-start; }
 }

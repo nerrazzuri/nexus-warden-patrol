@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
-// W44 第二期 机器人页(设计 §5.1「机器人」):卡片(名字、在线、电量、今天几趟、毛病)、详情(改名、版本、最近的毛病、
-// 手动 / 自动派、重出开通码、解绑要确认再输密码)、添加;起的名字保安页也用。
+// 现场设置 → 机器人(redesign 第六期 R-A / R-A2 / M-robot):左栏列表 + 加入申请;右边选中那一台「操作 / 设置」。
+// 操作 = 单台机器人控制(robotctl.test 测按钮)+ 健康状况;设置 = 名字、派单方式、检查单、排查与维护、告警记录、解绑。
 import { cleanup, fireEvent, render, waitFor } from "@testing-library/preact";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { setFetch } from "./api";
@@ -67,25 +67,38 @@ afterEach(() => {
   robotNames.value = {};
 });
 
-const page = () => render(<RobotsPage say={(s) => said.push(s)} now={NOW} />);
+const page = (o: { units?: UnitInfo[]; role?: string; readOnly?: boolean } = {}) =>
+  render(<RobotsPage say={(s) => said.push(s)} now={NOW} units={o.units} role={o.role} readOnly={o.readOnly} />);
 const cardOf = (c: Element, id: string) => c.querySelector(`.robot-card[data-robot="${id}"]`)!;
 const btn = (root: Element, text: string) => Array.from(root.querySelectorAll("button")).find((b) => b.textContent?.trim() === text) as HTMLButtonElement;
+/** 选一台、切到「设置」。 */
+const settings = async (c: Element, id: string) => {
+  await waitFor(() => expect(cardOf(c, id)).not.toBeNull());
+  fireEvent.click(cardOf(c, id));
+  await waitFor(() => expect(c.querySelector(".rb-head h2")!.textContent).toBe(id));
+  fireEvent.click(btn(c.querySelector(".rb-head")!, "设置"));
+  return c.querySelector(".robot-detail")!;
+};
+const unitOf = (id: string, o: Record<string, unknown> = {}) => ({ robot: { robot_id: id, active: true, fresh: true, revoked: false, held: null,
+  status: { online: true, last_seen: NOW / 1000 - 2, ready: { motion: true }, task: null }, capabilities: { tasks: {} } },
+  state: "idle", battery: 76, task: "", ...o } as unknown as UnitInfo);
 
-describe("机器人页", () => {
-  it("卡片:名字、电量、今天几趟、毛病", async () => {
+describe("机器人页 · 列表", () => {
+  it("每台:名字、电量、在做什么、今天几趟、毛病;离线标红", async () => {
     const { container: c } = page();
     await waitFor(() => expect(cardOf(c, "B")).not.toBeNull());
-    const b = cardOf(c, "B").textContent!;
-    expect(b).toContain("离线");
-    expect(b).toContain("2 个故障");
+    const b = cardOf(c, "B");
+    expect(b.textContent).toContain("离线");
+    expect(b.querySelector(".tone-error")).not.toBeNull();
+    expect(b.textContent).toContain("2 个故障");
     expect(cardOf(c, "A").textContent).toContain("76%");
     expect(cardOf(c, "A").textContent).toContain("3 趟");
+    expect(c.querySelector(".rb-listhead h1")!.textContent).toBe("机器人 2");
   });
 
-  it("W60 没毛病就安静:不写正常、没有提示条;有毛病多一条提示、卡片标需要关注", async () => {
+  it("W60 没毛病就安静:没有提示条;有毛病多一条", async () => {
     const { container: c } = page();
     await waitFor(() => expect(cardOf(c, "A")).not.toBeNull());
-    expect(cardOf(c, "A").textContent).not.toContain("正常");
     expect(cardOf(c, "A").querySelector(".fleet-warn")).toBeNull();
     expect(cardOf(c, "B").querySelector(".fleet-warn")).not.toBeNull();
   });
@@ -97,51 +110,139 @@ describe("机器人页", () => {
     await waitFor(() => expect(cardOf(c, "A")?.querySelector(".fleet-warn")).toBeTruthy());
     expect(cardOf(c, "A").querySelector(".fleet-warn")!.textContent).toBe("存储盘快满（86%）");
     expect(cardOf(c, "B").querySelector(".fleet-warn")!.textContent).toBe("摄像头 前故障");
-    expect(c.textContent).not.toContain("disk");
+    expect(c.querySelector(".rb-list")!.textContent).not.toContain("disk");
   });
 
-  it("第 11 轮 W11-02:不知道待传几个(站点从盘那一行读出的用量)只写「已用 88%」,不写 null", async () => {
+  it("W71 Nav2 没起来:提示条写 Nav2 不可用和原因", async () => {
+    robots = [card({ problems: [{ nav2: "Nav2 转接节点未连接" }] })];
+    const { container: c } = page();
+    await waitFor(() => expect(cardOf(c, "A")?.querySelector(".fleet-warn")).toBeTruthy());
+    expect(cardOf(c, "A").querySelector(".fleet-warn")!.textContent).toContain("Nav2 不可用（退回自带规划）：Nav2 转接节点未连接");
+  });
+
+  it("P1-23:还没连上过的是灰的「未激活」,不是红的离线", async () => {
+    robots = [card({ robot_id: "N", online: false, ever_seen: false, battery_pct: null }), card({ robot_id: "B", online: false, ever_seen: true })];
+    const { container: c } = page();
+    await waitFor(() => expect(cardOf(c, "N")).not.toBeNull());
+    const n = cardOf(c, "N");
+    expect(n.textContent).toContain("未激活");
+    expect(n.querySelector(".state")!.getAttribute("title")).toContain("还没连上");
+    expect(n.querySelector(".tone-error")).toBeNull();
+    expect(cardOf(c, "B").querySelector(".tone-error")).not.toBeNull();
+  });
+
+  it("第 2 轮 N4:消息服务没重启的常驻一条,写要重启、才能重新添加", async () => {
+    openRevoked = ["T7"];
+    const { container: c } = page();
+    await waitFor(() => expect(c.querySelector("[data-open-revoked]")).not.toBeNull());
+    expect(c.querySelector("[data-open-revoked]")!.textContent).toContain("T7");
+    expect(c.querySelector("[data-open-revoked]")!.textContent).toContain("重启消息服务");
+  });
+
+  it("保安页用起的名字", () => {
+    robotNames.value = { A: "南区" };
+    const u: UnitInfo = { robot: { robot_id: "A", active: true, fresh: true, revoked: false, held: null, status: { online: true, last_seen: 0 }, capabilities: null },
+      state: "idle", battery: 50, task: "" };
+    const { container: c } = render(<LiveWall units={[u]} alerts={[]} now={0} onZoom={() => {}} />);
+    expect(c.querySelector(".lw-card .slot-name")!.textContent).toBe("南区");
+  });
+});
+
+describe("机器人页 · 操作", () => {
+  it("默认开第一台、在「操作」:单台控制嵌在页里(没有它自己的页头),右栏末尾是健康状况", async () => {
+    robots[0] = card({ patrols_7d: 12, aborts_7d: 1, storage: { used_ratio: 0.42, backlog_files: 3, oldest_backlog_s: 90 },
+      map: { id: "estate-1", version: "7", match: false }, wifi: { ssid: "Estate", link: "wifi", change: null } });
+    const { container: c } = page({ units: [unitOf("A")] });
+    await waitFor(() => expect(c.querySelector(".robot-detail .rc")).not.toBeNull());
+    expect(c.querySelector(".rb-head h2")!.textContent).toBe("A");
+    expect(btn(c.querySelector(".rb-head")!, "操作").getAttribute("aria-pressed")).toBe("true");
+    expect(c.querySelector(".rc-head")).toBeNull();
+    const h = c.querySelector(".rc-side .rb-health")!.textContent!;
+    for (const s of ["76%", "Estate", "已用 42%", "待传 3 个", "estate-1 v7", "与站点不一致", "7 天 12 次", "中止 1 次"]) expect(h).toContain(s);
+  });
+
+  it("还没连上的:写连上后才能操作,照样有健康状况", async () => {
+    const { container: c } = page();
+    await waitFor(() => expect(c.querySelector(".rb-off")).not.toBeNull());
+    expect(c.querySelector(".rb-off")!.textContent).toContain("连上后才能操作");
+    expect(c.querySelector(".rb-off .rb-health")).not.toBeNull();
+  });
+
+  it("第 11 轮 W11-02:不知道待传几个只写「已用 88%」,不写 null", async () => {
     robots = [card({ storage: { used_ratio: 0.88, backlog_files: null, oldest_backlog_s: null } })];
     const { container: c } = page();
-    await waitFor(() => expect(cardOf(c, "A")).not.toBeNull());
-    fireEvent.click(cardOf(c, "A"));
-    const d = c.querySelector(".robot-detail")!.textContent!;
+    await waitFor(() => expect(c.querySelector(".rb-health")).not.toBeNull());
+    const d = c.querySelector(".rb-health")!.textContent!;
     expect(d).toContain("已用 88%");
     expect(d).not.toContain("null");
     expect(d).not.toContain("待传");
   });
 
+  it("M-robot 经理只看:没有添加、加入申请、「设置」;操作视图照样(派巡逻由单台控制按经理收)", async () => {
+    pending = [{ id: "ab12", serial: "D1M-7", check: "042917", model: "", version: "", source: "x", created_ms: NOW, expires_ms: NOW + 1 }];
+    const { container: c } = page({ readOnly: true, role: "owner", units: [unitOf("A")] });
+    await waitFor(() => expect(c.querySelector(".robot-detail .rc")).not.toBeNull());
+    expect(btn(c, "添加")).toBeUndefined();
+    expect(c.querySelector(".rb-views")).toBeNull();
+    expect(c.querySelector(".bind-pending")).toBeNull();
+    expect(c.querySelector('.robot-detail input[name="name"]')).toBeNull();
+  });
+});
+
+describe("机器人页 · 设置", () => {
   it("改名字", async () => {
     const { container: c } = page();
-    await waitFor(() => expect(cardOf(c, "A")).not.toBeNull());
-    fireEvent.click(cardOf(c, "A"));
-    const d = c.querySelector(".robot-detail")!;
+    const d = await settings(c, "A");
     fireEvent.input(d.querySelector('input[name="name"]')!, { target: { value: "南区" } });
     fireEvent.click(btn(d, "保存名字"));
     await waitFor(() => expect(posted.find((p) => p.url === "/api/admin/robots/A/name")?.body).toEqual({ name: "南区" }));
     await waitFor(() => expect(cardOf(c, "A").textContent).toContain("南区"));
   });
 
-  it("详情里有最近的毛病", async () => {
+  it("检查单:要处理的在上(换 Wi-Fi 等批准、地图不一致、毛病);正常的收起来,展开按组列", async () => {
+    robots = [card({ map: { id: "estate-1", version: "7", match: false }, home_set: true, standby_set: false,
+      wifi: { ssid: "Estate", link: "4g", change: { id: "0a1b2c3d4e5f", ssid: "New", mode: "trial", expires_ms: NOW } } })];
     const { container: c } = page();
-    await waitFor(() => expect(cardOf(c, "B")).not.toBeNull());
-    fireEvent.click(cardOf(c, "B"));
-    expect(c.querySelector(".robot-detail")!.textContent).toContain("未到达点位");
+    expect(await waitFor(() => cardOf(c, "A").textContent)).toContain("WiFi 变更待确认");
+    const d = await settings(c, "A");
+    const need = Array.from(d.querySelectorAll(".rb-checks"))[0];
+    expect(Array.from(need.querySelectorAll("[data-check]")).map((x) => x.getAttribute("data-check"))).toEqual(["wifi", "sw", "standby"]);
+    expect(d.querySelector(".rb-sum")!.textContent).toContain("3 项要处理");
+    expect(need.querySelector('[data-check="wifi"]')!.textContent).toContain("正在尝试 WiFi「New」");
+    expect(need.querySelector('a[href="#/admin/layout?tab=standby"]')).not.toBeNull();
+    expect(d.querySelector('[data-check="cert"]')).toBeNull();
+    fireEvent.click(btn(d, "展开"));
+    expect(d.querySelector('[data-check="cert"]')!.textContent).toContain("还剩 300 天");
+    expect(Array.from(d.querySelectorAll(".sp-lbl")).map((x) => x.textContent)).toContain("连接");
+    fireEvent.click(btn(need.querySelector('[data-check="wifi"]')!, "确认换 WiFi"));
+    await waitFor(() => expect(posted.at(-1)).toEqual({ url: "/api/robots/A/wifi", body: { id: "0a1b2c3d4e5f", approve: true } }));
   });
 
-  it("第 10 轮 W9-10:点位没到那条只写一遍,用全角标点", async () => {
-    robots = [card({ robot_id: "B", recent_problems: [
-      { key: "B/stuck#3", kind: "stuck", level: "P2", title: "点位 P7 未到达,已跳过", first_ms: NOW - 50_000, resolved_ms: null, resolved_by: "" },
-    ] })];
+  it("W72 详情:设备、手动原因、登记日期都在", async () => {
+    robots[0] = card({ devices: [{ id: "lidar", state: "online" }, { id: "camera:thermal", state: "error" }], enrolled_at: NOW - 86_400_000 * 10,
+      manual_only: true, manual_note: "先试跑" });
     const { container: c } = page();
-    await waitFor(() => expect(cardOf(c, "B")).not.toBeNull());
-    fireEvent.click(cardOf(c, "B"));
-    const sec = c.querySelector(".robot-detail .robot-alerts")!;
-    expect(sec.textContent).toContain("点位 P7 未到达，已跳过");
-    expect(sec.textContent).not.toContain("未到达,已跳过");
+    const d = (await settings(c, "A")).textContent!;
+    for (const s of ["摄像头 thermal 故障", "激光雷达", "先试跑", "只手动派"]) expect(d).toContain(s);
   });
 
-  it("W72 详情里的告警分三组放在最下面:要处理(P1)、待跟进、记录(自动恢复的标出来、收起来)", async () => {
+  it("P1-26 / P1-05:切派单方式、重出开通码先在原地确认(不弹窗),说清是什么意思", async () => {
+    const { container: c } = page();
+    const d = await settings(c, "A");
+    fireEvent.click(btn(d.querySelector(".rb-dispatch")!, "仅限手动"));
+    expect(posted.some((p) => p.url.endsWith("/service"))).toBe(false);
+    expect(document.querySelector(".modal")).toBeNull();
+    const ask = d.querySelector(".rb-ask")!;
+    expect(ask.textContent).toMatch(/报警|排程/);
+    fireEvent.click(btn(ask, "改为仅限手动"));
+    await waitFor(() => expect(posted.find((p) => p.url === "/api/robots/A/service")?.body).toEqual({ manual_only: true }));
+    // 都正常时检查单直接全展开
+    fireEvent.click(btn(d.querySelector('[data-check="code"]')!, "重出开通码…"));
+    expect(posted.some((p) => p.url.endsWith("/code"))).toBe(false);
+    expect(d.querySelector(".rb-ask")!.textContent).toContain("旧码会立刻作废");
+  });
+
+  it("告警记录在右栏,分三组:要处理(P1)、待跟进、记录(自动恢复的标出来、收起来)", async () => {
     robots = [card({ robot_id: "B", recent_problems: [
       { key: "B/robot_offline#2", kind: "robot_offline", level: "P1", first_ms: NOW - 50_000, resolved_ms: NOW - 40_000, resolved_by: "site:back_soon" },
       { key: "B/loc_degraded#1", kind: "loc_degraded", level: "P2", first_ms: NOW - 60_000, resolved_ms: null, resolved_by: "" },
@@ -149,52 +250,73 @@ describe("机器人页", () => {
       { key: "B/fallen#1", kind: "fallen", level: "P1", first_ms: NOW - 80_000, resolved_ms: NOW - 1000, resolved_by: "gina" },
     ] })];
     const { container: c } = page();
-    await waitFor(() => expect(cardOf(c, "B")).not.toBeNull());
-    fireEvent.click(cardOf(c, "B"));
-    const d = c.querySelector(".robot-detail")!;
-    const sec = d.querySelector(".robot-alerts")!;
-    expect(sec).not.toBeNull();
-    expect(d.lastElementChild).toBe(sec);
-    const groups = Array.from(sec.querySelectorAll("[data-group]")).map((g) => g.getAttribute("data-group"));
-    expect(groups).toEqual(["act", "later", "log"]);
+    const d = await settings(c, "B");
+    const sec = d.querySelector(".rb-setside .robot-alerts")!;
+    expect(Array.from(sec.querySelectorAll("[data-group]")).map((g) => g.getAttribute("data-group"))).toEqual(["act", "later", "log"]);
     expect(sec.querySelector('[data-group="act"]')!.textContent).toContain("未到达点位");
-    expect(sec.querySelector('[data-group="later"]')!.textContent).not.toContain("未到达点位");
     const log = sec.querySelector('[data-group="log"]') as HTMLDetailsElement;
-    expect(log.tagName).toBe("DETAILS");
     expect(log.open).toBe(false);
     expect(log.textContent).toContain("自动恢复");
     expect(log.textContent).toContain("已处理");
   });
 
-  it("解绑要确认再输密码", async () => {
+  it("第 10 轮 W9-10:点位没到那条只写一遍,用全角标点", async () => {
+    robots = [card({ robot_id: "B", recent_problems: [
+      { key: "B/stuck#3", kind: "stuck", level: "P2", title: "点位 P7 未到达,已跳过", first_ms: NOW - 50_000, resolved_ms: null, resolved_by: "" },
+    ] })];
     const { container: c } = page();
-    await waitFor(() => expect(cardOf(c, "A")).not.toBeNull());
-    fireEvent.click(cardOf(c, "A"));
-    fireEvent.click(btn(c.querySelector(".robot-detail")!, "解绑"));
-    fireEvent.click(btn(document.querySelector(".modal")!, "解绑"));
+    const d = await settings(c, "B");
+    const sec = d.querySelector(".robot-alerts")!;
+    expect(sec.textContent).toContain("点位 P7 未到达，已跳过");
+    expect(sec.textContent).not.toContain("未到达,已跳过");
+  });
+});
+
+describe("机器人页 · 解绑(第 2 轮 P0-10:说实话)", () => {
+  const ask = async (id: string) => {
+    const { container: c } = page();
+    const d = await settings(c, id);
+    fireEvent.click(Array.from(d.querySelectorAll(".rb-removal button")).find((b) => b.textContent!.startsWith("解绑"))!);
+    expect(document.querySelector(".modal")).toBeNull();
+    return { c, d, txt: d.querySelector(".rb-removal .rb-ask")!.textContent ?? "" };
+  };
+  it("原地确认写明恢复出厂、所有机器人会断线;继续 → 再输密码", async () => {
+    const { d, txt } = await ask("A");
+    expect(txt).toContain("恢复出厂");
+    expect(txt).toContain("所有机器人会断线");
+    fireEvent.click(btn(d.querySelector(".rb-removal .rb-ask")!, "继续"));
     await waitFor(() => expect(document.querySelector("form.confirm-pw")).not.toBeNull());
     fireEvent.input(document.querySelector('form.confirm-pw input[type="password"]')!, { target: { value: "my-own-password" } });
     fireEvent.submit(document.querySelector("form.confirm-pw")!);
     await waitFor(() => expect(posted.find((p) => p.url === "/api/admin/robots/A/revoke")?.body).toEqual({ confirm_password: "my-own-password" }));
     await waitFor(() => expect(said.join()).toContain("下次连接站点时将自动清除数据"));
   });
-
-  it("解绑确认写明恢复出厂、数据删掉", async () => {
-    const { container: c } = page();
-    await waitFor(() => expect(cardOf(c, "A")).not.toBeNull());
-    fireEvent.click(cardOf(c, "A"));
-    fireEvent.click(btn(c.querySelector(".robot-detail")!, "解绑"));
-    expect(document.querySelector(".modal")!.textContent).toContain("恢复出厂");
-    expect(document.querySelector(".modal")!.textContent).toContain("所有机器人会断线");   // 第 4 轮:重启消息服务器
+  it("在线:现在就清;录像已经在站点上的留着", async () => {
+    const { txt } = await ask("A");
+    expect(txt).toContain("现在就清除");
+    expect(txt).toContain("站点上已有的录像不删");
   });
+  it("离线:下次连上才清,证书现在作废", async () => {
+    const { txt } = await ask("B");
+    expect(txt).toContain("下次连上站点时");
+    expect(txt).not.toContain("现在就清除");
+  });
+  it("从没连上过:没有东西要清", async () => {
+    robots = [card({ robot_id: "T9", online: false, ever_seen: false })];
+    const { txt } = await ask("T9");
+    expect(txt).toContain("从没连上过");
+  });
+});
 
-  it("W42 等待批准加入:核对码、再输密码批准、能起名字;拒绝要确认", async () => {
+describe("机器人页 · 加入、添加", () => {
+  it("W42 等待批准加入:核对码;核对并批准要再输密码、能起名字", async () => {
     pending = [{ id: "ab12", serial: "D1M-7", check: "042917", model: "D1 Max", version: "1", source: "192.168.1.20", created_ms: NOW, expires_ms: NOW + 1 }];
     const { container: c } = page();
     await waitFor(() => expect(c.querySelector('.bind-req[data-serial="D1M-7"]')).not.toBeNull());
     const row = c.querySelector('.bind-req[data-serial="D1M-7"]')!;
     expect(row.textContent).toContain("042917");
-    fireEvent.click(btn(row, "批准"));
+    expect(c.querySelector(".rb-enrol h2")!.textContent).toContain("1 个加入申请");
+    fireEvent.click(btn(row, "核对并批准…"));
     const form = document.querySelector("form.bind-approve")!;
     expect(form.textContent).toContain("042917");
     fireEvent.input(form.querySelector('input:not([type="password"])')!, { target: { value: "西区" } });
@@ -208,40 +330,27 @@ describe("机器人页", () => {
     await waitFor(() => expect(c.querySelector(".bind-pending")).toBeNull());
   });
 
-  it("W42 拒绝申请", async () => {
+  it("W42 拒绝申请:原地确认", async () => {
     pending = [{ id: "cd34", serial: "D1M-8", check: "111111", model: "", version: "", source: "x", created_ms: NOW, expires_ms: NOW + 1 }];
     const { container: c } = page();
     await waitFor(() => expect(c.querySelector('.bind-req[data-serial="D1M-8"]')).not.toBeNull());
     fireEvent.click(btn(c.querySelector(".bind-req")!, "拒绝"));
-    fireEvent.click(btn(document.querySelector(".modal")!, "拒绝"));
+    expect(document.querySelector(".modal")).toBeNull();
+    expect(c.querySelector(".bind-req .rb-ask")!.textContent).toContain("D1M-8");
+    fireEvent.click(btn(c.querySelector(".bind-req .rb-ask")!, "拒绝"));
     await waitFor(() => expect(posted.at(-1)?.url).toBe("/api/admin/bind/cd34/reject"));
-  });
-
-  it("W42 机器人上提了换 WiFi:卡片标出来,详情里确认", async () => {
-    robots = [card({ wifi: { ssid: "Estate", link: "4g", change: { id: "0a1b2c3d4e5f", ssid: "New", mode: "trial", expires_ms: NOW } } })];
-    const { container: c } = page();
-    await waitFor(() => expect(cardOf(c, "A")).not.toBeNull());
-    expect(cardOf(c, "A").textContent).toContain("WiFi 变更待确认");
-    fireEvent.click(cardOf(c, "A"));
-    const d = c.querySelector(".robot-detail")!;
-    expect(d.textContent).toContain("Estate · 4G 连接");
-    expect(d.querySelector(".wifi-change")!.textContent).toContain("正在尝试 WiFi「New」");
-    fireEvent.click(btn(d, "确认换 WiFi"));
-    await waitFor(() => expect(posted.at(-1)).toEqual({ url: "/api/robots/A/wifi", body: { id: "0a1b2c3d4e5f", approve: true } }));
   });
 
   it("W42 添加:说明用手机扫贴纸,工程师的开通码收在按钮后面", async () => {
     const { container: c } = page();
     await waitFor(() => expect(cardOf(c, "A")).not.toBeNull());
-    fireEvent.click(btn(c, "添加机器人"));
+    fireEvent.click(btn(c, "添加"));
     const m = document.querySelector(".modal")!;
     expect(m.textContent).toContain("扫描机器人贴纸");
     expect(m.querySelector("form")).toBeNull();
     fireEvent.click(btn(m, "工程师：用开通码手动添加"));
     const f = document.querySelector(".modal form")!;
-    expect(f.querySelector("details")!.textContent).toContain("provision --code");     // P1-24:命令行收在「高级」里
-    expect(f.querySelector("p.muted")!.textContent).not.toContain("sudo");
-    // P1-25:格式写在框下面,填错标红、不提交
+    expect(f.querySelector("details")!.textContent).toContain("provision --code");
     const input = f.querySelector("input") as HTMLInputElement;
     expect(f.textContent).toContain("最多 64 个");
     fireEvent.input(input, { target: { value: "D1 07" } });
@@ -250,517 +359,20 @@ describe("机器人页", () => {
     expect(posted.some((p) => p.url === "/api/admin/robots")).toBe(false);
   });
 
-  it("P1-26 / P1-05:切自动派遣、重出开通码先确认,说清是什么意思", async () => {
-    const { container: c } = page();
-    await waitFor(() => expect(cardOf(c, "A")).not.toBeNull());
-    fireEvent.click(cardOf(c, "A"));
-    const d = c.querySelector(".robot-detail")!;
-    const toggle = btn(d, "改为仅限手动") ?? btn(d, "允许自动派遣");
-    fireEvent.click(toggle);
-    expect(posted.some((p) => p.url.endsWith("/service"))).toBe(false);
-    const m = document.querySelector(".modal")!;
-    expect(m.textContent).toMatch(/报警|排程/);
-    fireEvent.click(btn(m, toggle.textContent!.trim()));
-    await waitFor(() => expect(posted.some((p) => p.url === "/api/robots/A/service")).toBe(true));
-    fireEvent.click(btn(d, "重新生成开通码") ?? Array.from(d.querySelectorAll("button")).find((b) => b.textContent?.includes("开通码"))!);
-    expect(posted.some((p) => p.url.endsWith("/code"))).toBe(false);
-    expect(document.querySelector(".modal")!.textContent).toContain("旧码会立刻作废");
-  });
-
-  it("保安页用起的名字", () => {
-    robotNames.value = { A: "南区" };
-    const u: UnitInfo = { robot: { robot_id: "A", active: true, fresh: true, revoked: false, held: null, status: { online: true, last_seen: 0 }, capabilities: null },
-      state: "idle", battery: 50, task: "" };
-    const { container: c } = render(<LiveWall units={[u]} alerts={[]} now={0} onZoom={() => {}} />);
-    expect(c.querySelector(".lw-card .slot-name")!.textContent).toBe("南区");
-  });
-
-  it("W60 经理只看:没有添加、批准、改名、解绑(W72:跟手机一样能派巡逻、停止当前任务)", async () => {
-    const c = render(<RobotsPage say={() => {}} now={0} readOnly role="owner" />).container;
-    await waitFor(() => expect(cardOf(c, "A")).not.toBeNull());
-    expect(btn(c, "添加机器人")).toBeUndefined();
-    fireEvent.click(cardOf(c, "A"));
-    const d = c.querySelector(".robot-detail")!;
-    expect(d.querySelector("form")).toBeNull();
-    expect(Array.from(d.querySelectorAll("button")).map((b) => b.textContent?.trim())).toEqual(["关闭", "派巡逻", "停止当前任务"]);
-  });
-});
-
-describe("W71 Nav2 没起来", () => {
-  it("卡片提示条写 Nav2 不可用和原因", async () => {
-    robots = [card({ problems: [{ nav2: "Nav2 转接节点未连接" }] })];
-    const { container: c } = page();
-    await waitFor(() => expect(cardOf(c, "A")?.querySelector(".fleet-warn")).toBeTruthy());
-    expect(cardOf(c, "A").querySelector(".fleet-warn")!.textContent).toContain("Nav2 不可用（退回自带规划）：Nav2 转接节点未连接");
-  });
-
-  it("W72 详情:现在、巡逻统计、地图、设备、登记、手动原因", async () => {
-    robots[0] = card({ patrols_7d: 12, aborts_7d: 1, last_patrol_ms: NOW - 3_600_000, last_seen_ms: NOW - 3_000,
-      storage: { used_ratio: 0.42, backlog_files: 3, oldest_backlog_s: 90 }, map: { id: "estate-1", version: "7", match: false },
-      devices: [{ id: "lidar", state: "online" }, { id: "camera:thermal", state: "error" }], enrolled_at: NOW - 86_400_000 * 10,
-      manual_only: true, manual_note: "先试跑", wifi: { ssid: "Estate", link: "wifi", change: null } });
-    const { container: c } = render(<RobotsPage say={(s) => said.push(s)} now={NOW} />);
-    await waitFor(() => expect(cardOf(c, "A")).not.toBeNull());
-    fireEvent.click(cardOf(c, "A"));
-    const d = c.querySelector(".robot-detail")!.textContent!;
-    for (const s of ["现在", "最后联系", "已用 42%", "待传 3 个", "近 7 天", "12 趟", "1 次", "estate-1 v7", "与站点不一致",
-      "激光雷达", "摄像头 thermal", "故障", "先试跑", "Estate"]) expect(d).toContain(s);
-  });
-
-  it("W72 控制:选路线开始巡逻、回待命点、停止当前任务(现问站点在跑哪一趟)", async () => {
-    task = "t9";
-    const { container: c } = render(<RobotsPage say={(s) => said.push(s)} now={NOW} role="admin" />);
-    await waitFor(() => expect(cardOf(c, "A")).not.toBeNull());
-    fireEvent.click(cardOf(c, "A"));
-    const d = c.querySelector(".robot-detail")!;
-    await waitFor(() => expect(d.querySelectorAll('select[name="route"] option').length).toBe(3));
-    expect(btn(d, "派巡逻").disabled).toBe(true);
-    fireEvent.change(d.querySelector('select[name="route"]')!, { target: { value: "west-loop" } });
-    fireEvent.click(btn(d, "派巡逻"));
-    await waitFor(() => expect(posted.find((p) => p.url === "/api/robots/A/patrol")?.body).toEqual({ mission_id: "west-loop", loops: 1 }));
-    await waitFor(() => expect(said.join()).toContain("west-loop"));
-    fireEvent.click(btn(d, "回待命点"));
-    await waitFor(() => expect(posted.some((p) => p.url === "/api/robots/A/standby/return")).toBe(true));
-    await waitFor(() => expect(btn(d, "停止当前任务").disabled).toBe(false));
-    fireEvent.click(btn(d, "停止当前任务"));
-    await waitFor(() => expect(posted.find((p) => p.url === "/api/robots/A/abort")?.body).toEqual({ task_id: "t9" }));
-  });
-
-  // 第 8 轮 W8-02:跟 App 一样,画在别的地图版本上的路线灰掉、写原因(以前选得上,点了才报写给工程师的错)
-  it("W8-02 路线下拉:画在别的版本上的路线选不了,写画在哪一版、机器人用哪一版", async () => {
-    robots[0] = card({ map: { id: "estate-1", version: "7", match: true } });
-    setFetch(((url: string, init?: RequestInit) => {
-      if (url.startsWith("/api/routes")) return Promise.resolve(json({ routes: [
-        { id: "east-loop", map_id: "estate-1", map_version: "7" }, { id: "west-loop", map_id: "estate-1", map_version: "11" }] }));
-      if (url.startsWith("/api/robots/overview")) return Promise.resolve(json({ robots, open_revoked: [] }));
-      if (url === "/api/schedule") return Promise.resolve(json({ missions: ["east-loop", "west-loop"] }));
-      void init;
-      return Promise.resolve(json({}, 404));
-    }) as typeof fetch);
-    const { container: c } = render(<RobotsPage say={(s) => said.push(s)} now={NOW} role="admin" />);
-    await waitFor(() => expect(cardOf(c, "A")).not.toBeNull());
-    fireEvent.click(cardOf(c, "A"));
-    const d = c.querySelector(".robot-detail")!;
-    await waitFor(() => expect((d.querySelector('option[value="west-loop"]') as HTMLOptionElement | null)?.disabled).toBe(true));
-    expect(d.querySelector("[data-route-why]")!.textContent).toContain("画在 v11 上，A 用的是 v7");   // UIUX-022:写在下拉外
-    expect((d.querySelector('option[value="east-loop"]') as HTMLOptionElement).disabled).toBe(false);
-  });
-
-  it("UIUX-008:机器人详情里灰着的按钮,悬停都说为什么(在巡逻、没原点、没待命点、名字没改)", async () => {
-    robots[0] = card({ task: "sched-1", task_what: "patrol", postures: ["stand", "lie"], home: false, standby: false });
-    const { container: c } = render(<RobotsPage say={(s) => said.push(s)} now={NOW} role="admin" />);
-    await waitFor(() => expect(cardOf(c, "A")).not.toBeNull());
-    fireEvent.click(cardOf(c, "A"));
-    const d = await waitFor(() => { const x = c.querySelector(".robot-detail"); expect(x?.querySelector(".rd-actions")).not.toBeNull(); return x!; });
-    await new Promise((r) => setTimeout(r, 20));
-    const off = Array.from(d.querySelectorAll<HTMLButtonElement>("button:disabled")).filter((b) => !b.closest("dialog"));
-    expect(off.length).toBeGreaterThan(0);
-    for (const b of off) expect(b.title, `「${b.textContent}」灰着却不说为什么`).not.toBe("");
-  });
-
-  it("UIUX-022:唯一一条路线派不了 —— 不默认选上;原因在下拉外整句写出;「派巡逻」灰着", async () => {
-    robots[0] = card({ map: { id: "estate-1", version: "7", match: true } });
-    setFetch(((url: string, init?: RequestInit) => {
-      if (url.startsWith("/api/routes")) return Promise.resolve(json({ routes: [{ id: "demo-loop", map_id: "estate-1", map_version: "11" }] }));
-      if (url.startsWith("/api/robots/overview")) return Promise.resolve(json({ robots, open_revoked: [] }));
-      if (url === "/api/schedule") return Promise.resolve(json({ missions: ["demo-loop"] }));
-      void init;
-      return Promise.resolve(json({}, 404));
-    }) as typeof fetch);
-    const { container: c } = render(<RobotsPage say={(s) => said.push(s)} now={NOW} role="admin" />);
-    await waitFor(() => expect(cardOf(c, "A")).not.toBeNull());
-    fireEvent.click(cardOf(c, "A"));
-    const d = c.querySelector(".robot-detail")!;
-    const why = await waitFor(() => { const x = d.querySelector("[data-route-why]"); expect(x).not.toBeNull(); return x!; });
-    expect(why.textContent).toContain("demo-loop");
-    expect(why.textContent).toContain("画在 v11 上，A 用的是 v7");
-    const opt = d.querySelector('option[value="demo-loop"]')!;
-    expect(opt.textContent).toBe("demo-loop");
-    expect((d.querySelector('select[name="route"]') as HTMLSelectElement).value).toBe("");
-    expect(btn(d, "派巡逻").disabled).toBe(true);
-  });
-
-  it("W76 开始巡逻可选循环次数(一直巡逻带 loops 0);在跑几圈的巡逻显示第几圈", async () => {
-    robots[0] = card({ task: "adhoc-forever-x", lap: { n: 4, of: 0 } });
-    const { container: c } = render(<RobotsPage say={(s) => said.push(s)} now={NOW} role="admin" />);
-    await waitFor(() => expect(cardOf(c, "A")).not.toBeNull());
-    fireEvent.click(cardOf(c, "A"));
-    const d = c.querySelector(".robot-detail")!;
-    await waitFor(() => expect(d.textContent).toContain("一直巡逻 · 第 4 圈"));
-    await waitFor(() => expect(d.querySelectorAll('select[name="route"] option').length).toBe(3));
-    fireEvent.change(d.querySelector('select[name="route"]')!, { target: { value: "west-loop" } });
-    fireEvent.change(d.querySelector('select[name="loops"]')!, { target: { value: "0" } });
-    fireEvent.click(btn(d, "派巡逻"));
-    await waitFor(() => expect(posted.find((p) => p.url === "/api/robots/A/patrol")?.body).toEqual({ mission_id: "west-loop", loops: 0 }));
-  });
-
-  it("POC 回原点:没任务直接回;有任务时回原点灰掉,中止并回原点先确认再发 abort", async () => {
-    robots[0] = card({ task: null });
-    const { container: c } = render(<RobotsPage say={(s) => said.push(s)} now={NOW} role="guard" />);
-    await waitFor(() => expect(cardOf(c, "A")).not.toBeNull());
-    fireEvent.click(cardOf(c, "A"));
-    const d = c.querySelector(".robot-detail")!;
-    expect(btn(d, "中止并回原点")).toBeUndefined();
-    fireEvent.click(btn(d, "回原点"));
-    await waitFor(() => expect(posted.find((p) => p.url === "/api/robots/A/home/return")?.body).toEqual({}));
-    cleanup();
-    posted.length = 0;
-    robots[0] = card({ task: "patrol-7" });
-    const { container: c2 } = render(<RobotsPage say={(s) => said.push(s)} now={NOW} role="guard" />);
-    await waitFor(() => expect(cardOf(c2, "A")).not.toBeNull());
-    fireEvent.click(cardOf(c2, "A"));
-    const d2 = c2.querySelector(".robot-detail")!;
-    expect(btn(d2, "回原点").disabled).toBe(true);
-    fireEvent.click(btn(d2, "中止并回原点"));
-    expect(posted.some((p) => p.url === "/api/robots/A/home/return")).toBe(false);
-    const dlg = await waitFor(() => { const x = c2.querySelector("dialog"); expect(x).toBeTruthy(); return x!; });
-    expect(dlg.textContent).toContain("A：中止执行任务，然后回原点？");     // 第 9 轮 W9-06:不露任务编号
-    expect(dlg.textContent).not.toContain("patrol-7");
-    fireEvent.click(btn(dlg, "中止并回原点"));
-    await waitFor(() => expect(posted.find((p) => p.url === "/api/robots/A/home/return")?.body).toEqual({ abort: true }));
-  });
-
-  it("POC 11-05 警灯与喊话:报了才有;警灯带时长开、关;打字喊中文;点录好的话术;停止;经理看不到", async () => {
-    robots[0] = card({ deter: { outputs: ["strobe", "speaker"], max_s: 600, tts: true, clips: ["blocked", "restricted", "zz"] } });
-    const { container: c } = render(<RobotsPage say={(s) => said.push(s)} now={NOW} role="guard" />);
-    await waitFor(() => expect(cardOf(c, "A")).not.toBeNull());
-    fireEvent.click(cardOf(c, "A"));
-    const d = c.querySelector(".robot-detail")!;
-    const sel = d.querySelector('select[name="strobe_s"]') as HTMLSelectElement;
-    fireEvent.change(sel, { target: { value: "120" } });
-    fireEvent.click(btn(d, "开警灯"));
-    await waitFor(() => expect(posted.find((p) => p.url === "/api/robots/A/deter")?.body).toEqual({ output: "strobe", on: true, max_s: 120 }));
-    await waitFor(() => expect(said.join()).toContain("120 秒后自动关"));
-    await waitFor(() => expect(btn(d, "关警灯").disabled).toBe(false));
-    fireEvent.click(btn(d, "关警灯"));
-    await waitFor(() => expect(posted.filter((p) => p.url === "/api/robots/A/deter").at(-1)?.body).toEqual({ output: "strobe", on: false }));
-    expect(btn(d, "喊话").disabled).toBe(true);
-    const box = d.querySelector('input[name="say"]') as HTMLInputElement;
-    fireEvent.input(box, { target: { value: " 请注意，这里是巡逻机器人 " } });
-    await waitFor(() => expect(btn(d, "喊话").disabled).toBe(false));
-    fireEvent.click(btn(d, "喊话"));
-    await waitFor(() => expect(posted.filter((p) => p.url === "/api/robots/A/deter").at(-1)?.body)
-      .toEqual({ output: "speaker", on: true, max_s: 60, clip: "tts:zh:请注意，这里是巡逻机器人" }));
-    await waitFor(() => expect(btn(d, "禁区警告（英文）").disabled).toBe(false));
-    fireEvent.click(btn(d, "禁区警告（英文）"));
-    await waitFor(() => expect(posted.filter((p) => p.url === "/api/robots/A/deter").at(-1)?.body)
-      .toEqual({ output: "speaker", on: true, max_s: 60, clip: "restricted" }));
-    expect(btn(d, "zz")).toBeTruthy();
-    await waitFor(() => expect(btn(d, "停止").disabled).toBe(false));
-    fireEvent.click(btn(d, "停止"));
-    await waitFor(() => expect(posted.filter((p) => p.url === "/api/robots/A/deter").at(-1)?.body).toEqual({ output: "speaker", on: false }));
-    cleanup();
-    robots[0] = card({ deter: { outputs: ["strobe"], max_s: 600, tts: false, clips: [] } });
-    const { container: c2 } = render(<RobotsPage say={(s) => said.push(s)} now={NOW} role="guard" />);
-    await waitFor(() => expect(cardOf(c2, "A")).not.toBeNull());
-    fireEvent.click(cardOf(c2, "A"));
-    const d2 = c2.querySelector(".robot-detail")!;
-    expect(d2.querySelector('input[name="say"]')).toBeNull();
-    expect(Array.from(d2.querySelectorAll("button")).some((b) => b.textContent?.trim() === "停止")).toBe(false);
-    cleanup();
-    robots[0] = card({ deter: { outputs: ["strobe", "speaker"], max_s: 600, tts: true, clips: [] } });
-    const { container: c3 } = render(<RobotsPage say={(s) => said.push(s)} now={NOW} role="owner" />);
-    await waitFor(() => expect(cardOf(c3, "A")).not.toBeNull());
-    fireEvent.click(cardOf(c3, "A"));
-    expect(c3.querySelector(".rd-deter")).toBeNull();
-  });
-
-  it("第三档 #41 常用喊话:点一下念那一句(按它的语言);保安没有「编辑」;老站点没有这张表就不出这一行", async () => {
-    robots[0] = card({ deter: { outputs: ["speaker"], max_s: 600, tts: true, clips: [] } });
-    const { container: c } = render(<RobotsPage say={(s) => said.push(s)} now={NOW} role="guard" />);
-    await waitFor(() => expect(cardOf(c, "A")).not.toBeNull());
-    fireEvent.click(cardOf(c, "A"));
-    const d = c.querySelector(".robot-detail")!;
-    const row = await waitFor(() => { const x = d.querySelector("[data-voice-presets]"); expect(x).not.toBeNull(); return x!; });
-    expect(row.textContent).toContain("常用喊话");
-    await waitFor(() => expect(btn(row, "警告，您已进入受限制区域，请立即离开。").disabled).toBe(false));
-    fireEvent.click(btn(row, "警告，您已进入受限制区域，请立即离开。"));
-    await waitFor(() => expect(posted.filter((p) => p.url === "/api/robots/A/deter").at(-1)?.body)
-      .toEqual({ output: "speaker", on: true, max_s: 60, clip: "tts:zh:警告，您已进入受限制区域，请立即离开。" }));
-    await waitFor(() => expect(btn(row, "Please leave.").disabled).toBe(false));
-    fireEvent.click(btn(row, "Please leave."));
-    await waitFor(() => expect(posted.filter((p) => p.url === "/api/robots/A/deter").at(-1)?.body?.clip).toBe("tts:en:Please leave."));
-    expect(d.querySelector("[data-voice-edit]")).toBeNull();
-    cleanup();
-    // 用户 11-14:竞品只会念中文;机器人报了能念哪几种(tts_langs),念不了的灰掉、说原因
-    robots[0] = card({ deter: { outputs: ["speaker"], max_s: 600, tts: true, clips: [], tts_langs: ["zh"] } });
-    const { container: c1 } = render(<RobotsPage say={(s) => said.push(s)} now={NOW} role="guard" />);
-    await waitFor(() => expect(cardOf(c1, "A")).not.toBeNull());
-    fireEvent.click(cardOf(c1, "A"));
-    const row1 = await waitFor(() => { const x = c1.querySelector("[data-voice-presets]"); expect(x).not.toBeNull(); return x!; });
-    await waitFor(() => expect(btn(row1, "警告，您已进入受限制区域，请立即离开。").disabled).toBe(false));
-    expect(btn(row1, "Please leave.").disabled).toBe(true);
-    expect(btn(row1, "Please leave.").title).toContain("这台机器人念不了英文");
-    // UIUX-047:原因直接写出来(触屏、键盘看不到 title);字放在能省略的 span 里
-    expect(row1.querySelector("[data-preset-cant]")?.textContent).toContain("这台机器人念不了英文");
-    expect(btn(row1, "Please leave.").querySelector(".rd-preset-t")).not.toBeNull();
-    cleanup();
-    presets = null;      // 老站点:接口 404
-    const { container: c2 } = render(<RobotsPage say={(s) => said.push(s)} now={NOW} role="guard" />);
-    await waitFor(() => expect(cardOf(c2, "A")).not.toBeNull());
-    fireEvent.click(cardOf(c2, "A"));
-    const d2 = c2.querySelector(".robot-detail")!;
-    await waitFor(() => expect(d2.querySelector('input[name="say"]')).not.toBeNull());
-    expect(d2.querySelector("[data-voice-presets]")).toBeNull();
-  });
-
-  it("第三档 #41 常用喊话:管理员能编辑 —— 改字、删一句、加一句(选语言)、存;空的那句当场说", async () => {
-    robots[0] = card({ deter: { outputs: ["speaker"], max_s: 600, tts: true, clips: [] } });
-    const { container: c } = render(<RobotsPage say={(s) => said.push(s)} now={NOW} role="admin" />);
-    await waitFor(() => expect(cardOf(c, "A")).not.toBeNull());
-    fireEvent.click(cardOf(c, "A"));
-    const d = c.querySelector(".robot-detail")!;
-    const edit = await waitFor(() => { const x = d.querySelector("[data-voice-edit]") as HTMLButtonElement; expect(x).not.toBeNull(); return x; });
-    fireEvent.click(edit);
-    const dlg = await waitFor(() => { const x = c.querySelector("dialog"); expect(x).toBeTruthy(); return x!; });
-    const texts = () => Array.from(dlg.querySelectorAll<HTMLInputElement>("input[data-voice-text]"));
-    expect(texts().map((i) => i.value)).toEqual(["警告，您已进入受限制区域，请立即离开。", "Please leave."]);
-    fireEvent.input(texts()[0], { target: { value: "请离开这里" } });
-    fireEvent.click(dlg.querySelectorAll<HTMLButtonElement>("button[data-voice-del]")[1]);
-    fireEvent.click(btn(dlg, "加一句"));
-    expect(texts()).toHaveLength(2);
-    fireEvent.click(btn(dlg, "保存"));
-    await waitFor(() => expect(dlg.querySelector("[data-form-error]")?.textContent).toContain("第 2 句没写字"));
-    // UIUX-049:出错那句标 aria-invalid、焦点放过去
-    expect(texts()[1].getAttribute("aria-invalid")).toBe("true");
-    expect(document.activeElement).toBe(texts()[1]);
-    expect(posted.some((p) => p.url === "/api/voice-presets")).toBe(false);
-    const lang = dlg.querySelectorAll<HTMLSelectElement>("select[data-voice-lang]")[1];
-    fireEvent.change(lang, { target: { value: "ms" } });
-    fireEvent.input(texts()[1], { target: { value: "Sila keluar." } });
-    expect(texts()[1].getAttribute("aria-invalid")).toBeNull();
-    fireEvent.click(btn(dlg, "保存"));
-    await waitFor(() => expect(posted.find((p) => p.url === "/api/voice-presets")?.body)
-      .toEqual({ presets: [{ lang: "zh", text: "请离开这里" }, { lang: "ms", text: "Sila keluar." }] }));
-    await waitFor(() => expect(c.querySelector("dialog")).toBeNull());
-    const row = d.querySelector("[data-voice-presets]")!;
-    await waitFor(() => expect(btn(row, "Sila keluar.")).toBeTruthy());
-  });
-
-  it("POC 11-06 云台、雨刷:报了才有;方向键按步转、到头不超;回正;雨刷开 10 秒", async () => {
-    robots[0] = card({ deter: { outputs: ["strobe", "wiper", "ptz"], max_s: 600, tts: false, clips: [] } });
-    const { container: c } = render(<RobotsPage say={(s) => said.push(s)} now={NOW} role="guard" />);
-    await waitFor(() => expect(cardOf(c, "A")).not.toBeNull());
-    fireEvent.click(cardOf(c, "A"));
-    const d = c.querySelector(".robot-detail")!;
-    const last = () => posted.filter((p) => p.url === "/api/robots/A/deter").at(-1)?.body;
-    fireEvent.click(btn(d, "向右"));
-    await waitFor(() => expect(last()).toEqual({ output: "ptz", on: true, pan: 15, tilt: 0 }));
-    await waitFor(() => expect(btn(d, "向下").disabled).toBe(false));
-    fireEvent.click(btn(d, "向下"));
-    await waitFor(() => expect(last()).toEqual({ output: "ptz", on: true, pan: 15, tilt: 10 }));
-    await waitFor(() => expect(btn(d, "回正").disabled).toBe(false));
-    fireEvent.click(btn(d, "回正"));
-    await waitFor(() => expect(last()).toEqual({ output: "ptz", on: true, pan: 0, tilt: 0 }));
-    for (let i = 0; i < 10; i++) {
-      await waitFor(() => expect(btn(d, "向上").disabled).toBe(false));
-      fireEvent.click(btn(d, "向上"));
-    }
-    await waitFor(() => expect(last()).toEqual({ output: "ptz", on: true, pan: 0, tilt: -90 }));
-    await waitFor(() => expect(btn(d, "雨刷").disabled).toBe(false));
-    fireEvent.click(btn(d, "雨刷"));
-    await waitFor(() => expect(last()).toEqual({ output: "wiper", on: true, max_s: 10 }));
-    cleanup();
-    robots[0] = card({ deter: { outputs: ["strobe"], max_s: 600, tts: false, clips: [] } });
-    const { container: c2 } = render(<RobotsPage say={(s) => said.push(s)} now={NOW} role="guard" />);
-    await waitFor(() => expect(cardOf(c2, "A")).not.toBeNull());
-    fireEvent.click(cardOf(c2, "A"));
-    expect(c2.querySelector(".rd-ptz")).toBeNull();
-  });
-
-  it("POC 姿态:报了才显示;点了先确认再发;有任务在跑灰掉写原因;经理看不到", async () => {
-    robots[0] = card({ postures: ["stand", "lie", "crawl"], task: null });
-    const { container: c } = render(<RobotsPage say={(s) => said.push(s)} now={NOW} role="guard" />);
-    await waitFor(() => expect(cardOf(c, "A")).not.toBeNull());
-    fireEvent.click(cardOf(c, "A"));
-    const d = c.querySelector(".robot-detail")!;
-    for (const s of ["站起", "趴下", "蹲下"]) expect(btn(d, s).disabled).toBe(false);
-    fireEvent.click(btn(d, "趴下"));
-    expect(posted.some((p) => p.url === "/api/robots/A/posture")).toBe(false);
-    const dlg = await waitFor(() => { const x = c.querySelector("dialog"); expect(x).toBeTruthy(); return x!; });
-    expect(dlg.textContent).toContain("旁边没有人");
-    fireEvent.click(btn(dlg, "趴下"));
-    await waitFor(() => expect(posted.find((p) => p.url === "/api/robots/A/posture")?.body).toEqual({ mode: "lie" }));
-    await waitFor(() => expect(said.join()).toContain("已趴下"));
-    cleanup();
-    robots[0] = card({ postures: ["stand", "lie"], task: "adhoc-forever-dcf7", task_what: { kind: "patrol", route: "一楼夜巡", forever: true } });
-    const { container: c2 } = render(<RobotsPage say={(s) => said.push(s)} now={NOW} role="guard" />);
-    await waitFor(() => expect(cardOf(c2, "A")).not.toBeNull());
-    fireEvent.click(cardOf(c2, "A"));
-    const d2 = c2.querySelector(".robot-detail")!;
-    expect(btn(d2, "趴下").disabled).toBe(true);
-    // 第 9 轮 W9-06:写在干什么,不露任务编号
-    expect(d2.textContent).toContain("A 正在一直巡逻（一楼夜巡）：先叫停再换姿态。");
-    expect(d2.textContent).not.toContain("adhoc-forever");
-    expect(Array.from(d2.querySelectorAll("button")).some((b) => b.textContent?.trim() === "蹲下")).toBe(false);
-    cleanup();
-    robots[0] = card({ postures: ["stand", "lie"], task: null, held: { by: "bob", at_ms: NOW - 1000 } });
-    const { container: c4 } = render(<RobotsPage say={(s) => said.push(s)} now={NOW} role="guard" />);
-    await waitFor(() => expect(cardOf(c4, "A")).not.toBeNull());
-    fireEvent.click(cardOf(c4, "A"));
-    const d4 = c4.querySelector(".robot-detail")!;
-    expect(btn(d4, "趴下").disabled).toBe(true);
-    expect(d4.textContent).toContain("先点「恢复」再换姿态");
-    cleanup();
-    const { container: c3 } = render(<RobotsPage say={(s) => said.push(s)} now={NOW} role="owner" />);
-    await waitFor(() => expect(cardOf(c3, "A")).not.toBeNull());
-    fireEvent.click(cardOf(c3, "A"));
-    expect(c3.querySelector(".rd-posture")).toBeNull();
-  });
-
-  it("W72 控制:被叫停的给恢复;离线不能派;经理只能派巡逻和停", async () => {
-    robots[0] = card({ held: { by: "bob", at_ms: NOW - 60_000 } });
-    robots[1] = { ...robots[1], problems: [], recent_problems: [] };
-    const { container: c } = render(<RobotsPage say={(s) => said.push(s)} now={NOW} role="admin" />);
-    await waitFor(() => expect(cardOf(c, "A")).not.toBeNull());
-    fireEvent.click(cardOf(c, "A"));
-    let d = c.querySelector(".robot-detail")!;
-    expect(d.textContent).toContain("bob");
-    fireEvent.click(btn(d, "恢复"));
-    await waitFor(() => expect(posted.some((p) => p.url === "/api/robots/A/resume")).toBe(true));
-    fireEvent.click(cardOf(c, "B"));
-    d = c.querySelector(".robot-detail")!;
-    expect(btn(d, "回待命点").disabled).toBe(true);
-    expect(d.textContent).toContain("离线");
-    cleanup();
-    const o = render(<RobotsPage say={(s) => said.push(s)} now={NOW} role="owner" readOnly />).container;
-    await waitFor(() => expect(cardOf(o, "A")).not.toBeNull());
-    fireEvent.click(cardOf(o, "A"));
-    d = o.querySelector(".robot-detail")!;
-    expect(btn(d, "派巡逻")).toBeTruthy();
-    expect(btn(d, "停止当前任务")).toBeTruthy();
-    expect(btn(d, "回待命点")).toBeUndefined();
-    expect(btn(d, "恢复")).toBeUndefined();
-  });
-});
-
-describe("网页易用性第 1 轮 P1-23", () => {
-  it("还没连上过的:灰的「还没连上(等激活)」,不是红的离线", async () => {
-    robots = [card({ robot_id: "N", online: false, ever_seen: false, battery_pct: null }), card({ robot_id: "B", online: false, ever_seen: true })];
-    const { container: c } = page();
-    await waitFor(() => expect(c.querySelector('[data-robot="N"]')).not.toBeNull());
-    const n = c.querySelector('[data-robot="N"] .fleet-state')!;
-    expect(n.textContent).toContain("未激活");                         // 第 3 轮 admin N2:卡片上短一点,编号不被挤掉
-    expect(n.querySelector(".state")!.getAttribute("title")).toContain("还没连上");
-    expect(n.querySelector(".tone-error")).toBeNull();
-    expect(c.querySelector('[data-robot="B"] .fleet-state .tone-error')).not.toBeNull();
-  });
-});
-
-describe("网页易用性第 1 轮 P1-27/28", () => {
-  it("不能自己找位置的:自动定位灰掉、写原因;报了站没站着就写当前姿态", async () => {
-    lang.value = "zh";
-    robots[0] = card({ postures: ["stand", "lie"], task: null });
-    const u = { robot: { robot_id: "A", active: true, fresh: true, revoked: false, held: null,
-      status: { online: true, last_seen: 0, ready: { motion: true } }, capabilities: { tasks: {} } },
-      state: "idle", battery: 90, task: "" } as unknown as UnitInfo;
-    const { container: c } = render(<RobotsPage say={() => {}} now={NOW} role="guard" units={[u]} />);
-    await waitFor(() => expect(cardOf(c, "A")).not.toBeNull());
-    fireEvent.click(cardOf(c, "A"));
-    const d = c.querySelector(".robot-detail")!;
-    expect(btn(d, "自动定位").disabled).toBe(true);
-    expect(d.querySelector(".rd-why")!.textContent).toContain("不能自己找位置");
-    expect(d.querySelector("[data-posture-now]")!.textContent).toContain("现在站着");
-  });
-});
-
-describe("网页易用性第 1 轮 P1-30", () => {
-  it("经理:说明不提改名、解绑;没路线时让找管理员,不叫他去布置", async () => {
-    lang.value = "zh";
-    robots[0] = card({});
-    const { container: c } = render(<RobotsPage say={() => {}} now={NOW} role="owner" readOnly />);
-    await waitFor(() => expect(cardOf(c, "A")).not.toBeNull());
-    expect(c.querySelector(".lead")!.textContent).not.toContain("解绑");
-  });
-});
-
-
-describe("第 2 轮 P0-10 / N4:解绑说实话,后续步骤常驻", () => {
-  const ask = async (id: string) => {
-    const { container: c } = page();
-    await waitFor(() => expect(cardOf(c, id)).not.toBeNull());
-    fireEvent.click(cardOf(c, id));
-    fireEvent.click(btn(c.querySelector(".robot-detail")!, "解绑"));
-    return document.querySelector(".modal")!.textContent ?? "";
-  };
-  it("在线:现在就清;录像已经在站点上的留着", async () => {
-    const txt = await ask("A");
-    expect(txt).toContain("现在就清除");
-    expect(txt).toContain("站点上已有的录像不删");
-  });
-  it("离线:下次连上才清,证书现在作废", async () => {
-    const txt = await ask("B");
-    expect(txt).toContain("下次连上站点时");
-    expect(txt).not.toContain("现在就清除");
-  });
-  it("从没连上过:没有东西要清", async () => {
-    robots = [card({ robot_id: "T9", online: false, ever_seen: false })];
-    const txt = await ask("T9");
-    expect(txt).toContain("从没连上过");
-  });
-  it("消息服务没重启的:机器人页常驻一条,写要重启、才能重新添加", async () => {
-    openRevoked = ["T7"];
-    const { container: c } = page();
-    await waitFor(() => expect(c.querySelector("[data-open-revoked]")).not.toBeNull());
-    expect(c.querySelector("[data-open-revoked]")!.textContent).toContain("T7");
-    expect(c.querySelector("[data-open-revoked]")!.textContent).toContain("重启消息服务");
-  });
-});
-
-describe("第 2 轮 N2:回原点、回待命点做不成的先灰掉", () => {
-  it("没原点:回原点灰掉、写原因、给去定位页的链接;没待命点:回待命点灰掉、给去设置待命点的链接", async () => {
-    robots = [card({ home_set: false, standby_set: false })];
-    const { container: c } = page();
-    await waitFor(() => expect(cardOf(c, "A")).not.toBeNull());
-    fireEvent.click(cardOf(c, "A"));
-    const d = c.querySelector(".robot-detail")!;
-    await waitFor(() => expect(btn(d, "回原点")).toBeTruthy());
-    expect(btn(d, "回原点").disabled).toBe(true);
-    expect(btn(d, "回待命点").disabled).toBe(true);
-    expect(d.querySelector('a[href="#/admin/localization"]')).not.toBeNull();
-    expect(d.querySelector('a[href="#/admin/layout?tab=standby"]')).not.toBeNull();
-  });
-  it("都有:照常能点", async () => {
-    robots = [card({ home_set: true, standby_set: true })];
-    const { container: c } = page();
-    await waitFor(() => expect(cardOf(c, "A")).not.toBeNull());
-    fireEvent.click(cardOf(c, "A"));
-    const d = c.querySelector(".robot-detail")!;
-    await waitFor(() => expect(btn(d, "回原点")).toBeTruthy());
-    expect(btn(d, "回原点").disabled).toBe(false);
-    expect(btn(d, "回待命点").disabled).toBe(false);
-  });
-});
-
-describe("第 4 轮 admin N2", () => {
-  it("添加重复编号:错误写在弹窗里,不只靠 toast", async () => {
+  it("第 4 轮 admin N2:添加重复编号,错误写在弹窗里,不只靠 toast", async () => {
     setFetch(((url: string, init?: RequestInit) => {
       if (init?.method === "POST" && url === "/api/admin/robots") return Promise.resolve(json({ error: "A 已登记且未吊销;先 revoke" }, 409));
       if (url.startsWith("/api/robots/overview")) return Promise.resolve(json({ robots, open_revoked: [] }));
       return Promise.resolve(json({}, 404));
     }) as typeof fetch);
     const c = page();
-    fireEvent.click(await c.findByText("添加机器人"));
+    await waitFor(() => expect(cardOf(c.container, "A")).not.toBeNull());
+    fireEvent.click(btn(c.container, "添加"));
     fireEvent.click(await c.findByText("工程师：用开通码手动添加"));
     const dlg = c.container.ownerDocument.querySelector("dialog")!;
     fireEvent.input(dlg.querySelector("input")!, { target: { value: "A" } });
     fireEvent.submit(dlg.querySelector("form")!);
     await waitFor(() => expect(dlg.querySelector("[data-form-error]")?.textContent).toContain("A"));
     expect(said).toEqual([]);
-  });
-});
-
-describe("第 10 轮 W10-03", () => {
-  it("机器人页「状态」的圈数只写一遍", async () => {
-    lang.value = "zh";
-    robots[0] = card({ task: "adhoc-forever-x", lap: { n: 4, of: 0 } });
-    const u = { robot: { robot_id: "A", active: true, fresh: true, revoked: false, held: null,
-      status: { online: true, last_seen: 0, ready: { motion: true } }, capabilities: { tasks: {} } },
-      state: "patrolling", battery: 90, task: "一直巡逻 · 第 4 圈" } as unknown as UnitInfo;
-    const { container: c } = render(<RobotsPage say={() => {}} now={NOW} role="admin" units={[u]} />);
-    await waitFor(() => expect(cardOf(c, "A")).not.toBeNull());
-    fireEvent.click(cardOf(c, "A"));
-    const facts = c.querySelector(".robot-detail .rd-facts")!.textContent!;
-    expect(facts.split("第 4 圈").length - 1).toBe(1);
   });
 });

@@ -1,24 +1,23 @@
-// 机器人页(W44 第二期,设计 §5.1「机器人」):每台一张卡片 —— 名字、在线、电量、今天巡了几趟、有没有毛病(站点
-// /api/robots/overview 一次给全,今天按站点时区算)。点开是详情:改名字、软件版本、证书到期、最近的毛病、只能手动派 / 自动派、
-// 重出开通码、解绑(确认 + 再输一次密码;解绑 = 机器人恢复出厂,W42)。
-// W42:「添加」= 手机扫机器人贴纸;机器人连上站点后挂在本页顶上「等待批准加入」,核对 6 位核对码、再输密码批准。
-// 机器人上有人提了换 WiFi:详情里确认 / 不换(卡片上标出来)。工程师的开通码流程收进「添加」里的一个按钮。
-// 照片位这一期放图标;电池健康机器人还不报,不显示。
-// W60 卡片分层:第一层名字、状态、在做什么、电量;第二层定位、网络、今天几趟;出了毛病才多一条琥珀色提示
-// (正常时安静,不写「正常」)。在做什么、定位从值班的实时数据来(units),概况接口没有。
-import { siteKnown, siteStr, zhPunct } from "./sitetext";
+// 现场设置 → 机器人(redesign 第六期 R-A / R-A2 / M-robot;W44 第二期机器人页换样子)。
+// 左栏:机器人列表(状态、名字、电量、在做什么、毛病)+「添加」;底下是等待批准加入的申请(核对码、核对并批准 / 拒绝)。
+// 右边是选中那一台:页头名字、状态牌、编号 · 定位 · 派单方式 · 最后联系;「操作 / 设置」两个视图(经理只有操作)。
+// 操作 = 值班页的单台机器人控制(画面、云台、喊话、警示、当前任务、派巡逻、姿态、定位、今天)+ 健康状况。
+// 设置 = 名字、派单方式;检查单(要处理的在上,正常的按 连接 / 硬件 / 地图上的设置 收起来);排查与维护(W55 远程运维);
+//        右栏告警记录(W72 三组)、解绑(原地确认 + 再输密码;解绑 = 机器人恢复出厂,W42)。
+// W42:「添加」= 手机扫机器人贴纸;工程师的开通码流程收进「添加」里的一个按钮。
+import { siteKnown, zhPunct } from "./sitetext";
 import { useCallback, useEffect, useRef, useState } from "preact/hooks";
 import { api, ApiError, enc } from "./api";
 import { ConfirmPassword } from "./confirmpw";
 import { hm, robotNames, siteDown } from "./data";
-import { Confirm, Modal } from "./dialogs";
-import { alertTitle, lang, refusalText, t, type Key } from "./i18n";
-import { autoResolved, canDispatch, canFindPose, canPatrol, canTeleop, isOwnerLike } from "./model";
-import { notAccepted, type CommandReply } from "./posepick";
-import { siteHm } from "./todaypatrols";
-import { Shape } from "./icons";
-import { locText, StateText, type UnitInfo } from "./live";
-import { lapText, LoopsSelect } from "./loops";
+import { Modal } from "./dialogs";
+import { alertTitle, lang, t, type Key } from "./i18n";
+import { autoResolved, type Alert } from "./model";
+import { locText, type UnitInfo } from "./live";
+import { RobotControl } from "./robotctl";
+import { RobotOps } from "./remoteops";
+import { Sign } from "./signs";
+import type { TodayItem } from "./todaypatrols";
 
 type Say = (s: string) => void;
 export interface RobotCard {
@@ -95,33 +94,38 @@ export function taskWhat(w: { kind: string; route: string; forever: boolean } | 
   return w.route ? t("twRoute", { what: t(k), route: w.route }) : t(k);
 }
 
-export function RobotsPage({ say, now, units = [], readOnly = false, role = "admin", robot = null }: {
+export function RobotsPage({ say, now, units = [], readOnly = false, role = "admin", robot = null, alerts = [], refresh }: {
   say: Say; now: number; units?: UnitInfo[]; readOnly?: boolean; role?: string; robot?: string | null;
+  alerts?: Alert[]; refresh?: () => Promise<void>;
 }) {
   const [rows, setRows] = useState<RobotCard[] | null>(null);
   // 第 2 轮 N4:解绑了、消息服务还没重启的编号(常驻提示)
   const [openRevoked, setOpenRevoked] = useState<string[]>([]);
-  // P2-08:从总览点「详情」带着 ?robot= 进来,直接打开那一台
+  // P2-08:从总览点「详情」带着 ?robot= 进来,直接打开那一台;没带就开第一台
   const [open, setOpen] = useState<string | null>(robot);
+  const [view, setView] = useState<"op" | "set">("op");
   const [adding, setAdding] = useState(false);
   const [code, setCode] = useState<{ id: string; code: string; hours: number } | null>(null);
   const [pending, setPending] = useState<BindReq[]>([]);
   const [approving, setApproving] = useState<BindReq | null>(null);
-  const [rejecting, setRejecting] = useState<BindReq | null>(null);
-  void now;
+  const [rejecting, setRejecting] = useState<string | null>(null);
+  const [patrols, setPatrols] = useState<TodayItem[]>([]);
   const loadPending = useCallback(() => {
+    if (readOnly) return;
     // 没开绑定的站点(没接站点目录)回 404:当没有
     api<{ requests: BindReq[] }>("GET", "/api/admin/bind").then((d) => setPending(d.requests ?? [])).catch(() => setPending([]));
-  }, []);
+  }, [readOnly]);
   const load = useCallback(() => {
     api<{ robots: RobotCard[]; open_revoked?: string[] }>("GET", "/api/robots/overview")
       .then((d) => {
         setOpenRevoked(d.open_revoked ?? []);
         const list = (d.robots ?? []).filter((r) => !r.revoked);
         setRows(list);
+        setOpen((o) => (o && list.some((r) => r.robot_id === o) ? o : list[0]?.robot_id ?? null));
         robotNames.value = { ...robotNames.value, ...Object.fromEntries(list.filter((r) => r.name).map((r) => [r.robot_id, r.name])) };
       })
       .catch((e) => say(errText(e)));
+    api<{ items: TodayItem[] }>("GET", "/api/patrols/today").then((d) => setPatrols(d.items ?? [])).catch(() => {});
   }, []);
   useEffect(load, [load]);
   useEffect(() => {
@@ -130,82 +134,114 @@ export function RobotsPage({ say, now, units = [], readOnly = false, role = "adm
     return () => window.clearInterval(h);
   }, [load, loadPending]);
   const cur = rows?.find((r) => r.robot_id === open) ?? null;
+  const u = cur ? units.find((x) => x.robot.robot_id === cur.robot_id) : undefined;
+  const setView2 = !readOnly && view === "set";
   return (
-    <div class="robots">
-      <div class="panel-head">
-        <h1>{t("robots")}</h1>
-        {!readOnly && <button type="button" class="btn primary push" onClick={() => setAdding(true)}>{t("addRobot")}</button>}
-      </div>
-      {/* P1-30:经理只看,说明不提改名、解绑 */}
-      <p class="muted lead">{t(readOnly ? "robotsLeadView" : "robotsLead")}</p>
-      {!readOnly && openRevoked.length > 0 && (
-        <p class="warn" role="status" data-open-revoked="1">{t("robotsOpenRevoked", { ids: openRevoked.join(", ") })}</p>
-      )}
-      {!readOnly && pending.length > 0 && (
-        <section class="panel bind-pending" aria-label={t("bindPending")}>
-          <h2>{t("bindPending")}</h2>
-          <p class="muted small">{t("bindPendingHint")}</p>
-          <ul class="plain">
-            {pending.map((p) => (
-              <li key={p.id} class="bind-req row wrap" data-serial={p.serial}>
-                <span class="mono">{p.serial}</span>
-                <span>{t("bindCheck")} <strong class="mono check-digits">{p.check}</strong></span>
-                <span class="muted small">{t("bindFrom", { t: hm(p.created_ms), src: p.source })}</span>
-                <span class="push row">
-                  <button type="button" class="btn sm primary" onClick={() => setApproving(p)}>{t("bindApprove")}</button>
-                  <button type="button" class="btn sm" onClick={() => setRejecting(p)}>{t("bindReject")}</button>
-                </span>
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
-      {rows && rows.length === 0 && <p class="empty">{t("robotsNone")}</p>}
-      {/* 第 4 轮 layout r3-N3:读不到时不是一片空 */}
-      {rows == null && siteDown.value && <p class="note warn" role="status" data-load-failed="1">{t("loadRetry")}</p>}
-      <div class={cur ? "robots-split" : undefined}>
-        <div class="robot-cards">
-          {(rows ?? []).map((r) => {
-            const u = units.find((x) => x.robot.robot_id === r.robot_id);
-            const loc = locText(u);
-            const warn = r.problems.length > 0 || !!r.wifi?.change;
-            return (
-              <button key={r.robot_id} type="button" data-robot={r.robot_id}
-                class={["robot-card", r.robot_id === open ? "on" : "", warn ? "warn" : ""].filter(Boolean).join(" ")}
-                onClick={() => setOpen(r.robot_id === open ? null : r.robot_id)}>
-                {/* 第 4 轮 admin N1:起了名字的,名字 + 编号一行(编号不折),状态放第二行 */}
-                <span class={r.name ? "fleet-head named" : "fleet-head"}>
-                  <span class="robot-name" title={label(r)}>{label(r)}</span>
-                  {r.name && <small class="muted mono fleet-id">{r.robot_id}</small>}
-                  <span class="fleet-state">
+    <section class="sp robots rb">
+      <div class="rb-grid">
+        <aside class="rb-list" aria-label={t("robots")}>
+          <header class="rb-listhead">
+            <h1>{t("roTitle", { n: rows?.length ?? "–" })}</h1>
+            {!readOnly && <button type="button" class="btn" onClick={() => setAdding(true)}>{t("roAdd")}</button>}
+          </header>
+          {!readOnly && openRevoked.length > 0 && (
+            <p class="warn sp-pad small" role="status" data-open-revoked="1">{t("robotsOpenRevoked", { ids: openRevoked.join(", ") })}</p>
+          )}
+          {rows && rows.length === 0 && <p class="empty sp-pad">{t("robotsNone")}</p>}
+          {/* 第 4 轮 layout r3-N3:读不到时不是一片空 */}
+          {rows == null && siteDown.value && <p class="note warn sp-pad" role="status" data-load-failed="1">{t("loadRetry")}</p>}
+          <div class="robot-cards">
+            {(rows ?? []).map((r) => {
+              const ux = units.find((x) => x.robot.robot_id === r.robot_id);
+              const warn = r.problems.length > 0 || !!r.wifi?.change;
+              const sign = !r.online ? (r.ever_seen === false ? "idle" : "bad") : warn ? "warn" : "ok";
+              const doing = !r.online ? (r.ever_seen === false ? t("fleetNeverSeenShort") : t("st_offline"))
+                : ux && ux.task ? ux.task : r.task_what ? taskWhat(r.task_what) : ux ? t(`st_${ux.state}` as Key) : t("online");
+              return (
+                <button key={r.robot_id} type="button" data-robot={r.robot_id} aria-pressed={r.robot_id === open}
+                  class={["robot-card", r.robot_id === open ? "on" : "", warn ? "warn" : ""].filter(Boolean).join(" ")}
+                  onClick={() => setOpen(r.robot_id)}>
+                  <Sign kind={sign} />
+                  <span class="rb-name"><b class="robot-name" title={label(r)}>{label(r)}</b>{r.name && <small class="muted mono">{r.robot_id}</small>}</span>
+                  <span class={`mono fleet-pct${r.battery_pct != null && r.battery_pct < 20 ? " warn-text" : ""}`}>{r.battery_pct == null ? "—" : `${r.battery_pct}%`}</span>
+                  <span class="fleet-doing muted">
                     {/* P1-23:刚登记、还没连上过的不是故障:灰的「等它连上」,不是红的「离线」 */}
-                    {!r.online && r.ever_seen === false ? <span class="state" title={t("fleetNeverSeen")}>{t("fleetNeverSeenShort")}</span>
-                      : !r.online ? <span class="state tone-error">{t("st_offline")}</span>
-                      : warn ? <span class="state tone-warning"><Shape kind="P2" />{t("fleetAttention")}</span>
-                      : <span class="state tone-success">{t("online")}</span>}
+                    {!r.online && r.ever_seen !== false ? <span class="tone-error">{doing}</span>
+                      : !r.online ? <span class="state" title={t("fleetNeverSeen")}>{doing}</span> : doing}
+                    {" · "}{patrolsN(r.patrols_today)}
                   </span>
-                </span>
-                {u && r.online && <span class="fleet-doing"><StateText s={u.state} stale={u.stale} />{u.task && <span class="muted">{u.task}</span>}</span>}
-                <span class="fleet-batt">
-                  <span class="muted">{t("fleetBattery")}</span>
-                  <span class="mono fleet-pct">{r.battery_pct == null ? "—" : `${r.battery_pct}%`}</span>
-                  <span class="fleet-bar" aria-hidden="true"><i style={{ width: `${Math.max(0, Math.min(100, r.battery_pct ?? 0))}%` }} /></span>
-                </span>
-                {r.problems.length > 0 && (
-                  <span class="fleet-warn"><Shape kind="P2" />{problemText(r.problems[0], r)}{r.problems.length > 1 ? ` · ${t("robotProblems", { n: r.problems.length })}` : ""}</span>
-                )}
-                {r.wifi?.change && <span class="fleet-warn"><Shape kind="P2" />{t("wifiPending")}</span>}
-                <span class="fleet-facts">
-                  <span><small>{t("fleetLoc")}</small>{loc ? t(loc) : "—"}</span>
-                  <span><small>{t("fleetNet")}</small>{r.wifi ? t(`link_${r.wifi.link}` as Key) : "—"}</span>
-                  <span><small>{t("fleetToday")}</small>{patrolsN(r.patrols_today)}</span>
-                </span>
-              </button>
-            );
-          })}
-        </div>
-        {cur && <RobotDetail readOnly={readOnly} r={cur} u={units.find((x) => x.robot.robot_id === cur.robot_id)} now={now} role={role}
-          say={say} onChanged={load} onCode={setCode} onClose={() => setOpen(null)} />}
+                  {r.problems.length > 0 && (
+                    <span class="fleet-warn">{problemText(r.problems[0], r)}{r.problems.length > 1 ? ` · ${t("robotProblems", { n: r.problems.length })}` : ""}</span>
+                  )}
+                  {r.wifi?.change && <span class="fleet-warn">{t("wifiPending")}</span>}
+                </button>
+              );
+            })}
+          </div>
+          {!readOnly && pending.length > 0 && (
+            <section class="rb-enrol bind-pending" aria-label={t("bindPending")}>
+              <h2><Sign kind="info" />{pending.length === 1 ? t("roEnrol1") : t("roEnrolN", { n: pending.length })}</h2>
+              <p class="muted small">{t("bindPendingHint")}</p>
+              <ul class="plain">
+                {pending.map((p) => (
+                  <li key={p.id} class="bind-req" data-serial={p.serial}>
+                    <span class="muted"><span class="mono">{p.serial}</span> · {t("bindFrom", { t: hm(p.created_ms), src: p.source })}</span>
+                    <span>{t("roVerifyCode")} <strong class="mono check-digits">{p.check}</strong></span>
+                    {rejecting === p.id ? (
+                      <span class="rb-ask" role="group">
+                        <span>{t("bindRejectConfirm", { id: p.serial })}</span>
+                        <span class="rb-row">
+                          <button type="button" class="btn danger" onClick={() => {
+                            setRejecting(null);
+                            api("POST", `/api/admin/bind/${enc(p.id)}/reject`, {})
+                              .then(() => say(t("bindRejected", { id: p.serial })))
+                              .catch((e) => say(errText(e)))
+                              .finally(loadPending);
+                          }}>{t("bindReject")}</button>
+                          <button type="button" class="btn" onClick={() => setRejecting(null)}>{t("cancel")}</button>
+                        </span>
+                      </span>
+                    ) : (
+                      <span class="rb-row">
+                        <button type="button" class="btn primary" onClick={() => setApproving(p)}>{t("roVerify")}</button>
+                        <button type="button" class="btn" onClick={() => setRejecting(p.id)}>{t("bindReject")}</button>
+                      </span>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
+        </aside>
+        {cur && (
+          <div class="rb-main robot-detail" aria-label={label(cur)}>
+            <header class="rb-head">
+              <h2>{label(cur)}</h2>
+              <StateTag r={cur} u={u} />
+              <span class="rb-sub muted">{[cur.name ? cur.robot_id : "", locText(u) ? t(locText(u)!) : "",
+                cur.manual_only ? t("manualOnly") : t("autoDispatch"),
+                cur.last_seen_ms ? t("roLastContact", { t: ago(cur.last_seen_ms, now) }) : ""].filter(Boolean).join(" · ")}</span>
+              {!readOnly && (
+                <div class="seg rb-views" role="group" aria-label={label(cur)}>
+                  <button type="button" aria-pressed={view === "op"} onClick={() => setView("op")}>{t("roOperate")}</button>
+                  <button type="button" aria-pressed={view === "set"} onClick={() => setView("set")}>{t("roSettings")}</button>
+                </div>
+              )}
+            </header>
+            {setView2 ? (
+              <RobotSettings key={cur.robot_id} r={cur} u={u} now={now} say={say} onChanged={load} onCode={setCode} />
+            ) : u ? (
+              <RobotControl key={cur.robot_id} u={u} role={role} now={now} alerts={alerts} patrols={patrols}
+                since={startOfDay(now)} say={say} refresh={async () => { load(); await refresh?.(); }} onBack={() => {}} embedded
+                sideExtra={<Health r={cur} now={now} />} />
+            ) : (
+              <div class="rb-off">
+                <p class="sp-pad muted">{t("roNotConnected")}</p>
+                <Health r={cur} now={now} />
+              </div>
+            )}
+          </div>
+        )}
       </div>
       {adding && (
         <AddRobot onClose={() => setAdding(false)} say={say}
@@ -216,15 +252,207 @@ export function RobotsPage({ say, now, units = [], readOnly = false, role = "adm
         <BindApprove req={approving} onClose={() => setApproving(null)}
           onDone={() => { say(t("bindApproved", { id: approving.serial })); setApproving(null); loadPending(); load(); }} />
       )}
-      {rejecting && (
-        <Confirm text={t("bindRejectConfirm", { id: rejecting.serial })} yes={t("bindReject")} danger onNo={() => setRejecting(null)}
-          onYes={() => {
-            const r = rejecting;
-            setRejecting(null);
-            api("POST", `/api/admin/bind/${enc(r.id)}/reject`, {})
-              .then(() => say(t("bindRejected", { id: r.serial })))
-              .catch((e) => say(errText(e)))
-              .finally(loadPending);
+    </section>
+  );
+}
+
+const devOk = (s: string) => s === "online" || s === "ok";
+
+function startOfDay(ms: number): number {
+  const d = new Date(ms);
+  d.setHours(0, 0, 0, 0);
+  return d.getTime();
+}
+
+/** 名字旁边那块状态牌:在巡逻(绿)、离线(红)、还没连上(灰)、有毛病(黄)。 */
+function StateTag({ r, u }: { r: RobotCard; u?: UnitInfo }) {
+  if (!r.online) {
+    return r.ever_seen === false ? <span class="rb-tag idle">{t("fleetNeverSeen")}</span>
+      : <span class="rb-tag bad"><Sign kind="bad" />{t("st_offline")}</span>;
+  }
+  const warn = r.problems.length > 0 || !!r.wifi?.change;
+  const s = u ? (u.stale ? t("stUnknown") : t(`st_${u.state}` as Key)) : t("online");
+  return <span class={`rb-tag ${warn ? "warn" : "ok"}`}><Sign kind={warn ? "warn" : "ok"} />{s}{r.battery_pct != null && warn ? ` ${r.battery_pct}%` : ""}</span>;
+}
+
+/** 操作视图右栏末尾:电量、网络、存储、设备、软件、巡逻统计(老详情里的「现在」「巡逻」「基本信息」)。 */
+function Health({ r, now }: { r: RobotCard; now: number }) {
+  const bad = (r.devices ?? []).filter((x) => !devOk(x.state));
+  const row = (k: Key, v: preact.ComponentChildren, warn = false) => <><dt>{t(k)}</dt><dd class={warn ? "warn-text" : undefined}>{v}</dd></>;
+  const used = r.storage ? Math.round(r.storage.used_ratio * 100) : null;
+  return (
+    <section class="rc-sec rb-health">
+      <h3 class="lbl">{t("roHealth")}</h3>
+      <dl class="rb-kv">
+        {row("roBattery", r.battery_pct == null ? "—" : `${r.battery_pct}%`, r.battery_pct != null && r.battery_pct < 20)}
+        {row("roNetwork", r.wifi ? `${r.wifi.ssid || "—"} · ${t(`link_${r.wifi.link}` as Key)}` : "—")}
+        {/* 第 11 轮 W11-02:不知道待传几个(站点从盘那一行读出的用量)只写用了多少 */}
+        {r.storage && row("roStorage", r.storage.backlog_files == null ? t("rdStorageUsed", { p: used! })
+          : t("rdStorageVal", { p: used!, n: r.storage.backlog_files }), used! >= 80)}
+        {(r.devices?.length ?? 0) > 0 && row("roDevices", bad.length ? bad.map((x) => `${devName(x.id)} ${t(`dev_${x.state}` as Key)}`).join(" · ") : t("roDevicesOk"), bad.length > 0)}
+        {row("roSoftware", <>{r.agent ?? "—"}{r.map && <> · <span class="mono">{r.map.id} v{r.map.version ?? "?"}</span></>}
+          {r.map?.match === false && <small class="rd-bad"> {t("rdMapBad")}</small>}</>, r.map?.match === false)}
+        {row("roPatrols", <>{t("roPatrolsVal", { a: r.patrols_today, b: r.patrols_7d ?? "—", c: r.aborts_7d ?? "—" })}
+          {r.last_patrol_ms != null && <span class="muted"> · {t("roLastPatrol", { t: when(r.last_patrol_ms, now) })}</span>}</>)}
+      </dl>
+    </section>
+  );
+}
+
+type Check = { k: string; group: "conn" | "hw" | "setup"; sign: "ok" | "warn" | "bad" | "info"; label: Key; value: string; sub?: string; act?: preact.ComponentChildren };
+
+/** 设置视图(R-A2):名字、派单方式;检查单(要处理的在上、正常的收起来按组列);排查与维护(远程运维);右栏告警记录、解绑。 */
+function RobotSettings({ r, u, now, say, onChanged, onCode }: {
+  r: RobotCard; u?: UnitInfo; now: number; say: Say; onChanged: () => void;
+  onCode: (c: { id: string; code: string; hours: number }) => void;
+}) {
+  const [name, setName] = useState(r.name);
+  const [ask, setAsk] = useState<{ text: string; yes: string; danger?: boolean; go: () => void } | null>(null);
+  const [unbind, setUnbind] = useState(false);
+  const [showOk, setShowOk] = useState(false);
+  useEffect(() => setName(r.name), [r.robot_id, r.name]);
+  const act = async (fn: () => Promise<unknown>, msg?: string) => {
+    try {
+      await fn();
+      if (msg) say(msg);
+    } catch (e) {
+      say(errText(e));
+    }
+    onChanged();
+  };
+  const tasks = Object.keys(u?.robot.capabilities?.tasks ?? {});
+  const askBtn = (text: string, yes: string, go: () => void, labelKey: Key) =>
+    <button type="button" class="btn" onClick={() => setAsk({ text, yes, go })}>{t(labelKey)}</button>;
+  const days = r.expires_at ? Math.floor((r.expires_at - now) / 86_400_000) : null;
+  const compat: Key = r.compat === "ok" ? "compat_ok" : (`compat_${r.compat}` as Key);
+  const badDevs = (r.devices ?? []).filter((x) => !devOk(x.state));
+  const used = r.storage ? Math.round(r.storage.used_ratio * 100) : null;
+  const checks: Check[] = [
+    { k: "conn", group: "conn", sign: r.online ? "ok" : r.ever_seen === false ? "info" : "bad", label: "roConn",
+      value: r.online ? t("roOnlineNow") : r.ever_seen === false ? t("fleetNeverSeen") : t("st_offline"),
+      sub: r.last_seen_ms ? t("roLastContact", { t: ago(r.last_seen_ms, now) }) : undefined },
+    r.wifi?.change ? {
+      k: "wifi", group: "conn", sign: "info", label: "roWifi", value: t("roWifiReq", { ssid: r.wifi.change.ssid }),
+      sub: t(r.wifi.change.mode === "trial" ? "wifiChangeTrial" : "wifiChangeAsk", { ssid: r.wifi.change.ssid }),
+      act: <WifiChange id={r.robot_id} ch={r.wifi.change} act={act} />,
+    } : { k: "wifi", group: "conn", sign: "ok", label: "roWifi", value: r.wifi ? `${r.wifi.ssid || "—"} · ${t(`link_${r.wifi.link}` as Key)}` : "—" },
+    { k: "cert", group: "conn", sign: days != null && days < 30 ? "warn" : "ok", label: "roCert",
+      value: r.expires_at ? t("roCertVal", { d: day(r.expires_at) }) : "—", sub: days != null ? t("roCertDays", { n: days }) : undefined,
+      act: tasks.includes("cert_csr") ? <button type="button" class="btn"
+        onClick={() => void act(() => api("POST", `/api/robots/${enc(r.robot_id)}/ops/cert-renew`), t("roCertRenewed"))}>{t("roCertRenew")}</button> : undefined },
+    { k: "code", group: "conn", sign: "ok", label: "roCode", value: t("roCodeHint"),
+      // P1-26 / P1-05:重出开通码先确认,说清是什么意思
+      act: askBtn(t("newCodeAsk", { id: label(r) }), t("newCode"), () => void act(async () => {
+        const d = await api<{ code: string; hours: number }>("POST", `/api/admin/robots/${enc(r.robot_id)}/code`, {});
+        onCode({ id: r.robot_id, code: d.code, hours: d.hours });
+      }), "roCodeIssue") },
+    { k: "batt", group: "hw", sign: r.battery_pct != null && r.battery_pct < 20 ? "warn" : "ok", label: "roBattery",
+      value: r.battery_pct == null ? "—" : r.battery_pct < 20 ? t("roBattLow", { p: r.battery_pct }) : `${r.battery_pct}%` },
+    ...(r.storage ? [{ k: "storage", group: "hw" as const, sign: (used! >= 80 ? "warn" : "ok") as Check["sign"], label: "roStorage" as Key,
+      value: r.storage.backlog_files == null ? t("rdStorageUsed", { p: used! }) : t("rdStorageVal", { p: used!, n: r.storage.backlog_files }) }] : []),
+    { k: "sw", group: "hw", sign: r.compat !== "ok" || r.map?.match === false ? "warn" : "ok", label: "roSw",
+      value: [`${r.agent ?? "—"} · ${t(compat)}`, r.map ? `${r.map.id} v${r.map.version ?? "?"}` : ""].filter(Boolean).join(" · "),
+      sub: r.map?.match === false ? t("rdMapBad") : r.map?.match === true ? t("rdMapOk") : undefined },
+    ...((r.devices?.length ?? 0) > 0 ? [{ k: "devs", group: "hw" as const, sign: (badDevs.length ? "warn" : "ok") as Check["sign"], label: "roDevices" as Key,
+      value: badDevs.length ? badDevs.map((x) => `${devName(x.id)} ${t(`dev_${x.state}` as Key)}`).join(" · ") : t("roDevicesOk"),
+      sub: (r.devices ?? []).map((x) => devName(x.id)).join(" · ") }] : []),
+    ...(r.home_set != null ? [{ k: "home", group: "setup" as const, sign: (r.home_set ? "ok" : "warn") as Check["sign"], label: "roOrigin" as Key,
+      value: r.home_set ? t("roSet") : t("rdNoHome"), act: r.home_set ? undefined : <a class="btn" href="#/admin/localization">{t("rdNoHomeGo")}</a> }] : []),
+    ...(r.standby_set != null ? [{ k: "standby", group: "setup" as const, sign: (r.standby_set ? "ok" : "warn") as Check["sign"], label: "roStandby" as Key,
+      value: r.standby_set ? t("roSet") : t("rdNoStandby"), act: r.standby_set ? undefined : <a class="btn" href="#/admin/layout?tab=standby">{t("rdNoStandbyGo")}</a> }] : []),
+    ...r.problems.filter((p) => !("device" in p)).map((p, i) => ({ k: `p${i}`, group: "hw" as const, sign: "warn" as const, label: "roIssue" as Key,
+      value: problemText(p, r), sub: "first_ms" in p ? when(p.first_ms, now) : undefined })),
+  ];
+  const need = checks.filter((c) => c.sign !== "ok");
+  const okc = checks.filter((c) => c.sign === "ok");
+  const row = (c: Check) => (
+    <li key={c.k} class={`rb-check ${c.sign}`} data-check={c.k}>
+      <Sign kind={c.sign} />
+      <b>{t(c.label)}</b>
+      <span class="rb-cval"><span class={c.sign === "warn" || c.sign === "bad" ? "warn-text" : undefined}>{c.value}</span>{c.sub && <small class="muted">{c.sub}</small>}</span>
+      <span class="rb-cact">{c.act}</span>
+    </li>
+  );
+  const GROUPS: [Check["group"], Key][] = [["conn", "roGConn"], ["hw", "roGHw"], ["setup", "roGSetup"]];
+  return (
+    <div class="rb-set">
+      <div class="rb-setmain">
+        <div class="rb-setbar">
+          <form class="rb-namef" onSubmit={(e) => { e.preventDefault(); void act(() => api("POST", `/api/admin/robots/${enc(r.robot_id)}/name`, { name: name.trim() }),
+            name.trim() ? t("saved") : t("robotNameCleared", { id: r.robot_id })); }}>
+            <label class="lbl" for={`rd-name-${r.robot_id}`}>{t("robotName")}</label>
+            <input id={`rd-name-${r.robot_id}`} name="name" value={name} maxLength={32} placeholder={r.robot_id}
+              onInput={(e) => setName(e.currentTarget.value)} />
+            <button type="submit" class="btn" disabled={name === r.name} title={name === r.name ? t("rdWhyNameSame") : undefined}>{t("robotNameSave")}</button>
+            {/* P2-12:写明最多几个字(原来超了悄悄截掉) */}
+            <small class={name.length >= 32 ? "warn-text" : "muted"} data-name-count="1">{t("robotNameCount", { n: name.length, max: 32 })}</small>
+          </form>
+          <div class="rb-dispatch">
+            <span class="lbl">{t("dispatchMode")}</span>
+            <div class="seg" role="group" aria-label={t("dispatchMode")}>
+              {/* P1-26:切派遣方式先确认,说清是什么意思(原地,不弹窗) */}
+              <button type="button" aria-pressed={!r.manual_only} onClick={() => r.manual_only && setAsk({ text: t("setAutoAsk", { id: label(r) }), yes: t("setAuto"),
+                go: () => void act(() => api("POST", `/api/robots/${enc(r.robot_id)}/service`, { manual_only: false }), t("setAutoDone", { id: label(r) })) })}>{t("autoDispatch")}</button>
+              <button type="button" aria-pressed={r.manual_only} onClick={() => !r.manual_only && setAsk({ text: t("setManualAsk", { id: label(r) }), yes: t("setManual"),
+                go: () => void act(() => api("POST", `/api/robots/${enc(r.robot_id)}/service`, { manual_only: true }), t("setManualDone", { id: label(r) })) })}>{t("manualOnly")}</button>
+            </div>
+            <span class="muted small">{t(r.manual_only ? "roDispatchManual" : "roDispatchAuto")}{r.manual_only && r.manual_note ? ` ${siteKnown(r.manual_note)}` : ""}</span>
+          </div>
+        </div>
+        {ask && !ask.danger && (
+          <div class="rb-ask sp-pad" role="group">
+            <p>{ask.text}</p>
+            <span class="rb-row">
+              <button type="button" class="btn primary" onClick={() => { const g = ask.go; setAsk(null); g(); }}>{ask.yes}</button>
+              <button type="button" class="btn" onClick={() => setAsk(null)}>{t("cancel")}</button>
+            </span>
+          </div>
+        )}
+        <h3 class="rb-sum">{need.length === 0 ? <b>{t("roAllOk")}</b> : <><b>{need.length === 1 ? t("roAttention1") : t("roAttentionN", { n: need.length })}</b> {t("roOtherOk", { n: okc.length })}.</>}</h3>
+        {need.length > 0 && <ul class="rb-checks">{need.map(row)}</ul>}
+        <div class="rb-okbar">
+          <span class="muted">{t("roOtherOk", { n: okc.length })}</span>
+          <button type="button" class="linkbtn" aria-expanded={showOk || need.length === 0} onClick={() => setShowOk(!showOk)}>{showOk || need.length === 0 ? t("roCollapse") : t("roExpand")}</button>
+        </div>
+        {(showOk || need.length === 0) && GROUPS.map(([g, k]) => {
+          const xs = okc.filter((c) => c.group === g);
+          return xs.length ? <div key={g}><h4 class="sp-lbl">{t(k)}</h4><ul class="rb-checks">{xs.map(row)}</ul></div> : null;
+        })}
+        <h4 class="sp-lbl">{t("roTrouble")}</h4>
+        <p class="sp-pad muted small">{t("roTroubleHint")}</p>
+        <div class="sp-pad rb-ops"><RobotOps robotId={r.robot_id} tasks={tasks} say={say} /></div>
+      </div>
+      <aside class="rb-setside">
+        <RecentAlerts items={r.recent_problems} />
+        <section class="rd-sec rb-removal">
+          <h3 class="rd-h">{t("roRemoval")}</h3>
+          {r.enrolled_at != null && <p class="muted small">{t("rdEnrolled")} {day(r.enrolled_at)}</p>}
+          <button type="button" class="btn danger" onClick={() => setAsk({
+            // 第 4 轮:解绑要重启消息服务器(吊销名单 broker 重启才读),所有机器人断线几秒 —— 写明会怎样
+            text: `${t(r.online ? "robotUnbindConfirm" : r.ever_seen === false ? "robotUnbindConfirmNever" : "robotUnbindConfirmOffline", { id: label(r) })} ${t("robotUnbindBroker")}`,
+            yes: t("roContinue"), danger: true, go: () => setUnbind(true) })}>{t("roUnbindBtn", { id: label(r) })}</button>
+          <p class="muted small">{t("roUnbindHint")}</p>
+          {ask?.danger && (
+            <div class="rb-ask" role="group">
+              <p>{ask.text}</p>
+              <span class="rb-row">
+                <button type="button" class="btn danger" onClick={() => { const g = ask.go; setAsk(null); g(); }}>{ask.yes}</button>
+                <button type="button" class="btn" onClick={() => setAsk(null)}>{t("cancel")}</button>
+              </span>
+            </div>
+          )}
+        </section>
+      </aside>
+      {unbind && (
+        <ConfirmPassword title={t("robotUnbind")} onClose={() => setUnbind(false)}
+          onConfirm={async (pw) => {
+            const d = await api<{ robot_wipe?: string; old_connection_open?: boolean }>("POST", `/api/admin/robots/${enc(r.robot_id)}/revoke`, { confirm_password: pw });
+            setUnbind(false);
+            // 网页易用性第 1 轮 P0-10:如实说 —— 老版本不认远程清除;消息服务器没重启时旧连接还开着
+            // 第 3 轮 P0-10:从没连上过的不说「下次连上时删数据」(跟确认框说法相反)
+            const wipe = d.robot_wipe === "sent" ? "robotUnbound" : d.robot_wipe === "unsupported" ? "robotUnboundNoWipe" : r.ever_seen === false ? "robotUnboundNever" : "robotUnboundOffline";
+            say([t(wipe, { id: label(r) }), d.old_connection_open ? t("robotUnboundOpen") : ""].filter(Boolean).join(" "));
+            onChanged();
           }} />
       )}
     </div>
@@ -293,308 +521,6 @@ function ago(ms: number, now: number): string {
   return when(ms, now);
 }
 
-type Act = (fn: () => Promise<unknown>, msg?: string) => Promise<void>;
-
-/** W72(用户 11-03):手机上有的操作网页也要 —— 选路线开始巡逻、回待命点、停止当前任务、自动定位、叫停后恢复。
- * 权限跟手机一样:派巡逻、停止 = 能派单的 + 经理;回待命点、自动定位、恢复 = 能派单的(经理不能让它再动)。 */
-function Controls({ r, u, role, say, onChanged }: { r: RobotCard; u?: UnitInfo; role: string; say: Say; onChanged: () => void }) {
-  const [routes, setRoutes] = useState<string[] | null>(null);
-  const [pick, setPick] = useState("");
-  const [loops, setLoops] = useState(1);
-  const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState<string | null>(null);
-  const [ask, setAsk] = useState<Posture | null>(null);
-  const [askHome, setAskHome] = useState(false);
-  const [drawn, setDrawn] = useState<Record<string, { id: string; v: string; title?: string }>>({});
-  const patrol = canPatrol(role);
-  const dispatch = canDispatch(role);
-  useEffect(() => {
-    if (!patrol) return;
-    api<{ missions?: string[] }>("GET", "/api/schedule")
-      .then((d) => { const m = d.missions ?? []; setRoutes(m); setPick(m.length === 1 ? m[0] : ""); })
-      .catch(() => setRoutes([]));
-    // 第 8 轮 W8-02:路线画在哪一版(跟 App 一样,别的版本上的灰掉);读不到就不灰(站点照样会拒)
-    api<{ routes?: { id: string; map_id?: string; map_version?: string; title?: string }[] }>("GET", "/api/routes")
-      .then((d) => setDrawn(Object.fromEntries((d.routes ?? []).map((x) => [x.id, { id: x.map_id ?? "", v: x.map_version ?? "", title: x.title }]))))
-      .catch(() => setDrawn({}));
-  }, [r.robot_id, patrol]);
-  /** 这条路线画在别的图 / 版本上:回「画在哪一版」;对得上、不知道回 null。 */
-  const otherMap = (m: string): string | null => {
-    const d = drawn[m];
-    if (!d || !d.v || !r.map?.version) return null;
-    if (d.id && r.map.id && d.id !== r.map.id) return `${d.id} v${d.v}`;
-    return d.v === r.map.version ? null : `v${d.v}`;
-  };
-  useEffect(() => setErr(null), [r.robot_id]);
-  const id = r.name || r.robot_id;
-  // UIUX-022:派不了的路线(画在别的地图版本上):不当默认选中,「派巡逻」也不能点
-  const cantRoutes = (routes ?? []).map((m) => [m, otherMap(m)] as const).filter((x): x is readonly [string, string] => x[1] !== null);
-  const pickOk = !!pick && otherMap(pick) === null;
-  const send = async (fn: () => Promise<(CommandReply & { queued?: boolean; start_after_ms?: number; because?: string; utc_offset_min?: number }) | null>,
-    ok: string) => {
-    setBusy(true);
-    setErr(null);
-    try {
-      const res = await fn();
-      if (res === null) return;
-      if (res.queued) say(t("trQueued", { id, at: siteHm(res.start_after_ms ?? 0, res.utc_offset_min), why: res.because ?? "" }));
-      else {
-        const no = res.ack ? notAccepted(res) : null;
-        if (no) setErr(t("rdNotAccepted", { why: no }));
-        else say(ok);
-      }
-    } catch (e) {
-      setErr(e instanceof ApiError ? refusalText(e.message, e.data) : String(e));
-    } finally {
-      setBusy(false);
-      onChanged();
-    }
-  };
-  const path = (a: string) => `/api/robots/${enc(r.robot_id)}/${a}`;
-  const abort = () => send(async () => {
-    const v = await api<{ status?: { task?: { task_id?: string } | null } | null }>("GET", `/api/robots/${enc(r.robot_id)}`);
-    const tid = v.status?.task?.task_id;
-    if (!tid) { say(t("rdNoTask", { id })); return null; }
-    const res = await api<CommandReply>("POST", path("abort"), { task_id: tid });
-    // 第 9 轮 W9-06:机器人收到叫停到真的停下要一两秒 —— 过一会儿再刷两次,不让页面一直写「一直巡逻 · 第 2 圈」
-    for (const ms of [1500, 4000]) setTimeout(onChanged, ms);
-    return res;
-  }, t("rdSent", { id, what: t("rdAbort") }));
-  const off = !r.online;
-  // P1-27:点了也做不成的先灰掉、把原因写在按钮下面(不是点了才报红字)
-  const findable = u ? canFindPose(u.robot) : true;
-  const why = off ? null : r.task ? t("rdHomeBusy") : !findable ? t("rdNoAutoLoc") : null;
-  // P1-28:当前姿态(状态里的 ready.motion:站着能走 = true;老站点、没报 = 不写)
-  const motion = u?.robot.status?.ready?.motion;
-  // 第 2 轮 N2:没原点、没默认待命点的先灰掉,写原因、给去处理的链接(不是点了才报红字)
-  const noHome = r.home_set === false;
-  const noStandby = r.standby_set === false;
-  // UIUX-008:灰着的按钮悬停说为什么(按先后挑第一条成立的)
-  const whyOff = (...xs: [boolean, string][]): string | undefined => xs.find((x) => x[0])?.[1];
-  const offWhy = t(r.ever_seen === false ? "rdNeverNoCtl" : "rdOfflineNoCtl");
-  return (
-    <section class="rd-sec rd-control">
-      <h3 class="rd-h">{t("rdControl")}</h3>
-      {r.held && (
-        <div class="note warn rd-held">
-          <span>{t("rdHeld", { by: r.held.by, t: when(r.held.at_ms) })}</span>
-          {dispatch && <button type="button" class="btn sm" disabled={busy} title={whyOff([busy, t("rdWhySending")])}
-            onClick={() => void send(() => api("POST", path("resume"), {}), t("rdSent", { id, what: t("rdResume") }))}>{t("rdResume")}</button>}
-        </div>
-      )}
-      {off && <p class="muted small">{t(r.ever_seen === false ? "rdNeverNoCtl" : "rdOfflineNoCtl")}</p>}
-      {patrol && (
-        <div class="rd-name">
-          <label class="rd-label" for={`rd-route-${r.robot_id}`}>{t("rdRoute")}</label>
-          {routes !== null && routes.length === 0 ? <p class="muted small">{t(isOwnerLike(role) ? "rdNoRoutes" : "rdNoRoutesAsk")}</p> : (
-            <div class="rd-inline">
-              <select id={`rd-route-${r.robot_id}`} name="route" value={pickOk ? pick : ""} onChange={(e) => setPick(e.currentTarget.value)}>
-                <option value="">{t("rdPickRoute")}</option>
-                {(routes ?? []).map((m) => (
-                  // UIUX-022:选项只写路线名(原生下拉放不下整句、也没有省略号);派不了的灰掉,原因写在下拉下面
-                  <option key={m} value={m} disabled={otherMap(m) !== null}>{drawn[m]?.title || m}</option>
-                ))}
-              </select>
-              <LoopsSelect value={loops} onChange={setLoops} />
-              <button type="button" class="btn sm primary" disabled={busy || off || !pickOk}
-                title={whyOff([busy, t("rdWhySending")], [off, offWhy], [!!pick && !pickOk, t("rdRouteOtherMap", { at: otherMap(pick) ?? "", id, v: `v${r.map?.version ?? ""}` })], [!pickOk, t("rdWhyPickRoute")])}
-                onClick={() => void send(() => api("POST", path("patrol"), { mission_id: pick, loops }),
-                  t("rdPatrolSent", { id, route: drawn[pick]?.title || pick }))}>
-                {t("rdStartPatrol")}
-              </button>
-            </div>
-          )}
-          {cantRoutes.length > 0 && (
-            <ul class="plain small warn" data-route-why="1">
-              {cantRoutes.map(([m, o]) => <li key={m}>{drawn[m]?.title || m} {t("rdRouteOtherMap", { at: o, id, v: `v${r.map?.version ?? ""}` })}</li>)}
-            </ul>
-          )}
-        </div>
-      )}
-      {dispatch && !off && (noHome || noStandby) && (
-        <ul class="plain rd-why small muted">
-          {noHome && <li>{t("rdNoHome")} {isOwnerLike(role) && <a href="#/admin/localization">{t("rdNoHomeGo")}</a>}</li>}
-          {noStandby && <li>{t("rdNoStandby")} {isOwnerLike(role) && <a href="#/admin/layout?tab=standby">{t("rdNoStandbyGo")}</a>}</li>}
-        </ul>
-      )}
-      <div class="rd-actions">
-        {dispatch && <button type="button" class="btn sm" disabled={busy || off || noStandby}
-          title={whyOff([busy, t("rdWhySending")], [off, offWhy], [noStandby, t("rdNoStandby")])}
-          onClick={() => void send(() => api("POST", path("standby/return"), {}), t("rdSent", { id, what: t("rdReturn") }))}>{t("rdReturn")}</button>}
-        {dispatch && <button type="button" class="btn sm" disabled={busy || off || !!r.task || noHome}
-          title={whyOff([busy, t("rdWhySending")], [off, offWhy], [!!r.task, t("rdHomeBusy")], [noHome, t("rdNoHome")])}
-          onClick={() => void send(() => api("POST", path("home/return"), {}), t("rdSent", { id, what: t("rdHome") }))}>{t("rdHome")}</button>}
-        {dispatch && r.task && <button type="button" class="btn sm rd-danger" disabled={busy || off}
-          title={whyOff([busy, t("rdWhySending")], [off, offWhy])}
-          onClick={() => setAskHome(true)}>{t("rdAbortHome")}</button>}
-        {dispatch && <button type="button" class="btn sm" disabled={busy || off || !findable}
-          title={whyOff([busy, t("rdWhySending")], [off, offWhy], [!findable, t("rdNoAutoLoc")])}
-          onClick={() => void send(() => api("POST", path("relocalize"), { global: true }), t("rdSent", { id, what: t("rdAutoLoc") }))}>{t("rdAutoLoc")}</button>}
-        {/* P1-28:站点说了它空闲(task 是 null)就灰掉;没带这一项的老站点照旧能点(点了现问) */}
-        {patrol && <button type="button" class="btn sm rd-danger" disabled={busy || r.task === null}
-          title={whyOff([busy, t("rdWhySending")], [r.task === null, t("rdIdle")])} onClick={() => void abort()}>{t("rdAbort")}</button>}
-      </div>
-      {dispatch && why && <p class="muted small rd-why">{why}</p>}
-      {err && <p class="error small" role="alert">{err}</p>}
-      {canTeleop(role) && (r.postures ?? []).length > 0 && (
-        <div class="rd-name rd-posture">
-          <span class="rd-label">{t("rdPosture")}{motion !== undefined && r.online && <span class="muted small" data-posture-now="1"> · {motion ? t("rdNowStanding") : t("rdNowDown")}</span>}</span>
-          <div class="rd-actions">
-            {(r.postures ?? []).map((m) => (
-              <button key={m} type="button" class="btn sm" disabled={busy || off || !!r.task || !!r.held}
-                title={whyOff([busy, t("rdWhySending")], [off, offWhy], [!!r.task, t("rdPostureBusy", { id, what: taskWhat(r.task_what) })], [!!r.held, t("rdPostureHeld")])}
-                onClick={() => setAsk(m)}>{t(POSTURE_KEY[m])}</button>
-            ))}
-          </div>
-          {r.task && <p class="muted small">{t("rdPostureBusy", { id, what: taskWhat(r.task_what) })}</p>}
-          {!r.task && r.held && <p class="muted small">{t("rdPostureHeld")}</p>}
-        </div>
-      )}
-      {dispatch && r.deter && <DeterPanel r={r} d={r.deter} id={id} busy={busy} off={off} send={send} path={path} admin={isOwnerLike(role)} say={say} />}
-      {askHome && (
-        <Confirm text={t("rdAbortHomeAsk", { id, what: taskWhat(r.task_what) })} yes={t("rdAbortHome")} danger
-          onNo={() => setAskHome(false)}
-          onYes={() => {
-            setAskHome(false);
-            void send(() => api("POST", path("home/return"), { abort: true }), t("rdSent", { id, what: t("rdAbortHome") }));
-          }} />
-      )}
-      {ask && (
-        <Confirm text={t("rdPostureAsk", { id, what: t(POSTURE_KEY[ask]) })} yes={t(POSTURE_KEY[ask])}
-          onNo={() => setAsk(null)}
-          onYes={() => {
-            const m = ask;
-            setAsk(null);
-            void send(() => api("POST", path("posture"), { mode: m }), t("rdPostureDone", { id, what: t(POSTURE_KEY[m]) }));
-          }} />
-      )}
-    </section>
-  );
-}
-
-/** POC 11-06 竞品云台:每按一下转多少度、角度上限(跟 nexwar_contract.deter 一致)、雨刷刷多久。 */
-const PAN_STEP = 15, TILT_STEP = 10, PAN_MAX = 180, TILT_MAX = 90, WIPER_S = 10;
-
-/** POC 11-05:警灯开关(带时长)、喊话(打字、录好的话术)。保安、管理员;狗报了 deter 才有。 */
-function DeterPanel({ r, d, id, busy, off, send, path, admin, say }: {
-  r: RobotCard; d: Deter; id: string; busy: boolean; off: boolean;
-  send: (fn: () => Promise<CommandReply | null>, ok: string) => Promise<void>; path: (a: string) => string;
-  admin: boolean; say: Say;
-}) {
-  // 第三档 #41:常用喊话(全站一张,站点 /api/voice-presets);老站点没有这个接口就不出这一行
-  const [presets, setPresets] = useState<VoicePreset[] | null>(null);
-  const [editing, setEditing] = useState(false);
-  const tts = d.outputs.includes("speaker") && d.tts;
-  useEffect(() => {
-    if (!tts) return;
-    let live = true;
-    api<{ presets: VoicePreset[] }>("GET", "/api/voice-presets").then((x) => live && setPresets(x.presets ?? []))
-      .catch(() => live && setPresets(null));
-    return () => { live = false; };
-  }, [tts]);
-  const [secs, setSecs] = useState(60);
-  const [text, setText] = useState("");
-  useEffect(() => setText(""), [r.robot_id]);
-  const deter = (body: Record<string, unknown>) => () => api<CommandReply>("POST", path("deter"), body);
-  const strobe = d.outputs.includes("strobe");
-  const speaker = d.outputs.includes("speaker");
-  const words = text.trim();
-  // POC 11-06 竞品云台:没有回读角度,按「上次按到哪」算(看见人自己转过去以后,先点回正再调)
-  const [aim, setAim] = useState<[number, number]>([0, 0]);
-  useEffect(() => setAim([0, 0]), [r.robot_id]);
-  const turn = (dp: number, dt: number) => {
-    const pan = dp === 0 && dt === 0 ? 0 : Math.max(-PAN_MAX, Math.min(PAN_MAX, aim[0] + dp));
-    const tilt = dp === 0 && dt === 0 ? 0 : Math.max(-TILT_MAX, Math.min(TILT_MAX, aim[1] + dt));
-    setAim([pan, tilt]);
-    void send(deter({ output: "ptz", on: true, pan, tilt }), t("rdPtzDone", { id, pan, tilt }));
-  };
-  return (
-    <div class="rd-name rd-deter">
-      <span class="rd-label">{t("rdDeter")}</span>
-      {strobe && (
-        <div class="rd-inline">
-          <select name="strobe_s" aria-label={t("rdStrobeFor")} value={String(secs)} onChange={(e) => setSecs(Number(e.currentTarget.value))}>
-            {STROBE_S.filter((s) => s <= d.max_s).map((s) => <option key={s} value={String(s)}>{s} s</option>)}
-          </select>
-          <button type="button" class="btn sm primary" disabled={busy || off}
-            onClick={() => void send(deter({ output: "strobe", on: true, max_s: secs }), t("rdStrobeOnDone", { id, s: secs }))}>{t("rdStrobeOn")}</button>
-          <button type="button" class="btn sm" disabled={busy || off}
-            onClick={() => void send(deter({ output: "strobe", on: false }), t("rdStrobeOffDone", { id }))}>{t("rdStrobeOff")}</button>
-        </div>
-      )}
-      {d.outputs.includes("ptz") && (
-        <div class="rd-actions rd-ptz" aria-label={t("rdPtz")}>
-          <button type="button" class="btn sm" disabled={busy || off} onClick={() => turn(-PAN_STEP, 0)}>{t("rdPtzLeft")}</button>
-          <button type="button" class="btn sm" disabled={busy || off} onClick={() => turn(PAN_STEP, 0)}>{t("rdPtzRight")}</button>
-          <button type="button" class="btn sm" disabled={busy || off} onClick={() => turn(0, -TILT_STEP)}>{t("rdPtzUp")}</button>
-          <button type="button" class="btn sm" disabled={busy || off} onClick={() => turn(0, TILT_STEP)}>{t("rdPtzDown")}</button>
-          <button type="button" class="btn sm" disabled={busy || off} onClick={() => turn(0, 0)}>{t("rdPtzCenter")}</button>
-          {d.outputs.includes("wiper") && (
-            <button type="button" class="btn sm" disabled={busy || off}
-              onClick={() => void send(deter({ output: "wiper", on: true, max_s: WIPER_S }), t("rdWiperDone", { id, s: WIPER_S }))}>{t("rdWiper")}</button>
-          )}
-        </div>
-      )}
-      {speaker && d.tts && (
-        <form class="rd-inline" onSubmit={(e) => {
-          e.preventDefault();
-          if (!words) return;
-          void send(deter({ output: "speaker", on: true, max_s: 60, clip: `tts:zh:${words}` }), t("rdSpeakDone", { id }));
-        }}>
-          <input name="say" aria-label={t("rdSpeakText")} placeholder={t("rdSpeakPh")} maxLength={300} value={text}
-            onInput={(e) => setText(e.currentTarget.value)} />
-          {/* UIUX-E019:点不了的时候说为什么(别的禁用按钮都有) */}
-          <button type="submit" class="btn sm primary" disabled={busy || off || !words}
-            title={busy ? t("rdWhySending") : off ? t(r.ever_seen === false ? "rdNeverNoCtl" : "rdOfflineNoCtl") : !words ? t("rdSpeakNeedText") : undefined}>{t("rdSpeakSend")}</button>
-        </form>
-      )}
-      {tts && presets !== null && (
-        <div class="rd-presets" data-voice-presets="1">
-          <span class="muted small">{t("rdPresets")}</span>
-          <div class="rd-actions">
-            {presets.map((p) => {
-              const cant = d.tts_langs != null && !d.tts_langs.includes(p.lang);
-              return (
-              <button key={p.lang + p.text} type="button" class="btn sm rd-preset" disabled={busy || off || cant}
-                title={cant ? `${p.text}\n${t("rdPresetCantLang", { id, lang: langName(p.lang) })}` : p.text}
-                onClick={() => void send(deter({ output: "speaker", on: true, max_s: 60, clip: `tts:${p.lang}:${p.text}` }), t("rdSpeakDone", { id }))}>
-                <span class="rd-preset-t">{p.text}</span>
-              </button>
-              );
-            })}
-            {presets.length === 0 && <span class="muted small">{t("rdPresetsNone")}</span>}
-            {admin && <button type="button" class="btn sm" data-voice-edit="1" onClick={() => setEditing(true)}>{t("rdPresetsEdit")}</button>}
-          </div>
-          {/* UIUX-047:念不了的原因直接写出来(title 触屏、键盘看不到) */}
-          {[...new Set(presets.map((p) => p.lang))].filter((l) => d.tts_langs != null && !d.tts_langs.includes(l)).map((l) => (
-            <span key={l} class="muted small" data-preset-cant={l}>{t("rdPresetCantLang", { id, lang: langName(l) })}</span>
-          ))}
-        </div>
-      )}
-      {editing && presets !== null && (
-        <PresetEditor init={presets} onClose={() => setEditing(false)}
-          onSaved={(p) => { setPresets(p); setEditing(false); say(t("rdPresetsSaved")); }} />
-      )}
-      {speaker && d.clips.length > 0 && (
-        <div class="rd-actions" aria-label={t("rdClips")}>
-          {d.clips.map((c) => (
-            <button key={c} type="button" class="btn sm" disabled={busy || off}
-              onClick={() => void send(deter({ output: "speaker", on: true, max_s: 60, clip: c }), t("rdSpeakDone", { id }))}>
-              {CLIP_KEY[c] ? t(CLIP_KEY[c]) : c}
-            </button>
-          ))}
-        </div>
-      )}
-      {speaker && (
-        <div class="rd-actions">
-          <button type="button" class="btn sm" disabled={busy || off}
-            onClick={() => void send(deter({ output: "speaker", on: false }), t("rdSpeakStopped", { id }))}>{t("rdSpeakStop")}</button>
-        </div>
-      )}
-    </div>
-  );
-}
-
 export interface VoicePreset { lang: string; text: string }
 export const PRESET_LANGS: [string, string][] = [["zh", "中文"], ["en", "English"], ["ms", "Melayu"]];
 const PRESETS_MAX = 12;
@@ -661,153 +587,6 @@ export function PresetEditor({ init, onClose, onSaved }: { init: VoicePreset[]; 
         </div>
       </form>
     </Modal>
-  );
-}
-
-function RobotDetail({ r, u, now, role, say, onChanged, onCode, onClose, readOnly = false }: {
-  readOnly?: boolean; u?: UnitInfo; now: number; role: string;
-  r: RobotCard; say: Say; onChanged: () => void; onCode: (c: { id: string; code: string; hours: number }) => void; onClose: () => void;
-}) {
-  const [name, setName] = useState(r.name);
-  const [unbind, setUnbind] = useState<"ask" | "pw" | null>(null);
-  const [ask, setAsk] = useState<{ text: string; yes: string; go: () => void } | null>(null);
-  useEffect(() => setName(r.name), [r.robot_id, r.name]);
-  const act: Act = async (fn, msg) => {
-    try {
-      await fn();
-      if (msg) say(msg);
-    } catch (e) {
-      say(errText(e));
-    }
-    onChanged();
-  };
-  const compat: Key = r.compat === "ok" ? "compat_ok" : (`compat_${r.compat}` as Key);
-  const devices = r.problems.filter((p) => "device" in p);
-  const loc = locText(u);
-  const fact = (k: Key, v: string, mono = false) => <div><dt>{t(k)}</dt><dd class={mono ? "mono" : undefined}>{v}</dd></div>;
-  // 第 3 轮 admin N5:换一台时回到顶上(原来留着上一台的滚动位置,从中间开始看,以为还在看上一台)
-  const aside = useRef<HTMLElement>(null);
-  useEffect(() => {
-    const el = aside.current;
-    if (!el) return;
-    el.scrollTop = 0;
-    const top = el.getBoundingClientRect().top;
-    if (top < 0 && typeof window !== "undefined") window.scrollBy?.(0, top - 8);
-  }, [r.robot_id]);
-  return (
-    <aside class="panel robot-detail" aria-label={label(r)} ref={aside}>
-      <div class="panel-head">
-        <h2>{label(r)}</h2>
-        {r.name && <small class="muted mono">{r.robot_id}</small>}
-        {/* 第 2 轮 P1-23:刚登记、还没连上过的,详情顶上跟卡片一样写「还没连上」,不是红色离线 */}
-        {r.online ? <span class="state tone-success">{t("online")}</span>
-          : r.ever_seen === false ? <span class="state">{t("fleetNeverSeen")}</span>
-          : <span class="state tone-error">{t("st_offline")}</span>}
-        <button type="button" class="btn sm push" onClick={onClose}>{t("close")}</button>
-      </div>
-      <section class="rd-sec">
-        <h3 class="rd-h">{t("rdNow")}</h3>
-        <dl class="rd-facts">
-          <div><dt>{t("rdState")}</dt><dd>{u && r.online ? <><StateText s={u.state} stale={u.stale} />{u.task && <small class="muted"> {u.task}</small>}</>
-            : r.online ? t("online") : r.ever_seen === false ? t("fleetNeverSeen") : t("st_offline")}
-            {/* 第 10 轮 W10-03:实时状态那一小段已经写了第几圈的,这里不再写一遍 */}
-            {r.online && r.lap && !(u && u.task) && <small class="muted" data-lap="1"> · {lapText(r.lap)}</small>}</dd></div>
-          {fact("fleetBattery", r.battery_pct == null ? "—" : `${r.battery_pct}%`, true)}
-          {fact("fleetLoc", `${loc ? t(loc) : "—"}${u?.robot.loc?.localizer ? ` · ${u.robot.loc.localizer}` : ""}`)}
-          {fact("wifiLabel", r.wifi ? `${r.wifi.ssid || "—"} · ${t(`link_${r.wifi.link}` as Key)}` : "—")}
-          {fact("rdLastSeen", r.last_seen_ms ? ago(r.last_seen_ms, now) : "—")}
-          {/* 第 11 轮 W11-02:不知道待传几个(站点从盘那一行读出的用量)只写用了多少 */}
-          {r.storage && fact("rdStorage", r.storage.backlog_files == null ? t("rdStorageUsed", { p: Math.round(r.storage.used_ratio * 100) })
-            : t("rdStorageVal", { p: Math.round(r.storage.used_ratio * 100), n: r.storage.backlog_files }))}
-        </dl>
-        {devices.length > 0 && <p class="note small">{devices.map((p) => problemText(p, r)).join(" · ")}</p>}
-      </section>
-      {(canPatrol(role) || isOwnerLike(role)) && !r.revoked && <Controls r={r} u={u} role={role} say={say} onChanged={onChanged} />}
-      <section class="rd-sec">
-        <h3 class="rd-h">{t("rdPatrol")}</h3>
-        <dl class="rd-facts">
-          {fact("rdToday", patrolsN(r.patrols_today))}
-          {r.patrols_7d != null && fact("rd7d", patrolsN(r.patrols_7d))}
-          {r.aborts_7d != null && fact("rdAborts", t("rdAbortsN", { n: r.aborts_7d }))}
-          {r.last_patrol_ms != null && fact("rdLastPatrol", when(r.last_patrol_ms, now), true)}
-        </dl>
-      </section>
-      {(r.devices?.length ?? 0) > 0 && (
-        <section class="rd-sec">
-          <h3 class="rd-h">{t("rdDevices")}</h3>
-          <ul class="rd-devs">
-            {r.devices!.map((x) => (
-              <li key={x.id} class={`dev-${x.state}`} title={x.detail ? siteStr(x.detail) : undefined}><span>{devName(x.id)}</span><span>{t(`dev_${x.state}` as Key)}</span></li>
-            ))}
-          </ul>
-        </section>
-      )}
-      <section class="rd-sec">
-        <h3 class="rd-h">{t("rdBasics")}</h3>
-        <dl class="rd-facts">
-          {fact("robotId", r.robot_id, true)}
-          {fact("colVersion", `${r.agent ?? "—"} · ${t(compat)}`)}
-          {r.map && <div><dt>{t("rdMap")}</dt><dd><span class="mono">{r.map.id} v{r.map.version ?? "?"}</span>
-            {r.map.match === false && <small class="rd-bad"> {t("rdMapBad")}</small>}
-            {r.map.match === true && <small class="muted"> {t("rdMapOk")}</small>}</dd></div>}
-          {fact("certExpires", r.expires_at ? day(r.expires_at) : "—", true)}
-          {r.enrolled_at != null && fact("rdEnrolled", day(r.enrolled_at), true)}
-          <div><dt>{t("dispatchMode")}</dt><dd>{r.manual_only ? t("manualOnly") : t("autoDispatch")}
-            {r.manual_only && r.manual_note && <small class="muted"> · {siteKnown(r.manual_note)}</small>}</dd></div>
-        </dl>
-      </section>
-      {!readOnly && r.wifi?.change && <section class="rd-sec"><WifiChange id={r.robot_id} ch={r.wifi.change} act={act} /></section>}
-      {!readOnly && (
-        <section class="rd-sec">
-          <h3 class="rd-h">{t("rdManage")}</h3>
-          <form class="rd-name" onSubmit={(e) => { e.preventDefault(); void act(() => api("POST", `/api/admin/robots/${enc(r.robot_id)}/name`, { name: name.trim() }),
-            name.trim() ? t("saved") : t("robotNameCleared", { id: r.robot_id })); }}>
-            <label class="rd-label" for={`rd-name-${r.robot_id}`}>{t("robotName")}</label>
-            <div class="rd-inline">
-              <input id={`rd-name-${r.robot_id}`} name="name" value={name} maxLength={32} placeholder={r.robot_id}
-                onInput={(e) => setName(e.currentTarget.value)} />
-              <button type="submit" class="btn sm" disabled={name === r.name} title={name === r.name ? t("rdWhyNameSame") : undefined}>{t("robotNameSave")}</button>
-            </div>
-            {/* P2-12:写明最多几个字(原来超了悄悄截掉) */}
-            <small class={name.length >= 32 ? "warn-text" : "muted"} data-name-count="1">{t("robotNameCount", { n: name.length, max: 32 })}</small>
-          </form>
-          <div class="rd-actions">
-            {/* P1-26 / P1-05:切派遣方式、重出开通码都先确认,说清是什么意思 */}
-            <button type="button" class="btn sm" onClick={() => setAsk({
-              text: t(r.manual_only ? "setAutoAsk" : "setManualAsk", { id: label(r) }), yes: r.manual_only ? t("setAuto") : t("setManual"),
-              go: () => void act(() => api("POST", `/api/robots/${enc(r.robot_id)}/service`, { manual_only: !r.manual_only }),
-                t(r.manual_only ? "setAutoDone" : "setManualDone", { id: label(r) })) })}>
-              {r.manual_only ? t("setAuto") : t("setManual")}
-            </button>
-            <button type="button" class="btn sm" onClick={() => setAsk({ text: t("newCodeAsk", { id: label(r) }), yes: t("newCode"),
-              go: () => void act(async () => {
-                const d = await api<{ code: string; hours: number }>("POST", `/api/admin/robots/${enc(r.robot_id)}/code`, {});
-                onCode({ id: r.robot_id, code: d.code, hours: d.hours });
-              }) })}>{t("newCode")}</button>
-            <button type="button" class="btn sm rd-danger" onClick={() => setUnbind("ask")}>{t("robotUnbind")}</button>
-          </div>
-        </section>
-      )}
-      {ask && <Confirm text={ask.text} yes={ask.yes} onNo={() => setAsk(null)} onYes={() => { const g = ask.go; setAsk(null); g(); }} />}
-      {unbind === "ask" && (
-        // 第 4 轮:解绑要重启消息服务器(吊销名单 broker 重启才读),所有机器人断线几秒 —— 写明会怎样
-        <Confirm text={`${t(r.online ? "robotUnbindConfirm" : r.ever_seen === false ? "robotUnbindConfirmNever" : "robotUnbindConfirmOffline", { id: label(r) })} ${t("robotUnbindBroker")}`} yes={t("robotUnbind")} danger onNo={() => setUnbind(null)} onYes={() => setUnbind("pw")} />
-      )}
-      {unbind === "pw" && (
-        <ConfirmPassword title={t("robotUnbind")} onClose={() => setUnbind(null)}
-          onConfirm={async (pw) => {
-            const d = await api<{ robot_wipe?: string; old_connection_open?: boolean }>("POST", `/api/admin/robots/${enc(r.robot_id)}/revoke`, { confirm_password: pw });
-            setUnbind(null);
-            // 网页易用性第 1 轮 P0-10:如实说 —— 老版本不认远程清除;消息服务器没重启时旧连接还开着
-            // 第 3 轮 P0-10:从没连上过的不说「下次连上时删数据」(跟确认框说法相反)
-            const wipe = d.robot_wipe === "sent" ? "robotUnbound" : d.robot_wipe === "unsupported" ? "robotUnboundNoWipe" : r.ever_seen === false ? "robotUnboundNever" : "robotUnboundOffline";
-            say([t(wipe, { id: label(r) }), d.old_connection_open ? t("robotUnboundOpen") : ""].filter(Boolean).join(" "));
-            onClose();
-            onChanged();
-          }} />
-      )}
-      <RecentAlerts items={r.recent_problems} />
-    </aside>
   );
 }
 
@@ -897,13 +676,10 @@ function WifiChange({ id, ch, act }: {
   const send = (approve: boolean) => void act(() => api("POST", `/api/robots/${enc(id)}/wifi`, { id: ch.id, approve }),
     t(approve ? "wifiApproved" : "wifiRejected"));
   return (
-    <div class="wifi-change" role="status">
-      <p>{t(ch.mode === "trial" ? "wifiChangeTrial" : "wifiChangeAsk", { ssid: ch.ssid })}</p>
-      <div class="row">
-        <button type="button" class="btn sm primary" onClick={() => send(true)}>{t("wifiApprove")}</button>
-        <button type="button" class="btn sm" onClick={() => send(false)}>{t("wifiReject")}</button>
-      </div>
-    </div>
+    <span class="rb-col wifi-change">
+      <button type="button" class="btn primary" onClick={() => send(true)}>{t("wifiApprove")}</button>
+      <button type="button" class="btn" onClick={() => send(false)}>{t("wifiReject")}</button>
+    </span>
   );
 }
 
