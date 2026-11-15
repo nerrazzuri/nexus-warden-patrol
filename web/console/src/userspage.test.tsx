@@ -56,6 +56,13 @@ afterEach(cleanup);
 const page = () => render(<UsersPage me="alice" say={() => {}} now={NOW} />);
 const tr = (c: Element, name: string) => c.querySelector(`tr[data-name="${name}"]`)!;
 const btn = (root: Element, text: string) => Array.from(root.querySelectorAll("button")).find((b) => b.textContent?.trim() === text) as HTMLButtonElement;
+/** 选一行,回右栏的账号卡片(第六期 S-users:操作都在右栏)。 */
+const pick = async (c: Element, name: string) => {
+  await waitFor(() => expect(tr(c, name)).not.toBeNull());
+  fireEvent.click(tr(c, name));
+  await waitFor(() => expect(c.querySelector(".us-sub")!.textContent).toContain(`账号 ${name}`));
+  return c.querySelector(".us-card")!;
+};
 
 describe("用户页", () => {
   it("最后登录说人话", () => {
@@ -70,22 +77,25 @@ describe("用户页", () => {
     expect(tr(c, "alice").textContent).toContain("管理员（最高权限）");
     expect(tr(c, "olga").textContent).toContain("经理");
     expect(tr(c, "eng-20261027-0900").textContent).toContain("工程师（临时）");
-    expect((tr(c, "gina").querySelector("select") as HTMLSelectElement).selectedOptions[0].textContent).toBe("保安");
+    const card = await pick(c, "gina");
+    expect(card.querySelector('.us-role button[aria-pressed="true"]')!.textContent).toBe("保安");
   });
 
-  it("自己那一行不能删、不能停用", async () => {
+  it("自己那一行不能删、不能停用、不能改角色(改密码去账号菜单)", async () => {
     const { container: c } = page();
-    await waitFor(() => expect(tr(c, "alice")).not.toBeNull());
-    expect(btn(tr(c, "alice"), "删除")).toBeUndefined();
-    expect(btn(tr(c, "alice"), "停用")).toBeUndefined();
-    expect(btn(tr(c, "gina"), "删除")).toBeTruthy();
+    const card = await pick(c, "alice");
+    expect(btn(card, "删除…")).toBeUndefined();
+    expect(btn(card, "停用…")).toBeUndefined();
+    expect(card.querySelector(".us-role")).toBeNull();
+    expect(card.textContent).toContain("账号菜单");
+    expect(btn(await pick(c, "gina"), "删除…")).toBeTruthy();
   });
 
   it("第 2 轮 P1-65:站点没装 VPN,「签发 VPN」灰着、写原因", async () => {
     caps = { vpn: false };
     const { container: c } = page();
     await waitFor(() => expect(tr(c, "alice")).not.toBeNull());
-    fireEvent.click(btn(c, "给工程师开临时账号"));
+    fireEvent.click(btn(c, "给工程师开临时账号…"));
     await waitFor(() => expect((document.querySelector('form.eng-form input[name="vpn"]') as HTMLInputElement).disabled).toBe(true));
     expect(document.querySelector("[data-novpn]")!.textContent).toContain("没有装远程访问");
   });
@@ -93,7 +103,7 @@ describe("用户页", () => {
   it("开工程师账号要再输密码,口令只显示一次", async () => {
     const { container: c } = page();
     await waitFor(() => expect(tr(c, "alice")).not.toBeNull());
-    fireEvent.click(btn(c, "给工程师开临时账号"));
+    fireEvent.click(btn(c, "给工程师开临时账号…"));
     fireEvent.input(document.querySelector('form.eng-form input[name="display"]')!, { target: { value: "王工" } });
     fireEvent.click(document.querySelector('form.eng-form input[value="24"]')!);
     const vpn = document.querySelector('form.eng-form input[name="vpn"]') as HTMLInputElement;
@@ -117,7 +127,7 @@ describe("用户页", () => {
     pwOk = false;
     const { container: c } = page();
     await waitFor(() => expect(tr(c, "alice")).not.toBeNull());
-    fireEvent.click(btn(c, "给工程师开临时账号"));
+    fireEvent.click(btn(c, "给工程师开临时账号…"));
     fireEvent.input(document.querySelector('form.eng-form input[name="display"]')!, { target: { value: "王工" } });
     fireEvent.submit(document.querySelector("form.eng-form")!);
     await waitFor(() => expect(document.querySelector("form.confirm-pw")).not.toBeNull());
@@ -129,13 +139,14 @@ describe("用户页", () => {
   it("工程师那一行写还剩多久、只能提前关和删", async () => {
     const { container: c } = page();
     await waitFor(() => expect(tr(c, "eng-20261027-0900")).not.toBeNull());
-    const r = tr(c, "eng-20261027-0900");
-    expect(r.textContent).toContain("剩余 2 小时 10 分");
-    expect(r.querySelector("select")).toBeNull();
-    expect(btn(r, "重设密码")).toBeUndefined();
-    fireEvent.click(btn(r, "提前关闭"));
-    expect(posted.find((p) => p.url === "/api/accounts/eng-20261027-0900")).toBeUndefined();   // P1-05:先确认
-    fireEvent.click(btn(c.ownerDocument.querySelector(".modal")!, "提前关闭"));
+    expect(tr(c, "eng-20261027-0900").textContent).toContain("剩余 2 小时 10 分");
+    const r = await pick(c, "eng-20261027-0900");
+    expect(r.querySelector(".us-role")).toBeNull();
+    expect(btn(r, "重设密码…")).toBeUndefined();
+    fireEvent.click(btn(r, "提前关闭…"));
+    expect(posted.find((p) => p.url === "/api/accounts/eng-20261027-0900")).toBeUndefined();   // P1-05:先确认(原地,不弹窗)
+    expect(document.querySelector(".modal")).toBeNull();
+    fireEvent.click(btn(r.querySelector(".us-ask")!, "提前关闭"));
     await waitFor(() => expect(posted.find((p) => p.url === "/api/accounts/eng-20261027-0900")?.body).toEqual({ disabled: true }));
   });
 
@@ -144,6 +155,7 @@ describe("用户页", () => {
     await waitFor(() => expect(tr(c, "gina")).not.toBeNull());
     fireEvent.click(tr(c, "gina").querySelector(".user-name")!);
     await waitFor(() => expect(c.querySelector(".user-audit")!.textContent).toContain("切换布防模式"));
+    expect(c.querySelector('.user-audit a[href="#/admin/log?actor=gina"]')).not.toBeNull();
     // P1-66:写成功 / 被拒绝;认不得的写「其他操作」,不露接口路径
     const au = c.querySelector(".user-audit")!;
     expect(au.querySelectorAll('[data-result="refused"]').length).toBe(1);
@@ -170,9 +182,10 @@ describe("用户页", () => {
   it("删人要确认", async () => {
     const { container: c } = page();
     await waitFor(() => expect(tr(c, "gina")).not.toBeNull());
-    fireEvent.click(btn(tr(c, "gina"), "删除"));
-    expect(document.body.textContent).toContain("操作记录仍保留");
-    fireEvent.click(btn(document.querySelector(".modal, [role=dialog]")!, "删除"));
+    const card = await pick(c, "gina");
+    fireEvent.click(btn(card, "删除…"));
+    expect(card.querySelector(".us-ask")!.textContent).toContain("操作记录仍保留");
+    fireEvent.click(btn(card.querySelector(".us-ask")!, "删除"));
     await waitFor(() => expect(posted.map((p) => p.url)).toContain("/api/accounts/gina/remove"));
     await waitFor(() => expect(c.querySelector('tr[data-name="gina"]')).toBeNull());
   });
@@ -183,17 +196,18 @@ describe("网页易用性第 1 轮 P1-05 / P1-63 / P1-64", () => {
   it("改角色先确认(升管理员写清后果),停用先确认;新增用户能选只读", async () => {
     const { container: c } = page();
     await waitFor(() => expect(tr(c, "gina")).not.toBeNull());
-    const sel = tr(c, "gina").querySelector("select") as HTMLSelectElement;
-    fireEvent.change(sel, { target: { value: "admin" } });
+    const card = await pick(c, "gina");
+    fireEvent.click(btn(card.querySelector(".us-role")!, "管理员（最高权限）"));
     expect(posted.some((p) => p.url === "/api/accounts/gina")).toBe(false);
-    const m = c.ownerDocument.querySelector(".modal")!;
+    expect(document.querySelector(".modal")).toBeNull();
+    const m = card.querySelector(".us-ask")!;
     expect(m.textContent).toContain("管理员能增删用户");
     fireEvent.click(btn(m, "改角色"));
     await waitFor(() => expect(posted.find((p) => p.url === "/api/accounts/gina")?.body).toEqual({ role: "admin" }));
     posted.length = 0;
-    fireEvent.click(btn(tr(c, "gina"), "停用"));
+    fireEvent.click(btn(card, "停用…"));
     expect(posted.length).toBe(0);
-    fireEvent.click(btn(c.ownerDocument.querySelector(".modal")!, "停用"));
+    fireEvent.click(btn(card.querySelector(".us-ask")!, "停用"));
     await waitFor(() => expect(posted.find((p) => p.url === "/api/accounts/gina")?.body).toEqual({ disabled: true }));
     fireEvent.click(btn(c, "添加用户"));
     const opts = Array.from(c.ownerDocument.querySelectorAll(".modal select option")).map((o) => (o as HTMLOptionElement).value);
