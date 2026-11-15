@@ -11,6 +11,7 @@ import 'package:flutter/material.dart';
 
 import '../l10n.dart';
 import '../net/site_client.dart';
+import 'app_settings.dart' show openSettings;
 import 'nw/nw_button.dart';
 import 'nw/nw_p4_admin.dart';
 import 'nw/nw_theme.dart';
@@ -22,6 +23,7 @@ class SiteReleasesPage extends StatefulWidget {
 
   static Key robotKey(String id) => Key('rel-robot-$id');
   static Key actionKey(String id, String action) => Key('rel-$action-$id');
+  static const Key appKey = Key('rel-app-check');
 
   @override
   State<SiteReleasesPage> createState() => _SiteReleasesPageState();
@@ -177,8 +179,23 @@ class _SiteReleasesPageState extends State<SiteReleasesPage> {
     final nw = Nw.of(context);
     final title = NwText.titleSmall.copyWith(color: nw.text);
     final sub = NwText.bodySmall.copyWith(color: nw.textSecondary);
+    // App V2 稿 S-updates：站点上的版本（哪台在跑）、各机器人在跑的（按钮一排等宽）、手机 App
+    Widget section(String label, List<Widget> rows, {Key? key}) => Container(
+        key: key,
+        margin: const EdgeInsets.only(top: Nw.s8),
+        color: nw.surface,
+        padding: const EdgeInsets.fromLTRB(Nw.s16, Nw.s16, Nw.s16, Nw.s8),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          Text(label, style: NwText.titleMedium.copyWith(color: nw.text, fontWeight: FontWeight.w700)),
+          const SizedBox(height: Nw.s8),
+          ...rows,
+        ]));
+    Widget line(Widget child) => Container(
+        padding: const EdgeInsets.symmetric(vertical: 10),
+        decoration: BoxDecoration(border: Border(top: BorderSide(color: nw.outline))),
+        child: child);
     return Scaffold(
-      appBar: AppBar(title: Text(tr('Releases', '版本'))),
+      appBar: AppBar(title: Text(tr('Software updates', '软件升级'))),
       body: FutureBuilder<Map<String, dynamic>>(
         future: _data,
         builder: (_, snap) {
@@ -192,6 +209,7 @@ class _SiteReleasesPageState extends State<SiteReleasesPage> {
           final rels = (snap.data!['releases'] as List).whereType<Map<String, dynamic>>().toList();
           final names = [for (final r in rels) '${r['name']}'];
           final robots = (snap.data!['robots'] as Map).cast<String, dynamic>();
+          final sep = tr(', ', '、');
           return RefreshIndicator(
             onRefresh: () async {
               setState(() {
@@ -199,56 +217,78 @@ class _SiteReleasesPageState extends State<SiteReleasesPage> {
               });
               await _data.catchError((Object _) => <String, dynamic>{});
             },
-            child: NwListView(children: [
-              NwSectionLabel(tr('Running on each robot', '各机器人运行版本')),
-              nwGap8,
-              for (final e in robots.entries)
-                Padding(
-                    padding: const EdgeInsets.only(bottom: Nw.s8),
-                    child: NwCard(
-                        key: SiteReleasesPage.robotKey(e.key),
-                        child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text(e.key, style: NwText.titleMedium.copyWith(color: nw.text, fontWeight: FontWeight.w700)),
-                              nwGap4,
-                              Text(
-                                  '${e.value ?? tr('Version not reported. This robot software does not report it, so it cannot be updated from here.', '没报版本：这台机器人的软件不报自己的版本，所以不能从这里升级。')}',
-                                  style: NwText.bodyMedium.copyWith(color: nw.textSecondary)),
-                              // 狗没报在跑哪一版 = 没报发布能力（或者不在线）：按了也是 unsupported，不给按钮。
-                              if (admin && e.value != null) ...[
-                                nwGap8,
-                                Wrap(spacing: Nw.s8, runSpacing: Nw.s8, children: [
-                                  for (final (a, label) in [
-                                    ('install', tr('Install', '安装')),
-                                    ('precheck', tr('Check', '检查')),
-                                    ('activate', tr('Activate', '启用')),
-                                    ('rollback', tr('Roll back', '回退')),
-                                  ])
-                                    NwButton(
-                                        buttonKey: SiteReleasesPage.actionKey(e.key, a),
-                                        variant: NwButtonVariant.outline,
-                                        size: NwButtonSize.small,
-                                        onPressed: () => _act(e.key, a, names),
-                                        label: label),
-                                ]),
-                              ],
-                            ]))),
-              nwGap16,
-              NwSectionLabel(tr('Releases on the site', '站点上的版本')),
-              nwGap8,
-              NwListCard(children: [
-                if (rels.isEmpty) NwCardText(tr('No releases registered yet', '暂无已登记版本')),
+            child: ListView(padding: const EdgeInsets.only(bottom: Nw.s24), children: [
+              section(tr('Versions on the site', '站点上的版本'), [
+                if (rels.isEmpty) line(Text(tr('No releases registered yet', '暂无已登记版本'), style: sub)),
                 for (final r in rels)
-                  ListTile(
-                    leading: Icon(Icons.inventory_2_rounded, color: nw.textSecondary),
-                    title: Text(tr('${r['name']} (${r['version']})', '${r['name']}（${r['version']}）'), style: title),
-                    subtitle: Text(
-                        '${((r['size'] as num? ?? 0) / 1048576).toStringAsFixed(1)} MB'
-                        '${(r['note'] ?? '') != '' ? ' · ${r['note']}' : ''}',
-                        style: sub),
-                  ),
+                  () {
+                    final on = [for (final e in robots.entries) if (e.value == r['name']) e.key];
+                    return line(Row(key: Key('rel-release-${r['name']}'), crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      Padding(
+                          padding: const EdgeInsets.only(top: 4, right: Nw.s8),
+                          child: on.isEmpty
+                              ? Icon(Icons.circle, size: 10, color: nw.primary)
+                              : Icon(Icons.square, size: 10, color: nw.success)),
+                      Expanded(
+                          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                        Text(tr('${r['name']} (${r['version']})', '${r['name']}（${r['version']}）'),
+                            style: title.copyWith(fontWeight: FontWeight.w700)),
+                        Text(
+                            [
+                              '${((r['size'] as num? ?? 0) / 1048576).toStringAsFixed(1)} MB',
+                              if ((r['note'] ?? '') != '') '${r['note']}',
+                              on.isEmpty ? tr('Not installed', '没装') : tr('Running on ${on.join(sep)}', '${on.join(sep)} 在跑'),
+                            ].join(' · '),
+                            style: sub),
+                      ])),
+                    ]));
+                  }(),
+              ]),
+              section(tr('Running per robot', '各机器人在跑的'), [
+                for (final e in robots.entries)
+                  line(Column(key: SiteReleasesPage.robotKey(e.key), crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                    Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      SizedBox(width: 32, child: Text(e.key, style: title.copyWith(fontWeight: FontWeight.w700))),
+                      Expanded(
+                          child: Text(
+                              '${e.value ?? tr('Version not reported. This robot software does not report it, so it cannot be updated from here.', '没报版本：这台机器人的软件不报自己的版本，所以不能从这里升级。')}',
+                              style: NwText.bodyMedium.copyWith(color: e.value == null ? nw.textSecondary : nw.text))),
+                    ]),
+                    // 狗没报在跑哪一版 = 没报发布能力（或者不在线）：按了也是 unsupported，不给按钮。
+                    if (admin && e.value != null) ...[
+                      nwGap8,
+                      Row(children: [
+                        for (final (i, (a, label)) in [
+                          ('install', tr('Install', '安装')),
+                          ('precheck', tr('Check', '检查')),
+                          ('activate', tr('Activate', '启用')),
+                          ('rollback', tr('Roll back', '回退')),
+                        ].indexed) ...[
+                          if (i > 0) const SizedBox(width: Nw.s8),
+                          Expanded(
+                              child: NwButton(
+                                  buttonKey: SiteReleasesPage.actionKey(e.key, a),
+                                  variant: NwButtonVariant.outline,
+                                  size: NwButtonSize.small,
+                                  onPressed: () => _act(e.key, a, names),
+                                  label: label)),
+                        ],
+                      ]),
+                    ],
+                  ])),
+              ]),
+              section(tr('Mobile app', '手机 App'), [
+                line(Row(children: [
+                  Icon(Icons.square, size: 10, color: nw.success),
+                  const SizedBox(width: Nw.s8),
+                  Expanded(child: Text(tr('This phone $appVersion', '这台手机 $appVersion'), style: NwText.bodyMedium.copyWith(color: nw.text))),
+                  OutlinedButton(
+                      key: SiteReleasesPage.appKey,
+                      style: OutlinedButton.styleFrom(
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(2)), minimumSize: const Size(48, 40)),
+                      onPressed: () => openSettings(context, widget.api),
+                      child: Text(tr('Check for updates', '检查更新'))),
+                ])),
               ]),
             ]),
           );
