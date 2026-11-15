@@ -993,7 +993,7 @@ class _MapWizardPageState extends State<MapWizardPage> {
     final wide = mq.width > mq.height;
     final teleop = NwButton(
         buttonKey: MapWizardPage.teleopKey,
-        label: tr('Open phone remote control', '打开手机遥控'),
+        label: tr('Use phone remote', '用手机遥控'),
         icon: Icons.sports_esports_rounded,
         variant: NwButtonVariant.outline,
         fullWidth: true,
@@ -1070,16 +1070,15 @@ class _MapWizardPageState extends State<MapWizardPage> {
             onPressed: _startRec),
       ],
     ], [
-      if (wide && !remote)
+      // 稿 S-wizard：「结束行走 | 手机遥控」一排等宽
+      if (!remote)
         Row(children: [
-          Expanded(child: teleop),
-          const SizedBox(width: Nw.s8),
           Expanded(child: finish),
+          const SizedBox(width: Nw.s8),
+          Expanded(child: teleop),
         ])
-      else ...[
-        if (!remote) ...[teleop, const SizedBox(height: Nw.s8)],
+      else
         finish,
-      ],
     ], dense: wide);
   }
 
@@ -1686,6 +1685,16 @@ class _MapWizardPageState extends State<MapWizardPage> {
     ]);
   }
 
+  static String _stepName(String s) => switch (s) {
+        'prepare' => tr('Prepare', '准备'),
+        'drive' => tr('Drive mode', '怎么开'),
+        'walk' => tr('Walk the site', '走一圈'),
+        'build' => tr('Build', '建图'),
+        'zones' => tr('No-go zones', '禁行区'),
+        'origin' => tr('Origin', '原点'),
+        _ => tr('Review', '完成'),
+      };
+
   String _title() => switch (_step) {
         'walk' => tr('Walk the site', '行走建图'),
         'zones' => tr('No-go zones', '禁行区'),
@@ -1720,11 +1729,14 @@ class _MapWizardPageState extends State<MapWizardPage> {
                         label: Text(tr('Exit', '退出')))
                   else
                     const SizedBox(width: 48),
+                  // App V2 稿 S-wizard：「建图」+「第 3 步 / 共 7 步」
                   Expanded(
-                      child: Text(_title(),
-                          textAlign: TextAlign.center,
-                          style: NwText.titleMedium.copyWith(color: c.text, fontWeight: FontWeight.w700))),
-                  Text('${i + 1} / 7', key: MapWizardPage.stepKey, style: NwText.bodyMedium.copyWith(color: c.textSecondary)),
+                      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Text(tr('Mapping', '建图'), style: NwText.titleMedium.copyWith(color: c.text, fontWeight: FontWeight.w700)),
+                    Text(tr('Step ${i + 1} of 7 · ${_title()}', '第 ${i + 1} 步 / 共 7 步 · ${_title()}'),
+                        key: MapWizardPage.stepKey,
+                        style: NwText.bodySmall.copyWith(color: c.textSecondary)),
+                  ])),
                 ]),
                 const SizedBox(height: Nw.s8),
                 Row(children: [
@@ -1734,12 +1746,23 @@ class _MapWizardPageState extends State<MapWizardPage> {
                         child: Container(
                             height: 4,
                             decoration: BoxDecoration(
-                                borderRadius: BorderRadius.circular(2),
                                 color: k < i || (k == i && !warnBuild)
-                                    ? c.success
+                                    ? c.primary
                                     : (k == i ? c.fg(NwTone.warning) : c.outline)))),
                   ],
                 ]),
+                const SizedBox(height: Nw.s4),
+                // 各步名字一行，这一步加粗
+                Text.rich(
+                    TextSpan(children: [
+                      for (var k = 0; k < 7; k++) ...[
+                        if (k > 0) const TextSpan(text: ' · '),
+                        TextSpan(
+                            text: _stepName(wizardSteps[k]),
+                            style: k == i ? TextStyle(color: c.text, fontWeight: FontWeight.w700) : null),
+                      ],
+                    ]),
+                    style: NwText.bodySmall.copyWith(color: c.textSecondary)),
               ]),
             ),
             Expanded(

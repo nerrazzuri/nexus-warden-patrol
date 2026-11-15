@@ -20,6 +20,7 @@ import 'package:nexwar_patrol/ui/site_mapping.dart' show MapMark, SiteMapPreview
 import 'package:nexwar_patrol/ui/site_maps.dart' show SiteMapTab;
 import 'package:nexwar_patrol/net/site_client.dart' show SiteError;
 import 'package:nexwar_patrol/ui/site_add.dart';
+import 'package:nexwar_patrol/ui/map_wizard.dart';
 import 'package:nexwar_patrol/ui/site_page.dart';
 import 'package:nexwar_patrol/ui/site_recordings.dart';
 import 'package:nexwar_patrol/ui/problem_report.dart';
@@ -360,6 +361,11 @@ void main() {
         ];
       return SiteRecordingsPage(api: api, robotId: 'A', robots: const ['A', 'B'], aroundMs: now - 90000);
     }),
+    '35-wizard-walk': _Shot(_phone, () => MapWizardPage(api: FakeApi('admin')
+      ..mapsCount = 0
+      ..wizard = <String, dynamic>{'step': 'walk', 'robot_id': 'A', 'site_type': 'indoor', 'drive': 'phone',
+        'map_id': 'main', 'version': '20261115-01', 'tried': <dynamic>[], 'label': 'estate-1', 'by': 'demo', 'started_ms': 0}
+      ..wizardBuild = <String, dynamic>{'state': 'pending'})),
     '32-help': _Shot(const Size(390, 1200), () => HelpPage(role: 'guard', api: FakeApi('guard'))),
     '33-report': _Shot(_phone, () => ProblemReportPage(api: FakeApi('guard'), robots: const ['A', 'B'], share: (_, _) async => true)),
     '24-overview': _Shot(const Size(390, 1200), () => Scaffold(body: AdminHomeTab(api: FakeApi('admin'), switchTab: (_) {}))),

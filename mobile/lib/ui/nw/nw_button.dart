@@ -54,11 +54,11 @@ class NwButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = Nw.of(context);
-    // 设计稿的内距（横 / 竖）：16/4、24/8、32/16；高度另外给个下限，小号也不至于点不中。
+    // 设计稿的内距（横 / 竖）：16/4、24/8、32/16；高度另外给个下限，小号也不至于点不中。App V2：一律直角（2）。
     final (double padH, double padV, double radius, double minH, double iconSize, TextStyle text) = switch (size) {
-      NwButtonSize.small => (Nw.s16, Nw.s4, Nw.r4, 32, 16, NwText.labelMedium),
-      NwButtonSize.medium => (Nw.s24, Nw.s8, Nw.r8, 40, 18, NwText.labelMedium),
-      NwButtonSize.large => (Nw.s32, Nw.s16, Nw.r12, 52, 20, NwText.labelLarge),
+      NwButtonSize.small => (Nw.s16, Nw.s4, 2.0, 32, 16, NwText.labelMedium),
+      NwButtonSize.medium => (Nw.s24, Nw.s8, 2.0, 40, 18, NwText.labelMedium),
+      NwButtonSize.large => (Nw.s32, Nw.s16, 2.0, 52, 20, NwText.labelLarge),
     };
     final shape = RoundedRectangleBorder(borderRadius: BorderRadius.circular(radius));
     final padding = EdgeInsets.symmetric(horizontal: padH, vertical: padV);
