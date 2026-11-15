@@ -72,6 +72,30 @@ void main() {
     expect(legacy.isFor(name: '别的', urls: ['https://a'], fingerprint: fa), isFalse);
   });
 
+  testWidgets('外审 App-V2-4 N4：没登录时「登录后处理」：先收锁屏显示（登录页不在锁屏上），再去登录', (t) async {
+    var done = 0, signIn = 0;
+    await t.pumpWidget(MaterialApp(
+        home: Builder(
+            builder: (c) => TextButton(
+                onPressed: () => Navigator.push(
+                    c,
+                    MaterialPageRoute<void>(
+                        builder: (_) => RingPage(
+                            api: null,
+                            alert: Alert.fromWire(_wire()),
+                            site: '庄园',
+                            onSignIn: () => signIn++,
+                            mute: (_) async => true,
+                            done: () async => done++))),
+                child: const Text('home')))));
+    await t.tap(find.text('home'));
+    await t.pumpAndSettle();
+    await t.tap(find.byKey(RingPage.signInKey));
+    await t.pumpAndSettle();
+    expect(find.byType(RingPage), findsNothing);
+    expect((done, signIn), (1, 1));
+  });
+
   testWidgets('外审 App-V2-3 I5：没登录（冷启动）来报警也整屏弹；「登录后处理」去那个站点的登录页', (t) async {
     t.view.physicalSize = const Size(390 * 2, 844 * 2);
     t.view.devicePixelRatio = 2;
@@ -199,15 +223,22 @@ void main() {
     expect(RingRequest.fromChannel(null), isNull);
   });
 
-  testWidgets('外壳：后台值守拉起来的是这个站点的，整屏弹出来；别的站点的不弹、留着', (t) async {
+  testWidgets('外壳：后台值守拉起来的是这个站点的，整屏弹出来；别的站点的也弹（外审 App-V2-4 N3），只能看、静音', (t) async {
     addTearDown(() => pendingRing.value = null);
     final api = FakeApi('guard');
     pendingRing.value = RingRequest('cctv:3/intrusion#9', _wire(), '别的站点');
     await t.pumpWidget(MaterialApp(home: NwShell(api: api, title: '庄园', ring: () {}, updater: null)));
     await t.pump();
-    await t.pump();
+    await t.pump(const Duration(milliseconds: 400));
+    expect(find.byType(RingPage), findsOneWidget);
+    expect(t.widget<RingPage>(find.byType(RingPage)).api, isNull, reason: '不用这个站点的连接');
+    expect(find.byKey(RingPage.takeKey), findsNothing);
+    expect(find.byKey(RingPage.muteKey), findsOneWidget);
+    expect(find.textContaining('没登录 别的站点'), findsOneWidget);
+    expect(pendingRing.value, isNull);
+    t.state<NavigatorState>(find.byType(Navigator).first).pop();
+    await t.pumpAndSettle();
     expect(find.byType(RingPage), findsNothing);
-    expect(pendingRing.value, isNotNull, reason: '别的站点的留着');
     pendingRing.value = RingRequest('cctv:3/intrusion#9', _wire(), '庄园');
     await t.pump();
     await t.pump(const Duration(milliseconds: 400));

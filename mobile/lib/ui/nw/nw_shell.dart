@@ -147,8 +147,14 @@ class _NwShellState extends State<NwShell> {
     if (r == null || !mounted) return;
     final name = widget.entry?.name ?? widget.title ?? '';
     final e = widget.entry;
-    if (!r.isFor(name: name, urls: [widget.api.baseUrl, ...?e?.urls], fingerprint: e?.fingerprint ?? '')) return;
     pendingRing.value = null;
+    if (!r.isFor(name: name, urls: [widget.api.baseUrl, ...?e?.urls], fingerprint: e?.fingerprint ?? '')) {
+      // 外审 App-V2-4 N3：别的站点的报警（后台值守还连着那一个）：照样整屏弹，只能看、静音，不用这个站点的连接
+      final a = Alert.fromWire(<String, dynamic>{...r.alert, 'key': r.key});
+      unawaited(Navigator.of(context).push(MaterialPageRoute<void>(
+          fullscreenDialog: true, builder: (_) => RingPage(api: null, alert: a, site: r.site.isEmpty ? '?' : r.site))));
+      return;
+    }
     final a = Alert.fromWire(<String, dynamic>{...r.alert, 'key': r.key});
     unawaited(Navigator.of(context).push(MaterialPageRoute<void>(
         fullscreenDialog: true, builder: (_) => RingPage(api: widget.api, alert: a, site: name.isEmpty ? r.site : name))));

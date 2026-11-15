@@ -84,9 +84,10 @@ RobotPhase robotPhase(Map<String, dynamic> r, {bool deterring = false}) {
   final st = r['status'];
   if (st is! Map) return RobotPhase.unknown;
   if (!robotOnline(r)) return RobotPhase.offline;
-  if (deterring) return RobotPhase.deterring;
+  // 外审 App-V2-4 N1：机身急停压过驱离（驱离那一场不会因为拍了急停就收）
   final ready = st['ready'];
   if (ready is Map && ready['estop_clear'] == false) return RobotPhase.estop;
+  if (deterring) return RobotPhase.deterring;
   if (r['held'] is Map) return RobotPhase.held;
   if (robotCharging(r)) return RobotPhase.charging;
   final b = robotBattery(r);
