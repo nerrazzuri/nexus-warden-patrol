@@ -36,6 +36,8 @@ export function RobotControl(props: {
   onBack: () => void;
   /** 「派去看一眼…」:回全场地图、开看一眼工具。 */
   onLook: (robot: string) => void;
+  /** 「协助定位」:回全场地图,在地图上点它的实际位置(老值班页的「帮它找位置」)。 */
+  onFind?: (robot: string) => void;
 }) {
   const id = props.u.robot.robot_id;
   const name = nameOf(id);
@@ -168,6 +170,7 @@ export function RobotControl(props: {
                 {dispatch && <button type="button" class="btn" disabled={busy || off || !canFindPose(u.robot)}
                   title={!canFindPose(u.robot) ? t("rdNoAutoLoc") : undefined}
                   onClick={() => void send(post("relocalize", { global: true }), t("rdSent", { id: name, what: t("rcReloc") }))}>{t("rcReloc")}</button>}
+                {dispatch && props.onFind && <button type="button" class="btn" data-find="1" disabled={off} onClick={() => props.onFind!(id)}>{t("dutyFindPose")}</button>}
               </div>
             </section>
           ) : null}

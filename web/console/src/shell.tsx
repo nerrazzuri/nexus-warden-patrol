@@ -14,7 +14,7 @@ import { lang, setLang, t, type Key } from "./i18n";
 import { Icon, Shape } from "./icons";
 import { canArm, canDispatch, isOwnerLike, type Mode } from "./model";
 
-export type GuardPage = "duty" | "live" | "map" | "recordings" | "alarms";
+export type GuardPage = "duty" | "live" | "map" | "recordings" | "alarms" | "notes";
 /** 「管理」各页(W44 第二期,设计 §5):常用 = 现场概况、布防时间、授权和临时撤防、用户、机器人、报表;
  *  布置、高级两组先挂现有页面(第三、四期重做)。 */
 export type AdminPage =
@@ -25,7 +25,7 @@ export type AdminPage =
 export type Page = GuardPage | AdminPage;
 
 /** 「实时画面」「地图」两页并进了值班页(redesign 第二轮):老地址跳值班。 */
-export const GUARD_PAGES: GuardPage[] = ["duty", "recordings", "alarms"];
+export const GUARD_PAGES: GuardPage[] = ["duty", "recordings", "alarms", "notes"];
 
 /** 顶栏的三个大块(redesign 第二轮,design/console-v2/HANDOFF.md):值班 / 记录与录像 / 现场设置。 */
 export type Section = "monitor" | "events" | "setup";
@@ -51,7 +51,7 @@ export const SETUP_NAV: SetupGroup[] = [
 ];
 /** 一个大块(或现场设置的一项)里的几页,页头下面一排小标签切换。 */
 export const SUBPAGES: { pages: Page[]; keys: Key[] }[] = [
-  { pages: ["alarms", "recordings"], keys: ["subEvents", "subRecordings"] },
+  { pages: ["alarms", "recordings", "notes"], keys: ["subEvents", "subRecordings", "subNotes"] },
   { pages: ["admin/reports", "admin/activity"], keys: ["tabReports", "subAudit"] },
   { pages: ["admin/system", "admin/upgrade", "admin/maps", "admin/localization", "admin/diag"],
     keys: ["subSite", "tabUpgrade", "tabMapMgmt", "tabLocalization", "tabDiag"] },
@@ -59,7 +59,7 @@ export const SUBPAGES: { pages: Page[]; keys: Key[] }[] = [
 const ADMIN_PAGES: AdminPage[] = SETUP_NAV.flatMap((g) => g.items.flatMap((x) => [x.id, ...(x.also ?? [])]));
 
 export function sectionOf(p: Page): Section {
-  if (p === "alarms" || p === "recordings") return "events";
+  if (p === "alarms" || p === "recordings" || p === "notes") return "events";
   return isAdminPage(p) ? "setup" : "monitor";
 }
 
@@ -100,6 +100,8 @@ export interface Route {
   page: Page;
   robot: string | null;
   at: number | null;
+  /** 值班页打开哪一件(报警记录页的「Respond」)。 */
+  alarm?: string | null;
 }
 
 export function readRoute(hash: string = typeof location === "undefined" ? "" : location.hash): Route {
@@ -108,7 +110,7 @@ export function readRoute(hash: string = typeof location === "undefined" ? "" : 
   const at = Number(qs.get("t") ?? "");
   const page: Page = (GUARD_PAGES as string[]).includes(p) || (ADMIN_PAGES as string[]).includes(p)
     ? (p as Page) : LEGACY[p] ?? "duty";
-  return { page, robot: qs.get("robot"), at: at > 0 ? at : null };
+  return { page, robot: qs.get("robot"), at: at > 0 ? at : null, alarm: qs.get("alarm") };
 }
 
 export function isAdminPage(p: Page): p is AdminPage {
@@ -298,14 +300,16 @@ export function SetupNav(props: { me: Me; page: Page; notices: number }) {
 }
 
 /** 一个大块(或现场设置一项)里几页之间的小标签;只列这个角色开得了的;只有一页就不放。 */
-export function SubTabs({ page, role }: { page: Page; role: string }) {
+export function SubTabs({ page, role, rail }: { page: Page; role: string; rail?: boolean }) {
   const g = SUBPAGES.find((x) => x.pages.includes(page));
   if (!g) return null;
+  // 记录与录像(G-records):三个标签在左栏最上面(页面自己放,rail),不在页头
+  if (sectionOf(page) === "events" && !rail) return null;
   const items = g.pages.map((p, i) => ({ p, key: g.keys[i] })).filter((x) => pageAllowed(x.p, role));
   if (items.length < 2) return null;
   const on = page === "admin/mapedit" ? "admin/maps" : page;
   return (
-    <nav class="subtabs" aria-label={t(navLabel(page)?.section ?? "mainNav")}>
+    <nav class={rail ? "subtabs ev-tabs" : "subtabs"} aria-label={t(navLabel(page)?.section ?? "mainNav")}>
       {items.map((x) => (
         <a key={x.p} href={`#/${x.p}`} aria-current={on === x.p ? "page" : undefined}>{t(x.key)}</a>
       ))}

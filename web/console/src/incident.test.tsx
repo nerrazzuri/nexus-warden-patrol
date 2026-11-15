@@ -206,7 +206,7 @@ describe("进度条", () => {
     expect(s.every((x) => x.at != null)).toBe(true);
   });
 
-  it("关了的:从本班已关闭点进来,写结论;10 分钟内能重新打开", async () => {
+  it("关了的:从本班已关闭点进来是回放(第五期 G-playback),写结论;经过在右栏,10 分钟内能重新打开;回到实时", async () => {
     const closed = alert({ acked_ms: 5, acked_by: "gina", resolved_ms: 900, resolved_by: "gina", verdict: "false_alarm" });
     setFetch(((url: string, init?: RequestInit) => {
       if (init?.method === "POST") { posts.push({ url, body: JSON.parse(String(init.body ?? "{}")) }); return Promise.resolve(json({})); }
@@ -216,10 +216,39 @@ describe("进度条", () => {
     const { c } = page([]);
     const row = await waitFor(() => { const b = c.querySelector(".mon-closedlist button") as HTMLButtonElement; expect(b).not.toBeNull(); return b; });
     fireEvent.click(row);
-    expect(inc(c).querySelector(".inc-disp")!.textContent).toContain("已关闭：误报");
-    expect(inc(c).querySelectorAll(".inc-steps li.done").length).toBe(4);
-    fireEvent.click(btn(inc(c), "重新打开")!);
+    const pb = c.querySelector(".pb")!;
+    expect(pb.querySelector(".pb-banner h1")!.textContent).toContain("已关闭：误报");
+    expect(pb.querySelector(".pb-tag")!.textContent).toMatch(/^回放 · \d\d:\d\d:\d\d$/);
+    expect(pb.querySelector(".pb-banner p")!.textContent).toContain("不是实时画面");
+    const hist = c.querySelector(".mon-pbhist")!;
+    expect(hist.textContent).toContain("gina");
+    expect(c.querySelector(".mon-closedlist li.on")).not.toBeNull();
+    fireEvent.click(Array.from(hist.querySelectorAll("button")).find((b) => b.textContent!.startsWith("重新打开"))!);
     await waitFor(() => expect(posts).toContainEqual({ url: "/api/alerts/k1/reopen", body: {} }));
+  });
+
+  it("回放:「回到实时」回平时的样子;点时间轴某一刻也是回放,时间轴上画黄线", async () => {
+    const closed = alert({ acked_ms: 5, acked_by: "gina", resolved_ms: 900, resolved_by: "gina", verdict: "false_alarm" });
+    setFetch(((url: string) => {
+      if (url.startsWith("/api/alerts")) return Promise.resolve(json({ alerts: [closed] }));
+      return Promise.resolve(json({ cameras: [] }));
+    }) as typeof fetch);
+    const { c } = page([]);
+    const row = await waitFor(() => { const b = c.querySelector(".mon-closedlist button") as HTMLButtonElement; expect(b).not.toBeNull(); return b; });
+    fireEvent.click(row);
+    expect(c.querySelector(".shifttl .tl-play")).not.toBeNull();
+    fireEvent.click(c.querySelector(".pb [data-live]")!);
+    expect(c.querySelector(".pb")).toBeNull();
+    expect(c.querySelector(".shifttl .tl-play")).toBeNull();
+  });
+});
+
+describe("报警记录页「去处理」(第五期)", () => {
+  it("#/duty?alarm= 带过来的那一件直接打开,哪怕不是最要紧的那件", () => {
+    const a1 = alert({ key: "k1", first_ms: 10 }), a2 = alert({ key: "k2", kind: "stuck", audience: "help", level: "P2", title: "B 被挡住", first_ms: 20 });
+    const r = render(<MonitorPage openKey="k2" units={[unit("A", "patrolling")]} alerts={[a1, a2]} now={1000} role="guard" me="gina"
+      say={() => {}} refresh={async () => {}} onZoom={() => {}} />);
+    expect(r.container.querySelector(".inc")!.getAttribute("data-key")).toBe("k2");
   });
 });
 
