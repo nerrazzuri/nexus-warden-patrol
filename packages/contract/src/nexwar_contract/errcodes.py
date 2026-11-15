@@ -140,6 +140,7 @@ _T: tuple[tuple[int, str, str, str, str, str, str, str], ...] = (
     (0x021F, "dispatch.guard_prep", "warn", "user", "值守准备中", "Preparing for guard duty", "", ""),
     (0x0220, "dispatch.zone_unwatched", "warn", "user", "防区超时没看", "Zone has not been checked in time",
      "看机器人是否在路上", "Check whether a robot is on the way"),
+    (0x0221, "dispatch.backup_requested", "info", "user", "请求支援", "Backup requested", "", ""),
     # ---- 0x03 巡逻日程
     (0x0301, "sched.started", "info", "user", "日程到点开始巡逻", "Schedule started a patrol", "", ""),
     (0x0302, "sched.missed", "warn", "user", "日程这一轮没跑(过了时间窗)", "Scheduled round did not run (window passed)",
@@ -282,6 +283,7 @@ ALERT: dict[str, str] = {
     "zone_unwatched": "dispatch.zone_unwatched", "swap_soon": "robot.swap_soon",
     "guard_prep": "dispatch.guard_prep", "swap_needed": "robot.swap_needed",
     "swap_overdue": "robot.swap_overdue", "guard_stuck": "dispatch.guard_stuck",
+    "backup_requested": "dispatch.backup_requested",
     "swap_stuck": "robot.swap_stuck", "dog_sees_person": "sense.robot_sees_person",
     "person_overdue": "sense.person_overdue", "person_left": "sense.person_left",
     "evidence_plain": "evidence.plain", "evidence_unopened": "evidence.unopened",
