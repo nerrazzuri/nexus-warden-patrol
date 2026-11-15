@@ -1914,11 +1914,19 @@ input[type="checkbox"], input[type="radio"] { width: 18px; height: 18px; }
 .mon-map .mappage { margin: 0; flex: 1; min-height: 0; display: flex; }
 .mon-map .mapbox { flex: 1; }
 .mon-map .mapwrap { min-height: 0; }
-.map-tool { position: absolute; top: 12px; left: 12px; z-index: 3; width: min(320px, calc(100% - 24px)); max-height: calc(100% - 24px); overflow: auto;
-  background: var(--c-surface); border: 1px solid var(--c-outline); box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35); }
-.map-tool-h { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-1) var(--sp-3); padding: 10px 12px; border-bottom: 1px solid var(--c-outline); }
-.map-tool-h span { flex: 1 1 100%; order: 3; font-size: 13px; color: var(--c-textSecondary); }
-.map-tool .temproute, .map-tool .golook, .map-tool .tip { padding: 12px; position: static; box-shadow: none; border: 0; }
+/* G-check:地图上方一条工具条(名字、提示、退出),下面左边一张卡片;其余地方照样能点地图 */
+.map-tool { position: absolute; top: 12px; left: 12px; right: 12px; z-index: 3; max-height: calc(100% - 24px); display: flex; flex-direction: column; align-items: flex-start; pointer-events: none; }
+.map-tool > * { pointer-events: auto; }
+.map-tool-h { align-self: stretch; display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-1) var(--sp-3); padding: 8px 12px; background: var(--c-surface); border: 1px solid var(--c-outline); }
+.map-tool-h b { font-size: 12px; letter-spacing: 0.06em; }
+.map-tool-h span { flex: 1 1 200px; font-size: 13px; color: var(--c-textSecondary); }
+.map-tool .temproute, .map-tool .golook, .map-tool .tip { width: min(330px, 100%); min-height: 0; overflow: auto; padding: 14px 16px; position: static; box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
+  background: var(--c-surface); border: 1px solid var(--c-primary); border-top: 0; border-radius: 0; }
+.golook h3 { margin: 0 0 4px; font-size: 16px; }
+.golook select { width: 100%; margin: 4px 0 6px; }
+.golook-acts { display: grid; grid-template-columns: 1fr 1fr; gap: var(--sp-2); margin: 8px 0; }
+.golook-acts .btn { justify-content: center; height: 40px; }
+.golook-acts .btn:only-child { grid-column: 2; }
 .map-tool .temproute h3 { display: none; }
 .map-eng { position: absolute; right: 60px; bottom: 52px; z-index: 2; padding: 6px 10px; background: var(--c-surface); border: 1px solid var(--c-outline); }
 .mon-video { flex: 1 1 45%; min-height: 200px; display: flex; flex-direction: column; border-top: 1px solid var(--c-outline); padding: 0 20px 16px; }
@@ -1979,14 +1987,45 @@ input[type="checkbox"], input[type="radio"] { width: 18px; height: 18px; }
 .tl-nowlabel { position: absolute; top: 12px; margin-left: 6px; font-size: 11px; font-weight: 700; white-space: nowrap; }
 .mon .seg button { height: 32px; padding: 0 12px; font-size: 13px; }
 .mon-head-acts .btn { min-height: 32px; height: 32px; font-size: 13px; }
+/* G-compact(1366×768 一类):右栏收成窄栏(每台一个小块 + 巡逻 / 活动),点开的那一段盖在中间右边;时间轴收成一条 */
+.mon { position: relative; }
+.mon-rail, .tl-mini { display: none; }
+.mon-rail { flex-direction: column; gap: var(--sp-1); padding: 8px 6px; border-left: 1px solid var(--c-outline); background: var(--c-bg); min-height: 0; overflow-y: auto; }
+.mon-rail .push { flex: 1; }
+.mon-chip, .mon-railbtn { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; min-height: 48px; padding: 4px 2px;
+  border: 1px solid var(--c-outline); border-radius: var(--r-r2); background: var(--c-surface); color: var(--c-text); font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; }
+.mon-chip b { font-size: 14px; }
+.mon-chip small { font-size: 11px; color: var(--c-success); }
+.mon-chip.low small, .mon-chip.warn small { color: var(--c-warning); }
+.mon-chip.bad { border-color: var(--c-error); } .mon-chip.bad small { color: var(--c-error); }
+.mon-chip[aria-pressed=true], .mon-railbtn[aria-pressed=true] { background: var(--c-primary); border-color: var(--c-primary); color: var(--c-onPrimary, #fff); }
+.mon-chip[aria-pressed=true] small { color: inherit; }
+.mon-chip:focus-visible, .mon-railbtn:focus-visible { outline: 2px solid var(--c-focus); outline-offset: 2px; }
+.tl-mini { grid-template-columns: auto minmax(0, 1fr) auto auto; align-items: center; gap: var(--sp-3); }
+.tl-mini > .mono { font-size: 12px; font-weight: 700; }
+.tl-mini .tl-lane { height: 12px; }
+.tl-mini .tl-mark { top: -1px; }
 @media (max-width: 1439px) {
-  .mon { grid-template-columns: 296px minmax(0, 1fr) 296px; }
+  .mon { grid-template-columns: 280px minmax(0, 1fr) 64px; }
+  .mon-left { grid-column: 1; grid-row: 1; }
+  .mon-center { grid-column: 2; grid-row: 1; }
+  .mon-rail { display: flex; grid-column: 3; grid-row: 1; }
+  .mon-right { display: none; }
+  .mon-right[data-rail] { display: flex; grid-column: 2; grid-row: 1; justify-self: end; width: 320px; z-index: 5; box-shadow: -8px 0 24px rgba(0, 0, 0, 0.35); }
+  .mon-right[data-rail="patrol"] > :not(.mon-tonight), .mon-right[data-rail="activity"] > :not(.mon-act) { display: none; }
+  .tl-mini { display: grid; }
+  .shifttl { padding: 8px 16px; }
+  .shifttl:not(.open) .shifttl-head, .shifttl:not(.open) .shifttl-rows { display: none; }
+  .shifttl.open .tl-mini { margin-bottom: 6px; }
 }
-@media (max-width: 1279px) {
-  .mon { grid-template-columns: 280px minmax(0, 1fr) 280px; }
-}
+
 @media (max-width: 1099px) {
   .mon { height: auto; grid-template-columns: minmax(0, 1fr); grid-template-rows: none; }
+  .mon-left, .mon-center, .mon-right, .mon-right[data-rail] { grid-column: auto; grid-row: auto; width: auto; justify-self: stretch; box-shadow: none; }
+  .mon-right { display: flex; }
+  .mon-right[data-rail] > .mon-sec { display: block; }
+  .mon-rail, .tl-mini { display: none; }
+  .shifttl:not(.open) .shifttl-head, .shifttl:not(.open) .shifttl-rows { display: revert; }
   .mon-center { order: -1; }
   .mon-map { min-height: 380px; }
   .mon-left, .mon-right { overflow: visible; border: 0; }
@@ -2059,3 +2098,74 @@ input[type="checkbox"], input[type="radio"] { width: 18px; height: 18px; }
   .inc-acts { grid-template-columns: minmax(0, 1fr); }
   .inc-act + .inc-act { padding-left: 0; border-left: 0; border-top: 1px solid var(--c-outline); }
 }
+
+/* ---- 单台机器人控制(第 4 期 G-robot):值班页中间,左画面 + 喊话 / 警示,右任务 / 派巡逻 / 姿态定位 / 今天 ---- */
+.rc { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.rc-head { flex: none; display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2) var(--sp-4); padding: 12px 20px; border-bottom: 1px solid var(--c-outline); }
+.rc-head .mon-state { flex: none; }
+.rc-name { font-size: 22px; line-height: 28px; font-weight: 700; }
+.rc-sub { flex: 1 1 240px; min-width: 0; color: var(--c-textSecondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rc-body { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) 300px; }
+.rc-main { min-height: 0; display: flex; flex-direction: column; overflow-y: auto; border-right: 1px solid var(--c-outline); }
+.rc-video { flex: 1 0 320px; min-height: 0; display: flex; flex-direction: column; padding: 12px 20px; }
+.rc-video-h { display: flex; align-items: center; gap: var(--sp-3); padding-bottom: 8px; }
+.rc-ptz-read { color: var(--c-textSecondary); font-size: 13px; }
+.rc-video-well { position: relative; flex: 1; min-height: 0; display: flex; }
+.rc-video-well > * { flex: 1; min-width: 0; }
+.rc-ptz { position: absolute; right: 12px; bottom: 12px; display: grid; grid-template-columns: repeat(3, 40px); grid-template-rows: repeat(3, 40px); gap: var(--sp-1); flex: none; }
+.rc-ptz .btn { padding: 0; justify-content: center; min-width: 0; height: 40px; background: var(--c-surface); }
+.rc-ptz [data-ptz=up] { grid-area: 1 / 2; } .rc-ptz [data-ptz=left] { grid-area: 2 / 1; } .rc-ptz [data-ptz=center] { grid-area: 2 / 2; font-size: 11px; }
+.rc-ptz [data-ptz=right] { grid-area: 2 / 3; } .rc-ptz [data-ptz=down] { grid-area: 3 / 2; }
+.rc-wiper { position: absolute; left: 12px; bottom: 12px; flex: none !important; background: var(--c-surface); }
+.rc-sec { padding: 12px 20px; border-top: 1px solid var(--c-outline); display: flex; flex-direction: column; gap: var(--sp-2); }
+.rc-sec h3 { margin: 0; }
+.rc-main > .rc-sec { display: grid; grid-template-columns: 96px minmax(0, 1fr); align-items: start; }
+.rc-voice-body, .rc-deter-body { display: flex; flex-direction: column; gap: var(--sp-2); min-width: 0; }
+.rc-presets { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--sp-2); align-items: center; }
+.rc-preset { justify-content: center; min-height: 40px; white-space: normal; text-align: center; line-height: 18px; padding: 4px 10px; }
+.rc-presets .linkish { color: var(--c-primary); text-decoration: underline; justify-self: start; }
+.rc-say { display: grid; grid-template-columns: 120px minmax(0, 1fr) 96px 96px; gap: var(--sp-2); }
+.rc-say .btn { justify-content: center; }
+.rc-deter-body { flex-direction: row; flex-wrap: wrap; }
+.rc-deter-body .btn, .rc-deter-body select { min-width: 112px; justify-content: center; }
+.rc-side { min-height: 0; overflow-y: auto; display: flex; flex-direction: column; }
+.rc-side > .rc-sec:first-child { border-top: 0; }
+.rc-task-now { margin: 0; font-size: 18px; line-height: 24px; font-weight: 700; }
+.rc-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(0, 1fr)); gap: var(--sp-2); }
+.rc-row .btn { display: block; text-align: center; line-height: 36px; height: 38px; padding: 0 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.rc-dispatch select[name=route] { width: 100%; }
+.rc-row:has(select) { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+.rc-look { justify-content: center; height: 38px; }
+.rc-kv { display: grid; grid-template-columns: minmax(0, 1fr) 112px; align-items: center; gap: var(--sp-2); }
+.rc-kv .btn { justify-content: center; height: 38px; }
+.rc-kv .btn + .btn { grid-column: 2; }
+.rc-held { padding: 8px 10px; border-left: 3px solid var(--c-error); background: var(--c-errorSoft); display: flex; flex-direction: column; gap: var(--sp-2); }
+.rc-held p, .rc-ask p { margin: 0; }
+.rc-ask { margin: 0 20px; padding: 10px 12px; border: 1px solid var(--c-primary); display: flex; flex-direction: column; gap: var(--sp-2); }
+.rc-err { margin: 4px 20px; }
+.rc-guard-only { margin: 0; padding: 12px 20px; border-top: 1px solid var(--c-outline); }
+@media (max-width: 1439px) {
+  .rc-body { grid-template-columns: minmax(0, 1fr) 264px; }
+  .rc-say { grid-template-columns: 104px minmax(0, 1fr) 80px 80px; }
+  .rc-main > .rc-sec { grid-template-columns: minmax(0, 1fr); }
+}
+/* G-estop:「全部恢复…」在页头原地确认 */
+.mon-ask { flex-basis: 100%; order: 10; display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2) var(--sp-3); padding: 8px 12px; border: 1px solid var(--c-primary); }
+.mon-ask p { margin: 0; flex: 1 1 280px; }
+.mon-ask .btn { min-width: 128px; justify-content: center; }
+@media (max-width: 1439px) {
+  .rc-row { grid-template-columns: repeat(auto-fit, minmax(128px, 1fr)); }
+}
+/* G-multi:同时几件事 —— 页头、地图、一张表(谁管、谁去、画面、下一步) */
+.multi { flex: 1; min-height: 0; display: flex; flex-direction: column; overflow-y: auto; }
+.multi-map { flex: 1 0 300px; min-height: 0; display: flex; padding: 12px 20px 0; }
+.multi-map .mon-map { flex: 1; border: 1px solid var(--c-outline); }
+.multi-table { flex: none; margin: 12px 20px 16px; border-collapse: collapse; width: calc(100% - 40px); }
+.multi-table th { text-align: left; font-size: 12px; font-weight: 600; letter-spacing: 0.06em; color: var(--c-textSecondary); padding: 8px 10px; border-bottom: 1px solid var(--c-outline); }
+.multi-table td { padding: 10px; border-bottom: 1px solid var(--c-outline); vertical-align: middle; }
+.multi-table tr.unowned td { background: var(--c-errorSoft); }
+.multi-table td small { display: block; color: var(--c-textSecondary); }
+.multi-ev { display: inline-flex; align-items: center; gap: var(--sp-2); }
+.multi-none { color: var(--c-error); font-weight: 600; }
+.multi-act { width: 168px; text-align: right; }
+.multi-act .btn { width: 152px; justify-content: center; }

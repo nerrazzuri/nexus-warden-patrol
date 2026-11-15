@@ -1,9 +1,11 @@
 // 整班时间轴(redesign 第二轮 V4 稿底部):一台机器人一行,巡逻蓝条、离线红竖纹;下面一行标事件(安全事件红圈、
 // 设备异常黄三角);一条「现在」竖线。点任一处去看那一刻的录像(点哪一行就是哪台的,点事件那一行是事件那台的)。
 // 充电的灰条要站点记充电时段(还没有,见 design/console-v2/BUILD.md 第 8 期)。
+import { useState } from "preact/hooks";
 import { hm, nameOf } from "./data";
-import { t } from "./i18n";
-import { forGuard, type Alert } from "./model";
+import { alertTitle, lang, t } from "./i18n";
+import { autoResolved, forGuard, type Alert } from "./model";
+import { byText } from "./sitetext";
 import type { TodayItem } from "./todaypatrols";
 
 /** 机器人掉线(站点 alert_audience._OFFLINE;固定摄像头掉线不画在机器人那一行)。 */
@@ -50,6 +52,8 @@ export function ShiftTimeline(props: {
   const span = Math.max(1, to - from);
   const pct = (ms: number) => `${(100 * (Math.min(Math.max(ms, from), to) - from)) / span}%`;
   const { spans, marks } = shiftSpans(props.robots, props.patrols, props.alerts, from, to, props.now);
+  // G-compact:窄屏收成一条(全部机器人),展开看每台;宽屏一直展开(样式管)
+  const [open, setOpen] = useState(false);
   const ticks: number[] = [];
   for (let h = from; h <= to; h += 7_200_000) ticks.push(h);   // 从班头起每 2 小时(19:00、21:00 …)
   const at = (e: MouseEvent, el: HTMLElement) => {
@@ -58,7 +62,22 @@ export function ShiftTimeline(props: {
     return Math.min(props.now, from + f * span);
   };
   return (
-    <section class="shifttl" aria-label={t("tlTitle")}>
+    <section class={open ? "shifttl open" : "shifttl"} aria-label={t("tlTitle")}>
+      <div class="tl-mini">
+        <span class="mono">{hm(from)}</span>
+        <div class="tl-lane" onClick={(e) => props.robots[0] && props.onPick(props.robots[0], at(e, e.currentTarget as HTMLElement))}>
+          {spans.filter((s) => s.kind === "patrol").map((s, i) => (
+            <i key={i} class="tl-span patrol" style={{ left: pct(s.from), width: `calc(${pct(s.to)} - ${pct(s.from)})` }} />
+          ))}
+          {marks.map((m) => (
+            <button key={m.key} type="button" class={`tl-mark ${m.kind}`} style={{ left: pct(m.at) }} title={`${hm(m.at)} ${m.title}`}
+              aria-label={`${hm(m.at)} ${m.title}`} onClick={(e) => { e.stopPropagation(); props.onPick(m.robot, m.at); }} />
+          ))}
+          <i class="tl-now" style={{ left: pct(props.now) }} />
+        </div>
+        <span class="mono">{hm(to)}</span>
+        <button type="button" class="btn sm" aria-expanded={open} onClick={() => setOpen(!open)}>{t(open ? "tlCollapse" : "tlExpand")}</button>
+      </div>
       <div class="shifttl-head">
         <b>{t("tlShift", { a: hm(from), b: hm(to) })}</b>
         <span class="tl-key patrol">{t("tlPatrol")}</span>
@@ -93,4 +112,25 @@ export function ShiftTimeline(props: {
       </div>
     </section>
   );
+}
+
+/** 最近活动:本班的告警(来了、谁接了、谁关了)和巡逻(开始、走完),新的在前。 */
+export function recentActivity(alerts: Alert[], patrols: TodayItem[], since: number, now: number): { at: number; text: string }[] {
+  const out: { at: number; text: string }[] = [];
+  for (const a of alerts) {
+    const what = alertTitle(lang.value, a.kind, a.title);
+    if (a.first_ms >= since && a.level !== "P3") out.push({ at: a.first_ms, text: what });
+    if (a.acked_ms != null && a.acked_ms >= since && a.acked_by) out.push({ at: a.acked_ms, text: t("actTook", { who: byText(a.acked_by), what }) });
+    if (a.resolved_ms != null && a.resolved_ms >= since && a.resolved_by && !autoResolved(a)) {
+      out.push({ at: a.resolved_ms, text: t("actClosed", { who: byText(a.resolved_by), what }) });
+    }
+  }
+  for (const p of patrols) {
+    const route = p.title || p.label;
+    if (p.at_ms >= since && p.at_ms <= now && p.state !== "next" && p.state !== "later" && p.state !== "missed" && p.state !== "blocked") {
+      out.push({ at: p.at_ms, text: t("actRunStart", { id: nameOf(p.robot), route }) });
+    }
+    if (p.state === "done" && p.end_ms != null && p.end_ms >= since) out.push({ at: p.end_ms, text: t("actRunDone", { id: nameOf(p.robot), route }) });
+  }
+  return out.sort((a, b) => b.at - a.at);
 }

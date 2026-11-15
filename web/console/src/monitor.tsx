@@ -8,7 +8,6 @@ import { alertHeadline, canHandleAlerts } from "./alertinfo";
 import { modeLabel } from "./armingpage";
 import { CameraWell, camLabel } from "./camera";
 import { hm, nameOf, useDutySettings } from "./data";
-import { Confirm } from "./dialogs";
 import { guardAlarms, pickSlots, rankUnits, type SlotPick } from "./dutyrank";
 import { alertTitle, andList, joinList, lang, t, type Key } from "./i18n";
 import { locText, type UnitInfo } from "./live";
@@ -18,14 +17,15 @@ import type { CanvasArea } from "./mapcanvas";
 import { MapPage, verdictText, type MapPreset, type MapTool } from "./mappage";
 import { pointInPolygon } from "./mapview";
 import { autoResolved, canDispatch, forGuard, robotCams, type Alert, type Mode } from "./model";
-import { DispatchOnce } from "./routedispatch";
 import { pageAllowed } from "./shell";
 import { byText } from "./sitetext";
 import { VideoSlot, type Scene } from "./slot";
 import { Sign, stateSign, type VideoLayout } from "./signs";
 import { awayText, IncidentView, responder, type FixedCam } from "./incident";
-import { isSecurity, ShiftTimeline } from "./shifttl";
+import { isSecurity, recentActivity, ShiftTimeline } from "./shifttl";
 import { TodayPatrols, type TodayItem } from "./todaypatrols";
+import { RobotControl } from "./robotctl";
+import { MultiView } from "./multi";
 
 /** 迷路了的两种(站点 alerts.LEVEL_OF):多一个「帮它找位置」。 */
 const LOST = new Set(["loc_lost_paused", "loc_lost_idle"]);
@@ -45,26 +45,7 @@ function keep(key: string, v: string): void {
   try { localStorage.setItem(key, v); } catch { /* 隐私模式:不记 */ }
 }
 
-/** 最近活动:本班的告警(来了、谁接了、谁关了)和巡逻(开始、走完),新的在前。 */
-export function recentActivity(alerts: Alert[], patrols: TodayItem[], since: number, now: number): { at: number; text: string }[] {
-  const out: { at: number; text: string }[] = [];
-  for (const a of alerts) {
-    const what = alertTitle(lang.value, a.kind, a.title);
-    if (a.first_ms >= since && a.level !== "P3") out.push({ at: a.first_ms, text: what });
-    if (a.acked_ms != null && a.acked_ms >= since && a.acked_by) out.push({ at: a.acked_ms, text: t("actTook", { who: byText(a.acked_by), what }) });
-    if (a.resolved_ms != null && a.resolved_ms >= since && a.resolved_by && !autoResolved(a)) {
-      out.push({ at: a.resolved_ms, text: t("actClosed", { who: byText(a.resolved_by), what }) });
-    }
-  }
-  for (const p of patrols) {
-    const route = p.title || p.label;
-    if (p.at_ms >= since && p.at_ms <= now && p.state !== "next" && p.state !== "later" && p.state !== "missed" && p.state !== "blocked") {
-      out.push({ at: p.at_ms, text: t("actRunStart", { id: nameOf(p.robot), route }) });
-    }
-    if (p.state === "done" && p.end_ms != null && p.end_ms >= since) out.push({ at: p.end_ms, text: t("actRunDone", { id: nameOf(p.robot), route }) });
-  }
-  return out.sort((a, b) => b.at - a.at);
-}
+export { recentActivity } from "./shifttl";
 
 export function MonitorPage(props: {
   units: UnitInfo[];
@@ -83,7 +64,9 @@ export function MonitorPage(props: {
   const until = since + 12 * 3_600_000;
   const [preset, setPreset] = useState<MapPreset>(() => load(PRESET_KEY, ["all", "route", "zones", "cameras"] as const, "all"));
   const [layout, setLayout] = useState<VideoLayout>(() => load(LAYOUT_KEY, ["single", "dual", "quad", "wall"] as const, "dual"));
-  const [tool, setTool] = useState<MapTool>(null);
+  const [tool, setToolRaw] = useState<MapTool>(null);
+  const [lookRobot, setLookRobot] = useState<string | null>(null);
+  const setTool = (x: MapTool) => { setToolRaw(x); if (x !== "look") setLookRobot(null); };
   const [thermal, setThermal] = useState(false);
   const [selected, setSelected] = useState<string | null>(null);
   const [detail, setDetail] = useState<string | null>(null);
@@ -128,10 +111,14 @@ export function MonitorPage(props: {
   // 直到来了新的一条
   const [siteView, setSiteView] = useState(false);
   const [seenTop, setSeenTop] = useState<string | null>(null);
-  if ((top?.key ?? null) !== seenTop) { setSeenTop(top?.key ?? null); if (top && top.key !== seenTop) setSiteView(false); }
+  // 单台机器人控制(第 4 期 G-robot):右栏「Details」打开;来了新的告警切回告警
+  const [ctl, setCtl] = useState<string | null>(null);
+  // G-compact(≤1439 宽):右栏收成窄栏,巡逻 / 活动点开在原地盖一层
+  const [rail, setRail] = useState<"patrol" | "activity" | null>(null);
+  if ((top?.key ?? null) !== seenTop) { setSeenTop(top?.key ?? null); if (top && top.key !== seenTop) { setSiteView(false); setCtl(null); } }
   const picked = detail ? props.alerts.find((a) => a.key === detail) ?? recent.find((a) => a.key === detail) ?? null : null;
   const focus = picked ?? (!siteView ? top ?? null : null);
-  const openAlarm = (a: Alert) => { setSelected(a.robot); setDetail(a.key); setSiteView(false); };
+  const openAlarm = (a: Alert) => { setSelected(a.robot); setDetail(a.key); setSiteView(false); setCtl(null); };
   const held = props.units.filter((u) => u.robot.held != null);
   const noHome = props.units.filter((u) => u.state !== "offline" && u.robot.home_set === false);
   const fixHome = pageAllowed("admin/localization", props.role);
@@ -189,9 +176,13 @@ export function MonitorPage(props: {
   } else if (props.stale) {
     head = { sign: "warn", title: t("dutyUnknown"), sub: t("dutyUnknownSub") };
   } else if (held.length > 0) {
+    // G-estop:谁几点按的(取最早那一次);恢复在页头原地确认
+    const first = held.map((u) => u.robot.held as { by?: string; at_ms?: number } | null).filter((h) => h?.at_ms != null)
+      .sort((a, b) => (a!.at_ms ?? 0) - (b!.at_ms ?? 0))[0];
     head = {
-      sign: "bad", title: t("monHeld", { n: held.length }), sub: `${joinList(held.map((u) => nameOf(u.robot.robot_id)))} · ${t("dutyHeldSub")}`,
-      acts: canDispatch(props.role) && <button type="button" class="btn primary" onClick={() => setAskResume(true)}>{t("monResetAll")}</button>,
+      sign: "bad", title: t("monHeld", { n: held.length }),
+      sub: first?.by ? t("monHeldSub", { by: byText(first.by), t: hm(first.at_ms ?? 0) }) : `${joinList(held.map((u) => nameOf(u.robot.robot_id)))} · ${t("dutyHeldSub")}`,
+      acts: canDispatch(props.role) && !askResume && <button type="button" class="btn primary" onClick={() => setAskResume(true)}>{t("monResetAll")}</button>,
     };
   } else if (noHome.length > 0) {
     head = {
@@ -232,7 +223,9 @@ export function MonitorPage(props: {
     return d?.dist ?? Number.POSITIVE_INFINITY;
   }
   const activity = recentActivity(recent.filter(forGuard), patrols, since, props.now).slice(0, 6);
-  const robotsPage = pageAllowed("admin/robots", props.role);
+  const ctlUnit = ctl ? unitOf(ctl) : undefined;
+  // G-multi:两件以上安全事件开着、没点进哪一件:先看全局
+  const multi = !picked && !siteView && security.length >= 2;
 
   return (
     <div class={`mon${layout === "wall" ? " wall" : ""}`} data-head={head.sign}>
@@ -265,7 +258,20 @@ export function MonitorPage(props: {
       </aside>
 
       <section class="mon-center" aria-label={t("secMonitor")}>
-        {focus ? (
+        {ctlUnit ? (
+          <RobotControl u={ctlUnit} role={props.role} now={props.now} alerts={recent} patrols={patrols} since={since} say={props.say} refresh={props.refresh}
+            onBack={() => setCtl(null)}
+            onLook={(id) => { setCtl(null); setDetail(null); setSiteView(true); setSelected(id); setLookRobot(id); setTool("look"); }} />
+        ) : multi ? (
+          <MultiView events={security} units={props.units} cams={cams} canTake={can} onOpen={openAlarm}
+            onTake={(a) => void post(`/api/alerts/${enc(a.key)}/ack`)} map={(
+              <div class="mon-map">
+                <MapPage units={props.units} p1={alarms.filter((a) => a.level === "P1")} now={props.now} role={props.role} stale={props.stale}
+                  selected={selected} onSelect={setSelected} mode={props.mode ?? null} say={props.say} preset="all" recent={recent} hot={hot}
+                  onAreas={(a) => setAreas((old) => (old.length === a.length && old.every((x, i) => x.name === a[i].name) ? old : a))} />
+              </div>
+            )} />
+        ) : focus ? (
           <IncidentView a={focus} units={props.units} alerts={props.alerts} now={props.now} role={props.role} mode={props.mode ?? null} stale={props.stale}
             cams={cams} layout={layout} onLayout={(l) => { setLayout(l); keep(LAYOUT_KEY, l); }} say={props.say} refresh={props.refresh}
             onSite={() => { setDetail(null); setSiteView(true); }} onZoom={props.onZoom}
@@ -287,6 +293,13 @@ export function MonitorPage(props: {
               </>
             )}
           </div>
+          {askResume && held.length > 0 && (
+            <div class="mon-ask" role="group">
+              <p>{t("dutyResumeAsk", { n: held.length })}</p>
+              <button type="button" class="btn primary" onClick={() => void resumeAll()}>{t("dutyResumeAll")}</button>
+              <button type="button" class="btn" onClick={() => setAskResume(false)}>{t("cancel")}</button>
+            </div>
+          )}
           {layout !== "wall" && (
             <div class="seg" role="tablist" aria-label={t("tabMap")}>
               {presets.map((p) => <button key={p.v} type="button" role="tab" aria-selected={preset === p.v} class={preset === p.v ? "on" : ""}
@@ -298,7 +311,7 @@ export function MonitorPage(props: {
           <div class="mon-map">
             <MapPage units={props.units} p1={alarms.filter((a) => a.level === "P1")} now={props.now} role={props.role} stale={props.stale}
               selected={finding ?? selected ?? slots[0]?.robot ?? null} onSelect={setSelected} mode={props.mode ?? null} say={props.say}
-              preset={preset} tool={tool} onTool={setTool} recent={recent} hot={hot} finding={finding}
+              preset={preset} tool={tool} onTool={setTool} recent={recent} hot={hot} finding={finding} lookRobot={lookRobot}
               onLocated={(id) => { setFinding(null); props.say(t("locDoneMsg", { id: nameOf(id) })); }}
               onAreas={(a) => setAreas((old) => (old.length === a.length && old.every((x, i) => x.name === a[i].name) ? old : a))} />
           </div>
@@ -329,14 +342,14 @@ export function MonitorPage(props: {
         </>)}
       </section>
 
-      <aside class="mon-right" aria-label={t("monRobots")}>
-        <section class="mon-sec">
-          <h2 class="mon-h"><span>{t(focus && focus.resolved_ms == null ? "monRobotsNearest" : "monRobots")}</span></h2>
+      <aside class="mon-right" aria-label={t("monRobots")} data-rail={rail ?? undefined}>
+        <section class="mon-sec mon-robots-sec">
+          <h2 class="mon-h"><span>{t(focus && focus.resolved_ms == null && !ctlUnit && !multi ? "monRobotsNearest" : "monRobots")}</span></h2>
           {ranked.length === 0 && <p class={props.stale ? "warn mon-pad" : "muted mon-pad"}>{t(props.stale ? "dutyStaleRobots" : "dutyNoRobots")}</p>}
           <ul class="mon-robots">
             {byIncident.map((u) => {
               const id = u.robot.robot_id;
-              const sign = u.stale ? "warn" : stateSign(u.state);
+              const sign = u.stale ? "warn" : u.robot.held != null ? "bad" : stateSign(u.state);
               const loc = locText(u);
               const dist = focus && focus.resolved_ms == null ? responder({ ...focus, robot: "" }, [u])?.dist ?? null : null;
               const sub = [awayText(dist, focus?.context?.zone ?? focus?.context?.where ?? ""), zoneOf(u), u.task, loc ? t(loc) : "", u.state !== "offline" && u.robot.home_set === false ? t("dutyRowNoHome") : ""].filter(Boolean).join(" · ");
@@ -344,16 +357,15 @@ export function MonitorPage(props: {
                 <li key={id} class={selected === id ? "mon-robot on" : "mon-robot"} data-robot={id}>
                   <div class="mon-robot-top">
                     <b class="mon-robot-id">{nameOf(id)}</b>
-                    <span class={`mon-state ${sign}`}><Sign kind={sign} />{u.stale ? t("stUnknown") : t(`st_${u.state}` as Key)}</span>
+                    <span class={`mon-state ${sign}`}><Sign kind={sign} />{u.stale ? t("stUnknown") : u.robot.held != null ? t("st_estop") : t(`st_${u.state}` as Key)}</span>
                     {u.battery != null && <b class={u.battery < 30 ? "mon-batt low" : "mon-batt"}>{Math.round(u.battery)}%</b>}
                   </div>
                   {u.battery != null && <div class={u.battery < 30 ? "mon-bar low" : "mon-bar"}><i style={{ width: `${Math.max(0, Math.min(100, u.battery))}%` }} /></div>}
                   {sub && <p class="mon-robot-sub" title={sub}>{sub}</p>}
                   <div class="mon-robot-acts">
                     <button type="button" class="btn sm" onClick={() => { put(id); setSelected(id); if (layout === "wall" || layout === "quad") { setLayout("dual"); keep(LAYOUT_KEY, "dual"); } }}>{t("monViewVideo")}</button>
-                    <a class="btn sm" data-robot-more={id} href={robotsPage ? `#/admin/robots?robot=${enc(id)}` : `#/duty?robot=${enc(id)}`}
-                      onClick={robotsPage ? undefined : (e) => { e.preventDefault(); setSelected(id); }}>{t("dutyDetails")}</a>
-                    {!robotsPage && canDispatch(props.role) && u.state !== "offline" && <DispatchOnce robot={id} say={props.say} cls="btn sm" />}
+                    <button type="button" class="btn sm" data-robot-more={id} aria-pressed={ctl === id}
+                      onClick={() => { setSelected(id); setCtl(ctl === id ? null : id); }}>{t("dutyDetails")}</button>
                   </div>
                 </li>
               );
@@ -361,9 +373,9 @@ export function MonitorPage(props: {
           </ul>
         </section>
         <section class="mon-sec mon-tonight">
-          <TodayPatrols canFix={robotsPage} onItems={setPatrols} title={t("monTonight")} />
+          <TodayPatrols canFix={pageAllowed("admin/robots", props.role)} onItems={setPatrols} title={t("monTonight")} />
         </section>
-        <section class="mon-sec">
+        <section class="mon-sec mon-act">
           <h2 class="mon-h"><span>{t("monActivity")}</span></h2>
           {activity.length === 0 ? <p class="muted mon-pad">{t("monNoActivity")}</p> : (
             <ul class="mon-activity">{activity.map((x, i) => <li key={i}><time class="mono">{hm(x.at)}</time><span>{x.text}</span></li>)}</ul>
@@ -371,10 +383,25 @@ export function MonitorPage(props: {
         </section>
       </aside>
 
+      <nav class="mon-rail" aria-label={t("monRobots")}>
+        {ranked.map((u) => {
+          const id = u.robot.robot_id;
+          const low = u.battery != null && u.battery < 30;
+          return (
+            <button key={id} type="button" class={`mon-chip ${u.stale ? "warn" : stateSign(u.state)}${low ? " low" : ""}`} aria-pressed={ctl === id}
+              title={u.stale ? t("stUnknown") : t(`st_${u.state}` as Key)} onClick={() => { setSelected(id); setCtl(ctl === id ? null : id); }}>
+              <b>{nameOf(id)}</b>{u.battery != null && <small>{Math.round(u.battery)}%</small>}
+            </button>
+          );
+        })}
+        <span class="push" />
+        <button type="button" class="mon-railbtn" aria-pressed={rail === "patrol"} onClick={() => setRail(rail === "patrol" ? null : "patrol")}>{t("monRailPatrol")}</button>
+        <button type="button" class="mon-railbtn" aria-pressed={rail === "activity"} onClick={() => setRail(rail === "activity" ? null : "activity")}>{t("monRailActivity")}</button>
+      </nav>
+
       <ShiftTimeline robots={ranked.map((u) => u.robot.robot_id)} patrols={patrols} alerts={recent} from={since} to={until} now={props.now}
         onPick={(robot, at) => { location.hash = `#/recordings?robot=${enc(robot)}&t=${Math.round(at)}`; }} />
 
-      {askResume && <Confirm text={t("dutyResumeAsk", { n: held.length })} yes={t("dutyResumeAll")} onNo={() => setAskResume(false)} onYes={resumeAll} />}
     </div>
   );
 }
