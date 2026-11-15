@@ -6,6 +6,8 @@ import alertCatalog from "../../../design/i18n/alerts.json";
 export type Lang = "en" | "zh";
 
 const en = {
+  mapVer: "Map {id} · v{v}",
+  mapVerMixed: "Robots are on different map versions: {list}. The map follows the selected robot.",
   rcNoCam: "This robot reports no {cam} camera.",
   rcMapH: "Position on the map",
   rcMapNone: "No map reported by this robot.",
@@ -2280,6 +2282,8 @@ const en = {
 type Key = keyof typeof en;
 
 const zh: Partial<Record<Key, string>> = {
+  mapVer: "地图 {id} · v{v}",
+  mapVerMixed: "机器人用的地图版本不一致：{list}。地图跟着选中的那台。",
   rcNoCam: "这台机器人没报 {cam}。",
   rcMapH: "地图上的位置",
   rcMapNone: "这台机器人没报地图。",

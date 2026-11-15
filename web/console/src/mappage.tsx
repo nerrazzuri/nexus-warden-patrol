@@ -11,6 +11,7 @@ import { hm, nameOf, useDutySettings } from "./data";
 import { siteHm } from "./todaypatrols";
 import { Modal } from "./dialogs";
 import { alertTitle, andList, lang, refusalText, t, type Key } from "./i18n";
+import { Sign } from "./signs";
 import { pageAllowed } from "./shell";
 import { locText, type UnitInfo } from "./live";
 import { botLayout, type Box, ENGINEERING_LAYERS, etaNext, eventLabelY, textHalfW, layersFor, loadLayers, saveLayers, mapPins,  shiftStart, staleAfter, staleCells, zoneDecor,
@@ -170,6 +171,10 @@ export function SiteMap(props: {
     BOT_R, LABEL_PX, !!props.eta);
   // P2-15:机器人、报警两项一直在图例里(没有的时候也说清是什么样子)
   const legend: LegendKey[] = ["robot", "alarm"];
+  // 机器人之间版本不一致(有的切过去了、有的还没):图上标一个三角,悬停写谁在哪一版
+  const vers = props.units.map((u) => ({ id: u.robot.robot_id, m: robotMap(u.robot) })).filter((x) => x.m);
+  const verMixed = which && vers.some((x) => x.m!.version !== which.version || x.m!.map_id !== which.map_id)
+    ? t("mapVerMixed", { list: vers.map((x) => `${nameOf(x.id)} v${x.m!.version}`).join(", ") }) : "";
 
   return (
     <div class="mapbox" {...pose.wrapProps}>
@@ -188,7 +193,10 @@ export function SiteMap(props: {
             world={<>{props.route !== false && <VizWorld meta={meta} robots={vizRobots} />}{props.extraWorld?.(meta, which)}</>}
             // 「去这里」浮在图的右上角(不在图下面另占一块);运行图层的图例并进底图图例那一行
             // 第 2 轮 P1-56:定位时那句说明放进设位置的小卡片里(原来左上一句、卡片里一句、侧栏一句,还互相压着)
-            overlay={<>{props.hint && !(props.pick === true && pose.panel) && <div class="map-hint" role="status">{props.hint}</div>}{!props.onPickMap && props.pick !== false && pose.panel}</>}
+            overlay={<>
+              {/* 用户 11-15:图上写明现在画的是哪一版(下发新图后机器人切过去之前还是旧版,要看得出来) */}
+              <span class="map-ver" data-map-version={which.version} title={verMixed || undefined}>{t("mapVer", { id: which.map_id, v: which.version })}{verMixed && " ·"}{verMixed && <Sign kind="warn" />}</span>
+              {props.hint && !(props.pick === true && pose.panel) && <div class="map-hint" role="status">{props.hint}</div>}{!props.onPickMap && props.pick !== false && pose.panel}</>}
             legendExtra={<RunLegendItems has={vizHas(vizRobots, eps)} />}
             // 区域名让开报警圈、狗(圆点 + 下面的编号)
             avoid={(s) => [
