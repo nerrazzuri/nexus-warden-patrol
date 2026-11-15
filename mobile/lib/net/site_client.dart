@@ -781,6 +781,9 @@ abstract class SiteApi {
   /// 布防模式（W20）：当前模式、临时撤防到几点、每个防区现在布不布防。站点没开回 404。
   Future<Map<String, dynamic>> mode();
 
+  /// 布防时间表（App V2「布防与巡逻」只读汇总；改在网页）：`{enabled, slots:[{zone, day, start, end}], exceptions}`。
+  Future<Map<String, dynamic>> armingSchedule();
+
   /// 交班留言(App V2 现场 → 记录):最近 N 条,新的在前;写一条。跟网页同一个接口。
   Future<List<Map<String, dynamic>>> shiftNotes({int recent = 50});
   Future<void> postShiftNote(String text);
@@ -1411,6 +1414,8 @@ class SiteClient implements SiteApi {
 
   @override
   Future<Map<String, dynamic>> mode() async => _map(await _send('GET', '/api/mode'));
+  @override
+  Future<Map<String, dynamic>> armingSchedule() async => _map(await _send('GET', '/api/arming/schedule'));
 
   @override
   Future<List<Map<String, dynamic>>> shiftNotes({int recent = 50}) async {

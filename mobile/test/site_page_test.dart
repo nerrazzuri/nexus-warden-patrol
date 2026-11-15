@@ -1014,6 +1014,13 @@ class FakeApi implements SiteApi {
     calls.add('halt $robotId');
     return <String, dynamic>{'ack': <String, dynamic>{'result': 'accepted'}};
   }
+  Map<String, dynamic>? armingScheduleView;
+  @override
+  Future<Map<String, dynamic>> armingSchedule() async {
+    final v = armingScheduleView;
+    if (v == null) throw const SiteError(404, 'not found');
+    return v;
+  }
   @override
   Future<Map<String, dynamic>> renameRobot(String robotId, String name) async {
     calls.add('rename $robotId $name');
