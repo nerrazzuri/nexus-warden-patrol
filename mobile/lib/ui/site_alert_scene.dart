@@ -32,6 +32,7 @@ import 'nw/nw_theme.dart';
 import 'nw/nw_shell.dart' show EstopSquare;
 import 'site_tabs.dart' show AccountsPage;
 import 'site_mapping.dart';
+import 'site_deter.dart' show deterAckFailure;
 import 'site_recordings.dart';
 import 'site_runs.dart';
 import 'site_video.dart';
@@ -495,8 +496,12 @@ class _SiteAlertScenePageState extends State<SiteAlertScenePage> with EstopMissR
   Future<void> _warn(String output, {double? maxS, String? clip}) async {
     final gen = _gen, robot = _a.robot;
     try {
-      await widget.api.deter(robot, output, true, maxS: maxS, clip: clip);
+      final why = deterAckFailure(await widget.api.deter(robot, output, true, maxS: maxS, clip: clip));
       if (!mounted || gen != _gen) return;
+      if (why != null) {
+        setState(() => _msg = tr('Not done: $why', '没执行：$why'));
+        return;
+      }
       setState(
         () => _msg = switch (output) {
           'speaker' => tr('$robot: announcing.', '$robot 在喊话。'),
@@ -515,7 +520,7 @@ class _SiteAlertScenePageState extends State<SiteAlertScenePage> with EstopMissR
     final fails = <String>[];
     for (final o in _outputs.where((o) => const {'speaker', 'strobe', 'siren', 'spotlight'}.contains(o))) {
       try {
-        await widget.api.deter(robot, o, false);
+        if (deterAckFailure(await widget.api.deter(robot, o, false)) != null) fails.add(o);
       } on SiteError {
         fails.add(o);
       }
@@ -976,7 +981,8 @@ class _SiteAlertScenePageState extends State<SiteAlertScenePage> with EstopMissR
   /// 现场警示：自动驱离到第几级 +「结束驱离」；喊话 / 警灯 / 警笛 / 全部关（这台机器人有的才摆）。
   /// 只读、经理（不能派的）只说一句由保安操作。
   Widget? _warning(NwColors c) {
-    if (!_open || !_isRobot || !_security) return null;
+    // 外审 App-V2-2 N3：结案不等于驱离结束（站点结案不解除驱离）：还在驱离就照样摆着「结束驱离」
+    if ((!_open && _d == null) || !_isRobot || !_security) return null;
     final dispatch = widget.api.session?.canDispatch ?? false;
     if (!dispatch) {
       return _section(c, tr('On-site warning', '现场警示'), [

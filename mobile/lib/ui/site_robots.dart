@@ -115,7 +115,8 @@ class _SiteRobotsPageState extends State<SiteRobotsPage> {
       }
       if (arrivalAlerts.value) _arrival(f);
       if (alertWantsSound(f)) {
-        widget.ring();
+        // 来报警页 / 通知上点了静音的这一条：只出字，不响
+        if (!ringMuted('${(f['alert'] as Map)['key']}')) widget.ring();
         final a = f['alert'] as Map;
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(SnackBar(
@@ -162,7 +163,7 @@ class _SiteRobotsPageState extends State<SiteRobotsPage> {
         ..addAll(pending.map((a) => a.key));
       _bellOnOff();
       if (pending.isEmpty) return;
-      widget.ring();
+      if (pending.any((a) => !ringMuted(a.key))) widget.ring();
       final a = pending.first;
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
@@ -264,9 +265,11 @@ class _SiteRobotsPageState extends State<SiteRobotsPage> {
       _bell ??= Timer.periodic(widget.ringEvery, (_) {
         // 退到后台了由后台值守的通知响（闹钟声一直响），这边不叠着响
         final state = WidgetsBinding.instance.lifecycleState;
-        // 来报警页上点了「静音 2 分钟」的那几条前台也不响（全静了才不响）
-        if (_ringing.any((k) => !ringMuted(k)) && (state == null || state == AppLifecycleState.resumed)) {
-          widget.ring();
+        // 来报警页 / 通知上点了「静音 2 分钟」的那几条前台也不响（全静了才不响）
+        if (_ringing.isNotEmpty && (state == null || state == AppLifecycleState.resumed)) {
+          unawaited(syncNativeMutes().then((_) {
+            if (!_disposed && _ringing.any((k) => !ringMuted(k))) widget.ring();
+          }));
         }
       });
     }

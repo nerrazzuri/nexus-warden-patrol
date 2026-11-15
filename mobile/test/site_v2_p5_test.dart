@@ -211,10 +211,15 @@ void main() {
     expect(find.byKey(const Key('sched-editor')), findsNothing);
   });
 
+  // 机器人报了在用 m 第 1 版（待命点就在这一版上，才能设默认）
+  const onM1 = <String, dynamic>{
+    'tasks': <String, dynamic>{'patrol': <String, dynamic>{'map_id': 'm', 'map_version': '1'}}
+  };
   FakeApi pointsApi(String role) => FakeApi(role)
+    ..view = <String, dynamic>{'robot_id': 'A', 'capabilities': onM1}
     ..robotsOverride = <Map<String, dynamic>>[
-      <String, dynamic>{'robot_id': 'A', 'name': 'A'},
-      <String, dynamic>{'robot_id': 'B', 'name': 'B'},
+      <String, dynamic>{'robot_id': 'A', 'name': 'A', 'capabilities': onM1},
+      <String, dynamic>{'robot_id': 'B', 'name': 'B', 'capabilities': onM1},
     ]
     ..standby = <String, dynamic>{
       'points': <Map<String, dynamic>>[
@@ -275,6 +280,31 @@ void main() {
         findsOneWidget);
     expect(find.byKey(SitePointsPage.defaultKey('gate')), findsNothing, reason: '旧图上的点不能设默认（回去时站点会拒）');
     expect(find.text('尚未标原点'), findsOneWidget, reason: '原点只在旧版图上');
+  });
+
+  testWidgets('外审 App-V2-2 R4：不知道在用哪张图不让设默认；设之前现问，换了图就不设', (t) async {
+    await t.binding.setSurfaceSize(const Size(390, 1400));
+    addTearDown(() => t.binding.setSurfaceSize(null));
+    final unknown = pointsApi('admin')
+      ..robotsOverride = <Map<String, dynamic>>[<String, dynamic>{'robot_id': 'A', 'name': 'A'}];
+    await t.pumpWidget(MaterialApp(home: SitePointsPage(api: unknown)));
+    await t.pumpAndSettle();
+    expect(find.byKey(SitePointsPage.defaultKey('gate')), findsNothing);
+    expect(find.textContaining('不知道 A 在用哪张图'), findsWidgets);
+    await t.pumpWidget(Container());
+    final moved = pointsApi('admin')
+      ..view = <String, dynamic>{
+        'robot_id': 'A',
+        'capabilities': <String, dynamic>{
+          'tasks': <String, dynamic>{'patrol': <String, dynamic>{'map_id': 'm', 'map_version': '2'}}
+        },
+      };
+    await t.pumpWidget(MaterialApp(home: SitePointsPage(api: moved)));
+    await t.pumpAndSettle();
+    await t.tap(find.byKey(SitePointsPage.defaultKey('gate')));
+    await t.pumpAndSettle();
+    expect(moved.calls.where((c) => c.startsWith('standby-default')), isEmpty);
+    expect(find.textContaining('不在 A 现在用的图上'), findsOneWidget);
   });
 
   testWidgets('稿 S-points：保安只看原点、待命点，不能设默认', (t) async {

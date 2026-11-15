@@ -52,6 +52,8 @@ class WatchService : Service() {
         /** App V2 来报警全屏页 / 通知上的「静音 2 分钟」，extra `key`。 */
         const val ACTION_MUTE = "com.nexwar.watch.MUTE"
         const val MUTE_MS = 2 * 60_000L
+        /** 静到几点(毫秒):告警键 → 截止。App 前台的铃也看这个(外审 App-V2-2 R1:通知上点了静音,前台别接着响)。 */
+        val mutedUntil = java.util.concurrent.ConcurrentHashMap<String, Long>()
         /** 拉起 [MainActivity] 的来报警全屏页：extra 里的键、报文、站点名。 */
         const val EXTRA_RING_KEY = "ring_key"
         const val EXTRA_RING_ALERT = "ring_alert"
@@ -113,7 +115,9 @@ class WatchService : Service() {
             ACTION_MUTE -> {
                 // 只是这台手机先不出声;到点还没人确认接着响(站点说有人确认了才收)
                 val key = intent.getStringExtra("key") ?: ""
-                apply(bell.mute(key, System.currentTimeMillis(), MUTE_MS))
+                val now = System.currentTimeMillis()
+                mutedUntil[key] = now + MUTE_MS
+                apply(bell.mute(key, now, MUTE_MS))
                 ui.postDelayed({ for (act in bell.unmuteDue(System.currentTimeMillis())) apply(act) }, MUTE_MS + 500)
                 return START_STICKY
             }

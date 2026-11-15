@@ -110,6 +110,16 @@ class _SitePointsPageState extends State<SitePointsPage> {
     if (id == null || _busy) return;
     setState(() => _busy = true);
     try {
+      // 设之前现问机器人在用哪张图：页面开着的时候它可能换过图（外审 App-V2-2 R4）
+      final now = robotMapOf(await widget.api.robot(id));
+      if (now == null || '${p['map_id']}' != now.$1 || '${p['map_version']}' != now.$2) {
+        if (mounted) {
+          setState(() => _msg = tr('${standbyName(p)} is not on the map $id uses now; not set.',
+              '${standbyName(p)} 不在 $id 现在用的图上，没设。'));
+        }
+        unawaited(_load());
+        return;
+      }
       await widget.api.setStandbyDefault(id, p);
       if (mounted) setState(() => _msg = tr('${standbyName(p)} is now the default', '${standbyName(p)} 已设为默认'));
     } on SiteError catch (e) {
@@ -171,9 +181,11 @@ class _SitePointsPageState extends State<SitePointsPage> {
     final robot = _robot;
     // 外审 App-V2-1 #12：点是挂在某一版地图上的；机器人在用哪版看得见，别的版本的点标出来、不能设默认
     final cur = robotMapOf(_robotView);
-    bool onCur(Map<String, dynamic> p) => cur == null || ('${p['map_id']}' == cur.$1 && '${p['map_version']}' == cur.$2);
+    bool onCur(Map<String, dynamic> p) => cur != null && '${p['map_id']}' == cur.$1 && '${p['map_version']}' == cur.$2;
     String mapOf(Map<String, dynamic> p) => '${p['map_id']} v${p['map_version']}';
     final origin = cur == null ? _homes.isNotEmpty : _homes.any(onCur);
+    // 机器人还没报在用哪张图：不知道哪个点对，先不让设默认（外审 App-V2-2 R4）
+    final mapNote = cur == null ? tr('map in use unknown', '不知道 ${_robot ?? ''} 在用哪张图') : '';
     final linked = <String, List<String>>{};
     for (final z in _zones) {
       final i = '${z['intercept'] ?? ''}';
@@ -227,7 +239,10 @@ class _SitePointsPageState extends State<SitePointsPage> {
                       sub2: [
                         if (p['default'] == true) tr('Default · return here after patrol', '默认 · 巡逻结束回这里'),
                         mapOf(p),
-                        if (!onCur(p)) tr('not the map ${_robot ?? ''} uses now', '不是 ${_robot ?? ''} 现在用的图'),
+                        if (cur == null)
+                          mapNote
+                        else if (!onCur(p))
+                          tr('not the map ${_robot ?? ''} uses now', '不是 ${_robot ?? ''} 现在用的图'),
                       ].join(' · '),
                       trailing: _maps && p['default'] != true && onCur(p)
                           ? OutlinedButton(

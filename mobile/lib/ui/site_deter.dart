@@ -133,6 +133,16 @@ String strobeColorText(String c) => switch (c) {
 /// 页面上的一行：哪一路、哪一边（只给聚光灯）、名字。
 typedef _Row = ({String key, String output, String? side, String name});
 
+/// 机器人对一次警示指令的回执：成了回 null，没成回人话的原因（外审 App-V2-2 N4：HTTP 200 不等于做了）。
+/// 没带回执的（老站点）按成了算。
+String? deterAckFailure(Map<String, dynamic> r) {
+  final ack = r['ack'];
+  if (ack is! Map) return null;
+  final res = '${ack['result']}';
+  if (res == 'accepted' || res == 'duplicate') return null;
+  return deterReasonText('${ack['reason'] ?? res}');
+}
+
 /// 狗回的拒绝理由说人话。
 String deterReasonText(String r) => switch (r) {
       'busy' => tr('The speaker is playing something more urgent (incident, deterrence). Wait for it to finish',
@@ -286,7 +296,8 @@ class _SiteDeterPageState extends State<SiteDeterPage> {
     final bad = <String>[];
     for (final o in _outputs.where((o) => o != 'ptz' && o != 'wiper')) {
       try {
-        await widget.api.deter(widget.robotId, o, false);
+        final why = deterAckFailure(await widget.api.deter(widget.robotId, o, false));
+        if (why != null) bad.add('${deterOutputs[o]?.$1 ?? o}: $why');
       } on SiteError catch (e) {
         bad.add('${deterOutputs[o]?.$1 ?? o}: $e');
       }
