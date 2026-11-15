@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>App · 设置</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&display=swap">
+<style>
+body{margin:0}
+*{box-sizing:border-box}
+.btn{height:44px;padding:0 14px;border:1px solid #6B7178;border-radius:2px;background:#FFFFFF;color:#15181B;font:600 15px Barlow,'Noto Sans SC','Microsoft YaHei UI',sans-serif;display:inline-flex;align-items:center;justify-content:center;gap:8px;white-space:nowrap;min-width:0}
+.btn.sm{height:36px;padding:0 10px;font-size:14px}
+.btn.pri{background:#0B5FA5;border-color:#0B5FA5;color:#fff;font-weight:700}
+.btn.danger{background:transparent;border-color:#C8102E;color:#C8102E}
+.btn.stop{background:#C8102E;border-color:#C8102E;color:#fff;font-weight:700}
+.btn.ghost{background:transparent;border-color:transparent;color:#0B5FA5}
+.row{display:grid;gap:8px}
+.lbl{font-size:12px;font-weight:600;letter-spacing:.06em;color:#5F646A}
+.mut{color:#474C52}
+.ring{display:inline-block;flex:none;width:14px;height:14px;border:3px solid #C8102E;border-radius:50%}
+.ring.lg{width:26px;height:26px;border-width:5px}
+.tri{display:inline-block;flex:none;width:0;height:0;border-left:7px solid transparent;border-right:7px solid transparent;border-bottom:12px solid #F2A900}
+.tri.lg{border-left-width:12px;border-right-width:12px;border-bottom-width:21px}
+.sq{display:inline-block;flex:none;width:9px;height:9px;background:#0F7A3C}
+.off{display:inline-block;flex:none;width:14px;height:14px;border:2px solid #5F646A;border-radius:50%;background:linear-gradient(135deg,transparent 45%,#5F646A 45%,#5F646A 58%,transparent 58%)}
+.disc{display:inline-block;flex:none;width:12px;height:12px;border-radius:50%;background:#fff}
+.discb{display:inline-block;flex:none;width:12px;height:12px;border-radius:50%;background:#0B5FA5}
+.p3{display:inline-block;flex:none;width:12px;height:12px;border:1.5px solid #5F646A;border-radius:50%}
+.sec{padding:14px 16px;border-bottom:1px solid #D3D6D2}
+.h2{margin:0;font-size:17px;line-height:24px;font-weight:600}
+.h1{margin:0;font-size:22px;line-height:28px;font-weight:700}
+.li{display:flex;align-items:center;gap:12px;min-height:56px;padding:8px 16px;border-bottom:1px solid #D3D6D2;color:#15181B;text-decoration:none}
+.li .b{flex:1;min-width:0}
+.li .s{font-size:13px;line-height:18px;color:#474C52}
+.seg{display:grid;border:1px solid #D3D6D2;border-radius:2px;padding:3px;gap:3px}
+.seg button{height:36px;border:0;border-radius:2px;background:transparent;color:#474C52;font:600 14px Barlow,'Noto Sans SC','Microsoft YaHei UI',sans-serif}
+.seg button.on{background:#0B5FA5;color:#fff}
+.chip{display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 8px;border-radius:2px;font-size:13px;font-weight:600;white-space:nowrap}
+.c-ok{background:#E3F2E8;color:#0F7A3C} .c-warn{background:#FBF0D2;color:#8A5A00} .c-bad{background:#FBE4E7;color:#C8102E} .c-n{background:#ECEEEB;color:#474C52}
+.vid{position:relative;background:#000;overflow:hidden}
+.vid .cap{position:absolute;left:0;right:0;top:0;display:flex;align-items:center;gap:8px;padding:6px 10px;background:rgba(0,0,0,.65);color:#ECEDEA;font-size:13px}
+.inp{height:44px;border:1px solid #6B7178;border-radius:2px;padding:0 12px;background:#FFFFFF;color:#15181B;font:400 15px Barlow,'Noto Sans SC','Microsoft YaHei UI',sans-serif;display:flex;align-items:center;width:100%}
+.sw{width:44px;height:26px;border-radius:2px;background:#ECEEEB;border:1px solid #6B7178;position:relative;flex:none}
+.sw::after{content:"";position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:1px;background:#5F646A}
+.sw.on{background:#0B5FA5;border-color:#0B5FA5} .sw.on::after{left:21px;background:#fff}
+.note{font-size:13px;line-height:18px;color:#474C52}
+.tag{display:inline-block;padding:0 6px;border:1px solid #0B5FA5;color:#0B5FA5;font-size:11px;font-weight:700;line-height:16px}
+
+</style>
+</helmet>
+<div style="width:390px;height:1080px;position:relative;overflow:hidden;background:#F5F6F4;color:#15181B;font-family:Barlow,'Noto Sans SC','Microsoft YaHei UI',sans-serif;font-size:15px;line-height:22px;font-variant-numeric:tabular-nums;display:flex;flex-direction:column">
+<header style="flex:none;display:flex;align-items:center;gap:6px;min-height:56px;padding:6px 12px 6px 4px;background:#FFFFFF;border-bottom:1px solid #D3D6D2">
+  <button type="button" aria-label="返回" style="width:44px;height:44px;border:0;background:transparent;color:#15181B;display:flex;align-items:center;justify-content:center"><svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><polyline points="15,4 7,12 15,20"/></svg></button>
+  <div style="flex:1;min-width:0"><div style="font-size:18px;font-weight:700;line-height:24px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">设置</div></div>
+  <button type="button" aria-label="全部急停" style="height:40px;padding:0 10px;border:0;border-radius:2px;background:#D42F33;color:#fff;font:700 14px Barlow,'Noto Sans SC','Microsoft YaHei UI',sans-serif;display:inline-flex;align-items:center;gap:6px;flex:none"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><polygon points="8,2 16,2 22,8 22,16 16,22 8,22 2,16 2,8"/><line x1="7" y1="12" x2="17" y2="12"/></svg>急停</button>
+</header><div style="flex:1;min-height:0;background:#F5F6F4"><section style="background:#FFFFFF;border-bottom:1px solid #D3D6D2;padding:14px 16px;margin-top:8px">
+  <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px"><h2 class="h2" style="flex:1">通用</h2></div><div class="lbl" style="margin-bottom:6px">语言</div><div class="seg" style="grid-template-columns:1fr 1fr"><button class="on" type="button">English</button><button type="button">中文</button></div><div class="lbl" style="margin:12px 0 6px">外观</div><div class="seg" style="grid-template-columns:repeat(3,1fr)"><button class="on" type="button">按页面</button><button type="button">深色</button><button type="button">浅色</button></div><div class="note" style="margin-top:6px">按页面：「现在」深色，设置类浅色。</div></section><section style="background:#FFFFFF;border-bottom:1px solid #D3D6D2;padding:14px 16px;margin-top:8px">
+  <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px"><h2 class="h2" style="flex:1">通知与值守</h2></div><div style="display:flex;gap:10px;align-items:center;min-height:56px;border-top:1px solid #D3D6D2"><div style="flex:1"><b>后台值守</b><div class=note>App 退到后台、被划掉也连着站点，P1 一直响到有人处理</div></div><span class="sw on"></span></div><div style="display:flex;gap:10px;align-items:center;min-height:56px;border-top:1px solid #D3D6D2"><div style="flex:1"><b>P1 推送</b><div class=note>已就绪 · 这台手机能收</div></div><span class="sw on"></span></div><div style="display:flex;gap:10px;align-items:center;min-height:56px;border-top:1px solid #D3D6D2"><div style="flex:1"><b>报警声音</b><div class="note">闹钟声 · 跟着系统音量</div></div><button class="btn sm" type="button" style="">试听</button></div><div style="display:flex;gap:10px;align-items:center;min-height:56px;border-top:1px solid #D3D6D2"><div style="flex:1"><b>巡逻到点提醒</b><div class=note>现场测试用，App 重启就关</div></div><span class="sw "></span></div></section><section style="background:#FFFFFF;border-bottom:1px solid #D3D6D2;padding:14px 16px;margin-top:8px">
+  <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px"><h2 class="h2" style="flex:1">关于与更新</h2></div><div style="display:flex;gap:10px;align-items:center;min-height:44px"><span style="flex:1">App 版本 2.8.1（构建 21）</span><button class="btn sm" type="button" style="">检查更新</button></div><a href="#" class="li" style="padding:8px 0"><div class="b"><div style="font-weight:600;display:flex;align-items:center;gap:8px">开源许可</div></div><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="#5F646A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><polyline points="9,5 16,12 9,19"/></svg></a></section><section style="background:#FFFFFF;border-bottom:1px solid #D3D6D2;padding:14px 16px;margin-top:8px">
+  <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px"><h2 class="h2" style="flex:1">工程师工具</h2></div><a href="#" class="li" style="padding:8px 0"><div class="b"><div style="font-weight:600;display:flex;align-items:center;gap:8px">用解绑令解绑机器人</div><div class="s">给安装工程师用</div></div><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="#5F646A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><polyline points="9,5 16,12 9,19"/></svg></a></section></div><div aria-hidden="true" style="position:absolute;left:0;right:0;top:844px;border-top:1px dashed #0B5FA5;z-index:6"><span style="position:absolute;right:4px;top:-18px;font-size:11px;font-weight:600;color:#0B5FA5">第一屏到这里</span></div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":1080}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>
