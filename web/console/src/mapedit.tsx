@@ -159,6 +159,9 @@ function Editor({ say, target, Canvas }: { say: Say; target: Target; Canvas?: Fu
   const [noiseSkip, setNoiseSkip] = useState<Set<number>>(new Set());
   const [noiseErr, setNoiseErr] = useState("");
   const [noiseBusy, setNoiseBusy] = useState(false);
+  // 外审 2 #4:预览元数据和底图都到了才许清(看不到图就挑不了「细杆子留着」);测试替身画布没有底图,按有元数据算
+  const [rasterOk, setRasterOk] = useState(false);
+  const canSee = ready && (Canvas ? true : rasterOk);
   useEffect(() => {
     if (tool !== "noise") return;
     let live = true;
@@ -169,7 +172,7 @@ function Editor({ say, target, Canvas }: { say: Say; target: Target; Canvas?: Fu
   const noiseLeft = noise ? noise.specks.filter((x) => !noiseSkip.has(x.id)).length : 0;
   const toggleSpeck = (id: number) => setNoiseSkip((cur) => { const n = new Set(cur); if (n.has(id)) n.delete(id); else n.add(id); return n; });
   async function denoise() {
-    if (!noise) return;
+    if (!noise || !canSee) return;
     setNoiseBusy(true);
     try {
       const r = await api<{ version: string; cleaned: number }>("POST", `${adm}/denoise`, { digest: noise.digest, skip: [...noiseSkip] });
@@ -297,7 +300,8 @@ function Editor({ say, target, Canvas }: { say: Say; target: Target; Canvas?: Fu
   // (只剩一个 5×6 的虚线框)。现在直接渲染 MapCanvas
   const Map = (o: OwnLayer) => (Canvas ? <Canvas {...o} /> : meta ? (
     <MapCanvas meta={{ ...meta, zones: [], rotation_deg: now?.display.rotate_deg ?? meta.rotation_deg }} raster={`${base}/preview.png`} label={t("meTitle")}
-      drawing={o.drawing} onPick={o.onPick} onDragRect={o.onDragRect} world={o.world} marks={o.marks} areas={o.areas} legend={o.legend} />
+      drawing={o.drawing} onPick={o.onPick} onDragRect={o.onDragRect} world={o.world} marks={o.marks} areas={o.areas} legend={o.legend}
+      onRaster={setRasterOk} />
   ) : null);
   const strokeW = (w: number) => (meta ? w / meta.m_per_px : 2);
   const bm = now?.display.basemap;
@@ -471,7 +475,8 @@ function Editor({ say, target, Canvas }: { say: Say; target: Target; Canvas?: Fu
               {noise && (noise.specks.length === 0 ? <p class="muted small">{t("meNoiseNone")}</p>
                 : <p class="muted small">{t("meNoiseHint", { a: noise.max_m2, r: noise.ring_m })}</p>)}
               {dirty && <p class="muted small" data-noise-dirty="1">{t("meNoiseDirty")}</p>}
-              <button type="button" class="btn primary" data-denoise="1" disabled={!noise || noiseLeft === 0 || noiseBusy || dirty || busy}
+              {noise && !canSee && <p class="error small" data-noise-blind="1">{t("meNoiseBlind")}</p>}
+              <button type="button" class="btn primary" data-denoise="1" disabled={!noise || !canSee || noiseLeft === 0 || noiseBusy || dirty || busy}
                 onClick={() => void denoise()}>{t("meNoiseApply", { n: noiseLeft })}</button>
             </div>
           )}

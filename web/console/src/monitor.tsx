@@ -2,7 +2,7 @@
 // 左 事件队列(安全事件 / 设备与运营 / 本班已关闭)+ 交班留言;中 状态头 + 地图(全部/巡逻路线/防区/摄像头)+ 画面
 // (单/双/四画面/监控墙);右 机器人 + 今晚巡逻 + 最近活动;底 整班时间轴(点任一处看那时的录像)。
 // 原来的「实时画面」页 = 监控墙,「地图」页 = 中间的地图(派去看一眼、临时路线在页头)。
-import { useEffect, useMemo, useState } from "preact/hooks";
+import { useEffect, useMemo, useRef, useState } from "preact/hooks";
 import { api, ApiError, enc } from "./api";
 import { alertHeadline, canHandleAlerts } from "./alertinfo";
 import { modeLabel } from "./armingpage";
@@ -132,8 +132,15 @@ export function MonitorPage(props: {
   // 回放(第五期 G-playback):点「本班已关闭」的一件或时间轴某一刻;来了新的告警回到实时
   const [play, setPlay] = useState<Playback | null>(null);
   const [playHead, setPlayHead] = useState<number | null>(null);
-  // 外审 1 #1:来了新的最要紧的一条,之前点开的那件也让开(不然中央还停在旧事件上)
-  if ((top?.key ?? null) !== seenTop) { setSeenTop(top?.key ?? null); if (top && top.key !== seenTop) { setSiteView(false); setCtl(null); setPlay(null); setDetail(null); } }
+  // 外审 1 #1 / 外审 2 #1:只有**新来的**一条(这个标签页里第一次见到的键)顶到最上面,之前点开的那件才让开;
+  // 确认、关闭、现场更新引起的重排不动人家正在处理的那件(不然接手一条,中央就跳到另一条)
+  const seenKeys = useRef<Set<string>>(new Set());
+  const topIsNew = !!top && !seenKeys.current.has(top.key);
+  if ((top?.key ?? null) !== seenTop) {
+    setSeenTop(top?.key ?? null);
+    if (top && top.key !== seenTop && topIsNew) { setSiteView(false); setCtl(null); setPlay(null); setDetail(null); }
+  }
+  for (const a of alarms) seenKeys.current.add(a.key);
   const picked = detail ? props.alerts.find((a) => a.key === detail) ?? recent.find((a) => a.key === detail) ?? null : null;
   const focus = picked ?? (!siteView ? top ?? null : null);
   const openAlarm = (a: Alert) => { setSelected(a.robot); setDetail(a.key); setSiteView(false); setCtl(null); setPlay(null); };

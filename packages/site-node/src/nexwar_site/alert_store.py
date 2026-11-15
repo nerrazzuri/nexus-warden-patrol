@@ -16,7 +16,7 @@ from collections.abc import Callable
 from typing import Any
 
 from nexwar_contract import errcodes
-from nexwar_site.alerts import Alert, AlertBook, Channel, Level
+from nexwar_site.alerts import Alert, AlertBook, AlertNotFound, Channel, Level
 from nexwar_site.db import SiteDB
 
 log = logging.getLogger(__name__)
@@ -88,6 +88,9 @@ class AlertDesk:
         #: 商业化 A6:P1 推到手机(站点主程序配了推送才打开)。
         self.push = False
         self.book = AlertBook(sink=self._write)
+        #: 外审 2 #2:正在进行的「一组一起提交」的事务;None = 每笔自己一个事务
+        self._tx: Any = None
+        self._deferred: list[dict[str, Any]] = []
         # 只读回未解决的与最近 RESTORE_RECENT 条:整张历史表读进内存会一直涨,升级每 5 s 还要遍历。
         # 序号从整张表的键里算(只读键),读回的只是一部分也不撞号。
         max_seq: dict[str, int] = {}
@@ -112,19 +115,60 @@ class AlertDesk:
         w = a.to_wire()
         vals = tuple(json.dumps(w[c], ensure_ascii=False) if c == "context" else w[c]
                      for c in _COLS)
+        if self._tx is not None:
+            # 外审 2 #2:一组相关的改动(请求支援 = 起一条 + 原告警记一笔)写进同一个事务,
+            # 发布攒到提交后
+            self._write_in(self._tx, a, vals)
+            self._deferred.append(w)
+            return
         with self.db.tx() as c:
-            c.execute(f"INSERT INTO alerts({', '.join(_COLS)}) VALUES "
-                      f"({', '.join('?' * len(_COLS))}) ON CONFLICT(key) DO UPDATE SET "
-                      + ", ".join(f"{k}=excluded.{k}" for k in _COLS[1:]), vals)
-            if self.push:
-                # 商业化 A6:没确认的 P1 新起、升档,跟告警同一个事务排进推送队列(记下了就一定会推)
-                from nexwar_site.push import enqueue
-                enqueue(c, a, self._now())
+            self._write_in(c, a, vals)
         if self._publish is not None:
             try:
                 self._publish({"kind": "alert", "alert": w})
             except Exception:
                 log.exception("告警推不出去(%s),库里已经记下", a.key)
+
+    def _write_in(self, c: Any, a: Alert, vals: tuple[Any, ...]) -> None:
+        c.execute(f"INSERT INTO alerts({', '.join(_COLS)}) VALUES "
+                  f"({', '.join('?' * len(_COLS))}) ON CONFLICT(key) DO UPDATE SET "
+                  + ", ".join(f"{k}=excluded.{k}" for k in _COLS[1:]), vals)
+        if self.push:
+            # 商业化 A6:没确认的 P1 新起、升档,跟告警同一个事务排进推送队列(记下了就一定会推)
+            from nexwar_site.push import enqueue
+            enqueue(c, a, self._now())
+
+    def backup(self, key: str, *, who: str) -> Alert:
+        """redesign 第 8 期 / 外审 2 #2:保安请求支援 —— 起一条 ``backup_requested``
+        (推经理、管理员)、原告警记下谁几点叫的人,**两笔写进同一个事务**(写到一半失败,重试不会多推一条);叫过的直接回原告警;
+        关了的、没有的抛 ``AlertNotFound`` / ``ValueError``。"""
+        orig = self.book.get(key)
+        if orig is None:
+            raise AlertNotFound(key)
+        if orig.resolved_ms is not None:
+            raise ValueError("这条告警已经关闭,不用再叫人")
+        if orig.context.get("backup_by"):
+            return orig
+        now = self._now()
+        self._deferred = []
+        with self.db.tx() as c:
+            self._tx = c
+            try:
+                self.raise_alert(kind="backup_requested", robot=orig.robot,
+                                 title=f"请求支援：{orig.title}",
+                                 detail=f"{who} 正在处理，请求支援",
+                                 context={"for": key, "by": who}, merge=False)
+                a = self.book.amend(key, now_ms=now, context={"backup_by": who, "backup_ms": now})
+            finally:
+                self._tx = None
+        pending, self._deferred = self._deferred, []
+        if self._publish is not None:
+            for w in pending:
+                try:
+                    self._publish({"kind": "alert", "alert": w})
+                except Exception:
+                    log.exception("告警推不出去(%s),库里已经记下", w.get("key"))
+        return a
 
     # ------------------------------------------------------------ 操作
 

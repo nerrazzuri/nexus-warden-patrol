@@ -6,6 +6,11 @@ import alertCatalog from "../../../design/i18n/alerts.json";
 export type Lang = "en" | "zh";
 
 const en = {
+  rcNoCam: "This robot reports no {cam} camera.",
+  rcMapH: "Position on the map",
+  rcMapNone: "No map reported by this robot.",
+  rcMapLoading: "Loading map…",
+  meNoiseBlind: "The map preview has not loaded, so the candidates cannot be checked; cleaning is disabled until it shows.",
   meNoiseHint: "Red circles are tiny isolated specks (≤ {a} m², open floor within {r} m) left by people walking during mapping; they block the planner. Click a circle to keep that one (e.g. a thin post).",
   meNoiseNone: "No noise found in this version.",
   meNoiseLooking: "Looking for noise…",
@@ -2275,6 +2280,11 @@ const en = {
 type Key = keyof typeof en;
 
 const zh: Partial<Record<Key, string>> = {
+  rcNoCam: "这台机器人没报 {cam}。",
+  rcMapH: "地图上的位置",
+  rcMapNone: "这台机器人没报地图。",
+  rcMapLoading: "地图加载中…",
+  meNoiseBlind: "地图预览还没出来，没法核对候选，先不能清。",
   meNoiseHint: "红圈是很小、四周 {r} 米都是空地的小黑点（每处不超过 {a} 平方米），多半是建图时有人走动留下的，会挡住路线。真东西（比如细杆子）就点一下那个圈，留着它。",
   meNoiseNone: "这一版没找到噪点。",
   meNoiseLooking: "正在找噪点…",
