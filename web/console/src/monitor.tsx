@@ -16,7 +16,7 @@ import { shiftStart } from "./maplayers";
 import type { CanvasArea } from "./mapcanvas";
 import { MapPage, verdictText, type MapPreset, type MapTool } from "./mappage";
 import { pointInPolygon } from "./mapview";
-import { autoResolved, canDispatch, forGuard, robotCams, type Alert, type Mode } from "./model";
+import { autoResolved, canDispatch, forGuard, robotCams, type Alert, type Mode, canPatrol } from "./model";
 import { pageAllowed } from "./shell";
 import { byText } from "./sitetext";
 import { VideoSlot, type Scene } from "./slot";
@@ -132,7 +132,8 @@ export function MonitorPage(props: {
   // 回放(第五期 G-playback):点「本班已关闭」的一件或时间轴某一刻;来了新的告警回到实时
   const [play, setPlay] = useState<Playback | null>(null);
   const [playHead, setPlayHead] = useState<number | null>(null);
-  if ((top?.key ?? null) !== seenTop) { setSeenTop(top?.key ?? null); if (top && top.key !== seenTop) { setSiteView(false); setCtl(null); setPlay(null); } }
+  // 外审 1 #1:来了新的最要紧的一条,之前点开的那件也让开(不然中央还停在旧事件上)
+  if ((top?.key ?? null) !== seenTop) { setSeenTop(top?.key ?? null); if (top && top.key !== seenTop) { setSiteView(false); setCtl(null); setPlay(null); setDetail(null); } }
   const picked = detail ? props.alerts.find((a) => a.key === detail) ?? recent.find((a) => a.key === detail) ?? null : null;
   const focus = picked ?? (!siteView ? top ?? null : null);
   const openAlarm = (a: Alert) => { setSelected(a.robot); setDetail(a.key); setSiteView(false); setCtl(null); setPlay(null); };
@@ -221,7 +222,7 @@ export function MonitorPage(props: {
     const u = s ? unitOf(s.robot) : undefined;
     if (!s || !u) return <div key={`e${i}`} class="slot empty-slot" />;
     return (
-      <VideoSlot key={`${i}:${s.robot}:${s.alert?.key ?? ""}:${thermal}`} u={u} now={props.now} pinned={pins[i] === s.robot}
+      <VideoSlot key={`${i}:${s.robot}:${s.alert?.key ?? ""}`} u={u} now={props.now} pinned={pins[i] === s.robot} thermal={thermal}
         onPin={() => setPins((p) => { const n: [string | null, string | null] = [p[0], p[1]]; n[i] = n[i] === s.robot ? null : s.robot; return n; })}
         onZoom={() => props.onZoom(s.robot)} forceLive={!!s.alert} scene={sceneOf(s.alert)} alarm={!!s.alert} />
     );
@@ -311,11 +312,12 @@ export function MonitorPage(props: {
           </div>
           <div class="mon-head-acts">
             {head.acts}
+            {/* 外审 1 #8:临时路线按 canPatrol(经理也能派巡逻),派去看一眼按 canDispatch */}
             {!top && canDispatch(props.role) && (
-              <>
-                <button type="button" class="btn" aria-pressed={tool === "look"} onClick={() => setTool(tool === "look" ? null : "look")}>{t("monLook")}</button>
-                <button type="button" class="btn" aria-pressed={tool === "route"} onClick={() => setTool(tool === "route" ? null : "route")}>{t("monRoute")}</button>
-              </>
+              <button type="button" class="btn" aria-pressed={tool === "look"} onClick={() => setTool(tool === "look" ? null : "look")}>{t("monLook")}</button>
+            )}
+            {!top && canPatrol(props.role) && (
+              <button type="button" class="btn" aria-pressed={tool === "route"} onClick={() => setTool(tool === "route" ? null : "route")}>{t("monRoute")}</button>
             )}
           </div>
           {askResume && held.length > 0 && (

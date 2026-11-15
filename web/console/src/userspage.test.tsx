@@ -155,7 +155,7 @@ describe("用户页", () => {
     await waitFor(() => expect(tr(c, "gina")).not.toBeNull());
     fireEvent.click(tr(c, "gina").querySelector(".user-name")!);
     await waitFor(() => expect(c.querySelector(".user-audit")!.textContent).toContain("切换布防模式"));
-    expect(c.querySelector('.user-audit a[href="#/admin/log?actor=gina"]')).not.toBeNull();
+    expect(c.querySelector('.user-audit a[href="#/admin/activity?actor=gina"]')).not.toBeNull();   // 外审 1 #11
     // P1-66:写成功 / 被拒绝;认不得的写「其他操作」,不露接口路径
     const au = c.querySelector(".user-audit")!;
     expect(au.querySelectorAll('[data-result="refused"]').length).toBe(1);

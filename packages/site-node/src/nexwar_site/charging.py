@@ -107,6 +107,8 @@ class ChargeDesk:
     def remove_charger(self, robot_id: str) -> bool:
         with self.db.tx() as c:
             c.execute("DELETE FROM charge_cycles WHERE robot_id=?", (robot_id,))
+            c.execute("INSERT INTO charge_log(robot_id, state, at_ms) VALUES (?,?,?)",
+                      (robot_id, "idle", self._now()))
             return c.execute("DELETE FROM chargers WHERE robot_id=?", (robot_id,)).rowcount > 0
 
     def charger(self, robot_id: str) -> dict[str, Any] | None:
@@ -300,6 +302,8 @@ class ChargeDesk:
             with self.db.tx() as tx:
                 tx.execute("UPDATE charge_cycles SET state='cooldown', until_ms=? WHERE robot_id=?",
                            (now + COOLDOWN_MS, rid))
+                tx.execute("INSERT INTO charge_log(robot_id, state, at_ms) VALUES (?,?,?)",
+                           (rid, "cooldown", now))
                 queue(tx, kind="charge_failed", robot=rid, title=f"自动回充失败:{what}失败",
                       detail=(why or "看机器人的日志") + ";10 分钟后电量还低会再试,"
                                                   "还不行请人去看桩",

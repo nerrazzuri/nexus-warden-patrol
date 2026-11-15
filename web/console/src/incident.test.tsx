@@ -286,3 +286,42 @@ describe("第 8 期:请求支援", () => {
     expect(v.querySelector("[data-backup]")).toBeNull();
   });
 });
+
+describe("外审 1(新网站)", () => {
+  it("#1 点开一条 P2 后来了新的 P1:中央切到新的 P1,不停在旧的那件", () => {
+    const a2 = alert({ key: "k2", kind: "stuck", audience: "help", level: "P2", title: "B 被挡住", first_ms: 20 });
+    const r = render(<MonitorPage units={[unit("A", "patrolling")]} alerts={[a2]} now={1000} role="guard" me="gina"
+      say={() => {}} refresh={async () => {}} onZoom={() => {}} />);
+    expect(r.container.querySelector(".inc")!.getAttribute("data-key")).toBe("k2");
+    const a1 = alert({ key: "k1", first_ms: 500 });
+    r.rerender(<MonitorPage units={[unit("A", "patrolling")]} alerts={[a1, a2]} now={1000} role="guard" me="gina"
+      say={() => {}} refresh={async () => {}} onZoom={() => {}} />);
+    expect(r.container.querySelector(".inc")!.getAttribute("data-key")).toBe("k1");
+  });
+
+  it("#4 设备求助(被挡住)派人去看:最近机器人接口排除报警的那台自己", async () => {
+    const gets: string[] = [];
+    setFetch(((url: string, init?: RequestInit) => {
+      if (init?.method !== "POST") gets.push(url);
+      if (url.startsWith("/api/robots/nearest")) return Promise.resolve(json({ robot_id: "B", eta_s: 60 }));
+      return Promise.resolve(json({}));
+    }) as typeof fetch);
+    const a = alert({ key: "s1", kind: "stuck", audience: "help", level: "P2", robot: "A", title: "A 被挡住",
+      context: { pose: { map_id: "m", map_version: "1", x: 3, y: 4 } } });
+    const c = render(<IncidentView a={a} units={[unit("A", "patrolling"), unit("B", "idle")]} alerts={[]} now={1} role="guard" mode={null} cams={[]} layout="single" onLayout={() => {}}
+      say={() => {}} refresh={async () => {}} onSite={() => {}} onZoom={() => {}} onFindPose={() => {}} onAreas={() => {}} />).container;
+    const b = Array.from(c.querySelectorAll(".inc-act button")).find((x) => x.textContent === t("incDispatch")) as HTMLButtonElement;
+    expect(b).toBeTruthy();
+    fireEvent.click(b);
+    await waitFor(() => expect(gets.some((u) => u.startsWith("/api/robots/nearest"))).toBe(true));
+    expect(gets.find((u) => u.startsWith("/api/robots/nearest"))).toContain("exclude=A");
+  });
+
+  it("#8 经理在值班页有「临时路线」(能派巡逻),没有「派去看一眼」(不能派到点)", () => {
+    const r = render(<MonitorPage units={[unit("A", "idle")]} alerts={[]} now={1000} role="owner" me="olga"
+      say={() => {}} refresh={async () => {}} onZoom={() => {}} />);
+    const texts = Array.from(r.container.querySelectorAll(".mon-head-acts button")).map((b) => b.textContent);
+    expect(texts).toContain(t("monRoute"));
+    expect(texts).not.toContain(t("monLook"));
+  });
+});

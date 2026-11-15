@@ -858,7 +858,8 @@ button.armstate:focus-visible { outline: 2px solid var(--c-primary); outline-off
 .adminwrap { display: block; }
 /* UIUX-009:表单、列表页在大屏上限宽 1280px(地图、布置、值班这些铺满一屏的页不限) */
 /* UIUX-E017:管理页在大屏上多用一些宽度(原来 1920 下右边空 392px);读的文字另有 65ch 上限 */
-.console:not(.fill) .adminbody { max-width: 1600px; }
+/* 用户 11-15:现场设置各页撑满(原来 1600px 封顶,宽屏右边一大片空) */
+.console:not(.fill) .adminbody { max-width: none; }
 .adminbody { min-width: 0; }
 @media print { .sidenav { display: none !important; } .console { display: block; } }
 

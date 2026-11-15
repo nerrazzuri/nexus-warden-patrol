@@ -464,7 +464,7 @@ function UserAudit({ name, account }: { name: string; account?: Account }) {
           {mergeAudit(rows.slice(0, 50)).map((r) => <AuditLine key={r.id} r={r} />)}
         </ul>
       )}
-      <p class="sp-pad"><a href={`#/admin/log?actor=${encodeURIComponent(name)}`}>{t("usAllAudit")}</a></p>
+      <p class="sp-pad"><a href={`#/admin/activity?actor=${encodeURIComponent(name)}`}>{t("usAllAudit")}</a></p>
     </section>
   );
 }

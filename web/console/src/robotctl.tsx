@@ -356,6 +356,11 @@ function Voice({ r, name, busy, off, send, post, admin, say }: {
                   onClick={() => void send(deter({ output: "speaker", on: false }), t("rdSpeakStopped", { id: name }))}>{t("rdSpeakStop")}</button>
               </form>
             )}
+            {/* 外审 1 #5:不会 TTS 的机器人放录好的话也要能停 */}
+            {!tts && d.clips.length > 0 && (
+              <div class="rc-row"><button type="button" class="btn" data-speak-stop="1" disabled={dis}
+                onClick={() => void send(deter({ output: "speaker", on: false }), t("rdSpeakStopped", { id: name }))}>{t("rdSpeakStop")}</button></div>
+            )}
           </div>
         </section>
       )}

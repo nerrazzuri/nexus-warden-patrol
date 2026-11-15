@@ -290,3 +290,14 @@ describe("第七期:常用话就地编辑(不弹窗)", () => {
     await waitFor(() => expect(posts.some((p) => p.url === "/api/voice-presets")).toBe(true));
   });
 });
+
+describe("外审 1 #5:不会 TTS 的机器人", () => {
+  it("放录好的话之后也有「停止」", async () => {
+    const u = idle();
+    (u.robot.capabilities as { tasks: Record<string, unknown> }).tasks.deter = { ...DETER, tts: false, clips: ["restricted"] };
+    card = { ...CARD, deter: { ...DETER, tts: false, clips: ["restricted"] } };
+    const c = show("guard", u);
+    await waitFor(() => expect(c.querySelector("[data-speak-stop]")).not.toBeNull());
+    expect(c.querySelector(".rc-say")).toBeNull();
+  });
+});
