@@ -23,6 +23,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 
 import 'l10n.dart';
+import 'net/background_watch.dart' show initRingChannel;
 import 'net/error_log.dart';
 import 'store/paths.dart';
 import 'store/site_store.dart';
@@ -53,6 +54,7 @@ Future<void> main() async {
   langStoreRef = langStore;
   appLang.value = await langStore.load();
   await loadTeleopTier(await teleopTierFilePath()); // POC 速度档：上次选的那一档
+  await initRingChannel(); // App V2 来报警全屏页：后台值守的全屏通知拉起来的那一条
   runApp(PatrolApp(siteStore: await openSiteStore(), langStore: langStore));
 }
 
