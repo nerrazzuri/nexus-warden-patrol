@@ -14,8 +14,9 @@
 (前后半球、两侧盲带)、感知晚到、链路延迟、起步切步态、刹车上限。场景直接读 Gazebo 扫描生成的
 ``case.json``(同一个场景、同一个种子,能跟 Gazebo 结果逐个对),外加两类这里才有的:
 
-- ``curbs``:台阶边(线段)。雷达看不见、地图里也没有;机身前沿斜着(跟台阶线夹角小于
+- ``curbs``:台阶边(线段)。雷达看不见、地图里也没有;往前走着、机身前沿斜着(跟台阶线夹角小于
   :data:`CURB_STUCK_DEG`)顶上去就卡住、机身横滚(一边的腿在台阶下面,W71 商场那种),够正就上得去;
+  原地转、往后退扫过台阶线不卡;
 - ``zones``:禁行区(多边形,交给导航后端,跟站点下发的一样)。
 
 定位:按 case 的 ``sim.loc_noise_m / loc_noise_deg`` 给一个固定偏差 + 小抖动;``fault_trigger`` 那类
@@ -57,6 +58,8 @@ BODY_HL, BODY_HW = 0.465, 0.24
 CURB_STUCK_DEG = 40.0
 CURB_ROLL_RAD = math.radians(6.0)
 TICK = 0.1
+#: ``--urgent``:整趟按紧急走法(两种走法,用户 11-09)。
+URGENT = {"on": False}
 
 
 # ------------------------------------------------------------------ 几何
@@ -308,7 +311,11 @@ async def run_case(case: dict[str, Any], *, sim_cap_s: float) -> dict[str, Any]:
                                                                         g[2]))
                     for i, g in enumerate(case["goals"]))
         mission = Mission(mission=case["scenario"], map_id="m", waypoints=wps, policy=Policy())
+        if URGENT["on"]:
+            await nav.set_urgent(True)                    # 紧急走法:不限巡逻速度、出发前不查路线
         await parts.engine.start(mission, home=parts.home)
+        if URGENT["on"]:
+            await nav.set_urgent(True)
 
         actors = case.get("actors") or []
         lines = [Timeline(a["path"], float(a.get("speed", 1.0)), a.get("mode", "once"))
@@ -360,7 +367,8 @@ async def run_case(case: dict[str, Any], *, sim_cap_s: float) -> dict[str, Any]:
                 s1 = ex * (fy1 - a[1]) - ey * (fx1 - a[0])
                 L = math.hypot(ex, ey)
                 tpar = ((fx1 - a[0]) * ex + (fy1 - a[1]) * ey) / (L * L)
-                if s0 * s1 <= 0 and s0 != s1 and 0.0 <= tpar <= 1.0:
+                # 只有往前走着顶上去才算(原地转、往后退扫过台阶线不卡,也不算上去了)
+                if s0 * s1 <= 0 and s0 != s1 and 0.0 <= tpar <= 1.0 and r.speed[0] > 0.03:
                     ang = abs(math.degrees(math.remainder(r.yaw - math.atan2(ey, ex), math.pi)))
                     if ang < CURB_STUCK_DEG:
                         r.teleport(*prev)
@@ -523,6 +531,55 @@ def _clearance(world: Any, x: float, y: float, yaw: float) -> float:
     return max(best, 0.0)
 
 
+# ------------------------------------------------------------------ 这里才有的场景
+
+def make_extra(dst: Path, seeds: int = 10) -> int:
+    """台阶边(``curbs``)、禁行区(``zones``)两类场景,每类每个种子一份 case.json(格式同 Gazebo)。
+    18 × 18 m 空场,起点、朝向按种子抖一点。"""
+    base = {"dynamic": False, "actors": [], "map_size_m": [18.0, 18.0],
+            "map_bounds": [-9.0, 9.0, -9.0, 9.0], "site_map": None, "odom_origin": "world",
+            "timeout_s": 150, "safety_min_clearance_m": 0.08, "obstacles": [],
+            "sim": {"loc_noise_m": 0.05, "loc_noise_deg": 1.0, "obstacle_delay_ms": 100}}
+    specs = {
+        # 台阶线 y = 0;斜着过(跟台阶线夹角约 20°、30°)会卡住要台阶脱困,60° 直接上得去(对照)
+        "p0_curb_a20": {"curbs": [[[-7.0, 0.0], [7.0, 0.0]]], "start": [-6.0, -2.0, 0.36],
+                        "goals": [[5.0, 2.0, 0.36], [-6.0, -2.0, 3.5]]},
+        "p0_curb_a30": {"curbs": [[[-7.0, 0.0], [7.0, 0.0]]], "start": [-5.0, -2.6, 0.52],
+                        "goals": [[4.0, 2.6, 0.52], [-5.0, -2.6, 3.66]]},
+        "p0_curb_a60": {"curbs": [[[-7.0, 0.0], [7.0, 0.0]]], "start": [-2.0, -3.5, 1.05],
+                        "goals": [[2.0, 3.5, 1.05], [-2.0, -3.5, 4.19]]},
+        # 禁行区挡在中间:绕过去,车身不许进禁行区
+        "p0_nogo_detour": {"zones": [{"id": "pond", "kind": "nogo",
+                                      "polygon": [[-1.5, -3.0], [1.5, -3.0], [1.5, 3.0],
+                                                  [-1.5, 3.0]]}],
+                           "start": [-6.0, 0.0, 0.0], "goals": [[6.0, 0.0, 0.0],
+                                                                [-6.0, 0.0, 3.14]]},
+        # 第一个点在禁行区里(去不了):跳过、接着去后面的点
+        "p0_nogo_goal_inside": {"zones": [{"id": "pond", "kind": "nogo",
+                                           "polygon": [[-1.0, -1.0], [1.0, -1.0], [1.0, 1.0],
+                                                       [-1.0, 1.0]]}],
+                                "start": [-6.0, -3.0, 0.0],
+                                "goals": [[0.0, 0.0, 0.0], [6.0, 3.0, 0.0], [-6.0, -3.0, 3.14]],
+                                "goal_reachable": [False, True, True]},
+    }
+    n = 0
+    for name, sp in specs.items():
+        for seed in range(seeds):
+            rng = random.Random(f"{name}/{seed}")
+            sx, sy, syaw = sp["start"]
+            case = {**base, "scenario": name, "family": name.rsplit("_", 1)[0], "width_m": None,
+                    "seed": seed, "expect": "arrive", **{k: v for k, v in sp.items()},
+                    "start": [sx + rng.uniform(-0.2, 0.2), sy + rng.uniform(-0.2, 0.2),
+                              syaw + math.radians(rng.uniform(-10, 10))]}
+            case["collision_obstacles"] = []
+            d = dst / name / f"s{seed:03d}"
+            d.mkdir(parents=True, exist_ok=True)
+            (d / "case.json").write_text(json.dumps(case, ensure_ascii=False, indent=1),
+                                         encoding="utf-8")
+            n += 1
+    return n
+
+
 # ------------------------------------------------------------------ 批量
 
 def _cases(src: Path) -> list[Path]:
@@ -553,7 +610,7 @@ async def _batch(paths: list[Path], out: Path, sim_cap_s: float) -> None:
 
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    p.add_argument("--cases", type=Path, required=True, action="append",
+    p.add_argument("--cases", type=Path, default=[], action="append",
                    help="放 <场景>/<种子>/case.json 的目录(可以给多个)")
     p.add_argument("--out", type=Path, required=True)
     p.add_argument("--search", dest="search", action="store_true", default=True)
@@ -563,7 +620,14 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--seeds", default="", help="只跑这些种子(逗号分开)")
     p.add_argument("--shard", default="1/1", help="第 i 份 / 共 n 份(并行用)")
     p.add_argument("--sim-cap-s", type=float, default=900.0, help="一趟仿真最多多少秒")
+    p.add_argument("--urgent", action="store_true", help="整趟按紧急走法(不限巡逻速度、不查路线)")
+    p.add_argument("--make-extra", action="store_true",
+                   help="只生成台阶边、禁行区两类场景到 --out(不跑)")
     a = p.parse_args(argv)
+    if a.make_extra:
+        print(make_extra(a.out), "个用例")
+        return 0
+    URGENT["on"] = a.urgent
     import logging
     logging.disable(logging.WARNING)
     if not a.search:
