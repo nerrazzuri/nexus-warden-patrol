@@ -75,6 +75,30 @@ def _proj(poly, ax):
     return min(v), max(v)
 
 
+#: 用户 11-17:仿真里的车像真司机 —— 车头前这么远(米,按 2.3 m/s、3 m/s² 刹车约 0.9 m 再留余量)
+#: 车道里有东西(机器人)就刹住,让开了再走。
+CAR_BRAKE_M = 2.0
+
+
+def _car_brakes(line: Any, t0: float, t1: float, hx: float, hy: float, ox: float, oy: float,
+                r: Any) -> bool:
+    """车从 ``t0`` 往 ``t1`` 走:车头前 :data:`CAR_BRAKE_M`、车宽范围里压着机器人就刹住。"""
+    x0, y0 = line.at(t0)
+    x1, y1 = line.at(t1)
+    dx, dy = x1 - x0, y1 - y0
+    n = math.hypot(dx, dy)
+    if n < 1e-9:
+        return False
+    dx, dy = dx / n, dy / n
+    half_len = hx if abs(dx) >= abs(dy) else hy          # 车是轴对齐的长方形,顺着长边开
+    half_wid = hy if abs(dx) >= abs(dy) else hx
+    fx, fy = x0 + ox + dx * half_len, y0 + oy + dy * half_len
+    ex, ey = fx + dx * CAR_BRAKE_M, fy + dy * CAR_BRAKE_M
+    zone = (min(fx, ex) - abs(dy) * half_wid, min(fy, ey) - abs(dx) * half_wid,
+            max(fx, ex) + abs(dy) * half_wid, max(fy, ey) + abs(dx) * half_wid)
+    return _poly_hits_rect(_corners(r.x, r.y, r.yaw), zone)
+
+
 def _poly_hits_rect(poly, r) -> bool:
     x0, y0, x1, y1 = r
     box = [(x0, y0), (x1, y0), (x1, y1), (x0, y1)]
@@ -321,6 +345,7 @@ async def run_case(case: dict[str, Any], *, sim_cap_s: float) -> dict[str, Any]:
         lines = [Timeline(a["path"], float(a.get("speed", 1.0)), a.get("mode", "once"))
                  for a in actors]
         began: list[float | None] = [None] * len(actors)
+        prog = [0.0] * len(actors)                         # 各自走了多少秒(车刹住时不涨)
         curbs = [((p[0][0] + ox, p[0][1] + oy), (p[1][0] + ox, p[1][1] + oy))
                  for p in case.get("curbs", [])]
         climbed: set[int] = set()
@@ -407,8 +432,13 @@ async def run_case(case: dict[str, Any], *, sim_cap_s: float) -> dict[str, Any]:
                             began[i] = t_sim
                     elif t_sim >= float(st.get("at_s", 0.0)):
                         began[i] = t_sim
-                px, py = lines[i].at(0.0 if began[i] is None else t_sim - began[i])
                 hx, hy = float(a["sx"]) / 2, float(a["sy"]) / 2
+                if began[i] is not None:
+                    nxt = prog[i] + TICK
+                    if not (a.get("kind") == "vehicle"
+                            and _car_brakes(lines[i], prog[i], nxt, hx, hy, ox, oy, r)):
+                        prog[i] = nxt
+                px, py = lines[i].at(prog[i])
                 world.dyn[f"a{i}"] = (px + ox - hx, py + oy - hy, px + ox + hx, py + oy + hy)
             feed()
             for _ in range(3):
