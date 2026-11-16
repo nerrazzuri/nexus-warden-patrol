@@ -151,3 +151,12 @@ def test_小窗拼好的整条查不过_也整条再搜一次(monkeypatch):
     r = check_route(_smac_l(1.2), _lmap(1.2), RES, (0.0, 0.0))
     assert r.ok and r.path is not None and (3.4, 1.0, 0.0) not in r.path
     monkeypatch.setattr(rck, "_spliced", real)
+
+
+@pytest.mark.parametrize(("width", "at_least"), [(1.3, 0.18), (1.2, 0.15)])
+def test_仿真11_16_搜路先要宽的_有宽路不贴着底线走(width, at_least):
+    """A/B/C 仿真(11-16):只按底线 0.10 搜,搜出来的路余量中位 0.105,机器人走偏几厘米就被守卫挡住。
+    先按每边 0.20 搜,搜不到再 0.15,最后才 0.10。1.3 m 那条只要 0.18:终点本身离顶头 0.185。"""
+    r = check_route(_smac_l(width), _lmap(width), RES, (0.0, 0.0))
+    assert r.ok and r.path is not None, r
+    assert r.margin >= at_least - 0.005, r
