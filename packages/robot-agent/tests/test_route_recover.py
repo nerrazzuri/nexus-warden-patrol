@@ -323,3 +323,41 @@ async def test_弯里守卫拦的是地图上没有的东西_照旧停(tmp_path)
         link.cmd = (link.now, g["goal_id"], 0.3, 0.0, 0.25)
         await t.一拍()
     assert t.nav._last_vx == 0.0 and t.nav._guard_since is not None
+
+
+def _假守卫全挡(t, hit_body):
+    from nexwar_agent.obstacles import Verdict
+
+    def chk(vx, wz, *a, **kw):
+        if abs(vx) > 1e-6:
+            return Verdict(False, "扫过区有挡", hits=(hit_body,))
+        return Verdict(True, "")
+    t.nav._guard_check = chk
+
+
+async def test_墙边被拦_急弯也过不去_几秒内就自己前后挪_不等恢复链(tmp_path):
+    from nexwar_agent.bridges.nav2_nav import WALL_STUCK_S
+    t, link = await _拐角台(tmp_path)
+    _假守卫全挡(t, (1.05, -0.2))                          # 地图墙
+    g = link.kinds("goal")[-1]
+    for _ in range(int((WALL_STUCK_S + 1.0) / 0.1)):
+        link.now += 0.1
+        link.cmd = (link.now, g["goal_id"], 0.3, 0.0, 0.25)
+        await t.一拍()
+        if t.nav._man is not None:
+            break
+    assert t.nav._man is not None, "墙边卡着:直接自己挪"
+    assert WALL_STUCK_S <= 5.0
+    assert "maneuver" not in t.nav._rec_tried, "恢复链里那一级还留着"
+
+
+async def test_被地图上没有的东西拦住_不提前自己挪(tmp_path):
+    from nexwar_agent.bridges.nav2_nav import WALL_STUCK_S
+    t, link = await _拐角台(tmp_path)
+    _假守卫全挡(t, (1.0, 1.5))                            # 空地上的东西
+    g = link.kinds("goal")[-1]
+    for _ in range(int((WALL_STUCK_S + 1.0) / 0.1)):
+        link.now += 0.1
+        link.cmd = (link.now, g["goal_id"], 0.3, 0.0, 0.25)
+        await t.一拍()
+    assert t.nav._man is None
