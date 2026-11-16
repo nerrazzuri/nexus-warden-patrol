@@ -667,6 +667,8 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--search", dest="search", action="store_true", default=True)
     p.add_argument("--no-search", dest="search", action="store_false",
                    help="路线检查不做局部搜索(master 现在的样子)")
+    p.add_argument("--no-wall-alt", action="store_true", help="对照:墙边被拦不试更慢更急的弯")
+    p.add_argument("--no-wall-man", action="store_true", help="对照:墙边被拦不提前自己挪")
     p.add_argument("--only", default="", help="只跑名字里含这些的场景(逗号分开)")
     p.add_argument("--seeds", default="", help="只跑这些种子(逗号分开)")
     p.add_argument("--shard", default="1/1", help="第 i 份 / 共 n 份(并行用)")
@@ -681,6 +683,13 @@ def main(argv: list[str] | None = None) -> int:
     URGENT["on"] = a.urgent
     import logging
     logging.disable(logging.WARNING)
+    from nexwar_agent.bridges.nav2_nav import Nav2NavBackend as _N2
+    if a.no_wall_alt:
+        _N2._wall_alt = lambda self, *x: None                 # 对照:墙边不试更慢更急的弯
+    if a.no_wall_man:
+        async def _no_man(self, *x):
+            return None
+        _N2._wall_stuck = _no_man                           # 对照:墙边被拦不提前自己挪
     if not a.search:
         from nexwar_agent import route_check as _rc
         _rc._searched = lambda *x, **kw: None             # 局部搜索永远找不到 → 窄的照旧拒
