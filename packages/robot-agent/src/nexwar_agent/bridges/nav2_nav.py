@@ -248,6 +248,12 @@ RETREAT_LOOK_M = 0.4
 RETREAT_DONE_M = 0.15
 RETREAT_WAIT_S = 10.0
 RETREAT_MAX_S = 30.0
+#: 用户 11-16:倒着退出窄巷。站在窄处(原地转一圈会扫到地图墙,半径按查路线拐角那个
+#: :data:`~nexwar_agent.route_check.CORNER_R`)、下一段要往回走(路线最初 :data:`BACKOUT_LOOK_M`
+#: 在身后,或者查路线拒了)→ 先沿来路倒着退,退到转得开的地方(最多 :data:`BACKOUT_M`)再查路线、
+#: 交给 Nav2。仿真 11-16:货架通道、死胡同尽头的点到了以后掉不了头,卡住或被拒。
+BACKOUT_M = 8.0
+BACKOUT_LOOK_M = 0.6
 #: 退完重新规划时绕开刚才卡住的地方(用户 11-10:「重规划是不是就不走那条曾经被堵的路径了」):
 #: 卡住那一处半径这么大(米)临时当禁行区交给 Nav2,只这一趟有效;绕开就规划不出(只有这一条路)
 #: 就撤掉,还走这条。离机器人、离终点太近的不标(不许把自己、终点圈进去)。
@@ -524,7 +530,10 @@ class Nav2NavBackend(PlannedNavBackend):
                              else self._route_check(here, pose, op))
             finally:
                 self._planning = False
-        if got is not None and got.status == "unchecked":
+        backout = await self._backout_why(here, got, via, goal_xy) if got is not None else None
+        if backout is not None:
+            log.warning("%s:%s —— 先沿来路倒着退出来,转得开了再查路线", op, backout)
+        elif got is not None and got.status == "unchecked":
             # 外审 11-14(用户定):没查成不等于通过。降级规则:运行时守卫健康(障碍数据新鲜)
             # 才继续,并上报 route_unchecked;守卫不健康就不出发(不是最终失败,可以再派)
             healthy, why_g = self._guard_healthy()
@@ -555,13 +564,15 @@ class Nav2NavBackend(PlannedNavBackend):
                     raise NavRequestError(op, got.why, code=got.code, final=True)
                 got = alt
         self._goal_id += 1
-        self._nav2_goal = self._goal_id
+        self._nav2_goal = self._goal_id if backout is None else None
         self._goal_from = (here.x, here.y) if here is not None else None
         self.link.goal_states.clear()
         self.link.cmd = None                 # 外审 R7:上一个目标晚到的速度不许驱动这一个
         msg: dict[str, Any] = {"type": "goal", "goal_id": self._goal_id, "x": pose.position.x,
                                "y": pose.position.y, "yaw": pose.yaw}
-        if got is not None and got.ok and got.path:
+        if backout is not None:
+            pass                             # 退出来以后重查路线时再定照哪条走
+        elif got is not None and got.ok and got.path:
             # 外审 11-14:路线靠局部搜索放行 —— 让控制器照这条查过的路走,不让 Smac 另规划
             # (有路网时查的就是沿途经点那条,拼好的路已经沿着路网走)
             msg["path"] = _wire_path(got.path)
@@ -578,7 +589,8 @@ class Nav2NavBackend(PlannedNavBackend):
                 dense = densify(via, step=step)
             dense = dense[-MAX_VIA:]
             msg["via"] = [[round(x, 3), round(y, 3)] for x, y in dense]
-        self.link.send(msg)
+        if backout is None:
+            self.link.send(msg)
         self._goal_msg, self._resends, self._quiet_since = dict(msg), 0, None
         self._edge, self._edge_tries, self._fwd_ref = None, 0, None
         self._look, self._look_tries = None, 0
@@ -592,9 +604,58 @@ class Nav2NavBackend(PlannedNavBackend):
             self.planned_length_m = PATH_FACTOR * sum(math.dist(a, b)
                                                       for a, b in zip(pts, pts[1:], strict=False))
         self._guard_since, self._guard_told = None, False
+        if backout is not None:
+            await HalNavBackend.goto(self, pose)
+            self._start_retreat(here, backout, level=0, metres=BACKOUT_M, after="recheck",
+                                room=True)
+            return
         log.info("%s:交给 Nav2(目标 %d)→ (%.2f, %.2f)", op, self._goal_id, pose.position.x,
                  pose.position.y)
         await HalNavBackend.goto(self, pose)
+
+    async def _backout_why(self, here: Any, got: Any, via: list,
+                           goal_xy: tuple[float, float]) -> str | None:
+        """用户 11-16:这一段要不要先倒着退出窄巷(:data:`BACKOUT_M`);要 → 回原因。来路不够长、
+        站的地方原地转得开、查路线没查成(紧急任务、转接节点不规划)都不退。"""
+        if here is None or self._trail_len() < RETREAT_MIN_M or got.status == "unchecked":
+            return None
+        if not await self._cramped(here):
+            return None
+        if not got.ok:
+            return f"站在窄处转不开,往那儿的路线也查不过({got.why[:60]})"
+        pts = ([(float(x), float(y)) for x, y in via] + [goal_xy] if via
+               else [(float(p[0]), float(p[1])) for p in getattr(self, "_plan_poses", None) or []])
+        c, sn = math.cos(here.yaw), math.sin(here.yaw)
+        for px, py in pts:
+            if math.dist((px, py), (here.x, here.y)) >= BACKOUT_LOOK_M:
+                if c * (px - here.x) + sn * (py - here.y) < 0:
+                    return "站在窄处转不开,下一段要往回走"
+                return None
+        return None
+
+    async def _cramped(self, here: Any) -> bool:
+        """站在这儿原地转一圈,车身(加查路线的余量,半径 ``CORNER_R``)会不会扫到地图墙。
+        没有地图、读不了 → 当转得开(不退,跟以前一样)。"""
+        if self._map_dir is None:
+            return False
+        try:
+            walls, res, (ox, oy) = await self._route_walls()
+        except Exception:                                  # 只是改善:读不了就不退
+            log.exception("读地图墙没成:不判窄处")
+            return False
+        r = route_check.CORNER_R
+        h, w = walls.shape
+        c0, c1 = max(0, int((here.x - r - ox) / res)), min(w, int((here.x + r - ox) / res) + 1)
+        r0, r1 = max(0, int((here.y - r - oy) / res)), min(h, int((here.y + r - oy) / res) + 1)
+        if c0 >= c1 or r0 >= r1:
+            return False
+        win = walls[r0:r1, c0:c1]
+        if not win.any():
+            return False
+        rows, cols = np.nonzero(win)
+        dx = ox + (cols + c0 + 0.5) * res - here.x
+        dy = oy + (rows + r0 + 0.5) * res - here.y
+        return bool((np.hypot(dx, dy) - res / 2 < r).any())
 
     def _guard_healthy(self) -> tuple[bool, str]:
         """路线没查成时能不能继续:有守卫、有障碍数据,而且数据此刻新鲜。"""
@@ -630,6 +691,7 @@ class Nav2NavBackend(PlannedNavBackend):
         if not m["ok"]:
             return route_check.unchecked("no_route",
                                          f"规划器没给路线({m.get('reason', '')})")
+        self._plan_poses = m["poses"]
         try:
             walls = await self._route_walls()
             return await asyncio.to_thread(route_check.check_route, m["poses"], *walls)
@@ -1334,9 +1396,10 @@ class Nav2NavBackend(PlannedNavBackend):
 
     def _start_retreat(self, here: Any, why: str, *, level: int,
                        fail: tuple[str, str] | None = None, metres: float = RETREAT_M,
-                       after: str | None = None) -> None:
+                       after: str | None = None, room: bool = False) -> None:
         """恢复链:沿原路倒退 ``metres``(卡住不动时 :data:`RETREAT_M`,用户 11-10),退完再交给 Nav2;
-        ``after == "recheck"``:退完从那儿重新查路线(用户 11-15)。"""
+        ``after == "recheck"``:退完从那儿重新查路线(用户 11-15);``room``:退到原地转得开就停
+        (倒着退出窄巷,用户 11-16)。"""
         if after is None:
             self._rec_tried.add("retreat")
         self._cancel_nav2()
@@ -1347,7 +1410,9 @@ class Nav2NavBackend(PlannedNavBackend):
             if acc >= metres:
                 break
         self._back = {"path": pts[1:], "t0": self._secs(), "level": level, "why": why,
-                      "fail": fail, "blocked": None, "stuck": (here.x, here.y), "after": after}
+                      "fail": fail, "blocked": None, "stuck": (here.x, here.y), "after": after,
+                      "room": room,
+                      "max_s": max(RETREAT_MAX_S, acc / RETREAT_MPS * 1.5 + RETREAT_WAIT_S)}
         log.warning("%s:恢复链 %d 级 —— 沿原路倒退 %.1f m 回到 (%.2f, %.2f),再交给 Nav2", why,
                     level, acc, pts[-1][0], pts[-1][1])
         self._step_event(level, "retreat", None, here, why)
@@ -1393,11 +1458,14 @@ class Nav2NavBackend(PlannedNavBackend):
     async def _back_step(self, here: Any, dt_s: float) -> None:
         """沿原路倒退的一拍:倒着走,跟原路(前瞻 :data:`RETREAT_LOOK_M`)。"""
         b, now = self._back, self._secs()
+        if b.get("room") and not await self._cramped(here):
+            await self._back_finish(here, True, dt_s)     # 退到转得开的地方了
+            return
         cmd = retreat_cmd(here.x, here.y, here.yaw, b["path"])
         if cmd is None:
             await self._back_finish(here, True, dt_s)
             return
-        if now - b["t0"] > RETREAT_MAX_S:
+        if now - b["t0"] > b.get("max_s", RETREAT_MAX_S):
             await self._back_finish(here, False, dt_s)
             return
         vx, wz = self._deband(*cmd)

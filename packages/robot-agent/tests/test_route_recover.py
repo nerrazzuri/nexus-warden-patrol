@@ -170,3 +170,78 @@ def test_交付配置里有跟紧路线的控制器_协议认它_代理照路走
     assert t["PathAlignCritic"]["use_path_orientations"] is True
     assert "PreferForwardCritic" not in t["critics"], "路里有倒车那段"
     assert base["vx_max"] == 1.0, "平常导航不变"
+
+
+# ---------------------------------------------------------------- 用户 11-16:倒着退出窄巷
+
+def _死巷():
+    """x < 3 是空房间;x 3–8 一条 1.2 m 宽的死巷(y 3.4–4.6),x = 8 堵死。"""
+    return [(3.0, 0.1, 11.9, 3.4), (3.0, 4.6, 11.9, 7.9), (8.0, 3.4, 11.9, 4.6)]
+
+
+async def _等空闲(t):
+    for _ in range(100):
+        await t.跑(0.1)
+        if t.nav._status is NavStatus.STANDBY:
+            return
+    raise AssertionError(t.nav._status)
+
+
+async def _进死巷(tmp_path, link, x=7.2):
+    """从房间 (1.5, 4.0) 朝东走进死巷,到 (``x``, 4.0) 停下(Nav2 报到了)。"""
+    t = _台(tmp_path, link, walls=_死巷())
+    await t.start(1.5, 4.0)
+    link.here = (1.5, 4.0)
+    await t.nav.goto(Pose.from_xy_yaw(x, 4.0, 0.0))
+    g = link.kinds("goal")[-1]
+    await _走一段(t, link, g["goal_id"], x - 1.5)
+    link.goal_states.append({"type": "goal_state", "goal_id": g["goal_id"],
+                             "state": "succeeded", "reason": ""})
+    await _等空闲(t)
+    assert NavStatus.SUCCEED in t.status and t.r.x > x - 0.4
+    link.here = (t.r.x, t.r.y)
+    return t
+
+
+async def test_死巷尽头_下一个点在身后_先倒着退出巷子_转得开了再查路线交给Nav2(tmp_path):
+    from nexwar_agent.bridges.nav2_nav import BACKOUT_M
+    link = 会规划的转接()
+    t = await _进死巷(tmp_path, link)
+    goals, plans = len(link.kinds("goal")), len(link.kinds("plan"))
+    await t.nav.goto(Pose.from_xy_yaw(1.5, 4.0, math.pi))
+    assert len(link.kinds("goal")) == goals, "巷子里转不开:先不交给 Nav2"
+    assert t.nav._back is not None and t.nav._back.get("room"), "沿来路倒着退"
+    await t.跑(45.0)
+    assert t.nav._back is None
+    assert t.r.x < 2.7, ("退到巷口外、原地转得开的地方", t.r.x)
+    assert abs(math.remainder(t.r.yaw, 2 * math.pi)) < 0.5, "倒着退的:车头还朝里"
+    assert len(link.kinds("plan")) >= plans + 2, "退完从那儿重新查路线"
+    new = link.kinds("goal")[goals:]
+    assert new and all((g["x"], g["y"]) == (1.5, 4.0) for g in new), "退出来才交给 Nav2"
+    assert NavStatus.FAILED not in t.status and not t.crashed
+    assert 6.0 <= BACKOUT_M <= 10.0
+
+
+async def test_死巷里_下一个点还在前面_不倒退_照常交给Nav2(tmp_path):
+    link = 会规划的转接()
+    t = await _进死巷(tmp_path, link, x=5.0)
+    goals = len(link.kinds("goal"))
+    await t.nav.goto(Pose.from_xy_yaw(7.2, 4.0, 0.0))
+    assert t.nav._back is None and len(link.kinds("goal")) == goals + 1
+
+
+async def test_房间里_转得开_下一个点在身后_不倒退(tmp_path):
+    link = 会规划的转接()
+    t = _台(tmp_path, link, walls=_死巷())
+    await t.start(1.0, 4.0)
+    link.here = (1.0, 4.0)
+    await t.nav.goto(Pose.from_xy_yaw(2.6, 4.0, 0.0))
+    g = link.kinds("goal")[-1]
+    await _走一段(t, link, g["goal_id"], 1.4)
+    link.goal_states.append({"type": "goal_state", "goal_id": g["goal_id"],
+                             "state": "succeeded", "reason": ""})
+    await _等空闲(t)
+    link.here = (t.r.x, t.r.y)
+    goals = len(link.kinds("goal"))
+    await t.nav.goto(Pose.from_xy_yaw(0.8, 4.0, math.pi))
+    assert t.nav._back is None and len(link.kinds("goal")) == goals + 1
