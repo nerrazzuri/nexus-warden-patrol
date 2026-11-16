@@ -161,6 +161,9 @@ class 假转接:
         return self.now
 
     def send(self, m):
+        # 跟真转接节点一样,代理发的每一条都按协议过一遍(11-16:11-05 起地图报文带 clear、协议没加,
+        # 真转接节点会丢掉整条地图;假转接什么都收,一直测不出来)
+        parse(json.dumps(m).encode(), allowed=FROM_AGENT)
         self.sent.append(m)
         if m["type"] == "goal" and getattr(self, "auto_plan", True):
             # 真 Nav2 收下目标就规划出路线(转接节点按目标号报);测 P1 的那条自己管

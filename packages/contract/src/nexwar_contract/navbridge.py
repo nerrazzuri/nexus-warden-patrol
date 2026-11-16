@@ -56,9 +56,13 @@ from typing import Any
 from nexwar_contract.errors import ContractError
 
 #: 2(W47 外审 R7):``cmd`` 带 ``goal_id``;3(复查第三轮 P4):``cmd`` 带 ``src``;
-#: 4(W48):``goal`` 可带 ``via``;5(导航 V1 第 2 节):``plan`` / ``plan_result``。
+#: 4(W48):``goal`` 可带 ``via``;5(导航 V1 第 2 节):``plan`` / ``plan_result``;
+#: 6(11-16):``map`` 可带 ``clear``(72f9afa3 起代理就带着发,协议没加,转接节点按协议丢掉整条地图)。
 #: 两头同一个发布包里,对不上握手就拒(代理退回自己的规划)。
-PROTO = 5
+PROTO = 6
+#: ``map.clear`` 最多几项、每项的半长 / 半宽上限(米):只擦机器人站着的那块,不许大块擦图。
+MAX_CLEAR = 64
+MAX_CLEAR_HALF_M = 1.5
 #: ``cmd.src``:控制器 / 脱困动作。
 CMD_SRCS = ("ctl", "beh")
 #: 途经点最多几个(路网最多 500 个点)。
@@ -69,7 +73,7 @@ GOAL_STATES = ("accepted", "succeeded", "aborted", "canceled", "rejected")
 FIELDS: dict[str, tuple[set[str], set[str]]] = {
     # 类型: (必须的, 可选的)
     "hello": ({"proto"}, {"name", "version"}),
-    "map": ({"req", "map_id", "map_version", "dir"}, {"nogo", "speed"}),
+    "map": ({"req", "map_id", "map_version", "dir"}, {"nogo", "speed", "clear"}),
     "tick": ({"t_ms", "odom", "vel"}, {"map_odom", "speed"}),
     "grid": ({"t_ms", "pose", "res", "size", "occ", "known"}, set()),
     "goal": ({"goal_id", "x", "y", "yaw"}, {"via"}),
@@ -147,6 +151,17 @@ def check(msg: dict[str, Any]) -> dict[str, Any]:
             _poly(z["poly"], f"speed[{i}]")
             if _num(z["mps"], f"speed[{i}].mps") <= 0:
                 raise ContractError("Nav2 转接:限速要是正数")
+        clear = msg.get("clear", [])
+        if not isinstance(clear, list) or len(clear) > MAX_CLEAR:
+            raise ContractError(f"Nav2 转接:clear 要是列表(最多 {MAX_CLEAR} 项)")
+        for i, c in enumerate(clear):
+            # 机器人站在这里:[x, y, yaw, 半长, 半宽],转接节点把这块地图上的挡临时当空
+            if not isinstance(c, list) or len(c) != 5:
+                raise ContractError(f"Nav2 转接:clear[{i}] 要是 [x, y, yaw, 半长, 半宽]")
+            x, y, yaw, hl, hw = (_num(v, f"clear[{i}][{j}]") for j, v in enumerate(c))
+            if not (0 < hl <= MAX_CLEAR_HALF_M and 0 < hw <= MAX_CLEAR_HALF_M):
+                raise ContractError(
+                    f"Nav2 转接:clear[{i}] 半长 / 半宽要在 (0, {MAX_CLEAR_HALF_M}] 米")
     elif t == "tick":
         _int(msg["t_ms"], "t_ms")
         _triple(msg["odom"], "odom")
