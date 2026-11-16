@@ -32,6 +32,8 @@ Nav2 规划出路线(``plan_result``,带朝向、不抽稀)之后、出发之前
 过了才放行,``path`` 就是这条拼好的路(调用方让 Nav2 的控制器照它走,不再让 Smac 另规划)。
 小窗里搜不到(仿真 11-15:过门转弯、终点贴墙要多退一点、绕远一点才转得过来)就从起点到终点整条
 再搜一次,同样整条查过才放行。都不行照旧拒。
+**搜的时候先要宽的**(仿真 11-16:只按底线搜,路贴着 0.10 走,机器人走偏几厘米就被守卫挡住、
+走不完):先按每边 ``want``(0.20)搜,搜不到再按两者中间(0.15),最后才按底线;放行照旧只看底线。
 """
 
 from __future__ import annotations
@@ -161,7 +163,11 @@ def check_route(poses: Sequence[Sequence[float]], walls: Any, res: float,
     worst, at = float(m[j]), dense[int(idx[j])]
     if worst >= need:
         return RouteCheck(True, worst, at, tight=worst < want)
-    found = _searched(dense, along, idx, m, walls, res, origin, need)
+    found = None
+    for level in _search_levels(need, want):
+        found = _searched(dense, along, idx, m, walls, res, origin, need, level)
+        if found is not None:
+            break
     if found is not None:
         return found
     # 终点本身就放不下,而且连着终点的那段窄处是从终点附近(一个车身长 + GOAL_ZONE_M 以内)才开始的
@@ -197,10 +203,21 @@ def _checked(path: Sequence[tuple[float, float, float]], walls: Any, res: float,
     return dense, idx, pose_margins([dense[i] for i in idx], walls, res, origin)
 
 
+def _search_levels(need: float, want: float) -> list[float]:
+    """局部搜索依次按哪几档余量搜:``want``、两者中间、``need``(从宽到窄,不低于底线)。"""
+    out: list[float] = []
+    for v in (want, (want + need) / 2, need):
+        if v >= need and all(abs(v - o) > 1e-9 for o in out):
+            out.append(v)
+    return out
+
+
 def _searched(dense: list[tuple[float, float, float]], along: np.ndarray, idx: np.ndarray,
               m: np.ndarray, walls: Any, res: float, origin: tuple[float, float],
-              need: float) -> RouteCheck | None:
-    """余量不够的每一段做局部搜索、拼回去、整条再查(见模块说明);不行回 None。"""
+              need: float, level: float | None = None) -> RouteCheck | None:
+    """余量不够的每一段做局部搜索、拼回去、整条再查(见模块说明);不行回 None。
+    ``level`` = 搜的时候按每边多少余量找(默认 ``need``);放行只看整条不低于 ``need``。"""
+    level = need if level is None else level
     bad = m < need
     segs: list[list[int]] = []                             # [入口, 出口](``idx`` 里的位置)
     k = 0
@@ -223,9 +240,9 @@ def _searched(dense: list[tuple[float, float, float]], along: np.ndarray, idx: n
         else:
             segs.append([lo, hi])
         k = e + 1
-    tries = (lambda: _spliced(segs, dense, idx, walls, res, origin, need),
+    tries = (lambda: _spliced(segs, dense, idx, walls, res, origin, level),
              # 小窗搜不到(或拼好的整条查不过):整条路线一次搜(起点就是机器人此刻站的地方)
-             lambda: search_path(dense[0], dense[-1], walls, res, origin, need, span=dense,
+             lambda: search_path(dense[0], dense[-1], walls, res, origin, level, span=dense,
                                  goal_end=True, max_cells=WHOLE_MAX_CELLS))
     for attempt in tries:
         out = attempt()
