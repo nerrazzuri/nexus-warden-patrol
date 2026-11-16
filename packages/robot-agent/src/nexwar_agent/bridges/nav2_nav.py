@@ -252,8 +252,6 @@ RETREAT_MAX_S = 30.0
 #: :data:`~nexwar_agent.route_check.CORNER_R`)、下一段要往回走(路线最初 :data:`BACKOUT_LOOK_M`
 #: 在身后,或者查路线拒了)→ 先沿来路倒着退,退到转得开的地方(最多 :data:`BACKOUT_M`)再查路线、
 #: 交给 Nav2。仿真 11-16:货架通道、死胡同尽头的点到了以后掉不了头,卡住或被拒。
-#: 弯里守卫只拦地图墙时试的前进速度比例(:meth:`Nav2NavBackend._wall_alt`)。
-WALL_ALT_SCALES = (0.5, 0.25)
 BACKOUT_M = 8.0
 BACKOUT_LOOK_M = 0.6
 #: 来路要大致在正后方(偏不过这么多弧度)才倒退:斜后方得先原地转,窄处转不了(仿真 11-16:过门、
@@ -602,7 +600,6 @@ class Nav2NavBackend(PlannedNavBackend):
         self._rec_level, self._rec_at, self._man, self._back = 0, None, None, None
         self._rec_tried = set()
         self._rechecks = 0
-        self._alt_told = False
         self._osc.clear()
         self._prog_reset()                                 # W72:新目标,进展从头算
         if here is not None:
@@ -1048,12 +1045,9 @@ class Nav2NavBackend(PlannedNavBackend):
             if (self._look is not None or v.band_only) and await self._look_go(v, here, dt_s):
                 return
             if v.stops:
-                alt = self._wall_alt(vx, wz, v, here)
-                if alt is None:
-                    self._guarded(v, here)
-                    await self._send(0.0, 0.0, dt_s)
-                    return
-                vx, wz = alt
+                self._guarded(v, here)
+                await self._send(0.0, 0.0, dt_s)
+                return
         self._look = None
         if self._look_tries and math.dist(self._look_at, (here.x, here.y)) >= LOOK_RESET_M:
             self._look_tries = 0                           # 离上回挪的地方走远了:下回再被拦还能挪
@@ -2081,36 +2075,6 @@ class Nav2NavBackend(PlannedNavBackend):
                 hit[inb] = blocked[r[inb], k[inb]]
                 near |= hit
         return near
-
-    def _wall_alt(self, vx: float, wz: float, v: Any, here: Any) -> tuple[float, float] | None:
-        """用户 11-17(整趟走完 ≥ 95%):守卫拦住 Nav2 的速度,而扫过区里挡的**全是地图上的墙**
-        (离墙 :data:`STATIC_NEAR_M` 以内)—— 弯里 Nav2 要的弧太缓、蹭门框;这时按
-        :data:`WALL_ALT_SCALES` 试同样转速、更慢前进(弯更急),再试同比例放慢。每一个照样过守卫、
-        原地转照样核地图墙;都不行回 None(照旧停)。地图上没有的东西(人、箱子)挡着不试,照旧停。
-        仿真 11-17:1.4 m 门口拐进 1.1 m 走廊,离墙还有 0.20 m,守卫每拍拦、Nav2 每拍还要同一条弧,
-        停死 20 秒才进恢复链。"""
-        if v.cause != "hit" or not v.hits or vx <= 0.0 or abs(wz) < 1e-6 or self._base is None:
-            return None
-        xs = np.array([p[0] for p in v.hits], dtype=float)
-        ys = np.array([p[1] for p in v.hits], dtype=float)
-        if not bool(self._near_static(xs, ys, self._odom_pose, here).all()):
-            return None
-        wmax = getattr(self, "_wmax", math.inf)
-        tries = [(vx * k, wz) for k in WALL_ALT_SCALES] + [(vx * k, wz * k)
-                                                           for k in WALL_ALT_SCALES]
-        for cvx, cwz in tries:
-            cvx, cwz = self._deband(cvx, cwz)
-            if cvx <= 0.0 or abs(cwz) > wmax:
-                continue
-            if self._turn_hits_map(cvx, cwz, here):
-                continue
-            if not self._guard_check(cvx, cwz).stops:
-                if not getattr(self, "_alt_told", False):
-                    self._alt_told = True
-                    log.info("守卫拦的是地图墙(%s):改走更慢的弯 %.2f m/s、%.2f rad/s",
-                             v.reason[:60], cvx, cwz)
-                return cvx, cwz
-        return None
 
     def _turn_hits_map(self, vx: float, wz: float, here: Any) -> bool:
         """原地转扫过的那片(守卫算的扇形,机身外)压上地图里的墙没有。不靠雷达(墙进了两侧盲区、记忆
