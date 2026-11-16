@@ -245,3 +245,34 @@ async def test_房间里_转得开_下一个点在身后_不倒退(tmp_path):
     goals = len(link.kinds("goal"))
     await t.nav.goto(Pose.from_xy_yaw(0.8, 4.0, math.pi))
     assert t.nav._back is None and len(link.kinds("goal")) == goals + 1
+
+
+async def test_死巷尽头_来路不在正后方_倒退要先原地转_不倒退_照常交给Nav2(tmp_path):
+    """仿真 11-16:过门、S 弯里刚拐过弯就停下 —— 来路在斜后方,倒着退得先原地转(窄处转不了),
+    退了也挪不动、白等;这种照常交给 Nav2。"""
+    link = 会规划的转接()
+    t = await _进死巷(tmp_path, link)
+    t.r.yaw = 0.7                                        # 车头斜着(来路在斜后方 40°)
+    goals = len(link.kinds("goal"))
+    await t.nav.goto(Pose.from_xy_yaw(1.5, 4.0, math.pi))
+    assert t.nav._back is None and len(link.kinds("goal")) == goals + 1
+
+
+async def test_倒退一开始就被挡_几秒挪不动_改回照常交给Nav2(tmp_path):
+    from nexwar_agent.bridges.nav2_nav import BACKOUT_WAIT_S
+    from nexwar_agent.obstacles import Verdict
+    link = 会规划的转接()
+    t = await _进死巷(tmp_path, link)
+
+    async def 后面有人(here, vx, wz):
+        return Verdict(False, "后面有人")
+    t.nav._rec_safe = 后面有人
+    goals, x0 = len(link.kinds("goal")), t.r.x
+    await t.nav.goto(Pose.from_xy_yaw(1.5, 4.0, math.pi))
+    assert t.nav._back is not None
+    await t.跑(BACKOUT_WAIT_S + 1.0)
+    assert t.nav._back is None and abs(t.r.x - x0) < 0.05
+    new = link.kinds("goal")[goals:]
+    assert len(new) == 1 and (new[0]["x"], new[0]["y"]) == (1.5, 4.0), "照原来那样交给 Nav2"
+    assert BACKOUT_WAIT_S <= 5.0
+    assert NavStatus.FAILED not in t.status
