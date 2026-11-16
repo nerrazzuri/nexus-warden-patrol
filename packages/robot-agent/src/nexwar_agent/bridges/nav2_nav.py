@@ -254,6 +254,11 @@ RETREAT_MAX_S = 30.0
 #: 交给 Nav2。仿真 11-16:货架通道、死胡同尽头的点到了以后掉不了头,卡住或被拒。
 BACKOUT_M = 8.0
 BACKOUT_LOOK_M = 0.6
+#: 来路要大致在正后方(偏不过这么多弧度)才倒退:斜后方得先原地转,窄处转不了(仿真 11-16:过门、
+#: S 弯刚拐过弯就停,退了也挪不动)。
+BACKOUT_BEHIND_RAD = math.radians(30)
+#: 倒退一开始就被挡、这么久(秒)没挪开 :data:`RETREAT_MIN_M`:不退了,照原来那样交给 Nav2。
+BACKOUT_WAIT_S = 3.0
 #: 退完重新规划时绕开刚才卡住的地方(用户 11-10:「重规划是不是就不走那条曾经被堵的路径了」):
 #: 卡住那一处半径这么大(米)临时当禁行区交给 Nav2,只这一趟有效;绕开就规划不出(只有这一条路)
 #: 就撤掉,还走这条。离机器人、离终点太近的不标(不许把自己、终点圈进去)。
@@ -570,9 +575,7 @@ class Nav2NavBackend(PlannedNavBackend):
         self.link.cmd = None                 # 外审 R7:上一个目标晚到的速度不许驱动这一个
         msg: dict[str, Any] = {"type": "goal", "goal_id": self._goal_id, "x": pose.position.x,
                                "y": pose.position.y, "yaw": pose.yaw}
-        if backout is not None:
-            pass                             # 退出来以后重查路线时再定照哪条走
-        elif got is not None and got.ok and got.path:
+        if got is not None and got.ok and got.path:
             # 外审 11-14:路线靠局部搜索放行 —— 让控制器照这条查过的路走,不让 Smac 另规划
             # (有路网时查的就是沿途经点那条,拼好的路已经沿着路网走)
             msg["path"] = _wire_path(got.path)
@@ -608,6 +611,8 @@ class Nav2NavBackend(PlannedNavBackend):
             await HalNavBackend.goto(self, pose)
             self._start_retreat(here, backout, level=0, metres=BACKOUT_M, after="recheck",
                                 room=True)
+            # 退不动时照原来那样交给 Nav2(查路线过了的那条;拒了的没有,退不动就重查)
+            self._back["orig"] = dict(msg) if got.ok else None
             return
         log.info("%s:交给 Nav2(目标 %d)→ (%.2f, %.2f)", op, self._goal_id, pose.position.x,
                  pose.position.y)
@@ -619,7 +624,7 @@ class Nav2NavBackend(PlannedNavBackend):
         站的地方原地转得开、查路线没查成(紧急任务、转接节点不规划)都不退。"""
         if here is None or self._trail_len() < RETREAT_MIN_M or got.status == "unchecked":
             return None
-        if not await self._cramped(here):
+        if not self._trail_behind(here) or not await self._cramped(here):
             return None
         if not got.ok:
             return f"站在窄处转不开,往那儿的路线也查不过({got.why[:60]})"
@@ -632,6 +637,15 @@ class Nav2NavBackend(PlannedNavBackend):
                     return "站在窄处转不开,下一段要往回走"
                 return None
         return None
+
+    def _trail_behind(self, here: Any) -> bool:
+        """来路(离机器人 :data:`RETREAT_LOOK_M` 以外最近那一点)在不在正后方
+        :data:`BACKOUT_BEHIND_RAD` 以内:倒着退不用先原地转。"""
+        for px, py in reversed(self._trail):
+            if math.dist((px, py), (here.x, here.y)) >= RETREAT_LOOK_M:
+                rel = math.atan2(py - here.y, px - here.x) - (here.yaw + math.pi)
+                return abs(math.remainder(rel, 2 * math.pi)) <= BACKOUT_BEHIND_RAD
+        return False
 
     async def _cramped(self, here: Any) -> bool:
         """站在这儿原地转一圈,车身(加查路线的余量,半径 ``CORNER_R``)会不会扫到地图墙。
@@ -1424,6 +1438,14 @@ class Nav2NavBackend(PlannedNavBackend):
         took = now - b["t0"]
         self._step_event(b["level"], "retreat", ok, here, b["why"], took)
         self._rec_at = now
+        if b.get("room") and not ok and b.get("orig") is not None and self._target is not None \
+                and math.dist(b["stuck"], (here.x, here.y)) < RETREAT_MIN_M:
+            # 倒退一开始就被挡、没挪开:不退了,照原来那样交给 Nav2(仿真 11-16)
+            log.info("倒着退不动(%.0f 秒):照原来那样交给 Nav2", took)
+            self._goal_msg = dict(b["orig"])
+            self._prog_reset()
+            self._resend_goal()
+            return
         if b.get("after") == "recheck" and self._target is not None:
             # 用户 11-15:退出来了(没退完也一样,能退多少退多少)—— 从这儿重新查路线
             log.info("沿来路退了 %.0f 秒(%s):从 (%.2f, %.2f) 重新查路线", took,
@@ -1475,7 +1497,8 @@ class Nav2NavBackend(PlannedNavBackend):
                 b["blocked"] = now
             self._guarded(v, here)
             await self._send(0.0, 0.0, dt_s)
-            if now - b["blocked"] > RETREAT_WAIT_S:
+            if now - b["blocked"] > (BACKOUT_WAIT_S if b.get("room") and math.dist(
+                    b["stuck"], (here.x, here.y)) < RETREAT_MIN_M else RETREAT_WAIT_S):
                 await self._back_finish(here, False, dt_s)
             return
         b["blocked"] = None
