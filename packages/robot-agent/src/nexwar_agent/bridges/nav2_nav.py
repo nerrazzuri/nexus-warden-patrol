@@ -254,10 +254,6 @@ RETREAT_MAX_S = 30.0
 #: 交给 Nav2。仿真 11-16:货架通道、死胡同尽头的点到了以后掉不了头,卡住或被拒。
 #: 弯里守卫只拦地图墙时试的前进速度比例(:meth:`Nav2NavBackend._wall_alt`)。
 WALL_ALT_SCALES = (0.5, 0.25)
-#: 墙边被守卫拦着(挡的全是地图墙、更慢的弯也过不去)连着这么久(秒)→ 直接自己前后挪、分段转
-#: (恢复链 3 级那一步,不等前面两级各 20 秒;仿真 11-17:拐弯抄近路贴上内角,得先倒一下)。
-WALL_STUCK_S = 4.0
-WALL_MAN_MAX = 2
 BACKOUT_M = 8.0
 BACKOUT_LOOK_M = 0.6
 #: 来路要大致在正后方(偏不过这么多弧度)才倒退:斜后方得先原地转,窄处转不了(仿真 11-16:过门、
@@ -607,7 +603,6 @@ class Nav2NavBackend(PlannedNavBackend):
         self._rec_tried = set()
         self._rechecks = 0
         self._alt_told = False
-        self._wall_since, self._wall_men = None, 0
         self._osc.clear()
         self._prog_reset()                                 # W72:新目标,进展从头算
         if here is not None:
@@ -1057,11 +1052,8 @@ class Nav2NavBackend(PlannedNavBackend):
                 if alt is None:
                     self._guarded(v, here)
                     await self._send(0.0, 0.0, dt_s)
-                    await self._wall_stuck(v, here, dt_s)
                     return
                 vx, wz = alt
-        if abs(vx) > 1e-6 or abs(wz) > 1e-6:
-            self._wall_since = None                        # 走起来了:墙边被拦重新计时
         self._look = None
         if self._look_tries and math.dist(self._look_at, (here.x, here.y)) >= LOOK_RESET_M:
             self._look_tries = 0                           # 离上回挪的地方走远了:下回再被拦还能挪
@@ -2090,34 +2082,6 @@ class Nav2NavBackend(PlannedNavBackend):
                 near |= hit
         return near
 
-    async def _wall_stuck(self, v: Any, here: Any, dt_s: float) -> None:
-        """墙边被拦满 :data:`WALL_STUCK_S` → 直接自己挪(每个目标最多 :data:`WALL_MAN_MAX` 回;
-        不占恢复链 3 级那一次)。挡的不全是地图墙(人、箱子)不算、重新计时。"""
-        if not self._wall_only(v, here) or self._map_dir is None:
-            self._wall_since = None
-            return
-        now = self._secs()
-        if getattr(self, "_wall_since", None) is None:
-            self._wall_since = now
-            return
-        if now - self._wall_since < WALL_STUCK_S or getattr(self, "_wall_men", 0) >= WALL_MAN_MAX:
-            return
-        self._wall_since = None
-        self._wall_men = getattr(self, "_wall_men", 0) + 1
-        had = "maneuver" in self._rec_tried
-        self._start_maneuver(here, f"墙边被守卫拦了 {WALL_STUCK_S:.0f} 秒({v.reason[:60]})",
-                             level=self._rec_level)
-        if not had:
-            self._rec_tried.discard("maneuver")
-
-    def _wall_only(self, v: Any, here: Any) -> bool:
-        """守卫这次拦的(扫过区有挡)是不是全是地图上的墙(离墙 :data:`STATIC_NEAR_M` 以内)。"""
-        if v.cause != "hit" or not v.hits or self._base is None:
-            return False
-        xs = np.array([p[0] for p in v.hits], dtype=float)
-        ys = np.array([p[1] for p in v.hits], dtype=float)
-        return bool(self._near_static(xs, ys, self._odom_pose, here).all())
-
     def _wall_alt(self, vx: float, wz: float, v: Any, here: Any) -> tuple[float, float] | None:
         """用户 11-17(整趟走完 ≥ 95%):守卫拦住 Nav2 的速度,而扫过区里挡的**全是地图上的墙**
         (离墙 :data:`STATIC_NEAR_M` 以内)—— 弯里 Nav2 要的弧太缓、蹭门框;这时按
@@ -2125,7 +2089,11 @@ class Nav2NavBackend(PlannedNavBackend):
         原地转照样核地图墙;都不行回 None(照旧停)。地图上没有的东西(人、箱子)挡着不试,照旧停。
         仿真 11-17:1.4 m 门口拐进 1.1 m 走廊,离墙还有 0.20 m,守卫每拍拦、Nav2 每拍还要同一条弧,
         停死 20 秒才进恢复链。"""
-        if vx <= 0.0 or abs(wz) < 1e-6 or not self._wall_only(v, here):
+        if v.cause != "hit" or not v.hits or vx <= 0.0 or abs(wz) < 1e-6 or self._base is None:
+            return None
+        xs = np.array([p[0] for p in v.hits], dtype=float)
+        ys = np.array([p[1] for p in v.hits], dtype=float)
+        if not bool(self._near_static(xs, ys, self._odom_pose, here).all()):
             return None
         wmax = getattr(self, "_wmax", math.inf)
         tries = [(vx * k, wz) for k in WALL_ALT_SCALES] + [(vx * k, wz * k)
