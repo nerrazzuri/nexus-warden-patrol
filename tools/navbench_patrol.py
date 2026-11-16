@@ -335,6 +335,9 @@ async def run_case(case: dict[str, Any], *, sim_cap_s: float) -> dict[str, Any]:
                                "retreats": 0, "jump_applied": False}
         flags = {"edge": False, "man": False, "back": False}
         t_sim, cut = 0.0, False
+        out["nav2_late_ticks"], out["behind_s"] = 0, 0.0
+        wall0 = time.monotonic()
+        quiet = 0
         prev = (r.x, r.y, r.yaw)
         k = 0
         while True:
@@ -410,14 +413,32 @@ async def run_case(case: dict[str, Any], *, sim_cap_s: float) -> dict[str, Any]:
             feed()
             for _ in range(3):
                 await asyncio.sleep(0)
-            # Nav2 在开的时候:等它对这一拍出了速度(墙钟 ≤ 0.3 s)
+            # 按真实时间走(仿真 1 秒 = 墙钟 1 秒):Nav2 的超时、进度检查按墙钟算,代理按仿真钟算,
+            # 两边快慢不一样结果就不像真机(11-16:慢 2.4 倍时 Nav2 早放弃,快 2 倍时晚放弃)。
+            # Nav2 在开、上几拍还在出速度时,这一拍等它出,最多比该到的时刻晚 0.2 s(CPU 忙);
+            # 连着 3 拍不出(规划不出、在自己脱困)就不等 —— 真机上它不出速度机器人就站着、钟照走。
+            # 落后了就从现在重新对齐、不追。
+            tick_end = wall0 + t_sim
             if getattr(nav, "_nav2_goal", None) is not None:
                 want = nav._t_ms
-                for _ in range(60):
+                grace = 0.2 if quiet < 3 else 0.0
+                while True:
                     cmd = link.cmd
                     if cmd is not None and cmd[1] >= want:
+                        quiet = 0
+                        break
+                    if time.monotonic() > tick_end + grace:
+                        quiet += 1
+                        if grace:
+                            out["nav2_late_ticks"] += 1
                         break
                     await asyncio.sleep(0.005)
+            lag = tick_end - time.monotonic()
+            if lag > 0:
+                await asyncio.sleep(lag)
+            elif lag < -0.05:
+                out["behind_s"] += -lag
+                wall0 -= lag
             # 恢复动作计数(状态从无到有算一次)
             for key, attr, name in (("edge", "_edge", "edge_escapes"), ("man", "_man", "maneuvers"),
                                     ("back", "_back", "retreats")):
