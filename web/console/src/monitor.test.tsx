@@ -103,6 +103,16 @@ describe("值班 · 左栏事件队列", () => {
 });
 
 describe("值班 · 中间", () => {
+  it("I3 11-17:派去看一眼 / 临时路线选点时,视频收起、地图占满;退出选点视频回来", () => {
+    const c = page([]);
+    expect(c.querySelector(".mon-video")).not.toBeNull();
+    const look = Array.from(c.querySelectorAll(".mon-head-acts button")).find((b) => b.textContent === "派去看一眼")!;
+    fireEvent.click(look);
+    expect(c.querySelector(".mon-video")).toBeNull();
+    fireEvent.click(look);
+    expect(c.querySelector(".mon-video")).not.toBeNull();
+  });
+
   it("平时写「全场正常」;保安有派去看一眼、临时路线;只读没有", () => {
     const c = page([]);
     expect(c.querySelector(".mon-head h1")!.textContent).toBe("全场正常");
@@ -241,6 +251,21 @@ describe("右栏机器人(从老值班页搬来)", () => {
     expect(d.querySelector(".rc-head a")!.getAttribute("href")).toBe("#/admin/robots?robot=A");
     fireEvent.click(Array.from(d.querySelectorAll(".rc-head button")).find((b) => b.textContent === "全场")!);
     expect(d.querySelector(".mon-head")).not.toBeNull();
+  });
+
+  it("I1 11-17:1024×768 下点「详情」,控制面板滚进视野、焦点在面板上(原来开在屏幕上方看不见)", () => {
+    const seen: Element[] = [];
+    const orig = Element.prototype.scrollIntoView;
+    Element.prototype.scrollIntoView = function (this: Element) { seen.push(this); };
+    try {
+      const c = page([]);
+      fireEvent.click(c.querySelector('[data-robot-more="B"]')!);
+      const rc = c.querySelector(".mon-center .rc")!;
+      expect(seen).toContain(rc);
+      expect(document.activeElement).toBe(rc);
+    } finally {
+      Element.prototype.scrollIntoView = orig;
+    }
   });
 
   it("W8-09:保安在「详情」里派巡逻:选路线、圈数,写预计多久,派出", async () => {

@@ -4,7 +4,7 @@
 // 权限跟老机器人页一样:派巡逻、停下 = 能派巡逻的(含经理);回待命、回原点、定位、恢复、姿态、云台、喊话、警示 = 能派单的。
 // 只读只看。换姿态、停下回原点在原地确认(老页面是弹窗)。
 import type { ComponentChildren } from "preact";
-import { useEffect, useState } from "preact/hooks";
+import { useEffect, useRef, useState } from "preact/hooks";
 import { api, ApiError, enc } from "./api";
 import { CameraWell } from "./camera";
 import { hm, nameOf } from "./data";
@@ -97,6 +97,14 @@ export function RobotControl(props: {
   }, t("rdSent", { id: name, what: t("rcStop") }));
 
   const u = props.u;
+  // I1 11-17:1024×768 下右栏「详情」在页面下面,面板开在中间一块的上方、看不见:滚进视野、焦点给它
+  const root = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = root.current;
+    if (!el || props.embedded) return;
+    el.scrollIntoView?.({ block: "start", behavior: "smooth" });
+    el.focus({ preventScroll: true });
+  }, [id]);
   const sign = u.stale ? "warn" : stateSign(u.state);
   const loc = locText(u);
   const seen = u.robot.status?.last_seen;
@@ -108,7 +116,7 @@ export function RobotControl(props: {
   const today = recentActivity(props.alerts.filter((a) => a.robot === id && forGuard(a)), props.patrols.filter((p) => p.robot === id), props.since, props.now).slice(0, 8);
 
   return (
-    <div class="rc" data-robot={id}>
+    <div class="rc" data-robot={id} ref={root} tabIndex={-1}>
       {!props.embedded && <header class="rc-head">
         <button type="button" class="btn" onClick={props.onBack}>{t("rcSiteView")}</button>
         <b class="rc-name">{name}</b>

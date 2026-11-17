@@ -8,6 +8,7 @@ import 'package:nexwar_patrol/ui/site_mapping.dart';
 import 'package:nexwar_patrol/ui/site_page.dart';
 import 'package:nexwar_patrol/ui/site_runs.dart';
 import 'package:nexwar_patrol/ui/site_watch_page.dart';
+import 'package:nexwar_patrol/ui/nw/nw_theme.dart' show NwColors, nwTheme;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -72,6 +73,30 @@ void main() {
     }))!;
     expect(other.$3.length, 1);
     expect(sceneMarks(_intrusion(context: <String, dynamic>{'zone': 'z'})), isNull);
+  });
+
+  testWidgets('C1 11-17：外面是浅色主题，现场页（深色）的按钮、经过的字也是浅色，不是深底深字', (t) async {
+    await _land(t);
+    final api = FakeApi('guard');
+    await t.pumpWidget(MaterialApp(theme: nwTheme(Brightness.light),
+        home: SiteAlertScenePage(api: api, alert: _intrusion())));
+    await t.pumpAndSettle();
+    // 本页的动作按钮(描边 / 实心)用的颜色都得是深色那一套
+    final btns = find.byWidgetPredicate((w) => w is OutlinedButton || w is FilledButton);
+    expect(btns, findsWidgets);
+    for (final w in t.widgetList<ButtonStyleButton>(btns)) {
+      final fg = w.style?.foregroundColor?.resolve(<WidgetState>{});
+      if (fg == null) continue;
+      expect(fg, anyOf(NwColors.dark.text, NwColors.dark.onPrimary), reason: '按钮 ${w.key} 的字');
+    }
+    final tl = find.byKey(SiteAlertScenePage.timelineKey);
+    await t.scrollUntilVisible(tl, 200, scrollable: find.byType(Scrollable).first);
+    final texts = find.descendant(of: tl, matching: find.byType(RichText));
+    for (var i = 0; i < t.widgetList(texts).length; i++) {
+      final rt = t.widget<RichText>(texts.at(i));
+      final c = rt.text.style?.color;
+      if (c != null) expect(c, isNot(anyOf(NwColors.light.text, NwColors.light.info)), reason: '经过第 $i 行');
+    }
   });
 
   testWidgets('现场页：防区、拦截点、机器人在哪、那一趟；在图上看带着标记', (t) async {
