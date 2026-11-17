@@ -81,6 +81,8 @@ LEVEL_BIAS_MAX_DEG = 3.0    # 估出来比这大不信(不扣)
 LEVEL_BIAS_KEEP_DEG = 0.8   # 估零偏时离拟合超过这么多的段当在漂,不参与(v11 不漂的段 0.04–0.8°)
 LEVEL_BIAS_FINE_DEG = 0.3   # 精解时离拟合超过 max(这么多, 3 倍中位)的段也不要(漂刚开始的那几段)
 LEVEL_BIAS_TRIES = 3000     # RANSAC 最多试这么多组(段少时全试)
+LEVEL_CONST_DEG = 1.0       # 扣零偏后离常量重力不到 max(0.5°, 3 倍中位)(最多这么多)的段都用常量纠
+LEVEL_CONST_MIN_DEG = 0.5   # (笔记本 v13:没漂的各段 0.04–0.85°,中位约 0.3°)
 #: 建完把关:相邻两个位姿水平挪的比「最快速度 × 间隔 + 余量」还多,就是跟丢了,不出图(跟定位器
 #: 判跳一个做法)。不只看距离:录位姿会丢帧(台式机实测 1.8 s 断档里走了 1.58 m,是正常走);
 #: 不只看速度:两个位姿可能只隔 5 ms(差 1.5 cm 算出来 3 m/s)。
@@ -283,22 +285,14 @@ def level(poses: Sequence[Pose], imu: Sequence[tuple[float, float, float, float]
     M = sR[ok] / cnt[ok, None, None]
     up_axis = int(np.argmax(np.abs(raw)))
     flat = [i for i in range(3) if i != up_axis]
-    b, info["bias_deg"], info["bias_used"] = np.zeros(2), 0.0, False
-    if len(ok) >= LEVEL_BIAS_MIN_WINDOWS:
-        b, why_b = _imu_bias(U, M[:, :, flat])
-        info["bias_deg"] = round(math.degrees(float(np.linalg.norm(b))), 2)
-        if why_b:
-            info["bias_why"] = why_b
-            b = np.zeros(2)
-        else:
-            info["bias_used"] = True
-    C = U - np.einsum("kij,j->ki", M[:, :, flat], b)          # 扣掉零偏的「上」
-    w = cnt[ok].astype(float)
-    r = [min(1, i, len(ok) - 1 - i) for i in range(len(ok))]  # 前后各一段平均(约 60 s),两头不偏
-    smooth = np.array([(C[i - r[i]:i + r[i] + 1] * w[i - r[i]:i + r[i] + 1, None]).sum(0)
-                       for i in range(len(ok))])
+    C, b, why_b, const = _window_ups(U, M[:, :, flat])
+    info["bias_deg"] = round(math.degrees(float(np.linalg.norm(b))), 2)
+    info["bias_used"] = not why_b
+    info["const_windows"] = int(const.sum())
+    if why_b:
+        info["bias_why"] = why_b
     centers, fixes, degs = [], [], []
-    for k, (x, y, z) in zip(ok, smooth, strict=True):
+    for k, (x, y, z) in zip(ok, C, strict=True):
         n = math.sqrt(x * x + y * y + z * z)
         ux, uy, uz = x / n, y / n, z / n
         ang = math.acos(max(-1.0, min(1.0, uz)))
@@ -352,7 +346,42 @@ def level(poses: Sequence[Pose], imu: Sequence[tuple[float, float, float, float]
     return out, info
 
 
+def _window_ups(U: Any, M: Any) -> tuple[Any, Any, str, Any]:
+    """每段的「上」``U``(k×3)、平均姿态里水平两根轴 ``M``(k×3×2)→(纠正用的「上」k×3、零偏、
+    没扣零偏的原因、哪些段用常量)。扣掉零偏(:func:`_imu_bias`)后,离常量重力不到
+    :data:`LEVEL_CONST_DEG`(按段间噪声定)的段都用那个常量(不把段间 0.2–0.5° 的噪声
+    纠进去),只有漂了的段(和挨着它的段)逐段纠;不平滑(笔记本核 v13:前后各一段平均让
+    纠正滞后、摊开,去程回程差 0.12–0.27 m)。
+    零偏估不了:不扣、逐段纠。"""
+    import numpy as np
+    U = np.asarray(U, float)
+    k = len(U)
+    const = np.zeros(k, bool)
+    if k < LEVEL_BIAS_MIN_WINDOWS:
+        return U.copy(), np.zeros(2), f"段不够(要 {LEVEL_BIAS_MIN_WINDOWS} 段)", const
+    x, why = _bias_fit(U, M)
+    if why:
+        return U.copy(), np.zeros(2), why, const
+    b, g = x[3:], x[:3]
+    C = U - np.einsum("kij,j->ki", M, b)
+    cos = (C @ g) / (np.linalg.norm(C, axis=1) * np.linalg.norm(g))
+    dev = np.degrees(np.arccos(np.clip(cos, -1.0, 1.0)))
+    lim = min(LEVEL_CONST_DEG, max(LEVEL_CONST_MIN_DEG, 3 * float(np.median(dev))))
+    const = dev < lim                                    # 门槛按段间噪声定:慢慢漂起来的也认得出
+    drift = ~const                                       # 挨着漂的段也逐段纠(漂刚起头还没过门槛)
+    const &= ~(np.r_[drift[1:], False] | np.r_[False, drift[:-1]])
+    C[const] = g
+    return C, b, "", const
+
+
 def _imu_bias(U: Any, M: Any) -> tuple[Any, str]:
+    """:func:`_bias_fit` 的零偏部分:回(零偏 2 个分量, 不扣的原因)。"""
+    import numpy as np
+    x, why = _bias_fit(U, M)
+    return (np.zeros(2) if x is None else x[3:]), why
+
+
+def _bias_fit(U: Any, M: Any) -> tuple[Any, str]:
     """各段的「上」``U``(k×3)、平均姿态里水平两根轴 ``M``(k×3×2)→ 加速度计水平零偏
     (2 个分量,单位 g):解「U = 常量 g + M·b」。先找一致的大多数(RANSAC / MSAC:每次取 3 段解,
     离拟合 :data:`LEVEL_BIAS_KEEP_DEG` 以外的封顶算,误差总和最小的那组),再用那些段收紧了精解
@@ -394,13 +423,13 @@ def _imu_bias(U: Any, M: Any) -> tuple[Any, str]:
         if cost < best_cost:
             best, best_cost = res <= thr, cost
     if best is None:
-        return np.zeros(2), "朝向不够多,零偏跟重力分不开,不扣"
+        return None, "朝向不够多,零偏跟重力分不开,不扣"
     if best.sum() < LEVEL_BIAS_MIN_WINDOWS:
-        return np.zeros(2), f"一致的段只有 {int(best.sum())} 段,不扣"
+        return None, f"一致的段只有 {int(best.sum())} 段,不扣"
     for _ in range(3):                                   # 用一致的那些段精解,再按新解收紧了认一遍
         x = fit(best)
         if x is None:
-            return np.zeros(2), "朝向不够多,零偏跟重力分不开,不扣"
+            return None, "朝向不够多,零偏跟重力分不开,不扣"
         res = residual(x)
         fine = min(thr, max(math.radians(LEVEL_BIAS_FINE_DEG), 3 * float(np.median(res[best]))))
         new = res <= fine
@@ -409,8 +438,8 @@ def _imu_bias(U: Any, M: Any) -> tuple[Any, str]:
         best = new
     b = x[3:]
     if math.degrees(float(np.linalg.norm(b))) > LEVEL_BIAS_MAX_DEG:
-        return b, f"零偏估出来 {math.degrees(float(np.linalg.norm(b))):.1f}° 太大,不扣"
-    return b, ""
+        return x, f"零偏估出来 {math.degrees(float(np.linalg.norm(b))):.1f}° 太大,不扣"
+    return x, ""
 
 
 def bag_imu(bag: Path, topic: str = IMU_TOPIC) -> list[tuple[float, float, float, float]]:
