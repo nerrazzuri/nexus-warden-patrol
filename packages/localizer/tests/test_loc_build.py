@@ -127,7 +127,7 @@ def test_打包出版本的文件_上下装都标对_栅格跟定位同一个平
     work, pts = _scene(tmp_path, upside_down)
     out = tmp_path / "out"
     files = B.package(work, out, run=假MOLA(pts), source="bag:t-1")
-    assert sorted(files) == sorted(B.FILES)
+    assert sorted(files) == sorted([*B.FILES, B.LOOK_FILE])   # Top Glove 11-17:显示底图
     assert all((out / f).is_file() for f in files)
     f = Frames.load(out / "frames.json")
     assert f.sensor_in_base == B.FRONT_LIDAR_IN_BASE
@@ -292,14 +292,15 @@ def test_M9_栅格带显示掩码就写_seen_pbm_进文件表_没有就不写(tm
         return G.Grid(image=g.image, origin=g.origin, res=g.res, seen=seen)
     monkeypatch.setattr(G, "render", 带掩码)
     files = B.package(work, tmp_path / "out", run=假MOLA(pts))
-    assert sorted(files) == sorted([*B.FILES, SEEN_FILE])
+    assert sorted(files) == sorted([*B.FILES, SEEN_FILE])        # 换掉的栅格没有底图
     raw = (tmp_path / "out" / SEEN_FILE).read_bytes()
     head = (tmp_path / "out" / "floor.pgm").read_bytes().split(b"\n")[1]
     w, h = (int(v) for v in head.split())
     assert raw.startswith(f"P4\n{w} {h}\n".encode()), "跟 floor.pgm 一样大"
     monkeypatch.undo()
     files = B.package(work, tmp_path / "out2", run=假MOLA(pts))
-    assert sorted(files) == sorted(B.FILES) and not (tmp_path / "out2" / SEEN_FILE).exists()
+    assert sorted(files) == sorted([*B.FILES, B.LOOK_FILE])
+    assert not (tmp_path / "out2" / SEEN_FILE).exists()
 
 
 def test_点云消息按字段偏移取xyz_丢掉NaN():
@@ -482,7 +483,7 @@ def test_有回环工具_跑回环_从回环后的simplemap重出点云先验与
     cli = _lc_tool(tmp_path)
     fake = 假MOLA(pts, closures=3, shift=(0.0, 0.01, 0.0))
     files = B.package(work, tmp_path / "out", run=fake, loop_closure=cli)
-    assert sorted(files) == sorted(B.FILES)
+    assert sorted(files) == sorted([*B.FILES, B.LOOK_FILE])
     [lc] = [c for c in fake.calls if Path(c[0]).name == "mola-sm-lc-cli"]
     assert lc[0] == cli
     assert lc[lc.index("-i") + 1] == str(work / "map.simplemap")
@@ -957,3 +958,8 @@ def test_TG1117_去动态点的诊断_设了环境变量就把每个点的穿过
     assert n > 0 and {k: len(d[k]) for k in ("plane", "passes", "hits", "height", "dynamic")} \
         == dict.fromkeys(("plane", "passes", "hits", "height", "dynamic"), n)
     assert d["plane"].shape == (n, 2) and int(d["scans"]) == 12
+
+
+def test_TG1117_显示底图是契约里的可选文件_老狗老站点不认也不出事():
+    from nexwar_contract.maps import LOOK_FILE, OPTIONAL_FILES
+    assert B.LOOK_FILE == LOOK_FILE == "look.pgm" and LOOK_FILE in OPTIONAL_FILES

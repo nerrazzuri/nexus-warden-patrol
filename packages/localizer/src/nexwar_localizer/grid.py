@@ -189,6 +189,19 @@ MAX_CELLS = 25_000_000
 MAX_RES_M = 0.2
 
 
+# ---- 显示底图(Top Glove 11-17,用户经笔记本:网页上一眼看得出房子,跟竞品那张一样;:func:`render`)
+#: 离当地地面这么高(米)的点画进底图:下沿 15 cm 不画地面本身,上沿 2 m 不画天花板。
+LOOK_BAND_M = (0.15, 2.0)
+#: 一格连同周围 8 格一共不到这么多个点 = 零星孤点,不画。
+LOOK_MIN_PTS = 3
+#: 灰度:扫过、没有东西的白;没扫过的淡灰(不当成能走);有点的从 LOOK_FAINTEST 往 LOOK_DARK 按
+#: 点数的对数变深(最密的 1% 封顶)。
+LOOK_CLEAR = 255
+LOOK_UNSEEN = 232
+LOOK_FAINTEST = 200
+LOOK_DARK = 40
+
+
 class GridTooLarge(ValueError):
     """栅格大到放粗了也装不下(多半是轨迹发散了)。"""
 
@@ -205,6 +218,9 @@ class Grid:
     #: 路沿、绿化岛(2026-11-10,见模块说明):跟 ``image`` 一样大的真假,只标在可通行格上;
     #: 没有是 ``None``。
     curb: np.ndarray | None = None
+    #: 显示底图(Top Glove 11-17,见 :data:`LOOK_BAND_M`):跟 ``image`` 一样大的灰度(uint8);
+    #: 只管显示,规划、狗不读。
+    look: np.ndarray | None = None
 
     def cell_of(self, x: float, y: float) -> tuple[int, int] | None:
         """地图平面上的点在图像里的 (行, 列);出了图是 None。"""
@@ -927,8 +943,12 @@ def render(points: np.ndarray, sensor_traj: np.ndarray, frames: Frames, *, res: 
     curb = _curbs(q, h, ok, lo, (H, W), res, walked)        # 路沿、绿化岛(2026-11-10)
     curb &= ~_dilate(walked, int(round(FOOTPRINT_M / res)))  # 建图时走过的地方留口子
     moved = (occ >= 1) & (ratio <= 0.25)                    # 障碍层里动过的(Top Glove 11-17)
-    curb &= ~_dilate(moved, int(round(CURB_MOVED_PAD_M / res)))
+    moved_near = _dilate(moved, int(round(CURB_MOVED_PAD_M / res)))
+    curb &= ~moved_near
     curb &= img == FREE
+    # 底图:动过的格子不画,但平面图上画成障碍的照画(底图不能比平面图少东西)
+    look = _look(q, h, ok, lo, (H, W), res, moved & (img != OCCUPIED),
+                 (img != UNKNOWN) | seen_only | seen)
     known = (img != UNKNOWN) | seen_only
     if known.any():                                         # 裁到有内容的范围,四周留 5 格
         ys, xs = np.where(known)
@@ -937,10 +957,44 @@ def render(points: np.ndarray, sensor_traj: np.ndarray, frames: Frames, *, res: 
         img = img[y0:y1, x0:x1]
         seen_only = seen_only[y0:y1, x0:x1]
         curb = curb[y0:y1, x0:x1]
+        look = look[y0:y1, x0:x1]
         lo = lo + np.array([x0, y0]) * res
     return Grid(image=np.flipud(img).copy(), origin=(float(lo[0]), float(lo[1])), res=res,
                 seen=np.flipud(seen_only).copy() if seen_only.any() else None, specks=specks,
-                curb=np.flipud(curb).copy() if curb.any() else None)
+                curb=np.flipud(curb).copy() if curb.any() else None, look=np.flipud(look).copy())
+
+
+def _look(q: np.ndarray, h: np.ndarray, ok: np.ndarray, lo: np.ndarray, shape: tuple[int, int],
+          res: float, moved: np.ndarray, scanned: np.ndarray) -> np.ndarray:
+    """显示底图(行从下往上、没裁):见 :data:`LOOK_BAND_M`。``moved``:动过的格子(不画),
+    ``scanned``:扫过的(白底,别的淡灰)。"""
+    H, W = shape
+    band = ok & (h > LOOK_BAND_M[0]) & (h < LOOK_BAND_M[1])
+    c = np.floor((q[band, :2] - lo) / res).astype(int)
+    c = c[(c[:, 0] >= 0) & (c[:, 0] < W) & (c[:, 1] >= 0) & (c[:, 1] < H)]
+    cnt = np.zeros((H, W), np.int64)
+    np.add.at(cnt, (c[:, 1], c[:, 0]), 1)
+    cnt[moved] = 0
+    near = sum(_shifted(cnt, dy, dx) for dy in (-1, 0, 1) for dx in (-1, 0, 1))
+    cnt[near < LOOK_MIN_PTS] = 0
+    out = np.full((H, W), LOOK_UNSEEN, np.uint8)
+    out[scanned] = LOOK_CLEAR
+    has = cnt > 0
+    if has.any():
+        top = max(float(np.percentile(cnt[has], 99)), 1.0)
+        v = np.clip(np.log1p(cnt[has]) / np.log1p(top), 0.0, 1.0)
+        out[has] = np.round(LOOK_FAINTEST - (LOOK_FAINTEST - LOOK_DARK) * v).astype(np.uint8)
+    return out
+
+
+def write_look(grid: Grid, path: Path) -> Path | None:
+    """显示底图写成 PGM 二进制(``P5``),宽高、行序跟 ``floor.pgm`` 一样。没有 → 不写,回 ``None``。"""
+    if grid.look is None:
+        return None
+    path = Path(path)
+    h, w = grid.look.shape
+    path.write_bytes(f"P5\n{w} {h}\n255\n".encode() + grid.look.astype(np.uint8).tobytes())
+    return path
 
 
 def write(grid: Grid, base: Path) -> tuple[Path, Path]:
