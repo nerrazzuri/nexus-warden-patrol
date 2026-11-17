@@ -504,6 +504,19 @@ def test_W75_边走边存关键帧_每帧点云都给它_不受预览限速_存�
     assert bad.bad == 1 and len(g.added) == 2, "关键帧存不了只记一笔,预览照画"
 
 
+def test_现场关键帧_IMU比力交给关键帧记下_坏的只丢一条():
+    """11-18:站点上从关键帧打包要按 IMU 摆平(Top Glove 那种场地),边走边存时把比力记下来。"""
+    got = []
+    kf = _KF()
+    kf.on_imu = lambda *v: got.append(v)
+    h = L.Handlers(L.Feeder(_Grid()), decode_cloud=lambda raw: np.ones((8, 3)), keyframes=kf)
+    ns = types.SimpleNamespace
+    h.on_imu(ns(header=ns(stamp=ns(sec=100, nanosec=500_000_000)),
+                linear_acceleration=ns(x=0.1, y=-0.2, z=9.8)))
+    h.on_imu(object())
+    assert got == [(100.5, 0.1, -0.2, 9.8)] and h.bad == 1
+
+
 def test_W75_记下机器人自己的里程朝向_核手性用(tmp_path):
     h = L.Handlers(L.Feeder(_Grid()), decode_cloud=lambda raw: np.ones((8, 3)),
                    keyframes=_KF(), now=lambda: 50.5)

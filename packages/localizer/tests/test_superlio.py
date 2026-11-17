@@ -571,6 +571,82 @@ def test_TG1117_姿态漂了4度_按IMU重力摆平_高度回到平的_姿态回
     assert [p[0] for p in out] == [p[0] for p in poses]
 
 
+def _rows(path: Path, cols: int = 8) -> np.ndarray:
+    return np.array([[float(c) for c in ln.split()[:cols]]
+                     for ln in path.read_text().splitlines()])
+
+
+def _live_drifted(kd: Path, *, with_imu: bool = True) -> tuple[list[S.Pose], list, list]:
+    """现场边走边存(W75):漂了 4° 的那一趟,位姿、点云、IMU 都按到的顺序喂;``with_imu`` 关掉 = 老版本
+    预览(不记 IMU)。外参跟机器人上一样取参数文件里的。"""
+    poses, imu = _drifted()
+    clouds = [(1000.0 + k * 0.1, k) for k in range(1198)]
+    R, t = S.extrinsic(S.DEFAULT_CONFIG)
+    live = S.LiveKeyframes(S.Keyframer(kd, R, t, _cloud), log=kd / "lio.tum",
+                           imu_log=kd / S.IMU_FILE if with_imu else None)
+    ii = 0
+    for p, (ts, k) in zip(poses, clouds + [(None, None)] * 2, strict=False):
+        while ii < len(imu) and imu[ii][0] <= p[0]:
+            live.on_imu(*imu[ii])
+            ii += 1
+        live.on_pose(*p)
+        if ts is not None:
+            live.on_scan(ts, k)
+    n = live.close()
+    (kd / S.LIVE_FILE).write_text(json.dumps({**n, "clock_offset_s": 0.0, "odom": []}))
+    return poses, imu, clouds
+
+
+def test_现场关键帧_IMU另记一份_最多每秒100条(tmp_path):
+    live = S.LiveKeyframes(S.Keyframer(tmp_path, np.eye(3).tolist(), (0, 0, 0), _cloud),
+                           imu_log=tmp_path / S.IMU_FILE)
+    for k in range(400):                                     # 200 Hz 来 2 s
+        live.on_imu(1000.0 + k * 0.005, 0.1, 0.2, 9.8)
+    live.close()
+    rows = _rows(tmp_path / S.IMU_FILE, 4)
+    assert 190 <= len(rows) <= 201 and np.allclose(rows[0], [1000.0, 0.1, 0.2, 9.8])
+
+
+def test_现场关键帧_漂了4度_打包时按记下的IMU摆平_跟录包那条路一样(tmp_path):
+    """11-18:站点上从边走边存的关键帧打包(客户自己建图走的这条)原来不摆平 —— Top Glove 那种场地
+    客户自己建出来还是歪 4°。打包时拿记下的 IMU 摆平,关键帧和轨迹的位姿按摆平后的重写,点云不动。"""
+    kd = tmp_path / "kf-live"
+    poses, imu, clouds = _live_drifted(kd)
+    R, t = S.extrinsic(S.DEFAULT_CONFIG)
+    lv_poses, _ = S.level(S.clean(poses), S.read_imu(kd / S.IMU_FILE))
+    S.make_keyframes(lv_poses, clouds, tmp_path / "want", R, t, _cloud)
+    run = _Run()
+    info = S.prepare_live(tmp_path / "w", kd, cfg=S.DEFAULT_CONFIG, root=Path("/opt/x"),
+                          prior_pipeline=Path("/p.yaml"), run=run)
+    assert run.cmds[0][1] == str(tmp_path / "w/kf"), "摆平了:用改过位姿的那份关键帧"
+    traj, want = _rows(tmp_path / "w/traj.tum"), _rows(tmp_path / "want/traj.tum")
+    assert traj.shape == want.shape and np.abs(traj - want).max() < 1e-5
+    got = _rows(tmp_path / "w/kf/index.txt")                 # 取哪几帧照现场取的,位姿对上
+    at = {round(r[0], 6): r for r in want}
+    assert np.abs(np.array([at[round(r[0], 6)] for r in got]) - got).max() < 1e-5
+    names = [ln.split()[-1] for ln in (tmp_path / "w/kf/index.txt").read_text().splitlines()]
+    assert all((tmp_path / "w/kf" / nm).read_bytes() == (kd / "kf" / nm).read_bytes()
+               for nm in names)
+    assert _rows(kd / "kf/index.txt").shape == got.shape and \
+        np.abs(_rows(kd / "kf/index.txt") - got).max() > 0.5, "站点那份原料不改"
+    saved = json.loads((tmp_path / "w/mola.json").read_text())
+    assert saved["level"]["applied"] and 3.0 < saved["level"]["max_deg"] < 5.0
+    z = got[:, 3]
+    assert z.max() - z.min() < 0.3, f"摆平后关键帧高低差 {z.max() - z.min():.2f} m"
+    assert info["quality"] == saved["quality"]
+
+
+def test_现场关键帧_老版本没记IMU_照旧打包_写明没摆平(tmp_path):
+    kd = tmp_path / "kf-live"
+    _live_drifted(kd, with_imu=False)
+    run = _Run()
+    S.prepare_live(tmp_path / "w", kd, cfg=S.DEFAULT_CONFIG, root=Path("/opt/x"),
+                   prior_pipeline=Path("/p.yaml"), run=run)
+    assert run.cmds[0][1] == str(kd / "kf")
+    saved = json.loads((tmp_path / "w/mola.json").read_text())
+    assert saved["level"]["applied"] is False and "IMU" in saved["level"]["why"]
+
+
 def test_TG1117_没漂_摆平不改():
     poses, imu = _drifted(deg=0.0)
     out, info = S.level(poses, imu)

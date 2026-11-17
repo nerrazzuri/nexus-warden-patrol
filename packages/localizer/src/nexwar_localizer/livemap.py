@@ -425,6 +425,14 @@ class Handlers:
         if all(math.isfinite(c) for c in row):
             self.odom.append(row)
 
+    def on_imu(self, m: Any) -> None:
+        """IMU 比力交给关键帧另记(站点上打包时按它摆平;11-18)。"""
+        try:
+            s, a = m.header.stamp, m.linear_acceleration
+            self.kf.on_imu(s.sec + s.nanosec * 1e-9, a.x, a.y, a.z)
+        except Exception as exc:  # noqa: BLE001
+            self._bad("IMU", exc)
+
     def on_pose(self, m: Any) -> None:
         try:
             s, p, o = m.header.stamp, m.pose.pose.position, m.pose.pose.orientation
@@ -491,6 +499,8 @@ def main(argv: Sequence[str] | None = None) -> int:
                     help="位姿是 Super-LIO 的(IMU 位姿、帧末时刻;工单 21)")
     ap.add_argument("--keyframes", type=Path, default=None,
                     help="W75:边走边存关键帧到这个目录(要 --superlio)")
+    ap.add_argument("--imu-topic", default="",
+                    help="存关键帧时一起记 IMU 比力(站点上打包摆平用;缺省跟 Super-LIO 同一个)")
     ap.add_argument("--odom-topic", default="/odom/mc_odom",
                     help="机器人自己的里程(存关键帧时一起记朝向,核手性用)")
     a = ap.parse_args(argv)
@@ -503,7 +513,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     from rclpy.executors import SingleThreadedExecutor
     from rclpy.qos import HistoryPolicy, QoSProfile, ReliabilityPolicy
     from rclpy.serialization import deserialize_message
-    from sensor_msgs.msg import PointCloud2
+    from sensor_msgs.msg import Imu, PointCloud2
 
     from nexwar_localizer.build import cloud_xyz
 
@@ -520,7 +530,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             kf = superlio.LiveKeyframes(
                 superlio.Keyframer(a.keyframes, ext[0], ext[1], decode,
                                    voxel=superlio.KF_VOXEL_M),
-                log=a.keyframes / "lio.tum")
+                log=a.keyframes / "lio.tum", imu_log=a.keyframes / superlio.IMU_FILE)
     else:
         feeder = Feeder(grid)
     snaps = Snapshots(a.out, run=a.run)
@@ -549,6 +559,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     node.create_subscription(Odometry, a.pose_topic, h.on_pose, pose_qos)
     if kf is not None:
         node.create_subscription(Odometry, a.odom_topic, h.on_odom, pose_qos)
+        node.create_subscription(Imu, a.imu_topic or superlio.IMU_TOPIC, h.on_imu,
+                                 QoSProfile(depth=200, history=HistoryPolicy.KEEP_LAST,
+                                            reliability=ReliabilityPolicy.BEST_EFFORT))
     # 一个执行器反复用(全局的那个每次 spin_once 都要加、摘节点;内审小 4)
     ex = SingleThreadedExecutor()
     ex.add_node(node)
