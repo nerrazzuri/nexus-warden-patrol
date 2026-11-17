@@ -339,6 +339,9 @@ async def run_case(case: dict[str, Any], *, sim_cap_s: float) -> dict[str, Any]:
         view = ObstacleView(monotonic=c.s)
         if os.environ.get("NAVPATROL_BAND"):             # 对照实验用(strict / legacy);默认 strict
             view.band_policy = os.environ["NAVPATROL_BAND"]
+        if os.environ.get("NAVPATROL_SEAL_R"):           # sealed 看多大一圈(对照实验用)
+            from nexwar_agent import obstacles as _obs
+            _obs.SEAL_R = float(os.environ["NAVPATROL_SEAL_R"])
         nav.obstacles = view
         nav.guard = ObstacleGuard()
         events: list[tuple[float, str, dict]] = []
