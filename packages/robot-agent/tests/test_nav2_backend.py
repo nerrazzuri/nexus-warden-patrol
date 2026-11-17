@@ -2213,3 +2213,77 @@ async def test_外审1114_RPP也放弃了_从这儿重新查路线再走_两次�
     await t.跑(1.0)
     assert len(link.kinds("plan")) == plans0 + 2
     assert NavStatus.FAILED in t.status or t.nav._man is not None, "最后按原来的失败处理"
+
+
+# ---------------------------------------- 走廊里掉头(用户 11-17,真实巡逻仿真「绕路」)
+
+
+def _两米走廊():
+    """y = 4 为中心、宽 2.0 m 的长走廊,两头不封。"""
+    return [(0.1, 0.1, 15.0, 3.0), (0.1, 5.0, 15.0, 7.9)]
+
+
+async def _走着_Nav2改成往回走(t, link, *, ahead_s=6.0):
+    """Nav2 先往前开 ``ahead_s`` 秒,然后新路线往身后(前面被堵)、边倒车边转(MPPI 常这么干)。"""
+    await t.start(2.0, 4.0, 0.0)
+    await t.nav.goto(Pose.from_xy_yaw(12.0, 4.0, 0.0))
+    gid = link.kinds("goal")[-1]["goal_id"]
+    for _ in range(int(ahead_s / 0.1)):
+        link.plan = (gid, ((t.r.x, 4.0), (12.0, 4.0)))   # Nav2 的路线从机器人脚下起
+        link.now = t.c.s()
+        link.cmd = (link.now, 0, 0.3, 0.0, 0.0, gid, "ctl")
+        await t.一拍()
+    x0 = t.r.x
+    link.plan = (gid, tuple((x0 - d, 4.0) for d in (0.0, 0.5, 1.0, 2.0, 4.0)))
+    return gid, x0
+
+
+async def test_走廊里Nav2路线调头_代理接过来原地掉头_转过来再交回Nav2_不撞(tmp_path):
+    """用户 11-17:2 m 走廊前面被堵,Nav2 改走身后那条 —— 它边倒车边转、被守卫拦、两侧记忆过期,
+    最后横在走廊里动不了。路线一调头代理就接过来,趁两侧刚看过原地转过去,再交回 Nav2。"""
+    link = 假转接()
+    t = _台(tmp_path, link, walls=_两米走廊())
+    gid, x0 = await _走着_Nav2改成往回走(t, link)
+    assert x0 > 3.0, x0
+    for _ in range(150):
+        link.now = t.c.s()
+        cur = link.kinds("goal")[-1]["goal_id"]
+        link.cmd = (link.now, 0, -0.1, 0.0, 0.5, cur, "ctl") if cur == gid else None
+        await t.一拍()
+        if len(link.kinds("goal")) >= 2:
+            break
+    assert [d for k, d in t.events if k == "nav_uturn"], t.events
+    assert len(link.kinds("goal")) >= 2, "转过来以后重新交给 Nav2"
+    assert abs(math.remainder(t.r.yaw - math.pi, 2 * math.pi)) < math.radians(30), t.r.yaw
+    assert not t.crashed
+    assert NavStatus.FAILED not in t.status
+
+
+async def test_刚出发_目标在身后_不算掉头_照常交给Nav2(tmp_path):
+    """出发时就在身后的归原来那套(Nav2 自己转、死巷先倒出来);只接「走着走着路线调头」的。"""
+    link = 假转接()
+    t = _台(tmp_path, link, walls=_两米走廊())
+    await t.start(8.0, 4.0, 0.0)
+    await t.nav.goto(Pose.from_xy_yaw(2.0, 4.0, math.pi))
+    gid = link.kinds("goal")[-1]["goal_id"]
+    link.plan = (gid, ((8.0, 4.0), (6.0, 4.0), (2.0, 4.0)))
+    for _ in range(20):
+        link.now = t.c.s()
+        link.cmd = (link.now, 0, 0.0, 0.0, 0.5, gid, "ctl")
+        await t.一拍()
+    assert not [d for k, d in t.events if k == "nav_uturn"], t.events
+    assert len(link.kinds("goal")) == 1
+
+
+async def test_掉头每个目标最多接两回(tmp_path):
+    from nexwar_agent.bridges import nav2_nav
+    link = 假转接()
+    t = _台(tmp_path, link, walls=_两米走廊())
+    await _走着_Nav2改成往回走(t, link)
+    t.nav._uturns = nav2_nav.UTURN_MAX
+    gid = link.kinds("goal")[-1]["goal_id"]
+    for _ in range(10):
+        link.now = t.c.s()
+        link.cmd = (link.now, 0, 0.0, 0.0, 0.5, gid, "ctl")
+        await t.一拍()
+    assert not [d for k, d in t.events if k == "nav_uturn"], t.events
