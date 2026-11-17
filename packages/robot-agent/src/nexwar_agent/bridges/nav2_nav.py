@@ -227,6 +227,18 @@ MANEUVER_CLEAR_M = 0.03
 MANEUVER_LOOK_M = 1.0
 #: 脱困动作每一拍发速度前,按这个速度往前推这么久(秒)查整个车身扫过的范围(外审 POC r1 C2)
 REC_SWEEP_S = 1.0
+#: 走廊里掉头(用户 11-17,真实巡逻仿真「绕路」):走着走着 Nav2 的路线调头(前面被堵改走身后那条,
+#: 路线上 :data:`MANEUVER_LOOK_M` 外那一点在身后 :data:`UTURN_RAD` 以外)—— Nav2 会边倒车边转,被守卫
+#: 拦、两侧盲带的记忆过期,最后横在走廊里动不了。代理马上接过来,趁两侧刚看过按「自己挪」原地转过去
+#: (守卫、地图墙照样管),转过来再交回 Nav2。这个目标出发以后挪了 :data:`UTURN_AFTER_M` 才算「走着」
+#: (出发时就在身后的归原来那套);离终点 :data:`UTURN_GOAL_M` 以内不接(到点转朝向归只差朝向那套);
+#: 每个目标最多 :data:`UTURN_MAX` 回,接过一回要再挪 :data:`UTURN_AFTER_M` 才能接下一回。
+UTURN_RAD = math.radians(110.0)
+UTURN_AFTER_M = 1.0
+UTURN_GOAL_M = 1.5
+UTURN_MAX = 2
+#: 路线第一个点离机器人这么近(米)才算是从这儿新规划的(Nav2 约 1 Hz 从脚下重规划;远的是旧路线)。
+UTURN_PLAN_NEAR_M = 0.5
 #: 沿原路倒退:记最近 :data:`TRAIL_KEEP_M` 走过的路(每 :data:`TRAIL_STEP_M` 一个点;一拍跳过
 #: :data:`TRAIL_JUMP_M` 是定位跳了,清掉重记),退 :data:`RETREAT_M`(原路不到 :data:`RETREAT_MIN_M`
 #: 不退),:data:`RETREAT_MPS` 倒着走,跟原路按前瞻 :data:`RETREAT_LOOK_M` 走;
@@ -364,6 +376,8 @@ class Nav2NavBackend(PlannedNavBackend):
         self._look: dict[str, Any] | None = None
         self._look_tries = 0
         self._look_at = (0.0, 0.0)
+        self._uturns = 0                                   # 这个目标接过几回掉头
+        self._ut_from: tuple[float, float] | None = None   # 从这儿挪够了才能接下一回
         self._turn_err: float | None = None                # 上一拍原地转的误差(看转没转过头)
         self._turn_blocked_at: float | None = None         # 只差朝向的原地转从什么时候起被挡(W70)
         self._near_best: float | None = None               # 进了终点半米以后最近到过多近(W70)
@@ -600,6 +614,7 @@ class Nav2NavBackend(PlannedNavBackend):
         self._rec_level, self._rec_at, self._man, self._back = 0, None, None, None
         self._rec_tried = set()
         self._rechecks = 0
+        self._uturns, self._ut_from = 0, (here.x, here.y) if here is not None else None
         self._osc.clear()
         self._prog_reset()                                 # W72:新目标,进展从头算
         if here is not None:
@@ -981,6 +996,10 @@ class Nav2NavBackend(PlannedNavBackend):
             return
         if tgt is not None and await self._near_stalled(here, tgt, dt_s):
             return
+        if tgt is not None and self._uturn_due(here, tgt):
+            self._start_uturn(here)
+            await self._man_step(here, dt_s)
+            return
         if tgt is not None:
             self._watch_progress(here, tgt)
             if await self._recover_check(here, tgt, dt_s):
@@ -1212,6 +1231,40 @@ class Nav2NavBackend(PlannedNavBackend):
             return tgt.yaw
         return math.atan2(tgt.position.y - here.y, tgt.position.x - here.x)
 
+    def _uturn_want(self, here: Any) -> float | None:
+        """Nav2 这个目标的路线上 :data:`MANEUVER_LOOK_M` 外那一点的方向;没有回 None。"""
+        plan = getattr(self.link, "plan", None) if self.link is not None else None
+        if not plan or plan[0] != self._nav2_goal or not plan[1] \
+                or math.dist(plan[1][0], (here.x, here.y)) > UTURN_PLAN_NEAR_M:
+            return None
+        for x, y in plan[1]:
+            if math.dist((x, y), (here.x, here.y)) >= MANEUVER_LOOK_M:
+                return math.atan2(y - here.y, x - here.x)
+        return None
+
+    def _uturn_due(self, here: Any, tgt: Any) -> bool:
+        if self._uturns >= UTURN_MAX or self._ut_from is None \
+                or math.dist((here.x, here.y), self._ut_from) < UTURN_AFTER_M \
+                or math.dist((here.x, here.y), (tgt.position.x, tgt.position.y)) <= UTURN_GOAL_M:
+            return False
+        want = self._uturn_want(here)
+        return want is not None and abs(math.remainder(want - here.yaw, 2 * math.pi)) >= UTURN_RAD
+
+    def _start_uturn(self, here: Any) -> None:
+        want = self._uturn_want(here)
+        assert want is not None
+        self._uturns += 1
+        self._ut_from = (here.x, here.y)
+        self._cancel_nav2()
+        self._man = {"want": want, "t0": self._secs(), "steps": 0, "cur": None, "level": 0,
+                     "why": "路线调头", "fail": None, "last": None, "kind": "uturn"}
+        log.info("Nav2 的路线调头(要往 %.0f°,现在 %.0f°):代理接过来原地掉头(第 %d 回),转过来再交回",
+                 math.degrees(want), math.degrees(here.yaw), self._uturns)
+        if self.on_event is not None:
+            self.on_event("nav_uturn", {"x": round(here.x, 2), "y": round(here.y, 2),
+                                        "want_deg": round(math.degrees(want)),
+                                        "yaw_deg": round(math.degrees(here.yaw))})
+
     def _start_maneuver(self, here: Any, why: str, *, level: int,
                         fail: tuple[str, str] | None = None) -> None:
         self._rec_tried.add("maneuver")
@@ -1262,8 +1315,9 @@ class Nav2NavBackend(PlannedNavBackend):
         self._man = None
         await self._send(0.0, 0.0, dt_s)
         took = now - m["t0"]
-        self._step_event(m["level"], "maneuver", ok, here, m["why"], took)
-        self._rec_at = now
+        if m.get("kind") != "uturn":                       # 掉头不是恢复链的一级
+            self._step_event(m["level"], "maneuver", ok, here, m["why"], took)
+            self._rec_at = now
         if ok:
             log.info("自己挪完了(%.0f 秒,%d 步,朝向 %.0f°):交回 Nav2", took, m["steps"],
                      math.degrees(here.yaw))
