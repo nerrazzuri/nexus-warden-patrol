@@ -425,6 +425,7 @@ class AnbotPayload:
         self._speech: asyncio.Task[None] | None = None
         self._open_error = ""
         self._next_register = 0.0
+        self._link_state: str | None = None           # 上次报的竞品连接状态(变了写日志)
 
     # 能力
 
@@ -860,13 +861,29 @@ class AnbotPayload:
         from nexwar_contract.devices import device
         why = self._why_down(self._strobe) or self._why_down(self._voice)
         if self._open_error or not all(p.registered for p in (self._strobe, self._voice)):
-            return [device("link:anbot", "offline", why)]
-        if why:
-            return [device("link:anbot", "degraded", why)]
-        # POC 11-06:云台、雨刷是附带的,没连上不算降级,说一声
-        extra = "" if self._ptz.connections() and self._wiper.connections() else \
-            ";云台、雨刷程序还没连上"
-        return [device("link:anbot", "online", "竞品主控上的警灯、播音程序都连上了" + extra)]
+            state = "offline"
+        elif why:
+            state = "degraded"
+        else:
+            # POC 11-06:云台、雨刷是附带的,没连上不算降级,说一声
+            state = "online"
+            why = "竞品主控上的警灯、播音程序都连上了" + (
+                "" if self._ptz.connections() and self._wiper.connections() else
+                ";云台、雨刷程序还没连上")
+        self._note_link(state, why)
+        return [device("link:anbot", state, why)]
+
+    def _note_link(self, state: str, why: str) -> None:
+        """Top Glove 11-17 断网复测:状态只在设备状态里变、日志里一行没有。变了写一行
+        (第一次只记下)。"""
+        prev, self._link_state = self._link_state, state
+        if prev is None or prev == state:
+            return
+        text = {"online": "在线", "degraded": "降级", "offline": "离线"}
+        if state == "online":
+            log.info("竞品连接恢复:%s → 在线(%s)", text.get(prev, prev), why)
+        else:
+            log.warning("竞品连接%s → %s:%s", text.get(prev, prev), text.get(state, state), why)
 
 
 def load_payload(path: str | Path,
