@@ -57,7 +57,8 @@ def frame(w: float, h: float) -> list[dict[str, Any]]:
 def person(name: str, path: list, speed: float, *, mode: str = "pingpong",
            start: dict | None = None) -> dict[str, Any]:
     return {"name": name, "kind": "person", "sx": 0.45, "sy": 0.45, "h": 1.7, "speed": speed,
-            "mode": mode, "path": [list(p) for p in path], "start": start or {"at_s": 0.0}}
+            "mode": mode, "path": [list(p) for p in path], "start": start or {"at_s": 0.0},
+            "yields": True, "vanish": mode == "once"}
 
 
 def vehicle(name: str, path: list, speed: float, *, along_x: bool, size=(4.5, 1.9),
