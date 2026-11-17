@@ -385,6 +385,10 @@ class Nav2NavBackend(PlannedNavBackend):
     def __init__(self, *a: Any, link: Any = None, **kw: Any) -> None:
         kw.setdefault("robot_radius_m", FALLBACK_RADIUS_M)
         super().__init__(*a, **kw)
+        #: 外审 11-17 I1:这个点朝向不要紧(引擎每次 goto 前按点位动作设;默认要紧 = 不许放宽)
+        self.yaw_free = False
+        #: 这一趟终点朝向放宽了:(要的°, 实际的°),引擎写进这个点的结果;没放宽是 None
+        self.yaw_relaxed: tuple[int, int] | None = None
         #: 转接服务端(:class:`~nexwar_agent.navbridge.NavBridgeServer`);``None`` = 没配,
         #: 永远退回自己的规划。
         self.link = link
@@ -543,6 +547,7 @@ class Nav2NavBackend(PlannedNavBackend):
         if self.nogo_at(pose.position.x, pose.position.y) is not None:
             raise NavRequestError(op, "终点在禁行区里")
         self.fallback_reason = ""
+        self.yaw_relaxed = None
         self._turn_only = None
         self._look, self._look_tries = None, 0
         self._turn_err = None
@@ -758,8 +763,10 @@ class Nav2NavBackend(PlannedNavBackend):
 
     async def _relaxed_yaw(self, here: Any, pose: Pose, got: Any,
                            op: str) -> tuple[Pose, Any] | None:
-        """照要的朝向查不过(或只能靠局部搜索):朝开进去的方向直着能过就改成这个(:data:`GOAL_YAW_RELAX_RAD`)。"""
-        if got.status == "unchecked" or (got.ok and not got.path):
+        """照要的朝向查不过(或只能靠局部搜索):朝开进去的方向直着能过就改成这个(:data:`GOAL_YAW_RELAX_RAD`)。
+        只在引擎说这个点朝向不要紧(:attr:`yaw_free`,不拍照、不看云台、没检查项)时放宽
+        (外审 11-17 I1)。"""
+        if not self.yaw_free or got.status == "unchecked" or (got.ok and not got.path):
             return None
         pts = getattr(self, "_plan_poses", None) or []
         gx, gy = pose.position.x, pose.position.y
@@ -783,6 +790,7 @@ class Nav2NavBackend(PlannedNavBackend):
         log.warning("%s:终点要朝 %.0f° 那儿转不过来(%s),改成朝开进去的方向 %.0f° 到点", op,
                     math.degrees(pose.yaw), got.why[:80] if not got.ok else "只能靠局部搜索的路",
                     math.degrees(h))
+        self.yaw_relaxed = (round(math.degrees(pose.yaw)), round(math.degrees(h)))
         if self.on_event is not None:
             self.on_event("goal_yaw_relaxed", {"x": round(gx, 2), "y": round(gy, 2),
                                                "want_deg": round(math.degrees(pose.yaw)),

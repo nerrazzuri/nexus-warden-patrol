@@ -200,6 +200,16 @@ class EngineBusy(RuntimeError):
     """已经有一趟在跑了。"""
 
 
+#: 这些动作 / 有检查项的点朝向要紧,导航不许放宽终点朝向(外审 11-17 I1)
+YAW_ACTIONS = ("photo", "head")
+
+
+def _tell_yaw_free(nav: Any, wp: Any) -> None:
+    """告诉导航这个点的朝向要不要紧(导航没这个开关的不管)。"""
+    if hasattr(nav, "yaw_free"):
+        nav.yaw_free = not (wp.check or any(a.type in YAW_ACTIONS for a in wp.actions))
+
+
 @dataclass(frozen=True, slots=True)
 class WaypointResult:
     name: str
@@ -1274,6 +1284,7 @@ class MissionEngine(EventEmitter[RunSnapshot]):
                 log.info("去这个点 (%.2f, %.2f, %.2f) 第 %d 次", wp.pose.position.x,
                          wp.pose.position.y, wp.pose.yaw, tried + 1)
                 try:
+                    _tell_yaw_free(self._nav, wp)
                     await self._nav.goto(wp.pose)
                 except NavNotLocalizedError as exc:
                     # 没有可信定位(W10 外审 3):走定位恢复 —— 停车、重定位、等恢复,然后重试当前点
@@ -1296,8 +1307,11 @@ class MissionEngine(EventEmitter[RunSnapshot]):
                 log.info("到了 用时 %.1f s(这一次 %.1f s)", self._clock() - started,
                          self._clock() - attempt_started)
                 await self._do_actions(wp)
+                relaxed = getattr(self._nav, "yaw_relaxed", None)
                 return WaypointResult(wp.name, True, arrived_ms,
-                                      self._clock() - started, tuple(live.photos))
+                                      self._clock() - started, tuple(live.photos),
+                                      (f"终点朝向放宽:要 {relaxed[0]}°,转不过来,按开进去的方向 "
+                                       f"{relaxed[1]}° 到点" if relaxed else ""))
             except _RetryWaypoint:
                 continue                     # 暂停后继续,不算一次重试
             except _FailWaypoint as exc:
