@@ -773,7 +773,11 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     URGENT["on"] = a.urgent
     import logging
-    logging.disable(logging.WARNING)
+    if os.environ.get("NAVPATROL_AGENTLOG"):                # 回放用:代理日志写到文件
+        logging.basicConfig(filename=os.environ["NAVPATROL_AGENTLOG"], level=logging.INFO,
+                            format="%(relativeCreated)9.0f %(name)s %(message)s")
+    else:
+        logging.disable(logging.WARNING)
     from nexwar_agent.bridges.nav2_nav import Nav2NavBackend as _N2
     if a.no_wall_alt:
         _N2._wall_alt = lambda self, *x: None                 # 对照:墙边不试更慢更急的弯
