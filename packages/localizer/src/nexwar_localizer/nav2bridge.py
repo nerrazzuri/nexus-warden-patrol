@@ -98,6 +98,25 @@ def _stamp_ms(st: Any) -> int:
     return int(st.sec) * 1000 + int(st.nanosec) // 1_000_000
 
 
+#: 照走的路两点之间最多这么远(代理压缩过的直线段在这里插回去)
+PATH_STEP_M = 0.05
+
+
+def dense_path(path: Any, step: float = PATH_STEP_M) -> list[tuple[float, float, float]]:
+    """``goal.path`` 的点 → 两点之间不超过 ``step``:朝向一样的直线段按直线插点(朝向不变);
+    朝向不一样的(原地转、拐点)原样不动。"""
+    pts = [(float(x), float(y), float(yaw)) for x, y, yaw in path]
+    out = pts[:1]
+    for (ax, ay, ayaw), b in zip(pts, pts[1:], strict=False):
+        d = math.hypot(b[0] - ax, b[1] - ay)
+        if ayaw == b[2] and d > step:
+            n = math.ceil(d / step - 1e-9)
+            out += [(ax + (b[0] - ax) * i / n, ay + (b[1] - ay) * i / n, ayaw)
+                    for i in range(1, n)]
+        out.append(b)
+    return out
+
+
 def _yaw_q(yaw: float) -> tuple[float, float, float, float]:
     return (0.0, 0.0, math.sin(yaw / 2), math.cos(yaw / 2))
 
@@ -703,13 +722,14 @@ class Nav2Bridge:
         via = [(float(x), float(y)) for x, y in m.get("via") or []]
         path = m.get("path") or []
         if path:
-            # 外审 11-14:控制器照这条查过的路走。一个点不少(已经 ≤ 5 cm 一个,原地转也拆开了)
+            # 外审 11-14:控制器照这条查过的路走。一个点不少;代理去掉了直线中间的点(外审 11-17 I4,
+            # 太长时)就按 5 cm 插回去
             from nav_msgs.msg import Path
             goal = self._m["FollowPath"].Goal()
             goal.path = Path()
             goal.path.header.frame_id = "map"
             goal.path.header.stamp = self._stamp(self.t_ms)
-            goal.path.poses = [self._pose(float(x), float(y), float(yaw)) for x, y, yaw in path]
+            goal.path.poses = [self._pose(x, y, yaw) for x, y, yaw in dense_path(path)]
             goal.controller_id = str(m.get("controller") or "FollowPath")
             goal.goal_checker_id = "general_goal_checker"
             client, name = self.follow, "跟路"

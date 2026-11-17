@@ -276,6 +276,8 @@ RETREAT_ROUTE_M = 2.5
 #: 照查过的路走时交给哪个控制器(params.yaml 里跟紧路线的那套 MPPI,仿真 11-15 跟路试验 T2);
 #: 它放弃了照旧换 RPP 跟同一条。
 PATH_CONTROLLER = "FollowTight"
+_TOO_LONG = (f"查过的路太长(去掉直线中间的点还超过 {MAX_GOAL_PATH} 个位姿),不交出去照走;"
+             "把这个点拆成几段(中间加点)")
 RETREAT_MIN_M = 0.5
 RETREAT_MPS = 0.2
 RETREAT_LOOK_M = 0.4
@@ -615,6 +617,11 @@ class Nav2NavBackend(PlannedNavBackend):
                 if alt is None:
                     raise NavRequestError(op, got.why, code=got.code, final=True)
                 got = alt
+        wire = None
+        if got is not None and got.ok and got.path:
+            wire = _wire_path(got.path)
+            if wire is None:
+                raise NavRequestError(op, _TOO_LONG, code="goal_unreachable", final=True)
         self._goal_id += 1
         self._nav2_goal = self._goal_id if backout is None else None
         self._goal_from = (here.x, here.y) if here is not None else None
@@ -622,10 +629,10 @@ class Nav2NavBackend(PlannedNavBackend):
         self.link.cmd = None                 # 外审 R7:上一个目标晚到的速度不许驱动这一个
         msg: dict[str, Any] = {"type": "goal", "goal_id": self._goal_id, "x": pose.position.x,
                                "y": pose.position.y, "yaw": pose.yaw}
-        if got is not None and got.ok and got.path:
+        if wire is not None:
             # 外审 11-14:路线靠局部搜索放行 —— 让控制器照这条查过的路走,不让 Smac 另规划
             # (有路网时查的就是沿途经点那条,拼好的路已经沿着路网走)
-            msg["path"] = _wire_path(got.path)
+            msg["path"] = wire
             msg["controller"] = PATH_CONTROLLER
             log.info("%s:路线靠局部搜索放行(最窄处剩 %.2f m),照查过的这条走(%d 个位姿)", op,
                      got.margin, len(msg["path"]))
@@ -1703,7 +1710,12 @@ class Nav2NavBackend(PlannedNavBackend):
                 return
             got = alt
         if got.ok and got.path:
-            msg["path"] = _wire_path(got.path)
+            wire = _wire_path(got.path)
+            if wire is None:
+                self.fail_final = True
+                await self._fail(_TOO_LONG, code="goal_unreachable")
+                return
+            msg["path"] = wire
             msg["controller"] = PATH_CONTROLLER
         self._goal_msg = msg
         self._goal_from = (here.x, here.y)
@@ -1804,7 +1816,8 @@ class Nav2NavBackend(PlannedNavBackend):
         tgt = self._target
         msg0 = getattr(self, "_goal_msg", None)
         if msg0 is not None and msg0.get("path"):
-            if msg0.get("controller") != "RPP":
+            if msg0.get("controller") != "RPP" and not _has_reverse(msg0["path"]):
+                # 外审 11-17 I3:RPP 不许倒车、会原地转过来正着走 —— 带倒车段的路不换它,直接重查
                 # 跟行为树里 MPPI 走不动换 RPP 一样(导航 V1 第 4 步),跟的还是这条查过的路
                 log.warning("照查过的路走:MPPI 放弃了(%s),换 RPP 跟同一条", raw)
                 self._goal_msg = {**msg0, "controller": "RPP"}
@@ -2251,10 +2264,36 @@ class Nav2NavBackend(PlannedNavBackend):
                                           "waited_s": round(now - self._guard_since, 1)})
 
 
-def _wire_path(path: Any) -> list[list[float]]:
-    """查过的路 → ``goal.path``(协议 6):取三位小数;太长就等间隔挑(头尾都留)。"""
+def _wire_path(path: Any) -> list[list[float]] | None:
+    """查过的路 → ``goal.path``(协议 7):取三位小数。太长(> :data:`MAX_GOAL_PATH`)只去掉直着走、
+    朝向不变、正好在线上的中间点(转接节点按 5 cm 插回去,几何一样);倒车段、原地转、拐点一个不删。
+    压完还超:回 None,不交(外审 11-17 I4:原来等间隔抽点会删掉倒车段和转向点)。"""
     pts = [[round(float(x), 3), round(float(y), 3), round(float(yaw), 4)] for x, y, yaw in path]
-    if len(pts) > MAX_GOAL_PATH:
-        k = (len(pts) - 1) / (MAX_GOAL_PATH - 1)
-        pts = [pts[round(i * k)] for i in range(MAX_GOAL_PATH)]
-    return pts
+    if len(pts) <= MAX_GOAL_PATH:
+        return pts
+    keep = [pts[0]]
+    for i in range(1, len(pts) - 1):
+        if not _straight_middle(keep[-1], pts[i], pts[i + 1]):
+            keep.append(pts[i])
+    keep.append(pts[-1])
+    return keep if len(keep) <= MAX_GOAL_PATH else None
+
+
+def _straight_middle(a: list[float], b: list[float], c: list[float]) -> bool:
+    """``b`` 夹在 ``a``、``c`` 中间:三个朝向一样、同一个方向挪(都前进或都倒车)、在一条线上。"""
+    if not (a[2] == b[2] == c[2]):
+        return False
+    ux, uy, vx, vy = b[0] - a[0], b[1] - a[1], c[0] - b[0], c[1] - b[1]
+    lu, lv = math.hypot(ux, uy), math.hypot(vx, vy)
+    if lu < 1e-6 or lv < 1e-6:
+        return False
+    return (ux * vx + uy * vy) / (lu * lv) > 0.9999 and abs(ux * vy - uy * vx) / lu <= 0.002
+
+
+def _has_reverse(path: Any) -> bool:
+    """路里有车头朝前、往后挪的段(倒车)。"""
+    for a, b in zip(path, path[1:], strict=False):
+        dx, dy = b[0] - a[0], b[1] - a[1]
+        if math.hypot(dx, dy) > 1e-3 and dx * math.cos(a[2]) + dy * math.sin(a[2]) < 0:
+            return True
+    return False

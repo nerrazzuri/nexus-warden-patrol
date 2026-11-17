@@ -1084,10 +1084,14 @@ def test_带路的目标_交给控制器照着走_不让Nav2另规划(monkeypatc
     assert g.controller_id == "FollowPath" and g.goal_checker_id == "general_goal_checker"
     assert g.path.header.frame_id == "map"
     got = [(p.pose.position.x, p.pose.position.y) for p in g.path.poses]
-    assert got == [(x, y) for x, y, _ in _路], "一个点不少、不抽稀"
-    import math
-    assert 2 * math.atan2(g.path.poses[2].pose.orientation.z,
-                          g.path.poses[2].pose.orientation.w) == pytest.approx(0.5)
+    assert all(q in got for q in [(x, y) for x, y, _ in _路]), "原来的点一个不少"
+    assert [q for q in got if q in [(x, y) for x, y, _ in _路]] == [(x, y) for x, y, _ in _路]
+    gaps = [math.dist(a, b) for a, b in zip(got, got[1:], strict=False)]
+    assert max(gaps) <= 0.05 + 1e-9, "外审 11-17 I4:代理去掉了直线中间的点,这里按 5 cm 插回去"
+    yaws = [2 * math.atan2(p.pose.orientation.z, p.pose.orientation.w) for p in g.path.poses]
+    assert yaws[got.index((1.5, 2.0)) + 1] == pytest.approx(0.5), "原地转那一下还在"
+    assert all(y == pytest.approx(0.5) for y, q in zip(yaws, got, strict=True) if q[1] > 2.0), \
+        "插的点朝向跟两头一样"
 
 
 def test_带路的目标_收下就把这条路报给代理_代理才认控制器的速度(monkeypatch):
