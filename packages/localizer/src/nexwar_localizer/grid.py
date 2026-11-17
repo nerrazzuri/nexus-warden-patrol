@@ -913,7 +913,7 @@ def render(points: np.ndarray, sensor_traj: np.ndarray, frames: Frames, *, res: 
     gf = ((fl - lo) / res).astype(int)
     seen[gf[:, 1], gf[:, 0]] = True
     seen = _erode(_dilate(seen, 1), 1)                      # 闭运算:远处点稀,补上小洞
-    views, used, extra_used, front_only = None, 0, 0, None
+    views, used, extra_used, front_only, more = None, 0, 0, None, None
     if scans is not None:
         views = _Seen(H * W)
         hit_scans = np.zeros((H, W), np.int32)
@@ -926,14 +926,12 @@ def render(points: np.ndarray, sensor_traj: np.ndarray, frames: Frames, *, res: 
             more, extra_used = _raytrace_scans(
                 extra_rays, frames, lo, (H, W), res, (floor_clear, wall_top), max_range, ground,
                 occ_h=(occ_lo.reshape(H, W), occ_hi.reshape(H, W)), seen=views, openings=False)
-            passes = passes + more
     else:
         pc = ((t[:, :2] - lo) / res).astype(int)
         key = (pc[:, 0] // POSE_STRIDE_CELLS) * 100000 + (pc[:, 1] // POSE_STRIDE_CELLS)
         _, idx = np.unique(key, return_index=True)
         poses = pc[np.sort(idx)]
         passes = _raytrace(occ >= 3, poses, int(max_range / res))
-    ratio = occ / np.maximum(occ + passes, 1)
     walked = np.zeros((H, W), bool)                         # 狗走过的路(身子中心;没给用雷达的)
     path = body_path if body_path is not None and len(body_path) else t[:, :2]
     pc = ((np.asarray(path, float)[:, :2] - lo) / res).astype(int)
@@ -941,6 +939,12 @@ def render(points: np.ndarray, sensor_traj: np.ndarray, frames: Frames, *, res: 
     walked[pc[:, 1], pc[:, 0]] = True
     body = (_dilate(walked, int(round(FOOTPRINT_M / res)))  # 狗的身子待过的地方
             if body_path is not None and len(body_path) else None)
+    if more is not None:
+        # Top Glove 11-17 v9:后雷达外参差几厘米,斜着打过去会把墙削薄一格 —— 只用前雷达判成障碍的格,
+        # 后雷达的穿过一律不算(后雷达只把前雷达不知道的地方补成空地)
+        _, occ_f = _free_and_occupied(occ, passes, seen, body, res)
+        passes = passes + np.where(occ_f, 0, more)
+    ratio = occ / np.maximum(occ + passes, 1)
     free_m, occ_m = _free_and_occupied(occ, passes, seen, body, res)
     seen_only = np.zeros((H, W), bool)
     if views is not None and used and (walked & free_m).any():

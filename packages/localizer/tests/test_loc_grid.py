@@ -1018,3 +1018,26 @@ def test_TG1117_后雷达从背后远远一个方向扫过_不把原来算空地
     lost = (g0.image == G.FREE) & (g1.image == G.UNKNOWN)
     assert (g0.image == G.FREE).sum() > 0
     assert not lost.any(), f"{int(lost.sum())} 格空地被后雷达变成不知道"
+
+
+def test_TG1117_后雷达外参差几厘米_射线不把墙削薄():
+    """笔记本 11-17 核 v9:后雷达(外参只对上 59%)把几乎所有墙的内侧削掉 1 格(障碍→空地 2541 格,
+    1513 格 1 格内还有墙)。后雷达看到的墙往外偏 8 cm,射线就多穿一格进墙。"""
+    f = _frames()
+    P, T, scans, body = _walls_and_person(f, floor_x=(8.5, 10.0))
+    L = np.asarray(f.level_matrix())
+    front, rear = [], []
+    for o, pts in scans:
+        ahead = G.level(pts, f)[:, 0] >= G.level(o.reshape(1, 3), f)[0, 0]
+        front.append((o, pts[ahead]))
+        back = pts[~ahead]
+        out = np.sign(G.level(back, f)[:, 1] - 3.0)[:, None] * (np.array([0.0, 0.08, 0.0]) @ L)
+        rear.append((o, back + out))                     # 南北墙都往外偏 8 cm
+    g0 = G.render(P, T, f, scans=front, body_path=body)
+    g1 = G.render(P, T, f, scans=front, body_path=body, extra_rays=rear)
+    r, c = np.nonzero(g0.image == G.OCCUPIED)
+    y = g0.origin[1] + (g0.image.shape[0] - 1 - r + 0.5) * g0.res
+    wall = (y < 0.2) | (y > 5.8)
+    assert wall.sum() > 100, "前雷达看得到南北墙"
+    lost = g1.image[r[wall], c[wall]] != G.OCCUPIED
+    assert not lost.any(), f"南北墙 {int(lost.sum())}/{int(wall.sum())} 格被后雷达打穿"
