@@ -653,11 +653,11 @@ def test_TG1117_v11_IMU有水平零偏_去程回程不被摆到不同高度():
         i = int(np.argmin(np.abs(tx[:half] - x)))
         j = half + int(np.argmin(np.abs(tx[half:] - x)))
         worst = max(worst, abs(z[i] - z[j]))
-    # 这份是从段边界起线性慢漂:漂的头一段平均只偏约 0.3°,不过门槛,用常量,差 0.12 m。
-    # 「挨着漂的段也逐段纠」能压到 0.1 以下,但真数据(笔记本核 v14,Top Glove 第 16 段偏 0.94°、
-    # 方向跟漂的同向)它不是漂,逐段纠了西头反而低 0.27 m —— 按真数据取舍,这里放到 0.15
-    assert worst < 0.15, f"同一个 x 去程回程高低差 {worst:.2f} m"
-    assert max(z) - min(z) < 0.2, f"摆平后高低差 {max(z) - min(z):.2f} m"
+    # 这份是从段边界起线性慢漂:漂的头两段平均只偏 0.32°、0.96°,不过门槛,用常量,差 0.30 m
+    # (不摆平 0.67)。真数据里没漂的段也到 0.96°(Top Glove 第 16 段,逐段纠了西头反而低 0.27 m;
+    # 商场 Super-LIO 重跑 0.71–0.83°)—— 这么慢的开头跟噪声分不开,按真数据取舍(台式机 11-18)
+    assert worst < 0.35, f"同一个 x 去程回程高低差 {worst:.2f} m"
+    assert max(z) - min(z) < 0.4, f"摆平后高低差 {max(z) - min(z):.2f} m"  # 同上,慢漂的开头
 
 
 
@@ -702,6 +702,16 @@ def test_商场1102_平地20段_偏0点7度的两段不当漂_全用同一个常
     高度差 0.055 → 0.081 m(最大 0.069 → 0.126)。门槛下限抬到 0.8°(固定 1° 不行:合成的慢漂
     第二段 0.96° 就认不出来):20 段全用常量,差 0.047 m。"""
     d = np.load(Path(__file__).parent / "data" / "level-windows-mall3.npz")
+    flat = [i for i in range(3) if i != int(d["up_axis"])]
+    C, b, why, const = S._window_ups(d["U"], d["M"][:, :, flat])
+    assert why == "" and const.all(), const
+
+
+def test_商场1102_重跑SuperLIO_同两段偏到0点83度_还是不当漂():
+    """台式机 11-18 回归台:同一个商场包 Super-LIO 每回放一遍,第 6、7 段偏 0.71 / 0.77 / 0.83°
+    不等(中位都约 0.2°),下限 0.8° 压不住第三遍。没漂的段 Top Glove 到 0.96°、真漂的 2.04° 以上 ——
+    门槛固定在中间。"""
+    d = np.load(Path(__file__).parent / "data" / "level-windows-mall3-rerun.npz")
     flat = [i for i in range(3) if i != int(d["up_axis"])]
     C, b, why, const = S._window_ups(d["U"], d["M"][:, :, flat])
     assert why == "" and const.all(), const
