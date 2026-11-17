@@ -78,6 +78,13 @@ def _proj(poly, ax):
 #: 用户 11-17:仿真里的车像真司机 —— 车头前这么远(米,按 2.3 m/s、3 m/s² 刹车约 0.9 m 再留余量)
 #: 车道里有东西(机器人)就刹住,让开了再走。
 CAR_BRAKE_M = 2.0
+#: 会让路的人(``yields``):身前这么远、身宽 + 两边这么多里压着机器人就站住(米)
+PERSON_LOOK_M = 1.0
+PERSON_SIDE_M = 0.3
+#: 站住这么久(秒)还过不去就往离机器人远的那边让开,最多让这么远(米)、每秒挪这么多
+PERSON_PATIENCE_S = 2.0
+PERSON_STEP_M = 0.9
+PERSON_STEP_MPS = 0.5
 
 
 def _car_brakes(line: Any, t0: float, t1: float, hx: float, hy: float, ox: float, oy: float,
@@ -97,6 +104,24 @@ def _car_brakes(line: Any, t0: float, t1: float, hx: float, hy: float, ox: float
     zone = (min(fx, ex) - abs(dy) * half_wid, min(fy, ey) - abs(dx) * half_wid,
             max(fx, ex) + abs(dy) * half_wid, max(fy, ey) + abs(dx) * half_wid)
     return _poly_hits_rect(_corners(r.x, r.y, r.yaw), zone)
+
+
+def _person_zone(x0: float, y0: float, x1: float, y1: float, hx: float) -> tuple | None:
+    """人从 (x0, y0) 往 (x1, y1) 走:身前 :data:`PERSON_LOOK_M` 的那块(世界系长方形)。"""
+    dx, dy = x1 - x0, y1 - y0
+    n = math.hypot(dx, dy)
+    if n < 1e-9:
+        return None
+    dx, dy = dx / n, dy / n
+    w = hx + PERSON_SIDE_M
+    fx, fy = x0 + dx * hx, y0 + dy * hx
+    ex, ey = fx + dx * PERSON_LOOK_M, fy + dy * PERSON_LOOK_M
+    return (min(fx, ex) - abs(dy) * w, min(fy, ey) - abs(dx) * w,
+            max(fx, ex) + abs(dy) * w, max(fy, ey) + abs(dx) * w)
+
+
+def _rects_hit(a: tuple, b: tuple) -> bool:
+    return a[0] < b[2] and b[0] < a[2] and a[1] < b[3] and b[1] < a[3]
 
 
 def _poly_hits_rect(poly, r) -> bool:
@@ -346,6 +371,51 @@ async def run_case(case: dict[str, Any], *, sim_cap_s: float) -> dict[str, Any]:
                  for a in actors]
         began: list[float | None] = [None] * len(actors)
         prog = [0.0] * len(actors)                         # 各自走了多少秒(车刹住时不涨)
+        # 会让路的人:站住了多久、往旁边让开了多少(世界系偏移)
+        waited = [0.0] * len(actors)
+        side = [(0.0, 0.0)] * len(actors)
+        body = _corners
+
+        def _free(cx: float, cy: float, hx: float, hy: float) -> bool:
+            box = (cx + ox - hx, cy + oy - hy, cx + ox + hx, cy + oy + hy)
+            return not any(_rects_hit(box, w) for w in walls) \
+                and not _poly_hits_rect(body(r.x, r.y, r.yaw), box)
+
+        def _yield_step(i: int, line: Any, nxt: float, hx: float, hy: float) -> None:
+            """像真人:前面挡着机器人就站住;站久了往离机器人远的那边让开再走;
+            离机器人远了慢慢回到原来的路线上。"""
+            sx, sy = side[i]
+            x0, y0 = line.at(prog[i])
+            x1, y1 = line.at(nxt)
+            zone = _person_zone(x0 + sx + ox, y0 + sy + oy, x1 + sx + ox, y1 + sy + oy, hx)
+            poly = body(r.x, r.y, r.yaw)
+            if zone is not None and _poly_hits_rect(poly, zone):
+                waited[i] += TICK
+                if waited[i] >= PERSON_PATIENCE_S:
+                    dx, dy = x1 - x0, y1 - y0
+                    n = math.hypot(dx, dy) or 1.0
+                    nx, ny = -dy / n, dx / n                 # 走的方向的左手
+                    rx, ry = r.x - (x0 + sx + ox), r.y - (y0 + sy + oy)
+                    sgn = -1.0 if rx * nx + ry * ny > 0 else 1.0
+                    for s_ in (sgn, -sgn):
+                        st = PERSON_STEP_MPS * TICK
+                        tx, ty = sx + s_ * nx * st, sy + s_ * ny * st
+                        if math.hypot(tx, ty) <= PERSON_STEP_M and _free(x0 + tx, y0 + ty, hx, hy):
+                            side[i] = (tx, ty)
+                            break
+                return
+            waited[i] = 0.0
+            if (sx or sy) and math.hypot(r.x - (x1 + sx + ox), r.y - (y1 + sy + oy)) > 1.5:
+                k = max(0.0, 1.0 - PERSON_STEP_MPS * TICK / max(math.hypot(sx, sy), 1e-6))
+                if _free(x1 + sx * k, y1 + sy * k, hx, hy):
+                    sx, sy = sx * k, sy * k
+                    if math.hypot(sx, sy) < 0.02:
+                        sx, sy = 0.0, 0.0
+                    side[i] = (sx, sy)
+            nb = (x1 + side[i][0] + ox - hx, y1 + side[i][1] + oy - hy,
+                  x1 + side[i][0] + ox + hx, y1 + side[i][1] + oy + hy)
+            if not _poly_hits_rect(poly, nb):               # 不往机器人身上走(侧面也一样)
+                prog[i] = nxt
         curbs = [((p[0][0] + ox, p[0][1] + oy), (p[1][0] + ox, p[1][1] + oy))
                  for p in case.get("curbs", [])]
         climbed: set[int] = set()
@@ -435,10 +505,16 @@ async def run_case(case: dict[str, Any], *, sim_cap_s: float) -> dict[str, Any]:
                 hx, hy = float(a["sx"]) / 2, float(a["sy"]) / 2
                 if began[i] is not None:
                     nxt = prog[i] + TICK
-                    if not (a.get("kind") == "vehicle"
-                            and _car_brakes(lines[i], prog[i], nxt, hx, hy, ox, oy, r)):
+                    if a.get("yields"):
+                        _yield_step(i, lines[i], nxt, hx, hy)
+                    elif not (a.get("kind") == "vehicle"
+                              and _car_brakes(lines[i], prog[i], nxt, hx, hy, ox, oy, r)):
                         prog[i] = nxt
+                if a.get("vanish") and began[i] is not None and prog[i] >= lines[i].period:
+                    world.dyn.pop(f"a{i}", None)            # 走完就走开了(进店、出门)
+                    continue
                 px, py = lines[i].at(prog[i])
+                px, py = px + side[i][0], py + side[i][1]
                 world.dyn[f"a{i}"] = (px + ox - hx, py + oy - hy, px + ox + hx, py + oy + hy)
             feed()
             for _ in range(3):
