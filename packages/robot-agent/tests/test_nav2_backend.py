@@ -2375,3 +2375,25 @@ async def test_路线只调头一下又回来_人走过去了_不掉头(tmp_path
         link.cmd = (link.now, 0, 0.0, 0.0, 0.0, gid, "ctl")
         await t.一拍()
     assert not [d for k, d in t.events if k == "nav_uturn"], t.events
+
+
+async def test_自己挪_开始时就只差二十几度_也要转正_不是一步不挪就交回(tmp_path):
+    """仿真 11-17 医院种子 4:车头偏 24° 对着病床边的窄缝,恢复链「自己挪、转到 0°」—— 差 25° 以内
+    当转好了,0 步就交回 Nav2,还是那个朝向、还是被拦。开始时就在容差里的要转到细的容差。"""
+    from nexwar_agent.bridges import nav2_nav
+    link = 假转接()
+    t = _台(tmp_path, link)
+    await t.start(5.0, 4.0, math.radians(24))
+    await t.nav.goto(Pose.from_xy_yaw(9.0, 4.0, 0.0))
+    for _ in range(5):                                      # 先让两侧看过(走着的记忆)
+        await t.一拍()
+    here = await t.nav._here()
+    t.nav._start_maneuver(here, "测试", level=3)
+    t.nav._man["want"] = 0.0
+    for _ in range(100):
+        await t.一拍()
+        if t.nav._man is None:
+            break
+    assert t.nav._man is None
+    assert abs(math.remainder(t.r.yaw, 2 * math.pi)) <= nav2_nav.MANEUVER_FINE_RAD + 0.02, \
+        math.degrees(t.r.yaw)
