@@ -603,3 +603,53 @@ def test_TG1117_建图命令_拿录包里的IMU摆平再出关键帧_记进mola_
     tools._superlio_front(tmp_path / "bag1", tmp_path / "w", reuse=True)
     assert got["bag"] == "bag1" and seen["read"] == [("bag1", S.LIVE_TOPIC)]
     assert got["level"] is not None and "applied" in got["level"]
+
+
+def _out_and_back(bias_g=(-0.0147, 0.0, 0.0016), drift_deg=3.5, tilt0_deg=0.95):
+    """笔记本 11-17 v11:往东走 150 s,掉头往西走 150 s(北移 8 m),地是平的。估出来的姿态:
+    起步就偏 ``tilt0_deg``(绕 y),最后 80 s 再漂到 ``drift_deg``。IMU(z 朝上)量真比力 +
+    水平零偏 ``bias_g``(单位 g)。回(估出来的位姿, IMU, 每个位姿的真 x)。"""
+    rng = np.random.default_rng(7)
+    dt, v, g = 0.1, 0.6, 9.81
+    poses, imu, true_x = [], [], []
+    p_est = np.zeros(3)
+    x_true = np.zeros(3)
+    n = 3000
+    for k in range(n):
+        t = 1000.0 + k * dt
+        yaw = 0.0 if k < n // 2 else math.pi
+        extra = max(0.0, (t - (1000.0 + n * dt - 80.0)) / 80.0) * (drift_deg - tilt0_deg)
+        a = math.radians(tilt0_deg + extra)
+        D = np.array(S.quat_to_mat((0.0, math.sin(-a / 2), 0.0, math.cos(-a / 2))))
+        Rt = np.array(S.quat_to_mat((0.0, 0.0, math.sin(yaw / 2), math.cos(yaw / 2))))
+        if k == n // 2:
+            step_true = np.array([0.0, 8.0, 0.0])
+        elif k:
+            step_true = Rt @ np.array([v * dt, 0.0, 0.0])
+        else:
+            step_true = np.zeros(3)
+        x_true = x_true + step_true
+        p_est = p_est + D @ step_true
+        poses.append((t, tuple(p_est), S.mat_to_quat((D @ Rt).tolist())))
+        true_x.append(x_true[0])
+        for j in range(10):
+            f = Rt.T @ np.array([0.0, 0.0, g]) + g * np.array(bias_g) + rng.normal(0, 0.5, 3)
+            imu.append((t + j * 0.01, *f))
+    return poses, imu, np.array(true_x)
+
+
+def test_TG1117_v11_IMU有水平零偏_去程回程不被摆到不同高度():
+    """笔记本核 v11:加速度计约 0.84° 水平零偏没扣,去程回程朝向相反 → 纠成相反方向,同一个 x 处
+    回程比去程低 0.3–0.5 m、中段先验图摆出 y 向坡。先按「上 = 常量 + R·零偏」估零偏再扣。"""
+    poses, imu, tx = _out_and_back()
+    out, info = S.level(poses, imu)
+    assert info["applied"] and 0.6 < info["bias_deg"] < 1.1, info
+    z = np.array([p[1][2] for p in out])
+    half = len(out) // 2
+    worst = 0.0
+    for x in (10.0, 40.0, 70.0):
+        i = int(np.argmin(np.abs(tx[:half] - x)))
+        j = half + int(np.argmin(np.abs(tx[half:] - x)))
+        worst = max(worst, abs(z[i] - z[j]))
+    assert worst < 0.1, f"同一个 x 去程回程高低差 {worst:.2f} m"
+    assert max(z) - min(z) < 0.2, f"摆平后高低差 {max(z) - min(z):.2f} m"
