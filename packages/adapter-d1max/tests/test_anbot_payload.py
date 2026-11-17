@@ -820,3 +820,33 @@ async def test_第三档41_接到HAL上_能力报能念哪几种语言(master, t
     hal = D1MaxHal(mps_per_unit=0.4, radps_per_unit=1.0, deadband_mps=0.05, max_fraction=0.5,
                    payload=p)
     assert hal.sound_tts_langs() == ["zh", "en"]
+
+
+def test_现场1117_竞品连接断了又好了_日志里各留一行_状态不变不重复写(caplog):
+    """Top Glove 11-17 断网复测:网页设备状态里竞品连接变离线、又恢复,代理日志里这一段一行都没有。"""
+    import logging
+
+    class 通:
+        registered, error = True, ""
+
+        def connections(self):
+            return 1
+
+    p = AnbotPayload(_cfg("http://127.0.0.1:9/"))
+    p._strobe = p._voice = p._ptz = p._wiper = 通()
+    with caplog.at_level(logging.INFO, logger="nexwar_adapter_d1max.anbot"):
+        p.health()
+        caplog.clear()
+        p.health()
+        assert caplog.records == [], "一直在线:不写"
+        p._open_error = "Orin 上 10.0.0.2 开不了端口: 网络不可达"
+        p.health()
+        p.health()
+        down = [r for r in caplog.records if "竞品连接" in r.getMessage()]
+        assert len(down) == 1 and down[0].levelno == logging.WARNING, caplog.text
+        assert "离线" in down[0].getMessage() and "开不了端口" in down[0].getMessage()
+        caplog.clear()
+        p._open_error = ""
+        p.health()
+        up = [r for r in caplog.records if "竞品连接" in r.getMessage()]
+        assert len(up) == 1 and "在线" in up[0].getMessage(), caplog.text
