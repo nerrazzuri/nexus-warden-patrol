@@ -82,9 +82,14 @@ CAR_BRAKE_M = 2.0
 #: 车道两边再留这么多(米):真司机看到车道边上的机器人也会刹,不是擦着过(真实巡逻仿真 11-17:
 #: 叉车按自己车宽刹,机器人站在车道边上被侧面刮到)
 CAR_SIDE_M = 0.3
-#: 会让路的人(``yields``):身前这么远、身宽 + 两边这么多里压着机器人就站住(米)
-PERSON_LOOK_M = 1.0
+#: 会让路的人(``yields``):身前这么远、身宽 + 两边这么多里压着机器人就看见了(米)
+PERSON_LOOK_M = 2.0
 PERSON_SIDE_M = 0.3
+#: 外审 11-17 I5:看见了过这么久(秒)才反应,再按这个减速度刹住、按这个加速度起步(m/s²);
+#: 不按真值拦着不让人走进机器人(原来一看见就瞬间站住、永远撞不上,成功率虚高)
+PERSON_REACT_S = 0.5
+PERSON_DECEL_MPS2 = 2.0
+PERSON_ACCEL_MPS2 = 1.0
 #: 站住这么久(秒)还过不去就往离机器人远的那边让开,最多让这么远(米)、每秒挪这么多
 PERSON_PATIENCE_S = 2.0
 PERSON_STEP_M = 0.9
@@ -117,6 +122,25 @@ def _car_brakes(line: Any, t0: float, t1: float, hx: float, hy: float, ox: float
     zone = (min(fx, ex) - abs(dy) * half_wid, min(fy, ey) - abs(dx) * half_wid,
             max(fx, ex) + abs(dy) * half_wid, max(fy, ey) + abs(dx) * half_wid)
     return _poly_hits_rect(_corners(r.x, r.y, r.yaw), zone)
+
+
+def _person_pace(f: float, seen: float, sees: bool, speed: float,
+                 tick: float) -> tuple[float, float]:
+    """人走的快慢(占原速的几成 ``f``)、连着看见机器人多久了(``seen``,秒) → 这一拍以后的。
+    看见了 :data:`PERSON_REACT_S` 以后才开始刹(:data:`PERSON_DECEL_MPS2`);没看见就起步
+    (:data:`PERSON_ACCEL_MPS2`)。"""
+    seen = seen + tick if sees else 0.0
+    v = max(speed, 1e-6)
+    if sees and seen >= PERSON_REACT_S:
+        return max(0.0, f - tick * PERSON_DECEL_MPS2 / v), seen
+    if sees:
+        return f, seen
+    return min(1.0, f + tick * PERSON_ACCEL_MPS2 / v), seen
+
+
+def _yields(a: dict) -> bool:
+    """这个人会不会给机器人让路;``NAVPATROL_NO_YIELD=1``:谁都不让(对照实验,外审 11-17 I5)。"""
+    return bool(a.get("yields")) and not os.environ.get("NAVPATROL_NO_YIELD")
 
 
 def _person_zone(x0: float, y0: float, x1: float, y1: float, fwd: float, lat: float,
@@ -399,6 +423,8 @@ async def run_case(case: dict[str, Any], *, sim_cap_s: float) -> dict[str, Any]:
         # 会让路的人:站住了多久、往旁边让开了多少(世界系偏移)
         waited = [0.0] * len(actors)
         side = [(0.0, 0.0)] * len(actors)
+        pace = [1.0] * len(actors)                         # 走得多快(原速的几成)
+        seen = [0.0] * len(actors)                         # 连着看见机器人多久了
         body = _corners
 
         def _free(cx: float, cy: float, hx: float, hy: float) -> bool:
@@ -406,9 +432,10 @@ async def run_case(case: dict[str, Any], *, sim_cap_s: float) -> dict[str, Any]:
             return not any(_rects_hit(box, w) for w in walls) \
                 and not _poly_hits_rect(body(r.x, r.y, r.yaw), box)
 
-        def _yield_step(i: int, line: Any, nxt: float, hx: float, hy: float) -> None:
-            """像真人:前面挡着机器人就站住;站久了往离机器人远的那边让开再走;
-            离机器人远了慢慢回到原来的路线上。"""
+        def _yield_step(i: int, line: Any, nxt: float, hx: float, hy: float,
+                        speed: float) -> None:
+            """像真人:前面挡着机器人,反应过来以后刹住(:func:`_person_pace`);站久了往离机器人远
+            的那边让开再走;离机器人远了慢慢回到原来的路线上。不按真值拦着不往机器人身上走。"""
             sx, sy = side[i]
             x0, y0 = line.at(prog[i])
             x1, y1 = line.at(nxt)
@@ -430,7 +457,9 @@ async def run_case(case: dict[str, Any], *, sim_cap_s: float) -> dict[str, Any]:
                 if math.dist(line.at(back), (x0, y0)) < 0.05:   # 来回对称:同一点、反着走
                     prog[i], waited[i] = back, 0.0
                     return
-            if wide and not passing:
+            sees = wide and not passing
+            pace[i], seen[i] = _person_pace(pace[i], seen[i], sees, speed, TICK)
+            if sees and pace[i] == 0.0:                      # 站住了:等、让开
                 waited[i] += TICK
                 if waited[i] >= PERSON_PATIENCE_S:
                     dx, dy = x1 - x0, y1 - y0
@@ -445,7 +474,7 @@ async def run_case(case: dict[str, Any], *, sim_cap_s: float) -> dict[str, Any]:
                             side[i] = (tx, ty)
                             break
                 return
-            if not passing:
+            if not sees:
                 waited[i] = 0.0
             if (sx or sy) and math.hypot(r.x - (x1 + sx + ox), r.y - (y1 + sy + oy)) > 1.5:
                 k = max(0.0, 1.0 - PERSON_STEP_MPS * TICK / max(math.hypot(sx, sy), 1e-6))
@@ -454,10 +483,7 @@ async def run_case(case: dict[str, Any], *, sim_cap_s: float) -> dict[str, Any]:
                     if math.hypot(sx, sy) < 0.02:
                         sx, sy = 0.0, 0.0
                     side[i] = (sx, sy)
-            nb = (x1 + side[i][0] + ox - hx, y1 + side[i][1] + oy - hy,
-                  x1 + side[i][0] + ox + hx, y1 + side[i][1] + oy + hy)
-            if not _poly_hits_rect(poly, nb):               # 不往机器人身上走(侧面也一样)
-                prog[i] = nxt
+            prog[i] += (nxt - prog[i]) * pace[i]
         curbs = [((p[0][0] + ox, p[0][1] + oy), (p[1][0] + ox, p[1][1] + oy))
                  for p in case.get("curbs", [])]
         climbed: set[int] = set()
@@ -519,8 +545,9 @@ async def run_case(case: dict[str, Any], *, sim_cap_s: float) -> dict[str, Any]:
                     if ang < CURB_STUCK_DEG:
                         r.teleport(*prev)
                         on_curb = True
-                        side = -1.0 if math.sin(r.yaw - math.atan2(ey, ex)) > 0 else 1.0
-                        r.inject_imu(roll=side * CURB_ROLL_RAD)
+                        # 外审 11-17 M6:原来也叫 side,把行人让开的偏移表盖成了数
+                        roll_side = -1.0 if math.sin(r.yaw - math.atan2(ey, ex)) > 0 else 1.0
+                        r.inject_imu(roll=roll_side * CURB_ROLL_RAD)
                     else:
                         climbed.add(ci)
             if not on_curb:
@@ -553,8 +580,8 @@ async def run_case(case: dict[str, Any], *, sim_cap_s: float) -> dict[str, Any]:
                 hx, hy = float(a["sx"]) / 2, float(a["sy"]) / 2
                 if began[i] is not None:
                     nxt = prog[i] + TICK
-                    if a.get("yields"):
-                        _yield_step(i, lines[i], nxt, hx, hy)
+                    if _yields(a):
+                        _yield_step(i, lines[i], nxt, hx, hy, float(a.get("speed", 1.0)))
                     elif not (a.get("kind") == "vehicle"
                               and _car_brakes(lines[i], prog[i], nxt, hx, hy, ox, oy, r)):
                         prog[i], waited[i] = nxt, 0.0
