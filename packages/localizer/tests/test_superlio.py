@@ -674,3 +674,18 @@ def test_TG1117_v12_漂的那几段朝向别处没有_零偏不被漂移带偏()
         M.append(R[:, :2])
     est, why = S._imu_bias(np.array(U), np.array(M))
     assert why == "" and np.linalg.norm(est - b) < math.radians(0.15), (est, why)
+
+
+def test_TG1117_v13_真数据22段_零偏约0点9度_没漂的16段用同一个纠正_漂的6段逐段纠():
+    """笔记本 11-17 导出的 Top Glove 那包每 20 s 一段(按 :func:`superlio.level` 的算法,IMU y 轴
+    朝上)。核 v13:零偏对了(0.90°),但「前后各一段平均」把纠正量摊开、滞后,去程回程差 0.12–0.27 m、
+    西头压过头 0.5 m。偏离常量重力不到 1° 的段都用常量纠,只有漂了的段逐段纠(笔记本模拟:两条线差
+    ≤0.10 m、西头 -0.23 正好对上真高)。"""
+    d = np.load(Path(__file__).parent / "data" / "level-windows-1117.npz")
+    flat = [i for i in range(3) if i != int(d["up_axis"])]
+    C, b, why, const = S._window_ups(d["U"], d["M"][:, :, flat])
+    assert why == "" and 0.75 < math.degrees(float(np.linalg.norm(b))) < 1.0, (b, why)
+    assert const[:15].all() and not const[15:].any(), const   # 第 16 段挨着漂的,也逐段纠
+    tilt = [math.degrees(math.acos(c[2] / np.linalg.norm(c))) for c in C]
+    assert max(tilt[:15]) - min(tilt[:15]) < 1e-9, "没漂的段纠正一样"
+    assert min(tilt[16:]) > 2.0, tilt
