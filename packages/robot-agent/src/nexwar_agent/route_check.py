@@ -249,11 +249,28 @@ def _searched(dense: list[tuple[float, float, float]], along: np.ndarray, idx: n
         if out is None:
             continue
         path, cidx, cm = _checked(out, walls, res, origin)
-        if float(cm.min()) >= need:
+        if float(cm.min()) >= need and _start_ok(out, dense, walls, res, origin, need):
             j = int(np.argmin(cm))
             return RouteCheck(True, float(cm[j]), path[int(cidx[j])], tight=True,
                               path=tuple(path))
     return None
+
+
+def _start_ok(out: list[tuple[float, float, float]], dense: list[tuple[float, float, float]],
+              walls: Any, res: float, origin: tuple[float, float], need: float) -> bool:
+    """起步豁免只给原路线自己:搜出来插在起步那段里的(入口原地转之类)逐个细查,余量不低于
+    min(``need``, 站着时)—— 贴墙起步可以,转的时候不许比站着更贴(外审 11-17 第 2 轮)。"""
+    orig = set(dense)
+    along = 0.0
+    floor = min(need, float(pose_margins([out[0]], walls, res, origin)[0]))
+    new: list[tuple[float, float, float]] = []
+    for a, b in zip(out, out[1:], strict=False):
+        if along >= SKIP_START_M:
+            break
+        along += math.dist(a[:2], b[:2])
+        if a not in orig or b not in orig:
+            new += densify([a, b])
+    return not new or float(pose_margins(new, walls, res, origin).min()) >= floor - 1e-9
 
 
 def _spliced(segs: list[list[int]], dense: list[tuple[float, float, float]], idx: np.ndarray,

@@ -172,3 +172,44 @@ def test_外审1117_I2_入口不在格子中心_接上去也不横移_每一步�
     assert p is not None
     assert p[0] == pytest.approx(entry) and p[-1] == pytest.approx((3.4, 2.0, 0.0))
     assert not _no_strafe(p, 1e-6), _no_strafe(p, 1e-6)[:3]
+
+
+def _phys_hits(path, walls, res, origin):
+    """物理车身(半长 0.465、半宽 0.24 的矩形)跟墙格(方格)按分离轴判相交 → 碰到的位姿。"""
+    rr, cc = np.nonzero(walls)
+    wx, wy = origin[0] + (cc + 0.5) * res, origin[1] + (rr + 0.5) * res
+    out = []
+    for px, py, a in densify(path):
+        c, s = math.cos(a), math.sin(a)
+        dx, dy = wx - px, wy - py
+        hit = ((abs(dx) <= 0.465 * abs(c) + 0.24 * abs(s) + res / 2)
+               & (abs(dy) <= 0.465 * abs(s) + 0.24 * abs(c) + res / 2)
+               & (abs(dx * c + dy * s) <= 0.465 + res / 2 * (abs(c) + abs(s)))
+               & (abs(-dx * s + dy * c) <= 0.24 + res / 2 * (abs(c) + abs(s))))
+        if hit.any():
+            out.append((px, py, math.degrees(a)))
+    return out
+
+
+def test_外审1117第2轮_贴墙起步_搜出来的入口原地转不吃起步豁免_转的时候不许比站着更贴墙():
+    """外审 11-17 第 2 轮(codex 复现):墙从 x=3.0 起,机器人在 (2.485, 2, 15°) 贴墙起步,原路线先倒过一段
+    窄处再绕到终点(物理上不碰)。局部搜索在入口先原地转,转到约 27.5° 车身压进墙 8 mm,可整条复查
+    按走过的路程跳过起步 0.5 m,原地转一步都没查,放行了。现在:插在起步那段的位姿照查,余量不低于
+    min(要求, 站着时);转向也按细角度查。"""
+    res, origin = 0.05, (-2.0, -2.0)
+    rr, cc = np.indices((200, 200))
+    x, y = origin[0] + (cc + 0.5) * res, origin[1] + (rr + 0.5) * res
+    q = (2.485, 2.0, math.radians(15))
+    lat = -(x - q[0]) * math.sin(q[2]) + (y - q[1]) * math.cos(q[2])
+    walls = (x >= 3.0) | ((x >= 0.5) & (x < 1.95) & (abs(lat) >= 0.34) & (abs(lat) < 0.7))
+    b = (-0.4, 2.0 + (-0.4 - q[0]) * math.tan(q[2]), q[2])
+    route = [q, b, (*b[:2], math.pi / 2), (-0.4, 4.0, math.pi / 2), (-0.4, 4.0, 0.0),
+             (2.2, 4.0, 0.0), (2.2, 4.0, math.pi / 2)]
+    assert not _phys_hits(route, walls, res, origin)             # 原路线本身物理上不碰
+    r = check_route(route, walls, res, origin)
+    if r.ok and r.path is not None:
+        assert not _phys_hits(r.path, walls, res, origin), _phys_hits(r.path, walls, res, origin)[:3]
+        here = float(pose_margins([q], walls, res, origin)[0])
+        fine = [p for p in densify(r.path) if math.dist(p[:2], q[:2]) < 1e-6]   # 起点上原地转的那些
+        m = pose_margins(fine, walls, res, origin)
+        assert float(m.min()) >= min(ROUTE_MARGIN_MIN, here) - 1e-9, (float(m.min()), here)
