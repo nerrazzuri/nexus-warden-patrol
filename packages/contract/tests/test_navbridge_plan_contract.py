@@ -10,8 +10,8 @@ from nexwar_contract import navbridge as nb
 from nexwar_contract.errors import ContractError
 
 
-def test_协议号升到5():
-    assert nb.PROTO == 5
+def test_协议号升到6_地图带clear():
+    assert nb.PROTO == 6
 
 
 def test_plan只许代理发_plan_result只许转接节点发():
@@ -51,3 +51,21 @@ def test_显示用的path还是抽稀的二维点():
     assert nb.MAX_PATH_PTS == 256
     with pytest.raises(ContractError):
         nb.check({"type": "path", "goal_id": 1, "pts": [[0.0, 0.0, 0.0]]})
+
+
+def _map(**kw):
+    return {"type": "map", "req": 1, "map_id": "m", "map_version": "", "dir": "/x", **kw}
+
+
+def test_map_带clear_站着的机身矩形_收():
+    """真机 11-17:代理的地图带 clear、契约没加,每次都发不出去,Nav2 一直没图。"""
+    nb.check(_map(nogo=[], speed=[], clear=[]))
+    nb.check(_map(clear=[[1.0, 2.0, 0.3, 0.465, 0.24]]))
+
+
+@pytest.mark.parametrize("bad", [
+    "x", [[1.0, 2.0, 0.3, 0.465]], [[1.0, 2.0, 0.3, 0.465, "w"]], [[1, 2, 0, 0.0, 0.24]],
+    [[1, 2, 0, 5.0, 0.24]], [[1.0, 2.0, 0.3, 0.4, 0.2]] * 17])
+def test_map_clear_形状不对_拒(bad):
+    with pytest.raises(ContractError):
+        nb.check(_map(clear=bad))

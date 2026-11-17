@@ -58,7 +58,9 @@ from nexwar_contract.errors import ContractError
 #: 2(W47 外审 R7):``cmd`` 带 ``goal_id``;3(复查第三轮 P4):``cmd`` 带 ``src``;
 #: 4(W48):``goal`` 可带 ``via``;5(导航 V1 第 2 节):``plan`` / ``plan_result``。
 #: 两头同一个发布包里,对不上握手就拒(代理退回自己的规划)。
-PROTO = 5
+PROTO = 6
+#: ``map.clear`` 最多几项(代理只留最近 8 处)。
+MAX_CLEAR = 16
 #: ``cmd.src``:控制器 / 脱困动作。
 CMD_SRCS = ("ctl", "beh")
 #: 途经点最多几个(路网最多 500 个点)。
@@ -69,7 +71,8 @@ GOAL_STATES = ("accepted", "succeeded", "aborted", "canceled", "rejected")
 FIELDS: dict[str, tuple[set[str], set[str]]] = {
     # 类型: (必须的, 可选的)
     "hello": ({"proto"}, {"name", "version"}),
-    "map": ({"req", "map_id", "map_version", "dir"}, {"nogo", "speed"}),
+    # clear(协议 6,11-05 起点致命):机器人站着的 [x, y, yaw, 半长, 半宽],转接节点把那块当空
+    "map": ({"req", "map_id", "map_version", "dir"}, {"nogo", "speed", "clear"}),
     "tick": ({"t_ms", "odom", "vel"}, {"map_odom", "speed"}),
     "grid": ({"t_ms", "pose", "res", "size", "occ", "known"}, set()),
     "goal": ({"goal_id", "x", "y", "yaw"}, {"via"}),
@@ -147,6 +150,15 @@ def check(msg: dict[str, Any]) -> dict[str, Any]:
             _poly(z["poly"], f"speed[{i}]")
             if _num(z["mps"], f"speed[{i}].mps") <= 0:
                 raise ContractError("Nav2 转接:限速要是正数")
+        clear = msg.get("clear", [])
+        if not isinstance(clear, list) or len(clear) > MAX_CLEAR:
+            raise ContractError(f"Nav2 转接:clear 要是最多 {MAX_CLEAR} 项的列表")
+        for i, c in enumerate(clear):
+            if not isinstance(c, list) or len(c) != 5:
+                raise ContractError(f"Nav2 转接:clear[{i}] 要是 [x, y, yaw, 半长, 半宽]")
+            vals = [_num(v, f"clear[{i}]") for v in c]
+            if not (0 < vals[3] <= 2.0 and 0 < vals[4] <= 2.0):
+                raise ContractError(f"Nav2 转接:clear[{i}] 的半长、半宽要在 (0, 2] 米")
     elif t == "tick":
         _int(msg["t_ms"], "t_ms")
         _triple(msg["odom"], "odom")
