@@ -95,6 +95,9 @@ PERSON_SQUEEZE_M = 0.1
 #: 来回走的人被挡这么久(秒)、挤也挤不过去:像真人一样不等了,掉头往回走(仿真 11-17 办公室种子 5、9:
 #: 行人在走廊里对着停住的机器人一站半分钟以上,机器人转身、挪看清都被他卡着,两边干耗)。
 PERSON_GIVEUP_S = 15.0
+#: 来回开的车为机器人刹住这么久(秒):司机不等了,掉头往回开(工厂种子 8 11-17:叉车跟机器人在同一条
+#: 过道迎面,叉车停在机器人前 2 m 一直等,机器人被叉车挡着也走不了,两边干耗到超时)。
+CAR_GIVEUP_S = 20.0
 
 
 def _car_brakes(line: Any, t0: float, t1: float, hx: float, hy: float, ox: float, oy: float,
@@ -543,7 +546,14 @@ async def run_case(case: dict[str, Any], *, sim_cap_s: float) -> dict[str, Any]:
                         _yield_step(i, lines[i], nxt, hx, hy)
                     elif not (a.get("kind") == "vehicle"
                               and _car_brakes(lines[i], prog[i], nxt, hx, hy, ox, oy, r)):
-                        prog[i] = nxt
+                        prog[i], waited[i] = nxt, 0.0
+                    else:                                   # 为机器人刹住了
+                        waited[i] += TICK
+                        ln = lines[i]
+                        if waited[i] >= CAR_GIVEUP_S and ln.repeat:
+                            back = (prog[i] // ln.period + 1) * ln.period - prog[i] % ln.period
+                            if math.dist(ln.at(back), ln.at(prog[i])) < 0.05:
+                                prog[i], waited[i] = back, 0.0
                 if a.get("vanish") and began[i] is not None and prog[i] >= lines[i].period:
                     world.dyn.pop(f"a{i}", None)            # 走完就走开了(进店、出门)
                     continue
