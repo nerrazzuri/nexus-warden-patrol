@@ -46,8 +46,14 @@ REC_FREE_S = 15.0
 #: ``strict`` = 外审 11-14 第六批(两侧盲带、原地转、没后雷达后退看不见 → 停;超过 :data:`MEMORY_S`
 #: 的旧帧只认「有东西」;走着的时候旧帧留到 :data:`REC_FREE_S`);``legacy`` = 第六批以前(看不见的
 #: 一律降到 0.3 m/s 接着走,站着留下的旧帧说空也算空,旧帧只留 :data:`MEMORY_S`)。旧策略也**没有**
-#: 真机发布认可,只做对照。
-BAND_POLICIES = ("strict", "legacy")
+#: 真机发布认可,只做对照。``sealed`` = 严格策略 + 「封住」(11-17 仿真对照,用户未定):站着没挪窝、
+#: 机器人周围 :data:`SEAL_R` 以内看得见的格子一直没变(没冒出新的挡、原来的挡也没变空),人就没法不经
+#: 过看得见的地方走进盲带 —— 停下那一刻还新鲜(:data:`MEMORY_S` 以内)的「空」接着算数。一变就失效、
+#: 不往回认,退回严格策略。已知漏洞:盲带跟别的看不见的地方(柱子后面的影子)连着,人从影子里走进来
+#: 看不见。
+BAND_POLICIES = ("strict", "legacy", "sealed")
+#: 「封住」看机器人周围多大一圈(米)。
+SEAL_R = 2.0
 MEMORY_STILL_M = 0.15
 FRESH_S = 0.3
 LOST_S = 2.0
@@ -133,6 +139,10 @@ class ObstacleView:
     #: 工单 21:狗最近一次挪窝(离上次站的地方超过 :data:`MEMORY_STILL_M`)的位置和时刻。
     _still_at: tuple[float, float] | None = None
     _still_since: float = -math.inf
+    #: ``sealed``:封住时的参考帧、从哪一刻起没变、往回认多久(停下 = memory_s;被打破 = 0)。
+    _seal_ref: Any = None
+    _seal_at: float = math.inf
+    _seal_back: float = 0.0
     #: 外审 11-14 采集时刻:最近一帧估的「采集 → 收到」(秒)、帧龄可不可信(没有帧头时刻、刚重新估钟
     #: 的不可信:照固定延迟算)。
     delay_s: float = 0.0
@@ -221,6 +231,8 @@ class ObstacleView:
                                       known=np.frombuffer(known, dtype=np.uint8),
                                       size=g.size, res=g.res,
                                       suspect=np.frombuffer(g.suspect_bits(), dtype=np.uint8)))
+        if self.band_policy == "sealed":
+            self._seal_note(self.frames[0])
         while self.frames:
             f, age = self.frames[-1], now - self.frames[-1].at
             keep = max(self.memory_s, REC_FREE_S) if self.band_policy == "strict" else self.memory_s
@@ -228,6 +240,16 @@ class ObstacleView:
                                         and self._still_since <= f.at + self.memory_s):
                 break                                   # 工单 21:它过期之前狗就站住了、一直没挪窝
             self.frames.pop()
+
+    def _seal_note(self, f: Any) -> None:
+        """``sealed``:新的一帧跟参考帧比。挪了窝 → 从这儿重新封、往回认 memory_s;看得见的变了 →
+        从这儿重新封、不往回认。"""
+        ref = self._seal_ref
+        if ref is None or math.hypot(f.pose[0] - ref.pose[0],
+                                     f.pose[1] - ref.pose[1]) > MEMORY_STILL_M:
+            self._seal_ref, self._seal_at, self._seal_back = f, f.at, self.memory_s
+        elif _seal_changed(ref, f) or _seal_changed(f, ref):
+            self._seal_ref, self._seal_at, self._seal_back = f, f.at, 0.0
 
     def on_wall(self, w: Any) -> None:
         """感知发来一份墙那一层(W41 全局重定位)。"""
@@ -321,8 +343,10 @@ class ObstacleView:
                 break
             # 外审 11-14:站着不动留下来的旧帧(超过 memory_s)只能说「那儿有东西」,不能单独证明
             # 「那儿现在是空的」—— 站着的时候人可能从侧面走进盲带
-            stale = (self.band_policy == "strict"
-                     and now - f.at > (self.memory_s if free_s is None else free_s))
+            stale = (self.band_policy in ("strict", "sealed")
+                     and now - f.at > (self.memory_s if free_s is None else free_s)
+                     and not (self.band_policy == "sealed"
+                              and f.at >= self._seal_at - self._seal_back))
             c, s = math.cos(f.pose[2]), math.sin(f.pose[2])
             dx, dy = wx - f.pose[0], wy - f.pose[1]
             lx, ly = c * dx + s * dy, -s * dx + c * dy
@@ -596,6 +620,44 @@ class ObstacleGuard:
                 and getattr(view, "rear", False) and getattr(view, "rear_cal", False):
             return "unknown"
         return "blind"
+
+
+def _dilate(m: Any) -> Any:
+    """n × n 布尔格子往外扩一格(八邻域)。"""
+    d = m.copy()
+    d[1:] |= m[:-1]
+    d[:-1] |= m[1:]
+    e = d.copy()
+    e[:, 1:] |= d[:, :-1]
+    e[:, :-1] |= d[:, 1:]
+    return e
+
+
+def _seal_changed(a: Any, b: Any) -> bool:
+    """``b`` 里机器人 :data:`SEAL_R` 以内的「挡」,在 ``a`` 里同一处(按两帧的位姿换过去)看得见、
+    是空的、一格以内也没有挡 → 变了。两个方向各查一次:冒出新东西、原来的东西没了。"""
+    n = b.size
+    c = (np.arange(n) - n / 2 + 0.5) * b.res
+    lx = np.broadcast_to(c[:, None], (n, n)).ravel()
+    ly = np.broadcast_to(c[None, :], (n, n)).ravel()
+    sel = (b.occ == 1) & (np.hypot(lx, ly) <= SEAL_R)
+    if not sel.any():
+        return False
+    lx, ly = lx[sel], ly[sel]
+    cb, sb = math.cos(b.pose[2]), math.sin(b.pose[2])
+    wx, wy = b.pose[0] + cb * lx - sb * ly, b.pose[1] + sb * lx + cb * ly
+    ca, sa = math.cos(a.pose[2]), math.sin(a.pose[2])
+    dx, dy = wx - a.pose[0], wy - a.pose[1]
+    ax, ay = ca * dx + sa * dy, -sa * dx + ca * dy
+    m = a.size
+    r = np.floor(ax / a.res + m / 2).astype(int)
+    k = np.floor(ay / a.res + m / 2).astype(int)
+    inb = (r >= 0) & (r < m) & (k >= 0) & (k < m)
+    if not inb.any():
+        return False
+    idx = r[inb] * m + k[inb]
+    near = _dilate(a.occ.reshape(m, m).astype(bool)).ravel()
+    return bool(((a.known[idx] == 1) & ~near[idx]).any())
 
 
 def _nearest(hits: tuple[tuple[float, float], ...]) -> str:

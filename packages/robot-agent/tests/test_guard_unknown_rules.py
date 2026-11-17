@@ -239,7 +239,8 @@ def test_旧策略_站着十秒以前的帧说空_照样算空():
     assert unk == [] and hit == [1], "旧策略:站着留下的旧帧说空也算空"
 
 
-def test_默认还是严格策略_只认这两个名字():
+def test_默认还是严格策略_只认这三个名字():
+    """sealed(封住)是 11-17 仿真对照用的,用户没定之前默认照旧 strict。"""
     from nexwar_agent.obstacles import BAND_POLICIES
     assert ObstacleView().band_policy == "strict"
-    assert BAND_POLICIES == ("strict", "legacy")
+    assert BAND_POLICIES == ("strict", "legacy", "sealed")
