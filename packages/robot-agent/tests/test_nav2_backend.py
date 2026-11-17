@@ -16,6 +16,7 @@ from test_obstacle_avoid import 台子
 from nexwar_agent.bridges.nav2_nav import Nav2NavBackend, _compose_map_odom
 from nexwar_agent.navbridge import NavBridgeServer
 from nexwar_agent.planning.planner import Planner
+from nexwar_contract import navbridge as nb
 from nexwar_contract.errors import ContractError
 from nexwar_contract.navbridge import FROM_AGENT, FROM_BRIDGE, encode, parse
 from nexwar_patrol.protocol.nav_types import NavStatus, Pose
@@ -161,6 +162,8 @@ class 假转接:
         return self.now
 
     def send(self, m):
+        # 真链路发之前照契约查(真机 11-17:地图多带 clear、契约没加,每次都发不出去,测试全没拦住)
+        nb.check(dict(m))
         self.sent.append(m)
         if m["type"] == "goal" and getattr(self, "auto_plan", True):
             # 真 Nav2 收下目标就规划出路线(转接节点按目标号报);测 P1 的那条自己管
