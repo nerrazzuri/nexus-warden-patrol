@@ -112,17 +112,17 @@ def _car_brakes(line: Any, t0: float, t1: float, hx: float, hy: float, ox: float
     return _poly_hits_rect(_corners(r.x, r.y, r.yaw), zone)
 
 
-def _person_zone(x0: float, y0: float, x1: float, y1: float, hx: float,
+def _person_zone(x0: float, y0: float, x1: float, y1: float, fwd: float, lat: float,
                  side_m: float = PERSON_SIDE_M) -> tuple | None:
-    """人从 (x0, y0) 往 (x1, y1) 走:身前 :data:`PERSON_LOOK_M`、两边各多 ``side_m`` 的那块
-    (世界系长方形)。"""
+    """人从 (x0, y0) 往 (x1, y1) 走(身子前后半长 ``fwd``、左右半宽 ``lat``):身前
+    :data:`PERSON_LOOK_M`、两边各多 ``side_m`` 的那块(世界系长方形)。"""
     dx, dy = x1 - x0, y1 - y0
     n = math.hypot(dx, dy)
     if n < 1e-9:
         return None
     dx, dy = dx / n, dy / n
-    w = hx + side_m
-    fx, fy = x0 + dx * hx, y0 + dy * hx
+    w = lat + side_m
+    fx, fy = x0 + dx * fwd, y0 + dy * fwd
     ex, ey = fx + dx * PERSON_LOOK_M, fy + dy * PERSON_LOOK_M
     return (min(fx, ex) - abs(dy) * w, min(fy, ey) - abs(dx) * w,
             max(fx, ex) + abs(dy) * w, max(fy, ey) + abs(dx) * w)
@@ -395,15 +395,18 @@ async def run_case(case: dict[str, Any], *, sim_cap_s: float) -> dict[str, Any]:
             sx, sy = side[i]
             x0, y0 = line.at(prog[i])
             x1, y1 = line.at(nxt)
-            zone = _person_zone(x0 + sx + ox, y0 + sy + oy, x1 + sx + ox, y1 + sy + oy, hx)
+            # 推着的病床是长条:按走的方向分前后半长、左右半宽(原来左右也按半长,1 m 宽的床
+            # 当 2.3 m 宽,永远觉得机器人挡着;医院种子 4)
+            fwd, lat = (hx, hy) if abs(x1 - x0) >= abs(y1 - y0) else (hy, hx)
+            zone = _person_zone(x0 + sx + ox, y0 + sy + oy, x1 + sx + ox, y1 + sy + oy, fwd, lat)
             poly = body(r.x, r.y, r.yaw)
             wide = zone is not None and _poly_hits_rect(poly, zone)
             passing = False
             if wide and waited[i] >= PERSON_PATIENCE_S + PERSON_SQUEEZE_AFTER_S \
                     and abs(r.speed[0]) < 0.05 and abs(r.speed[1]) < 0.05:
                 # 让到头了还挡着、机器人停着:真人贴着它挤过去(每边留 PERSON_SQUEEZE_M)
-                z2 = _person_zone(x0 + sx + ox, y0 + sy + oy, x1 + sx + ox, y1 + sy + oy, hx,
-                                  PERSON_SQUEEZE_M)
+                z2 = _person_zone(x0 + sx + ox, y0 + sy + oy, x1 + sx + ox, y1 + sy + oy, fwd,
+                                  lat, PERSON_SQUEEZE_M)
                 passing = z2 is not None and not _poly_hits_rect(poly, z2)
             if wide and not passing:
                 waited[i] += TICK
