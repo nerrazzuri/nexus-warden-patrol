@@ -4,7 +4,7 @@
 import { cleanup, fireEvent, render, waitFor } from "@testing-library/preact";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { EventPanel } from "./alertdetail";
-import { alertAdvice, alertHeadline, reportStart, watchStart } from "./alertinfo";
+import { alertAdvice, alertHeadline, plainReason, reportStart, watchStart } from "./alertinfo";
 import { LocPage } from "./advloc";
 import { setFetch } from "./api";
 import { lang } from "./i18n";
@@ -50,6 +50,25 @@ describe("P0-01 出发前检查没过", () => {
     lang.value = "en";
     expect(alertHeadline(a)).toBe("Pre-departure check failed, robot did not leave: the map has no origin yet");
     expect(alertHeadline(alert({ context: { check: "battery" } as never }))).toContain("battery too low");
+  });
+
+  it("现场 11-17:电量那一项是因为没原点算不出返航电量,不说「电量不够」;真是电量低照旧", () => {
+    const noHome = alert({ context: { check: "battery" } as never,
+      detail: "先去充电或换电池;原文:起飞前检查未通过: battery(没有原点,算不出出发线)" });
+    expect(alertHeadline(noHome)).toContain("算不出返航要留的电量");
+    expect(alertHeadline(noHome)).not.toContain("电量不够");
+    expect(alertAdvice(noHome)).toContain("原点");
+    const low = alert({ context: { check: "battery" } as never,
+      detail: "先去充电;原文:起飞前检查未通过: battery(电量 18% 低于出发线 30%)" });
+    expect(alertHeadline(low)).toContain("电量不够出发");
+    lang.value = "en";
+    expect(alertHeadline(noHome)).toContain("turn-back battery level cannot be worked out");
+    expect(alertHeadline(low)).toContain("battery too low");
+  });
+
+  it("现场 11-17:巡逻没走完的原因里电量那一项也按原因说", () => {
+    expect(plainReason("起飞前检查未通过: battery(没有原点,算不出出发线)")).toContain("算不出返航要留的电量");
+    expect(plainReason("起飞前检查未通过: battery(电量 18% 低于出发线 30%)")).toContain("电量不够出发");
   });
 
   it("别的警报不改标题、没有办法", () => {
