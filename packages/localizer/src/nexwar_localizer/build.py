@@ -736,34 +736,56 @@ def bag_scans(bag: Path, traj: Sequence[Any], topic: str = SCAN_TOPIC, *,
               every: int = SCAN_EVERY) -> Iterator[tuple[Any, Any]]:
     """从录包逐帧读扫描(每 ``every`` 帧取一帧),按时刻配上轨迹里的位姿,回 ``(雷达位置, 这一帧的点)``
     (MOLA 系)。要 ROS 的系统 Python(``rosbag2_py``)。"""
-    import numpy as np
     import rosbag2_py
     from rclpy.serialization import deserialize_message
     from sensor_msgs.msg import PointCloud2
 
-    from nexwar_localizer.frames import quat_to_mat
-
-    stamps = np.array([t for t, _, _ in traj])
     storage = "mcap" if any(Path(bag).glob("*.mcap")) else "sqlite3"
     r = rosbag2_py.SequentialReader()
     r.open(rosbag2_py.StorageOptions(uri=str(bag), storage_id=storage),
            rosbag2_py.ConverterOptions("", ""))
     r.set_filter(rosbag2_py.StorageFilter(topics=[topic]))
-    i = -1
-    while r.has_next():
-        _, raw, _ = r.read_next()
-        i += 1
+
+    def msgs() -> Iterator[tuple[float, Any]]:
+        while r.has_next():
+            _, raw, _ = r.read_next()
+            m = deserialize_message(raw, PointCloud2)
+            yield m.header.stamp.sec + m.header.stamp.nanosec * 1e-9, m
+
+    yield from scans_with_pose(msgs(), traj, every=every)
+
+
+def merged_scans(T_front_rear: Any) -> Callable[..., Iterator[tuple[Any, Any]]]:
+    """:func:`package` 的 ``read_scans``:扫描用前后雷达合并的帧(前雷达系,按轨迹补两台之间的运动;
+    Top Glove 11-17 后雷达进图)。要 ROS 的系统 Python。"""
+    def read(bag: Path, traj: Sequence[Any], topic: str = SCAN_TOPIC, *,
+             every: int = SCAN_EVERY) -> Iterator[tuple[Any, Any]]:
+        from nexwar_localizer import dualbag
+        msgs = ((dualbag._stamp(m), m) for _, m in
+                dualbag.merged_messages(bag, T_front_rear, traj=traj, front_topic=topic))
+        yield from scans_with_pose(msgs, traj, every=every)
+    return read
+
+
+def scans_with_pose(scans: Iterator[tuple[float, Any]], traj: Sequence[Any], *,
+                    every: int = SCAN_EVERY) -> Iterator[tuple[Any, Any]]:
+    """``(时刻, 点或 PointCloud2)`` 逐帧(每 ``every`` 帧取一帧)按时刻配上轨迹里最近的位姿(差
+    :data:`SCAN_MATCH_S` 以上不要),回 ``(雷达位置, 换进地图系的点)``。"""
+    import numpy as np
+
+    from nexwar_localizer.frames import quat_to_mat
+
+    stamps = np.array([t for t, _, _ in traj])
+    for i, (st, m) in enumerate(scans):
         if i % every:
             continue
-        m = deserialize_message(raw, PointCloud2)
-        st = m.header.stamp.sec + m.header.stamp.nanosec * 1e-9
         k = int(np.clip(np.searchsorted(stamps, st), 1, len(stamps) - 1))
         k = k - 1 if abs(stamps[k - 1] - st) <= abs(stamps[k] - st) else k
         if abs(stamps[k] - st) > SCAN_MATCH_S:
             continue
         _, p, q = traj[k]
         R = np.array(quat_to_mat(q))
-        xyz = cloud_xyz(m)[::SCAN_POINT_STRIDE]
+        xyz = (m if isinstance(m, np.ndarray) else cloud_xyz(m))[::SCAN_POINT_STRIDE]
         yield np.array(p, float), xyz @ R.T + np.array(p, float)
 
 
