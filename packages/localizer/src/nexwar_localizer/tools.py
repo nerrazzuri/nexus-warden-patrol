@@ -340,9 +340,11 @@ def _superlio_front(bag: Path, work: Path, *, reuse: bool, replay: bool = False,
             raise
         lio = S.run_offline(bag, work, cfg=cfg)
         poses, source = S.read_odom(lio, "/lio/odom"), "replay"
+    poses, lv = S.level(S.clean(poses), S.bag_imu(bag))     # Top Glove 11-17:俯仰漂了 4°
+    print(f"按重力摆平:{lv['why']}")
     t1 = time.monotonic()
     info = S.prepare(work, bag, poses, cfg=cfg, prior_pipeline=build.PRIOR_PIPELINE,
-                     plugin=build._plugin(), source=source + why)
+                     plugin=build._plugin(), source=source + why, level=lv)
     q = info["quality"]
     print(f"Super-LIO({source}):{q['duration_s']} s、路程 {q['path_m']} m、首尾相距 "
           f"{q['start_end_m']} m(回到起点的话这就是误差)、关键帧 {info['keyframes']}")

@@ -210,6 +210,7 @@ def _fake_front(monkeypatch, tmp_path, *, live: bool):
     monkeypatch.setattr(S, "read_odom", read_odom)
     monkeypatch.setattr(S, "run_offline", run_offline)
     monkeypatch.setattr(S, "prepare", prepare)
+    monkeypatch.setattr(S, "bag_imu", lambda bag, topic=S.IMU_TOPIC: [])
     monkeypatch.setattr(build, "_plugin", lambda: [])
     return seen
 
@@ -532,3 +533,73 @@ def test_TG1117_建图命令_后雷达外参没标定就拒_不悄悄用几何�
     assert tools.main(["build", "--bag", str(tmp_path), "--out", str(tmp_path / "o"),
                        "--front", "superlio", "--rear-lidars", str(tmp_path / "none.json")]) == 2
     assert "没标定" in capsys.readouterr().out
+
+
+# ---------------------------------------------------------------- Top Glove 11-17:按重力摆平
+def _drifted(n: int = 1200, dt: float = 0.1, v: float = 0.6, deg: float = 4.0):
+    """平地上沿 x 直走 120 s;估出来的姿态俯仰从 0 漂到 ``deg``,位移跟着转(z 一路爬)。IMU 量的是真的
+    比力(机身真是平的:一直是 +Z 的 9.81),加一点走路的抖动。回(估出来的位姿, IMU)。"""
+    rng = np.random.default_rng(5)
+    poses, p = [], np.zeros(3)
+    for k in range(n):
+        t = 1000.0 + k * dt
+        a = math.radians(deg) * k / (n - 1)
+        q = (0.0, math.sin(-a / 2), 0.0, math.cos(-a / 2))          # 绕 y 转 -a:往前抬头
+        if k:
+            R = np.array(S.quat_to_mat(q))
+            p = p + R @ np.array([v * dt, 0.0, 0.0])
+        poses.append((t, tuple(p), q))
+    imu = [(1000.0 + k * 0.01, *(np.array([0.0, 0.0, 9.81]) + rng.normal(0, 0.5, 3)))
+           for k in range(n * 10)]
+    return poses, imu
+
+
+def test_TG1117_姿态漂了4度_按IMU重力摆平_高度回到平的_姿态回正():
+    """Top Glove 11-17(笔记本核):Super-LIO 俯仰 / 横滚漂了约 4°,轨迹东头「高 1.2 m」是假的,
+    先验 3D 图西头歪了。每 20 s 拿 IMU 的比力按轨迹转到世界系取平均 = 那段的「上」,
+    把轨迹逐段转正。"""
+    poses, imu = _drifted()
+    z0 = max(p[1][2] for p in poses) - min(p[1][2] for p in poses)
+    assert z0 > 2.0, "漂了 4°、走 72 m:z 爬了两米多"
+    out, info = S.level(poses, imu)
+    assert info["applied"] and 3.0 < info["max_deg"] < 5.0, info
+    z = [p[1][2] for p in out]
+    assert max(z) - min(z) < 0.2, f"摆平后高低差 {max(z) - min(z):.2f} m"
+    assert abs(out[-1][1][0] - 0.6 * 0.1 * 1199) < 0.5, "往前走的距离不变"
+    up = np.array(S.quat_to_mat(out[-1][2])) @ np.array([0.0, 0.0, 1.0])
+    assert math.degrees(math.acos(min(1.0, up[2]))) < 0.5, "最后的姿态回正"
+    assert [p[0] for p in out] == [p[0] for p in poses]
+
+
+def test_TG1117_没漂_摆平不改():
+    poses, imu = _drifted(deg=0.0)
+    out, info = S.level(poses, imu)
+    assert info["max_deg"] < 0.5
+    assert np.allclose([p[1] for p in out], [p[1] for p in poses], atol=0.05)
+
+
+def test_TG1117_IMU不够或者偏得离谱_不摆平_写明为什么():
+    poses, imu = _drifted()
+    out, info = S.level(poses, imu[:20])
+    assert not info["applied"] and "IMU" in info["why"] and out == poses
+    tilted = [(t, ax, ay + 3.0, az) for t, ax, ay, az in imu]          # 偏了约 17°:IMU 有问题
+    out, info = S.level(poses, tilted)
+    assert not info["applied"] and "°" in info["why"] and out == poses
+
+
+def test_TG1117_建图命令_拿录包里的IMU摆平再出关键帧_记进mola_json(tmp_path, monkeypatch):
+    from nexwar_localizer import tools
+    seen = _fake_front(monkeypatch, tmp_path, live=True)
+    got: dict[str, object] = {}
+    _, imu = _drifted()
+    monkeypatch.setattr(S, "bag_imu",
+                        lambda bag, topic=S.IMU_TOPIC: got.update(bag=Path(bag).name) or imu)
+
+    def prepare(work, bag, poses, **kw):
+        got["level"] = kw.get("level")
+        return {"quality": S.quality(poses), "keyframes": 3, "prepare_s": 1.0}
+
+    monkeypatch.setattr(S, "prepare", prepare)
+    tools._superlio_front(tmp_path / "bag1", tmp_path / "w", reuse=True)
+    assert got["bag"] == "bag1" and seen["read"] == [("bag1", S.LIVE_TOPIC)]
+    assert got["level"] is not None and "applied" in got["level"]
