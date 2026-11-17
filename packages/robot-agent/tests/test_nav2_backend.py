@@ -2425,3 +2425,30 @@ async def test_终点朝向改成开进去的方向_按最后一米多的走向_
     await t.nav.goto(Pose.from_xy_yaw(9.0, 4.0, math.pi))
     [g] = link.kinds("goal")
     assert abs(math.remainder(g["yaw"], 2 * math.pi)) < math.radians(8), math.degrees(g["yaw"])
+
+
+async def test_先直走看清_刚起步就被走过来的人挡住_不算一次_人走了还能挪(tmp_path):
+    """仿真 11-17 办公室种子 4:走廊尽头要掉头,两次「先直走看清」都在两个行人走到跟前时起步、一步没
+    挪就被挡,次数用完;人走了盲带还拦着原地转,再也不挪,卡死。没挪出去的不算一次。"""
+    link = 假转接()
+    t = _台(tmp_path, link, walls=_两米走廊() + [(0.1, 3.0, 2.1, 5.0)])   # 身后 0.9 m 封死
+    await t.start(3.0, 4.0)
+    await t.nav.goto(Pose.from_xy_yaw(1.0, 4.0))
+    x0 = t.r.x
+    for _ in range(2):                                      # 两回:刚起步,人就走到车头前
+        for _ in range(40):
+            link.now += 0.1
+            link.cmd = (link.now, 1, 0.0, 0.0, 0.6)
+            await t.一拍()
+            if t.nav._look is not None and "人" not in t.world.dyn:
+                t.world.dyn["人"] = (t.r.x + 0.75, 3.75, t.r.x + 1.0, 4.25)
+        t.world.dyn.pop("人", None)
+    assert t.r.x - x0 < 0.3, t.r.x - x0
+    sent = []
+    for _ in range(120):
+        link.now += 0.1
+        link.cmd = (link.now, 1, 0.0, 0.0, 0.6)
+        await t.一拍()
+        sent.append(round(t.nav._last_wz, 2))
+    assert t.r.x - x0 > 0.5, ("人走了还能挪出去看清", t.r.x - x0)
+    assert any(abs(w) > 0.1 for w in sent), "看清以后照 Nav2 的转"
