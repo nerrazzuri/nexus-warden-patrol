@@ -605,7 +605,7 @@ def test_TG1117_建图命令_拿录包里的IMU摆平再出关键帧_记进mola_
     assert got["level"] is not None and "applied" in got["level"]
 
 
-def _out_and_back(bias_g=(-0.0147, 0.0, 0.0016), drift_deg=3.5, tilt0_deg=0.95):
+def _out_and_back(bias_g=(-0.0147, 0.0, 0.0016), drift_deg=3.5, tilt0_deg=0.95, tail_yaws=()):
     """笔记本 11-17 v11:往东走 150 s,掉头往西走 150 s(北移 8 m),地是平的。估出来的姿态:
     起步就偏 ``tilt0_deg``(绕 y),最后 80 s 再漂到 ``drift_deg``。IMU(z 朝上)量真比力 +
     水平零偏 ``bias_g``(单位 g)。回(估出来的位姿, IMU, 每个位姿的真 x)。"""
@@ -618,6 +618,8 @@ def _out_and_back(bias_g=(-0.0147, 0.0, 0.0016), drift_deg=3.5, tilt0_deg=0.95):
     for k in range(n):
         t = 1000.0 + k * dt
         yaw = 0.0 if k < n // 2 else math.pi
+        if tail_yaws and k >= n - 800:                     # 最后 80 s 换成别处没走过的朝向
+            yaw = tail_yaws[min(len(tail_yaws) - 1, (k - (n - 800)) * len(tail_yaws) // 800)]
         extra = max(0.0, (t - (1000.0 + n * dt - 80.0)) / 80.0) * (drift_deg - tilt0_deg)
         a = math.radians(tilt0_deg + extra)
         D = np.array(S.quat_to_mat((0.0, math.sin(-a / 2), 0.0, math.cos(-a / 2))))
@@ -653,3 +655,22 @@ def test_TG1117_v11_IMU有水平零偏_去程回程不被摆到不同高度():
         worst = max(worst, abs(z[i] - z[j]))
     assert worst < 0.1, f"同一个 x 去程回程高低差 {worst:.2f} m"
     assert max(z) - min(z) < 0.2, f"摆平后高低差 {max(z) - min(z):.2f} m"
+
+
+
+def test_TG1117_v12_漂的那几段朝向别处没有_零偏不被漂移带偏():
+    """笔记本核 v12:西头漂的 6 段朝向(-94°、-137°)只在漂的时候出现,先全量最小二乘,零偏把漂移
+    「解释」掉(估成 1.47°,应约 0.84°),按离群也剔不掉,结果纠反、回程比去程高 0.45–0.7 m。
+    要先找一致的大多数(RANSAC):16 段对 6 段。"""
+    rng = np.random.default_rng(3)
+    g = np.array([math.radians(0.95), 0.0, 1.0])
+    b = np.array([-0.0147, 0.0016])                     # IMU 系 x、y(z 朝上)
+    wrong = b + np.array([-0.045, 0.02])                # 漂的那几段差了约 2.8°,「看起来像」零偏
+    U, M = [], []
+    for yaw in [0.0, math.pi] * 8 + [math.radians(-94)] * 3 + [math.radians(-137)] * 3:
+        R = np.array(S.quat_to_mat((0.0, 0.0, math.sin(yaw / 2), math.cos(yaw / 2))))
+        bb = b if len(U) < 16 else wrong
+        U.append(g + R[:, :2] @ bb + rng.normal(0, math.radians(0.2), 3))
+        M.append(R[:, :2])
+    est, why = S._imu_bias(np.array(U), np.array(M))
+    assert why == "" and np.linalg.norm(est - b) < math.radians(0.15), (est, why)
