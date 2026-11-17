@@ -201,9 +201,9 @@ def package(work: Path, out: Path, *, prior_pack: PriorPack | None = None,
     :class:`BuildError`,一个版本文件都不写)。``loop_closure`` 是回环工具的路径
     (:func:`find_loop_closure`;None = 不回环):先回环(:func:`loop_close`),成了就从 ``work/lc``
     里回环后的三样打包。``live``(W75,站点上打包、没有录包):边走边存的关键帧目录 —— 里程、雷达钟差从
-    它的 ``live.json`` 拿,RTK 解从它的 ``rtk.jsonl`` 拿;栅格用模拟射线。``gravity_up``:建图系里重力
-    的「上」(Super-LIO 按 IMU 对齐了重力,是 +Z;MOLA 没对齐,不给)—— 给了「上」的正负号按它定
-    (:func:`orient`)。"""
+    它的 ``live.json`` 拿,RTK 解从它的 ``rtk.jsonl`` 拿;栅格拿关键帧打真射线(:func:`live_scans`)。
+    ``gravity_up``:建图系里重力的「上」(Super-LIO 按 IMU 对齐了重力,是 +Z;MOLA 没对齐,不给)——
+    给了「上」的正负号按它定(:func:`orient`)。"""
     prior_pack = prior_pack or PriorPack()
     say = progress or (lambda _stage: None)
     aux = bag
@@ -255,9 +255,14 @@ def package(work: Path, out: Path, *, prior_pack: PriorPack | None = None,
     slio = slioloc.voxel_down(points, slioloc.MAP_VOXEL_M)
     rc = mapclean.RayClear(slio, slioloc.MAP_VOXEL_M)     # W70:画栅格那批逐帧扫描顺带清动态点
     body = np.array([frames.to_map2d(p, q)[:2] for _, p, q in traj])
+    scan_src, reader = bag, read_scans or bag_scans
+    if bag is None and live is not None and (live / "kf" / "index.txt").is_file():
+        # 11-18:站点上没有录包 —— 边走边存的关键帧就是真扫描,拿它打真射线(原来用模拟射线,
+        # 办公室包上路沿多了一倍多、远处墙线没了、墙外漏空地)
+        scan_src, reader = live, read_scans or live_scans
     try:
-        g, rays = _render(points, sensor, frames, body, traj, bag, lidar_topic,
-                          read_scans or bag_scans, on_scan=rc.add, read_extra=read_extra_rays)
+        g, rays = _render(points, sensor, frames, body, traj, scan_src, lidar_topic,
+                          reader, on_scan=rc.add, read_extra=read_extra_rays)
     except grid.GridTooLarge as exc:
         raise BuildError(str(exc)) from exc
     grid.write(g, out / "floor")
@@ -728,7 +733,9 @@ def _render(points: Any, sensor: Any, frames: Frames, body: Any, traj: Sequence[
             why = f"无法读取逐帧扫描:{exc}"[:300]
         else:
             if used[0]:
-                return g, f"scans:{used[0]}" + (f"+rear:{g.extra_scans}" if g.extra_scans else "")
+                kind = "keyframes" if (bag / "kf" / "index.txt").is_file() else "scans"
+                return g, f"{kind}:{used[0]}" + (f"+rear:{g.extra_scans}" if g.extra_scans
+                                                 else "")
             why = "录包里没有配得上轨迹的扫描"
     return grid.render(points, sensor, frames, body_path=body), f"synthetic:{why}"
 
@@ -784,6 +791,24 @@ def bag_scans(bag: Path, traj: Sequence[Any], topic: str = SCAN_TOPIC, *,
     yield from scans_with_pose(msgs(), traj, every=every)
 
 
+def live_scans(live: Path, traj: Sequence[Any], topic: str = SCAN_TOPIC
+               ) -> Iterator[tuple[Any, Any]]:
+    """站点上打包(没有录包):边走边存的关键帧(``kf/index.txt`` + 雷达系 float32 点云,已按 5 cm
+    降采样)当逐帧扫描,按时刻配上轨迹的位姿,回 ``(雷达位置, 换进地图系的点)``。每帧都用、点不
+    再抽。"""
+    import numpy as np
+
+    kf = live / "kf"
+
+    def clouds() -> Iterator[tuple[float, Any]]:
+        for ln in (kf / "index.txt").read_text(encoding="utf-8").splitlines():
+            c = ln.split()
+            if len(c) >= 2:
+                yield float(c[0]), np.fromfile(kf / c[-1], "<f4").reshape(-1, 3).astype(float)
+
+    yield from scans_with_pose(clouds(), traj, every=1, stride=1)
+
+
 def rear_rays(T_front_rear: Any, topic: str = "/rear_lidar"
               ) -> Callable[..., Iterator[tuple[Any, Any]]]:
     """:func:`package` 的 ``read_extra_rays``:后雷达自己的帧(不跟前雷达合并),按那一刻的前雷达位姿
@@ -831,7 +856,8 @@ def rays_from(scans: Iterator[tuple[float, Any]], traj: Sequence[Any], T_front_r
 
 
 def scans_with_pose(scans: Iterator[tuple[float, Any]], traj: Sequence[Any], *,
-                    every: int = SCAN_EVERY) -> Iterator[tuple[Any, Any]]:
+                    every: int = SCAN_EVERY, stride: int = SCAN_POINT_STRIDE
+                    ) -> Iterator[tuple[Any, Any]]:
     """``(时刻, 点或 PointCloud2)`` 逐帧(每 ``every`` 帧取一帧)按时刻配上轨迹里最近的位姿(差
     :data:`SCAN_MATCH_S` 以上不要),回 ``(雷达位置, 换进地图系的点)``。"""
     import numpy as np
@@ -848,7 +874,7 @@ def scans_with_pose(scans: Iterator[tuple[float, Any]], traj: Sequence[Any], *,
             continue
         _, p, q = traj[k]
         R = np.array(quat_to_mat(q))
-        xyz = (m if isinstance(m, np.ndarray) else cloud_xyz(m))[::SCAN_POINT_STRIDE]
+        xyz = (m if isinstance(m, np.ndarray) else cloud_xyz(m))[::stride]
         yield np.array(p, float), xyz @ R.T + np.array(p, float)
 
 
