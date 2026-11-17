@@ -460,7 +460,7 @@ def make(dst: Path, seeds: int) -> int:
     for fam in FAMILIES:
         for seed in range(seeds):
             rng = random.Random(f"{fam.__name__}/{seed}")
-            for _try in range(20):
+            for _try in range(100):                      # 种子多了偶尔 20 次不够(仓库 11)
                 try:
                     case = fam(rng, seed)
                     break
