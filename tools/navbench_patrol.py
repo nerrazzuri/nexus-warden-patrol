@@ -36,6 +36,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import logging
 import math
 import os
 import random
@@ -277,6 +278,11 @@ class Clock:
 async def run_case(case: dict[str, Any], *, sim_cap_s: float) -> dict[str, Any]:
     from actor_driver import Timeline
     from obs_world import 世界, 假感知
+
+    # 轨迹路径里的 {case} 换成「场景-种子」(整批跑时一个用例一个文件);代理日志里标出用例开头
+    name = f"{case['scenario']}-{int(case['seed'])}"
+    trace_to = os.environ.get("NAVPATROL_TRACE", "").replace("{case}", name)
+    logging.getLogger("navbench").info("==== 用例 %s ====", name)
 
     from nexwar_agent.assembly import build_engine
     from nexwar_agent.engine.machine import FINAL_STATES
@@ -600,8 +606,8 @@ async def run_case(case: dict[str, Any], *, sim_cap_s: float) -> dict[str, Any]:
             if zones and not out["zone_entered"]:
                 if any(_in_poly(px, py, z) for z in zones for px, py in poly):
                     out["zone_entered"] = True
-            if os.environ.get("NAVPATROL_TRACE") and k % 2 == 0:   # 回放用:每 2 拍一行
-                with open(os.environ["NAVPATROL_TRACE"], "a", encoding="utf-8") as tf:
+            if trace_to and k % 2 == 0:                     # 回放用:每 2 拍一行
+                with open(trace_to, "a", encoding="utf-8") as tf:
                     tf.write(json.dumps({
                         "t": round(t_sim, 2), "x": round(r.x - ox, 3), "y": round(r.y - oy, 3),
                         "yaw": round(r.yaw, 3), "vx": round(vx, 3), "wz": round(wz, 3),
