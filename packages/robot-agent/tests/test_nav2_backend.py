@@ -2250,13 +2250,16 @@ async def test_走廊里Nav2路线调头_代理接过来原地掉头_转过来�
     for _ in range(150):
         link.now = t.c.s()
         cur = link.kinds("goal")[-1]["goal_id"]
+        if cur == gid:                                      # Nav2 约 1 Hz 从脚下重规划,还是往回
+            link.plan = (gid, tuple((t.r.x - d, 4.0) for d in (0.0, 0.5, 1.0, 2.0, 4.0)))
         link.cmd = (link.now, 0, -0.1, 0.0, 0.5, cur, "ctl") if cur == gid else None
         await t.一拍()
         if len(link.kinds("goal")) >= 2:
             break
     assert [d for k, d in t.events if k == "nav_uturn"], t.events
     assert len(link.kinds("goal")) >= 2, "转过来以后重新交给 Nav2"
-    assert abs(math.remainder(t.r.yaw - math.pi, 2 * math.pi)) < math.radians(30), t.r.yaw
+    # 差 25° 以内就交回 Nav2(MANEUVER_DONE_RAD);等那 3 秒 Nav2 倒车带偏了一点,路线方向也偏一点
+    assert abs(math.remainder(t.r.yaw - math.pi, 2 * math.pi)) < math.radians(40), t.r.yaw
     assert not t.crashed
     assert NavStatus.FAILED not in t.status
 
@@ -2356,3 +2359,19 @@ async def test_先直走看清的路上经过了目标_接过来只差朝向时�
             break
     assert NavStatus.SUCCEED in t.status, t.status
     assert math.dist((t.r.x, t.r.y), (3.3, 4.0)) < 0.3, (t.r.x, t.r.y)
+
+
+async def test_路线只调头一下又回来_人走过去了_不掉头(tmp_path):
+    """仿真 11-17 工厂种子 6:离终点不远,工人迎面走来,Nav2 的路线临时改往回绕;马上接过来掉头,
+    转完背对着目标又卡住。调头要持续 UTURN_PERSIST_S 才接。"""
+    link = 假转接()
+    t = _台(tmp_path, link, walls=_两米走廊())
+    gid, x0 = await _走着_Nav2改成往回走(t, link)
+    flip = 10                                               # 往回绕的路线只持续 1 秒
+    for i in range(flip + 30):
+        if i >= flip:                                       # 人走过去了,路线又往前
+            link.plan = (gid, ((t.r.x, 4.0), (12.0, 4.0)))
+        link.now = t.c.s()
+        link.cmd = (link.now, 0, 0.0, 0.0, 0.0, gid, "ctl")
+        await t.一拍()
+    assert not [d for k, d in t.events if k == "nav_uturn"], t.events
