@@ -81,10 +81,11 @@ LEVEL_BIAS_MAX_DEG = 3.0    # 估出来比这大不信(不扣)
 LEVEL_BIAS_KEEP_DEG = 0.8   # 估零偏时离拟合超过这么多的段当在漂,不参与(v11 不漂的段 0.04–0.8°)
 LEVEL_BIAS_FINE_DEG = 0.3   # 精解时离拟合超过 max(这么多, 3 倍中位)的段也不要(漂刚开始的那几段)
 LEVEL_BIAS_TRIES = 3000     # RANSAC 最多试这么多组(段少时全试)
-LEVEL_CONST_DEG = 1.0       # 扣零偏后离常量重力不到 max(0.5°, 3 倍中位)(最多这么多)的段都用常量纠
-LEVEL_CONST_MIN_DEG = 0.8   # (笔记本 v13:没漂的各段 0.04–0.85°,中位约 0.3°;台式机 11-18:原来 0.5,
-                            # 商场平地中位 0.20° → 门槛 0.61°,0.71–0.72° 的两段被当漂逐段纠,
-                            # 同处去程回程高度差 0.055 → 0.081 m)
+LEVEL_CONST_DEG = 1.3       # 扣零偏后离常量重力不到这么多的段都用常量纠(固定,不按段间噪声往下压)。
+                            # 台式机 11-18 回归台:没漂的段 Top Glove 到 0.96°、商场 Super-LIO
+                            # 每回放一遍 0.71–0.83°;真漂的 Top Glove 2.04° 以上。原来「3 倍中位、
+                            # 不低于 0.5°/0.8°、最多 1°」紧贴没漂的那边。合成慢漂 1.0–1.3° 一样,
+                            # 1.5° 就纠不动
 #: 建完把关:相邻两个位姿水平挪的比「最快速度 × 间隔 + 余量」还多,就是跟丢了,不出图(跟定位器
 #: 判跳一个做法)。不只看距离:录位姿会丢帧(台式机实测 1.8 s 断档里走了 1.58 m,是正常走);
 #: 不只看速度:两个位姿可能只隔 5 ms(差 1.5 cm 算出来 3 m/s)。
@@ -351,7 +352,7 @@ def level(poses: Sequence[Pose], imu: Sequence[tuple[float, float, float, float]
 def _window_ups(U: Any, M: Any) -> tuple[Any, Any, str, Any]:
     """每段的「上」``U``(k×3)、平均姿态里水平两根轴 ``M``(k×3×2)→(纠正用的「上」k×3、零偏、
     没扣零偏的原因、哪些段用常量)。扣掉零偏(:func:`_imu_bias`)后,离常量重力不到
-    :data:`LEVEL_CONST_DEG`(按段间噪声定)的段都用那个常量(不把段间 0.2–0.5° 的噪声
+    :data:`LEVEL_CONST_DEG` 的段都用那个常量(不把段间 0.2–0.5° 的噪声
     纠进去),只有漂了的段逐段纠;不平滑(笔记本核 v13:前后各一段平均让
     纠正滞后、摊开,去程回程差 0.12–0.27 m)。
     零偏估不了:不扣、逐段纠。"""
@@ -368,10 +369,9 @@ def _window_ups(U: Any, M: Any) -> tuple[Any, Any, str, Any]:
     C = U - np.einsum("kij,j->ki", M, b)
     cos = (C @ g) / (np.linalg.norm(C, axis=1) * np.linalg.norm(g))
     dev = np.degrees(np.arccos(np.clip(cos, -1.0, 1.0)))
-    lim = min(LEVEL_CONST_DEG, max(LEVEL_CONST_MIN_DEG, 3 * float(np.median(dev))))
-    # 门槛按段间噪声定:慢慢漂起来的也认得出。挨着漂的段不另算(笔记本核 v14:Top Glove 第 16 段
-    # 偏 0.85°、看高度不是漂,逐段纠了西头反而压低 0.27 m)
-    const = dev < lim
+    # 门槛固定(:data:`LEVEL_CONST_DEG`)。挨着漂的段不另算(笔记本核 v14:Top Glove 第 16 段
+    # 偏 0.85–0.96°、看高度不是漂,逐段纠了西头反而压低 0.27 m)
+    const = dev < LEVEL_CONST_DEG
     C[const] = g
     return C, b, "", const
 
