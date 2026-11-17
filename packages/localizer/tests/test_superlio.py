@@ -694,3 +694,14 @@ def test_TG1117_v13_真数据22段_零偏约0点9度_没漂的16段用同一个�
     tilt = [math.degrees(math.acos(c[2] / np.linalg.norm(c))) for c in C]
     assert max(tilt[:16]) - min(tilt[:16]) < 1e-9, "没漂的段纠正一样"
     assert min(tilt[16:]) > 2.0, tilt
+
+
+def test_商场1102_平地20段_偏0点7度的两段不当漂_全用同一个常量纠():
+    """台式机 11-18 拿商场 mall3 的包核平地(Super-LIO 按现在的配置回放):20 段中位 0.20°,
+    门槛按「3 倍中位、不低于 0.5°」算出 0.61°,第 6、7 段 0.71–0.72° 被当漂逐段纠,同一处去程回程
+    高度差 0.055 → 0.081 m(最大 0.069 → 0.126)。门槛下限抬到 0.8°(固定 1° 不行:合成的慢漂
+    第二段 0.96° 就认不出来):20 段全用常量,差 0.047 m。"""
+    d = np.load(Path(__file__).parent / "data" / "level-windows-mall3.npz")
+    flat = [i for i in range(3) if i != int(d["up_axis"])]
+    C, b, why, const = S._window_ups(d["U"], d["M"][:, :, flat])
+    assert why == "" and const.all(), const
