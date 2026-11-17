@@ -46,7 +46,7 @@ REC_FREE_S = 15.0
 #: ``strict`` = 外审 11-14 第六批(两侧盲带、原地转、没后雷达后退看不见 → 停;超过 :data:`MEMORY_S`
 #: 的旧帧只认「有东西」;走着的时候旧帧留到 :data:`REC_FREE_S`);``legacy`` = 第六批以前(看不见的
 #: 一律降到 0.3 m/s 接着走,站着留下的旧帧说空也算空,旧帧只留 :data:`MEMORY_S`)。旧策略也**没有**
-#: 真机发布认可,只做对照。``sealed`` = 严格策略 + 「封住」(11-17 仿真对照,用户未定):站着没挪窝、
+#: 真机发布认可,只做对照。``sealed`` = 严格策略 + 「封住」(用户 11-17 定为默认):站着没挪窝、
 #: 机器人周围 :data:`SEAL_R` 以内看得见的格子一直没变(没冒出新的挡、原来的挡也没变空),人就没法不经
 #: 过看得见的地方走进盲带 —— 停下那一刻还新鲜(:data:`MEMORY_S` 以内)的「空」接着算数。一变就失效、
 #: 不往回认,退回严格策略。已知漏洞:盲带跟别的看不见的地方(柱子后面的影子)连着,人从影子里走进来
@@ -134,8 +134,9 @@ class ObstacleView:
     wall_still: bool = False
     wall_pose: tuple[float, float, float] | None = None
     wall_seq: int = 0
-    #: 看不见的按哪套规矩(:data:`BAND_POLICIES`)。
-    band_policy: str = "strict"
+    #: 看不见的按哪套规矩(:data:`BAND_POLICIES`)。用户 11-17 定默认 ``sealed``(仿真 100 个
+    #: 用例:strict 85%、sealed 90%,都没碰);上真机前在 C40221 上实测转身。
+    band_policy: str = "sealed"
     #: 工单 21:狗最近一次挪窝(离上次站的地方超过 :data:`MEMORY_STILL_M`)的位置和时刻。
     _still_at: tuple[float, float] | None = None
     _still_since: float = -math.inf
