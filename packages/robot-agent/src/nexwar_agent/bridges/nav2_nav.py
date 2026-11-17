@@ -264,6 +264,16 @@ BACKOUT_WAIT_S = 3.0
 #: 就撤掉,还走这条。离机器人、离终点太近的不标(不许把自己、终点圈进去)。
 AVOID_R = 0.5
 AVOID_SIDES = 8
+#: 用户 11-17(真实巡逻仿真:走廊被地图上没有的东西整条堵死,机器人一直顶在前面等):守卫被地图上没有的
+#: 东西拦满这么久(秒,人一般早让开了)→ 本趟把挡的地方临时标成绕开、从这儿重新查一条路
+BLOCK_REROUTE_S = 8.0
+#: 一个目标最多这样换几次
+BLOCK_REROUTE_MAX = 3
+#: 标的圈(半径 :data:`AVOID_R`)圆心从挡点往远离机器人的方向推这么多(米):圈不压到机器人自己
+BLOCK_PUSH_M = 0.5
+#: 挡点隔这么近(米)只标一个圈;最多标这么多个
+BLOCK_CELL_M = 0.3
+BLOCK_MAX_MARKS = 8
 #: 原地转最快(弧度/秒):转快了定位器跟不上(11-02 工单 13)。
 TURN_ONLY_MAX_RPS = 0.6
 #: 前进速度不到这个(米/秒)就当「原地转」,按地图上的墙核一道(:meth:`Nav2NavBackend._turn_hits_map`)。
@@ -398,6 +408,8 @@ class Nav2NavBackend(PlannedNavBackend):
         self._back: dict[str, Any] | None = None
         #: 这一趟临时绕开的地方(卡住过的点,只交给 Nav2)。
         self._avoid: list[tuple[float, float]] = []
+        #: 这个目标因为被地图上没有的东西堵住换过几次路(:meth:`_block_reroute`)
+        self._block_tries = 0
         self._osc: deque[tuple[float, int]] = deque()
         #: 最近走过的路(沿原路倒退用;跨目标留着 —— 机器人就是从那儿来的)。
         self._trail: deque[tuple[float, float]] = deque()
@@ -520,6 +532,7 @@ class Nav2NavBackend(PlannedNavBackend):
         if self._avoid:                                    # 上一趟的临时绕开:先撤再查路
             self._avoid = []
             self._send_map()
+        self._block_tries = 0
         # W48:有路网就先在路网上找路,途经点交给 Nav2(NavigateThroughPoses,只是路过)
         via = route(self.route_net, (here.x, here.y), goal_xy) \
             if self.route_net is not None and here is not None else []
@@ -1047,6 +1060,7 @@ class Nav2NavBackend(PlannedNavBackend):
             if v.stops:
                 self._guarded(v, here)
                 await self._send(0.0, 0.0, dt_s)
+                await self._block_reroute(v, here)
                 return
         self._look = None
         if self._look_tries and math.dist(self._look_at, (here.x, here.y)) >= LOOK_RESET_M:
@@ -1573,6 +1587,67 @@ class Nav2NavBackend(PlannedNavBackend):
         self._goal_msg = msg
         self._goal_from = (here.x, here.y)
         self._resend_goal()
+
+    async def _block_reroute(self, v: Any, here: Any) -> bool:
+        """守卫被地图上没有的东西拦满 :data:`BLOCK_REROUTE_S`(用户 11-17):本趟把挡的地方临时标成绕开
+        (挡点往远处推 :data:`BLOCK_PUSH_M`、每个圈半径 :data:`AVOID_R`),送图,从这儿重新查一条路。
+        查出来了照新路走;规划不出、查不过(只有这一条路)撤掉标记照旧等。每个目标最多
+        :data:`BLOCK_REROUTE_MAX` 次。回 True = 换了路。"""
+        if v.cause != "hit" or not v.hits or self._base is None or self._target is None \
+                or self._guard_since is None or here is None \
+                or self._block_tries >= BLOCK_REROUTE_MAX \
+                or self._secs() - self._guard_since < BLOCK_REROUTE_S:
+            return False
+        xs = np.array([p[0] for p in v.hits], dtype=float)
+        ys = np.array([p[1] for p in v.hits], dtype=float)
+        dyn = ~self._near_static(xs, ys, self._odom_pose, here)
+        if not bool(dyn.any()):
+            return False                                   # 挡的全是地图上的墙:归恢复链管
+        c, s = math.cos(here.yaw), math.sin(here.yaw)
+        marks: list[tuple[float, float]] = []
+        for hx, hy in sorted(zip(xs[dyn], ys[dyn], strict=True), key=lambda p: math.hypot(*p)):
+            d = math.hypot(hx, hy) or 1.0
+            px, py = hx + hx / d * BLOCK_PUSH_M, hy + hy / d * BLOCK_PUSH_M
+            m = (here.x + c * px - s * py, here.y + s * px + c * py)
+            if any(math.dist(m, q) < BLOCK_CELL_M for q in marks + self._avoid):
+                continue
+            marks.append(m)
+            if len(marks) >= BLOCK_MAX_MARKS:
+                break
+        if not marks:
+            return False
+        self._block_tries += 1
+        self._guard_since = self._secs()                   # 重新计时:换不成也不每拍都试
+        self._avoid.extend(marks)
+        self._send_map()
+        log.warning("被地图上没有的东西挡了 %.0f 秒:本趟把那里(%d 处,最近 (%.2f, %.2f))标成绕开,"
+                    "从 (%.2f, %.2f) 重新查一条路(第 %d 次)", BLOCK_REROUTE_S, len(marks),
+                    marks[0][0], marks[0][1], here.x, here.y, self._block_tries)
+        self._planning = True
+        try:
+            got = await self._route_check(here, self._target, "路被挡住换一条")
+        finally:
+            self._planning = False
+        if not got.ok:
+            log.warning("换一条也不行(%s):撤掉标记,照旧等", got.why[:120])
+            for m in marks:
+                self._avoid.remove(m)
+            self._send_map()
+            return False
+        if self.on_event is not None:
+            self.on_event("route_reroute", {"x": round(marks[0][0], 2), "y": round(marks[0][1], 2),
+                                            "marks": len(marks),
+                                            "margin": round(float(got.margin), 3)})
+        msg = {k: v for k, v in self._goal_msg.items() if k not in ("path", "controller")}
+        if got.path:
+            msg["path"] = _wire_path(got.path)
+            msg["controller"] = PATH_CONTROLLER
+        self._goal_msg = msg
+        self._goal_from = (here.x, here.y)
+        self._prog_reset()
+        self._rec_level, self._rec_tried = 0, set()
+        self._resend_goal()
+        return True
 
     def _resend_goal(self) -> None:
         """把这次 goto 的目标重新交给 Nav2(新目标号)。"""
