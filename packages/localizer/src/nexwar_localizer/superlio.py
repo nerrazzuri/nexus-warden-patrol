@@ -70,6 +70,11 @@ OFFLINE_ENV = {"ROS_DOMAIN_ID": "93", "RMW_IMPLEMENTATION": "rmw_fastrtps_cpp",
 #: 位姿要盖住几成的扫描、两头最多差几秒(Super-LIO 中途退了、录位姿断了,不出残缺的图;外审 W67-1)。
 MIN_POSE_COVERAGE = 0.8
 MAX_EDGE_GAP_S = 5.0
+# 按重力摆平(Top Glove 11-17:Super-LIO 俯仰 / 横滚走了 10 分钟漂了约 4°,轨迹东头「高 1.2 m」是假的)
+LEVEL_WINDOW_S = 20.0       # 每这么长拿 IMU 比力的平均当「上」(走路的加速度平均掉)
+LEVEL_MIN_DEG = 1.0         # 偏得比这小不改(IMU 零偏、噪声也有这么多)
+LEVEL_MAX_DEG = 10.0        # 偏得比这大是 IMU / 轴向有问题,不改,写明
+LEVEL_MIN_SAMPLES = 200     # 一段里 IMU 少于这么多不算那段
 #: 建完把关:相邻两个位姿水平挪的比「最快速度 × 间隔 + 余量」还多,就是跟丢了,不出图(跟定位器
 #: 判跳一个做法)。不只看距离:录位姿会丢帧(台式机实测 1.8 s 断档里走了 1.58 m,是正常走);
 #: 不只看速度:两个位姿可能只隔 5 ms(差 1.5 cm 算出来 3 m/s)。
@@ -229,6 +234,113 @@ def pose_at(poses: Sequence[Pose], t: float, times: Sequence[float] | None = Non
         return None
     s = 0.0 if t1 == t0 else (t - t0) / (t1 - t0)
     return (tuple(a + s * (b - a) for a, b in zip(p0, p1, strict=True)), slerp(q0, q1, s))
+
+
+def level(poses: Sequence[Pose], imu: Sequence[tuple[float, float, float, float]]
+          ) -> tuple[list[Pose], dict[str, Any]]:
+    """按 IMU 测的重力把 Super-LIO 的轨迹逐段摆平(Top Glove 11-17)。
+
+    ``poses``:IMU 在世界系的位姿(Super-LIO 的 odom);``imu``:``(t, ax, ay, az)``
+    IMU 系的比力(静止时朝上,单位不管,只用方向)。每 :data:`LEVEL_WINDOW_S` 一段:比力按那一刻
+    的姿态转到世界系取平均 = 那段的「上」;转到 +Z 的最小旋转(不动航向)= 那段的纠正,段中心
+    之间线性插,两头取最近的一段。姿态左乘
+    纠正,位移逐步按纠正转(高低跟着回平)。偏得不到 :data:`LEVEL_MIN_DEG`、超过
+    :data:`LEVEL_MAX_DEG`、IMU 不够:原样回,``info["why"]`` 写明。回(位姿, 摘要)。"""
+    import bisect
+    poses = list(poses)
+    info: dict[str, Any] = {"applied": False, "max_deg": 0.0, "window_s": LEVEL_WINDOW_S}
+    if len(poses) < 2:
+        info["why"] = "位姿太少"
+        return poses, info
+    times = [r[0] for r in poses]
+    t0 = times[0]
+    n_win = max(1, int(math.ceil((times[-1] - t0) / LEVEL_WINDOW_S)))
+    acc = [[0.0, 0.0, 0.0, 0] for _ in range(n_win)]
+    for t, ax, ay, az in imu:
+        at = pose_at(poses, t, times)
+        n = math.sqrt(ax * ax + ay * ay + az * az)
+        if at is None or n < 1e-6:
+            continue
+        k = min(int((t - t0) / LEVEL_WINDOW_S), n_win - 1)
+        u = _apply(quat_to_mat(at[1]), (ax / n, ay / n, az / n))
+        a = acc[k]
+        a[0], a[1], a[2], a[3] = a[0] + u[0], a[1] + u[1], a[2] + u[2], a[3] + 1
+    centers, fixes, degs = [], [], []
+    for k, (x, y, z, m) in enumerate(acc):
+        if m < LEVEL_MIN_SAMPLES:
+            continue
+        n = math.sqrt(x * x + y * y + z * z)
+        ux, uy, uz = x / n, y / n, z / n
+        ang = math.acos(max(-1.0, min(1.0, uz)))
+        h = math.hypot(ux, uy)
+        if h < 1e-9:
+            q = (0.0, 0.0, 0.0, 1.0)
+        else:                            # 绕 u × z(水平轴)转 ang
+            ex, ey = uy / h, -ux / h
+            q = (ex * math.sin(ang / 2), ey * math.sin(ang / 2), 0.0, math.cos(ang / 2))
+        centers.append(t0 + (k + 0.5) * LEVEL_WINDOW_S)
+        fixes.append(q)
+        degs.append(math.degrees(ang))
+    if not fixes:
+        info["why"] = (f"IMU 不够(每 {LEVEL_WINDOW_S:g} s 要 {LEVEL_MIN_SAMPLES} 个,"
+                       "录包里有 IMU 吗?)")
+        return poses, info
+    info["max_deg"] = round(max(degs), 2)
+    info["first_deg"], info["last_deg"] = round(degs[0], 2), round(degs[-1], 2)
+    if max(degs) > LEVEL_MAX_DEG:
+        info["why"] = f"偏了 {max(degs):.1f}° 超过 {LEVEL_MAX_DEG:g}°(IMU 或轴向不对?),不摆平"
+        return poses, info
+    if max(degs) < LEVEL_MIN_DEG:
+        info["why"] = f"偏得不到 {LEVEL_MIN_DEG:g}°,不改"
+        return poses, info
+
+    def fix_at(t: float) -> tuple[float, ...]:
+        i = bisect.bisect_left(centers, t)
+        if i <= 0:
+            return fixes[0]
+        if i >= len(centers):
+            return fixes[-1]
+        s = (t - centers[i - 1]) / (centers[i] - centers[i - 1])
+        return slerp(fixes[i - 1], fixes[i], s)
+
+    out: list[Pose] = []
+    prev_p, prev_new = None, None
+    for t, p, q in poses:
+        C = quat_to_mat(fix_at(t))
+        new_q = mat_to_quat(_mul(C, quat_to_mat(q)))
+        if prev_p is None:
+            new_p = tuple(p)
+        else:
+            d = _apply(C, [a - b for a, b in zip(p, prev_p, strict=True)])
+            new_p = tuple(a + b for a, b in zip(prev_new, d, strict=True))
+        out.append((t, new_p, new_q))
+        prev_p, prev_new = p, new_p
+    info["applied"] = True
+    info["why"] = (f"按 IMU 重力摆平:开头偏 {degs[0]:.1f}°、最多 {max(degs):.1f}°、"
+                   f"最后 {degs[-1]:.1f}°")
+    return out, info
+
+
+def bag_imu(bag: Path, topic: str = IMU_TOPIC) -> list[tuple[float, float, float, float]]:
+    """录包里 ``topic`` 的 ``sensor_msgs/Imu`` → ``(报文头时刻, ax, ay, az)``。没有这个话题回空。"""
+    import rosbag2_py
+    from rclpy.serialization import deserialize_message
+    from sensor_msgs.msg import Imu
+
+    storage = "mcap" if any(Path(bag).glob("*.mcap")) else "sqlite3"
+    r = rosbag2_py.SequentialReader()
+    r.open(rosbag2_py.StorageOptions(uri=str(bag), storage_id=storage),
+           rosbag2_py.ConverterOptions("cdr", "cdr"))
+    if topic not in {x.name for x in r.get_all_topics_and_types()}:
+        return []
+    r.set_filter(rosbag2_py.StorageFilter(topics=[topic]))
+    out = []
+    while r.has_next():
+        _, raw, _ = r.read_next()
+        m = deserialize_message(raw, Imu)
+        a = m.linear_acceleration
+        out.append((m.header.stamp.sec + m.header.stamp.nanosec * 1e-9, a.x, a.y, a.z))
+    return out
 
 
 def lidar_pose(p_imu: Sequence[float], q_imu: Sequence[float], R_il: Sequence[Sequence[float]],
@@ -486,7 +598,8 @@ def _checked(poses: Iterable[Pose]) -> tuple[list[Pose], dict[str, float]]:
 def prepare(work: Path, bag: Path, poses: Sequence[Pose], *, cfg: Path, root: Path = ROOT,
             prior_pipeline: Path, plugin: Sequence[str] = (), run: Runner = subprocess.run,
             clouds: Iterable[tuple[float, Any]] | None = None,
-            xyz_of: Callable[[Any], Any] | None = None, source: str = "") -> dict[str, Any]:
+            xyz_of: Callable[[Any], Any] | None = None, source: str = "",
+            level: dict[str, Any] | None = None) -> dict[str, Any]:
     """位姿 → ``work`` 里出图要的三样(``traj.tum``、``map.simplemap``、``raw_prior.mm``)
     + ``mola.json``
     (``build.json`` 抄它:这次用的哪个前端、参数、质量)。回汇总。"""
@@ -498,6 +611,8 @@ def prepare(work: Path, bag: Path, poses: Sequence[Pose], *, cfg: Path, root: Pa
     t0 = time.monotonic()
     n = make_keyframes(poses, bag_clouds(bag) if clouds is None else clouds, work, R_il, t_il,
                        xyz_of)
+    if level is not None:                                 # 按重力摆平的摘要(:func:`level`)
+        n["level"] = level
     info = _finish(work, work / "kf", n, poses, q, cfg=cfg, root=root,
                    prior_pipeline=prior_pipeline, plugin=plugin, run=run, source=source, t0=t0)
     shutil.rmtree(work / "kf", ignore_errors=True)        # 几百 MB,simplemap 里都有了
