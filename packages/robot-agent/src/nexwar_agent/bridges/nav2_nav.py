@@ -222,6 +222,9 @@ MANEUVER_STEP_S = 1.0
 MANEUVER_MAX_STEPS = 24
 MANEUVER_MAX_S = 60.0
 MANEUVER_DONE_RAD = math.radians(25.0)
+#: 开始时就差不到 :data:`MANEUVER_DONE_RAD`:转到这么细(仿真 11-17 医院:差 24° 当转好了,0 步就交回,
+#: 还是那个朝向、还是被拦)。
+MANEUVER_FINE_RAD = math.radians(8.0)
 MANEUVER_CLEAR_M = 0.03
 #: 要去的方向:Nav2 最近那条路线上离机器人这么远(米)的那一点;没有路线就朝目标。
 MANEUVER_LOOK_M = 1.0
@@ -1333,7 +1336,8 @@ class Nav2NavBackend(PlannedNavBackend):
         self._cancel_nav2()
         want = self._man_heading(here)
         self._man = {"want": want, "t0": self._secs(), "steps": 0, "cur": None, "level": level,
-                     "why": why, "fail": fail, "last": None}
+                     "why": why, "fail": fail, "last": None, "fine": abs(math.remainder(
+                         want - here.yaw, 2 * math.pi)) <= MANEUVER_DONE_RAD}
         log.warning("%s:恢复链 %d 级 —— 自己前后挪、分段转,转到 %.0f°(现在 %.0f°)再交回 Nav2",
                     why, level, math.degrees(want), math.degrees(here.yaw))
         self._step_event(level, "maneuver", None, here, why)
@@ -1405,7 +1409,7 @@ class Nav2NavBackend(PlannedNavBackend):
             m["cur"] = None                                # 挪完看清了重挑这一步
             return
         err = math.remainder(m["want"] - here.yaw, 2 * math.pi)
-        if abs(err) <= MANEUVER_DONE_RAD:
+        if abs(err) <= (MANEUVER_FINE_RAD if m.get("fine") else MANEUVER_DONE_RAD):
             await self._man_finish(here, True, dt_s)
             return
         cur = m["cur"]
