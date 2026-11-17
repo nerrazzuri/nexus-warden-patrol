@@ -11,7 +11,7 @@ from nexwar_contract.errors import ContractError
 
 
 def test_协议号升到7_地图带clear_目标带路():
-    assert nb.PROTO == 7                                   # 6:map 带 clear;7(外审 11-14):goal 带 path
+    assert nb.PROTO == 7                    # 6:map 带 clear;7(外审 11-14):goal 带 path
 
 
 def test_plan只许代理发_plan_result只许转接节点发():
