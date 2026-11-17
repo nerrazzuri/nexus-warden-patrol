@@ -31,6 +31,7 @@ import argparse
 import json
 import math
 import random
+from collections import deque
 from pathlib import Path
 from typing import Any
 
@@ -451,6 +452,64 @@ def detour(rng: random.Random, seed: int) -> dict[str, Any]:
     return _case("r_detour", seed, (W, H), mapped, unmapped, start, goals, actors=actors)
 
 
+#: 几何可达检查:机身半宽 0.24 m + 每边 0.2 m(窄通道标准「每边 ≥ 0.2 m 必须过」),格子 5 cm。
+REACH_INFL_M = 0.44
+REACH_RES_M = 0.05
+
+
+def reachable(case: dict[str, Any], infl: float = REACH_INFL_M) -> tuple[bool, str]:
+    """几何上走不走得通(用户 11-17:成功率的分母只能是能过的场景):静态障碍(地图上的 + 地图上没有的)、
+    禁行区按 :data:`REACH_INFL_M` 往外胀,起点和每个巡逻点要站得下、在同一块连通的空地里。走动的人、
+    车不算(它们会让开、走开)。"""
+    import numpy as np
+    x0, x1, y0, y1 = case["map_bounds"]
+    RES = REACH_RES_M
+    W, H = int(round((x1 - x0) / RES)), int(round((y1 - y0) / RES))
+    cx = x0 + (np.arange(W) + 0.5) * RES
+    cy = y0 + (np.arange(H) + 0.5) * RES
+    blocked = np.zeros((H, W), bool)
+    rects = [(o["x"] - o["sx"] / 2, o["y"] - o["sy"] / 2,
+              o["x"] + o["sx"] / 2, o["y"] + o["sy"] / 2) for o in case["collision_obstacles"]]
+    for z in case.get("zones") or []:
+        if z.get("kind", "nogo") == "nogo":
+            p = np.asarray(z["polygon"])
+            rects.append((p[:, 0].min(), p[:, 1].min(), p[:, 0].max(), p[:, 1].max()))
+    for a, b, c, d in rects:
+        i0, i1 = np.searchsorted(cx, a - infl - RES), np.searchsorted(cx, c + infl + RES)
+        j0, j1 = np.searchsorted(cy, b - infl - RES), np.searchsorted(cy, d + infl + RES)
+        if i1 <= i0 or j1 <= j0:
+            continue
+        gx, gy = np.meshgrid(cx[i0:i1], cy[j0:j1])
+        dx = np.maximum(np.maximum(a - gx, 0), gx - c)
+        dy = np.maximum(np.maximum(b - gy, 0), gy - d)
+        blocked[j0:j1, i0:i1] |= np.hypot(dx, dy) < infl
+    blocked[[0, -1], :] = blocked[:, [0, -1]] = True
+
+    def cell(x, y):
+        return int((y - y0) / RES), int((x - x0) / RES)
+
+    pts = [tuple(case["start"][:2])] + [tuple(g[:2]) for g in case["goals"]]
+    for i, (x, y) in enumerate(pts):
+        if blocked[cell(x, y)]:
+            return False, f"{'起点' if i == 0 else f'点 {i}'} ({x:.2f}, {y:.2f}) 站不下"
+    seen = np.zeros_like(blocked)
+    s = cell(*pts[0])
+    seen[s] = True
+    q = deque([s])
+    free = ~blocked
+    while q:
+        j, i = q.popleft()
+        for dj, di in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+            a, b = j + dj, i + di
+            if free[a, b] and not seen[a, b]:
+                seen[a, b] = True
+                q.append((a, b))
+    for i, (x, y) in enumerate(pts[1:], 1):
+        if not seen[cell(x, y)]:
+            return False, f"点 {i} ({x:.2f}, {y:.2f}) 跟起点不连通"
+    return True, ""
+
+
 FAMILIES = [mall_loop, mall_atrium, factory, warehouse, office, parking, estate, hospital,
             lobby, detour]
 
@@ -463,9 +522,10 @@ def make(dst: Path, seeds: int) -> int:
             for _try in range(100):                      # 种子多了偶尔 20 次不够(仓库 11)
                 try:
                     case = fam(rng, seed)
-                    break
                 except ValueError:
                     continue
+                if reachable(case)[0]:
+                    break
             else:
                 raise RuntimeError(f"{fam.__name__}/{seed} 出不来合格的布局")
             d = dst / case["scenario"] / f"s{seed:03d}"
