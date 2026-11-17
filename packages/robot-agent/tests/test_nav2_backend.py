@@ -2183,8 +2183,15 @@ async def test_外审1114_拐角原地转余量不够_局部搜索给了路_带�
     assert t.nav.planned_length_m > 0
 
 
+def _只前进(t):
+    """局部搜索在拐角给的是带倒车的三点掉头;换成一条只前进的(_L路线)来测换 RPP 这条链。"""
+    t.nav._goal_msg = {**t.nav._goal_msg, "path": [list(q) for q in _L路线()]}
+    t.nav._resend_goal()
+
+
 async def test_外审1114_照路走_控制器放弃了_先换RPP跟同一条(tmp_path):
     t, link = await _L台(tmp_path)
+    _只前进(t)
     g = link.kinds("goal")[-1]
     await t.跑(0.5)
     link.goal_states.append({"type": "goal_state", "goal_id": g["goal_id"], "state": "aborted",
@@ -2198,6 +2205,7 @@ async def test_外审1114_照路走_控制器放弃了_先换RPP跟同一条(tmp
 
 async def test_外审1114_RPP也放弃了_从这儿重新查路线再走_两次还不行才按原来的失败处理(tmp_path):
     t, link = await _L台(tmp_path)
+    _只前进(t)
     plans0 = len(link.kinds("plan"))
     for _ in range(2):                                     # MPPI、RPP 都放弃
         await t.跑(0.5)
@@ -2216,6 +2224,52 @@ async def test_外审1114_RPP也放弃了_从这儿重新查路线再走_两次�
     await t.跑(1.0)
     assert len(link.kinds("plan")) == plans0 + 2
     assert NavStatus.FAILED in t.status or t.nav._man is not None, "最后按原来的失败处理"
+
+
+async def test_外审1117_I3_查过的路里有倒车段_控制器放弃了不换RPP_直接重查(tmp_path):
+    """外审 11-17 I3:RPP 配的 allow_reversing: false、允许原地转 —— 带倒车的路交给它,它会转过来
+    正着走,不是查过的那套走法。有倒车段就不换 RPP,从这儿重查。"""
+    t, link = await _L台(tmp_path)
+    msg = t.nav._goal_msg
+    back = [[1.5 - 0.025 * i, 4.0, 0.0] for i in range(1, 9)]       # 车头朝前、往后退 0.2 m
+    t.nav._goal_msg = {**msg, "path": [msg["path"][0], *back, *msg["path"][1:]]}
+    t.nav._resend_goal()
+    plans0 = len(link.kinds("plan"))
+    g = link.kinds("goal")[-1]
+    await t.跑(0.5)
+    link.goal_states.append({"type": "goal_state", "goal_id": g["goal_id"], "state": "aborted",
+                             "reason": "x"})
+    await t.跑(0.5)
+    assert all(x.get("controller") != "RPP" for x in link.kinds("goal")), link.kinds("goal")
+    assert len(link.kinds("plan")) == plans0 + 1, "从这儿重新查"
+
+
+def test_外审1117_I4_长路只去掉直线中间的点_拐角倒车一个不少_压不下去回None():
+    """外审 11-17 I4:超过 MAX_GOAL_PATH 等间隔抽点会删掉倒车段、转向点。只去掉直着走、朝向不变、
+    正好在线上的中间点(转接节点再按 5 cm 插回去,几何一样);压完还超就不交(回 None)。"""
+    from nexwar_agent.bridges import nav2_nav
+    from nexwar_contract.navbridge import MAX_GOAL_PATH
+    fwd = [[0.05 * i, 0.0, 0.0] for i in range(3000)]                 # 直走 150 m
+    turn = [[fwd[-1][0], 0.0, math.pi / 2 * i / 10] for i in range(1, 11)]
+    up = [[fwd[-1][0], 0.05 * i, math.pi / 2] for i in range(1, 2000)]
+    rev = [[fwd[-1][0], up[-1][1] - 0.05 * i, math.pi / 2] for i in range(1, 6)]   # 倒车 0.25 m
+    path = fwd + turn + up + rev
+    assert len(path) > MAX_GOAL_PATH
+    out = nav2_nav._wire_path(path)
+    assert out is not None and len(out) < 30, len(out or [])
+    for q in (fwd[0], fwd[-1], *turn, up[-1], rev[-1]):
+        assert [round(v, 3) for v in q[:2]] in [o[:2] for o in out], q
+    zig = [[0.05 * i, 0.0, 0.1 * (i % 2)] for i in range(MAX_GOAL_PATH + 10)]
+    assert nav2_nav._wire_path(zig) is None, "压不下去不交,不抽点"
+
+
+async def test_外审1117_I4_查过的路压完还太长_不交出去_这个点报走不到(tmp_path, monkeypatch):
+    from nexwar_agent.bridges import nav2_nav
+    from nexwar_patrol.backends.base import NavRequestError
+    monkeypatch.setattr(nav2_nav, "MAX_GOAL_PATH", 5)
+    with pytest.raises(NavRequestError) as e:
+        await _L台(tmp_path)
+    assert "太长" in str(e.value) and e.value.code == "goal_unreachable"
 
 
 # ---------------------------------------- 走廊里掉头(用户 11-17,真实巡逻仿真「绕路」)
