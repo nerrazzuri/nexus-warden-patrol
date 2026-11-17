@@ -659,7 +659,7 @@ def _denoise(slio: Any, sensor: Any, frames: Frames, g: Any, rc: Any) -> tuple[A
         return slio, {"before": 0, "kept": 0, "skipped": []}
     q = grid.level(np.asarray(slio, float), frames)
     t = grid.level(np.asarray(sensor, float), frames)
-    ground = grid._Ground(t, grid._floor_height(q[:, 2], t[:, 2]), grid.TRAJ_MARGIN_M, q)
+    ground = grid._Ground(t, grid._clearance(q, t), grid.TRAJ_MARGIN_M, q)
     h, ok = ground.rel(q)
     masks: dict[str, Any] = {}
     if rc.scans:

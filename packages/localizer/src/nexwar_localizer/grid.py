@@ -299,14 +299,57 @@ def _floor_height(h: np.ndarray, sensor_h: np.ndarray) -> float:
     return float((edges[k] + edges[k + 1]) / 2)
 
 
+#: 算「雷达离地多高」:沿轨迹每隔这么远(米)取一处,看它水平 :data:`CLEAR_R_M` 以内、比雷达低
+#: :data:`CLEAR_RANGE_M` 的点里最密的那一层,各处的差取中位数(Top Glove 11-17:轨迹高低差 0.95 m,
+#: 全图一个地面峰去减全程雷达高度的中位数,离地算成 1.06 m,实际 0.55 m)。
+CLEAR_STEP_M = 1.0
+CLEAR_R_M = 1.5
+CLEAR_RANGE_M = (0.1, 2.5)
+#: 至少这么多处估得出来才用(少了退回全图一个地面峰)。
+CLEAR_MIN_SPOTS = 5
+
+
+def _clearance(q: np.ndarray, t: np.ndarray) -> float:
+    """雷达离地多高:沿轨迹逐处看脚下最密的那层(见 :data:`CLEAR_STEP_M`),取中位数。"""
+    step = np.r_[0.0, np.cumsum(np.hypot(*np.diff(t[:, :2], axis=0).T))]
+    spots = t[np.unique(np.searchsorted(step, np.arange(0.0, step[-1] + 1e-9, CLEAR_STEP_M)))
+              .clip(0, len(t) - 1)]
+    pts = q[:: max(1, len(q) // 2_000_000)]
+    key = np.floor(pts[:, :2] / CLEAR_R_M).astype(np.int64)
+    kk = key[:, 0] * 1_000_003 + key[:, 1]
+    order = np.argsort(kk, kind="stable")
+    kk, pts = kk[order], pts[order]
+    bins = np.arange(CLEAR_RANGE_M[0], CLEAR_RANGE_M[1] + GROUND_BIN_M, GROUND_BIN_M)
+    out = []
+    for sx, sy, sz in spots:
+        cx, cy = int(np.floor(sx / CLEAR_R_M)), int(np.floor(sy / CLEAR_R_M))
+        near = []
+        for dx in (-1, 0, 1):
+            for dy in (-1, 0, 1):
+                k = (cx + dx) * 1_000_003 + (cy + dy)
+                a, b = np.searchsorted(kk, k), np.searchsorted(kk, k, side="right")
+                if b > a:
+                    near.append(pts[a:b])
+        if not near:
+            continue
+        p = np.vstack(near)
+        p = p[np.hypot(p[:, 0] - sx, p[:, 1] - sy) <= CLEAR_R_M]
+        hist, edges = np.histogram(sz - p[:, 2], bins=bins)
+        if hist.size and hist.max() >= GROUND_MIN_PTS:
+            k = int(np.argmax(hist))
+            out.append(float((edges[k] + edges[k + 1]) / 2))
+    if len(out) < CLEAR_MIN_SPOTS:
+        return float(np.median(t[:, 2])) - _floor_height(q[:, 2], t[:, 2])
+    return float(np.median(out))
+
+
 class _Ground:
-    """当地地面高度:狗离地的高度(雷达高度的中位数 − 整体地面)不变,轨迹上每一处往下挪这么多就是脚下的
+    """当地地面高度:狗离地的高度(:func:`_clearance`,沿轨迹逐处看脚下的地面)不变,轨迹上每一处往下挪这么多就是脚下的
     地面;按粗格子平均(再按点云修:轨迹的高度会漂),再一圈一圈往外推 ``margin`` 米:新的一格先取已知
     邻格的平均当预估,再按格子里的点修(:meth:`_refine`,坡顺着点云往外走)。推不到的地方没有地面。"""
 
-    def __init__(self, sensor: np.ndarray, floor: float, margin: float,
+    def __init__(self, sensor: np.ndarray, clearance: float, margin: float,
                  points: np.ndarray) -> None:
-        clearance = float(np.median(sensor[:, 2])) - floor
         c = GROUND_CELL_M
         self.lo = sensor[:, :2].min(0) - margin - 2 * c
         size = ((sensor[:, :2].max(0) + margin + 2 * c - self.lo) / c).astype(int) + 1
@@ -806,7 +849,7 @@ def render(points: np.ndarray, sensor_traj: np.ndarray, frames: Frames, *, res: 
     :data:`FOOTPRINT_M` 一律可通行(没给的话「走过的路」用雷达的轨迹)。"""
     q = level(np.asarray(points, float), frames)
     t = level(np.asarray(sensor_traj, float), frames)
-    ground = _Ground(t, _floor_height(q[:, 2], t[:, 2]), traj_margin, q)
+    ground = _Ground(t, _clearance(q, t), traj_margin, q)
     h, ok = ground.rel(q)
     wall = ok & (h > floor_clear) & (h < wall_top)
     flr = ok & (h > FLOOR_BAND_M[0]) & (h < FLOOR_BAND_M[1])
