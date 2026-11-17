@@ -480,12 +480,18 @@ async def run_case(case: dict[str, Any], *, sim_cap_s: float) -> dict[str, Any]:
             if t_sim >= sim_cap_s:
                 cut = True
                 break
-            # 规划在线程里按真实时间算:算完之前不推仿真时钟
+            # 规划在线程里按真实时间算:算完之前不推仿真时钟。等的时候照样送时钟、里程
+            # (真机上导航在自己的协程里等,主循环一直在送;不送的话转接节点按真实时间
+            # 2 秒判「代理未在送时钟」,这一趟就判失败 —— R7 庄园种子 2、8)
+            fed = time.monotonic()
             for _ in range(2000):
                 busy = nav._planning or (nav._replan is not None and not nav._replan.done())
                 if not busy:
                     break
                 await asyncio.sleep(0.005)
+                if time.monotonic() - fed >= 0.2:
+                    fed = time.monotonic()
+                    nav._feed()
             await nav.step(TICK)
             await parts.device.step(TICK)
             prev = (r.x, r.y, r.yaw)
