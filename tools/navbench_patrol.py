@@ -337,6 +337,8 @@ async def run_case(case: dict[str, Any], *, sim_cap_s: float) -> dict[str, Any]:
         nav = parts.nav
         nav.link = link
         view = ObstacleView(monotonic=c.s)
+        if os.environ.get("NAVPATROL_BAND"):             # 对照实验用(strict / legacy);默认 strict
+            view.band_policy = os.environ["NAVPATROL_BAND"]
         nav.obstacles = view
         nav.guard = ObstacleGuard()
         events: list[tuple[float, str, dict]] = []
