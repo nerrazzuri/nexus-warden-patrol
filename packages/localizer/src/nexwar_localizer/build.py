@@ -49,7 +49,7 @@ from pathlib import Path
 from typing import Any
 
 from nexwar_contract.geo import GEO_FILE
-from nexwar_contract.maps import CURB_FILE, GEOMETRY_FILES, SEEN_FILE
+from nexwar_contract.maps import CURB_FILE, GEOMETRY_FILES, LOOK_FILE, SEEN_FILE
 from nexwar_localizer.frames import Frames, calibrate
 from nexwar_localizer.replay import MOLA_SHARE, read_tum
 
@@ -259,6 +259,7 @@ def package(work: Path, out: Path, *, prior_pack: PriorPack | None = None,
     grid.write(g, out / "floor")
     seen_written = grid.write_seen(g, out / SEEN_FILE) is not None   # M9:显示用,有才写
     curb_written = grid.write_curb(g, out / CURB_FILE) is not None   # 路沿(11-10):有才写
+    look_written = grid.write_look(g, out / LOOK_FILE) is not None   # 显示底图(TG 11-17)
     timings["grid_s"] = round(time.monotonic() - t0, 1)
     t0 = time.monotonic()
     say("先验")
@@ -281,6 +282,8 @@ def package(work: Path, out: Path, *, prior_pack: PriorPack | None = None,
         files.append(SEEN_FILE)
     if curb_written:
         files.append(CURB_FILE)
+    if look_written:
+        files.append(LOOK_FILE)
     (out / "build.json").write_text(json.dumps({
         "version": 1, "source": source,
         "builder": _mola_info(work).get("builder", "mola-lidar-odometry"), "prior_pack":

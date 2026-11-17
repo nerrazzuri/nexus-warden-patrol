@@ -934,3 +934,37 @@ def test_TG1117_走过的人腿在路沿那一层_不算路沿_真路沿照旧()
     r1, c1 = g.cell_of(8.5, 3.0)
     trail = g.curb[min(r0, r1):max(r0, r1) + 1, min(c0, c1):max(c0, c1) + 1]
     assert int(trail.sum()) == 0, f"人走过的那一溜冒了 {int(trail.sum())} 格路沿"
+
+
+def test_TG1117_显示底图_墙按点多少画深浅_走过的人不画_扫过的白_没扫过的淡灰_孤点不画():
+    """Top Glove 11-17(用户经笔记本):给网页看的底图,跟竞品那张一样一眼看得出房子 —— 离当地地面
+    0.15–2 m 的点按多少画灰(对数),动的不画,扫过的地方白底,没扫过的淡灰(不当成能走),零星孤点不画。"""
+    f = _frames()
+    P, T, scans, body = _walls_and_person(f)
+    L = np.asarray(f.level_matrix())
+    speck = np.array([[5.0, 4.5, 1.0]]) @ L                       # 屋里半空一个孤点
+    g = G.render(np.vstack([P, speck]), T, f, scans=scans, body_path=body)
+    look = g.look
+    assert look is not None and look.shape == g.image.shape and look.dtype == np.uint8
+    at = lambda x, y: int(look[g.cell_of(x, y)])           # noqa: E731
+    assert at(5.0, 0.0) < 160 and at(0.0, 3.0) < 160, "墙画深"
+    assert at(5.0, 1.05) < 200, "柱子"
+    for x in (2.0, 4.5, 7.0):
+        assert at(x - 0.5, 2.7) == G.LOOK_CLEAR, "人走过的地方不画"
+        assert at(x, 1.5) == G.LOOK_CLEAR, "扫过的地面白"
+    assert at(5.0, 4.5) == G.LOOK_CLEAR, "孤点不画"
+    out = [g.cell_of(x, y) for x, y in ((-0.3, 3.0), (10.3, 3.0))]
+    assert all(c is None or look[c] in (G.LOOK_UNSEEN,) or look[c] < G.LOOK_UNSEEN
+               for c in out), "墙外没扫过的:淡灰或墙"
+    assert G.LOOK_UNSEEN < G.LOOK_CLEAR
+
+
+def test_TG1117_显示底图写成PGM_宽高行序跟floor一样(tmp_path):
+    f = _frames()
+    P, T, scans, body = _walls_and_person(f)
+    g = G.render(P, T, f, scans=scans, body_path=body)
+    p = G.write_look(g, tmp_path / "look.pgm")
+    raw = p.read_bytes()
+    h, w = g.image.shape
+    head = f"P5\n{w} {h}\n255\n".encode()
+    assert raw.startswith(head) and raw[len(head):] == g.look.tobytes()
