@@ -119,6 +119,7 @@ class _SiteRobotsPageState extends State<SiteRobotsPage> {
         if (!ringMuted('${(f['alert'] as Map)['key']}')) widget.ring();
         final a = f['alert'] as Map;
         if (mounted) {
+          _toastKey = '${a['key']}';
           ScaffoldMessenger.of(context).showSnackBar(SnackBar(
               content: Text(tr(
                   '${a['level']} ${a['robot']} · '
@@ -166,6 +167,7 @@ class _SiteRobotsPageState extends State<SiteRobotsPage> {
       if (pending.any((a) => !ringMuted(a.key))) widget.ring();
       final a = pending.first;
       if (mounted) {
+        _toastKey = a.key;
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
             content: Text(tr(
                 '${a.level} ${a.robot} · ${alertTitle(a.kind, a.title)} (unacknowledged)',
@@ -232,6 +234,9 @@ class _SiteRobotsPageState extends State<SiteRobotsPage> {
   final Set<String> _ringing = <String>{};
   Timer? _bell;
 
+  /// 眼下那条「无人确认」提示是哪条告警的（I4 11-17：确认了就收起）。
+  String? _toastKey;
+
   /// 只读账号：响一声提醒，不一直响（他确认不了，M15）。
   bool get _viewer => widget.api.session?.isViewer ?? false;
 
@@ -253,6 +258,11 @@ class _SiteRobotsPageState extends State<SiteRobotsPage> {
       _ringing.add(key);
     } else {
       _ringing.remove(key);
+      // I4 11-17：说「无人确认」的那条提示，有人确认了（或解除了）就收起
+      if (key == _toastKey && mounted) {
+        ScaffoldMessenger.of(context).hideCurrentSnackBar();
+        _toastKey = null;
+      }
     }
     _bellOnOff();
   }

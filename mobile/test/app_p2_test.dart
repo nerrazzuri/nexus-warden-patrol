@@ -6,6 +6,7 @@ import 'package:nexwar_patrol/net/site_client.dart';
 import 'package:nexwar_patrol/store/site_store.dart';
 import 'package:nexwar_patrol/ui/guide.dart';
 import 'package:nexwar_patrol/ui/site_add.dart';
+import 'package:nexwar_patrol/l10n.dart';
 import 'package:nexwar_patrol/ui/nw/nw_p3_robots.dart';
 import 'package:nexwar_patrol/ui/site_alert_scene.dart';
 import 'package:nexwar_patrol/ui/site_duty_page.dart';
@@ -54,6 +55,25 @@ void main() {
   test('M22：地址不带端口不让存', () {
     expect(checkSiteEntry('https://10.0.0.5', 'ab' * 32), contains('8443'));
     expect(checkSiteEntry('https://10.0.0.5:8520', 'ab' * 32), isNull);
+  });
+
+  testWidgets('I5 11-17：站点码在哪，写网页上真实的位置；窄屏能折成两行', (t) async {
+    t.view.physicalSize = const Size(360, 780) * 2;
+    t.view.devicePixelRatio = 2.0;
+    addTearDown(t.view.reset);
+    final was = appLang.value;
+    for (final (lang, want) in [
+      (AppLang.en, 'Site Setup → Maps, localization, diagnostics, updates → Site host'),
+      (AppLang.zh, '现场设置 → 地图、定位、诊断、升级 → 站点主机'),
+    ]) {
+      appLang.value = lang;
+      await t.pumpWidget(MaterialApp(key: UniqueKey(), home: const SiteAddPage()));
+      await t.pumpAndSettle();
+      final hint = find.textContaining(want);
+      expect(hint, findsOneWidget, reason: '$lang');
+      expect(t.widget<Text>(hint).maxLines, 2);
+    }
+    appLang.value = was;
   });
 
   testWidgets('M22：同一个站点不加第二次，原因留在页面上', (t) async {

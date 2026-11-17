@@ -155,9 +155,10 @@ class _SiteAddPageState extends State<SiteAddPage> {
           title: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text(tr('Add site', '添加站点'), style: NwText.titleMedium.copyWith(color: c.text, fontWeight: FontWeight.w700)),
             Text(
-                tr('The site code is on the duty console: System → Add this site to the phone app',
-                    '站点码在值班台「系统」页的「把这个站点加到手机 App」里'),
-                maxLines: 1,
+                // I5 11-17：写网页上真实的位置（以前说「系统」页，新版网页没有这一页）
+                tr('Site code: web console → Site Setup → Maps, localization, diagnostics, updates → Site host',
+                    '站点码在网页：现场设置 → 地图、定位、诊断、升级 → 站点主机'),
+                maxLines: 2,
                 overflow: TextOverflow.ellipsis,
                 style: NwText.bodySmall.copyWith(color: c.textSecondary)),
           ])),
