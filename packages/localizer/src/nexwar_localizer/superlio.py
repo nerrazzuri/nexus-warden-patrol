@@ -350,7 +350,7 @@ def _window_ups(U: Any, M: Any) -> tuple[Any, Any, str, Any]:
     """每段的「上」``U``(k×3)、平均姿态里水平两根轴 ``M``(k×3×2)→(纠正用的「上」k×3、零偏、
     没扣零偏的原因、哪些段用常量)。扣掉零偏(:func:`_imu_bias`)后,离常量重力不到
     :data:`LEVEL_CONST_DEG`(按段间噪声定)的段都用那个常量(不把段间 0.2–0.5° 的噪声
-    纠进去),只有漂了的段(和挨着它的段)逐段纠;不平滑(笔记本核 v13:前后各一段平均让
+    纠进去),只有漂了的段逐段纠;不平滑(笔记本核 v13:前后各一段平均让
     纠正滞后、摊开,去程回程差 0.12–0.27 m)。
     零偏估不了:不扣、逐段纠。"""
     import numpy as np
@@ -367,9 +367,9 @@ def _window_ups(U: Any, M: Any) -> tuple[Any, Any, str, Any]:
     cos = (C @ g) / (np.linalg.norm(C, axis=1) * np.linalg.norm(g))
     dev = np.degrees(np.arccos(np.clip(cos, -1.0, 1.0)))
     lim = min(LEVEL_CONST_DEG, max(LEVEL_CONST_MIN_DEG, 3 * float(np.median(dev))))
-    const = dev < lim                                    # 门槛按段间噪声定:慢慢漂起来的也认得出
-    drift = ~const                                       # 挨着漂的段也逐段纠(漂刚起头还没过门槛)
-    const &= ~(np.r_[drift[1:], False] | np.r_[False, drift[:-1]])
+    # 门槛按段间噪声定:慢慢漂起来的也认得出。挨着漂的段不另算(笔记本核 v14:Top Glove 第 16 段
+    # 偏 0.85°、看高度不是漂,逐段纠了西头反而压低 0.27 m)
+    const = dev < lim
     C[const] = g
     return C, b, "", const
 

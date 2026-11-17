@@ -653,7 +653,10 @@ def test_TG1117_v11_IMU有水平零偏_去程回程不被摆到不同高度():
         i = int(np.argmin(np.abs(tx[:half] - x)))
         j = half + int(np.argmin(np.abs(tx[half:] - x)))
         worst = max(worst, abs(z[i] - z[j]))
-    assert worst < 0.1, f"同一个 x 去程回程高低差 {worst:.2f} m"
+    # 这份是从段边界起线性慢漂:漂的头一段平均只偏约 0.3°,不过门槛,用常量,差 0.12 m。
+    # 「挨着漂的段也逐段纠」能压到 0.1 以下,但真数据(笔记本核 v14,Top Glove 第 16 段偏 0.94°、
+    # 方向跟漂的同向)它不是漂,逐段纠了西头反而低 0.27 m —— 按真数据取舍,这里放到 0.15
+    assert worst < 0.15, f"同一个 x 去程回程高低差 {worst:.2f} m"
     assert max(z) - min(z) < 0.2, f"摆平后高低差 {max(z) - min(z):.2f} m"
 
 
@@ -685,7 +688,9 @@ def test_TG1117_v13_真数据22段_零偏约0点9度_没漂的16段用同一个�
     flat = [i for i in range(3) if i != int(d["up_axis"])]
     C, b, why, const = S._window_ups(d["U"], d["M"][:, :, flat])
     assert why == "" and 0.75 < math.degrees(float(np.linalg.norm(b))) < 1.0, (b, why)
-    assert const[:15].all() and not const[15:].any(), const   # 第 16 段挨着漂的,也逐段纠
+    # 第 16 段偏 0.85°,从高度看不是漂(笔记本核 v14:它也逐段纠时西头回程 -0.48,真高 -0.21;
+    # 用常量时模拟 -0.23)—— 挨着漂的段不再另算,按门槛判
+    assert const[:16].all() and not const[16:].any(), const
     tilt = [math.degrees(math.acos(c[2] / np.linalg.norm(c))) for c in C]
-    assert max(tilt[:15]) - min(tilt[:15]) < 1e-9, "没漂的段纠正一样"
+    assert max(tilt[:16]) - min(tilt[:16]) < 1e-9, "没漂的段纠正一样"
     assert min(tilt[16:]) > 2.0, tilt
