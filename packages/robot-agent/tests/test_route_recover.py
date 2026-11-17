@@ -276,3 +276,95 @@ async def test_倒退一开始就被挡_几秒挪不动_改回照常交给Nav2(t
     assert len(new) == 1 and (new[0]["x"], new[0]["y"]) == (1.5, 4.0), "照原来那样交给 Nav2"
     assert BACKOUT_WAIT_S <= 5.0
     assert NavStatus.FAILED not in t.status
+
+
+# ---------------------------------------------------------------- 路被堵住换一条(用户 11-17)
+
+def _两个口():
+    """x = 6 一道墙(0.2 厚),两个 1.5 m 的口子:y 3.25–4.75(直走那个)、y 6.0–7.5。"""
+    return [(5.9, 0.1, 6.1, 3.25), (5.9, 4.75, 6.1, 6.0), (5.9, 7.5, 6.1, 7.9)]
+
+
+class 另一个口也没路的转接(会绕路的转接):
+    """直走那个口子被标成绕开就规划不出(只有这一条路)。"""
+
+    def send(self, m):
+        if m["type"] == "plan":
+            maps = self.kinds("map")
+            nogo = maps[-1]["nogo"] if maps else []
+            if nogo:
+                self.plan_results[m["req_id"]] = {"type": "plan_result", "req_id": m["req_id"],
+                                                  "ok": False, "reason": "no_path"}
+                self.sent.append(m)
+                return True
+        return super().send(m)
+
+
+async def _顶着箱子(tmp_path, link):
+    """从 (1.5, 4.0) 往 (9.0, 4.0) 直走,走到 x ≈ 5 停在口子前。"""
+    t = _台(tmp_path, link, walls=_两个口())
+    await t.start(1.5, 4.0)
+    link.here = (1.5, 4.0)
+    await t.nav.goto(Pose.from_xy_yaw(9.0, 4.0))
+    g = link.kinds("goal")[-1]
+    await _走一段(t, link, g["goal_id"], 3.5)
+    return t, g
+
+
+async def _顶着等(t, link, gid, secs):
+    for _ in range(int(secs / 0.1)):
+        link.now += 0.1
+        link.cmd = (link.now, gid, 0.5, 0.0, 0.0)
+        await t.一拍()
+
+
+def _箱子():
+    from nexwar_agent.obstacles import Verdict
+    return Verdict(False, "扫过区有挡", hits=((0.7, -0.3), (0.7, 0.0), (0.7, 0.3)))
+
+
+async def test_被地图上没有的东西堵住_拦满一会儿_标成绕开_换另一个口子(tmp_path):
+    from nexwar_agent.bridges.nav2_nav import BLOCK_REROUTE_S
+    link = 会绕路的转接()
+    t, g = await _顶着箱子(tmp_path, link)
+    box = _箱子()
+    t.nav._guard_check = lambda vx, wz, **kw: box
+    goals = len(link.kinds("goal"))
+    await _顶着等(t, link, g["goal_id"], BLOCK_REROUTE_S - 1.0)
+    assert len(link.kinds("goal")) == goals, "人一般几秒就让开:先等"
+    await _顶着等(t, link, g["goal_id"], 2.0)
+    new = link.kinds("goal")[goals:]
+    assert len(new) == 1 and new[0]["goal_id"] != g["goal_id"]
+    assert any(p[1] > 6.0 for p in t.nav._plan_poses), "查的是走另一个口子那条"
+    assert t.nav._avoid and link.kinds("map")[-1]["nogo"], "挡的地方本趟标着绕开"
+    assert all(math.dist(a, (t.r.x, t.r.y)) > 0.9 for a in t.nav._avoid), "圈不压到机器人自己"
+    assert "route_reroute" in [k for k, _ in t.events]
+    assert NavStatus.FAILED not in t.status
+
+
+async def test_只有这一条路_换不了_撤掉标记照旧等_最多试几次(tmp_path):
+    from nexwar_agent.bridges.nav2_nav import BLOCK_REROUTE_MAX, BLOCK_REROUTE_S
+    link = 另一个口也没路的转接()
+    t, g = await _顶着箱子(tmp_path, link)
+    box = _箱子()
+    t.nav._guard_check = lambda vx, wz, **kw: box
+    goals, plans = len(link.kinds("goal")), len(link.kinds("plan"))
+    await _顶着等(t, link, g["goal_id"], BLOCK_REROUTE_S + 1.0)
+    assert len(link.kinds("plan")) == plans + 1, "查了一次"
+    assert not t.nav._avoid and link.kinds("map")[-1]["nogo"] == [], "撤掉了"
+    assert len(link.kinds("goal")) == goals and NavStatus.FAILED not in t.status, "照旧等"
+    await _顶着等(t, link, g["goal_id"], BLOCK_REROUTE_S * (BLOCK_REROUTE_MAX + 1))
+    assert len(link.kinds("plan")) - plans <= BLOCK_REROUTE_MAX
+
+
+async def test_挡的全是地图上的墙_不标绕开(tmp_path):
+    from nexwar_agent.bridges.nav2_nav import BLOCK_REROUTE_S
+    from nexwar_agent.obstacles import Verdict
+    link = 会绕路的转接()
+    t, g = await _顶着箱子(tmp_path, link)
+    dx = 5.95 - t.r.x                                     # 机身系:正前方那道墙的墙段上
+    wall = Verdict(False, "扫过区有挡", hits=((dx, -0.85), (dx, -1.0)))
+    t.nav._guard_check = lambda vx, wz, **kw: wall
+    plans = len(link.kinds("plan"))
+    await _顶着等(t, link, g["goal_id"], BLOCK_REROUTE_S + 2.0)
+    assert len(link.kinds("plan")) == plans and not t.nav._avoid
