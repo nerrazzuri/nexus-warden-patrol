@@ -88,6 +88,9 @@ PERSON_SIDE_M = 0.3
 PERSON_PATIENCE_S = 2.0
 PERSON_STEP_M = 0.9
 PERSON_STEP_MPS = 0.5
+#: 让开以后又等了这么久(秒)还挡着、机器人停着:贴着机器人挤过去,每边留这么多(米)(真人会这么走)
+PERSON_SQUEEZE_AFTER_S = 2.0
+PERSON_SQUEEZE_M = 0.1
 
 
 def _car_brakes(line: Any, t0: float, t1: float, hx: float, hy: float, ox: float, oy: float,
@@ -109,14 +112,16 @@ def _car_brakes(line: Any, t0: float, t1: float, hx: float, hy: float, ox: float
     return _poly_hits_rect(_corners(r.x, r.y, r.yaw), zone)
 
 
-def _person_zone(x0: float, y0: float, x1: float, y1: float, hx: float) -> tuple | None:
-    """人从 (x0, y0) 往 (x1, y1) 走:身前 :data:`PERSON_LOOK_M` 的那块(世界系长方形)。"""
+def _person_zone(x0: float, y0: float, x1: float, y1: float, hx: float,
+                 side_m: float = PERSON_SIDE_M) -> tuple | None:
+    """人从 (x0, y0) 往 (x1, y1) 走:身前 :data:`PERSON_LOOK_M`、两边各多 ``side_m`` 的那块
+    (世界系长方形)。"""
     dx, dy = x1 - x0, y1 - y0
     n = math.hypot(dx, dy)
     if n < 1e-9:
         return None
     dx, dy = dx / n, dy / n
-    w = hx + PERSON_SIDE_M
+    w = hx + side_m
     fx, fy = x0 + dx * hx, y0 + dy * hx
     ex, ey = fx + dx * PERSON_LOOK_M, fy + dy * PERSON_LOOK_M
     return (min(fx, ex) - abs(dy) * w, min(fy, ey) - abs(dx) * w,
@@ -392,7 +397,15 @@ async def run_case(case: dict[str, Any], *, sim_cap_s: float) -> dict[str, Any]:
             x1, y1 = line.at(nxt)
             zone = _person_zone(x0 + sx + ox, y0 + sy + oy, x1 + sx + ox, y1 + sy + oy, hx)
             poly = body(r.x, r.y, r.yaw)
-            if zone is not None and _poly_hits_rect(poly, zone):
+            wide = zone is not None and _poly_hits_rect(poly, zone)
+            passing = False
+            if wide and waited[i] >= PERSON_PATIENCE_S + PERSON_SQUEEZE_AFTER_S \
+                    and abs(r.speed[0]) < 0.05 and abs(r.speed[1]) < 0.05:
+                # 让到头了还挡着、机器人停着:真人贴着它挤过去(每边留 PERSON_SQUEEZE_M)
+                z2 = _person_zone(x0 + sx + ox, y0 + sy + oy, x1 + sx + ox, y1 + sy + oy, hx,
+                                  PERSON_SQUEEZE_M)
+                passing = z2 is not None and not _poly_hits_rect(poly, z2)
+            if wide and not passing:
                 waited[i] += TICK
                 if waited[i] >= PERSON_PATIENCE_S:
                     dx, dy = x1 - x0, y1 - y0
@@ -407,7 +420,8 @@ async def run_case(case: dict[str, Any], *, sim_cap_s: float) -> dict[str, Any]:
                             side[i] = (tx, ty)
                             break
                 return
-            waited[i] = 0.0
+            if not passing:
+                waited[i] = 0.0
             if (sx or sy) and math.hypot(r.x - (x1 + sx + ox), r.y - (y1 + sy + oy)) > 1.5:
                 k = max(0.0, 1.0 - PERSON_STEP_MPS * TICK / max(math.hypot(sx, sy), 1e-6))
                 if _free(x1 + sx * k, y1 + sy * k, hx, hy):
