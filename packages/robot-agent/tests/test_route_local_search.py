@@ -192,10 +192,10 @@ def _phys_hits(path, walls, res, origin):
 
 
 def test_外审1117第2轮_贴墙起步_搜出来的入口原地转不吃起步豁免_转的时候不许比站着更贴墙():
-    """外审 11-17 第 2 轮(codex 复现):墙从 x=3.0 起,机器人在 (2.485, 2, 15°) 贴墙起步,原路线先倒过一段
-    窄处再绕到终点(物理上不碰)。局部搜索在入口先原地转,转到约 27.5° 车身压进墙 8 mm,可整条复查
-    按走过的路程跳过起步 0.5 m,原地转一步都没查,放行了。现在:插在起步那段的位姿照查,余量不低于
-    min(要求, 站着时);转向也按细角度查。"""
+    """外审 11-17 第 2 轮(codex 复现):墙从 x=3.0 起,机器人在 (2.485, 2, 15°) 贴墙起步,
+    原路线先倒过一段窄处再绕到终点(物理上不碰)。局部搜索在入口先原地转,
+    转到约 27.5° 车身压进墙 8 mm,可整条复查按走过的路程跳过起步 0.5 m,原地转一步都没查,
+    放行了。现在:插在起步那段的位姿照查,余量不低于 min(要求, 站着时);转向也按细角度查。"""
     res, origin = 0.05, (-2.0, -2.0)
     rr, cc = np.indices((200, 200))
     x, y = origin[0] + (cc + 0.5) * res, origin[1] + (rr + 0.5) * res
@@ -208,7 +208,8 @@ def test_外审1117第2轮_贴墙起步_搜出来的入口原地转不吃起步�
     assert not _phys_hits(route, walls, res, origin)             # 原路线本身物理上不碰
     r = check_route(route, walls, res, origin)
     if r.ok and r.path is not None:
-        assert not _phys_hits(r.path, walls, res, origin), _phys_hits(r.path, walls, res, origin)[:3]
+        hits = _phys_hits(r.path, walls, res, origin)
+        assert not hits, hits[:3]
         here = float(pose_margins([q], walls, res, origin)[0])
         fine = [p for p in densify(r.path) if math.dist(p[:2], q[:2]) < 1e-6]   # 起点上原地转的那些
         m = pose_margins(fine, walls, res, origin)
