@@ -224,6 +224,32 @@ void main() {
       await t.pumpWidget(Container());
     });
 
+    testWidgets('I4 11-17：P1 提示条不盖住右下角「全部急停」；有人确认了，「无人确认」那条就收起', (t) async {
+      _size(t);
+      final api = FakeApi('guard');
+      await _show(t, api, theme: nwTheme(Brightness.light));
+      final f = siteFixture('site_alert_frame');
+      final a = <String, dynamic>{...(f['alert'] as Map<String, dynamic>), 'channel': 'sound'};
+      api.sse.add(<String, dynamic>{...f, 'alert': a});
+      await t.pump();
+      await t.pump(const Duration(milliseconds: 800));
+      final bar = find.ancestor(of: find.textContaining('无人确认'), matching: find.byType(SnackBar));
+      expect(bar, findsOneWidget);
+      final estop = find.byKey(NwShell.estopKey);
+      expect(estop, findsOneWidget);
+      final card = find.descendant(of: bar, matching: find.byType(Material)).first; // 看得见的那块
+      expect(t.getRect(card).bottom, lessThanOrEqualTo(t.getRect(estop).top),
+          reason: '提示条在急停上面，不挡着它');
+      api.sse.add(<String, dynamic>{
+        ...f,
+        'alert': <String, dynamic>{...a, 'acked_ms': 1793379431846, 'acked_by': 'gina'}
+      });
+      await t.pump();
+      await t.pump(const Duration(seconds: 1));
+      expect(find.textContaining('无人确认'), findsNothing, reason: '已经有人确认了，不再说无人确认');
+      await t.pumpWidget(Container());
+    });
+
     testWidgets('登录过期（401）：不管在哪一层，整个外壳退回上一页并说明', (t) async {
       _size(t);
       final api = FakeApi('guard');

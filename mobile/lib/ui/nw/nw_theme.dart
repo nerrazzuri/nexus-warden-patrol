@@ -334,6 +334,8 @@ ThemeData nwTheme(Brightness b) {
         contentTextStyle: on(NwText.bodyMedium, c.bg),
         actionTextColor: c.bg,
         behavior: SnackBarBehavior.floating,
+        // I4 11-17：右下角 88×88 的「全部急停」（离底 16）上面再留 8，提示条不挡它
+        insetPadding: const EdgeInsets.fromLTRB(16, 8, 16, 16 + 88 + 8),
         elevation: 0,
         shape: control),
     chipTheme: ChipThemeData(
