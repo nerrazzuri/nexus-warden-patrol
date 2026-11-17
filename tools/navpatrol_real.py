@@ -39,6 +39,12 @@ SIM = {"exec_noise": True, "loc_noise_m": 0.045, "loc_noise_deg": 1.2, "obstacle
 WALL = 0.2
 #: 点离障碍(墙、柱子、地图上没有的东西)至少这么远(米,车身外接圆 0.6 + 余量)
 GOAL_CLEAR_M = 0.75
+#: 人起步(路线第一个点)离机器人起点车身至少这么远(净距,台式机 11-18:K1 大堂 35、53 号人生在
+#: 车身里、让路站着不动,机器人一退就记成撞人)。不另抽随机数:太近就从路线上下一个够远的点起步。
+#: 只管叠在车身上的;医院、办公室、仓库故意让人在车头前 1 m 起步往前走(净距约 0.3 m),不动它
+START_ACTOR_CLEAR_M = 0.2
+#: 车身半长、半宽(同 nexwar_contract.footprint:BODY_LEN 0.93、BODY_WID 0.48)
+BODY_HALF = (0.465, 0.24)
 
 
 # ------------------------------------------------------------------ 小工具
@@ -93,6 +99,27 @@ def _route(pts: list[tuple[float, float]], back_yaw: float | None = None) -> lis
     return out
 
 
+def _start_gap(start: tuple[float, float, float], p: Any, half: float) -> float:
+    """点 ``p``(半边 ``half`` 的东西)离起点车身的净距。"""
+    c, s = math.cos(start[2]), math.sin(start[2])
+    dx, dy = p[0] - start[0], p[1] - start[1]
+    lx, ly = c * dx + s * dy, -s * dx + c * dy
+    return math.hypot(max(0.0, abs(lx) - BODY_HALF[0]), max(0.0, abs(ly) - BODY_HALF[1])) - half
+
+
+def _away_from_start(actors: list, start: tuple[float, float, float], name: str) -> None:
+    """人起步太贴机器人:路线转一下,从下一个够远的点起步(来回 / 一圈走的路线还是那条)。"""
+    for a in actors:
+        if a.get("kind") != "person":
+            continue
+        path, half = a["path"], max(a["sx"], a["sy"]) / 2
+        ok = [i for i, p in enumerate(path) if _start_gap(start, p, half) >= START_ACTOR_CLEAR_M]
+        if not ok:
+            raise ValueError(f"{name}:{a['name']} 整条路线都贴着起点")
+        if ok[0]:
+            a["path"] = path[ok[0]:] + path[:ok[0]]
+
+
 def _case(name: str, seed: int, size: tuple[float, float], mapped: list, unmapped: list,
           start: tuple[float, float, float], goals: list[tuple[float, float]], *,
           actors: list | None = None, zones: list | None = None, curbs: list | None = None,
@@ -105,6 +132,7 @@ def _case(name: str, seed: int, size: tuple[float, float], mapped: list, unmappe
             raise ValueError(f"{name}/{seed}:点 ({gx:.2f}, {gy:.2f}) 离障碍只有 {c:.2f} m")
     if _clear(start[0], start[1], allr) < GOAL_CLEAR_M:
         raise ValueError(f"{name}/{seed}:起点离障碍太近")
+    _away_from_start(actors or [], start, f"{name}/{seed}")
     return {"scenario": name, "family": name, "width_m": None, "seed": seed,
             "start": [round(v, 4) for v in start],
             "goals": _route(list(goals) + [start[:2]], back_yaw=start[2]),
