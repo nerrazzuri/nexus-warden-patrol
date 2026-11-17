@@ -78,6 +78,9 @@ def _proj(poly, ax):
 #: 用户 11-17:仿真里的车像真司机 —— 车头前这么远(米,按 2.3 m/s、3 m/s² 刹车约 0.9 m 再留余量)
 #: 车道里有东西(机器人)就刹住,让开了再走。
 CAR_BRAKE_M = 2.0
+#: 车道两边再留这么多(米):真司机看到车道边上的机器人也会刹,不是擦着过(真实巡逻仿真 11-17:
+#: 叉车按自己车宽刹,机器人站在车道边上被侧面刮到)
+CAR_SIDE_M = 0.3
 #: 会让路的人(``yields``):身前这么远、身宽 + 两边这么多里压着机器人就站住(米)
 PERSON_LOOK_M = 1.0
 PERSON_SIDE_M = 0.3
@@ -98,7 +101,7 @@ def _car_brakes(line: Any, t0: float, t1: float, hx: float, hy: float, ox: float
         return False
     dx, dy = dx / n, dy / n
     half_len = hx if abs(dx) >= abs(dy) else hy          # 车是轴对齐的长方形,顺着长边开
-    half_wid = hy if abs(dx) >= abs(dy) else hx
+    half_wid = (hy if abs(dx) >= abs(dy) else hx) + CAR_SIDE_M
     fx, fy = x0 + ox + dx * half_len, y0 + oy + dy * half_len
     ex, ey = fx + dx * CAR_BRAKE_M, fy + dy * CAR_BRAKE_M
     zone = (min(fx, ex) - abs(dy) * half_wid, min(fy, ey) - abs(dx) * half_wid,
