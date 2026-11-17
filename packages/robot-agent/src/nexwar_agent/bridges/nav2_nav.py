@@ -254,7 +254,9 @@ UTURN_PLAN_NEAR_M = 0.5
 #: 只能靠局部搜索的路),改成朝开进去的方向(规划路线进终点前 :data:`GOAL_APPROACH_M` 那段的走向)
 #: 直着能过 → 就按这个朝向到点,发 ``goal_yaw_relaxed``。差不到 :data:`GOAL_YAW_RELAX_RAD` 不改。
 GOAL_YAW_RELAX_RAD = math.radians(20.0)
-GOAL_APPROACH_M = 0.5
+#: 按最后这么长(米)那段的走向:规划器照原来的朝向规划,最后半米常往那个朝向弯(仿真 11-17 仓库
+#: 种子 3:巷子 90°、最后 0.5 m 算出 119°,Nav2 照 119° 斜着停在巷子尽头,倒不出来)。
+GOAL_APPROACH_M = 1.5
 #: 沿原路倒退:记最近 :data:`TRAIL_KEEP_M` 走过的路(每 :data:`TRAIL_STEP_M` 一个点;一拍跳过
 #: :data:`TRAIL_JUMP_M` 是定位跳了,清掉重记),退 :data:`RETREAT_M`(原路不到 :data:`RETREAT_MIN_M`
 #: 不退),:data:`RETREAT_MPS` 倒着走,跟原路按前瞻 :data:`RETREAT_LOOK_M` 走;

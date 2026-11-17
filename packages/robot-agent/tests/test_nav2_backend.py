@@ -2397,3 +2397,31 @@ async def test_自己挪_开始时就只差二十几度_也要转正_不是一�
     assert t.nav._man is None
     assert abs(math.remainder(t.r.yaw, 2 * math.pi)) <= nav2_nav.MANEUVER_FINE_RAD + 0.02, \
         math.degrees(t.r.yaw)
+
+
+class 末端往要的朝向弯的转接(按走向规划的转接):
+    """像 Smac:照要的朝向规划,最后 1 m 往那个朝向弯过去。"""
+
+    def send(self, m):
+        r = super().send(m)
+        if m["type"] == "plan":
+            res = self.plan_results[m["req_id"]]
+            gx, gy, gyaw = m["goal"]
+            poses = [p for p in res["poses"] if math.dist(p[:2], (gx, gy)) > 1.0]
+            bx, by = poses[-1][0], poses[-1][1]
+            # 弯过去:最后 1 m 从 (bx, by) 弯着到终点,横着最多偏 0.15 m(离终点半米处那一点偏出 17°)
+            for i in range(1, 21):
+                t = i / 20
+                poses.append([bx + (gx - bx) * t, by + (gy - by) * t + 0.15 * math.sin(math.pi * t),
+                              gyaw if i == 20 else 0.0])
+            res["poses"] = poses
+        return r
+
+
+async def test_终点朝向改成开进去的方向_按最后一米多的走向_不按末端那一弯(tmp_path):
+    link = 末端往要的朝向弯的转接()
+    t = _台(tmp_path, link, walls=_死胡同(1.3, end_x=10.0))
+    await t.start(1.5, 4.0, 0.0)
+    await t.nav.goto(Pose.from_xy_yaw(9.0, 4.0, math.pi))
+    [g] = link.kinds("goal")
+    assert abs(math.remainder(g["yaw"], 2 * math.pi)) < math.radians(8), math.degrees(g["yaw"])
