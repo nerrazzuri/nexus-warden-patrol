@@ -368,3 +368,56 @@ async def test_挡的全是地图上的墙_不标绕开(tmp_path):
     plans = len(link.kinds("plan"))
     await _顶着等(t, link, g["goal_id"], BLOCK_REROUTE_S + 2.0)
     assert len(link.kinds("plan")) == plans and not t.nav._avoid
+
+
+class _假帧视图:
+    """只有一帧的障碍视图:机身系 (``x``, ``y``) 那一格有挡(帧拍下时在 ``pose``)。"""
+
+    def __init__(self, pose, cells, size=100, res=0.05):
+        import numpy as np
+        occ = np.zeros((size, size), dtype=np.uint8)
+        for x, y in cells:
+            occ[int(x / res + size / 2), int(y / res + size / 2)] = 1
+        f = type("F", (), {})()
+        f.occ, f.known, f.size, f.res, f.pose = occ.ravel(), np.ones(size * size, np.uint8), size, \
+            res, pose
+        self.frames = [f]
+
+    def fresh(self):
+        return True
+
+
+async def test_前面近处有地图上没有的东西_挑出来_地图系(tmp_path):
+    link = 会绕路的转接()
+    t, g = await _顶着箱子(tmp_path, link)
+    from types import SimpleNamespace
+    here = SimpleNamespace(x=t.r.x, y=t.r.y, yaw=t.r.yaw)
+    box = [(1.2, dy / 10) for dy in range(-4, 5)]
+    behind = [(-1.2, 0.0)]
+    wall = [(5.95 - t.r.x, -0.9)]                         # 地图墙上的:不算
+    t.nav.obstacles = _假帧视图(t.nav._odom_pose, box + behind + wall)
+    pts = t.nav._ahead_unmapped(here)
+    assert pts and all(abs(x - (t.r.x + 1.2)) < 0.1 for x, _ in pts), pts
+    assert len(pts) == len(box)
+
+
+async def test_Nav2在箱子前停住想转身_守卫拦的是看不见_没进展一会儿_也换一条(tmp_path):
+    from nexwar_agent.bridges.nav2_nav import BLOCK_REROUTE_S, RECOVER_AFTER_S
+    from nexwar_agent.obstacles import Verdict
+    link = 会绕路的转接()
+    t, g = await _顶着箱子(tmp_path, link)
+    blind = Verdict(False, "盲带看不见", kind="blind", unknown=20, band=20)
+    t.nav._guard_check = lambda vx, wz, **kw: blind
+    t.nav._ahead_unmapped = lambda here: [(t.r.x + 1.2, 4.0 + dy / 10) for dy in range(-4, 5)]
+    goals = len(link.kinds("goal"))
+    for _ in range(int((RECOVER_AFTER_S + 2.0) / 0.1)):   # Nav2 想原地转身
+        link.now += 0.1
+        link.cmd = (link.now, g["goal_id"], 0.0, 0.0, 0.6)
+        await t.一拍()
+        if len(link.kinds("goal")) > goals:
+            break
+    new = link.kinds("goal")[goals:]
+    assert new, "没进展满一会儿、前面有地图上没有的东西:换一条"
+    assert "route_reroute" in [k for k, _ in t.events]
+    assert t.nav._avoid
+    assert BLOCK_REROUTE_S < RECOVER_AFTER_S, "比恢复链(重新规划)先来"
