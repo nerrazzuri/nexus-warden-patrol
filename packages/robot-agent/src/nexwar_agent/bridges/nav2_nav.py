@@ -85,6 +85,10 @@ LOOK_MPS = SOFT_CREEP_MPS
 LOOK_S = 10.0
 LOOK_TRIES = 2
 LOOK_RESET_M = 3.0
+#: 挪出去不到这么远(米)就被拦停的不算一次,隔 :data:`LOOK_RETRY_S` 秒再试(仿真 11-17 办公室种子 4:
+#: 走廊尽头两次都在行人走到跟前时起步、一步没挪就被挡,次数用完;人走了盲带还拦着原地转,卡死)。
+LOOK_MIN_M = 0.15
+LOOK_RETRY_S = 2.0
 #: 只差朝向的原地转:挪出去看清再倒回出发点,离出发点这么近算回来了(米)。
 LOOK_BACK_TOL_M = 0.05
 # ---- 看得清就快(决策 76,用户 2026-10-29:报警要 90 s 内到位;两侧盲区让 1.0 m/s 一律跑不安全)
@@ -394,6 +398,7 @@ class Nav2NavBackend(PlannedNavBackend):
         self._look: dict[str, Any] | None = None
         self._look_tries = 0
         self._look_at = (0.0, 0.0)
+        self._look_hold = -math.inf                        # 没挪出去的那次之后,到这个时刻前不再起步
         self._uturns = 0                                   # 这个目标接过几回掉头
         self._ut_since: float | None = None                # 路线从什么时候起一直是调头的
         self._ut_from: tuple[float, float] | None = None   # 从这儿挪够了才能接下一回
@@ -1910,6 +1915,13 @@ class Nav2NavBackend(PlannedNavBackend):
             return False
         return len(hits) >= 2
 
+    def _look_end(self, moved: float, now: float) -> None:
+        """往外挪的那段结束了:没挪出 :data:`LOOK_MIN_M` 的不算一次,隔 :data:`LOOK_RETRY_S` 再试。"""
+        self._look = None
+        if moved < LOOK_MIN_M:
+            self._look_tries = max(0, self._look_tries - 1)
+            self._look_hold = now + LOOK_RETRY_S
+
     async def _look_go(self, v: Any, here: Any, dt_s: float, *, ret: bool = False) -> bool:
         """转身被两侧盲带看不见拦住(``v``;``None`` = 只把进行中的接着做):先直着往看得清、没挡的
         一侧挪 :data:`LOOK_M`,盲带看过一遍再转(外审 11-14、用户定)。``ret``:挪完再原路倒回出发点
@@ -1918,7 +1930,7 @@ class Nav2NavBackend(PlannedNavBackend):
         now = self._secs()
         lk = self._look
         if lk is None:
-            if v is None or self._look_tries >= LOOK_TRIES:
+            if v is None or self._look_tries >= LOOK_TRIES or now < self._look_hold:
                 return False
             # 先挑地图上整段 LOOK_M 都放得下的一侧(死胡同里别先往尽头挪),都放不下再挑能动的
             try:
@@ -1946,7 +1958,7 @@ class Nav2NavBackend(PlannedNavBackend):
             if done and lk["ret"]:
                 lk = self._look = {**lk, "phase": "back", "t": now}
             elif done:
-                self._look = None
+                self._look_end(moved, now)
                 return False
         d = lk["dir"] if lk["phase"] == "out" else -lk["dir"]
         if lk["phase"] == "back" and (moved <= LOOK_BACK_TOL_M or now - lk["t"] > LOOK_S):
@@ -1954,7 +1966,10 @@ class Nav2NavBackend(PlannedNavBackend):
             return False
         vx, _ = self._deband(d * LOOK_MPS, 0.0)
         if await self._rec_safe(here, vx, 0.0) is not None:
-            self._look = None
+            if lk["phase"] == "out":
+                self._look_end(moved, now)
+            else:
+                self._look = None
             return False
         self._trail_note(here)                             # 挪过的也是走过的路(沿原路倒退要用)
         await self._send(vx, 0.0, dt_s)
