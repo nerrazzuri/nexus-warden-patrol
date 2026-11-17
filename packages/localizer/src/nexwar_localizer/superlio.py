@@ -75,6 +75,10 @@ LEVEL_WINDOW_S = 20.0       # 每这么长拿 IMU 比力的平均当「上」(�
 LEVEL_MIN_DEG = 1.0         # 偏得比这小不改(IMU 零偏、噪声也有这么多)
 LEVEL_MAX_DEG = 10.0        # 偏得比这大是 IMU / 轴向有问题,不改,写明
 LEVEL_MIN_SAMPLES = 200     # 一段里 IMU 少于这么多不算那段
+# 加速度计水平零偏(笔记本核 v11:约 0.84° 没扣,去程回程朝向相反被纠成相反方向,同一处高低差 0.3–0.5 m)
+LEVEL_BIAS_MIN_WINDOWS = 6  # 估零偏至少要这么多段
+LEVEL_BIAS_MAX_DEG = 3.0    # 估出来比这大不信(不扣)
+LEVEL_BIAS_KEEP_DEG = 0.5   # 估零偏时离拟合超过 max(这么多, 3 倍中位)的段当在漂,不参与
 #: 建完把关:相邻两个位姿水平挪的比「最快速度 × 间隔 + 余量」还多,就是跟丢了,不出图(跟定位器
 #: 判跳一个做法)。不只看距离:录位姿会丢帧(台式机实测 1.8 s 断档里走了 1.58 m,是正常走);
 #: 不只看速度:两个位姿可能只隔 5 ms(差 1.5 cm 算出来 3 m/s)。
@@ -252,23 +256,47 @@ def level(poses: Sequence[Pose], imu: Sequence[tuple[float, float, float, float]
     if len(poses) < 2:
         info["why"] = "位姿太少"
         return poses, info
+    import numpy as np
     times = [r[0] for r in poses]
     t0 = times[0]
     n_win = max(1, int(math.ceil((times[-1] - t0) / LEVEL_WINDOW_S)))
-    acc = [[0.0, 0.0, 0.0, 0] for _ in range(n_win)]
+    su = np.zeros((n_win, 3))            # 每段:比力(单位向量)转到世界系的和
+    sR = np.zeros((n_win, 3, 3))         # 每段:姿态的和(零偏转到世界系用)
+    cnt = np.zeros(n_win, int)
+    raw = np.zeros(3)                    # IMU 系里比力的和(哪根轴朝上)
     for t, ax, ay, az in imu:
         at = pose_at(poses, t, times)
         n = math.sqrt(ax * ax + ay * ay + az * az)
         if at is None or n < 1e-6:
             continue
         k = min(int((t - t0) / LEVEL_WINDOW_S), n_win - 1)
-        u = _apply(quat_to_mat(at[1]), (ax / n, ay / n, az / n))
-        a = acc[k]
-        a[0], a[1], a[2], a[3] = a[0] + u[0], a[1] + u[1], a[2] + u[2], a[3] + 1
+        R = np.array(quat_to_mat(at[1]))
+        f = np.array((ax / n, ay / n, az / n))
+        su[k] += R @ f
+        sR[k] += R
+        cnt[k] += 1
+        raw += f
+    ok = np.nonzero(cnt >= LEVEL_MIN_SAMPLES)[0]
+    U = su[ok] / cnt[ok, None]
+    M = sR[ok] / cnt[ok, None, None]
+    up_axis = int(np.argmax(np.abs(raw)))
+    flat = [i for i in range(3) if i != up_axis]
+    b, info["bias_deg"], info["bias_used"] = np.zeros(2), 0.0, False
+    if len(ok) >= LEVEL_BIAS_MIN_WINDOWS:
+        b, why_b = _imu_bias(U, M[:, :, flat])
+        info["bias_deg"] = round(math.degrees(float(np.linalg.norm(b))), 2)
+        if why_b:
+            info["bias_why"] = why_b
+            b = np.zeros(2)
+        else:
+            info["bias_used"] = True
+    C = U - np.einsum("kij,j->ki", M[:, :, flat], b)          # 扣掉零偏的「上」
+    w = cnt[ok].astype(float)
+    r = [min(1, i, len(ok) - 1 - i) for i in range(len(ok))]  # 前后各一段平均(约 60 s),两头不偏
+    smooth = np.array([(C[i - r[i]:i + r[i] + 1] * w[i - r[i]:i + r[i] + 1, None]).sum(0)
+                       for i in range(len(ok))])
     centers, fixes, degs = [], [], []
-    for k, (x, y, z, m) in enumerate(acc):
-        if m < LEVEL_MIN_SAMPLES:
-            continue
+    for k, (x, y, z) in zip(ok, smooth, strict=True):
         n = math.sqrt(x * x + y * y + z * z)
         ux, uy, uz = x / n, y / n, z / n
         ang = math.acos(max(-1.0, min(1.0, uz)))
@@ -278,7 +306,7 @@ def level(poses: Sequence[Pose], imu: Sequence[tuple[float, float, float, float]
         else:                            # 绕 u × z(水平轴)转 ang
             ex, ey = uy / h, -ux / h
             q = (ex * math.sin(ang / 2), ey * math.sin(ang / 2), 0.0, math.cos(ang / 2))
-        centers.append(t0 + (k + 0.5) * LEVEL_WINDOW_S)
+        centers.append(t0 + (int(k) + 0.5) * LEVEL_WINDOW_S)
         fixes.append(q)
         degs.append(math.degrees(ang))
     if not fixes:
@@ -317,8 +345,39 @@ def level(poses: Sequence[Pose], imu: Sequence[tuple[float, float, float, float]
         prev_p, prev_new = p, new_p
     info["applied"] = True
     info["why"] = (f"按 IMU 重力摆平:开头偏 {degs[0]:.1f}°、最多 {max(degs):.1f}°、"
-                   f"最后 {degs[-1]:.1f}°")
+                   f"最后 {degs[-1]:.1f}°;加速度计零偏 {info['bias_deg']:.2f}°"
+                   + ("已扣" if info["bias_used"] else f"没扣({info.get('bias_why', '段不够')})"))
     return out, info
+
+
+def _imu_bias(U: Any, M: Any) -> tuple[Any, str]:
+    """各段的「上」``U``(k×3)、平均姿态里水平两根轴 ``M``(k×3×2)→ 加速度计水平零偏(2 个分量,
+    单位 g):最小二乘解「U = 常量 g + M·b」,离拟合太远的段(在漂)去掉再解,两轮。朝向不够多(零偏跟
+    常量分不开)、估出来太大:回 (零, 原因)。"""
+    import numpy as np
+    k = len(U)
+    A = np.zeros((3 * k, 5))
+    A[:, :3] = np.tile(np.eye(3), (k, 1))
+    A[:, 3:] = M.reshape(3 * k, 2)
+    y = U.reshape(3 * k)
+    keep = np.ones(k, bool)
+    x = np.zeros(5)
+    for _ in range(3):
+        rows = np.repeat(keep, 3)
+        sv = np.linalg.svd(A[rows], compute_uv=False)
+        if sv[-1] < 0.05 * sv[0]:
+            return np.zeros(2), "朝向不够多,零偏跟重力分不开,不扣"
+        x = np.linalg.lstsq(A[rows], y[rows], rcond=None)[0]
+        res = np.linalg.norm((A @ x - y).reshape(k, 3), axis=1)
+        lim = max(math.radians(LEVEL_BIAS_KEEP_DEG), 3 * float(np.median(res[keep])))
+        new = res <= lim
+        if new.sum() < LEVEL_BIAS_MIN_WINDOWS or (new == keep).all():
+            break
+        keep = new
+    b = x[3:]
+    if math.degrees(float(np.linalg.norm(b))) > LEVEL_BIAS_MAX_DEG:
+        return b, f"零偏估出来 {math.degrees(float(np.linalg.norm(b))):.1f}° 太大,不扣"
+    return b, ""
 
 
 def bag_imu(bag: Path, topic: str = IMU_TOPIC) -> list[tuple[float, float, float, float]]:
