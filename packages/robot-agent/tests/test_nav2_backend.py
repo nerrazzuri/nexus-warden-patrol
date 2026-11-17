@@ -2287,3 +2287,47 @@ async def test_掉头每个目标最多接两回(tmp_path):
         link.cmd = (link.now, 0, 0.0, 0.0, 0.5, gid, "ctl")
         await t.一拍()
     assert not [d for k, d in t.events if k == "nav_uturn"], t.events
+
+
+# ---------------------------------------- 终点朝向转不过来(用户 11-17,真实巡逻仿真「仓库巷道」)
+
+
+class 按走向规划的转接(会规划的转接):
+    """像 Nav2:路上的朝向是走的方向,最后一个位姿才是要的朝向(到了原地转)。"""
+
+    def send(self, m):
+        if m["type"] == "plan":
+            gx, gy, gyaw = m["goal"]
+            sx, sy, _ = m["start"]
+            h = math.atan2(gy - sy, gx - sx)
+            n = max(1, int(math.dist((sx, sy), (gx, gy)) / 0.025))
+            poses = [[sx + (gx - sx) * i / n, sy + (gy - sy) * i / n, h] for i in range(n)]
+            poses.append([gx, gy, gyaw])
+            self.plan_results[m["req_id"]] = {"type": "plan_result", "req_id": m["req_id"],
+                                              "ok": True, "poses": poses}
+        return 假转接.send(self, m)
+
+
+async def test_窄巷尽头的点_要的朝向转不过来_按开进去的方向到点_不拒(tmp_path):
+    """1.3 m 巷子尽头的点要朝回走的方向:那儿原地转不开(原来查路线拒、或者绕出在巷口掉头倒着进的
+    怪路,控制器跟不住卡在巷口)。改成朝开进去的方向,路线直着就过。"""
+    link = 按走向规划的转接()
+    t = _台(tmp_path, link, walls=_死胡同(1.3, end_x=10.0))
+    await t.start(1.5, 4.0, 0.0)
+    await t.nav.goto(Pose.from_xy_yaw(9.0, 4.0, math.pi))
+    [g] = link.kinds("goal")
+    assert abs(math.remainder(g["yaw"], 2 * math.pi)) < 0.05, g
+    assert "path" not in g, "直着走,不用局部搜索的怪路"
+    ev = [d for k, d in t.events if k == "goal_yaw_relaxed"]
+    assert ev and ev[0]["want_deg"] == 180 and ev[0]["yaw_deg"] == 0, t.events
+    assert abs(math.remainder(t.nav._target.yaw, 2 * math.pi)) < 0.05, "到点不再转回去"
+
+
+async def test_空地上的点_转得开_朝向照要的(tmp_path):
+    link = 按走向规划的转接()
+    t = _台(tmp_path, link)
+    await t.start(1.5, 4.0, 0.0)
+    await t.nav.goto(Pose.from_xy_yaw(6.0, 4.0, math.pi))
+    [g] = link.kinds("goal")
+    assert abs(math.remainder(g["yaw"] - math.pi, 2 * math.pi)) < 0.05, g
+    assert not [d for k, d in t.events if k == "goal_yaw_relaxed"]
