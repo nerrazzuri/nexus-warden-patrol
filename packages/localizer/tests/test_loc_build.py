@@ -894,3 +894,34 @@ def test_W75_打包每到一步报一声(tmp_path):
     B.package(work, tmp_path / "out", run=假MOLA(pts), loop_closure=_lc_tool(tmp_path),
               progress=said.append)
     assert said == ["回环", "点云", "栅格", "先验", "定位地图"]
+
+
+def _雷达上方更密的一层(tmp_path):
+    """Top Glove 11-17:离雷达上方 0.22 m 有一层比地面还密的水平面(机身上的载荷、台面)。雷达倒装
+    (X 朝下),跟 C40221 一样。"""
+    work, pts, yaws = _转圈(tmp_path, True)
+    W2M, _ = _world(True)
+    rng = np.random.default_rng(7)
+    xy = rng.uniform([-1.0, -3.0], [9.0, 3.0], (200000, 2))
+    layer = np.c_[xy, np.full(len(xy), 0.22)] @ W2M.T
+    return work, np.vstack([pts, layer]).astype("<f4"), yaws, W2M
+
+
+def test_TG1117_雷达上方有更密的一层_只看点云判反了上_里程核出镜像_照旧不出图(tmp_path):
+    work, pts, yaws, _ = _雷达上方更密的一层(tmp_path)
+    with pytest.raises(B.BuildError, match="镜像"):
+        B.package(work, tmp_path / "out", run=假MOLA(pts), bag=tmp_path / "bag",
+                  read_scans=lambda *a: iter(()),
+                  read_odom=lambda bag: ("/odom/mc_odom", _里程(yaws)))
+
+
+def test_TG1117_Super_LIO的世界按重力对齐_上的正负号按重力定_不被那一层带偏(tmp_path):
+    work, pts, yaws, W2M = _雷达上方更密的一层(tmp_path)
+    B.package(work, tmp_path / "out", run=假MOLA(pts), bag=tmp_path / "bag",
+              read_scans=lambda *a: iter(()),
+              read_odom=lambda bag: ("/odom/mc_odom", _里程(yaws)),
+              gravity_up=tuple(W2M @ np.array([0.0, 0.0, 1.0])))
+    f = json.loads((tmp_path / "out" / "frames.json").read_text())
+    assert f["sensor_up"][0] < -0.99, f["sensor_up"]
+    b = json.loads((tmp_path / "out" / "build.json").read_text())
+    assert b["handedness"]["verdict"] == "ok", b["handedness"]

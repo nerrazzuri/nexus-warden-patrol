@@ -246,7 +246,8 @@ def _build(a: argparse.Namespace) -> int:
     files = build.package(work, a.out, prior_pack=build.PriorPack.parse(a.prior_pack),
                           source=f"bag:{a.bag.name}", timings=timings, bag=a.bag,
                           lidar_topic=a.lidar_topic, rtk_antenna=tuple(a.rtk_antenna),
-                          loop_closure=lc, progress=_say)
+                          loop_closure=lc, progress=_say,
+                          gravity_up=build.SUPERLIO_GRAVITY_UP if a.front == "superlio" else None)
     print(json.dumps(json.loads((a.out / "build.json").read_text()), ensure_ascii=False,
                      indent=2))
     print("文件:", ", ".join(files))
@@ -276,7 +277,8 @@ def _build_from_keyframes(a: argparse.Namespace, work: Path) -> int:
     files = build.package(work, a.out, prior_pack=build.PriorPack.parse(a.prior_pack),
                           source=f"keyframes:{kd.name}", timings={"prepare_s": info["prepare_s"]},
                           bag=None, live=kd, lidar_topic=a.lidar_topic,
-                          rtk_antenna=tuple(a.rtk_antenna), loop_closure=lc, progress=_say)
+                          rtk_antenna=tuple(a.rtk_antenna), loop_closure=lc, progress=_say,
+                          gravity_up=build.SUPERLIO_GRAVITY_UP)    # 机器人上边走边建的是 Super-LIO
     _say("完成")
     print("文件:", ", ".join(files))
     return 0
