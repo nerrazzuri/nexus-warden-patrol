@@ -197,8 +197,8 @@ LOOK_MIN_PTS = 3
 #: 灰度:扫过、没有东西的白;没扫过的淡灰(不当成能走);有点的从 LOOK_FAINTEST 往 LOOK_DARK 按
 #: 点数的对数变深(最密的 1% 封顶)。
 LOOK_CLEAR = 255
-LOOK_UNSEEN = 232
-LOOK_FAINTEST = 200
+LOOK_UNSEEN = 215
+LOOK_FAINTEST = 180
 LOOK_DARK = 40
 
 
