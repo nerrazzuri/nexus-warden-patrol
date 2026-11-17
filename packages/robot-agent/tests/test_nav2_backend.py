@@ -5,6 +5,7 @@ Nav2 本身不在这里起(那是 ``tools/navbench.py --backend nav2``);转接�
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import math
 from collections import deque
@@ -2324,13 +2325,31 @@ async def test_窄巷尽头的点_要的朝向转不过来_按开进去的方向
     link = 按走向规划的转接()
     t = _台(tmp_path, link, walls=_死胡同(1.3, end_x=10.0))
     await t.start(1.5, 4.0, 0.0)
+    t.nav.yaw_free = True                                   # 引擎说:这个点不拍照、朝向不要紧
     await t.nav.goto(Pose.from_xy_yaw(9.0, 4.0, math.pi))
     [g] = link.kinds("goal")
     assert abs(math.remainder(g["yaw"], 2 * math.pi)) < 0.05, g
     assert "path" not in g, "直着走,不用局部搜索的怪路"
+    assert t.nav.yaw_relaxed == (180, 0), "引擎要写进这个点的结果"
     ev = [d for k, d in t.events if k == "goal_yaw_relaxed"]
     assert ev and ev[0]["want_deg"] == 180 and ev[0]["yaw_deg"] == 0, t.events
     assert abs(math.remainder(t.nav._target.yaw, 2 * math.pi)) < 0.05, "到点不再转回去"
+
+
+async def test_外审1117_I1_要拍照的点_朝向转不过来也不放宽_照要的朝向查(tmp_path):
+    """外审 11-17 I1:朝向放宽会把对着门、设备拍照的点按错的朝向记成到了。引擎没说朝向不要紧
+    (默认)就不放宽。"""
+    link = 按走向规划的转接()
+    t = _台(tmp_path, link, walls=_死胡同(1.3, end_x=10.0))
+    await t.start(1.5, 4.0, 0.0)
+    assert t.nav.yaw_free is False, "默认朝向要紧"
+    from nexwar_patrol.backends.base import NavRequestError
+    with contextlib.suppress(NavRequestError):              # 查路线拒了也行,就是不许放宽
+        await t.nav.goto(Pose.from_xy_yaw(9.0, 4.0, math.pi))
+    assert not [d for k, d in t.events if k == "goal_yaw_relaxed"], t.events
+    assert t.nav.yaw_relaxed is None
+    for g in link.kinds("goal"):
+        assert abs(math.remainder(g["yaw"] - math.pi, 2 * math.pi)) < 0.05, g
 
 
 async def test_空地上的点_转得开_朝向照要的(tmp_path):
@@ -2422,6 +2441,7 @@ async def test_终点朝向改成开进去的方向_按最后一米多的走向_
     link = 末端往要的朝向弯的转接()
     t = _台(tmp_path, link, walls=_死胡同(1.3, end_x=10.0))
     await t.start(1.5, 4.0, 0.0)
+    t.nav.yaw_free = True
     await t.nav.goto(Pose.from_xy_yaw(9.0, 4.0, math.pi))
     [g] = link.kinds("goal")
     assert abs(math.remainder(g["yaw"], 2 * math.pi)) < math.radians(8), math.degrees(g["yaw"])

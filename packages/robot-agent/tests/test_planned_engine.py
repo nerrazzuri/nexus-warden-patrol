@@ -358,3 +358,33 @@ async def test_只试一次的策略_不回头补(台子):
     await _跑完(c, r, parts)
     res = parts.engine._live.results
     assert [x.ok for x in res] == [False, True] and "回头补" not in res[0].note
+
+
+async def test_外审1117_I1_拍照的点告诉导航朝向要紧_放宽了写进这个点的结果(台子):
+    """外审 11-17 I1:有拍照 / 云台动作、有检查项的点,朝向要紧(不许放宽);没有的可以放宽,
+    放宽了这个点的结果里写明要的朝向、实际朝向。"""
+    from nexwar_agent.engine.mission import Action
+    c, r, parts = 台子
+    nav, real, seen = parts.nav, parts.nav.goto, []
+    nav.yaw_free, nav.yaw_relaxed = False, None             # 这个后端没这开关:装上,看引擎设不设
+
+    async def goto(pose):
+        seen.append(((pose.position.x, pose.position.y), nav.yaw_free))
+        nav.yaw_relaxed = None
+        await real(pose)
+        if (pose.position.x, pose.position.y) == (3.5, 4.0):
+            nav.yaw_relaxed = (180, 0)                     # 「路过」那个点:导航说放宽了
+    nav.goto = goto
+    wps = (MissionWaypoint(name="拍门", pose=Pose.from_xy_yaw(3.5, 2.0),
+                           actions=(Action(type="head", pitch=0.2),)),
+           MissionWaypoint(name="路过", pose=Pose.from_xy_yaw(3.5, 4.0)),
+           MissionWaypoint(name="看表", pose=Pose.from_xy_yaw(2.0, 4.0), check="压力表在绿区"))
+    await parts.engine.start(Mission(mission="t", map_id="m", waypoints=wps, policy=Policy()),
+                             home=parts.home)
+    await _跑完(c, r, parts)
+    by = dict(seen)
+    assert (by[(3.5, 2.0)], by[(3.5, 4.0)], by[(2.0, 4.0)]) == (False, True, False), seen
+    res = parts.engine._live.results
+    assert [x.ok for x in res] == [True, True, True], res
+    assert "朝向" in res[1].note and "180" in res[1].note, res[1].note
+    assert "朝向" not in res[0].note and "朝向" not in res[2].note
