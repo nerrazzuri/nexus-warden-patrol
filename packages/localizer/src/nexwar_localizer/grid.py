@@ -221,6 +221,8 @@ class Grid:
     #: 显示底图(Top Glove 11-17,见 :data:`LOOK_BAND_M`):跟 ``image`` 一样大的灰度(uint8);
     #: 只管显示,规划、狗不读。
     look: np.ndarray | None = None
+    #: 另一批射线(后雷达)用了几帧。
+    extra_scans: int = 0
 
     def cell_of(self, x: float, y: float) -> tuple[int, int] | None:
         """地图平面上的点在图像里的 (行, 列);出了图是 None。"""
@@ -582,11 +584,13 @@ def _raytrace_scans(scans: Iterable[tuple[np.ndarray, np.ndarray]], frames: Fram
                     max_range: float, ground: _Ground,
                     occ_h: tuple[np.ndarray, np.ndarray] | None = None,
                     seen: _Seen | None = None,
-                    hits: np.ndarray | None = None) -> tuple[np.ndarray, int]:
+                    hits: np.ndarray | None = None,
+                    openings: bool = True) -> tuple[np.ndarray, int]:
     """真射线:每一帧从雷达到这一帧障碍层里的点(每个方位格最近的那个),路过的格子各记一次。
     ``occ_h``:每格障碍点离当地地面的(最低, 最高)(没有障碍点是 nan);给了就按三维判穿过
     (:data:`RAY_HEIGHT_TOL_M`)。``seen``:给了就顺带记下每格是直接看到还是透过开口看到、从哪些方向
     看到(:class:`_Seen`)。``hits``:给了(``H × W`` 个 int)就顺带记每格有几帧打中(W71 判噪点)。
+    ``openings=False``(后雷达那批,Top Glove 11-17):只记穿过、直接看到的方向,不判开口、不算地面。
     回(每格被穿过的次数, 用了几帧)。"""
     H, W = shape
     passes = np.zeros(H * W, np.int32)
@@ -610,7 +614,7 @@ def _raytrace_scans(scans: Iterable[tuple[np.ndarray, np.ndarray]], frames: Fram
         floor = None
         if seen is not None:
             fl = ok_all & (h_all > FLOOR_BAND_M[0]) & (h_all < FLOOR_BAND_M[1])
-            floor = q_all[fl, :2] - o
+            floor = q_all[fl, :2] - o if openings else np.zeros((0, 2))
         if not len(r):
             if seen is not None:
                 none = np.zeros(0, int)
@@ -650,7 +654,7 @@ def _raytrace_scans(scans: Iterable[tuple[np.ndarray, np.ndarray]], frames: Fram
         key = np.unique(ray[inside].astype(np.int64) * (H * W) + cell)
         np.add.at(passes, key % (H * W), 1)
         if seen is not None:
-            s_open = _openings(b, r, q)
+            s_open = _openings(b, r, q) if openings else np.full(SCAN_BINS, np.inf)
             ri = ray[inside]
             seen.scan(o, floor, s_open, lo, (H, W), res, max_range, cell,
                       k[inside] * step > s_open[b[ri]], b[ri] * VIEW_BINS // SCAN_BINS)
@@ -861,11 +865,14 @@ def render(points: np.ndarray, sensor_traj: np.ndarray, frames: Frames, *, res: 
            floor_clear: float = FLOOR_CLEAR_M, wall_top: float = WALL_TOP_M,
            traj_margin: float = TRAJ_MARGIN_M, max_range: float = MAX_RANGE_M,
            scans: Iterable[tuple[np.ndarray, np.ndarray]] | None = None,
-           body_path: np.ndarray | None = None) -> Grid:
+           body_path: np.ndarray | None = None,
+           extra_rays: Iterable[tuple[np.ndarray, np.ndarray]] | None = None) -> Grid:
     """点云(MOLA 系,(N,3))+ 建图时雷达的位置(MOLA 系,(M,3))→ 栅格(地图平面系)。
 
     ``scans``:逐帧扫描 ``(雷达位置, 这一帧的点)``(都在 MOLA 系;给了就用真射线,并去掉透过玻璃、
-    开口看到的假空地,见模块说明);``body_path``:狗身中心走过的路(地图平面,(K,2)),两边
+    开口看到的假空地,见模块说明);``extra_rays``:另一台雷达(后雷达)的逐帧扫描,只添穿过和直接
+    看到的方向(不判开口、不算地面、不算打中;要配 ``scans``);
+    ``body_path``:狗身中心走过的路(地图平面,(K,2)),两边
     :data:`FOOTPRINT_M` 一律可通行(没给的话「走过的路」用雷达的轨迹)。"""
     q = level(np.asarray(points, float), frames)
     t = level(np.asarray(sensor_traj, float), frames)
@@ -900,7 +907,7 @@ def render(points: np.ndarray, sensor_traj: np.ndarray, frames: Frames, *, res: 
     gf = ((fl - lo) / res).astype(int)
     seen[gf[:, 1], gf[:, 0]] = True
     seen = _erode(_dilate(seen, 1), 1)                      # 闭运算:远处点稀,补上小洞
-    views, used = None, 0
+    views, used, extra_used = None, 0, 0
     if scans is not None:
         views = _Seen(H * W)
         hit_scans = np.zeros((H, W), np.int32)
@@ -908,6 +915,11 @@ def render(points: np.ndarray, sensor_traj: np.ndarray, frames: Frames, *, res: 
                                        max_range, ground,
                                        occ_h=(occ_lo.reshape(H, W), occ_hi.reshape(H, W)),
                                        seen=views, hits=hit_scans)
+        if extra_rays is not None:
+            more, extra_used = _raytrace_scans(
+                extra_rays, frames, lo, (H, W), res, (floor_clear, wall_top), max_range, ground,
+                occ_h=(occ_lo.reshape(H, W), occ_hi.reshape(H, W)), seen=views, openings=False)
+            passes = passes + more
     else:
         pc = ((t[:, :2] - lo) / res).astype(int)
         key = (pc[:, 0] // POSE_STRIDE_CELLS) * 100000 + (pc[:, 1] // POSE_STRIDE_CELLS)
@@ -961,7 +973,8 @@ def render(points: np.ndarray, sensor_traj: np.ndarray, frames: Frames, *, res: 
         lo = lo + np.array([x0, y0]) * res
     return Grid(image=np.flipud(img).copy(), origin=(float(lo[0]), float(lo[1])), res=res,
                 seen=np.flipud(seen_only).copy() if seen_only.any() else None, specks=specks,
-                curb=np.flipud(curb).copy() if curb.any() else None, look=np.flipud(look).copy())
+                curb=np.flipud(curb).copy() if curb.any() else None, look=np.flipud(look).copy(),
+                extra_scans=extra_used)
 
 
 def _look(q: np.ndarray, h: np.ndarray, ok: np.ndarray, lo: np.ndarray, shape: tuple[int, int],

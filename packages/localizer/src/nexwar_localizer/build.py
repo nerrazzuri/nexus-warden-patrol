@@ -37,6 +37,7 @@ from __future__ import annotations
 
 import glob
 import json
+import logging
 import math
 import os
 import re
@@ -52,6 +53,8 @@ from nexwar_contract.geo import GEO_FILE
 from nexwar_contract.maps import CURB_FILE, GEOMETRY_FILES, LOOK_FILE, SEEN_FILE
 from nexwar_localizer.frames import Frames, calibrate
 from nexwar_localizer.replay import MOLA_SHARE, read_tum
+
+log = logging.getLogger(__name__)
 
 #: 前雷达在狗身上的水平偏移(朝前、朝左,米;SDK 开发指南 2.10 节,前激光雷达 x = 404.3 mm)。
 FRONT_LIDAR_IN_BASE = (0.4043, 0.0)
@@ -185,6 +188,7 @@ def package(work: Path, out: Path, *, prior_pack: PriorPack | None = None,
             run: Runner = subprocess.run, timings: dict[str, float] | None = None,
             bag: Path | None = None, lidar_topic: str = SCAN_TOPIC,
             read_scans: Callable[..., Iterator[Any]] | None = None,
+            read_extra_rays: Callable[..., Iterator[Any]] | None = None,
             rtk_antenna: tuple[float, float] = (0.0, 0.0),
             clock_offset: Callable[[Path, str], float | None] | None = None,
             loop_closure: str | None = None,
@@ -253,7 +257,7 @@ def package(work: Path, out: Path, *, prior_pack: PriorPack | None = None,
     body = np.array([frames.to_map2d(p, q)[:2] for _, p, q in traj])
     try:
         g, rays = _render(points, sensor, frames, body, traj, bag, lidar_topic,
-                          read_scans or bag_scans, on_scan=rc.add)
+                          read_scans or bag_scans, on_scan=rc.add, read_extra=read_extra_rays)
     except grid.GridTooLarge as exc:
         raise BuildError(str(exc)) from exc
     grid.write(g, out / "floor")
@@ -690,7 +694,8 @@ def _denoise(slio: Any, sensor: Any, frames: Frames, g: Any, rc: Any) -> tuple[A
 
 def _render(points: Any, sensor: Any, frames: Frames, body: Any, traj: Sequence[Any],
             bag: Path | None, topic: str, read_scans: Callable[..., Iterator[Any]],
-            on_scan: Callable[[Any, Any], None] | None = None) -> tuple[Any, str]:
+            on_scan: Callable[[Any, Any], None] | None = None,
+            read_extra: Callable[..., Iterator[Any]] | None = None) -> tuple[Any, str]:
     """画栅格:有录包用逐帧扫描的真射线,读不了(没有 ROS、话题不对、包坏了)退回模拟射线。回
     (栅格, 用的哪种)。``on_scan``:每一帧扫描也交给它(W70 三维去噪)。"""
     from nexwar_localizer import grid
@@ -716,14 +721,24 @@ def _render(points: Any, sensor: Any, frames: Frames, body: Any, traj: Sequence[
                     on_scan(*s)
                 yield s
         try:
-            g = grid.render(points, sensor, frames, scans=counted(), body_path=body)
+            extra = None if read_extra is None else _quiet(read_extra(bag, traj))
+            g = grid.render(points, sensor, frames, scans=counted(), body_path=body,
+                            extra_rays=extra)
         except _ScanReadError as exc:
             why = f"无法读取逐帧扫描:{exc}"[:300]
         else:
             if used[0]:
-                return g, f"scans:{used[0]}"
+                return g, f"scans:{used[0]}" + (f"+rear:{g.extra_scans}" if g.extra_scans else "")
             why = "录包里没有配得上轨迹的扫描"
     return grid.render(points, sensor, frames, body_path=body), f"synthetic:{why}"
+
+
+def _quiet(it: Iterator[Any]) -> Iterator[Any]:
+    """另一批射线(后雷达)读不了就停,不连累前雷达那批(写日志)。"""
+    try:
+        yield from it
+    except Exception:
+        log.warning("后雷达的帧读不了,只用前雷达", exc_info=True)
 
 
 def _mola_info(work: Path) -> dict[str, Any]:
@@ -769,16 +784,50 @@ def bag_scans(bag: Path, traj: Sequence[Any], topic: str = SCAN_TOPIC, *,
     yield from scans_with_pose(msgs(), traj, every=every)
 
 
-def merged_scans(T_front_rear: Any) -> Callable[..., Iterator[tuple[Any, Any]]]:
-    """:func:`package` 的 ``read_scans``:扫描用前后雷达合并的帧(前雷达系,按轨迹补两台之间的运动;
-    Top Glove 11-17 后雷达进图)。要 ROS 的系统 Python。"""
-    def read(bag: Path, traj: Sequence[Any], topic: str = SCAN_TOPIC, *,
-             every: int = SCAN_EVERY) -> Iterator[tuple[Any, Any]]:
-        from nexwar_localizer import dualbag
-        msgs = ((dualbag._stamp(m), m) for _, m in
-                dualbag.merged_messages(bag, T_front_rear, traj=traj, front_topic=topic))
-        yield from scans_with_pose(msgs, traj, every=every)
+def rear_rays(T_front_rear: Any, topic: str = "/rear_lidar"
+              ) -> Callable[..., Iterator[tuple[Any, Any]]]:
+    """:func:`package` 的 ``read_extra_rays``:后雷达自己的帧(不跟前雷达合并),按那一刻的前雷达位姿
+    × 外参放进地图系(Top Glove 11-17)。要 ROS 的系统 Python。"""
+    def read(bag: Path, traj: Sequence[Any], *, every: int = SCAN_EVERY
+             ) -> Iterator[tuple[Any, Any]]:
+        import rosbag2_py
+        from rclpy.serialization import deserialize_message
+        from sensor_msgs.msg import PointCloud2
+
+        storage = "mcap" if any(Path(bag).glob("*.mcap")) else "sqlite3"
+        r = rosbag2_py.SequentialReader()
+        r.open(rosbag2_py.StorageOptions(uri=str(bag), storage_id=storage),
+               rosbag2_py.ConverterOptions("", ""))
+        r.set_filter(rosbag2_py.StorageFilter(topics=[topic]))
+
+        def msgs() -> Iterator[tuple[float, Any]]:
+            while r.has_next():
+                _, raw, _ = r.read_next()
+                m = deserialize_message(raw, PointCloud2)
+                yield m.header.stamp.sec + m.header.stamp.nanosec * 1e-9, m
+
+        yield from rays_from(msgs(), traj, T_front_rear, every=every)
     return read
+
+
+def rays_from(scans: Iterator[tuple[float, Any]], traj: Sequence[Any], T_front_rear: Any, *,
+              every: int = SCAN_EVERY) -> Iterator[tuple[Any, Any]]:
+    """另一台雷达的 ``(时刻, 点或 PointCloud2)`` 逐帧(每 ``every`` 帧取一帧):位姿 = 那一刻前雷达
+    在轨迹里的位姿(按时刻插,轨迹外的不要)× ``T_front_rear``。回 ``(雷达位置, 地图系的点)``。"""
+    import numpy as np
+
+    from nexwar_localizer.dualbag import Trajectory
+    tr = Trajectory(traj)
+    Tfr = np.asarray(T_front_rear, float)
+    for i, (st, m) in enumerate(scans):
+        if i % every:
+            continue
+        A = tr.at(st)
+        if A is None:
+            continue
+        Tw = A @ Tfr
+        xyz = (m if isinstance(m, np.ndarray) else cloud_xyz(m))[::SCAN_POINT_STRIDE]
+        yield Tw[:3, 3].copy(), xyz @ Tw[:3, :3].T + Tw[:3, 3]
 
 
 def scans_with_pose(scans: Iterator[tuple[float, Any]], traj: Sequence[Any], *,

@@ -963,3 +963,17 @@ def test_TG1117_去动态点的诊断_设了环境变量就把每个点的穿过
 def test_TG1117_显示底图是契约里的可选文件_老狗老站点不认也不出事():
     from nexwar_contract.maps import LOOK_FILE, OPTIONAL_FILES
     assert B.LOOK_FILE == LOOK_FILE == "look.pgm" and LOOK_FILE in OPTIONAL_FILES
+
+
+def test_TG1117_后雷达的帧按前雷达轨迹和外参放进地图系_不跟前雷达合并():
+    from nexwar_localizer import build
+    traj = [(10.0 + 0.1 * k, (0.1 * k, 0.0, 0.0), (0.0, 0.0, 0.0, 1.0)) for k in range(11)]
+    T = np.eye(4)
+    T[:3, 3] = [-0.75, 0.0, 0.0]                                   # 后雷达在前雷达后面 0.75 m
+    pts = np.array([[1.0, 0.0, 0.0]] * 8)
+    msgs = [(10.05 + 0.1 * k, pts) for k in range(10)] + [(99.0, pts)]
+    out = list(build.rays_from(iter(msgs), traj, T, every=3))
+    assert len(out) == 4, "每 3 帧取一帧,轨迹外的不要"
+    s, p = out[1]
+    assert np.allclose(s, [0.35 - 0.75, 0, 0]), "雷达位置 = 那一刻前雷达位姿 × 外参(按时刻插)"
+    assert np.allclose(p[0], [0.35 - 0.75 + 1.0, 0, 0])
