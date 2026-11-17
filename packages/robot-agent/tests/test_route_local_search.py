@@ -36,8 +36,9 @@ def _smac_l(w: float):
     return [(1.2, cy, 0.0), (cx, cy, 0.0), (cx, cy, math.pi / 2), (cx, 4.3, math.pi / 2)]
 
 
-def _no_strafe(path, tol_deg=3.0):
-    """相邻两个位姿:要么原地转(位置不动),要么沿车头(前 / 后)走,横向分量只许插值误差那么点。"""
+def _no_strafe(path, tol_m=0.002):
+    """相邻两个位姿:要么原地转(位置不动),要么沿车头(前 / 后)走,横向分量不超过 ``tol_m``
+    (外审 11-17 I2:原来许 3° + 3.6 cm,接缝的横移和每步偏半档都放过去了)。"""
     bad = []
     for a, b in zip(path, path[1:], strict=False):
         dx, dy = b[0] - a[0], b[1] - a[1]
@@ -49,7 +50,7 @@ def _no_strafe(path, tol_deg=3.0):
             bad.append((a, b, "边走边转的一步"))
             continue
         lat = abs(-math.sin(yaw) * dx + math.cos(yaw) * dy)
-        if lat > d * math.tan(math.radians(tol_deg)) + 0.036:
+        if lat > tol_m:
             bad.append((a, b, round(lat, 3)))
     return bad
 
@@ -89,10 +90,8 @@ def test_开阔地_搜出来的路不倒车():
     p = search_path((1.0, 2.0, 0.0), (3.4, 2.0, 0.0), walls, RES, (0.0, 0.0),
                     ROUTE_MARGIN_MIN, span=[(1.0, 2.0, 0.0), (3.4, 2.0, 0.0)])
     assert p is not None
-    for i, (a, b) in enumerate(zip(p, p[1:], strict=False)):
+    for a, b in zip(p, p[1:], strict=False):
         dx, dy = b[0] - a[0], b[1] - a[1]
-        if i in (0, len(p) - 2) and math.hypot(dx, dy) <= 1.5 * RES:
-            continue                                       # 头尾拼回原位姿那一下:对格子,不到一格
         assert math.cos(a[2]) * dx + math.sin(a[2]) * dy >= -1e-6, ("倒车了", a, b)
 
 
@@ -160,3 +159,16 @@ def test_仿真11_16_搜路先要宽的_有宽路不贴着底线走(width, at_le
     r = check_route(_smac_l(width), _lmap(width), RES, (0.0, 0.0))
     assert r.ok and r.path is not None, r
     assert r.margin >= at_least - 0.005, r
+
+
+@pytest.mark.parametrize("entry", [(1.0, 2.0, 0.0), (1.013, 1.982, 0.03), (1.0, 2.0, 0.6)])
+def test_外审1117_I2_入口不在格子中心_接上去也不横移_每一步沿车头(entry):
+    """外审 11-17 I2:原来入口直接连到格子中心((1, 2) → (0.975, 1.975) 横着 2.5 cm),每档按 5° 整档
+    走、一步最多偏半档。现在只用原地转 + 沿车头直走接上,整条验收。"""
+    walls = np.zeros((80, 80), dtype=bool)
+    walls[38:42, 36:48] = True
+    p = search_path(entry, (3.4, 2.0, 0.0), walls, RES, (0.0, 0.0), ROUTE_MARGIN_MIN,
+                    span=[entry, (3.4, 2.0, 0.0)])
+    assert p is not None
+    assert p[0] == pytest.approx(entry) and p[-1] == pytest.approx((3.4, 2.0, 0.0))
+    assert not _no_strafe(p, 1e-6), _no_strafe(p, 1e-6)[:3]
