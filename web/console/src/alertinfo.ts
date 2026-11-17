@@ -20,6 +20,8 @@ const en = {
   pfNavDo: "Wait a minute and send it again. If it stays like this, check navigation on the Diagnostics page.",
   pfBattery: "battery too low to start",
   pfBatteryDo: "Charge it or swap the battery first.",
+  pfBatteryNoHome: "the turn-back battery level cannot be worked out (the map has no usable origin)",
+  pfBatteryNoHomeDo: "Mark the origin on the map first; the battery itself is fine.",
   pfStorage: "robot storage is full",
   pfStorageDo: "Free up space on the Diagnostics page.",
   pfRemovable: "robot storage has a problem",
@@ -53,6 +55,8 @@ const zh: Record<AKey, string> = {
   pfNavDo: "等一分钟再派；一直不好就到「诊断」页看导航。",
   pfBattery: "电量不够出发",
   pfBatteryDo: "先去充电或换电池。",
+  pfBatteryNoHome: "算不出返航要留的电量（地图没有可用的原点）",
+  pfBatteryNoHomeDo: "先在地图上标原点；电池本身没问题。",
   pfStorage: "机器人存储空间不足",
   pfStorageDo: "到「诊断」页清理空间。",
   pfRemovable: "机器人存储设备有问题",
@@ -92,14 +96,22 @@ const PREFLIGHT: Record<string, [AKey, AKey]> = {
 
 function preflightKeys(a: Alert): [AKey, AKey] {
   const c = (a.context as { check?: string } | undefined)?.check;
+  // 现场 11-17:电量那一项不一定是电量低 —— 没原点算不出出发线也算它没过(跟 sitetext 同一条规矩)
+  if (c === "battery" && /原点|出发线/.test(a.detail ?? "") && !/低于/.test(a.detail ?? "")) {
+    return ["pfBatteryNoHome", "pfBatteryNoHomeDo"];
+  }
   return (c && PREFLIGHT[c]) || ["pfOther", "pfOtherDo"];
 }
 
 /** 网页易用性 P1-14:站点给的巡逻失败原因(机器人上的原话,常带检查项名、括号里的细节)翻成人话;
  *  认不出的原样给(悬停看全文)。 */
 export function plainReason(raw: string): string {
-  const pf = /起飞前检查未通过[:：]\s*([a-z_]+)/.exec(raw);
-  if (pf) return at("pfFailed", { why: at((PREFLIGHT[pf[1]] ?? ["pfOther"])[0]) });
+  const pf = /起飞前检查未通过[:：]\s*([a-z_]+)(?:[(（]([^)）]*))?/.exec(raw);
+  if (pf) {
+    // 现场 11-17:电量那一项没原点算不出出发线也算没过,不是电量低
+    const noHome = pf[1] === "battery" && /原点|出发线/.test(pf[2] ?? "") && !/低于/.test(pf[2] ?? "");
+    return at("pfFailed", { why: at(noHome ? "pfBatteryNoHome" : (PREFLIGHT[pf[1]] ?? ["pfOther"])[0]) });
+  }
   if (/电量\s*[\d.]+%\s*低于中止线/.test(raw)) return at("batteryTurned");
   // 第 3 轮 admin N7:被人按「停止」停下的,站点记的是原始代码 halt
   if (/^(halt|stop|stopped)$/i.test(raw.trim())) return lang.value === "zh" ? "被人停下" : "stopped by hand";
