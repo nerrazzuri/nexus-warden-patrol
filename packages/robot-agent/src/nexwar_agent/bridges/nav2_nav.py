@@ -236,8 +236,14 @@ REC_SWEEP_S = 1.0
 #: 接过一回要再挪 :data:`UTURN_AFTER_M` 才能接下一回。
 UTURN_RAD = math.radians(110.0)
 UTURN_AFTER_M = 1.0
-UTURN_GOAL_M = 1.5
+UTURN_GOAL_M = 3.0
 UTURN_MAX = 2
+#: 路线调头要连着这么久(秒)才接:人迎面走来 Nav2 也会临时改往回绕,人让开路线就回来(仿真 11-17 工厂
+#: 种子 6:离终点 1.6 m 被人逼得调头,马上接过来转了 140°,背对着目标又卡住)。
+UTURN_PERSIST_S = 3.0
+#: 开始计以后,路线跟车头差到这么小以下才算「路线又往前了」(等的时候 Nav2 可能已经转了一半,
+#: 差小于 :data:`UTURN_RAD` 也还是调头)。
+UTURN_KEEP_RAD = math.radians(45.0)
 #: 路线第一个点离机器人这么近(米)才算是从这儿新规划的(Nav2 约 1 Hz 从脚下重规划;远的是旧路线)。
 UTURN_PLAN_NEAR_M = 0.5
 #: 终点要的朝向转不过来(用户 11-17,真实巡逻仿真「仓库巷道」):窄巷尽头的点要朝回走的方向,那儿原地
@@ -384,6 +390,7 @@ class Nav2NavBackend(PlannedNavBackend):
         self._look_tries = 0
         self._look_at = (0.0, 0.0)
         self._uturns = 0                                   # 这个目标接过几回掉头
+        self._ut_since: float | None = None                # 路线从什么时候起一直是调头的
         self._ut_from: tuple[float, float] | None = None   # 从这儿挪够了才能接下一回
         self._turn_err: float | None = None                # 上一拍原地转的误差(看转没转过头)
         self._turn_blocked_at: float | None = None         # 只差朝向的原地转从什么时候起被挡(W70)
@@ -625,7 +632,7 @@ class Nav2NavBackend(PlannedNavBackend):
         self._rec_level, self._rec_at, self._man, self._back = 0, None, None, None
         self._rec_tried = set()
         self._rechecks = 0
-        self._uturns, self._ut_from = 0, None
+        self._uturns, self._ut_from, self._ut_since = 0, None, None
         self._osc.clear()
         self._prog_reset()                                 # W72:新目标,进展从头算
         if here is not None:
@@ -1295,13 +1302,21 @@ class Nav2NavBackend(PlannedNavBackend):
                 or math.dist((here.x, here.y), (tgt.position.x, tgt.position.y)) <= UTURN_GOAL_M:
             return False
         want = self._uturn_want(here)
-        return want is not None and abs(math.remainder(want - here.yaw, 2 * math.pi)) >= UTURN_RAD
+        err = abs(math.remainder(want - here.yaw, 2 * math.pi)) if want is not None else 0.0
+        if err < (UTURN_RAD if self._ut_since is None else UTURN_KEEP_RAD):
+            if want is not None:                           # 一拍没路线(重规划中)不清
+                self._ut_since = None
+            return False
+        now = self._secs()
+        if self._ut_since is None:
+            self._ut_since = now
+        return now - self._ut_since >= UTURN_PERSIST_S
 
     def _start_uturn(self, here: Any) -> None:
         want = self._uturn_want(here)
         assert want is not None
         self._uturns += 1
-        self._ut_from = (here.x, here.y)
+        self._ut_from, self._ut_since = (here.x, here.y), None
         self._cancel_nav2()
         self._man = {"want": want, "t0": self._secs(), "steps": 0, "cur": None, "level": 0,
                      "why": "路线调头", "fail": None, "last": None, "kind": "uturn"}
