@@ -495,3 +495,68 @@ def test_W75_建图命令_边走边存的不全_退回读录包_原因记下(tmp
     assert seen["prepare"][0].startswith("live") and "没收尾" in seen["prepare"][0], \
         "build.json 的 mola.source 写着为什么没用边走边存的"
     assert set(t) == {"superlio_s", "prepare_s"}
+
+
+# ---------------------------------------------------------------- Top Glove 11-17:后雷达也进图
+def test_TG1117_IMU轨迹换成前雷达轨迹_跟逐帧乘外参一样():
+    R = [[0.0, -1.0, 0.0], [1.0, 0.0, 0.0], [0.0, 0.0, 1.0]]
+    t = [0.1, 0.0, 0.05]
+    poses = [(1000.0, (1.0, 2.0, 0.0), (0.0, 0.0, 0.0, 1.0)),
+             (1000.1, (1.5, 2.0, 0.0), (0.0, 0.0, math.sin(0.2), math.cos(0.2)))]
+    tr = S.lidar_traj(poses, R, t)
+    assert [r[0] for r in tr] == [1000.0, 1000.1]
+    for (_, p, q), (_, pi, qi) in zip(tr, poses, strict=True):
+        p2, R2 = S.lidar_pose(pi, qi, R, t)
+        assert np.allclose(p, p2) and np.allclose(S.quat_to_mat(q), R2, atol=1e-9)
+
+
+class _Msg:
+    def __init__(self, t: float) -> None:
+        sec = int(t)
+        self.header = type("H", (), {"stamp": type("S", (), {
+            "sec": sec, "nanosec": int(round((t - sec) * 1e9))})()})()
+
+
+def test_TG1117_给了后雷达外参_关键帧用前后合并的点_位姿照旧只靠前雷达(tmp_path, monkeypatch):
+    """Top Glove 11-17:Super-LIO 建图只读 /front_lidar,后雷达看到的那一半没进图。"""
+    from nexwar_localizer import dualbag, tools
+    seen = _fake_front(monkeypatch, tmp_path, live=True)
+    T = np.eye(4).tolist()
+    got: dict[str, object] = {}
+
+    def merged(bag, T_fr, *, traj=None, **kw):
+        got["merged"] = (Path(bag).name, T_fr, len(traj or []))
+        yield 1, _Msg(1000.2)
+        yield 2, _Msg(1000.3)
+
+    def prepare(work, bag, poses, **kw):
+        got["clouds"] = [round(t, 3) for t, _ in kw["clouds"]]
+        return {"quality": S.quality(poses), "keyframes": 3, "prepare_s": 1.0}
+
+    monkeypatch.setattr(dualbag, "merged_messages", merged)
+    monkeypatch.setattr(S, "prepare", prepare)
+    tools._superlio_front(tmp_path / "bag1", tmp_path / "w", reuse=True, rear=T)
+    assert seen["read"] == [("bag1", S.LIVE_TOPIC)], "位姿还是录下的 / 前雷达算的"
+    assert got["merged"] == ("bag1", T, 100), "合并时按前雷达轨迹补两台之间的运动"
+    assert got["clouds"] == [1000.2, 1000.3]
+
+
+def test_TG1117_没给后雷达外参_照旧只用前雷达(tmp_path, monkeypatch):
+    from nexwar_localizer import tools
+    _fake_front(monkeypatch, tmp_path, live=True)
+    got: dict[str, object] = {}
+
+    def prepare(work, bag, poses, **kw):
+        got["clouds"] = kw.get("clouds")
+        return {"quality": S.quality(poses), "keyframes": 3, "prepare_s": 1.0}
+
+    monkeypatch.setattr(S, "prepare", prepare)
+    tools._superlio_front(tmp_path / "bag1", tmp_path / "w", reuse=True)
+    assert got["clouds"] is None
+
+
+def test_TG1117_建图命令_后雷达外参没标定就拒_不悄悄用几何初值(tmp_path, capsys):
+    from nexwar_localizer import tools
+    assert tools.main(["build", "--bag", str(tmp_path), "--out", str(tmp_path / "o"),
+                       "--front", "superlio", "--rear-lidars", str(tmp_path / "none.json")]) == 2
+    assert "没标定" in capsys.readouterr().out

@@ -925,3 +925,15 @@ def test_TG1117_Super_LIO的世界按重力对齐_上的正负号按重力定_�
     assert f["sensor_up"][0] < -0.99, f["sensor_up"]
     b = json.loads((tmp_path / "out" / "build.json").read_text())
     assert b["handedness"]["verdict"] == "ok", b["handedness"]
+
+
+def test_TG1117_扫描配位姿_按时刻配_隔几帧取一帧_配不上的不要():
+    """出栅格打射线的扫描:录包里的前雷达帧、前后合并的帧都走这一套(Top Glove 11-17 后雷达进图)。"""
+    from nexwar_localizer import build
+    traj = [(10.0 + 0.1 * k, (float(k), 0.0, 0.0), (0.0, 0.0, 0.0, 1.0)) for k in range(10)]
+    pts = np.array([[1.0, 0.0, 0.0]] * 8)
+    scans = [(10.0 + 0.1 * k, pts) for k in range(9)] + [(30.0, pts)]
+    out = list(build.scans_with_pose(iter(scans), traj, every=3))
+    assert [round(float(o[0][0]), 3) for o in out] == [0.0, 3.0, 6.0]
+    assert np.allclose(out[1][1][0], [4.0, 0.0, 0.0]), "点按位姿换进地图系"
+    assert len(out[0][1]) == 8 // build.SCAN_POINT_STRIDE

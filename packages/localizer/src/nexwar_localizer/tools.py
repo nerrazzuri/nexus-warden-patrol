@@ -26,6 +26,7 @@ import math
 import statistics
 from collections.abc import Sequence
 from pathlib import Path
+from typing import Any
 
 from nexwar_localizer import replay
 from nexwar_localizer.backend import FRAMES_FILE
@@ -81,6 +82,11 @@ def parser() -> argparse.ArgumentParser:
                           "录下的位姿不是建图轨迹;11-04 广场)")
     b.add_argument("--front", choices=("mola", "superlio"), default="mola",
                    help="建图前端(工单 21):superlio = Super-LIO 的轨迹 + 原始点云;mola = 原来的")
+    b.add_argument("--rear-lidars", type=Path, default=None,
+                   help="Top Glove 11-17:后雷达也进图(只配 --front superlio)—— 标定好的 "
+                        "lidars.json;轨迹照旧只用前雷达,关键帧的点和栅格的射线用前后合并的帧")
+    b.add_argument("--sensor-up", type=lambda s: _floats(s, 3), default=(-1.0, 0.0, 0.0))
+    b.add_argument("--forward-hint", type=lambda s: _floats(s, 3), default=(0.0, 0.0, 1.0))
     b.add_argument("--keyframes", type=Path, default=None,
                    help="W75:边走边存的关键帧目录(配 --reuse;不全就退回读录包)")
     b.add_argument("--rtk-antenna", type=lambda s: _floats(s, 2), default=(0.0, 0.0),
@@ -236,9 +242,20 @@ def _build(a: argparse.Namespace) -> int:
     work = a.work or a.out.with_name(a.out.name + ".work")
     if a.from_keyframes is not None:
         return _build_from_keyframes(a, work)
+    rear = None
+    if a.rear_lidars is not None:
+        from nexwar_localizer.lidars import load
+        lid = load(a.rear_lidars, up=a.sensor_up, forward=a.forward_hint)
+        if a.front != "superlio":
+            print("后雷达进图只配 --front superlio(MOLA 用 merge-bag + --lidar-topic)")
+            return 2
+        if not lid.calibrated:
+            print(f"后雷达外参没标定({lid.note or a.rear_lidars}):合并会重影,先 calibrate-rear")
+            return 2
+        rear = lid.T_front_rear
     if a.front == "superlio":
         timings = _superlio_front(a.bag, work, reuse=a.reuse, replay=a.replay,
-                                  keyframes=a.keyframes)
+                                  keyframes=a.keyframes, rear=rear)
     else:
         timings = {} if a.reuse else build.run_mapping(a.bag, work, lidar_topic=a.lidar_topic)
     lc = _loop_closure(a.loop_closure)
@@ -247,6 +264,7 @@ def _build(a: argparse.Namespace) -> int:
                           source=f"bag:{a.bag.name}", timings=timings, bag=a.bag,
                           lidar_topic=a.lidar_topic, rtk_antenna=tuple(a.rtk_antenna),
                           loop_closure=lc, progress=_say,
+                          read_scans=build.merged_scans(rear) if rear is not None else None,
                           gravity_up=build.SUPERLIO_GRAVITY_UP if a.front == "superlio" else None)
     print(json.dumps(json.loads((a.out / "build.json").read_text()), ensure_ascii=False,
                      indent=2))
@@ -285,7 +303,7 @@ def _build_from_keyframes(a: argparse.Namespace, work: Path) -> int:
 
 
 def _superlio_front(bag: Path, work: Path, *, reuse: bool, replay: bool = False,
-                    keyframes: Path | None = None) -> dict[str, float]:
+                    keyframes: Path | None = None, rear: Any = None) -> dict[str, float]:
     """Super-LIO 前端(工单 21):录包里有边走边建录下的位姿就用;没有(老的包、只录了原始数据)
     在隔离域里回放给 Super-LIO 重算。出 ``work`` 里的三样,之后照原来的打包(回环、栅格、先验)。"""
     import shutil
@@ -299,7 +317,7 @@ def _superlio_front(bag: Path, work: Path, *, reuse: bool, replay: bool = False,
     shutil.rmtree(work, ignore_errors=True)
     t0 = time.monotonic()
     why = ""
-    if keyframes is not None and reuse:
+    if keyframes is not None and reuse and rear is None:
         # W75:边走边存了关键帧就用它,录包一帧都不读(广场 8 分钟的包光读一遍就要 142 s)
         try:
             info = S.prepare_live(work, keyframes, cfg=cfg, prior_pipeline=build.PRIOR_PIPELINE,
@@ -323,8 +341,16 @@ def _superlio_front(bag: Path, work: Path, *, reuse: bool, replay: bool = False,
         lio = S.run_offline(bag, work, cfg=cfg)
         poses, source = S.read_odom(lio, "/lio/odom"), "replay"
     t1 = time.monotonic()
+    clouds = None
+    if rear is not None:
+        # Top Glove 11-17:后雷达也进图。Super-LIO 只吃一台雷达,轨迹照旧;关键帧的点用前后合并的帧
+        from nexwar_localizer import dualbag
+        traj = S.lidar_traj(S.clean(poses), *S.extrinsic(cfg))
+        clouds = ((dualbag._stamp(m), m) for _, m in
+                  dualbag.merged_messages(bag, rear, traj=traj, front_topic=S.LIDAR_TOPIC))
+        source += "+后雷达"
     info = S.prepare(work, bag, poses, cfg=cfg, prior_pipeline=build.PRIOR_PIPELINE,
-                     plugin=build._plugin(), source=source + why)
+                     plugin=build._plugin(), source=source + why, clouds=clouds)
     q = info["quality"]
     print(f"Super-LIO({source}):{q['duration_s']} s、路程 {q['path_m']} m、首尾相距 "
           f"{q['start_end_m']} m(回到起点的话这就是误差)、关键帧 {info['keyframes']}")
