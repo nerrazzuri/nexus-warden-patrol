@@ -760,8 +760,10 @@ def test_外审复查P3_代理记的倒车比例跟Nav2参数一致():
     assert MPPI_REVERSE_RATIO == pytest.approx(-vmin / vmax)
 
 
-async def test_复查三P1_路线门槛打开前缓存的速度作废_要比路线晚到的才认(tmp_path):
+async def test_复查三P1_路线门槛打开前缓存的速度作废_要比路线晚到的才认(tmp_path, monkeypatch):
     """Codex 第三轮:新目标的路线来了,门槛打开,之前缓存的(标的也是新目标的)旧速度不能拿来开车。"""
+    from nexwar_agent.bridges import nav2_nav
+    monkeypatch.setattr(nav2_nav, "UTURN_MAX", 0)           # 测的是速度门槛,身后的路线不掉头接管
     link = 假转接()
     link.auto_plan = False
     t = _台(tmp_path, link)
@@ -2259,20 +2261,25 @@ async def test_走廊里Nav2路线调头_代理接过来原地掉头_转过来�
     assert NavStatus.FAILED not in t.status
 
 
-async def test_刚出发_目标在身后_不算掉头_照常交给Nav2(tmp_path):
-    """出发时就在身后的归原来那套(Nav2 自己转、死巷先倒出来);只接「走着走着路线调头」的。"""
+async def test_刚出发_下一段就在身后_也接过来原地掉头(tmp_path):
+    """仿真 11-17 办公楼:走廊尽头掉头回起点 —— Nav2 看清两侧以后不马上转(先倒、犹豫),记忆又过期,
+    卡死。出发时下一段就在身后也由代理一口气转过去。"""
     link = 假转接()
     t = _台(tmp_path, link, walls=_两米走廊())
     await t.start(8.0, 4.0, 0.0)
     await t.nav.goto(Pose.from_xy_yaw(2.0, 4.0, math.pi))
     gid = link.kinds("goal")[-1]["goal_id"]
-    link.plan = (gid, ((8.0, 4.0), (6.0, 4.0), (2.0, 4.0)))
-    for _ in range(20):
+    for _ in range(300):
+        link.plan = (gid, ((t.r.x, 4.0), (6.0, 4.0), (2.0, 4.0)))
         link.now = t.c.s()
-        link.cmd = (link.now, 0, 0.0, 0.0, 0.5, gid, "ctl")
+        link.cmd = (link.now, 0, -0.1, 0.0, 0.5, gid, "ctl")
         await t.一拍()
-    assert not [d for k, d in t.events if k == "nav_uturn"], t.events
-    assert len(link.kinds("goal")) == 1
+        if len(link.kinds("goal")) >= 2:
+            break
+    assert [d for k, d in t.events if k == "nav_uturn"], t.events
+    assert len(link.kinds("goal")) >= 2, "转过来以后重新交给 Nav2"
+    assert abs(math.remainder(t.r.yaw - math.pi, 2 * math.pi)) < math.radians(30), t.r.yaw
+    assert not t.crashed
 
 
 async def test_掉头每个目标最多接两回(tmp_path):

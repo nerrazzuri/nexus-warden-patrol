@@ -230,9 +230,10 @@ REC_SWEEP_S = 1.0
 #: 走廊里掉头(用户 11-17,真实巡逻仿真「绕路」):走着走着 Nav2 的路线调头(前面被堵改走身后那条,
 #: 路线上 :data:`MANEUVER_LOOK_M` 外那一点在身后 :data:`UTURN_RAD` 以外)—— Nav2 会边倒车边转,被守卫
 #: 拦、两侧盲带的记忆过期,最后横在走廊里动不了。代理马上接过来,趁两侧刚看过按「自己挪」原地转过去
-#: (守卫、地图墙照样管),转过来再交回 Nav2。这个目标出发以后挪了 :data:`UTURN_AFTER_M` 才算「走着」
-#: (出发时就在身后的归原来那套);离终点 :data:`UTURN_GOAL_M` 以内不接(到点转朝向归只差朝向那套);
-#: 每个目标最多 :data:`UTURN_MAX` 回,接过一回要再挪 :data:`UTURN_AFTER_M` 才能接下一回。
+#: (守卫、地图墙照样管;看不见的先直着挪看清、接着就转),转过来再交回 Nav2。出发时下一段就在身后也
+#: 一样接(仿真 11-17 办公楼:走廊尽头掉头回起点,Nav2 看清以后不马上转、记忆又过期,卡死)。
+#: 离终点 :data:`UTURN_GOAL_M` 以内不接(到点转朝向归只差朝向那套);每个目标最多 :data:`UTURN_MAX` 回,
+#: 接过一回要再挪 :data:`UTURN_AFTER_M` 才能接下一回。
 UTURN_RAD = math.radians(110.0)
 UTURN_AFTER_M = 1.0
 UTURN_GOAL_M = 1.5
@@ -624,7 +625,7 @@ class Nav2NavBackend(PlannedNavBackend):
         self._rec_level, self._rec_at, self._man, self._back = 0, None, None, None
         self._rec_tried = set()
         self._rechecks = 0
-        self._uturns, self._ut_from = 0, (here.x, here.y) if here is not None else None
+        self._uturns, self._ut_from = 0, None
         self._osc.clear()
         self._prog_reset()                                 # W72:新目标,进展从头算
         if here is not None:
@@ -1289,8 +1290,8 @@ class Nav2NavBackend(PlannedNavBackend):
         return None
 
     def _uturn_due(self, here: Any, tgt: Any) -> bool:
-        if self._uturns >= UTURN_MAX or self._ut_from is None \
-                or math.dist((here.x, here.y), self._ut_from) < UTURN_AFTER_M \
+        if self._uturns >= UTURN_MAX or (self._ut_from is not None and math.dist(
+                (here.x, here.y), self._ut_from) < UTURN_AFTER_M) \
                 or math.dist((here.x, here.y), (tgt.position.x, tgt.position.y)) <= UTURN_GOAL_M:
             return False
         want = self._uturn_want(here)
