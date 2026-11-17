@@ -2331,3 +2331,21 @@ async def test_空地上的点_转得开_朝向照要的(tmp_path):
     [g] = link.kinds("goal")
     assert abs(math.remainder(g["yaw"] - math.pi, 2 * math.pi)) < 0.05, g
     assert not [d for k, d in t.events if k == "goal_yaw_relaxed"]
+
+
+async def test_先直走看清的路上经过了目标_接过来只差朝向时不再接着直走_站在目标上转(tmp_path):
+    """真实巡逻仿真(办公楼种子 8,11-17):出发两侧没看过、先直走 1.2 m;目标就在前面 0.3 m,走的路上
+    到了目标附近 → 代理接过来原地转。原来那段直走没撤、接着走完,在离目标 1 m 的地方转、算到了。"""
+    link = 假转接()
+    t = _台(tmp_path, link)
+    await t.start(3.0, 4.0)
+    await t.nav.goto(Pose.from_xy_yaw(3.3, 4.0, math.pi / 2))
+    gid = link.kinds("goal")[-1]["goal_id"]
+    for _ in range(300):
+        link.now += 0.1
+        link.cmd = (link.now, gid, 0.0, 0.0, 0.6)
+        await t.一拍()
+        if NavStatus.SUCCEED in t.status:
+            break
+    assert NavStatus.SUCCEED in t.status, t.status
+    assert math.dist((t.r.x, t.r.y), (3.3, 4.0)) < 0.3, (t.r.x, t.r.y)

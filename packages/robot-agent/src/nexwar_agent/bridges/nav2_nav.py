@@ -1034,6 +1034,9 @@ class Nav2NavBackend(PlannedNavBackend):
             log.info("Nav2 到了目标附近、只差朝向 %.0f°:代理接过来原地转",
                      math.degrees(math.remainder(tgt.yaw - here.yaw, 2 * math.pi)))
             self._cancel_nav2()
+            # 先直走看清的路上经过了目标:那段直走撤掉(不然走完它、在离目标 1 m 的地方转、算到了;
+            # 办公楼仿真 11-17)。站在目标上转,两侧没看过的照常先挪出去看清、再倒回来
+            self._look = None
             self._turn_only, self._turn_err = tgt.yaw, None
             await self._turn_step(here, dt_s)
             return
