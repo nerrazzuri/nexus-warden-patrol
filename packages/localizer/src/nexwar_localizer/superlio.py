@@ -78,7 +78,9 @@ LEVEL_MIN_SAMPLES = 200     # 一段里 IMU 少于这么多不算那段
 # 加速度计水平零偏(笔记本核 v11:约 0.84° 没扣,去程回程朝向相反被纠成相反方向,同一处高低差 0.3–0.5 m)
 LEVEL_BIAS_MIN_WINDOWS = 6  # 估零偏至少要这么多段
 LEVEL_BIAS_MAX_DEG = 3.0    # 估出来比这大不信(不扣)
-LEVEL_BIAS_KEEP_DEG = 0.5   # 估零偏时离拟合超过 max(这么多, 3 倍中位)的段当在漂,不参与
+LEVEL_BIAS_KEEP_DEG = 0.8   # 估零偏时离拟合超过这么多的段当在漂,不参与(v11 不漂的段 0.04–0.8°)
+LEVEL_BIAS_FINE_DEG = 0.3   # 精解时离拟合超过 max(这么多, 3 倍中位)的段也不要(漂刚开始的那几段)
+LEVEL_BIAS_TRIES = 3000     # RANSAC 最多试这么多组(段少时全试)
 #: 建完把关:相邻两个位姿水平挪的比「最快速度 × 间隔 + 余量」还多,就是跟丢了,不出图(跟定位器
 #: 判跳一个做法)。不只看距离:录位姿会丢帧(台式机实测 1.8 s 断档里走了 1.58 m,是正常走);
 #: 不只看速度:两个位姿可能只隔 5 ms(差 1.5 cm 算出来 3 m/s)。
@@ -351,29 +353,60 @@ def level(poses: Sequence[Pose], imu: Sequence[tuple[float, float, float, float]
 
 
 def _imu_bias(U: Any, M: Any) -> tuple[Any, str]:
-    """各段的「上」``U``(k×3)、平均姿态里水平两根轴 ``M``(k×3×2)→ 加速度计水平零偏(2 个分量,
-    单位 g):最小二乘解「U = 常量 g + M·b」,离拟合太远的段(在漂)去掉再解,两轮。朝向不够多(零偏跟
-    常量分不开)、估出来太大:回 (零, 原因)。"""
+    """各段的「上」``U``(k×3)、平均姿态里水平两根轴 ``M``(k×3×2)→ 加速度计水平零偏
+    (2 个分量,单位 g):解「U = 常量 g + M·b」。先找一致的大多数(RANSAC / MSAC:每次取 3 段解,
+    离拟合 :data:`LEVEL_BIAS_KEEP_DEG` 以外的封顶算,误差总和最小的那组),再用那些段收紧了精解
+    —— 笔记本核 v12:先全量最小二乘,漂的几段朝向别处没有,零偏把漂移「解释」掉了。
+    朝向不够多、一致的段不够、估出来太大:回 (零, 原因)。"""
+    import itertools
+
     import numpy as np
     k = len(U)
     A = np.zeros((3 * k, 5))
     A[:, :3] = np.tile(np.eye(3), (k, 1))
     A[:, 3:] = M.reshape(3 * k, 2)
     y = U.reshape(3 * k)
-    keep = np.ones(k, bool)
-    x = np.zeros(5)
-    for _ in range(3):
+    thr = math.radians(LEVEL_BIAS_KEEP_DEG)
+
+    def fit(keep: Any) -> Any:
         rows = np.repeat(keep, 3)
         sv = np.linalg.svd(A[rows], compute_uv=False)
         if sv[-1] < 0.05 * sv[0]:
+            return None
+        return np.linalg.lstsq(A[rows], y[rows], rcond=None)[0]
+
+    def residual(x: Any) -> Any:
+        return np.linalg.norm((A @ x - y).reshape(k, 3), axis=1)
+
+    combos = list(itertools.combinations(range(k), 3))
+    if len(combos) > LEVEL_BIAS_TRIES:
+        pick = np.random.default_rng(0).choice(len(combos), LEVEL_BIAS_TRIES, replace=False)
+        combos = [combos[i] for i in pick]
+    best, best_cost = None, math.inf
+    for c in combos:
+        keep = np.zeros(k, bool)
+        keep[list(c)] = True
+        x = fit(keep)
+        if x is None:
+            continue
+        res = residual(x)
+        cost = float((np.minimum(res, thr) ** 2).sum())     # MSAC:离得远的封顶,一致的越贴越好
+        if cost < best_cost:
+            best, best_cost = res <= thr, cost
+    if best is None:
+        return np.zeros(2), "朝向不够多,零偏跟重力分不开,不扣"
+    if best.sum() < LEVEL_BIAS_MIN_WINDOWS:
+        return np.zeros(2), f"一致的段只有 {int(best.sum())} 段,不扣"
+    for _ in range(3):                                   # 用一致的那些段精解,再按新解收紧了认一遍
+        x = fit(best)
+        if x is None:
             return np.zeros(2), "朝向不够多,零偏跟重力分不开,不扣"
-        x = np.linalg.lstsq(A[rows], y[rows], rcond=None)[0]
-        res = np.linalg.norm((A @ x - y).reshape(k, 3), axis=1)
-        lim = max(math.radians(LEVEL_BIAS_KEEP_DEG), 3 * float(np.median(res[keep])))
-        new = res <= lim
-        if new.sum() < LEVEL_BIAS_MIN_WINDOWS or (new == keep).all():
+        res = residual(x)
+        fine = min(thr, max(math.radians(LEVEL_BIAS_FINE_DEG), 3 * float(np.median(res[best]))))
+        new = res <= fine
+        if new.sum() < LEVEL_BIAS_MIN_WINDOWS or (new == best).all():
             break
-        keep = new
+        best = new
     b = x[3:]
     if math.degrees(float(np.linalg.norm(b))) > LEVEL_BIAS_MAX_DEG:
         return b, f"零偏估出来 {math.degrees(float(np.linalg.norm(b))):.1f}° 太大,不扣"
