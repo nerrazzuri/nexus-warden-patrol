@@ -829,9 +829,13 @@ class _SiteAlertScenePageState extends State<SiteAlertScenePage> with EstopMissR
     );
   }
 
+  /// 本页包在深色主题里（C1 11-17）：State 自己的 context 在那层主题外面，取颜色要用里面那层的。
+  BuildContext? _inner;
+  NwColors get _c => Nw.of(_inner ?? context);
+
   /// 本页的动作按钮：字 14（正文半粗）、高 48、内距小 —— 390 宽两个一排也摆得下一行；夜里戴手套也点得中。
   Widget _act(Key key, String label, VoidCallback? on, {bool primary = false, IconData? icon}) {
-    final c = Nw.of(context);
+    final c = _c;
     const size = Size(48, 48);
     const padding = EdgeInsets.symmetric(horizontal: Nw.s8);
     final shape = RoundedRectangleBorder(borderRadius: BorderRadius.circular(2));
@@ -1252,7 +1256,7 @@ class _SiteAlertScenePageState extends State<SiteAlertScenePage> with EstopMissR
 
   /// 事件经过：站点记下来的时刻，一行一条；最后一行是「接下来会自动发生什么」（提示色）。
   List<Widget> _timeline() {
-    final c = Nw.of(context);
+    final c = _c;
     final note = NwText.bodyMedium.copyWith(color: c.info, fontWeight: FontWeight.w600);
     final rows = <(int, String)>[
       (
@@ -1408,6 +1412,7 @@ class _SiteAlertScenePageState extends State<SiteAlertScenePage> with EstopMissR
       data: dark,
       child: Builder(
         builder: (context) {
+          _inner = context;
           final c = Nw.of(context);
           final map = _mapBlock();
           final warn = _warning(c);

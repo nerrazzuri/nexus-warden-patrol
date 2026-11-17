@@ -67,6 +67,8 @@ export function SiteMap(props: {
   episodes?: boolean;
   /** 能不能点图「去这里 / 在这里设位置」(默认能;值班页只在「帮它找位置」时能)。 */
   pick?: boolean;
+  /** I3 11-17:正在选点(派去看一眼、临时路线):点到机器人身上也算选点,不选中它。 */
+  picking?: boolean;
   /** 浮在图左上角的一句提示(值班页「帮它找位置」时说怎么做)。 */
   hint?: string | null;
   /** 第 2 轮 P1-56:「帮它定位」设完位置、机器人定位好了(页面退出定位模式)。 */
@@ -240,6 +242,7 @@ export function SiteMap(props: {
                     <g key={u.robot.robot_id} class={`bot ${a ?? "ok"}${on ? " on" : ""}`} onClick={(e) => {
                       // 第 4 轮 maps N3:点已选中的这台本身 = 在它身上选点(帮它定位时最自然的点法),交给地图
                       if (on && pose.onPick && props.pick === true && !props.onPickMap) return;   // 只在「帮它定位」时(pick 明说要选点)
+                      if (props.picking && props.onPickMap) return;                          // 选点:交给地图
                       e.stopPropagation(); props.onSelect(u.robot.robot_id);
                     }}>
                       {moved && <line x1={rx} y1={ry} x2={x} y2={y} class="bot-leader" data-bot-leader="1" />}
@@ -395,7 +398,7 @@ export function MapPage(props: {
         areaDecor={on("zones") ? (n) => zoneDecor(n, props.mode, authz) : (n) => ({ label: n, tone: "armed" })}
         onMapShown={(map, meta) => setShown({ map, meta })}
         hot={props.hot} onAreas={(a) => { setAreas(a); props.onAreas?.(a); }}
-        pick={props.finding ? true : undefined} onLocated={props.onLocated}
+        pick={props.finding ? true : undefined} onLocated={props.onLocated} picking={tool === "look" || tool === "route"}
         onPickMap={props.finding ? undefined : canDispatch(props.role ?? "") ? (x, y, map) => {
           if (route) setRoute([...route, [x, y]]);
           else setLook({ at: [x, y], map });

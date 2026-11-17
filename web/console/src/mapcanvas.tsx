@@ -105,6 +105,9 @@ function fromClient(el: SVGGraphicsElement | null, x: number, y: number): Pt | n
   return [i.a * x + i.c * y + i.e, i.b * x + i.d * y + i.f];
 }
 
+/** 放大 / 缩小按一下的倍数。 */
+const ZOOM_STEP = 1.5;
+
 export function MapCanvas(props: {
   meta: PreviewMeta;
   /** 栅格预览(preview.png)的地址;站点给了平面图就画平面图,读不出来再退回它。 */
@@ -304,6 +307,11 @@ export function MapCanvas(props: {
             <svg class="scalebar" width={bar.px + 2} height="10" data-px={bar.px} aria-hidden="true"><path d={`M1 1V9H${bar.px + 1}V1`} /></svg>
             <span class="scale-label" aria-hidden="true">{t("scaleM", { m: bar.m })}</span>
           </span>
+          {/* I3 11-17:看得见的放大 / 缩小(原来只有滚轮) */}
+          <button type="button" class="btn sm mapzoom" data-zoom="out" aria-label={t("zoomOut")} title={t("zoomOut")}
+            onClick={() => setView(zoomView(live.current, 1 / ZOOM_STEP, box.w / 2, box.h / 2))}>−</button>
+          <button type="button" class="btn sm mapzoom" data-zoom="in" aria-label={t("zoomIn")} title={t("zoomIn")}
+            onClick={() => setView(zoomView(live.current, ZOOM_STEP, box.w / 2, box.h / 2))}>+</button>
           <button type="button" class="btn sm" title={t("wholeMapHint")} onClick={() => setUser(null)}>{t("wholeMap")}</button>
         </div>
       </div>

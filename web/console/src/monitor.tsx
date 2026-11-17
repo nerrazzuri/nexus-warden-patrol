@@ -356,7 +356,8 @@ export function MonitorPage(props: {
               onAreas={(a) => setAreas((old) => (old.length === a.length && old.every((x, i) => x.name === a[i].name) ? old : a))} />
           </div>
         )}
-        <section class="mon-video" aria-label={t("monVideo")}>
+        {/* I3 11-17:选点时视频收起,地图占满(原来地图只剩 296 px 高、卡片还盖住一块) */}
+        {!(tool === "look" || tool === "route") && <section class="mon-video" aria-label={t("monVideo")}>
           <div class="mon-video-h">
             <h2>{t("monVideo")}</h2>
             <span class="push" />
@@ -387,7 +388,7 @@ export function MonitorPage(props: {
                 {layout === "dual" && slot(slots[1], 1)}
               </div>
             )}
-        </section>
+        </section>}
         </>)}
       </section>
 
