@@ -91,6 +91,9 @@ PERSON_STEP_MPS = 0.5
 #: 让开以后又等了这么久(秒)还挡着、机器人停着:贴着机器人挤过去,每边留这么多(米)(真人会这么走)
 PERSON_SQUEEZE_AFTER_S = 2.0
 PERSON_SQUEEZE_M = 0.1
+#: 来回走的人被挡这么久(秒)、挤也挤不过去:像真人一样不等了,掉头往回走(仿真 11-17 办公室种子 5、9:
+#: 行人在走廊里对着停住的机器人一站半分钟以上,机器人转身、挪看清都被他卡着,两边干耗)。
+PERSON_GIVEUP_S = 15.0
 
 
 def _car_brakes(line: Any, t0: float, t1: float, hx: float, hy: float, ox: float, oy: float,
@@ -408,6 +411,11 @@ async def run_case(case: dict[str, Any], *, sim_cap_s: float) -> dict[str, Any]:
                 z2 = _person_zone(x0 + sx + ox, y0 + sy + oy, x1 + sx + ox, y1 + sy + oy, fwd,
                                   lat, PERSON_SQUEEZE_M)
                 passing = z2 is not None and not _poly_hits_rect(poly, z2)
+            if wide and not passing and waited[i] >= PERSON_GIVEUP_S and line.repeat:
+                back = (prog[i] // line.period + 1) * line.period - prog[i] % line.period
+                if math.dist(line.at(back), (x0, y0)) < 0.05:   # 来回对称:同一点、反着走
+                    prog[i], waited[i] = back, 0.0
+                    return
             if wide and not passing:
                 waited[i] += TICK
                 if waited[i] >= PERSON_PATIENCE_S:
