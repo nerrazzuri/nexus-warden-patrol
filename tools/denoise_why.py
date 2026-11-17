@@ -16,8 +16,10 @@ from pathlib import Path
 
 import numpy as np
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "packages/localizer/src"))
-from nexwar_localizer import mapclean as C
+_ROOT = Path(__file__).resolve().parents[1]
+for _pkg in ("localizer", "contract"):              # 笔记本 11-17:光有 localizer 缺 contract
+    sys.path.insert(0, str(_ROOT / "packages" / _pkg / "src"))
+from nexwar_localizer import mapclean as C  # noqa: E402
 
 
 def main() -> int:

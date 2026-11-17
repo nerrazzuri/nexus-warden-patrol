@@ -240,17 +240,6 @@ def lidar_pose(p_imu: Sequence[float], q_imu: Sequence[float], R_il: Sequence[Se
     return p_wl, R_wl
 
 
-def lidar_traj(poses: Sequence[Pose], R_il: Sequence[Sequence[float]], t_il: Sequence[float]
-               ) -> list[tuple[float, tuple[float, ...], tuple[float, ...]]]:
-    """IMU 轨迹 → 前雷达轨迹(TUM 的 ``(t, p, q)``):合并前后雷达时按它补两台之间的运动
-    (Top Glove 11-17 后雷达进图)。"""
-    out = []
-    for t, p, q in poses:
-        pl, R = lidar_pose(p, q, R_il, t_il)
-        out.append((t, tuple(pl), tuple(mat_to_quat(R))))
-    return out
-
-
 # ---------------------------------------------------------------- 读录包
 def read_odom(bag: Path, topic: str) -> list[Pose]:
     """录包里 ``topic`` 的 ``nav_msgs/Odometry`` → 位姿(报文头时刻)。要 ROS 的系统 Python。"""
