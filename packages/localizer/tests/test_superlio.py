@@ -101,6 +101,17 @@ def test_质量_首尾相距_最大单步():
     assert q["path_m"] == pytest.approx(4.95, abs=0.06)
     assert q["start_end_m"] == pytest.approx(4.95)
     assert q["max_step_m"] == pytest.approx(0.05)
+    assert q["same_place_dz_p95"] == 0.0, "只走一趟:没有同一处经过两次"
+
+
+def test_质量_同一处隔30秒以上又经过_记高度差():
+    """11-18 出图自动检查:去程回程同一处(水平 0.5 m 内、隔 30 s 以上)高度对不上 = 上下歪了
+    (Top Glove 没摆平时东头差 1.2 m;四个合格的包 p95 最多 0.115 m)。"""
+    out = [(1000.0 + k * 0.1, (k * 0.05, 0.0, 0.0), (0.0, 0.0, 0.0, 1.0)) for k in range(400)]
+    back = [(1040.0 + k * 0.1, (20.0 - k * 0.05, 0.0, 0.4), (0.0, 0.0, 0.0, 1.0))
+            for k in range(400)]
+    q = S.quality(out + back)
+    assert q["same_place_dz_p95"] == pytest.approx(0.4, abs=0.01)
 
 
 class _Run:
@@ -582,7 +593,7 @@ def _live_drifted(kd: Path, *, with_imu: bool = True) -> tuple[list[S.Pose], lis
     poses, imu = _drifted()
     clouds = [(1000.0 + k * 0.1, k) for k in range(1198)]
     R, t = S.extrinsic(S.DEFAULT_CONFIG)
-    live = S.LiveKeyframes(S.Keyframer(kd, R, t, _cloud), log=kd / "lio.tum",
+    live = S.LiveKeyframes(S.Keyframer(kd, R, t, _cloud, voxel=S.KF_VOXEL_M), log=kd / "lio.tum",
                            imu_log=kd / S.IMU_FILE if with_imu else None)
     ii = 0
     for p, (ts, k) in zip(poses, clouds + [(None, None)] * 2, strict=False):
@@ -634,6 +645,21 @@ def test_现场关键帧_漂了4度_打包时按记下的IMU摆平_跟录包那�
     z = got[:, 3]
     assert z.max() - z.min() < 0.3, f"摆平后关键帧高低差 {z.max() - z.min():.2f} m"
     assert info["quality"] == saved["quality"]
+
+
+def test_回归台_从录包模拟现场的关键帧目录_跟机器人上存的逐字节一样(tmp_path):
+    """回归台(11-18)要验客户走的那条打包路:录包 + Super-LIO 位姿 → 跟机器人边走边存一样的目录。"""
+    kd = tmp_path / "robot"
+    poses, imu, clouds = _live_drifted(kd)
+    n = S.live_from_bag(poses, clouds, imu, tmp_path / "sim", cfg=S.DEFAULT_CONFIG,
+                        xyz_of=_cloud)
+    want = {k: v for k, v in _files(kd).items() if k != S.LIVE_FILE}
+    got = _files(tmp_path / "sim")
+    assert {k: v for k, v in got.items() if k != S.LIVE_FILE} == want
+    live = json.loads(got[S.LIVE_FILE])
+    assert live["keyframes"] == n["keyframes"] == json.loads(_files(kd)[S.LIVE_FILE])["keyframes"]
+    S.prepare_live(tmp_path / "w", tmp_path / "sim", cfg=S.DEFAULT_CONFIG, root=Path("/opt/x"),
+                   prior_pipeline=Path("/p.yaml"), run=_Run())
 
 
 def test_现场关键帧_老版本没记IMU_照旧打包_写明没摆平(tmp_path):

@@ -100,6 +100,11 @@ String qualityReasonText(String code) => switch (code) {
       'big_shift' => tr('Large loop-closure correction: walls may show double lines',
           '闭合修正较大：墙边可能有重影'),
       'short_path' => tr('Path too short: some areas may be missing', '行走距离过短：可能有区域缺失'),
+      // 11-18 出图自动检查（Super-LIO 没做回环的图）
+      'drift' => tr('Ended far from the start: the map may have drifted. Walk again and finish at the start',
+          '结束时离起点太远：地图可能漂了。请重走，最后回到起点再结束'),
+      'height' => tr('Heights do not match where the robot passed twice: the map is tilted. Walk again, more slowly',
+          '同一处两次经过高度对不上：地图上下歪了。请慢一点重走'),
       _ => code,
     };
 

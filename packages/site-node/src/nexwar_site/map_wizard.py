@@ -37,6 +37,11 @@ _LOCK = threading.Lock()
 #: 结论的阈值(设计 D6)。
 MAX_SHIFT_M = 0.3
 MIN_PATH_M = 15.0
+#: Super-LIO 建的图(没做回环)自动检查(用户 11-18:交付后不能靠改代码、跑一天图,不合格让客户重走):
+#: 结束时离起点(App 让客户回到起点再结束)、同一处两次经过的高度差 95 分位。台式机回归台四个合格的
+#: 包:离起点最多 0.51 m(广场 328 m)、高度差最多 0.115 m(商场);Top Glove 没摆平时差 0.3–1.2 m。
+MAX_START_END_M = 1.0
+MAX_SAME_PLACE_DZ_M = 0.25
 
 
 class WizardError(ValueError):
@@ -82,10 +87,12 @@ def quality(build: Any, coverage_path: Any) -> dict[str, Any]:
     """``build`` 是 ``build.json`` 的内容(没有就 ``None``),``coverage_path`` 是 ``coverage.json`` 的
     ``path``(没回环、``build.json`` 里没路程时拿它算走了多远)。回 ``{verdict, reasons, closures,
     max_shift_m, path_m}``;``reasons`` 是代号(``no_loop`` 没回到起点闭合、``big_shift`` 修正太大、
-    ``short_path`` 走得太少),文字在 App 里。"""
+    ``short_path`` 走得太少;没做回环的 Super-LIO 图:``drift`` 结束时离起点太远、``height`` 同一处
+    高度对不上),文字在 App 里。"""
     if not isinstance(build, dict):
         return {"verdict": "unknown", "reasons": [], "closures": None, "max_shift_m": None,
-                "path_m": None, "optimized": False}
+                "path_m": None, "optimized": False, "start_end_m": None,
+                "same_place_dz_p95": None}
     lc = build.get("loop_closure") if isinstance(build.get("loop_closure"), dict) else {}
     closures = lc.get("closures") if isinstance(lc.get("closures"), int) \
         and not isinstance(lc.get("closures"), bool) else None
@@ -103,12 +110,21 @@ def quality(build: Any, coverage_path: Any) -> dict[str, Any]:
         reasons.append("no_loop")
     if path is not None and path < MIN_PATH_M:
         reasons.append("short_path")
+    mola = build.get("mola") if isinstance(build.get("mola"), dict) else {}
+    sq = mola.get("quality") if isinstance(mola.get("quality"), dict) else {}
+    start_end, dz = _num(sq.get("start_end_m")), _num(sq.get("same_place_dz_p95"))
+    if not ran:                                  # 做了回环的看回环;没做的(Super-LIO 默认)看这两条
+        if start_end is not None and start_end > MAX_START_END_M:
+            reasons.append("drift")              # 没回到起点,或者回到了还差这么多(漂了)
+        if dz is not None and dz > MAX_SAME_PLACE_DZ_M:
+            reasons.append("height")             # 同一处高度对不上:地图上下歪了
     # minor #2(W75 外审 2 #5):老手机见 ``usable`` 就写「✓ 已回到起点闭合」—— 没做回环的给
     # ``usable_unlooped``(老手机不认,写「无法评估」,不打包票;新手机当能用、不写闭合)
     verdict = "problem" if reasons else ("usable" if ran else "usable_unlooped")
     return {"verdict": verdict, "reasons": reasons,
             "closures": closures, "max_shift_m": shift,
-            "path_m": None if path is None else round(path, 1), "optimized": ran}
+            "path_m": None if path is None else round(path, 1), "optimized": ran,
+            "start_end_m": start_end, "same_place_dz_p95": dz}
 
 
 def read_quality(cat: Any, map_id: str, version: str) -> dict[str, Any]:

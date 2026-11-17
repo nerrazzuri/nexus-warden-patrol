@@ -674,6 +674,44 @@ class LiveKeyframes:
         return self.k.close()
 
 
+def live_from_bag(poses: Sequence[Pose], clouds: Iterable[tuple[float, Any]],
+                  imu: Iterable[tuple[float, float, float, float]], kd: Path, *, cfg: Path,
+                  xyz_of: Callable[[Any], Any] | None = None) -> dict[str, Any]:
+    """回归台用(11-18):录包里的点云 + Super-LIO 位姿 + IMU → 跟机器人边走边存(``livemap
+    --keyframes``)一样的关键帧目录(位姿没摆平、关键帧按 :data:`KF_VOXEL_M` 降采样、IMU 另记、
+    ``live.json`` 收尾),站点那条打包路(:func:`prepare_live`)就能拿录包验。回关键帧汇总。"""
+    if xyz_of is None:
+        from nexwar_localizer.build import cloud_xyz as xyz_of
+    R_il, t_il = extrinsic(cfg)
+    kd.mkdir(parents=True, exist_ok=True)
+    (kd / LIVE_FILE).unlink(missing_ok=True)
+    live = LiveKeyframes(Keyframer(kd, R_il, t_il, xyz_of, voxel=KF_VOXEL_M),
+                         log=kd / "lio.tum", imu_log=kd / IMU_FILE)
+    poses = clean(poses)
+    imu = sorted(imu)
+    pi = ii = 0
+    # 按机器人上到的顺序喂:位姿、IMU 到了这一帧的时刻再给点云
+    for t, msg in clouds:
+        while pi < len(poses) and poses[pi][0] <= t + SCAN_MID_S:
+            while ii < len(imu) and imu[ii][0] <= poses[pi][0]:
+                live.on_imu(*imu[ii])
+                ii += 1
+            live.on_pose(*poses[pi])
+            pi += 1
+        live.on_scan(t, msg)
+    for p in poses[pi:]:
+        while ii < len(imu) and imu[ii][0] <= p[0]:
+            live.on_imu(*imu[ii])
+            ii += 1
+        live.on_pose(*p)
+    n = live.close()
+    tmp = kd / f".{LIVE_FILE}.tmp"
+    tmp.write_text(json.dumps({**n, "clock_offset_s": None, "odom": [], "clean": True}),
+                   encoding="utf-8")
+    os.replace(tmp, kd / LIVE_FILE)
+    return n
+
+
 def read_imu(path: Path) -> list[tuple[float, float, float, float]]:
     """:class:`LiveKeyframes` 记的 IMU 比力(:data:`IMU_FILE`)。坏行跳过;没有这个文件回空。"""
     out: list[tuple[float, float, float, float]] = []
@@ -739,8 +777,31 @@ def read_tum_poses(path: Path) -> list[Pose]:
     return out
 
 
+#: 「同一处」:水平这么近、时间隔这么久以上两次经过(:func:`_same_place_dz`)。
+SAME_PLACE_R_M = 0.5
+SAME_PLACE_DT_S = 30.0
+
+
+def _same_place_dz(keep: Sequence[Pose]) -> float:
+    """同一处两次经过的高度差(每个点取跟它差得最多的那次)的 95 分位;没经过两次是 0。
+    上下歪了(俯仰漂、摆平没摆对)就对不上(11-18 出图自动检查)。"""
+    import numpy as np
+    if len(keep) < 2:
+        return 0.0
+    t = np.array([r[0] for r in keep])
+    p = np.array([r[1] for r in keep], float)
+    worst = []
+    for i in range(len(p)):
+        j = (np.hypot(*(p[:, :2] - p[i, :2]).T) < SAME_PLACE_R_M) & \
+            (np.abs(t - t[i]) > SAME_PLACE_DT_S)
+        if j.any():
+            worst.append(float(np.abs(p[j, 2] - p[i, 2]).max()))
+    return round(float(np.percentile(worst, 95)), 3) if worst else 0.0
+
+
 def quality(poses: Sequence[Pose]) -> dict[str, float]:
-    """路程(每秒取一个点)、首尾相距、最大单步:扫图时回到起点的话,首尾相距就是误差。"""
+    """路程(每秒取一个点)、首尾相距、最大单步:扫图时回到起点的话,首尾相距就是误差;同一处
+    两次经过的高度差(:func:`_same_place_dz`)。"""
     keep: list[Pose] = []
     for r in poses:
         if not keep or r[0] - keep[-1][0] >= 1.0:
@@ -753,7 +814,8 @@ def quality(poses: Sequence[Pose]) -> dict[str, float]:
     over = [math.dist(a[1], b[1]) - MAX_SPEED_MPS * (b[0] - a[0])
             for a, b in zip(poses, poses[1:], strict=False)]
     gaps = sum(1 for a, b in zip(poses, poses[1:], strict=False) if b[0] - a[0] > MAX_GAP_S)
-    return {"duration_s": round(poses[-1][0] - poses[0][0], 1) if poses else 0.0,
+    return {"same_place_dz_p95": _same_place_dz(keep),
+            "duration_s": round(poses[-1][0] - poses[0][0], 1) if poses else 0.0,
             "path_m": round(path, 1),
             "start_end_m": round(math.dist(poses[0][1][:2], poses[-1][1][:2]), 2) if poses else 0.0,
             "max_step_m": round(max(steps), 2) if steps else 0.0,
