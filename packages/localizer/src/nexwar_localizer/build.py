@@ -58,6 +58,10 @@ FRONT_LIDAR_IN_BASE = (0.4043, 0.0)
 #: RS-Airy 装法上「上」「前」是哪根轴(「上」的正负号由点云判)。
 SENSOR_UP_HINT = (1.0, 0.0, 0.0)
 SENSOR_FORWARD_HINT = (0.0, 0.0, 1.0)
+#: 标出来的「上」跟建图的重力夹角余弦到这么多才按重力定(约 25°;建图走的平面跟重力差不了这么多)。
+GRAVITY_AGREE = 0.9
+#: Super-LIO 建图系按 IMU 对齐了重力:「上」是 +Z(广场 11-04 那张 frames.json 的 up ≈ (0, 0, 1))。
+SUPERLIO_GRAVITY_UP = (0.0, 0.0, 1.0)
 COVERAGE_STEP_M = 0.5
 #: 真射线每几帧扫描取一帧、每帧每几个点取一个(newdog2:676 帧,读包 11 s、打射线 10 s)。
 SCAN_EVERY = 3
@@ -186,13 +190,16 @@ def package(work: Path, out: Path, *, prior_pack: PriorPack | None = None,
             loop_closure: str | None = None,
             read_odom: Callable[[Path], tuple[str, list[tuple[float, float, float]]] | None]
             | None = None, live: Path | None = None,
-            progress: Callable[[str], None] | None = None) -> list[str]:
+            progress: Callable[[str], None] | None = None,
+            gravity_up: Sequence[float] | None = None) -> list[str]:
     """``work`` 里的 ``raw_prior.mm``、``traj.tum``、``map.simplemap`` → ``out`` 里的版本文件。回
     文件名。给了 ``bag``(建图的那个录包)就从里面逐帧读扫描打真射线、读狗自己的里程核手性(镜像就抛
     :class:`BuildError`,一个版本文件都不写)。``loop_closure`` 是回环工具的路径
     (:func:`find_loop_closure`;None = 不回环):先回环(:func:`loop_close`),成了就从 ``work/lc``
     里回环后的三样打包。``live``(W75,站点上打包、没有录包):边走边存的关键帧目录 —— 里程、雷达钟差从
-    它的 ``live.json`` 拿,RTK 解从它的 ``rtk.jsonl`` 拿;栅格用模拟射线。"""
+    它的 ``live.json`` 拿,RTK 解从它的 ``rtk.jsonl`` 拿;栅格用模拟射线。``gravity_up``:建图系里重力
+    的「上」(Super-LIO 按 IMU 对齐了重力,是 +Z;MOLA 没对齐,不给)—— 给了「上」的正负号按它定
+    (:func:`orient`)。"""
     prior_pack = prior_pack or PriorPack()
     say = progress or (lambda _stage: None)
     aux = bag
@@ -226,7 +233,8 @@ def package(work: Path, out: Path, *, prior_pack: PriorPack | None = None,
     points = _points(src, run)
     timings["points_s"] = round(time.monotonic() - t0, 1)
     sensor = np.array([p for _, p, _ in traj])
-    frames, why = orient(points, traj)
+    frames, why = (orient(points, traj) if gravity_up is None
+                   else orient(points, traj, gravity_up=gravity_up))
     frames = frames.with_sensor_in_base(*sensor_in_base)
     hand = check_handedness(traj, frames, aux, lidar_topic, read_odom or bag_odom,
                             clock_offset or bag_clock_offset)
@@ -759,24 +767,45 @@ def bag_scans(bag: Path, traj: Sequence[Any], topic: str = SCAN_TOPIC, *,
         yield np.array(p, float), xyz @ R.T + np.array(p, float)
 
 
-def orient(points: Any, traj: Sequence[Any]) -> tuple[Frames, str]:
-    """从轨迹标 ``frames``;「上」的正负号用点云判:以雷达为准的相对高度里,最密的那层水平面(地面)要在
-    雷达下面,在上面就把「上」翻过来重标。回 ``(frames, 说明)``。"""
+def orient(points: Any, traj: Sequence[Any], *, gravity_up: Sequence[float] | None = None
+           ) -> tuple[Frames, str]:
+    """从轨迹标 ``frames``;「上」的正负号:给了 ``gravity_up``(建图系里重力的上,Super-LIO 是 +Z)
+    就按它 —— 标出来的「上」跟它同向的那个;没给(或两个都跟它差太多)用点云判:以雷达为准的相对
+    高度里,最密的那层水平面(地面)要在雷达下面,在上面就把「上」翻过来重标。回 ``(frames, 说明)``。
+
+    Top Glove 11-17:离雷达上方 0.22 m 有一层比地面还密的水平面(机身上的载荷、台面),只看点云把
+    「上」判反了,图是镜像的(里程核出来拦下);同一台机器人广场那次地面在下方 0.52 m。"""
     import numpy as np
 
     from nexwar_localizer import grid
 
     poses = [(p, q) for _, p, q in traj]
     sensor = np.array([p for p, _ in poses])
-    note = ""
-    for hint in (SENSOR_UP_HINT, tuple(-c for c in SENSOR_UP_HINT)):
-        f, why = calibrate(poses, sensor_up=hint, forward_hint=SENSOR_FORWARD_HINT, explain=True)
-        pts = np.asarray(points, float)
+    pts = np.asarray(points, float)
+
+    def peak_of(f: Frames) -> float:
         q = grid.level(pts[:: max(1, len(pts) // 400000)], f)
         rel = q[:, 2] - float(np.median(grid.level(sensor, f)[:, 2]))
         hist, edges = np.histogram(rel, bins=60, range=(-1.5, 1.5))
         k = int(np.argmax(hist))
-        peak = float((edges[k] + edges[k + 1]) / 2)
+        return float((edges[k] + edges[k + 1]) / 2)
+
+    hints = (SENSOR_UP_HINT, tuple(-c for c in SENSOR_UP_HINT))
+    if gravity_up is not None:
+        g = np.asarray(gravity_up, float)
+        g = g / (np.linalg.norm(g) or 1.0)
+        for hint in hints:
+            f, why = calibrate(poses, sensor_up=hint, forward_hint=SENSOR_FORWARD_HINT,
+                               explain=True)
+            if float(np.dot(np.asarray(f.up, float), g)) >= GRAVITY_AGREE:
+                pk = peak_of(f)
+                plane = (f"最密的水平面在雷达下方 {-pk:.2f} m" if pk < 0 else
+                         f"最密的水平面在雷达上方 {pk:.2f} m(不是地面:机身上的东西、台面之类)")
+                return f, f"{why};「上」按建图的重力定(雷达系 {_fmt(hint)}),{plane}"
+    note = ""
+    for hint in hints:
+        f, why = calibrate(poses, sensor_up=hint, forward_hint=SENSOR_FORWARD_HINT, explain=True)
+        peak = peak_of(f)
         if peak < 0:
             return f, f"{why};地面在雷达下方 {-peak:.2f} m{note}"
         note = f"(按装法的「上」{_fmt(hint)} 标出来地面在雷达上方 {peak:.2f} m:雷达是倒装的,翻过来)"
