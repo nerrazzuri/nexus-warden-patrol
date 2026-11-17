@@ -54,6 +54,10 @@ KF_TURN_DEG = 10.0
 KF_VOXEL_M = 0.05
 #: 边走边存收尾时写的汇总(``livemap.write_live``):有它才算这一趟的关键帧齐了。
 LIVE_FILE = "live.json"
+#: W75 边走边存时另记的 IMU 比力(``t ax ay az`` 一行一条,最多每秒 :data:`IMU_LOG_HZ` 条):站点上从
+#: 关键帧打包时按它摆平(:func:`level`;11-18 前这条路不摆平,客户自己建 Top Glove 那种场地还是歪的)。
+IMU_FILE = "imu.txt"
+IMU_LOG_HZ = 100.0
 #: 关键帧点云按离雷达的距离裁(太近是机身、太远是噪点)。
 RANGE_MIN_M, RANGE_MAX_M = 0.6, 80.0
 #: 位姿取在扫描的哪个时刻(Airy 一帧 0.1 s,报文头是起点):取中间。
@@ -609,11 +613,14 @@ class LiveKeyframes:
     没位姿算。位姿照 :func:`clean` 的规矩丢坏的。"""
 
     def __init__(self, keyframer: Keyframer, *, wait_s: float = 1.0, keep_poses: int = 200,
-                 log: Path | None = None) -> None:
-        """``log``:收下的位姿(IMU)逐行另记一份 TUM(建完把关 :func:`quality` 用)。"""
+                 log: Path | None = None, imu_log: Path | None = None) -> None:
+        """``log``:收下的位姿(IMU)逐行另记一份 TUM(建完把关 :func:`quality` 用);``imu_log``:
+        IMU 比力另记一份(:data:`IMU_FILE`,打包时摆平用)。"""
         import collections
         self.k = keyframer
         self._log = None if log is None else open(log, "w", encoding="utf-8")
+        self._imu = None if imu_log is None else open(imu_log, "w", encoding="utf-8")
+        self._imu_last = -math.inf
         self.wait_s = wait_s
         self.poses: collections.deque[Pose] = collections.deque(maxlen=keep_poses)
         self.pending: collections.deque[tuple[float, Any]] = collections.deque()
@@ -623,6 +630,15 @@ class LiveKeyframes:
         self.pending.append((t, msg))
         self._newest = max(self._newest, t)
         self._drain()
+
+    def on_imu(self, t: float, ax: float, ay: float, az: float) -> None:
+        if self._imu is None or t - self._imu_last < 1.0 / IMU_LOG_HZ - 1e-6:
+            return
+        v = (float(t), float(ax), float(ay), float(az))
+        if not all(map(math.isfinite, v)):
+            return
+        self._imu_last = v[0]
+        self._imu.write(" ".join(repr(c) for c in v) + "\n")
 
     def on_pose(self, t: float, p: Sequence[float], q: Sequence[float]) -> None:
         got = clean([(t, tuple(p), tuple(q))])
@@ -653,7 +669,61 @@ class LiveKeyframes:
         self._drain(final=True)
         if self._log is not None:
             self._log.close()
+        if self._imu is not None:
+            self._imu.close()
         return self.k.close()
+
+
+def read_imu(path: Path) -> list[tuple[float, float, float, float]]:
+    """:class:`LiveKeyframes` 记的 IMU 比力(:data:`IMU_FILE`)。坏行跳过;没有这个文件回空。"""
+    out: list[tuple[float, float, float, float]] = []
+    try:
+        text = Path(path).read_text(encoding="utf-8")
+    except FileNotFoundError:
+        return out
+    for line in text.splitlines():
+        try:
+            v = [float(c) for c in line.split()]
+        except ValueError:
+            continue
+        if len(v) == 4 and all(map(math.isfinite, v)):
+            out.append((v[0], v[1], v[2], v[3]))
+    return out
+
+
+def _relevel_keyframes(kd: Path, work: Path, poses: Sequence[Pose], cfg: Path) -> Path:
+    """摆平后的 IMU 位姿 → 重写关键帧索引、``traj.tum`` 的雷达位姿(跟 :class:`Keyframer` 一样:扫描
+    中间时刻插值、乘外参),写到 ``work``;点云不动(雷达系),链接原文件。回新的关键帧目录。"""
+    R_il, t_il = extrinsic(cfg)
+    times = [r[0] for r in poses]
+
+    def pose_line(t: float) -> str | None:
+        at = pose_at(poses, t + SCAN_MID_S, times)
+        if at is None:
+            return None
+        p, R = lidar_pose(at[0], at[1], R_il, t_il)
+        return " ".join(f"{c:.6f}" for c in (*p, *mat_to_quat(R)))
+
+    out = work / "kf"
+    shutil.rmtree(out, ignore_errors=True)
+    out.mkdir(parents=True)
+    rows = []
+    for ln in (kd / "kf" / "index.txt").read_text(encoding="utf-8").splitlines():
+        c = ln.split()
+        new = pose_line(float(c[0])) if len(c) == 15 else None
+        if new is None:
+            raise SuperLioError(f"关键帧索引对不上摆平后的位姿:{ln[:80]}")
+        rows.append(f"{c[0]} {new} {' '.join(c[8:14])} {c[14]}")
+        (out / c[14]).symlink_to((kd / "kf" / c[14]).resolve())
+    (out / "index.txt").write_text("".join(r + "\n" for r in rows), encoding="utf-8")
+    traj = []
+    for ln in (kd / "traj.tum").read_text(encoding="utf-8").splitlines():
+        c = ln.split()
+        new = pose_line(float(c[0])) if len(c) == 8 else None
+        if new is not None:
+            traj.append(f"{c[0]} {new}\n")
+    (work / "traj.tum").write_text("".join(traj), encoding="utf-8")
+    return out
 
 
 def read_tum_poses(path: Path) -> list[Pose]:
@@ -755,12 +825,23 @@ def prepare_live(work: Path, kf_dir: Path, *, cfg: Path, root: Path = ROOT,
                             ",从录包建") from exc
     t0 = time.monotonic()
     try:
-        poses, q = _checked(read_tum_poses(kf_dir / "lio.tum"))
+        raw = clean(read_tum_poses(kf_dir / "lio.tum"))
     except OSError as exc:
         raise SuperLioError("边走边存的关键帧缺位姿(lio.tum)") from exc
+    imu = read_imu(kf_dir / IMU_FILE)
+    if imu:
+        lv_poses, lv = level(raw, imu)
+    else:
+        lv_poses, lv = raw, {"applied": False, "why": "没记 IMU(机器人上的建图预览是老版本),没摆平"}
+    poses, q = _checked(lv_poses)
     work.mkdir(parents=True, exist_ok=True)
-    shutil.copyfile(kf_dir / "traj.tum", work / "traj.tum")
-    return _finish(work, kf_dir / "kf", n, poses, q, cfg=cfg, root=root,
+    n = {**n, "level": lv}
+    if lv.get("applied"):
+        kf = _relevel_keyframes(kf_dir, work, poses, cfg)
+    else:
+        kf = kf_dir / "kf"
+        shutil.copyfile(kf_dir / "traj.tum", work / "traj.tum")
+    return _finish(work, kf, n, poses, q, cfg=cfg, root=root,
                    prior_pipeline=prior_pipeline, plugin=plugin, run=run, source="live-kf",
                    t0=t0)
 
