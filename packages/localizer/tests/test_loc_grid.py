@@ -957,6 +957,8 @@ def test_TG1117_显示底图_墙按点多少画深浅_走过的人不画_扫过�
     assert all(c is None or look[c] in (G.LOOK_UNSEEN,) or look[c] < G.LOOK_UNSEEN
                for c in out), "墙外没扫过的:淡灰或墙"
     assert G.LOOK_UNSEEN < G.LOOK_CLEAR
+    # 笔记本核 v6a:没扫过的淡灰跟扫过的白差太小,网页上分不清;有点的最淡那一档还要比没扫过的深
+    assert G.LOOK_CLEAR - G.LOOK_UNSEEN >= 35 and G.LOOK_FAINTEST <= G.LOOK_UNSEEN - 30
 
 
 def test_TG1117_显示底图写成PGM_宽高行序跟floor一样(tmp_path):
