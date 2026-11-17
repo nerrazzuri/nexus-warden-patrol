@@ -63,6 +63,7 @@ ANCHOR_STEP_M = 0.15
 LINK_MAX_M = 0.6
 LINK_WEDGE_DEG = 6.0
 LINK_SLACK_M = 0.03
+TURN_CHECK_M = 0.02          # 入口原地转:车身角点每扫过这么多查一次
 #: 没墙时的余量(只用来比大小)。
 CAP = 9.0
 #: 验收:相邻两个位姿横着挪的(相对两头朝向的平均)不许超过这么多(米)。
@@ -367,18 +368,27 @@ def _link_floor(need: float, here: float) -> float:
     return need if here >= need else here - LINK_SLACK_M
 
 
+def _corner_r() -> float:
+    from nexwar_agent.route_check import CORNER_R  # 函数里导入:route_check 导入本模块
+    return CORNER_R
+
+
 def _turn_seeds(q: tuple[float, float, float], th: list[float], free_here: np.ndarray,
                 margin: Any, need: float) -> dict[int, int]:
     """站在 ``q`` 原地转到哪几档接得上格子(那一档在这个格子里放得下;转的一路每半档一个位姿,
     余量不低于 :func:`_link_floor`)→ {档: 转了几档(代价)}。"""
     nb = len(th)
     step = 2 * math.pi / nb
-    floor = _link_floor(need, margin([q]))
+    # 外审 11-17 第 2 轮:入口在起步豁免里,整条复查不查它 —— 这里不给 LINK_SLACK_M 的宽限
+    # (不许比站着更贴墙),也不只查半档:按车身角点扫过不超过 TURN_CHECK_M 一个角度查
+    floor = min(need, margin([q]))
+    fine = TURN_CHECK_M / _corner_r()
+    sub = max(1, int(math.ceil((step / 2) / fine - 1e-9)))
     out: dict[int, int] = {}
     for sign in (1, -1):
         reach = 0.0                                        # 这个方向转得到多远
-        for n in range(1, nb + 1):
-            a = n * step / 2
+        for n in range(1, nb * sub + 1):
+            a = n * step / (2 * sub)
             if margin([(q[0], q[1], _wrap(q[2] + sign * a))]) < floor - 1e-9:
                 break
             reach = a
