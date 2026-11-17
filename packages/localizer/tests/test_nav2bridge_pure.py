@@ -684,6 +684,7 @@ def _生命周期桥(now):
     b = Nav2Bridge.__new__(Nav2Bridge)
     b._mono = lambda: now[0]
     b._clock_wall = 1e18                                 # 代理在送时钟
+    b._loc_wall = 1e18                                   # 也在送 map→odom(定位好了)
     b.nav2_active = False
     b._inactive_since, b._restarts, b._manage_busy = None, 0, False
     b._manage_deadline, b._manage_gen = 0.0, 0
@@ -1009,3 +1010,45 @@ def test_外审POC_I6_桥里的常数跟部署配置一致():
     cs = d["controller_server"]["ros__parameters"]
     assert cs["FollowPath"]["vx_max"] == nb.MPPI_VX_MAX
     assert cs["RPP"]["desired_linear_vel"] == nb.RPP_MAX_MPS
+
+
+def test_TG1117_没定位_不送map_odom_不当Nav2卡住_不重来_也不整个重启():
+    """Top Glove 11-17(3699bcc3):机器人没定位,代理不送 map→odom,全局代价地图一直卡在等坐标变换、
+    激活不了;以前当 Nav2 卡住,每 90 秒重来、连着两回不成整个重启(退出码 75),一直重启到有定位。
+    重来也等不来定位:等着,定位上来以后再从头计时。"""
+    from nexwar_localizer import nav2bridge as nb
+    now = [0.0]
+    b = _生命周期桥(now)
+    full: list = []
+    b._full_restart = lambda: full.append(now[0])
+    b._loc_wall = -1e9
+    for _ in range(6):
+        now[0] += nb.LIFECYCLE_RETRY_S + 1
+        b._lifecycle_retry()
+    assert b.sent == [] and b._restarts == 0 and full == [], "没定位:不重来"
+    b._loc_wall = 1e18                                   # 定位上来了
+    b._lifecycle_retry()
+    now[0] += nb.LIFECYCLE_RETRY_S - 1
+    b._lifecycle_retry()
+    assert b.sent == [], "从定位上来那一刻起计时"
+    now[0] += 2
+    b._lifecycle_retry()
+    assert b.sent == [nb.LIFECYCLE_RESET, nb.LIFECYCLE_STARTUP]
+
+
+def test_TG1117_没定位_Nav2没激活_就绪原因说等定位_不说还在启动():
+    now = [0.0]
+    b = _就绪桥(now)
+    b._loc_wall = -1e9
+    b.check_ready()
+    why = b.sent[-1]["reason"]
+    assert "定位" in why and "还在启动" not in why, why
+
+
+def test_TG1117_代理送了map_odom_记下定位的时刻_没送不记():
+    b = _发钟的桥()
+    b._loc_wall = -1e9
+    b.on_tick(_tick(1_000))
+    assert b._loc_wall < 0
+    b.on_tick({**_tick(2_000), "map_odom": [0.0, 0.0, 0.0]})
+    assert b._loc_wall > 0

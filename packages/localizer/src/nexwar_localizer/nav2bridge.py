@@ -87,6 +87,9 @@ LIFECYCLE_STARTUP, LIFECYCLE_RESET = 0, 3
 #: 生命周期管理器每一步(reset / startup)最多等这么久(秒)回话;过了当没成,下个周期再来(外审 r3 #7:
 #: 管理器卡在切状态里不回,以前就永远「在办」,再也不重来)。
 LIFECYCLE_CALL_S = 60.0
+#: 这么久(秒)没收到代理送的 ``map_odom`` 算没定位(Top Glove 11-17:没定位时全局代价地图卡在等
+#: map→odom、激活不了,生命周期重来也等不来,别当 Nav2 卡住重启)。
+LOC_STALE_S = 5.0
 
 
 def _stamp_ms(st: Any) -> int:
@@ -338,6 +341,7 @@ class Nav2Bridge:
         self.writer: asyncio.StreamWriter | None = None
         self.t_ms = 0
         self._clock_wall = -1e9
+        self._loc_wall = -1e9                           # 上次收到 map_odom(定位)的时刻
         self.odom: tuple[float, float, float] | None = None
         self.map_sent = False
         self._ready: tuple[bool, str] | None = None
@@ -485,6 +489,7 @@ class Nav2Bridge:
         tfs = [self._tf("odom", "base_link", m["odom"], stamp)]
         if m.get("map_odom") is not None:
             tfs.append(self._tf("map", "odom", m["map_odom"], stamp))
+            self._loc_wall = time.monotonic()
         self.tf.sendTransform(tfs)
         o = self._m["Odometry"]()
         o.header.stamp, o.header.frame_id, o.child_frame_id = stamp, "odom", "base_link"
@@ -841,7 +846,8 @@ class Nav2Bridge:
 
     def _lifecycle_retry(self) -> None:
         """节点一直没全部激活:超过 :data:`LIFECYCLE_RETRY_S` 让生命周期管理器 reset + startup 一次。
-        没在送时钟(重来也起不来)、管理器不在、已经激活了都不动。"""
+        没在送时钟、没定位(没送 map→odom,全局代价地图等坐标变换;重来也起不来)、管理器不在、已经
+        激活了都不动。"""
         now = self._mono()
         if self._manage_busy and now >= self._manage_deadline:
             # 外审 r4 #7:先作废过期的这一回,再看要不要提前返回(没时钟、服务不在时也作废)
@@ -852,7 +858,7 @@ class Nav2Bridge:
             self._retry_failed()
         clock_ok = time.monotonic() - self._clock_wall <= CLOCK_STALE_S
         if self.nav2_active or self.manage is None or not self.lm.service_is_ready() \
-                or not self.manage.service_is_ready() or not clock_ok:
+                or not self.manage.service_is_ready() or not clock_ok or not self._localized():
             self._inactive_since = None
             return
         if self._inactive_since is None:
@@ -911,6 +917,9 @@ class Nav2Bridge:
             log.exception("Nav2 重置没发出去")
             self._manage_busy = False
 
+    def _localized(self) -> bool:
+        return time.monotonic() - self._loc_wall <= LOC_STALE_S
+
     def _retry_failed(self) -> None:
         self._retry_fails = getattr(self, "_retry_fails", 0) + 1
         if self._retry_fails >= LIFECYCLE_FAILS_FULL:
@@ -937,6 +946,9 @@ class Nav2Bridge:
             hint = ",一直这样请看定位:机器人加载的图是不是这个地方的、定位好了没有"
         elif time.monotonic() - self._clock_wall > CLOCK_STALE_S:
             why = "代理未在送时钟"
+        elif not self.nav2_active and not self._localized():
+            why = "等定位(还没定位好,Nav2 等地图系的坐标才能起来)"
+            hint = ",一直这样请看定位:机器人加载的图是不是这个地方的、定位好了没有"
         elif not self.nav2_active:
             why = ("Nav2 还在启动(生命周期未全部激活"
                    + (f";已自动重来 {self._restarts} 次)" if self._restarts else ")"))
