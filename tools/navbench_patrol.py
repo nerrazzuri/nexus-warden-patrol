@@ -572,6 +572,18 @@ async def run_case(case: dict[str, Any], *, sim_cap_s: float) -> dict[str, Any]:
             if zones and not out["zone_entered"]:
                 if any(_in_poly(px, py, z) for z in zones for px, py in poly):
                     out["zone_entered"] = True
+            if os.environ.get("NAVPATROL_TRACE") and k % 2 == 0:   # 回放用:每 2 拍一行
+                with open(os.environ["NAVPATROL_TRACE"], "a", encoding="utf-8") as tf:
+                    tf.write(json.dumps({
+                        "t": round(t_sim, 2), "x": round(r.x - ox, 3), "y": round(r.y - oy, 3),
+                        "yaw": round(r.yaw, 3), "vx": round(vx, 3), "wz": round(wz, 3),
+                        "g": getattr(nav, "_guard_since", None) is not None,
+                        "back": getattr(nav, "_back", None) is not None,
+                        "man": getattr(nav, "_man", None) is not None,
+                        "rec": getattr(nav, "_rec_level", 0),
+                        "act": {actors[int(nm[1:])]["name"]: [round((b[0] + b[2]) / 2 - ox, 2),
+                                                                round((b[1] + b[3]) / 2 - oy, 2)]
+                                for nm, b in world.dyn.items() if nm.startswith("a")}}) + "\n")
             k += 1
             if k % 5 == 0:
                 cl = _clearance(world, r.x, r.y, r.yaw)
