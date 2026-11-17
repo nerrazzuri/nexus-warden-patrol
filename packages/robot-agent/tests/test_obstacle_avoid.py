@@ -1008,7 +1008,7 @@ def test_工单21_站着不动_旧帧留着但超过10秒只认有东西_挪了�
     不能证明「空」(站着的时候人可能从侧面走进盲带);挪了窝照旧 10 s 就扔。"""
     from nexwar_agent.obstacles import MEMORY_STILL_S
     t = [0.0]
-    v = ObstacleView(monotonic=lambda: t[0], latency_s=0.0)
+    v = ObstacleView(monotonic=lambda: t[0], latency_s=0.0, band_policy="strict")
     v.note_odom(0.0, 0.0, 0.0)
     v.on_grid(_grid())                                        # 全看过、全空
     front_only = [(r, c) for r in range(12, 20) for c in range(20)]

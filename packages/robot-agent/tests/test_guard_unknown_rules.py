@@ -92,7 +92,7 @@ def test_原地转_车头视野里看不见_也停():
 
 def test_站着不动_十秒以前的帧只能说有东西_不能证明是空():
     t = [0.0]
-    v = ObstacleView(monotonic=lambda: t[0], latency_s=0.0)
+    v = ObstacleView(monotonic=lambda: t[0], latency_s=0.0, band_policy="strict")
     v.note_odom(0.0, 0.0, 0.0)
     v.on_grid(_grid(cells_occ=[(10, 2)], size=20))        # 全看过:左侧盲带里 (0.05, -0.75) 有东西
     front_only = [(r, k) for r in range(15, 20) for k in range(20)]
@@ -122,7 +122,7 @@ def test_站着超过十秒再原地转_盲带旧记忆不算_停():
     """场景:机器人在巡逻点站了 30 s,有人可能走到它侧面(两侧前后雷达都看不见)。原来 60 s 的旧帧
     说那儿空,原地转照转;现在停,交给脱困(先直着挪、看清再转)。"""
     t = [0.0]
-    v = ObstacleView(monotonic=lambda: t[0], latency_s=0.0)
+    v = ObstacleView(monotonic=lambda: t[0], latency_s=0.0, band_policy="strict")
     v.note_odom(0.0, 0.0, 0.0)
     v.on_grid(_grid(size=N))                              # 走到这儿时全看过、空
     see = [(r, k) for r in range(N) for k in range(N) if not _band(_c(r), _c(k))]
@@ -144,7 +144,7 @@ def test_盲带拦的_结论里带盲带几处_后退拦的不带():
 def _走着_十二秒前看过两侧():
     """机器人一直在慢慢走(不算站着);12 s 前那一帧全看过、空,之后只看见前面。"""
     t = [0.0]
-    v = ObstacleView(monotonic=lambda: t[0], latency_s=0.0)
+    v = ObstacleView(monotonic=lambda: t[0], latency_s=0.0, band_policy="strict")
     v.note_odom(0.0, 0.0, 0.0)
     v.on_grid(_grid(size=N))
     see = [(r, k) for r in range(N) for k in range(N) if not _band(_c(r), _c(k))]
@@ -239,8 +239,8 @@ def test_旧策略_站着十秒以前的帧说空_照样算空():
     assert unk == [] and hit == [1], "旧策略:站着留下的旧帧说空也算空"
 
 
-def test_默认还是严格策略_只认这三个名字():
-    """sealed(封住)是 11-17 仿真对照用的,用户没定之前默认照旧 strict。"""
+def test_默认是封住_只认这三个名字():
+    """用户 11-17 定默认 sealed(仿真 100 个用例 strict 85%、sealed 90%,都没碰)。"""
     from nexwar_agent.obstacles import BAND_POLICIES
-    assert ObstacleView().band_policy == "strict"
+    assert ObstacleView().band_policy == "sealed"
     assert BAND_POLICIES == ("strict", "legacy", "sealed")
