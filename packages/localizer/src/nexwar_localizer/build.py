@@ -649,6 +649,11 @@ def _georeference(out: Path, bag: Path | None, traj: Sequence[Any], frames: Fram
             "clock_offset_s": off}
 
 
+#: 设了这个环境变量(一个 .npz 路径)就把定位地图每个点的射线清除计数存下来(Top Glove 11-17:西边拖影
+#: 没去掉,拿现场的数分是哪条规矩留下的)。
+DENOISE_DUMP_ENV = "NEXWAR_DENOISE_DUMP"
+
+
 def _denoise(slio: Any, sensor: Any, frames: Frames, g: Any, rc: Any) -> tuple[Any, dict[str, Any]]:
     """W70:定位地图去噪(:mod:`nexwar_localizer.mapclean`)。回(留下的点, 统计)。"""
     import numpy as np
@@ -664,6 +669,12 @@ def _denoise(slio: Any, sensor: Any, frames: Frames, g: Any, rc: Any) -> tuple[A
     masks: dict[str, Any] = {}
     if rc.scans:
         masks["dynamic"] = rc.dynamic(height=np.where(ok, h, np.nan))
+        dump = os.environ.get(DENOISE_DUMP_ENV)
+        if dump:
+            np.savez_compressed(dump, xyz=np.asarray(slio, np.float32),
+                                plane=q[:, :2].astype(np.float32), passes=rc.passes, hits=rc.hits,
+                                height=np.where(ok, h, np.nan).astype(np.float32),
+                                dynamic=masks["dynamic"], scans=rc.scans)
     masks["isolated"] = mapclean.isolated(slio, slioloc.MAP_VOXEL_M)
     through = mapclean.through_mask(slio, q[:, :2], g.seen, g.origin, g.res)
     kept, stats = mapclean.apply(slio, masks)

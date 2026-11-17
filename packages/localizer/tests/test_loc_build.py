@@ -937,3 +937,23 @@ def test_TG1117_扫描配位姿_按时刻配_隔几帧取一帧_配不上的不�
     assert [round(float(o[0][0]), 3) for o in out] == [0.0, 3.0, 6.0]
     assert np.allclose(out[1][1][0], [4.0, 0.0, 0.0]), "点按位姿换进地图系"
     assert len(out[0][1]) == 8 // build.SCAN_POINT_STRIDE
+
+
+def test_TG1117_去动态点的诊断_设了环境变量就把每个点的穿过打中离地存下来(tmp_path, monkeypatch):
+    """Top Glove 11-17:西边那片拖影去动态没去掉,原因要拿现场的数分:哪条规矩把它留下的。"""
+    work, pts = _scene(tmp_path, False)
+
+    def 读扫描(bag, traj, topic):
+        for _, p, _ in traj[::10]:
+            yield np.array(p), pts[::10]
+
+    B.package(work, tmp_path / "out", run=假MOLA(pts), bag=tmp_path / "bag", read_scans=读扫描)
+    assert not list((tmp_path / "out").glob("*.npz")), "没设不存"
+    dump = tmp_path / "dn.npz"
+    monkeypatch.setenv(B.DENOISE_DUMP_ENV, str(dump))
+    B.package(work, tmp_path / "out2", run=假MOLA(pts), bag=tmp_path / "bag", read_scans=读扫描)
+    d = np.load(dump)
+    n = len(d["xyz"])
+    assert n > 0 and {k: len(d[k]) for k in ("plane", "passes", "hits", "height", "dynamic")} \
+        == dict.fromkeys(("plane", "passes", "hits", "height", "dynamic"), n)
+    assert d["plane"].shape == (n, 2) and int(d["scans"]) == 12

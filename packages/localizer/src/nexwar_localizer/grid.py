@@ -160,6 +160,10 @@ CURB_MIN_M = 0.07
 CURB_MAX_M = FLOOR_CLEAR_M
 #: 连起来(八邻接)至少这么长才算(去掉石头、垃圾、零星噪点)。
 CURB_MIN_LEN_M = 0.5
+#: 障碍层里「动过的」格子(有点、但射线穿过的是打中的 3 倍以上 —— 跟判障碍同一个比例)周围这么远
+#: (米)以内不认路沿:那是同一个走过的人、推车的腿和轮子(Top Glove 11-17 v5 主通道 20–30 块假路沿)。
+#: 真路沿上方没有动的东西。
+CURB_MOVED_PAD_M = 0.2
 #: 标好的路沿往两边各放这么宽。
 CURB_PAD_M = 0.1
 #: 只认离建图路线(机器人身子中心走过的路)这么近(米,按横竖步数量)的:远处点稀、测距噪声大,冒假路沿
@@ -922,6 +926,8 @@ def render(points: np.ndarray, sensor_traj: np.ndarray, frames: Frames, *, res: 
         img, specks = drop_specks(img, res, passes >= SPECK_PASS_RATIO * np.maximum(hit_scans, 1))
     curb = _curbs(q, h, ok, lo, (H, W), res, walked)        # 路沿、绿化岛(2026-11-10)
     curb &= ~_dilate(walked, int(round(FOOTPRINT_M / res)))  # 建图时走过的地方留口子
+    moved = (occ >= 1) & (ratio <= 0.25)                    # 障碍层里动过的(Top Glove 11-17)
+    curb &= ~_dilate(moved, int(round(CURB_MOVED_PAD_M / res)))
     curb &= img == FREE
     known = (img != UNKNOWN) | seen_only
     if known.any():                                         # 裁到有内容的范围,四周留 5 格
