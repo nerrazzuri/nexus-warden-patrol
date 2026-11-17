@@ -146,6 +146,13 @@ def parser() -> argparse.ArgumentParser:
             r.add_argument("--reference-other-frame", action="store_true",
                            help="参考轨迹不在先验的系里(独立建图):按时间配对后平面对齐")
         r.add_argument("--reuse", action="store_true", help="用 --out 里已有的定位程序输出,只重算")
+    lb = sub.add_parser("live-from-bag",
+                        help="回归台:录包 + Super-LIO 位姿 → 跟机器人边走边存一样的关键帧目录"
+                             "(再 build --from-keyframes 验站点那条打包路)")
+    lb.add_argument("--bag", type=Path, required=True, help="原始录包(点云、IMU)")
+    lb.add_argument("--lio", type=Path, required=True,
+                    help="Super-LIO 位姿:回放出的位姿包(/lio/odom),或录包本身(边走边建录下的)")
+    lb.add_argument("--out", type=Path, required=True, help="关键帧目录")
     ia = sub.add_parser("imu-axes", help="从录包核 IMU 的安装角(工单 27)")
     ia.add_argument("--bag", type=Path, required=True)
     ia.add_argument("--traj", type=Path, required=True,
@@ -174,7 +181,21 @@ def main(argv: Sequence[str] | None = None) -> int:
         return _calibrate_rear(a)
     if a.cmd == "merge-bag":
         return _merge_bag(a)
+    if a.cmd == "live-from-bag":
+        return _live_from_bag(a)
     return _sweep(a)
+
+
+def _live_from_bag(a: argparse.Namespace) -> int:
+    from nexwar_localizer import superlio as S
+    try:
+        poses = S.read_odom(a.lio, "/lio/odom")
+    except S.SuperLioError:
+        poses = S.read_odom(a.lio, S.LIVE_TOPIC)
+    n = S.live_from_bag(poses, S.bag_clouds(a.bag), S.bag_imu(a.bag), a.out,
+                        cfg=S.config_path())
+    print(f"关键帧目录 {a.out}:{n['scans']} 帧扫描、{n['keyframes']} 个关键帧")
+    return 0
 
 
 def _imu_axes(a: argparse.Namespace) -> int:

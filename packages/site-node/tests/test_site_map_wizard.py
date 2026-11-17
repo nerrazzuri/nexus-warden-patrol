@@ -58,6 +58,33 @@ def test_结论_坏数字不炸():
         assert q["path_m"] is None and q["max_shift_m"] is None
 
 
+def _slio(**q):
+    return {**BUILD, "builder": "super-lio", "loop_closure": {"ran": False},
+            "mola": {"builder": "super-lio", "quality": {"path_m": 150.0, **q}}}
+
+
+def test_结论_SuperLIO_回到起点对得上_同一处高度对得上_能用():
+    """四个合格的包:回到起点最多差 0.51 m(广场)、同一处高度差 p95 最多 0.115 m(商场)。"""
+    q = quality(_slio(start_end_m=0.51, same_place_dz_p95=0.115), None)
+    assert q["verdict"] == "usable_unlooped" and q["reasons"] == []
+    assert q["start_end_m"] == 0.51 and q["same_place_dz_p95"] == 0.115
+
+
+@pytest.mark.parametrize("mq, reason", [
+    ({"start_end_m": 1.2, "same_place_dz_p95": 0.05}, "drift"),
+    ({"start_end_m": 0.2, "same_place_dz_p95": 0.3}, "height"),
+])
+def test_结论_SuperLIO_回到起点对不上_或同一处高度对不上_有问题(mq, reason):
+    """11-18 出图自动检查:不合格就让客户重走,不用改代码。"""
+    q = quality(_slio(**mq), None)
+    assert q["verdict"] == "problem" and q["reasons"] == [reason], q
+
+
+def test_结论_SuperLIO_老图没记高度差_只看回到起点():
+    q = quality(_slio(start_end_m=0.3), None)
+    assert q["verdict"] == "usable_unlooped" and q["same_place_dz_p95"] is None
+
+
 def test_结论_导入的老图没有建图记录_说不清():
     assert quality(None, None)["verdict"] == "unknown"
 

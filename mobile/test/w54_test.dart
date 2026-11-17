@@ -286,6 +286,21 @@ void main() {
       expect(api.calls, contains('mapping A start map-20261031-2 main:20261031-2'), reason: '重走：换了版本、接着就开录');
     });
 
+    testWidgets('出图自动检查（11-18）：离起点太远、同一处高度对不上，说人话、主按钮重走', (t) async {
+      final api = _admin()
+        ..wizard = <String, dynamic>{'step': 'build', 'robot_id': 'A', 'map_id': 'main', 'version': '20261031-1',
+          'drive': 'remote', 'by': 'u', 'label': ''}
+        ..wizardBuild = <String, dynamic>{'state': 'ready', 'quality': <String, dynamic>{
+          'verdict': 'problem', 'reasons': <dynamic>['drift', 'height'], 'path_m': 150.0, 'optimized': false,
+          'start_end_m': 2.4, 'same_place_dz_p95': 0.41}};
+      await _wizard(t, api);
+      expect(find.text('地图已建成：有问题'), findsOneWidget);
+      expect(find.textContaining('结束时离起点太远'), findsOneWidget);
+      expect(find.textContaining('同一处两次经过高度对不上'), findsOneWidget);
+      expect(find.text('drift'), findsNothing);
+      expect(t.widget<FilledButton>(find.byKey(MapWizardPage.rewalkKey)), isNotNull, reason: '重走是实底主按钮');
+    });
+
     testWidgets('走到一半机器人重启、这一趟自己收尾建好了：不卡在走一圈，给「看建图结果」（演示站点 10-31 撞上的）', (t) async {
       final api = _admin()
         ..wizard = <String, dynamic>{'step': 'walk', 'robot_id': 'A', 'map_id': 'main', 'version': '20261031-1',
