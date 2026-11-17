@@ -2406,6 +2406,24 @@ async def test_外审1117_I1_要拍照的点_朝向转不过来也不放宽_照�
         assert abs(math.remainder(g["yaw"] - math.pi, 2 * math.pi)) < 0.05, g
 
 
+async def test_外审1117_I1_朝向不要紧只管这一次goto_下一次引擎不说就不放宽(tmp_path):
+    """回家、返航、后端自己发的 goto 不许沿用上一个点的「朝向不要紧」。"""
+    link = 按走向规划的转接()
+    t = _台(tmp_path, link, walls=_死胡同(1.3, end_x=10.0))
+    await t.start(1.5, 4.0, 0.0)
+    t.nav.yaw_free = True
+    await t.nav.goto(Pose.from_xy_yaw(9.0, 4.0, math.pi))
+    assert t.nav.yaw_relaxed == (180, 0)
+    assert t.nav.yaw_free is False, "用过就清掉"
+    await t.nav.stop()
+    await t.跑(0.5)
+    from nexwar_patrol.backends.base import NavRequestError
+    with contextlib.suppress(NavRequestError):
+        await t.nav.goto(Pose.from_xy_yaw(9.0, 4.0, math.pi))
+    assert t.nav.yaw_relaxed is None
+    assert len([d for k, d in t.events if k == "goal_yaw_relaxed"]) == 1, t.events
+
+
 async def test_空地上的点_转得开_朝向照要的(tmp_path):
     link = 按走向规划的转接()
     t = _台(tmp_path, link)

@@ -387,8 +387,10 @@ class Nav2NavBackend(PlannedNavBackend):
     def __init__(self, *a: Any, link: Any = None, **kw: Any) -> None:
         kw.setdefault("robot_radius_m", FALLBACK_RADIUS_M)
         super().__init__(*a, **kw)
-        #: 外审 11-17 I1:这个点朝向不要紧(引擎每次 goto 前按点位动作设;默认要紧 = 不许放宽)
+        #: 外审 11-17 I1:这个点朝向不要紧(引擎每次 goto 前按点位动作设;默认要紧 = 不许放宽)。
+        #: 只管紧接着的那一次 goto,开头读进 ``_yaw_free_now`` 就清掉(回家、返航不沿用)
         self.yaw_free = False
+        self._yaw_free_now = False
         #: 这一趟终点朝向放宽了:(要的°, 实际的°),引擎写进这个点的结果;没放宽是 None
         self.yaw_relaxed: tuple[int, int] | None = None
         #: 转接服务端(:class:`~nexwar_agent.navbridge.NavBridgeServer`);``None`` = 没配,
@@ -519,6 +521,8 @@ class Nav2NavBackend(PlannedNavBackend):
         return ""
 
     async def _go(self, pose: Pose, op: str) -> None:
+        self.yaw_relaxed = None                            # 外审 11-17 I1:只管这一次,被拒也算用过
+        self._yaw_free_now, self.yaw_free = self.yaw_free, False
         why = self.nav2_ready()
         if why and any(k in why for k in NAV2_TRANSIENT):
             if self._settling:
@@ -549,7 +553,6 @@ class Nav2NavBackend(PlannedNavBackend):
         if self.nogo_at(pose.position.x, pose.position.y) is not None:
             raise NavRequestError(op, "终点在禁行区里")
         self.fallback_reason = ""
-        self.yaw_relaxed = None
         self._turn_only = None
         self._look, self._look_tries = None, 0
         self._turn_err = None
@@ -773,7 +776,7 @@ class Nav2NavBackend(PlannedNavBackend):
         """照要的朝向查不过(或只能靠局部搜索):朝开进去的方向直着能过就改成这个(:data:`GOAL_YAW_RELAX_RAD`)。
         只在引擎说这个点朝向不要紧(:attr:`yaw_free`,不拍照、不看云台、没检查项)时放宽
         (外审 11-17 I1)。"""
-        if not self.yaw_free or got.status == "unchecked" or (got.ok and not got.path):
+        if not self._yaw_free_now or got.status == "unchecked" or (got.ok and not got.path):
             return None
         pts = getattr(self, "_plan_poses", None) or []
         gx, gy = pose.position.x, pose.position.y
