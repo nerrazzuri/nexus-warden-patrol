@@ -852,6 +852,28 @@ def test_W75_站点打包_没有录包_里程从关键帧目录里拿_核手性�
     assert b["superlio_map"]["denoise"]["skipped"], "没有逐帧扫描:不做射线清除,写明"
 
 
+def test_站点打包_关键帧就是真扫描_拿它打真射线_也做射线清除(tmp_path):
+    """11-18 回归台:站点上用模拟射线画的平面图跟录包打真射线的差很多(办公室:路沿 1171 → 2697 格、
+    远处墙线没了、墙外漏空地)。边走边存的关键帧就是真扫描(雷达系、带时刻),拿它打真射线。"""
+    from nexwar_localizer.frames import quat_to_mat
+    from nexwar_localizer.replay import read_tum
+    work, pts, yaws = _转圈(tmp_path, False)
+    live = _live(tmp_path, yaws)
+    (live / "kf").mkdir()
+    rows = []
+    for i, (t, p, q) in enumerate(read_tum(work / "traj.tum")[::5]):
+        local = (pts - np.array(p)) @ np.array(quat_to_mat(q))      # 地图系 → 雷达系
+        local = local[np.linalg.norm(local, axis=1) < 6.0]
+        name = f"{i:05d}.bin"
+        local.astype("<f4").tofile(live / "kf" / name)
+        rows.append(f"{t:.6f} " + " ".join(["0"] * 13) + f" {name}")
+    (live / "kf" / "index.txt").write_text("\n".join(rows) + "\n")
+    B.package(work, tmp_path / "out", run=假MOLA(pts), live=live)
+    b = json.loads((tmp_path / "out" / "build.json").read_text())
+    assert b["grid"]["rays"] == f"keyframes:{len(rows)}", b["grid"]["rays"]
+    assert not b["superlio_map"]["denoise"].get("skipped"), b["superlio_map"]["denoise"]
+
+
 def test_W75_站点打包_关键帧目录里的里程跟图反着转_不出图(tmp_path):
     work, pts, yaws = _转圈(tmp_path, False)
     with pytest.raises(B.BuildError, match="镜像"):
