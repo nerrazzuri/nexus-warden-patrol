@@ -154,6 +154,10 @@ String walkTip(
     required Duration elapsed,
     double? speed,
     double? turn}) {
+  // Top Glove 11-17：开录就走，建图时重力没定好。前几秒还没走就请它站稳。
+  if (elapsed.inSeconds < 5 && pathM < 0.1) {
+    return tr('Keep the robot still for a few seconds before walking.', '请先让机器人原地站稳几秒再开始走。');
+  }
   if (speed != null && speed > 0.6) return tr('Slow down: high speed blurs the map', '请减速：速度过快会导致地图模糊');
   if (turn != null && turn > 0.8) return tr('Turn more slowly', '请放慢转向');
   if (elapsed.inMinutes >= 40) {

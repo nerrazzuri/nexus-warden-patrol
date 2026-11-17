@@ -537,6 +537,9 @@ void main() {
     expect(walkTip(pathM: 30, fromStartM: 0.5, elapsed: Duration.zero), contains('结束行走'));
     expect(walkTip(pathM: 80, fromStartM: 8, elapsed: const Duration(minutes: 45)), contains('较长时间'));
     expect(walkTip(pathM: 1, fromStartM: 0, elapsed: Duration.zero), contains('缓慢行走'));
+    // Top Glove 11-17:开录就走,建图的重力没定好(录的前几秒要站稳)
+    expect(walkTip(pathM: 0, fromStartM: 0, elapsed: const Duration(seconds: 2)), contains('原地站稳'));
+    expect(walkTip(pathM: 0, fromStartM: 0, elapsed: const Duration(seconds: 6)), contains('缓慢行走'));
   });
 
   testWidgets('地图管理：每一版写结论、谁在用；在用的、最新的不能删；能把机器人退回上一版', (t) async {
