@@ -898,3 +898,39 @@ def test_TG1117_雷达离地按每段脚下算_是055_平地和缓坡上不冒�
     assert abs(G._clearance(G.level(P, f), G.level(T, f)) - 0.55) < 0.05
     g = G.render(P, T, f, scans=[])
     assert g.curb is None or int(g.curb.sum()) * g.res ** 2 < 0.5, "缓坡不是路沿"
+
+
+def _走过的人和真路沿(frames):
+    """屋子 + 一个跟着狗走的人(腿 0.1–0.3 m,正好在路沿那一层;身子 0.8–1.6 m)+ 一道真路沿
+    (y = 4.5,高 0.15 m,x 2–8)。"""
+    L = np.asarray(frames.level_matrix())
+    P, T, scans, body = _walls_and_person(frames)
+    curb_x = np.arange(2.0, 8.0, 0.02)
+    curb = np.vstack([np.c_[curb_x, np.full_like(curb_x, 4.5 + dy), np.full_like(curb_x, 0.15)]
+                      for dy in np.arange(0.0, 0.6, 0.03)])         # 路沿顶面(往外 0.6 m 的台子)
+    face = np.vstack([np.c_[curb_x, np.full_like(curb_x, 4.5), np.full_like(curb_x, z)]
+                      for z in (0.05, 0.1)])
+    a = np.linspace(0, 2 * np.pi, 16, endpoint=False)
+    legs_all, out = [], []
+    for (s, pts), x in zip(scans, np.linspace(1, 9, 80), strict=True):
+        legs = np.vstack([np.c_[x - 0.5 + dx + 0.06 * np.cos(a), 2.7 + 0.06 * np.sin(a),
+                                np.full(16, z)] for dx in (-0.1, 0.1) for z in (0.1, 0.2, 0.3)])
+        legs_all.append(legs)
+        out.append((s, np.vstack([pts, (np.vstack([legs, curb, face]) @ L)])))
+    Q = np.vstack([P, np.vstack([curb, face, *legs_all]) @ L])
+    return Q, T, out, body
+
+
+def test_TG1117_走过的人腿在路沿那一层_不算路沿_真路沿照旧():
+    """Top Glove 11-17 v5:主通道走过的人、推车拖出一串小菱形「路沿」(20–30 块)。人的身子那一截在
+    障碍层、后来射线穿过去了(动的);同一处的腿就是同一个人,不是路沿。真路沿上面没有动的东西。"""
+    f = _frames()
+    P, T, scans, body = _走过的人和真路沿(f)
+    g = G.render(P, T, f, scans=scans, body_path=body)
+    assert g.curb is not None
+    at = lambda x, y: g.curb[g.cell_of(x, y)]             # noqa: E731
+    assert any(at(x, y) for x in (3.0, 5.0, 7.0) for y in (4.45, 4.5, 4.55)), "真路沿"
+    r0, c0 = g.cell_of(1.0, 2.4)
+    r1, c1 = g.cell_of(8.5, 3.0)
+    trail = g.curb[min(r0, r1):max(r0, r1) + 1, min(c0, c1):max(c0, c1) + 1]
+    assert int(trail.sum()) == 0, f"人走过的那一溜冒了 {int(trail.sum())} 格路沿"
