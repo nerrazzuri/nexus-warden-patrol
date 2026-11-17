@@ -860,3 +860,41 @@ def test_W71_空地里零星的占用格_打包时就清掉_柱子_贴墙的_挨
     assert img[30, 30] == X, "不改传进来的那张"
     crossed[30, 30:32] = False
     assert G.drop_specks(img, 0.05, crossed)[1] == 0, "射线从没穿过的(细柱子朝路那一面):留着"
+
+
+def _厂房(frames):
+    """Top Glove 11-17:东头一片宽的平地(地面点多,全图的地面峰落在这儿),西边接一条窄走廊、地面升高
+    0.95 m(有坡、或者建图的高度漂了 —— 点跟轨迹一起漂),走廊长、轨迹在高处待得久(雷达高度的中位数
+    落在高处)。狗离地一直是 0.55 m。"""
+    L = np.asarray(frames.level_matrix())
+    rng = np.random.default_rng(3)
+    g = lambda x: np.clip((x - 10.0) / 10.0, 0.0, 1.0) * 0.95   # noqa: E731 - 地面高度
+    hall = rng.uniform([0, -8], [10, 8], (300000, 2))
+    corr = rng.uniform([10, -1.5], [40, 1.5], (120000, 2))
+    pts = [np.c_[hall, g(hall[:, 0])], np.c_[corr, g(corr[:, 0])]]
+    ws = np.arange(10, 40, 0.02)
+    for y in (-1.5, 1.5):                                 # 走廊两边的墙,在当地地面上 0.8–1.6 m
+        pts += [np.c_[ws, np.full_like(ws, y), g(ws) + h] for h in np.linspace(0.8, 1.6, 9)]
+    sx = np.linspace(1, 39, 400)
+    traj = np.c_[sx, np.zeros_like(sx), g(sx) + 0.55]
+    return np.vstack(pts) @ L, traj @ L
+
+
+def test_TG1117_轨迹高低差将近一米_离地按每段脚下的地面算_平地和走廊都是可通行():
+    """Top Glove 11-17:全图一个地面峰(来自平地)去减全程雷达高度的中位数(来自高处的走廊),离地算成
+    1.06 m(实际 0.55 m),当地地面处处估低半米,「看到过地面」几乎没有,图上只剩走过的一条白带。"""
+    f = _frames()
+    P, T = _厂房(f)
+    g = G.render(P, T, f, scans=[])
+    for x, y in ((5.0, 5.0), (3.0, -6.0), (30.0, 1.0), (15.0, -1.0)):
+        c = g.cell_of(x, y)
+        assert c is not None and g.image[c] == G.FREE, (x, y)
+    assert g.image[g.cell_of(30.0, 1.5)] == G.OCCUPIED, "走廊的墙照样是墙"
+
+
+def test_TG1117_雷达离地按每段脚下算_是055_平地和缓坡上不冒路沿():
+    f = _frames()
+    P, T = _厂房(f)
+    assert abs(G._clearance(G.level(P, f), G.level(T, f)) - 0.55) < 0.05
+    g = G.render(P, T, f, scans=[])
+    assert g.curb is None or int(g.curb.sum()) * g.res ** 2 < 0.5, "缓坡不是路沿"
