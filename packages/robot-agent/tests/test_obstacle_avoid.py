@@ -1403,3 +1403,80 @@ def test_工单24_被挡的原因写最近一处在机身哪儿_现场分得清�
     v2 = _view_with([(8, 18)])                            # x −1.15、y −0.15(右后)
     r2 = g.check(-0.6, 0.0, 0.6, v2, (0, 0, 0))
     assert not r2.ok and "最近一处在机身后 1.1 m、右 0.1 m" in r2.reason, r2.reason
+
+
+# ------------------------------------------------ 盲带「封住」(sealed,11-17 仿真对照,未定)
+
+def _封住视野(policy="sealed", occ=()):
+    """到点时(t=0)这一帧全看过、全空(走过来时看过两侧);之后站着,每秒一帧只看得见前面一块
+    (x 0.25–0.95 m),两侧盲带看不见。"""
+    t = [0.0]
+    v = ObstacleView(monotonic=lambda: t[0], latency_s=0.0, band_policy=policy)
+    v.note_odom(0.0, 0.0, 0.0)
+    v.on_grid(_grid(cells_occ=occ))
+    front = [(r, c) for r in range(12, 20) for c in range(20)]
+    return t, v, front
+
+
+def _站着(t, v, front, t0, t1, occ=(), yaw=0.0):
+    for i in range(t0, t1):
+        t[0] = float(i)
+        v.note_odom(0.0, 0.0, yaw)
+        v.on_grid(_grid(cells_occ=occ, cells_known=front, seq=i + 1))
+
+
+def test_封住_站着30秒_周围看得见的一直没变_盲带旧帧说空还算数_严格策略不算():
+    for policy, want in (("sealed", []), ("strict", [0])):
+        t, v, front = _封住视野(policy, occ=[(16, 4)])
+        _站着(t, v, front, 1, 31, occ=[(16, 4)])               # 前面一直立着一根柱子
+        _, unk = v.lookup([(0.0, 0.6)], (0.0, 0.0, 0.0))
+        assert unk == want, policy
+
+
+def test_封住_看得见的地方冒出新东西_封不住了_盲带旧帧不算():
+    t, v, front = _封住视野()
+    _站着(t, v, front, 1, 12)
+    _站着(t, v, front, 12, 13, occ=[(13, 18)])                 # 有人走到右前方、看得见
+    _站着(t, v, front, 13, 31)                                 # 又看不见了(走进盲带?)
+    _, unk = v.lookup([(0.0, 0.6)], (0.0, 0.0, 0.0))
+    assert unk == [0]
+
+
+def test_封住_原来看得见的东西不见了_封不住了():
+    t, v, front = _封住视野(occ=[(13, 18)])
+    _站着(t, v, front, 1, 12, occ=[(13, 18)])                  # 右前方站着一个人
+    _站着(t, v, front, 12, 31)                                 # 人不见了、那一格看得见是空的
+    _, unk = v.lookup([(0.0, 0.6)], (0.0, 0.0, 0.0))
+    assert unk == [0]
+
+
+def test_封住_一格以内的抖动不算变():
+    t, v, front = _封住视野(occ=[(16, 4)])
+    _站着(t, v, front, 1, 12, occ=[(16, 4)])
+    _站着(t, v, front, 12, 31, occ=[(16, 5)])                  # 柱子边上那一格时有时无
+    _, unk = v.lookup([(0.0, 0.6)], (0.0, 0.0, 0.0))
+    assert unk == []
+
+
+def test_封住_封不住以后_后来的帧不能替以前作保():
+    """被打破的那一刻起重新封,但不往回认 —— 打破以前那份「空」的记忆说不清了。"""
+    t, v, front = _封住视野()
+    _站着(t, v, front, 1, 5)
+    _站着(t, v, front, 5, 6, occ=[(13, 18)])
+    _站着(t, v, front, 6, 31)
+    _, unk = v.lookup([(0.0, 0.6)], (0.0, 0.0, 0.0))
+    assert unk == [0]
+
+
+def test_封住_挪了窝重新封_按平时的10秒():
+    t, v, front = _封住视野()
+    _站着(t, v, front, 1, 20)
+    t[0] = 20.0
+    v.note_odom(-0.5, 0.0, 0.0)                                # 往后挪了窝
+    v.on_grid(_grid(cells_known=front, seq=100))
+    for i in range(21, 40):
+        t[0] = float(i)
+        v.note_odom(-0.5, 0.0, 0.0)
+        v.on_grid(_grid(cells_known=front, seq=i + 100))
+    _, unk = v.lookup([(0.0, 0.6)], (-0.5, 0.0, 0.0))
+    assert unk == [0], "挪窝以前那帧(t=0)离挪窝超过 10 秒:不算"
