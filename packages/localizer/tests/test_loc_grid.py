@@ -997,3 +997,24 @@ def test_TG1117_后雷达射线只添空地_不把空地变成不知道():
     assert (np.hypot(xy[:, 0] - 5.0, xy[:, 1] - 1.2) < 0.25).all(), xy
     r, c = g1.cell_of(0.5, 1.5)
     assert g1.image[r, c] == G.FREE and g0.image[r, c] != G.FREE, "起点后面只有后雷达看得到"
+
+
+def test_TG1117_后雷达从背后远远一个方向扫过_不把原来算空地的地方当成窄口看过去的():
+    """笔记本 11-17 核 v8:还有 12946 格空地变「不知道」,全在 seen.pbm 里(透过开口 / 窄口看到
+    的那步去掉的)。前雷达没从那儿看过(没有方向记录,只靠点云里的地面点算空地,不判窄口);后雷达
+    从背后远远扫过,只有一个方向 → 被当成从窄口远远看过去的扇形。只用前雷达时留下的空地,加了
+    后雷达也要留下。"""
+    f = _frames()
+    P, T, scans, body = _walls_and_person(f)
+    later = [i for i, (o, _) in enumerate(scans) if G.level(o.reshape(1, 3), f)[0, 0] >= 6.0]
+    front, rear = [], []
+    for i in later:
+        o, pts = scans[i]
+        ahead = G.level(pts, f)[:, 0] >= G.level(o.reshape(1, 3), f)[0, 0]
+        front.append((o, pts[ahead]))
+        rear.append((o, pts[~ahead]))
+    g0 = G.render(P, T[later], f, scans=front, body_path=body[later])
+    g1 = G.render(P, T[later], f, scans=front, body_path=body[later], extra_rays=rear)
+    lost = (g0.image == G.FREE) & (g1.image == G.UNKNOWN)
+    assert (g0.image == G.FREE).sum() > 0
+    assert not lost.any(), f"{int(lost.sum())} 格空地被后雷达变成不知道"

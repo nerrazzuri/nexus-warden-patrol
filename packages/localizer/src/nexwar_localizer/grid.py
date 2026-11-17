@@ -466,6 +466,12 @@ class _Seen:
         self.through = np.zeros(cells, np.int32)
         self.dirs = np.zeros(cells, np.uint32)
 
+    def copy(self) -> _Seen:
+        out = _Seen(0)
+        out.direct, out.through = self.direct.copy(), self.through.copy()
+        out.dirs = self.dirs.copy()
+        return out
+
     def vote(self, cell: np.ndarray, thr: np.ndarray) -> None:
         """一帧看到的格(可以重复),``thr``:是不是透过开口看到的。"""
         self.direct[cell[~thr]] += 1                        # 重复的下标只加一次:一帧一票
@@ -907,7 +913,7 @@ def render(points: np.ndarray, sensor_traj: np.ndarray, frames: Frames, *, res: 
     gf = ((fl - lo) / res).astype(int)
     seen[gf[:, 1], gf[:, 0]] = True
     seen = _erode(_dilate(seen, 1), 1)                      # 闭运算:远处点稀,补上小洞
-    views, used, extra_used = None, 0, 0
+    views, used, extra_used, front_only = None, 0, 0, None
     if scans is not None:
         views = _Seen(H * W)
         hit_scans = np.zeros((H, W), np.int32)
@@ -916,6 +922,7 @@ def render(points: np.ndarray, sensor_traj: np.ndarray, frames: Frames, *, res: 
                                        occ_h=(occ_lo.reshape(H, W), occ_hi.reshape(H, W)),
                                        seen=views, hits=hit_scans)
         if extra_rays is not None:
+            front_only = (passes, views.copy())
             more, extra_used = _raytrace_scans(
                 extra_rays, frames, lo, (H, W), res, (floor_clear, wall_top), max_range, ground,
                 occ_h=(occ_lo.reshape(H, W), occ_hi.reshape(H, W)), seen=views, openings=False)
@@ -927,23 +934,22 @@ def render(points: np.ndarray, sensor_traj: np.ndarray, frames: Frames, *, res: 
         poses = pc[np.sort(idx)]
         passes = _raytrace(occ >= 3, poses, int(max_range / res))
     ratio = occ / np.maximum(occ + passes, 1)
-    occ_m = (occ >= 5) & (ratio > 0.25)
-    free_m = ((passes >= 1) | seen) & ~occ_m
-    free_m = _dilate(_erode(free_m, 2), 2)                  # 开运算:去掉细扇形
     walked = np.zeros((H, W), bool)                         # 狗走过的路(身子中心;没给用雷达的)
     path = body_path if body_path is not None and len(body_path) else t[:, :2]
     pc = ((np.asarray(path, float)[:, :2] - lo) / res).astype(int)
     pc = pc[(pc[:, 0] >= 0) & (pc[:, 0] < W) & (pc[:, 1] >= 0) & (pc[:, 1] < H)]
     walked[pc[:, 1], pc[:, 0]] = True
-    if body_path is not None and len(body_path):            # 狗的身子待过的地方
-        body = _dilate(walked, int(round(FOOTPRINT_M / res)))
-        free_m |= body
-        occ_m &= ~body
-    occ_m &= _dilate(free_m, int(0.5 / res))                # 只留贴着可通行区的障碍
-    occ_m &= ~_surface(occ_m, free_m, res)                  # 墙只画看得见的那一面
+    body = (_dilate(walked, int(round(FOOTPRINT_M / res)))  # 狗的身子待过的地方
+            if body_path is not None and len(body_path) else None)
+    free_m, occ_m = _free_and_occupied(occ, passes, seen, body, res)
     seen_only = np.zeros((H, W), bool)
     if views is not None and used and (walked & free_m).any():
         kept = _see_through(free_m, views, walked, res)     # 透过玻璃、开口看到的假空地
+        if front_only is not None:
+            # Top Glove 11-17 v8:只用前雷达时留下的空地,加了后雷达也留下(后雷达从背后远远一个
+            # 方向扫过,会把没有方向记录、只靠地面点算的空地当成窄口看过去的)
+            free_f, _ = _free_and_occupied(occ, front_only[0], seen, body, res)
+            kept |= _see_through(free_f, front_only[1], walked, res) & free_m
         seen_only = free_m & ~kept                          # M9:去掉的那些,显示时画淡色
         free_m = kept
     img = np.full((H, W), UNKNOWN, np.uint8)
@@ -975,6 +981,22 @@ def render(points: np.ndarray, sensor_traj: np.ndarray, frames: Frames, *, res: 
                 seen=np.flipud(seen_only).copy() if seen_only.any() else None, specks=specks,
                 curb=np.flipud(curb).copy() if curb.any() else None, look=np.flipud(look).copy(),
                 extra_scans=extra_used)
+
+
+def _free_and_occupied(occ: np.ndarray, passes: np.ndarray, seen: np.ndarray,
+                       body: np.ndarray | None, res: float) -> tuple[np.ndarray, np.ndarray]:
+    """障碍点数 + 射线穿过次数 + 看到地面的格 → (可通行, 障碍)(去透过开口看到的那步之前)。
+    ``body``:狗的身子待过的格,一律可通行。"""
+    ratio = occ / np.maximum(occ + passes, 1)
+    occ_m = (occ >= 5) & (ratio > 0.25)
+    free_m = ((passes >= 1) | seen) & ~occ_m
+    free_m = _dilate(_erode(free_m, 2), 2)                  # 开运算:去掉细扇形
+    if body is not None:
+        free_m |= body
+        occ_m &= ~body
+    occ_m &= _dilate(free_m, int(0.5 / res))                # 只留贴着可通行区的障碍
+    occ_m &= ~_surface(occ_m, free_m, res)                  # 墙只画看得见的那一面
+    return free_m, occ_m
 
 
 def _look(q: np.ndarray, h: np.ndarray, ok: np.ndarray, lo: np.ndarray, shape: tuple[int, int],
