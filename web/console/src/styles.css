@@ -276,7 +276,7 @@ a.chip-top:hover { background: #2A2F36; }
 .mapimg { filter: var(--map-raster, none); }
 .mapbar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2) var(--sp-4); padding: 6px 12px; background: var(--c-surface); border-top: 1px solid var(--c-outline); }
 .maplegend { flex: 1; min-width: 0; list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: var(--sp-1) var(--sp-4); font-family: var(--font-sans); font-size: 12px; line-height: 18px; color: var(--c-textSecondary); }
-.mapctl { flex: none; display: flex; align-items: center; gap: var(--sp-3); }
+.mapctl { flex: none; display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-3); max-width: 100%; }
 .maplegend li { display: inline-flex; align-items: center; gap: var(--sp-2); white-space: nowrap; flex: none; }
 .sw { flex: none; display: block; }
 .sw .sw-edge { stroke: var(--c-textMuted); stroke-width: 1; }
@@ -2581,7 +2581,15 @@ input[type="checkbox"], input[type="radio"] { width: 18px; height: 18px; }
 /* I2 11-17:1440 宽时操作页左边只有约 500 px,三分之一给小地图只剩 135 px —— 按这一块自己的宽度,
    不到 900 px 画面、小地图上下排 */
 .rc-main { container-type: inline-size; }
-@container (max-width: 899px) { .rc-top { grid-template-columns: minmax(0, 1fr); } .rc-map { padding-left: 20px; } }
+@container (max-width: 899px) {
+  .rc-top { grid-template-columns: minmax(0, 1fr); } .rc-map { padding-left: 20px; }
+  /* I2' 11-17(liang-d5 复查):上下排时两行不再挤在一个定高里分(视频被压成 0、小地图盖住下一节)——
+     按内容高,画面 16:9,左边这一块自己滚 */
+  .rc-top { flex: none; }
+  .rc-top > .rc-video { min-height: 0; }
+  .rc-video-well { flex: none; aspect-ratio: 16 / 9; }
+  .rc-map .mapcanvas { flex: none; height: 280px; }
+}
 
 /* 用户 11-15:地图右上角写明画的是哪一版 */
 .map-ver { position: absolute; top: 8px; left: 8px; z-index: 2; display: inline-flex; align-items: center; gap: var(--sp-1); padding: 2px 8px; font-size: 12px; font-weight: 600;
