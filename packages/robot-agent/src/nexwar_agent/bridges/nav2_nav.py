@@ -239,6 +239,12 @@ UTURN_GOAL_M = 1.5
 UTURN_MAX = 2
 #: 路线第一个点离机器人这么近(米)才算是从这儿新规划的(Nav2 约 1 Hz 从脚下重规划;远的是旧路线)。
 UTURN_PLAN_NEAR_M = 0.5
+#: 终点要的朝向转不过来(用户 11-17,真实巡逻仿真「仓库巷道」):窄巷尽头的点要朝回走的方向,那儿原地
+#: 转不开 —— 查路线拒、或者绕出「巷口掉头倒着进」的怪路,控制器跟不住卡在巷口。照要的朝向查不过(或者
+#: 只能靠局部搜索的路),改成朝开进去的方向(规划路线进终点前 :data:`GOAL_APPROACH_M` 那段的走向)
+#: 直着能过 → 就按这个朝向到点,发 ``goal_yaw_relaxed``。差不到 :data:`GOAL_YAW_RELAX_RAD` 不改。
+GOAL_YAW_RELAX_RAD = math.radians(20.0)
+GOAL_APPROACH_M = 0.5
 #: 沿原路倒退:记最近 :data:`TRAIL_KEEP_M` 走过的路(每 :data:`TRAIL_STEP_M` 一个点;一拍跳过
 #: :data:`TRAIL_JUMP_M` 是定位跳了,清掉重记),退 :data:`RETREAT_M`(原路不到 :data:`RETREAT_MIN_M`
 #: 不退),:data:`RETREAT_MPS` 倒着走,跟原路按前瞻 :data:`RETREAT_LOOK_M` 走;
@@ -549,6 +555,10 @@ class Nav2NavBackend(PlannedNavBackend):
                              else self._route_check(here, pose, op))
             finally:
                 self._planning = False
+        if got is not None and not via:
+            relaxed = await self._relaxed_yaw(here, pose, got, op)
+            if relaxed is not None:
+                pose, got = relaxed
         backout = await self._backout_why(here, got, via, goal_xy) if got is not None else None
         if backout is not None:
             log.warning("%s:%s —— 先沿来路倒着退出来,转得开了再查路线", op, backout)
@@ -727,6 +737,39 @@ class Nav2NavBackend(PlannedNavBackend):
         except Exception as exc:                          # 查不了:算没查成
             log.exception("%s:路线检查出错", op)
             return route_check.unchecked("route_check_error", f"路线检查出错:{exc}"[:200])
+
+    async def _relaxed_yaw(self, here: Any, pose: Pose, got: Any,
+                           op: str) -> tuple[Pose, Any] | None:
+        """照要的朝向查不过(或只能靠局部搜索):朝开进去的方向直着能过就改成这个(:data:`GOAL_YAW_RELAX_RAD`)。"""
+        if got.status == "unchecked" or (got.ok and not got.path):
+            return None
+        pts = getattr(self, "_plan_poses", None) or []
+        gx, gy = pose.position.x, pose.position.y
+        if len(pts) < 2 or math.dist((pts[-1][0], pts[-1][1]), (gx, gy)) > 0.3:
+            return None
+        h = None
+        for p in reversed(pts[:-1]):
+            if math.dist((p[0], p[1]), (gx, gy)) >= GOAL_APPROACH_M:
+                h = math.atan2(gy - p[1], gx - p[0])
+                break
+        if h is None or abs(math.remainder(h - pose.yaw, 2 * math.pi)) < GOAL_YAW_RELAX_RAD:
+            return None
+        alt_pose = Pose.from_xy_yaw(gx, gy, h)
+        self._planning = True
+        try:
+            alt = await self._route_check(here, alt_pose, f"{op}(朝向按开进去的方向)")
+        finally:
+            self._planning = False
+        if alt.status == "unchecked" or not alt.ok or alt.path:
+            return None
+        log.warning("%s:终点要朝 %.0f° 那儿转不过来(%s),改成朝开进去的方向 %.0f° 到点", op,
+                    math.degrees(pose.yaw), got.why[:80] if not got.ok else "只能靠局部搜索的路",
+                    math.degrees(h))
+        if self.on_event is not None:
+            self.on_event("goal_yaw_relaxed", {"x": round(gx, 2), "y": round(gy, 2),
+                                               "want_deg": round(math.degrees(pose.yaw)),
+                                               "yaw_deg": round(math.degrees(h))})
+        return alt_pose, alt
 
     async def _detour(self, here: Any, pose: Pose, got: Any, op: str) -> Any:
         """路线检查卡在一处(用户 11-15:整趟走完优先):本趟把那一处(半径 :data:`AVOID_R`)临时标成
