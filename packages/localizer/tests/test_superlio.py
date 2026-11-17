@@ -510,7 +510,8 @@ def test_TG1117_给了后雷达外参_只拿去打栅格射线_点云和关键�
     monkeypatch.setattr(tools, "_loop_closure", lambda s: None)
 
     def package(work, out, **kw):
-        got["read_scans"] = kw["read_scans"]
+        got["read_scans"] = kw.get("read_scans")
+        got["extra"] = kw.get("read_extra_rays")
         (out).mkdir(parents=True, exist_ok=True)
         (out / "build.json").write_text("{}")
         return []
@@ -522,7 +523,8 @@ def test_TG1117_给了后雷达外参_只拿去打栅格射线_点云和关键�
     assert tools.main(["build", "--bag", str(tmp_path), "--out", str(tmp_path / "o"),
                        "--front", "superlio", "--rear-lidars", str(lid)]) == 0
     assert "rear" not in got["front"], "关键帧照旧只用前雷达"
-    assert got["read_scans"] is not None and got["read_scans"] is not build.bag_scans
+    assert got["read_scans"] is None, "栅格的主射线照旧是前雷达(不合并,v7 合并帧慢 8 倍)"
+    assert got["extra"] is not None, "后雷达是另一批射线"
 
 
 def test_TG1117_建图命令_后雷达外参没标定就拒_不悄悄用几何初值(tmp_path, capsys):

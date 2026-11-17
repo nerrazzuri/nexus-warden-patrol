@@ -264,7 +264,7 @@ def _build(a: argparse.Namespace) -> int:
                           source=f"bag:{a.bag.name}", timings=timings, bag=a.bag,
                           lidar_topic=a.lidar_topic, rtk_antenna=tuple(a.rtk_antenna),
                           loop_closure=lc, progress=_say,
-                          read_scans=build.merged_scans(rear) if rear is not None else None,
+                          read_extra_rays=build.rear_rays(rear) if rear is not None else None,
                           gravity_up=build.SUPERLIO_GRAVITY_UP if a.front == "superlio" else None)
     print(json.dumps(json.loads((a.out / "build.json").read_text()), ensure_ascii=False,
                      indent=2))

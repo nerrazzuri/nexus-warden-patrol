@@ -970,3 +970,30 @@ def test_TG1117_显示底图写成PGM_宽高行序跟floor一样(tmp_path):
     h, w = g.image.shape
     head = f"P5\n{w} {h}\n255\n".encode()
     assert raw.startswith(head) and raw[len(head):] == g.look.tobytes()
+
+
+def test_TG1117_后雷达射线只添空地_不把空地变成不知道():
+    """笔记本 11-17 核 v7:后雷达的帧并进前雷达一起判开口、地面,外参只对上 59%,主通道北侧人多的
+    一条带 36603 格从空地变成「不知道」。后雷达改成另一批射线:只记穿过、直接看到的方向,
+    不判开口、不算地面、不算打中 —— 加上它只会多出空地。"""
+    f = _frames()
+    P, T, scans, body = _walls_and_person(f, floor_x=(8.5, 10.0))   # 空地只能靠射线清
+    L = np.asarray(f.level_matrix())
+    front, rear = [], []
+    for o, pts in scans:
+        ahead = G.level(pts, f)[:, 0] >= G.level(o.reshape(1, 3), f)[0, 0]  # 地图上朝前 / 朝后
+        front.append((o, pts[ahead]))
+        # 外参差一点:偏 8 cm、高 20 cm
+        rear.append((o, pts[~ahead] + np.array([0.0, 0.08, 0.2]) @ L))
+    g0 = G.render(P, T, f, scans=front, body_path=body)
+    g1 = G.render(P, T, f, scans=front, body_path=body, extra_rays=rear)
+    assert g0.image.shape == g1.image.shape
+    free0, unk1 = g0.image == G.FREE, g1.image == G.UNKNOWN
+    assert not (free0 & unk1).any(), f"{int((free0 & unk1).sum())} 格空地被后雷达变成了不知道"
+    # 变成障碍的只许是柱子朝后那一面(前雷达看不到、后雷达看到了,本来就是柱子)
+    r, c = np.nonzero(free0 & (g1.image == G.OCCUPIED))
+    xy = np.c_[g1.origin[0] + (c + 0.5) * g1.res,
+               g1.origin[1] + (g1.image.shape[0] - 1 - r + 0.5) * g1.res]
+    assert (np.hypot(xy[:, 0] - 5.0, xy[:, 1] - 1.2) < 0.25).all(), xy
+    r, c = g1.cell_of(0.5, 1.5)
+    assert g1.image[r, c] == G.FREE and g0.image[r, c] != G.FREE, "起点后面只有后雷达看得到"
