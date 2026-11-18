@@ -554,3 +554,20 @@ def test_外审W75_1_1_收尾文件记正常停了没有_最后收到雷达的�
     assert json.loads((tmp_path / L.LIVE_FILE).read_text())["kf_errors"] == 1
     L.finish_keyframes(tmp_path, h, _Close(), clean=False)
     assert not (tmp_path / L.LIVE_FILE).exists(), "没正常停:不写收尾文件(交接时退回机器人上打包)"
+
+
+def test_后雷达_外参标定过才一起存_抄进关键帧目录_上一趟的先删(tmp_path):
+    from nexwar_localizer import livemap as LM
+    from nexwar_localizer.lidars import Lidars, geometry_guess
+    kd = tmp_path / "kd"
+    kd.mkdir()
+    (kd / "lidars.json").write_text("上一趟的")
+    lj = tmp_path / "lidars.json"
+    T = geometry_guess((-1.0, 0.0, 0.0), (0.0, 0.0, 1.0))
+    assert not LM.rear_ok("/rear_lidar", lj, kd) and not (kd / "lidars.json").exists(), "没有外参"
+    lj.write_text(json.dumps(Lidars(T_front_rear=T, calibrated=False).to_json()))
+    assert not LM.rear_ok("/rear_lidar", lj, kd), "没标定"
+    lj.write_text(json.dumps(Lidars(T_front_rear=T, calibrated=True).to_json()))
+    assert not LM.rear_ok("", lj, kd), "话题给空 = 不存"
+    assert LM.rear_ok("/rear_lidar", lj, kd)
+    assert (kd / "lidars.json").read_text() == lj.read_text()

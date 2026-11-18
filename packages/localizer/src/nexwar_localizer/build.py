@@ -260,6 +260,8 @@ def package(work: Path, out: Path, *, prior_pack: PriorPack | None = None,
         # 11-18:站点上没有录包 —— 边走边存的关键帧就是真扫描,拿它打真射线(原来用模拟射线,
         # 办公室包上路沿多了一倍多、远处墙线没了、墙外漏空地)
         scan_src, reader = live, read_scans or live_scans
+        if read_extra_rays is None:
+            read_extra_rays = live_rear_rays(live)       # 11-18:机器人也存了后雷达的帧
     try:
         g, rays = _render(points, sensor, frames, body, traj, scan_src, lidar_topic,
                           reader, on_scan=rc.add, read_extra=read_extra_rays)
@@ -835,8 +837,41 @@ def rear_rays(T_front_rear: Any, topic: str = "/rear_lidar"
     return read
 
 
+def live_rear_rays(live: Path) -> Callable[..., Iterator[tuple[Any, Any]]] | None:
+    """站点上打包:关键帧目录里有后雷达的帧(``kf/rear.txt``)和标定过的外参(``lidars.json``)就回
+    :func:`package` 的 ``read_extra_rays``(跟录包那条 :func:`rear_rays` 一样按前雷达位姿 × 外参放进
+    地图系;已经按 5 cm 降采样,每帧都用、点不再抽);没有回 None(老机器人、没标定)。"""
+    import numpy as np
+
+    from nexwar_localizer import superlio as S
+    from nexwar_localizer.lidars import Lidars, LidarsError
+
+    idx, lj = live / "kf" / S.REAR_INDEX, live / S.REAR_LIDARS
+    if not (idx.is_file() and lj.is_file()):
+        return None
+    try:
+        lid = Lidars.from_json(json.loads(lj.read_text("utf-8")))
+    except (OSError, ValueError, LidarsError) as exc:
+        log.warning("关键帧目录里的后雷达外参读不了(%s),只用前雷达", exc)
+        return None
+    if not lid.calibrated:
+        log.warning("关键帧目录里的后雷达外参没标定,只用前雷达")
+        return None
+
+    def read(_src: Path, traj: Sequence[Any]) -> Iterator[tuple[Any, Any]]:
+        def clouds() -> Iterator[tuple[float, Any]]:
+            for ln in idx.read_text(encoding="utf-8").splitlines():
+                c = ln.split()
+                if len(c) == 2:
+                    yield float(c[0]), np.fromfile(live / "kf" / c[1], "<f4").reshape(-1, 3
+                                                                                      ).astype(float)
+        yield from rays_from(clouds(), traj, lid.T_front_rear, every=1, stride=1)
+    return read
+
+
 def rays_from(scans: Iterator[tuple[float, Any]], traj: Sequence[Any], T_front_rear: Any, *,
-              every: int = SCAN_EVERY) -> Iterator[tuple[Any, Any]]:
+              every: int = SCAN_EVERY, stride: int = SCAN_POINT_STRIDE
+              ) -> Iterator[tuple[Any, Any]]:
     """另一台雷达的 ``(时刻, 点或 PointCloud2)`` 逐帧(每 ``every`` 帧取一帧):位姿 = 那一刻前雷达
     在轨迹里的位姿(按时刻插,轨迹外的不要)× ``T_front_rear``。回 ``(雷达位置, 地图系的点)``。"""
     import numpy as np
@@ -851,7 +886,7 @@ def rays_from(scans: Iterator[tuple[float, Any]], traj: Sequence[Any], T_front_r
         if A is None:
             continue
         Tw = A @ Tfr
-        xyz = (m if isinstance(m, np.ndarray) else cloud_xyz(m))[::SCAN_POINT_STRIDE]
+        xyz = (m if isinstance(m, np.ndarray) else cloud_xyz(m))[::stride]
         yield Tw[:3, 3].copy(), xyz @ Tw[:3, :3].T + Tw[:3, 3]
 
 

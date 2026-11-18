@@ -57,6 +57,14 @@ LIVE_FILE = "live.json"
 #: W75 边走边存时另记的 IMU 比力(``t ax ay az`` 一行一条,最多每秒 :data:`IMU_LOG_HZ` 条):站点上从
 #: 关键帧打包时按它摆平(:func:`level`;11-18 前这条路不摆平,客户自己建 Top Glove 那种场地还是歪的)。
 IMU_FILE = "imu.txt"
+#: 后雷达(11-18,Top Glove):每存一个前雷达关键帧,顺手存一帧时刻最近的后雷达(雷达系点云,文件名
+#: ``r00000.bin``,跟前雷达的放在同一个 ``kf/`` 里、另记索引 ``kf/rear.txt``:旧站点收件只认
+#: ``kf/<文件名>``,这样照收、只是不用)。外参抄一份 :data:`REAR_LIDARS` 在关键帧目录顶上
+#: (标定过的才抄)。
+REAR_INDEX = "rear.txt"
+REAR_LIDARS = "lidars.json"
+#: 后雷达跟前雷达关键帧最多差这么多秒才配(两台 10 帧/秒,半帧多一点)。
+REAR_MATCH_S = 0.06
 IMU_LOG_HZ = 100.0
 #: 关键帧点云按离雷达的距离裁(太近是机身、太远是噪点)。
 RANGE_MIN_M, RANGE_MAX_M = 0.6, 80.0
@@ -553,6 +561,39 @@ class Keyframer:
         self.last: float | None = None
         self._last_kf: tuple[list[float], list[list[float]]] | None = None
         self._prev: tuple[float, list[float], list[list[float]]] | None = None
+        self._rear_index: Any = None
+        self.rear_keyframes = 0
+        import collections
+        self._rear: collections.deque[tuple[float, Any]] = collections.deque(maxlen=20)
+
+    def rear(self, t: float, msg: Any) -> None:
+        """后雷达来了一帧(原始报文先攒着,配上关键帧才解)。最近 2 秒左右的留着:前雷达那帧要等位姿,
+        交给 :meth:`scan` 时比后雷达晚。"""
+        self._rear.append((t, msg))
+
+    def _save_rear(self, t: float) -> None:
+        import numpy as np
+
+        if not self._rear:
+            return
+        rt, msg = min(self._rear, key=lambda r: abs(r[0] - t))
+        if abs(rt - t) > REAR_MATCH_S:
+            return
+        xyz = _clip(np.asarray(self.xyz_of(msg), float))
+        if len(xyz) < MIN_KF_POINTS:
+            return
+        if self.voxel:
+            from nexwar_localizer.slioloc import voxel_down
+            xyz = voxel_down(xyz, self.voxel)
+        name = f"r{self.rear_keyframes:05d}.bin"
+        tmp = self.kf / f".{name}.tmp"
+        xyz.astype("<f4").tofile(tmp)
+        os.replace(tmp, self.kf / name)
+        if self._rear_index is None:
+            self._rear_index = open(self.kf / REAR_INDEX, "w", encoding="utf-8")
+        self._rear_index.write(f"{rt:.6f} {name}\n")
+        self._rear_index.flush()
+        self.rear_keyframes += 1
 
     def scan(self, t: float, msg: Any,
              pose: tuple[Sequence[float], Sequence[float]] | None) -> None:
@@ -580,10 +621,7 @@ class Keyframer:
             turned = math.degrees(rot_angle(_mul(_T(self._last_kf[1]), R)))
             if moved < KF_DIST_M and turned < KF_TURN_DEG:
                 return
-        xyz = np.asarray(self.xyz_of(msg), float)
-        if len(xyz):
-            rng = np.linalg.norm(xyz, axis=1)
-            xyz = xyz[(rng > RANGE_MIN_M) & (rng < RANGE_MAX_M)]
+        xyz = _clip(np.asarray(self.xyz_of(msg), float))
         if len(xyz) < MIN_KF_POINTS:
             return
         if self.voxel:
@@ -598,12 +636,28 @@ class Keyframer:
         self._index.flush()
         self.keyframes += 1
         self._last_kf = (p, R)
+        self._save_rear(t)
 
     def close(self) -> dict[str, Any]:
         self._index.close()
         self._traj.close()
-        return {"scans": self.scans, "traj": self.traj, "keyframes": self.keyframes,
-                "first_scan": self.first, "last_scan": self.last}
+        if self._rear_index is not None:
+            self._rear_index.close()
+        out = {"scans": self.scans, "traj": self.traj, "keyframes": self.keyframes,
+               "first_scan": self.first, "last_scan": self.last}
+        if self.rear_keyframes:
+            out["rear_keyframes"] = self.rear_keyframes
+        return out
+
+
+def _clip(xyz: Any) -> Any:
+    """量程外的点不要(:data:`RANGE_MIN_M`–:data:`RANGE_MAX_M`)。"""
+    import numpy as np
+
+    if len(xyz):
+        rng = np.linalg.norm(xyz, axis=1)
+        xyz = xyz[(rng > RANGE_MIN_M) & (rng < RANGE_MAX_M)]
+    return xyz
 
 
 class LiveKeyframes:
@@ -630,6 +684,10 @@ class LiveKeyframes:
         self.pending.append((t, msg))
         self._newest = max(self._newest, t)
         self._drain()
+
+    def on_rear(self, t: float, msg: Any) -> None:
+        """后雷达一帧(:data:`REAR_INDEX`)。"""
+        self.k.rear(t, msg)
 
     def on_imu(self, t: float, ax: float, ay: float, az: float) -> None:
         if self._imu is None or t - self._imu_last < 1.0 / IMU_LOG_HZ - 1e-6:
@@ -676,10 +734,13 @@ class LiveKeyframes:
 
 def live_from_bag(poses: Sequence[Pose], clouds: Iterable[tuple[float, Any]],
                   imu: Iterable[tuple[float, float, float, float]], kd: Path, *, cfg: Path,
-                  xyz_of: Callable[[Any], Any] | None = None) -> dict[str, Any]:
+                  xyz_of: Callable[[Any], Any] | None = None,
+                  rear: Iterable[tuple[float, Any]] = (),
+                  rear_lidars: Path | None = None) -> dict[str, Any]:
     """回归台用(11-18):录包里的点云 + Super-LIO 位姿 + IMU → 跟机器人边走边存(``livemap
     --keyframes``)一样的关键帧目录(位姿没摆平、关键帧按 :data:`KF_VOXEL_M` 降采样、IMU 另记、
-    ``live.json`` 收尾),站点那条打包路(:func:`prepare_live`)就能拿录包验。回关键帧汇总。"""
+    ``live.json`` 收尾),站点那条打包路(:func:`prepare_live`)就能拿录包验。回关键帧汇总。
+    ``rear`` + ``rear_lidars``:后雷达的帧和外参,跟机器人上一样存(:data:`REAR_INDEX`)。"""
     if xyz_of is None:
         from nexwar_localizer.build import cloud_xyz as xyz_of
     R_il, t_il = extrinsic(cfg)
@@ -690,8 +751,15 @@ def live_from_bag(poses: Sequence[Pose], clouds: Iterable[tuple[float, Any]],
     poses = clean(poses)
     imu = sorted(imu)
     pi = ii = 0
-    # 按机器人上到的顺序喂:位姿、IMU 到了这一帧的时刻再给点云
+    if rear_lidars is not None:
+        shutil.copyfile(rear_lidars, kd / REAR_LIDARS)
+    rear_it = iter(rear)
+    nxt = next(rear_it, None)
+    # 按机器人上到的顺序喂:位姿、IMU 到了这一帧的时刻再给点云;后雷达按时刻插在前雷达之间
     for t, msg in clouds:
+        while nxt is not None and nxt[0] <= t + REAR_MATCH_S:   # 机器人上后雷达实时到,不缺这几帧
+            live.on_rear(*nxt)
+            nxt = next(rear_it, None)
         while pi < len(poses) and poses[pi][0] <= t + SCAN_MID_S:
             while ii < len(imu) and imu[ii][0] <= poses[pi][0]:
                 live.on_imu(*imu[ii])
@@ -699,6 +767,9 @@ def live_from_bag(poses: Sequence[Pose], clouds: Iterable[tuple[float, Any]],
             live.on_pose(*poses[pi])
             pi += 1
         live.on_scan(t, msg)
+    while nxt is not None:
+        live.on_rear(*nxt)
+        nxt = next(rear_it, None)
     for p in poses[pi:]:
         while ii < len(imu) and imu[ii][0] <= p[0]:
             live.on_imu(*imu[ii])

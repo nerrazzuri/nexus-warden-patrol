@@ -95,11 +95,13 @@ def test_回放算不过来_定位结果作废_比较时不算变差(tmp_path: P
     assert "作废" in mr.report_md({"office1": got})
 
 
-def test_站点那条路_先出关键帧再从关键帧打包_不带后雷达(tmp_path: Path):
+def test_站点那条路_先出关键帧再从关键帧打包_后雷达在出关键帧那步给(tmp_path: Path):
     spec = {"name": "tg", "bag": "/b/tg", "rear_lidars": "/b/lidars.json"}
     live, pack = mr.site_cmds(spec, tmp_path, "/usr/bin/python3", Path("/r/tg/map.work/lio_bag"))
     assert live[3:] == ["live-from-bag", "--bag", "/b/tg", "--lio", "/r/tg/map.work/lio_bag",
-                        "--out", str(tmp_path / "live")]
+                        "--out", str(tmp_path / "live"), "--rear-lidars", "/b/lidars.json"]
+    assert "--rear-lidars" not in mr.site_cmds({"name": "m", "bag": "/b/m"}, tmp_path, "py",
+                                               Path("/l"))[0]
     assert pack[3:6] == ["build", "--from-keyframes", str(tmp_path / "live")]
     assert "--rear-lidars" not in pack and "--replay" not in pack
 

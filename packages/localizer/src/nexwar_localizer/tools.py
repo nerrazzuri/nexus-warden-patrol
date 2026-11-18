@@ -153,6 +153,9 @@ def parser() -> argparse.ArgumentParser:
     lb.add_argument("--lio", type=Path, required=True,
                     help="Super-LIO 位姿:回放出的位姿包(/lio/odom),或录包本身(边走边建录下的)")
     lb.add_argument("--out", type=Path, required=True, help="关键帧目录")
+    lb.add_argument("--rear-lidars", type=Path, default=None,
+                    help="后雷达外参 lidars.json(标定过的):后雷达也按机器人上那样存")
+    lb.add_argument("--rear-topic", default="/rear_lidar")
     ia = sub.add_parser("imu-axes", help="从录包核 IMU 的安装角(工单 27)")
     ia.add_argument("--bag", type=Path, required=True)
     ia.add_argument("--traj", type=Path, required=True,
@@ -192,9 +195,11 @@ def _live_from_bag(a: argparse.Namespace) -> int:
         poses = S.read_odom(a.lio, "/lio/odom")
     except S.SuperLioError:
         poses = S.read_odom(a.lio, S.LIVE_TOPIC)
+    rear = S.bag_clouds(a.bag, a.rear_topic) if a.rear_lidars is not None else ()
     n = S.live_from_bag(poses, S.bag_clouds(a.bag), S.bag_imu(a.bag), a.out,
-                        cfg=S.config_path())
-    print(f"关键帧目录 {a.out}:{n['scans']} 帧扫描、{n['keyframes']} 个关键帧")
+                        cfg=S.config_path(), rear=rear, rear_lidars=a.rear_lidars)
+    print(f"关键帧目录 {a.out}:{n['scans']} 帧扫描、{n['keyframes']} 个关键帧"
+          f"、后雷达 {n.get('rear_keyframes', 0)} 帧")
     return 0
 
 
