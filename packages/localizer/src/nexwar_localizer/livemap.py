@@ -19,6 +19,7 @@ import json
 import logging
 import math
 import os
+import shutil
 import signal
 import struct
 import time
@@ -409,6 +410,13 @@ class Handlers:
         except Exception as exc:  # noqa: BLE001
             self._bad("点云", exc)
 
+    def on_rear(self, raw: bytes) -> None:
+        """后雷达一帧交给关键帧(11-18:站点打包多打一批射线;预览不用它)。"""
+        try:
+            self.kf.on_rear(cdr_stamp(raw), raw)
+        except Exception as exc:  # noqa: BLE001 —— 坏一帧丢一帧
+            self._bad("后雷达", exc)
+
     def clock_offset(self) -> float | None:
         """雷达「本机收到 − 报文头」的中位数(秒;跟 ``build.bag_clock_offset`` 一个算法)。"""
         c = sorted(self._clock)
@@ -487,6 +495,27 @@ def cdr_stamp(raw: bytes) -> float:
     return sec + nsec * 1e-9
 
 
+def rear_ok(topic: str, lidars: Path, keyframes: Path) -> bool:
+    """存不存后雷达的帧:给了话题、外参标定过(没标定的外参放进地图会重影,不如不要)。存的话把外参抄进
+    关键帧目录(站点打包按它放后雷达的帧)。上一趟留下的外参先删掉。"""
+    from nexwar_localizer import superlio
+    from nexwar_localizer.lidars import LidarsError, load
+
+    (keyframes / superlio.REAR_LIDARS).unlink(missing_ok=True)
+    if not topic or not lidars.is_file():
+        return False
+    try:
+        lid = load(lidars, up=(0.0, 0.0, 1.0), forward=(1.0, 0.0, 0.0))
+    except LidarsError as exc:
+        log.warning("关键帧:后雷达外参读不了(%s),只存前雷达", exc)
+        return False
+    if not lid.calibrated:
+        log.info("关键帧:后雷达外参没标定,只存前雷达")
+        return False
+    shutil.copyfile(lidars, keyframes / superlio.REAR_LIDARS)
+    return True
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     """ROS 节点(系统 Python)。编排经 ``deploy/nexwar_live_preview`` 起,SIGTERM 停(停前再写一张)。"""
     ap = argparse.ArgumentParser(prog="nexwar_live_preview")
@@ -503,6 +532,10 @@ def main(argv: Sequence[str] | None = None) -> int:
                     help="存关键帧时一起记 IMU 比力(站点上打包摆平用;缺省跟 Super-LIO 同一个)")
     ap.add_argument("--odom-topic", default="/odom/mc_odom",
                     help="机器人自己的里程(存关键帧时一起记朝向,核手性用)")
+    ap.add_argument("--rear-topic", default="/rear_lidar",
+                    help="存关键帧时一起存后雷达的帧(外参标定过才存;空 = 不存)")
+    ap.add_argument("--rear-lidars", type=Path, default=Path("/etc/nexwar/lidars.json"),
+                    help="后雷达外参(calibrate-rear 标的);抄进关键帧目录")
     a = ap.parse_args(argv)
     if a.keyframes is not None and not a.superlio:
         ap.error("--keyframes 要跟 --superlio 一起用")
@@ -557,6 +590,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     node.create_subscription(PointCloud2, a.lidar_topic, h.on_scan, qos, raw=True)
     pose_qos = QoSProfile(depth=KEEP_POSES, reliability=ReliabilityPolicy.BEST_EFFORT)
     node.create_subscription(Odometry, a.pose_topic, h.on_pose, pose_qos)
+    if kf is not None and rear_ok(a.rear_topic, a.rear_lidars, a.keyframes):
+        node.create_subscription(PointCloud2, a.rear_topic, h.on_rear, qos, raw=True)
+        log.info("关键帧:后雷达 %s 一起存(外参 %s)", a.rear_topic, a.rear_lidars)
     if kf is not None:
         node.create_subscription(Odometry, a.odom_topic, h.on_odom, pose_qos)
         node.create_subscription(Imu, a.imu_topic or superlio.IMU_TOPIC, h.on_imu,

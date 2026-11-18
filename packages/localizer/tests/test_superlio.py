@@ -817,3 +817,48 @@ def test_商场1102_重跑SuperLIO_同两段偏到0点83度_还是不当漂():
     flat = [i for i in range(3) if i != int(d["up_axis"])]
     C, b, why, const = S._window_ups(d["U"], d["M"][:, :, flat])
     assert why == "" and const.all(), const
+
+
+def test_后雷达_每存一个前雷达关键帧顺手存时刻最近的一帧_配不上的不存_前雷达的文件不变(tmp_path):
+    """11-18 Top Glove:站点那条路只有前雷达,平面图空地比录包那条少 19 %。后雷达的帧跟着关键帧存在
+    同一个 kf/ 里(旧站点收件照收),另记 rear.txt;前雷达的关键帧、索引、轨迹一个字节不变。"""
+    poses, clouds = _walk()
+    R, t = [[0, -1, 0], [1, 0, 0], [0, 0, 1]], (0.1, 0.0, 0.05)
+
+    def run(d: Path, rear: bool) -> dict:
+        live = S.LiveKeyframes(S.Keyframer(d, R, t, _cloud))
+        pi = 0
+        for ts, k in clouds:
+            if rear and not 100 <= k < 120:   # 后雷达比前雷达晚 0.03 s;第 100–119 帧那段丢了
+                live.on_rear(ts + 0.03, 1000 + k)
+            while pi < len(poses) and poses[pi][0] <= ts - 0.05:
+                live.on_pose(*poses[pi])
+                pi += 1
+            live.on_scan(ts, k)
+        for p in poses[pi:]:
+            live.on_pose(*p)
+        return live.close()
+
+    plain, both = run(tmp_path / "a", False), run(tmp_path / "b", True)
+    assert {k: v for k, v in both.items() if k != "rear_keyframes"} == plain
+    fa, fb = _files(tmp_path / "a"), _files(tmp_path / "b")
+    assert {k: v for k, v in fb.items() if not k.startswith(("kf/r", "kf/rear"))} == fa
+    kf_t = [float(r.split()[0]) for r in (tmp_path / "b/kf/index.txt").read_text().splitlines()]
+    rows = [r.split() for r in (tmp_path / "b/kf/rear.txt").read_text().splitlines()]
+    assert 0 < len(rows) == both["rear_keyframes"] < len(kf_t), "配不上的那段不存"
+    for i, (st, name) in enumerate(rows):
+        assert name == f"r{i:05d}.bin" and (tmp_path / "b/kf" / name).is_file()
+        assert min(abs(float(st) - k) for k in kf_t) <= S.REAR_MATCH_S
+        assert not 2010.0 <= float(st) < 2012.0
+
+
+def test_后雷达_录包模拟机器人_外参抄进关键帧目录(tmp_path):
+    poses, clouds = _walk()
+    lj = tmp_path / "lidars.json"
+    lj.write_text('{"version": 1}')
+    kd = tmp_path / "kd"
+    n = S.live_from_bag(poses, clouds, [], kd, cfg=S.DEFAULT_CONFIG, xyz_of=_cloud,
+                        rear=[(ts + 0.02, k) for ts, k in clouds], rear_lidars=lj)
+    assert n["rear_keyframes"] == n["keyframes"]
+    assert (kd / S.REAR_LIDARS).read_text() == '{"version": 1}'
+    assert json.loads((kd / S.LIVE_FILE).read_text())["rear_keyframes"] == n["rear_keyframes"]

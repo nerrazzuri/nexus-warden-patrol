@@ -343,11 +343,12 @@ def _job(i: int, spec: dict[str, Any], out: Path, code: Path, cores: str, sroot:
 
 
 def site_cmds(spec: dict[str, Any], d: Path, py: str, lio: Path) -> list[list[str]]:
-    """站点那条路的两步:录包 + Super-LIO 位姿 → 关键帧目录(``d/live``)→ 站点打包(``d/map``)。
-    后雷达不用(机器人边走边存的只有前雷达)。"""
+    """站点那条路的两步:录包 + Super-LIO 位姿 → 关键帧目录(``d/live``;配了后雷达外参就跟机器人上
+    一样也存后雷达的帧)→ 站点打包(``d/map``,有后雷达的帧自己用)。"""
     tools = [py, "-m", "nexwar_localizer.tools"]
+    rear = ["--rear-lidars", spec["rear_lidars"]] if spec.get("rear_lidars") else []
     return [[*tools, "live-from-bag", "--bag", spec["bag"], "--lio", str(lio),
-             "--out", str(d / "live")],
+             "--out", str(d / "live"), *rear],
             [*tools, "build", "--from-keyframes", str(d / "live"), "--out", str(d / "map"),
              "--work", str(d / "map.work")]]
 

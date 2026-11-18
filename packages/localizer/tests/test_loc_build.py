@@ -999,3 +999,38 @@ def test_TG1117_后雷达的帧按前雷达轨迹和外参放进地图系_不跟
     s, p = out[1]
     assert np.allclose(s, [0.35 - 0.75, 0, 0]), "雷达位置 = 那一刻前雷达位姿 × 外参(按时刻插)"
     assert np.allclose(p[0], [0.35 - 0.75 + 1.0, 0, 0])
+
+
+def test_站点打包_关键帧目录里有后雷达的帧和标定过的外参_多打一批后雷达射线_没标定不用(tmp_path):
+    """11-18 Top Glove:关键帧只存前雷达,站点图空地比录包那条少 19 %。机器人也存后雷达的帧
+    (kf/rear.txt)和外参(lidars.json)就跟录包那条一样多打一批射线;外参没标定的不用(会重影)。"""
+    from nexwar_localizer.frames import quat_to_mat
+    from nexwar_localizer.lidars import Lidars
+    from nexwar_localizer.replay import read_tum
+    work, pts, yaws = _转圈(tmp_path, False)
+    live = _live(tmp_path, yaws)
+    (live / "kf").mkdir()
+    rows, rear = [], []
+    T = np.eye(4)
+    T[:3, :3] = [[-1, 0, 0], [0, -1, 0], [0, 0, 1]]     # 后雷达朝后、装在前雷达后面 0.75 m
+    T[0, 3] = -0.75
+    for i, (t, p, q) in enumerate(read_tum(work / "traj.tum")[::5]):
+        A = np.eye(4)
+        A[:3, :3], A[:3, 3] = quat_to_mat(q), p
+        for Tl, out, name in ((np.eye(4), rows, f"{i:05d}.bin"), (T, rear, f"r{i:05d}.bin")):
+            W = A @ Tl
+            local = (pts - W[:3, 3]) @ W[:3, :3]
+            local = local[np.linalg.norm(local, axis=1) < 6.0]
+            local.astype("<f4").tofile(live / "kf" / name)
+            out.append(f"{t:.6f} " + (" ".join(["0"] * 13) + " " if out is rows else "") + name)
+    (live / "kf" / "index.txt").write_text("\n".join(rows) + "\n")
+    (live / "kf" / "rear.txt").write_text("\n".join(rear) + "\n")
+    lj = live / "lidars.json"
+    lj.write_text(json.dumps(Lidars(T_front_rear=T.tolist(), calibrated=True).to_json()))
+    B.package(work, tmp_path / "out", run=假MOLA(pts), live=live)
+    b = json.loads((tmp_path / "out" / "build.json").read_text())
+    assert b["grid"]["rays"] == f"keyframes:{len(rows)}+rear:{len(rear)}", b["grid"]["rays"]
+    lj.write_text(json.dumps(Lidars(T_front_rear=T.tolist(), calibrated=False).to_json()))
+    B.package(work, tmp_path / "out2", run=假MOLA(pts), live=live)
+    b = json.loads((tmp_path / "out2" / "build.json").read_text())
+    assert b["grid"]["rays"] == f"keyframes:{len(rows)}", "没标定的外参不用"
