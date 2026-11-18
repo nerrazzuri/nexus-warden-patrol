@@ -93,3 +93,23 @@ def test_回放算不过来_定位结果作废_比较时不算变差(tmp_path: P
     rows = mr.compare(base, {"office1": got})
     assert not any(x["worse"] for x in rows if x["metric"].startswith("replay."))
     assert "作废" in mr.report_md({"office1": got})
+
+
+def test_站点那条路_先出关键帧再从关键帧打包_不带后雷达(tmp_path: Path):
+    spec = {"name": "tg", "bag": "/b/tg", "rear_lidars": "/b/lidars.json"}
+    live, pack = mr.site_cmds(spec, tmp_path, "/usr/bin/python3", Path("/r/tg/map.work/lio_bag"))
+    assert live[3:] == ["live-from-bag", "--bag", "/b/tg", "--lio", "/r/tg/map.work/lio_bag",
+                        "--out", str(tmp_path / "live")]
+    assert pack[3:6] == ["build", "--from-keyframes", str(tmp_path / "live")]
+    assert "--rear-lidars" not in pack and "--replay" not in pack
+
+
+def test_比较_站点打包跟录包建图不能混着比(tmp_path: Path):
+    import json
+
+    import pytest
+    for name, site in (("a", False), ("b", True)):
+        (tmp_path / name).mkdir()
+        (tmp_path / name / "results.json").write_text(json.dumps({"site": site, "bags": {}}))
+    with pytest.raises(SystemExit, match="同一条路"):
+        mr.main(["compare", str(tmp_path / "a"), str(tmp_path / "b")])

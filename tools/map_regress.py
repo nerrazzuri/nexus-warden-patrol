@@ -10,9 +10,16 @@
         --lio-from $E/regress/master-<rev>
     # 改的是 Super-LIO 本身 / 配置:不加 --lio-from,重算(一个一个包跑,约 1.5 小时)
     python3 tools/map_regress.py compare $E/regress/master-<rev> $E/regress/prNNN
+    # 站点那条路(客户自己在 App 上建图:机器人边走边存关键帧、站点主机打包):录包 + 基准那份
+    # Super-LIO 位姿 → 跟机器人上逐字节一样的关键帧目录 → build --from-keyframes。改了站点打包
+    # (prepare_live、摆平、栅格)两条路都跑;站点的跟站点的基准比
+    python3 tools/map_regress.py run --site --bags $E/bags.json --out $E/regress/prNNN-site \
+        --code ../wt-N --lio-from $E/regress/master-<rev>
+    python3 tools/map_regress.py compare $E/regress/site-<rev> $E/regress/prNNN-site
 
 台式机上 ``E=/media/liang/E/bags-level``:四个包(商场 mall3、办公室 office1、广场 plaza、
-Top Glove)、``bags.json``、基准 ``regress/master-9fa18be7``。``bags.json`` 按机器写,不进仓库::
+Top Glove)、``bags.json``、基准 ``regress/master-9fa18be7``(站点那条路 ``regress/site-<rev>``)。
+``bags.json`` 按机器写,不进仓库::
 
     {"superlio_root": "/home/liang/d1max-superlio/current",
      "bags": [{"name": "mall3", "bag": "/media/liang/E/bags-level/superlio-mall3/raw-bag"},
@@ -32,6 +39,7 @@ import argparse
 import json
 import math
 import os
+import shlex
 import subprocess
 import sys
 import time
@@ -311,13 +319,15 @@ _REUSE_LIO = ("import sys; from pathlib import Path; "
 
 
 def _job(i: int, spec: dict[str, Any], out: Path, code: Path, cores: str, sroot: str,
-         py: str, lio_from: Path | None = None) -> subprocess.Popen[bytes]:
+         py: str, lio_from: Path | None = None, site: bool = False) -> subprocess.Popen[bytes]:
     d = out / spec["name"]
     d.mkdir(parents=True, exist_ok=True)
     env = {**os.environ, "PYTHONPATH": _pythonpath(code) + ":" + os.environ.get("PYTHONPATH", ""),
            "ROS_DOMAIN_ID": str(DOMAIN0 + i + int(cores.split("-")[0])),
            "NEXWAR_SUPERLIO_ROOT": sroot, "PYTHONDONTWRITEBYTECODE": "1"}
     head = ["-m", "nexwar_localizer.tools"]
+    if site:
+        return _site_job(spec, d, env, cores, py, lio_from)
     if lio_from is not None:
         lio = lio_from / spec["name"] / "map.work" / "lio_bag"
         if not (lio / "metadata.yaml").exists():
@@ -330,6 +340,30 @@ def _job(i: int, spec: dict[str, Any], out: Path, code: Path, cores: str, sroot:
         cmd += ["--rear-lidars", spec["rear_lidars"]]
     log = (d / "build.log").open("wb")
     return subprocess.Popen(cmd, env=env, stdout=log, stderr=subprocess.STDOUT, cwd=d)
+
+
+def site_cmds(spec: dict[str, Any], d: Path, py: str, lio: Path) -> list[list[str]]:
+    """站点那条路的两步:录包 + Super-LIO 位姿 → 关键帧目录(``d/live``)→ 站点打包(``d/map``)。
+    后雷达不用(机器人边走边存的只有前雷达)。"""
+    tools = [py, "-m", "nexwar_localizer.tools"]
+    return [[*tools, "live-from-bag", "--bag", spec["bag"], "--lio", str(lio),
+             "--out", str(d / "live")],
+            [*tools, "build", "--from-keyframes", str(d / "live"), "--out", str(d / "map"),
+             "--work", str(d / "map.work")]]
+
+
+def _site_job(spec: dict[str, Any], d: Path, env: dict[str, str], cores: str, py: str,
+              lio_from: Path | None) -> subprocess.Popen[bytes]:
+    if lio_from is None:
+        raise SystemExit("--site 要 --lio-from(用哪次的 Super-LIO 位姿模拟机器人边走边存)")
+    lio = lio_from / spec["name"] / "map.work" / "lio_bag"
+    if not (lio / "metadata.yaml").exists():
+        raise SystemExit(f"--lio-from 里没有 {lio}")
+    script = " && ".join(shlex.join(["taskset", "-c", cores, *c])
+                         for c in site_cmds(spec, d, py, lio.resolve()))
+    log = (d / "build.log").open("wb")
+    return subprocess.Popen(["bash", "-c", script], env=env, stdout=log,
+                            stderr=subprocess.STDOUT, cwd=d)
 
 
 def _replay_job(i: int, spec: dict[str, Any], out: Path, code: Path, cores: str, sroot: str,
@@ -373,7 +407,7 @@ def _run(a: argparse.Namespace) -> int:
     failed: dict[str, str] = {}
     if not a.replay_only:
         def build(i: int, b: dict[str, Any]) -> subprocess.Popen[bytes]:
-            return _job(i, b, a.out, code, cores[i], sroot, a.python, a.lio_from)
+            return _job(i, b, a.out, code, cores[i], sroot, a.python, a.lio_from, a.site)
         if a.lio_from:
             procs = {b["name"]: build(i, b) for i, b in enumerate(bags)}
             rcs = {name: p.wait() for name, p in procs.items()}
@@ -398,18 +432,21 @@ def _run(a: argparse.Namespace) -> int:
     if old.exists():                             # 别的 --only 同时在跑:写之前再并一次
         results = {**json.loads(old.read_text()).get("bags", {}), **results}
     summary = {"code": str(code), "rev": rev, "wall_s": round(time.monotonic() - t0),
-               "lio_from": str(a.lio_from) if a.lio_from else None,
+               "lio_from": str(a.lio_from) if a.lio_from else None, "site": a.site,
                "bags": results}
     (a.out / "results.json").write_text(json.dumps(summary, ensure_ascii=False, indent=2) + "\n")
-    md = f"# 建图回归 {rev}({summary['wall_s']} s)\n\n" + report_md(results)
+    path = "站点打包" if a.site else "录包建图"
+    md = f"# 建图回归 {rev} {path}({summary['wall_s']} s)\n\n" + report_md(results)
     (a.out / "report.md").write_text(md)
     print(md)
     return 1 if any("error" in m for m in results.values()) else 0
 
 
 def _compare(a: argparse.Namespace) -> int:
-    base = json.loads((a.base / "results.json").read_text())["bags"]
-    new = json.loads((a.new / "results.json").read_text())["bags"]
+    bj, nj = (json.loads((x / "results.json").read_text()) for x in (a.base, a.new))
+    if bool(bj.get("site")) != bool(nj.get("site")):
+        raise SystemExit("一个是站点打包、一个是录包建图:跟同一条路的基准比")
+    base, new = bj["bags"], nj["bags"]
     rows = compare(base, new)
     md = compare_md(rows)
     print(md)
@@ -430,6 +467,8 @@ def main(argv: list[str] | None = None) -> int:
     r.add_argument("--replay-only", action="store_true", help="图已经建好了,只重跑回放定位")
     r.add_argument("--lio-from", type=Path, default=None,
                    help="Super-LIO 不回放,用这次跑的结果目录里的位姿包(比代码改动时用)")
+    r.add_argument("--site", action="store_true",
+                   help="走站点那条路(关键帧 → build --from-keyframes);要 --lio-from")
     r.add_argument("--python", default="/usr/bin/python3", help="ROS 的系统 Python")
     c = sub.add_parser("compare")
     c.add_argument("base", type=Path)
