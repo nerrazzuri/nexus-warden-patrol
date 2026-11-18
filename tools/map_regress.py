@@ -323,7 +323,7 @@ def _job(i: int, spec: dict[str, Any], out: Path, code: Path, cores: str, sroot:
     d = out / spec["name"]
     d.mkdir(parents=True, exist_ok=True)
     env = {**os.environ, "PYTHONPATH": _pythonpath(code) + ":" + os.environ.get("PYTHONPATH", ""),
-           "ROS_DOMAIN_ID": str(DOMAIN0 + i + int(cores.split("-")[0])),
+           "ROS_DOMAIN_ID": str(DOMAIN0 + i + int(cores.replace(",", "-").split("-")[0])),
            "NEXWAR_SUPERLIO_ROOT": sroot, "PYTHONDONTWRITEBYTECODE": "1"}
     head = ["-m", "nexwar_localizer.tools"]
     if site:
@@ -366,12 +366,28 @@ def _site_job(spec: dict[str, Any], d: Path, env: dict[str, str], cores: str, py
                             stderr=subprocess.STDOUT, cwd=d)
 
 
+def fast_cpus(max_khz: dict[int, int] | None = None) -> list[int]:
+    """最快那一档的核(大小核的机器只要大核;台式机 i7-14700:0–15 是 5.3 GHz 大核、16–27 是 4.2 GHz
+    小核,广场的包回放绑到小核上 Super-LIO 只跑到 4.3 帧/秒、定位丢了,11-18)。读不到频率就全用。"""
+    if max_khz is None:
+        max_khz = {}
+        for f in Path("/sys/devices/system/cpu").glob("cpu[0-9]*/cpufreq/cpuinfo_max_freq"):
+            try:
+                max_khz[int(f.parent.parent.name[3:])] = int(f.read_text())
+            except (OSError, ValueError):
+                pass
+    if not max_khz:
+        return list(range(os.cpu_count() or 1))
+    top = max(max_khz.values())
+    return sorted(c for c, k in max_khz.items() if k >= 0.9 * top)
+
+
 def _replay_job(i: int, spec: dict[str, Any], out: Path, code: Path, cores: str, sroot: str,
                 py: str) -> subprocess.Popen[bytes]:
     d = out / spec["name"]
     x, y, yaw = _first_pose_2d(d / "map", d / "map.work", code)
     env = {**os.environ, "PYTHONPATH": _pythonpath(code) + ":" + os.environ.get("PYTHONPATH", ""),
-           "ROS_DOMAIN_ID": str(DOMAIN0 + i + int(cores.split("-")[0])),
+           "ROS_DOMAIN_ID": str(DOMAIN0 + i + int(cores.replace(",", "-").split("-")[0])),
            "NEXWAR_SUPERLIO_ROOT": sroot, "PYTHONDONTWRITEBYTECODE": "1"}
     cmd = ["taskset", "-c", cores, py, "-m", "nexwar_localizer.tools", "replay",
            "--bag", spec["bag"], "--prior", str(d / "map"), f"--init={x},{y},{yaw}",
@@ -405,6 +421,7 @@ def _run(a: argparse.Namespace) -> int:
     # 的位姿);复用位姿(--lio-from)只剩打栅格,一起跑。回放定位按实时、怕抢(办公室回放跟商场建图
     # 同时跑,Super-LIO 只跑到 3.65 帧/秒、飞了几千米),等建图全完再一个一个跑
     failed: dict[str, str] = {}
+    replay_cores = ",".join(map(str, fast_cpus()))
     if not a.replay_only:
         def build(i: int, b: dict[str, Any]) -> subprocess.Popen[bytes]:
             return _job(i, b, a.out, code, cores[i], sroot, a.python, a.lio_from, a.site)
@@ -420,7 +437,8 @@ def _run(a: argparse.Namespace) -> int:
         name = b["name"]
         if name in failed or a.no_replay:
             continue
-        p = _replay_job(i, b, a.out, code, cores[i], sroot, a.python)
+        # 回放一个一个跑、按实时:全给大核(按包分的核可能落在小核上)
+        p = _replay_job(i, b, a.out, code, replay_cores, sroot, a.python)
         if p.wait() != 0:
             failed[name] = f"replay 退出码 {p.returncode}(见 {a.out / name / 'replay.log'})"
     for b in bags:
