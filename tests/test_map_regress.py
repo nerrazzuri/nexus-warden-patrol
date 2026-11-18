@@ -113,3 +113,9 @@ def test_比较_站点打包跟录包建图不能混着比(tmp_path: Path):
         (tmp_path / name / "results.json").write_text(json.dumps({"site": site, "bags": {}}))
     with pytest.raises(SystemExit, match="同一条路"):
         mr.main(["compare", str(tmp_path / "a"), str(tmp_path / "b")])
+
+
+def test_回放只用最快那一档的核_大小核机器不落到小核():
+    khz = {i: 5_300_000 for i in range(16)} | {i: 4_200_000 for i in range(16, 28)}
+    assert mr.fast_cpus(khz) == list(range(16))
+    assert mr.fast_cpus({0: 3_000_000, 1: 2_950_000}) == [0, 1]
