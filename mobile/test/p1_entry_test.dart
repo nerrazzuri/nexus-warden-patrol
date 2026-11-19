@@ -99,16 +99,14 @@ void main() {
       expect(find.byType(SiteLoginPage), findsOneWidget);
     });
 
-    testWidgets('删除在登录页「其他地址」里：只删点的那一个，没点「删除」不删，不弹窗', (t) async {
+    testWidgets('删除在登录页最下面单独一个按钮（用户 11-19：原来收在「其他地址」里找不到）：只删点的那一个，没点「删除」不删，不弹窗', (t) async {
       final store = MemorySiteStore([_site(), _site('别院')]);
       await t.pumpWidget(MaterialApp(home: SiteListPage(store: store)));
       await t.pumpAndSettle();
       await t.tap(find.byKey(const Key('site-enter-别院')));
       await t.pumpAndSettle();
-      expect(find.byKey(SiteLoginPage.removeKey), findsNothing, reason: '收在「其他地址」里，平时看不见');
-      await t.tap(find.byKey(SiteLoginPage.altsKey));
-      await t.pumpAndSettle();
-      await t.ensureVisible(find.byKey(SiteLoginPage.removeKey));
+      expect(find.byKey(SiteListPage.removeOkKey), findsNothing, reason: '还没点删除，确认那一行不出来');
+      await t.ensureVisible(find.byKey(SiteLoginPage.removeKey));   // 不用先点开「其他地址」
       await t.tap(find.byKey(SiteLoginPage.removeKey));
       await t.pumpAndSettle();
       expect(store.sites.length, 2, reason: 'M22：先问一句');

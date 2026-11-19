@@ -389,7 +389,8 @@ typedef SiteSignIn = Future<SiteApi> Function(String account, String password);
 typedef SiteApply = Future<void> Function(String name, String display, String password);
 
 /// 登录页（App V2 稿 E-login，深色）：顶栏站点名和地址；账号、密码、登录；证书变了琥珀一条 +「扫新码 | 其他地址」；
-/// 底下「申请账号 | 报问题」一排等宽。站点卡上原来的「⋮」菜单（其他地址、更新站点码、删除）都在这一页上就地做，不弹窗。
+/// 底下「申请账号 | 报问题」一排等宽，再下面单独一个「从这台手机上删掉这个站点」（用户 11-19：原来收在「其他地址」
+/// 里找不到）。站点卡上原来的「⋮」菜单（其他地址、更新站点码、删除）都在这一页上就地做，不弹窗。
 /// 登上了带着客户端退回去（`Navigator.pop(context, api)`）；登不上留在这一页说原因。
 class SiteLoginPage extends StatefulWidget {
   final SiteEntry site;
@@ -731,27 +732,6 @@ class _SiteLoginPageState extends State<SiteLoginPage> {
                                     style: FilledButton.styleFrom(minimumSize: const Size(48, 44), shape: shape),
                                     onPressed: _saveAlts,
                                     child: Text(tr('Save', '保存')))),
-                            if (widget.remove != null) ...[
-                              const SizedBox(height: Nw.s24),
-                              if (!_askRemove)
-                                btn(SiteLoginPage.removeKey, tr('Remove this site from this phone', '从这台手机上删掉这个站点'),
-                                    () => setState(() => _askRemove = true), c.error)
-                              else ...[
-                                Text(
-                                    tr('Remove ${s.name} from this phone? The site itself is not affected. To add it back you need its site code again.',
-                                        '从这台手机上删掉「${s.name}」？站点本身不受影响。要再加回来，得重新扫或粘贴它的站点码。'),
-                                    style: NwText.bodySmall.copyWith(color: c.text)),
-                                const SizedBox(height: Nw.s8),
-                                two(
-                                    btn(const Key('login-remove-cancel'), tr('Keep', '不删'), () => setState(() => _askRemove = false)),
-                                    FilledButton(
-                                        key: SiteListPage.removeOkKey,
-                                        style: FilledButton.styleFrom(
-                                            minimumSize: const Size(48, 44), shape: shape, backgroundColor: c.error),
-                                        onPressed: _remove,
-                                        child: Text(tr('Remove', '删除')))),
-                              ],
-                            ],
                           ],
                           if (widget.apply != null || widget.openAnon != null) ...[
                             const SizedBox(height: Nw.s32),
@@ -770,6 +750,27 @@ class _SiteLoginPageState extends State<SiteLoginPage> {
                                 widget.openAnon != null
                                     ? btn(SiteLoginPage.problemKey, tr('Report a problem', '报问题'), _busy ? null : _problem)
                                     : const SizedBox.shrink()),
+                          ],
+                          if (widget.remove != null) ...[
+                            const SizedBox(height: Nw.s32),
+                            if (!_askRemove)
+                              btn(SiteLoginPage.removeKey, tr('Remove this site from this phone', '从这台手机上删掉这个站点'),
+                                  _busy ? null : () => setState(() => _askRemove = true), c.error)
+                            else ...[
+                              Text(
+                                  tr('Remove ${s.name} from this phone? The site itself is not affected. To add it back you need its site code again.',
+                                      '从这台手机上删掉「${s.name}」？站点本身不受影响。要再加回来，得重新扫或粘贴它的站点码。'),
+                                  style: NwText.bodySmall.copyWith(color: c.text)),
+                              const SizedBox(height: Nw.s8),
+                              two(
+                                  btn(const Key('login-remove-cancel'), tr('Keep', '不删'), () => setState(() => _askRemove = false)),
+                                  FilledButton(
+                                      key: SiteListPage.removeOkKey,
+                                      style: FilledButton.styleFrom(
+                                          minimumSize: const Size(48, 44), shape: shape, backgroundColor: c.error),
+                                      onPressed: _busy ? null : _remove,
+                                      child: Text(tr('Remove', '删除')))),
+                            ],
                           ],
                         ]))))),
       ),

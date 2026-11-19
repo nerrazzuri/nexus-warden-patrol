@@ -1770,10 +1770,8 @@ void main() {
     ]);
     await t.pumpWidget(MaterialApp(home: SiteListPage(key: const Key('fresh'), store: store)));
     await t.pumpAndSettle();
-    // App V2：删除在登录页「其他地址」里，就地确认
+    // 删除在登录页最下面单独一个按钮，就地确认（用户 11-19）
     await t.tap(find.byKey(const Key('site-enter-a')));
-    await t.pumpAndSettle();
-    await t.tap(find.byKey(SiteLoginPage.altsKey));
     await t.pumpAndSettle();
     await t.ensureVisible(find.byKey(SiteLoginPage.removeKey));
     await t.tap(find.byKey(SiteLoginPage.removeKey));
