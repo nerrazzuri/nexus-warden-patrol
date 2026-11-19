@@ -409,6 +409,10 @@ List<_Faq> _faqs() => [
       _Faq({'owner'}, tr("Robot can't be dispatched", '机器人无法派出'),
           tr('An amber note says why. Common causes: robot E-stopped (a guard or administrator resets it), no-go zones not confirmed (contact the administrator), offline or charging.',
               '琥珀一条会说原因。常见原因：已急停（要保安或管理员恢复）、禁行区未确认（联系管理员）、离线或正在充电。')),
+      // 真机 11-20 vivo V2353A：从最近任务里划掉 = 系统把 App 整个停了，推送也送不进来（GMS 记「stopped app」）
+      _Faq(null, tr('Not getting alarm notifications', '收不到报警通知'),
+          tr('Some phones (vivo, OPPO, Xiaomi, Huawei, Honor…) fully stop an app when you swipe it away from recent apps; after that no alarm reaches the phone until you open the app again. On these phones: lock the app in recent apps (long-press its card → Lock), turn on Auto-start, set battery use to "Allow background activity" (no restrictions), and allow notifications. Do not swipe the app away.',
+              '有些手机（vivo、OPPO、小米、华为、荣耀等）从最近任务里划掉 App，就等于把它整个停掉，之后报警一条都送不到，直到再打开 App。这类手机请：在最近任务里把 App 锁住（长按它的卡片 →「锁定」），打开「自启动」，耗电设成「允许后台运行」（不限制），允许通知。不要划掉 App。')),
       _Faq(null, tr('What if a robot goes offline?', '机器人离线怎么办'),
           tr('Check the robot is powered on and the Wi-Fi works. If the Wi-Fi changed, an administrator reconfigures it under the robot\'s Settings → Network.',
               '检查机器人是否开机、Wi-Fi 是否正常。如更换过 Wi-Fi，请管理员在这台机器人的「设置 → 网络」里重新配置。')),
