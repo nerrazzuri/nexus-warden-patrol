@@ -52,6 +52,11 @@
                 android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
                 android:value="安防值守:局域网内常连站点,收入侵等 P1 告警并响铃"/>
         </service>
+        <!-- FCM 推送的默认通知渠道 = P1 报警(重要性高、弹悬浮)。渠道 App 一启动就建(MainActivity)。
+             真机 11-20 vivo V2353A:没写这条时进了 Firebase 自己的「Misc」,只有状态栏小图标。 -->
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_channel_id"
+            android:value="watch_p1" />
         <!-- W55:系统装包的回执(只收系统发来的,别的 App 发不进来) -->
         <receiver
             android:name=".InstallResultReceiver"

@@ -68,11 +68,49 @@ class WatchService : Service() {
         private const val CERT_MISMATCH = "证书指纹对不上"
         private val CJK = Regex("[\u3400-\u9fff]")
         private const val CH_ONGOING = "watch_ongoing"
-        private const val CH_P1 = "watch_p1"
+        /** FCM 推送的默认渠道也是它(AndroidManifest 的 default_notification_channel_id)。 */
+        const val CH_P1 = "watch_p1"
         private const val CH_ALARM = "watch_alarm"
         private const val CH_STATE = "watch_state"
         private const val ID_ONGOING = 1
         private const val ID_STATE = 2
+
+        /**
+         * 建通知渠道。App 一启动就建(MainActivity),不等后台值守跑起来:FCM 推送默认进 [CH_P1],
+         * 渠道还没建时 Firebase 退到自己的「Misc」(重要性一般,不弹悬浮;真机 11-20 vivo V2353A)。
+         */
+        fun ensureChannels(ctx: Context, lang: String) {
+            if (Build.VERSION.SDK_INT < 26) return
+            fun t(en: String, zh: String) = if (lang == "zh") zh else en
+            val nm = ctx.getSystemService(NotificationManager::class.java)
+            nm.createNotificationChannel(
+                NotificationChannel(CH_ONGOING, t("On watch", "值守中"), NotificationManager.IMPORTANCE_LOW).apply {
+                    description = t("The ongoing background-watch notification (required by Android)", "后台值守常驻的那一条（Android 要求）")
+                    setShowBadge(false)
+                })
+            nm.createNotificationChannel(
+                NotificationChannel(CH_P1, t("P1 alarms", "P1 报警"), NotificationManager.IMPORTANCE_HIGH).apply {
+                    description = t("Alarms that need someone to go now", "要人立刻动身的报警")
+                    enableVibration(true)
+                })
+            nm.createNotificationChannel(
+                NotificationChannel(CH_ALARM, t("P1 alarms (ringing)", "P1 报警（响铃）"), NotificationManager.IMPORTANCE_HIGH).apply {
+                    description = t("Intrusions and unacknowledged P1s: an alarm sound rings until someone handles it", "入侵、没人确认的 P1：闹钟声一直响到有人处理")
+                    enableVibration(true)
+                    setBypassDnd(true)
+                    setSound(
+                        RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM),
+                        AudioAttributes.Builder()
+                            .setUsage(AudioAttributes.USAGE_ALARM)
+                            .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                            .build())
+                })
+            nm.createNotificationChannel(
+                NotificationChannel(CH_STATE, t("Watch interrupted", "值守断了"), NotificationManager.IMPORTANCE_HIGH).apply {
+                    description = t("Site unreachable or sign-in expired: no alarms meanwhile", "连不上站点、令牌失效：这期间收不到报警")
+                })
+        }
+
         /** 连不上多久弹「值守断了」。站点每 15 s 发心跳，读超时 45 s。 */
         private const val LOST_ALERT_MS = 2 * 60_000L
         private const val READ_TIMEOUT_MS = 45_000
@@ -456,36 +494,7 @@ class WatchService : Service() {
 
     // ------------------------------------------------------------ 通知
 
-    private fun channels() {
-        if (Build.VERSION.SDK_INT < 26) return
-        val nm = getSystemService(NotificationManager::class.java)
-        nm.createNotificationChannel(
-            NotificationChannel(CH_ONGOING, t("On watch", "值守中"), NotificationManager.IMPORTANCE_LOW).apply {
-                description = t("The ongoing background-watch notification (required by Android)", "后台值守常驻的那一条（Android 要求）")
-                setShowBadge(false)
-            })
-        nm.createNotificationChannel(
-            NotificationChannel(CH_P1, t("P1 alarms", "P1 报警"), NotificationManager.IMPORTANCE_HIGH).apply {
-                description = t("Alarms that need someone to go now", "要人立刻动身的报警")
-                enableVibration(true)
-            })
-        nm.createNotificationChannel(
-            NotificationChannel(CH_ALARM, t("P1 alarms (ringing)", "P1 报警（响铃）"), NotificationManager.IMPORTANCE_HIGH).apply {
-                description = t("Intrusions and unacknowledged P1s: an alarm sound rings until someone handles it", "入侵、没人确认的 P1：闹钟声一直响到有人处理")
-                enableVibration(true)
-                setBypassDnd(true)
-                setSound(
-                    RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM),
-                    AudioAttributes.Builder()
-                        .setUsage(AudioAttributes.USAGE_ALARM)
-                        .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
-                        .build())
-            })
-        nm.createNotificationChannel(
-            NotificationChannel(CH_STATE, t("Watch interrupted", "值守断了"), NotificationManager.IMPORTANCE_HIGH).apply {
-                description = t("Site unreachable or sign-in expired: no alarms meanwhile", "连不上站点、令牌失效：这期间收不到报警")
-            })
-    }
+    private fun channels() = ensureChannels(this, lang)
 
     private fun builder(ch: String): Notification.Builder =
         if (Build.VERSION.SDK_INT >= 26) Notification.Builder(this, ch)

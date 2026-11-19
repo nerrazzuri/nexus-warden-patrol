@@ -1,6 +1,7 @@
 package com.nexwar.nexwar_patrol
 
 import android.Manifest
+import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
@@ -26,6 +27,10 @@ class MainActivity : FlutterActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         takeRing(intent)
         super.onCreate(savedInstanceState)
+        // FCM 推送进 watch_p1(清单里的默认渠道):一启动就建好,不等后台值守(真机 11-20 vivo:没建时进了
+        // Firebase 自己的「Misc」,只有状态栏小图标、不弹悬浮)。语言跟后台值守上次记下的一样。
+        val lang = getSharedPreferences(WatchService.PREFS, Context.MODE_PRIVATE).getString("lang", "zh") ?: "zh"
+        WatchService.ensureChannels(applicationContext, lang)
     }
 
     override fun onNewIntent(intent: Intent) {
