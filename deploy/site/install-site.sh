@@ -281,7 +281,7 @@ cat <<TXT
   /etc/nexwar_site/evidence.key 狗上的照片、录像是用它的公钥封的(W30b):丢了它,封着传上来、还没解开的
                                就再也解不开(nexwar_site evidence-open 补解)
 三把一起导成一个带口令的托管包更省事:
-  sudo -u nexwar_site $VENV/bin/nexwar_site --home $HOME_DIR keys-export <U 盘上的文件>
+  sudo -u nexwar_site $VENV/bin/nexwar_site --home $HOME_DIR keys-export --out <U 盘或另一台机器上的文件>
 恢复步骤见 docs/备份恢复与灾备演练.md 第四节。
 TXT
 
