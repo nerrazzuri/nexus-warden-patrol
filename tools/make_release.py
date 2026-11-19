@@ -226,14 +226,55 @@ def make_package(repo: Path, key: Path, out: Path, *, wheels: Path | None, now_m
     return pkg
 
 
-def build_apk(repo: Path, build_name: str, build_number: int) -> Path:
+#: 安卓包名(applicationId):google-services.json 里要有这个包名的那一项
+APP_ID_RE = re.compile(r'^\s*applicationId\s*=\s*"([^"]+)"', re.M)
+
+
+def fcm_values(repo: Path, services: Path) -> dict[str, str]:
+    """FCM 的四个参数(RC 加固 H9,决策 56;docs/告警推送配置.md 第五节)。
+
+    从 Firebase 控制台下的 google-services.json 里按**这个 App 的包名**抄
+    ``mobilesdk_app_id``、``current_key``、``project_id``、``project_number``
+    (打包时编成 ``--dart-define``)。这四个不是密钥,但跟包名绑着:包名对不上、
+    缺一个就不发(缺一个 App 就没有 FCM 这一路,发出去才发现收不到推送)。
+    google-services.json 不进仓库。"""
+    m = APP_ID_RE.search((repo / "mobile/android/app/build.gradle.kts").read_text("utf-8"))
+    if not m:
+        raise ReleaseFail("mobile/android/app/build.gradle.kts 里读不到 applicationId")
+    pkg = m.group(1)
+    try:
+        g = json.loads(services.read_text("utf-8"))
+        pid = str(g["project_info"]["project_id"])
+        sender = str(g["project_info"]["project_number"])
+        mine = [c for c in g["client"]
+                if c["client_info"]["android_client_info"]["package_name"] == pkg]
+    except (OSError, ValueError, KeyError, TypeError) as exc:
+        raise ReleaseFail(f"{services} 读不出 FCM 参数:{exc}") from exc
+    if not mine:
+        raise ReleaseFail(f"{services} 里没有包名 {pkg} 的安卓应用"
+                          "(在 Firebase 控制台加的包名不对?)")
+    try:
+        app_id = str(mine[0]["client_info"]["mobilesdk_app_id"])
+        api_key = str(mine[0]["api_key"][0]["current_key"])
+    except (KeyError, IndexError, TypeError) as exc:
+        raise ReleaseFail(f"{services} 里包名 {pkg} 那一项缺 FCM 参数:{exc}") from exc
+    vals = {"FCM_APP_ID": app_id, "FCM_API_KEY": api_key, "FCM_PROJECT_ID": pid,
+            "FCM_SENDER_ID": sender}
+    empty = [k for k, v in vals.items() if not v.strip()]
+    if empty:
+        raise ReleaseFail(f"{services} 里这几个是空的:{'、'.join(empty)}")
+    return vals
+
+
+def build_apk(repo: Path, build_name: str, build_number: int,
+              defines: list[str] | None = None) -> Path:
     apk = repo / APK
     apk.unlink(missing_ok=True)                    # 上一次编出来的(可能是调试签名)不许冒充
     cmd = ["flutter", "build", "apk", "--release", "-Pnexwar.requireReleaseKey=true",
            "--build-name", build_name, "--build-number", str(build_number),
            # 易用性第 6 轮 A6-01:App 代码里显示、上报的版本号和构建号也用这一次的(原来写死 build 9)
            f"--dart-define=NEXWAR_APP_VERSION={build_name}",
-           f"--dart-define=NEXWAR_APP_BUILD={build_number}"]
+           f"--dart-define=NEXWAR_APP_BUILD={build_number}", *(defines or [])]
     if subprocess.run(cmd, cwd=repo / "mobile").returncode != 0 or not apk.is_file():
         raise ReleaseFail("安卓包没编出来(看上面 flutter 的输出)")
     return apk
@@ -289,6 +330,18 @@ def run(args: argparse.Namespace, *, now_ms: int) -> int:
     bad = preflight(repo, key, out, android=android, wheels=wheels)
     if android and args.build_number is None:
         bad.append("没给 --build-number:安卓靠它判断新旧,每发一版加一")
+    push_defines: list[str] = []
+    fcm_project = None
+    fcm_arg = getattr(args, "fcm", None)
+    if fcm_arg and not android:
+        bad.append("给了 --fcm 又 --skip-android:FCM 的参数只进安卓包")
+    elif fcm_arg:
+        try:
+            vals = fcm_values(repo, Path(fcm_arg).expanduser())
+            push_defines = [f"--dart-define={k}={v}" for k, v in vals.items()]
+            fcm_project = vals["FCM_PROJECT_ID"]
+        except ReleaseFail as exc:
+            bad.append(str(exc))
     gate: dict[str, Any] | None = None
     gate_arg = getattr(args, "gate", None)
     if gate_arg:
@@ -336,7 +389,7 @@ def run(args: argparse.Namespace, *, now_ms: int) -> int:
         files.append(tgz)
         if android:
             name = pubspec_version(repo)
-            apk = build_apk(repo, name, args.build_number)
+            apk = build_apk(repo, name, args.build_number, push_defines)
             dn, digest = apk_signer(apk)
             dest = out / f"{manifest['name']}-android-{name}+{args.build_number}.apk"
             shutil.copy2(apk, dest)
@@ -352,7 +405,9 @@ def run(args: argparse.Namespace, *, now_ms: int) -> int:
             record["android"] = {"file": dest.name, "version": name,
                                  "build_number": args.build_number, "signer": dn,
                                  "cert_sha256": digest, "sha256": sha256(dest),
-                                 "site_manifest": man_path.name}
+                                 "site_manifest": man_path.name,
+                                 # 推送打进去了哪些通道(只记项目号,不是密钥);None = 这个包没有 FCM
+                                 "fcm_project": fcm_project}
         write_record(out, record, files)
     except ReleaseFail as exc:
         print(f"没成: {exc}", file=sys.stderr)
@@ -363,6 +418,8 @@ def run(args: argparse.Namespace, *, now_ms: int) -> int:
     if record["android"]:
         print(f"安卓包        {record['android']['file']}")
         print(f"安卓证书      {record['android']['cert_sha256']}(第一次发行时抄下来,以后每次对)")
+        fp = record["android"]["fcm_project"]
+        print("推送          " + (f"FCM(Firebase 项目 {fp})" if fp else "**没有 FCM**(没给 --fcm)"))
     else:
         print("安卓包        没编(--skip-android)")
     print("发行闸        " + ("过了" if record["gate"] else "**没过闸**(--no-gate)"))
@@ -382,6 +439,9 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--wheels", default=None, help="离线轮子目录(*.whl),拷进包里")
     p.add_argument("--build-number", type=int, default=None, help="安卓构建号,每发一版加一")
     p.add_argument("--skip-android", action="store_true", help="只出站点和狗的包,不编安卓")
+    p.add_argument("--fcm", default=None, metavar="GOOGLE_SERVICES_JSON",
+                   help="Firebase 控制台下的 google-services.json:"
+                        "FCM 的四个参数编进安卓包(不进仓库)")
     p.add_argument("--repo", default=str(Path(__file__).resolve().parent.parent),
                    help=argparse.SUPPRESS)
     return run(p.parse_args(argv), now_ms=int(time.time() * 1000))

@@ -83,7 +83,7 @@ def test_条件齐了_出签好的包和发行记录(world, capsys):
 def _parse(argv):
     import argparse
     p = argparse.ArgumentParser()
-    for name in ("--key", "--out", "--wheels", "--repo", "--gate", "--write-gate"):
+    for name in ("--key", "--out", "--wheels", "--repo", "--gate", "--write-gate", "--fcm"):
         p.add_argument(name, default=None)
     p.add_argument("--no-gate", action="store_true")
     p.add_argument("--build-number", type=int, default=None)
@@ -323,7 +323,7 @@ def test_W55_安卓包旁边出站点分发用的签名清单_站点认(world, m
     apk.write_bytes(b"PK-apk")
     monkeypatch.setattr(mr, "preflight", lambda *a, **k: [])
     monkeypatch.setattr(mr, "pubspec_version", lambda repo: "1.4.0")
-    monkeypatch.setattr(mr, "build_apk", lambda repo, name, n: apk)
+    monkeypatch.setattr(mr, "build_apk", lambda repo, name, n, defines=None: apk)
     monkeypatch.setattr(mr, "apk_signer", lambda p: ("CN=Nexus", "ab" * 32))
     argv = ["--repo", str(repo), "--key", str(key), "--out", str(out), "--no-gate",
             "--build-number", "17"]
@@ -367,3 +367,67 @@ def test_11_11_A6_01_打包把版本号和构建号交给App代码(tmp_path, mon
     mr.build_apk(tmp_path, "1.0.0-rc.1", 13)
     assert "--dart-define=NEXWAR_APP_BUILD=13" in got[0]
     assert "--dart-define=NEXWAR_APP_VERSION=1.0.0-rc.1" in got[0]
+
+
+def _gs(tmp_path, pkg="com.nexusdynamic.warden", key="AIzaTEST"):
+    g = {"project_info": {"project_number": "804668267656", "project_id": "nexus-warden"},
+         "client": [{"client_info": {"mobilesdk_app_id": "1:804:android:other",
+                                     "android_client_info": {"package_name": "com.other.app"}},
+                     "api_key": [{"current_key": "AIzaOTHER"}]},
+                    {"client_info": {"mobilesdk_app_id": "1:804:android:abc",
+                                     "android_client_info": {"package_name": pkg}},
+                     "api_key": [{"current_key": key}]}]}
+    f = tmp_path / "google-services.json"
+    f.write_text(json.dumps(g), encoding="utf-8")
+    return f
+
+
+def test_11_19_FCM_按App包名从google_services抄四个参数(tmp_path):
+    """用户 11-19 注册了 Firebase:发行脚本 --fcm 读 google-services.json,
+    只认这个 App 包名那一项。"""
+    vals = mr.fcm_values(ROOT, _gs(tmp_path))
+    assert vals == {"FCM_APP_ID": "1:804:android:abc", "FCM_API_KEY": "AIzaTEST",
+                    "FCM_PROJECT_ID": "nexus-warden", "FCM_SENDER_ID": "804668267656"}
+
+
+def test_11_19_FCM_包名对不上或缺参数_不发(tmp_path):
+    with pytest.raises(mr.ReleaseFail, match="没有包名"):
+        mr.fcm_values(ROOT, _gs(tmp_path, pkg="com.wrong.pkg"))
+    with pytest.raises(mr.ReleaseFail, match="空的"):
+        mr.fcm_values(ROOT, _gs(tmp_path, key=" "))
+    bad = tmp_path / "bad.json"
+    bad.write_text("{}", encoding="utf-8")
+    with pytest.raises(mr.ReleaseFail, match="读不出"):
+        mr.fcm_values(ROOT, bad)
+
+
+def test_11_19_FCM_参数交给flutter_记录里写项目号(world, monkeypatch, tmp_path):
+    repo, key, out = world
+    apk = tmp_path / "app-release.apk"
+    apk.write_bytes(b"PK-apk")
+    got = {}
+
+    def build(repo_, name, n, defines=None):
+        got["defines"] = defines
+        return apk
+    monkeypatch.setattr(mr, "preflight", lambda *a, **k: [])
+    monkeypatch.setattr(mr, "pubspec_version", lambda repo: "1.4.0")
+    real = mr.fcm_values                 # 小仓库里没有 build.gradle.kts:包名照真仓库的读
+    monkeypatch.setattr(mr, "fcm_values", lambda repo, f: real(ROOT, f))
+    monkeypatch.setattr(mr, "build_apk", build)
+    monkeypatch.setattr(mr, "apk_signer", lambda p: ("CN=Nexus", "ab" * 32))
+    argv = ["--repo", str(repo), "--key", str(key), "--out", str(out), "--no-gate",
+            "--build-number", "24", "--fcm", str(_gs(tmp_path))]
+    assert mr.run(_parse(argv), now_ms=NOW) == 0
+    assert "--dart-define=FCM_PROJECT_ID=nexus-warden" in got["defines"]
+    assert "--dart-define=FCM_API_KEY=AIzaTEST" in got["defines"]
+    rec = json.loads(next(out.glob("*.release-record.json")).read_text("utf-8"))
+    assert rec["android"]["fcm_project"] == "nexus-warden"
+    assert "AIzaTEST" not in json.dumps(rec), "记录里不抄 API key"
+
+
+def test_11_19_FCM_给了又skip_android_不发(world, tmp_path):
+    repo, key, out = world
+    argv = ["--repo", str(repo), "--key", str(key), "--out", str(out), "--no-gate",
+            "--skip-android", "--fcm", str(_gs(tmp_path))]
+    assert mr.run(_parse(argv), now_ms=NOW) == 2
