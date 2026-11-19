@@ -25,6 +25,7 @@ class _Reg implements PushRegistrar {
 
 void main() {
   h9();
+  stuck();
   test('F2：一开始拿不到推送号、第一次登记失败，退避重试，不用重新登录就登记上', () async {
     final log = <String>[];
     var fail = 1;
@@ -217,5 +218,49 @@ void h9() {
     expect(await FcmRegistrar(options: const {}, android: true).registrationId(), isNull);
     expect(FcmRegistrar().supported, isFalse, reason: '这次构建没给 FCM 参数');
     expect(FcmRegistrar(options: full, android: true).provider, 'fcm');
+  });
+}
+
+class _Hang implements PushRegistrar {
+  int calls = 0;
+  @override
+  bool get supported => true;
+  @override
+  String get platform => 'android';
+  @override
+  String get provider => 'jpush';
+  @override
+  Future<String?> registrationId() {
+    calls++;
+    return Completer<String?>().future;                  // 跟没 AppKey 的极光插件一样：永远不回
+  }
+}
+
+void stuck() {
+  test('真机 11-19：排在前面的一路挂着不回，FCM 照样登记上（每一路要号有超时）', () async {
+    final log = <String>[];
+    final jp = _Hang();
+    final s = PushSession(jp,
+        also: [_Prov('fcm', ['fcm-1'])],
+        register: (id, p, prov) async => log.add('+$id/$prov'),
+        unregister: (id) async => log.add('-$id'),
+        idTimeout: const Duration(milliseconds: 30),
+        backoff: (_) => Duration.zero)
+      ..start();
+    expect(log, isEmpty, reason: '极光那一路还在等');
+    for (var i = 0; i < 100 && s.state.value != PushState.ready; i++) {
+      await Future<void>.delayed(const Duration(milliseconds: 5));
+    }
+    expect(log, ['+fcm-1/fcm']);
+    expect(s.state.value, PushState.ready);
+    await s.stop();
+    expect(log.last, '-fcm-1');
+  });
+
+  test('真机 11-19：打包没给极光 AppKey，极光那一路不算配了', () {
+    expect(JPushRegistrar.enabled(android: true, appKey: ''), isFalse);
+    expect(JPushRegistrar.enabled(android: true, appKey: '  '), isFalse);
+    expect(JPushRegistrar.enabled(android: false, appKey: 'k'), isFalse, reason: 'iOS 没配 APNs（H13）');
+    expect(JPushRegistrar.enabled(android: true, appKey: 'k'), isTrue);
   });
 }

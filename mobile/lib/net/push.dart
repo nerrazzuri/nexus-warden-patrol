@@ -60,8 +60,14 @@ class JPushRegistrar implements PushRegistrar {
   /// 只在安卓上开（H13）：iOS 工程还没配 APNs（没有推送权限、没有 aps-environment），极光 iOS 插件的
   /// `getRegistrationID` 在真机上没登录成功就**一直不回**（`JPushPlugin.m` 把回调挂起等登录），
   /// 推送登记会卡住、离开站点要白等 10 秒。配好 APNs 之后再放开 iOS。
+  ///
+  /// 打包时**没给 AppKey 也不开**（真机 11-19，build 24、vivo V2353A）：安卓的极光插件没注册上同样把
+  /// `getRegistrationID` 挂着不回，没有 AppKey 永远注册不上，排在后面的 FCM 一直轮不到、什么都没登记。
   @override
-  bool get supported => Platform.isAndroid;
+  bool get supported => enabled(android: Platform.isAndroid, appKey: _appKey);
+
+  static bool enabled({required bool android, required String appKey}) =>
+      android && appKey.trim().isNotEmpty;
 
   @override
   String get platform => Platform.isIOS ? 'ios' : 'android';
@@ -149,12 +155,17 @@ enum PushState { off, waiting, ready }
 class PushSession {
   PushSession(this.registrar, {required this.register, required this.unregister,
       this.also = const <PushRegistrar>[], this.extraTries = 4,
+      this.idTimeout = const Duration(seconds: 20),
       Duration Function(int attempt)? backoff})
       : _backoff = backoff ?? _defaultBackoff;
 
   final PushRegistrar registrar;
   final List<PushRegistrar> also;
   final int extraTries;
+
+  /// 每一路要推送号最多等这么久（真机 11-19：一路的插件挂着不回，后面的通道就永远轮不到）。
+  /// 超时算这一轮没拿到，下一轮再要；插件那头晚些回了也不管（下一轮会再问到）。
+  final Duration idTimeout;
   final Future<void> Function(String id, String platform, String provider) register;
   final Future<void> Function(String id) unregister;
   final Duration Function(int attempt) _backoff;
@@ -190,7 +201,7 @@ class PushSession {
       for (final r in List<PushRegistrar>.of(pending)) {
         String? id;
         try {
-          id = await r.registrationId();
+          id = await r.registrationId().timeout(idTimeout, onTimeout: () => null);
         } catch (_) {}
         if (_stopped) return;
         if (id == null) {
