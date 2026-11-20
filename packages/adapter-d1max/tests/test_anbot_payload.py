@@ -648,7 +648,7 @@ async def test_POC1106_开机调竞品音量_配了才调_登录竞品主控跑a
                           volume_control="DACL", volume_percent=70, sos_log="", estop_log=""))
     await p.start()
     await _等(lambda: log.exists() and "amixer" in log.read_text())
-    assert "amixer -q sset 'DACL' 70%" in log.read_text()
+    assert "amixer -q -c 1 sset 'DACL' 70%" in log.read_text()   # 11-20:缺省声卡 1
     await p.close()
 
 
@@ -850,3 +850,20 @@ def test_现场1117_竞品连接断了又好了_日志里各留一行_状态不�
         p.health()
         up = [r for r in caplog.records if "竞品连接" in r.getMessage()]
         assert len(up) == 1 and "在线" in up[0].getMessage(), caplog.text
+
+
+async def test_真机1120_P08_音量缺省就调竞品声卡1的DACL和DACR到70(master, tmp_path):
+    log = tmp_path / "ssh.log"
+    s = tmp_path / "ssh-vol"
+    s.write_text(f'#!/bin/sh\necho "$@" >> "{log}"\n')
+    s.chmod(0o755)
+    p = AnbotPayload(_cfg(master.url, audio_host="anbot@192.168.113.101", ssh=str(s),
+                          sos_log="", estop_log=""))
+    await p.start()
+    await _等(lambda: log.exists() and "amixer" in log.read_text())
+    got = log.read_text()
+    assert "amixer -q -c 1 sset 'DACL' 70% && amixer -q -c 1 sset 'DACR' 70%" in got, got
+    await p.close()
+    with pytest.raises(PayloadError):
+        AnbotConfig.from_dict({"master": "http://127.0.0.1:1/", "host": "127.0.0.1",
+                               "volume_control": "DACL,DACR;reboot"})

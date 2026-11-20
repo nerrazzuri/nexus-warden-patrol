@@ -290,10 +290,12 @@ class AnbotConfig:
     sos_log: str = "/logs/current/can.log"
     estop_log: str = "/logs/current/led_control.log"
     #: POC 11-06(第 7、30 条):竞品重启后音量偏小,我们起来时登录竞品主控调一次(``amixer -q [-c 卡]
-    #: sset <控件> <百分比>%``)。空 = 不调(控件名按现场 ``amixer`` 列出来的填)。
-    volume_control: str = ""
+    #: sset <控件> <百分比>%``)。几个控件用逗号隔开;空 = 不调。
+    #: 真机 11-20:缺省就按 11-05 现场查到的竞品声卡 1 的 DACL、DACR(左右声道)调到 70%
+    #: —— 以前缺省不调,payload.json 没写就一直偏小(P08)。
+    volume_control: str = "DACL,DACR"
     volume_percent: int = 70
-    volume_card: str = ""
+    volume_card: str = "1"
     #: 第三档 #41:竞品念不了的语言在 Orin 上用 Piper 合成。
     #: ``{"en": "/opt/piper/en_US-ryan-medium.onnx"}``;
     #: 要配了 ``audio_host`` 才放得出去。空 = 只能念中文。
@@ -346,7 +348,8 @@ class AnbotConfig:
         for k in ("sos_log", "estop_log"):
             if not _PATH.fullmatch(getattr(self, k)):
                 raise PayloadError(f"{k} 只许字母、数字、_ . / -: {getattr(self, k)!r}")
-        if self.volume_control and not _CTL.fullmatch(str(self.volume_control)):
+        if self.volume_control and not all(
+                _CTL.fullmatch(c.strip()) for c in str(self.volume_control).split(",")):
             raise PayloadError(f"volume_control 只许字母、数字、空格、_ -: {self.volume_control!r}")
         if self.volume_card and not str(self.volume_card).isalnum():
             raise PayloadError(f"volume_card 只许字母、数字: {self.volume_card!r}")
@@ -592,8 +595,9 @@ class AnbotPayload:
     async def _set_volume(self) -> None:
         """起来时调一次竞品音量(第 7、30 条:竞品重启后偏小);连不上 1 分钟后再试,最多 10 回。"""
         card = f"-c {self.cfg.volume_card} " if self.cfg.volume_card else ""
-        ctl = self.cfg.volume_control.replace("'", "")
-        remote = f"amixer -q {card}sset '{ctl}' {self.cfg.volume_percent}%"
+        remote = " && ".join(f"amixer -q {card}sset '{c.strip()}' {self.cfg.volume_percent}%"
+                             for c in self.cfg.volume_control.replace("'", "").split(",")
+                             if c.strip())
         for _ in range(10):
             cmd, env = self._ssh_cmd(remote)
             try:

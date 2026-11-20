@@ -27,6 +27,10 @@ from nexwar_contract.messages import Command
 log = logging.getLogger(__name__)
 
 
+#: 喇叭命令等这么久(秒)还没做完就先回执、后台接着做(站点等回执 10 s)。
+SPEAK_ACK_S = 3.0
+
+
 class DeterDesk:
     def __init__(self, hal: Any, *, emit: Callable[[str, dict[str, Any]], Any],
                  monotonic: Callable[[], float] = time.monotonic,
@@ -177,6 +181,28 @@ class DeterDesk:
             for k in (("front", "back") if side == "both" else (side,)):
                 self._light_off[k] = asyncio.create_task(off_later(k))
 
+    async def _sound_now(self, cmd: Command, req: Any) -> None:
+        """喇叭:``SPEAK_ACK_S`` 内做完(或当场出错)照常;没做完 —— 合成、连竞品主控、ssh 慢 —— 先回执
+        收下,后台接着做,后台没做成发 ``ended: failed``(站点出「喊话没放出来」)。
+        真机 11-20:喊话回执超过 10 s,站点等不到回 504,人以为没发出去。"""
+        t = asyncio.ensure_future(self.hal.sound(req.clip if req.on else "", req.max_s))
+        try:
+            await asyncio.wait_for(asyncio.shield(t), SPEAK_ACK_S)
+            return
+        except asyncio.TimeoutError:
+            pass
+        log.warning("喊话 %g 秒内没起来(合成、连竞品慢):先回执收下,后台接着做", SPEAK_ACK_S)
+
+        def done(f: asyncio.Future) -> None:
+            if f.cancelled() or f.exception() is None:
+                return
+            log.warning("喊话后台没做成: %s", f.exception())
+            if req.on:
+                self._sound = None
+            self._emit("deter", {"task_id": cmd.task_id, "output": "speaker", "on": False,
+                                 "ended": "failed", "reason": str(f.exception())[:200]})
+        t.add_done_callback(done)
+
     async def _do(self, cmd: Command, req: Any) -> str:
         if req.output == "speaker" and req.on:
             cur = self.playing()
@@ -199,7 +225,7 @@ class DeterDesk:
             elif req.output == "light":
                 await self._light(req.side, req.on, req.max_s)
             else:
-                await self.hal.sound(req.clip if req.on else "", req.max_s)
+                await self._sound_now(cmd, req)
         except HalUnsupported:
             return "unsupported"
         except Exception as exc:                     # noqa: BLE001 - 设备的错原样回给站点(继电器板没回…)
