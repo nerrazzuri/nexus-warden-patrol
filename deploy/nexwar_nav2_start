@@ -10,6 +10,8 @@
 # 现场值从 /etc/nexwar/env 来(单元的 EnvironmentFile):
 #   NEXWAR_NAV2_ROS_DOMAIN=61         我们 Nav2 的 ROS 域(别跟厂家的 24、定位器的一样)
 #   NEXWAR_NAV2_PARAMS=<路径>         换一份参数(空着 = 这一版带的 deploy/nav2/params.yaml)
+#   NEXWAR_NAV2_DDS=shm               数据走共享内存(deploy/nav2/fastdds_nav2.xml;真机 11-20 大图冲爆
+#                                     UDP 缓冲、节点失联);空着 = 只在本机走 UDP(ROS_LOCALHOST_ONLY)
 set -eu
 here=$(cd "$(dirname "$0")/.." && pwd -P)
 # 11-04:钟对了再起(开机 1970、Nav2 先起来再跳钟,一直不认 odom)
@@ -18,7 +20,12 @@ set +u
 . /opt/ros/humble/setup.sh
 set -u
 export ROS_DOMAIN_ID="${NEXWAR_NAV2_ROS_DOMAIN:-61}"
-export ROS_LOCALHOST_ONLY=1
+if [ "${NEXWAR_NAV2_DDS:-}" = shm ]; then
+  export ROS_LOCALHOST_ONLY=0
+  export FASTRTPS_DEFAULT_PROFILES_FILE="$here/deploy/nav2/fastdds_nav2.xml"
+else
+  export ROS_LOCALHOST_ONLY=1
+fi
 export RMW_IMPLEMENTATION=rmw_fastrtps_cpp
 export OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1
 exec ros2 launch "$here/deploy/nav2/nexwar_nav2.launch.py" \
