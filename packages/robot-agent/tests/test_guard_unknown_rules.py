@@ -244,3 +244,12 @@ def test_默认是封住_只认这三个名字():
     from nexwar_agent.obstacles import BAND_POLICIES
     assert ObstacleView().band_policy == "sealed"
     assert BAND_POLICIES == ("strict", "legacy", "sealed")
+
+
+def test_真机1120_看不见的规矩现场能换_写错按默认():
+    """商场抛光地砖回点少:NEXWAR_GUARD_BAND=legacy 退回 11-14 以前(看不见的一律降速走)。"""
+    from nexwar_agent.obstacles import BAND_POLICIES, ObstacleView, band_policy_from_env
+    assert band_policy_from_env({}) is None and ObstacleView().band_policy == "sealed"
+    for b in BAND_POLICIES:
+        assert band_policy_from_env({"NEXWAR_GUARD_BAND": b}) == b
+    assert band_policy_from_env({"NEXWAR_GUARD_BAND": "loose"}) is None

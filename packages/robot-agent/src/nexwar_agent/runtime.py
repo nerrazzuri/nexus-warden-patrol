@@ -268,8 +268,12 @@ class AgentRuntime:
             if parts is None or not hasattr(parts.nav, "guard"):
                 raise ValueError("--obstacles bridge 要配 --nav planned 或 nav2(守卫在规划后端里)")
             from nexwar_agent.obs_server import ObsBridgeServer
-            from nexwar_agent.obstacles import ObstacleGuard, ObstacleView
+            from nexwar_agent.obstacles import ObstacleGuard, ObstacleView, band_policy_from_env
             self.obs_view = ObstacleView(monotonic=monotonic or time.monotonic)
+            band = band_policy_from_env()
+            if band is not None:
+                self.obs_view.band_policy = band
+                log.warning("看不见的按现场设置:%s(NEXWAR_GUARD_BAND)", band)
             parts.nav.obstacles = self.obs_view
             parts.nav.guard = ObstacleGuard()
             self._obs_srv = ObsBridgeServer(obs_socket or store_dir / "obs.sock", self.obs_view,
