@@ -266,11 +266,35 @@ class SiteMapBuilder:
             out["stage"] = st.get("stage", STAGES[0][0])
             since = st.get("stage_since", st["since"])
             out["pct"] = progress_pct(out["stage"], self._now() - since, lc=bool(st.get("lc")))
+        elif st["state"] == "uploading":
+            out["pct"] = self._upload_pct((st["robot_id"], map_id, version))
         elif st["state"] == "done":
             out["pct"] = 100
         elif st["state"] == "failed":
             out["reason"] = str(st.get("reason", ""))[:600]
         return out
+
+    def _upload_pct(self, job: Job) -> int:
+        """关键帧收了百分之几:按清单里的总字节算(真机 11-20:原来「上传中」一直 0%,用户等不及退了
+        向导)。清单还没到(老机器人最后才传清单)是 0;录包不算。"""
+        d = self._dir(job)
+        try:
+            m = json.loads((d / KF_MANIFEST).read_text(encoding="utf-8"))
+            files = [(str(f["name"]), int(f["size"])) for f in m["files"]]
+        except (OSError, ValueError, KeyError, TypeError):
+            return 0
+        total = sum(max(0, size) for _, size in files)
+        if total <= 0:
+            return 0
+        got = 0
+        for name, size in files:
+            if not _REL.match(name) or ".." in name:
+                continue
+            try:
+                got += min(size, (d / name).stat().st_size)
+            except OSError:
+                continue
+        return min(99, got * 100 // total)
 
     def retry(self, map_id: str, version: str) -> None:
         with self._cv:
