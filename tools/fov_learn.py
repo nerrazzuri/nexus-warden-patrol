@@ -59,6 +59,8 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--out", type=Path, default=None)
     p.add_argument("--every", type=int, default=2, help="每几帧前雷达用一帧")
     p.add_argument("--mirror", action="store_true", help="左右镜像取并(录的时候一侧一直贴墙时用)")
+    p.add_argument("--use", type=Path, default=None,
+                   help="不学,直接用这张视野表(fov.json)比遮挡限速(拿别的包核一张学好的表)")
     a = p.parse_args(argv)
 
     import numpy as np
@@ -111,14 +113,20 @@ def main(argv: list[str] | None = None) -> int:
         print(f"只有 {len(knowns)} 帧能用(至少 {fovmask.FOV_MIN_FRAMES}):换一段长一点的",
               file=sys.stderr)
         return 1
-    mask = fovmask.learn(knowns, threshold=thr)
+    if a.use is not None:
+        mask = fovmask.from_wire(json.loads(a.use.read_text(encoding="utf-8")))[0]
+        a.out = None
+    else:
+        mask = fovmask.learn(knowns, threshold=thr)
     if a.mirror:
         mask |= mask[:, ::-1]                              # 左右镜像取并:只会更宽(更保守)
     cc = (np.arange(n) - n / 2 + 0.5) * cfg.res
     XX, YY = np.meshgrid(cc, cc, indexing="ij")
     cone = np.abs(YY) <= 0.6 + 0.9 * np.maximum(np.abs(XX) - 0.465, 0.0)
     cone &= np.abs(XX) > 0.465
-    print(f"学了 {len(knowns)} 帧(包里 {a.t0:g}–{min(a.t1, rel):.0f} s),门槛 {thr:.0%},"
+    if a.use:
+        print(f"用的视野表 {a.use}")
+    print(f"{'看了' if a.use else '学了'} {len(knowns)} 帧(包里 {a.t0:g}–{min(a.t1, rel):.0f} s),门槛 {thr:.0%},"
           f"后雷达 {'用了' if rear is not None else '没有'}")
     print(f"视野表 {int(mask.sum())} 格;写死的锥 {int(cone.sum())} 格;锥里视野表看不见的 "
           f"{int((cone & ~mask).sum())} 格(这些以前被当成阴影)")
