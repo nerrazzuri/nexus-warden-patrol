@@ -1840,14 +1840,16 @@ def test_W47_Nav2单元_单独ROS域_只装不起_卸载收干净():
     assert "socket:=/var/lib/nexwar/agent/nav2.sock" in text
     assert "$here/deploy/nav2/nexwar_nav2.launch.py" in text
     assert (DEPLOY / "nav2" / "params.yaml").is_file()
-    # 真机 11-20:NEXWAR_NAV2_DDS=shm 走共享内存的 FastDDS 配置(不设 ROS_LOCALHOST_ONLY,不然 rmw 换掉传输)
+    # 真机 11-20:NEXWAR_NAV2_DDS=shm 走共享内存的 FastDDS 配置
+    # (不设 ROS_LOCALHOST_ONLY,不然 rmw 换掉传输)
     import xml.etree.ElementTree as ET
     shm = text.split('if [ "${NEXWAR_NAV2_DDS:-}" = shm ]; then', 1)[1].split("else", 1)[0]
     assert "ROS_LOCALHOST_ONLY=0" in shm and \
         'FASTRTPS_DEFAULT_PROFILES_FILE="$here/deploy/nav2/fastdds_nav2.xml"' in shm
     x = ET.parse(DEPLOY / "nav2" / "fastdds_nav2.xml").getroot()
     ns = {"f": "http://www.eprosima.com/XMLSchemas/fastRTPS_Profiles"}
-    kinds = [t.findtext("f:type", namespaces=ns) for t in x.iterfind(".//f:transport_descriptor", ns)]
+    kinds = [t.findtext("f:type", namespaces=ns)
+             for t in x.iterfind(".//f:transport_descriptor", ns)]
     assert kinds == ["SHM", "UDPv4"]
     assert int(x.findtext(".//f:segment_size", namespaces=ns)) >= 8 << 20, "装得下整张大图"
     assert [a.text for a in x.iterfind(".//f:interfaceWhiteList/f:address", ns)] == ["127.0.0.1"]
