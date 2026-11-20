@@ -44,6 +44,7 @@ import contextlib
 import json
 import logging
 import math
+import re
 import threading
 import uuid
 from collections.abc import AsyncIterator, Callable
@@ -76,6 +77,18 @@ _TASK_END = frozenset({"task_done", "task_failed", "task_aborted", "task_preempt
 #: 中止并回原点(POC):中止之后最多等这么久让上一趟停下(秒)。
 HOME_ABORT_WAIT_S = 15.0
 
+
+
+_DERIVED = re.compile(r"(-dn\d+)+$")
+
+
+def same_frame(a: tuple[Any, Any], b: tuple[Any, Any]) -> bool:
+    """两个 (地图号, 版本) 是不是同一个坐标系:一样,或者只差网页「另存」出来的 ``-dn<n>``
+    (编辑、去噪另存只换栅格、坐标系不变,禁行区照抄;真机 11-20 去噪另存了 ``-2-dn1``,待命点登记在
+    ``-2`` 上就回不去、报「未返回待命点」)。新扫的图是新版本号,不算。"""
+    if a[0] != b[0] or not isinstance(a[1], str) or not isinstance(b[1], str):
+        return False
+    return a[1] == b[1] or _DERIVED.sub("", a[1]) == _DERIVED.sub("", b[1])
 
 class StandbyError(RuntimeError):
     pass
@@ -280,17 +293,23 @@ class StandbyManager:
         loaded = (caps.get("map_id"), caps.get("map_version"))
         if loaded[0] is None:
             raise DispatchRefused(f"{robot_id} 未上报已加载的地图")
-        if loaded != (p["map_id"], p["map_version"]):
+        if not same_frame(loaded, (p["map_id"], p["map_version"])):
             raise DispatchRefused(f"{robot_id} 加载的地图是 {loaded[0]}:{loaded[1]},待命点 "
                                   f"{p['name']} 登记在 {p['map_id']}:{p['map_version']}"
                                   f"(地图或版本不匹配)")
+        if loaded[1] != p["map_version"]:
+            # 另存出来的同一坐标系版本:按狗加载的这一版派(狗只收它加载着的那一版的坐标)
+            log.info("%s 待命点 %s 登记在 %s,狗加载的是同一坐标系的 %s:按这一版派", robot_id,
+                     p["name"], p["map_version"], loaded[1])
+            p = {**p, "map_version": loaded[1], "registered_version": p["map_version"]}
         return p
 
     def swap_point(self, robot_id: str, map_id: str, map_version: str) -> dict[str, Any] | None:
         """换电位(W73 §7.4)= 默认待命点,且登记在这张图这一版上;不然 ``None``(派不过去,原地换)。
         跟 :meth:`return_to` 派去的是同一个点(外审 r2 #3:以前判到没到用的是原点)。"""
         p = self.default(robot_id)
-        return p if p is not None and (p["map_id"], p["map_version"]) == (map_id, map_version) \
+        return {**p, "map_version": map_version} if p is not None and same_frame(
+            (p["map_id"], p["map_version"]), (map_id, map_version)) \
             else None
 
     async def return_to(self, robot_id: str, *, issued_by: str,
@@ -432,7 +451,7 @@ class StandbyManager:
             raise StandbyError(f"直线的机器人要沿来路回待命点,无法获取 {task_id} 的来路: "
                                f"{exc}") from exc
         p = self._checked_default(robot_id, name)
-        if (m.map_id, version) != (p["map_id"], p["map_version"]):
+        if not same_frame((m.map_id, version), (p["map_id"], p["map_version"])):
             raise StandbyError(f"{task_id} 跑在 {m.map_id}:{version},待命点 {p['name']} 登记在 "
                                f"{p['map_id']}:{p['map_version']}(地图或版本不匹配,来路坐标不可信)")
         if m.policy.forever:
