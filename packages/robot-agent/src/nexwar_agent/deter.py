@@ -162,6 +162,8 @@ class DeterDesk:
             if old is not None:
                 old.cancel()
         await self.hal.light(side, on)
+        log.info("本体灯 %s %s(上装命令%s)", side, "开" if on else "关",
+                 f",{max_s:g} 秒后自己关" if on else "")
         if on:
             async def off_later(k: str) -> None:
                 await asyncio.sleep(max_s)
