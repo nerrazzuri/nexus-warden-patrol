@@ -86,3 +86,11 @@ def test_W55_从站点更新App_装包权限与回执():
     assert "setAppPackageName(act.packageName)" in kt, "只装我们自己的新版"
     assert '"nexwar/install"' in (MAIN_MANIFEST.parent
                                  / "kotlin/com/nexwar/nexwar_patrol/MainActivity.kt").read_text()
+
+
+def test_用户1120_指纹登录的权限():
+    """BiometricPrompt 没有 USE_BIOMETRIC 会直接抛 SecurityException(外审指纹-1);Android 9 上
+    FingerprintManager 要 USE_FINGERPRINT。"""
+    perms = _permissions(MAIN_MANIFEST)
+    assert "android.permission.USE_BIOMETRIC" in perms
+    assert "android.permission.USE_FINGERPRINT" in perms

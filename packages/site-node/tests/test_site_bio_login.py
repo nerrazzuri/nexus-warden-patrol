@@ -5,6 +5,8 @@
 from __future__ import annotations
 
 import base64
+import threading
+from concurrent.futures import ThreadPoolExecutor
 
 import pytest
 from test_site_api import PW, 站
@@ -42,11 +44,12 @@ def acc(tmp_path):
     db.close()
 
 
-def _登记(a, name="gina", label="Pixel 8"):
+def _登记(a, name="gina", label="Pixel 8", pw=PW):
     d, pub = p256.new_key()
+    tok = a.login(name, pw)
     n = a.bio_nonce(BIO_ENROLL, name)
     kid, exp = a.bio_enroll(name, pub, label, n, p256.sign(d, BIO_ENROLL + n.encode() + b"\0"
-                                                           + name.encode()))
+                                                           + name.encode()), tok)
     return d, kid, exp
 
 
@@ -91,27 +94,44 @@ def test_登记要签对_别人的钥匙签的不认_工程师不许(acc):
     a, c = acc
     d, pub = p256.new_key()
     other, _ = p256.new_key()
+    tok = a.login("gina", PW)
     n = a.bio_nonce(BIO_ENROLL, "gina")
     with pytest.raises(AuthError, match="签名"):
-        a.bio_enroll("gina", pub, "", n, p256.sign(other, BIO_ENROLL + n.encode() + b"\0gina"))
+        a.bio_enroll("gina", pub, "", n, p256.sign(other, BIO_ENROLL + n.encode() + b"\0gina"),
+                     tok)
     n = a.bio_nonce(BIO_ENROLL, "gina")
     with pytest.raises(AuthError, match="P-256"):
-        a.bio_enroll("gina", b"junk", "", n, b"")
-    eng, _, _ = a.add_engineer("修理工", 4, by="gina")
+        a.bio_enroll("gina", b"junk", "", n, b"", tok)
+    eng, epw, _ = a.add_engineer("修理工", 4, by="gina")
+    etok = a.login(eng, epw)
     n = a.bio_nonce(BIO_ENROLL, eng)
     with pytest.raises(AuthError, match="工程师"):
         a.bio_enroll(eng, pub, "", n, p256.sign(d, BIO_ENROLL + n.encode() + b"\0"
-                                                + eng.encode()))
+                                                + eng.encode()), etok)
+    # 别人的会话、没有会话都不行
+    n = a.bio_nonce(BIO_ENROLL, "gina")
+    with pytest.raises(AuthError, match="登录已失效"):
+        a.bio_enroll("gina", pub, "", n, p256.sign(d, BIO_ENROLL + n.encode() + b"\0gina"),
+                     etok)
+    n = a.bio_nonce(BIO_ENROLL, "gina")
+    with pytest.raises(AuthError, match="登录已失效"):
+        a.bio_enroll("gina", pub, "", n, p256.sign(d, BIO_ENROLL + n.encode() + b"\0gina"),
+                     None)
     assert a.bio_keys("gina") == [] and a.bio_keys(eng) == []
 
 
 def test_改口令_改角色_停用_都把指纹登录作废(acc):
     a, c = acc
-    for change in (lambda: a.reset_password("gina", "another-long-pw"),
-                   lambda: a.set_role("gina", "owner"),
+    pw = [PW]
+
+    def reset():
+        a.reset_password("gina", "another-long-pw")
+        pw[0] = "another-long-pw"
+
+    for change in (reset, lambda: a.set_role("gina", "owner"),
                    lambda: a.update("gina", disabled=True)):
         a.update("gina", disabled=False)
-        d, kid, _ = _登记(a)
+        d, kid, _ = _登记(a, pw=pw[0])
         change()
         with pytest.raises(BioGone):
             _指纹登(a, d, kid)
@@ -203,3 +223,42 @@ def test_接口_登记_指纹登录_管理员一键撤(站点):
     assert code == 401 and d.get("bio_gone") is True, d
     # 保安撤不了别人的
     assert s.req("POST", "/api/accounts/alice/bio/revoke", {}, token=tok)[0] == 403
+
+
+@pytest.mark.parametrize("change", ["revoke", "password", "role", "disable"])
+def test_外审1_验签那一会儿被撤_改口令_改角色_停用_不发会话(acc, monkeypatch, change):
+    a, c = acc
+    d, kid, _ = _登记(a)
+    n = a.bio_nonce(BIO_LOGIN, kid)
+    sig = p256.sign(d, BIO_LOGIN + n.encode() + b"\0" + kid.encode())
+    entered, resume = threading.Event(), threading.Event()
+    real = p256.verify
+
+    def slow(*args):
+        ok = real(*args)
+        entered.set()
+        assert resume.wait(5)
+        return ok
+
+    monkeypatch.setattr(p256, "verify", slow)
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        f = pool.submit(a.bio_login, kid, n, sig)
+        assert entered.wait(5)
+        {"revoke": lambda: a.bio_revoke("gina"),
+         "password": lambda: a.reset_password("gina", "changed-password"),
+         "role": lambda: a.set_role("gina", "owner"),
+         "disable": lambda: a.update("gina", disabled=True)}[change]()
+        resume.set()
+        with pytest.raises(BioGone):
+            f.result(5)
+
+
+def test_外审1_登记请求过了登录检查以后口令被重设_钥匙登记不进去(acc):
+    a, c = acc
+    tok = a.login("gina", PW)
+    d, pub = p256.new_key()
+    n = a.bio_nonce(BIO_ENROLL, "gina")
+    a.reset_password("gina", "changed-password")       # 会话跟着删了
+    with pytest.raises(AuthError, match="登录已失效"):
+        a.bio_enroll("gina", pub, "", n, p256.sign(d, BIO_ENROLL + n.encode() + b"\0gina"), tok)
+    assert a.bio_keys("gina") == []

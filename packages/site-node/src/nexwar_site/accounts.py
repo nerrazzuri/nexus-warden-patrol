@@ -470,13 +470,16 @@ class Accounts:
         return self._open_session(name, client)
 
     def _open_session(self, name: str, client: Any) -> str:
-        now = self._now()
-        token = secrets.token_urlsafe(32)
         with self.db.tx() as c:
-            c.execute("INSERT INTO sessions(token_hash, name, created_at, last_used, client) "
-                      "VALUES (?,?,?,?,?)",
-                      (_token_hash(token), name, now, now, clean_client(client)))
-            c.execute("UPDATE accounts SET last_login_ms=? WHERE name=?", (now, name))
+            return self._insert_session(c, name, client, self._now())
+
+    @staticmethod
+    def _insert_session(c: Any, name: str, client: Any, now: int) -> str:
+        token = secrets.token_urlsafe(32)
+        c.execute("INSERT INTO sessions(token_hash, name, created_at, last_used, client) "
+                  "VALUES (?,?,?,?,?)",
+                  (_token_hash(token), name, now, now, clean_client(client)))
+        c.execute("UPDATE accounts SET last_login_ms=? WHERE name=?", (now, name))
         return token
 
     def clients(self) -> list[dict[str, Any]]:
@@ -575,9 +578,12 @@ class Accounts:
             and got[2] > self._now()
 
     def bio_enroll(self, name: str, pub: bytes, label: str, nonce: Any,
-                   sig: bytes) -> tuple[str, int]:
-        """登记这部手机的公钥。要先登录(``name`` 是这次会话的账号),再用手机按指纹签站点出的随机数,
-        证明私钥在手机上、指纹能用。回 ``(钥匙号, 到期时刻)``。工程师临时账号不许。"""
+                   sig: bytes, token: str | None) -> tuple[str, int]:
+        """登记这部手机的公钥。要先登录(``token`` 是 ``name`` 这次的会话),再用手机按指纹签站点出的
+        随机数,证明私钥在手机上、指纹能用。回 ``(钥匙号, 到期时刻)``。工程师临时账号不许。
+
+        外审(指纹 1):存钥匙那个事务里再查一遍这次会话还在 —— 请求过了登录检查以后口令被重设、
+        账号被停用(会话跟着删了),这把钥匙就不能再登记进去。"""
         from nexwar_contract import p256
         if not self._take_nonce(nonce, BIO_ENROLL, name):
             raise AuthError("随机数不对或过期了,重来一次")
@@ -593,6 +599,11 @@ class Accounts:
             row = self._get(c, name)
             if row["role"] == ENGINEER:
                 raise AuthError("工程师临时账号不能用指纹登录")
+            alive = token and c.execute(
+                "SELECT 1 FROM sessions WHERE token_hash=? AND name=? AND scope=''",
+                (_token_hash(token), name)).fetchone()
+            if not alive or row["disabled"]:
+                raise AuthError("登录已失效,请重新登录再开指纹登录")
             c.execute("INSERT INTO bio_keys(key_id, account, pub, label, created_ms, expires_ms) "
                       "VALUES (?,?,?,?,?,?)",
                       (key_id, name, pub, (label or "")[:64], now, now + BIO_TTL_MS))
@@ -623,9 +634,18 @@ class Accounts:
             raise AccountDisabled("这个账号已停用,请找管理员")
         if r["expires_ms"] is not None and now >= r["expires_ms"]:
             raise AccountDisabled("这个账号已过期,请找管理员")
+        # 外审(指纹 1):验签那一会儿钥匙可能被撤、口令角色被改(钥匙跟着删)、账号被停用 ——
+        # 发会话的同一个事务里再查一遍,还是那把钥匙、账号还能用,才发
         with self.db.tx() as c:
+            still = c.execute(
+                "SELECT 1 FROM bio_keys k JOIN accounts a ON a.name=k.account WHERE k.key_id=? "
+                "AND k.account=? AND k.pub=? AND k.expires_ms>? AND a.disabled=0 AND "
+                "(a.expires_ms IS NULL OR a.expires_ms>?)",
+                (key_id, name, r["pub"], now, now)).fetchone()
+            if still is None:
+                raise BioGone("这部手机的指纹登录已失效,请用密码登录")
             c.execute("UPDATE bio_keys SET last_used_ms=? WHERE key_id=?", (now, key_id))
-        return self._open_session(name, client), name
+            return self._insert_session(c, name, client, now), name
 
     def bio_keys(self, name: str) -> list[dict[str, Any]]:
         """这个账号登记了指纹登录的手机(没过期的)。"""
