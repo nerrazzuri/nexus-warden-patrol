@@ -51,6 +51,7 @@ Map<String, (String, double)> get deterOutputs => <String, (String, double)>{
       'spotlight': (tr('Spotlight', '聚光灯'), 120),
       'speaker': (tr('Speaker', '喇叭'), 30),
       'wiper': (tr('Wiper', '雨刷'), 10), // POC 11-06 竞品上装：刷可见光镜头
+      'light': (tr('Robot lights', '机器人灯光'), 600), // 真机 11-20：路线开的本体灯要能关
     };
 
 /// App V2 机器人控制页的一块：标题、一句说明、内容；上面一道分隔线。
@@ -185,6 +186,7 @@ class _SiteDeterPageState extends State<SiteDeterPage> {
   List<String> get _outputs => ((widget.caps['outputs'] as List?) ?? const []).map((e) => '$e').toList();
   List<String> get _clips => ((widget.caps['clips'] as List?) ?? const []).map((e) => '$e').toList();
   List<String> get _sides => ((widget.caps['spotlight_sides'] as List?) ?? const []).map((e) => '$e').toList();
+  List<String> get _lightSides => ((widget.caps['light_sides'] as List?) ?? const []).map((e) => '$e').toList();
   List<String> get _colors => ((widget.caps['strobe_colors'] as List?) ?? const []).map((e) => '$e').toList();
   String? _color;
 
@@ -224,6 +226,10 @@ class _SiteDeterPageState extends State<SiteDeterPage> {
             (key: 'spotlight-left', output: o, side: 'left', name: tr('Left spotlight', '左聚光灯')),
           if (o == 'spotlight' && _sides.contains('right'))
             (key: 'spotlight-right', output: o, side: 'right', name: tr('Right spotlight', '右聚光灯')),
+          if (o == 'light' && _lightSides.contains('front'))
+            (key: 'light-front', output: o, side: 'front', name: tr('Front light', '前灯')),
+          if (o == 'light' && _lightSides.contains('back'))
+            (key: 'light-back', output: o, side: 'back', name: tr('Rear light', '后灯')),
         ],
       ];
 
@@ -482,7 +488,10 @@ class _SiteDeterPageState extends State<SiteDeterPage> {
           nwButtonRows([
             for (final r in rows)
               btn(Key('deter-on-${r.key}'),
-                  r.side == null && r.output == 'spotlight' && _sides.isNotEmpty
+                  r.output == 'light'
+                      ? tr('${r.name} ${(deterOutputs['light']!.$2 / 60).toStringAsFixed(0)} min',
+                          '${r.name} ${(deterOutputs['light']!.$2 / 60).toStringAsFixed(0)} 分钟')
+                      : r.side == null && r.output == 'spotlight' && _sides.isNotEmpty
                       ? tr('Both spotlights ${deterOutputs['spotlight']!.$2.toStringAsFixed(0)} s',
                           '双侧聚光灯 ${deterOutputs['spotlight']!.$2.toStringAsFixed(0)} 秒')
                       : tr('${r.name} ${deterOutputs[r.output]?.$2.toStringAsFixed(0) ?? ''} s',
@@ -491,8 +500,11 @@ class _SiteDeterPageState extends State<SiteDeterPage> {
                   icon: switch (r.output) {
                     'strobe' => Icons.lightbulb_outline_rounded,
                     'siren' => Icons.notifications_none_rounded,
+                    'light' => Icons.light_mode_outlined,
                     _ => null,
                   }),
+            if (outs.contains('light'))
+              btn(const Key('deter-off-light'), tr('Lights off', '关灯'), () => _go('light', false)),
             btn(SiteDeterPage.allOffKey, tr('All off', '全部关'), () => unawaited(_allOff())),
           ]),
         ]),

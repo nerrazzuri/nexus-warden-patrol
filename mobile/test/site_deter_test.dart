@@ -325,4 +325,22 @@ void pocClipNames() {
     await _open(t, FakeApi('guard'));
     expect(find.byKey(const Key('ptz-right')), findsNothing);
   });
+
+  testWidgets('真机 11-20：本体灯 App 能开（前后都 / 前 / 后，10 分钟）、能关', (t) async {
+    final api = FakeApi('guard');
+    await _open(t, api, caps: <String, dynamic>{
+      'outputs': <String>['light'],
+      'light_sides': <String>['front', 'back'],
+      'max_s': 600.0,
+    });
+    expect(find.byKey(const Key('deter-on-light')), findsOneWidget);
+    expect(find.text('机器人灯光 10 分钟'), findsOneWidget);
+    await t.tap(find.byKey(const Key('deter-on-light-back')));
+    await t.pumpAndSettle();
+    expect(api.calls.last, 'deter A light true 600.0 side=back');
+    await t.ensureVisible(find.byKey(const Key('deter-off-light')));
+    await t.tap(find.byKey(const Key('deter-off-light')));
+    await t.pumpAndSettle();
+    expect(api.calls.last, 'deter A light false');
+  });
 }
