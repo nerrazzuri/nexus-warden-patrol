@@ -70,6 +70,7 @@ from __future__ import annotations
 from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 
@@ -585,7 +586,74 @@ def _openings(b: np.ndarray, r: np.ndarray, q: np.ndarray) -> np.ndarray:
     return out
 
 
+#: 真射线分几个进程打(用户 11-20:26 号那张图更大,出图要快)。各帧互不相干、计数都是加(方向是位或),
+#: 拆开打再合起来跟一个进程打逐格一样。``NEXWAR_GRID_WORKERS`` 改(1 = 不拆);没设 = CPU 数,最多 8。
+GRID_WORKERS_ENV = "NEXWAR_GRID_WORKERS"
+GRID_WORKERS_MAX = 8
+#: 每个进程至少分这么多帧,不然不值得拆。
+GRID_MIN_SCANS_PER_WORKER = 32
+_PAR: dict[str, Any] = {}
+
+
+def grid_workers(n_scans: int) -> int:
+    import os
+    raw = os.environ.get(GRID_WORKERS_ENV, "").strip()
+    try:
+        want = int(raw) if raw else min(os.cpu_count() or 1, GRID_WORKERS_MAX)
+    except ValueError:
+        want = 1
+    return max(1, min(want, n_scans // GRID_MIN_SCANS_PER_WORKER))
+
+
+def _par_one(i: int) -> tuple[Any, ...]:
+    p = _PAR
+    n = p["workers"]
+    cells = p["shape"][0] * p["shape"][1]
+    seen = _Seen(cells) if p["seen"] else None
+    hits = np.zeros(p["shape"], np.int32) if p["hits"] else None
+    passes, used = _raytrace_one(p["scans"][i::n], p["frames"], p["lo"], p["shape"], p["res"],
+                                 p["band"], p["max_range"], p["ground"], occ_h=p["occ_h"],
+                                 seen=seen, hits=hits, openings=p["openings"])
+    return (passes, used, hits, None if seen is None else (seen.direct, seen.through, seen.dirs))
+
+
 def _raytrace_scans(scans: Iterable[tuple[np.ndarray, np.ndarray]], frames: Frames,
+                    lo: np.ndarray, shape: tuple[int, int], res: float, band: tuple[float, float],
+                    max_range: float, ground: _Ground,
+                    occ_h: tuple[np.ndarray, np.ndarray] | None = None,
+                    seen: _Seen | None = None,
+                    hits: np.ndarray | None = None,
+                    openings: bool = True) -> tuple[np.ndarray, int]:
+    """:func:`_raytrace_one`,帧多就分 :func:`grid_workers` 个进程打、合起来(结果一样)。"""
+    import multiprocessing as mp
+    lst = list(scans)
+    n = grid_workers(len(lst))
+    if n <= 1 or "fork" not in mp.get_all_start_methods():
+        return _raytrace_one(lst, frames, lo, shape, res, band, max_range, ground, occ_h=occ_h,
+                             seen=seen, hits=hits, openings=openings)
+    _PAR.update(scans=lst, frames=frames, lo=lo, shape=shape, res=res, band=band,
+                max_range=max_range, ground=ground, occ_h=occ_h, seen=seen is not None,
+                hits=hits is not None, openings=openings, workers=n)
+    try:
+        with mp.get_context("fork").Pool(n) as pool:
+            parts = pool.map(_par_one, range(n))
+    finally:
+        _PAR.clear()
+    passes = np.zeros(shape, np.int32)
+    used = 0
+    for p_pass, p_used, p_hits, p_seen in parts:
+        passes += p_pass
+        used += p_used
+        if hits is not None:
+            hits += p_hits
+        if seen is not None:
+            seen.direct += p_seen[0]
+            seen.through += p_seen[1]
+            seen.dirs |= p_seen[2]
+    return passes, used
+
+
+def _raytrace_one(scans: Iterable[tuple[np.ndarray, np.ndarray]], frames: Frames,
                     lo: np.ndarray, shape: tuple[int, int], res: float, band: tuple[float, float],
                     max_range: float, ground: _Ground,
                     occ_h: tuple[np.ndarray, np.ndarray] | None = None,
