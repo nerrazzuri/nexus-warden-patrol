@@ -24,6 +24,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
 import math
 import os
@@ -151,6 +152,9 @@ NAV2_SETTLE_S = 10.0
 #: 导航 V1 第 2 节:出发前等转接节点回路线最多多久(秒;Smac 规划一般 < 1 s);等不到就不查了。
 PLAN_WAIT_S = 3.0
 PLAN_POLL_S = 0.02
+#: 等规划、查路线、找绕路的时候,后台每这么久送一拍时钟、里程(真机 11-20:重新查路线卡在一拍里 2 s 多,
+#: 转接节点判「代理未在送时钟」= Nav2 未就绪,关了退回就直接失败)。
+FEED_WAIT_S = 0.1
 NAV2_SETTLE_POLL_S = 0.2
 #: 「代理未在送时钟」(2026-11-03 11:58:01:处理中止那一拍卡了 2 s 多):等的时候自己先送上时钟。
 NAV2_TRANSIENT = ("取消上一次", "动作状态同步", "未在送时钟")
@@ -761,7 +765,35 @@ class Nav2NavBackend(PlannedNavBackend):
             return False, f"障碍数据{obstacles_mod.describe(st)}"
         return True, ""
 
+    @contextlib.asynccontextmanager
+    async def _feeding(self) -> Any:
+        """这一段里后台照样送时钟、里程(:data:`FEED_WAIT_S`);套着套着只开一个。"""
+        n = getattr(self, "_feeders", 0)
+        self._feeders = n + 1
+        task = None
+        if n == 0 and self.link is not None:
+            async def loop() -> None:
+                while True:
+                    await asyncio.sleep(FEED_WAIT_S)
+                    try:
+                        self._feed()
+                    except Exception:
+                        log.exception("等规划的时候送时钟出错")
+            task = asyncio.create_task(loop())
+        try:
+            yield
+        finally:
+            self._feeders -= 1
+            if task is not None:
+                task.cancel()
+                with contextlib.suppress(asyncio.CancelledError):
+                    await task
+
     async def _route_check(self, here: Any, pose: Pose, op: str) -> Any:
+        async with self._feeding():
+            return await self._route_check_now(here, pose, op)
+
+    async def _route_check_now(self, here: Any, pose: Pose, op: str) -> Any:
         """导航 V1 第 2 节 Route Validator V1.0:向转接节点要一条路线(``plan``),沿路线查有效车身离
         地图墙的余量(:mod:`nexwar_agent.route_check`)。查不成(转接节点不支持、不回、规划器忙或说没路、
         没地图、出错)回 ``status == "unchecked"`` 的结果 —— 不等于通过,:meth:`goto` 按降级规则处理;
@@ -831,6 +863,10 @@ class Nav2NavBackend(PlannedNavBackend):
         return alt_pose, alt
 
     async def _detour(self, here: Any, pose: Pose, got: Any, op: str) -> Any:
+        async with self._feeding():
+            return await self._detour_now(here, pose, got, op)
+
+    async def _detour_now(self, here: Any, pose: Pose, got: Any, op: str) -> Any:
         """路线检查卡在一处(用户 11-15:整趟走完优先):本趟把那一处(半径 :data:`AVOID_R`)临时标成
         绕开,送图,重新要路线、重新查。过了回新的检查结果(标记留着,Nav2 自己规划也绕);不过、没查成
         都撤掉标记回 None。卡的地方离机器人、离终点太近不标(不许把自己、终点圈进去)。"""
@@ -1709,7 +1745,12 @@ class Nav2NavBackend(PlannedNavBackend):
         return True
 
     async def _recheck_route(self, here: Any, tgt: Pose, raw: str) -> None:
-        """照路走的控制器都放弃了:从这儿重新要路线、重新查(外审 11-14);查的规矩跟出发前一样。"""
+        """照路走的控制器都放弃了:从这儿重新要路线、重新查(外审 11-14);查的规矩跟出发前一样。
+        查的这几秒里照样送时钟(真机 11-20)。"""
+        async with self._feeding():
+            await self._recheck_route_now(here, tgt, raw)
+
+    async def _recheck_route_now(self, here: Any, tgt: Pose, raw: str) -> None:
         log.warning("照查过的路走:%s,从 (%.2f, %.2f) 重新查路线(第 %d 次)",
                     raw, here.x, here.y, self._rechecks)
         await self._send(0.0, 0.0, 0.0)
