@@ -909,6 +909,7 @@ def _outbox(args: argparse.Namespace, registration: Registration, parts: EngineP
     mapkf = Outbox(args.outbox, cap_bytes=cap, sink=sinks[5], sn=registration.robot_id,
                    now_ms=wall_ms, sub=KF_SUB, run_depth=2, classify=kf_classify,
                    settled=kf_settled)
+    bags.after = (mapkf,)             # 真机 11-20:关键帧(站点出图要的)先传完,再传几个 GB 的录包
 
     def _active() -> set[Path]:
         # 引擎跑完之后 archive 还指着上一趟(W00c5d 内部评审):只有正在跑的那一趟算「正在写」,

@@ -336,3 +336,41 @@ def test_scan_改过的报告会被重新入队(一趟: Path, tmp_path: Path) ->
     assert up.scan() == 0                              # 不是新条目
     item = up.queue.get(key)
     assert (item.done, item.offset) == (False, 0)
+
+
+def test_大文件_前缀哈希接着上一块算_不每块从头读_真机11_20(tmp_path: Path, monkeypatch) -> None:
+    """C40221 11-20:7.2 GB 的建图录包每传 1 MiB 都从文件头重算前缀哈希(平方级),发件箱跌到
+    150 KB/s。文件没变就接着上一块算:整个文件从头算最多一次。"""
+    import nexwar_agent.engine.uploader as up_mod
+    from nexwar_agent.engine.uploader import CHUNK_BYTES
+    run = tmp_path / "runs" / "巡检一" / "20260911T101500Z"
+    run.mkdir(parents=True)
+    body = bytes(range(256)) * (CHUNK_BYTES // 256 * 5 + 7)   # 5 块多一点
+    (run / "events.jsonl").write_bytes(body)
+    full_reads: list[int] = []
+    real = up_mod._prefix_hash
+    monkeypatch.setattr(up_mod, "_prefix_hash", lambda p, n: (full_reads.append(n), real(p, n))[1])
+    sink = 假服务器()
+    up = 造(tmp_path / "runs", tmp_path, sink)
+    up.scan()
+    steps = [up.run_once(0).action for _ in range(10)]
+    assert steps[:6] == ["sent"] * 5 + ["done"]
+    assert bytes(sink.盘["NEXWAR-TEST-01/巡检一/20260911T101500Z/events.jsonl"]) == body
+    assert full_reads == [CHUNK_BYTES], "只有第一块从文件读,后面都接着算"
+
+
+def test_大文件_传到一半文件变了_从头重算_哈希照样核得出不对(tmp_path: Path) -> None:
+    from nexwar_agent.engine.uploader import CHUNK_BYTES
+    run = tmp_path / "runs" / "巡检一" / "20260911T101500Z"
+    run.mkdir(parents=True)
+    f = run / "events.jsonl"
+    f.write_bytes(b"a" * (CHUNK_BYTES * 3))
+    sink = 假服务器()
+    up = 造(tmp_path / "runs", tmp_path, sink)
+    up.scan()
+    assert up.run_once(0).action == "sent"
+    # 第一块之后,文件开头被改了(大小不变、修改时间变了):接着算会把旧前缀当真,必须从头读
+    import os
+    f.write_bytes(b"b" * (CHUNK_BYTES * 3))
+    os.utime(f, ns=(1, 1))
+    assert up.run_once(0).action == "rewound", "服务器存的前缀是 a,本地现在是 b:对不上"

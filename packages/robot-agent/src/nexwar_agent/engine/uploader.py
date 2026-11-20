@@ -14,7 +14,7 @@ import os
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Protocol
+from typing import Any, Protocol
 
 from nexwar_agent.engine.upload_queue import QueueItem, UploadQueue, backoff_ms, classify
 
@@ -31,6 +31,15 @@ def sha256_prefix(path: Path | str, n: int) -> str:
     """算文件前 ``n`` 个字节的 sha256。**流式,不整个读进内存** —— 照片可能几 MB,
     事件流跑一整天可能几十 MB。
     """
+    return _prefix_hash(path, n).hexdigest()
+
+
+#: 增量前缀哈希最多记几个文件(一次只传一个文件的块,够用)。
+PREFIX_CACHE = 16
+
+
+def _prefix_hash(path: Path | str, n: int) -> Any:
+    """文件前 ``n`` 个字节的哈希对象(还能接着 ``update``)。"""
     digest = hashlib.sha256()
     left = n
     with open(path, "rb") as fh:
@@ -40,7 +49,7 @@ def sha256_prefix(path: Path | str, n: int) -> str:
                 break
             digest.update(chunk)
             left -= len(chunk)
-    return digest.hexdigest()
+    return digest
 
 
 class SinkError(Exception):
@@ -126,6 +135,10 @@ class Uploader:
         self._classify = classify
         #: 先别传的(队列里的键 → 真):W30b 封不上的明文证据,留着、不传,等补封成了再说。
         self.hold: Callable[[str], bool] = lambda key: False
+        #: 增量前缀哈希:键 → (已核到的长度, 哈希对象, (文件大小, 修改时间))。真机 11-20 C40221:每块
+        #: 传完都从文件头重算前缀哈希,7.2 GB 的建图录包越传越慢(平方级),整个发件箱跌到 150 KB/s。
+        #: 文件大小、修改时间都没变,上一块核到的地方正好是这一块的起点,就接着算这一块。
+        self._prefix: dict[str, tuple[int, Any, tuple[int, int]]] = {}
 
     # ---- 扫 ----
 
@@ -177,7 +190,9 @@ class Uploader:
         # 拿到 OSError 再去分辨到底是哪一种"读不到"。
         try:
             with open(path, "rb") as fh:
-                size = os.fstat(fh.fileno()).st_size
+                st = os.fstat(fh.fileno())
+                size = st.st_size
+                stamp = (st.st_size, st.st_mtime_ns)
                 offset = min(item.offset, size)
                 fh.seek(offset)
                 data = fh.read(CHUNK_BYTES)
@@ -219,10 +234,13 @@ class Uploader:
         # 掉线、水位线可以把整趟删掉。这一次读照样会抛 OSError,不接住的话它会
         # 直接穿出 run_once,而不是走 _missing() 那三分支的判断。
         try:
-            want = sha256_prefix(path, receipt.stored)
+            h = self._next_prefix(item.key, path, offset, data, receipt.stored, stamp)
         except OSError:
+            self._prefix.pop(item.key, None)
             return self._missing(item, run, now_ms)
+        want = h.hexdigest()
         if receipt.sha256 != want:
+            self._prefix.pop(item.key, None)
             self.queue.rewind(item.key)
             wait = backoff_ms(item.attempts + 1, rand=self._rand)
             self.queue.defer(item.key, next_ms=now_ms + wait)
@@ -230,9 +248,26 @@ class Uploader:
 
         self.queue.advance(item.key, offset=receipt.stored)
         if receipt.stored >= size:
+            self._prefix.pop(item.key, None)
             self.queue.finish(item.key)
             return Step(key=item.key, action="done", detail=f"{receipt.stored} 字节对上了")
         return Step(key=item.key, action="sent", detail=f"到第 {receipt.stored} 个字节")
+
+    def _next_prefix(self, key: str, path: Path, offset: int, data: bytes, stored: int,
+                     stamp: tuple[int, int]) -> Any:
+        """站点说存了 ``stored`` 个字节:本地同样长度前缀的哈希对象(记下来,下一块接着算)。
+        上一块核到 ``offset``、文件没变(大小、修改时间)、站点正好收下了这一块:接着上一块的算;
+        否则从文件头重算(第二次读文件,读不到照抛 OSError)。"""
+        c = self._prefix.get(key)
+        if c is not None and c[0] == offset and c[2] == stamp and stored == offset + len(data):
+            h = c[1].copy()
+            h.update(data)
+        else:
+            h = _prefix_hash(path, stored)
+        self._prefix[key] = (stored, h, stamp)
+        while len(self._prefix) > PREFIX_CACHE:
+            self._prefix.pop(next(iter(self._prefix)))
+        return h
 
     def _missing(self, item: QueueItem, run: str, now_ms: int) -> Step:
         """文件读不到,分三种情况——只有第三种真的允许销账。
