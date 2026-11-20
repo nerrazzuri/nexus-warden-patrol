@@ -69,10 +69,11 @@ KF_COVER_S = 10.0
 
 
 def kf_classify(rel: str) -> int | None:
-    """关键帧都传,清单最后走;点开头的(写到一半的临时文件)不传。"""
+    """关键帧都传,清单**先**走(真机 11-20:站点有了清单才知道一共多少、手机才有上传进度;站点照旧
+    收齐、核对完才出图);点开头的(写到一半的临时文件)不传。"""
     if rel.split("/")[-1].startswith("."):
         return None
-    return 5 if rel == KF_MANIFEST else 4
+    return 3 if rel == KF_MANIFEST else 4
 
 
 def kf_settled(run: Path) -> bool:

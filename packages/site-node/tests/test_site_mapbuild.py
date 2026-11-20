@@ -116,6 +116,25 @@ def test_清单先到_文件还没传齐_等齐了再出图(site):
     assert b.status("yard", "3")["state"] == "queued"
 
 
+def test_上传中_按清单的总字节算百分比_真机11_20(site):
+    """C40221 11-20:手机向导「上传」一直 0%(站点上传中不算进度),用户等不及退了向导。"""
+    home, cat = site
+    b = SiteMapBuilder(home, cat, runner=_fake_builder(home), start_thread=False)
+    big = {"kf/00000.bin": b"k" * 60, "kf/00001.bin": b"k" * 30,
+           "live.json": b"{" + b" " * 8 + b"}"}
+    _send(b, "kf/00000.bin", big["kf/00000.bin"])
+    assert b.status("yard", "3") is None or b.status("yard", "3").get("pct", 0) == 0
+    _send(b, KF_MANIFEST, _manifest(big))                 # 清单先到:知道一共 100 字节
+    st = b.status("yard", "3")
+    assert st["state"] == "uploading" and st["pct"] == 60
+    b.put_chunk("A", "yard/3", "kf/00001.bin", offset=0, data=b"k" * 15, total=30)
+    assert b.status("yard", "3")["pct"] == 75
+    b.put_chunk("A", "yard/3", "kf/00001.bin", offset=15, data=b"k" * 15, total=30)
+    assert b.status("yard", "3")["pct"] == 90, "收齐之前最多 99,不到 100"
+    _send(b, "live.json", big["live.json"])
+    assert b.status("yard", "3")["state"] == "queued"
+
+
 def test_出图失败_说原因带日志尾巴_回调告诉站点_关键帧留着能重试(site):
     home, cat = site
     done = []

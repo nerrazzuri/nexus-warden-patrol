@@ -621,10 +621,11 @@ async def test_W75_代理重启_站点打包的这一趟接着收尾(tmp_path):
     assert mode == "site"
 
 
-def test_W75_关键帧的分类_清单最后传_点开头的不传_有清单才算传完能删(tmp_path):
+def test_W75_关键帧的分类_清单先传_点开头的不传_有清单才算传完能删(tmp_path):
+    """真机 11-20:清单先传(站点有了总字节才有上传进度);站点照旧收齐、核对完才出图。"""
     from nexwar_agent.mapping import kf_classify, kf_settled
     assert kf_classify("kf/00000.bin") == kf_classify("live.json") == 4
-    assert kf_classify("kf.json") == 5
+    assert kf_classify("kf.json") == 3
     assert kf_classify("kf/.00001.bin.tmp") is None and kf_classify(".x") is None
     assert not kf_settled(tmp_path)
     (tmp_path / "kf.json").write_text("{}")
