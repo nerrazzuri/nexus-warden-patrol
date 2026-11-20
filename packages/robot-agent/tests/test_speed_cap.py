@@ -162,3 +162,23 @@ def test_两种走法_普通任务最快巡逻速度_紧急不限_都还受全�
     nav.urgent, nav.speed_cap = False, math.inf
     nav._vmax = 0.4
     assert nav._vlim() == 0.4, "任务给的更低:按任务的"
+
+
+def test_真机1120_普通巡逻最快速度现场能改_夹在范围里_写错照旧():
+    """用户 11-20「巡逻最高1.0」:NEXWAR_PATROL_MAX_MPS。"""
+    import math
+    from types import SimpleNamespace
+
+    from nexwar_agent.bridges.hal_nav import PATROL_MAX_MPS, HalNavBackend, patrol_max_mps
+    assert patrol_max_mps({}) == PATROL_MAX_MPS
+    assert patrol_max_mps({"NEXWAR_PATROL_MAX_MPS": "1.0"}) == 1.0
+    assert patrol_max_mps({"NEXWAR_PATROL_MAX_MPS": "0.05"}) == 0.2, "太低走不动:垫到 0.2"
+    for bad in ("fast", "-1", "0", "nan", "inf"):
+        assert patrol_max_mps({"NEXWAR_PATROL_MAX_MPS": bad}) == PATROL_MAX_MPS, bad
+    caps = SimpleNamespace(max_vx=1.0, max_wz=1.5, deadband_vx=0.2)
+    nav = HalNavBackend.__new__(HalNavBackend)
+    nav._hal = SimpleNamespace(hal_capabilities=lambda: caps)
+    nav._vmax, nav.speed_cap, nav.patrol_max = 1.0, math.inf, 1.0
+    assert nav.urgent is False and nav._vlim() == 1.0
+    nav.speed_cap = 0.3
+    assert nav._vlim() == 0.3, "全狗限速照样管"

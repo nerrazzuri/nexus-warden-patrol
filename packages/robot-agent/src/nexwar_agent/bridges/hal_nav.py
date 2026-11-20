@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import logging
 import math
+import os
 from collections.abc import Callable, Sequence
 from typing import Any
 
@@ -58,6 +59,26 @@ LOC_DEGRADED_MPS = 0.3
 #: 见 :meth:`HalNavBackend.set_urgent`)
 #: 不受它限。两种都照样受全狗限速、定位变差、看得清多远、附近有人的降速管。
 PATROL_MAX_MPS = 0.6
+#: 现场改普通巡逻的最快速度(米/秒;真机 11-20 用户「巡逻最高1.0」):``NEXWAR_PATROL_MAX_MPS``,
+#: 夹在 [:data:`PATROL_MAX_MIN_MPS`, 机器人能跑的最高] 里;没设、写错照旧 :data:`PATROL_MAX_MPS`。
+PATROL_MAX_ENV = "NEXWAR_PATROL_MAX_MPS"
+PATROL_MAX_MIN_MPS = 0.2
+
+
+def patrol_max_mps(env: dict[str, str] | None = None) -> float:
+    """普通巡逻最快多快(没夹机器人上限;见 :data:`PATROL_MAX_ENV`)。"""
+    raw = (os.environ if env is None else env).get(PATROL_MAX_ENV, "").strip()
+    if not raw:
+        return PATROL_MAX_MPS
+    try:
+        v = float(raw)
+    except ValueError:
+        log.warning("%s=%r 不是数,按 %g", PATROL_MAX_ENV, raw, PATROL_MAX_MPS)
+        return PATROL_MAX_MPS
+    if not math.isfinite(v) or v <= 0:
+        log.warning("%s=%r 不对,按 %g", PATROL_MAX_ENV, raw, PATROL_MAX_MPS)
+        return PATROL_MAX_MPS
+    return max(PATROL_MAX_MIN_MPS, v)
 BEARING_THRESH_RAD = 0.3
 K_LIN = 1.0
 K_ANG = 2.0
@@ -86,6 +107,10 @@ class HalNavBackend(NavBackend):
         self._wmax = caps.max_wz
         #: 全狗限速(W29,站点下雨、雷暴时发;运行时按有效期管,没限是无穷大)。不随任务重置。
         self.speed_cap = math.inf
+        #: 普通巡逻最快多快(:func:`patrol_max_mps`;不超过机器人能跑的)。
+        self.patrol_max = min(patrol_max_mps(), self._vmax)
+        if self.patrol_max != PATROL_MAX_MPS:
+            log.warning("普通巡逻最快 %g m/s(%s)", self.patrol_max, PATROL_MAX_ENV)
         self._connected = False
         self._status = NavStatus.STANDBY
         self._loc = LocStatus.CONTINUOUS_LOC
@@ -272,15 +297,18 @@ class HalNavBackend(NavBackend):
         on = bool(on)
         if on != self.urgent:
             log.info("走法:%s", "紧急(不限巡逻速度、不做路线检查)" if on
-                     else f"普通巡逻(最快 {PATROL_MAX_MPS} m/s、出发前查路线)")
+                     else f"普通巡逻(最快 {self._patrol_max()} m/s、出发前查路线)")
         self.urgent = on
+
+    def _patrol_max(self) -> float:
+        return getattr(self, "patrol_max", PATROL_MAX_MPS)
 
     def _vlim(self) -> float:
         """这一拍的前进上限:任务给的 ∧ 全狗限速(W29)∧ 定位变差时的限速(对账 S6)∧ 普通任务的巡逻速度
         (两种走法);不低于死区,不然走不动。两座桥(直线、规划)自己走都经这里。"""
         cap = self.speed_cap
         if not self.urgent:
-            cap = min(cap, PATROL_MAX_MPS)
+            cap = min(cap, self._patrol_max())
         if self._loc_degraded():
             cap = min(cap, LOC_DEGRADED_MPS)
         return min(self._vmax, max(cap, self._caps.deadband_vx))
