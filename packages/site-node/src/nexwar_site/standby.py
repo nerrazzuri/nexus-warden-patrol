@@ -299,7 +299,7 @@ class StandbyManager:
                                   f"(地图或版本不匹配)")
         if loaded[1] != p["map_version"]:
             # 另存出来的同一坐标系版本:按狗加载的这一版派(狗只收它加载着的那一版的坐标)
-            log.info("%s 待命点 %s 登记在 %s,狗加载的是同一坐标系的 %s:按这一版派", robot_id,
+            log.info("%s 待命点 %s 登记在 %s,机器人加载的是同一坐标系的 %s:按这一版派", robot_id,
                      p["name"], p["map_version"], loaded[1])
             p = {**p, "map_version": loaded[1], "registered_version": p["map_version"]}
         return p
