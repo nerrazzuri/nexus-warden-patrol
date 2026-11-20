@@ -22,6 +22,11 @@ from typing import Any
 #: 切版本的电量下限(W00c5d 定的;老服务 50% 是因为带上装要整机重启,现在只重启代理)。
 MIN_BATTERY_PCT = 30.0
 
+#: 不健康只提醒、不拦切版本的来源。定位器:切版本只重启代理,定位器是另一个进程、照常跑;机器人在忙
+#: 已经由 ``busy`` 拦了。真机 11-20 C40221:趴着、空闲,只是不在图上(loc_not_found off_map),
+#: 「现在换」被「定位器」拦了两次 —— 用户:「这个不应该成为阻断的啊」。
+WARN_ONLY_SOURCES = frozenset({"localizer"})
+
 #: 由外部来源报健康的三项(W08):W09 定位器、W11 感知进程与外参自检。
 SOURCE_ITEMS: tuple[tuple[str, str], ...] = (
     ("localizer", "定位器(W09)"),
@@ -142,9 +147,13 @@ def precheck(inputs: PrecheckInputs) -> tuple[PrecheckItem, ...]:
             out.append(PrecheckItem(name, True, False,
                                     f"{label}尚未部署,这一项现在不查(接上之后不健康就拦)"))
     # 接上来的来源一个不落地列出来(不认识的名字也列、也拦 —— 内审:以前被悄悄丢掉、照样切)。
+    # 只提醒的(:data:`WARN_ONLY_SOURCES`)照样列出来、写明不拦。
     for s in i.sources:
-        out.append(PrecheckItem(s.name, s.ok, True, f"{labels.get(s.name, s.name)}:{s.detail}",
-                                s.name))
+        warn = s.name in WARN_ONLY_SOURCES
+        detail = f"{labels.get(s.name, s.name)}:{s.detail}"
+        if warn and not s.ok:
+            detail += " —— 只是提醒,不拦切版本(切版本只重启代理)"
+        out.append(PrecheckItem(s.name, s.ok, not warn, detail, s.name))
     return tuple(out)
 
 

@@ -476,7 +476,8 @@ class AgentRuntime:
         #: ``PRECHECK_SOURCE_TIMEOUT_S``,炸了、卡住都按不健康(名字按登记的,不信来源自己报的)。
         self.precheck_sources: list[tuple[str, Callable[[], Awaitable[Any]]]] = []
         if self._locsrv is not None:
-            self.precheck_sources.append(("定位器", self._loc_health))
+            # 名字用清单里的 ``localizer``(以前登记成「定位器」:清单里另列一条「定位器尚未部署」)
+            self.precheck_sources.append(("localizer", self._loc_health))
         #: 各用各的后台槽:换图、录包、重建、发布。``_switching``:正在载入、切坐标系。
         self._map_job: asyncio.Task | None = None
         self._rec_job: asyncio.Task | None = None

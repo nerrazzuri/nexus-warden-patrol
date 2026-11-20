@@ -278,7 +278,7 @@ async def test_换图请定位器换先验_升级前检查有定位器这一项(
     from nexwar_contract.maps import MapRef
     t = 台
     await t.连()
-    [(name, src)] = [(n, s) for n, s in t.rt.precheck_sources if n == "定位器"]
+    [(name, src)] = [(n, s) for n, s in t.rt.precheck_sources if n == "localizer"]
     assert (await src()).ok
     ref = MapRef.from_wire({"map_id": "m", "version": "2", "files": [
         {"name": "m.pgm", "size": 1, "sha256": "0" * 64}]})
@@ -298,7 +298,7 @@ async def test_没配定位器的狗_照旧里程锚定_不开套接字(tmp_path
     try:
         assert isinstance(t.rt.parts.nav.anchor, OdomAnchor)
         assert not (t.d / "loc.sock").exists()
-        assert not [n for n, _ in t.rt.precheck_sources if n == "定位器"]
+        assert not [n for n, _ in t.rt.precheck_sources if n == "localizer"]
     finally:
         await t.rt.close()
         shutil.rmtree(t.d, ignore_errors=True)
