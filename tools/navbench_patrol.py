@@ -380,6 +380,13 @@ async def run_case(case: dict[str, Any], *, sim_cap_s: float) -> dict[str, Any]:
         await nav.connect()
         r.teleport(start.position.x, start.position.y, syaw)
         per = 假感知(world, rear=True, cone=True)
+        if os.environ.get("NAVPATROL_FOV"):
+            # 真机 11-20:假感知、遮挡限速都用这台机器人实测的视野表(tools/fov_learn.py 学的),
+            # 不用写死的锥 —— 仿真的结论才对得上真机
+            from nexwar_agent import fovmask
+            fm = fovmask.from_wire(json.loads(Path(os.environ["NAVPATROL_FOV"]).read_text()))
+            per.fov_mask = fm[0]
+            nav.fov_mask = fm
         delay = 0.15 + float(sim.get("obstacle_delay_ms", 0)) / 1000.0
         q: list = []
 
