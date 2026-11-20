@@ -2670,3 +2670,40 @@ async def test_真机1120_走着走着一时未在送时钟_停车等它恢复�
     link.ready, link.reason = False, "代理未在送时钟"
     await t.跑(NAV2_SETTLE_S + 1.0)
     assert NavStatus.FAILED in t.status and t.nav.fail_code == "nav_unavailable", "一直不好才失败"
+
+
+async def test_真机1120_用户_没有视野表先关遮挡限速_走起来自己学_学好就打开(tmp_path, monkeypatch):
+    """用户 11-20:新机器没有视野表,遮挡限速关掉;机器人走起来把视野表学了,学好当场换上、打开。"""
+    import numpy as np
+
+    from nexwar_agent import fovmask
+    from nexwar_agent.bridges.nav2_nav import SOFT_CREEP_MPS, V_FAST
+    t = _台(tmp_path, 假转接())
+    await t.start(1.5, 4.0)
+    t.per.cone, t.per.cone_slope = True, 0.35
+    assert await _遮挡(t) <= SOFT_CREEP_MPS + 0.35, "仿真、测试:照旧按写死的锥"
+    t.nav.occ_need_fov = True
+    assert await _遮挡(t) == pytest.approx(V_FAST), "真机没有视野表:先不限"
+    t.nav.occ_algo = "E2"
+    assert await _遮挡(t) <= SOFT_CREEP_MPS + 0.35, "现场设了 NEXWAR_NAV_OCC 的照设的"
+    t.nav.occ_algo = None
+    # 边走边学(站着的台子:放开挪窝门槛)
+    for k, v in (("AUTO_STEP_M", -1.0), ("AUTO_STEP_RAD", -1.0), ("AUTO_FRAMES", 40),
+                 ("AUTO_MIN_EVIDENCE", 10), ("AUTO_MIN_CELLS", 10)):
+        monkeypatch.setattr(fovmask, k, v)
+    done = []
+    view = t.nav.obstacles
+    view.fov_learner = fovmask.Learner()
+
+    def fov_done(mask, res, frames):
+        done.append(frames)
+        t.nav.fov_mask = (mask, res)
+    view.fov_done = fov_done
+    t.per.shadow = False
+    for _ in range(60):
+        await t.一拍()
+    assert done == [40] and view.fov_learner is None and t.nav.fov_mask is not None
+    assert isinstance(t.nav.fov_mask[0], np.ndarray)
+    assert await _遮挡(t) == pytest.approx(V_FAST), "学好了:空地不压"
+    t.world.dyn["car"] = (2.6, 4.45, 3.2, 5.4)
+    assert await _遮挡(t) < 0.9, "车后面的阴影照样压"

@@ -276,7 +276,26 @@ class AgentRuntime:
             )
             self.obs_view = ObstacleView(monotonic=monotonic or time.monotonic)
             from nexwar_agent import fovmask
-            parts.nav.fov_mask = fovmask.load()
+            learned = store_dir / fovmask.LEARNED_NAME
+            parts.nav.fov_mask = fovmask.load(learned=learned)
+            parts.nav.occ_need_fov = True
+            if parts.nav.fov_mask is None:
+                # 用户 11-20:没有视野表先关遮挡限速,机器人一动起来就自己学(fovmask.Learner)
+                log.warning("没有雷达视野表:遮挡限速先关着,走起来自己学(约 %d 帧)",
+                            fovmask.AUTO_FRAMES)
+                nav = parts.nav
+
+                def fov_done(mask: Any, res: float, frames: int) -> None:
+                    try:
+                        fovmask.save(learned, mask, res=res, frames=frames, source="auto")
+                    except OSError:
+                        log.exception("视野表学好了但存不下(下次开机重学)")
+                    nav.fov_mask = (mask, res)
+                    log.warning("雷达视野表学好了(%d 帧、%d 格看得见,存 %s):遮挡限速打开",
+                                frames, int(mask.sum()), learned)
+
+                self.obs_view.fov_learner = fovmask.Learner()
+                self.obs_view.fov_done = fov_done
             # 用户 11-20「先暂时默认盲带没人」:没设按 legacy(obstacles.FIELD_DEFAULT_BAND)
             self.obs_view.band_policy = field_band_policy()
             log.warning("看不见的按 %s(%s)", self.obs_view.band_policy,
