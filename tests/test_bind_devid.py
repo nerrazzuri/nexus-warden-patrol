@@ -58,6 +58,60 @@ def test_芯片编号_厂家占位值不算_往下读真编号_工单11_02_2(tmp
     assert Path("/sys/module/tegra_fuse/parameters/tegra_chip_uid") in devid.HW_SOURCES
 
 
+def _eeprom(serial: bytes, part: bytes = b"699-13767-0000-303 D.1", pad: bytes = b"\x00") -> bytes:
+    """照 C40221 的模块 EEPROM(256 字节)摆:偏移 20 料号,74 序列号,150 ``NVCB``。"""
+    raw = bytearray(b"\xff" * 256)
+    raw[20:20 + len(part)] = part
+    raw[74:89] = serial.ljust(15, pad)[:15]
+    raw[150:154] = b"NVCB"
+    return bytes(raw)
+
+
+def test_芯片编号_Orin只有模块EEPROM有序列号_真机11_20(tmp_path):
+    """11-20 C40221(R36.4.7):设备树 DummySN,没有 tegra_chip_uid、soc0 序号、cpuinfo Serial;
+    模块 EEPROM(module1,256 字节)偏移 74 是模块序列号 ``1423925050686``。"""
+    dummy = tmp_path / "serial-number"
+    dummy.write_bytes(b"DummySN\x00")
+    cpu = tmp_path / "cpuinfo"
+    cpu.write_text("processor\t: 0\nmodel name\t: ARMv8 Processor rev 1 (v8l)\n")
+    ee = tmp_path / "module1" / "nvmem"
+    ee.parent.mkdir()
+    ee.write_bytes(_eeprom(b"1423925050686"))
+    import hashlib
+    want = hashlib.sha256(b"d1max-hw|1423925050686").hexdigest()
+    assert devid.read_hw_id([dummy, tmp_path / "none", cpu, ee]) == want
+    # 补 0xFF、补空格也一样;i2c 那个 eeprom 文件名也认
+    ee2 = tmp_path / "eeprom"
+    ee2.write_bytes(_eeprom(b"1423925050686", pad=b"\xff"))
+    assert devid.read_hw_id([ee2]) == want
+    ee2.write_bytes(_eeprom(b"1423925050686", pad=b" "))
+    assert devid.read_hw_id([ee2]) == want
+    # 两块板不一样
+    ee2.write_bytes(_eeprom(b"1423925050999"))
+    assert devid.read_hw_id([ee2]) != want
+    # 不是 Jetson 的 EEPROM、序列号是空的 / 全 0 / 全 FF / 有怪字符:都不算,报读不到
+    for raw in (_eeprom(b"1423925050686", part=b"ABC-123"), _eeprom(b""), _eeprom(b"0000000000000"),
+                bytes(b"\xff" * 256), _eeprom(b"14239-25050"), b"699-" + b"\x00" * 40):
+        ee2.write_bytes(raw)
+        with pytest.raises(devid.DevIdError, match="芯片编号"):
+            devid.read_hw_id([dummy, cpu, ee2])
+    # 读不了(不是 root)就往下,最后报读不到
+    with pytest.raises(devid.DevIdError, match="root"):
+        devid.read_hw_id([dummy, tmp_path / "nope" / "nvmem"])
+
+
+def test_芯片编号_EEPROM排在最后_已签的板子hw_id不变(tmp_path):
+    """新来源只往最后加:设备树(RK3588)、tegra_chip_uid 读得到的板子,有 EEPROM 也照旧用前面那个。"""
+    assert devid.HW_SOURCES[-len(devid.JETSON_EEPROM):] == devid.JETSON_EEPROM
+    src = devid.HW_SOURCES
+    assert src.index(Path("/proc/cpuinfo")) < src.index(devid.JETSON_EEPROM[0])
+    dt = tmp_path / "serial-number"
+    dt.write_bytes(b"1424C21A0C3A\x00")
+    ee = tmp_path / "nvmem"
+    ee.write_bytes(_eeprom(b"1423925050686"))
+    assert devid.read_hw_id([dt, ee]) == devid.read_hw_id([dt])
+
+
 def test_出厂申请_生成设备钥匙只给root读_不覆盖(板):
     p, hw = 板
     req = devid.make_request(p, hw_sources=hw)
