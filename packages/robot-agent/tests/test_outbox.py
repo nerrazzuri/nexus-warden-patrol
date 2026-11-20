@@ -307,3 +307,35 @@ def test_W46过热暂停上传_放开了接着传():
         time.sleep(0.01)
     assert b.n > 0
     pump.stop()
+
+
+def test_录包等关键帧传完再传_关键帧在退避就不挡_真机11_20(tmp_path):
+    """C40221 11-20:建图关键帧(70 MB,站点出图要的)跟 7.2 GB 录包一起传、互相抢。"""
+    from nexwar_agent.outbox import OutboxPump
+
+    class 队列:
+        def __init__(self):
+            self.ready = ["kf1"]
+
+        def pending(self, now):
+            return list(self.ready)
+
+    class 箱子:
+        runs_root = type("P", (), {"name": "x"})()
+
+        def __init__(self, name, log):
+            self.name, self.log, self.after = name, log, ()
+            self.uploader = type("U", (), {})()
+            self.uploader.queue = 队列()
+            self._now = lambda: 0
+
+        def step(self, stop):
+            self.log.append(self.name)
+    log: list[str] = []
+    kf, bags = 箱子("kf", log), 箱子("bags", log)
+    bags.after = (kf,)
+    pump = OutboxPump(kf, more=(bags,), period_s=0.0)
+    assert pump.boxes == (kf, bags)
+    assert not pump.waiting(kf) and pump.waiting(bags), "关键帧还有能传的:录包这一拍不走"
+    kf.uploader.queue.ready = []                     # 传完了(或都在退避)
+    assert not pump.waiting(bags)

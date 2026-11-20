@@ -84,6 +84,9 @@ class Outbox:
         #: W30b:证据加密(:meth:`seal_leftovers` 接上)。封不上的明文:键 → 原因,扣着不传、
         #: 隔一会儿重封。
         self._seal: tuple[Any, Callable[[str], bool]] | None = None
+        #: 等这几块发件箱传完了再传(:class:`OutboxPump` 看)。真机 11-20 C40221:建图的关键帧(70 MB,
+        #: 站点出图要它)跟建图录包(3 分钟 7.2 GB)一起传、互相抢,关键帧要等很久。
+        self.after: tuple[Outbox, ...] = ()
         self.unsealed: dict[str, str] = {}
         self._next_reseal = 0
 
@@ -281,12 +284,20 @@ class OutboxPump:
             for b in self.boxes:
                 if self._stop.is_set() or self._hold.is_set():
                     break
+                if self.waiting(b):
+                    continue
                 try:
                     with self._lock:
                         b.step(self._stop.is_set)
                 except Exception:
                     log.exception("发件箱这一拍炸了(%s)", b.runs_root.name)
             self._stop.wait(self.period_s)
+
+    @staticmethod
+    def waiting(b: Any) -> bool:
+        """``b`` 这一拍先不走:它要等的那几块(:attr:`Outbox.after`)还有现在就能传的
+        (那边都在退避、传完了就不挡)。"""
+        return any(a.uploader.queue.pending(a._now()) for a in getattr(b, "after", ()))
 
     def facts(self) -> StorageFacts | None:
         """几块发件箱合起来的盘况:盘与发件箱总量是同一块盘、同一个目录;积压相加,最老的取最老。"""
