@@ -689,6 +689,16 @@ def test_狗说停车没成_站点回502让人按机身急停(站点):
     assert s.req("GET", "/api/robots/A", token=alice)[1]["held"] is not None, "照样算停着"
 
 
+def test_真机1120_K03_旁路断了按急停_中英文都说清楚是旁路断了():
+    from nexwar_site.api import halt_failed_text
+    zh, en = halt_failed_text("stop_failed: DeviceBackendError: 未连接旁路进程,发无法完成 halt")
+    assert "旁路没连上" in zh and "sidecar" in en and "未连接" not in en
+    zh, en = halt_failed_text("stop_failed: OSError: boom")
+    assert "停车失败" in zh and "boom" in en
+    zh, en = halt_failed_text("停不了")
+    assert en == "the robot reported that stopping failed", "英文里不夹中文"
+
+
 def test_W17_值守令牌只能看告警_注销即作废(站点):
     tok = 站点.login()
     code, d = 站点.req("POST", "/api/watch/token", {}, token=tok)

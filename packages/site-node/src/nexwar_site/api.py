@@ -247,6 +247,17 @@ def _cam_frames(v: Any) -> Iterator[bytes]:
         frames.close()
 
 
+def halt_failed_text(reason: str) -> tuple[str, str]:
+    """机器人回「停车失败」的原因 → 给人看的(中文, 英文)。真机 11-20 K03:旁路进程停了按急停,网页
+    (默认英文)只说「The site hit an error」—— 中文原因英文界面认不出,整句换成了通用话。"""
+    if "旁路" in reason or "sidecar" in reason.lower():
+        return ("机器人的运动控制旁路没连上,停车命令发不出去",
+                "the robot's motion-control link (sidecar) is down, so the stop couldn't be sent")
+    return (f"机器人说停车失败({reason})",
+            "the robot reported that stopping failed" + (f" ({reason})" if reason.isascii()
+                                                         and reason else ""))
+
+
 class HttpError(Exception):
     def __init__(self, status: int, message: str, *, extra: dict[str, Any] | None = None) -> None:
         super().__init__(message)
@@ -3339,11 +3350,14 @@ class _Handler(TlsHandlerMixin):
         except DispatchRefused as exc:
             raise HttpError(409, str(exc)) from exc
         except (DispatchTimeout, TimeoutError, FutureTimeout) as exc:
-            raise HttpError(504, "机器人未返回停车的回执:无法确认是否已停止,按机身急停") from exc
+            raise HttpError(504, "机器人未返回停车的回执:无法确认是否已停止,按机身急停",
+                            extra={"reason_en": "the robot didn't confirm the stop, so it may "
+                                                "still be moving"}) from exc
         ack = r.get("ack") if isinstance(r, dict) else None
         if isinstance(ack, dict) and ack.get("result") != "accepted":
             # 狗说停车没成(W00c5e 内部评审):任务它中止了,腿停没停住不知道。
-            raise HttpError(502, f"机器人说停车失败({ack.get('reason', '')}):按机身急停")
+            zh, en = halt_failed_text(str(ack.get("reason", "")))
+            raise HttpError(502, f"{zh}:按机身急停", extra={"reason_en": en})
         return self._send_json(200, r)
 
     def _doing(self, robot_id: str) -> dict[str, Any]:
