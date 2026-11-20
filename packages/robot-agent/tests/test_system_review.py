@@ -62,7 +62,7 @@ async def 台(tmp_path, monkeypatch):
 
 async def test_S01_撤任务一直失败_旧遥控还在_受力锁住后HAL收不到非零速度(台, monkeypatch):
     rt, r, 走, 命令, 遥控, sent = 台
-    await 走(3)
+    await 走(6)                                         # 站稳 3 s 才学基线(真机 11-20)
     task = await 遥控(0.3)
 
     async def 撤不掉(*a):
@@ -82,7 +82,7 @@ async def test_S01_撤任务一直失败_旧遥控还在_受力锁住后HAL收�
 
 async def test_S02_识别出危险先落盘_等撤任务的时候进程没了_重启照旧锁着(台, monkeypatch):
     rt, r, 走, 命令, 遥控, sent = 台
-    await 走(3)
+    await 走(6)
     rt.force.save()
     entered, blocked = asyncio.Event(), asyncio.Event()
 

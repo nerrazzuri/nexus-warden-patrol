@@ -228,7 +228,7 @@ async def test_代理_翻倒了_撤任务停车软急停_报状态_不收会动�
 
 async def test_代理_被抱起来_撤任务停车_不急停_放下了能再动(狗):
     rt, r, 走, 遥控, 事件, 能力 = 狗
-    await 走(3)
+    await 走(6)                                     # 站稳 3 s 才学基线,再攒 2 s(真机 11-20)
     await 遥控(1)
     r.inject_imu(load=5.0)
     await 走(1)
@@ -375,7 +375,7 @@ async def test_外审3_代理重启_被抱起来的锁还在(tmp_path):
 
 async def test_外审2_代理_在跑的对桩任务走停对桩不出桩(狗):
     rt, r, 走, 遥控, 事件, 能力 = 狗
-    await 走(3)
+    await 走(6)
 
     class 对桩:
         from nexwar_contract.messages import TaskState
@@ -424,7 +424,7 @@ async def test_外审1_软急停命令回了成_可读回来没开_下一拍再�
 
 async def test_复查1_写盘失败了每拍重写_写成为止(狗, monkeypatch):
     rt, r, 走, 遥控, 事件, 能力 = 狗
-    await 走(3)
+    await 走(6)
     real = type(rt.force).save
     fails = [5]
 
@@ -536,3 +536,31 @@ def test_工单2_门槛3g_现场那几次站着微调转身的误报都不报():
     w = ForceWatch()
     got, _ = _喂(w, _s(shock=3.1), 0, 0.1)
     assert [f.kind for f in got] == ["bump"]
+
+
+def test_起身那几秒的承重不进基线_站稳了才判抱起来_真机11_20():
+    """C40221 11-20:趴着 → App 站起。起身那几秒运控报「站着」(StandUp,承重 358),学进了基线;
+    进 General(ready)后承重 89,不到四分之一 → 判成被抱起来、锁住解不开。"""
+    w = ForceWatch()
+    _, t = _喂(w, _s(load=20.0), 0, 5.0, standing=False, motion="lying")
+    got, t = _喂(w, _s(load=358.0), t, 8.0, motion="standing")       # 起身、蹲:不学不判
+    assert not got and not w.checks["lift"]
+    got, t = _喂(w, _s(load=89.0), t, 10.0, motion="ready")          # 站稳待命
+    assert not got and w.state == "ok", "正常站着不是被抱起来"
+    assert w.checks["lift"], "站稳满 3 秒以后攒出了基线(89)"
+    got, t = _喂(w, _s(load=10.0), t, 0.6, motion="ready")           # 真被抱起来:照样判
+    assert [f.kind for f in got] == ["lifted"] and got[0].data["baseline"] == 89.0
+    got, t = _喂(w, _s(load=80.0), t, 2.1, motion="ready")
+    assert [f.kind for f in got] == ["landed"] and w.state == "ok"
+
+
+def test_刚进能走那3秒不学不判_离开能走基线清掉重攒():
+    w = ForceWatch()
+    got, t = _喂(w, _s(load=300.0), 0, 2.9, motion="ready")
+    assert not w.checks["lift"], "进 ready 不到 3 秒:不学"
+    got, t = _喂(w, _s(load=100.0), t, 5.0, motion="ready")
+    assert w.checks["lift"]
+    _, t = _喂(w, _s(load=100.0), t, 1.0, motion="standing")          # 换姿势(蹲、原地):清基线
+    assert not w.checks["lift"]
+    got, t = _喂(w, _s(load=10.0), t, 2.5, motion="ready")  # 回 ready 头 3 秒:不判
+    assert not got and w.state == "ok"

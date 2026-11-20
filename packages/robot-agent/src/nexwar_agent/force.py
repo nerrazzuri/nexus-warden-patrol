@@ -109,6 +109,8 @@ class ForceWatch:
         #: 工单 2:上一拍的姿势类、最近一次换姿势的时刻。
         self._posture: str | None = None
         self._posture_ms: int | None = None
+        #: 真机 11-20:运控进「能走」(``ready``)的时刻;不在 ``ready`` 是 None。
+        self._ready_ms: int | None = None
         #: 压着没报的「撞」:(时刻, 数据)。
         self._pending: tuple[int, dict[str, Any]] | None = None
         #: 门槛文件读不懂(照缺省判):能力里带上,站点报 P2。
@@ -187,6 +189,7 @@ class ForceWatch:
         ``motion``:运控状态(``MotionStatus`` 的值;不给 = 不按姿势挡撞,老的调用方)。
         回这一拍判出来的事(状态变了、撞了一下)。没数据、不新鲜:什么都不判,状态不变。"""
         quiet = self._posture_quiet(motion, now_ms)
+        settled = self._settled(motion, now_ms, standing)
         if s is None or not s.valid:
             self._cand = None
             return []
@@ -202,14 +205,14 @@ class ForceWatch:
             if tilt >= c.flip_tilt_rad:
                 if self._hold("flip", now_ms, c.flip_hold_s):
                     out.append(self._enter(FLIPPED, now_ms, info))
-            elif s.load is not None and base is not None and standing \
+            elif s.load is not None and base is not None and settled \
                     and s.load < base * c.lift_load_ratio:
                 if self._hold("lift", now_ms, c.lift_hold_s):
                     out.append(self._enter(LIFTED, now_ms, {**info, "load": round(s.load, 2),
                                                             "baseline": round(base, 2)}))
             else:
                 self._cand = None
-                if s.load is not None and standing and tilt < c.upright_rad:
+                if s.load is not None and settled and tilt < c.upright_rad:
                     self._base.append((now_ms, s.load))
         elif self.state == FLIPPED:
             if self._hold("upright" if tilt < c.upright_rad else None, now_ms, c.upright_hold_s):
@@ -254,6 +257,23 @@ class ForceWatch:
         return [Finding("bump", p[1])]
 
     _lift_base: float | None = None
+
+    def _settled(self, motion: str | None, now_ms: int, standing: bool) -> bool:
+        """承重进不进基线、判不判抱起来。真机 11-20 C40221:App 站起,起身那几秒运控报「站着」
+        (``StandUp``/``Crawl`` 都报 STANDING),承重 358 学进了基线;起身完进 General(``ready``)、
+        承重 89 不到四分之一 → 判成被抱起来锁住,再也解不开。所以:给了运控状态的,只认 ``ready``
+        (站着待命、在走),而且进 ``ready`` 满 ``posture_quiet_s`` 秒;一离开 ``ready`` 基线就清掉
+        重攒。没给运控状态的老调用方照旧按 ``standing``。"""
+        if motion is None:
+            return standing
+        if motion != "ready":
+            self._ready_ms = None
+            if self.state == OK:
+                self._base.clear()
+            return False
+        if self._ready_ms is None:
+            self._ready_ms = now_ms
+        return now_ms - self._ready_ms >= self.cfg.posture_quiet_s * 1000
 
     def _posture_quiet(self, motion: str | None, now_ms: int) -> bool:
         """工单 2:这一拍要不要因为姿势挡掉「撞」—— 不是立着,或者换姿势还没过
