@@ -47,10 +47,28 @@ def test_定位器感知外参_还没部署_写明白_不拦():
 
 def test_接上来源之后_不健康就拦():
     from nexwar_agent.release_precheck import SourceCheck
-    items = precheck(_好(sources=(SourceCheck("localizer", False, "定位器 3 s 未出位姿"),)))
+    items = precheck(_好(sources=(SourceCheck("perception", False, "感知进程 3 s 没心跳"),)))
     got = _项(items)
-    assert not got["localizer"].ok and got["localizer"].blocking
-    assert first_block(items) == "localizer"
+    assert not got["perception"].ok and got["perception"].blocking
+    assert first_block(items) == "perception"
+
+
+def test_定位器不健康_只提醒_不拦切版本_真机11_20():
+    """C40221 趴着、空闲,不在图上(off_map):「现在换」被「定位器」拦了两次。切版本只重启代理,
+    定位器照常跑:列出来、写明不拦;别的照常判。"""
+    from nexwar_agent.release_precheck import SourceCheck
+    items = precheck(_好(sources=(SourceCheck("localizer", False, "loc_not_found off_map"),)))
+    got = _项(items)
+    assert not got["localizer"].ok and not got["localizer"].blocking
+    assert "不拦" in got["localizer"].detail and "off_map" in got["localizer"].detail
+    assert first_block(items) == ""
+    # 健康时不加那句提醒;忙照样拦
+    ok = _项(precheck(_好(sources=(SourceCheck("localizer", True, "连着、定位可信"),))))
+    assert ok["localizer"].ok and "不拦" not in ok["localizer"].detail
+    busy = precheck(_好(busy="在跑任务", sources=(SourceCheck("localizer", False, "off_map"),)))
+    assert first_block(busy) == "busy"
+    # 清单里只有一条定位器(没有再列一条「尚未部署」)
+    assert [it.name for it in items].count("localizer") == 1
 
 
 def test_不认识的来源_也列出来_不健康照样拦():
@@ -235,11 +253,11 @@ async def test_接上健康来源_不健康就拦切版本_来源炸了卡住了
 
     async def 定位器():
         return SourceCheck("whatever", False, "3 s 未出位姿")
-    rt.precheck_sources.append(("localizer", 定位器))
+    rt.precheck_sources.append(("gnss", 定位器))
     await rt._on_cmd(_cmd("release_activate", {"name": NEW}, "s1", c))
     await broker.drain()
     ack = _ack(ears)
-    assert ack["reason"] == "localizer" and "localizer" in ack["data"]["blocking"]
+    assert ack["reason"] == "gnss" and "gnss" in ack["data"]["blocking"]
 
     async def 炸():
         raise RuntimeError("桥已断开")
