@@ -201,6 +201,25 @@ async def test_Nav2没就绪_这一段退回自己的规划_照样到(tmp_path):
     assert NavStatus.SUCCEED in t.status and not t.crashed
 
 
+async def test_真机1120_关了退回_Nav2没就绪_这一段直接失败_原因写清楚_不走(tmp_path, monkeypatch):
+    """用户 11-20:测 Nav2 的表现时不要备用规划。``NEXWAR_NAV2_FALLBACK=0``:没就绪就失败。"""
+    from nexwar_patrol.backends.base import NavRequestError
+    monkeypatch.setenv("NEXWAR_NAV2_FALLBACK", "0")
+    link = 假转接(ready=False)
+    link.reason = "Nav2 停了(没激活:controller_server;等它自动重来)"
+    t = _台(tmp_path, link)
+    assert t.nav.fallback_ok is False
+    await t.start(1.5, 4.0)
+    with pytest.raises(NavRequestError) as e:
+        await t.nav.goto(Pose.from_xy_yaw(6.0, 4.0))
+    assert e.value.code == "nav_unavailable" and "controller_server" in e.value.message
+    assert "关了退回" in e.value.message and not e.value.final
+    assert not link.kinds("goal") and not any(k == "nav_fallback" for k, _ in t.events)
+    assert t.nav.fallback_reason == ""
+    monkeypatch.setenv("NEXWAR_NAV2_FALLBACK", "1")
+    assert _台(tmp_path, link).nav.fallback_ok, "默认照旧退回"
+
+
 async def test_Nav2没就绪_一米走廊退回自己的规划_也到得了_跟站点查路线一个口径(tmp_path):
     """11-09:备用规划按外接圆 0.52 + 0.05 m 膨胀,1.14 m 以下的通道都判走不通;站点查路线按 0.40 m
     (intercept_reach.REACH_RADIUS_M)。站点说走得通、Nav2 一没就绪机器人就跳点。"""
