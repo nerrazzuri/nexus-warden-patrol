@@ -179,6 +179,31 @@ async def test_待命点的地图版本对不上就不回(站):
     assert "standby_failed" in got, "回不去要让值守的人看见"
 
 
+
+def test_真机1120_另存的同一坐标系版本算对得上_新扫的不算():
+    from nexwar_site.standby import same_frame
+    m = "main"
+    assert same_frame((m, "20261120-2"), (m, "20261120-2-dn1"))
+    assert same_frame((m, "20261120-2-dn1"), (m, "20261120-2-dn2"))
+    assert same_frame((m, "7-dn1-dn1"), (m, "7"))
+    assert not same_frame((m, "20261120-2"), (m, "20261120-3"))
+    assert not same_frame((m, "7"), (m, "8")) and not same_frame((m, "7"), ("other", "7"))
+    assert not same_frame((m, "7"), (m, None)) and not same_frame((m, "7-dnx"), (m, "7"))
+
+
+async def test_真机1120_待命点登记在另存前的版本_照样回_按狗加载的版本派(站):
+    """11-20:去噪另存出 ``-2-dn1``、狗加载它,待命点还登记在 ``-2`` 上 → 原来拒、报没回去。"""
+    t = 站
+    t.stb.set("A", "dock", map_id="estate-1", map_version="7-dn1", x=0.0, y=0.0, yaw=0.0,
+              default=True)
+    await t.send(t.site.goto("A", target(0.8), 0.8, issued_by="alice", priority=MANUAL))
+    await t.run(200)
+    goto = _cmds(t, "goto")
+    assert len(goto) == 2 and goto[1]["task_id"].startswith("standby-"), goto
+    assert '"7-dn1"' not in json.dumps(goto[1]), "按狗加载的 7 派,不是登记的 7-dn1"
+    assert t.stb.swap_point("A", "estate-1", "7")["map_version"] == "7"
+
+
 # ---------------------------------------------------- 巡检之后沿来路回(W00c6b)
 
 
