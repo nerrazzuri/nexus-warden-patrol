@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import '../../l10n.dart';
 import '../../net/site_client.dart';
 import '../nw/nw_theme.dart';
+import '../stop_failed.dart';
 
 /// 优先级的形状：P1 实心菱形、P2 实心三角、别的空心圆。颜色由调用方给（实底上是白的）。
 class PriorityShape extends StatelessWidget {
@@ -169,7 +170,9 @@ class StopAllButton extends StatelessWidget {
         _missed(id, null, at, epoch);
       } on SiteError catch (e) {
         _missed(id, e, at, epoch); // 稿 N-refuse：红框「急停没确认」+ 再发一次
-        bad.add(tr("$id didn't stop: $e. Use the E-stop on the robot.", '$id 未能停止：$e。请按机身急停。'));
+        // 真机 11-20 K03:原因按界面语言说(英文界面用站点给的 reason_en,不夹中文原话)
+        final why = stopFailedDetail(e);
+        bad.add(tr("$id didn't stop: $why. Use the E-stop on the robot.", '$id 未能停止：$why。请按机身急停。'));
       }
     }));
     onResult(bad.isEmpty ? tr('Stopped $n robots.', '已停止 $n 台机器人。') : bad.join(' '));
