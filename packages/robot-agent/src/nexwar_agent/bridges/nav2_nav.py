@@ -26,6 +26,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import math
+import os
 import time
 from collections import deque
 from pathlib import Path
@@ -396,6 +397,9 @@ class Nav2NavBackend(PlannedNavBackend):
         #: 转接服务端(:class:`~nexwar_agent.navbridge.NavBridgeServer`);``None`` = 没配,
         #: 永远退回自己的规划。
         self.link = link
+        #: Nav2 没就绪时退不退回自己的规划(真机 11-20 用户:测 Nav2 的表现时不要备用规划 ——
+        #: ``NEXWAR_NAV2_FALLBACK=0`` 关掉:这一段直接失败、原因写清楚)。
+        self.fallback_ok = os.environ.get("NEXWAR_NAV2_FALLBACK", "1").strip() != "0"
         #: 目标号从此刻(毫秒,取模)起算:代理重启、换一个后端,也不跟转接节点手里旧目标的号撞上
         #: (旧目标「已取消」的回执晚到,会被当成新目标的结果)。
         self._goal_id = int(time.time() * 1000) % 1_000_000_000
@@ -539,6 +543,9 @@ class Nav2NavBackend(PlannedNavBackend):
                         break
             finally:
                 self._settling = False
+        if why and not self.fallback_ok:
+            log.warning("%s:%s,关了退回自己的规划(NEXWAR_NAV2_FALLBACK=0):这一段不走", op, why)
+            raise NavRequestError(op, f"{why}(关了退回自己的规划)", code="nav_unavailable")
         if why:
             self.fallback_reason = why
             log.warning("%s:%s,这一段退回自己的规划导航 code=0x040F nav.fallback_planner", op, why)
