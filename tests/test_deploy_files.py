@@ -1854,6 +1854,9 @@ def test_W47_Nav2单元_单独ROS域_只装不起_卸载收干净():
     assert int(x.findtext(".//f:segment_size", namespaces=ns)) >= 8 << 20, "装得下整张大图"
     assert [a.text for a in x.iterfind(".//f:interfaceWhiteList/f:address", ns)] == ["127.0.0.1"]
     assert x.findtext(".//f:useBuiltinTransports", namespaces=ns) == "false"
+    # 发现不靠组播:本机单播、端口范围盖得住这个域里所有参与者(默认 4 个不够)
+    assert [a.text for a in x.iterfind(".//f:initialPeersList//f:address", ns)] == ["127.0.0.1"]
+    assert int(x.findtext(".//f:maxInitialPeersRange", namespaces=ns)) >= 32
     单元 = (DEPLOY / "nexwar_nav2.service").read_text(encoding="utf-8")
     assert "User=robot" in 单元 and "ExecStart=/opt/nexwar/current/deploy/nexwar_nav2_start" in 单元
     装 = (DEPLOY / "install.sh").read_text(encoding="utf-8")
