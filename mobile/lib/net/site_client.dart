@@ -620,6 +620,16 @@ abstract class SiteApi {
   Future<SiteSession> login(String name, String password);
   Future<void> logout();
 
+  /// 手机指纹登录（用户 11-20）：登记这部手机要先登录；[bioEnrollNonce] 要随机数，按指纹签了交
+  /// [bioEnroll]（回 `{key_id, expires_at}`）。没登录时 [bioLoginNonce] + [bioLogin] 换普通会话。
+  Future<String> bioEnrollNonce();
+  Future<Map<String, dynamic>> bioEnroll(List<int> pub, String label, String nonce, List<int> sig);
+  Future<String> bioLoginNonce(String keyId);
+  Future<SiteSession> bioLogin(String keyId, String nonce, List<int> sig);
+
+  /// 撤掉自己的一部手机（[keyId]）或全部。
+  Future<void> bioRevoke({String? keyId});
+
   /// 商业化 A6：这台手机收 P1 推送（极光推送号），离开站点前注销。
   Future<void> pushRegister(String registrationId, String platform, {String provider = 'jpush'});
   Future<void> pushUnregister(String registrationId);
@@ -1262,6 +1272,38 @@ class SiteClient implements SiteApi {
   Future<SiteSession> login(String name, String password) async {
     final d = _map(await _send('POST', '/api/login',
         <String, dynamic>{'name': name, 'password': password, 'client': clientInfo()}));
+    return _sessionFrom(d, name);
+  }
+
+  static String _b64(List<int> b) => base64Url.encode(b).replaceAll('=', '');
+
+  @override
+  Future<String> bioEnrollNonce() async =>
+      '${_map(await _send('POST', '/api/me/bio/challenge', <String, dynamic>{}))['nonce'] ?? ''}';
+
+  @override
+  Future<Map<String, dynamic>> bioEnroll(List<int> pub, String label, String nonce, List<int> sig) async =>
+      _map(await _send('POST', '/api/me/bio',
+          <String, dynamic>{'pub': _b64(pub), 'label': label, 'nonce': nonce, 'sig': _b64(sig)}));
+
+  @override
+  Future<String> bioLoginNonce(String keyId) async =>
+      '${_map(await _send('POST', '/api/login/bio/challenge', <String, dynamic>{'key_id': keyId}))['nonce'] ?? ''}';
+
+  @override
+  Future<SiteSession> bioLogin(String keyId, String nonce, List<int> sig) async {
+    final d = _map(await _send('POST', '/api/login/bio', <String, dynamic>{
+      'key_id': keyId, 'nonce': nonce, 'sig': _b64(sig), 'client': clientInfo()}));
+    return _sessionFrom(d, '');
+  }
+
+  @override
+  Future<void> bioRevoke({String? keyId}) async {
+    await _send('POST', '/api/me/bio/revoke', <String, dynamic>{'key_id': ?keyId});
+  }
+
+  /// 登录的回包 → 会话（配不上的当场注销、说为什么）。
+  Future<SiteSession> _sessionFrom(Map<String, dynamic> d, String name) async {
     final why = compatProblem(d);
     if (why != null) {
       // 配不上：不用这次登录（顺手注销掉，站点上不留一个没人用的令牌）

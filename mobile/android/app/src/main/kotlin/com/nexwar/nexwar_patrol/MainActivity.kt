@@ -116,6 +116,31 @@ class MainActivity : FlutterActivity() {
                 else -> result.notImplemented()
             }
         }
+        // 用户 11-20:指纹登录(BioKey:Keystore 里要按指纹才能用的私钥)
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "nexwar/bio").setMethodCallHandler { call, result ->
+            val alias = call.argument<String>("alias") ?: ""
+            when (call.method) {
+                "available" -> result.success(BioKey.available(applicationContext))
+                "create" -> Thread {                       // 生成钥匙可能要几百毫秒:别卡界面
+                    try {
+                        val pub = BioKey.create(alias)
+                        runOnUiThread { result.success(pub) }
+                    } catch (e: Exception) {
+                        runOnUiThread { result.error("create", e.message, null) }
+                    }
+                }.start()
+                "sign" -> BioKey.sign(this, alias, call.argument<ByteArray>("data") ?: ByteArray(0),
+                    call.argument<String>("title") ?: "", call.argument<String>("subtitle") ?: "",
+                    call.argument<String>("cancel") ?: "") { r, sig ->
+                    result.success(mapOf("result" to r, "sig" to sig))
+                }
+                "delete" -> {
+                    BioKey.delete(alias)
+                    result.success(null)
+                }
+                else -> result.notImplemented()
+            }
+        }
         // W42:连机器人的热点(添加机器人、换 WiFi、工程师解绑)
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "nexwar/hotspot").setMethodCallHandler { call, result ->
             when (call.method) {

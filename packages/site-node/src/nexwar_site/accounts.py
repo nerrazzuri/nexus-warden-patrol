@@ -59,6 +59,15 @@ ENGINEER = "engineer"
 #: 接口路径里占用的名字(``/api/accounts/engineer`` 是开工程师账号)。
 RESERVED_NAMES = frozenset({ENGINEER})
 _DUMMY_SALT = b"\0" * 16
+#: 手机指纹登录(用户 11-20):登记的那把钥匙 30 天到期(到期按一次密码再登记);一个账号最多几部手机
+#: (多了删最旧的);一次性随机数多久内要用掉、最多同时攒多少个。
+BIO_TTL_MS = 30 * 86400_000
+BIO_MAX = 5
+BIO_NONCE_MS = 60_000
+BIO_NONCE_CAP = 1000
+#: 签名的内容 = 用途 + 随机数 + 0 + 账号名(登记)或钥匙号(登录):登记的签名拿去登录不认,反之亦然。
+BIO_ENROLL = b"nexwar-bio-enroll\x00"
+BIO_LOGIN = b"nexwar-bio-login\x00"
 
 
 
@@ -66,9 +75,15 @@ def _drop_push(c: Any, name: str) -> None:
     """账号的权限变了(停用、改角色、重设口令):它登记的手机都不再推(A 阶段外审 I2)。
     手机下次登录会重新登记。"""
     c.execute("DELETE FROM push_devices WHERE account=?", (name,))
+    # 指纹登录的钥匙也一起作废(用户 11-20):改了口令、角色、停了用,得重新输密码再登记
+    c.execute("DELETE FROM bio_keys WHERE account=?", (name,))
 
 class AuthError(RuntimeError):
     pass
+
+
+class BioGone(AuthError):
+    """指纹登录的钥匙没了(撤了、过期了、账号改过口令):手机删掉本地钥匙,改用密码。"""
 
 
 class LockedOut(AuthError):
@@ -150,6 +165,8 @@ class Accounts:
         self._locked_until: dict[str, int] = {}
         self._lock = threading.Lock()
         self._hash_slots = threading.BoundedSemaphore(MAX_CONCURRENT_HASH)
+        #: 指纹登录的一次性随机数 → (用途, 账号名或钥匙号, 到期时刻)。
+        self._bio_nonces: dict[str, tuple[bytes, str, int]] = {}
 
     # ------------------------------------------------------------ 账号
 
@@ -247,10 +264,15 @@ class Accounts:
 
     def list(self) -> list[dict]:
         now = self._now()
+        bio = {r["account"]: r["n"] for r in self.db.query(
+            "SELECT account, count(*) AS n FROM bio_keys WHERE expires_ms>? GROUP BY account",
+            (now,))}
         return [{"name": r["name"], "role": r["role"], "disabled": bool(r["disabled"]),
                  "display_name": r["display_name"], "expires_ms": r["expires_ms"],
                  "last_login_ms": r["last_login_ms"],
-                 "expired": r["expires_ms"] is not None and now >= r["expires_ms"]}
+                 "expired": r["expires_ms"] is not None and now >= r["expires_ms"],
+                 # 用户 11-20:几部手机开了指纹登录(管理员能一键撤)
+                 "bio_devices": bio.get(r["name"], 0)}
                 for r in self.db.query(
                     "SELECT name, role, disabled, display_name, expires_ms, last_login_ms "
                     "FROM accounts ORDER BY name")]
@@ -445,6 +467,10 @@ class Accounts:
             # 成功:这个名字的失败计数与锁都清掉(占位的那次也算不上失败)。
             self._fails.pop(name, None)
             self._locked_until.pop(name, None)
+        return self._open_session(name, client)
+
+    def _open_session(self, name: str, client: Any) -> str:
+        now = self._now()
         token = secrets.token_urlsafe(32)
         with self.db.tx() as c:
             c.execute("INSERT INTO sessions(token_hash, name, created_at, last_used, client) "
@@ -523,6 +549,100 @@ class Accounts:
                       "(SELECT token_hash FROM sessions WHERE scope='watch' AND name=? "
                       "ORDER BY created_at DESC, rowid DESC LIMIT ?)", (name, name, WATCH_MAX))
         return token, now + WATCH_ABS_MS
+
+    # ------------------------------------------------------------ 手机指纹登录(用户 11-20)
+
+    def bio_nonce(self, purpose: bytes, subject: str) -> str:
+        """出一个一次性随机数(:data:`BIO_NONCE_MS` 内用掉)。
+        ``subject``:登记时是账号名,登录时是钥匙号。"""
+        now = self._now()
+        nonce = secrets.token_urlsafe(24)
+        with self._lock:
+            live = {k: v for k, v in self._bio_nonces.items() if v[2] > now}
+            while len(live) >= BIO_NONCE_CAP:
+                live.pop(next(iter(live)))
+            live[nonce] = (purpose, subject, now + BIO_NONCE_MS)
+            self._bio_nonces = live
+        return nonce
+
+    def _take_nonce(self, nonce: Any, purpose: bytes, subject: str) -> bool:
+        """随机数对不对得上(用途、对象、没过期);不管对不对都当场作废。"""
+        if not isinstance(nonce, str):
+            return False
+        with self._lock:
+            got = self._bio_nonces.pop(nonce, None)
+        return got is not None and got[0] == purpose and got[1] == subject \
+            and got[2] > self._now()
+
+    def bio_enroll(self, name: str, pub: bytes, label: str, nonce: Any,
+                   sig: bytes) -> tuple[str, int]:
+        """登记这部手机的公钥。要先登录(``name`` 是这次会话的账号),再用手机按指纹签站点出的随机数,
+        证明私钥在手机上、指纹能用。回 ``(钥匙号, 到期时刻)``。工程师临时账号不许。"""
+        from nexwar_contract import p256
+        if not self._take_nonce(nonce, BIO_ENROLL, name):
+            raise AuthError("随机数不对或过期了,重来一次")
+        try:
+            p256.public_point(pub)
+        except p256.BadKey as exc:
+            raise AuthError(str(exc)) from exc
+        if not p256.verify(pub, BIO_ENROLL + nonce.encode() + b"\x00" + name.encode(), sig):
+            raise AuthError("签名不对")
+        now = self._now()
+        key_id = secrets.token_hex(16)
+        with self.db.tx() as c:
+            row = self._get(c, name)
+            if row["role"] == ENGINEER:
+                raise AuthError("工程师临时账号不能用指纹登录")
+            c.execute("INSERT INTO bio_keys(key_id, account, pub, label, created_ms, expires_ms) "
+                      "VALUES (?,?,?,?,?,?)",
+                      (key_id, name, pub, (label or "")[:64], now, now + BIO_TTL_MS))
+            c.execute("DELETE FROM bio_keys WHERE account=? AND key_id NOT IN (SELECT key_id "
+                      "FROM bio_keys WHERE account=? ORDER BY created_ms DESC, rowid DESC LIMIT ?)",
+                      (name, name, BIO_MAX))
+        return key_id, now + BIO_TTL_MS
+
+    def bio_login(self, key_id: Any, nonce: Any, sig: bytes, client: Any = None) -> tuple[str, str]:
+        """用指纹签过的随机数换一个普通会话。回 ``(令牌, 账号名)``。钥匙不在、过期、账号停用 / 过期
+        都拒;签名不对跟输错密码同一个计数和锁。"""
+        from nexwar_contract import p256
+        if not isinstance(key_id, str) or not self._take_nonce(nonce, BIO_LOGIN, key_id):
+            raise AuthError("随机数不对或过期了,重来一次")
+        now = self._now()
+        rows = self.db.query("SELECT k.account, k.pub, k.expires_ms AS kexp, a.disabled, "
+                             "a.expires_ms FROM bio_keys k JOIN accounts a ON a.name=k.account "
+                             "WHERE k.key_id=?", (key_id,))
+        if not rows or rows[0]["kexp"] <= now:
+            raise BioGone("这部手机的指纹登录已失效,请用密码登录")
+        r = rows[0]
+        name = r["account"]
+        self._attempt(name)
+        if not p256.verify(r["pub"], BIO_LOGIN + nonce.encode() + b"\x00" + key_id.encode(), sig):
+            raise AuthError("指纹签名不对")
+        self._clear(name)
+        if r["disabled"]:
+            raise AccountDisabled("这个账号已停用,请找管理员")
+        if r["expires_ms"] is not None and now >= r["expires_ms"]:
+            raise AccountDisabled("这个账号已过期,请找管理员")
+        with self.db.tx() as c:
+            c.execute("UPDATE bio_keys SET last_used_ms=? WHERE key_id=?", (now, key_id))
+        return self._open_session(name, client), name
+
+    def bio_keys(self, name: str) -> list[dict[str, Any]]:
+        """这个账号登记了指纹登录的手机(没过期的)。"""
+        now = self._now()
+        return [dict(r) for r in self.db.query(
+            "SELECT key_id, label, created_ms, expires_ms, last_used_ms FROM bio_keys "
+            "WHERE account=? AND expires_ms>? ORDER BY created_ms DESC", (name, now))]
+
+    def bio_revoke(self, name: str, key_id: str | None = None) -> int:
+        """撤掉这个账号的一部手机(``key_id``)或全部;回撤了几个。"""
+        with self.db.tx() as c:
+            if key_id is None:
+                cur = c.execute("DELETE FROM bio_keys WHERE account=?", (name,))
+            else:
+                cur = c.execute("DELETE FROM bio_keys WHERE account=? AND key_id=?",
+                                (name, key_id))
+            return cur.rowcount
 
     def logout(self, token: str) -> None:
         """退出登录。**这次登录登记的手机一并不再推**(A 阶段外审 I2:推送跟着登记它的那次登录的
