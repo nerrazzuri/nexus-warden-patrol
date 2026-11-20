@@ -1028,12 +1028,54 @@ def test_TG1117_没定位_不送map_odom_不当Nav2卡住_不重来_也不整个
     assert b.sent == [] and b._restarts == 0 and full == [], "没定位:不重来"
     b._loc_wall = 1e18                                   # 定位上来了
     b._lifecycle_retry()
-    now[0] += nb.LIFECYCLE_RETRY_S - 1
+    now[0] += nb.LOC_GRACE_S - 1
     b._lifecycle_retry()
-    assert b.sent == [], "从定位上来那一刻起计时"
+    assert b.sent == [] and full == [], "从定位上来那一刻起,先给它一会儿自己激活"
     now[0] += 2
     b._lifecycle_retry()
-    assert b.sent == [nb.LIFECYCLE_RESET, nb.LIFECYCLE_STARTUP]
+    assert full and b.sent == [], "真机 11-20:等定位等坏了的启动,不再重来两回,直接整个重启"
+
+
+def test_真机1120_刚开机没定位一会儿_不算等坏了_照旧等满一个周期再重来():
+    from nexwar_localizer import nav2bridge as nb
+    now = [0.0]
+    b = _生命周期桥(now)
+    full: list = []
+    b._full_restart = lambda: full.append(now[0])
+    b._loc_wall = -1e9
+    b._lifecycle_retry()
+    now[0] += nb.UNLOC_STUCK_S - 5                       # 开机几秒后代理就送定位了
+    b._lifecycle_retry()
+    b._loc_wall = 1e18
+    b._lifecycle_retry()
+    now[0] += nb.LOC_GRACE_S + 1
+    b._lifecycle_retry()
+    assert full == [] and b.sent == [], "正常启动:不整个重启"
+    now[0] += nb.LIFECYCLE_RETRY_S
+    b._lifecycle_retry()
+    assert b.sent == [nb.LIFECYCLE_RESET, nb.LIFECYCLE_STARTUP] and full == []
+
+
+def test_真机1120_等定位时Nav2自己激活了_不重启():
+    from nexwar_localizer import nav2bridge as nb
+    now = [0.0]
+    b = _生命周期桥(now)
+    full: list = []
+    b._full_restart = lambda: full.append(now[0])
+    b._loc_wall = -1e9
+    for _ in range(3):
+        now[0] += nb.UNLOC_STUCK_S
+        b._lifecycle_retry()
+    b._loc_wall = 1e18
+    b._lifecycle_retry()
+    b.nav2_active = True                                 # 定位上来,代价地图拿到坐标、自己激活了
+    now[0] += nb.LOC_GRACE_S + 1
+    b._lifecycle_retry()
+    b.nav2_active = False                                # 以后真卡住:照旧的周期,不当等坏了
+    b._lifecycle_retry()
+    now[0] += nb.LOC_GRACE_S + 1
+    b._lifecycle_retry()
+    assert full == []
 
 
 def test_TG1117_没定位_Nav2没激活_就绪原因说等定位_不说还在启动():
