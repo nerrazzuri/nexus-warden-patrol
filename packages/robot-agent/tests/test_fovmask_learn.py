@@ -1,4 +1,4 @@
-"""真机 11-20:没有视野表就先关遮挡限速,机器人走起来自己学(:class:`nexwar_agent.fovmask.Learner`)。"""
+"""真机 11-20:没有视野表就先关遮挡限速,机器人走起来自己学。"""
 
 from __future__ import annotations
 

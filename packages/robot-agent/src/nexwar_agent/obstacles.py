@@ -270,7 +270,7 @@ class ObstacleView:
             try:
                 got = self.fov_learner.feed(occ=f0.occ, known=f0.known, size=f0.size,
                                             res=f0.res, pose=f0.pose)
-            except Exception:                            # noqa: BLE001 - 学不成不能拖垮守卫
+            except Exception:                            # 学不成不能拖垮守卫
                 log.exception("学视野表出错,不学了")
                 self.fov_learner, got = None, None
             if got is not None:
