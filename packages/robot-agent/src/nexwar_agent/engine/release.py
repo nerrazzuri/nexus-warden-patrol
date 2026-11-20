@@ -46,6 +46,10 @@ CURRENT_LINK = "current"
 PENDING_FILE = "pending.json"
 #: 每一版目录里都有一份。
 MANIFEST_NAME = "release.json"
+#: 「上一版」= 最近一次切过来之前在跑的那一版(提交时记)。**不在 releases/ 里**。
+#: 真机 11-20 C40221:没记这个时「上一版」按名字挑 —— 同一天的两版按提交号的字母排,
+#: 356305bb → 65f617cd 之后「退」退到了 c3594543,提交时清旧槽还把刚切走的 356305bb 删了。
+PREVIOUS_FILE = "previous.json"
 
 #: 盘上留几份。理由见模块开头:第三份只占盘。
 KEEP_RELEASES = 2
@@ -798,9 +802,34 @@ def activate(layout: Layout, name: str, *, now_ms: int,
 
 
 def commit(layout: Layout) -> tuple[str, ...]:
-    """这一版坐实了:清标记,顺手把多余的版本删掉。返回删掉了哪几版。"""
+    """这一版坐实了:记下切过来之前那一版(「上一版」),清标记,顺手把多余的版本删掉 ——
+    **刚切走的那一版不删**(它是「退」要回去的地方)。返回删掉了哪几版。"""
+    pending = read_pending(layout)
+    if pending is not None and pending.src and pending.src != pending.to:
+        write_previous(layout, pending.src)
     clear_pending(layout)
     return prune(layout)
+
+
+def read_previous(layout: Layout) -> str:
+    """记下的「上一版」;没记、读不懂、名字不合规:空串。"""
+    try:
+        raw = json.loads((layout.root / PREVIOUS_FILE).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return ""
+    name = raw.get("name") if isinstance(raw, dict) else None
+    return name if isinstance(name, str) and _NAME_RE.match(name) else ""
+
+
+def write_previous(layout: Layout, name: str) -> None:
+    """记「上一版」。先写临时文件再改名;写不了就算了(退回时按名字挑,跟以前一样)。"""
+    try:
+        layout.root.mkdir(parents=True, exist_ok=True)
+        tmp = layout.root / (PREVIOUS_FILE + ".tmp")
+        tmp.write_text(json.dumps({"name": safe_name(name)}), encoding="utf-8")
+        os.replace(tmp, layout.root / PREVIOUS_FILE)
+    except (OSError, ReleaseError):
+        pass
 
 
 
@@ -884,7 +913,7 @@ def prune(layout: Layout, *, keep: int = KEEP_RELEASES) -> tuple[str, ...]:
     就说明没迁干净,删了数据就没了。
     """
     pending = read_pending(layout)
-    protected = {current_name(layout)}
+    protected = {current_name(layout), read_previous(layout)}
     if pending is not None:
         protected.update({pending.to, pending.src})
     protected.discard("")

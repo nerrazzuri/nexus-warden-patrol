@@ -208,9 +208,16 @@ class ReleaseOps:
         return (self.layout.release_dir(name) / "venv" / SENTINEL).is_file()
 
     def previous(self) -> str | None:
-        """「上一版」:比在跑的那版旧的、装好了的、退过去代理起得来的最新一版。没有回 None。
+        """「上一版」:最近一次切过来之前在跑的那一版(提交时记的,``rel.read_previous``;要比在跑的
+        旧)。没记过(老机器)、那一版已经不在了:比在跑的那版旧的、装好了的、退过去代理起得来的最新
+        一版。没有回 None。
         老服务那一代的槽、启动脚本坏了的槽不算(W00c5e 内部评审;判据见 ``rel.can_switch``)。"""
         cur = self.current()
+        rec = rel.read_previous(self.layout)
+        # 只往旧的退(跟以前一样:退回之后再点「退」不会又跳回新版)
+        if rec and rec < cur and rec in rel.installed(self.layout) and self.ready(rec) \
+                and self.can_switch_to(rec):
+            return rec
         older = [n for n in rel.installed(self.layout) if n < cur and self.ready(n)
                  and self.can_switch_to(n)]
         return older[-1] if older else None
