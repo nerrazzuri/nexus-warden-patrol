@@ -1096,7 +1096,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     # 日志设计 第 4 条:统一格式(带时区时间、方括号里的任务号 / 第几个点 / 地图版本);
     # 机器人上进 systemd 日志,由日志上传按批传到站点
     from nexwar_contract import logsetup
-    logsetup.setup(name="agent", log_dir=None, level="INFO")
+    # 真机 11-20:后台线程写 —— journald 写不动时标准错误的管道塞满,事件循环跟着停 10–20 s
+    logsetup.setup(name="agent", log_dir=None, level="INFO", background=True)
     assembled = build(args)
     try:
         assembled.start()
