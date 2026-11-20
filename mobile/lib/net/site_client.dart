@@ -547,8 +547,20 @@ String obstaclesText(Map<String, dynamic>? caps) {
       '：${o['reason']}') : '';
   final rear = o['rear'] == true ? '' : tr(', rear lidar not in use', '，后雷达未启用');
   return tr(
-      'Obstacle avoidance: $state$reason${o['state'] == 'ok' ? rear : ''}',
-      '避障：$state$reason${o['state'] == 'ok' ? rear : ''}');
+      'Obstacle avoidance: $state$reason${o['state'] == 'ok' ? rear : ''}${fovText(o['fov'])}',
+      '避障：$state$reason${o['state'] == 'ok' ? rear : ''}${fovText(o['fov'])}');
+}
+
+/// 用户 11-21:雷达视野表学没学好(没学好时盲区限速不生效)。学好了不多写。
+String fovText(Object? f) {
+  if (f is! Map) return '';
+  final need = f['need'] is num && (f['need'] as num) > 0 ? (f['need'] as num) : 1;
+  final p = f['frames'] is num ? ((f['frames'] as num) * 100 / need).floor().clamp(0, 99) : 0;
+  return switch ('${f['state']}') {
+    'learning' => tr('; lidar field of view learning while moving ($p%)', '；雷达视野表边走边学（$p%）'),
+    'none' => tr('; lidar field of view not learned yet', '；雷达视野表还没学'),
+    _ => '',
+  };
 }
 
 /// 配了定位器的狗（W09a，经本机定位桥）：来源说人话。

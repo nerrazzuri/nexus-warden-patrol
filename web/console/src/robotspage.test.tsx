@@ -226,6 +226,16 @@ describe("机器人页 · 设置", () => {
     for (const s of ["摄像头 thermal 故障", "激光雷达", "先试跑", "只手动派"]) expect(d).toContain(s);
   });
 
+  it("用户 11-21:雷达视野表在学写进度、学好了算正常", async () => {
+    robots[0] = card({ fov: { state: "learning", frames: 240, need: 600 } });
+    const { container: c } = page();
+    const d = await settings(c, "A");
+    const row = d.querySelector('[data-check="fov"]')!;
+    expect(row.textContent).toContain("边走边学（40%）");
+    expect(row.textContent).toContain("盲区限速不生效");
+    expect(row.closest(".rb-checks")).toBe(d.querySelectorAll(".rb-checks")[0]);
+  });
+
   it("P1-26 / P1-05:切派单方式、重出开通码先在原地确认(不弹窗),说清是什么意思", async () => {
     const { container: c } = page();
     const d = await settings(c, "A");

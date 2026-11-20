@@ -125,7 +125,9 @@ async def test_运行时_能力里报避障状态_外参没过带原因(tmp_path
     try:
         await broker.drain()
         caps = Capabilities.from_wire(ears.caps[-1])
-        assert caps.tasks["obstacles"] == {"state": "lost", "rear": False}
+        ob = dict(caps.tasks["obstacles"])
+        assert ob.pop("fov")["state"] in ("learning", "ready")    # 用户 11-21:视野表状态另测
+        assert ob == {"state": "lost", "rear": False}
         assert rt.parts.nav.obstacles is rt.obs_view and rt.parts.nav.guard is not None
         rd, w = await _连(tmp_path / "o.sock")
         w.write(encode(Hello(proto=1)))
@@ -296,6 +298,10 @@ def test_真机1120_运行时_没有视野表先关_自己学_存下_下次开�
     nav = a.parts.nav
     assert nav.occ_need_fov and nav.fov_mask is None
     assert isinstance(a.obs_view.fov_learner, fovmask.Learner)
+    # 用户 11-21:能力里报视野表在学、学了多少;学好了报 ready
+    a.obs_view.fov_learner.frames = 240
+    assert a._extra_tasks()["obstacles"]["fov"] == {"state": "learning", "frames": 240,
+                                                     "need": fovmask.AUTO_FRAMES}
     m = np.zeros((80, 80), dtype=bool)
     m[50:70, 30:50] = True
     a.obs_view.fov_done(m, 0.1, 600)
@@ -303,3 +309,5 @@ def test_真机1120_运行时_没有视野表先关_自己学_存下_下次开�
     assert (tmp_path / "agent" / fovmask.LEARNED_NAME).is_file()
     b = rt()
     assert b.obs_view.fov_learner is None and (b.parts.nav.fov_mask[0] == m).all()
+    assert a._extra_tasks()["obstacles"]["fov"] == {"state": "ready"}
+    assert b._extra_tasks()["obstacles"]["fov"] == {"state": "ready"}
