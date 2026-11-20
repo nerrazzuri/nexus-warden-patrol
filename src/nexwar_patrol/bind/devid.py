@@ -24,12 +24,23 @@ from nexwar_contract import ed25519
 from nexwar_patrol.bind.paths import BindPaths, read_json, write_json
 
 #: 芯片序号从哪儿读(按先后):设备树(RK3588),Tegra 熔丝里的芯片 UID(Orin:设备树那个是厂家占位
-#: ``DummySN``,11-02 工单 2),通用的 soc0,再是 cpuinfo 的 Serial。
+#: ``DummySN``,11-02 工单 2),通用的 soc0,再是 cpuinfo 的 Serial,最后是 Jetson 模块 EEPROM 里的
+#: 模块序列号(:data:`JETSON_EEPROM`)。**新来源只往最后加**:前面读得到的板子 hw_id 不变,已签的出厂
+#: 证书照旧有效。
+JETSON_EEPROM: tuple[Path, ...] = (Path("/sys/bus/nvmem/devices/module1/nvmem"),
+                                   Path("/sys/bus/i2c/devices/0-0050/eeprom"))
 HW_SOURCES: tuple[Path, ...] = (Path("/proc/device-tree/serial-number"),
                                 Path("/sys/firmware/devicetree/base/serial-number"),
                                 Path("/sys/module/tegra_fuse/parameters/tegra_chip_uid"),
                                 Path("/sys/devices/soc0/serial_number"),
-                                Path("/proc/cpuinfo"))
+                                Path("/proc/cpuinfo"),
+                                *JETSON_EEPROM)
+#: NVIDIA Jetson 模块 EEPROM(256 字节):偏移 20 起是料号(``699-…``),偏移 74 起 15 字节是模块序列号
+#: (ASCII,后面补 0x00 / 0xFF / 空格)。11-20 真机 C40221(R36.4.7):设备树是 ``DummySN``、没有
+#: tegra_chip_uid / soc0 序号 / cpuinfo Serial,只有这里有唯一编号(``module1``,只有 root 读得到)。
+_EEPROM_PART = slice(20, 50)
+_EEPROM_SERIAL = slice(74, 89)
+_EEPROM_SERIAL_RE = re.compile(r"[0-9A-Za-z]{6,15}")
 #: 厂家占位值(小写比):这些板子个个一样,不能当芯片编号。
 _PLACEHOLDERS = frozenset({"dummysn", "dummy", "default", "default string", "none", "null",
                            "unknown", "n/a", "na", "serial", "to be filled by o.e.m.",
@@ -65,12 +76,26 @@ def cert_path(p: BindPaths) -> Path:
     return device_dir(p) / "device-cert.json"
 
 
+def _eeprom_serial(raw: bytes) -> str | None:
+    """Jetson 模块 EEPROM 里的模块序列号。不是这种 EEPROM(料号不是 ``699-`` 开头)、
+    序列号不像样:None。"""
+    if len(raw) < _EEPROM_SERIAL.stop or not raw[_EEPROM_PART].startswith(b"699-"):
+        return None
+    sn = raw[_EEPROM_SERIAL].split(b"\x00")[0].strip(b"\xff \t").decode("ascii", "replace")
+    return sn if _EEPROM_SERIAL_RE.fullmatch(sn) and not _placeholder(sn) else None
+
+
 def read_hw_id(sources: Iterable[Path] = HW_SOURCES) -> str:
     """芯片编号:第一个读得到、不是占位值(全 0、``DummySN`` 之类)的序号的 SHA-256(64 位十六进制)。"""
     for src in sources:
         try:
             raw = Path(src).read_bytes()
         except OSError:
+            continue
+        if Path(src).name in ("nvmem", "eeprom"):     # 二进制的模块 EEPROM,不当文本读
+            sn = _eeprom_serial(raw)
+            if sn is not None:
+                return hashlib.sha256(b"d1max-hw|" + sn.encode("ascii")).hexdigest()
             continue
         text = raw.replace(b"\x00", b"").decode("ascii", "replace")
         m = _SERIAL_LINE.search(text)
@@ -79,8 +104,8 @@ def read_hw_id(sources: Iterable[Path] = HW_SOURCES) -> str:
             continue
         if not _placeholder(value) and len(value) <= 128:
             return hashlib.sha256(b"d1max-hw|" + value.encode("ascii", "replace")).hexdigest()
-    raise DevIdError("读不到芯片编号(设备树 serial-number、cpuinfo 的 Serial 都没有):"
-                     "这块板不能出厂")
+    raise DevIdError("读不到芯片编号(设备树 serial-number、cpuinfo 的 Serial、Jetson 模块 EEPROM 的"
+                     "序列号都没有;EEPROM 要 root 才读得到):这块板不能出厂")
 
 
 def _model(dev: dict[str, Any]) -> str:
