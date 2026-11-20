@@ -1840,10 +1840,10 @@ def test_W47_Nav2单元_单独ROS域_只装不起_卸载收干净():
     assert "socket:=/var/lib/nexwar/agent/nav2.sock" in text
     assert "$here/deploy/nav2/nexwar_nav2.launch.py" in text
     assert (DEPLOY / "nav2" / "params.yaml").is_file()
-    # 真机 11-20:NEXWAR_NAV2_DDS=shm 走共享内存的 FastDDS 配置
+    # 真机 11-20:走共享内存的 FastDDS 配置,用户 11-20 定为默认(NEXWAR_NAV2_DDS=udp 才退回)
     # (不设 ROS_LOCALHOST_ONLY,不然 rmw 换掉传输)
     import xml.etree.ElementTree as ET
-    shm = text.split('if [ "${NEXWAR_NAV2_DDS:-}" = shm ]; then', 1)[1].split("else", 1)[0]
+    shm = text.split('if [ "${NEXWAR_NAV2_DDS:-shm}" != udp ]; then', 1)[1].split("else", 1)[0]
     assert "ROS_LOCALHOST_ONLY=0" in shm and \
         'FASTRTPS_DEFAULT_PROFILES_FILE="$here/deploy/nav2/fastdds_nav2.xml"' in shm
     x = ET.parse(DEPLOY / "nav2" / "fastdds_nav2.xml").getroot()
@@ -1858,6 +1858,8 @@ def test_W47_Nav2单元_单独ROS域_只装不起_卸载收干净():
     zen = text.split('if [ "${NEXWAR_NAV2_RMW:-}" = zenoh ]; then', 1)[1].split("fi", 1)[0]
     assert "RMW_IMPLEMENTATION=rmw_zenoh_cpp" in zen
     assert "unset FASTRTPS_DEFAULT_PROFILES_FILE" in zen
+    udp = text.split('if [ "${NEXWAR_NAV2_DDS:-shm}" != udp ]; then', 1)[1].split("else", 1)[1]
+    assert udp.split("fi", 1)[0].strip() == "export ROS_LOCALHOST_ONLY=1", "udp 才退回本机 UDP"
     assert text.index("NEXWAR_NAV2_DDS:-") < text.index("NEXWAR_NAV2_RMW:-") \
         < text.index("exec ros2")
     # 发现不靠组播:本机单播、端口范围盖得住这个域里所有参与者(默认 4 个不够)
