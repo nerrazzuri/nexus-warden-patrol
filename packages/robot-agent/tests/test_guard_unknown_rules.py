@@ -253,3 +253,13 @@ def test_真机1120_看不见的规矩现场能换_写错按默认():
     for b in BAND_POLICIES:
         assert band_policy_from_env({"NEXWAR_GUARD_BAND": b}) == b
     assert band_policy_from_env({"NEXWAR_GUARD_BAND": "loose"}) is None
+
+
+def test_真机1120_用户先暂时默认盲带没人_真机没设按legacy_设了按设的():
+    """用户 11-20「先暂时默认盲带没人」:真机守卫缺省 legacy;仿真、测试用的 ObstacleView 缺省不变。"""
+    from nexwar_agent.obstacles import FIELD_DEFAULT_BAND, ObstacleView, field_band_policy
+    assert FIELD_DEFAULT_BAND == "legacy"
+    assert field_band_policy({}) == "legacy"
+    assert field_band_policy({"NEXWAR_GUARD_BAND": "loose"}) == "legacy", "写错按缺省"
+    assert field_band_policy({"NEXWAR_GUARD_BAND": "sealed"}) == "sealed"
+    assert ObstacleView().band_policy == "sealed"
