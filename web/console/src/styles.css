@@ -2108,7 +2108,7 @@ input[type="checkbox"], input[type="radio"] { width: 18px; height: 18px; }
 .multi-act .btn { width: 152px; justify-content: center; }
 
 /* 第五期 G-records:记录与录像三栏 —— 左 标签 + 筛选,中 表格 / 播放,右 选中那条 */
-.page[data-page="alarms"], .page[data-page="recordings"], .page[data-page="notes"] { padding: 0; gap: 0; }
+.page[data-page="alarms"], .page[data-page="recordings"], .page[data-page="patrols"], .page[data-page="notes"] { padding: 0; gap: 0; }
 .ev { display: grid; grid-template-columns: 264px minmax(0, 1fr) 520px; height: calc(100vh - 60px); height: calc(100dvh - 60px); background: var(--c-bg); }
 .ev.recpage { grid-template-columns: 264px minmax(0, 1fr); }
 .ev.notes { grid-template-columns: 320px minmax(0, 1fr); }
@@ -2116,10 +2116,12 @@ input[type="checkbox"], input[type="radio"] { width: 18px; height: 18px; }
 .ev-main { min-width: 0; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; }
 .ev-side { min-height: 0; overflow-y: auto; border-left: 1px solid var(--c-outline); }
 .ev-side > .empty { padding: 24px 20px; }
-.subtabs.ev-tabs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0; margin: 0; padding: 0; border: 1px solid var(--c-outline); }
+.subtabs.ev-tabs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0; margin: 0; padding: 0; border: 1px solid var(--c-outline); }
 .subtabs.ev-tabs a { display: flex; align-items: center; justify-content: center; min-height: 36px; padding: 0 6px; font-size: 13px; font-weight: 600;
   text-align: center; color: var(--c-text); text-decoration: none; border: 0; border-right: 1px solid var(--c-outline); border-radius: 0; }
-.subtabs.ev-tabs a:last-child { border-right: 0; }
+/* 真机 11-20 加了「巡逻记录」:四个标签两行两列 */
+.subtabs.ev-tabs a:nth-child(2n) { border-right: 0; }
+.subtabs.ev-tabs a:nth-child(-n + 2) { border-bottom: 1px solid var(--c-outline); }
 .subtabs.ev-tabs a[aria-current="page"] { background: var(--c-primary); color: var(--c-onPrimary); }
 .ev-f { display: flex; flex-direction: column; gap: var(--sp-2); margin: 0; padding: 0; border: 0; font-size: 12px; font-weight: 600; letter-spacing: 0.06em; color: var(--c-textSecondary); }
 .ev-f legend { padding: 0; margin-bottom: 8px; }
@@ -2200,7 +2202,7 @@ input[type="checkbox"], input[type="radio"] { width: 18px; height: 18px; }
   .ev-table .ev-shot { display: none; }
 }
 @media (max-width: 1099px) {
-  .ev, .ev.recpage, .ev.notes { grid-template-columns: 1fr; height: auto; }
+  .ev, .ev.recpage, .ev.notes, .ev.patrols { grid-template-columns: 1fr; height: auto; }
   .ev-left, .ev-side { border: 0; border-bottom: 1px solid var(--c-outline); }
 }
 /* 第五期 G-playback:值班页回放 —— 黄条 + 黄框,右栏照旧实时 */
@@ -2638,3 +2640,25 @@ input[type="checkbox"], input[type="radio"] { width: 18px; height: 18px; }
 .up-status { flex: 1 1 100%; display: grid; gap: 2px; padding-left: 140px; }
 .up-status p { margin: 0; }
 @media (max-width: 760px) { .up-status { padding-left: 0; } }
+
+/* 真机 11-20:记录与录像 → 巡逻记录(patrolspage.tsx) */
+/* 宽屏三栏;1099 以下跟别的记录页一样叠成一列(上面的 @media 里) */
+@media (min-width: 1440px) { .ev.patrols { grid-template-columns: 264px minmax(0, 1fr) 440px; } }
+@media (min-width: 1100px) and (max-width: 1439px) { .ev.patrols { grid-template-columns: 232px minmax(0, 1fr) 360px; } }
+.pt-table td small { white-space: nowrap; }
+.pt-bad { color: var(--c-error); font-weight: 600; }
+.pt-runhead { padding: 12px 16px; border-bottom: 1px solid var(--c-outline); }
+.pt-runhead h2 { margin: 0; font-size: 18px; line-height: 26px; }
+.pt-runhead p { margin: 2px 0 0; }
+.pt-photos { list-style: none; margin: 0; padding: 0; }
+.pt-photos li { display: grid; grid-template-columns: 160px minmax(0, 1fr); gap: var(--sp-3); padding: 12px 16px; border-bottom: 1px solid var(--c-outline); }
+.pt-photos li.bad { box-shadow: inset 3px 0 0 var(--c-error); }
+.pt-photos img { display: block; width: 160px; height: 100px; object-fit: cover; background: #000; border: 1px solid var(--c-outline); }
+.pt-photos p { margin: 2px 0 0; }
+.evp > .empty { margin: 24px 16px; }
+@media (max-width: 760px) {
+  .pt-photos li { grid-template-columns: minmax(0, 1fr); }
+  .pt-photos img { width: 100%; height: auto; aspect-ratio: 16 / 10; }
+  .pt-table td small { white-space: normal; }
+  .pt-table th:nth-child(4), .pt-table td:nth-child(4) { display: none; }
+}

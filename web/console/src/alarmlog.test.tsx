@@ -221,9 +221,9 @@ describe("报警记录页", () => {
     } finally { lang.value = "zh"; }
   });
 
-  it("左栏三个标签:报警 / 录像 / 交班留言", async () => {
+  it("左栏四个标签:报警 / 录像 / 巡逻记录(真机 11-20)/ 交班留言", async () => {
     const { container: c } = page();
-    expect(Array.from(c.querySelectorAll(".ev-tabs a")).map((a) => a.getAttribute("href"))).toEqual(["#/alarms", "#/recordings", "#/notes"]);
+    expect(Array.from(c.querySelectorAll(".ev-tabs a")).map((a) => a.getAttribute("href"))).toEqual(["#/alarms", "#/recordings", "#/patrols", "#/notes"]);
   });
 });
 
