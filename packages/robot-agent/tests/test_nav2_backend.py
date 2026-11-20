@@ -2563,3 +2563,26 @@ async def test_先直走看清_刚起步就被走过来的人挡住_不算一次
         sent.append(round(t.nav._last_wz, 2))
     assert t.r.x - x0 > 0.5, ("人走了还能挪出去看清", t.r.x - x0)
     assert any(abs(w) > 0.1 for w in sent), "看清以后照 Nav2 的转"
+
+
+def test_真机1120_遮挡限速现场开关_限速变了记一行原因(tmp_path, monkeypatch, caplog):
+    """商场一路 0.19 m/s、日志里看不出为什么:限速变了记原因和各项;NEXWAR_NAV_OCC 换算法或关。"""
+    import logging
+
+    from nexwar_agent.bridges import nav2_nav
+    link = 假转接(ready=True)
+    assert _台(tmp_path, link).nav.occ_algo is None, "默认按 OCC_ALGO"
+    for env, want in (("off", ""), ("E1", "E1"), ("E2", "E2"), ("bogus", None)):
+        monkeypatch.setenv("NEXWAR_NAV_OCC", env)
+        assert _台(tmp_path, link).nav.occ_algo == want, env
+    nav = _台(tmp_path, link).nav
+    caplog.set_level(logging.INFO, logger=nav2_nav.log.name)
+    parts = {"看得清": 1.0, "遮挡": 0.2, "任务/巡逻/定位": 0.6, "区域": math.inf,
+             "限速区": math.inf}
+    nav._log_cap(0.2, parts)
+    nav._log_cap(0.22, parts)                           # 变得少、原因一样:不再记
+    nav._log_cap(0.6, {**parts, "遮挡": 1.0})            # 原因换了
+    lines = [r.getMessage() for r in caplog.records if r.getMessage().startswith("限速 ")]
+    assert len(lines) == 2, lines
+    assert "卡在「遮挡」" in lines[0] and "遮挡 0.20" in lines[0] and "区域 不限" in lines[0]
+    assert "卡在「任务/巡逻/定位」" in lines[1]

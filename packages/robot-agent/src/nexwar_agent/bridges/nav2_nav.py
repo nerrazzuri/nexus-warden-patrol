@@ -99,6 +99,11 @@ V_FAST = 1.0
 #: 人(停车场两车之间、拐角):按算法限速。"E1" 按冒出点离机身多远分档;"E2" 按「反应 + 刹车」在冒出点
 #: 之前停得住;"" 关掉。仿真 runs/nav-sweep-phys-1107(DE1 / DE2 组)比完定。
 OCC_ALGO = "E2"
+#: 现场换遮挡限速算法(真机 11-20 商场两边货架、柱子,阴影一直在,一路 0.19 m/s):
+#: ``NEXWAR_NAV_OCC`` = ``E2``(默认)/ ``E1`` / ``off``。关掉是安全取舍,由现场的人定。
+OCC_ALGOS = {"E2": "E2", "E1": "E1", "off": ""}
+#: 限速变了多少(米/秒)或者原因换了,记一行日志。
+CAP_LOG_STEP = 0.05
 #: E1:看走廊两边横向这么远(米)以内的阴影;离机身 < 1 m 限 0.2、< 2 m 限 0.4。
 OCC_E1_SIDE_M = 1.5
 OCC_E1_TIERS = ((1.0, 0.2), (2.0, 0.4))
@@ -397,6 +402,14 @@ class Nav2NavBackend(PlannedNavBackend):
         #: 转接服务端(:class:`~nexwar_agent.navbridge.NavBridgeServer`);``None`` = 没配,
         #: 永远退回自己的规划。
         self.link = link
+        occ = os.environ.get("NEXWAR_NAV_OCC", "").strip()
+        if occ and occ not in OCC_ALGOS:
+            log.warning("NEXWAR_NAV_OCC=%r 不认识,按默认 %s", occ, OCC_ALGO)
+        #: 现场指定的遮挡限速(``""`` = 关);None = 按 :data:`OCC_ALGO`。
+        self.occ_algo: str | None = OCC_ALGOS.get(occ) if occ else None
+        if self.occ_algo is not None:
+            log.warning("遮挡限速按现场设置:%s(NEXWAR_NAV_OCC)", self.occ_algo or "关")
+        self._cap_logged: tuple[float, str] | None = None
         #: Nav2 没就绪时退不退回自己的规划(真机 11-20 用户:测 Nav2 的表现时不要备用规划 ——
         #: ``NEXWAR_NAV2_FALLBACK=0`` 关掉:这一段直接失败、原因写清楚)。
         self.fallback_ok = os.environ.get("NEXWAR_NAV2_FALLBACK", "1").strip() != "0"
@@ -912,6 +925,17 @@ class Nav2NavBackend(PlannedNavBackend):
         finally:
             self._travel_sign = None
 
+    def _log_cap(self, cap: float, parts: dict[str, float]) -> None:
+        """真机 11-20(商场一路 0.19 m/s、日志里看不出为什么):限速变了 :data:`CAP_LOG_STEP`
+        以上、或者卡住它的原因换了,记一行(原因、各项数值)。"""
+        why = min(parts, key=lambda k: parts[k])
+        last = getattr(self, "_cap_logged", None)
+        if last is not None and last[1] == why and abs(last[0] - cap) < CAP_LOG_STEP:
+            return
+        self._cap_logged = (cap, why)
+        log.info("限速 %.2f m/s,卡在「%s」(%s)", cap, why, "、".join(
+            f"{k} {'不限' if math.isinf(v) else f'{v:.2f}'}" for k, v in parts.items()))
+
     def _slow_cap(self, here: Any, sign: int) -> float:
         """限速区的上限(外审 R4、复查 N2):机身(行进方向上从机尾到机头再往前半米、机身宽)这块矩形
         压上的限速区里最低的那个。按多边形相交算(原来每 10 cm 取一个点,窄的区会漏)。"""
@@ -1129,9 +1153,13 @@ class Nav2NavBackend(PlannedNavBackend):
             if verdict == "near":
                 await self._send(0.0, 0.0, dt_s)
                 return
-        self._vis = min(self._vis_cap(here, sign), self._occ_cap(here, sign))
+        vis, occ = self._vis_cap(here, sign), self._occ_cap(here, sign)
+        self._vis = min(vis, occ)
         self._slow = self._slow_cap(here, sign)
-        cap = min(self._vlim(), self._zone_cap_to(here, sign), self._vis, self._slow)
+        parts = {"看得清": vis, "遮挡": occ, "任务/巡逻/定位": self._vlim(),
+                 "区域": self._zone_cap_to(here, sign), "限速区": self._slow}
+        cap = min(parts.values())
+        self._log_cap(cap, parts)
         # 工单 11-02-9:压前进、压转向都按同一个比例,走的还是 Nav2 算的那条弯(只压前进弯就变急,
         # 11-02 回程急拐向方块角、守卫一直拦)
         vx, wz = self._fit(vx, wz, cap)
@@ -2144,7 +2172,8 @@ class Nav2NavBackend(PlannedNavBackend):
         :data:`OCC_E1_SIDE_M`)以内的才管。感知不新鲜、没配避障:不限
         (``_vis_cap`` 那边已经按 V_BASE)。
         """
-        algo = OCC_ALGO
+        algo = getattr(self, "occ_algo", None)
+        algo = OCC_ALGO if algo is None else algo
         view, g = self.obstacles, self.guard
         if not algo or view is None or g is None or not getattr(view, "frames", None):
             return V_FAST
