@@ -95,7 +95,7 @@ class _SiteListPageState extends State<SiteListPage> {
     final keys = widget.bioKeys;
     if (!await keys.available()) return;
     final book = await _bioBook();
-    final rec = await book.of(s, DateTime.now().millisecondsSinceEpoch);
+    final rec = await bioRecordFor(keys, book, s, DateTime.now().millisecondsSinceEpoch);
     if (rec != null && rec.account == account) return;
     if (await book.declined(s, account) || !mounted) return;
     final yes = await showDialog<bool>(
@@ -114,7 +114,14 @@ class _SiteListPageState extends State<SiteListPage> {
               ],
             ));
     if (yes != true) {
-      if (yes == false) await book.decline(s, account);
+      // 记不下「暂不」（存储满了）：下次再问一次，不挡这次进站点（外审指纹-2 Important）
+      if (yes == false) {
+        try {
+          await book.decline(s, account);
+        } on Object {
+          // 忽略
+        }
+      }
       return;
     }
     String msg;
@@ -214,7 +221,7 @@ class _SiteListPageState extends State<SiteListPage> {
     // （先问能不能用指纹：不能用的手机、桌面版不碰记录文件）
     final keys = widget.bioKeys;
     final book = await keys.available() ? await _bioBook() : null;
-    final bio = await book?.of(s, DateTime.now().millisecondsSinceEpoch);
+    final bio = book == null ? null : await bioRecordFor(keys, book, s, DateTime.now().millisecondsSinceEpoch);
     if (!mounted) return;
     // 口令在登录页上收（2026-10-14 重做：原来是弹窗）。登录不了人留在那一页、原因摆在那一页上，
     // 改了能再试；登上了那一页带着连好的客户端退回来，下面的顺序跟原来一样。
@@ -302,7 +309,14 @@ class _SiteListPageState extends State<SiteListPage> {
             })));
     if (api == null) return;
     final a = api;
-    if (byPassword && account0 != null && mounted) await _offerBio(a, s, account0!);
+    if (byPassword && account0 != null && mounted) {
+      // 问指纹登录出了什么岔子都不挡已经登上的这次（外审指纹-2 Important）
+      try {
+        await _offerBio(a, s, account0!);
+      } on Object {
+        // 忽略：这次照样进站点，下次登录再问
+      }
+    }
     // 记下这次登录用的账号（下次登录页自动填好）、登上的地址（下次先试它）
     if ((account0 != null && account0 != s.username) || (used != null && used != s.url)) {
       final upd = (used == null ? s : s.preferring(used!)).copyWith(username: account0);

@@ -36,12 +36,8 @@ object BioKey {
             return bm.canAuthenticate(BiometricManager.Authenticators.BIOMETRIC_STRONG) ==
                 BiometricManager.BIOMETRIC_SUCCESS
         }
-        if (Build.VERSION.SDK_INT == 29) {
-            val bm = ctx.getSystemService(BiometricManager::class.java) ?: return false
-            @Suppress("DEPRECATION")
-            return bm.canAuthenticate() == BiometricManager.BIOMETRIC_SUCCESS
-        }
-        // Android 9:只认指纹(这一版的人脸多半不是强生物识别)
+        // Android 9、10:只认指纹。10 的 canAuthenticate() 不分强弱,只录了弱人脸也说能用,
+        // 钥匙却要强生物识别(外审指纹-2 Minor 2);指纹传感器都是强的
         if (!ctx.packageManager.hasSystemFeature(PackageManager.FEATURE_FINGERPRINT)) return false
         @Suppress("DEPRECATION")
         val fm = ctx.getSystemService(android.hardware.fingerprint.FingerprintManager::class.java)

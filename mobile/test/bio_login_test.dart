@@ -1,6 +1,7 @@
 // 手机指纹登录（用户 11-20）：签的内容跟站点一字不差；用密码登上问一次、开了记下；下次进来先弹指纹、
 // 登上直接进外壳；站点说作废了就删掉记录、收起按钮、照旧输密码；「暂不」以后不再问。
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -41,6 +42,12 @@ class FakeBioKeys implements BioKeys {
     log.add('delete');
     live.remove(alias);
   }
+}
+
+/// 存不下东西的记录本（手机存储满了）。
+class _FullBook extends BioBook {
+  @override
+  Future<void> decline(SiteEntry s, String account) async => throw const FileSystemException('No space left on device');
 }
 
 SiteEntry _site() => SiteEntry(name: '庄园', url: 'https://h:1', fingerprint: 'ab' * 32, username: 'gina');
@@ -171,5 +178,39 @@ void main() {
     expect(find.text('这部手机已关闭指纹登录。'), findsOneWidget);
     expect(keys.live, isEmpty);
     expect(await book.of(_site(), DateTime.now().millisecondsSinceEpoch), isNull);
+  });
+
+  testWidgets('外审指纹-2：点「暂不」存不下（存储满）照样进站点', (t) async {
+    t.view.physicalSize = const Size(800, 1600);
+    t.view.devicePixelRatio = 2.0;
+    addTearDown(t.view.reset);
+    await t.pumpWidget(MaterialApp(
+        home: SiteListPage(store: MemorySiteStore([_site()]), apiFactory: (_) => FakeApi('guard'), bioKeys: FakeBioKeys(), bioBook: _FullBook())));
+    await t.pumpAndSettle();
+    await _openSite(t);
+    await t.enterText(find.byKey(const Key('site-password')), 'pw');
+    await t.tap(find.text('登录'));
+    await t.pumpAndSettle();
+    await t.tap(find.byKey(SiteListPage.bioOfferNoKey));
+    await t.pumpAndSettle();
+    expect(find.byType(NwShell), findsOneWidget);
+  });
+
+  testWidgets('外审指纹-2：到期的记录进登录页时清掉（记录和钥匙都删），只剩密码', (t) async {
+    t.view.physicalSize = const Size(800, 1600);
+    t.view.devicePixelRatio = 2.0;
+    addTearDown(t.view.reset);
+    final keys = FakeBioKeys();
+    final book = BioBook();
+    await keys.create('old');
+    await book.put(BioRecord(site: 'ab' * 32, account: 'gina', alias: 'old', keyId: 'k' * 32,
+        expiresAt: DateTime.now().millisecondsSinceEpoch - 1));
+    await t.pumpWidget(MaterialApp(
+        home: SiteListPage(store: MemorySiteStore([_site()]), apiFactory: (_) => FakeApi('guard'), bioKeys: keys, bioBook: book)));
+    await t.pumpAndSettle();
+    await _openSite(t);
+    expect(find.byKey(SiteLoginPage.bioKey), findsNothing);
+    expect(keys.live, isEmpty);
+    expect(await book.any(_site()), isNull);
   });
 }
