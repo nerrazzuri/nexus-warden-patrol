@@ -2600,3 +2600,36 @@ input[type="checkbox"], input[type="radio"] { width: 18px; height: 18px; }
 .golook-then { display: flex; flex-direction: column; align-items: stretch; gap: var(--sp-1); margin: 8px 0; }
 .golook-then .seg { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); width: 100%; }
 .golook-then .seg button { min-width: 0; height: auto; min-height: 38px; padding: 6px 4px; font-size: 13px; line-height: 1.2; white-space: normal; overflow-wrap: anywhere; }
+
+/* 真机 11-20 用户「手机网页版的排版非常差」:手机宽(≤760)统一收成一栏。
+   页头标题、状态、按钮各占一行;待办正文占满、按钮另起一行;机器人操作页一栏;二级导航竖排一列 →
+   横向一行可滑;值班页两路画面上下排;顶栏省掉品牌字。 */
+@media (max-width: 760px) {
+  .sp-head { gap: var(--sp-2) var(--sp-3); align-content: flex-start; }
+  .ly-grid { grid-template-rows: auto minmax(0, 1fr); align-content: start; }
+  .ly-rail button { min-height: 44px; align-content: center; }
+  .sp-head h1, .mt-head h1 { flex: 1 1 auto; min-width: 0; font-size: 22px; line-height: 28px; white-space: normal; overflow-wrap: anywhere; }
+  .sp-status { flex: 1 1 100%; order: 2; flex-wrap: wrap; }
+  .sp-head > .btn, .sp-head > a.btn { order: 3; }
+  .sp-list > li { align-items: flex-start; padding: 12px 16px; }
+  .sp-list .todo-body { flex: 1 1 calc(100% - 40px); }
+  .sp-list .todo-acts { flex: 1 1 100%; }
+  .sp-list .todo-acts .btn { min-width: 0; flex: 1 1 0; }
+  .rc-body, .rb-main .rc-body { grid-template-columns: minmax(0, 1fr); height: auto; }
+  .rc-main { border-right: 0; overflow: visible; }
+  .rc-side { overflow: visible; border-top: 1px solid var(--c-outline); }
+  .rc-say { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .rc-say > :not(.btn) { grid-column: 1 / -1; }
+  .mt-rail, .ly-rail { flex-direction: row; flex-wrap: nowrap; overflow-x: auto; min-height: 0; border-right: 0; border-bottom: 1px solid var(--c-outline); }
+  .mt-rail a, .ly-rail button { flex: none; border-top: 0; border-left: 0; border-bottom: 3px solid transparent; padding: 10px 14px; }
+  .mt-rail a small, .ly-rail .ly-note, .ly-rail .ly-lead { display: none; }
+  .mt-rail a[aria-current="page"], .ly-rail button[aria-selected="true"] { border-bottom-color: var(--c-primary); }
+  .rp-bar { padding: 12px 16px; }
+  .rp-field { max-width: 100%; min-width: 0; }
+  .rp-field .seg { flex-wrap: wrap; }
+  .mon-tiles.dual, .mon-tiles.single:has(> .mon-tile + .mon-tile) { grid-template-columns: minmax(0, 1fr); }
+  .brandmark { display: none; }
+  /* 机器人操作页的小地图:地图本身 260 高,图例、缩放在它下面(原来地图 420 高塞进 280 的框,图例压到下一节) */
+  .rc-map .mapcanvas { height: auto; }
+  .rc-map .mapwrap { flex: none; height: 260px; min-height: 0; }
+}
