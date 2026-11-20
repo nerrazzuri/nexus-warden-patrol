@@ -164,6 +164,10 @@ class ObstacleView:
     #: 看不见的按哪套规矩(:data:`BAND_POLICIES`)。用户 11-17 定默认 ``sealed``(仿真 100 个
     #: 用例:strict 85%、sealed 90%,都没碰);上真机前在 C40221 上实测转身。
     band_policy: str = "sealed"
+    #: 真机 11-20:还没有视野表时边走边学(:class:`nexwar_agent.fovmask.Learner`);学好了调
+    #: ``fov_done(视野表, 格子边长, 帧数)``、自己清掉。None = 不学。
+    fov_learner: Any = None
+    fov_done: Callable[[Any, float, int], None] | None = None
     #: 工单 21:狗最近一次挪窝(离上次站的地方超过 :data:`MEMORY_STILL_M`)的位置和时刻。
     _still_at: tuple[float, float] | None = None
     _still_since: float = -math.inf
@@ -261,6 +265,18 @@ class ObstacleView:
                                       suspect=np.frombuffer(g.suspect_bits(), dtype=np.uint8)))
         if self.band_policy == "sealed":
             self._seal_note(self.frames[0])
+        if self.fov_learner is not None and g.check == "ok":
+            f0 = self.frames[0]
+            try:
+                got = self.fov_learner.feed(occ=f0.occ, known=f0.known, size=f0.size,
+                                            res=f0.res, pose=f0.pose)
+            except Exception:                            # noqa: BLE001 - 学不成不能拖垮守卫
+                log.exception("学视野表出错,不学了")
+                self.fov_learner, got = None, None
+            if got is not None:
+                self.fov_learner = None
+                if self.fov_done is not None:
+                    self.fov_done(*got)
         while self.frames:
             f, age = self.frames[-1], now - self.frames[-1].at
             keep = max(self.memory_s, REC_FREE_S) if self.band_policy == "strict" else self.memory_s

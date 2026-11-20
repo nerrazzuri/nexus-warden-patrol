@@ -277,3 +277,29 @@ async def test_W71_运行时_能力里报Nav2就绪没有_变了重发(tmp_path,
             "ready": False, "reason": "Nav2 未就绪(bt_navigator 没起来)"}
     finally:
         await rt.close()
+
+
+def test_真机1120_运行时_没有视野表_遮挡限速先关_自己学_学好存下_下次开机直接用(tmp_path, monkeypatch):
+    import numpy as np
+
+    from nexwar_agent import fovmask
+    monkeypatch.delenv(fovmask.FOV_ENV, raising=False)
+    monkeypatch.setattr(fovmask, "FOV_DEFAULT", tmp_path / "etc-fov.json")
+
+    def rt():
+        return AgentRuntime(transport=MemoryTransport(MemoryBroker(), "dog"), registration=REG,
+                            hal=SimRobot(now_ms=lambda: 1_000_000), store_dir=tmp_path / "agent",
+                            now_ms=lambda: 1_000_000, loaded_map=("m", "1"), boot_id="b",
+                            home=Pose.from_xy_yaw(0, 0, 0), nav="planned", obstacles="bridge",
+                            obs_socket=tmp_path / "o.sock")
+    a = rt()
+    nav = a.parts.nav
+    assert nav.occ_need_fov and nav.fov_mask is None
+    assert isinstance(a.obs_view.fov_learner, fovmask.Learner)
+    m = np.zeros((80, 80), dtype=bool)
+    m[50:70, 30:50] = True
+    a.obs_view.fov_done(m, 0.1, 600)
+    assert nav.fov_mask is not None and (nav.fov_mask[0] == m).all()
+    assert (tmp_path / "agent" / fovmask.LEARNED_NAME).is_file()
+    b = rt()
+    assert b.obs_view.fov_learner is None and (b.parts.nav.fov_mask[0] == m).all()

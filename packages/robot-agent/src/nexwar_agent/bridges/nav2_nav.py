@@ -416,6 +416,10 @@ class Nav2NavBackend(PlannedNavBackend):
         #: 这台机器人实测的雷达视野(:mod:`nexwar_agent.fovmask`;(布尔 n × n, 格子边长));
         #: None = 按写死的视野锥。运行时那边装。
         self.fov_mask: tuple[Any, float] | None = None
+        #: 用户 11-20:真机上还没有视野表(没装、还没学好)时遮挡限速关着 —— 写死的锥跟真机对不上,
+        #: 空旷处也一直压 0.2。运行时那边置 True;仿真、测试照旧按写死的锥开着。
+        #: 现场设了 ``NEXWAR_NAV_OCC`` 的照设的。
+        self.occ_need_fov = False
         self._cap_logged: tuple[float, str] | None = None
         #: Nav2 没就绪时退不退回自己的规划(真机 11-20 用户:测 Nav2 的表现时不要备用规划 ——
         #: ``NEXWAR_NAV2_FALLBACK=0`` 关掉:这一段直接失败、原因写清楚)。
@@ -2233,6 +2237,9 @@ class Nav2NavBackend(PlannedNavBackend):
         (``_vis_cap`` 那边已经按 V_BASE)。
         """
         algo = getattr(self, "occ_algo", None)
+        if algo is None and getattr(self, "occ_need_fov", False) \
+                and getattr(self, "fov_mask", None) is None:
+            return V_FAST                                # 真机还没有视野表:先不限
         algo = OCC_ALGO if algo is None else algo
         view, g = self.obstacles, self.guard
         if not algo or view is None or g is None or not getattr(view, "frames", None):

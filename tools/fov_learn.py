@@ -61,6 +61,9 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--mirror", action="store_true", help="左右镜像取并(录的时候一侧一直贴墙时用)")
     p.add_argument("--use", type=Path, default=None,
                    help="不学,直接用这张视野表(fov.json)比遮挡限速(拿别的包核一张学好的表)")
+    p.add_argument("--auto", action="store_true",
+                   help="照代理自己学的办法(fovmask.Learner,里程看挪没挪窝、挡住的不算)学一张,"
+                        "跟 --use 那张比")
     a = p.parse_args(argv)
 
     import numpy as np
@@ -85,7 +88,11 @@ def main(argv: list[str] | None = None) -> int:
     r = rosbag2_py.SequentialReader()
     r.open(rosbag2_py.StorageOptions(uri=str(a.bag), storage_id=storage),
            rosbag2_py.ConverterOptions("", ""))
-    r.set_filter(rosbag2_py.StorageFilter(topics=["/front_lidar", "/rear_lidar"]))
+    r.set_filter(rosbag2_py.StorageFilter(topics=["/front_lidar", "/rear_lidar", "/odom/mc_odom"]))
+    from nav_msgs.msg import Odometry
+    pose = (0.0, 0.0, 0.0)
+    auto = fovmask.Learner() if a.auto else None
+    auto_got = None
     n, nf, start = cfg.size, 0, None
     knowns, occs = [], []
     while r.has_next():
@@ -95,6 +102,12 @@ def main(argv: list[str] | None = None) -> int:
         if rel > a.t1:
             break
         clock[0] = t_ns / 1e9
+        if topic == "/odom/mc_odom":
+            o = deserialize_message(raw, Odometry).pose.pose
+            q = o.orientation
+            pose = (o.position.x, o.position.y,
+                    math.atan2(2 * (q.w * q.z + q.x * q.y), 1 - 2 * (q.y * q.y + q.z * q.z)))
+            continue
         pts = cloud_xyz(deserialize_message(raw, PointCloud2))
         if topic == "/rear_lidar":
             per.on_rear(pts)
@@ -109,6 +122,10 @@ def main(argv: list[str] | None = None) -> int:
                       .astype(bool).reshape(n, n))
         occs.append(np.frombuffer(unpack_bits(g["occ"], n), dtype=np.uint8)
                     .astype(bool).reshape(n, n))
+        if auto is not None and auto_got is None:
+            got = auto.feed(occ=occs[-1], known=knowns[-1], size=n, res=cfg.res, pose=pose)
+            if got is not None:
+                auto_got = (got[0], rel)
     if len(knowns) < fovmask.FOV_MIN_FRAMES:
         print(f"只有 {len(knowns)} 帧能用(至少 {fovmask.FOV_MIN_FRAMES}):换一段长一点的",
               file=sys.stderr)
@@ -149,6 +166,17 @@ def main(argv: list[str] | None = None) -> int:
     for name, v in (("写死的锥", old), ("视野表", new)):
         print(f"遮挡限速(往前走,粗算) {name}:中位 {np.median(v):.2f} m/s,≤0.3 的帧 "
               f"{np.mean(v <= 0.3):.0%},不限的帧 {np.mean(v >= 0.99):.0%}")
+    if a.auto:
+        if auto_got is None:
+            print(f"自己学:没学成(收了 {auto.frames} 帧,要 {fovmask.AUTO_FRAMES})")
+        else:
+            am, at = auto_got
+            print(f"自己学:包里第 {at:.0f} 秒学好,{int(am.sum())} 格;跟上面那张都有 "
+                  f"{int((am & mask).sum())}、只有自己学的有 {int((am & ~mask).sum())}、"
+                  f"只有上面那张有 {int((mask & ~am).sum())}")
+            v = np.array([e2(k, o, am & (XX > 0), cc) for k, o in zip(knowns, occs, strict=True)])
+            print(f"遮挡限速(往前走,粗算) 自己学的:中位 {np.median(v):.2f} m/s,≤0.3 的帧 "
+                  f"{np.mean(v <= 0.3):.0%},不限的帧 {np.mean(v >= 0.99):.0%}")
     if a.out:
         a.out.write_text(json.dumps(fovmask.to_wire(mask, res=cfg.res, frames=len(knowns),
                                                      threshold=thr, source=str(a.bag.name)),
