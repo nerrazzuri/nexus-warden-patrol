@@ -83,6 +83,6 @@ describe("第二档 样式", () => {
 describe("UIUX-024 报警行(第五期换成表格)", () => {
   it("1439 宽以下表格去掉画面列、右栏变窄;1099 以下三栏叠成一列", () => {
     expect(flat).toMatch(/@media \(max-width: 1439px\) \{ ?\.ev \{ ?grid-template-columns: 232px minmax\(0, ?1fr\) 400px; ?\} ?\.ev-table \.ev-shot \{ ?display: none/);
-    expect(flat).toMatch(/@media \(max-width: 1099px\) \{ ?\.ev, \.ev\.recpage, \.ev\.notes \{ ?grid-template-columns: 1fr/);
+    expect(flat).toMatch(/@media \(max-width: 1099px\) \{ ?\.ev, \.ev\.recpage, \.ev\.notes, \.ev\.patrols \{ ?grid-template-columns: 1fr/);
   });
 });
