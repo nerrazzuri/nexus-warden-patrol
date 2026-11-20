@@ -107,10 +107,12 @@ class HalNavBackend(NavBackend):
         self._wmax = caps.max_wz
         #: 全狗限速(W29,站点下雨、雷暴时发;运行时按有效期管,没限是无穷大)。不随任务重置。
         self.speed_cap = math.inf
-        #: 普通巡逻最快多快(:func:`patrol_max_mps`;不超过机器人能跑的)。
-        self.patrol_max = min(patrol_max_mps(), self._vmax)
+        #: 普通巡逻最快多快(:func:`patrol_max_mps`)。**这里不夹机器人上限**:建桥时旁路的 hello
+        #: 还没到,上限只是老的 0.436(真机 11-20 设了 1.0 被夹成 0.436);每拍 :meth:`_vlim` 再跟
+        #: 任务开始时按实时能力设的 ``_vmax`` 取小。
+        self.patrol_max = patrol_max_mps()
         if self.patrol_max != PATROL_MAX_MPS:
-            log.warning("普通巡逻最快 %g m/s(%s)", self.patrol_max, PATROL_MAX_ENV)
+            log.warning("普通巡逻最快 %g m/s(%s;还受机器人上限管)", self.patrol_max, PATROL_MAX_ENV)
         self._connected = False
         self._status = NavStatus.STANDBY
         self._loc = LocStatus.CONTINUOUS_LOC

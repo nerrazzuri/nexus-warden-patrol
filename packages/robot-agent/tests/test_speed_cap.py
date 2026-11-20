@@ -182,3 +182,21 @@ def test_真机1120_普通巡逻最快速度现场能改_夹在范围里_写错�
     assert nav.urgent is False and nav._vlim() == 1.0
     nav.speed_cap = 0.3
     assert nav._vlim() == 0.3, "全狗限速照样管"
+
+
+def test_真机1120_巡逻最快速度_不在建桥时按没连上旁路的老上限夹死(monkeypatch):
+    """建桥时 hello 没到,能力是老的 0.436;设了 1.0 不能被夹成 0.436(连上以后上限 1.09)。"""
+    from types import SimpleNamespace
+
+    from nexwar_agent.bridges.hal_nav import HalNavBackend
+    monkeypatch.setenv("NEXWAR_PATROL_MAX_MPS", "1.0")
+    caps = SimpleNamespace(max_vx=0.436, max_wz=1.5, deadband_vx=0.2)
+
+    class 假HAL:
+        def hal_capabilities(self):
+            return caps
+    nav = HalNavBackend(假HAL(), now_ms=lambda: 0, map_id="m")
+    assert nav.patrol_max == 1.0
+    caps.max_vx = 1.09                                   # 连上旁路:hello 报了 --max-fraction 1.0
+    nav._vmax = caps.max_vx                              # 任务开始 reset_speed 按实时能力设
+    assert nav._vlim() == 1.0
