@@ -62,6 +62,10 @@ void main() {
     expect(obstaclesText(c({'state': 'extrinsic_bad', 'rear': false, 'reason': '雷达离地 2.9 m'})),
         '避障：外参自检未通过（暂停自主任务）：雷达离地 2.9 m');
     expect(obstaclesText(c({'state': 'lost', 'rear': false})), '避障：感知中断（暂停自主任务）');
+    expect(obstaclesText(c({'state': 'ok', 'rear': true, 'fov': {'state': 'learning', 'frames': 240, 'need': 600}})),
+        '避障：正常；雷达视野表边走边学（40%）');
+    expect(obstaclesText(c({'state': 'ok', 'rear': true, 'fov': {'state': 'none'}})), '避障：正常；雷达视野表还没学');
+    expect(obstaclesText(c({'state': 'ok', 'rear': true, 'fov': {'state': 'ready'}})), '避障：正常');
   });
 
   test('配了定位器的机器人：设位置被拒的原因说人话（W09a）', () {

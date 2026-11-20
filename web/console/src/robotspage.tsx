@@ -38,6 +38,8 @@ export interface RobotCard {
   enrolled_at?: number | null; manual_note?: string; held?: { by: string; at_ms: number } | null;
   /** POC:能换哪几种姿态、正在跑的任务(老站点没有)。 */
   postures?: Posture[]; task?: string | null;
+  /** 用户 11-21:雷达视野表(没学好时遮挡限速关着)。老站点、没有避障的机器人没有。 */
+  fov?: { state: "ready" | "learning" | "none"; frames?: number; need?: number } | null;
   /** POC 11-05:上装能开哪几路、有哪些话术、能不能打字(老站点没有)。 */
   deter?: Deter | null;
   /** 第 9 轮 W9-06:正在跑的任务给人看的说法(不露 adhoc-forever-… 这种编号)。 */
@@ -360,6 +362,11 @@ function RobotSettings({ r, u, now, say, onChanged, onCode }: {
       value: r.home_set ? t("roSet") : t("rdNoHome"), act: r.home_set ? undefined : <a class="btn" href="#/admin/localization">{t("rdNoHomeGo")}</a> }] : []),
     ...(r.standby_set != null ? [{ k: "standby", group: "setup" as const, sign: (r.standby_set ? "ok" : "warn") as Check["sign"], label: "roStandby" as Key,
       value: r.standby_set ? t("roSet") : t("rdNoStandby"), act: r.standby_set ? undefined : <a class="btn" href="#/admin/layout?tab=standby">{t("rdNoStandbyGo")}</a> }] : []),
+    ...(r.fov ? [{ k: "fov", group: "setup" as const, sign: (r.fov.state === "ready" ? "ok" : "info") as Check["sign"], label: "roFov" as Key,
+      value: r.fov.state === "ready" ? t("roFovReady")
+        : r.fov.state === "learning" ? t("roFovLearning", { p: Math.min(99, Math.floor(100 * (r.fov.frames ?? 0) / Math.max(1, r.fov.need ?? 1))) })
+        : t("roFovNone"),
+      sub: r.fov.state === "ready" ? undefined : t("roFovHint") }] : []),
     ...r.problems.filter((p) => !("device" in p)).map((p, i) => ({ k: `p${i}`, group: "hw" as const, sign: "warn" as const, label: "roIssue" as Key,
       value: problemText(p, r), sub: "first_ms" in p ? when(p.first_ms, now) : undefined })),
   ];

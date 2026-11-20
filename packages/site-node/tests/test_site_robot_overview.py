@@ -220,6 +220,21 @@ def test_W71_概览_Nav2没起来算毛病_就绪不算_离线不算(台):
     assert _one(d, db)["problems"] == []
 
 
+def test_1121_概览_雷达视野表学没学好_离线不报_乱填不报(台):
+    d, db = 台
+    assert _one(d, db)["fov"] is None
+    d.clients["A"].capabilities.tasks["obstacles"] = {
+        "state": "ok", "fov": {"state": "learning", "frames": 240, "need": 600, "junk": 1}}
+    assert _one(d, db)["fov"] == {"state": "learning", "frames": 240, "need": 600}
+    d.clients["A"].capabilities.tasks["obstacles"] = {"state": "ok", "fov": {"state": "ready"}}
+    assert _one(d, db)["fov"] == {"state": "ready"}
+    d.fresh.discard("A")
+    assert _one(d, db)["fov"] is None
+    d.fresh.add("A")
+    d.clients["A"].capabilities.tasks["obstacles"] = {"state": "ok", "fov": {"state": "weird"}}
+    assert _one(d, db)["fov"] is None
+
+
 def test_W72_概览_详情要的东西_近7天_上次联系_存储_地图_设备_登记_手动原因(台):
     d, db = 台
     _cmd(db, 1, kl(2026, 10, 19, 9))                   # 8 天前:不算

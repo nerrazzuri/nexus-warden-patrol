@@ -55,6 +55,11 @@ def overview(dispatcher: Any, db: Any, *, now_ms: int, tz: tzinfo) -> list[dict[
         if isinstance(n2, dict) and n2.get("ready") is False:
             # W71:Nav2 没起来(机器人退回自己的规划,照样能走,但现场要知道)
             problems.append({"nav2": str(n2.get("reason") or "")[:200]})
+        ob = (getattr(caps, "tasks", None) or {}).get("obstacles") if fresh else None
+        fv = ob.get("fov") if isinstance(ob, dict) else None
+        # 用户 11-21:雷达视野表学没学好(没学好时遮挡限速关着)
+        fov = {k: fv[k] for k in ("state", "frames", "need") if k in fv} \
+            if isinstance(fv, dict) and fv.get("state") in ("ready", "learning", "none") else None
         recent = [{"key": r["key"], "kind": r["kind"], "level": r["level"],
                    "title": r["title"] or "", "first_ms": r["first_ms"],
                    "resolved_ms": r["resolved_ms"], "resolved_by": r["resolved_by"] or ""}
@@ -72,6 +77,7 @@ def overview(dispatcher: Any, db: Any, *, now_ms: int, tz: tzinfo) -> list[dict[
                     "battery_pct": battery_pct(c, fresh=fresh),
                     "manual_only": reg.manual_only(rid) is not None,
                     "patrols_today": n["n"], "problems": problems, "recent_problems": recent,
+                    "fov": fov,
                     "agent": getattr(caps, "agent", None),
                     "compat": _robot(rid, c)["verdict"] if c is not None else "unknown",
                     # W42:连的哪个 WiFi、走哪条线、有没有等确认的 WiFi 改动(老机器人是 None)

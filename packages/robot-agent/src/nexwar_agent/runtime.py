@@ -1093,6 +1093,9 @@ class AgentRuntime:
                 o["reason"] = self.obs_view.reason[:200]
             if self.obs_view.frames:
                 o["stamp_ok"] = self.obs_view.stamp_trusted   # 外审 11-14:帧龄可不可信
+            fv = self._fov_caps()
+            if fv is not None:
+                o["fov"] = fv
             out["obstacles"] = o
         n2 = self._nav2_caps()
         if n2 is not None:
@@ -2591,6 +2594,20 @@ class AgentRuntime:
         if sent is not None:
             self._estop_told = sent
 
+    def _fov_caps(self) -> dict[str, Any] | None:
+        """用户 11-21:雷达视野表学没学好(网页、App 看得见)。``ready`` 有表;``learning`` 走起来在学,
+        带已收帧数 / 要多少帧;``none`` 没表也没在学(感知没起来)。不归这台管的 None。"""
+        nav = self.parts.nav if self.parts else None
+        if nav is None or not getattr(nav, "occ_need_fov", False):
+            return None
+        if getattr(nav, "fov_mask", None) is not None:
+            return {"state": "ready"}
+        lr = self.obs_view.fov_learner if self.obs_view is not None else None
+        if lr is not None:
+            from nexwar_agent import fovmask
+            return {"state": "learning", "frames": int(lr.frames), "need": fovmask.AUTO_FRAMES}
+        return {"state": "none"}
+
     def _video_live(self) -> bool:
         """遥控「没画面不许动」在狗这头的那一道:本机推流器至少一路在推。站点那头还有一道。"""
         v = self.video
@@ -3185,6 +3202,10 @@ class AgentRuntime:
             st = "ok" if st == "stale" else st
             if self.obs_view.frames:
                 st += "/stamp_ok" if self.obs_view.stamp_trusted else "/stamp_bad"   # 外审 11-14
+            fv = self._fov_caps()
+            if fv is not None:
+                # 视野表:学好了、或者进度每过一成,重发一次(不每帧发)
+                st += f"/fov:{fv['state']}:{fv.get('frames', 0) * 10 // max(1, fv.get('need', 1))}"
             if st != self._obs_state_told:
                 self._obs_state_told = st
                 if self.transport.connected:
