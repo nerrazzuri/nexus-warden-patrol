@@ -154,6 +154,9 @@ def _tail(f: IO[bytes]) -> str:
         return ""
 
 
+#: 叫停推流以后这么久(秒)还没退就 SIGKILL。
+STOP_KILL_S = 2.0
+
 class VideoPusher:
     def __init__(self, *, source: Source, ffmpeg: str = "ffmpeg", transcode: bool = False,
                  clock: Callable[[], float] = time.monotonic,
@@ -167,6 +170,9 @@ class VideoPusher:
         self.emit = emit
         self._latency_ms = latency_ms
         self._push: dict[str, _Push] = {}
+        #: 叫停了还没退的 ffmpeg:(进程, 发 SIGTERM 的时刻, 发过 SIGKILL 没有)。每拍看一眼,
+        #: 不在事件循环里等(真机 11-20:停推流原来同步等 ffmpeg 退,最多 4 s,代理整个停住)。
+        self._dying: list[tuple[subprocess.Popen[bytes], float, bool]] = []
         #: 一共起过几条推流进程。测试用的观察窗:「续期不重起」只有累计数看得见。
         self.starts = 0
 
@@ -208,9 +214,22 @@ class VideoPusher:
         log.info("开始推 %s → %s(%d ms)", req.camera, req.url, req.ttl_ms)
         return ""
 
+    def _reap(self, now: float) -> None:
+        keep = []
+        for proc, at, killed in self._dying:
+            if proc.poll() is not None:
+                continue
+            if not killed and now - at >= STOP_KILL_S:
+                with contextlib.suppress(OSError):
+                    proc.kill()
+                killed = True
+            keep.append((proc, at, killed))
+        self._dying = keep
+
     def step(self) -> None:
         """每拍:到期没续的停;没到期就自己退了的报 ``video_failed``。"""
         now = self._clock()
+        self._reap(now)
         for cam, p in list(self._push.items()):
             with contextlib.suppress(OSError):
                 if p.errs.seek(0, 2) > _ERR_MAX:
@@ -238,16 +257,21 @@ class VideoPusher:
         if p.proc.poll() is None:
             with contextlib.suppress(OSError):
                 p.proc.terminate()
-            try:
-                p.proc.wait(timeout=2.0)
-            except subprocess.TimeoutExpired:
-                with contextlib.suppress(OSError):
-                    p.proc.kill()
-                with contextlib.suppress(subprocess.TimeoutExpired):
-                    p.proc.wait(timeout=2.0)
+            if p.proc.poll() is None:
+                self._dying.append((p.proc, self._clock(), False))   # 不等:下几拍收
         with contextlib.suppress(OSError):
             p.errs.close()
 
     def close(self) -> None:
+        """退出时:停掉全部,这回可以等(代理在收尾)。"""
         for cam in list(self._push):
             self._stop(cam)
+        for proc, _, _ in self._dying:
+            try:
+                proc.wait(timeout=2.0)
+            except subprocess.TimeoutExpired:
+                with contextlib.suppress(OSError):
+                    proc.kill()
+                with contextlib.suppress(subprocess.TimeoutExpired):
+                    proc.wait(timeout=2.0)
+        self._dying = []
