@@ -168,14 +168,66 @@ def trim_dir(d: Path, max_total_bytes: int, *, keep_days: int | None = None,
     return gone
 
 
+#: 后台写日志的队列最多攒这么多行;满了丢(不卡调用的那一边),丢了几行过后补记一行。
+BACKGROUND_QUEUE = 20_000
+
+
+class _Enqueue(logging.handlers.QueueHandler):
+    """后台写(真机 11-20):调用方只把这一行放进内存队列就走 —— 标准错误是交给 journald 的管道,磁盘
+    被录包写满时 journald 写不动、管道塞满,代理写一行日志整个事件循环停 10–20 s。编号(``ctx``)、
+    消息、堆栈在调用方这边就定下来(换了线程上下文就没了)。队列满了丢,不等。"""
+
+    def __init__(self, q: Any) -> None:
+        super().__init__(q)
+        self.dropped = 0
+
+    def prepare(self, record: logging.LogRecord) -> logging.LogRecord:
+        import copy
+        if not hasattr(record, "ctx"):
+            record.ctx = _ctx_text(_CTX.get() or {})
+        r = copy.copy(record)
+        r.msg, r.args = record.getMessage(), None
+        if record.exc_info:
+            r.exc_text = logging.Formatter().formatException(record.exc_info)
+        r.exc_info = None
+        return r
+
+    def enqueue(self, record: logging.LogRecord) -> None:
+        import queue
+        try:
+            if self.dropped:
+                note = logging.LogRecord(record.name, logging.WARNING, __file__, 0,
+                                         "日志写不过来,丢了 %d 行", (self.dropped,), None)
+                note.ctx = ""
+                self.queue.put_nowait(note)
+                self.dropped = 0
+            self.queue.put_nowait(record)
+        except queue.Full:
+            self.dropped += 1
+
+
+_LISTENER: Any = None
+
+
+def _stop_listener() -> None:
+    global _LISTENER
+    if _LISTENER is not None:
+        with contextlib.suppress(Exception):
+            _LISTENER.stop()
+        _LISTENER = None
+
+
 def setup(*, name: str, log_dir: Path | None, level: str | int = "INFO",
           keep_days: int = KEEP_DAYS, max_total_bytes: int = MAX_TOTAL_BYTES,
-          stream: bool = True, access: bool = True) -> list[logging.Handler]:
-    """装到根日志器上。``log_dir`` 为 ``None`` 只写标准错误(命令行小工具)。回装上的处理器。"""
+          stream: bool = True, access: bool = True,
+          background: bool = False) -> list[logging.Handler]:
+    """装到根日志器上。``log_dir`` 为 ``None`` 只写标准错误(命令行小工具)。回装上的处理器。
+    ``background``:由后台线程写(:class:`_Enqueue`;代理用,事件循环不许被写日志卡住)。"""
     root = logging.getLogger()
     for h in [h for h in root.handlers if getattr(h, "_nexwar_logsetup", False)]:
         root.removeHandler(h)                 # 装第二次(测试、重新加载)不叠一份
         h.close()
+    _stop_listener()
     lvl = level if isinstance(level, int) else logging.getLevelName(str(level).upper())
     root.setLevel(lvl if isinstance(lvl, int) else logging.INFO)
     fmt = Formatter()
@@ -201,6 +253,18 @@ def setup(*, name: str, log_dir: Path | None, level: str | int = "INFO",
         with contextlib.suppress(OSError):
             os.chmod(log_dir, 0o750)
         trim_dir(log_dir, max_total_bytes, keep_days=keep_days)
+    if background and out:
+        import atexit
+        import queue
+        global _LISTENER
+        q: queue.Queue[logging.LogRecord] = queue.Queue(BACKGROUND_QUEUE)
+        _LISTENER = logging.handlers.QueueListener(q, *out, respect_handler_level=True)
+        _LISTENER.start()
+        atexit.register(_stop_listener)
+        front = _Enqueue(q)
+        front._nexwar_logsetup = True         # type: ignore[attr-defined]
+        root.addHandler(front)
+        return out
     for h in out:
         h._nexwar_logsetup = True             # type: ignore[attr-defined]
         root.addHandler(h)

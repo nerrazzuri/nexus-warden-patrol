@@ -101,3 +101,49 @@ def test_装两次不叠_写的是当时的标准错误(tmp_path, monkeypatch):
         for h in [h for h in root.handlers if h not in before]:
             root.removeHandler(h)
             h.close()
+
+
+def test_真机1120_后台写_标准错误塞住了也不卡调用方_编号堆栈照样带上_满了丢(monkeypatch):
+    """11-20:journald 写不动、标准错误的管道塞满,代理写一行日志事件循环停 10–20 s。"""
+    import io
+    import logging
+    import sys
+    import threading
+    import time
+
+    from nexwar_contract import logsetup
+
+    gate = threading.Event()
+
+    class 塞住的(io.StringIO):
+        def write(self, s):
+            gate.wait(5)
+            return super().write(s)
+    err = 塞住的()
+    monkeypatch.setattr(sys, "stderr", err)
+    monkeypatch.setattr(logsetup, "BACKGROUND_QUEUE", 50)
+    try:
+        logsetup.setup(name="t", log_dir=None, level="INFO", background=True)
+        log = logging.getLogger("x")
+        t0 = time.monotonic()
+        with logsetup.context(task="T1"):
+            log.info("第 %d 行", 1)
+            try:
+                raise ValueError("坏了")
+            except ValueError:
+                log.exception("出错")
+        for i in range(200):
+            log.info("灌 %d", i)
+        assert time.monotonic() - t0 < 0.5, "塞住了也不等"
+        gate.set()
+        deadline = time.monotonic() + 5
+        while "丢了" not in err.getvalue() and time.monotonic() < deadline:
+            log.info("再来一行")
+            time.sleep(0.05)
+        out = err.getvalue()
+        assert "[task=T1] 第 1 行" in out and "ValueError: 坏了" in out
+        assert "日志写不过来,丢了" in out
+    finally:
+        gate.set()
+        logsetup._stop_listener()
+        logging.getLogger().handlers.clear()
