@@ -4,6 +4,7 @@
 import { cleanup, fireEvent, render, waitFor } from "@testing-library/preact";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { setFetch } from "./api";
+import { nameOf } from "./data";
 import { lang } from "./i18n";
 import { ReportsPage } from "./reportpage";
 import { reportRange } from "./reports";
@@ -146,12 +147,24 @@ describe("W60 关键指标", () => {
     expect(Array.from(c.querySelectorAll(".kpi-group-h")).map((x) => x.textContent)).toEqual(["安防运营", "系统可靠性"]);
     expect(c.querySelector('[data-kpi="patrol_completion"] .kpi-v')!.textContent).toBe("90%");
     expect(c.querySelector('[data-kpi="response_s"] .kpi-d')!.textContent).toContain("↓ 8 秒");
+    expect(c.querySelector('[data-kpi="response_s"] .kpi-v')!.textContent).toBe("42\u00a0秒");
     expect(c.querySelector('[data-kpi="camera_availability"] .kpi-v')!.textContent).toBe("—");
     cleanup();
     setFetch(((url: string) => Promise.resolve(json(summaryFor(url)))) as typeof fetch);
     const old = render(<ReportsPage now={NOW} />).container;
     await waitFor(() => expect(old.querySelector(".rep-stats")).not.toBeNull());
     expect(old.querySelector(".kpi")).toBeNull();
+  });
+
+  it("liang-d5 11-14:按防区报的事件,机器人那一列写「防区 1」不写 zone:1", () => {
+    expect(nameOf("zone:1")).toBe("防区 1");
+    expect(nameOf("cctv:Gate")).toBe("摄像头 Gate");
+  });
+
+  it("liang-d5 11-14:响应时间两分钟以上按分钟写", async () => {
+    setFetch(((url: string) => Promise.resolve(json({ ...summaryFor(url), kpis: k({ response_s: 3972 }) }))) as typeof fetch);
+    const c = render(<ReportsPage now={NOW} />).container;
+    await waitFor(() => expect(c.querySelector('[data-kpi="response_s"] .kpi-v')!.textContent).toBe("66.2\u00a0分钟"));
   });
 });
 

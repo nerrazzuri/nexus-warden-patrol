@@ -52,6 +52,8 @@ export function nameOf(id: string): string {
   if (robotNames.value[id]) return robotNames.value[id];
   // 第 3 轮 duty N7:摄像头报的报警 robot 是「cctv:名字」,不露内部前缀
   if (id.startsWith("cctv:")) return t("camNamed", { name: id.slice(5) });
+  // liang-d5 11-14:「防区太久没巡到」这类按防区报的,robot 是「zone:名字」(报表事件表露过 zone:1)
+  if (id.startsWith("zone:")) return t("zoneNamed", { name: id.slice(5) });
   return id;
 }
 

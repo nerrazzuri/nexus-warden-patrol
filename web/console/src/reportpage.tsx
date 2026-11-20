@@ -19,7 +19,8 @@ const KPI_GROUPS: { key: Key; items: { k: KpiKey; key: Key }[] }[] = [
 
 function kpiValue(k: KpiKey, v: number | null): { n: string; unit: string } {
   if (v == null) return { n: "—", unit: "" };
-  if (k === "response_s") return { n: String(Math.round(v)), unit: t("kpiSec") };
+  // liang-d5 11-14:「3972秒」难读 —— 两分钟以上按分钟写(一位小数)
+  if (k === "response_s") return v >= 120 ? { n: String(Math.round(v / 6) / 10), unit: t("kpiMinUnit") } : { n: String(Math.round(v)), unit: t("kpiSec") };
   return { n: (Math.round(v * 1000) / 10).toString(), unit: "%" };
 }
 
@@ -36,7 +37,7 @@ function KpiCards({ cur, prev }: { cur: Kpis; prev?: Kpis }) {
               return (
                 <div key={x.k} class="kpi" data-kpi={x.k}>
                   <span class="kpi-l">{t(x.key)}</span>
-                  <span class="kpi-v">{v.n}<small>{v.unit}</small></span>
+                  <span class="kpi-v">{v.n}<small>{v.unit && v.unit !== "%" ? "\u00a0" : ""}{v.unit}</small></span>
                   <span class={`kpi-d ${d ? d.tone : "flat"}`}>
                     {d == null ? t("kpiNoPrev") : d.d === 0 ? t("kpiFlat")
                       : t(x.k === "response_s" ? "kpiDeltaSec" : "kpiDeltaPts", { a: d.d > 0 ? "↑" : "↓", n: Math.abs(d.d) })}

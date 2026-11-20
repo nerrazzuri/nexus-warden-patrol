@@ -36,6 +36,7 @@ import asyncio
 import json
 import logging
 import math
+import re
 from collections.abc import Callable
 from typing import Any
 
@@ -454,6 +455,9 @@ class PersonWatch:
         last = a.context.get("last_seen") or {}
         # 易用性 r7:不写坐标(客户看不懂);说得出在哪就写地方,说不出就不写
         place = self._place_name(last) if "x" in last else None
+        # liang-d5 11-14:防区名常是「1」「A」,「最后在1」看不懂:纯字母数字的补「防区」
+        if place and re.fullmatch(r"[A-Za-z0-9_-]{1,8}", place):
+            place = f"防区 {place}"
         where = f",最后在{place}" if place else ""
         self.alerts.amend_open(
             rid, PERSON_KIND, title=f"看不到了,去向不明{where}",

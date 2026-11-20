@@ -169,6 +169,18 @@ def test_易用性r7_去向不明不写坐标_说得出地方就说地方(看):
     assert "(" not in b.title
 
 
+def test_liang_d5_1114_防区名是数字_写成防区几(看):
+    t = 看
+    t.w.where_of = lambda p: "1" if p.get("map_id") else None
+    t.d.persons(present=True, count=1)
+    t.w.tick()
+    t.c.ms += 30_000
+    t.d.persons(present=False)
+    t.w.tick()
+    [b] = _开着的(t)
+    assert b.title == "看不到了,去向不明,最后在防区 1", b.title
+
+
 def test_易用性r7_去向不明_说不出地方就不写_不写坐标(看):
     t = 看
     t.d.persons(present=True, count=1)
