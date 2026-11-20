@@ -92,6 +92,11 @@ LIFECYCLE_CALL_S = 60.0
 #: 这么久(秒)没收到代理送的 ``map_odom`` 算没定位(Top Glove 11-17:没定位时全局代价地图卡在等
 #: map→odom、激活不了,生命周期重来也等不来,别当 Nav2 卡住重启)。
 LOC_STALE_S = 5.0
+#: 没定位、Nav2 又没激活这么久(秒),算 Nav2 的启动已经在等坐标变换里耗坏了(真机 11-20 C40221)。
+UNLOC_STUCK_S = 30.0
+#: 定位上来以后再给 Nav2 这么久(秒)自己激活;还不行直接整个重启。真机 11-20 C40221:定位上来以后
+#: 生命周期管理器 reset + startup 两回都不成(各等 90 秒),最后整个重启 8 秒就起来了,一共耽误约 4.5 分钟。
+LOC_GRACE_S = 15.0
 
 
 def _stamp_ms(st: Any) -> int:
@@ -370,6 +375,8 @@ class Nav2Bridge:
         self.t_ms = 0
         self._clock_wall = -1e9
         self._loc_wall = -1e9                           # 上次收到 map_odom(定位)的时刻
+        self._unloc_since: float | None = None          # 没激活、没定位从什么时候起
+        self._waited_loc = False                        # 没激活时等定位等得够久了(真机 11-20)
         self.odom: tuple[float, float, float] | None = None
         self.map_sent = False
         self._ready: tuple[bool, str] | None = None
@@ -907,12 +914,32 @@ class Nav2Bridge:
             self._manage_gen += 1                       # 晚到的回调不再理
             self._retry_failed()
         clock_ok = time.monotonic() - self._clock_wall <= CLOCK_STALE_S
+        if self.nav2_active:
+            self._unloc_since = None
+            self._waited_loc = False
+        elif clock_ok and not self._localized():
+            # 没定位:不重来(重来也等不来定位),记下等了多久
+            if getattr(self, "_unloc_since", None) is None:
+                self._unloc_since = now
+            elif now - self._unloc_since >= UNLOC_STUCK_S:
+                self._waited_loc = True
         if self.nav2_active or self.manage is None or not self.lm.service_is_ready() \
                 or not self.manage.service_is_ready() or not clock_ok or not self._localized():
             self._inactive_since = None
             return
+        self._unloc_since = None
         if self._inactive_since is None:
             self._inactive_since = now
+            return
+        if getattr(self, "_waited_loc", False) and not self._manage_busy:
+            if now - self._inactive_since < LOC_GRACE_S:
+                return
+            # 等定位等坏了的启动,生命周期重来救不回来:直接整个重启(真机 11-20)
+            log.warning("定位上来 %g 秒了 Nav2 还没激活(没定位时启动卡坏了):整个 Nav2 服务重启",
+                        LOC_GRACE_S)
+            self._waited_loc = False
+            self._inactive_since = now
+            self._full_restart()
             return
         if now - self._inactive_since < LIFECYCLE_RETRY_S or self._manage_busy:
             return
