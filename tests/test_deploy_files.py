@@ -1955,6 +1955,13 @@ def test_复查三P4_自己起Nav2的节点_控制器和脱困各出一路_不�
     assert '("cmd_vel", "cmd_vel_nav")' in launch and '("cmd_vel", "cmd_vel_behavior")' in launch
     assert "velocity_smoother" not in code, "平滑器会把旧目标的速度拖进新目标"
     assert "lifecycle_manager_navigation" in launch
+    # 真机 11-20:心跳超时放宽到 10 秒;转接节点逐个问的节点跟管理器管的一样
+    assert '{"bond_timeout": BOND_TIMEOUT_S}' in launch and "BOND_TIMEOUT_S = 10.0" in launch
+    assert 'LIFECYCLE_NODES = ["controller_server", "planner_server", "behavior_server", ' \
+        '"bt_navigator"]' in launch
+    assert 'LIFECYCLE_NODES = ("controller_server", "planner_server", "behavior_server", ' \
+        '"bt_navigator")' in (ROOT / "packages" / "localizer" / "src" / "nexwar_localizer"
+                              / "nav2bridge.py").read_text(encoding="utf-8")
     for n in ("controller_server", "planner_server", "behavior_server", "bt_navigator"):
         assert f'"{n}"' in launch
     src = (ROOT / "packages" / "localizer" / "src" / "nexwar_localizer" / "nav2bridge.py").read_text(  # noqa: E501

@@ -94,6 +94,13 @@ LIFECYCLE_CALL_S = 60.0
 LOC_STALE_S = 5.0
 #: 没定位、Nav2 又没激活这么久(秒),算 Nav2 的启动已经在等坐标变换里耗坏了(真机 11-20 C40221)。
 UNLOC_STUCK_S = 30.0
+#: 生命周期管理器管的节点(跟 deploy/nav2/nexwar_nav2.launch.py 的 LIFECYCLE_NODES 一致,测试核)。
+LIFECYCLE_NODES = ("controller_server", "planner_server", "behavior_server", "bt_navigator")
+#: 每秒问一次「激活了没」:这么久(秒)没回「激活」就当没激活(真机 11-20 C40221:管理器心跳超时把
+#: 节点整套停了,转接节点还当就绪,代理一直交 Nav2、不退回自己的规划;问了不回也不能一直当激活)。
+ACTIVE_STALE_S = 3.0
+#: lifecycle_msgs/State 的「激活」。
+_STATE_ACTIVE = 3
 #: 定位上来以后再给 Nav2 这么久(秒)自己激活;还不行直接整个重启。真机 11-20 C40221:定位上来
 #: 以后生命周期管理器 reset + startup 两回都不成(各等 90 秒),最后整个重启 8 秒就起来了,
 #: 一共耽误约 4.5 分钟。
@@ -352,6 +359,11 @@ class Nav2Bridge:
         self._trigger = Trigger
         #: Nav2 的生命周期管理器:全部节点激活了才算就绪(动作服务在不等于激活了,早发的目标会被拒)。
         self.lm = self.node.create_client(Trigger, "/lifecycle_manager_navigation/is_active")
+        from lifecycle_msgs.srv import GetState
+        self._get_state = GetState.Request
+        #: 每个节点自己的状态(真机 11-20:管理器的「整套激活」之外再逐个问)。
+        self.states = {n: self.node.create_client(GetState, f"/{n}/get_state")
+                       for n in LIFECYCLE_NODES}
         self.nav2_active = False
         self._inactive_since: float | None = None
         #: 11-05 现场第 47 条:从什么时候起没就绪(单调钟;就绪了 None)。
@@ -891,16 +903,47 @@ class Nav2Bridge:
             self.send({"type": "ready", "ok": ok, "reason": why})
 
     def _poll_active(self) -> None:
+        """问管理器「整套激活了没」、逐个问节点的状态;按最近 :data:`ACTIVE_STALE_S` 秒里的回话算
+        :attr:`nav2_active`(问了不回 = 没激活,不沿用上一次的「激活」)。"""
+        ok = getattr(self, "_active_at", None)
+        if ok is None:
+            ok = self._active_at = {}
+        now = time.monotonic()
         if not self.lm.service_is_ready():
-            self.nav2_active = False
-            return
+            ok.pop("", None)
 
-        def done(f: Any) -> None:
+        def mark(key: str, good: bool) -> None:
+            if good:
+                ok[key] = time.monotonic()
+            else:
+                ok.pop(key, None)
+
+        def lm_done(f: Any) -> None:
             try:
-                self.nav2_active = bool(f.result().success)
+                mark("", bool(f.result().success))
             except Exception:                           # noqa: BLE001
-                self.nav2_active = False
-        self.lm.call_async(self._trigger.Request()).add_done_callback(done)
+                mark("", False)
+        if self.lm.service_is_ready():
+            self.lm.call_async(self._trigger.Request()).add_done_callback(lm_done)
+        states = getattr(self, "states", {})
+        for name, c in states.items():
+            if not c.service_is_ready():
+                ok.pop(name, None)
+                continue
+
+            def st_done(f: Any, name: str = name) -> None:
+                try:
+                    mark(name, int(f.result().current_state.id) == _STATE_ACTIVE)
+                except Exception:                       # noqa: BLE001
+                    mark(name, False)
+            c.call_async(self._get_state()).add_done_callback(st_done)
+        fresh = [k for k in ("", *states) if now - ok.get(k, -1e9) <= ACTIVE_STALE_S]
+        was = self.nav2_active
+        self.nav2_active = len(fresh) == 1 + len(states)
+        self._down = [k for k in states if k not in fresh]
+        if was and not self.nav2_active:
+            log.warning("Nav2 不再全部激活(%s):就绪报否,代理退回自己的规划",
+                        "、".join(self._down) or "生命周期管理器")
 
     def _lifecycle_retry(self) -> None:
         """节点一直没全部激活:超过 :data:`LIFECYCLE_RETRY_S` 让生命周期管理器 reset + startup 一次。
@@ -1016,6 +1059,8 @@ class Nav2Bridge:
         没就绪超过一分钟,原因后面写等了几分钟(按分钟变,不每秒重发)。"""
         self._poll_active()
         self._lifecycle_retry()
+        if self.nav2_active:
+            self._was_active = True
         hint = ""
         if self._mono() < self.status_sync_until:
             why = "等 Nav2 的动作状态同步"
@@ -1027,6 +1072,9 @@ class Nav2Bridge:
         elif not self.nav2_active and not self._localized():
             why = "等定位(还没定位好,Nav2 等地图系的坐标才能起来)"
             hint = ",一直这样请看定位:机器人加载的图是不是这个地方的、定位好了没有"
+        elif not self.nav2_active and getattr(self, "_was_active", False):
+            down = "、".join(getattr(self, "_down", ())) or "生命周期管理器"
+            why = f"Nav2 停了(没激活:{down};等它自动重来)"
         elif not self.nav2_active:
             why = ("Nav2 还在启动(生命周期未全部激活"
                    + (f";已自动重来 {self._restarts} 次)" if self._restarts else ")"))

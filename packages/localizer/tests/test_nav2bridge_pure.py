@@ -1159,3 +1159,77 @@ def test_带路的目标_跟路动作不在_回拒(monkeypatch):
     b.follow = NS(server_is_ready=lambda: False)
     b.on_goal({"goal_id": 5, "x": 2.0, "y": 2.3, "yaw": 0.5, "path": _路})
     assert b.sent[-1]["state"] == "rejected" and "跟路" in b.sent[-1]["reason"]
+
+
+# ------------------------------------------------ 真机 11-20:管理器心跳超时把节点停了
+
+def _问状态的桥(lm_ok=True, states=None):
+    from types import SimpleNamespace as NS
+
+    from nexwar_localizer.nav2bridge import LIFECYCLE_NODES, Nav2Bridge
+    b = Nav2Bridge.__new__(Nav2Bridge)
+    b.nav2_active = False
+    b._trigger = NS(Request=lambda: None)
+    b._get_state = lambda: None
+    ans = {"": lm_ok, **{n: 3 for n in LIFECYCLE_NODES}, **(states or {})}
+
+    class _Fut:
+        def __init__(self, key):
+            self.key = key
+
+        def add_done_callback(self, cb):
+            if ans[self.key] is not None:                   # None = 不回话
+                cb(self)
+
+        def result(self):
+            v = ans[self.key]
+            return NS(success=v) if self.key == "" else NS(current_state=NS(id=v))
+
+    b.lm = NS(service_is_ready=lambda: True, call_async=lambda r: _Fut(""))
+    b.states = {n: NS(service_is_ready=lambda: True, call_async=lambda r, n=n: _Fut(n))
+                for n in LIFECYCLE_NODES}
+    return b, ans
+
+
+def test_真机1120_节点都激活才算激活_控制器被停了马上报没激活(monkeypatch):
+    b, ans = _问状态的桥()
+    b._poll_active()
+    b._poll_active()
+    assert b.nav2_active
+    ans["controller_server"] = 2                            # 管理器心跳超时:停成 inactive
+    b._poll_active()
+    b._poll_active()
+    assert not b.nav2_active and b._down == ["controller_server"]
+
+
+def test_真机1120_问了不回_过几秒当没激活_不沿用上一次的激活(monkeypatch):
+    from nexwar_localizer import nav2bridge as nb
+    t = [1000.0]
+    monkeypatch.setattr(nb.time, "monotonic", lambda: t[0])
+    b, ans = _问状态的桥()
+    b._poll_active()
+    b._poll_active()
+    assert b.nav2_active
+    ans[""] = None                                          # 管理器卡住不回
+    t[0] += 1
+    b._poll_active()
+    assert b.nav2_active, "一两秒没回先不动"
+    t[0] += nb.ACTIVE_STALE_S
+    b._poll_active()
+    assert not b.nav2_active
+
+
+def test_真机1120_激活过又停了_就绪原因说停了_不说还在启动():
+    now = [0.0]
+    b = _就绪桥(now)
+    b.nav2_active = True
+    b.cleanup_pending = False
+    from types import SimpleNamespace as NS
+    b.nav = b.thru = NS(server_is_ready=lambda: True)
+    b.check_ready()
+    assert b.sent[-1]["ok"] is True
+    b.nav2_active = False
+    b._down = ["controller_server"]
+    b.check_ready()
+    why = b.sent[-1]["reason"]
+    assert b.sent[-1]["ok"] is False and "停了" in why and "controller_server" in why, why
