@@ -12,6 +12,8 @@
 #   NEXWAR_NAV2_PARAMS=<路径>         换一份参数(空着 = 这一版带的 deploy/nav2/params.yaml)
 #   NEXWAR_NAV2_DDS=shm               数据走共享内存(deploy/nav2/fastdds_nav2.xml;真机 11-20 大图冲爆
 #                                     UDP 缓冲、节点失联);空着 = 只在本机走 UDP(ROS_LOCALHOST_ONLY)
+#   NEXWAR_NAV2_RMW=zenoh             Nav2 这个域改用 rmw_zenoh_cpp(真机 11-20 FastDDS 匹配上了数据却送
+#                                     不到的备选);连本机默认路由 tcp/localhost:7447,域 61 隔开别人
 set -eu
 here=$(cd "$(dirname "$0")/.." && pwd -P)
 # 11-04:钟对了再起(开机 1970、Nav2 先起来再跳钟,一直不认 odom)
@@ -26,7 +28,12 @@ if [ "${NEXWAR_NAV2_DDS:-}" = shm ]; then
 else
   export ROS_LOCALHOST_ONLY=1
 fi
-export RMW_IMPLEMENTATION=rmw_fastrtps_cpp
+if [ "${NEXWAR_NAV2_RMW:-}" = zenoh ]; then
+  export RMW_IMPLEMENTATION=rmw_zenoh_cpp
+  unset FASTRTPS_DEFAULT_PROFILES_FILE
+else
+  export RMW_IMPLEMENTATION=rmw_fastrtps_cpp
+fi
 export OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1
 exec ros2 launch "$here/deploy/nav2/nexwar_nav2.launch.py" \
   "params_file:=${NEXWAR_NAV2_PARAMS:-$here/deploy/nav2/params.yaml}" \
