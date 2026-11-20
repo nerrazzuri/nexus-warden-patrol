@@ -2650,3 +2650,23 @@ async def test_真机1120_等规划查路线的时候照样送时钟_不然判Na
     n = len(link.kinds("tick"))
     await asyncio.sleep(0.3)
     assert len(link.kinds("tick")) == n, "等完就停,不留后台"
+
+
+async def test_真机1120_走着走着一时未在送时钟_停车等它恢复接着走_一直不恢复才失败(tmp_path):
+    """11-20:代理事件循环卡了 10 s,恢复后转接节点状态还写着「代理未在送时钟」,以前当场判失败。"""
+    from nexwar_agent.bridges.nav2_nav import NAV2_SETTLE_S
+    link = 假转接()
+    t = _台(tmp_path, link)
+    await t.start(1.5, 4.0)
+    await t.nav.goto(Pose.from_xy_yaw(6.0, 4.0))
+    await t.跑(0.5)
+    link.ready, link.reason = False, "代理未在送时钟"
+    await t.跑(1.0)
+    assert NavStatus.FAILED not in t.status, "一时的:等"
+    assert abs(t.r.speed[0]) < 1e-6, "等的时候停车"
+    link.ready, link.reason = True, ""
+    await t.跑(0.5)
+    assert NavStatus.FAILED not in t.status and t.nav._unready_since is None
+    link.ready, link.reason = False, "代理未在送时钟"
+    await t.跑(NAV2_SETTLE_S + 1.0)
+    assert NavStatus.FAILED in t.status and t.nav.fail_code == "nav_unavailable", "一直不好才失败"

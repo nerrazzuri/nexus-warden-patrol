@@ -191,3 +191,30 @@ def test_外审R2_推流和录像的报错尾巴_长RTSP地址的口令也打码
     assert secret not in _tail(io.BytesIO(raw))
     rec = Recorder.__new__(Recorder)
     assert secret not in rec._tail(SimpleNamespace(err=io.BytesIO(raw)))
+
+
+def test_真机1120_停推流不在事件循环里等ffmpeg退_几拍以后收掉_不听话的杀掉():
+    """11-20:停推流原来同步等 ffmpeg 退(最多 4 s),代理整个停住。"""
+    import sys
+    import tempfile
+    from types import SimpleNamespace
+
+    from nexwar_agent import video_push as vp
+    clk = [100.0]
+    pusher = VideoPusher(source=lavfi_source("front"), clock=lambda: clk[0])
+    stubborn = subprocess.Popen([sys.executable, "-c",
+                                 "import signal,time; "
+                                 "signal.signal(signal.SIGTERM, signal.SIG_IGN);"
+                                 "print('ok', flush=True); time.sleep(60)"],
+                                stdout=subprocess.PIPE)
+    assert stubborn.stdout is not None and stubborn.stdout.readline()   # 等它把 SIGTERM 屏蔽好
+    pusher._push["front"] = SimpleNamespace(proc=stubborn, errs=tempfile.TemporaryFile())
+    t0 = time.monotonic()
+    pusher._stop("front")
+    assert time.monotonic() - t0 < 0.3, "不等"
+    assert stubborn.poll() is None and len(pusher._dying) == 1
+    clk[0] += vp.STOP_KILL_S + 0.1
+    pusher.step()                                    # 到点:SIGKILL
+    stubborn.wait(5)
+    pusher.step()
+    assert pusher._dying == []

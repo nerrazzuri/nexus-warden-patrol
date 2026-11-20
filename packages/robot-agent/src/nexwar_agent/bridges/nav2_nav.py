@@ -1127,10 +1127,26 @@ class Nav2NavBackend(PlannedNavBackend):
             await self._nav2_failed(m, here)
             return
         why = self.nav2_ready()
+        if why and any(k in why for k in NAV2_TRANSIENT):
+            # 真机 11-20:代理卡了一阵(事件循环 10 s 没动)、恢复以后转接节点的状态还写着
+            # 「代理未在送时钟」—— 先停车、照常送时钟,等它最多 NAV2_SETTLE_S;还不行才判失败
+            # (以前当场失败,一趟跳 7 个点)
+            now = self._secs()
+            since = getattr(self, "_unready_since", None)
+            if since is None:
+                self._unready_since = since = now
+                log.warning("走着走着 Nav2 一时不能用:%s(停车等它,最多 %g 秒)", why, NAV2_SETTLE_S)
+            if now - since < NAV2_SETTLE_S:
+                await self._send(0.0, 0.0, dt_s)
+                return
         if why:
+            self._unready_since = None
             log.warning("走着走着 Nav2 不能用了:%s(这一趟判失败)", why)
             await self._fail(why, code="nav_unavailable")
             return
+        if getattr(self, "_unready_since", None) is not None:
+            log.info("Nav2 又能用了(等了 %.1f 秒),接着走", self._secs() - self._unready_since)
+            self._unready_since = None
         tgt = self._target
         if tgt is not None and math.dist((here.x, here.y), (tgt.position.x, tgt.position.y)) \
                 <= TURN_ONLY_M and abs(math.remainder(tgt.yaw - here.yaw, 2 * math.pi)) \
