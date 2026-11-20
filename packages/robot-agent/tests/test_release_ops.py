@@ -157,6 +157,49 @@ def test_上一版是比在跑的旧的里面最新的那一版(ops, tmp_path):
     assert o.previous() == OLD, "不是最旧的那一版"
 
 
+def test_退回刚切走的那一版_提交时不删它_真机11_20(tmp_path):
+    """C40221 11-20:盘上 c3594543、356305bb(都是 11-17,356305bb 在跑)。切到 65f617cd、提交时清旧槽
+    把刚切走的 356305bb 删了(名字按提交号字母排,它「最旧」);「退」按名字挑,退到了 c3594543。"""
+    layout = rel.Layout(root=tmp_path / "opt")
+    a, b, new = "2026-11-17-c3594543", "2026-11-17-356305bb", "2026-11-19-65f617cd"
+    restarts = []
+
+    def build(pkg, slot):
+        (slot / "venv").mkdir(parents=True, exist_ok=True)
+        (slot / "venv" / SENTINEL).write_text("ok")
+    for n in (a, b, new):
+        rel.stage(layout, _包(tmp_path, n), now_ms=1)
+        build(None, layout.release_dir(n))
+    rel._point_current(layout, b)
+    o = ReleaseOps(layout, fetch=lambda name: iter([]), build=build, work=tmp_path / "work",
+                   now_ms=lambda: 5, restart=lambda: restarts.append(1),
+                   disk_free=lambda p: 10 ** 12)
+    o.activate(new)
+    assert o.commit_if_pending() == new
+    left = set(rel.installed(layout))
+    assert b in left, "刚切走的那一版是「退」要回去的地方,不删"
+    assert a not in left and len(left) == rel.KEEP_RELEASES
+    assert o.previous() == b
+    assert o.rollback() == b and o.current() == b
+    assert o.commit_if_pending() == b
+    assert set(rel.installed(layout)) == {b, new}, "退回来以后两版都在,还能再切过去"
+    o.activate(new)
+    assert o.commit_if_pending() == new and o.previous() == b
+
+
+def test_记的上一版不在了_或者比在跑的新_按名字挑(ops, tmp_path):
+    o, served, restarts, built, layout = ops
+    (layout.release_dir(OLD) / "venv").mkdir(parents=True, exist_ok=True)
+    (layout.release_dir(OLD) / "venv" / SENTINEL).write_text("ok")
+    o.install(_ref(served, NEW, _tar(_包(tmp_path, NEW))))
+    o.activate(NEW)
+    o.commit_if_pending()
+    rel.write_previous(layout, "2026-01-01-abcdef")          # 记的那一版已经不在盘上
+    assert o.previous() == OLD
+    (layout.root / rel.PREVIOUS_FILE).write_text("{坏的")    # 读不懂:当没记
+    assert o.previous() == OLD and rel.read_previous(layout) == ""
+
+
 def test_起来时清掉上次装到一半的临时文件(tmp_path):
     work = tmp_path / "work"
     (work / "x.x").mkdir(parents=True)
