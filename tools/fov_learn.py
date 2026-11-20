@@ -126,7 +126,8 @@ def main(argv: list[str] | None = None) -> int:
     cone &= np.abs(XX) > 0.465
     if a.use:
         print(f"用的视野表 {a.use}")
-    print(f"{'看了' if a.use else '学了'} {len(knowns)} 帧(包里 {a.t0:g}–{min(a.t1, rel):.0f} s),门槛 {thr:.0%},"
+    verb = "看了" if a.use else "学了"
+    print(f"{verb} {len(knowns)} 帧(包里 {a.t0:g}–{min(a.t1, rel):.0f} s),门槛 {thr:.0%},"
           f"后雷达 {'用了' if rear is not None else '没有'}")
     print(f"视野表 {int(mask.sum())} 格;写死的锥 {int(cone.sum())} 格;锥里视野表看不见的 "
           f"{int((cone & ~mask).sum())} 格(这些以前被当成阴影)")
