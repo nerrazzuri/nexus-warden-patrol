@@ -1139,6 +1139,20 @@ class MissionEngine(EventEmitter[RunSnapshot]):
         兜底路径自己炸了、走到这儿状态还不是终态:先停导航,再把状态落成 ABORTED(内存里
         一定落上;广播、记档尽力而为)。"""
         live = self._live
+        lit = set(getattr(self, "_lit", ()) or ())
+        if lit:
+            # 真机 11-20:路线点上开了本体灯,巡逻被叫停、中止、跑完都关掉
+            # (以前一直亮着,网页、App 关不掉)
+            self._lit = set()
+            for side in sorted(lit):
+                try:
+                    if side == "front":
+                        await self._device.set_light(False)
+                    else:
+                        await self._device.set_light(False, side=side)
+                    self._note("light_off", side=side, reason="这一趟结束:关掉路线开的灯")
+                except Exception:
+                    log.exception("这一趟结束关灯(%s)没成", side)
         try:
             if self._state not in FINAL_STATES:
                 # 先把状态落成终态再停导航(W00c6a 内审 S1):停导航再抛,也不会停在 ABORTING。
@@ -1434,7 +1448,15 @@ class MissionEngine(EventEmitter[RunSnapshot]):
                        file=path.name)
             return
         if action.type == "light":
-            await self._device.set_light(bool(action.on))
+            side = getattr(action, "side", "front")
+            if side == "front":
+                await self._device.set_light(bool(action.on))
+            else:
+                await self._device.set_light(bool(action.on), side=side)
+            lit = set(getattr(self, "_lit", ()) or ())
+            for k in (("front", "back") if side == "both" else (side,)):
+                (lit.add if action.on else lit.discard)(k)
+            self._lit = lit
             return
         if action.type == "head":
             await self._device.set_gimbal(action.pitch or 0.0, action.yaw or 0.0)

@@ -1112,8 +1112,10 @@ class Dispatcher:
         if req.output not in caps.get("outputs", []):
             raise Unsupported(f"{robot_id} 的上装未接入 {req.output}")
         # W40:老狗不认 side、color(会当成两边都开、缺省颜色),按能力在这里挡
-        if req.side != "both" and req.side not in caps.get("spotlight_sides", []):
-            raise Unsupported(f"{robot_id} 的聚光灯不分左右")
+        sides = caps.get("light_sides" if req.output == "light" else "spotlight_sides", [])
+        if req.side != "both" and req.side not in sides:
+            raise Unsupported(f"{robot_id} 的本体灯不分前后" if req.output == "light"
+                              else f"{robot_id} 的聚光灯不分左右")
         if req.color and req.color not in caps.get("strobe_colors", []):
             raise Unsupported(f"{robot_id} 的警灯没有 {req.color} 色")
         if req.on and not self._fresh(c):

@@ -82,9 +82,11 @@ class HalDeviceBackend(DeviceBackend):
     async def emergency_stop(self, on: bool = True) -> None:
         await self._hal.emergency_stop(on)
 
-    async def set_light(self, on: bool) -> None:
+    async def set_light(self, on: bool, side: str = "front") -> None:
+        """``side``:``front``(缺省)、``back``、``both``(真机 11-20:后灯原来关不了)。"""
+        log.info("本体灯 %s %s", side, "开" if on else "关")    # 现场对得上旁路有没有收到
         try:
-            await self._hal.light("front", on)
+            await self._hal.light(side, on)
         except HalUnsupported:
             if not self._light_warned:
                 log.info("这台机器没有灯,set_light 按空操作处理(只提示这一次)")

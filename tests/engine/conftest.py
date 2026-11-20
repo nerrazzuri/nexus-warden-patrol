@@ -248,8 +248,8 @@ class DeviceStub(EventEmitter[DeviceEvent]):
     async def has_control(self) -> bool:
         return self.control
 
-    async def set_light(self, on: bool) -> None:
-        self.lights.append(on)
+    async def set_light(self, on: bool, side: str = "front") -> None:
+        self.lights.append(on if side == "front" else (on, side))
 
     async def set_gimbal(self, pitch: float, yaw: float) -> None:
         self.gimbals.append((pitch, yaw))

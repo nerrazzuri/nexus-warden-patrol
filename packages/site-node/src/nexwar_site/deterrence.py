@@ -209,7 +209,9 @@ class DeterrenceDesk:
 
     def _can(self, robot_id: str) -> bool:
         c = self.dispatcher.clients.get(robot_id)
-        return bool(c and c.capabilities and "deter" in c.capabilities.tasks)
+        d = c.capabilities.tasks.get("deter") if c and c.capabilities else None
+        # 真机 11-20:没上装的机器人也报 deter(只有本体灯 light),不算能驱离
+        return isinstance(d, dict) and bool(set(d.get("outputs") or []) - {"light"})
 
     def _center_of(self, task_id: str) -> str:
         """这一场的拦截点:出警那条 goto 的目标点(W25 外审 2)。取不到回空串。"""
@@ -626,7 +628,7 @@ class DeterrenceDesk:
     def _outputs(self, rid: str) -> list[str]:
         c = self.dispatcher.clients.get(rid)
         caps = c.capabilities.tasks.get("deter", {}) if c and c.capabilities else {}
-        return list(caps.get("outputs", []))
+        return [o for o in caps.get("outputs", []) if o != "light"]   # 本体灯不归驱离管
 
     def _clips(self, rid: str, kind: str) -> list[str]:
         c = self.dispatcher.clients.get(rid)

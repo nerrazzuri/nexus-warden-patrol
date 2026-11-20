@@ -244,3 +244,16 @@ def test_用户1113_布防看见人_真派单到仿真狗_警灯亮_喇叭放话
     s.loop.call(看见人)
     等(lambda: s.dog.deter_on("strobe") and s.dog.deter_on("speaker"), timeout=5)
     assert s.dog.deter_clip == "warn-zh"
+
+
+def test_真机1120_本体灯_站点认前后_不认左右():
+    from nexwar_contract.deter import parse_deter
+    from nexwar_contract.errors import ContractError
+    r = parse_deter({"output": "light", "on": False, "side": "back"})
+    assert (r.output, r.on, r.side) == ("light", False, "back")
+    assert r.to_payload() == {"output": "light", "on": False, "side": "back"}
+    assert parse_deter({"output": "light", "on": True, "max_s": 60}).side == "both"
+    for bad in ({"output": "light", "on": False, "side": "left"},
+                {"output": "spotlight", "on": False, "side": "back"}):
+        with pytest.raises(ContractError):
+            parse_deter(bad)

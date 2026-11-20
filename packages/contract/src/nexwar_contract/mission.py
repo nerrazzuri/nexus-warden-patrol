@@ -25,6 +25,7 @@ from nexwar_contract.geometry import Pose
 
 #: 第一版支持的动作类型。见设计 spec §6.1。
 ACTION_TYPES = frozenset({"dwell", "photo", "light", "head"})
+LIGHT_SIDES = ("front", "back", "both")
 
 #: 机器上的两路相机。见清单 #29。
 CAMERAS = frozenset({"front", "back"})
@@ -78,6 +79,9 @@ class Action:
     on: bool = True
     pitch: float = 0.0
     yaw: float = 0.0
+    #: 开关哪一路本体灯(``light``;真机 11-20 后灯关不了):``front``(缺省,老路线照旧)、
+    #: ``back``、``both``。
+    side: str = "front"
 
     def to_wire(self) -> dict[str, Any]:
         """只导出这种动作用得上的字段 —— 全导出会让 YAML 变得没法读。"""
@@ -88,6 +92,8 @@ class Action:
             out["camera"] = self.camera
         elif self.type == "light":
             out["on"] = self.on
+            if self.side != "front":
+                out["side"] = self.side
         elif self.type == "head":
             out["pitch"] = self.pitch
             out["yaw"] = self.yaw
@@ -250,7 +256,10 @@ def _parse_action(raw: Any, where: str) -> Action:
     if kind == "light":
         on = raw.get("on", True)
         _require(isinstance(on, bool), f"{where} 的 light.on 应为真假值,实际为 {on!r}")
-        return Action(type="light", on=on)
+        side = raw.get("side", "front")
+        _require(side in LIGHT_SIDES, f"{where} 的 light.side 只认 {'/'.join(LIGHT_SIDES)},"
+                                      f"实际为 {side!r}")
+        return Action(type="light", on=on, side=side)
     return Action(type="head",
                   pitch=_num(raw, "pitch", f"{where} 的 head 动作", 0.0),
                   yaw=_num(raw, "yaw", f"{where} 的 head 动作", 0.0))

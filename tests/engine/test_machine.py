@@ -347,8 +347,55 @@ async def test_灯和云台动作会打到设备上(make_engine, device):
     ))
     engine = make_engine()
     assert await run_to_end(engine, mission) is RunState.DONE
-    assert device.lights == [True]
+    assert device.lights == [True, False], "跑完关掉路线开的灯(真机 11-20)"
     assert device.gimbals == [(0.3, -0.2)]
+
+
+async def test_真机1120_路线开了灯_中止了也关灯(make_engine, nav, device):
+    mission = make_mission(waypoints=(
+        MissionWaypoint(name="P1", pose=Pose.from_xy_yaw(0.0, 0.0, 0.0),
+                        actions=(Action(type="light", on=True),
+                                 Action(type="dwell", seconds=30.0))),
+    ))
+    engine = make_engine()
+    await engine.start(mission, home=_HOME)
+    await until(lambda: device.lights == [True])
+    device.emit(BatteryEvent(percent=1.0))       # 远低于中止线
+    assert await engine.wait_done(timeout_s=5.0) is RunState.ABORTED
+    assert device.lights == [True, False]
+    await engine.aclose()
+
+
+async def test_真机1120_路线能开关后灯_跑完把开着的都关掉(make_engine, device):
+    mission = make_mission(waypoints=(
+        MissionWaypoint(name="P1", pose=Pose.from_xy_yaw(0.0, 0.0, 0.0),
+                        actions=(Action(type="light", on=True, side="both"),
+                                 Action(type="light", on=False, side="front"))),
+    ))
+    engine = make_engine()
+    assert await run_to_end(engine, mission) is RunState.DONE
+    assert device.lights == [(True, "both"), False, (False, "back")], "前灯照老样子调(不带 side)"
+
+
+def test_真机1120_灯的动作带哪一路_老路线不带照旧前灯():
+    from nexwar_contract.mission import MissionError, parse_mission
+    wp = make_mission().waypoints[0]
+    base = {"mission": "m", "map_id": "x", "waypoints": [
+        {"name": "P", "pose": wp.pose.to_wire(), "actions": [{"type": "light", "on": False}]}]}
+    a = parse_mission(base).waypoints[0].actions[0]
+    assert a.side == "front" and a.to_wire() == {"type": "light", "on": False}
+    base["waypoints"][0]["actions"] = [{"type": "light", "on": False, "side": "back"}]
+    a = parse_mission(base).waypoints[0].actions[0]
+    assert a.side == "back" and a.to_wire() == {"type": "light", "on": False, "side": "back"}
+    base["waypoints"][0]["actions"] = [{"type": "light", "on": False, "side": "left"}]
+    with pytest.raises(MissionError, match="side"):
+        parse_mission(base)
+
+
+async def test_真机1120_路线没开灯_结束不碰灯(make_engine, device):
+    engine = make_engine()
+    assert await run_to_end(engine, make_mission()) is RunState.DONE
+    assert device.lights == []
 
 
 async def test_dwell期间照样处理事件(make_engine, nav, device):
