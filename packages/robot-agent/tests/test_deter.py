@@ -618,3 +618,43 @@ async def test_外审_自动播报起播时来了停止_停得掉():
     assert await stopping == ""
     assert hal.clips[-1] == "", "停止排在自动起播之后,最后一下是关"
     assert desk.playing() is None
+
+
+async def test_真机1120_本体前后灯_网页App能直接开关_分前后_开了到点关():
+    """11-20:前灯一直亮着、后灯关不了,网页、App 没入口。``light`` 走 HAL 的 front/back/both。"""
+    from types import SimpleNamespace
+
+    from nexwar_agent.deter import DeterDesk
+    from nexwar_contract.messages import Command
+
+    class 有本体灯:
+        def __init__(self):
+            self.calls = []
+
+        def hal_capabilities(self):
+            return SimpleNamespace(actuators={"light": True})
+
+        async def light(self, channel, on):
+            self.calls.append((channel, on))
+    hal, ev = 有本体灯(), []
+    desk = DeterDesk(hal, emit=lambda k, d: ev.append(d))
+
+    def cmd(p):
+        return Command(command_id="c", task_id="t", kind="deter", issued_at=1, expires_at=2,
+                       control_epoch=1, payload=p)
+    assert desk.caps() == {"outputs": ["light"], "max_s": 600.0,
+                           "light_sides": ["front", "back"]}
+    assert await desk.handle(cmd({"output": "light", "on": False, "side": "back"})) == ""
+    assert await desk.handle(cmd({"output": "light", "on": False})) == ""
+    assert hal.calls == [("back", False), ("both", False)]
+    assert await desk.handle(cmd({"output": "light", "on": True, "max_s": 0.05,
+                                  "side": "front"})) == ""
+    await asyncio.sleep(0.15)
+    assert hal.calls[-2:] == [("front", True), ("front", False)], "到点自己关"
+    assert ev[-1] == {"output": "light", "on": False, "side": "front", "ended": "timeout"}
+    assert await desk.handle(cmd({"output": "light", "on": True, "max_s": 0.05})) == ""
+    assert await desk.handle(cmd({"output": "light", "on": False})) == ""
+    await asyncio.sleep(0.15)
+    assert hal.calls[-2:] == [("both", True), ("both", False)], "关了就撤掉到点关,不再多关一次"
+    assert (await desk.handle(cmd({"output": "light", "on": False, "side": "left"}))) \
+        .startswith("payload")

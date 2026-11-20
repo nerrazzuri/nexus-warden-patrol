@@ -38,6 +38,8 @@ class DeterDesk:
         self._sound: tuple[int, float] | None = None
         #: 外审:喇叭的仲裁(看优先级 → 起播 / 关 → 记下)一把锁做完,自动播报和手动喊话、关喇叭不交错
         self._speaker_lock = asyncio.Lock()
+        #: 本体灯开着到点关(``max_s``):哪一路 → 关灯的那个任务
+        self._light_off: dict[str, asyncio.Task[None]] = {}
         #: 喇叭放完、放坏了、到点了(W21 外审):HAL 回调过来,当场放开优先级、记一条事件。
         #: HAL 不报(仿真狗)就按 ``max_s`` 算。
         listen = getattr(hal, "set_sound_listener", None)
@@ -84,8 +86,11 @@ class DeterDesk:
         """W40:聚光灯分不分左右、警灯有哪些颜色、警笛怎么响(HAL 不报就是都没有)。"""
         fn = getattr(self.hal, "deter_options", None)
         opts = fn() if callable(fn) else {}
-        return {k: opts[k] for k in ("spotlight_sides", "strobe_colors", "strobe_default",
-                                     "siren_via") if k in opts}
+        got = {k: opts[k] for k in ("spotlight_sides", "strobe_colors", "strobe_default",
+                                    "siren_via") if k in opts}
+        if "light" in self.outputs():
+            got["light_sides"] = ["front", "back"]       # 本体灯(HAL light 的 front / back / both)
+        return got
 
     async def aim_at(self, bearing_deg: float) -> None:
         """POC 11-06:确认看见人,云台转过去(``bearing_deg`` 狗身系,朝左为正;云台向右为正)。
@@ -139,14 +144,36 @@ class DeterDesk:
         if req.output not in self.outputs():
             return "unsupported"
         opts = self.options()
-        if req.side != "both" and req.side not in opts.get("spotlight_sides", []):
-            return "unsupported: 此机器人的聚光灯不分左右"
+        sides = opts.get("light_sides" if req.output == "light" else "spotlight_sides", [])
+        if req.side != "both" and req.side not in sides:
+            return ("unsupported: 此机器人的本体灯不分前后" if req.output == "light"
+                    else "unsupported: 此机器人的聚光灯不分左右")
         if req.color and req.color not in opts.get("strobe_colors", []):
             return f"unsupported: 警灯没有 {req.color} 色"
         if req.output == "speaker":
             async with self._speaker_lock:
                 return await self._do(cmd, req)
         return await self._do(cmd, req)
+
+    async def _light(self, side: str, on: bool, max_s: float) -> None:
+        """本体灯(真机 11-20):开了 ``max_s`` 秒到点自己关;关、再开都把前一个到点关的撤掉。"""
+        for k in (("front", "back") if side == "both" else (side,)):
+            old = self._light_off.pop(k, None)
+            if old is not None:
+                old.cancel()
+        await self.hal.light(side, on)
+        if on:
+            async def off_later(k: str) -> None:
+                await asyncio.sleep(max_s)
+                try:
+                    await self.hal.light(k, False)
+                    self._emit("deter", {"output": "light", "on": False, "side": k,
+                                         "ended": "timeout"})
+                except Exception:
+                    log.exception("本体灯到点关没成")
+                self._light_off.pop(k, None)
+            for k in (("front", "back") if side == "both" else (side,)):
+                self._light_off[k] = asyncio.create_task(off_later(k))
 
     async def _do(self, cmd: Command, req: Any) -> str:
         if req.output == "speaker" and req.on:
@@ -167,6 +194,8 @@ class DeterDesk:
                 await self.hal.wiper(req.on, req.max_s)
             elif req.output == "ptz":
                 await self.hal.ptz(req.pan, req.tilt)
+            elif req.output == "light":
+                await self._light(req.side, req.on, req.max_s)
             else:
                 await self.hal.sound(req.clip if req.on else "", req.max_s)
         except HalUnsupported:

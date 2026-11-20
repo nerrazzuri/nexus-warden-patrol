@@ -4,13 +4,15 @@
 **每一次开都带最长时间**(``max_s``),到点狗上自己关 —— 站点没了、断网了,声光也不会一直响
 (解耦总设计)。
 
-- ``output``:``strobe`` 警灯、``siren`` 警笛、``spotlight`` 聚光灯、``speaker`` 喇叭。
+- ``output``:``strobe`` 警灯、``siren`` 警笛、``spotlight`` 聚光灯、``speaker`` 喇叭、
+  ``light`` 机器人本体的前后灯(真机 11-20:路线开的灯原来网页、App 关不掉)。
 - ``on``:开还是关。关不带 ``max_s``。
 - ``clip``:只给喇叭,话术名(``[A-Za-z0-9_.-]``)或 ``tts:<语言>:<文字>``。
 - ``priority``:只给喇叭(0–100)。正在放的比它高,这一条回 ``busy``;一样高或更高的打断正在放的。
   关喇叭不看优先级:让它安静永远可以。
 - ``side``(W40,可选,只给聚光灯):``both``(缺省)、``left``、``right``。上装 V1.2 有左右两只灯;
-  狗在能力里报 ``spotlight_sides`` 才认 ``left``/``right``。关也可以只关一边。
+  狗在能力里报 ``spotlight_sides`` 才认 ``left``/``right``。关也可以只关一边。本体灯 ``light`` 是
+  ``both``、``front``、``back``(狗报 ``light_sides``)。
 - ``color``(W40,可选,只给开警灯):颜色名(``red``、``yellow``…)。狗在能力里报 ``strobe_colors``
   才认;不带就是狗配置里的缺省颜色。
 
@@ -26,7 +28,7 @@ from typing import Any
 
 from nexwar_contract.errors import ContractError
 
-OUTPUTS = ("strobe", "siren", "spotlight", "speaker", "wiper", "ptz")
+OUTPUTS = ("strobe", "siren", "spotlight", "speaker", "wiper", "ptz", "light")
 #: POC 11-06(只在竞品分支):竞品云台 ``ptz`` 转到 ``pan``(水平,度,正 = 向右)、``tilt``(俯仰,度,
 #: 正 = 向下);不带 ``max_s``(转过去就停在那)。雨刷 ``wiper`` 跟警灯一样开、到点关。
 PAN_MAX, TILT_MAX = 180.0, 90.0
@@ -36,6 +38,7 @@ MAX_TTS_CHARS = 300
 _CLIP = re.compile(r"[A-Za-z0-9_-][A-Za-z0-9_.-]{0,63}")
 _TTS = re.compile(r"tts:[A-Za-z]{2,3}(?:[-_][A-Za-z0-9]{2,8})?:.+", re.S)
 SIDES = ("both", "left", "right")
+LIGHT_SIDES = ("both", "front", "back")
 #: 颜色名:小写字母开头,字母、数字、下划线(狗的配置里定有哪些)。
 COLOR = re.compile(r"[a-z][a-z0-9_]{0,15}")
 
@@ -61,7 +64,7 @@ class DeterRequest:
         if self.output == "speaker" and self.on:
             d["clip"] = self.clip
             d["priority"] = self.priority
-        if self.output == "spotlight" and self.side != "both":
+        if self.output in ("spotlight", "light") and self.side != "both":
             d["side"] = self.side
         if self.output == "strobe" and self.on and self.color:
             d["color"] = self.color
@@ -77,7 +80,10 @@ def parse_deter(p: Any) -> DeterRequest:
     if not isinstance(on, bool):
         raise ContractError("deter: on 要是布尔")
     side = p.get("side", "both")
-    if "side" in p and (out != "spotlight" or side not in SIDES):
+    if "side" in p and out == "light":
+        if side not in LIGHT_SIDES:
+            raise ContractError(f"deter: 本体灯的 side 只认 {'/'.join(LIGHT_SIDES)}")
+    elif "side" in p and (out != "spotlight" or side not in SIDES):
         raise ContractError(f"deter: side 只给聚光灯,只认 {'/'.join(SIDES)}")
     color = p.get("color", "")
     if "color" in p and (out != "strobe" or not on or not isinstance(color, str)
