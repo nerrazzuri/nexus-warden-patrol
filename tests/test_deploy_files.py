@@ -1854,6 +1854,12 @@ def test_W47_Nav2单元_单独ROS域_只装不起_卸载收干净():
     assert int(x.findtext(".//f:segment_size", namespaces=ns)) >= 8 << 20, "装得下整张大图"
     assert [a.text for a in x.iterfind(".//f:interfaceWhiteList/f:address", ns)] == ["127.0.0.1"]
     assert x.findtext(".//f:useBuiltinTransports", namespaces=ns) == "false"
+    # 真机 11-20 备选:NEXWAR_NAV2_RMW=zenoh 换 rmw_zenoh_cpp(不再带 FastDDS 配置)
+    zen = text.split('if [ "${NEXWAR_NAV2_RMW:-}" = zenoh ]; then', 1)[1].split("fi", 1)[0]
+    assert "RMW_IMPLEMENTATION=rmw_zenoh_cpp" in zen
+    assert "unset FASTRTPS_DEFAULT_PROFILES_FILE" in zen
+    assert text.index("NEXWAR_NAV2_DDS:-") < text.index("NEXWAR_NAV2_RMW:-") \
+        < text.index("exec ros2")
     # 发现不靠组播:本机单播、端口范围盖得住这个域里所有参与者(默认 4 个不够)
     assert [a.text for a in x.iterfind(".//f:initialPeersList//f:address", ns)] == ["127.0.0.1"]
     assert int(x.findtext(".//f:maxInitialPeersRange", namespaces=ns)) >= 32
