@@ -2632,3 +2632,21 @@ def test_真机1120_视野表_读不了就按写死的锥_帧太少不认(tmp_pa
     assert fovmask.load({"NEXWAR_FOV_FILE": str(p)}) is None, "一格都看不见"
     p.write_text("{bad")
     assert fovmask.load({"NEXWAR_FOV_FILE": str(p)}) is None
+
+
+async def test_真机1120_等规划查路线的时候照样送时钟_不然判Nav2未就绪(tmp_path, monkeypatch):
+    """11-20 窄道:MPPI、RPP 放弃以后重新查路线,卡在一拍里 2 s 多没送时钟 → 「代理未在送时钟」。"""
+    from nexwar_agent.bridges import nav2_nav
+    link = 会规划的转接(answer="silent")
+    t = _台(tmp_path, link)
+    await t.start(1.5, 4.0)
+    link.here = (1.5, 4.0)
+    monkeypatch.setattr(nav2_nav, "PLAN_WAIT_S", 0.6)
+    before = len(link.kinds("tick"))
+    got = await t.nav._route_check(await t.nav._here(), Pose.from_xy_yaw(9.0, 4.0), "测")
+    assert got.status == "unchecked"
+    assert len(link.kinds("tick")) - before >= 4, "等的 0.6 s 里每 0.1 s 一拍"
+    assert t.nav._feeders == 0
+    n = len(link.kinds("tick"))
+    await asyncio.sleep(0.3)
+    assert len(link.kinds("tick")) == n, "等完就停,不留后台"
