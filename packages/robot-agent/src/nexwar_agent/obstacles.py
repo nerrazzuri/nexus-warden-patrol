@@ -53,9 +53,15 @@ REC_FREE_S = 15.0
 #: 看不见。
 BAND_POLICIES = ("strict", "legacy", "sealed")
 #: 现场换看不见的规矩(真机 11-20 商场抛光地砖回点少,两侧九成格子一直看不见,转身一直被拦):
-#: ``NEXWAR_GUARD_BAND`` = ``sealed``(默认)/ ``strict`` / ``legacy``
+#: ``NEXWAR_GUARD_BAND`` = ``sealed`` / ``strict`` / ``legacy``
 #: (11-14 以前:看不见的一律降速走)。
 GUARD_BAND_ENV = "NEXWAR_GUARD_BAND"
+#: 真机上没设 ``NEXWAR_GUARD_BAND`` 时用哪套。用户 11-20「先暂时默认盲带没人」:``legacy``
+#: (机身两侧盲带看不见的当没人,降速放行,原地转、后退不拦)—— 当天 C40221 商场 sealed 下空旷处
+#: 原地转不了身、20 秒没进展叫人接管,legacy 跑了整个下午(0.75–0.83 m/s,转身正常)。
+#: 这是安全上的取舍:盲带里真有人时转身可能扫到。:class:`ObstacleView` 自己的缺省(仿真、测试用)
+#: 还是 ``sealed``。
+FIELD_DEFAULT_BAND = "legacy"
 
 
 def band_policy_from_env(env: Any = None) -> str | None:
@@ -68,6 +74,11 @@ def band_policy_from_env(env: Any = None) -> str | None:
         log.warning("%s=%r 不认识,按默认", GUARD_BAND_ENV, raw)
         return None
     return raw
+
+
+def field_band_policy(env: Any = None) -> str:
+    """真机守卫用哪套:现场设了按设的,没设 / 写错按 :data:`FIELD_DEFAULT_BAND`。"""
+    return band_policy_from_env(env) or FIELD_DEFAULT_BAND
 #: 「封住」看机器人周围多大一圈(米)。
 SEAL_R = 2.0
 MEMORY_STILL_M = 0.15
