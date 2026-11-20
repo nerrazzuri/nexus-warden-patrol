@@ -89,6 +89,39 @@ class FakeApi implements SiteApi {
     if (loginError != null) throw loginError!;
     return session!;
   }
+
+  /// 指纹登录（用户 11-20）：记下调了哪个、登记的公钥；[bioError] 给了指纹登录就抛它。
+  final List<String> bioCalls = <String>[];
+  SiteError? bioError;
+  @override
+  Future<String> bioEnrollNonce() async {
+    bioCalls.add('enrollNonce');
+    return 'n-enroll';
+  }
+
+  @override
+  Future<Map<String, dynamic>> bioEnroll(List<int> pub, String label, String nonce, List<int> sig) async {
+    bioCalls.add('enroll $label $nonce ${sig.length}');
+    return <String, dynamic>{'key_id': '0123456789abcdef0123456789abcdef', 'expires_at': 4102444800000};
+  }
+
+  @override
+  Future<String> bioLoginNonce(String keyId) async {
+    bioCalls.add('loginNonce $keyId');
+    return 'n-login';
+  }
+
+  @override
+  Future<SiteSession> bioLogin(String keyId, String nonce, List<int> sig) async {
+    bioCalls.add('login $keyId $nonce');
+    if (bioError != null) throw bioError!;
+    return session!;
+  }
+
+  @override
+  Future<void> bioRevoke({String? keyId}) async {
+    bioCalls.add('revoke ${keyId ?? 'all'}');
+  }
   /// 站点体检（C-B4）：给了就用它；[healthError] 给了就抛。诊断包同理。
   Map<String, dynamic> healthBody = <String, dynamic>{
     'ok': true, 'critical_ok': true, 'version': '1.4.0', 'now_ms': 1,

@@ -189,6 +189,19 @@ describe("用户页", () => {
     await waitFor(() => expect(posted.map((p) => p.url)).toContain("/api/accounts/gina/remove"));
     await waitFor(() => expect(c.querySelector('tr[data-name="gina"]')).toBeNull());
   });
+
+  it("用户 11-20:开了指纹登录的写几部手机,能一键关(确认后)", async () => {
+    accounts = accounts.map((a) => a.name === "gina" ? { ...a, bio_devices: 2 } : a);
+    const { container: c } = page();
+    const card = await pick(c, "gina");
+    expect(card.querySelector('[data-us-bio="gina"]')!.textContent).toContain("有 2 部手机开了指纹登录");
+    fireEvent.click(btn(card.querySelector('[data-us-bio="gina"]')!, "关闭指纹登录"));
+    expect(card.querySelector(".us-ask")!.textContent).toContain("手机丢了时用");
+    fireEvent.click(btn(card.querySelector(".us-ask")!, "关闭指纹登录"));
+    await waitFor(() => expect(posted.map((p) => p.url)).toContain("/api/accounts/gina/bio/revoke"));
+    const olga = await pick(c, "olga");
+    expect(olga.querySelector("[data-us-bio]")).toBeNull();
+  });
 });
 
 
@@ -239,6 +252,9 @@ describe("第 3 轮 P1-66 活动记录", () => {
     expect(actionText("POST /api/duty-settings")).toBe("改了值班设置");
     expect(actionText("POST /api/arming/exceptions")).toBe("加了布防例外");
     expect(actionText("POST /api/arming/exceptions/2/remove")).toBe("删了布防例外");
+    expect(actionText("POST /api/me/bio")).toBe("开了指纹登录");
+    expect(actionText("POST /api/me/bio/revoke")).toBe("关了指纹登录");
+    expect(actionText("POST /api/accounts/gina/bio/revoke")).toBe("关了别人的指纹登录");
     expect(actionText("POST /api/route-schedules/s1")).toBe("改了巡逻日程");
     expect(actionText("POST /api/teleop-speeds")).toBe("改了遥控速度");
     expect(actionText("POST /api/voice-presets")).toBe("改了常用喊话");

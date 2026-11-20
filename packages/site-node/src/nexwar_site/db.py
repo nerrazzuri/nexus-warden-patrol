@@ -29,7 +29,8 @@ from typing import Any
 #: 77 第 13 轮 W13-01:删掉的排程留着当时的定义 retired_ids.definition
 #:    (今天没跑的那一轮删了照样列;只加列)。
 #: 78 W77(外审 W77-1 #6):见人开的警灯、警笛还没确认关掉的 person_warn_lit(只加表)。
-SCHEMA_VERSION = 79
+#: 80 用户 11-20:手机指纹登录的公钥 bio_keys(只加表)。
+SCHEMA_VERSION = 80
 
 _DDL = """
 CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
@@ -445,6 +446,17 @@ CREATE TABLE IF NOT EXISTS purged (
     key       TEXT NOT NULL,
     purged_ms INTEGER NOT NULL,
     PRIMARY KEY (kind, robot_id, key)
+);
+-- 手机指纹登录(用户 11-20):一部手机一把 P-256 公钥(私钥在手机 Keystore 里,要按指纹才能用)。
+-- 30 天到期;改角色、停用、改口令、删账号时跟会话一起删。
+CREATE TABLE IF NOT EXISTS bio_keys (
+    key_id     TEXT PRIMARY KEY,
+    account    TEXT NOT NULL,
+    pub        BLOB NOT NULL,
+    label      TEXT NOT NULL DEFAULT '',
+    created_ms INTEGER NOT NULL,
+    expires_ms INTEGER NOT NULL,
+    last_used_ms INTEGER
 );
 -- 商业化 A6(决策 53):收推送的手机(极光的推送号)、要推的 P1(告警写库的同一个事务里排上;同一条
 -- 同一档只排一次)。

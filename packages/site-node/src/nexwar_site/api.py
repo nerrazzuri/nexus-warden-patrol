@@ -103,6 +103,21 @@ REQUEST_TIMEOUT_S = 30.0
 LOCAL_HOSTS = frozenset({"127.0.0.1", "localhost", "::1"})
 _ACCOUNT = re.compile(r"^/api/accounts/([A-Za-z0-9._-]{1,64})$")
 _ACCOUNT_RM = re.compile(r"^/api/accounts/([A-Za-z0-9._-]{1,64})/remove$")
+#: 用户 11-20:管理员撤掉这个账号所有手机的指纹登录。
+_ACCOUNT_BIO = re.compile(r"^/api/accounts/([A-Za-z0-9._-]{1,64})/bio/revoke$")
+
+
+def _b64(v: Any) -> bytes:
+    """手机发来的 base64(普通或 URL 安全、带不带补齐都认);不是字符串、解不出来回空。"""
+    if not isinstance(v, str) or len(v) > 4096:
+        return b""
+    import base64
+    import binascii
+    t = v.strip().replace("-", "+").replace("_", "/")
+    try:
+        return base64.b64decode(t + "=" * (-len(t) % 4), validate=True)
+    except (binascii.Error, ValueError):
+        return b""
 #: 防区多边形(商业化 B1c)、名单(时段 / 人员授权)。
 #: 路线库:路线 ``/api/routes/<名>[/delete]``、排程 ``/api/route-schedules/<id>[/delete]``。
 _ADHOC = re.compile(r"^/api/adhoc/([^/]{1,32})/cancel$")
@@ -733,6 +748,8 @@ class _Handler(TlsHandlerMixin):
                 return self._static(path)          # 商业化 B1:网页值班台(不用登录;数据走 /api)
             if method == "POST" and path == "/api/login":
                 return self._login()
+            if method == "POST" and path in ("/api/login/bio", "/api/login/bio/challenge"):
+                return self._bio_login(path.endswith("/challenge"))   # 用户 11-20:指纹登录
             if method == "POST" and path == "/api/enroll/claim":
                 return self._enroll_claim()          # 商业化 A4:狗领证书包,开通码就是凭证
             if method == "GET" and path == "/api/attest/challenge":
@@ -770,6 +787,8 @@ class _Handler(TlsHandlerMixin):
             if method == "POST" and _PROBLEM_DELETE.match(path):
                 self._need(user, MAINTAIN)              # 用户 11-11:问题单要能删
                 return self._problem_delete(_PROBLEM_DELETE.match(path).group(1))
+            if path.startswith("/api/me/bio"):
+                return self._me_bio(method, path, user)        # 用户 11-20:登记、撤指纹登录
             if method == "POST" and path == "/api/watch/token":
                 # W17:手机后台值守领一个只能看告警的长期令牌(普通会话 12 小时就到期)
                 self._need(user, VIEW)
@@ -836,6 +855,13 @@ class _Handler(TlsHandlerMixin):
             if m is not None and method == "POST":
                 self._need(user, MANAGE)
                 return self._robot_wifi(unquote(m.group(1)), user)
+            m = _ACCOUNT_BIO.match(path)
+            if m is not None and method == "POST":
+                self._need(user, MANAGE_ACCOUNTS)
+                self._audit_target = m.group(1)
+                n = self.site.accounts.bio_revoke(m.group(1))
+                self._audit_detail = {"bio_revoked": n}
+                return self._send_json(200, {"revoked": n, "accounts": self.site.accounts.list()})
             if path == "/api/accounts" or _ACCOUNT.match(path) or _ACCOUNT_RM.match(path):
                 self._need(user, MANAGE_ACCOUNTS)
                 return self._accounts(method, path, user)
@@ -1633,6 +1659,70 @@ class _Handler(TlsHandlerMixin):
                               "display_name": self.site.accounts.display_name(name),
                               # 商业化 A7:App 看这两个数,配不上的当场说「升级 App」「升级站点」
                               "api_level": SITE_API_LEVEL, "min_app_level": MIN_APP_API_LEVEL})
+
+    def _bio_login(self, challenge: bool) -> None:
+        """手机指纹登录(用户 11-20)。``/challenge {key_id}`` 出一次性随机数;``{key_id, nonce, sig,
+        client}`` 验签换普通会话(跟密码登录同样的回包,不种 cookie:只给 App)。"""
+        from nexwar_site.accounts import BIO_LOGIN, BioGone
+        d = self._body()
+        key_id = d.get("key_id")
+        if not isinstance(key_id, str) or not re.fullmatch(r"[0-9a-f]{32}", key_id):
+            raise HttpError(400, "要 key_id")
+        acc = self.site.accounts
+        if challenge:
+            return self._send_json(200, {"nonce": acc.bio_nonce(BIO_LOGIN, key_id)})
+        self._actor = f"login:bio:{key_id[:8]}"
+        client = d.get("client") if isinstance(d.get("client"), dict) else None
+        if client is not None and client.get("kind") == "web":
+            client = None
+        self._login_kind = "app" if client is not None and client.get("kind") == "app" else ""
+        try:
+            token, name = acc.bio_login(key_id, d.get("nonce"), _b64(d.get("sig")), client)
+        except LockedOut as exc:
+            raise HttpError(429, str(exc)) from exc
+        except AccountDisabled as exc:
+            raise HttpError(401, str(exc), extra={"disabled": True}) from exc
+        except BioGone as exc:
+            raise HttpError(401, str(exc), extra={"bio_gone": True}) from exc
+        except AuthError as exc:
+            raise HttpError(401, str(exc)) from exc
+        self._actor = f"login:{name}"
+        who = acc.check(token)
+        from nexwar_contract.compat import MIN_APP_API_LEVEL, SITE_API_LEVEL
+        self._send_json(200, {"token": token, "name": name, "role": getattr(who, "role", ""),
+                              "display_name": acc.display_name(name),
+                              "api_level": SITE_API_LEVEL, "min_app_level": MIN_APP_API_LEVEL})
+
+    def _me_bio(self, method: str, path: str, user) -> None:
+        """自己的指纹登录:``GET /api/me/bio`` 登记了哪几部手机;
+        ``POST /api/me/bio/challenge`` 出随机数;
+        ``POST /api/me/bio {pub, label, nonce, sig}`` 登记这部手机;``POST /api/me/bio/revoke
+        {key_id?}`` 撤一部(不给 key_id 撤全部)。"""
+        from nexwar_site.accounts import BIO_ENROLL
+        self._need(user, VIEW)
+        acc, name = self.site.accounts, str(user)
+        if method == "GET" and path == "/api/me/bio":
+            return self._send_json(200, {"keys": acc.bio_keys(name)})
+        if method != "POST":
+            raise HttpError(405, "只支持 GET/POST")
+        if path == "/api/me/bio/challenge":
+            return self._send_json(200, {"nonce": acc.bio_nonce(BIO_ENROLL, name)})
+        d = self._body()
+        if path == "/api/me/bio/revoke":
+            kid = d.get("key_id")
+            n = acc.bio_revoke(name, kid if isinstance(kid, str) else None)
+            self._audit_detail = {"bio_revoked": n}
+            return self._send_json(200, {"revoked": n, "keys": acc.bio_keys(name)})
+        if path != "/api/me/bio":
+            raise HttpError(404, "没有这个接口")
+        label = d.get("label") if isinstance(d.get("label"), str) else ""
+        try:
+            key_id, expires = acc.bio_enroll(name, _b64(d.get("pub")), label, d.get("nonce"),
+                                             _b64(d.get("sig")))
+        except AuthError as exc:
+            raise HttpError(400, str(exc)) from exc
+        self._audit_detail = {"bio_enrolled": label[:64]}
+        self._send_json(200, {"key_id": key_id, "expires_at": expires})
 
     def _robot(self, method: str, robot_id: str, action: str | None, user: str) -> None:
         disp = self.site.dispatcher

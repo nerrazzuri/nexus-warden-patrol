@@ -9,9 +9,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../l10n.dart';
+import '../net/app_log.dart' show deviceSummary;
 import '../net/background_watch.dart';
+import '../net/bio_login.dart';
 import '../net/push.dart';
 import '../net/site_client.dart';
+import '../store/paths.dart' show bioFilePath;
 import '../store/site_store.dart';
 import 'app_settings.dart';
 import '../model/alert.dart';
@@ -46,6 +49,10 @@ class SiteListPage extends StatefulWidget {
   final LangStore? langStore;
   /// 扫配对码（App V2）：测试换成假的；缺省手机上开相机，桌面版没有扫码按钮。
   final CodeScanner? scanner;
+
+  /// 指纹登录（用户 11-20）：钥匙（测试换成假的）、记录（不给就用 App 目录里的 bio.json）。
+  final BioKeys bioKeys;
+  final BioBook? bioBook;
   const SiteListPage(
       {super.key,
       required this.store,
@@ -53,7 +60,13 @@ class SiteListPage extends StatefulWidget {
       this.watch = const ChannelBackgroundWatch(),
       this.push,
       this.langStore,
-      this.scanner});
+      this.scanner,
+      this.bioKeys = const ChannelBioKeys(),
+      this.bioBook});
+
+  /// 用密码登上以后问「下次用指纹登录？」的两个按钮。
+  static const Key bioOfferYesKey = Key('bio-offer-yes');
+  static const Key bioOfferNoKey = Key('bio-offer-no');
 
   /// 右上角齿轮：设置（W55，语言、工程师工具、App 版本）。
   static const Key settingsKey = Key('open-settings');
@@ -65,6 +78,54 @@ class SiteListPage extends StatefulWidget {
 
 class _SiteListPageState extends State<SiteListPage> {
   List<SiteEntry> _sites = <SiteEntry>[];
+
+  BioBook? _book;
+  Future<BioBook> _bioBook() async {
+    if (_book != null) return _book!;
+    if (widget.bioBook != null) return _book = widget.bioBook!;
+    try {
+      return _book = BioBook(await bioFilePath());
+    } on Object {
+      return _book = BioBook();                  // 拿不到目录（测试、桌面怪环境）：只在内存里
+    }
+  }
+
+  /// 用密码登上以后：这部手机能用指纹、这个站点这个账号还没开、也没说过「不用」→ 问一次。
+  Future<void> _offerBio(SiteApi api, SiteEntry s, String account) async {
+    final keys = widget.bioKeys;
+    if (!await keys.available()) return;
+    final book = await _bioBook();
+    final rec = await book.of(s, DateTime.now().millisecondsSinceEpoch);
+    if (rec != null && rec.account == account) return;
+    if (await book.declined(s, account) || !mounted) return;
+    final yes = await showDialog<bool>(
+        context: context,
+        builder: (c) => AlertDialog(
+              title: Text(tr('Sign in with your fingerprint next time?', '下次用指纹登录？')),
+              content: Text(tr(
+                  'Next time you open ${s.name}, just touch the fingerprint sensor instead of typing the password. '
+                      'It lasts 30 days on this phone. Changing your password or the phone\'s fingerprints turns it off.',
+                  '下次打开「${s.name}」时按一下指纹就能登录，不用输密码。在这部手机上 30 天有效；改密码或手机上的指纹有变动会自动失效。')),
+              actions: [
+                TextButton(key: SiteListPage.bioOfferNoKey, onPressed: () => Navigator.pop(c, false),
+                    child: Text(tr('Not now', '暂不'))),
+                FilledButton(key: SiteListPage.bioOfferYesKey, onPressed: () => Navigator.pop(c, true),
+                    child: Text(tr('Turn on', '开启'))),
+              ],
+            ));
+    if (yes != true) {
+      if (yes == false) await book.decline(s, account);
+      return;
+    }
+    String msg;
+    try {
+      final ok = await bioEnroll(api, keys, book, s, account, label: deviceSummary());
+      msg = ok ? tr('Fingerprint sign-in is on for this phone.', '这部手机已开启指纹登录。') : '';
+    } on BioFailure catch (e) {
+      msg = e.message;
+    }
+    if (msg.isNotEmpty && mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+  }
 
   /// 卡片最宽这么多（桌面版的大窗口上不拉满）。
   static const double _maxWidth = 720;
@@ -146,8 +207,15 @@ class _SiteListPageState extends State<SiteListPage> {
   Future<void> _open(SiteEntry s) async {
     String? account0;
     String? used;
+    var byPassword = false;
     final messenger = ScaffoldMessenger.of(context);
     final nav = Navigator.of(context);
+    // 用户 11-20：这个站点开过指纹登录、这部手机还能用指纹 → 登录页先给「用指纹登录」
+    // （先问能不能用指纹：不能用的手机、桌面版不碰记录文件）
+    final keys = widget.bioKeys;
+    final book = await keys.available() ? await _bioBook() : null;
+    final bio = await book?.of(s, DateTime.now().millisecondsSinceEpoch);
+    if (!mounted) return;
     // 口令在登录页上收（2026-10-14 重做：原来是弹窗）。登录不了人留在那一页、原因摆在那一页上，
     // 改了能再试；登上了那一页带着连好的客户端退回来，下面的顺序跟原来一样。
     final api = await nav.push<SiteApi>(MaterialPageRoute<SiteApi>(
@@ -173,10 +241,37 @@ class _SiteListPageState extends State<SiteListPage> {
                 }
                 account0 = account;
                 used = u;
+                byPassword = true;
                 return api;
               }
               throw SiteError(0, errs.join('\n'));
             },
+            bioAccount: bio?.account,
+            bioSignIn: bio == null
+                ? null
+                : () async {
+                    // 跟密码一样按顺序试地址；连不上（状态 0）换下一个
+                    final errs = <String>[];
+                    for (final u in s.urls) {
+                      final api = widget.apiFactory(s.copyWith(url: u));
+                      try {
+                        await bioSignIn(api, keys, book!, s, bio);
+                      } on SiteError catch (e) {
+                        api.close();
+                        if (e.status != 0 || e.certChanged || s.urls.length == 1) rethrow;
+                        errs.add(tr('$u: ${e.message}', '$u：${e.message}'));
+                        continue;
+                      } catch (_) {
+                        api.close();
+                        rethrow;
+                      }
+                      account0 = bio.account;
+                      used = u;
+                      return api;
+                    }
+                    throw SiteError(0, errs.join('\n'));
+                  },
+            bioOff: bio == null ? null : () => bioTurnOff(null, keys, book!, s),
             // 手机 App 测试 M03：证书变了，登录页上直接「新站点码」：只换地址和指纹（名字、账号、备用地址留着）。
             // 下面登录用的是换过的 s（闭包抓的是变量）。
             scanner: widget.scanner ?? (canScanCodes ? scanSiteCode : null),
@@ -207,6 +302,7 @@ class _SiteListPageState extends State<SiteListPage> {
             })));
     if (api == null) return;
     final a = api;
+    if (byPassword && account0 != null && mounted) await _offerBio(a, s, account0!);
     // 记下这次登录用的账号（下次登录页自动填好）、登上的地址（下次先试它）
     if ((account0 != null && account0 != s.username) || (used != null && used != s.url)) {
       final upd = (used == null ? s : s.preferring(used!)).copyWith(username: account0);
@@ -412,6 +508,12 @@ class SiteLoginPage extends StatefulWidget {
 
   /// 日志设计 第 6 条：登不进去也能「上传日志」—— 给一个还没登录的站点连接（用完关掉）。
   final SiteApi Function()? openAnon;
+
+  /// 指纹登录（用户 11-20）：给了就有「用指纹登录」（进来自动弹一次），[bioAccount] 是开的那个账号；
+  /// [bioOff] 在这部手机上关掉。指纹登不成抛 [BioFailure]（`gone` = 已失效，按钮收起来）。
+  final Future<SiteApi> Function()? bioSignIn;
+  final String? bioAccount;
+  final Future<void> Function()? bioOff;
   const SiteLoginPage(
       {super.key,
       required this.site,
@@ -421,7 +523,13 @@ class SiteLoginPage extends StatefulWidget {
       this.saveAlts,
       this.remove,
       this.scanner,
-      this.openAnon});
+      this.openAnon,
+      this.bioSignIn,
+      this.bioAccount,
+      this.bioOff});
+
+  static const Key bioKey = Key('login-bio');
+  static const Key bioOffKey = Key('login-bio-off');
 
   static const Key problemKey = Key('login-problem');
   static const Key applyKey = Key('login-apply');
@@ -457,6 +565,67 @@ class _SiteLoginPageState extends State<SiteLoginPage> {
 
   /// 换好码、存好地址之后的那句话。
   String? _msg;
+
+  /// 指纹登录还给不给（失效了、关掉了就收起来）。
+  late bool _bio = widget.bioSignIn != null;
+
+  @override
+  void initState() {
+    super.initState();
+    // 进来就弹一次指纹框（取消了就留在这一页输密码）
+    if (_bio) WidgetsBinding.instance.addPostFrameCallback((_) => unawaited(_bioSubmit()));
+  }
+
+  Future<void> _bioSubmit() async {
+    if (_busy || !_bio || !mounted) return;
+    setState(() {
+      _busy = true;
+      _error = null;
+      _msg = null;
+    });
+    final SiteApi api;
+    try {
+      api = await widget.bioSignIn!();
+    } on BioFailure catch (e) {
+      if (mounted) {
+        setState(() {
+          _busy = false;
+          if (e.gone) _bio = false;
+          _error = e.cancelled ? null : e.message;
+          _notPassword = true;
+        });
+      }
+      return;
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _busy = false;
+          _notPassword = true;
+          _certChanged = e is SiteError && e.certChanged;
+          _error = tr("Can't sign in: $e", '登录失败：$e');
+        });
+      }
+      return;
+    }
+    if (!mounted) {
+      try {
+        await api.logout();
+      } catch (_) {}
+      api.close();
+      return;
+    }
+    Navigator.pop(context, api);
+  }
+
+  Future<void> _bioTurnOff() async {
+    await widget.bioOff?.call();
+    if (mounted) {
+      setState(() {
+        _bio = false;
+        _msg = tr('Fingerprint sign-in is off on this phone.', '这部手机已关闭指纹登录。');
+      });
+    }
+  }
 
   @override
   void dispose() {
@@ -649,6 +818,23 @@ class _SiteLoginPageState extends State<SiteLoginPage> {
                               style: FilledButton.styleFrom(minimumSize: const Size(48, 48), shape: shape),
                               onPressed: _busy ? null : _submit,
                               child: Text(_busy ? tr('Signing in…', '正在登录…') : tr('Sign in', '登录'))),
+                          if (_bio) ...[
+                            const SizedBox(height: Nw.s8),
+                            OutlinedButton.icon(
+                                key: SiteLoginPage.bioKey,
+                                style: OutlinedButton.styleFrom(minimumSize: const Size(48, 48), shape: shape),
+                                onPressed: _busy ? null : _bioSubmit,
+                                icon: const Icon(Icons.fingerprint_rounded),
+                                label: Text(widget.bioAccount == null
+                                    ? tr('Sign in with fingerprint', '用指纹登录')
+                                    : tr('Sign in with fingerprint (${widget.bioAccount})', '用指纹登录（${widget.bioAccount}）'))),
+                            Align(
+                                alignment: Alignment.centerRight,
+                                child: TextButton(
+                                    key: SiteLoginPage.bioOffKey,
+                                    onPressed: _busy || widget.bioOff == null ? null : _bioTurnOff,
+                                    child: Text(tr('Turn off fingerprint sign-in on this phone', '在这部手机上关闭指纹登录')))),
+                          ],
                           if (error != null) ...[
                             const SizedBox(height: Nw.s16),
                             NwNotice(

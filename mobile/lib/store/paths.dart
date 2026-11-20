@@ -26,6 +26,11 @@ Future<File> teleopTierFilePath() async => File('${(await _dir()).path}/$teleopT
 
 Future<LangStore> openLangStore() async => LangStore(File('${(await _dir()).path}/$langFileName'));
 
+/// 指纹登录记的哪个站点用哪把钥匙（用户 11-20；不存密码、令牌）。
+const String bioFileName = 'bio.json';
+
+Future<File> bioFilePath() async => File('${(await _dir()).path}/$bioFileName');
+
 Future<SiteStore> openSiteStore() async =>
     JsonSiteStore(File('${(await _dir()).path}/$sitesFileName'));
 

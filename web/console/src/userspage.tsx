@@ -13,7 +13,9 @@ import { roleLabel } from "./shell";
 import { siteStr, zhPunct } from "./sitetext";
 
 type Say = (s: string) => void;
-interface Account { name: string; role: string; disabled: boolean; display_name: string; expires_ms: number | null; last_login_ms: number | null; expired: boolean }
+interface Account { name: string; role: string; disabled: boolean; display_name: string; expires_ms: number | null; last_login_ms: number | null; expired: boolean;
+  /** 用户 11-20:几部手机开了指纹登录(老站点没有)。 */
+  bio_devices?: number }
 export interface AuditRow { id: number; at: number; actor: string; actor_role?: string | null; action: string; target: string; status: number;
   /** 第 10 轮 W9-01:对象是日程、路线时站点给的显示名(老站点没有)。 */
   target_name?: string;
@@ -95,6 +97,9 @@ export function leftText(until: number, now: number): string {
 
 /** 审计里的动作翻成人话;认不得的原样。 */
 const ACTIONS: [RegExp, string][] = [
+  // 用户 11-20:指纹登录(要随机数那两条不进审计意义;登记、关掉、管理员关别人的)
+  [/^POST \/api\/me\/bio\/revoke$/, "actBioOff"], [/^POST \/api\/me\/bio$/, "actBioOn"],
+  [/^POST \/api\/accounts\/[^/]+\/bio\/revoke$/, "actBioRevoke"],
   [/^POST \/api\/arming\/exceptions\/\d+\/remove$/, "actArmExceptionDel"],
   [/^(POST|DELETE) \/api\/arming\/exceptions/, "actArmExceptionAdd"],
   // 第 4 轮 P1-66:巡逻日程真正的接口是 route-schedules;遥控速度
@@ -363,6 +368,15 @@ export function UsersPage({ me, say, now }: { me: string; say: Say; now: number 
                   </div>
                 )}
                 {cur.name !== me && cur.role !== "engineer" && <p class="sp-pad muted small us-hint">{t("usDisableHint")}</p>}
+                {(cur.bio_devices ?? 0) > 0 && (
+                  <div class="sp-pad us-bio" data-us-bio={cur.name}>
+                    <p class="small">{t("usBioN", { n: cur.bio_devices ?? 0 })}</p>
+                    <button type="button" class="btn" onClick={() => setAsk({ text: t("usBioAsk", { who: nm(cur) }), yes: t("usBioRevoke"), danger: true,
+                      go: () => void api<{ accounts: Account[] }>("POST", `/api/accounts/${enc(cur.name)}/bio/revoke`, {})
+                        .then((d) => { setRows(d.accounts ?? []); say(t("usBioDone", { who: nm(cur) })); })
+                        .catch((e) => say(errText(e))) })}>{t("usBioRevoke")}</button>
+                  </div>
+                )}
               </section>
               <UserAudit name={cur.name} account={cur} />
             </>
