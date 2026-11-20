@@ -531,14 +531,23 @@ class ObstacleGuard:
 
     def _arc(self, vx: float, wz: float, dist: float, hl: float, hw: float, *,
              turn_dist: float | None = None) -> set[tuple[float, float]]:
-        """按 (vx, wz) 的方向和弯走 ``dist`` 米,每一步机身轮廓线落下的点;弯比机身对角线还急就并上
-        外接圆(跟原地转差不多)。``turn_dist``:只弯这么远,再往后顺着那时的朝向直着走。"""
+        """按 (vx, wz) 的方向和弯走 ``dist`` 米,每一步机身轮廓线落下的点。``turn_dist``:只弯这么远,
+        再往后顺着那时的朝向直着走。
+
+        弯比机身对角线还急(真机 11-20 C40221:原来直接并上整个外接圆,当原地转一整圈查):按刹停前
+        真转过的角度查 —— 走的路至少够转完 :meth:`turn_reach`(原地转也是这么查的),步数按机身角点
+        走过的弧长取,相邻两步角点挪不过一格。原来那样,机器人中心离墙 0.5 m、Nav2 要掉头发
+        「慢走 + 急转」,外接圆(0.59 m)压墙,守卫一直拦、Nav2 一直这么发,20 秒判卡住。"""
         s = self.step
         pts: set[tuple[float, float]] = set()
         corner = math.hypot(hl, hw)
-        # 角点走过的弧长只在转弯半径比机身对角线还小时才比中心的长 —— 那种急转下面直接并上外接圆
-        # (内审应修 3;突变里「按角点弧长取步数」跟「并外接圆」互相顶替,只留后一条)
+        tight = abs(wz) > 1e-6 and abs(vx) > 1e-6 and abs(vx / wz) < corner
+        if tight and turn_dist is None:
+            dist = max(dist, self.turn_reach(wz) * abs(vx / wz))
         k = max(1, int(dist / s))
+        if tight:
+            # 角点走过的弧长 ≈ 转过的角度 × (转弯半径 + 机身对角线)
+            k = max(k, int(math.ceil(dist / abs(vx / wz) * (abs(vx / wz) + corner) / s)))
         xs = [(i + 0.5) * s for i in range(int(-hl / s) - 1, int(hl / s) + 1)
               if abs((i + 0.5) * s) < hl] + [-hl, hl]
         ys = [(j + 0.5) * s for j in range(int(-hw / s) - 1, int(hw / s) + 1)
@@ -560,8 +569,6 @@ class ObstacleGuard:
             # 每一步机身的轮廓线(采样间距不大于一格,轮廓线扫过的就是整个扫掠区;起点那块是狗自己)
             for x, y in edge:
                 pts.add((round(px + c * x - sn * y, 3), round(py + sn * x + c * y, 3)))
-        if abs(wz) > 1e-6 and abs(vx / wz) < corner:
-            pts |= self._sector(0.0, 2 * math.pi, hl, hw)
         return pts
 
     def _swept_cmd(self, vx: float, wz: float, v_meas: float, w_now: Sequence[float],
