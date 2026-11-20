@@ -372,3 +372,57 @@ def test_第3轮_P1_77_签名不对_密码也不对_说签名不说密码_不登
     code, got = _传(s, _登(s), _打包(d), pw="wrong-wrong-wrong")
     assert code == 400 and "签名不匹配" in got["error"] and got.get("reason") == "bad_package"
     assert s.req("GET", "/api/releases", token=_登(s))[1]["releases"] == []
+
+
+def test_真机1120_排队被拒_记原因_5分钟内不重发_已经在跑就出队(tmp_path):
+    """11-20:进了充电排队,拒了每一拍都重发、网页看不出来;要切的版本已经在跑了也照发。"""
+    from nexwar_site.release_queue import RETRY_MS
+
+    class 拒(假派遣):
+        async def map_command(self, rid, kind, payload, *, issued_by):
+            self.sent.append((rid, kind, payload))
+            return {"ack": {"result": "rejected", "reason": "定位器"}}
+    d, now = 拒(), [1]
+    q = ReleaseQueue(SiteDB(tmp_path / "s.db"), d, now_ms=lambda: now[0],
+                     payload=lambda n: {"name": n})
+    _狗(d)
+    q.add("A", NAME, by="alice")
+    for _ in range(5):
+        asyncio.run(q.tick())
+    assert len(d.sent) == 1, "拒了不再一拍一发"
+    row = q.list()[0]
+    assert row["last_reason"] == "定位器" and row["retry_at_ms"] == 1 + RETRY_MS
+    now[0] += RETRY_MS
+    asyncio.run(q.tick())
+    assert len(d.sent) == 2, "到点再试"
+    d.clients["A"].capabilities = SimpleNamespace(tasks={"release_install": {"current": NAME}})
+    asyncio.run(q.tick())
+    assert q.list() == [] and len(d.sent) == 2, "已经在跑这一版:出队,不发"
+
+
+def test_真机1120_升级页看得见最近一条命令_回执_事件_排队_能取消(站点, tmp_path):
+    s = 站点
+    d = 做包(tmp_path)
+    _签(d, s.key)
+    tok = _登(s)
+    assert _传(s, tok, _打包(d))[0] == 200
+    db = s.api.dispatcher.db
+    with db.tx() as c:
+        c.execute("INSERT INTO commands(command_id, task_id, robot_id, kind, payload, issued_by,"
+                  " issued_at, ack_result, ack_reason) VALUES ('c1','t1','A','release_activate',"
+                  " ?, 'alice', 5, 'rejected', '定位器')", (json.dumps({"name": NAME}),))
+        c.execute("INSERT INTO events(robot_id, boot_id, seq, event_id, kind, data, stamp,"
+                  " received_at) VALUES ('A','b',1,'e1','release_installed', ?, 3, 4)",
+                  (json.dumps({"name": NAME}),))
+        c.execute("INSERT INTO events(robot_id, boot_id, seq, event_id, kind, data, stamp,"
+                  " received_at) VALUES ('A','b',2,'e2','releasexinstalled', '{}', 3, 9)")
+    s.api.release_queue.add("A", NAME, by="alice")
+    code, got = s.req("GET", "/api/releases", token=tok)
+    assert code == 200
+    assert got["last"]["A"]["cmd"] == {"kind": "release_activate", "name": NAME, "at_ms": 5,
+                                       "result": "rejected", "reason": "定位器"}
+    assert got["last"]["A"]["event"]["kind"] == "release_installed", "下划线不当通配"
+    assert [(r["robot_id"], r["name"]) for r in got["queue"]] == [("A", NAME)]
+    code, got = s.req("POST", "/api/robots/A/release", {"action": "unqueue"}, token=tok)
+    assert code == 200 and got["removed"] is True
+    assert s.api.release_queue.list() == []

@@ -2,7 +2,7 @@
 // 站点照旧核签名和指纹);在线下载等站点联网(W45)。每台机器人:下载到机器人、换成这一版(现在 / 等它在充电、空闲时)、
 // 退回上一版。谁还在用老 App 也在这一页。
 import { pkgProblem } from "./pkgcheck";
-import { useState } from "preact/hooks";
+import { useEffect, useState } from "preact/hooks";
 import { useLoad, clientTooOld, groupClients, type ClientRow } from "./admin";
 import { api, apiUpload, ApiError, badPackage, enc } from "./api";
 import { siteStr } from "./sitetext";
@@ -15,14 +15,74 @@ export { platformName };
 
 type Say = (s: string) => void;
 interface Release { name: string; size?: number; note?: string; added_ms?: number }
+interface LastCmd { kind: string; name?: string | null; at_ms: number; result?: string | null; reason?: string | null }
+interface LastEv { kind: string; name?: string | null; reason?: string | null; at_ms: number }
+interface Queued { robot_id: string; name: string; last_reason?: string; retry_at_ms?: number | null }
+interface Releases {
+  releases: Release[];
+  robots: Record<string, string | null>;
+  rollback?: Record<string, boolean>;
+  last?: Record<string, { cmd: LastCmd | null; event: LastEv | null }>;
+  queue?: Queued[];
+}
+/** 排队的门槛(站点 release_queue.MIN_BATTERY)。 */
+const QUEUE_PCT = 80;
 interface Versions { site: { version: string; min_app_level?: number }; robots: { robot_id: string; verdict: string }[]; clients?: ClientRow[] }
 
 function errText(e: unknown): string {
   return t("failed", { why: e instanceof ApiError ? e.message : String(e) });
 }
 
+// 真机 11-20 用户「点下发和切换的时候没有状态显示，不知道是否下发成功，或者切换成功」:
+// 每台写最近一条命令(机器人收下没有、拒了为什么)和最近一条升级事件(下载好了、切换中、现在跑哪一版)。
+function cmdText(c: LastCmd): string {
+  const what = c.kind === "release_install" ? t("upCmdInstall", { name: c.name ?? "" })
+    : c.kind === "release_activate" ? t("upCmdActivate", { name: c.name ?? "" }) : t("upCmdRollback");
+  const at = hm(c.at_ms);
+  const res = c.result === "accepted" || c.result === "duplicate" ? t("upAccepted", { at })
+    : c.result ? t("upRejected", { at, why: siteStr(c.reason || c.result) }) : t("upPending", { at });
+  return `${what}: ${res}`;
+}
+
+const EVENT_TEXT: Record<string, Parameters<typeof t>[0]> = {
+  release_installed: "upEvInstalled", release_install_failed: "upEvInstallFailed",
+  release_activating: "upEvActivating", release_committed: "upEvCommitted",
+  release_activate_failed: "upEvActivateFailed", release_rolling_back: "upEvRollingBack",
+  release_rolled_back: "upEvRolledBack", release_rollback_failed: "upEvRollbackFailed",
+};
+
+function evText(e: LastEv): string | null {
+  const key = EVENT_TEXT[e.kind];
+  return key ? t(key, { name: e.name ?? "", at: hm(e.at_ms), why: siteStr(e.reason || "") }) : null;
+}
+
+const evBad = (k: string) => k.endsWith("_failed");
+
+function RobotUpStatus({ rid, rel, onUnqueue }: { rid: string; rel: Releases | null; onUnqueue: () => void }) {
+  const last = rel?.last?.[rid];
+  const q = (rel?.queue ?? []).find((x) => x.robot_id === rid);
+  const ev = last?.event ? evText(last.event) : null;
+  if (!last?.cmd && !ev && !q) return null;
+  const refused = !!last?.cmd?.result && last.cmd.result !== "accepted" && last.cmd.result !== "duplicate";
+  return (
+    <div class="up-status small" data-up-status={rid} role="status">
+      {last?.cmd && <p class={refused ? "error" : undefined} data-up-cmd={last.cmd.result ?? "pending"}><span class="muted">{t("upLast")}: </span>{cmdText(last.cmd)}</p>}
+      {ev && <p class={evBad(last!.event!.kind) ? "error" : undefined} data-up-event={last!.event!.kind}>{ev}</p>}
+      {q && (
+        <div class="row wrap" data-up-queue={q.name}>
+          <span class="tag">{t("upInQueue", { name: q.name, pct: QUEUE_PCT })}</span>
+          {q.last_reason && <span class="error">{t("upQueueRefused", { why: siteStr(q.last_reason), at: q.retry_at_ms ? hm(q.retry_at_ms) : "—" })}</span>}
+          <button type="button" class="btn sm" onClick={onUnqueue}>{t("upUnqueue")}</button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function UpgradePage({ say }: { say: Say }) {
-  const [rel, reload] = useLoad<{ releases: Release[]; robots: Record<string, string | null>; rollback?: Record<string, boolean> }>("/api/releases");
+  const [rel, reload] = useLoad<Releases>("/api/releases");
+  // 命令发出去以后机器人几秒到几十秒才回事件、切完重连:页面开着就每 5 秒刷一次
+  useEffect(() => { const h = setInterval(reload, 5000); return () => clearInterval(h); }, [reload]);
   const [versions] = useLoad<Versions>("/api/versions");
   const [file, setFile] = useState<File | null>(null);
   const [bad, setBad] = useState<string | null>(null);
@@ -32,8 +92,11 @@ export function UpgradePage({ say }: { say: Say }) {
 
   const act = async (robot: string, body: Record<string, unknown>, msg: string) => {
     try {
-      await api("POST", `/api/robots/${enc(robot)}/release`, body);
-      say(msg);
+      const got = await api<{ ack?: { result?: string; reason?: string } }>("POST", `/api/robots/${enc(robot)}/release`, body);
+      // 原来只要 HTTP 200 就说「正在切换」,机器人拒了(回执 rejected)也一样
+      const r = got?.ack?.result;
+      if (r && r !== "accepted" && r !== "duplicate") say(t(r === "rejected" ? "upRefused" : "upNoReply", { id: nameOf(robot), why: siteStr(got?.ack?.reason || r) }));
+      else say(msg);
       reload();
     } catch (e) {
       say(errText(e));
@@ -56,6 +119,7 @@ export function UpgradePage({ say }: { say: Say }) {
             {!cur ? null : rel?.rollback?.[rid] !== false
               ? <button type="button" class="btn sm push" onClick={() => setBacking(rid)}>{t("upRollback")}</button>
               : <span class="muted small push">{t("upNoRollback")}</span>}
+            <RobotUpStatus rid={rid} rel={rel} onUnqueue={() => void act(rid, { action: "unqueue" }, t("upUnqueued", { id: nameOf(rid) }))} />
           </div>
         ))}
       </section>
