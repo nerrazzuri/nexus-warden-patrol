@@ -279,7 +279,7 @@ async def test_W71_运行时_能力里报Nav2就绪没有_变了重发(tmp_path,
         await rt.close()
 
 
-def test_真机1120_运行时_没有视野表_遮挡限速先关_自己学_学好存下_下次开机直接用(tmp_path, monkeypatch):
+def test_真机1120_运行时_没有视野表先关_自己学_存下_下次开机直接用(tmp_path, monkeypatch):
     import numpy as np
 
     from nexwar_agent import fovmask
