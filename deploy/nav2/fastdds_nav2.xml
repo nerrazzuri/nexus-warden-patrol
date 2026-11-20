@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!--
+  我们 Nav2 这个域(61)的 FastDDS 传输(真机 11-20 C40221 商场):ROS_LOCALHOST_ONLY=1 时 Humble 的
+  rmw_fastrtps 只开 127.0.0.1 上的 UDP、不开共享内存;商场图 978×832 一条 /map、代价地图约 800 KB,
+  比接收缓冲(rmem_default 212992)还大,冲爆缓冲(UDP receive buffer errors 启动十几秒 +2190),
+  心跳、服务回话、发现包跟着丢,节点互相失联。
+  这里:数据走共享内存(段 16 MB,装得下整张图),UDP 只留本机(跟 ROS_LOCALHOST_ONLY 一样只认
+  127.0.0.1)。nexwar_nav2_start 在 NEXWAR_NAV2_DDS=shm 时用它(同时不设 ROS_LOCALHOST_ONLY,不然
+  rmw 会把这里的传输换掉)。
+-->
+<profiles xmlns="http://www.eprosima.com/XMLSchemas/fastRTPS_Profiles">
+  <transport_descriptors>
+    <transport_descriptor>
+      <transport_id>nexwar_shm</transport_id>
+      <type>SHM</type>
+      <segment_size>16777216</segment_size>
+    </transport_descriptor>
+    <transport_descriptor>
+      <transport_id>nexwar_udp_lo</transport_id>
+      <type>UDPv4</type>
+      <interfaceWhiteList>
+        <address>127.0.0.1</address>
+      </interfaceWhiteList>
+    </transport_descriptor>
+  </transport_descriptors>
+  <participant profile_name="nexwar_nav2" is_default_profile="true">
+    <rtps>
+      <userTransports>
+        <transport_id>nexwar_shm</transport_id>
+        <transport_id>nexwar_udp_lo</transport_id>
+      </userTransports>
+      <useBuiltinTransports>false</useBuiltinTransports>
+    </rtps>
+  </participant>
+</profiles>
