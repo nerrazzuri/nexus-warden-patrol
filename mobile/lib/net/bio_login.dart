@@ -144,6 +144,12 @@ class BioBook {
     return r != null && r.expiresAt > nowMs ? r : null;
   }
 
+  /// 这个站点的记录，不管到没到期（清理到期的用）。
+  Future<BioRecord?> any(SiteEntry s) async {
+    await _load();
+    return _records[bioSiteKey(s)];
+  }
+
   Future<bool> declined(SiteEntry s, String account) async {
     await _load();
     return _declined.contains('${bioSiteKey(s)}|$account');
@@ -168,6 +174,20 @@ class BioBook {
     if (r != null) await _save();
     return r;
   }
+}
+
+/// 这个站点能用的那条记录。到期了的顺手清掉（记录和 Keystore 里的钥匙都删；外审指纹-2 Minor 1），
+/// 回 null。
+Future<BioRecord?> bioRecordFor(BioKeys keys, BioBook book, SiteEntry s, int nowMs) async {
+  final r = await book.any(s);
+  if (r == null || r.expiresAt > nowMs) return r;
+  try {
+    await book.remove(s);
+  } on Object {
+    // 写不进去：下次再清
+  }
+  await keys.delete(r.alias);
+  return null;
 }
 
 /// 签的内容：跟站点 `accounts.BIO_ENROLL` / `BIO_LOGIN` 一字不差。
