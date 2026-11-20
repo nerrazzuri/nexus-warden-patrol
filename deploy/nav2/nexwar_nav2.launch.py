@@ -28,6 +28,8 @@ LIFECYCLE_NODES = ["controller_server", "planner_server", "behavior_server", "bt
 #: 转接节点用这个退出码退出 = Nav2 自己重来连着不成(11-05 现场第 5 条):整个关掉,systemd 拉起来。
 #: 跟 nexwar_localizer.nav2bridge.FULL_RESTART_RC 一致(测试核)。
 FULL_RESTART_RC = 75
+#: 生命周期管理器等节点心跳多久(秒)算它死了(Humble 默认 4)。
+BOND_TIMEOUT_S = 10.0
 
 
 def _whole_restart(event, _context):
@@ -64,8 +66,10 @@ def generate_launch_description():
         nav2("nav2_bt_navigator", "bt_navigator"),
         Node(package="nav2_lifecycle_manager", executable="lifecycle_manager",
              name="lifecycle_manager_navigation", output="screen",
+             # 真机 11-20 C40221:Orin 吃紧(load 4.7)时 controller_server 一接目标 4 秒没回心跳(默认
+             # bond_timeout 4 s),管理器把整套节点停了、机器人一步没动。放宽到 10 秒。
              parameters=[{"use_sim_time": True}, {"autostart": True},
-                         {"node_names": LIFECYCLE_NODES}]),
+                         {"node_names": LIFECYCLE_NODES}, {"bond_timeout": BOND_TIMEOUT_S}]),
         bridge := ExecuteProcess(cmd=["/usr/bin/python3", "-m", "nexwar_localizer.nav2bridge",
                             "--socket", sock],
                        # 接在 ROS 原有的 PYTHONPATH 前面(覆盖掉就找不到 rclpy)
