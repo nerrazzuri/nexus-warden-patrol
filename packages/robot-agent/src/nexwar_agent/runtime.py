@@ -270,6 +270,8 @@ class AgentRuntime:
             from nexwar_agent.obs_server import ObsBridgeServer
             from nexwar_agent.obstacles import ObstacleGuard, ObstacleView, band_policy_from_env
             self.obs_view = ObstacleView(monotonic=monotonic or time.monotonic)
+            from nexwar_agent import fovmask
+            parts.nav.fov_mask = fovmask.load()
             band = band_policy_from_env()
             if band is not None:
                 self.obs_view.band_policy = band

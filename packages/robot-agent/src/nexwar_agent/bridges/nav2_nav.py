@@ -409,6 +409,9 @@ class Nav2NavBackend(PlannedNavBackend):
         self.occ_algo: str | None = OCC_ALGOS.get(occ) if occ else None
         if self.occ_algo is not None:
             log.warning("遮挡限速按现场设置:%s(NEXWAR_NAV_OCC)", self.occ_algo or "关")
+        #: 这台机器人实测的雷达视野(:mod:`nexwar_agent.fovmask`;(布尔 n × n, 格子边长));
+        #: None = 按写死的视野锥。运行时那边装。
+        self.fov_mask: tuple[Any, float] | None = None
         self._cap_logged: tuple[float, str] | None = None
         #: Nav2 没就绪时退不退回自己的规划(真机 11-20 用户:测 Nav2 的表现时不要备用规划 ——
         #: ``NEXWAR_NAV2_FALLBACK=0`` 关掉:这一段直接失败、原因写清楚)。
@@ -2198,7 +2201,12 @@ class Nav2NavBackend(PlannedNavBackend):
         sh[:, jl:] = np.logical_or.accumulate(shield[:, jl:], axis=1)
         if jr >= 0:
             sh[:, :jr + 1] = np.logical_or.accumulate(shield[:, :jr + 1][:, ::-1], axis=1)[:, ::-1]
-        fov = np.abs(YY) <= OCC_FOV_HALF_M + OCC_FOV_SLOPE * np.maximum(X - (hl - margin), 0.0)
+        fm = getattr(self, "fov_mask", None)
+        if fm is not None and fm[0].shape == (n, n) and abs(fm[1] - res) < 1e-9:
+            fov = fm[0]                          # 这台机器人实测的视野(机身系,前进后退不翻)
+        else:
+            fov = np.abs(YY) <= OCC_FOV_HALF_M + OCC_FOV_SLOPE * np.maximum(X - (hl - margin),
+                                                                             0.0)
         em = (~known) & fov & (~sh) & (gap > 0) & (X > hl + OCC_SELF_BLIND_M)
         if em.any() and hasattr(view, "lookup"):
             # 刚刚看见过的不算(机身系 → 拍下这一帧时的里程位姿;lookup 按里程换到各帧)

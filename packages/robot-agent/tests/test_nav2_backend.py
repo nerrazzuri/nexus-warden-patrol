@@ -2586,3 +2586,49 @@ def test_真机1120_遮挡限速现场开关_限速变了记一行原因(tmp_pat
     assert len(lines) == 2, lines
     assert "卡在「遮挡」" in lines[0] and "遮挡 0.20" in lines[0] and "区域 不限" in lines[0]
     assert "卡在「任务/巡逻/定位」" in lines[1]
+
+
+async def test_真机1120_视野比写死的锥窄_空地也压_用实测视野表不压_阴影照样压(tmp_path):
+    """C40221 11-20:前雷达视野比遮挡限速写死的锥(0.6 + 0.9)窄,两锥之间那一条永远看不见,
+    被当成阴影、空旷的地方一直 0.2。视野表(:mod:`nexwar_agent.fovmask`,从录包学)= 这台机器人
+    本来看得见的格子。"""
+    import numpy as np
+
+    from nexwar_agent import fovmask
+    from nexwar_agent.bridges.nav2_nav import SOFT_CREEP_MPS, V_FAST
+    t = _台(tmp_path, 假转接())
+    await t.start(1.5, 4.0)
+    t.per.cone, t.per.cone_slope = True, 0.35
+    assert await _遮挡(t) <= SOFT_CREEP_MPS + 0.35, "复现现场:空地也压"
+    # 空地上学视野(跟 tools/fov_learn.py 一个算法)
+    knowns = []
+    for _ in range(fovmask.FOV_MIN_FRAMES):
+        g = t.per.grid(1.5, 4.0, 0.0)
+        knowns.append(np.frombuffer(g.bits()[1], dtype=np.uint8).reshape(g.size, g.size))
+    mask = fovmask.learn(knowns)
+    wire = fovmask.to_wire(mask, res=t.per.res, frames=len(knowns), source="test")
+    t.nav.fov_mask = fovmask.from_wire(wire)
+    assert await _遮挡(t) == pytest.approx(V_FAST), "空地不压"
+    t.world.dyn["car"] = (2.6, 4.45, 3.2, 5.4)              # 视野里真有车挡着:车后面照样压
+    assert await _遮挡(t) < 0.9
+
+
+def test_真机1120_视野表_读不了就按写死的锥_帧太少不认(tmp_path):
+    import json
+
+    import numpy as np
+
+    from nexwar_agent import fovmask
+    assert fovmask.load({"NEXWAR_FOV_FILE": str(tmp_path / "none.json")}) is None
+    m = np.zeros((80, 80), dtype=bool)
+    m[50:60, 35:45] = True
+    p = tmp_path / "fov.json"
+    p.write_text(json.dumps(fovmask.to_wire(m, res=0.1, frames=10)))
+    assert fovmask.load({"NEXWAR_FOV_FILE": str(p)}) is None, "只学了 10 帧"
+    p.write_text(json.dumps(fovmask.to_wire(m, res=0.1, frames=300)))
+    got, res = fovmask.load({"NEXWAR_FOV_FILE": str(p)})
+    assert res == 0.1 and (got == m).all()
+    p.write_text(json.dumps(fovmask.to_wire(np.zeros((80, 80), bool), res=0.1, frames=300)))
+    assert fovmask.load({"NEXWAR_FOV_FILE": str(p)}) is None, "一格都看不见"
+    p.write_text("{bad")
+    assert fovmask.load({"NEXWAR_FOV_FILE": str(p)}) is None
