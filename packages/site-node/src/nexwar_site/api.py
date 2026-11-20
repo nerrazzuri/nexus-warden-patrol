@@ -1718,7 +1718,7 @@ class _Handler(TlsHandlerMixin):
         label = d.get("label") if isinstance(d.get("label"), str) else ""
         try:
             key_id, expires = acc.bio_enroll(name, _b64(d.get("pub")), label, d.get("nonce"),
-                                             _b64(d.get("sig")))
+                                             _b64(d.get("sig")), self._token())
         except AuthError as exc:
             raise HttpError(400, str(exc)) from exc
         self._audit_detail = {"bio_enrolled": label[:64]}
