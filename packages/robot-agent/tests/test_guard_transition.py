@@ -145,3 +145,21 @@ async def test_导航按枚举停_原因文字怎么写都一样(tmp_path):
         link.cmd = (link.now, 1, 0.25, 0.0, 0.0)
         await t.一拍()
     assert t.r.speed[0] == 0.0, "数据不新鲜:停,不看原因文字"
+
+
+def test_真机1120_贴墙急转_按刹停前真转过的角度查_不当原地转一整圈():
+    """C40221 11-20 商场:机器人中心离左墙 0.5 m,Nav2 要掉头发「慢走 + 急转」(转弯半径比机身对角线
+    0.59 m 小)。原来并上整个外接圆,压墙一直拦、Nav2 一直这么发,20 秒判卡住。"""
+    wall = 0.5
+    r = math.hypot(HL, HW)
+    assert r > wall, "外接圆会压墙"
+    away = G.swept(0.2, -0.6, 0.2)                   # 往右(离开墙)急转
+    assert max(y for _, y in away) < wall, "车尾往左甩,但刹停前甩不到 0.5 m 的墙"
+    into = G.swept(0.2, 0.6, 0.2)                    # 往左(朝墙)急转:照样压墙
+    assert max(y for _, y in into) > wall
+    # 刹停前转过的角度至少有原地转那么多:慢走(0.05)快转(1.0)也查到 turn_reach 那么大的角
+    slow = G.swept(0.05, 1.0, 0.0)
+    a = G.turn_reach(1.0)
+    c, s = math.cos(a), math.sin(a)
+    corner = (c * HL - s * HW, s * HL + c * HW)       # 左前角转过 a 之后(半径很小,中心几乎不动)
+    assert any(math.dist(corner, p) < 0.1 for p in slow), "转过的角度不能比原地转少"
