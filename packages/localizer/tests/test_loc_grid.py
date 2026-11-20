@@ -1041,3 +1041,38 @@ def test_TG1117_后雷达外参差几厘米_射线不把墙削薄():
     assert wall.sum() > 100, "前雷达看得到南北墙"
     lost = g1.image[r[wall], c[wall]] != G.OCCUPIED
     assert not lost.any(), f"南北墙 {int(lost.sum())}/{int(wall.sum())} 格被后雷达打穿"
+
+
+def test_用户1120_真射线分几个进程打_合起来跟一个进程打逐格一样(monkeypatch):
+    """26 号那张图更大:栅格那一步(真射线)分进程打:结果要跟一个进程打的逐格一样。"""
+    rng = np.random.default_rng(3)
+    f = _frames()
+    L = np.asarray(f.level_matrix())
+    g = np.mgrid[-1:6:0.05, -3:3:0.05].reshape(2, -1).T
+    floor = np.c_[g, np.zeros(len(g))]
+    sensor = np.c_[np.linspace(0, 4, 100), np.zeros(100), np.full(100, 0.6)]
+    ground = G._Ground(sensor, 0.0, 12.0, floor)
+    lo, res = np.array([-1.0, -3.0]), 0.05
+    shape = (int(6 / res) + 1, int(7 / res) + 1)
+    scans = []
+    for s in sensor:
+        a = rng.uniform(-np.pi, np.pi, 300)
+        r = rng.uniform(0.5, 2.5, 300)
+        pts = np.c_[s[0] + r * np.cos(a), r * np.sin(a), rng.uniform(0.0, 1.5, 300)]
+        scans.append((s @ L, pts @ L))
+    occ_h = (np.full(shape, np.nan), np.full(shape, np.nan))
+
+    def run(workers):
+        monkeypatch.setenv(G.GRID_WORKERS_ENV, str(workers))
+        seen, hits = G._Seen(shape[0] * shape[1]), np.zeros(shape, np.int32)
+        passes, used = G._raytrace_scans(iter(scans), f, lo, shape, res, (0.4, 1.8), 12.0,
+                                         ground, occ_h=occ_h, seen=seen, hits=hits)
+        return passes, used, hits, seen
+    monkeypatch.setattr(G, "GRID_MIN_SCANS_PER_WORKER", 10)
+    one, four = run(1), run(4)
+    assert one[1] == four[1] == 100
+    assert one[0].sum() > 0 and (one[0] == four[0]).all() and (one[2] == four[2]).all()
+    for k in ("direct", "through", "dirs"):
+        assert (getattr(one[3], k) == getattr(four[3], k)).all(), k
+    monkeypatch.setenv(G.GRID_WORKERS_ENV, "4")
+    assert G.grid_workers(100) == 4 and G.grid_workers(25) == 2 and G.grid_workers(5) == 1
