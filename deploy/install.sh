@@ -52,6 +52,7 @@ set -euo pipefail
 # @写盘 /etc/systemd/system/nexwar_boot.service                           开机准备(11-06:固定路由、向站点对时、厂家自启)
 # @写盘 /etc/systemd/system/multi-user.target.wants/nexwar_boot.service   上面开机准备的自启链
 # @写盘 /etc/systemd/journald.conf.d/nexwar.conf                          日志留盘 14 天、最多 500 MB(W55:远程取日志、重启不丢)
+# @写盘 /etc/systemd/logind.conf.d/nexwar.conf                            不清服务账号的共享内存(真机 11-20 Nav2 失联根因)
 #
 # 这份脚本不写、但 uninstall.sh 要负责收掉的(老机器上可能还在;这里只 rm/disable 它们,从来不写):
 #
@@ -620,6 +621,18 @@ systemctl restart systemd-journald || true
 if getent group systemd-journal >/dev/null 2>&1; then
   usermod -aG systemd-journal "$RUN_USER"
 fi
+# ②b 真机 11-20 C40221 Nav2 失联的根因:服务的账号(robot)也是工程师 ssh 登录的账号。Ubuntu 默认
+# RemoveIPC=yes —— 这个账号最后一个登录会话一结束,系统删光它在 /dev/shm 的共享内存;FastDDS 同机进程
+# 之间的数据走共享内存,一删就断(发现还在、服务调用和话题全部收不到,永远不恢复;台式机复现过)。
+# 现场「起一个探针就好、探针一退 17 秒后失联」:探针挂在 ssh 会话里,它活着会话就没结束。
+# 两道:logind 不清(下次 logind 重启 / 开机生效)+ 这个账号常驻(linger,当场生效:账号一直在,不会被清)。
+install -d -m 0755 /etc/systemd/logind.conf.d
+cat > /etc/systemd/logind.conf.d/nexwar.conf <<'LOGIND'
+# D1 Max:服务账号也是 ssh 登录的账号,最后一个会话结束时不许清它的共享内存(Nav2 / FastDDS 要用)
+[Login]
+RemoveIPC=no
+LOGIND
+loginctl enable-linger "$RUN_USER" 2>/dev/null || echo "  (loginctl enable-linger $RUN_USER 没成;重启以后靠上面的 RemoveIPC=no)"
 # ③ VPN 工具(站点 VPN:4G 上连回站点、工程师远程 SSH)。离线装不上只提示,局域网照常。
 if ! command -v wg >/dev/null 2>&1; then
   apt-get install -y wireguard-tools >/dev/null 2>&1 \

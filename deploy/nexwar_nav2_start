@@ -22,6 +22,14 @@ set +u
 . /opt/ros/humble/setup.sh
 set -u
 export ROS_DOMAIN_ID="${NEXWAR_NAV2_ROS_DOMAIN:-61}"
+# 真机 11-20 Nav2 失联根因:这个账号最后一个 ssh 会话一结束,logind 删光它的共享内存,FastDDS 断。
+# 装机脚本(install.sh)会关掉;老机器没重跑过的,这里大声说一句(不拦启动)
+if command -v loginctl >/dev/null 2>&1 \
+   && [ "$(loginctl show-user "$(id -un)" -p Linger --value 2>/dev/null)" != yes ] \
+   && ! grep -qs '^RemoveIPC=no' /etc/systemd/logind.conf /etc/systemd/logind.conf.d/*.conf; then
+  echo "警告:账号 $(id -un) 没开 linger、logind 也没关 RemoveIPC —— 最后一个 ssh 会话一结束," \
+       "Nav2 的共享内存会被清、Nav2 失联。修:sudo loginctl enable-linger $(id -un)(或重跑 install.sh)" >&2
+fi
 if [ "${NEXWAR_NAV2_DDS:-}" = shm ]; then
   export ROS_LOCALHOST_ONLY=0
   export FASTRTPS_DEFAULT_PROFILES_FILE="$here/deploy/nav2/fastdds_nav2.xml"

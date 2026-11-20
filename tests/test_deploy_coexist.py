@@ -393,7 +393,9 @@ def test_范围只盖我们自己的东西():
            "/etc/sudoers.d/nexwar", "/etc/systemd/timesyncd.conf.d/nexwar.conf",
            "/etc/chrony/conf.d/nexwar.conf",
            # W55:特权执行器的目录、日志留盘设置 —— 同样精确、名字带 nexwar
-           "/usr/local/lib/nexwar", "/etc/systemd/journald.conf.d/nexwar.conf"}
+           "/usr/local/lib/nexwar", "/etc/systemd/journald.conf.d/nexwar.conf",
+           # 11-20:logind 不清共享内存 —— 同样精确、名字带 nexwar
+           "/etc/systemd/logind.conf.d/nexwar.conf"}
     for 一组 in 形状:
         for 一条 in 一组.split("|"):
             if 一条 in 精确的:

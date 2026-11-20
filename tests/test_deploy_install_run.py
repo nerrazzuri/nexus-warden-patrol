@@ -80,6 +80,7 @@ done
 exec /usr/bin/install "$@"
 ''')
     _stub(stub / "usermod", f'echo "usermod $*" >> "{log}"\n')
+    _stub(stub / "loginctl", f'echo "loginctl $*" >> "{log}"\n')
     _stub(stub / "apt-get", f'echo "apt-get $*" >> "{log}"\n')
     _stub(stub / "python3", f'''echo "python3 $*" >> "{log}"
 if [ "$1" = "-m" ] && [ "$2" = "venv" ]; then
@@ -146,6 +147,16 @@ def test_W55_装上特权执行器_日志留盘_读日志的组(tmp_path):
     assert any(c.startswith("install -m 0755 -o root -g root") and c.endswith("ops-runner")
                for c in calls), "执行器要 root 属主"
     assert any(c.startswith("usermod -aG systemd-journal") for c in calls), "代理要读得了系统日志"
+
+
+def test_真机1120_服务账号的共享内存不许被logind清_账号常驻(tmp_path):
+    """11-20 Nav2 失联根因:robot 最后一个 ssh 会话结束,RemoveIPC 删光 /dev/shm,FastDDS 断。"""
+    script = _准备(tmp_path)
+    got = _跑(tmp_path, script)
+    assert got.returncode == 0, got.stdout + got.stderr
+    conf = (tmp_path / "etc/systemd/logind.conf.d/nexwar.conf").read_text(encoding="utf-8")
+    assert "[Login]" in conf and "RemoveIPC=no" in conf
+    assert "loginctl enable-linger robot" in _调用(tmp_path)
 
 def test_老机器_清掉老服务助手白名单任务包_老env的PIN行不动只提示(tmp_path):
     script = _准备(tmp_path)

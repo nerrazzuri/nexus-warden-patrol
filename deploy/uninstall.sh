@@ -85,6 +85,7 @@ set -euo pipefail
 # @删除 /etc/systemd/system/nexwar_boot.service                           开机准备(11-06)
 # @删除 /etc/systemd/system/multi-user.target.wants/nexwar_boot.service   开机准备的自启链
 # @删除 /etc/systemd/journald.conf.d/nexwar.conf                          日志留盘设置(W55;删了回到系统原来的设置)
+# @删除 /etc/systemd/logind.conf.d/nexwar.conf                            不清共享内存的设置(11-20;账号常驻 linger 不收,别的程序也可能要)
 # @删除 /etc/systemd/system/nexwar_bootguard.service                      老的守卫单元(多数机器上没有)
 # @删除 /etc/systemd/system/nexwar_patrol.service                         老服务(W00c5e 退役;没重跑过装机脚本的老机器上还在)
 # @删除 /etc/systemd/system/multi-user.target.wants/nexwar_patrol.service 老服务的自启链
@@ -232,6 +233,7 @@ rm_sys() {
     /etc/systemd/system/nexwar_ops.path) ;;
     /etc/systemd/system/paths.target.wants/nexwar_ops.path) ;;
     /etc/systemd/journald.conf.d/nexwar.conf) ;;
+    /etc/systemd/logind.conf.d/nexwar.conf) ;;
     *)
       warn "  拒绝删除 $target —— 不在允许的范围里。这是护栏,不是错误。"
       return 0
@@ -498,6 +500,7 @@ stop_service() {
   rm_sys "/etc/nexwar_ops.json" "特权执行器的配置(W55)"
   rm_sys "/var/lib/nexwar_ops" "特权执行器的请求、结果目录(W55)"
   rm_sys "/etc/systemd/journald.conf.d/nexwar.conf" "日志留盘设置(W55)"
+  rm_sys "/etc/systemd/logind.conf.d/nexwar.conf" "不清共享内存的设置(11-20)"
   rm_sys "$UNIT_DIR/$OLD_UNIT" "老的守卫单元,多数机器上本来就没有"
   rm_sys "$UNIT_DIR/$LEGACY_UNIT" "老服务(W00c5e 退役),重跑过装机脚本的机器上已经没有"
   rm_sys "$LEGACY_WANTS_LINK" "老服务的自启链"
