@@ -301,3 +301,26 @@ describe("外审 1 #5:不会 TTS 的机器人", () => {
     expect(c.querySelector(".rc-say")).toBeNull();
   });
 });
+
+describe("真机 11-20:本体灯网页能开关", () => {
+  it("报了 light 才有;选前 / 后 / 都,开带最长时间,关", async () => {
+    const u = unit();
+    const LD = { ...DETER, outputs: ["light"], light_sides: ["front", "back"] };
+    (u.robot.capabilities as { tasks: Record<string, unknown> }).tasks.deter = LD;
+    card = { ...CARD, deter: LD };
+    const c = show("guard", u);
+    const sec = await waitFor(() => { const s = c.querySelector("[data-rc-light]"); expect(s).not.toBeNull(); return s as HTMLElement; });
+    expect(c.querySelector(".rc-deter")).toBeNull();
+    await waitFor(() => expect(btn(sec, "Lights on").disabled).toBe(false));
+    fireEvent.change(c.querySelector("select[name=light_side]")!, { target: { value: "back" } });
+    await press(c.querySelector("[data-rc-light]")!, "Lights on");
+    await waitFor(() => expect(JSON.stringify(posted("/api/robots/A/deter")[0])).toBe(JSON.stringify({ output: "light", on: true, max_s: 300, side: "back" })));
+    await press(c.querySelector("[data-rc-light]")!, "Off");
+    await waitFor(() => expect(posted("/api/robots/A/deter")[1]).toEqual({ output: "light", on: false, side: "back" }));
+    cleanup();
+    card = { ...CARD };
+    const plain = show();
+    await waitFor(() => expect(plain.querySelector(".rc-deter")).not.toBeNull());
+    expect(plain.querySelector("[data-rc-light]")).toBeNull();
+  });
+});

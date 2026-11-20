@@ -365,6 +365,9 @@ function Voice({ r, name, busy, off, send, post, admin, say }: {
   const words = text.trim();
   const strobe = d.outputs.includes("strobe");
   const siren = d.outputs.includes("siren");
+  // 真机 11-20:路线开的本体灯网页关不掉(deter output=light,前 / 后 / 都)
+  const light = d.outputs.includes("light");
+  const [lightSide, setLightSide] = useState<"both" | "front" | "back">("both");
   return (
     <>
       {speaker && (
@@ -412,6 +415,22 @@ function Voice({ r, name, busy, off, send, post, admin, say }: {
               <div class="rc-row"><button type="button" class="btn" data-speak-stop="1" disabled={dis}
                 onClick={() => void send(deter({ output: "speaker", on: false }), t("rdSpeakStopped", { id: name }))}>{t("rdSpeakStop")}</button></div>
             )}
+          </div>
+        </section>
+      )}
+      {light && (
+        <section class="rc-sec rc-light" data-rc-light="1">
+          <h3 class="lbl">{t("rcLightH")}</h3>
+          <div class="rc-deter-body">
+            <select name="light_side" aria-label={t("rcLightWhich")} value={lightSide} onChange={(e) => setLightSide(e.currentTarget.value as typeof lightSide)}>
+              <option value="both">{t("rcLightBoth")}</option>
+              <option value="front">{t("rcLightFront")}</option>
+              <option value="back">{t("rcLightBack")}</option>
+            </select>
+            <button type="button" class="btn" disabled={dis}
+              onClick={() => void send(deter({ output: "light", on: true, max_s: d.max_s, side: lightSide }), t("rcLightOnDone", { id: name, min: Math.round(d.max_s / 60) }))}>{t("rcLightOn")}</button>
+            <button type="button" class="btn" disabled={dis}
+              onClick={() => void send(deter({ output: "light", on: false, side: lightSide }), t("rcLightOffDone", { id: name }))}>{t("rcOff")}</button>
           </div>
         </section>
       )}
