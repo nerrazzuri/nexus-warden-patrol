@@ -4794,8 +4794,14 @@ class _Handler(TlsHandlerMixin):
             rollback = {rid: (c.capabilities is not None
                               and "release_rollback" in c.capabilities.tasks)
                         for rid, c in self.site.dispatcher.clients.items()}
+            # 真机 11-20 用户「点下发和切换的时候没有状态显示」:每台最近一条装 / 切 / 退的命令
+            # (机器人收下没有、拒了为什么)、最近一条升级事件(装好了、切换中、
+            # 切完是哪一版、失败原因),充电排队里等着的
             return self._send_json(200, {"releases": cat.list(), "robots": robots,
-                                         "rollback": rollback})
+                                         "rollback": rollback,
+                                         "last": {rid: self._release_last(rid) for rid in robots},
+                                         "queue": (self.site.release_queue.list()
+                                                   if self.site.release_queue else [])})
         m = _RELCMD.match(path)
         if m is None or method != "POST":
             raise HttpError(404, f"没有 {method} {path}")
@@ -4837,8 +4843,14 @@ class _Handler(TlsHandlerMixin):
                     return self._send_json(200, {"queued": True})
             elif action == "rollback":
                 kind, payload = "release_rollback", {}
+            elif action == "unqueue":
+                # 真机 11-20:充电排队里的那条网页能取消
+                self._audit_detail = {"action": action}
+                gone = bool(self.site.release_queue and self.site.release_queue.remove(robot_id))
+                return self._send_json(200, {"removed": gone})
             else:
-                raise HttpError(400, "action 只能是 install / activate / rollback / precheck")
+                raise HttpError(400, "action 只能是 install / activate / rollback / "
+                                     "precheck / unqueue")
         except ReleaseCatalogError as exc:
             raise HttpError(404, str(exc)) from exc
         except ContractError as exc:
@@ -4846,6 +4858,30 @@ class _Handler(TlsHandlerMixin):
         self._audit_detail = {"action": action, "name": str(d.get("name", ""))[:32]}
         return self._send_json(200, self.site.dispatch(lambda: self.site.dispatcher.map_command(
             robot_id, kind, payload, issued_by=str(user))))
+
+    def _release_last(self, robot_id: str) -> dict[str, Any]:
+        """这台最近一条装 / 切 / 退命令(``cmd``)和最近一条升级事件(``event``),没有是 None。"""
+        db = self.site.dispatcher.db
+        cmd = ev = None
+        for r in db.query("SELECT kind, payload, issued_at, ack_result, ack_reason FROM commands "
+                          "WHERE robot_id=? AND kind IN ('release_install','release_activate',"
+                          "'release_rollback') ORDER BY issued_at DESC LIMIT 1", (robot_id,)):
+            try:
+                name = json.loads(r["payload"]).get("name")
+            except (ValueError, AttributeError):
+                name = None
+            cmd = {"kind": r["kind"], "name": name, "at_ms": r["issued_at"],
+                   "result": r["ack_result"], "reason": r["ack_reason"]}
+        for r in db.query("SELECT kind, data, received_at FROM events WHERE robot_id=? AND "
+                          "kind LIKE 'release\\_%' ESCAPE '\\' ORDER BY received_at DESC LIMIT 1",
+                          (robot_id,)):
+            try:
+                d = json.loads(r["data"])
+            except ValueError:
+                d = {}
+            ev = {"kind": r["kind"], "name": d.get("name"), "reason": d.get("reason"),
+                  "at_ms": r["received_at"]}
+        return {"cmd": cmd, "event": ev}
 
     #: 网页上传的升级包最大多少(W44 第四期)。
     MAX_UPLOAD = 500 * 1024 * 1024

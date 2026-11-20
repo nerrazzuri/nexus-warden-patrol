@@ -2633,3 +2633,8 @@ input[type="checkbox"], input[type="radio"] { width: 18px; height: 18px; }
   .rc-map .mapcanvas { height: auto; }
   .rc-map .mapwrap { flex: none; height: 260px; min-height: 0; }
 }
+
+/* 真机 11-20:软件升级每台的命令回执、升级事件、充电排队 */
+.up-status { flex: 1 1 100%; display: grid; gap: 2px; padding-left: 140px; }
+.up-status p { margin: 0; }
+@media (max-width: 760px) { .up-status { padding-left: 0; } }

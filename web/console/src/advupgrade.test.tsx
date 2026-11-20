@@ -78,3 +78,34 @@ describe("第 3 轮 config N11 / P1-77", () => {
     expect(badPackage(new ApiError(403, "密码不对"))).toBe(false);
   });
 });
+
+describe("真机 11-20:点了装、切以后看得见结果", () => {
+  it("机器人拒了不再说「正在切换」;最近一条命令、事件、排队都写出来,排队能取消", async () => {
+    const said: string[] = [];
+    setFetch(((url: string, init?: RequestInit) => {
+      if (init?.method === "POST") {
+        const body = JSON.parse(String(init.body ?? "{}"));
+        posts.push({ url, body });
+        return Promise.resolve(json(body.action === "unqueue" ? { removed: true } : { ack: { result: "rejected", reason: "busy" } }));
+      }
+      if (url === "/api/releases") return Promise.resolve(json({
+        releases: [{ name: "r27" }], robots: { A: "v1" }, rollback: { A: true },
+        last: { A: { cmd: { kind: "release_activate", name: "r27", at_ms: 0, result: "rejected", reason: "busy" },
+                     event: { kind: "release_committed", name: "v1", at_ms: 0 } } },
+        queue: [{ robot_id: "A", name: "r27", last_reason: "busy", retry_at_ms: 0 }],
+      }));
+      if (url === "/api/versions") return Promise.resolve(json({ site: { version: "1.0" }, robots: [] }));
+      return Promise.resolve(json({}, 404));
+    }) as typeof fetch);
+    const { container: c } = render(<UpgradePage say={(s) => said.push(s)} />);
+    const st = await waitFor(() => { const r = c.querySelector('[data-up-status="A"]'); expect(r).not.toBeNull(); return r as HTMLElement; });
+    expect(st.querySelector('[data-up-cmd="rejected"]')!.textContent).toContain("切换到 r27");
+    expect(st.querySelector('[data-up-event="release_committed"]')!.textContent).toContain("现在运行 v1");
+    expect(st.querySelector('[data-up-queue="r27"]')!.textContent).toContain("排队中");
+    fireEvent.click(Array.from(c.querySelectorAll("button")).find((b) => b.textContent === "立即切换")!);
+    await waitFor(() => expect(said.some((s) => s.startsWith("A 拒绝"))).toBe(true));
+    expect(said.some((s) => s.includes("正在切换"))).toBe(false);
+    fireEvent.click(Array.from(st.querySelectorAll("button")).find((b) => b.textContent === "取消排队")!);
+    await waitFor(() => expect(posts).toContainEqual({ url: "/api/robots/A/release", body: { action: "unqueue" } }));
+  });
+});

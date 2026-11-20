@@ -1,12 +1,19 @@
 {
+  "last": {
+    "A": {
+      "cmd": null,
+      "event": null
+    }
+  },
+  "queue": [],
   "releases": [
     {
-      "created_ms": 1794066225041,
+      "created_ms": 1795177293947,
       "name": "2026-09-25-bbbbbb",
       "note": "夜巡修了一个 bug",
       "requires_mission_schema": 1,
-      "sha256": "ba2d3f7ca7dc553a6c721a3b60761f6cb08254b201f3c0acadcf0e3a8af8e365",
-      "size": 518,
+      "sha256": "c47613ff829c4c3f5849b4b52b6e70003825013952265553b6a03e614e9450da",
+      "size": 536,
       "version": "0.9"
     }
   ],
