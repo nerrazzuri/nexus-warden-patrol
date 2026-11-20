@@ -48,6 +48,8 @@ SURVEY_DIRS=(
   "/etc/chrony/conf.d:1"
   # W55:日志留盘 14 天、最多 500 MB 的设置写在这儿
   "/etc/systemd/journald.conf.d:1"
+  # 11-20:不清服务账号共享内存的 logind 设置(Nav2 失联根因)
+  "/etc/systemd/logind.conf.d:1"
   "/etc:1"
   "/usr/local/bin:1"
   "/usr/local/lib:2"
@@ -246,6 +248,7 @@ function is_ours(p) {
   if (p == "/etc/nexwar_ops.json") return 1
   if (p ~ /^\/var\/lib\/nexwar_ops($|\/)/) return 1
   if (p == "/etc/systemd/journald.conf.d/nexwar.conf") return 1
+  if (p == "/etc/systemd/logind.conf.d/nexwar.conf") return 1
   if (p ~ /^\/etc\/systemd\/system\/nexwar_[^\/]*\.(service|path)$/) return 1
   if (p ~ /^\/etc\/systemd\/system\/[^\/]*\.target\.wants\/nexwar_[^\/]*\.(service|path)$/) return 1
   return 0
@@ -257,6 +260,7 @@ function is_parent(p) {
   if (p == "/etc" || p == "/opt" || p == "/var/lib") return 1
   if (p == "/etc/systemd/system" || p == "/etc/systemd/timesyncd.conf.d") return 1
   if (p == "/etc/systemd/journald.conf.d") return 1
+  if (p == "/etc/systemd/logind.conf.d") return 1
   if (p == "/etc/chrony/conf.d" || p == "/etc/chrony") return 1
   if (p == "/usr/local/bin" || p == "/usr/local/lib") return 1
   if (p == "/usr/local/sbin" || p == "/etc/sudoers.d") return 1

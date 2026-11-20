@@ -658,3 +658,39 @@ async def test_真机1120_本体前后灯_网页App能直接开关_分前后_开
     assert hal.calls[-2:] == [("both", True), ("both", False)], "关了就撤掉到点关,不再多关一次"
     assert (await desk.handle(cmd({"output": "light", "on": False, "side": "left"}))) \
         .startswith("payload")
+
+
+async def test_真机1120_喊话慢_3秒内先回执_后台做完照常_做不成报ended_failed(monkeypatch):
+    """11-20:喊话回执超过 10 s,站点回 504。慢的先收下,后台失败走「喊话没放出来」。"""
+    from nexwar_agent import deter as dm
+    from nexwar_agent.deter import DeterDesk
+    monkeypatch.setattr(dm, "SPEAK_ACK_S", 0.05)
+    gate = asyncio.Event()
+
+    class 慢喇叭(_有回调的喇叭):
+        async def sound(self, clip, max_s):
+            await gate.wait()
+            if self.fail:
+                raise RuntimeError(self.fail)
+            self.clips.append(clip)
+    hal, ev = 慢喇叭(), []
+    desk = DeterDesk(hal, emit=lambda k, d: ev.append((k, d)))
+    t0 = asyncio.get_running_loop().time()
+    assert await desk.handle(_喇叭命令("tts:zh:请离开", 90)) == ""
+    assert asyncio.get_running_loop().time() - t0 < 1.0, "不等合成"
+    assert ev[-1][1]["on"] is True and desk.playing() is not None
+    hal.fail = "竞品主控的播音程序没连上"
+    gate.set()
+    await asyncio.sleep(0)
+    await asyncio.sleep(0)
+    assert ev[-1][1] == {"task_id": "deter-c", "output": "speaker", "on": False,
+                         "ended": "failed", "reason": "竞品主控的播音程序没连上"}
+    assert desk.playing() is None
+    gate.clear()
+    hal.fail = "aplay 不在"
+
+    async def 快坏(clip, max_s):
+        raise RuntimeError("aplay 不在")
+    hal.sound = 快坏
+    why = await desk.handle(_喇叭命令("warn-zh", 90, "c2"))
+    assert why.startswith("device:"), "快的错照旧拒收"
