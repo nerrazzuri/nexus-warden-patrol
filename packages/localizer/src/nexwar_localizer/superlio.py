@@ -65,6 +65,9 @@ REAR_INDEX = "rear.txt"
 REAR_LIDARS = "lidars.json"
 #: 后雷达跟前雷达关键帧最多差这么多秒才配(两台 10 帧/秒,半帧多一点)。
 REAR_MATCH_S = 0.06
+#: 后雷达关键帧的降采样(米)。后雷达只拿去打栅格射线清空地(不进点云、路沿、底图),10 cm 够用;
+#: 跟前雷达一样 5 cm 时 Top Glove 一趟往站点传 414 MB,10 cm 约 270 MB(用户 11-21 定做)。
+REAR_KF_VOXEL_M = 0.10
 IMU_LOG_HZ = 100.0
 #: 关键帧点云按离雷达的距离裁(太近是机身、太远是噪点)。
 RANGE_MIN_M, RANGE_MAX_M = 0.6, 80.0
@@ -584,7 +587,7 @@ class Keyframer:
             return
         if self.voxel:
             from nexwar_localizer.slioloc import voxel_down
-            xyz = voxel_down(xyz, self.voxel)
+            xyz = voxel_down(xyz, max(self.voxel, REAR_KF_VOXEL_M))
         name = f"r{self.rear_keyframes:05d}.bin"
         tmp = self.kf / f".{name}.tmp"
         xyz.astype("<f4").tofile(tmp)
