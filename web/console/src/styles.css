@@ -2418,6 +2418,9 @@ input[type="checkbox"], input[type="radio"] { width: 18px; height: 18px; }
 .us .sp-table tbody tr:hover { background: var(--c-surfaceVariant); }
 .us .sp-table tbody tr.on { background: var(--c-surfaceVariant); box-shadow: inset 2px 0 0 var(--c-primary); }
 .us .sp-table tr.off td { color: var(--c-textSecondary); }
+/* 用户 11-21 手机实测:通用的「第 2 列 20px 窄列」也套到了账号表的角色列,手机上被挤成三行、贴左边 */
+.us .users-table td:nth-child(2) { width: auto; padding: 10px 20px; }
+@media (max-width: 760px) { .us .users-table td, .us .users-table td:nth-child(2) { border: 0; padding: 4px 12px; } }
 .us .user-name { border: 0; background: none; padding: 0; font: inherit; font-weight: 600; color: var(--c-text); cursor: pointer; }
 .us-perms { border-top: 1px solid var(--c-outline); padding-top: 10px; padding-bottom: 6px; }
 .us-perms summary { font-weight: 600; cursor: pointer; }
