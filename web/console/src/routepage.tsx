@@ -10,6 +10,8 @@ import { colon, joinList, t, type Key } from "./i18n";
 import { SaveCancelled, type OwnLayer } from "./layoutpage";
 import { MapCanvas } from "./mapcanvas";
 import { PoseMarker } from "./posemarker";
+import { spreadMarks } from "./markspread";
+import { RouteIO } from "./routeiopanel";
 import { DispatchOnce } from "./routedispatch";
 import { toPx, type PreviewMeta } from "./mapview";
 import "./routes.css";
@@ -417,7 +419,10 @@ export function RoutesPage({ say, embed, kind = "patrol" }: { say: Say; embed?: 
                   {draft && pts.length > 1 && <polyline points={line(pts)} class="route-line" data-route={draft.id} />}
                   {badSegs.map(([a, b]) => pts[a] && pts[b] && <polyline key={`seg${a}`} points={line([pts[a], pts[b]])} class="route-line bad-seg" data-bad-seg={a} />)}
                 </>}
-                marks={(s) => (
+                marks={(s) => {
+                  // 第四档 #32:挤在一起的点散开摆,细线连回真实位置(选中的不挪)
+                  const spread = spreadMarks(pts.map((p) => handleAt(meta, s, p.x, p.y, p.yaw, HANDLE_PX)), PT_R, pi);
+                  return (
                   <>
                     {/* 路线的点:定位箭头(posemarker.tsx),中间是序号,三角尖指着到点后的朝向;选中的那一个三角尖能拖 */}
                     {others.map((r) => r.waypoints.map((p, i) => {
@@ -425,8 +430,16 @@ export function RoutesPage({ say, embed, kind = "patrol" }: { say: Say; embed?: 
                       return <PoseMarker key={`${r.id}:${i}`} x={h.x} y={h.y} hx={h.hx} hy={h.hy} r={8} label={i + 1}
                         class="route-pt other" />;
                     }))}
+                    {spread.map((q, i) => q.moved && (
+                      <g key={`lead${i}`} class="route-lead" data-lead={i}>
+                        <line x1={q.x0} y1={q.y0} x2={q.x} y2={q.y} />
+                        <circle cx={q.x0} cy={q.y0} r={2.5} />
+                      </g>
+                    ))}
                     {pts.map((p, i) => {
-                      const h = handleAt(meta, s, p.x, p.y, p.yaw, HANDLE_PX);
+                      const h0 = handleAt(meta, s, p.x, p.y, p.yaw, HANDLE_PX);
+                      const q = spread[i];
+                      const h = { x: q.x, y: q.y, hx: h0.hx + q.x - h0.x, hy: h0.hy + q.y - h0.y };
                       return (
                         <PoseMarker key={i} x={h.x} y={h.y} hx={h.hx} hy={h.hy} r={PT_R} label={i + 1} selected={i === pi}
                           class={`route-pt${i === pi ? " on" : ""}${bad.has(i) ? " bad" : warns.has(i) ? " warn" : ""}`}
@@ -438,7 +451,7 @@ export function RoutesPage({ say, embed, kind = "patrol" }: { say: Say; embed?: 
                       );
                     })}
                   </>
-                )} />
+                ); }} />
             )}
           </div>
           <div class="routeside">
@@ -452,6 +465,7 @@ export function RoutesPage({ say, embed, kind = "patrol" }: { say: Say; embed?: 
               <button type="button" class="btn primary ly-new" onClick={startNew} disabled={!sel || !meta}>{rt("routeNewBtn")}</button>
             </div>
             {guardKind && <p class="muted small">{rt("guardOnlyArmed")}</p>}
+            {sel && view && <RouteIO sel={sel} kind={kind} routes={routes} say={say} onDone={() => void load()} />}
             {genOpen && sel && <GuardGenerate map={sel} taken={routes.map((r) => r.id)} say={say} onDone={fromGenerated} onClose={() => setGenOpen(false)} />}
             {routes.length === 0 && <p class="muted small">{guardKind ? rt("guardNone") : rt("routesNone")}</p>}
             {routes.length === 0 && elsewhere.length > 0 && (

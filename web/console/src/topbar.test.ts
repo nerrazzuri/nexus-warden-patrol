@@ -34,9 +34,9 @@ describe("顶栏一行放得下(样式表)", () => {
     expect(r).toMatch(/text-overflow: ellipsis/);
   });
 
-  it("≥ 900 顶栏一行(只有窄屏才折行)", () => {
+  it("≥ 1100 顶栏一行(只有平板、手机才折行;第四档 #28 断点收成四个)", () => {
     expect(rule(".topbar")).not.toMatch(/flex-wrap: wrap/);
-    expect(rule(".topbar", media("(max-width: 899px)"))).toMatch(/flex-wrap: wrap/);
+    expect(rule(".topbar", media("(max-width: 1099px)"))).toMatch(/flex-wrap: wrap/);
   });
 
   it("往窄了收只藏站点名、角色、日期;全部急停、布防、未处理数、时钟、大块导航从来不藏", () => {
