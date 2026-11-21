@@ -81,3 +81,19 @@ p.warn { color: var(--c-warning); }
 .form.sched-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: var(--sp-3) var(--sp-4); align-items: start; }
 .sched-form > fieldset, .sched-form > p, .sched-form > .sched-add { grid-column: 1 / -1; }
 .sched-form input[type="number"] { max-width: 8em; }
+/* 第四档 #32:散开摆的点拉回真实位置的细线 + 小点 */
+.route-lead line { stroke: var(--c-textSecondary); stroke-width: 1; }
+.route-lead circle { fill: var(--c-textSecondary); }
+/* 第四档 #44:导出、导入路线 */
+.routeio { display: flex; flex-direction: column; gap: var(--sp-2); margin: var(--sp-2) 0; }
+.routeio-btns { display: flex; flex-wrap: wrap; gap: var(--sp-2); }
+.routeio-pick { position: relative; overflow: hidden; }
+.routeio-pick input[type="file"] { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+.routeio-plan { border: 1px solid var(--c-outline); border-radius: var(--r-r2); padding: var(--sp-3); display: flex; flex-direction: column; gap: var(--sp-2); }
+.routeio-plan p { margin: 0; }
+.routeio-rows { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--sp-1); }
+.routeio-rows label { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 2px var(--sp-2); align-items: center; }
+.routeio-rows .routeio-act { grid-column: 2 / -1; font-size: 13px; color: var(--c-textSecondary); }
+.routeio-rows .routeio-act.replace, .routeio-rows .routeio-act.rename { color: var(--c-warning); }
+.routeio-name { overflow-wrap: anywhere; }
+.routeio-failed { margin: 0; padding-left: 18px; color: var(--c-error); }

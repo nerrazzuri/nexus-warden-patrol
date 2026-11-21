@@ -1063,3 +1063,27 @@ describe("实测查出的用词", () => {
     expect(row).not.toContain("角");
   });
 });
+
+// 第四档 #32(UIUX-015):点挨得近,标记叠成一个只看得到最上面那个序号 —— 散开摆、细线连回真实位置
+describe("第四档 #32 挤在一起的点散开摆", () => {
+  it("三个点相距 0.1 m:标记散开、两两不叠,存下去的还是点的那一处", async () => {
+    const WANT: [number, number][] = [[1, 1], [1.1, 1], [1.05, 1.1]];
+    const { r, posted, svg, c } = await openNew(META);
+    for (const [x, y] of WANT) {
+      fireEvent.click(svg, clientOf(c, META, x, y));
+      await tick();
+    }
+    fireEvent.click(c.querySelector("svg.map")!, clientOf(c, META, -8, -8));   // 再加一个远处的点,它不挪
+    await tick();
+    const leads = c.querySelectorAll("[data-lead]");
+    // 最后加的那个是选中的(不挪);前三个里挪开的都有一根线
+    expect(leads.length).toBeGreaterThanOrEqual(2);
+    const centers = [...c.querySelectorAll("[data-point] .pm-body")].map((e) => [Number(e.getAttribute("cx")), Number(e.getAttribute("cy"))]);
+    for (let i = 0; i < 3; i++) for (let j = i + 1; j < 3; j++) {
+      expect(Math.hypot(centers[i][0] - centers[j][0], centers[i][1] - centers[j][1])).toBeGreaterThanOrEqual(22);
+    }
+    fireEvent.click(r.getByText("Save route"));
+    await waitFor(() => expect(posted.length).toBe(1));
+    posted[0].body.waypoints.slice(0, 3).forEach((w: RoutePoint, i: number) => { near(w.x, WANT[i][0]); near(w.y, WANT[i][1]); });
+  });
+});
