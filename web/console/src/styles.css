@@ -2681,3 +2681,13 @@ input[type="checkbox"], input[type="radio"] { width: 18px; height: 18px; }
   .pt-table td small { white-space: normal; }
   .pt-table th:nth-child(4), .pt-table td:nth-child(4) { display: none; }
 }
+
+/* 用户 11-21「这种按钮能 span 吗」:手机宽(≤760)并排的按钮拉满一行、平分宽度 ——
+   页头按钮、待批的批准 / 拒绝、值守页顶上的操作和地图预设。 */
+@media (max-width: 760px) {
+  .sp-head > .btn, .sp-head > a.btn { flex: 1 1 auto; }
+  .us-req .rb-row { flex: 1 1 100%; }
+  .us-req .rb-row .btn { flex: 1 1 0; min-width: 0; }
+  .mon-head-acts, .mon-head .seg { flex: 1 1 100%; display: flex; }
+  .mon-head-acts > .btn, .mon-head .seg > button { flex: 1 1 0; min-width: 0; padding-inline: var(--sp-2); }
+}
