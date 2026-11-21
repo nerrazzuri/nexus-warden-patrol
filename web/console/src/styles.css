@@ -2691,3 +2691,37 @@ input[type="checkbox"], input[type="radio"] { width: 18px; height: 18px; }
   .mon-head-acts, .mon-head .seg { flex: 1 1 100%; display: flex; }
   .mon-head-acts > .btn, .mon-head .seg > button { flex: 1 1 0; min-width: 0; padding-inline: var(--sp-2); }
 }
+
+/* 用户 11-21 手机实测「按钮的问题还有很多没解决」:手机宽(≤760)按钮统一拉满一行。
+   切换按钮组一整行平分;一排普通按钮按字长分满一行;夹在提示文字里的按钮另起一行占满。 */
+@media (max-width: 760px) {
+  /* 只拉宽:父级是竖排的 flex 时 flex-basis 100% 会把它撑高(布防页「Now」被挤扁) */
+  .page .seg, .subtabs.rp-seg { display: flex; width: 100%; }
+  .page .seg > button, .page .seg > a, .subtabs.rp-seg > a { flex: 1 1 0; min-width: 0; justify-content: center; text-align: center; padding-inline: var(--sp-2); }
+  .subtabs.rp-seg { margin: 0; padding: 0; background: none; }
+  .mon-video-h .seg, .arm-now-btns .seg { width: auto; flex: 1 1 auto; }
+
+  .routeio-btns, .rp-acts, .recctl-pair, .arm-now-btns, .ly-marks .row.wrap { display: flex; flex-wrap: wrap; width: 100%; }
+  .routeio-btns > .btn, .rp-acts > .btn, .recctl-pair > .btn, .arm-now-btns > .btn, .ly-marks .row.wrap > .btn { flex: 1 1 auto; min-width: 0; justify-content: center; }
+  .rp-acts { margin-left: 0; }
+  .rp-field { flex: 1 1 0; min-width: 0; }
+  .rp-field:first-child, .rp-max { flex: 1 1 100%; }
+  .rp-field input, .rp-field select { min-width: 0; width: 100%; }
+
+  .rc-deter-body > .btn, .rc-deter-body > select { flex: 1 1 calc(33% - var(--sp-2)); min-width: 0; }
+  .mapctl { width: 100%; }
+  .mapctl > .btn { flex: 1 1 auto; justify-content: center; }
+  p.note > .btn { display: flex; width: 100%; margin-top: var(--sp-2); justify-content: center; }
+
+  /* 布防时间表:天名和「复制到…」一行,时间条占满下一行 */
+  .armrow { grid-template-columns: minmax(0, 1fr) auto; row-gap: var(--sp-1); }
+  .armrow .armday { grid-column: 1; grid-row: 1; }
+  .armrow .arm-copy { grid-column: 2; grid-row: 1; justify-self: end; }
+  .armrow .armtrack { grid-column: 1 / -1; grid-row: 2; }
+  .armhours { margin: 0; }
+
+  /* 机器人操作页:姿态、定位一行字,按钮在下一行平分;确认框的两个按钮平分 */
+  .rc-kv { display: flex; flex-wrap: wrap; }
+  .rc-kv > span { flex: 1 1 100%; }
+  .rc-kv > .btn, .rc-row > .btn { flex: 1 1 0; min-width: 0; }
+}
