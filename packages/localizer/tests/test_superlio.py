@@ -862,3 +862,19 @@ def test_后雷达_录包模拟机器人_外参抄进关键帧目录(tmp_path):
     assert n["rear_keyframes"] == n["keyframes"]
     assert (kd / S.REAR_LIDARS).read_text() == '{"version": 1}'
     assert json.loads((kd / S.LIVE_FILE).read_text())["rear_keyframes"] == n["rear_keyframes"]
+
+
+def test_后雷达关键帧按10厘米降采样_前雷达还是5厘米(tmp_path):
+    """用户 11-21:后雷达只拿去打栅格射线清空地,按 10 cm 存(Top Glove 往站点传 414 → 约 270 MB);
+    前雷达的关键帧照旧 5 cm(点云、路沿、底图都用它)。"""
+    g = np.arange(0.0, 2.0, 0.025)
+    # 2.5 cm 一格的一片(在量程里)
+    dense = np.array([(3.0 + x, y, 0.5) for x in g for y in g], float)
+    k = S.Keyframer(tmp_path, np.eye(3).tolist(), (0.0, 0.0, 0.0), lambda m: dense,
+                    voxel=S.KF_VOXEL_M)
+    k.rear(10.0, "r")
+    k._save_rear(10.0)
+    got = np.fromfile(tmp_path / "kf" / "r00000.bin", "<f4").reshape(-1, 3)
+    assert S.REAR_KF_VOXEL_M == 0.10 and S.KF_VOXEL_M == 0.05
+    # 2 m × 2 m:10 cm 一格约 400 个点(5 cm 时约 1600)
+    assert 300 <= len(got) <= 500, len(got)
