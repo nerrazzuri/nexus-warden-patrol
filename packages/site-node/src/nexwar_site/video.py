@@ -234,7 +234,8 @@ class _Feed:
                 f"[0:v]split=2[full][s];[s]fps={self.hub.lite_fps:g},"
                 f"scale='min({self.hub.lite_width},iw)':-2[lite]",
                 "-map", "[full]", *full, "pipe:1",
-                "-map", "[lite]", "-f", "image2pipe", "-vcodec", "mjpeg", "-q:v", str(self.hub.lite_q),
+                "-map", "[lite]", "-f", "image2pipe", "-vcodec", "mjpeg",
+                "-q:v", str(self.hub.lite_q),
                 f"pipe:{lite_fd}"]
 
     def _pump_lite(self, gen: int, pipe: IO[bytes]) -> None:
@@ -458,7 +459,8 @@ def video_lite(vcfg: Any) -> tuple[int, float, int]:
     if lite is None:
         return LITE_WIDTH, LITE_FPS, LITE_Q
     if not isinstance(lite, dict) or set(lite) - set(LITE_RANGES):
-        raise ValueError("site.json 的 video.lite 要写成 {\"width\": 像素, \"fps\": 帧, \"q\": 画质},"
+        raise ValueError("site.json 的 video.lite 要写成 "
+                         "{\"width\": 像素, \"fps\": 帧, \"q\": 画质},"
                          f"现在是 {lite!r}")
     for k, v in lite.items():
         lo, hi = LITE_RANGES[k]
