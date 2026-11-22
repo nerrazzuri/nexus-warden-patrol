@@ -80,6 +80,20 @@ BIND_FILES = {
        for m in ("__init__", "binding", "device_id", "ed25519", "oldenv")},
 }
 SITE_UNITS = ("nexwar_site", "nexwar_mosquitto")
+#: 执行器自己和它验签用的两个模块:包里的路径 → ``<lib>/`` 底下的路径。随发行换(用户 11-23 要「一键」:
+#: 以后加的系统设置跟着网页升级走,不用到现场重跑装机脚本)。跟配网服务的代码同一个信任:验过发行签名的
+#: 那一份字节才装,root 只跑 root 独占目录里的。
+RUNNER_FILES = {
+    "packages/contract/src/nexwar_contract/ed25519.py": "nexwar_contract/ed25519.py",
+    "packages/contract/src/nexwar_contract/relsign.py": "nexwar_contract/relsign.py",
+    "deploy/nexwar_ops_runner": "ops-runner",             # 放最后:模块先换好,新执行器再上
+}
+#: 机器人上要的系统设置(跟装机脚本 ②b 一字不差,``tests/test_ops_runner_system.py`` 核):
+#: 服务账号也是 ssh 登录的账号,最后一个会话结束时 logind 不许清它的共享内存(真机 11-20 Nav2 失联根因)。
+LOGIND_CONF = "systemd/logind.conf.d/nexwar.conf"
+LOGIND_TEXT = ("# D1 Max:服务账号也是 ssh 登录的账号,最后一个会话结束时不许清它的共享内存(Nav2 / FastDDS 要用)\n"
+               "[Login]\n"
+               "RemoveIPC=no\n")
 
 #: 不靠 SSH(11-06,用户定):站点能改的 ``/etc/nexwar/env`` 设置 —— 只有这几个键、只认这几个值。
 #: 文件里别的行(设备 PIN 等)不读出、不改;改完重启用到它的服务,代理最后、不等。
@@ -461,6 +475,29 @@ def install_bind(files: dict[str, bytes], lib_dir: Path) -> bool:
         os.rename(dst, old)
     os.rename(new, dst)
     shutil.rmtree(old, ignore_errors=True)
+    return True
+
+
+def install_runner(files: dict[str, bytes], lib_dir: Path) -> bool:
+    """执行器自己(:data:`RUNNER_FILES`)换成验过签的这一版:跟装着的一样就不动;新执行器先编译一遍,
+    编不过不换(坏了就没人能再换回来)。上一份留成 ``ops-runner.prev``,人工能换回去。回换没换。"""
+    if all((lib_dir / rel).is_file() and (lib_dir / rel).read_bytes() == files[src]
+           for src, rel in RUNNER_FILES.items()):
+        return False
+    code = files["deploy/nexwar_ops_runner"]
+    try:
+        compile(code, "ops-runner", "exec")
+    except (SyntaxError, ValueError) as exc:
+        raise OpError(f"新执行器编译不过,不换:{exc}") from exc
+    if b"\ndef main(" not in code or b"\ndef boot(" not in code:
+        raise OpError("新执行器不完整,不换")
+    cur = lib_dir / "ops-runner"
+    if cur.is_file():
+        write_atomic(lib_dir / "ops-runner.prev", cur.read_bytes(), mode=0o755)
+    for src, rel in RUNNER_FILES.items():
+        target = lib_dir / rel
+        target.parent.mkdir(parents=True, exist_ok=True, mode=0o755)
+        write_atomic(target, files[src], mode=0o755 if rel == "ops-runner" else 0o644)
     return True
 
 
@@ -902,7 +939,7 @@ class Ops:
             raise OpError("机器人上没装发行公钥:服务单元不更新")
         manifest = json.loads(read_nofollow(root / "release.json", limit=MAX_REQ))
         want = frozenset(f"deploy/{u}.service" for u in ROBOT_UNITS) | frozenset(BIND_FILES) \
-            | frozenset({UNBIND_REVOKED, FACTORY_PUB})
+            | frozenset(RUNNER_FILES) | frozenset({UNBIND_REVOKED, FACTORY_PUB})
         got = tree_ok(root, manifest, pubkey, want,
                       capture_prefixes=(UNBIND_DIR + "/", FACTORY_DIR + "/"))
         units = {k: v for k, v in got.items() if k.endswith(".service")}
@@ -929,6 +966,14 @@ class Ops:
         if bind or "nexwar_bind.service" in changed:
             self.run(["systemctl", "--no-block", "try-restart", "nexwar_bind.service"], 30)
         out: dict[str, Any] = {"changed": changed, "bind": bind}
+        # 执行器自己、系统设置跟着这一版走(用户 11-23「一键」)。只在真以 root 跑时做(测试、仿真不动系统)
+        if os.geteuid() == 0:
+            lib = Path(self.cfg.get("lib_dir", "/usr/local/lib/nexwar"))
+            if all(k in got for k in RUNNER_FILES) and install_runner(got, lib):
+                out["runner"] = True
+            fixed = self.system_settings()
+            if fixed:
+                out["system"] = fixed
         keys = self._unbind_keys(got)
         if keys is not None:
             out["unbind_keys"] = keys
@@ -980,6 +1025,24 @@ class Ops:
         return sorted(pems)
 
     # ---------------------------------------------------------------- 站点
+    def system_settings(self) -> list[str]:
+        """机器人上要的系统设置(:data:`LOGIND_TEXT`、服务账号常驻)缺了就补上;回补了哪几样。开机准备、
+        换版本以后各跑一次 —— 老机器重跑一次装机脚本以后,以后再加的设置都不用人到现场。"""
+        if self.profile != "robot":
+            return []
+        fixed = []
+        conf = self.etc / LOGIND_CONF
+        if not conf.is_file() or conf.read_text("utf-8", "replace") != LOGIND_TEXT:
+            conf.parent.mkdir(parents=True, exist_ok=True, mode=0o755)
+            write_atomic(conf, LOGIND_TEXT.encode(), mode=0o644)
+            fixed.append("logind")
+        user = str(self.cfg["requester"])
+        _, out = self.run(["loginctl", "show-user", user, "-p", "Linger", "--value"], 30)
+        if out.strip() != "yes":
+            rc, msg = self.run(["loginctl", "enable-linger", user], 30)
+            fixed.append("linger" if rc == 0 else f"linger 没开成:{msg.strip()[-200:]}")
+        return fixed
+
     def _site(self) -> tuple[Path, Path, str]:
         return (Path(self.cfg.get("site_home", "/var/lib/nexwar_site")),
                 Path(self.cfg.get("site_venv", "/opt/nexwar_site/venv")),
@@ -1392,6 +1455,12 @@ def boot(ops: Ops, *, sleep: Callable[[float], Any] = time.sleep) -> None:
     缺省关;``NEXWAR_VENDOR_AUTOSTART=1`` 开回去)。网卡、网关、厂家的进程都起得晚:没齐每分钟再来,
     最多 :data:`BOOT_ROUNDS` 回;出错只记一笔,不拦开机。"""
     routes_ok = chrony_ok = False
+    try:                                        # 系统设置:一开机就补(用户 11-23;不等网络)
+        fixed = ops.system_settings()
+        if fixed:
+            print(f"开机准备 system:{json.dumps(fixed, ensure_ascii=False)}", flush=True)
+    except (OpError, OSError) as exc:
+        print(f"开机准备 system:{exc}", flush=True)
     for i in range(BOOT_ROUNDS):
         try:
             on = ops._env_value("NEXWAR_VENDOR_AUTOSTART") == "1"
