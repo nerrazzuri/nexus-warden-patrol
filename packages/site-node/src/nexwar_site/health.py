@@ -207,7 +207,9 @@ class HealthDesk:
                              + ("; backup is out of date" if st.get("stale") else "")
                              + ("; last check failed" if ver and not ver.get("ok") else "")}
         else:
-            out["backup"] = {"ok": False, "detail": "未配置备份:站点主机损坏将导致数据丢失",
+            # 没配备份算提醒(level warn):跟 selfcheck 的 WARN 一致,网页画黄不画红(真机 11-19 M02)
+            out["backup"] = {"ok": False, "level": "warn",
+                             "detail": "未配置备份:站点主机损坏将导致数据丢失",
                              "detail_en": "No backup set up: if the site computer fails, "
                                           "data will be lost"}
         if self.push is not None:

@@ -112,6 +112,16 @@ describe("系统", () => {
     expect(c.querySelector(".sys-vpn")!.textContent).toContain("未安装");
     expect(c.textContent).toContain("翠湖庄园");
   });
+  it("没配备份是提醒(黄),不是失败(红)(真机 11-19 M02)", async () => {
+    health = { ok: false, version: "1.4.0", checks: { db: { ok: true }, backup: { ok: false, level: "warn", detail: "未配置备份" } } };
+    const { container: c } = render(<SystemPage2 me={{ name: "a", role: "admin", display_name: "", site_name: "x" }} now={0} say={() => {}} />);
+    await waitFor(() => expect(c.querySelector(".sys-backup .sys-row")!.className).toContain("warn"));
+    expect(c.querySelector(".sys-backup .sys-row")!.className).not.toContain("bad");
+    cleanup();
+    const d = render(<DiagPage say={() => {}} />).container;
+    await waitFor(() => expect(d.querySelector('[data-check="backup"]')!.className).toContain("warn"));
+    expect(d.querySelector('[data-check="backup"] .mark')!.textContent).toBe("!");
+  });
 });
 
 describe("POC 配对码地址", () => {
