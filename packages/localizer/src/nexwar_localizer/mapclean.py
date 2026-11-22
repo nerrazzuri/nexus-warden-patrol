@@ -9,6 +9,9 @@
    的帧数 = 当时有东西、后来空了(人走了、箱子挪了),删掉。离地 :data:`FLOOR_KEEP_M` 以内的不按
    这一步删(远处的射线贴着地面擦过去,会把地面当成「穿过」)。
 2. **零星孤点**(:func:`isolated`):周围 26 个体素里有点的不到 :data:`ISOLATED_MIN` 个。
+2b. **远处稀点**(:func:`far_sparse`,用户 11-22「清理激光雷达远距离产生的零散噪点」):离建图时雷达走过的
+   路越远,要求周围有点的体素越多(:data:`FAR_SPARSE`)。近处照旧只删完全孤零零的;远处真墙也稀,所以
+   门槛只往上提一点(Top Glove 站点图上多删约 0.4%,都是远处结构边上零星的一两个点)。
 3. **透过开口看到的**:二维栅格判出来「只透过玻璃、门口看到过、机器人没进去过」的格子(``seen.pbm``
    那些,M9)上方的点 —— **只数、不删**(``see_through_seen``):这些格子分不清玻璃外面和从门口看进去的
    房间,office1 上照删会删掉 14% 不动的桌椅隔断,定位要靠它们。玻璃外面的变化交给套图打分兜底。
@@ -45,6 +48,11 @@ PASS_PER_HIT = 5.0
 FLOOR_KEEP_M = 0.2
 #: 周围 26 个体素里有点的少于这么多个 = 零星孤点。
 ISOLATED_MIN = 1
+#: 远处稀点:离雷达走过的路(三维,米)至少这么远的,周围 26 个体素里有点的要至少这么多个,不然删。
+#: 从近到远排;没到第一档的不归这一步管(交给 :data:`ISOLATED_MIN`)。
+FAR_SPARSE: tuple[tuple[float, int], ...] = ((15.0, 2), (30.0, 3))
+#: 算「离路多远」时轨迹先按这么大的格子抽稀(米)。
+FAR_TRAJ_STEP_M = 0.5
 #: 一步最多删这么大比例,超过就那一步不做。
 MAX_DROP = 0.25
 
@@ -114,8 +122,8 @@ class RayClear:
         return dyn
 
 
-def isolated(points: Any, res: float) -> np.ndarray:
-    """零星孤点:周围 26 个体素里有点的少于 :data:`ISOLATED_MIN` 个。"""
+def _near_count(points: Any, res: float) -> np.ndarray:
+    """每个点所在体素周围 26 个体素里有点的有几个。"""
     v = np.floor(np.asarray(points, float) / res).astype(np.int64)
     k = _keys(v)
     s = np.unique(k)
@@ -126,7 +134,43 @@ def isolated(points: Any, res: float) -> np.ndarray:
         nk = _keys(v + d)
         i = np.clip(np.searchsorted(s, nk), 0, max(len(s) - 1, 0))
         near += (s[i] == nk) if len(s) else 0
-    return near < ISOLATED_MIN
+    return near
+
+
+def isolated(points: Any, res: float) -> np.ndarray:
+    """零星孤点:周围 26 个体素里有点的少于 :data:`ISOLATED_MIN` 个。"""
+    return _near_count(points, res) < ISOLATED_MIN
+
+
+def traj_distance(points: Any, sensor: Any, *, step: float = FAR_TRAJ_STEP_M,
+                  chunk: int = 20000) -> np.ndarray:
+    """每个点离雷达走过的路(``sensor``:N×3 雷达位置)最近多远(米)。只用 numpy(狗上没有 scipy):
+    轨迹按 ``step`` 抽稀,分块算。没有轨迹 → 全是 inf。"""
+    p = np.asarray(points, float).reshape(-1, 3)
+    t = np.asarray(sensor, float).reshape(-1, 3)
+    if not len(t):
+        return np.full(len(p), np.inf)
+    _, first = np.unique(np.floor(t / step).astype(np.int64), axis=0, return_index=True)
+    t = t[np.sort(first)]
+    out = np.empty(len(p))
+    for i in range(0, len(p), chunk):
+        q = p[i:i + chunk]
+        d2 = (q * q).sum(1)[:, None] - 2.0 * q @ t.T + (t * t).sum(1)[None, :]
+        out[i:i + chunk] = np.sqrt(np.maximum(d2.min(1), 0.0))
+    return out
+
+
+def far_sparse(points: Any, res: float, sensor: Any,
+               tiers: tuple[tuple[float, int], ...] = FAR_SPARSE) -> np.ndarray:
+    """远处稀点:离雷达走过的路至少 ``tiers`` 某一档那么远、周围有点的体素少于那一档要的个数。"""
+    n = len(np.asarray(points).reshape(-1, 3))
+    if not n or not tiers:
+        return np.zeros(n, bool)
+    dist = traj_distance(points, sensor)
+    need = np.zeros(n, np.int32)
+    for far, k in tiers:
+        need[dist >= far] = k
+    return _near_count(points, res) < need
 
 
 def apply(points: Any, masks: Mapping[str, Any], *, max_drop: float = MAX_DROP

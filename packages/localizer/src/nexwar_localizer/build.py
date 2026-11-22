@@ -690,6 +690,7 @@ def _denoise(slio: Any, sensor: Any, frames: Frames, g: Any, rc: Any) -> tuple[A
                                 height=np.where(ok, h, np.nan).astype(np.float32),
                                 dynamic=masks["dynamic"], scans=rc.scans)
     masks["isolated"] = mapclean.isolated(slio, slioloc.MAP_VOXEL_M)
+    masks["far_sparse"] = mapclean.far_sparse(slio, slioloc.MAP_VOXEL_M, sensor)
     through = mapclean.through_mask(slio, q[:, :2], g.seen, g.origin, g.res)
     kept, stats = mapclean.apply(slio, masks)
     stats["see_through_seen"] = int(through.sum())        # 只数不删(见 mapclean 模块说明)
