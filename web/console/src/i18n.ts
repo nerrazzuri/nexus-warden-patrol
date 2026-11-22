@@ -599,6 +599,8 @@ const en = {
   menuLook: "Appearance",
   // 第三档 #40:报警弹窗和声音
   menuAlarmSound: "Alarm sound",
+  menuDataSaver: "Data saver",
+  menuDataSaverHint: "Smaller, slower video (about 2 frames a second) on this browser. Turn on when watching over mobile data.",
   soundOnShort: "On",
   soundOffShort: "Off",
   popGo: "Go to duty",
@@ -2961,6 +2963,8 @@ const zh: Partial<Record<Key, string>> = {
   armVisitor: "临时撤防（到 {t}）",
   menuLook: "外观",
   menuAlarmSound: "报警声音",
+  menuDataSaver: "省流量",
+  menuDataSaverHint: "这台浏览器上的画面变小、每秒约 2 帧。用手机流量看的时候打开。",
   soundOnShort: "开",
   soundOffShort: "关",
   popGo: "去值守页",

@@ -7,6 +7,7 @@ library;
 import 'package:flutter/material.dart';
 
 import '../l10n.dart';
+import '../net/data_saver.dart';
 import '../net/app_update.dart';
 import '../net/background_watch.dart';
 import '../net/push.dart';
@@ -67,6 +68,7 @@ class AppSettingsPage extends StatefulWidget {
   static const Key unbindKey = Key('engineer-unbind');
   static const Key engineerKey = Key('engineer-tools');
   static const Key arrivalKey = Key('arrival-alerts');
+  static const Key dataSaverKey = Key('data-saver');
 
   @override
   State<AppSettingsPage> createState() => _AppSettingsPageState();
@@ -195,6 +197,20 @@ class _AppSettingsPageState extends State<AppSettingsPage> with NwAsk {
                           style: sub()),
                       value: on,
                       onChanged: (v) => arrivalAlerts.value = v,
+                    )),
+            ValueListenableBuilder<bool>(
+                valueListenable: dataSaver,
+                builder: (_, on, _) => SwitchListTile(
+                      key: AppSettingsPage.dataSaverKey,
+                      secondary: Icon(on ? Icons.data_saver_on : Icons.data_saver_off,
+                          color: on ? c.success : c.textSecondary),
+                      title: Text(tr('Data saver', '省流量')),
+                      subtitle: Text(
+                          tr('Smaller, slower video (about 2 frames a second). Turn on when watching over mobile data.',
+                              '画面变小、每秒约 2 帧。用手机流量看的时候打开。'),
+                          style: sub()),
+                      value: on,
+                      onChanged: setDataSaver,
                     )),
           ]),
         ],

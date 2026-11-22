@@ -963,7 +963,7 @@ class Server:
         log.info("天气:%s", f"联网查(坐标 {latlon[0]:.2f},{latlon[1]:.2f})" if latlon
                  else "没配坐标,只能手动切")
         # W00c5b:视频经站点。狗按需把相机推到这里(SRT),这里转 MJPEG 给观众。
-        from nexwar_site.video import VideoHub, dispatcher_sender, video_fps
+        from nexwar_site.video import VideoHub, dispatcher_sender, video_fps, video_lite
         vcfg = cfg.get("video", {})
         self.video = VideoHub(send=dispatcher_sender(self.dispatcher, self.loop),
                               known=lambda rid: rid in self.dispatcher.clients,
@@ -971,7 +971,7 @@ class Server:
                               srt_host=vcfg.get("srt_host") or cfg["hostnames"][0],
                               ports=tuple(vcfg.get("ports", (8890, 8989))),
                               ffmpeg=vcfg.get("ffmpeg", "ffmpeg"),
-                              fps=video_fps(vcfg))
+                              fps=video_fps(vcfg), lite=video_lite(vcfg))
         self.dispatcher.on_event(self.video.on_event)
         # W00c5c:遥控经站点(决策 7)。「没画面不许动」读的就是上面那个视频的画面健康。
         from nexwar_site.teleop import TeleopDesk

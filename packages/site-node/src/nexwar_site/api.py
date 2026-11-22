@@ -5427,7 +5427,7 @@ class _Handler(TlsHandlerMixin):
                 raise HttpError(exc.status, exc.message) from exc
             return self._send_json(200, {"robot_id": robot_id, "cameras": cams})
         try:
-            frames = hub.stream(robot_id, what)
+            frames = hub.stream(robot_id, what, lite=self._lite())
             first = next(frames)
         except VideoError as exc:
             raise HttpError(exc.status, exc.message) from exc
@@ -5474,8 +5474,11 @@ class _Handler(TlsHandlerMixin):
             ws.close(1000, "")
 
     def _mux_open(self, stream_id: str) -> Iterator[bytes]:
-        """W51:一路画面的地址(跟 HTTP 那条一样)→ 画面生成器。"""
-        m = _VIDEO.match(stream_id)
+        """W51:一路画面的地址(跟 HTTP 那条一样)→ 画面生成器。地址可以带 ``?lite=1``(第四档 #45
+        省流量:小画面、帧少)。"""
+        path, _, query = stream_id.partition("?")
+        lite = "lite=1" in query.split("&")
+        m = _VIDEO.match(path)
         if m is not None and m.group(2) != "health":
             robot_id = unquote(m.group(1))
             if not SAFE_ID.match(robot_id):
@@ -5483,11 +5486,17 @@ class _Handler(TlsHandlerMixin):
             hub = self.site.video
             if hub is None:
                 raise HttpError(404, "此站点未启用视频")
-            return hub.stream(robot_id, m.group(2))
+            return hub.stream(robot_id, m.group(2), lite=lite)
+        stream_id = path
         m = _CAM.match(stream_id)
         if m is not None and m.group(2) == "live":
             return self._camera_frames(m.group(1))
         raise HttpError(404, f"视频源不存在:{stream_id[:80]}")
+
+    def _lite(self) -> bool:
+        """``?lite=1``(第四档 #45 省流量):小画面(最宽 640)、每秒 2 帧左右。"""
+        q = self.path.split("?", 1)[1] if "?" in self.path else ""
+        return "lite=1" in q.split("&")
 
     def _still(self) -> bool:
         """``?still=1``:只要一张 JPEG(演示站点实测:四台机器人 8 路长连占满浏览器对一个站点的 6 条
