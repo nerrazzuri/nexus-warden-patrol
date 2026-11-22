@@ -9,12 +9,12 @@ import { t, type Key } from "./i18n";
 import { SiteMetrics, SiteOps } from "./remoteops";
 import { checkText } from "./sitetext";
 
-type Check = { ok: boolean; detail?: string; detail_en?: string };
+type Check = { ok: boolean; level?: "warn"; detail?: string; detail_en?: string };
 interface Health { ok: boolean; version: string; checks: Record<string, Check> }
 
 function Row({ k, check }: { k: Key; check?: Check }) {
   return (
-    <div class={check && !check.ok ? "sys-row bad" : "sys-row"}>
+    <div class={check && !check.ok ? (check.level === "warn" ? "sys-row warn" : "sys-row bad") : "sys-row"}>
       <span class="muted">{t(k)}</span>
       <b>{check ? (checkText(check) || (check.ok ? t("sysOk") : t("checkFail"))) : "—"}</b>
     </div>

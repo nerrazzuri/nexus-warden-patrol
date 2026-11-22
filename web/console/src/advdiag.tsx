@@ -10,7 +10,7 @@ import type { Robot } from "./model";
 import { RobotOps } from "./remoteops";
 import { checkText, SiteSpan } from "./sitetext";
 
-interface Health { ok: boolean; version: string; checks: Record<string, { ok: boolean; detail?: string; detail_en?: string }> }
+interface Health { ok: boolean; version: string; checks: Record<string, { ok: boolean; level?: "warn"; detail?: string; detail_en?: string }> }
 type DevRobot = Robot & { devices?: { items: { id: string; state: string; detail?: string }[]; stale?: boolean } | null };
 
 const CHECK: Record<string, Key> = {
@@ -54,8 +54,8 @@ export function DiagPage({ say }: { say: (s: string) => void }) {
         {!health ? <p class="muted">…</p> : (
           <ul class="plain">
             {Object.entries(health.checks).map(([k, c]) => (
-              <li key={k} class={c.ok ? "chk ok" : "chk bad"} data-check={k}>
-                <span class="mark" aria-hidden="true">{c.ok ? "✓" : "✕"}</span>
+              <li key={k} class={c.ok ? "chk ok" : c.level === "warn" ? "chk warn" : "chk bad"} data-check={k}>
+                <span class="mark" aria-hidden="true">{c.ok ? "✓" : c.level === "warn" ? "!" : "✕"}</span>
                 <b>{CHECK[k] ? t(CHECK[k]) : k}</b>
                 {c.detail && <span class="muted small" title={lang.value === "en" ? undefined : c.detail}>{checkText(c)}</span>}
               </li>

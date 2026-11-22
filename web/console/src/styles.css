@@ -1132,6 +1132,7 @@ img.cam-live { width: 100%; max-height: 60vh; object-fit: contain; background: #
 .sys-row { display: flex; gap: var(--sp-3); align-items: baseline; padding: 4px 0; flex-wrap: wrap; }
 .sys-row > .muted { min-width: 140px; }
 .sys-row.bad b { color: var(--c-error); }
+.sys-row.warn b { color: var(--c-warning); }
 .up-rel { display: flex; flex-direction: column; gap: var(--sp-2); padding: 8px 0; border-bottom: 1px solid var(--c-outline); }
 .up-robot { display: inline-flex; gap: var(--sp-1); align-items: center; margin-right: 12px; }
 

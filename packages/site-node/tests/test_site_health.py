@@ -50,6 +50,7 @@ def test_体检_都好_各项说人话(台):
     c = t.h.checks()
     assert all(c[k]["ok"] for k in ("db", "loop", "disk", "certs", "lanes")), c
     assert c["backup"]["ok"] is False and "未配置备份" in c["backup"]["detail"]
+    assert c["backup"]["level"] == "warn"           # 跟 selfcheck 的 WARN 一致(真机 11-19 M02)
     assert "400 天" in c["certs"]["detail"]
     assert t.h.healthz() == (True, {"ok": True, "version": t.h.healthz()[1]["version"]})
 
