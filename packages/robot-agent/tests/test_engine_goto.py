@@ -363,9 +363,10 @@ def test_W73外审r3_4_回待命点这一趟_停止线15_出发按路程算_不�
 async def test_两种走法_报警出动是紧急_不限巡逻速度_普通任务限巡逻速度(台子):
     """用户 11-09:正常巡逻慢一些无所谓,不撞、不卡;紧急(报警出动、跟人、查易藏点:优先级 ≥ 报警)
     走最快的。紧急的不限巡逻速度,普通的(手动派、排程、回待命点)最快 PATROL_MAX_MPS。"""
-    from nexwar_agent.bridges.hal_nav import PATROL_MAX_MPS
     from nexwar_contract.charging import ALARM_PRIORITY
     c, r, parts, book = 台子
+    # 默认巡逻上限 1.0(用户 11-23)跟仿真机器人的最高一样,分不出两种走法;这里按现场改低(0.6)来看
+    parts.nav.patrol_max = PATROL_MAX_MPS = 0.6
     t1 = EngineGotoTask(task_id="t1", target=_target(8.0, 0.0), max_speed_mps=None, parts=parts,
                         events=book, now_ms=c, priority=ALARM_PRIORITY)
     await t1.start()
