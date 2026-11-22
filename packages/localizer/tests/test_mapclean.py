@@ -112,3 +112,36 @@ def test_W70_只透过开口看到的格子上的点删掉_别的格子不动() 
     m = C.through_mask(pts, pts[:, :2], seen, (0.0, 0.0), 1.0)
     assert m.tolist() == [True, True, False, False]
     assert not C.through_mask(pts, pts[:, :2], None, (0.0, 0.0), 1.0).any()
+
+
+def test_离路多远_纯numpy_跟逐个算的一样():
+    rng = np.random.default_rng(3)
+    traj = np.cumsum(rng.normal(0, 0.2, (400, 3)), 0)
+    pts = rng.uniform(-20, 20, (3000, 3))
+    got = C.traj_distance(pts, traj, step=1e-9, chunk=700)       # 不抽稀:跟暴力算逐个比
+    want = np.sqrt(((pts[:, None, :] - traj[None, :, :]) ** 2).sum(2)).min(1)
+    assert np.allclose(got, want, atol=1e-6)
+    coarse = C.traj_distance(pts, traj)                          # 抽稀以后最多差半格多一点
+    assert np.all(coarse >= want - 1e-9) and np.all(coarse - want <= C.FAR_TRAJ_STEP_M * 1.8)
+    assert np.isinf(C.traj_distance(pts[:3], np.zeros((0, 3)))).all()
+
+
+def test_远处稀点_近处照旧_远处要的邻居多_真墙留着():
+    """用户 11-22:远距离零散噪点。近处一个两个挨着的不删(交给孤点那一步);远处两个挨着的删;
+    远处成片的墙(稀,但每点都有好几个邻居)留着。"""
+    traj = np.stack([np.linspace(0, 5, 50), np.zeros(50), np.zeros(50)], 1)
+    pair_near = np.array([[5.0, 8.0, 1.0], [5.25, 8.0, 1.0]])            # 离路 8 m
+    pair_mid = np.array([[5.0, 20.0, 1.0], [5.25, 20.0, 1.0]])           # 20 m:两个点各 1 个邻居 < 2
+    trio_mid = np.array([[0.0, -20.0, 1.0], [0.25, -20.0, 1.0], [0.5, -20.0, 1.0]])  # 两头 1 个、中间 2 个
+    # 40 m 外一面墙:真地图是很多帧叠起来再按体素降采样的,远处的墙在体素上也连成片(Top Glove 站点图
+    # 20–60 m 有 2.8 万个点,邻居不到 3 个的约 1200 个);隔一格才有一个点的「墙」孤点那一步本来就删
+    ys, zs = np.meshgrid(np.arange(-6, 6, 0.25), np.arange(0, 4, 0.25))
+    wall = np.stack([np.full(ys.size, 45.0), ys.ravel(), zs.ravel()], 1)
+    pts = np.vstack([pair_near, pair_mid, trio_mid, wall])
+    m = C.far_sparse(pts, V, traj)
+    assert not m[:2].any()                                               # 近处:不归这一步管
+    assert m[2:4].all()
+    assert list(m[4:7]) == [True, False, True]
+    assert not m[7:].any(), "远处的真墙不能删"
+    assert not C.far_sparse(pts, V, traj, tiers=()).any()
+    assert C.far_sparse(np.zeros((0, 3)), V, traj).shape == (0,)
