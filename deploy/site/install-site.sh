@@ -263,7 +263,10 @@ systemctl enable --now nexwar_mosquitto.service nexwar_site.service
 # (恢复模式上面已经退出:服务等恢复完再起,记录留着,下次正常装机再开)
 sh "$PKG/deploy/nexwar_migrate" finish || true
 if [[ $UPGRADE -eq 1 ]]; then
-  echo "升级好了(站点服务已起)。"
+  # 手工升级时站点一直开着:enable --now 不会重启正在跑的进程,不重启就还是旧代码(笔记本 11-23 装 32 碰上)。
+  # 远程「升级站点」先停了站点,这里再重启一次也无妨。
+  systemctl restart nexwar_site.service
+  echo "升级好了(站点服务已重启,跑的是新版)。"
   exit 0
 fi
 

@@ -1398,6 +1398,9 @@ def test_站点安装脚本不碰狗_狗的安装脚本不碰站点():
     assert site.index("useradd --system") < site.index("usermod -aG systemd-journal") \
         < site.index("enable --now nexwar_mosquitto.service"), "先有用户再加组,加完再起服务"
     assert 'packages/contract[mqtt,planning]" "$PKG/packages/site-node"' in site
+    up = site[site.index('if [[ $UPGRADE -eq 1 ]]; then\n  # 手工升级'):]
+    assert up.index("systemctl restart nexwar_site.service") < up.index("升级好了"), \
+        "手工 --upgrade 要重启正在跑的站点,不然还是旧代码(笔记本 11-23)"
 
 
 def test_站点安装脚本语法():
