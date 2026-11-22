@@ -387,6 +387,11 @@ def run(args: argparse.Namespace, *, now_ms: int) -> int:
         with tarfile.open(tgz, "w:gz") as t:
             t.add(pkg, arcname=pkg.name)
         files.append(tgz)
+        # 用户 11-23「一键式」:机器人上一条命令装 / 重装
+        # (跟 .tar.gz 并排放:sudo bash <包名>.install-robot.sh)
+        one = out / f"{pkg.name}.install-robot.sh"
+        shutil.copy2(repo / "deploy" / "install-robot.sh", one)
+        files.append(one)
         if android:
             name = pubspec_version(repo)
             apk = build_apk(repo, name, args.build_number, push_defines)

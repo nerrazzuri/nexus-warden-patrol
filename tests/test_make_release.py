@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import os
 import subprocess
 import sys
 import types
@@ -40,6 +41,7 @@ def world(tmp_path):
         (repo / d).mkdir(parents=True)
         (repo / d / "keep.txt").write_text("x\n", "utf-8")
     (repo / "pyproject.toml").write_text('[project]\nname = "x"\nversion = "1.2.3"\n', "utf-8")
+    (repo / "deploy/install-robot.sh").write_text("#!/usr/bin/env bash\necho one-click\n", "utf-8")
     key = tmp_path / "usb" / "release.key"
     key.parent.mkdir()
     relsign.keygen(key, repo / "deploy/release-pub.pem")
@@ -78,6 +80,10 @@ def test_条件齐了_出签好的包和发行记录(world, capsys):
     with tarfile.open(tgz) as t:
         assert {n.split("/")[0] for n in t.getnames()} == {pkgs[0].name}
     assert tgz.name in (out / f"{pkgs[0].name}.SHA256SUMS.txt").read_text()
+    # 用户 11-23「一键式」:机器人上一条命令装的脚本跟 .tar.gz 并排出,也进 SHA256SUMS
+    one = out / f"{pkgs[0].name}.install-robot.sh"
+    assert one.read_text("utf-8") == (repo / "deploy/install-robot.sh").read_text("utf-8")
+    assert f"  {one.name}\n" in (out / f"{pkgs[0].name}.SHA256SUMS.txt").read_text()
 
 
 def _parse(argv):
@@ -431,3 +437,18 @@ def test_11_19_FCM_给了又skip_android_不发(world, tmp_path):
     argv = ["--repo", str(repo), "--key", str(key), "--out", str(out), "--no-gate",
             "--skip-android", "--fcm", str(_gs(tmp_path))]
     assert mr.run(_parse(argv), now_ms=NOW) == 2
+
+
+def test_一键装机脚本_语法_规矩跟装机脚本一致():
+    """用户 11-23:「装机脚本可以做一下，能不能做成一键式的？这样对客户也简单」。"""
+    one = ROOT / "deploy/install-robot.sh"
+    assert os.access(one, os.X_OK)
+    r = subprocess.run(["bash", "-n", str(one)], capture_output=True, text=True)
+    assert r.returncode == 0, r.stderr
+    text = one.read_text("utf-8")
+    inst = (ROOT / "deploy/install.sh").read_text("utf-8")
+    name_re = "^[0-9]{4}-[0-9]{2}-[0-9]{2}-[0-9a-f]{6,12}$"
+    assert name_re in text and name_re in inst, "包名规矩两边一字不差"
+    assert 'bash "$DEST/deploy/install.sh" "$DEST"' in text, "装的还是包里那份装机脚本"
+    assert "set -euo pipefail" in text and "sha256sum" in text and '[[ $EUID -ne 0 ]]' in text
+    assert "NEXWAR_USER" in text
