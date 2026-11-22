@@ -467,7 +467,8 @@ def _宽高(jpeg: bytes) -> tuple[int, int]:
         assert jpeg[i] == 0xFF, "不是 JPEG 段"
         mark, n = jpeg[i + 1], int.from_bytes(jpeg[i + 2:i + 4], "big")
         if mark in (0xC0, 0xC1, 0xC2):
-            return int.from_bytes(jpeg[i + 7:i + 9], "big"), int.from_bytes(jpeg[i + 5:i + 7], "big")
+            w, h = jpeg[i + 7:i + 9], jpeg[i + 5:i + 7]
+            return int.from_bytes(w, "big"), int.from_bytes(h, "big")
         i += 2 + n
     raise AssertionError("没找到 SOF")
 
@@ -490,7 +491,8 @@ def test_第四档45_省流量_同一路多出小画面_帧少字节少_原画�
         assert len(small) == 4 and len(big) == 4
         assert all(_宽高(j)[0] <= V.LITE_WIDTH for j in small)
         assert _宽高(small[0]) == _宽高(big[0]) or _宽高(small[0])[0] < _宽高(big[0])[0]
-        assert sum(map(len, small)) < sum(map(len, big)) * 0.8, (sum(map(len, small)), sum(map(len, big)))
+        ns, nb = sum(map(len, small)), sum(map(len, big))
+        assert ns < nb * 0.8, (ns, nb)
         assert dt >= 3 / V.LITE_FPS * 0.7, f"4 帧小画面只用了 {dt:.2f} s:帧数没降"
         assert s.api.video.feed("A", "front").starts == 1                 # 一路收流,两种观众共用
     finally:
