@@ -164,7 +164,28 @@ def parser() -> argparse.ArgumentParser:
     return p
 
 
+def no_hugepage() -> bool:
+    """叫 numpy 分大数组时别向内核要大页(``madvise(MADV_HUGEPAGE)``)。
+
+    台式机 11-22:开了很多天、空闲内存碎了以后,出图到「栅格」那一步进程卡在内核整理大页上(一次整理
+    几乎都失败,``compact_stall`` 420 万次),内存压力冲到 70% 多,systemd-oomd 把出图连同所在的终端
+    一起杀了;关掉以后同一张 Top Glove 图 35 s 出完、整理 0 次。站点主机(现场笔记本)也是一开好多天,
+    一样会碰上。只影响内存怎么分,不影响算出来的图。numpy 1.x 和 2.x 这个开关放的地方不一样,都试;
+    找不到就算了(回 False)。"""
+    for mod in ("numpy._core.multiarray", "numpy.core.multiarray"):
+        try:
+            m = __import__(mod, fromlist=["_set_madvise_hugepage"])
+        except ImportError:
+            continue
+        f = getattr(m, "_set_madvise_hugepage", None)
+        if f is not None:
+            f(False)
+            return True
+    return False
+
+
 def main(argv: Sequence[str] | None = None) -> int:
+    no_hugepage()
     p = parser()
     a = p.parse_args(argv)
     if getattr(a, "imu_topic", None) is not None and a.cmd in ("replay", "sweep"):
