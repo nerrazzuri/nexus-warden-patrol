@@ -5,6 +5,7 @@
 import { useEffect, useRef, useState } from "preact/hooks";
 import { api, ApiError } from "./api";
 import type { Me } from "./app";
+import { dataSaver, setDataSaver } from "./videomux";
 import { alarmSound, setAlarmSound, testChime } from "./alarmpop";
 import { canHandleAlerts } from "./alertinfo";
 import { modeLabel } from "./armingpage";
@@ -431,6 +432,14 @@ function UserMenu(props: { me: Me; pref: ThemePref; onPref: (p: ThemePref) => vo
               </div>
             </div>
           )}
+          {/* 第四档 #45:省流量(这台浏览器):画面小、帧少 */}
+          <div class="menu-row" title={t("menuDataSaverHint")}>
+            <span class="muted small">{t("menuDataSaver")}</span>
+            <div class="seg" role="group" aria-label={t("menuDataSaver")}>
+              <button type="button" data-saver="on" aria-pressed={dataSaver.value} onClick={() => setDataSaver(true)}>{t("soundOnShort")}</button>
+              <button type="button" data-saver="off" aria-pressed={!dataSaver.value} onClick={() => setDataSaver(false)}>{t("soundOffShort")}</button>
+            </div>
+          </div>
           {props.onHelp && (
             <button type="button" class="menu-item" role="menuitem" data-menu-help="1" onClick={() => { setOpen(false); props.onHelp!(); }}>{t("helpTitle")}</button>
           )}

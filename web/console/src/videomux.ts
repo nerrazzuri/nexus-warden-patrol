@@ -4,6 +4,7 @@
 // 用法:``subscribe(画面地址, 每秒几帧, {onFrame, onError})`` 回一个退订函数。同一路几个人看只订一次(fps 取大的)。
 // 每来一帧给一个 blob: 地址(上一帧的地址收回);这一路出错(站点回的原因)或者连接断了叫 onError —— 调用方
 // 按断了处理、过一会儿重新订阅。连接断了、还有人在看就自己重连(1 秒起,最多 5 秒)。
+import { signal } from "@preact/signals";
 import { useEffect, useRef, useState } from "preact/hooks";
 
 export const WS_PATH = "/api/video/ws";
@@ -40,6 +41,31 @@ export function setSocketFactory(f: Factory | null): void {
   factory = f;
 }
 
+// 第四档 #45 省流量(用户 11-21):开了以后每一路都要站点的小画面(``?lite=1``)。多大、每秒几帧由站点
+// 定(site.json 的 video.lite,缺省最宽 640、每秒 2 帧),这里不再另外压帧。记在这台浏览器上(手机用
+// 流量看、12-03 演讲会舞台电脑走 4G 看的时候开;办公室电脑不用开)。
+const SAVER_KEY = "nexwar.dataSaver";
+function loadSaver(): boolean {
+  try { return localStorage.getItem(SAVER_KEY) === "on"; } catch { return false; }
+}
+export const dataSaver = signal<boolean>(loadSaver());
+export function setDataSaver(on: boolean): void {
+  dataSaver.value = on;
+  try {
+    if (on) localStorage.setItem(SAVER_KEY, "on");
+    else localStorage.removeItem(SAVER_KEY);
+  } catch { /* 存不了就只管这一次 */ }
+  sendSubs();
+}
+/** 发给站点的地址:省流量时带 ``lite=1``。 */
+export function wireId(id: string, saver = dataSaver.value): string {
+  return saver ? `${id}${id.includes("?") ? "&" : "?"}lite=1` : id;
+}
+/** 站点回来的地址 → 自己订的那一路(去掉 ``lite=1``)。 */
+export function localId(wire: string): string {
+  return wire.replace(/([?&])lite=1(&|$)/, (_m, a: string, b: string) => (b ? a : "")).replace(/[?&]$/, "");
+}
+
 interface Sub { listeners: Set<FrameListener>; url: string | null }
 const subs = new Map<string, Sub>();
 let sock: SocketLike | null = null;
@@ -53,7 +79,11 @@ function wsUrl(): string {
 }
 
 function wanted(): { id: string; fps: number }[] {
-  return [...subs].map(([id, s]) => ({ id, fps: Math.max(...[...s.listeners].map((l) => l.fps)) }));
+  const saver = dataSaver.value;
+  return [...subs].map(([id, s]) => {
+    const fps = Math.max(...[...s.listeners].map((l) => l.fps));
+    return { id: wireId(id, saver), fps };
+  });
 }
 
 function sendSubs(): void {
@@ -100,13 +130,13 @@ function connect(): void {
   ws.onmessage = (e) => {
     if (e.data instanceof ArrayBuffer) {
       const f = decode(e.data);
-      if (f) onFrame(f.id, f.jpeg);
+      if (f) onFrame(localId(f.id), f.jpeg);
       return;
     }
     try {
       const m = JSON.parse(String(e.data)) as { kind?: string; id?: string | null; status?: number; message?: string };
       if (m.kind !== "error") return;
-      const s = m.id ? subs.get(m.id) : undefined;
+      const s = m.id ? subs.get(localId(m.id)) : undefined;
       for (const l of s ? [...s.listeners] : []) l.onError(m.status ?? 502, m.message ?? "");
     } catch {
       /* 看不懂的不管 */

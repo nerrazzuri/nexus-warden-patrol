@@ -401,6 +401,25 @@ def test_W41_帧率可配_没写是5_写错了报错():
             video_fps({"fps": bad})
 
 
+def test_第四档45_省流量画面可配_没写是缺省_写错了报错():
+    """12-03 演讲会:舞台电脑走 4G 看,缺省的 640 宽、每秒 2 帧上大屏太卡,site.json 能调。"""
+    import pytest as _pt
+
+    from nexwar_site import video as V
+    assert V.video_lite({}) == (V.LITE_WIDTH, V.LITE_FPS, V.LITE_Q) == (640, 2.0, 12)
+    assert V.video_lite({"lite": {"width": 960, "fps": 8, "q": 8}}) == (960, 8.0, 8)
+    assert V.video_lite({"lite": {"fps": 5}}) == (640, 5.0, 12)          # 哪项不写用缺省
+    for bad in ({"width": 100}, {"width": 960.5}, {"fps": 0}, {"fps": True}, {"q": 1},
+                {"q": "8"}, {"size": 3}, [960]):
+        with _pt.raises(ValueError, match="video.lite"):
+            V.video_lite({"lite": bad})
+    hub = V.VideoHub(send=lambda *a, **k: "", srt_host="h", lite=(960, 8.0, 8))
+    argv = V._Feed(hub, "A", "front")._argv(9000, "pw", lite_fd=7)
+    graph = argv[argv.index("-filter_complex") + 1]
+    assert "fps=8," in graph and "min(960,iw)" in graph, graph
+    assert argv[argv.index("pipe:7") - 1] == "8" and argv[argv.index("pipe:7") - 2] == "-q:v"
+
+
 def test_实测_取一张_回一张JPEG就结束_不占着连接(站点):
     """四台机器人 8 路画面时浏览器连接数不够(HTTP/1.1 一个站点 6 条):
     超出的画面位改成隔一会儿取一张。"""
@@ -439,3 +458,55 @@ def test_工单3_site_json_写错_serve_只打一行说明_退出码2(tmp_path, 
     assert "Traceback" not in err and "video.fps" in err
     # 日志设计 第 3 条起启动过程的日志也进标准错误:配置不对的说明只一行、不带堆栈
     assert len([ln for ln in err.splitlines() if "起不来" in ln]) == 1, err
+
+
+def _宽高(jpeg: bytes) -> tuple[int, int]:
+    """JPEG 的 SOF 段里读宽高。"""
+    i = 2
+    while i < len(jpeg) - 9:
+        assert jpeg[i] == 0xFF, "不是 JPEG 段"
+        mark, n = jpeg[i + 1], int.from_bytes(jpeg[i + 2:i + 4], "big")
+        if mark in (0xC0, 0xC1, 0xC2):
+            return int.from_bytes(jpeg[i + 7:i + 9], "big"), int.from_bytes(jpeg[i + 5:i + 7], "big")
+        i += 2 + n
+    raise AssertionError("没找到 SOF")
+
+
+def test_第四档45_省流量_同一路多出小画面_帧少字节少_原画照旧(站点):
+    """用户 11-21:手机用流量、远程看要省。``?lite=1`` 拿同一个 ffmpeg 顺手出的小画面(最宽 640、
+    每秒约 2 帧、画质压低);跟原画的观众共用一路收流,不多起一次推流。"""
+    from nexwar_site import video as V
+    s = 站点
+    tok = _登(s)
+    _新鲜(s, tok)
+    full = 观众(s, tok)
+    lite = 观众(s, tok, "/api/robots/A/video/front?lite=1")
+    try:
+        assert full.resp.status == 200 and lite.resp.status == 200
+        t0 = time.monotonic()
+        small = lite.jpegs(4)[:4]
+        dt = time.monotonic() - t0
+        big = full.jpegs(4)[:4]
+        assert len(small) == 4 and len(big) == 4
+        assert all(_宽高(j)[0] <= V.LITE_WIDTH for j in small)
+        assert _宽高(small[0]) == _宽高(big[0]) or _宽高(small[0])[0] < _宽高(big[0])[0]
+        assert sum(map(len, small)) < sum(map(len, big)) * 0.8, (sum(map(len, small)), sum(map(len, big)))
+        assert dt >= 3 / V.LITE_FPS * 0.7, f"4 帧小画面只用了 {dt:.2f} s:帧数没降"
+        assert s.api.video.feed("A", "front").starts == 1                 # 一路收流,两种观众共用
+    finally:
+        full.close()
+        lite.close()
+
+
+def test_第四档45_省流量_多路连接里地址带lite也认(站点):
+    """网页的多路画面(W51)订阅的就是 HTTP 地址:带 ``?lite=1`` 一样拿小画面。"""
+    s = 站点
+    tok = _登(s)
+    _新鲜(s, tok)
+    handler = type("H", (), {"site": s.api})()
+    from nexwar_site.api import _Handler
+    frames = _Handler._mux_open(handler, "/api/robots/A/video/front?lite=1")
+    try:
+        assert _宽高(next(frames))[0] <= 640
+    finally:
+        frames.close()

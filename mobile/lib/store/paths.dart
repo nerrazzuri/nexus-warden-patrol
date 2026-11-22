@@ -24,6 +24,11 @@ const String teleopTierFileName = 'teleop_tier.json';
 
 Future<File> teleopTierFilePath() async => File('${(await _dir()).path}/$teleopTierFileName');
 
+/// 省流量开没开（第四档 #45）。
+const String dataSaverFileName = 'data_saver.json';
+
+Future<File> dataSaverFilePath() async => File('${(await _dir()).path}/$dataSaverFileName');
+
 Future<LangStore> openLangStore() async => LangStore(File('${(await _dir()).path}/$langFileName'));
 
 /// 指纹登录记的哪个站点用哪把钥匙（用户 11-20；不存密码、令牌）。

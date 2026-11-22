@@ -24,6 +24,7 @@ import 'dart:developer' as developer;
 import 'dart:io';
 import 'dart:typed_data';
 
+import '../../net/data_saver.dart';
 import 'package:flutter/material.dart';
 
 import '../../l10n.dart';
@@ -453,7 +454,7 @@ class _LiveVideoState extends State<LiveVideo> {
       ..connectionTimeout = const Duration(seconds: 5);
     _io = io;
     _frames = mjpegFrames(
-      Uri.parse('${widget.baseUrl}${widget.streamPath ?? '/api/video/${widget.camera}'}'),
+      Uri.parse('${widget.baseUrl}${videoPath(widget.streamPath ?? '/api/video/${widget.camera}')}'),
       io: io,
       token: widget.token,
       // 这一茬被换掉之后，那条连接掀起来的错就是我们自己掐出来的。

@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import contextlib
 import logging
+import os
 import secrets
 import socket
 import subprocess
@@ -42,6 +43,15 @@ _CHUNK = 65536
 _ERR_TAIL = 400
 #: stderr 临时文件超过这么大就清空(libsrt 不管 -loglevel,丢包时会一直写)。
 _ERR_MAX = 256 * 1024
+#: 第四档 #45 省流量(用户 11-21):每一路同一个 ffmpeg 顺手多出一路小画面 —— 最宽这么多像素、
+#: 每秒这么多帧、画质 ``-q:v`` 这么多(2 最好、31 最差)。手机用流量看、远程看用它:一路约 20 KB/帧,
+#: 2 帧每秒 ≈ 0.3 Mbit/s(原画 5 帧每秒约 4 Mbit/s)。这三个是缺省;``site.json`` 的
+#: ``video.lite`` 可以改(:func:`video_lite`;12-03 演讲会走 4G 上大屏要清楚、顺一点)。
+LITE_WIDTH = 640
+LITE_FPS = 2.0
+LITE_Q = 12
+#: ``video.lite`` 各项认的范围。
+LITE_RANGES = {"width": (160, 1920), "fps": (0.5, 30.0), "q": (2, 31)}
 
 
 class VideoError(RuntimeError):
@@ -105,6 +115,9 @@ class _Feed:
         self._viewers = 0
         self._latest: bytes | None = None
         self._seq = 0
+        #: 省流量那一路(:data:`LITE_WIDTH`):最新一帧、第几帧。
+        self._lite: bytes | None = None
+        self._lite_seq = 0
         self._last_at: float | None = None
         self._detail = ""
         self._gen = 0
@@ -140,6 +153,7 @@ class _Feed:
             self.starts += 1
             self._port = port
             self._latest, self._last_at, self._detail = None, None, ""
+            self._lite = None
             gen, pw = self._gen, secrets.token_hex(16)
             self._req = VideoRequest(camera=self.camera, url=f"srt://{self.hub.srt_host}:{port}",
                                      passphrase=pw, ttl_ms=self.hub.ttl_ms)
@@ -207,25 +221,56 @@ class _Feed:
 
     # ------------------------------------------------------------ 收流与续命令
 
-    def _argv(self, port: int, pw: str) -> list[str]:
-        return [self.hub.ffmpeg, "-nostdin", "-loglevel", "error", "-fflags", "nobuffer",
-                "-probesize", "32768", "-analyzeduration", "500000",
-                "-i", f"srt://{self.hub.bind_host}:{port}?mode=listener&passphrase={pw}"
-                      f"&pbkeylen=16&latency={self.hub.latency_ms * 1000}",
-                "-an", "-f", "image2pipe", "-vcodec", "mjpeg", "-q:v", "6",
-                "-r", f"{self.hub.fps:g}", "-"]
+    def _argv(self, port: int, pw: str, lite_fd: int | None = None) -> list[str]:
+        """``lite_fd``:省流量那一路写到这个文件描述符(``pipe:<fd>``);None = 只出原画。"""
+        src = [self.hub.ffmpeg, "-nostdin", "-loglevel", "error", "-fflags", "nobuffer",
+               "-probesize", "32768", "-analyzeduration", "500000",
+               "-i", f"srt://{self.hub.bind_host}:{port}?mode=listener&passphrase={pw}"
+                     f"&pbkeylen=16&latency={self.hub.latency_ms * 1000}", "-an"]
+        full = ["-f", "image2pipe", "-vcodec", "mjpeg", "-q:v", "6", "-r", f"{self.hub.fps:g}"]
+        if lite_fd is None:
+            return [*src, *full, "-"]
+        return [*src, "-filter_complex",
+                f"[0:v]split=2[full][s];[s]fps={self.hub.lite_fps:g},"
+                f"scale='min({self.hub.lite_width},iw)':-2[lite]",
+                "-map", "[full]", *full, "pipe:1",
+                "-map", "[lite]", "-f", "image2pipe", "-vcodec", "mjpeg", "-q:v", str(self.hub.lite_q),
+                f"pipe:{lite_fd}"]
+
+    def _pump_lite(self, gen: int, pipe: IO[bytes]) -> None:
+        """省流量那一路:一直读空(不读 ffmpeg 会卡住,原画也跟着停),只留最新一帧。"""
+        try:
+            for frame in _frames(pipe):
+                with self._ready:
+                    if gen != self._gen:
+                        return
+                    self._lite = frame
+                    self._lite_seq += 1
+                    self._ready.notify_all()
+        except (OSError, ValueError):
+            pass
+        finally:
+            with contextlib.suppress(OSError):
+                pipe.close()
 
     def _pump(self, gen: int, port: int, pw: str) -> None:
         # 追加模式:清空之后子进程接着往新的结尾写,不会留一个越来越大的空洞文件。
         errs = tempfile.TemporaryFile(mode="a+b")
         proc = None
         try:
+            lite_r, lite_w = os.pipe()
             try:
-                proc = subprocess.Popen(self._argv(port, pw), stdin=subprocess.DEVNULL,
-                                        stdout=subprocess.PIPE, stderr=errs)  # 没有 shell
+                proc = subprocess.Popen(self._argv(port, pw, lite_w), stdin=subprocess.DEVNULL,
+                                        stdout=subprocess.PIPE, stderr=errs,
+                                        pass_fds=(lite_w,))  # 没有 shell
             except OSError as exc:
+                os.close(lite_r)
                 self.fail(gen, f"站点无法启动 ffmpeg({self.hub.ffmpeg}): {exc}")
                 return
+            finally:
+                os.close(lite_w)                 # 子进程那份留着;自己这份关掉,ffmpeg 退了读端才见底
+            threading.Thread(target=self._pump_lite, args=(gen, os.fdopen(lite_r, "rb")),
+                             daemon=True, name=f"video-lite-{self.robot_id}-{self.camera}").start()
             with self._ready:
                 if gen != self._gen:
                     return
@@ -334,21 +379,26 @@ class _Feed:
             return {"online": self._online_locked(), "last_frame_age_ms": age,
                     "viewers": self._viewers, "detail": self._detail}
 
-    def frames(self) -> Iterator[bytes]:
+    def _pick(self, lite: bool) -> tuple[bytes | None, int]:
+        return (self._lite, self._lite_seq) if lite else (self._latest, self._seq)
+
+    def frames(self, lite: bool = False) -> Iterator[bytes]:
         """一次吐一个 JPEG。调用方**必须** ``close()`` 它(观众随时会走,退场在 ``finally`` 里)。
-        第一帧等 ``first_frame_timeout_s``,等不到抛 504。"""
+        第一帧等 ``first_frame_timeout_s``,等不到抛 504。``lite``:省流量那一路(小、帧少);
+        在不在线、冻没冻照旧按原画那一路算。"""
         self.join()
         try:
             with self._ready:
                 # 手上那一帧只在「这一刻真在出画面」时才当第一帧发:冻住的旧帧不许冒充画面。
-                fresh = self._latest is not None and self._online_locked()
-                seen = self._seq - 1 if fresh else self._seq
+                have, at = self._pick(lite)
+                fresh = have is not None and self._online_locked()
+                seen = at - 1 if fresh else at
                 gen = self._gen
             deadline = self.hub.clock() + self.hub.first_frame_timeout_s
             first = True
             while True:
                 with self._ready:
-                    while self._seq <= seen or self._latest is None:
+                    while self._pick(lite)[1] <= seen or self._pick(lite)[0] is None:
                         if self._detail:
                             raise VideoError(502, self._detail)
                         if not self._running:
@@ -376,8 +426,7 @@ class _Feed:
                                 finally:
                                     self._ready.acquire()
                                 raise VideoError(504, why)
-                    seen = self._seq
-                    frame = self._latest
+                    frame, seen = self._pick(lite)
                 first = False
                 yield frame
         finally:
@@ -401,6 +450,26 @@ def video_fps(vcfg: Any) -> float:
     return float(v)
 
 
+def video_lite(vcfg: Any) -> tuple[int, float, int]:
+    """``site.json`` 的 ``video.lite``(``{"width": 960, "fps": 8, "q": 8}``,哪项不写用缺省)→
+    (最宽多少像素, 每秒几帧, 画质 ``-q:v``)。写错了报错,不悄悄用缺省(跟 ``video.fps`` 一样)。"""
+    got = {"width": LITE_WIDTH, "fps": LITE_FPS, "q": LITE_Q}
+    lite = vcfg.get("lite") if isinstance(vcfg, dict) else None
+    if lite is None:
+        return LITE_WIDTH, LITE_FPS, LITE_Q
+    if not isinstance(lite, dict) or set(lite) - set(LITE_RANGES):
+        raise ValueError("site.json 的 video.lite 要写成 {\"width\": 像素, \"fps\": 帧, \"q\": 画质},"
+                         f"现在是 {lite!r}")
+    for k, v in lite.items():
+        lo, hi = LITE_RANGES[k]
+        if isinstance(v, bool) or not isinstance(v, (int, float)) or not lo <= v <= hi \
+                or (k != "fps" and v != int(v)):
+            raise ValueError(f"site.json 的 video.lite.{k} 要是 {lo:g}–{hi:g} 之间的"
+                             f"{'数' if k == 'fps' else '整数'},现在是 {v!r}")
+        got[k] = v
+    return int(got["width"]), float(got["fps"]), int(got["q"])
+
+
 class VideoHub:
     def __init__(self, *, send: Callable[..., str], srt_host: str,
                  known: Callable[[str], bool] | None = None,
@@ -409,6 +478,7 @@ class VideoHub:
                  ffmpeg: str = "ffmpeg", ttl_ms: int = 10_000, idle_s: float = 10.0,
                  first_frame_timeout_s: float = 8.0, max_viewers: int = MAX_VIEWERS,
                  stale_s: float = STALE_S, fps: float = 5.0, latency_ms: int = 200,
+                 lite: tuple[int, float, int] = (LITE_WIDTH, LITE_FPS, LITE_Q),
                  clock: Callable[[], float] = time.monotonic) -> None:
         #: 发 ``video`` 命令:``(robot_id, req, timeout_s=None) -> 拒绝理由(空串 = 收下)``。
         self._send = send
@@ -425,6 +495,8 @@ class VideoHub:
         self.first_frame_timeout_s = first_frame_timeout_s
         self.max_viewers, self.stale_s, self.fps = max_viewers, stale_s, fps
         self.latency_ms = latency_ms
+        #: 省流量那一路:最宽、每秒几帧、画质(:func:`video_lite`)。
+        self.lite_width, self.lite_fps, self.lite_q = lite
         self.clock = clock
         self._feeds: dict[tuple[str, str], _Feed] = {}
         self._flock = threading.Lock()
@@ -442,8 +514,8 @@ class VideoHub:
                 f = self._feeds[(robot_id, camera)] = _Feed(self, robot_id, camera)
             return f
 
-    def stream(self, robot_id: str, camera: str) -> Iterator[bytes]:
-        return self.feed(robot_id, camera).frames()
+    def stream(self, robot_id: str, camera: str, lite: bool = False) -> Iterator[bytes]:
+        return self.feed(robot_id, camera).frames(lite)
 
     def cameras(self, robot_id: str) -> tuple[str, ...]:
         return self._cameras(robot_id) if self._cameras is not None else CAMERAS

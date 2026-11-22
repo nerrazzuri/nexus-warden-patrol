@@ -3,10 +3,13 @@
 import 'package:nexwar_patrol/l10n.dart';
 import 'package:nexwar_patrol/net/app_update.dart';
 import 'package:nexwar_patrol/net/background_watch.dart';
+import 'package:nexwar_patrol/net/data_saver.dart';
 import 'package:nexwar_patrol/net/site_client.dart';
 import 'package:nexwar_patrol/ui/app_settings.dart';
 import 'package:nexwar_patrol/ui/arrival_alert.dart';
 import 'package:nexwar_patrol/ui/nw/nw_shell.dart';
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -51,6 +54,37 @@ void main() {
     expect(t.widget<SwitchListTile>(sw).value, isTrue);
     await _show(t, const AppSettingsPage());
     expect(find.byKey(AppSettingsPage.arrivalKey), findsNothing);
+  });
+
+  testWidgets('第四档 #45 站点里有「省流量」开关，默认关；开了画面地址带 lite=1', (t) async {
+    addTearDown(() => dataSaver.value = false);
+    await _show(t, AppSettingsPage(api: FakeApi('guard')));
+    final sw = find.byKey(AppSettingsPage.dataSaverKey);
+    await t.ensureVisible(sw);
+    expect(t.widget<SwitchListTile>(sw).value, isFalse);
+    expect(videoPath('/api/video/front'), '/api/video/front');
+    await t.tap(sw);
+    await t.pumpAndSettle();
+    expect(dataSaver.value, isTrue);
+    expect(videoPath('/api/video/front'), '/api/video/front?lite=1');
+    expect(videoPath('/api/x?still=1'), '/api/x?still=1&lite=1');
+  });
+
+  test('第四档 #45 省流量记在手机上：存了再读回来照旧；文件坏了当关', () async {
+    addTearDown(() => dataSaver.value = false);
+    final dir = await Directory.systemTemp.createTemp('saver');
+    addTearDown(() => dir.delete(recursive: true));
+    final f = File('${dir.path}/data_saver.json');
+    await loadDataSaver(f);
+    expect(dataSaver.value, isFalse);
+    setDataSaver(true);
+    await Future<void>.delayed(const Duration(milliseconds: 50));
+    dataSaver.value = false;
+    await loadDataSaver(f);
+    expect(dataSaver.value, isTrue);
+    await f.writeAsString('not json');
+    await loadDataSaver(f);
+    expect(dataSaver.value, isFalse);
   });
 
   testWidgets('站点里：后台值守开关点的是机器人栏那个开关；没有工程师工具', (t) async {

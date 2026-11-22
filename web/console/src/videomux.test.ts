@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 // W51:所有画面走一条 WebSocket(原来每路 MJPEG 占一条 HTTP/1.1 连接,浏览器对一个站点最多 6 条)。
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { setSocketFactory, subscribe, subscribed, type SocketLike } from "./videomux";
+import { dataSaver, localId, setDataSaver, setSocketFactory, subscribe, subscribed, wireId, type SocketLike } from "./videomux";
 
 class 假连接 implements SocketLike {
   binaryType = "blob";
@@ -112,5 +112,42 @@ describe("一条 WebSocket 装所有画面", () => {
     a.off();
     await tick();
     expect(made[0].sent.at(-1)).toEqual({ sub: [{ id: B, fps: 10 }] });
+  });
+});
+
+// 第四档 #45(用户 11-21):省流量 —— 每一路要站点的小画面(?lite=1)、每秒最多 2 帧
+describe("第四档 #45 省流量", () => {
+  afterEach(() => setDataSaver(false));
+
+  it("地址加 lite=1、回来的去掉;已经带问号的接 &", () => {
+    expect(wireId(A, true)).toBe(`${A}?lite=1`);
+    expect(wireId(`${A}?x=1`, true)).toBe(`${A}?x=1&lite=1`);
+    expect(wireId(A, false)).toBe(A);
+    expect(localId(`${A}?lite=1`)).toBe(A);
+    expect(localId(`${A}?x=1&lite=1`)).toBe(`${A}?x=1`);
+    expect(localId(A)).toBe(A);
+  });
+
+  it("开着:订的是小画面(多大、几帧站点定,这里不另外压);回来的帧交给原来那一路;关掉马上换回原画重订", async () => {
+    setDataSaver(true);
+    expect(dataSaver.value).toBe(true);
+    const a = 看(A, 10);
+    made[0].open();
+    await tick();
+    expect(made[0].sent.at(-1)).toEqual({ sub: [{ id: `${A}?lite=1`, fps: 10 }] });
+    made[0].frame(`${A}?lite=1`, [0xff, 0xd8, 0xff, 0xd9]);
+    expect(a.frames.length).toBe(1);
+    made[0].onmessage?.({ data: JSON.stringify({ kind: "error", id: `${A}?lite=1`, status: 504, message: "冻了" }) });
+    expect(a.errors).toEqual([[504, "冻了"]]);
+    setDataSaver(false);
+    await tick();
+    expect(made[0].sent.at(-1)).toEqual({ sub: [{ id: A, fps: 10 }] });
+  });
+
+  it("记在这台浏览器上", () => {
+    setDataSaver(true);
+    expect(localStorage.getItem("nexwar.dataSaver")).toBe("on");
+    setDataSaver(false);
+    expect(localStorage.getItem("nexwar.dataSaver")).toBeNull();
   });
 });
