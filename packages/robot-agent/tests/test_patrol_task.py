@@ -253,6 +253,7 @@ async def test_W76_一直巡逻低电返航时_有效优先级抬到日程之上
     from nexwar_agent.tasks.engine_goto import HOMING_GUARD_PRIORITY
     from nexwar_contract.mission import LOOPS_FOREVER
     c, r, parts, book = 台子
+    parts.nav.patrol_max = 0.6     # 要在返航途中暂停:巡逻上限 1.0 时 1 m 一拍就到家了
     t = PatrolTask(task_id="t1", mission=_任务((1.0, 0.0), (1.0, 1.0),
                                                policy=Policy(loops=LOOPS_FOREVER)),
                    parts=parts, events=book, now_ms=c, priority=5)

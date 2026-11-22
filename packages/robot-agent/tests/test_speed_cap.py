@@ -153,7 +153,7 @@ def test_两种走法_普通任务最快巡逻速度_紧急不限_都还受全�
     nav = HalNavBackend.__new__(HalNavBackend)
     nav._hal = SimpleNamespace(hal_capabilities=lambda: caps)
     nav._vmax, nav.speed_cap = 1.0, math.inf
-    assert PATROL_MAX_MPS == 0.6
+    assert PATROL_MAX_MPS == 1.0, "用户 11-23:20 号的巡逻最高 1.0 是长期的"
     assert nav.urgent is False and nav._vlim() == PATROL_MAX_MPS, "默认普通巡逻"
     nav.urgent = True
     assert nav._vlim() == 1.0

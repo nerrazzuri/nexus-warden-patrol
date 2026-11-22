@@ -58,8 +58,10 @@ LOC_DEGRADED_MPS = 0.3
 #: 慢一些无所谓,不碰撞,不卡着就好」。紧急任务(报警出动、跟人、查易藏点,
 #: 见 :meth:`HalNavBackend.set_urgent`)
 #: 不受它限。两种都照样受全狗限速、定位变差、看得清多远、附近有人的降速管。
-PATROL_MAX_MPS = 0.6
-#: 现场改普通巡逻的最快速度(米/秒;真机 11-20 用户「巡逻最高1.0」):``NEXWAR_PATROL_MAX_MPS``,
+#: 用户 11-20 现场「巡逻最高1.0」、11-23「20 号测试的设置就是长期的」:
+#: 从 0.6 改成 1.0(还在 SDK 低速档里)。
+PATROL_MAX_MPS = 1.0
+#: 现场改普通巡逻的最快速度(米/秒):``NEXWAR_PATROL_MAX_MPS``,
 #: 夹在 [:data:`PATROL_MAX_MIN_MPS`, 机器人能跑的最高] 里;没设、写错照旧 :data:`PATROL_MAX_MPS`。
 PATROL_MAX_ENV = "NEXWAR_PATROL_MAX_MPS"
 PATROL_MAX_MIN_MPS = 0.2
