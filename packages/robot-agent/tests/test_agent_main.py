@@ -663,3 +663,15 @@ def test_真机1123_起运行时等得够_不早于首次连站点和等旁路()
     except AttributeError:
         pass                                    # 后面起发件箱那些假对象没有,不管
     assert got and got[0] > RT.HAL_CONNECT_WAIT_S + RT.FIRST_CONNECT_WAIT_S
+
+
+def test_真机1123_推流转小的参数_写错了起不来_说清楚():
+    from nexwar_agent.video_push import PushLite
+    M = agent_main
+    assert M.push_lite("") is None
+    assert M.push_lite("960x8@1000") == PushLite(960, 8, 1000)
+    for bad in ("960x8", "961x8@1000", "abc"):
+        with pytest.raises(SystemExit, match="video-push-lite"):
+            M.push_lite(bad)
+    acts = {o for a in M.build_parser()._actions for o in a.option_strings}
+    assert "--video-push-lite" in acts, "NEXWAR_AGENT_ARGS 里写它要认得"

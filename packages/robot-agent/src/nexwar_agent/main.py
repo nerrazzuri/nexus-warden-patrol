@@ -14,6 +14,7 @@ import argparse
 import asyncio
 import logging
 import os
+import re
 import shutil
 import signal
 import sys
@@ -264,6 +265,9 @@ def build_parser() -> argparse.ArgumentParser:
                    help="--video-source file 用:放 front.mp4、back.mp4 的目录")
     v.add_argument("--video-transcode", action="store_true",
                    help="相机不是 H.264 时转成 H.264 再推(默认原样转封装,不占 CPU)")
+    v.add_argument("--video-push-lite", default="", metavar="宽x帧率@码率",
+                   help="推到站点前在机器人这头转小(真机 11-23,4G 上行不够原画):比如 960x8@1000"
+                        "(宽 960、8 帧、最多 1000 kbit/s)。缺省原样推。录像不受影响")
     v.add_argument("--ffmpeg", default="ffmpeg", help="ffmpeg 可执行文件")
     v.add_argument("--evidence-pub", type=Path, default=Path("/etc/nexwar/evidence-pub.key"),
                    help="站点的证据公钥(W30b):有这个文件就把照片、截图、录像封着存(机器人自己解不开);"
@@ -623,7 +627,8 @@ def build(args: argparse.Namespace) -> Assembled:
         else:
             source = lavfi_source if kind == "lavfi" else rtsp_source(args.camera_host,
                                                                        extra_cameras(args))
-        video = VideoPusher(source=source, ffmpeg=args.ffmpeg, transcode=args.video_transcode)
+        video = VideoPusher(source=source, ffmpeg=args.ffmpeg, transcode=args.video_transcode,
+                            lite=push_lite(args.video_push_lite))
         pump = keeper = mapper = recorder = None
         cams = record_cameras(args)
         sealer = _sealer(args)
@@ -744,6 +749,20 @@ def extra_cameras(args: argparse.Namespace) -> dict[str, dict[str, Any]]:
         args._extra_cameras = got
     return got
 
+
+
+def push_lite(text: str):
+    """``--video-push-lite 960x8@1000`` → :class:`PushLite`;空串 = 原样推。写错了起不来(说清楚)。"""
+    from nexwar_agent.video_push import PushLite
+    if not text:
+        return None
+    m = re.fullmatch(r"(\d{3,4})x(\d{1,2})@(\d{3,4})", text.strip())
+    if m is None:
+        raise SystemExit(f"--video-push-lite 要写成 宽x帧率@码率,比如 960x8@1000:{text!r}")
+    try:
+        return PushLite(width=int(m.group(1)), fps=int(m.group(2)), kbps=int(m.group(3)))
+    except ValueError as exc:
+        raise SystemExit(f"--video-push-lite {text!r}:{exc}") from exc
 
 def record_cameras(args: argparse.Namespace) -> list[str]:
     """``--record`` → 录哪几路(W18)。``auto``:真狗前后两路(加上 ``--cameras`` 里写了 ``record`` 的,

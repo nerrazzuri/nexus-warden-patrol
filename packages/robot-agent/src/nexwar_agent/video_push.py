@@ -6,6 +6,8 @@
 - 推流进程**没到期就自己退了**(连不上站点、相机不通):报一条 ``video_failed``,只报一次。
 - **默认不转码**(``-c:v copy``):不在 Orin 上白烧 CPU,上行也只推相机原样的那份。相机若不是
   H.264(真机没量过),用 ``transcode=True`` 转成 H.264。
+- **4G 上行要省(真机 11-23)**:原画经 4G 稳定 3.4–3.6 Mbit/s,卡的上行只有约 3.2 Mbit/s;站点的
+  「省流量」只管站点到浏览器那一段。``lite``(:class:`PushLite`)在机器人这头缩小、降帧、限码率再推。
 
 线程:只在代理的事件循环里调(``request`` 由命令处理、``step`` 每拍)。ffmpeg 是子进程,不阻塞。
 """
@@ -157,13 +159,30 @@ def _tail(f: IO[bytes]) -> str:
 #: 叫停推流以后这么久(秒)还没退就 SIGKILL。
 STOP_KILL_S = 2.0
 
+@dataclass(frozen=True)
+class PushLite:
+    """推到站点之前在机器人这头转小:宽(高按比例)、帧率、码率上限(kbit/s)。录像不受影响。"""
+    width: int = 960
+    fps: int = 8
+    kbps: int = 1000
+
+    def __post_init__(self) -> None:
+        if not (160 <= self.width <= 1920 and self.width % 2 == 0):
+            raise ValueError("推流宽度要在 160–1920、偶数")
+        if not 1 <= self.fps <= 30:
+            raise ValueError("推流帧率要在 1–30")
+        if not 100 <= self.kbps <= 8000:
+            raise ValueError("推流码率要在 100–8000 kbit/s")
+
+
 class VideoPusher:
     def __init__(self, *, source: Source, ffmpeg: str = "ffmpeg", transcode: bool = False,
                  clock: Callable[[], float] = time.monotonic,
                  emit: Callable[[str, dict[str, Any]], None] | None = None,
-                 latency_ms: int = 200) -> None:
+                 latency_ms: int = 200, lite: PushLite | None = None) -> None:
         self._source = source
         self._ffmpeg = ffmpeg
+        self._lite = lite
         self._transcode = transcode or bool(getattr(source, "raw", False))
         self._clock = clock
         #: ``video_failed`` 往哪儿报。代理运行时把它接到事件簿上。
@@ -177,8 +196,15 @@ class VideoPusher:
         self.starts = 0
 
     def argv(self, req: VideoRequest) -> list[str]:
-        codec = (["-c:v", "libx264", "-preset", "ultrafast", "-tune", "zerolatency",
-                  "-g", "30"] if self._transcode else ["-c:v", "copy"])
+        lt = self._lite
+        if lt is not None:
+            k = f"{lt.kbps}k"
+            codec = ["-vf", f"scale={lt.width}:-2,fps={lt.fps}", "-c:v", "libx264",
+                     "-preset", "ultrafast", "-tune", "zerolatency", "-g", str(lt.fps * 2),
+                     "-b:v", k, "-maxrate", k, "-bufsize", k]
+        else:
+            codec = (["-c:v", "libx264", "-preset", "ultrafast", "-tune", "zerolatency",
+                      "-g", "30"] if self._transcode else ["-c:v", "copy"])
         return [self._ffmpeg, "-nostdin", "-loglevel", "error", *self._source(req.camera),
                 "-an", *codec, "-f", "mpegts", srt_push_url(req, latency_ms=self._latency_ms)]
 
