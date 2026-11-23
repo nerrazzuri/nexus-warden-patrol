@@ -2595,6 +2595,9 @@ input[type="checkbox"], input[type="radio"] { width: 18px; height: 18px; }
 .rc-top > .rc-video { flex: none; min-height: 0; }
 .rc-map { display: flex; flex-direction: column; gap: var(--sp-2); padding: 12px 20px 12px 0; min-height: 0; }
 .rc-map .mapcanvas { flex: 1; min-height: 240px; }
+/* 真机 11-23(1170 宽):地图框通用的 min-height 420 塞进小地图的定高,图例、缩放那一条溢出去压住下面的喊话 ——
+   小地图里地图自己最少 160 高,图例那一条在它下面占自己的位置 */
+.rc-map .mapwrap { min-height: 160px; }
 .rc-map h3 { margin: 0; }
 .rc-robot-mark circle { fill: var(--c-success); stroke: var(--c-bg); stroke-width: 2; }
 .rc-robot-mark line { stroke: var(--c-success); stroke-width: 3; stroke-linecap: round; }
@@ -2610,7 +2613,8 @@ input[type="checkbox"], input[type="radio"] { width: 18px; height: 18px; }
   .rc-top { flex: none; }
   .rc-top > .rc-video { min-height: 0; }
   .rc-video-well { flex: none; aspect-ratio: 16 / 9; }
-  .rc-map .mapcanvas { flex: none; height: 280px; }
+  .rc-map .mapcanvas { flex: none; height: auto; }
+  .rc-map .mapwrap { flex: none; height: 280px; min-height: 0; }
 }
 
 /* 用户 11-15:地图右上角写明画的是哪一版 */
