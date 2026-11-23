@@ -249,6 +249,7 @@ function is_ours(p) {
   if (p ~ /^\/var\/lib\/nexwar_ops($|\/)/) return 1
   if (p == "/etc/systemd/journald.conf.d/nexwar.conf") return 1
   if (p == "/etc/systemd/logind.conf.d/nexwar.conf") return 1
+  if (p == "/etc/systemd/system/chrony.service.d/nexwar.conf") return 1
   if (p ~ /^\/etc\/systemd\/system\/nexwar_[^\/]*\.(service|path)$/) return 1
   if (p ~ /^\/etc\/systemd\/system\/[^\/]*\.target\.wants\/nexwar_[^\/]*\.(service|path)$/) return 1
   return 0
@@ -261,6 +262,7 @@ function is_parent(p) {
   if (p == "/etc/systemd/system" || p == "/etc/systemd/timesyncd.conf.d") return 1
   if (p == "/etc/systemd/journald.conf.d") return 1
   if (p == "/etc/systemd/logind.conf.d") return 1
+  if (p == "/etc/systemd/system/chrony.service.d") return 1
   if (p == "/etc/chrony/conf.d" || p == "/etc/chrony") return 1
   if (p == "/usr/local/bin" || p == "/usr/local/lib") return 1
   if (p == "/usr/local/sbin" || p == "/etc/sudoers.d") return 1

@@ -395,7 +395,9 @@ def test_范围只盖我们自己的东西():
            # W55:特权执行器的目录、日志留盘设置 —— 同样精确、名字带 nexwar
            "/usr/local/lib/nexwar", "/etc/systemd/journald.conf.d/nexwar.conf",
            # 11-20:logind 不清共享内存 —— 同样精确、名字带 nexwar
-           "/etc/systemd/logind.conf.d/nexwar.conf"}
+           "/etc/systemd/logind.conf.d/nexwar.conf",
+           # 11-23:chrony 起来以后加回站点对时源的单元片段 —— 同样精确、名字带 nexwar
+           "/etc/systemd/system/chrony.service.d/nexwar.conf"}
     for 一组 in 形状:
         for 一条 in 一组.split("|"):
             if 一条 in 精确的:
@@ -415,6 +417,9 @@ def test_碰都不许碰别人的目录():
     文本 = 读(卸载脚本)
     for 禁 in ("/opt/release", "/opt/ros", "/opt/ROS"):
         assert 禁 not in 文本, f"uninstall.sh 里出现了 {禁}"
+    # 11-23 唯一的例外:chrony 的单元片段(我们自己的文件 nexwar.conf,厂家的 chrony 单元和配置都不改;
+    # 删了 chrony 就回到厂家的样子)。只认这一条精确路径。
+    文本 = 文本.replace("/etc/systemd/system/chrony.service.d/nexwar.conf", "")
     单元们 = set(re.findall(r"[A-Za-z0-9_.*-]+\.service", 文本))
     assert 单元们, "读不出任何 systemd 单元名"
     for 单元 in 单元们:

@@ -90,6 +90,17 @@ RUNNER_FILES = {
 }
 #: 机器人上要的系统设置(跟装机脚本 ②b 一字不差,``tests/test_ops_runner_system.py`` 核):
 #: 服务账号也是 ssh 登录的账号,最后一个会话结束时 logind 不许清它的共享内存(真机 11-20 Nav2 失联根因)。
+#: chrony 每次(重)启动以后把站点这个对时源加回去(真机 11-23:厂家的 chrony.conf 没有 confdir,
+#: conf.d 里的片段不读;源是开机准备用 chronyc 运行时加的,谁重启一下 chrony 就没了,一直到下次开机)。
+#: 厂家的 chrony.conf 照旧一个字不改(用户 11-06)。
+CHRONY_DROPIN = "systemd/system/chrony.service.d/nexwar.conf"
+CHRONY_DROPIN_TEXT = ("# D1 Max:chrony 每次起来以后把站点主机这个对时源加回去(厂家的 chrony.conf 不改)\n"
+                      "[Service]\n"
+                      "ExecStartPost=-/usr/bin/python3 /usr/local/lib/nexwar/ops-runner "
+                      "--config /etc/nexwar_ops.json --chrony-site\n")
+#: 跟站点差这么多秒以上,选上站点这个源以后主动拨一次钟(``makestep``):厂家配的 ``makestep 1 3``
+#: 只有头 3 次能直接拨,开机头几次已经被竞品板 / 秒脉冲用掉了,之后只能慢慢调。
+CHRONY_STEP_S = 1.0
 LOGIND_CONF = "systemd/logind.conf.d/nexwar.conf"
 LOGIND_TEXT = ("# D1 Max:服务账号也是 ssh 登录的账号,最后一个会话结束时不许清它的共享内存(Nav2 / FastDDS 要用)\n"
                "[Login]\n"
@@ -679,22 +690,48 @@ class Ops:
         rc, _ = self.run(["systemctl", "is-active", "--quiet", "chrony"], 20)
         if rc != 0:
             return {"chrony": "inactive"}
+        host = self._ntp_host()
+        if not host:
+            return {"chrony": "no_site"}
+        rc, out = self.run(["chronyc", "add", "server", host, "iburst", "prefer", "trust"], 30)
+        if rc == 0 or "already" in out.lower():
+            # 真机 11-23:路由没加上的时候 iburst 已经白发了,轮询拉长到 128–256 s,选上站点要等好几分钟;
+            # 这里再催一次(路通了 6 s 就选上)
+            self.run(["chronyc", "burst", "4/4", host], 20)
+            return {"chrony": "added" if rc == 0 else "present", "host": host}
+        return {"chrony": "failed", "host": host, "error": out.strip()[-200:]}
+
+    def chrony_step(self) -> dict[str, Any]:
+        """选上站点这个源以后,钟跟站点差 :data:`CHRONY_STEP_S` 秒以上就主动拨一次(``chronyc makestep``)。
+        开机先跟竞品板 / 秒脉冲对上的钟要是错得多,只靠慢慢调,站点证书会一直「还没生效」。"""
+        host = self._ntp_host()
+        if not host:
+            return {"step": "no_site"}
+        rc, out = self.run(["chronyc", "-c", "tracking"], 20)
+        f = out.strip().split(",")
+        if rc != 0 or len(f) < 5:
+            return {"step": "unknown"}
+        if f[1] != host:
+            return {"step": "not_selected", "ref": f[1][:60]}
+        try:
+            off = float(f[4])
+        except ValueError:
+            return {"step": "unknown"}
+        if abs(off) < CHRONY_STEP_S:
+            return {"step": "ok", "offset_s": off}
+        rc, out = self.run(["chronyc", "makestep"], 20)
+        return {"step": "stepped" if rc == 0 else "failed", "offset_s": off}
+
+    def _ntp_host(self) -> str:
         host = self._env_value("NEXWAR_SITE_NTP")
         if not host:
             mqtt = self._env_value("NEXWAR_SITE_MQTT")
             host = mqtt.split("://", 1)[-1].split("/", 1)[0].rsplit(":", 1)[0] if mqtt else ""
             if host.startswith("127.") or host == "localhost":
                 host = ""
-        if not host:
-            return {"chrony": "no_site"}
-        if not HOST_RE.fullmatch(host) or len(host) > 253:
+        if host and (not HOST_RE.fullmatch(host) or len(host) > 253):
             raise OpError(f"站点主机写错了:{host[:60]!r}")
-        rc, out = self.run(["chronyc", "add", "server", host, "iburst", "prefer", "trust"], 30)
-        if rc == 0:
-            return {"chrony": "added", "host": host}
-        if "already" in out.lower():
-            return {"chrony": "present", "host": host}
-        return {"chrony": "failed", "host": host, "error": out.strip()[-200:]}
+        return host
 
     def _unit_of(self, pid: int) -> str:
         try:
@@ -1040,6 +1077,13 @@ class Ops:
             conf.parent.mkdir(parents=True, exist_ok=True, mode=0o755)
             write_atomic(conf, LOGIND_TEXT.encode(), mode=0o644)
             fixed.append("logind")
+        if (self.etc / "chrony" / "chrony.conf").is_file():     # 对时归 chrony 管的机器
+            drop = self.etc / CHRONY_DROPIN
+            if not drop.is_file() or drop.read_text("utf-8", "replace") != CHRONY_DROPIN_TEXT:
+                drop.parent.mkdir(parents=True, exist_ok=True, mode=0o755)
+                write_atomic(drop, CHRONY_DROPIN_TEXT.encode(), mode=0o644)
+                self.run(["systemctl", "daemon-reload"], 60)
+                fixed.append("chrony")
         user = str(self.cfg["requester"])
         _, out = self.run(["loginctl", "show-user", user, "-p", "Linger", "--value"], 30)
         if out.strip() != "yes":
@@ -1458,7 +1502,7 @@ def boot(ops: Ops, *, sleep: Callable[[float], Any] = time.sleep) -> None:
     加固定路由(第 25 条)、给厂家的 chrony 加站点这个源(第 4 条)、厂家用不上的服务关自启(第 32 条,
     缺省关;``NEXWAR_VENDOR_AUTOSTART=1`` 开回去)。网卡、网关、厂家的进程都起得晚:没齐每分钟再来,
     最多 :data:`BOOT_ROUNDS` 回;出错只记一笔,不拦开机。"""
-    routes_ok = chrony_ok = False
+    routes_ok = chrony_ok = step_ok = False
     try:                                        # 系统设置:一开机就补(用户 11-23;不等网络)
         fixed = ops.system_settings()
         if fixed:
@@ -1500,6 +1544,9 @@ def boot(ops: Ops, *, sleep: Callable[[float], Any] = time.sleep) -> None:
             steps.append(("routes", lambda: ops.routes_apply({})))
         if not chrony_ok:
             steps.append(("chrony", lambda: ops.chrony_site({})))
+        else:
+            if not step_ok:
+                steps.append(("step", ops.chrony_step))
         if not on or i == 0:
             steps.append(("vendor", lambda: ops.vendor_autostart({"on": on})))
         for name, fn in steps:
@@ -1515,7 +1562,11 @@ def boot(ops: Ops, *, sleep: Callable[[float], Any] = time.sleep) -> None:
                 routes_ok = not out.get("failed")
             elif name == "chrony":
                 chrony_ok = out.get("chrony") != "failed"
-        if routes_ok and chrony_ok and on:
+                if out.get("chrony") in ("inactive", "no_site"):
+                    step_ok = True
+            elif name == "step":
+                step_ok = out.get("step") != "not_selected"     # 还跟着别的源:下一回再看
+        if routes_ok and chrony_ok and step_ok and on:
             return
         if i < BOOT_ROUNDS - 1:
             sleep(BOOT_EVERY_S)
@@ -1527,6 +1578,8 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--install-bind", metavar="包目录",
                     help="装机脚本用:把包里配网服务的代码装进 root 独占目录(装机是人在现场、包是人拿来的)")
     ap.add_argument("--lib-dir", default="/usr/local/lib/nexwar")
+    ap.add_argument("--chrony-site", action="store_true",
+                    help="chrony 起来以后(它的单元片段 ExecStartPost)把站点这个对时源加回去")
     ap.add_argument("--boot", action="store_true",
                     help="开机准备(nexwar_boot.service):固定路由、向站点对时、厂家用不上的服务关自启")
     a = ap.parse_args(argv)
@@ -1544,6 +1597,20 @@ def main(argv: list[str] | None = None) -> int:
     if a.boot:
         if cfg.get("profile") == "robot":
             boot(Ops(cfg))
+        return 0
+    if a.chrony_site:
+        if cfg.get("profile") == "robot":
+            ops = Ops(cfg)
+            for _ in range(5):                  # chronyd 刚起来,一时可能还不收 chronyc
+                try:
+                    out = ops.chrony_site({})
+                except OpError as exc:
+                    print(f"向站点对时:{exc}", flush=True)
+                    break
+                if out.get("chrony") != "failed":
+                    print(f"向站点对时:{json.dumps(out, ensure_ascii=False)}", flush=True)
+                    break
+                time.sleep(1)
         return 0
     pw = pwd.getpwnam(cfg["requester"])
     process(cfg, Ops(cfg), uid=pw.pw_uid, gid=pw.pw_gid)

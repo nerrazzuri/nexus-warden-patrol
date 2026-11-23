@@ -53,6 +53,7 @@ set -euo pipefail
 # @写盘 /etc/systemd/system/multi-user.target.wants/nexwar_boot.service   上面开机准备的自启链
 # @写盘 /etc/systemd/journald.conf.d/nexwar.conf                          日志留盘 14 天、最多 500 MB(W55:远程取日志、重启不丢)
 # @写盘 /etc/systemd/logind.conf.d/nexwar.conf                            不清服务账号的共享内存(真机 11-20 Nav2 失联根因)
+# @写盘 /etc/systemd/system/chrony.service.d/nexwar.conf                  chrony 起来以后加回站点对时源(11-23;特权执行器开机、换版本以后写)
 #
 # 这份脚本不写、但 uninstall.sh 要负责收掉的(老机器上可能还在;这里只 rm/disable 它们,从来不写):
 #
