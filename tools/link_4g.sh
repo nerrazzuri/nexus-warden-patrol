@@ -79,6 +79,14 @@ site_json_py() {  # site_json_py <python 片段,变量 d 是 site.json>
   printf 'sudo -u nexwar_site python3 - %q <<'"'"'PY'"'"'\nimport json, sys\np = sys.argv[1] + "/site.json"\nd = json.load(open(p))\n%s\nPY\n' "$SITE_HOME" "$1"
 }
 
+# 站点对时也发给 Tailscale 地址(装站点时只放了私网;旧站点、升级过的站点补一行,有了不动)
+CHRONY_SITE_CONF="${CHRONY_SITE_CONF:-/etc/chrony/conf.d/nexwar_site.conf}"
+chrony_allow_ts() {
+  local_do "站点对时也给 Tailscale 地址(100.64.0.0/10)发" \
+"if grep -qx 'allow 100.64.0.0/10' $CHRONY_SITE_CONF 2>/dev/null; then echo '已经有了'; else
+  echo 'allow 100.64.0.0/10' | sudo tee -a $CHRONY_SITE_CONF >/dev/null && sudo systemctl restart chrony && echo '加上了,chrony 重启了'; fi"
+}
+
 case "$CMD" in
 status)
   TS="$(ts_ip)"
@@ -104,6 +112,7 @@ import os; os.replace(p + '.tmp', p); print('hostnames:', h)")"
   local_do "重签站点证书、重启站点" \
     "sudo -u nexwar_site $SITE_CLI --home $SITE_HOME vpn reissue-cert
 sudo systemctl restart nexwar_mosquitto nexwar_site"
+  chrony_allow_ts
   say "做完:每部手机重新添加站点;以后 up / down 都不用再重签"
   ;;
 
@@ -112,6 +121,7 @@ up)
   [[ "$SSID" =~ ^[A-Za-z0-9_.\ -]{1,32}$ ]] || die "Wi-Fi 名只认字母数字和 _ . - 空格:$SSID"
   TS="$(ts_ip)"; SECS="$(hours_s)"
   PW="dry-run-password"
+  chrony_allow_ts
   if [ "$DRY" = 0 ]; then
     local_do "站点证书里要有 $TS(没有先跑 prepare)" \
       "$(site_json_py "sys.exit(0 if '$TS' in d['hostnames'] else 'site.json 的 hostnames 里没有 $TS:先跑 tools/link_4g.sh prepare')")"
@@ -140,7 +150,7 @@ sudo systemctl stop nexwar-4g-revert.timer 2>/dev/null || true
 sudo systemd-run --on-active=${SECS}s --unit=nexwar-4g-revert ip route replace default via $ORIN_GW_B dev $ORIN_IF proto static metric 102
 sudo ip route replace default via $ORIN_GW_A dev $ORIN_IF proto static metric 102
 ip route get 1.1.1.1 | head -1
-timeout 20 sudo tailscale ping -c 3 $TS || echo '!! tailscale ping 不通:看 tailscale status'"
+timeout 20 sudo tailscale ping -c 3 $TS || echo '!! tailscale ping 不通:笔记本这时只连着机器人热点、上不了网的话是正常的,换连能上网的 Wi-Fi 以后跑 status 再看'"
   on "$ORIN" "③ Orin:代理、对时改连 $TS,重启开机准备和代理" \
 "set -e
 [ -f /etc/nexwar/env.bak-B ] || sudo cp -a /etc/nexwar/env /etc/nexwar/env.bak-B
