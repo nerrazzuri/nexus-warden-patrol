@@ -22,10 +22,12 @@ def test_up_四步_先排自动恢复再连_只临时连():
     out = _run("up", "--ssid", "ZTE_C8DE4B", "--hours", "0.25")
     assert out.returncode == 0, out.stderr
     s = out.stdout
-    assert s.index("systemd-run --on-active=900s --unit=nexwar-sta-revert") < s.index("robot_sta.sh connect")
+    assert s.index("systemd-run --on-active=900s --unit=nexwar-sta-revert") \
+        < s.index("robot_sta.sh connect")
     assert "robot_sta.sh enable" not in s and "robot_sta.sh save" not in s
     assert s.index("--unit=nexwar-4g-revert") < s.index("default via 192.168.168.168")
-    assert "NEXWAR_SITE_MQTT=mqtts://100.69.130.19:8883" in s and "NEXWAR_SITE_NTP=100.69.130.19" in s
+    assert "NEXWAR_SITE_MQTT=mqtts://100.69.130.19:8883" in s
+    assert "NEXWAR_SITE_NTP=100.69.130.19" in s
     assert "env.bak-B" in s and "srt_host" in s
     assert "funnel" not in SH.read_text(encoding="utf-8").replace("不开 funnel", "")
 
