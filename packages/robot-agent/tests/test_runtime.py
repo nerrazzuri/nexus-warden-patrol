@@ -721,6 +721,64 @@ async def test_W70_一直连不上_退出前给守卫留条子(台子, monkeypat
     assert noted == [1]
 
 
+async def test_真机1123_起来时旁路还没在听_在进程里等_起来了照常起(台子, monkeypatch):
+    """真机 11-23:换到 33 那一刻代理比旁路先起,连 127.0.0.1:8090 被拒就退出,升级途中开机守卫数了一次
+    (守卫只给 2 次)。旁路没在听就在进程里等,起来了照常起。"""
+    import nexwar_agent.runtime as RT
+    from nexwar_patrol.backends.base import DeviceBackendError
+    monkeypatch.setattr(RT, "HAL_CONNECT_RETRY_S", 0.01)
+    broker, c, r, ears, rt, _ = 台子
+    real = rt.hal.connect
+    n = [0]
+
+    async def 前两次被拒():
+        n[0] += 1
+        if n[0] <= 2:
+            try:
+                raise ConnectionRefusedError(111, "Connection refused")
+            except OSError as exc:
+                raise DeviceBackendError("无法连接运控旁路进程 127.0.0.1:8090") from exc
+        await real()
+    monkeypatch.setattr(rt.hal, "connect", 前两次被拒)
+    await rt.start()
+    assert n[0] >= 3 and rt.transport.connected, \
+        "被拒两次以后第三次连上(后面两个桥还会各连一次,幂等)"
+    await rt.close()
+
+
+async def test_真机1123_旁路一直不在听_等够了照旧退出_让守卫数(台子, monkeypatch):
+    import nexwar_agent.runtime as RT
+    from nexwar_patrol.backends.base import DeviceBackendError
+    monkeypatch.setattr(RT, "HAL_CONNECT_RETRY_S", 0.01)
+    monkeypatch.setattr(RT, "HAL_CONNECT_WAIT_S", 0.05)
+    broker, c, r, ears, rt, _ = 台子
+
+    async def 一直被拒():
+        try:
+            raise ConnectionRefusedError(111, "Connection refused")
+        except OSError as exc:
+            raise DeviceBackendError("无法连接运控旁路进程") from exc
+    monkeypatch.setattr(rt.hal, "connect", 一直被拒)
+    with pytest.raises(DeviceBackendError):
+        await rt.start()
+
+
+async def test_真机1123_旁路的真错_比如协议版本不对_不等马上退出(台子, monkeypatch):
+    import nexwar_agent.runtime as RT
+    from nexwar_patrol.backends.base import DeviceBackendError
+    monkeypatch.setattr(RT, "HAL_CONNECT_RETRY_S", 0.01)
+    broker, c, r, ears, rt, _ = 台子
+    n = [0]
+
+    async def 协议不对():
+        n[0] += 1
+        raise DeviceBackendError("协议版本不匹配: 旁路进程 3")
+    monkeypatch.setattr(rt.hal, "connect", 协议不对)
+    with pytest.raises(DeviceBackendError):
+        await rt.start()
+    assert n[0] == 1, "不是「没在听」的错不重试"
+
+
 async def test_现场1104_跟运控断了_过几秒自己重连_拿回控制权(台子):
     """以前只在起来时连一次运控:旁路进程重启以后代理一直断着,只能人重启代理。"""
     from nexwar_agent.runtime import HAL_RETRY_S
