@@ -161,3 +161,49 @@ def test_装机清单里执行器装的模块_跟随发行换的一样():
     assert {f"nexwar_contract/{x}.py" for x in m.group(1).split()} \
         == {v for v in R.RUNNER_FILES.values() if v.startswith("nexwar_contract/")}
     assert Path(R.RUNNER_FILES["deploy/nexwar_ops_runner"]).name == "ops-runner"
+
+
+def test_真机1123_chrony重启以后站点对时源自己加回来(tmp_path):
+    """真机 11-23:厂家 chrony.conf 不读 conf.d,站点源是开机运行时加的,谁重启一下 chrony 就没了。
+    装一个 chrony 的单元片段,每次起来以后加回去;厂家的 chrony.conf 不改。没装 chrony 的机器不动。"""
+    cfg = _cfg(tmp_path)
+    etc = tmp_path / "etc"
+    run, calls = _linger({"on": True})
+    ops = R.Ops(cfg, run=run, etc=etc)
+    assert ops.system_settings() == ["logind"], "没有 chrony 的机器不装片段"
+    (etc / "chrony").mkdir(parents=True)
+    (etc / "chrony" / "chrony.conf").write_text("server 192.168.168.19 iburst\n")
+    assert ops.system_settings() == ["chrony"]
+    drop = (etc / R.CHRONY_DROPIN).read_text(encoding="utf-8")
+    assert "ExecStartPost=-" in drop and "--chrony-site" in drop
+    assert ["systemctl", "daemon-reload"] in calls
+    assert ops.system_settings() == []
+    assert (etc / "chrony" / "chrony.conf").read_text() == "server 192.168.168.19 iburst\n"
+
+
+def test_真机1123_加上站点源以后催一次_选上了差得多就拨一次钟(tmp_path):
+    cfg = _cfg(tmp_path)
+    env = tmp_path / "etc" / "nexwar" / "env"
+    env.parent.mkdir(parents=True, exist_ok=True)
+    env.write_text("NEXWAR_SITE_NTP=192.168.234.232\n")
+    track = {"ref": "192.168.168.19", "off": "-20000000.5"}
+    calls = []
+
+    def run(argv, timeout):
+        calls.append(argv)
+        if argv[:3] == ["chronyc", "-c", "tracking"]:
+            return 0, (f"C0A8A813,{track['ref']},3,1795402791.0,{track['off']},"
+                       "0,0,0,0,0,0,0,0,Normal\n")
+        return 0, ""
+    ops = R.Ops(cfg, run=run, etc=tmp_path / "etc")
+    assert ops.chrony_site({})["chrony"] == "added"
+    assert ["chronyc", "burst", "4/4", "192.168.234.232"] in calls, \
+        "路由晚加时 iburst 白发了,再催一次"
+    assert ops.chrony_step() == {"step": "not_selected", "ref": "192.168.168.19"}
+    assert ["chronyc", "makestep"] not in calls, "还跟着竞品板,不拨"
+    track["ref"] = "192.168.234.232"
+    assert ops.chrony_step()["step"] == "stepped"
+    assert ["chronyc", "makestep"] in calls
+    calls.clear()
+    track["off"] = "0.002"
+    assert ops.chrony_step()["step"] == "ok" and ["chronyc", "makestep"] not in calls

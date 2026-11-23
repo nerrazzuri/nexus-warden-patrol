@@ -648,8 +648,8 @@ def test_开机准备_路由_对时_厂家自启_一起做_没齐每分钟再来
     _env(tmp_path, "NEXWAR_ROUTES=192.168.234.0/24 via 192.168.168.168\n"
                    "NEXWAR_SITE_NTP=192.168.234.10\nNEXWAR_VENDOR_AUTOSTART=1\n")
     R.boot(R.Ops(cfg, run=run, etc=tmp_path / "etc", proc=proc), sleep=slept.append)
-    assert tries["n"] == 3 and slept == [3, 3], \
-        "路由先快着试(真机 11-23);路由、对时齐了;厂家自启开着:不用再看"
+    assert tries["n"] == 3 and slept == [3, 3, 60], \
+        "路由先快着试(真机 11-23);对时源加上以后下一回看要不要拨钟;厂家自启开着:不用再看"
     # 厂家自启关着(缺省):厂家的进程起得晚,十分钟里每分钟看一回;路由加上了就不再加
     _env(tmp_path, "NEXWAR_ROUTES=192.168.234.0/24 via 192.168.168.168\n"
                    "NEXWAR_SITE_NTP=192.168.234.10\n")
