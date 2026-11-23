@@ -217,8 +217,11 @@ def test_SIGTERM好好收尾_退0(tmp_path):
 def test_broker连不上_退1而不是挂着(tmp_path):
     """连不上就退出非零,让 systemd 的 Restart=always/RestartSec=5 接手重试;挂着不退的话
     systemd 以为它活着,一辈子不重试。"""
+    import os
+    # 首次连站点在进程里要等 120 s(W70);这里只看「等够了退 1」,等 3 s
+    env = dict(os.environ, NEXWAR_FIRST_CONNECT_WAIT_S="3")
     got = subprocess.run(_命令行(tmp_path, "mqtt://127.0.0.1:1"), capture_output=True,
-                         text=True, timeout=90)
+                         text=True, timeout=90, env=env)
     assert got.returncode == 1, (got.returncode, got.stdout[-2000:], got.stderr[-2000:])
     assert "起不来" in got.stderr + got.stdout
 
@@ -632,3 +635,31 @@ def test_改名_旁路还是老版本_令牌在老路径_代理读老的(tmp_pat
     (tmp_path / ".nexwar" / "sidecar.token").write_text("t")
     assert m.sidecar_token_path(default) == default, "新的有了:读新的"
     assert m.sidecar_token_path("/run/x/tok") == "/run/x/tok", "人给的路径不动"
+
+
+def test_真机1123_起运行时等得够_不早于首次连站点和等旁路():
+    """真机 11-23:外面只等 30 s,里面首次连站点要等 120 s(W70)、等旁路 60 s ——
+    30 s 就被取消、代理退出,给守卫的「连不上站点」条子也没留下。外面等的要比里面的加起来还长。"""
+    import threading
+
+    from nexwar_agent import main as M
+    from nexwar_agent import runtime as RT
+    got: list[float] = []
+
+    class 假桥:
+        def call(self, factory, timeout_s=30.0):
+            got.append(timeout_s)
+
+        def spawn(self, factory):
+            pass
+    a = M.Assembled.__new__(M.Assembled)
+    a.bridge = 假桥()
+    a.runtime = type("假运行时", (), {"start": None})()
+    a.skipped_args = ()
+    a.sim_loc = None
+    a._stop = threading.Event()
+    try:
+        a.start()
+    except AttributeError:
+        pass                                    # 后面起发件箱那些假对象没有,不管
+    assert got and got[0] > RT.HAL_CONNECT_WAIT_S + RT.FIRST_CONNECT_WAIT_S

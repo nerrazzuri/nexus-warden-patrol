@@ -13,9 +13,11 @@ from __future__ import annotations
 
 import asyncio
 import dataclasses
+import errno
 import json
 import logging
 import math
+import os
 import re
 import time
 import uuid
@@ -95,9 +97,30 @@ PRIOR_ACK_WAIT_S = 120.0
 PRIOR_ACK_POLL_S = 0.2
 #: 换图等定位器确认时,定位器一直连不上这么久就不再等(W70:没在运行,白等 120 s)。
 LOC_DOWN_WAIT_S = 15.0
-#: 起来时首次连站点:连不上每这么久再试,最多等这么久(秒)才退出(W70)。
+#: 起来时首次连站点:连不上每这么久再试,最多等这么久(秒)才退出(W70)。环境变量只给测试用。
 FIRST_CONNECT_RETRY_S = 5.0
-FIRST_CONNECT_WAIT_S = 120.0
+FIRST_CONNECT_WAIT_S = float(os.environ.get("NEXWAR_FIRST_CONNECT_WAIT_S", "120"))
+#: 起来时运控旁路进程还没在听(连接被拒):每这么久再试,最多等这么久(秒)才退出(真机 11-23:
+#: 换到 33 那一刻代理比旁路先起,连 127.0.0.1:8090 被拒就退出,升级途中开机守卫数了一次 ——
+#: 守卫只给 2 次,碰上两回好好的新版就被退回去)。等够了还连不上照旧退出、让守卫数:旁路是随版本发的,
+#: 新版把它弄坏了也是这个样子。
+HAL_CONNECT_RETRY_S = 2.0
+HAL_CONNECT_WAIT_S = 60.0
+
+
+def _hal_not_listening(exc: BaseException) -> bool:
+    """连运控旁路时对面根本没在听(连接被拒、地址还没起来),不是协议、令牌这种真错。"""
+    seen: set[int] = set()
+    e: BaseException | None = exc
+    while e is not None and id(e) not in seen:
+        seen.add(id(e))
+        if isinstance(e, (ConnectionRefusedError, ConnectionResetError)):
+            return True
+        if isinstance(e, OSError) and e.errno in (errno.ECONNREFUSED, errno.EHOSTUNREACH,
+                                                   errno.ENETUNREACH, errno.EADDRNOTAVAIL):
+            return True
+        e = e.__cause__ or e.__context__
+    return False
 
 
 def _parse_home(v: Any) -> tuple[float, float, float] | None:
@@ -2619,6 +2642,22 @@ class AgentRuntime:
 
     # ------------------------------------------------------------ 生命周期
 
+    async def _connect_hal(self) -> None:
+        """起来时连运控旁路。旁路还没在听就在进程里等(:data:`HAL_CONNECT_WAIT_S`),别的错照旧马上抛。"""
+        deadline = time.monotonic() + HAL_CONNECT_WAIT_S
+        while True:
+            try:
+                await self.hal.connect()
+                return
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:
+                if not _hal_not_listening(exc) or time.monotonic() >= deadline:
+                    raise
+                log.warning("运控旁路还没在听(%s):%g 秒后再试(最多等 %g 秒)", exc,
+                            HAL_CONNECT_RETRY_S, HAL_CONNECT_WAIT_S)
+                await asyncio.sleep(HAL_CONNECT_RETRY_S)
+
     async def _first_connect(self) -> None:
         """首次连站点。连不上不马上退出(W70,2026-11-03 C40221:装完新版那一刻隧道断着,退出 → systemd
         5 s 后再起 → 开机守卫 8 s 内数满 2 次,把好好的新版退回上一版):在进程里每
@@ -2697,7 +2736,7 @@ class AgentRuntime:
         # HAL 的生死归代理(总设计 §2.2「谁连 SDK」):先连上、拿到厂商控制权,再对站点亮相。
         self._closed = False
         self._hal_touched = True
-        await self.hal.connect()
+        await self._connect_hal()
         await self.hal.acquire_control()
         if self.parts is not None:
             # 头尾方向(W11a)先读一次:不然导航桥走第一拍之前进来的 goto 会被当成「不知道」拒掉

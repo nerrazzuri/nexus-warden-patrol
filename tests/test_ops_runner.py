@@ -631,6 +631,8 @@ def test_第4条_向站点对时_只在chrony运行时加一个运行时的源_�
 
 
 def test_开机准备_路由_对时_厂家自启_一起做_没齐每分钟再来_最多十回(tmp_path):
+    """真机 11-23:路由第一回没加上、隔 60 s 才加上,代理这 60 s 连不上站点 ——
+    路由开头两分钟每 3 秒试一次。"""
     cfg = _cfg(tmp_path)
     _env(tmp_path, "NEXWAR_ROUTES=192.168.234.0/24 via 192.168.168.168\n"
                    "NEXWAR_SITE_NTP=192.168.234.10\n")
@@ -646,19 +648,22 @@ def test_开机准备_路由_对时_厂家自启_一起做_没齐每分钟再来
     _env(tmp_path, "NEXWAR_ROUTES=192.168.234.0/24 via 192.168.168.168\n"
                    "NEXWAR_SITE_NTP=192.168.234.10\nNEXWAR_VENDOR_AUTOSTART=1\n")
     R.boot(R.Ops(cfg, run=run, etc=tmp_path / "etc", proc=proc), sleep=slept.append)
-    assert tries["n"] == 3 and slept == [60, 60], "路由、对时齐了;厂家自启开着:不用再看"
+    assert tries["n"] == 3 and slept == [3, 3], \
+        "路由先快着试(真机 11-23);路由、对时齐了;厂家自启开着:不用再看"
     # 厂家自启关着(缺省):厂家的进程起得晚,十分钟里每分钟看一回;路由加上了就不再加
     _env(tmp_path, "NEXWAR_ROUTES=192.168.234.0/24 via 192.168.168.168\n"
                    "NEXWAR_SITE_NTP=192.168.234.10\n")
     tries["n"] = 0
     slept.clear()
     R.boot(R.Ops(cfg, run=run, etc=tmp_path / "etc", proc=proc), sleep=slept.append)
-    assert tries["n"] == 3 and len(slept) == 9
+    assert tries["n"] == 3 and slept == [3, 3] + [60] * 9
     # 一直不通:十回后放弃,不卡开机
     tries["n"] = -100
     slept.clear()
     R.boot(R.Ops(cfg, run=run, etc=tmp_path / "etc", proc=proc), sleep=slept.append)
-    assert len(slept) == 9 and tries["n"] == -90
+    fast = R.BOOT_FAST_FOR_S // R.BOOT_FAST_S
+    assert slept == [3] * fast + [60] * 9, "快的两分钟 + 每分钟一回"
+    assert tries["n"] == -100 + (fast + 1) + 10
 
 
 def test_POC1106_暂停厂家进程也停竞品的ros1桥_关自启不碰竞品的单元(tmp_path):

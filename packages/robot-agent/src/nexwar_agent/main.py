@@ -467,7 +467,11 @@ class Assembled:
 
     def start(self) -> None:
         """在 bridge 的循环里起运行时,并开始每拍 step;发件箱一起起。"""
-        self.bridge.call(self.runtime.start, timeout_s=30.0)
+        # 真机 11-23:这里原来只等 30 s,可运行时里首次连站点要等 120 s(W70)、等旁路 60 s ——
+        # 30 s 一到就把它取消、代理退出,W70 给守卫的「连不上站点」条子也没留下
+        from nexwar_agent import runtime as _rt
+        self.bridge.call(self.runtime.start,
+                         timeout_s=_rt.HAL_CONNECT_WAIT_S + _rt.FIRST_CONNECT_WAIT_S + 60.0)
         if self.skipped_args:
             skipped = list(self.skipped_args)
 
