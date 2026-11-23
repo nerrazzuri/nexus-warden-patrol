@@ -262,6 +262,13 @@ describe("model", () => {
     const busy = { ...down, status: { ...down.status!, task: { kind: "patrol", state: "running" } } };
     expect(robotState(busy, undefined, false)).toBe("patrolling");
   });
+  it("真机 11-23:控制权在别人手里(厂家遥控器、竞品)写「控制权在别人手里」,不写「没站起来」", () => {
+    const other = { ...robot, status: { ...robot.status!, ready: { estop_clear: true, motion: false, control: false } } };
+    expect(robotState(other, undefined, false)).toBe("controlled");
+    expect(abnormal("controlled")).toBe("p2");
+    expect(DICTS.zh.st_controlled).toBe("控制权在别人手里");
+    expect(DICTS.en.st_controlled).toBe("Controlled elsewhere");
+  });
   it("巡的是哪张图", () => {
     expect(robotMap(robot)).toEqual({ map_id: "estate-1", version: "7" });
     expect(robotMap({ ...robot, capabilities: null })).toBeNull();
