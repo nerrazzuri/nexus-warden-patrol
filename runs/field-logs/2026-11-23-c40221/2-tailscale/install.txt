@@ -1,0 +1,67 @@
+Installing Tailscale for ubuntu jammy, using method apt
++ mkdir -p --mode=0755 /usr/share/keyrings
++ case "$APT_KEY_TYPE" in
++ curl -fsSL https://pkgs.tailscale.com/stable/ubuntu/jammy.noarmor.gpg
++ tee /usr/share/keyrings/tailscale-archive-keyring.gpg
++ chmod 0644 /usr/share/keyrings/tailscale-archive-keyring.gpg
++ curl -fsSL https://pkgs.tailscale.com/stable/ubuntu/jammy.tailscale-keyring.list
++ tee /etc/apt/sources.list.d/tailscale.list
+# Tailscale packages for ubuntu jammy
+deb [signed-by=/usr/share/keyrings/tailscale-archive-keyring.gpg] https://pkgs.tailscale.com/stable/ubuntu jammy main
++ chmod 0644 /etc/apt/sources.list.d/tailscale.list
++ apt-get update
+Hit:1 https://deb.nodesource.com/node_24.x nodistro InRelease
+Get:2 https://dl.google.com/linux/chrome-stable/deb stable InRelease [2,548 B]
+Hit:3 https://packages.microsoft.com/repos/code stable InRelease
+Get:4 https://dl.google.com/linux/chrome-stable/deb stable/main amd64 Packages [1,404 B]
+Get:5 https://pkgs.tailscale.com/stable/ubuntu jammy InRelease
+Get:6 https://pkgs.tailscale.com/stable/ubuntu jammy/main i386 Packages [16.7 kB]
+Hit:7 http://snapshots.ros.org/humble/2026-09-14/ubuntu jammy InRelease
+Hit:8 http://packages.ros.org/ros2/ubuntu jammy InRelease
+Get:9 https://pkgs.tailscale.com/stable/ubuntu jammy/main all Packages [351 B]
+Get:10 https://pkgs.tailscale.com/stable/ubuntu jammy/main amd64 Packages [17.1 kB]
+Get:11 http://security.ubuntu.com/ubuntu jammy-security InRelease [129 kB]
+Get:12 http://security.ubuntu.com/ubuntu jammy-security/main amd64 DEP-11 Metadata [74.3 kB]
+Get:13 http://security.ubuntu.com/ubuntu jammy-security/universe amd64 DEP-11 Metadata [127 kB]
+Hit:14 http://my.archive.ubuntu.com/ubuntu jammy InRelease
+Get:15 http://my.archive.ubuntu.com/ubuntu jammy-updates InRelease [128 kB]
+Get:16 http://my.archive.ubuntu.com/ubuntu jammy-backports InRelease [127 kB]
+Get:17 http://my.archive.ubuntu.com/ubuntu jammy-updates/main amd64 Packages [4,012 kB]
+Get:18 http://my.archive.ubuntu.com/ubuntu jammy-updates/main i386 Packages [1,122 kB]
+Get:19 http://my.archive.ubuntu.com/ubuntu jammy-updates/main amd64 DEP-11 Metadata [117 kB]
+Get:20 http://my.archive.ubuntu.com/ubuntu jammy-updates/universe i386 Packages [825 kB]
+Get:21 http://my.archive.ubuntu.com/ubuntu jammy-updates/universe amd64 Packages [1,291 kB]
+Get:22 http://my.archive.ubuntu.com/ubuntu jammy-updates/universe amd64 DEP-11 Metadata [360 kB]
+Get:23 http://my.archive.ubuntu.com/ubuntu jammy-updates/multiverse amd64 DEP-11 Metadata [940 B]
+Get:24 http://my.archive.ubuntu.com/ubuntu jammy-backports/main amd64 DEP-11 Metadata [5,760 B]
+Get:25 http://my.archive.ubuntu.com/ubuntu jammy-backports/universe amd64 DEP-11 Metadata [12.4 kB]
+Fetched 8,376 kB in 16s (540 kB/s)
+Reading package lists...
++ '[' -n '' ']'
++ apt-get install -y tailscale tailscale-archive-keyring
+Reading package lists...
+Building dependency tree...
+Reading state information...
+The following NEW packages will be installed:
+  tailscale tailscale-archive-keyring
+0 upgraded, 2 newly installed, 0 to remove and 301 not upgraded.
+Need to get 40.8 MB of archives.
+After this operation, 78.3 MB of additional disk space will be used.
+Get:1 https://pkgs.tailscale.com/stable/ubuntu jammy/main amd64 tailscale amd64 1.104.7 [40.8 MB]
+Get:2 https://pkgs.tailscale.com/stable/ubuntu jammy/main all tailscale-archive-keyring all 1.35.181 [3,082 B]
+Fetched 40.8 MB in 6s (6,935 kB/s)
+Selecting previously unselected package tailscale.
+(Reading database ... (Reading database ... 5%(Reading database ... 10%(Reading database ... 15%(Reading database ... 20%(Reading database ... 25%(Reading database ... 30%(Reading database ... 35%(Reading database ... 40%(Reading database ... 45%(Reading database ... 50%(Reading database ... 55%(Reading database ... 60%(Reading database ... 65%(Reading database ... 70%(Reading database ... 75%(Reading database ... 80%(Reading database ... 85%(Reading database ... 90%(Reading database ... 95%(Reading database ... 100%(Reading database ... 372680 files and directories currently installed.)
+Preparing to unpack .../tailscale_1.104.7_amd64.deb ...
+Unpacking tailscale (1.104.7) ...
+Selecting previously unselected package tailscale-archive-keyring.
+Preparing to unpack .../tailscale-archive-keyring_1.35.181_all.deb ...
+Unpacking tailscale-archive-keyring (1.35.181) ...
+Setting up tailscale-archive-keyring (1.35.181) ...
+Setting up tailscale (1.104.7) ...
+Created symlink /etc/systemd/system/multi-user.target.wants/tailscaled.service → /lib/systemd/system/tailscaled.service.
++ '[' false = true ']'
++ set +x
+Installation complete! Log in to start using Tailscale by running:
+
+tailscale up

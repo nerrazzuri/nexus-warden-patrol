@@ -1,0 +1,17 @@
+== 09:48:14 RK3588 排自动恢复 15 分钟
+Will run service as unit: nexwar-sta-revert2.service
+未找到匹配的 ZTE_C8DE4B 可以连接
+wpa_state=INACTIVE
+	ssid XG2WIFI_C40221
+	channel 149 (5745 MHz), width: 80 MHz, center1: 5775 MHz
+ping: Warning: source address might be selected on device other than: wlan0
+
+  BSSID: 5c:7d:ae:c8:de:4b
+  频段: 5745 MHz
+  信号强度: -58 dBm
+freq=5745
+ssid=ZTE_C8DE4B
+wpa_state=COMPLETED
+ip_address=192.168.0.75
+rtt min/avg/max/mdev = 24.215/28.456/34.114/4.163 ms
+Tue 2026-04-07 10:03:14 CST 14min left  n/a                 

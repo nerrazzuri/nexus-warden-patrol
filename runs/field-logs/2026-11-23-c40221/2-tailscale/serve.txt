@@ -1,0 +1,10 @@
+Available within your tailnet:
+
+https://liang-mach-wx9.tail9f6cae.ts.net/
+|-- proxy https+insecure://localhost:8443
+
+Serve started and running in the background.
+To disable the proxy, run: tailscale serve --https=443 off
+https://liang-mach-wx9.tail9f6cae.ts.net (tailnet only)
+|-- / proxy https+insecure://localhost:8443
+

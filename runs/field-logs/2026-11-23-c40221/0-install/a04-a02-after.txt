@@ -1,0 +1,27 @@
+2026-11-23 10:23:29
+/opt/nexwar/releases/2026-11-22-a9b33a7c
+ls: cannot access '/opt/nexwar/pending.json': No such file or directory
+ls: cannot access '/opt/nexwar/rolled_back.json': No such file or directory
+active active active active active active 
+NRestarts=1 ActiveEnterTimestamp=Mon 2026-11-23 10:24:31 CST 
+NRestarts=0 ActiveEnterTimestamp=Thu 1970-01-01 08:00:36 CST 
+NRestarts=0 ActiveEnterTimestamp=Thu 1970-01-01 08:00:37 CST 
+Linger=yes
+Nov 23 10:23:50 orin-nx nexwar_agent_start[1293]: 2026-11-23T10:23:50.762+08:00 INFO nexwar_adapter_d1max.anbot 竞品音量调到 70%
+Nov 23 10:24:20 orin-nx nexwar_agent_start[1293]: nexwar_agent 起不来: TimeoutError('等了 30s 尚未结果')2026-11-23T10:24:20.274+08:00 ERROR nexwar_agent.main nexwar_agent 起不来: TimeoutError('等了 30s 尚未结果')
+Nov 23 10:24:32 orin-nx nexwar_agent_start[3721]: 2026-11-23T10:24:32.144+08:00 INFO nexwar_agent.ops 暂停了厂家进程 13 个
+Nov 23 10:24:32 orin-nx nexwar_agent_start[3721]: 2026-11-23T10:24:32.391+08:00 INFO nexwar_adapter_d1max.anbot 竞品音量调到 70%
+Nov 23 10:24:54 orin-nx nexwar_agent_start[3721]: nexwar_agent 起来了:transport=mqtts://192.168.234.232:8883 hal=d1max robot=C40221
+Reference ID    : 00000000 ()
+System time     : 0.000000000 seconds slow of NTP time
+Leap status     : Not synchronised
+#x PPS                           0   2   100    31   +358ms[ +358ms] +/-   13us
+^x 192.168.168.19                3   1   377     1   +628ms[ +628ms] +/-  231ms
+^? 192.168.234.232               0   8     0     -     +0ns[   +0ns] +/-    0ns
+Jan 01 08:00:41 orin-nx chronyd[1045]: Selected source 192.168.168.19
+Nov 23 10:23:49 orin-nx chronyd[1045]: System clock was stepped by 1795400588.079613 seconds
+Nov 23 10:24:36 orin-nx chronyd[1045]: Selected source 192.168.168.19
+10:28:30
+^? 192.168.234.232               4   7     1     9    -75ms[  -75ms] +/-   42ms
+Reference ID    : 00000000 ()
+Leap status     : Not synchronised

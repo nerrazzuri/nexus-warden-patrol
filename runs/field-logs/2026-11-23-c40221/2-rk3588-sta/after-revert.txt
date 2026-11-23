@@ -1,0 +1,31 @@
+09:46:34
+inactive
+wlan0            DOWN           
+0
+	ssid XG2WIFI_C40221
+	channel 149 (5745 MHz), width: 80 MHz, center1: 5775 MHz
+c8621eae671871698a860409cae57f76d8f85f40b9fddd7598abb2dd5023163b  /etc/hostapd/hostapd.conf
+49b7c121ea2b019495a76111a693ea45c310c5d210a4b7aba31502ca9378df60  /etc/hostapd/ifupdown.sh
+e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855  /etc/NetworkManager/conf.d/10-globally-managed-devices.conf
+77b1584f71b7ae30085df5c8df25f09d81e3910ce99d1b72b1f87047671efc3d  /etc/NetworkManager/conf.d/default-wifi-powersave-on.conf
+4d7607f0cce2250ec461036c4ad7dbc04ff571f391398d8b1fc005934fee0009  /etc/NetworkManager/conf.d/unmanaged.conf
+d8c5ec76ea9aa2cdcd536232543fe7d2e31bec0ffd7aac8103cc4b91d232a198  /etc/NetworkManager/dispatcher.d/01-ifupdown
+066bddfdac5de6f073724f64b0dc209d2557f0ca3b0d013e01f4267d8dddb9a1  /etc/NetworkManager/NetworkManager.conf
+4ef392d450290cbbbfcedc70a8e0d9b9bde68d6c3f12be50eb9101520c538e8f  /etc/NetworkManager/system-connections/Wired connection 1.nmconnection
+03a5c8aa2c5561d9054724595baee980eb9591fe7f1c3f9d0c98889f3c8feb58  /etc/systemd/network/20-p2p0.network
+e96391cbfeee6ca979361cf819763487143b001c5bc701b19cdf23ef8eb5ad9f  /etc/systemd/network/25-wlan0.network
+6d3ee10dfa4a0ab59acc1377158c29420b5d36a914c9f7c3bc82979e867fbbe7  /etc/systemd/system/bt-attach.service
+63ca6a6c45fa2617b398791c7ddc2dc796e696bcc25dc239bf059e7d33950efb  /etc/systemd/system/hostapd.service
+e9727b0f53ded458b44a7e5ea5a8f166ae5c23ee4903d480f27be0e0e46db8ad  /etc/systemd/system/netfilter-persistent.service.d/iptables.conf
+1570bd95c32ea38b351e9a65328e74fa222c28f557b3fa59cc6aa855bfe49e6f  /etc/systemd/system/sdcard-rescan.service
+f01f84ed964d4e692a2b2f638f170bae90c1dedb898e196af0a6bdaad1a00d94  /etc/systemd/system/sdcard@.service
+99c450753436362c728274bd95db0c745662144da2cd2b94015429e2c86228e7  /etc/systemd/system/serial-getty@.service.d/override.conf
+b6681beed9a91c713ef73b959a803939afc5ae93a8079e528ad539dd19ef6863  /etc/systemd/system/wifi-wdg.service
+930be6a9cc625c102c65898dd503bd1610ca35be8d7012418b9bbc3501981f72  /etc/systemd/system/wpa_supplicant.service
+648e3f4a0af4eb4285e65d003ab36d71a966fae3c01f2ea810811a3ed276e0a5  /etc/wpa_supplicant/action_wpa.sh
+b9071e73d244f9fa899b8bfb3ff61e5afe45a7bd34eac3a520fc58305e3d073b  /etc/wpa_supplicant/functions.sh
+77dfc5b63e0276c8dafc26dae9b6d0ccb7bba645956dd98d43f648fcb1cbc65d  /etc/wpa_supplicant/ifupdown.sh
+8e06c59fa05c15cb880c32d104fa0988b41785afb65ee6b7bc2dc35f1bc6c8a1  /userdata/config/ble_config.bash
+f540e1e50256fa6a16e1c301a2e5fc38b5c62e92b5073948d8c0ac1748887f6c  /userdata/config/device.json
+5dff343f2e402d589e16e50cf9988a7b978d1536a751b52edee3d18887350258  /userdata/config/sta.conf
+371fb033b7b4b737f321931f8e7b275c5cbcc0a5c458dd929f9a5e8db1235b58  /userdata/config/wifi_config.bash

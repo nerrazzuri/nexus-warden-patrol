@@ -1,0 +1,446 @@
+### systemctl cat wifi-wdg
+[Unit]
+Description=Keep WIFI AP alive
+After=hostapd.service
+
+[Service]
+Type=simple
+ExecStart=/opt/runtime/bin/robot_wifi_wdg.sh
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
+### systemctl cat hostapd
+[Unit]
+Description=Hostapd IEEE 802.11 AP, IEEE 802.1X/WPA/WPA2/EAP/RADIUS Authenticator
+After=network.target
+StartLimitIntervalSec=60s
+StartLimitBurst=3
+
+[Service]
+ExecStart=/usr/sbin/hostapd /tmp/hostapd.conf
+Restart=on-failure
+RestartSec=5s
+
+[Install]
+WantedBy=multi-user.target
+### /opt/runtime/bin/robot_wifi_init.sh
+ENV_FILE=/userdata/config/wifi_config.bash
+UDEV_RULE=/etc/udev/rules.d/90-robot-wifi.rules
+ENV_FILE_DIR=$(dirname $ENV_FILE)
+AP_DEVICE="p2p0"
+STA_DEVICE="wlan0"
+if [ ! -f $UDEV_RULE ]; then
+cat > $UDEV_RULE << EOF
+ACTION=="add", SUBSYSTEM=="net", KERNEL=="p2p0", RUN+="/opt/runtime/bin/robot_wifi_init.sh"
+EOF
+chmod 644 $UDEV_RULE
+fi
+function init_config() {
+    echo "AP_SSID=XXXX_AX" > $ENV_FILE
+    echo "AP_PASSWD=<已隐去>" >> $ENV_FILE
+    echo "AP_IP=192.168.234.1/24" >> $ENV_FILE
+    echo "COUNTRY_CODE=CN" >> $ENV_FILE
+    echo "AP_ENABLE=1" >> $ENV_FILE
+    echo "AP_5G_ENABLE=1" >> $ENV_FILE
+    echo "AP_CHAN_50G=0" >> $ENV_FILE
+    echo "AP_CHANLIST_50G=\"36-48 149-165\"" >> $ENV_FILE
+    echo "AP_CHAN_24G=0" >> $ENV_FILE
+    echo "AP_CHANLIST_24G=\"1-13\"" >> $ENV_FILE
+    echo "AP_AUTO_PREFIX=1" >> $ENV_FILE
+    echo "STA_ENABLE=0" >> $ENV_FILE
+}
+if [ ! -d $ENV_FILE_NAME  ] || [ ! -f $ENV_FILE ] ; then
+    mkdir -p $ENV_FILE_DIR
+    init_config
+fi
+. $ENV_FILE
+if [ ! -n "$STA_ENABLE" ]; then
+    init_config
+    . $ENV_FILE
+fi
+AP_NETWORK_CONFIG=/etc/systemd/network/20-$AP_DEVICE.network
+CONFIG_IP=$(cat $AP_NETWORK_CONFIG 2>/dev/null | awk -F'=' '/^Address=/ {print $2}')
+if [ ! -f $AP_NETWORK_CONFIG ] || [ "$CONFIG_IP" != "$AP_IP" ]; then
+echo "warning!! $CONFIG_IP" != "$AP_IP"
+cat > $AP_NETWORK_CONFIG << EOF
+[Match]
+Name=$AP_DEVICE
+[Network]
+Address=$AP_IP
+DHCPServer=yes
+[DHCPServer]
+PoolOffset=200
+PoolSize=50
+EmitRouter=yes
+DNS=$(echo $AP_IP | cut -d'/' -f1)
+EOF
+chmod 664 /etc/systemd/network/20-$AP_DEVICE.network
+networkctl reload
+networkctl reconfigure $AP_DEVICE
+fi
+STA_NETWORK_CONFIG=/etc/systemd/network/25-$STA_DEVICE.network
+if [ ! -f $STA_NETWORK_CONFIG ]; then
+cat > $STA_NETWORK_CONFIG << EOF
+[Match]
+Name=$STA_DEVICE
+[Network]
+DHCP=yes
+EOF
+chmod 664 /etc/systemd/network/25-$STA_DEVICE.network
+fi
+UNMANAGE_CONF=/etc/NetworkManager/conf.d/unmanaged.conf   
+if ! grep -q "interface-name:wlan0" $UNMANAGE_CONF || ! grep -q "interface-name:p2p0" $UNMANAGE_CONF; then
+cat > /etc/NetworkManager/conf.d/unmanaged.conf << EOF
+[keyfile]
+unmanaged-devices=interface-name:ap0;interface-name:wlan0;interface-name:p2p0
+EOF
+    nmcli device set wlan0 managed no
+    nmcli device set p2p0 managed no
+fi
+WDG_SERVICE=/etc/systemd/system/wifi-wdg.service
+HOSTAPD_SERVICE=/etc/systemd/system/hostapd.service
+if [ ! -f $WDG_SERVICE ]; then
+cat > $WDG_SERVICE << EOF
+[Unit]
+Description=Keep WIFI AP alive
+After=hostapd.service
+[Service]
+Type=simple
+ExecStart=/opt/runtime/bin/robot_wifi_wdg.sh
+Restart=always
+RestartSec=10
+[Install]
+WantedBy=multi-user.target
+EOF
+cat > $HOSTAPD_SERVICE << EOF
+[Unit]
+Description=Hostapd IEEE 802.11 AP, IEEE 802.1X/WPA/WPA2/EAP/RADIUS Authenticator
+After=network.target
+StartLimitIntervalSec=60s
+StartLimitBurst=3
+[Service]
+ExecStart=/usr/sbin/hostapd /tmp/hostapd.conf
+Restart=on-failure
+RestartSec=5s
+[Install]
+WantedBy=multi-user.target
+EOF
+/usr/bin/systemctl daemon-reload
+fi
+if [ $AP_5G_ENABLE -ne 0 ]; then
+    HW_MODE=a
+    CHAN=$AP_CHAN_50G
+    CHAHLIST=$AP_CHANLIST_50G
+    NEED_AC=1
+    HW_CHWD=1
+    if [ $AP_AUTO_PREFIX -ne 0 ]; then
+    	AP_SSID=ZG50G_$AP_SSID
+    fi
+else
+    HW_MODE=g
+    CHAN=$AP_CHAN_24G
+    CHAHLIST=$AP_CHANLIST_24G
+    NEED_AC=0
+    HW_CHWD=0
+    if [ $AP_AUTO_PREFIX -ne 0 ]; then
+    	AP_SSID=ZG24G_$AP_SSID
+    fi
+fi
+cat > /tmp/hostapd.conf << EOF
+interface=$AP_DEVICE
+ctrl_interface=/var/run/hostapd
+ssid=$AP_SSID
+driver=nl80211
+beacon_int=100
+hw_mode=$HW_MODE
+channel=$CHAN
+chanlist=$CHAHLIST
+acs_num_scans=5
+acs_exclude_dfs=1
+ieee80211n=1
+require_ht=1
+ht_capab=[HT40+][SHORT-GI-20][SHORT-GI-40][RX-STBC][RX-STBC1][TX-STBC][TX-STBC-2BY1][DSSS_CCK-40]
+ieee80211ac=$NEED_AC
+require_vht=1
+vht_oper_chwidth=1
+vht_capab=[MAX-MPDU-7991][SHORT-GI-80][TX-STBC-2BY1][SU-BEAMFORMEE][MU-BEAMFORMEE][HTC-VHT]
+ieee80211ax=1
+he_oper_chwidth=$HW_CHWD
+he_su_beamformer=1
+he_su_beamformee=1
+he_mu_beamformer=1
+he_bss_color=11
+auth_algs=3
+ieee80211w=2
+wpa_passphrase=<已隐去>
+wpa=2
+wpa_key_mgmt=WPA-PSK <已隐去>
+wpa_pairwise=CCMP
+rsn_pairwise=CCMP
+max_num_sta=8
+wmm_enabled=1
+EOF
+if ! systemctl is-enabled systemd-networkd >/dev/null 2>&1; then
+    /usr/bin/systemctl enable systemd-networkd
+    /usr/bin/systemctl restart systemd-networkd
+fi
+if ! systemctl is-enabled systemd-resolved >/dev/null 2>&1; then
+    /usr/bin/systemctl enable systemd-resolved	
+    /usr/bin/systemctl restart systemd-resolved
+fi
+if [ ! -L /etc/resolv.conf ]; then
+    rm -f /etc/resolv.conf
+    ln -s /run/systemd/resolve/stub-resolv.conf /etc/resolv.conf
+fi
+/usr/sbin/iw reg set $COUNTRY_CODE
+/usr/bin/systemctl disable hostapd.service > /dev/null
+/usr/bin/systemctl disable wifi-wdg.service > /dev/null
+/usr/bin/systemctl disable wpa_supplicant.service > /dev/null
+/usr/bin/systemctl stop hostapd.service > /dev/null
+/usr/bin/systemctl stop wifi-wdg.service > /dev/null
+/usr/bin/systemctl stop wpa_supplicant.service > /dev/null
+if [ $AP_ENABLE -ne 0 ]; then 
+    /usr/bin/systemctl restart hostapd.service
+fi
+if [ $STA_ENABLE -ne 0 ]; then
+    /usr/bin/systemctl start wpa_supplicant.service
+fi
+/usr/bin/systemctl restart wifi-wdg.service
+exit 0
+### /opt/runtime/bin/robot_ap.sh
+AP_DEVICE="p2p0"
+SSID_50G_PREFIX=""
+WIFI_CONFIG_FILE=/userdata/config/wifi_config.bash
+PROGRAM_NAME=$(basename $0)
+usage() {
+    echo "usage: $PROGRAM_NAME status"
+    echo "usage: $PROGRAM_NAME stop"
+    echo "usage: $PROGRAM_NAME start"
+    echo "usage: $PROGRAM_NAME enable"
+    echo "usage: $PROGRAM_NAME disable"
+    echo "usage: $PROGRAM_NAME create <ssid> <password>"
+}
+if [ $# -eq 1 ]; then
+    case $1 in
+	    "start")
+    		/usr/bin/systemctl start hostapd.service
+		;;
+	    "stop")
+    		/usr/bin/systemctl stop hostapd.service
+		;;
+        "enable")
+		sed -i -e "s/^AP_ENABLE=.*/AP_ENABLE=1/" $WIFI_CONFIG_FILE
+		;;
+        "disable")
+		sed -i -e "s/^AP_ENABLE=.*/AP_ENABLE=0/" $WIFI_CONFIG_FILE
+		;;
+        "status")
+    		echo "Driver info:"
+    		cat /proc/net/rtl8852be/$AP_DEVICE/ap_info
+		;;
+	*) echo "cmd $1 invalid !!"
+		exit 5;
+		usage
+		;;
+    esac
+    exit 0;
+elif [ $# -eq 3 ]; then
+    case $1 in
+        "create")
+        sed -i -e "s/^AP_SSID=.*/AP_SSID=${SSID_50G_PREFIX}$2/" \
+       -e "s/^AP_PASSWD=<已隐去>" $WIFI_CONFIG_FILE
+		;;
+	*) echo "cmd $1 invalid !!"
+		exit 8;
+		usage
+		;;
+    esac
+    exit 0;
+else
+    echo "invalid cmd $@"
+    usage
+    exit 9;
+fi
+### /opt/runtime/bin/robot_sta.sh
+STA_DEVICE="wlan0"
+WIFI_CONFIG_FILE=/userdata/config/wifi_config.bash
+PROGRAM_NAME=$(basename $0)
+usage() {
+    echo "usage: $PROGRAM_NAME status"
+    echo "usage: $PROGRAM_NAME scan"
+    echo "usage: $PROGRAM_NAME stop"
+    echo "usage: $PROGRAM_NAME start"
+    echo "usage: $PROGRAM_NAME save"
+    echo "usage: $PROGRAM_NAME enable"
+    echo "usage: $PROGRAM_NAME disable"
+    echo "usage: $PROGRAM_NAME connect <ssid> <password>"
+}
+SERVICE_NAME="wpa_supplicant"
+CONFIG_FILE=/userdata/config/sta.conf
+SERVICE_FILE=/etc/systemd/system/wpa_supplicant.service
+if [ ! -f $CONFIG_FILE ]; then
+cat > $CONFIG_FILE << EOF
+ctrl_interface=/var/run/wpa_supplicant
+update_config=1
+network={
+    ssid="RobotNet"
+    bssid=80:ae:54:9e:78:2c
+    psk=<已隐去>
+    mesh_fwding=1
+    disabled=1
+}
+EOF
+cat > $SERVICE_FILE << EOF
+[Unit]
+Description=WPA supplicant daemon (Wi-Fi connection)
+After=network.target dbus.service
+Wants=network.target
+[Service]
+Type=simple
+ExecStart=/sbin/wpa_supplicant -c $CONFIG_FILE -i wlan0
+ExecReload=/bin/kill -HUP $MAINPID
+Restart=always
+RestartSec=5
+[Install]
+WantedBy=multi-user.target
+EOF
+systemctl daemon-reload
+systemctl restart wpa_supplicant.service
+fi
+find_best_bssid() {
+    local target_ssid="$1"
+    local interface="${2:-wlan0}"  # 可选参数：无线接口，默认为wlan0
+    
+    if [ -z "$target_ssid" ]; then
+        echo "错误: 必须提供SSID名称作为参数" >&2
+        return 1
+    fi
+    
+    echo "正在扫描SSID: $target_ssid (接口: $interface)..." >&2
+    
+    if ! wpa_cli -i "$interface" scan > /dev/null 2>&1; then
+        echo "错误: 扫描失败，请检查接口 $interface 是否正确" >&2
+        return 2
+    fi
+    
+    sleep 5
+    
+    local best_bssid=""
+    local best_frequency=0
+    local best_signal=-1000
+    local best_is_5ghz=0
+    
+    wpa_cli -i "$interface" scan_results | awk -F'\t' -v ssid="$target_ssid" '
+    NR < 2 { next }  # 跳过标题行
+    $5 == ssid {  # 只处理匹配目标SSID的行
+        bssid = $1
+        frequency = $2
+        signal_level = $3
+        flags = $4
+        
+        is_5ghz = (frequency > 5000) ? 1 : 0
+        if (best_bssid == "") {
+            best_bssid = bssid
+            best_frequency = frequency
+            best_signal = signal_level
+            best_is_5ghz = is_5ghz
+        } else {
+            if (is_5ghz && !best_is_5ghz) {
+                best_bssid = bssid
+                best_frequency = frequency
+                best_signal = signal_level
+                best_is_5ghz = is_5ghz
+            } else if (is_5ghz == best_is_5ghz) {
+                if (signal_level > best_signal) {
+                    best_bssid = bssid
+                    best_frequency = frequency
+                    best_signal = signal_level
+                    best_is_5ghz = is_5ghz
+                }
+            }
+        }
+    }
+    END {
+        if (best_bssid != "") {
+            printf "BSSID:%s,频率:%d,信号强度:%d", best_bssid, best_frequency, best_signal
+        } else {
+            print "未找到匹配的网络"
+            exit 3
+        }
+    }'
+}
+if [ $# -eq 1 ]; then
+    case $1 in
+        "scan")
+		wpa_cli -i $STA_DEVICE scan
+		sleep 5
+		wpa_cli -i $STA_DEVICE scan_results
+		exit $?
+		;;
+        "save")
+		wpa_cli -i $STA_DEVICE save_config 0
+		;;
+	"start")
+    		wpa_cli -i $STA_DEVICE enable_network 0
+		;;
+	"stop")
+    		wpa_cli -i $STA_DEVICE disable_network 0
+		;;
+        "enable")
+		sed -i -e "s/^STA_ENABLE=.*/STA_ENABLE=1/" $WIFI_CONFIG_FILE
+		;;
+        "disable")
+		sed -i -e "s/^STA_ENABLE=.*/STA_ENABLE=0/" $WIFI_CONFIG_FILE
+		;;
+        "status")
+        	echo "WPA info:"
+    		wpa_cli -i $STA_DEVICE status 0
+    		echo "Driver info:"
+    		cat /proc/net/rtl8852be/$STA_DEVICE/ap_info
+		;;
+	*) echo "cmd $1 invalid !!"
+		exit 5;
+		usage
+		;;
+    esac
+    exit 0;
+elif [ $# -eq 3 ]; then
+    case $1 in
+        "connect")
+		result=$(find_best_bssid "$2" "$STA_DEVICE")
+		if [ $? -ne 0 ]; then
+		    echo "未找到匹配的 $2 可以连接"
+		    exit 6;
+		    usage
+		fi
+		bssid=$(echo "$result" | sed 's/.*BSSID:\([^,]*\),.*/\1/')
+                freq=$(echo "$result" | sed 's/.*频率:\([^,]*\),.*/\1/')
+                signal=$(echo "$result" | sed 's/.*信号强度:\([^,]*\).*/\1/')
+                echo "解析结果:"
+                echo "  BSSID: $bssid"
+                echo "  频段: $freq MHz"
+                echo "  信号强度: $signal dBm"
+		wpa_cli -i $STA_DEVICE set_network 0 ssid '"'"$2"'"'
+		wpa_cli -i $STA_DEVICE set_network 0 bssid $bssid
+		wpa_cli -i $STA_DEVICE set_network 0 psk <已隐去>"'"$3"'"'
+		wpa_cli -i $STA_DEVICE enable_network 0
+		;;
+	*) echo "cmd $1 invalid !!"
+		exit 8;
+		usage
+		;;
+    esac
+    exit 0;
+else
+    echo "invalid cmd $@"
+    usage
+    exit 9;
+fi
+### tmpfiles /tmp
+D /tmp 1777 root root -
+#q /var/tmp 1777 root root 30d
+### chrony/ntp
+active inactive inactive System clock synchronized: yes
+              NTP service: active

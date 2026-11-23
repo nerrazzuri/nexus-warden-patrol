@@ -1,0 +1,18 @@
+DF ping 1200: 2 received
+DF ping 1252: 2 received
+DF ping 1300: message too long, mtu=1280
+DF ping 1400: message too long, mtu=1280
+mss=1500 推流: [srt @ 0xaaaafbae6a20] Connection to srt://192.168.234.232:8899?latency=200000&mss=1500 failed: Input/output error
+srt://192.168.234.232:8899?latency=200000&mss=1500: Input/output error
+rc=0
+mss=1200 推流: [srt @ 0xaaaad14bba20] Connection to srt://192.168.234.232:8899?latency=200000&mss=1200 failed: Input/output error
+srt://192.168.234.232:8899?latency=200000&mss=1200: Input/output error
+rc=0
+两头 mss=1200 推流: [srt @ 0xaaaae9a0aa20] Connection to srt://192.168.234.232:8899?latency=200000&mss=1200 failed: Input/output error
+srt://192.168.234.232:8899?latency=200000&mss=1200: Input/output error
+rc=1
+收端: 
+UDP → 100.69.130.19 收到: udp-test-100.69.130.19 
+UDP → 192.168.234.232 收到: udp-test-192.168.234.232 
+SRT → 100.69.130.19: rc=0 / 收端 frame=   47 fps=0.0 q=-0.0 Lsize=N/A time=00:00:04.70 bitrate=N/A speed= 190x    
+100.67.176.60 dev tailscale0 table 52 src 192.168.234.232 uid 1000 

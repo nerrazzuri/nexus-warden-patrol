@@ -1,0 +1,13 @@
+2026-11-23 10:31:17
+37 1001 robot       
+c1  128 gdm   seat0 tty1
+---
+30
+529a0e9a4bebe1c3ac22069b8431f3dd  -
+MainPID=1314 NRestarts=0  MainPID=3721 NRestarts=1 
+Nov 23 10:23:52 orin-nx nexwar_agent_start[1293]: 2026-11-23T10:23:52.445+08:00 INFO nexwar_agent.navbridge Nav2 转接节点连上了:nexwar_nav2bridge 1
+Nov 23 10:24:33 orin-nx nexwar_agent_start[3721]: 2026-11-23T10:24:33.528+08:00 INFO nexwar_agent.navbridge Nav2 转接节点连上了:nexwar_nav2bridge 1
+   2282 Mon Nov 23 10:23:50 2026 /opt/ros/humble/lib/nav2_controller/controller_server --ros-args -r __node:=controller_
+   2284 Mon Nov 23 10:23:50 2026 /opt/ros/humble/lib/nav2_planner/planner_server --ros-args -r __node:=planner_server --
+   2292 Mon Nov 23 10:23:50 2026 /usr/bin/python3 -m nexwar_localizer.nav2bridge --socket /var/lib/nexwar/agent/nav2.soc
+10:31:24 所有 ssh 已退出，开始等 2 分钟
