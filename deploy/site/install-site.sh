@@ -94,6 +94,8 @@ cat > /etc/chrony/conf.d/nexwar_site.conf <<'对时'
 allow 10.0.0.0/8
 allow 172.16.0.0/12
 allow 192.168.0.0/16
+# Tailscale(100.64.0.0/10):12-03 A 方案机器人走 4G 经 Tailscale 来对时(真机 11-24)
+allow 100.64.0.0/10
 local stratum 10
 对时
 systemctl restart chrony

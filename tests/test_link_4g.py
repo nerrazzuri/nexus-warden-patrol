@@ -51,3 +51,12 @@ def test_prepare_证书加地址重签():
     s = _run("prepare").stdout
     assert "h.append('100.69.130.19')" in s and "vpn reissue-cert" in s
     assert "重新添加站点" in s
+
+
+def test_真机1124_站点对时也给Tailscale地址发_prepare和up都补():
+    """装站点时 chrony 只 allow 私网,机器人改连 100.69.130.19 对时会被拒;
+    站点升级也会把这个文件重写。"""
+    for args in (("prepare",), ("up", "--ssid", "ZTE_C8DE4B")):
+        assert "allow 100.64.0.0/10" in _run(*args).stdout, args
+    site = (ROOT / "deploy" / "site" / "install-site.sh").read_text(encoding="utf-8")
+    assert "allow 100.64.0.0/10" in site
