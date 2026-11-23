@@ -1,0 +1,48 @@
+Nov 23 10:23:49 orin-nx nexwar_agent_start[1299]: nexwar_wait_clock: 钟对了(2026-11-23T02:23:49Z),接着起
+Nov 23 10:23:50 orin-nx nexwar_agent_start[1293]: 2026-11-23T10:23:50.089+08:00 INFO nexwar_agent.main 上装配置 /etc/nexwar/payload.json:接了 strobe、speaker
+Nov 23 10:23:50 orin-nx nexwar_agent_start[1293]: 2026-11-23T10:23:50.101+08:00 WARNING nexwar_agent.bridges.nav2_nav 遮挡限速按现场设置:关(NEXWAR_NAV_OCC)
+Nov 23 10:23:50 orin-nx nexwar_agent_start[1293]: 2026-11-23T10:23:50.212+08:00 WARNING nexwar_agent.runtime 没有雷达视野表:遮挡限速先关着,走起来自己学(约 600 帧)
+Nov 23 10:23:50 orin-nx nexwar_agent_start[1293]: 2026-11-23T10:23:50.212+08:00 WARNING nexwar_agent.runtime 看不见的按 legacy(NEXWAR_GUARD_BAND)
+Nov 23 10:23:50 orin-nx nexwar_agent_start[1293]: 2026-11-23T10:23:50.268+08:00 INFO nexwar_agent.runtime 自主级别: autonomous
+Nov 23 10:23:50 orin-nx nexwar_agent_start[1293]: 2026-11-23T10:23:50.408+08:00 INFO nexwar_agent.locbridge 本机定位桥在 /var/lib/nexwar/agent/loc.sock 等定位器
+Nov 23 10:23:50 orin-nx nexwar_agent_start[1293]: 2026-11-23T10:23:50.411+08:00 INFO nexwar_agent.obs_server 本机障碍桥在 /var/lib/nexwar/agent/obs.sock 等感知节点
+Nov 23 10:23:50 orin-nx nexwar_agent_start[1293]: 2026-11-23T10:23:50.450+08:00 INFO nexwar_agent.obs_server 感知节点连上了:nexwar_obstacles
+Nov 23 10:23:50 orin-nx nexwar_agent_start[1293]: 2026-11-23T10:23:50.552+08:00 INFO nexwar_agent.locbridge 定位器连上了:nexwar_localizer
+Nov 23 10:23:50 orin-nx nexwar_agent_start[1293]: 2026-11-23T10:23:50.762+08:00 INFO nexwar_adapter_d1max.anbot 竞品音量调到 70%
+Nov 23 10:23:52 orin-nx nexwar_agent_start[1293]: 2026-11-23T10:23:52.442+08:00 WARNING nexwar_agent.runtime 连不上站点(无法连接 broker(TCP 或 TLS 握手失败)):5 秒后再试(首次连接最多等 120 秒)
+Nov 23 10:23:52 orin-nx nexwar_agent_start[1293]: 2026-11-23T10:23:52.445+08:00 INFO nexwar_agent.navbridge Nav2 转接节点连上了:nexwar_nav2bridge 1
+Nov 23 10:23:58 orin-nx nexwar_agent_start[1293]: 2026-11-23T10:23:58.448+08:00 WARNING nexwar_agent.runtime 连不上站点(无法连接 broker(TCP 或 TLS 握手失败)):5 秒后再试(首次连接最多等 120 秒)
+Nov 23 10:24:04 orin-nx nexwar_agent_start[1293]: 2026-11-23T10:24:04.452+08:00 WARNING nexwar_agent.runtime 连不上站点(无法连接 broker(TCP 或 TLS 握手失败)):5 秒后再试(首次连接最多等 120 秒)
+Nov 23 10:24:13 orin-nx nexwar_agent_start[1293]: 2026-11-23T10:24:13.503+08:00 WARNING nexwar_agent.runtime 连不上站点(无法连接 broker(TCP 或 TLS 握手失败)):5 秒后再试(首次连接最多等 120 秒)
+Nov 23 10:24:20 orin-nx nexwar_agent_start[1293]: nexwar_agent 起不来: TimeoutError('等了 30s 尚未结果')2026-11-23T10:24:20.274+08:00 ERROR nexwar_agent.main nexwar_agent 起不来: TimeoutError('等了 30s 尚未结果')
+Nov 23 10:24:23 orin-nx nexwar_agent_start[1293]: 2026-11-23T10:24:23.508+08:00 WARNING nexwar_agent.locbridge 本机定位桥:代理收尾
+Nov 23 10:24:23 orin-nx nexwar_agent_start[1293]: 2026-11-23T10:24:23.510+08:00 WARNING nexwar_agent.obs_server 本机障碍桥:代理收尾
+Nov 23 10:24:23 orin-nx nexwar_agent_start[1293]: 2026-11-23T10:24:23.662+08:00 INFO nexwar_agent.runtime 这台机器的控制权不可释放,收尾不放
+Nov 23 10:24:25 orin-nx nexwar_agent_start[1293]: 2026-11-23T10:24:25.165+08:00 INFO nexwar_agent.runtime HAL 已收尾:停、放控制权、关链路
+Nov 23 10:24:25 orin-nx systemd[1]: nexwar_agent.service: Main process exited, code=exited, status=1/FAILURE
+Nov 23 10:24:25 orin-nx systemd[1]: nexwar_agent.service: Failed with result 'exit-code'.
+Nov 23 10:24:25 orin-nx systemd[1]: nexwar_agent.service: Consumed 2.800s CPU time.
+Nov 23 10:24:30 orin-nx systemd[1]: nexwar_agent.service: Scheduled restart job, restart counter is at 1.
+Nov 23 10:24:30 orin-nx systemd[1]: Stopped D1 Max 机器人代理(robot-agent).
+Nov 23 10:24:30 orin-nx systemd[1]: nexwar_agent.service: Consumed 2.800s CPU time.
+Nov 23 10:24:30 orin-nx systemd[1]: Starting D1 Max 机器人代理(robot-agent)...
+Nov 23 10:24:31 orin-nx python[3720]: [守卫] 没有在途的升级,链是好的。 现在指着: 2026-11-22-a9b33a7c
+Nov 23 10:24:31 orin-nx systemd[1]: Started D1 Max 机器人代理(robot-agent).
+Nov 23 10:24:31 orin-nx nexwar_agent_start[3721]: 2026-11-23T10:24:31.771+08:00 INFO nexwar_agent.main 上装配置 /etc/nexwar/payload.json:接了 strobe、speaker
+Nov 23 10:24:31 orin-nx nexwar_agent_start[3721]: 2026-11-23T10:24:31.787+08:00 WARNING nexwar_agent.bridges.nav2_nav 遮挡限速按现场设置:关(NEXWAR_NAV_OCC)
+Nov 23 10:24:31 orin-nx nexwar_agent_start[3721]: 2026-11-23T10:24:31.880+08:00 WARNING nexwar_agent.runtime 没有雷达视野表:遮挡限速先关着,走起来自己学(约 600 帧)
+Nov 23 10:24:31 orin-nx nexwar_agent_start[3721]: 2026-11-23T10:24:31.880+08:00 WARNING nexwar_agent.runtime 看不见的按 legacy(NEXWAR_GUARD_BAND)
+Nov 23 10:24:31 orin-nx nexwar_agent_start[3721]: 2026-11-23T10:24:31.937+08:00 INFO nexwar_agent.runtime 自主级别: autonomous
+Nov 23 10:24:32 orin-nx nexwar_agent_start[3721]: 2026-11-23T10:24:32.091+08:00 INFO nexwar_agent.locbridge 本机定位桥在 /var/lib/nexwar/agent/loc.sock 等定位器
+Nov 23 10:24:32 orin-nx nexwar_agent_start[3721]: 2026-11-23T10:24:32.092+08:00 INFO nexwar_agent.obs_server 本机障碍桥在 /var/lib/nexwar/agent/obs.sock 等感知节点
+Nov 23 10:24:32 orin-nx nexwar_agent_start[3721]: 2026-11-23T10:24:32.144+08:00 INFO nexwar_agent.ops 暂停了厂家进程 13 个
+Nov 23 10:24:32 orin-nx nexwar_agent_start[3721]: 2026-11-23T10:24:32.214+08:00 INFO nexwar_agent.obs_server 感知节点连上了:nexwar_obstacles
+Nov 23 10:24:32 orin-nx nexwar_agent_start[3721]: 2026-11-23T10:24:32.391+08:00 INFO nexwar_adapter_d1max.anbot 竞品音量调到 70%
+Nov 23 10:24:32 orin-nx nexwar_agent_start[3721]: 2026-11-23T10:24:32.527+08:00 INFO nexwar_agent.locbridge 定位器连上了:nexwar_localizer
+Nov 23 10:24:33 orin-nx nexwar_agent_start[3721]: 2026-11-23T10:24:33.528+08:00 INFO nexwar_agent.navbridge Nav2 转接节点连上了:nexwar_nav2bridge 1
+Nov 23 10:24:38 orin-nx nexwar_agent_start[3721]: 2026-11-23T10:24:38.101+08:00 WARNING nexwar_agent.runtime 连不上站点(无法连接 broker(TCP 或 TLS 握手失败)):5 秒后再试(首次连接最多等 120 秒)
+Nov 23 10:24:45 orin-nx python3[983]: 开机准备 routes:{"applied": ["192.168.234.0/24 via 192.168.168.168"], "failed": []}
+Nov 23 10:24:45 orin-nx python3[983]: 开机准备 vendor:{"disabled": [], "skipped": [{"unit": "robot-launch.service", "why": "shared"}]}
+Nov 23 10:24:49 orin-nx nexwar_agent_start[3721]: 2026-11-23T10:24:49.108+08:00 WARNING nexwar_agent.runtime 连不上站点(无法连接 broker(TCP 或 TLS 握手失败)):5 秒后再试(首次连接最多等 120 秒)
+Nov 23 10:24:54 orin-nx nexwar_agent_start[3721]: nexwar_agent 起来了:transport=mqtts://192.168.234.232:8883 hal=d1max robot=C40221
+Nov 23 10:24:54 orin-nx nexwar_agent_start[3721]: 2026-11-23T10:24:54.654+08:00 INFO nexwar_agent.outbox 站点已确认,发件箱删掉这一趟:20261123-102425
