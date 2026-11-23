@@ -218,3 +218,29 @@ def test_真机1120_停推流不在事件循环里等ffmpeg退_几拍以后收�
     stubborn.wait(5)
     pusher.step()
     assert pusher._dying == []
+
+
+def test_真机1123_4G上行不够_机器人这头缩小降帧限码率再推():
+    from nexwar_agent.video_push import PushLite
+    p = VideoPusher(source=rtsp_source("192.168.234.1"), lite=PushLite(960, 8, 1000))
+    cmd = p.argv(_req(9000))
+    assert cmd[cmd.index("-vf") + 1] == "scale=960:-2,fps=8"
+    assert cmd[cmd.index("-c:v") + 1] == "libx264"
+    assert cmd[cmd.index("-maxrate") + 1] == "1000k" and cmd[cmd.index("-g") + 1] == "16"
+    assert cmd[-1].startswith("srt://127.0.0.1:9000?passphrase=")
+    for bad in [(961, 8, 1000), (960, 0, 1000), (960, 8, 50)]:
+        with pytest.raises(ValueError):
+            PushLite(*bad)
+
+
+def test_真机1123_转小了照样推得出去_站点收得到画面():
+    from nexwar_agent.video_push import PushLite
+    p = VideoPusher(source=lavfi_source, lite=PushLite(320, 5, 300))
+    port = _port()
+    site = 站点那头(port)
+    try:
+        assert p.request(_req(port)) == ""
+        assert site.jpegs(8.0) >= 3
+    finally:
+        site.close()
+        p.close()
