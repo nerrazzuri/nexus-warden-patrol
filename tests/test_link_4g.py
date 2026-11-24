@@ -60,3 +60,30 @@ def test_真机1124_站点对时也给Tailscale地址发_prepare和up都补():
         assert "allow 100.64.0.0/10" in _run(*args).stdout, args
     site = (ROOT / "deploy" / "site" / "install-site.sh").read_text(encoding="utf-8")
     assert "allow 100.64.0.0/10" in site
+
+
+def test_真机1124_重签用站点装的那个命令_一步不成就停():
+    s = _run("prepare").stdout
+    assert "/opt/nexwar_site/venv/bin/nexwar_site --home /var/lib/nexwar_site vpn reissue-cert" in s
+    sh = SH.read_text(encoding="utf-8")
+    assert 'bash -ec "$2"' in sh
+
+
+def test_真机1124_本地一步失败_脚本退出_不说做完(tmp_path):
+    """真机 11-24:重签那步 command not found,脚本照样往下跑、最后说「做完」。"""
+    fake = tmp_path / "bin"
+    fake.mkdir()
+    (fake / "tailscale").write_text("#!/bin/sh\necho 100.69.130.19\n")
+    (fake / "systemctl").write_text("#!/bin/sh\nexit 0\n")
+    (fake / "sudo").write_text("#!/bin/sh\n[ \"$1\" = -u ] && shift 2\nexec \"$@\"\n")
+    home = tmp_path / "site"
+    home.mkdir()
+    (home / "site.json").write_text('{"hostnames": ["192.168.234.232", "100.69.130.19"]}\n')
+    for f in fake.iterdir():
+        f.chmod(0o755)
+    env = {"PATH": f"{fake}:/usr/bin:/bin", "SITE_HOME": str(home),
+           "SITE_CLI": str(tmp_path / "没有这个命令"), "CHRONY_SITE_CONF": str(tmp_path / "c.conf")}
+    out = subprocess.run(["bash", str(SH), "prepare"], input="yes\n", capture_output=True,
+                         text=True, timeout=30, env=env)
+    assert out.returncode != 0
+    assert "做完" not in out.stdout
