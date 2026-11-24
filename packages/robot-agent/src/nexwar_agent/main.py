@@ -618,7 +618,8 @@ def build(args: argparse.Namespace) -> Assembled:
             # 工单 18:到点拍照跟实时画面用同一套 RTSP 相机,每次 ffmpeg 抽一帧 JPEG
             from nexwar_agent.bridges.rtsp_media import rtsp_media
             from nexwar_agent.video_push import rtsp_source as _rtsp_source
-            media = rtsp_media(_rtsp_source(args.camera_host, extra_cameras(args)),
+            media = rtsp_media(_rtsp_source(args.camera_host, extra_cameras(args),
+                                            builtin_cameras(args)),
                                now_ms=wall_ms, ffmpeg=args.ffmpeg)
         parts = build_engine(hal, runs_root=args.runs_root, now_ms=wall_ms, map_id=args.map[0],
                              home=args.home, media=media, nav_kind=args.nav,
@@ -639,8 +640,8 @@ def build(args: argparse.Namespace) -> Assembled:
                 raise SystemExit(f"--video-source file:{folder} 里没有 {'、'.join(missing)}")
             source = file_source(folder)
         else:
-            source = lavfi_source if kind == "lavfi" else rtsp_source(args.camera_host,
-                                                                       extra_cameras(args))
+            source = lavfi_source if kind == "lavfi" else rtsp_source(
+                args.camera_host, extra_cameras(args), builtin_cameras(args))
         video = VideoPusher(source=source, ffmpeg=args.ffmpeg, transcode=args.video_transcode,
                             lite=push_lite(args.video_push_lite))
         pump = keeper = mapper = recorder = None
@@ -721,7 +722,8 @@ def build(args: argparse.Namespace) -> Assembled:
             from nexwar_agent.lens import ffmpeg_gray
             from nexwar_contract.video import STANDARD_CAMERAS
             runtime.attach_cover(CoverWatch(
-                {c: ffmpeg_gray(source(c), args.ffmpeg) for c in STANDARD_CAMERAS},
+                {c: ffmpeg_gray(source(c), args.ffmpeg) for c in builtin_cameras(args)
+                 if c in STANDARD_CAMERAS},
                 lidar_blocked=anchor.lidar_blocked, monotonic=time.monotonic))
         runtime.attach_ops(_ops(args, registration, runtime))   # W55 远程运维
         if args.hal == "d1max":
@@ -755,6 +757,17 @@ class _NoIntake:
 ROBOT_MODELS = ("d1max", "d1edu")
 #: 报给站点的适配器号(``capabilities.adapter``):站点、手机据此认机型。
 MODEL_ADAPTER_IDS = {"d1edu": "nexwar-d1edu/0.1.0"}
+
+
+#: W80:机型自带哪几路相机(``cameras.json`` 只能改地址、加别的,去不掉自带的)。D1 Edu 只有头上一个
+#: 前摄像头(用户 11-25:「D1 Edu 什么都没有,只有一个前摄像头」)。
+MODEL_CAMERAS: dict[str, tuple[str, ...]] = {"d1edu": ("front",)}
+
+
+def builtin_cameras(args: argparse.Namespace) -> tuple[str, ...]:
+    """这台机器人自带哪几路相机:按 ``--robot-model``,缺省 D1 Max 的前后两路。"""
+    from nexwar_contract.video import STANDARD_CAMERAS
+    return MODEL_CAMERAS.get(getattr(args, "robot_model", "d1max"), tuple(STANDARD_CAMERAS))
 
 
 def model_hal_kwargs(model: str) -> dict[str, Any]:
@@ -807,13 +820,13 @@ def push_lite(text: str):
 def record_cameras(args: argparse.Namespace) -> list[str]:
     """``--record`` → 录哪几路(W18)。``auto``:真狗前后两路(加上 ``--cameras`` 里写了 ``record`` 的,
     W40)、仿真不录;``none``/空:不录。"""
-    from nexwar_contract.video import STANDARD_CAMERAS
+    builtin = builtin_cameras(args)
     raw = (args.record or "").strip()
     extra = extra_cameras(args) if args.hal == "d1max" or raw not in ("auto", "", "none") else {}
-    have = list(dict.fromkeys([*STANDARD_CAMERAS, *extra]))
+    have = list(dict.fromkeys([*builtin, *extra]))
     if raw == "auto":
-        return [*STANDARD_CAMERAS, *(c for c, v in extra.items()
-                                     if v["record"] and c not in STANDARD_CAMERAS)] \
+        return [*builtin, *(c for c, v in extra.items()
+                            if v["record"] and c not in builtin)] \
             if args.hal == "d1max" else []
     if raw in ("", "none"):
         return []

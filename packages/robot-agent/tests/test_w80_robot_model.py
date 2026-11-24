@@ -89,3 +89,23 @@ def test_外部编排_装进建图服务(tmp_path, monkeypatch):
         assert got == {"bags_dir": store / "mapbags", "work": store / "mapwork", "store": store}
     finally:
         a.stop()
+
+
+def test_d1edu只有前摄像头_d1max照旧前后两路(tmp_path):
+    """用户 11-25:D1 Edu 只有一个前摄像头。上报的相机、录像、到点拍照都只有 front。"""
+    from nexwar_agent.video_push import rtsp_source, source_cameras
+    edu = _args(tmp_path, "--hal", "d1max", "--robot-model", "d1edu", "--record", "auto")
+    mx = _args(tmp_path, "--hal", "d1max", "--record", "auto")
+    assert agent_main.builtin_cameras(edu) == ("front",)
+    assert agent_main.builtin_cameras(mx) == ("front", "back")
+    assert agent_main.record_cameras(edu) == ["front"]
+    assert agent_main.record_cameras(mx) == ["front", "back"]
+    with pytest.raises(SystemExit):
+        agent_main.record_cameras(_args(tmp_path, "--hal", "d1max", "--robot-model", "d1edu",
+                                        "--record", "back"))
+    src = rtsp_source("192.168.168.168", {"front": {"url": "rtsp://192.168.168.168:8554/test",
+                                                    "record": True}},
+                      agent_main.builtin_cameras(edu))
+    assert source_cameras(src) == ("front",)
+    assert "rtsp://192.168.168.168:8554/test" in src("front"), "cameras.json 里的地址顶掉缺省的"
+    assert source_cameras(rtsp_source("127.0.0.1")) == ("front", "back")
