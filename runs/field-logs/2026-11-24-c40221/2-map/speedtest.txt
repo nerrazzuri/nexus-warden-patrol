@@ -1,0 +1,7 @@
+== 11:35:19 笔记本在 Always Robots_5G 1；    	verbose output (default false)
+20000000
+20 MB Orin→笔记本：18.252725825 s，1.09 MB/s
+== 11:35:55 笔记本在 ZTE_C8DE4B
+pong from c40221-orin (100.67.176.60) via 192.168.0.75:41641 in 8ms
+100000000
+100 MB Orin→笔记本：10.133568210 s，9.86 MB/s
