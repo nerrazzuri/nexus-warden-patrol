@@ -93,7 +93,7 @@ status)
   say "笔记本 Tailscale 地址:$TS"
   local_do "站点证书里有没有它、画面连哪" "$(site_json_py "print('hostnames:', d.get('hostnames')); print('video.srt_host:', (d.get('video') or {}).get('srt_host', '(缺省 = hostnames[0])'))")"
   on "$ORIN" "Orin:默认路线、代理连哪、Tailscale" \
-    "ip route show default; grep -E '^NEXWAR_SITE_(MQTT|NTP)=' /etc/nexwar/env; tailscale status 2>/dev/null | head -5; chronyc sources 2>/dev/null | grep -E '^\^' ; systemctl list-timers --all 2>/dev/null | grep -E 'nexwar-4g' || true"
+    "ip route show default; sudo grep -E '^NEXWAR_SITE_(MQTT|NTP)=' /etc/nexwar/env; tailscale status 2>/dev/null | head -5; chronyc sources 2>/dev/null | grep -E '^\^' ; systemctl list-timers --all 2>/dev/null | grep -E 'nexwar-4g' || true"
   on "$RK" "RK3588:wlan0、热点" \
     "wpa_cli -i wlan0 status 2>/dev/null | grep -E 'wpa_state|ssid|ip_address' || echo 'wpa_supplicant 没在跑'; iw dev | grep -E 'Interface|ssid|channel'; systemctl list-timers --all 2>/dev/null | grep -E 'nexwar-sta' || true"
   ;;
@@ -135,9 +135,16 @@ sudo systemctl stop nexwar-sta-revert.timer 2>/dev/null || true
 sudo systemd-run --on-active=${SECS}s --unit=nexwar-sta-revert sh -c 'systemctl stop wpa_supplicant; ip link set wlan0 down'
 sudo ip link set wlan0 up
 sudo systemctl start wpa_supplicant 2>/dev/null || true
-for i in 1 2 3; do sudo wpa_cli -i wlan0 scan >/dev/null 2>&1 || true; sleep 6
-  sudo wpa_cli -i wlan0 scan_results | grep -qF -- $QS && break; done
-sudo $RK_STA connect $QS $QP >/dev/null
+# 真机 11-24:没有 sta.conf 时 wpa_supplicant 起来就退,厂家脚本建好 sta.conf 重启它以后又扫得太早(「扫描失败」)。
+# 每次连之前等 wpa_supplicant 能应答,连不上隔一会儿再来,最多 3 次。
+ok=0
+for n in 1 2 3; do
+  for i in \$(seq 1 15); do sudo wpa_cli -i wlan0 ping 2>/dev/null | grep -q PONG && break; sleep 1; done
+  sudo wpa_cli -i wlan0 scan >/dev/null 2>&1 || true; sleep 6
+  if sudo $RK_STA connect $QS $QP >/dev/null; then ok=1; break; fi
+  echo \"第 \$n 次没连上(厂家脚本扫描早了?),5 秒后再来\"; sleep 5
+done
+[ \$ok = 1 ] || { echo '!! 连了 3 次都没连上:看 Wi-Fi 名、口令、信号'; exit 1; }
 for i in \$(seq 1 20); do sudo wpa_cli -i wlan0 status | grep -q '^wpa_state=COMPLETED' && break; sleep 1; done
 sudo wpa_cli -i wlan0 status | grep -E 'wpa_state|^ssid|ip_address'
 iw dev | grep -E 'Interface|ssid|channel'
@@ -153,9 +160,9 @@ ip route get 1.1.1.1 | head -1
 timeout 20 sudo tailscale ping -c 3 $TS || echo '!! tailscale ping 不通:笔记本这时只连着机器人热点、上不了网的话是正常的,换连能上网的 Wi-Fi 以后跑 status 再看'"
   on "$ORIN" "③ Orin:代理、对时改连 $TS,重启开机准备和代理" \
 "set -e
-[ -f /etc/nexwar/env.bak-B ] || sudo cp -a /etc/nexwar/env /etc/nexwar/env.bak-B
+sudo test -f /etc/nexwar/env.bak-B || sudo cp -a /etc/nexwar/env /etc/nexwar/env.bak-B
 sudo sed -i -e 's#^NEXWAR_SITE_MQTT=.*#NEXWAR_SITE_MQTT=mqtts://$TS:8883#' -e 's#^NEXWAR_SITE_NTP=.*#NEXWAR_SITE_NTP=$TS#' /etc/nexwar/env
-grep -E '^NEXWAR_SITE_(MQTT|NTP)=' /etc/nexwar/env
+sudo grep -E '^NEXWAR_SITE_(MQTT|NTP)=' /etc/nexwar/env
 sudo systemctl restart nexwar_boot nexwar_agent"
   local_do "④ 站点:画面改收 $TS,重启站点" \
 "$(site_json_py "v = d.setdefault('video', {})
@@ -170,9 +177,10 @@ sudo systemctl restart nexwar_site"
 down)
   on "$ORIN" "① Orin:代理、对时改回热点,默认路线改回 R300S,取消定时" \
 "set -e
-if [ -f /etc/nexwar/env.bak-B ]; then sudo cp -a /etc/nexwar/env.bak-B /etc/nexwar/env; else
+if sudo test -f /etc/nexwar/env.bak-B && ! sudo grep -q '^NEXWAR_SITE_MQTT=mqtts://100\\.' /etc/nexwar/env.bak-B; then
+  sudo cp -a /etc/nexwar/env.bak-B /etc/nexwar/env; else
   sudo sed -i -e 's#^NEXWAR_SITE_MQTT=.*#NEXWAR_SITE_MQTT=mqtts://$HOTSPOT_IP:8883#' -e 's#^NEXWAR_SITE_NTP=.*#NEXWAR_SITE_NTP=$HOTSPOT_IP#' /etc/nexwar/env; fi
-grep -E '^NEXWAR_SITE_(MQTT|NTP)=' /etc/nexwar/env
+sudo grep -E '^NEXWAR_SITE_(MQTT|NTP)=' /etc/nexwar/env
 sudo systemctl stop nexwar-4g-revert.timer 2>/dev/null || true
 sudo ip route replace default via $ORIN_GW_B dev $ORIN_IF proto static metric 102
 ip route show default

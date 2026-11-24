@@ -87,3 +87,16 @@ def test_真机1124_本地一步失败_脚本退出_不说做完(tmp_path):
                          text=True, timeout=30, env=env)
     assert out.returncode != 0
     assert "做完" not in out.stdout
+
+
+def test_真机1124_env要sudo读_wpa能应答再连_连不上再来():
+    up = _run("up", "--ssid", "ZTE_C8DE4B").stdout
+    assert "sudo grep -E '^NEXWAR_SITE_(MQTT|NTP)=' /etc/nexwar/env" in up
+    assert "sudo test -f /etc/nexwar/env.bak-B" in up
+    assert up.index("wpa_cli -i wlan0 ping") < up.index("robot_sta.sh connect")
+    assert "for n in 1 2 3" in up
+    down = _run("down").stdout
+    assert "sudo grep -E '^NEXWAR_SITE_(MQTT|NTP)=' /etc/nexwar/env" in down
+    assert "mqtts://100\\." in down, "备份里已经是 Tailscale 地址(up 跑过两次)就不拿它恢复"
+    sh = SH.read_text(encoding="utf-8")
+    assert "\n grep -E '^NEXWAR_SITE" not in sh and "; grep -E '^NEXWAR_SITE" not in sh
