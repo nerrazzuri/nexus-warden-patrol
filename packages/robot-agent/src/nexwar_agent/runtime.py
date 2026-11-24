@@ -2103,7 +2103,7 @@ class AgentRuntime:
         if not await self._still_since(ref):
             log.info("点云套图核对算完时机器人动过了:这次的结论作废")
             return
-        soft, self._soft_check = self._soft_check, False
+        soft, self._soft_check = getattr(self, "_soft_check", False), False
         if soft and v.fit < MIN_FIT:
             # 真机 11-24:自动找到的位置是先认、交定位器精配的;精配完再套图还不到门槛 —— 不认,等人
             reason = (f"自动找到的位置交定位器精配后,点云套图贴合度 {v.fit:.2f}"
