@@ -135,3 +135,18 @@ def test_工单10_人给的跟定位器的冲突_按两处贴合度判信谁():
     assert resolve_conflict(0.2, TRUST_FIT + 0.1) == "anchor"
     assert resolve_conflict(TRUST_FIT + 0.05, TRUST_FIT + 0.05 - WRONG_GAP / 2) == "", "差得不够"
     assert resolve_conflict(TRUST_FIT - 0.05, 0.0) == "", "哪处都不够像:不下结论"
+
+
+def test_真机1124_先精配再判_贴合度差一点的先认_分不清的照样不认():
+    from nexwar_agent.globalloc import MIN_FIT, SOFT_FIT
+    near = [Candidate(-0.2, 0.1, 0.0, 0.47), Candidate(4.0, 4.0, 1.0, 0.30)]
+    assert decide(near)[0] is None, "不带 soft:老规矩"
+    best, why = decide(near, soft=True)
+    assert best == near[0] and why == "" and SOFT_FIT <= best.fit < MIN_FIT
+    two = [Candidate(-0.2, 0.1, 0.0, 0.47), Candidate(4.0, 4.0, 1.0, 0.42)]
+    assert decide(two, soft=True)[0] is None, "跟别处分不清:照样不认"
+    low = [Candidate(0, 0, 0, SOFT_FIT - 0.01)]
+    assert decide(low, soft=True)[0] is None
+    v = judge(0.30, (5.0, 5.0, 0.0), [Candidate(1, 1, 0, 0.47)])
+    assert v.reloc is None and f"要 {MIN_FIT:g}" in v.reason, \
+        "核对定位器那条不放宽:0.47 不拿去重定位"

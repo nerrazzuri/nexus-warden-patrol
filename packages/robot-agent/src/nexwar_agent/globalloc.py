@@ -40,6 +40,11 @@ NMS_M = 1.0
 NMS_DEG = 25.0
 MIN_FIT = 0.5
 MIN_GAP = 0.1
+#: 自动找位置「先精配再判」(真机 11-24,用户同意):第一名到这么多、又不跟别处分不清,就先交给
+#: 定位器当初值精配(ICP);稳下来以后按定位器给的位置再套一次图,还是到 :data:`MIN_FIT` 才算数,
+#: 不到标不可信、等人。现场:换图后站在建图起点,猜的位置只差约 0.1 m,首轮贴合度 0.47;
+#: 人给同一处 → ICP 0.71,复核 0.52。
+SOFT_FIT = 0.4
 #: 扫描点太少(被围住、雷达被挡)不找。
 MIN_POINTS = 30
 
@@ -225,14 +230,15 @@ def _nms(cands: list[Candidate]) -> list[Candidate]:
     return out
 
 
-def decide(cands: list[Candidate]) -> tuple[Candidate | None, str]:
-    """认不认第一名:→ (认的那个, ""),或者 (None, 不认的原因)。"""
+def decide(cands: list[Candidate], *, soft: bool = False) -> tuple[Candidate | None, str]:
+    """认不认第一名:→ (认的那个, ""),或者 (None, 不认的原因)。``soft``(自动找位置交定位器精配用):
+    贴合度到 :data:`SOFT_FIT` 就先认(调用方看 ``fit < MIN_FIT`` 知道是先认的,精配完要复核)。"""
     if not cands:
         return None, "图上没有能站机器人的地方跟看到的对得上"
     best = cands[0]
-    if best.fit < MIN_FIT:
+    if best.fit < (SOFT_FIT if soft else MIN_FIT):
         return None, (f"最像的 ({best.x:.1f}, {best.y:.1f}) 贴合度只有 {best.fit:.2f}"
-                      f"(要 {MIN_FIT:g} 以上):看到的与图不匹配")
+                      f"(要 {SOFT_FIT if soft else MIN_FIT:g} 以上):看到的与图不匹配")
     if len(cands) > 1 and best.fit - cands[1].fit < MIN_GAP:
         o = cands[1]
         return None, (f"有两处差不多像:({best.x:.1f}, {best.y:.1f}) 贴合度 {best.fit:.2f}、"

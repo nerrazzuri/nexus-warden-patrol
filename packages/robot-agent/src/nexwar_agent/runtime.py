@@ -346,6 +346,9 @@ class AgentRuntime:
         self._conflict_next = -math.inf
         #: 点云套图连着自动请了几次重定位(定位器又锁回错处就不再请,等人)。
         self._scan_relocs = 0
+        #: 上一次自动找到的位置是「先认、交定位器精配」的(贴合度不到 MIN_FIT,真机 11-24):
+        #: 稳下来以后的点云核对要到 MIN_FIT 才算数。
+        self._soft_check = False
         #: W68 开机自己找位置:后台活、这一段不可信从什么时候起、找了几次、下一次能找的时刻、
         #: 上次找时什么图,找不到时原因的种类(off_map / ambiguous / no_scan)。
         self._find_job: asyncio.Task | None = None
@@ -1772,6 +1775,7 @@ class AgentRuntime:
             if why:
                 return why
             self._scan_relocs = 0
+            self._soft_check = bool(found and found.get("refine"))
             if not auto:
                 # 人给的位置:RTK 核对之前的结论作废、一阵子不按 RTK 自动请(W09e 内审应修 4)
                 self._rtk_check.human_override(self._mono())
@@ -1912,16 +1916,19 @@ class AgentRuntime:
         if not self.globalloc.still_valid(ref):
             # 外审 R3、复查 N1:算的这段时间狗动了 —— 结果对不上此刻(来了新点云、狗没动不算,N4)
             return "not_found: 找位置的这段时间机器人动了,停稳了再试一次"
-        best, why = decide(cands)
+        best, why = decide(cands, soft=True)      # 真机 11-24:先交定位器精配,稳下来再复核
         top = [c.to_wire() for c in cands[:3]]
         if best is None and not await self.hal.stopped():
             # 外审 r2 #9:套图途中机器人动了(里程缓存可能还没跟上):这次的「没找到」不算数
             return "not_found: 找位置的这段时间机器人动了,停稳了再试一次"
+        from nexwar_agent.globalloc import MIN_FIT, SOFT_FIT
         if best is None:
-            from nexwar_agent.globalloc import MIN_FIT
-            self._find_kind = "off_map" if not cands or cands[0].fit < MIN_FIT else "ambiguous"
+            self._find_kind = "off_map" if not cands or cands[0].fit < SOFT_FIT else "ambiguous"
             return f"not_found: {why}"[:200]
-        return (best.x, best.y, best.yaw), {"fit": round(best.fit, 3), "candidates": top}, ref
+        got = {"fit": round(best.fit, 3), "candidates": top}
+        if best.fit < MIN_FIT:
+            got["refine"] = True                  # 先认的:定位器精配完复核(_scan_check)
+        return (best.x, best.y, best.yaw), got, ref
 
     async def _mark_home(self, cmd: Command) -> str | tuple[str, dict[str, Any]]:
         """在当前位置标原点(W00c6f):用**此刻锚定后的地图位姿**当这张图上的原点。狗要停着、不在忙;定位
@@ -2061,7 +2068,7 @@ class AgentRuntime:
         :data:`SCAN_CHECK_WAIT_S` 秒),按定位器给的位置算贴合度;对得上就算了;锁错了 —— 能认出
         对的那处就请定位器按那处重定位(连着最多 :data:`SCAN_RELOC_MAX` 次,定位器又锁回错处就
         不再请),认不出就标定位不可信、等人。"""
-        from nexwar_agent.globalloc import GLOBAL_SIGMA_M, GlobalLocError
+        from nexwar_agent.globalloc import GLOBAL_SIGMA_M, MIN_FIT, GlobalLocError
         anchor = self.parts.nav.anchor
         m = self.loaded_map
         deadline = self._mono() + SCAN_CHECK_WAIT_S
@@ -2095,6 +2102,18 @@ class AgentRuntime:
             return
         if not await self._still_since(ref):
             log.info("点云套图核对算完时机器人动过了:这次的结论作废")
+            return
+        soft, self._soft_check = self._soft_check, False
+        if soft and v.fit < MIN_FIT:
+            # 真机 11-24:自动找到的位置是先认、交定位器精配的;精配完再套图还不到门槛 —— 不认,等人
+            reason = (f"自动找到的位置交定位器精配后,点云套图贴合度 {v.fit:.2f}"
+                      f"(要 {MIN_FIT:g} 以上),位置不可信:请人给位置")
+            log.warning("%s", reason)
+            anchor.scan_disagree = reason[:200]
+            self.events.emit("loc_wrong_solution", {
+                "map_id": m[0], "map_version": m[1], "fit": round(v.fit, 3),
+                "x": round(pose[0], 2), "y": round(pose[1], 2), "reason": reason[:200],
+                "stuck": True})
             return
         if v.ok:
             log.info("点云套图核对:定位器给的 (%.2f, %.2f) 贴合度 %.2f,对得上", pose[0], pose[1],

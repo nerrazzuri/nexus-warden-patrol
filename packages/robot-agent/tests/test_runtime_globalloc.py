@@ -406,3 +406,46 @@ async def test_W71_三次用完_隔两分钟再开一轮(台):
     t.view.pts = _扫(t.occ, *TRUE, noise=0.02)              # 人把它搬回图上了
     await t.拍(10 * 150)
     assert len(t.loc.relocs) == 1, "用完 3 次不是永远不找:隔两分钟再开一轮"
+
+
+async def test_真机1124_贴合度差一点_先交定位器精配_精配完复核不到门槛_标不可信(台, monkeypatch):
+    """用户 11-24 同意「先精配再判」:首轮贴合度在 SOFT_FIT–MIN_FIT 之间、又不跟别处分不清
+    → 先请定位器按它精配;稳下来以后点云套图还是到 MIN_FIT 才算数。
+    这里把 MIN_FIT 抬到够不着,看复核那一关拦得住。"""
+    import nexwar_agent.globalloc as G
+    t = 台
+    monkeypatch.setattr(G, "MIN_FIT", 0.99)              # 连上之前就改:开机那次核对也按它
+    monkeypatch.setattr(G, "SOFT_FIT", 0.3)
+    await t.连()
+    await t.rt._on_cmd(_cmd("relocalize", {"global": True}, "r1", t.c))
+    await t.拍(3)
+    a = _ack(t.ears)
+    assert a["result"] == "accepted" and a["data"]["refine"] is True, a
+    assert t.loc.relocs and t.rt._soft_check
+    t.rt._conflict_next = math.inf
+    await t.拍(15)                                       # 定位器稳下来;稳下来以后代理自己核一遍
+    if t.rt._soft_check:
+        await t.rt._scan_check(-math.inf)
+    await t.拍(2)
+    anchor = t.rt.parts.nav.anchor
+    assert "精配后" in anchor.scan_disagree and anchor.why_not(True) == anchor.scan_disagree
+    assert _事件(t.ears, "loc_wrong_solution")[-1]["stuck"] is True
+    assert not t.rt._soft_check, "复核过一次就算完"
+
+
+async def test_真机1124_先认的_精配完复核到门槛_照常可信(台):
+    t = 台
+    await t.连()
+    t.rt._soft_check = True
+    await t.rt._scan_check(-math.inf)
+    await t.拍(2)
+    assert t.rt.parts.nav.anchor.scan_disagree == "" and not t.rt._soft_check
+    assert not _事件(t.ears, "loc_wrong_solution")
+
+
+async def test_真机1124_贴合度够的_不标精配(台):
+    t = 台
+    await t.连()
+    await t.rt._on_cmd(_cmd("relocalize", {"global": True}, "r1", t.c))
+    await t.拍(3)
+    assert "refine" not in _ack(t.ears)["data"] and not t.rt._soft_check
