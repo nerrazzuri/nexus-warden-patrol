@@ -49,6 +49,17 @@ class SiteError implements Exception {
   }
 }
 
+/// 站点地址是 Tailscale 的（100.64.0.0/10）却连不上时补一句（真机 11-24：手机装了 Tailscale 没打开，
+/// 登录只说「登录失败」，站点那头一条日志都没有）。别的地址返回空串。
+String tailscaleHint(Uri base) {
+  final p = base.host.split('.');
+  if (p.length != 4) return '';
+  final a = int.tryParse(p[0]), b = int.tryParse(p[1]);
+  if (a != 100 || b == null || b < 64 || b > 127) return '';
+  return tr(' — this is a Tailscale address: check that Tailscale is on on this phone.',
+      '（这是 Tailscale 地址：看看手机上的 Tailscale 开着没有）');
+}
+
 /// 站点证书变了时给人看的话（手机 App 测试 M03）。
 String get certChangedText => tr(
     "The site's certificate has changed. If an administrator just reinstalled the site, ask them for the new site code. "
@@ -1215,9 +1226,11 @@ class SiteClient implements SiteApi {
       }
       throw SiteError(0, tr('TLS handshake with the site failed: $e', '与站点的加密连接失败：$e'), kind: 'tls');
     } on TimeoutException {
-      throw SiteError(0, tr('No reply from the site (timed out)', '站点无响应（超时）'), kind: 'timeout');
+      throw SiteError(0, tr('No reply from the site (timed out)', '站点无响应（超时）') + tailscaleHint(base),
+          kind: 'timeout');
     } on SocketException catch (e) {
-      throw SiteError(0, tr("Can't reach the site: ${e.message}", '无法连接站点：${e.message}'), kind: 'net');
+      throw SiteError(0, tr("Can't reach the site: ${e.message}", '无法连接站点：${e.message}') + tailscaleHint(base),
+          kind: 'net');
     } on HttpException catch (e) {
       throw SiteError(0, tr(
           'Connection to the site dropped: ${e.message}',
