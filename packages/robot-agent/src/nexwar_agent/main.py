@@ -20,7 +20,7 @@ import signal
 import sys
 import threading
 import time
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -145,6 +145,9 @@ def build_parser() -> argparse.ArgumentParser:
                    help="/etc/nexwar/env 的 NEXWAR_AGENT_ARGS(启动脚本带进来,W32):"
                         "这一版不认识的参数跳过并报站点,不会因为它起不来")
     p.add_argument("--hal", choices=("sim", "d1max"), default="sim", help="品牌适配器")
+    p.add_argument("--robot-model", choices=ROBOT_MODELS, default="d1max",
+                   help="W80:--hal d1max 下接的是哪种机器人。d1edu = D1 Edu"
+                        "(旁路在 nexwar-d1edu 仓库,说同一套旁路协议;没有机身灯)")
     p.add_argument("--autonomy", choices=("supervised", "autonomous"), default=None,
                    help="自主级别(W00c6i):supervised = goto/巡检只在有人现场监护时才接;"
                         "默认 --hal d1max 是 supervised、sim 是 autonomous。**真机器人改成 "
@@ -301,6 +304,9 @@ def build_parser() -> argparse.ArgumentParser:
     o.add_argument("--mapping-sim", type=Path, default=None, metavar="图目录",
                    help="演示站点用(W54):假建图 —— 录包、打包流程是真的,建出的图照搬这张图,"
                         "回环按仿真机器人走过的路算;只配 --hal sim")
+    o.add_argument("--mapping-orchestrator", default=None, metavar="模块:函数",
+                   help="W80:建图编排换成外部包给的(比如 nexwar_d1edu.slam2d:orchestrator,2D 建图);"
+                        "函数收 bags_dir、work、store 三个关键字参数,回编排器。要 --mapping")
     o.add_argument("--log-ship-file", action="append", default=[], type=Path,
                    help="日志设计 第 5 条:没有 systemd 日志时(演示、仿真)按文件传到站点,可给多个;"
                         "systemd 下跑时自动传我们各服务的 systemd 日志")
@@ -402,6 +408,13 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         p.error("--mapping-sim 只配 --hal sim、要 --outbox、不跟 --mapping 一起")
     if args.mapping and args.outbox is None:
         p.error("--mapping 要配 --outbox(录包和生成的图都写进发件箱传给站点)")
+    if args.mapping_orchestrator is not None and not args.mapping:
+        p.error("--mapping-orchestrator 要配 --mapping")
+    if args.mapping_orchestrator is not None and \
+            not re.fullmatch(r"[A-Za-z_][\w.]*:[A-Za-z_]\w*", args.mapping_orchestrator):
+        p.error("--mapping-orchestrator 要写成 模块:函数")
+    if args.robot_model != "d1max" and args.hal != "d1max":
+        p.error("--robot-model 只配 --hal d1max")
     if args.obstacles == "bridge" and args.nav not in ("planned", "nav2"):
         p.error("--obstacles bridge 要配 --nav planned 或 nav2(守卫在规划后端里)")
     if args.nav == "nav2" and args.obstacles != "bridge":
@@ -600,7 +613,8 @@ def build(args: argparse.Namespace) -> Assembled:
                            lateral_mps_per_unit=args.lateral_mps_per_unit,
                            invert_lateral=args.invert_lateral,
                            stopped_eps=args.stopped_eps, now_ms=wall_ms, payload=payload,
-                           token_file=sidecar_token_path(args.sidecar_token_file))
+                           token_file=sidecar_token_path(args.sidecar_token_file),
+                           **model_hal_kwargs(args.robot_model))
             # 工单 18:到点拍照跟实时画面用同一套 RTSP 相机,每次 ffmpeg 抽一帧 JPEG
             from nexwar_agent.bridges.rtsp_media import rtsp_media
             from nexwar_agent.video_push import rtsp_source as _rtsp_source
@@ -735,6 +749,32 @@ class _NoIntake:
     def put(self, req):
         from nexwar_agent.engine.uploader import SinkError
         raise SinkError("没有配站点接收口")
+
+
+#: W80:``--hal d1max`` 下的机型。
+ROBOT_MODELS = ("d1max", "d1edu")
+#: 报给站点的适配器号(``capabilities.adapter``):站点、手机据此认机型。
+MODEL_ADAPTER_IDS = {"d1edu": "nexwar-d1edu/0.1.0"}
+
+
+def model_hal_kwargs(model: str) -> dict[str, Any]:
+    """机型 → :class:`~nexwar_adapter_d1max.hal.D1MaxHal` 多给的参数(D1 Max 什么都不多给)。"""
+    if model == "d1edu":
+        return {"light": False, "adapter_id": MODEL_ADAPTER_IDS["d1edu"]}
+    return {}
+
+
+def load_orchestrator(spec: str) -> Callable[..., Any]:
+    """``模块:函数`` → 那个函数(W80 外部建图编排)。找不到就不起,说清楚。"""
+    import importlib
+    mod, _, attr = spec.partition(":")
+    try:
+        fn = getattr(importlib.import_module(mod), attr)
+    except (ImportError, AttributeError) as exc:
+        raise SystemExit(f"--mapping-orchestrator {spec}:找不到({exc})") from exc
+    if not callable(fn):
+        raise SystemExit(f"--mapping-orchestrator {spec}:不是函数")
+    return fn
 
 
 def extra_cameras(args: argparse.Namespace) -> dict[str, dict[str, Any]]:
@@ -907,6 +947,11 @@ def _outbox(args: argparse.Namespace, registration: Registration, parts: EngineP
                                       work=Path(args.store_dir) / "mapwork")
         mapper = MappingService(orch, bags_root=bag_root,
                                 maps_out=args.outbox / "maps")
+        mapper.keeper = keeper
+    elif args.mapping and args.mapping_orchestrator is not None:
+        orch = load_orchestrator(args.mapping_orchestrator)(
+            bags_dir=bag_root, work=Path(args.store_dir) / "mapwork", store=Path(args.store_dir))
+        mapper = MappingService(orch, bags_root=bag_root, maps_out=args.outbox / "maps")
         mapper.keeper = keeper
     elif args.mapping:
         from nexwar_patrol.app.mapping import MappingConfig, MappingOrchestrator

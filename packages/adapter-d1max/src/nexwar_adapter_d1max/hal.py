@@ -124,9 +124,14 @@ class D1MaxHal:
                  now_ms: Callable[[], int] = wall_ms,
                  backend: SidecarDeviceBackend | None = None,
                  payload: Payload | AnbotPayload | None = None,
-                 token_file: str | None = None) -> None:
+                 token_file: str | None = None, light: bool = True,
+                 adapter_id: str | None = None) -> None:
         """``token_file``:旁路进程的令牌(协议 9,S11)。代理给缺省的 ``~/.nexwar/sidecar.token``;
-        旁路进程要令牌而读不了、不对,``connect`` 就抛(开不了车的代理不该假装能开)。"""
+        旁路进程要令牌而读不了、不对,``connect`` 就抛(开不了车的代理不该假装能开)。
+
+        ``light``、``adapter_id``(W80):同一套旁路协议接别的机型(D1 Edu 旁路在
+        ``nexwar-d1edu`` 仓库),它没有机身灯就报不能、调了抛 :class:`HalUnsupported`;
+        ``adapter_id`` 报给站点认机型。"""
         for name, v in (("mps_per_unit", mps_per_unit), ("radps_per_unit", radps_per_unit)):
             if not (math.isfinite(v) and v > 0):
                 raise ValueError(f"{name} 要是正数,收到 {v}")
@@ -138,6 +143,9 @@ class D1MaxHal:
             raise ValueError(f"fwd_offset 要在 [0, min(max_fraction, {MAX_WALK_SPEED})),"
                              f"收到 {fwd_offset}")
         self._b = backend or SidecarDeviceBackend(host, port, token_file=token_file)
+        self._light = bool(light)
+        if adapter_id is not None:
+            self.adapter_id = adapter_id
         self._payload = payload
         self._payload_up = False
         self._mps, self._radps = mps_per_unit, radps_per_unit
@@ -495,6 +503,8 @@ class D1MaxHal:
     # ------------------------------------------------------------ 执行器与媒体
 
     async def light(self, channel: str, on: bool) -> None:
+        if not self._light:
+            raise HalUnsupported("这个机型没有机身灯")
         setter = {"front": self._b.set_front_light, "back": self._b.set_back_light,
                   "both": self._b.set_light}.get(channel)
         if setter is None:
@@ -660,6 +670,6 @@ class D1MaxHal:
             control_releasable=False, recharge_mode="none",
             sensing={"lidar": False, "depth": False, "thermal": False, "imu": True,
                      "imu_hz": IMU_HZ, "joint_effort": False, "foot_force": False},
-            actuators={"light": True, "head": False} | {
+            actuators={"light": self._light, "head": False} | {
                 k: self._payload is not None and self._payload.has(k)
                 for k in ("strobe", "siren", "speaker", "spotlight", "wiper", "ptz")})
