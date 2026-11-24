@@ -3,7 +3,7 @@ import { signal } from "@preact/signals";
 import { useCallback, useEffect, useRef, useState } from "preact/hooks";
 import { api, ApiError } from "./api";
 import { t } from "./i18n";
-import type { Alert, DeterSession, Mode, Robot, Summary } from "./model";
+import { robotCams, type Alert, type DeterSession, type Mode, type Robot, type Summary } from "./model";
 
 export interface SiteData {
   robots: Robot[];
@@ -39,11 +39,14 @@ export async function fetchSite(): Promise<SiteData> {
     api<Summary>("GET", "/api/watch/summary").catch(() => null),
   ]);
   robotNames.value = Object.fromEntries(r.robots.filter((x) => x.name).map((x) => [x.robot_id, x.name as string]));
+  robotCameras.value = Object.fromEntries(r.robots.map((x) => [x.robot_id, robotCams(x)]));
   return { robots: r.robots, alerts: a.alerts, mode: m, deter: d, summary: s };
 }
 
 /** 管理员给机器人起的名字(W44 第二期,站点 /api/robots 带 name);每次拉站点数据都更新。 */
 export const robotNames = signal<Record<string, string>>({});
+/** W80:每台机器人有哪几路相机(D1 Edu 只有前摄像头);每次拉站点数据都更新。没拉到的按前后两路算。 */
+export const robotCameras = signal<Record<string, string[]>>({});
 /** 第 4 轮 layout r3-N3:现在连不上站点(值班台的轮询断了)。各页清单是空的时候,连不上就写「读取失败,正在重试」,不写「没有」。 */
 export const siteDown = signal(false);
 

@@ -249,3 +249,21 @@ describe("导航 V1 第 5 节:报警详情按原因码写「怎么回事 + 该�
     }
   });
 });
+
+describe("W80:D1 Edu 只有前摄像头", () => {
+  it("报警录像:机器人没有后摄像头就不给「换一路」;有的照旧给", async () => {
+    const { robotCameras } = await import("./data");
+    const a = alert({ kind: "intrusion", robot: "E" });
+    robotCameras.value = { E: ["front"] };
+    const r = render(<EventPanel a={a} role="guard" now={1000} refresh={async () => {}} say={() => {}} />);
+    expect(r.container.querySelector("[data-other-cam]")).toBeNull();
+    cleanup();
+    robotCameras.value = { E: ["front", "back"] };
+    const r2 = render(<EventPanel a={a} role="guard" now={1000} refresh={async () => {}} say={() => {}} />);
+    expect(r2.container.querySelector("[data-other-cam]")).not.toBeNull();
+    cleanup();
+    robotCameras.value = {};                       // 没拉到:按前后两路算(老样子)
+    const r3 = render(<EventPanel a={a} role="guard" now={1000} refresh={async () => {}} say={() => {}} />);
+    expect(r3.container.querySelector("[data-other-cam]")).not.toBeNull();
+  });
+});

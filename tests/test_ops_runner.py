@@ -687,3 +687,20 @@ def test_POC1106_暂停厂家进程也停竞品的ros1桥_关自启不碰竞品�
                                                                     {"on": False})
     assert out["disabled"] == ["robot_slam.service"]
     assert not any("anbot_bridge" in " ".join(c) for c in sysd.calls), "竞品的自启不动"
+
+
+def test_W80_机型多出来的服务_配置里写了才进白名单_重启全部也带上(tmp_path):
+    cfg = _cfg(tmp_path)
+    assert "nexwar_d1edu_lidar" not in R.Ops(cfg, run=Rec())._units()
+    with pytest.raises(R.OpError):
+        R.Ops(cfg, run=Rec()).do("restart", {"unit": "nexwar_d1edu_lidar"})
+    cfg["extra_units"] = ["nexwar_d1edu_lidar", "nexwar_d1edu_sidecar", "nexwar_agent"]
+    rec = Rec()
+    ops = R.Ops(cfg, run=rec)
+    assert ops.do("restart", {"unit": "nexwar_d1edu_lidar"}) == {"unit": "nexwar_d1edu_lidar"}
+    out = R.Ops(cfg, run=Rec()).do("restart_all", {})
+    assert out["restarted"][-1] == "nexwar_agent" and "nexwar_d1edu_sidecar" in out["restarted"]
+    assert out["restarted"].count("nexwar_agent") == 1
+    for bad in (["ssh"], ["nexwar_x; rm"], "nexwar_a", [1]):
+        with pytest.raises(R.OpError, match="extra_units"):
+            R.Ops({**cfg, "extra_units": bad}, run=Rec())

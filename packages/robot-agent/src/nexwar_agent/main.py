@@ -20,7 +20,7 @@ import signal
 import sys
 import threading
 import time
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -126,6 +126,7 @@ def sidecar_token_path(given: str | None) -> str | None:
 #: 照它换算代理以为的速度跟实际差一大截、限速区限不住 —— 不在范围里就不起,实测值真不在范围里要人加
 #: ``--units-confirmed``。``deploy/nexwar_units_check``(装机前查)用同一个范围(测试核)。
 UNIT_RANGES = {"mps_per_unit": (0.7, 1.5), "radps_per_unit": (1.1, 2.0)}
+#: (W80 起各机型的范围写在机型档案里,:mod:`nexwar_agent.robot_models`;D1 系列 SDK 的就是上面这个。)
 
 
 def resolve_autonomy(args: argparse.Namespace) -> str:
@@ -145,6 +146,10 @@ def build_parser() -> argparse.ArgumentParser:
                    help="/etc/nexwar/env 的 NEXWAR_AGENT_ARGS(启动脚本带进来,W32):"
                         "这一版不认识的参数跳过并报站点,不会因为它起不来")
     p.add_argument("--hal", choices=("sim", "d1max"), default="sim", help="品牌适配器")
+    p.add_argument("--robot-model", default="d1max",
+                   help="W80:--hal d1max 下接的是哪种机器人(机型档案的编号)。内置 d1max;"
+                        "别的机型的档案放 /etc/nexwar/robot-models/<编号>.json(品牌包装),"
+                        "见 docs/接入新机型.md")
     p.add_argument("--autonomy", choices=("supervised", "autonomous"), default=None,
                    help="自主级别(W00c6i):supervised = goto/巡检只在有人现场监护时才接;"
                         "默认 --hal d1max 是 supervised、sim 是 autonomous。**真机器人改成 "
@@ -301,6 +306,9 @@ def build_parser() -> argparse.ArgumentParser:
     o.add_argument("--mapping-sim", type=Path, default=None, metavar="图目录",
                    help="演示站点用(W54):假建图 —— 录包、打包流程是真的,建出的图照搬这张图,"
                         "回环按仿真机器人走过的路算;只配 --hal sim")
+    o.add_argument("--mapping-orchestrator", default=None, metavar="模块:函数",
+                   help="W80:建图编排换成外部包给的(比如 nexwar_d1edu.slam2d:orchestrator,2D 建图);"
+                        "函数收 bags_dir、work、store 三个关键字参数,回编排器。要 --mapping")
     o.add_argument("--log-ship-file", action="append", default=[], type=Path,
                    help="日志设计 第 5 条:没有 systemd 日志时(演示、仿真)按文件传到站点,可给多个;"
                         "systemd 下跑时自动传我们各服务的 systemd 日志")
@@ -402,6 +410,22 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         p.error("--mapping-sim 只配 --hal sim、要 --outbox、不跟 --mapping 一起")
     if args.mapping and args.outbox is None:
         p.error("--mapping 要配 --outbox(录包和生成的图都写进发件箱传给站点)")
+    if args.mapping_orchestrator is not None and not args.mapping:
+        p.error("--mapping-orchestrator 要配 --mapping")
+    if args.mapping_orchestrator is not None and \
+            not re.fullmatch(r"[A-Za-z_][\w.]*:[A-Za-z_]\w*", args.mapping_orchestrator):
+        p.error("--mapping-orchestrator 要写成 模块:函数")
+    from nexwar_agent import robot_models
+    if args.robot_model != "d1max" and args.hal != "d1max":
+        p.error("--robot-model 只配 --hal d1max")
+    try:
+        args.model = robot_models.get(args.robot_model)
+    except robot_models.ModelError as exc:
+        p.error(str(exc))
+    if args.mapping and args.mapping_orchestrator is None:
+        args.mapping_orchestrator = args.model.mapping_orchestrator   # W80:机型档案里的
+    if args.robot_radius is None:
+        args.robot_radius = args.model.robot_radius_m
     if args.obstacles == "bridge" and args.nav not in ("planned", "nav2"):
         p.error("--obstacles bridge 要配 --nav planned 或 nav2(守卫在规划后端里)")
     if args.nav == "nav2" and args.obstacles != "bridge":
@@ -440,12 +464,13 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     if args.hal == "d1max":
         for k, v in NEXWAR_DEFAULTS.items():
             if getattr(args, k) is None:
-                setattr(args, k, v)
+                setattr(args, k, args.model.units.get(k, v))     # W80:先机型档案,再缺省
+        ranges = args.model.unit_ranges if args.model.driver == "sidecar" else {}
         bad = [f"--{k.replace('_', '-')} {getattr(args, k)}(要在 {lo}–{hi})"
-               for k, (lo, hi) in UNIT_RANGES.items()
+               for k, (lo, hi) in ranges.items()
                if not lo <= getattr(args, k) <= hi]
         if bad and not args.units_confirmed:
-            p.error("速度换算系数不在 SDK 低速档的合理范围里:" + "、".join(bad)
+            p.error(f"{args.model.name} 的速度换算系数不在 SDK 低速档的合理范围里:" + "、".join(bad)
                     + "。老模板的 0.4 / 1.0 是猜的(文档是 1.0 m/s、1.5 rad/s),照它换算限速区限不住;"
                     "删掉用默认值、写实测值,实测值真不在范围里人核过之后加 --units-confirmed(W12)")
     elif nexwar_only:
@@ -583,8 +608,6 @@ def build(args: argparse.Namespace) -> Assembled:
                 media = rtsp_media(file_snapshot_source(args.video_dir), now_ms=wall_ms,
                                    ffmpeg=args.ffmpeg)
         else:
-            from nexwar_adapter_d1max.hal import D1MaxHal
-            host, port = args.sidecar
             if args.payload.is_file():
                 # 11-05 POC:kind=anbot_ros1 是借竞品上装的警灯、喇叭(nexwar_adapter_d1max.anbot)
                 from nexwar_adapter_d1max.anbot import load_payload
@@ -592,19 +615,12 @@ def build(args: argparse.Namespace) -> Assembled:
                 log.info("上装配置 %s:接了 %s", args.payload,
                          "、".join(o for o in ("strobe", "siren", "spotlight", "speaker")
                                   if payload.has(o)) or "(一路都没有)")
-            hal = D1MaxHal(host, port, mps_per_unit=args.mps_per_unit,
-                           mps_per_unit_mid=args.mps_per_unit_mid,
-                           radps_per_unit=args.radps_per_unit, deadband_mps=args.deadband,
-                           max_fraction=args.max_fraction, fwd_offset=args.fwd_offset,
-                           invert_yaw=args.invert_yaw,
-                           lateral_mps_per_unit=args.lateral_mps_per_unit,
-                           invert_lateral=args.invert_lateral,
-                           stopped_eps=args.stopped_eps, now_ms=wall_ms, payload=payload,
-                           token_file=sidecar_token_path(args.sidecar_token_file))
+            hal = make_hal(args, payload)
             # 工单 18:到点拍照跟实时画面用同一套 RTSP 相机,每次 ffmpeg 抽一帧 JPEG
             from nexwar_agent.bridges.rtsp_media import rtsp_media
             from nexwar_agent.video_push import rtsp_source as _rtsp_source
-            media = rtsp_media(_rtsp_source(args.camera_host, extra_cameras(args)),
+            media = rtsp_media(_rtsp_source(args.camera_host, extra_cameras(args),
+                                            builtin_cameras(args)),
                                now_ms=wall_ms, ffmpeg=args.ffmpeg)
         parts = build_engine(hal, runs_root=args.runs_root, now_ms=wall_ms, map_id=args.map[0],
                              home=args.home, media=media, nav_kind=args.nav,
@@ -625,8 +641,8 @@ def build(args: argparse.Namespace) -> Assembled:
                 raise SystemExit(f"--video-source file:{folder} 里没有 {'、'.join(missing)}")
             source = file_source(folder)
         else:
-            source = lavfi_source if kind == "lavfi" else rtsp_source(args.camera_host,
-                                                                       extra_cameras(args))
+            source = lavfi_source if kind == "lavfi" else rtsp_source(
+                args.camera_host, extra_cameras(args), builtin_cameras(args))
         video = VideoPusher(source=source, ffmpeg=args.ffmpeg, transcode=args.video_transcode,
                             lite=push_lite(args.video_push_lite))
         pump = keeper = mapper = recorder = None
@@ -707,7 +723,8 @@ def build(args: argparse.Namespace) -> Assembled:
             from nexwar_agent.lens import ffmpeg_gray
             from nexwar_contract.video import STANDARD_CAMERAS
             runtime.attach_cover(CoverWatch(
-                {c: ffmpeg_gray(source(c), args.ffmpeg) for c in STANDARD_CAMERAS},
+                {c: ffmpeg_gray(source(c), args.ffmpeg) for c in builtin_cameras(args)
+                 if c in STANDARD_CAMERAS},
                 lidar_blocked=anchor.lidar_blocked, monotonic=time.monotonic))
         runtime.attach_ops(_ops(args, registration, runtime))   # W55 远程运维
         if args.hal == "d1max":
@@ -735,6 +752,54 @@ class _NoIntake:
     def put(self, req):
         from nexwar_agent.engine.uploader import SinkError
         raise SinkError("没有配站点接收口")
+
+
+def robot_model(args: argparse.Namespace) -> Any:
+    """这台机器人的机型档案(:mod:`nexwar_agent.robot_models`;``parse_args`` 读好的)。"""
+    from nexwar_agent import robot_models
+    return getattr(args, "model", None) or robot_models.get(getattr(args, "robot_model", "d1max"))
+
+
+def builtin_cameras(args: argparse.Namespace) -> tuple[str, ...]:
+    """这台机器人自带哪几路相机(机型档案的 ``cameras``;D1 Max 前后两路,D1 Edu 只有前)。"""
+    return tuple(robot_model(args).cameras)
+
+
+def make_hal(args: argparse.Namespace, payload: Any = None) -> Any:
+    """按机型档案的 ``driver`` 造真机器人的 HAL。``sidecar`` = 旁路协议(D1 系列、D1 Edu,别家写一个
+    说这套协议的旁路进程也走这条);``模块:函数`` = 品牌包自己的适配器,调
+    ``函数(model=档案, args=命令行参数, now_ms=..., payload=上装)`` 拿 HAL。"""
+    model = robot_model(args)
+    if model.driver != "sidecar":
+        hal = load_orchestrator(model.driver, what="机型档案的 driver")(
+            model=model, args=args, now_ms=wall_ms, payload=payload)
+        log.info("机型 %s:驱动 %s", model.name, model.driver)
+        return hal
+    from nexwar_adapter_d1max.hal import D1MaxHal
+    host, port = args.sidecar
+    return D1MaxHal(host, port, mps_per_unit=args.mps_per_unit,
+                    mps_per_unit_mid=args.mps_per_unit_mid,
+                    radps_per_unit=args.radps_per_unit, deadband_mps=args.deadband,
+                    max_fraction=args.max_fraction, fwd_offset=args.fwd_offset,
+                    invert_yaw=args.invert_yaw,
+                    lateral_mps_per_unit=args.lateral_mps_per_unit,
+                    invert_lateral=args.invert_lateral,
+                    stopped_eps=args.stopped_eps, now_ms=wall_ms, payload=payload,
+                    token_file=sidecar_token_path(args.sidecar_token_file),
+                    light=model.light, adapter_id=model.adapter_id)
+
+
+def load_orchestrator(spec: str, what: str = "--mapping-orchestrator") -> Callable[..., Any]:
+    """``模块:函数`` → 那个函数(W80 外部建图编排、品牌包的驱动)。找不到就不起,说清楚。"""
+    import importlib
+    mod, _, attr = spec.partition(":")
+    try:
+        fn = getattr(importlib.import_module(mod), attr)
+    except (ImportError, AttributeError) as exc:
+        raise SystemExit(f"{what} {spec}:找不到({exc})") from exc
+    if not callable(fn):
+        raise SystemExit(f"{what} {spec}:不是函数")
+    return fn
 
 
 def extra_cameras(args: argparse.Namespace) -> dict[str, dict[str, Any]]:
@@ -767,13 +832,13 @@ def push_lite(text: str):
 def record_cameras(args: argparse.Namespace) -> list[str]:
     """``--record`` → 录哪几路(W18)。``auto``:真狗前后两路(加上 ``--cameras`` 里写了 ``record`` 的,
     W40)、仿真不录;``none``/空:不录。"""
-    from nexwar_contract.video import STANDARD_CAMERAS
+    builtin = builtin_cameras(args)
     raw = (args.record or "").strip()
     extra = extra_cameras(args) if args.hal == "d1max" or raw not in ("auto", "", "none") else {}
-    have = list(dict.fromkeys([*STANDARD_CAMERAS, *extra]))
+    have = list(dict.fromkeys([*builtin, *extra]))
     if raw == "auto":
-        return [*STANDARD_CAMERAS, *(c for c, v in extra.items()
-                                     if v["record"] and c not in STANDARD_CAMERAS)] \
+        return [*builtin, *(c for c, v in extra.items()
+                            if v["record"] and c not in builtin)] \
             if args.hal == "d1max" else []
     if raw in ("", "none"):
         return []
@@ -907,6 +972,11 @@ def _outbox(args: argparse.Namespace, registration: Registration, parts: EngineP
                                       work=Path(args.store_dir) / "mapwork")
         mapper = MappingService(orch, bags_root=bag_root,
                                 maps_out=args.outbox / "maps")
+        mapper.keeper = keeper
+    elif args.mapping and args.mapping_orchestrator is not None:
+        orch = load_orchestrator(args.mapping_orchestrator)(
+            bags_dir=bag_root, work=Path(args.store_dir) / "mapwork", store=Path(args.store_dir))
+        mapper = MappingService(orch, bags_root=bag_root, maps_out=args.outbox / "maps")
         mapper.keeper = keeper
     elif args.mapping:
         from nexwar_patrol.app.mapping import MappingConfig, MappingOrchestrator
@@ -1059,6 +1129,7 @@ def _ops(args: argparse.Namespace, registration: Registration, runtime: Any) -> 
         priv = privops.SimOps(restarts=False)        # W61:没人会重启仿真代理,做完就放开
     data_root = Path(os.environ.get("NEXWAR_DATA_ROOT") or Path(args.store_dir).parent)
     desk = OpsDesk(robot_id=registration.robot_id, priv=priv, data_root=data_root,
+                   units=robot_model(args).all_services,          # W80:机型档案的服务
                    busy=lambda: "", releases=runtime.releases,
                    tls_cert=Path(args.tls_cert or "/etc/nexwar/tls/robot.crt"),
                    tls_ca=Path(args.tls_ca or "/etc/nexwar/tls/ca.crt"))

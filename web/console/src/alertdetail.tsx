@@ -4,7 +4,7 @@
 import { useEffect, useRef, useState } from "preact/hooks";
 import { alertAdvice, alertHeadline, canHandleAlerts } from "./alertinfo";
 import { api, ApiError, enc } from "./api";
-import { hm, nameOf } from "./data";
+import { hm, nameOf, robotCameras } from "./data";
 import { lang, t } from "./i18n";
 import { verdictText } from "./mappage";
 import { autoResolved, type Alert } from "./model";
@@ -181,6 +181,8 @@ function EvPlayer({ a, role }: { a: Alert; role: string }) {
     } else setCur(hit);
   };
   const other = cam === "front" ? "back" : "front";
+  // W80:D1 Edu 只有前摄像头,没有后的就不给「换一路」
+  const hasBack = (robotCameras.value[a.robot] ?? ["front", "back"]).includes("back");
   const pct = (ms: number) => Math.min(100, Math.max(0, ((ms - from) / (to - from)) * 100));
   return (
     <div class="evp-player">
@@ -209,7 +211,7 @@ function EvPlayer({ a, role }: { a: Alert; role: string }) {
         <button type="button" class="btn" disabled={!cur} onClick={() => { const v = video.current; if (v) { if (v.paused) void v.play().catch(() => {}); else v.pause(); } }}>
           {t(paused ? "evPlay" : "evPause")}
         </button>
-        <button type="button" class="btn" data-other-cam="1" onClick={() => setCam(other)}>{t("evOtherCam", { cam: t(other) })}</button>
+        {hasBack && <button type="button" class="btn" data-other-cam="1" onClick={() => setCam(other)}>{t("evOtherCam", { cam: t(other) })}</button>}
         {(role === "admin" || role === "engineer")
           ? <a class="btn" href={`/api/recordings/clip?robot=${enc(a.robot)}&camera=${cam}&since=${Math.floor(from)}&until=${Math.floor(to)}`}>{t("evExportClip")}</a>
           : <a class="btn" href={recordingLink(a)}>{t("evFullRec")}</a>}

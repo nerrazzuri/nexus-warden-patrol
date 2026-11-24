@@ -74,11 +74,14 @@ def load_cameras(path: Path) -> dict[str, dict[str, Any]]:
     return out
 
 
-def rtsp_source(host: str, extra: dict[str, dict[str, Any]] | None = None) -> Source:
+def rtsp_source(host: str, extra: dict[str, dict[str, Any]] | None = None,
+                builtin: tuple[str, ...] | None = None) -> Source:
     """真狗:RK3588 上的相机 RTSP(``rtsp://<host>:8554/<camera>``),走 TCP。``extra``
-    (:func:`load_cameras`)里的相机按它自己的地址拉。返回的函数带 ``cameras``:这只狗有哪几路。"""
+    (:func:`load_cameras`)里的相机按它自己的地址拉。返回的函数带 ``cameras``:这只狗有哪几路。
+
+    ``builtin``:机器人自带哪几路(缺省 D1 Max 的前后两路;W80 D1 Edu 只有 ``front``)。"""
     from nexwar_contract.video import STANDARD_CAMERAS
-    urls = {c: f"rtsp://{host}:8554/{c}" for c in STANDARD_CAMERAS} | {
+    urls = {c: f"rtsp://{host}:8554/{c}" for c in (builtin or STANDARD_CAMERAS)} | {
         c: v["url"] for c, v in (extra or {}).items()}
 
     def src(camera: str) -> list[str]:
