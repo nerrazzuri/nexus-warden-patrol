@@ -28,7 +28,7 @@ ORIN_GW_B="${ORIN_GW_B:-192.168.113.1}"         # 平时经 R300S(11-23 实测)
 ORIN_GW_A="${ORIN_GW_A:-192.168.168.168}"       # RK3588
 HOTSPOT_IP="${HOTSPOT_IP:-192.168.234.232}"     # 笔记本在机器人热点上的固定地址
 SITE_HOME="${SITE_HOME:-/var/lib/nexwar_site}"
-SITE_CLI="${SITE_CLI:-nexwar_site}"
+SITE_CLI="${SITE_CLI:-/opt/nexwar_site/venv/bin/nexwar_site}"   # 装站点时不进 PATH(真机 11-24)
 SSH_OPTS=(-o ConnectTimeout=8 -o ServerAliveInterval=5)
 
 DRY=0; CMD=""; SSID=""; HOURS=6
@@ -58,7 +58,7 @@ on() {  # on <主机> <说明> <脚本>
 local_do() {  # local_do <说明> <脚本>
   say "$1(笔记本)"
   if [ "$DRY" = 1 ]; then printf '%s\n' "$2" | sed 's/^/   | /'; return 0; fi
-  bash -c "$2"
+  bash -ec "$2"   # 一步不成就停:不往下走、不说「做完」(真机 11-24)
 }
 
 ts_ip() {
