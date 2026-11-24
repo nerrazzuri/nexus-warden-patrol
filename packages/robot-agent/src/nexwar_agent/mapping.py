@@ -4,9 +4,11 @@
 离线重建一张图)。这里只是把现成的建图编排(``nexwar_patrol.app.mapping.MappingOrchestrator``,
 录 mcap 包 → MOLA 离线建一个地图版本,W09c1)接到发件箱上:
 
-- **包**写进发件箱 ``bags/<包名>-<UTC 时刻>/``(带时刻:同名的包不会在站点上覆盖上一个);停录时打
-  一个 ``.done``。**重建成功之后(``.built``)或录完满 ``BAG_KEEP_DAYS`` 天**,传完、站点确认才删 ——
-  包是在狗上重建的原料,传完就删的话「拿这个包重建」几乎永远做不成(内部评审)。正在拿它重建的包不删。
+- **包**写进 ``bags_root/<包名>-<UTC 时刻>/``,停录时打一个 ``.done``。**真机 11-24 起包不进发件箱、
+  不传站点**(8 分钟建图录了 21 GB,撑满发件箱上限被拒 ``storage_full``,还经 4G 往站点传):出图用
+  边走边存的关键帧(W75),包只留在机器人上备关键帧不齐时从包建、备拿回来回放(局域网或 U 盘拷)。
+  录完满 ``BAG_KEEP_DAYS`` 天删;盘紧了(:func:`storage_pressure`)提前删
+  (:meth:`MappingService.prune_bags`)。正在录的、正在拿来打包、重建的不删。
 - **重建出来的图**(``GEOMETRY_FILES`` 那几样,缺一样都不算建成)挪进发件箱 ``maps/<地图号>/<版本>/``
   (挪、不拷:先验几百 MB),文件都就位之后**最后写** ``map.json``(每个文件的大小与 sha256):站点
   收齐这一份、核对全部文件才登记;狗上传完就删。
@@ -42,8 +44,28 @@ LIVE = ".live"
 #: 发停录那一刻(本机钟,秒;外审 W75-2 #1):关键帧齐不齐按它比 —— ``.done`` 是收尾完才打的(录包写
 #: 索引、在线建图存盘要好一会;代理重启补打的更晚),拿它比会把齐的误判成不齐。
 STOP_AT = ".stop_at"
-#: 没重建过的包,录完之后在狗上最多留几天(传完、站点确认之后才删)。
+#: 录包录完之后在机器人上留几天(真机 11-24 起不传站点;盘紧了提前删)。
 BAG_KEEP_DAYS = 7
+#: 录包放哪(``--store-dir`` 下面;真机 11-24 以前在发件箱 ``bags/`` 里)。
+MAPBAGS = "mapbags"
+
+
+def _move_old_bags(old: Path, new: Path) -> None:
+    """升级上来的:发件箱 ``bags/`` 里还有的包挪到 ``new``(同一块盘,改名不拷),不再传。
+    挪不了的(不同盘、重名)留在原地,记一行。"""
+    if not old.is_dir():
+        return
+    new.mkdir(parents=True, exist_ok=True)
+    for b in sorted(old.iterdir()):
+        if not b.is_dir():
+            continue
+        try:
+            if (new / b.name).exists():
+                raise FileExistsError(b.name)
+            os.rename(b, new / b.name)
+            log.info("录包挪出发件箱(不再传站点):%s", b.name)
+        except OSError:
+            log.exception("录包挪不出发件箱,留在原地:%s", b)
 #: **盘紧了就不留**(W00c5d 第三部分内部评审:留着的包把发件箱撑满,巡检就被拒 storage_full):
 #: 发件箱过了上限的这一份、或者盘用到这条线,传完了的包一律可以删 —— 站点上有一份。
 RETAIN_CAP_SHARE = 0.5
@@ -190,6 +212,10 @@ class MappingService:
         #: 起来时找到的、没法接着收尾的边走边建(包, 地图号, 版本, 命令号):调用方报「没建成」。
         self.lost: list[tuple[str, str, str, str]] = []
         self._cleanup()
+        try:
+            self.prune_bags()                     # 起来时放满天数的删(盘况这时还没量,只按天数)
+        except OSError:
+            log.exception("起来时清理老录包出错")
 
     @property
     def log_dir(self) -> Path | None:
@@ -221,7 +247,38 @@ class MappingService:
                 self.pending, self.pending_task, self.pending_pack = got, task, pack
                 self.held.add(b.name)
 
+    def prune_bags(self) -> list[str]:
+        """在机器人上留着的录包到期就删(真机 11-24:包不进发件箱、不传):录完满 :data:`BAG_KEEP_DAYS`
+        天的删;盘紧了(``pressure``)录完了的都删,老的先删。正在录的、正在拿来打包、重建的不删。
+        回删掉的包名。"""
+        gone: list[str] = []
+        if not self.bags_root.is_dir():
+            return gone
+        tight = self.pressure()
+
+        def done_at(b: Path) -> float:
+            try:
+                return (b / DONE).stat().st_mtime
+            except OSError:
+                return float("inf")
+        for b in sorted((d for d in self.bags_root.iterdir() if d.is_dir()), key=done_at):
+            with self.lock:
+                at = done_at(b)
+                if at == float("inf") or b.name in self.held \
+                        or (self.recording and b.name == self.last_bag):
+                    continue
+                if not tight and (time.time() - at) / 86400 < BAG_KEEP_DAYS:
+                    continue
+                shutil.rmtree(b, ignore_errors=True)
+            if b.exists():
+                log.warning("录包删不干净:%s", b)
+                continue
+            gone.append(b.name)
+            log.info("录包%s,删掉:%s", "盘紧了" if tight else f"放满 {BAG_KEEP_DAYS} 天", b.name)
+        return gone
+
     def bag_settled(self, run: Path) -> bool:
+        """老路子(包经发件箱传站点)用的:传完、站点确认以后能不能删。真机 11-24 起主程序不再传包。"""
         if not (run / DONE).is_file() or run.name in self.held:
             return False
         if (run / BUILT).is_file() or self.pressure():
@@ -238,6 +295,10 @@ class MappingService:
             pack = "robot"
         if self.recording:
             raise MappingError(f"正在录 {self.last_bag},先停")
+        try:
+            self.prune_bags()                     # 开录前先腾地方(盘紧了老包先让位)
+        except OSError:
+            log.exception("开录前清理老录包出错(照旧开录,盘够不够编排会查)")
         if self.pending is not None:
             raise MappingError(f"上一趟边走边建的 {self.pending[1]}:{self.pending[2]} 还在打包")
         full = f"{name}-{time.strftime('%Y%m%dT%H%M%SZ', time.gmtime())}"

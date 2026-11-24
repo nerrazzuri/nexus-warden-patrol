@@ -707,3 +707,60 @@ async def test_外审W75_2_1_没记发停录的时刻_保守退回从录包重�
     (svc.bags_root / svc.last_bag / STOP_AT).unlink()           # 录包也没有元数据
     _, mode = await svc.finish()
     assert mode == "bag" and "停录" in svc.last_fallback
+
+
+# ---------------------------------------------------------------- 真机 11-24:录包不进发件箱、不传
+
+def _老包(root, name, days):
+    import os
+    import time
+    b = root / name
+    b.mkdir(parents=True)
+    (b / f"{name}_0.mcap").write_bytes(b"x" * 10)
+    (b / DONE).touch()
+    t = time.time() - days * 86400
+    os.utime(b / DONE, (t, t))
+    return b
+
+
+def test_真机1124_录包在机器人上留满天数才删_盘紧了老的先删(tmp_path):
+    from nexwar_agent.mapping import BAG_KEEP_DAYS
+    root = tmp_path / "mapbags"
+    old = _老包(root, "old", BAG_KEEP_DAYS + 1)
+    new = _老包(root, "new", 1)
+    (root / "half").mkdir()                       # 录到一半(没有 .done)的不动
+    svc = MappingService(假编排(root, tmp_path / "work"), bags_root=root,
+                         maps_out=tmp_path / "outbox" / "maps")
+    assert not old.exists() and new.exists(), "起来时放满天数的删了,新的留着"
+    assert (root / "half" / DONE).exists(), "录到一半的补 .done(原来就这样)"
+    svc.held.add("new")
+    svc.pressure = lambda: True
+    assert svc.prune_bags() == ["half"], "盘紧了:录完了的都删,正在用的不删"
+    assert new.exists()
+    svc.held.clear()
+    assert svc.prune_bags() == ["new"]
+
+
+async def test_真机1124_开录前先腾地方_正在录的不删(tmp_path):
+    root = tmp_path / "mapbags"
+    old = _老包(root, "old", 1)
+    svc = MappingService(假编排(root, tmp_path / "work"), bags_root=root,
+                         maps_out=tmp_path / "outbox" / "maps")
+    svc.pressure = lambda: True
+    await svc.start("yard")
+    assert not old.exists(), "开录前盘紧:老包让位"
+    (root / svc.last_bag / DONE).touch()          # 就算有了 .done,正在录的也不删
+    assert svc.prune_bags() == [] and (root / svc.last_bag).is_dir()
+
+
+def test_真机1124_升级上来_发件箱里的老包挪出来不再传(tmp_path):
+    from nexwar_agent.mapping import _move_old_bags
+    old_root = tmp_path / "outbox" / "bags"
+    _老包(old_root, "map-1", 0)
+    _老包(tmp_path / "mapbags", "dup", 0)
+    _老包(old_root, "dup", 0)
+    _move_old_bags(old_root, tmp_path / "mapbags")
+    assert (tmp_path / "mapbags" / "map-1" / DONE).is_file()
+    assert not (old_root / "map-1").exists()
+    assert (old_root / "dup").is_dir(), "重名的留在原地,不覆盖"
+    _move_old_bags(tmp_path / "没有", tmp_path / "mapbags")     # 没有老目录:什么都不做
