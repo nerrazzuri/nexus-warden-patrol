@@ -28,7 +28,8 @@
     ``/usr/local/lib/nexwar/bind/``(``install_bind``),不再从机器人可写的版本目录跑。
 
 配置 ``/etc/nexwar_ops.json``(装机脚本写):``{"profile": "robot"|"site", "requester": <用户>,
-"spool": <目录>, ...}``。
+"spool": <目录>, ...}``。W80:``"extra_units": [...]`` = 这个机型多出来的我们的服务(品牌包的装机脚本写,
+比如 D1 Edu 的 ``nexwar_d1edu_*``;只认 ``nexwar_`` 开头的名字),跟 ``ROBOT_UNITS`` 一起进白名单。
 """
 
 from __future__ import annotations
@@ -64,6 +65,8 @@ MAX_CLOCK_STEP_MS = 366 * 24 * 3600 * 1000
 #: NTP 说对上了、可跟站点差超过这么多(毫秒):两个时间源打架(W70),不拨,回报 ``conflict``。
 SITE_DISAGREE_MS = 5_000
 CLOCK_FLOOR_S = 1_735_689_600                    # 2025-01-01:比它早的钟一定是错的
+#: W80:机型多出来的服务(``extra_units``)只认这种名字。
+EXTRA_UNIT_RE = re.compile(r"nexwar_[a-z0-9_]{1,40}")
 ROBOT_UNITS = ("nexwar_localizer", "nexwar_obstacles", "nexwar_persons", "nexwar_lidar_merge",
                "nexwar_nav2", "nexwar_sidecar", "nexwar_zenohd", "nexwar_bind", "nexwar_agent")
 
@@ -528,6 +531,11 @@ class Ops:
         self.etc = etc
         self.systemd_dir = systemd_dir
         self.profile = cfg["profile"]
+        extra = cfg.get("extra_units", [])
+        if not isinstance(extra, list) or any(
+                not isinstance(u, str) or not EXTRA_UNIT_RE.fullmatch(u) for u in extra):
+            raise OpError(f"配置里的 extra_units 不对(只认 nexwar_ 开头的服务名):{extra!r}")
+        self.extra_units = tuple(u for u in dict.fromkeys(extra) if u not in ROBOT_UNITS)
 
     # ---------------------------------------------------------------- 公用
     def _sys(self, *argv: str, timeout: float = 120.0) -> str:
@@ -537,7 +545,7 @@ class Ops:
         return out
 
     def _units(self) -> tuple[str, ...]:
-        return ROBOT_UNITS if self.profile == "robot" else SITE_UNITS
+        return (*ROBOT_UNITS, *self.extra_units) if self.profile == "robot" else SITE_UNITS
 
     def _unit_arg(self, args: dict[str, Any]) -> str:
         u = args.get("unit")
@@ -842,7 +850,7 @@ class Ops:
     def restart_all(self, args: dict[str, Any]) -> dict[str, Any]:
         """换版本以后:我们的服务里已启用或正在跑的,全重启;代理最后、不等。"""
         done, failed = [], []
-        for u in ROBOT_UNITS:
+        for u in self._units():
             if u == "nexwar_agent":
                 continue
             rc_a, _ = self.run(["systemctl", "is-active", "--quiet", f"{u}.service"], 30)

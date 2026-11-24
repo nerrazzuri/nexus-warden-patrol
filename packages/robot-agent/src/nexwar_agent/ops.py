@@ -103,8 +103,14 @@ class OpsDesk:
     releases: Any = None                        # ReleaseOps(可没有)
     debug_flag: Path | None = None
     extra_diag: Callable[[], dict[str, Any]] | None = None
+    #: W80:这个机型在机器人上跑的我们的服务(机型档案 ``all_services``);缺省 D1 Max 那一套。
+    units: tuple[str, ...] = OUR_UNITS
 
     hold_file: Path | None = None
+
+    @property
+    def journal_units(self) -> tuple[str, ...]:
+        return (*self.units, *JOURNAL_UNITS[len(OUR_UNITS):])
 
     def __post_init__(self) -> None:
         if self.debug_flag is None:
@@ -161,13 +167,13 @@ class OpsDesk:
     def kinds(self) -> dict[str, dict[str, Any]]:
         """能力里报哪几项。要 root 的那几项没装执行器就不报。"""
         out: dict[str, dict[str, Any]] = {
-            "ops_journal": {"units": list(JOURNAL_UNITS)}, "ops_diag": {},
+            "ops_journal": {"units": list(self.journal_units)}, "ops_diag": {},
             "ops_debug": {"max_minutes": DEBUG_MAX_MIN}, "ops_cleanup": {}}
         if self.priv is not None:
             for k in ("ops_restart", "ops_reboot", "ops_timesync", "cert_csr", "cert_install",
                       "ops_settings"):
                 out[k] = {}
-            out["ops_restart"] = {"units": list(OUR_UNITS)}
+            out["ops_restart"] = {"units": list(self.units)}
             # W70:认站点时刻,NTP 没对上按它拨;probe = 先量一次往返(链路堵的时候不按它拨)
             out["ops_timesync"] = {"site_time": True, "probe": True}
         return out
@@ -214,8 +220,8 @@ class OpsDesk:
     def _ops_journal(self, p: dict[str, Any]) -> str | tuple[str, dict[str, Any]]:
         unit = p.get("unit")
         if unit is None:
-            return "", {"units": list(JOURNAL_UNITS)}
-        if unit not in JOURNAL_UNITS:
+            return "", {"units": list(self.journal_units)}
+        if unit not in self.journal_units:
             return f"payload: 不能看 {unit!r} 的日志"
         hours = p.get("hours", 6)
         size = p.get("bytes", MAX_JOURNAL)
@@ -246,7 +252,7 @@ class OpsDesk:
         out: dict[str, Any] = {"robot_id": self.robot_id, "at_ms": self.now_ms(),
                                "host": platform.node(), "arch": platform.machine(),
                                "python": platform.python_version()}
-        out["services"] = [self._unit_state(u) for u in OUR_UNITS]
+        out["services"] = [self._unit_state(u) for u in self.units]
         out["release"] = self._release_info()
         out["uptime_s"] = _read_float("/proc/uptime")
         out["load"] = _read_text("/proc/loadavg").split()[:3]
@@ -331,7 +337,7 @@ class OpsDesk:
     # ------------------------------------------------------------ 动手的
     def _ops_restart(self, p: dict[str, Any]) -> str | tuple[str, dict[str, Any]]:
         unit = p.get("unit")
-        if unit not in RESTART_UNITS:
+        if unit not in self.units:
             return f"payload: 只能重启我们的服务,不认 {unit!r}"
         why = self.busy()                          # 重启定位、避障、旁路这些,走着的时候会出事
         if why:

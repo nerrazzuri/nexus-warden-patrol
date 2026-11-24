@@ -126,6 +126,7 @@ def sidecar_token_path(given: str | None) -> str | None:
 #: 照它换算代理以为的速度跟实际差一大截、限速区限不住 —— 不在范围里就不起,实测值真不在范围里要人加
 #: ``--units-confirmed``。``deploy/nexwar_units_check``(装机前查)用同一个范围(测试核)。
 UNIT_RANGES = {"mps_per_unit": (0.7, 1.5), "radps_per_unit": (1.1, 2.0)}
+#: (W80 起各机型的范围写在机型档案里,:mod:`nexwar_agent.robot_models`;D1 系列 SDK 的就是上面这个。)
 
 
 def resolve_autonomy(args: argparse.Namespace) -> str:
@@ -145,9 +146,10 @@ def build_parser() -> argparse.ArgumentParser:
                    help="/etc/nexwar/env 的 NEXWAR_AGENT_ARGS(启动脚本带进来,W32):"
                         "这一版不认识的参数跳过并报站点,不会因为它起不来")
     p.add_argument("--hal", choices=("sim", "d1max"), default="sim", help="品牌适配器")
-    p.add_argument("--robot-model", choices=ROBOT_MODELS, default="d1max",
-                   help="W80:--hal d1max 下接的是哪种机器人。d1edu = D1 Edu"
-                        "(旁路在 nexwar-d1edu 仓库,说同一套旁路协议;没有机身灯)")
+    p.add_argument("--robot-model", default="d1max",
+                   help="W80:--hal d1max 下接的是哪种机器人(机型档案的编号)。内置 d1max;"
+                        "别的机型的档案放 /etc/nexwar/robot-models/<编号>.json(品牌包装),"
+                        "见 docs/接入新机型.md")
     p.add_argument("--autonomy", choices=("supervised", "autonomous"), default=None,
                    help="自主级别(W00c6i):supervised = goto/巡检只在有人现场监护时才接;"
                         "默认 --hal d1max 是 supervised、sim 是 autonomous。**真机器人改成 "
@@ -413,8 +415,17 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     if args.mapping_orchestrator is not None and \
             not re.fullmatch(r"[A-Za-z_][\w.]*:[A-Za-z_]\w*", args.mapping_orchestrator):
         p.error("--mapping-orchestrator 要写成 模块:函数")
+    from nexwar_agent import robot_models
     if args.robot_model != "d1max" and args.hal != "d1max":
         p.error("--robot-model 只配 --hal d1max")
+    try:
+        args.model = robot_models.get(args.robot_model)
+    except robot_models.ModelError as exc:
+        p.error(str(exc))
+    if args.mapping and args.mapping_orchestrator is None:
+        args.mapping_orchestrator = args.model.mapping_orchestrator   # W80:机型档案里的
+    if args.robot_radius is None:
+        args.robot_radius = args.model.robot_radius_m
     if args.obstacles == "bridge" and args.nav not in ("planned", "nav2"):
         p.error("--obstacles bridge 要配 --nav planned 或 nav2(守卫在规划后端里)")
     if args.nav == "nav2" and args.obstacles != "bridge":
@@ -453,12 +464,13 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     if args.hal == "d1max":
         for k, v in NEXWAR_DEFAULTS.items():
             if getattr(args, k) is None:
-                setattr(args, k, v)
+                setattr(args, k, args.model.units.get(k, v))     # W80:先机型档案,再缺省
+        ranges = args.model.unit_ranges if args.model.driver == "sidecar" else {}
         bad = [f"--{k.replace('_', '-')} {getattr(args, k)}(要在 {lo}–{hi})"
-               for k, (lo, hi) in UNIT_RANGES.items()
+               for k, (lo, hi) in ranges.items()
                if not lo <= getattr(args, k) <= hi]
         if bad and not args.units_confirmed:
-            p.error("速度换算系数不在 SDK 低速档的合理范围里:" + "、".join(bad)
+            p.error(f"{args.model.name} 的速度换算系数不在 SDK 低速档的合理范围里:" + "、".join(bad)
                     + "。老模板的 0.4 / 1.0 是猜的(文档是 1.0 m/s、1.5 rad/s),照它换算限速区限不住;"
                     "删掉用默认值、写实测值,实测值真不在范围里人核过之后加 --units-confirmed(W12)")
     elif nexwar_only:
@@ -596,8 +608,6 @@ def build(args: argparse.Namespace) -> Assembled:
                 media = rtsp_media(file_snapshot_source(args.video_dir), now_ms=wall_ms,
                                    ffmpeg=args.ffmpeg)
         else:
-            from nexwar_adapter_d1max.hal import D1MaxHal
-            host, port = args.sidecar
             if args.payload.is_file():
                 # 11-05 POC:kind=anbot_ros1 是借竞品上装的警灯、喇叭(nexwar_adapter_d1max.anbot)
                 from nexwar_adapter_d1max.anbot import load_payload
@@ -605,16 +615,7 @@ def build(args: argparse.Namespace) -> Assembled:
                 log.info("上装配置 %s:接了 %s", args.payload,
                          "、".join(o for o in ("strobe", "siren", "spotlight", "speaker")
                                   if payload.has(o)) or "(一路都没有)")
-            hal = D1MaxHal(host, port, mps_per_unit=args.mps_per_unit,
-                           mps_per_unit_mid=args.mps_per_unit_mid,
-                           radps_per_unit=args.radps_per_unit, deadband_mps=args.deadband,
-                           max_fraction=args.max_fraction, fwd_offset=args.fwd_offset,
-                           invert_yaw=args.invert_yaw,
-                           lateral_mps_per_unit=args.lateral_mps_per_unit,
-                           invert_lateral=args.invert_lateral,
-                           stopped_eps=args.stopped_eps, now_ms=wall_ms, payload=payload,
-                           token_file=sidecar_token_path(args.sidecar_token_file),
-                           **model_hal_kwargs(args.robot_model))
+            hal = make_hal(args, payload)
             # 工单 18:到点拍照跟实时画面用同一套 RTSP 相机,每次 ffmpeg 抽一帧 JPEG
             from nexwar_agent.bridges.rtsp_media import rtsp_media
             from nexwar_agent.video_push import rtsp_source as _rtsp_source
@@ -753,40 +754,51 @@ class _NoIntake:
         raise SinkError("没有配站点接收口")
 
 
-#: W80:``--hal d1max`` 下的机型。
-ROBOT_MODELS = ("d1max", "d1edu")
-#: 报给站点的适配器号(``capabilities.adapter``):站点、手机据此认机型。
-MODEL_ADAPTER_IDS = {"d1edu": "nexwar-d1edu/0.1.0"}
-
-
-#: W80:机型自带哪几路相机(``cameras.json`` 只能改地址、加别的,去不掉自带的)。D1 Edu 只有头上一个
-#: 前摄像头(用户 11-25:「D1 Edu 什么都没有,只有一个前摄像头」)。
-MODEL_CAMERAS: dict[str, tuple[str, ...]] = {"d1edu": ("front",)}
+def robot_model(args: argparse.Namespace) -> Any:
+    """这台机器人的机型档案(:mod:`nexwar_agent.robot_models`;``parse_args`` 读好的)。"""
+    from nexwar_agent import robot_models
+    return getattr(args, "model", None) or robot_models.get(getattr(args, "robot_model", "d1max"))
 
 
 def builtin_cameras(args: argparse.Namespace) -> tuple[str, ...]:
-    """这台机器人自带哪几路相机:按 ``--robot-model``,缺省 D1 Max 的前后两路。"""
-    from nexwar_contract.video import STANDARD_CAMERAS
-    return MODEL_CAMERAS.get(getattr(args, "robot_model", "d1max"), tuple(STANDARD_CAMERAS))
+    """这台机器人自带哪几路相机(机型档案的 ``cameras``;D1 Max 前后两路,D1 Edu 只有前)。"""
+    return tuple(robot_model(args).cameras)
 
 
-def model_hal_kwargs(model: str) -> dict[str, Any]:
-    """机型 → :class:`~nexwar_adapter_d1max.hal.D1MaxHal` 多给的参数(D1 Max 什么都不多给)。"""
-    if model == "d1edu":
-        return {"light": False, "adapter_id": MODEL_ADAPTER_IDS["d1edu"]}
-    return {}
+def make_hal(args: argparse.Namespace, payload: Any = None) -> Any:
+    """按机型档案的 ``driver`` 造真机器人的 HAL。``sidecar`` = 旁路协议(D1 系列、D1 Edu,别家写一个
+    说这套协议的旁路进程也走这条);``模块:函数`` = 品牌包自己的适配器,调
+    ``函数(model=档案, args=命令行参数, now_ms=..., payload=上装)`` 拿 HAL。"""
+    model = robot_model(args)
+    if model.driver != "sidecar":
+        hal = load_orchestrator(model.driver, what="机型档案的 driver")(
+            model=model, args=args, now_ms=wall_ms, payload=payload)
+        log.info("机型 %s:驱动 %s", model.name, model.driver)
+        return hal
+    from nexwar_adapter_d1max.hal import D1MaxHal
+    host, port = args.sidecar
+    return D1MaxHal(host, port, mps_per_unit=args.mps_per_unit,
+                    mps_per_unit_mid=args.mps_per_unit_mid,
+                    radps_per_unit=args.radps_per_unit, deadband_mps=args.deadband,
+                    max_fraction=args.max_fraction, fwd_offset=args.fwd_offset,
+                    invert_yaw=args.invert_yaw,
+                    lateral_mps_per_unit=args.lateral_mps_per_unit,
+                    invert_lateral=args.invert_lateral,
+                    stopped_eps=args.stopped_eps, now_ms=wall_ms, payload=payload,
+                    token_file=sidecar_token_path(args.sidecar_token_file),
+                    light=model.light, adapter_id=model.adapter_id)
 
 
-def load_orchestrator(spec: str) -> Callable[..., Any]:
-    """``模块:函数`` → 那个函数(W80 外部建图编排)。找不到就不起,说清楚。"""
+def load_orchestrator(spec: str, what: str = "--mapping-orchestrator") -> Callable[..., Any]:
+    """``模块:函数`` → 那个函数(W80 外部建图编排、品牌包的驱动)。找不到就不起,说清楚。"""
     import importlib
     mod, _, attr = spec.partition(":")
     try:
         fn = getattr(importlib.import_module(mod), attr)
     except (ImportError, AttributeError) as exc:
-        raise SystemExit(f"--mapping-orchestrator {spec}:找不到({exc})") from exc
+        raise SystemExit(f"{what} {spec}:找不到({exc})") from exc
     if not callable(fn):
-        raise SystemExit(f"--mapping-orchestrator {spec}:不是函数")
+        raise SystemExit(f"{what} {spec}:不是函数")
     return fn
 
 
@@ -1117,6 +1129,7 @@ def _ops(args: argparse.Namespace, registration: Registration, runtime: Any) -> 
         priv = privops.SimOps(restarts=False)        # W61:没人会重启仿真代理,做完就放开
     data_root = Path(os.environ.get("NEXWAR_DATA_ROOT") or Path(args.store_dir).parent)
     desk = OpsDesk(robot_id=registration.robot_id, priv=priv, data_root=data_root,
+                   units=robot_model(args).all_services,          # W80:机型档案的服务
                    busy=lambda: "", releases=runtime.releases,
                    tls_cert=Path(args.tls_cert or "/etc/nexwar/tls/robot.crt"),
                    tls_ca=Path(args.tls_ca or "/etc/nexwar/tls/ca.crt"))
