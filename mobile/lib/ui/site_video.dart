@@ -76,8 +76,16 @@ class SiteVideo extends StatefulWidget {
   /// 两边各让出 [sideInset]（摇杆的位置）。不铺满就是原来那样：切换在上、画面 16:9 在下。
   final bool fullscreen;
   final double sideInset;
+
+  /// 先开哪一路（用户 11-25：看见人的报警先开看到人的那一路）。
+  final String initialCamera;
   const SiteVideo(
-      {super.key, required this.api, required this.robotId, this.fullscreen = false, this.sideInset = 0});
+      {super.key,
+      required this.api,
+      required this.robotId,
+      this.fullscreen = false,
+      this.sideInset = 0,
+      this.initialCamera = 'front'});
 
   static Key cameraKey(String cam) => Key('site-video-$cam');
 
@@ -88,7 +96,7 @@ class SiteVideo extends StatefulWidget {
 class _SiteVideoState extends State<SiteVideo> {
   late final SiteVideoHealthPoller _poller =
       SiteVideoHealthPoller(api: widget.api, robotId: widget.robotId);
-  String _camera = 'front';
+  late String _camera = widget.initialCamera;
 
   @override
   void dispose() {

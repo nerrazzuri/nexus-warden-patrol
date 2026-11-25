@@ -36,6 +36,7 @@ import 'nw_p2_duty.dart' show NwMapThumb;
 import 'nw_p3_robots.dart';
 import 'nw_site_dir.dart' show ShiftNotesPage;
 import 'nw_estop_miss.dart';
+import '../person_live.dart';
 import 'nw_theme.dart';
 import 'nw_widgets.dart';
 
@@ -238,6 +239,12 @@ class _NowPageState extends State<NowPage> with EstopMissReveal {
       if (_heldIds().isEmpty) _askResume = false;
       _loaded = true;
     });
+    // 用户 11-25：刚发生、没人接手的「机器人看见人」：直接横屏整屏放画面（同一条只弹一次）
+    final pop = got[1] is List ? personLiveToPop(_alerts, nowMs: DateTime.now().millisecondsSinceEpoch) : null;
+    if (pop != null && (ModalRoute.of(context)?.isCurrent ?? false)) {
+      personLiveShown.add(pop.key);
+      unawaited(_go(PersonLivePage(api: widget.api, alert: pop)));
+    }
     // 每台的视图(最近事件、状态细节):台数不多,一起读
     final views = await Future.wait([
       for (final r in robots) _try(() => widget.api.robot('${r['robot_id']}')),
