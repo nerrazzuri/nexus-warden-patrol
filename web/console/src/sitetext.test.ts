@@ -280,3 +280,16 @@ describe("易用性 37 复测 P3:站点自己加的点名翻英文", () => {
     expect(siteStr("点位 回待命点 未到达,已跳过")).toBe("Waypoint “Return to standby” not reached, skipped");
   });
 });
+
+describe("易用性 37 复测第四轮:标原点被拒英文;回头补同一句不重复", () => {
+  it("站点中文原话翻英文", () => {
+    expect(siteStr("A 现在站的地方不能当待命点:这里 在图上不是可通行的地方(墙、障碍或未扫到)。往开阔、扫到过的地方开 1 m 左右再标"))
+      .toBe("A can't use this spot as its standby point: the map shows it as not walkable or not scanned, so robots could never be sent back here. Drive about 1 m into open, scanned floor and mark again.");
+  });
+  it("两半一样只说一遍", () => {
+    const one = "导航拒了: goto 被设备拒绝: 规划失败(start_blocked):起点在障碍或禁行区里";
+    const en = siteStr(`${one};回头补也没到:${one}`);
+    expect(en.split("with Remote").length).toBe(2);
+    expect(en).toContain("tried again after the lap: same result");
+  });
+});

@@ -1,6 +1,6 @@
 {
   "active": true,
-  "battery_pct": null,
+  "battery_pct": 100,
   "capabilities": {
     "actuators": {
       "light": [],
@@ -100,8 +100,8 @@
     {
       "ack_reason": "",
       "ack_result": "accepted",
-      "command_id": "cmd-213c81e7f95f",
-      "issued_at": 1795636657587,
+      "command_id": "cmd-89fcc06d097e",
+      "issued_at": 1795638381020,
       "issued_by": "alice",
       "kind": "goto",
       "payload": {
@@ -117,28 +117,49 @@
       },
       "priority": 60,
       "robot_id": "A",
-      "task_id": "task-b5380079b869"
+      "task_id": "task-c379cf48441b"
     }
   ],
   "devices": null,
-  "enrolled_at": 1795636657436,
+  "enrolled_at": 1795638380524,
   "events": [
     {
-      "boot_id": "boot-4762ffbd69",
+      "boot_id": "boot-f426e0f740",
+      "data": {
+        "distance_m": 4.0,
+        "task_id": "task-c379cf48441b"
+      },
+      "kind": "task_progress",
+      "seq": 2,
+      "stamp": 1795638381268
+    },
+    {
+      "boot_id": "boot-f426e0f740",
       "data": {
         "faults": []
       },
       "kind": "robot_fault",
       "seq": 1,
-      "stamp": 1795636657488
+      "stamp": 1795638380648
     }
   ],
-  "expires_at": 1796636657437,
+  "expires_at": 1796638380525,
   "fresh": true,
   "held": null,
   "home_set": false,
   "lap": null,
-  "loc": null,
+  "loc": {
+    "anchored": true,
+    "pose": {
+      "x": 0.18,
+      "y": 0.0,
+      "yaw": 0.0
+    },
+    "quality": 1.0,
+    "reason": "",
+    "sigma_m": 0.0,
+    "source": "odom_identity"
+  },
   "manual_only": null,
   "muted": null,
   "name": "",
@@ -171,9 +192,9 @@
   "standby_bad": false,
   "standby_countdown": null,
   "status": {
-    "boot_id": "boot-4762ffbd69",
+    "boot_id": "boot-f426e0f740",
     "control_epoch": 1,
-    "last_seen": 1795636657602,
+    "last_seen": 1795638381127,
     "online": true,
     "ready": {
       "control": true,
@@ -185,7 +206,7 @@
     "task": {
       "kind": "goto",
       "state": "running",
-      "task_id": "task-b5380079b869"
+      "task_id": "task-c379cf48441b"
     }
   },
   "wifi": null

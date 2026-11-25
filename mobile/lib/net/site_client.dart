@@ -388,7 +388,7 @@ String _ackReasonText(String reason) => switch (reason) {
       'odom_invalid' => tr(
           'Cannot read robot odometry (sidecar process may be down)',
           '无法读取机器人里程（旁路进程可能已断开）'),
-      _ => reason,
+      _ => siteText(reason),  // 易用性 37 复测 P1-7：站点中文原话按语言翻
     };
 
 /// 定位状态的人话（W00c6e，里程锚定）：单狗视图里的 `loc`（站点从狗的遥测取的）。没有就是空串。

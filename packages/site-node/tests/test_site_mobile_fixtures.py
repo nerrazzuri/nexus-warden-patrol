@@ -90,7 +90,9 @@ def _collect(tmp_path) -> dict[str, object]:
         s.req("POST", "/api/bundles", {"path": str(打包(tmp_path, 1))}, token=tok)
         sub = s.disp.feed.subscribe()
         code, dispatch = s.req("POST", "/api/robots/A/goto", {"target": target(4.0)}, token=tok)
-        busy = _等(lambda: (lambda v: v if (v["status"] or {}).get("task") else None)(
+        # 满载时任务先到、遥测(电量、定位)后到:等两样都有了再拍(不然形状里是 null)
+        busy = _等(lambda: (lambda v: v if (v["status"] or {}).get("task") and v.get("loc")
+                            and v.get("battery_pct") is not None else None)(
             s.req("GET", "/api/robots/A", token=tok)[1]))
         frame = _等(lambda: (lambda f: f if f and f["kind"] == "status" else None)(sub.get(1.0)))
         s.req("POST", "/api/robots/A/abort", {"task_id": dispatch["task_id"]}, token=tok)

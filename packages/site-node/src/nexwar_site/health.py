@@ -285,13 +285,14 @@ class HealthDesk:
                       if standby_bad(self.db, self.dispatcher.maps, rid, c.capabilities)]
             out["standby"] = {"ok": not bad_sb,
                               "detail": ("待命点在图上走不了(派不了回待命点、值守):"
-                                         + "、".join(bad_sb) + "。把机器人开到空地重新标")
+                                         + "、".join(bad_sb) + "。把机器人开到空地,"
+                                         "用「在这儿设待命点」设一个默认的")
                               if bad_sb
                               else "待命点都在能走的地方",
                               "detail_en": ("Standby point is not on walkable, scanned floor for "
                                             + ", ".join(bad_sb) + ": it can't be sent home or on "
-                                            "guard rounds. Drive it into open floor and mark the "
-                                            "standby point again") if bad_sb
+                                            "guard rounds. Drive it into open floor and use "
+                                            "\"Set standby point here\" as the default") if bad_sb
                               else "Standby points are on walkable floor"}
         lanes = self._lanes() if self._lanes is not None else {}
         stuck = [n for n, t0 in lanes.items() if self._mono() - t0 > LANE_STUCK_S]
