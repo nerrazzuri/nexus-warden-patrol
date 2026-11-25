@@ -458,7 +458,7 @@ class _SiteHealthPageState extends State<SiteHealthPage> {
           title: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text(tr('Site health', '站点体检')),
             if (h != null)
-              Text(bad == 0 ? tr('All checks passed', '全部正常') : tr('$bad items need attention', '$bad 项要看一下'),
+              Text(bad == 0 ? tr('All checks passed', '全部正常') : tr(bad == 1 ? '1 item needs attention' : '$bad items need attention', '$bad 项要看一下'),
                   style: NwText.bodySmall.copyWith(color: nw.textSecondary)),
           ]),
           actions: [refresh]),

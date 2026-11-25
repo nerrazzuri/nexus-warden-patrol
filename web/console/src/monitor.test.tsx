@@ -195,6 +195,16 @@ describe("最近活动、整班时间轴", () => {
       { robot: "B", from: 300, to: 600, kind: "offline" }]);
     expect(marks.map((m) => [m.key, m.kind])).toEqual([["s", "security"], ["e", "equipment"]]);
   });
+
+  it("易用性 37 复测 P3-6:时间轴上报警点的标题是翻过的,英文界面不露站点原话", () => {
+    lang.value = "en";
+    try {
+      const { marks } = shiftSpans(["B"], [], [alert({ key: "p", kind: "dog_sees_person", robot: "B", title: "机器人看见人了:1 个人,最近 4.0 m", first_ms: 400 })], 0, 1000, 600);
+      expect(marks[0].title).not.toMatch(/[\u4e00-\u9fff]/);
+    } finally {
+      lang.value = "zh";
+    }
+  });
 });
 
 describe("右栏机器人(从老值班页搬来)", () => {

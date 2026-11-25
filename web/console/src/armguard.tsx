@@ -6,6 +6,7 @@ import { api, ApiError } from "./api";
 import { robotNames } from "./data";
 import { lang, type Lang } from "./i18n";
 import { clock } from "./routes";
+import { siteStr } from "./sitetext";
 
 // end_standby:每圈结束回待命点(11-04 用户,默认开;老站点不带这个键 = 开)
 export interface GuardEntry { id?: number; route: string; robot: string; gap_min: number; shuffle: boolean; end_standby?: boolean }
@@ -369,7 +370,7 @@ export function GuardPanel({ say, now, canEdit }: { say: (s: string) => void; no
           <p>{status.duty ? gt("gOn", { t: hhmm(status.duty.started_ms) }) : gt("gOff")}</p>
           <ul class="plain">
             {status.runs.map((r) => <li key={r.entry}><b>{who(r.robot_id)}</b> {runText(r)}</li>)}
-            {Object.entries(status.waiting).map(([k, why]) => <li key={`w${k}`} class="muted">{gt("gWaiting", { why })}</li>)}
+            {Object.entries(status.waiting).map(([k, why]) => <li key={`w${k}`} class="muted">{gt("gWaiting", { why: siteStr(why) })}</li>)}
           </ul>
           <ul class="plain guard-seen">
             {status.zones.map((z) => (

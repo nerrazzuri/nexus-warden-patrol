@@ -256,7 +256,7 @@ class _SiteAddPageState extends State<SiteAddPage> {
                           ),
                         ),
                       ),
-                    NwField(fieldKey: const Key('site-name'), controller: _name, label: tr('Site', '站点名')),
+                    NwField(fieldKey: const Key('site-name'), controller: _name, label: tr('Site name', '站点名')), // 易用性 37 P3-11：跟上面的「Site」重了
                     gap,
                     NwField(
                       fieldKey: const Key('site-url'),

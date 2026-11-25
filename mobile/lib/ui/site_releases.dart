@@ -13,6 +13,7 @@ import 'package:flutter/material.dart';
 
 import '../l10n.dart';
 import '../net/site_client.dart';
+import '../net/site_text.dart';
 import 'app_settings.dart' show openSettings;
 import 'nw/nw_button.dart';
 import 'nw/nw_p4_admin.dart';
@@ -365,7 +366,7 @@ class _SiteReleasesPageState extends State<SiteReleasesPage> with NwAsk {
                         Text(
                             [
                               '${((r['size'] as num? ?? 0) / 1048576).toStringAsFixed(1)} MB',
-                              if ((r['note'] ?? '') != '') '${r['note']}',
+                              if ((r['note'] ?? '') != '') siteKnown('${r['note']}'),
                               on.isEmpty ? tr('Not installed', '没装') : tr('Running on ${on.join(sep)}', '${on.join(sep)} 在跑'),
                             ].join(' · '),
                             style: sub),

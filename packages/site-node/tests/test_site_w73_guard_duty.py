@@ -422,6 +422,34 @@ async def test_易用性36_P1_4_遥控刚结束_留在这里_值守不派_放开
     assert len(_patrols(t)) == 1
 
 
+
+async def test_易用性37_任意一台的方案_那台被留住_放掉这一趟另挑_指定的照旧等(站):
+    """易用性 37 复测 P1:选「任意空闲机器人」,B 点了「留在这里」,整个防区 10 分钟没人巡。
+    现在放掉这一趟(下一拍 _pick 跳过留住的那台、另挑);指定了机器人的方案照旧等它。"""
+    t = 站
+    hold: dict[str, str] = {}
+    t.duty.stay = lambda rid: hold.get(rid, "")
+    _方案(t, robot="")
+    await _跑(t, 3)
+    assert len(_patrols(t)) == 1
+    hold["A"] = "A 遥控后留在原地(有人点了「留在这里」),到点前不自动派"
+    await _跑(t, 30)                                    # 一圈约 18 s:到下一圈时被留住
+    assert _log(t, "handover"), "放掉这一趟"
+    assert t.duty.status()["runs"] == [], "不再绑在 A 上"
+    assert len(_patrols(t)) == 1
+    hold.clear()
+    await _跑(t, 3)
+    assert len(_patrols(t)) == 2, "放开了:重新挑(这里只有 A)"
+
+    _方案(t, robot="A")
+    await _跑(t, 25)
+    hold["A"] = "A 遥控后留在原地(有人点了「留在这里」),到点前不自动派"
+    n = len(_log(t, "handover"))
+    await _跑(t, 30)
+    assert len(_log(t, "handover")) == n, "指定了 A:不放掉,等它"
+    assert t.duty.status()["runs"], "这一趟还挂在 A 上"
+
+
 # ---------------------------------------------------------------- 第三期:保存时查冲突(设计 §6.3)
 
 def _冲突台(t):

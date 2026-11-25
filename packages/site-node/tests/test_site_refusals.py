@@ -27,7 +27,9 @@ SRC = (Path(__file__).resolve().parents[1] / "src" / "nexwar_site")
     "manual_only": "A 站点设成只许手动派,不接排程",
     "heading": "A 的头尾方向是「反」:x",
     "unreachable": "第 2 个点无法到达",
+    "stop_first": "A 正在执行任务 guard-1:先「原地停下」再趴下",
     "busy": "A 正在执行别的任务",
+    "unsupported": "A 不支持 release_install",
     "unregistered": "没有登记过 Z",
     "bad_mission": "任务定义不成形: x",
 }

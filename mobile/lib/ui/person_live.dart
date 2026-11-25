@@ -104,13 +104,19 @@ class PersonLiveView extends StatelessWidget {
                               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: Nw.s8),
                               decoration: BoxDecoration(
                                   color: Colors.black.withValues(alpha: 0.55),
-                                  border: Border(left: BorderSide(color: c.error, width: 4))),
+                                  border: Border(left: BorderSide(color: a.resolved ? Colors.white54 : c.error, width: 4))),
                               child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min,
                                   children: [
-                                Text('${a.level} · ${alertTitle(a.kind, a.title)}',
+                                // 易用性 37 复测 P2-19：报警关了还红字写「P1 · …」—— 关了写「已关闭」、不用红
+                                Text(
+                                    a.resolved
+                                        ? tr('Closed · ${alertTitle(a.kind, a.title)}', '已关闭 · ${alertTitle(a.kind, a.title)}')
+                                        : '${a.level} · ${alertTitle(a.kind, a.title)}',
+                                    key: const Key('person-live-head'),
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
-                                    style: NwText.titleMedium.copyWith(color: c.error, fontWeight: FontWeight.w700)),
+                                    style: NwText.titleMedium
+                                        .copyWith(color: a.resolved ? Colors.white : c.error, fontWeight: FontWeight.w700)),
                                 Text(where,
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
@@ -269,9 +275,12 @@ class _PersonLivePageState extends State<PersonLivePage> {
   Widget build(BuildContext context) {
     final handle = widget.api.session?.canHandleAlerts ?? false;
     final by = _a.ackedBy.isEmpty ? '' : _a.ackedBy;
+    final closedBy = _a.resolvedBy.isEmpty ? '' : _a.resolvedBy;
     final note = _msg.isNotEmpty
         ? _msg
-        : _a.acked
+        : _a.resolved
+            ? (closedBy.isEmpty ? tr('Closed', '已关闭') : tr('Closed by $closedBy', '$closedBy 已关闭'))
+            : _a.acked
             ? tr('Handled by $by', '$by 在处理')
             : tr('No one has taken it yet', '还没人接手');
     return LandscapeOnly(

@@ -566,3 +566,18 @@ describe("第 4 轮 config N3:删今天的例外", () => {
     expect(posted.find((p) => p.url === "/api/arming/schedule/preview")?.body.skip_exception).toBe(7);
   });
 });
+
+describe("易用性 37 复测 P2-18:切留守的确认句按防区说", () => {
+  it("留守时还布防的照样报人,不说「不再报人」", async () => {
+    const { stayConfirmText } = await import("./armingpage");
+    lang.value = "en";
+    try {
+      expect(stayConfirmText([{ zone: "Drive-thru lane", home_armed: true }])).toBe(
+        "Switch to Stay? Every zone stays armed in Stay (Drive-thru lane): robots keep raising person alarms.");
+      expect(stayConfirmText([{ zone: "North", home_armed: true }, { zone: "Lobby", home_armed: false }])).toContain("North stay armed");
+      expect(stayConfirmText([{ zone: "Lobby", home_armed: false }])).toBe("Switch to Stay? Robots stop raising person alarms until you arm again.");
+    } finally {
+      lang.value = "zh";
+    }
+  });
+});

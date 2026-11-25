@@ -334,8 +334,9 @@ REFUSAL: dict[str, str] = {
     "map_mismatch": "dispatch.map_mismatch", "obstacles": "dispatch.obstacles", "clock": "dispatch.clock",
     "zones_sync": "dispatch.zones_sync", "deterring": "dispatch.deterring",
     "manual_only": "dispatch.manual_only", "heading": "dispatch.heading",
-    "unreachable": "dispatch.unreachable", "busy": "dispatch.busy",
+    "unreachable": "dispatch.unreachable", "busy": "dispatch.busy", "stop_first": "dispatch.busy",
     "unregistered": "dispatch.unregistered", "bad_mission": "dispatch.bad_mission",
+    "unsupported": "dispatch.refused",
 }
 
 #: 日程结果(``schedule_runs.outcome``)→ 码名。
