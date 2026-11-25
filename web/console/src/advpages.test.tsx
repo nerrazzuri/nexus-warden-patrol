@@ -6,7 +6,7 @@ import { DiagPage, deviceText } from "./advdiag";
 import { parseSpeeds, SystemPage2 } from "./advsystem";
 import { isLoopbackOrigin, pairChoices, pickPairUrl } from "./admin";
 import { UpgradePage } from "./advupgrade";
-import { setFetch } from "./api";
+import { setFetch, setXhr } from "./api";
 import { lang } from "./i18n";
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
@@ -179,6 +179,45 @@ describe("软件升级", () => {
     fireEvent.submit(document.querySelector("form.confirm-pw")!);
     await waitFor(() => expect(uploads.length).toBe(1));
     expect(uploads[0].headers["X-Nexwar-Confirm"]).toBe("my-own-password");
+  });
+  it("易用性 build 36:传包有进度条,传完写正在验签,回了就收起", async () => {
+    const sent: { headers: Record<string, string>; body: unknown }[] = [];
+    let fake: { upload: { onprogress: ((e: { lengthComputable: boolean; loaded: number; total: number }) => void) | null };
+      onload: (() => void) | null; status: number; responseText: string } | null = null;
+    setXhr(() => {
+      const x = {
+        upload: { onprogress: null }, onload: null, onerror: null, onabort: null, status: 0, responseText: "",
+        withCredentials: false, headers: {} as Record<string, string>,
+        open() {}, setRequestHeader(k: string, v: string) { x.headers[k] = v; },
+        send(b: unknown) { sent.push({ headers: x.headers, body: b }); },
+      };
+      fake = x as never;
+      return x as never;
+    });
+    try {
+      const { container: c } = render(<UpgradePage say={() => {}} />);
+      const f = new File([new Uint8Array([1, 2, 3])], "v1.5.0.tar.gz");
+      fireEvent.change(c.querySelector('input[name="pkg"]')!, { target: { files: [f] } });
+      fireEvent.click(btn(c, "上传升级包"));
+      fireEvent.input(document.querySelector('form.confirm-pw input[type="password"]')!, { target: { value: "my-own-password" } });
+      fireEvent.submit(document.querySelector("form.confirm-pw")!);
+      await waitFor(() => expect(sent.length).toBe(1));
+      expect(sent[0].headers["X-Nexwar-Confirm"]).toBe("my-own-password");
+      const bar = () => document.querySelector('[data-up-progress="upload"]');
+      await waitFor(() => expect(bar()?.textContent).toContain("0%"));
+      fake!.upload.onprogress!({ lengthComputable: true, loaded: 40, total: 100 });
+      await waitFor(() => expect(bar()?.textContent).toContain("40%"));
+      expect(bar()!.textContent).toContain("正在把 v1.5.0.tar.gz 传到站点");
+      fake!.upload.onprogress!({ lengthComputable: true, loaded: 100, total: 100 });
+      await waitFor(() => expect(bar()?.textContent).toContain("站点正在验签"));
+      fake!.status = 200;
+      fake!.responseText = JSON.stringify({ release: { name: "v1.5.0" } });
+      fake!.onload!();
+      await waitFor(() => expect(document.querySelector("form.confirm-pw")).toBeNull());
+      expect(bar()).toBeNull();
+    } finally {
+      setXhr(null);
+    }
   });
   it("充电且空闲时切换", async () => {
     const { container: c } = render(<UpgradePage say={() => {}} />);
