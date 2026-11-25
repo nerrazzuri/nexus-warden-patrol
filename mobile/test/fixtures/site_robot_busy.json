@@ -48,9 +48,9 @@
       },
       "patrol": {
         "autonomy": "autonomous",
+        "loops_forever": true,
         "map_id": "estate-1",
-        "map_version": "7",
-        "loops_forever": true
+        "map_version": "7"
       },
       "posture": {
         "modes": [
@@ -100,8 +100,8 @@
     {
       "ack_reason": "",
       "ack_result": "accepted",
-      "command_id": "cmd-b81d75e1d71e",
-      "issued_at": 1794337329333,
+      "command_id": "cmd-8d8e297fcb4e",
+      "issued_at": 1795581670583,
       "issued_by": "alice",
       "kind": "goto",
       "payload": {
@@ -117,28 +117,30 @@
       },
       "priority": 60,
       "robot_id": "A",
-      "task_id": "task-2bfc9b5b4205"
+      "task_id": "task-cdcd21b4dc21"
     }
   ],
   "devices": null,
-  "enrolled_at": 1794337329183,
+  "enrolled_at": 1795581670469,
   "events": [
     {
-      "boot_id": "boot-3813831346",
+      "boot_id": "boot-33eae8366b",
       "data": {
         "faults": []
       },
       "kind": "robot_fault",
       "seq": 1,
-      "stamp": 1794337329253
+      "stamp": 1795581670516
     }
   ],
-  "expires_at": 1795337329184,
+  "expires_at": 1796581670470,
   "fresh": true,
   "held": null,
   "home_set": false,
+  "lap": null,
   "loc": null,
   "manual_only": null,
+  "muted": null,
   "name": "",
   "revoked": false,
   "robot_id": "A",
@@ -166,11 +168,11 @@
       "site_rev": 0
     }
   },
-  "lap": null,
+  "standby_countdown": null,
   "status": {
-    "boot_id": "boot-3813831346",
+    "boot_id": "boot-33eae8366b",
     "control_epoch": 1,
-    "last_seen": 1794337329340,
+    "last_seen": 1795581670585,
     "online": true,
     "ready": {
       "control": true,
@@ -181,8 +183,8 @@
     "schema": "1.0",
     "task": {
       "kind": "goto",
-      "state": "running",
-      "task_id": "task-2bfc9b5b4205"
+      "state": "pending",
+      "task_id": "task-cdcd21b4dc21"
     }
   },
   "wifi": null

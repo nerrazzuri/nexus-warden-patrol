@@ -50,9 +50,9 @@
           },
           "patrol": {
             "autonomy": "autonomous",
+            "loops_forever": true,
             "map_id": "estate-1",
-            "map_version": "7",
-            "loops_forever": true
+            "map_version": "7"
           },
           "posture": {
             "modes": [
@@ -99,11 +99,12 @@
       },
       "clock_skew_s": 0.0,
       "devices": null,
-      "enrolled_at": 1794337329183,
-      "expires_at": 1795337329184,
+      "enrolled_at": 1795581670469,
+      "expires_at": 1796581670470,
       "fresh": true,
       "held": null,
       "home_set": false,
+      "lap": null,
       "loc": {
         "anchored": true,
         "pose": {
@@ -117,6 +118,7 @@
         "source": "odom_identity"
       },
       "manual_only": null,
+      "muted": null,
       "name": "",
       "revoked": false,
       "robot_id": "A",
@@ -144,11 +146,11 @@
           "site_rev": 0
         }
       },
-      "lap": null,
+      "standby_countdown": null,
       "status": {
-        "boot_id": "boot-3813831346",
+        "boot_id": "boot-33eae8366b",
         "control_epoch": 1,
-        "last_seen": 1794337329907,
+        "last_seen": 1795581673129,
         "online": true,
         "ready": {
           "control": true,
