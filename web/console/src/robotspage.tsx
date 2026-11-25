@@ -367,7 +367,7 @@ function RobotSettings({ r, u, now, say, onChanged, onCode }: {
     // 易用性 37 复测 P1-7:默认待命点在图上走不了 —— 回待命点、值守都派不了,写出来
     ...(r.standby_set != null ? [{ k: "standby", group: "setup" as const, sign: (r.standby_set && !r.standby_bad ? "ok" : "warn") as Check["sign"], label: "roStandby" as Key,
       value: !r.standby_set ? t("rdNoStandby") : r.standby_bad ? t("rdStandbyBad") : t("roSet"),
-      act: r.standby_set && !r.standby_bad ? undefined : <a class="btn" href="#/admin/layout?tab=standby">{t("rdNoStandbyGo")}</a> }] : []),
+      act: r.standby_set && !r.standby_bad ? undefined : <a class="btn" href="#/admin/layout?tab=standby">{t(r.standby_bad ? "rdStandbyBadGo" : "rdNoStandbyGo")}</a> }] : []),
     ...(r.fov ? [{ k: "fov", group: "setup" as const, sign: (r.fov.state === "ready" ? "ok" : "info") as Check["sign"], label: "roFov" as Key,
       value: r.fov.state === "ready" ? t("roFovReady")
         : r.fov.state === "learning" ? t("roFovLearning", { p: Math.min(99, Math.floor(100 * (r.fov.frames ?? 0) / Math.max(1, r.fov.need ?? 1))) })

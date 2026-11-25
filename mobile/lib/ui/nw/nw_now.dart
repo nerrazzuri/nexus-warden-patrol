@@ -447,7 +447,7 @@ class _NowPageState extends State<NowPage> with EstopMissReveal {
   String _attnWord(Map<String, dynamic> r) {
     final p = _phaseOf(r);
     if (const {RobotPhase.estop, RobotPhase.offline, RobotPhase.revoked}.contains(p)) return _phaseWord(p);
-    return tr('standby point not walkable, re-mark it', '待命点走不了，要重新标');
+    return tr('standby point not walkable: set a new default standby point', '待命点走不了：要重新设一个默认待命点');
   }
 
   /// 截图核对 11-15:有机器人急停 / 离线时顶上一条琥珀「要看一下」,写清是哪台、什么状态。

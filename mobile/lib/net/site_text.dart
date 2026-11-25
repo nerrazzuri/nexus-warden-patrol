@@ -109,7 +109,13 @@ const String _afterNote = '; recorded afterwards because the site was not runnin
 final List<_Rule> _rules = [
   // 易用性 37 复测 P1-9：机器人「…;回头补也没到:…」
   (RegExp(r'^([\s\S]+?)[;；]回头补也没到[:：]\s*([\s\S]*)$'),
-      (m) => '${_en(m[1]!)}; tried again after the lap, still not reached: ${_lc(_en(m[2]!))}'),
+      (m) {
+        final a = _en(m[1]!), b = _en(m[2]!);
+        return a == b ? '$a (tried again after the lap: same result)' : '$a; tried again after the lap, still not reached: ${_lc(b)}';
+      }),
+  // 易用性 37 复测 P1-7：标原点 / 设待命点被拒（App 有的页不读 reason_en）
+  (RegExp(r'^(\S+) 现在站的地方不能当待命点[:：][\s\S]*$'),
+      (m) => "${m[1]} can't use this spot as its standby point: the map shows it as not walkable or not scanned, so robots could never be sent back here. Drive about 1 m into open, scanned floor and mark again."),
   (RegExp(r'^网页上传$'), (m) => 'uploaded on the web'), // 升级包来源（站点 api.py）
   // 易用性 37 复测：值守等「留在这里」的原因（站点 standby.py stay_hold）
   (RegExp(r'^(\S+) 遥控后留在原地[(（]有人点了「留在这里」[)）][,，]到点前不自动派$'),

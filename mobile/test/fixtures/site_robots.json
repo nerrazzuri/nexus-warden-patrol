@@ -99,8 +99,8 @@
       },
       "clock_skew_s": 0.0,
       "devices": null,
-      "enrolled_at": 1795636657436,
-      "expires_at": 1796636657437,
+      "enrolled_at": 1795638380524,
+      "expires_at": 1796638380525,
       "fresh": true,
       "held": null,
       "home_set": false,
@@ -108,7 +108,7 @@
       "loc": {
         "anchored": true,
         "pose": {
-          "x": 0.0,
+          "x": 0.36,
           "y": 0.0,
           "yaw": 0.0
         },
@@ -149,9 +149,9 @@
       "standby_bad": false,
       "standby_countdown": null,
       "status": {
-        "boot_id": "boot-4762ffbd69",
+        "boot_id": "boot-f426e0f740",
         "control_epoch": 1,
-        "last_seen": 1795636658204,
+        "last_seen": 1795638385155,
         "online": true,
         "ready": {
           "control": true,

@@ -242,7 +242,8 @@ void main() {
     });
 
     testWidgets('电量读不到不写电量；W53：诊断卡去掉了（工程师在 管理 → 体检 看）', (t) async {
-      final v = Map<String, dynamic>.of(busyView());
+      // 夹具里现在有电量（满载时拍到空值是测试不稳）：这里自己设成读不到
+      final v = Map<String, dynamic>.of(busyView())..['battery_pct'] = null;
       await t.pumpWidget(MaterialApp(home: SiteRobotPage(api: FakeApi('admin', robotView: v), robotId: 'A')));
       await t.pumpAndSettle();
       expect(find.textContaining('电量'), findsNothing);

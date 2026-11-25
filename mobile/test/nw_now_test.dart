@@ -76,6 +76,7 @@ void main() {
     expect(find.byKey(NowPage.okKey), findsNothing);
     final txt = t.widgetList<Text>(find.descendant(of: find.byKey(NowPage.attnKey), matching: find.byType(Text))).map((w) => w.data).join(' ');
     expect(txt, contains('待命点走不了'));
+    expect(txt, contains('默认待命点'));
     await t.pumpWidget(Container());
   });
 

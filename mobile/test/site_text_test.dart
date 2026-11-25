@@ -1,11 +1,20 @@
 // 手机 App 测试 M05：站点、机器人的中文原文按 App 语言说（跟网页 sitetext.test.ts 同一套例子）。
 import 'package:flutter_test/flutter_test.dart';
 import 'package:nexwar_patrol/l10n.dart';
+import 'package:nexwar_patrol/net/site_client.dart';
 import 'package:nexwar_patrol/net/site_text.dart';
 
 void main() {
   setUp(() => appLang.value = AppLang.en);
   tearDown(() => appLang.value = AppLang.zh);
+
+  test('易用性 37 复测第四轮：标原点被拒英文（ackReasonText 兜底也翻）；回头补同一句不重复', () {
+    expect(ackReasonText('A 现在站的地方不能当待命点:这里 在图上不是可通行的地方(墙、障碍或未扫到)。往开阔、扫到过的地方开 1 m 左右再标'),
+        startsWith("A can't use this spot as its standby point"));
+    const one = '导航拒了: goto 被设备拒绝: 规划失败(start_blocked):起点在障碍或禁行区里';
+    final en = siteText('$one;回头补也没到:$one');
+    expect(en.split('with Remote').length, 2, reason: en);
+  });
 
   test('易用性 37 复测 P1-9：起点被挡 + 回头补也没到 整句英文、说用遥控挪', () {
     final en = siteText('导航拒了: goto 被设备拒绝: 规划失败(start_blocked):起点在障碍或禁行区里;回头补也没到:导航拒了: goto 被设备拒绝: 规划失败(start_blocked):起点在障碍或禁行区里');
