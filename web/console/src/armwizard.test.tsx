@@ -22,6 +22,7 @@ let taken: Set<string>;
 let posted: { url: string; body: Record<string, unknown> }[];
 let gets: string[];
 let schedule: { enabled: boolean; slots: unknown[] };
+let base: typeof fetch;
 beforeEach(() => {
   schedule = { enabled: false, slots: [] };
   lang.value = "zh";
@@ -32,7 +33,7 @@ beforeEach(() => {
   plan = { revision: 0, entries: [], limits: {}, forecast: { entries: [], zones: [], warnings: [] } };
   preview = null;
   taken = new Set();
-  setFetch(((url: string, init?: RequestInit) => {
+  base = ((url: string, init?: RequestInit) => {
     if (init?.method === "POST") {
       const body = JSON.parse(String(init.body ?? "{}"));
       posted.push({ url, body });
@@ -63,8 +64,15 @@ beforeEach(() => {
     if (url === "/api/arming/schedule") return Promise.resolve(json(schedule));
     if (url === "/api/guard/status") return Promise.resolve(json(status));
     if (url.endsWith("/preview")) return Promise.resolve(json(META));
+    if (url.endsWith("/areas")) return Promise.resolve(json({ areas: ready.zones.map((z) => ({ zone: z, points: [[0, 0], [2, 0], [2, 2]] })) }));
+    if (url.startsWith("/api/routes/")) {
+      const id = decodeURIComponent(url.split("/").pop()!);
+      return Promise.resolve(json({ id, map_id: "estate-1", map_version: "7", revision: 1, bound: false, policy: {}, updated_by: "", updated_ms: 0,
+        waypoints: [{ name: "1-1", x: 1, y: 1, yaw: 0 }, { name: "1-2", x: 2, y: 1, yaw: 0 }] }));
+    }
     return Promise.resolve(json({}, 404));
-  }) as typeof fetch);
+  }) as typeof fetch;
+  setFetch(base);
 });
 afterEach(cleanup);
 
@@ -262,6 +270,28 @@ describe("布防向导", () => {
     await waitFor(() => expect(posted.some((p) => p.url === "/api/guard-routes/generate")).toBe(true));
     const g = posted.find((p) => p.url === "/api/guard-routes/generate")!.body;
     expect((g.zones as { zone: string }[]).map((z) => z.zone)).toEqual(["2"]);
+  });
+
+  it("用户 11-25:路线这一步有地图 —— 自动生成以后画出那条路线和选的防区", async () => {
+    ready = { ...ready, zones: ["1", "2"], routes: [] };
+    const r = await openWiz();
+    pickZone(r, "2");
+    await next(r, "route");
+    const real = ready;
+    setFetch(((url: string, init?: RequestInit) => {
+      // 存好了:站点的就绪情况里有这条路线(跟真站点一样)
+      if (init?.method === "POST" && url.startsWith("/api/routes/")) {
+        real.routes = [...real.routes, { id: decodeURIComponent(url.split("/").pop()!), title: "t", zones: ["2"], in_plan: false }];
+      }
+      return base(url, init);
+    }) as typeof fetch);
+    fireEvent.click(r.getByText("按选的防区自动生成"));
+    const box = await waitFor(() => {
+      const m = r.container.ownerDocument.querySelector("[data-wiz-route-map] polyline.route-line");
+      expect(m).not.toBeNull();
+      return m!;
+    });
+    expect(box.getAttribute("data-route")).toMatch(/^guard-/);
   });
 
   it("第 3 步不预选:选了才能下一步;时间表本来关着、选「手动」不存", async () => {

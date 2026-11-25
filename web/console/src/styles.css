@@ -1732,6 +1732,10 @@ input[aria-invalid="true"] { border-color: var(--c-error); outline-color: var(--
 .wiz-steps li[aria-current="step"] .wiz-step { border-color: var(--c-primary); color: var(--c-text); font-weight: 600; }
 .wiz-pick { display: flex; flex-direction: column; gap: var(--sp-2); border: 0; margin: 0; padding: 0; }
 .wiz-pick legend { margin-bottom: 8px; }
+/* 用户 11-25:向导「巡逻路线」这一步的地图(选的防区 + 选中的路线) */
+.wiz-route-map { height: clamp(240px, 45vh, 420px); margin-top: var(--sp-3); display: flex; }
+.wiz-route-map > * { flex: 1; min-width: 0; }
+.route-start { fill: var(--c-tertiary); stroke: var(--c-surface); stroke-width: 1.5; vector-effect: non-scaling-stroke; }
 .wiz-robots { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--sp-2); }
 .wiz-robots li { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2); }
 .wiz-robots .ok { color: var(--c-success); }
