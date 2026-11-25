@@ -248,9 +248,9 @@ class MappingService:
                 self.held.add(b.name)
 
     def disk_view(self) -> dict[str, Any] | None:
-        """真机 11-25:录包占了多少、盘还剩多少(``bag_gb`` 正在录 / 上一个包、``bags_gb`` 留着的全部包、
-        ``free_gb`` 录包那块盘还剩)。27 号会展扫 30 分钟约 75 GB,连扫两回就会碰到「盘不够先删最旧」:
-        手机向导上写出来。录包目录不在 → ``None``。"""
+        """真机 11-25:录包占了多少、盘还剩多少(``bag_gb`` 正在录 / 上一个包、``bags_gb`` 留着的
+        全部包、``free_gb`` 录包那块盘还剩)。27 号会展扫 30 分钟约 75 GB,连扫两回就会碰到
+        「盘不够先删最旧」:手机向导上写出来。录包目录不在 → ``None``。"""
         root = self.bags_root
         if not root.is_dir():
             return None

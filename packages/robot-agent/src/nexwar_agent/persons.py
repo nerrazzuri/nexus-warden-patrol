@@ -281,8 +281,9 @@ class PersonView:
     def sweep_snapshots(self, *, max_age_s: float = 24 * 3600.0,
                         wall: Callable[[], float] = time.time) -> int:
         """真机 11-25:截图目录里留着没传走的旧截图(C40221 上 22 张 10-26~11-04 的)。正常的截图收到就
-        存进归档、删掉;存不成(那时还没加载地图、归档出错、代理没在跑)的就一直留着。超过 ``max_age_s``
-        的删掉(太旧了,再当新的一趟传上去会混进告警的时间线),记一笔删了几张。回删了几张。"""
+        存进归档、删掉;存不成(那时还没加载地图、归档出错、代理没在跑)的就一直留着。超过
+        ``max_age_s`` 的删掉(太旧了,再当新的一趟传上去会混进告警的时间线),记一笔删了几张。
+        回删了几张。"""
         d = self.snapshot_dir
         if d is None or not d.is_dir():
             return 0
