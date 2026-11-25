@@ -157,6 +157,15 @@ export function RobotControl(props: {
                     t("rcReturnCancelled", { id: name }))}>{t("rcReturnCancel")}</button>}
               </div>
             )}
+            {/* 真机 11-25:撤防了还在喊、App 关灯停不了喊话 —— 一键静音(到下次布防) */}
+            {patrol && r.deter?.outputs.some((o) => o === "speaker" || o === "siren") && (
+              <div class="rc-row" data-mute={id}>
+                <button type="button" class="btn" aria-pressed={!!r.muted} disabled={busy}
+                  onClick={() => void send(async () => { await api("POST", path("mute"), { on: !r.muted }); return {} as Reply; },
+                    t(r.muted ? "rcUnmuted" : "rcMutedDone", { id: name }))}>{t(r.muted ? "rcUnmute" : "rcMute")}</button>
+                {r.muted && <span class="muted small">{t("rcMutedBy", { by: r.muted })}</span>}
+              </div>
+            )}
             <p class="rc-task-now">{task ? (r.task_what ? [r.task_what.kind === "patrol" && r.task_what.route ? t("rcRunning", { what: r.task_what.route }) : taskWhat(r.task_what), lapText(r.lap)].filter(Boolean).join(" · ") : u.task || taskWhat(null)) : t("rcNoTask")}</p>
             {off && <p class="rc-off muted small">{offWhy}</p>}
             {(patrol || dispatch) && (
@@ -290,10 +299,10 @@ export function cardFromUnit(u: UnitInfo): RobotCard {
 }
 
 /** 跟着实时数据走、不等概况的那几样。 */
-function liveOf(u: UnitInfo): Pick<RobotCard, "online" | "held" | "task" | "standby_countdown"> {
+function liveOf(u: UnitInfo): Pick<RobotCard, "online" | "held" | "task" | "standby_countdown" | "muted"> {
   const st = u.robot.status as { task?: { task_id?: string } | null } | null | undefined;
   return { online: u.state !== "offline", held: (u.robot.held as RobotCard["held"]) ?? null, task: st?.task?.task_id ?? null,
-    standby_countdown: u.robot.standby_countdown ?? null };
+    standby_countdown: u.robot.standby_countdown ?? null, muted: u.robot.muted ?? null };
 }
 
 interface Plan { estimate_s?: number | null; start_ms?: number; queued?: boolean; because?: string; utc_offset_min?: number; forever?: boolean; return_pct?: number }

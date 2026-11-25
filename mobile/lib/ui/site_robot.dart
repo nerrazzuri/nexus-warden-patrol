@@ -312,6 +312,31 @@ class _SiteRobotPageState extends State<SiteRobotPage> with NwAsk {
         ]),
       ));
 
+  static bool _hasSound(Map<String, dynamic>? v) {
+    final caps = v?['capabilities'];
+    final tasks = caps is Map ? caps['tasks'] : null;
+    final d = tasks is Map ? tasks['deter'] : null;
+    final outs = d is Map ? (d['outputs'] as List? ?? const []) : const [];
+    return outs.contains('speaker') || outs.contains('siren');
+  }
+
+  Future<void> _toggleMute() async {
+    final on = _view?['muted'] == null;
+    String msg;
+    try {
+      final r = await widget.api.mute(widget.robotId, on);
+      msg = r['muted'] == true
+          ? tr('${widget.robotId} muted: speaker and siren off until the next arming',
+              '${widget.robotId} 已静音：喇叭、警笛关了，下次布防前不再喊')
+          : tr('${widget.robotId} unmuted', '${widget.robotId} 已取消静音');
+    } on SiteError catch (e) {
+      msg = tr('Mute failed: ${refusalText(e)}', '静音 失败：${refusalText(e)}');
+    }
+    if (!mounted) return;
+    _say(msg);
+    await _reload();
+  }
+
   Future<void> _cancelReturn() async {
     String msg;
     try {
@@ -888,6 +913,10 @@ class _SiteRobotPageState extends State<SiteRobotPage> with NwAsk {
       // **有叫停权限就一直按得动**（App 重做外审 I1）：`_abort` 自己现问站点现在跑的是哪一趟
       if (s?.canAbort ?? false)
         nwOpButton(c, const Key('btn-abort'), tr('Stop in place', '原地停下'), _abort, icon: Icons.pause_rounded),
+      // 真机 11-25：撤防了还在喊、「关灯」停不了喊话 —— 一键静音（到下次布防）
+      if ((s?.canAbort ?? false) && _hasSound(v))
+        nwOpButton(c, const Key('btn-mute'), v?['muted'] != null ? tr('Unmute', '取消静音') : tr('Mute', '静音'),
+            _toggleMute, icon: v?['muted'] != null ? Icons.volume_up_rounded : Icons.volume_off_rounded),
       if (dispatch)
         nwOpButton(c, const Key('btn-standby'), tr('Return to standby', '回待命点'),
             () => _do(() => widget.api.returnToStandby(widget.robotId), tr('Return to standby', '回待命点'))),

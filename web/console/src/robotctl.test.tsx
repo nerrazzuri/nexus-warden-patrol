@@ -346,3 +346,18 @@ describe("真机 11-25:遥控松手后先倒数再回待命点", () => {
     expect(c.querySelector("[data-standby-countdown]")).toBeNull();
   });
 });
+
+describe("真机 11-25:静音", () => {
+  it("有喇叭的机器人有「静音」;点了发 on:true;静音着写谁点的、按钮变「取消静音」", async () => {
+    const c = show("guard", idle());
+    await press(c, "Mute");
+    await waitFor(() => expect(posts).toContainEqual({ url: "/api/robots/A/mute", body: { on: true } }));
+    cleanup();
+    const u = idle();
+    (u.robot as { muted?: string }).muted = "gina";
+    const c2 = show("guard", u);
+    await waitFor(() => expect(c2.querySelector('[data-mute="A"]')!.textContent).toContain("Muted by gina"));
+    await press(c2, "Unmute");
+    await waitFor(() => expect(posts).toContainEqual({ url: "/api/robots/A/mute", body: { on: false } }));
+  });
+});

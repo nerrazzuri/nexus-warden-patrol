@@ -21,7 +21,7 @@ import { pageAllowed } from "./shell";
 import { byText } from "./sitetext";
 import { VideoSlot, type Scene } from "./slot";
 import { fitLayout, Sign, stateSign, videoLayoutsFor, type VideoLayout } from "./signs";
-import { awayText, followText, IncidentView, responder, type FixedCam } from "./incident";
+import { awayText, followText, IncidentView, seenByText, responder, type FixedCam } from "./incident";
 import { type ChargeSpan, isSecurity, recentActivity, ShiftTimeline } from "./shifttl";
 import { TodayPatrols, type TodayItem } from "./todaypatrols";
 import { RobotControl } from "./robotctl";
@@ -190,7 +190,7 @@ export function MonitorPage(props: {
       sign: top.level === "P1" ? "bad" : "warn",
       title: alertHeadline(top),
       sub: [top.level, top.context?.zone ?? top.context?.where ?? "", nameOf(top.robot), hm(top.first_ms),
-        followText(top.context),
+        followText(top.context), seenByText(top.context),
         top.context?.arrived_by ? t("dutyArrived", { who: top.context.arrived_by }) : mustArrive(top) ? t("dutyArriveFirst")
           : top.acked_ms != null && top.acked_by ? t("dutyTakenBy", { who: byText(top.acked_by) }) : "",
         alarms.length > 1 ? t("dutyMore", { n: alarms.length - 1 }) : ""].filter(Boolean).join(" · "),

@@ -663,3 +663,70 @@ def test_外审W77_10_1_位置过期_不标人的位置_照样报P1(台):
     t.w.tick()
     [a] = t.w.alerts.raised
     assert "person" not in a["context"]
+
+
+# ------------------------------------------------ 真机 11-25:撤防了还亮灯、还在喊
+
+async def test_真机1125_撤防了人还在_见人开的警灯警笛当场关(台):
+    t = 台
+    t.arming.set_mode("armed", by="gina")
+    d, w = _上装台(t, outputs=("strobe", "siren", "speaker"))
+    d.persons("A", present=True, count=1, nearest_m=1.8)
+    await _拍(w)
+    assert {p["output"] for _, p, _ in d.sent} >= {"strobe", "siren"}
+    d.sent.clear()
+    t.arming.set_mode("home", by="olga")                 # 撤防,人还站在旁边
+    await _拍(w)
+    off = {p["output"]: p for _, p, _ in d.sent}
+    assert set(off) == {"strobe", "siren"} and not any(p["on"] for p in off.values())
+
+
+class 假话术派遣(假上装派遣):
+    def __init__(self, **kw):
+        super().__init__(**kw)
+        self.clients["A"].capabilities.tasks["auto_voice"] = {"person": False}
+        self.voice: list[bool] = []
+
+    async def auto_voice(self, rid, person, *, issued_by):
+        self.voice.append(person)
+        self.clients["A"].capabilities.tasks["auto_voice"] = {"person": person}
+        return {"ack": {"result": "accepted"}}
+
+
+async def test_真机1125_机器人自己的有人走近话术_只在布防且没静音时放(台):
+    t = 台
+    d = 假话术派遣(outputs=("strobe", "siren", "speaker"))
+    w = PersonWatch(t.db, d, now_ms=lambda: t.ms[0], arming=t.arming, deterrence=t.det)
+    w.alerts = 假告警台()
+    t.arming.set_mode("armed", by="gina")
+    await _拍(w)
+    assert d.voice == [True], "布防:告诉机器人放"
+    await _拍(w)
+    assert d.voice == [True], "一样的不重发"
+    t.arming.set_mode("home", by="olga")
+    await _拍(w)
+    assert d.voice == [True, False], "撤防:告诉机器人别喊"
+
+
+async def test_真机1125_静音_当场停喇叭警笛_见人只开灯_重新布防自动解除(台):
+    t = 台
+    d = 假话术派遣(outputs=("strobe", "siren", "speaker"))
+    w = PersonWatch(t.db, d, now_ms=lambda: t.ms[0], arming=t.arming, deterrence=t.det)
+    w.alerts = 假告警台()
+    t.arming.set_mode("armed", by="gina")
+    await _拍(w)
+    assert await w.mute("A", True, by="gina") is True
+    await _拍(w)
+    stop = {p["output"]: p["on"] for _, p, _ in d.sent}
+    assert stop == {"speaker": False, "siren": False}, "当场停掉喇叭、警笛"
+    assert d.voice[-1] is False and d.voice_muted == {"A": "gina"}
+    d.sent.clear()
+    d.persons("A", present=True, count=1, nearest_m=1.8)
+    await _拍(w)
+    assert [p["output"] for _, p, _ in d.sent] == ["strobe"], "静音了:见人只开灯,不喊不响"
+    t.arming.set_mode("home", by="olga")
+    await _拍(w)
+    t.arming.set_mode("armed", by="gina")
+    await _拍(w)
+    assert "A" not in w.muted and d.voice[-1] is True, "撤防再布防:静音自动解除"
+    assert await w.mute("A", False, by="gina") is False

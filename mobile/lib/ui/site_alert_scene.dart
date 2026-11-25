@@ -39,6 +39,18 @@ import 'site_runs.dart';
 import 'site_video.dart';
 import 'widget/alarm_widgets.dart';
 
+/// 真机 11-25：哪台相机看到的人（用户分不清是前面还是后面）。没报是空串。
+String seenByText(Map<String, dynamic> ctx) {
+  final p = ctx['persons'];
+  final cams = p is Map ? p['cams'] : null;
+  if (cams is! List || cams.isEmpty) return '';
+  final names = [
+    for (final c in cams)
+      c == 'front' ? tr('front', '前') : c == 'back' ? tr('rear', '后') : '$c',
+  ];
+  return tr('seen by the ${names.join(' and ')} camera', '${names.join('、')}相机看到的');
+}
+
 class SiteAlertScenePage extends StatefulWidget {
   final SiteApi api;
   final Alert alert;
@@ -716,6 +728,7 @@ class _SiteAlertScenePageState extends State<SiteAlertScenePage> with EstopMissR
       if ('${ctx['zone'] ?? ''}'.isNotEmpty) '${ctx['zone']}',
       if ('${ctx['camera'] ?? ''}'.isNotEmpty) '${ctx['camera']}',
       if (_isRobot) _a.robot,
+      if (seenByText(ctx).isNotEmpty) seenByText(ctx),
       if ('${ctx['exit'] ?? ''}'.isNotEmpty) tr('left via ${ctx['exit']}', '从 ${ctx['exit']} 离开'),
     ].join(' · ');
     final follow = _followLine();

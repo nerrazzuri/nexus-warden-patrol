@@ -130,7 +130,7 @@ export function IncidentView(props: {
 
   // ---- 页头 ----
   const sub = [a.level, t(sec ? "incSecurity" : "incEquipment"), where, scene?.name ?? "", hms(a.first_ms),
-    followText(a.context),
+    followText(a.context), seenByText(a.context),
     a.context?.exit ? t("incExit", { exit: a.context.exit }) : "", site ? "" : nameOf(a.robot)].filter(Boolean).join(" · ");
   let primary: preact.ComponentChildren = null;
   if (open && can && a.acked_ms == null) {
@@ -330,6 +330,14 @@ export function IncidentView(props: {
 }
 
 /** 「离北门 48 米」:没地名写「离报警点」;不到 1 米(就是它自己看见的)不写。 */
+/** 真机 11-25:哪台相机看到的人(用户分不清是前面还是后面)。没报是空串。 */
+export function seenByText(ctx: { persons?: { cams?: string[] } } | null | undefined): string {
+  const cams = ctx?.persons?.cams;
+  if (!Array.isArray(cams) || cams.length === 0) return "";
+  const names = cams.map((c) => (c === "front" || c === "back" ? t(c) : c));
+  return t("incSeenBy", { cams: names.join(lang.value === "zh" ? "、" : " and ") });
+}
+
 /** 机器人跟人到哪一步了(真机 11-25:用户看不出它为什么动、为什么停)。没在跟、没跟过是空串。 */
 export function followText(ctx: Record<string, unknown> | null | undefined): string {
   const f = ctx?.follow;

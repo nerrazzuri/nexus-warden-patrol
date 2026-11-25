@@ -16,6 +16,7 @@
   ``POST /api/routes/<名>``(整条存,带 ``base_revision``,新建 0)、``POST /api/routes/<名>/delete``;
   ``POST /api/route-timezone``;``GET /api/route-schedules``、``POST /api/route-schedules/<id>``、
   ``…/<id>/delete``;``POST /api/route-export``(导成任务包放在站点主机的 ``route-exports/``)
+- ``POST /api/robots/<id>/mute`` ``{on}``:静音(真机 11-25,叫停权限);
 - ``POST /api/robots/<id>/standby/cancel``:取消遥控放租后的「N 秒后回待命点」(真机 11-25,叫停权限);
 - ``GET/POST /api/robots/<id>/standby``、``POST /api/robots/<id>/standby/return``:待命点(W00c2b);
   GET 也带这台狗的原点(``homes``,W13a);``standby/return`` 可带 ``name`` 回指定的那一个;
@@ -238,7 +239,7 @@ GOTO_RETURN_PCT, GOTO_ABORT_PCT, GOTO_SLACK = 25.0, 15.0, 1.5
 GOTO_SPEED, GOTO_DRAIN, GOTO_DETOUR, GOTO_FLOOR_PCT = 0.4, 22.3, 1.4, 3.0
 _ROBOT = re.compile(
     r"^/api/robots/([^/]+)"
-    r"(?:/(goto|abort|patrol|patrol-plan|goto-plan|standby|standby/return|standby/here|standby/cancel"
+    r"(?:/(goto|abort|patrol|patrol-plan|goto-plan|standby|standby/return|standby/here|standby/cancel|mute"
     r"|intercept/here"
     r"|home/return))?$")
 
@@ -344,6 +345,7 @@ class SiteApi:
         self.arming: Any = None
         #: 分级驱离(W22,``deterrence.DeterrenceDesk``)。
         self.deterrence: Any = None
+        self.sightings: Any = None                       # 真机 11-25:静音(main 接上)
         #: 天气(W29,``weather.WeatherDesk``)。没接的站点 /api/weather 回 404。
         self.weather: Any = None
         #: P1 推到手机(商业化 A6,``push.PushDesk``)。没接的站点 /api/push/devices 回 404。
@@ -1730,7 +1732,7 @@ class _Handler(TlsHandlerMixin):
         disp = self.site.dispatcher
         if method == "GET":
             self._need(user, VIEW)
-        elif action in ("abort", "standby/cancel"):
+        elif action in ("abort", "standby/cancel", "mute"):
             self._need(user, ABORT)               # 取消「N 秒后自己走」跟叫停一个权限(真机 11-25)
         elif action == "standby":
             self._need(user, MANAGE)
@@ -1752,6 +1754,20 @@ class _Handler(TlsHandlerMixin):
             return self._send_json(200, view)
         if action in ("standby", "standby/return"):
             return self._standby(method, robot_id, action, user)
+        if action == "mute":
+            # 真机 11-25:静音(停掉正在放的、见人不再喊、机器人自己的「有人走近」也不喊)
+            if method != "POST":
+                raise HttpError(405, "只支持 POST")
+            sw = getattr(self.site, "sightings", None)
+            if sw is None:
+                raise HttpError(404, "此站点没开人员检测")
+            on = (self._body() or {}).get("on")
+            if not isinstance(on, bool):
+                raise HttpError(400, "on 要 true / false")
+            self._audit_target = robot_id
+            self._audit_detail = {"mute": on}
+            got = self.site.loop.call(lambda: sw.mute(robot_id, on, by=str(user)))
+            return self._send_json(200, {"muted": bool(got)})
         if action == "standby/cancel":
             # 真机 11-25:遥控放租后的「N 秒后回待命点」—— 人点取消
             if method != "POST":

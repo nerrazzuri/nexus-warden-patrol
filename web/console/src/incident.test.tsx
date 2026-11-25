@@ -362,3 +362,16 @@ describe("真机 11-25:跟人到哪一步写清楚", () => {
     expect(followText({})).toBe("");
   });
 });
+
+describe("真机 11-25:哪台相机看到的", () => {
+  it("前相机、后相机写出来;没报不写", async () => {
+    const { seenByText } = await import("./incident");
+    const { lang } = await import("./i18n");
+    lang.value = "zh";
+    expect(seenByText({ persons: { cams: ["back"] } })).toBe("后相机看到的");
+    expect(seenByText({ persons: { cams: ["front", "back"] } })).toBe("前、后相机看到的");
+    lang.value = "en";
+    expect(seenByText({ persons: { cams: ["front"] } })).toBe("Seen by the Front camera");
+    expect(seenByText({ persons: {} })).toBe("");
+  });
+});

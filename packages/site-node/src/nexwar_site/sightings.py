@@ -55,6 +55,8 @@ WARN_POC_CLIP = "restricted"
 WARN_CLIP_S = 15.0
 #: 喇叭优先级:低于保安手动喊话(``MANUAL`` 60)、驱离(80),高于机器人自己的提醒(40)。
 WARN_PRIORITY = 55
+#: 真机 11-25:「自动话术放不放」跟机器人报的对不上时,最快多久重发一次(毫秒)。
+VOICE_RESEND_MS = 10_000
 #: 外审 W77-1 #6:见人开的警灯、警笛,人走了关没关成(断网、拒收),隔这么久再关一次。
 UNWARN_RETRY_MS = 5_000
 
@@ -103,6 +105,16 @@ class PersonWatch:
         #: W74 二期:地图上一个点在哪(命名区域、没命名用防区名;``{map_id, map_version, x, y}``)。
         #: 站点主程序接上;没接就不说。
         self.where_of: Callable[[dict[str, Any]], str | None] | None = None
+        #: 真机 11-25:静音(机器人 → 谁点的)。静音时不放见人话术、不响警笛,机器人自己的「有人走近」
+        #: 也不喊;下一次布防(撤防 → 布防)自动解除,或者再点一下。只在内存里(站点重启就解了)。
+        self.muted: dict[str, str] = {}
+        self._armed_prev: dict[str, bool] = {}
+        #: 给机器人发「跟人有关的自动话术放不放」(``auto_voice``)最近一次发的什么、什么时刻(毫秒)。
+        self._voice_sent: dict[str, tuple[bool, int]] = {}
+        try:
+            dispatcher.voice_muted = self.muted          # 机器人视图里带上(App、网页画静音键)
+        except AttributeError:
+            pass
         reg = getattr(dispatcher, "on_event", None)
         if callable(reg):
             reg(self.on_event)
@@ -198,6 +210,11 @@ class PersonWatch:
         busy = set(getattr(self.deterrence, "sessions", {}) or {})
         now = self._now()
         for rid in list(self.dispatcher.clients):
+            armed = self._armed_for(rid)
+            if armed and self._armed_prev.get(rid) is False and self.muted.pop(rid, None):
+                log.info("%s 重新布防:静音解除", rid)
+            self._armed_prev[rid] = armed
+            self._sync_voice(rid, armed, now)
             p = self._persons(rid)
             if p is None:
                 continue                                  # 说不清:不报、不删
@@ -216,7 +233,8 @@ class PersonWatch:
                     # 驱离那一场接手了灯笛:这边不再关;受力警报占着的那几样关的责任留在这边
                     # (外审 W77-9 #1:驱离不关别人占着的,受力放手了没人关)
                     self._set_lit(rid, keep)
-            elif present is False:
+            elif present is False or not armed:
+                # 真机 11-25:撤防了人还在,见人开的警灯、警笛也关(以前要等人走了才关)
                 self._unwarn(rid, now)
             if present is False and rid in seen:
                 open_ = self._open(rid)
@@ -226,7 +244,7 @@ class PersonWatch:
                     pass                                  # 还在等保安到场
                 else:
                     self._done(rid)                       # 人走了、那条也关了:再看见再报
-            elif present is True and rid not in busy and self._armed_for(rid):
+            elif present is True and rid not in busy and armed:
                 kind = seen.get(rid)
                 if kind == "lost":
                     if self._open(rid) is not None:
@@ -279,6 +297,8 @@ class PersonWatch:
         if last is not None and now - last < WARN_EVERY_MS:
             return
         strobe, siren, pool = self._warn_plan(rid)
+        if rid in self.muted:
+            siren, pool = False, []                       # 真机 11-25:静音了只开灯
         payloads: list[dict[str, Any]] = []
         for out, on in (("strobe", strobe), ("siren", siren)):
             if on:
@@ -303,6 +323,59 @@ class PersonWatch:
             job = loop.create_task(self._warn_one(rid, pl))
             self._warn_jobs.add(job)
             job.add_done_callback(self._warn_jobs.discard)
+
+    def _sync_voice(self, rid: str, armed: bool, now: int) -> None:
+        """真机 11-25:告诉机器人跟人有关的自动话术(有人走近、人多)放不放 = 布防且没静音。
+        机器人报了 ``auto_voice`` 才发;它报的跟想要的不一样才发,最快 :data:`VOICE_RESEND_MS` 一次。"""
+        c = self.dispatcher.clients.get(rid)
+        caps = getattr(getattr(c, "capabilities", None), "tasks", None) or {}
+        have = caps.get("auto_voice") if isinstance(caps, dict) else None
+        if not isinstance(have, dict) or not callable(getattr(self.dispatcher, "auto_voice", None)):
+            return
+        want = bool(armed and rid not in self.muted)
+        last = self._voice_sent.get(rid)
+        if have.get("person") is want or (
+                last is not None and last[0] is want and now - last[1] < VOICE_RESEND_MS):
+            return                         # 一样的、刚发过(回执或能力还没回来):过一阵再发
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            return
+        self._voice_sent[rid] = (want, now)
+        job = loop.create_task(self._voice_one(rid, want))
+        self._warn_jobs.add(job)
+        job.add_done_callback(self._warn_jobs.discard)
+
+    async def _voice_one(self, rid: str, want: bool) -> None:
+        try:
+            await self.dispatcher.auto_voice(rid, want, issued_by="site:person_warn")
+            log.info("%s 自动话术(有人走近、人多):告诉机器人%s", rid, "放" if want else "不放")
+        except Exception as exc:  # noqa: BLE001 - 下一拍再发
+            log.warning("%s 自动话术开关没发出去:%s", rid, exc)
+
+    async def mute(self, rid: str, on: bool, *, by: str) -> bool:
+        """真机 11-25:App、网页的「静音」。开:当场停掉正在放的话术和警笛,见人不再喊、警笛不再响,
+        机器人自己的「有人走近」也不喊(警灯照旧),直到下一次布防或者再点一下。回此刻静没静音。"""
+        if not on:
+            if self.muted.pop(rid, None) is not None:
+                log.info("%s 静音被 %s 解除", rid, by)
+            self._voice_sent.pop(rid, None)
+            return False
+        self.muted[rid] = by
+        self._voice_sent.pop(rid, None)
+        log.info("%s 被 %s 静音:停掉喇叭、警笛", rid, by)
+        for out in ("speaker", "siren"):
+            try:
+                await self.dispatcher.deter(rid, {"output": out, "on": False},
+                                            issued_by=f"mute:{by}", priority=WARN_PRIORITY)
+            except Exception as exc:  # noqa: BLE001 - 没上装那一路、不在线:照样算静音
+                log.info("%s 静音时关%s没成:%s", rid, out, exc)
+        cur = self._lit_of(rid)
+        if "siren" in cur:
+            cur.pop("siren")
+            self._set_lit(rid, cur)
+        self._sync_voice(rid, self._armed_for(rid), self._now())
+        return True
 
     def _lit_row(self, rid: str) -> tuple[dict[str, int], int]:
         """见人开着、还没确认关掉的输出 → 开的第几代;外加这台机器人用到第几代了。代号只增不复用
@@ -384,6 +457,7 @@ class PersonWatch:
                                             issued_by="site:person_warn", priority=WARN_PRIORITY)
             ack = (r or {}).get("ack") if isinstance(r, dict) else None
             if isinstance(ack, dict) and ack.get("result") == "accepted":
+                log.info("%s 见人开的 %s 关了", rid, out)
                 cur = self._lit_of(rid)
                 if cur.get(out) == gen:                   # 关的就是这一代;后来又开过的不销
                     cur.pop(out)
@@ -396,6 +470,9 @@ class PersonWatch:
             self._unwarn_busy.discard((rid, out))
 
     async def _warn_one(self, rid: str, payload: dict[str, Any]) -> None:
+        # 真机 11-25:开灯、喊话都记一笔(现场分不清是谁在喊)
+        log.info("%s 见人警告:开 %s%s", rid, payload.get("output"),
+                 f"(话术 {payload['clip']})" if payload.get("clip") else "")
         try:
             await self.dispatcher.deter(rid, payload, issued_by="site:person_warn",
                                         priority=WARN_PRIORITY)
@@ -585,6 +662,9 @@ class PersonWatch:
         pose = c.telemetry.pose if c is not None and c.telemetry is not None else None
         context: dict[str, Any] = {"task_id": "persons",
                                    "persons": {k: p[k] for k in ("count", "nearest_m") if k in p}}
+        if isinstance(p.get("cams"), list):
+            # 真机 11-25:哪台相机看到的(App、网页写「前相机」「后相机」)
+            context["persons"]["cams"] = [str(x) for x in p["cams"]][:4]
         if pose is not None:
             context["pose"] = {"map_id": pose.map_id, "map_version": pose.map_version,
                                "x": round(pose.x, 2), "y": round(pose.y, 2), "at_ms": now}

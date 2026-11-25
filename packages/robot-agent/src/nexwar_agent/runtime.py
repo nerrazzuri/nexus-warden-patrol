@@ -1184,6 +1184,8 @@ class AgentRuntime:
         deter = self.deter.caps()
         if deter is not None:
             out["deter"] = deter                    # W21:接了哪几路上装、能放哪些话术
+            # 真机 11-25:跟人有关的自动话术此刻放不放(站点按布防 / 静音发 ``auto_voice``)
+            out["auto_voice"] = {"person": bool(self.autovoice.person)}
         postures = self.hal.hal_capabilities().postures
         if postures:
             out["posture"] = {"modes": list(postures)}   # POC:站起、趴下、蹲下
@@ -1517,6 +1519,8 @@ class AgentRuntime:
             return await self._relocalize(cmd)
         if kind == "mark_home":
             return await self._mark_home(cmd)
+        if kind == "auto_voice":
+            return await self._auto_voice(cmd.payload)
         if kind == "zones_set":
             return await self._zones_set(cmd)
         if kind == "route_net_set":
@@ -1949,6 +1953,18 @@ class AgentRuntime:
         if best.fit < MIN_FIT:
             got["refine"] = True                  # 先认的:定位器精配完复核(_scan_check)
         return (best.x, best.y, best.yaw), got, ref
+
+    async def _auto_voice(self, payload: dict[str, Any]) -> str:
+        """真机 11-25:站点说跟人有关的自动话术放不放(布防、没静音才放)。变了马上报能力。"""
+        on = payload.get("person")
+        if not isinstance(on, bool):
+            return "payload: person 要 true / false"
+        if on != self.autovoice.person:
+            log.info("自动话术(有人走近、人多):站点说%s", "放" if on else "不放")
+            self.autovoice.person = on
+            if self.transport.connected:
+                await self._publish_caps()
+        return ""
 
     async def _mark_home(self, cmd: Command) -> str | tuple[str, dict[str, Any]]:
         """在当前位置标原点(W00c6f):用**此刻锚定后的地图位姿**当这张图上的原点。狗要停着、不在忙;定位

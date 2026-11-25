@@ -48,6 +48,8 @@ export interface RobotCard {
   lap?: { n: number; of: number } | null;
   /** 真机 11-25:遥控松手后倒数回待命点。 */
   standby_countdown?: { after: string; due_ms: number } | null;
+  /** 真机 11-25:谁点的静音。 */
+  muted?: string | null;
 }
 export interface Deter { outputs: string[]; max_s: number; tts: boolean; clips: string[];
   /** 第三档 #41:能念哪几种语言(竞品只会中文;英文靠 Orin 上合成)。没报 = 不知道,不挡。 */
