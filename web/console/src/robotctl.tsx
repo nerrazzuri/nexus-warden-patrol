@@ -144,6 +144,19 @@ export function RobotControl(props: {
                   onClick={() => void send(post("resume"), t("rdSent", { id: name, what: t("rdResume") }))}>{t("rdResume")}</button>}
               </div>
             )}
+            {/* 真机 11-25:遥控松手后站点倒数再派回待命点 —— 写明它要自己走、还剩几秒,能取消 */}
+            {r.standby_countdown && (
+              <div class="rc-held warn" data-standby-countdown={id}>
+                <p>{t("rcReturnIn", { s: Math.max(0, Math.ceil((r.standby_countdown.due_ms - props.now) / 1000)) })}</p>
+                {patrol && <button type="button" class="btn primary" disabled={busy}
+                  onClick={() => void send(async () => {
+                    const d = await api<{ cancelled?: boolean }>("POST", path("standby/cancel"), {});
+                    if (!d.cancelled) { props.say(t("rcReturnTooLate", { id: name })); return null; }
+                    return {} as Reply;
+                  },
+                    t("rcReturnCancelled", { id: name }))}>{t("rcReturnCancel")}</button>}
+              </div>
+            )}
             <p class="rc-task-now">{task ? (r.task_what ? [r.task_what.kind === "patrol" && r.task_what.route ? t("rcRunning", { what: r.task_what.route }) : taskWhat(r.task_what), lapText(r.lap)].filter(Boolean).join(" · ") : u.task || taskWhat(null)) : t("rcNoTask")}</p>
             {off && <p class="rc-off muted small">{offWhy}</p>}
             {(patrol || dispatch) && (
@@ -277,9 +290,10 @@ export function cardFromUnit(u: UnitInfo): RobotCard {
 }
 
 /** 跟着实时数据走、不等概况的那几样。 */
-function liveOf(u: UnitInfo): Pick<RobotCard, "online" | "held" | "task"> {
+function liveOf(u: UnitInfo): Pick<RobotCard, "online" | "held" | "task" | "standby_countdown"> {
   const st = u.robot.status as { task?: { task_id?: string } | null } | null | undefined;
-  return { online: u.state !== "offline", held: (u.robot.held as RobotCard["held"]) ?? null, task: st?.task?.task_id ?? null };
+  return { online: u.state !== "offline", held: (u.robot.held as RobotCard["held"]) ?? null, task: st?.task?.task_id ?? null,
+    standby_countdown: u.robot.standby_countdown ?? null };
 }
 
 interface Plan { estimate_s?: number | null; start_ms?: number; queued?: boolean; because?: string; utc_offset_min?: number; forever?: boolean; return_pct?: number }

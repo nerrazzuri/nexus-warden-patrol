@@ -46,6 +46,8 @@ export interface RobotCard {
   task_what?: { kind: string; route: string; forever: boolean } | null;
   /** W76:正在跑几圈的巡逻 —— 第几圈、共几圈(0 = 一直巡逻)。一圈的、老站点没有。 */
   lap?: { n: number; of: number } | null;
+  /** 真机 11-25:遥控松手后倒数回待命点。 */
+  standby_countdown?: { after: string; due_ms: number } | null;
 }
 export interface Deter { outputs: string[]; max_s: number; tts: boolean; clips: string[];
   /** 第三档 #41:能念哪几种语言(竞品只会中文;英文靠 Orin 上合成)。没报 = 不知道,不挡。 */

@@ -16,6 +16,7 @@
   ``POST /api/routes/<名>``(整条存,带 ``base_revision``,新建 0)、``POST /api/routes/<名>/delete``;
   ``POST /api/route-timezone``;``GET /api/route-schedules``、``POST /api/route-schedules/<id>``、
   ``…/<id>/delete``;``POST /api/route-export``(导成任务包放在站点主机的 ``route-exports/``)
+- ``POST /api/robots/<id>/standby/cancel``:取消遥控放租后的「N 秒后回待命点」(真机 11-25,叫停权限);
 - ``GET/POST /api/robots/<id>/standby``、``POST /api/robots/<id>/standby/return``:待命点(W00c2b);
   GET 也带这台狗的原点(``homes``,W13a);``standby/return`` 可带 ``name`` 回指定的那一个;
   ``POST /api/robots/<id>/standby/here``:在当前位置设待命点(W13a,不动原点)
@@ -237,7 +238,8 @@ GOTO_RETURN_PCT, GOTO_ABORT_PCT, GOTO_SLACK = 25.0, 15.0, 1.5
 GOTO_SPEED, GOTO_DRAIN, GOTO_DETOUR, GOTO_FLOOR_PCT = 0.4, 22.3, 1.4, 3.0
 _ROBOT = re.compile(
     r"^/api/robots/([^/]+)"
-    r"(?:/(goto|abort|patrol|patrol-plan|goto-plan|standby|standby/return|standby/here|intercept/here"
+    r"(?:/(goto|abort|patrol|patrol-plan|goto-plan|standby|standby/return|standby/here|standby/cancel"
+    r"|intercept/here"
     r"|home/return))?$")
 
 
@@ -1728,8 +1730,8 @@ class _Handler(TlsHandlerMixin):
         disp = self.site.dispatcher
         if method == "GET":
             self._need(user, VIEW)
-        elif action == "abort":
-            self._need(user, ABORT)
+        elif action in ("abort", "standby/cancel"):
+            self._need(user, ABORT)               # 取消「N 秒后自己走」跟叫停一个权限(真机 11-25)
         elif action == "standby":
             self._need(user, MANAGE)
         elif action == "patrol":
@@ -1750,6 +1752,16 @@ class _Handler(TlsHandlerMixin):
             return self._send_json(200, view)
         if action in ("standby", "standby/return"):
             return self._standby(method, robot_id, action, user)
+        if action == "standby/cancel":
+            # 真机 11-25:遥控放租后的「N 秒后回待命点」—— 人点取消
+            if method != "POST":
+                raise HttpError(405, "只支持 POST")
+            stb = self.site.standby
+            if stb is None:
+                raise HttpError(404, "此站点未启用待命点")
+            self._audit_target = robot_id
+            done = self.site.loop.call(lambda: _sync(stb.cancel_countdown, robot_id, by=str(user)))
+            return self._send_json(200, {"cancelled": bool(done)})
         if action == "home/return":
             if method != "POST":
                 raise HttpError(405, "只支持 POST")

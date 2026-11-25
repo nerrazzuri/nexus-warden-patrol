@@ -415,6 +415,7 @@ async def test_真机1124_贴合度差一点_先交定位器精配_精配完复�
     import nexwar_agent.globalloc as G
     t = 台
     monkeypatch.setattr(G, "MIN_FIT", 0.99)              # 连上之前就改:开机那次核对也按它
+    monkeypatch.setattr(G, "REFINE_FIT", 0.99)
     monkeypatch.setattr(G, "SOFT_FIT", 0.3)
     await t.连()
     await t.rt._on_cmd(_cmd("relocalize", {"global": True}, "r1", t.c))
@@ -441,6 +442,32 @@ async def test_真机1124_先认的_精配完复核到门槛_照常可信(台):
     await t.拍(2)
     assert t.rt.parts.nav.anchor.scan_disagree == "" and not t.rt._soft_check
     assert not _事件(t.ears, "loc_wrong_solution")
+
+
+async def test_真机1125_精配完复核_0点42算数_0点38不算_别处明显更像的照旧不认(台):
+    """用户 11-25 选「两处不像就放宽到 0.4」:C40221 那张图对的位置精配后 0.42 被 0.5 拒了。"""
+    from nexwar_agent.globalloc import Candidate, Verdict
+    t = 台
+    await t.连()
+    anchor = t.rt.parts.nav.anchor
+    for fit, verdict, trusted in (
+            (0.42, Verdict(True, 0.42), True),
+            (0.38, Verdict(True, 0.38), False),
+            (0.45, Verdict(False, 0.45, reloc=Candidate(25.3, 13.5, 0.0, 0.62),
+                           reason="点云套图:定位器多半锁错了"), False)):
+        anchor.scan_disagree = ""
+
+        async def check(pts, pose, v=verdict):
+            return v
+        t.rt.globalloc.check = check
+        t.rt._soft_check = True
+        await t.rt._scan_check(-math.inf)
+        await t.拍(2)
+        if verdict.reloc is None:
+            assert (anchor.scan_disagree == "") is trusted, (fit, anchor.scan_disagree)
+        else:
+            ev = _事件(t.ears, "loc_wrong_solution")[-1]
+            assert ev.get("reloc", {}).get("x") == 25.3, "别处明显更像:不认这里,按那处重定位"
 
 
 async def test_真机1124_贴合度够的_不标精配(台):

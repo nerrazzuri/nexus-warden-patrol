@@ -34,7 +34,11 @@
   对不上地图时一样不回、推 ``standby_failed``(坐标不可信)。别的都回默认的。
 - ``goto`` 跑完、手动「回待命点」照旧直线 ``goto``(过渡期受 W00c6i 的监护租约约束)。遥控放租之后
   (``teleop-`` 那一趟 ``task_done``),直线的狗**不自动回**:起点是人刚开到的任意位置;人在场、
-  知道狗在哪,要回就手动叫。会规划的狗照旧回。
+  知道狗在哪,要回就手动叫。会规划的狗照旧回 —— 但**先倒数**(真机 11-25,用户选「先提示,倒数 30 秒再
+  回,能取消」):遥控松手 2 秒就自己走,人还站在旁边、App 上什么也没写。现在先推一条
+  ``standby_countdown``(``due_ms``),机器人视图、卡片带 ``standby_countdown``,App、网页写「N 秒后回待命点」
+  和「取消」(``POST /api/robots/<id>/standby/cancel``);倒数期间人又派了任务、又遥控、叫停了 —— 这一趟
+  不回(新的那一趟结束后自己按规矩回)。
 """
 
 from __future__ import annotations
@@ -76,6 +80,10 @@ _RETURN_AFTER = frozenset({"task_done"})
 _TASK_END = frozenset({"task_done", "task_failed", "task_aborted", "task_preempted"})
 #: 中止并回原点(POC):中止之后最多等这么久让上一趟停下(秒)。
 HOME_ABORT_WAIT_S = 15.0
+#: 遥控放租之后(会规划的狗)倒数这么多秒再回待命点,期间可取消(真机 11-25)。
+TELEOP_RETURN_DELAY_S = 30.0
+#: 倒数期间这台狗又收到这几种命令 = 人接着在用它:这一趟不回。
+_SUPERSEDE_KINDS = ("patrol", "goto", "teleop", "abort", "halt", "posture", "dock", "follow")
 
 
 
@@ -120,6 +128,11 @@ class StandbyManager:
         self.hold: Callable[[str, str], bool] | None = None
         #: 中止并回原点(外审 r1 #6):最近结束的任务 ``(狗, 任务号) → 结束原因``,判上一趟停没停稳。
         self._ended: dict[tuple[str, str], str] = {}
+        #: 遥控放租之后的倒数(真机 11-25):狗 → 取消用的事件。给人看的那份在
+        #: ``dispatcher.standby_countdown``(机器人视图、卡片读它)。
+        self._countdown_cancel: dict[str, asyncio.Event] = {}
+        self.teleop_delay_s = TELEOP_RETURN_DELAY_S
+        dispatcher.standby_countdown = {}
         dispatcher.on_event(self._on_event)
 
     # ------------------------------------------------------------ 登记
@@ -549,6 +562,8 @@ class StandbyManager:
             # 第 10 轮 W10-01:遥控开了没动就退出,机器人一直在待命点 —— 不用回,也不报
             log.info("%s 在 %s 结束时已经在待命点:不派回程", robot_id, after)
             return
+        if after.startswith(TELEOP_TASK_PREFIX) and not await self._count_down(robot_id, after):
+            return
         try:
             why = self.refusal(robot_id) if self.refusal is not None else ""
             if why:
@@ -563,6 +578,55 @@ class StandbyManager:
             log.warning("%s 在 %s 结束后回待命点没派成: %s", robot_id, after, exc)
             self.dispatcher.feed.publish({"kind": "standby_failed", "robot_id": robot_id,
                                           "after": after, "reason": str(exc)})
+
+    def countdown(self, robot_id: str) -> dict[str, Any] | None:
+        """正在倒数的那一趟(``{"after", "due_ms"}``),没有是 ``None``。"""
+        return self.dispatcher.standby_countdown.get(robot_id)
+
+    def cancel_countdown(self, robot_id: str, *, by: str) -> bool:
+        """人点了「取消」:这一趟不回(真机 11-25)。没在倒数回假。"""
+        ev = self._countdown_cancel.get(robot_id)
+        if ev is None or ev.is_set():
+            return False
+        ev.set()
+        log.info("%s 遥控后的自动回待命点被 %s 取消", robot_id, by)
+        self.dispatcher.feed.publish({"kind": "standby_countdown_cancelled",
+                                      "robot_id": robot_id, "by": by})
+        return True
+
+    async def _count_down(self, robot_id: str, after: str) -> bool:
+        """遥控放租之后先倒数 :attr:`teleop_delay_s` 秒(真机 11-25)。真 = 接着回;假 = 取消了,
+        或者倒数期间人又派了任务 / 又遥控 / 叫停了(那一趟自己管自己的回程)。"""
+        start = self._now()
+        due = start + int(self.teleop_delay_s * 1000)
+        ev = asyncio.Event()
+        old = self._countdown_cancel.get(robot_id)
+        if old is not None:
+            old.set()                                   # 同一台上一轮倒数还没完:让给这一轮
+        self._countdown_cancel[robot_id] = ev
+        self.dispatcher.standby_countdown[robot_id] = {"after": after, "due_ms": due}
+        self.dispatcher.feed.publish({"kind": "standby_countdown", "robot_id": robot_id,
+                                      "after": after, "due_ms": due})
+        log.info("%s 遥控放租:%g 秒后回待命点(可取消)", robot_id, self.teleop_delay_s)
+        waiter = asyncio.ensure_future(ev.wait())
+        sleeper = asyncio.ensure_future(self._sleep(self.teleop_delay_s))
+        try:
+            await asyncio.wait({waiter, sleeper}, return_when=asyncio.FIRST_COMPLETED)
+        finally:
+            for f in (waiter, sleeper):
+                f.cancel()
+            if self._countdown_cancel.get(robot_id) is ev:
+                self._countdown_cancel.pop(robot_id, None)
+                self.dispatcher.standby_countdown.pop(robot_id, None)
+        if ev.is_set():
+            return False
+        marks = ",".join("?" * len(_SUPERSEDE_KINDS))
+        if self.db.query(f"SELECT 1 FROM commands WHERE robot_id=? AND issued_at>=? "
+                         f"AND kind IN ({marks}) LIMIT 1",
+                         (robot_id, start, *_SUPERSEDE_KINDS)):
+            log.info("%s 倒数期间人又给它派了命令:%s 之后不再自动回待命点", robot_id, after)
+            return False
+        return True
 
     def _at_standby(self, robot_id: str, after: str) -> bool:
         """机器人现在离要回的待命点不到 :data:`AT_STANDBY_M`(最近一份遥测的位置,同一张图同一版)。

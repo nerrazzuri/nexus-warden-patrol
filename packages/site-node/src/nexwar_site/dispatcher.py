@@ -384,6 +384,8 @@ class Dispatcher:
                "expires_at": rec.expires_at, "status": status, "capabilities": caps,
                "fresh": self._fresh(c), "held": self.held(robot_id),
                "manual_only": self.registry.manual_only(robot_id),
+               # 真机 11-25:遥控放租后倒数回待命点(standby.py 写;没在倒数是 None)
+               "standby_countdown": getattr(self, "standby_countdown", {}).get(robot_id),
                # 易用性第 6 轮 W6-01:当前这版图上有没有原点(没有就出不了发;没报地图 = None 不知道)
                "home_set": self._home_set(robot_id, c),
                "running": self.running_view(c),

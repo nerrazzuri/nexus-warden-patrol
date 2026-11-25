@@ -60,6 +60,8 @@ export interface Robot {
   fresh: boolean;
   revoked: boolean;
   held: unknown;
+  /** 真机 11-25:遥控松手后「N 秒后回待命点」(站点倒数,能取消);没在倒数 / 老站点没有。 */
+  standby_countdown?: { after: string; due_ms: number } | null;
   /** 易用性第 6 轮 W6-01:当前那版图上有没有原点(没有就出不了发;没报地图 / 老站点 = 不知道)。 */
   home_set?: boolean | null;
   loc?: {
