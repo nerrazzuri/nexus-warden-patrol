@@ -338,5 +338,5 @@ async def test_退版本_又忙又读不到电量_先说忙(tmp_path):
     dog.battery = 读不到
     await rt._on_cmd(_cmd("release_rollback", {}, "b2", c))
     await broker.drain()
-    assert _ack(ears)["reason"] == "busy"
+    assert _ack(ears)["reason"] == "busy: 正在执行任务 goto-b1", "真机 11-25:说清在忙什么"
     await rt.close()
