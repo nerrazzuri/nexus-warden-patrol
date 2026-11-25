@@ -441,6 +441,9 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--backup", action="store_true",
                     help="开备份(备份目录、口令密钥、备份密钥都放在 --dir 下面,不碰 /etc):"
                          "试备份、解开备份、演练、托管包用")
+    ap.add_argument("--release-pub", type=Path, default=None,
+                    help="升级包验签用这把发行公钥(比如 deploy/release-pub.pem):在演示站点上试上传"
+                         "正式签名的包(易用性 build 36 P2-4:不给就找 /etc 下的,开发机上没有,全拒)")
     ap.add_argument("--sim-payload", action="store_true",
                     help="仿真机器人装上上装(警灯、警笛、喇叭);A 能念中英文,别的只会中文"
                          "(看常用喊话、念不了的那句灰掉)")
@@ -526,6 +529,12 @@ def _setup_rest(a, home: Path, names: list[str]) -> str:
         (a.dir / "backup").mkdir()                 # 真站点上是挂好的备份盘;站点不替你建
         cfg |= {"backup_dir": str(a.dir / "backup"), "secrets_key": str(keys / "secrets.key"),
                 "backup_key": str(keys / "backup.key"), "evidence_key": str(keys / "evidence.key")}
+        cfg_path.write_text(json.dumps(cfg, indent=1))
+    if a.release_pub is not None:
+        import json
+        cfg_path = home / "site.json"
+        cfg = json.loads(cfg_path.read_text())
+        cfg["release_pubkey"] = str(a.release_pub.resolve())
         cfg_path.write_text(json.dumps(cfg, indent=1))
     if a.host.startswith("127.") and a.host != "127.0.0.1":
         # 站点绑在回环别名(127.0.0.2)上时,SRT 收流回包的源地址是 127.0.0.1,狗推到 127.0.0.2 连不上

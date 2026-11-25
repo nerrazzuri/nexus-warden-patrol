@@ -150,8 +150,10 @@ export function RobotControl(props: {
                 <p>{t("rcReturnIn", { s: Math.max(0, Math.ceil((r.standby_countdown.due_ms - props.now) / 1000)) })}</p>
                 {patrol && <button type="button" class="btn primary" disabled={busy}
                   onClick={() => void send(async () => {
-                    const d = await api<{ cancelled?: boolean }>("POST", path("standby/cancel"), {});
+                    const d = await api<{ cancelled?: boolean; until_ms?: number | null }>("POST", path("standby/cancel"), {});
                     if (!d.cancelled) { props.say(t("rcReturnTooLate", { id: name })); return null; }
+                    // 易用性 build 36 P1-4:写清楚值守到几点前不自动派这台
+                    if (d.until_ms) { props.say(t("rcReturnStay", { id: name, t: hm(d.until_ms) })); return null; }
                     return {} as Reply;
                   },
                     t("rcReturnCancelled", { id: name }))}>{t("rcReturnCancel")}</button>}

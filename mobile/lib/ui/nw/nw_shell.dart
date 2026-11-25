@@ -221,6 +221,14 @@ class _NwShellState extends State<NwShell> {
       return '${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}';
     }
     if (mode == 'visitor' && until != null) return (tr('Temporary disarm · until ${hm(until)}', '临时撤防 · 到 ${hm(until)}'), _Sign.warn);
+    // 易用性 build 36 P2-2：留守（Stay）时防区照样布防，state 是 armed —— 以前顶栏写「Armed」，网页写「Stay」，对不上
+    if (mode == 'home' && m['source'] != 'schedule') {
+      return switch (state) {
+        'armed' => (tr('Stay · zones armed', '留守 · 防区布防中'), _Sign.ok),
+        'disarmed' => (tr('Stay · disarmed', '留守 · 已撤防'), _Sign.idle),
+        _ => (tr('Stay · partly armed', '留守 · 部分布防'), _Sign.warn),
+      };
+    }
     if (state == 'armed') {
       final n = next != null ? tr(' · until ${hm(next)}', ' · 到 ${hm(next)}') : '';
       return (tr('Armed$n', '布防中$n'), _Sign.ok);

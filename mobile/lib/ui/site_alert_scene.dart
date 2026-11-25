@@ -55,6 +55,10 @@ String seenByText(Map<String, dynamic> ctx) {
 String followLine(Alert a) {
   final f = a.context['follow'];
   if (f == 'follow') return tr('${a.robot} following', '${a.robot} 正在跟随');
+  // 易用性 build 36 P2-13：不会跟人的机器人停着看，说一句
+  if (f == 'unsupported') {
+    return tr("${a.robot} can't follow people: it stays where it is and keeps watching", '${a.robot} 不能跟人，原地看着');
+  }
   // 真机 11-25：用户看不出它为什么往后退、为什么站着不动
   if (f == 'retreat') return tr('Person too close: ${a.robot} is backing away', '人太近，${a.robot} 在往后退');
   if (f == 'cornered') {

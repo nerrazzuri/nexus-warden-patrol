@@ -36,7 +36,7 @@ export interface Alert {
     /** W74:最后看见人时机器人在哪(看得见时每 5 秒更新)。 */
     last_seen?: { map_id: string; map_version: string; x: number; y: number; at_ms?: number };
     /** W74 二期:机器人在跟(follow)、跟丢了(lost)、跟到上限(limit)。 */
-    follow?: "follow" | "retreat" | "cornered" | "lost" | "limit" | "ended";
+    follow?: "follow" | "retreat" | "cornered" | "lost" | "limit" | "ended" | "unsupported";
     /** 真机 11-25:退不了站定的原因、那时人多远;人离开了防区、不再跟。 */
     follow_why?: string; follow_range_m?: number; follow_left?: boolean;
     /** W74 二期:人最后在地图上哪儿、往哪走(度,地图系)、在哪个区域。 */

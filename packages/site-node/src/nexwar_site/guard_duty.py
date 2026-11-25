@@ -150,6 +150,8 @@ class GuardDuty:
         self.alerts: Any = None
         #: 正在驱离的狗(``DeterrenceDesk.busy``)。
         self.busy: Callable[[], set[str]] | None = None
+        #: 遥控刚结束、点了「留在这里」的狗先别派(``StandbyManager.stay_hold``,易用性 36 P1-4)。
+        self.stay: Callable[[str], str] | None = None
         #: 这台在不在回充(``ChargeDesk``,站点接上)。
         self.charging: Callable[[str], bool] | None = None
         #: W73 第四期:没桩的换电进度(``battery_swap.SwapDesk``;``status`` 里带出去)。
@@ -576,6 +578,10 @@ class GuardDuty:
             return why
         if self.busy is not None and rid in self.busy():
             return f"{rid} 在驱离"
+        if self.stay is not None:                        # 易用性 36 P1-4:遥控刚结束 / 留在这里
+            w = self.stay(rid)
+            if w:
+                return w
         if self.charging is not None and self.charging(rid):
             return f"{rid} 在回充"
         pct = self._battery(rid)
@@ -1075,6 +1081,10 @@ class GuardDuty:
         c = self._client(rid)
         caps = getattr(getattr(c, "capabilities", None), "tasks", None) or {}
         if "follow" not in caps:
+            # 易用性 build 36 P2-13:不会跟人的机器人看见人以后停着,界面上不说为什么 —— 记一笔
+            if not fs.get("nofollow"):
+                fs = self._fs_set(rid, nofollow=True)
+                self._amend(fs.get("alert", ""), follow="unsupported")
             return
         from nexwar_contract.follow import TASK_PREFIX, FollowRequest
         tid = f"{TASK_PREFIX}{eid}-{uuid.uuid4().hex[:10]}"

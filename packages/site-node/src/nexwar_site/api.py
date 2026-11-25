@@ -1776,8 +1776,9 @@ class _Handler(TlsHandlerMixin):
             if stb is None:
                 raise HttpError(404, "此站点未启用待命点")
             self._audit_target = robot_id
-            done = self.site.loop.call(lambda: _sync(stb.cancel_countdown, robot_id, by=str(user)))
-            return self._send_json(200, {"cancelled": bool(done)})
+            until = self.site.loop.call(lambda: _sync(stb.cancel_countdown, robot_id, by=str(user)))
+            # 易用性 build 36 P1-4:until_ms = 值守到几点前不自动派这台
+            return self._send_json(200, {"cancelled": until is not None, "until_ms": until})
         if action == "home/return":
             if method != "POST":
                 raise HttpError(405, "只支持 POST")

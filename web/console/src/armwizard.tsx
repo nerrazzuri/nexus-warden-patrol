@@ -337,8 +337,17 @@ export function RoutePreview({ base, label, zones, route }: { base: string; labe
       <MapCanvas meta={meta} raster={`${base}/preview.png`} label={label} areas={shapes}
         world={pts.length > 0 && <>
           {pts.length > 1 && <polyline points={pts.map((q) => `${q.px},${q.py}`).join(" ")} class="route-line" data-route={route} />}
-          <circle cx={pts[0].px} cy={pts[0].py} r={4} class="route-start" />
-        </>} />
+        </>}
+        // 易用性 build 36 P2-9:路线又细又淡、跟墙分不清 —— 加粗,点上标号(标记层:屏上大小不变)
+        marks={(sc) => (line?.waypoints ?? []).map((w, i) => {
+          const [x, y] = sc.map(w.x, w.y);
+          return (
+            <g key={i} class="wiz-route-pt" data-route-pt={i + 1}>
+              <circle cx={x} cy={y} r={9} />
+              <text x={x} y={y} text-anchor="middle" dominant-baseline="central">{i + 1}</text>
+            </g>
+          );
+        })} />
     </div>
   );
 }

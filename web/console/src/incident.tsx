@@ -353,6 +353,7 @@ export function followText(ctx: Record<string, unknown> | null | undefined): str
   if (f === "follow") return t("dutyFollowing");
   if (f === "retreat") return t("dutyRetreat");
   if (f === "cornered") return t("dutyCornered");
+  if (f === "unsupported") return t("dutyNoFollow");   // 易用性 build 36 P2-13
   if (ctx?.follow_left) return t("dutyLeftZone");
   return ctx?.lost_ms != null ? t("dutyLost") : "";
 }

@@ -76,4 +76,12 @@ void main() {
     expect(siteText('迟了 5 分钟，过了时间窗，已报警（站点那时没在运行，事后补记）'),
         '5 min late and past the time window, so an alarm was raised; recorded afterwards because the site was not running then');
   });
+
+  test('易用性 build 36 P3-6：看见人那一条后来改的标题翻成英文', () {
+    appLang.value = AppLang.en;
+    addTearDown(() => appLang.value = AppLang.zh);
+    expect(siteText('又看见人了(这一回还没处理完)'), 'Person seen again (this alarm is still open)');
+    expect(siteText('看不到了,去向不明,最后在防区 1'), 'Lost sight of the person, last seen at zone 1');
+    expect(siteText('人离开防区:北区'), 'Person left the zone: 北区');
+  });
 }

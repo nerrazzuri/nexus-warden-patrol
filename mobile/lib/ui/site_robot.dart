@@ -341,8 +341,21 @@ class _SiteRobotPageState extends State<SiteRobotPage> with NwAsk {
     String msg;
     try {
       final r = await widget.api.cancelStandbyReturn(widget.robotId);
-      msg = r['cancelled'] == true
-          ? tr('${widget.robotId} will stay where it is', '${widget.robotId} 留在原地，不回待命点')
+      // 易用性 build 36 P1-4：站点给 until_ms = 值守到几点前不自动派这台
+      final until = r['until_ms'] is num
+          ? DateTime.fromMillisecondsSinceEpoch((r['until_ms'] as num).toInt())
+          : null;
+      final hm = until == null
+          ? ''
+          : '${until.hour.toString().padLeft(2, '0')}:${until.minute.toString().padLeft(2, '0')}';
+      msg = r['cancelled'] != true
+          ? ''
+          : hm.isEmpty
+              ? tr('${widget.robotId} will stay where it is', '${widget.robotId} 留在原地，不回待命点')
+              : tr('${widget.robotId} will stay where it is. No automatic patrol before $hm unless you send it.',
+                  '${widget.robotId} 留在原地，不回待命点；$hm 前不会自动派去巡逻（手动派照常）。');
+      msg = msg.isNotEmpty
+          ? msg
           : tr('${widget.robotId} has already set off. Tap Stop in place to stop it.',
               '${widget.robotId} 已经出发了。要停就点「原地停下」。');
     } on SiteError catch (e) {
