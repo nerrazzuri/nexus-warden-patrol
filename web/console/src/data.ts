@@ -38,9 +38,14 @@ export async function fetchSite(): Promise<SiteData> {
     api<{ sessions: DeterSession[] }>("GET", "/api/deterrence").then((x) => x.sessions).catch(() => null),
     api<Summary>("GET", "/api/watch/summary").catch(() => null),
   ]);
+  // 易用性 build 37 复测:没配推送还写「已推送到所有手机」
+  if (s?.site && "push" in s.site) pushOff.value = !s.site.push?.configured;
   robotNames.value = Object.fromEntries(r.robots.filter((x) => x.name).map((x) => [x.robot_id, x.name as string]));
   return { robots: r.robots, alerts: a.alerts, mode: m, deter: d, summary: s };
 }
+
+/** 站点没配手机推送(值班台上一次拉到的;拉不到不改)。 */
+export const pushOff = signal(false);
 
 /** 管理员给机器人起的名字(W44 第二期,站点 /api/robots 带 name);每次拉站点数据都更新。 */
 export const robotNames = signal<Record<string, string>>({});

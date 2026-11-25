@@ -7,7 +7,7 @@ import { hms, incidentLog, REOPEN_MS, verdictsFor } from "./alertdetail";
 import { alertAdvice, alertHeadline, canHandleAlerts, seeingCam } from "./alertinfo";
 import { api, ApiError, enc } from "./api";
 import { CameraWell, camLabel } from "./camera";
-import { hm, nameOf } from "./data";
+import { hm, nameOf, pushOff } from "./data";
 import { lang, t, type Key } from "./i18n";
 import type { UnitInfo } from "./live";
 import { LiveWall } from "./livewall";
@@ -228,7 +228,8 @@ export function IncidentView(props: {
     groups.push(
       <section key="n" class="inc-act" aria-label={t("incNotifyH")}>
         <h3 class="lbl">{t("incNotifyH")}</h3>
-        <p class="inc-state">{t(a.level === "P1" ? "incPushedP1" : "incPushedP2")}</p>
+        <p class="inc-state" data-push-off={a.level === "P1" && pushOff.value ? "1" : undefined}>
+          {t(a.level !== "P1" ? "incPushedP2" : pushOff.value ? "incPushOffP1" : "incPushedP1")}</p>
         <p class="inc-note">{t("incPushHint")}</p>
         {/* 第 8 期:请求支援 —— 站点给经理、管理员推一条,这里记下谁几点叫的 */}
         {a.context?.backup_by ? <p class="inc-state" data-backup-done="1">{t("incBackupDone", { who: String(a.context.backup_by), t: hm(Number(a.context.backup_ms ?? a.last_ms)) })}</p>

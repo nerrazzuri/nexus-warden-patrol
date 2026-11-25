@@ -130,6 +130,8 @@ export function sirenState(d: DeterSession): SirenState {
 
 export interface Summary {
   robots: { robot_id: string; battery_pct: number | null; charging?: boolean }[];
+  /** 站点 watch.summary:推送配没配(没配 = null 或 configured false)。 */
+  site?: { push?: { configured: boolean } | null };
 }
 
 export interface Mode {

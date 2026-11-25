@@ -12,6 +12,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../l10n.dart';
+import '../model/alert.dart';
 import '../net/background_watch.dart';
 import '../net/push.dart';
 import '../net/site_client.dart';
@@ -20,6 +21,7 @@ import 'arrival_alert.dart';
 import 'nw/nw_p3_robots.dart';
 import 'nw/nw_theme.dart';
 import 'nw/nw_widgets.dart';
+import 'person_live.dart';
 import 'robot_bind_page.dart';
 import 'site_deterrence.dart';
 import 'site_robot.dart';
@@ -242,6 +244,7 @@ class _SiteRobotsPageState extends State<SiteRobotsPage> {
 
   void _track(Map<String, dynamic> a) {
     final key = '${a['key']}';
+    _popPersonLive(a);
     final p1 = widget.openP1;
     if (p1 != null) {
       final open = a['level'] == 'P1' && a['resolved_ms'] == null;
@@ -265,6 +268,23 @@ class _SiteRobotsPageState extends State<SiteRobotsPage> {
       }
     }
     _bellOnOff();
+  }
+
+  /// 易用性 build 37 复测：看见人整屏页原来只在「现在」页刷新时弹，在「站点」等别的页不弹。
+  /// 这一页一直挂着收事件（IndexedStack），在这里弹：哪一页都弹；同一条只弹一次（personLiveShown），
+  /// 上面盖着别的页（详情、遥控）不弹。
+  void _popPersonLive(Map<String, dynamic> wire) {
+    if (_disposed || !mounted) return;
+    final Alert alert;
+    try {
+      alert = Alert.fromWire(wire);
+    } catch (_) {
+      return;
+    }
+    final pop = personLiveToPop([alert], nowMs: DateTime.now().millisecondsSinceEpoch);
+    if (pop == null || !(ModalRoute.of(context)?.isCurrent ?? false)) return;
+    personLiveShown.add(pop.key);
+    unawaited(Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => PersonLivePage(api: widget.api, alert: pop))));
   }
 
   void _bellOnOff() {
