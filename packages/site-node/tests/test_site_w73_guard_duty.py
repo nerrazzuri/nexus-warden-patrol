@@ -450,6 +450,38 @@ async def test_易用性37_任意一台的方案_那台被留住_放掉这一趟
     assert t.duty.status()["runs"], "这一趟还挂在 A 上"
 
 
+async def test_易用性37第六轮_任意一台_连着跑不成_放掉这一趟_先不挑它_没别的照旧派(站, monkeypatch):
+    """A 卡在走不了的地方,每圈秒失败:原来每分钟重派 A、空着的 B 不接。现在连着 FAIL_ALERT 圈后放掉,
+    FAIL_AVOID_MS 里先挑别的;这里只有 A —— 没别的可挑,照旧派 A(总比没人巡好)。"""
+    from nexwar_site import guard_duty as gd
+    t = 站
+    monkeypatch.setattr(gd, "FAIL_RETRY_MS", 2_000)
+    _方案(t, robot="")
+    await _跑(t, 3)
+    real = t.duty._terminal
+
+    def 秒失败(rid, tid):
+        got = real(rid, tid)
+        if tid.startswith("guard-"):
+            return ("task_failed", {"task_id": tid, "reason": "规划失败(start_blocked)"})
+        return got
+    t.duty._terminal = 秒失败
+    for _ in range(40):
+        runs = t.duty.status()["runs"]
+        if runs and runs[0].get("task_id"):
+            # 仿真狗其实还在走:中止掉(站点这边 _terminal 照样当「跑不成」),它就空下来
+            await t.send(t.site.abort("A", runs[0]["task_id"], issued_by="test"))
+        await _跑(t, 1)
+        if _log(t, "handover"):
+            break
+    assert _log(t, "handover"), ("连着跑不成:放掉这一趟", _log(t, "lap_failed"))
+    eid = t.duty.plan()["entries"][0]["id"]
+    assert t.duty._avoid.get((eid, "A"), 0) > t.clock()
+    n = len(_patrols(t))
+    await _跑(t, 3)
+    assert len(_patrols(t)) > n, "只有 A:照旧派它"
+
+
 # ---------------------------------------------------------------- 第三期:保存时查冲突(设计 §6.3)
 
 def _冲突台(t):

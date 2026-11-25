@@ -131,6 +131,10 @@ final List<_Rule> _rules = [
         final a = _en(m[1]!), b = _en(m[2]!);
         return a == b ? '$a (tried again after the lap: same result)' : '$a; tried again after the lap, still not reached: ${_lc(b)}';
       }),
+  // 易用性 37 复测第六轮：值守一圈「3 个航点未到达(a, b, 回待命点):…」
+  (RegExp(r'^(\d+) 个航点未到达[(（]([^)）]*)[)）][:：]\s*([\s\S]*)$'),
+      (m) => '${m[1]} ${m[1] == '1' ? 'waypoint' : 'waypoints'} not reached '
+          '(${m[2]!.split(RegExp(r'[,，、]\s*')).map(_wp).join(', ')}): ${_lc(_en(m[3]!))}'),
   // 易用性 37 复测 P1-7：标原点 / 设待命点被拒（App 有的页不读 reason_en）
   (RegExp(r'^(\S+) 的待命点不能设在这里[:：][\s\S]*$'), (m) => "${m[1]}'s standby point can't go here: the map shows it as not walkable or not scanned, so robots could never be sent there. Pick a spot on open, scanned floor."),
   (RegExp(r'^(\S+) 现在站的地方不能当待命点[:：][\s\S]*$'),

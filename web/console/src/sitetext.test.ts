@@ -293,3 +293,13 @@ describe("易用性 37 复测第四轮:标原点被拒英文;回头补同一句�
     expect(en).toContain("tried again after the lap: same result");
   });
 });
+
+describe("易用性 37 复测第六轮:值守一圈 N 个航点未到达", () => {
+  it("整句英文,点名翻,不丢前半句", () => {
+    const one = "导航拒了: goto 被设备拒绝: 规划失败(start_blocked):起点在障碍或禁行区里";
+    const en = siteStr(`3 个航点未到达(Drive-thru lane-3, Drive-thru lane-4, 回待命点):${one};回头补也没到:${one}`);
+    expect(en).not.toMatch(CJK);
+    expect(en).toMatch(/^3 waypoints not reached \(Drive-thru lane-3, Drive-thru lane-4, “Return to standby”\): /);
+    expect(en).toContain("with Remote");
+  });
+});
