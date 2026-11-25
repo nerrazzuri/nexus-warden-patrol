@@ -105,16 +105,25 @@ FIRST_CONNECT_WAIT_S = float(os.environ.get("NEXWAR_FIRST_CONNECT_WAIT_S", "120"
 #: 守卫只给 2 次,碰上两回好好的新版就被退回去)。等够了还连不上照旧退出、让守卫数:旁路是随版本发的,
 #: 新版把它弄坏了也是这个样子。
 HAL_CONNECT_RETRY_S = 2.0
+#: 装版本时同一步里最多多久报一次进度(秒)。
+RELEASE_PROGRESS_EVERY_S = 3.0
+#: 装版本那几步给人看的名字(``busy`` 的说明里用;网页、App 各有自己的译文)。
+RELEASE_STAGE_TEXT = {"download": "下载", "unpack": "解包", "verify": "验签名", "stage": "落槽",
+                      "venv": "装 Python 环境", "sidecar": "编运控旁路", "superlio": "编 Super-LIO"}
 HAL_CONNECT_WAIT_S = 60.0
 
 
 def _hal_not_listening(exc: BaseException) -> bool:
-    """连运控旁路时对面根本没在听(连接被拒、地址还没起来),不是协议、令牌这种真错。"""
+    """连运控旁路时对面根本没在听(连接被拒、地址还没起来),或者连上了还没准备好(HAL 抛
+    ``HalNotReady``:旁路刚起、第一帧没到 —— 真机 11-25 切版本时旁路跟代理同一秒重启,
+    代理第一次没起来),
+    不是协议、令牌这种真错。"""
+    from nexwar_contract.hal import HalNotReady
     seen: set[int] = set()
     e: BaseException | None = exc
     while e is not None and id(e) not in seen:
         seen.add(id(e))
-        if isinstance(e, (ConnectionRefusedError, ConnectionResetError)):
+        if isinstance(e, (ConnectionRefusedError, ConnectionResetError, HalNotReady)):
             return True
         if isinstance(e, OSError) and e.errno in (errno.ECONNREFUSED, errno.EHOSTUNREACH,
                                                    errno.ENETUNREACH, errno.EADDRNOTAVAIL):
@@ -539,6 +548,9 @@ class AgentRuntime:
         self._rec_job: asyncio.Task | None = None
         self._build_job: asyncio.Task | None = None
         self._release_job: asyncio.Task | None = None
+        #: 正在装的那一版走到哪一步(真机 11-25 进度条):``{name, stage, pct}``;没在装是 None。
+        self._release_step: dict[str, Any] | None = None
+        self._release_step_sent: tuple[str, int, float] = ("", -1, 0.0)
         self._switching = False
         #: 切版本、退版本收下了、马上要重启:什么都不再接(W00c5d 第三部分内部评审:
         #: 这几秒里收下的任务会被重启掐掉)。切不成就放开。
@@ -1068,7 +1080,11 @@ class AgentRuntime:
             out["recording"] = self.recorder.caps()  # W18:在录哪几路、一段多长(站点、手机据此显示)
         if self.releases is not None:
             # 站点据此显示每台狗在跑哪一版。
-            out["release_install"] = {"current": self.releases.current()}
+            cur = self.releases.current()
+            out["release_install"] = {"current": cur}
+            build = getattr(self.releases, "build_of", lambda _n: None)(cur)
+            if build is not None:
+                out["release_install"]["build"] = build   # 真机 11-25:网页、App 写「build 35」
             out["release_activate"] = {}
             out["release_rollback"] = {}
             out["release_precheck"] = {}        # W00c6d:升级前检查,清单在回执里
@@ -1665,6 +1681,10 @@ class AgentRuntime:
             if cmd.kind == "release_precheck":
                 return "", report(name, items, needs)
             reason = first_block(items)
+            if reason == "busy":
+                # 真机 11-25「我一直点立即切换一直显示 busy」:说清在忙什么、要等什么
+                reason = "busy: " + next((it.detail for it in items if it.code == "busy"),
+                                         "机器人在忙")
             if reason:
                 return reason, report(name, items, needs)
             self._restarting = True               # 清单里的空闲是最后取的,取完到这儿没有让出
@@ -1672,7 +1692,7 @@ class AgentRuntime:
                 self._release_switch("activate", name, cmd.task_id))
             return ""
         if self._running(self._release_job) or self._running(self._map_job):
-            return "busy"
+            return f"busy: {self._busy_reason()}"
         if cmd.kind == "release_install":
             if not self.releases.disk_ok(ref.size):
                 return "storage_full"             # 下载、解开、落槽、建 venv 都在系统盘上
@@ -1680,7 +1700,7 @@ class AgentRuntime:
             self._release_job = asyncio.get_running_loop().create_task(job)
             return ""
         if self._busy_reason():
-            return "busy"                         # 重启那几秒谁都停不了它;也会悄悄掐掉录包、重建
+            return f"busy: {self._busy_reason()}"  # 重启那几秒谁都停不了它;也会悄悄掐掉录包、重建
         try:
             battery = (await self.hal.battery()).percent
         except Exception:  # noqa: BLE001 - 读不到电量(适配器还没收到第一帧):不切
@@ -1692,7 +1712,7 @@ class AgentRuntime:
         if not self.releases.can_roll_back():
             return "nothing_to_roll_back"
         if self._busy_reason():
-            return "busy"                         # 上面读电量让出过一次:收下之前再看一眼
+            return f"busy: {self._busy_reason()}"  # 上面读电量让出过一次:收下之前再看一眼
         self._restarting = True
         self._release_job = asyncio.get_running_loop().create_task(
             self._release_switch("rollback", "", cmd.task_id))
@@ -2222,7 +2242,11 @@ class AgentRuntime:
     def _busy_reason(self) -> str:
         """在忙什么(升级前检查的「空闲」那一项);空串 = 空闲。"""
         if self._running(self._release_job):
-            return "在装或在切版本"
+            s = self._release_step
+            if s is not None:
+                return (f"正在装 {s['name']}({RELEASE_STAGE_TEXT.get(s['stage'], s['stage'])},"
+                        f"{s['pct']}%)")
+            return "在切版本"
         if self._running(self._map_job):
             return "在换图"
         if not self._tasks_idle():
@@ -2276,13 +2300,40 @@ class AgentRuntime:
 
     async def _release_install(self, ref, task_id: str) -> None:
         base = {"task_id": task_id, "name": ref.name}
+        loop = asyncio.get_running_loop()
+        self._release_step = {"name": ref.name, "stage": "download", "pct": 0}
+        self._release_step_sent = ("", -1, 0.0)
+
+        def progress(stage: str, frac: float) -> None:      # 在装的线程里调
+            loop.call_soon_threadsafe(self._release_progress, base, stage, frac)
         try:
-            await asyncio.to_thread(self.releases.install, ref)
+            import inspect
+            if "progress" in inspect.signature(self.releases.install).parameters:
+                await asyncio.to_thread(self.releases.install, ref, progress=progress)
+            else:
+                await asyncio.to_thread(self.releases.install, ref)
             self.events.emit("release_installed", base)
         except Exception as exc:  # noqa: BLE001 - 装不上:原因发给站点
             log.warning("装版本没成(%s):%s", ref.name, exc)
             self.events.emit("release_install_failed",
                              base | {"reason": f"{type(exc).__name__}: {exc}"[:200]})
+        finally:
+            self._release_step = None
+
+    def _release_progress(self, base: dict[str, Any], stage: str, frac: float) -> None:
+        """装到哪一步了(真机 11-25「下载给机器人的时候需要有进度条」)。换了一步马上报;同一步里
+        至少隔 :data:`RELEASE_PROGRESS_EVERY_S` 秒、涨了 2% 以上才报(下载每兆一次回调,别刷屏)。"""
+        from nexwar_agent.release_ops import install_pct
+        if self._release_step is None:
+            return                                  # 已经装完 / 失败了:线程里晚到的那一下
+        pct = install_pct(stage, frac)
+        self._release_step = {"name": base["name"], "stage": stage, "pct": pct}
+        last_stage, last_pct, last_t = self._release_step_sent
+        now = time.monotonic()
+        if stage == last_stage and (pct - last_pct < 2 or now - last_t < RELEASE_PROGRESS_EVERY_S):
+            return
+        self._release_step_sent = (stage, pct, now)
+        self.events.emit("release_progress", base | {"stage": stage, "pct": pct})
 
     async def _release_switch(self, what: str, name: str, task_id: str) -> None:
         base = {"task_id": task_id, "name": name}

@@ -1,19 +1,24 @@
 {
+  "builds": {
+    "A": null
+  },
   "last": {
     "A": {
       "cmd": null,
-      "event": null
+      "event": null,
+      "progress": null
     }
   },
   "queue": [],
   "releases": [
     {
-      "created_ms": 1795177293947,
+      "build": null,
+      "created_ms": 1795577788309,
       "name": "2026-09-25-bbbbbb",
       "note": "夜巡修了一个 bug",
       "requires_mission_schema": 1,
-      "sha256": "c47613ff829c4c3f5849b4b52b6e70003825013952265553b6a03e614e9450da",
-      "size": 536,
+      "sha256": "0e8ac10e34b12ae4499306a6c0309cb73d26a14589dc4692beafd3bcd6c4a804",
+      "size": 519,
       "version": "0.9"
     }
   ],

@@ -19,6 +19,9 @@ class 假发布:
     def current(self):
         return self.cur
 
+    def build_of(self, name):
+        return 35 if name == self.cur else None
+
     def ready(self, name):
         return name in self.done
 
@@ -79,6 +82,7 @@ def test_管理员给狗装一版_切过去_保安只看(站点, tmp_path):
     _等(lambda: (s.req("GET", "/api/releases", token=gina)[1]["robots"].get("A")))
     d = s.req("GET", "/api/releases", token=gina)[1]
     assert [r["name"] for r in d["releases"]] == [NAME] and d["robots"]["A"] == "2026-09-20-aaaaaa"
+    assert d["builds"] == {"A": 35}, "真机 11-25:每台在跑的是 build 几"
     assert s.req("POST", "/api/robots/A/release", {"action": "install", "name": NAME},
                  token=gina)[0] == 403
     assert s.req("POST", "/api/robots/A/release",
@@ -306,3 +310,32 @@ def test_网页P1_78_报出哪台能退回上一版_不支持的网页就不给�
     assert s.req("GET", "/api/releases", token=tok)[1]["rollback"] == {"A": True}
     s.disp.clients["A"].capabilities.tasks.pop("release_rollback")
     assert s.req("GET", "/api/releases", token=tok)[1]["rollback"] == {"A": False}
+
+
+def test_真机1125_装的时候升级页有进度_装好了就没了_事件列表里不刷进度(站点, tmp_path):
+    """用户 11-25「下载给机器人的时候需要有进度条」:狗发 ``release_progress``,升级页的 ``last`` 里
+    带着最新一条;装好了(更新的升级事件)就不再给进度。进度不进机器人的事件列表。"""
+    import threading
+    s = 站点
+    alice = _登(s, "alice")
+    s.rel_catalog.add(做包(tmp_path))
+    _等(lambda: s.disp.clients["A"].capabilities is not None
+        and "release_install" in s.disp.clients["A"].capabilities.tasks)
+    ops = s.agent.releases
+    gate = threading.Event()
+
+    def install(ref, progress=None):
+        progress("superlio", 0.0)
+        gate.wait(10)
+        ops.done.add(ref.name)
+    ops.install = install
+    s.req("POST", "/api/robots/A/release", {"action": "install", "name": NAME}, token=alice)
+    got = _等(lambda: s.req("GET", "/api/releases", token=alice)[1]["last"]["A"]["progress"],
+              timeout=8)
+    assert got["name"] == NAME and got["stage"] == "superlio" and got["pct"] == 80
+    kinds = [e["kind"] for e in s.disp.recent_events("A")]
+    assert "release_progress" not in kinds
+    gate.set()
+    _等(lambda: (s.req("GET", "/api/releases", token=alice)[1]["last"]["A"]["event"] or {})
+        .get("kind") == "release_installed", timeout=8)
+    assert s.req("GET", "/api/releases", token=alice)[1]["last"]["A"]["progress"] is None

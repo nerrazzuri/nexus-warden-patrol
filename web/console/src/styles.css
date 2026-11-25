@@ -2663,6 +2663,12 @@ input[type="checkbox"], input[type="radio"] { width: 18px; height: 18px; }
 /* 真机 11-20:软件升级每台的命令回执、升级事件、充电排队 */
 .up-status { flex: 1 1 100%; display: grid; gap: 2px; padding-left: 140px; }
 .up-status p { margin: 0; }
+/* 真机 11-25:装、切换的进度条(蓝色只给选中,进度用绿) */
+.up-prog { display: grid; gap: var(--sp-1); max-width: 480px; }
+.up-prog-h { display: flex; justify-content: space-between; gap: var(--sp-2); }
+.up-prog-track { height: 8px; border-radius: var(--r-r2); background: var(--c-outline); overflow: hidden; }
+.up-prog-fill { height: 100%; background: var(--c-success); transition: width .4s ease-out; }
+@media (prefers-reduced-motion: reduce) { .up-prog-fill { transition: none; } }
 @media (max-width: 760px) { .up-status { padding-left: 0; } }
 
 /* 真机 11-20:记录与录像 → 巡逻记录(patrolspage.tsx) */

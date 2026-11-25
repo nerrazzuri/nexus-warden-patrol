@@ -203,8 +203,13 @@ def sha256(path: Path) -> str:
     return h.hexdigest()
 
 
-def make_package(repo: Path, key: Path, out: Path, *, wheels: Path | None, now_ms: int) -> Path:
-    """打包 → 签名 → 拿仓库里的公钥验一遍。验不过就删掉半成品。"""
+def make_package(repo: Path, key: Path, out: Path, *, wheels: Path | None, now_ms: int,
+                 build: int | None = None) -> Path:
+    """打包 → 签名 → 拿仓库里的公钥验一遍。验不过就删掉半成品。
+
+    ``build``:这一次的构建号(跟 App 的同一个号),写进 ``release.json`` 给人看 —— 站点、网页、App 上
+    写「build 35」(真机 11-25 用户看不出机器人是 34 还是 35)。**不签、不算指纹**,
+    跟 ``built_at`` 一样只是说明;老代理读到不认得的键照旧不管。"""
     try:
         pkg = pack(repo, out, now_ms=now_ms, wheels=wheels)
     except ReleaseError as exc:
@@ -212,6 +217,8 @@ def make_package(repo: Path, key: Path, out: Path, *, wheels: Path | None, now_m
     try:
         path = pkg / "release.json"
         manifest = json.loads(path.read_text(encoding="utf-8"))
+        if build is not None:
+            manifest["build"] = int(build)
         manifest["signature"] = relsign.sign(manifest, key)
         tmp = path.with_name(path.name + ".tmp")
         tmp.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n",
@@ -362,7 +369,8 @@ def run(args: argparse.Namespace, *, now_ms: int) -> int:
         return 2
     out.mkdir(parents=True, exist_ok=True)
     try:
-        pkg = make_package(repo, key, out, wheels=wheels, now_ms=now_ms)
+        pkg = make_package(repo, key, out, wheels=wheels, now_ms=now_ms,
+                           build=args.build_number)
         manifest = json.loads((pkg / "release.json").read_text(encoding="utf-8"))
         if gate is not None:
             try:

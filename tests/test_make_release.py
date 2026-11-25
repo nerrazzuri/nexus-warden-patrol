@@ -339,6 +339,10 @@ def test_W55_安卓包旁边出站点分发用的签名清单_站点认(world, m
     assert man["version"] == "1.4.0+17" and man["name"] == rec["android"]["file"]
     st = AppStore(tmp_path / "apps", pubkey=repo / "deploy/release-pub.pem")
     assert st.add("android", (out / man["name"]).read_bytes(), man, now_ms=1)["build"] == 17
+    # 真机 11-25:机器人 / 站点包的自述里也写构建号(给人看,不签、不算指纹),签名照样验得过
+    pkg = out / rec["package"]
+    assert json.loads((pkg / "release.json").read_text("utf-8"))["build"] == 17
+    assert relsign.check_package(pkg, repo / "deploy/release-pub.pem") == ""
 
 
 def test_W57_pubspec版本带候选号_安卓包名和清单里都留着(tmp_path):

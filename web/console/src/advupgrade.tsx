@@ -14,20 +14,23 @@ import { AppPackages, platformName, SiteUpdate } from "./remoteops";
 export { platformName };
 
 type Say = (s: string) => void;
-interface Release { name: string; size?: number; note?: string; added_ms?: number }
+interface Release { name: string; size?: number; note?: string; added_ms?: number; build?: number | null }
 interface LastCmd { kind: string; name?: string | null; at_ms: number; result?: string | null; reason?: string | null }
 interface LastEv { kind: string; name?: string | null; reason?: string | null; at_ms: number }
+/** 真机 11-25:机器人装到哪一步(站点 _release_last 的 progress)。 */
+interface Progress { name?: string | null; stage: string; pct: number | null; at_ms: number }
 interface Queued { robot_id: string; name: string; last_reason?: string; retry_at_ms?: number | null }
 interface Releases {
   releases: Release[];
   robots: Record<string, string | null>;
   rollback?: Record<string, boolean>;
-  last?: Record<string, { cmd: LastCmd | null; event: LastEv | null }>;
+  builds?: Record<string, number | null>;
+  last?: Record<string, { cmd: LastCmd | null; event: LastEv | null; progress?: Progress | null }>;
   queue?: Queued[];
 }
 /** 排队的门槛(站点 release_queue.MIN_BATTERY)。 */
 const QUEUE_PCT = 80;
-interface Versions { site: { version: string; min_app_level?: number }; robots: { robot_id: string; verdict: string }[]; clients?: ClientRow[] }
+interface Versions { site: { version: string; min_app_level?: number; release_name?: string | null; release_build?: number | null }; robots: { robot_id: string; verdict: string }[]; clients?: ClientRow[] }
 
 function errText(e: unknown): string {
   return t("failed", { why: e instanceof ApiError ? e.message : String(e) });
@@ -58,14 +61,52 @@ function evText(e: LastEv): string | null {
 
 const evBad = (k: string) => k.endsWith("_failed");
 
+/** 「build 35」;老包没写构建号就不写。 */
+export function buildTag(n: number | null | undefined): string {
+  return n ? t("upBuild", { n }) : "";
+}
+
+const STAGE_KEY: Record<string, Parameters<typeof t>[0]> = {
+  download: "upStDownload", unpack: "upStUnpack", verify: "upStVerify", stage: "upStStage",
+  venv: "upStVenv", sidecar: "upStSidecar", superlio: "upStSuperlio",
+};
+
+function Bar({ pct, label, kind }: { pct: number; label: string; kind: string }) {
+  return (
+    <div class="up-prog" data-up-progress={kind}>
+      <div class="up-prog-h small"><span>{label}</span><b class="mono">{pct}%</b></div>
+      <div class="up-prog-track" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={pct} aria-label={label}>
+        <div class="up-prog-fill" style={{ width: `${pct}%` }} />
+      </div>
+    </div>
+  );
+}
+
+/** 真机 11-25 用户「下载给机器人的时候需要有进度条，升级也是」。下载(装):机器人报的哪一步、百分比。
+ *  切换:三步 —— 机器人收下、正在重启到新版、新版跑起来了(切的时候代理要重启,中间报不了更细的)。 */
+function UpProgress({ last }: { last: { cmd: LastCmd | null; event: LastEv | null; progress?: Progress | null } }) {
+  const p = last.progress;
+  if (p && p.pct != null) {
+    const step = STAGE_KEY[p.stage] ? t(STAGE_KEY[p.stage]) : p.stage;
+    return <Bar kind="install" pct={p.pct} label={t("upProgInstall", { name: p.name ?? "", step })} />;
+  }
+  const c = last.cmd, e = last.event;
+  if (!c || c.kind !== "release_activate" || (c.result !== "accepted" && c.result !== "duplicate")) return null;
+  if (e && e.at_ms >= c.at_ms && (e.kind === "release_committed" || evBad(e.kind) || e.kind === "release_rolled_back")) return null;
+  const restarting = !!e && e.at_ms >= c.at_ms && e.kind === "release_activating";
+  return <Bar kind="activate" pct={restarting ? 66 : 33}
+    label={restarting ? t("upProgRestart", { name: c.name ?? "" }) : t("upProgAccepted", { name: c.name ?? "" })} />;
+}
+
 function RobotUpStatus({ rid, rel, onUnqueue }: { rid: string; rel: Releases | null; onUnqueue: () => void }) {
   const last = rel?.last?.[rid];
   const q = (rel?.queue ?? []).find((x) => x.robot_id === rid);
   const ev = last?.event ? evText(last.event) : null;
-  if (!last?.cmd && !ev && !q) return null;
+  if (!last?.cmd && !ev && !q && !last?.progress) return null;
   const refused = !!last?.cmd?.result && last.cmd.result !== "accepted" && last.cmd.result !== "duplicate";
   return (
     <div class="up-status small" data-up-status={rid} role="status">
+      {last && <UpProgress last={last} />}
       {last?.cmd && <p class={refused ? "error" : undefined} data-up-cmd={last.cmd.result ?? "pending"}><span class="muted">{t("upLast")}: </span>{cmdText(last.cmd)}</p>}
       {ev && <p class={evBad(last!.event!.kind) ? "error" : undefined} data-up-event={last!.event!.kind}>{ev}</p>}
       {q && (
@@ -109,11 +150,13 @@ export function UpgradePage({ say }: { say: Say }) {
       <p class="muted lead">{t("upWhen")}</p>
       <section class="panel">
         <h2>{t("upNow")}</h2>
-        <div class="sys-row"><span class="muted">{t("upSite")}</span><b class="mono">{versions?.site.version ?? "—"}</b></div>
+        {/* 真机 11-25:「站点上的版本」被当成站点自己的版本 —— 站点(这台电脑)自己是哪一版单独一行 */}
+        <div class="sys-row" data-site-version="1"><span class="muted">{t("upSite")}</span>
+          <b class="mono">{[versions?.site.version ?? "—", buildTag(versions?.site.release_build), versions?.site.release_name].filter(Boolean).join(" · ")}</b></div>
         {Object.entries(rel?.robots ?? {}).map(([rid, cur]) => (
           <div key={rid} class="sys-row" data-robot={rid}>
             {/* 第 2 轮 P1-78:没报版本时写为什么,不只是「—」 */}
-            <span class="muted">{nameOf(rid)}</span>{cur ? <b class="mono">{cur}</b> : <span class="small muted" data-no-release="1">{t("upNoRelease")}</span>}
+            <span class="muted">{nameOf(rid)}</span>{cur ? <b class="mono">{[cur, buildTag(rel?.builds?.[rid])].filter(Boolean).join(" · ")}</b> : <span class="small muted" data-no-release="1">{t("upNoRelease")}</span>}
             {/* P1-78:先确认;站点说这台不能退(老代理)就不给按钮 */}
             {/* 第 3 轮 config N11:没报版本的不再接着说「软件太老、不能退回」 */}
             {!cur ? null : rel?.rollback?.[rid] !== false
@@ -143,11 +186,12 @@ export function UpgradePage({ say }: { say: Say }) {
       </section>
       <section class="panel">
         <h2>{t("upPackages")}</h2>
+        <p class="muted small">{t("upPackagesHint")}</p>
         {(rel?.releases ?? []).length === 0 && <p class="muted small">{t("upNone")}</p>}
         <ul class="plain">
           {(rel?.releases ?? []).map((r) => (
             <li key={r.name} class="up-rel" data-release={r.name}>
-              <b class="mono">{r.name}</b>{r.note && <span class="muted small"> · {r.note}</span>}
+              <b class="mono">{r.name}</b>{r.build ? <span class="small"> · {buildTag(r.build)}</span> : null}{r.note && <span class="muted small"> · {r.note}</span>}
               <div class="row wrap">
                 {Object.keys(rel?.robots ?? {}).map((rid) => (
                   <span key={rid} class="up-robot">

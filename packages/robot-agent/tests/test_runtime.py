@@ -746,6 +746,27 @@ async def test_真机1123_起来时旁路还没在听_在进程里等_起来了�
     await rt.close()
 
 
+async def test_真机1125_旁路刚起_第一帧没到_也在进程里等(台子, monkeypatch):
+    """真机 11-25:切 35 时旁路跟代理同一秒重启,代理连上了旁路、3 秒没等到第一帧就退出
+    (NRestarts=1,守卫数了一次)。这也是「还没准备好」:在进程里再连。"""
+    import nexwar_agent.runtime as RT
+    from nexwar_adapter_d1max.hal import FirstFrameTimeout
+    monkeypatch.setattr(RT, "HAL_CONNECT_RETRY_S", 0.01)
+    broker, c, r, ears, rt, _ = 台子
+    real = rt.hal.connect
+    n = [0]
+
+    async def 第一次没帧():
+        n[0] += 1
+        if n[0] == 1:
+            raise FirstFrameTimeout("连上旁路进程 3.0s 尚未收到状态帧与里程帧")
+        await real()
+    monkeypatch.setattr(rt.hal, "connect", 第一次没帧)
+    await rt.start()
+    assert n[0] >= 2 and rt.transport.connected
+    await rt.close()
+
+
 async def test_真机1123_旁路一直不在听_等够了照旧退出_让守卫数(台子, monkeypatch):
     import nexwar_agent.runtime as RT
     from nexwar_patrol.backends.base import DeviceBackendError

@@ -97,7 +97,25 @@ function lateEn(min: string, how: string): string {
 
 type Rule = [RegExp, (m: RegExpMatchArray) => string];
 
+/** 真机 11-25:机器人装版本走到哪一步(代理 runtime.RELEASE_STAGE_TEXT)。 */
+const STAGE_EN: Record<string, string> = {
+  下载: "downloading", 解包: "unpacking", 验签名: "checking the signature", 落槽: "storing it",
+  "装 Python 环境": "installing Python packages", 编运控旁路: "building the motion bridge", "编 Super-LIO": "building Super-LIO",
+};
+const BUSY_EN: Record<string, string> = {
+  在录包: "recording a bag", 在换图: "switching maps", 在重建地图: "rebuilding the map", 在切版本: "switching software version",
+};
+function busyWhatEn(s: string): string {
+  const inst = /^正在装 (\S+?)[(（](.+?)[,，](\d+)%[)）]$/.exec(s);
+  if (inst) return `installing ${inst[1]} (${STAGE_EN[inst[2]] ?? inst[2]}, ${inst[3]}%)`;
+  const task = /^正在执行任务 (\S+)$/.exec(s);
+  if (task) return `running task ${task[1]}`;
+  return BUSY_EN[s] ?? tr(s);
+}
+
 const RULES: Rule[] = [
+  // 真机 11-25「我一直点立即切换一直显示 busy」:代理拒切换 / 装的时候写清在忙什么
+  [/^busy: ([\s\S]+?)(?: —— 重启那几秒谁都无法停止它[,，]等它完)?$/, (m) => `The robot is busy: ${busyWhatEn(m[1].trim())}. Try again when it finishes`],
   // 日志设计 第 2 条(用户 11-10「为什么只显示中文」):日程没跑、被挡下的原因(site scheduler.py、dispatcher.py)
   [/^([\s\S]+?)[;；]之前没派出去[:：]([\s\S]+)$/, (m) => `${trParts(m[1])}. Before that, no robot could be sent: ${lc(trParts(m[2]))}`],
   // 第 13 轮:不再露 on_missed=skip(老记录照样认,也说人话)
@@ -277,6 +295,8 @@ export function zhPunct(src: string): string {
 /** 第 5 轮 P1-01:系统页上还露着的三种站点原文(中文界面也不该露):「…;原文:机器人原话」只说该做什么、
  *  证据公钥路径、账号申请的「账号 wangxm」。原文放悬停。 */
 const ZH_SYS: [RegExp, (m: RegExpMatchArray) => string][] = [
+  // 真机 11-25:代理回的 busy 带说明 —— 中文界面不露英文码
+  [/^busy: ([\s\S]+?)(?: —— 重启那几秒谁都无法停止它[,，]等它完)?$/, (m) => `机器人在忙：${m[1].trim()}。等它忙完再试`],
   [/^([\s\S]+?)[;；]\s*原文[:：][\s\S]*$/, (m) => m[1]],
   [/^机器人上没有站点的证据公钥[\s\S]*$/, () => "机器人上缺少站点的证据公钥：照片、录像没加密，人脸补拍也关了。请工程师把证书包里的证据公钥装到机器人上，再重启机器人程序。"],
   [/^账号 ([A-Za-z0-9._-]+)$/, (m) => `申请的登录名：${m[1]}`],

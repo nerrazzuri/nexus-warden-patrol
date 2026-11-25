@@ -93,9 +93,62 @@ void main() {
     await openSiteDir(t, SiteDest.updates);
     expect(find.byType(SiteReleasesPage), findsOneWidget);
   });
+  testWidgets('真机 11-25：站点自己一行、构建号、装的进度条、忙的时候说在忙什么', (t) async {
+    final api = _ProgressApi();
+    await t.pumpWidget(MaterialApp(home: SiteReleasesPage(api: api)));
+    await t.pumpAndSettle();
+    expect(find.text('站点（这台电脑）'), findsOneWidget);
+    expect(find.text('机器人升级包（存在站点上）'), findsOneWidget);
+    expect(find.text('站点上的版本'), findsNothing, reason: '原来这么叫，用户当成站点自己的版本');
+    expect(find.text('1.4.0 · 构建 36 · 2026-11-26-abcdef12'), findsOneWidget);
+    expect(find.text('2026-11-24-166a47ee · 构建 35'), findsNWidgets(2));
+    expect(find.textContaining('2026-11-26-abcdef12（1.0.0） · 构建 36'), findsOneWidget);
+    expect(find.byKey(const Key('rel-progress-install-A')), findsOneWidget);
+    expect(find.textContaining('编译 Super-LIO'), findsOneWidget);
+    expect(find.text('80%'), findsOneWidget);
+    expect(find.byKey(const Key('rel-progress-activate-B')), findsOneWidget);
+    expect(find.textContaining('正在用新版重启'), findsOneWidget);
+    await t.scrollUntilVisible(find.byKey(const Key('rel-app-version')), 200);
+    expect(find.textContaining('（构建 '), findsOneWidget, reason: '这台手机也写构建号');
+    await t.pumpWidget(const SizedBox());
+  });
+
+  test('真机 11-25：拒的原因是忙，写清在忙什么', () {
+    expect(releaseReasonText('busy: 正在装 r36(编 Super-LIO,80%) —— 重启那几秒谁都无法停止它,等它完'),
+        '机器人在忙：正在装 r36（编译 Super-LIO（约 4 分钟），80%）。等它忙完再试');
+    expect(releaseReasonText('busy: 在录包 —— 重启那几秒谁都无法停止它,等它完'), '机器人在忙：在录包。等它忙完再试');
+  });
 }
 
-/// 升级前检查（W00c6d）：「查」回一份清单；「切」被狗拒时回执里带清单。
+class _ProgressApi extends FakeApi {
+  _ProgressApi() : super('admin');
+  @override
+  Future<Map<String, dynamic>> releases() async => {
+        'releases': <Object>[
+          {'name': '2026-11-26-abcdef12', 'version': '1.0.0', 'size': 1048576, 'build': 36},
+        ],
+        'robots': {'A': '2026-11-24-166a47ee', 'B': '2026-11-24-166a47ee'},
+        'builds': {'A': 35, 'B': 35},
+        'last': {
+          'A': {
+            'cmd': {'kind': 'release_install', 'name': '2026-11-26-abcdef12', 'at_ms': 1, 'result': 'accepted'},
+            'event': null,
+            'progress': {'name': '2026-11-26-abcdef12', 'stage': 'superlio', 'pct': 80, 'at_ms': 2},
+          },
+          'B': {
+            'cmd': {'kind': 'release_activate', 'name': '2026-11-26-abcdef12', 'at_ms': 5, 'result': 'accepted'},
+            'event': {'kind': 'release_activating', 'name': '2026-11-26-abcdef12', 'at_ms': 6},
+            'progress': null,
+          },
+        },
+      };
+  @override
+  Future<Map<String, dynamic>> versions() async => {
+        'site': {'version': '1.4.0', 'release_build': 36, 'release_name': '2026-11-26-abcdef12'},
+        'robots': <Object>[],
+      };
+}
+
 class _PrecheckApi extends FakeApi {
   _PrecheckApi() : super('admin');
   static const _checks = <Object>[

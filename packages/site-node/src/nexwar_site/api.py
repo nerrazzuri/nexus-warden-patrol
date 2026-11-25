@@ -4887,7 +4887,12 @@ class _Handler(TlsHandlerMixin):
             # 真机 11-20 用户「点下发和切换的时候没有状态显示」:每台最近一条装 / 切 / 退的命令
             # (机器人收下没有、拒了为什么)、最近一条升级事件(装好了、切换中、
             # 切完是哪一版、失败原因),充电排队里等着的
+            # 真机 11-25 用户看不出机器人是 34 还是 35:每台在跑那一版的构建号(新包才有)
+            builds = {rid: ((c.capabilities.tasks.get("release_install") or {}).get("build")
+                            if c.capabilities is not None else None)
+                      for rid, c in self.site.dispatcher.clients.items()}
             return self._send_json(200, {"releases": cat.list(), "robots": robots,
+                                         "builds": builds,
                                          "rollback": rollback,
                                          "last": {rid: self._release_last(rid) for rid in robots},
                                          "queue": (self.site.release_queue.list()
@@ -4963,15 +4968,36 @@ class _Handler(TlsHandlerMixin):
             cmd = {"kind": r["kind"], "name": name, "at_ms": r["issued_at"],
                    "result": r["ack_result"], "reason": r["ack_reason"]}
         for r in db.query("SELECT kind, data, received_at FROM events WHERE robot_id=? AND "
-                          "kind LIKE 'release\\_%' ESCAPE '\\' ORDER BY received_at DESC LIMIT 1",
-                          (robot_id,)):
+                          "kind LIKE 'release\\_%' ESCAPE '\\' AND kind != 'release_progress' "
+                          "ORDER BY received_at DESC LIMIT 1", (robot_id,)):
             try:
                 d = json.loads(r["data"])
             except ValueError:
                 d = {}
             ev = {"kind": r["kind"], "name": d.get("name"), "reason": d.get("reason"),
                   "at_ms": r["received_at"]}
-        return {"cmd": cmd, "event": ev}
+        # 真机 11-25「下载给机器人的时候需要有进度条」:还在装的那一次走到哪一步(比最近一条升级事件
+        # 新的进度才算 —— 装好了、失败了就不再显示进度)
+        prog = None
+        for r in db.query("SELECT data, received_at FROM events WHERE robot_id=? AND "
+                          "kind='release_progress' ORDER BY received_at DESC, seq DESC LIMIT 1",
+                          (robot_id,)):
+            if ev is not None and ev["at_ms"] >= r["received_at"]:
+                break
+            if self.site.dispatcher._now() - r["received_at"] > self.PROGRESS_STALE_MS:
+                break                       # 装到一半代理重启了:不一直挂着一条不动的进度
+            try:
+                d = json.loads(r["data"])
+            except ValueError:
+                d = {}
+            pct = d.get("pct")
+            prog = {"name": d.get("name"), "stage": str(d.get("stage") or ""),
+                    "pct": pct if isinstance(pct, int) and 0 <= pct <= 100 else None,
+                    "at_ms": r["received_at"]}
+        return {"cmd": cmd, "event": ev, "progress": prog}
+
+    #: 装版本的进度多久没更新就不再显示(编 Super-LIO 那一步约 4 分钟只报一次,留足)。
+    PROGRESS_STALE_MS = 20 * 60_000
 
     #: 网页上传的升级包最大多少(W44 第四期)。
     MAX_UPLOAD = 500 * 1024 * 1024

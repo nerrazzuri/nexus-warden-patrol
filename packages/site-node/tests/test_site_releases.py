@@ -17,7 +17,7 @@ from nexwar_site.releases import ReleaseCatalog, ReleaseCatalogError
 NAME = "2026-09-25-bbbbbb"
 
 
-def 做包(tmp, name=NAME, *, sha=None, schema=1, compat="现在"):
+def 做包(tmp, name=NAME, *, sha=None, schema=1, compat="现在", build=None):
     d = tmp / "pkgs" / name
     (d / "src").mkdir(parents=True, exist_ok=True)
     (d / "src" / "x.py").write_text("print('hi')\n")
@@ -28,6 +28,8 @@ def 做包(tmp, name=NAME, *, sha=None, schema=1, compat="现在"):
            "content_sha256": sha or tree_sha256(d, skip="release.json")}
     if compat is not None:                                 # A7:None = 老包,没有兼容级别
         raw["compat_level"] = AGENT_LEVEL if compat == "现在" else compat
+    if build is not None:                                  # 真机 11-25:构建号(给人看,不签)
+        raw["build"] = build
     (d / "release.json").write_text(json.dumps(raw))
     return d
 
@@ -153,3 +155,21 @@ def test_A7_升级包的代理兼容级别_太老太新站点都不登记(cat, t
     with pytest.raises(ReleaseCatalogError, match="先升站点"):
         cat.add(做包(tmp_path, "2026-10-10-aaaaa3", compat=SITE_MAX_AGENT_LEVEL + 1))
     cat.add(做包(tmp_path, "2026-10-10-aaaaa4"))
+
+
+def test_真机1125_包里写了构建号_目录里带着_老包没有(cat, tmp_path):
+    cat.add(做包(tmp_path, build=36))
+    cat.add(做包(tmp_path / "b", "2026-01-02-bbbbbbbb"))
+    got = {r["name"]: r["build"] for r in cat.list()}
+    assert got == {NAME: 36, "2026-01-02-bbbbbbbb": None}
+
+
+def test_真机1125_站点自己是哪个发行包(tmp_path):
+    from nexwar_site.health import site_release
+    p = tmp_path / "release.json"
+    assert site_release(p) == {"name": None, "build": None}, "从源码跑:没有"
+    p.write_text(json.dumps({"name": "2026-11-26-abcdef12", "build": 36, "version": "1.0.0"}))
+    assert site_release(p) == {"name": "2026-11-26-abcdef12", "build": 36}
+    p.write_text(json.dumps({"name": "2026-11-24-166a47ee"}))
+    assert site_release(p) == {"name": "2026-11-24-166a47ee", "build": None}, \
+        "35 以前的包没写构建号"

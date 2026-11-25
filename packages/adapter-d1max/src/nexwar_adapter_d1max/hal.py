@@ -49,6 +49,7 @@ from nexwar_contract.hal import (
     ControlStatus,
     Fault,
     HalCapabilities,
+    HalNotReady,
     HalUnsupported,
     Health,
     ImuSample,
@@ -95,8 +96,13 @@ STOPPED_EPS = 0.02
 VEL_ACK_TIMEOUT_S = 0.5
 #: 一条故障多久没再报就算消了(秒)。**待真机**:SDK 报故障的节奏没量过。
 FAULT_FRESH_S = 10.0
-#: 连上之后等第一帧状态与里程多久。等不到就是旁路进程不对劲,不接。
+#: 连上之后等第一帧状态与里程多久。等不到就断开、抛 :class:`FirstFrameTimeout`(代理起来时会再连)。
 FIRST_FRAME_TIMEOUT_S = 3.0
+
+
+class FirstFrameTimeout(DeviceBackendError, HalNotReady):
+    """连上了旁路,第一帧状态、里程没到。旁路刚起(切版本时跟代理同一秒重启,真机 11-25)也是这样:
+    代理起来时当「还没准备好」,在进程里再连,不退出。"""
 #: 站起/趴下之后等状态帧跟上的上限。站起实测约 6 s(清单 #36)。
 POSTURE_TIMEOUT_S = 10.0
 
@@ -237,7 +243,7 @@ class D1MaxHal:
         while self._b.last_state is None or self._b.last_odom is None:
             if self._monotonic() >= deadline:
                 await self._b.close()
-                raise DeviceBackendError(
+                raise FirstFrameTimeout(
                     f"连上旁路进程 {FIRST_FRAME_TIMEOUT_S}s 尚未收到状态帧与里程帧")
             await asyncio.sleep(0.02)
 

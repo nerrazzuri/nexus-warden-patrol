@@ -43,6 +43,10 @@ from nexwar_site.temporal import GATED, temporal_class
 
 log = logging.getLogger(__name__)
 
+#: 只落库、不推给事件流和回调的事件:装版本的进度(真机 11-25 进度条;一次装十几条,
+#: 进事件列表就刷屏了)。
+QUIET_EVENTS = ("release_progress",)
+
 _HEAD_TEXT = {"tail": "机器人尾为前", "unknown": "未知"}
 
 #: 多久没收到**实时** status 就算不新鲜(按站点自己的钟,见 ``DispatchClient.status_live_at``)。
@@ -339,6 +343,8 @@ class Dispatcher:
             fresh = cur.rowcount == 1
         if not fresh:
             return                          # 站点重启后 broker 补投的旧事件:库里有了,不再推
+        if e.kind in QUIET_EVENTS:
+            return                          # 只给升级页看进度(真机 11-25):不推、不进事件流
         for cb in list(self._event_cbs):
             try:
                 cb(robot_id, e)
@@ -420,8 +426,10 @@ class Dispatcher:
         return [v for r in self.registry.list() if (v := self.robot_view(r.robot_id))]
 
     def recent_events(self, robot_id: str, limit: int = 50) -> list[dict[str, Any]]:
-        rows = self.db.query("SELECT * FROM events WHERE robot_id=? ORDER BY received_at DESC, "
-                             "seq DESC LIMIT ?", (robot_id, limit))
+        quiet = ",".join("?" * len(QUIET_EVENTS))
+        rows = self.db.query(f"SELECT * FROM events WHERE robot_id=? AND kind NOT IN ({quiet}) "
+                             "ORDER BY received_at DESC, seq DESC LIMIT ?",
+                             (robot_id, *QUIET_EVENTS, limit))
         return [{"boot_id": r["boot_id"], "seq": r["seq"], "kind": r["kind"],
                  "data": json.loads(r["data"]), "stamp": r["stamp"]} for r in rows]
 
