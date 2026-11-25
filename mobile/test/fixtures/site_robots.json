@@ -99,8 +99,8 @@
       },
       "clock_skew_s": 0.0,
       "devices": null,
-      "enrolled_at": 1795581670469,
-      "expires_at": 1796581670470,
+      "enrolled_at": 1795636657436,
+      "expires_at": 1796636657437,
       "fresh": true,
       "held": null,
       "home_set": false,
@@ -146,11 +146,12 @@
           "site_rev": 0
         }
       },
+      "standby_bad": false,
       "standby_countdown": null,
       "status": {
-        "boot_id": "boot-33eae8366b",
+        "boot_id": "boot-4762ffbd69",
         "control_epoch": 1,
-        "last_seen": 1795581673129,
+        "last_seen": 1795636658204,
         "online": true,
         "ready": {
           "control": true,

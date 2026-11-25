@@ -393,6 +393,8 @@ class Dispatcher:
                "muted": getattr(self, "voice_muted", {}).get(robot_id),
                # 易用性第 6 轮 W6-01:当前这版图上有没有原点(没有就出不了发;没报地图 = None 不知道)
                "home_set": self._home_set(robot_id, c),
+               # 易用性 37 复测 P1-7:默认待命点在当前图上走不了(App 现在页写「要看一下」)
+               "standby_bad": self._standby_bad(robot_id, c),
                "running": self.running_view(c),
                # W76:正在跑几圈的巡逻 → 第几圈 / 共几圈(0 = 一直巡逻);跟机器人卡片一个算法
                "lap": _lap_of(self.db, robot_id, c),
@@ -411,6 +413,11 @@ class Dispatcher:
         if nav:
             out["nav"] = nav
         return out
+
+    def _standby_bad(self, robot_id: str, c: DispatchClient | None) -> bool:
+        from nexwar_site.robot_overview import standby_bad
+        return standby_bad(self.db, getattr(self, "maps", None), robot_id,
+                           c.capabilities if c is not None else None)
 
     def _home_set(self, robot_id: str, c: DispatchClient | None) -> bool | None:
         m = self._loaded(c)
