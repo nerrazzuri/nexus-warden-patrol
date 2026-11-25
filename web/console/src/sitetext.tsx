@@ -120,6 +120,9 @@ const RULES: Rule[] = [
     const a = tr(m[1]), b = tr(m[2]);
     return a === b ? `${a} (tried again after the lap: same result)` : `${a}; tried again after the lap, still not reached: ${lc(b)}`;
   }],
+  // 易用性 37 复测第六轮:值守一圈「3 个航点未到达(a, b, 回待命点):…」
+  [/^(\d+) 个航点未到达[(（]([^)）]*)[)）][:：]\s*([\s\S]*)$/, (m) =>
+    `${m[1]} ${plural(m[1], "waypoint", "waypoints")} not reached (${m[2].split(/[,，、]\s*/).map((n) => WP_NAMES[n] ?? n).join(", ")}): ${lc(tr(m[3]))}`],
   // 易用性 37 复测 P1-7:标原点 / 设待命点被拒(App 有的页不读 reason_en)
   [/^(\S+) 的待命点不能设在这里[:：][\s\S]*$/, (m) => `${m[1]}'s standby point can't go here: the map shows it as not walkable or not scanned, so robots could never be sent there. Pick a spot on open, scanned floor.`],
   [/^(\S+) 现在站的地方不能当待命点[:：][\s\S]*$/, (m) => `${m[1]} can't use this spot as its standby point: the map shows it as not walkable or not scanned, so robots could never be sent back here. Drive about 1 m into open, scanned floor and mark again.`],

@@ -95,6 +95,8 @@ FOLLOW_RETRY_MS = 30_000
 FOLLOW_PREFIX = "follow-"
 #: 连着这么多圈跑不成报 P2。
 FAIL_ALERT = 3
+#: 「任意一台」的方案,一台连着 FAIL_ALERT 圈跑不成:这么久(毫秒)里先挑别的(易用性 37 复测第六轮)。
+FAIL_AVOID_MS = 10 * 60_000
 #: 电量不过这条线(%)不开新的一圈。第四期换成按任务算的出站线。
 #: 「不够跑一圈」判过以后这么久内算数(回充 / 换电按它起)。
 LOW_FRESH_MS = 120_000
@@ -165,6 +167,8 @@ class GuardDuty:
         self.reach: Any = None
         self._retry_at: dict[int, int] = {}
         self._reserved: set[str] = set()
+        #: (方案, 机器人) → 到这个时刻之前「任意一台」先不挑它(连着跑不成,FAIL_AVOID_MS)
+        self._avoid: dict[tuple[Any, str], int] = {}
         self._no_standby: set[tuple[int, str, str, str]] = set()
         self._waiting: dict[int, str] = {}
         self._route_cache: dict[tuple, dict[str, Any]] = {}
@@ -713,6 +717,9 @@ class GuardDuty:
                 cands.append(rid)
         if not cands:
             return "", ";".join(why) or "没有登记的机器人"
+        now = self._now()
+        fresh = [r for r in cands if self._avoid.get((e["id"], r), 0) <= now]
+        cands = fresh or cands                          # 都连着跑不成:照旧挑(总比没人巡好)
         cands.sort(key=lambda r: -(self._battery(r) or 0.0))
         return cands[0], ""
 
@@ -1667,6 +1674,13 @@ class GuardDuty:
                     title=f"防区路线 {info['id']} 连着 {fails} 圈跑不成",
                     detail=(why or "看机器人的日志") + ";站点一分钟后再试,路被堵了请人去看",
                     context={"route": info["id"]})
+            if not e["robot"] and fails >= FAIL_ALERT:
+                # 易用性 37 复测第六轮:「任意一台」的方案,这台连着跑不成(比如卡在走不了的地方)——
+                # 放掉这一趟,下一拍另挑一台;FAIL_AVOID_MS 里先不挑它(没别的可挑照旧派它)
+                self._avoid[(eid, rid)] = now + FAIL_AVOID_MS
+                self._log("handover", robot=rid, entry=eid,
+                          detail=f"{rid} 连着 {fails} 圈跑不成,换一台")
+                self._drop_run(eid)
 
     def _terminal(self, rid: str, task_id: str) -> tuple[str, dict[str, Any]] | None:
         if not task_id:

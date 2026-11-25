@@ -93,6 +93,10 @@ class _SiteStandbyPageState extends State<SiteStandbyPage> with NwAsk {
           ? tr('$what failed: ${ackReasonText(e.message.replaceFirst(RegExp(r'^机器人标记失败[:：]'), ''))}',
               '$what失败：${ackReasonText(e.message.replaceFirst(RegExp(r'^机器人标记失败[:：]'), ''))}')
           : tr('$what failed: $e', '$what失败：$e');
+    } catch (e) {
+      // 易用性 37 复测第六轮：超时、网断（不是站点回的错）原来页面上什么都不说
+      msg = tr('$what: no answer from the site. Check the list, then try again',
+          '$what：站点没有回应。先看看列表，再试一次');
     }
     if (!mounted) return;
     setState(() => _msg = msg);

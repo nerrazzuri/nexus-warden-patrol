@@ -8,6 +8,13 @@ void main() {
   setUp(() => appLang.value = AppLang.en);
   tearDown(() => appLang.value = AppLang.zh);
 
+  test('易用性 37 复测第六轮：值守一圈 N 个航点未到达 整句英文', () {
+    const one = '导航拒了: goto 被设备拒绝: 规划失败(start_blocked):起点在障碍或禁行区里';
+    final en = siteText('3 个航点未到达(Drive-thru lane-3, Drive-thru lane-4, 回待命点):$one;回头补也没到:$one');
+    expect(RegExp(r'[\u4e00-\u9fff]').hasMatch(en), isFalse, reason: en);
+    expect(en, startsWith('3 waypoints not reached (Drive-thru lane-3, Drive-thru lane-4, “Return to standby”): '));
+  });
+
   test('易用性 37 复测：设备那几行翻英文', () {
     expect(siteText('6 个线圈都确认过'), 'All 6 relay channels confirmed');
     expect(siteText('喇叭放警笛声'), 'Siren plays through the speaker');
