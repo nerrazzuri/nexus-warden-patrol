@@ -603,6 +603,9 @@ class PushDesk:
                                 c.executemany(
                                     "INSERT OR IGNORE INTO push_sent(outbox_id, reg_id, sent_ms) "
                                     "VALUES (?,?,?)", [(row["id"], r, self._now()) for r in ok])
+                            # 真机 11-25:发成功也记一笔(I01 那条 P1 推没推到查不出来)
+                            log.info("P1 推送(%s)发出去了:%s,%d 台手机", name, row["alert_key"],
+                                     len(ok))
                     if bad:
                         failed = bad
                     elif not stopped and mine and not tried.intersection(mine):
