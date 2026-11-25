@@ -107,6 +107,24 @@ const Map<String, String> _lateZh = {'这一轮不跑了': 'skip', '已报警': 
 const String _afterNote = '; recorded afterwards because the site was not running then';
 
 final List<_Rule> _rules = [
+  // 易用性 37 复测：机器人设置页设备那几行（跟网页 sitetext 同一组，易用性 build 36 P2-5）
+  (RegExp(r'^(\d+) 个线圈都确认过$'), (m) => 'All ${m[1]} relay channels confirmed'),
+  (RegExp(r'^仿真声卡$'), (_) => 'Simulated sound card'),
+  (RegExp(r'^已用 (\d+)%[,，]\s?剩 ([\d.]+) GB[:：]\s?到 (\d+)% 就不接新的巡逻'),
+      (m) => '${m[1]}% used, ${m[2]} GB free: no new patrols above ${m[3]}% (data not yet uploaded is kept)'),
+  (RegExp(r'^已用 (\d+)%[,，]\s?剩 ([\d.]+) GB$'), (m) => '${m[1]}% used, ${m[2]} GB free'),
+  (RegExp(r'^喇叭放警笛声$'), (_) => 'Siren plays through the speaker'),
+  (RegExp(r'^继电器板读不回来'), (_) => 'Relay board not responding (power or cable?)'),
+  (RegExp(r'^继电器板一直未确认'), (_) => 'Relay board never confirmed (serial port, address or board power?)'),
+  (RegExp(r'^(.+)未确认或无法关闭[,，]\s?正在接着关$'), (m) => '${m[1]}: not confirmed or cannot switch off; still trying'),
+  (RegExp(r'^断线自动全关未设置'), (_) => 'Auto-off on link loss is not set: lights and siren will not switch off if the robot loses the site. Set it with relay setup, then power-cycle the board'),
+  (RegExp(r'^声卡 (\S+) 不在'), (m) => 'Sound card ${m[1]} not found (USB unplugged?)'),
+  (RegExp(r'^功放 MUTE 脚 (\S+) 无法写入'), (m) => 'Amplifier mute pin ${m[1]} cannot be set'),
+  (RegExp(r'^MUTE 脚 (\S+)$'), (m) => 'Mute pin ${m[1]}'),
+  (RegExp(r'^系统声音 (\S+) 的 (\S+) 无法静音或打开'), (m) => 'System sound ${m[1]} / ${m[2]} cannot be muted or unmuted'),
+  (RegExp(r'^系统静音[(（](\S+) 的 (\S+)[)）]$'), (m) => 'System mute (${m[1]} / ${m[2]})'),
+  (RegExp(r'^没有警笛声文件'), (_) => 'Siren sound file missing on the robot'),
+  (RegExp(r'^喇叭警笛无法播放'), (_) => 'Siren cannot play through the speaker'),
   // 易用性 37 复测 P1-9：机器人「…;回头补也没到:…」
   (RegExp(r'^([\s\S]+?)[;；]回头补也没到[:：]\s*([\s\S]*)$'),
       (m) {
@@ -114,6 +132,7 @@ final List<_Rule> _rules = [
         return a == b ? '$a (tried again after the lap: same result)' : '$a; tried again after the lap, still not reached: ${_lc(b)}';
       }),
   // 易用性 37 复测 P1-7：标原点 / 设待命点被拒（App 有的页不读 reason_en）
+  (RegExp(r'^(\S+) 的待命点不能设在这里[:：][\s\S]*$'), (m) => "${m[1]}'s standby point can't go here: the map shows it as not walkable or not scanned, so robots could never be sent there. Pick a spot on open, scanned floor."),
   (RegExp(r'^(\S+) 现在站的地方不能当待命点[:：][\s\S]*$'),
       (m) => "${m[1]} can't use this spot as its standby point: the map shows it as not walkable or not scanned, so robots could never be sent back here. Drive about 1 m into open, scanned floor and mark again."),
   (RegExp(r'^网页上传$'), (m) => 'uploaded on the web'), // 升级包来源（站点 api.py）

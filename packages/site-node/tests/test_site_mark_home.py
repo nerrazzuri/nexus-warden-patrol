@@ -418,3 +418,18 @@ def test_易用性37_P1_7_站的地方图上走不了_不标_狗上不动_说往
     assert code == 409 and "standby point" in d["reason_en"], d
     assert not [x for x in s.stb_list("A") if x["name"] == "gate"]
 
+
+
+def test_易用性37第五轮_布局页设待命点_图上走不了也拒(站点, monkeypatch):
+    import types
+    s = 站点
+    alice = _登(s, "alice")
+    monkeypatch.setattr(s.api, "maps", types.SimpleNamespace(
+        reach_problem=lambda mid, ver, pts: "这里 在图上不是可通行的地方(墙、障碍或未扫到)"
+        if pts[0][1] > 5 else ""))
+    body = {"name": "wall", "map_id": "m", "map_version": "1", "x": 8.8, "y": -4.6, "default": True}
+    code, d = s.req("POST", "/api/robots/A/standby", body, token=alice)
+    assert code == 409 and "Pick a spot" in d["reason_en"], d
+    assert not [x for x in s.stb_list("A") if x["name"] == "wall"]
+    code, d = s.req("POST", "/api/robots/A/standby", {**body, "x": 1.0}, token=alice)
+    assert code == 200, d

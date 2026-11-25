@@ -220,7 +220,8 @@ class _SitePointsPageState extends State<SitePointsPage> {
                         for (final r in _robots)
                           ButtonSegment(
                               value: '${r['robot_id']}',
-                              label: Text('${r['name'] ?? r['robot_id']}',
+                              // 易用性 37 复测：没起名字的 name 是空串（不是 null），按钮上没字
+                              label: Text('${(r['name'] ?? '').toString().isEmpty ? r['robot_id'] : r['name']}',
                                   key: SitePointsPage.robotKey('${r['robot_id']}'), overflow: TextOverflow.ellipsis)),
                       ],
                       selected: {?robot},

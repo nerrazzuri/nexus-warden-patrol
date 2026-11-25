@@ -121,6 +121,7 @@ const RULES: Rule[] = [
     return a === b ? `${a} (tried again after the lap: same result)` : `${a}; tried again after the lap, still not reached: ${lc(b)}`;
   }],
   // 易用性 37 复测 P1-7:标原点 / 设待命点被拒(App 有的页不读 reason_en)
+  [/^(\S+) 的待命点不能设在这里[:：][\s\S]*$/, (m) => `${m[1]}'s standby point can't go here: the map shows it as not walkable or not scanned, so robots could never be sent there. Pick a spot on open, scanned floor.`],
   [/^(\S+) 现在站的地方不能当待命点[:：][\s\S]*$/, (m) => `${m[1]} can't use this spot as its standby point: the map shows it as not walkable or not scanned, so robots could never be sent back here. Drive about 1 m into open, scanned floor and mark again.`],
   // 真机 11-25「我一直点立即切换一直显示 busy」:代理拒切换 / 装的时候写清在忙什么
   [/^busy: ([\s\S]+?)(?: —— 重启那几秒谁都无法停止它[,，]等它完)?$/, (m) => `The robot is busy: ${busyWhatEn(m[1].trim())}. Try again when it finishes`],

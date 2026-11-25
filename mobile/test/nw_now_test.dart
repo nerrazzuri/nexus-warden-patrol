@@ -11,6 +11,7 @@ import 'package:nexwar_patrol/ui/site_video.dart';
 import 'package:flutter/material.dart';
 import 'package:nexwar_patrol/ui/site_deterrence.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:nexwar_patrol/ui/site_standby.dart';
 
 import 'site_page_test.dart' show FakeApi;
 import 'support/fake_site.dart';
@@ -77,6 +78,10 @@ void main() {
     final txt = t.widgetList<Text>(find.descendant(of: find.byKey(NowPage.attnKey), matching: find.byType(Text))).map((w) => w.data).join(' ');
     expect(txt, contains('待命点走不了'));
     expect(txt, contains('默认待命点'));
+    // 第五轮：点这一条直接到 A 的待命点页
+    await t.tap(find.byKey(NowPage.attnStandbyKey));
+    await t.pumpAndSettle();
+    expect(find.byType(SiteStandbyPage), findsOneWidget);
     await t.pumpWidget(Container());
   });
 

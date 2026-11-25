@@ -150,6 +150,19 @@ def test_点位未到_只记录不推送_同一个点连着3趟没到才报P1(�
     assert "连续 3 趟" in a.title and "gate" in a.title and _pushed(db) == [a.key]
 
 
+def test_易用性37_起点被挡_一趟只记一笔_不按点升P1(台):
+    """机器人自己站的地方被挡(start_blocked):这一趟每个点都秒失败 —— 原来每个点各记一条、
+    3 趟后每个点各升一条 P1(演示里一下冒出十几条)。"""
+    c, db, desk, src, stale = 台
+    note = "导航拒了: goto 被设备拒绝: 规划失败(start_blocked):起点在障碍或禁行区里"
+    for i in range(WAYPOINT_MISS_RUNS + 1):
+        for wp in ("p1", "p2", "p3", "回待命点"):
+            src.on_event("A", _ev("patrol_waypoint", task_id=f"t{i}", name=wp, ok=False, note=note))
+            c.ms += 100
+    assert _open(desk) == [] and _pushed(db) == []
+    assert len(_all(desk)) == WAYPOINT_MISS_RUNS + 1, [a.title for a in _all(desk)]
+
+
 def test_V1_点位未到带原因码_报警写怎么回事和该做什么(台):
     """导航 V1 第 5 节:代理给了原因码,报警按码写说明和处理建议
     (代替笼统的「到场看看,或者改路线」)。"""

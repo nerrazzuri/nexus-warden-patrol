@@ -200,6 +200,8 @@ class _Mem:
     rec_failed: set = field(default_factory=set)
     #: W72:点位名 → 连着没到的那几趟(任务号);到过一次清掉。
     wp_miss: dict = field(default_factory=dict)
+    #: 易用性 37 复测:起点被挡(start_blocked)记过一笔的任务 —— 同一趟每个点都秒失败,只记一笔
+    start_blocked: set = field(default_factory=set)
 
 
 #: W41(2026-10-26 现场:禁行区删了、狗也不在里面了,P1 还挂着、也不提示能关):狗报的位置离每一个
@@ -547,6 +549,22 @@ class SiteAlertSources:
         info = FAIL_CODES[code] if code else None
         head = f"{info.zh}:{note}" if info and note else info.zh if info else note
         ctx = {"code": code} if code else None
+        if code == "start_blocked" or "start_blocked" in note:
+            # 易用性 37 复测第五轮:机器人自己站的地方被挡,这一趟后面的点全都秒失败 —— 不是点的问题,
+            # 不按点数趟(不然每个点各升一条 P1);同一趟只记一笔(回待命点失败另有 run_abort)
+            task = str(d.get("task_id") or "")
+            seen = self._m(rid).start_blocked
+            if task and task in seen:
+                log.info("%s 起点被挡,点位 %s 也没到(这一趟已记过)", rid, name)
+                return
+            if task:
+                if len(seen) > 64:
+                    seen.clear()
+                seen.add(task)
+            self.desk.raise_alert(kind="stuck", robot=rid, title=f"点位 {name} 未到达,已跳过",
+                                  detail=(head + ";" if head else "") + "巡逻继续,只做记录",
+                                  context=ctx, record="site:skipped")
+            return
         runs = self._m(rid).wp_miss.setdefault(name, set())
         runs.add(str(d.get("task_id") or f"?{self._now()}"))
         if len(runs) >= WAYPOINT_MISS_RUNS:
