@@ -1,0 +1,6 @@
+
+To authenticate, visit:
+
+	https://login.tailscale.com/a/g1ad30438cdcd0d2b
+
+timeout waiting for Tailscale service to enter a Running state; check health with "tailscale status"

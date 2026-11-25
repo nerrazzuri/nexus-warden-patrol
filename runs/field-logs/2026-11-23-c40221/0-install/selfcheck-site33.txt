@@ -1,0 +1,17 @@
+[PASS] 站点身份: field-laptop
+[PASS] 站点证书: 30 天内不到期
+[PASS] 密钥 secrets: 0o440 指纹 40750841e16ec54f
+[PASS] 密钥 backup: 0o440 指纹 8d7a16d097b04802
+[PASS] 密钥 evidence: 0o440 指纹 a916de82bb411d0d
+[PASS] 发行公钥: 登记软件版本时会验签
+[PASS] 管理员: 1 个
+[WARN] 备份: site.json 未配置 backup_dir:主机损坏将导致数据丢失
+[PASS] 推送: 配了
+[PASS] 读日志: 诊断包读得到站点日志
+[PASS] 服务 nexwar_mosquitto: 正在运行,开机自启
+[PASS] 服务 nexwar_site: 正在运行,开机自启
+[PASS] 机器人连的端口: 8883 开着
+[PASS] 探活: 站点 1.0.0-rc.1 回好
+[PASS] 对时服务: chrony 正在运行(机器人跟此主机对时)
+[PASS] 盘: 还剩 28%
+FAIL 0 条,WARN 1 条:能用了,WARN 的看一眼

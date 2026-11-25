@@ -1,0 +1,111 @@
+2026-11-24T11:56:38.976+08:00 INFO nexwar_agent.engine.machine [task=adhoc-0f8cef738bbb map=main:20261124-2] 开一趟 mission=TestPatrol-1 点数=13 循环=1 点位失败=retry_then_skip
+2026-11-24T11:56:38.977+08:00 INFO nexwar_agent.engine.machine [task=adhoc-0f8cef738bbb map=main:20261124-2] 状态 IDLE → PREFLIGHT
+2026-11-24T11:56:38.980+08:00 INFO nexwar_agent.engine.machine [task=adhoc-0f8cef738bbb map=main:20261124-2] 状态 PREFLIGHT → LOCALIZING
+2026-11-24T11:56:38.981+08:00 INFO nexwar_agent.engine.machine [task=adhoc-0f8cef738bbb map=main:20261124-2] 状态 LOCALIZING → RUNNING
+2026-11-24T11:56:38.983+08:00 INFO nexwar_agent.engine.machine [task=adhoc-0f8cef738bbb pt=0 point=W1 map=main:20261124-2] 去这个点 (-2.83, -7.31, 0.00) 第 1 次
+2026-11-24T11:56:39.098+08:00 INFO nexwar_agent.bridges.nav2_nav [task=adhoc-0f8cef738bbb pt=0 point=W1 map=main:20261124-2] goto:交给 Nav2(目标 489372140)→ (-2.83, -7.31)
+2026-11-24T11:56:39.138+08:00 INFO nexwar_agent.runtime 位置 (0.12, 0.06, 0.14) map=main:20261124-2 task=adhoc-0f8cef738bbb 定位=可信 质量=0.80
+2026-11-24T11:56:44.190+08:00 INFO nexwar_agent.runtime 位置 (0.15, -0.30, -1.62) map=main:20261124-2 task=adhoc-0f8cef738bbb 定位=可信 质量=0.80
+2026-11-24T11:56:49.308+08:00 INFO nexwar_agent.runtime 位置 (0.14, -0.29, -1.61) map=main:20261124-2 task=adhoc-0f8cef738bbb 定位=可信 质量=0.80
+2026-11-24T11:56:54.377+08:00 INFO nexwar_agent.runtime 位置 (0.14, -0.29, -1.60) map=main:20261124-2 task=adhoc-0f8cef738bbb 定位=可信 质量=0.80
+2026-11-24T11:56:59.464+08:00 INFO nexwar_agent.runtime 位置 (0.06, -0.88, -2.03) map=main:20261124-2 task=adhoc-0f8cef738bbb 定位=可信 质量=0.78
+2026-11-24T11:57:04.522+08:00 INFO nexwar_agent.runtime 位置 (-0.59, -2.68, -2.01) map=main:20261124-2 task=adhoc-0f8cef738bbb 定位=可信 质量=0.77
+2026-11-24T11:57:09.548+08:00 INFO nexwar_agent.runtime 位置 (-1.30, -4.28, -2.04) map=main:20261124-2 task=adhoc-0f8cef738bbb 定位=可信 质量=0.78
+2026-11-24T11:57:14.628+08:00 INFO nexwar_agent.runtime 位置 (-2.16, -5.89, -2.16) map=main:20261124-2 task=adhoc-0f8cef738bbb 定位=可信 质量=0.78
+2026-11-24T11:57:19.658+08:00 INFO nexwar_agent.runtime 位置 (-2.73, -7.22, -1.93) map=main:20261124-2 task=adhoc-0f8cef738bbb 定位=可信 质量=0.80
+2026-11-24T11:57:24.667+08:00 INFO nexwar_agent.runtime 位置 (-2.81, -7.21, -0.02) map=main:20261124-2 task=adhoc-0f8cef738bbb 定位=可信 质量=0.80
+2026-11-24T11:57:24.668+08:00 INFO nexwar_agent.engine.machine [task=adhoc-0f8cef738bbb pt=0 point=W1 map=main:20261124-2] 到了 用时 45.7 s(这一次 45.7 s)
+2026-11-24T11:57:25.316+08:00 INFO nexwar_agent.engine.machine [task=adhoc-0f8cef738bbb pt=1 point=W2 map=main:20261124-2] 去这个点 (-2.97, -21.41, -1.58) 第 1 次
+2026-11-24T11:57:25.505+08:00 INFO nexwar_agent.bridges.nav2_nav [task=adhoc-0f8cef738bbb pt=1 point=W2 map=main:20261124-2] goto:交给 Nav2(目标 489372141)→ (-2.97, -21.41)
+2026-11-24T11:57:27.685+08:00 INFO nexwar_agent.engine.machine [task=adhoc-0f8cef738bbb pt=1 point=W2 map=main:20261124-2] 状态 RUNNING → PAUSED 原因=定位丢失,暂停并尝试重置(第 1 次)
+2026-11-24T11:57:28.145+08:00 INFO nexwar_agent.bridge_localizer [task=adhoc-0f8cef738bbb pt=1 point=W2 map=main:20261124-2] 丢定位后的重置(?):定位器自己还在跟踪,先等 8 秒,回来了就不重定位
+2026-11-24T11:57:28.225+08:00 INFO nexwar_agent.engine.machine [task=adhoc-0f8cef738bbb pt=1 point=W2 map=main:20261124-2] 状态 PAUSED → RUNNING 原因=定位已恢复
+2026-11-24T11:57:28.365+08:00 INFO nexwar_agent.bridge_localizer [task=adhoc-0f8cef738bbb pt=1 point=W2 map=main:20261124-2] 丢定位后的重置:等了 0.2 秒定位回来了,不重定位
+2026-11-24T11:57:28.690+08:00 INFO nexwar_agent.engine.machine [task=adhoc-0f8cef738bbb pt=1 point=W2 map=main:20261124-2] 去这个点 (-2.97, -21.41, -1.58) 第 1 次
+2026-11-24T11:57:28.909+08:00 INFO nexwar_agent.bridges.nav2_nav [task=adhoc-0f8cef738bbb pt=1 point=W2 map=main:20261124-2] goto:交给 Nav2(目标 489372142)→ (-2.97, -21.41)
+2026-11-24T11:57:29.783+08:00 INFO nexwar_agent.runtime 位置 (-2.54, -7.40, -1.40) map=main:20261124-2 task=adhoc-0f8cef738bbb 定位=可信 质量=0.80
+2026-11-24T11:57:34.901+08:00 INFO nexwar_agent.runtime 位置 (-2.54, -11.46, -1.58) map=main:20261124-2 task=adhoc-0f8cef738bbb 定位=可信 质量=0.80
+2026-11-24T11:57:39.963+08:00 INFO nexwar_agent.runtime 位置 (-2.53, -15.30, -1.64) map=main:20261124-2 task=adhoc-0f8cef738bbb 定位=可信 质量=0.73
+2026-11-24T11:57:45.039+08:00 INFO nexwar_agent.runtime 位置 (-2.88, -18.87, -1.71) map=main:20261124-2 task=adhoc-0f8cef738bbb 定位=可信 质量=0.77
+2026-11-24T11:57:49.679+08:00 INFO nexwar_agent.engine.machine [task=adhoc-0f8cef738bbb pt=1 point=W2 map=main:20261124-2] 到了 用时 25.0 s(这一次 21.5 s)
+2026-11-24T11:57:50.051+08:00 INFO nexwar_agent.runtime 位置 (-2.98, -21.19, -1.63) map=main:20261124-2 task=adhoc-0f8cef738bbb 定位=可信 质量=0.80
+2026-11-24T11:57:50.259+08:00 INFO nexwar_agent.engine.machine [task=adhoc-0f8cef738bbb pt=2 point=W3 map=main:20261124-2] 去这个点 (0.06, -11.13, 1.28) 第 1 次
+2026-11-24T11:57:50.396+08:00 INFO nexwar_agent.bridges.nav2_nav [task=adhoc-0f8cef738bbb pt=2 point=W3 map=main:20261124-2] goto:交给 Nav2(目标 489372143)→ (0.06, -11.13)
+2026-11-24T11:57:55.195+08:00 INFO nexwar_agent.runtime 位置 (-2.60, -19.91, 1.24) map=main:20261124-2 task=adhoc-0f8cef738bbb 定位=可信 质量=0.80
+2026-11-24T11:58:00.311+08:00 INFO nexwar_agent.runtime 位置 (-0.74, -15.98, 1.11) map=main:20261124-2 task=adhoc-0f8cef738bbb 定位=可信 质量=0.80
+2026-11-24T11:58:05.358+08:00 INFO nexwar_agent.runtime 位置 (0.00, -12.37, 1.51) map=main:20261124-2 task=adhoc-0f8cef738bbb 定位=可信 质量=0.77
+2026-11-24T11:58:08.301+08:00 INFO nexwar_agent.engine.machine [task=adhoc-0f8cef738bbb pt=2 point=W3 map=main:20261124-2] 到了 用时 18.6 s(这一次 18.6 s)
+2026-11-24T11:58:08.871+08:00 INFO nexwar_agent.engine.machine [task=adhoc-0f8cef738bbb pt=3 point=W4 map=main:20261124-2] 去这个点 (1.40, -3.28, 1.40) 第 1 次
+2026-11-24T11:58:09.004+08:00 INFO nexwar_agent.bridges.nav2_nav [task=adhoc-0f8cef738bbb pt=3 point=W4 map=main:20261124-2] goto:交给 Nav2(目标 489372144)→ (1.40, -3.28)
+2026-11-24T11:58:10.384+08:00 INFO nexwar_agent.runtime 位置 (0.16, -10.78, 1.45) map=main:20261124-2 task=adhoc-0f8cef738bbb 定位=可信 质量=0.77
+2026-11-24T11:58:15.473+08:00 INFO nexwar_agent.runtime 位置 (0.29, -6.46, 1.13) map=main:20261124-2 task=adhoc-0f8cef738bbb 定位=可信 质量=0.73
+2026-11-24T11:58:20.558+08:00 INFO nexwar_agent.runtime 位置 (1.38, -3.39, 1.32) map=main:20261124-2 task=adhoc-0f8cef738bbb 定位=可信 质量=0.78
+2026-11-24T11:58:21.302+08:00 INFO nexwar_agent.engine.machine [task=adhoc-0f8cef738bbb pt=3 point=W4 map=main:20261124-2] 到了 用时 13.0 s(这一次 13.0 s)
+2026-11-24T11:58:21.808+08:00 INFO nexwar_agent.engine.machine [task=adhoc-0f8cef738bbb pt=4 point=W5 map=main:20261124-2] 去这个点 (8.79, -2.06, 0.16) 第 1 次
+2026-11-24T11:58:21.914+08:00 INFO nexwar_agent.bridges.nav2_nav [task=adhoc-0f8cef738bbb pt=4 point=W5 map=main:20261124-2] goto:交给 Nav2(目标 489372145)→ (8.79, -2.06)
+2026-11-24T11:58:25.564+08:00 INFO nexwar_agent.runtime 位置 (3.02, -1.99, 0.41) map=main:20261124-2 task=adhoc-0f8cef738bbb 定位=可信 质量=0.73
+2026-11-24T11:58:30.639+08:00 INFO nexwar_agent.runtime 位置 (6.68, -2.05, 0.01) map=main:20261124-2 task=adhoc-0f8cef738bbb 定位=可信 质量=0.73
+2026-11-24T11:58:34.191+08:00 INFO nexwar_agent.engine.machine [task=adhoc-0f8cef738bbb pt=4 point=W5 map=main:20261124-2] 到了 用时 12.9 s(这一次 12.9 s)
+2026-11-24T11:58:34.787+08:00 INFO nexwar_agent.engine.machine [task=adhoc-0f8cef738bbb pt=5 point=W6 map=main:20261124-2] 去这个点 (20.60, -0.66, 0.12) 第 1 次
+2026-11-24T11:58:34.972+08:00 INFO nexwar_agent.bridges.nav2_nav [task=adhoc-0f8cef738bbb pt=5 point=W6 map=main:20261124-2] goto:交给 Nav2(目标 489372146)→ (20.60, -0.66)
+2026-11-24T11:58:35.724+08:00 INFO nexwar_agent.runtime 位置 (8.69, -2.04, 0.02) map=main:20261124-2 task=adhoc-0f8cef738bbb 定位=可信 质量=0.80
+2026-11-24T11:58:40.867+08:00 INFO nexwar_agent.runtime 位置 (12.71, -1.33, 0.01) map=main:20261124-2 task=adhoc-0f8cef738bbb 定位=可信 质量=0.76
+2026-11-24T11:58:45.952+08:00 INFO nexwar_agent.runtime 位置 (16.84, -1.25, 0.04) map=main:20261124-2 task=adhoc-0f8cef738bbb 定位=可信 质量=0.73
+2026-11-24T11:58:51.061+08:00 INFO nexwar_agent.runtime 位置 (20.31, -0.68, 0.06) map=main:20261124-2 task=adhoc-0f8cef738bbb 定位=可信 质量=0.77
+2026-11-24T11:58:51.708+08:00 INFO nexwar_agent.engine.machine [task=adhoc-0f8cef738bbb pt=5 point=W6 map=main:20261124-2] 到了 用时 17.5 s(这一次 17.5 s)
+2026-11-24T11:58:52.301+08:00 INFO nexwar_agent.engine.machine [task=adhoc-0f8cef738bbb pt=6 point=W7 map=main:20261124-2] 去这个点 (29.95, 3.71, 0.44) 第 1 次
+2026-11-24T11:58:52.304+08:00 INFO nexwar_agent.bridges.nav2_nav [task=adhoc-0f8cef738bbb pt=6 point=W7 map=main:20261124-2] goto:终点 (29.95, 3.71) 贴着墙(膨胀圈里),改去最近能站的 (29.85, 3.81)
+2026-11-24T11:58:52.426+08:00 INFO nexwar_agent.bridges.nav2_nav [task=adhoc-0f8cef738bbb pt=6 point=W7 map=main:20261124-2] goto:交给 Nav2(目标 489372147)→ (29.85, 3.81)
+2026-11-24T11:58:56.101+08:00 INFO nexwar_agent.runtime 位置 (22.80, -0.46, 0.01) map=main:20261124-2 task=adhoc-0f8cef738bbb 定位=可信 质量=0.80
+2026-11-24T11:59:01.256+08:00 INFO nexwar_agent.runtime 位置 (26.75, 1.02, 0.57) map=main:20261124-2 task=adhoc-0f8cef738bbb 定位=可信 质量=0.80
+2026-11-24T11:59:06.282+08:00 INFO nexwar_agent.runtime 位置 (29.51, 3.53, 0.70) map=main:20261124-2 task=adhoc-0f8cef738bbb 定位=可信 质量=0.75
+2026-11-24T11:59:07.096+08:00 INFO nexwar_agent.engine.machine [task=adhoc-0f8cef738bbb pt=6 point=W7 map=main:20261124-2] 到了 用时 15.4 s(这一次 15.4 s)
+2026-11-24T11:59:07.602+08:00 INFO nexwar_agent.engine.machine [task=adhoc-0f8cef738bbb pt=7 point=W8 map=main:20261124-2] 去这个点 (29.74, 10.55, 1.60) 第 1 次
+2026-11-24T11:59:07.725+08:00 INFO nexwar_agent.bridges.nav2_nav [task=adhoc-0f8cef738bbb pt=7 point=W8 map=main:20261124-2] goto:交给 Nav2(目标 489372148)→ (29.74, 10.55)
+2026-11-24T11:59:11.376+08:00 INFO nexwar_agent.runtime 位置 (29.70, 5.71, 1.52) map=main:20261124-2 task=adhoc-0f8cef738bbb 定位=可信 质量=0.73
+2026-11-24T11:59:16.398+08:00 INFO nexwar_agent.runtime 位置 (29.69, 9.51, 1.54) map=main:20261124-2 task=adhoc-0f8cef738bbb 定位=可信 质量=0.77
+2026-11-24T11:59:18.125+08:00 INFO nexwar_agent.engine.machine [task=adhoc-0f8cef738bbb pt=7 point=W8 map=main:20261124-2] 到了 用时 11.0 s(这一次 11.0 s)
+2026-11-24T11:59:18.627+08:00 INFO nexwar_agent.engine.machine [task=adhoc-0f8cef738bbb pt=8 point=W9 map=main:20261124-2] 去这个点 (18.01, 1.74, -2.50) 第 1 次
+2026-11-24T11:59:19.412+08:00 INFO nexwar_agent.bridges.nav2_nav [task=adhoc-0f8cef738bbb pt=8 point=W9 map=main:20261124-2] goto:交给 Nav2(目标 489372149)→ (18.01, 1.74)
+2026-11-24T11:59:21.527+08:00 INFO nexwar_agent.runtime 位置 (29.70, 10.22, 2.19) map=main:20261124-2 task=adhoc-0f8cef738bbb 定位=可信 质量=0.80
+2026-11-24T11:59:26.531+08:00 INFO nexwar_agent.runtime 位置 (27.08, 8.52, -2.45) map=main:20261124-2 task=adhoc-0f8cef738bbb 定位=可信 质量=0.80
+2026-11-24T11:59:31.553+08:00 INFO nexwar_agent.runtime 位置 (24.13, 5.50, -2.41) map=main:20261124-2 task=adhoc-0f8cef738bbb 定位=可信 质量=0.73
+2026-11-24T11:59:36.679+08:00 INFO nexwar_agent.runtime 位置 (20.97, 3.17, -2.89) map=main:20261124-2 task=adhoc-0f8cef738bbb 定位=可信 质量=0.76
+2026-11-24T11:59:41.770+08:00 INFO nexwar_agent.runtime 位置 (18.16, 1.74, -2.48) map=main:20261124-2 task=adhoc-0f8cef738bbb 定位=可信 质量=0.78
+2026-11-24T11:59:42.269+08:00 INFO nexwar_agent.engine.machine [task=adhoc-0f8cef738bbb pt=8 point=W9 map=main:20261124-2] 到了 用时 24.1 s(这一次 24.1 s)
+2026-11-24T11:59:42.839+08:00 INFO nexwar_agent.engine.machine [task=adhoc-0f8cef738bbb pt=9 point=W10 map=main:20261124-2] 去这个点 (14.97, 6.26, 2.16) 第 1 次
+2026-11-24T11:59:42.935+08:00 INFO nexwar_agent.bridges.nav2_nav [task=adhoc-0f8cef738bbb pt=9 point=W10 map=main:20261124-2] goto:交给 Nav2(目标 489372150)→ (14.97, 6.26)
+2026-11-24T11:59:46.904+08:00 INFO nexwar_agent.runtime 位置 (17.09, 2.74, 2.10) map=main:20261124-2 task=adhoc-0f8cef738bbb 定位=可信 质量=0.74
+2026-11-24T11:59:51.916+08:00 INFO nexwar_agent.runtime 位置 (15.17, 5.70, 2.09) map=main:20261124-2 task=adhoc-0f8cef738bbb 定位=可信 质量=0.80
+2026-11-24T11:59:53.397+08:00 INFO nexwar_agent.engine.machine [task=adhoc-0f8cef738bbb pt=9 point=W10 map=main:20261124-2] 到了 用时 11.1 s(这一次 11.1 s)
+2026-11-24T11:59:53.980+08:00 INFO nexwar_agent.engine.machine [task=adhoc-0f8cef738bbb pt=10 point=W11 map=main:20261124-2] 去这个点 (5.29, 5.45, -3.06) 第 1 次
+2026-11-24T11:59:56.998+08:00 INFO nexwar_agent.runtime 位置 (14.96, 6.03, 2.06) map=main:20261124-2 task=adhoc-0f8cef738bbb 定位=可信 质量=0.80
+2026-11-24T11:59:59.637+08:00 INFO nexwar_agent.bridges.nav2_nav [task=adhoc-0f8cef738bbb pt=10 point=W11 map=main:20261124-2] goto:路线靠局部搜索放行(最窄处剩 0.12 m),照查过的这条走(279 个位姿)
+2026-11-24T11:59:59.638+08:00 INFO nexwar_agent.bridges.nav2_nav [task=adhoc-0f8cef738bbb pt=10 point=W11 map=main:20261124-2] goto:交给 Nav2(目标 489372151)→ (5.29, 5.45)
+2026-11-24T12:00:02.074+08:00 INFO nexwar_agent.runtime 位置 (14.41, 6.57, 2.26) map=main:20261124-2 task=adhoc-0f8cef738bbb 定位=可信 质量=0.76
+2026-11-24T12:00:07.200+08:00 INFO nexwar_agent.runtime 位置 (12.89, 6.79, -3.01) map=main:20261124-2 task=adhoc-0f8cef738bbb 定位=可信 质量=0.80
+2026-11-24T12:00:12.288+08:00 INFO nexwar_agent.runtime 位置 (11.10, 6.48, -2.96) map=main:20261124-2 task=adhoc-0f8cef738bbb 定位=可信 质量=0.77
+2026-11-24T12:00:17.356+08:00 INFO nexwar_agent.runtime 位置 (9.61, 6.17, -3.00) map=main:20261124-2 task=adhoc-0f8cef738bbb 定位=可信 质量=0.77
+2026-11-24T12:00:22.474+08:00 INFO nexwar_agent.runtime 位置 (8.54, 6.00, -3.06) map=main:20261124-2 task=adhoc-0f8cef738bbb 定位=可信 质量=0.80
+2026-11-24T12:00:31.485+08:00 INFO nexwar_agent.runtime 位置 (8.15, 5.92, -3.05) map=main:20261124-2 task=adhoc-0f8cef738bbb 定位=可信 质量=0.80
+2026-11-24T12:00:38.324+08:00 INFO nexwar_agent.runtime 位置 (8.16, 5.92, -3.05) map=main:20261124-2 task=adhoc-0f8cef738bbb 定位=可信 质量=0.80
+2026-11-24T12:00:43.401+08:00 INFO nexwar_agent.runtime 位置 (8.92, 6.01, -3.07) map=main:20261124-2 task=adhoc-0f8cef738bbb 定位=可信 质量=0.80
+2026-11-24T12:00:48.507+08:00 INFO nexwar_agent.runtime 位置 (9.54, 6.15, -2.96) map=main:20261124-2 task=adhoc-0f8cef738bbb 定位=可信 质量=0.80
+2026-11-24T12:00:53.512+08:00 INFO nexwar_agent.runtime 位置 (8.03, 5.91, -3.07) map=main:20261124-2 task=adhoc-0f8cef738bbb 定位=可信 质量=0.80
+2026-11-24T12:00:58.551+08:00 INFO nexwar_agent.runtime 位置 (6.57, 5.68, -2.93) map=main:20261124-2 task=adhoc-0f8cef738bbb 定位=可信 质量=0.78
+2026-11-24T12:01:02.963+08:00 INFO nexwar_agent.engine.machine [task=adhoc-0f8cef738bbb pt=10 point=W11 map=main:20261124-2] 到了 用时 69.6 s(这一次 69.6 s)
+2026-11-24T12:01:03.486+08:00 INFO nexwar_agent.engine.machine [task=adhoc-0f8cef738bbb pt=11 point=W12 map=main:20261124-2] 去这个点 (5.50, -0.25, -1.53) 第 1 次
+2026-11-24T12:01:03.592+08:00 INFO nexwar_agent.runtime 位置 (5.44, 5.48, -3.01) map=main:20261124-2 task=adhoc-0f8cef738bbb 定位=可信 质量=0.80
+2026-11-24T12:01:03.603+08:00 INFO nexwar_agent.bridges.nav2_nav [task=adhoc-0f8cef738bbb pt=11 point=W12 map=main:20261124-2] goto:交给 Nav2(目标 489372159)→ (5.50, -0.25)
+2026-11-24T12:01:08.665+08:00 INFO nexwar_agent.runtime 位置 (5.72, 3.92, -1.22) map=main:20261124-2 task=adhoc-0f8cef738bbb 定位=可信 质量=0.75
+2026-11-24T12:01:13.778+08:00 INFO nexwar_agent.runtime 位置 (5.66, 0.42, -1.77) map=main:20261124-2 task=adhoc-0f8cef738bbb 定位=可信 质量=0.77
+2026-11-24T12:01:17.022+08:00 INFO nexwar_agent.engine.machine [task=adhoc-0f8cef738bbb pt=11 point=W12 map=main:20261124-2] 到了 用时 14.1 s(这一次 14.1 s)
+2026-11-24T12:01:17.598+08:00 INFO nexwar_agent.engine.machine [task=adhoc-0f8cef738bbb pt=12 point=start map=main:20261124-2] 去这个点 (0.11, 0.05, 0.15) 第 1 次
+2026-11-24T12:01:17.679+08:00 INFO nexwar_agent.bridges.nav2_nav [task=adhoc-0f8cef738bbb pt=12 point=start map=main:20261124-2] goto:交给 Nav2(目标 489372160)→ (0.11, 0.05)
+2026-11-24T12:01:18.893+08:00 INFO nexwar_agent.runtime 位置 (5.55, -0.05, -2.11) map=main:20261124-2 task=adhoc-0f8cef738bbb 定位=可信 质量=0.79
+2026-11-24T12:01:23.913+08:00 INFO nexwar_agent.runtime 位置 (2.80, -0.32, 3.04) map=main:20261124-2 task=adhoc-0f8cef738bbb 定位=可信 质量=0.80
+2026-11-24T12:01:29.013+08:00 INFO nexwar_agent.runtime 位置 (0.35, -0.03, 3.02) map=main:20261124-2 task=adhoc-0f8cef738bbb 定位=可信 质量=0.80
+2026-11-24T12:01:34.116+08:00 INFO nexwar_agent.runtime 位置 (0.34, -0.03, 0.34) map=main:20261124-2 task=adhoc-0f8cef738bbb 定位=可信 质量=0.80
+2026-11-24T12:01:35.109+08:00 INFO nexwar_agent.engine.machine [task=adhoc-0f8cef738bbb pt=12 point=start map=main:20261124-2] 到了 用时 18.1 s(这一次 18.1 s)
+2026-11-24T12:01:35.109+08:00 INFO nexwar_agent.engine.machine [task=adhoc-0f8cef738bbb map=main:20261124-2] 状态 RUNNING → DONE
+2026-11-24T12:01:35.691+08:00 INFO nexwar_agent.commands 任务 adhoc-0f8cef738bbb(patrol)结束:task_done

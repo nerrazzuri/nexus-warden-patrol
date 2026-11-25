@@ -1,0 +1,62 @@
+bash: line 1: <口令>: command not found
+== 09:42:03 排自动恢复：4 分钟后停 wpa_supplicant、关 wlan0
+Running timer as unit: nexwar-sta-revert.timer
+Will run service as unit: nexwar-sta-revert.service
+Tue 2026-04-07 09:46:03 CST 3min 59s left n/a                         n/a                nexwar-sta-revert.timer        nexwar-sta-revert.service
+== 09:42:03 连 ZTE_C8DE4B（厂家 robot_sta.sh connect，不 enable、不 save）
+正在扫描SSID: ZTE_C8DE4B (接口: wlan0)...
+错误: 扫描失败，请检查接口 wlan0 是否正确
+未找到匹配的 ZTE_C8DE4B 可以连接
+== 09:42:18 状态
+wpa_state=DISCONNECTED
+wlan0            DOWN           
+192.168.144.0/24 dev eth0 proto kernel scope link src 192.168.144.144 metric 100 
+192.168.168.0/24 dev eth0 proto kernel scope link src 192.168.168.168 metric 100 
+192.168.234.0/24 dev p2p0 proto kernel scope link src 192.168.234.1 
+224.0.0.0/4 dev lo scope link 
+	Interface p2p0
+		ssid XG2WIFI_C40221
+		type AP
+		channel 149 (5745 MHz), width: 80 MHz, center1: 5775 MHz
+	Interface wlan0
+		type managed
+		channel 36 (5180 MHz), width: 20 MHz (no HT), center1: 5180 MHz
+ping: Warning: source address might be selected on device other than: wlan0
+3 packets transmitted, 0 received, 100% packet loss, time 2028ms
+
+== 09:42:37 wpa_supplicant: active
+-rw-r--r-- 1 root root 169 Apr  7 09:42 /userdata/config/sta.conf
+PONG
+OK
+bssid / frequency / signal level / flags / ssid
+5c:7d:ae:c8:de:4b	5745	-60	[WPA2-PSK-CCMP][ESS]	ZTE_C8DE4B
+== 09:42:43 再连
+正在扫描SSID: ZTE_C8DE4B (接口: wlan0)...
+解析结果:
+  BSSID: 5c:7d:ae:c8:de:4b
+  频段: 5745 MHz
+  信号强度: -60 dBm
+OK
+OK
+OK
+OK
+== 09:43:03 状态
+bssid=5c:7d:ae:c8:de:4b
+freq=5745
+ssid=ZTE_C8DE4B
+key_mgmt=WPA2-PSK
+wpa_state=COMPLETED
+ip_address=192.168.0.75
+wlan0            UP             192.168.0.75/24 metric 1024 2001:d08:1c02:6d11:160a:2ff:fef5:3501/64 fe80::160a:2ff:fef5:3501/64 
+default via 192.168.0.1 dev wlan0 proto dhcp src 192.168.0.75 metric 1024 
+192.168.0.0/24 dev wlan0 proto kernel scope link src 192.168.0.75 metric 1024 
+192.168.0.1 dev wlan0 proto dhcp scope link src 192.168.0.75 metric 1024 
+	Interface p2p0
+		ssid XG2WIFI_C40221
+		channel 149 (5745 MHz), width: 80 MHz, center1: 5775 MHz
+	Interface wlan0
+		ssid ZTE_C8DE4B
+		channel 149 (5745 MHz), width: 80 MHz, center1: 5775 MHz
+3 packets transmitted, 3 received, 0% packet loss, time 2001ms
+rtt min/avg/max/mdev = 20.820/33.986/40.830/9.312 ms
+Tue 2026-04-07 09:46:03 CST 2min 58s left n/a                         n/a                nexwar-sta-revert.timer        nexwar-sta-revert.service

@@ -1,0 +1,24 @@
+10:28:10
+NRestarts=0 User=robot ActiveState=active SubState=running ActiveEnterTimestamp=Thu 1970-01-01 08:00:37 CST 
+Sessions=22 Linger=yes 
+30
+Nov 23 10:28:07 orin-nx nexwar_nav2_start[1314]: [planner_server-2] [INFO] [1795400887.078195119] [global_costmap.global_costmap]: Timed out waiting for transform from base_link to map to become available, tf error: Invalid frame ID "map" passed to canTransform argument target_frame - frame does not exist
+Nov 23 10:28:07 orin-nx nexwar_nav2_start[1314]: [controller_server-1] [ERROR] [1795400887.335942127] [local_costmap.local_costmap]: StaticLayer: "map" passed to lookupTransform argument target_frame does not exist.
+Nov 23 10:28:07 orin-nx nexwar_nav2_start[1314]: [planner_server-2] [INFO] [1795400887.578197333] [global_costmap.global_costmap]: Timed out waiting for transform from base_link to map to become available, tf error: Invalid frame ID "map" passed to canTransform argument target_frame - frame does not exist
+Nov 23 10:28:07 orin-nx nexwar_nav2_start[1314]: [controller_server-1] [ERROR] [1795400887.854732842] [local_costmap.local_costmap]: StaticLayer: "map" passed to lookupTransform argument target_frame does not exist.
+Nov 23 10:28:08 orin-nx nexwar_nav2_start[1314]: [planner_server-2] [INFO] [1795400888.078193055] [global_costmap.global_costmap]: Timed out waiting for transform from base_link to map to become available, tf error: Invalid frame ID "map" passed to canTransform argument target_frame - frame does not exist
+Nov 23 10:28:08 orin-nx nexwar_nav2_start[1314]: [controller_server-1] [ERROR] [1795400888.364563654] [local_costmap.local_costmap]: StaticLayer: "map" passed to lookupTransform argument target_frame does not exist.
+Nov 23 10:28:08 orin-nx nexwar_nav2_start[1314]: [planner_server-2] [INFO] [1795400888.578197355] [global_costmap.global_costmap]: Timed out waiting for transform from base_link to map to become available, tf error: Invalid frame ID "map" passed to canTransform argument target_frame - frame does not exist
+Nov 23 10:28:08 orin-nx nexwar_nav2_start[1314]: [controller_server-1] [ERROR] [1795400888.891596287] [local_costmap.local_costmap]: StaticLayer: "map" passed to lookupTransform argument target_frame does not exist.
+Nov 23 10:28:09 orin-nx nexwar_nav2_start[1314]: [planner_server-2] [INFO] [1795400889.078200726] [global_costmap.global_costmap]: Timed out waiting for transform from base_link to map to become available, tf error: Invalid frame ID "map" passed to canTransform argument target_frame - frame does not exist
+Nov 23 10:28:09 orin-nx nexwar_nav2_start[1314]: [controller_server-1] [ERROR] [1795400889.429050457] [local_costmap.local_costmap]: StaticLayer: "map" passed to lookupTransform argument target_frame does not exist.
+Nov 23 10:28:09 orin-nx nexwar_nav2_start[1314]: [planner_server-2] [INFO] [1795400889.578156416] [global_costmap.global_costmap]: Timed out waiting for transform from base_link to map to become available, tf error: Invalid frame ID "map" passed to canTransform argument target_frame - frame does not exist
+Nov 23 10:28:09 orin-nx nexwar_nav2_start[1314]: [controller_server-1] [ERROR] [1795400889.936033318] [local_costmap.local_costmap]: StaticLayer: "map" passed to lookupTransform argument target_frame does not exist.
+Nov 23 10:28:10 orin-nx nexwar_nav2_start[1314]: [planner_server-2] [INFO] [1795400890.078202253] [global_costmap.global_costmap]: Timed out waiting for transform from base_link to map to become available, tf error: Invalid frame ID "map" passed to canTransform argument target_frame - frame does not exist
+Nov 23 10:28:10 orin-nx nexwar_nav2_start[1314]: [controller_server-1] [ERROR] [1795400890.452788226] [local_costmap.local_costmap]: StaticLayer: "map" passed to lookupTransform argument target_frame does not exist.
+Nov 23 10:28:10 orin-nx nexwar_nav2_start[1314]: [planner_server-2] [INFO] [1795400890.578179575] [global_costmap.global_costmap]: Timed out waiting for transform from base_link to map to become available, tf error: Invalid frame ID "map" passed to canTransform argument target_frame - frame does not exist
+---agent
+Nov 23 10:23:50 orin-nx nexwar_agent_start[1293]: 2026-11-23T10:23:50.101+08:00 WARNING nexwar_agent.bridges.nav2_nav 遮挡限速按现场设置:关(NEXWAR_NAV_OCC)
+Nov 23 10:23:52 orin-nx nexwar_agent_start[1293]: 2026-11-23T10:23:52.445+08:00 INFO nexwar_agent.navbridge Nav2 转接节点连上了:nexwar_nav2bridge 1
+Nov 23 10:24:31 orin-nx nexwar_agent_start[3721]: 2026-11-23T10:24:31.787+08:00 WARNING nexwar_agent.bridges.nav2_nav 遮挡限速按现场设置:关(NEXWAR_NAV_OCC)
+Nov 23 10:24:33 orin-nx nexwar_agent_start[3721]: 2026-11-23T10:24:33.528+08:00 INFO nexwar_agent.navbridge Nav2 转接节点连上了:nexwar_nav2bridge 1

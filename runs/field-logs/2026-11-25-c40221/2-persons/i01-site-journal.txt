@@ -1,0 +1,95 @@
+5T11:51:05.370+08:00 WARNING nexwar_site.alert_store 告警 产生 P1 code=0x0807 sense.person_left robot=C40221 key=C40221/person_left#1:人离开防区:patrol1 被跟的人离开了防区「patrol1」。机器人不再跟,回到防区里最后看见人的地方、朝
+5T11:52:02.897+08:00 INFO nexwar_site.api [req=2e454efc] 100.105.156.105 "POST /api/alerts/C40221%2Fperson_left%231/ack HTTP/1.1" 200 -
+5T11:52:03.879+08:00 INFO nexwar_site.api [req=37dd07ef] 100.105.156.105 "POST /api/alerts/C40221%2Fdog_sees_person%231/ack HTTP/1.1" 200 -
+5T11:52:39.495+08:00 INFO nexwar_site.api [req=591eacd3] 127.0.0.1 "POST /api/robots/C40221/deter HTTP/1.1" 200 -
+5T11:53:16.752+08:00 INFO nexwar_site.api [req=25826ffe] 100.105.156.105 "POST /api/robots/C40221/deter HTTP/1.1" 200 -
+5T11:53:18.769+08:00 INFO nexwar_site.api [req=9cf9eff2] 100.105.156.105 "POST /api/robots/C40221/deter HTTP/1.1" 200 -
+5T11:53:20.879+08:00 INFO nexwar_site.api [req=9a567a9a] 100.105.156.105 "POST /api/robots/C40221/deter HTTP/1.1" 200 -
+5T11:53:21.133+08:00 INFO nexwar_site.api [req=6661090f] 100.105.156.105 "POST /api/robots/C40221/deter HTTP/1.1" 200 -
+5T11:53:21.403+08:00 INFO nexwar_site.api [req=05ee33b1] 100.105.156.105 "POST /api/robots/C40221/deter HTTP/1.1" 200 -
+5T11:53:57.130+08:00 INFO nexwar_site.api [req=35e16e70] 100.105.156.105 "POST /api/robots/C40221/deter HTTP/1.1" 200 -
+5T11:53:57.352+08:00 INFO nexwar_site.api [req=e7f50b6e] 100.105.156.105 "POST /api/robots/C40221/deter HTTP/1.1" 200 -
+5T11:53:57.603+08:00 INFO nexwar_site.api [req=4c3c070f] 100.105.156.105 "POST /api/robots/C40221/deter HTTP/1.1" 200 -
+5T11:54:05.756+08:00 INFO nexwar_site.api [req=c7b116e5] 100.105.156.105 "POST /api/robots/C40221/deter HTTP/1.1" 200 -
+5T11:54:10.921+08:00 INFO nexwar_site.api [req=eae55169] 100.105.156.105 "POST /api/robots/C40221/home/return HTTP/1.1" 200 -
+5T11:54:25.761+08:00 WARNING nexwar_site.alert_store 告警 产生 P2 code=0x0601 loc.degraded robot=C40221 key=C40221/loc_degraded#6:定位变差或打滑:原地停下等恢复 任务 standby-home-4279fe4904db 正在运行,机器人报定位不行;30 秒内恢复就继
+5T11:54:26.115+08:00 INFO nexwar_site.alert_store 告警 C40221/loc_degraded#6 自动解除 code=0x0601 loc.degraded robot=C40221 by=site:loc_ok
+5T11:54:37.268+08:00 INFO nexwar_site.api [req=3bb14f2f] 100.105.156.105 "POST /api/robots/C40221/deter HTTP/1.1" 200 -
+5T11:54:37.567+08:00 INFO nexwar_site.api [req=69c99746] 100.105.156.105 "POST /api/robots/C40221/deter HTTP/1.1" 200 -
+5T11:54:37.959+08:00 INFO nexwar_site.api [req=145e523a] 100.105.156.105 "POST /api/robots/C40221/deter HTTP/1.1" 200 -
+5T11:55:18.105+08:00 INFO nexwar_site.api [req=c58384e7] 100.105.156.105 "POST /api/robots/C40221/deter HTTP/1.1" 200 -
+5T11:55:18.473+08:00 INFO nexwar_site.api [req=c127780d] 100.105.156.105 "POST /api/robots/C40221/deter HTTP/1.1" 200 -
+5T11:55:18.934+08:00 INFO nexwar_site.api [req=3225c111] 100.105.156.105 "POST /api/robots/C40221/deter HTTP/1.1" 200 -
+5T11:55:42.338+08:00 INFO nexwar_site.standby C40221 回待命点暂时派不了(C40221 正在遥控),2 s 后再试
+5T11:55:50.446+08:00 WARNING nexwar_site.video C40221 front 续期没成(画面还在来,马上再续): 等机器人的回执超时
+5T11:55:52.747+08:00 WARNING nexwar_site.teleop [req=b1d43346] 放租发不出去(C40221 代次 61),机器人那头租约到期自己停
+ (most recent call last):
+usr/lib/python3.10/asyncio/tasks.py", line 456, in wait_for
+n fut.result()
+xceptions.CancelledError
+ exception was the direct cause of the following exception:
+ (most recent call last):
+opt/nexwar_site/venv/lib/python3.10/site-packages/nexwar_contract/dispatch.py", line 109, in send
+n await asyncio.wait_for(fut, timeout=timeout_s)
+usr/lib/python3.10/asyncio/tasks.py", line 458, in wait_for
+ exceptions.TimeoutError() from exc
+xceptions.TimeoutError
+ exception was the direct cause of the following exception:
+ (most recent call last):
+opt/nexwar_site/venv/lib/python3.10/site-packages/nexwar_site/teleop.py", line 480, in close
+loop.call(lambda: self.dispatcher.teleop_lease(
+opt/nexwar_site/venv/lib/python3.10/site-packages/nexwar_site/loop.py", line 55, in call
+n fut.result(timeout_s)
+usr/lib/python3.10/concurrent/futures/_base.py", line 458, in result
+n self.__get_result()
+usr/lib/python3.10/concurrent/futures/_base.py", line 403, in __get_result
+ self._exception
+opt/nexwar_site/venv/lib/python3.10/site-packages/nexwar_site/loop.py", line 48, in _wrap
+n await factory()
+opt/nexwar_site/venv/lib/python3.10/site-packages/nexwar_site/dispatcher.py", line 991, in teleop_lease
+n await c.send(cmd, timeout_s=timeout_s)
+opt/nexwar_site/venv/lib/python3.10/site-packages/nexwar_contract/dispatch.py", line 111, in send
+ DispatchTimeout(
+ntract.dispatch.DispatchTimeout: teleop_lease cmd-ab983c7b110f 等回执超过 2s
+5T11:55:53.053+08:00 WARNING nexwar_site.video C40221 front 续期没成(画面还在来,马上再续): 等机器人的回执超时
+5T11:55:55.657+08:00 WARNING nexwar_site.video C40221 front 续期没成(画面还在来,马上再续): 等机器人的回执超时
+5T11:55:56.233+08:00 INFO nexwar_site.api [req=dbb7c87d] 100.105.156.105 "POST /api/robots/C40221/deter HTTP/1.1" 200 -
+5T11:55:56.748+08:00 INFO nexwar_site.api [req=e5292b52] 100.105.156.105 "POST /api/robots/C40221/deter HTTP/1.1" 200 -
+5T11:55:57.123+08:00 INFO nexwar_site.api [req=35ccb521] 100.105.156.105 "POST /api/robots/C40221/deter HTTP/1.1" 200 -
+5T11:55:57.366+08:00 WARNING nexwar_site.alert_store 告警 产生 P1 code=0x0215 dispatch.run_abort robot=C40221 key=C40221/run_abort#17:整趟中止了 lease_expired
+5T11:55:57.681+08:00 INFO nexwar_site.api [req=d4f47bc3] 100.105.156.105 "POST /api/robots/C40221/deter HTTP/1.1" 200 -
+5T11:55:57.727+08:00 INFO nexwar_site.api [req=46e93ad7] 100.105.156.105 "POST /api/robots/C40221/deter HTTP/1.1" 200 -
+5T11:55:57.918+08:00 INFO nexwar_site.api [req=0c20a5d4] 100.105.156.105 "POST /api/robots/C40221/deter HTTP/1.1" 200 -
+5T11:55:58.115+08:00 INFO nexwar_site.api [req=d3786da4] 100.105.156.105 "POST /api/robots/C40221/deter HTTP/1.1" 200 -
+5T11:55:58.361+08:00 INFO nexwar_site.api [req=e81779d5] 100.105.156.105 "POST /api/robots/C40221/deter HTTP/1.1" 200 -
+5T11:55:58.564+08:00 INFO nexwar_site.api [req=75ff7cd9] 100.105.156.105 "POST /api/robots/C40221/deter HTTP/1.1" 200 -
+5T11:56:00.847+08:00 INFO nexwar_site.api [req=a763cdb2] 100.105.156.105 "POST /api/robots/C40221/deter HTTP/1.1" 200 -
+5T11:56:01.637+08:00 INFO nexwar_site.api [req=f0625bd1] 100.105.156.105 "POST /api/robots/C40221/deter HTTP/1.1" 200 -
+5T11:56:02.470+08:00 INFO nexwar_site.api [req=7c68b30e] 100.105.156.105 "POST /api/robots/C40221/deter HTTP/1.1" 200 -
+5T11:56:42.754+08:00 INFO nexwar_site.api [req=4fbe643c] 100.105.156.105 "POST /api/robots/C40221/deter HTTP/1.1" 200 -
+5T11:56:43.132+08:00 INFO nexwar_site.api [req=7d9a3060] 100.105.156.105 "POST /api/robots/C40221/deter HTTP/1.1" 200 -
+5T11:56:43.943+08:00 INFO nexwar_site.api [req=bc585a89] 100.105.156.105 "POST /api/robots/C40221/deter HTTP/1.1" 200 -
+5T11:57:58.116+08:00 INFO nexwar_site.api [req=4d20b721] 100.105.156.105 "POST /api/robots/C40221/deter HTTP/1.1" 200 -
+5T11:58:01.478+08:00 WARNING nexwar_site.alert_store 告警 C40221/run_abort#17 没人确认,升级到 Channel.PUSH code=0x0215 dispatch.run_abort robot=C40221
+5T11:58:04.170+08:00 INFO nexwar_site.api [req=5c78c9fd] 100.105.156.105 "POST /api/robots/C40221/deter HTTP/1.1" 200 -
+5T11:58:05.321+08:00 INFO nexwar_site.api [req=b6e198e6] 100.105.156.105 "POST /api/robots/C40221/deter HTTP/1.1" 200 -
+5T11:58:05.509+08:00 INFO nexwar_site.api [req=58cac814] 100.105.156.105 "POST /api/robots/C40221/deter HTTP/1.1" 200 -
+5T11:58:06.089+08:00 INFO nexwar_site.api [req=449e94b6] 100.105.156.105 "POST /api/robots/C40221/deter HTTP/1.1" 200 -
+5T11:58:42.526+08:00 INFO nexwar_site.api [req=7b27bff1] 100.105.156.105 "POST /api/mode HTTP/1.1" 200 -
+5T11:58:55.919+08:00 INFO nexwar_site.api [req=a86b3e64] 100.105.156.105 "POST /api/robots/C40221/deter HTTP/1.1" 200 -
+5T11:58:56.973+08:00 INFO nexwar_site.api [req=6ece6e07] 100.105.156.105 "POST /api/robots/C40221/deter HTTP/1.1" 200 -
+5T11:58:58.246+08:00 INFO nexwar_site.api [req=f8b754b6] 100.105.156.105 "POST /api/robots/C40221/deter HTTP/1.1" 200 -
+5T12:00:26.655+08:00 WARNING nexwar_site.alert_store 告警 产生 P1 code=0x0806 sense.person_overdue robot=C40221 key=C40221/person_overdue#1:C40221 看见人 10 分钟没人到场 「机器人看见人了:2 个人,最近 2.4 m」开了 10 分钟,还没有保安点「
+5T12:00:26.660+08:00 WARNING nexwar_site.sightings C40221 看见人 10 分钟没人到场:报经理
+5T12:01:01.699+08:00 WARNING nexwar_site.alert_store 告警 C40221/run_abort#17 没人确认,升级到 Channel.SOUND code=0x0215 dispatch.run_abort robot=C40221
+5T12:02:10.342+08:00 WARNING nexwar_site.alert_store 告警 产生 P1 code=0x040E nav.nogo robot=C40221 key=C40221/nogo#5:机器人在禁行区「虚拟墙」里,原地停着等人 位置 (-0.53, 0.03),图 main:20261124-2;人到场把它挪出来(遥控),或者核对区
+5T12:02:17.933+08:00 INFO nexwar_site.alert_store 告警 C40221/nogo#5 自动解除 code=0x040E nav.nogo robot=C40221 by=site:left_nogo
+5T12:02:26.782+08:00 WARNING nexwar_site.alert_store 告警 C40221/person_overdue#1 没人确认,升级到 Channel.PUSH code=0x0806 sense.person_overdue robot=C40221
+5T12:02:29.319+08:00 WARNING nexwar_site.alert_store 告警 产生 P2 code=0x0515 robot.force_bump robot=C40221 key=C40221/force_bump#3:机器人受到撞击(3.1 g) 受力异常但未倒,任务照常执行;位置看告警现场,录像看此时刻前后(门槛未在真机
+5T12:02:36.895+08:00 WARNING nexwar_site.alert_store 告警 产生 P2 code=0x0603 loc.lost_idle robot=C40221 key=C40221/loc_lost_idle#11:机器人未找到自身位置:位置偏差过大,可能不在地图上 位置偏差过大:机器人可能不在地图上(或周围变
+5T12:02:41.814+08:00 WARNING nexwar_site.alert_store 告警 产生 P2 code=0x0220 dispatch.zone_unwatched robot=zone:patrol1 key=zone:patrol1/zone_unwatched#1:防区 patrol1 已 15 分钟没巡到 原因:C40221 在值守位上盯着别的防区;先看这个防区的摄
+5T12:02:51.820+08:00 INFO nexwar_site.sightings C40221 看不到人了:改成去向不明
+5T12:03:41.501+08:00 WARNING nexwar_site.video C40221 front 续期没成(画面还在来,马上再续): 等机器人的回执超时
+5T12:04:11.873+08:00 WARNING nexwar_site.alert_store 告警 C40221/nogo#5 没人确认,升级到 Channel.PUSH code=0x040E nav.nogo robot=C40221
+5T12:04:44.973+08:00 WARNING nexwar_site.video C40221 front 续期没成(画面还在来,马上再续): 等机器人的回执超时
+5T12:05:26.935+08:00 WARNING nexwar_site.alert_store 告警 C40221/person_overdue#1 没人确认,升级到 Channel.SOUND code=0x0806 sense.person_overdue robot=C40221

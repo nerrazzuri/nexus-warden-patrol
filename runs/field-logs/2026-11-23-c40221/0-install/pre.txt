@@ -1,0 +1,5 @@
+2026-11-23 10:15:07
+笔记本: wlp59s0=XG2WIFI_C40221 1 (192.168.234.232), wlx=Always Robots_2.4G 1 (上网, default)
+机器人原版本: 2026-11-20-a2fe1c5f; Orin df / : 231G 用 46G 剩 174G; pending.json 无; uptime 4 min
+/dev/nvme0n1p2  468G  315G  129G  72% /
+R300S 热点 26WG512014 看得到(信号 100)

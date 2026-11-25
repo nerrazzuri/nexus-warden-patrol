@@ -1,0 +1,4 @@
+== 12:20:00 收尾
+AdvertiseRoutes None
+100.67.176.60 dev tailscale0 scope link src 192.168.234.232 
+100.67.176.60 dev tailscale0 scope link 

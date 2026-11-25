@@ -1,0 +1,68 @@
+2026-11-23 10:34:18
+/uss_driver/uss_left/range [sensor_msgs/msg/Range]
+/uss_driver/uss_right/range [sensor_msgs/msg/Range]
+--- 总话题数 129
+### /uss_driver/uss_left/range
+header:
+  stamp:
+    sec: 1795401268
+    nanosec: 221779208
+  frame_id: uss_left_link
+radiation_type: 0
+field_of_view: 0.0
+min_range: 0.0
+max_range: 0.0
+range: 1.5820000171661377
+---
+## hz
+usage: ros2 [-h] [--use-python-default-buffering]
+            Call `ros2 <command> -h` for more detailed usage. ...
+ros2: error: unrecognized arguments: --no-daemon
+## info
+Publisher count: 1
+Node name: uss_driver
+Node namespace: /
+  Reliability: RELIABLE
+  Durability: VOLATILE
+Subscription count: 0
+### /uss_driver/uss_right/range
+header:
+  stamp:
+    sec: 1795401271
+    nanosec: 380041779
+  frame_id: uss_right_link
+radiation_type: 0
+field_of_view: 0.0
+min_range: 0.0
+max_range: 0.0
+range: 0.09300000220537186
+---
+## hz
+usage: ros2 [-h] [--use-python-default-buffering]
+            Call `ros2 <command> -h` for more detailed usage. ...
+ros2: error: unrecognized arguments: --no-daemon
+## info
+Publisher count: 1
+Node name: uss_driver
+Node namespace: /
+  Reliability: RELIABLE
+  Durability: VOLATILE
+Subscription count: 0
+## hz /uss_driver/uss_left/range
+	min: 0.035s max: 0.165s std dev: 0.03225s window: 95
+average rate: 10.004
+	min: 0.035s max: 0.165s std dev: 0.03231s window: 105
+## 10 s 读数 /uss_driver/uss_left/range
+1.581 1.581 1.584 1.581 1.579 1.583 1.583 1.581 1.581 1.582 1.584 1.581 1.581 1.581 1.582 1.584 1.582 1.584 1.581 1.581 1.584 1.581 1.581 1.581 1.581 1.584 1.582 1.584 1.584 1.581 1.581 1.584 1.582 1.584 1.582 1.582 1.582 1.579 1.582 1.582 1.581 1.582 1.581 1.584 1.584 1.584 1.584 1.581 1.581 1.581 1.584 1.581 1.581 1.581 1.584 1.581 1.579 1.582 1.581 1.584 1.581 1.581 1.584 1.582 1.582 1.582 1.582 1.579 1.582 1.581 1.581 1.581 1.581 1.581 1.581 1.582 1.582 1.581 1.581 1.581 1.582 1.581 1.581 1.581 1.581 1.581 1.581 1.581 1.581 0.000 
+## hz /uss_driver/uss_right/range
+average rate: 10.004
+	min: 0.090s max: 0.110s std dev: 0.00423s window: 98
+failed to initialize wait set: the given context is not valid, either rcl_init() was not called or rcl_shutdown() was called., at ./src/rcl/wait.c:130
+## 10 s 读数 /uss_driver/uss_right/range
+0.000 0.000 0.000 0.000 0.000 0.000 0.000 0.000 0.000 0.000 0.000 0.000 0.000 0.000 0.000 0.000 0.000 0.000 0.000 0.000 0.000 0.000 0.000 0.000 
+## tf_static 里的超声
+== 10:38:35 站起来以后（右 1.5 m 墙，左 ~2 m 桌椅）
+## 8 s left
+0.000 0.000 0.000 0.000 0.000 0.000 0.000 0.000 0.000 0.000 0.000 0.000 0.000 0.000 0.000 0.000 0.000 0.000 0.000 0.000 0.000 0.000 0.000 0.000 
+## 8 s right
+0.000 0.000 0.000 0.000 0.000 0.000 0.000 0.000 0.000 0.000 0.000 0.000 0.000 0.000 0.000 0.000 0.000 0.000 0.000 0.000 0.000 0.000 0.000 0.000 

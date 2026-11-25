@@ -1,0 +1,6 @@
+2026-11-23 07:45:46 adb install -r 33
+Performing Streamed Install
+Success
+rc=0
+    versionCode=33 minSdk=24 targetSdk=36
+    lastUpdateTime=2026-11-23 07:45:55

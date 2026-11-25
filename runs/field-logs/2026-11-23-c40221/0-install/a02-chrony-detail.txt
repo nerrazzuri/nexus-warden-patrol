@@ -1,0 +1,54 @@
+## chrony.conf（去注释）
+keyfile /etc/chrony/chrony.keys
+driftfile /var/lib/chrony/chrony.drift
+ntsdumpdir /var/lib/chrony
+logdir /var/log/chrony
+maxupdateskew 100.0
+rtcsync
+makestep 1 3
+leapsectz right/UTC
+refclock PPS /dev/pps0 prefer lock GPS refid PPS poll 2
+server 192.168.168.19 iburst minpoll 1 maxpoll 1
+## conf.d
+# /etc/chrony/conf.d/nexwar.conf
+server 192.168.234.232 iburst prefer trust
+makestep 1.0 3
+## journal chrony 本次开机
+Nov 23 10:24:03 orin-nx chronyd[1045]: Can't synchronise: no majority
+Nov 23 10:24:36 orin-nx chronyd[1045]: Selected source 192.168.168.19
+Nov 23 10:24:43 orin-nx chronyd[1045]: Can't synchronise: no majority
+Nov 23 10:25:16 orin-nx chronyd[1045]: Selected source 192.168.168.19
+Nov 23 10:25:23 orin-nx chronyd[1045]: Can't synchronise: no majority
+Nov 23 10:25:55 orin-nx chronyd[1045]: Selected source 192.168.168.19
+Nov 23 10:25:59 orin-nx chronyd[1045]: Can't synchronise: no majority
+Nov 23 10:26:31 orin-nx chronyd[1045]: Selected source 192.168.168.19
+Nov 23 10:26:35 orin-nx chronyd[1045]: Can't synchronise: no majority
+Nov 23 10:27:18 orin-nx chronyd[1045]: Selected source 192.168.168.19
+Nov 23 10:27:23 orin-nx chronyd[1045]: Can't synchronise: no majority
+Nov 23 10:27:56 orin-nx chronyd[1045]: Selected source 192.168.168.19
+Nov 23 10:28:03 orin-nx chronyd[1045]: Can't synchronise: no majority
+Nov 23 10:28:37 orin-nx chronyd[1045]: Selected source 192.168.168.19
+Nov 23 10:28:43 orin-nx chronyd[1045]: Can't synchronise: no majority
+Nov 23 10:30:08 orin-nx chronyd[1045]: Selected source 192.168.168.19
+Nov 23 10:30:11 orin-nx chronyd[1045]: Can't synchronise: no majority
+Nov 23 10:30:44 orin-nx chronyd[1045]: Selected source 192.168.168.19
+Nov 23 10:30:47 orin-nx chronyd[1045]: Can't synchronise: no majority
+Nov 23 10:31:20 orin-nx chronyd[1045]: Selected source 192.168.168.19
+Nov 23 10:31:27 orin-nx chronyd[1045]: Can't synchronise: no majority
+Nov 23 10:31:33 orin-nx chronyd[1045]: Selected source 192.168.234.232
+Nov 23 10:31:39 orin-nx chronyd[1045]: Selected source PPS
+Nov 23 10:32:37 orin-nx chronyd[1045]: Can't synchronise: no majority
+Nov 23 10:32:38 orin-nx chronyd[1045]: Selected source 192.168.234.232
+## sources -v
+MS Name/IP address         Stratum Poll Reach LastRx Last sample               
+===============================================================================
+#x PPS                           0   2   377     5   -265ms[ -265ms] +/- 2964ns
+^? 192.168.168.19                3   1   377     0    +12ms[  +12ms] +/-  212ms
+^* 192.168.234.232               4   6   377    81  -1345us[-1383us] +/- 7711us
+Name/IP Address            NP  NR  Span  Frequency  Freq Skew  Offset  Std Dev
+==============================================================================
+PPS                        63  29   248     -3.413      0.014   -265ms  1714ns
+192.168.168.19             17  10    32     -6.919      0.937    +12ms  9894ns
+192.168.234.232            14   7   32m     +0.193      1.262    +16us   484us
+## 路由加上的时间
+Nov 23 10:24:45 orin-nx python3[983]: 开机准备 routes:{"applied": ["192.168.234.0/24 via 192.168.168.168"], "failed": []}

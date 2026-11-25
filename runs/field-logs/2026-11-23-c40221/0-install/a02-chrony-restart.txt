@@ -1,0 +1,58 @@
+重启 chrony 11:03:06
++0s #? PPS 0;^? 192.168.168.19 0;
++2s #? PPS 0;^* 192.168.168.19 17;
++4s #? PPS 0;^* 192.168.168.19 37;
++6s #? PPS 0;^* 192.168.168.19 77;
++8s #? PPS 1;^* 192.168.168.19 177;
++10s #? PPS 1;^* 192.168.168.19 377;
++12s #? PPS 3;^* 192.168.168.19 377;
++16s #x PPS 7;^x 192.168.168.19 377;
++20s #x PPS 16;^x 192.168.168.19 377;
++24s #x PPS 34;^x 192.168.168.19 377;
++28s #x PPS 70;^x 192.168.168.19 377;
++32s #x PPS 160;^x 192.168.168.19 377;
++36s #x PPS 340;^x 192.168.168.19 377;
++40s #x PPS 300;^x 192.168.168.19 377;
++45s #x PPS 200;^x 192.168.168.19 377;
++49s #x PPS 0;^x 192.168.168.19 377;
++63s #? PPS 0;^* 192.168.168.19 377;
++69s #x PPS 1;^x 192.168.168.19 377;
++73s #x PPS 2;^x 192.168.168.19 377;
++77s #x PPS 4;^x 192.168.168.19 377;
++81s #x PPS 10;^x 192.168.168.19 377;
++85s #x PPS 20;^x 192.168.168.19 377;
++89s #x PPS 40;^x 192.168.168.19 377;
++93s #x PPS 100;^x 192.168.168.19 377;
++97s #x PPS 200;^x 192.168.168.19 377;
++101s #x PPS 0;^x 192.168.168.19 377;
++103s #? PPS 0;^* 192.168.168.19 377;
++109s #x PPS 1;^x 192.168.168.19 377;
++113s #x PPS 2;^x 192.168.168.19 377;
++117s #x PPS 4;^x 192.168.168.19 377;
++121s #x PPS 10;^x 192.168.168.19 377;
++125s #x PPS 20;^x 192.168.168.19 377;
++129s #x PPS 40;^x 192.168.168.19 377;
++133s #x PPS 100;^x 192.168.168.19 377;
++137s #x PPS 200;^x 192.168.168.19 377;
++141s #x PPS 0;^x 192.168.168.19 377;
+Reference ID    : 00000000 ()
+System time     : 0.000000000 seconds slow of NTP time
+Leap status     : Not synchronised
+Nov 23 11:03:06 orin-nx systemd[1]: Started chrony, an NTP client/server.
+Nov 23 11:03:07 orin-nx chronyd[13234]: Selected source 192.168.168.19
+Nov 23 11:03:07 orin-nx chronyd[13234]: System clock TAI offset set to 37 seconds
+Nov 23 11:03:21 orin-nx chronyd[13234]: Can't synchronise: no majority
+Nov 23 11:04:07 orin-nx chronyd[13234]: Selected source 192.168.168.19
+Nov 23 11:04:13 orin-nx chronyd[13234]: Can't synchronise: no majority
+Nov 23 11:04:47 orin-nx chronyd[13234]: Selected source 192.168.168.19
+Nov 23 11:04:53 orin-nx chronyd[13234]: Can't synchronise: no majority
+== 补回笔记本源（照 nexwar_boot：chronyc add server 192.168.234.232 iburst prefer trust）11:06:32
+200 OK
++0s #x PPS 2;^x 192.168.168.19 377;^? 192.168.234.232 0;
++2s #x PPS 4;^x 192.168.168.19 377;^? 192.168.234.232 1;
++4s #x PPS 4;^x 192.168.168.19 377;^? 192.168.234.232 3;
++6s #x PPS 10;^? 192.168.168.19 377;^* 192.168.234.232 7;
+选上笔记本 +6s 11:06:38
+Reference ID    : C0A8EAE8 (192.168.234.232)
+System time     : 0.000005514 seconds fast of NTP time
+Leap status     : Normal

@@ -1,0 +1,152 @@
+2026-11-23 10:27:06
+RK3588 192.168.234.1 只读检查（用户同意 sudo 只读）
+
+### hostname; uname -a; cat /etc/os-release | head -3; date
+robot
+Linux robot 5.10.160-rt78-preempt #14 SMP PREEMPT_RT Wed May 20 22:00:25 CST 2026 aarch64 aarch64 aarch64 GNU/Linux
+PRETTY_NAME="Ubuntu 22.04.5 LTS"
+NAME="Ubuntu"
+VERSION_ID="22.04"
+Tue Apr  7 08:11:03 AM CST 2026
+
+### iw dev
+phy#0
+	Interface p2p0
+		ifindex 9
+		wdev 0x2
+		addr 16:0a:02:f5:35:01
+		ssid XG2WIFI_C40221
+		type AP
+		channel 149 (5745 MHz), width: 80 MHz, center1: 5775 MHz
+		txpower 12.00 dBm
+	Interface wlan0
+		ifindex 8
+		wdev 0x1
+		addr 14:0a:02:f5:35:01
+		type managed
+		channel 36 (5180 MHz), width: 20 MHz (no HT), center1: 5180 MHz
+		txpower 12.00 dBm
+
+### iw list | grep -A8 "valid interface combinations"
+	valid interface combinations:
+		 * #{ managed, P2P-client } <= 2, #{ AP, P2P-GO } <= 1,
+		   total <= 2, #channels <= 1
+	Device supports SAE with AUTHENTICATE command
+	Device supports scan flush.
+	Device supports randomizing MAC-addr in scans.
+	max # scan plans: 1
+	max scan plan interval: -1
+	max scan plan iterations: 0
+
+### ip -br addr; ip route
+lo               UNKNOWN        127.0.0.1/8 ::1/128 
+dummy0           DOWN           
+eth0             UP             192.168.168.168/24 192.168.144.144/24 fe80::8658:eda1:65b5:27f9/64 
+can0             UP             
+can3             UP             
+can2             UP             
+can1             UP             
+wlan0            DOWN           
+p2p0             UP             192.168.234.1/24 fe80::140a:2ff:fef5:3501/64 
+192.168.144.0/24 dev eth0 proto kernel scope link src 192.168.144.144 metric 100 
+192.168.168.0/24 dev eth0 proto kernel scope link src 192.168.168.168 metric 100 
+192.168.234.0/24 dev p2p0 proto kernel scope link src 192.168.234.1 
+224.0.0.0/4 dev lo scope link 
+
+### lsusb; ls /dev/ttyUSB* /dev/cdc-wdm* 2>/dev/null; mmcli -L 2>/dev/null
+Bus 004 Device 001: ID 1d6b:0003 Linux Foundation 3.0 root hub
+Bus 003 Device 001: ID 1d6b:0002 Linux Foundation 2.0 root hub
+Bus 006 Device 001: ID 1d6b:0001 Linux Foundation 1.1 root hub
+Bus 002 Device 001: ID 1d6b:0002 Linux Foundation 2.0 root hub
+Bus 005 Device 001: ID 1d6b:0001 Linux Foundation 1.1 root hub
+Bus 001 Device 003: ID 1a86:55d9 QinHeng Electronics USB2.0 To Multi Serial Ports
+Bus 001 Device 004: ID 0bda:b85b Realtek Semiconductor Corp. Bluetooth Radio
+Bus 001 Device 002: ID 1a86:809e QinHeng Electronics USB2.0 HUB
+Bus 001 Device 001: ID 1d6b:0002 Linux Foundation 2.0 root hub
+
+### cat /proc/sys/net/ipv4/ip_forward
+1
+
+### sudo iptables -t nat -S | head -30
+-P PREROUTING ACCEPT
+-P INPUT ACCEPT
+-P OUTPUT ACCEPT
+-P POSTROUTING ACCEPT
+-A POSTROUTING -j MASQUERADE
+
+### ps -ef | grep -E "hostapd|wpa_supplicant|dnsmasq|NetworkManager|udhcpd|create_ap" | grep -v grep
+root         783       1  0 08:07 ?        00:00:00 /usr/sbin/NetworkManager --no-daemon
+root        1212       1  0 08:07 ?        00:00:00 /usr/sbin/hostapd /tmp/hostapd.conf
+
+### systemctl list-units --type=service --no-pager | grep -i -E "hostapd|wifi|wlan|ap|network"
+  console-setup.service                         loaded active exited  Set console font and keymap
+  hostapd.service                               loaded active running Hostapd IEEE 802.11 AP, IEEE 802.1X/WPA/WPA2/EAP/RADIUS Authenticator
+  NetworkManager.service                        loaded active running Network Manager
+  systemd-network-generator.service             loaded active exited  Generate network units from Kernel command line
+  systemd-networkd.service                      loaded active running Network Configuration
+  systemd-resolved.service                      loaded active running Network Name Resolution
+  systemd-sysctl.service                        loaded active exited  Apply Kernel Variables
+  wifi-wdg.service                              loaded active running Keep WIFI AP alive
+
+### nmcli dev
+DEVICE  TYPE      STATE      CONNECTION 
+eth0    ethernet  connected  eth0       
+can0    can       unmanaged  --         
+can1    can       unmanaged  --         
+can2    can       unmanaged  --         
+can3    can       unmanaged  --         
+dummy0  dummy     unmanaged  --         
+lo      loopback  unmanaged  --         
+p2p0    wifi      unmanaged  --         
+wlan0   wifi      unmanaged  --         
+
+### findmnt /tmp
+
+### sudo ls -la /etc/NetworkManager/system-connections /etc/wpa_supplicant /etc/hostapd /etc/netplan /etc/systemd/network
+/etc/hostapd:
+total 20
+drwxr-xr-x 2 root root 4096 Oct 15 12:19 .
+drwxr-xr-x 1 root root 4096 May 20  2026 ..
+-rwxr--r-- 1 root root  396 Feb 18  2025 hostapd.conf
+-rwxr-xr-x 1 root root 3129 Apr  4  2022 ifupdown.sh
+
+/etc/netplan:
+total 12
+drwxr-xr-x 2 root root 4096 Apr  3  2025 .
+drwxr-xr-x 1 root root 4096 May 20  2026 ..
+
+/etc/NetworkManager/system-connections:
+total 12
+drwxr-xr-x 2 root root 4096 Dec 11 05:54 .
+drwxr-xr-x 7 root root 4096 Sep 10  2024 ..
+-rw------- 1 root root  292 Oct 16 03:57 Wired connection 1.nmconnection
+
+/etc/systemd/network:
+total 20
+drwxr-xr-x 2 root root 4096 Oct 15 13:41 .
+drwxr-xr-x 1 root root 4096 Oct 24 13:35 ..
+-rw-rw-r-- 1 root root  143 Oct 15 13:10 20-p2p0.network
+-rw-rw-r-- 1 root root   39 Oct 15 13:41 25-wlan0.network
+
+/etc/wpa_supplicant:
+total 52
+drwxr-xr-x 2 root root  4096 Oct 15 12:19 .
+drwxr-xr-x 1 root root  4096 May 20  2026 ..
+-rwxr-xr-x 1 root root   937 Apr  4  2022 action_wpa.sh
+-rw-r--r-- 1 root root 25569 Apr  4  2022 functions.sh
+-rwxr-xr-x 1 root root  4696 Apr  4  2022 ifupdown.sh
+
+### systemctl is-enabled NetworkManager wpa_supplicant hostapd dnsmasq
+Failed to get unit file state for dnsmasq.service: No such file or directory
+enabled
+disabled
+disabled
+
+### sudo grep -r -l -I -i -E "XG2WIFI|ssid=" /etc /ota /opt 2>/dev/null | head -30
+/etc/wpa_supplicant/functions.sh
+/etc/network/if-pre-up.d/wireless-tools
+/etc/hostapd/hostapd.conf
+/opt/runtime/bin/robot_sta.sh
+/opt/runtime/bin/robot_wifi_init.sh
+/opt/runtime/bin/robot_ap.sh
+rc=0

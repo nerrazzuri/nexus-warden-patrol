@@ -1,0 +1,8 @@
+2026-11-23 10:33:44
+30
+529a0e9a4bebe1c3ac22069b8431f3dd  -
+MainPID=1314 NRestarts=0  MainPID=3721 NRestarts=1 
+---nav2
+---bridge
+Nov 23 10:31:52 orin-nx nexwar_nav2_start[1314]: [python3-6] 2026-11-23 10:31:52,504 nexwar.nav2bridge 就绪:False 等定位(还没定位好,Nav2 等地图系的坐标才能起来)(已等 8 分钟,一直这样请看定位:机器人加载的图是不是这个地方的、定位好了没有)
+Nov 23 10:32:51 orin-nx nexwar_nav2_start[1314]: [python3-6] 2026-11-23 10:32:51,789 nexwar.nav2bridge 就绪:False 等定位(还没定位好,Nav2 等地图系的坐标才能起来)(已等 9 分钟,一直这样请看定位:机器人加载的图是不是这个地方的、定位好了没有)

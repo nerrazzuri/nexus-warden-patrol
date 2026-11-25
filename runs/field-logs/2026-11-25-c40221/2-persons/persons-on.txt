@@ -1,0 +1,8 @@
+2026-11-25 11:49 人员检测打开（用户终端跑 sudo）：/etc/nexwar/env 第 51 行去注释 → NEXWAR_PERSONS=bridge（备份 env.bak-20261125-persons-on），
+systemctl enable --now nexwar_persons，restart nexwar_agent。
+11:49:39 检测器 CUDAExecutionProvider，模型 yolox，输入 640，分数线 0.70
+11:49:39 人脸补拍不开：没有人脸模型文件 /etc/nexwar/face.onnx   ← I07 要先放 YuNet 模型
+11:49:39 订 /front_camera/image_compressed、/rear_camera/image_compressed + /front_lidar
+11:49:41 连上代理的人员桥；代理 NRestarts 0
+12:10 人员检测关回（用户 11-25「先把人员检测关闭，开机也先不打开」）：env 第 51 行注释回去，disable --now nexwar_persons，restart agent。12:11:07 代理起来 NRestarts 0，不带 --persons；persons disabled/inactive。
+I01 前相机：11:50:25 P1 发出；手机推送用户没注意，没记到（站点没报推送失败，但成功也不记日志）→ I01 不勾，下次补测前后两次并盯手机。

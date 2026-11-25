@@ -1,0 +1,7 @@
+2026-11-25 10:50 C27 link_4g.sh up --ssid ZTE_C8DE4B（用户终端跑；down 跳过：用户「不用down，直接tailscale测试」，env 本来就还是 A）
+机器人开机前在 34（2026-11-23-7143b8ae），重启过：默认路由已回 B，RK3588 没连 ZTE；代理 NRestarts=218（another master exists，遥控器开着）
+① RK3588 一次连上：wpa_state=COMPLETED ip 192.168.0.75（p2p0、wlan0 同在 ch36）
+② Orin 默认路由 → 192.168.168.168；tailscale ping 前两次超时、第三次 9ms（via 192.168.168.168:41641）
+③ env：NEXWAR_SITE_MQTT=mqtts://100.69.130.19:8883 / NEXWAR_SITE_NTP=100.69.130.19
+④ site.json video.srt_host=100.69.130.19
+之后（约 10:52 只读）：代理 active NRestarts=0（10:51:25 起）；chronyc ^* 100.69.130.19 +1.7ms ±9ms；发件箱在清旧的趟

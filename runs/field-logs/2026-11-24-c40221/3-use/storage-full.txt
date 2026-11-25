@@ -1,0 +1,15 @@
+== 2026-11-24 11:56:05 挪包前（用户同意挪出发件箱）
+/dev/nvme0n1p1  231G   67G  153G  31% /
+21G	/var/lib/nexwar/outbox
+{"key": "map-20261124-2-20261124T031014Z/map-20261124-2-20261124T031014Z_0.mcap", "priority": 5, "offset": 1270874112, "size": 2149425571, "attempts": 0, "next_ms": 0, "done": false, "mtime_ns": 1795489863708671805, "refused": false}
+{"key": "map-20261124-2-20261124T031014Z/map-20261124-2-20261124T031014Z_0.mcap", "priority": 5, "offset": 1271922688, "size": 2149425571, "attempts": 0, "next_ms": 0, "done": false, "mtime_ns": 1795489863708671805, "refused": false}
+total 12
+drwxrwxr-x  3 robot robot 4096 Nov 24 11:56 .
+drwxr-xr-x 54 robot robot 4096 Nov 24 11:56 ..
+drwxr-xr-x  2 robot robot 4096 Nov 24 11:18 map-20261124-2-20261124T031014Z
+21G	/home/robot/bags-hold/map-20261124-2-20261124T031014Z
+8.3M	/var/lib/nexwar/outbox
+11:56:16
+{"key": "map-20261124-2-20261124T031014Z/map-20261124-2-20261124T031014Z_9.mcap", "priority": 5, "offset": 2151708006, "size": 2151708006, "attempts": 0, "next_ms": 0, "done": true, "mtime_ns": 179549
+{"key": "map-20261124-2-20261124T031014Z/metadata.yaml", "priority": 5, "offset": 7355, "size": 7355, "attempts": 0, "next_ms": 0, "done": true, "mtime_ns": 1795490309343611571, "refused": false}
+NRestarts=0

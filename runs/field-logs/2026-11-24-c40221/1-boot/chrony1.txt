@@ -1,0 +1,27 @@
+
+  .-- Source mode  '^' = server, '=' = peer, '#' = local clock.
+ / .- Source state '*' = current best, '+' = combined, '-' = not combined,
+| /             'x' = may be in error, '~' = too variable, '?' = unusable.
+||                                                 .- xxxx [ yyyy ] +/- zzzz
+||      Reachability register (octal) -.           |  xxxx = adjusted offset,
+||      Log2(Polling interval) --.      |          |  yyyy = measured offset,
+||                                \     |          |  zzzz = estimated error.
+||                                 |    |           \
+MS Name/IP address         Stratum Poll Reach LastRx Last sample               
+===============================================================================
+#x PPS                           0   2   377     5   -220ms[ -220ms] +/- 5781ns
+^? 192.168.168.19                3   1   377     2    +30ms[  +30ms] +/-  243ms
+^* 192.168.234.232               3   6    37    29  -3362ns[ +220ms] +/-   26ms
+Reference ID    : C0A8EAE8 (192.168.234.232)
+Stratum         : 4
+Ref time (UTC)  : Tue Nov 24 02:32:47 2026
+System time     : 0.000000001 seconds fast of NTP time
+Last offset     : +0.219709143 seconds
+RMS offset      : 0.082972191 seconds
+Frequency       : 34.862 ppm slow
+Residual freq   : +21.012 ppm
+Skew            : 3.726 ppm
+Root delay      : 0.036725122 seconds
+Root dispersion : 0.008705215 seconds
+Update interval : 2.2 seconds
+Leap status     : Normal

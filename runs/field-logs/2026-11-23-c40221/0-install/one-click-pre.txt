@@ -1,0 +1,9 @@
+ls: cannot access '/etc/nexwar/chrony.conf.orig': No such file or directory
+ls: cannot access '/opt/nexwar/pending.json': No such file or directory
+Linger=no
+ls: cannot access '/etc/systemd/logind.conf.d/': No such file or directory
+2219edae769d464d1a1d8b9028cf434275e1330e3ca7ecf5081cc389b50b4e30  /etc/chrony/chrony.conf
+sha256sum: /etc/nexwar/env: Permission denied
+README
+/usr/local/lib/nexwar/ops-runner /opt/nexwar/releases/2026-11-22-a9b33a7c/deploy/nexwar_ops_runner differ: byte 4583, line 83
+ops-runner不同
