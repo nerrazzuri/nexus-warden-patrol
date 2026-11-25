@@ -11,7 +11,10 @@ import { LayoutPage } from "./layoutpage";
 import { GuardRoutesTab } from "./layoutroutes";
 import { ZonesTab } from "./layoutzones";
 import { addBlock, toWire, type Slot, type WireSlot } from "./armgrid";
-import type { PreviewMeta } from "./mapview";
+import { toPx, type PreviewMeta, type Pt } from "./mapview";
+import { MapCanvas, type CanvasArea } from "./mapcanvas";
+import type { Route } from "./routes";
+import "./routes.css";
 import type { GuardEntry, Plan, Status } from "./armguard";
 import { previewChanges } from "./armingpage";
 
@@ -309,6 +312,37 @@ export function dailySlots(from: number, to: number): WireSlot[] {
 const minutes = (hm: string) => { const [h, m] = hm.split(":").map(Number); return (h || 0) * 60 + (m || 0); };
 
 /** 整张图的外框(地图坐标,米)。 */
+/** 用户 11-25:向导「巡逻路线」这一步的地图 —— 选的防区(实框)、别的防区(淡)、选中的路线(线 + 起点)。 */
+export function RoutePreview({ base, label, zones, route }: { base: string; label: string; zones: string[]; route: string }) {
+  const [meta, setMeta] = useState<PreviewMeta | null>(null);
+  const [areas, setAreas] = useState<{ zone: string; points: Pt[] }[]>([]);
+  const [line, setLine] = useState<Route | null>(null);
+  useEffect(() => {
+    let live = true;
+    api<PreviewMeta>("GET", `${base}/preview`).then((m) => live && setMeta(m)).catch(() => live && setMeta(null));
+    api<{ areas: { zone: string; points: Pt[] }[] }>("GET", `${base}/areas`).then((d) => live && setAreas(d.areas ?? [])).catch(() => {});
+    return () => { live = false; };
+  }, [base]);
+  useEffect(() => {
+    let live = true;
+    setLine(null);
+    if (route) api<Route>("GET", `/api/routes/${encodeURIComponent(route)}`).then((x) => live && setLine(x)).catch(() => {});
+    return () => { live = false; };
+  }, [route]);
+  if (!meta) return null;
+  const shapes: CanvasArea[] = areas.map((a) => ({ name: a.zone, pts: a.points, kind: zones.includes(a.zone) ? "zone" : "ref" }));
+  const pts = (line?.waypoints ?? []).map((p) => toPx(meta, p.x, p.y));
+  return (
+    <div class="wiz-route-map" data-wiz-route-map={route || "none"}>
+      <MapCanvas meta={meta} raster={`${base}/preview.png`} label={label} areas={shapes}
+        world={pts.length > 0 && <>
+          {pts.length > 1 && <polyline points={pts.map((q) => `${q.px},${q.py}`).join(" ")} class="route-line" data-route={route} />}
+          <circle cx={pts[0].px} cy={pts[0].py} r={4} class="route-start" />
+        </>} />
+    </div>
+  );
+}
+
 export function wholeMap(meta: PreviewMeta): [number, number][] {
   const x0 = meta.left_x, y1 = meta.top_y;
   const x1 = x0 + meta.width * meta.m_per_px, y0 = y1 - meta.height * meta.m_per_px;
@@ -605,6 +639,8 @@ export function ArmWizard({ say, onClose, arming = false, onChanged }: { say: Sa
               {editor === "guard" ? wt("hideEditor") : wt("routeEdit")}</button>
           </div>
           {note && <p class="bad small" role="status">{note}</p>}
+          {/* 用户 11-25:自动生成的路线地图上看不到 —— 这一步直接画选的防区和选中的路线 */}
+          {map && editor !== "guard" && <RoutePreview base={base} label={wt("s2")} zones={picked} route={route} />}
         </section>
       )}
       {r && sched && step === 2 && (
