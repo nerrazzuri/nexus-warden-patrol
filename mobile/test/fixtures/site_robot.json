@@ -48,9 +48,9 @@
       },
       "patrol": {
         "autonomy": "autonomous",
+        "loops_forever": true,
         "map_id": "estate-1",
-        "map_version": "7",
-        "loops_forever": true
+        "map_version": "7"
       },
       "posture": {
         "modes": [
@@ -100,8 +100,8 @@
     {
       "ack_reason": "",
       "ack_result": "accepted",
-      "command_id": "cmd-2af0bb804e0e",
-      "issued_at": 1794337329426,
+      "command_id": "cmd-b1a3b7c51517",
+      "issued_at": 1795581670667,
       "issued_by": "incident:nvr",
       "kind": "goto",
       "payload": {
@@ -117,25 +117,25 @@
       },
       "priority": 80,
       "robot_id": "A",
-      "task_id": "incident-917ead579419"
+      "task_id": "incident-f612606db081"
     },
     {
       "ack_reason": "",
       "ack_result": "accepted",
-      "command_id": "cmd-5c2badab2595",
-      "issued_at": 1794337329360,
+      "command_id": "cmd-043ae6da25b2",
+      "issued_at": 1795581670596,
       "issued_by": "alice",
       "kind": "abort",
       "payload": {},
       "priority": 0,
       "robot_id": "A",
-      "task_id": "task-2bfc9b5b4205"
+      "task_id": "task-cdcd21b4dc21"
     },
     {
       "ack_reason": "",
       "ack_result": "accepted",
-      "command_id": "cmd-b81d75e1d71e",
-      "issued_at": 1794337329333,
+      "command_id": "cmd-8d8e297fcb4e",
+      "issued_at": 1795581670583,
       "issued_by": "alice",
       "kind": "goto",
       "payload": {
@@ -151,66 +151,58 @@
       },
       "priority": 60,
       "robot_id": "A",
-      "task_id": "task-2bfc9b5b4205"
+      "task_id": "task-cdcd21b4dc21"
     }
   ],
   "devices": null,
-  "enrolled_at": 1794337329183,
+  "enrolled_at": 1795581670469,
   "events": [
     {
-      "boot_id": "boot-3813831346",
+      "boot_id": "boot-33eae8366b",
       "data": {
-        "reason": "起飞前检查未通过: device_ready(急停处于按下状态)",
-        "task_id": "incident-917ead579419"
+        "code": "robot_not_ready",
+        "reason": "无法到达下一个点:急停按下了;回头补也没到:无法到达下一个点:急停按下了",
+        "task_id": "incident-f612606db081"
       },
       "kind": "task_failed",
-      "seq": 5,
-      "stamp": 1794337329906
+      "seq": 4,
+      "stamp": 1795581673129
     },
     {
-      "boot_id": "boot-3813831346",
+      "boot_id": "boot-33eae8366b",
       "data": {
         "distance_m": 0.2,
-        "task_id": "incident-917ead579419"
+        "task_id": "incident-f612606db081"
       },
       "kind": "task_progress",
-      "seq": 4,
-      "stamp": 1794337329906
+      "seq": 3,
+      "stamp": 1795581670702
     },
     {
-      "boot_id": "boot-3813831346",
+      "boot_id": "boot-33eae8366b",
       "data": {
-        "reason": "abort",
-        "task_id": "task-2bfc9b5b4205"
+        "reason": "",
+        "task_id": "task-cdcd21b4dc21"
       },
       "kind": "task_aborted",
-      "seq": 3,
-      "stamp": 1794337329872
-    },
-    {
-      "boot_id": "boot-3813831346",
-      "data": {
-        "distance_m": 4.0,
-        "task_id": "task-2bfc9b5b4205"
-      },
-      "kind": "task_progress",
       "seq": 2,
-      "stamp": 1794337329376
+      "stamp": 1795581670598
     },
     {
-      "boot_id": "boot-3813831346",
+      "boot_id": "boot-33eae8366b",
       "data": {
         "faults": []
       },
       "kind": "robot_fault",
       "seq": 1,
-      "stamp": 1794337329253
+      "stamp": 1795581670516
     }
   ],
-  "expires_at": 1795337329184,
+  "expires_at": 1796581670470,
   "fresh": true,
   "held": null,
   "home_set": false,
+  "lap": null,
   "loc": {
     "anchored": true,
     "pose": {
@@ -224,6 +216,7 @@
     "source": "odom_identity"
   },
   "manual_only": null,
+  "muted": null,
   "name": "",
   "revoked": false,
   "robot_id": "A",
@@ -251,11 +244,11 @@
       "site_rev": 0
     }
   },
-  "lap": null,
+  "standby_countdown": null,
   "status": {
-    "boot_id": "boot-3813831346",
+    "boot_id": "boot-33eae8366b",
     "control_epoch": 1,
-    "last_seen": 1794337329907,
+    "last_seen": 1795581673129,
     "online": true,
     "ready": {
       "control": true,
