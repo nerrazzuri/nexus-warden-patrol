@@ -348,3 +348,17 @@ describe("外审 3 #1:接手当前选中的那条,中央不跳", () => {
     expect(r.container.querySelector(".inc")!.getAttribute("data-key")).toBe("p-new");
   });
 });
+
+describe("真机 11-25:跟人到哪一步写清楚", () => {
+  it("在跟、在退、退不了站定、人离开防区、跟丢,各说各的", async () => {
+    const { followText } = await import("./incident");
+    const { lang } = await import("./i18n");
+    lang.value = "zh";
+    expect(followText({ follow: "follow" })).toContain("跟着");
+    expect(followText({ follow: "retreat" })).toContain("往后退");
+    expect(followText({ follow: "cornered" })).toContain("原地站定");
+    expect(followText({ follow: "ended", follow_left: true })).toContain("离开了防区");
+    expect(followText({ lost_ms: 5 })).toContain("看不到人");
+    expect(followText({})).toBe("");
+  });
+});

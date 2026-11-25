@@ -93,6 +93,23 @@ void main() {
     expect(marks.map((m) => (m.x, m.y)), contains((7.0, 8.0)));
   });
 
+  testWidgets('真机 11-25：退不了原地站定、人离开防区 —— 写清它为什么停', (t) async {
+    await _tall(t);
+    final api = FakeApi('guard');
+    await t.pumpWidget(MaterialApp(
+        home: SiteAlertScenePage(api: api, alert: _person(extra: <String, dynamic>{
+      'follow': 'cornered', 'follow_why': '身后有东西', 'person': <String, dynamic>{'x': 7.0, 'y': 8.0, 'at_ms': 3000}}))));
+    await t.pumpAndSettle();
+    expect(await sceneShow(t, find.textContaining('身后有东西退不了，原地站定')), findsWidgets);
+    expect(find.textContaining('跟随中'), findsWidgets);
+    await t.pumpWidget(MaterialApp(
+        home: SiteAlertScenePage(api: api, alert: _person(extra: <String, dynamic>{
+      'follow': 'ended', 'follow_left': true, 'person': <String, dynamic>{'x': 7.0, 'y': 8.0, 'at_ms': 3000}}))));
+    await t.pumpAndSettle();
+    expect(await sceneShow(t, find.textContaining('人离开了防区')), findsWidgets);
+    expect(find.textContaining('跟随中'), findsNothing);
+  });
+
   testWidgets('别的告警照旧：我来处理、误报', (t) async {
     await _tall(t);
     final api = FakeApi('guard');
