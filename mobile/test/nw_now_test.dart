@@ -67,6 +67,18 @@ void main() {
     await t.pumpWidget(Container());
   });
 
+  testWidgets('易用性 37 复测 P1-7：默认待命点走不了 —— 不写全场正常，写哪台、要重新标', (t) async {
+    _size(t, const Size(390, 2000));
+    final api = FakeApi('guard')
+      ..alertRows = <Map<String, dynamic>>[]
+      ..robotsOverride = [<String, dynamic>{..._robot('A'), 'standby_bad': true}, _robot('B')];
+    await _show(t, api);
+    expect(find.byKey(NowPage.okKey), findsNothing);
+    final txt = t.widgetList<Text>(find.descendant(of: find.byKey(NowPage.attnKey), matching: find.byType(Text))).map((w) => w.data).join(' ');
+    expect(txt, contains('待命点走不了'));
+    await t.pumpWidget(Container());
+  });
+
   testWidgets('外审 App-V2-3 I4：报警结案了驱离还在 —— 不说「全场正常」，一条红框写驱离到第几级，保安点进驱离页', (t) async {
     _size(t, const Size(390, 2000));
     final healthy = [

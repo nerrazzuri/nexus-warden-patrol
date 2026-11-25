@@ -738,8 +738,8 @@ const en = {
   accVisitorTitle: "Temporary disarm by zone",
   modeLabel: "Mode",
   modeHomeConfirm: "Switch to Stay? Robots stop raising person alarms until you arm again.",
-  modeHomeConfirmSome: "Switch to Stay? {kept} stay armed. In {off}, robots stop raising person alarms until you arm again.",
-  modeHomeConfirmAll: "Switch to Stay? Every zone stays armed in Stay ({kept}): robots keep raising person alarms.",
+  modeHomeConfirmSome: "Switch to Stay? Robots stop raising their own person alarms until you arm again. {kept} stay armed: camera and sensor alarms there still send robots. {off} are disarmed.",
+  modeHomeConfirmAll: "Switch to Stay? Robots stop raising their own person alarms until you arm again. Every zone stays armed ({kept}): camera and sensor alarms still send robots.",
   modeVisitorConfirm: "Switch to Temp disarm? The chosen zones stop raising person alarms for 4 hours.",
   modeVisitorAllConfirm: "Disarm the whole site for 4 hours? No person alarms until then; it re-arms by itself afterwards.",
   modeArmConfirm: "Arm the site? Robots raise an urgent alarm as soon as they see a person.",
@@ -890,6 +890,7 @@ const en = {
   rdNoHome: "Return home is not available: this map has no origin yet.",
   rdNoHomeGo: "Set the origin on the Localization page",
   rdNoStandby: "Return to standby is not available: this robot has no default standby point.",
+  rdStandbyBad: "The default standby point is not on walkable, scanned floor, so this robot can't be sent back or on guard rounds. Drive it into open floor and mark the standby point again.",
   rdNoStandbyGo: "Add one under Setup → Standby points",
   trFixPoints: "Move or undo the marked points first, then Start.",
   locDoneMsg: "{id} is localized.",
@@ -1488,6 +1489,7 @@ const en = {
   check_backup: "Backup",
   check_push: "Push notifications",
   check_robots: "Robots",
+  check_standby: "Standby points",
   critical: "Critical",
   versions: "Versions",
   siteVersion: "Site {v}",
@@ -2019,6 +2021,7 @@ const en = {
   diagBackup: "Backups",
   diagPush: "Phone alerts",
   diagRobots: "Robot reports",
+  diagStandby: "Standby points",
   diagOnline: "Online and reporting",
   diagNoDevices: "This robot doesn't report its devices yet.",
   devCam: "{c} camera has a picture",
@@ -3133,8 +3136,8 @@ const zh: Partial<Record<Key, string>> = {
   accVisitorTitle: "按防区临时撤防",
   modeLabel: "模式",
   modeHomeConfirm: "切换为「留守」？重新布防前，机器人不再报「发现人员」。",
-  modeHomeConfirmSome: "切换为「留守」？{kept}仍布防；{off}在重新布防前，机器人不再报「发现人员」。",
-  modeHomeConfirmAll: "切换为「留守」？所有防区留守时都布防（{kept}），机器人照样报「发现人员」。",
+  modeHomeConfirmSome: "切换为「留守」？重新布防前，机器人自己看见人不再报警。{kept}仍布防：摄像头、传感器报警照样派机器人；{off}撤防。",
+  modeHomeConfirmAll: "切换为「留守」？重新布防前，机器人自己看见人不再报警。所有防区仍布防（{kept}）：摄像头、传感器报警照样派机器人。",
   modeVisitorConfirm: "切换为「临时撤防」？选中的防区 4 小时内不报「发现人员」。",
   modeVisitorAllConfirm: "全站临时撤防 4 小时？这段时间不报「发现人员」，到点自己恢复布防。",
   modeArmConfirm: "确认布防？布防后机器人发现有人会立即报紧急报警。",
@@ -3283,6 +3286,7 @@ const zh: Partial<Record<Key, string>> = {
   rdNoHome: "不能回原点：这张地图还没有原点。",
   rdNoHomeGo: "去「定位」页设原点",
   rdNoStandby: "不能回待命点：这台机器人还没有默认待命点。",
+  rdStandbyBad: "默认待命点在图上走不了（墙、障碍或没扫到），回待命点、值守都派不了：把机器人开到空地重新标待命点。",
   rdNoStandbyGo: "去「布置 → 待命点」加一个",
   trFixPoints: "先把标出问题的点挪开或撤销，再按「开始」。",
   locDoneMsg: "{id} 已定位好。",
@@ -3879,6 +3883,7 @@ const zh: Partial<Record<Key, string>> = {
   check_backup: "备份",
   check_push: "推送",
   check_robots: "机器人",
+  check_standby: "待命点",
   critical: "关键",
   versions: "版本",
   siteVersion: "站点 {v}",
@@ -4409,6 +4414,7 @@ const zh: Partial<Record<Key, string>> = {
   diagBackup: "备份",
   diagPush: "手机推送",
   diagRobots: "机器人状态上报",
+  diagStandby: "待命点",
   diagOnline: "在线、上报",
   diagNoDevices: "此机器人尚未上报设备状态。",
   devCam: "{c}摄像头画面正常",
@@ -4844,6 +4850,7 @@ const TEST_PREFIX = "测试：";
 
 /** 告警标题:认识的种类用目录里的;不认识的用站点给的原文。测试告警(标题带前缀)换成译文前缀照样标出来
  *  (外审 r1 #9:不然演练在地图、值守页上看着跟真的一样)。 */
+const WP_EN: Record<string, string> = { 回待命点: "“Return to standby”", 回原点: "“Return to origin”" };
 export function alertTitle(l: Lang, kind: string, siteTitle: string): string {
   // 第 4 轮 r2-duty-N7:「点位没到」跳过一次和连续几趟是同一个种类,标题分开说(英文界面不都叫 Waypoint not reached)
   const bare = siteTitle.startsWith(TEST_PREFIX) ? siteTitle.slice(TEST_PREFIX.length) : siteTitle;
@@ -4851,7 +4858,9 @@ export function alertTitle(l: Lang, kind: string, siteTitle: string): string {
   if (kind === "stuck" && (many || once)) {
     const head = siteTitle.startsWith(TEST_PREFIX) ? (l === "zh" ? TEST_PREFIX : "TEST: ") : "";
     if (l === "zh") return head + bare.replace(/:路可能被堵住了$/, "：路可能被堵住了").replace(/未到达,已跳过/, "未到达，已跳过");
-    return head + (many ? `Waypoint ${many[1]} not reached ${many[2]} runs in a row` : `Waypoint ${once![1]} skipped`);
+    // 易用性 37 复测 P3:站点自己加的点(回待命点)名字也翻
+    const wp = (n: string) => WP_EN[n] ?? n;
+    return head + (many ? `Waypoint ${wp(many[1])} not reached ${many[2]} runs in a row` : `Waypoint ${wp(once![1])} skipped`);
   }
   const e = CATALOG[kind];
   if (!e || kind.startsWith("$")) return siteTitle;

@@ -78,6 +78,8 @@ def test_狗没报这种姿势_409_标不支持(站点):
     c.capabilities = type(c.capabilities)(**{**c.capabilities.__dict__, "tasks": tasks})
     code, d = s.req("POST", "/api/robots/A/posture", {"mode": "crawl"}, token=gina)
     assert code == 409 and d.get("unsupported") is True, d
+    # 易用性 37 复测 P2-22:不支持的也带英文说明
+    assert d["reason_code"] == "unsupported" and "can't do this" in d["reason_en"], d
 
 
 def test_概览卡片带能做哪几种姿势_和正在跑的任务(站点):

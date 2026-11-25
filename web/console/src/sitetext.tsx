@@ -26,7 +26,7 @@ const PREFLIGHT_ZH: Record<string, string> = {
   nav_ready: "导航没准备好", battery: "电量太低，不能出发", storage: "机器人存储满了", removable: "机器人存储有问题",
 };
 const PLAN_ZH: Record<string, string> = {
-  goal_blocked: "去不了这个点：终点在障碍物、禁行区里或离得太近", start_blocked: "走不了：机器人所在的地方被障碍物挡住",
+  goal_blocked: "去不了这个点：终点在障碍物、禁行区里或离得太近", start_blocked: "走不了：机器人所在的地方在图上算被挡住（障碍或禁行区）——用遥控往空地挪一下再试",
   outside: "这个点在地图外面", no_path: "找不到去终点的路", timeout: "规划路线用时太长", worker: "路线规划出错",
 };
 export function zhRobot(src: string): string {
@@ -50,7 +50,8 @@ export function zhRobot(src: string): string {
 /** 路径规划失败的原因码(contract planning/astar.py 的 PlanError.reason)。 */
 const PLAN: Record<string, string> = {
   goal_blocked: "no path — the destination is inside or too close to an obstacle or no-go area",
-  start_blocked: "no path — the robot's own spot is blocked by an obstacle",
+  // 易用性 37 复测 P1-9:写出该怎么办
+  start_blocked: "no path — the map counts the robot's own spot as blocked (obstacle or no-go area). Drive it a little into open floor with Remote, then try again",
   outside: "the point is outside the map",
   no_path: "no path to the destination",
   timeout: "path planning took too long",
@@ -114,6 +115,8 @@ function busyWhatEn(s: string): string {
 }
 
 const RULES: Rule[] = [
+  // 易用性 37 复测 P1-9:机器人「…;回头补也没到:…」(一圈走完回头补点)
+  [/^([\s\S]+?)[;；]回头补也没到[:：]\s*([\s\S]*)$/, (m) => `${tr(m[1])}; tried again after the lap, still not reached: ${lc(tr(m[2]))}`],
   // 真机 11-25「我一直点立即切换一直显示 busy」:代理拒切换 / 装的时候写清在忙什么
   [/^busy: ([\s\S]+?)(?: —— 重启那几秒谁都无法停止它[,，]等它完)?$/, (m) => `The robot is busy: ${busyWhatEn(m[1].trim())}. Try again when it finishes`],
   // 日志设计 第 2 条(用户 11-10「为什么只显示中文」):日程没跑、被挡下的原因(site scheduler.py、dispatcher.py)
@@ -231,9 +234,11 @@ const RULES: Rule[] = [
   [/^从 (\S+) 编辑[:：]擦了 ([\d.]+) 平方米$/, (m) => `Edited from version ${m[1]}: erased ${m[2]} m²`],
   [/^从 (\S+) 编辑[:：]画了 ([\d.]+) 平方米障碍$/, (m) => `Edited from version ${m[1]}: drew ${m[2]} m² of obstacles`],
   [/^从 (\S+) 编辑[:：]只改了禁行区、显示$/, (m) => `Edited from version ${m[1]}: only no-go zones / display changed`],
+  // 易用性 37 复测 P1-7:值守「A 没接:…」;点名(目标点、回待命点…)不夹中文
+  [/^(\S+) 没接[:：]\s*([\s\S]*)$/, (m) => `${m[1]} didn't take it: ${lc(tr(m[2]))}`],
   [/^(\S+) 离建图时走过的地方 ([\d.]+) m[(（]超过 ([\d.]+) m[)）][,，]那里定位不可靠[:：]先把那里建进图$/,
-    (m) => `${m[1]} is ${m[2]} m from where the robot went while mapping (limit ${m[3]} m), so it cannot locate itself there reliably. Map that area first.`],
-  [/^(\S+) 在图上不是可通行的地方/, (m) => `${m[1]} is not a walkable spot on the map (wall, obstacle or not scanned).`],
+    (m) => `${ptName(m[1])} is ${m[2]} m from where the robot went while mapping (limit ${m[3]} m), so it cannot locate itself there reliably. Map that area first.`],
+  [/^(\S+) 在图上不是可通行的地方/, (m) => `${ptName(m[1])} is not a walkable spot on the map (wall, obstacle or not scanned).`],
   // 特殊地面自动生成的限速区名字(site map_display.TERRAIN_LABEL)
   [/^(楼梯|台阶|斜坡|草地|碎石路)(\s*\d*)$/, (m) => ({ 楼梯: "Stairs", 台阶: "Steps", 斜坡: "Slope", 草地: "Grass", 碎石路: "Gravel path" } as Record<string, string>)[m[1]] + m[2]],
   [/^地图 '([^']+)' 未标原点/, (m) => `map “${m[1]}” has no origin yet`],
@@ -252,8 +257,8 @@ const RULES: Rule[] = [
   [/^摄像头 (\S+)[(（]防区 ([^)）]*)[)）]连不上,这一路的入侵现在收不到[;；]看看摄像头的电源和网线$/,
     (m) => `Camera ${m[1]} (zone ${m[2]}) cannot be reached, so intrusions from it are not received now. Check its power and network cable.`],
   // 第 4 轮 r2-duty-N7:点位没到 —— 跳过一次只记一笔、连续几趟才报 P1,两种分开说
-  [/^点位 (\S+) 连续 (\d+) 趟未到达[:：]路可能被堵住了$/, (m) => `Waypoint ${m[1]} not reached ${m[2]} runs in a row: the way may be blocked`],
-  [/^点位 (\S+) 未到达,已跳过$/, (m) => `Waypoint ${m[1]} not reached, skipped`],
+  [/^点位 (\S+) 连续 (\d+) 趟未到达[:：]路可能被堵住了$/, (m) => `Waypoint ${WP_NAMES[m[1]] ?? m[1]} not reached ${m[2]} runs in a row: the way may be blocked`],
+  [/^点位 (\S+) 未到达,已跳过$/, (m) => `Waypoint ${WP_NAMES[m[1]] ?? m[1]} not reached, skipped`],
   [/^([\s\S]*?)[;；]?巡逻继续,只做记录$/, (m) => `${m[1] ? `${tr(m[1])}. ` : ""}The patrol went on; this is only a record.`],
   [/^([\s\S]*?)[;；]?到达一次后自动解除$/, (m) => `${m[1] ? `${trParts(m[1])}. ` : ""}Clears itself once the point is reached.`],
   [/^到场看看,或者改路线$/, () => "Go and look, or change the route"],
@@ -370,6 +375,10 @@ export function siteTextEn(src: string): SiteText {
 
 /** 只要文字(悬停用不上的地方,比如 toast、活动日志)。第 3 轮 admin N4:这里没有悬停,不写「see details」
  *  (点不开,是死路),写清是中文原文、换成中文界面能看。 */
+const WP_NAMES: Record<string, string> = { 回待命点: "“Return to standby”", 回原点: "“Return to origin”" };
+const PT_NAMES: Record<string, string> = { 目标点: "The target point", 回待命点: "The standby point", 回原点: "The origin", 这个点: "This point" };
+function ptName(s: string): string { return PT_NAMES[s] ?? s; }
+
 export function siteStr(s: string | null | undefined): string {
   const v = siteText(s);
   if (!v.raw) return v.text;

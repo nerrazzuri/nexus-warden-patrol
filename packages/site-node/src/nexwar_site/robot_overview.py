@@ -98,7 +98,7 @@ def overview(dispatcher: Any, db: Any, *, now_ms: int, tz: tzinfo) -> list[dict[
                     "deter": _deter(caps) if fresh else None,
                     "task_what": task_what(db, rid, _task(c)),
                     "manual_note": (reg.manual_only(rid) or {}).get("note", ""),
-                    **_return_targets(db, rid, caps),
+                    **_return_targets(db, rid, caps, getattr(dispatcher, "maps", None)),
                     # 真机 11-25:遥控放租后倒数回待命点(没在倒数是 None)
                     "standby_countdown": getattr(dispatcher, "standby_countdown", {}).get(rid)})
     return out
@@ -117,7 +117,22 @@ def _deter(caps: Any) -> dict[str, Any] | None:
     return out
 
 
-def _return_targets(db: Any, rid: str, caps: Any) -> dict[str, Any]:
+def standby_bad(db: Any, maps: Any, rid: str, caps: Any) -> bool:
+    """易用性 37 复测 P1-7:默认待命点在当前地图上走不了(墙、障碍、没扫到)—— 回待命点、值守派单都会
+    被拒;站点不认识的图、老图不查(回 False)。"""
+    patrol = ((getattr(caps, "tasks", None) or {}).get("patrol") or {}) if caps is not None else {}
+    mid, ver = patrol.get("map_id"), patrol.get("map_version")
+    if maps is None or mid is None:
+        return False
+    rows = db.query("SELECT x, y FROM standby_points WHERE robot_id=? AND is_default=1 "
+                    "AND map_id=? AND map_version=?", (rid, mid, ver))
+    try:
+        return any(maps.reach_problem(mid, ver, [("回待命点", r["x"], r["y"])]) for r in rows)
+    except Exception:  # noqa: BLE001 —— 图读不了不在这里报(地图页有)
+        return False
+
+
+def _return_targets(db: Any, rid: str, caps: Any, maps: Any = None) -> dict[str, Any]:
     """网页易用性第 2 轮 N2:回原点、回待命点能不能派(站点派的时候同样这么查,见 standby.py)。
     ``home_set``:狗当前地图那一版上有没有原点(没报地图 = ``None``,不知道);
     ``standby_set``:有没有默认待命点。"""
@@ -127,7 +142,8 @@ def _return_targets(db: Any, rid: str, caps: Any) -> dict[str, Any]:
         "SELECT 1 FROM homes WHERE robot_id=? AND map_id=? AND map_version=?", (rid, mid, ver)))
     standby = bool(db.query("SELECT 1 FROM standby_points WHERE robot_id=? AND is_default=1",
                             (rid,)))
-    return {"home_set": home, "standby_set": standby}
+    return {"home_set": home, "standby_set": standby,
+            "standby_bad": standby_bad(db, maps, rid, caps)}
 
 
 def _week(db: Any, rid: str, now_ms: int) -> dict[str, Any]:

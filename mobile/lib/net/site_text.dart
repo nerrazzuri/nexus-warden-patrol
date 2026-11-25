@@ -36,7 +36,7 @@ const Map<String, String> _preflightZh = {
 
 const Map<String, String> _planZh = {
   'goal_blocked': '去不了这个点：终点在障碍物、禁行区里或离得太近',
-  'start_blocked': '走不了：机器人所在的地方被障碍物挡住',
+  'start_blocked': '走不了：机器人所在的地方在图上算被挡住（障碍或禁行区）——用遥控往空地挪一下再试',
   'outside': '这个点在地图外面',
   'no_path': '找不到去终点的路',
   'timeout': '规划路线用时太长',
@@ -45,7 +45,8 @@ const Map<String, String> _planZh = {
 
 const Map<String, String> _plan = {
   'goal_blocked': 'no path — the destination is inside or too close to an obstacle or no-go area',
-  'start_blocked': "no path — the robot's own spot is blocked by an obstacle",
+  'start_blocked': "no path — the map counts the robot's own spot as blocked (obstacle or no-go area). "
+      'Drive it a little into open floor with Remote, then try again',
   'outside': 'the point is outside the map',
   'no_path': 'no path to the destination',
   'timeout': 'path planning took too long',
@@ -106,6 +107,9 @@ const Map<String, String> _lateZh = {'这一轮不跑了': 'skip', '已报警': 
 const String _afterNote = '; recorded afterwards because the site was not running then';
 
 final List<_Rule> _rules = [
+  // 易用性 37 复测 P1-9：机器人「…;回头补也没到:…」
+  (RegExp(r'^([\s\S]+?)[;；]回头补也没到[:：]\s*([\s\S]*)$'),
+      (m) => '${_en(m[1]!)}; tried again after the lap, still not reached: ${_lc(_en(m[2]!))}'),
   (RegExp(r'^网页上传$'), (m) => 'uploaded on the web'), // 升级包来源（站点 api.py）
   // 易用性 37 复测：值守等「留在这里」的原因（站点 standby.py stay_hold）
   (RegExp(r'^(\S+) 遥控后留在原地[(（]有人点了「留在这里」[)）][,，]到点前不自动派$'),
@@ -164,10 +168,12 @@ final List<_Rule> _rules = [
   (RegExp(r'^从 (\S+) 清了 (\d+) 处零星噪点[(（](\d+) 格[)）]$'),
       (m) => 'Noise cleanup of version ${m[1]}: removed ${m[2]} specks (${m[3]} cells)'),
   (RegExp(r'^新登记[:：]确认之前只许手动派$'), (_) => 'Newly registered: manual dispatch only until confirmed'),
+  // 易用性 37 复测 P1-7：值守「A 没接:…」；点名（目标点、回待命点…）不夹中文
+  (RegExp(r'^(\S+) 没接[:：]\s*([\s\S]*)$'), (m) => "${m[1]} didn't take it: ${_lc(_en(m[2]!))}"),
   (RegExp(r'^(\S+) 离建图时走过的地方 ([\d.]+) m[(（]超过 ([\d.]+) m[)）][,，]那里定位不可靠[:：]先把那里建进图$'),
-      (m) => '${m[1]} is ${m[2]} m from where the robot went while mapping (limit ${m[3]} m), '
+      (m) => '${_ptName(m[1]!)} is ${m[2]} m from where the robot went while mapping (limit ${m[3]} m), '
           'so it cannot locate itself there reliably. Map that area first.'),
-  (RegExp(r'^(\S+) 在图上不是可通行的地方'), (m) => '${m[1]} is not a walkable spot on the map (wall, obstacle or not scanned).'),
+  (RegExp(r'^(\S+) 在图上不是可通行的地方'), (m) => '${_ptName(m[1]!)} is not a walkable spot on the map (wall, obstacle or not scanned).'),
   (RegExp(r'^(楼梯|台阶|斜坡|草地|碎石路)(\s*\d*)$'),
       (m) => const {'楼梯': 'Stairs', '台阶': 'Steps', '斜坡': 'Slope', '草地': 'Grass', '碎石路': 'Gravel path'}[m[1]]! + m[2]!),
   (RegExp(r"^地图 '([^']+)' 未标原点"), (m) => 'map “${m[1]}” has no origin yet'),
@@ -181,8 +187,8 @@ final List<_Rule> _rules = [
       (m) => 'Camera ${m[1]} (zone ${m[2]}) cannot be reached, so intrusions from it are not received now. '
           'Check its power and network cable.'),
   (RegExp(r'^点位 (\S+) 连续 (\d+) 趟未到达[:：]路可能被堵住了$'),
-      (m) => 'Waypoint ${m[1]} not reached ${m[2]} runs in a row: the way may be blocked'),
-  (RegExp(r'^点位 (\S+) 未到达,已跳过$'), (m) => 'Waypoint ${m[1]} not reached, skipped'),
+      (m) => 'Waypoint ${_wp(m[1]!)} not reached ${m[2]} runs in a row: the way may be blocked'),
+  (RegExp(r'^点位 (\S+) 未到达,已跳过$'), (m) => 'Waypoint ${_wp(m[1]!)} not reached, skipped'),
   (RegExp(r'^([\s\S]*?)[;；]?巡逻继续,只做记录$'),
       (m) => '${m[1]!.isNotEmpty ? '${_en(m[1]!)}. ' : ''}The patrol went on; this is only a record.'),
   (RegExp(r'^([\s\S]*?)[;；]?到达一次后自动解除$'),
@@ -350,3 +356,10 @@ String alertLine(String robot, String kind, String siteTitle) {
   final title = alertTitle(kind, siteTitle);
   return title == src || title.startsWith('$src ') ? title : '$src · $title';
 }
+
+const _ptNames = <String, String>{'目标点': 'The target point', '回待命点': 'The standby point', '回原点': 'The origin', '这个点': 'This point'};
+String _ptName(String s) => _ptNames[s] ?? s;
+
+// 易用性 37 复测 P3：站点自己加的点（回待命点）名字也翻
+const _wpNames = <String, String>{'回待命点': '“Return to standby”', '回原点': '“Return to origin”'};
+String _wp(String s) => _wpNames[s] ?? s;

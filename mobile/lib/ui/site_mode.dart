@@ -568,8 +568,11 @@ class _SiteModeBarState extends State<SiteModeBar> with NwAsk {
 
   Future<void> _home() async {
     final ok = await askYes(tr('Switch to Stay?', '切换到留守？'),
-        body: tr('Zones marked "Disarmed in Stay mode" stop dispatching robots and ringing.',
-            '标为「留守时撤防」的防区发生入侵时，不派机器人、不响铃。'),
+        // 易用性 37 复测 P1-8：留守时机器人自己看见人不报（modes.robot_armed 老约定），确认框要说
+        body: tr(
+            'Robots stop raising their own person alarms until you arm again. Camera and sensor alarms in zones '
+                'that stay armed still send robots; zones marked "Disarmed in Stay mode" don\'t send robots or ring.',
+            '重新布防前，机器人自己看见人不再报警。仍布防的防区，摄像头、传感器报警照样派机器人；标为「留守时撤防」的防区不派、不响铃。'),
         ok: tr('Switch to Stay', '切换为留守'),
         okKey: SiteModeBar.homeGoKey);
     if (!ok || !mounted) return;

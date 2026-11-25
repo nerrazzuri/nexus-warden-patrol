@@ -55,6 +55,27 @@ def test_体检_都好_各项说人话(台):
     assert t.h.healthz() == (True, {"ok": True, "version": t.h.healthz()[1]["version"]})
 
 
+def test_易用性37_P1_7_默认待命点在当前图上走不了_体检写出哪台_探活不算(台):
+    t = 台
+    with t.db.tx() as c:
+        c.execute("INSERT INTO standby_points (robot_id, name, map_id, map_version, x, y, yaw, "
+                  "is_default) VALUES ('A','home','m','1',8.8,-4.6,0,1), "
+                  "('B','home','m','1',1.0,1.0,0,1), ('B','old','m','0',8.8,-4.6,0,0)")
+    caps = SimpleNamespace(tasks={"patrol": {"map_id": "m", "map_version": "1"}})
+    bad = {(8.8, -4.6)}
+    maps = SimpleNamespace(
+        reach_problem=lambda mid, ver, pts: "走不了" if (pts[0][1], pts[0][2]) in bad else "")
+    t.h.dispatcher = SimpleNamespace(clients={"A": SimpleNamespace(capabilities=caps, status=None),
+                                              "B": SimpleNamespace(capabilities=caps, status=None)},
+                                     maps=maps)
+    c = t.h.checks()
+    assert c["standby"]["ok"] is False and "A" in c["standby"]["detail"], c["standby"]
+    assert "B" not in c["standby"]["detail_en"].split("for ")[1].split(":")[0]
+    assert t.h.healthz()[0] is True                 # 不是站点坏了,探活照好
+    bad.clear()
+    assert t.h.checks()["standby"]["ok"] is True
+
+
 def test_体检_盘紧_事件循环卡住_后台道卡住_证书快到期_都查得出(台):
     t = 台
     t.free[0] = 5

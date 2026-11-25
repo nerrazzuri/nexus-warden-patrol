@@ -7,6 +7,19 @@ void main() {
   setUp(() => appLang.value = AppLang.en);
   tearDown(() => appLang.value = AppLang.zh);
 
+  test('易用性 37 复测 P1-9：起点被挡 + 回头补也没到 整句英文、说用遥控挪', () {
+    final en = siteText('导航拒了: goto 被设备拒绝: 规划失败(start_blocked):起点在障碍或禁行区里;回头补也没到:导航拒了: goto 被设备拒绝: 规划失败(start_blocked):起点在障碍或禁行区里');
+    expect(RegExp(r'[\u4e00-\u9fff]').hasMatch(en), isFalse, reason: en);
+    expect(en, contains('with Remote'));
+    expect(en, contains('tried again after the lap'));
+  });
+
+  test('易用性 37 复测 P1-7：值守「A 没接:…」、点名（目标点、回待命点）都翻英文', () {
+    expect(siteText('A 没接:回待命点 在图上不是可通行的地方(墙、障碍或未扫到)'),
+        "A didn't take it: the standby point is not a walkable spot on the map (wall, obstacle or not scanned).");
+    expect(siteText('目标点 在图上不是可通行的地方(墙、障碍或未扫到)'), startsWith('The target point is not'));
+  });
+
   test('第 9 轮 W9-10：中文界面站点原话的半角标点换全角（前面是数字、字母也换）；报警标题也换', () {
     appLang.value = AppLang.zh;
     expect(zhPunct('已用 86%,剩 30 GB:到 90% 就不接新的巡逻(没传完的不删)'), '已用 86%，剩 30 GB：到 90% 就不接新的巡逻（没传完的不删）');
