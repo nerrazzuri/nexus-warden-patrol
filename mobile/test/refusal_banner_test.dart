@@ -2,6 +2,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:nexwar_patrol/net/site_client.dart';
+import 'package:nexwar_patrol/ui/nw/nw_theme.dart';
 import 'package:nexwar_patrol/ui/refusal.dart';
 
 import 'site_page_test.dart' show FakeApi;
@@ -33,4 +34,32 @@ void main() {
     expect(back, isTrue);
     expect(api.calls.where((c) => c.startsWith('resume')), isEmpty);
   });
+
+  for (final (outer, page) in [(Brightness.dark, Brightness.light), (Brightness.light, Brightness.dark)]) {
+    testWidgets('易用性 build 37 复测 P1：页面主题跟外面不一样（外面 ${outer.name}、页 ${page.name}），横幅底色和字是同一套', (t) async {
+      final api = FakeApi('guard');
+      const e = SiteError(409, 'A 正在执行任务 p1', body: <String, dynamic>{'reason_code': 'busy'});
+      await t.pumpWidget(MaterialApp(
+          theme: nwTheme(Brightness.light),
+          darkTheme: nwTheme(Brightness.dark),
+          themeMode: outer == Brightness.dark ? ThemeMode.dark : ThemeMode.light,
+          home: Scaffold(
+              body: Theme(
+                  data: nwTheme(page),
+                  child: Builder(
+                      builder: (c) => TextButton(
+                          onPressed: () => showRefusal(c, api, e, robotId: 'A', title: '趴下'),
+                          child: const Text('go')))))));
+      await t.tap(find.text('go'));
+      await t.pumpAndSettle();
+      final want = page == Brightness.dark ? NwColors.dark : NwColors.light;
+      final banner = t.widget<MaterialBanner>(find.byKey(refusalDialogKey));
+      expect(banner.backgroundColor, want.warningSoft);
+      final head = t.widget<Text>(find.text('趴下：没成'));
+      expect(head.style?.color, want.text, reason: '字跟底色同一套主题，不会米色底白字');
+      final ack = t.widget<Text>(find.text('知道了'));
+      final ackColor = DefaultTextStyle.of(t.element(find.text('知道了'))).style.color ?? ack.style?.color;
+      expect(ackColor, isNot(want.warningSoft));
+    });
+  }
 }

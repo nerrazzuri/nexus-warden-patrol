@@ -11,6 +11,7 @@ import { api, ApiError, enc } from "./api";
 import { addBlock, copyDay, fromWire, minutesText, moveEdge, removeBlock, toWire, type Slot, type WireSlot } from "./armgrid";
 import { hm, type DutySettings } from "./data";
 import { joinList, t, type Key } from "./i18n";
+import { siteKnown } from "./sitetext";
 import { pageAllowed } from "./shell";
 import { Confirm } from "./dialogs";
 import { Sign } from "./signs";
@@ -64,6 +65,16 @@ function errText(e: unknown): string {
 }
 
 /** 模式给人看的名字(网页自己翻,站点的 label 只有中文):按时间表:布防 / 部分布防 / 撤防;手动的:布防 / 留守 / 临时撤防。 */
+/** 易用性 37 复测 P2-18:切留守的确认句按防区说(留守时还布防的照样报人),不笼统说「不再报人」。 */
+export function stayConfirmText(zones: { zone: string; home_armed?: boolean }[] | null | undefined): string {
+  if (!zones || zones.length === 0) return t("modeHomeConfirm");
+  const kept = zones.filter((z) => z.home_armed !== false).map((z) => siteKnown(z.zone));
+  const off = zones.filter((z) => z.home_armed === false).map((z) => siteKnown(z.zone));
+  if (kept.length === 0) return t("modeHomeConfirm");
+  if (off.length === 0) return t("modeHomeConfirmAll", { kept: joinList(kept) });
+  return t("modeHomeConfirmSome", { kept: joinList(kept), off: joinList(off) });
+}
+
 export function modeLabel(m: { mode: string; source?: string; state?: string }): string {
   if (m.source === "schedule") {
     return t("armSched", { s: t(m.state === "armed" ? "armStArmed" : m.state === "disarmed" ? "armStDisarmed" : "armStPartial") });
@@ -289,7 +300,7 @@ export function ArmingPage({ say, now, role = "admin" }: { say: Say; now: number
       {wizBox}
       {askSave && <Confirm text={askSave} yes={t("save")} onNo={() => setAskSave(null)} onYes={() => void save()} />}
       {switching && (
-        <Confirm text={t(switching === "armed" ? "modeArmConfirm" : "modeHomeConfirm")}
+        <Confirm text={switching === "armed" ? t("modeArmConfirm") : stayConfirmText(mode?.zones)}
           yes={t(switching === "armed" ? "modeArmed" : "modeHome")} onNo={() => setSwitching(null)}
           onYes={() => {
             const m = switching;

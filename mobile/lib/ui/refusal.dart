@@ -105,11 +105,16 @@ Future<void> showRefusal(BuildContext context, SiteApi api, SiteError e,
 
   final head = title == null ? tr('Not dispatched', '没派出去') : tr('$title: not done', '$title：没成');
   m.clearMaterialBanners();
+  // 易用性 build 37 复测 P1：横幅挂在最外面那个 ScaffoldMessenger 上，主题是最外面的（跟系统亮 / 暗）；
+  // 调用的页（机器人页固定深色）主题不一样 —— 底色按调用方、字按横幅那里，米色底白字看不见。
+  // 底色、图标、字、按钮一律用调用方的主题。
+  final theme = Theme.of(context);
+  final nw0 = Nw.of(context);
   m.showMaterialBanner(MaterialBanner(
     key: refusalDialogKey,
-    backgroundColor: Nw.of(context).warningSoft,
-    leading: Icon(Icons.warning_amber_rounded, color: Nw.of(context).warning),
-    content: Builder(builder: (c) {
+    backgroundColor: nw0.warningSoft,
+    leading: Icon(Icons.warning_amber_rounded, color: nw0.warning),
+    content: Theme(data: theme, child: Builder(builder: (c) {
       final nw = Nw.of(c);
       return Column(crossAxisAlignment: CrossAxisAlignment.stretch, mainAxisSize: MainAxisSize.min, children: [
         Text(head, style: NwText.titleSmall.copyWith(color: nw.text, fontWeight: FontWeight.w700)),
@@ -134,7 +139,7 @@ Future<void> showRefusal(BuildContext context, SiteApi api, SiteError e,
                   child: Text(tr('Acknowledge', '知道了')))),
         ]),
       ]);
-    }),
+    })),
     actions: const [SizedBox.shrink()],
   ));
   final go = await done.future;

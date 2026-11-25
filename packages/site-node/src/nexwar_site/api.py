@@ -704,8 +704,10 @@ class _Handler(TlsHandlerMixin):
             # 记下来只会把表撑满(内部评审)。登录失败、事件回调照记。
             if method != "GET" and self.site.audit is not None and self._actor \
                     and not self._skip_audit:
-                detail = {k: self._resp[k] for k in ("command_id", "task_id", "error", "outcome",
-                                                       "reason", "reason_code", "err", "err_name")
+                # 易用性 37 复测 P2-24:被拒的英文说明(reason_en)也存,操作记录英文界面用它
+                detail = {k: self._resp[k] for k in ("command_id", "task_id", "error", "reason_en",
+                                                       "outcome", "reason", "reason_code", "err",
+                                                       "err_name")
                           if k in self._resp} | self._audit_detail
                 target = self._audit_target or _path_target(path)
                 # 第 11 轮 W11-01:日程、路线的名字在这一刻存下(删了、编号换了主人,记录照旧)。

@@ -40,6 +40,19 @@ Future<void> _settle(WidgetTester t) async {
 void main() {
   setUp(personLiveShown.clear);
 
+  testWidgets('易用性 build 37 复测 P2-19：报警关了，标题写「已关闭」不再红字 P1，右边写谁关的', (t) async {
+    _landscape(t);
+    final api = FakeApi('guard');
+    final closed = Alert.fromWire(<String, dynamic>{..._seen('A/p#12', ackedBy: 'gina'), 'resolved_ms': _now, 'resolved_by': 'gina'});
+    await t.pumpWidget(MaterialApp(theme: nwTheme(Brightness.dark), home: PersonLivePage(api: api, alert: closed)));
+    await _settle(t);
+    final head = t.widget<Text>(find.byKey(const Key('person-live-head')));
+    expect(head.data, startsWith('已关闭 · '));
+    expect(find.text('gina 已关闭'), findsOneWidget);
+    expect(find.byKey(PersonLivePage.takeKey), findsNothing);
+    await t.pumpWidget(Container());
+  });
+
   testWidgets('易用性 build 37 复测：不在「现在」页（比如在「站点」页）来了看见人，也整屏弹；同一条只弹一次', (t) async {
     _landscape(t);
     final api = FakeApi('guard');

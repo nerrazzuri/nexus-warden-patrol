@@ -63,6 +63,8 @@ def test_不认识的姿势_400_有任务在跑_409带原因(站点):
     assert code == 200 and d["ack"]["result"] == "accepted", d
     code, d = s.req("POST", "/api/robots/A/posture", {"mode": "lie"}, token=gina)
     assert code == 409 and "正在执行任务" in d["error"], d
+    # 易用性 37 复测 P2-16:英文说先点「原地停下」(以前是笼统的 busy)
+    assert d.get("reason_code") == "stop_first" and "Stop in place" in d.get("reason_en", ""), d
     assert _姿态(s) is MotionStatus.READY
 
 

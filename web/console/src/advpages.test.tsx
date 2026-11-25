@@ -20,7 +20,7 @@ beforeEach(() => {
   uploads = [];
   posted = [];
   health = { ok: false, version: "1.4.0", checks: { db: { ok: true }, disk: { ok: true, detail: "剩 120 GB" }, backup: { ok: false, detail: "已经 9 天没有备份成功" } } };
-  setFetch(((url: string, init?: RequestInit) => {
+  setFetch(lastFetch = ((url: string, init?: RequestInit) => {
     if (init?.method === "POST") {
       const h = (init.headers ?? {}) as Record<string, string>;
       if (url === "/api/releases/upload") {
@@ -168,6 +168,20 @@ describe("POC 遥控速度档", () => {
   });
 });
 
+let lastFetch: Parameters<typeof setFetch>[0] = null;
+/** 「下载到机器人」回 409(模拟机器人不支持),别的照旧。 */
+function setFetchRelease409() {
+  const base = lastFetch;
+  setFetch(((url: string, init?: RequestInit) => {
+    if (url === "/api/robots/A/release") {
+      return Promise.resolve(json({ error: "A 不支持 release_install", reason_code: "unsupported",
+        reason_en: "This robot's software can't do this (simulated robots and older robot software don't support it)." }, 409));
+    }
+    return base!(url, init);
+  }) as typeof fetch);
+  return base;
+}
+
 describe("软件升级", () => {
   it("上传要再输密码,在线下载灰着", async () => {
     const { container: c } = render(<UpgradePage say={() => {}} />);
@@ -217,6 +231,20 @@ describe("软件升级", () => {
       expect(bar()).toBeNull();
     } finally {
       setXhr(null);
+    }
+  });
+  it("易用性 37 复测:下载到机器人被拒,原因(英文说明)留在那台下面,不只闪一下", async () => {
+    lang.value = "en";
+    const base = setFetchRelease409();
+    try {
+      const { container: c } = render(<UpgradePage say={() => {}} />);
+      await waitFor(() => expect(c.querySelector('[data-release="v1.4.0"]')).not.toBeNull());
+      fireEvent.click(btn(c.querySelector('[data-release="v1.4.0"]')!, "Download to robot"));
+      const err = await waitFor(() => { const x = c.querySelector('[data-up-err="A"]'); expect(x).not.toBeNull(); return x!; });
+      expect(err.textContent).toContain("can't do this");
+      expect(err.textContent).not.toMatch(/refused this right now/);
+    } finally {
+      setFetch(base);
     }
   });
   it("充电且空闲时切换", async () => {

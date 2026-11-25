@@ -153,6 +153,13 @@ const RULES: Rule[] = [
   [/^(\S+) 还没报电量$/, (m) => `${m[1]} has not reported its battery yet`],
   [/^(\S+) 电量 (\d+)%[,，]不够跑一圈[(（]要 ≥ (\d+)%[)）][,，]先补能$/,
     (m) => `${m[1]} is at ${m[2]}%, not enough for a lap (needs ≥ ${m[3]}%); charging first`],
+  [/^网页上传$/, () => "uploaded on the web"],             // 升级包来源(api.py)
+  // 易用性 37 复测:遥控刚结束 / 留在这里(site standby.py stay_hold)
+  [/^(\S+) 遥控刚结束[,，]在倒数回待命点[(（]可以点「留在这里」[)）]$/,
+    (m) => `${m[1]} was just driven by hand and is counting down before returning to standby (you can press Stay here)`],
+  [/^(\S+) 遥控刚结束$/, (m) => `${m[1]} was just driven by hand`],
+  [/^(\S+) 遥控后留在原地[(（]有人点了「留在这里」[)）][,，]到点前不自动派$/,
+    (m) => `${m[1]} was told to stay where it is after remote control: no automatic patrol until the hold ends`],
   [/^(\S+) 刚连回来[,，]等它报手上的任务$/, (m) => `${m[1]} just reconnected; waiting for it to report its task`],
   [/^防区路线 (\S+) 上布防着的防区里没有点$/, (m) => `zone route ${m[1]} has no points in the armed zones`],
   [/^(\S+) 不在线或状态不新鲜$/, (m) => `${m[1]} is offline or has not reported recently`],

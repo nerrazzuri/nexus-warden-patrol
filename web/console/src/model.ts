@@ -141,7 +141,7 @@ export interface Mode {
   /** 临时撤防到几点(站点 modes.view)。 */
   until_ms?: number | null;
   /** 每个防区此刻布没布防(站点 modes.view)。 */
-  zones?: { zone: string; armed: boolean }[];
+  zones?: { zone: string; armed: boolean; home_armed?: boolean }[];
   /** W44 第二期:谁说了算(时间表 / 手动)、整体布防到什么程度、下一次变是几点、手动管到几点。 */
   source?: "schedule" | "manual";
   state?: "armed" | "partial" | "disarmed";

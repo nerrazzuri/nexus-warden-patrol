@@ -19,7 +19,7 @@ import { AlarmLogPage } from "./alarmlog";
 import { NotesPage } from "./notes";
 import { PatrolsPage } from "./patrolspage";
 import { HelpDialog, WEB_TOUR } from "./guide";
-import { ArmingPage } from "./armingpage";
+import { ArmingPage, stayConfirmText } from "./armingpage";
 import { ArmWizard, needsWizard, patrolHint, wt } from "./armwizard";
 import { AlarmPop } from "./alarmpop";
 import { MonitorPage } from "./monitor";
@@ -259,7 +259,7 @@ export function Console({ me, onOut }: { me: Me; onOut: (note?: string) => void 
       </div>
 
       {pending?.kind === "mode" && (
-        <Confirm text={t(pending.mode === "armed" ? "modeArmConfirm" : pending.mode === "home" ? "modeHomeConfirm" : "modeVisitorAllConfirm")}
+        <Confirm text={pending.mode === "home" ? stayConfirmText(data?.mode?.zones) : t(pending.mode === "armed" ? "modeArmConfirm" : "modeVisitorAllConfirm")}
           yes={t(pending.mode === "armed" ? "modeArmed" : pending.mode === "home" ? "modeHome" : "modeVisitorAll")}
           onNo={() => setPending(null)}
           onYes={() => {

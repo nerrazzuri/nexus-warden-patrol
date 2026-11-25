@@ -45,7 +45,13 @@ CODES: tuple[tuple[str, re.Pattern[str], str], ...] = tuple(
         ("heading", r"头尾方向", "This robot's front/back direction isn't set correctly."),
         ("unreachable", r"无法到达|无法到达", "The robot can't reach one of these points."),
         # 日志设计 第 7 条:剩下常见的几种也给码
+        # 易用性 37 复测 P2-16:巡逻、去某点时不让趴下(dispatcher.posture)—— 说先点哪个
+        ("stop_first", r"先「原地停下」再", "This robot is on a task. Press \"Stop in place\" "
+         "first, then change its posture."),
         ("busy", r"正在执行", "This robot is busy with another task."),
+        # 易用性 37 复测:「下载到机器人」被拒只写 The site refused this right now
+        ("unsupported", r"不支持", "This robot's software can't do this (simulated robots and "
+         "older robot software don't support it)."),
         ("unregistered", r"没有登记过|登记已吊销或过期",
          "This robot isn't registered on this site (or was removed)."),
         ("bad_mission", r"不成形|个航点|字节",

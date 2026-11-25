@@ -5,7 +5,7 @@ import { pkgProblem } from "./pkgcheck";
 import { useEffect, useState } from "preact/hooks";
 import { useLoad, clientTooOld, groupClients, type ClientRow } from "./admin";
 import { api, apiUpload, ApiError, badPackage, enc } from "./api";
-import { siteStr } from "./sitetext";
+import { siteKnown, siteStr } from "./sitetext";
 import { ConfirmPassword } from "./confirmpw";
 import { Confirm } from "./dialogs";
 import { hm, nameOf } from "./data";
@@ -31,10 +31,6 @@ interface Releases {
 /** 排队的门槛(站点 release_queue.MIN_BATTERY)。 */
 const QUEUE_PCT = 80;
 interface Versions { site: { version: string; min_app_level?: number; release_name?: string | null; release_build?: number | null }; robots: { robot_id: string; verdict: string }[]; clients?: ClientRow[] }
-
-function errText(e: unknown): string {
-  return t("failed", { why: e instanceof ApiError ? e.message : String(e) });
-}
 
 // 真机 11-20 用户「点下发和切换的时候没有状态显示，不知道是否下发成功，或者切换成功」:
 // 每台写最近一条命令(机器人收下没有、拒了为什么)和最近一条升级事件(下载好了、切换中、现在跑哪一版)。
@@ -130,18 +126,22 @@ export function UpgradePage({ say }: { say: Say }) {
   const [asking, setAsking] = useState(false);
   const [busy, setBusy] = useState(false);
   const [upPct, setUpPct] = useState<number | null>(null);
+  // 易用性 37 复测:下载 / 切换被拒只闪一下提示条 —— 原因留在那台机器人下面(红字),再点别的操作时清
+  const [upErr, setUpErr] = useState<Record<string, string>>({});
+  const fail = (robot: string, why: string) => { setUpErr((m) => ({ ...m, [robot]: why })); say(why); };
   const [backing, setBacking] = useState<string | null>(null);
 
   const act = async (robot: string, body: Record<string, unknown>, msg: string) => {
+    setUpErr((m) => { const n = { ...m }; delete n[robot]; return n; });
     try {
       const got = await api<{ ack?: { result?: string; reason?: string } }>("POST", `/api/robots/${enc(robot)}/release`, body);
       // 原来只要 HTTP 200 就说「正在切换」,机器人拒了(回执 rejected)也一样
       const r = got?.ack?.result;
-      if (r && r !== "accepted" && r !== "duplicate") say(t(r === "rejected" ? "upRefused" : "upNoReply", { id: nameOf(robot), why: siteStr(got?.ack?.reason || r) }));
+      if (r && r !== "accepted" && r !== "duplicate") fail(robot, t(r === "rejected" ? "upRefused" : "upNoReply", { id: nameOf(robot), why: siteStr(got?.ack?.reason || r) }));
       else say(msg);
       reload();
     } catch (e) {
-      say(errText(e));
+      fail(robot, t("upNotDone", { id: nameOf(robot), why: e instanceof ApiError ? e.message : String(e) }));
     }
   };
 
@@ -164,6 +164,7 @@ export function UpgradePage({ say }: { say: Say }) {
               ? <button type="button" class="btn sm push" onClick={() => setBacking(rid)}>{t("upRollback")}</button>
               : <span class="muted small push">{t("upNoRollback")}</span>}
             <RobotUpStatus rid={rid} rel={rel} onUnqueue={() => void act(rid, { action: "unqueue" }, t("upUnqueued", { id: nameOf(rid) }))} />
+            {upErr[rid] && <p class="error small" role="alert" data-up-err={rid}>{upErr[rid]}</p>}
           </div>
         ))}
       </section>
@@ -192,7 +193,7 @@ export function UpgradePage({ say }: { say: Say }) {
         <ul class="plain">
           {(rel?.releases ?? []).map((r) => (
             <li key={r.name} class="up-rel" data-release={r.name}>
-              <b class="mono">{r.name}</b>{r.build ? <span class="small"> · {buildTag(r.build)}</span> : null}{r.note && <span class="muted small"> · {r.note}</span>}
+              <b class="mono">{r.name}</b>{r.build ? <span class="small"> · {buildTag(r.build)}</span> : null}{r.note && <span class="muted small"> · {siteKnown(r.note)}</span>}
               <div class="row wrap">
                 {Object.keys(rel?.robots ?? {}).map((rid) => (
                   <span key={rid} class="up-robot">

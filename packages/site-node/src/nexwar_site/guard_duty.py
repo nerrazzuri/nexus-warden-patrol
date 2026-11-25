@@ -1738,6 +1738,11 @@ class GuardDuty:
         budget = [self._hide_pt(w, z) for w, z in hide_z] + pts
         why = self._why_not(rid, info, e, budget)        # 外审 r4 #3 / r5 #3:按这一圈实际的点算
         if why:
+            if run is not None and not e["robot"] and self.stay is not None and self.stay(rid):
+                # 易用性 37 复测 P1:「任意一台」的方案,这台被遥控 / 「留在这里」留住:
+                # 放掉这一趟,下一拍另挑一台(_pick 跳过留住的),不让防区停十分钟没人巡
+                self._log("handover", robot=rid, entry=eid, detail=why)
+                self._drop_run(eid)
             self._wait(e, rid, why)
             return
         self._waiting.pop(eid, None)

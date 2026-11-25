@@ -106,6 +106,13 @@ const Map<String, String> _lateZh = {'这一轮不跑了': 'skip', '已报警': 
 const String _afterNote = '; recorded afterwards because the site was not running then';
 
 final List<_Rule> _rules = [
+  (RegExp(r'^网页上传$'), (m) => 'uploaded on the web'), // 升级包来源（站点 api.py）
+  // 易用性 37 复测：值守等「留在这里」的原因（站点 standby.py stay_hold）
+  (RegExp(r'^(\S+) 遥控后留在原地[(（]有人点了「留在这里」[)）][,，]到点前不自动派$'),
+      (m) => '${m[1]} was told to stay where it is after remote control: no automatic patrol until the hold ends'),
+  (RegExp(r'^(\S+) 遥控刚结束[,，]在倒数回待命点[(（]可以点「留在这里」[)）]$'),
+      (m) => '${m[1]} was just driven by hand and is counting down before returning to standby (you can press Stay here)'),
+  (RegExp(r'^(\S+) 遥控刚结束$'), (m) => '${m[1]} was just driven by hand'),
   // 易用性 build 36 P3-6：看见人那一条后来改的标题（时间线、报警列表）
   (RegExp(r'^又看见人了[(（]这一回还没处理完[)）]$'), (m) => 'Person seen again (this alarm is still open)'),
   (RegExp(r'^看不到了[,，]\s?去向不明[,，]\s?最后在\s?(.+)$'),

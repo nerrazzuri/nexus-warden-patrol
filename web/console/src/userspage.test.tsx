@@ -43,7 +43,7 @@ beforeEach(() => {
     if (url === "/api/system/caps") return Promise.resolve(json({ priv: true, push: true, vpn: caps.vpn }));
     if (url.startsWith("/api/audit")) {
       return Promise.resolve(json({ audit: [{ id: 1, at: NOW - 60_000, actor: "gina", actor_role: "guard", action: "POST /api/mode", target: "armed", status: 200 },
-        { id: 2, at: NOW - 30_000, actor: "gina", actor_role: "guard", action: "POST /api/robots/A/goto", target: "A", status: 403, detail: { error: "A 未就绪:没站起来(电量低)" } },
+        { id: 2, at: NOW - 30_000, actor: "gina", actor_role: "guard", action: "POST /api/robots/A/goto", target: "A", status: 403, detail: { error: "A 未就绪:没站起来(电量低)", reason_en: "This robot isn't standing (it may be sitting or lying down). Make it stand up, then dispatch again." } },
         { id: 3, at: NOW - 20_000, actor: "gina", actor_role: "guard", action: "POST /api/weird/thing", target: "", status: 200 },
         // 第 10 轮 W9-01:站点给了显示名
         { id: 4, at: NOW - 10_000, actor: "gina", actor_role: "guard", action: "POST /api/route-schedules", target: "route-1-2", target_name: "夜巡测试", status: 200 }] }));
@@ -176,6 +176,8 @@ describe("用户页", () => {
       fireEvent.click(tr(c, "gina").querySelector(".user-name")!);
       const why = await waitFor(() => { const x = c.querySelector(".user-audit [data-why]"); expect(x).not.toBeNull(); return x!; });
       expect(why.getAttribute("title") ?? "").not.toMatch(/[\u4e00-\u9fff]/);
+      // 易用性 37 复测 P2-24:用站点给的英文说明,不是「Site message in Chinese」
+      expect(why.textContent).toBe("This robot isn't standing (it may be sitting or lying down). Make it stand up, then dispatch again.");
     } finally { lang.value = "zh"; }
   });
 

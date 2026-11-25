@@ -35,7 +35,9 @@ export function shiftSpans(robots: string[], patrols: TodayItem[], alerts: Alert
   }
   const marks: Mark[] = alerts
     .filter((a) => a.level !== "P3" && !ROBOT_OFFLINE.has(a.kind) && forGuard(a) && a.first_ms >= from && a.first_ms < to)
-    .map((a) => ({ key: a.key, robot: a.robot, at: a.first_ms, kind: isSecurity(a) ? "security" as const : "equipment" as const, title: a.title }));
+    .map((a) => ({ key: a.key, robot: a.robot, at: a.first_ms, kind: isSecurity(a) ? "security" as const : "equipment" as const,
+      // 易用性 37 复测 P3-6:时间线上的标题跟报警列表一样翻(原来直接放站点原话)
+      title: alertTitle(lang.value, a.kind, a.title) }));
   return { spans, marks };
 }
 
