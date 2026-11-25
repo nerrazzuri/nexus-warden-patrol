@@ -526,5 +526,7 @@ class FollowTask(Task):
             return
         self._sent_at = now
         pts, self._unsent = self._unsent, []
+        # 真机 11-25:带上在不在退、是不是退不了站定 —— App 上要写清它为什么动、为什么停
         self._events.emit("follow_track", {"task_id": self.task_id, "phase": self.phase,
-                                           "points": pts, **self._last()})
+                                           "backing": self._backing, "points": pts,
+                                           **self._last()})

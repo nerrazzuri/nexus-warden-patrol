@@ -324,6 +324,31 @@ def test_跟丢了_告警写跟丢_带最后位置和方向(看):
     t.w.on_event("A", _事件("patrol_waypoint", task_id="x"))   # 别的事件不管
 
 
+def test_真机1125_退不了原地站定_写进告警_为什么停_接着跟又改回在跟(看):
+    """真机 11-25:人走近到 1.9 m,身后 0.5 m 有东西退不了 —— App 上要看得出它在跟、为什么停。"""
+    t = 看
+    t.d.persons(present=True, count=1)
+    t.w.tick()
+    _绑(t)
+    t.w.on_event("A", _事件("follow_track", task_id="follow-1", phase="follow", backing="retreat",
+                            points=[]))
+    assert _开着的(t)[0].context["follow"] == "retreat"
+    t.w.on_event("A", _事件("follow_cornered", task_id="follow-1", range_m=1.93,
+                            why="身后 0.5 m 有东西"))
+    [a] = _开着的(t)
+    assert a.context["follow"] == "cornered" and a.context["follow_range_m"] == 1.9
+    assert "身后" in a.context["follow_why"]
+    t.w.on_event("A", _事件("follow_track", task_id="follow-1", phase="follow", backing="cornered",
+                            points=[]))
+    assert _开着的(t)[0].context["follow"] == "cornered", "还站定着:轨迹不把它改回在跟"
+    t.w.on_event("A", _事件("follow_track", task_id="follow-1", phase="follow", backing="",
+                            points=[]))
+    assert _开着的(t)[0].context["follow"] == "follow"
+    t.w.on_event("A", _事件("follow_cornered", task_id="follow-1", why="x"))
+    t.w.on_event("A", _事件("task_done", task_id="follow-1"))
+    assert _开着的(t)[0].context["follow"] == "ended", "站定着结束了也不再说在跟"
+
+
 def test_人最后在哪_按区域名说(看):
     t = 看
     t.w.where_of = lambda p: "东门附近" if p.get("x") == 4.0 and p.get("map_id") else None

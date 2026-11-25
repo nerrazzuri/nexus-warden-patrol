@@ -110,7 +110,7 @@ class PersonWatch:
     def on_event(self, rid: str, e: Any) -> None:
         """W74 二期:机器人跟人路上发的轨迹(``follow_track``)、跟丢 / 到上限(``follow_lost``)
         进这台开着的「看见人」告警的现场:人最后在哪、往哪走、轨迹。没有开着的告警不记。"""
-        if e.kind not in ("follow_track", "follow_lost", *_TASK_END) \
+        if e.kind not in ("follow_track", "follow_lost", "follow_cornered", *_TASK_END) \
                 or not isinstance(e.data, dict):
             return
         try:
@@ -124,15 +124,24 @@ class PersonWatch:
                 return
             cur = a.context.get("follow")
             if e.kind in _TASK_END:                      # 那一趟结束了:不再说在跟(#13)
-                if cur == "follow":
+                if cur in ("follow", "retreat", "cornered"):
                     self.alerts.amend_open(rid, PERSON_KIND, context={"follow": "ended"})
                 return
             ctx: dict[str, Any] = {}
             if e.kind == "follow_lost":
                 ctx["follow"] = str(d.get("result") or "lost")
+            elif e.kind == "follow_cornered":
+                # 真机 11-25:人走近了要退、身后有东西退不了 → 原地站定;App、网页写清为什么停
+                ctx["follow"] = "cornered"
+                ctx["follow_why"] = str(d.get("why") or "")[:120]
+                if _num(d.get("range_m")):
+                    ctx["follow_range_m"] = round(float(d["range_m"]), 1)
             elif d.get("phase") == "follow" or (d.get("phase") is None
                                                 and cur not in ("lost", "limit", "ended")):
-                ctx["follow"] = "follow"                 # 收尾时的轨迹不把跟丢改回在跟(#13)
+                # 收尾时的轨迹不把跟丢改回在跟(#13);11-25 起轨迹带 ``backing``(在退 / 退不了)
+                b = d.get("backing")
+                ctx["follow"] = ("retreat" if b == "retreat" else "cornered" if b == "cornered"
+                                 else "follow")
             last = d.get("last")
             if isinstance(last, dict) and _num(last.get("x")) and _num(last.get("y")):
                 person = {"x": float(last["x"]), "y": float(last["y"]),

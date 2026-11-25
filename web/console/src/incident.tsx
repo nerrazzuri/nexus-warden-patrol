@@ -130,7 +130,7 @@ export function IncidentView(props: {
 
   // ---- 页头 ----
   const sub = [a.level, t(sec ? "incSecurity" : "incEquipment"), where, scene?.name ?? "", hms(a.first_ms),
-    a.context?.follow === "follow" ? t("dutyFollowing") : a.context?.lost_ms != null ? t("dutyLost") : "",
+    followText(a.context),
     a.context?.exit ? t("incExit", { exit: a.context.exit }) : "", site ? "" : nameOf(a.robot)].filter(Boolean).join(" · ");
   let primary: preact.ComponentChildren = null;
   if (open && can && a.acked_ms == null) {
@@ -330,6 +330,16 @@ export function IncidentView(props: {
 }
 
 /** 「离北门 48 米」:没地名写「离报警点」;不到 1 米(就是它自己看见的)不写。 */
+/** 机器人跟人到哪一步了(真机 11-25:用户看不出它为什么动、为什么停)。没在跟、没跟过是空串。 */
+export function followText(ctx: Record<string, unknown> | null | undefined): string {
+  const f = ctx?.follow;
+  if (f === "follow") return t("dutyFollowing");
+  if (f === "retreat") return t("dutyRetreat");
+  if (f === "cornered") return t("dutyCornered");
+  if (ctx?.follow_left) return t("dutyLeftZone");
+  return ctx?.lost_ms != null ? t("dutyLost") : "";
+}
+
 export function awayText(dist: number | null | undefined, where: string): string {
   if (dist == null || dist < 1) return "";
   return where ? t("incAway", { m: Math.round(dist), where }) : t("incAwayPoint", { m: Math.round(dist) });

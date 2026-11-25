@@ -695,6 +695,15 @@ class _SiteAlertScenePageState extends State<SiteAlertScenePage> with EstopMissR
   String _followLine() {
     final f = _a.context['follow'];
     if (f == 'follow') return tr('${_a.robot} following', '${_a.robot} 正在跟随');
+    // 真机 11-25：用户看不出它为什么往后退、为什么站着不动
+    if (f == 'retreat') return tr('Person too close: ${_a.robot} is backing away', '人太近，${_a.robot} 在往后退');
+    if (f == 'cornered') {
+      return tr("Person too close and something is behind ${_a.robot}: it can't back away, standing still",
+          '人太近，${_a.robot} 身后有东西退不了，原地站定');
+    }
+    if (_a.context['follow_left'] == true) {
+      return tr('Person left the zone: ${_a.robot} stopped following', '人离开了防区，${_a.robot} 不再跟');
+    }
     if (f == 'lost' || f == 'limit' || _a.context['lost_ms'] is num) return tr('Person no longer seen', '看不到人了');
     return '';
   }
@@ -927,7 +936,7 @@ class _SiteAlertScenePageState extends State<SiteAlertScenePage> with EstopMissR
           child: Text(
             [
               tr('${_a.robot} · Live video', '${_a.robot} · 实时画面'),
-              if (_followLine().isNotEmpty && _a.context['follow'] == 'follow') tr('Following', '跟随中'),
+              if (const ['follow', 'retreat', 'cornered'].contains(_a.context['follow'])) tr('Following', '跟随中'),
             ].join(' · '),
             style: NwText.labelLarge.copyWith(color: c.text, fontWeight: FontWeight.w600),
           ),
@@ -1297,6 +1306,10 @@ class _SiteAlertScenePageState extends State<SiteAlertScenePage> with EstopMissR
     final pAt = person?['at_ms'] is num ? (person!['at_ms'] as num).toInt() : _a.lastMs;
     if (follow == 'follow') {
       rows.add((pAt, tr('The robot is following this person.', '机器人正跟着这个人。')));
+    } else if (follow == 'retreat' || follow == 'cornered') {
+      rows.add((pAt, '${_followLine()}${tr('.', '。')}'));
+    } else if (_a.context['follow_left'] == true) {
+      rows.add((pAt, '${_followLine()}${tr('.', '。')}'));
     } else if (follow == 'lost' || follow == 'limit') {
       final w = person?['where'] is String ? person!['where'] as String : '';
       rows.add((
