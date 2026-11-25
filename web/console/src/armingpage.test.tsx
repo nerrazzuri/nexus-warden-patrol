@@ -572,9 +572,11 @@ describe("易用性 37 复测 P2-18:切留守的确认句按防区说", () => {
     const { stayConfirmText } = await import("./armingpage");
     lang.value = "en";
     try {
+      // P1-8:留守时机器人自己看见人不报(modes.robot_armed),不能说「照样报人」
       expect(stayConfirmText([{ zone: "Drive-thru lane", home_armed: true }])).toBe(
-        "Switch to Stay? Every zone stays armed in Stay (Drive-thru lane): robots keep raising person alarms.");
+        "Switch to Stay? Robots stop raising their own person alarms until you arm again. Every zone stays armed (Drive-thru lane): camera and sensor alarms still send robots.");
       expect(stayConfirmText([{ zone: "North", home_armed: true }, { zone: "Lobby", home_armed: false }])).toContain("North stay armed");
+      expect(stayConfirmText([{ zone: "North", home_armed: true }])).not.toContain("keep raising");
       expect(stayConfirmText([{ zone: "Lobby", home_armed: false }])).toBe("Switch to Stay? Robots stop raising person alarms until you arm again.");
     } finally {
       lang.value = "zh";

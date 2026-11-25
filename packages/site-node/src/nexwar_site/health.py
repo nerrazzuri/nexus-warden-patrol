@@ -278,6 +278,21 @@ class HealthDesk:
                                for r in self._keys() if r["problem"])
                                ) if bad
                            else "Site keys present, permissions correct"}
+        if self.dispatcher is not None and getattr(self.dispatcher, "maps", None) is not None:
+            # 易用性 37 复测 P1-7:默认待命点走不了 = 这台什么都派不了,健康页要看得见
+            from nexwar_site.robot_overview import standby_bad
+            bad_sb = [rid for rid, c in list(getattr(self.dispatcher, "clients", {}).items())
+                      if standby_bad(self.db, self.dispatcher.maps, rid, c.capabilities)]
+            out["standby"] = {"ok": not bad_sb,
+                              "detail": ("待命点在图上走不了(派不了回待命点、值守):"
+                                         + "、".join(bad_sb) + "。把机器人开到空地重新标")
+                              if bad_sb
+                              else "待命点都在能走的地方",
+                              "detail_en": ("Standby point is not on walkable, scanned floor for "
+                                            + ", ".join(bad_sb) + ": it can't be sent home or on "
+                                            "guard rounds. Drive it into open floor and mark the "
+                                            "standby point again") if bad_sb
+                              else "Standby points are on walkable floor"}
         lanes = self._lanes() if self._lanes is not None else {}
         stuck = [n for n, t0 in lanes.items() if self._mono() - t0 > LANE_STUCK_S]
         out["lanes"] = {"ok": not stuck,

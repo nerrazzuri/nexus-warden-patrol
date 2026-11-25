@@ -9,7 +9,7 @@ import sqlite3
 from pathlib import Path
 
 import pytest
-from test_site_api import MAP, PW, 站
+from test_site_api import MAP, PW, _等, 站
 from test_site_intercept_reach import _屋子
 from test_site_maps import _files
 from test_site_schedule import 任务, 排程, 毫秒
@@ -664,7 +664,9 @@ def test_接口_只查不存_逐点问题照报_不存不进审计(站点):
     assert code == 200 and [e["index"] for e in d["errors"]] == [0], d
     assert s.req("POST", "/api/route-check", {**tmp, "points": []}, token=gina)[0] == 400
     # 查成功的不进操作记录(画的时候一会儿一次);被拒、出错的照样记
-    rows = s.db.query("SELECT status FROM audit WHERE action='POST /api/route-check'")
+    # 审计在回了响应之后才写(满载时最后一笔会晚到):等齐了再比
+    rows = _等(lambda: (lambda r: r if len(r) >= 3 else None)(
+        s.db.query("SELECT status FROM audit WHERE action='POST /api/route-check'")))
     assert sorted(r["status"] for r in rows) == [400, 400, 403], rows
 
 

@@ -393,3 +393,28 @@ def test_POC1105_没给名字_home在别的图上_自动叫home加图名_不409_
     assert names["home"] == "other", "别的图上的 home 留着"
     code, d2 = s.req("POST", "/api/robots/A/home/here", {}, token=alice)
     assert code == 200 and d2["standby"]["name"] == got["name"], "同一张图再标:改同一个"
+
+
+def test_易用性37_P1_7_站的地方图上走不了_不标_狗上不动_说往空地挪(站点, monkeypatch):
+    s = 站点
+    alice = _登(s, "alice")
+    _能标(s)
+    _等(lambda: s.disp.clients["A"].telemetry is not None and s.disp.clients["A"].telemetry.pose)
+    发了 = []
+    原 = s.disp.map_command
+
+    async def 记(*a, **k):
+        发了.append(a)
+        return await 原(*a, **k)
+    monkeypatch.setattr(s.disp, "map_command", 记)
+    import types
+    monkeypatch.setattr(s.api, "maps", types.SimpleNamespace(
+        reach_problem=lambda *a, **k: "这里 在图上不是可通行的地方(墙、障碍或未扫到)"))
+    code, d = s.req("POST", "/api/robots/A/home/here", {"name": "dock"}, token=alice)
+    assert code == 409 and "1 m" in d["error"] and "Drive about 1 m" in d["reason_en"], d
+    assert not 发了 and not [x for x in s.stb_list("A") if x["name"] == "dock"]
+    # 只标待命点(狗上本来就不改):照样拒、不登记
+    code, d = s.req("POST", "/api/robots/A/standby/here", {"name": "gate"}, token=alice)
+    assert code == 409 and "standby point" in d["reason_en"], d
+    assert not [x for x in s.stb_list("A") if x["name"] == "gate"]
+

@@ -255,3 +255,28 @@ describe("用户 11-10「为什么只显示中文」:日程没跑、被挡下的
     lang.value = "zh";
   });
 });
+
+describe("易用性 37 复测 P1-7:值守没接、点名不夹中文", () => {
+  it("「A 没接:回待命点 在图上…」整句英文;「目标点 …」也翻", () => {
+    expect(siteStr("A 没接:回待命点 在图上不是可通行的地方(墙、障碍或未扫到)"))
+      .toBe("A didn't take it: the standby point is not a walkable spot on the map (wall, obstacle or not scanned).");
+    expect(siteStr("目标点 在图上不是可通行的地方(墙、障碍或未扫到)")).not.toMatch(CJK);
+  });
+});
+
+describe("易用性 37 复测 P1-9:起点被挡 + 回头补也没到", () => {
+  it("整句英文,告诉人用遥控挪到空地", () => {
+    const s = "导航拒了: goto 被设备拒绝: 规划失败(start_blocked):起点在障碍或禁行区里;回头补也没到:导航拒了: goto 被设备拒绝: 规划失败(start_blocked):起点在障碍或禁行区里";
+    const en = siteStr(s);
+    expect(en).not.toMatch(CJK);
+    expect(en).toContain("Drive it a little into open floor with Remote");
+    expect(en).toContain("tried again after the lap");
+    expect(siteStr("导航拒了: goto 被设备拒绝: 规划失败(start_blocked):起点在障碍或禁行区里")).toContain("with Remote");
+  });
+});
+
+describe("易用性 37 复测 P3:站点自己加的点名翻英文", () => {
+  it("点位 回待命点 未到达", () => {
+    expect(siteStr("点位 回待命点 未到达,已跳过")).toBe("Waypoint “Return to standby” not reached, skipped");
+  });
+});

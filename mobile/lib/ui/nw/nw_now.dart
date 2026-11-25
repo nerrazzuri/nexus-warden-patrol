@@ -438,8 +438,17 @@ class _NowPageState extends State<NowPage> with EstopMissReveal {
   /// 急停、离线、吊销的机器人(被人叫停的走上面的急停卡)。有这些就不能说「全场正常」。
   List<Map<String, dynamic>> _needAttention() => [
         for (final r in _robots)
-          if (const {RobotPhase.estop, RobotPhase.offline, RobotPhase.revoked}.contains(_phaseOf(r))) r,
+          if (const {RobotPhase.estop, RobotPhase.offline, RobotPhase.revoked}.contains(_phaseOf(r)) || _standbyBad(r)) r,
       ];
+
+  /// 易用性 37 复测 P1-7：默认待命点在图上走不了 —— 回待命点、值守都派不了，不能说「全场正常」。
+  static bool _standbyBad(Map<String, dynamic> r) => r['standby_bad'] == true;
+
+  String _attnWord(Map<String, dynamic> r) {
+    final p = _phaseOf(r);
+    if (const {RobotPhase.estop, RobotPhase.offline, RobotPhase.revoked}.contains(p)) return _phaseWord(p);
+    return tr('standby point not walkable, re-mark it', '待命点走不了，要重新标');
+  }
 
   /// 截图核对 11-15:有机器人急停 / 离线时顶上一条琥珀「要看一下」,写清是哪台、什么状态。
   Widget _attnStrip(NwColors c, List<Map<String, dynamic>> bad) => Container(
@@ -453,7 +462,7 @@ class _NowPageState extends State<NowPage> with EstopMissReveal {
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text(tr('${bad.length} ${bad.length == 1 ? 'robot needs' : 'robots need'} attention', '${bad.length} 台机器人要看一下'),
                 style: NwText.titleSmall.copyWith(color: c.text, fontWeight: FontWeight.w700)),
-            Text([for (final r in bad) '${robotLabel(r)}: ${_phaseWord(_phaseOf(r))}'].join(' · '),
+            Text([for (final r in bad) '${robotLabel(r)}: ${_attnWord(r)}'].join(' · '),
                 maxLines: 2, overflow: TextOverflow.ellipsis, style: NwText.bodySmall.copyWith(color: c.textSecondary)),
           ])),
         ]),

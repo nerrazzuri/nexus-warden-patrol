@@ -30,7 +30,7 @@ export interface RobotCard {
   wifi?: Wifi | null;
   /** W72 详情:老站点没有这些。 */
   /** 第 2 轮 N2:当前地图那一版有没有原点(没报地图 = null)、有没有默认待命点。老站点没有。 */
-  home_set?: boolean | null; standby_set?: boolean;
+  home_set?: boolean | null; standby_set?: boolean; standby_bad?: boolean;
   patrols_7d?: number; aborts_7d?: number; last_patrol_ms?: number | null; last_seen_ms?: number | null; ever_seen?: boolean;
   storage?: { used_ratio: number; backlog_files: number | null; oldest_backlog_s: number | null } | null;
   map?: { id: string; version: string | null; match: boolean | null } | null;
@@ -364,8 +364,10 @@ function RobotSettings({ r, u, now, say, onChanged, onCode }: {
       sub: (r.devices ?? []).map((x) => devName(x.id)).join(" · ") }] : []),
     ...(r.home_set != null ? [{ k: "home", group: "setup" as const, sign: (r.home_set ? "ok" : "warn") as Check["sign"], label: "roOrigin" as Key,
       value: r.home_set ? t("roSet") : t("rdNoHome"), act: r.home_set ? undefined : <a class="btn" href="#/admin/localization">{t("rdNoHomeGo")}</a> }] : []),
-    ...(r.standby_set != null ? [{ k: "standby", group: "setup" as const, sign: (r.standby_set ? "ok" : "warn") as Check["sign"], label: "roStandby" as Key,
-      value: r.standby_set ? t("roSet") : t("rdNoStandby"), act: r.standby_set ? undefined : <a class="btn" href="#/admin/layout?tab=standby">{t("rdNoStandbyGo")}</a> }] : []),
+    // 易用性 37 复测 P1-7:默认待命点在图上走不了 —— 回待命点、值守都派不了,写出来
+    ...(r.standby_set != null ? [{ k: "standby", group: "setup" as const, sign: (r.standby_set && !r.standby_bad ? "ok" : "warn") as Check["sign"], label: "roStandby" as Key,
+      value: !r.standby_set ? t("rdNoStandby") : r.standby_bad ? t("rdStandbyBad") : t("roSet"),
+      act: r.standby_set && !r.standby_bad ? undefined : <a class="btn" href="#/admin/layout?tab=standby">{t("rdNoStandbyGo")}</a> }] : []),
     ...(r.fov ? [{ k: "fov", group: "setup" as const, sign: (r.fov.state === "ready" ? "ok" : "info") as Check["sign"], label: "roFov" as Key,
       value: r.fov.state === "ready" ? t("roFovReady")
         : r.fov.state === "learning" ? t("roFovLearning", { p: Math.min(99, Math.floor(100 * (r.fov.frames ?? 0) / Math.max(1, r.fov.need ?? 1))) })

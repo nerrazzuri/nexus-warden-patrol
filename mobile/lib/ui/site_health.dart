@@ -40,6 +40,7 @@ String checkLabel(String key) => switch (key) {
       'backup' => tr('Backup', '备份'),
       'push' => tr('Push alerts', '推送'),
       'robots' => tr('Robots', '四足机器人'),
+      'standby' => tr('Standby points', '待命点'),
       _ => key,
     };
 

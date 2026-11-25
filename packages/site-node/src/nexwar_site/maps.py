@@ -234,7 +234,7 @@ class MapCatalog:
     def list(self) -> list[dict[str, Any]]:
         """网页易用性 P1-87:每一版带 ``missing``(登记了、盘上却缺的文件名;都在 = 空)。"""
         out = []
-        for r in self.db.query("SELECT * FROM maps ORDER BY map_id, created_ms DESC"):
+        for r in self.db.query("SELECT * FROM maps ORDER BY map_id, created_ms DESC, rowid DESC"):
             d = _row(r)
             base = self.root / d["map_id"] / d["version"]
             names = [str(f.get("name", "")) for f in d["files"] if isinstance(f, dict)]

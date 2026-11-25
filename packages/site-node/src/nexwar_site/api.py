@@ -529,7 +529,10 @@ class SiteApi:
             return self.loop.call(fn, timeout_s=self.dispatcher.ack_timeout_s + 5
                                   if timeout_s is None else timeout_s)
         except Unsupported as exc:
-            raise HttpError(409, str(exc), extra={"unsupported": True}) from exc
+            # 易用性 37 复测 P2-22:「A 不支持 release_install」也带英文说明(原来只写「站点拒了」)
+            from nexwar_site.refusals import extra_for
+            raise HttpError(409, str(exc),
+                            extra={"unsupported": True, **extra_for(str(exc))}) from exc
         except DispatchRefused as exc:
             from nexwar_site.refusals import extra_for
             raise HttpError(409, str(exc), extra=extra_for(str(exc))) from exc   # W53:带代号
@@ -3709,6 +3712,11 @@ class _Handler(TlsHandlerMixin):
                                  "或者说明要替换",
                             extra={"name_taken": {"map_id": old["map_id"],
                                                   "map_version": old["map_version"]}})
+        # 易用性 37 复测 P1-7:标之前按它此刻的遥测位置查一遍(狗上还没改);
+        # 图上走不了的地方当原点 = 之后回待命点、值守派单全被拒
+        pose = c.telemetry.pose if c is not None and c.telemetry is not None else None
+        if pose is not None:
+            self._standby_walkable(robot_id, pose.map_id, pose.map_version, pose.x, pose.y)
         # 有效期同设位置(30 s,Orin 的钟不准,再短就收不下);超时之后狗照样标了的,按事件补登记。
         try:
             r = self.site.dispatch(lambda: self.site.dispatcher.map_command(
@@ -3739,6 +3747,28 @@ class _Handler(TlsHandlerMixin):
         home = stb.home(robot_id, data["map_id"], data["map_version"])
         point = next((p for p in stb.list(robot_id) if p["name"] == name), None)
         return self._send_json(200, {"ack": ack, "home": home, "standby": point})
+
+    def _standby_walkable(self, robot_id: str, map_id: str, version: str,
+                          x: float, y: float) -> None:
+        """待命点(原点)要落在图上能走、建图走过的地方,不然回待命点、值守派单都被拒(易用性 37
+        复测 P1-7)。不行 409,告诉人往空地挪;站点不认识的图、没有 coverage 的老图不查。"""
+        from nexwar_site.maps import MapError
+        maps = getattr(self.site, "maps", None)
+        if maps is None:
+            return
+        try:
+            why = maps.reach_problem(map_id, version, [("这里", x, y)])
+        except MapError:
+            return
+        if why:
+            raise HttpError(
+                409, f"{robot_id} 现在站的地方不能当待命点:{why}。"
+                     "往开阔、扫到过的地方开 1 m 左右再标",
+                extra={"reason_en": f"{robot_id} can't use this spot as its standby point: "
+                                    "the map "
+                                    "shows it as not walkable or not scanned, so robots could "
+                                    "never be sent back here. Drive about 1 m into open, scanned "
+                                    "floor and mark again."})
 
     def _here_pose(self, robot_id: str, user, name: str) -> dict:
         """狗此刻锚定后的地图位姿(``mark_home {target: standby}``:检查同标原点,狗上什么都不改)。
@@ -3819,6 +3849,7 @@ class _Handler(TlsHandlerMixin):
             raise HttpError(400, "default 要是 true/false")
         self._audit_detail = {"name": name}
         data = self._here_pose(robot_id, user, name)
+        self._standby_walkable(robot_id, data["map_id"], data["map_version"], data["x"], data["y"])
         try:
             stb.mark_standby(robot_id, name, data, default)
         except (StandbyError, KeyError, TypeError) as exc:
