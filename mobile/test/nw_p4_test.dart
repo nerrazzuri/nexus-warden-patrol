@@ -336,7 +336,12 @@ void main() {
       await t.pumpWidget(MaterialApp(home: Scaffold(body: AlarmLogPage(api: api))));
       await t.pumpAndSettle();
       expect(find.byKey(const Key('alarm-test-mode')), findsOneWidget);
-      expect(find.textContaining('${end.hour.toString().padLeft(2, '0')}:${end.minute.toString().padLeft(2, '0')}'),
+      // 只在条幅里找：现在 +1 小时碰巧跟样例里哪条告警的钟点一样（CI 11-25 15:57 UTC → 16:57）就会找到两个
+      expect(
+          find.descendant(
+              of: find.byKey(const Key('alarm-test-mode')),
+              matching: find.textContaining(
+                  '${end.hour.toString().padLeft(2, '0')}:${end.minute.toString().padLeft(2, '0')}')),
           findsOneWidget);
       await t.pumpWidget(Container());
     });
