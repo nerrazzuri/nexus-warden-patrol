@@ -53,6 +53,10 @@ from nexwar_contract.zones import MAX_ZONES, ZoneSet, covered, tightens, wall_po
 log = logging.getLogger(__name__)
 
 CONFIRM_TEXT = "水池、高楼楼梯、陡坡、落差(路缘、池边)都已画成禁行区"
+#: 易用性 build 36 P1-3:英文界面显示这一句(以前也露中文)。
+CONFIRM_TEXT_EN = ("Water (ponds, lakes, pools), stairs, steep slopes and drops "
+                   "(curbs, pool edges) "
+                   "are all drawn as no-go zones")
 #: 临时区最长多久(决策 66):挡手滑(秒当毫秒、多打几个零)。
 MAX_TEMP_MS = 366 * 86_400_000
 #: 接口给时长(``for_s``)最短多久。
@@ -142,7 +146,9 @@ class NavZones:
     def view(self, map_id: str, version: str) -> dict[str, Any]:
         r = self._row(map_id, version)
         zs = self.current(map_id, version)
-        out: dict[str, Any] = zs.to_wire() | {"confirm_text": CONFIRM_TEXT, "confirmed": None,
+        out: dict[str, Any] = zs.to_wire() | {"confirm_text": CONFIRM_TEXT,
+                                              "confirm_text_en": CONFIRM_TEXT_EN,
+                                              "confirmed": None,
                                               "updated_by": None, "updated_ms": None}
         # 还没确认、狗上照旧守着的(确认过的那一份里被这次删了、缩了、放松了的):
         # 给人看「确认之后才生效」

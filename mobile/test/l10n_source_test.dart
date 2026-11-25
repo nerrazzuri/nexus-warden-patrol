@@ -30,6 +30,9 @@ const _allowed = <String, List<String>>{
   // 存到站点上的区域名字（数据，不是界面文字）；显示的时候另外翻（zoneLabelText）
   'lib/ui/site_mapping.dart': [
     "'nogo' => '禁行区', 'erase' => '抹掉区', 'wall' => '虚拟墙', _ => '限速区'",
+  ],
+  // zoneLabelText 易用性 build 36 挪到 map_view.dart（地图标签也要翻）
+  'lib/ui/map_view.dart': [
     "'禁行区' => 'No-go zone', '限速区' => 'Speed-limit zone', '抹掉区' => 'Erase zone', '虚拟墙' => 'Virtual wall'"
   ],
   // 外审 r1 #9：站点给测试告警标题加的前缀（数据，按它认出是演练）；显示时另外翻

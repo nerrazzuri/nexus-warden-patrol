@@ -183,6 +183,12 @@ const RULES: Rule[] = [
   [/到诊断页清理空间/, () => "Free up space on the Diagnostics page."],
   [/到诊断页看存储/, () => "Check storage on the Diagnostics page."],
   // 站点拼的名字、说明
+  // 易用性 build 36 P1-3:手机 App 画区时给的默认名字、禁行区确认那一句(老站点没有 confirm_text_en)
+  [/^禁行区$/, () => "No-go zone"],
+  [/^限速区$/, () => "Speed-limit zone"],
+  [/^虚拟墙$/, () => "Virtual wall"],
+  [/^抹掉区$/, () => "Erase zone"],
+  [/^水池、高楼楼梯、陡坡、落差[(（]路缘、池边[)）]都已画成禁行区$/, () => "Water (ponds, lakes, pools), stairs, steep slopes and drops (curbs, pool edges) are all drawn as no-go zones"],
   [/^临时路线 (\d+) 个点$/, (m) => `One-off route (${m[1]} ${plural(m[1], "point", "points")})`],
   [/^临时巡逻不进日程$/, () => "One-off patrol (not in the schedule)"],
   [/^新登记[:：]确认之前只许手动派$/, () => "Newly registered: manual dispatch only until confirmed"],

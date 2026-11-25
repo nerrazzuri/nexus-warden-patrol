@@ -5,7 +5,7 @@ import { useEffect, useRef, useState } from "preact/hooks";
 import { api, ApiError } from "./api";
 import { robotNames } from "./data";
 import { Confirm, Modal } from "./dialogs";
-import { siteStr } from "./sitetext";
+import { siteKnown, siteStr } from "./sitetext";
 import { colon, joinList, lang, t, type Lang } from "./i18n";
 import { LayoutPage } from "./layoutpage";
 import { GuardRoutesTab } from "./layoutroutes";
@@ -439,7 +439,8 @@ export function ArmWizard({ say, onClose, arming = false, onChanged }: { say: Sa
         "POST", "/api/guard-routes/generate", { map_id: map.map_id, map_version: map.version, spacing_m: 6,
           zones: picked.map((z) => ({ zone: z, laps: 1, dwell_s: 0, photos: 1 })) });
       if (!g.waypoints.length) {
-        setNote(wt("routeGenNone", { why: g.zones.map((z) => z.note).filter(Boolean).join("；") }));
+        // 易用性 build 36 P1-3:站点写的原因按界面语言翻(以前英文界面后半句是中文)
+        setNote(wt("routeGenNone", { why: g.zones.map((z) => z.note).filter(Boolean).map((n) => siteKnown(n)).join(lang.value === "en" ? "; " : "；") }));
         return;
       }
       const taken = new Set(r.routes.map((x) => x.id));

@@ -26,6 +26,9 @@ def test_存储_修订号_并发_收紧判定_确认(tmp_path):
     assert z.current("m", "1").revision == 0 and not z.confirmed_current("m", "1")
     v = z.view("m", "1")
     assert v["revision"] == 0 and v["confirmed"] is None and v["confirm_text"] == CONFIRM_TEXT
+    # 易用性 build 36 P1-3:英文界面那一句
+    en = v["confirm_text_en"]
+    assert en and not any("\u4e00" <= ch <= "\u9fff" for ch in en)
     z.confirm("m", "1", revision=0, by="alice")                  # 没什么要画的也要确认
     assert z.confirmed_current("m", "1")
     zs, tight = z.put("m", "1", [POND], base_revision=0, by="alice")

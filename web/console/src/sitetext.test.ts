@@ -99,6 +99,15 @@ describe("站点原文翻成英文", () => {
 });
 
 describe("人也可能写的字段(siteKnown)", () => {
+  it("易用性 build 36 P1-3:App 画区的默认名字、禁行区确认那一句、生成路线的原因,英文界面不露中文", () => {
+    expect(siteKnown("禁行区")).toBe("No-go zone");
+    expect(siteKnown("虚拟墙")).toBe("Virtual wall");
+    expect(siteKnown("泳池")).toBe("泳池");
+    expect(CJK.test(siteKnown("水池、高楼楼梯、陡坡、落差(路缘、池边)都已画成禁行区"))).toBe(false);
+    expect(CJK.test(siteKnown("防区里站得下的地方离建图时走过的路都太远(定位不可靠)"))).toBe(false);
+    lang.value = "zh";
+    expect(siteKnown("禁行区")).toBe("禁行区");
+  });
   it("认得的站点自动文字翻;人写的中文原样,不换成「见详情」", () => {
     expect(siteKnown("临时路线 3 个点")).toBe("One-off route (3 points)");
     expect(siteKnown("斜坡")).toBe("Slope");
