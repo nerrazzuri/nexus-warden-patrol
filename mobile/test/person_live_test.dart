@@ -123,6 +123,26 @@ void main() {
         reason: '按钮中心点要点得到按钮');
   });
 
+  testWidgets('易用性 build 36 P2-14：自动弹的看见人页有「静音 2 分钟」，点了写静到几点、按钮变灰', (t) async {
+    _landscape(t);
+    final api = FakeApi('guard')..alertRows = [_seen('A/p#5')];
+    final muted = <String>[];
+    await t.pumpWidget(MaterialApp(
+        theme: nwTheme(Brightness.dark),
+        home: PersonLivePage(
+            api: api,
+            alert: Alert.fromWire(_seen('A/p#5')),
+            now: () => DateTime(2026, 11, 27, 10, 0),
+            mute: (k) async => muted.add(k))));
+    await _settle(t);
+    expect(find.byKey(PersonLivePage.muteKey), findsOneWidget);
+    await t.tap(find.byKey(PersonLivePage.muteKey));
+    await _settle(t);
+    expect(muted, ['A/p#5']);
+    expect(find.textContaining('10:02'), findsOneWidget);
+    expect(t.widget<ButtonStyleButton>(find.byKey(PersonLivePage.muteKey)).onPressed, isNull);
+  });
+
   testWidgets('App 开着在「现在」页：读到刚发生的「机器人看见人」直接弹整屏画面，关了不再弹', (t) async {
     _landscape(t);
     final api = FakeApi('guard')..alertRows = [_seen('A/p#9', cams: ['front'])];

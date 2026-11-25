@@ -231,6 +231,19 @@ void main() {
     await t.pumpWidget(Container());
   });
 
+  testWidgets('易用性 build 36 P2-2：站点在留守（Stay）时顶栏先写「留守」（以前只写「布防中」，跟网页对不上）', (t) async {
+    _size(t);
+    final api = FakeApi('guard')
+      ..alertRows = <Map<String, dynamic>>[]
+      ..modeView = <String, dynamic>{...FakeApi('guard').modeView, 'mode': 'home', 'state': 'armed', 'source': 'manual',
+        'until_ms': null, 'next_change_ms': null};
+    await t.pumpWidget(MaterialApp(home: NwShell(api: api, title: '庄园', ring: () {}, updater: null)));
+    await t.pumpAndSettle();
+    expect(find.descendant(of: find.byKey(NwShell.armKey), matching: find.textContaining('留守')), findsOneWidget);
+    expect(find.descendant(of: find.byKey(NwShell.armKey), matching: find.textContaining('布防中')), findsOneWidget,
+        reason: '留守 · 防区布防中');
+  });
+
   testWidgets('外壳：「现在」段上有没关的 P1 计数；App 有新版本时底部一条，「以后」收起，急停方块让开', (t) async {
     _size(t);
     final api = FakeApi('guard')..alertRows = [_p1('A/intrusion#1')];

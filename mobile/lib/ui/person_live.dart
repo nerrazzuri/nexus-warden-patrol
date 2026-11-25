@@ -12,6 +12,7 @@ import 'package:flutter/material.dart';
 
 import '../l10n.dart';
 import '../model/alert.dart';
+import '../net/background_watch.dart' as bg;
 import '../net/site_client.dart';
 import 'nw/nw_theme.dart';
 import 'orientation.dart';
@@ -178,9 +179,19 @@ class PersonLivePage extends StatefulWidget {
   final SiteApi api;
   final Alert alert;
   final Duration every;
-  const PersonLivePage({super.key, required this.api, required this.alert, this.every = const Duration(seconds: 3)});
+  final DateTime Function() now;
+  final Future<void> Function(String key) mute;
+  const PersonLivePage(
+      {super.key,
+      required this.api,
+      required this.alert,
+      this.every = const Duration(seconds: 3),
+      this.now = DateTime.now,
+      this.mute = bg.muteRing});
 
   static const Key takeKey = Key('person-live-take');
+  /// 易用性 build 36 P2-14：自动弹的这一页也要「静音 2 分钟」（以前只有来报警全屏页有）。
+  static const Key muteKey = Key('person-live-mute');
   static const Key detailKey = Key('person-live-detail');
   static const Key closeKey = Key('person-live-close');
 
@@ -193,6 +204,22 @@ class _PersonLivePageState extends State<PersonLivePage> {
   Timer? _poll;
   bool _busy = false;
   String _msg = '';
+  int? _mutedUntil;
+
+  Future<void> _mute() async {
+    // 跟来报警全屏页一样：前台的铃和后台通知的铃静到同一个点
+    final until = widget.now().add(const Duration(minutes: 2)).millisecondsSinceEpoch;
+    bg.ringMutedUntil[_a.key] = until;
+    await widget.mute(_a.key);
+    if (!mounted) return;
+    final d = DateTime.fromMillisecondsSinceEpoch(until);
+    final hm = '${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}';
+    setState(() {
+      _mutedUntil = until;
+      _msg = tr('Muted on this phone until $hm. It rings again if no one takes ownership.',
+          '这台手机静音到 $hm，到时还没人接手会接着响。');
+    });
+  }
 
   @override
   void initState() {
@@ -254,6 +281,9 @@ class _PersonLivePageState extends State<PersonLivePage> {
                     personLiveButton(context, PersonLivePage.takeKey, tr('Take ownership', '我来处理'),
                         _busy ? null : () => unawaited(_take()),
                         primary: true),
+                  if (!_a.acked && !_a.resolved)
+                    personLiveButton(context, PersonLivePage.muteKey, tr('Mute 2 min', '静音 2 分钟'),
+                        _mutedUntil == null ? () => unawaited(_mute()) : null),
                   personLiveButton(context, PersonLivePage.detailKey, tr('Details', '详情'), _detail),
                   personLiveButton(context, PersonLivePage.closeKey, tr('Close', '关闭'), () => Navigator.of(context).pop()),
                 ])));

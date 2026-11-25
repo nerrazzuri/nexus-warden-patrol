@@ -232,7 +232,8 @@ export function UpgradePage({ say }: { say: Say }) {
             reload();
           } catch (e) {
             // 第 3 轮 P1-77:包不对(签名、指纹、已登记)不是密码问题 —— 关掉密码框、单独说,不清空密码重来
-            if (badPackage(e)) { setAsking(false); say(t("upBadPkg", { why: siteStr((e as ApiError).message) })); return; }
+            // 易用性 build 36 P2-3:原因留在按钮下面(红字),到重新选文件才清掉 —— 以前只闪一下提示条
+            if (badPackage(e)) { const why = t("upBadPkg", { why: siteStr((e as ApiError).message) }); setAsking(false); setBad(why); say(why); return; }
             throw e;
           } finally {
             setBusy(false);

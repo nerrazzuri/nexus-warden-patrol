@@ -83,6 +83,8 @@ _TASK_END = frozenset({"task_done", "task_failed", "task_aborted", "task_preempt
 HOME_ABORT_WAIT_S = 15.0
 #: 遥控放租之后(会规划的狗)倒数这么多秒再回待命点,期间可取消(真机 11-25)。
 TELEOP_RETURN_DELAY_S = 30.0
+#: 易用性 build 36 P1-4:遥控后点「留在这里」,值守多久不自动派这台(人手动派了就提前放开)。
+STAY_HOLD_S = 600.0
 #: 倒数期间这台狗又收到这几种命令 = 人接着在用它:这一趟不回。
 _SUPERSEDE_KINDS = ("patrol", "goto", "teleop", "abort", "halt", "posture", "dock", "follow")
 
@@ -133,6 +135,11 @@ class StandbyManager:
         #: ``dispatcher.standby_countdown``(机器人视图、卡片读它)。
         self._countdown_cancel: dict[str, asyncio.Event] = {}
         self.teleop_delay_s = TELEOP_RETURN_DELAY_S
+        #: 易用性 build 36 P1-4:遥控放租后、倒数还没开始(等回执那几秒)的狗 → 放租时刻。
+        self._teleop_ended: dict[str, int] = {}
+        #: 点了「留在这里」的狗 → (点的时刻, 到几点):这段时间值守不自动派(:meth:`stay_hold`)。
+        self._stay: dict[str, tuple[int, int]] = {}
+        self.stay_hold_s = STAY_HOLD_S
         dispatcher.standby_countdown = {}
         dispatcher.on_event(self._on_event)
 
@@ -417,6 +424,9 @@ class StandbyManager:
             return                      # W22:到了拦截点要驱离,回程由驱离结束时派
         if self.default(robot_id) is None:
             return
+        if task_id.startswith(TELEOP_TASK_PREFIX):
+            # 易用性 build 36 P1-4:同步记下 —— 倒数开始前那几秒值守也别抢着派(布防时一松手就被派走)
+            self._teleop_ended[robot_id] = self._now()
         # 事件回调在事件循环里、同步地跑;派单要 await 回执,另起一个协程。
         t = asyncio.get_running_loop().create_task(self._auto(robot_id, task_id))
         self._tasks.add(t)
@@ -542,6 +552,13 @@ class StandbyManager:
         return "back" if self._already_back(robot_id, after) == "back" else ""
 
     async def _auto(self, robot_id: str, after: str) -> None:
+        try:
+            await self._auto_inner(robot_id, after)
+        finally:
+            if after.startswith(TELEOP_TASK_PREFIX):
+                self._teleop_ended.pop(robot_id, None)
+
+    async def _auto_inner(self, robot_id: str, after: str) -> None:
         if await self._settle(robot_id, after) == "back":
             log.info("%s 在 %s 之后已经派过回待命点:这一趟结束不再派", robot_id, after)
             return
@@ -584,16 +601,43 @@ class StandbyManager:
         """正在倒数的那一趟(``{"after", "due_ms"}``),没有是 ``None``。"""
         return self.dispatcher.standby_countdown.get(robot_id)
 
-    def cancel_countdown(self, robot_id: str, *, by: str) -> bool:
-        """人点了「取消」:这一趟不回(真机 11-25)。没在倒数回假。"""
+    def cancel_countdown(self, robot_id: str, *, by: str) -> int | None:
+        """人点了「留在这里」:这一趟不回(真机 11-25),值守 :attr:`stay_hold_s` 秒内也不自动派这台
+        (易用性 build 36 P1-4:以前几秒后又被值守派去巡逻)。返回到几点(毫秒);没在倒数回 ``None``。"""
         ev = self._countdown_cancel.get(robot_id)
         if ev is None or ev.is_set():
-            return False
+            return None
         ev.set()
-        log.info("%s 遥控后的自动回待命点被 %s 取消", robot_id, by)
+        now = self._now()
+        until = now + int(self.stay_hold_s * 1000)
+        self._stay[robot_id] = (now, until)
+        log.info("%s 遥控后的自动回待命点被 %s 取消:留在原地,值守到 %d 前不自动派", robot_id, by,
+                 until)
         self.dispatcher.feed.publish({"kind": "standby_countdown_cancelled",
-                                      "robot_id": robot_id, "by": by})
-        return True
+                                      "robot_id": robot_id, "by": by, "until_ms": until})
+        return until
+
+    def stay_hold(self, robot_id: str) -> str:
+        """值守问:这台现在能不能自动派(易用性 build 36 P1-4)。不能 → 为什么;能 → 空串。
+        遥控刚放租(倒数前那几秒、倒数中)、点了「留在这里」还没到点 —— 都先别派。人又手动派了命令
+        (巡逻、去某点、遥控、叫停……)就提前放开。"""
+        if robot_id in self.dispatcher.standby_countdown:
+            return f"{robot_id} 遥控刚结束,在倒数回待命点(可以点「留在这里」)"
+        now = self._now()
+        ended = self._teleop_ended.get(robot_id)
+        if ended is not None and now - ended < int((self.teleop_delay_s + 30) * 1000):
+            return f"{robot_id} 遥控刚结束"
+        got = self._stay.get(robot_id)
+        if got is None:
+            return ""
+        start, until = got
+        marks = ",".join("?" * len(_SUPERSEDE_KINDS))
+        if now >= until or self.db.query(
+                f"SELECT 1 FROM commands WHERE robot_id=? AND issued_at>? "
+                f"AND kind IN ({marks}) LIMIT 1", (robot_id, start, *_SUPERSEDE_KINDS)):
+            self._stay.pop(robot_id, None)
+            return ""
+        return f"{robot_id} 遥控后留在原地(有人点了「留在这里」),到点前不自动派"
 
     async def _count_down(self, robot_id: str, after: str) -> bool:
         """遥控放租之后先倒数 :attr:`teleop_delay_s` 秒(真机 11-25)。真 = 接着回;假 = 取消了,

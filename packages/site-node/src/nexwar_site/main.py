@@ -1108,6 +1108,7 @@ class Server:
         from nexwar_site.api import map_marks
         self.guard.marks = map_marks(self.api)                # W74 三期:出口线、易藏点
         self.guard.busy = self.deterrence.busy
+        self.guard.stay = self.standby.stay_hold
         self.guard.charging = lambda rid: bool(self.db.query(
             "SELECT 1 FROM charge_cycles WHERE robot_id=?", (rid,)))
         self.guard.standby = self.standby

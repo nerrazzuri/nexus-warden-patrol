@@ -99,6 +99,20 @@ describe("站点原文翻成英文", () => {
 });
 
 describe("人也可能写的字段(siteKnown)", () => {
+  it("易用性 build 36 P3-6:看见人那一条后来改的标题翻成英文", () => {
+    for (const x of ["又看见人了(这一回还没处理完)", "看不到了,去向不明,最后在防区 1", "看不到了,去向不明", "A 看见人 5 分钟没人到场",
+      "授权在场:王小明", "人离开防区:北区", "人离开值守区:东门", "A 电量不够开始值守", "A 停车没确认"]) {
+      expect(siteText(x).text, x).not.toMatch(/see details|in Chinese/);
+    }
+    expect(siteText("又看见人了(这一回还没处理完)").text).toBe("Person seen again (this alarm is still open)");
+  });
+  it("易用性 build 36 P2-5:诊断页上装、存储那几行翻成英文", () => {
+    for (const x of ["6 个线圈都确认过", "仿真声卡", "喇叭放警笛声", "已用 74%,剩 58 GB", "已用 91%,剩 6.2 GB:到 90% 就不接新的巡逻(没传完的不删)",
+      "继电器板一直未确认(串口、站号、板子供电?)", "声卡 hw:1 不在(USB 掉了?)", "系统静音(Device 的 PCM)"]) {
+      expect(CJK.test(siteText(x).text), x).toBe(false);
+    }
+    expect(siteText("已用 74%,剩 58 GB").text).toBe("74% used, 58 GB free");
+  });
   it("易用性 build 36 P1-3:App 画区的默认名字、禁行区确认那一句、生成路线的原因,英文界面不露中文", () => {
     expect(siteKnown("禁行区")).toBe("No-go zone");
     expect(siteKnown("虚拟墙")).toBe("Virtual wall");

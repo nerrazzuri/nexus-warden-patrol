@@ -408,6 +408,20 @@ async def test_一圈跑完下一圈派不出去_只记一次跑完_等着(站):
     assert len(_patrols(t)) == 2 and _log(t, "lap_start")[-1]["detail"].startswith("第 2 圈")
 
 
+async def test_易用性36_P1_4_遥控刚结束_留在这里_值守不派_放开了再派(站):
+    """易用性 build 36 P1-4 / P2-1:遥控松手、点「留在这里」以后值守又把机器人派去巡逻。"""
+    t = 站
+    hold = {"A": "A 遥控后留在原地(有人点了「留在这里」),到点前不自动派"}
+    t.duty.stay = lambda rid: hold.get(rid, "")
+    _方案(t)
+    await _跑(t, 5)
+    assert _patrols(t) == []
+    assert any("留在这里" in r["detail"] for r in _log(t, "waiting"))
+    hold.clear()
+    await _跑(t, 3)
+    assert len(_patrols(t)) == 1
+
+
 # ---------------------------------------------------------------- 第三期:保存时查冲突(设计 §6.3)
 
 def _冲突台(t):
@@ -1106,6 +1120,8 @@ async def test_W74_看见人_停下以后派跟人_一回只派一次_机器人�
     t.duty.alerts.raise_alert(kind="dog_sees_person", robot="A", title="看见人")
     await _跑(t, 3)
     assert _follows(t) == [], "机器人能力里没有 follow:照旧原地盯着"
+    [a] = [a for a in t.duty.alerts.open if a["kind"] == "dog_sees_person"]
+    assert (a.get("context") or {}).get("follow") == "unsupported", "P2-13:告警里说它不会跟"
     t.duty.alerts.resolve_all("A", "dog_sees_person", who="gina")
     await _跑(t, 3)
     t.site.clients["A"].capabilities.tasks["follow"] = {"state": "idle"}

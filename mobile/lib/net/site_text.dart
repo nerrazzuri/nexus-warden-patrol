@@ -106,6 +106,16 @@ const Map<String, String> _lateZh = {'这一轮不跑了': 'skip', '已报警': 
 const String _afterNote = '; recorded afterwards because the site was not running then';
 
 final List<_Rule> _rules = [
+  // 易用性 build 36 P3-6：看见人那一条后来改的标题（时间线、报警列表）
+  (RegExp(r'^又看见人了[(（]这一回还没处理完[)）]$'), (m) => 'Person seen again (this alarm is still open)'),
+  (RegExp(r'^看不到了[,，]\s?去向不明[,，]\s?最后在\s?(.+)$'),
+      (m) => 'Lost sight of the person, last seen at ${m[1]!.replaceFirst(RegExp(r'^防区 '), 'zone ')}'),
+  (RegExp(r'^看不到了[,，]\s?去向不明$'), (m) => 'Lost sight of the person'),
+  (RegExp(r'^(\S+) 看见人 (\d+) 分钟没人到场$'), (m) => '${m[1]} saw a person ${m[2]} min ago and no one is on scene yet'),
+  (RegExp(r'^人离开防区[:：]\s?(.+)$'), (m) => 'Person left the zone: ${m[1]}'),
+  (RegExp(r'^人离开值守区[:：]\s?(.+)$'), (m) => 'Person left the guarded area: ${m[1]}'),
+  (RegExp(r'^(\S+) 电量不够开始值守$'), (m) => '${m[1]} does not have enough battery to start guard duty'),
+  (RegExp(r'^(\S+) 停车没确认$'), (m) => '${m[1]} did not confirm it stopped'),
   // 第 13 轮：排程没跑的说明（站点 scheduler.py；新写法不露 on_missed，老记录照样认）
   (RegExp(r'^([\s\S]+?)[;；]之前没派出去[:：]([\s\S]+)$'),
       (m) => '${_en(m[1]!)}. Before that, no robot could be sent: ${_lc(_en(m[2]!))}'),

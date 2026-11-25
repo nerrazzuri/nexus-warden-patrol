@@ -54,6 +54,8 @@ _HEAD_TEXT = {"tail": "机器人尾为前", "unknown": "未知"}
 STALE_MS = 90_000
 #: 遥控任务的 task_id 前缀(W00c5c)。
 TELEOP_TASK_PREFIX = "teleop-"
+#: 这几种任务跑着的时候不让趴下、蹲下(易用性 build 36 P2-16)。
+_MOVE_KINDS = frozenset({"goto", "patrol", "follow", "dock"})
 #: 遥控授予命令的有效期 = 等回执的时间 + 这么多(毫秒)。
 TELEOP_GRANT_TTL_SLACK_MS = 2_000
 #: ``video`` 命令本身至少活多久(毫秒),跟推流的有效期分开。见 :meth:`Dispatcher.video`。
@@ -1156,6 +1158,10 @@ class Dispatcher:
         self._check_held(robot_id)            # 外审 r1 #4:叫停了「恢复前不会再动」,姿势也算动
         if not self._fresh(c):
             raise DispatchRefused(f"{robot_id} 不在线或状态不新鲜")
+        t = c.status.task if c.status is not None else None
+        if mode != "stand" and t is not None and t.kind in _MOVE_KINDS:
+            # 易用性 build 36 P2-16:巡逻中点「趴下」,狗上不拦、导航还在走,界面上也看不出结果
+            raise DispatchRefused(f"{robot_id} 正在执行任务 {t.task_id}:先「原地停下」再趴下")
         return await self._send(c, robot_id, "posture", {"mode": mode}, issued_by=issued_by,
                                 task_id=f"posture-{uuid.uuid4().hex[:8]}",
                                 timeout_s=POSTURE_ACK_TIMEOUT_S)

@@ -435,15 +435,42 @@ async def test_真机1125_遥控放租后_先倒数_能取消_倒数完才回(�
     cd = t.site.robot_view("A")["standby_countdown"]
     assert cd["after"] == "teleop-11" and cd["due_ms"] > 0, "倒数的时候视图上看得见"
     assert not _cmds(t, "goto"), "倒数完之前不走"
-    assert t.stb.cancel_countdown("A", by="gina") is True
+    assert "倒数" in t.stb.stay_hold("A"), "倒数中值守别派(易用性 build 36 P1-4)"
+    assert t.stb.cancel_countdown("A", by="gina") is not None
     await job
     assert not _cmds(t, "goto") and t.site.robot_view("A")["standby_countdown"] is None
     kinds = [i["kind"] for i in _feed(sub)]
     assert "standby_countdown" in kinds and "standby_countdown_cancelled" in kinds
-    assert t.stb.cancel_countdown("A", by="gina") is False, "没在倒数:取消不了"
+    assert t.stb.cancel_countdown("A", by="gina") is None, "没在倒数:取消不了"
     # 不取消:倒数完照回
     await t.send(t.stb._auto("A", "teleop-12"))
     assert len(_cmds(t, "goto")) == 1
+
+
+async def test_易用性36_P1_4_留在这里_值守到点前不派_人手动派了提前放开(站):
+    """易用性 build 36 P1-4:点「留在这里」以后几秒,值守又把机器人派去巡逻。"""
+    t = 站
+    t.site.clients["A"].capabilities.tasks["goto"]["path"] = "planned"
+    t.stb.set("A", "dock", map_id="estate-1", map_version="7", x=5.0, y=0.0, yaw=0.0, default=True)
+    t.stb.teleop_delay_s = 5.0
+    assert t.stb.stay_hold("A") == ""
+    job = asyncio.ensure_future(t.stb._auto("A", "teleop-21"))
+    await asyncio.sleep(0.05)
+    assert t.stb.stay_hold("A"), "倒数中"
+    until = t.stb.cancel_countdown("A", by="gina")
+    await job
+    assert until is not None and until - t.stb._now() > 9 * 60 * 1000, "大约 10 分钟"
+    assert "留在原地" in t.stb.stay_hold("A")
+    # 到点放开
+    t.stb._stay["A"] = (t.stb._stay["A"][0], t.stb._now() - 1)
+    assert t.stb.stay_hold("A") == ""
+    # 人又手动派了命令:提前放开
+    t.stb._stay["A"] = (t.stb._now() - 1000, t.stb._now() + 600_000)
+    with t.site.db.tx() as c:
+        c.execute("INSERT INTO commands (command_id, task_id, robot_id, kind, payload, issued_by,"
+                  " issued_at) VALUES ('c-99', 'goto-99', 'A', 'goto', '{}', 'gina', ?)",
+                  (t.stb._now(),))
+    assert t.stb.stay_hold("A") == ""
 
 
 async def test_真机1125_倒数期间人又派了命令_这一趟不回(站):

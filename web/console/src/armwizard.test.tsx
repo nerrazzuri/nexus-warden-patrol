@@ -292,6 +292,10 @@ describe("布防向导", () => {
       return m!;
     });
     expect(box.getAttribute("data-route")).toMatch(/^guard-/);
+    // 易用性 build 36 P2-9:每个点标上序号
+    const nums = [...r.container.ownerDocument.querySelectorAll("[data-wiz-route-map] [data-route-pt]")].map((g) => g.textContent);
+    expect(nums.length).toBeGreaterThan(1);
+    expect(nums[0]).toBe("1");
   });
 
   it("第 3 步不预选:选了才能下一步;时间表本来关着、选「手动」不存", async () => {
