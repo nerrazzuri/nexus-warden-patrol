@@ -218,7 +218,8 @@ class _SiteAlertScenePageState extends State<SiteAlertScenePage> with EstopMissR
   String _msg = '';
   bool _dim = false;
   /// 易用性 build 37 复测：站点没配推送还写「已推送到所有手机」—— 问一次站点（问不到当配了，照旧写）。
-  bool _pushOff = false;
+  // 易用性 37 复测：null = 还没问到（满载、网慢）—— 不说「已推送」也不说「没配」
+  bool? _pushOff;
   int _ticks = 0;
   Timer? _timer;
 
@@ -1172,7 +1173,9 @@ class _SiteAlertScenePageState extends State<SiteAlertScenePage> with EstopMissR
     return _section(c, tr('Notify', '通知'), key: SiteAlertScenePage.notifyKey, [
       Text(
         _a.level == 'P1'
-            ? (_pushOff
+            ? (_pushOff == null
+                ? tr('P1 alarm: shown in the app and on every console', 'P1 报警：App 和所有控制台都看得到')
+                : _pushOff!
                 ? tr('Phone push is not set up on this site: this alarm shows only in the app and on consoles',
                     '站点没配手机推送：这条报警只在 App 和网页里')
                 : tr('Pushed to all signed-in phones', '已推送到所有登录的手机'))

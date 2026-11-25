@@ -62,10 +62,12 @@ void main() {
   testWidgets('回指定的待命点', (t) async {
     final api = _api('guard');
     await _open(t, api);
+    await t.ensureVisible(find.byKey(const Key('standby-go-yard')));
+    await t.pumpAndSettle();
     await t.tap(find.byKey(const Key('standby-go-yard')));
     await t.pumpAndSettle();
     expect(api.calls, contains('standby A yard'));
-    expect(find.byKey(SiteStandbyPage.msgKey), findsOneWidget);
+    expect(find.byKey(SiteStandbyPage.msgKey, skipOffstage: false), findsOneWidget);
   });
 
   testWidgets('保安：能叫回，不能设、设默认、删', (t) async {
@@ -108,10 +110,14 @@ void main() {
   testWidgets('设默认、删（先确认）', (t) async {
     final api = _api('admin');
     await _open(t, api);
+    await t.ensureVisible(find.byKey(const Key('standby-default-yard')));
+    await t.pumpAndSettle();
     await t.tap(find.byKey(const Key('standby-default-yard')));
     await t.pumpAndSettle();
     expect(api.calls, contains('standby-default A yard'));
     expect(find.text('yard（默认）'), findsOneWidget);
+    await t.ensureVisible(find.byKey(const Key('standby-remove-gate')));
+    await t.pumpAndSettle();
     await t.tap(find.byKey(const Key('standby-remove-gate')));
     await t.pumpAndSettle();
     expect(api.calls.where((c) => c.startsWith('standby-remove')), isEmpty, reason: '先确认');

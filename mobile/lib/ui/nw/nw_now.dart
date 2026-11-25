@@ -30,6 +30,7 @@ import '../site_alert_scene.dart';
 import '../site_deterrence.dart' show SiteDeterrencePage, deterSessionText;
 import '../site_duty_page.dart' show DutyTargets, dutyOrder, robotLabel, kSiteDownGrace;
 import '../site_robot.dart' show SiteRobotPage, robotStatusLine;
+import '../site_standby.dart' show SiteStandbyPage;
 import '../site_video.dart';
 import 'nw_button.dart';
 import 'nw_p2_duty.dart' show NwMapThumb;
@@ -57,6 +58,7 @@ class NowPage extends StatefulWidget {
   static const Key okKey = Key('now-ok');
   static Key deterKey(String id) => Key('now-deter-$id');
   static const Key attnKey = Key('now-attn');
+  static const Key attnStandbyKey = Key('now-attn-standby');
   static Key p1Key(String key) => Key('now-p1-$key');
   static Key ackKey(String key) => Key('now-ack-$key');
   static Key openKey(String key) => Key('now-open-$key');
@@ -447,11 +449,25 @@ class _NowPageState extends State<NowPage> with EstopMissReveal {
   String _attnWord(Map<String, dynamic> r) {
     final p = _phaseOf(r);
     if (const {RobotPhase.estop, RobotPhase.offline, RobotPhase.revoked}.contains(p)) return _phaseWord(p);
-    return tr('standby point not walkable: set a new default standby point', '待命点走不了：要重新设一个默认待命点');
+    return tr('default standby point not walkable: tap to make a good one default', '默认待命点走不了：点这里把好的点设为默认');
   }
 
   /// 截图核对 11-15:有机器人急停 / 离线时顶上一条琥珀「要看一下」,写清是哪台、什么状态。
-  Widget _attnStrip(NwColors c, List<Map<String, dynamic>> bad) => Container(
+  Widget _attnStrip(NwColors c, List<Map<String, dynamic>> bad) {
+    // 易用性 37 复测第五轮：待命点走不了的那台，点这一条直接到它的待命点页（原来要钻 5 层）
+    final sb = bad.where(_standbyBad).toList();
+    final strip = _attnStripBody(c, bad, sb.isNotEmpty);
+    if (sb.isEmpty || _viewer) return strip;
+    final r = sb.first;
+    return InkWell(
+        key: NowPage.attnStandbyKey,
+        onTap: () => unawaited(Navigator.of(context).push(MaterialPageRoute<void>(
+            builder: (_) => SiteStandbyPage(
+                api: widget.api, robotId: '${r['robot_id']}', canMarkHere: robotCanStandbyHere(r))))),
+        child: strip);
+  }
+
+  Widget _attnStripBody(NwColors c, List<Map<String, dynamic>> bad, bool tappable) => Container(
         key: NowPage.attnKey,
         padding: const EdgeInsets.fromLTRB(Nw.s16, 12, Nw.s16, 12),
         decoration: BoxDecoration(border: Border(bottom: BorderSide(color: c.outline))),
@@ -465,6 +481,7 @@ class _NowPageState extends State<NowPage> with EstopMissReveal {
             Text([for (final r in bad) '${robotLabel(r)}: ${_attnWord(r)}'].join(' · '),
                 maxLines: 2, overflow: TextOverflow.ellipsis, style: NwText.bodySmall.copyWith(color: c.textSecondary)),
           ])),
+          if (tappable) Icon(Icons.chevron_right_rounded, color: c.textSecondary),
         ]),
       );
 

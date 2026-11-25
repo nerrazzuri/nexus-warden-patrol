@@ -54,6 +54,14 @@ void main() {
     expect(find.text('已推送到所有登录的手机'), findsNothing);
     await show(<String, dynamic>{'configured': true});
     expect(find.text('已推送到所有登录的手机'), findsOneWidget);
+    // 第五轮：问不到（满载、网慢、老站点不报）—— 不说已推送
+    final api = FakeApi('guard')..summaryBody = <String, dynamic>{'robots': []};
+    await t.pumpWidget(Container());
+    await t.pumpWidget(MaterialApp(
+        home: SiteAlertScenePage(api: api, alert: _p1(), now: () => DateTime.fromMillisecondsSinceEpoch(40000))));
+    await t.pumpAndSettle();
+    expect(find.text('已推送到所有登录的手机'), findsNothing);
+    expect(find.text('P1 报警：App 和所有控制台都看得到'), findsOneWidget);
     await t.pumpWidget(Container());
   });
 

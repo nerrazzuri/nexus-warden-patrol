@@ -251,8 +251,10 @@ class _SiteStandbyPageState extends State<SiteStandbyPage> with NwAsk {
                             shape: Border(bottom: BorderSide(color: c.outline)),
                             title: Text(
                                 '${standbyName(p)}${p['default'] == true ? tr(' (default)', '（默认）') : ''}'),
-                            subtitle: Text(_xy(p)),
-                            trailing: Wrap(
+                            // 易用性 37 复测：按钮放在 trailing 把名字挤成一个字一行 —— 挪到名字下面
+                            subtitle: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                              Text(_xy(p)),
+                              Wrap(
                               spacing: 4,
                               children: [
                                 if (dispatch)
@@ -280,6 +282,7 @@ class _SiteStandbyPageState extends State<SiteStandbyPage> with NwAsk {
                                   ),
                               ],
                             ),
+                            ]),
                           ),
                       ])),
               ],

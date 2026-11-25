@@ -540,6 +540,23 @@ class SiteApi:
             raise HttpError(504, f"等机器人的回执超时: {exc}") from exc
 
 
+def _finite_xy(d: dict[str, Any]) -> tuple[float, float] | None:
+    """``x``、``y`` 都是有限数 → 浮点;不像话的(布尔、太大、非数)回 None,交给后面的校验报 400。"""
+    out = []
+    for k in ("x", "y"):
+        v = d.get(k)
+        if isinstance(v, bool) or not isinstance(v, (int, float)):
+            return None
+        try:
+            f = float(v)
+        except OverflowError:
+            return None
+        if not math.isfinite(f):
+            return None
+        out.append(f)
+    return out[0], out[1]
+
+
 def _clashes(g: Any) -> list[str]:
     """W73 第三期:现在就撞着的(老数据里留下的;新的保存时已经拦了)。"""
     c = getattr(g, "clash", None)
@@ -2221,6 +2238,11 @@ class _Handler(TlsHandlerMixin):
                 self._audit_detail = {"op": "update" if old else "add", "name": d.get("name"),
                                       "map": f"{d.get('map_id')}:{d.get('map_version')}",
                                       "x": d.get("x"), "y": d.get("y"), "yaw": d.get("yaw", 0.0)}
+                xy = _finite_xy(d)
+                if xy is not None and all(isinstance(d.get(k), str)
+                                          for k in ("map_id", "map_version")):
+                    self._standby_walkable(robot_id, d["map_id"], d["map_version"], *xy,
+                                           here=False)
                 stb.set(robot_id, d.get("name"), map_id=d.get("map_id"),
                         map_version=d.get("map_version"), x=d.get("x"), y=d.get("y"),
                         yaw=d.get("yaw", 0.0), default=d.get("default"))
@@ -3749,7 +3771,7 @@ class _Handler(TlsHandlerMixin):
         return self._send_json(200, {"ack": ack, "home": home, "standby": point})
 
     def _standby_walkable(self, robot_id: str, map_id: str, version: str,
-                          x: float, y: float) -> None:
+                          x: float, y: float, *, here: bool = True) -> None:
         """待命点(原点)要落在图上能走、建图走过的地方,不然回待命点、值守派单都被拒(易用性 37
         复测 P1-7)。不行 409,告诉人往空地挪;站点不认识的图、没有 coverage 的老图不查。"""
         from nexwar_site.maps import MapError
@@ -3760,6 +3782,13 @@ class _Handler(TlsHandlerMixin):
             why = maps.reach_problem(map_id, version, [("这里", x, y)])
         except MapError:
             return
+        if why and not here:
+            # 易用性 37 复测第五轮:布局页在图上点 / 设默认也查(原来只查「在这儿设」)
+            raise HttpError(
+                409, f"{robot_id} 的待命点不能设在这里:{why}。挑开阔、扫到过的地方",
+                extra={"reason_en": f"{robot_id}'s standby point can't go here: the map shows "
+                                    "it as not walkable or not scanned, so robots could never "
+                                    "be sent there. Pick a spot on open, scanned floor."})
         if why:
             raise HttpError(
                 409, f"{robot_id} 现在站的地方不能当待命点:{why}。"

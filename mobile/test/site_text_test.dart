@@ -8,6 +8,13 @@ void main() {
   setUp(() => appLang.value = AppLang.en);
   tearDown(() => appLang.value = AppLang.zh);
 
+  test('易用性 37 复测：设备那几行翻英文', () {
+    expect(siteText('6 个线圈都确认过'), 'All 6 relay channels confirmed');
+    expect(siteText('喇叭放警笛声'), 'Siren plays through the speaker');
+    expect(siteText('仿真声卡'), 'Simulated sound card');
+    expect(siteText('已用 81%,剩 41 GB:到 90% 就不接新的巡逻(没传完的不删)'), startsWith('81% used, 41 GB free'));
+  });
+
   test('易用性 37 复测第四轮：标原点被拒英文（ackReasonText 兜底也翻）；回头补同一句不重复', () {
     expect(ackReasonText('A 现在站的地方不能当待命点:这里 在图上不是可通行的地方(墙、障碍或未扫到)。往开阔、扫到过的地方开 1 m 左右再标'),
         startsWith("A can't use this spot as its standby point"));
