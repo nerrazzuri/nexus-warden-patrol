@@ -4,7 +4,7 @@
 // 同一个页框里切换。只读账号看得到进度(谁在处理、哪台机器人、结论),没有操作。
 import { useEffect, useState } from "preact/hooks";
 import { hms, incidentLog, REOPEN_MS, verdictsFor } from "./alertdetail";
-import { alertAdvice, alertHeadline, canHandleAlerts } from "./alertinfo";
+import { alertAdvice, alertHeadline, canHandleAlerts, seeingCam } from "./alertinfo";
 import { api, ApiError, enc } from "./api";
 import { CameraWell, camLabel } from "./camera";
 import { hm, nameOf } from "./data";
@@ -145,7 +145,7 @@ export function IncidentView(props: {
     ? <button type="button" class={a.acked_ms != null ? "btn primary" : "btn"} onClick={() => props.onFindPose(a.robot)}>{t("dutyFindPose")}</button> : null;
 
   // ---- 画面 ----
-  const tiles: { key: string; label: string; el: preact.ComponentChildren }[] = [];
+  const tiles: { key: string; label: string; el: preact.ComponentChildren; hero?: boolean }[] = [];
   if (scene) {
     const feed = { label: scene.name, src: `/api/cameras/${enc(scene.name)}/live`, health: `/api/cameras/${enc(scene.name)}/health` };
     tiles.push({ key: `c:${scene.name}`, label: t("incSceneCam", { cam: scene.name, zone: where }),
@@ -171,6 +171,15 @@ export function IncidentView(props: {
     const at = tiles.findIndex((x) => x.key === `r:${rid}`);
     tiles.splice(at + 1, 0, { key: `b:${rid}`, label: camLabel(rid, "back"),
       el: <CameraWell robot={rid} cam="back" now={props.now} variant="main" forceLive /> });
+  }
+  // 用户 11-25:机器人看见人 —— 看到人的那一路(前 / 后)直接放大摆第一个,不只是告警
+  const seeCam = seeingCam(a);
+  if (seeCam && a.robot) {
+    const key = seeCam === "front" ? `r:${a.robot}` : `b:${a.robot}`;
+    const at = tiles.findIndex((x) => x.key === key);
+    if (at >= 0) tiles.splice(at, 1);
+    tiles.unshift({ key, hero: true, label: t("incSeenCamLabel", { cam: camLabel(a.robot, seeCam) }),
+      el: <CameraWell robot={a.robot} cam={seeCam} now={props.now} variant="main" forceLive onOpen={() => props.onZoom(a.robot)} /> });
   }
   const n = layout === "multi" ? tiles.length : 2;
   const LAYOUT_KEYS: Record<VideoLayout, Key> = { single: "monSingle", dual: "monDual", multi: "monMulti", wall: "monWall" };
@@ -268,9 +277,9 @@ export function IncidentView(props: {
               <span class="push" />
               {!site && <a class="btn" href={recordingLink(a)}>{t("incReplay")}</a>}
             </div>
-            <div class={`mon-tiles ${layout === "multi" ? "many" : layout}`}>
+            <div class={`mon-tiles ${layout === "multi" ? "many" : layout}${seeCam ? " has-hero" : ""}`}>
               {tiles.length === 0 && <p class="muted">{t("incNoVideo")}</p>}
-              {tiles.slice(0, n).map((x) => <figure key={x.key} class="mon-tile"><figcaption>{x.label}</figcaption>{x.el}</figure>)}
+              {tiles.slice(0, n).map((x) => <figure key={x.key} class={x.hero ? "mon-tile hero" : "mon-tile"} data-hero={x.hero ? "1" : undefined}><figcaption>{x.label}</figcaption>{x.el}</figure>)}
             </div>
           </section>
           <section class="inc-map" aria-label={t("tabMap")}>

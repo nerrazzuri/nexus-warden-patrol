@@ -196,3 +196,13 @@ describe("账号菜单里的报警声音开关", () => {
     expect(c.querySelector("[data-alarm-sound]")).toBeNull();
   });
 });
+
+describe("用户 11-25:机器人看见人,卡片上直接放画面", () => {
+  it("看见人的报警带看到人的那一路(后相机看到就放后相机);别的报警没有画面", () => {
+    const { container: c } = render(pop([alert({ kind: "dog_sees_person", audience: "intrusion", context: { persons: { cams: ["back"] } } })]));
+    expect(c.querySelector('[data-pop-video="back"]')).not.toBeNull();
+    cleanup();
+    const { container: c2 } = render(pop([alert()]));
+    expect(c2.querySelector("[data-pop-video]")).toBeNull();
+  });
+});

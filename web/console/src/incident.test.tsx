@@ -375,3 +375,28 @@ describe("真机 11-25:哪台相机看到的", () => {
     expect(seenByText({ persons: {} })).toBe("");
   });
 });
+
+describe("用户 11-25:看见人的告警放大哪一路", () => {
+  it("报了后相机就放后相机,前相机优先,没报用前;别的告警、关了的不放大", async () => {
+    const { seeingCam } = await import("./alertinfo");
+    expect(seeingCam({ kind: "dog_sees_person", robot: "A", context: { persons: { cams: ["back"] } } })).toBe("back");
+    expect(seeingCam({ kind: "dog_sees_person", robot: "A", context: { persons: { cams: ["front", "back"] } } })).toBe("front");
+    expect(seeingCam({ kind: "dog_sees_person", robot: "A", context: {} })).toBe("front");
+    expect(seeingCam({ kind: "robot_fell", robot: "A" })).toBeNull();
+    expect(seeingCam({ kind: "dog_sees_person", robot: "A", resolved_ms: 5 })).toBeNull();
+  });
+});
+
+describe("用户 11-25:看见人,看到人的那一路直接放大摆第一个", () => {
+  it("后相机看到人:第一格是 A 的后相机、标着放大", async () => {
+    const { IncidentView } = await import("./incident");
+    const a = alert({ key: "p1", kind: "dog_sees_person", audience: "intrusion", level: "P1", robot: "A", title: "A 看见人",
+      context: { persons: { count: 1, cams: ["back"] } } });
+    const c = render(<IncidentView a={a} units={[unit("A", "patrolling"), unit("B", "idle")]} alerts={[]} now={1} role="guard" mode={null} cams={[]} layout="dual" onLayout={() => {}}
+      say={() => {}} refresh={async () => {}} onSite={() => {}} onZoom={() => {}} onFindPose={() => {}} onAreas={() => {}} />).container;
+    const first = c.querySelector(".mon-tiles > .mon-tile")!;
+    expect(first.getAttribute("data-hero")).toBe("1");
+    expect(first.querySelector("figcaption")!.textContent).toContain("看到人的这一路");
+    expect(c.querySelector(".mon-tiles")!.classList.contains("has-hero")).toBe(true);
+  });
+});

@@ -187,3 +187,11 @@ export async function reportStart(id: string, sentAt: number, say: (s: string) =
   else if (r.state === "started") say(at("sendStarted", { id }));
   return r;
 }
+
+/** 用户 11-25:「机器人看见人」的告警该放大哪一路:报了哪台相机看到就用它(前的优先),没报用前相机;
+ *  别的告警 ``null``。 */
+export function seeingCam(a: { kind: string; robot?: string; resolved_ms?: number | null; context?: { persons?: { cams?: string[] } } }): "front" | "back" | null {
+  if (a.kind !== "dog_sees_person" || !a.robot || a.resolved_ms != null) return null;
+  const cams = a.context?.persons?.cams ?? [];
+  return cams.includes("back") && !cams.includes("front") ? "back" : "front";
+}
