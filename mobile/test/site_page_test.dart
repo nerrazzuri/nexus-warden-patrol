@@ -274,6 +274,11 @@ class FakeApi implements SiteApi {
     calls.add(name == null ? 'standby $id' : 'standby $id $name');
     return {'ack': {'result': 'accepted'}};
   }
+  @override
+  Future<Map<String, dynamic>> mute(String id, bool on) async {
+    calls.add('mute $id $on');
+    return {'muted': on};
+  }
   bool standbyCancelled = true;
   @override
   Future<Map<String, dynamic>> cancelStandbyReturn(String id) async {
@@ -1578,6 +1583,29 @@ void main() {
     expect(find.textContaining('留在原地'), findsOneWidget);
     final due = (v['standby_countdown'] as Map)['due_ms'] as int;
     expect(returnCountdownS(v, now: DateTime.fromMillisecondsSinceEpoch(due - 9100)), 10);
+  });
+
+  testWidgets('真机 11-25：有喇叭的机器人有「静音」，静音着变「取消静音」', (t) async {
+    final v = Map<String, dynamic>.of(siteFixture('site_robot'));
+    final caps = Map<String, dynamic>.of((v['capabilities'] as Map).cast<String, dynamic>());
+    caps['tasks'] = <String, dynamic>{
+      ...(caps['tasks'] as Map).cast<String, dynamic>(),
+      'deter': <String, dynamic>{'outputs': <String>['strobe', 'speaker'], 'clips': <String>[]},
+    };
+    v['capabilities'] = caps;
+    final guard = FakeApi('guard', robotView: v);
+    await openRobot(t, guard);
+    await t.ensureVisible(find.byKey(const Key('btn-mute')));
+    await t.pump();
+    expect(find.descendant(of: find.byKey(const Key('btn-mute')), matching: find.text('静音')), findsOneWidget);
+    await t.tap(find.byKey(const Key('btn-mute')));
+    await t.pumpAndSettle();
+    expect(guard.calls, contains('mute A true'));
+    await t.pumpWidget(const SizedBox());
+    await t.pumpWidget(MaterialApp(
+        home: SiteRobotPage(key: UniqueKey(), api: FakeApi('guard', robotView: {...v, 'muted': 'gina'}), robotId: 'A')));
+    await t.pumpAndSettle();
+    expect(find.descendant(of: find.byKey(const Key('btn-mute')), matching: find.text('取消静音')), findsOneWidget);
   });
 
   testWidgets('被叫停了：说清楚，保安有「恢复」，管理员没有', (t) async {

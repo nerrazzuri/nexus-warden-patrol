@@ -65,7 +65,9 @@ MAP_KINDS = frozenset({"map_activate", "mapping", "map_build",
 #: 记录** —— 回执里带着上百 KB 的日志、轨迹每 2 s 查一次,记下来代理起来要全量重放;重投的再查一次
 #: 就是,无害。
 READ_KINDS = frozenset({"proc_log", "mapping_trail", "mapping_preview",
-                        "ops_journal", "ops_diag"})       # W55:日志、诊断快照
+                        "ops_journal", "ops_diag",        # W55:日志、诊断快照
+                        # 真机 11-25:自动话术放不放(站点按布防 / 静音隔一阵重发一次状态,重投无害)
+                        "auto_voice"})
 
 TaskFactory = Callable[[Command], Task]
 

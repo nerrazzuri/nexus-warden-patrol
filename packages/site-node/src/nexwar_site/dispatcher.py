@@ -65,7 +65,8 @@ POSTURE_ACK_TIMEOUT_S = 20.0
 #: 事件流** —— 单狗视图里看得到最近 50 条命令、事件流谁登录了都收得到(保安、经理也是),日志只给要它
 #: 的管理员;手机收到事件流的每一帧都会刷新狗的列表,录包时每 2 s 查一次轨迹、每 3 s 查一次预览,
 #: 不该让所有人跟着刷、把正经命令挤出账。
-_QUIET_KINDS = frozenset({"proc_log", "mapping_trail", "mapping_preview"})
+_QUIET_KINDS = frozenset({"proc_log", "mapping_trail", "mapping_preview",
+                          "auto_voice"})      # 真机 11-25:状态隔一阵重发,不进命令账
 #: 一趟巡检的任务定义进命令(设计决定二 A);broker 的报文上限是 256 KB,留余量。
 MAX_PATROL_BYTES = 200_000
 MAX_PATROL_WAYPOINTS = 500
@@ -386,6 +387,8 @@ class Dispatcher:
                "manual_only": self.registry.manual_only(robot_id),
                # 真机 11-25:遥控放租后倒数回待命点(standby.py 写;没在倒数是 None)
                "standby_countdown": getattr(self, "standby_countdown", {}).get(robot_id),
+               # 真机 11-25:静音了没有(谁点的;没静音是 None)
+               "muted": getattr(self, "voice_muted", {}).get(robot_id),
                # 易用性第 6 轮 W6-01:当前这版图上有没有原点(没有就出不了发;没报地图 = None 不知道)
                "home_set": self._home_set(robot_id, c),
                "running": self.running_view(c),
@@ -1156,6 +1159,16 @@ class Dispatcher:
         return await self._send(c, robot_id, "posture", {"mode": mode}, issued_by=issued_by,
                                 task_id=f"posture-{uuid.uuid4().hex[:8]}",
                                 timeout_s=POSTURE_ACK_TIMEOUT_S)
+
+    async def auto_voice(self, robot_id: str, person: bool, *, issued_by: str) -> dict[str, Any]:
+        """真机 11-25:跟人有关的自动话术(有人走近、人多)放不放(布防且没静音才放)。不是任务;
+        要狗报了 ``auto_voice``。"""
+        c = self._client_for(robot_id)
+        if c.capabilities is None or "auto_voice" not in c.capabilities.tasks:
+            raise Unsupported(f"{robot_id} 不认自动话术开关")
+        return await self._send(c, robot_id, "auto_voice", {"person": bool(person)},
+                                issued_by=issued_by, task_id=f"voice-{uuid.uuid4().hex[:8]}",
+                                ttl_ms=VIDEO_COMMAND_TTL_MS)
 
     async def speed_cap(self, robot_id: str, cap: Any, *, issued_by: str) -> dict[str, Any]:
         """全狗限速(W29,下雨、雷暴):不是任务。要狗报了 ``speed_cap``、状态新鲜。"""

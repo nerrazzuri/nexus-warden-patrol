@@ -30,7 +30,8 @@ export interface Alert {
     zone?: string;
     /** 在哪(W44 第四期:命名区域,没命名用防区名;站点按机器人当时的位置算)。 */
     where?: string;
-    persons?: { count?: number; nearest_m?: number };
+    /** 真机 11-25 起带 ``cams``:哪几台相机看到的(front / back)。 */
+    persons?: { count?: number; nearest_m?: number; cams?: string[] };
     pose?: { map_id: string; map_version: string; x: number; y: number };
     /** W74:最后看见人时机器人在哪(看得见时每 5 秒更新)。 */
     last_seen?: { map_id: string; map_version: string; x: number; y: number; at_ms?: number };
@@ -64,6 +65,8 @@ export interface Robot {
   held: unknown;
   /** 真机 11-25:遥控松手后「N 秒后回待命点」(站点倒数,能取消);没在倒数 / 老站点没有。 */
   standby_countdown?: { after: string; due_ms: number } | null;
+  /** 真机 11-25:谁点的静音(停喇叭警笛、见人只开灯,到下次布防);没静音 / 老站点没有。 */
+  muted?: string | null;
   /** 易用性第 6 轮 W6-01:当前那版图上有没有原点(没有就出不了发;没报地图 / 老站点 = 不知道)。 */
   home_set?: boolean | null;
   loc?: {

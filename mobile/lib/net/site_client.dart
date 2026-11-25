@@ -747,6 +747,9 @@ abstract class SiteApi {
   /// 真机 11-25：遥控松手后站点倒数再回待命点 —— 取消这一次（留在原地）。回 `{cancelled: bool}`；
   /// 假 = 已经出发了（或者本来就没在倒数）。叫停权限。
   Future<Map<String, dynamic>> cancelStandbyReturn(String id);
+  /// 真机 11-25：静音（停喇叭、警笛，见人只开灯，机器人自己的「有人走近」也不喊，到下次布防）。
+  /// 回 `{muted: bool}`。叫停权限。
+  Future<Map<String, dynamic>> mute(String id, bool on);
   /// 回原点（POC）：当前地图上的原点。[abort] 为真先中止正在跑的任务再回（没原点、有任务没带 abort
   /// 站点 409，原因在 [SiteError]）。保安、管理员。
   Future<Map<String, dynamic>> returnHome(String robotId, {bool abort = false});
@@ -1436,6 +1439,10 @@ class SiteClient implements SiteApi {
   Future<Map<String, dynamic>> returnToStandby(String id, {String? name}) async => _map(
       await _send('POST', '/api/robots/${Uri.encodeComponent(id)}/standby/return',
           <String, dynamic>{'name': ?name}));
+
+  @override
+  Future<Map<String, dynamic>> mute(String id, bool on) async => _map(
+      await _send('POST', '/api/robots/${Uri.encodeComponent(id)}/mute', <String, dynamic>{'on': on}));
 
   @override
   Future<Map<String, dynamic>> cancelStandbyReturn(String id) async => _map(

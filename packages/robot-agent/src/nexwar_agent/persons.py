@@ -127,6 +127,10 @@ class PersonView:
             if t is not None:
                 # 用户 11-15:最近那个人的方向(狗身系,朝前 0°、朝左为正),站点据此在地图上标人
                 d["bearing_deg"] = round(t[0], 1)
+            # 真机 11-25:哪几台相机此刻看到人(App、网页写「前相机看到」「后相机看到」)
+            seen = sorted(k for k, c in self._cams.items() if self._healthy(k) and c.sees())
+            if seen:
+                d["cams"] = seen
         if self.reason and d["state"] not in ("ok", "off", "stale"):
             d["reason"] = self.reason[:200]
         return d

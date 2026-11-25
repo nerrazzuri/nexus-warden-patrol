@@ -110,6 +110,12 @@ void main() {
     expect(find.textContaining('跟随中'), findsNothing);
   });
 
+  test('真机 11-25：写清是前相机还是后相机看到的', () {
+    expect(seenByText(<String, dynamic>{'persons': <String, dynamic>{'cams': <String>['back']}}), '后相机看到的');
+    expect(seenByText(<String, dynamic>{'persons': <String, dynamic>{'cams': <String>['front', 'back']}}), '前、后相机看到的');
+    expect(seenByText(<String, dynamic>{'persons': <String, dynamic>{}}), '');
+  });
+
   testWidgets('别的告警照旧：我来处理、误报', (t) async {
     await _tall(t);
     final api = FakeApi('guard');

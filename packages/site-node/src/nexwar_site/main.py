@@ -1095,6 +1095,7 @@ class Server:
         self.sightings.where_of = self.alert_sources.where_of   # W74 二期:人最后在哪
         self.force.armed_for = self.sightings.armed_now          # W44 外审 R2
         self.api.deterrence = self.deterrence
+        self.api.sightings = self.sightings                       # 真机 11-25:静音
         # W73 第二期:布防值守。布防着自己一圈圈跑防区路线、两圈之间站值守位;值守中的任务
         # 不自动回待命点,排程不往值守中的机器人上派,站在值守位上看见人按它盯着的防区判。
         from nexwar_site.api import zone_posts

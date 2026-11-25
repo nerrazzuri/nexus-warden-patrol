@@ -694,3 +694,17 @@ async def test_真机1120_喊话慢_3秒内先回执_后台做完照常_做不�
     hal.sound = 快坏
     why = await desk.handle(_喇叭命令("warn-zh", 90, "c2"))
     assert why.startswith("device:"), "快的错照旧拒收"
+
+
+async def test_真机1125_站点说放不放跟人有关的自动话术_能力里报_起来时不放(tmp_path):
+    broker, c, ears, dog, rt = await _台(tmp_path)
+    assert ears.by["capabilities"][-1]["tasks"]["auto_voice"] == {"person": False}, "起来时不喊"
+    await rt._on_cmd(_cmd("auto_voice", {"person": True}, "v1", c))
+    await broker.drain()
+    assert ears.by["cmd/ack"][-1]["result"] == "accepted"
+    assert rt.autovoice.person is True
+    assert ears.by["capabilities"][-1]["tasks"]["auto_voice"] == {"person": True}, "变了马上报"
+    await rt._on_cmd(_cmd("auto_voice", {"person": "yes"}, "v2", c))
+    await broker.drain()
+    assert ears.by["cmd/ack"][-1]["result"] == "rejected"
+    await rt.close()

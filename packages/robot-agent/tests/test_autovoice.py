@@ -41,7 +41,9 @@ class 钟:
 def _台(clips=("blocked", "passing", "distance", "restricted")):
     hal, c, ev = 假HAL(clips), 钟(), []
     desk = DeterDesk(hal, emit=lambda k, d: ev.append((k, d)), monotonic=c)
-    return hal, c, ev, desk, AutoVoice(desk, monotonic=c)
+    av = AutoVoice(desk, monotonic=c)
+    av.person = True                     # 真机 11-25 起要站点说放(布防)才放;这里按布防测
+    return hal, c, ev, desk, av
 
 
 async def test_被挡住_放blocked_挡着每20秒再放_走通了停():
@@ -133,3 +135,14 @@ async def test_自己放的被手动的打断_手动的照常(tmp_path):
     hal, c, ev, desk, av = _台()
     await av.tick(moving=False, persons=1, nearest_m=1.0)
     assert desk.playing()[0] == AUTO_PRIORITY < 60
+
+
+async def test_真机1125_站点没说放_撤防_有人进2米也不喊_被挡照旧喊():
+    """用户 11-25:撤防了还一直喊「please keep safe distance」。"""
+    hal, c, ev, desk, av = _台()
+    av.person = False
+    await av.tick(moving=True, persons=4, nearest_m=1.0)
+    assert hal.played == [], "没布防(或静音):有人走近、人多都不喊"
+    av.on_nav_event("nav_blocked", {})
+    await av.tick(moving=True, persons=4, nearest_m=1.0)
+    assert hal.played == ["blocked"], "被挡跟人无关:照旧喊"
