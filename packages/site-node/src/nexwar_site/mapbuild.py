@@ -286,7 +286,8 @@ class SiteMapBuilder:
         elif st["state"] == "failed":
             out["reason"] = str(st.get("reason", ""))[:600]
             if st.get("detail"):
-                out["detail"] = str(st["detail"])[-4000:]     # 真机 11-25:整段日志,手机收在「详情」里
+                # 真机 11-25:整段日志,手机收在「详情」里
+                out["detail"] = str(st["detail"])[-4000:]
         return out
 
     def _upload_pct(self, job: Job) -> int:

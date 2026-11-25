@@ -1966,7 +1966,7 @@ class AgentRuntime:
         if cached is None or now - cached[0] >= 5.0:
             try:
                 got = await asyncio.to_thread(fn)
-            except Exception:                            # noqa: BLE001 - 算不出来就不带
+            except Exception:
                 log.exception("录包占盘算不出来")
                 got = None
             cached = self._disk_cache = (now, got)

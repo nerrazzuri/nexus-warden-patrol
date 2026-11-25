@@ -326,7 +326,8 @@ class PersonWatch:
 
     def _sync_voice(self, rid: str, armed: bool, now: int) -> None:
         """真机 11-25:告诉机器人跟人有关的自动话术(有人走近、人多)放不放 = 布防且没静音。
-        机器人报了 ``auto_voice`` 才发;它报的跟想要的不一样才发,最快 :data:`VOICE_RESEND_MS` 一次。"""
+        机器人报了 ``auto_voice`` 才发;它报的跟想要的不一样才发,同一个值最快
+        :data:`VOICE_RESEND_MS` 一次。"""
         c = self.dispatcher.clients.get(rid)
         caps = getattr(getattr(c, "capabilities", None), "tasks", None) or {}
         have = caps.get("auto_voice") if isinstance(caps, dict) else None

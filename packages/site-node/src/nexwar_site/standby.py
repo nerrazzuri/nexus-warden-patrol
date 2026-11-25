@@ -36,8 +36,9 @@
   (``teleop-`` 那一趟 ``task_done``),直线的狗**不自动回**:起点是人刚开到的任意位置;人在场、
   知道狗在哪,要回就手动叫。会规划的狗照旧回 —— 但**先倒数**(真机 11-25,用户选「先提示,倒数 30 秒再
   回,能取消」):遥控松手 2 秒就自己走,人还站在旁边、App 上什么也没写。现在先推一条
-  ``standby_countdown``(``due_ms``),机器人视图、卡片带 ``standby_countdown``,App、网页写「N 秒后回待命点」
-  和「取消」(``POST /api/robots/<id>/standby/cancel``);倒数期间人又派了任务、又遥控、叫停了 —— 这一趟
+  ``standby_countdown``(``due_ms``),机器人视图、卡片带 ``standby_countdown``,App、网页写
+  「N 秒后回待命点」和「取消」(``POST /api/robots/<id>/standby/cancel``);倒数期间人又派了任务、
+  又遥控、叫停了 —— 这一趟
   不回(新的那一趟结束后自己按规矩回)。
 """
 
