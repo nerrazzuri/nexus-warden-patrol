@@ -51,6 +51,23 @@ String seenByText(Map<String, dynamic> ctx) {
   return tr('seen by the ${names.join(' and ')} camera', '${names.join('、')}相机看到的');
 }
 
+/// 跟随一行：「A 正在跟随，距离 4.6 米」/「看不到人了」。
+String followLine(Alert a) {
+  final f = a.context['follow'];
+  if (f == 'follow') return tr('${a.robot} following', '${a.robot} 正在跟随');
+  // 真机 11-25：用户看不出它为什么往后退、为什么站着不动
+  if (f == 'retreat') return tr('Person too close: ${a.robot} is backing away', '人太近，${a.robot} 在往后退');
+  if (f == 'cornered') {
+    return tr("Person too close and something is behind ${a.robot}: it can't back away, standing still",
+        '人太近，${a.robot} 身后有东西退不了，原地站定');
+  }
+  if (a.context['follow_left'] == true) {
+    return tr('Person left the zone: ${a.robot} stopped following', '人离开了防区，${a.robot} 不再跟');
+  }
+  if (f == 'lost' || f == 'limit' || a.context['lost_ms'] is num) return tr('Person no longer seen', '看不到人了');
+  return '';
+}
+
 class SiteAlertScenePage extends StatefulWidget {
   final SiteApi api;
   final Alert alert;
@@ -703,22 +720,7 @@ class _SiteAlertScenePageState extends State<SiteAlertScenePage> with EstopMissR
     return '${_two(d.hour)}:${_two(d.minute)}';
   }
 
-  /// 跟随一行：「A 正在跟随，距离 4.6 米」/「看不到人了」。
-  String _followLine() {
-    final f = _a.context['follow'];
-    if (f == 'follow') return tr('${_a.robot} following', '${_a.robot} 正在跟随');
-    // 真机 11-25：用户看不出它为什么往后退、为什么站着不动
-    if (f == 'retreat') return tr('Person too close: ${_a.robot} is backing away', '人太近，${_a.robot} 在往后退');
-    if (f == 'cornered') {
-      return tr("Person too close and something is behind ${_a.robot}: it can't back away, standing still",
-          '人太近，${_a.robot} 身后有东西退不了，原地站定');
-    }
-    if (_a.context['follow_left'] == true) {
-      return tr('Person left the zone: ${_a.robot} stopped following', '人离开了防区，${_a.robot} 不再跟');
-    }
-    if (f == 'lost' || f == 'limit' || _a.context['lost_ms'] is num) return tr('Person no longer seen', '看不到人了');
-    return '';
-  }
+  String _followLine() => followLine(_a);
 
   /// 页头：标题 + P1、在哪 · 几点、谁在处理（或没人接手多久 +「我来处理」）、步骤条。没接手的 P1 红框闪。
   Widget _header(NwColors c) {

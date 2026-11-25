@@ -11,6 +11,8 @@ import '../../l10n.dart';
 import '../../model/alert.dart';
 import '../../net/background_watch.dart' as bg;
 import '../../net/site_client.dart';
+import '../orientation.dart';
+import '../person_live.dart';
 import '../site_alert_scene.dart';
 import 'nw_theme.dart';
 
@@ -121,14 +123,16 @@ class _RingPageState extends State<RingPage> {
     }
   }
 
-  void _open() {
+  /// [live]：用户 11-25 看见人接手以后接着看整屏画面（[PersonLivePage]）；不然去「这件事」。
+  void _open({bool live = false}) {
     final api = widget.api;
     if (_left || !mounted || api == null) return;
     _left = true;
     _finish();
     // 外审 App-V2-2 N1：换掉的是自己这一页（上面可能已经压着另一件的来报警页），不是栈顶
     final route = ModalRoute.of(context);
-    final next = MaterialPageRoute<void>(builder: (_) => SiteAlertScenePage(api: api, alert: _a));
+    final next = MaterialPageRoute<void>(
+        builder: (_) => live ? PersonLivePage(api: api, alert: _a) : SiteAlertScenePage(api: api, alert: _a));
     if (route == null || route.isCurrent) {
       Navigator.of(context).pushReplacement(next);
     } else if (route.isActive) {
@@ -141,11 +145,12 @@ class _RingPageState extends State<RingPage> {
     if (_busy || api == null) return;
     setState(() => _busy = true);
     try {
+      final live = _isLive(api);
       final r = await api.ackAlert(_a.key);
       if (!mounted) return;
       final got = r['alert'] is Map ? Alert.fromWire(Map<String, dynamic>.from(r['alert'] as Map)) : null;
       if (got != null && got.key == _a.key) _a = got;
-      _open();
+      _open(live: live);
     } on SiteError catch (e) {
       if (mounted) setState(() => _msg = tr('Not taken: $e', '没接上：$e'));
     } finally {
@@ -213,8 +218,35 @@ class _RingPageState extends State<RingPage> {
             child: child);
   }
 
+  /// 用户 11-25：「机器人看见人」、登录了：横屏整屏放看到人的那一路画面（像遥控页），按钮在右边一列。
+  /// 一开始是就一直是（接手的回包、轮询换了 [_a] 也不变回竖屏那一版）。
+  late final bool _liveKind = personLiveFor(widget.alert);
+  bool _isLive(SiteApi? api) => api != null && _liveKind;
+
+  Widget _liveRing(SiteApi api) {
+    personLiveShown.add(_a.key);
+    final handle = api.session?.canHandleAlerts ?? false;
+    final note = _msg.isNotEmpty
+        ? _msg
+        : tr('Rings until someone takes ownership; stops automatically when another user does.',
+            '一直响到有人接手；别人接手了这里自动停。');
+    return LandscapeOnly(
+        child: Builder(
+            builder: (context) => PersonLiveView(api: api, alert: _a, site: widget.site, note: note, actions: [
+                  if (handle)
+                    personLiveButton(context, RingPage.takeKey, tr('Take ownership', '我来处理'),
+                        _busy ? null : () => unawaited(_take()),
+                        primary: true),
+                  personLiveButton(context, RingPage.muteKey, tr('Mute 2 min', '静音 2 分钟'),
+                      _mutedUntil == null ? () => unawaited(_mute()) : null),
+                  personLiveButton(context, RingPage.videoKey, tr('Details', '详情'), _open),
+                ])));
+  }
+
   @override
   Widget build(BuildContext context) {
+    final api = widget.api;
+    if (_isLive(api)) return _liveRing(api!);
     return Theme(
         data: nwTheme(Brightness.dark),
         child: Builder(builder: (context) {
