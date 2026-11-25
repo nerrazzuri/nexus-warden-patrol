@@ -4,6 +4,7 @@
 import { cleanup, fireEvent, render, waitFor } from "@testing-library/preact";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { setFetch } from "./api";
+import { pushOff } from "./data";
 import { IncidentView, incidentSteps, responder } from "./incident";
 import { lang, t } from "./i18n";
 import type { UnitInfo } from "./live";
@@ -147,6 +148,21 @@ describe("三组操作和角色", () => {
     expect(btn(inc(c), "派机器人去北区")).toBeDefined();
     expect(c.querySelector(".mon-right .mon-h")!.textContent).toBe("机器人 · 离事发点近的在前");
     expect(c.querySelector(".mon-robot")!.getAttribute("data-robot")).toBe("B");
+  });
+
+  it("易用性 build 37 复测:站点没配推送,P1 不写「已推送到所有手机」", () => {
+    const n = () => c0().querySelector('[aria-label="通知"] .inc-state')!.textContent;
+    let r = page([near], [placed("B", 10)]);
+    const c0 = () => r.c;
+    expect(n()).toBe("已推送到所有登录的手机");
+    cleanup();
+    pushOff.value = true;
+    try {
+      r = page([near], [placed("B", 10)]);
+      expect(n()).toBe("站点没配手机推送：这条报警只在 App 和网页里");
+    } finally {
+      pushOff.value = false;
+    }
   });
 
   it("警示:喊话发 restricted、警灯 30 秒", async () => {

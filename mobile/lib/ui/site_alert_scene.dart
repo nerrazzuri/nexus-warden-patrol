@@ -217,6 +217,8 @@ class _SiteAlertScenePageState extends State<SiteAlertScenePage> with EstopMissR
 
   String _msg = '';
   bool _dim = false;
+  /// 易用性 build 37 复测：站点没配推送还写「已推送到所有手机」—— 问一次站点（问不到当配了，照旧写）。
+  bool _pushOff = false;
   int _ticks = 0;
   Timer? _timer;
 
@@ -239,10 +241,22 @@ class _SiteAlertScenePageState extends State<SiteAlertScenePage> with EstopMissR
   bool get _arrived => _a.context['arrived_ms'] != null || _arrivedHere != null;
   bool get _flashing => _a.level == 'P1' && _open && !_acked;
 
+  Future<void> _checkPush() async {
+    try {
+      final s = await widget.api.watchSummary();
+      final site = s['site'];
+      if (site is! Map || !site.containsKey('push')) return; // 老站点不报：照旧写
+      final push = site['push'];
+      final off = push == null || (push is Map && push['configured'] != true);
+      if (mounted && off != _pushOff) setState(() => _pushOff = off);
+    } catch (_) {}
+  }
+
   @override
   void initState() {
     super.initState();
     unawaited(_refresh());
+    unawaited(_checkPush());
     // 一个钟管三件事：没确认多久（每拍重画）、闪框（半个周期翻一次）、隔几拍向站点再问一遍。
     _timer = Timer.periodic(const Duration(milliseconds: D1Motion.p1FlashMs ~/ 2), (_) {
       if (!mounted) return;
@@ -1158,7 +1172,10 @@ class _SiteAlertScenePageState extends State<SiteAlertScenePage> with EstopMissR
     return _section(c, tr('Notify', '通知'), key: SiteAlertScenePage.notifyKey, [
       Text(
         _a.level == 'P1'
-            ? tr('Pushed to all signed-in phones', '已推送到所有登录的手机')
+            ? (_pushOff
+                ? tr('Phone push is not set up on this site: this alarm shows only in the app and on consoles',
+                    '站点没配手机推送：这条报警只在 App 和网页里')
+                : tr('Pushed to all signed-in phones', '已推送到所有登录的手机'))
             : tr('Shown on every console', '所有控制台都看得到'),
         style: NwText.bodyMedium.copyWith(color: c.text),
       ),

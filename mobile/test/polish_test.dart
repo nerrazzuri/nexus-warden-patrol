@@ -38,6 +38,25 @@ Alert _p1() => Alert.fromWire(<String, dynamic>{
     });
 
 void main() {
+  testWidgets('易用性 build 37 复测：站点没配推送，P1 不写「已推送到所有手机」', (t) async {
+    t.view.physicalSize = const Size(390, 2600) * 2;
+    t.view.devicePixelRatio = 2.0;
+    addTearDown(t.view.reset);
+    Future<void> show(Map<String, dynamic>? push) async {
+      final api = FakeApi('guard')..summaryBody = <String, dynamic>{'robots': [], 'site': <String, dynamic>{'push': push}};
+      await t.pumpWidget(Container());
+      await t.pumpWidget(MaterialApp(
+          home: SiteAlertScenePage(api: api, alert: _p1(), now: () => DateTime.fromMillisecondsSinceEpoch(40000))));
+      await t.pumpAndSettle();
+    }
+    await show(null);
+    expect(find.text('站点没配手机推送：这条报警只在 App 和网页里'), findsOneWidget);
+    expect(find.text('已推送到所有登录的手机'), findsNothing);
+    await show(<String, dynamic>{'configured': true});
+    expect(find.text('已推送到所有登录的手机'), findsOneWidget);
+    await t.pumpWidget(Container());
+  });
+
   for (final lang in AppLang.values) {
     testWidgets('「这件事」：390 宽上主要按钮的字都是一行、不小于 14（${lang.name}）', (t) async {
       await _realFonts(t);

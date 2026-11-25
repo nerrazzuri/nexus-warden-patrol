@@ -7,6 +7,7 @@ import 'package:nexwar_patrol/ui/nw/nw_ring.dart';
 import 'package:nexwar_patrol/ui/nw/nw_theme.dart';
 import 'package:nexwar_patrol/ui/person_live.dart';
 import 'package:nexwar_patrol/ui/site_alert_scene.dart';
+import 'package:nexwar_patrol/ui/site_robots.dart';
 import 'package:nexwar_patrol/ui/site_video.dart';
 
 import 'site_page_test.dart' show FakeApi;
@@ -38,6 +39,33 @@ Future<void> _settle(WidgetTester t) async {
 
 void main() {
   setUp(personLiveShown.clear);
+
+  testWidgets('易用性 build 37 复测：不在「现在」页（比如在「站点」页）来了看见人，也整屏弹；同一条只弹一次', (t) async {
+    _landscape(t);
+    final api = FakeApi('guard');
+    await t.pumpWidget(MaterialApp(theme: nwTheme(Brightness.dark), home: SiteRobotsPage(api: api, ring: () {})));
+    await _settle(t);
+    api.sse.add(<String, dynamic>{'kind': 'alert', 'alert': _seen('A/p#9')});
+    await _settle(t);
+    expect(find.byType(PersonLivePage), findsOneWidget);
+    expect(personLiveShown, contains('A/p#9'));
+    api.sse.add(<String, dynamic>{'kind': 'alert', 'alert': _seen('A/p#9')});
+    await _settle(t);
+    expect(find.byType(PersonLivePage), findsOneWidget, reason: '同一条不再弹');
+    await t.pumpWidget(Container());
+  });
+
+  testWidgets('易用性 build 37 复测：旧的（10 分钟前）、已经有人接手的，不弹', (t) async {
+    _landscape(t);
+    final api = FakeApi('guard');
+    await t.pumpWidget(MaterialApp(theme: nwTheme(Brightness.dark), home: SiteRobotsPage(api: api, ring: () {})));
+    await _settle(t);
+    api.sse.add(<String, dynamic>{'kind': 'alert', 'alert': _seen('A/p#10', lastMs: _now - 11 * 60 * 1000)});
+    api.sse.add(<String, dynamic>{'kind': 'alert', 'alert': _seen('A/p#11', ackedBy: 'gina')});
+    await _settle(t);
+    expect(find.byType(PersonLivePage), findsNothing);
+    await t.pumpWidget(Container());
+  });
 
   test('先开哪一路：只有后相机看到 = 后，前后都看到 / 没报 = 前', () {
     expect(personLiveCam(<String, dynamic>{'persons': <String, dynamic>{'cams': ['back']}}), 'back');
