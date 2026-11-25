@@ -100,8 +100,8 @@
     {
       "ack_reason": "",
       "ack_result": "accepted",
-      "command_id": "cmd-8d8e297fcb4e",
-      "issued_at": 1795581670583,
+      "command_id": "cmd-213c81e7f95f",
+      "issued_at": 1795636657587,
       "issued_by": "alice",
       "kind": "goto",
       "payload": {
@@ -117,23 +117,23 @@
       },
       "priority": 60,
       "robot_id": "A",
-      "task_id": "task-cdcd21b4dc21"
+      "task_id": "task-b5380079b869"
     }
   ],
   "devices": null,
-  "enrolled_at": 1795581670469,
+  "enrolled_at": 1795636657436,
   "events": [
     {
-      "boot_id": "boot-33eae8366b",
+      "boot_id": "boot-4762ffbd69",
       "data": {
         "faults": []
       },
       "kind": "robot_fault",
       "seq": 1,
-      "stamp": 1795581670516
+      "stamp": 1795636657488
     }
   ],
-  "expires_at": 1796581670470,
+  "expires_at": 1796636657437,
   "fresh": true,
   "held": null,
   "home_set": false,
@@ -168,11 +168,12 @@
       "site_rev": 0
     }
   },
+  "standby_bad": false,
   "standby_countdown": null,
   "status": {
-    "boot_id": "boot-33eae8366b",
+    "boot_id": "boot-4762ffbd69",
     "control_epoch": 1,
-    "last_seen": 1795581670585,
+    "last_seen": 1795636657602,
     "online": true,
     "ready": {
       "control": true,
@@ -183,8 +184,8 @@
     "schema": "1.0",
     "task": {
       "kind": "goto",
-      "state": "pending",
-      "task_id": "task-cdcd21b4dc21"
+      "state": "running",
+      "task_id": "task-b5380079b869"
     }
   },
   "wifi": null
