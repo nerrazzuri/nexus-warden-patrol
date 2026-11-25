@@ -274,6 +274,12 @@ class FakeApi implements SiteApi {
     calls.add(name == null ? 'standby $id' : 'standby $id $name');
     return {'ack': {'result': 'accepted'}};
   }
+  bool standbyCancelled = true;
+  @override
+  Future<Map<String, dynamic>> cancelStandbyReturn(String id) async {
+    calls.add('standby-cancel $id');
+    return {'cancelled': standbyCancelled};
+  }
   Map<String, dynamic> alertTestMode = <String, dynamic>{'active': false};
   @override
   Future<Map<String, dynamic>> alertTest() async => alertTestMode;
@@ -1552,6 +1558,26 @@ void main() {
     await t.pumpAndSettle();
     expect(find.textContaining('仅限手动'), findsOneWidget);
     expect(find.textContaining('看见 2 人'), findsOneWidget);
+  });
+
+  testWidgets('真机 11-25：遥控松手后倒数回待命点 —— 写清它要自己走，保安能点「留在这里」', (t) async {
+    final v = Map<String, dynamic>.of(siteFixture('site_robot'))
+      ..['standby_countdown'] = <String, dynamic>{
+        'after': 'teleop-3',
+        'due_ms': DateTime.now().millisecondsSinceEpoch + 20500,
+      };
+    final guard = FakeApi('guard', robotView: v);
+    await openRobot(t, guard);
+    expect(find.byKey(const Key('robot-return-countdown')), findsOneWidget);
+    expect(find.textContaining('秒后它会自己走回待命点'), findsOneWidget);
+    await t.ensureVisible(find.byKey(const Key('btn-return-cancel')));
+    await t.pump();
+    await t.tap(find.byKey(const Key('btn-return-cancel')));
+    await t.pumpAndSettle();
+    expect(guard.calls, contains('standby-cancel A'));
+    expect(find.textContaining('留在原地'), findsOneWidget);
+    final due = (v['standby_countdown'] as Map)['due_ms'] as int;
+    expect(returnCountdownS(v, now: DateTime.fromMillisecondsSinceEpoch(due - 9100)), 10);
   });
 
   testWidgets('被叫停了：说清楚，保安有「恢复」，管理员没有', (t) async {

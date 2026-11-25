@@ -324,3 +324,25 @@ describe("真机 11-20:本体灯网页能开关", () => {
     expect(plain.querySelector("[data-rc-light]")).toBeNull();
   });
 });
+
+describe("真机 11-25:遥控松手后先倒数再回待命点", () => {
+  it("写它要自己走、还剩几秒;点「留在这里」发取消", async () => {
+    const u = idle();
+    (u.robot as { standby_countdown?: unknown }).standby_countdown = { after: "teleop-3", due_ms: NOW + 21_500 };
+    const c = show("guard", u);
+    const box = await waitFor(() => { const b = c.querySelector('[data-standby-countdown="A"]'); expect(b).not.toBeNull(); return b!; });
+    expect(box.textContent).toContain("in 22 s");
+    setFetch(((url: string, init?: RequestInit) => {
+      if (init?.method === "POST") { posts.push({ url, body: JSON.parse(String(init.body ?? "{}")) }); return Promise.resolve(json({ cancelled: true })); }
+      return Promise.resolve(json({}, 404));
+    }) as typeof fetch);
+    await press(c, "Stay here");
+    await waitFor(() => expect(posts).toContainEqual({ url: "/api/robots/A/standby/cancel", body: {} }));
+  });
+
+  it("没在倒数就没有这一块", async () => {
+    const c = show("guard", idle());
+    await waitFor(() => expect(c.querySelector(".rc-task-now")).not.toBeNull());
+    expect(c.querySelector("[data-standby-countdown]")).toBeNull();
+  });
+});

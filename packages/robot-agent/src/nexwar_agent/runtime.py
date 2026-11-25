@@ -356,7 +356,7 @@ class AgentRuntime:
         #: 点云套图连着自动请了几次重定位(定位器又锁回错处就不再请,等人)。
         self._scan_relocs = 0
         #: 上一次自动找到的位置是「先认、交定位器精配」的(贴合度不到 MIN_FIT,真机 11-24):
-        #: 稳下来以后的点云核对要到 MIN_FIT 才算数。
+        #: 稳下来以后的点云核对要到 globalloc.REFINE_FIT(11-25 起 0.4)才算数。
         self._soft_check = False
         #: W68 开机自己找位置:后台活、这一段不可信从什么时候起、找了几次、下一次能找的时刻、
         #: 上次找时什么图,找不到时原因的种类(off_map / ambiguous / no_scan)。
@@ -2088,7 +2088,8 @@ class AgentRuntime:
         :data:`SCAN_CHECK_WAIT_S` 秒),按定位器给的位置算贴合度;对得上就算了;锁错了 —— 能认出
         对的那处就请定位器按那处重定位(连着最多 :data:`SCAN_RELOC_MAX` 次,定位器又锁回错处就
         不再请),认不出就标定位不可信、等人。"""
-        from nexwar_agent.globalloc import GLOBAL_SIGMA_M, MIN_FIT, GlobalLocError
+        from nexwar_agent import globalloc as G
+        from nexwar_agent.globalloc import GLOBAL_SIGMA_M, GlobalLocError
         anchor = self.parts.nav.anchor
         m = self.loaded_map
         deadline = self._mono() + SCAN_CHECK_WAIT_S
@@ -2124,10 +2125,11 @@ class AgentRuntime:
             log.info("点云套图核对算完时机器人动过了:这次的结论作废")
             return
         soft, self._soft_check = getattr(self, "_soft_check", False), False
-        if soft and v.fit < MIN_FIT:
+        if soft and v.fit < G.REFINE_FIT:
             # 真机 11-24:自动找到的位置是先认、交定位器精配的;精配完再套图还不到门槛 —— 不认,等人
+            # (门槛 11-25 放到 REFINE_FIT 0.4;图上别处明显更像的照旧由下面 judge 的结论拦)
             reason = (f"自动找到的位置交定位器精配后,点云套图贴合度 {v.fit:.2f}"
-                      f"(要 {MIN_FIT:g} 以上),位置不可信:请人给位置")
+                      f"(要 {G.REFINE_FIT:g} 以上),位置不可信:请人给位置")
             log.warning("%s", reason)
             anchor.scan_disagree = reason[:200]
             self.events.emit("loc_wrong_solution", {

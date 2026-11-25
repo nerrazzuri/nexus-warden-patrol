@@ -98,7 +98,9 @@ def overview(dispatcher: Any, db: Any, *, now_ms: int, tz: tzinfo) -> list[dict[
                     "deter": _deter(caps) if fresh else None,
                     "task_what": task_what(db, rid, _task(c)),
                     "manual_note": (reg.manual_only(rid) or {}).get("note", ""),
-                    **_return_targets(db, rid, caps)})
+                    **_return_targets(db, rid, caps),
+                    # 真机 11-25:遥控放租后倒数回待命点(没在倒数是 None)
+                    "standby_countdown": getattr(dispatcher, "standby_countdown", {}).get(rid)})
     return out
 
 

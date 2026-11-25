@@ -3,6 +3,8 @@
 
 from __future__ import annotations
 
+import asyncio
+
 import json
 
 import pytest
@@ -417,8 +419,47 @@ async def test_遥控放租之后_直线狗不自动回待命点_也不报(站):
     assert not _cmds(t, "goto") and not _cmds(t, "patrol")
     assert not [i for i in _feed(sub) if i["kind"] == "standby_failed"]
     t.site.clients["A"].capabilities.tasks["goto"]["path"] = "planned"
+    t.stb.teleop_delay_s = 0.0                      # 真机 11-25 的倒数另测
     await t.send(t.stb._auto("A", "teleop-8"))
     assert len(_cmds(t, "goto")) == 1
+
+
+async def test_真机1125_遥控放租后_先倒数_能取消_倒数完才回(站):
+    """用户 11-25 选「先提示,倒数 30 秒再回,能取消」:遥控松手 2 秒就自己走,人还在旁边。"""
+    t = 站
+    t.site.clients["A"].capabilities.tasks["goto"]["path"] = "planned"
+    t.stb.set("A", "dock", map_id="estate-1", map_version="7", x=5.0, y=0.0, yaw=0.0, default=True)
+    t.stb.teleop_delay_s = 0.3
+    sub = t.site.feed.subscribe()
+    job = asyncio.ensure_future(t.stb._auto("A", "teleop-11"))
+    await asyncio.sleep(0.05)
+    cd = t.site.robot_view("A")["standby_countdown"]
+    assert cd["after"] == "teleop-11" and cd["due_ms"] > 0, "倒数的时候视图上看得见"
+    assert not _cmds(t, "goto"), "倒数完之前不走"
+    assert t.stb.cancel_countdown("A", by="gina") is True
+    await job
+    assert not _cmds(t, "goto") and t.site.robot_view("A")["standby_countdown"] is None
+    kinds = [i["kind"] for i in _feed(sub)]
+    assert "standby_countdown" in kinds and "standby_countdown_cancelled" in kinds
+    assert t.stb.cancel_countdown("A", by="gina") is False, "没在倒数:取消不了"
+    # 不取消:倒数完照回
+    await t.send(t.stb._auto("A", "teleop-12"))
+    assert len(_cmds(t, "goto")) == 1
+
+
+async def test_真机1125_倒数期间人又派了命令_这一趟不回(站):
+    t = 站
+    t.site.clients["A"].capabilities.tasks["goto"]["path"] = "planned"
+    t.stb.set("A", "dock", map_id="estate-1", map_version="7", x=5.0, y=0.0, yaw=0.0, default=True)
+    t.stb.teleop_delay_s = 0.3
+    job = asyncio.ensure_future(t.stb._auto("A", "teleop-13"))
+    await asyncio.sleep(0.05)
+    with t.db.tx() as c:
+        c.execute("INSERT INTO commands(command_id, task_id, robot_id, kind, payload, issued_by, "
+                  "issued_at, priority) VALUES ('c-x','teleop-14','A','teleop','{}','gina',?,0)",
+                  (t.clock.ms + 1,))
+    await job
+    assert not _cmds(t, "goto"), "人接着在用它:不自己走"
 
 
 async def test_第10轮_W10_01_遥控完本来就在待命点_不派也不报(站):
@@ -454,6 +495,7 @@ async def test_第10轮_W10_01_站点还当它在遥控_等一等再派_不报(�
 
     monkeypatch.setattr(t.stb, "return_to", first_busy)
     monkeypatch.setattr(t.stb, "_sleep", no_sleep)
+    t.stb.teleop_delay_s = 0.0
     sub = t.site.feed.subscribe()
     await t.send(t.stb._auto("A", "teleop-10"))
     assert calls["n"] == 2 and len(_cmds(t, "goto")) == 1

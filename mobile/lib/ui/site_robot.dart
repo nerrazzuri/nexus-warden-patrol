@@ -100,6 +100,15 @@ String robotWifiLine(Map w) {
   return ssid.isEmpty ? link : '$ssid · $link';
 }
 
+/// 真机 11-25：遥控松手后回待命点还剩几秒（按站点给的 `due_ms`；页面每 5 秒刷新一次，所以是大约）。
+int returnCountdownS(Map<String, dynamic> v, {DateTime? now}) {
+  final cd = v['standby_countdown'];
+  final due = cd is Map ? cd['due_ms'] : null;
+  if (due is! num) return 0;
+  final left = (due - (now ?? DateTime.now()).millisecondsSinceEpoch) / 1000;
+  return left <= 0 ? 0 : left.ceil();
+}
+
 class SiteRobotPage extends StatefulWidget {
   final SiteApi api;
   final String robotId;
@@ -283,6 +292,40 @@ class _SiteRobotPageState extends State<SiteRobotPage> with NwAsk {
     _say(msg);
     await _reload();
     return ok;
+  }
+
+  Widget _returnCountdown(NwColors c, Map<String, dynamic> v, bool canCancel) => Padding(
+      padding: const EdgeInsets.fromLTRB(Nw.s16, 0, Nw.s16, 12),
+      child: NwCard(
+        key: const Key('robot-return-countdown'),
+        tone: NwTone.warning,
+        child: Row(children: [
+          Expanded(
+              child: Text(
+                  tr('Remote control ended. In about ${returnCountdownS(v)} s it will walk back to the standby point by itself.',
+                      '遥控已结束，约 ${returnCountdownS(v)} 秒后它会自己走回待命点。'),
+                  style: NwText.bodySmall.copyWith(color: c.text))),
+          if (canCancel) ...[
+            const SizedBox(width: Nw.s8),
+            NwButton(buttonKey: const Key('btn-return-cancel'), label: tr('Stay here', '留在这里'), onPressed: _cancelReturn),
+          ],
+        ]),
+      ));
+
+  Future<void> _cancelReturn() async {
+    String msg;
+    try {
+      final r = await widget.api.cancelStandbyReturn(widget.robotId);
+      msg = r['cancelled'] == true
+          ? tr('${widget.robotId} will stay where it is', '${widget.robotId} 留在原地，不回待命点')
+          : tr('${widget.robotId} has already set off. Tap Stop in place to stop it.',
+              '${widget.robotId} 已经出发了。要停就点「原地停下」。');
+    } on SiteError catch (e) {
+      msg = tr('Stay here failed: ${refusalText(e)}', '留在这里 失败：${refusalText(e)}');
+    }
+    if (!mounted) return;
+    _say(msg);
+    await _reload();
   }
 
   static bool _busy(Map<String, dynamic>? v) {
@@ -909,6 +952,8 @@ class _SiteRobotPageState extends State<SiteRobotPage> with NwAsk {
                 ],
               ]),
             )),
+      // 真机 11-25：遥控松手后站点倒数再派回待命点 —— 写明它要自己走、大约还剩几秒，能取消
+      if (v?['standby_countdown'] is Map) _returnCountdown(c, v!, s?.canAbort ?? false),
       if (teleop && needsStand(v))
         Padding(
             padding: const EdgeInsets.fromLTRB(Nw.s16, 0, Nw.s16, 12),
