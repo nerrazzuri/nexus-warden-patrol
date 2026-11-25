@@ -8,7 +8,8 @@
 import { signal } from "@preact/signals";
 import type { JSX } from "preact";
 import { useEffect, useMemo, useRef, useState } from "preact/hooks";
-import { alertHeadline, canHandleAlerts } from "./alertinfo";
+import { alertHeadline, canHandleAlerts, seeingCam } from "./alertinfo";
+import { CameraWell } from "./camera";
 import { hm, nameOf } from "./data";
 import { guardAlarms } from "./dutyrank";
 import { t } from "./i18n";
@@ -185,6 +186,12 @@ export function AlarmPop(props: {
       {can && !alarmSound.value && <span class="alarm-pop-note">{t("popSoundOff")}</span>}
       {ring && !beeper.ready() && (
         <button type="button" class="btn sm" onClick={() => { beeper.unlock(); setTick((n) => n + 1); }}>{t("popUnlock")}</button>
+      )}
+      {/* 用户 11-25:机器人看见人 —— 卡片上直接放看到人的那一路实时画面,点画面进值守页放大 */}
+      {seeingCam(top) && (
+        <div class="alarm-pop-video" data-pop-video={seeingCam(top)}>
+          <CameraWell robot={top.robot} cam={seeingCam(top)!} now={Date.now()} variant="pip" forceLive onOpen={props.onGo} />
+        </div>
       )}
       <div class="alarm-pop-acts">
         {can && <button type="button" class="btn sm onsolid" onClick={() => props.onAck(top)}>{t("dutyTake")}</button>}

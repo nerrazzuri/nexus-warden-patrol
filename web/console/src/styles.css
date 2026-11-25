@@ -705,6 +705,9 @@ button.armstate:focus-visible { outline: 2px solid var(--c-primary); outline-off
 /* 第三档 #40:别的页上来了新报警,右下角弹卡片(值守页有横幅,不弹);右上角会盖住各页的主按钮。
    在对话框、账号菜单下面,页面上面 */
 /* UIUX-048:缩小(380 → 320 宽、按钮小档、一行写全),少盖住页面上的按钮 */
+/* 用户 11-25:看见人的报警卡片上放实时画面 */
+.alarm-pop-video { aspect-ratio: 16 / 9; display: flex; border-radius: var(--r-r8); overflow: hidden; background: var(--c-well); }
+.alarm-pop-video > * { flex: 1; min-width: 0; }
 .alarm-pop { position: fixed; bottom: var(--sp-4); right: var(--sp-4); z-index: 4; width: min(320px, calc(100% - 32px));
   display: flex; flex-direction: column; gap: var(--sp-1); padding: var(--sp-2) var(--sp-3); border-radius: var(--r-r12);
   background: var(--c-errorFill); color: var(--c-onErrorFill); box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45); }
@@ -1880,6 +1883,11 @@ input[type="checkbox"], input[type="radio"] { width: 18px; height: 18px; }
 .mon-tiles.many { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-auto-rows: max-content; align-content: start; overflow-y: auto; overscroll-behavior: contain; }
 /* 笔记本复测 11-15:行高不许压到容器高(min-height:0 时行被压扁、16:9 的格子照原高画,上下互相盖住) */
 .mon-tiles.many > .slot, .mon-tiles.many > .mon-tile { aspect-ratio: 16 / 9; min-height: auto; }
+/* 用户 11-25:看见人的那一路放大:占满一整行、比别的高 */
+.mon-tiles.has-hero:not(.many) { grid-template-rows: minmax(0, 2fr) minmax(0, 1fr); }
+.mon-tiles.has-hero:not(.many):not(:has(> .mon-tile + .mon-tile)) { grid-template-rows: minmax(0, 1fr); }
+.mon-tiles > .mon-tile.hero { grid-column: 1 / -1; }
+.mon-tiles.many > .mon-tile.hero { aspect-ratio: 16 / 9; }
 .mon-tiles > .slot { min-height: 0; }
 .mon-tile { margin: 0; min-height: 0; display: flex; flex-direction: column; background: var(--c-well); border: 1px solid var(--c-outline); }
 .mon-tile figcaption { padding: 6px 10px; font-weight: 600; background: #000; color: #ECEDEA; }
