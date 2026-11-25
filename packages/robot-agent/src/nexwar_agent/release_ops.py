@@ -33,6 +33,49 @@ from typing import Any
 from nexwar_agent.engine import release as rel
 from nexwar_contract.releases import ReleaseRef
 
+#: 装一版的几步和各占进度条的哪一段(百分比,真机 11-25 用户「下载给机器人的时候需要有进度条」)。
+#: 下载按字节;编 Super-LIO 最慢(C40221 约 4 分钟),给的段最长。编过的版本那几步一闪就过。
+INSTALL_STAGES: dict[str, tuple[int, int]] = {
+    "download": (0, 40), "unpack": (40, 44), "verify": (44, 48), "stage": (48, 52),
+    "venv": (52, 72), "sidecar": (72, 80), "superlio": (80, 99)}
+#: 进度回调:``(哪一步, 这一步做了几成 0–1)``。在装的线程里调,调用方自己转回事件循环。
+Progress = Callable[[str, float], None]
+
+
+def read_build(pkg: Path) -> int | None:
+    """包目录里 ``release.json`` 写的构建号(真机 11-25:看得出是 build 34 还是 35);没有、读不了是
+    ``None``。只是说明,不签、不算指纹。"""
+    import json
+    try:
+        b = json.loads((Path(pkg) / "release.json").read_text(encoding="utf-8")).get("build")
+    except (OSError, ValueError, AttributeError):
+        return None
+    return b if isinstance(b, int) and not isinstance(b, bool) and b > 0 else None
+
+
+def install_pct(stage: str, frac: float) -> int:
+    """这一步做了几成 → 整个装的百分比(0–99;100 是装好了,由「装好了」事件说)。"""
+    lo, hi = INSTALL_STAGES.get(stage, (0, 0))
+    return int(lo + (hi - lo) * min(max(frac, 0.0), 1.0))
+
+
+def _say(progress: Progress | None, stage: str, frac: float = 0.0) -> None:
+    if progress is None:
+        return
+    try:
+        progress(stage, frac)
+    except Exception:  # 报进度出错不能把装版本带崩
+        log.debug("报进度出错", exc_info=True)
+
+
+def _takes_progress(fn: Callable[..., Any]) -> bool:
+    """建 venv 的函数收不收 ``progress``(测试里换的那些不收)。"""
+    import inspect
+    try:
+        return "progress" in inspect.signature(fn).parameters
+    except (TypeError, ValueError):
+        return False
+
 log = logging.getLogger(__name__)
 
 #: 下载:给版本名,返回一块一块的字节(调用方在线程里跑它)。
@@ -73,7 +116,7 @@ def safe_extract(tar: Path, dest: Path) -> None:
 
 
 def build_venv(pkg: Path, slot: Path, *, pip_args: list[str],
-               python: str = "python3") -> None:
+               python: str = "python3", progress: Progress | None = None) -> None:
     """跟 ``deploy/install.sh`` 4/7 一个做法:每版一个 venv,从包的**临时副本**装(不往槽里写
     egg-info),robot-agent 那几个包按依赖顺序装,**哨兵最后才落**。哨兵在就跳过。"""
     venv = slot / "venv"
@@ -91,16 +134,21 @@ def build_venv(pkg: Path, slot: Path, *, pip_args: list[str],
         shutil.copytree(pkg, copy)
         if (copy / WHEELS_DIR).is_dir():
             pip_args = ["--no-index", f"--find-links={copy / WHEELS_DIR}", *pip_args]
+        _say(progress, "venv")
         run(python, "-m", "venv", str(venv))
         vpy = str(venv / "bin" / "python")
         run(vpy, "-m", "pip", "install", "--quiet", *pip_args, str(copy))
         agent = copy / "packages" / "robot-agent"
         if agent.is_dir():
+            _say(progress, "venv", 0.5)
             run(vpy, "-m", "pip", "install", "--quiet", *pip_args,
                 f"{copy / 'packages' / 'contract'}[mqtt]", str(copy / "packages" / "adapter-sim"),
                 str(copy / "packages" / "adapter-d1max"), str(agent))
-    why = build_sidecar(pkg, slot, sdk=os.environ.get("NEXWAR_ROBOT_SDK")) \
-        or build_superlio(pkg, slot)
+    _say(progress, "sidecar")
+    why = build_sidecar(pkg, slot, sdk=os.environ.get("NEXWAR_ROBOT_SDK"))
+    if not why:
+        _say(progress, "superlio")
+        why = build_superlio(pkg, slot)
     if why:
         raise ReleaseOpError(why)
     (venv / SENTINEL).write_text(f"nexwar_patrol {slot.name}\n", encoding="utf-8")
@@ -203,6 +251,10 @@ class ReleaseOps:
         except rel.ReleaseError:
             return ""
 
+    def build_of(self, name: str) -> int | None:
+        """槽里这一版的构建号(``release.json`` 的 ``build``,发行脚本写的,给人看;老包没有)。"""
+        return read_build(self.layout.release_dir(name)) if name else None
+
     def ready(self, name: str) -> bool:
         """这一版落了槽、venv 也建好了。"""
         return (self.layout.release_dir(name) / "venv" / SENTINEL).is_file()
@@ -264,7 +316,9 @@ class ReleaseOps:
 
     # ------------------------------------------------------------ 装(阻塞,在线程里调)
 
-    def install(self, ref: ReleaseRef) -> None:
+    def install(self, ref: ReleaseRef, progress: Progress | None = None) -> None:
+        """下载 → 核大小哈希 → 解开 → 验签 → 落槽 → 建 venv、编旁路、编 Super-LIO。每一步开头经
+        ``progress`` 报一次(下载按字节报)。"""
         if self.ready(ref.name):
             # 装好了就不重下;启动脚本的执行位照样补一遍 —— 以前落下的 0644 槽,站点再点一次「装」
             # 就能救回来,不用上狗重跑装机脚本(W00c5 修复内部评审)。
@@ -275,6 +329,7 @@ class ReleaseOps:
         top = self.work / f"{ref.name}.x"
         try:
             h, n = hashlib.sha256(), 0
+            _say(progress, "download")
             with open(tar, "wb") as fh:
                 try:
                     for chunk in self._fetch(ref.name):
@@ -283,12 +338,14 @@ class ReleaseOps:
                             raise ReleaseOpError("包比站点说的大")
                         h.update(chunk)
                         fh.write(chunk)
+                        _say(progress, "download", n / ref.size if ref.size else 1.0)
                 except ReleaseOpError:
                     raise
                 except Exception as exc:
                     raise ReleaseOpError(f"下载失败: {type(exc).__name__}: {exc}") from exc
             if n != ref.size or h.hexdigest() != ref.sha256:
                 raise ReleaseOpError("包的大小或哈希不匹配")
+            _say(progress, "unpack")
             shutil.rmtree(top, ignore_errors=True)
             safe_extract(tar, top)
             pkg = top / ref.name
@@ -299,15 +356,20 @@ class ReleaseOps:
                 # 开机守卫修链时还可能挑中它(W00c5 修复内部评审)。站点登记时也拒。
                 raise ReleaseOpError(f"包里没有代理的启动脚本 {rel.AGENT_START}"
                                      "(老服务那一代的包),不装")
+            _say(progress, "verify")
             if self._sigcheck is not None:
                 why = self._sigcheck(pkg)                  # 先验发行方签名(W30):不是我们发的不装
                 if why:
                     raise ReleaseOpError(why)
+            _say(progress, "stage")
             try:
                 rel.stage(self.layout, pkg, now_ms=self._now())   # 先核包内指纹,不对一个字节都不落
             except rel.ReleaseError as exc:
                 raise ReleaseOpError(str(exc)) from exc
-            self._build(pkg, self.layout.release_dir(ref.name))
+            if progress is not None and _takes_progress(self._build):
+                self._build(pkg, self.layout.release_dir(ref.name), progress=progress)
+            else:
+                self._build(pkg, self.layout.release_dir(ref.name))
         finally:
             tar.unlink(missing_ok=True)
             shutil.rmtree(top, ignore_errors=True)

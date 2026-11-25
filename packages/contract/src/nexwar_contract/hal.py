@@ -24,6 +24,11 @@ class HalUnsupported(Exception):
     """这台机器/这个适配器没有这项能力。调用方先看 ``hal_capabilities()``。"""
 
 
+class HalNotReady(Exception):
+    """连上了,但机身那头还没准备好(比如旁路进程刚起、第一帧还没到)。过一会再连就行,不是真错。
+    代理起来时按「对面还没在听」一样在进程里等(真机 11-25:切版本时旁路跟代理同一秒重启)。"""
+
+
 #: 姿态(POC 2026-11):站起、趴下、蹲下(SDK 的 Crawl)。``set_motion_mode`` 收这几个。
 POSTURES: tuple[str, ...] = ("stand", "lie", "crawl")
 

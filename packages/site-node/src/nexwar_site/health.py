@@ -20,6 +20,7 @@ import csv
 import io
 import json
 import logging
+import os
 import platform
 import re
 import shutil
@@ -86,6 +87,27 @@ def site_version() -> str:
     """产品版本(W57:站点、机器人、App 同一个号,客户看到的就是它)。"""
     from nexwar_contract.product import PRODUCT_VERSION
     return PRODUCT_VERSION
+
+
+#: 装机脚本把这台站点装的那个发行包的 ``release.json`` 拷到这里(真机 11-25:站点自己是哪一版)。
+SITE_RELEASE_JSON = Path("/opt/nexwar_site/release.json")
+
+
+def site_release(path: Path | None = None) -> dict[str, Any]:
+    """这台站点装的是哪个发行包:``{"name": …, "build": …}``,读不到的那项是 ``None``(从源码跑、
+    老装机脚本装的)。"""
+    import json
+    p = path or Path(os.environ.get("NEXWAR_SITE_RELEASE_JSON") or SITE_RELEASE_JSON)
+    try:
+        raw = json.loads(p.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {"name": None, "build": None}
+    if not isinstance(raw, dict):
+        return {"name": None, "build": None}
+    name, build = raw.get("name"), raw.get("build")
+    return {"name": name if isinstance(name, str) and name else None,
+            "build": build if isinstance(build, int) and not isinstance(build, bool)
+            and build > 0 else None}
 
 
 #: 英文界面(网页易用性第 2 轮 P1-01):检查说明带一份英文 ``detail_en``。

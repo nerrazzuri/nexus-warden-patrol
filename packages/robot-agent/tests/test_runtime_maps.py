@@ -328,10 +328,12 @@ async def test_发布命令_装在后台_切要空闲要装好_能力里报在�
     await rt.step(0.1)
     await rt._on_cmd(_cmd("release_activate", {"name": new}, "r4", c))
     await broker.drain()
-    assert ears.by["cmd/ack"][-1]["reason"] == "busy", "跑着任务不切版本"
+    # 真机 11-25:拒的时候说清在忙什么(原来只回 busy)
+    assert ears.by["cmd/ack"][-1]["reason"].startswith("busy: 正在执行任务 goto-r3"), \
+        "跑着任务不切版本"
     await rt._on_cmd(_cmd("release_rollback", {}, "r5", c))
     await broker.drain()
-    assert ears.by["cmd/ack"][-1]["reason"] == "busy"
+    assert ears.by["cmd/ack"][-1]["reason"] == "busy: 正在执行任务 goto-r3"
     await rt.close()
 
 
@@ -479,7 +481,7 @@ async def test_换图时不装版本(台):
     await rt._on_cmd(_cmd("release_install", {"name": "2026-09-25-bbbbbb", "sha256": "a" * 64,
                                               "size": 9}, "w2", c))
     await broker.drain()
-    assert ears.by["cmd/ack"][-1]["reason"] == "busy"
+    assert ears.by["cmd/ack"][-1]["reason"] == "busy: 在换图"
     gate.set()
     await _跑(rt, broker)
     assert rt.releases.calls == []
@@ -559,7 +561,7 @@ async def test_切版本_录包时不切_电量读不到不切_在跑的不切_�
     rt.mapper.recording = True
     await rt._on_cmd(_cmd("release_activate", {"name": new}, "a1", c))
     await broker.drain()
-    assert ears.by["cmd/ack"][-1]["reason"] == "busy", "重启会悄悄掐掉录包"
+    assert ears.by["cmd/ack"][-1]["reason"].startswith("busy: 在录包"), "重启会悄悄掐掉录包"
     rt.mapper.recording = False
 
     async def 读不到():
@@ -870,4 +872,45 @@ async def test_W75_站点打包_开录带pack_site_走完交给站点_发交接�
     assert "map_built" not in kinds
     got = [e for e in ears.by["event"] if e["kind"] == "map_handoff"][-1]["data"]
     assert (got["map_id"], got["version"], got["task_id"]) == ("m", "5", "mapping-s1")
+    await rt.close()
+
+
+async def test_真机1125_装的时候报进度_这时点切换说清在装哪一步(tmp_path):
+    """用户 11-25:「现在只能盲猜下发完成了没,我一直点立即切换一直显示 busy」。装的时候发
+    ``release_progress``(哪一步、百分比);这时来切换,拒的原因写在装哪一版、哪一步、多少。"""
+    import asyncio
+    import threading
+    broker, c, ears, rel, dog, rt = await _发布台(tmp_path)
+    await rt.start()
+    new = "2026-09-26-cccccc"
+    gate, at_build = threading.Event(), threading.Event()
+
+    def install(ref, progress=None):
+        progress("download", 0.0)
+        progress("download", 0.5)
+        progress("superlio", 0.0)
+        at_build.set()
+        gate.wait(5)
+        rel.installed.add(ref.name)
+    rel.install = install
+    await rt._on_cmd(_cmd("release_install", {"name": new, "sha256": "a" * 64, "size": 9},
+                          "p1", c))
+    for _ in range(200):
+        if at_build.is_set():
+            break
+        await asyncio.sleep(0.01)
+    await asyncio.sleep(0.05)
+    await rt.step(0.1)                                  # 事件随下一拍发出去
+    await broker.drain()
+    prog = [e["data"] for e in ears.by["event"] if e["kind"] == "release_progress"]
+    assert [p["stage"] for p in prog] == ["download", "superlio"], "同一步里刷得太快的不报"
+    assert {k: prog[-1][k] for k in ("name", "stage", "pct")} == {"name": new, "stage": "superlio",
+                                                             "pct": 80}
+    await rt._on_cmd(_cmd("release_activate", {"name": "2026-09-25-bbbbbb"}, "p2", c))
+    await broker.drain()
+    why = ears.by["cmd/ack"][-1]["reason"]
+    assert why.startswith(f"busy: 正在装 {new}(编 Super-LIO,80%)"), why
+    gate.set()
+    await _跑(rt, broker)
+    assert any(e["kind"] == "release_installed" for e in ears.by["event"])
     await rt.close()

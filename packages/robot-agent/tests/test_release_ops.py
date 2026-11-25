@@ -90,6 +90,47 @@ def test_装_切_起来提交(ops, tmp_path):
     assert built == [(NEW, NEW)]
 
 
+def test_真机1125_装的时候一步一步报进度_建环境的收得到就往下传(ops, tmp_path):
+    """用户 11-25「下载给机器人的时候需要有进度条」:下载按字节、之后每一步开头各报一次,
+    百分比只涨不跌。"""
+    from nexwar_agent.release_ops import INSTALL_STAGES, install_pct
+    o, served, restarts, built, layout = ops
+    seen: list[tuple[str, float]] = []
+
+    def build(pkg, slot, progress=None):
+        progress("venv", 0.0)
+        progress("superlio", 0.5)
+        (slot / "venv").mkdir(parents=True, exist_ok=True)
+        (slot / "venv" / SENTINEL).write_text("ok")
+    o._build = build
+    o.install(_ref(served, NEW, _tar(_包(tmp_path, NEW))),
+              progress=lambda s, f: seen.append((s, f)))
+    stages = list(dict.fromkeys(s for s, _ in seen))
+    assert stages == ["download", "unpack", "verify", "stage", "venv", "superlio"]
+    assert ("download", 1.0) in seen, "下载完那一下是 100%"
+    pcts = [install_pct(s, f) for s, f in seen]
+    assert pcts == sorted(pcts) and pcts[-1] < 100, "只涨不跌;100% 由「装好了」说"
+    assert set(INSTALL_STAGES) >= set(stages)
+
+
+def test_真机1125_报进度出错不把装版本带崩_老的建环境函数不收进度也照装(ops, tmp_path):
+    o, served, restarts, built, layout = ops
+
+    def 坏(stage, frac):
+        raise RuntimeError("界面那头炸了")
+    o.install(_ref(served, NEW, _tar(_包(tmp_path, NEW))), progress=坏)
+    assert o.ready(NEW) and built == [(NEW, NEW)], "fixture 的 build 不收 progress:照旧调"
+
+
+def test_真机1125_槽里那一版的构建号_老包没有(ops, tmp_path):
+    o, served, restarts, built, layout = ops
+    pkg = _包(tmp_path, NEW)
+    raw = json.loads((pkg / "release.json").read_text())
+    (pkg / "release.json").write_text(json.dumps(raw | {"build": 35}))   # 自述不算指纹
+    o.install(_ref(served, NEW, _tar(pkg)))
+    assert o.build_of(NEW) == 35 and o.build_of(OLD) is None and o.build_of("") is None
+
+
 def test_切了之后退回上一版(ops, tmp_path):
     o, served, restarts, built, layout = ops
     o.install(_ref(served, NEW, _tar(_包(tmp_path, NEW))))

@@ -103,6 +103,10 @@ class ReleaseCatalog:
             for chunk in iter(lambda: fh.read(1 << 20), b""):
                 h.update(chunk)
         os.replace(tmp, out)
+        build = raw.get("build")
+        if isinstance(build, int) and not isinstance(build, bool) and build > 0:
+            # 真机 11-25:构建号给人看(「build 35」),记在包旁边,不进库、不签
+            (self.root / f"{name}.build").write_text(str(build), encoding="utf-8")
         row = {"name": name, "version": str(raw.get("version", "")), "sha256": h.hexdigest(),
                "size": out.stat().st_size, "created_ms": self._now(), "note": note[:200],
                "requires_mission_schema": schema}
@@ -113,7 +117,16 @@ class ReleaseCatalog:
         return row
 
     def list(self) -> list[dict[str, Any]]:
-        return [dict(r) for r in self.db.query("SELECT * FROM releases ORDER BY name DESC")]
+        return [dict(r) | {"build": self.build_of(r["name"])}
+                for r in self.db.query("SELECT * FROM releases ORDER BY name DESC")]
+
+    def build_of(self, name: str) -> int | None:
+        """登记时包里写的构建号(发行脚本从 build 36 起写);老包没有是 ``None``。"""
+        try:
+            b = int((self.root / f"{name}.build").read_text(encoding="utf-8").strip())
+        except (OSError, ValueError):
+            return None
+        return b if b > 0 else None
 
     def get(self, name: str) -> ReleaseRef:
         rows = self.db.query("SELECT name, sha256, size FROM releases WHERE name=?", (name,))

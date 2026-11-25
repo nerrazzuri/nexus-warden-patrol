@@ -109,3 +109,65 @@ describe("真机 11-20:点了装、切以后看得见结果", () => {
     await waitFor(() => expect(posts).toContainEqual({ url: "/api/robots/A/release", body: { action: "unqueue" } }));
   });
 });
+
+describe("真机 11-25:看得出是几号构建、下载有进度条、忙的时候说在忙什么", () => {
+  const page = (rel: unknown, site: unknown = { version: "1.0.0-rc.1", release_build: 36, release_name: "2026-11-26-abcdef12" }) => {
+    setFetch(((url: string, init?: RequestInit) => {
+      if (init?.method === "POST") return Promise.resolve(json({ ack: {} }));
+      if (url === "/api/releases") return Promise.resolve(json(rel));
+      if (url === "/api/versions") return Promise.resolve(json({ site, robots: [] }));
+      return Promise.resolve(json({}, 404));
+    }) as typeof fetch);
+    return render(<UpgradePage say={() => {}} />).container;
+  };
+
+  it("站点自己一行写清是这台电脑、几号构建;机器人和升级包也写构建号;升级包那一栏不再叫「站点上的…」", async () => {
+    const c = page({ releases: [{ name: "2026-11-26-abcdef12", build: 36 }, { name: "2026-11-24-166a47ee" }], robots: { A: "2026-11-24-166a47ee" }, builds: { A: null } });
+    const site = await waitFor(() => { const r = c.querySelector("[data-site-version]"); expect(r?.textContent).toContain("构建 36"); return r!; });
+    expect(site.textContent).toContain("站点（这台电脑）");
+    expect(site.textContent).toContain("2026-11-26-abcdef12");
+    expect(c.querySelector('[data-release="2026-11-26-abcdef12"]')!.textContent).toContain("构建 36");
+    expect(c.querySelector('[data-release="2026-11-24-166a47ee"]')!.textContent).not.toContain("构建");
+    expect(c.textContent).toContain("机器人升级包（存在站点上）");
+    expect(c.textContent).not.toContain("站点上的升级包");
+  });
+
+  it("装的时候有进度条(哪一步、百分比);装好了就没了", async () => {
+    const c = page({ releases: [], robots: { A: "v1" }, builds: { A: 35 },
+      last: { A: { cmd: { kind: "release_install", name: "r36", at_ms: 1, result: "accepted" }, event: null,
+                   progress: { name: "r36", stage: "superlio", pct: 80, at_ms: 2 } } } });
+    const bar = await waitFor(() => { const b = c.querySelector('[data-up-progress="install"]'); expect(b).not.toBeNull(); return b!; });
+    expect(bar.textContent).toContain("编译 Super-LIO");
+    expect(bar.textContent).toContain("80%");
+    expect(bar.querySelector('[role="progressbar"]')!.getAttribute("aria-valuenow")).toBe("80");
+    expect(c.querySelector('[data-robot="A"]')!.textContent).toContain("v1 · 构建 35");
+  });
+
+  it("切换:收下了、正在重启各一格;新版跑起来就没进度条了", async () => {
+    let c = page({ releases: [], robots: { A: "v1" },
+      last: { A: { cmd: { kind: "release_activate", name: "r36", at_ms: 5, result: "accepted" },
+                   event: { kind: "release_activating", name: "r36", at_ms: 6 } } } });
+    const bar = await waitFor(() => { const b = c.querySelector('[data-up-progress="activate"]'); expect(b).not.toBeNull(); return b!; });
+    expect(bar.textContent).toContain("正在用新版重启");
+    cleanup();
+    c = page({ releases: [], robots: { A: "r36" },
+      last: { A: { cmd: { kind: "release_activate", name: "r36", at_ms: 5, result: "accepted" },
+                   event: { kind: "release_committed", name: "r36", at_ms: 9 } } } });
+    await waitFor(() => expect(c.querySelector('[data-up-event="release_committed"]')).not.toBeNull());
+    expect(c.querySelector("[data-up-progress]")).toBeNull();
+  });
+
+  it("拒的原因是「忙」:写在忙什么,不只是 busy(中文、英文)", async () => {
+    const why = "busy: 正在装 r36(编 Super-LIO,80%) —— 重启那几秒谁都无法停止它,等它完";
+    const rel = { releases: [], robots: { A: "v1" }, last: { A: { cmd: { kind: "release_activate", name: "r36", at_ms: 5, result: "rejected", reason: why }, event: null } } };
+    let c = page(rel);
+    let line = await waitFor(() => { const p = c.querySelector('[data-up-cmd="rejected"]'); expect(p).not.toBeNull(); return p!; });
+    expect(line.textContent).toContain("机器人在忙：正在装 r36");
+    expect(line.textContent).not.toContain("busy");
+    cleanup();
+    lang.value = "en";
+    c = page(rel);
+    line = await waitFor(() => { const p = c.querySelector('[data-up-cmd="rejected"]'); expect(p).not.toBeNull(); return p!; });
+    expect(line.textContent).toContain("The robot is busy: installing r36 (building Super-LIO, 80%)");
+  });
+});

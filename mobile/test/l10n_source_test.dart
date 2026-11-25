@@ -21,6 +21,12 @@ const _allowed = <String, List<String>>{
   // W53：禁行区没确认的拒绝原话里抠出图号、版本
   'lib/ui/refusal.dart': [r"RegExp(r'^(\S+?):(\S+?)\s*当前的区域修订')"],
   'lib/ui/site_intercepts.dart': [r"RegExp(r'^机器人标记失败[:：]')"],
+  // 真机 11-25：机器人拒切换时说「busy: 正在装 …(编 Super-LIO,80%)」，按原话认出哪一步，再按语言说
+  'lib/ui/site_releases.dart': [
+    r"RegExp(r'^正在装 (\S+?)[(（](.+?)[,，](\d+)%[)）]$')",
+    "'下载': 'download', '解包': 'unpack', '验签名': 'verify', '落槽': 'stage',",
+    "'装 Python 环境': 'venv', '编运控旁路': 'sidecar', '编 Super-LIO': 'superlio',",
+  ],
   // 存到站点上的区域名字（数据，不是界面文字）；显示的时候另外翻（zoneLabelText）
   'lib/ui/site_mapping.dart': [
     "'nogo' => '禁行区', 'erase' => '抹掉区', 'wall' => '虚拟墙', _ => '限速区'",

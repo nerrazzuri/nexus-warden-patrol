@@ -173,6 +173,12 @@ chmod 0644 /etc/nexwar_ops.json
 echo "[3/5] Python 环境"
 [[ -x "$VENV/bin/python" ]] || python3 -m venv "$VENV"
 "$VENV/bin/pip" install --upgrade "$PKG/packages/contract[mqtt,planning]" "$PKG/packages/site-node"
+# 真机 11-25:站点自己是哪个发行包(网页、App「站点（这台电脑）… build 35」)。从源码装的没有,就不写。
+if [[ -f "$PKG/release.json" ]]; then
+  install -m 0644 -o root -g root "$PKG/release.json" /opt/nexwar_site/release.json
+else
+  rm -f /opt/nexwar_site/release.json
+fi
 if [[ $RECOVER -eq 1 && -n "$KEYS_FILE" ]]; then
   # A3:托管包里的密钥放回 /etc/nexwar_site(root:nexwar_site 0440);口令交互输入
   "$VENV/bin/nexwar_site" --home "$HOME_DIR" keys-import "$KEYS_FILE"

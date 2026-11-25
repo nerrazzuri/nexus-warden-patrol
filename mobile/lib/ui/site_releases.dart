@@ -7,6 +7,8 @@
 ///   起不起得来、定位器/感知/外参）加站点这边（任务包 schema、备份）。切被狗拒的时候也把清单摆出来。
 library;
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../l10n.dart';
@@ -30,8 +32,77 @@ class SiteReleasesPage extends StatefulWidget {
   State<SiteReleasesPage> createState() => _SiteReleasesPageState();
 }
 
+/// 「构建 35」；老包没写构建号就是空串（真机 11-25：看不出机器人是 34 还是 35）。
+String buildTag(Object? n) => n is int && n > 0 ? tr('build $n', '构建 $n') : '';
+
+/// 装版本那几步（机器人报的 `stage`，代理 release_ops.INSTALL_STAGES）。
+String installStepText(String stage) =>
+    {
+      'download': tr('downloading', '下载'),
+      'unpack': tr('unpacking', '解包'),
+      'verify': tr('checking the signature', '验签名'),
+      'stage': tr('storing it on the robot', '存到机器人上'),
+      'venv': tr('installing Python packages', '装 Python 环境'),
+      'sidecar': tr('building the motion bridge', '编译运控旁路'),
+      'superlio': tr('building Super-LIO (about 4 min)', '编译 Super-LIO（约 4 分钟）'),
+    }[stage] ??
+    stage;
+
+/// 机器人拒收的原因。真机 11-25「一直显示 busy」：代理现在说在忙什么（`busy: 正在装 …(编 Super-LIO,80%) —— …`），
+/// 这里去掉后面那句、英文界面把认得的翻过来。
+String releaseReasonText(String reason) {
+  if (!reason.startsWith('busy:')) return ackReasonText(reason);
+  final what = reason.substring(5).split(' —— ').first.trim();
+  final inst = RegExp(r'^正在装 (\S+?)[(（](.+?)[,，](\d+)%[)）]$').firstMatch(what);
+  if (inst != null) {
+    const zhStep = {
+      '下载': 'download', '解包': 'unpack', '验签名': 'verify', '落槽': 'stage',
+      '装 Python 环境': 'venv', '编运控旁路': 'sidecar', '编 Super-LIO': 'superlio',
+    };
+    final step = installStepText(zhStep[inst.group(2)] ?? inst.group(2)!);
+    return tr('Robot is busy installing ${inst.group(1)} ($step, ${inst.group(3)}%). Try again when it finishes',
+        '机器人在忙：正在装 ${inst.group(1)}（$step，${inst.group(3)}%）。等它忙完再试');
+  }
+  return tr('Robot is busy: $what. Try again when it finishes', '机器人在忙：$what。等它忙完再试');
+}
+
 class _SiteReleasesPageState extends State<SiteReleasesPage> with NwAsk {
-  late Future<Map<String, dynamic>> _data = widget.api.releases();
+  late Future<Map<String, dynamic>> _data = _load();
+  Timer? _tick;
+
+  /// 发布目录 + 站点自己的版本（真机 11-25：站点自己那一行单独写）。站点版本读不到不影响别的。
+  Future<Map<String, dynamic>> _load() async {
+    final d = await widget.api.releases();
+    try {
+      final v = await widget.api.versions();
+      return {...d, 'site': v['site']};
+    } catch (_) {
+      return d;
+    }
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    // 装、切的时候机器人几秒到几分钟才报一次：页面开着就每 5 秒刷一次（进度条跟着走）
+    _tick = Timer.periodic(const Duration(seconds: 5), (_) {
+      if (!mounted) return;
+      final next = _load();
+      next.then((_) {
+        if (mounted) {
+          setState(() {
+            _data = next;
+          });
+        }
+      }, onError: (Object _) {});
+    });
+  }
+
+  @override
+  void dispose() {
+    _tick?.cancel();
+    super.dispose();
+  }
 
   void _snack(String t) {
     if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(t)));
@@ -77,8 +148,13 @@ class _SiteReleasesPageState extends State<SiteReleasesPage> with NwAsk {
       _snack(ack['result'] == 'accepted'
           ? tr('$robot accepted: $what $name (it reports when done; the site raises an alarm on failure)',
               '$robot 已接受：$what $name（完成后上报，失败时站点报警）')
-          : tr('$robot did not accept: ${ack['reason'] ?? ack['result']}',
-              '$robot 未接受：${ack['reason'] ?? ack['result']}'));
+          : tr('$robot did not accept: ${releaseReasonText('${ack['reason'] ?? ack['result']}')}',
+              '$robot 未接受：${releaseReasonText('${ack['reason'] ?? ack['result']}')}'));
+      if (mounted) {
+        setState(() {
+          _data = _load();
+        });
+      }
       final data = ack['data'];
       if (mounted && ack['result'] != 'accepted' && data is Map<String, dynamic>) {
         // 狗拒切时回执里带着清单
@@ -149,6 +225,60 @@ class _SiteReleasesPageState extends State<SiteReleasesPage> with NwAsk {
   /// 排序：拦住的不过项 → 提示的不过项 → 过了的。
   static int _rank(Map ch) => ch['ok'] == true ? 2 : (ch['blocking'] == true ? 0 : 1);
 
+  /// 这台最近一次装 / 切走到哪了（站点 `last`）：装的时候按机器人报的哪一步、百分比；切的时候三步
+  /// （收下 → 用新版重启 → 跑起来，跑起来就不显示了）；最近一条被拒的写原因。
+  /// 真机 11-25 用户「下载给机器人的时候需要有进度条，升级也是」「只能盲猜下发完成了没」。
+  List<Widget> _status(String rid, Object? raw, NwColors nw) {
+    if (raw is! Map) return const [];
+    final cmd = raw['cmd'] as Map?;
+    final ev = raw['event'] as Map?;
+    final prog = raw['progress'] as Map?;
+    final small = NwText.bodySmall.copyWith(color: nw.textSecondary);
+    Widget bar(String kind, double v, String label) => Padding(
+        key: Key('rel-progress-$kind-$rid'),
+        padding: const EdgeInsets.only(top: Nw.s8),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          Row(children: [
+            Expanded(child: Text(label, style: small)),
+            Text('${(v * 100).round()}%', style: small.copyWith(color: nw.text)),
+          ]),
+          const SizedBox(height: 4),
+          LinearProgressIndicator(value: v, minHeight: 6, color: nw.success, backgroundColor: nw.outline),
+        ]));
+    final out = <Widget>[];
+    final pct = prog?['pct'];
+    final accepted = cmd != null && (cmd['result'] == 'accepted' || cmd['result'] == 'duplicate');
+    final evNewer = ev != null && cmd != null && (ev['at_ms'] as num? ?? 0) >= (cmd['at_ms'] as num? ?? 0);
+    if (prog != null && pct is int) {
+      out.add(bar('install', pct / 100,
+          tr('Installing ${prog['name']} on the robot: ${installStepText('${prog['stage']}')}',
+              '正在装到机器人：${prog['name']}，${installStepText('${prog['stage']}')}')));
+    } else if (accepted && cmd['kind'] == 'release_activate') {
+      final k = evNewer ? '${ev['kind']}' : '';
+      final done = k == 'release_committed' || k == 'release_rolled_back' || k.endsWith('_failed');
+      if (!done) {
+        final restarting = k == 'release_activating';
+        out.add(bar(
+            'activate',
+            restarting ? 0.66 : 0.33,
+            restarting
+                ? tr('Switching to ${cmd['name']}: restarting on the new version (about 1–2 min)',
+                    '切换到 ${cmd['name']}：正在用新版重启（约 1–2 分钟）')
+                : tr('Switching to ${cmd['name']}: the robot accepted and is about to restart',
+                    '切换到 ${cmd['name']}：机器人已收下，马上重启')));
+      }
+    }
+    if (cmd != null && cmd['result'] != null && !accepted) {
+      out.add(Padding(
+          key: Key('rel-refused-$rid'),
+          padding: const EdgeInsets.only(top: Nw.s8),
+          child: Text(tr('Last command refused: ${releaseReasonText('${cmd['reason'] ?? cmd['result']}')}',
+              '上一条命令被拒：${releaseReasonText('${cmd['reason'] ?? cmd['result']}')}'),
+              style: small.copyWith(color: nw.error))));
+    }
+    return out;
+  }
+
   @override
   Widget build(BuildContext context) {
     final admin = widget.api.session?.canManageMaps ?? false;
@@ -185,17 +315,35 @@ class _SiteReleasesPageState extends State<SiteReleasesPage> with NwAsk {
           final rels = (snap.data!['releases'] as List).whereType<Map<String, dynamic>>().toList();
           final names = [for (final r in rels) '${r['name']}'];
           final robots = (snap.data!['robots'] as Map).cast<String, dynamic>();
+          final builds = (snap.data!['builds'] as Map? ?? const {}).cast<String, dynamic>();
+          final last = (snap.data!['last'] as Map? ?? const {}).cast<String, dynamic>();
+          final site = snap.data!['site'] as Map?;
           final sep = tr(', ', '、');
           return RefreshIndicator(
             onRefresh: () async {
               setState(() {
-                _data = widget.api.releases();
+                _data = _load();
               });
               await _data.catchError((Object _) => <String, dynamic>{});
             },
             child: ListView(padding: const EdgeInsets.only(bottom: Nw.s24), children: [
               askStrip(),
-              section(tr('Versions on the site', '站点上的版本'), [
+              // 真机 11-25：原来这一栏叫「站点上的版本」，用户当成站点自己的版本（看到 34 就问站点为什么还是 34）
+              if (site != null)
+                section(tr('Site (this computer)', '站点（这台电脑）'), [
+                  line(Text(
+                      [
+                        '${site['version'] ?? '—'}',
+                        buildTag(site['release_build']),
+                        if ((site['release_name'] ?? '') != '') '${site['release_name']}',
+                      ].where((s) => s.isNotEmpty).join(' · '),
+                      key: const Key('rel-site-version'),
+                      style: NwText.bodyMedium.copyWith(color: nw.text))),
+                ]),
+              section(tr('Robot update packages (kept on this site)', '机器人升级包（存在站点上）'), [
+                Text(
+                    tr('For the robots, not the site\'s own version.', '给机器人用的包，不是站点自己的版本。'),
+                    style: sub),
                 if (rels.isEmpty) line(Text(tr('No releases registered yet', '暂无已登记版本'), style: sub)),
                 for (final r in rels)
                   () {
@@ -208,7 +356,11 @@ class _SiteReleasesPageState extends State<SiteReleasesPage> with NwAsk {
                               : Icon(Icons.square, size: 10, color: nw.success)),
                       Expanded(
                           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                        Text(tr('${r['name']} (${r['version']})', '${r['name']}（${r['version']}）'),
+                        Text(
+                            [
+                              tr('${r['name']} (${r['version']})', '${r['name']}（${r['version']}）'),
+                              buildTag(r['build']),
+                            ].where((s) => s.isNotEmpty).join(' · '),
                             style: title.copyWith(fontWeight: FontWeight.w700)),
                         Text(
                             [
@@ -228,9 +380,12 @@ class _SiteReleasesPageState extends State<SiteReleasesPage> with NwAsk {
                       SizedBox(width: 32, child: Text(e.key, style: title.copyWith(fontWeight: FontWeight.w700))),
                       Expanded(
                           child: Text(
-                              '${e.value ?? tr('Version not reported. This robot software does not report it, so it cannot be updated from here.', '没报版本：这台机器人的软件不报自己的版本，所以不能从这里升级。')}',
+                              e.value == null
+                                  ? tr('Version not reported. This robot software does not report it, so it cannot be updated from here.', '没报版本：这台机器人的软件不报自己的版本，所以不能从这里升级。')
+                                  : ['${e.value}', buildTag(builds[e.key])].where((s) => s.isNotEmpty).join(' · '),
                               style: NwText.bodyMedium.copyWith(color: e.value == null ? nw.textSecondary : nw.text))),
                     ]),
+                    ..._status(e.key, last[e.key], nw),
                     // 狗没报在跑哪一版 = 没报发布能力（或者不在线）：按了也是 unsupported，不给按钮。
                     if (admin && e.value != null) ...[
                       nwGap8,
@@ -258,7 +413,10 @@ class _SiteReleasesPageState extends State<SiteReleasesPage> with NwAsk {
                 line(Row(children: [
                   Icon(Icons.square, size: 10, color: nw.success),
                   const SizedBox(width: Nw.s8),
-                  Expanded(child: Text(tr('This phone $appVersion', '这台手机 $appVersion'), style: NwText.bodyMedium.copyWith(color: nw.text))),
+                  // 真机 11-25：只写 1.0.0-rc.1 看不出是 34 还是 35
+                  Expanded(
+                      child: Text(tr('This phone $appVersion (build $appBuild)', '这台手机 $appVersion（构建 $appBuild）'),
+                          key: const Key('rel-app-version'), style: NwText.bodyMedium.copyWith(color: nw.text))),
                   OutlinedButton(
                       key: SiteReleasesPage.appKey,
                       style: OutlinedButton.styleFrom(

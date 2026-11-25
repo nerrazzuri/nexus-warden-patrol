@@ -45,9 +45,11 @@ def _robot(rid: str, c: Any) -> dict[str, Any]:
 
 
 def versions(dispatcher: Any) -> dict[str, Any]:
-    from nexwar_site.health import site_version
+    from nexwar_site.health import site_release, site_version
     robots = [_robot(rid, c) for rid, c in sorted(getattr(dispatcher, "clients", {}).items())]
-    return {"site": {"version": site_version(), "schema": SCHEMA, "api_level": SITE_API_LEVEL,
+    return {"site": {"version": site_version(), **{f"release_{k}": v for k, v in
+                                                   site_release().items()},
+                     "schema": SCHEMA, "api_level": SITE_API_LEVEL,
                      "agent_level_min": SITE_MIN_AGENT_LEVEL,
                      "agent_level_max": SITE_MAX_AGENT_LEVEL,
                      "min_app_level": MIN_APP_API_LEVEL},
