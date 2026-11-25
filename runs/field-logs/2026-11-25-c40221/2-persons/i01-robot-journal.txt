@@ -1,0 +1,133 @@
+art[22098]: 2026-11-25T11:50:35.593+08:00 INFO nexwar_agent.tasks.follow 跟人 follow-1-ca47a63001:离人够远了,接着跟
+art[22098]: 2026-11-25T11:50:35.795+08:00 INFO nexwar_agent.runtime 位置 (-0.21, 0.36, 1.55) map=main:20261124-2 task=follow-1-ca47a63001 定位=可信 质量=0.80
+art[22098]: 2026-11-25T11:50:35.970+08:00 INFO nexwar_agent.bridges.hal_nav 走法:紧急(不限巡逻速度、不做路线检查)
+art[22098]: 2026-11-25T11:50:35.972+08:00 INFO nexwar_agent.engine.machine [task=follow-1-ca47a63001 map=main:?] 开一趟 mission=follow-1-ca47a63001 点数=1 循环=1 点位失败=retry_then_skip
+art[22098]: 2026-11-25T11:50:35.973+08:00 INFO nexwar_agent.engine.machine [task=follow-1-ca47a63001 map=main:?] 状态 IDLE → PREFLIGHT
+art[22098]: 2026-11-25T11:50:35.976+08:00 INFO nexwar_agent.engine.machine [task=follow-1-ca47a63001 map=main:?] 状态 PREFLIGHT → LOCALIZING
+art[22098]: 2026-11-25T11:50:35.977+08:00 INFO nexwar_agent.engine.machine [task=follow-1-ca47a63001 map=main:?] 状态 LOCALIZING → RUNNING
+art[22098]: 2026-11-25T11:50:35.978+08:00 INFO nexwar_agent.engine.machine [task=follow-1-ca47a63001 pt=0 point=target map=main:?] 去这个点 (0.29, -2.35, -1.39) 第 1 次
+art[22098]: 2026-11-25T11:50:36.096+08:00 WARNING nexwar_agent.bridges.nav2_nav [task=follow-1-ca47a63001 pt=0 point=target map=main:?] goto:路线没查成 code=urgent:紧急任务不做路线检查(用户 11-09:走最快的路);守卫健康,继续
+art[22098]: 2026-11-25T11:50:36.098+08:00 INFO nexwar_agent.bridges.nav2_nav [task=follow-1-ca47a63001 pt=0 point=target map=main:?] goto:交给 Nav2(目标 578580907)→ (0.29, -2.35)
+art[22098]: 2026-11-25T11:50:39.873+08:00 INFO nexwar_agent.tasks.follow 跟人 follow-1-ca47a63001:人走近到 3.0 m,停下往后退
+art[22098]: 2026-11-25T11:50:39.874+08:00 INFO nexwar_agent.engine.machine [task=follow-1-ca47a63001 pt=0 point=target map=main:?] 这一趟中止:follow_backoff
+art[22098]: 2026-11-25T11:50:39.875+08:00 WARNING nexwar_agent.engine.machine [task=follow-1-ca47a63001 pt=0 point=target map=main:?] 状态 RUNNING → ABORTING 原因=follow_backoff
+art[22098]: 2026-11-25T11:50:40.028+08:00 WARNING nexwar_agent.engine.machine [task=follow-1-ca47a63001 pt=0 point=target map=main:?] 状态 ABORTING → ABORTED 原因=follow_backoff
+art[22098]: 2026-11-25T11:50:40.846+08:00 INFO nexwar_agent.runtime 位置 (0.26, -0.28, 3.03) map=main:20261124-2 task=follow-1-ca47a63001 定位=可信 质量=0.80
+art[22098]: 2026-11-25T11:50:41.160+08:00 WARNING nexwar_agent.tasks.follow 跟人 follow-1-ca47a63001:人在 2.0 m,退不了,原地站定(扫过区有挡 11 处、看不见 0 处(最近一处在机身后 0.5 m、右 0.2 m);扫过区有挡 13 处、看不见 4 处(最近一处在机身后 0
+art[22098]: 2026-11-25T11:50:41.493+08:00 INFO nexwar_agent.ops 暂停了厂家进程 13 个
+art[22098]: 2026-11-25T11:50:43.884+08:00 WARNING nexwar_agent.tasks.follow 跟人 follow-1-ca47a63001:人在 1.9 m,退不了,原地站定(扫过区有挡 9 处、看不见 0 处(最近一处在机身后 0.5 m、右 0.2 m);扫过区有挡 11 处、看不见 0 处(最近一处在机身后 0.
+art[22098]: 2026-11-25T11:50:45.654+08:00 WARNING nexwar_agent.tasks.follow 跟人 follow-1-ca47a63001:人在 4.6 m,退不了,原地站定(扫过区有挡 4 处、看不见 0 处(最近一处在机身后 0.5 m、右 0.2 m);扫过区有挡 5 处、看不见 0 处(最近一处在机身后 0.5
+art[22098]: 2026-11-25T11:50:46.108+08:00 INFO nexwar_agent.runtime 位置 (1.55, 0.02, -2.64) map=main:20261124-2 task=follow-1-ca47a63001 定位=可信 质量=0.80
+art[22098]: 2026-11-25T11:50:46.308+08:00 INFO nexwar_agent.tasks.follow 跟人 follow-1-ca47a63001:离人够远了,接着跟
+art[22098]: 2026-11-25T11:50:46.589+08:00 INFO nexwar_agent.engine.machine [task=follow-1-ca47a63001 map=main:?] 开一趟 mission=follow-1-ca47a63001 点数=1 循环=1 点位失败=retry_then_skip
+art[22098]: 2026-11-25T11:50:46.593+08:00 INFO nexwar_agent.engine.machine [task=follow-1-ca47a63001 map=main:?] 状态 IDLE → PREFLIGHT
+art[22098]: 2026-11-25T11:50:46.595+08:00 INFO nexwar_agent.engine.machine [task=follow-1-ca47a63001 map=main:?] 状态 PREFLIGHT → LOCALIZING
+art[22098]: 2026-11-25T11:50:46.598+08:00 INFO nexwar_agent.engine.machine [task=follow-1-ca47a63001 map=main:?] 状态 LOCALIZING → RUNNING
+art[22098]: 2026-11-25T11:50:46.606+08:00 INFO nexwar_agent.engine.machine [task=follow-1-ca47a63001 pt=0 point=target map=main:?] 去这个点 (0.64, -1.40, -2.14) 第 1 次
+art[22098]: 2026-11-25T11:50:46.747+08:00 WARNING nexwar_agent.bridges.nav2_nav [task=follow-1-ca47a63001 pt=0 point=target map=main:?] goto:路线没查成 code=urgent:紧急任务不做路线检查(用户 11-09:走最快的路);守卫健康,继续
+art[22098]: 2026-11-25T11:50:46.748+08:00 INFO nexwar_agent.bridges.nav2_nav [task=follow-1-ca47a63001 pt=0 point=target map=main:?] goto:交给 Nav2(目标 578580910)→ (0.64, -1.40)
+art[22098]: 2026-11-25T11:50:51.118+08:00 INFO nexwar_agent.runtime 位置 (1.11, -0.82, -1.96) map=main:20261124-2 task=follow-1-ca47a63001 定位=可信 质量=0.80
+art[22098]: 2026-11-25T11:50:52.205+08:00 INFO nexwar_agent.bridges.nav2_nav 守卫拦住 Nav2 的速度:扫过区有挡 20 处、看不见 0 处(最近一处在机身后 0.5 m、右 0.2 m)
+art[22098]: 2026-11-25T11:50:56.199+08:00 INFO nexwar_agent.runtime 位置 (0.52, -2.10, -2.22) map=main:20261124-2 task=follow-1-ca47a63001 定位=可信 质量=0.75
+art[22098]: 2026-11-25T11:51:01.123+08:00 INFO nexwar_agent.tasks.follow 跟人 follow-1-ca47a63001:人走近到 1.9 m,停下往后退
+art[22098]: 2026-11-25T11:51:01.124+08:00 INFO nexwar_agent.engine.machine [task=follow-1-ca47a63001 pt=0 point=target map=main:?] 这一趟中止:follow_backoff
+art[22098]: 2026-11-25T11:51:01.124+08:00 WARNING nexwar_agent.engine.machine [task=follow-1-ca47a63001 pt=0 point=target map=main:?] 状态 RUNNING → ABORTING 原因=follow_backoff
+art[22098]: 2026-11-25T11:51:01.384+08:00 WARNING nexwar_agent.engine.machine [task=follow-1-ca47a63001 pt=0 point=target map=main:?] 状态 ABORTING → ABORTED 原因=follow_backoff
+art[22098]: 2026-11-25T11:51:01.495+08:00 INFO nexwar_agent.runtime 位置 (-1.00, -4.84, -1.96) map=main:20261124-2 task=follow-1-ca47a63001 定位=可信 质量=0.80
+art[22098]: 2026-11-25T11:51:06.521+08:00 INFO nexwar_agent.runtime 位置 (-0.97, -4.78, -1.99) map=main:20261124-2 task=follow-1-ca47a63001 定位=可信 质量=0.80
+art[22098]: 2026-11-25T11:51:10.962+08:00 WARNING nexwar_agent.commands 任务 follow-1-ca47a63001(follow)结束:task_aborted {'reason': 'abort', 'last': {'x': -1.85, 'y': -2.22, 'at_ms': 1795578670036}, 'heading_deg': -175.0, 'dist_m': 9.8, 'secs': 41, 'track': [{'x': 1.17, 'y': -1.95, 'at
+art[22098]: 2026-11-25T11:51:41.696+08:00 INFO nexwar_agent.ops 暂停了厂家进程 13 个
+art[22098]: 2026-11-25T11:52:41.903+08:00 INFO nexwar_agent.ops 暂停了厂家进程 13 个
+art[22098]: 2026-11-25T11:53:16.617+08:00 INFO nexwar_agent.deter 本体灯 both 关(上装命令)
+art[22098]: 2026-11-25T11:53:18.622+08:00 INFO nexwar_agent.deter 本体灯 both 关(上装命令)
+art[22098]: 2026-11-25T11:53:21.244+08:00 INFO nexwar_agent.deter 本体灯 both 关(上装命令)
+art[22098]: 2026-11-25T11:53:42.158+08:00 INFO nexwar_agent.ops 暂停了厂家进程 13 个
+art[22098]: 2026-11-25T11:53:57.432+08:00 INFO nexwar_agent.deter 本体灯 both 关(上装命令)
+art[22098]: 2026-11-25T11:54:10.893+08:00 INFO nexwar_agent.bridges.hal_nav 走法:普通巡逻(最快 1.0 m/s、出发前查路线)
+art[22098]: 2026-11-25T11:54:10.896+08:00 INFO nexwar_agent.engine.machine [task=standby-home-4279fe4904db map=main:?] 开一趟 mission=standby-home-4279fe4904db 点数=1 循环=1 点位失败=retry_then_skip
+art[22098]: 2026-11-25T11:54:10.898+08:00 INFO nexwar_agent.engine.machine [task=standby-home-4279fe4904db map=main:?] 状态 IDLE → PREFLIGHT
+art[22098]: 2026-11-25T11:54:10.900+08:00 INFO nexwar_agent.engine.machine [task=standby-home-4279fe4904db map=main:?] 状态 PREFLIGHT → LOCALIZING
+art[22098]: 2026-11-25T11:54:10.901+08:00 INFO nexwar_agent.engine.machine [task=standby-home-4279fe4904db map=main:?] 状态 LOCALIZING → RUNNING
+art[22098]: 2026-11-25T11:54:10.903+08:00 INFO nexwar_agent.engine.machine [task=standby-home-4279fe4904db pt=0 point=target map=main:?] 去这个点 (-0.08, 0.11, 0.04) 第 1 次
+art[22098]: 2026-11-25T11:54:10.999+08:00 INFO nexwar_agent.runtime 位置 (-1.08, -5.16, -1.53) map=main:20261124-2 task=standby-home-4279fe4904db 定位=可信 质量=0.80
+art[22098]: 2026-11-25T11:54:11.002+08:00 INFO nexwar_agent.bridges.nav2_nav [task=standby-home-4279fe4904db pt=0 point=target map=main:?] goto:交给 Nav2(目标 578580918)→ (-0.08, 0.11)
+art[22098]: 2026-11-25T11:54:11.410+08:00 INFO nexwar_agent.bridges.nav2_nav 守卫拦住 Nav2 的速度:扫过区有挡 16 处、看不见 93 处(最近一处在机身后 0.5 m、右 0.2 m)
+art[22098]: 2026-11-25T11:54:14.523+08:00 INFO nexwar_agent.bridges.nav2_nav Nav2 的路线调头(要往 86°,现在 -87°):代理接过来原地掉头(第 1 回),转过来再交回
+art[22098]: 2026-11-25T11:54:16.088+08:00 INFO nexwar_agent.runtime 位置 (-1.08, -5.16, -1.52) map=main:20261124-2 task=standby-home-4279fe4904db 定位=可信 质量=0.80
+art[22098]: 2026-11-25T11:54:19.913+08:00 WARNING nexwar_agent.bridges.nav2_nav 自己挪了 5 秒没挪出来:交回 Nav2,再没进展就停下
+art[22098]: 2026-11-25T11:54:21.131+08:00 INFO nexwar_agent.runtime 位置 (-1.08, -5.16, -1.52) map=main:20261124-2 task=standby-home-4279fe4904db 定位=可信 质量=0.80
+art[22098]: 2026-11-25T11:54:23.211+08:00 INFO nexwar_agent.bridges.nav2_nav 守卫拦住 Nav2 的速度:扫过区有挡 107 处、看不见 1919 处(最近一处在机身后 0.5 m、左 0.5 m)
+art[22098]: 2026-11-25T11:54:25.565+08:00 INFO nexwar_agent.engine.machine [task=standby-home-4279fe4904db pt=0 point=target map=main:?] 状态 RUNNING → PAUSED 原因=定位丢失,暂停并尝试重置(第 1 次)
+art[22098]: 2026-11-25T11:54:26.001+08:00 INFO nexwar_agent.bridge_localizer 定位器稳下来了,修正量 (0.33269331672867075, -0.14322763782138992, -0.06609171548718873)
+art[22098]: 2026-11-25T11:54:26.024+08:00 INFO nexwar_agent.bridge_localizer [task=standby-home-4279fe4904db pt=0 point=target map=main:?] 丢定位后的重置(?):定位器自己还在跟踪,先等 8 秒,回来了就不重定位
+art[22098]: 2026-11-25T11:54:26.196+08:00 INFO nexwar_agent.runtime 位置 (-1.06, -4.99, -1.38) map=main:20261124-2 task=standby-home-4279fe4904db 定位=可信 质量=0.80
+art[22098]: 2026-11-25T11:54:26.225+08:00 INFO nexwar_agent.bridge_localizer [task=standby-home-4279fe4904db pt=0 point=target map=main:?] 丢定位后的重置:等了 0.2 秒定位回来了,不重定位
+art[22098]: 2026-11-25T11:54:26.428+08:00 INFO nexwar_agent.engine.machine [task=standby-home-4279fe4904db pt=0 point=target map=main:?] 状态 PAUSED → RUNNING 原因=定位已恢复
+art[22098]: 2026-11-25T11:54:26.584+08:00 INFO nexwar_agent.engine.machine [task=standby-home-4279fe4904db pt=0 point=target map=main:?] 去这个点 (-0.08, 0.11, 0.04) 第 1 次
+art[22098]: 2026-11-25T11:54:27.191+08:00 WARNING nexwar_agent.bridges.nav2_nav [task=standby-home-4279fe4904db pt=0 point=target map=main:?] goto:终点要朝 2° 那儿转不过来(只能靠局部搜索的路),改成朝开进去的方向 81° 到点
+art[22098]: 2026-11-25T11:54:27.193+08:00 INFO nexwar_agent.bridges.nav2_nav [task=standby-home-4279fe4904db pt=0 point=target map=main:?] goto:交给 Nav2(目标 578580920)→ (-0.08, 0.11)
+art[22098]: 2026-11-25T11:54:27.515+08:00 INFO nexwar_agent.runtime 点云套图核对:定位器给的 (-1.06, -4.97) 贴合度 0.57,对得上
+art[22098]: 2026-11-25T11:54:28.789+08:00 INFO nexwar_agent.bridges.nav2_nav 守卫拦住 Nav2 的速度:扫过区有挡 11 处、看不见 871 处(最近一处在机身后 0.5 m、右 0.1 m)
+art[22098]: 2026-11-25T11:54:31.220+08:00 INFO nexwar_agent.runtime 位置 (-0.66, -4.72, 0.77) map=main:20261124-2 task=standby-home-4279fe4904db 定位=可信 质量=0.80
+art[22098]: 2026-11-25T11:54:36.357+08:00 INFO nexwar_agent.runtime 位置 (-0.13, -1.23, 1.45) map=main:20261124-2 task=standby-home-4279fe4904db 定位=可信 质量=0.80
+art[22098]: 2026-11-25T11:54:37.807+08:00 INFO nexwar_agent.deter 本体灯 both 关(上装命令)
+art[22098]: 2026-11-25T11:54:40.828+08:00 INFO nexwar_agent.engine.machine [task=standby-home-4279fe4904db pt=0 point=target map=main:?] 到了 用时 29.9 s(这一次 14.4 s)
+art[22098]: 2026-11-25T11:54:40.828+08:00 INFO nexwar_agent.engine.machine [task=standby-home-4279fe4904db map=main:?] 状态 RUNNING → DONE
+art[22098]: 2026-11-25T11:54:41.367+08:00 INFO nexwar_agent.commands 任务 standby-home-4279fe4904db(goto)结束:task_done {'distance_m': 0.269}
+art[22098]: 2026-11-25T11:54:42.363+08:00 INFO nexwar_agent.ops 暂停了厂家进程 13 个
+art[22098]: 2026-11-25T11:55:18.774+08:00 INFO nexwar_agent.deter 本体灯 both 关(上装命令)
+art[22098]: 2026-11-25T11:55:22.411+08:00 INFO nexwar_agent.tasks.teleop 遥控开始:teleop-60 代次 60
+art[22098]: 2026-11-25T11:55:22.612+08:00 INFO nexwar_agent.runtime 位置 (-0.10, -0.19, 1.52) map=main:20261124-2 task=teleop-60 定位=可信 质量=0.80
+art[22098]: 2026-11-25T11:55:27.648+08:00 INFO nexwar_agent.runtime 位置 (-0.10, -0.59, 1.54) map=main:20261124-2 task=teleop-60 定位=可信 质量=0.80
+art[22098]: 2026-11-25T11:55:32.936+08:00 INFO nexwar_agent.runtime 位置 (-0.11, -1.80, 1.55) map=main:20261124-2 task=teleop-60 定位=可信 质量=0.80
+art[22098]: 2026-11-25T11:55:38.036+08:00 INFO nexwar_agent.runtime 位置 (-0.18, -1.96, 0.67) map=main:20261124-2 task=teleop-60 定位=可信 质量=0.80
+art[22098]: 2026-11-25T11:55:42.240+08:00 INFO nexwar_agent.tasks.teleop 遥控结束:teleop-60(released),丢帧 {'epoch': 0, 'seq': 0, 'late': 0, 'no_video': 0, 'video_recovered': 0, 'gear_wait': 0, 'gear_switching': 0}
+art[22098]: 2026-11-25T11:55:42.241+08:00 INFO nexwar_agent.commands 任务 teleop-60(teleop)结束:task_done {'reason': 'released', 'dropped': {'epoch': 0, 'seq': 0, 'late': 0, 'no_video': 0, 'video_recovered': 0, 'gear_wait': 0, 'gear_switching': 0}}
+art[22098]: 2026-11-25T11:55:42.567+08:00 INFO nexwar_agent.ops 暂停了厂家进程 13 个
+art[22098]: 2026-11-25T11:55:45.025+08:00 INFO nexwar_agent.engine.machine [task=standby-8e8946d3ac78 map=main:?] 开一趟 mission=standby-8e8946d3ac78 点数=1 循环=1 点位失败=retry_then_skip
+art[22098]: 2026-11-25T11:55:45.026+08:00 INFO nexwar_agent.engine.machine [task=standby-8e8946d3ac78 map=main:?] 状态 IDLE → PREFLIGHT
+art[22098]: 2026-11-25T11:55:45.031+08:00 INFO nexwar_agent.engine.machine [task=standby-8e8946d3ac78 map=main:?] 状态 PREFLIGHT → LOCALIZING
+art[22098]: 2026-11-25T11:55:45.032+08:00 INFO nexwar_agent.engine.machine [task=standby-8e8946d3ac78 map=main:?] 状态 LOCALIZING → RUNNING
+art[22098]: 2026-11-25T11:55:45.033+08:00 INFO nexwar_agent.engine.machine [task=standby-8e8946d3ac78 pt=0 point=target map=main:?] 去这个点 (-0.08, 0.11, 0.04) 第 1 次
+art[22098]: 2026-11-25T11:55:45.149+08:00 INFO nexwar_agent.bridges.nav2_nav [task=standby-8e8946d3ac78 pt=0 point=target map=main:?] goto:交给 Nav2(目标 578580921)→ (-0.08, 0.11)
+art[22098]: 2026-11-25T11:55:46.664+08:00 INFO nexwar_agent.runtime 位置 (-0.26, -1.83, -0.80) map=main:20261124-2 task=standby-8e8946d3ac78 定位=可信 质量=0.80
+art[22098]: 2026-11-25T11:55:47.496+08:00 INFO nexwar_agent.engine.machine [task=standby-8e8946d3ac78 pt=0 point=target map=main:?] 这一趟中止:preempted
+art[22098]: 2026-11-25T11:55:47.496+08:00 WARNING nexwar_agent.engine.machine [task=standby-8e8946d3ac78 pt=0 point=target map=main:?] 状态 RUNNING → ABORTING 原因=preempted
+art[22098]: 2026-11-25T11:55:47.649+08:00 WARNING nexwar_agent.engine.machine [task=standby-8e8946d3ac78 pt=0 point=target map=main:?] 状态 ABORTING → ABORTED 原因=preempted
+art[22098]: 2026-11-25T11:55:49.322+08:00 WARNING nexwar_agent.commands 任务 standby-8e8946d3ac78(goto)结束:task_preempted {'reason': 'preempted'}
+art[22098]: 2026-11-25T11:55:49.323+08:00 INFO nexwar_agent.tasks.teleop 遥控开始:teleop-61 代次 61
+art[22098]: 2026-11-25T11:55:56.238+08:00 INFO nexwar_agent.runtime 位置 (-0.27, -1.85, -0.80) map=main:20261124-2 task=teleop-61 定位=可信 质量=0.80
+art[22098]: 2026-11-25T11:55:56.644+08:00 INFO nexwar_agent.tasks.teleop 遥控结束:teleop-61(lease_expired),丢帧 {'epoch': 0, 'seq': 0, 'late': 0, 'no_video': 0, 'video_recovered': 0, 'gear_wait': 0, 'gear_switching': 0}
+art[22098]: 2026-11-25T11:55:56.644+08:00 WARNING nexwar_agent.commands 任务 teleop-61(teleop)结束:task_failed {'reason': 'lease_expired', 'dropped': {'epoch': 0, 'seq': 0, 'late': 0, 'no_video': 0, 'video_recovered': 0, 'gear_wait': 0, 'gear_switching': 0}}
+art[22098]: 2026-11-25T11:55:57.973+08:00 INFO nexwar_agent.deter 本体灯 both 关(上装命令)
+art[22098]: 2026-11-25T11:55:58.133+08:00 INFO nexwar_agent.deter 本体灯 both 关(上装命令)
+art[22098]: 2026-11-25T11:55:58.405+08:00 INFO nexwar_agent.deter 本体灯 both 关(上装命令)
+art[22098]: 2026-11-25T11:56:02.320+08:00 INFO nexwar_agent.deter 本体灯 both 关(上装命令)
+art[22098]: 2026-11-25T11:56:42.771+08:00 INFO nexwar_agent.ops 暂停了厂家进程 13 个
+art[22098]: 2026-11-25T11:56:43.733+08:00 INFO nexwar_agent.deter 本体灯 both 关(上装命令)
+art[22098]: 2026-11-25T11:57:42.983+08:00 INFO nexwar_agent.ops 暂停了厂家进程 13 个
+art[22098]: 2026-11-25T11:57:57.987+08:00 INFO nexwar_agent.deter 本体灯 both 关(上装命令)
+art[22098]: 2026-11-25T11:58:03.849+08:00 INFO nexwar_agent.deter 本体灯 both 关(上装命令)
+art[22098]: 2026-11-25T11:58:05.605+08:00 INFO nexwar_agent.deter 本体灯 both 关(上装命令)
+art[22098]: 2026-11-25T11:58:43.187+08:00 INFO nexwar_agent.ops 暂停了厂家进程 13 个
+art[22098]: 2026-11-25T11:58:53.859+08:00 INFO nexwar_agent.video_push 开始推 front → srt://100.69.130.19:8890(10000 ms)
+art[22098]: 2026-11-25T11:58:58.055+08:00 INFO nexwar_agent.deter 本体灯 both 关(上装命令)
+art[22098]: 2026-11-25T12:00:38.397+08:00 INFO nexwar_agent.video_push 开始推 back → srt://100.69.130.19:8891(10000 ms)
+art[22098]: 2026-11-25T12:01:26.028+08:00 INFO nexwar_agent.video_push 开始推 back → srt://100.69.130.19:8891(10000 ms)
+art[22098]: 2026-11-25T12:02:10.303+08:00 ERROR nexwar_agent.bridges.planned_nav 机器人在禁行区 z2 里面(或压上了边):原地停,等人处理
+art[22098]: 2026-11-25T12:02:29.261+08:00 WARNING nexwar_agent.runtime 受力检测:bump {'roll_deg': 1.5, 'pitch_deg': -1.4, 'shock_g': 3.1}
+art[22098]: 2026-11-25T12:02:36.787+08:00 WARNING nexwar_agent.runtime 开机自己找位置没找到(第 1 次):位置偏差过大:机器人可能不在地图上(或周围变化太大),请到场设位置 —— 最像的 (24.0, 8.9) 贴合度只有 0.35(要 0.4 以上):看到的与图不
+art[22098]: 2026-11-25T12:02:37.475+08:00 WARNING nexwar_agent.bridge_localizer 定位器跳过(或重定位过),里程断过(换了段),推不到最后可信的位置,无法核对它稳住的地方:请重新设位置
+art[22098]: 2026-11-25T12:02:39.483+08:00 WARNING nexwar_agent.bridge_localizer 定位器跳过(或重定位过),里程断过(换了段),推不到最后可信的位置,无法核对它稳住的地方:请重新设位置
+art[22098]: 2026-11-25T12:02:41.878+08:00 WARNING nexwar_agent.bridge_localizer 定位器跳过(或重定位过),里程断过(换了段),推不到最后可信的位置,无法核对它稳住的地方:请重新设位置
+art[22098]: 2026-11-25T12:02:49.497+08:00 INFO nexwar_agent.persons 人走了(连续 20 秒有效观测没看到)
+art[22098]: 2026-11-25T12:03:41.905+08:00 WARNING nexwar_agent.runtime 开机自己找位置没找到(第 2 次):位置偏差过大:机器人可能不在地图上(或周围变化太大),请到场设位置 —— 最像的 (24.0, 9.0) 贴合度只有 0.35(要 0.4 以上):看到的与图不
+art[22098]: 2026-11-25T12:04:17.589+08:00 INFO nexwar_agent.persons 人走了(连续 20 秒有效观测没看到)
+pping D1 Max 人员检测节点(相机看到人 + 雷达量距离,经本机人员桥给代理;W24)...
+start[22032]: 2026-11-25 12:04:37,911 INFO 人员检测停了
+art[22098]: 2026-11-25T12:04:37.926+08:00 WARNING nexwar_agent.obs_server 人员桥:人员检测节点已断开
+art[22098]: 2026-11-25T12:04:37.926+08:00 INFO nexwar_agent.persons 人员检测中断:有没有人先当不知道
+war_persons.service: Deactivated successfully.
+pped D1 Max 人员检测节点(相机看到人 + 雷达量距离,经本机人员桥给代理;W24).
+war_persons.service: Consumed 4min 20.221s CPU time.
+art[22098]: 2026-11-25T12:04:46.909+08:00 WARNING nexwar_agent.runtime 开机自己找位置没找到(第 3 次):位置偏差过大:机器人可能不在地图上(或周围变化太大);自动找位置 3 次未成功,2 分钟后再找一轮,或请到场设位置 —— 最像的 (24.0, 8.9)

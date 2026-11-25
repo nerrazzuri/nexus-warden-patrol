@@ -1,0 +1,8 @@
+== 12:05:39 Orin 排自动恢复 13 分钟（默认路线回 R300S、关 accept-routes）
+Will run service as unit: nexwar-4g-revert.service
+原默认: default via 192.168.113.1 dev enP8p1s0 proto static metric 102 
+新默认: default via 192.168.168.168 dev enP8p1s0 proto static metric 102 
+出口: AS9534 Binariang Berhad
+到站点: 192.168.234.232 dev tailscale0 src 100.67.176.60 uid 0 
+100.67.176.60    c40221-orin      <账号>  linux    -                                               
+100.69.130.19    liang-mach-wx9   <账号>  linux    active; direct 192.168.0.39:41641, tx 17846128 r

@@ -1,0 +1,34 @@
+== 站点对时也给 Tailscale 地址(100.64.0.0/10)发(笔记本)
+已经有了
+== 站点证书里要有 100.69.130.19(没有先跑 prepare)(笔记本)
+随身 Wi-Fi「ZTE_C8DE4B」的口令(不回显):
+== ① RK3588:排好 6 小时后自动断开,再临时连「ZTE_C8DE4B」(不 enable、不 save)(robot@192.168.234.1)
+Running timer as unit: nexwar-sta-revert.timer
+Will run service as unit: nexwar-sta-revert.service
+正在扫描SSID: ZTE_C8DE4B (接口: wlan0)...
+ssid=ZTE_C8DE4B
+wpa_state=COMPLETED
+ip_address=192.168.0.75
+	Interface p2p0
+		ssid XG2WIFI_C40221
+		channel 36 (5180 MHz), width: 80 MHz, center1: 5210 MHz
+	Interface wlan0
+		ssid ZTE_C8DE4B
+		channel 36 (5180 MHz), width: 80 MHz, center1: 5210 MHz
+3 packets transmitted, 3 received, 0% packet loss, time 2003ms
+rtt min/avg/max/mdev = 31.464/88.116/184.621/68.582 ms
+Connection to 192.168.234.1 closed.
+== ② Orin:排好 6 小时后自动改回,默认路线指向 RK3588(robot@192.168.168.100)
+default via 192.168.113.1 dev enP8p1s0 proto static metric 102 
+[sudo] password for robot: 
+Sorry, try again.
+[sudo] password for robot: 
+Running timer as unit: nexwar-4g-revert.timer
+Will run service as unit: nexwar-4g-revert.service
+1.1.1.1 via 192.168.168.168 dev enP8p1s0 src 192.168.168.100 uid 1001 
+pong from liang-mach-wx9 (100.69.130.19) via 192.168.234.232:41641 in 4ms
+Connection to 192.168.168.100 closed.
+== ③ Orin:代理、对时改连 100.69.130.19,重启开机准备和代理(robot@192.168.168.100)
+[sudo] password for robot: 
+grep: /etc/nexwar/env: Permission denied
+Connection to 192.168.168.100 closed.

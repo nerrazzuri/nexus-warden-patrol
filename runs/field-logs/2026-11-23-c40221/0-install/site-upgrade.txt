@@ -1,0 +1,49 @@
+start 2026-11-23 07:45:12
+[1/5] 系统包
+  只升级软件:不装系统包
+[2/5] 用户与目录
+[3/5] Python 环境
+Processing ./2026-11-22-a9b33a7c/packages/contract
+  Installing build dependencies: started
+  Installing build dependencies: finished with status 'done'
+  Getting requirements to build wheel: started
+  Getting requirements to build wheel: finished with status 'done'
+  Preparing metadata (pyproject.toml): started
+  Preparing metadata (pyproject.toml): finished with status 'done'
+Processing ./2026-11-22-a9b33a7c/packages/site-node
+  Installing build dependencies: started
+  Installing build dependencies: finished with status 'done'
+  Getting requirements to build wheel: started
+  Getting requirements to build wheel: finished with status 'done'
+  Preparing metadata (pyproject.toml): started
+  Preparing metadata (pyproject.toml): finished with status 'done'
+Requirement already satisfied: PyYAML>=6.0 in /opt/nexwar_site/venv/lib/python3.10/site-packages (from nexwar_contract==1.0.0rc1) (6.0.3)
+Requirement already satisfied: numpy>=1.21 in /opt/nexwar_site/venv/lib/python3.10/site-packages (from nexwar_contract==1.0.0rc1) (2.2.6)
+Requirement already satisfied: paho-mqtt>=2.1 in /opt/nexwar_site/venv/lib/python3.10/site-packages (from nexwar_contract==1.0.0rc1) (2.2.0)
+Building wheels for collected packages: nexwar_site_node, nexwar_contract
+  Building wheel for nexwar_site_node (pyproject.toml): started
+  Building wheel for nexwar_site_node (pyproject.toml): finished with status 'done'
+  Created wheel for nexwar_site_node: filename=nexwar_site_node-1.0.0rc1-py3-none-any.whl size=1289831 sha256=635f8e54661bf1cd758c582d0c7f924ec48adc13c2134d7bc1dac510305bbf94
+  Stored in directory: /root/.cache/pip/wheels/4e/73/09/b7f3e8cdc86c6332589df04501a793a2b387f56c4aad2402f2
+  Building wheel for nexwar_contract (pyproject.toml): started
+  Building wheel for nexwar_contract (pyproject.toml): finished with status 'done'
+  Created wheel for nexwar_contract: filename=nexwar_contract-1.0.0rc1-py3-none-any.whl size=192426 sha256=d4d22b589bcc19e7eaf2d04d05c7d69be95832772c601552d4906692d37cb578
+  Stored in directory: /tmp/pip-ephem-wheel-cache-pit05lqw/wheels/c6/e3/c0/ac8b21e29aa80e8f02176b50b6c73bc1de30b5bb8b4aa52b00
+Successfully built nexwar_site_node nexwar_contract
+Installing collected packages: nexwar_contract, nexwar_site_node
+  Attempting uninstall: nexwar_contract
+    Found existing installation: nexwar_contract 1.0.0rc1
+    Uninstalling nexwar_contract-1.0.0rc1:
+      Successfully uninstalled nexwar_contract-1.0.0rc1
+  Attempting uninstall: nexwar_site_node
+    Found existing installation: nexwar_site_node 1.0.0rc1
+    Uninstalling nexwar_site_node-1.0.0rc1:
+      Successfully uninstalled nexwar_site_node-1.0.0rc1
+Successfully installed nexwar_contract-1.0.0rc1 nexwar_site_node-1.0.0rc1
+  出图组件:代码与 kf2sm
+  出图组件装好了:机器人建图时关键帧传到站点,在这台机器上出图
+[4/5] 站点目录
+  已 init 过,跳过(不重建 CA:重建等于让所有狗失联)
+[5/5] systemd 单元
+升级好了(站点服务已重启,跑的是新版)。
+rc=0 end 2026-11-23 07:45:27

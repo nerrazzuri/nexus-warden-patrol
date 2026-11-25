@@ -1,0 +1,22 @@
+12:18:57
+9.4M	/var/lib/nexwar/outbox
+total 8
+drwxr-xr-x 2 robot robot 4096 Nov 24 11:56 .
+drwxr-xr-x 9 robot robot 4096 Nov 25 12:18 ..
+total 12
+drwxr-xr-x 3 robot robot 4096 Nov 25 12:17 .
+drwxr-xr-x 7 robot robot 4096 Nov 25 12:11 ..
+drwxr-xr-x 2 robot robot 4096 Nov 25 12:18 map-20261125-1-20261125T041740Z
+2.7G	/var/lib/nexwar/agent/mapbags/map-20261125-1-20261125T041740Z
+66 /var/lib/nexwar/outbox/queue-bags.jsonl
+e, "mtime_ns": 1795490296791627044, "refused": false}
+{"key": "map-20261124-2-20261124T031014Z/metadata.yaml", "priority": 5, "offset": 7355, "size": 7355, "attempts": 0, "next_ms": 0, "done": true, "mtime_ns": 1795490309343611571, "refused": false}
+
+25T12:18:45.797+08:00 INFO nexwar_agent.mapping main:20261125-1 的关键帧交给站点打包(9 个文件)
+
+== 结论 D20（静止版，用户 11-25：「机器不用动，录制一小包，停掉后没进发件箱就算过了」）✅
+App 建图 12:17:40 → 结束 12:18:45（约 65 s），机器人原地不动
+录包：/var/lib/nexwar/agent/mapbags/map-20261125-1-20261125T041740Z/（2 个 mcap，共 2.7 GB，.done、.stop_at 都在）
+发件箱：8.4 MB → 9.4 MB（多出来的是 video/、runs/，bags/ 仍空）；queue-bags.jsonl 没新条目（最后一条还是 11-24 的）
+关键帧照常交站点打包（9 个文件）
+注：录包约 2.5 GB/分钟（42 MB/s）。27 号会展扫 30 分钟 ≈ 75 GB；Orin 盘剩 150 GB（~/bags-hold 还有 11-24 的 21 GB）

@@ -1,0 +1,384 @@
+## date 2026-11-23 12:30:26 1795408226
+## rostopic info /rslidar_points
+Type: sensor_msgs/PointCloud2
+
+Publishers: 
+ * /rslidar_sdk_node (http://firefly:40337/)
+
+Subscribers: 
+ * /ground_segment (http://firefly:38089/)
+ * /loc_refine (http://firefly:38769/)
+ * /anbotControl (http://firefly:33707/)
+ * /oneway_amcl (http://firefly:42645/)
+
+
+## rostopic info /anbot/obstacle/laser
+Type: sensor_msgs/LaserScan
+
+Publishers: 
+ * /ground_segment (http://firefly:38089/)
+
+Subscribers: 
+ * /drive (http://192.168.113.101:45145/)
+ * /uwb_follow_node (http://firefly:36167/)
+ * /anbotControl (http://firefly:33707/)
+
+
+## rostopic info /anbot/obstacle/laser2stop
+Type: sensor_msgs/LaserScan
+
+Publishers: 
+ * /ground_segment (http://firefly:38089/)
+
+Subscribers: 
+ * /core_local_planner (http://firefly:43641/)
+
+
+## rostopic info /pclob/scan2
+Type: sensor_msgs/LaserScan
+
+Publishers: 
+ * /ground_segment (http://firefly:38089/)
+
+Subscribers: 
+ * /anbotControl (http://firefly:33707/)
+
+
+## rostopic info /kinect_scan
+Type: sensor_msgs/LaserScan
+
+Publishers: None
+
+Subscribers: 
+ * /anbotControl (http://firefly:33707/)
+
+
+## rostopic info /livox/lidar
+Type: sensor_msgs/PointCloud2
+
+Publishers: None
+
+Subscribers: 
+ * /anbotControl (http://firefly:33707/)
+
+
+## rostopic info /rslidar_points_airy
+Type: sensor_msgs/PointCloud2
+
+Publishers: None
+
+Subscribers: 
+ * /anbotControl (http://firefly:33707/)
+
+
+## rostopic info /detect_laser
+Type: anbot_msgs/DetectSonar
+
+Publishers: None
+
+Subscribers: 
+ * /anbotControl (http://firefly:33707/)
+ * /core_local_planner (http://firefly:43641/)
+
+
+## rostopic info /laserPara
+Type: std_msgs/Float64MultiArray
+
+Publishers: 
+ * /anbotControl (http://firefly:33707/)
+
+Subscribers: None
+
+
+## rostopic info /sensor/lidar_auxiliary_switch
+Type: std_msgs/Bool
+
+Publishers: 
+ * /anbotControl (http://firefly:33707/)
+
+Subscribers: 
+ * /ground_segment (http://firefly:38089/)
+
+
+## rostopic info /cloudNonGroundNav
+Type: sensor_msgs/PointCloud2
+
+Publishers: 
+ * /ground_segment (http://firefly:38089/)
+
+Subscribers: None
+
+
+## /laserPara
+layout: 
+  dim: []
+  data_offset: 0
+data: [-179.0, 180.0, 0.30000001192092896, 30.0, 0.30000001192092896, 1.600000023841858]
+---
+## /sensor/lidar_auxiliary_switch
+## /detect_laser 一条
+ERROR: Cannot load message class for [anbot_msgs/DetectSonar]. Are your messages built?
+## rosmsg show anbot_msgs/DetectSonar
+Unable to load msg [anbot_msgs/DetectSonar]: Cannot locate message [DetectSonar]: unknown package [anbot_msgs] on search path [{'rosmaster': ['/opt/ros/noetic/share/rosmaster/msg'], 'carrot_planner': ['/opt/ros/noetic/share/carrot_planner/msg'], 'mbf_msgs': ['/opt/ros/noetic/share/mbf_msgs/msg'], 'mbf_costmap_core': ['/opt/ros/noetic/share/mbf_costmap_core/msg'], 'rqt_pose_view': ['/opt/ros/noetic/share/rqt_pose_view/msg'], 'rosconsole': ['/opt/ros/noetic/share/rosconsole/msg'], 'pcl_ros': ['/opt/ros/noetic/share/pcl_ros/msg'], 'transmission_interface': ['/opt/ros/noetic/share/transmission_interface/msg'], 'nodelet_tutorial_math': ['/opt/ros/noetic/share/nodelet_tutorial_math/msg'], 'roscpp_tutorials': ['/opt/ros/noetic/share/roscpp_tutorials/msg'], 'rqt_moveit': ['/opt/ros/noetic/share/rqt_moveit/msg'], 'smach_msgs': ['/opt/ros/noetic/share/smach_msgs/msg'], 'navfn': ['/opt/ros/noetic/share/navfn/msg'], 'urdf': ['/opt/ros/noetic/share/urdf/msg'], 'qt_gui_py_common': ['/opt/ros/noetic/share/qt_gui_py_common/msg'], 'genmsg': ['/opt/ros/noetic/share/genmsg/msg'], 'rotate_recovery': ['/opt/ros/noetic/share/rotate_recovery/msg'], 'rosservice': ['/opt/ros/noetic/share/rosservice/msg'], 'rqt_logger_level': ['/opt/ros/noetic/share/rqt_logger_level/msg'], 'joint_state_publisher_gui': ['/opt/ros/noetic/share/joint_state_publisher_gui/msg'], 'rqt_py_console': ['/opt/ros/noetic/share/rqt_py_console/msg'], 'visualization_msgs': ['/opt/ros/noetic/share/visualization_msgs/msg'], 'rqt_launch': ['/opt/ros/noetic/share/rqt_launch/msg'], 'message_filters': ['/opt/ros/noetic/share/message_filters/msg'], 'eigen_conversions': ['/opt/ros/noetic/share/eigen_conversions/msg'], 'move_base_msgs': ['/opt/ros/noetic/share/move_base_msgs/msg'], 'gazebo_dev': ['/opt/ros/noetic/share/gazebo_dev/msg'], 'smach': ['/opt/ros/noetic/share/smach/msg'], 'tf_conversions': ['/opt/ros/noetic/share/tf_conversions/msg'], 'rosboost_cfg': ['/opt/ros/noetic/share/rosboost_cfg/msg'], 'gazebo_msgs': ['/opt/ros/noetic/share/gazebo_msgs/msg'], 'mk': ['/opt/ros/noetic/share/mk/msg'], 'actionlib_tutorials': ['/opt/ros/noetic/share/actionlib_tutorials/msg'], 'rostopic': ['/opt/ros/noetic/share/rostopic/msg'], 'rqt_graph': ['/opt/ros/noetic/share/rqt_graph/msg'], 'control_toolbox': ['/opt/ros/noetic/share/control_toolbox/msg'], 'rqt_gui_py': ['/opt/ros/noetic/share/rqt_gui_py/msg'], 'class_loader': ['/opt/ros/noetic/share/class_loader/msg'], 'tf2_py': ['/opt/ros/noetic/share/tf2_py/msg'], 'clear_costmap_recovery': ['/opt/ros/noetic/share/clear_costmap_recovery/msg'], 'sensor_msgs': ['/opt/ros/noetic/share/sensor_msgs/msg'], 'roscpp': ['/opt/ros/noetic/share/roscpp/msg'], 'xmlrpcpp': ['/opt/ros/noetic/share/xmlrpcpp/msg'], 'rostest': ['/opt/ros/noetic/share/rostest/msg'], 'xacro': ['/opt/ros/noetic/share/xacro/msg'], 'tf2_sensor_msgs': ['/opt/ros/noetic/share/tf2_sensor_msgs/msg'], 'nav_core': ['/opt/ros/noetic/share/nav_core/msg'], 'rqt_service_caller': ['/opt/ros/noetic/share/rqt_service_caller/msg'], 'image_rotate': ['/opt/ros/noetic/share/image_rotate/msg'], 'camera_calibration_parsers': ['/opt/ros/noetic/share/camera_calibration_parsers/msg'], 'dwa_local_planner': ['/opt/ros/noetic/share/dwa_local_planner/msg'], 'rqt_runtime_monitor': ['/opt/ros/noetic/share/rqt_runtime_monitor/msg'], 'nodelet': ['/opt/ros/noetic/share/nodelet/msg'], 'stage_ros': ['/opt/ros/noetic/share/stage_ros/msg'], 'rosconsole_bridge': ['/opt/ros/noetic/share/rosconsole_bridge/msg'], 'rqt_bag_plugins': ['/opt/ros/noetic/share/rqt_bag_plugins/msg'], 'rqt_shell': ['/opt/ros/noetic/share/rqt_shell/msg'], 'resource_retriever': ['/opt/ros/noetic/share/resource_retriever/msg'], 'camera_info_manager': ['/opt/ros/noetic/share/camera_info_manager/msg'], 'rosbag': ['/opt/ros/noetic/share/rosbag/msg'], 'actionlib': ['/opt/ros/noetic/share/actionlib/msg'], 'rqt_bag': ['/opt/ros/noetic/share/rqt_bag/msg'], 'diagnostic_common_diagnostics': ['/opt/ros/noetic/share/diagnostic_common_diagnostics/msg'], 'rosnode': ['/opt/ros/noetic/share/rosnode/msg'], 'kdl_conversions': ['/opt/ros/noetic/share/kdl_conversions/msg'], 'compressed_image_transport': ['/opt/ros/noetic/share/compressed_image_transport/msg'], 'roswtf': ['/opt/ros/noetic/share/roswtf/msg'], 'roslint': ['/opt/ros/noetic/share/roslint/msg'], 'rosbuild': ['/opt/ros/noetic/share/rosbuild/msg'], 'rviz_python_tutorial': ['/opt/ros/noetic/share/rviz_python_tutorial/msg'], 'message_generation': ['/opt/ros/noetic/share/message_generation/msg'], 'qt_gui_cpp': ['/opt/ros/noetic/share/qt_gui_cpp/msg'], 'roscreate': ['/opt/ros/noetic/share/roscreate/msg'], 'rosmake': ['/opt/ros/noetic/share/rosmake/msg'], 'rospy': ['/opt/ros/noetic/share/rospy/msg'], 'gl_dependency': ['/opt/ros/noetic/share/gl_dependency/msg'], 'hardware_interface': ['/opt/ros/noetic/share/hardware_interface/msg'], 'diagnostic_analysis': ['/opt/ros/noetic/share/diagnostic_analysis/msg'], 'rqt_reconfigure': ['/opt/ros/noetic/share/rqt_reconfigure/msg'], 'rqt_srv': ['/opt/ros/noetic/share/rqt_srv/msg'], 'image_publisher': ['/opt/ros/noetic/share/image_publisher/msg'], 'theora_image_transport': ['/opt/ros/noetic/share/theora_image_transport/msg'], 'laser_assembler': ['/opt/ros/noetic/share/laser_assembler/msg'], 'ros_environment': ['/opt/ros/noetic/share/ros_environment/msg'], 'genpy': ['/opt/ros/noetic/share/genpy/msg'], 'fake_localization': ['/opt/ros/noetic/share/fake_localization/msg'], 'angles': ['/opt/ros/noetic/share/angles/msg'], 'cmake_modules': ['/opt/ros/noetic/share/cmake_modules/msg'], 'urdf_tutorial': ['/opt/ros/noetic/share/urdf_tutorial/msg'], 'filters': ['/opt/ros/noetic/share/filters/msg'], 'tf2_ros': ['/opt/ros/noetic/share/tf2_ros/msg'], 'rqt_robot_monitor': ['/opt/ros/noetic/share/rqt_robot_monitor/msg'], 'geographic_msgs': ['/opt/ros/noetic/share/geographic_msgs/msg'], 'position_controllers': ['/opt/ros/noetic/share/position_controllers/msg'], 'rviz_plugin_tutorials': ['/opt/ros/noetic/share/rviz_plugin_tutorials/msg'], 'uuid_msgs': ['/opt/ros/noetic/share/uuid_msgs/msg'], 'stereo_msgs': ['/opt/ros/noetic/share/stereo_msgs/msg'], 'camera_calibration': ['/opt/ros/noetic/share/camera_calibration/msg'], 'rosgraph': ['/opt/ros/noetic/share/rosgraph/msg'], 'nmea_msgs': ['/opt/ros/noetic/share/nmea_msgs/msg'], 'control_msgs': ['/opt/ros/noetic/share/control_msgs/msg'], 'rqt_console': ['/opt/ros/noetic/share/rqt_console/msg'], 'rosunit': ['/opt/ros/noetic/share/rosunit/msg'], 'turtle_tf2': ['/opt/ros/noetic/share/turtle_tf2/msg'], 'diagnostic_msgs': ['/opt/ros/noetic/share/diagnostic_msgs/msg'], 'pcl_msgs': ['/opt/ros/noetic/share/pcl_msgs/msg'], 'image_view': ['/opt/ros/noetic/share/image_view/msg'], 'librviz_tutorial': ['/opt/ros/noetic/share/librviz_tutorial/msg'], 'joint_limits_interface': ['/opt/ros/noetic/share/joint_limits_interface/msg'], 'tf2_msgs': ['/opt/ros/noetic/share/tf2_msgs/msg'], 'rosbag_storage': ['/opt/ros/noetic/share/rosbag_storage/msg'], 'roslib': ['/opt/ros/noetic/share/roslib/msg'], 'bondcpp': ['/opt/ros/noetic/share/bondcpp/msg'], 'smach_ros': ['/opt/ros/noetic/share/smach_ros/msg'], 'rqt_py_common': ['/opt/ros/noetic/share/rqt_py_common/msg'], 'cpp_common': ['/opt/ros/noetic/share/cpp_common/msg'], 'controller_manager_msgs': ['/opt/ros/noetic/share/controller_manager_msgs/msg'], 'rqt_plot': ['/opt/ros/noetic/share/rqt_plot/msg'], 'tf2_eigen': ['/opt/ros/noetic/share/tf2_eigen/msg'], 'visualization_marker_tutorials': ['/opt/ros/noetic/share/visualization_marker_tutorials/msg'], 'media_export': ['/opt/ros/noetic/share/media_export/msg'], 'qt_gui': ['/opt/ros/noetic/share/qt_gui/msg'], 'diff_drive_controller': ['/opt/ros/noetic/share/diff_drive_controller/msg'], 'rqt_action': ['/opt/ros/noetic/share/rqt_action/msg'], 'rqt_rviz': ['/opt/ros/noetic/share/rqt_rviz/msg'], 'joint_state_controller': ['/opt/ros/noetic/share/joint_state_controller/msg'], 'rospack': ['/opt/ros/noetic/share/rospack/msg'], 'bond': ['/opt/ros/noetic/share/bond/msg'], 'qwt_dependency': ['/opt/ros/noetic/share/qwt_dependency/msg'], 'actionlib_msgs': ['/opt/ros/noetic/share/actionlib_msgs/msg'], 'depth_image_proc': ['/opt/ros/noetic/share/depth_image_proc/msg'], 'interactive_marker_tutorials': ['/opt/ros/noetic/share/interactive_marker_tutorials/msg'], 'rqt_publisher': ['/opt/ros/noetic/share/rqt_publisher/msg'], 'rqt_gui_cpp': ['/opt/ros/noetic/share/rqt_gui_cpp/msg'], 'webkit_dependency': ['/opt/ros/noetic/share/webkit_dependency/msg'], 'amcl': ['/opt/ros/noetic/share/amcl/msg'], 'rosbag_migration_rule': ['/opt/ros/noetic/share/rosbag_migration_rule/msg'], 'image_proc': ['/opt/ros/noetic/share/image_proc/msg'], 'genlisp': ['/opt/ros/noetic/share/genlisp/msg'], 'turtle_actionlib': ['/opt/ros/noetic/share/turtle_actionlib/msg'], 'gazebo_ros': ['/opt/ros/noetic/share/gazebo_ros/msg'], 'turtle_tf': ['/opt/ros/noetic/share/turtle_tf/msg'], 'joint_state_publisher': ['/opt/ros/noetic/share/joint_state_publisher/msg'], 'roslz4': ['/opt/ros/noetic/share/roslz4/msg'], 'rostime': ['/opt/ros/noetic/share/rostime/msg'], 'shape_msgs': ['/opt/ros/noetic/share/shape_msgs/msg'], 'costmap_converter': ['/opt/ros/noetic/share/costmap_converter/msg'], 'roslaunch': ['/opt/ros/noetic/share/roslaunch/msg'], 'nmea_navsat_driver': ['/opt/ros/noetic/share/nmea_navsat_driver/msg'], 'mbf_utility': ['/opt/ros/noetic/share/mbf_utility/msg'], 'rosout': ['/opt/ros/noetic/share/rosout/msg'], 'nav_msgs': ['/opt/ros/noetic/share/nav_msgs/msg'], 'pluginlib': ['/opt/ros/noetic/share/pluginlib/msg'], 'trajectory_msgs': ['/opt/ros/noetic/share/trajectory_msgs/msg'], 'rosgraph_msgs': ['/opt/ros/noetic/share/rosgraph_msgs/msg'], 'rqt_robot_dashboard': ['/opt/ros/noetic/share/rqt_robot_dashboard/msg'], 'libg2o': ['/opt/ros/noetic/share/libg2o/msg'], 'rqt_image_view': ['/opt/ros/noetic/share/rqt_image_view/msg'], 'tf': ['/opt/ros/noetic/share/tf/msg'], 'cv_bridge': ['/opt/ros/noetic/share/cv_bridge/msg'], 'smclib': ['/opt/ros/noetic/share/smclib/msg'], 'tf2': ['/opt/ros/noetic/share/tf2/msg'], 'rosclean': ['/opt/ros/noetic/share/rosclean/msg'], 'python_qt_binding': ['/opt/ros/noetic/share/python_qt_binding/msg'], 'image_geometry': ['/opt/ros/noetic/share/image_geometry/msg'], 'std_msgs': ['/opt/ros/noetic/share/std_msgs/msg'], 'pluginlib_tutorials': ['/opt/ros/noetic/share/pluginlib_tutorials/msg'], 'pcl_conversions': ['/opt/ros/noetic/share/pcl_conversions/msg'], 'mbf_abstract_core': ['/opt/ros/noetic/share/mbf_abstract_core/msg'], 'serial': ['/opt/ros/noetic/share/serial/msg'], 'roslang': ['/opt/ros/noetic/share/roslang/msg'], 'map_msgs': ['/opt/ros/noetic/share/map_msgs/msg'], 'message_runtime': ['/opt/ros/noetic/share/message_runtime/msg'], 'std_srvs': ['/opt/ros/noetic/share/std_srvs/msg'], 'move_slow_and_clear': ['/opt/ros/noetic/share/move_slow_and_clear/msg'], 'controller_manager': ['/opt/ros/noetic/share/controller_manager/msg'], 'interactive_markers': ['/opt/ros/noetic/share/interactive_markers/msg'], 'geneus': ['/opt/ros/noetic/share/geneus/msg'], 'roscpp_serialization': ['/opt/ros/noetic/share/roscpp_serialization/msg'], 'stage': ['/opt/ros/noetic/share/stage/msg'], 'controller_interface': ['/opt/ros/noetic/share/controller_interface/msg'], 'map_server': ['/opt/ros/noetic/share/map_server/msg'], 'compressed_depth_image_transport': ['/opt/ros/noetic/share/compressed_depth_image_transport/msg'], 'rqt_topic': ['/opt/ros/noetic/share/rqt_topic/msg'], 'urdf_sim_tutorial': ['/opt/ros/noetic/share/urdf_sim_tutorial/msg'], 'kdl_parser': ['/opt/ros/noetic/share/kdl_parser/msg'], 'rqt_dep': ['/opt/ros/noetic/share/rqt_dep/msg'], 'voxel_grid': ['/opt/ros/noetic/share/voxel_grid/msg'], 'rqt_web': ['/opt/ros/noetic/share/rqt_web/msg'], 'diagnostic_aggregator': ['/opt/ros/noetic/share/diagnostic_aggregator/msg'], 'forward_command_controller': ['/opt/ros/noetic/share/forward_command_controller/msg'], 'self_test': ['/opt/ros/noetic/share/self_test/msg'], 'costmap_2d': ['/opt/ros/noetic/share/costmap_2d/msg'], 'dynamic_reconfigure': ['/opt/ros/noetic/share/dynamic_reconfigure/msg'], 'image_transport': ['/opt/ros/noetic/share/image_transport/msg'], 'stereo_image_proc': ['/opt/ros/noetic/share/stereo_image_proc/msg'], 'gencpp': ['/opt/ros/noetic/share/gencpp/msg'], 'move_base': ['/opt/ros/noetic/share/move_base/msg'], 'laser_geometry': ['/opt/ros/noetic/share/laser_geometry/msg'], 'global_planner': ['/opt/ros/noetic/share/global_planner/msg'], 'teb_local_planner': ['/opt/ros/noetic/share/teb_local_planner/msg'], 'tf2_kdl': ['/opt/ros/noetic/share/tf2_kdl/msg'], 'base_local_planner': ['/opt/ros/noetic/share/base_local_planner/msg'], 'roslisp': ['/opt/ros/noetic/share/roslisp/msg'], 'rqt_robot_steering': ['/opt/ros/noetic/share/rqt_robot_steering/msg'], 'robot_state_publisher': ['/opt/ros/noetic/share/robot_state_publisher/msg'], 'nodelet_topic_tools': ['/opt/ros/noetic/share/nodelet_topic_tools/msg'], 'laser_filters': ['/opt/ros/noetic/share/laser_filters/msg'], 'tf2_geometry_msgs': ['/opt/ros/noetic/share/tf2_geometry_msgs/msg'], 'rqt_tf_tree': ['/opt/ros/noetic/share/rqt_tf_tree/msg'], 'urdf_parser_plugin': ['/opt/ros/noetic/share/urdf_parser_plugin/msg'], 'rqt_msg': ['/opt/ros/noetic/share/rqt_msg/msg'], 'rosparam': ['/opt/ros/noetic/share/rosparam/msg'], 'geometry_msgs': ['/opt/ros/noetic/share/geometry_msgs/msg'], 'gazebo_plugins': ['/opt/ros/noetic/share/gazebo_plugins/msg'], 'rqt_top': ['/opt/ros/noetic/share/rqt_top/msg'], 'rosbash': ['/opt/ros/noetic/share/rosbash/msg'], 'rqt_nav_view': ['/opt/ros/noetic/share/rqt_nav_view/msg'], 'gennodejs': ['/opt/ros/noetic/share/gennodejs/msg'], 'catkin': ['/opt/ros/noetic/share/catkin/msg'], 'diagnostic_updater': ['/opt/ros/noetic/share/diagnostic_updater/msg'], 'roscpp_traits': ['/opt/ros/noetic/share/roscpp_traits/msg'], 'rosmsg': ['/opt/ros/noetic/share/rosmsg/msg'], 'realtime_tools': ['/opt/ros/noetic/share/realtime_tools/msg'], 'rqt_gui': ['/opt/ros/noetic/share/rqt_gui/msg'], 'turtlesim': ['/opt/ros/noetic/share/turtlesim/msg'], 'polled_camera': ['/opt/ros/noetic/share/polled_camera/msg'], 'qt_dotgraph': ['/opt/ros/noetic/share/qt_dotgraph/msg'], 'topic_tools': ['/opt/ros/noetic/share/topic_tools/msg'], 'rospy_tutorials': ['/opt/ros/noetic/share/rospy_tutorials/msg'], 'gazebo_ros_control': ['/opt/ros/noetic/share/gazebo_ros_control/msg'], 'bondpy': ['/opt/ros/noetic/share/bondpy/msg'], 'rviz': ['/opt/ros/noetic/share/rviz/msg']}]
+## tf_static 全部
+      frame_id: "base_link"
+    child_frame_id: "rslidar_head"
+        x: 0.4043
+        y: 0.0
+        z: -0.0377
+        x: 0.0
+        y: 0.707106771713121
+        z: 0.0
+        w: 0.707106790659974
+## tf base_link→rslidar / base_link→base_footprint
+  rslidar - Translation: [0.226, 0.015, 0.200]
+  rslidar - Rotation: in Quaternion [-0.009, -0.001, 0.006, 1.000]
+  rslidar             in RPY (degree) [-1.084, -0.087, 0.665]
+  rslidar_head - Translation: [0.404, 0.000, -0.038]
+  rslidar_head - Rotation: in Quaternion [0.000, 0.707, 0.000, 0.707]
+  rslidar_head             in RPY (degree) [0.000, 90.000, 0.000]
+## 节点
+/ground_segment
+/rslidar_sdk_node
+/tf_base_to_rslidar
+## 参数（只列名字含 lidar/laser/pclob/obstacle 的，口令类不读）
+/core_local_planner/TebLocalPlannerROS/costmap_obstacles_behind_robot_dist = 0.0 
+
+/core_local_planner/TebLocalPlannerROS/dynamic_obstacle_inflation_dist = 0.05 
+
+/core_local_planner/TebLocalPlannerROS/include_costmap_obstacles = true 
+
+/core_local_planner/TebLocalPlannerROS/include_dynamic_obstacles = true 
+
+/core_local_planner/TebLocalPlannerROS/legacy_obstacle_association = true 
+
+/core_local_planner/TebLocalPlannerROS/min_obstacle_dist = 0.28 
+
+/core_local_planner/TebLocalPlannerROS/obstacle_association_cutoff_factor = 5.0 
+
+/core_local_planner/TebLocalPlannerROS/obstacle_association_force_inclusion_factor = 1.5 
+
+/core_local_planner/TebLocalPlannerROS/obstacle_cost_exponent = 4.0 
+
+/core_local_planner/TebLocalPlannerROS/obstacle_heading_threshold = 0.45 
+
+/core_local_planner/TebLocalPlannerROS/obstacle_poses_affected = 20 
+
+/core_local_planner/TebLocalPlannerROS/obstacle_proximity_lower_bound = 0.0 
+
+/core_local_planner/TebLocalPlannerROS/obstacle_proximity_ratio_max_vel = 1.0 
+
+/core_local_planner/TebLocalPlannerROS/obstacle_proximity_upper_bound = 0.5 
+
+/core_local_planner/TebLocalPlannerROS/weight_dynamic_obstacle = 10.0 
+
+/core_local_planner/TebLocalPlannerROS/weight_dynamic_obstacle_inflation = 10.0 
+
+/core_local_planner/TebLocalPlannerROS/weight_obstacle = 500.0 
+
+/core_local_planner/TebLocalPlannerROS/weight_velocity_obstacle_ratio = 0.0 
+
+/core_local_planner/global_costmap/obstacle_layer/combination_method = 1 
+
+/core_local_planner/global_costmap/obstacle_layer/enabled = true 
+
+/core_local_planner/global_costmap/obstacle_layer/footprint_clearing_enabled = true 
+
+/core_local_planner/global_costmap/obstacle_layer/laser_scan_sensor/clearing = true 
+
+/core_local_planner/global_costmap/obstacle_layer/laser_scan_sensor/data_type = LaserScan 
+
+/core_local_planner/global_costmap/obstacle_layer/laser_scan_sensor/expected_update_rate = 8 
+
+/core_local_planner/global_costmap/obstacle_layer/laser_scan_sensor/marking = true 
+
+/core_local_planner/global_costmap/obstacle_layer/laser_scan_sensor/max_obstacle_height = 9999.0 
+
+/core_local_planner/global_costmap/obstacle_layer/laser_scan_sensor/min_obstacle_height = -9999 
+
+/core_local_planner/global_costmap/obstacle_layer/laser_scan_sensor/observation_persistence = 0.0 
+
+/core_local_planner/global_costmap/obstacle_layer/laser_scan_sensor/topic = /anbot/obstacle/laser2stop 
+
+/core_local_planner/global_costmap/obstacle_layer/max_obstacle_height = 50.0 
+
+/core_local_planner/global_costmap/obstacle_layer/observation_sources = laser_scan_sensor 
+
+/core_local_planner/global_costmap/obstacle_layer/obstacle_range = 6.0 
+
+/core_local_planner/global_costmap/obstacle_layer/raytrace_range = 6.0 
+
+/core_local_planner/global_costmap/obstacle_layer/track_unknown_space = true 
+
+/core_local_planner/local_costmap/obstacle_layer/combination_method = 1 
+
+/core_local_planner/local_costmap/obstacle_layer/enabled = true 
+
+/core_local_planner/local_costmap/obstacle_layer/footprint_clearing_enabled = true 
+
+/core_local_planner/local_costmap/obstacle_layer/laser_scan_sensor/clearing = true 
+
+/core_local_planner/local_costmap/obstacle_layer/laser_scan_sensor/data_type = LaserScan 
+
+/core_local_planner/local_costmap/obstacle_layer/laser_scan_sensor/expected_update_rate = 8 
+
+/core_local_planner/local_costmap/obstacle_layer/laser_scan_sensor/marking = true 
+
+/core_local_planner/local_costmap/obstacle_layer/laser_scan_sensor/max_obstacle_height = 9999.0 
+
+/core_local_planner/local_costmap/obstacle_layer/laser_scan_sensor/min_obstacle_height = -9999 
+
+/core_local_planner/local_costmap/obstacle_layer/laser_scan_sensor/observation_persistence = 0.0 
+
+/core_local_planner/local_costmap/obstacle_layer/laser_scan_sensor/topic = /anbot/obstacle/laser2stop 
+
+/core_local_planner/local_costmap/obstacle_layer/max_obstacle_height = 50.0 
+
+/core_local_planner/local_costmap/obstacle_layer/observation_sources = laser_scan_sensor 
+
+/core_local_planner/local_costmap/obstacle_layer/obstacle_range = 6.0 
+
+/core_local_planner/local_costmap/obstacle_layer/raytrace_range = 6.0 
+
+/core_local_planner/local_costmap/obstacle_layer/track_unknown_space = true 
+
+/core_local_planner/obstacle_voice = "\u54CE\u5440\uFF0C\u88AB\u6321\u4F4F\u4E86\uFF0C\u6211\u6362\u6761\u8DEF\u8D70\u5427\   !"  
+
+/ground_segment/FallZone/bbox_max = - 2.0 - 0.6  
+
+/ground_segment/FallZone/bbox_min = - 0.4 - -0.6  
+
+/ground_segment/FallZone/cliff_points_ratio = 0.5 
+
+/ground_segment/FallZone/cliff_z_thresh = -0.3 
+
+/ground_segment/FallZone/enabled = false 
+
+/ground_segment/FallZone/min_points_mun = 10 
+
+/ground_segment/IMU/enabled = false 
+
+/ground_segment/IMU/frame = imu 
+
+/ground_segment/IMU/topic = /imu/data_can 
+
+/ground_segment/JCP/clipZ = false 
+
+/ground_segment/JCP/clipZ_near_range = 1.2 
+
+/ground_segment/JCP/clip_z_max = 1.6 
+
+/ground_segment/JCP/clip_z_min = 0.15 
+
+/ground_segment/JCP/deltaH = 12.0 
+
+/ground_segment/JCP/deltaThetaAngle = 2.0 
+
+/ground_segment/JCP/obstacle_height_loc = 0.2 
+
+/ground_segment/JCP/obstacle_height_nav = 0.2 
+
+/ground_segment/JCP/press_z_max = 1.0 
+
+/ground_segment/JCP/press_z_min = 0.0 
+
+/ground_segment/JCP/sector_h_ang_res = 10.0 
+
+/ground_segment/JCP/sector_range_max = 120.0 
+
+/ground_segment/JCP/slopeAngThresh_loc = 30.0 
+
+/ground_segment/JCP/slopeAngThresh_nav = 25.0 
+
+/ground_segment/Lidar/lidar0/RadiusOutlierRemoval/MinNeighborsInRadius = 0.5 
+
+/ground_segment/Lidar/lidar0/RadiusOutlierRemoval/RadiusSearch = 0.03 
+
+/ground_segment/Lidar/lidar0/StatisticalOutlierRemoval/MeanK = 30 
+
+/ground_segment/Lidar/lidar0/StatisticalOutlierRemoval/StddevMulThresh = 0.5 
+
+/ground_segment/Lidar/lidar0/bbox_max = - 0.3 - 0.3 - 0.25  
+
+/ground_segment/Lidar/lidar0/bbox_min = - -0.6 - -0.3 - -0.4  
+
+/ground_segment/Lidar/lidar0/braceFilterAnglePitch_max = - 50 - 0 - 50 - 0 - 40 - 0 - 40 - 0  
+
+/ground_segment/Lidar/lidar0/braceFilterAnglePitch_min = - 0 - -10 - 0 - -10 - 0 - -40 - 0 - -40  
+
+/ground_segment/Lidar/lidar0/braceFilterAngleYaw_max = - 180 - 180 - 258 - 258 - 75 - 75 - 297 - 297  
+
+/ground_segment/Lidar/lidar0/braceFilterAngleYaw_min = - 102 - 102 - 180 - 180 - 55 - 55 - 283 - 283  
+
+/ground_segment/Lidar/lidar0/braceFilterRange = - 0.8 - 0.8 - 0.8 - 0.8 - 0.5 - 0.5 - 0.5 - 0.5  
+
+/ground_segment/Lidar/lidar0/frame = rslidar 
+
+/ground_segment/Lidar/lidar0/jump_min_range = 1.5 
+
+/ground_segment/Lidar/lidar0/jump_num = 2 
+
+/ground_segment/Lidar/lidar0/lidar_type = 0 
+
+/ground_segment/Lidar/lidar0/or_bbox_max = - 2 - 2 - 2  
+
+/ground_segment/Lidar/lidar0/or_bbox_min = - -2 - -2 - -2  
+
+/ground_segment/Lidar/lidar0/or_enabled = false 
+
+/ground_segment/Lidar/lidar0/or_method = 1 
+
+/ground_segment/Lidar/lidar0/or_voxel_grid = 0.03 
+
+/ground_segment/Lidar/lidar0/range_max = 200.0 
+
+/ground_segment/Lidar/lidar0/topic = /rslidar_points 
+
+/ground_segment/Lidar/lidar1/RadiusOutlierRemoval/MinNeighborsInRadius = 0.5 
+
+/ground_segment/Lidar/lidar1/RadiusOutlierRemoval/RadiusSearch = 0.03 
+
+/ground_segment/Lidar/lidar1/StatisticalOutlierRemoval/MeanK = 30 
+
+/ground_segment/Lidar/lidar1/StatisticalOutlierRemoval/StddevMulThresh = 0.5 
+
+/ground_segment/Lidar/lidar1/bbox_max = - 0.5 - 0.3 - 0.1  
+
+/ground_segment/Lidar/lidar1/bbox_min = - -0.2 - -0.3 - -0.9  
+
+/ground_segment/Lidar/lidar1/braceFilterAnglePitch_max = - 20 - 0 - 20 - 0  
+
+/ground_segment/Lidar/lidar1/braceFilterAnglePitch_min = - 0 - -20 - 0 - -20  
+
+/ground_segment/Lidar/lidar1/braceFilterAngleYaw_max = - 180 - 180 - 290 - 290  
+
+/ground_segment/Lidar/lidar1/braceFilterAngleYaw_min = - 70 - 70 - 180 - 180  
+
+/ground_segment/Lidar/lidar1/braceFilterRange = - 0.4 - 0.4 - 0.4 - 0.4  
+
+/ground_segment/Lidar/lidar1/frame = rslidar_head 
+
+/ground_segment/Lidar/lidar1/jump_min_range = 1.5 
+
+/ground_segment/Lidar/lidar1/jump_num = 2 
+
+/ground_segment/Lidar/lidar1/or_bbox_max = - 2 - 2 - 2  
+
+/ground_segment/Lidar/lidar1/or_bbox_min = - -2 - -2 - -2  
+
+/ground_segment/Lidar/lidar1/or_enabled = false 
+
+/ground_segment/Lidar/lidar1/or_method = 1 
+
+/ground_segment/Lidar/lidar1/or_voxel_grid = 0.03 
+
+/ground_segment/Lidar/lidar1/range_max = 200.0 
+
+/ground_segment/Lidar/lidar1/topic = /front_lidar 
+
+/ground_segment/Lidar/num = 2 
+
+/ground_segment/Nearby/nearby_box_max = - 1.4 - 2  
+
+/ground_segment/Nearby/nearby_box_min = - -1.0 - -2  
+

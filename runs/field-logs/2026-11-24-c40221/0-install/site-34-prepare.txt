@@ -1,0 +1,6 @@
+2026-11-24 08:4x 笔记本站点升 34 + link_4g.sh prepare（在家联网时做）
+- install-site.sh --upgrade：成功，最后一行「升级好了(站点服务已重启,跑的是新版)。」
+- link_4g.sh prepare：hostnames 加上 100.69.130.19 OK；chrony allow 100.64.0.0/10 OK；
+  重签证书失败：「sudo: nexwar_site: command not found」（SITE_CLI 默认 nexwar_site 不在 PATH，实际 /opt/nexwar_site/venv/bin/nexwar_site），脚本没停、照样打印「做完」
+- 手工补：sudo -u nexwar_site /opt/nexwar_site/venv/bin/nexwar_site --home /var/lib/nexwar_site vpn reissue-cert；重启 nexwar_mosquitto、nexwar_site
+- 核对：8443 在 127.0.0.1 和 100.69.130.19 上都出新证书，SAN 含 100.69.130.19，sha256 7102dc02…870c；8883 SAN 同；/healthz ok

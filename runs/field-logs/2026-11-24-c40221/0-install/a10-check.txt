@@ -1,0 +1,32 @@
+Tue Nov 24 10:23:49 AM CST 2026
+/opt/nexwar/releases/2026-11-23-7143b8ae
+## pending
+ls: cannot access '/opt/nexwar/pending.json': No such file or directory
+## chrony dropin
+cat: /etc/systemd/system/chrony.service.d/nexwar.conf: No such file or directory
+DropInPaths=
+## agent
+NRestarts=0
+ActiveEnterTimestamp=Tue 2026-11-24 10:23:17 CST
+active
+active
+inactive
+active
+## grep
+Nov 24 10:23:18 orin-nx nexwar_agent_start[5456]: 2026-11-24T10:23:18.604+08:00 WARNING nexwar_agent.runtime 运控旁路还没在听(无法连接运控旁路进程 127.0.0.1:8090: [Errno 111] Connect call failed ('127.0.0.1', 8090)。它起来了吗? 见 docs/真机联调手册.md 的 S1):2 秒后再试(最多等 60 秒)
+## chronyc
+MS Name/IP address         Stratum Poll Reach LastRx Last sample               
+===============================================================================
+#x PPS                           0   2   377     3   -200ms[ -200ms] +/- 2075ns
+^? 192.168.168.19                4   1   377     0    +53ms[  +53ms] +/-  238ms
+^* 192.168.234.232               3   6   377    56  +8071us[  +17ms] +/-   30ms
+## df
+/dev/nvme0n1p1  231G   46G  173G  21% /
+
+## 笔记本判读 10:25
+- 10:22:17 上传 /api/releases/upload；10:22:22–10:23:12 四次 POST /api/robots/C40221/release（装、切、用户见无进度又点）
+- 10:23 切到 2026-11-23-7143b8ae，服务重启、不重启整机；pending.json 已消失（守卫确认完）
+- 代理 NRestarts=0，只有一行「运控旁路还没在听…2 秒后再试」→ 过
+- ❌/待定：chrony 单元片段 nexwar.conf 不在。原因：换版本那一步是**老（33）执行器**在跑，它先把新 ops-runner 拷进 /usr/local/lib/nexwar（10:23，sha 8c06663b 与 34 包一致），
+  但接着调的是自己（老代码）的 system_settings，老代码没有 chrony 片段。新执行器的 system_settings 在 nexwar_boot 开机时跑 → 第 1 块断电开机后应出现。
+- 电池 97%/97%（旁路心跳）；Orin / 盘 173G 可用；笔记本 home 118G 可用

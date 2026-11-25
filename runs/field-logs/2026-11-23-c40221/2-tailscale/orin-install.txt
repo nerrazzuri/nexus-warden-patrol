@@ -1,0 +1,35 @@
+Get:41 http://mirrors.tuna.tsinghua.edu.cn/ubuntu-ports jammy-security/multiverse arm64 Packages [61.8 kB]
+Get:42 http://mirrors.tuna.tsinghua.edu.cn/ubuntu-ports jammy-security/multiverse Translation-en [13.6 kB]
+Get:43 http://mirrors.tuna.tsinghua.edu.cn/ros2/ubuntu jammy/main arm64 Packages [1,828 kB]
+Fetched 31.6 MB in 2min 20s (226 kB/s)
+Reading package lists...
++ '[' -n '' ']'
++ apt-get install -y tailscale tailscale-archive-keyring
+Reading package lists...
+Building dependency tree...
+Reading state information...
+You might want to run 'apt --fix-broken install' to correct these.
+The following packages have unmet dependencies:
+ ros-humble-mola-viz-imgui : Depends: libglfw3-dev but it is not going to be installed
+ ros-humble-mrpt-libgui : Depends: libglfw3-dev but it is not going to be installed
+E: Unmet dependencies. Try 'apt --fix-broken install' with no packages (or specify a solution).
+rc=100
+bash: line 1: tailscale: command not found
+inactive
+Get:1 https://pkgs.tailscale.com/stable/ubuntu jammy/main arm64 tailscale arm64 1.104.7 [37.5 MB]
+Fetched 37.5 MB in 11s (3,353 kB/s)
+-rw-r--r-- 1 robot robot 37521780 Nov 13 06:00 tailscale_1.104.7_arm64.deb
+Depends: iptables
+Version: 1.104.7
+(Reading database ... 323660 files and directories currently installed.)
+Preparing to unpack tailscale_1.104.7_arm64.deb ...
+Unpacking tailscale (1.104.7) ...
+Setting up tailscale (1.104.7) ...
+Created symlink /etc/systemd/system/multi-user.target.wants/tailscaled.service → /lib/systemd/system/tailscaled.service.
+1.104.7
+active
+enabled
+To authenticate, visit:
+	https://login.tailscale.com/a/g6b0878e368d656ae
+timeout waiting for Tailscale service to enter a Running state; check health with "tailscale status"
+active active active active active 

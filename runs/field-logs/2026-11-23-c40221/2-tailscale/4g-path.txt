@@ -1,0 +1,28 @@
+== 11:52:24 断开机器人热点
+Device 'wlp59s0' successfully disconnected.
+100.67.176.60 dev tailscale0 table 52 src 100.69.130.19 uid 1000 
+    cache 
+pong from c40221-orin (100.67.176.60) via DERP(sin) in 69ms
+pong from c40221-orin (100.67.176.60) via DERP(sin) in 200ms
+pong from c40221-orin (100.67.176.60) via DERP(sin) in 104ms
+pong from c40221-orin (100.67.176.60) via DERP(sin) in 173ms
+pong from c40221-orin (100.67.176.60) via 202.187.130.38:41641 in 103ms
+100.67.176.60    c40221-orin      <账号>  linux    active; direct 202.187.130.38:41641, tx 5692 rx 5276  
+time=173 ms
+time=33.1 ms
+time=47.3 ms
+time=466 ms
+time=150 ms
+== ssh
+orin-nx
+
+real	0m2.280s
+user	0m0.046s
+sys	0m0.024s
+== 上传 20 MB（笔记本 4G 上行 → 机器人）
+scp rc=0 用时 50.261458676 s
+== 下载 20 MB（机器人 → 笔记本 4G 下行）
+scp rc=124 用时 60.012250059 s
+== 11:54:30 接回机器人热点
+Connection successfully activated (D-Bus active path: /org/freedesktop/NetworkManager/ActiveConnection/13)
+== 11:54:32 完

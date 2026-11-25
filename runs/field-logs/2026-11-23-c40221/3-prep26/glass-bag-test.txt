@@ -1,0 +1,25 @@
+/dev/nvme0n1p1  231G   46G  173G  21% /
+11:43:43
+record rc=124
+11:44:13
+[INFO] [1795405453.557772162] [rosbag2_cpp]: Writing remaining messages from cache to the bag. It may take a while
+[INFO] [1795405453.562171818] [rosbag2_recorder]: Event publisher thread: Exiting
+[INFO] [1795405453.562572023] [rosbag2_recorder]: Recording stopped
+1.4G	/home/robot/nexwar_bags/glass-test-closed-1
+Files:             glass-test-closed-1_0.mcap
+Bag size:          1.3 GiB
+Storage id:        mcap
+Duration:          29.500169131s
+Start:             Nov 23 2026 11:43:44.049856455 (1795405424.049856455)
+End:               Nov 23 2026 11:44:13.550025586 (1795405453.550025586)
+Messages:          8993
+Topic information: Topic: /front_camera/image_compressed | Type: sensor_msgs/msg/CompressedImage | Count: 294 | Serialization Format: cdr
+                   Topic: /rear_lidar | Type: sensor_msgs/msg/PointCloud2 | Count: 292 | Serialization Format: cdr
+                   Topic: /front_lidar | Type: sensor_msgs/msg/PointCloud2 | Count: 290 | Serialization Format: cdr
+                   Topic: /front_lidar/imu | Type: sensor_msgs/msg/Imu | Count: 5876 | Serialization Format: cdr
+                   Topic: /tf_static | Type: tf2_msgs/msg/TFMessage | Count: 826 | Serialization Format: cdr
+                   Topic: /rear_camera/image_compressed | Type: sensor_msgs/msg/CompressedImage | Count: 295 | Serialization Format: cdr
+                   Topic: /tf | Type: tf2_msgs/msg/TFMessage | Count: 1120 | Serialization Format: cdr
+== 录包期间站点、代理
+测试包已删
+/dev/nvme0n1p1  231G   46G  173G  21% /

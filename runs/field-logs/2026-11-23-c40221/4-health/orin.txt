@@ -1,0 +1,76 @@
+## 基本
+2026-11-23 12:36:19
+ 12:36:19 up  2:12,  0 users,  load average: 5.55, 5.89, 5.53
+/opt/nexwar/releases/2026-11-22-a9b33a7c
+  ls: cannot access '/opt/nexwar/pending.json': No such file or directory
+  ls: cannot access '/opt/nexwar/rolled_back.json': No such file or directory
+## 服务
+nexwar_boot        inactive NRestarts=0 since Thu 1970-01-01 08:00:36 CST
+nexwar_agent       active NRestarts=1 since Mon 2026-11-23 10:24:31 CST
+nexwar_sidecar     active NRestarts=0 since Thu 1970-01-01 08:00:36 CST
+nexwar_nav2        active NRestarts=0 since Thu 1970-01-01 08:00:37 CST
+nexwar_localizer   active NRestarts=0 since Thu 1970-01-01 08:00:37 CST
+nexwar_obstacles   active NRestarts=0 since Thu 1970-01-01 08:00:37 CST
+nexwar_ops.path    active NRestarts= since Thu 1970-01-01 08:00:35 CST
+chrony             active NRestarts=0 since Mon 2026-11-23 11:03:06 CST
+tailscaled         active NRestarts=0 since Mon 2026-11-23 11:33:02 CST
+## 失败的单元
+● nxserver.service loaded failed failed NoMachine Server daemon
+## 盘、内存、温度
+/dev/nvme0n1p1  231G   46G  173G  21% /
+/dev/nvme0n1p1  231G   46G  173G  21% /
+               total        used        free      shared  buff/cache   available
+Mem:            15Gi       5.6Gi       7.3Gi       101Mi       2.4Gi       9.3Gi
+cpu-thermal=46 gpu-thermal=41 cv0-thermal=44 cv1-thermal=44 cv2-thermal=42 soc0-thermal=43 soc1-thermal=45 soc2-thermal=43 tj-thermal=46 
+11-23-2026 12:36:20 RAM 5879/15656MB (lfb 4x4MB) SWAP 0/7828MB (cached 0MB) CPU [60%@1984,34%@1984,28%@1984,34%@1984,57%@1984,51%@1984,38%@1984,49%@1984] EMC_FREQ 9%@2133 GR3D_FREQ 13%@[305] NVENC off
+## 对时
+Reference ID    : C0A8EAE8 (192.168.234.232)
+System time     : 0.000152185 seconds fast of NTP time
+Leap status     : Normal
+#x PPS                           0   2   377     2   -273ms[ -273ms] +/- 2419ns
+^? 192.168.168.19                3   1   377     1    +62ms[  +62ms] +/-  233ms
+^* 192.168.234.232               4   7   177    19   -315us[ +756us] +/- 7588us
+## 网络
+default via 192.168.113.1 dev enP8p1s0 proto static metric 102 
+192.168.234.232 via 192.168.168.168 dev enP8p1s0 src 192.168.168.100 uid 0 
+1
+100.67.176.60    c40221-orin      <账号>  linux    -                           
+100.111.181.125  desktop-8j4edo4  <账号>  windows  offline, last seen 175d ago 
+## 旁路/控制
+心跳#2650 held=1 motion=5 batt=0%/61%
+TakeControlAck: SUCCESS 'OK'
+## 定位器
+Nov 23 10:23:50 orin-nx nexwar_localizer_start[1303]: 2026-11-23 10:23:50,562 INFO nexwar_localizer.core: 定位器状态:initializing 等人给初始位置
+Nov 23 10:38:18 orin-nx nexwar_localizer_start[1303]: 2026-11-23 10:38:18,483 INFO nexwar_localizer.core: 定位器状态:tracking
+## Super-LIO
+/opt/nexwar/superlio/current/
+/opt/nexwar/superlio/f89f48d-8ff747753336/
+/opt/nexwar/superlio/current/bin:
+kf2sm
+
+/opt/nexwar/superlio/f89f48d-8ff747753336/bin:
+kf2sm
+## 代理近 30 分钟警告(去掉感知帧)
+      2 WARNING nexwar_agent.runtime 与站点断线;当前任务按断线策略表处理
+      1 WARNING nexwar_agent.video_push front 推流进程退了(rc=1): [srt @ 0xaaab06368130] Connection to srt://192
+      1 WARNING nexwar_agent.video_push front 推流进程退了(rc=1): [srt @ 0xaaaafe29c130] Connection to srt://192
+      1 WARNING nexwar_agent.video_push front 推流进程退了(rc=1): [srt @ 0xaaaafd26d130] Connection to srt://192
+      1 WARNING nexwar_agent.video_push front 推流进程退了(rc=1): [srt @ 0xaaaaf94ca130] Connection to srt://192
+      1 WARNING nexwar_agent.video_push front 推流进程退了(rc=1): [srt @ 0xaaaaf7154130] Connection to srt://192
+      1 WARNING nexwar_agent.video_push front 推流进程退了(rc=1): [srt @ 0xaaaaf377d130] Connection to srt://192
+      1 WARNING nexwar_agent.video_push front 推流进程退了(rc=1): [srt @ 0xaaaaf2c25130] Connection to srt://192
+## 代理感知延迟最近
+1
+## 录包/关键帧目录
+total 24
+drwxr-xr-x  6 robot robot 4096 Nov  5 12:29 .
+drwxr-xr-x 76 root  root  4096 Nov 23 11:33 ..
+drwxr-xr-x  6 robot robot 4096 Nov 23 12:36 agent
+drwx------  2 robot robot 4096 Nov  2 11:20 cert-new
+drwxr-xr-x  2 robot robot 4096 Nov  5 13:19 clips
+drwxr-xr-x  9 robot robot 4096 Nov 23 12:35 outbox
+## env 老行
+4
+## Linger/RemoveIPC
+Linger=yes
+RemoveIPC=no

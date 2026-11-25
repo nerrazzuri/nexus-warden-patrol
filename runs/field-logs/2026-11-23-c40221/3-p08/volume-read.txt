@@ -1,0 +1,13 @@
+/etc/nexwar/env: line 57: --record: command not found
+/etc/nexwar/env: line 64: 1: command not found
+/etc/nexwar/env: line 73: via: command not found
+Warning: Permanently added '192.168.113.101' (ED25519) to the list of known hosts.
+Mon 23 Nov 2026 12:23:26 PM CST
+Simple mixer control 'DACL',0
+  Playback channels: Mono
+  Limits: Playback 0 - 255
+  Mono: Playback 179 [70%] [-6.00dB]
+Simple mixer control 'DACR',0
+  Playback channels: Mono
+  Limits: Playback 0 - 255
+  Mono: Playback 179 [70%] [-6.00dB]

@@ -1,0 +1,55 @@
+>>> 1/3 核发行包 2026-11-22-a9b33a7c.tar.gz
+  指纹对上了
+>>> 2/3 解包到 /home/robot/2026-11-22-a9b33a7c
+>>> 3/3 跑装机脚本(能重跑;已经在跑这一版就不切换,只补服务单元、系统设置)
+包里带了离线轮子:依赖只从 /home/robot/2026-11-22-a9b33a7c/wheels 装(要走别处就自己给 NEXWAR_PIP_ARGS)。
+
+>>> 1/7 建目录 /opt/nexwar 和数据根 /var/lib/nexwar
+
+>>> 2/7 装一个跟版本无关的解释器到 /opt/nexwar/bin
+
+>>> 3/7 把包落进槽里
+  装了发行公钥 /etc/nexwar/release-pub.pem
+落槽了: 2026-11-22-a9b33a7c (版本 1.0.0-rc.1)
+
+>>> 4/7 给这一版建自己的 venv
+  编 Super-LIO(定位与建图必需;第一次约 7 分钟)…
+Super-LIO 已编过:/opt/nexwar/superlio/f89f48d-8ff747753336
+
+>>> 5/7 装代理单元与环境文件;清掉老服务
+  配网服务的代码没变:/usr/local/lib/nexwar/bind/
+  提示: 没装上 wireguard-tools(离线?):站点 VPN 用不了,局域网照常。离线装法见装机清单「一」
+  提示: robot 不在 dialout 组,上装继电器板的串口打不开(W21);接了上装再:
+        sudo usermod -aG dialout robot && sudo systemctl restart nexwar_agent
+
+>>> 6/7 看一眼站点签发的证书包与注册文件
+  都在:/etc/nexwar/registration.json、/etc/nexwar/tls/{ca.crt,robot.crt,robot.key}。
+  对时:厂家的 /etc/chrony/chrony.conf 不读 conf.d,我们不改它;开机准备(nexwar_boot)每次开机用 chronyc 给它运行时加 192.168.234.232 这个源(重启 chrony 就没了,下次开机再加)。
+
+>>> 7/7 切到刚装的这一版并起代理
+  2026-11-22-a9b33a7c 已经是在跑的那一版了,跳过切换。
+数据根   : /var/lib/nexwar
+搬过的槽 : (没有要搬的)
+拷了 0 个文件,跳过 0 个(目标已有)
+  /etc/nexwar/env 里写了 NEXWAR_LOCALIZER=bridge:nexwar_localizer 设了开机自启并已起来
+  /etc/nexwar/env 里写了 NEXWAR_OBSTACLES=bridge:nexwar_obstacles 设了开机自启并已起来
+  /etc/nexwar/env 里写了 NEXWAR_NAV=nav2:nexwar_nav2 设了开机自启并已起来
+
+>>> 装完了。看一眼:
+  systemctl status nexwar_agent
+  journalctl -u nexwar_agent -f
+
+  连上站点之后,手机(站点模式)的狗列表里看得到这只狗;能力里报的是 NEXWAR_HAL 那个适配器。
+rc=0
+Linger=yes
+[Login]
+RemoveIPC=no
+同一份
+/opt/nexwar/releases/2026-11-22-a9b33a7c
+ls: cannot access '/opt/nexwar/pending.json': No such file or directory
+2219edae769d464d1a1d8b9028cf434275e1330e3ca7ecf5081cc389b50b4e30  /etc/chrony/chrony.conf
+env未变
+Only in /etc/chrony/conf.d: nexwar.conf
+active active active active active NRestarts=0 ActiveEnterTimestamp=Mon 2026-11-23 10:20:46 CST 
+NRestarts=0 ActiveEnterTimestamp=Mon 2026-11-23 10:20:46 CST 
+NRestarts=0 ActiveEnterTimestamp=Mon 2026-11-23 10:18:35 CST 

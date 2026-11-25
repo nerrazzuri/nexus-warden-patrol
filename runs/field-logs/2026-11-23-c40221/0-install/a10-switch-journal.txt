@@ -1,0 +1,146 @@
+Nov 23 10:17:13 orin-nx nexwar_sidecar_start[990]: [agent] 心跳#120 held=1 motion=2 batt=52%/0%
+Nov 23 10:17:13 orin-nx nexwar_sidecar_start[990]: [CTRL] TakeControlAck: SUCCESS 'OK'
+Nov 23 10:17:21 orin-nx nexwar_agent_start[3693]: 2026-11-23T10:17:21.252+08:00 INFO nexwar_agent.outbox 站点已确认,发件箱删掉这一趟:20261123-101719
+Nov 23 10:17:28 orin-nx nexwar_sidecar_start[990]: [agent] 心跳#125 held=1 motion=2 batt=52%/0%
+Nov 23 10:17:28 orin-nx nexwar_sidecar_start[990]: [CTRL] TakeControlAck: SUCCESS 'OK'
+Nov 23 10:17:43 orin-nx nexwar_sidecar_start[990]: [agent] 心跳#130 held=1 motion=2 batt=52%/0%
+Nov 23 10:17:43 orin-nx nexwar_sidecar_start[990]: [CTRL] TakeControlAck: SUCCESS 'OK'
+Nov 23 10:17:58 orin-nx nexwar_sidecar_start[990]: [agent] 心跳#135 held=1 motion=2 batt=52%/0%
+Nov 23 10:17:58 orin-nx nexwar_sidecar_start[990]: [CTRL] TakeControlAck: SUCCESS 'OK'
+Nov 23 10:17:58 orin-nx nexwar_agent_start[3693]: 2026-11-23T10:17:58.526+08:00 INFO nexwar_agent.ops 暂停了厂家进程 13 个
+Nov 23 10:18:13 orin-nx nexwar_sidecar_start[990]: [agent] 心跳#140 held=1 motion=2 batt=52%/0%
+Nov 23 10:18:13 orin-nx nexwar_sidecar_start[990]: [CTRL] TakeControlAck: SUCCESS 'OK'
+Nov 23 10:18:28 orin-nx nexwar_sidecar_start[990]: [agent] 心跳#145 held=1 motion=2 batt=52%/0%
+Nov 23 10:18:28 orin-nx nexwar_sidecar_start[990]: [CTRL] TakeControlAck: SUCCESS 'OK'
+Nov 23 10:18:35 orin-nx nexwar_agent_start[3693]: 2026-11-23T10:18:35.051+08:00 WARNING nexwar_agent.locbridge 本机定位桥:定位器已断开
+Nov 23 10:18:35 orin-nx nexwar_sidecar_start[990]: [i] 一个客户端断开，会话继续持有
+Nov 23 10:18:35 orin-nx nexwar_agent_start[3693]: 2026-11-23T10:18:35.324+08:00 WARNING nexwar_agent.obs_server 本机障碍桥:感知节点已断开
+Nov 23 10:18:35 orin-nx nexwar_agent_start[3693]: 2026-11-23T10:18:35.481+08:00 WARNING nexwar_agent.navbridge Nav2 转接节点断了
+Nov 23 10:18:35 orin-nx nexwar_agent_start[3693]: 2026-11-23T10:18:35.481+08:00 ERROR asyncio Task exception was never retrieved
+Nov 23 10:18:35 orin-nx nexwar_agent_start[3693]: future: <Task finished name='Task-19' coro=<NavBridgeServer._serve() done, defined at /opt/nexwar/releases/2026-11-20-a2fe1c5f/venv/lib/python3.10/site-packages/nexwar_agent/navbridge.py:103> exception=ConnectionResetError(104, 'Connection reset by peer')>
+Nov 23 10:18:35 orin-nx nexwar_agent_start[3693]: Traceback (most recent call last):
+Nov 23 10:18:35 orin-nx nexwar_agent_start[3693]:   File "/opt/nexwar/releases/2026-11-20-a2fe1c5f/venv/lib/python3.10/site-packages/nexwar_agent/navbridge.py", line 133, in _serve
+Nov 23 10:18:35 orin-nx nexwar_agent_start[3693]:     line = await reader.readline()
+Nov 23 10:18:35 orin-nx nexwar_agent_start[3693]:   File "/usr/lib/python3.10/asyncio/streams.py", line 524, in readline
+Nov 23 10:18:35 orin-nx nexwar_agent_start[3693]:     line = await self.readuntil(sep)
+Nov 23 10:18:35 orin-nx nexwar_agent_start[3693]:   File "/usr/lib/python3.10/asyncio/streams.py", line 616, in readuntil
+Nov 23 10:18:35 orin-nx nexwar_agent_start[3693]:     await self._wait_for_data('readuntil')
+Nov 23 10:18:35 orin-nx nexwar_agent_start[3693]:   File "/usr/lib/python3.10/asyncio/streams.py", line 501, in _wait_for_data
+Nov 23 10:18:35 orin-nx nexwar_agent_start[3693]:     await self._waiter
+Nov 23 10:18:35 orin-nx nexwar_agent_start[3693]:   File "/usr/lib/python3.10/asyncio/selector_events.py", line 862, in _read_ready__data_received
+Nov 23 10:18:35 orin-nx nexwar_agent_start[3693]:     data = self._sock.recv(self.max_size)
+Nov 23 10:18:35 orin-nx nexwar_agent_start[3693]: ConnectionResetError: [Errno 104] Connection reset by peer
+Nov 23 10:18:35 orin-nx nexwar_sidecar_start[990]: [i] 收到信号：只退进程，不释放控制权。
+Nov 23 10:18:35 orin-nx nexwar_sidecar_start[990]:     真要交还请发 shutdown 命令。
+Nov 23 10:18:35 orin-nx systemd[1]: Stopping D1 Max 运动控制旁路(patrol_agent:经厂家 SDK 握控制权、只收代理的运动命令;工单 7)...
+Nov 23 10:18:35 orin-nx systemd[1]: nexwar_sidecar.service: Deactivated successfully.
+Nov 23 10:18:35 orin-nx systemd[1]: Stopped D1 Max 运动控制旁路(patrol_agent:经厂家 SDK 握控制权、只收代理的运动命令;工单 7).
+Nov 23 10:18:35 orin-nx systemd[1]: nexwar_sidecar.service: Consumed 20.451s CPU time.
+Nov 23 10:18:35 orin-nx systemd[1]: Started D1 Max 运动控制旁路(patrol_agent:经厂家 SDK 握控制权、只收代理的运动命令;工单 7).
+Nov 23 10:18:35 orin-nx nexwar_sidecar_start[4673]: [agent] 令牌写在 /home/robot/.nexwar/sidecar.token(0600);代理连上先认证才能开车
+Nov 23 10:18:35 orin-nx nexwar_sidecar_start[4673]: [agent] 抢连 192.168.168.168:8082 …（**现在就该给机器上电**，它会一直重试）
+Nov 23 10:18:35 orin-nx systemd[1]: Stopping D1 Max 机器人代理(robot-agent)...
+Nov 23 10:18:35 orin-nx nexwar_agent_start[3693]: 收到 SIGTERM,收尾中……
+Nov 23 10:18:35 orin-nx nexwar_agent_start[3693]: 2026-11-23T10:18:35.563+08:00 ERROR nexwar_agent.runtime 收尾:HAL 停 失败,后面的照做
+Nov 23 10:18:35 orin-nx nexwar_agent_start[3693]: Traceback (most recent call last):
+Nov 23 10:18:35 orin-nx nexwar_agent_start[3693]:   File "/opt/nexwar/releases/2026-11-20-a2fe1c5f/venv/lib/python3.10/site-packages/nexwar_agent/runtime.py", line 2763, in _step
+Nov 23 10:18:35 orin-nx nexwar_agent_start[3693]:     await fn()
+Nov 23 10:18:35 orin-nx nexwar_agent_start[3693]:   File "/opt/nexwar/releases/2026-11-20-a2fe1c5f/venv/lib/python3.10/site-packages/nexwar_adapter_d1max/hal.py", line 371, in stop
+Nov 23 10:18:35 orin-nx nexwar_agent_start[3693]:     await self._b.halt()
+Nov 23 10:18:35 orin-nx nexwar_agent_start[3693]:   File "/opt/nexwar/releases/2026-11-20-a2fe1c5f/venv/lib/python3.10/site-packages/nexwar_patrol/backends/sidecar_device.py", line 594, in halt
+Nov 23 10:18:35 orin-nx nexwar_agent_start[3693]:     await self._command("halt", timeout_s=URGENT_ACK_TIMEOUT_S)
+Nov 23 10:18:35 orin-nx nexwar_agent_start[3693]:   File "/opt/nexwar/releases/2026-11-20-a2fe1c5f/venv/lib/python3.10/site-packages/nexwar_patrol/backends/sidecar_device.py", line 447, in _command
+Nov 23 10:18:35 orin-nx nexwar_agent_start[3693]:     raise DeviceBackendError(f"未连接旁路进程,发无法完成 {cmd}")
+Nov 23 10:18:35 orin-nx nexwar_agent_start[3693]: nexwar_patrol.backends.base.DeviceBackendError: 未连接旁路进程,发无法完成 halt
+Nov 23 10:18:35 orin-nx nexwar_agent_start[3693]: 2026-11-23T10:18:35.572+08:00 INFO nexwar_agent.runtime 这台机器的控制权不可释放,收尾不放
+Nov 23 10:18:36 orin-nx nexwar_agent_start[3693]: 2026-11-23T10:18:36.722+08:00 INFO nexwar_agent.runtime HAL 已收尾:停、放控制权、关链路
+Nov 23 10:18:36 orin-nx nexwar_agent_start[3693]: 2026-11-23T10:18:36.809+08:00 WARNING nexwar_agent.runtime 与站点断线;当前任务按断线策略表处理
+Nov 23 10:18:37 orin-nx systemd[1]: nexwar_agent.service: Deactivated successfully.
+Nov 23 10:18:37 orin-nx systemd[1]: Stopped D1 Max 机器人代理(robot-agent).
+Nov 23 10:18:37 orin-nx systemd[1]: nexwar_agent.service: Consumed 1min 35.745s CPU time.
+Nov 23 10:18:37 orin-nx systemd[1]: Starting D1 Max 机器人代理(robot-agent)...
+Nov 23 10:18:37 orin-nx python[4831]: [守卫] 有在途的升级,数了一次,让它起。 现在指着: 2026-11-22-a9b33a7c
+Nov 23 10:18:37 orin-nx systemd[1]: Started D1 Max 机器人代理(robot-agent).
+Nov 23 10:18:37 orin-nx nexwar_agent_start[4851]: 2026-11-23T10:18:37.863+08:00 INFO nexwar_agent.main 上装配置 /etc/nexwar/payload.json:接了 strobe、speaker
+Nov 23 10:18:37 orin-nx nexwar_agent_start[4851]: 2026-11-23T10:18:37.870+08:00 WARNING nexwar_agent.bridges.nav2_nav 遮挡限速按现场设置:关(NEXWAR_NAV_OCC)
+Nov 23 10:18:37 orin-nx nexwar_agent_start[4851]: 2026-11-23T10:18:37.950+08:00 WARNING nexwar_agent.runtime 没有雷达视野表:遮挡限速先关着,走起来自己学(约 600 帧)
+Nov 23 10:18:37 orin-nx nexwar_agent_start[4851]: 2026-11-23T10:18:37.951+08:00 WARNING nexwar_agent.runtime 看不见的按 legacy(NEXWAR_GUARD_BAND)
+Nov 23 10:18:38 orin-nx nexwar_agent_start[4851]: 2026-11-23T10:18:38.008+08:00 INFO nexwar_agent.runtime 自主级别: autonomous
+Nov 23 10:18:38 orin-nx nexwar_agent_start[4851]: 2026-11-23T10:18:38.051+08:00 ERROR nexwar_agent.runtime 收尾:HAL 停 失败,后面的照做
+Nov 23 10:18:38 orin-nx nexwar_agent_start[4851]: Traceback (most recent call last):
+Nov 23 10:18:38 orin-nx nexwar_agent_start[4851]:   File "/opt/nexwar/releases/2026-11-22-a9b33a7c/venv/lib/python3.10/site-packages/nexwar_patrol/backends/sidecar_device.py", line 280, in connect
+Nov 23 10:18:38 orin-nx nexwar_agent_start[4851]:     self._reader, self._writer = await asyncio.open_connection(
+Nov 23 10:18:38 orin-nx nexwar_agent_start[4851]:   File "/usr/lib/python3.10/asyncio/streams.py", line 48, in open_connection
+Nov 23 10:18:38 orin-nx nexwar_agent_start[4851]:     transport, _ = await loop.create_connection(
+Nov 23 10:18:38 orin-nx nexwar_agent_start[4851]:   File "/usr/lib/python3.10/asyncio/base_events.py", line 1076, in create_connection
+Nov 23 10:18:38 orin-nx nexwar_agent_start[4851]:     raise exceptions[0]
+Nov 23 10:18:38 orin-nx nexwar_agent_start[4851]:   File "/usr/lib/python3.10/asyncio/base_events.py", line 1060, in create_connection
+Nov 23 10:18:38 orin-nx nexwar_agent_start[4851]:     sock = await self._connect_sock(
+Nov 23 10:18:38 orin-nx nexwar_agent_start[4851]:   File "/usr/lib/python3.10/asyncio/base_events.py", line 969, in _connect_sock
+Nov 23 10:18:38 orin-nx nexwar_agent_start[4851]:     await self.sock_connect(sock, address)
+Nov 23 10:18:38 orin-nx nexwar_agent_start[4851]:   File "/usr/lib/python3.10/asyncio/selector_events.py", line 501, in sock_connect
+Nov 23 10:18:38 orin-nx nexwar_agent_start[4851]:     return await fut
+Nov 23 10:18:38 orin-nx nexwar_agent_start[4851]:   File "/usr/lib/python3.10/asyncio/selector_events.py", line 541, in _sock_connect_cb
+Nov 23 10:18:38 orin-nx nexwar_agent_start[4851]:     raise OSError(err, f'Connect call failed {address}')
+Nov 23 10:18:38 orin-nx nexwar_agent_start[4851]: ConnectionRefusedError: [Errno 111] Connect call failed ('127.0.0.1', 8090)
+Nov 23 10:18:38 orin-nx nexwar_agent_start[4851]: The above exception was the direct cause of the following exception:
+Nov 23 10:18:38 orin-nx nexwar_agent_start[4851]: Traceback (most recent call last):
+Nov 23 10:18:38 orin-nx nexwar_agent_start[4851]:   File "/opt/nexwar/releases/2026-11-22-a9b33a7c/venv/lib/python3.10/site-packages/nexwar_agent/runtime.py", line 2649, in start
+Nov 23 10:18:38 orin-nx nexwar_agent_start[4851]:     await self._start()
+Nov 23 10:18:38 orin-nx nexwar_agent_start[4851]:   File "/opt/nexwar/releases/2026-11-22-a9b33a7c/venv/lib/python3.10/site-packages/nexwar_agent/runtime.py", line 2700, in _start
+Nov 23 10:18:38 orin-nx nexwar_agent_start[4851]:     await self.hal.connect()
+Nov 23 10:18:38 orin-nx nexwar_agent_start[4851]:   File "/opt/nexwar/releases/2026-11-22-a9b33a7c/venv/lib/python3.10/site-packages/nexwar_adapter_d1max/hal.py", line 235, in connect
+Nov 23 10:18:38 orin-nx nexwar_agent_start[4851]:     await self._b.connect()
+Nov 23 10:18:38 orin-nx nexwar_agent_start[4851]:   File "/opt/nexwar/releases/2026-11-22-a9b33a7c/venv/lib/python3.10/site-packages/nexwar_patrol/backends/sidecar_device.py", line 283, in connect
+Nov 23 10:18:38 orin-nx nexwar_agent_start[4851]:     raise DeviceBackendError(
+Nov 23 10:18:38 orin-nx nexwar_agent_start[4851]: nexwar_patrol.backends.base.DeviceBackendError: 无法连接运控旁路进程 127.0.0.1:8090: [Errno 111] Connect call failed ('127.0.0.1', 8090)。它起来了吗? 见 docs/真机联调手册.md 的 S1
+Nov 23 10:18:38 orin-nx nexwar_agent_start[4851]: During handling of the above exception, another exception occurred:
+Nov 23 10:18:38 orin-nx nexwar_agent_start[4851]: Traceback (most recent call last):
+Nov 23 10:18:38 orin-nx nexwar_agent_start[4851]:   File "/opt/nexwar/releases/2026-11-22-a9b33a7c/venv/lib/python3.10/site-packages/nexwar_agent/runtime.py", line 2804, in _step
+Nov 23 10:18:38 orin-nx nexwar_agent_start[4851]:     await fn()
+Nov 23 10:18:38 orin-nx nexwar_agent_start[4851]:   File "/opt/nexwar/releases/2026-11-22-a9b33a7c/venv/lib/python3.10/site-packages/nexwar_adapter_d1max/hal.py", line 371, in stop
+Nov 23 10:18:38 orin-nx nexwar_agent_start[4851]:     await self._b.halt()
+Nov 23 10:18:38 orin-nx nexwar_agent_start[4851]:   File "/opt/nexwar/releases/2026-11-22-a9b33a7c/venv/lib/python3.10/site-packages/nexwar_patrol/backends/sidecar_device.py", line 594, in halt
+Nov 23 10:18:38 orin-nx nexwar_agent_start[4851]:     await self._command("halt", timeout_s=URGENT_ACK_TIMEOUT_S)
+Nov 23 10:18:38 orin-nx nexwar_agent_start[4851]:   File "/opt/nexwar/releases/2026-11-22-a9b33a7c/venv/lib/python3.10/site-packages/nexwar_patrol/backends/sidecar_device.py", line 447, in _command
+Nov 23 10:18:38 orin-nx nexwar_agent_start[4851]:     raise DeviceBackendError(f"未连接旁路进程,发无法完成 {cmd}")
+Nov 23 10:18:38 orin-nx nexwar_agent_start[4851]: nexwar_patrol.backends.base.DeviceBackendError: 未连接旁路进程,发无法完成 halt
+Nov 23 10:18:38 orin-nx nexwar_agent_start[4851]: 2026-11-23T10:18:38.057+08:00 INFO nexwar_agent.runtime 这台机器的控制权不可释放,收尾不放
+Nov 23 10:18:38 orin-nx nexwar_agent_start[4851]: 2026-11-23T10:18:38.217+08:00 INFO nexwar_agent.ops 暂停了厂家进程 13 个
+Nov 23 10:18:39 orin-nx nexwar_sidecar_start[4673]: [agent] ★★★ 抢到窗口，已连上（第 7 次）★★★
+Nov 23 10:18:39 orin-nx nexwar_sidecar_start[4673]: [CTRL] TakeControlAck: SUCCESS 'OK'
+Nov 23 10:18:39 orin-nx nexwar_sidecar_start[4673]: [agent] TakeControl(): ok
+Nov 23 10:18:39 orin-nx nexwar_sidecar_start[4673]: [agent] SetSpeed(1): ok
+Nov 23 10:18:39 orin-nx nexwar_sidecar_start[4673]: [agent] 监听 127.0.0.1:8090，等巡检程序接进来
+Nov 23 10:18:39 orin-nx nexwar_sidecar_start[4673]: [agent] 人工通道: echo stand > /home/robot/nexwar_sidecar/runs/nexwar_agent.fifo
+Nov 23 10:18:39 orin-nx nexwar_agent_start[4851]: nexwar_agent 起不来: DeviceBackendError("无法连接运控旁路进程 127.0.0.1:8090: [Errno 111] Connect call failed ('127.0.0.1', 8090)。它起来了吗? 见 docs/真机联调手册.md 的 S1")2026-11-23T10:18:39.225+08:00 INFO nexwar_agent.runtime HAL 已收尾:停、放控制权、关链路
+Nov 23 10:18:39 orin-nx nexwar_agent_start[4851]: 2026-11-23T10:18:39.226+08:00 ERROR nexwar_agent.main nexwar_agent 起不来: DeviceBackendError("无法连接运控旁路进程 127.0.0.1:8090: [Errno 111] Connect call failed ('127.0.0.1', 8090)。它起来了吗? 见 docs/真机联调手册.md 的 S1")
+Nov 23 10:18:39 orin-nx systemd[1]: nexwar_agent.service: Main process exited, code=exited, status=1/FAILURE
+Nov 23 10:18:39 orin-nx systemd[1]: nexwar_agent.service: Failed with result 'exit-code'.
+Nov 23 10:18:39 orin-nx systemd[1]: nexwar_agent.service: Consumed 1.207s CPU time.
+Nov 23 10:18:39 orin-nx nexwar_sidecar_start[4673]: [i] 客户端接入 127.0.0.1
+Nov 23 10:18:44 orin-nx systemd[1]: nexwar_agent.service: Scheduled restart job, restart counter is at 1.
+Nov 23 10:18:44 orin-nx systemd[1]: Stopped D1 Max 机器人代理(robot-agent).
+Nov 23 10:18:44 orin-nx systemd[1]: nexwar_agent.service: Consumed 1.207s CPU time.
+Nov 23 10:18:44 orin-nx systemd[1]: Starting D1 Max 机器人代理(robot-agent)...
+Nov 23 10:18:44 orin-nx python[4989]: [守卫] 有在途的升级,数了一次,让它起。 现在指着: 2026-11-22-a9b33a7c
+Nov 23 10:18:45 orin-nx systemd[1]: Started D1 Max 机器人代理(robot-agent).
+Nov 23 10:18:45 orin-nx nexwar_agent_start[4990]: 2026-11-23T10:18:45.520+08:00 INFO nexwar_agent.main 上装配置 /etc/nexwar/payload.json:接了 strobe、speaker
+Nov 23 10:18:45 orin-nx nexwar_agent_start[4990]: 2026-11-23T10:18:45.532+08:00 WARNING nexwar_agent.bridges.nav2_nav 遮挡限速按现场设置:关(NEXWAR_NAV_OCC)
+Nov 23 10:18:45 orin-nx nexwar_agent_start[4990]: 2026-11-23T10:18:45.611+08:00 WARNING nexwar_agent.runtime 没有雷达视野表:遮挡限速先关着,走起来自己学(约 600 帧)
+Nov 23 10:18:45 orin-nx nexwar_agent_start[4990]: 2026-11-23T10:18:45.611+08:00 WARNING nexwar_agent.runtime 看不见的按 legacy(NEXWAR_GUARD_BAND)
+Nov 23 10:18:45 orin-nx nexwar_agent_start[4990]: 2026-11-23T10:18:45.677+08:00 INFO nexwar_agent.runtime 自主级别: autonomous
+Nov 23 10:18:45 orin-nx nexwar_sidecar_start[4673]: [i] 客户端接入 127.0.0.1
+Nov 23 10:18:45 orin-nx nexwar_sidecar_start[4673]: [CTRL] TakeControlAck: SUCCESS 'OK'
+Nov 23 10:18:45 orin-nx nexwar_agent_start[4990]: 2026-11-23T10:18:45.828+08:00 INFO nexwar_agent.locbridge 本机定位桥在 /var/lib/nexwar/agent/loc.sock 等定位器
+Nov 23 10:18:45 orin-nx nexwar_agent_start[4990]: 2026-11-23T10:18:45.830+08:00 INFO nexwar_agent.obs_server 本机障碍桥在 /var/lib/nexwar/agent/obs.sock 等感知节点
+Nov 23 10:18:45 orin-nx nexwar_agent_start[4990]: 2026-11-23T10:18:45.884+08:00 INFO nexwar_agent.ops 暂停了厂家进程 13 个
+Nov 23 10:18:46 orin-nx nexwar_agent_start[4990]: 2026-11-23T10:18:46.205+08:00 INFO nexwar_adapter_d1max.anbot 竞品音量调到 70%
+Nov 23 10:18:46 orin-nx nexwar_agent_start[4990]: nexwar_agent 起来了:transport=mqtts://192.168.234.232:8883 hal=d1max robot=C40221
+Nov 23 10:18:46 orin-nx nexwar_agent_start[4990]: 2026-11-23T10:18:46.312+08:00 INFO nexwar_agent.locbridge 定位器连上了:nexwar_localizer
+Nov 23 10:18:46 orin-nx nexwar_agent_start[4990]: 2026-11-23T10:18:46.529+08:00 INFO nexwar_agent.obs_server 感知节点连上了:nexwar_obstacles
+Nov 23 10:18:46 orin-nx nexwar_agent_start[4990]: 2026-11-23T10:18:46.643+08:00 INFO nexwar_agent.outbox 站点已确认,发件箱删掉这一趟:20261123-101836
+Nov 23 10:18:46 orin-nx nexwar_agent_start[4990]: 2026-11-23T10:18:46.647+08:00 INFO nexwar_agent.outbox 站点已确认,发件箱删掉这一趟:20261123-101839
+Nov 23 10:18:47 orin-nx nexwar_agent_start[4990]: 2026-11-23T10:18:47.423+08:00 INFO nexwar_agent.navbridge Nav2 转接节点连上了:nexwar_nav2bridge 1
+Nov 23 10:18:54 orin-nx nexwar_sidecar_start[4673]: [agent] 心跳#5 held=1 motion=2 batt=52%/0%
+Nov 23 10:18:54 orin-nx nexwar_sidecar_start[4673]: [CTRL] TakeControlAck: SUCCESS 'OK'

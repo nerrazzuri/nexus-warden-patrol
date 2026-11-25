@@ -1,0 +1,35 @@
+10:43:23 用户卷尺：右探头表面到墙垂直 0.75 m，探头正对墙（朝正右）；读数 0.76–0.77 → 准
+## 5 s left
+Traceback (most recent call last):   File "/opt/ros/humble/bin/ros2", line 33, in <module>     sys.exit(load_entry_point('ros2cli==0.18.15', 'console_scripts', 'ros2')())   File "/opt/ros/humble/lib/python3.10/site-packages/ros2cli/cli.py", line 91, in main     rc = extension.main(parser=parser, args=args)   File "/opt/ros/humble/lib/python3.10/site-packages/ros2topic/command/topic.py", line 41, i
+## 5 s right
+Traceback (most recent call last):   File "/opt/ros/humble/bin/ros2", line 33, in <module>     sys.exit(load_entry_point('ros2cli==0.18.15', 'console_scripts', 'ros2')())   File "/opt/ros/humble/lib/python3.10/site-packages/ros2cli/cli.py", line 91, in main     rc = extension.main(parser=parser, args=args)   File "/opt/ros/humble/lib/python3.10/site-packages/ros2topic/command/topic.py", line 41, i
+149
+## left
+inf inf inf inf inf inf inf inf inf inf inf inf inf inf inf inf inf inf inf inf inf inf inf inf inf inf inf inf inf inf inf inf inf inf inf inf inf inf inf inf inf inf inf inf inf inf inf inf !rclpy.ok() 
+## right
+0.8399999737739563 0.8429999947547913 0.8399999737739563 0.8399999737739563 0.8399999737739563 0.8379999995231628 0.8399999737739563 0.8370000123977661 0.8379999995231628 0.8379999995231628 0.8399999737739563 0.8399999737739563 0.8399999737739563 0.8399999737739563 0.8399999737739563 0.8399999737739563 0.8399999737739563 0.8399999737739563 0.8399999737739563 0.8370000123977661 0.8399999737739563 0
+10:46:03
+## left
+inf inf inf inf inf inf inf inf inf inf inf inf inf inf inf inf inf inf inf inf inf inf inf inf inf inf inf inf inf inf inf inf inf inf inf inf inf inf 
+## right
+1.493 1.495 1.493 1.496 1.498 1.498 1.496 1.493 1.493 1.493 1.493 1.493 1.496 1.493 1.496 1.496 1.494 1.494 1.493 1.493 1.494 1.494 1.496 1.494 1.497 1.495 1.495 1.497 1.497 1.497 1.497 1.497 1.499 1.495 1.497 1.495 1.497 1.497 
+10:46:52
+## left
+0.889 0.889 0.889 0.888 0.888 0.888 0.888 0.889 0.889 0.888 0.889 0.888 0.888 0.888 0.888 0.888 0.888 0.888 0.888 0.888 0.888 0.889 0.888 0.889 0.889 0.888 0.888 0.888 0.888 0.888 0.888 0.888 0.888 0.888 0.888 0.888 0.888 0.888 
+## right
+inf inf inf inf inf inf inf inf inf inf inf inf inf inf inf inf inf inf inf inf inf inf inf inf inf inf inf inf inf inf inf inf 2.090 2.090 2.092 inf inf inf 
+10:47:27
+## left
+1.320 1.320 1.320 1.320 1.320 1.321 1.321 1.322 1.323 1.325 1.325 1.324 1.325 1.324 1.324 1.325 1.324 1.324 1.325 1.324 1.324 1.324 1.324 1.325 1.325 1.324 1.324 1.324 1.325 1.324 1.324 1.324 1.325 1.325 1.325 1.325 1.325 1.325 
+## right
+inf 2.046 inf inf inf inf inf 2.042 2.045 inf 2.067 2.044 inf inf inf inf 2.059 inf inf inf inf 2.054 2.045 2.048 inf 2.045 2.043 2.038 2.052 2.045 2.041 inf 2.051 inf inf inf inf inf 
+10:47:58
+## left
+1.968 1.968 1.968 1.968 1.968 1.966 1.968 1.965 1.965 1.967 1.967 1.965 1.967 1.967 1.967 1.967 1.967 1.967 1.967 1.967 1.967 1.968 1.967 1.967 1.965 1.967 1.965 1.967 1.968 1.965 1.968 1.968 1.968 1.968 1.968 1.968 1.968 1.966 
+## right
+1.281 1.376 1.379 1.377 1.379 1.376 1.376 1.378 1.376 1.375 1.381 1.381 1.376 1.376 1.381 1.381 1.378 1.376 1.381 1.378 1.378 1.378 1.381 1.381 1.376 1.376 1.378 1.381 1.381 1.383 1.378 1.378 1.284 1.376 1.383 1.383 1.376 1.376 
+== 10:53:34 前方正对墙，左右 4–5 m 空地
+## left
+inf inf inf inf 2.75 2.76 inf 2.76 inf 2.75 inf inf inf inf inf inf inf inf 2.75 inf inf inf inf inf inf inf inf inf inf inf inf inf inf 0.79 inf 0.40 0.35 0.31 0.31 0.32 inf inf inf inf inf inf inf inf 
+## right
+0.99 0.92 0.91 0.91 0.92 1.00 1.13 1.15 1.16 inf inf 1.12 1.12 1.10 inf inf inf inf inf 1.35 inf inf 1.39 inf inf inf inf inf inf inf inf inf inf inf inf inf inf inf inf inf inf inf inf inf inf inf inf inf 

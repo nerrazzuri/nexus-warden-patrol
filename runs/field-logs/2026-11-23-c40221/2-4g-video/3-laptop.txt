@@ -1,0 +1,17 @@
+== 12:06:03 开始
+Connection successfully activated (D-Bus active path: /org/freedesktop/NetworkManager/ActiveConnection/15)
+Device 'wlp59s0' successfully disconnected.
+lo               UNKNOWN        127.0.0.1/8 192.168.234.232/32 
+wlx40a5ef5f1bd9  UP             192.168.100.208/24 
+tailscale0       UNKNOWN        100.69.130.19/32 
+default via 192.168.100.1 dev wlx40a5ef5f1bd9 proto dhcp metric 607 
+100.67.176.60 dev tailscale0 table 52 src 100.69.130.19 uid 1000 
+100.67.176.60    c40221-orin      <账号>  linux    active; relay "sin", tx 22067916 rx 17136144  
+== 12:06:14 切好了，720 s 后改回
+== 12:18:14 改回
+Connection successfully activated (D-Bus active path: /org/freedesktop/NetworkManager/ActiveConnection/16)
+lo               UNKNOWN        127.0.0.1/8 
+wlp59s0          UP             192.168.234.232/24 
+wlx40a5ef5f1bd9  UP             192.168.100.208/24 
+tailscale0       UNKNOWN        100.69.130.19/32 
+== 12:18:22 完

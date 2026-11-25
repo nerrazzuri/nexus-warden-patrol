@@ -1,0 +1,48 @@
+Jan 01 08:00:39.169095 orin-nx chronyd[1095]: System clock wrong by 1795487456.605392 seconds
+Nov 24 10:31:35.774535 orin-nx chronyd[1095]: System clock was stepped by 1795487456.605392 seconds
+Nov 24 10:31:35.774649 orin-nx chronyd[1095]: System clock TAI offset set to 10 seconds
+Nov 24 10:31:36.284291 orin-nx chronyd[1095]: System clock TAI offset set to 37 seconds
+Nov 24 10:31:36.444125 orin-nx nexwar_agent_start[1363]: nexwar_wait_clock: 钟对了(2026-11-24T02:31:36Z),接着起
+Nov 24 10:31:36.921095 orin-nx nexwar_agent_start[1353]: 2026-11-24T10:31:36.920+08:00 INFO nexwar_agent.main 上装配置 /etc/nexwar/payload.json:接了 strobe、speaker
+Nov 24 10:31:36.931039 orin-nx nexwar_agent_start[1353]: 2026-11-24T10:31:36.930+08:00 WARNING nexwar_agent.bridges.nav2_nav 遮挡限速按现场设置:关(NEXWAR_NAV_OCC)
+Nov 24 10:31:37.046369 orin-nx nexwar_agent_start[1353]: 2026-11-24T10:31:37.045+08:00 WARNING nexwar_agent.fovmask 遮挡限速按视野表 /var/lib/nexwar/agent/fov.json(2182 格看得见)
+Nov 24 10:31:37.046660 orin-nx nexwar_agent_start[1353]: 2026-11-24T10:31:37.045+08:00 WARNING nexwar_agent.runtime 看不见的按 legacy(NEXWAR_GUARD_BAND)
+Nov 24 10:31:37.108237 orin-nx nexwar_agent_start[1353]: 2026-11-24T10:31:37.107+08:00 INFO nexwar_agent.runtime 自主级别: autonomous
+Nov 24 10:31:37.123384 orin-nx nexwar_sidecar_start[1037]: [i] 客户端接入 127.0.0.1
+Nov 24 10:31:37.128784 orin-nx python3[1036]: 开机准备 routes:{"applied": ["192.168.234.0/24 via 192.168.168.168"], "failed": []}(等了 6 秒)
+Nov 24 10:31:37.152419 orin-nx python3[1036]: 开机准备 chrony:{"chrony": "added", "host": "192.168.234.232"}
+Nov 24 10:31:37.174492 orin-nx nexwar_sidecar_start[1037]: [CTRL] TakeControlAck: SUCCESS 'OK'
+Nov 24 10:31:37.200970 orin-nx python3[1036]: 开机准备 vendor:{"disabled": [], "skipped": []}
+Nov 24 10:31:37.258446 orin-nx nexwar_agent_start[1353]: 2026-11-24T10:31:37.257+08:00 INFO nexwar_agent.locbridge 本机定位桥在 /var/lib/nexwar/agent/loc.sock 等定位器
+Nov 24 10:31:37.259865 orin-nx nexwar_agent_start[1353]: 2026-11-24T10:31:37.259+08:00 INFO nexwar_agent.obs_server 本机障碍桥在 /var/lib/nexwar/agent/obs.sock 等感知节点
+Nov 24 10:31:37.312038 orin-nx nexwar_agent_start[1353]: 2026-11-24T10:31:37.311+08:00 INFO nexwar_agent.obs_server 感知节点连上了:nexwar_obstacles
+Nov 24 10:31:37.413816 orin-nx nexwar_agent_start[1353]: 2026-11-24T10:31:37.413+08:00 INFO nexwar_agent.locbridge 定位器连上了:nexwar_localizer
+Nov 24 10:31:37.428053 orin-nx nexwar_agent_start[1353]: nexwar_agent 起来了:transport=mqtts://192.168.234.232:8883 hal=d1max robot=C40221
+Nov 24 10:31:37.602949 orin-nx nexwar_agent_start[1353]: 2026-11-24T10:31:37.602+08:00 INFO nexwar_adapter_d1max.anbot 竞品音量调到 70%
+Nov 24 10:31:38.526945 orin-nx nexwar_agent_start[1353]: 2026-11-24T10:31:38.526+08:00 INFO nexwar_agent.navbridge Nav2 转接节点连上了:nexwar_nav2bridge 1
+Nov 24 10:31:41.416517 orin-nx chronyd[1095]: Selected source 192.168.234.232
+Nov 24 10:31:47.321590 orin-nx nexwar_sidecar_start[1037]: [i] 客户端接入 127.0.0.1
+Nov 24 10:31:50.175238 orin-nx nexwar_sidecar_start[1037]: [agent] 心跳#5 held=1 motion=2 batt=96%/95%
+Nov 24 10:31:50.177330 orin-nx nexwar_sidecar_start[1037]: [CTRL] TakeControlAck: SUCCESS 'OK'
+Nov 24 10:31:58.453906 orin-nx nexwar_agent_start[1353]: 2026-11-24T10:31:58.453+08:00 WARNING nexwar_agent.obstacles 感知帧多等了 0.11 s(采集 → 收到共 0.26 s;积压或卡顿)
+Nov 24 10:31:59.045917 orin-nx nexwar_agent_start[1353]: 2026-11-24T10:31:59.043+08:00 WARNING nexwar_adapter_d1max.anbot 竞品连接离线 → 降级:竞品主控上的订阅端还没连上(竞品程序没起来?)
+Nov 24 10:32:05.175702 orin-nx nexwar_sidecar_start[1037]: [agent] 心跳#10 held=1 motion=2 batt=96%/95%
+Nov 24 10:32:05.179569 orin-nx nexwar_sidecar_start[1037]: [CTRL] TakeControlAck: SUCCESS 'OK'
+Nov 24 10:32:09.333732 orin-nx nexwar_agent_start[1353]: 2026-11-24T10:32:09.332+08:00 INFO nexwar_adapter_d1max.anbot 竞品连接恢复:降级 → 在线(竞品主控上的警灯、播音程序都连上了)
+Nov 24 10:32:10.048968 orin-nx chronyd[1095]: Selected source PPS
+Nov 24 10:32:11.058343 orin-nx nexwar_agent_start[1353]: 2026-11-24T10:32:11.057+08:00 WARNING nexwar_agent.obstacles 感知帧多等了 0.11 s(采集 → 收到共 0.26 s;积压或卡顿)
+Nov 24 10:32:20.176357 orin-nx nexwar_sidecar_start[1037]: [agent] 心跳#15 held=1 motion=2 batt=96%/95%
+Nov 24 10:32:20.178341 orin-nx nexwar_sidecar_start[1037]: [CTRL] TakeControlAck: SUCCESS 'OK'
+Nov 24 10:32:21.073496 orin-nx nexwar_agent_start[1353]: 2026-11-24T10:32:21.072+08:00 WARNING nexwar_agent.obstacles 感知帧多等了 0.21 s(采集 → 收到共 0.36 s;积压或卡顿)
+Nov 24 10:32:31.168995 orin-nx nexwar_agent_start[1353]: 2026-11-24T10:32:31.168+08:00 WARNING nexwar_agent.obstacles 感知帧多等了 0.20 s(采集 → 收到共 0.35 s;积压或卡顿)
+Nov 24 10:32:35.176784 orin-nx nexwar_sidecar_start[1037]: [agent] 心跳#20 held=1 motion=2 batt=96%/95%
+Nov 24 10:32:35.177864 orin-nx nexwar_sidecar_start[1037]: [CTRL] TakeControlAck: SUCCESS 'OK'
+Nov 24 10:32:37.262259 orin-nx python3[1036]: 开机准备 step:{"step": "not_selected", "ref": "PPS"}
+Nov 24 10:32:37.327061 orin-nx python3[1036]: 开机准备 vendor:{"disabled": [], "skipped": [{"unit": "robot-launch.service", "why": "shared"}]}
+Nov 24 10:32:37.517806 orin-nx nexwar_agent_start[1353]: 2026-11-24T10:32:37.517+08:00 INFO nexwar_agent.ops 暂停了厂家进程 13 个
+Nov 24 10:32:41.294938 orin-nx nexwar_agent_start[1353]: 2026-11-24T10:32:41.293+08:00 WARNING nexwar_agent.obstacles 感知帧多等了 0.21 s(采集 → 收到共 0.36 s;积压或卡顿)
+Nov 24 10:32:48.224322 orin-nx chronyd[1095]: Selected source 192.168.234.232
+Nov 24 10:32:50.177267 orin-nx nexwar_sidecar_start[1037]: [agent] 心跳#25 held=1 motion=2 batt=96%/95%
+Nov 24 10:32:50.178132 orin-nx nexwar_sidecar_start[1037]: [CTRL] TakeControlAck: SUCCESS 'OK'
+Nov 24 10:33:05.177789 orin-nx nexwar_sidecar_start[1037]: [agent] 心跳#30 held=1 motion=2 batt=96%/95%
+Nov 24 10:33:05.178835 orin-nx nexwar_sidecar_start[1037]: [CTRL] TakeControlAck: SUCCESS 'OK'
