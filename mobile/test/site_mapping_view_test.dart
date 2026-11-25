@@ -184,6 +184,17 @@ void main() {
     expect(find.textContaining('没有栅格'), findsOneWidget);
   });
 
+  test('真机 11-25：录包占了多少、盘还剩多少；不到 20 GB 提醒', () {
+    appLang.value = AppLang.zh;
+    final (t, low) = recordDiskText({'disk': {'bag_gb': 12.3, 'bags_gb': 96.0, 'free_gb': 140.0, 'keep_days': 7}});
+    expect(t, '这个包 12.3 GB · 机器人上的录包共 96 GB · 盘还剩 140 GB（录包留 7 天）');
+    expect(low, isFalse);
+    final (t2, low2) = recordDiskText({'disk': {'bag_gb': 70.0, 'bags_gb': 170.0, 'free_gb': 8.0}});
+    expect(low2, isTrue);
+    expect(t2, contains('先删最旧的录包'));
+    expect(recordDiskText({}), ('', false));
+  });
+
   test('POC Top Glove：录着说还能录多久；停了说录了多久、多大、哪个话题没录到', () {
     appLang.value = AppLang.zh;
     expect(recordInfoText({'recording': true, 'est_minutes': 37}), '按机器人剩余空间，大约还能录 37 分钟');

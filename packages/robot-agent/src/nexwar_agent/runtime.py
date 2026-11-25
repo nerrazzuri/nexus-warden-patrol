@@ -1540,8 +1540,9 @@ class AgentRuntime:
             extra = {} if orch is None else {
                 "est_minutes": int(getattr(orch, "est_minutes", 0) or 0),
                 "last_record": dict(getattr(orch, "last_record", None) or {})}
+            disk = await self._mapping_disk()
             return "", self.trail.since(n) | {"recording": bool(self.mapper.recording),
-                                              "starting": starting} | extra
+                                              "starting": starting} | extra | disk
         if kind == "mapping_preview":
             n = cmd.payload.get("since", 0)
             if isinstance(n, bool) or not isinstance(n, int) or n < 0:
@@ -1555,7 +1556,7 @@ class AgentRuntime:
             if got.get("live") and got.get("recording"):
                 got["preview_running"] = alive
             starting = self._running(self._rec_job) and self._rec_action == "start"
-            return "", got | {"starting": starting}
+            return "", got | {"starting": starting} | await self._mapping_disk()
         if kind.startswith("release_"):
             return await self._release_command(cmd)
         if kind in ("unbind", "wifi_confirm"):
@@ -1953,6 +1954,23 @@ class AgentRuntime:
         if best.fit < MIN_FIT:
             got["refine"] = True                  # 先认的:定位器精配完复核(_scan_check)
         return (best.x, best.y, best.yaw), got, ref
+
+    async def _mapping_disk(self) -> dict[str, Any]:
+        """真机 11-25:建图时录包占了多少、盘还剩多少(``{"disk": …}``);说不清就不带。每份最多算一次 /
+        5 秒(轨迹每 2 秒问一次,几十 GB 的包要走一遍目录)。"""
+        fn = getattr(self.mapper, "disk_view", None)
+        if not callable(fn):
+            return {}
+        now = self._mono()
+        cached = getattr(self, "_disk_cache", None)
+        if cached is None or now - cached[0] >= 5.0:
+            try:
+                got = await asyncio.to_thread(fn)
+            except Exception:                            # noqa: BLE001 - 算不出来就不带
+                log.exception("录包占盘算不出来")
+                got = None
+            cached = self._disk_cache = (now, got)
+        return {"disk": cached[1]} if cached[1] else {}
 
     async def _auto_voice(self, payload: dict[str, Any]) -> str:
         """真机 11-25:站点说跟人有关的自动话术放不放(布防、没静音才放)。变了马上报能力。"""
@@ -3361,6 +3379,13 @@ class AgentRuntime:
                 if self.transport.connected:
                     await self._publish_caps()
         pv = self.person_view
+        if pv is not None and self._mono() >= getattr(self, "_snap_sweep_at", 0.0):
+            # 真机 11-25:截图目录里没传走的旧截图,起来时和每小时清一次
+            self._snap_sweep_at = self._mono() + 3600.0
+            try:
+                await asyncio.to_thread(pv.sweep_snapshots)
+            except Exception:                            # 清不了不拖每拍
+                log.exception("清旧截图出错")
         try:
             await self.autovoice.tick(
                 moving=not self._tasks_idle(),

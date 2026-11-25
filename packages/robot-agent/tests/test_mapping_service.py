@@ -764,3 +764,19 @@ def test_真机1124_升级上来_发件箱里的老包挪出来不再传(tmp_pat
     assert not (old_root / "map-1").exists()
     assert (old_root / "dup").is_dir(), "重名的留在原地,不覆盖"
     _move_old_bags(tmp_path / "没有", tmp_path / "mapbags")     # 没有老目录:什么都不做
+
+
+def test_真机1125_录包占了多少_盘还剩多少(tmp_path):
+    root = tmp_path / "mapbags"
+    (root / "a-1").mkdir(parents=True)
+    (root / "a-1" / "x.mcap").write_bytes(b"0" * 3000)
+    (root / "b-2").mkdir()
+    (root / "b-2" / "y.mcap").write_bytes(b"0" * 1000)
+    svc = MappingService(假编排(root, tmp_path / "work"), bags_root=root,
+                         maps_out=tmp_path / "maps")
+    svc.last_bag = "b-2"
+    d = svc.disk_view()
+    assert d is not None and d["free_gb"] > 0 and d["keep_days"] == 7
+    assert d["bag_gb"] == 0.0 and d["bags_gb"] == 0.0, "按 GB 一位小数"
+    assert MappingService(假编排(root, tmp_path / "w2"), bags_root=tmp_path / "没有",
+                          maps_out=tmp_path / "maps").disk_view() is None

@@ -22,7 +22,7 @@ import 'nw/nw_p3_robots.dart' show robotActive, robotBattery, robotOnline;
 import 'nw/nw_ask.dart';
 import 'nw/nw_theme.dart';
 import 'nw/nw_widgets.dart';
-import 'site_mapping.dart' show PreviewPainter, SiteMapPreviewPage;
+import 'site_mapping.dart' show PreviewPainter, SiteMapPreviewPage, recordDiskText;
 import 'site_maps.dart' show robotMapTag;
 import 'site_robot.dart' show SiteRobotPage;
 import 'site_routes.dart';
@@ -910,7 +910,11 @@ class _MapWizardPageState extends State<MapWizardPage> with NwAsk {
     final ok = await askYes(tr('Finish walking?', '结束行走？'),
         body: [
           tr('The robot stops recording and builds the map (a few minutes).', '机器人将停止录制并开始建图（约几分钟）。'),
-          if (warn)
+          // 真机 11-25：原地没走就结束，出图只会失败（关键帧太少）—— 先说清楚
+          if (path < 1)
+            tr("The robot has hardly moved (under 1 m). The map can't be built from this: walk it around first.",
+                '机器人几乎没走（不到 1 米），这样出不了图。请先带它走一圈。')
+          else if (warn)
             tr('Walked ${path.round()} m, ${from.round()} m from the start. Return to the start before finishing.', '已行走 ${path.round()} 米，距起点 ${from.round()} 米。请回到起点后结束。'),
         ].join('\n\n'),
         cancel: tr('Keep walking', '继续行走'),
@@ -1008,6 +1012,12 @@ class _MapWizardPageState extends State<MapWizardPage> with NwAsk {
               style: NwText.bodyMedium.copyWith(color: c.textSecondary)),
         ]),
       ),
+      if (recordDiskText(_pv).$1.isNotEmpty) ...[
+        const SizedBox(height: Nw.s8),
+        Text(recordDiskText(_pv).$1,
+            key: const Key('map-walk-disk'),
+            style: NwText.bodySmall.copyWith(color: recordDiskText(_pv).$2 ? c.warning : c.textSecondary)),
+      ],
       if (remote && control is bool) ...[
         const SizedBox(height: Nw.s8),
         NwStatusPill(
@@ -1148,6 +1158,16 @@ class _MapWizardPageState extends State<MapWizardPage> with NwAsk {
       return _scroll([
         _h1(tr("Mapping failed", '建图失败')),
         NwNotice(key: MapWizardPage.buildStatusKey, tone: NwTone.error, text: '${b['reason'] ?? ''}'),
+        // 真机 11-25：出图程序的整段日志收在「详情」里（原来原因只显示 traceback 前半段）
+        if ('${b['detail'] ?? ''}'.isNotEmpty)
+          ExpansionTile(
+              key: const Key('map-build-detail'),
+              tilePadding: EdgeInsets.zero,
+              title: Text(tr('Details (for your delivery engineer)', '详情（发给交付工程师）'),
+                  style: NwText.bodyMedium.copyWith(color: c.textSecondary)),
+              children: [
+                SelectableText('${b['detail']}', style: NwText.bodySmall.copyWith(color: c.textSecondary)),
+              ]),
         const SizedBox(height: Nw.s8),
         Text(
             onSite

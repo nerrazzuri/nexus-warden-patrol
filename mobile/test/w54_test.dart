@@ -341,6 +341,19 @@ void main() {
       expect(find.byKey(MapWizardPage.buildProgressKey), findsOneWidget, reason: '重试了：回到进度条');
     });
 
+    testWidgets('真机 11-25：出图失败先说真正的原因，整段日志收在「详情」里', (t) async {
+      final api = _admin()
+        ..wizard = <String, dynamic>{'step': 'build', 'robot_id': 'A', 'map_id': 'main', 'version': '20261031-1',
+          'drive': 'remote', 'by': 'u', 'label': ''}
+        ..wizardBuild = <String, dynamic>{'state': 'failed', 'where': 'site',
+          'reason': '出图没成:关键帧只有 1 个(走得太短,或位姿跟点云时间对不上)',
+          'detail': 'Traceback (most recent call last): / File "tools.py", line 203'};
+      await _wizard(t, api);
+      expect(find.textContaining('关键帧只有 1 个'), findsOneWidget);
+      expect(find.byKey(const Key('map-build-detail')), findsOneWidget);
+      expect(find.textContaining('Traceback'), findsNothing, reason: '详情先收着');
+    });
+
     testWidgets('用户 11-13：没做回环，说明什么时候点「优化地图」；点了换新版本、回到进度条', (t) async {
       final api = _admin()
         ..wizard = <String, dynamic>{'step': 'build', 'robot_id': 'A', 'map_id': 'main', 'version': '20261031-1',

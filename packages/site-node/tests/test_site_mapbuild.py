@@ -441,3 +441,14 @@ def test_minor1_作废以后迟到的旧上传_不重建收件目录_叫机器�
     (d / "kf" / "00003.bin").write_bytes(b"old")
     SiteMapBuilder(home, cat, runner=_fake_builder(home), start_thread=False)
     assert not d.exists()
+
+
+def test_真机1125_出图失败_原因先说真正那句_traceback收进详情():
+    from nexwar_site.mapbuild import error_headline
+    tail = ["Traceback (most recent call last):",
+            '  File "tools.py", line 203, in main',
+            '  File "superlio.py", line 980, in prepare_live',
+            "nexwar_localizer.superlio.SuperLioError: 关键帧只有 1 个(走得太短,或位姿跟点云时间对不上)"]
+    assert error_headline(tail) == "关键帧只有 1 个(走得太短,或位姿跟点云时间对不上)"
+    assert error_headline(["ValueError: x", "OSError: 盘满了"]) == "盘满了", "取最后一句"
+    assert error_headline(["killed", "出图超过 3600 秒,停了"]) == ""
