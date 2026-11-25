@@ -480,3 +480,19 @@ async def test_POC1106_runtime_看见人_云台转过去():
     await asyncio.sleep(0)
     assert ("person_seen", {"count": 1, "nearest_m": 4.0}) in ev
     assert aims == [5.0]
+
+
+def test_真机1125_截图目录里超过一天没传走的旧截图_删掉_新的不动(tmp_path):
+    import os
+    from nexwar_agent.persons import PersonView
+    d = tmp_path / "snaps"
+    d.mkdir()
+    old, new = d / "front-1.jpg", d / "back-2.jpg"
+    old.write_bytes(b"x")
+    new.write_bytes(b"y")
+    os.utime(old, (1_000.0, 1_000.0))
+    os.utime(new, (100_000.0, 100_000.0))
+    v = PersonView(emit=lambda k, x: None, snapshot_dir=d)
+    assert v.sweep_snapshots(wall=lambda: 100_000.0 + 60) == 1
+    assert not old.exists() and new.exists()
+    assert PersonView(emit=lambda k, x: None).sweep_snapshots() == 0, "没配截图目录:不动"

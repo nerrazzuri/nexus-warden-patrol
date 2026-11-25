@@ -247,6 +247,37 @@ class MappingService:
                 self.pending, self.pending_task, self.pending_pack = got, task, pack
                 self.held.add(b.name)
 
+    def disk_view(self) -> dict[str, Any] | None:
+        """真机 11-25:录包占了多少、盘还剩多少(``bag_gb`` 正在录 / 上一个包、``bags_gb`` 留着的全部包、
+        ``free_gb`` 录包那块盘还剩)。27 号会展扫 30 分钟约 75 GB,连扫两回就会碰到「盘不够先删最旧」:
+        手机向导上写出来。录包目录不在 → ``None``。"""
+        root = self.bags_root
+        if not root.is_dir():
+            return None
+
+        def size(d: Path) -> int:
+            n = 0
+            for dirpath, _dirs, files in os.walk(d):
+                for f in files:
+                    try:
+                        n += os.lstat(os.path.join(dirpath, f)).st_size
+                    except OSError:
+                        pass
+            return n
+        total, cur = 0, 0
+        for b in root.iterdir():
+            if b.is_dir():
+                s = size(b)
+                total += s
+                if b.name == self.last_bag:
+                    cur = s
+        try:
+            free = shutil.disk_usage(root).free
+        except OSError:
+            return None
+        return {"bag_gb": round(cur / 1e9, 1), "bags_gb": round(total / 1e9, 1),
+                "free_gb": round(free / 1e9, 1), "keep_days": BAG_KEEP_DAYS}
+
     def prune_bags(self) -> list[str]:
         """在机器人上留着的录包到期就删(真机 11-24:包不进发件箱、不传):录完满 :data:`BAG_KEEP_DAYS`
         天的删;盘紧了(``pressure``)录完了的都删,老的先删。正在录的、正在拿来打包、重建的不删。

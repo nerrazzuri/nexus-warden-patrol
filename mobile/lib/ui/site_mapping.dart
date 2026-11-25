@@ -1628,6 +1628,29 @@ class StandbyPainter extends CustomPainter {
   bool shouldRepaint(StandbyPainter old) => old.pixels != pixels || old.homes != homes;
 }
 
+/// 真机 11-25：录包占了多少、机器人盘还剩多少（会展扫 30 分钟约 75 GB，连扫两回就碰到「盘不够先删最旧」）。
+/// 第二个是「盘快不够了」（不到 [kDiskLowGb]）。机器人没报（老代理、仿真）是 `('', false)`。
+(String, bool) recordDiskText(Map<String, dynamic> d) {
+  final disk = d['disk'];
+  if (disk is! Map || disk['free_gb'] is! num) return ('', false);
+  final free = (disk['free_gb'] as num).toDouble();
+  final bag = (disk['bag_gb'] as num?)?.toDouble() ?? 0;
+  final all = (disk['bags_gb'] as num?)?.toDouble() ?? 0;
+  final days = disk['keep_days'];
+  final low = free < kDiskLowGb;
+  final text = tr(
+      'This bag ${bag.toStringAsFixed(1)} GB · all bags on the robot ${all.toStringAsFixed(0)} GB · '
+          '${free.toStringAsFixed(0)} GB free${days is num ? ' (bags are kept $days days)' : ''}',
+      '这个包 ${bag.toStringAsFixed(1)} GB · 机器人上的录包共 ${all.toStringAsFixed(0)} GB · '
+          '盘还剩 ${free.toStringAsFixed(0)} GB${days is num ? '（录包留 $days 天）' : ''}');
+  return low
+      ? ('$text\n${tr("Disk nearly full: when it runs out, the oldest bags are deleted first.", '盘快不够了：不够时会先删最旧的录包。')}', true)
+      : (text, false);
+}
+
+/// 盘还剩不到这么多（GB）就提醒（录 1 分钟约 2.5 GB，20 GB 不到 10 分钟）。
+const kDiskLowGb = 20.0;
+
 /// POC Top Glove（跟竞品一起录）：在录时按剩余空间说还能录多久；停了说上一个包录了多久、多大，
 /// 哪个话题一条都没录到（雷达断了、线松了一眼看出来）。狗没给（老代理）就是空。
 String recordInfoText(Map<String, dynamic> d) {

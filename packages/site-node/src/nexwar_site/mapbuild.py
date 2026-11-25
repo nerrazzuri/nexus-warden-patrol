@@ -96,6 +96,19 @@ def _sha256(p: Path) -> str:
     return h.hexdigest()
 
 
+
+_ERR_LINE = re.compile(r"^(?:[A-Za-z_][\w.]*\.)?([A-Za-z_]\w*(?:Error|Exception)):\s*(.+)$")
+
+
+def error_headline(lines: Any) -> str:
+    """出图程序的日志里真正的错误那一句(Python 异常的最后一行,``XxxError: 原因``)→ 原因;
+    找不到是空串(真机 11-25)。"""
+    for ln in reversed(list(lines)):
+        m = _ERR_LINE.match(str(ln).strip())
+        if m:
+            return m.group(2).strip()[:300]
+    return ""
+
 class SiteMapBuilder:
     def __init__(self, home: Path, maps: Any, *, runner: Sequence[str],
                  on_done: Callable[[dict[str, Any]], None] | None = None,
@@ -272,6 +285,8 @@ class SiteMapBuilder:
             out["pct"] = 100
         elif st["state"] == "failed":
             out["reason"] = str(st.get("reason", ""))[:600]
+            if st.get("detail"):
+                out["detail"] = str(st["detail"])[-4000:]     # 真机 11-25:整段日志,手机收在「详情」里
         return out
 
     def _upload_pct(self, job: Job) -> int:
@@ -432,7 +447,13 @@ class SiteMapBuilder:
                 tail.append(f"出图超过 {TIMEOUT_S:.0f} 秒,停了")
                 rc = None
         if rc != 0:
-            return self._failed(job, f"出图没成(退出码 {rc}):" + " / ".join(tail))
+            # 真机 11-25:原来原因是日志尾巴从头接,手机上只看见 traceback 前半段,真正那句
+            # (「关键帧只有 1 个……」)被截掉。先说那句,整段日志放进详情。
+            head = error_headline(tail)
+            log_text = " / ".join(tail)
+            if head:
+                return self._failed(job, f"出图没成:{head}", detail=log_text)
+            return self._failed(job, f"出图没成(退出码 {rc}):" + log_text, detail=log_text)
         note = (f"站点优化(回环,从 {opt[1]})" if opt is not None
                 else "站点打包(边走边存的关键帧)")
         try:
@@ -464,7 +485,7 @@ class SiteMapBuilder:
                 tail.append(line)
         return p.wait()
 
-    def _failed(self, job: Job, reason: str) -> None:
+    def _failed(self, job: Job, reason: str, *, detail: str = "") -> None:
         reason = reason[:1000]
         opt = self._opt.get((job[1], job[2]))
         try:
@@ -475,7 +496,7 @@ class SiteMapBuilder:
                 (self._dir(job) / FAILED).write_text(reason, encoding="utf-8")
         except OSError:
             log.exception("记不下出图失败的原因")
-        self._set(job, "failed", reason=reason, lc=opt is not None)
+        self._set(job, "failed", reason=reason, lc=opt is not None, detail=detail[-4000:])
         log.warning("站点打包 %s:%s 没成:%s", job[1], job[2], reason)
         self._tell(job, ok=False, reason=reason)
 

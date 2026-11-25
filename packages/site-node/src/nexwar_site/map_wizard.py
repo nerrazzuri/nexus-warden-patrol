@@ -222,7 +222,8 @@ class MapWizard:
         if sb is not None and sb.get("robot_id") == st["robot_id"]:
             # W75:关键帧交给站点出图了 —— 到哪一步、百分之几
             if sb["state"] == "failed":
-                return {"state": "failed", "where": "site", "reason": sb.get("reason", "")}
+                return {"state": "failed", "where": "site", "reason": sb.get("reason", ""),
+                        **({"detail": sb["detail"]} if sb.get("detail") else {})}
             from nexwar_site.mapbuild import STAGE_CODES
             stage = {"uploading": "upload", "queued": "queued"}.get(
                 sb["state"], STAGE_CODES.get(sb.get("stage", ""), ""))
