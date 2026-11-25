@@ -129,6 +129,7 @@ export function UpgradePage({ say }: { say: Say }) {
   const [bad, setBad] = useState<string | null>(null);
   const [asking, setAsking] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [upPct, setUpPct] = useState<number | null>(null);
   const [backing, setBacking] = useState<string | null>(null);
 
   const act = async (robot: string, body: Record<string, unknown>, msg: string) => {
@@ -225,8 +226,10 @@ export function UpgradePage({ say }: { say: Say }) {
       {asking && file && (
         <ConfirmPassword title={t("upUpload")} onClose={() => setAsking(false)} onConfirm={async (pw) => {
           setBusy(true);
+          setUpPct(0);
           try {
-            const d = await apiUpload<{ release: Release }>("/api/releases/upload", file, { "X-Nexwar-Confirm": pw });
+            const d = await apiUpload<{ release: Release }>("/api/releases/upload", file, { "X-Nexwar-Confirm": pw },
+              (f) => setUpPct(Math.min(100, Math.round(f * 100))));
             setAsking(false);
             say(t("upUploaded", { name: d.release?.name ?? "" }));
             reload();
@@ -237,8 +240,13 @@ export function UpgradePage({ say }: { say: Say }) {
             throw e;
           } finally {
             setBusy(false);
+            setUpPct(null);
           }
-        }} />
+        }}>
+          {/* 易用性 build 36:传包有进度;传完了站点还要验签、登记,写「正在检查」 */}
+          {upPct != null && <Bar kind="upload" pct={upPct}
+            label={upPct >= 100 ? t("upProgChecking", { name: file.name }) : t("upProgUpload", { name: file.name })} />}
+        </ConfirmPassword>
       )}
     </section>
   );

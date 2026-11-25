@@ -33,9 +33,17 @@ function errorText(status: number, data: unknown): string {
 export type Fetch = typeof fetch;
 
 let fetcher: Fetch = (...a) => fetch(...a);
-/** 测试换掉网络。 */
-export function setFetch(f: Fetch): void {
-  fetcher = f;
+let customFetch = false;
+/** 测试换掉网络(``null`` = 换回真的)。 */
+export function setFetch(f: Fetch | null): void {
+  fetcher = f ?? ((...a) => fetch(...a));
+  customFetch = f !== null;
+}
+type MakeXhr = () => XMLHttpRequest;
+let makeXhr: MakeXhr | null = null;
+/** 测试换掉带进度的上传(``null`` = 换回真的;换了网络又没换这个就不走带进度的那条)。 */
+export function setXhr(f: MakeXhr | null): void {
+  makeXhr = f;
 }
 
 /** W55:接口回 5xx 时叫它(记进网页错误记录);errlog 接上。 */
@@ -86,25 +94,55 @@ export async function api<T = unknown>(method: "GET" | "POST", path: string, bod
 
 export const enc = encodeURIComponent;
 
-/** 传文件(W44 第四期:升级包):请求体就是文件本身,别的放头里。回包、出错跟 ``api`` 一样。 */
-export async function apiUpload<T = unknown>(path: string, file: Blob, headers: Record<string, string> = {}): Promise<T> {
-  let resp: Response;
-  try {
-    resp = await fetcher(path, {
-      method: "POST",
-      headers: { Accept: "application/json", "Content-Type": "application/octet-stream", "X-Nexwar-Web": "1", ...headers },
-      credentials: "same-origin",
-      body: file,
-    });
-  } catch {
-    throw new ApiError(0, netMsg());
-  }
+/** fetch 拿不到上传进度:要进度时用 XMLHttpRequest。回 HTTP 码和回包(解不开是 {})。 */
+function xhrUpload(path: string, file: Blob, headers: Record<string, string>,
+                   onProgress: (frac: number) => void): Promise<{ status: number; data: unknown }> {
+  return new Promise((resolve, reject) => {
+    const x = makeXhr ? makeXhr() : new XMLHttpRequest();
+    x.open("POST", path);
+    x.withCredentials = true;
+    for (const [k, v] of Object.entries(headers)) x.setRequestHeader(k, v);
+    x.upload.onprogress = (e) => { if (e.lengthComputable && e.total > 0) onProgress(e.loaded / e.total); };
+    x.onload = () => {
+      let data: unknown = {};
+      try { data = JSON.parse(x.responseText || "{}"); } catch { data = {}; }
+      resolve({ status: x.status, data });
+    };
+    x.onerror = () => reject(new Error("network"));
+    x.onabort = () => reject(new Error("abort"));
+    x.send(file);
+  });
+}
+
+/** 传文件(W44 第四期:升级包):请求体就是文件本身,别的放头里。回包、出错跟 ``api`` 一样。
+ *  ``onProgress``(0..1):传了多少(易用性 build 36:20 MB 的包远程传要一两分钟,只有灰按钮像卡住了)。 */
+export async function apiUpload<T = unknown>(path: string, file: Blob, headers: Record<string, string> = {},
+                                             onProgress?: (frac: number) => void): Promise<T> {
+  const h = { Accept: "application/json", "Content-Type": "application/octet-stream", "X-Nexwar-Web": "1", ...headers };
+  let status: number;
   let data: unknown = {};
-  try {
-    data = await resp.json();
-  } catch {
-    data = {};
+  if (onProgress && (makeXhr || (!customFetch && typeof XMLHttpRequest !== "undefined"))) {
+    try {
+      ({ status, data } = await xhrUpload(path, file, h, onProgress));
+    } catch {
+      throw new ApiError(0, netMsg());
+    }
+  } else {
+    let resp: Response;
+    try {
+      resp = await fetcher(path, { method: "POST", headers: h, credentials: "same-origin", body: file });
+    } catch {
+      throw new ApiError(0, netMsg());
+    }
+    status = resp.status;
+    try {
+      data = await resp.json();
+    } catch {
+      data = {};
+    }
+    onProgress?.(1);
   }
+  const resp = { ok: status >= 200 && status < 300, status };
   if (!resp.ok) {
     if (resp.status === 401) onUnauthorized.cb();
     throw new ApiError(resp.status, errorText(resp.status, data), data);
