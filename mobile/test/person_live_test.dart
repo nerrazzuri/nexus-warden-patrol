@@ -90,6 +90,39 @@ void main() {
     expect(find.byType(SiteAlertScenePage), findsOneWidget);
   });
 
+  testWidgets('易用性 build 36 P1-1：外面正弹着「无人确认」提示条，横屏 844×390 上「我来处理」照样点得到', (t) async {
+    _landscape(t);
+    final api = FakeApi('guard')..alertRows = [_seen('A/p#1')];
+    await t.pumpWidget(MaterialApp(
+        theme: nwTheme(Brightness.dark),
+        home: Scaffold(
+            body: Builder(
+                builder: (c) => TextButton(
+                    onPressed: () {
+                      ScaffoldMessenger.of(c).showSnackBar(const SnackBar(
+                          content: Text('P1 A · Person detected (unacknowledged)'), duration: Duration(minutes: 5)));
+                      Navigator.push(
+                          c,
+                          MaterialPageRoute<void>(
+                              builder: (_) => RingPage(
+                                  api: api,
+                                  alert: Alert.fromWire(_seen('A/p#1')),
+                                  site: 'estate-1',
+                                  mute: (_) async => true,
+                                  done: () async {})));
+                    },
+                    child: const Text('home'))))));
+    await t.tap(find.text('home'));
+    await _settle(t);
+    expect(find.byKey(PersonLiveView.key_), findsOneWidget);
+    expect(find.textContaining('unacknowledged'), findsNothing, reason: '提示条不进这一页');
+    final take = find.byKey(RingPage.takeKey);
+    final hit = t.hitTestOnBinding(t.getCenter(take));
+    final btn = t.renderObject(take);
+    expect(hit.path.any((e) => e.target is RenderObject && _isUnder(e.target as RenderObject, btn)), isTrue,
+        reason: '按钮中心点要点得到按钮');
+  });
+
   testWidgets('App 开着在「现在」页：读到刚发生的「机器人看见人」直接弹整屏画面，关了不再弹', (t) async {
     _landscape(t);
     final api = FakeApi('guard')..alertRows = [_seen('A/p#9', cams: ['front'])];
@@ -105,4 +138,11 @@ void main() {
     await _settle(t);
     expect(find.byType(PersonLivePage), findsNothing, reason: '同一条只弹一次');
   });
+}
+
+bool _isUnder(RenderObject o, RenderObject root) {
+  for (RenderObject? x = o; x != null; x = x.parent) {
+    if (identical(x, root)) return true;
+  }
+  return false;
 }

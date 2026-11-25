@@ -664,27 +664,6 @@ class _MapWizardPageState extends State<MapWizardPage> with NwAsk {
     final r = _robots.where((x) => '${x['robot_id']}' == _robot).firstOrNull;
     final checks = _checks(r);
     final ok = r != null && checks.every((x) => x.$1);
-    Widget siteCard(String id, String title, String sub, {bool enabled = true}) => Padding(
-          padding: const EdgeInsets.only(bottom: Nw.s8),
-          child: Opacity(
-            opacity: enabled ? 1 : 0.45,
-            child: NwCard(
-              key: MapWizardPage.siteTypeKey(id),
-              tone: _siteType == id ? NwTone.success : NwTone.neutral,
-              onTap: enabled ? () => setState(() => _siteType = id) : null,
-              child: Row(children: [
-                Icon(_siteType == id ? Icons.radio_button_checked_rounded : Icons.radio_button_off_rounded,
-                    color: _siteType == id ? c.success : c.textSecondary),
-                const SizedBox(width: Nw.s16),
-                Expanded(
-                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text(title, style: NwText.titleSmall.copyWith(color: c.text, fontWeight: FontWeight.w700)),
-                  Text(sub, style: NwText.bodySmall.copyWith(color: c.textSecondary)),
-                ])),
-              ]),
-            ),
-          ),
-        );
     return _scroll([
       _h1(tr('Get ready', '准备')),
       if (_robots.length > 1) ...[
@@ -701,13 +680,7 @@ class _MapWizardPageState extends State<MapWizardPage> with NwAsk {
       ],
       if (_robots.isEmpty)
         NwNotice(tone: NwTone.warning, text: tr('No robots on this site yet. Add one under Robots → Add.', '站点暂无机器人，请先在「机器人 → 添加」中添加。')),
-      _label2(tr('Site type', '场地类型')),
-      siteCard('indoor', tr('Indoor', '室内'), tr('Offices, warehouses, corridors, lobbies', '办公室、仓库、走廊、大堂')),
-      siteCard('outdoor', tr('Outdoor', '室外'), tr('Coming soon. Contact your delivery engineer for now.', '即将支持，目前请联系交付工程师'),
-          enabled: false),
-      siteCard('glass', tr('Glass-heavy site', '玻璃较多的场地'),
-          tr('Coming soon. Contact your delivery engineer for now.', '即将支持，目前请联系交付工程师'),
-          enabled: false),
+      // 易用性 build 36 P1-2：「场地类型」只记一笔、不改建图参数（室外照样这一套），另两项灰着写「找交付工程师」在客户面前难看 → 不显示。
       const SizedBox(height: Nw.s8),
       TextField(
           key: MapWizardPage.labelKey,

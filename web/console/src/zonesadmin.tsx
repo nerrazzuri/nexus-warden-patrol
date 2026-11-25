@@ -8,7 +8,7 @@ import { clip, siteDown } from "./data";
 import { useCallback, useEffect, useRef, useState } from "preact/hooks";
 import { api, ApiError, enc } from "./api";
 import { Confirm, Modal } from "./dialogs";
-import { t } from "./i18n";
+import { lang, t } from "./i18n";
 import { MapCanvas } from "./mapcanvas";
 import { toPx, type NavZone, type PreviewMeta, type Pt } from "./mapview";
 
@@ -26,6 +26,8 @@ interface NavZones {
   auto_confirmed?: boolean;
   confirmed?: { revision: number; by: string; at_ms: number; current: boolean; how: string } | null;
   confirm_text?: string;
+  /** 易用性 build 36 P1-3:英文界面显示这一句。 */
+  confirm_text_en?: string;
   proposal?: unknown;
   /** 还没确认、狗上照旧守着的(外审 W38-I1)。 */
   held?: NavZone[];
@@ -362,7 +364,7 @@ export function MapsZonesPage({ say }: { say: Say }) {
       )}
       {confirming && confirming.base === base && (
         <Confirm text={confirming.nav.zones.length === 0 ? t("navConfirmEmpty")
-          : t("navConfirmText", { rev: confirming.nav.revision, text: confirming.nav.confirm_text ?? "" })}
+          : t("navConfirmText", { rev: confirming.nav.revision, text: (lang.value === "en" ? confirming.nav.confirm_text_en : null) ?? siteKnown(confirming.nav.confirm_text ?? "") })}
           yes={t("navConfirmBtn")} onNo={() => setConfirming(null)} onYes={() => void confirmNav()} />
       )}
       {erasing && <Confirm text={t("eraseConfirm")} yes={t("finishErase")} onNo={() => setErasing(false)} onYes={() => void erase()} />}

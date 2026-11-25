@@ -213,8 +213,9 @@ void main() {
       await _wizard(t, api);
       expect(find.textContaining('第 1 步 / 共 7 步'), findsOneWidget);
       expect(find.byKey(MapWizardPage.checksKey), findsOneWidget);
-      // 室外、玻璃多点不了
-      await _tap(t, MapWizardPage.siteTypeKey('outdoor'));
+      // 场地类型不再显示（易用性 build 36 P1-2），站点照样记 indoor
+      expect(find.byKey(MapWizardPage.siteTypeKey('outdoor')), findsNothing);
+      expect(find.textContaining('即将支持'), findsNothing);
       await t.enterText(find.byKey(MapWizardPage.labelKey), '一楼');
       await _tap(t, MapWizardPage.nextKey);
       expect(api.calls, containsAllInOrder(['wizard start remote', 'wizard step drive']));

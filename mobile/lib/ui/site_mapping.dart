@@ -23,6 +23,7 @@ import '../l10n.dart';
 import '../net/site_client.dart';
 import 'map_manage.dart' show versionLabel;
 import 'map_view.dart';
+export 'map_view.dart' show zoneLabelText;
 import 'nw/nw_map_raster.dart';
 import 'nw/nw_ask.dart';
 import 'nw/nw_theme.dart';
@@ -35,12 +36,6 @@ enum _Mode { probe, preview, trail }
 const int _staleAfterS = 15;
 
 /// 区域的名字在英文界面上怎么显示。名字是存在站点上的数据：画的时候 app 给的缺省名是中文的
-/// 「禁行区」「限速区」，英文界面把这两个翻过来；人自己起的名字原样显示。
-String zoneLabelText(Object? label) {
-  final l = '${label ?? ''}';
-  if (appLang.value == AppLang.zh) return l;
-  return switch (l) { '禁行区' => 'No-go zone', '限速区' => 'Speed-limit zone', '抹掉区' => 'Erase zone', '虚拟墙' => 'Virtual wall', _ => l };
-}
 
 class SiteMappingTrailPage extends StatefulWidget {
   final SiteApi api;
@@ -823,7 +818,7 @@ class _SiteMapPreviewPageState extends State<SiteMapPreviewPage> with NwAsk {
     // 二次确认（W10 内审小 15）：把确认的那句话念一遍，别跟画区域的按钮误触
     final ok = await askYes(tr('Confirm zones revision $_rev', '确认第 $_rev 版区域'),
         body: tr(
-                  '${_zones?['confirm_text'] ?? ''}.\nThe map can be sent to robots only after you confirm.'
+                  '${_zones?['confirm_text_en'] ?? _zones?['confirm_text'] ?? ''}.\nThe map can be sent to robots only after you confirm.'
                       '${prop == null ? '' : '\nCopied from version ${prop['from_version']}: adopting the $picked ticked item(s) of $offered; the rest are dropped.'}',
                   '${_zones?['confirm_text'] ?? ''}。\n确认后此地图才能下发给机器人。'
                 '${prop == null ? '' : '\n从第 ${prop['from_version']} 版带入的 $offered 项中，采纳已勾选的 $picked 项，其余放弃。'}'),
@@ -1422,7 +1417,8 @@ class _SiteMapPreviewPageState extends State<SiteMapPreviewPage> with NwAsk {
                 '抹除区域：机器人不会进入（同禁行区），所有地图上显示为已抹除（适用于建图杂物、玻璃反射、禁止进入的区域）。'),
             style: NwText.bodySmall.copyWith(color: Nw.of(context).textSecondary)),
         if (!confirmed || prop != null) ...[
-          Text('${_zones!['confirm_text'] ?? ''}',
+          // 易用性 build 36 P1-3：英文界面用站点给的英文那一句
+          Text(tr('${_zones!['confirm_text_en'] ?? _zones!['confirm_text'] ?? ''}', '${_zones!['confirm_text'] ?? ''}'),
               style: NwText.bodySmall.copyWith(color: Nw.of(context).textSecondary)),
           FilledButton(
               key: SiteMapPreviewPage.confirmKey,

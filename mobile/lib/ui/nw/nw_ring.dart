@@ -249,7 +249,9 @@ class _RingPageState extends State<RingPage> {
     if (_isLive(api)) return _liveRing(api!);
     return Theme(
         data: nwTheme(Brightness.dark),
-        child: Builder(builder: (context) {
+        child: ScaffoldMessenger(
+            // 易用性 build 36 P1-1：自己一个 ScaffoldMessenger —— 外面那条「无人确认」提示条不进这一页（这页就是那条报警），不会压住「我来处理」
+            child: Builder(builder: (context) {
           final c = Nw.of(context);
           final ctx = _a.context;
           final where = [
@@ -320,6 +322,6 @@ class _RingPageState extends State<RingPage> {
                                   _mutedUntil == null ? () => unawaited(_mute()) : null)),
                         ]),
                       ]))));
-        }));
+        })));
   }
 }

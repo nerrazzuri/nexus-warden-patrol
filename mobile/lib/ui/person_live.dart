@@ -66,7 +66,9 @@ class PersonLiveView extends StatelessWidget {
   Widget build(BuildContext context) {
     return Theme(
         data: nwTheme(Brightness.dark),
-        child: Builder(builder: (context) {
+        child: ScaffoldMessenger(
+            // 易用性 build 36 P1-1：自己一个 ScaffoldMessenger —— 外面那条「无人确认」提示条不进这一页（这页就是那条报警），不会压住「我来处理」
+            child: Builder(builder: (context) {
           final c = Nw.of(context);
           final a = alert;
           final ctx = a.context;
@@ -139,7 +141,7 @@ class PersonLiveView extends StatelessWidget {
                               for (final w in actions) ...[w, const SizedBox(height: Nw.s8)],
                             ])))),
               ]));
-        }));
+        })));
   }
 }
 

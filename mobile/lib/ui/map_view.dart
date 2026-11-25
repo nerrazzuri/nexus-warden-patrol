@@ -28,6 +28,14 @@ import 'nw/nw_map_raster.dart';
 import 'nw/nw_p4_admin.dart' show NwLegendItem, NwMapOverlay;
 import 'nw/nw_theme.dart';
 
+/// 「禁行区」「限速区」，英文界面把这两个翻过来；人自己起的名字原样显示。
+/// 易用性 build 36 P1-3：地图上的区名标签也走这里（以前英文界面直接露「禁行区」）。
+String zoneLabelText(Object? label) {
+  final l = '${label ?? ''}';
+  if (appLang.value == AppLang.zh) return l;
+  return switch (l) { '禁行区' => 'No-go zone', '限速区' => 'Speed-limit zone', '抹掉区' => 'Erase zone', '虚拟墙' => 'Virtual wall', _ => l };
+}
+
 /// 一片有名字的地方（站点给的 `areas` 里的一项）：名字 + 顶点（地图坐标，米）。
 class MapArea {
   final String name;
@@ -358,7 +366,7 @@ class MapAreaLabels extends StatelessWidget {
       for (final (name, poly) in areas)
         (name, poly, polygonLabelPoint(poly), () {
           final tp = TextPainter(
-              text: TextSpan(text: name, style: style), textDirection: dir, textScaler: scaler, maxLines: 1)
+              text: TextSpan(text: zoneLabelText(name), style: style), textDirection: dir, textScaler: scaler, maxLines: 1)
             ..layout();
           final s = Size(tp.width + _pad.horizontal, tp.height + _pad.vertical);
           tp.dispose();
@@ -384,7 +392,7 @@ class MapAreaLabels extends StatelessWidget {
                                 decoration: BoxDecoration(
                                     color: c.surface.withValues(alpha: 0.8),
                                     borderRadius: BorderRadius.circular(Nw.rPill)),
-                                child: Text(name,
+                                child: Text(zoneLabelText(name),
                                     key: labelKey?.call(name), maxLines: 1, softWrap: false, style: style)))))),
       ]);
     }
