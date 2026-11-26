@@ -8,6 +8,13 @@ void main() {
   setUp(() => appLang.value = AppLang.en);
   tearDown(() => appLang.value = AppLang.zh);
 
+  test('易用性 37 第八轮：值守日志每圈那几句、规划原因码开头、点名', () {
+    expect(siteText('第 7 圈跑完,用时 60 秒'), 'Lap 7 done in 60 s');
+    expect(siteText('第 7 圈接着跑:a→回待命点'), 'Lap 7 resumed: a → “Return to standby”');
+    expect(RegExp(r'[\u4e00-\u9fff]').hasMatch(siteText('start_blocked: 起点在障碍或禁行区里')), isFalse);
+    expect(wpName('回待命点'), '“Return to standby”');
+  });
+
   test('用户 11-26：被困 90 秒换车、叫人遥控回来 整句英文', () {
     for (final s in [
       '规划失败(start_blocked):起点在障碍或禁行区里;请用遥控把 A 开回开阔、扫到过的地方',

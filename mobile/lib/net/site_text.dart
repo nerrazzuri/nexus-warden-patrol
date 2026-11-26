@@ -150,6 +150,15 @@ final List<_Rule> _rules = [
       (m) => "${m[1]} stuck for ${m[2]} s and couldn't get free, so another robot took over"),
   (RegExp(r'^请用遥控把 (\S+) 开回开阔、扫到过的地方$'), (m) => 'drive ${m[1]} back to open, scanned floor with Remote'),
   (RegExp(r'^请人遥控把它开回来$'), (_) => 'someone needs to drive it back with Remote'),
+  // 易用性 37 第八轮：值守日志每圈那几句；规划原因码开头的机器人原话
+  (RegExp(r'^第 (\d+) 圈跑完,用时 (\d+) 秒$'), (m) => 'Lap ${m[1]} done in ${m[2]} s'),
+  (RegExp(r'^第 (\d+) 圈(接着跑)?[:：](.*)$'),
+      (m) => 'Lap ${m[1]}${m[2] != null ? ' resumed' : ''}: ${m[3]!.split('→').map(_wp).join(' → ')}'),
+  (RegExp(r'^第 (\d+) 圈被 (\S+) 打断$'),
+      (m) => 'Lap ${m[1]} interrupted by ${m[2] == '别的任务' ? 'another task' : m[2]}'),
+  (RegExp(r'^第 (\d+) 圈被人中止[:：]歇 (\d+) 分钟再接着跑$'),
+      (m) => 'Lap ${m[1]} stopped by someone: resuming in ${m[2]} min'),
+  (RegExp(r'^(start_blocked|goal_blocked|no_path|outside|timeout)[:：]\s*([\s\S]+)$'), (m) => _plan[m[1]] ?? _en(m[2]!)),
   (RegExp(r'^第 (\d+) 圈跑不成[:：]\s*([\s\S]*)$'),
       (m) => m[2]!.isEmpty ? 'lap ${m[1]} failed' : 'lap ${m[1]} failed: ${_lc(_en(m[2]!))}'),
   (RegExp(r'^(\d+) m 内没有能直线挪过去站的地方$'), (m) => 'no open spot within ${m[1]} m it could move straight to'),
@@ -409,6 +418,9 @@ String _ptName(String s) => _ptNames[s] ?? s;
 // 易用性 37 复测 P3：站点自己加的点（回待命点）名字也翻
 const _wpNames = <String, String>{'回待命点': '“Return to standby”', '回原点': '“Return to origin”'};
 String _wp(String s) => _wpNames[s] ?? s;
+
+/// 站点自己加的点名（回待命点、回原点）按 App 语言说；别的点名原样。
+String wpName(String s) => appLang.value == AppLang.zh ? s : _wp(s);
 
 /// 用户 11-26：值守的机器人被困 90 秒（换车 / 指定了它没换）那条告警标题的英文；不是这句 null。
 String? guardStuckTitleEn(String title) {

@@ -13,6 +13,7 @@ import '../site_routes.dart';
 import 'nw_p2_duty.dart' show NwMapThumb;
 import 'nw_points.dart';
 import 'nw_theme.dart';
+import '../../net/map_names.dart';
 
 /// 机器人在用哪张图（图号、版本）；没报就是 null。
 (String, String)? robotMapOf(Map<String, dynamic>? r) {
@@ -125,7 +126,7 @@ class _SiteLayoutPageState extends State<SiteLayoutPage> {
       appBar: AppBar(
           title: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Text(tr('Map & layout', '地图与布置')),
-        if (m != null) Text('${m.$1} · v${m.$2}', style: NwText.bodySmall.copyWith(color: c.textSecondary)),
+        if (m != null) Text('${mapName(m.$1)} · v${m.$2}', style: NwText.bodySmall.copyWith(color: c.textSecondary)),
       ])),
       body: RefreshIndicator(
           onRefresh: _load,
@@ -164,7 +165,7 @@ class _SiteLayoutPageState extends State<SiteLayoutPage> {
             if (maps) ...[
               label(tr('Maps', '地图')),
               row('maps', Icons.map_outlined, tr('Map management & mapping', '地图管理与建图'),
-                  m == null ? tr('Versions, deploy, roll back, new map', '版本、下发、退回、新建') : tr('${m.$1} v${m.$2}', '${m.$1} v${m.$2}'),
+                  m == null ? tr('Versions, deploy, roll back, new map', '版本、下发、退回、新建') : '${mapName(m.$1)} v${m.$2}',
                   () => _push(MapManagePage(api: widget.api))),
             ],
           ])),

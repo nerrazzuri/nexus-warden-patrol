@@ -132,6 +132,12 @@ const RULES: Rule[] = [
   [/^(\S+) 被困 (\d+) 秒没脱开,换一台$/, (m) => `${m[1]} stuck for ${m[2]} s and couldn't get free, so another robot took over`],
   [/^请用遥控把 (\S+) 开回开阔、扫到过的地方$/, (m) => `drive ${m[1]} back to open, scanned floor with Remote`],
   [/^请人遥控把它开回来$/, () => "someone needs to drive it back with Remote"],
+  // 易用性 37 第八轮:值守日志每圈那几句;规划原因码开头的机器人原话
+  [/^第 (\d+) 圈跑完,用时 (\d+) 秒$/, (m) => `Lap ${m[1]} done in ${m[2]} s`],
+  [/^第 (\d+) 圈(接着跑)?[:：](.*)$/, (m) => `Lap ${m[1]}${m[2] ? " resumed" : ""}: ${m[3].split("→").map((n) => WP_NAMES[n] ?? n).join(" → ")}`],
+  [/^第 (\d+) 圈被 (\S+) 打断$/, (m) => `Lap ${m[1]} interrupted by ${m[2] === "别的任务" ? "another task" : m[2]}`],
+  [/^第 (\d+) 圈被人中止[:：]歇 (\d+) 分钟再接着跑$/, (m) => `Lap ${m[1]} stopped by someone: resuming in ${m[2]} min`],
+  [/^(start_blocked|goal_blocked|no_path|outside|timeout)[:：]\s*([\s\S]+)$/, (m) => PLAN[m[1]] ?? tr(m[2])],
   [/^第 (\d+) 圈跑不成[:：]\s*([\s\S]*)$/, (m) => m[2] ? `lap ${m[1]} failed: ${lc(tr(m[2]))}` : `lap ${m[1]} failed`],
   [/^(\d+) m 内没有能直线挪过去站的地方$/, (m) => `no open spot within ${m[1]} m it could move straight to`],
   [/^(\S+) 的待命点不能设在这里[:：][\s\S]*$/, (m) => `${m[1]}'s standby point can't go here: the map shows it as not walkable or not scanned, so robots could never be sent there. Pick a spot on open, scanned floor.`],
@@ -462,4 +468,9 @@ export function byText(by: string | null | undefined): string {
   if (!by) return "";
   // 第 4 轮 admin P1-01:「站点:…」开头的也是系统自动处理
   return /^(site|站点)[:：]/.test(by) ? t("bySystem") : by;
+}
+
+/** 站点自己加的点名(回待命点、回原点)按界面语言说;别的点名原样。 */
+export function wpName(n: string): string {
+  return lang.value === "en" ? WP_NAMES[n] ?? n : n;
 }
