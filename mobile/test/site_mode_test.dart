@@ -5,6 +5,7 @@ import 'dart:async';
 import 'package:nexwar_patrol/net/site_client.dart';
 import 'package:nexwar_patrol/ui/site_duty_page.dart';
 import 'package:nexwar_patrol/ui/site_mode.dart';
+import 'package:nexwar_patrol/l10n.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -125,14 +126,15 @@ void main() {
     expect(one.calls, contains('mode visitor Whole site 240'));
   });
 
-  testWidgets('易用性 37 场景测试：窄屏三个模式按钮放不下一排就竖着排（以前截成「Tempo rary …」）', (t) async {
+  testWidgets('易用性 37 场景测试：窄屏一排三个，临时撤防按钮用短写（以前「Temporary」从中间截成「Tempo rary …」）', (t) async {
+    appLang.value = AppLang.en;
+    addTearDown(() => appLang.value = AppLang.zh);
     await _open(t, FakeApi('guard'));
     await t.binding.setSurfaceSize(const Size(390, 844));
     await t.pumpAndSettle();
-    final a = t.getTopLeft(find.byKey(SiteModePage.armKey));
-    final v = t.getTopLeft(find.byKey(SiteModePage.visitorKey));
-    expect(v.dy, greaterThan(a.dy), reason: '竖着排');
-    expect(t.getSize(find.byKey(SiteModePage.visitorKey)).width, greaterThan(300));
+    expect(find.descendant(of: find.byKey(SiteModePage.visitorKey), matching: find.text('Temp. disarm')), findsOneWidget);
+    expect(t.getTopLeft(find.byKey(SiteModePage.visitorKey)).dy, t.getTopLeft(find.byKey(SiteModePage.armKey)).dy,
+        reason: '还是一排（App V2）');
   });
 
   testWidgets('管理员改不了防区，管理员能改「留守时也布防」', (t) async {
