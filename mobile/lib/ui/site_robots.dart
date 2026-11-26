@@ -226,6 +226,7 @@ class _SiteRobotsPageState extends State<SiteRobotsPage> {
   }
 
   Future<void> _reload() async {
+    if (_disposed) return;
     try {
       final r = await widget.api.robots();
       if (mounted) {
@@ -235,14 +236,18 @@ class _SiteRobotsPageState extends State<SiteRobotsPage> {
         });
       }
     } on SiteError catch (e) {
+      // 易用性 37 第十五轮 P2：退出站点时在路上的那次刷新 —— 外壳还在退场（没 dispose），站点列表已经关了
+      // 连接（kind closed）。连接关了就是要走了：不报
+      if (e.kind == 'closed' || _disposed) return;
       if (e.status == 401) return _backToLogin();
       if (mounted) setState(() => _error = e.toString());
     }
+    if (_disposed) return;
     try {
       final d = await widget.api.deterrence();
       if (mounted) setState(() => _deter = {for (final s in d) '${s['robot_id']}': s});
     } on SiteError {
-      return; // 老站点没有驱离（404）
+      return; // 老站点没有驱离（404）；连接关了（退出站点）
     }
   }
 
@@ -257,15 +262,6 @@ class _SiteRobotsPageState extends State<SiteRobotsPage> {
 
   /// 「无人确认」提示条挂多久（第十四轮：不能一直挂着）。
   static const Duration _toastFor = Duration(seconds: 10);
-
-  /// 离开外壳时收提示条用（dispose 里不能再查 context）。
-  ScaffoldMessengerState? _messenger;
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    _messenger = ScaffoldMessenger.maybeOf(context);
-  }
 
   /// 只读账号：响一声提醒，不一直响（他确认不了，M15）。
   bool get _viewer => widget.api.session?.isViewer ?? false;
@@ -409,14 +405,7 @@ class _SiteRobotsPageState extends State<SiteRobotsPage> {
   @override
   void dispose() {
     _disposed = true;
-    // 第十四轮 P2：退出站点 —— 这个站点的提示条不跟到站点列表、下一次登录（提示条在 App 根上）
-    final m = _messenger;
-    if (_toastKey != null && m != null && m.mounted) {
-      // 拆树的这一帧里不能动它（整个 App 在拆时它自己也在拆）：画完这一帧再收
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (m.mounted) m.hideCurrentSnackBar();
-      });
-    }
+    // 第十四、十五轮 P2：退出站点时这个站点的提示条由站点列表收（site_list.dart，push 回来那一下）
     _debounce?.cancel();
     _retry?.cancel();
     _sub?.cancel();

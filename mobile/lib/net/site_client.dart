@@ -1247,6 +1247,10 @@ class SiteClient implements SiteApi {
       throw SiteError(0, tr(
           'Connection to the site dropped: ${e.message}',
           '跟站点的连接断了：${e.message}'), kind: 'dropped');
+    } on StateError {
+      // 易用性 37 第十五轮 P2：退出站点后（[close] 过了）还在路上 / 定时器发的请求 —— dart:io 抛
+      // `Bad state: Client is closed`，页面只接 SiteError，成了未处理异常
+      throw SiteError(0, tr('Signed out of this site', '已退出这个站点'), kind: 'closed');
     }
   }
 

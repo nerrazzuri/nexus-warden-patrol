@@ -281,7 +281,12 @@ class _PersonLivePageState extends State<PersonLivePage> {
     try {
       final r = await widget.api.ackAlert(_a.key);
       final got = r['alert'] is Map ? Alert.fromWire(Map<String, dynamic>.from(r['alert'] as Map)) : null;
-      if (mounted && got != null && got.key == _a.key) setState(() => _a = got);
+      if (mounted && got != null && got.key == _a.key) {
+        // 易用性 37 第十五轮 P3：整屏页上接了，外面那条「（无人确认）」提示条马上收（以前被这页盖着，计时停了，
+        // 进详情页还挂 50–80 秒）
+        ScaffoldMessenger.maybeOf(context)?.hideCurrentSnackBar();
+        setState(() => _a = got);
+      }
     } on SiteError catch (e) {
       if (mounted) setState(() => _msg = tr('Not taken: $e', '没接上：$e'));
     } finally {
