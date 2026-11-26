@@ -145,8 +145,12 @@ export function PairPhone() {
       if (sel && dd) { const r = document.createRange(); r.selectNodeContents(dd); sel.removeAllRanges(); sel.addRange(r); }
     }
   }
+  // 易用性 37 场景测试:开站清单「先把站点加到 App」点进来(#/admin/system?pair=1)直接滚到这一块
+  useEffect(() => {
+    if (/[?&]pair=1\b/.test(window.location.hash)) document.getElementById("pair-phone")?.scrollIntoView?.({ block: "start" });
+  }, []);
   return (
-    <section class="panel">
+    <section class="panel" id="pair-phone">
       <div class="panel-head"><h2>{t("pairTitle")}</h2></div>
       <div class="pair-phone pad">
         {/* 白底黑码:扫码器要的是这个,不跟着深色主题走 */}

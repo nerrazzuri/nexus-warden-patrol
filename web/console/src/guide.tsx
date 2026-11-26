@@ -83,6 +83,10 @@ export function SetupChecklist() {
           if (!next) void patch({ setup_hidden: true });
         }}>{open ? t("suHide") : t("suShow")}</button>
       </div>
+      {/* 易用性 37 场景测试:机器人、地图都在手机 App 里加 —— 网页先说清,给出加站点用的码(原来藏在「高级」里) */}
+      {open && items.some((x) => (x.id === "robots" || x.id === "map") && !x.done && !x.skipped) && (
+        <p class="note" data-setup-app="1">{t("suAppFirst")} <a class="btn sm" href="#/admin/system?pair=1">{t("suAppCode")}</a></p>
+      )}
       {open && (
         <ul class="plain setup-list">
           {items.map((x) => {
