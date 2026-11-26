@@ -22,6 +22,7 @@ import 'nw/nw_p3_robots.dart';
 import 'nw/nw_theme.dart';
 import 'nw/nw_widgets.dart';
 import 'person_live.dart';
+import 'site_alert_scene.dart';
 import 'robot_bind_page.dart';
 import 'site_deterrence.dart';
 import 'site_robot.dart';
@@ -64,6 +65,7 @@ class SiteRobotsPage extends StatefulWidget {
       this.openP1});
 
   static const Key addKey = Key('robot-add');
+  static const Key toastOpenKey = Key('robot-toast-open');
 
   @override
   State<SiteRobotsPage> createState() => _SiteRobotsPageState();
@@ -123,6 +125,9 @@ class _SiteRobotsPageState extends State<SiteRobotsPage> {
         if (mounted) {
           _toastKey = '${a['key']}';
           ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+              // 易用性 37 第十三轮 P3：停在别的报警详情页时来新的 —— 整屏不压上来（[_popPersonLive]），这一条要点得开
+              action: SnackBarAction(
+                  key: SiteRobotsPage.toastOpenKey, label: tr('Open', '打开'), onPressed: () => _openAlert(a)),
               content: Text(tr(
                   '${a['level']} ${a['robot']} · '
                       '${alertTitle('${a['kind']}', '${a['title']}')} (unacknowledged)',
@@ -171,6 +176,8 @@ class _SiteRobotsPageState extends State<SiteRobotsPage> {
       if (mounted) {
         _toastKey = a.key;
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            action: SnackBarAction(
+                key: SiteRobotsPage.toastOpenKey, label: tr('Open', '打开'), onPressed: () => _openAlertObj(a)),
             content: Text(tr(
                 '${a.level} ${a.robot} · ${alertTitle(a.kind, a.title)} (unacknowledged)',
                 '${a.level} ${a.robot} · ${a.title}（无人确认）'))));
@@ -197,10 +204,14 @@ class _SiteRobotsPageState extends State<SiteRobotsPage> {
   }
 
   void _backToLogin() {
-    if (!_disposed && mounted) {
-      Navigator.of(context)
-          .pop(tr('Your session has expired. Sign in again', '登录已过期，请重新登录'));
-    }
+    if (_disposed || !mounted) return;
+    // 易用性 37 第十三轮 P2：只退自己这一页（外壳）。人点了「退出站点」，外壳正在退场时站点列表就注销了，
+    // 事件流一断走到这里 —— 以前照样 pop 栈顶，把站点列表也退掉，根导航一页不剩（Linux 上整屏黑、点不动）
+    final mine = ModalRoute.of(context);
+    if (mine == null || !mine.isActive) return;
+    final nav = Navigator.of(context);
+    nav.popUntil((r) => r == mine);   // 上面压着报警页之类的先收
+    nav.pop(tr('Your session has expired. Sign in again', '登录已过期，请重新登录'));
   }
 
   void _soon() {
@@ -273,6 +284,28 @@ class _SiteRobotsPageState extends State<SiteRobotsPage> {
   /// 易用性 build 37 复测：看见人整屏页原来只在「现在」页刷新时弹，在「站点」等别的页不弹。
   /// 这一页一直挂着收事件（IndexedStack），在这里弹：哪一页都弹；同一条只弹一次（personLiveShown），
   /// 上面盖着别的页（详情、遥控）不弹。
+  /// 提示条上点「打开」：人员告警开整屏（看现场），别的开报警详情。
+  void _openAlert(Map<dynamic, dynamic> wire) {
+    if (_disposed || !mounted) return;
+    final Alert alert;
+    try {
+      alert = Alert.fromWire(Map<String, dynamic>.from(wire));
+    } catch (_) {
+      return;
+    }
+    _openAlertObj(alert);
+  }
+
+  void _openAlertObj(Alert alert) {
+    if (_disposed || !mounted) return;
+    final live = personLiveToPop([alert], nowMs: DateTime.now().millisecondsSinceEpoch);
+    if (live != null) personLiveShown.add(live.key);
+    unawaited(Navigator.of(context).push(MaterialPageRoute<void>(
+        builder: (_) => live != null
+            ? PersonLivePage(api: widget.api, alert: live)
+            : SiteAlertScenePage(api: widget.api, alert: alert))));
+  }
+
   void _popPersonLive(Map<String, dynamic> wire) {
     if (_disposed || !mounted) return;
     final Alert alert;
