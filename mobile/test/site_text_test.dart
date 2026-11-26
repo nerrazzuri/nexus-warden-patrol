@@ -47,6 +47,15 @@ void main() {
     expect(siteText('已用 81%,剩 41 GB:到 90% 就不接新的巡逻(没传完的不删)'), startsWith('81% used, 41 GB free'));
   });
 
+  test('用户 11-27 第十八轮：原点贴墙被拒，英文界面看得懂；markRefusalText 先用 reason_en', () {
+    expect(ackReasonText('A 现在站的地方不能当待命点(原点):离墙、障碍或禁行区只有 0.12 m,附近 0.35 m 内也没有离开 0.57 m 的空地:机器人规划不出到这里的路(回原点、回待命点会被拒)。往开阔处开 1 m 左右再标'), contains('too close to a wall, obstacle or no-go zone'));
+    expect(siteText('A 现在站的地方不能当待命点(原点):离墙、障碍或禁行区只有 0.12 m,附近 0.35 m 内也没有离开 0.57 m 的空地:机器人规划不出到这里的路(回原点、回待命点会被拒)。往开阔处开 1 m 左右再标'), endsWith('Drive about 1 m into open floor and mark again.'));
+    expect(siteText('A 这里不能当待命点(原点):离墙、障碍或禁行区只有 0.12 m。挑离墙、障碍、禁行区远一点的空地'), endsWith('Pick a spot further from walls, obstacles and no-go zones.'));
+    final e = SiteError(409, 'A 现在站的地方不能当待命点(原点):离墙、障碍或禁行区只有 0.12 m,附近 0.35 m 内也没有离开 0.57 m 的空地:机器人规划不出到这里的路(回原点、回待命点会被拒)。往开阔处开 1 m 左右再标', body: {'reason_en': 'EN reason'});
+    expect(markRefusalText(e), 'EN reason');
+    expect(markRefusalText(SiteError(409, '机器人标记失败:A 现在站的地方不能当待命点(原点):离墙、障碍或禁行区只有 0.12 m,附近 0.35 m 内也没有离开 0.57 m 的空地:机器人规划不出到这里的路(回原点、回待命点会被拒)。往开阔处开 1 m 左右再标')), contains('too close to a wall'));
+  });
+
   test('易用性 37 复测第四轮：标原点被拒英文（ackReasonText 兜底也翻）；回头补同一句不重复', () {
     expect(ackReasonText('A 现在站的地方不能当待命点:这里 在图上不是可通行的地方(墙、障碍或未扫到)。往开阔、扫到过的地方开 1 m 左右再标'),
         startsWith("A can't use this spot as its standby point"));

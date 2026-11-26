@@ -602,7 +602,7 @@ class _SiteRobotPageState extends State<SiteRobotPage> with NwAsk {
             '${e.message}：机器人上的原点位于 $at 的 ($x, $y)');
       } else if (e.status == 409) {
         // 站点回的是「狗没标:<狗的原因>」：原因照拒收那一套说人话。
-        final why = ackReasonText(e.message.replaceFirst(RegExp(r'^机器人标记失败[:：]'), ''));
+        final why = markRefusalText(e);
         msg = tr('Not marked: $why', '未标记：$why');
       } else {
         msg = e.toString(); // 504「狗可能已经标了」等：照站点说的
