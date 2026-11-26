@@ -106,12 +106,19 @@ void main() {
     await t.pumpAndSettle();
     expect(await sceneShow(t, find.textContaining('防区：front-yard')), findsOneWidget);
     expect(await sceneShow(t, find.textContaining('拦截点：gate')), findsOneWidget);
-    expect(await sceneShow(t, find.textContaining('机器人最后位置：(3.0, -1.0)')), findsOneWidget);
-    expect(await sceneShow(t, find.textContaining('incident-abc')), findsOneWidget);
+    // 易用性 37 场景测试：坐标、地图版本、任务号对保安没用，保安看不到（图上画着）；管理员看得到
+    expect(find.textContaining('机器人最后位置'), findsNothing);
+    expect(find.textContaining('incident-abc'), findsNothing);
+    expect(find.textContaining('(1.0, 0.0)'), findsNothing);
     await sceneTap(t, SiteAlertScenePage.mapKey);
     final page = t.widget<SiteMapPreviewPage>(find.byType(SiteMapPreviewPage));
     expect(page.marks.length, 2);
     expect((page.mapId, page.version), ('estate-1', '7'));
+    await t.pumpWidget(Container());
+    await t.pumpWidget(MaterialApp(home: SiteAlertScenePage(api: FakeApi('admin'), alert: _intrusion())));
+    await t.pumpAndSettle();
+    expect(await sceneShow(t, find.textContaining('机器人最后位置：(3.0, -1.0)')), findsOneWidget);
+    expect(await sceneShow(t, find.textContaining('incident-abc')), findsOneWidget);
   });
 
   testWidgets('现场照片：按那一趟找记录；还没传上来就说', (t) async {

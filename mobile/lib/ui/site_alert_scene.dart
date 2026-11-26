@@ -24,6 +24,7 @@ import '../design/tokens.g.dart' show D1Motion;
 import '../l10n.dart';
 import '../model/alert.dart';
 import '../net/site_client.dart';
+import '../net/map_names.dart';
 import '../net/site_text.dart';
 import 'map_view.dart' show loadMapPicture;
 import 'nw/nw_p2_duty.dart';
@@ -1447,25 +1448,27 @@ class _SiteAlertScenePageState extends State<SiteAlertScenePage> with EstopMissR
     final point = ctx['intercept'] is Map ? ctx['intercept'] as Map : null;
     final taskId = ctx['task_id'] is String ? ctx['task_id'] as String : null;
     String f(Object? v) => (v as num).toStringAsFixed(1);
+    // 易用性 37 场景测试：坐标、地图版本号、任务号对保安没用 —— 只给管地图的（管理员、工程师）看；地图上已经画了位置
+    final tech = widget.api.session?.canManageMaps ?? false;
     return [
       if (ctx['zone'] != null) Text(tr('Zone: ${ctx['zone']}', '防区：${ctx['zone']}'), style: small),
       if (point != null && point['x'] is num && point['y'] is num)
         Text(
-          tr(
-            'Intercept point: ${point['name']}  (${f(point['x'])}, ${f(point['y'])})',
-            '拦截点：${point['name']}  (${f(point['x'])}, ${f(point['y'])})',
-          ),
+          tech
+              ? tr('Intercept point: ${point['name']}  (${f(point['x'])}, ${f(point['y'])})',
+                  '拦截点：${point['name']}  (${f(point['x'])}, ${f(point['y'])})')
+              : tr('Intercept point: ${point['name']}', '拦截点：${point['name']}'),
           style: small,
         ),
-      if (pose != null && pose['x'] is num && pose['y'] is num)
+      if (tech && pose != null && pose['x'] is num && pose['y'] is num)
         Text(
           tr(
-            'Robot last at: (${f(pose['x'])}, ${f(pose['y'])})  map ${pose['map_id']}:${pose['map_version']}',
-            '机器人最后位置：(${f(pose['x'])}, ${f(pose['y'])})  地图 ${pose['map_id']}:${pose['map_version']}',
+            'Robot last at: (${f(pose['x'])}, ${f(pose['y'])})  map ${mapName(pose['map_id'])} v${pose['map_version']}',
+            '机器人最后位置：(${f(pose['x'])}, ${f(pose['y'])})  地图 ${mapName(pose['map_id'])} 第 ${pose['map_version']} 版',
           ),
           style: small,
         ),
-      if (taskId != null) Text(tr('Task: $taskId', '那一趟：$taskId'), style: small),
+      if (tech && taskId != null) Text(tr('Task: $taskId', '那一趟：$taskId'), style: small),
       if (ctx.isEmpty)
         Text(
           tr('This alarm has no scene data (older site, or a site-level alarm)', '此报警没有现场数据（旧版站点或站点级报警）'),
@@ -1487,7 +1490,7 @@ class _SiteAlertScenePageState extends State<SiteAlertScenePage> with EstopMissR
           final warn = _warning(c);
           final notify = _notify(c);
           final dispatch = widget.api.session?.canDispatch ?? false;
-          final detail = appLang.value != AppLang.zh && _a.detail.isNotEmpty ? siteText(_a.detail) : '';
+          final detail = appLang.value != AppLang.zh && _a.detail.isNotEmpty ? siteTextOrEmpty(_a.detail) : '';
           return Scaffold(
             backgroundColor: c.bg,
             appBar: AppBar(
