@@ -305,6 +305,19 @@ void main() {
         reason: '留守 · 防区布防中');
   });
 
+  testWidgets('用户 11-27：新站点还没人布过防 —— 顶栏写「还未布防」，不写「布防中」', (t) async {
+    _size(t);
+    final api = FakeApi('guard')
+      ..alertRows = <Map<String, dynamic>>[]
+      ..modeView = <String, dynamic>{...FakeApi('guard').modeView, 'mode': 'home', 'state': 'disarmed', 'source': 'manual',
+        'until_ms': null, 'next_change_ms': null, 'unset': true, 'set_by': 'site:unset'};
+    await t.pumpWidget(MaterialApp(home: NwShell(api: api, title: '庄园', ring: () {}, updater: null)));
+    await t.pumpAndSettle();
+    expect(find.descendant(of: find.byKey(NwShell.armKey), matching: find.textContaining('还未布防')), findsOneWidget);
+    expect(find.descendant(of: find.byKey(NwShell.armKey), matching: find.textContaining('布防中')), findsNothing);
+    expect(find.descendant(of: find.byKey(NwShell.armKey), matching: find.textContaining('留守')), findsNothing);
+  });
+
   testWidgets('易用性 37 场景测试：手动布防后顶栏写「到点按时间表」，不写「到 19:00」（像到点撤防）', (t) async {
     _size(t);
     final at = DateTime(2026, 11, 26, 19).millisecondsSinceEpoch;

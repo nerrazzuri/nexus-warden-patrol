@@ -338,11 +338,11 @@ function ArmState({ mode, role, stale, onMode }: { mode: Mode; role: string; sta
     document.addEventListener("keydown", esc);
     return () => { document.removeEventListener("mousedown", off); document.removeEventListener("keydown", esc); };
   }, [open]);
-  const text = mode.source === "schedule" ? modeLabel(mode) : mode.mode === "armed" ? t("armArmed")
+  const text = mode.unset ? t("armUnset") : mode.source === "schedule" ? modeLabel(mode) : mode.mode === "armed" ? t("armArmed")
     : mode.mode === "home" ? t("armHome")
     : t("armVisitor", { t: mode.until_ms ? hm(mode.until_ms) : "—" });
   // 第 2 轮 duty N11:连不上站点时变灰、写「最后已知」,不像一切正常
-  const cls = stale ? "stale" : mode.source === "schedule" ? (mode.state === "armed" ? "armed" : "home") : mode.mode;
+  const cls = stale ? "stale" : mode.unset ? "unset" : mode.source === "schedule" ? (mode.state === "armed" ? "armed" : "home") : mode.mode;
   const label = <><i class="dot" aria-hidden="true" />{stale ? t("lastKnown", { s: text }) : text}</>;
   const can = !!onMode && canArm(role);
   if (!can) {
@@ -362,7 +362,7 @@ function ArmState({ mode, role, stale, onMode }: { mode: Mode; role: string; sta
       {open && (
         <div class="menu armmenu-list" role="menu" data-mode-menu="1">
           {items.map((x) => (
-            <button key={x.m} type="button" role="menuitem" aria-pressed={mode.source !== "schedule" && mode.mode === x.m}
+            <button key={x.m} type="button" role="menuitem" aria-pressed={!mode.unset && mode.source !== "schedule" && mode.mode === x.m}
               onClick={() => { setOpen(false); onMode!(x.m); }}>{t(x.key)}</button>
           ))}
         </div>

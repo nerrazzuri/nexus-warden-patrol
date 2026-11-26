@@ -14,6 +14,7 @@ from pathlib import Path
 
 import pytest
 
+import nexwar_site.modes as _modes
 from nexwar_site.broker_conf import BrokerPaths, render_acl, render_conf
 from nexwar_site.ca import RobotBundle, SiteCA
 
@@ -154,3 +155,16 @@ def 真钟差(dispatcher) -> None:
     s = dispatcher._skew
     if isinstance(s, 同钟钟差):
         dispatcher._skew = s.real
+
+
+def pytest_configure(config):
+    config.addinivalue_line(
+        "markers", "new_site_unset: 新站点从「还未布防」起(用户 11-27),不换成老约定")
+
+
+@pytest.fixture(autouse=True)
+def _new_site_armed(request, monkeypatch):
+    """用户 11-27:新站点从「还未布防」起。测别的功能的测试都假设站点在布防 —— 默认照老约定;
+    测这条本身的带 ``new_site_unset`` 标记。"""
+    if request.node.get_closest_marker("new_site_unset") is None:
+        monkeypatch.setattr(_modes, "NEW_SITE_SET_BY", "")

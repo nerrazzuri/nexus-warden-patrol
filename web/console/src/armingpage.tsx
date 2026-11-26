@@ -75,7 +75,8 @@ export function stayConfirmText(zones: { zone: string; home_armed?: boolean }[] 
   return t("modeHomeConfirmSome", { kept: joinList(kept), off: joinList(off) });
 }
 
-export function modeLabel(m: { mode: string; source?: string; state?: string }): string {
+export function modeLabel(m: { mode: string; source?: string; state?: string; unset?: boolean }): string {
+  if (m.unset) return t("armUnset");   // 用户 11-27:新站点还没人布过防
   if (m.source === "schedule") {
     return t("armSched", { s: t(m.state === "armed" ? "armStArmed" : m.state === "disarmed" ? "armStDisarmed" : "armStPartial") });
   }
