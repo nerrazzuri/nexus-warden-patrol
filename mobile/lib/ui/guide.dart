@@ -40,8 +40,9 @@ List<TourStep> tourSteps(String role, DutyTargets t) {
       t.mode,
       tr('Arming and weather', '布防和天气'),
       role == 'guard'
-          ? tr('Arming status and weather. You can switch to Armed; disarming is done by the manager.',
-              '布防状态与天气。可切换为「布防」；撤防需经理操作。')
+          // 易用性 37 场景测试：保安能撤防（用户 11-11），以前写「撤防需经理操作」
+          ? tr('Arming status and weather. Tap Change to arm, switch to Stay, or disarm some zones for a while (it asks you to confirm).',
+              '布防状态与天气。点「切换」布防、切到留守，或临时撤防几个防区（要确认）。')
           : tr('Whether the site is armed, and the weather. Tap Change to arm or disarm (disarming asks you to confirm).',
               '布防状态和天气。点「切换」布防、撤防（撤防要确认）。'));
   final robots = TourStep(t.chips, tr('Robots', '机器人'),
@@ -86,9 +87,10 @@ List<TourStep> tourSteps(String role, DutyTargets t) {
         robots,
         video,
         today,
-        TourStep(null, tr('Admin', '管理'),
-            tr('The Admin tab starts with pending items and the site setup checklist; complete them in order. Add robots: Robots → Add. Confirm no-go zones: Map. Approve accounts: Admin → Accounts.',
-                '「管理」页顶部是待处理事项和开站清单，请逐项完成。添加机器人：机器人 → 添加；确认禁行区：地图；审批账号：管理 → 账号。')),
+        TourStep(null, tr('Site', '现场'),
+            // 易用性 37 场景测试：App 没有「管理」页签，是「现场」
+            tr('The Site tab starts with pending items and the site setup checklist; complete them in order. Add robots: Site → Robots. Confirm no-go zones: Site → Map & layout. Approve accounts: Site → Users.',
+                '「现场」页顶部是待处理事项和开站清单，请逐项完成。添加机器人：现场 → 机器人；确认禁行区：现场 → 地图与布置；审批账号：现场 → 人员。')),
       ],
   };
 }
@@ -151,7 +153,8 @@ Future<void> runTour(BuildContext context, SiteApi api, DutyTargets t) async {
     _running = false;
     // 练习页开着的时候导览已经算走完了（不挡下一次「使用教程」）
     if (finished && (api.session?.canHandleAlerts ?? false) && role != 'owner' && context.mounted) {
-      unawaited(Navigator.push(context, MaterialPageRoute<void>(builder: (_) => const PracticeAlarmPage())));
+      // 易用性 37 场景测试：等练习页关了再返回（外壳接着问「现在建图吗」），以前两层叠在一起
+      await Navigator.push(context, MaterialPageRoute<void>(builder: (_) => const PracticeAlarmPage()));
     }
   } finally {
     _running = false;

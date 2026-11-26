@@ -350,7 +350,10 @@ function ArmState({ mode, role, stale, onMode }: { mode: Mode; role: string; sta
       {/* UIUX-034:切不了的不像按钮:写「只看」,样式去掉按钮感(styles.css span.armstate) */}
       {label}{!stale && <small class="armstate-ro" data-ro="1">{t("armViewOnly")}</small>}</span>;
   }
-  const items: { m: Mode["mode"]; key: Key }[] = [{ m: "armed", key: "modeArmed" }, { m: "home", key: "modeHome" }, { m: "visitor", key: "modeVisitorAll" }];   // UIUX-035:顶栏这一项是全站 4 小时
+  // 易用性 37 场景测试:已经撤防(临时撤防中、按时间表此刻撤防)就不再给「全站临时撤防 4 小时」
+  const off = mode.mode === "visitor" || (mode.source === "schedule" && mode.state !== "armed");
+  const items: { m: Mode["mode"]; key: Key }[] = [{ m: "armed", key: "modeArmed" }, { m: "home", key: "modeHome" },
+    ...(off ? [] : [{ m: "visitor" as const, key: "modeVisitorAll" as Key }])];   // UIUX-035:顶栏这一项是全站 4 小时
   return (
     <div class="armmenu" ref={box}>
       <button type="button" class={`armstate ${cls}`} data-stale={stale || undefined} disabled={stale} aria-haspopup="menu" aria-expanded={open}
