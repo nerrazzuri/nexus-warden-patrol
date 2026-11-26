@@ -267,7 +267,8 @@ final List<_Rule> _rules = [
       (_) => 'This map has no origin yet. Stand the robot at the origin and press “Mark origin here”.'),
   (RegExp(r'^(\S+) 没有默认待命点$'), (m) => '${m[1]} has no default standby point.'),
   (RegExp(r'^(\S+) 已登记且未吊销'), (m) => '${m[1]} already exists. Unbind it first to add it again.'),
-  (RegExp(r'^(\d+) 处不能用$'), (m) => '${m[1]} point${m[1] == '1' ? '' : 's'} cannot be used'),
+  // 易用性 37 场景测试：「处」可能是点、也可能是两点之间那段路（以前一律说成点）
+  (RegExp(r'^(\d+) 处不能用$'), (m) => '${m[1]} problem${m[1] == '1' ? '' : 's'} with points or the way between them'),
   // 手机 App 测试 M05：App 上常见的几句
   (RegExp(r'^账号或密码错误$'), (_) => 'Wrong account or password'),
   (RegExp(r'^你的账号[(（]只读[)）]不能做这件事$'), (_) => 'Your account is view-only and cannot do this'),

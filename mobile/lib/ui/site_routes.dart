@@ -9,6 +9,7 @@
 /// 就是点的那一处的地图坐标。
 library;
 
+import 'dart:async';
 import 'dart:convert';
 import 'dart:math' as math;
 import 'dart:typed_data';
@@ -425,6 +426,10 @@ class _SiteRouteEditorPageState extends State<SiteRouteEditorPage> with NwAsk {
   bool _conflict = false;
   bool _busy = false;
   int _formGen = 0;
+  /// 易用性 37 场景测试：画了没存（或存不进去）就退出会丢；程序自己关页（删了、派出去了）时置真，不再问。
+  bool _leaving = false;
+  /// 易用性 37 场景测试：两点之间走不通（站点按段报，不是哪个点不能用）。
+  final List<String> _segProblems = [];
 
   bool get _isNew => widget.route == null;
   bool get _temp => widget.tempFor != null;
@@ -451,6 +456,7 @@ class _SiteRouteEditorPageState extends State<SiteRouteEditorPage> with NwAsk {
     _saved = _snapshot;
     _sel = null;
     _problems.clear();
+    _segProblems.clear();
     _warns.clear();
     _conflict = false;
     _formGen++;
@@ -496,6 +502,7 @@ class _SiteRouteEditorPageState extends State<SiteRouteEditorPage> with NwAsk {
           _pts[i].x = x;
           _pts[i].y = y;
           _problems.clear();
+          _segProblems.clear();
           _warns.clear();
         }
         return;
@@ -509,6 +516,7 @@ class _SiteRouteEditorPageState extends State<SiteRouteEditorPage> with NwAsk {
       _sel = _pts.length - 1;
       _formGen++;
       _problems.clear();
+      _segProblems.clear();
       _warns.clear();
     });
   }
@@ -519,6 +527,7 @@ class _SiteRouteEditorPageState extends State<SiteRouteEditorPage> with NwAsk {
         _sel = j;
         _formGen++;
         _problems.clear();
+        _segProblems.clear();
         _warns.clear();
       });
 
@@ -527,6 +536,7 @@ class _SiteRouteEditorPageState extends State<SiteRouteEditorPage> with NwAsk {
         _sel = null;
         _formGen++;
         _problems.clear();
+        _segProblems.clear();
         _warns.clear();
       });
 
@@ -539,6 +549,7 @@ class _SiteRouteEditorPageState extends State<SiteRouteEditorPage> with NwAsk {
       _msg = null;
       _conflict = false;
       _problems.clear();
+      _segProblems.clear();
       _warns.clear();
     });
     try {
@@ -565,16 +576,25 @@ class _SiteRouteEditorPageState extends State<SiteRouteEditorPage> with NwAsk {
       setState(() {
         _busy = false;
         _conflict = e.status == 409;
+        _segProblems.clear();
         for (final x in (e.body['errors'] as List? ?? const [])) {
-          if (x is Map && x['index'] is num) _problems[(x['index'] as num).toInt()] = '${x['problem']}';
+          if (x is Map && x['index'] is num) {
+            _problems[(x['index'] as num).toInt()] = '${x['problem']}';
+          } else if (x is Map && x['problem'] != null) {
+            _segProblems.add('${x['problem']}');
+          }
         }
         if (_problems.isNotEmpty) _sel = _problems.keys.first;
         // 手机 App 测试 M19：说是哪几个点、按界面语言说（以前「Not saved: 1 处不能用」）
         final which = (_problems.keys.toList()..sort()).map((i) => '${i + 1}').join(', ');
-        _msg = _problems.isEmpty
-            ? tr('Not saved: ${siteText(e.message)}', '保存失败：${e.message}')
-            : tr('Not saved: point $which cannot be used (marked red, reason listed below)',
-                '保存失败：第 $which 个点不能用（标红了，原因在下面）');
+        // 易用性 37 场景测试：只是两点之间走不通时，别说成「点不能用」；画的点还在，改完再存
+        _msg = _problems.isNotEmpty
+            ? tr('Not saved: point $which cannot be used (marked red, reason listed below). Your points are kept.',
+                '保存失败：第 $which 个点不能用（标红了，原因在下面）。画的点还在。')
+            : _segProblems.isNotEmpty
+                ? tr('Not saved: the robot cannot get between some points (listed below). Your points are kept.',
+                    '保存失败：有几段两点之间走不通（原因在下面）。画的点还在。')
+                : tr('Not saved: ${siteText(e.message)}', '保存失败：${e.message}');
       });
     }
   }
@@ -625,7 +645,10 @@ class _SiteRouteEditorPageState extends State<SiteRouteEditorPage> with NwAsk {
     if (!ok || !mounted) return;
     try {
       await widget.api.deleteRoute(_id, _revision);
-      if (mounted) Navigator.pop(context);
+      if (mounted) {
+        _leaving = true;
+        Navigator.pop(context);
+      }
     } on SiteError catch (e) {
       if (mounted) {
         setState(() {
@@ -705,6 +728,7 @@ class _SiteRouteEditorPageState extends State<SiteRouteEditorPage> with NwAsk {
       // 手机 App 测试 M26：要等机器人回话（几秒），以前这几秒什么都不显示
       _msg = tr('Sending to $rid… waiting for the robot to accept (a few seconds)', '正在派给 $rid…等机器人回话（几秒）');
       _problems.clear();
+      _segProblems.clear();
       _warns.clear();
     });
     try {
@@ -717,6 +741,7 @@ class _SiteRouteEditorPageState extends State<SiteRouteEditorPage> with NwAsk {
             '机器人未接受：${ack['result']} ${ack['reason'] ?? ''}'));
         return;
       }
+      _leaving = true;
       Navigator.pop(context, dispatchResultText(r, tr('custom route', '临时路线')));
     } on SiteError catch (e) {
       if (!mounted) return;
@@ -750,8 +775,29 @@ class _SiteRouteEditorPageState extends State<SiteRouteEditorPage> with NwAsk {
 
   // ---- 画
 
+  Future<void> _askLeave() async {
+    final ok = await askYes(tr('Leave without saving?', '不保存就离开？'),
+        body: tr('The points you drew on this route are not saved yet and will be lost.', '这条路线上画的点还没存，离开就没了。'),
+        ok: tr('Discard and leave', '不要了，离开'),
+        okKey: const Key('route-leave-discard'),
+        danger: true);
+    if (!ok || !mounted) return;
+    _leaving = true;
+    Navigator.pop(context);
+  }
+
   @override
   Widget build(BuildContext context) {
+    // 易用性 37 场景测试：画了没存（包括存不进去）按返回先问，不悄悄丢掉
+    return PopScope(
+        canPop: _leaving || !_dirty || _pts.isEmpty,
+        onPopInvokedWithResult: (didPop, _) {
+          if (!didPop) unawaited(_askLeave());
+        },
+        child: _page(context));
+  }
+
+  Widget _page(BuildContext context) {
     return Scaffold(
         appBar: AppBar(title: Text(_temp ? tr('Custom route for ${widget.tempFor}', '${widget.tempFor} 的临时路线') : (_title.isNotEmpty ? _title : _id))),
         body: FutureBuilder<(Map<String, dynamic>, Uint8List, bool)>(
@@ -924,8 +970,14 @@ class _SiteRouteEditorPageState extends State<SiteRouteEditorPage> with NwAsk {
           if (_problems.isNotEmpty) ...[
             nwGap8,
             for (final e in _problems.entries)
-              Text('${e.key + 1}. ${e.key < _pts.length ? _pts[e.key].name : ''}: ${e.value}',
+              // 易用性 37 场景测试：原因按界面语言（以前英文界面整段中文）
+              Text('${e.key + 1}. ${e.key < _pts.length ? _pts[e.key].name : ''}: ${tr(siteText(e.value), e.value)}',
                   style: NwText.bodySmall.copyWith(color: c.error)),
+          ],
+          if (_segProblems.isNotEmpty) ...[
+            nwGap8,
+            for (final p in _segProblems)
+              Text(tr(siteText(p), p), key: const Key('route-seg-problem'), style: NwText.bodySmall.copyWith(color: c.error)),
           ],
           if (_warns.isNotEmpty) ...[
             nwGap8,

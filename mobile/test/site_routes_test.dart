@@ -302,6 +302,49 @@ void main() {
     expect(find.textContaining('P2 is not a drivable spot'), findsNothing);
   });
 
+  testWidgets('易用性 37 场景测试：原因按界面语言；两点走不通单独列、不说成点不能用；没存就返回先问', (t) async {
+    final api = RoutesApi('admin')
+      ..routeError = const SiteError(400, '2 处不能用', body: {
+        'errors': [
+          {'index': 0, 'name': 'W1', 'problem': 'W1 离建图时走过的地方 21.5 m(超过 5 m),那里定位不可靠:先把那里建进图'},
+        ]
+      });
+    await t.binding.setSurfaceSize(const Size(900, 700));
+    addTearDown(() => t.binding.setSurfaceSize(null));
+    await t.pumpWidget(MaterialApp(
+        home: Builder(
+            builder: (ctx) => TextButton(
+                onPressed: () => Navigator.of(ctx).push(MaterialPageRoute<void>(
+                    builder: (_) => SiteRouteEditorPage(api: api, mapId: 'estate-1', version: '8', newName: 'night'))),
+                child: const Text('open')))));
+    await t.tap(find.text('open'));
+    await t.pumpAndSettle();
+    final c = _Canvas(t, SiteRouteEditorPage.canvasKey, MapGeo.fromPreview(rot23Preview()));
+    await _tapMap(t, c, 8.0, -10.0);
+    await _tapMap(t, c, 9.0, -10.0);
+    await _tapKey(t, SiteRouteEditorPage.saveKey);
+    expect(find.textContaining('21.5 m from where the robot went while mapping'), findsOneWidget);
+    expect(find.textContaining('离建图时'), findsNothing);
+    api.routeError = const SiteError(400, '1 处不能用', body: {
+      'errors': [
+        {'index': null, 'name': 'W1→W2', 'segment': [0, 1], 'problem': 'W1 到 W2 走不通(被墙或禁行区隔开)'},
+      ]
+    });
+    await _tapKey(t, SiteRouteEditorPage.saveKey);
+    expect(find.textContaining('cannot get between some points'), findsOneWidget);
+    expect(find.textContaining('cannot be used'), findsNothing);
+    expect(find.byKey(const Key('route-seg-problem')), findsOneWidget);
+    expect(find.textContaining('No way from W1 to W2'), findsOneWidget);
+    // 没存就返回：先问；点了不要才离开
+    await t.binding.handlePopRoute();
+    await t.pumpAndSettle();
+    expect(find.byKey(const Key('route-leave-discard')), findsOneWidget);
+    expect(find.byType(SiteRouteEditorPage), findsOneWidget);
+    await t.tap(find.byKey(const Key('route-leave-discard')));
+    await t.pumpAndSettle();
+    expect(find.byType(SiteRouteEditorPage), findsNothing);
+  });
+
   testWidgets('存下了、有点要原地转又贴墙（11-05 现场第 15、35 条）：提醒列出来、点换色，照样存了', (t) async {
     final api = RoutesApi('admin')
       ..routeWarnings = [
