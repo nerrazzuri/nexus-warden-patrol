@@ -234,7 +234,7 @@ export function Console({ me, onOut }: { me: Me; onOut: (note?: string) => void 
                 <HomePage alerts={alerts} mode={data?.mode ?? null} now={now} role={me.role} onAck={ack} onDone={(a) => resolve(a, "handled")}
                   onMode={askMode} onWizard={admin ? () => openWiz("open") : undefined} />
               )}
-              {route.page === "admin/arming" && <ArmingPage say={say} now={now} role={me.role} />}
+              {route.page === "admin/arming" && <ArmingPage say={say} now={now} role={me.role} live={data?.mode} />}
               {route.page === "admin/users" && pageAllowed(route.page, me.role) && <UsersPage me={me.name} say={say} now={now} />}
               {route.page === "admin/robots" && <RobotsPage key={route.robot ?? ""} say={say} now={now} units={units} readOnly={!admin} role={me.role} robot={route.robot} alerts={alerts} refresh={refresh} />}
               {route.page === "admin/system" && <SystemPage2 me={me} now={now} say={say} />}

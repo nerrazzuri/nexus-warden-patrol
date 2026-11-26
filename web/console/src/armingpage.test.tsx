@@ -583,3 +583,15 @@ describe("易用性 37 复测 P2-18:切留守的确认句按防区说", () => {
     }
   });
 });
+
+// 易用性 37 第十一轮 P3:顶栏切了模式,布防页页头跟着重读(以前一直写「按时间表」)
+describe("易用性 37 第十一轮 页头跟着顶栏", () => {
+  it("外壳的模式变了就重读 /api/mode,页头换成手动", async () => {
+    mode = { mode: "armed", label: "", source: "schedule", state: "armed", next_change_ms: null, zones: [] };
+    const r = render(<ArmingPage say={() => {}} now={at(12)} live={mode as never} />);
+    await waitFor(() => expect(r.container.querySelector(".sp-status")?.textContent).toContain("当前按时间表"));
+    mode = { mode: "home", label: "", source: "manual", state: "disarmed", manual_until_ms: null, zones: [] };
+    r.rerender(<ArmingPage say={() => {}} now={at(12)} live={mode as never} />);
+    await waitFor(() => expect(r.container.querySelector(".sp-status")?.textContent).not.toContain("当前按时间表"));
+  });
+});

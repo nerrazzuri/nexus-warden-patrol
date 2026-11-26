@@ -95,7 +95,9 @@ export function whoText(m: ModeView | null, enabled: boolean): string {
   return t("armWhoOff", { s });
 }
 
-export function ArmingPage({ say, now, role = "admin" }: { say: Say; now: number; role?: string }) {
+export function ArmingPage({ say, now, role = "admin", live }: { say: Say; now: number; role?: string;
+  /** 易用性 37 第十一轮 P3:外壳轮询到的模式 —— 顶栏切了模式,这页页头跟着重读(以前一直写「按时间表」)。 */
+  live?: ModeView | null }) {
   // W53:经理能排布防时间,值班设置(交班钟点等)还是管理员的事 —— 经理那一块不显示、不提交(外审 W53-1 #10)
   const canDuty = isOwnerLike(role);
   const [loaded, setLoaded] = useState<{ enabled: boolean; slots: Slot[]; duty: DutySettings } | null>(null);
@@ -116,6 +118,12 @@ export function ArmingPage({ say, now, role = "admin" }: { say: Say; now: number
   const [askWiz, setAskWiz] = useState<"open" | "arm" | null>(null);
 
   const loadMode = () => api<ModeView>("GET", "/api/mode").then(setMode).catch(() => setMode(null));
+  const liveKey = live ? `${live.mode}|${live.source}|${live.state}|${live.next_change_ms}|${live.manual_until_ms}` : "";
+  const firstLive = useRef(true);
+  useEffect(() => {
+    if (firstLive.current) { firstLive.current = false; return; }
+    if (liveKey) void loadMode();
+  }, [liveKey]);
   // 第 4 轮 layout r3-N3:读不到不画成空日程 —— 写「读取失败,正在重试」,隔 5 秒再读(保存一直是灰的)
   const [loadFailed, setLoadFailed] = useState(false);
   const [retry, setRetry] = useState(0);
