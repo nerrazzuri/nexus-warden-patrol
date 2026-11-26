@@ -524,3 +524,43 @@ def test_外审W75_3_1_看着能优化_收的那一刻关键帧刚被清掉_说�
         w.apply({"action": "optimize"}, by="alice")
     assert ei.value.status == 409 and ei.value.reason == "not_optimizable"
     assert w.view()["version"] == old, "没优化成:向导还停在原来那一版"
+
+
+def test_易用性37第十二轮_录着放弃建图_这一版不出_已出好的删掉_迟到的上传不收(站点):
+    eng = _tok(站点, "eng")
+    code, d = 站点.req("POST", "/api/map-wizard", {"action": "start", "robot_id": "A",
+                                                  "site_type": "indoor", "drive": "remote"},
+                      token=eng)
+    wid, ver = d["wizard"]["id"], d["wizard"]["version"]
+    站点.req("POST", "/api/map-wizard", {"action": "step", "step": "walk", "wizard_id": wid},
+            token=eng)
+    d0 = 站点.maps.root.parent / "src-ab"
+    d0.mkdir()
+    (d0 / "m.pgm").write_bytes(b"x")
+    站点.maps.import_dir(d0, map_id="main", version=ver)   # 停录以后已经出好登记了
+    code, d = 站点.req("POST", "/api/map-wizard", {"action": "abandon", "wizard_id": wid},
+                      token=eng)
+    assert code == 200 and d["wizard"] is None, d
+    assert not any(m["version"] == ver for m in 站点.maps.list()), "放弃了:这一版删掉"
+    assert ver in 站点.maps.retired("main"), "版本号不再发"
+    # 机器人迟到的上传:不收,叫它当传完(站点让它建过这一版)
+    with 站点.db.tx() as c:
+        c.execute("INSERT INTO commands(command_id, task_id, robot_id, kind, payload, issued_by, "
+                  "issued_at) VALUES ('c1', 't1', 'A', 'map_build', ?, 'eng', 0)",
+                  (json.dumps({"map_id": "main", "version": ver}),))
+    got = 站点.maps.put_map_chunk("A", f"main/{ver}", "m.pgm", offset=0, data=b"x", total=1)
+    assert got.discarded and not any(m["version"] == ver for m in 站点.maps.list())
+
+
+def test_易用性37第十二轮_画禁行区以后放弃_图留着(站点):
+    w = _wiz(站点)
+    v = w.apply({"action": "start", "robot_id": "A", "site_type": "indoor", "drive": "remote"},
+                by="alice")
+    d0 = 站点.maps.root.parent / "src-keep"
+    d0.mkdir()
+    (d0 / "m.pgm").write_bytes(b"x")
+    站点.maps.import_dir(d0, map_id="main", version=v["version"])
+    站点.api.settings.put("map_wizard", {**站点.api.settings.get("map_wizard"), "step": "zones"})
+    w.apply({"action": "abandon"}, by="alice")
+    assert any(m["version"] == v["version"] for m in 站点.maps.list())
+    assert v["version"] not in 站点.maps.retired("main")

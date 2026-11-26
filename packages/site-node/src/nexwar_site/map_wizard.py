@@ -24,6 +24,8 @@ from typing import Any
 
 KEY = "map_wizard"
 STEPS = ("prepare", "drive", "walk", "build", "zones", "origin", "done")
+#: 这几步放弃建图,这一版作废(还没出图、或者出了还没往下用);画禁行区以后放弃,图留着。
+DISCARD_STEPS = ("walk", "build")
 #: 调好参数的场地类型;其余的「即将支持」(室外、玻璃多要真场地录包调参,另开一单)。
 SITE_TYPES = ("indoor",)
 COMING_SOON = ("outdoor", "glass")
@@ -287,6 +289,11 @@ class MapWizard:
                                    "重新进一次", "stale_wizard")
         if action == "abandon":
             self.settings.put(KEY, None)
+            if st.get("step") in DISCARD_STEPS and st.get("map_id") and st.get("version"):
+                # 易用性 37 第十二轮 P2:录着、出着图时放弃 —— 这一版不出(以前照样多出一版「走了 0 m」)
+                self.cat.discard(st["map_id"], st["version"])
+                if self.builds is not None and st.get("robot_id"):
+                    self.builds.discard(st["robot_id"], st["map_id"], st["version"])
             return {}
         if action == "rewalk":
             # 重走一遍:旧的那一版(建好了的)留着,换一个新版本号
