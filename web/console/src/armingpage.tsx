@@ -255,7 +255,7 @@ export function ArmingPage({ say, now, role = "admin" }: { say: Say; now: number
           <div class="ly-stage">
             {wizBox}
             {dirty && <p class="arm-dirty" role="status">{t("armDirtyOther")}</p>}
-            {sec === "patrols" ? <>{canDuty && <PatrolLine say={say} />}<PatrolSchedules say={say} canEdit={canSchedule(role)} /></>
+            {sec === "patrols" ? <>{canDuty && <PatrolLine say={say} />}<PatrolSchedules say={say} canEdit={canSchedule(role)} canTz={canDuty} /></>
               : sec === "guard" ? <GuardPanel say={say} now={now} canEdit={canSchedule(role)} /> : <DevicesPanel say={say} canEdit={isOwnerLike(role)} />}
           </div>
         </div>
