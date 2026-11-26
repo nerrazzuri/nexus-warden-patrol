@@ -8,6 +8,12 @@ void main() {
   setUp(() => appLang.value = AppLang.en);
   tearDown(() => appLang.value = AppLang.zh);
 
+  test('易用性 37 场景测试：报警详情整段认不出给空（不摆「Site message in Chinese」），认得的照常', () {
+    expect(siteTextOrEmpty('某某某不认识的一整段话'), '');
+    expect(siteTextOrEmpty('第 7 圈跑完,用时 60 秒'), 'Lap 7 done in 60 s');
+    expect(siteTextOrEmpty('nvr-1'), 'nvr-1');
+  });
+
   test('易用性 37 第八轮：值守日志每圈那几句、规划原因码开头、点名', () {
     expect(siteText('第 7 圈跑完,用时 60 秒'), 'Lap 7 done in 60 s');
     expect(siteText('第 7 圈接着跑:a→回待命点'), 'Lap 7 resumed: a → “Return to standby”');

@@ -331,6 +331,12 @@ String siteText(String? s) {
   return out == _unk ? _fallback : out.split(_unk).join('(in Chinese)');
 }
 
+/// 易用性 37 场景测试：英文界面整段认不出时给空（报警详情里不摆一行「Site message in Chinese」）。
+String siteTextOrEmpty(String? s) {
+  final o = siteText(s);
+  return o == _fallback ? '' : o;
+}
+
 /// 人也可能写的（路线名、区域名）：英文界面只翻认得的站点自动文字，认不得的原样（人写的中文不换掉）。
 String siteKnown(String? s) {
   final src = s ?? '';
