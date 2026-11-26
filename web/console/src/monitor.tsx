@@ -435,7 +435,7 @@ export function MonitorPage(props: {
           </section>
         )}
         <section class="mon-sec mon-tonight">
-          <TodayPatrols canFix={pageAllowed("admin/robots", props.role)} onItems={setPatrols} title={t("monTonight")} />
+          <TodayPatrols canFix={pageAllowed("admin/robots", props.role)} onItems={setPatrols} title={t("monTonight")} guard />
         </section>
         <section class="mon-sec mon-act">
           <h2 class="mon-h"><span>{t("monActivity")}</span></h2>
