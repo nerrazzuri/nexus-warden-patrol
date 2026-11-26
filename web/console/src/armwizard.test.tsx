@@ -89,7 +89,11 @@ describe("布防向导的小函数", () => {
     const { slotsText } = await import("./armwizard");
     const week = [0, 1, 2, 3, 4, 5, 6].map((day) => ({ zone: "", day, start: "22:00", end: "24:00" }));
     expect(slotsText([...week, { zone: "", day: 5, start: "00:00", end: "06:00" }, { zone: "", day: 6, start: "00:00", end: "06:00" }]))
-      .toBe("每天 22:00–24:00；周六、周日 00:00–06:00");
+      .toBe("周一、周二、周三、周四、周日 22:00–24:00；周五、周六 22:00–次日 06:00");
+    // 易用性 37 场景测试:每天 19:00–07:00 存成拆开的两段,给人看并回一段(以前像两个时段、「14 段」)
+    expect(slotsText(dailySlots(19 * 60, 7 * 60))).toBe("每天 19:00–次日 07:00");
+    lang.value = "en";
+    try { expect(slotsText(dailySlots(19 * 60, 7 * 60))).toBe("Every day 19:00–07:00 next day"); } finally { lang.value = "zh"; }
   });
   it("整张图的外框按地图元数据算(米)", () => {
     expect(wholeMap(META)).toEqual([[-2, -2], [8, -2], [8, 3], [-2, 3]]);
@@ -354,7 +358,7 @@ describe("布防向导", () => {
     await toTime(r);
     pickTime(r, "daily");
     fireEvent.click(r.getByText("下一步"));
-    await waitFor(() => expect(r.getByText(/会替换现在的布防时间（每周 2 段）：周一 20:00–24:00；周二 00:00–05:00。/)).toBeTruthy());
+    await waitFor(() => expect(r.getByText(/会替换现在的布防时间：周一 20:00–次日 05:00。/)).toBeTruthy());
     expect(posted.some((p) => p.url === "/api/arming/schedule")).toBe(false);
     fireEvent.click(r.getAllByText("保存这个时间").find((el: HTMLElement) => el.tagName === "BUTTON")!);
     await waitFor(() => expect(q(r, "[data-wiz-step=who]")).not.toBeNull());
@@ -367,7 +371,7 @@ describe("布防向导", () => {
     await toTime(r);
     pickTime(r, "manual");
     fireEvent.click(r.getByText("下一步"));
-    await waitFor(() => expect(r.getByText(/会关掉现在的布防时间表（每周 1 段）/)).toBeTruthy());
+    await waitFor(() => expect(r.getByText(/会关掉现在的布防时间表（周一 20:00–24:00）/)).toBeTruthy());
     expect(posted.some((p) => p.url === "/api/arming/schedule")).toBe(false);
   });
 

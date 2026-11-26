@@ -310,19 +310,11 @@ class _SiteModePageState extends State<SiteModePage> with NwAsk {
                       () => _arm()),
                 if (canSet) ...[
                   btn(SiteModePage.homeKey, 'home', tr('Stay', '留守'), () => _toHome(now)),
-                  btn(SiteModePage.visitorKey, 'visitor', tr('Temporary disarm', '临时撤防'), () => _visitorAsk(now)),
+                  // 易用性 37 场景测试：窄屏一排三个时「Temporary」被从中间截断（「Tempo rary …」）：按钮上用短写，只在词间换行
+                  btn(SiteModePage.visitorKey, 'visitor', tr('Temp. disarm', '临时撤防'), () => _visitorAsk(now)),
                 ],
               ];
-              // App V2：同一排等宽。易用性 37 场景测试：窄屏一排三个时「Temporary disarm」被截成「Tempo rary …」——
-              // 一排放不下（每个不到 120 宽）就竖着排，字不截断
-              if (buttons.length > 1 && (box.maxWidth - Nw.s8 * (buttons.length - 1)) / buttons.length < 120) {
-                return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-                  for (var i = 0; i < buttons.length; i++) ...[
-                    if (i > 0) const SizedBox(height: Nw.s8),
-                    buttons[i],
-                  ],
-                ]);
-              }
+              // App V2：同一排等宽（窄屏也一排三个）
               return Row(children: [
                 for (var i = 0; i < buttons.length; i++) ...[
                   if (i > 0) const SizedBox(width: Nw.s8),
@@ -399,14 +391,49 @@ class _SiteModePageState extends State<SiteModePage> with NwAsk {
     );
   }
 
+  /// 易用性 37 场景测试：跨半夜的一段（存成「当天 …–24:00」+「第二天 00:00–…」）给人看时并回一段（「19:00 → 次日 07:00」），
+  /// 以前显示成两段、像两个时段。
+  @visibleForTesting
+  static List<({String zone, int day, String start, String end, bool next})> joinOvernight(List<Map> slots) {
+    final xs = [
+      for (final x in slots)
+        (zone: '${x['zone'] ?? ''}', day: (x['day'] as num?)?.toInt() ?? 0, start: '${x['start']}', end: '${x['end']}')
+    ];
+    final morning = <int, int>{};
+    final taken = <int>{};
+    for (var i = 0; i < xs.length; i++) {
+      if (xs[i].end != '24:00') continue;
+      for (var k = 0; k < xs.length; k++) {
+        final y = xs[k];
+        if (k != i && !taken.contains(k) && y.zone == xs[i].zone && y.day == (xs[i].day + 1) % 7 &&
+            y.start == '00:00' && y.end != '24:00') {
+          morning[i] = k;
+          taken.add(k);
+          break;
+        }
+      }
+    }
+    return [
+      for (var i = 0; i < xs.length; i++)
+        if (!taken.contains(i))
+          (
+            zone: xs[i].zone,
+            day: xs[i].day,
+            start: xs[i].start,
+            end: morning[i] == null ? xs[i].end : xs[morning[i]!].end,
+            next: morning[i] != null
+          )
+    ];
+  }
+
   /// 布防时间（只读）：同一时段的几天并一行（「周一–周五 19:00 → 07:00」那样），例外列在下面；改在网页。
   List<Widget> _schedule(NwColors c, Map<String, dynamic> v) {
     final days = [tr('Mon', '周一'), tr('Tue', '周二'), tr('Wed', '周三'), tr('Thu', '周四'), tr('Fri', '周五'), tr('Sat', '周六'), tr('Sun', '周日')];
     final groups = <String, List<int>>{};
-    for (final x in (v['slots'] as List? ?? const [])) {
-      if (x is! Map) continue;
-      final k = '${'${x['zone'] ?? ''}'.isEmpty ? '' : '${x['zone']} '}${x['start']} → ${x['end']}';
-      (groups[k] ??= <int>[]).add((x['day'] as num?)?.toInt() ?? 0);
+    for (final x in joinOvernight((v['slots'] as List? ?? const []).whereType<Map>().toList())) {
+      final end = x.next ? tr('${x.end} next day', '次日 ${x.end}') : x.end;
+      final k = '${x.zone.isEmpty ? '' : '${x.zone} '}${x.start} → $end';
+      (groups[k] ??= <int>[]).add(x.day);
     }
     String dayText(List<int> ds) {
       final d = ds.toSet().toList()..sort();

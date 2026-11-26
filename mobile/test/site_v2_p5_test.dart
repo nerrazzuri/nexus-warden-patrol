@@ -98,6 +98,28 @@ void main() {
     expect(find.byKey(SiteModePage.schedulesKey), findsOneWidget);
   });
 
+  testWidgets('易用性 37 场景测试：每天 19:00–07:00 存成拆开的两段，显示并回一段「19:00 → 次日 07:00」', (t) async {
+    final api = FakeApi('guard')
+      ..armingScheduleView = <String, dynamic>{
+        'enabled': true,
+        'slots': [
+          for (final d in [0, 1, 2, 3, 4, 5, 6]) ...[
+            {'zone': '', 'day': d, 'start': '00:00', 'end': '07:00'},
+            {'zone': '', 'day': d, 'start': '19:00', 'end': '24:00'},
+          ],
+        ],
+        'exceptions': <dynamic>[],
+      };
+    await t.binding.setSurfaceSize(const Size(390, 1600));
+    addTearDown(() => t.binding.setSurfaceSize(null));
+    await t.pumpWidget(MaterialApp(home: SiteModePage(api: api)));
+    await t.pumpAndSettle();
+    expect(find.text('每天'), findsOneWidget);
+    expect(find.text('19:00 → 次日 07:00'), findsOneWidget);
+    expect(find.text('00:00 → 07:00'), findsNothing);
+    expect(find.text('19:00 → 24:00'), findsNothing);
+  });
+
   testWidgets('外审 App-V2-5 N1：经理在布防与巡逻页也有巡逻日程（排程权限）；保安没有', (t) async {
     for (final (role, want) in [('owner', findsOneWidget), ('guard', findsNothing)]) {
       await t.pumpWidget(MaterialApp(home: SiteModePage(api: FakeApi(role))));

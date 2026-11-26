@@ -51,7 +51,7 @@ const en = {
   routeGenNone: "No reachable points in the zones: {why}",
   routeSavedN: "Saved route {name}: {n} points.",
   routeProblems: "The generated route has problems. Fix the red points in the editor below and save.",
-  schedKeep: "Keep the current arming times ({n} blocks)",
+  schedKeep: "Keep the current arming times ({list})",
   schedManual: "No timetable: I arm and disarm by hand",
   schedEvery: "Every day from", schedTo: "to", schedArmed: "",
   schedReplace: "This replaces the current arming times.",
@@ -67,7 +67,7 @@ const en = {
   noRobot: "No robot can patrol this map yet.",
   sumMap: "Map", sumZones: "Zones", sumRoute: "Route", sumTime: "Arming times", sumWho: "Who",
   sumManual: "armed and disarmed by hand",
-  sumSlots: "{n} blocks a week",
+  sumSlots: "{list}",
   stillMissing: "Robots will not patrol yet: {why}",
   armNow: "Arm now",
   armOnly: "Arm without robot patrols",
@@ -102,8 +102,8 @@ const en = {
   dropArming: "This page has unsaved arming-time changes. The wizard may change arming times too, so these changes will be discarded.",
   dropYes: "Discard",
   timeGoOn: "Save these times",
-  schedOverwrite: "This replaces the current arming times ({n} blocks a week): {list}.",
-  schedOffAsk: "This turns off the current arming timetable ({n} blocks a week); you arm and disarm by hand.",
+  schedOverwrite: "This replaces the current arming times: {list}.",
+  schedOffAsk: "This turns off the current arming timetable ({list}); you arm and disarm by hand.",
   schedPickOne: "Choose one.",
   planOverwrite: "The guard plan already has: {list}. Replace it with “{route}” ({robot})?",
   planReplace: "Replace the guard plan",
@@ -135,7 +135,7 @@ const zh: Record<WKey, string> = {
   routeGenNone: "防区里没有机器人走得到的点：{why}",
   routeSavedN: "已保存路线「{name}」，共 {n} 个点。",
   routeProblems: "生成的路线有问题：请在下面的编辑器里改好红色的点，再保存。",
-  schedKeep: "保留现在的布防时间（{n} 段）",
+  schedKeep: "保留现在的布防时间（{list}）",
   schedManual: "不按时间，自己手动布防、撤防",
   schedEvery: "每天", schedTo: "到", schedArmed: "布防",
   schedReplace: "会替换现在的布防时间。",
@@ -151,7 +151,7 @@ const zh: Record<WKey, string> = {
   noRobot: "还没有能在这张图上巡逻的机器人。",
   sumMap: "地图", sumZones: "防区", sumRoute: "路线", sumTime: "布防时间", sumWho: "谁去",
   sumManual: "手动布防、撤防",
-  sumSlots: "每周 {n} 段",
+  sumSlots: "{list}",
   stillMissing: "机器人还不会巡逻：{why}",
   armNow: "现在布防",
   armOnly: "只布防，不让机器人巡逻",
@@ -186,8 +186,8 @@ const zh: Record<WKey, string> = {
   dropArming: "这页的布防时间还有没保存的修改。布防向导也会改布防时间，打开向导会丢掉这些修改。",
   dropYes: "丢掉",
   timeGoOn: "保存这个时间",
-  schedOverwrite: "会替换现在的布防时间（每周 {n} 段）：{list}。",
-  schedOffAsk: "会关掉现在的布防时间表（每周 {n} 段），改成自己手动布防、撤防。",
+  schedOverwrite: "会替换现在的布防时间：{list}。",
+  schedOffAsk: "会关掉现在的布防时间表（{list}），改成自己手动布防、撤防。",
   schedPickOne: "请选一项。",
   planOverwrite: "值守方案里已经有：{list}。换成「{route}」（{robot}）吗？",
   planReplace: "替换值守方案",
@@ -299,8 +299,9 @@ const DAY_KEYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"] as const;
 export function slotsText(slots: WireSlot[]): string {
   const zh = lang.value === "zh";
   const groups = new Map<string, number[]>();
-  for (const x of slots) {
-    const k = `${x.zone ? `${x.zone} ` : ""}${x.start}–${x.end}`;
+  for (const x of joinOvernight(slots)) {
+    const end = x.next ? (zh ? `次日 ${x.end}` : `${x.end} next day`) : x.end;
+    const k = `${x.zone ? `${x.zone} ` : ""}${x.start}–${end}`;
     groups.set(k, [...(groups.get(k) ?? []), x.day]);
   }
   return [...groups.entries()]
@@ -310,6 +311,29 @@ export function slotsText(slots: WireSlot[]): string {
       return `${d} ${k}`;
     })
     .join(zh ? "；" : "; ");
+}
+
+/** 易用性 37 场景测试:跨半夜的一段(存的时候拆成「当天 …–24:00」+「第二天 00:00–…」)给人看时并回一段,
+ *  如「19:00–次日 07:00」;以前写成两段、像是两个时段。 */
+export function joinOvernight(slots: WireSlot[]): (WireSlot & { next?: boolean })[] {
+  const morning = new Map<number, number>();          // 晚上那段的下标 → 第二天早上那段的下标
+  const taken = new Set<number>();
+  slots.forEach((x, i) => {
+    if (x.end !== "24:00") return;
+    const j = slots.findIndex((y, k) => k !== i && !taken.has(k) && y.zone === x.zone && y.day === (x.day + 1) % 7
+      && y.start === "00:00" && y.end !== "24:00");
+    if (j >= 0) {
+      morning.set(i, j);
+      taken.add(j);
+    }
+  });
+  const out: (WireSlot & { next?: boolean })[] = [];
+  slots.forEach((x, i) => {
+    if (taken.has(i)) return;
+    const j = morning.get(i);
+    out.push(j === undefined ? x : { ...x, end: slots[j].end, next: true });
+  });
+  return out;
 }
 
 /** 每天 from–to 布防(跨半夜的拆成两段),全部防区一样。 */
@@ -672,7 +696,7 @@ export function ArmWizard({ say, onClose, arming = false, onChanged }: { say: Sa
         <section data-wiz-step="time">
           <fieldset class="wiz-pick">
             {sched.enabled && sched.slots.length > 0 && (
-              <label><input type="radio" name="wiz-time" checked={time === "keep"} onChange={() => setTime("keep")} /> {wt("schedKeep", { n: sched.slots.length })}</label>
+              <label><input type="radio" name="wiz-time" checked={time === "keep"} onChange={() => setTime("keep")} /> {wt("schedKeep", { list: slotsText(sched.slots) })}</label>
             )}
             <label><input type="radio" name="wiz-time" checked={time === "daily"} onChange={() => setTime("daily")} />{" "}
               {wt("schedEvery")}{" "}
@@ -726,7 +750,7 @@ export function ArmWizard({ say, onClose, arming = false, onChanged }: { say: Sa
             <dt>{wt("sumMap")}</dt><dd>{mapName(map?.map_id)} · v{map?.version}</dd>
             <dt>{wt("sumZones")}</dt><dd>{joinList(picked) || "—"}</dd>
             <dt>{wt("sumRoute")}</dt><dd>{sel ? sel.title || sel.id : "—"}</dd>
-            <dt>{wt("sumTime")}</dt><dd>{sched.enabled && sched.slots.length ? wt("sumSlots", { n: sched.slots.length }) : wt("sumManual")}</dd>
+            <dt>{wt("sumTime")}</dt><dd>{sched.enabled && sched.slots.length ? wt("sumSlots", { list: slotsText(sched.slots) }) : wt("sumManual")}</dd>
             <dt>{wt("sumWho")}</dt><dd>{robot ? who(robot) : wt("whoAny")}</dd>
             {/* UIUX-036:值守方案里不止这一条时,全列出来(布防后它们都会跑) */}
             {plan && plan.entries.length > 1 && <><dt>{wt("sumPlan")}</dt><dd data-wiz-plan="1">{plan.entries.map((e) =>
