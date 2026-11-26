@@ -316,6 +316,23 @@ void main() {
       expect(find.text('地图已建成：有问题'), findsOneWidget);
     });
 
+    testWidgets('易用性 37 场景测试：录到一半站点重启、这一版号被占 —— 点开始录制自动换新版本接着录，说清为什么', (t) async {
+      final api = _admin()
+        ..wizard = <String, dynamic>{'step': 'walk', 'robot_id': 'A', 'map_id': 'main', 'version': '20261031-1',
+          'drive': 'phone', 'by': 'u', 'label': ''}
+        ..mappingStartError = const SiteError(409, 'main:20261031-1 已存在(或正在建),换个版本号',
+            body: {'error': 'main:20261031-1 已存在(或正在建),换个版本号', 'reason': 'version_taken'});
+      await _wizard(t, api);
+      expect(find.byKey(MapWizardPage.startRecKey), findsOneWidget);
+      await _tap(t, MapWizardPage.startRecKey);
+      expect(api.calls, contains('mapping A start map-20261031-1 main:20261031-1'));
+      expect(api.calls, contains('wizard rewalk'));
+      expect(api.calls, contains('mapping A start map-20261031-2 main:20261031-2'));
+      expect(find.byKey(const Key('map-walk-restarted')), findsOneWidget);
+      expect(find.textContaining('上一次录制中断了'), findsOneWidget);
+      expect(find.textContaining('已存在'), findsNothing, reason: '不把站点的拒绝原话甩给人');
+    });
+
     testWidgets('没建成：写原因，只能重走', (t) async {
       final api = _admin()
         ..wizard = <String, dynamic>{'step': 'build', 'robot_id': 'A', 'map_id': 'main', 'version': '20261031-1',

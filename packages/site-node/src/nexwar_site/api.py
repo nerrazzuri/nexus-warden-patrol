@@ -4911,7 +4911,8 @@ class _Handler(TlsHandlerMixin):
             raise HttpError(400, "地图号最多 40 个字符、版本最多 16 个(文件名里还要加后缀)")
         if any(r["map_id"] == map_id and r["version"] == version for r in cat.list()) \
                 or cat.build_in_flight(map_id, version):
-            raise HttpError(409, f"{map_id}:{version} 已存在(或正在建),换个版本号")
+            raise HttpError(409, f"{map_id}:{version} 已存在(或正在建),换个版本号",
+                            extra={"reason": "version_taken"})
 
     def _map_preview(self, map_id: str, version: str, what: str) -> None:
         """建好的图的预览(W00c6h,``view``):``preview`` 是坐标换算 + 这张图这一版上登记的待命点
