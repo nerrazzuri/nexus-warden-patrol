@@ -16,12 +16,20 @@ CHARGER = (2.0, 0.0, 0.0)
 class 假告警台:
     def __init__(self):
         self.raised = []
+        self.resolved: list[tuple[str, str, str]] = []      # (robot, kind, who)
 
     def raise_alert(self, **kw):
         self.raised.append(kw)
 
     def has_open(self, robot, kind):
-        return any(a["robot"] == robot and a["kind"] == kind for a in self.raised)
+        n = sum(1 for a in self.raised if a["robot"] == robot and a["kind"] == kind)
+        return n > sum(1 for r, k, _ in self.resolved if r == robot and k == kind)
+
+    def resolve_all(self, robot, kind, *, who):
+        if not self.has_open(robot, kind):
+            return 0
+        self.resolved.append((robot, kind, who))
+        return 1
 
 
 @pytest.fixture

@@ -145,6 +145,15 @@ LOC_IDLE_P2_S = 120
 LOC_IDLE_BOOT_S = 300
 
 
+def _rtk_heals(a: Any) -> bool:
+    """用户 11-27:这条 RTK 告警随定位好了关吗。「基站挪了」不关(要人改基站坐标或重新配准);
+    老站点报的没记 ``event``,按标题认。"""
+    ev = (a.context or {}).get("event")
+    if ev:
+        return ev != "rtk_base_moved"
+    return not str(a.title).startswith("基站坐标")
+
+
 def _teleop(task_id: object) -> bool:
     from nexwar_site.dispatcher import TELEOP_TASK_PREFIX
     return str(task_id or "").startswith(TELEOP_TASK_PREFIX)
@@ -196,6 +205,8 @@ class _Mem:
     estop_recheck: bool = False
     #: W72:报过定位变差 / 定位丢失暂停、还没解决(定位好了一起解决)。
     loc_alerted: bool = False
+    #: 用户 11-27:挂着会随定位好了关的 RTK 告警(``rtk_disagree`` / ``rtk_gave_up``)
+    rtk_alerted: bool = False
     #: W72:录像断着的那几路相机(都录回来了才解决「录像中断」)。
     rec_failed: set = field(default_factory=set)
     #: W72:点位名 → 连着没到的那几趟(任务号);到过一次清掉。
@@ -311,7 +322,22 @@ class SiteAlertSources:
                 log.error("%s 上装急停按钮:没在事件循环里,站点没叫停", rid)
 
     def _m(self, rid: str) -> _Mem:
-        return self._mem.setdefault(rid, _Mem())
+        m = self._mem.get(rid)
+        if m is None:
+            m = self._mem[rid] = _Mem()
+            self._restore(rid, m)
+        return m
+
+    def _restore(self, rid: str, m: _Mem) -> None:
+        """用户 11-27:这台头一回见(站点刚起来,没读回状态做种)—— 库里挂着的、条件恢复就该关的告警
+        记上,第一份好的状态就关(以前「空闲时定位不可信」只在内存记着坏过才关,重启后永远挂着)。"""
+        try:
+            m.loc_bad = self.desk.has_open(rid, "loc_lost_idle")
+            m.loc_alerted = any(self.desk.has_open(rid, k)
+                                for k in ("loc_degraded", "loc_lost_paused"))
+            m.rtk_alerted = self.desk.has_open(rid, "rtk")
+        except Exception:
+            log.exception("%s 库里挂着的告警没查成", rid)
 
     def seed(self, rid: str, s: Status) -> None:
         """用一份**已经知道**的状态给记忆做种,不报任何告警。"""
@@ -339,6 +365,10 @@ class SiteAlertSources:
             # W72:库里挂着的定位告警(站点重启前报的),定位好了照样解决
             m.loc_alerted = any(self.desk.has_open(rid, k)
                                 for k in ("loc_degraded", "loc_lost_paused"))
+            m.rtk_alerted = self.desk.has_open(rid, "rtk")
+            if self.desk.has_open(rid, "loc_lost_idle"):
+                # 用户 11-27:库里挂着「空闲时定位不可信」(站点重启前报的)—— 照样等定位好了关
+                m.loc_bad = True
         except Exception:
             log.exception("%s 查有没有挂着的禁行区 P1 没成", rid)
         m.nogo_clear_since = None
@@ -389,6 +419,12 @@ class SiteAlertSources:
             for k in ("loc_degraded", "loc_lost_paused"):
                 self.desk.resolve_all(rid, k, who="site:loc_ok")
             m.loc_alerted = False
+        if s.ready.loc_ok and m.rtk_alerted:
+            # 用户 11-27:RTK 对不上时机器人报定位不可信(bridge_localizer),定位好了 = 重定位成了、
+            # RTK 跟定位器对上了 ——「在按 RTK 重定位」「请了几次还不匹配」自己关;
+            # 「基站挪了」要人改配置,不关
+            self.desk.resolve_all(rid, "rtk", who="site:rtk_agree", only=_rtk_heals)
+            m.rtk_alerted = False
         if not loc:
             m.loc_since = None
         elif m.loc_since is None:
@@ -401,6 +437,8 @@ class SiteAlertSources:
                 return
             self.desk.raise_alert(kind="run_start", robot=rid,
                                   title=f"开跑:{s.task.kind} {s.task.task_id}")
+            # 用户 11-27:这台下一趟正常出发了,上次的「出发前检查未通过」自己关
+            self.desk.resolve_all(rid, "preflight_refused", who="site:departed")
 
     def _loc_idle(self, rid: str, m: _Mem, *, idle_bad: bool, ok: bool) -> None:
         """空闲的狗定位不可信(对账 S6):开表 / 停表;定位好了把挂着的那条解决(解决不成下一份状态
@@ -595,6 +633,9 @@ class SiteAlertSources:
         if e.kind == "task_done":
             if not _teleop(tid):                         # 第 11 轮 W10-04:遥控结束不报「已完成」
                 self.desk.raise_alert(kind="run_done", robot=rid, title=f"已完成:{tid}")
+            if str(tid).startswith(STANDBY_PREFIX):
+                # 用户 11-27:后来回到待命点(原点)了,「未返回待命点」自己关
+                self.desk.resolve_all(rid, "standby_failed", who="site:standby_reached")
         elif e.kind == "payload_button":
             self._payload_button(rid, str(d.get("button", "")))
         elif e.kind == "task_failed":
@@ -632,6 +673,9 @@ class SiteAlertSources:
             self.desk.raise_alert(kind="release_failed", robot=rid,
                                   title=f"{what}失败:{d.get('name', '')}",
                                   detail=str(d.get("reason", ""))[:300])
+        elif e.kind == "release_committed":
+            # 用户 11-27:这台后来装好、切好新版本(开机守卫坐实了),之前那条「装 / 切版本失败」自己关
+            self.desk.resolve_all(rid, "release_failed", who="site:release_committed")
         elif e.kind == "release_rolled_back" and d.get("no_fallback"):
             # 上一版是老服务那一代,退不回去,开机守卫把狗留在了新版(W00c5e 内部评审)。
             self.desk.raise_alert(kind="release_failed", robot=rid,
@@ -655,7 +699,10 @@ class SiteAlertSources:
                      "rtk_base_moved": f"基站坐标跟建图时差 {d.get('moved_m')} m:不再拿 RTK 核对"
                                        ",基站要用固定坐标、或者重新建图配准"}[e.kind]
             self.desk.raise_alert(kind="rtk", robot=rid, title=title,
-                                  detail=f"图 {d.get('map_id', '?')}:{d.get('map_version', '?')}")
+                                  detail=f"图 {d.get('map_id', '?')}:{d.get('map_version', '?')}",
+                                  context={"event": e.kind})
+            if e.kind != "rtk_base_moved":
+                self._m(rid).rtk_alerted = True
         elif e.kind == "inside_nogo":
             # W10:狗在禁行区里 —— 原地停了,不自己往外走
             m = self._m(rid)
@@ -996,6 +1043,9 @@ class SiteAlertSources:
                 detail=f"积压 {f.backlog_files} 个文件、{f.backlog_bytes // 1024} KB,"
                        f"最老的等了 {oldest // 60} 分钟")
         elif oldest < BACKLOG_CLEAR_S:
+            if m.backlog or self.desk.has_open(rid, "upload_backlog"):
+                # 用户 11-27:积压传上来了,那条自己关(站点重启后库里挂着的也关)
+                self.desk.resolve_all(rid, "upload_backlog", who="site:upload_caught_up")
             m.backlog = False
 
     # ------------------------------------------------------------ 站点自己

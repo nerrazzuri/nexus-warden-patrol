@@ -302,7 +302,30 @@ class AlertDesk:
         if a is not None and a.kind in ARRIVAL_KINDS and a.resolved_ms is None \
                 and a.context.get("arrived_ms") is None:
             raise ArrivalNeeded("要保安先到场:到了现场点「已到场」,再处置完成或标误报")
-        return self.book.resolve(key, who=who, verdict=verdict, now_ms=self._now(), note=note)
+        done = self.book.resolve(key, who=who, verdict=verdict, now_ms=self._now(), note=note)
+        self._close_backups({key})
+        return done
+
+    def _close_backups(self, keys: set[str]) -> int:
+        """用户 11-27:原告警关了,为它起的「请求支援」(P3)跟着关 —— 以前一直挂着。回关了几条。"""
+        n = 0
+        for b in self.book.open():
+            if b.kind == "backup_requested" and b.context.get("for") in keys:
+                try:
+                    self.book.resolve(b.key, who="site:incident_closed", now_ms=self._now())
+                except Exception:
+                    log.exception("请求支援 %s 跟着原告警关没关成", b.key)
+                    continue
+                self._event("alert auto-resolved", b, by="site:incident_closed")
+                n += 1
+        return n
+
+    def sweep_backups(self) -> int:
+        """站点起来时对一遍:原告警已经关了(或者没了)的「请求支援」关掉(用户 11-27)。"""
+        live = {a.key for a in self.book.open()}
+        gone = {str(b.context.get("for")) for b in self.book.open()
+                if b.kind == "backup_requested" and b.context.get("for") not in live}
+        return self._close_backups(gone) if gone else 0
 
     def reopen(self, key: str) -> Alert:
         """撤销处置(点错了,``alerts.REOPEN_MS`` 内)。"""
@@ -343,16 +366,19 @@ class AlertDesk:
     def unshelve(self, key: str) -> Alert:
         return self.book.unshelve(key, now_ms=self._now())
 
-    def resolve_all(self, robot: str, kind: str, *, who: str) -> int:
-        """这一位(狗、站点、``cctv:<名字>``)这一种还没解决的告警全解决(W19:摄像头恢复、删了)。回几条。"""
+    def resolve_all(self, robot: str, kind: str, *, who: str,
+                    only: Callable[[Alert], bool] | None = None) -> int:
+        """这一位(狗、站点、``cctv:<名字>``)这一种还没解决的告警全解决(W19:摄像头恢复、删了)。回几条。
+        ``only``:只关它说是的(用户 11-27:RTK 那种里「基站挪了」不随定位好了关)。"""
         n = 0
         for a in self.book.open():
-            if a.robot == robot and a.kind == kind:
+            if a.robot == robot and a.kind == kind and (only is None or only(a)):
                 self.book.resolve(a.key, who=who, now_ms=self._now())
                 log.info("告警 %s 自动解除 code=%s robot=%s by=%s", a.key,
                          errcodes.tag(errcodes.ALERT.get(kind, kind)), robot, who)
                 self._event("alert auto-resolved", a, by=who)
                 n += 1
+                self._close_backups({a.key})
         return n
 
     def resolve_except(self, kind: str, prefix: str, keep: set[str], *, who: str) -> int:
@@ -370,7 +396,12 @@ class AlertDesk:
         return any(a.robot == robot and a.kind == kind for a in self.book.open())
 
     def escalate(self) -> list[tuple[Alert, Channel]]:
-        """P1 未确认的,到时限就升一档(换通道)。站点主循环每 5 s 调一次。"""
+        """P1 未确认的,到时限就升一档(换通道)。站点主循环每 5 s 调一次。顺带对一遍「请求支援」
+        (原告警别的路子关的、站点重启前关的,跟着关;用户 11-27)。"""
+        try:
+            self.sweep_backups()
+        except Exception:
+            log.exception("请求支援对账没成")
         out = list(self.book.due_escalations(now_ms=self._now()))
         for a, ch in out:
             log.warning("告警 %s 没人确认,升级到 %s code=%s robot=%s", a.key, ch,
@@ -448,8 +479,9 @@ class LoopAlerts:
     def raise_alert(self, **kw: Any) -> Any:
         return self._on_loop(self.desk.raise_alert, **kw)
 
-    def resolve_all(self, robot: str, kind: str, *, who: str) -> int:
-        return self._on_loop(self.desk.resolve_all, robot, kind, who=who)
+    def resolve_all(self, robot: str, kind: str, *, who: str,
+                    only: Callable[[Alert], bool] | None = None) -> int:
+        return self._on_loop(self.desk.resolve_all, robot, kind, who=who, only=only)
 
     def resolve_except(self, kind: str, prefix: str, keep: set[str], *, who: str) -> int:
         return self._on_loop(self.desk.resolve_except, kind, prefix, keep, who=who)
