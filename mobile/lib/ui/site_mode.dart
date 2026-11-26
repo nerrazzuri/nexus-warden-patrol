@@ -174,11 +174,14 @@ class _SiteModePageState extends State<SiteModePage> with NwAsk {
   }
 
   /// 从布防切出去之前问一句（M07：以前不确认，只提示「切换为留守：完成」）。
-  Future<bool> _leaveArmed(String now) async {
+  Future<bool> _leaveArmed(String now, {bool visitor = false}) async {
     if (now != 'armed') return true;
+    // 易用性 37 第十轮 P1：点的是「临时撤防」，这一句别讲留守（以前两个按钮共用一句）
     final ok = await askYes(tr('Leave Armed?', '退出布防？'),
-        body: tr('Zones that are disarmed in Stay stop dispatching robots and ringing.',
-            '「留守时撤防」的防区发生入侵时，不派机器人、不响铃。'),
+        body: visitor
+            ? tr('Next, pick the zones to disarm for a while and for how long.', '下一步选要临时撤防的防区和时长。')
+            : tr('Zones that are disarmed in Stay stop dispatching robots and ringing.',
+                '「留守时撤防」的防区发生入侵时，不派机器人、不响铃。'),
         ok: tr('Leave Armed', '退出布防'),
         okKey: SiteModePage.leaveArmedKey);
     return ok && mounted;
@@ -190,7 +193,7 @@ class _SiteModePageState extends State<SiteModePage> with NwAsk {
   }
 
   Future<void> _visitorAsk(String now) async {
-    if (!await _leaveArmed(now)) return;
+    if (!await _leaveArmed(now, visitor: true)) return;
     await _visitor();
   }
 
@@ -198,9 +201,11 @@ class _SiteModePageState extends State<SiteModePage> with NwAsk {
       ((_mode?['zones'] as List?) ?? const []).whereType<Map>().map((z) => z.cast<String, dynamic>()).toList();
 
   Future<void> _visitor() async {
-    final picked = <String>{};
-    var hours = 4;
     final zones = _zones.map((z) => '${z['zone']}').toList();
+    // 易用性 37 第十轮 P1：只有一个防区就默认选上；有防区却一个没选，不提交（以前照样提交、说「完成」，
+    // 其实一个防区都没撤）
+    final picked = <String>{if (zones.length == 1) zones.first};
+    var hours = 4;
     final ok = await askYes(tr('Temporary disarm', '临时撤防'),
         content: StatefulBuilder(
             builder: (c, set) => Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -208,15 +213,19 @@ class _SiteModePageState extends State<SiteModePage> with NwAsk {
                   Text(tr('Works like Stay. Also disarm these zones for a while:', '跟「留守」一样，另外再撤防这些防区一段时间：')),
                   const SizedBox(height: Nw.s8),
                   if (zones.isEmpty) Text(tr('No zones yet (disarms as in Stay only)', '暂无防区（仅按「留守」撤防）')),
-                  Wrap(spacing: 6, children: [
-                    for (final z in zones)
-                      FilterChip(
-                        key: Key('visitor-zone-$z'),
-                        label: Text(z),
-                        selected: picked.contains(z),
-                        onSelected: (v) => set(() => v ? picked.add(z) : picked.remove(z)),
-                      ),
-                  ]),
+                  // 易用性 37 第十轮 P1：勾选框（以前只有描边的块，看不出选没选、能不能点）
+                  for (final z in zones)
+                    CheckboxListTile(
+                      key: Key('visitor-zone-$z'),
+                      dense: true,
+                      contentPadding: EdgeInsets.zero,
+                      controlAffinity: ListTileControlAffinity.leading,
+                      title: Text(z),
+                      value: picked.contains(z),
+                      onChanged: (v) => set(() => v == true ? picked.add(z) : picked.remove(z)),
+                    ),
+                  if (zones.isNotEmpty && picked.isEmpty)
+                    Text(tr('Tick at least one zone.', '至少勾一个防区。'), key: const Key('visitor-pick-hint')),
                   Wrap(crossAxisAlignment: WrapCrossAlignment.center, children: [
                     Text(tr('Duration: ', '时长：')),
                     DropdownButton<int>(
@@ -231,6 +240,13 @@ class _SiteModePageState extends State<SiteModePage> with NwAsk {
         ok: tr('Start temp disarm', '开始临时撤防'),
         okKey: const Key('visitor-go'));
     if (!ok) return;
+    if (zones.isNotEmpty && picked.isEmpty) {
+      if (mounted) {
+        setState(() => _msg = tr('Nothing disarmed: tick at least one zone for temporary disarm.',
+            '没有撤防：临时撤防要至少勾一个防区。'));
+      }
+      return;
+    }
     final list = picked.toList()..sort();
     await _run(() => widget.api.setMode('visitor', zones: list, minutes: hours * 60),
         tr('Start temp disarm for $hours h', '开始临时撤防 $hours 小时'));
