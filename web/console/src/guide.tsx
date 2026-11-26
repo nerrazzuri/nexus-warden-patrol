@@ -13,7 +13,7 @@ interface MapVer { map: string; version: string }
 interface SetupItem {
   id: string; done: boolean; skipped: boolean;
   /** 第 8 轮 W8-08:路线都画在别的版本上(``elsewhere``)、机器人在用哪一版(``using``);日程的路线跑不了(``blocked``)。 */
-  elsewhere?: (MapVer & { route: string })[]; using?: MapVer[]; blocked?: string[];
+  elsewhere?: (MapVer & { route: string })[]; using?: MapVer[]; blocked?: string[]; no_tz?: boolean;
   /** minor #21:默认待命点就在原点上的机器人(标原点时站点自动加的)。 */
   at_home?: string[];
   /** minor #40:登记了还没报在用哪张图的机器人(原点、待命点查不了)。 */
@@ -28,7 +28,9 @@ export function setupDetail(x: SetupItem): string {
     const use = x.using.map(ver).join("、");
     return t("suRoutesElsewhere", { n: x.elsewhere.length, names: x.elsewhere.map((r) => r.route).join("、"), at, use });
   }
-  if (x.id === "schedule" && x.blocked?.length) return t("suSchedBlocked", { names: x.blocked.join("、") });
+  if (x.id === "schedule" && x.blocked?.length) return t("suSchedBlocked", { names: joinList(x.blocked) });
+  // 易用性 37 场景测试:排程时区没设,经理排日程会被拒 —— 先提醒管理员设
+  if (x.id === "schedule" && !x.done && x.no_tz) return t("suSchedNoTz");
   if ((x.id === "home" || x.id === "standby") && !x.done && x.no_map?.length) {
     return t("suNoMap", { ids: x.no_map.map(nameOf).join("、") });
   }

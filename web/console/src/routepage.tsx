@@ -738,7 +738,7 @@ function PointForm({ p, idx, names, plain, onChange, onActions }: {
 
 /** P2-39:经理在网页上排巡逻日程(布防页的「巡逻日程」标签):挑一条路线,下面是跟路线页同一个排程面板。
  *  路线本身(画点、改名)还是管理员在「布置」里改。 */
-export function PatrolSchedules({ say, canEdit }: { say: Say; canEdit: boolean }) {
+export function PatrolSchedules({ say, canEdit, canTz = true }: { say: Say; canEdit: boolean; canTz?: boolean }) {
   const [view, setView] = useState<RouteView | null>(null);
   const [route, setRoute] = useState("");
   const load = useCallback(() => api<RouteView>("GET", "/api/routes?kind=patrol")
@@ -759,17 +759,24 @@ export function PatrolSchedules({ say, canEdit }: { say: Say; canEdit: boolean }
         </label>
       </div>
       <div class="arm-patrols-body">
-        {canEdit ? <SchedulePanel key={route} inPanel route={route} view={view} schedules={view.schedules.filter((s) => s.mission === route)} say={say} reload={load} />
+        {canEdit ? <SchedulePanel key={route} inPanel canTz={canTz} route={route} view={view} schedules={view.schedules.filter((s) => s.mission === route)} say={say} reload={load} />
           : <p class="muted small">{rt("schedReadOnly")}</p>}
       </div>
     </section>
   );
 }
 
-function SchedulePanel({ route, view, schedules, say, reload, inPanel }: {
+/** 这台电脑浏览器的时区(IANA 名);认不出来是空串。只拿来预填,存不存由管理员点。 */
+export function browserTz(): string {
+  try { return Intl.DateTimeFormat().resolvedOptions().timeZone ?? ""; } catch { return ""; }
+}
+
+function SchedulePanel({ route, view, schedules, say, reload, inPanel, canTz = true }: {
   route: string; view: RouteView | null; schedules: RouteSchedule[]; say: Say; reload: () => Promise<void>; inPanel?: boolean;
+  canTz?: boolean;
 }) {
-  const [tz, setTz] = useState("");
+  // 易用性 37 场景测试:时区框预填这台电脑的时区,管理员一点就好(站点仍不自己读系统时区)
+  const [tz, setTz] = useState(browserTz);
   // 第 2 轮 config N2 / N3:编号自动给(路线名-1、-2…第一个没用过的);用过的当场说,不等站点回「有人先改过」
   const all = view?.schedules ?? [];
   const nextId = () => freeId(route, all.map((x) => x.id), view, "schedule");
@@ -830,7 +837,10 @@ function SchedulePanel({ route, view, schedules, say, reload, inPanel }: {
     <>
       {/* 第 4 轮 r2-config-N3:放在「巡逻日程」面板里时面板已有标题,不再标一次 */}
       {!inPanel && <h2>{rt("routeSchedules")}</h2>}
-      {view && view.timezone === null ? (
+      {view && view.timezone === null && !canTz ? (
+        // 易用性 37 场景测试:经理能排日程,但时区只有管理员能设 —— 不亮一个点了必失败的按钮,说清找谁
+        <p class="muted" data-sched-need-tz="1">{rt("schedNeedTz")}</p>
+      ) : view && view.timezone === null ? (
         <form class="row" onSubmit={(e) => { e.preventDefault(); void call("/api/route-timezone", { timezone: tz.trim() }, t("saved")); }}>
           <label class="field">{rt("schedTimezone")}
             <input value={tz} placeholder="Asia/Kuala_Lumpur" onInput={(e) => setTz(e.currentTarget.value)} />

@@ -26,6 +26,12 @@ class GuideError(ValueError):
     pass
 
 
+
+def _tz_set(db: Any) -> bool:
+    """路线库设过排程时区没有(没设:排第一条日程前要管理员先设)。"""
+    rows = db.query("SELECT timezone FROM route_store WHERE id=1")
+    return bool(rows and rows[0]["timezone"])
+
 def _count(db: Any, sql: str, args: tuple = ()) -> int:
     return int(db.query(sql, args)[0][0])
 
@@ -94,7 +100,8 @@ def setup_view(db: Any, dispatcher: Any, *, skip: set[str] | None = None) -> dic
                     {"robots": no_standby, "at_home": at_home, "no_map": no_map}),
         "routes": (routes_ok, routes_detail),
         # 第 9 轮 W8-08 尾巴:有一条跑不了就不打勾(以前打着勾又写「跑不了」)
-        "schedule": (bool(sched) and not blocked, {"blocked": blocked}),
+        # 易用性 37 场景测试:排程时区没设,经理排日程会卡住 —— 清单上先提醒管理员设
+        "schedule": (bool(sched) and not blocked, {"blocked": blocked, "no_tz": not _tz_set(db)}),
         "arming": (_count(db, "SELECT COUNT(*) FROM arming_slots") > 0, {}),
         "accounts": (people >= 2, {"count": people}),
         "push": (_count(db, "SELECT COUNT(*) FROM push_devices") > 0, {}),

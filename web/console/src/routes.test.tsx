@@ -9,7 +9,7 @@ import type { UnitInfo } from "./live";
 import { SiteMap } from "./mappage";
 import { applyMat, toPx, type Mat, type PreviewMeta } from "./mapview";
 import type { Robot } from "./model";
-import { revealInSide, RoutesPage } from "./routepage";
+import { browserTz, PatrolSchedules, revealInSide, RoutesPage } from "./routepage";
 import {
   addPoint,
   deletePoint,
@@ -637,6 +637,19 @@ describe("路线页:站点的回答", () => {
     fireEvent.click(r.getByText("Set timezone"));
     await waitFor(() => expect(posted.at(-1)!.path).toContain("/api/route-timezone"));
     expect(posted.at(-1)!.body).toEqual({ timezone: "Asia/Kuala_Lumpur" });
+  });
+
+  it("易用性 37 场景测试:经理排日程不被时区卡死 —— 管理员的时区框预填这台电脑的时区;经理不给必失败的按钮,说清找谁", async () => {
+    routesApi({ meta: META, routes: [ROUTE], timezone: null, schedules: [] });
+    const a = render(<PatrolSchedules say={() => {}} canEdit />);
+    await waitFor(() => expect(a.getByText("Set timezone")).toBeTruthy());
+    expect((a.getByPlaceholderText("Asia/Kuala_Lumpur") as HTMLInputElement).value).toBe(browserTz());
+    expect(browserTz()).not.toBe("");
+    a.unmount();
+    const m = render(<PatrolSchedules say={() => {}} canEdit canTz={false} />);
+    await waitFor(() => expect(m.container.querySelector("[data-sched-need-tz]")).not.toBeNull());
+    expect(m.queryByText("Set timezone")).toBeNull();
+    expect(m.container.querySelector("[data-sched-need-tz]")!.textContent).toMatch(/administrator/);
   });
 
   // 第 8 轮 W8-06:加日程能选由哪台跑(默认哪台空就哪台);列表里写由哪台跑
