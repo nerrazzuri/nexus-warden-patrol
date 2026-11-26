@@ -433,3 +433,33 @@ def test_易用性37第五轮_布局页设待命点_图上走不了也拒(站点
     assert not [x for x in s.stb_list("A") if x["name"] == "wall"]
     code, d = s.req("POST", "/api/robots/A/standby", {**body, "x": 1.0}, token=alice)
     assert code == 200, d
+
+
+def test_用户1127_站的地方贴墙_规划不出终点_不标_说往开阔处挪(站点, monkeypatch):
+    import types
+    s = 站点
+    alice = _登(s, "alice")
+    _能标(s)
+    _等(lambda: s.disp.clients["A"].telemetry is not None and s.disp.clients["A"].telemetry.pose)
+    发了 = []
+    原 = s.disp.map_command
+
+    async def 记(*a, **k):
+        发了.append(a)
+        return await 原(*a, **k)
+    monkeypatch.setattr(s.disp, "map_command", 记)
+    seen = {}
+
+    def goal(mid, ver, x, y, keep_out=()):
+        seen["keep_out"] = keep_out
+        return "离墙、障碍或禁行区只有 0.15 m"
+    monkeypatch.setattr(s.api, "maps", types.SimpleNamespace(
+        reach_problem=lambda *a, **k: "", goal_problem=goal))
+    code, d = s.req("POST", "/api/robots/A/home/here", {"name": "dock"}, token=alice)
+    assert code == 409 and "0.15 m" in d["error"] and "往开阔处" in d["error"], d
+    assert "too close to a wall" in d["reason_en"] and "Drive about 1 m" in d["reason_en"], d
+    assert not 发了, "机器人上的原点不动"
+    assert not [x for x in s.stb_list("A") if x["name"] == "dock"]
+    body = {"name": "wall", "map_id": "m", "map_version": "1", "x": 0.1, "y": 0.0}
+    code, d = s.req("POST", "/api/robots/A/standby", body, token=alice)
+    assert code == 409 and "Pick a spot further from walls" in d["reason_en"], d

@@ -81,6 +81,17 @@ async def test_goto经引擎走到点_状态序列与归档(台子, tmp_path):
     assert runs, "引擎归档目录里要有这趟的 manifest"
 
 
+async def test_用户1127_goto的任务带目标点的地图版本_日志记录里不再是问号(台子):
+    c, r, parts, book = 台子
+    t = EngineGotoTask(task_id="t1", target=_target(1.0, 0.0), max_speed_mps=0.8, parts=parts,
+                       events=book, now_ms=c, priority=0)
+    m = t._mission()
+    assert (m.map_id, m.map_version) == ("m", "1")
+    await t.start()
+    await _跑(c, r, parts, t, 300)
+    assert t.state is TaskState.DONE, (t.state, t.detail)
+
+
 async def test_速度上限经set_speed承接(台子):
     c, r, parts, book = 台子
     t = EngineGotoTask(task_id="t1", target=_target(6.0, 0.0), max_speed_mps=0.4, parts=parts,

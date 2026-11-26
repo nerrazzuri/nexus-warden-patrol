@@ -306,3 +306,29 @@ def test_网页P1_87_文件丢了_清单里标出来_不算有能用的图(cat, 
     cat.file_path("m", "1", "m.pgm").unlink()
     assert cat.list()[0]["missing"] == ["m.pgm"]
     assert not cat.usable()
+
+
+def test_用户1127_原点要规划得出终点_贴墙不行_离墙够的近处有空地就行_禁行区也算(cat, tmp_path):
+    """4 m × 3 m 的屋子(0.1 m 一格,四面是墙)。机器人那边:离墙、禁行区 0.57 m 以内是致命区,
+    终点落进去就近挪 0.35 m 以内能站的点,都没有才拒(planned_nav ``_snap_goal``)。"""
+    from nexwar_site.maps import GOAL_CLEAR_M, GOAL_SNAP_M
+    src = _files(tmp_path / "room")
+    rows = ["#" * 40] + ["#" + "." * 38 + "#" for _ in range(28)] + ["#" * 40]
+    _floor(src, rows, res=0.1)
+    (src / "coverage.json").write_text(json.dumps(
+        {"version": 1, "step_m": 0.5, "path": [[0.5 + 0.5 * i, 1.5] for i in range(7)]}))
+    cat.import_dir(src, map_id="room", version="1")
+    assert cat.goal_problem("room", "1", 2.0, 1.5) == "", "屋子中间"
+    tight = cat.goal_problem("room", "1", 0.2, 1.5)
+    assert "离墙" in tight and "规划不出" in tight, "贴墙 0.1 m,0.35 m 内也挪不到离墙 0.57 m 的地方"
+    assert cat.goal_problem("room", "1", 0.45, 1.5) == "", "离墙 0.35 m:机器人会就近挪开,照样能回"
+    assert cat.goal_problem("room", "1", 0.2, 0.2) != "", "墙角"
+    nogo = ((1.5, 1.0), (2.5, 1.0), (2.5, 2.0), (1.5, 2.0))
+    assert cat.goal_problem("room", "1", 2.0, 1.5, keep_out=(nogo,)) == "在禁行区里"
+    assert cat.goal_problem("room", "1", 1.2, 1.5, keep_out=(nogo,)) == "", "挪 0.35 m 离禁行区够远"
+    assert cat.goal_problem("room", "1", 1.45, 1.5, keep_out=(nogo,)) != ""
+    assert cat.goal_problem("nope", "1", 0.2, 1.5) == "", "站点不认识的图不查"
+    from nexwar_contract.planning.costmap import INFLATE_MARGIN_M, ROBOT_RADIUS_M
+    assert GOAL_CLEAR_M == pytest.approx(ROBOT_RADIUS_M + INFLATE_MARGIN_M)
+    from nexwar_agent.bridges.planned_nav import GOAL_SNAP_M as agent_snap
+    assert GOAL_SNAP_M == agent_snap, "跟机器人那边的就近挪同一个距离"

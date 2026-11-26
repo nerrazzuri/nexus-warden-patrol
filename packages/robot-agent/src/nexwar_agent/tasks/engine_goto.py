@@ -304,6 +304,9 @@ class EngineGotoTask(EngineMissionTask):
         alarm = not self.charge and getattr(self, "priority", 0) >= ALARM_PRIORITY
         return Mission(
             mission=self.task_id, map_id=self.target.map_id,
+            # 用户 11-27:带上目标点的地图版本(收单时已按它核对过加载的图);以前不带,
+            # 日志、巡逻记录里写成 main:?
+            map_version=self.target.map_version or "",
             waypoints=(MissionWaypoint(
                 name="target", pose=Pose.from_xy_yaw(self.target.x, self.target.y,
                                                      self.target.yaw),
