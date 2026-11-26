@@ -253,7 +253,10 @@ class ArmingDesk:
                 "manual_until_ms": None if governed else r.get("manual_until_ms"),
                 "default_armed": default_on, "unset": unset,
                 "timezone": self.schedule.tz_name() if self.schedule is not None else None,
-                "next_change_ms": nxt}
+                "next_change_ms": nxt,
+                # 用户 11-27:时间表开着时手动切的(撤防也是)管到这个时刻,之后按时间表 —— 确认框写出来
+                "schedule_next_ms": sch.next_boundary(now)
+                if sch is not None and sch.enabled() else None}
 
     # ------------------------------------------------------------ 改
 

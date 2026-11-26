@@ -187,6 +187,27 @@ def test_未返回待命点_撤防回原点到了也关(台):
     assert _of(desk, "standby_failed")[0].resolved_by == "site:standby_reached"
 
 
+def test_第十六轮_撤防回原点被拒_报P2回原点失败_不是P1回待命点失败(台):
+    c, db, desk, src = 台
+    src.on_status("A", _status())
+    src.on_event("A", _ev("task_failed", task_id="standby-home-abc123",
+                          reason="导航拒了:goal_blocked 终点在障碍、禁行区里或贴得太近"))
+    assert _of(desk, "run_abort") == [], "不报 P1"
+    [a] = _of(desk, "standby_failed")
+    assert a.level.value == "P2" and a.title == "回原点失败"
+    assert "离墙太近" in a.detail and "布置" in a.detail
+    src.on_event("A", _ev("task_done", task_id="standby-home-def"))      # 挪了原点、回成了
+    assert _of(desk, "standby_failed")[0].resolved_by == "site:standby_reached"
+
+
+def test_第十六轮_回待命点停在半路_照旧P1(台):
+    c, db, desk, src = 台
+    src.on_status("A", _status())
+    src.on_event("A", _ev("task_failed", task_id="standby-abc", reason="导航中止"))
+    [a] = _of(desk, "run_abort")
+    assert a.title == "回待命点失败,停在半路"
+
+
 # ------------------------------------------------------------ 9. 装 / 切版本失败
 
 

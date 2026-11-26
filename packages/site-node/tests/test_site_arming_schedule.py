@@ -206,6 +206,21 @@ def test_手动切到下一个边界为止(台):
     assert 台.armed("前门") == (False, "schedule")
 
 
+def test_用户1127_时间表开着_撤防也管到下一个边界_确认框拿得到那个时刻(台):
+    台.schedule.put({"enabled": True, "slots": [slot(0, "22:00", "24:00")]}, by="alice")
+    台.clock.t = kl(*MON, 12)
+    assert 台.view()["schedule_next_ms"] == kl(*MON, 22), "切之前就给:确认框写「撤防到 22:00」"
+    台.set_mode("disarmed", by="gina")
+    v = 台.view()
+    assert v["mode"] == "disarmed" and v["manual_until_ms"] == kl(*MON, 22)
+    assert 台.disarmed() is True
+    台.clock.t = kl(*MON, 22, 0)
+    assert 台.view()["source"] == "schedule" and 台.armed("前门") == (True, "schedule")
+    assert 台.disarmed() is False
+    台.schedule.put({"enabled": False, "slots": []}, by="alice")
+    assert 台.view()["schedule_next_ms"] is None, "没开时间表:撤防直到有人布防"
+
+
 def test_临时撤防到点回时间表(台):
     台.schedule.put({"enabled": True, "slots": [slot(0, "00:00", "24:00")]}, by="alice")
     台.clock.t = kl(*MON, 12)

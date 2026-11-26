@@ -204,6 +204,12 @@ const RULES: Rule[] = [
   [/^站点的钟跟 (\S+) 差 (\d+) 秒$/, (m) => `The site clock is ${m[2]} s off from ${m[1]}`],
   [/^雷暴[:：]排程巡检暂停$/, () => "Thunderstorm: scheduled patrols paused"],
   [/^整站撤防[:：]排程巡逻暂停$/, () => "Site disarmed: scheduled patrols paused"],   // 用户 11-27
+  [/^整站已经撤防了[,，]不用再临时撤防[:：]要恢复就切到「布防」或「留守」$/,
+    () => "The whole site is already disarmed, so a temporary disarm isn't needed. To restore, switch to Armed or Stay."],
+  // 第十六轮 P2:回原点失败的说明
+  [/^原点在障碍里或离墙太近[:：]去「布置」把原点挪开一点,再叫它回原点[;；]原文[:：]([\s\S]*)$/,
+    (m) => `The home point is inside an obstacle or too close to a wall: move it a little in Site layout, then send the robot home again. Original: ${tr(m[1])}`],
+  [/^看详情里的原因[;；]机器人停在原地等[;；]原文[:：]([\s\S]*)$/, (m) => `The robot is waiting where it is. Reason: ${tr(m[1])}`],
   // 机器人的巡逻失败原因(robot-agent tasks/patrol.py、engine/machine.py、导航桥)
   [/^跳过 (\d+) 个点[(（]([^)）]*)[)）][:：]\s*([\s\S]*)$/, (m) => `Skipped ${m[1]} ${plural(m[1], "point", "points")} (${m[2]}): ${lc(tr(m[3]))}`],
   [/^导航拒了[:：]\s*([\s\S]*)$/, (m) => `Navigation refused: ${lc(tr(m[1]))}`],

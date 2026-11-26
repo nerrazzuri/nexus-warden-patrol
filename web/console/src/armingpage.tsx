@@ -21,7 +21,7 @@ import { dateInput } from "./recordings";
 type Say = (s: string) => void;
 interface Exception { id: number; first_day: string; last_day: string; state: "armed" | "disarmed"; note: string }
 interface Schedule { enabled: boolean; slots: WireSlot[]; exceptions: Exception[] }
-interface ModeView { mode: string; label?: string; state?: string; source?: "schedule" | "manual"; next_change_ms?: number | null; manual_until_ms?: number | null;
+interface ModeView { mode: string; label?: string; state?: string; source?: "schedule" | "manual"; next_change_ms?: number | null; manual_until_ms?: number | null; schedule_next_ms?: number | null;
   zones?: { zone: string; armed?: boolean; home_armed?: boolean }[]; default_armed?: boolean | null; timezone?: string | null }
 
 /** 第 4 轮 config N2:布防页的时间一律按站点时区(日程格子就是站点时间);认不出的时区退回浏览器的。 */
@@ -30,6 +30,12 @@ function inTz(ms: number, tz: string | null | undefined, opts: Intl.DateTimeForm
   try { return new Intl.DateTimeFormat(loc, { ...opts, timeZone: tz }).format(ms); } catch { return null; }
 }
 export const hmSite = (ms: number, tz?: string | null) => inTz(ms, tz, { hour: "2-digit", minute: "2-digit", hourCycle: "h23" }) ?? hm(ms);
+
+/** 用户 11-27:撤防的确认框 —— 时间表开着就写到几点(之后按时间表),没开写「直到有人布防」。 */
+export function disarmConfirmText(m: { schedule_next_ms?: number | null; timezone?: string | null } | null | undefined): string {
+  const at = m?.schedule_next_ms;
+  return at ? t("modeDisarmConfirmUntil", { t: hmSite(at, m?.timezone) }) : t("modeDisarmConfirm");
+}
 export const daySite = (ms: number, tz?: string | null) => inTz(ms, tz, { year: "numeric", month: "2-digit", day: "2-digit" }, "sv-SE") ?? dateInput(ms);
 export function browserTz(): string {
   try { return Intl.DateTimeFormat().resolvedOptions().timeZone; } catch { return ""; }
@@ -306,7 +312,7 @@ export function ArmingPage({ say, now, role = "admin", live }: { say: Say; now: 
       {wizBox}
       {askSave && <Confirm text={askSave} yes={t("save")} onNo={() => setAskSave(null)} onYes={() => void save()} />}
       {switching && (
-        <Confirm text={switching === "armed" ? t("modeArmConfirm") : switching === "disarmed" ? t("modeDisarmConfirm") : stayConfirmText(mode?.zones)}
+        <Confirm text={switching === "armed" ? t("modeArmConfirm") : switching === "disarmed" ? disarmConfirmText(mode) : stayConfirmText(mode?.zones)}
           yes={t(switching === "armed" ? "modeArmed" : switching === "home" ? "modeHome" : "modeDisarm")} onNo={() => setSwitching(null)}
           onYes={() => {
             const m = switching;
