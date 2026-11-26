@@ -593,7 +593,7 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--c-brand); }
 .alarmcount .shape.P1 { fill: var(--c-error); }
 .armstate { display: inline-flex; align-items: center; gap: var(--sp-2); height: var(--ctl-sm); padding: 0 12px; border-radius: var(--r-r2); font-size: 14px; font-weight: 600;
   color: var(--c-success); background: var(--c-successSoft); white-space: nowrap; }
-.armstate.home, .armstate.visitor { color: var(--c-textSecondary); background: var(--c-surfaceVariant); }
+.armstate.home, .armstate.visitor, .armstate.unset { color: var(--c-textSecondary); background: var(--c-surfaceVariant); }
 .armstate .dot { width: 9px; height: 9px; background: currentColor; }
 /* 易用性第 6 轮 W6-05:顶栏布防状态点开切模式 */
 .armmenu { position: relative; display: inline-flex; }

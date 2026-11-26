@@ -289,15 +289,15 @@ class _SiteModePageState extends State<SiteModePage> with NwAsk {
                       style: NwText.titleMedium.copyWith(color: c.text)),
                   subtitle: Text(
                       tr(
-                          '${m['source'] == 'schedule' ? 'Switched by the schedule' : m['set_by'] == 'site:visitor_expired' ? 'Restored automatically when temporary disarm ended' : 'Set by ${personName(m['set_by'])}'}${(m['visitor_zones'] as List? ?? const []).isNotEmpty ? ' · temporarily disarmed: ${(m['visitor_zones'] as List).join(', ')}' : ''}',
-                          '${m['source'] == 'schedule' ? '按时间表切换' : m['set_by'] == 'site:visitor_expired' ? '临时撤防到期自动恢复' : '由 ${personName(m['set_by'])} 切换'}${(m['visitor_zones'] as List? ?? const []).isNotEmpty ? ' · 临时撤防：${(m['visitor_zones'] as List).join('、')}' : ''}'),
+                          '${m['unset'] == true ? 'Nobody has armed this site yet' : m['source'] == 'schedule' ? 'Switched by the schedule' : m['set_by'] == 'site:visitor_expired' ? 'Restored automatically when temporary disarm ended' : 'Set by ${personName(m['set_by'])}'}${(m['visitor_zones'] as List? ?? const []).isNotEmpty ? ' · temporarily disarmed: ${(m['visitor_zones'] as List).join(', ')}' : ''}',
+                          '${m['unset'] == true ? '这个站点还没人布过防' : m['source'] == 'schedule' ? '按时间表切换' : m['set_by'] == 'site:visitor_expired' ? '临时撤防到期自动恢复' : '由 ${personName(m['set_by'])} 切换'}${(m['visitor_zones'] as List? ?? const []).isNotEmpty ? ' · 临时撤防：${(m['visitor_zones'] as List).join('、')}' : ''}'),
                       style: NwText.bodyMedium.copyWith(color: c.textSecondary)),
                 )),
             const SizedBox(height: Nw.s8),
             // 手机 App 测试 M07：当前模式用选中样式（实心 + 打勾），别的是普通描边按钮（以前当前的是灰的、
             // 没选中的「布防」反而实心高亮）。窄屏竖着排，字不截断。从布防切到留守、临时撤防要确认。
             LayoutBuilder(builder: (context, box) {
-              final now = '${m['mode']}';
+              final now = m['unset'] == true ? '' : '${m['mode']}';   // 用户 11-27：还没人布过防，哪个都不是选中
               Widget btn(Key key, String mode, String label, VoidCallback go) => NwButton(
                   buttonKey: key,
                   variant: now == mode ? NwButtonVariant.primary : NwButtonVariant.outline,
@@ -648,7 +648,7 @@ class _SiteModeBarState extends State<SiteModeBar> with NwAsk {
     final canArm = s?.canArm ?? false;
     final canSet = s?.canSetMode ?? false;
     final m = _known ? _mode : null;
-    final now = m == null ? null : '${m['mode']}';
+    final now = m == null || m['unset'] == true ? null : '${m['mode']}';
     final small = NwText.bodySmall.copyWith(color: c.textSecondary);
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, mainAxisSize: MainAxisSize.min, children: [
       NwChoiceBar(choices: [

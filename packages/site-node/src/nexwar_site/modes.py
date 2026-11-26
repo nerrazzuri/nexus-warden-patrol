@@ -36,6 +36,12 @@ MODES = ("armed", "home", "visitor")
 LABEL = {"armed": "布防", "home": "留守", "visitor": "临时撤防", "schedule": "按时间表"}
 STATE_LABEL = {"armed": "布防", "partial": "部分布防", "disarmed": "撤防"}
 DEFAULT_VISITOR_MIN = 4 * 60
+#: 新站点还没人布过防(``set_by`` 记这个):当撤防,顶栏写「还未布防」。
+UNSET = "site:unset"
+#: 新建站点那一行的 ``set_by``。测试夹具默认换成 ``""``
+#: (老约定:新站点就是布防 —— 测别的功能的测试都这么假设),
+#: 测「新站点还未布防」的测试带 ``@pytest.mark.new_site_unset``。
+NEW_SITE_SET_BY = UNSET
 MAX_VISITOR_MIN = 24 * 60
 #: 临时撤防一次最多撤这么多个防区(一个现场远到不了;防一个请求塞几千个名字进库)。
 MAX_VISITOR_ZONES = 1000      # W73:防区个数不设上下限,这里只防误操作
@@ -66,8 +72,13 @@ class ArmingDesk:
         self.on_schedule: Callable[[dict[str, Any]], None] | None = None
         self._last_fp: tuple | None = None
         with db.tx() as c:
+            # 用户 11-27:新站点一开始不能显示「布防」—— 新建的站点从「还没布防」起
+            # (UNSET,不报、不出动),
+            # 有人切过模式或开了时间表才按正常的走。以前就有这一行的老站点(set_by 是空)照旧算布防,
+            # 升级不会突然撤防。
             c.execute("INSERT OR IGNORE INTO site_mode(id, mode, prev_mode, visitor_zones, "
-                      "until_ms, set_by, set_ms) VALUES (1, 'armed', '', '[]', NULL, '', 0)")
+                      "until_ms, set_by, set_ms) VALUES (1, 'armed', '', '[]', NULL, ?, 0)",
+                      (NEW_SITE_SET_BY,))
 
     def authorized(self, zone: str | None) -> str | None:
         """此刻 ``zone`` 上生效的授权名字(B1c);没有、没接名单都是 ``None``。
@@ -94,6 +105,10 @@ class ArmingDesk:
                         "until_ms": None}
         return r
 
+    @staticmethod
+    def _unset(r: dict[str, Any]) -> bool:
+        return r.get("set_by") == UNSET
+
     def _governed(self, r: dict[str, Any], sch: Any = None) -> bool:
         """此刻按时间表(开着、不在手动期里)。"""
         sch = sch if sch is not None else self.schedule
@@ -118,6 +133,8 @@ class ArmingDesk:
             assert self.schedule is not None
             on = self.schedule.scheduled(zone, self._now())
             return on is not False, "schedule"          # None(锁里不该有)按布防:宁可报
+        if self._unset(r):
+            return False, "unset"
         mode = r["mode"]
         if mode == "armed":
             return True, mode
@@ -145,7 +162,7 @@ class ArmingDesk:
         with self.db.snapshot():
             r = self._effective(self._raw())
             if not self._governed(r):
-                return r["mode"] == "armed"
+                return r["mode"] == "armed" and not self._unset(r)
             assert self.schedule is not None
             now = self._now()
             parts = [self.schedule.scheduled(z, now) for z in self.known_zones()]
@@ -207,6 +224,12 @@ class ArmingDesk:
         else:
             state = "armed" if r["mode"] == "armed" else "partial"
         mode, label = r["mode"], LABEL[r["mode"]]
+        unset = not governed and self._unset(r)
+        if unset:
+            # 还没人布过防:老 App 按 mode/state 显示成「留守 · 已撤防」,新的看 ``unset``
+            for z in zones:
+                z["armed"] = False
+            state, mode, label = "disarmed", "home", "还未布防"
         if governed:
             mode = "armed" if state == "armed" else "home"
             label = f"{LABEL['schedule']}:{STATE_LABEL[state]}"
@@ -218,7 +241,7 @@ class ArmingDesk:
                 "set_by": r["set_by"], "set_ms": r["set_ms"], "zones": zones,
                 "source": "schedule" if governed else "manual", "state": state,
                 "manual_until_ms": None if governed else r.get("manual_until_ms"),
-                "default_armed": default_on,
+                "default_armed": default_on, "unset": unset,
                 "timezone": self.schedule.tz_name() if self.schedule is not None else None,
                 "next_change_ms": nxt}
 
