@@ -957,6 +957,9 @@ class Server:
         self.weather = WeatherDesk(self.db, self.dispatcher, now_ms=wall_ms, latlon=latlon,
                                    publish=self.dispatcher.feed.publish)
         self.scheduler.weather = self.weather
+        # 用户 11-27:整站撤防 —— 排程巡逻暂停,跑完手上这一趟回原点等
+        self.scheduler.arming = self.arming
+        self.standby.disarmed = self.arming.disarmed
         self.weather.standby = self.standby            # 雷暴撤了巡检派回待命点(W29 外审 1)
         self.weather.alerts = self.alerts              # 回不得报「没回待命点」(W29 复查二)
         self.alert_sources.weather = self.weather
@@ -1118,6 +1121,9 @@ class Server:
         _hold = self.standby.hold
         self.standby.hold = lambda rid, tid: _hold(rid, tid) or self.guard.holds(rid, tid)
         self.scheduler.guard_busy = self.guard.robots
+        # 用户 11-27:撤防那一下叫空着的机器人回原点 —— 值守的自己收队,充电、换电、驱离中的不动
+        self.standby.keep = lambda rid: (rid in self.guard.robots() or self.guard.charging(rid)
+                                         or rid in self.deterrence.busy())
         # W73 第四期:有桩的按值守的出站线起回充、充到够撑到布防结束
         # W76:巡逻电量到全站电量线回来以后 —— 回充按这条线起、没桩的上一趟因电量结束起换电;
         # 跟值守的取高
@@ -1441,6 +1447,7 @@ class Server:
             for what, part, meth in (("驱离", "deterrence", "tick"),      # W22:到点收、续声光
                                      ("回充", "charge", "tick"),          # W13
                                      ("布防值守", "guard", "tick"),       # W73 第二期
+                                     ("撤防回原点", "standby", "disarm_tick"),   # 用户 11-27
                                      ("换电", "swap", "tick"),            # W73 第四期:会派回换电位
                                      ("受力警笛", "force", "sound"),      # W26:布防时被抱起来
                                      ("天气", "weather", "tick"),         # W29:雷暴撤排程、对账限速

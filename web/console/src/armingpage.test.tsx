@@ -308,6 +308,17 @@ describe("布防时间页", () => {
     expect(now().querySelector('a[href="#/admin/access"]')!.textContent).toBe("按防区临时撤防…");
   });
 
+  it("用户 11-27:页顶「现在」能整站撤防 —— 先问,说清机器人走完这一圈回原点", async () => {
+    const { container: c } = page();
+    const now = () => c.querySelector(".arm-now")!;
+    await waitFor(() => expect(now().textContent).toContain("按时间表"));
+    fireEvent.click(btn(now(), "撤防"));
+    expect(posted.some((p) => p.url === "/api/mode")).toBe(false);
+    expect(document.querySelector(".modal")!.textContent).toContain("回到原点等待");
+    fireEvent.click(btn(document.querySelector(".modal")!, "撤防"));
+    await waitFor(() => expect(posted.find((p) => p.url === "/api/mode")?.body).toEqual({ mode: "disarmed" }));
+  });
+
   it("外审 1 #3:这页有没存的布防时间,打开向导先问(向导存的不会被旧草稿盖回去)", async () => {
     missing = ["plan"];
     const { container: c } = page();
@@ -389,13 +400,13 @@ describe("布防时间页", () => {
       expect(posted.some((p) => p.url === "/api/arming/schedule")).toBe(false);
     });
 
-    it("第 3 轮 config N1:此刻按日程撤防,停用日程 → 确认框写会变成「留守」", async () => {
+    it("第 3 轮 config N1(用户 11-27 改):此刻按日程撤防,停用日程 → 确认框写保持「撤防」", async () => {
       const { container: c } = page();
       await waitFor(() => expect(row(c, 0).querySelector(".armblock")).not.toBeNull());
       await new Promise((ok) => setTimeout(ok, 20));
       fireEvent.click(c.querySelector("#arm-enabled")!);
       fireEvent.click(c.querySelector(".arm-save")!);
-      await waitFor(() => expect(c.ownerDocument.querySelector(".modal")?.textContent).toContain("这些外围防区会马上布防：北区"));
+      await waitFor(() => expect(c.ownerDocument.querySelector(".modal")?.textContent).toContain("全站马上改成「撤防」"));
     });
 
     it("第 3 轮 config N2:手动留守(外围布防)、日程关着,新日程此刻不布防 → 要确认会撤防", async () => {

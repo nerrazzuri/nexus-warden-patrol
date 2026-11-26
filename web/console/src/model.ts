@@ -137,7 +137,7 @@ export interface Summary {
 }
 
 export interface Mode {
-  mode: "armed" | "home" | "visitor";
+  mode: "armed" | "home" | "visitor" | "disarmed";
   /** 用户 11-27:新站点还没人布过防(当撤防)。顶栏写「还未布防」,不写布防。 */
   unset?: boolean;
   /** 站点时区(IANA 名,站点 modes.view);顶栏的钟按它走(第 5 轮)。 */

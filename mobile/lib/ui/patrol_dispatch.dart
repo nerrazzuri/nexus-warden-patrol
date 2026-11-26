@@ -467,7 +467,7 @@ class _PatrolSheetState extends State<_PatrolSheet> {
 String patrolReasonText(String reason, String robot) => switch (reason) {
       'manual_only' => tr('$robot is set to manual dispatch only', '$robot 只许手动派'),
       'map_mismatch' => tr("$robot's map doesn't match the route", '$robot 用的地图跟路线对不上'),
-      _ => reason,
+      _ => siteText(reason),
     };
 
 String _ver(String v) => RegExp(r'^\d+$').hasMatch(v) ? 'v$v' : v;

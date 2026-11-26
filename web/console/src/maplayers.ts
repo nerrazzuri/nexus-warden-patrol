@@ -184,7 +184,7 @@ export function etaNext(path: Pt[] | null | undefined, at: Pt | null | undefined
 }
 
 export interface ModeView {
-  mode: "armed" | "home" | "visitor";
+  mode: "armed" | "home" | "visitor" | "disarmed";
   until_ms?: number | null;
   zones?: { zone: string; armed: boolean }[];
 }

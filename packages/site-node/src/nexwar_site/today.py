@@ -32,7 +32,8 @@ _TERMINAL = {"task_done": "done", "task_failed": "failed", "task_aborted": "abor
 _CODE_ONLY = re.compile(r"^\s*(abort(ed)?|done|halt(ed)?|stop(ped)?|cancel(l?ed)?|preempted|ok|"
                         r"finished|completed?)\s*$", re.I)
 #: 排程账里「这一轮到点了还没起跑」的几种去向(还在窗口里就是 waiting)。
-_PENDING = ("busy", "no_robot", "displaced", "supervised", "weather", "skew", "ambiguous")
+_PENDING = ("busy", "no_robot", "displaced", "supervised", "weather", "skew", "ambiguous",
+            "disarmed")
 
 
 def _terminal(db: Any, robot: str, task_id: str) -> tuple[str, int, str, int] | None:

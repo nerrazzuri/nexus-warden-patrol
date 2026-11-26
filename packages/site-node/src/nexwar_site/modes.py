@@ -32,8 +32,10 @@ from nexwar_site.sitetime import site_tz
 
 log = logging.getLogger(__name__)
 
-MODES = ("armed", "home", "visitor")
-LABEL = {"armed": "布防", "home": "留守", "visitor": "临时撤防", "schedule": "按时间表"}
+#: 用户 11-27 加「撤防」:整站撤防、不限时(入侵不出动、看见人不报;机器人跑完手上这一趟回原点等)
+MODES = ("armed", "home", "visitor", "disarmed")
+LABEL = {"armed": "布防", "home": "留守", "visitor": "临时撤防", "disarmed": "撤防",
+         "schedule": "按时间表"}
 STATE_LABEL = {"armed": "布防", "partial": "部分布防", "disarmed": "撤防"}
 DEFAULT_VISITOR_MIN = 4 * 60
 #: 新站点还没人布过防(``set_by`` 记这个):当撤防,顶栏写「还未布防」。
@@ -77,8 +79,8 @@ class ArmingDesk:
             # 有人切过模式或开了时间表才按正常的走。以前就有这一行的老站点(set_by 是空)照旧算布防,
             # 升级不会突然撤防。
             c.execute("INSERT OR IGNORE INTO site_mode(id, mode, prev_mode, visitor_zones, "
-                      "until_ms, set_by, set_ms) VALUES (1, 'armed', '', '[]', NULL, ?, 0)",
-                      (NEW_SITE_SET_BY,))
+                      "until_ms, set_by, set_ms) VALUES (1, ?, '', '[]', NULL, ?, 0)",
+                      ("disarmed" if NEW_SITE_SET_BY == UNSET else "armed", NEW_SITE_SET_BY))
 
     def authorized(self, zone: str | None) -> str | None:
         """此刻 ``zone`` 上生效的授权名字(B1c);没有、没接名单都是 ``None``。
@@ -133,9 +135,9 @@ class ArmingDesk:
             assert self.schedule is not None
             on = self.schedule.scheduled(zone, self._now())
             return on is not False, "schedule"          # None(锁里不该有)按布防:宁可报
-        if self._unset(r):
-            return False, "unset"
         mode = r["mode"]
+        if mode == "disarmed" or self._unset(r):
+            return False, "disarmed"
         if mode == "armed":
             return True, mode
         if zone in self.home_disarmed():
@@ -143,6 +145,13 @@ class ArmingDesk:
         if mode == "visitor" and zone in r["visitor_zones"]:
             return False, mode
         return True, mode
+
+    def disarmed(self) -> bool:
+        """用户 11-27:此刻整站撤防(手动切的「撤防」,新站点还未布防也算)—— 值守跑完这一圈不派下一圈、
+        排程巡逻暂停、机器人跑完手上这一趟回原点。按时间表管着时不算(时间表自己管各防区)。"""
+        with self.db.snapshot():
+            r = self._effective(self._raw())
+            return not self._governed(r) and (r["mode"] == "disarmed" or self._unset(r))
 
     def known_zones(self) -> list[str]:
         """手机挑防区用:绑过拦截点的、摄像头登记的、配过留守撤防的。"""
@@ -190,7 +199,7 @@ class ArmingDesk:
             if before["source"] == "schedule" and not sch.enabled():
                 # 布防向导外审 2 #3:保存时停用时间表照「此刻」转手动(api 存时间表那一段),
                 # 预演也照它算
-                mode = "home" if before["state"] == "disarmed" else "armed"
+                mode = "disarmed" if before["state"] == "disarmed" else "armed"
             return {"before": before, "after": self._view_locked(sch, extra, mode=mode)}
 
     def _view_locked(self, sch: Any = None, extra: frozenset[str] = frozenset(),
@@ -225,11 +234,12 @@ class ArmingDesk:
             state = "armed" if r["mode"] == "armed" else "partial"
         mode, label = r["mode"], LABEL[r["mode"]]
         unset = not governed and self._unset(r)
-        if unset:
-            # 还没人布过防:老 App 按 mode/state 显示成「留守 · 已撤防」,新的看 ``unset``
+        if not governed and (unset or r["mode"] == "disarmed"):
+            # 撤防(用户 11-27);新站点还没人布过防也是撤防,写「还未布防」(看 ``unset``)
             for z in zones:
                 z["armed"] = False
-            state, mode, label = "disarmed", "home", "还未布防"
+            state, mode = "disarmed", "disarmed"
+            label = "还未布防" if unset else LABEL["disarmed"]
         if governed:
             mode = "armed" if state == "armed" else "home"
             label = f"{LABEL['schedule']}:{STATE_LABEL[state]}"
@@ -255,6 +265,8 @@ class ArmingDesk:
         vz: list[str] = []
         until = None
         if mode == "visitor":
+            if self.disarmed():
+                raise ModeError("整站已经撤防了,不用再临时撤防:要恢复就切到「布防」或「留守」")
             if minutes is None:
                 minutes = DEFAULT_VISITOR_MIN
             if isinstance(minutes, bool) or not isinstance(minutes, int) \

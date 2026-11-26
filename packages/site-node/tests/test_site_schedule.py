@@ -497,3 +497,23 @@ async def test_W29_雷暴到点不起跑_记weather_雷暴过了窗口里照跑(
     await t.run(1)
     await _拍(t)
     assert "started" in [r["outcome"] for r in t.sched.runs("nightly")], "雷暴过了:窗口里照常执行"
+
+
+async def test_用户1127_整站撤防_排程巡逻暂停_记disarmed_布防了窗口里照跑(站):
+    from types import SimpleNamespace
+    t = 站
+    off = [True]
+    t.sched.arming = SimpleNamespace(disarmed=lambda: off[0])
+    await t.run(15)
+    t.clock.ms = 毫秒(22, 0, 30)
+    await t.run(1)
+    await _拍(t)
+    await _拍(t)
+    runs = t.sched.runs("nightly")
+    assert [r["outcome"] for r in runs] == ["disarmed"] and "撤防" in runs[0]["note"]
+    assert t.site.commands("A") == [], "撤防:不派"
+    off[0] = False
+    t.clock.ms = 毫秒(22, 5)
+    await t.run(1)
+    await _拍(t)
+    assert "started" in [r["outcome"] for r in t.sched.runs("nightly")], "布防了:窗口里照常执行"

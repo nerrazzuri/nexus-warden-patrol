@@ -873,3 +873,43 @@ async def test_W76外审_一直巡逻电量到线回了原点_不自动回待命
         await t.send(t.stb._auto("A", f"adhoc-forever-{path}"))
     assert not _cmds(t, "goto") and not _cmds(t, "patrol")
     assert not [i for i in _feed(sub) if i["kind"] == "standby_failed"]
+
+
+async def test_用户1127_整站撤防_任务跑完回原点_不回待命点(站):
+    t = 站
+    off = [True]
+    t.stb.disarmed = lambda: off[0]
+    t.stb.set("A", "dock", map_id="estate-1", map_version="7", x=0.6, y=0.0, yaw=0.0, default=True)
+    t.stb.set_home("A", "home", map_id="estate-1", map_version="7", x=0.0, y=0.0, yaw=0.0)
+    await t.send(t.site.goto("A", target(0.8), 0.8, issued_by="alice", priority=MANUAL))
+    await t.run(200)
+    goto = _cmds(t, "goto")
+    assert len(goto) == 2 and goto[1]["task_id"].startswith("standby-home-"), "回原点"
+    assert goto[1]["issued_by"] == "standby:disarmed"
+    await t.run(300)
+    o = await t.dog.odometry()
+    assert abs(o.x) < 0.2 and abs(o.y) < 0.2, "到了原点"
+    assert len(_cmds(t, "goto")) == 2, "到了不再派"
+
+
+async def test_用户1127_切到撤防那一下_空着的不在原点的回原点_在原点的和要留着的不动(站):
+    t = 站
+    off = [False]
+    t.stb.disarmed = lambda: off[0]
+    t.stb.set_home("A", "home", map_id="estate-1", map_version="7", x=0.0, y=0.0, yaw=0.0)
+    await t.send(t.site.goto("A", target(0.8), 0.8, issued_by="alice", priority=MANUAL))
+    await t.run(200)                                     # 停在 0.8 m(没有待命点,不回)
+    assert len(_cmds(t, "goto")) == 1
+    await t.send(t.stb.disarm_tick())
+    assert len(_cmds(t, "goto")) == 1, "还没撤防"
+    t.stb.keep = lambda rid: True
+    off[0] = True
+    await t.send(t.stb.disarm_tick())
+    assert len(_cmds(t, "goto")) == 1, "要留着的(充电、值守、驱离)不动"
+    t.stb._was_disarmed = False
+    t.stb.keep = None
+    await t.send(t.stb.disarm_tick())
+    goto = _cmds(t, "goto")
+    assert len(goto) == 2 and goto[1]["task_id"].startswith("standby-home-")
+    await t.send(t.stb.disarm_tick())
+    assert len(_cmds(t, "goto")) == 2, "只在切过去的那一下叫"

@@ -242,6 +242,21 @@ describe("W6-05 顶栏点布防状态切模式", () => {
   const mode = { mode: "armed", label: "布防", source: "manual", state: "armed", zones: [{ zone: "北区", armed: true }] } as never;
   const bar = (role: string, onMode = vi.fn(), stale = false, m = mode) => ({ onMode, c: render(<TopBar me={me(role)} page="duty" mode={m} alarms={0} now={0} pref="system"
     onPref={() => {}} onStop={() => {}} onSignOut={() => {}} onSay={() => {}} onMode={onMode} stale={stale} />).container });
+  it("用户 11-27:撤防了 —— 顶栏写已撤防,菜单里撤防是按下的,不再给全站临时撤防", () => {
+    lang.value = "zh";
+    const onMode = vi.fn();
+    const { c } = bar("guard", onMode, false, { mode: "disarmed", label: "撤防", source: "manual", state: "disarmed", zones: [{ zone: "北区", armed: false }] } as never);
+    const btn = c.querySelector("button.armstate")!;
+    expect(btn.textContent).toContain("已撤防");
+    expect(btn.className).toContain("disarmed");
+    fireEvent.click(btn);
+    const items = Array.from(c.querySelectorAll("[data-mode-menu] button"));
+    expect(items.map((b) => b.textContent)).toEqual(["布防", "留守", "撤防"]);
+    expect(items[2].getAttribute("aria-pressed")).toBe("true");
+    fireEvent.click(items[0]);
+    expect(onMode).toHaveBeenCalledWith("armed");
+    cleanup();
+  });
   it("用户 11-27:新站点还没人布过防 —— 顶栏写「还未布防」,不写布防,菜单里没有一项是按下的", () => {
     lang.value = "en";
     const { c } = bar("admin", vi.fn(), false, { mode: "home", label: "还未布防", source: "manual", state: "disarmed", zones: [], unset: true } as never);
@@ -262,12 +277,12 @@ describe("W6-05 顶栏点布防状态切模式", () => {
     let menu = c.querySelector("[data-mode-menu]")!;
     const items = Array.from(menu.querySelectorAll("button")).map((b) => b.textContent);
     // UIUX-035:顶栏这一项是全站 4 小时,跟授权页「按防区临时撤防」分开叫
-    expect(items).toEqual(["布防", "留守", "全站临时撤防 4 小时"]);
+    expect(items).toEqual(["布防", "留守", "全站临时撤防 4 小时", "撤防"]);   // 用户 11-27:加整站撤防(保安也能)
     // 易用性 37 第十一轮:没有防区时不给「全站临时撤防」(站点拒,以前撤了个空却显示撤了)
     cleanup();
     const { c: c2 } = bar("guard", vi.fn(), false, { mode: "armed", label: "布防", source: "manual", state: "armed", zones: [] } as never);
     fireEvent.click(c2.querySelector("button.armstate")!);
-    expect(Array.from(c2.querySelectorAll("[data-mode-menu] button")).map((b) => b.textContent)).toEqual(["布防", "留守"]);
+    expect(Array.from(c2.querySelectorAll("[data-mode-menu] button")).map((b) => b.textContent)).toEqual(["布防", "留守", "撤防"]);
     cleanup();
     ({ c } = bar("guard", onMode));
     fireEvent.click(c.querySelector("button.armstate")!);

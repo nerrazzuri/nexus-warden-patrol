@@ -127,15 +127,17 @@ void main() {
     expect(one.calls, contains('mode visitor Whole site 240'));
   });
 
-  testWidgets('易用性 37 场景测试：窄屏一排三个，临时撤防按钮用短写（以前「Temporary」从中间截成「Tempo rary …」）', (t) async {
+  testWidgets('易用性 37 场景测试：窄屏两排（用户 11-27 加了撤防），临时撤防按钮用短写（以前「Temporary」从中间截成「Tempo rary …」）', (t) async {
     appLang.value = AppLang.en;
     addTearDown(() => appLang.value = AppLang.zh);
     await _open(t, FakeApi('guard'));
     await t.binding.setSurfaceSize(const Size(390, 844));
     await t.pumpAndSettle();
     expect(find.descendant(of: find.byKey(SiteModePage.visitorKey), matching: find.text('Temp. disarm')), findsOneWidget);
-    expect(t.getTopLeft(find.byKey(SiteModePage.visitorKey)).dy, t.getTopLeft(find.byKey(SiteModePage.armKey)).dy,
-        reason: '还是一排（App V2）');
+    // 用户 11-27 加了「撤防」：四个按钮窄屏两排各两个（一排四个放不下）
+    expect(t.getTopLeft(find.byKey(SiteModePage.homeKey)).dy, t.getTopLeft(find.byKey(SiteModePage.armKey)).dy);
+    expect(t.getTopLeft(find.byKey(SiteModePage.disarmKey)).dy, t.getTopLeft(find.byKey(SiteModePage.visitorKey)).dy);
+    expect(t.getTopLeft(find.byKey(SiteModePage.visitorKey)).dy, greaterThan(t.getTopLeft(find.byKey(SiteModePage.armKey)).dy));
     // 易用性 37 第十一轮 P3：临时撤防是当前模式时也不折两行（窄屏不加打勾）
     final api = FakeApi('guard')..modeView = <String, dynamic>{...FakeApi('guard').modeView, 'mode': 'visitor'};
     await _open(t, api);
@@ -145,6 +147,23 @@ void main() {
     expect(t.widget<NwButton>(find.ancestor(of: find.byKey(SiteModePage.visitorKey), matching: find.byType(NwButton))).size,
         NwButtonSize.small);
     expect(find.descendant(of: find.byKey(SiteModePage.visitorKey), matching: find.byIcon(Icons.check_rounded)), findsNothing);
+  });
+
+  testWidgets('用户 11-27：保安能整站撤防 —— 先问、说清后果；撤防了不再给临时撤防', (t) async {
+    final api = FakeApi('guard');
+    await _open(t, api);
+    await t.ensureVisible(find.byKey(SiteModePage.disarmKey));
+    await t.tap(find.byKey(SiteModePage.disarmKey));
+    await t.pumpAndSettle();
+    expect(find.textContaining('回到原点等待'), findsOneWidget);
+    await t.tap(find.byKey(SiteModePage.disarmOkKey));
+    await t.pumpAndSettle();
+    expect(api.calls, contains('mode disarmed'));
+    final off = FakeApi('guard')..modeView = <String, dynamic>{...FakeApi('guard').modeView, 'mode': 'disarmed',
+      'state': 'disarmed', 'source': 'manual', 'label': '撤防'};
+    await _open(t, off);
+    expect(find.byKey(SiteModePage.visitorKey), findsNothing, reason: '整站撤防了：临时撤防没意义');
+    expect(find.textContaining('现在：撤防'), findsOneWidget);
   });
 
   testWidgets('管理员改不了防区，管理员能改「留守时也布防」', (t) async {

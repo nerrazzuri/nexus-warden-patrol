@@ -80,7 +80,7 @@ export function modeLabel(m: { mode: string; source?: string; state?: string; un
   if (m.source === "schedule") {
     return t("armSched", { s: t(m.state === "armed" ? "armStArmed" : m.state === "disarmed" ? "armStDisarmed" : "armStPartial") });
   }
-  return t(m.mode === "armed" ? "modeArmed" : m.mode === "home" ? "modeHome" : "modeVisitor");
+  return t(m.mode === "armed" ? "modeArmed" : m.mode === "home" ? "modeHome" : m.mode === "disarmed" ? "modeDisarm" : "modeVisitor");
 }
 
 /** 现在谁说了算:按时间表 / 手动到几点回时间表 / 时间表没开。 */
@@ -114,7 +114,7 @@ export function ArmingPage({ say, now, role = "admin", live }: { say: Say; now: 
   const [sec, setSec] = useState<"times" | "patrols" | "guard" | "devices">("times");
   const [copyFrom, setCopyFrom] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
-  const [switching, setSwitching] = useState<"armed" | "home" | null>(null);
+  const [switching, setSwitching] = useState<"armed" | "home" | "disarmed" | null>(null);
   const [wiz, setWiz] = useState<"open" | "arm" | null>(null);
   const [askWiz, setAskWiz] = useState<"open" | "arm" | null>(null);
 
@@ -177,14 +177,11 @@ export function ArmingPage({ say, now, role = "admin", live }: { say: Say; now: 
   function effectNow(): string | null {
     if (!mode) return null;
     const wasOn = !!loaded?.enabled;
-    // 第 3 轮 config N1:停用日程时站点照此刻的状态改成手动(此刻撤防 → 留守),确认框写清变成什么
+    // 第 3 轮 config N1:停用日程时站点照此刻的状态改成手动(此刻撤防 → 撤防),确认框写清变成什么
     if (!enabled && wasOn) {
       if (mode.source !== "schedule") return t("armSaveOff");
-      // 第 4 轮 config N5:日程此刻撤防 → 手动没有全撤防,改成留守:外围防区马上布防,写出是哪几个
-      if (mode.state === "disarmed") {
-        const outer = (mode.zones ?? []).filter((z) => z.home_armed !== false).map((z) => z.zone);
-        return outer.length ? t("armSaveOffStay", { zones: joinList(outer) }) : t("armSaveOffTo", { to: t("modeHome") });
-      }
+      // 用户 11-27:手动也有「撤防」了 —— 日程此刻撤防就保持撤防(原来改成留守,外围防区马上布防)
+      if (mode.state === "disarmed") return t("armSaveOffTo", { to: t("modeDisarm") });
       return t("armSaveOffTo", { to: t("modeArmed") });
     }
     // 第 3 轮 config N4:手动期里删光时段也要说「整周撤防」(原来手动期里一律不问)
@@ -291,12 +288,12 @@ export function ArmingPage({ say, now, role = "admin", live }: { say: Say; now: 
         {mode && (
           <div class="arm-now-btns">
             <div class="seg" role="group" aria-label={t("homeSwitch")}>
-              {(["armed", "home"] as const).map((m) => (
+              {(["armed", "home", "disarmed"] as const).map((m) => (
                 <button key={m} type="button" aria-pressed={mode.source !== "schedule" && mode.mode === m}
                   disabled={m === "armed" ? !canArm(role) : !canDisarm(role)}
                   title={m !== "armed" && !canDisarm(role) ? t("armNoDisarm") : undefined}
                   onClick={() => (m === "armed" && canDuty
-                    ? void needsWizard().then((n) => (n ? openWiz("arm") : setSwitching(m))) : setSwitching(m))}>{t(m === "armed" ? "modeArmed" : "modeHome")}</button>
+                    ? void needsWizard().then((n) => (n ? openWiz("arm") : setSwitching(m))) : setSwitching(m))}>{t(m === "armed" ? "modeArmed" : m === "home" ? "modeHome" : "modeDisarm")}</button>
               ))}
             </div>
             {/* 第 2 轮 config N4:打不开「临时撤防」页的账号(经理)不给这个入口,写一句谁能做 */}
@@ -309,12 +306,12 @@ export function ArmingPage({ say, now, role = "admin", live }: { say: Say; now: 
       {wizBox}
       {askSave && <Confirm text={askSave} yes={t("save")} onNo={() => setAskSave(null)} onYes={() => void save()} />}
       {switching && (
-        <Confirm text={switching === "armed" ? t("modeArmConfirm") : stayConfirmText(mode?.zones)}
-          yes={t(switching === "armed" ? "modeArmed" : "modeHome")} onNo={() => setSwitching(null)}
+        <Confirm text={switching === "armed" ? t("modeArmConfirm") : switching === "disarmed" ? t("modeDisarmConfirm") : stayConfirmText(mode?.zones)}
+          yes={t(switching === "armed" ? "modeArmed" : switching === "home" ? "modeHome" : "modeDisarm")} onNo={() => setSwitching(null)}
           onYes={() => {
             const m = switching;
             setSwitching(null);
-            api("POST", "/api/mode", { mode: m }).then(() => say(t(m === "armed" ? "modeNowArmed" : "modeNowHome"))).catch((e) => say(errText(e))).finally(() => void loadMode());
+            api("POST", "/api/mode", { mode: m }).then(() => say(t(m === "armed" ? "modeNowArmed" : m === "home" ? "modeNowHome" : "modeNowDisarmed"))).catch((e) => say(errText(e))).finally(() => void loadMode());
           }} />
       )}
 
