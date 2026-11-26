@@ -266,6 +266,8 @@ String scheduleWhen(Map<String, dynamic> e) {
 
 /// 布防模式说人话（W20）：`布防` / `留守` / `临时撤防（到 21:30）`。
 String modeText(Map<String, dynamic> m) {
+  // 用户 11-27：新站点还没人布过防
+  if (m['unset'] == true) return tr('not armed yet', '还未布防');
   // W44 第二期：站点的布防时间表管着时，写「按时间表：布防 / 部分布防 / 撤防」，不按 mode 写成「留守」
   if (m['source'] == 'schedule') {
     final st = switch (m['state']) {

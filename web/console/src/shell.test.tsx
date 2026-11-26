@@ -242,6 +242,18 @@ describe("W6-05 顶栏点布防状态切模式", () => {
   const mode = { mode: "armed", label: "布防", source: "manual", state: "armed", zones: [{ zone: "北区", armed: true }] } as never;
   const bar = (role: string, onMode = vi.fn(), stale = false, m = mode) => ({ onMode, c: render(<TopBar me={me(role)} page="duty" mode={m} alarms={0} now={0} pref="system"
     onPref={() => {}} onStop={() => {}} onSignOut={() => {}} onSay={() => {}} onMode={onMode} stale={stale} />).container });
+  it("用户 11-27:新站点还没人布过防 —— 顶栏写「还未布防」,不写布防,菜单里没有一项是按下的", () => {
+    lang.value = "en";
+    const { c } = bar("admin", vi.fn(), false, { mode: "home", label: "还未布防", source: "manual", state: "disarmed", zones: [], unset: true } as never);
+    const btn = c.querySelector("button.armstate")!;
+    expect(btn.textContent).toContain("Not armed yet");
+    expect(btn.textContent).not.toMatch(/\bArmed\b/);
+    expect(btn.className).toContain("unset");
+    fireEvent.click(btn);
+    expect(c.querySelectorAll("[data-mode-menu] button[aria-pressed='true']").length).toBe(0);
+    cleanup();
+    lang.value = "zh";
+  });
   it("保安:点开有布防、留守、临时撤防,点留守交给外壳去确认", () => {
     lang.value = "zh";
     let { c } = bar("guard");

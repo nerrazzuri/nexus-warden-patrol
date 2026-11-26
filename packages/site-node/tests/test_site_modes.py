@@ -33,6 +33,45 @@ def 台(tmp_path):
     db.close()
 
 
+@pytest.mark.new_site_unset
+def test_用户1127_新站点还没人布过防_顶栏不写布防_不报不出动_切过一次就照常(tmp_path):
+    db = SiteDB(tmp_path / "site.db")
+    desk = ArmingDesk(db, now_ms=钟())
+    desk.set_zone_home("garden", True)                  # 有个防区
+    v = desk.view()
+    assert v["unset"] is True and v["state"] == "disarmed" and v["label"] == "还未布防"
+    assert v["mode"] != "armed", "老 App 按 mode 显示:不能写成布防"
+    assert all(not z["armed"] for z in v["zones"])
+    assert desk.armed("front-yard")[0] is False, "还没布防:入侵不出动"
+    assert desk.robot_armed(True, None) is False, "还没布防:机器人看见人不报"
+    desk.set_mode("armed", by="olga")
+    v = desk.view()
+    assert v["unset"] is False and v["state"] == "armed"
+    assert desk.armed("front-yard") == (True, "armed")
+    db.close()
+
+
+@pytest.mark.new_site_unset
+def test_用户1127_老站点那一行早就在_升级以后照旧布防(tmp_path):
+    db = SiteDB(tmp_path / "site.db")
+    with db.tx() as c:                                   # 老版本建的那一行:set_by 空
+        c.execute("INSERT INTO site_mode(id, mode, prev_mode, visitor_zones, until_ms, set_by, "
+                  "set_ms) VALUES (1, 'armed', '', '[]', NULL, '', 0)")
+    desk = ArmingDesk(db, now_ms=钟())
+    assert desk.view()["unset"] is False and desk.view()["state"] == "armed"
+    assert desk.armed("front-yard") == (True, "armed")
+    db.close()
+
+
+@pytest.mark.new_site_unset
+def test_用户1127_还没布防时开了时间表_按时间表走(tmp_path):
+    db = SiteDB(tmp_path / "site.db")
+    desk = ArmingDesk(db, now_ms=钟())
+    assert desk.schedule is not None
+    assert not desk._governed(desk._raw()) and desk.view()["unset"] is True
+    db.close()
+
+
 def test_新站点默认布防_所有防区都布防(台):
     assert 台.view()["mode"] == "armed"
     assert 台.armed("front-yard") == (True, "armed")

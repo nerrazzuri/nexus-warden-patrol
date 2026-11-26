@@ -227,6 +227,8 @@ class _NwShellState extends State<NwShell> {
       final d = DateTime.fromMillisecondsSinceEpoch(ms.toInt());
       return '${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}';
     }
+    // 用户 11-27：新站点还没人布过防 —— 不能一开始就写「Armed」
+    if (m['unset'] == true) return (tr('Not armed yet', '还未布防'), _Sign.idle);
     if (mode == 'visitor' && until != null) return (tr('Temporary disarm · until ${hm(until)}', '临时撤防 · 到 ${hm(until)}'), _Sign.warn);
     // 易用性 build 36 P2-2：留守（Stay）时防区照样布防，state 是 armed —— 以前顶栏写「Armed」，网页写「Stay」，对不上
     if (mode == 'home' && m['source'] != 'schedule') {

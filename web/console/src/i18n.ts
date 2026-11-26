@@ -600,6 +600,7 @@ const en = {
   alarmCount: "Alarms {n}",
   armArmed: "Armed",
   armHome: "Stay",
+  armUnset: "Not armed yet",
   armVisitor: "Temp disarm until {t}",
   menuLook: "Appearance",
   // 第三档 #40:报警弹窗和声音
@@ -3009,6 +3010,7 @@ const zh: Partial<Record<Key, string>> = {
   alarmCount: "报警 {n}",
   armArmed: "布防中",
   armHome: "留守",
+  armUnset: "还未布防",
   armVisitor: "临时撤防（到 {t}）",
   menuLook: "外观",
   menuAlarmSound: "报警声音",

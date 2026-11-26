@@ -140,7 +140,7 @@ export function HomePage(props: {
                 <p class="arm-who">{whoText(m as Parameters<typeof whoText>[0], today?.enabled ?? false)}</p>
                 <div class="seg" role="group" aria-label={t("homeSwitch")}>
                   {([{ m: "armed", key: "modeArmed" }, { m: "home", key: "modeHome" }] as { m: Mode["mode"]; key: Key }[]).map((x) => (
-                    <button key={x.m} type="button" aria-pressed={m.source !== "schedule" && m.mode === x.m}
+                    <button key={x.m} type="button" aria-pressed={!m.unset && m.source !== "schedule" && m.mode === x.m}
                       onClick={() => props.onMode(x.m)}>{t(x.key)}</button>
                   ))}
                 </div>
