@@ -3844,8 +3844,26 @@ class _Handler(TlsHandlerMixin):
             return
         try:
             why = maps.reach_problem(map_id, version, [("这里", x, y)])
+            tight = False
+            goal = getattr(maps, "goal_problem", None)
+            if not why and goal is not None:
+                # 用户 11-27:还要规划得出终点(离墙、障碍、禁行区够远;第十六轮原点贴墙,回原点被拒)
+                why = goal(map_id, version, float(x), float(y),
+                           keep_out=self._keep_out(map_id, version))
+                tight = bool(why)
         except MapError:
             return
+        if tight:
+            where = "现在站的地方" if here else "这里"
+            raise HttpError(
+                409, f"{robot_id} {where}不能当待命点(原点):{why}。"
+                     + ("往开阔处开 1 m 左右再标" if here else "挑离墙、障碍、禁行区远一点的空地"),
+                extra={"reason_en": f"{robot_id} can't use this spot as its standby / home point: "
+                                    "it is too close to a wall, obstacle or no-go zone, so the "
+                                    "robot could not plan a path back to it. "
+                                    + ("Drive about 1 m into open floor and mark again."
+                                       if here else "Pick a spot further from walls, obstacles "
+                                                    "and no-go zones.")})
         if why and not here:
             # 易用性 37 复测第五轮:布局页在图上点 / 设默认也查(原来只查「在这儿设」)
             raise HttpError(
@@ -3862,6 +3880,17 @@ class _Handler(TlsHandlerMixin):
                                     "shows it as not walkable or not scanned, so robots could "
                                     "never be sent back here. Drive about 1 m into open, scanned "
                                     "floor and mark again."})
+
+    def _keep_out(self, map_id: str, version: str) -> tuple[tuple[tuple[float, float], ...], ...]:
+        """这一版图上在生效的禁行区、抹掉区多边形(机器人规划当硬挡的);拿不到回空。"""
+        zones = getattr(self.site.dispatcher, "zones", None)
+        if zones is None:
+            return ()
+        try:
+            return tuple(tuple(z.polygon) for z in zones.effective(map_id, version).nogo())
+        except Exception:                  # 读不出禁行区:只按墙查
+            log.warning("%s:%s 的禁行区读不出,原点只按墙查", map_id, version, exc_info=True)
+            return ()
 
     def _here_pose(self, robot_id: str, user, name: str) -> dict:
         """狗此刻锚定后的地图位姿(``mark_home {target: standby}``:检查同标原点,狗上什么都不改)。

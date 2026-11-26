@@ -39,6 +39,12 @@ from nexwar_site.evidence import ChunkWriter, PathRefused, Stored, safe_join
 log = logging.getLogger(__name__)
 
 
+#: 用户 11-27:原点、待命点要离墙、障碍、禁行区多远机器人才规划得出终点 —— 机器人那边的
+#: 外接圆半径 + 膨胀余量(contract ``planning.costmap`` 的 ROBOT_RADIUS_M + INFLATE_MARGIN_M)。
+GOAL_CLEAR_M = 0.57
+#: 终点落在致命区里,机器人就近挪这么远找能站的点(robot-agent ``planned_nav.GOAL_SNAP_M``)。
+GOAL_SNAP_M = 0.35
+
 #: 栅格预览缓存几张(W00c6h;一张最大 1024×1024 灰度 PNG,几百 KB)。
 PREVIEW_CACHE = 8
 #: 平面图(地图显示改进)缓存几张:一张最大 2048×2048 灰度 + 透明 PNG,通常几百 KB。
@@ -497,6 +503,40 @@ class MapCatalog:
         if pts and step > 1 and out[-1] != [round(pts[-1][0], 2), round(pts[-1][1], 2)]:
             out.append([round(pts[-1][0], 2), round(pts[-1][1], 2)])
         return out
+
+    def goal_problem(self, map_id: str, version: str, x: float, y: float,
+                     keep_out: tuple[tuple[tuple[float, float], ...], ...] = ()) -> str:
+        """用户 11-27:机器人规划得出到 ``(x, y)`` 的终点吗(原点、待命点)。机器人那边离墙、障碍、
+        禁行区 :data:`GOAL_CLEAR_M` 以内是致命区,终点落进去就就近挪 :data:`GOAL_SNAP_M` 以内能站的
+        地方(planned_nav ``_snap_goal``),都没有就 ``goal_blocked`` 拒单 —— 第十六轮演示站点原点贴墙,
+        撤防回原点被拒。这里按同一个规矩量;不行回一句给人看的原因,行回 ``""``。没有规划栅格的
+        老版本、站点不认识的版本不查。``keep_out``:在生效的禁行区(抹掉区)多边形。"""
+        from nexwar_contract.zones import distance_to_polygon, point_in_polygon
+        if self._reach(map_id, version) is None:
+            return ""
+        if any(point_in_polygon(x, y, poly) for poly in keep_out):
+            return "在禁行区里"
+
+        def room(px: float, py: float) -> float:
+            c = self.clearance(map_id, version, px, py, GOAL_CLEAR_M)
+            d = GOAL_CLEAR_M if c is None else c
+            for poly in keep_out:
+                d = min(d, 0.0 if point_in_polygon(px, py, poly)
+                        else distance_to_polygon(px, py, poly))
+            return d
+
+        here = room(x, y)
+        if here >= GOAL_CLEAR_M:
+            return ""
+        step = 0.05
+        n = int(round(GOAL_SNAP_M / step))
+        for i in range(-n, n + 1):
+            for j in range(-n, n + 1):
+                if (i or j) and math.hypot(i * step, j * step) <= GOAL_SNAP_M + 1e-9 \
+                        and room(x + i * step, y + j * step) >= GOAL_CLEAR_M:
+                    return ""
+        return (f"离墙、障碍或禁行区只有 {here:.2f} m,附近 {GOAL_SNAP_M:g} m 内也没有离开 "
+                f"{GOAL_CLEAR_M:g} m 的空地:机器人规划不出到这里的路(回原点、回待命点会被拒)")
 
     def clearance(self, map_id: str, version: str, x: float, y: float,
                   limit: float) -> float | None:
