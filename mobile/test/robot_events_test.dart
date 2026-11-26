@@ -23,7 +23,7 @@ void main() {
     appLang.value = AppLang.zh;
     expect(robotEventDetail('patrol_waypoint',
             {'name': '东门', 'ok': false, 'note': '路线在 (3.1, 2.0) 处离墙只剩 0.12 m', 'code': 'route_too_narrow'}),
-        '东门 · 未到达 · 路线太窄,过不去 · 改路线,或在地图上把这段标成不可通行 · 路线在 (3.1, 2.0) 处离墙只剩 0.12 m');
+        '东门 · 未到达 · 路线太窄,过不去 · 改路线,或在地图上把这段标成不可通行 · 路线在（3.1, 2.0） 处离墙只剩 0.12 m');  // 机器人原话也按中文标点（跟别的页一样）
     expect(robotEventDetail('task_failed', {'reason': '急停按下', 'code': 'made_up'}), '急停按下',
         reason: '码不认识就照旧');
   });

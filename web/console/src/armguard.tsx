@@ -6,7 +6,7 @@ import { api, ApiError } from "./api";
 import { robotNames } from "./data";
 import { lang, type Lang } from "./i18n";
 import { clock } from "./routes";
-import { siteStr } from "./sitetext";
+import { siteStr, wpName } from "./sitetext";
 
 // end_standby:每圈结束回待命点(11-04 用户,默认开;老站点不带这个键 = 开)
 export interface GuardEntry { id?: number; route: string; robot: string; gap_min: number; shuffle: boolean; end_standby?: boolean }
@@ -405,7 +405,7 @@ export function GuardPanel({ say, now, canEdit }: { say: (s: string) => void; no
               {showLog && duty.log && (
                 <ol class="plain small guard-log">
                   {duty.log.slice(-200).map((l, i) => (
-                    <li key={i}><span class="mono">{hhmm(l.at_ms)}</span> {l.robot_id && who(l.robot_id)} {l.kind === "point" ? gt("lgPoint") : l.kind === "missed" ? gt("lgMissed") : ""} {l.zone} {l.point} {l.detail ? siteStr(l.detail) : ""}</li>
+                    <li key={i}><span class="mono">{hhmm(l.at_ms)}</span> {l.robot_id && who(l.robot_id)} {l.kind === "point" ? gt("lgPoint") : l.kind === "missed" ? gt("lgMissed") : ""} {l.zone} {l.point ? wpName(l.point) : ""} {l.detail ? siteStr(l.detail) : ""}</li>
                   ))}
                 </ol>
               )}

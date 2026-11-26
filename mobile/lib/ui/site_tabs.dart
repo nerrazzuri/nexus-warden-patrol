@@ -144,10 +144,10 @@ String setupDetailText(Map it) {
     // minor #21：标原点时站点顺手加的待命点就在原点上
     final ids = home.join(tr(', ', '\u3001'));
     // 用户 11-26：原点和待命点分开说（重标原点不挪待命点，W13a）
-    return tr('The standby point of $ids was added where the origin was first marked. The origin and standby points '
-        "are separate: marking the origin again later doesn't move it. To park the robot somewhere else, "
+    return tr('The default standby point of $ids is right at the origin. The origin and standby points '
+        "are separate: marking the origin again later doesn't move standby points. To park the robot somewhere else, "
         'add a standby point on the Layout page.',
-        '$ids 的待命点是第一次标原点时在那儿自动加的。原点和待命点是分开的：以后重标原点，它不跟着挪。'
+        '$ids 的默认待命点就在原点上。原点和待命点是分开的：以后重标原点，待命点不跟着挪。'
         '想让机器人停到别处，在网页布置页加一个待命点。');
   }
   if (it['id'] == 'schedule' && blocked is List && blocked.isNotEmpty) {

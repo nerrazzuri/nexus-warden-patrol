@@ -318,3 +318,13 @@ describe("用户 11-26:被困 90 秒换车、叫人遥控回来", () => {
     expect(siteStr("A 被困 92 秒没脱开,换一台;请人遥控把它开回来")).toContain("A stuck for 92 s");
   });
 });
+
+describe("易用性 37 第八轮:值守日志每圈那几句、规划原因码开头", () => {
+  it("整句英文,点名翻", () => {
+    expect(siteStr("第 7 圈跑完,用时 60 秒")).toBe("Lap 7 done in 60 s");
+    expect(siteStr("第 7 圈接着跑:Drive-thru lane-3→回待命点")).toBe("Lap 7 resumed: Drive-thru lane-3 → “Return to standby”");
+    expect(siteStr("第 8 圈:a→b")).toBe("Lap 8: a → b");
+    expect(siteStr("第 8 圈被 别的任务 打断")).toBe("Lap 8 interrupted by another task");
+    expect(siteStr("start_blocked: 起点在障碍或禁行区里")).not.toMatch(CJK);
+  });
+});

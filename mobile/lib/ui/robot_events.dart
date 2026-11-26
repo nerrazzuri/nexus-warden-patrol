@@ -8,6 +8,7 @@ library;
 import '../design/alert_titles.g.dart';
 import '../design/nav_codes.g.dart';
 import '../l10n.dart';
+import '../net/site_text.dart';
 
 String? _title(String kind) => switch (kind) {
       'task_done' => tr('Task done', '任务完成'),
@@ -101,7 +102,7 @@ String robotEventDetail(String kind, Map<String, dynamic> data) {
     }
   }
   final name = data['name'];
-  if (name is String && name.isNotEmpty) parts.add(name);
+  if (name is String && name.isNotEmpty) parts.add(wpName(name));     // 「回待命点」这种站点加的点名也翻
   if (kind == 'patrol_waypoint' && data['ok'] is bool) {
     parts.add(data['ok'] == true ? tr('Arrived', '已到达') : tr('missed', '未到达'));
   }
@@ -113,7 +114,7 @@ String robotEventDetail(String kind, Map<String, dynamic> data) {
     final v = data[k];
     // `preempted`、`halt` 这种是程序里的代号，人看不懂，跳过
     if (v is String && v.isNotEmpty && !_code.hasMatch(v)) {
-      parts.add(v);
+      parts.add(siteText(v));                 // 易用性 37 第八轮：start_escape 的原因原来是中文
       break;
     }
   }

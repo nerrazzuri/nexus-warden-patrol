@@ -6,7 +6,7 @@ import { useEffect, useState } from "preact/hooks";
 import { api } from "./api";
 import { nameOf } from "./data";
 import { Modal } from "./dialogs";
-import { t, type Key } from "./i18n";
+import { joinList, t, type Key } from "./i18n";
 
 export interface Guide { tour: number; web_tour?: number; setup_hidden: boolean; skip: string[] }
 interface MapVer { map: string; version: string }
@@ -32,7 +32,7 @@ export function setupDetail(x: SetupItem): string {
   if ((x.id === "home" || x.id === "standby") && !x.done && x.no_map?.length) {
     return t("suNoMap", { ids: x.no_map.map(nameOf).join("、") });
   }
-  if (x.id === "standby" && x.done && x.at_home?.length) return t("suStandbyAtHome", { ids: x.at_home.map(nameOf).join("、") });
+  if (x.id === "standby" && x.done && x.at_home?.length) return t("suStandbyAtHome", { ids: joinList(x.at_home.map(nameOf)) });
   return "";
 }
 
