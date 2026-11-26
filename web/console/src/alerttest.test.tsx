@@ -38,6 +38,11 @@ describe("告警测试模式", () => {
     expect(alertTitle("zh", "stuck", "测试：被挡住了")).toMatch(/^测试：/);
     expect(alertTitle("en", "stuck", "被挡住了")).not.toMatch(/TEST/);
   });
+  it("第十六轮 P2:回原点失败跟未返回待命点同一种类,标题分开说", () => {
+    expect(alertTitle("en", "standby_failed", "回原点失败")).toBe("Did not return to home point");
+    expect(alertTitle("zh", "standby_failed", "回原点失败")).toBe("回原点失败");
+    expect(alertTitle("en", "standby_failed", "未返回待命点")).not.toContain("home point");
+  });
   it("第 5 轮:演练期间没有报警,不给「删掉演练报警」(不问删 0 条)", async () => {
     mode = { active: true, until_ms: END_AT, by: "alice", alarms: [] } as never;
     const { container: c } = render(<AlertTestBar role="admin" onCleared={() => {}} />);

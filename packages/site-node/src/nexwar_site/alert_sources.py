@@ -145,6 +145,10 @@ LOC_IDLE_P2_S = 120
 LOC_IDLE_BOOT_S = 300
 
 
+#: 站点派的回原点那一趟的任务号开头(standby.py ``return_home``)。
+HOME_TASK_PREFIX = STANDBY_PREFIX + "home-"
+
+
 def _rtk_heals(a: Any) -> bool:
     """用户 11-27:这条 RTK 告警随定位好了关吗。「基站挪了」不关(要人改基站坐标或重新配准);
     老站点报的没记 ``event``,按标题认。"""
@@ -652,6 +656,16 @@ class SiteAlertSources:
                                       title=f"出发前检查未通过:{title}",
                                       detail=f"{act};原文:{reason}"[:400],
                                       context={"check": item})
+            elif str(tid).startswith(HOME_TASK_PREFIX):
+                # 第十六轮 P2:回原点那一趟(撤防收队、手动叫回)没成 —— 机器人在原地等,不是巡逻中止:
+                # P2「回原点失败」(以前 P1「回待命点失败,停在半路」还升级推送,
+                # 其实一步没动、去的是原点)
+                blocked = "goal_blocked" in reason or "终点在障碍" in reason
+                why = ("原点在障碍里或离墙太近:去「布置」把原点挪开一点,再叫它回原点"
+                       if blocked else "看详情里的原因;机器人停在原地等")
+                self.desk.raise_alert(kind="standby_failed", robot=rid, title="回原点失败",
+                                      detail=f"{why};原文:{reason}"[:400],
+                                      context={"after": str(tid)})
             elif _hit(reason, BATTERY_WORDS):
                 self.desk.raise_alert(kind="battery_abort", robot=rid,
                                       title="电量不足,回待命点停在半路" if back

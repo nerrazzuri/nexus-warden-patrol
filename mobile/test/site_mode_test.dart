@@ -166,6 +166,18 @@ void main() {
     expect(find.textContaining('现在：撤防'), findsOneWidget);
   });
 
+  testWidgets('用户 11-27：时间表开着，撤防确认框写撤防到几点、之后按时间表', (t) async {
+    final at = DateTime(2026, 11, 28, 7, 0).millisecondsSinceEpoch;
+    final api = FakeApi('guard')..modeView = <String, dynamic>{...FakeApi('guard').modeView, 'schedule_next_ms': at};
+    await _open(t, api);
+    await t.ensureVisible(find.byKey(SiteModePage.disarmKey));
+    await t.tap(find.byKey(SiteModePage.disarmKey));
+    await t.pumpAndSettle();
+    expect(find.text('整站撤防到 07:00？'), findsOneWidget);
+    expect(find.textContaining('到 07:00 回到按布防时间表'), findsOneWidget);
+    expect(disarmAsk(null).$2, contains('直到有人重新布防'));
+  });
+
   testWidgets('管理员改不了防区，管理员能改「留守时也布防」', (t) async {
     await _open(t, FakeApi('owner'));
     expect(find.byKey(const Key('mode-zone-home-yard')), findsNothing);

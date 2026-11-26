@@ -36,7 +36,9 @@ const _allowed = <String, List<String>>{
     "'禁行区' => 'No-go zone', '限速区' => 'Speed-limit zone', '抹掉区' => 'Erase zone', '虚拟墙' => 'Virtual wall'"
   ],
   // 外审 r1 #9：站点给测试告警标题加的前缀（数据，按它认出是演练）；显示时另外翻
-  'lib/l10n.dart': ["const String kAlertTestPrefix = '测试：';"],
+  'lib/l10n.dart': ["const String kAlertTestPrefix = '测试：';",
+    // 第十六轮 P2：认站点给的标题原文（不是给人看的）
+    "if (kind == 'standby_failed' && bare == '回原点失败') {"],
   // 只有全角标点、没有字：报错原文的拼接
   'lib/ui/widget/live_video.dart': [r"'$error（$status）'", r"'$head：$detail'"],
 };
