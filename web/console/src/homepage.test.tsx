@@ -212,7 +212,7 @@ describe("第六期 M-home:经理看的概况(只读)", () => {
     const rows = Array.from(c.querySelectorAll(".home-24 tbody tr"));
     expect(rows.length).toBe(1);
     expect(rows[0].textContent).toContain("gina");
-    expect(rows[0].textContent).toContain("确认有人");
+    expect(rows[0].textContent).toContain("确认入侵");
     const admin = c.querySelector(".home-admin")!;
     expect(admin.textContent).toContain("等管理员处理");
     expect(admin.querySelectorAll("button").length).toBe(0);
