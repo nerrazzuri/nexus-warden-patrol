@@ -1009,7 +1009,7 @@ class _NowPageState extends State<NowPage> with EstopMissReveal {
     final at = n?['at_ms'] is num ? _hm((n!['at_ms'] as num).toInt()) : '';
     return _section(
         c,
-        n == null ? tr('Handover note', '上一班留言') : tr('Last shift note · ${n['author'] ?? ''} $at', '上一班留言 · ${n['author'] ?? ''} $at'),
+        n == null ? tr('Handover note', '上一班留言') : tr('Last shift note · ${personName(n['author'])} $at', '上一班留言 · ${personName(n['author'])} $at'),
         key: NowPage.noteKey,
         Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Text(n == null ? tr('No note from the last shift.', '上一班没有留言。') : '${n['text'] ?? ''}',

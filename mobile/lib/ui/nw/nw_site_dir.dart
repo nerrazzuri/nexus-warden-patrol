@@ -5,6 +5,7 @@
 /// 每一项先接到老页面（第 1 期）；后面几期按稿重排各页时这里只改目的地。
 library;
 
+import '../../net/person_names.dart';
 import 'package:flutter/material.dart';
 
 import '../../l10n.dart';
@@ -179,7 +180,7 @@ class _AccountBlockState extends State<_AccountBlock> {
           Divider(height: 1, thickness: 1, color: c.outline),
           ListTile(
               leading: Icon(Icons.person_outline, color: c.textSecondary),
-              title: Text(s?.name ?? '', style: NwText.titleSmall.copyWith(color: c.text, fontWeight: FontWeight.w700)),
+              title: Text(personName(s?.name), style: NwText.titleSmall.copyWith(color: c.text, fontWeight: FontWeight.w700)),
               subtitle: Text(site.isEmpty ? roleName(s?.role ?? '') : '${roleName(s?.role ?? '')} · $site',
                   style: NwText.bodySmall.copyWith(color: c.textSecondary))),
           Divider(height: 1, thickness: 1, color: c.outline),
@@ -506,7 +507,7 @@ class _ShiftNotesPageState extends State<ShiftNotesPage> {
                                 child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
                                   Row(children: [
                                     Expanded(
-                                        child: Text('${n['author'] ?? ''}',
+                                        child: Text(personName(n['author']),
                                             style: NwText.labelLarge.copyWith(color: c.text, fontWeight: FontWeight.w700))),
                                     Text(when, style: NwText.bodySmall.copyWith(color: c.textSecondary)),
                                   ]),
