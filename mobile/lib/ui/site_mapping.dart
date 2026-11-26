@@ -29,6 +29,7 @@ import 'nw/nw_ask.dart';
 import 'nw/nw_theme.dart';
 import 'nw/nw_widgets.dart';
 import '../net/map_names.dart';
+import '../net/person_names.dart';
 
 /// 先问预览（还不知道）、在看预览、在看录包轨迹。
 enum _Mode { probe, preview, trail }
@@ -1368,10 +1369,10 @@ class _SiteMapPreviewPageState extends State<SiteMapPreviewPage> with NwAsk {
           confirmed
               ? switch (conf['how']) {
                   // 决策 66：只收紧的改动当场算确认了；临时区到期删掉也算（到期是确认时就定好的）
-                  'tighten' => tr('Confirmed (${conf['by']}, tightening only)',
-                      '已确认（${conf['by']}，仅收紧）'),
+                  'tighten' => tr('Confirmed (${personName(conf['by'])}, tightening only)',
+                      '已确认（${personName(conf['by'])}，仅收紧）'),
                   'expiry' => tr('Confirmed (a temporary zone expired)', '已确认（临时区已到期删除）'),
-                  _ => tr('Confirmed (${conf['by']})', '已确认（${conf['by']}）'),
+                  _ => tr('Confirmed (${personName(conf['by'])})', '已确认（${personName(conf['by'])}）'),
                 }
               : conf == null
                   ? tr('Not confirmed: this map can\'t be sent to robots', '未确认：此地图无法下发')

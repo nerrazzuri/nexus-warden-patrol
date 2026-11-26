@@ -2,7 +2,7 @@
 // 选哪个标签只能改那一样,别的四样在图上淡着画、只作参考。右上角「保存」(这个标签有没存的改动才亮)和「历史版本」
 // (谁、几点改的,一键退回;退回走原来的保存,禁行区放宽照样要确认)。两个人同时改:后保存的看到「刚才有人改过」。
 // 这个文件是外框:选图、拉五样数据、淡层、保存按钮、历史抽屉、切标签前问没存的。各标签在 layout*.tsx。
-import { siteKnown } from "./sitetext";
+import { siteKnown, byText } from "./sitetext";
 import { useUnsaved } from "./unsaved";
 import type { ComponentChildren, FunctionComponent } from "preact";
 import { useCallback, useEffect, useRef, useState } from "preact/hooks";
@@ -415,8 +415,8 @@ export const historyItemLabel = (r: { item: string; title?: string }): string =>
 
 /** 退回确认框:路线的写是哪条路线(以前四条不同的路线都只写「回退到 demo 于 19:00 保存的版本?」)。 */
 export function restoreAskText(kind: string, r: { item: string; title?: string; at_ms: number; by: string }): string {
-  if (kind === "route") return t("lyRestoreRouteNamed", { name: historyItemLabel(r), t: hm(r.at_ms), by: r.by });
-  return t(kind === "nogo" ? "lyRestoreNogo" : "lyRestoreAsk", { t: hm(r.at_ms), by: r.by });
+  if (kind === "route") return t("lyRestoreRouteNamed", { name: historyItemLabel(r), t: hm(r.at_ms), by: byText(r.by) });
+  return t(kind === "nogo" ? "lyRestoreNogo" : "lyRestoreAsk", { t: hm(r.at_ms), by: byText(r.by) });
 }
 
 interface HistoryRow {
@@ -478,7 +478,7 @@ function HistoryDrawer({ kind, map, say, onRestored, onClose, routeKind }: {
           {rows.map((r, i) => (
             <li key={r.id}>
               <div>
-                <time class="mono small">{new Date(r.at_ms).toLocaleDateString("sv-SE")} {hm(r.at_ms)}</time> <b>{r.by}</b>
+                <time class="mono small">{new Date(r.at_ms).toLocaleDateString("sv-SE")} {hm(r.at_ms)}</time> <b>{byText(r.by)}</b>
                 {r.item && <span class="muted small"> · {historyItemLabel(r)}</span>}
                 {r.note.startsWith("restored") && <span class="tag">{t("lyRestoredTag")}</span>}
                 {(r.facts || r.summary) && <div class="muted small">{historySummary(kind, r)}</div>}

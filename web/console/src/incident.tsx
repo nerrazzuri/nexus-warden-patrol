@@ -38,7 +38,7 @@ export function incidentSteps(a: Alert): Step[] {
     const robot = a.robot && a.robot !== "site" && !a.robot.includes(":");
     steps.push({ key: "incDispatched", at: robot ? a.first_ms : null, who: robot ? nameOf(a.robot) : undefined });
   }
-  if (ARRIVE.has(a.kind)) steps.push({ key: "incOnSite", at: a.context?.arrived_ms ?? null, who: a.context?.arrived_by });
+  if (ARRIVE.has(a.kind)) steps.push({ key: "incOnSite", at: a.context?.arrived_ms ?? null, who: a.context?.arrived_by ? byText(a.context.arrived_by) : undefined });
   steps.push({ key: "incClosed", at: a.resolved_ms, who: a.resolved_ms != null ? verdictText(a) : undefined });
   return steps;
 }

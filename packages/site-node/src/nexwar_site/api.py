@@ -906,7 +906,8 @@ class _Handler(TlsHandlerMixin):
                 cat = getattr(self.site, "maps", None)
                 names = cat.names() if cat is not None and hasattr(cat, "names") else {}
                 return self._send_json(200, {"robots": self.site.dispatcher.robots_view(),
-                                             "map_names": names})
+                                             "map_names": names,
+                                             "person_names": self._person_names()})
             if method == "GET" and path == "/api/video/ws":
                 return self._video_ws(user)               # W51:网页的多路画面走一条 WebSocket
             if method == "GET" and path.split("?", 1)[0] == "/api/robots/charging":
@@ -4913,6 +4914,15 @@ class _Handler(TlsHandlerMixin):
                 or cat.build_in_flight(map_id, version):
             raise HttpError(409, f"{map_id}:{version} 已存在(或正在建),换个版本号",
                             extra={"reason": "version_taken"})
+
+    def _person_names(self) -> dict[str, str]:
+        """易用性 37 场景测试:账号 → 给人看的名字(起了名的才有)。各处「谁接的、谁派的」显示人名,不显示登录名。"""
+        accts = getattr(self.site, "accounts", None)
+        try:
+            rows = accts.list() if accts is not None else []
+        except Exception:  # noqa: BLE001 —— 拿不到就照旧显示登录名
+            return {}
+        return {r["name"]: r["display_name"] for r in rows if r.get("display_name")}
 
     def _map_preview(self, map_id: str, version: str, what: str) -> None:
         """建好的图的预览(W00c6h,``view``):``preview`` 是坐标换算 + 这张图这一版上登记的待命点

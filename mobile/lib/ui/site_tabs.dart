@@ -30,6 +30,7 @@ import 'site_intercepts.dart';
 import 'site_robot.dart' show robotStatusLine;
 import 'site_mapping.dart';
 import 'site_routes.dart';
+import '../net/person_names.dart';
 
 void _push(BuildContext context, Widget page) =>
     Navigator.push(context, MaterialPageRoute<void>(builder: (_) => page));
@@ -485,7 +486,7 @@ class _AdminHomeTabState extends State<AdminHomeTab> {
                                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                               Text(alertLine(a.robot, a.kind, a.title),
                                   style: NwText.titleSmall.copyWith(color: c.text, fontWeight: FontWeight.w700)),
-                              Text([if (a.ackedBy.isNotEmpty) a.ackedBy, outcome(a)].join(' · '), style: sub),
+                              Text([if (a.ackedBy.isNotEmpty) personName(a.ackedBy), outcome(a)].join(' · '), style: sub),
                             ])),
                           ])),
                   ]),

@@ -3,6 +3,7 @@
 // 右边当前任务(停下 / 回待命点 / 回原点)、派巡逻(忙时排队)、派去看一眼、姿态、定位、今天这台的事。
 // 权限跟老机器人页一样:派巡逻、停下 = 能派巡逻的(含经理);回待命、回原点、定位、恢复、姿态、云台、喊话、警示 = 能派单的。
 // 只读只看。换姿态、停下回原点在原地确认(老页面是弹窗)。
+import { byText } from "./sitetext";
 import type { ComponentChildren } from "preact";
 import { useEffect, useRef, useState } from "preact/hooks";
 import { api, ApiError, enc } from "./api";
@@ -139,7 +140,7 @@ export function RobotControl(props: {
             <h3 class="lbl">{t("rcTaskH")}</h3>
             {r.held && (
               <div class="rc-held warn">
-                <p>{t("rdHeld", { by: r.held.by, t: hm(r.held.at_ms) })}</p>
+                <p>{t("rdHeld", { by: byText(r.held.by), t: hm(r.held.at_ms) })}</p>
                 {dispatch && <button type="button" class="btn primary" disabled={busy}
                   onClick={() => void send(post("resume"), t("rdSent", { id: name, what: t("rdResume") }))}>{t("rdResume")}</button>}
               </div>

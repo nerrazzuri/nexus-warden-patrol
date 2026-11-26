@@ -1,6 +1,6 @@
 // 地图管理页(管理员):每张图每个版本是什么、哪几只狗在用、发布到狗、回退、删旧版本、两版对比。
 // 后端见 packages/site-node/src/nexwar_site/maps_admin*.py;文字走本文件里的 tr(英, 中),不碰 i18n.ts。
-import { siteKnown, siteStr } from "./sitetext";
+import { siteKnown, siteStr, byText } from "./sitetext";
 import { useCallback, useEffect, useRef, useState } from "preact/hooks";
 import { api, ApiError, enc } from "./api";
 import { ConfirmPassword } from "./confirmpw";
@@ -307,7 +307,7 @@ function ActivationCell({ a }: { a: Activation }) {
   return (
     <span class={`mm-act ${a.state}`}>
       <b>{mapName(a.map_id)}:{a.version}</b> · <span data-state={a.state}>{activationText(a)}</span>
-      <span class="muted small vmeta"><span>{a.by} {when(a.at_ms)}</span></span>
+      <span class="muted small vmeta"><span>{byText(a.by)} {when(a.at_ms)}</span></span>
     </span>
   );
 }

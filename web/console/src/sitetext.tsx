@@ -2,6 +2,7 @@
 // 站点能给英文的(体检项的 detail_en、报错的 reason_en)直接用;别的(机器人报的失败原因、站点拼的路线名、
 // 版本备注、拒绝原因……)按下面的规则翻。认不出的那一段不显示中文,写「见详情」,原文放悬停 / 技术详情。
 // 中文界面一律原样。
+import { signal } from "@preact/signals";
 import { lang, t } from "./i18n";
 
 const CJK = /[㐀-鿿]/;
@@ -469,10 +470,13 @@ export function SiteSpan({ s, class: cls }: { s: string | null | undefined; clas
 }
 
 /** 处理人:站点自己关的(``site:xxx``)说「系统自动」,不露内部代码(复测 duty N3、admin N1)。 */
+/** 易用性 37 场景测试:账号 → 人名(管理员在人员页起的),跟着 /api/robots 每拍更新;「谁接的、谁派的」都用它。 */
+export const personNames = signal<Record<string, string>>({});
+
 export function byText(by: string | null | undefined): string {
   if (!by) return "";
   // 第 4 轮 admin P1-01:「站点:…」开头的也是系统自动处理
-  return /^(site|站点)[:：]/.test(by) ? t("bySystem") : by;
+  return /^(site|站点)[:：]/.test(by) ? t("bySystem") : personNames.value[by] || by;
 }
 
 /** 站点自己加的点名(回待命点、回原点)按界面语言说;别的点名原样。 */
