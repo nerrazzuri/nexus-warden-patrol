@@ -47,7 +47,7 @@ const en = {
   routeGenAgain: "Generate a new one from the selected zones",
   routePick: "Generate a route through the selected zones ({zones}), or pick an existing one:",
   routeEdit: "Edit routes on the map",
-  routeGenTitle: "Zone patrol ({map} v{ver})",
+  routeGenTitle: "Zone patrol ({map})",
   routeGenNone: "No reachable points in the zones: {why}",
   routeSavedN: "Saved route {name}: {n} points.",
   routeProblems: "The generated route has problems. Fix the red points in the editor below and save.",
@@ -131,7 +131,7 @@ const zh: Record<WKey, string> = {
   routeGenAgain: "按选的防区重新生成一条",
   routePick: "按选的防区（{zones}）生成一条路线，或者选一条已有的：",
   routeEdit: "在地图上修改路线",
-  routeGenTitle: "防区巡逻（{map} 第 {ver} 版）",
+  routeGenTitle: "防区巡逻（{map}）",
   routeGenNone: "防区里没有机器人走得到的点：{why}",
   routeSavedN: "已保存路线「{name}」，共 {n} 个点。",
   routeProblems: "生成的路线有问题：请在下面的编辑器里改好红色的点，再保存。",
@@ -225,6 +225,21 @@ const ROBOT_EN: Record<string, string> = {
 const HALF_HOURS = Array.from({ length: 48 }, (_, i) => `${String(Math.floor(i / 2)).padStart(2, "0")}:${i % 2 ? "30" : "00"}`);
 function halfHours(cur: string): string[] {
   return !cur || HALF_HOURS.includes(cur) ? HALF_HOURS : [...HALF_HOURS, cur].sort();
+}
+
+/** 站点存路线显示名最多这么多个字(routes.py ``TITLE_MAX``)。 */
+export const ROUTE_TITLE_MAX = 40;
+
+/** 自动生成的路线显示名(易用性 37 第十轮 P1:地图起了长名字,拼出来超过 40 个字,站点拒收、向导只说
+ *  「站点不接受」)。版本号不拼(路线本来就绑着那一版);还长就把地图名截短加「…」。 */
+export function genTitle(map: string): string {
+  const fit = (m: string) => wt("routeGenTitle", { map: m });
+  const chars = Array.from(map);
+  let s = fit(map);
+  for (let n = chars.length - 1; Array.from(s).length > ROUTE_TITLE_MAX && n > 0; n--) {
+    s = fit(`${chars.slice(0, n).join("").trimEnd()}…`);
+  }
+  return Array.from(s).slice(0, ROUTE_TITLE_MAX).join("");
 }
 
 export function robotWhy(x: ReadyRobot): string {
@@ -453,7 +468,7 @@ export function ArmWizard({ say, onClose, arming = false, onChanged }: { say: Sa
         return;
       }
       const taken = new Set(r.routes.map((x) => x.id));
-      const title = wt("routeGenTitle", { map: mapName(map.map_id), ver: map.version });
+      const title = genTitle(mapName(map.map_id));
       let saved = "";
       // 外审 2 #5:前缀先截短,给「-2」「-20」留位置(编号最长 64)
       const head = `guard-${map.map_id}-${map.version}`.replace(/[^A-Za-z0-9_.-]/g, "-").slice(0, 60);
