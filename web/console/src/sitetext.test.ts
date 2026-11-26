@@ -326,5 +326,7 @@ describe("易用性 37 第八轮:值守日志每圈那几句、规划原因码�
     expect(siteStr("第 8 圈:a→b")).toBe("Lap 8: a → b");
     expect(siteStr("第 8 圈被 别的任务 打断")).toBe("Lap 8 interrupted by another task");
     expect(siteStr("start_blocked: 起点在障碍或禁行区里")).not.toMatch(CJK);
+    expect(siteStr("布防开始值守")).toBe("Guard duty started (armed)");
+    expect(siteStr("派了没在跑,也没结果(当被打断)")).not.toMatch(CJK);
   });
 });

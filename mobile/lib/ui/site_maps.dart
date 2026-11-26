@@ -614,9 +614,12 @@ class _SiteMapTabState extends State<SiteMapTab> {
             NwHeader(
                 overline: tr('Map', '地图'),
                 // M32：标题不印内部编号 estate-1:7
-                title: v?.mapId == null ? tr('Site map', '地图') : tr('${mapName(v!.mapId)} v${v.version}', '${mapName(v.mapId)} · 第 ${v.version} 版'),
-                subtitle:
-                    v?.mapId == null ? null : tr(onMap == 1 ? '1 robot on this map' : '$onMap robots on this map', '此地图上 $onMap 台机器人'),
+                // 易用性 37 第九轮：名字长了版本号被截掉 —— 标题只写名字，版本放到副标题
+                title: v?.mapId == null ? tr('Site map', '地图') : mapName(v!.mapId),
+                subtitle: v?.mapId == null
+                    ? null
+                    : tr('v${v!.version} · ${onMap == 1 ? '1 robot on this map' : '$onMap robots on this map'}',
+                        '第 ${v.version} 版 · 此地图上 $onMap 台机器人'),
                 trailing: [
                   IconButton(
                       key: SiteMapTab.refreshKey,
