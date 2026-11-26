@@ -853,12 +853,17 @@ class _待命点:
     def __init__(self, point=None):
         self.point = point
         self.sent: list[str] = []
+        self.home_sent: list[str] = []
 
     def swap_point(self, rid, map_id, map_version):
         return self.point
 
     async def return_to(self, rid, *, issued_by, **kw):
         self.sent.append(rid)
+        return {}
+
+    async def return_home(self, rid, *, issued_by, **kw):
+        self.home_sent.append(rid)
         return {}
 
 
@@ -1094,6 +1099,43 @@ async def test_外审r3_3_全撤防_中止被拒_接着重发_停下了才收队
     assert not t.duty._running("A")
     assert t.duty.status()["runs"] == [], "停下了才收队"
     assert stb.sent == ["A"], "收队后回待命点"
+
+
+async def test_用户1127_整站撤防_这一圈跑完再收队_回原点_不派下一圈(站):
+    t = 站
+    t.duty.standby = stb = _待命点(_原点)
+    _方案(t)
+    await _跑(t, 1.5)                                    # 第一圈在跑
+    first = _patrols(t)[0]["task_id"]
+    t.arming.set_mode("disarmed", by="gina")
+    await _跑(t, 4)
+    assert not [c for c in t.site.commands("A", 500) if c["kind"] == "abort"], "撤防:这一圈不停"
+    assert t.duty.status()["runs"], "跑着的这一圈还算值守的"
+    for _ in range(300):
+        await _跑(t, 1)
+        if not t.duty.status()["runs"]:
+            break
+    end = t.duty._terminal("A", first)
+    assert end is not None and end[0] == "task_done"
+    assert t.duty.status()["runs"] == [], "跑完收队"
+    assert stb.home_sent == ["A"] and stb.sent == [], "回原点,不回待命点"
+    assert len(_patrols(t)) == 1, "不派下一圈"
+    await _跑(t, 10)
+    assert len(_patrols(t)) == 1
+
+
+async def test_用户1127_留守撤了所有防区_照老规矩马上停下回待命点(站):
+    t = 站
+    t.duty.standby = stb = _待命点(_原点)
+    _方案(t)
+    await _跑(t, 1.5)
+    first = _patrols(t)[0]["task_id"]
+    for z in ("东区", "西区"):
+        t.arming.set_zone_home(z, False)
+    t.arming.set_mode("home", by="olga")
+    await _跑(t, 8)
+    assert any(c["kind"] == "abort" and c["task_id"] == first for c in t.site.commands("A", 500))
+    assert stb.sent == ["A"] and stb.home_sent == []
 
 
 async def test_外审r3_6_每圈回待命点那段算进一圈的电_不够就先补能(站):

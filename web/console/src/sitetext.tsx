@@ -203,6 +203,7 @@ const RULES: Rule[] = [
   [/^(\S+) 加载的地图是 '([^']*)'[,，]任务要 '([^']*)'$/, (m) => `${m[1]} has map “${m[2]}” loaded; the patrol needs “${m[3]}”`],
   [/^站点的钟跟 (\S+) 差 (\d+) 秒$/, (m) => `The site clock is ${m[2]} s off from ${m[1]}`],
   [/^雷暴[:：]排程巡检暂停$/, () => "Thunderstorm: scheduled patrols paused"],
+  [/^整站撤防[:：]排程巡逻暂停$/, () => "Site disarmed: scheduled patrols paused"],   // 用户 11-27
   // 机器人的巡逻失败原因(robot-agent tasks/patrol.py、engine/machine.py、导航桥)
   [/^跳过 (\d+) 个点[(（]([^)）]*)[)）][:：]\s*([\s\S]*)$/, (m) => `Skipped ${m[1]} ${plural(m[1], "point", "points")} (${m[2]}): ${lc(tr(m[3]))}`],
   [/^导航拒了[:：]\s*([\s\S]*)$/, (m) => `Navigation refused: ${lc(tr(m[1]))}`],

@@ -339,6 +339,7 @@ function ArmState({ mode, role, stale, onMode }: { mode: Mode; role: string; sta
     return () => { document.removeEventListener("mousedown", off); document.removeEventListener("keydown", esc); };
   }, [open]);
   const text = mode.unset ? t("armUnset") : mode.source === "schedule" ? modeLabel(mode) : mode.mode === "armed" ? t("armArmed")
+    : mode.mode === "disarmed" ? t("armDisarmed")
     : mode.mode === "home" ? t("armHome")
     : t("armVisitor", { t: mode.until_ms ? hm(mode.until_ms) : "—" });
   // 第 2 轮 duty N11:连不上站点时变灰、写「最后已知」,不像一切正常
@@ -352,9 +353,10 @@ function ArmState({ mode, role, stale, onMode }: { mode: Mode; role: string; sta
   }
   // 易用性 37 场景测试:已经撤防(临时撤防中、按时间表此刻撤防)就不再给「全站临时撤防 4 小时」
   // 易用性 37 第十一轮:站点没有防区时全站临时撤防撤不了什么(站点会拒),不给这一项
-  const off = mode.mode === "visitor" || (mode.source === "schedule" && mode.state !== "armed") || !mode.zones?.length;
+  const off = mode.mode === "visitor" || mode.mode === "disarmed" || (mode.source === "schedule" && mode.state !== "armed") || !mode.zones?.length;
   const items: { m: Mode["mode"]; key: Key }[] = [{ m: "armed", key: "modeArmed" }, { m: "home", key: "modeHome" },
-    ...(off ? [] : [{ m: "visitor" as const, key: "modeVisitorAll" as Key }])];   // UIUX-035:顶栏这一项是全站 4 小时
+    ...(off ? [] : [{ m: "visitor" as const, key: "modeVisitorAll" as Key }]),
+    { m: "disarmed", key: "modeDisarm" }];   // 用户 11-27:整站撤防(保安也能)   // UIUX-035:顶栏这一项是全站 4 小时
   return (
     <div class="armmenu" ref={box}>
       <button type="button" class={`armstate ${cls}`} data-stale={stale || undefined} disabled={stale} aria-haspopup="menu" aria-expanded={open}

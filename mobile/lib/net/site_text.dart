@@ -107,6 +107,9 @@ const Map<String, String> _lateZh = {'这一轮不跑了': 'skip', '已报警': 
 const String _afterNote = '; recorded afterwards because the site was not running then';
 
 final List<_Rule> _rules = [
+  // 用户 11-27：整站撤防时到点的排程巡逻（今天的巡逻里写原因）
+  (RegExp(r'^整站撤防[:：]排程巡逻暂停$'), (_) => 'Site disarmed: scheduled patrols paused'),
+  (RegExp(r'^雷暴[:：]排程巡检暂停$'), (_) => 'Thunderstorm: scheduled patrols paused'),
   // 易用性 37 复测：机器人设置页设备那几行（跟网页 sitetext 同一组，易用性 build 36 P2-5）
   (RegExp(r'^(\d+) 个线圈都确认过$'), (m) => 'All ${m[1]} relay channels confirmed'),
   (RegExp(r'^仿真声卡$'), (_) => 'Simulated sound card'),

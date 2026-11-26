@@ -80,6 +80,8 @@ class SiteModePage extends StatefulWidget {
   static const Key armKey = Key('mode-armed');
   static const Key homeKey = Key('mode-home');
   static const Key visitorKey = Key('mode-visitor');
+  static const Key disarmKey = Key('mode-disarm');
+  static const Key disarmOkKey = Key('mode-disarm-ok');
   static const Key msgKey = Key('mode-msg');
   static const Key leaveArmedKey = Key('mode-leave-armed');
 
@@ -191,6 +193,20 @@ class _SiteModePageState extends State<SiteModePage> with NwAsk {
   Future<void> _toHome(String now) async {
     if (!await _leaveArmed(now)) return;
     await _run(() => widget.api.setMode('home'), tr('Switch to Stay', '切换为留守'));
+  }
+
+  /// 用户 11-27：整站撤防（保安也能）—— 问一句，说清后果。
+  Future<void> _disarm() async {
+    final ok = await askYes(tr('Disarm the whole site?', '整站撤防？'),
+        body: tr(
+            'Intrusions and person detection stop raising alarms. Robots finish the lap they are on, '
+                'then go back to their home point and wait. The site stays disarmed until someone arms it.',
+            '撤防后入侵和人员检测都不报警；机器人走完手上这一圈，回到原点等待。直到有人重新布防才恢复。'),
+        ok: tr('Disarm', '撤防'),
+        okKey: SiteModePage.disarmOkKey,
+        danger: true);
+    if (!ok || !mounted) return;
+    await _run(() => widget.api.setMode('disarmed'), tr('Disarm', '撤防'));
   }
 
   Future<void> _visitorAsk(String now) async {
@@ -315,21 +331,33 @@ class _SiteModePageState extends State<SiteModePage> with NwAsk {
                 if (canSet) ...[
                   btn(SiteModePage.homeKey, 'home', tr('Stay', '留守'), () => _toHome(now)),
                   // 易用性 37 场景测试：窄屏一排三个时「Temporary」被从中间截断（「Tempo rary …」）：按钮上用短写，只在词间换行
-                  btn(SiteModePage.visitorKey, 'visitor', tr('Temp. disarm', '临时撤防'), () => _visitorAsk(now)),
+                  // 整站撤防了，临时撤防没意义（站点也会拒）
+                  if (now != 'disarmed')
+                    btn(SiteModePage.visitorKey, 'visitor', tr('Temp. disarm', '临时撤防'), () => _visitorAsk(now)),
+                  // 用户 11-27：整站撤防
+                  btn(SiteModePage.disarmKey, 'disarmed', tr('Disarm', '撤防'), _disarm),
                 ],
               ];
-              // App V2：同一排等宽（窄屏也一排三个）
-              return Row(children: [
-                for (var i = 0; i < buttons.length; i++) ...[
-                  if (i > 0) const SizedBox(width: Nw.s8),
-                  Expanded(child: buttons[i]),
-                ],
-              ]);
+              Widget row(List<Widget> xs) => Row(children: [
+                    for (var i = 0; i < xs.length; i++) ...[
+                      if (i > 0) const SizedBox(width: Nw.s8),
+                      Expanded(child: xs[i]),
+                    ],
+                  ]);
+              // App V2：同一排等宽；四个按钮窄屏放两排（一排四个字放不下）
+              if (buttons.length > 3 && box.maxWidth < 560) {
+                return Column(mainAxisSize: MainAxisSize.min, children: [
+                  row(buttons.sublist(0, 2)),
+                  const SizedBox(height: Nw.s8),
+                  row(buttons.sublist(2)),
+                ]);
+              }
+              return row(buttons);
             }),
             if (!canSet)
               Padding(
                   padding: const EdgeInsets.only(top: Nw.s8),
-                  child: Text(tr('Disarming (Stay, Temp disarm) needs an administrator or manager', '撤防（留守、临时撤防）需管理员或经理操作'),
+                  child: Text(tr('Disarming (Stay, Temp disarm, Disarm) needs an administrator, manager or guard on duty', '撤防（留守、临时撤防、撤防）需管理员、经理或值班保安操作'),
                       style: NwText.bodySmall.copyWith(color: c.textSecondary))),
             const SizedBox(height: Nw.s16),
             Text(tr('Zones (zones that are not configured are always armed)', '防区（未配置的防区一律布防）'),
@@ -474,6 +502,7 @@ class _SiteModePageState extends State<SiteModePage> with NwAsk {
 
 IconData modeIcon(String mode) => switch (mode) {
       'home' => Icons.home_rounded,
+      'disarmed' => Icons.shield_outlined,
       'visitor' => Icons.people_rounded,
       _ => Icons.shield_rounded,
     };
@@ -481,7 +510,7 @@ IconData modeIcon(String mode) => switch (mode) {
 /// 布防、留守、临时撤防都是正常状态：不上色。认不出的模式是异常：提示色。颜色跟着浅色 / 深色走：把
 /// `Nw.of(context)` 传进来（不传按浅色那一套）。
 Color modeColor(String mode, [NwColors c = NwColors.light]) => switch (mode) {
-      'armed' || 'home' || 'visitor' => c.textSecondary,
+      'armed' || 'home' || 'visitor' || 'disarmed' => c.textSecondary,
       _ => c.info,
     };
 
@@ -502,6 +531,8 @@ class SiteModeBar extends StatefulWidget {
   static const Key homeKey = Key('duty-mode-home');
   static const Key homeGoKey = Key('duty-mode-home-go');
   static const Key visitorKey = Key('duty-mode-visitor');
+  static const Key disarmKey = Key('duty-mode-disarm');
+  static const Key disarmGoKey = Key('duty-mode-disarm-go');
   static const Key nowKey = Key('duty-mode-now');
   static const Key msgKey = Key('duty-mode-msg');
 
@@ -635,6 +666,20 @@ class _SiteModeBarState extends State<SiteModeBar> with NwAsk {
     await _run(() => widget.api.setMode('home'), tr('Switch to Stay', '切换为留守'));
   }
 
+  /// 用户 11-27：整站撤防（保安也能）。
+  Future<void> _disarm() async {
+    final ok = await askYes(tr('Disarm the whole site?', '整站撤防？'),
+        body: tr(
+            'Intrusions and person detection stop raising alarms. Robots finish the lap they are on, '
+                'then go back to their home point and wait. The site stays disarmed until someone arms it.',
+            '撤防后入侵和人员检测都不报警；机器人走完手上这一圈，回到原点等待。直到有人重新布防才恢复。'),
+        ok: tr('Disarm', '撤防'),
+        okKey: SiteModeBar.disarmGoKey,
+        danger: true);
+    if (!ok || !mounted) return;
+    await _run(() => widget.api.setMode('disarmed'), tr('Disarm', '撤防'));
+  }
+
   Future<void> _visitor() async {
     await Navigator.push(context, MaterialPageRoute<void>(builder: (_) => SiteModePage(api: widget.api)));
     if (mounted) unawaited(_load());
@@ -671,7 +716,13 @@ class _SiteModeBarState extends State<SiteModeBar> with NwAsk {
             icon: Icons.people_rounded,
             label: tr('Temporary disarm', '临时撤防').toUpperCase(),
             selected: now == 'visitor',
-            onTap: !canSet || _busy ? null : _visitor),
+            onTap: !canSet || _busy || now == 'disarmed' ? null : _visitor),
+        NwChoice(
+            key: SiteModeBar.disarmKey,
+            icon: Icons.shield_outlined,
+            label: tr('Disarm', '撤防').toUpperCase(),
+            selected: now == 'disarmed',
+            onTap: !canSet || _busy || now == 'disarmed' ? null : _disarm),
       ]),
       askStrip(margin: const EdgeInsets.only(top: Nw.s8)),
       const SizedBox(height: Nw.s4),
@@ -683,7 +734,7 @@ class _SiteModeBarState extends State<SiteModeBar> with NwAsk {
             key: SiteModeBar.nowKey, style: small)
       else
         Text(tr('Arming mode not loaded yet', '布防模式未加载'), key: SiteModeBar.nowKey, style: small),
-      if (!canSet) Text(tr('Disarming (Stay, Temp disarm) needs an administrator or manager', '撤防（留守、临时撤防）需管理员或经理操作'), style: small),
+      if (!canSet) Text(tr('Disarming (Stay, Temp disarm, Disarm) needs an administrator, manager or guard on duty', '撤防（留守、临时撤防、撤防）需管理员、经理或值班保安操作'), style: small),
       if (_msg.isNotEmpty)
         Padding(
             padding: const EdgeInsets.only(top: Nw.s4),

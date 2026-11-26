@@ -326,6 +326,23 @@ class GuardDuty:
         self._route_cache[key] = info
         return info
 
+    def _disarmed(self) -> bool:
+        """用户 11-27:整站撤防(不是留守、临时撤防、时间表撤了几个防区)。"""
+        f = getattr(self.arming, "disarmed", None)
+        try:
+            return bool(f()) if callable(f) else False
+        except Exception:
+            log.exception("整站撤防没有读出来")
+            return False
+
+    def _finish_lap(self, run: dict[str, Any]) -> bool:
+        """整站撤防时手上这一圈还在跑:让它跑完(用户 11-27:走完当前这一圈,回原点等)。
+        别的状态(歇着、站在值守位、盯着人、正在停)照老规矩马上收队。"""
+        if run["state"] != "lap" or not run["task_id"] or not self._disarmed():
+            return False
+        rid, tid = run["robot_id"], run["task_id"]
+        return not self._stopped(rid, tid, self._running(rid), self._now())
+
     def _armed(self, zone: str) -> bool:
         try:
             return bool(self.arming.armed(zone)[0])
@@ -761,7 +778,11 @@ class GuardDuty:
             if armed:
                 active.append((e, info, armed))  # type: ignore[arg-type]
             elif e["id"] in runs:
-                await self._stand_down(runs[e["id"]], "这条路线经过的防区都撤防了")
+                r = runs[e["id"]]
+                if self._finish_lap(r):
+                    continue                     # 用户 11-27:撤防 —— 这一圈跑完再收队、回原点
+                await self._stand_down(r, "撤防:这一圈跑完了,回原点" if self._disarmed()
+                                       else "这条路线经过的防区都撤防了")
         duty = self._duty()
         if active and duty is None:
             with self.db.tx() as c:
@@ -1957,6 +1978,14 @@ class GuardDuty:
         if run["state"] != "standdown":
             self._log("stand_down", robot=rid, entry=eid, detail=why)
         if taken or self.standby is None:
+            return
+        if self._disarmed():
+            # 用户 11-27:整站撤防 —— 回原点等,不回待命点
+            try:
+                await self.standby.return_home(rid, issued_by="guard:disarmed")
+            except Exception as exc:  # noqa: BLE001 - 回不了原点:记下,机器人原地
+                log.warning("%s 撤防后回原点没派成: %s", rid, exc)
+                self._log("stand_down", robot=rid, entry=eid, detail=f"撤防后回原点没派成:{exc}")
             return
         try:
             await self.standby.return_to(rid, issued_by="guard", homing=True)
