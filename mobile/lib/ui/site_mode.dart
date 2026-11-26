@@ -313,7 +313,16 @@ class _SiteModePageState extends State<SiteModePage> with NwAsk {
                   btn(SiteModePage.visitorKey, 'visitor', tr('Temporary disarm', '临时撤防'), () => _visitorAsk(now)),
                 ],
               ];
-              // App V2：同一排等宽（窄屏也一排三个）
+              // App V2：同一排等宽。易用性 37 场景测试：窄屏一排三个时「Temporary disarm」被截成「Tempo rary …」——
+              // 一排放不下（每个不到 120 宽）就竖着排，字不截断
+              if (buttons.length > 1 && (box.maxWidth - Nw.s8 * (buttons.length - 1)) / buttons.length < 120) {
+                return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                  for (var i = 0; i < buttons.length; i++) ...[
+                    if (i > 0) const SizedBox(height: Nw.s8),
+                    buttons[i],
+                  ],
+                ]);
+              }
               return Row(children: [
                 for (var i = 0; i < buttons.length; i++) ...[
                   if (i > 0) const SizedBox(width: Nw.s8),
