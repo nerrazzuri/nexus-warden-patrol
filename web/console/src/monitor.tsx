@@ -505,7 +505,7 @@ function Handover({ role, me }: { role: string; me: string }) {
   }
   return (
     <section class="mon-note" aria-label={t("monNoteTitle")}>
-      <h3 class="lbl">{note ? t(note.author === me ? "alNoteMine" : "alNoteFrom", { who: note.author, t: hm(note.at_ms) }) : t("alNoteNone")}</h3>
+      <h3 class="lbl">{note ? t(note.author === me ? "alNoteMine" : "alNoteFrom", { who: byText(note.author), t: hm(note.at_ms) }) : t("alNoteNone")}</h3>
       {note && <p>{note.text}</p>}
       {canNote && (
         <>
