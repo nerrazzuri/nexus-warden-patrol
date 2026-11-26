@@ -19,6 +19,13 @@ void main() {
 
   tearDown(() async => site.close());
 
+  test('易用性 37 第十五轮 P2：关了以后还发的请求（退出站点时定时器发的）报 SiteError closed，不是未处理的 Bad state', () async {
+    final c = SiteClient(site.url, testCertFingerprint());
+    await c.login('alice', 'correct-horse-battery');
+    c.close();
+    await expectLater(c.robots(), throwsA(isA<SiteError>().having((e) => e.kind, 'kind', 'closed')));
+  });
+
   test('指纹对得上才连：登录拿到令牌和角色，之后的请求带令牌', () async {
     final c = SiteClient(site.url, testCertFingerprint());
     final s = await c.login('alice', 'correct-horse-battery');
