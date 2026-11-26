@@ -893,7 +893,8 @@ class _SiteMapPreviewPageState extends State<SiteMapPreviewPage> with NwAsk {
       // App V2 稿 S-zones：标题说这页管什么，副标题是哪张图哪一版
       appBar: AppBar(
           title: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text(tr('No-go zones, speed limits, virtual walls', '禁行区、限速、虚拟墙'), overflow: TextOverflow.ellipsis),
+        // 易用性 37 场景测试：窄屏截成「No-go zones, speed limits, vi…」—— 标题用短写
+        Text(tr('No-go, slow zones & walls', '禁行区、限速、虚拟墙'), overflow: TextOverflow.ellipsis),
         Text('${mapName(widget.mapId)} · ${versionLabel(widget.version)}',
             style: NwText.bodySmall.copyWith(color: Nw.of(context).textSecondary)),
       ])),
