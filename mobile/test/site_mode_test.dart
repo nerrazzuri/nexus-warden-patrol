@@ -125,6 +125,16 @@ void main() {
     expect(one.calls, contains('mode visitor Whole site 240'));
   });
 
+  testWidgets('易用性 37 场景测试：窄屏三个模式按钮放不下一排就竖着排（以前截成「Tempo rary …」）', (t) async {
+    await _open(t, FakeApi('guard'));
+    await t.binding.setSurfaceSize(const Size(390, 844));
+    await t.pumpAndSettle();
+    final a = t.getTopLeft(find.byKey(SiteModePage.armKey));
+    final v = t.getTopLeft(find.byKey(SiteModePage.visitorKey));
+    expect(v.dy, greaterThan(a.dy), reason: '竖着排');
+    expect(t.getSize(find.byKey(SiteModePage.visitorKey)).width, greaterThan(300));
+  });
+
   testWidgets('管理员改不了防区，管理员能改「留守时也布防」', (t) async {
     await _open(t, FakeApi('owner'));
     expect(find.byKey(const Key('mode-zone-home-yard')), findsNothing);
