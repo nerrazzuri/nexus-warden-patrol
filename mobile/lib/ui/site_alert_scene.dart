@@ -380,6 +380,8 @@ class _SiteAlertScenePageState extends State<SiteAlertScenePage> with EstopMissR
         );
         return;
       }
+      // 易用性 37 第十二轮 P3：自己接了，外面那条「（无人确认）」提示条马上收起（不等事件流）
+      ScaffoldMessenger.maybeOf(context)?.hideCurrentSnackBar();
       // 站点回了确认之后的这一条：谁、几点以站点记的为准。老站点不回正文：先在本地记成「我、现在」，
       // 下一次刷新拿到站点的再换。
       setState(() {
@@ -1229,7 +1231,7 @@ class _SiteAlertScenePageState extends State<SiteAlertScenePage> with EstopMissR
     }
     if (!_open || _closedHere != null && _a.resolvedMs == null) {
       final at = _a.resolvedMs ?? _closedHere;
-      final who = _a.resolvedBy.isNotEmpty ? _a.resolvedBy : (widget.api.session?.name ?? '');
+      final who = personName(_a.resolvedBy.isNotEmpty ? _a.resolvedBy : (widget.api.session?.name ?? ''));
       final v = _a.verdict.isNotEmpty ? _a.verdict : (_verdict ?? '');
       return _section(c, tr('Disposition', '结论'), key: SiteAlertScenePage.verdictKey, [
         Text(
@@ -1389,7 +1391,7 @@ class _SiteAlertScenePageState extends State<SiteAlertScenePage> with EstopMissR
     }
     if (_a.resolvedMs != null) {
       final n = '${_a.context['note'] ?? ''}';
-      final who = _a.resolvedBy.isEmpty ? '' : ' ${_a.resolvedBy}';
+      final who = _a.resolvedBy.isEmpty ? '' : ' ${personName(_a.resolvedBy)}';
       rows.add((
         _a.resolvedMs!,
         _a.verdict.isEmpty
