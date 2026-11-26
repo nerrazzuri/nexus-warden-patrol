@@ -1,24 +1,24 @@
 {
-  "now_ms": 1793379422716,
+  "now_ms": 1795696102004,
   "robots": [
     {
       "alerts": {
-        "P1": 3,
-        "P2": 1,
+        "P1": 2,
+        "P2": 2,
         "P3": 1
       },
       "backup": null,
-      "battery_as_of_ms": 1793379422665,
-      "battery_pct": 99.99766444444444,
+      "battery_as_of_ms": 1795696101971,
+      "battery_pct": 99.99759333333333,
       "bundle_lag": null,
       "clock_skew_s": 0.0,
       "disk_used_ratio": 0.42,
       "fresh": true,
-      "last_seen_ms": 1793379422271,
+      "last_seen_ms": 1795696101757,
       "oldest_backlog_s": 95,
       "online": true,
       "robot_id": "A",
-      "storage_as_of_ms": 1793379422665,
+      "storage_as_of_ms": 1795696101971,
       "upload_backlog": 3,
       "why": {
         "backup": "备份在站点做(决策 8:数据都在站点),看站点那一行",
@@ -34,17 +34,17 @@
     },
     "backup": {
       "configured": true,
-      "dest": "/tmp/pytest-of-liang/pytest-1164/test_手机读的站点夹具跟真站点同形0/bak",
+      "dest": "/tmp/pxd-1126y2/test_手机读的站点夹具跟真站点同形0/bak",
       "encrypted": false,
       "error": "",
-      "last_ok_ms": 1793379422684,
+      "last_ok_ms": 1795696101984,
       "stale": false
     },
     "push": null,
     "schedule_error": "",
     "schedule_ok": true,
     "why": {
-      "push": "没配推送:P1 只在 App 里"
+      "push": "未配置推送:P1 只在 App 里"
     }
   }
 }

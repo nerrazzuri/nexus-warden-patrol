@@ -844,7 +844,7 @@ class _MapWizardPageState extends State<MapWizardPage> with NwAsk {
     } on SiteError catch (e) {
       // 易用性 37 场景测试：录到一半机器人断线、站点重启后，这一版号已经被占（录了一半的那份），再录被拒、
       // 只能放弃重来。换一个新版本号接着录，说清是为什么
-      if (!retried && e.status == 409 && (e.body['reason'] == 'version_taken' || e.message.contains('已存在'))) {
+      if (!retried && e.status == 409 && e.body['reason'] == 'version_taken') {
         fresh = true;
       } else if (mounted) {
         setState(() => _err = refusalText(e));
