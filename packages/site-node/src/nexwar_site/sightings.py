@@ -64,6 +64,10 @@ PERSON_KIND = "dog_sees_person"
 OVERDUE_KIND = "person_overdue"
 #: 人在的时候,最后位置多久记一次(毫秒)。
 TRACK_EVERY_MS = 5_000
+#: 易用性 37 第十二轮 P1:报警已经关了、检测又一直说不清(断流、检测重启、机器人重启)超过这么久,
+#: 这一回的记录清掉 —— 以前留着,同一台再看见人只开灯笛、不报 P1(8530 上留了 9 小时)。
+#: 说不清一小会儿(闪断)不清:保安刚关、人还在,不马上重报。
+UNCLEAR_CLEAR_MS = 60_000
 #: 看见人以后这么多分钟没人到场 → 报经理。
 OVERDUE_MIN = 10
 #: W74 二期:告警现场里最多留这么多个人的轨迹点(``[x, y, at_ms]``,留最新的)。
@@ -90,6 +94,8 @@ class PersonWatch:
         self.alerts: Any = None
         #: 每台最后一次记最后位置的时刻(内存;站点重启了下一拍重记)。
         self._tracked: dict[str, int] = {}
+        #: 每台从什么时候起说不清(:meth:`_persons` 回 None);说得清了就去掉。
+        self._unclear: dict[str, int] = {}
         #: 每台最后一次见人喊话、开灯的时刻;轮到第几段话术(内存)。
         self._warned: dict[str, int] = {}
         #: 外审 W77-1 #6:关灯笛下一次能发的时刻、正在发的(机器人, 输出)。开着的那几样落库
@@ -217,7 +223,14 @@ class PersonWatch:
             self._sync_voice(rid, armed, now)
             p = self._persons(rid)
             if p is None:
-                continue                                  # 说不清:不报、不删
+                since = self._unclear.setdefault(rid, now)
+                if rid in seen and now - since >= UNCLEAR_CLEAR_MS and self._open(rid) is None:
+                    self._done(rid)                       # 那条关了、又说不清很久了:另起一回
+                    seen.pop(rid, None)
+                    log.info("%s 报警已关、人员检测 %d 秒说不清:这一回的记录清掉", rid,
+                             (now - since) // 1000)
+                continue                                  # 说不清:不报(报警开着也不删)
+            self._unclear.pop(rid, None)
             present = p.get("present")
             held = self._held(rid)
             prev = self._held_prev.get(rid, set())

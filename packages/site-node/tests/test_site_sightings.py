@@ -67,6 +67,29 @@ def test_一回看见只报一次_人走了才清_再看见再报_说不清不�
     assert [x["kind"] for x in t.w.alerts.raised] == ["dog_sees_person"]
 
 
+def test_易用性37第十二轮_报警关了检测断流很久_清掉这一回_再看见照报P1_闪断不清(台):
+    t = 台
+    t.d.persons("A", present=True, count=1)
+    t.w.tick()
+    assert len(t.w.alerts.raised) == 1
+    t.w.alerts.raised.clear()                             # 那条关了(假告警台没有 open_of = 都算关了)
+    t.d.clients["A"].capabilities.tasks["persons"] = {"state": "stale"}   # 人员流断了:说不清
+    t.w.tick()
+    t.ms[0] += 30_000
+    t.w.tick()
+    t.d.persons("A", present=True, count=1)
+    t.w.tick()
+    assert t.w.alerts.raised == [], "闪断 30 秒:不清,人还在不重报"
+    t.d.clients["A"].capabilities.tasks["persons"] = {"state": "stale"}
+    t.w.tick()
+    t.ms[0] += 61_000
+    t.w.tick()
+    assert t.db.query("SELECT 1 FROM person_sightings WHERE robot_id='A'") == []
+    t.d.persons("A", present=True, count=1)
+    t.w.tick()
+    assert [x["kind"] for x in t.w.alerts.raised] == ["dog_sees_person"], "另起一回照报 P1"
+
+
 @pytest.mark.parametrize("mode", ["home", "visitor"])
 def test_留守临时撤防不报_切回布防人还在就报(台, mode):
     t = 台
