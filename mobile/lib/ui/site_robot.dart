@@ -1167,7 +1167,15 @@ class _SiteRobotPageState extends State<SiteRobotPage> with NwAsk {
       ]),
       nwRobotSection(c, tr('Position', '位置'), key: const Key('robot-position'), [
         if (maps && robotCan(v, 'mark_home'))
-          _row(c, tr('Origin', '原点'), v?['home_set'] == true ? tr('Set', '已标') : tr('Not set', '没标'),
+          // 易用性 37 场景测试：null = 机器人没报图，或者报的图站点上没有（还没建图）—— 不说「没标」
+          _row(
+              c,
+              tr('Origin', '原点'),
+              switch (v?['home_set']) {
+                true => tr('Set', '已标'),
+                false => tr('Not set', '没标'),
+                _ => tr('Unknown: no site map yet', '不知道：站点上还没有这张图'),
+              },
               action: _small(c, const Key('btn-mark-home'), tr('Set here', '在这儿标'), _markHome)),
         if (dispatch || maps)
           _row(c, tr('Standby point', '待命点'), tr('Where it waits between tasks', '没任务时在哪等'),

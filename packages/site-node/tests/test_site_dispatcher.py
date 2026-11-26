@@ -594,6 +594,9 @@ async def test_11_11_W6_01_机器人列表带上_当前地图有没有原点_保
     assert m is not None
     with t.site.db.tx() as c:
         c.execute("DELETE FROM homes WHERE robot_id='A'")
+    assert t.site.robot_view("A")["home_set"] is None, "易用性 37 场景测试:图站点上没有 = 不知道"
+    with t.site.db.tx() as c:
+        c.execute("INSERT OR IGNORE INTO maps(map_id, version, source, created_ms, files) VALUES (?, ?, 't', 0, '[]')", m)
     assert t.site.robot_view("A")["home_set"] is False, "当前这版图上没原点:出不了发"
     with t.site.db.tx() as c:
         c.execute("INSERT INTO homes(robot_id, map_id, map_version, name, x, y, yaw) "

@@ -171,6 +171,14 @@ class Feed:
 
 
 
+def map_on_site(db: Any, map_id: Any, version: Any) -> bool:
+    """站点上有没有登记这一版图(机器人报的图站点上没有 = 新站点还没建图,或者是厂家自带的图)。查不了当有。"""
+    try:
+        return bool(db.query("SELECT 1 FROM maps WHERE map_id=? AND version=?", (map_id, version)))
+    except Exception:  # noqa: BLE001 —— 老库、测试替身没有 maps 表:照旧
+        return True
+
+
 def battery_pct(c: Any, *, fresh: bool) -> int | None:
     """最近一份遥测里的电量,取整;连接不新鲜、没有遥测都是 None(旧数显示成「现在的电量」会误导)。"""
     tel = getattr(c, "telemetry", None) if c is not None and fresh else None
@@ -423,8 +431,11 @@ class Dispatcher:
         m = self._loaded(c)
         if m is None:
             return None
-        return bool(self.db.query("SELECT 1 FROM homes WHERE robot_id=? AND map_id=? AND "
-                                  "map_version=?", (robot_id, *m)))
+        if self.db.query("SELECT 1 FROM homes WHERE robot_id=? AND map_id=? AND map_version=?",
+                         (robot_id, *m)):
+            return True
+        # 易用性 37 场景测试:机器人报的图站点上没有(新站点还没建图)—— 不说「没标原点」(标不了),说不知道
+        return False if map_on_site(self.db, *m) else None
 
     @staticmethod
     def _loc_view(c: DispatchClient | None) -> dict[str, Any] | None:
