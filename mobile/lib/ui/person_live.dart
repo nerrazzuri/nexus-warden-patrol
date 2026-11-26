@@ -84,9 +84,10 @@ class PersonLiveView extends StatelessWidget {
           return Scaffold(
               key: key_,
               backgroundColor: Colors.black,
-              body: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-                Expanded(
-                    child: Stack(fit: StackFit.expand, children: [
+              // 易用性 37 场景测试：竖着的窗口（桌面版、锁不了横屏的机器）以前左右两半、画面只占半边 —— 竖着就上下摆
+              body: LayoutBuilder(builder: (context, box) {
+                final tall = box.maxHeight > box.maxWidth;
+                final video = Stack(fit: StackFit.expand, children: [
                   SiteVideo(
                       key: ValueKey<String>('person-live-video ${a.robot}'),
                       api: api,
@@ -129,26 +130,48 @@ class PersonLiveView extends StatelessWidget {
                                       overflow: TextOverflow.ellipsis,
                                       style: NwText.bodyMedium.copyWith(color: Colors.white)),
                               ])))),
-                ])),
-                Container(
-                    width: 184,
-                    color: c.bg,
-                    child: SafeArea(
-                        left: false,
-                        child: Padding(
-                            padding: const EdgeInsets.all(12),
-                            child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-                              if (note.isNotEmpty)
-                                Expanded(
-                                    child: SingleChildScrollView(
-                                        child: Text(note,
-                                            key: const Key('person-live-note'),
-                                            style: NwText.bodySmall.copyWith(color: c.textSecondary))))
-                              else
-                                const Spacer(),
-                              for (final w in actions) ...[w, const SizedBox(height: Nw.s8)],
-                            ])))),
-              ]));
+                ]);
+                final noteText = Text(note,
+                    key: const Key('person-live-note'), style: NwText.bodySmall.copyWith(color: c.textSecondary));
+                if (tall) {
+                  return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                    Expanded(child: video),
+                    Container(
+                        color: c.bg,
+                        child: SafeArea(
+                            top: false,
+                            child: Padding(
+                                padding: const EdgeInsets.all(12),
+                                child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                  if (note.isNotEmpty) ...[
+                                    ConstrainedBox(
+                                        constraints: const BoxConstraints(maxHeight: 72),
+                                        child: SingleChildScrollView(child: noteText)),
+                                    const SizedBox(height: Nw.s8),
+                                  ],
+                                  for (final w in actions) ...[w, const SizedBox(height: Nw.s8)],
+                                ])))),
+                  ]);
+                }
+                return Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                  Expanded(child: video),
+                  Container(
+                      width: 184,
+                      color: c.bg,
+                      child: SafeArea(
+                          left: false,
+                          child: Padding(
+                              padding: const EdgeInsets.all(12),
+                              child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                                if (note.isNotEmpty)
+                                  Expanded(child: SingleChildScrollView(child: noteText))
+                                else
+                                  const Spacer(),
+                                for (final w in actions) ...[w, const SizedBox(height: Nw.s8)],
+                              ])))),
+                ]);
+              }));
         })));
   }
 }
