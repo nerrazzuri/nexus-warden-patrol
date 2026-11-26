@@ -1850,6 +1850,12 @@ class _Handler(TlsHandlerMixin):
             if then not in THENS:
                 raise HttpError(400, f"then 只能是 {' / '.join(THENS)}")
             self._audit_detail = {"then": then}
+            # 易用性 37 场景测试:保安点了墙边、障碍旁的点,机器人当场拒,站点却冒一条全站 P1「整趟中止」。
+            # 派之前先查这个点(跟画路线同一套逐点检查)和走不走得到,去不了只回给点的人
+            errs = self._goto_check(robot_id, target)
+            if errs:
+                raise HttpError(400, errs[0]["problem"],
+                                extra={"errors": errs, "reason": "unreachable"})
             result = self.site.dispatch(lambda: disp.goto(
                 robot_id, target, speed, issued_by=str(user), priority=MANUAL))
             look = getattr(self.site, "look", None)
@@ -2097,6 +2103,23 @@ class _Handler(TlsHandlerMixin):
             except (TypeError, ValueError):
                 p["yaw"] = 0.0                            # 点不成形:下面逐点报
         return flat
+
+    def _goto_check(self, robot: str, target: dict[str, Any]) -> list[dict[str, Any]]:
+        """「去这里」/派去看一眼之前查目标点:能不能站(画路线那套逐点检查)、从现在的位置走不走得到。
+        查不了(没路线库、目标没带图号版本、坐标不对……)就不拦,交给机器人自己查。"""
+        store = getattr(self.site, "routes", None)
+        mid, ver = target.get("map_id"), target.get("map_version")
+        if store is None or not isinstance(mid, str) or not isinstance(ver, str):
+            return []
+        pts = [{"x": target.get("x"), "y": target.get("y")}]
+        try:
+            wps = self._temp_waypoints(pts)
+            wps[0]["name"] = "目标点"          # 原因里写「目标点 在图上不是可通行的地方」,网页、App 都翻得了
+            errs = store.check_points({"map_id": mid, "map_version": ver, "waypoints": wps})
+        except Exception:  # noqa: BLE001 - 查不了不拦,机器人自己还会查
+            log.warning("%s 去这里之前查点没查成", robot, exc_info=True)
+            return []
+        return errs or self._reach_first(robot, mid, ver, pts)
 
     def _reach_first(self, robot: str, map_id: Any, version: Any, points: Any
                      ) -> list[dict[str, Any]]:
