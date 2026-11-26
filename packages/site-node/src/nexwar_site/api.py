@@ -5017,8 +5017,10 @@ class _Handler(TlsHandlerMixin):
             info = info | {"rotation_deg": disp["rotate_deg"]}
         display = None if disp is None else {k: disp[k] for k in ("rotate_deg", "regions",
                                                                     "terrain")}
+        walked = self.site.maps.walked(map_id, version)      # 易用性 37 第十一轮 P2:建图走过的路
         return self._send_json(200, info | {"standby": standby, "homes": homes, "zones": zones,
-                                            "areas": areas, "plan": plan, "display": display})
+                                            "areas": areas, "plan": plan, "display": display,
+                                            "walked": walked})
 
     def _home_on(self, robot_id: str, map_id: str, version: str) -> dict[str, float] | None:
         """这台狗在这张图这个版本上的原点(W13a):**只看原点表**。待命点是运营调度的点、随时会加、挪、删,

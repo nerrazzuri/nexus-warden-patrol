@@ -171,6 +171,11 @@ def test_哪里有图_离走过的路太远或不在可通行格子上就说清�
     cat.import_dir(old, map_id="yard", version="0")
     assert cat.reach_problem("yard", "0", [("随便", 999.0, 0.0)]) == "", "老版本没有 coverage.json"
     assert cat.reach_problem("nope", "1", [("随便", 0.0, 0.0)]) == "", "站点不认识的版本:不挡"
+    # 易用性 37 第十一轮 P2:路线编辑器画建图走过的路
+    assert cat.walked("yard", "1") == [[0.5 * i, 0.0] for i in range(7)]
+    thin = cat.walked("yard", "1", max_points=3)
+    assert len(thin) <= 4 and thin[0] == [0.0, 0.0] and thin[-1] == [3.0, 0.0], "抽稀保留头尾"
+    assert cat.walked("yard", "0") == [] and cat.walked("nope", "1") == []
 
 
 def _cov_version(cat, tmp_path, version, cov=None, yaml_image="floor.pgm"):

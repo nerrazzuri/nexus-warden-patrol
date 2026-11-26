@@ -568,8 +568,11 @@ class FakeApi implements SiteApi {
       'top_y': 5.0, 'source': 'yard.yaml', if (previewWarning != null) 'warning': previewWarning,
       'standby': <dynamic>[
         {'robot_id': 'A', 'name': 'dock', 'x': 1.5, 'y': 2.0, 'yaw': 0.5, 'default': true},
-      ]};
+      ], ...previewExtra};
   }
+
+  /// 易用性 37 第十一轮：预览里再带的（建图走过的路 walked、区域 zones）。
+  Map<String, dynamic> previewExtra = <String, dynamic>{};
 
   /// 区域（W10）：站点那一份；[zonesConflict] 给了就让下一次存回 409。
   Map<String, dynamic> zonesView = <String, dynamic>{

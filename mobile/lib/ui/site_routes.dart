@@ -30,6 +30,7 @@ import 'nw/nw_p3_robots.dart' show robotNotStanding;
 import 'patrol_dispatch.dart' show adhocEndText, dispatchResultText, hhmm, minutesText, patrolSent;
 import 'pose_marker.dart';
 import 'refusal.dart';
+import 'site_mapping.dart' show ZoneShape, ZonesPainter, zoneWallPixels;
 import 'widget/fields_dialog.dart';
 import '../net/map_names.dart';
 
@@ -380,6 +381,8 @@ class SiteRouteEditorPage extends StatefulWidget {
   static const Key tempSendKey = Key('route-temp-send');
 
   static const Key canvasKey = Key('route-canvas');
+  static const Key zonesKey = Key('route-zones');
+  static const Key walkedLegendKey = Key('route-walked-legend');
   static const Key saveKey = Key('route-save');
   static const Key deleteKey = Key('route-delete');
   static const Key deleteOkKey = Key('route-delete-ok');
@@ -816,7 +819,7 @@ class _SiteRouteEditorPageState extends State<SiteRouteEditorPage> with NwAsk {
               final (meta, png, plan) = snap.data!;
               final geo = MapGeo.fromPreview(meta);
               return LayoutBuilder(builder: (context, box) {
-                final map = _map(context, geo, png, plan);
+                final map = _map(context, geo, png, plan, meta);
                 final panel = _panel(context);
                 if (box.maxWidth >= 700) {
                   return Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
@@ -832,7 +835,7 @@ class _SiteRouteEditorPageState extends State<SiteRouteEditorPage> with NwAsk {
             }));
   }
 
-  Widget _map(BuildContext context, MapGeo geo, Uint8List png, bool plan) {
+  Widget _map(BuildContext context, MapGeo geo, Uint8List png, bool plan, Map<String, dynamic> meta) {
     final c = Nw.of(context);
     final w = geo.width, h = geo.height, rad = geo.radians;
     Offset px(double x, double y) => geo.toPx(x, y);
@@ -846,7 +849,35 @@ class _SiteRouteEditorPageState extends State<SiteRouteEditorPage> with NwAsk {
           ]
     ];
     final line = [for (final p in _pts) px(p.x, p.y)];
-    return LayoutBuilder(
+    // 易用性 37 第十一轮 P2：画路线时看得到建图走过的路（站点 preview 的 walked）和禁行区、虚拟墙、限速区
+    final walked = [
+      for (final p in (meta['walked'] as List? ?? const []))
+        if (p is List && p.length >= 2 && p[0] is num && p[1] is num) px((p[0] as num).toDouble(), (p[1] as num).toDouble()),
+    ];
+    final zones = [
+      for (final z in (meta['zones'] as List? ?? const []))
+        if (z is Map<String, dynamic> && z['kind'] != 'erase') z,
+    ];
+    final shapes = [
+      for (final z in zones)
+        ZoneShape.of(z, wall: zoneWallPixels(z, px), [
+          for (final p in (z['polygon'] as List? ?? const []))
+            if (p is List && p.length >= 2 && p[0] is num && p[1] is num) px((p[0] as num).toDouble(), (p[1] as num).toDouble()),
+        ]),
+    ];
+    final nogo = zones.any((z) => z['kind'] == 'nogo');
+    final legend = [
+      if (walked.length >= 2)
+        NwLegendItem(
+            key: SiteRouteEditorPage.walkedLegendKey,
+            swatch: Container(width: 14, height: 4, color: _walkedColor.withValues(alpha: 0.5)),
+            label: tr('Path walked while mapping', '建图时走过的路')),
+      if (nogo)
+        NwLegendItem(
+            swatch: Container(width: 10, height: 10, decoration: BoxDecoration(border: Border.all(color: Colors.red, width: 1.5))),
+            label: tr('No-go zone', '禁行区')),
+    ];
+    final canvas = LayoutBuilder(
         builder: (context, box) => ClipRect(
             child: InteractiveViewer(
                 transformationController: _zoom,
@@ -869,9 +900,16 @@ class _SiteRouteEditorPageState extends State<SiteRouteEditorPage> with NwAsk {
                                 height: h,
                                 child: Stack(clipBehavior: Clip.none, children: [
                                   SizedBox(width: w, height: h, child: mapBaseImage(context, png, plan: plan)),
+                                  if (shapes.isNotEmpty)
+                                    CustomPaint(
+                                        key: SiteRouteEditorPage.zonesKey,
+                                        size: Size(w, h),
+                                        painter: ZonesPainter(shapes, const <Offset>[], radius: r / 2)),
                                   CustomPaint(
                                       size: Size(w, h),
                                       painter: _RoutePainter(
+                                          walked: walked,
+                                          walkedColor: _walkedColor,
                                           others: others,
                                           line: line,
                                           color: c.tertiary,
@@ -900,6 +938,13 @@ class _SiteRouteEditorPageState extends State<SiteRouteEditorPage> with NwAsk {
                                                         surface: c.surface,
                                                         text: c.text))))),
                                 ]))))))));
+    if (legend.isEmpty) return canvas;
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      Expanded(child: canvas),
+      Padding(
+          padding: const EdgeInsets.fromLTRB(Nw.s8, Nw.s4, Nw.s8, Nw.s4),
+          child: Wrap(spacing: Nw.s16, runSpacing: Nw.s4, children: legend)),
+    ]);
   }
 
   Widget _panel(BuildContext context) {
@@ -1134,14 +1179,20 @@ String yawText(double yaw) {
   return d == d.roundToDouble() ? '${d.toInt()}' : '$d';
 }
 
+const Color _walkedColor = Colors.green;
+
 class _RoutePainter extends CustomPainter {
+  final List<Offset> walked;
+  final Color walkedColor;
   final List<List<Offset>> others;
   final List<Offset> line;
   final Color color;
   final Color otherColor;
   final double width;
   const _RoutePainter(
-      {required this.others, required this.line, required this.color, required this.otherColor, required this.width});
+      {this.walked = const [],
+      this.walkedColor = _walkedColor,
+      required this.others, required this.line, required this.color, required this.otherColor, required this.width});
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -1160,6 +1211,7 @@ class _RoutePainter extends CustomPainter {
             ..strokeJoin = StrokeJoin.round);
     }
 
+    poly(walked, walkedColor.withValues(alpha: 0.35), width * 2.2);
     for (final o in others) {
       poly(o, otherColor.withValues(alpha: 0.7), width * 0.7);
     }
@@ -1168,5 +1220,5 @@ class _RoutePainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_RoutePainter old) =>
-      old.line != line || old.others != others || old.color != color || old.width != width;
+      old.line != line || old.others != others || old.color != color || old.width != width || old.walked != walked;
 }
