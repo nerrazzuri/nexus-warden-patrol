@@ -126,7 +126,7 @@ export function TodayPatrols({ retryMs = 5_000, canFix = false, onItems, title, 
             <span class="mono">{siteHm(duty.duty!.started_ms, off)}</span>
             <span class="today-what">
               {[t("tdGuard"), r ? robotNames.value[r.robot_id] || r.robot_id : ""].filter(Boolean).join(" · ")}
-              {r && <span class="muted small"> · {runText(r)}</span>}
+              {r && <span class="muted small"> · {runText(r, false)}</span>}
             </span>
             <span class="tdchip info">{t("tdRunning")}</span>
           </li>

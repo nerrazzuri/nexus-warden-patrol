@@ -150,6 +150,7 @@ describe("值守方案面板", () => {
   it("英文也说得通", () => {
     lang.value = "en";
     expect(runText({ entry: 1, robot_id: "A", state: "lap", lap: 2, task_id: "", next_lap_ms: 0, watch_zone: "" })).toBe("running lap 2");
+    expect(runText({ entry: 1, robot_id: "A", state: "lap", lap: 512, task_id: "", next_lap_ms: 0, watch_zone: "" }, false)).toBe("running its zone route");
     expect(runText({ entry: 1, robot_id: "A", state: "paused", lap: 2, task_id: "", next_lap_ms: 0, watch_zone: "" })).toBe("stopped by a person, resting");
   });
 });

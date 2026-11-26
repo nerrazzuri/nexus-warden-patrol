@@ -16,6 +16,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../l10n.dart';
+import '../net/person_names.dart';
 import '../net/site_client.dart';
 import 'nw/nw_ask.dart';
 import 'nw/nw_button.dart';
@@ -288,8 +289,8 @@ class _SiteModePageState extends State<SiteModePage> with NwAsk {
                       style: NwText.titleMedium.copyWith(color: c.text)),
                   subtitle: Text(
                       tr(
-                          '${m['source'] == 'schedule' ? 'Switched by the schedule' : m['set_by'] == 'site:visitor_expired' ? 'Restored automatically when temporary disarm ended' : 'Set by ${m['set_by']}'}${(m['visitor_zones'] as List? ?? const []).isNotEmpty ? ' · temporarily disarmed: ${(m['visitor_zones'] as List).join(', ')}' : ''}',
-                          '${m['source'] == 'schedule' ? '按时间表切换' : m['set_by'] == 'site:visitor_expired' ? '临时撤防到期自动恢复' : '由 ${m['set_by']} 切换'}${(m['visitor_zones'] as List? ?? const []).isNotEmpty ? ' · 临时撤防：${(m['visitor_zones'] as List).join('、')}' : ''}'),
+                          '${m['source'] == 'schedule' ? 'Switched by the schedule' : m['set_by'] == 'site:visitor_expired' ? 'Restored automatically when temporary disarm ended' : 'Set by ${personName(m['set_by'])}'}${(m['visitor_zones'] as List? ?? const []).isNotEmpty ? ' · temporarily disarmed: ${(m['visitor_zones'] as List).join(', ')}' : ''}',
+                          '${m['source'] == 'schedule' ? '按时间表切换' : m['set_by'] == 'site:visitor_expired' ? '临时撤防到期自动恢复' : '由 ${personName(m['set_by'])} 切换'}${(m['visitor_zones'] as List? ?? const []).isNotEmpty ? ' · 临时撤防：${(m['visitor_zones'] as List).join('、')}' : ''}'),
                       style: NwText.bodyMedium.copyWith(color: c.textSecondary)),
                 )),
             const SizedBox(height: Nw.s8),
@@ -300,8 +301,11 @@ class _SiteModePageState extends State<SiteModePage> with NwAsk {
               Widget btn(Key key, String mode, String label, VoidCallback go) => NwButton(
                   buttonKey: key,
                   variant: now == mode ? NwButtonVariant.primary : NwButtonVariant.outline,
-                  icon: now == mode ? Icons.check_rounded : null,
+                  // 易用性 37 第十一轮 P3：390 宽时打勾占了地方，「Temp. disarm」折两行 —— 窄屏只用实心表示选中
+                  icon: now == mode && box.maxWidth >= 420 ? Icons.check_rounded : null,
                   fullWidth: true,
+                  // 同上：窄屏用小号（横内距 16，不是 24），三个按钮里的字才有地方
+                  size: box.maxWidth >= 420 ? NwButtonSize.medium : NwButtonSize.small,
                   onPressed: now == mode && mode != 'visitor' ? () {} : go,
                   label: label);
               final buttons = <Widget>[
