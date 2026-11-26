@@ -2,6 +2,7 @@
 // 设备与运营、上一班留言、最新活动；只读没有按钮；各尺寸不溢出。
 import 'package:nexwar_patrol/l10n.dart';
 import 'package:nexwar_patrol/net/app_update.dart';
+import 'package:nexwar_patrol/net/person_names.dart';
 import 'package:nexwar_patrol/ui/nw/nw_now.dart';
 import 'package:nexwar_patrol/ui/nw/nw_shell.dart';
 import 'package:nexwar_patrol/ui/nw/nw_theme.dart';
@@ -48,6 +49,20 @@ Future<void> _scrollTo(WidgetTester t, Key key) async {
 }
 
 void main() {
+  testWidgets('易用性 37 第十一轮 P2：上一班留言写人名，不写登录名', (t) async {
+    _size(t, const Size(390, 2000));
+    addTearDown(() => personNames.value = const {});
+    updatePersonNames({'guard1': 'Gina Tan'});
+    final api = FakeApi('guard')
+      ..alertRows = <Map<String, dynamic>>[]
+      ..notes = [<String, dynamic>{'text': '门没锁', 'author': 'guard1', 'at_ms': DateTime.now().millisecondsSinceEpoch}];
+    await _show(t, api);
+    await _scrollTo(t, NowPage.noteKey);
+    expect(find.textContaining('Gina Tan'), findsWidgets);
+    expect(find.textContaining('guard1'), findsNothing);
+    await t.pumpWidget(Container());
+  });
+
   testWidgets('易用性 37 第十一轮 P2：A 在布防值守 —— 今晚巡逻列出「布防值守 · A」，不写今天没有巡逻', (t) async {
     _size(t, const Size(390, 2000));
     final api = FakeApi('guard')

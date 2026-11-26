@@ -508,7 +508,7 @@ class _AdminHomeTabState extends State<AdminHomeTab> {
                       Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
                         SizedBox(width: 96, child: Text(tr('Handover notes', '交班留言'), style: sub)),
                         Expanded(
-                            child: Text('${_note!['author'] ?? ''} ${_hm(_note!['at_ms'])}${tr(': ', '：')}${_note!['text'] ?? ''}',
+                            child: Text('${personName(_note!['author'])} ${_hm(_note!['at_ms'])}${tr(': ', '：')}${_note!['text'] ?? ''}',
                                 style: NwText.bodyMedium.copyWith(color: c.text))),
                       ]),
                     ]),
@@ -1380,7 +1380,7 @@ class MeTab extends StatelessWidget {
                     child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                   Text(s?.displayName.isNotEmpty == true ? s!.displayName : (s?.name ?? ''),
                       style: NwText.titleMedium.copyWith(color: c.text, fontWeight: FontWeight.w700)),
-                  Text('${s?.name ?? ''} · ${roleName(s?.role ?? '')}${entry == null ? '' : ' · ${entry!.name}'}',
+                  Text('${personName(s?.name)} · ${roleName(s?.role ?? '')}${entry == null ? '' : ' · ${entry!.name}'}',
                       style: NwText.bodySmall.copyWith(color: c.textSecondary)),
                 ])),
               ]),
