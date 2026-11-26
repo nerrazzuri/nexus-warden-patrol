@@ -53,6 +53,20 @@ void main() {
     await t.pumpWidget(Container());
   });
 
+  testWidgets('易用性 37 场景测试：竖着的窗口上下摆（画面整宽在上、按钮在下），不再左右两半', (t) async {
+    t.view.physicalSize = const Size(390 * 2, 844 * 2);
+    t.view.devicePixelRatio = 2.0;
+    addTearDown(t.view.reset);
+    final api = FakeApi('guard');
+    await t.pumpWidget(MaterialApp(theme: nwTheme(Brightness.dark), home: PersonLivePage(api: api, alert: Alert.fromWire(_seen('A/p#13')))));
+    await _settle(t);
+    final head = t.getRect(find.byKey(const Key('person-live-head')));
+    final take = t.getRect(find.byKey(PersonLivePage.takeKey));
+    expect(take.top, greaterThan(head.bottom), reason: '按钮在画面下面');
+    expect(take.width, greaterThan(300), reason: '按钮整宽');
+    await t.pumpWidget(Container());
+  });
+
   testWidgets('易用性 build 37 复测：不在「现在」页（比如在「站点」页）来了看见人，也整屏弹；同一条只弹一次', (t) async {
     _landscape(t);
     final api = FakeApi('guard');
