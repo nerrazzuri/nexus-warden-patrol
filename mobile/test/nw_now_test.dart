@@ -262,6 +262,19 @@ void main() {
         reason: '留守 · 防区布防中');
   });
 
+  testWidgets('易用性 37 场景测试：手动布防后顶栏写「到点按时间表」，不写「到 19:00」（像到点撤防）', (t) async {
+    _size(t);
+    final at = DateTime(2026, 11, 26, 19).millisecondsSinceEpoch;
+    final api = FakeApi('guard')
+      ..alertRows = <Map<String, dynamic>>[]
+      ..modeView = <String, dynamic>{...FakeApi('guard').modeView, 'mode': 'armed', 'state': 'armed', 'source': 'manual',
+        'until_ms': null, 'manual_until_ms': at, 'next_change_ms': at};
+    await t.pumpWidget(MaterialApp(home: NwShell(api: api, title: '庄园', ring: () {}, updater: null)));
+    await t.pumpAndSettle();
+    expect(find.descendant(of: find.byKey(NwShell.armKey), matching: find.textContaining('19:00 起按时间表')), findsOneWidget);
+    expect(find.descendant(of: find.byKey(NwShell.armKey), matching: find.textContaining('到 19:00')), findsNothing);
+  });
+
   testWidgets('外壳：「现在」段上有没关的 P1 计数；App 有新版本时底部一条，「以后」收起，急停方块让开', (t) async {
     _size(t);
     final api = FakeApi('guard')..alertRows = [_p1('A/intrusion#1')];
