@@ -11,6 +11,7 @@ import 'package:nexwar_patrol/ui/site_list.dart';
 import 'package:nexwar_patrol/ui/site_tabs.dart' show leaveConfirmKey;
 
 import 'site_page_test.dart' show FakeApi;
+import 'support/fake_site.dart';
 
 /// 跟真客户端一样：注销以后会话没了、事件流断了（第十三轮：测试里假的不清会话，复现不出来）。
 class _RealLogout extends FakeApi {
@@ -41,6 +42,12 @@ void main() {
         await t.tap(find.text('登录'));
         await t.pumpAndSettle();
         expect(find.byType(NwShell), findsOneWidget);
+        // 第十四轮 P2：来一条要响的报警，「无人确认」提示条挂着时退出 —— 不能跟到站点列表
+        final f = siteFixture('site_alert_frame');
+        api.sse.add(<String, dynamic>{...f, 'alert': <String, dynamic>{...(f['alert'] as Map<String, dynamic>), 'channel': 'sound'}});
+        await t.pump();
+        await t.pump(const Duration(milliseconds: 800));
+        expect(find.byType(SnackBar), findsOneWidget);
         await t.tap(find.byKey(NwShell.siteKey));
         await t.pumpAndSettle();
         await t.scrollUntilVisible(find.byKey(SiteDirectory.leaveKey), 200,
@@ -57,6 +64,7 @@ void main() {
         }
         await t.pumpAndSettle();
         expect(t.takeException(), isNull);
+        expect(find.byType(SnackBar), findsNothing, reason: '这个站点的提示条跟着外壳收掉');
         expect(find.byType(NwShell), findsNothing);
         final barriers = t.widgetList<ModalBarrier>(find.byType(ModalBarrier)).where((b) => b.color != null && b.color!.a > 0);
         expect(barriers, isEmpty);
