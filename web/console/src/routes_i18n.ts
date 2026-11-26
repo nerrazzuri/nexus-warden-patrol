@@ -320,7 +320,7 @@ const zh: Record<RKey, string> = {
   schedNote: "新加、改过的排程从现在起算：之前到点的轮次不补跑。",
   poseGo: "去这里",
   legendWalked: "建图时走过的路",
-  schedAtPh: "时:分,比如 21:00",
+  schedAtPh: "时：分，比如 21:00",
   poseSending: "已发给 {robot}，等它回话…",
   poseSet: "在这里设位置",
   poseHint: "点地图选一个位置；拖圆形把手定朝向。",

@@ -477,8 +477,9 @@ class MapCatalog:
         return ""
 
     def walked(self, map_id: str, version: str, max_points: int = 3000) -> list[list[float]]:
-        """建图时走过的路(``coverage.json`` 的点,地图平面米),路线编辑器画成一条淡线(易用性 37 第十一轮
-        P2:画路线时看得到哪里建过图)。点太多按步长抽稀;没有 coverage 的老版本、读不了回 ``[]``。"""
+        """建图时走过的路(``coverage.json`` 的点,地图平面米),路线编辑器画成一条淡线
+        (易用性 37 第十一轮 P2:画路线时看得到哪里建过图)。点太多按步长抽稀;
+        没有 coverage 的老版本、读不了回 ``[]``。"""
         try:
             reach = self._reach(map_id, version)
         except MapError:
