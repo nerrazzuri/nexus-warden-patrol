@@ -3,6 +3,7 @@
 import 'package:nexwar_patrol/l10n.dart';
 import 'package:nexwar_patrol/net/site_client.dart';
 import 'package:nexwar_patrol/ui/map_manage.dart';
+import 'package:nexwar_patrol/ui/site_mode.dart';
 import 'package:nexwar_patrol/ui/map_wizard.dart';
 import 'package:nexwar_patrol/ui/nw/nw_shell.dart';
 import 'package:nexwar_patrol/ui/nw/nw_now.dart';
@@ -174,6 +175,20 @@ void main() {
       expect(next.top - stop.bottom, inInclusiveRange(0, 24));
       await _tap(t, MapWizardPage.stopTaskKey);
       expect(api.calls, contains('abort A adhoc-forever-f1'));
+    });
+
+    testWidgets('易用性 37 第十一轮 P2：机器人在布防值守，说先撤防或切留守，给「改布防」进布防页', (t) async {
+      final a = _robotA();
+      (a['status'] as Map)['task'] = <String, dynamic>{'kind': 'patrol', 'state': 'running', 'task_id': 'guard-g1-3'};
+      final api = FakeApi('admin', robotView: a)
+        ..robotsOverride = [a]
+        ..mapsCount = 0;
+      await _wizard(t, api);
+      expect(find.textContaining('A 在布防值守'), findsWidgets);
+      expect(find.textContaining('请等待当前任务完成'), findsNothing);
+      expect(find.byKey(MapWizardPage.stopTaskKey), findsNothing, reason: '叫停这一圈没用，值守到点又派');
+      await _tap(t, MapWizardPage.disarmKey);
+      expect(find.byType(SiteModePage), findsOneWidget);
     });
 
     testWidgets('第 10 轮 W10-06：横屏第一步底栏只占一行（原因、叫停、下一步并排）', (t) async {

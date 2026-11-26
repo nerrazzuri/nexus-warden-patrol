@@ -22,6 +22,7 @@ import 'nw/nw_p3_robots.dart' show robotActive, robotBattery, robotOnline;
 import 'nw/nw_ask.dart';
 import 'nw/nw_theme.dart';
 import 'nw/nw_widgets.dart';
+import 'site_mode.dart' show SiteModePage;
 import 'site_mapping.dart' show PreviewPainter, SiteMapPreviewPage, recordDiskText;
 import 'site_maps.dart' show robotMapTag;
 import 'site_robot.dart' show SiteRobotPage;
@@ -342,6 +343,7 @@ class MapWizardPage extends StatefulWidget {
   static const Key checksKey = Key('wizard-checks');
   /// 第 8 轮 A8-02：机器人在一直巡逻时的「叫停」。
   static const Key stopTaskKey = Key('wizard-stop-task');
+  static const Key disarmKey = Key('wizard-disarm');
   static Key driveKey(String d) => Key('wizard-drive-$d');
   static const Key startRecKey = Key('wizard-start-rec');
   static const Key walkStatusKey = Key('wizard-walk-status');
@@ -604,7 +606,11 @@ class _MapWizardPageState extends State<MapWizardPage> with NwAsk {
         !online || !robotActive(r),
         tr('Idle (no task)', '空闲（无任务）'),
         // 第 8 轮 A8-02：一直巡逻要到电量线才结束，等不到
-        _forever(r)
+        // 易用性 37 第十一轮 P2：布防值守的任务等不完（跑完一圈就站岗、到点又跑），要先撤防
+        _guard(r)
+            ? tr('$id is on arming guard duty, which keeps sending it out. Disarm the site or switch to Stay first.',
+                '$id 在布防值守（跑完一圈站岗、到点又跑，等不完）：先撤防或切到留守。')
+            : _forever(r)
             ? tr('$id is keep-patrolling: stop it first (it only ends at the patrol battery line).',
                 '$id 正在一直巡逻，要先叫停（一直巡逻要到巡逻电量线才结束）。')
             : tr('Wait for the current task to finish.', '请等待当前任务完成。')
@@ -622,6 +628,18 @@ class _MapWizardPageState extends State<MapWizardPage> with NwAsk {
     final st = r['status'];
     final task = st is Map ? st['task'] : null;
     return task is Map ? '${task['task_id'] ?? ''}' : '';
+  }
+
+  static bool _guard(Map<String, dynamic> r) => _taskId(r).startsWith('guard-');
+
+  Future<void> _openArming() async {
+    await Navigator.push(context, MaterialPageRoute<void>(builder: (_) => SiteModePage(api: api)));
+    try {
+      final robots = await api.robots();
+      if (mounted) setState(() => _robots = [for (final x in robots) if (x['revoked'] != true) x]);
+    } on SiteError {
+      // 读不到就等下一次自动刷新
+    }
   }
 
   static bool _forever(Map<String, dynamic> r) {
@@ -739,6 +757,14 @@ class _MapWizardPageState extends State<MapWizardPage> with NwAsk {
             fullWidth: !wide,
             label: tr('Stop ${r['robot_id']}', '叫停 ${r['robot_id']}'),
             onPressed: _busy ? null : () => _stopTask(r))
+        : r != null && robotOnline(r) && robotActive(r) && _guard(r)
+        ? NwButton(
+            buttonKey: MapWizardPage.disarmKey,
+            variant: NwButtonVariant.outline,
+            icon: Icons.shield_outlined,
+            fullWidth: !wide,
+            label: tr('Change arming', '改布防'),
+            onPressed: _busy ? null : _openArming)
         : null;
     final next = NwButton(
         buttonKey: MapWizardPage.nextKey,
