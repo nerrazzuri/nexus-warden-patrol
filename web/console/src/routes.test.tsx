@@ -1100,3 +1100,16 @@ describe("第四档 #32 挤在一起的点散开摆", () => {
     posted[0].body.waypoints.slice(0, 3).forEach((w: RoutePoint, i: number) => { near(w.x, WANT[i][0]); near(w.y, WANT[i][1]); });
   });
 });
+
+// 易用性 37 第十一轮 P2:画路线时看得到建图走过的路(站点 preview 的 walked),图例里有一行;老站点没有就不画
+describe("易用性 37 第十一轮 建图走过的路", () => {
+  it("有 walked 画一条淡线、图例写出来;没有就不画", async () => {
+    const { r } = await openNew({ ...META, walked: [[0, 0], [1, 0], [2, 1]] });
+    await waitFor(() => expect(r.container.querySelector("polyline[data-walked]")).not.toBeNull());
+    expect(r.container.querySelector("polyline[data-walked]")!.getAttribute("points")!.split(" ")).toHaveLength(3);
+    expect(r.container.querySelector("[data-legend=walked]")?.textContent).toBe("Path walked while mapping");
+    r.unmount();
+    const { r: r2 } = await openNew(META);
+    expect(r2.container.querySelector("polyline[data-walked]")).toBeNull();
+  });
+});

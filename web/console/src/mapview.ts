@@ -47,6 +47,8 @@ export interface PreviewMeta {
   /** 平面图(灰度 + 透明,盖住预览的整个范围,scale 倍分辨率);拉到 width×height 画。 */
   plan?: { url: string; scale: number };
   zones?: NavZone[];
+  /** 易用性 37 第十一轮 P2:建图时走过的路(地图平面米,站点抽稀过);老站点没有。 */
+  walked?: [number, number][];
   /** 有内容的范围(预览像素 [x0, y0, x1, y1]);没给 = 老站点,全图按整张图。 */
   content_bbox?: number[];
   /** 这一版带「看到过、狗没走过」的淡色层(图例里加一行)。 */

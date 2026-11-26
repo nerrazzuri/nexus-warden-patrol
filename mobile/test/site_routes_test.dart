@@ -98,6 +98,23 @@ Future<void> _open(WidgetTester t, SiteApi api, {Map<String, dynamic>? route, St
 void main() {
   // 英文界面（测试默认是中文）：断言的文字用英文写，切完切回来
   setUp(() => appLang.value = AppLang.en);
+
+  testWidgets('易用性 37 第十一轮 P2：路线编辑器画建图走过的路和禁行区，图例写出来；老站点没有就不画', (t) async {
+    final api = FakeApi('admin')
+      ..previewExtra = <String, dynamic>{
+        'walked': [[0.0, 0.0], [1.0, 0.0], [2.0, 1.0]],
+        'zones': [<String, dynamic>{'id': 'n1', 'kind': 'nogo', 'polygon': [[0.0, 0.0], [1.0, 0.0], [1.0, 1.0]]}],
+      };
+    await _open(t, api, newName: 'night');
+    expect(find.byKey(SiteRouteEditorPage.zonesKey), findsOneWidget);
+    expect(find.byKey(SiteRouteEditorPage.walkedLegendKey), findsOneWidget);
+    expect(find.text('Path walked while mapping'), findsOneWidget);
+    expect(find.text('No-go zone'), findsOneWidget);
+    await t.pumpWidget(Container());
+    await _open(t, FakeApi('admin'), newName: 'night');
+    expect(find.byKey(SiteRouteEditorPage.zonesKey), findsNothing);
+    expect(find.byKey(SiteRouteEditorPage.walkedLegendKey), findsNothing);
+  });
   tearDown(() => appLang.value = AppLang.zh);
 
   group('W53 临时路线（用户 10-31：保安在图上点几个点派一趟，不存）', () {

@@ -476,6 +476,22 @@ class MapCatalog:
                 return f"{name} 在图上不是可通行的地方(墙、障碍或未扫到)"
         return ""
 
+    def walked(self, map_id: str, version: str, max_points: int = 3000) -> list[list[float]]:
+        """建图时走过的路(``coverage.json`` 的点,地图平面米),路线编辑器画成一条淡线(易用性 37 第十一轮
+        P2:画路线时看得到哪里建过图)。点太多按步长抽稀;没有 coverage 的老版本、读不了回 ``[]``。"""
+        try:
+            reach = self._reach(map_id, version)
+        except MapError:
+            return []
+        if reach is None:
+            return []
+        pts = reach[0].points
+        step = max(1, math.ceil(len(pts) / max_points))
+        out = [[round(x, 2), round(y, 2)] for x, y in pts[::step]]
+        if pts and step > 1 and out[-1] != [round(pts[-1][0], 2), round(pts[-1][1], 2)]:
+            out.append([round(pts[-1][0], 2), round(pts[-1][1], 2)])
+        return out
+
     def clearance(self, map_id: str, version: str, x: float, y: float,
                   limit: float) -> float | None:
         """``(x, y)`` 离最近的不可通行格(墙、障碍、没扫到)多远,最多量到 ``limit``(米,按 5 cm 一步

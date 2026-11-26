@@ -320,6 +320,9 @@ export function RoutesPage({ say, embed, kind = "patrol" }: { say: Say; embed?: 
   const pts = draft?.points ?? [];
   const others = showOthers ? routes.filter((r) => r.id !== draft?.id) : [];
   const schedCount = (id: string) => (view?.schedules ?? []).filter((s) => s.mission === id).length;
+  // 易用性 37 第十一轮 P2:画路线时看得到建图走过的路(那一带才有图、定位可靠)
+  const walkedLine = meta?.walked && meta.walked.length > 1
+    ? meta.walked.map(([x, y]) => { const q = toPx(meta, x, y); return `${q.px},${q.py}`; }).join(" ") : "";
   const line = (ps: { x: number; y: number }[]) => ps.map((p) => { const q = toPx(meta!, p.x, p.y); return `${q.px},${q.py}`; }).join(" ");
 
   function dragPoint(i: number) {
@@ -414,7 +417,9 @@ export function RoutesPage({ say, embed, kind = "patrol" }: { say: Say; embed?: 
               <MapLike meta={meta} raster={`${base}/preview.png`} label={guardKind ? rt("guardTitle") : rt("routesTitle")}
                 drawing={!!draft} onPick={draft ? pick : undefined}
                 overlay={!draft && routes.length > 0 ? <p class="routepick-hint small" data-route-hint="1">{rt("routePickHint")}</p> : undefined}
+                legendExtra={walkedLine ? <li data-legend="walked"><svg class="swatch" width="16" height="10" aria-hidden="true"><line x1="1" y1="5" x2="15" y2="5" class="walked-line" /></svg>{rt("legendWalked")}</li> : undefined}
                 world={<>
+                  {walkedLine && <polyline points={walkedLine} class="walked-line" data-walked="1" />}
                   {others.map((r) => <polyline key={r.id} points={line(r.waypoints)} class="route-line other" data-route={r.id} />)}
                   {draft && pts.length > 1 && <polyline points={line(pts)} class="route-line" data-route={draft.id} />}
                   {badSegs.map(([a, b]) => pts[a] && pts[b] && <polyline key={`seg${a}`} points={line([pts[a], pts[b]])} class="route-line bad-seg" data-bad-seg={a} />)}
