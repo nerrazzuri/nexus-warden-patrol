@@ -29,7 +29,7 @@ const PATTERNS: [RegExp, (m: RegExpMatchArray) => string][] = [
   [/升级包(过|太)大/, () => "The package is too large (max 500 MB)."],
   [/底图最大/, () => "The image is too large (max 8 MB)."],
   [/未收到文件|文件未传完/, () => "The file did not upload completely. Try again."],
-  [/处不能用/, () => "Some points cannot be used. See the marked points."],
+  [/处不能用/, () => "Some points, or the way between them, cannot be used. See the marks on the map."],
   [/名字只许|路线名只许/, () => "Names may only use letters, digits and . _ -"],
   // 易用性 37 第十轮 P2:名字太长被站点拒,以前只说「The site could not accept this」(显示名、区域名、账号名……)
   [/(显示名|名字)(?:最多|要是?|要有)?\s*(?:(\d+)\s*[–-]\s*)?(\d+)\s*个字(?!母)/, (m) =>

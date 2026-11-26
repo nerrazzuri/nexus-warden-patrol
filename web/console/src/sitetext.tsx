@@ -310,7 +310,8 @@ const RULES: Rule[] = [
   [/^升级包的签名不匹配/, () => "The package's signature does not match: it was not released by us. Ask us for the correct upgrade file."],
   [/^升级包已损坏/, () => "The package is damaged (its files do not match its list). Download it again."],
   [/^此版本已存在/, () => "This version is already on the site."],
-  [/^(\d+) 处不能用$/, (m) => `${m[1]} point${m[1] === "1" ? "" : "s"} cannot be used`],
+  // 易用性 37 场景测试:「处」可能是点、也可能是两点之间那段路(以前一律说成点)
+  [/^(\d+) 处不能用$/, (m) => `${m[1]} problem${m[1] === "1" ? "" : "s"} with points or the way between them (marked on the map)`],
   [/^(\S+) 的钟差未知/, (m) => `${m[1]} has not reported its clock recently (just connected, or no telemetry in the last minute). Wait a moment and try again.`],
   [/^(\S+) 的钟差 ([+-]?\d+) 秒/, (m) => `${m[1]}'s clock is ${m[2]} s off from the site. Sync its time with the site host first.`],
 ];
