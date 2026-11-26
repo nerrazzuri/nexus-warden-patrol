@@ -76,6 +76,7 @@ const en = {
   gOn: "On duty since {t}",
   gLapN: "lap {n}",
   stLap: "running {lap}",
+  stLapAny: "running its zone route",
   stWatch: "going to the {z} watch post",
   stPost: "watching {z} from its post",
   stWait: "waiting for the next lap",
@@ -155,6 +156,7 @@ const zh: Record<GKey, string> = {
   gOn: "从 {t} 起值守中",
   gLapN: "第 {n} 圈",
   stLap: "在跑{lap}",
+  stLapAny: "在跑防区路线",
   stWatch: "去{z}的值守位",
   stPost: "在值守位上盯着{z}",
   stWait: "等下一圈",
@@ -198,10 +200,11 @@ const clean = (es: GuardEntry[]) => es.map(({ route, robot, gap_min, shuffle, en
   ({ route, robot, gap_min, shuffle, end_standby: end_standby !== false }));
 
 /** 这台此刻在干什么(一句话)。 */
-export function runText(r: Run): string {
+/** ``laps``:写第几圈(布防设置页);值班页给经理、保安看的不写(第 512 圈对他们没用,易用性 37 第十一轮 P3)。 */
+export function runText(r: Run, laps = true): string {
   const z = r.watch_zone;
   switch (r.state) {
-    case "lap": return gt("stLap", { lap: gt("gLapN", { n: r.lap }) });
+    case "lap": return laps ? gt("stLap", { lap: gt("gLapN", { n: r.lap }) }) : gt("stLapAny");
     case "watch": return gt("stWatch", { z });
     case "post": return gt("stPost", { z });
     case "wait": return gt("stWait");
