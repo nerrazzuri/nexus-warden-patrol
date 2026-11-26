@@ -1290,7 +1290,8 @@ class _SiteAlertScenePageState extends State<SiteAlertScenePage> with EstopMissR
           controller: _note,
           maxLength: 200,
           decoration: InputDecoration(
-            hintText: tr('Note for the next shift (optional)', '备注（给下一班看，可不写）'),
+            // 易用性 37 场景测试：这句备注记在这条报警上（报警记录、交班报告里看得到），不进交班留言 —— 以前写「给下一班看」
+            hintText: tr('Note on this alarm (optional; shown in the alarm log)', '备注（可不写，记在这条报警上）'),
             counterText: '',
           ),
         ),
