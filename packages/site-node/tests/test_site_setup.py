@@ -209,3 +209,13 @@ def test_第9轮_W8_08尾巴_有一条日程跑不了就不打勾_写日程显�
     assert not it["schedule"]["done"], "两条里一条跑不了,也不打勾(以前打着勾又写跑不了)"
     assert it["schedule"]["blocked"] == ["夜巡"]
     db.close()
+
+
+def test_易用性37场景_排程时区没设_清单上提醒管理员先设(tmp_path):
+    db = SiteDB(tmp_path / "s.db")
+    assert _项(setup_view(db, 假派遣器({})))["schedule"]["no_tz"] is True
+    with db.tx() as c:
+        c.execute("INSERT OR IGNORE INTO route_store(id) VALUES (1)")
+        c.execute("UPDATE route_store SET timezone='Asia/Kuala_Lumpur' WHERE id=1")
+    assert _项(setup_view(db, 假派遣器({})))["schedule"]["no_tz"] is False
+    db.close()
