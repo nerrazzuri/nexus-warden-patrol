@@ -299,6 +299,8 @@ const RULES: Rule[] = [
   [/^摄像头 (\S+) 无法连接[(（]防区 ([^)）]+)[)）]$/, (m) => `Camera ${m[1]} cannot be reached (zone ${m[2]})`],
   [/^(\S+) 无法连接[:：]/, (m) => `${m[1]} cannot be reached`],
   // 站点的拒绝原因
+  [/^站点还没有防区,临时撤防撤不了什么:要停就切到「留守」或撤防$/, () => "This site has no zones yet, so a temporary disarm would not disarm anything. Switch to Stay or disarm instead."],
+  [/^临时撤防要选至少一个防区$/, () => "Pick at least one zone to disarm for a while."],
   [/^(\S+) 已存在[(（]或正在建[)）][,，]换个版本号$/, (m) => `Map version ${m[1]} already exists (or is being built): use another version.`],
   [/^(?:账号 )?(\S+) 已存在$/, (m) => `“${m[1]}” already exists.`],
   [/^账号 (\S+)$/, (m) => `Account ${m[1]}`],

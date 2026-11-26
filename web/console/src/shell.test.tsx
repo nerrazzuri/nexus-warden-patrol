@@ -239,17 +239,27 @@ describe("新外壳", () => {
 
 // 易用性第 6 轮 W6-05(用户 11-11:保安也能撤防):顶栏的布防状态点开就能切 —— 布防、留守、临时撤防
 describe("W6-05 顶栏点布防状态切模式", () => {
-  const mode = { mode: "armed", label: "布防", source: "manual", state: "armed" } as never;
-  const bar = (role: string, onMode = vi.fn(), stale = false) => ({ onMode, c: render(<TopBar me={me(role)} page="duty" mode={mode} alarms={0} now={0} pref="system"
+  const mode = { mode: "armed", label: "布防", source: "manual", state: "armed", zones: [{ zone: "北区", armed: true }] } as never;
+  const bar = (role: string, onMode = vi.fn(), stale = false, m = mode) => ({ onMode, c: render(<TopBar me={me(role)} page="duty" mode={m} alarms={0} now={0} pref="system"
     onPref={() => {}} onStop={() => {}} onSignOut={() => {}} onSay={() => {}} onMode={onMode} stale={stale} />).container });
   it("保安:点开有布防、留守、临时撤防,点留守交给外壳去确认", () => {
     lang.value = "zh";
-    const { c, onMode } = bar("guard");
+    let { c } = bar("guard");
+    const { onMode } = { onMode: vi.fn() };
     fireEvent.click(c.querySelector("button.armstate")!);
-    const menu = c.querySelector("[data-mode-menu]")!;
+    let menu = c.querySelector("[data-mode-menu]")!;
     const items = Array.from(menu.querySelectorAll("button")).map((b) => b.textContent);
     // UIUX-035:顶栏这一项是全站 4 小时,跟授权页「按防区临时撤防」分开叫
     expect(items).toEqual(["布防", "留守", "全站临时撤防 4 小时"]);
+    // 易用性 37 第十一轮:没有防区时不给「全站临时撤防」(站点拒,以前撤了个空却显示撤了)
+    cleanup();
+    const { c: c2 } = bar("guard", vi.fn(), false, { mode: "armed", label: "布防", source: "manual", state: "armed", zones: [] } as never);
+    fireEvent.click(c2.querySelector("button.armstate")!);
+    expect(Array.from(c2.querySelectorAll("[data-mode-menu] button")).map((b) => b.textContent)).toEqual(["布防", "留守"]);
+    cleanup();
+    ({ c } = bar("guard", onMode));
+    fireEvent.click(c.querySelector("button.armstate")!);
+    menu = c.querySelector("[data-mode-menu]")!;
     expect((menu.querySelector("button[aria-pressed=true]") as HTMLButtonElement).textContent).toBe("布防");
     fireEvent.click(Array.from(menu.querySelectorAll("button")).find((b) => b.textContent === "留守")!);
     expect(onMode).toHaveBeenCalledWith("home");
