@@ -87,6 +87,10 @@ def _sn(tx: Any, ids: list[str]) -> str:
     return "、".join(out)
 
 
+# 易用性 37 第十一轮 P2:经理排日程撞了布防值守,以前只说撞了,不说怎么办
+CLASH_HINT = "。改到撤防的时段,或者指定一台不在值守的机器人"
+
+
 class RouteError(Exception):
     """存不下:``errors`` 是逐点的问题。"""
 
@@ -442,7 +446,7 @@ class RouteStore:
             if clash is not None:                        # 同一个事务里查:撞了就整个回滚
                 got = clash.since(before, routes=[route_id])
                 if got:
-                    raise RouteError("改了以后跟布防值守撞了:" + ";".join(got))
+                    raise RouteError("改了以后跟布防值守撞了:" + ";".join(got) + CLASH_HINT)
         return self.get(route_id)
 
     def move_to_version(self, map_id: str, from_version: str, to_version: str, *,
@@ -535,7 +539,7 @@ class RouteStore:
         if clash is not None:
             got = clash.new(schedules={entry_id: entry.to_wire()})
             if got:
-                raise RouteError("跟布防值守撞了:" + ";".join(got))
+                raise RouteError("跟布防值守撞了:" + ";".join(got) + CLASH_HINT)
         now = self._now()
         with self.db.tx() as tx:
             got = tx.execute("SELECT kind FROM routes WHERE route_id=?",

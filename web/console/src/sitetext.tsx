@@ -393,8 +393,39 @@ export function siteText(s: string | null | undefined): SiteText {
 }
 
 /** 不看界面语言,一律翻成英文(报错那边自己判断过语言)。 */
+// 易用性 37 第十一轮 P2:排程跟布防值守撞了(guard_clash.py 的三种句子,「;」连着,后面带怎么办)
+const DAY_EN: Record<string, string> = { 周一: "Mon", 周二: "Tue", 周三: "Wed", 周四: "Thu", 周五: "Fri", 周六: "Sat", 周日: "Sun" };
+const whenEn = (d: string, a: string, b: string) => `${DAY_EN[d] ?? d} ${a}–${b}`;
+const guardEn = (l: string) => {
+  const m = /^(周.) (\d\d:\d\d) 开始的布防值守$/.exec(l);
+  return m ? `the guard duty starting ${DAY_EN[m[1]] ?? m[1]} ${m[2]}` : `guard duty “${l}”`;
+};
+const CLASH: [RegExp, (m: RegExpExecArray) => string][] = [
+  [/^(\S+) 在(周.) (\d\d:\d\d)–(\d\d:\d\d)有巡逻[(（]排程「(.*?)」[)）][,，]跟(.+?)[(（]防区路线「(.*?)」[)）]撞了$/,
+    (m) => `${m[1]} would patrol ${whenEn(m[2], m[3], m[4])} (schedule “${m[5]}”), but it is on ${guardEn(m[6])} (zone route “${m[7]}”) then`],
+  [/^(\S+) 在(周.) (\d\d:\d\d)–(\d\d:\d\d)有巡逻[(（]排程「(.*?)」[)）][,，](.+?)要「任意一台」机器人值守[,，]剩下的不够[(（]还差 (\d+) 台[)）]$/,
+    (m) => `${m[1]} would patrol ${whenEn(m[2], m[3], m[4])} (schedule “${m[5]}”), but ${guardEn(m[6])} needs any robot and ${m[7]} more would be needed`],
+  [/^排程「(.*?)」写的任意一台[,，](周.) (\d\d:\d\d)–(\d\d:\d\d)所有机器人都在布防值守[(（](.+)[)）]$/,
+    (m) => `Schedule “${m[1]}” uses any robot, but ${whenEn(m[2], m[3], m[4])} every robot is on ${guardEn(m[5])}`],
+];
+/** → 英文和有没有整句认不出的(名字、备注是人写的,可以是中文,不算认不出)。 */
+function clashEn(src: string): { text: string; unknown: boolean } | null {
+  const m = /^(改了以后)?跟布防值守撞了[:：]([\s\S]*?)(?:。改到撤防的时段[\s\S]*)?$/.exec(src.trim());
+  if (!m) return null;
+  let unknown = false;
+  const parts = m[2].split(/[;；]/).map((p) => {
+    for (const [re, f] of CLASH) { const x = re.exec(p.trim()); if (x) return f(x); }
+    unknown = true;
+    return p.trim();
+  });
+  return { unknown, text: `${m[1] ? "After this change, it clashes" : "This clashes"} with arming guard duty: ${parts.join("; ")}. `
+    + "Move it to a disarmed time, or pick a specific robot that is not on guard duty." };
+}
+
 export function siteTextEn(src: string): SiteText {
   if (!CJK.test(src)) return { text: src };
+  const clash = clashEn(src);
+  if (clash) return clash.unknown ? { text: clash.text, raw: src } : { text: clash.text };
   // 第 5 轮 P1-01
   if (/^机器人上没有站点的证据公钥/.test(src)) {
     return { text: "The robot is missing the site's evidence key: photos and video are stored unencrypted and face snapshots are off. An engineer installs the evidence key from the certificate pack on the robot and restarts the robot software.", raw: src };

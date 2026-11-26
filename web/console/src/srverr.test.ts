@@ -48,3 +48,13 @@ describe("api 的报错", () => {
     expect(englishError(400, "名字要是 1–64 个字母、数字、点、下划线、减号(字母或数字开头)")).not.toMatch(/must be/);
   });
 });
+
+describe("易用性 37 第十一轮 P2:排程跟布防值守撞了", () => {
+  it("英文写出哪条排程、哪段值守,并说怎么办", () => {
+    const zh = "跟布防值守撞了:A 在周一 21:55–22:05有巡逻(排程「night」),跟周一 22:00 开始的布防值守(防区路线「z1」)撞了;"
+      + "排程「s2」写的任意一台,周二 22:00–22:30所有机器人都在布防值守(夜班)。改到撤防的时段,或者指定一台不在值守的机器人";
+    const en = englishError(400, zh);
+    expect(en).toBe("This clashes with arming guard duty: A would patrol Mon 21:55–22:05 (schedule “night”), but it is on the guard duty starting Mon 22:00 (zone route “z1”) then; "
+      + "Schedule “s2” uses any robot, but Tue 22:00–22:30 every robot is on guard duty “夜班”. Move it to a disarmed time, or pick a specific robot that is not on guard duty.");
+  });
+});
