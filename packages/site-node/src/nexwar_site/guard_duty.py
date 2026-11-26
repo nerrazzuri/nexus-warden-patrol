@@ -464,6 +464,27 @@ class GuardDuty:
                            f"布防前请先充电 / 换电池")
                 self._prep_told[rid] = nb                # 真发出去了才记(没发成下一拍补)
 
+    def _prep_heal(self, plan: dict[str, Any]) -> None:
+        """用户 11-27:挂着的「电量不够开始值守」—— 充够了(过得了一圈的出站线),或者值守已经开跑,
+        自己关。站点重启后库里挂着的同样(看告警簿,不看内存)。"""
+        if self.alerts is None or not hasattr(self.alerts, "has_open"):
+            return
+        running = self.robots()
+        for e in plan["entries"]:
+            rid = e.get("robot")
+            if not rid or not self.alerts.has_open(rid, "guard_prep"):
+                continue
+            why = ""
+            if rid in running:
+                why = "site:guard_started"
+            else:
+                info = self._route(e["route"])
+                pct = self._battery(rid)
+                if info is not None and pct is not None and pct >= self._lap_need(e, info, rid)[0]:
+                    why = "site:battery_ok"
+            if why:
+                self.alerts.resolve_all(rid, "guard_prep", who=why)
+
     def _tz(self) -> Any:
         sched = getattr(self.arming, "schedule", None)
         try:
@@ -820,6 +841,10 @@ class GuardDuty:
                 self._prep_alerts(plan)
             except Exception:
                 log.exception("布防前电量检查没办成")
+        try:
+            self._prep_heal(plan)
+        except Exception:
+            log.exception("「电量不够开始值守」该不该关没对上账")
 
     async def _drive(self, e: dict[str, Any], info: dict[str, Any], armed: list[str],
                      run: dict[str, Any] | None, taken: set[str]) -> None:

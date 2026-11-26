@@ -187,6 +187,21 @@ class ChargeDesk:
             self._hazards()
         except Exception:
             log.exception("桩上危险这一拍没对上账")
+        try:
+            self._overlap_heal(chargers)
+        except Exception:
+            log.exception("「两台同时在充」该不该关没对上账")
+
+    def _overlap_heal(self, chargers: list[dict[str, Any]]) -> None:
+        """用户 11-27:「两台同时在充」—— 另一台出桩了(只剩这一台在充或都不充),这块区域又有机器人守,
+        那条自己关。看告警簿(站点重启后挂着的也关)。"""
+        a = self.alerts
+        if a is None or not hasattr(a, "has_open"):
+            return
+        for ch in chargers:
+            rid = ch["robot_id"]
+            if a.has_open(rid, "charge_overlap") and not self._charging_other(rid):
+                a.resolve_all(rid, "charge_overlap", who="site:overlap_over")
 
     def _hazards(self) -> None:
         """狗报的「桩上危险」对账:新挂上的报 P1(一次挂一次),摘了的清掉记录。"""

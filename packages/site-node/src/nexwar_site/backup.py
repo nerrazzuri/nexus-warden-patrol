@@ -73,6 +73,7 @@ class SiteBackup:
         self.last_error = ""
         self._next_ms = 0
         self._stale_told = False
+        self._first_step = True    # 用户 11-27:起来头一拍把库里挂着的「已过期」也对一下
 
     def _meta_int(self, key: str) -> int | None:
         rows = self.db.query("SELECT value FROM meta WHERE key=?", (key,))
@@ -115,6 +116,15 @@ class SiteBackup:
         if stale and not self._stale_told and self.alerts is not None:
             self.alerts.raise_alert(kind="backup_stale", robot=SITE, title="站点备份已过期",
                                     detail=self.last_error or "超过 25 小时没有备份成功")
+        elif not stale and hasattr(self.alerts, "resolve_all") \
+                and (self._stale_told or self._first_step):
+            # 用户 11-27:又备份成功了,「已过期」那条自己关(站点重启后库里挂着的也关)
+            try:
+                self.alerts.resolve_all(SITE, "backup_stale", who="site:backup_ok")
+            except Exception:
+                log.exception("备份好了,「已过期」那条关不了,下一分钟再来")
+                return
+        self._first_step = False
         self._stale_told = stale
 
     def run_once(self) -> bool:

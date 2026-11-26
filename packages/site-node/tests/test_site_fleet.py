@@ -154,6 +154,22 @@ async def test_守到20去充_被拒_30秒后再派_不重复报(台):
     assert [x["kind"] for x in t.desk.alerts.raised] == ["charge_overlap"]
 
 
+async def test_用户1127_两台同时在充_另一台出桩了_那条自己关(台):
+    t = 台
+    t.d.pct("A", 25.0)
+    await t.desk.tick()
+    t.d.pct("B", FLOOR_PCT)
+    await t.desk.tick()
+    assert [x["kind"] for x in t.desk.alerts.raised] == ["charge_overlap"]
+    await t.desk.tick()
+    assert t.desk.alerts.resolved == [], "A 还在充:挂着"
+    t.desk._set("A", None)                                # A 充完出桩
+    await t.desk.tick()
+    assert t.desk.alerts.resolved == [("B", "charge_overlap", "site:overlap_over")]
+    await t.desk.tick()
+    assert len(t.desk.alerts.resolved) == 1
+
+
 def test_去桩那一趟的中止线在守的线下面():
     from nexwar_contract.charging import LOW_PCT
     assert TRIP_ABORT_PCT < FLOOR_PCT < LOW_PCT

@@ -630,6 +630,21 @@ async def test_布防前30分钟_电量撑不到第一次补能_提醒先充电�
     assert len([x for x in t.duty.alerts.open if x["kind"] == "guard_prep"]) == 1
 
 
+async def test_用户1127_电量不够开始值守_充够了自己关(站):
+    t = 站
+    t.store.set_timezone("UTC", by="alice")
+    _方案(t)
+    t.arming.schedule.put({"enabled": True, "slots": [{"zone": "", "day": 4, "start": "08:20",
+                                                       "end": "10:00"}]}, by="olga")
+    t.dog.inject_battery(24.0)
+    await _跑(t, 3)
+    assert t.duty.alerts.has_open("A", "guard_prep")
+    t.dog.inject_battery(100.0)                          # 换了电池
+    await _跑(t, 3)
+    assert not t.duty.alerts.has_open("A", "guard_prep")
+    assert [a["kind"] for a in t.duty.alerts.done] == ["guard_prep"]
+
+
 # ------------------------------------------------------------ 外审 r1
 
 
