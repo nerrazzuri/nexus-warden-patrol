@@ -804,6 +804,7 @@ const en = {
   modeDisarm: "Disarm",
   armDisarmed: "Disarmed",
   modeDisarmConfirm: "Disarm the whole site? Intrusions and person detection stop raising alarms. Robots finish the lap they are on, then go back to their home point and wait. The site stays disarmed until someone arms it.",
+  modeDisarmConfirmUntil: "Disarm the whole site until {t}? Intrusions and person detection stop raising alarms. Robots finish the lap they are on, then go back to their home point and wait. At {t} the site follows the arming timetable again.",
   authzAddedMsg: "Authorization added.",
   rsNeedFrom: "Pick a start date.",
   rsNeedTo: "Pick an end date.",
@@ -3214,6 +3215,7 @@ const zh: Partial<Record<Key, string>> = {
   modeDisarm: "撤防",
   armDisarmed: "已撤防",
   modeDisarmConfirm: "整站撤防？撤防后入侵和人员检测都不报警；机器人走完手上这一圈，回到原点等待。直到有人重新布防才恢复。",
+  modeDisarmConfirmUntil: "整站撤防到 {t}？撤防后入侵和人员检测都不报警；机器人走完手上这一圈，回到原点等待。到 {t} 回到按布防时间表。",
   authzAddedMsg: "已添加授权。",
   rsNeedFrom: "选开始日期。",
   rsNeedTo: "选结束日期。",
@@ -4896,6 +4898,11 @@ export function alertTitle(l: Lang, kind: string, siteTitle: string): string {
     const head = siteTitle.startsWith(TEST_PREFIX) ? (l === "zh" ? TEST_PREFIX : "TEST: ") : "";
     if (l === "zh") return head + bare.replace(/:/, "：").replace(/,/, "，");
     return head + `${held[1]} stuck for ${held[2]} s: ` + (held[3].startsWith("已换") ? "another robot took over" : "no other robot took over (the plan names it)");
+  }
+  // 第十六轮 P2:回原点那一趟没成(撤防收队、手动叫回)跟「未返回待命点」同一个种类,标题分开说
+  if (kind === "standby_failed" && bare === "回原点失败") {
+    const head = siteTitle.startsWith(TEST_PREFIX) ? (l === "zh" ? TEST_PREFIX : "TEST: ") : "";
+    return head + (l === "zh" ? "回原点失败" : "Did not return to home point");
   }
   const e = CATALOG[kind];
   if (!e || kind.startsWith("$")) return siteTitle;

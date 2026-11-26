@@ -315,8 +315,19 @@ describe("布防时间页", () => {
     fireEvent.click(btn(now(), "撤防"));
     expect(posted.some((p) => p.url === "/api/mode")).toBe(false);
     expect(document.querySelector(".modal")!.textContent).toContain("回到原点等待");
+    expect(document.querySelector(".modal")!.textContent).toContain("直到有人重新布防");
     fireEvent.click(btn(document.querySelector(".modal")!, "撤防"));
     await waitFor(() => expect(posted.find((p) => p.url === "/api/mode")?.body).toEqual({ mode: "disarmed" }));
+  });
+
+  it("用户 11-27:时间表开着,撤防的确认框写到几点、之后按时间表", async () => {
+    mode = { ...mode, schedule_next_ms: Date.UTC(2026, 10, 27, 23, 0), timezone: "UTC" } as never;
+    const { container: c } = page();
+    const now = () => c.querySelector(".arm-now")!;
+    await waitFor(() => expect(now().textContent).toContain("按时间表"));
+    fireEvent.click(btn(now(), "撤防"));
+    expect(document.querySelector(".modal")!.textContent).toContain("整站撤防到 23:00");
+    expect(document.querySelector(".modal")!.textContent).toContain("回到按布防时间表");
   });
 
   it("外审 1 #3:这页有没存的布防时间,打开向导先问(向导存的不会被旧草稿盖回去)", async () => {

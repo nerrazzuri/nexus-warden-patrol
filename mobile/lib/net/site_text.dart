@@ -109,6 +109,14 @@ const String _afterNote = '; recorded afterwards because the site was not runnin
 final List<_Rule> _rules = [
   // 用户 11-27：整站撤防时到点的排程巡逻（今天的巡逻里写原因）
   (RegExp(r'^整站撤防[:：]排程巡逻暂停$'), (_) => 'Site disarmed: scheduled patrols paused'),
+  (RegExp(r'^整站已经撤防了[,，]不用再临时撤防[:：]要恢复就切到「布防」或「留守」$'),
+      (_) => "The whole site is already disarmed, so a temporary disarm isn't needed. To restore, switch to Armed or Stay."),
+  // 第十六轮 P2：回原点失败的说明
+  (RegExp(r'^原点在障碍里或离墙太近[:：]去「布置」把原点挪开一点,再叫它回原点[;；]原文[:：]([\s\S]*)$'),
+      (m) => 'The home point is inside an obstacle or too close to a wall: move it a little in Site layout, '
+          'then send the robot home again. Original: ${_en(m[1]!)}'),
+  (RegExp(r'^看详情里的原因[;；]机器人停在原地等[;；]原文[:：]([\s\S]*)$'),
+      (m) => 'The robot is waiting where it is. Reason: ${_en(m[1]!)}'),
   (RegExp(r'^雷暴[:：]排程巡检暂停$'), (_) => 'Thunderstorm: scheduled patrols paused'),
   // 易用性 37 复测：机器人设置页设备那几行（跟网页 sitetext 同一组，易用性 build 36 P2-5）
   (RegExp(r'^(\d+) 个线圈都确认过$'), (m) => 'All ${m[1]} relay channels confirmed'),

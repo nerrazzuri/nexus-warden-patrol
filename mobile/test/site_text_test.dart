@@ -154,4 +154,19 @@ void main() {
         'the guard duty starting Mon 22:00 (zone route “z1”) then. '
         'Move it to a disarmed time, or pick a specific robot that is not on guard duty.');
   });
+
+  test('第十六轮 P2：回原点失败的标题、说明，撤防时临时撤防的拒绝，英文整句', () {
+    appLang.value = AppLang.en;
+    addTearDown(() => appLang.value = AppLang.zh);
+    expect(alertTitle('standby_failed', '回原点失败'), 'Did not return to home point');
+    expect(alertTitle('standby_failed', '未返回待命点'), isNot(contains('home point')));
+    for (final s in [
+      '原点在障碍里或离墙太近:去「布置」把原点挪开一点,再叫它回原点;原文:导航拒了',
+      '整站已经撤防了,不用再临时撤防:要恢复就切到「布防」或「留守」',
+      '整站撤防:排程巡逻暂停',
+    ]) {
+      final en = siteText(s);
+      expect(RegExp(r'[\u4e00-\u9fff]').hasMatch(en), isFalse, reason: '$s => $en');
+    }
+  });
 }

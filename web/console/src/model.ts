@@ -151,6 +151,8 @@ export interface Mode {
   state?: "armed" | "partial" | "disarmed";
   next_change_ms?: number | null;
   manual_until_ms?: number | null;
+  /** 用户 11-27:时间表开着时,手动切的模式(撤防也是)管到这个时刻,之后按时间表;没开 = null。 */
+  schedule_next_ms?: number | null;
   label?: string;
   prev_mode?: string;
   visitor_zones?: string[];

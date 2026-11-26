@@ -37,6 +37,10 @@ String alertTitle(String kind, String siteTitle) {
   final bare = siteTitle.startsWith(kAlertTestPrefix) ? siteTitle.substring(kAlertTestPrefix.length) : siteTitle;
   final held = kind == 'guard_stuck' ? guardStuckTitleEn(bare) : null;
   if (held != null) return '${siteTitle.startsWith(kAlertTestPrefix) ? 'TEST: ' : ''}$held';
+  // 第十六轮 P2：回原点那一趟没成（撤防收队、手动叫回）跟「未返回待命点」同一个种类，标题分开说
+  if (kind == 'standby_failed' && bare == '回原点失败') {
+    return '${siteTitle.startsWith(kAlertTestPrefix) ? 'TEST: ' : ''}Did not return to home point';
+  }
   final e = alertTitles[kind];
   if (e == null) return siteTitle;
   final title = appLang.value == AppLang.zh ? e.$2 : e.$1;

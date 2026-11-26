@@ -197,11 +197,9 @@ class _SiteModePageState extends State<SiteModePage> with NwAsk {
 
   /// 用户 11-27：整站撤防（保安也能）—— 问一句，说清后果。
   Future<void> _disarm() async {
-    final ok = await askYes(tr('Disarm the whole site?', '整站撤防？'),
-        body: tr(
-            'Intrusions and person detection stop raising alarms. Robots finish the lap they are on, '
-                'then go back to their home point and wait. The site stays disarmed until someone arms it.',
-            '撤防后入侵和人员检测都不报警；机器人走完手上这一圈，回到原点等待。直到有人重新布防才恢复。'),
+    final (title, body) = disarmAsk(_mode);
+    final ok = await askYes(title,
+        body: body,
         ok: tr('Disarm', '撤防'),
         okKey: SiteModePage.disarmOkKey,
         danger: true);
@@ -500,6 +498,24 @@ class _SiteModePageState extends State<SiteModePage> with NwAsk {
   }
 }
 
+/// 用户 11-27：撤防的确认框（标题、正文）。时间表开着（站点给 `schedule_next_ms`）写撤防到几点、之后按时间表；
+/// 没开写「直到有人布防」。
+(String, String) disarmAsk(Map<String, dynamic>? m) {
+  final at = m?['schedule_next_ms'];
+  final what = tr(
+      'Intrusions and person detection stop raising alarms. Robots finish the lap they are on, '
+          'then go back to their home point and wait.',
+      '撤防后入侵和人员检测都不报警；机器人走完手上这一圈，回到原点等待。');
+  if (at is num) {
+    final d = DateTime.fromMillisecondsSinceEpoch(at.toInt());
+    final t = '${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}';
+    return (tr('Disarm the whole site until $t?', '整站撤防到 $t？'),
+        tr('$what At $t the site follows the arming timetable again.', '$what到 $t 回到按布防时间表。'));
+  }
+  return (tr('Disarm the whole site?', '整站撤防？'),
+      tr('$what The site stays disarmed until someone arms it.', '$what直到有人重新布防才恢复。'));
+}
+
 IconData modeIcon(String mode) => switch (mode) {
       'home' => Icons.home_rounded,
       'disarmed' => Icons.shield_outlined,
@@ -668,11 +684,9 @@ class _SiteModeBarState extends State<SiteModeBar> with NwAsk {
 
   /// 用户 11-27：整站撤防（保安也能）。
   Future<void> _disarm() async {
-    final ok = await askYes(tr('Disarm the whole site?', '整站撤防？'),
-        body: tr(
-            'Intrusions and person detection stop raising alarms. Robots finish the lap they are on, '
-                'then go back to their home point and wait. The site stays disarmed until someone arms it.',
-            '撤防后入侵和人员检测都不报警；机器人走完手上这一圈，回到原点等待。直到有人重新布防才恢复。'),
+    final (title, body) = disarmAsk(_mode);
+    final ok = await askYes(title,
+        body: body,
         ok: tr('Disarm', '撤防'),
         okKey: SiteModeBar.disarmGoKey,
         danger: true);

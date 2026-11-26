@@ -330,3 +330,17 @@ describe("易用性 37 第八轮:值守日志每圈那几句、规划原因码�
     expect(siteStr("派了没在跑,也没结果(当被打断)")).not.toMatch(CJK);
   });
 });
+
+describe("第十六轮 P2:回原点失败、撤防时临时撤防的拒绝", () => {
+  beforeEach(() => { lang.value = "en"; });
+  afterEach(() => { lang.value = "zh"; });
+  it("整句英文", () => {
+    for (const s of [
+      "原点在障碍里或离墙太近:去「布置」把原点挪开一点,再叫它回原点;原文:导航拒了",
+      "整站已经撤防了,不用再临时撤防:要恢复就切到「布防」或「留守」",
+      "整站撤防:排程巡逻暂停",
+    ]) {
+      expect(siteText(s).text, s).not.toMatch(/[一-鿿]/);
+    }
+  });
+});
