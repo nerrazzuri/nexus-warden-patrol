@@ -1753,7 +1753,7 @@ input[aria-invalid="true"] { border-color: var(--c-error); outline-color: var(--
 /* UIUX-044:bottom 抵掉对话框 20px 的下内边距,按钮栏下面不再露一条缝 */
 .modal.armwiz .wiz-actions { position: sticky; bottom: -20px; z-index: 2; margin: 12px -20px -20px; padding: 12px 20px;
   background: var(--c-surface); border-top: 1px solid var(--c-outline); }
-.wiz-editor { height: min(calc(100dvh - 360px), 640px); min-height: 320px; display: flex; flex-direction: column; border-top: 1px solid var(--c-outline); padding-top: 8px; }
+.wiz-editor { height: min(calc(100dvh - 360px), 640px); min-height: 420px; display: flex; flex-direction: column; border-top: 1px solid var(--c-outline); padding-top: 8px; }
 .wiz-editor .layout { flex: 1; min-height: 0; overflow: hidden; }
 /* UIUX-045:编辑器里的地图按整个窗口算高(路线 600px、防区 100vh − 280px),比向导给的框高、画到框外 ——
    框里一层层撑满、地图吃剩下的高度,侧栏放不下自己滚 */
@@ -1761,6 +1761,10 @@ input[aria-invalid="true"] { border-color: var(--c-error); outline-color: var(--
 .wiz-editor .ly-main, .wiz-editor .routes-embed, .wiz-editor .routes-embed > section { height: 100%; min-height: 0; display: flex; flex-direction: column; }
 .wiz-editor .routes-embed .routesplit { flex: 1; min-height: 0; grid-template-rows: minmax(0, 1fr); }
 .wiz-editor .routemap, .wiz-editor .layout-map { flex: 1; min-height: 0; }
+/* 易用性 37 场景测试:向导里嵌的路线编辑器地图是空白灰框 —— .layout-map 不是竖排弹性盒,地图画布只分到图例那 75 px,
+   地图本身 0 高。排成竖排,画布占满剩下的高度;编辑器整体至少 420 高(上面那条) */
+.wiz-editor .layout-map { display: flex; flex-direction: column; }
+.wiz-editor .layout-map > .mapcanvas { flex: 1; min-height: 240px; }
 .wiz-editor .ly-tab { flex: 1; min-height: 0; height: 100%; grid-template-rows: minmax(0, 1fr); align-items: stretch; }
 .wiz-editor .ly-tab > .ly-side { min-height: 0; overflow-y: auto; }
 .wiz-editor .routemap .mapwrap, .wiz-editor .layout-map .mapwrap { flex: 1; height: auto; min-height: 0; }
