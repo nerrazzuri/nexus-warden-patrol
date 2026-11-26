@@ -890,7 +890,7 @@ function SchedulePanel({ route, view, schedules, say, reload, inPanel, canTz = t
               {idTaken && <span class="error small" role="alert" data-sched-dup="1">{rt("schedIdTaken")}</span>}
               {!idTaken && err("id")}</label>
             {/* P1-03:时间一律 24 小时制(浏览器的时间框可能按系统显示成上午 / 下午) */}
-            <label class="field">{rt("schedAt")}<input name="at" type="text" inputMode="numeric" pattern="([01][0-9]|2[0-3]):[0-5][0-9]" placeholder="21:00"
+            <label class="field">{rt("schedAt")}<input name="at" type="text" inputMode="numeric" pattern="([01][0-9]|2[0-3]):[0-5][0-9]" placeholder={rt("schedAtPh")}
               maxLength={5} value={at} aria-invalid={(touched.has("at") && !!bad.at) || undefined}
               onInput={(e) => { touch("at"); setAt(e.currentTarget.value); }} />{err("at")}</label>
             <fieldset class="checks row-wrap">

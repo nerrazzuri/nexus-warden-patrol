@@ -895,8 +895,11 @@ class _SiteMapPreviewPageState extends State<SiteMapPreviewPage> with NwAsk {
           title: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         // 易用性 37 场景测试：窄屏截成「No-go zones, speed limits, vi…」—— 标题用短写
         Text(tr('No-go, slow zones & walls', '禁行区、限速、虚拟墙'), overflow: TextOverflow.ellipsis),
-        Text('${mapName(widget.mapId)} · ${versionLabel(widget.version)}',
-            style: NwText.bodySmall.copyWith(color: Nw.of(context).textSecondary)),
+        // 易用性 37 第十一轮 P3：名字后到（站点回了 map_names）也换上，不一直写地图号 main
+        ValueListenableBuilder<Map<String, String>>(
+            valueListenable: mapNames,
+            builder: (context, _, _) => Text('${mapName(widget.mapId)} · ${versionLabel(widget.version)}',
+                style: NwText.bodySmall.copyWith(color: Nw.of(context).textSecondary))),
       ])),
       body: FutureBuilder<(Map<String, dynamic>, Uint8List, bool)>(
         future: _data,
