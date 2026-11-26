@@ -132,6 +132,9 @@ const RULES: Rule[] = [
   [/^(\S+) 被困 (\d+) 秒没脱开,换一台$/, (m) => `${m[1]} stuck for ${m[2]} s and couldn't get free, so another robot took over`],
   [/^请用遥控把 (\S+) 开回开阔、扫到过的地方$/, (m) => `drive ${m[1]} back to open, scanned floor with Remote`],
   [/^请人遥控把它开回来$/, () => "someone needs to drive it back with Remote"],
+  // 易用性 37 第九轮:值守日志剩下的两句
+  [/^布防开始值守$/, () => "Guard duty started (armed)"],
+  [/^派了没在跑,也没结果[(（]当被打断[)）]$/, () => "Sent but not running and no result came back (counted as interrupted)"],
   // 易用性 37 第八轮:值守日志每圈那几句;规划原因码开头的机器人原话
   [/^第 (\d+) 圈跑完,用时 (\d+) 秒$/, (m) => `Lap ${m[1]} done in ${m[2]} s`],
   [/^第 (\d+) 圈(接着跑)?[:：](.*)$/, (m) => `Lap ${m[1]}${m[2] ? " resumed" : ""}: ${m[3].split("→").map((n) => WP_NAMES[n] ?? n).join(" → ")}`],
