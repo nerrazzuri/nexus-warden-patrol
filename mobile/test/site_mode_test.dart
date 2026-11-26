@@ -86,14 +86,43 @@ void main() {
     await t.pumpAndSettle();
     // 手机 App 测试 M07：从布防切出去先确认
     expect(find.textContaining('退出布防？'), findsOneWidget);
+    // 易用性 37 第十轮 P1：点的是临时撤防，这一句不讲留守
+    expect(find.textContaining('下一步选要临时撤防的防区'), findsOneWidget);
     await t.tap(find.byKey(SiteModePage.leaveArmedKey));
+    await t.pumpAndSettle();
+    await t.tap(find.byKey(const Key('visitor-zone-drive')));
     await t.pumpAndSettle();
     await t.tap(find.byKey(const Key('visitor-go')));
     await t.pumpAndSettle();
-    expect(api.calls, contains('mode visitor  240'));
+    expect(api.calls, contains('mode visitor drive 240'));
     await t.tap(find.byKey(SiteModePage.homeKey));
     await t.pumpAndSettle();
     expect(api.calls.last, 'mode home');
+  });
+
+  testWidgets('易用性 37 第十轮 P1：有防区却一个没勾，不提交、说清楚；只有一个防区默认勾上', (t) async {
+    final api = FakeApi('guard')..modeView = <String, dynamic>{
+      ...siteFixture('site_mode'), 'mode': 'home', 'visitor_zones': <String>[], 'until_ms': null};
+    await _open(t, api);
+    await t.tap(find.byKey(SiteModePage.visitorKey));
+    await t.pumpAndSettle();
+    expect(find.byKey(const Key('visitor-pick-hint')), findsOneWidget);
+    await t.tap(find.byKey(const Key('visitor-go')));
+    await t.pumpAndSettle();
+    expect(api.calls.where((c) => c.startsWith('mode visitor')), isEmpty);
+    expect(find.textContaining('没有撤防'), findsOneWidget);
+    expect(find.textContaining('现在：留守'), findsOneWidget);
+
+    final one = FakeApi('guard')..modeView = <String, dynamic>{
+      ...siteFixture('site_mode'), 'mode': 'home', 'visitor_zones': <String>[], 'until_ms': null,
+      'zones': [<String, dynamic>{'zone': 'Whole site', 'home_armed': true, 'armed': true}]};
+    await _open(t, one);
+    await t.tap(find.byKey(SiteModePage.visitorKey));
+    await t.pumpAndSettle();
+    expect(find.byKey(const Key('visitor-pick-hint')), findsNothing);
+    await t.tap(find.byKey(const Key('visitor-go')));
+    await t.pumpAndSettle();
+    expect(one.calls, contains('mode visitor Whole site 240'));
   });
 
   testWidgets('管理员改不了防区，管理员能改「留守时也布防」', (t) async {
