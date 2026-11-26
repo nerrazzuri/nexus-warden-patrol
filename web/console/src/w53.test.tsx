@@ -87,6 +87,8 @@ describe("W53 网页", () => {
     const { container: c } = render(<SetupChecklist />);
     await waitFor(() => expect(c.querySelector('li[data-item="arming"]')).not.toBeNull());
     expect(c.textContent).toContain("开站清单 1/3");
+    // 易用性 37 场景测试:机器人做完了、没有地图项 —— 不再提「先把站点加到 App」
+    expect(c.querySelector("[data-setup-app]")).toBeNull();
     fireEvent.click(btn(c.querySelector('li[data-item="arming"]')!, "跳过"));
     await waitFor(() => expect(posted.some((p) => p.url === "/api/me/guide" && Array.isArray(p.body.skip))).toBe(true));
     // P1-75:跳过的写明「没设置」、能撤销;「去做」到那一项的标签页
@@ -96,6 +98,16 @@ describe("W53 网页", () => {
     expect(c.querySelector('li[data-item="zones"] a')!.getAttribute("href")).toBe("#/admin/layout?tab=nogo");
     fireEvent.click(btn(c, "暂不处理"));
     await waitFor(() => expect(posted.some((p) => p.body.setup_hidden === true)).toBe(true));
+  });
+
+  it("易用性 37 场景测试:还没加机器人、没建图 —— 先说要去手机 App,给站点码的入口(原来藏在「高级」里)", async () => {
+    setFetch(((url: string) => Promise.resolve(url === "/api/setup"
+      ? json({ items: [{ id: "robots", done: false, skipped: false }, { id: "map", done: false, skipped: false }] })
+      : json({ guide: { setup_hidden: false, skip: [] } }))) as never);
+    const { container: c } = render(<SetupChecklist />);
+    await waitFor(() => expect(c.querySelector("[data-setup-app]")).not.toBeNull());
+    expect(c.querySelector("[data-setup-app]")!.textContent).toContain("手机 App");
+    expect(c.querySelector("[data-setup-app] a")!.getAttribute("href")).toBe("#/admin/system?pair=1");
   });
 
   it("使用教程:按角色几步,点到最后「好了」记下看过了;常见问题按角色挑", async () => {
