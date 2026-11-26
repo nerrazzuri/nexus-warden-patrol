@@ -59,6 +59,27 @@ describe("地图面板:站点上没有这张图", () => {
   });
 });
 
+describe("今晚巡逻:值守巡逻", () => {
+  it("易用性 37 场景测试:布防后机器人在跑值守巡逻 —— 值班页列出来,不写「今天没有巡逻」", async () => {
+    setFetch((async (url: unknown) => {
+      const u = String(url);
+      if (u.includes("/patrols/today")) return json({ items: [] });
+      if (u.includes("/guard/status")) return json({ duty: { id: 1, started_ms: 0 }, now_ms: 0, waiting: {}, zones: [],
+        runs: [{ entry: 1, robot_id: "A", state: "lap", lap: 3, task_id: "t", next_lap_ms: 0, watch_zone: "" }] });
+      return json({});
+    }) as never);
+    const r = render(<TodayPatrols guard />);
+    await waitFor(() => expect(r.container.querySelector("[data-guard-run]")).not.toBeNull());
+    expect(r.container.textContent).toContain("布防值守 · A");
+    expect(r.container.textContent).not.toContain("今天没有巡逻");
+    cleanup();
+    // 没在值守(撤防了):照旧写没有
+    setFetch((async (url: unknown) => json(String(url).includes("/guard/status") ? { duty: null, runs: [], now_ms: 0, waiting: {}, zones: [] } : { items: [] })) as never);
+    const r2 = render(<TodayPatrols guard />);
+    await waitFor(() => expect(r2.container.textContent).toContain("今天没有巡逻"));
+  });
+});
+
 describe("今天的巡逻", () => {
   it("拉不到:写读取失败,不写今天没有巡逻;回来以后照常", async () => {
     const r = render(<TodayPatrols retryMs={20} />);
