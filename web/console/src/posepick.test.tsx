@@ -35,10 +35,10 @@ function mapFetch(log?: string[]) {
   }) as never);
 }
 
-type Ctx = { robot: string; map: typeof MA; robotMap?: typeof MA | null };
+type Ctx = { robot: string; map: typeof MA; robotMap?: typeof MA | null; role?: string };
 
 function Harness(p: Ctx) {
-  const pick = usePosePick({ meta, map: p.map, robotId: p.robot, robotMap: p.robotMap === undefined ? p.map : p.robotMap, role: "admin" });
+  const pick = usePosePick({ meta, map: p.map, robotId: p.robot, robotMap: p.robotMap === undefined ? p.map : p.robotMap, role: p.role ?? "admin" });
   return <><button onClick={() => pick.onPick?.(300, 100)}>pick</button>{pick.panel}</>;
 }
 
@@ -281,4 +281,13 @@ describe("minor #29 选位置时的朝向", () => {
     expect(pickYaw({ x: 1, y: 1 }, 1.03, 0.98, 0.7)).toBeCloseTo(0.7, 6);
     expect(pickYaw(null, 5, 5, 0.3)).toBeCloseTo(0.3, 6);
   });
+});
+
+it("易用性 37 第十一轮 P2:保安的地图上有「去这里」,没有「在这里设位置」", async () => {
+  mapFetch();
+  const r = render(<Harness robot="A" map={MA} role="guard" />);
+  fireEvent.click(r.getByText("pick"));
+  await waitFor(() => expect(r.container.querySelector("[data-pose-text]")).not.toBeNull());
+  expect(r.queryByText("Set position here")).toBeNull();
+  expect(r.queryByText("Go here")).not.toBeNull();
 });
