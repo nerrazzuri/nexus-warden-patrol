@@ -197,7 +197,8 @@ export function usePosePick(o: {
         {pose && o.robotId && wrongMap && <p class="small warn" data-pose-wrongmap="1">{rt("poseWrongMap", { robot: o.robotId })}</p>}
         {(pose || msg) && <div class="row">
           {!o.locate && <button type="button" class="btn primary sm" disabled={!pose || !o.robotId || !o.map || wrongMap || busy} onClick={go}>{rt("poseGo")}</button>}
-          <button type="button" class={o.locate ? "btn primary sm" : "btn sm"} disabled={!pose || !o.robotId || !o.map || wrongMap || busy || (!!settling && !settled && !timedOut)} onClick={() => setAsking(true)}>{rt("poseSet")}</button>
+          {/* 易用性 37 第十一轮 P2:保安的地图上不给「在这里设位置」(设错了机器人按错的位置走);「帮它定位」是专门进去的,照给 */}
+          {(o.locate || o.role !== "guard") && <button type="button" class={o.locate ? "btn primary sm" : "btn sm"} disabled={!pose || !o.robotId || !o.map || wrongMap || busy || (!!settling && !settled && !timedOut)} onClick={() => setAsking(true)}>{rt("poseSet")}</button>}
           <button type="button" class="btn sm" disabled={!pose} onClick={() => { setPose(null); setMsg(""); }}>{rt("poseClear")}</button>
         </div>}
         {/* 第 4 轮 P1-56:等机器人回执时写一句,不只是按钮变灰 */}

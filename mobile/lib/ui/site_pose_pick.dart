@@ -350,6 +350,8 @@ class _PoseBarState extends State<PoseBar> with NwAsk {
                             variant: NwButtonVariant.outline,
                             size: NwButtonSize.small,
                             onPressed: sel == null || _busy ? null : _go),
+                        // 易用性 37 第十一轮 P2：改机器人定位设错了它会按错的位置走 —— 只给管理员、工程师，保安不给
+                        if (widget.api.session?.canManageMaps ?? false)
                         NwButton(
                             buttonKey: PoseBar.setKey,
                             label: tr('Set position here', '在这里设位置'),

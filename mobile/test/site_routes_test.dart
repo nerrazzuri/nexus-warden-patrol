@@ -597,6 +597,14 @@ void main() {
       expect(find.textContaining('Go-to sent'), findsNothing);
     });
 
+    testWidgets('易用性 37 第十一轮 P2：保安的地图上有「去这里」、没有「在这里设位置」', (t) async {
+      final c = await pumpTab(t, Rot23Api('guard'));
+      await t.tapAt(c.global(-3.5, 4.25));
+      await t.pumpAndSettle();
+      expect(find.byKey(PoseBar.goKey), findsOneWidget);
+      expect(find.byKey(PoseBar.setKey), findsNothing);
+    });
+
     testWidgets('站点拒了：原因原样显示', (t) async {
       final api = Rot23Api('admin')..routeError = const SiteError(409, 'A needs on-site supervision: turn it on in the app first');
       final c = await pumpTab(t, api);
