@@ -4673,16 +4673,33 @@ class _Handler(TlsHandlerMixin):
             raise HttpError(404, f"没有 {method} /api/map-wizard")
         self._need(user, MANAGE)
         d = self._body()
+        before = w.view() if d.get("action") == "abandon" else None
         try:
             out = w.apply(d, by=str(user))
         except WizardError as exc:
             raise HttpError(exc.status, str(exc),
                             extra={"reason": exc.reason} if exc.reason else None) from exc
+        if before and before.get("step") in ("walk", "build") and before.get("version") and \
+                before.get("id") == d.get("wizard_id"):
+            self._drop_abandoned(str(before["map_id"]), str(before["version"]))
         self._audit_target = "map_wizard"
         self._audit_detail = {k: d.get(k) for k in ("action", "step", "robot_id", "site_type",
                                                      "drive") if k in d} | (
             {"version": out["version"]} if out.get("version") else {})
         return self._send_json(200, {"wizard": out or None})
+
+    def _drop_abandoned(self, map_id: str, version: str) -> None:
+        """易用性 37 第十二轮 P2:放弃建图时这一版已经出好登记了 —— 删掉(有机器人在用、是退回目标就留着)。"""
+        from nexwar_site.maps_admin import AdminError
+        from nexwar_site.maps_admin_api import _admin
+        if not self.site.dispatcher.db.query("SELECT 1 FROM maps WHERE map_id=? AND version=?",
+                                             (map_id, version)):
+            return
+        try:
+            _admin(self).delete(map_id, version)
+            log.info("放弃建图:删掉已出好的 %s:%s", map_id, version)
+        except AdminError as exc:
+            log.warning("放弃建图:%s:%s 删不了(%s),留着", map_id, version, exc)
 
     def _maps_admin(self, method: str, path: str, user) -> None:
         """地图管理页(管理员):见 ``maps_admin_api``。"""

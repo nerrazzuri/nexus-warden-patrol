@@ -453,3 +453,20 @@ def test_真机1125_出图失败_原因先说真正那句_traceback收进详情(
     assert error_headline(tail) == "关键帧只有 1 个(走得太短,或位姿跟点云时间对不上)"
     assert error_headline(["ValueError: x", "OSError: 盘满了"]) == "盘满了", "取最后一句"
     assert error_headline(["killed", "出图超过 3600 秒,停了"]) == ""
+
+
+def test_易用性37第十二轮_放弃建图_排着的拿掉_出着的出完不登记_迟到的上传当传完(site):
+    home, cat = site
+    b = SiteMapBuilder(home, cat, runner=_fake_builder(home), start_thread=False)
+    _upload_all(b)
+    assert b.status("yard", "3")["state"] == "queued"
+    cat.discard("yard", "3")
+    b.discard("A", "yard", "3")
+    b.run_pending()
+    assert b.status("yard", "3") is None
+    assert not any(m["map_id"] == "yard" for m in cat.list())
+    assert _send(b, "kf/00000.bin", b"kf0").discarded, "迟到的上传叫它当传完"
+    # 已经在出了(拿出队以后)才放弃:出完也不登记
+    b2 = SiteMapBuilder(home, cat, runner=_fake_builder(home), start_thread=False)
+    b2._run(("A", "yard", "3"))
+    assert not any(m["map_id"] == "yard" for m in cat.list())

@@ -262,7 +262,8 @@ class _MapManagePageState extends State<MapManagePage> with NwAsk {
     final reasons = [for (final r in (q['reasons'] as List? ?? const [])) qualityReasonText('$r')];
     final on = [for (final r in (v['loaded_on'] as List? ?? const [])) '$r'];
     final path = q['path_m'];
-    final canDelete = on.isEmpty && v['latest'] != true;
+    // 易用性 37 第十二轮：最新那一版没人用也能删（站点、网页本来就许；放弃建图留下的那种删不掉）
+    final canDelete = on.isEmpty;
     // 11-05 现场第 10 条：缺定位文件的老版本，带定位器的机器人收了也会拒
     final unusable = '${v['unusable'] ?? ''}';
     // 11-11：编辑、去噪出来的草稿只在站点上，网页预览、发布到站点后才能下发

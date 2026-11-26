@@ -162,6 +162,11 @@ class MapCatalog:
         if not self._build_issued(robot_id, map_id, version):
             # 只收站点让它建的那张(W00c5d 内部评审:不然随便哪台登记过的狗都能塞一张图进目录)。
             raise PathRefused(f"站点未让 {robot_id} 建 {map_id}:{version}")
+        if version in self.retired(map_id) and not self.db.query(
+                "SELECT 1 FROM maps WHERE map_id=? AND version=?", (map_id, version)):
+            # 易用性 37 第十二轮:放弃了的那一版,机器人迟到的上传不收,叫它当传完
+            shutil.rmtree(self.incoming / robot_id / map_id / version, ignore_errors=True)
+            return Stored(size=total, sha256="", discarded=True)
         path = safe_join(self.incoming, robot_id, map_id, version, rel)
         got = self.writer.write(path, offset=offset, data=data, total=total)
         # 收完一个文件:记下收块时算好的整个文件的哈希(狗也拿它核过),登记时不再重算(W09c 决定 9);
@@ -760,6 +765,17 @@ class MapCatalog:
         with self.db.tx() as c:
             v = self._retired_all(c).get(map_id, [])
         return {x for x in v if isinstance(x, str)}
+
+    def discard(self, map_id: str, version: str) -> None:
+        """易用性 37 第十二轮 P2:放弃建图 —— 这一版号记成删掉过(不再发);还没到的上传、还在出的图
+        到了也不登记(:meth:`put_map_chunk`、``mapbuild``)。已经登记了的由调用方删。"""
+        with self.db.tx() as c:
+            retired = self._retired_all(c)
+            retired.setdefault(map_id, [])
+            if version not in retired[map_id]:
+                retired[map_id].append(version)
+            from nexwar_site.site_settings import SiteSettings
+            SiteSettings.put_in(c, RETIRED_KEY, retired)
 
     def delete(self, map_id: str, version: str) -> int:
         """删掉这一版:文件、登记行,缓存里的预览也清。回删掉多少字节。**不查**有没有狗在用、是不是
