@@ -49,6 +49,15 @@ Future<void> _scrollTo(WidgetTester t, Key key) async {
 }
 
 void main() {
+  testWidgets('易用性 37 第十一轮 P2：P1 开着时设备与运营不写「没有要处理的」，说 P1 在最上面', (t) async {
+    _size(t, const Size(390, 2000));
+    final api = FakeApi('guard')..alertRows = [_p1('k1')];
+    await _show(t, api);
+    await _scrollTo(t, NowPage.opsEmptyKey);
+    expect(find.text('没有别的要处理的（P1 报警列在最上面）。'), findsOneWidget);
+    await t.pumpWidget(Container());
+  });
+
   testWidgets('易用性 37 第十一轮 P2：上一班留言写人名，不写登录名', (t) async {
     _size(t, const Size(390, 2000));
     addTearDown(() => personNames.value = const {});
