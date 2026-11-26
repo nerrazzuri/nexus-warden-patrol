@@ -111,6 +111,7 @@ class SiteAlertScenePage extends StatefulWidget {
   static const Key deterLevelKey = Key('scene-deter-level');
   static const Key notifyKey = Key('scene-notify');
   static const Key backupKey = Key('scene-backup');
+  static const Key arrivedDoneKey = Key('scene-arrived-done');
   static const Key backupDoneKey = Key('scene-backup-done');
   static const Key verdictKey = Key('scene-verdict');
   static const Key intruderKey = Key('scene-v-intruder');
@@ -1169,11 +1170,16 @@ class _SiteAlertScenePageState extends State<SiteAlertScenePage> with EstopMissR
   Widget? _notify(NwColors c) {
     if (!_open || _a.kind == 'account_request') return null;
     final handle = widget.api.session?.canHandleAlerts ?? false;
-    final by = '${_a.context['backup_by'] ?? _backupHere?.$1 ?? ''}';
+    final by = personName('${_a.context['backup_by'] ?? _backupHere?.$1 ?? ''}');
     final at = _a.context['backup_ms'] is num ? (_a.context['backup_ms'] as num).toInt() : _backupHere?.$2;
     final buttons = <Widget>[
       if (handle && by.isEmpty) _act(SiteAlertScenePage.backupKey, tr('Request backup', '请求支援'), _backup),
-      if (handle && _needsArrive && !_arrived) _act(SiteAlertScenePage.arriveKey, tr('On scene', '已到场'), _arrive),
+      // 易用性 37 第十三轮 P3：点了「已到场」按钮留在原处（变灰、打勾）—— 以前它一消失，「请求支援」变宽挪到手指下，
+      // 连点两下就误发支援
+      if (handle && _needsArrive)
+        _arrived
+            ? _act(SiteAlertScenePage.arrivedDoneKey, tr('On scene', '已到场'), null, icon: Icons.check)
+            : _act(SiteAlertScenePage.arriveKey, tr('On scene', '已到场'), _arrive),
     ];
     return _section(c, tr('Notify', '通知'), key: SiteAlertScenePage.notifyKey, [
       Text(
@@ -1386,7 +1392,7 @@ class _SiteAlertScenePageState extends State<SiteAlertScenePage> with EstopMissR
     }
     final bAt = _a.context['backup_ms'] is num ? (_a.context['backup_ms'] as num).toInt() : _backupHere?.$2;
     if (bAt != null) {
-      final by = '${_a.context['backup_by'] ?? _backupHere?.$1 ?? ''}';
+      final by = personName('${_a.context['backup_by'] ?? _backupHere?.$1 ?? ''}');
       rows.add((bAt, tr('$by requested backup.', '$by 请求了支援。')));
     }
     if (_a.resolvedMs != null) {

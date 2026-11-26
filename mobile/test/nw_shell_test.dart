@@ -1,6 +1,9 @@
 // 登录之后的外壳（App V2，2026-11-15）：顶栏 + 「现在 | 现场」两段；「现在」深色、右下角「全部急停」方块；
 // 「现场」浅色目录按角色四套，顶栏小红「急停」；机器人列表一直活着（事件流、响铃、登录过期退回）。
+import 'dart:async';
+
 import 'package:nexwar_patrol/l10n.dart';
+import 'package:nexwar_patrol/model/alert.dart';
 import 'package:nexwar_patrol/net/site_client.dart';
 import 'package:nexwar_patrol/store/site_store.dart';
 import 'package:nexwar_patrol/ui/alarm_log.dart';
@@ -10,6 +13,8 @@ import 'package:nexwar_patrol/ui/nw/nw_site_dir.dart';
 import 'package:nexwar_patrol/ui/nw/nw_theme.dart';
 import 'package:nexwar_patrol/ui/site_page.dart';
 import 'package:nexwar_patrol/ui/site_tabs.dart';
+import 'package:nexwar_patrol/ui/site_alert_scene.dart';
+import 'package:nexwar_patrol/ui/person_live.dart';
 import 'package:nexwar_patrol/ui/widget/alarm_widgets.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -247,6 +252,33 @@ void main() {
       await t.pump();
       await t.pump(const Duration(seconds: 1));
       expect(find.textContaining('无人确认'), findsNothing, reason: '已经有人确认了，不再说无人确认');
+      await t.pumpWidget(Container());
+    });
+
+    testWidgets('易用性 37 第十三轮 P3：「无人确认」提示条上有「打开」，点了开这一条报警', (t) async {
+      _size(t);
+      final api = FakeApi('guard');
+      await _show(t, api, theme: nwTheme(Brightness.light));
+      final f = siteFixture('site_alert_frame');
+      final a = <String, dynamic>{...(f['alert'] as Map<String, dynamic>), 'channel': 'sound'};
+      // 停在另一条报警的详情页上（测试反映的情形：整屏不压上来，只出提示条）
+      final other = Alert.fromWire(<String, dynamic>{'key': 'B/other#1', 'level': 'P2', 'kind': 'other', 'robot': 'B',
+          'title': 't', 'first_ms': 1, 'last_ms': 1, 'count': 1, 'acked_by': '', 'acked_ms': null,
+          'resolved_by': '', 'resolved_ms': null, 'channel': 'push', 'context': <String, dynamic>{}});
+      unawaited(Navigator.of(t.element(find.byType(NwShell))).push(
+          MaterialPageRoute<void>(builder: (_) => SiteAlertScenePage(api: api, alert: other))));
+      await t.pump();
+      await t.pump(const Duration(milliseconds: 600));
+      api.sse.add(<String, dynamic>{...f, 'alert': a});
+      await t.pump();
+      await t.pump(const Duration(milliseconds: 800));
+      final open = find.byKey(SiteRobotsPage.toastOpenKey);
+      expect(open, findsWidgets);
+      await t.tap(open.last);
+      await t.pump();
+      await t.pump(const Duration(milliseconds: 600));
+      expect(find.byWidgetPredicate((w) => (w is SiteAlertScenePage && w.alert.key == a['key']) || w is PersonLivePage),
+          findsOneWidget, reason: '开的是新来的这一条');
       await t.pumpWidget(Container());
     });
 

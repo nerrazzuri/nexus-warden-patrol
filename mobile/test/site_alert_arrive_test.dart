@@ -43,6 +43,10 @@ void main() {
     expect(api.calls, contains('arrive A/dog_sees_person#1'));
     expect(await sceneShow(t, find.byKey(SiteAlertScenePage.doneKey)), findsOneWidget, reason: '到场了：能定结论结案');
     expect(find.byKey(SiteAlertScenePage.falseKey), findsOneWidget);
+    // 易用性 37 第十三轮 P3：「已到场」留在原处变灰，「请求支援」不挪到手指下
+    expect(await sceneShow(t, find.byKey(SiteAlertScenePage.arrivedDoneKey)), findsOneWidget);
+    final done = t.widget<ButtonStyleButton>(find.byKey(SiteAlertScenePage.arrivedDoneKey));
+    expect(done.onPressed, isNull);
   });
 
   testWidgets('到场了：先选结论才能结案；备注一起发', (t) async {

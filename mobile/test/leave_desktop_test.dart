@@ -1,4 +1,6 @@
 // 易用性 37 第十二轮 P2-4：测试反映 Linux 正式版点「退出」后站点列表被一层暗色盖住、什么都点不动。
+// 第十三轮查明：外壳退场那几百毫秒里注销了 → 事件流断 → 机器人列表当「登录过期」又 pop 了一次根导航，
+// 把站点列表也退掉了（根导航一页不剩）。
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -10,13 +12,24 @@ import 'package:nexwar_patrol/ui/site_tabs.dart' show leaveConfirmKey;
 
 import 'site_page_test.dart' show FakeApi;
 
+/// 跟真客户端一样：注销以后会话没了、事件流断了（第十三轮：测试里假的不清会话，复现不出来）。
+class _RealLogout extends FakeApi {
+  _RealLogout(super.role);
+  @override
+  Future<void> logout() async {
+    await super.logout();
+    session = null;
+    await sse.close();
+  }
+}
+
 void main() {
   for (final size in const [Size(1280, 800), Size(400, 1400)]) {
     for (final role in ['admin', 'guard']) {
       testWidgets('易用性 37 第十二轮 P2：Linux 上「退出站点」回站点列表，不留暗层、列表能点 [$role] $size', (t) async {
         debugDefaultTargetPlatformOverride = TargetPlatform.linux;
         await t.binding.setSurfaceSize(size);
-        final api = FakeApi(role);
+        final api = _RealLogout(role);
         final store = MemorySiteStore([
           SiteEntry(name: '庄园', url: 'https://h:1', fingerprint: 'ab' * 32, username: 'gina')
         ]);
