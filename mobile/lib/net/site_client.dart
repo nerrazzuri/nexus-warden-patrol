@@ -229,6 +229,14 @@ String roleName(String role) => switch (role) {
     };
 
 /// 站点回的拒绝（409）按语言说：中文界面照站点原话；英文界面有 `reason_en` 就用它（W53 D10）。
+/// 「标原点 / 标待命点」被站点 409 拒：英文界面先用站点给的 reason_en（用户 11-27 第十八轮 P2：
+/// 机器人页只认「机器人标记失败:」那一种，站点自己查出来的原因英文界面看不到）；不然按拒收原因说人话。
+String markRefusalText(SiteError e) {
+  final en = e.body['reason_en'];
+  if (appLang.value == AppLang.en && en is String && en.isNotEmpty) return en;
+  return ackReasonText(e.message.replaceFirst(RegExp(r'^机器人标记失败[:：]'), ''));
+}
+
 String refusalText(SiteError e) {
   final en = e.body['reason_en'];
   if (appLang.value == AppLang.en && en is String && en.isNotEmpty) return en;

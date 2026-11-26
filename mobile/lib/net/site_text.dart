@@ -177,6 +177,11 @@ final List<_Rule> _rules = [
   (RegExp(r'^第 (\d+) 圈跑不成[:：]\s*([\s\S]*)$'),
       (m) => m[2]!.isEmpty ? 'lap ${m[1]} failed' : 'lap ${m[1]} failed: ${_lc(_en(m[2]!))}'),
   (RegExp(r'^(\d+) m 内没有能直线挪过去站的地方$'), (m) => 'no open spot within ${m[1]} m it could move straight to'),
+  // 用户 11-27：原点、待命点离墙、障碍、禁行区太近，机器人规划不出终点（站点 api.py _standby_walkable）
+  (RegExp(r'^(\S+) (现在站的地方|这里)不能当待命点[(（]原点[)）][:：][\s\S]*$'),
+      (m) => m[2] == '这里'
+          ? "${m[1]} can't use this spot as its standby / home point: it is too close to a wall, obstacle or no-go zone, so the robot could not plan a path back to it. Pick a spot further from walls, obstacles and no-go zones."
+          : "${m[1]} can't use this spot as its standby / home point: it is too close to a wall, obstacle or no-go zone, so the robot could not plan a path back to it. Drive about 1 m into open floor and mark again."),
   (RegExp(r'^(\S+) 的待命点不能设在这里[:：][\s\S]*$'), (m) => "${m[1]}'s standby point can't go here: the map shows it as not walkable or not scanned, so robots could never be sent there. Pick a spot on open, scanned floor."),
   (RegExp(r'^(\S+) 现在站的地方不能当待命点[:：][\s\S]*$'),
       (m) => "${m[1]} can't use this spot as its standby point: the map shows it as not walkable or not scanned, so robots could never be sent back here. Drive about 1 m into open, scanned floor and mark again."),

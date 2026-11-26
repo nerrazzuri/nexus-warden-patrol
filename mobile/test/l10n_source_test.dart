@@ -16,11 +16,10 @@ const _allowed = <String, List<String>>{
   'lib/ui/site_list.dart': ["site.contains('等管理员批准')", "site.contains('拒')",
     "site.contains('过期')"],
   // 跟站点回的报错原文对：剥掉开头那几个字
-  'lib/ui/site_robot.dart': [r"RegExp(r'^机器人标记失败[:：]')", "why.contains('未标原点')"],
-  'lib/ui/site_standby.dart': [r"RegExp(r'^机器人标记失败[:：]')"],
+  'lib/ui/site_robot.dart': ["why.contains('未标原点')"],
+  'lib/net/site_client.dart': [r"RegExp(r'^机器人标记失败[:：]')"],
   // W53：禁行区没确认的拒绝原话里抠出图号、版本
   'lib/ui/refusal.dart': [r"RegExp(r'^(\S+?):(\S+?)\s*当前的区域修订')"],
-  'lib/ui/site_intercepts.dart': [r"RegExp(r'^机器人标记失败[:：]')"],
   // 真机 11-25：机器人拒切换时说「busy: 正在装 …(编 Super-LIO,80%)」，按原话认出哪一步，再按语言说
   'lib/ui/site_releases.dart': [
     r"RegExp(r'^正在装 (\S+?)[(（](.+?)[,，](\d+)%[)）]$')",
