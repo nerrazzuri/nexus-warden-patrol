@@ -81,6 +81,7 @@ class NowPage extends StatefulWidget {
   static const Key opsKey = Key('now-ops');
   static Key opsRowKey(String key) => Key('now-ops-$key');
   static const Key noteKey = Key('now-note');
+  static const Key opsEmptyKey = Key('now-ops-empty');
   static const Key noteWriteKey = Key('now-note-write');
   static const Key activityKey = Key('now-activity');
   static const Key recordsKey = Key('now-records');
@@ -959,13 +960,18 @@ class _NowPageState extends State<NowPage> with EstopMissReveal {
 
   Widget _ops(NwColors c) {
     final rows = _alerts.where((a) => a.level != 'P1' && alertNeedsAttention(a)).toList();
+    // 易用性 37 第十一轮 P2：P1（比如「整趟中止」）开着时这里写「没有要处理的」像是全没事 —— P1 在最上面
+    final p1 = _alerts.any((a) => a.level == 'P1' && a.resolvedMs == null);
     return _section(
         c,
         rows.isEmpty ? tr('Equipment & operations', '设备与运营') : tr('Equipment & operations ${rows.length}', '设备与运营 ${rows.length}'),
         key: NowPage.opsKey,
         pad: const EdgeInsets.fromLTRB(Nw.s16, 14, Nw.s16, 4),
         rows.isEmpty
-            ? Padding(padding: const EdgeInsets.only(bottom: 10), child: Text(tr('Nothing open.', '没有要处理的。'), style: NwText.bodySmall.copyWith(color: c.textSecondary)))
+            ? Padding(padding: const EdgeInsets.only(bottom: 10), child: Text(
+                    key: NowPage.opsEmptyKey,
+                    p1 ? tr('Nothing else open. P1 alarms are listed at the top.', '没有别的要处理的（P1 报警列在最上面）。') : tr('Nothing open.', '没有要处理的。'),
+                    style: NwText.bodySmall.copyWith(color: c.textSecondary)))
             : Column(children: [
                 for (final a in rows)
                   InkWell(
@@ -991,7 +997,7 @@ class _NowPageState extends State<NowPage> with EstopMissReveal {
                                 if ('${a.context['zone'] ?? ''}'.isNotEmpty) '${a.context['zone']}',
                                 if (a.robot != 'site') _label(a.robot),
                                 _hm(a.firstMs),
-                                if (a.ackedBy.isNotEmpty) tr('${a.ackedBy} handling', '${a.ackedBy} 处理中'),
+                                if (a.ackedBy.isNotEmpty) tr('${personName(a.ackedBy)} handling', '${personName(a.ackedBy)} 处理中'),
                               ].join(' · '),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
