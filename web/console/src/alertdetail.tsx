@@ -35,7 +35,7 @@ export function incidentLog(a: Alert): { at: number; text: string }[] {
   const log: { at: number; text: string }[] = [{ at: a.first_ms, text: alertHeadline(a) }];
   if (a.count > 1) log.push({ at: a.last_ms, text: t("incRepeat", { n: a.count }) });
   if (a.acked_ms != null && a.acked_by) log.push({ at: a.acked_ms, text: t("actTook", { who: byText(a.acked_by), what: "" }).replace(/[:：]\s*$/, "") });
-  if (a.context?.arrived_ms != null) log.push({ at: a.context.arrived_ms, text: t("incArrivedBy", { who: a.context.arrived_by ?? "—" }) });
+  if (a.context?.arrived_ms != null) log.push({ at: a.context.arrived_ms, text: t("incArrivedBy", { who: byText(a.context.arrived_by) || "—" }) });
   if (a.context?.lost_ms != null) log.push({ at: a.context.lost_ms, text: t("dutyLost") });
   if (a.resolved_ms != null) {
     const note = (a.context as { note?: string } | undefined)?.note;

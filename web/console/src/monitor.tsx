@@ -191,7 +191,7 @@ export function MonitorPage(props: {
       title: alertHeadline(top),
       sub: [top.level, top.context?.zone ?? top.context?.where ?? "", nameOf(top.robot), hm(top.first_ms),
         followText(top.context), seenByText(top.context),
-        top.context?.arrived_by ? t("dutyArrived", { who: top.context.arrived_by }) : mustArrive(top) ? t("dutyArriveFirst")
+        top.context?.arrived_by ? t("dutyArrived", { who: byText(top.context.arrived_by) }) : mustArrive(top) ? t("dutyArriveFirst")
           : top.acked_ms != null && top.acked_by ? t("dutyTakenBy", { who: byText(top.acked_by) }) : "",
         alarms.length > 1 ? t("dutyMore", { n: alarms.length - 1 }) : ""].filter(Boolean).join(" · "),
       acts: (

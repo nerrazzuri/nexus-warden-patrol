@@ -80,6 +80,18 @@ describe("今晚巡逻:值守巡逻", () => {
   });
 });
 
+describe("人名", () => {
+  it("易用性 37 场景测试:谁接的、谁派的显示人名(站点在 /api/robots 带 person_names),没起名的照旧显示登录名", async () => {
+    const { byText, personNames } = await import("./sitetext");
+    personNames.value = { gina: "Gina Tan" };
+    try {
+      expect(byText("gina")).toBe("Gina Tan");
+      expect(byText("bob")).toBe("bob");
+      expect(byText("site:schedule")).not.toContain("site");
+    } finally { personNames.value = {}; }
+  });
+});
+
 describe("今天的巡逻", () => {
   it("拉不到:写读取失败,不写今天没有巡逻;回来以后照常", async () => {
     const r = render(<TodayPatrols retryMs={20} />);

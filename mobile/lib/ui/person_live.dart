@@ -18,6 +18,7 @@ import 'nw/nw_theme.dart';
 import 'orientation.dart';
 import 'site_alert_scene.dart';
 import 'site_video.dart';
+import '../net/person_names.dart';
 
 /// 这条报警要不要横屏整屏放画面：「机器人看见人」、机器人报的（不是站点、监控相机）、还没结案。
 bool personLiveFor(Alert a) =>
@@ -274,8 +275,8 @@ class _PersonLivePageState extends State<PersonLivePage> {
   @override
   Widget build(BuildContext context) {
     final handle = widget.api.session?.canHandleAlerts ?? false;
-    final by = _a.ackedBy.isEmpty ? '' : _a.ackedBy;
-    final closedBy = _a.resolvedBy.isEmpty ? '' : _a.resolvedBy;
+    final by = _a.ackedBy.isEmpty ? '' : personName(_a.ackedBy);
+    final closedBy = _a.resolvedBy.isEmpty ? '' : personName(_a.resolvedBy);
     final note = _msg.isNotEmpty
         ? _msg
         : _a.resolved

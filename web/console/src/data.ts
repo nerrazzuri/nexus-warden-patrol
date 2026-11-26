@@ -3,6 +3,7 @@ import { signal } from "@preact/signals";
 import { useCallback, useEffect, useRef, useState } from "preact/hooks";
 import { api, ApiError } from "./api";
 import { t } from "./i18n";
+import { personNames } from "./sitetext";
 import type { Alert, DeterSession, Mode, Robot, Summary } from "./model";
 
 export interface SiteData {
@@ -32,7 +33,7 @@ export function isStale(conn: Conn, now: number): boolean {
 /** 拉一次。核心(狗、告警)拿不到整个算失败;次要的(模式、驱离、电量)拿不到记成「说不清」(null)。 */
 export async function fetchSite(): Promise<SiteData> {
   const [r, a, m, d, s] = await Promise.all([
-    api<{ robots: Robot[]; map_names?: Record<string, string> }>("GET", "/api/robots"),
+    api<{ robots: Robot[]; map_names?: Record<string, string>; person_names?: Record<string, string> }>("GET", "/api/robots"),
     api<{ alerts: Alert[] }>("GET", "/api/alerts"),
     api<Mode>("GET", "/api/mode").catch(() => null),
     api<{ sessions: DeterSession[] }>("GET", "/api/deterrence").then((x) => x.sessions).catch(() => null),
@@ -41,6 +42,7 @@ export async function fetchSite(): Promise<SiteData> {
   // 易用性 build 37 复测:没配推送还写「已推送到所有手机」
   if (s?.site && "push" in s.site) pushOff.value = !s.site.push?.configured;
   if (r.map_names && typeof r.map_names === "object") mapNames.value = r.map_names;
+  if (r.person_names && typeof r.person_names === "object") personNames.value = r.person_names;
   robotNames.value = Object.fromEntries(r.robots.filter((x) => x.name).map((x) => [x.robot_id, x.name as string]));
   return { robots: r.robots, alerts: a.alerts, mode: m, deter: d, summary: s };
 }

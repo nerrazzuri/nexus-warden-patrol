@@ -41,6 +41,7 @@ import 'site_video.dart';
 import 'site_watch_page.dart';
 import 'site_weather.dart';
 import 'stop_failed.dart';
+import '../net/person_names.dart';
 
 /// 每个站点上次选的哪台（这一次打开 App 里记着；按站点地址分）。
 final Map<String, String> _picked = <String, String>{};
@@ -75,8 +76,8 @@ String manualOnlyText(Map m) {
   final why = enroll
       ? tr('New robot: manual dispatch only until an administrator confirms it',
           '新加入的机器人，管理员确认前只许手动派')
-      : tr('Manual only (set by ${m['by']}${note.isEmpty ? '' : ': $note'})',
-          '仅限手动（${m['by']} 设的${note.isEmpty ? '' : '：$note'}）');
+      : tr('Manual only (set by ${personName(m['by'])}${note.isEmpty ? '' : ': $note'})',
+          '仅限手动（${personName(m['by'])} 设的${note.isEmpty ? '' : '：$note'}）');
   return tr('$why. Schedules and alarms will not send it; you can still send it by hand. '
           'An administrator switches it back on the robot page.',
       '$why。日程和报警不会派它，手动还能派。管理员在机器人页改回自动。');
@@ -681,8 +682,8 @@ class _SiteDutyPageState extends State<SiteDutyPage> {
             Row(children: [
               Expanded(
                   child: Text(
-                      tr('Stopped by ${(r['held'] as Map)['by']}. Not dispatched until resumed.',
-                          '已被 ${(r['held'] as Map)['by']} 叫停，恢复前不会派出。'),
+                      tr('Stopped by ${personName((r['held'] as Map)['by'])}. Not dispatched until resumed.',
+                          '已被 ${personName((r['held'] as Map)['by'])} 叫停，恢复前不会派出。'),
                       style: NwText.bodySmall.copyWith(color: c.textSecondary))),
               if (s?.canDispatch ?? false)
                 NwButton(
@@ -803,7 +804,7 @@ class _SiteDutyPageState extends State<SiteDutyPage> {
           const SizedBox(height: 2),
           Text(
               wiz != null
-                  ? tr('${wiz['by']} is mapping (step $step of 7).', '${wiz['by']} 正在建图（第 $step / 7 步）。')
+                  ? tr('${personName(wiz['by'])} is mapping (step $step of 7).', '${personName(wiz['by'])} 正在建图（第 $step / 7 步）。')
                   : (admin
                       ? tr('A map is needed before patrolling. Video and remote control are available now.',
                           '巡逻前需先建图。当前可查看画面和遥控。')

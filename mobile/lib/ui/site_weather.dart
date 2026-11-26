@@ -19,6 +19,7 @@ import 'nw/nw_button.dart';
 import 'nw/nw_p4_admin.dart';
 import 'nw/nw_theme.dart';
 import 'nw/nw_widgets.dart';
+import '../net/person_names.dart';
 
 /// 三种天气给人看的名字。每次用的时候现取（语言能当场换）。
 Map<String, String> get _names => {
@@ -34,7 +35,7 @@ String weatherText(Map<String, dynamic> w) {
   // 站点给的 label 是中文：英文界面按 condition 取自己的名字，不认识的才用站点原文。
   final enLabel = _names[w['condition']] ?? (w['condition'] == 'unknown' ? 'Unknown' : label);
   final who = w['source'] == 'manual' && m is Map
-      ? tr(' (manual, ${m['by'] ?? ''})', '（手动，${m['by'] ?? ''}）')
+      ? tr(' (manual, ${personName(m['by'])})', '（手动，${personName(m['by'])}）')
       : '';
   final parts = <String>[tr('Weather: $enLabel$who', '天气：$label$who')];
   if (w['patrols_paused'] == true) parts.add(tr('Scheduled patrols paused', '排程巡逻暂停'));

@@ -3,7 +3,7 @@
 // 存的是整份导航区域(带改之前看到的修订号,跟手机一样);加一块是收紧、当场生效,删一块是放宽、要重新确认。
 // 2026-10-15(用户「只能画防区感觉不太够」):网页也能画禁行区、限速区、**虚拟墙**(画一条线,站点存成约 0.3 m 宽的
 // 禁行带,规则跟禁行区一样),列出狗守的区域、删、确认这一版(从上一版带过来的建议还是在手机上核)。
-import { siteKnown } from "./sitetext";
+import { siteKnown, byText } from "./sitetext";
 import { clip, siteDown, mapName } from "./data";
 import { useCallback, useEffect, useRef, useState } from "preact/hooks";
 import { api, ApiError, enc } from "./api";
@@ -427,7 +427,7 @@ function NavPanel({ nav, list, onRemove, onConfirm }: {
       <h2>{t("navZones")}</h2>
       <p class="muted small">{t("navZonesHint")}</p>
       {current
-        ? <p class="small" data-nav-status="ok">{t("navConfirmed", { rev: nav.revision, by: nav.confirmed!.by })}</p>
+        ? <p class="small" data-nav-status="ok">{t("navConfirmed", { rev: nav.revision, by: byText(nav.confirmed!.by) })}</p>
         : <p class="small warn" data-nav-status="unconfirmed">{t("navUnconfirmed", { rev: nav.revision })}</p>}
       {held.length > 0 && <p class="small warn" data-nav-held="1">{t("navHeld", { names: held.map((z) => z.label || z.id).join(", ") })}</p>}
       {!current && (nav.proposal

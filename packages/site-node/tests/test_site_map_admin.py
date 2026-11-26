@@ -532,3 +532,12 @@ def test_网页P1_47_网页上删版本_退回上一版跟发布一样要再输�
     assert code == 403 and "密码" in d["error"], d
     code, d = web(f"/api/admin/maps/{MAP[0]}/9/delete", {"confirm_password": PW})
     assert code == 200, d
+
+
+def test_易用性37场景_机器人列表带账号人名_谁接的谁派的显示人名_没起名的不带(站点):
+    s = 站点
+    s.accounts.add("hana", PW, role="guard", display_name="Hana Lee")
+    gina = _登(s, "gina")
+    names = s.req("GET", "/api/robots", token=gina)[1]["person_names"]
+    assert names.get("hana") == "Hana Lee"
+    assert "gina" not in names, "没起名的不带(照旧显示登录名)"
