@@ -25,6 +25,7 @@ import 'map_names.dart';
 import 'site_text.dart';
 import '../model/alert.dart';
 import 'error_log.dart';
+import 'person_names.dart';
 
 /// 跟站点说话时出的任何岔子。连不上、证书不对、超时是 0；站点回的 4xx/5xx 原样带状态码。
 class SiteError implements Exception {
@@ -1374,6 +1375,7 @@ class SiteClient implements SiteApi {
   Future<List<Map<String, dynamic>>> robots() async {
     final d = _map(await _send('GET', '/api/robots'));
     updateMapNames(d['map_names']);              // 用户 11-26：地图显示名
+    updatePersonNames(d['person_names']);        // 易用性 37 场景测试：人名
     return (d['robots'] as List? ?? const [])
         .whereType<Map<String, dynamic>>()
         .toList();

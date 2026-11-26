@@ -38,6 +38,7 @@ import 'site_recordings.dart';
 import 'site_runs.dart';
 import 'site_video.dart';
 import 'widget/alarm_widgets.dart';
+import '../net/person_names.dart';
 
 /// 真机 11-25：哪台相机看到的人（用户分不清是前面还是后面）。没报是空串。
 String seenByText(Map<String, dynamic> ctx) {
@@ -673,7 +674,7 @@ class _SiteAlertScenePageState extends State<SiteAlertScenePage> with EstopMissR
       final by = _a.ackedBy.isNotEmpty ? _a.ackedBy : (_ackedHere?.$1 ?? '');
       final at = hms(_a.ackedMs ?? _ackedHere!.$2);
       final me = by.isNotEmpty && by == widget.api.session?.name;
-      return me ? tr('Acknowledged by you at $at', '你已于 $at 确认') : tr('Acknowledged by $by at $at', '$by 已于 $at 确认');
+      return me ? tr('Acknowledged by you at $at', '你已于 $at 确认') : tr('Acknowledged by ${personName(by)} at $at', '${personName(by)} 已于 $at 确认');
     }
     return tr(
       'Unacknowledged for ${span(widget.now().millisecondsSinceEpoch - _a.firstMs)}',
@@ -728,9 +729,9 @@ class _SiteAlertScenePageState extends State<SiteAlertScenePage> with EstopMissR
     final arrivedMs = _a.context['arrived_ms'] is num ? (_a.context['arrived_ms'] as num).toInt() : _arrivedHere?.$2;
     return [
       (tr('Detected', '发现'), _a.firstMs, ''),
-      (tr('Assigned', '接手'), ackAt, ackBy),
+      (tr('Assigned', '接手'), ackAt, personName(ackBy)),
       if (_security) (tr('Dispatched', '派出'), _isRobot ? _a.firstMs : null, _isRobot ? _a.robot : ''),
-      if (_needsArrive) (tr('On site', '到场'), arrivedMs, '${_a.context['arrived_by'] ?? _arrivedHere?.$1 ?? ''}'),
+      if (_needsArrive) (tr('On site', '到场'), arrivedMs, personName(_a.context['arrived_by'] ?? _arrivedHere?.$1 ?? '')),
       (tr('Closed', '结案'), _a.resolvedMs ?? _closedHere, _a.resolvedMs != null ? verdictWord(_a.verdict) : ''),
     ];
   }
@@ -1334,7 +1335,7 @@ class _SiteAlertScenePageState extends State<SiteAlertScenePage> with EstopMissR
     final at = _a.ackedMs ?? _ackedHere?.$2;
     if (at != null) {
       final by = _a.ackedBy.isNotEmpty ? _a.ackedBy : (_ackedHere?.$1 ?? '');
-      rows.add((at, tr('Acknowledged by $by.', '$by 已确认。')));
+      rows.add((at, tr('Acknowledged by ${personName(by)}.', '${personName(by)} 已确认。')));
     }
     final lost = _a.context['lost_ms'];
     if (lost is num) {
@@ -1362,7 +1363,7 @@ class _SiteAlertScenePageState extends State<SiteAlertScenePage> with EstopMissR
     final arrivedMs = _a.context['arrived_ms'] is num ? (_a.context['arrived_ms'] as num).toInt() : _arrivedHere?.$2;
     if (arrivedMs != null) {
       final by = _a.context['arrived_by'] is String ? _a.context['arrived_by'] as String : (_arrivedHere?.$1 ?? '');
-      rows.add((arrivedMs, tr('$by is on site.', '$by 已到场。')));
+      rows.add((arrivedMs, tr('${personName(by)} is on site.', '${personName(by)} 已到场。')));
     }
     final bAt = _a.context['backup_ms'] is num ? (_a.context['backup_ms'] as num).toInt() : _backupHere?.$2;
     if (bAt != null) {

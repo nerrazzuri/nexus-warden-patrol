@@ -32,6 +32,7 @@ import 'nw/nw_theme.dart';
 import 'nw/nw_widgets.dart';
 import 'site_alert_scene.dart';
 import 'site_mode.dart';
+import '../net/person_names.dart';
 
 /// 这一帧 SSE 是不是「升到声音档、还没人确认」的告警——手机该响铃。
 bool alertWantsSound(Map<String, dynamic> frame) {
@@ -190,7 +191,7 @@ class _SiteWatchPageState extends State<SiteWatchPage> {
     final c = Nw.of(context);
     final can = widget.api.session?.canHandleAlerts ?? false;
     final state = <String>[
-      if (a.ackedBy.isNotEmpty) tr('Acknowledged by ${a.ackedBy}', '${a.ackedBy} 已确认') else tr('Unacknowledged', '无人确认'),
+      if (a.ackedBy.isNotEmpty) tr('Acknowledged by ${personName(a.ackedBy)}', '${personName(a.ackedBy)} 已确认') else tr('Unacknowledged', '无人确认'),
       if (a.escalated > 0) tr('Escalated to ${a.channel}', '已升级到 ${a.channel}'),
       if (a.count > 1) tr('${a.count} times', '${a.count} 次'),
     ].join(' · ');

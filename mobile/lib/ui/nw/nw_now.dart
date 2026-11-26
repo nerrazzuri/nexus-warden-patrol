@@ -40,6 +40,7 @@ import 'nw_estop_miss.dart';
 import '../person_live.dart';
 import 'nw_theme.dart';
 import 'nw_widgets.dart';
+import '../../net/person_names.dart';
 
 class NowPage extends StatefulWidget {
   final SiteApi api;
@@ -509,7 +510,7 @@ class _NowPageState extends State<NowPage> with EstopMissReveal {
       _hm(a.firstMs),
     ].join(' · ');
     final ownerLine = owned
-        ? tr('${a.ackedBy} is handling', '${a.ackedBy} 在处理')
+        ? tr('${personName(a.ackedBy)} is handling', '${personName(a.ackedBy)} 在处理')
         : tr('Unowned · ${_since(a.firstMs)}', '没人接手 · ${_since(a.firstMs)}');
     Widget buttons;
     if (_viewer) {
@@ -667,7 +668,7 @@ class _NowPageState extends State<NowPage> with EstopMissReveal {
             Text(tr('The site has no map yet', '站点还没有地图'), style: NwText.titleMedium.copyWith(color: c.text, fontWeight: FontWeight.w700)),
             Text(
                 wiz != null
-                    ? tr('${wiz['by']} is mapping (step $step of 7).', '${wiz['by']} 正在建图（第 $step / 7 步）。')
+                    ? tr('${personName(wiz['by'])} is mapping (step $step of 7).', '${personName(wiz['by'])} 正在建图（第 $step / 7 步）。')
                     : admin
                         ? tr('Robots need a map before they can patrol. Walk $first around once, about 20 minutes.',
                             '机器人要先有图才能巡逻。用 $first 走一圈，大约 20 分钟。')
@@ -803,7 +804,7 @@ class _NowPageState extends State<NowPage> with EstopMissReveal {
       final end = run['end_ms'] is num ? tr(' · ends ${_hm((run['end_ms'] as num).toInt())}', ' · 约 ${_hm((run['end_ms'] as num).toInt())} 走完') : '';
       return '${todayLabel(run)}${lap.isEmpty ? '' : ' · $lap'}$end';
     }
-    if (r['held'] is Map) return tr('Stopped by ${(r['held'] as Map)['by']}', '${(r['held'] as Map)['by']} 叫停的');
+    if (r['held'] is Map) return tr('Stopped by ${personName((r['held'] as Map)['by'])}', '${personName((r['held'] as Map)['by'])} 叫停的');
     if (r['manual_only'] is Map) return tr('Manual only', '仅限手动');
     final line = robotStatusLine(r);
     // 「在线 · 」是格子上牌子已经说了的

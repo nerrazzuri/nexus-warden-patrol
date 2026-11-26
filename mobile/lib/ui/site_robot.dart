@@ -38,6 +38,7 @@ import 'nw/nw_shell.dart' show EstopSquare;
 import 'widget/alarm_widgets.dart' show StopAllButton;
 import 'widget/fields_dialog.dart';
 import '../net/map_names.dart';
+import '../net/person_names.dart';
 
 /// 一只狗的状态说成一行（狗列表、单狗页共用）。
 String robotStatusLine(Map<String, dynamic> r) {
@@ -972,7 +973,7 @@ class _SiteRobotPageState extends State<SiteRobotPage> with NwAsk {
               child: Row(children: [
                 Expanded(
                     child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text(tr('Stopped by ${(v!['held'] as Map)['by']}', '已被 ${(v['held'] as Map)['by']} 叫停'),
+                  Text(tr('Stopped by ${personName((v!['held'] as Map)['by'])}', '已被 ${personName((v['held'] as Map)['by'])} 叫停'),
                       style: NwText.titleSmall.copyWith(color: c.text)),
                   const SizedBox(height: Nw.s4),
                   Text(

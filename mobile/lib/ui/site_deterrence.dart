@@ -14,6 +14,7 @@ import '../net/site_client.dart';
 import 'nw/nw_ask.dart';
 import 'nw/nw_theme.dart';
 import 'nw/nw_widgets.dart';
+import '../net/person_names.dart';
 
 /// 每一级的名字（跟站点 `deterrence.LABEL` 一样）。
 List<String> get deterLevelNames => <String>[
@@ -33,7 +34,7 @@ String deterSessionText(Map<String, dynamic> s) {
       ? (next is num
           ? tr(' (auto, escalates in ${next.toInt()} s)', '（自动，${next.toInt()} 秒后升级）')
           : tr(' (auto, at the highest automatic level)', '（自动，已达自动最高级）'))
-      : tr(' (${s['by'] ?? ''} in control)', '（${s['by'] ?? ''} 正在控制）');
+      : tr(' (${personName(s['by'])} in control)', '（${personName(s['by'])} 正在控制）');
   return 'L$lv $name$tail';
 }
 

@@ -1,6 +1,7 @@
 // 诊断 → 导出诊断包(日志设计 第 5 条,用户 11-10):按场景导出 —— 选一条告警、一趟巡检、一台机器人,
 // 时间段按它自动取(开始前 10 分钟到结束后 10 分钟),可以改。出事过几天才导也取得到(留存期内)。
 // 包里有站点、机器人的日志和轨迹、各种记录,不含密钥、令牌、照片录像。
+import { byText } from "./sitetext";
 import { useEffect, useState } from "preact/hooks";
 import { api } from "./api";
 import { alertHeadline } from "./alertinfo";
@@ -22,7 +23,7 @@ export function runLabel(r: Run): string {
   // minor #19:回原点、回待命点那一趟任务名是 standby-…(站点按目标认出是不是原点)
   const route = r.kind === "home" ? t("bpHome") : r.kind === "standby" || r.mission.startsWith("standby-") ? t("bpStandby")
     : r.mission.startsWith("temp-") && r.points ? t("bpTempRouteN", { n: r.points }) : routeName(r.mission);
-  const by = !r.by ? "" : r.by.startsWith("site:") ? t("bpBySchedule") : t("bpBy", { n: r.by });
+  const by = !r.by ? "" : r.by.startsWith("site:") ? t("bpBySchedule") : t("bpBy", { n: byText(r.by) });
   return [`${md(r.first_ms)} ${hm(r.first_ms)}`, nameOf(r.robot_id), route, by].filter(Boolean).join(" · ");
 }
 interface Win { since_ms: number; until_ms: number; robot: string | null; scene: string }
@@ -168,7 +169,7 @@ export function ProblemList() {
           {shown.map((p) => (
             <li key={p.code} class="row wrap" data-code={p.code}>
               <b class="mono">{p.code}</b>
-              <span class="muted small">{toLocalInput(p.at_ms).replace("T", " ")} · {p.robot ? nameOf(p.robot) + " · " : ""}{p.by}{p.device ? " · " + p.device : ""}</span>
+              <span class="muted small">{toLocalInput(p.at_ms).replace("T", " ")} · {p.robot ? nameOf(p.robot) + " · " : ""}{byText(p.by)}{p.device ? " · " + p.device : ""}</span>
               {p.note && <span>{p.note}</span>}
               <a class="btn push" href={`/api/problem-reports/${p.code}/bundle`} download={`nexwar_${p.code}.tar.gz`}>{t("supportBundle")}</a>
               <button type="button" class="btn danger" onClick={() => setDel(p)}>{t("remove")}</button>

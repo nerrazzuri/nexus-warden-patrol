@@ -19,6 +19,7 @@ import 'nw/nw_p4_admin.dart' show nwGap8;
 import 'nw/nw_theme.dart';
 import 'nw/nw_widgets.dart';
 import 'refusal.dart';
+import '../net/person_names.dart';
 import 'site_robot.dart' show SiteRobotPage;
 import 'site_video.dart' show SiteVideo;
 import 'site_routes.dart' show SiteRouteEditorPage;
@@ -305,8 +306,8 @@ class _PatrolSheetState extends State<_PatrolSheet> {
                 key: const Key('patrol-held'),
                 tone: NwTone.warning,
                 text: tr(
-                    '${widget.robotId} was stopped by ${_held!['by']}. It won\'t go until a guard or administrator taps Resume.',
-                    '${widget.robotId} 已被 ${_held!['by']} 叫停。保安或管理员点「恢复」之前，它不会出发。')),
+                    '${widget.robotId} was stopped by ${personName(_held!['by'])}. It won\'t go until a guard or administrator taps Resume.',
+                    '${widget.robotId} 已被 ${personName(_held!['by'])} 叫停。保安或管理员点「恢复」之前，它不会出发。')),
             nwGap8,
           ],
           if (_error != null)
@@ -580,7 +581,7 @@ class _TodayPatrolListState extends State<TodayPatrolList> {
     final lines = <String>[
       '${hhmm((it['at_ms'] as num).toInt(), offsetMin)} · ${todayLabel(it)}${'${it['robot'] ?? ''}'.isEmpty ? '' : ' · ${it['robot']}'}',
       st,
-      if (adhoc) tr('One-off patrol sent by ${it['by']}', '${it['by']} 派的临时巡逻'),
+      if (adhoc) tr('One-off patrol sent by ${personName(it['by'])}', '${personName(it['by'])} 派的临时巡逻'),
       if (it['state'] == 'running' && it['lap'] is Map) lapText(it['lap']),
       if (it['handover'] is Map) patrolHandoverText(it['handover']),
       // 第 8 轮：还没跑完的才是「预计」；跑完了的写几点结束
@@ -681,7 +682,7 @@ class _TodayPatrolListState extends State<TodayPatrolList> {
                         if (items[i]['kind'] == 'adhoc') tr('One-off', '临时'),
                         todayLabel(items[i]),
                         if ('${items[i]['robot'] ?? ''}'.isNotEmpty) '${items[i]['robot']}',
-                        if (items[i]['kind'] == 'adhoc' && '${items[i]['by'] ?? ''}'.isNotEmpty) '${items[i]['by']}',
+                        if (items[i]['kind'] == 'adhoc' && '${items[i]['by'] ?? ''}'.isNotEmpty) personName(items[i]['by']),
                       ].join(' · '),
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
