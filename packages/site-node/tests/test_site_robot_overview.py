@@ -288,6 +288,9 @@ def test_网页第2轮_N2_原点和默认待命点有没有_回原点回待命�
     d, db = 台
     assert _one(d, db)["home_set"] is None, "没报地图 = 不知道"
     d.clients["A"].capabilities.tasks["patrol"] = {"map_id": "m", "map_version": "2"}
+    assert _one(d, db)["home_set"] is None, "易用性 37 场景测试:图站点上没有(还没建图)= 不知道,不说没标原点"
+    with db.tx() as c:
+        c.execute("INSERT INTO maps(map_id, version, source, created_ms, files) VALUES ('m','2','t',0,'[]')")
     r = _one(d, db)
     assert r["home_set"] is False and r["standby_set"] is False
     with db.tx() as c:

@@ -14,7 +14,7 @@ from typing import Any
 
 from nexwar_contract.binding import wifi_view
 from nexwar_site.alert_audience import audience
-from nexwar_site.dispatcher import battery_pct
+from nexwar_site.dispatcher import battery_pct, map_on_site
 from nexwar_site.sitetime import local_day_start
 
 PROBLEM_AUDIENCES = ("help", "offline")
@@ -140,6 +140,8 @@ def _return_targets(db: Any, rid: str, caps: Any, maps: Any = None) -> dict[str,
     mid, ver = patrol.get("map_id"), patrol.get("map_version")
     home = None if mid is None else bool(db.query(
         "SELECT 1 FROM homes WHERE robot_id=? AND map_id=? AND map_version=?", (rid, mid, ver)))
+    if home is False and not map_on_site(db, mid, ver):
+        home = None                          # 易用性 37 场景测试:图站点上没有(还没建图),标不了原点 —— 不知道
     standby = bool(db.query("SELECT 1 FROM standby_points WHERE robot_id=? AND is_default=1",
                             (rid,)))
     return {"home_set": home, "standby_set": standby,

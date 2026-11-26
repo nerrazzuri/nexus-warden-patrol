@@ -46,6 +46,19 @@ describe("地图面板", () => {
   });
 });
 
+describe("地图面板:站点上没有这张图", () => {
+  it("易用性 37 场景测试:新站点没建图,机器人报的图 404 —— 写「尚无地图」,不写读取失败", async () => {
+    setFetch((async (url: unknown) => {
+      const u = String(url);
+      if (u.endsWith("/preview") || u.endsWith("/areas")) return new Response(JSON.stringify({ error: "地图不存在" }), { status: 404, headers: { "Content-Type": "application/json" } });
+      return json({ episodes: [], cameras: [], robots: {} });
+    }) as never);
+    const r = render(<SiteMap units={[unit("A")] as never} p1={[]} now={0} selected={null} onSelect={() => {}} retryMs={20} />);
+    await waitFor(() => expect(r.container.textContent).toContain("尚无地图"));
+    expect(r.container.textContent).not.toContain("读取失败");
+  });
+});
+
 describe("今天的巡逻", () => {
   it("拉不到:写读取失败,不写今天没有巡逻;回来以后照常", async () => {
     const r = render(<TodayPatrols retryMs={20} />);
