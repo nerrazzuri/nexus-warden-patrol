@@ -4,6 +4,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:nexwar_patrol/net/site_client.dart' show SiteError;
 import 'package:nexwar_patrol/store/site_store.dart';
 import 'package:nexwar_patrol/ui/nw/nw_shell.dart';
 import 'package:nexwar_patrol/ui/nw/nw_site_dir.dart';
@@ -21,6 +22,17 @@ class _RealLogout extends FakeApi {
     await super.logout();
     session = null;
     await sse.close();
+  }
+
+  // 第十五轮 P2：真客户端关了以后再请求是 `Bad state: Client is closed`
+  bool closed = false;
+  @override
+  void close() => closed = true;
+  @override
+  Future<List<Map<String, dynamic>>> robots() async {
+    await Future<void>.delayed(const Duration(milliseconds: 400));   // 在路上的那次刷新
+    if (closed) throw const SiteError(0, 'Signed out of this site', kind: 'closed');   // 真客户端 _wrapped 收成这样
+    return super.robots();
   }
 }
 
@@ -58,6 +70,9 @@ void main() {
         await t.scrollUntilVisible(find.byKey(leaveConfirmKey), 200,
             scrollable: find.descendant(of: find.byType(SiteDirectory), matching: find.byType(Scrollable)).first);
         await t.pumpAndSettle();
+        // 第十五轮 P2：退出那一下正好有一次刷新在路上（站点列表关了连接它才回来）
+        api.sse.add(<String, dynamic>{'kind': 'robot', 'robot_id': 'A'});
+        await t.pump(const Duration(milliseconds: 600));
         await t.tap(find.byKey(leaveConfirmKey));
         for (var i = 0; i < 40; i++) {
           await t.pump(const Duration(milliseconds: 50));

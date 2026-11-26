@@ -333,6 +333,9 @@ class _SiteListPageState extends State<SiteListPage> {
     final why = await nav.push<String>(MaterialPageRoute<String>(
         builder: (_) => NwShell(
             api: a, title: s.name, entry: s, watch: widget.watch, push: push)));
+    // 易用性 37 第十五轮 P2：外壳的提示条（「P1 A · 看见人（无人确认）/ 打开」）挂在 App 根上，退出站点不跟过来。
+    // 在这儿收（外壳退场动画里还活着、dispose 晚 —— 它自己收会把下面「登录已过期」这条也收掉）
+    messenger.clearSnackBars();
     // 离开就注销：不然令牌在站点上还能用半小时。推送先停、注销推送号（在路上的登记落定了再注销，
     // A6 外审 F3），再注销会话（站点那头推送号跟这次登录绑着，退出了也不再推）。
     await push.stop();
@@ -340,6 +343,7 @@ class _SiteListPageState extends State<SiteListPage> {
       if (a.session != null) await a.logout();
     } catch (_) {}
     a.close();
+    messenger.clearSnackBars();   // 退场那 300 毫秒里外壳又弹的
     if (why != null) messenger.showSnackBar(SnackBar(content: Text(why)));
   }
 
