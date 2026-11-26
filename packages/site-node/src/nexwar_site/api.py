@@ -4689,7 +4689,8 @@ class _Handler(TlsHandlerMixin):
         return self._send_json(200, {"wizard": out or None})
 
     def _drop_abandoned(self, map_id: str, version: str) -> None:
-        """易用性 37 第十二轮 P2:放弃建图时这一版已经出好登记了 —— 删掉(有机器人在用、是退回目标就留着)。"""
+        """易用性 37 第十二轮 P2:放弃建图时这一版已经出好登记了 —— 删掉
+        (有机器人在用、是退回目标就留着)。"""
         from nexwar_site.maps_admin import AdminError
         from nexwar_site.maps_admin_api import _admin
         if not self.site.dispatcher.db.query("SELECT 1 FROM maps WHERE map_id=? AND version=?",

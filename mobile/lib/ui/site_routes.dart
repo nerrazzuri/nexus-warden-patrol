@@ -131,13 +131,19 @@ class _SiteRoutesPageState extends State<SiteRoutesPage> with NwAsk {
     _loadMaps();
   }
 
+  static bool _inUse(Map<String, dynamic> m) => (m['loaded_on'] as List? ?? const []).isNotEmpty;
+
   Future<void> _loadMaps() async {
     try {
       final cat = await widget.api.maps();
       final maps = (cat['maps'] as List? ?? const []).whereType<Map<String, dynamic>>().toList();
       if (!mounted) return;
-      var pick = maps.isEmpty ? null : maps.first;
-      for (final m in maps) {
+      // 易用性 37 第十二轮 P2：默认打开机器人在用的那一版（没有才用最新的）——
+      // 以前开最新的（放弃建图留下的那种），写「这一版上没有路线」，看着像路线丢了
+      final inUse = [for (final m in maps) if (_inUse(m)) m];
+      final from = inUse.isNotEmpty ? inUse : maps;
+      var pick = from.isEmpty ? null : from.first;
+      for (final m in from) {
         if (pick != null && (m['created_ms'] as num? ?? 0) >= (pick['created_ms'] as num? ?? 0)) pick = m;
       }
       setState(() {
@@ -301,7 +307,8 @@ class _SiteRoutesPageState extends State<SiteRoutesPage> with NwAsk {
                                     for (final m in _maps)
                                       DropdownMenuItem(
                                           value: '${m['map_id']}:${m['version']}',
-                                          child: Text('${mapName(m['map_id'])} · v${m['version']}')),
+                                          child: Text(
+                                              '${mapName(m['map_id'])} · v${m['version']}${_inUse(m) ? tr(' · In use', ' · 在用') : ''}')),
                                   ],
                                   onChanged: (v) {
                                     if (v == null) return;
