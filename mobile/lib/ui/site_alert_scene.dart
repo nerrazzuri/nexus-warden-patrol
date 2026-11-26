@@ -113,6 +113,7 @@ class SiteAlertScenePage extends StatefulWidget {
   static const Key backupKey = Key('scene-backup');
   static const Key arrivedDoneKey = Key('scene-arrived-done');
   static const Key backupDoneKey = Key('scene-backup-done');
+  static const Key backupSentKey = Key('scene-backup-sent');
   static const Key verdictKey = Key('scene-verdict');
   static const Key intruderKey = Key('scene-v-intruder');
   static const Key handledKey = Key('scene-v-handled');
@@ -1173,7 +1174,11 @@ class _SiteAlertScenePageState extends State<SiteAlertScenePage> with EstopMissR
     final by = personName('${_a.context['backup_by'] ?? _backupHere?.$1 ?? ''}');
     final at = _a.context['backup_ms'] is num ? (_a.context['backup_ms'] as num).toInt() : _backupHere?.$2;
     final buttons = <Widget>[
-      if (handle && by.isEmpty) _act(SiteAlertScenePage.backupKey, tr('Request backup', '请求支援'), _backup),
+      // 第十四轮 P3：请求过支援，按钮也留在原处（变灰、打勾）—— 不然「已到场」变宽挪到手指下
+      if (handle)
+        by.isEmpty
+            ? _act(SiteAlertScenePage.backupKey, tr('Request backup', '请求支援'), _backup)
+            : _act(SiteAlertScenePage.backupSentKey, tr('Backup requested', '已请求支援'), null, icon: Icons.check),
       // 易用性 37 第十三轮 P3：点了「已到场」按钮留在原处（变灰、打勾）—— 以前它一消失，「请求支援」变宽挪到手指下，
       // 连点两下就误发支援
       if (handle && _needsArrive)

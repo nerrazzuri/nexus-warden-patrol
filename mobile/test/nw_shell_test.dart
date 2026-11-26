@@ -274,11 +274,16 @@ void main() {
       await t.pump(const Duration(milliseconds: 800));
       final open = find.byKey(SiteRobotsPage.toastOpenKey);
       expect(open, findsWidgets);
+      // 第十四轮 P2：带「打开」也到点自己收（Flutter 默认一直挂着）
+      final bar = t.widget<SnackBar>(find.ancestor(of: open.last, matching: find.byType(SnackBar)));
+      expect(bar.persist, isFalse);
+      expect(bar.duration, const Duration(seconds: 10));
       await t.tap(open.last);
       await t.pump();
       await t.pump(const Duration(milliseconds: 600));
-      expect(find.byWidgetPredicate((w) => (w is SiteAlertScenePage && w.alert.key == a['key']) || w is PersonLivePage),
-          findsOneWidget, reason: '开的是新来的这一条');
+      // 第十四轮 P2：开在最上面（以前推到外壳那层，开在详情页下面，看不见）
+      expect(find.byWidgetPredicate((w) => (w is SiteAlertScenePage && w.alert.key == a['key']) || w is PersonLivePage).hitTestable(),
+          findsOneWidget, reason: '开的是新来的这一条，而且在最上面');
       await t.pumpWidget(Container());
     });
 
