@@ -126,6 +126,9 @@ class _SiteRobotsPageState extends State<SiteRobotsPage> {
           _toastKey = '${a['key']}';
           ScaffoldMessenger.of(context).showSnackBar(SnackBar(
               // 易用性 37 第十三轮 P3：停在别的报警详情页时来新的 —— 整屏不压上来（[_popPersonLive]），这一条要点得开
+              // 第十四轮 P2：带「打开」的提示条 Flutter 默认一直挂着（认领、关单、退出站点都还在）—— 到点自己收
+              persist: false,
+              duration: _toastFor,
               action: SnackBarAction(
                   key: SiteRobotsPage.toastOpenKey, label: tr('Open', '打开'), onPressed: () => _openAlert(a)),
               content: Text(tr(
@@ -176,6 +179,8 @@ class _SiteRobotsPageState extends State<SiteRobotsPage> {
       if (mounted) {
         _toastKey = a.key;
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            persist: false,
+            duration: _toastFor,
             action: SnackBarAction(
                 key: SiteRobotsPage.toastOpenKey, label: tr('Open', '打开'), onPressed: () => _openAlertObj(a)),
             content: Text(tr(
@@ -250,6 +255,18 @@ class _SiteRobotsPageState extends State<SiteRobotsPage> {
   /// 眼下那条「无人确认」提示是哪条告警的（I4 11-17：确认了就收起）。
   String? _toastKey;
 
+  /// 「无人确认」提示条挂多久（第十四轮：不能一直挂着）。
+  static const Duration _toastFor = Duration(seconds: 10);
+
+  /// 离开外壳时收提示条用（dispose 里不能再查 context）。
+  ScaffoldMessengerState? _messenger;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _messenger = ScaffoldMessenger.maybeOf(context);
+  }
+
   /// 只读账号：响一声提醒，不一直响（他确认不了，M15）。
   bool get _viewer => widget.api.session?.isViewer ?? false;
 
@@ -300,7 +317,8 @@ class _SiteRobotsPageState extends State<SiteRobotsPage> {
     if (_disposed || !mounted) return;
     final live = personLiveToPop([alert], nowMs: DateTime.now().millisecondsSinceEpoch);
     if (live != null) personLiveShown.add(live.key);
-    unawaited(Navigator.of(context).push(MaterialPageRoute<void>(
+    // 第十四轮 P2：开在根导航上 —— 报警详情页在根导航上，推到外壳那层就开在它下面，看不见
+    unawaited(Navigator.of(context, rootNavigator: true).push(MaterialPageRoute<void>(
         builder: (_) => live != null
             ? PersonLivePage(api: widget.api, alert: live)
             : SiteAlertScenePage(api: widget.api, alert: alert))));
@@ -391,6 +409,14 @@ class _SiteRobotsPageState extends State<SiteRobotsPage> {
   @override
   void dispose() {
     _disposed = true;
+    // 第十四轮 P2：退出站点 —— 这个站点的提示条不跟到站点列表、下一次登录（提示条在 App 根上）
+    final m = _messenger;
+    if (_toastKey != null && m != null && m.mounted) {
+      // 拆树的这一帧里不能动它（整个 App 在拆时它自己也在拆）：画完这一帧再收
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (m.mounted) m.hideCurrentSnackBar();
+      });
+    }
     _debounce?.cancel();
     _retry?.cancel();
     _sub?.cancel();

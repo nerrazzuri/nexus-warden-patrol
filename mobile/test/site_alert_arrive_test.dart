@@ -47,6 +47,11 @@ void main() {
     expect(await sceneShow(t, find.byKey(SiteAlertScenePage.arrivedDoneKey)), findsOneWidget);
     final done = t.widget<ButtonStyleButton>(find.byKey(SiteAlertScenePage.arrivedDoneKey));
     expect(done.onPressed, isNull);
+    // 第十四轮 P3：请求支援以后它也留在原处（变灰），「已到场」不挪到手指下
+    await sceneTap(t, SiteAlertScenePage.backupKey);
+    await t.pumpAndSettle();
+    expect(await sceneShow(t, find.byKey(SiteAlertScenePage.backupSentKey)), findsOneWidget);
+    expect(t.widget<ButtonStyleButton>(find.byKey(SiteAlertScenePage.backupSentKey)).onPressed, isNull);
   });
 
   testWidgets('到场了：先选结论才能结案；备注一起发', (t) async {
