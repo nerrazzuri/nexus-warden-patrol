@@ -1,6 +1,7 @@
 // W53（用户 2026-10-30 / 10-31）：值守页跟着一台机器人走、画面手动开、按角色的按钮、派巡逻弹框
 // （估时、撞日程排队、被拒说原因）、今天的巡逻、管理栏（要你处理、开站清单）、账号审批、日程、申请账号、
 // 上手导览和报警练习。
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:nexwar_patrol/l10n.dart';
@@ -649,6 +650,26 @@ void main() {
       expect(find.byKey(PracticeAlarmPage.doneKey), findsOneWidget);
       expect(api.calls.where((c) => !before.contains(c) && !c.startsWith('patrolsToday')), isEmpty,
           reason: '练习不发给站点');
+    });
+
+    testWidgets('易用性 37 第十一轮 P2：从「使用教程」点值守导览 —— 先退回「现在」页再走，不在教程页上圈', (t) async {
+      final api = FakeApi('guard')..guide = <String, dynamic>{'tour': kTourVersion, 'setup_hidden': false, 'skip': <dynamic>[]};
+      _size(t, const Size(400, 900));
+      await t.pumpWidget(MaterialApp(home: NwShell(api: api, title: '站点', ring: () {})));
+      await t.pumpAndSettle();
+      final nav = Navigator.of(t.element(find.byType(NwShell)));
+      unawaited(nav.push(MaterialPageRoute<void>(builder: (_) => HelpPage(role: 'guard', api: api))));
+      await t.pumpAndSettle();
+      await t.tap(find.byKey(HelpPage.tourKey));
+      await t.pumpAndSettle();
+      expect(find.byType(HelpPage), findsNothing);
+      expect(find.byKey(tourCardKey), findsOneWidget);
+      expect(find.textContaining('1 / 7 · 现场状态'), findsOneWidget);
+      expect(find.textContaining('切换'), findsNothing, reason: '「现在」页上没有「切换」按钮');
+      while (find.byKey(tourNextKey).evaluate().isNotEmpty) {
+        await t.tap(find.byKey(tourNextKey));
+        await t.pumpAndSettle();
+      }
     });
 
     testWidgets('看过了就不再弹；「跳过」也记下来', (t) async {
