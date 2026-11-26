@@ -603,7 +603,27 @@ void main() {
     expect(walkTip(pathM: 0, fromStartM: 0, elapsed: const Duration(seconds: 6)), contains('缓慢行走'));
   });
 
-  testWidgets('地图管理：每一版写结论、谁在用；在用的、最新的不能删；能把机器人退回上一版', (t) async {
+  testWidgets('易用性 37 第十二轮：最新那一版没机器人用 —— 能删（放弃建图留下的那种）', (t) async {
+    _size(t);
+    final api = FakeApi('admin')
+      ..overview = <String, dynamic>{
+        'maps': <dynamic>[
+          <String, dynamic>{'map_id': 'main', 'versions': <dynamic>[
+            <String, dynamic>{'version': '20261031-5', 'note': '', 'created_ms': 0, 'latest': true,
+              'loaded_on': <dynamic>[], 'quality': <String, dynamic>{'verdict': 'problem', 'reasons': <dynamic>['short_path'], 'path_m': 0.0}},
+            <String, dynamic>{'version': '20261031-1', 'note': '', 'created_ms': 0, 'latest': false,
+              'loaded_on': <dynamic>['A'], 'quality': <String, dynamic>{'verdict': 'usable_unlooped', 'reasons': <dynamic>[]}},
+          ]},
+        ],
+        'robots': <dynamic>[],
+      };
+    await t.pumpWidget(MaterialApp(home: MapManagePage(api: api)));
+    await t.pumpAndSettle();
+    expect(find.byKey(MapManagePage.deleteKey('main', '20261031-5')), findsOneWidget);
+    expect(find.byKey(MapManagePage.deleteKey('main', '20261031-1')), findsNothing, reason: 'A 在用');
+  });
+
+  testWidgets('地图管理：每一版写结论、谁在用；在用的不能删；能把机器人退回上一版', (t) async {
     _size(t);
     final api = FakeApi('admin')
       ..overview = <String, dynamic>{

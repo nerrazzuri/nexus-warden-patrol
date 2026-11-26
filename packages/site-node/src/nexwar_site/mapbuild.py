@@ -312,6 +312,19 @@ class SiteMapBuilder:
                 continue
         return min(99, got * 100 // total)
 
+    def discard(self, robot_id: str, map_id: str, version: str) -> None:
+        """易用性 37 第十二轮 P2:放弃建图 —— 这台这一版的关键帧作废(迟到的上传当传完)、排着的拿掉;
+        正在出的出完也不登记(:meth:`_run` 看地图目录的「删掉过」)。"""
+        job: Job = (robot_id, map_id, version)
+        mark = self._abandoned_mark(job)
+        mark.parent.mkdir(parents=True, exist_ok=True)
+        mark.write_text("放弃建图", encoding="utf-8")
+        shutil.rmtree(self._dir(job), ignore_errors=True)
+        with self._cv:
+            self._queue = collections.deque(j for j in self._queue if j != job)
+            if self._status.get((map_id, version), {}).get("state") != "running":
+                self._status.pop((map_id, version), None)
+
     def retry(self, map_id: str, version: str) -> None:
         with self._cv:
             st = self._status.get((map_id, version))
@@ -457,6 +470,14 @@ class SiteMapBuilder:
             return self._failed(job, f"出图没成(退出码 {rc}):" + log_text, detail=log_text)
         note = (f"站点优化(回环,从 {opt[1]})" if opt is not None
                 else "站点打包(边走边存的关键帧)")
+        retired = getattr(self.maps, "retired", None)
+        if opt is None and callable(retired) and version in retired(map_id):
+            # 易用性 37 第十二轮:出的时候人放弃了建图 —— 出完也不登记
+            shutil.rmtree(base, ignore_errors=True)
+            with self._cv:
+                self._status.pop((map_id, version), None)
+            log.info("%s:%s 出完了,但建图已放弃:不登记", map_id, version)
+            return
         try:
             self.maps.import_dir(out, map_id=map_id, version=version, source=robot, note=note)
         except Exception as exc:  # noqa: BLE001 —— MapError、盘满……都按没成说
