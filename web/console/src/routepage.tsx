@@ -7,7 +7,7 @@ import { api, ApiError, enc } from "./api";
 import { Confirm } from "./dialogs";
 import { startDrag, clickGuard, swallowClick } from "./dragpt";
 import { colon, joinList, t, type Key } from "./i18n";
-import { SaveCancelled, type OwnLayer } from "./layoutpage";
+import { SaveCancelled, defaultMap, type OwnLayer } from "./layoutpage";
 import { MapCanvas } from "./mapcanvas";
 import { PoseMarker } from "./posemarker";
 import { spreadMarks } from "./markspread";
@@ -46,7 +46,7 @@ import { siteKnown, siteStr } from "./sitetext";
 import { clip, siteDown, mapName } from "./data";
 
 type Say = (s: string) => void;
-interface MapRow { map_id: string; version: string; note: string }
+interface MapRow { map_id: string; version: string; note: string; loaded_on?: string[]; created_ms?: number }
 
 export const NAME_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
 const DAYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"] as const;
@@ -113,7 +113,7 @@ export function RoutesPage({ say, embed, kind = "patrol" }: { say: Say; embed?: 
     if (embed) return;
     api<{ maps: MapRow[] }>("GET", "/api/maps").then((d) => {
       setMaps(d.maps);
-      setSel((s) => s ?? d.maps[d.maps.length - 1] ?? null);
+      setSel((s) => s ?? defaultMap(d.maps));   // 易用性 37 第十二轮:默认开机器人在用的那一版
     }).catch((e) => say(errText(e)));
   }, []);
   const base = sel ? `/api/maps/${enc(sel.map_id)}/${enc(sel.version)}` : "";
@@ -405,7 +405,7 @@ export function RoutesPage({ say, embed, kind = "patrol" }: { say: Say; embed?: 
               const [m, v] = e.currentTarget.value.split("\u0000");
               setSel(maps.find((x) => x.map_id === m && x.version === v) ?? null);
             }}>
-              {maps.map((m) => <option key={`${m.map_id}:${m.version}`} value={`${m.map_id}\u0000${m.version}`}>{m.map_id} · v{m.version}{m.note ? ` · ${clip(siteKnown(m.note))}` : ""}</option>)}
+              {maps.map((m) => <option key={`${m.map_id}:${m.version}`} value={`${m.map_id}\u0000${m.version}`}>{m.map_id} · v{m.version}{m.loaded_on?.length ? ` · ${rt("mapInUse")}` : ""}{m.note ? ` · ${clip(siteKnown(m.note))}` : ""}</option>)}
             </select>
           </label>
           <span class="push" />
