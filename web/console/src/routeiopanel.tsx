@@ -1,5 +1,6 @@
 // 第四档 #44:路线列表上的「导出」「导入」。导出 = 这张图这一版上的路线存成一个文件下载;
 // 导入 = 选文件 → 列出每条怎么办(新建 / 盖掉同名的 / 编号用过换一个)→ 一条条存,存不下的说原因。
+import { mapName } from "./data";
 import { useState } from "preact/hooks";
 import { api, ApiError, enc } from "./api";
 import { buildRouteFile, parseRouteFile, planImport, routeFileName, type ImportRow, type RouteFile } from "./routeio";
@@ -101,7 +102,7 @@ export function RouteIO({ sel, kind, routes, say, onDone }: {
       {err && <p class="error small" role="alert" data-routeio-err="1">{err}</p>}
       {file && (
         <div class="routeio-plan" data-routeio-plan="1">
-          <p class="small">{rt("ioFrom", { map: `${file.map_id} · v${file.map_version}`, n: file.routes.length })}
+          <p class="small">{rt("ioFrom", { map: `${mapName(file.map_id)} · v${file.map_version}`, n: file.routes.length })}
             {file.map_version !== sel.version && <> {rt("ioOtherVersion", { v: sel.version })}</>}</p>
           <ul class="routeio-rows">
             {rows.map((r, i) => (

@@ -8,6 +8,10 @@
 .mm-body h3 { margin: 0; display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--sp-2); }
 .mm-tag { font-size: 12px; font-weight: 700; padding: 1px 8px; border: 1px solid var(--c-textMuted); border-radius: var(--r-rPill); }
 .mm-notebox { display: flex; gap: var(--sp-2); align-items: center; }
+/* 用户 11-26:地图显示名那一行(标题 + 改名) */
+.mm-mapname { display: flex; flex-wrap: wrap; gap: var(--sp-2); align-items: center; }
+.mm-mapname .mm-mapid { flex: 0 1 auto; margin-right: var(--sp-2); }
+.mm-mapname input { flex: 0 1 240px; min-width: 0; height: var(--ctl-sm); padding: 0 8px; border-radius: var(--r-r8); border: 1px solid var(--c-textMuted); background: var(--c-surface); color: var(--c-text); font: inherit; font-size: 14px; }
 .mm-notebox input { flex: 1 1 auto; min-width: 0; height: var(--ctl-sm); padding: 0 8px; border-radius: var(--r-r8); border: 1px solid var(--c-textMuted); background: var(--c-surface); color: var(--c-text); font: inherit; font-size: 14px; }
 .mm-build, .mm-counts, .mm-dogs-on { margin: 0; display: flex; flex-wrap: wrap; gap: var(--sp-1) var(--sp-4); }
 .mm-chip { display: inline-block; margin-left: 4px; padding: 0 8px; border: 1px solid var(--c-outline); border-radius: var(--r-rPill); }

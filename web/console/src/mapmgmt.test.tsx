@@ -3,6 +3,7 @@
 import { cleanup, fireEvent, render, waitFor } from "@testing-library/preact";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { setFetch } from "./api";
+import { mapName, mapNames } from "./data";
 import { lang } from "./i18n";
 import { activationText, MapManagePage, rollLabel, routeCount } from "./mapmgmt";
 import type { Activation, Dog, Overview, Version } from "./mapmgmt";
@@ -148,6 +149,23 @@ describe("备注", () => {
     await waitFor(() => expect(say).toHaveBeenCalledWith("Saved"));
     expect(calls.find((x) => x.method === "POST")?.body).toEqual({ note: "after the storm" });
     expect(calls.filter((x) => x.path === "/api/admin/maps").length).toBe(2);
+  });
+
+  it("用户 11-26:整张图的显示名 —— 标题写名字、小字写地图号;改了存到 /name,各页的 mapName 跟着换", async () => {
+    overview.maps[0].name = "Elmina";
+    routes["POST /api/admin/maps/estate/name"] = () => json({ ok: true, name: "Elmina Lakeside" });
+    const { container, getByLabelText, getByText } = mount();
+    await waitFor(() => getByLabelText("Name of map estate"));
+    expect(container.querySelector(".mm-mapid")!.textContent).toBe("Elmina estate");
+    fireEvent.input(getByLabelText("Name of map estate"), { target: { value: "Elmina Lakeside" } });
+    await waitFor(() => expect((getByText("Save name") as HTMLButtonElement).disabled).toBe(false));
+    fireEvent.click(getByText("Save name"));
+    await waitFor(() => expect(say).toHaveBeenCalledWith("Saved"));
+    expect(calls.find((x) => x.path === "/api/admin/maps/estate/name")?.body).toEqual({ name: "Elmina Lakeside" });
+    expect(mapName("estate")).toBe("Elmina Lakeside");
+    expect(mapName("other")).toBe("other");
+    mapNames.value = {};
+    delete overview.maps[0].name;
   });
 });
 

@@ -30,6 +30,7 @@ import 'patrol_dispatch.dart' show adhocEndText, dispatchResultText, hhmm, minut
 import 'pose_marker.dart';
 import 'refusal.dart';
 import 'widget/fields_dialog.dart';
+import '../net/map_names.dart';
 
 /// 路线名、排程 id：ASCII 字母数字 . _ -（跟站点同一条规矩）。
 final RegExp routeNameRe = RegExp(r'^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$');
@@ -259,7 +260,7 @@ class _SiteRoutesPageState extends State<SiteRoutesPage> with NwAsk {
         appBar: AppBar(
             title: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Text(tr('Patrol routes', '巡逻路线')),
-              if (sel != null) Text('${sel['map_id']} v${sel['version']}', style: sub),
+              if (sel != null) Text('${mapName(sel['map_id'])} v${sel['version']}', style: sub),
             ]),
             actions: [
               if (admin && sel != null)
@@ -298,7 +299,7 @@ class _SiteRoutesPageState extends State<SiteRoutesPage> with NwAsk {
                                     for (final m in _maps)
                                       DropdownMenuItem(
                                           value: '${m['map_id']}:${m['version']}',
-                                          child: Text('${m['map_id']} · v${m['version']}')),
+                                          child: Text('${mapName(m['map_id'])} · v${m['version']}')),
                                   ],
                                   onChanged: (v) {
                                     if (v == null) return;

@@ -14,7 +14,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 
 import 'design/alert_titles.g.dart';
-import 'net/site_text.dart' show zhPunct;
+import 'net/site_text.dart' show guardStuckTitleEn, zhPunct;
 
 enum AppLang { en, zh }
 
@@ -33,6 +33,10 @@ const String kAlertTestPrefix = '测试：';
 String alertTitle(String kind, String siteTitle) {
   // 第 9 轮 W9-10：站点给的标题多用半角「:,(」，挨着汉字的换成全角（跟网页一样）
   if (appLang.value == AppLang.zh && siteTitle.isNotEmpty) return zhPunct(siteTitle);
+  // 用户 11-26：值守的机器人被困 90 秒（换车 / 指定了它没换）—— 写清是哪台、多久
+  final bare = siteTitle.startsWith(kAlertTestPrefix) ? siteTitle.substring(kAlertTestPrefix.length) : siteTitle;
+  final held = kind == 'guard_stuck' ? guardStuckTitleEn(bare) : null;
+  if (held != null) return '${siteTitle.startsWith(kAlertTestPrefix) ? 'TEST: ' : ''}$held';
   final e = alertTitles[kind];
   if (e == null) return siteTitle;
   final title = appLang.value == AppLang.zh ? e.$2 : e.$1;

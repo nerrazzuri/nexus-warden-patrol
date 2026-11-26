@@ -438,6 +438,7 @@ const Map<String, (String, String, String, String, String, String, String)> errC
 const Map<String, String> alertErr = <String, String>{
   'stuck': 'dispatch.stuck',
   'intrusion': 'sense.intrusion',
+  'waypoint_skipped': 'dispatch.waypoint_missed',
   'payload_sos': 'robot.payload_sos',
   'payload_estop': 'robot.payload_estop',
   'deter_failed': 'robot.deter_failed',

@@ -143,7 +143,9 @@ def test_点位未到_只记录不推送_同一个点连着3趟没到才报P1(�
                               note="被挡"))
         c.ms += 1000
     assert _open(desk) == [] and _pushed(db) == []
-    assert all(a.kind == "stuck" and a.resolved_ms is not None for a in _all(desk))
+    # 用户 11-26「降级吧」:跳过一次的记录是 P3 waypoint_skipped,连着 3 趟才是 P1 stuck
+    assert all(a.kind == "waypoint_skipped" and a.level.value == "P3" and a.resolved_ms is not None
+               for a in _all(desk))
     src.on_event("A", _ev("patrol_waypoint", task_id="t9", name="gate", ok=False, note="被挡"))
     assert _open(desk) == ["stuck"]
     [a] = [x for x in _all(desk) if x.resolved_ms is None]

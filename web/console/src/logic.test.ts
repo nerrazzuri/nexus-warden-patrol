@@ -491,3 +491,13 @@ describe("网页易用性第 1 轮 P1-69 报表导出", () => {
     expect(reportFileName(since, until)).toBe("report-2026-11-02_to_2026-11-08.csv");
   });
 });
+
+describe("用户 11-26:值守被困 90 秒、点位跳过降成 P3", () => {
+  it("guard_stuck 被困标题写哪台、多久;waypoint_skipped 跟 stuck 一样翻点名", () => {
+    expect(alertTitle("en", "guard_stuck", "A 被困 92 秒没脱开:已换一台接着巡")).toBe("A stuck for 92 s: another robot took over");
+    expect(alertTitle("en", "guard_stuck", "A 被困 92 秒没脱开:这条方案指定了它,没换车")).toContain("plan names it");
+    expect(alertTitle("en", "guard_stuck", "防区路线 r1 连着 3 圈跑不成")).toBe(alertTitle("en", "guard_stuck", "x"));
+    expect(alertTitle("en", "waypoint_skipped", "点位 回待命点 未到达,已跳过")).toBe("Waypoint “Return to standby” skipped");
+    expect(knownKinds()).toContain("waypoint_skipped");
+  });
+});

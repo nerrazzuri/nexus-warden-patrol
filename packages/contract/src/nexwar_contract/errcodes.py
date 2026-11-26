@@ -272,6 +272,7 @@ BY_NUM: dict[int, ErrCode] = {c.num: c for c in CODES.values()}
 #: 告警种类 → 码名(``alerts.LEVEL_OF`` 里每一种都要有，测试看着)。
 ALERT: dict[str, str] = {
     "stuck": "dispatch.stuck", "intrusion": "sense.intrusion",
+    "waypoint_skipped": "dispatch.waypoint_missed",     # 用户 11-26:点位跳过降成 P3
     "payload_sos": "robot.payload_sos", "payload_estop": "robot.payload_estop",
     "deter_failed": "robot.deter_failed",
     "intrusion_unanswered": "sense.intrusion_unanswered", "intrusion_person": "sense.intrusion_person",

@@ -12,6 +12,7 @@ import '../site_recordings.dart' show clipTime;
 import '../site_standby.dart';
 import 'nw_layout_hub.dart' show robotMapOf;
 import 'nw_theme.dart';
+import '../../net/map_names.dart';
 
 /// 设默认待命点之前现问机器人在用哪张图：点不在那一版上（或不知道在用哪张）就不设，回原因；能设回 null。
 /// 合并页和待命点管理页共用（外审 App-V2-2 R4 / App-V2-3 I1）。
@@ -192,7 +193,7 @@ class _SitePointsPageState extends State<SitePointsPage> {
     // 外审 App-V2-1 #12：点是挂在某一版地图上的；机器人在用哪版看得见，别的版本的点标出来、不能设默认
     final cur = robotMapOf(_robotView);
     bool onCur(Map<String, dynamic> p) => cur != null && '${p['map_id']}' == cur.$1 && '${p['map_version']}' == cur.$2;
-    String mapOf(Map<String, dynamic> p) => '${p['map_id']} v${p['map_version']}';
+    String mapOf(Map<String, dynamic> p) => '${mapName(p['map_id'])} v${p['map_version']}';
     final origin = cur == null ? _homes.isNotEmpty : _homes.any(onCur);
     // 机器人还没报在用哪张图：不知道哪个点对，先不让设默认（外审 App-V2-2 R4）
     final mapNote = cur == null ? tr('map in use unknown', '不知道 ${_robot ?? ''} 在用哪张图') : '';

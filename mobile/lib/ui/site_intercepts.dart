@@ -15,6 +15,7 @@ import 'nw/nw_ask.dart';
 import 'nw/nw_theme.dart';
 import 'widget/bar_actions.dart';
 import 'widget/fields_dialog.dart';
+import '../net/map_names.dart';
 
 class SiteInterceptsPage extends StatefulWidget {
   final SiteApi api;
@@ -224,7 +225,7 @@ class _SiteInterceptsPageState extends State<SiteInterceptsPage> with NwAsk {
                     title: Text('${p['name']}', style: NwText.bodyMedium.copyWith(color: nw.text, fontWeight: FontWeight.w600)),
                     subtitle: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                       Text(
-                          '${p['map_id']}:${p['map_version']}  (${(p['x'] as num).toStringAsFixed(1)}, '
+                          '${mapName(p['map_id'])}:${p['map_version']}  (${(p['x'] as num).toStringAsFixed(1)}, '
                           '${(p['y'] as num).toStringAsFixed(1)})',
                           style: small.copyWith(color: nw.textSecondary)),
                       // W23：走不到（入侵来了不派狗）、没查成的、图有新版本要重设

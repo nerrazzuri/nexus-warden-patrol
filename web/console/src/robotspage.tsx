@@ -9,7 +9,7 @@ import { siteKnown, zhPunct } from "./sitetext";
 import { useCallback, useEffect, useRef, useState } from "preact/hooks";
 import { api, ApiError, enc } from "./api";
 import { ConfirmPassword } from "./confirmpw";
-import { hm, robotNames, siteDown } from "./data";
+import { hm, robotNames, siteDown, mapName } from "./data";
 import { Modal } from "./dialogs";
 import { alertTitle, lang, t, type Key } from "./i18n";
 import { autoResolved, type Alert } from "./model";
@@ -296,7 +296,7 @@ function Health({ r, now }: { r: RobotCard; now: number }) {
         {r.storage && row("roStorage", r.storage.backlog_files == null ? t("rdStorageUsed", { p: used! })
           : t("rdStorageVal", { p: used!, n: r.storage.backlog_files }), used! >= 80)}
         {(r.devices?.length ?? 0) > 0 && row("roDevices", bad.length ? bad.map((x) => `${devName(x.id)} ${t(`dev_${x.state}` as Key)}`).join(" · ") : t("roDevicesOk"), bad.length > 0)}
-        {row("roSoftware", <>{r.agent ?? "—"}{r.map && <> · <span class="mono">{r.map.id} v{r.map.version ?? "?"}</span></>}
+        {row("roSoftware", <>{r.agent ?? "—"}{r.map && <> · <span>{mapName(r.map.id)} v{r.map.version ?? "?"}</span></>}
           {r.map?.match === false && <small class="rd-bad"> {t("rdMapBad")}</small>}</>, r.map?.match === false)}
         {row("roPatrols", <>{t("roPatrolsVal", { a: r.patrols_today, b: r.patrols_7d ?? "—", c: r.aborts_7d ?? "—" })}
           {r.last_patrol_ms != null && <span class="muted"> · {t("roLastPatrol", { t: when(r.last_patrol_ms, now) })}</span>}</>)}
@@ -357,7 +357,7 @@ function RobotSettings({ r, u, now, say, onChanged, onCode }: {
     ...(r.storage ? [{ k: "storage", group: "hw" as const, sign: (used! >= 80 ? "warn" : "ok") as Check["sign"], label: "roStorage" as Key,
       value: r.storage.backlog_files == null ? t("rdStorageUsed", { p: used! }) : t("rdStorageVal", { p: used!, n: r.storage.backlog_files }) }] : []),
     { k: "sw", group: "hw", sign: r.compat !== "ok" || r.map?.match === false ? "warn" : "ok", label: "roSw",
-      value: [`${r.agent ?? "—"} · ${t(compat)}`, r.map ? `${r.map.id} v${r.map.version ?? "?"}` : ""].filter(Boolean).join(" · "),
+      value: [`${r.agent ?? "—"} · ${t(compat)}`, r.map ? `${mapName(r.map.id)} v${r.map.version ?? "?"}` : ""].filter(Boolean).join(" · "),
       sub: r.map?.match === false ? t("rdMapBad") : r.map?.match === true ? t("rdMapOk") : undefined },
     ...((r.devices?.length ?? 0) > 0 ? [{ k: "devs", group: "hw" as const, sign: (badDevs.length ? "warn" : "ok") as Check["sign"], label: "roDevices" as Key,
       value: badDevs.length ? badDevs.map((x) => `${devName(x.id)} ${t(`dev_${x.state}` as Key)}`).join(" · ") : t("roDevicesOk"),

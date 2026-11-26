@@ -7,7 +7,7 @@ import { siteStr } from "./sitetext";
 import { useEffect, useMemo, useState } from "preact/hooks";
 import { reportStart, type StartCheck } from "./alertinfo";
 import { api, ApiError, enc } from "./api";
-import { hm, nameOf, useDutySettings } from "./data";
+import { hm, nameOf, useDutySettings, mapName } from "./data";
 import { siteHm } from "./todaypatrols";
 import { Modal } from "./dialogs";
 import { alertTitle, andList, lang, refusalText, t, type Key } from "./i18n";
@@ -197,7 +197,7 @@ export function SiteMap(props: {
             // 第 2 轮 P1-56:定位时那句说明放进设位置的小卡片里(原来左上一句、卡片里一句、侧栏一句,还互相压着)
             overlay={<>
               {/* 用户 11-15:图上写明现在画的是哪一版(下发新图后机器人切过去之前还是旧版,要看得出来) */}
-              <span class="map-ver" data-map-version={which.version} title={verMixed || undefined}>{t("mapVer", { id: which.map_id, v: which.version })}{verMixed && " ·"}{verMixed && <Sign kind="warn" />}</span>
+              <span class="map-ver" data-map-version={which.version} title={verMixed || undefined}>{t("mapVer", { id: mapName(which.map_id), v: which.version })}{verMixed && " ·"}{verMixed && <Sign kind="warn" />}</span>
               {props.hint && !(props.pick === true && pose.panel) && <div class="map-hint" role="status">{props.hint}</div>}{!props.onPickMap && props.pick !== false && pose.panel}</>}
             legendExtra={<RunLegendItems has={vizHas(vizRobots, eps)} />}
             // 区域名让开报警圈、狗(圆点 + 下面的编号)

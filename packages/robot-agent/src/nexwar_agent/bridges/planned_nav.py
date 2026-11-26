@@ -42,6 +42,7 @@ import math
 from collections.abc import Callable
 from dataclasses import replace
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import numpy as np
@@ -141,6 +142,9 @@ STALL_M = 0.03
 STALL_RAD = 0.05
 #: 工单 20:终点只是在地图墙的膨胀圈里时,最多挪这么远去最近能站的点(米)。
 GOAL_SNAP_M = 0.35
+#: 用户 11-26(易用性 37 P1-9):起点在地图墙 / 贴墙太近(``start_blocked``)—— 机器人明明站在那儿,
+#: 是图或定位在这一小块不准。最多直线挪这么远(米)到最近能站的点再规划;挪的那一段照常实时避障。
+START_ESCAPE_M = 1.0
 #: 同一段最多挪几次(往后退完又走回来、两侧还是看不见:不来回折腾)。
 MAX_CREEPS = 3
 #: 对朝向的时候被挪开(往后退)、或者定位一跳,离点超过到点容差 + 这么多 → 不算在对朝向了,重新走过去
@@ -640,7 +644,44 @@ class PlannedNavBackend(HalNavBackend):
             return None
         return Pose.from_xy_yaw(best[1], best[2], pose.yaw)
 
-    async def _plan_from_here(self, pose: Pose, op: str) -> tuple[PlannedPath, Costmap, Pose]:
+    def _escape_start(self, cm: Costmap, x: float, y: float) -> tuple[float, float] | None:
+        """用户 11-26(P1-9 自动脱困):起点规划不出来(``start_blocked``)时,:data:`START_ESCAPE_M`
+        以内最近的不致命格;从这里直线过去不进禁行区、不擦着临时障碍(绕障记下的,真看见过的东西)。
+        障碍数据不是「正常」不挪(挪的那一段要靠实时避障兜底)。找不到 → ``None``。"""
+        if self.obstacles is not None and self.obstacles.state() != "ok":
+            return None
+        rc = cm.cell_of(x, y)
+        if rc is None:
+            return None
+        res = cm.res
+        body = self.robot_radius_m + cmod.INFLATE_MARGIN_M
+        temp = [cm.center(r, c) for (r, c) in self._temp]
+        n = int(math.ceil(START_ESCAPE_M / res))
+        h, w = cm.lethal.shape
+        cands = []
+        for dr in range(-n, n + 1):
+            for dc in range(-n, n + 1):
+                r, c = rc[0] + dr, rc[1] + dc
+                if not (0 <= r < h and 0 <= c < w) or cm.lethal[r, c]:
+                    continue
+                cx, cy = cm.center(r, c)
+                d = math.hypot(cx - x, cy - y)
+                if d <= START_ESCAPE_M:
+                    cands.append((d, cx, cy))
+        for d, cx, cy in sorted(cands):
+            k = max(1, int(math.ceil(d / (res / 2))))
+            line = [(x + (cx - x) * i / k, y + (cy - y) * i / k) for i in range(k + 1)]
+            if any(self.nogo_at(px, py) is not None for px, py in line):
+                continue
+            if any(_seg_dist(tx, ty, x, y, cx, cy) < body for tx, ty in temp):
+                continue
+            return cx, cy
+        return None
+
+    async def _plan_from_here(self, pose: Pose, op: str, *,
+                              escape: bool = False) -> tuple[PlannedPath, Costmap, Pose]:
+        """``escape``:新任务起步(机器人停着)起点被挡时先挪出来(:meth:`_plan_escaped`)。走着走着重规划
+        起点进了墙 = 定位多半跳了,不挪,照旧失败。"""
         if self._base is None:
             raise NavRequestError(op, f"无法规划:{self.plan_problem}")
         if self.obstacles is not None:
@@ -665,6 +706,11 @@ class PlannedNavBackend(HalNavBackend):
             except PlanError as exc:
                 if epoch != self._epoch:
                     continue                  # 规划期间图或区域换了:按新的再来
+                if exc.reason == "start_blocked" and escape:
+                    path = await self._plan_escaped(cm, here, pose, op, exc)
+                    if epoch == self._epoch:
+                        return path, cm, goal
+                    continue
                 snapped = self._snap_goal(cm, pose) if exc.reason == "goal_blocked" else None
                 if snapped is None:
                     raise NavRequestError(op, f"规划失败({exc.reason}):{exc}") from None
@@ -678,6 +724,29 @@ class PlannedNavBackend(HalNavBackend):
             if epoch == self._epoch:
                 return path, cm, goal
         raise NavRequestError(op, "规划期间图或区域一直在换")
+
+    async def _plan_escaped(self, cm: Costmap, here: Any, pose: Pose, op: str,
+                            exc: PlanError) -> PlannedPath:
+        """起点被挡:先直线挪到 :meth:`_escape_start` 找的点,再从那儿规划(拼成一条路);
+        挪不了照旧抛。"""
+        out = self._escape_start(cm, here.x, here.y)
+        if out is None:
+            raise NavRequestError(
+                op, f"规划失败({exc.reason}):{exc};"
+                    f"{START_ESCAPE_M:.0f} m 内没有能直线挪过去站的地方") from None
+        ex, ey = out
+        log.info("%s:起点 (%.2f, %.2f) 规划不出来(%s),先直线挪 %.2f m 到 (%.2f, %.2f)", op,
+                 here.x, here.y, exc.reason, math.hypot(ex - here.x, ey - here.y), ex, ey)
+        try:
+            rest = await self._plan_via(cm, SimpleNamespace(x=ex, y=ey),
+                                        (pose.position.x, pose.position.y), op)
+        except PlanError as exc2:
+            raise NavRequestError(op, f"规划失败({exc2.reason}):{exc2}") from None
+        if self.on_event is not None:
+            self.on_event("start_escape", {"x": round(here.x, 2), "y": round(here.y, 2),
+                                           "to_x": round(ex, 2), "to_y": round(ey, 2),
+                                           "reason": f"{exc.reason}: {exc}"[:200]})
+        return PlannedPath(((here.x, here.y),) + tuple(rest.points))
 
     async def goto(self, pose: Pose) -> None:
         await self._go(pose, "goto")
@@ -698,7 +767,7 @@ class PlannedNavBackend(HalNavBackend):
         gen = self._gen
         self._planning = True
         try:
-            path, cm, pose = await self._plan_from_here(pose, op)
+            path, cm, pose = await self._plan_from_here(pose, op, escape=True)
         finally:
             self._planning = False
         if gen != self._gen:
@@ -1495,3 +1564,11 @@ class PlannedNavBackend(HalNavBackend):
                 self._len_cache[key] = p.length_m
         self._len_task = loop.create_task(run())
         return None
+
+
+def _seg_dist(px: float, py: float, ax: float, ay: float, bx: float, by: float) -> float:
+    """点 (px, py) 到线段 ab 的距离。"""
+    dx, dy = bx - ax, by - ay
+    L = dx * dx + dy * dy
+    t = 0.0 if L <= 0 else max(0.0, min(1.0, ((px - ax) * dx + (py - ay) * dy) / L))
+    return math.hypot(px - ax - t * dx, py - ay - t * dy)

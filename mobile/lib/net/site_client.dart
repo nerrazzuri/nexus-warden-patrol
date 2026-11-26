@@ -21,6 +21,7 @@ import 'package:crypto/crypto.dart';
 
 import '../l10n.dart';
 import 'app_log.dart';
+import 'map_names.dart';
 import 'site_text.dart';
 import '../model/alert.dart';
 import 'error_log.dart';
@@ -1372,6 +1373,7 @@ class SiteClient implements SiteApi {
   @override
   Future<List<Map<String, dynamic>>> robots() async {
     final d = _map(await _send('GET', '/api/robots'));
+    updateMapNames(d['map_names']);              // 用户 11-26：地图显示名
     return (d['robots'] as List? ?? const [])
         .whereType<Map<String, dynamic>>()
         .toList();
@@ -1851,6 +1853,13 @@ class SiteClient implements SiteApi {
   @override
   Future<Map<String, dynamic>> maps() async {
     final d = _map(await _send('GET', '/api/maps'));
+    if (d['maps'] is List) {
+      // 用户 11-26：每一版带整张图的显示名（name）
+      updateMapNames({
+        for (final m in (d['maps'] as List).whereType<Map>())
+          if ('${m['name'] ?? ''}'.isNotEmpty) '${m['map_id']}': '${m['name']}',
+      });
+    }
     if (d['maps'] is! List || d['bags'] is! List) {
       throw FormatException(tr(
           'Site reply for the map catalog has no "maps" / "bags" field',

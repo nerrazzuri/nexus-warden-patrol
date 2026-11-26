@@ -3,6 +3,7 @@
 /// 告警标题按种类(kind):``(英文, 中文)``。来源 ``design/i18n/alerts.json``。
 const Map<String, (String, String)> alertTitles = <String, (String, String)>{
   'stuck': ('Waypoint not reached', '未到达点位'),
+  'waypoint_skipped': ('Waypoint skipped', '点位已跳过'),
   'intrusion': ('Intrusion', '发现入侵'),
   'intrusion_unanswered': ('Intrusion not answered', '入侵无人处理'),
   'intrusion_person': ('Intruder confirmed', '确认有人入侵'),

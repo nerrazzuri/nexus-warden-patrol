@@ -502,7 +502,7 @@ def alert_title_zh(kind: str, title: str) -> str:
                          if not k.startswith("$") and isinstance(v, dict) and "zh" in v}
         except (OSError, ValueError):
             _ALERT_ZH = {}
-    if kind in ("stuck", "preflight_refused"):
+    if kind in ("stuck", "waypoint_skipped", "preflight_refused"):
         return title
     return _ALERT_ZH.get(kind, title)
 

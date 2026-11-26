@@ -387,7 +387,7 @@ void main() {
       _size(t);
       await t.pumpWidget(MaterialApp(home: AdminHomeTab(api: api, switchTab: (_) {})));
       await t.pumpAndSettle();
-      expect(find.textContaining('A 的待命点就是原点（标原点时自动加的）'), findsOneWidget);
+      expect(find.textContaining('A 的待命点是第一次标原点时在那儿自动加的'), findsOneWidget);
     });
 
     testWidgets('minor #40：没报在用哪张图的机器人，原点那一项写明是哪几台', (t) async {

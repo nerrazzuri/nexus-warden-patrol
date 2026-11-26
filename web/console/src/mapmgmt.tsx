@@ -4,7 +4,7 @@ import { siteKnown, siteStr } from "./sitetext";
 import { useCallback, useEffect, useRef, useState } from "preact/hooks";
 import { api, ApiError, enc } from "./api";
 import { ConfirmPassword } from "./confirmpw";
-import { nameOf, siteDown } from "./data";
+import { mapName, mapNames, nameOf, siteDown } from "./data";
 import { Modal } from "./dialogs";
 import { lang } from "./i18n";
 import "./mapmgmt.css";
@@ -85,7 +85,7 @@ export interface Dog {
   history: Activation[];
   rollback: { map_id: string; version: string; local: boolean } | null;
 }
-export interface Overview { maps: { map_id: string; versions: Version[] }[]; robots: Dog[]; now_ms: number }
+export interface Overview { maps: { map_id: string; name?: string; versions: Version[] }[]; robots: Dog[]; now_ms: number }
 export interface PublishResult { robot_id: string; ok: boolean; state: string; reason: string; code?: string | null }
 export interface DiffStats {
   a: string; b: string; width: number; height: number; caveat: string; likely_misaligned: boolean;
@@ -175,12 +175,25 @@ export function MapManagePage({ say, pollMs = 5000 }: { say: Say; pollMs?: numbe
     void load();
   }
 
+  // 用户 11-26「建图名字这很重要」:整张图的显示名(建图向导里填的),各页都按它显示
+  async function saveName(map_id: string, name: string) {
+    try {
+      const r = await api<{ name: string }>("POST", `/api/admin/maps/${enc(map_id)}/name`, { name });
+      const rest = Object.fromEntries(Object.entries(mapNames.value).filter(([k]) => k !== map_id));
+      mapNames.value = r.name ? { ...rest, [map_id]: r.name } : rest;
+      say(tr("Saved", "已保存"));
+    } catch (e) {
+      say(errText(e));
+    }
+    void load();
+  }
+
   // P1-47:删除、退回跟发布一样再输密码(对话框里写清后果);密码错对话框不关
   async function doDelete(t: { map_id: string; version: string; back: string[] }, pw: string) {
     const r = await api<{ freed_bytes: number }>("POST", `/api/admin/maps/${enc(t.map_id)}/${enc(t.version)}/delete`,
       { confirm_password: pw, ...(t.back.length > 0 ? { confirm_rollback: true } : {}) });
     setDeleting(null);
-    say(tr(`Deleted ${t.map_id}:${t.version} (freed ${mb(r.freed_bytes)})`, `已删除 ${t.map_id}:${t.version}（腾出 ${mb(r.freed_bytes)}）`));
+    say(tr(`Deleted ${mapName(t.map_id)}:${t.version} (freed ${mb(r.freed_bytes)})`, `已删除 ${mapName(t.map_id)}:${t.version}（腾出 ${mb(r.freed_bytes)}）`));
     setPick((p) => p.filter((v) => v !== t.version));
     void load();
   }
@@ -213,7 +226,7 @@ export function MapManagePage({ say, pollMs = 5000 }: { say: Say; pollMs?: numbe
         {data && data.maps.length === 0 && <p class="pad muted">{tr("No map has been registered yet.", "站点里还没有登记任何地图。")}</p>}
         {(data?.maps ?? []).map((m) => (
           <div key={m.map_id} class="mm-map">
-            <h2 class="mm-mapid mono">{m.map_id}</h2>
+            <MapNameRow map_id={m.map_id} name={m.name ?? ""} onSave={(n) => void saveName(m.map_id, n)} />
             <div class="mm-vers">
               {m.versions.map((v) => (
                 <VersionCard key={v.version} map_id={m.map_id} v={v}
@@ -249,7 +262,7 @@ export function MapManagePage({ say, pollMs = 5000 }: { say: Say; pollMs?: numbe
               {robots.map((d) => (
                 <tr key={d.robot_id} class={d.online ? undefined : "off"}>
                   <td class="mono">{d.robot_id}{!d.online && <span class="muted small"> · {tr("offline", "不在线")}</span>}</td>
-                  <td class="mono">{d.loaded ? `${d.loaded.map_id}:${d.loaded.version}` : "—"}</td>
+                  <td class="mono">{d.loaded ? `${mapName(d.loaded.map_id)}:${d.loaded.version}` : "—"}</td>
                   <td>{d.activation ? <ActivationCell a={d.activation} /> : <span class="muted">—</span>}</td>
                   <td><RunningCell r={d.running} /></td>
                   <td class="actions">
@@ -271,8 +284,8 @@ export function MapManagePage({ say, pollMs = 5000 }: { say: Say; pollMs?: numbe
       {deleting && (
         <ConfirmPassword title={tr("Delete version", "删除版本")} onClose={() => setDeleting(null)} onConfirm={(pw) => doDelete(deleting, pw)}
           text={[
-            tr(`Delete ${deleting.map_id}:${deleting.version}? Its files, no-go areas, security zones, exit lines, hiding spots, standby and intercept points are removed. This cannot be undone; the version number will not be used again.`,
-              `删除 ${deleting.map_id}:${deleting.version}？它的文件、禁行区、防区、出口线、藏匿点、待命点、拦截点都会删掉，不能恢复；这个版本号以后不再使用。`),
+            tr(`Delete ${mapName(deleting.map_id)}:${deleting.version}? Its files, no-go areas, security zones, exit lines, hiding spots, standby and intercept points are removed. This cannot be undone; the version number will not be used again.`,
+              `删除 ${mapName(deleting.map_id)}:${deleting.version}？它的文件、禁行区、防区、出口线、藏匿点、待命点、拦截点都会删掉，不能恢复；这个版本号以后不再使用。`),
             deleting.back.length > 0 ? tr(`${deleting.back.join(", ")} would roll back to this version; after deleting, they cannot roll back to it.`,
               `${deleting.back.join("、")} 出问题时会退回这一版；删掉以后就退不回这一版了。`) : "",
             deleting.latest ? tr("This is the newest version of this map.", "这是这张图最新的一版。") : "",
@@ -280,7 +293,7 @@ export function MapManagePage({ say, pollMs = 5000 }: { say: Say; pollMs?: numbe
       )}
       {rolling && rolling.rollback && (
         <ConfirmPassword title={rollLabel(rolling)} onClose={() => setRolling(null)} onConfirm={(pw) => doRollback(rolling, pw)}
-          text={tr(`Roll ${rolling.robot_id} back to ${rolling.rollback.map_id}:${rolling.rollback.version}? `, `把 ${rolling.robot_id} 退回到 ${rolling.rollback.map_id}:${rolling.rollback.version}？`)
+          text={tr(`Roll ${rolling.robot_id} back to ${mapName(rolling.rollback.map_id)}:${rolling.rollback.version}? `, `把 ${rolling.robot_id} 退回到 ${mapName(rolling.rollback.map_id)}:${rolling.rollback.version}？`)
             + (rolling.rollback.local
               ? tr("The robot still has it locally — nothing is downloaded.", "机器人本地还留着这一版，不用重新下载。")
               : tr("The robot may not have it any more and will download it again.", "机器人上可能已经没有这一版，会重新下载。"))} />
@@ -293,7 +306,7 @@ export function MapManagePage({ say, pollMs = 5000 }: { say: Say; pollMs?: numbe
 function ActivationCell({ a }: { a: Activation }) {
   return (
     <span class={`mm-act ${a.state}`}>
-      <b>{a.map_id}:{a.version}</b> · <span data-state={a.state}>{activationText(a)}</span>
+      <b>{mapName(a.map_id)}:{a.version}</b> · <span data-state={a.state}>{activationText(a)}</span>
       <span class="muted small vmeta"><span>{a.by} {when(a.at_ms)}</span></span>
     </span>
   );
@@ -567,7 +580,7 @@ export function PublishDialog({ target, dogs, onClose }: { target: { map_id: str
     setBusy(false);
   }
   return (
-    <Modal label={tr(`Send ${target.map_id}:${target.version} to robots`, `下发 ${target.map_id}:${target.version} 到机器人`)} onClose={onClose}>
+    <Modal label={tr(`Send ${mapName(target.map_id)}:${target.version} to robots`, `下发 ${mapName(target.map_id)}:${target.version} 到机器人`)} onClose={onClose}>
       {results ? (
         <>
           <ul class="mm-results">
@@ -597,7 +610,7 @@ export function PublishDialog({ target, dogs, onClose }: { target: { map_id: str
                   <input type="checkbox" disabled={!ok} checked={chosen.includes(d.robot_id)}
                     onChange={(e) => setChosen((c) => (e.currentTarget.checked ? [...c, d.robot_id] : c.filter((x) => x !== d.robot_id)))} />
                   <span class="mono"> {d.robot_id}</span>
-                  <span class="muted small"> · {d.loaded ? `${tr("now", "现在")} ${d.loaded.map_id}:${d.loaded.version}` : tr("no map loaded", "没加载地图")}
+                  <span class="muted small"> · {d.loaded ? `${tr("now", "现在")} ${mapName(d.loaded.map_id)}:${d.loaded.version}` : tr("no map loaded", "没加载地图")}
                     {!d.online ? ` · ${tr("offline", "不在线")}` : !d.can_activate ? ` · ${tr("cannot switch maps", "不能换图")}`
                       : noLoc(d) ? ` · ${tr("this version lacks localization files", "这一版缺定位文件")}` : ""}</span>
                 </label>
@@ -848,4 +861,19 @@ export function rollLabel(d: Pick<Dog, "loaded" | "rollback">): string {
   const newer = d.loaded && d.loaded.map_id === r.map_id && Number(r.version) > Number(d.loaded.version);
   // W6-12:「换回 v11」看着像往旧的退 —— 写明那版更新
   return newer ? tr(`Switch to v${r.version} (newer)`, `切到 v${r.version}（更新的那版）`) : tr(`Roll back to v${r.version}`, `退回到 v${r.version}`);
+}
+
+/** 用户 11-26:地图的显示名(整张图一个,所有版本共用)。起了名标题写名字、旁边小字写地图号;没起写地图号。 */
+function MapNameRow(p: { map_id: string; name: string; onSave: (n: string) => void }) {
+  const [draft, setDraft] = useState<string | null>(null);
+  const v = draft ?? p.name;
+  return (
+    <div class="mm-mapname">
+      <h2 class="mm-mapid">{p.name || <span class="mono">{p.map_id}</span>}{p.name && <span class="muted small mono"> {p.map_id}</span>}</h2>
+      <input type="text" aria-label={tr(`Name of map ${p.map_id}`, `地图 ${p.map_id} 的名字`)} value={v} maxLength={40}
+        placeholder={tr("Map name, e.g. Elmina Lakeside", "地图名字，比如：一楼")} onInput={(e) => setDraft(e.currentTarget.value)} />
+      <button type="button" class="btn sm" disabled={v.trim() === p.name}
+        onClick={() => { p.onSave(v.trim()); setDraft(null); }}>{tr("Save name", "保存名字")}</button>
+    </div>
+  );
 }

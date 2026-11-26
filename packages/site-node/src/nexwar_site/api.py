@@ -902,7 +902,11 @@ class _Handler(TlsHandlerMixin):
                 return self._audit_search(q, actor)
             if method == "GET" and path == "/api/robots":
                 self._need(user, VIEW)
-                return self._send_json(200, {"robots": self.site.dispatcher.robots_view()})
+                # 用户 11-26:地图显示名跟着机器人列表一起给(网页、App 各处把地图号换成名字)
+                cat = getattr(self.site, "maps", None)
+                names = cat.names() if cat is not None and hasattr(cat, "names") else {}
+                return self._send_json(200, {"robots": self.site.dispatcher.robots_view(),
+                                             "map_names": names})
             if method == "GET" and path == "/api/video/ws":
                 return self._video_ws(user)               # W51:网页的多路画面走一条 WebSocket
             if method == "GET" and path.split("?", 1)[0] == "/api/robots/charging":

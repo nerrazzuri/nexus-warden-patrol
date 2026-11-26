@@ -451,11 +451,13 @@ async def test_易用性37_任意一台的方案_那台被留住_放掉这一趟
 
 
 async def test_易用性37第六轮_任意一台_连着跑不成_放掉这一趟_先不挑它_没别的照旧派(站, monkeypatch):
-    """A 卡在走不了的地方,每圈秒失败:原来每分钟重派 A、空着的 B 不接。现在连着 FAIL_ALERT 圈后放掉,
-    FAIL_AVOID_MS 里先挑别的;这里只有 A —— 没别的可挑,照旧派 A(总比没人巡好)。"""
+    """A 卡在走不了的地方,每圈秒失败:原来每分钟重派 A、空着的 B 不接。用户 11-26:被困满
+    STUCK_HANDOVER_MS(90 s)放掉、报警叫人遥控开回来,FAIL_AVOID_MS 里先挑别的;这里只有 A ——
+    没别的可挑,照旧派 A(总比没人巡好)。"""
     from nexwar_site import guard_duty as gd
     t = 站
     monkeypatch.setattr(gd, "FAIL_RETRY_MS", 2_000)
+    monkeypatch.setattr(gd, "STUCK_HANDOVER_MS", 8_000)
     _方案(t, robot="")
     await _跑(t, 3)
     real = t.duty._terminal
@@ -477,6 +479,9 @@ async def test_易用性37第六轮_任意一台_连着跑不成_放掉这一趟
     assert _log(t, "handover"), ("连着跑不成:放掉这一趟", _log(t, "lap_failed"))
     eid = t.duty.plan()["entries"][0]["id"]
     assert t.duty._avoid.get((eid, "A"), 0) > t.clock()
+    [al] = [x for x in t.duty.alerts.open if x["kind"] == "guard_stuck"]
+    assert "被困" in al["title"] and "已换一台" in al["title"] and "遥控" in al["detail"], al
+    assert "遥控" in _log(t, "handover")[0]["detail"]
     n = len(_patrols(t))
     await _跑(t, 3)
     assert len(_patrols(t)) > n, "只有 A:照旧派它"

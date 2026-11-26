@@ -33,6 +33,7 @@ import 'site_mapping.dart';
 import 'site_pose_pick.dart';
 import 'site_robot.dart';
 import 'widget/fields_dialog.dart';
+import '../net/map_names.dart';
 
 export 'nw/nw_map_raster.dart' show darkMapRaster;
 
@@ -91,7 +92,7 @@ class _SiteMapsPageState extends State<SiteMapsPage> with NwAsk {
   Future<void> _activate(Map<String, dynamic> m) async {
     final robot = await _pickRobot('map_activate', tr('switch maps', '换图'));
     if (robot == null || !mounted) return;
-    final label = '${m['map_id']}:${m['version']}';
+    final label = '${mapName(m['map_id'])}:${m['version']}';
     // 换图会换坐标系：点位、待命点都得是这张图上的。点错了狗就在错的图上走，所以要再确认一次。
     final ok = await askYes(tr('Switch $robot to $label?', '将 $robot 切换到 $label？'),
         body: tr(
@@ -203,7 +204,7 @@ class _SiteMapsPageState extends State<SiteMapsPage> with NwAsk {
                     leading: Icon(Icons.map_rounded, color: c.textSecondary),
                     // 第 11 轮 A11-01：跟地图管理一个写法（第几版、谁编辑、说明、哪几台在用），不写 edit:demo、几个文件
                     title: Row(children: [
-                      Flexible(child: Text('${m['map_id']} · ${versionLabel('${m['version']}')}', style: title)),
+                      Flexible(child: Text('${mapName(m['map_id'])} · ${versionLabel('${m['version']}')}', style: title)),
                       // 11-11：编辑、去噪出来的是草稿，只在站点上，网页预览、发布到站点后才能下发
                       if (m['draft'] == true) ...[
                         const SizedBox(width: 6),
@@ -613,7 +614,7 @@ class _SiteMapTabState extends State<SiteMapTab> {
             NwHeader(
                 overline: tr('Map', '地图'),
                 // M32：标题不印内部编号 estate-1:7
-                title: v?.mapId == null ? tr('Site map', '地图') : tr('${v!.mapId} · version ${v.version}', '${v.mapId} · 第 ${v.version} 版'),
+                title: v?.mapId == null ? tr('Site map', '地图') : tr('${mapName(v!.mapId)} · version ${v.version}', '${mapName(v.mapId)} · 第 ${v.version} 版'),
                 subtitle:
                     v?.mapId == null ? null : tr(onMap == 1 ? '1 robot on this map' : '$onMap robots on this map', '此地图上 $onMap 台机器人'),
                 trailing: [

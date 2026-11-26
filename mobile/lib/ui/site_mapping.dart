@@ -28,6 +28,7 @@ import 'nw/nw_map_raster.dart';
 import 'nw/nw_ask.dart';
 import 'nw/nw_theme.dart';
 import 'nw/nw_widgets.dart';
+import '../net/map_names.dart';
 
 /// 先问预览（还不知道）、在看预览、在看录包轨迹。
 enum _Mode { probe, preview, trail }
@@ -892,7 +893,7 @@ class _SiteMapPreviewPageState extends State<SiteMapPreviewPage> with NwAsk {
       appBar: AppBar(
           title: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Text(tr('No-go zones, speed limits, virtual walls', '禁行区、限速、虚拟墙'), overflow: TextOverflow.ellipsis),
-        Text('${widget.mapId} · ${versionLabel(widget.version)}',
+        Text('${mapName(widget.mapId)} · ${versionLabel(widget.version)}',
             style: NwText.bodySmall.copyWith(color: Nw.of(context).textSecondary)),
       ])),
       body: FutureBuilder<(Map<String, dynamic>, Uint8List, bool)>(

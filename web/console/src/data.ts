@@ -32,7 +32,7 @@ export function isStale(conn: Conn, now: number): boolean {
 /** 拉一次。核心(狗、告警)拿不到整个算失败;次要的(模式、驱离、电量)拿不到记成「说不清」(null)。 */
 export async function fetchSite(): Promise<SiteData> {
   const [r, a, m, d, s] = await Promise.all([
-    api<{ robots: Robot[] }>("GET", "/api/robots"),
+    api<{ robots: Robot[]; map_names?: Record<string, string> }>("GET", "/api/robots"),
     api<{ alerts: Alert[] }>("GET", "/api/alerts"),
     api<Mode>("GET", "/api/mode").catch(() => null),
     api<{ sessions: DeterSession[] }>("GET", "/api/deterrence").then((x) => x.sessions).catch(() => null),
@@ -40,6 +40,7 @@ export async function fetchSite(): Promise<SiteData> {
   ]);
   // 易用性 build 37 复测:没配推送还写「已推送到所有手机」
   if (s?.site && "push" in s.site) pushOff.value = !s.site.push?.configured;
+  if (r.map_names && typeof r.map_names === "object") mapNames.value = r.map_names;
   robotNames.value = Object.fromEntries(r.robots.filter((x) => x.name).map((x) => [x.robot_id, x.name as string]));
   return { robots: r.robots, alerts: a.alerts, mode: m, deter: d, summary: s };
 }
@@ -51,6 +52,15 @@ export const pushOff = signal(false);
 export const robotNames = signal<Record<string, string>>({});
 /** 第 4 轮 layout r3-N3:现在连不上站点(值班台的轮询断了)。各页清单是空的时候,连不上就写「读取失败,正在重试」,不写「没有」。 */
 export const siteDown = signal(false);
+
+/** 用户 11-26「建图名字这很重要」:地图显示名(建图向导填的、地图管理里改的),跟着 /api/robots 每拍更新。 */
+export const mapNames = signal<Record<string, string>>({});
+
+/** 给人看的地图名:起了名用名字,没起用地图号。 */
+export function mapName(id: string | null | undefined): string {
+  const k = id ?? "";
+  return mapNames.value[k] || k;
+}
 
 /** 给人看的机器人名字:起了名用名字,没起用编号。 */
 export function nameOf(id: string): string {

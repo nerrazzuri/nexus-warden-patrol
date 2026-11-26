@@ -134,6 +134,26 @@ def test_备注_只有管理员能改_记进审计(站点):
     assert len(s.req("POST", path, {"note": "n" * 500}, token=alice)[1]["note"]) == 200
 
 
+def test_用户1126_地图显示名_整张图一个_管理员改_机器人列表和地图目录都带(站点):
+    s = 站点
+    alice, gina = _登(s, "alice"), _登(s, "gina")
+    path = f"/api/admin/maps/{MAP[0]}/name"
+    assert s.req("POST", path, {"name": "x"}, token=gina)[0] == 403
+    assert s.req("POST", path, {"name": 5}, token=alice)[0] == 400
+    assert s.req("POST", "/api/admin/maps/nope/name", {"name": "x"}, token=alice)[0] == 404
+    code, d = s.req("POST", path, {"name": " Elmina Lakeside "}, token=alice)
+    assert code == 200 and d["name"] == "Elmina Lakeside"
+    assert s.req("GET", "/api/robots", token=gina)[1]["map_names"] == {MAP[0]: "Elmina Lakeside"}
+    got = {m["name"] for m in s.req("GET", "/api/maps", token=gina)[1]["maps"]}
+    assert got == {"Elmina Lakeside"}
+    adm = s.req("GET", "/api/admin/maps", token=alice)[1]["maps"][0]
+    assert adm["map_id"] == MAP[0] and adm["name"] == "Elmina Lakeside"
+    row = s.db.query("SELECT actor, target, detail FROM audit WHERE action LIKE '%/name'")[-1]
+    assert (row["actor"], row["target"]) == ("alice", MAP[0]) and "Elmina" in row["detail"]
+    assert s.req("POST", path, {"name": ""}, token=alice)[1]["name"] == ""
+    assert s.req("GET", "/api/robots", token=gina)[1]["map_names"] == {}
+
+
 def test_发布_每只狗一个结果_禁行区没确认拒_确认后狗换上_状态pending到confirmed(站点):
     s = 站点
     alice, gina = _登(s, "alice"), _登(s, "gina")
