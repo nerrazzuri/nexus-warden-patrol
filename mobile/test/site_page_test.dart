@@ -800,10 +800,17 @@ class FakeApi implements SiteApi {
   /// 录包命令的回执（W54：模拟机器人拒停录）；不给就是收下。
   Map<String, dynamic>? mappingAck;
 
+  /// 易用性 37 场景测试：开始录制被站点拒一次（版本号被占）。
+  SiteError? mappingStartError;
   @override
   Future<Map<String, dynamic>> mapping(String robotId, String action,
       {String name = '', String mapId = '', String version = ''}) async {
     calls.add('mapping $robotId $action $name${mapId.isEmpty ? '' : ' $mapId:$version'}');
+    final err = mappingStartError;
+    if (action == 'start' && err != null) {
+      mappingStartError = null;          // 只拒一次
+      throw err;
+    }
     return <String, dynamic>{'ack': mappingAck ?? <String, dynamic>{'result': 'accepted'}};
   }
   @override

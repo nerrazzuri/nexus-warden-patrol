@@ -381,6 +381,8 @@ class _MapWizardPageState extends State<MapWizardPage> with NwAsk {
   bool _loading = true;
   bool _busy = false;
   String _err = '';
+  /// 易用性 37 场景测试：录到一半中断、自动换了新版本重录时说一句（离开这一步清掉）。
+  String _restarted = '';
   Timer? _timer;
 
   // 准备
@@ -494,6 +496,7 @@ class _MapWizardPageState extends State<MapWizardPage> with NwAsk {
 
   /// 进到某一步时要先拿的。
   Future<void> _enterStep() async {
+    if (_step != 'walk') _restarted = '';
     switch (_step) {
       case 'walk':
         _walkSince ??= DateTime.now();
@@ -823,11 +826,12 @@ class _MapWizardPageState extends State<MapWizardPage> with NwAsk {
 
   // ---- 3 走一圈
 
-  Future<void> _startRec() async {
+  Future<void> _startRec({bool retried = false}) async {
     setState(() {
       _busy = true;
       _err = '';
     });
+    var fresh = false;
     try {
       final r = await api.mapping(_robotId, 'start', name: 'map-$_version', mapId: _mapId, version: _version);
       final ack = (r['ack'] as Map?) ?? const {};
@@ -838,9 +842,23 @@ class _MapWizardPageState extends State<MapWizardPage> with NwAsk {
         _lastPose = null;
       }
     } on SiteError catch (e) {
-      if (mounted) setState(() => _err = refusalText(e));
+      // 易用性 37 场景测试：录到一半机器人断线、站点重启后，这一版号已经被占（录了一半的那份），再录被拒、
+      // 只能放弃重来。换一个新版本号接着录，说清是为什么
+      if (!retried && e.status == 409 && (e.body['reason'] == 'version_taken' || e.message.contains('已存在'))) {
+        fresh = true;
+      } else if (mounted) {
+        setState(() => _err = refusalText(e));
+      }
     } finally {
       if (mounted) setState(() => _busy = false);
+    }
+    if (fresh && mounted) {
+      await _rewalk(retried: true);
+      if (mounted && _err.isEmpty) {
+        setState(() => _restarted = tr(
+            'The last recording was cut off (the robot or the site restarted). Recording again from here as a new version: walk the whole area again.',
+            '上一次录制中断了（机器人或站点重启过）。已从这里换一个新版本重新录：请把整个区域再走一遍。'));
+      }
     }
   }
 
@@ -985,6 +1003,42 @@ class _MapWizardPageState extends State<MapWizardPage> with NwAsk {
               style: NwText.bodyMedium.copyWith(color: c.textSecondary)),
         ]),
       ),
+      if (_restarted.isNotEmpty) ...[
+        const SizedBox(height: Nw.s8),
+        NwNotice(key: const Key('map-walk-restarted'), tone: NwTone.info, text: _restarted),
+      ],
+      if (!live && !starting && built != 'pending') ...[
+        const SizedBox(height: Nw.s16),
+        NwNotice(
+            tone: NwTone.info,
+            text: built == 'failed'
+                ? tr('This run has ended and the map could not be built (the robot may have restarted).',
+                    '本次录制已结束，建图失败（机器人可能重启过）。')
+                : tr('This run has ended and the map is built (the robot may have restarted).',
+                    '本次录制已结束，地图已建好（机器人可能重启过）。')),
+        const SizedBox(height: Nw.s8),
+        NwButton(
+            buttonKey: MapWizardPage.walkBuiltKey,
+            label: tr('See the result', '看建图结果'),
+            fullWidth: true,
+            onPressed: _busy ? null : () => _go('build')),
+      ] else if (!live && !starting && !_busy) ...[
+        const SizedBox(height: Nw.s8),
+        // 易用性 37 场景测试：没在录时说清怎么回事，「开始录制」放在上面（以前在屏幕下面要往下滑）
+        if (path > 0)
+          NwNotice(
+              key: const Key('map-walk-stopped'),
+              tone: NwTone.warning,
+              text: tr('Recording stopped (the robot or the site may have restarted). Tap "Start recording" to go on.',
+                  '录制停了（机器人或站点可能重启过）。点「开始录制」接着录。')),
+        const SizedBox(height: Nw.s8),
+        NwButton(
+            buttonKey: MapWizardPage.startRecKey,
+            label: tr('Start recording', '开始录制'),
+            icon: Icons.fiber_manual_record_rounded,
+            fullWidth: true,
+            onPressed: () => _startRec()),
+      ],
       if (recordDiskText(_pv).$1.isNotEmpty) ...[
         const SizedBox(height: Nw.s8),
         Text(recordDiskText(_pv).$1,
@@ -1013,30 +1067,6 @@ class _MapWizardPageState extends State<MapWizardPage> with NwAsk {
         const SizedBox(height: Nw.s8),
         Text(tr('Keep the remote on LOW speed.', '请将遥控器档位调至低速。'),
             style: NwText.bodySmall.copyWith(color: c.fg(NwTone.warning))),
-      ],
-      if (!live && !starting && built != 'pending') ...[
-        const SizedBox(height: Nw.s16),
-        NwNotice(
-            tone: NwTone.info,
-            text: built == 'failed'
-                ? tr('This run has ended and the map could not be built (the robot may have restarted).',
-                    '本次录制已结束，建图失败（机器人可能重启过）。')
-                : tr('This run has ended and the map is built (the robot may have restarted).',
-                    '本次录制已结束，地图已建好（机器人可能重启过）。')),
-        const SizedBox(height: Nw.s8),
-        NwButton(
-            buttonKey: MapWizardPage.walkBuiltKey,
-            label: tr('See the result', '看建图结果'),
-            fullWidth: true,
-            onPressed: _busy ? null : () => _go('build')),
-      ] else if (!live && !starting && !_busy) ...[
-        const SizedBox(height: Nw.s16),
-        NwButton(
-            buttonKey: MapWizardPage.startRecKey,
-            label: tr('Start recording', '开始录制'),
-            icon: Icons.fiber_manual_record_rounded,
-            fullWidth: true,
-            onPressed: _startRec),
       ],
     ], [
       // 稿 S-wizard：「结束行走 | 手机遥控」一排等宽
@@ -1286,7 +1316,7 @@ class _MapWizardPageState extends State<MapWizardPage> with NwAsk {
   }
 
   /// 重走一遍：站点换一个新版本号（旧的那一版留着），接着就开录（跟「开始录」一样）。
-  Future<void> _rewalk() async {
+  Future<void> _rewalk({bool retried = false}) async {
     try {
       await _act(<String, dynamic>{'action': 'rewalk'});
     } on SiteError {
@@ -1294,7 +1324,7 @@ class _MapWizardPageState extends State<MapWizardPage> with NwAsk {
     }
     _pv = const {};
     _walkSince = null;
-    if (_step == 'walk') await _startRec();
+    if (_step == 'walk') await _startRec(retried: retried);
   }
 
   // ---- 5 禁行区
