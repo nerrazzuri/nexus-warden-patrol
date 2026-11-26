@@ -69,11 +69,11 @@ describe("有告警:中间是这件事", () => {
     await waitFor(() => expect(posts).toContainEqual({ url: "/api/alerts/k1/ack", body: {} }));
   });
 
-  it("没有一点就关:先选结论(确认有人闯入)才能关,带备注", async () => {
+  it("没有一点就关:先选结论(确认入侵)才能关,带备注", async () => {
     const { c } = page([alert({ acked_ms: 5, acked_by: "gina" })]);
     const close = btn(inc(c), "关闭报警")!;
     expect(close.disabled).toBe(true);
-    fireEvent.click(btn(inc(c), "确认有人闯入")!);
+    fireEvent.click(btn(inc(c), "确认入侵")!);
     fireEvent.input(inc(c).querySelector(".inc-noteinput")!, { target: { value: "翻墙进来的" } });
     fireEvent.click(btn(inc(c), "关闭报警")!);
     await waitFor(() => expect(posts).toContainEqual({ url: "/api/alerts/k1/resolve", body: { verdict: "intruder", note: "翻墙进来的" } }));
@@ -81,7 +81,7 @@ describe("有告警:中间是这件事", () => {
 
   it("机器人要帮忙的:结论是已处理、误报,没有确认有人", () => {
     const { c } = page([alert({ kind: "stuck", audience: "help", title: "A 被挡住了" })]);
-    expect(btn(inc(c), "确认有人闯入")).toBeUndefined();
+    expect(btn(inc(c), "确认入侵")).toBeUndefined();
     expect(btn(inc(c), "已处理")).toBeDefined();
     expect(btn(inc(c), "误报")).toBeDefined();
   });
@@ -191,7 +191,7 @@ describe("W74 看见人:到场才能关", () => {
 
   it("没到场:页头是已到场,点了发 arrive;结论不出,写到场后才能关", async () => {
     const { c } = page([seen()]);
-    expect(btn(inc(c), "确认有人闯入")).toBeUndefined();
+    expect(btn(inc(c), "确认入侵")).toBeUndefined();
     expect(inc(c).querySelector(".inc-disp")!.textContent).toContain("到场后才能关");
     fireEvent.click(btn(inc(c).querySelector(".inc-head")!, "已到场")!);
     await waitFor(() => expect(posts).toContainEqual({ url: "/api/alerts/p1/arrive", body: {} }));
@@ -202,7 +202,7 @@ describe("W74 看见人:到场才能关", () => {
     const step = inc(c).querySelector('[data-step="incOnSite"]')!;
     expect(step.className).toBe("done");
     expect(step.textContent).toContain("张三");
-    expect(btn(inc(c), "确认有人闯入")).toBeDefined();
+    expect(btn(inc(c), "确认入侵")).toBeDefined();
   });
 
   it("在跟、去向不明写在页头", () => {
