@@ -453,7 +453,8 @@ class _SiteAlertScenePageState extends State<SiteAlertScenePage> with EstopMissR
   }
 
   static String verdictWord(String v) => switch (v) {
-    'intruder' => tr('Confirmed intrusion', '确认有人'),
+    // 易用性 37 场景测试：两边、各页同一个说法
+    'intruder' => tr('Confirmed intrusion', '确认入侵'),
     'false_alarm' => tr('False alarm', '误报'),
     'handled' => tr('Resolved', '已处理'),
     _ => tr('Closed', '已关闭'),
