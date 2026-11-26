@@ -7,6 +7,7 @@ import 'package:nexwar_patrol/ui/site_duty_page.dart';
 import 'package:nexwar_patrol/ui/site_mode.dart';
 import 'package:nexwar_patrol/l10n.dart';
 import 'package:flutter/material.dart';
+import 'package:nexwar_patrol/ui/nw/nw_button.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'site_page_test.dart' show FakeApi;
@@ -135,6 +136,15 @@ void main() {
     expect(find.descendant(of: find.byKey(SiteModePage.visitorKey), matching: find.text('Temp. disarm')), findsOneWidget);
     expect(t.getTopLeft(find.byKey(SiteModePage.visitorKey)).dy, t.getTopLeft(find.byKey(SiteModePage.armKey)).dy,
         reason: '还是一排（App V2）');
+    // 易用性 37 第十一轮 P3：临时撤防是当前模式时也不折两行（窄屏不加打勾）
+    final api = FakeApi('guard')..modeView = <String, dynamic>{...FakeApi('guard').modeView, 'mode': 'visitor'};
+    await _open(t, api);
+    await t.binding.setSurfaceSize(const Size(390, 844));
+    await t.pumpAndSettle();
+    // 测试字体比真机宽得多，量不了是不是一行；查窄屏用的是小号、没打勾（真机 390 宽一行放得下）
+    expect(t.widget<NwButton>(find.ancestor(of: find.byKey(SiteModePage.visitorKey), matching: find.byType(NwButton))).size,
+        NwButtonSize.small);
+    expect(find.descendant(of: find.byKey(SiteModePage.visitorKey), matching: find.byIcon(Icons.check_rounded)), findsNothing);
   });
 
   testWidgets('管理员改不了防区，管理员能改「留守时也布防」', (t) async {
