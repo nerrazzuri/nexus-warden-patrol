@@ -261,6 +261,8 @@ final List<_Rule> _rules = [
   (RegExp(r'^没有登记过 (\S+)$'), (m) => '${m[1]} is not registered on this site'),
   (RegExp(r'^摄像头 (\S+) 无法连接[(（]防区 ([^)）]+)[)）]$'), (m) => 'Camera ${m[1]} cannot be reached (zone ${m[2]})'),
   (RegExp(r'^(\S+) 无法连接[:：]'), (m) => '${m[1]} cannot be reached'),
+  (RegExp(r'^(\S+) 已存在[(（]或正在建[)）][,，]换个版本号$'),
+      (m) => 'Map version ${m[1]} already exists (or is being built): use another version.'),
   (RegExp(r'^(?:账号 )?(\S+) 已存在$'), (m) => '“${m[1]}” already exists.'),
   (RegExp(r'^账号 (\S+)$'), (m) => 'Account ${m[1]}'),
   (RegExp(r'当前地图上还没有原点'),
