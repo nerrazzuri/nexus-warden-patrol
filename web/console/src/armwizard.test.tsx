@@ -3,8 +3,9 @@
 import { cleanup, fireEvent, render, waitFor, type RenderResult } from "@testing-library/preact";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { setFetch } from "./api";
-import { afterLines, ArmWizard, dailySlots, missingText, needsWizard, PatrolReason, patrolHint, wholeMap, type Readiness } from "./armwizard";
+import { afterLines, ArmWizard, dailySlots, genTitle, missingText, needsWizard, PatrolReason, patrolHint, wholeMap, type Readiness } from "./armwizard";
 import { lang } from "./i18n";
+import { mapNames } from "./data";
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
 const MAPS = { maps: [{ map_id: "estate-1", version: "6", note: "", loaded_on: [] }, { map_id: "estate-1", version: "7", note: "", active: true, loaded_on: ["A", "B"] }] };
@@ -270,6 +271,35 @@ describe("布防向导", () => {
     await waitFor(() => expect(posted.some((p) => p.url === "/api/guard-routes/generate")).toBe(true));
     const g = posted.find((p) => p.url === "/api/guard-routes/generate")!.body;
     expect((g.zones as { zone: string }[]).map((z) => z.zone)).toEqual(["2"]);
+  });
+
+  it("易用性 37 第十轮 P1:地图名长 —— 生成的路线显示名不超过 40 个字,站点收得下", async () => {
+    expect(genTitle("Elmina Lakeside")).toBe("防区巡逻（Elmina Lakeside）");
+    const long = genTitle("Plant 2 Ground Floor — North Wing Warehouse Annex");
+    expect(Array.from(long).length).toBeLessThanOrEqual(40);
+    expect(long).toMatch(/^防区巡逻（Plant 2 .*…）$/);
+    lang.value = "en";
+    try {
+      expect(genTitle("Elmina Lakeside")).toBe("Zone patrol (Elmina Lakeside)");
+      expect(Array.from(genTitle("x".repeat(60))).length).toBe(40);
+      expect(genTitle("x".repeat(60))).toMatch(/…\)$/);
+    } finally {
+      lang.value = "zh";
+    }
+    ready = { ...ready, zones: ["1", "2"], routes: [] };
+    mapNames.value = { "estate-1": "Plant 2 Ground Floor — North Wing Warehouse Annex" };
+    try {
+      const r = await openWiz();
+      pickZone(r, "2");
+      await next(r, "route");
+      fireEvent.click(r.getByText("按选的防区自动生成"));
+      await waitFor(() => expect(posted.some((p) => p.url.startsWith("/api/routes/"))).toBe(true));
+      const t = String(posted.find((p) => p.url.startsWith("/api/routes/"))!.body.title);
+      expect(Array.from(t).length).toBeLessThanOrEqual(40);
+      expect(t).not.toMatch(/版/);
+    } finally {
+      mapNames.value = {};
+    }
   });
 
   it("用户 11-25:路线这一步有地图 —— 自动生成以后画出那条路线和选的防区", async () => {
