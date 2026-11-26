@@ -132,6 +132,31 @@ void main() {
     expect(find.byType(SiteRunPage), findsOneWidget);
   });
 
+  testWidgets('易用性 37 场景测试：报警详情里的喊话、警灯进「经过」（谁、几点），谁用人名', (t) async {
+    final api = FakeApi('guard');
+    final ctx = <String, dynamic>{
+      ..._intrusion().context,
+      'warnings': [
+        {'at_ms': 2000, 'output': 'speaker', 'by': 'gina'},
+        {'at_ms': 3000, 'output': 'strobe', 'by': 'gina'},
+      ],
+    };
+    await t.binding.setSurfaceSize(const Size(400, 3000));
+    addTearDown(() => t.binding.setSurfaceSize(null));
+    await t.pumpWidget(MaterialApp(home: SiteAlertScenePage(api: api, alert: _intrusion(context: ctx))));
+    await t.pumpAndSettle();
+    expect(find.descendant(of: find.byKey(SiteAlertScenePage.timelineKey), matching: find.textContaining('gina 喊话')),
+        findsOneWidget);
+    expect(find.descendant(of: find.byKey(SiteAlertScenePage.timelineKey), matching: find.textContaining('gina 开了警灯')),
+        findsOneWidget);
+    if (find.byKey(SiteAlertScenePage.strobeKey).evaluate().isNotEmpty) {
+      await t.ensureVisible(find.byKey(SiteAlertScenePage.strobeKey));
+      await t.tap(find.byKey(SiteAlertScenePage.strobeKey));
+      await t.pumpAndSettle();
+      expect(api.lastDeterAlert, 'A/intrusion#1', reason: '带上报警号，站点记进经过');
+    }
+  });
+
   testWidgets('值守屏：点告警进现场页', (t) async {
     final api = FakeApi('guard');
     await t.pumpWidget(MaterialApp(home: SiteWatchPage(api: api)));

@@ -5,7 +5,7 @@ import { useEffect, useRef, useState } from "preact/hooks";
 import { alertAdvice, alertHeadline, canHandleAlerts } from "./alertinfo";
 import { api, ApiError, enc } from "./api";
 import { hm, nameOf } from "./data";
-import { lang, t } from "./i18n";
+import { lang, t, type Key } from "./i18n";
 import { verdictText } from "./mappage";
 import { autoResolved, type Alert } from "./model";
 import { NAV_FAIL_CODES } from "./navcodes.g";
@@ -37,6 +37,12 @@ export function incidentLog(a: Alert): { at: number; text: string }[] {
   if (a.acked_ms != null && a.acked_by) log.push({ at: a.acked_ms, text: t("actTook", { who: byText(a.acked_by), what: "" }).replace(/[:：]\s*$/, "") });
   if (a.context?.arrived_ms != null) log.push({ at: a.context.arrived_ms, text: t("incArrivedBy", { who: byText(a.context.arrived_by) || "—" }) });
   if (a.context?.lost_ms != null) log.push({ at: a.context.lost_ms, text: t("dutyLost") });
+  // 易用性 37 场景测试:喊话、警灯、警笛也进经过
+  for (const w of a.context?.warnings ?? []) {
+    if (typeof w?.at_ms !== "number") continue;
+    const k: Key = w.output === "speaker" ? "incWarnSpeak" : w.output === "strobe" ? "incWarnStrobe" : w.output === "siren" ? "incWarnSiren" : "incWarnOther";
+    log.push({ at: w.at_ms, text: t(k, { who: byText(w.by), o: w.output }) });
+  }
   if (a.resolved_ms != null) {
     const note = (a.context as { note?: string } | undefined)?.note;
     log.push({ at: a.resolved_ms, text: `${t("incClosed")} · ${verdictText(a)}${a.resolved_by ? ` · ${byText(a.resolved_by)}` : ""}${note ? ` · “${siteText(note).text}”` : ""}` });

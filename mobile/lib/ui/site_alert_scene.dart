@@ -547,7 +547,7 @@ class _SiteAlertScenePageState extends State<SiteAlertScenePage> with EstopMissR
   Future<void> _warn(String output, {double? maxS, String? clip}) async {
     final gen = _gen, robot = _a.robot;
     try {
-      final why = deterAckFailure(await widget.api.deter(robot, output, true, maxS: maxS, clip: clip));
+      final why = deterAckFailure(await widget.api.deter(robot, output, true, maxS: maxS, clip: clip, alert: _a.key));
       if (!mounted || gen != _gen) return;
       if (why != null) {
         setState(() => _msg = tr('Not done: $why', '没执行：$why'));
@@ -1364,6 +1364,21 @@ class _SiteAlertScenePageState extends State<SiteAlertScenePage> with EstopMissR
     if (arrivedMs != null) {
       final by = _a.context['arrived_by'] is String ? _a.context['arrived_by'] as String : (_arrivedHere?.$1 ?? '');
       rows.add((arrivedMs, tr('${personName(by)} is on site.', '${personName(by)} 已到场。')));
+    }
+    // 易用性 37 场景测试：从这里点的喊话、警灯、警笛（站点记在 context.warnings）
+    for (final w in (_a.context['warnings'] as List? ?? const []).whereType<Map>()) {
+      if (w['at_ms'] is! num) continue;
+      final who = personName(w['by']);
+      rows.add((
+        (w['at_ms'] as num).toInt(),
+        switch ('${w['output']}') {
+          'speaker' => tr('$who made an announcement.', '$who 喊话。'),
+          'strobe' => tr('$who turned on the strobe.', '$who 开了警灯。'),
+          'siren' => tr('$who sounded the siren.', '$who 拉了警笛。'),
+          'spotlight' => tr('$who turned on the spotlight.', '$who 开了聚光灯。'),
+          final o => tr('$who turned on $o.', '$who 开了 $o。'),
+        },
+      ));
     }
     final bAt = _a.context['backup_ms'] is num ? (_a.context['backup_ms'] as num).toInt() : _backupHere?.$2;
     if (bAt != null) {

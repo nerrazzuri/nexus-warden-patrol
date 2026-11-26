@@ -92,6 +92,16 @@ describe("人名", () => {
   });
 });
 
+describe("事件经过", () => {
+  it("易用性 37 场景测试:报警详情里点的喊话、警灯进经过(谁、几点)", async () => {
+    const { incidentLog } = await import("./alertdetail");
+    const log = incidentLog({ key: "k", kind: "dog_sees_person", robot: "A", title: "看见人", detail: "", first_ms: 1000, last_ms: 1000, count: 1,
+      acked_ms: null, acked_by: null, resolved_ms: null, context: { warnings: [{ at_ms: 2000, output: "speaker", by: "gina" }, { at_ms: 3000, output: "strobe", by: "gina" }] } } as never);
+    expect(log.map((x) => x.text)).toEqual(expect.arrayContaining(["gina 喊话", "gina 开了警灯"]));
+    expect(log.findIndex((x) => x.text === "gina 喊话")).toBeLessThan(log.findIndex((x) => x.text === "gina 开了警灯"));
+  });
+});
+
 describe("今天的巡逻", () => {
   it("拉不到:写读取失败,不写今天没有巡逻;回来以后照常", async () => {
     const r = render(<TodayPatrols retryMs={20} />);

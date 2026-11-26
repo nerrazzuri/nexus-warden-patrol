@@ -3619,6 +3619,8 @@ class _Handler(TlsHandlerMixin):
         d = self._body()
         if not isinstance(d, dict):
             raise HttpError(400, "要一个对象")
+        # 易用性 37 场景测试:从报警详情里点的喊话、警灯、警笛,记进那条报警的经过(以前不进时间线)
+        alert_key = d.get("alert") if isinstance(d.get("alert"), str) else None
         d = {k: d[k] for k in ("output", "on", "max_s", "clip", "side", "color", "pan", "tilt")
              if k in d}                               # pan/tilt:POC 11-06 竞品云台
         self._audit_detail = {k: str(v)[:80] for k, v in d.items()}
@@ -3628,8 +3630,34 @@ class _Handler(TlsHandlerMixin):
             parse_deter(d)
         except ContractError as exc:
             raise HttpError(400, str(exc)) from exc
-        return self._send_json(200, self.site.dispatch(lambda: self.site.dispatcher.deter(
-            robot_id, d, issued_by=str(user), priority=MANUAL)))
+        r = self.site.dispatch(lambda: self.site.dispatcher.deter(
+            robot_id, d, issued_by=str(user), priority=MANUAL))
+        ack = r.get("ack") if isinstance(r, dict) else None
+        if alert_key and d.get("on") is True and isinstance(ack, dict) \
+                and ack.get("result") in ("accepted", "duplicate"):
+            self._note_warning(alert_key, robot_id, str(d.get("output")), str(user))
+        return self._send_json(200, r)
+
+    def _note_warning(self, key: str, robot_id: str, output: str, who: str) -> None:
+        """报警的现场里 ``warnings`` 追加一条 ``{at_ms, output, by, robot}``(最多留 20 条);报警关了不记
+        (派去的那台不一定是报警的那台,不核对是哪台)。
+        记不上不影响已经执行了的警示。"""
+        alerts = getattr(self.site, "alerts", None)
+        if alerts is None:
+            return
+
+        def note() -> None:
+            a = alerts.book.get(key)
+            if a is None or a.resolved_ms is not None:
+                return
+            old = a.context.get("warnings")
+            rows = [x for x in old if isinstance(x, dict)] if isinstance(old, list) else []
+            rows.append({"at_ms": self.site._now(), "output": output, "by": who, "robot": robot_id})
+            alerts.amend(key, context={"warnings": rows[-20:]})
+        try:
+            self.site.loop.call(lambda: _sync(note))
+        except Exception:  # noqa: BLE001
+            log.exception("喊话记不进报警 %s", key)
 
     def _registered(self, robot_id: str) -> None:
         """第 2 轮 P2-25:没登记过的机器人回 404(跟派单、视频一致),不是 409「条件不满足」。"""
