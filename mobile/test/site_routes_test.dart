@@ -451,6 +451,20 @@ void main() {
     expect(await _enabled(t, SiteRouteEditorPage.sendKey, OutlinedButton), isFalse);
   });
 
+  testWidgets('易用性 37 第十二轮 P2：路线列表默认开机器人在用的那一版（不是最新的），下拉里标「在用」', (t) async {
+    final api = RoutesApi('admin')
+      ..catalog = <String, dynamic>{'maps': <dynamic>[
+        <String, dynamic>{'map_id': 'estate-1', 'version': '8', 'created_ms': 1, 'loaded_on': <dynamic>['A']},
+        <String, dynamic>{'map_id': 'estate-1', 'version': '9', 'created_ms': 2, 'loaded_on': <dynamic>[]},
+      ]};
+    await t.binding.setSurfaceSize(const Size(900, 700));
+    addTearDown(() => t.binding.setSurfaceSize(null));
+    await t.pumpWidget(MaterialApp(home: SiteRoutesPage(api: api)));
+    await t.pumpAndSettle();
+    expect(api.calls, contains('routes estate-1:8'));
+    expect(find.textContaining('v8 · In use'), findsWidgets);
+  });
+
   testWidgets('路线列表：按地图版本列，管理员有「新路线」，点一条进编辑页', (t) async {
     final api = RoutesApi('admin');
     await t.binding.setSurfaceSize(const Size(900, 700));

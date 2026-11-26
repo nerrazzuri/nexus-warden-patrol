@@ -290,7 +290,8 @@ class MapWizard:
         if action == "abandon":
             self.settings.put(KEY, None)
             if st.get("step") in DISCARD_STEPS and st.get("map_id") and st.get("version"):
-                # 易用性 37 第十二轮 P2:录着、出着图时放弃 —— 这一版不出(以前照样多出一版「走了 0 m」)
+                # 易用性 37 第十二轮 P2:录着、出着图时放弃 —— 这一版不出
+                # (以前照样多出一版「走了 0 m」)
                 self.cat.discard(st["map_id"], st["version"])
                 if self.builds is not None and st.get("robot_id"):
                     self.builds.discard(st["robot_id"], st["map_id"], st["version"])

@@ -72,7 +72,7 @@ def test_易用性37第十二轮_报警关了检测断流很久_清掉这一回_
     t.d.persons("A", present=True, count=1)
     t.w.tick()
     assert len(t.w.alerts.raised) == 1
-    t.w.alerts.raised.clear()                             # 那条关了(假告警台没有 open_of = 都算关了)
+    t.w.alerts.raised.clear()                  # 那条关了(假告警台没有 open_of = 都算关了)
     t.d.clients["A"].capabilities.tasks["persons"] = {"state": "stale"}   # 人员流断了:说不清
     t.w.tick()
     t.ms[0] += 30_000
