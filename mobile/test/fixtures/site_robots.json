@@ -1,4 +1,5 @@
 {
+  "map_names": {},
   "robots": [
     {
       "active": true,
@@ -99,8 +100,8 @@
       },
       "clock_skew_s": 0.0,
       "devices": null,
-      "enrolled_at": 1795638380524,
-      "expires_at": 1796638380525,
+      "enrolled_at": 1795656269099,
+      "expires_at": 1796656269100,
       "fresh": true,
       "held": null,
       "home_set": false,
@@ -108,7 +109,7 @@
       "loc": {
         "anchored": true,
         "pose": {
-          "x": 0.36,
+          "x": 0.58,
           "y": 0.0,
           "yaw": 0.0
         },
@@ -149,9 +150,9 @@
       "standby_bad": false,
       "standby_countdown": null,
       "status": {
-        "boot_id": "boot-f426e0f740",
+        "boot_id": "boot-c2202a0c4a",
         "control_epoch": 1,
-        "last_seen": 1795638385155,
+        "last_seen": 1795656270749,
         "online": true,
         "ready": {
           "control": true,

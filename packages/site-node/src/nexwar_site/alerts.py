@@ -230,6 +230,8 @@ LEVEL_OF: dict[str, Level] = {
     "account_request": Level.P2,
     # P3:只记录。日常的正常事件,不需要谁去处理什么。
     "run_done": Level.P3,
+    # 用户 11-26「降级吧」:点位没到、机器人跳过接着巡 —— 只记一笔(连着几趟没到另报 P1 ``stuck``)
+    "waypoint_skipped": Level.P3,
     "run_start": Level.P3,
     "battery_swap": Level.P3,
     # B1c:授权在场(名单)——狗看见人,但人在授权的防区和时段里:不报 P1,留一条记录

@@ -43,7 +43,7 @@ import {
 } from "./routes";
 import { rt } from "./routes_i18n";
 import { siteKnown, siteStr } from "./sitetext";
-import { clip, siteDown } from "./data";
+import { clip, siteDown, mapName } from "./data";
 
 type Say = (s: string) => void;
 interface MapRow { map_id: string; version: string; note: string }
@@ -279,7 +279,7 @@ export function RoutesPage({ say, embed, kind = "patrol" }: { say: Say; embed?: 
       if (!still(tk)) return;
       if (sel && (r.map_id !== sel.map_id || r.map_version !== sel.version)) {
         // 别人把这条路线改到了别的图上:不放进这张图的编辑页
-        say(rt("routeMovedMap", { map: `${r.map_id} · v${r.map_version}` }));
+        say(rt("routeMovedMap", { map: `${mapName(r.map_id)} · v${r.map_version}` }));
         setDraft(null);
         await load();
         return;

@@ -752,6 +752,13 @@ CREATE TABLE IF NOT EXISTS route_nets (
     updated_by  TEXT NOT NULL,
     PRIMARY KEY (map_id, map_version)
 );
+-- 用户 11-26:地图的显示名(建图向导里填的「Elmina」;不跟版本走)。没有这一行 = 显示地图号。maps.py。
+CREATE TABLE IF NOT EXISTS map_names (
+    map_id     TEXT PRIMARY KEY,
+    name       TEXT NOT NULL,
+    updated_by TEXT NOT NULL DEFAULT '',
+    updated_ms INTEGER NOT NULL DEFAULT 0
+);
 -- 地图的显示设置(转角、底图、区域名、特殊地面),跟着版本走。map_display.py。
 CREATE TABLE IF NOT EXISTS map_display (
     map_id      TEXT NOT NULL,

@@ -7,7 +7,7 @@ import { useUnsaved } from "./unsaved";
 import type { ComponentChildren, FunctionComponent } from "preact";
 import { useCallback, useEffect, useRef, useState } from "preact/hooks";
 import { api, ApiError, enc } from "./api";
-import { clip, hm, siteDown } from "./data";
+import { clip, hm, siteDown, mapName } from "./data";
 import { Confirm } from "./dialogs";
 import { Sign } from "./signs";
 import { t, type Key } from "./i18n";
@@ -306,14 +306,14 @@ export function LayoutPage({ say, robots, tabs, embed }: {
   const notes: Partial<Record<LayoutTab, string>> = {
     nogo: held ? `${held} ${t("lyRailAwait")}` : carried && data.nav?.proposal ? t("lyStCarried", { n: carried, v: data.nav.proposal.from_version }) : "",
   };
-  const status = sel ? [t("lyStMap", { id: sel.map_id, v: sel.version }), inService(sel) ? t("lyStActive") : t("lyStNotActive"),
+  const status = sel ? [t("lyStMap", { id: mapName(sel.map_id), v: sel.version }), inService(sel) ? t("lyStActive") : t("lyStNotActive"),
     held ? t(held === 1 ? "lyStPending1" : "lyStPendingN", { n: held }) : ""].filter(Boolean) : [];
   return (
     <section class={embed ? "layout" : "layout sp ly-sp"}>
       <div class={embed ? "panel-head" : "sp-head ly-head"}>
         {!embed && <h1>{t("lyTitle")}</h1>}
         {!embed && <p class="sp-status"><Sign kind={held || carried ? "info" : "ok"} /><span>{status.slice(0, 2).join(" · ")} {status[2] && <b>{status[2]}</b>}</span></p>}
-        {embed ? <span class="field-inline">{t("mapLabel")} {embed.map.map_id} · v{embed.map.version}</span> : <label class="field-inline">{t("mapLabel")}
+        {embed ? <span class="field-inline">{t("mapLabel")} {mapName(embed.map.map_id)} · v{embed.map.version}</span> : <label class="field-inline">{t("mapLabel")}
           <select value={sel ? `${sel.map_id}\u0000${sel.version}` : ""} onChange={(e) => {
             const [m, v] = e.currentTarget.value.split("\u0000");
             const next = maps.find((x) => x.map_id === m && x.version === v) ?? null;
@@ -321,7 +321,7 @@ export function LayoutPage({ say, robots, tabs, embed }: {
             if (dirty) { el.value = sel ? `${sel.map_id}\u0000${sel.version}` : ""; setAsk(() => () => setSel(next)); } else setSel(next);
           }}>
             {maps.map((m) => <option key={`${m.map_id}:${m.version}`} value={`${m.map_id}\u0000${m.version}`}>
-              {m.map_id} · v{m.version}{inService(m) ? ` · ${t("lyActive")}` : ""}{m.note ? ` · ${clip(siteKnown(m.note))}` : ""}</option>)}
+              {mapName(m.map_id)} · v{m.version}{inService(m) ? ` · ${t("lyActive")}` : ""}{m.note ? ` · ${clip(siteKnown(m.note))}` : ""}</option>)}
           </select>
         </label>}
         {/* 第 4 轮 layout N5:不用空 span 顶开(窄屏上它折到下一行,在「历史」左边空出一块) */}

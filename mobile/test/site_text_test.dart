@@ -8,6 +8,18 @@ void main() {
   setUp(() => appLang.value = AppLang.en);
   tearDown(() => appLang.value = AppLang.zh);
 
+  test('用户 11-26：被困 90 秒换车、叫人遥控回来 整句英文', () {
+    for (final s in [
+      '规划失败(start_blocked):起点在障碍或禁行区里;请用遥控把 A 开回开阔、扫到过的地方',
+      'A 被困 92 秒没脱开,换一台;请人遥控把它开回来',
+      '第 3 圈跑不成:导航拒了: goto 被设备拒绝: 规划失败(start_blocked):起点在障碍或禁行区里;1 m 内没有能直线挪过去站的地方',
+    ]) {
+      final en = siteText(s);
+      expect(RegExp(r'[\u4e00-\u9fff]').hasMatch(en), isFalse, reason: '$s => $en');
+    }
+    expect(alertTitle('guard_stuck', 'A 被困 92 秒没脱开:已换一台接着巡'), 'A stuck for 92 s: another robot took over');
+  });
+
   test('易用性 37 复测第六轮：值守一圈 N 个航点未到达 整句英文', () {
     const one = '导航拒了: goto 被设备拒绝: 规划失败(start_blocked):起点在障碍或禁行区里';
     final en = siteText('3 个航点未到达(Drive-thru lane-3, Drive-thru lane-4, 回待命点):$one;回头补也没到:$one');

@@ -143,9 +143,12 @@ String setupDetailText(Map it) {
   if (it['id'] == 'standby' && it['done'] == true && home is List && home.isNotEmpty) {
     // minor #21：标原点时站点顺手加的待命点就在原点上
     final ids = home.join(tr(', ', '\u3001'));
-    return tr('The standby point of $ids is its origin (added automatically when the origin was marked). '
-        'To park it somewhere else, add a standby point on the Layout page.',
-        '$ids 的待命点就是原点（标原点时自动加的）。想让它停到别处，在网页布置页加一个待命点。');
+    // 用户 11-26：原点和待命点分开说（重标原点不挪待命点，W13a）
+    return tr('The standby point of $ids was added where the origin was first marked. The origin and standby points '
+        "are separate: marking the origin again later doesn't move it. To park the robot somewhere else, "
+        'add a standby point on the Layout page.',
+        '$ids 的待命点是第一次标原点时在那儿自动加的。原点和待命点是分开的：以后重标原点，它不跟着挪。'
+        '想让机器人停到别处，在网页布置页加一个待命点。');
   }
   if (it['id'] == 'schedule' && blocked is List && blocked.isNotEmpty) {
     final names = blocked.join(tr(', ', '\u3001'));

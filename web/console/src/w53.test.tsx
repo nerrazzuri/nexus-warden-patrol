@@ -248,7 +248,7 @@ describe("minor #21 开站清单:待命点就是原点", () => {
       : url === "/api/me" ? json({ name: "alice", role: "admin", guide: { tour: 1, setup_hidden: false, skip: [] } }) : json({}, 404))) as typeof fetch);
     const { container: c } = render(<SetupChecklist />);
     await waitFor(() => expect(c.querySelector('[data-item="standby"]')).not.toBeNull());
-    expect(c.querySelector('[data-item="standby"]')!.textContent).toContain("A 的待命点就是原点（标原点时自动加的）");
+    expect(c.querySelector('[data-item="standby"]')!.textContent).toContain("A 的待命点是第一次标原点时在那儿自动加的");
   });
 });
 

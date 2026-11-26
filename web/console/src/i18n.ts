@@ -2237,7 +2237,7 @@ const en = {
   suHide: "Not now",
   suShow: "Show",
   suRoutesElsewhere: "{n} route(s) ({names}) are drawn on {at}, but the robots use {use}: redraw on {use}",
-  suStandbyAtHome: "The standby point of {ids} is its origin (added automatically when the origin was marked). To park it somewhere else, add a standby point on the Layout page.",
+  suStandbyAtHome: "The standby point of {ids} was added where the origin was first marked. The origin and standby points are separate: marking the origin again later doesn't move it. To park the robot somewhere else, add a standby point on the Layout page.",
   suNoMap: "{ids} hasn't reported which map it is using yet, so this can't be checked. Turn it on and let it localize, then look again.",
   suSchedBlocked: "Schedule {names} can't run its route (drawn on another map version, or deleted): change the route or redraw it",
   suSkip: "Skip",
@@ -4631,7 +4631,7 @@ const zh: Partial<Record<Key, string>> = {
   suHide: "暂不处理",
   suShow: "展开",
   suRoutesElsewhere: "有 {n} 条路线（{names}）画在 {at} 上，机器人在用 {use}：在 {use} 上重画",
-  suStandbyAtHome: "{ids} 的待命点就是原点（标原点时自动加的）。想让它停到别处，在布置页加一个待命点。",
+  suStandbyAtHome: "{ids} 的待命点是第一次标原点时在那儿自动加的。原点和待命点是分开的：以后重标原点，它不跟着挪。想让机器人停到别处，在布置页加一个待命点。",
   suNoMap: "{ids} 还没报在用哪张图，查不了这一项。开机、定好位以后再看。",
   suSchedBlocked: "日程 {names} 要跑的路线跑不了（画在别的地图版本上或已删除）：改路线或重画",
   suSkip: "跳过",
@@ -4857,12 +4857,19 @@ export function alertTitle(l: Lang, kind: string, siteTitle: string): string {
   // 第 4 轮 r2-duty-N7:「点位没到」跳过一次和连续几趟是同一个种类,标题分开说(英文界面不都叫 Waypoint not reached)
   const bare = siteTitle.startsWith(TEST_PREFIX) ? siteTitle.slice(TEST_PREFIX.length) : siteTitle;
   const many = /^点位 (\S+) 连续 (\d+) 趟未到达/.exec(bare), once = /^点位 (\S+) 未到达,已跳过/.exec(bare);
-  if (kind === "stuck" && (many || once)) {
+  if ((kind === "stuck" || kind === "waypoint_skipped") && (many || once)) {
     const head = siteTitle.startsWith(TEST_PREFIX) ? (l === "zh" ? TEST_PREFIX : "TEST: ") : "";
     if (l === "zh") return head + bare.replace(/:路可能被堵住了$/, "：路可能被堵住了").replace(/未到达,已跳过/, "未到达，已跳过");
     // 易用性 37 复测 P3:站点自己加的点(回待命点)名字也翻
     const wp = (n: string) => WP_EN[n] ?? n;
     return head + (many ? `Waypoint ${wp(many[1])} not reached ${many[2]} runs in a row` : `Waypoint ${wp(once![1])} skipped`);
+  }
+  // 用户 11-26:值守的机器人被困 90 秒(换车 / 指定了它没换)—— 写清是哪台、多久
+  const held = /^(\S+) 被困 (\d+) 秒没脱开[:：](已换一台接着巡|这条方案指定了它,没换车)$/.exec(bare);
+  if (kind === "guard_stuck" && held) {
+    const head = siteTitle.startsWith(TEST_PREFIX) ? (l === "zh" ? TEST_PREFIX : "TEST: ") : "";
+    if (l === "zh") return head + bare.replace(/:/, "：").replace(/,/, "，");
+    return head + `${held[1]} stuck for ${held[2]} s: ` + (held[3].startsWith("已换") ? "another robot took over" : "no other robot took over (the plan names it)");
   }
   const e = CATALOG[kind];
   if (!e || kind.startsWith("$")) return siteTitle;

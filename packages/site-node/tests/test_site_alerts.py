@@ -189,7 +189,7 @@ def test_点位没到记一笔_到了不报(台):
     src.on_event("A", _ev("patrol_waypoint", task_id="t1", index=1, name="pond", ok=False,
                           note="导航失败"))
     [a] = desk.book.all()
-    assert a.kind == "stuck" and "pond" in a.title and a.detail.startswith("导航失败")
+    assert a.kind == "waypoint_skipped" and "pond" in a.title and a.detail.startswith("导航失败")
     assert a.resolved_ms is not None
 
 

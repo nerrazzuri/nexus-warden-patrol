@@ -346,6 +346,9 @@ class MapWizard:
             if st["step"] in ("walk", "build") and st.get("label"):
                 # 用这一张:显示名记成这一版的备注(地图管理里看得到)
                 self.cat.set_note(st["map_id"], st["version"], st["label"])
+                # 用户 11-26「建图名字这很重要」:原来只记了备注,网页、App 到处还写地图号 main ——
+                # 记成整张图的显示名,各处按它显示
+                self.cat.set_name(st["map_id"], st["label"], by=str(st.get("by") or ""))
         st["step"] = step
         return self._save(st)
 

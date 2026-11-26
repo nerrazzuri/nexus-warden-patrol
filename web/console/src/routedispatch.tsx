@@ -1,5 +1,6 @@
 // POC 第 5 项:路线页「派一趟」。挑一台机器人 → 站点估预计多久、现在走还是排在日程后面 → 确认了才派
 // (走现成的临时巡逻:撞日程就排队、通知经理和管理员)。
+import { mapName } from "./data";
 import { useState } from "preact/hooks";
 import { api, ApiError, enc } from "./api";
 import { Modal } from "./dialogs";
@@ -63,7 +64,7 @@ export function DispatchOnce({ route: fixedRoute, robot: fixedRobot, say, cls, t
   const otherMap = (rt: { map_id?: string; map_version?: string } | undefined, id: string): string | null => {
     const m = maps[id];
     if (!rt || !rt.map_version || !m?.version) return null;
-    if (rt.map_id && m.id && rt.map_id !== m.id) return `${rt.map_id} v${rt.map_version}`;
+    if (rt.map_id && m.id && rt.map_id !== m.id) return `${mapName(rt.map_id)} v${rt.map_version}`;
     return rt.map_version === m.version ? null : `v${rt.map_version}`;
   };
   const pick = (id: string) => { setRobot(id); ask(id, route, loops); };

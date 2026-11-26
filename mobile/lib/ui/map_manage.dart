@@ -17,6 +17,7 @@ import 'nw/nw_theme.dart';
 import 'nw/nw_widgets.dart';
 import 'site_mapping.dart' show SiteMapPreviewPage;
 import 'site_maps.dart' show SiteMapsPage;
+import '../net/map_names.dart';
 
 /// 第 8 轮 A8-04：版本先写「第 N 版」（纯数字的）；别的写法（日期编号）写「版本 X」。
 String versionLabel(String v) =>
@@ -240,7 +241,7 @@ class _MapManagePageState extends State<MapManagePage> with NwAsk {
 
   Future<void> _rollback(String robot, Map rb) async {
     final ok = await askYes(
-        tr('Switch $robot to ${rb['map_id']} ${versionLabel('${rb['version']}')}?', '把 $robot 换回 ${rb['map_id']} ${versionLabel('${rb['version']}')}？'),
+        tr('Switch $robot to ${mapName(rb['map_id'])} ${versionLabel('${rb['version']}')}?', '把 $robot 换回 ${mapName(rb['map_id'])} ${versionLabel('${rb['version']}')}？'),
         ok: tr('Roll back', '回退'),
         okKey: const Key('rollback-ok'));
     if (!ok) return;
@@ -382,7 +383,7 @@ class _MapManagePageState extends State<MapManagePage> with NwAsk {
             () {
               final vs = [for (final v in (m['versions'] as List? ?? const [])) if (v is Map) v.cast<String, dynamic>()];
               final latest = vs.where((v) => v['latest'] == true).firstOrNull ?? vs.firstOrNull;
-              return section(title: '${m['map_id']}', [
+              return section(title: mapName(m['map_id']), [
                 for (final v in vs) _version(c, '${m['map_id']}', v),
                 const SizedBox(height: Nw.s8),
                 // 建图一次只能建一张（向导是全站一个）：按钮放在第一张图下面
@@ -419,7 +420,7 @@ class _MapManagePageState extends State<MapManagePage> with NwAsk {
                       Expanded(
                           child: Text(
                               r['loaded'] is Map
-                                  ? '${r['loaded']['map_id']} · ${versionLabel('${r['loaded']['version']}')}'
+                                  ? '${mapName(r['loaded']['map_id'])} · ${versionLabel('${r['loaded']['version']}')}'
                                   : tr('(no map)', '（没有图）'),
                               style: NwText.bodyMedium.copyWith(color: c.text))),
                       if (r['rollback'] is Map)
@@ -435,7 +436,7 @@ class _MapManagePageState extends State<MapManagePage> with NwAsk {
                       Padding(
                         padding: const EdgeInsets.only(top: Nw.s4),
                         child: Text(
-                            '${(r['activation'] as Map)['map_id']}:${(r['activation'] as Map)['version']}  '
+                            '${mapName((r['activation'] as Map)['map_id'])}:${(r['activation'] as Map)['version']}  '
                             '${mapSwitchText((r['activation'] as Map).cast<String, dynamic>(), nowMs: (ov?['now_ms'] as num?)?.toInt() ?? DateTime.now().millisecondsSinceEpoch, rateBps: _rate['${r['robot_id']}'])}',
                             key: MapManagePage.progressKey('${r['robot_id']}'),
                             style: NwText.bodySmall.copyWith(color: c.textSecondary)),

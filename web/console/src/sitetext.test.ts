@@ -303,3 +303,18 @@ describe("易用性 37 复测第六轮:值守一圈 N 个航点未到达", () =>
     expect(en).toContain("with Remote");
   });
 });
+
+describe("用户 11-26:被困 90 秒换车、叫人遥控回来", () => {
+  it("告警详情、值守日志、起点挪不出去整句英文", () => {
+    for (const s of [
+      "规划失败(start_blocked):起点在障碍或禁行区里;请用遥控把 A 开回开阔、扫到过的地方",
+      "A 被困 92 秒没脱开,换一台;请人遥控把它开回来",
+      "第 3 圈跑不成:导航拒了: goto 被设备拒绝: 规划失败(start_blocked):起点在障碍或禁行区里;1 m 内没有能直线挪过去站的地方",
+    ]) {
+      const en = siteStr(s);
+      expect(en, s).not.toMatch(CJK);
+      expect(en, s).not.toContain("Site message in Chinese");
+    }
+    expect(siteStr("A 被困 92 秒没脱开,换一台;请人遥控把它开回来")).toContain("A stuck for 92 s");
+  });
+});

@@ -1,6 +1,7 @@
 // 定位历史页:每台狗定位丢了 / 变差的每一段(站点 /api/loc-episodes)—— 什么时候、多久、在哪、为什么、
 // 在跑哪个任务。按狗、种类、时间段过滤。地图页上同一批记录画成点。不是匹配分数的热力图
 // (错解也会打高分,把危险的地方画成绿的)。
+import { mapName } from "./data";
 import { useState } from "preact/hooks";
 import { Shape } from "./icons";
 import { L, durText, endText, kindText, useEpisodes, type Episode } from "./runviz";
@@ -74,7 +75,7 @@ export function LocHistoryPage({ robots, now }: { robots: string[]; now: number 
               <td class="mono">{durText(e.duration_s)}</td>
               <td class="mono strong">{e.robot_id}</td>
               <td><span class={e.kind === "lost" ? "state p2" : "state"}>{e.kind === "lost" && <Shape kind="P2" />}{kindText(e.kind)}</span></td>
-              <td class="mono">{where(e)}{e.map_id ? <span class="muted"> {e.map_id}:{e.map_version}</span> : null}</td>
+              <td class="mono">{where(e)}{e.map_id ? <span class="muted"> {mapName(e.map_id)}:{e.map_version}</span> : null}</td>
               <td class="cause">{e.cause || "—"}</td>
               <td class="mono">{e.task_id || "—"}</td>
               <td class={e.ongoing ? "warncell" : "muted small"}>{endText(e.end_how, e.ongoing)}</td>

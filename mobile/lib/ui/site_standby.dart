@@ -14,13 +14,15 @@ import 'nw/nw_points.dart' show standbyDefaultBlocked;
 import 'nw/nw_theme.dart';
 import 'nw/nw_widgets.dart';
 import 'widget/bar_actions.dart';
+import '../net/map_names.dart';
 
 /// 第 9 轮 W9-12：标原点时自动加的待命点（名字是 home）写「在原点（标原点时自动加的）」，不写 home。
 /// 第 11 轮 W11-04：home 已登记在别的图上时站点起名 home-<图名>，也算。
 bool autoHomeName(Object? name) => name == 'home' || RegExp(r'^home-[A-Za-z0-9._-]+$').hasMatch('$name');
 
 String standbyName(Map p) => autoHomeName(p['name'])
-    ? tr('At the origin (added when the origin was marked)', '在原点（标原点时自动加的）')
+    // 用户 11-26：原点和待命点分开（W13a，重标原点不挪它）—— 名字别说「在原点」
+    ? tr('First standby point (where the origin was first marked)', '第一个待命点（第一次标原点的地方）')
     : '${p['name']}';
 
 class SiteStandbyPage extends StatefulWidget {
@@ -158,7 +160,7 @@ class _SiteStandbyPageState extends State<SiteStandbyPage> with NwAsk {
   }
 
   static String _xy(Map<String, dynamic> p) =>
-      '${p['map_id']}:${p['map_version']}  (${(p['x'] as num).toStringAsFixed(1)}, '
+      '${mapName(p['map_id'])}:${p['map_version']}  (${(p['x'] as num).toStringAsFixed(1)}, '
       '${(p['y'] as num).toStringAsFixed(1)})';
 
   /// W13：狗现在站的地方登记成充电桩对准点（领到桩前约 1.5 米、正对桩）。

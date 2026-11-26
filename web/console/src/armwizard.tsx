@@ -3,7 +3,7 @@
 // 一步步做完;已经做好的步骤打勾,可以直接往下。画防区、改路线就地嵌布置页的编辑器,不跳页面。
 import { useEffect, useRef, useState } from "preact/hooks";
 import { api, ApiError } from "./api";
-import { robotNames } from "./data";
+import { robotNames, mapName } from "./data";
 import { Confirm, Modal } from "./dialogs";
 import { siteKnown, siteStr } from "./sitetext";
 import { colon, joinList, lang, t, type Lang } from "./i18n";
@@ -453,7 +453,7 @@ export function ArmWizard({ say, onClose, arming = false, onChanged }: { say: Sa
         return;
       }
       const taken = new Set(r.routes.map((x) => x.id));
-      const title = wt("routeGenTitle", { map: map.map_id, ver: map.version });
+      const title = wt("routeGenTitle", { map: mapName(map.map_id), ver: map.version });
       let saved = "";
       // 外审 2 #5:前缀先截短,给「-2」「-20」留位置(编号最长 64)
       const head = `guard-${map.map_id}-${map.version}`.replace(/[^A-Za-z0-9_.-]/g, "-").slice(0, 60);
@@ -599,7 +599,7 @@ export function ArmWizard({ say, onClose, arming = false, onChanged }: { say: Sa
   return (
     <Modal label={wt("title")} onClose={() => guarded(onClose)} wide cls="armwiz">
       <p class="muted small">{wt("lead")}</p>
-      {map && <p class="small" data-wiz-map="1">{wt("map", { map: map.map_id, ver: map.version })}</p>}
+      {map && <p class="small" data-wiz-map="1">{wt("map", { map: mapName(map.map_id), ver: map.version })}</p>}
       <ol class="wiz-steps" aria-label={wt("title")}>
         {steps.map((k, i) => (
           <li key={k} aria-current={i === step ? "step" : undefined} class={done[i] ? "done" : ""}>
@@ -708,7 +708,7 @@ export function ArmWizard({ say, onClose, arming = false, onChanged }: { say: Sa
       {r && sched && step === 4 && (
         <section data-wiz-step="confirm">
           <dl class="wiz-sum">
-            <dt>{wt("sumMap")}</dt><dd>{map?.map_id} · v{map?.version}</dd>
+            <dt>{wt("sumMap")}</dt><dd>{mapName(map?.map_id)} · v{map?.version}</dd>
             <dt>{wt("sumZones")}</dt><dd>{joinList(picked) || "—"}</dd>
             <dt>{wt("sumRoute")}</dt><dd>{sel ? sel.title || sel.id : "—"}</dd>
             <dt>{wt("sumTime")}</dt><dd>{sched.enabled && sched.slots.length ? wt("sumSlots", { n: sched.slots.length }) : wt("sumManual")}</dd>

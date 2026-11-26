@@ -41,7 +41,31 @@ def _admin(h: Any) -> MapAdmin:
     return adm
 
 
+_NAME = re.compile(r"^/api/admin/maps/([^/]{1,64})/name$")
+
+
 def handle(h: Any, method: str, path: str, user: Any) -> None:
+    n = _NAME.match(path)
+    if n is not None:
+        # 用户 11-26:整张图的显示名(所有版本一起);空 = 去掉,显示地图号
+        h._need(user, MANAGE)
+        if method != "POST":
+            raise HttpError(404, f"没有 {method} {path}")
+        from nexwar_site.maps import MapError
+        map_id = unquote(n.group(1))
+        d = h._body()
+        name = d.get("name")
+        if not isinstance(name, str):
+            raise HttpError(400, "name 要是字符串")
+        h._audit_target = map_id
+        if h.site.maps is None:
+            raise HttpError(404, "此站点未启用地图目录")
+        try:
+            got = h.site.maps.set_name(map_id, name, by=str(user))
+        except MapError as exc:
+            raise HttpError(404, str(exc)) from exc
+        h._audit_detail = {"name": got}
+        return h._send_json(200, {"ok": True, "name": got})
     m = _ROUTE.match(path)
     if m is None:
         raise HttpError(404, f"没有 {method} {path}")

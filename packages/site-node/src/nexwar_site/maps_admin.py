@@ -198,6 +198,7 @@ class MapAdmin:
                 "rollback": target,
             })
         maps: dict[str, list[dict[str, Any]]] = {}
+        names = cat.names()                      # 用户 11-26:整张图的显示名
         for m in cat.list():                     # 新的在前
             maps.setdefault(m["map_id"], []).append(m)
         out_maps = []
@@ -232,7 +233,8 @@ class MapAdmin:
                     "has_raster": any(f["name"] == "floor.yaml" for f in m["files"]),
                     # 11-05 现场第 10 条:缺定位文件的老图发不到带定位器的机器人(空串 = 齐了)
                     "unusable": prior_missing(f["name"] for f in m["files"])})
-            out_maps.append({"map_id": map_id, "versions": versions})
+            out_maps.append({"map_id": map_id, "name": names.get(map_id, ""),
+                             "versions": versions})
         return {"maps": out_maps, "robots": robots, "now_ms": self._now()}
 
     def _count(self, table: str, ver_col: str, key: tuple[str, str]) -> int:

@@ -150,6 +150,7 @@ export const ERR_CODES: Record<string, readonly [string, string, string, string,
 export const ALERT_ERR: Record<string, string> = {
   "stuck": "dispatch.stuck",
   "intrusion": "sense.intrusion",
+  "waypoint_skipped": "dispatch.waypoint_missed",
   "payload_sos": "robot.payload_sos",
   "payload_estop": "robot.payload_estop",
   "deter_failed": "robot.deter_failed",

@@ -115,6 +115,8 @@ MAX_COVERAGE_BYTES = 16 * 1024 ** 2
 REACH_CACHE = 8
 #: ``build.json`` 最大多少字节(地图管理页读它显示怎么建的;正常几 KB)。
 MAX_BUILD_JSON_BYTES = 256 * 1024
+#: 用户 11-26:地图显示名最多几个字(跟建图向导的显示名一样长)。
+MAX_MAP_NAME = 40
 
 
 class MapCatalog:
@@ -234,8 +236,10 @@ class MapCatalog:
     def list(self) -> list[dict[str, Any]]:
         """网页易用性 P1-87:每一版带 ``missing``(登记了、盘上却缺的文件名;都在 = 空)。"""
         out = []
+        titles = self.names()
         for r in self.db.query("SELECT * FROM maps ORDER BY map_id, created_ms DESC, rowid DESC"):
             d = _row(r)
+            d["name"] = titles.get(d["map_id"], "")        # 用户 11-26:整张图的显示名
             base = self.root / d["map_id"] / d["version"]
             names = [str(f.get("name", "")) for f in d["files"] if isinstance(f, dict)]
             d["missing"] = [n for n in names if not (base / n).is_file()]
@@ -656,6 +660,28 @@ class MapCatalog:
         with self.db.tx() as c:
             c.execute("UPDATE maps SET source=? WHERE map_id=? AND version=?",
                       (f"edit:{by}", map_id, version))
+
+    def names(self) -> dict[str, str]:
+        """用户 11-26:地图号 → 显示名(建图向导填的、地图管理里改的);没起名的不在里面。"""
+        rows = self.db.query("SELECT map_id, name FROM map_names WHERE name != ''")
+        return {str(r["map_id"]): str(r["name"]) for r in rows}
+
+    def set_name(self, map_id: str, name: str, *, by: str = "") -> str:
+        """给整张图(所有版本)起显示名,最多 :data:`MAX_MAP_NAME` 个字;空 = 去掉,回到显示地图号。
+        没有这张图 :class:`MapError`。"""
+        name = " ".join(name.split())[:MAX_MAP_NAME]
+        if not self.db.query("SELECT 1 FROM maps WHERE map_id=? LIMIT 1", (map_id,)):
+            raise MapError(f"地图不存在:{map_id}")
+        with self.db.tx() as c:
+            if name:
+                c.execute("INSERT INTO map_names(map_id, name, updated_by, updated_ms) "
+                          "VALUES (?, ?, ?, ?) ON CONFLICT(map_id) DO UPDATE SET "
+                          "name=excluded.name, updated_by=excluded.updated_by, "
+                          "updated_ms=excluded.updated_ms",
+                          (map_id, name, by, int(self._now())))
+            else:
+                c.execute("DELETE FROM map_names WHERE map_id=?", (map_id,))
+        return name
 
     def set_note(self, map_id: str, version: str, note: str) -> str:
         """改这一版的备注(最多 200 字,去首尾空白);回新的备注。没有这一版 :class:`MapError`。"""

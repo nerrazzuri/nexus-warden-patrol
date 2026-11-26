@@ -7,7 +7,7 @@ import type { ComponentChildren } from "preact";
 import { useEffect, useRef, useState } from "preact/hooks";
 import { api, ApiError, enc } from "./api";
 import { CameraWell } from "./camera";
-import { hm, nameOf } from "./data";
+import { hm, nameOf, mapName } from "./data";
 import { refusalText, t, type Key } from "./i18n";
 import { locText, type UnitInfo } from "./live";
 import { lapText, LoopsSelect } from "./loops";
@@ -262,7 +262,7 @@ function RobotMiniMap({ u }: { u: UnitInfo }) {
   const meta = got.key === key ? got.meta : null;
   return (
     <section class="rc-map" aria-label={t("rcMapH")}>
-      <h3 class="lbl">{t("rcMapH")}{m && <span class="muted"> · {m.map_id} v{m.version}</span>}</h3>
+      <h3 class="lbl">{t("rcMapH")}{m && <span class="muted"> · {mapName(m.map_id)} v{m.version}</span>}</h3>
       {!m ? <p class="muted small">{t("rcMapNone")}</p>
         : !meta ? <p class="muted small">{got.failed && got.key === key ? t("loadRetry") : t("rcMapLoading")}</p> : (
           <MapCanvas meta={meta} raster={`/api/maps/${enc(m.map_id)}/${enc(m.version)}/preview.png`} label={t("rcMapH")}

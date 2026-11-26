@@ -124,6 +124,16 @@ const RULES: Rule[] = [
   [/^(\d+) 个航点未到达[(（]([^)）]*)[)）][:：]\s*([\s\S]*)$/, (m) =>
     `${m[1]} ${plural(m[1], "waypoint", "waypoints")} not reached (${m[2].split(/[,，、]\s*/).map((n) => WP_NAMES[n] ?? n).join(", ")}): ${lc(tr(m[3]))}`],
   // 易用性 37 复测 P1-7:标原点 / 设待命点被拒(App 有的页不读 reason_en)
+  // 用户 11-26:被困 90 秒换车、叫人遥控回来;起步时起点被挡、1 m 内挪不出去
+  [/^(\S+) 被困 (\d+) 秒没脱开[:：]已换一台接着巡$/, (m) => `${m[1]} stuck for ${m[2]} s and couldn't get free: another robot took over the route`],
+  [/^(\S+) 被困 (\d+) 秒没脱开[:：]这条方案指定了它,没换车$/, (m) => `${m[1]} stuck for ${m[2]} s and couldn't get free: this plan names it, so no other robot took over`],
+  [/^(\S+) 被困 (\d+) 秒没脱开,换一台[;；]请人遥控把它开回来$/, (m) => `${m[1]} stuck for ${m[2]} s and couldn't get free, so another robot took over. Someone needs to drive it back with Remote.`],
+  [/^([\s\S]*?)[;；]?请用遥控把 (\S+) 开回开阔、扫到过的地方$/, (m) => `${m[1] ? `${trParts(m[1])}. ` : ""}Drive ${m[2]} back to open, scanned floor with Remote.`],
+  [/^(\S+) 被困 (\d+) 秒没脱开,换一台$/, (m) => `${m[1]} stuck for ${m[2]} s and couldn't get free, so another robot took over`],
+  [/^请用遥控把 (\S+) 开回开阔、扫到过的地方$/, (m) => `drive ${m[1]} back to open, scanned floor with Remote`],
+  [/^请人遥控把它开回来$/, () => "someone needs to drive it back with Remote"],
+  [/^第 (\d+) 圈跑不成[:：]\s*([\s\S]*)$/, (m) => m[2] ? `lap ${m[1]} failed: ${lc(tr(m[2]))}` : `lap ${m[1]} failed`],
+  [/^(\d+) m 内没有能直线挪过去站的地方$/, (m) => `no open spot within ${m[1]} m it could move straight to`],
   [/^(\S+) 的待命点不能设在这里[:：][\s\S]*$/, (m) => `${m[1]}'s standby point can't go here: the map shows it as not walkable or not scanned, so robots could never be sent there. Pick a spot on open, scanned floor.`],
   [/^(\S+) 现在站的地方不能当待命点[:：][\s\S]*$/, (m) => `${m[1]} can't use this spot as its standby point: the map shows it as not walkable or not scanned, so robots could never be sent back here. Drive about 1 m into open, scanned floor and mark again.`],
   // 真机 11-25「我一直点立即切换一直显示 busy」:代理拒切换 / 装的时候写清在忙什么

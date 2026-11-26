@@ -225,6 +225,15 @@ def test_向导_没建好不能去禁行区_建好了带结论_记显示名(站�
     assert v["step"] == "zones"
     assert 站点.maps.get("main", v["version"]) is not None
     assert [m for m in 站点.maps.list() if m["version"] == v["version"]][0]["note"] == "一楼"
+    # 用户 11-26「建图名字这很重要」:填的名字是整张图的显示名(原来各处只写地图号 main)
+    assert 站点.maps.names() == {"main": "一楼"}
+    assert all(m["name"] == "一楼" for m in 站点.maps.list() if m["map_id"] == "main")
+    assert 站点.maps.set_name("main", "  Elmina   Lakeside ", by="olga") == "Elmina Lakeside"
+    assert 站点.maps.names() == {"main": "Elmina Lakeside"}
+    assert 站点.maps.set_name("main", "", by="olga") == "" and 站点.maps.names() == {}
+    from nexwar_site.maps import MapError
+    with pytest.raises(MapError):
+        站点.maps.set_name("nope", "x")
 
 
 def test_向导_建图失败_带原因(站点):

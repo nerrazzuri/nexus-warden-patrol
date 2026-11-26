@@ -4,6 +4,10 @@
     "en": "Waypoint not reached",
     "zh": "未到达点位"
   },
+  "waypoint_skipped": {
+    "en": "Waypoint skipped",
+    "zh": "点位已跳过"
+  },
   "intrusion": {
     "en": "Intrusion",
     "zh": "发现入侵"

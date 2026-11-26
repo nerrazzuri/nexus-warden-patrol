@@ -97,6 +97,9 @@ FOLLOW_PREFIX = "follow-"
 FAIL_ALERT = 3
 #: 「任意一台」的方案,一台连着 FAIL_ALERT 圈跑不成:这么久(毫秒)里先挑别的(易用性 37 复测第六轮)。
 FAIL_AVOID_MS = 10 * 60_000
+#: 用户 11-26:被困(从第一次跑不成算起)超过这么久(毫秒)还没脱开 → 「任意一台」的方案换一台接着巡,
+#: 同时报警叫人用遥控把它开回来(机器人自己先试着挪出来,见 planned_nav ``START_ESCAPE_M``)。
+STUCK_HANDOVER_MS = 90_000
 #: 电量不过这条线(%)不开新的一圈。第四期换成按任务算的出站线。
 #: 「不够跑一圈」判过以后这么久内算数(回充 / 换电按它起)。
 LOW_FRESH_MS = 120_000
@@ -169,6 +172,8 @@ class GuardDuty:
         self._reserved: set[str] = set()
         #: (方案, 机器人) → 到这个时刻之前「任意一台」先不挑它(连着跑不成,FAIL_AVOID_MS)
         self._avoid: dict[tuple[Any, str], int] = {}
+        #: (方案, 机器人) → 这一串连着跑不成从什么时候开始(跑成一圈就清)
+        self._stuck_since: dict[tuple[Any, str], int] = {}
         self._no_standby: set[tuple[int, str, str, str]] = set()
         self._waiting: dict[int, str] = {}
         self._route_cache: dict[tuple, dict[str, Any]] = {}
@@ -1639,6 +1644,7 @@ class GuardDuty:
             nxt = max(run["lap_started_ms"] + gap, now) if gap else now
             # 先记成「等下一圈」:下一圈这一拍派不出去(机器人忙、电量低…)就在 wait 里接着等,
             # 不会每拍把这一圈的「跑完」再记一遍
+            self._stuck_since.pop((eid, rid), None)
             self._set_run(eid, state="wait", fails=0, next_lap_ms=nxt)
             if nxt - now >= WATCH_MIN_S * 1000:
                 await self._go_watch(e, info, {**run, "fails": 0}, nxt)
@@ -1666,20 +1672,35 @@ class GuardDuty:
             fails = run["fails"] + 1
             why = str(data.get("reason") or data.get("error") or "")[:200]
             self._log("lap_failed", robot=rid, entry=eid, detail=f"第 {run['lap']} 圈跑不成:{why}")
-            self._set_run(eid, state="resume", until_ms=now + FAIL_RETRY_MS, fails=fails)
-            if fails >= FAIL_ALERT and self.alerts is not None \
-                    and not self.alerts.has_open(rid, "guard_stuck"):
-                self.alerts.raise_alert(
-                    kind="guard_stuck", robot=rid,
-                    title=f"防区路线 {info['id']} 连着 {fails} 圈跑不成",
-                    detail=(why or "看机器人的日志") + ";站点一分钟后再试,路被堵了请人去看",
-                    context={"route": info["id"]})
-            if not e["robot"] and fails >= FAIL_ALERT:
-                # 易用性 37 复测第六轮:「任意一台」的方案,这台连着跑不成(比如卡在走不了的地方)——
+            since = self._stuck_since.setdefault((eid, rid), now)
+            stuck = fails >= 2 and now - since >= STUCK_HANDOVER_MS
+            # 用户 11-26:被困满 STUCK_HANDOVER_MS 那一刻正好再试一次(一分钟一试会拖到两分钟)
+            until = max(now + 5_000, min(now + FAIL_RETRY_MS, since + STUCK_HANDOVER_MS))
+            self._set_run(eid, state="resume", until_ms=until, fails=fails)
+            if self.alerts is not None and not self.alerts.has_open(rid, "guard_stuck"):
+                if stuck:
+                    # 用户 11-26:换车的同时叫人把它遥控回来(指定了它的方案换不了车,也叫人)
+                    swap = "已换一台接着巡" if not e["robot"] else "这条方案指定了它,没换车"
+                    self.alerts.raise_alert(
+                        kind="guard_stuck", robot=rid,
+                        title=f"{rid} 被困 {(now - since) // 1000} 秒没脱开:{swap}",
+                        detail=(why + ";" if why else "")
+                        + f"请用遥控把 {rid} 开回开阔、扫到过的地方",
+                        context={"route": info["id"], "stuck_since_ms": since})
+                elif fails >= FAIL_ALERT:
+                    self.alerts.raise_alert(
+                        kind="guard_stuck", robot=rid,
+                        title=f"防区路线 {info['id']} 连着 {fails} 圈跑不成",
+                        detail=(why or "看机器人的日志") + ";站点一分钟后再试,路被堵了请人去看",
+                        context={"route": info["id"]})
+            if not e["robot"] and stuck:
+                # 易用性 37 复测第六轮 + 用户 11-26:「任意一台」的方案,这台被困满 90 秒 ——
                 # 放掉这一趟,下一拍另挑一台;FAIL_AVOID_MS 里先不挑它(没别的可挑照旧派它)
                 self._avoid[(eid, rid)] = now + FAIL_AVOID_MS
+                self._stuck_since.pop((eid, rid), None)
                 self._log("handover", robot=rid, entry=eid,
-                          detail=f"{rid} 连着 {fails} 圈跑不成,换一台")
+                          detail=f"{rid} 被困 {(now - since) // 1000} 秒没脱开,换一台;"
+                                 "请人遥控把它开回来")
                 self._drop_run(eid)
 
     def _terminal(self, rid: str, task_id: str) -> tuple[str, dict[str, Any]] | None:

@@ -561,7 +561,8 @@ class SiteAlertSources:
                 if len(seen) > 64:
                     seen.clear()
                 seen.add(task)
-            self.desk.raise_alert(kind="stuck", robot=rid, title=f"点位 {name} 未到达,已跳过",
+            self.desk.raise_alert(kind="waypoint_skipped", robot=rid,
+                                  title=f"点位 {name} 未到达,已跳过",
                                   detail=(head + ";" if head else "") + "巡逻继续,只做记录",
                                   context=ctx, record="site:skipped")
             return
@@ -574,7 +575,8 @@ class SiteAlertSources:
                                   detail=(head + ";" if head else "") + act + ";到达一次后自动解除",
                                   context=ctx)
         else:
-            self.desk.raise_alert(kind="stuck", robot=rid, title=f"点位 {name} 未到达,已跳过",
+            self.desk.raise_alert(kind="waypoint_skipped", robot=rid,
+                                  title=f"点位 {name} 未到达,已跳过",
                                   detail=(head + ";" if head else "") + "巡逻继续,只做记录",
                                   context=ctx, record="site:skipped")
 

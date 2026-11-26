@@ -136,6 +136,23 @@ final List<_Rule> _rules = [
       (m) => '${m[1]} ${m[1] == '1' ? 'waypoint' : 'waypoints'} not reached '
           '(${m[2]!.split(RegExp(r'[,，、]\s*')).map(_wp).join(', ')}): ${_lc(_en(m[3]!))}'),
   // 易用性 37 复测 P1-7：标原点 / 设待命点被拒（App 有的页不读 reason_en）
+  // 用户 11-26：被困 90 秒换车、叫人遥控回来；起步时起点被挡、1 m 内挪不出去
+  (RegExp(r'^(\S+) 被困 (\d+) 秒没脱开[:：]已换一台接着巡$'),
+      (m) => "${m[1]} stuck for ${m[2]} s and couldn't get free: another robot took over the route"),
+  (RegExp(r'^(\S+) 被困 (\d+) 秒没脱开[:：]这条方案指定了它,没换车$'),
+      (m) => "${m[1]} stuck for ${m[2]} s and couldn't get free: this plan names it, so no other robot took over"),
+  (RegExp(r'^(\S+) 被困 (\d+) 秒没脱开,换一台[;；]请人遥控把它开回来$'),
+      (m) => "${m[1]} stuck for ${m[2]} s and couldn't get free, so another robot took over. "
+          'Someone needs to drive it back with Remote.'),
+  (RegExp(r'^([\s\S]*?)[;；]?请用遥控把 (\S+) 开回开阔、扫到过的地方$'),
+      (m) => '${m[1]!.isNotEmpty ? '${_parts(m[1]!)}. ' : ''}Drive ${m[2]} back to open, scanned floor with Remote.'),
+  (RegExp(r'^(\S+) 被困 (\d+) 秒没脱开,换一台$'),
+      (m) => "${m[1]} stuck for ${m[2]} s and couldn't get free, so another robot took over"),
+  (RegExp(r'^请用遥控把 (\S+) 开回开阔、扫到过的地方$'), (m) => 'drive ${m[1]} back to open, scanned floor with Remote'),
+  (RegExp(r'^请人遥控把它开回来$'), (_) => 'someone needs to drive it back with Remote'),
+  (RegExp(r'^第 (\d+) 圈跑不成[:：]\s*([\s\S]*)$'),
+      (m) => m[2]!.isEmpty ? 'lap ${m[1]} failed' : 'lap ${m[1]} failed: ${_lc(_en(m[2]!))}'),
+  (RegExp(r'^(\d+) m 内没有能直线挪过去站的地方$'), (m) => 'no open spot within ${m[1]} m it could move straight to'),
   (RegExp(r'^(\S+) 的待命点不能设在这里[:：][\s\S]*$'), (m) => "${m[1]}'s standby point can't go here: the map shows it as not walkable or not scanned, so robots could never be sent there. Pick a spot on open, scanned floor."),
   (RegExp(r'^(\S+) 现在站的地方不能当待命点[:：][\s\S]*$'),
       (m) => "${m[1]} can't use this spot as its standby point: the map shows it as not walkable or not scanned, so robots could never be sent back here. Drive about 1 m into open, scanned floor and mark again."),
@@ -392,3 +409,12 @@ String _ptName(String s) => _ptNames[s] ?? s;
 // 易用性 37 复测 P3：站点自己加的点（回待命点）名字也翻
 const _wpNames = <String, String>{'回待命点': '“Return to standby”', '回原点': '“Return to origin”'};
 String _wp(String s) => _wpNames[s] ?? s;
+
+/// 用户 11-26：值守的机器人被困 90 秒（换车 / 指定了它没换）那条告警标题的英文；不是这句 null。
+String? guardStuckTitleEn(String title) {
+  final m = RegExp(r'^(\S+) 被困 (\d+) 秒没脱开[:：](已换一台接着巡|这条方案指定了它,没换车)$').firstMatch(title);
+  if (m == null) return null;
+  final swapped = m[3]!.startsWith('已换');
+  return '${m[1]} stuck for ${m[2]} s: '
+      '${swapped ? 'another robot took over' : 'no other robot took over (the plan names it)'}';
+}

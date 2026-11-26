@@ -16,6 +16,8 @@ String? _title(String kind) => switch (kind) {
       'task_preempted' => tr('Task replaced', '任务被新任务替换'),
       'task_progress' => tr('On the way', '在路上'),
       'patrol_waypoint' => tr('Patrol point', '巡逻点'),
+      // 用户 11-26：起步时起点被挡，机器人自己直线挪出来再走
+      'start_escape' => tr('Moved off a blocked spot', '从被挡的地方挪出来'),
       'relocalized' => tr('Re-localize', '重新定位'),
       'loc_wrong_solution' => tr('Position looked wrong', '定位结果异常'),
       'loc_not_found' => tr('Position not found', '未找到位置'),

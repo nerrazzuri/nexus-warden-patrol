@@ -405,7 +405,7 @@ export function GuardPanel({ say, now, canEdit }: { say: (s: string) => void; no
               {showLog && duty.log && (
                 <ol class="plain small guard-log">
                   {duty.log.slice(-200).map((l, i) => (
-                    <li key={i}><span class="mono">{hhmm(l.at_ms)}</span> {l.robot_id && who(l.robot_id)} {l.kind === "point" ? gt("lgPoint") : l.kind === "missed" ? gt("lgMissed") : ""} {l.zone} {l.point} {l.detail}</li>
+                    <li key={i}><span class="mono">{hhmm(l.at_ms)}</span> {l.robot_id && who(l.robot_id)} {l.kind === "point" ? gt("lgPoint") : l.kind === "missed" ? gt("lgMissed") : ""} {l.zone} {l.point} {l.detail ? siteStr(l.detail) : ""}</li>
                   ))}
                 </ol>
               )}

@@ -5,6 +5,7 @@
 //   完成」):画、点选、改名、删,跟着版本存;确认此版本、带过来的建议也在这里。
 // - 撤销、重做一起管;「保存」一次存全部:先擦(另存新版本,没发布过的编辑草稿站点直接替换,不越存越多),再存禁行区、显示。
 // 清噪点在「地图」页每一版的「清噪点…」里(那一页外审过,自己另存一版)。
+import { mapName } from "./data";
 import { useUnsaved } from "./unsaved";
 import type { FunctionComponent } from "preact";
 import { useEffect, useRef, useState } from "preact/hooks";
@@ -323,7 +324,7 @@ function Editor({ say, target, Canvas }: { say: Say; target: Target; Canvas?: Fu
   return (
     <section class="mapedit" data-ready={ready ? "1" : undefined}>
       <div class="panel-head">
-        <h1>{t("meTitle")} · <span class="mono">{target.map_id}:{target.version}</span></h1>
+        <h1>{t("meTitle")} · <span>{mapName(target.map_id)}:{target.version}</span></h1>
         <a class="btn push" href="#/admin/maps">{t("meBack")}</a>
         <button type="button" class="btn" disabled={!hist?.past.length} onClick={() => setHist((h) => (h ? undo(h) : h))}>{t("meUndo")}</button>
 

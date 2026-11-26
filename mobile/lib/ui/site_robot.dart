@@ -37,6 +37,7 @@ import 'stop_failed.dart';
 import 'nw/nw_shell.dart' show EstopSquare;
 import 'widget/alarm_widgets.dart' show StopAllButton;
 import 'widget/fields_dialog.dart';
+import '../net/map_names.dart';
 
 /// 一只狗的状态说成一行（狗列表、单狗页共用）。
 String robotStatusLine(Map<String, dynamic> r) {
@@ -545,10 +546,12 @@ class _SiteRobotPageState extends State<SiteRobotPage> with NwAsk {
     final ok = await askYes(tr('Mark origin here', '在这儿标原点'),
         body: tr(
             'Set the origin of ${widget.robotId} on this map to its current position? Standby points are unchanged.\n'
-                'This applies to the whole map and cannot be undone (only by marking again). Return home and "At the origin" will use the new spot.\n'
+                'This applies to the whole map and cannot be undone (only by marking again). "Return to origin" and setting the position "At the origin (dock)" will use the new spot. '
+                'Standby points, including the first one added when the origin was first marked, stay where they are: move them on the Standby page if needed.\n'
                 'The robot verifies its localization first and won\'t mark it if the position isn\'t set, the error is large, or it is busy or switching maps.',
             '将 ${widget.robotId} 在此地图上的原点改为当前位置？待命点不变。\n'
-                '对整张地图生效，不能撤销（只能重新标）。「回原点」「在原点」以后都按新的位置。\n'
+                '对整张地图生效，不能撤销（只能重新标）。「回原点」和设位置选「在原点（充电桩）」以后按新的位置；'
+                '待命点（包括第一次标原点时自动加的那个）都不挪，要挪在待命点页改。\n'
                 '机器人会先核验定位：未设置位置、偏差过大、正在执行任务或换图时不会标记。'),
         ok: tr('Mark', '标记'),
         okKey: const Key('mark-home-go'));
@@ -562,7 +565,7 @@ class _SiteRobotPageState extends State<SiteRobotPage> with NwAsk {
         final taken = e.body['name_taken'];
         if (e.status != 409 || taken is! Map || !mounted) rethrow;
         // 同名的点登记在别的图上（比如重建之前那一版）：问清楚再搬（W00c6f 内审）。
-        final where = '${taken['map_id']}:${taken['map_version']}';
+        final where = '${mapName(taken['map_id'])}:${taken['map_version']}';
         final move = await askYes(tr('Replace the old standby point?', '替换旧的待命点？'),
             body: tr(
                 'Standby point home is registered on $where. Move it to the map the robot is using now '
@@ -592,7 +595,7 @@ class _SiteRobotPageState extends State<SiteRobotPage> with NwAsk {
       final d = e.body['data'];
       if (e.status == 500 && d is Map && d['x'] is num && d['y'] is num) {
         // 狗上已经换了、站点没登记上：给坐标，好手工登记待命点。
-        final at = '${d['map_id']}:${d['map_version']}';
+        final at = '${mapName(d['map_id'])}:${d['map_version']}';
         final x = (d['x'] as num).toStringAsFixed(1), y = (d['y'] as num).toStringAsFixed(1);
         msg = tr("${e.message}: the robot's origin is at ($x, $y) on $at",
             '${e.message}：机器人上的原点位于 $at 的 ($x, $y)');
