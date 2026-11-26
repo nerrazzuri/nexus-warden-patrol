@@ -237,8 +237,14 @@ class ArmingDesk:
             if isinstance(minutes, bool) or not isinstance(minutes, int) \
                     or not 1 <= minutes <= MAX_VISITOR_MIN:
                 raise ModeError(f"临时撤防要有结束时间:minutes 是 1–{MAX_VISITOR_MIN} 的整数分钟")
+            # 易用性 37 第十一轮 P1:网页顶栏「全站临时撤防 4 小时」不带防区,以前撤了个空
+            # (显示撤了、值守照跑、看见人照报)。不带 = 全站(所有防区);明确给空列表 = 没选,拒
             if zones is None:
-                zones = []
+                zones = self.known_zones()
+                if not zones:
+                    raise ModeError("站点还没有防区,临时撤防撤不了什么:要停就切到「留守」或撤防")
+            elif isinstance(zones, list) and not zones:
+                raise ModeError("临时撤防要选至少一个防区")
             if not isinstance(zones, list) or not all(
                     isinstance(z, str) and _ZONE.fullmatch(z) for z in zones):
                 raise ModeError("zones 要是防区名的列表")
