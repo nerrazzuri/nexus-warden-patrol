@@ -103,7 +103,7 @@ export function SiteMap(props: {
   const which = selMap ?? props.units.map((u) => robotMap(u.robot)).find((m) => m) ?? null;
   const key = which ? `${which.map_id}/${which.version}` : "";
   // 预览、区域记着是哪张图的:换图以后才回来的旧回包不认
-  const [got, setGot] = useState<{ key: string; meta: PreviewMeta | null; areas: { zone: string; points: Pt[] }[]; failed?: boolean }>({ key: "", meta: null, areas: [] });
+  const [got, setGot] = useState<{ key: string; meta: PreviewMeta | null; areas: { zone: string; points: Pt[] }[]; failed?: boolean; missing?: boolean }>({ key: "", meta: null, areas: [] });
   // 第 2 轮:预览拉不到(断线)不能当成「没有地图」—— 记着失败了,按 retryMs 再拉,拉到为止
   const [retry, setRetry] = useState(0);
   useEffect(() => {
@@ -112,9 +112,11 @@ export function SiteMap(props: {
     const base = `/api/maps/${enc(which.map_id)}/${enc(which.version)}`;
     let timer = 0;
     api<PreviewMeta>("GET", `${base}/preview`).then((m) => live && setGot((g) => ({ key, meta: m, areas: g.key === key ? g.areas : [] })))
-      .catch(() => {
+      .catch((e: unknown) => {
         if (!live) return;
-        setGot((g) => ({ key, meta: g.key === key ? g.meta : null, areas: g.key === key ? g.areas : [], failed: true }));
+        // 易用性 37 场景测试:404 = 站点上没有这张图(新站点还没建图,机器人报的是自带的图)—— 说「还没有地图」,不说「加载失败」
+        const missing = e instanceof ApiError && e.status === 404;
+        setGot((g) => ({ key, meta: g.key === key ? g.meta : null, areas: g.key === key ? g.areas : [], failed: !missing, missing }));
         timer = window.setTimeout(() => setRetry((n) => n + 1), props.retryMs ?? 5_000);
       });
     api<{ areas: { zone: string; points: Pt[] }[] }>("GET", `${base}/areas`).then((d) => live && setGot((g) => ({ ...g, key, meta: g.key === key ? g.meta : null, areas: d.areas })))
