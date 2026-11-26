@@ -121,6 +121,12 @@ class StandbyManager:
         #: 把同一个点又写成「不是默认」)。
         self._mark_lock = threading.Lock()
         self.dispatcher = dispatcher
+        #: 用户 11-27:此刻整站撤防(站点接 ``ArmingDesk.disarmed``)——
+        #: 跑完手上这一趟回**原点**等,不回待命点
+        self.disarmed: Callable[[], bool] | None = None
+        #: 撤防那一下不叫回的(站点接:值守自己收队的、在充电、换电、驱离的)。
+        self.keep: Callable[[str], bool] | None = None
+        self._was_disarmed = False
         self._now = now_ms
         self._tasks: set[asyncio.Task] = set()
         #: 外审 r6 #1:这个进程里正在等回执的回待命点命令(每台几条);等完了通知 ``_auto`` 重新结算
@@ -422,7 +428,7 @@ class StandbyManager:
             return
         if self.hold is not None and self.hold(robot_id, task_id):
             return                      # W22:到了拦截点要驱离,回程由驱离结束时派
-        if self.default(robot_id) is None:
+        if self.default(robot_id) is None and not self._disarmed():
             return
         if task_id.startswith(TELEOP_TASK_PREFIX):
             # 易用性 build 36 P1-4:同步记下 —— 倒数开始前那几秒值守也别抢着派(布防时一松手就被派走)
@@ -576,11 +582,18 @@ class StandbyManager:
             # 遥控放租之后直线的狗不自动回(W00c6b 内审):起点是人刚开到的任意位置,人在场。
             log.info("%s 遥控放租之后不自动回待命点(直线的机器人,人手动叫)", robot_id)
             return
+        if self._disarmed() and not after.startswith(TELEOP_TASK_PREFIX):
+            # 用户 11-27:整站撤防 —— 回原点等(不看在不在待命点)。遥控放租的照老规矩倒数
+            await self._home_disarmed(robot_id, after)
+            return
         if self._at_standby(robot_id, after):
             # 第 10 轮 W10-01:遥控开了没动就退出,机器人一直在待命点 —— 不用回,也不报
             log.info("%s 在 %s 结束时已经在待命点:不派回程", robot_id, after)
             return
         if after.startswith(TELEOP_TASK_PREFIX) and not await self._count_down(robot_id, after):
+            return
+        if self._disarmed():
+            await self._home_disarmed(robot_id, after)
             return
         try:
             why = self.refusal(robot_id) if self.refusal is not None else ""
@@ -596,6 +609,75 @@ class StandbyManager:
             log.warning("%s 在 %s 结束后回待命点没派成: %s", robot_id, after, exc)
             self.dispatcher.feed.publish({"kind": "standby_failed", "robot_id": robot_id,
                                           "after": after, "reason": str(exc)})
+
+    def _disarmed(self) -> bool:
+        try:
+            return bool(self.disarmed()) if self.disarmed is not None else False
+        except Exception:
+            log.exception("整站撤防没有读出来")
+            return False
+
+    def at_home(self, robot_id: str) -> bool:
+        """离这张图上的原点不到 :data:`AT_STANDBY_M`(最近一份遥测)。拿不准当不在。"""
+        c = self.dispatcher.clients.get(robot_id)
+        pose = getattr(getattr(c, "telemetry", None), "pose", None) if c is not None else None
+        if pose is None:
+            return False
+        h = self.home(robot_id, pose.map_id, pose.map_version)
+        return h is not None and math.hypot(pose.x - h["x"], pose.y - h["y"]) < AT_STANDBY_M
+
+    async def _home_disarmed(self, robot_id: str, after: str) -> None:
+        """用户 11-27:撤防时一趟跑完回原点等。已经在原点不派;回不去推 ``standby_failed``。"""
+        if self.at_home(robot_id):
+            log.info("%s 在 %s 结束时已经在原点:撤防中,不派", robot_id, after)
+            return
+        try:
+            why = self.refusal(robot_id) if self.refusal is not None else ""
+            if why:
+                raise StandbyError(why)
+            r = await self.return_home(robot_id, issued_by="standby:disarmed")
+            ack = r.get("ack", {}) if isinstance(r, dict) else {}
+            if ack.get("result") not in (None, "accepted", "duplicate"):
+                why = ack.get("reason") or ack.get("result")
+                raise StandbyError(f"机器人未接受回原点命令: {why}")
+        except Exception as exc:  # noqa: BLE001 - 回不了原点:报没回去,机器人原地
+            log.warning("%s 撤防后回原点没派成: %s", robot_id, exc)
+            self.dispatcher.feed.publish({"kind": "standby_failed", "robot_id": robot_id,
+                                          "after": after, "reason": str(exc)})
+
+    async def home_idle(self) -> list[str]:
+        """用户 11-27:切到撤防的那一下 —— 手上没任务、不在原点、能自己动的机器人都回原点等
+        (在跑的跑完由 :meth:`_on_event` 送回)。回派了哪几台。"""
+        sent = []
+        for rid, c in list(self.dispatcher.clients.items()):
+            st = getattr(c, "status", None)
+            if st is None or not st.online or st.task is not None:
+                continue
+            if self.dispatcher.registry.manual_only(rid) is not None or self.at_home(rid):
+                continue
+            try:
+                if self.keep is not None and self.keep(rid):
+                    continue
+            except Exception:
+                log.exception("%s 撤防:要不要叫回读不出来,不动", rid)
+                continue
+            try:
+                await self.return_home(rid, issued_by="standby:disarmed")
+                sent.append(rid)
+            except Exception as exc:  # noqa: BLE001 - 这台派不成不挡别的
+                log.warning("%s 撤防:回原点没派成: %s", rid, exc)
+                self.dispatcher.feed.publish({"kind": "standby_failed", "robot_id": rid,
+                                              "after": "", "reason": str(exc)})
+        return sent
+
+    async def disarm_tick(self) -> None:
+        """站点告警循环每拍调:刚切到整站撤防的那一拍,把空着的机器人叫回原点(用户 11-27)。"""
+        now = self._disarmed()
+        rising, self._was_disarmed = now and not self._was_disarmed, now
+        if rising:
+            sent = await self.home_idle()
+            if sent:
+                log.info("整站撤防:%s 回原点等", "、".join(sent))
 
     def countdown(self, robot_id: str) -> dict[str, Any] | None:
         """正在倒数的那一趟(``{"after", "due_ms"}``),没有是 ``None``。"""

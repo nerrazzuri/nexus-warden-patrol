@@ -313,16 +313,16 @@ def test_接口权限(tmp_path):
         s.close()
 
 
-@pytest.mark.parametrize(("start", "want"), [("10:00", "armed"), ("22:00", "home")])
+@pytest.mark.parametrize(("start", "want"), [("10:00", "armed"), ("22:00", "disarmed")])
 def test_第3轮_config_N1_停用日程_站点照此刻的状态改成手动(tmp_path, start, want):
     """原来停用日程退回到开日程之前的手动模式(可能悄悄变成留守 / 布防),确认框却说「保持当前状态」。
-    现在:此刻按日程布防 → 手动布防;此刻按日程撤防 → 留守(手动没有全撤防)。"""
+    现在:此刻按日程布防 → 手动布防;此刻按日程撤防 → 撤防(用户 11-27 起手动也有撤防)。"""
     s = 站(tmp_path)
     try:
         s.api.arming = ArmingDesk(s.db, now_ms=lambda: kl(*MON, 12))
         s.api.arming.schedule = ArmingSchedule(s.db, now_ms=lambda: kl(*MON, 12), tz=lambda: KL)
         alice = s.login()
-        first = "armed" if want == "home" else "home"
+        first = "armed" if want == "disarmed" else "home"
         assert s.req("POST", "/api/mode", {"mode": first}, token=alice)[0] == 200
         body = {"enabled": True, "slots": [slot(0, start, "24:00")]}
         assert s.req("POST", "/api/arming/schedule", body, token=alice)[0] == 200

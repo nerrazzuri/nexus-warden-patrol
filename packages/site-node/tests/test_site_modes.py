@@ -40,7 +40,7 @@ def test_用户1127_新站点还没人布过防_顶栏不写布防_不报不出�
     desk.set_zone_home("garden", True)                  # 有个防区
     v = desk.view()
     assert v["unset"] is True and v["state"] == "disarmed" and v["label"] == "还未布防"
-    assert v["mode"] != "armed", "老 App 按 mode 显示:不能写成布防"
+    assert v["mode"] == "disarmed", "还未布防就是撤防"
     assert all(not z["armed"] for z in v["zones"])
     assert desk.armed("front-yard")[0] is False, "还没布防:入侵不出动"
     assert desk.robot_armed(True, None) is False, "还没布防:机器人看见人不报"
@@ -70,6 +70,33 @@ def test_用户1127_还没布防时开了时间表_按时间表走(tmp_path):
     assert desk.schedule is not None
     assert not desk._governed(desk._raw()) and desk.view()["unset"] is True
     db.close()
+
+
+def test_用户1127_撤防_整站不布防_不限时_不能再临时撤防(台):
+    台.set_zone_home("garden", True)
+    v = 台.set_mode("disarmed", by="gina")
+    assert v["mode"] == "disarmed" and v["state"] == "disarmed" and v["label"] == "撤防"
+    assert v["unset"] is False and v["until_ms"] is None
+    assert all(not z["armed"] for z in v["zones"])
+    assert 台.armed("front-yard") == (False, "disarmed")
+    assert 台.robot_armed(True, None) is False and 台.robot_armed(False, None) is False
+    assert 台.disarmed() is True
+    with pytest.raises(ModeError, match="已经撤防"):
+        台.set_mode("visitor", by="gina", minutes=30)
+    台.set_mode("armed", by="gina")
+    assert 台.disarmed() is False and 台.armed("front-yard") == (True, "armed")
+
+
+def test_用户1127_撤防_保安也能切(tmp_path):
+    s = 站(tmp_path)
+    try:
+        s.api.arming = ArmingDesk(s.db, now_ms=s.api._now, publish=s.disp.feed.publish)
+        s.accounts.add("gina", PW, role="guard")
+        tok = s.req("POST", "/api/login", {"name": "gina", "password": PW})[1]["token"]
+        code, d = s.req("POST", "/api/mode", {"mode": "disarmed"}, token=tok)
+        assert code == 200 and d["mode"] == "disarmed", d
+    finally:
+        s.close()
 
 
 def test_新站点默认布防_所有防区都布防(台):

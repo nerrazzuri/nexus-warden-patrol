@@ -281,6 +281,7 @@ String modeText(Map<String, dynamic> m) {
     'armed' => tr('Armed', '布防'),
     'home' => tr('Stay', '留守'),
     'visitor' => tr('Temporary disarm', '临时撤防'),
+    'disarmed' => tr('Disarmed', '撤防'),
     _ => '${m['mode']}',
   };
   final until = m['until_ms'];

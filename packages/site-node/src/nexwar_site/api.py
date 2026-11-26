@@ -2698,8 +2698,8 @@ class _Handler(TlsHandlerMixin):
                             or "落库失败" in str(exc) else 400, str(exc)) from exc
 
     def _mode(self, method: str, path: str, user) -> None:
-        """布防模式(W20)。看:``view``。切到布防:``arm``(保安也行);切到留守、临时撤防:``set_mode``
-        (经理、管理员)。哪些防区留守时撤防:``manage``。"""
+        """布防模式(W20)。看:``view``。切到布防:``arm``(保安也行);切到留守、临时撤防、撤防:``set_mode``
+        (经理、管理员,用户 11-11 起值班的保安也行)。哪些防区留守时撤防:``manage``。"""
         from nexwar_site.modes import ModeError
         desk = self.site.arming
         if desk is None:
@@ -2763,8 +2763,9 @@ class _Handler(TlsHandlerMixin):
                 sch.put(d, by=str(user))
                 if before is not None and before["source"] == "schedule" and not sch.enabled():
                     # 第 3 轮 config N1:停用日程时站点照「此刻」的状态走手动(原来退回到开日程之前的
-                    # 手动模式,可能悄悄变成留守 / 布防)。手动没有「全撤防」,此刻撤防的落到留守
-                    desk.set_mode("home" if before["state"] == "disarmed" else "armed",
+                    # 手动模式,可能悄悄变成留守 / 布防)。用户 11-27 起手动有「撤防」:
+                    # 此刻撤防的落到撤防
+                    desk.set_mode("disarmed" if before["state"] == "disarmed" else "armed",
                                   by=str(user))
             elif path == "/api/arming/exceptions":
                 self._audit_detail = {k: d.get(k) for k in ("first_day", "last_day", "state")}

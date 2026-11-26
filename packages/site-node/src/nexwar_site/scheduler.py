@@ -111,6 +111,8 @@ class SiteScheduler:
         self._run_late: set[str] = set()
         #: 天气(W29,``weather.WeatherDesk``):雷暴时到点不起跑。站点主程序接上。
         self.weather: Any = None
+        #: 用户 11-27:布防台(看整站撤防没有);站点接上。
+        self.arming: Any = None
         #: 站点这头占着的狗(驱离会话;系统审查 S05):狗上一时没有任务(没配保持距离、补派窗口、
         #: 站点重启恢复中)也算忙,排程不许抢。站点主程序接 ``deterrence.busy``。
         self.site_busy: Callable[[], set[str]] | None = None
@@ -297,6 +299,14 @@ class SiteScheduler:
 
     # ------------------------------------------------------------ 每拍
 
+    def _disarmed(self) -> bool:
+        f = getattr(getattr(self, "arming", None), "disarmed", None)
+        try:
+            return bool(f()) if callable(f) else False
+        except Exception:
+            log.exception("整站撤防没有读出来")
+            return False
+
     async def tick(self) -> None:
         act = active_bundle(self.db)
         if act is None or not act.schedule.entries:
@@ -331,6 +341,14 @@ class SiteScheduler:
             for e, d in decisions:
                 if d.kind in (DecisionKind.DUE, DecisionKind.LATE):
                     self._record(e, d.scheduled_ms or 0, "weather", note="雷暴:排程巡检暂停")
+            self._sweep(act, now_ms)
+            return
+        if self._disarmed():
+            # 用户 11-27:整站撤防 —— 排程巡逻暂停(在跑的那一趟跑完,机器人回原点等)。
+            # 到点的这一轮记一笔
+            for e, d in decisions:
+                if d.kind in (DecisionKind.DUE, DecisionKind.LATE):
+                    self._record(e, d.scheduled_ms or 0, "disarmed", note="整站撤防:排程巡逻暂停")
             self._sweep(act, now_ms)
             return
         picked = pick(decisions, running=None)
