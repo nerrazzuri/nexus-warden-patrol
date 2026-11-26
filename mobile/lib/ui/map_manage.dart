@@ -225,7 +225,8 @@ class _MapManagePageState extends State<MapManagePage> with NwAsk {
   }
 
   Future<void> _delete(String mapId, String version) async {
-    final ok = await askYes(tr('Delete this version?', '删除此版本？'),
+    // 易用性 37 第十三轮 P3：写明删哪一版
+    final ok = await askYes(tr('Delete ${mapName(mapId)} v$version?', '删除 ${mapName(mapId)} v$version？'),
         body: tr("This can't be undone. No robot is using this version.", '删除后无法恢复。当前没有机器人使用此版本。'),
         ok: tr('Delete', '删除'),
         okKey: const Key('delete-ok'),

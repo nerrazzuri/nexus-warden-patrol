@@ -621,6 +621,11 @@ void main() {
     await t.pumpAndSettle();
     expect(find.byKey(MapManagePage.deleteKey('main', '20261031-5')), findsOneWidget);
     expect(find.byKey(MapManagePage.deleteKey('main', '20261031-1')), findsNothing, reason: 'A 在用');
+    // 第十三轮 P3：确认里写明删哪一版
+    await t.ensureVisible(find.byKey(MapManagePage.deleteKey('main', '20261031-5')));
+    await t.tap(find.byKey(MapManagePage.deleteKey('main', '20261031-5')));
+    await t.pumpAndSettle();
+    expect(find.textContaining('v20261031-5'), findsWidgets);
   });
 
   testWidgets('地图管理：每一版写结论、谁在用；在用的不能删；能把机器人退回上一版', (t) async {
