@@ -2,15 +2,15 @@
   "bags": [
     {
       "bytes": 5000,
-      "first_ms": 1795656270765,
-      "last_ms": 1795656270766,
+      "first_ms": 1795696101989,
+      "last_ms": 1795696101989,
       "name": "yard-0925",
       "robot_id": "A"
     }
   ],
   "maps": [
     {
-      "created_ms": 1795656270764,
+      "created_ms": 1795696101987,
       "draft": false,
       "files": [
         {

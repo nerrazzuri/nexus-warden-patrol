@@ -1851,7 +1851,8 @@ class _Handler(TlsHandlerMixin):
             if then not in THENS:
                 raise HttpError(400, f"then 只能是 {' / '.join(THENS)}")
             self._audit_detail = {"then": then}
-            # 易用性 37 场景测试:保安点了墙边、障碍旁的点,机器人当场拒,站点却冒一条全站 P1「整趟中止」。
+            # 易用性 37 场景测试:保安点了墙边、障碍旁的点,机器人当场拒,
+            # 站点却冒一条全站 P1「整趟中止」。
             # 派之前先查这个点(跟画路线同一套逐点检查)和走不走得到,去不了只回给点的人
             errs = self._goto_check(robot_id, target)
             if errs:
@@ -2112,12 +2113,17 @@ class _Handler(TlsHandlerMixin):
         mid, ver = target.get("map_id"), target.get("map_version")
         if store is None or not isinstance(mid, str) or not isinstance(ver, str):
             return []
+        from nexwar_site.dispatcher import map_on_site
+        if not map_on_site(self.site.dispatcher.db, mid, ver):
+            # 站点上没有这张图(机器人自带的、新站点还没建):查不了,不拦
+            return []
         pts = [{"x": target.get("x"), "y": target.get("y")}]
         try:
             wps = self._temp_waypoints(pts)
-            wps[0]["name"] = "目标点"          # 原因里写「目标点 在图上不是可通行的地方」,网页、App 都翻得了
+            # 原因里写「目标点 在图上不是可通行的地方」,网页、App 都翻得了
+            wps[0]["name"] = "目标点"
             errs = store.check_points({"map_id": mid, "map_version": ver, "waypoints": wps})
-        except Exception:  # noqa: BLE001 - 查不了不拦,机器人自己还会查
+        except Exception:  # 查不了不拦,机器人自己还会查
             log.warning("%s 去这里之前查点没查成", robot, exc_info=True)
             return []
         return errs or self._reach_first(robot, mid, ver, pts)
@@ -3639,7 +3645,8 @@ class _Handler(TlsHandlerMixin):
         return self._send_json(200, r)
 
     def _note_warning(self, key: str, robot_id: str, output: str, who: str) -> None:
-        """报警的现场里 ``warnings`` 追加一条 ``{at_ms, output, by, robot}``(最多留 20 条);报警关了不记
+        """报警的现场里 ``warnings`` 追加一条 ``{at_ms, output, by, robot}``(最多留 20 条);
+        报警关了不记
         (派去的那台不一定是报警的那台,不核对是哪台)。
         记不上不影响已经执行了的警示。"""
         alerts = getattr(self.site, "alerts", None)
@@ -3656,7 +3663,7 @@ class _Handler(TlsHandlerMixin):
             alerts.amend(key, context={"warnings": rows[-20:]})
         try:
             self.site.loop.call(lambda: _sync(note))
-        except Exception:  # noqa: BLE001
+        except Exception:
             log.exception("喊话记不进报警 %s", key)
 
     def _registered(self, robot_id: str) -> None:
@@ -4944,7 +4951,8 @@ class _Handler(TlsHandlerMixin):
                             extra={"reason": "version_taken"})
 
     def _person_names(self) -> dict[str, str]:
-        """易用性 37 场景测试:账号 → 给人看的名字(起了名的才有)。各处「谁接的、谁派的」显示人名,不显示登录名。"""
+        """易用性 37 场景测试:账号 → 给人看的名字(起了名的才有)。
+        各处「谁接的、谁派的」显示人名,不显示登录名。"""
         accts = getattr(self.site, "accounts", None)
         try:
             rows = accts.list() if accts is not None else []

@@ -857,12 +857,14 @@ def test_易用性37场景_去这里_点在墙里先拒_只回给点的人_不�
     """保安点了墙边的点,以前派出去机器人当场拒、站点冒一条全站 P1「整趟中止」。"""
     s = 站点
     gina = _登(s, "gina")
-    tgt = {"map_id": MAP[0], "map_version": MAP[1], "frame_id": "map", "x": 4.0, "y": 0.5, "yaw": 0.0}
+    tgt = {"map_id": MAP[0], "map_version": MAP[1], "frame_id": "map",
+           "x": 4.0, "y": 0.5, "yaw": 0.0}
     code, d = s.req("POST", "/api/robots/A/goto", {"target": tgt}, token=gina)
     assert code == 400 and d["error"].startswith("目标点 在图上不是可通行的地方"), d
     assert d["reason"] == "unreachable"
     assert not s.db.query("SELECT 1 FROM commands WHERE robot_id='A' AND kind='goto'")
     assert not s.db.query("SELECT 1 FROM alerts WHERE kind='run_abort'")
     # 好点不被这一道拦(之后怎样是派单的事)
-    code, d = s.req("POST", "/api/robots/A/goto", {"target": {**tgt, "x": 1.0, "y": 2.0}}, token=gina)
+    code, d = s.req("POST", "/api/robots/A/goto", {"target": {**tgt, "x": 1.0, "y": 2.0}},
+                    token=gina)
     assert "目标点" not in str(d.get("error", "")), d

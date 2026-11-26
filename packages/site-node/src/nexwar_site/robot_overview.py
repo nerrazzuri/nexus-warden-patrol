@@ -141,7 +141,8 @@ def _return_targets(db: Any, rid: str, caps: Any, maps: Any = None) -> dict[str,
     home = None if mid is None else bool(db.query(
         "SELECT 1 FROM homes WHERE robot_id=? AND map_id=? AND map_version=?", (rid, mid, ver)))
     if home is False and not map_on_site(db, mid, ver):
-        home = None                          # 易用性 37 场景测试:图站点上没有(还没建图),标不了原点 —— 不知道
+        # 易用性 37 场景测试:图站点上没有(还没建图),标不了原点 —— 不知道
+        home = None
     standby = bool(db.query("SELECT 1 FROM standby_points WHERE robot_id=? AND is_default=1",
                             (rid,)))
     return {"home_set": home, "standby_set": standby,

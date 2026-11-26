@@ -73,7 +73,8 @@ def test_管理员下发一张图_狗装上_能力变了_按新版本派单(站�
     _等(lambda: _caps(s).tasks["patrol"]["map_version"] == "8", timeout=8)
     assert s.dog.loaded_map[:2] == (MAP[0], "8")
     code, d = s.req("POST", "/api/robots/A/goto", {"target": target(1.0)}, token=alice)
-    assert code == 409 or d["ack"]["result"] != "accepted", "旧版本的目标点不许再派"
+    # 易用性 37:站点先查点,400
+    assert code in (400, 409) or d["ack"]["result"] != "accepted", "旧版本的目标点不许再派"
 
 
 def test_录包与重建的命令到狗_重建的版本不许撞(站点):

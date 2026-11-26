@@ -69,7 +69,8 @@ void main() {
         home: SiteAlertScenePage(api: api, alert: _person(extra: <String, dynamic>{'lost_ms': 4000}))));
     await t.pumpAndSettle();
     expect(await sceneShow(t, find.textContaining('看不到人了，去向不明')), findsWidgets);
-    expect(await sceneShow(t, find.textContaining('(5.0, 6.0)')), findsOneWidget);
+    // 易用性 37 场景测试：坐标只给管理员、工程师看；保安看图上的标记（下面）
+    expect(find.textContaining('(5.0, 6.0)'), findsNothing);
     final (_, _, marks) = sceneMarks(_person())!;
     expect((marks.first.x, marks.first.y), (5.0, 6.0));
   });
