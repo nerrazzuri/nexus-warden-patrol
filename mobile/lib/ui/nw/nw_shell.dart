@@ -229,12 +229,23 @@ class _NwShellState extends State<NwShell> {
         _ => (tr('Stay · partly armed', '留守 · 部分布防'), _Sign.warn),
       };
     }
+    // 易用性 37 场景测试：手动布防后 next 是「时间表接回来」的时刻，不一定会变（19:00 时间表照样布防）——
+    // 以前写「Armed · until 19:00」像是到点撤防。手动的写「到点按时间表」，按时间表的才写到点怎样
+    final manual = m['source'] == 'manual' && m['manual_until_ms'] != null;
     if (state == 'armed') {
-      final n = next != null ? tr(' · until ${hm(next)}', ' · 到 ${hm(next)}') : '';
+      final n = next == null
+          ? ''
+          : manual
+              ? tr(' · timetable from ${hm(next)}', ' · ${hm(next)} 起按时间表')
+              : tr(' · until ${hm(next)}', ' · 到 ${hm(next)}');
       return (tr('Armed$n', '布防中$n'), _Sign.ok);
     }
     if (state == 'disarmed') {
-      final n = next != null ? tr(' · Arms ${hm(next)}', ' · ${hm(next)} 布防') : '';
+      final n = next == null
+          ? ''
+          : manual
+              ? tr(' · timetable from ${hm(next)}', ' · ${hm(next)} 起按时间表')
+              : tr(' · Arms ${hm(next)}', ' · ${hm(next)} 布防');
       return (tr('Disarmed$n', '已撤防$n'), _Sign.idle);
     }
     if (state == 'partial') return (tr('Partly armed', '部分布防'), _Sign.warn);
