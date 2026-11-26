@@ -121,7 +121,9 @@ export function IncidentView(props: {
   }
   async function deterSend(body: Record<string, unknown>, ok: string) {
     try {
-      await api("POST", `/api/robots/${enc(rid)}/deter`, body);
+      // 易用性 37 场景测试:带上报警号,站点记进这件事的经过
+      await api("POST", `/api/robots/${enc(rid)}/deter`, { ...body, alert: a.key });
+      void props.refresh();
       props.say(ok);
     } catch (e) {
       props.say(t("failed", { why: e instanceof ApiError ? e.message : String(e) }));

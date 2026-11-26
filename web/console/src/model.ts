@@ -49,6 +49,8 @@ export interface Alert {
     lost_ms?: number | null;
     /** W74:谁、几点点了「已到场」(看见人那一类要先到场才能关)。 */
     arrived_by?: string;
+    /** 易用性 37 场景测试:从报警详情里点的喊话、警灯、警笛(谁、几点)。 */
+    warnings?: { at_ms: number; output: string; by: string }[];
     arrived_ms?: number;
     /** 第 8 期:谁几点请求了支援(站点 /backup 记在告警上)。 */
     backup_by?: string; backup_ms?: number;

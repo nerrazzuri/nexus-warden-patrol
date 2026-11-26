@@ -257,3 +257,24 @@ def test_真机1120_本体灯_站点认前后_不认左右():
                 {"output": "spotlight", "on": False, "side": "back"}):
         with pytest.raises(ContractError):
             parse_deter(bad)
+
+
+def test_易用性37场景_报警详情里喊话_警灯_记进那条报警的经过_关了的不记(tmp_path):
+    from nexwar_site.api import _sync
+    s = 站(tmp_path, payload=True, alerts=True)
+    try:
+        s.accounts.add("gina", PW, role="guard")
+        gina = _登(s, "gina")
+        _新鲜(s, gina)
+        a = s.loop.call(lambda: _sync(s.desk.raise_alert, kind="dog_sees_person", robot="A", title="看见人"))
+        code, d = s.req("POST", "/api/robots/A/deter",
+                        {"output": "strobe", "on": True, "max_s": 1, "alert": a.key}, token=gina)
+        assert code == 200 and d["ack"]["result"] == "accepted", d
+        w = s.desk.book.get(a.key).context["warnings"]
+        assert len(w) == 1 and w[0]["output"] == "strobe" and w[0]["by"] == "gina"
+        # 关警灯不记;不带 alert 的不记
+        s.req("POST", "/api/robots/A/deter", {"output": "strobe", "on": False, "alert": a.key}, token=gina)
+        s.req("POST", "/api/robots/A/deter", {"output": "siren", "on": True, "max_s": 1}, token=gina)
+        assert len(s.desk.book.get(a.key).context["warnings"]) == 1
+    finally:
+        s.close()
