@@ -938,8 +938,9 @@ abstract class SiteApi {
   /// （[color]，狗报的 `strobe_colors` 之一）。
   /// POC 11-06（竞品上装）：`wiper` 雨刷（同警灯，带时长）；`ptz` 云台转到 [pan]（水平，度，正 = 向右）、
   /// [tilt]（俯仰，度，正 = 向下），`on` 恒为 true、不带时长。
+  /// [alert]：从哪条报警的详情里点的（易用性 37 场景测试：站点记进那条报警的经过）。
   Future<Map<String, dynamic>> deter(String robotId, String output, bool on,
-      {double? maxS, String? clip, String? side, String? color, double? pan, double? tilt});
+      {double? maxS, String? clip, String? side, String? color, double? pan, double? tilt, String? alert});
   /// 常用喊话（第三档 #41，`GET /api/voice-presets`）：`[{lang, text}]`，点一下按 `tts:<lang>:<text>` 念。
   /// 老站点没有这个接口抛 [SiteError]。
   Future<List<Map<String, String>>> voicePresets();
@@ -2205,7 +2206,7 @@ class SiteClient implements SiteApi {
 
   @override
   Future<Map<String, dynamic>> deter(String robotId, String output, bool on,
-          {double? maxS, String? clip, String? side, String? color, double? pan, double? tilt}) async =>
+          {double? maxS, String? clip, String? side, String? color, double? pan, double? tilt, String? alert}) async =>
       _map(await _send('POST', '/api/robots/${Uri.encodeComponent(robotId)}/deter', <String, dynamic>{
         'output': output,
         'on': on,
@@ -2215,6 +2216,7 @@ class SiteClient implements SiteApi {
         if (on) 'color': ?color,
         'pan': ?pan,
         'tilt': ?tilt,
+        'alert': ?alert,
       }));
 
   @override

@@ -430,12 +430,15 @@ class FakeApi implements SiteApi {
   }
   @override
   Future<Map<String, dynamic>> deter(String robotId, String output, bool on,
-      {double? maxS, String? clip, String? side, String? color, double? pan, double? tilt}) async {
+      {double? maxS, String? clip, String? side, String? color, double? pan, double? tilt, String? alert}) async {
+    lastDeterAlert = alert;
     calls.add('deter $robotId $output $on${maxS == null ? '' : ' $maxS'}${clip == null ? '' : ' $clip'}'
         '${side == null ? '' : ' side=$side'}${color == null ? '' : ' color=$color'}'
         '${pan == null ? '' : ' pan=$pan'}${tilt == null ? '' : ' tilt=$tilt'}');
     return <String, dynamic>{'ack': deterAck};
   }
+  /// 最后一次警示带的报警号（易用性 37 场景测试）。
+  String? lastDeterAlert;
   /// 天气（W29）：默认用真站点的夹具（手动切成下雨）；切记在 [calls] 里。
   Map<String, dynamic> weatherView = Map<String, dynamic>.from(siteFixture('site_weather'));
   @override

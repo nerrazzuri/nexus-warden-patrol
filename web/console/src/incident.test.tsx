@@ -170,7 +170,7 @@ describe("三组操作和角色", () => {
     fireEvent.click(btn(inc(c), "喊话警告")!);
     fireEvent.click(btn(inc(c), "警灯 30 秒")!);
     await waitFor(() => expect(posts.filter((p) => p.url === "/api/robots/B/deter").map((p) => p.body)).toEqual([
-      { output: "speaker", on: true, max_s: 60, clip: "restricted" }, { output: "strobe", on: true, max_s: 30 }]));
+      { output: "speaker", on: true, max_s: 60, clip: "restricted", alert: near.key }, { output: "strobe", on: true, max_s: 30, alert: near.key }]));
   });
 
   it("经理:能接手、关,不能派、不能警示(写由值班保安操作,不放灰按钮)", () => {
