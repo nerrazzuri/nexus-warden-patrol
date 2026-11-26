@@ -88,6 +88,8 @@ export interface OwnLayer {
   onDragRect?: (a: [number, number], b: [number, number], done: boolean) => void;
   drawing?: boolean;
   overlay?: ComponentChildren;
+  /** 易用性 37 第十一轮 P2:图例里再加的几行(路线编辑的「建图时走过的路」)。 */
+  legendExtra?: ComponentChildren;
 }
 
 function errText(e: unknown): string {
@@ -283,7 +285,7 @@ export function LayoutPage({ say, robots, tabs, embed }: {
       <MapCanvas meta={meta} raster={`${base}/preview.png`} label={t("lyTitle")}
         areas={[...(tab === "zones" ? [] : data.areas.map((a) => ({ name: a.zone, pts: a.points, kind: "ref" as const }))), ...(own.areas ?? [])]}
         navZones={tab !== "nogo"}
-        drawing={own.drawing} onPick={own.onPick} overlay={own.overlay} legend={own.legend}
+        drawing={own.drawing} onPick={own.onPick} overlay={own.overlay} legend={own.legend} legendExtra={own.legendExtra}
         world={<>
           <g class="dim">{dimWorld(tab, meta, data, sel)}</g>
           {own.world}
