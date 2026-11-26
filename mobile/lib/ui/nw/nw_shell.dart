@@ -125,6 +125,13 @@ class _NwShellState extends State<NwShell> {
       }, onError: (Object _) {}));
     }
     replayTour = () async {
+      // 易用性 37 第十一轮 P2：从「使用教程」页点进来，那一页还盖在上面 —— 先退回外壳，再在「现在」页上走
+      final mine = ModalRoute.of(context);
+      if (mine != null && !mine.isCurrent) {
+        Navigator.of(context).popUntil((r) => r == mine);
+        await Future<void>.delayed(const Duration(milliseconds: 350));
+        if (!mounted) return;
+      }
       _replay = true;
       if (_layer == ShellLayer.now) {
         final t = _targets, ctx = _dutyContext;

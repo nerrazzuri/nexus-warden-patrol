@@ -36,21 +36,26 @@ class TourStep {
 
 /// 按角色的导览步骤（值守页上圈的那几块）。
 List<TourStep> tourSteps(String role, DutyTargets t) {
+  // 易用性 37 第十一轮 P2：导览跑在「现在」页上（老值守页的「切换」按钮已经没有了）：t.mode 是最上面那一条，
+  // 布防状态在顶栏，改布防在「现场」→「布防」
   final mode = TourStep(
       t.mode,
-      tr('Arming and weather', '布防和天气'),
+      tr('Site status', '现场状态'),
       role == 'guard'
           // 易用性 37 场景测试：保安能撤防（用户 11-11），以前写「撤防需经理操作」
-          ? tr('Arming status and weather. Tap Change to arm, switch to Stay, or disarm some zones for a while (it asks you to confirm).',
-              '布防状态与天气。点「切换」布防、切到留守，或临时撤防几个防区（要确认）。')
-          : tr('Whether the site is armed, and the weather. Tap Change to arm or disarm (disarming asks you to confirm).',
-              '布防状态和天气。点「切换」布防、撤防（撤防要确认）。'));
+          ? tr('The top bar shows whether the site is armed. This line shows P1 incidents, emergency stops, or "All normal". To arm, switch to Stay or disarm some zones for a while: Site → Arming.',
+              '顶栏显示布防状态；这一条显示 P1 事件、急停或「全场正常」。要布防、切到留守或临时撤防几个防区：现场 → 布防。')
+          : tr('The top bar shows whether the site is armed. This line shows P1 incidents, emergency stops, or "All normal". To arm or disarm: Site → Arming & patrols.',
+              '顶栏显示布防状态；这一条显示 P1 事件、急停或「全场正常」。要布防、撤防：现场 → 布防与巡逻。'));
   final robots = TourStep(t.chips, tr('Robots', '机器人'),
       tr('Your robots: tap a name to switch, or swipe on the video.', '机器人列表：点名称切换，或在画面上左右滑动。'));
   final video = TourStep(t.video, tr('Live video', '实时画面'),
       tr('Tap ▶ to watch live; tap ✕ to stop (saves data on 4G).', '点 ▶ 查看实时画面，✕ 关闭（使用 4G 时可节省流量）。'));
-  final status = TourStep(t.status, tr('Current status', '当前状态'),
-      tr('Current task, estimated finish time and battery.', '显示当前任务、预计完成时间和电量。'));
+  final status = TourStep(t.status, tr('Map', '地图'),
+      tr('Where each robot is and what it is doing. Tap the map to open it full screen.', '每台机器人在哪、在做什么。点地图全屏查看。'));
+  final ops = TourStep(t.actions, tr('Equipment & operations', '设备与运营'),
+      tr('Open items other than P1: low battery, robot faults, runs that stopped. Tap one to see what to do.',
+          'P1 以外没处理的：电量低、机器人故障、中途停下的巡逻。点一条看怎么办。'));
   final today = TourStep(t.today, tr("Today's patrols", '今天的巡逻'),
       tr('All patrols today. Tap an unfinished one to see why.',
           '今日全部巡逻。点开未完成项可查看原因。'));
@@ -60,19 +65,16 @@ List<TourStep> tourSteps(String role, DutyTargets t) {
         robots,
         video,
         status,
-        TourStep(t.actions, tr('Patrol, drive, stop', '派巡逻、遥控、叫停'),
-            tr('Patrol: pick a route; if it clashes with the schedule it runs afterwards and the manager is notified. Drive: manual control. Stop: the robot stops where it is.',
-                '派巡逻：选择路线，与日程冲突时排在日程之后并通知经理。遥控：手动控制。叫停：机器人原地停止。')),
+        ops,
         today,
         TourStep(null, tr('When an alarm comes in', '有报警的时候'),
-            tr('A P1 alarm rings and shows a red bar at the top; tap Respond. Start a practice run below.',
-                'P1 报警会响铃并在顶部显示红条，点「去处理」进入。下面进行一次演练。')),
+            tr('A P1 alarm rings and shows a red bar at the top; tap Take ownership. Start a practice run below.',
+                'P1 报警会响铃并在顶部显示红条，点「我来处理」进入。下面进行一次演练。')),
       ],
     'owner' => [
         mode,
         robots,
-        TourStep(t.actions, tr('Patrol and stop', '派巡逻、叫停'),
-            tr('Send a one-off patrol, or stop a robot right away.', '临时派一趟巡逻，或者马上叫停。')),
+        ops,
         today,
         TourStep(null, tr('Schedule', '日程'),
             tr('Schedule tab: when each route runs and on which robot.', '「日程」页：各路线的执行时间和机器人。')),
@@ -284,12 +286,12 @@ class _PracticeAlarmPageState extends State<PracticeAlarmPage> {
                 buttonKey: PracticeAlarmPage.respondKey,
                 size: NwButtonSize.small,
                 variant: NwButtonVariant.destructive,
-                label: tr('Respond', '去处理'),
+                label: tr('Take ownership', '我来处理'),
                 onPressed: () => setState(() => _step = 1)),
           ]),
         ),
         nwGap8,
-        Text(tr('Tap Respond.', '点「去处理」。'), style: NwText.bodyMedium.copyWith(color: c.text)),
+        Text(tr('Tap Take ownership.', '点「我来处理」。'), style: NwText.bodyMedium.copyWith(color: c.text)),
       ]),
       // 1：报警页
       Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
