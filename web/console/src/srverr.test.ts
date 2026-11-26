@@ -37,4 +37,14 @@ describe("api 的报错", () => {
     lang.value = "en";
     expect((await api("POST", "/x", {}).catch((x) => x) as ApiError).message).toBe("battery too low");
   });
+
+  it("易用性 37 第十轮 P2:名字太长 —— 英文界面说清楚上限,不再只说「站点不接受」", () => {
+    expect(englishError(400, "显示名要是 0–40 个字的文字(不能有换行)")).toBe("The display name must be at most 40 characters, on one line.");
+    expect(englishError(400, "显示名最多 64 个字符,不许有控制字符")).toBe("The display name must be at most 64 characters, on one line.");
+    expect(englishError(400, "名字要 1–32 个字")).toBe("The name must be 1–32 characters, on one line.");
+    expect(englishError(400, "名字最多 32 个字,不许有控制字符")).toBe("The name must be at most 32 characters, on one line.");
+    expect(englishError(400, "区域要有名字(1–64 个字)")).toBe("The area needs a name (1–64 characters).");
+    // 「个字母」那条是另一回事(只许字母数字),不能被当成长度
+    expect(englishError(400, "名字要是 1–64 个字母、数字、点、下划线、减号(字母或数字开头)")).not.toMatch(/must be/);
+  });
 });

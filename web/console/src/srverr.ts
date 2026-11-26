@@ -31,6 +31,10 @@ const PATTERNS: [RegExp, (m: RegExpMatchArray) => string][] = [
   [/未收到文件|文件未传完/, () => "The file did not upload completely. Try again."],
   [/处不能用/, () => "Some points cannot be used. See the marked points."],
   [/名字只许|路线名只许/, () => "Names may only use letters, digits and . _ -"],
+  // 易用性 37 第十轮 P2:名字太长被站点拒,以前只说「The site could not accept this」(显示名、区域名、账号名……)
+  [/(显示名|名字)(?:最多|要是?|要有)?\s*(?:(\d+)\s*[–-]\s*)?(\d+)\s*个字(?!母)/, (m) =>
+    `${m[1] === "显示名" ? "The display name" : "The name"} must be ${m[2] && m[2] !== "0" ? `${m[2]}–${m[3]}` : `at most ${m[3]}`} characters, on one line.`],
+  [/区域要有名字[(（](\d+)[–-](\d+)\s*个字/, (m) => `The area needs a name (${m[1]}–${m[2]} characters).`],
   // 用户 11-15「Patrol routes 无法删除」:站点拒删路线的两种原因(routes.py delete_route)
   [/排程(.+?)还在用路线「([^」]*)」/, (m) => `Schedules ${m[1].replace(/「([^」]*)」/g, "“$1”").replace(/、/g, ", ")} still use route “${m[2]}”. Delete or change those schedules first.`],
   [/布防的值守方案还在用路线「([^」]*)」/, (m) => `The arming guard plan still uses route “${m[1]}”. Remove it from the guard plan under Arming & patrols first.`],
