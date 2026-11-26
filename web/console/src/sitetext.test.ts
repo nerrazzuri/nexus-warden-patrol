@@ -281,6 +281,13 @@ describe("易用性 37 复测 P3:站点自己加的点名翻英文", () => {
   });
 });
 
+describe("用户 11-27 第十八轮:原点贴墙被拒的原话翻英文", () => {
+  it("现在站的地方 / 这里", () => {
+    expect(siteStr("A 现在站的地方不能当待命点(原点):离墙、障碍或禁行区只有 0.12 m,附近 0.35 m 内也没有离开 0.57 m 的空地:机器人规划不出到这里的路(回原点、回待命点会被拒)。往开阔处开 1 m 左右再标")).toBe("A can't use this spot as its standby / home point: it is too close to a wall, obstacle or no-go zone, so the robot could not plan a path back to it. Drive about 1 m into open floor and mark again.");
+    expect(siteStr("A 这里不能当待命点(原点):离墙、障碍或禁行区只有 0.12 m。挑离墙、障碍、禁行区远一点的空地")).toMatch(/Pick a spot further from walls, obstacles and no-go zones\.$/);
+  });
+});
+
 describe("易用性 37 复测第四轮:标原点被拒英文;回头补同一句不重复", () => {
   it("站点中文原话翻英文", () => {
     expect(siteStr("A 现在站的地方不能当待命点:这里 在图上不是可通行的地方(墙、障碍或未扫到)。往开阔、扫到过的地方开 1 m 左右再标"))

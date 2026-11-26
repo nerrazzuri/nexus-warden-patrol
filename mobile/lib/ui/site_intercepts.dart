@@ -72,8 +72,7 @@ class _SiteInterceptsPageState extends State<SiteInterceptsPage> with NwAsk {
       msg = tr('$what: done', '$what：完成');
     } on SiteError catch (e) {
       msg = e.status == 409
-          ? tr('$what failed: ${ackReasonText(e.message.replaceFirst(RegExp(r'^机器人标记失败[:：]'), ''))}',
-              '$what失败：${ackReasonText(e.message.replaceFirst(RegExp(r'^机器人标记失败[:：]'), ''))}')
+          ? tr('$what failed: ${markRefusalText(e)}', '$what失败：${markRefusalText(e)}')
           : tr('$what failed: $e', '$what失败：$e');
     }
     if (mounted) setState(() => _msg = msg);

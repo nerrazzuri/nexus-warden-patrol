@@ -92,8 +92,7 @@ class _SiteStandbyPageState extends State<SiteStandbyPage> with NwAsk {
               '$what：${ackReasonText('${ack['reason'] ?? res}')}');
     } on SiteError catch (e) {
       msg = e.status == 409
-          ? tr('$what failed: ${ackReasonText(e.message.replaceFirst(RegExp(r'^机器人标记失败[:：]'), ''))}',
-              '$what失败：${ackReasonText(e.message.replaceFirst(RegExp(r'^机器人标记失败[:：]'), ''))}')
+          ? tr('$what failed: ${markRefusalText(e)}', '$what失败：${markRefusalText(e)}')
           : tr('$what failed: $e', '$what失败：$e');
     } catch (e) {
       // 易用性 37 复测第六轮：超时、网断（不是站点回的错）原来页面上什么都不说
