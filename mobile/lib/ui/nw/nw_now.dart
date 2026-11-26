@@ -1174,7 +1174,7 @@ class _NowPageState extends State<NowPage> with EstopMissReveal {
                 key: NowPage.tonightKey,
                 right: Text(_today.isEmpty ? '' : tr('${_today.length} runs', '${_today.length} 趟'), style: NwText.bodySmall.copyWith(color: c.textSecondary)),
                 _todayKnown || _downSince == null
-                    ? TodayPatrolList(api: widget.api, items: _today, onChanged: _reload, offsetMin: _offsetMin)
+                    ? TodayPatrolList(api: widget.api, items: _today, onChanged: _reload, offsetMin: _offsetMin, guard: guardRobots(_robots))
                     : Text(tr("Unknown: today's patrols couldn't be read from the site.", '未知：读不到站点上今天的巡逻。'),
                         key: NowPage.todayUnknownKey, style: NwText.bodyMedium.copyWith(color: c.textSecondary)))),
         KeyedSubtree(key: _t.actions, child: _ops(c)),

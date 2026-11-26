@@ -544,6 +544,14 @@ Map<String, dynamic>? runningItem(List<Map<String, dynamic>> items, String robot
 
 Key todayRowKey(int i) => Key('today-row-$i');
 
+/// 正在跑布防值守（task_id 以 guard- 开头：跑圈或站岗）的机器人。
+List<String> guardRobots(Iterable<Map<String, dynamic>> robots) => [
+      for (final r in robots)
+        if (r['status'] is Map && (r['status'] as Map)['task'] is Map &&
+            '${((r['status'] as Map)['task'] as Map)['task_id'] ?? ''}'.startsWith('guard-'))
+          '${r['robot_id']}',
+    ];
+
 class TodayPatrolList extends StatefulWidget {
   final SiteApi api;
   final List<Map<String, dynamic>> items;
@@ -552,9 +560,13 @@ class TodayPatrolList extends StatefulWidget {
 
   /// 站点时区离 UTC 几分钟（今天的巡逻回的 `utc_offset_min`）；老站点没有就按手机的钟。
   final int? offsetMin;
-  const TodayPatrolList({super.key, required this.api, required this.items, this.onChanged, this.offsetMin});
+  /// 易用性 37 第十一轮 P2：正在布防值守的机器人（[guardRobots]）—— 值守不在「今天的巡逻」里，也要列出来。
+  final List<String> guard;
+  const TodayPatrolList(
+      {super.key, required this.api, required this.items, this.onChanged, this.offsetMin, this.guard = const []});
 
   static const Key emptyKey = Key('today-empty');
+  static Key guardKey(String robot) => Key('today-guard-$robot');
 
   @override
   State<TodayPatrolList> createState() => _TodayPatrolListState();
@@ -648,7 +660,7 @@ class _TodayPatrolListState extends State<TodayPatrolList> {
   @override
   Widget build(BuildContext context) {
     final c = Nw.of(context);
-    if (items.isEmpty) {
+    if (items.isEmpty && widget.guard.isEmpty) {
       return Padding(
           key: TodayPatrolList.emptyKey,
           padding: const EdgeInsets.symmetric(vertical: Nw.s8),
@@ -658,6 +670,21 @@ class _TodayPatrolListState extends State<TodayPatrolList> {
     return NwCard(
       padding: EdgeInsets.zero,
       child: Column(mainAxisSize: MainAxisSize.min, children: [
+        for (final g in widget.guard)
+          Padding(
+            key: TodayPatrolList.guardKey(g),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: Nw.s8),
+            child: Row(children: [
+              Expanded(
+                  child: Text('${tr('Guard duty', '布防值守')} · $g',
+                      maxLines: 1, overflow: TextOverflow.ellipsis, style: NwText.bodyMedium.copyWith(color: c.text))),
+              const SizedBox(width: Nw.s8),
+              Builder(builder: (_) {
+                final (label, tone) = patrolStateText('running');
+                return NwStatusPill(label: label, tone: tone);
+              }),
+            ]),
+          ),
         for (var i = 0; i < items.length; i++) ...[
           InkWell(
             key: todayRowKey(i),

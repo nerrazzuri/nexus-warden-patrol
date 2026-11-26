@@ -6,6 +6,7 @@ import 'package:nexwar_patrol/ui/nw/nw_now.dart';
 import 'package:nexwar_patrol/ui/nw/nw_shell.dart';
 import 'package:nexwar_patrol/ui/nw/nw_theme.dart';
 import 'package:nexwar_patrol/ui/site_alert_scene.dart';
+import 'package:nexwar_patrol/ui/patrol_dispatch.dart' show TodayPatrolList;
 import 'package:nexwar_patrol/ui/site_robot.dart';
 import 'package:nexwar_patrol/ui/site_video.dart';
 import 'package:flutter/material.dart';
@@ -47,6 +48,24 @@ Future<void> _scrollTo(WidgetTester t, Key key) async {
 }
 
 void main() {
+  testWidgets('易用性 37 第十一轮 P2：A 在布防值守 —— 今晚巡逻列出「布防值守 · A」，不写今天没有巡逻', (t) async {
+    _size(t, const Size(390, 2000));
+    final api = FakeApi('guard')
+      ..alertRows = <Map<String, dynamic>>[]
+      ..robotsOverride = [
+        <String, dynamic>{..._robot('A'), 'status': <String, dynamic>{'online': true,
+          'task': <String, dynamic>{'kind': 'patrol', 'state': 'running', 'task_id': 'guard-g1-2'}}},
+        _robot('B'),
+      ];
+    await _show(t, api);
+    await _scrollTo(t, NowPage.tonightKey);
+    expect(find.byKey(TodayPatrolList.guardKey('A')), findsOneWidget);
+    expect(find.byKey(TodayPatrolList.guardKey('B')), findsNothing);
+    expect(find.byKey(TodayPatrolList.emptyKey), findsNothing);
+    expect(find.textContaining('布防值守 · A'), findsOneWidget);
+    await t.pumpWidget(Container());
+  });
+
   // 截图核对 11-15:A 急停着,顶上还写「全场正常」—— 急停、离线、吊销的机器人在,就换成琥珀「要看一下」一条
   testWidgets('有机器人急停 / 离线：不写全场正常，换成「要看一下」一条，列出是哪台', (t) async {
     _size(t, const Size(390, 2000));

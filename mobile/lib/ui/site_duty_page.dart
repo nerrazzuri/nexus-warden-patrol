@@ -929,7 +929,8 @@ class _SiteDutyPageState extends State<SiteDutyPage> {
                   child: KeyedSubtree(
                       key: SiteDutyPage.todayKey,
                       child: _todayKnown || _downSince == null
-                          ? TodayPatrolList(api: widget.api, items: _today, onChanged: _reload, offsetMin: _offsetMin)
+                          ? TodayPatrolList(
+                              api: widget.api, items: _today, onChanged: _reload, offsetMin: _offsetMin, guard: guardRobots(_robots))
                           : Text(tr("Unknown: today's patrols couldn't be read from the site.", '未知：读不到站点上今天的巡逻。'),
                               key: SiteDutyPage.todayUnknownKey,
                               style: NwText.bodyMedium.copyWith(color: c.textSecondary)))),
