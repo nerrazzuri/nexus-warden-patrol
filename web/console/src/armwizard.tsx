@@ -41,6 +41,7 @@ const en = {
   zoneEdit: "Draw or edit zones on the map",
   hideEditor: "Close the editor",
   routeHave: "Zone routes on this map (pick the one the robots run):",
+  routeKinds: "Guard duty runs a zone route: a loop through the zones, run lap after lap while armed. Patrol routes you drew for scheduled or one-off patrols (Site layout → Patrol routes) are separate and are not used here.",
   routeNone: "No zone route on this map yet.",
   routeVia: "via {zones}",
   routeGen: "Generate from the selected zones",
@@ -125,6 +126,7 @@ const zh: Record<WKey, string> = {
   zoneEdit: "在地图上新画或修改防区",
   hideEditor: "收起编辑器",
   routeHave: "这张图上的防区路线（选一条让机器人跑）：",
+  routeKinds: "布防值守跑的是「防区路线」：串起防区的一圈，布防时一圈圈地跑。你为日程巡逻、临时巡逻画的「巡逻路线」（现场设置 → 布置 → 巡逻路线）是另一套，这里用不上。",
   routeNone: "这张图上还没有防区路线。",
   routeVia: "经过 {zones}",
   routeGen: "按选的防区自动生成",
@@ -670,6 +672,8 @@ export function ArmWizard({ say, onClose, arming = false, onChanged }: { say: Sa
       )}
       {r && step === 1 && (
         <section data-wiz-step="route">
+          {/* 易用性 37 场景测试:「巡逻路线」和「防区路线」两套,以前只在编辑器里一句话 —— 这一步开头先说清 */}
+          <p class="muted small" data-wiz-route-kinds="1">{wt("routeKinds")}</p>
           {r.routes.length ? (
             <fieldset class="wiz-pick">
               <legend>{wt("routePick", { zones: joinList(picked) })}</legend>
