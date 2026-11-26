@@ -79,8 +79,18 @@ def test_临时撤防叠临时撤防_退回的还是开临时撤防之前的模�
 
 
 def test_临时撤防不填时长默认4小时_时长和防区不合规矩都拒(台):
+    # 易用性 37 第十一轮 P1:站点还没有防区时「全站临时撤防」撤不了什么 —— 拒,不显示成撤了
+    with pytest.raises(ModeError):
+        台.set_mode("visitor", by="olga")
+    台.set_zone_home("garden", False)               # 配过的防区站点就认得了
+    台.set_zone_home("drive", False)
     台.set_mode("visitor", by="olga")
-    assert 台.view()["until_ms"] == 台.clock.t + 4 * 3_600_000
+    v = 台.view()
+    assert v["until_ms"] == 台.clock.t + 4 * 3_600_000
+    assert v["visitor_zones"] == ["drive", "garden"], "不带防区 = 全站"
+    assert 台.armed("garden")[0] is False and 台.armed("drive")[0] is False
+    with pytest.raises(ModeError):
+        台.set_mode("visitor", by="olga", zones=[])
     for bad in (0, 24 * 60 + 1, True, 1.5, "60"):
         with pytest.raises(ModeError):
             台.set_mode("visitor", by="olga", minutes=bad)
@@ -275,7 +285,8 @@ def test_保安能布防也能撤防_用户11_11_防区配置只有管理员(站
     (gina, _), (olga, _), (alice, _) = _登(s, "gina"), _登(s, "olga"), _登(s, "alice")
     assert s.req("GET", "/api/mode", token=gina) == (200, s.api.arming.view())
     assert s.req("POST", "/api/mode", {"mode": "home"}, token=gina)[0] == 200
-    assert s.req("POST", "/api/mode", {"mode": "visitor", "minutes": 60}, token=gina)[0] == 200
+    assert s.req("POST", "/api/mode", {"mode": "visitor", "zones": ["drive"], "minutes": 60},
+                 token=gina)[0] == 200
     code, d = s.req("POST", "/api/mode", {"mode": "visitor", "zones": ["drive"], "minutes": 60},
                     token=olga)
     assert code == 200 and d["mode"] == "visitor" and d["set_by"] == "olga"

@@ -351,7 +351,8 @@ function ArmState({ mode, role, stale, onMode }: { mode: Mode; role: string; sta
       {label}{!stale && <small class="armstate-ro" data-ro="1">{t("armViewOnly")}</small>}</span>;
   }
   // 易用性 37 场景测试:已经撤防(临时撤防中、按时间表此刻撤防)就不再给「全站临时撤防 4 小时」
-  const off = mode.mode === "visitor" || (mode.source === "schedule" && mode.state !== "armed");
+  // 易用性 37 第十一轮:站点没有防区时全站临时撤防撤不了什么(站点会拒),不给这一项
+  const off = mode.mode === "visitor" || (mode.source === "schedule" && mode.state !== "armed") || !mode.zones?.length;
   const items: { m: Mode["mode"]; key: Key }[] = [{ m: "armed", key: "modeArmed" }, { m: "home", key: "modeHome" },
     ...(off ? [] : [{ m: "visitor" as const, key: "modeVisitorAll" as Key }])];   // UIUX-035:顶栏这一项是全站 4 小时
   return (
