@@ -6,6 +6,8 @@ import { api } from "./api";
 import { hm } from "./data";
 import { t, type Key } from "./i18n";
 import { lapText } from "./loops";
+import { runText, type Status as GuardStatus } from "./armguard";
+import { robotNames } from "./data";
 
 /** 第 9 轮 W9-05:机器人没就绪的哪一样 → 说法。 */
 const NOT_READY: Record<string, Key> = { motion: "tdNrMotion", estop_clear: "tdNrEstop", loc_ok: "tdNrLoc", control: "tdNrControl" };
@@ -66,11 +68,13 @@ export function stateOf(s: string, skipped = 0): [string, string] {
 /** 有在跑的几圈巡逻时多久刷一次。 */
 export const LAP_MS = 5_000;
 
-export function TodayPatrols({ retryMs = 5_000, canFix = false, onItems, title }: { retryMs?: number; canFix?: boolean;
+export function TodayPatrols({ retryMs = 5_000, canFix = false, onItems, title, guard = false }: { retryMs?: number; canFix?: boolean;
   /** 值班页拿今天的这几趟画时间轴、写最近活动(只给今天的,看往天时不给)。 */
   onItems?: (items: TodayItem[]) => void;
   /** 标题(值班页写「今晚巡逻」)。 */
-  title?: string } = {}) {
+  title?: string;
+  /** 易用性 37 场景测试:值班页也列在跑的值守巡逻(布防后按防区一圈圈巡,不在日程里)—— 以前写「今天没有巡逻」。 */
+  guard?: boolean } = {}) {
   const [items, setItems] = useState<TodayItem[] | null>(null);
   const [off, setOff] = useState<number | null>(null);
   // liang-d5 第 5 轮前:往天的每一趟也能查(选个日期;空 = 今天)
@@ -93,7 +97,19 @@ export function TodayPatrols({ retryMs = 5_000, canFix = false, onItems, title }
     void load();
     return () => { live = false; window.clearTimeout(timer); };
   }, [day]);
+  const [guardSt, setGuardSt] = useState<GuardStatus | null>(null);
+  useEffect(() => {
+    if (!guard) return;
+    let live = true;
+    let timer = 0;
+    const load = () => api<GuardStatus>("GET", "/api/guard/status")
+      .then((g) => { if (live) setGuardSt(g); }, () => { if (live) setGuardSt(null); })
+      .then(() => { if (live) timer = window.setTimeout(load, 15_000); });
+    void load();
+    return () => { live = false; window.clearTimeout(timer); };
+  }, [guard]);
   const past = day !== "" && day !== today;
+  const duty = !past && guardSt?.duty ? guardSt : null;
   return (
     <section class="today" aria-label={t("tdTitle")}>
       <h3 class="today-h row">
@@ -103,8 +119,18 @@ export function TodayPatrols({ retryMs = 5_000, canFix = false, onItems, title }
         {past && <button type="button" class="btn sm" onClick={() => setDay("")}>{t("alToday")}</button>}
       </h3>
       {failed && <p class="warn small" role="status">{t("loadRetry")}</p>}
-      {!failed && items != null && items.length === 0 && <p class="muted small">{t(past ? "tdNoneDay" : "tdNone")}</p>}
+      {!failed && items != null && items.length === 0 && !duty && <p class="muted small">{t(past ? "tdNoneDay" : "tdNone")}</p>}
       <ul class="today-list">
+        {duty && (duty.runs.length ? duty.runs : [null]).map((r, i) => (
+          <li key={`g${i}`} class="today-row" data-guard-run="1">
+            <span class="mono">{siteHm(duty.duty!.started_ms, off)}</span>
+            <span class="today-what">
+              {[t("tdGuard"), r ? robotNames.value[r.robot_id] || r.robot_id : ""].filter(Boolean).join(" · ")}
+              {r && <span class="muted small"> · {runText(r)}</span>}
+            </span>
+            <span class="tdchip info">{t("tdRunning")}</span>
+          </li>
+        ))}
         {(items ?? []).map((x, i) => {
           const [label, tone] = stateOf(x.state, x.skipped ?? 0);
           return (
