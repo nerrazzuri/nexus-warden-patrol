@@ -145,4 +145,13 @@ void main() {
     expect(siteText('看不到了,去向不明,最后在防区 1'), 'Lost sight of the person, last seen at zone 1');
     expect(siteText('人离开防区:北区'), 'Person left the zone: 北区');
   });
+
+  test('易用性 37 第十一轮 P2：排程跟布防值守撞了 —— 英文写出哪条、哪段，并说怎么办', () {
+    expect(
+        siteText('跟布防值守撞了:A 在周一 21:55–22:05有巡逻(排程「night」),跟周一 22:00 开始的布防值守(防区路线「z1」)撞了。'
+            '改到撤防的时段,或者指定一台不在值守的机器人'),
+        'This clashes with arming guard duty: A would patrol Mon 21:55–22:05 (schedule “night”), but it is on '
+        'the guard duty starting Mon 22:00 (zone route “z1”) then. '
+        'Move it to a disarmed time, or pick a specific robot that is not on guard duty.');
+  });
 }

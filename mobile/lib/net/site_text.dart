@@ -295,9 +295,44 @@ final List<_Rule> _rules = [
 String _parts(String s) => s.split(RegExp(r'[;；]')).map(_en).join('. ');
 
 /// 一段原文 → 英文；认不出的换成 [_unk]。
+// 易用性 37 第十一轮 P2：排程跟布防值守撞了（guard_clash.py 的三种句子，「;」连着，后面带怎么办）
+const _dayEn = {'周一': 'Mon', '周二': 'Tue', '周三': 'Wed', '周四': 'Thu', '周五': 'Fri', '周六': 'Sat', '周日': 'Sun'};
+String _whenEn(String d, String a, String b) => '${_dayEn[d] ?? d} $a–$b';
+String _guardEn(String l) {
+  final m = RegExp(r'^(周.) (\d\d:\d\d) 开始的布防值守$').firstMatch(l);
+  return m != null ? 'the guard duty starting ${_dayEn[m[1]] ?? m[1]} ${m[2]}' : 'guard duty “$l”';
+}
+
+final List<(RegExp, String Function(RegExpMatch))> _clash = [
+  (RegExp(r'^(\S+) 在(周.) (\d\d:\d\d)–(\d\d:\d\d)有巡逻[(（]排程「(.*?)」[)）][,，]跟(.+?)[(（]防区路线「(.*?)」[)）]撞了$'),
+      (m) => '${m[1]} would patrol ${_whenEn(m[2]!, m[3]!, m[4]!)} (schedule “${m[5]}”), but it is on '
+          '${_guardEn(m[6]!)} (zone route “${m[7]}”) then'),
+  (RegExp(r'^(\S+) 在(周.) (\d\d:\d\d)–(\d\d:\d\d)有巡逻[(（]排程「(.*?)」[)）][,，](.+?)要「任意一台」机器人值守[,，]剩下的不够[(（]还差 (\d+) 台[)）]$'),
+      (m) => '${m[1]} would patrol ${_whenEn(m[2]!, m[3]!, m[4]!)} (schedule “${m[5]}”), but '
+          '${_guardEn(m[6]!)} needs any robot and ${m[7]} more would be needed'),
+  (RegExp(r'^排程「(.*?)」写的任意一台[,，](周.) (\d\d:\d\d)–(\d\d:\d\d)所有机器人都在布防值守[(（](.+)[)）]$'),
+      (m) => 'Schedule “${m[1]}” uses any robot, but ${_whenEn(m[2]!, m[3]!, m[4]!)} every robot is on ${_guardEn(m[5]!)}'),
+];
+
+String? _clashEn(String src) {
+  final m = RegExp(r'^(改了以后)?跟布防值守撞了[:：]([\s\S]*?)(?:。改到撤防的时段[\s\S]*)?$').firstMatch(src.trim());
+  if (m == null) return null;
+  final parts = m[2]!.split(RegExp('[;；]')).map((p) {
+    for (final (re, f) in _clash) {
+      final x = re.firstMatch(p.trim());
+      if (x != null) return f(x);
+    }
+    return _unk;
+  });
+  return '${m[1] != null ? 'After this change, it clashes' : 'This clashes'} with arming guard duty: ${parts.join('; ')}. '
+      'Move it to a disarmed time, or pick a specific robot that is not on guard duty.';
+}
+
 String _en(String s) {
   final x = s.trim();
   if (!hasChinese(x)) return x;
+  final clash = _clashEn(x);
+  if (clash != null) return clash;
   for (final (re, f) in _rules) {
     final m = re.firstMatch(x);
     if (m != null) return f(m);
