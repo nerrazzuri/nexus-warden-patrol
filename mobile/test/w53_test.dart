@@ -7,6 +7,7 @@ import 'package:nexwar_patrol/l10n.dart';
 import 'package:nexwar_patrol/net/site_client.dart';
 import 'package:nexwar_patrol/store/site_store.dart';
 import 'package:nexwar_patrol/ui/guide.dart';
+import 'package:nexwar_patrol/ui/map_wizard.dart' show mapOfferKey;
 import 'package:nexwar_patrol/ui/nw/nw_shell.dart';
 import 'package:nexwar_patrol/ui/nw/nw_widgets.dart';
 import 'package:nexwar_patrol/ui/patrol_dispatch.dart';
@@ -601,6 +602,27 @@ void main() {
   });
 
   group('上手向导', () {
+    testWidgets('易用性 37 场景测试：管理员走完导览、站点没图 —— 先练报警，练完关掉再问「现在建图吗」，不叠在一起', (t) async {
+      final api = FakeApi('admin')
+        ..guide = <String, dynamic>{'tour': 0, 'setup_hidden': false, 'skip': <dynamic>[]}
+        ..mapsCount = 0;
+      _size(t, const Size(400, 900));
+      await t.pumpWidget(MaterialApp(home: NwShell(api: api, title: '站点', ring: () {})));
+      await t.pumpAndSettle();
+      var steps = 0;
+      while (find.byKey(tourNextKey).evaluate().isNotEmpty && steps < 20) {
+        await t.tap(find.byKey(tourNextKey));
+        await t.pumpAndSettle();
+        steps++;
+      }
+      expect(find.byType(PracticeAlarmPage), findsOneWidget);
+      expect(find.byKey(mapOfferKey), findsNothing, reason: '练习页开着时不弹建图');
+      await t.pageBack();
+      await t.pumpAndSettle();
+      expect(find.byType(PracticeAlarmPage), findsNothing);
+      expect(find.byKey(mapOfferKey), findsOneWidget);
+    });
+
     testWidgets('没看过导览的保安：进站点就开始，一步步走完记下来，最后练一次报警（不发给站点）', (t) async {
       final api = FakeApi('guard')..guide = <String, dynamic>{'tour': 0, 'setup_hidden': false, 'skip': <dynamic>[]};
       _size(t, const Size(400, 900));
