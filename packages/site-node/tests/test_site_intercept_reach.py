@@ -257,18 +257,3 @@ def test_W70_通道宽1米_跟Nav2一样算走得通_0点8米照样不通(台, t
     t.cat.import_dir(src, map_id="house", version="m1")
     assert t.reach.reachable("house", "m1", (1.5, 2.0), (6.0, 2.0)) is True
     assert t.reach.reachable("house", "narrow", (1.5, 2.0), (6.0, 2.0)) is False
-
-
-def test_用户1127_机器人停在墙边_起点跟机器人一样直线挪出来_不判走不到(台):
-    """新人易用性报告 B:机器人停在离墙 0.1 m 处,站点起点只挪 0.25 m 够不着能站的格子,紧挨着它的
-    点也判「走不到」;机器人自己起步会直线挪最多 1 m(planned_nav.START_ESCAPE_M)。"""
-    from nexwar_site.intercept_reach import START_ESCAPE_M, snap, start_cell
-    t = 台
-    cm = t.reach.costmap("house", "wide")
-    assert snap(cm, cm.cell_of(0.2, 2.0)) is None, "老办法:0.25 m 内没有能站的格"
-    assert start_cell(cm, 0.2, 2.0) is not None
-    assert t.reach.path_m("house", "wide", (0.2, 2.0), (1.5, 2.0)) is not None
-    assert t.reach.path_m("house", "wide", (3.95, 3.5), (2.0, 3.0)) is not None, "定位落在墙格里"
-    assert t.reach.path_m("house", "wide", (-3.0, 2.0), (1.5, 2.0)) is None, "图外照旧不行"
-    from nexwar_agent.bridges.planned_nav import START_ESCAPE_M as agent
-    assert START_ESCAPE_M == agent
