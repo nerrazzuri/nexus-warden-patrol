@@ -798,7 +798,8 @@ class _NowPageState extends State<NowPage> with EstopMissReveal {
   String _phaseWord(RobotPhase p) => switch (p) {
         RobotPhase.working => tr('Patrolling', '巡逻中'),
         RobotPhase.charging => tr('Charging', '充电中'),
-        RobotPhase.idle => tr('Standby', '待命'),
+        // 新人 11-28 第二轮：以前叫 Standby / 待命，跟「待命点」撞（没在待命点也写 Standby）—— 跟机器人页一样叫空闲
+        RobotPhase.idle => tr('Idle', '空闲'),
         RobotPhase.held => tr('Stopped', '已急停'),
         RobotPhase.estop => tr('E-STOP', '急停'),
         RobotPhase.lowBattery => tr('Low battery', '低电'),
@@ -1198,6 +1199,9 @@ class _NowPageState extends State<NowPage> with EstopMissReveal {
                 decoration: BoxDecoration(border: Border(bottom: BorderSide(color: c.outline))),
                 child: map),
         ],
+        // 新人 11-28 第二轮：从「现场」点红条回「现在」，这页是新建的、正在读 —— 以前下面几块先按空数据写
+        // 「今天没有巡逻」「没有要处理的」「还没有」，跟顶上「现在 ○3」对不上。读到之前只转圈
+        if (_loaded) ...[
         KeyedSubtree(
             key: _t.today,
             child: _section(
@@ -1212,6 +1216,7 @@ class _NowPageState extends State<NowPage> with EstopMissReveal {
         KeyedSubtree(key: _t.actions, child: _ops(c)),
         _lastNote(c),
         _activity(c),
+        ],
       ]),
     ));
   }

@@ -107,6 +107,11 @@ def test_用户1127_回待命点_有任务在跑_带abort先停再去(站点):
     assert s.req("POST", "/api/robots/A/standby/here", {"name": "lobby"}, token=alice)[0] == 200
     assert s.req("POST", "/api/robots/A/standby/return", {"abort": 1}, token=gina)[0] == 400
     tid = _去远处(s, gina)
+    # 新人 11-28 第二轮 P2:不带 abort(页面刚显示空闲、其实已经出发了)—— 站点先拦,说再点一次
+    code, d = s.req("POST", "/api/robots/A/standby/return", {}, token=gina)
+    assert code == 409 and d.get("reason_code") == "busy_return" and "Press the button again" in \
+        d["reason_en"], d
+    assert _任务(s) == tid, "没动它手上那一趟"
     code, d = s.req("POST", "/api/robots/A/standby/return", {"abort": True}, token=gina)
     assert code == 200 and d["ack"]["result"] == "accepted", d
     assert d["task_id"].startswith("standby-") and d["aborted"] == tid, d

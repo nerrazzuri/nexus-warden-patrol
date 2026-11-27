@@ -146,14 +146,46 @@ void main() {
     expect(st('a').data, '未处理');
     expect(st('b').data, '误报');
     expect(st('c').data, '确认入侵');
+    await t.ensureVisible(find.byKey(AlarmLogPage.filterKey('open')));
+    await t.pumpAndSettle();
     await t.tap(find.byKey(AlarmLogPage.filterKey('open')));
     await t.pumpAndSettle();
     expect(find.byKey(AlarmLogPage.rowKey('a')), findsOneWidget);
     expect(find.byKey(AlarmLogPage.rowKey('b')), findsNothing);
+    await t.ensureVisible(find.byKey(AlarmLogPage.filterKey('p1')));
+    await t.pumpAndSettle();
     await t.tap(find.byKey(AlarmLogPage.filterKey('p1')));
     await t.pumpAndSettle();
     expect(find.byKey(AlarmLogPage.rowKey('c')), findsOneWidget);
     expect(find.byKey(AlarmLogPage.rowKey('b')), findsNothing);
+  });
+
+  testWidgets('新人 11-28 第二轮 P2：报警记录分「安全事件」「设备与运行」—— 每条标出类别，顶上能只看一类', (t) async {
+    final now = DateTime.now().millisecondsSinceEpoch;
+    Map<String, dynamic> row(String key, String kind, String audience) => {
+          'key': key, 'kind': kind, 'level': 'P1', 'robot': 'A', 'first_ms': now, 'last_ms': now, 'count': 1,
+          'audience': audience,
+        };
+    final api = FakeApi('guard')
+      ..alertRows = [row('p', 'dog_sees_person', 'intrusion'), row('s', 'swap_overdue', 'owner'), row('b', 'battery_swap', 'help')];
+    await t.binding.setSurfaceSize(const Size(390, 1200));
+    addTearDown(() => t.binding.setSurfaceSize(null));
+    await t.pumpWidget(MaterialApp(home: Scaffold(body: AlarmLogPage(api: api))));
+    await t.pumpAndSettle();
+    expect(find.text('安全事件 1'), findsOneWidget);
+    expect(find.text('设备与运行 2'), findsOneWidget);
+    Icon ic(String k) => t.widget<Icon>(find.byKey(AlarmLogPage.kindKey(k)));
+    expect(ic('p').icon, Icons.shield_outlined);
+    expect(ic('s').icon, Icons.build_outlined);
+    expect(find.descendant(of: find.byKey(AlarmLogPage.rowKey('p')), matching: find.textContaining('安全事件')), findsOneWidget);
+    await t.tap(find.byKey(AlarmLogPage.filterKey('security')));
+    await t.pumpAndSettle();
+    expect(find.byKey(AlarmLogPage.rowKey('p')), findsOneWidget);
+    expect(find.byKey(AlarmLogPage.rowKey('s')), findsNothing);
+    await t.tap(find.byKey(AlarmLogPage.filterKey('device')));
+    await t.pumpAndSettle();
+    expect(find.byKey(AlarmLogPage.rowKey('p')), findsNothing);
+    expect(find.byKey(AlarmLogPage.rowKey('b')), findsOneWidget);
   });
 
   testWidgets('软件升级：站点上的版本写哪台在跑 / 没装；每台机器人四个按钮一排等宽；有手机 App 一段', (t) async {

@@ -236,9 +236,12 @@ class FakeApi implements SiteApi {
     return episodesBody;
   }
 
+    /// 新人 11-28：卡住读机器人列表，看「现在」页读到之前显示什么。
+  Completer<void>? robotsGate;
   @override
   Future<List<Map<String, dynamic>>> robots() async {
     robotsCalls++;
+    if (robotsGate != null) await robotsGate!.future;
     if (robotsError != null) {
       if (robotsError!.status == 401) session = null;
       throw robotsError!;
