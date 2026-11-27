@@ -272,11 +272,15 @@ void main() {
       await t.pumpAndSettle();
       expect(find.text('有新版本 App：1.1.0+5'), findsOneWidget);
       await t.tap(find.byKey(appUpdateActionKey));
-      for (var i = 0; i < 20 && asked == 0; i++) {
+      // 易用性 37 用户 11-27 轮：真写文件、算校验，三套测试一起跑、机器卡时 0.4 秒不够 —— 最多等 10 秒
+      for (var i = 0; i < 500 && asked == 0; i++) {
         await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 20)));
         await t.pump(const Duration(milliseconds: 50));
       }
-      await t.pump(const Duration(milliseconds: 500));
+      for (var i = 0; i < 100 && find.text('已保存').evaluate().isEmpty; i++) {
+        await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 20)));
+        await t.pump(const Duration(milliseconds: 50));
+      }
       expect(asked, 1);
       expect(find.text('已保存'), findsOneWidget);
       await t.runAsync(() => File('${Directory.systemTemp.path}/nw-linux.tar.gz').delete());

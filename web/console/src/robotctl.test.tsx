@@ -153,8 +153,17 @@ describe("单台机器人控制 · 保安", () => {
     await press(c, "Stop and return home");
     expect(c.querySelector(".modal")).toBeNull();
     expect(c.querySelector(".rc-ask")!.textContent).toContain("go back to the home point");
+    // 用户 11-27:当场选回到原点后怎么办 —— 缺省等 10 分钟;改成 5 分钟
+    expect(c.querySelector("[data-after-home]")!.textContent).toContain("After it gets home");
+    fireEvent.input(c.querySelector("input[name=after_min]")!, { target: { value: "5" } });
     fireEvent.click(c.querySelector(".rc-ask .btn.primary")!);
-    await waitFor(() => expect(posted("/api/robots/A/home/return")).toEqual([{ abort: true }]));
+    await waitFor(() => expect(posted("/api/robots/A/home/return")).toEqual([{ abort: true, after: "wait", wait_min: 5 }]));
+    await press(c, "Stop and return home");
+    fireEvent.click([...c.querySelectorAll<HTMLInputElement>("[data-after-home] input[type=radio]")][0]);
+    fireEvent.click(c.querySelector(".rc-ask .btn.primary")!);
+    await waitFor(() => expect(posted("/api/robots/A/home/return")[1]).toEqual({ abort: true, after: "go" }));
+    await press(c, "Stop and return home");
+    expect(c.querySelector("[data-after-home]")!.textContent).toContain("Disarm the site");
   });
 
   it("派巡逻:选路线、几圈;正在跑的时候按钮叫「排队」并说排在当前这趟后面", async () => {

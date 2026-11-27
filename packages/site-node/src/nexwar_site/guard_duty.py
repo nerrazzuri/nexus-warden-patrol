@@ -174,6 +174,10 @@ class GuardDuty:
         self._avoid: dict[tuple[Any, str], int] = {}
         #: (方案, 机器人) → 这一串连着跑不成从什么时候开始(跑成一圈就清)
         self._stuck_since: dict[tuple[Any, str], int] = {}
+        #: 用户 11-27:人「中止并回原点」时选的「回到原点后」—— 机器人 → {trip: 回原点那一趟,
+        #: min: 回到后等几分钟(0 = 马上), until: 回到了以后算出的出发时刻}。只在内存里(站点重启
+        #: 退回老样子:歇 PAUSE_MS)
+        self._after_home: dict[str, dict[str, Any]] = {}
         self._no_standby: set[tuple[int, str, str, str]] = set()
         self._waiting: dict[int, str] = {}
         self._route_cache: dict[tuple, dict[str, Any]] = {}
@@ -408,6 +412,51 @@ class GuardDuty:
         return bool(self.db.query("SELECT 1 FROM guard_runs WHERE robot_id=? LIMIT 1",
                                   (robot_id,)))
 
+    def pause_robot(self, robot_id: str, why: str) -> int:
+        """易用性 37 用户 11-27 轮 P2:人叫这台回待命点 / 回原点 —— 它手上的值守跟人中止一样歇
+        :data:`PAUSE_MS`(正在跑的那一圈由回去的那一趟中止,中止了也是歇)。在等着接着跑、等下一圈、
+        去 / 站值守位的先歇下,免得叫回去的那一趟一派出去就被下一圈抢掉。回歇下了几条。"""
+        now, n = self._now(), 0
+        for eid, run in self._runs().items():
+            if run["robot_id"] != robot_id \
+                    or run["state"] not in ("resume", "post", "wait", "watch"):
+                continue
+            self._log("aborted", robot=robot_id, entry=eid,
+                      detail=f"{why}:歇 {PAUSE_MS // 60_000} 分钟再接着跑")
+            self._set_run(eid, state="paused", until_ms=now + PAUSE_MS)
+            n += 1
+        return n
+
+    def after_home(self, robot_id: str, trip: str, wait_min: int) -> None:
+        """用户 11-27:「中止并回原点」时点的人选了回到原点后怎么办 —— ``wait_min`` 分钟后接着值守
+        (0 = 回到马上接着巡)。回原点那一趟在跑时值守歇着;那一趟结束(到了、没成)从那一刻算。
+        这段时间看见人照样停下盯、跟(安全事件不等),办完了还是等到点再出发。"""
+        self._after_home[robot_id] = {"trip": trip, "min": max(0, int(wait_min)), "until": None}
+
+    async def _after_home_tick(self, e: dict[str, Any], run: dict[str, Any], running: str,
+                               now: int) -> bool:
+        """:meth:`after_home` 的那台:还没到点 → 歇着(``True``,这一拍别的不办);到点 → 接着值守。"""
+        rid, eid = run["robot_id"], e["id"]
+        ah = self._after_home.get(rid)
+        if ah is None or run["state"] not in ("resume", "post", "wait", "watch", "paused"):
+            return False
+        if running == ah["trip"]:                        # 还在回原点的路上
+            if run["state"] != "paused" or run["until_ms"] - now < 60_000:
+                self._set_run(eid, state="paused", until_ms=now + PAUSE_MS)
+            return True
+        if ah["until"] is None:
+            ah["until"] = now + ah["min"] * 60_000
+            self._log("aborted", robot=rid, entry=eid,
+                      detail="回原点那一趟结束:" + (f"等 {ah['min']} 分钟再接着巡" if ah["min"]
+                                                   else "马上接着巡"))
+        if now < ah["until"]:
+            if run["state"] != "paused" or run["until_ms"] != ah["until"]:
+                self._set_run(eid, state="paused", until_ms=ah["until"])
+            return True
+        self._after_home.pop(rid, None)
+        self._set_run(eid, state="resume", until_ms=now)
+        return False
+
     def watching(self, robot_id: str) -> str | None:
         """这台此刻站在哪个防区的值守位上盯着(看见人按这个防区判,设计 §5.4);不在值守位上 ``None``。
         """
@@ -439,6 +488,17 @@ class GuardDuty:
         if rows and rows[0]["priority"] is not None and int(rows[0]["priority"]) < GUARD_LAP:
             return ""
         return running
+
+    def _human_return(self, rid: str) -> str:
+        """易用性 37 用户 11-27 轮 P2:机器人手上是**人**叫的回待命点 / 回原点(``standby-``,不是站点
+        自己派的)→ 那一趟的任务号;不是 → 空串。"""
+        running = self._running(rid)
+        if not running.startswith(STANDBY_PREFIX):
+            return ""
+        rows = self.db.query("SELECT issued_by FROM commands WHERE robot_id=? AND task_id=? "
+                             "ORDER BY rowid DESC LIMIT 1", (rid, running))
+        from nexwar_site.dispatcher import auto_issuer
+        return running if rows and not auto_issuer(str(rows[0]["issued_by"] or "")) else ""
 
     def _prep_alerts(self, plan: dict[str, Any]) -> None:
         """W73 §7.1:布防开始前 :data:`PREP_MIN` 分钟,值守方案里指定的机器人电量过不了一圈的出站线
@@ -874,6 +934,18 @@ class GuardDuty:
                        else f"{rid} 刚连回来,等它报手上的任务")
             return
         foreign = bool(self._blocking(rid))
+        if await self._after_home_tick(e, run, running, now):
+            return
+        run = self._runs().get(e["id"], run)
+        state = run["state"]
+        back = self._human_return(rid) if state in ("resume", "post", "wait") else ""
+        if back:
+            # 易用性 37 用户 11-27 轮 P2:人叫它回待命点(比如先停了临时巡逻再叫回)—— 跟人中止一样歇
+            # PAUSE_MS,不马上一圈把回去的那一趟抢掉(以前值守被临时任务打断是 resume,马上接着巡)
+            self._log("aborted", robot=rid, entry=e["id"],
+                      detail=f"人叫它回待命点({back}):歇 {PAUSE_MS // 60_000} 分钟再接着跑")
+            self._set_run(e["id"], state="paused", until_ms=now + PAUSE_MS)
+            return
         if state in ("post", "wait") and foreign:
             self._log("interrupted", robot=rid, entry=e["id"], zone=run["watch_zone"],
                       detail=f"在值守位上被 {running} 叫走")

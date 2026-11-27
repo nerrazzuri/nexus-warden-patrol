@@ -9,6 +9,7 @@ import 'dart:math';
 
 import 'package:flutter/material.dart';
 
+import '../design/nw_tokens.g.dart';
 import '../l10n.dart';
 import '../net/site_client.dart';
 import '../net/site_text.dart';
@@ -149,6 +150,13 @@ class SiteRobotPage extends StatefulWidget {
   State<SiteRobotPage> createState() => _SiteRobotPageState();
 }
 
+/// 用户 11-27：中止并回原点 —— 回到原点以后怎么办的几个选项。
+const homeAfterGoKey = Key('home-after-go');
+const homeAfterWaitKey = Key('home-after-wait');
+const homeAfterDisarmKey = Key('home-after-disarm');
+const homeMinMinusKey = Key('home-after-minus');
+const homeMinPlusKey = Key('home-after-plus');
+
 class _SiteRobotPageState extends State<SiteRobotPage> with NwAsk {
   Map<String, dynamic>? _view;
 
@@ -157,6 +165,11 @@ class _SiteRobotPageState extends State<SiteRobotPage> with NwAsk {
 
   /// 就地确认（不弹窗）：'stand' / 'lie' / 'home-abort' / 'standby-abort' / 'unbind' / 'name'。
   String? _ask;
+
+  /// 用户 11-27：中止并回原点 —— 回到原点以后怎么办（'go' / 'wait' / 'disarm'）、等几分钟。
+  String _homeAfter = 'wait';
+  int _homeMin = 10;
+
   /// 用户 11-27（新人易用性报告 D）：「中止并回原点」发出去到站点回话（最多等它停稳 15 秒）这段时间
   /// 按钮写「正在停车…」、按不动；原来确认框一收什么都不显示，按钮还能再按。
   bool _stopping = false;
@@ -410,7 +423,11 @@ class _SiteRobotPageState extends State<SiteRobotPage> with NwAsk {
 
   /// 中止并回原点（App V2 不弹窗）：就地确认。
   void _abortHome() {
-    setState(() => _ask = 'home-abort');
+    setState(() {
+      _ask = 'home-abort';
+      _homeAfter = 'wait';
+      _homeMin = 10;
+    });
     _showAsk();
   }
 
@@ -429,7 +446,8 @@ class _SiteRobotPageState extends State<SiteRobotPage> with NwAsk {
       _stopping = true;
     });
     try {
-      await _do(() => widget.api.returnHome(widget.robotId, abort: true), tr('Abort and return to origin', '中止并回原点'));
+      await _do(() => widget.api.returnHome(widget.robotId, abort: true, after: _homeAfter, waitMin: _homeMin),
+          tr('Abort and return to origin', '中止并回原点'));
     } finally {
       if (mounted) setState(() => _stopping = false);
     }
@@ -759,18 +777,61 @@ class _SiteRobotPageState extends State<SiteRobotPage> with NwAsk {
                 style: NwText.bodySmall.copyWith(color: c.text))));
   }
 
-  Widget _confirm(NwColors c, String text, Key goKey, String go, VoidCallback onGo) => Container(
+  Widget _confirm(NwColors c, String text, Key goKey, String go, VoidCallback onGo, {Widget? extra}) => Container(
       margin: const EdgeInsets.only(top: Nw.s8),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(color: c.bg, border: Border.all(color: c.outline)),
       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         Text(text, style: NwText.bodyMedium.copyWith(color: c.text)),
+        ?extra,
         const SizedBox(height: Nw.s8),
         nwButtonRows([
           nwOpButton(c, goKey, go, onGo, primary: true),
           nwOpButton(c, const Key('robot-ask-cancel'), tr('Cancel', '取消'), () => setState(() => _ask = null)),
         ], per: 2),
       ]));
+
+  /// 用户 11-27：中止并回原点 —— 回到原点以后：马上接着布防巡逻 / 等几分钟再出发 / 撤防（有撤防权限才给）。
+  Widget _homeAfterPick(NwColors c) {
+    Widget opt(Key key, String v, String label, {Widget? tail}) => InkWell(
+        key: key,
+        onTap: () => setState(() => _homeAfter = v),
+        child: ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: 44),
+            child: Row(children: [
+              Icon(_homeAfter == v ? Icons.radio_button_checked_rounded : Icons.radio_button_unchecked_rounded,
+                  size: 20, color: _homeAfter == v ? c.primary : c.textSecondary),
+              const SizedBox(width: Nw.s8),
+              Flexible(child: Text(label, style: NwText.bodyMedium.copyWith(color: c.text))),
+              ?tail,
+            ])));
+    final minutes = Row(mainAxisSize: MainAxisSize.min, children: [
+      const SizedBox(width: Nw.s8),
+      IconButton(key: homeMinMinusKey, visualDensity: VisualDensity.compact, icon: const Icon(Icons.remove_rounded),
+          onPressed: () => setState(() {
+                _homeAfter = 'wait';
+                _homeMin = (_homeMin - 5).clamp(5, 240);
+              })),
+      Text('$_homeMin', style: NwText.titleSmall.copyWith(color: c.text, fontFamily: NwFont.mono)),
+      IconButton(key: homeMinPlusKey, visualDensity: VisualDensity.compact, icon: const Icon(Icons.add_rounded),
+          onPressed: () => setState(() {
+                _homeAfter = 'wait';
+                _homeMin = (_homeMin + 5).clamp(5, 240);
+              })),
+    ]);
+    return Padding(
+        padding: const EdgeInsets.only(top: Nw.s8),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          Text(tr('After it gets home', '回到原点以后'), style: NwText.labelLarge.copyWith(color: c.textSecondary)),
+          opt(homeAfterGoKey, 'go', tr('Go out on guard again right away', '马上接着布防巡逻')),
+          opt(homeAfterWaitKey, 'wait', tr('Wait $_homeMin min, then go out again', '等 $_homeMin 分钟再出发'), tail: minutes),
+          if (widget.api.session?.canSetMode ?? false)
+            opt(homeAfterDisarmKey, 'disarm', tr('Disarm the site (robots go home and stay)', '撤防（机器人回原点待着）')),
+          Text(tr('Only matters while the site is armed. A person seen in the meantime is still reported and handled.',
+                  '只在布防时有用。这段时间看见人照样报警、照样处理。'),
+              style: NwText.bodySmall.copyWith(color: c.textSecondary)),
+        ]));
+  }
 
   /// 设置页签的一行：名称、值、右边一个按钮。
   Widget _row(NwColors c, String label, String value, {Widget? action, Key? key}) => Container(
@@ -1131,8 +1192,11 @@ class _SiteRobotPageState extends State<SiteRobotPage> with NwAsk {
           if (_ask == 'home-abort')
             KeyedSubtree(
                 key: _askAnchor,
-                child: _confirm(c, tr('Stop the current task, then go back to the origin?', '中止当前任务，然后回原点？'),
-                    const Key('home-abort-confirm'), tr('Abort and return', '中止并回原点'), () => unawaited(_abortHomeGo()))),
+                child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                  _confirm(c, tr('Stop the current task, then go back to the origin?', '中止当前任务，然后回原点？'),
+                      const Key('home-abort-confirm'), tr('Abort and return', '中止并回原点'), () => unawaited(_abortHomeGo()),
+                      extra: _homeAfterPick(c)),
+                ])),
         ]),
       if (teleop)
         nwRobotSection(c, tr('Remote control & posture', '遥控与姿态'), key: const Key('robot-teleop'),
