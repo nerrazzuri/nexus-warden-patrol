@@ -174,10 +174,21 @@ def test_未返回待命点_后来回到了_自己关(台):
     src.on_feed({"kind": "standby_failed", "robot_id": "A", "after": "sched-1",
                  "reason": "导航拒了"})
     assert len(_of(desk, "standby_failed")) == 1
-    src.on_event("A", _ev("task_done", task_id="sched-2"))
-    assert _of(desk, "standby_failed")[0].resolved_ms is None, "别的任务完成不算回到"
+    src.on_event("A", _ev("task_done", task_id="teleop-2"))
+    assert _of(desk, "standby_failed")[0].resolved_ms is None, "遥控结束不算"
     src.on_event("A", _ev("task_done", task_id="standby-abc"))
     _healed(desk, db, "standby_failed", "site:standby_reached")
+
+
+def test_用户1127轮P2_3_未返回待命点_后来又跑完了别的任务_也关(台):
+    """易用性 37:回原点失败、停在原地等以后又跑了好几圈值守,「停在原地等」还挂着,
+    机器人页卡片也在。"""
+    c, db, desk, src = 台
+    src.on_feed({"kind": "standby_failed", "robot_id": "A", "after": "sched-1", "reason": "x"})
+    src.on_event("A", _ev("task_failed", task_id="guard-3", reason="busy"))
+    assert _of(desk, "standby_failed")[0].resolved_ms is None, "没跑成不算"
+    src.on_event("A", _ev("task_done", task_id="guard-4"))
+    _healed(desk, db, "standby_failed", "site:moved_on")
 
 
 def test_未返回待命点_撤防回原点到了也关(台):

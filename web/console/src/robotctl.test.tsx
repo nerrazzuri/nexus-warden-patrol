@@ -140,13 +140,16 @@ describe("单台机器人控制 · 保安", () => {
     await waitFor(() => expect(posted("/api/robots/A/deter")[3]).toEqual({ output: "speaker", on: true, max_s: 60, clip: "restricted" }));
   });
 
-  it("当前任务:写在跑什么、第几圈;停下(带任务号)、回待命点;忙的时候回原点要先当场确认", async () => {
+  it("当前任务:写在跑什么、第几圈;停下(带任务号);忙的时候回待命点、回原点都要先当场确认(用户 11-27 轮 P2-1:确认了先中止)", async () => {
     const c = show();
     await waitFor(() => expect(c.querySelector(".rc-task-now")!.textContent).toBe("Running guard-1 · Loop 3 of 5"));
     await press(c, "Stop in place");
     await waitFor(() => expect(posted("/api/robots/A/abort")).toEqual([{ task_id: "t1" }]));
     await press(c, "Return to standby");
-    await waitFor(() => expect(posted("/api/robots/A/standby/return")).toEqual([{}]));
+    expect(posted("/api/robots/A/standby/return")).toEqual([]);
+    expect(c.querySelector(".rc-ask")!.textContent).toContain("go to the standby point");
+    fireEvent.click(c.querySelector(".rc-ask .btn.primary")!);
+    await waitFor(() => expect(posted("/api/robots/A/standby/return")).toEqual([{ abort: true }]));
     await press(c, "Stop and return home");
     expect(c.querySelector(".modal")).toBeNull();
     expect(c.querySelector(".rc-ask")!.textContent).toContain("go back to the home point");

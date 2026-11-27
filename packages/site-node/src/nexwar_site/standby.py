@@ -341,17 +341,48 @@ class StandbyManager:
 
     async def return_to(self, robot_id: str, *, issued_by: str,
                         name: str | None = None, charge: bool = False,
-                        homing: bool = False) -> dict[str, Any]:
+                        homing: bool = False, abort: bool = False) -> dict[str, Any]:
         """``charge``:这一趟是去补能(换电,W73 外审 r2 #2)—— 狗上出发线只看中止线、低电不掉头。
-        ``homing``:回待命点(外审 r3 #4)—— 低电不掉头,但停止线留 15%、出发按路程算。"""
+        ``homing``:回待命点(外审 r3 #4)—— 低电不掉头,但停止线留 15%、出发按路程算。
+        ``abort``(易用性 37 用户 11-27 轮 P2-1:人点「回待命点」= 结束这一趟):有任务在跑先中止、
+        等它停下再派,跟 :meth:`return_home` 一样;回复多带 ``aborted``。不带照旧(有任务机器人拒)。"""
         p = self._checked_default(robot_id, name)
+        aborted = await self._abort_running(robot_id, issued_by, "回待命点") if abort else None
         target = MapPose(map_id=p["map_id"], map_version=p["map_version"], frame_id="map",
                          x=p["x"], y=p["y"], yaw=p["yaw"]).to_wire()
         async with self._sending(robot_id):
-            return await self.dispatcher.goto(robot_id, target, None, issued_by=issued_by,
-                                              priority=STANDBY_RETURN, charge=charge,
-                                              homing=homing and not charge,
-                                              task_id=f"{STANDBY_PREFIX}{uuid.uuid4().hex[:12]}")
+            r = await self.dispatcher.goto(robot_id, target, None, issued_by=issued_by,
+                                           priority=STANDBY_RETURN, charge=charge,
+                                           homing=homing and not charge,
+                                           task_id=f"{STANDBY_PREFIX}{uuid.uuid4().hex[:12]}")
+        return {**r, "aborted": aborted} if abort else r
+
+    async def _abort_running(self, robot_id: str, issued_by: str, what: str) -> str | None:
+        """有任务在跑:中止、等它的**结束事件**(最多 ``HOME_ABORT_WAIT_S``),回中止了的任务号;
+        没任务回 None。不成抛 ``DispatchRefused``(原因里写「没派{what}」)。"""
+        c = self.dispatcher.clients.get(robot_id)
+        cur = c.status.task if c is not None and c.status is not None else None
+        if cur is None:
+            return None
+        r = await self.dispatcher.abort(robot_id, cur.task_id, issued_by=issued_by)
+        ack = r.get("ack", {}) if isinstance(r, dict) else {}
+        if ack.get("result") not in ("accepted", "duplicate"):
+            raise DispatchRefused(f"中止没成功:{ack.get('reason') or ack.get('result')}")
+        # 外审 r1 #6:要等到那一趟的**结束事件**(状态里没了不算),而且结束原因里没有
+        # stop_unconfirmed(代理停车确认等不到也会进终态)
+        t0 = asyncio.get_running_loop().time()
+        key = (robot_id, cur.task_id)
+        while key not in self._ended:
+            if asyncio.get_running_loop().time() - t0 > HOME_ABORT_WAIT_S:
+                raise DispatchRefused(f"中止后 {HOME_ABORT_WAIT_S:.0f} 秒还没停下,没派{what}")
+            await asyncio.sleep(0.2)
+        why = self._ended.pop(key)
+        if "stop_unconfirmed" in why:
+            raise DispatchRefused(f"上一趟中止了,但机器人停车没确认:没派{what},先看现场画面")
+        now = c.status.task if c.status is not None else None
+        if now is not None and now.task_id != cur.task_id:
+            raise DispatchRefused(f"等停车时又派了任务 {now.task_id}:没派{what}")
+        return cur.task_id
 
     async def return_home(self, robot_id: str, *, issued_by: str,
                           abort: bool = False) -> dict[str, Any]:
@@ -367,29 +398,9 @@ class StandbyManager:
         if h is None:
             raise DispatchRefused("当前地图上还没有原点:在原点位置点“设为原点”")
         cur = c.status.task if c is not None and c.status is not None else None
-        aborted = None
-        if cur is not None:
-            if not abort:
-                raise DispatchRefused(f"正在执行任务 {cur.task_id},要先中止:用“中止并回原点”")
-            r = await self.dispatcher.abort(robot_id, cur.task_id, issued_by=issued_by)
-            ack = r.get("ack", {}) if isinstance(r, dict) else {}
-            if ack.get("result") not in ("accepted", "duplicate"):
-                raise DispatchRefused(f"中止没成功:{ack.get('reason') or ack.get('result')}")
-            # 外审 r1 #6:要等到那一趟的**结束事件**(状态里没了不算),而且结束原因里没有
-            # stop_unconfirmed(代理停车确认等不到也会进终态)
-            t0 = asyncio.get_running_loop().time()
-            key = (robot_id, cur.task_id)
-            while key not in self._ended:
-                if asyncio.get_running_loop().time() - t0 > HOME_ABORT_WAIT_S:
-                    raise DispatchRefused(f"中止后 {HOME_ABORT_WAIT_S:.0f} 秒还没停下,没派回原点")
-                await asyncio.sleep(0.2)
-            why = self._ended.pop(key)
-            if "stop_unconfirmed" in why:
-                raise DispatchRefused("上一趟中止了,但机器人停车没确认:没派回原点,先看现场画面")
-            now = c.status.task if c.status is not None else None
-            if now is not None and now.task_id != cur.task_id:
-                raise DispatchRefused(f"等停车时又派了任务 {now.task_id}:没派回原点")
-            aborted = cur.task_id
+        if cur is not None and not abort:
+            raise DispatchRefused(f"正在执行任务 {cur.task_id},要先中止:用“中止并回原点”")
+        aborted = await self._abort_running(robot_id, issued_by, "回原点")
         target = MapPose(map_id=mid, map_version=ver, frame_id="map",
                          x=h["x"], y=h["y"], yaw=h["yaw"]).to_wire()
         async with self._sending(robot_id):

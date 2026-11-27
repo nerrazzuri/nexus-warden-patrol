@@ -270,8 +270,8 @@ class FakeApi implements SiteApi {
     return {'ack': {'result': 'accepted'}};
   }
   @override
-  Future<Map<String, dynamic>> returnToStandby(String id, {String? name}) async {
-    calls.add(name == null ? 'standby $id' : 'standby $id $name');
+  Future<Map<String, dynamic>> returnToStandby(String id, {String? name, bool abort = false}) async {
+    calls.add((name == null ? 'standby $id' : 'standby $id $name') + (abort ? ' abort' : ''));
     return {'ack': {'result': 'accepted'}};
   }
   @override
@@ -1316,6 +1316,32 @@ void main() {
     await t.tap(find.byKey(const Key('home-abort-confirm')));
     await t.pumpAndSettle();
     expect(busy.calls, ['home A abort']);
+  });
+
+  testWidgets('用户 11-27 轮 P2-1：有任务时点「回待命点」先就地确认，确认了带 abort（先中止这一趟）；没任务直接回', (t) async {
+    final busy = FakeApi('guard', robotView: busyView());
+    await openRobot(t, busy);
+    await t.ensureVisible(find.byKey(const Key('btn-standby')));
+    await t.pump();
+    await t.tap(find.byKey(const Key('btn-standby')));
+    await t.pumpAndSettle();
+    expect(busy.calls.where((c) => c.startsWith('standby')), isEmpty, reason: '先确认');
+    expect(find.text('中止当前任务，然后回待命点？'), findsOneWidget);
+    await t.ensureVisible(find.byKey(const Key('standby-abort-confirm')));
+    await t.tap(find.byKey(const Key('standby-abort-confirm')));
+    await t.pumpAndSettle();
+    expect(busy.calls, contains('standby A abort'));
+
+    await t.pumpWidget(Container());
+    final v = jsonDecode(jsonEncode(busyView())) as Map<String, dynamic>;
+    (v['status'] as Map)['task'] = null;
+    final idle = FakeApi('guard', robotView: v);
+    await openRobot(t, idle);
+    await t.ensureVisible(find.byKey(const Key('btn-standby')));
+    await t.pump();
+    await t.tap(find.byKey(const Key('btn-standby')));
+    await t.pumpAndSettle();
+    expect(idle.calls, contains('standby A'));
   });
 
   // 用户 11-27（新人易用性报告 C、D、E、A）
