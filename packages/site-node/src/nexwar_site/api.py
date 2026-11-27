@@ -2152,7 +2152,8 @@ class _Handler(TlsHandlerMixin):
             x, y = float(points[0]["x"]), float(points[0]["y"])
         except (KeyError, TypeError, ValueError):
             return []
-        if reach.path_m(map_id, version, (float(t.pose.x), float(t.pose.y)), (x, y)) is None:
+        # 走不通(False)才拦;查不了(None:没有规划栅格、不认识的图)不拦 —— CI 集成 W00c1
+        if reach.reachable(map_id, version, (float(t.pose.x), float(t.pose.y)), (x, y)) is False:
             why = f"{robot} 从现在的位置走不到这个点(被墙或禁行区隔开)"
             return [{"index": 0, "problem": why}]
         return []
