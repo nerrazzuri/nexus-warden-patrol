@@ -121,6 +121,30 @@ async def test_goto到done_事件落库_命令记着派单人(台):
     assert (await t.dog.odometry()).x == pytest.approx(1.0, abs=0.15)
 
 
+async def test_用户1127_控制权交还后_站点自己发起的等2分钟_人派的照收(台):
+    """手持遥控器开过机器人、松手以后:值守、排程、回充这些站点自己发起的任务等 2 分钟
+    (人可能还站在旁边);人手动派的不受限。"""
+    from nexwar_site.dispatcher import MANUAL_HOLD_MS, auto_issuer
+    t = 台
+    assert auto_issuer("guard") and auto_issuer("schedule:3") and auto_issuer("standby:auto")
+    assert not auto_issuer("alice")
+    await t.run(3)
+    assert t.site.dispatchable("A", "goto", auto=True) == "", "一直握着控制权:不等"
+    t.dog.inject_control_lost()                          # 遥控器拿走了
+    await t.run(3)
+    assert "控制权" in t.site.dispatchable("A", "goto")
+    await t.dog.acquire_control()                        # 人松手,旁路重新拿到
+    await t.run(3)
+    why = t.site.dispatchable("A", "goto", auto=True)
+    assert "刚交还控制权" in why, why
+    with pytest.raises(DispatchRefused, match="刚交还控制权"):
+        await t.send(t.site.goto("A", target(1.0), 0.8, issued_by="guard"))
+    assert t.site.dispatchable("A", "goto") == "", "人派的不受限"
+    t.clock.advance(MANUAL_HOLD_MS / 1000 + 1)
+    await t.run(3)
+    assert t.site.dispatchable("A", "goto", auto=True) == "", "2 分钟后照常"
+
+
 async def test_abort中途停下(台):
     t = 台
     r = await t.send(t.site.goto("A", target(6.0), 0.8, issued_by="alice"))

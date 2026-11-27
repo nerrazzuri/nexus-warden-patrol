@@ -535,6 +535,7 @@ class AgentRuntime:
         #: 现在照常上线,只是不收会让狗动的任务。
         self._control_held: bool | None = None
         self._await_control = False                      # 起来时没拿到:一直等到拿到为止
+        self._bridges_owed = False                       # 起来时没连上运控:连上以后补连两个桥
         self.processor.admit_hook = self._admit
         #: 地图(W00c5d 第二部分):正在用的那一张(``MapKeeper``)、录包与重建(``MappingService``)。
         self.maps = maps
@@ -2799,6 +2800,52 @@ class AgentRuntime:
                             FIRST_CONNECT_RETRY_S, FIRST_CONNECT_WAIT_S)
                 await asyncio.sleep(FIRST_CONNECT_RETRY_S)
 
+    async def _first_hal(self) -> bool:
+        """起来时连运控旁路。**连不上不致命**(用户 11-27「要改」):照常上线、发遥测,运控断开、
+        控制权 false,不收会让狗动的任务;:meth:`_watch_link` 每 :data:`HAL_RETRY_S` 秒重连。
+        **例外:新版试跑**(升级还没提交)照旧退出 —— 开机守卫要数够次数把起不来的新版退回上一版。
+        回连上没有。"""
+        try:
+            await self._connect_hal()
+            return True
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            if self._upgrading():
+                raise
+            log.warning("连不上运控旁路(%s):照常上线,运控断开、不收会让机器人动的任务;"
+                        "每 %g 秒重连", exc, HAL_RETRY_S)
+            self._control_held = False
+            self._await_control = True
+            self._bridges_owed = True
+            self._link_down_at = self._mono()
+            return False
+
+    def _upgrading(self) -> bool:
+        """正在试跑没提交的新版吗;说不准按「是」(照旧退出,守卫照旧数)。"""
+        if self.releases is None:
+            return False
+        try:
+            return bool(getattr(self.releases, "upgrading", lambda: True)())
+        except Exception:
+            log.exception("读在途升级失败:按新版试跑算")
+            return True
+
+    async def _bridges_up(self) -> None:
+        """运控连上以后:读头尾方向、两个桥记「连上了」。"""
+        self._bridges_owed = False
+        if self.parts is None:
+            return
+        # 头尾方向(W11a)先读一次:不然导航桥走第一拍之前进来的 goto 会被当成「不知道」拒掉
+        try:
+            self.parts.nav.head = getattr(await self.hal.health(), "head", "unknown")
+        except Exception:
+            log.exception("起来时读不到头尾方向")
+        self._head_told = self._head_key()
+        # 两个桥各自记着「连上了」(老 HTTP 面的绿灯读它);HAL.connect 是幂等的。
+        await self.parts.device.connect()
+        await self.parts.nav.connect()
+
     async def _first_control(self) -> None:
         """起来时拿运动控制权。**拿不到不致命**(11-27 C40221:手持遥控器拿着时 SDK 回
         「another master exists」,原来代理退出、systemd 拉起来又退,站点一直看着离线):照常上线、
@@ -2870,19 +2917,9 @@ class AgentRuntime:
         # HAL 的生死归代理(总设计 §2.2「谁连 SDK」):先连上、核对厂商控制权,再对站点亮相。
         self._closed = False
         self._hal_touched = True
-        await self._connect_hal()
-        await self._first_control()
-        if self.parts is not None:
-            # 头尾方向(W11a)先读一次:不然导航桥走第一拍之前进来的 goto 会被当成「不知道」拒掉
-            try:
-                self.parts.nav.head = getattr(await self.hal.health(), "head", "unknown")
-            except Exception:
-                log.exception("起来时读不到头尾方向")
-            self._head_told = self._head_key()
-        if self.parts is not None:
-            # 两个桥各自记着「连上了」(老 HTTP 面的绿灯读它);HAL.connect 是幂等的。
-            await self.parts.device.connect()
-            await self.parts.nav.connect()
+        if await self._first_hal():
+            await self._first_control()
+            await self._bridges_up()
         self.transport.set_will(
             self.topics.status,
             _dumps(offline_status(boot_id=self.boot_id,
@@ -3522,6 +3559,11 @@ class AgentRuntime:
             log.warning("重连运控没成:%s", exc)
             return
         log.warning("重新连上运控了")
+        if self._bridges_owed:
+            try:
+                await self._bridges_up()
+            except Exception:                  # HAL.connect 刚成过,桥不该炸:记下、照常拿控制权
+                log.exception("连上运控以后补连桥没成")
         self._reclaim_left, self._reclaim_at = HAL_RECLAIM_TRIES, self._mono() + HAL_RETRY_S
         await self._reclaim()
 

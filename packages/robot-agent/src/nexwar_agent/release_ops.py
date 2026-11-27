@@ -298,6 +298,11 @@ class ReleaseOps:
         except (rel.ReleaseError, OSError):
             return None
 
+    def upgrading(self) -> bool:
+        """正在试跑一次还没提交的升级(新版这次起来):起不来要退出,让开机守卫数够次数退回上一版。"""
+        p = rel.read_pending(self.layout)
+        return p is not None and self.current() == p.to
+
     def can_roll_back(self) -> bool:
         """有在途的那次升级,或者盘上有上一版。"""
         return rel.read_pending(self.layout) is not None or self.previous() is not None

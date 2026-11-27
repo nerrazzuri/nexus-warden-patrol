@@ -19,6 +19,7 @@ SRC = (Path(__file__).resolve().parents[1] / "src" / "nexwar_site")
     "no_control": "A 未就绪:控制权不在站点(手柄或别的程序在控制)",
     "not_standing": "A 未就绪:没站起来(蹲着、趴着,或运动模式没就绪)",
     "not_ready": "A 未就绪: standing",
+    "control_returned": "A 刚交还控制权(手持遥控器或别的程序用过):站点自己发起的任务 90 秒后才派",
     "map_mismatch": "任务用的地图 'm1',A 加载的是 'm2'",
     "obstacles": "A 的避障不可用:感知已断开",
     "clock": "A 的钟差未知(站点刚起来",
