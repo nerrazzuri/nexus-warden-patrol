@@ -1991,6 +1991,16 @@ input[type="checkbox"], input[type="radio"] { width: 18px; height: 18px; }
 }
 /* 用户 11-21 手机实测:往下排之后视频区没有高度,格子被压成一条缝、字和按钮叠在一起。
    这时格子自己按 16:9 撑高;手机宽每台一格占一整行。 */
+.mon-rail-lbl { display: none; }
+/* 新人 11-28 第二轮 P2:1099 以下三栏上下排,机器人栏排到很下面,约 1000 宽的窗口找不到「怎么停机器人」——
+   机器人那一排小按钮横着放到最上面(点了开这台的控制),巡逻 / 活动两个按钮这时没用(右栏整个摊开在下面) */
+@media (max-width: 1099px) {
+  .mon-rail { display: flex; order: -2; grid-column: auto; grid-row: auto; flex-direction: row; flex-wrap: wrap; align-items: center; gap: var(--sp-2);
+    padding: 8px 12px; border-left: 0; border-bottom: 1px solid var(--c-outline); overflow: visible; }
+  .mon-rail .push, .mon-rail .mon-railbtn { display: none; }
+  .mon-rail .mon-chip { flex-direction: row; gap: var(--sp-2); min-width: 88px; padding: 4px 12px; }
+  .mon-rail-lbl { display: inline; font-size: 13px; font-weight: 600; color: var(--c-textSecondary); }
+}
 @media (max-width: 1099px) {
   .mon-video { flex: none; }
   .mon-tiles { flex: none; grid-auto-rows: max-content; }
@@ -2116,7 +2126,7 @@ input[type="checkbox"], input[type="radio"] { width: 18px; height: 18px; }
 .rc-kv .btn + .btn { grid-column: 2; }
 .rc-held { padding: 8px 10px; border-left: 3px solid var(--c-error); background: var(--c-errorSoft); display: flex; flex-direction: column; gap: var(--sp-2); }
 .rc-held p, .rc-ask p { margin: 0; }
-.rc-ask { margin: 0 20px; padding: 10px 12px; border: 1px solid var(--c-primary); display: flex; flex-direction: column; gap: var(--sp-2); }
+.rc-ask { margin: 0; padding: 10px 12px; border: 1px solid var(--c-primary); display: flex; flex-direction: column; gap: var(--sp-2); }
 /* 用户 11-27:中止并回原点 —— 回到原点以后怎么办 */
 .rc-after { border: 0; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--sp-1); }
 .rc-after legend { padding: 0; margin-bottom: 2px; }
