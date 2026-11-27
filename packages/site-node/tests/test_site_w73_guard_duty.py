@@ -281,6 +281,101 @@ async def test_被人中止_歇10分钟(站):
     assert len(_patrols(t)) == 2
 
 
+async def test_用户1127轮P2_临时巡逻抢了值守_人停了它再叫回待命点_值守不马上抢回去_歇10分钟(站):
+    """易用性 37:demo 派 route-1 抢掉 guard-1(resume),点「回待命点」中止 route-1、走 standby-…,
+    5 秒后 guard-1 下一圈把回待命点那一趟抢掉,机器人接着巡。"""
+    from nexwar_site.priorities import STANDBY_PREFIX, STANDBY_RETURN
+    t = 站
+    _方案(t)
+    await _跑(t, 3)
+    await t.send(t.site.goto("A", target(3.0), 0.8, issued_by="demo", priority=80,
+                             task_id="adhoc-x"))
+    await _跑(t, 3)
+    assert t.duty.status()["runs"][0]["state"] == "resume"
+    # 站点 API 的「回待命点」:先让值守歇下,再中止、再派(见 api._guard_paused)
+    assert t.duty.pause_robot("A", "demo 叫它回待命点") == 1
+    n = len(_patrols(t))
+    await t.send(t.site.abort("A", "adhoc-x", issued_by="demo"))
+    await _跑(t, 3)
+    await t.send(t.site.goto("A", target(0.5), 0.8, issued_by="demo", priority=STANDBY_RETURN,
+                             task_id=f"{STANDBY_PREFIX}back1"))
+    await _跑(t, 20)
+    assert len(_patrols(t)) == n, "人叫回待命点:值守先不派"
+    assert t.duty.status()["runs"][0]["state"] == "paused"
+    assert any("叫它回待命点" in (r.get("detail") or "") for r in _log(t, "aborted"))
+    t.clock.advance(600)
+    await _跑(t, 5)
+    assert len(_patrols(t)) == n + 1, "歇够了照常接着巡"
+
+
+async def _中止回原点(t, wait_min):
+    """模拟站点 API 的「中止并回原点」:值守先歇、中止这一圈、派回原点那一趟、记下回到后怎么办。"""
+    from nexwar_site.priorities import STANDBY_PREFIX, STANDBY_RETURN
+    tid = _patrols(t)[-1]["task_id"]
+    t.duty.pause_robot("A", "gina 叫它回原点")
+    await t.send(t.site.abort("A", tid, issued_by="gina"))
+    await _跑(t, 3)
+    trip = f"{STANDBY_PREFIX}home-1"
+    await t.send(t.site.goto("A", target(0.2), 0.8, issued_by="gina", priority=STANDBY_RETURN,
+                             task_id=trip))
+    t.duty.after_home("A", trip, wait_min)
+    return trip
+
+
+async def test_用户1127_中止并回原点_选等3分钟_回到了等够3分钟再出发_中间被叫成接着跑也不提前(站):
+    t = 站
+    _方案(t)
+    await _跑(t, 3)
+    await _中止回原点(t, 3)
+    n = len(_patrols(t))
+    for _ in range(60):
+        await _跑(t, 1)
+        if t.site.clients["A"].status.task is None:
+            break
+    assert len(_patrols(t)) == n, "回原点的路上:不派"
+    await _跑(t, 3)
+    run = t.duty.status()["runs"][0]
+    assert run["state"] == "paused"
+    assert any("等 3 分钟再接着巡" in (r.get("detail") or "") for r in _log(t, "aborted"))
+    t.duty._set_run(run["entry"], state="resume", until_ms=t.clock())   # 比如看见人、人走了
+    await _跑(t, 3)
+    assert len(_patrols(t)) == n, "人选了等 3 分钟:没到点不出发"
+    t.clock.advance(181)
+    await _跑(t, 5)
+    assert len(_patrols(t)) == n + 1, "到点接着巡"
+    assert "A" not in t.duty._after_home
+
+
+async def test_用户1127_中止并回原点_选马上出发_回到原点就接着巡(站):
+    t = 站
+    _方案(t)
+    await _跑(t, 3)
+    await _中止回原点(t, 0)
+    n = len(_patrols(t))
+    for _ in range(60):
+        await _跑(t, 1)
+        if len(_patrols(t)) > n:
+            break
+    assert len(_patrols(t)) == n + 1, "回到原点:马上接着巡(不等 10 分钟)"
+    assert t.site.clients["A"].status.task is None or \
+        t.site.clients["A"].status.task.task_id.startswith("guard-")
+    assert any("马上接着巡" in (r.get("detail") or "") for r in _log(t, "aborted"))
+
+
+async def test_站点自己派的回待命点_值守照旧(站):
+    from nexwar_site.priorities import STANDBY_PREFIX, STANDBY_RETURN
+    t = 站
+    _方案(t)
+    await _跑(t, 3)
+    await t.send(t.site.goto("A", target(3.0), 0.8, issued_by="incident", priority=80,
+                             task_id="incident-y"))
+    await _跑(t, 3)
+    await t.send(t.site.goto("A", target(0.5), 0.8, issued_by="standby:auto",
+                             priority=STANDBY_RETURN, task_id=f"{STANDBY_PREFIX}auto1"))
+    await _跑(t, 15)
+    assert t.duty.status()["runs"][0]["state"] != "paused"
+
+
 async def test_太久没看_报防区没巡到_看到了自动解决(站):
     t = 站
     _方案(t, robot="B", limits={"东区": 1, "西区": 1})          # B 不存在:没人去看

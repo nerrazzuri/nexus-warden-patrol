@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import math
 
 import numpy as np
@@ -191,11 +192,22 @@ async def _没初值地连上(t):
     await t.拍(3)
 
 
+async def _拍到(t, ok, *, wall_s: float = 30.0) -> None:
+    """易用性 37 用户 11-27 轮:找位置在线程里算(``asyncio.to_thread``),三套测试一起跑、机器卡的时候
+    固定拍数等不到它算完 —— 一拍一拍推,每拍多让线程 20 ms,直到 ``ok()`` 或墙钟 ``wall_s`` 秒。"""
+    import time
+    end = time.monotonic() + wall_s
+    while not ok() and time.monotonic() < end:
+        await t.拍(1)
+        await asyncio.sleep(0.02)
+
+
 async def test_W68_开机没有初值_自己找位置_请定位器按它重定位_之后可信(台):
     t = 台
     await _没初值地连上(t)
     assert "等人给初始位置" in _遥测(t.ears).loc["reason"]
     await t.拍(60)
+    await _拍到(t, lambda: t.loc.relocs and _事件(t.ears, "relocalized"))
     assert len(t.loc.relocs) == 1, t.loc.relocs
     r = t.loc.relocs[-1]
     assert math.hypot(r.x - TRUE[0], r.y - TRUE[1]) < 0.15 and not r.human
@@ -235,6 +247,7 @@ async def test_W68_开机自己找_几处差不多像_说无法确定_不请定�
     t.view.pts = _扫(occ, 5.0, 5.0, 0.3)
     await _没初值地连上(t)
     await t.拍(60)
+    await _拍到(t, lambda: _事件(t.ears, "loc_not_found"))
     assert t.loc.relocs == []
     nf = _事件(t.ears, "loc_not_found")
     assert nf and nf[-1]["cause"] == "ambiguous", nf
