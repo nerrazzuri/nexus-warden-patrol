@@ -150,3 +150,15 @@ def test_真机1124_先精配再判_贴合度差一点的先认_分不清的照�
     v = judge(0.30, (5.0, 5.0, 0.0), [Candidate(1, 1, 0, 0.47)])
     assert v.reloc is None and f"要 {MIN_FIT:g}" in v.reason, \
         "核对定位器那条不放宽:0.47 不拿去重定位"
+
+
+def test_用户1127_另一处_离得远又差不多才算():
+    from nexwar_agent.globalloc import RIVAL_FAR_M, RIVAL_GAP, Candidate, rival
+    best = Candidate(0.0, 0.0, 0.0, 0.70)
+    assert rival([best], best) is None
+    near = Candidate(RIVAL_FAR_M - 0.5, 0.0, 0.0, 0.69)          # 近处差不多:同一处偏一点
+    assert rival([best, near], best) is None
+    weak = Candidate(20.0, 0.0, 0.0, 0.70 - RIVAL_GAP - 0.01)      # 远处但差得多
+    assert rival([best, near, weak], best) is None
+    twin = Candidate(21.0, -0.5, 0.0, 0.70 - RIVAL_GAP + 0.05)     # 11-26:相隔 21 m、差不多
+    assert rival([best, near, weak, twin], best) is twin

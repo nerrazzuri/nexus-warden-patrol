@@ -113,6 +113,13 @@ void main() {
     expect(runResultText({'finished': false, 'result': 'aborted'}), '没跑完');
   });
 
+  test('用户 11-27：回原点、回待命点跑完写「按机器人自己的定位」到了；别的照旧「已完成」', () {
+    expect(runResultText({'finished': true, 'result': 'done', 'mission': 'standby-home-edc3c720b9a2'}), '已到（按机器人自己的定位）');
+    expect(runResultText({'finished': true, 'result': 'done', 'kind': 'standby', 'mission': 'standby-1'}), '已到（按机器人自己的定位）');
+    expect(runResultText({'finished': true, 'result': 'done', 'mission': 'r1'}), '已完成');
+    expect(runResultText({'finished': true, 'result': 'aborted', 'mission': 'standby-home-1'}), '叫停了');
+  });
+
   testWidgets('列表：一趟一行、有异常标红；点进去看每张照片的判读与复核', (t) async {
     final api = FakeApi('guard');
     await _pumpRuns(t, api);

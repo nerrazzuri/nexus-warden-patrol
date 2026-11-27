@@ -27,7 +27,9 @@ export interface AuditRow { id: number; at: number; actor: string; actor_role?: 
     note?: string; verdict?: string; mission?: string; mission_title?: string; robot?: string | null; title?: string; level?: string; kind?: string;
     channel?: string; by?: string; task_id?: string | null; err?: string; err_name?: string; req?: string;
     // minor #18:派单的点数、去一个点的目标、存草稿存成的版本
-    points?: number; request?: { target?: unknown }; version?: string; manual_only?: boolean; delete?: boolean; created?: boolean } }
+    points?: number; request?: { target?: unknown }; version?: string; manual_only?: boolean; delete?: boolean; created?: boolean;
+    // 用户 11-27:站点发出去了、机器人没接受(回执不是 accepted / duplicate)
+    ack?: string; ack_reason?: string } }
 
 /** 第 3 轮 P1-66:改账号写清改了什么(原来只写「改了账号」)。 */
 export function changeText(d: AuditRow["detail"], target = ""): string {
@@ -445,19 +447,21 @@ export function mergeAudit(rows: AuditRow[]): AuditRow[] {
 /** 活动记录的一行(用户页「他做过什么」、全站活动日志共用)。``who``:行里写上是谁做的。 */
 export function AuditLine({ r, who }: { r: AuditRow; who?: boolean }) {
   return (
-    <li class={r.status >= 400 ? "bad" : undefined} data-audit={r.id}
+    <li class={r.status >= 400 || r.detail?.ack ? "bad" : undefined} data-audit={r.id}
       title={r.status < 400 && r.detail?.err ? [r.detail.err, r.detail.err_name].filter(Boolean).join(" ") : undefined}>
       <time class="mono small">{day(r.at)} {hms(r.at)}</time>
       <div class="audit-body">
       {who && <b class="audit-who">{r.actor.startsWith("site:") ? t("auditSystem") : r.actor.replace(/^login:/, "")}</b>}
       <span title={r.action}>{rowActionText(r)}</span>
       {r.status >= 400 ? <span class="tag bad" data-result="refused">{t("auditRefused")}</span>
+        : r.detail?.ack ? <span class="tag bad" data-result="not-accepted">{t("auditNotAccepted")}</span>
         : r.status >= 200 && /^[A-Z]+ /.test(r.action) ? <span class="tag ok" data-result="ok">{t("auditOk")}</span> : null}
       {r.target && <span class="muted small" title={r.target}>{rowTargetText(r)}</span>}
       {r.actor_role === "engineer" && <span class="tag">{t("roleEngineer")}</span>}
       {r.status >= 400 && r.detail?.err && <span class="tag mono" data-err={r.detail.err} title={r.detail.err_name ?? ""}>{r.detail.err}</span>}
       {r.detail?.source && r.detail.source !== "system" && <span class="tag" data-source={r.detail.source}>{t(r.detail.source === "web" ? "auditViaWeb" : r.detail.source === "api" ? "auditViaApi" : "auditViaApp")}</span>}
       {r.status < 400 && changeText(r.detail, r.target) && <span class="small muted" data-change="1">{changeText(r.detail, r.target)}</span>}
+      {r.status < 400 && r.detail?.ack && <span class="small audit-why" data-why="1">{siteStr(r.detail.ack_reason || r.detail.ack)}</span>}
       {r.status >= 400 && r.detail?.error && <span class="small audit-why" data-why="1" title={lang.value === "zh" ? zhPunct(r.detail.error) : undefined}>{lang.value === "en" && typeof r.detail.reason_en === "string" && r.detail.reason_en ? r.detail.reason_en : siteStr(r.detail.error)}</span>}
       </div>
     </li>

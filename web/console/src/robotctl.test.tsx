@@ -360,4 +360,31 @@ describe("真机 11-25:静音", () => {
     await press(c2, "Unmute");
     await waitFor(() => expect(posts).toContainEqual({ url: "/api/robots/A/mute", body: { on: false } }));
   });
+
+describe("用户 11-27:位置可疑(自动找到的,图上另一处也很像)", () => {
+  it("写明另一处在哪、不会自己走;保安看过画面点「位置没错」要当场确认,发 confirm", async () => {
+    const u = idle();
+    u.robot.loc = { pose: { x: 1, y: 2, yaw: 0 }, anchored: true, unconfirmed: "位置是自动找的,图上另一处 (17.0, -23.1) 也很像", rival: { x: 17.04, y: -23.12 } };
+    const c = show("guard", u);
+    const w = c.querySelector("[data-loc-unconfirmed]")!;
+    expect(w.textContent).toContain("another spot on the map (17.0, -23.1) looks almost the same");
+    expect(w.textContent).toContain("won't go anywhere on its own");
+    expect(c.querySelector(".rc-loc")!.textContent).toContain("Unconfirmed");
+    await press(c, "Position is right");
+    expect(posted("/api/robots/A/relocalize")).toEqual([]);
+    expect(c.querySelector(".rc-ask")!.textContent).toContain("is A really where the map shows it");
+    fireEvent.click(c.querySelector(".rc-ask .btn.primary")!);
+    await waitFor(() => expect(posted("/api/robots/A/relocalize")).toEqual([{ confirm: true }]));
+  });
+
+  it("只读的人只看提示,没有确认按钮;不可疑时没有这块", () => {
+    const u = idle();
+    u.robot.loc = { pose: { x: 1, y: 2, yaw: 0 }, anchored: true, unconfirmed: "x" };
+    const c = show("viewer", u);
+    expect(c.querySelector("[data-loc-unconfirmed]")!.textContent).toContain("another spot on the map looks almost the same");
+    expect(c.querySelector("[data-loc-confirm]")).toBeNull();
+    cleanup();
+    expect(show("guard", idle()).querySelector("[data-loc-unconfirmed]")).toBeNull();
+  });
+});
 });

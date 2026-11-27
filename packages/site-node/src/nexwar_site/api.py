@@ -729,6 +729,13 @@ class _Handler(TlsHandlerMixin):
                                                        "outcome", "reason", "reason_code", "err",
                                                        "err_name")
                           if k in self._resp} | self._audit_detail
+                ack = self._resp.get("ack")
+                if isinstance(ack, dict) \
+                        and ack.get("result") not in (None, "accepted", "duplicate"):
+                    # 用户 11-27:站点发出去了(200)、机器人没接受 —— 记下来,操作记录别写成「成功」
+                    detail["ack"] = str(ack.get("result"))[:32]
+                    if ack.get("reason"):
+                        detail["ack_reason"] = str(ack["reason"])[:200]
                 target = self._audit_target or _path_target(path)
                 # 第 11 轮 W11-01:日程、路线的名字在这一刻存下(删了、编号换了主人,记录照旧)。
                 # 只有改路线、日程的请求才查(别的请求不多查库)
@@ -3693,9 +3700,10 @@ class _Handler(TlsHandlerMixin):
         return self._send_json(200, {"ack": ack, "mode": mode})
 
     def _relocalize(self, robot_id: str, user) -> None:
-        """设位置(W00c6e,里程锚定):``{"x", "y", "yaw"}``、``{"at_home": true}`` 或
+        """设位置(W00c6e,里程锚定):``{"x", "y", "yaw"}``、``{"at_home": true}``、
         ``{"global": true}``(W41:狗拿看到的墙在整张图上自己找;狗报了 ``relocalize.global``
-        才发),转成 ``relocalize`` 命令;坐标按狗**当前加载的那张图**(命令里带上图号,狗核对)。
+        才发)或 ``{"confirm": true}``(用户 11-27:自动找到的位置人确认没错),转成 ``relocalize``
+        命令;坐标按狗**当前加载的那张图**(命令里带上图号,狗核对)。
         ``dispatch`` 权限 —— 保安、管理员。不受监护闸约束(不动)。狗在走、原点没标过这些由狗拒,
         回执原样回。"""
         import math
@@ -3704,6 +3712,15 @@ class _Handler(TlsHandlerMixin):
         d = self._body()
         if not isinstance(d, dict):
             raise HttpError(400, "要一个对象")
+        if "confirm" in d:
+            # 用户 11-27:自动找到的位置可疑(图上另一处也很像),人看了画面确认没错 —— 不带坐标、图号
+            if d.get("confirm") is not True:
+                raise HttpError(400, "confirm 只能是 true")
+            self._audit_detail = {"confirm": True}
+            from nexwar_site.dispatcher import VIDEO_COMMAND_TTL_MS
+            return self._send_json(200, self.site.dispatch(lambda: self.site.dispatcher.map_command(
+                robot_id, "relocalize", {"confirm": True}, issued_by=str(user),
+                ttl_ms=VIDEO_COMMAND_TTL_MS)))
         if "global" in d:
             if d.get("global") is not True:
                 raise HttpError(400, "global 只能是 true")
