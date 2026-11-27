@@ -66,9 +66,14 @@ String runResultText(Map<String, dynamic> r) {
     'aborted' || 'abort' => tr('Stopped', '叫停了'),
     'failed' => tr('Failed', '没跑成'),
     'preempted' => tr('Handed over', '被接替'),
+    // 用户 11-27（C40221 11-26：按错的位置「回到了」原点，其实停在别处）：回原点 / 待命点的「到了」是按机器人自己的定位算的
+    _ when _isReturn(r) => tr('Arrived (by its own position estimate)', '已到（按机器人自己的定位）'),
     _ => tr('Finished', '已完成'),
   };
 }
+
+bool _isReturn(Map<String, dynamic> r) =>
+    r['kind'] == 'home' || r['kind'] == 'standby' || RegExp(r'^(standby-|home-)').hasMatch('${r['mission'] ?? ''}');
 
 /// 这一趟没跑完（中止、失败、没收尾）。
 bool runFailed(Map<String, dynamic> r) =>

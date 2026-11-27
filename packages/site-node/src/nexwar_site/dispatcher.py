@@ -46,6 +46,8 @@ log = logging.getLogger(__name__)
 #: 控制权交还以后(手持遥控器、别的程序拿过,状态里「控制权」从 false 变回 true),站点自己发起的
 #: 让狗动的任务等这么久再派(用户 11-27「等2分钟」):人可能还站在机器人旁边。人手动派的不受限。
 MANUAL_HOLD_MS = 120_000
+#: 用户 11-27:位置可疑(狗报 ``loc.unconfirmed``)时不派的任务 —— 会自己走的(狗上同一张表)。
+UNCONFIRMED_KINDS = frozenset({"goto", "patrol", "standoff", "dock", "follow"})
 #: 站点自己发起的任务的 ``issued_by``(冒号前那一段);别的(账号名)算人派的。
 AUTO_ISSUERS = frozenset({"guard", "standby", "charge", "deterrence", "weather", "site", "force",
                           "incident", "schedule"})
@@ -568,12 +570,24 @@ class Dispatcher:
                                   "人手动派的不受限")
         if c.capabilities is not None and kind not in c.capabilities.tasks:
             raise DispatchRefused(f"{robot_id} 不支持 {kind}")
+        why = self._loc_unconfirmed(c) if kind in UNCONFIRMED_KINDS else ""
+        if why:
+            # 用户 11-27(C40221 11-26 中止回原点停错地方):狗也拦,这里先说清楚
+            raise DispatchRefused(f"{robot_id} 位置可疑:{why}")
         self._check_skew(robot_id)
         self._check_zones(robot_id, c, kind)
         self._check_running(robot_id, c, kind)
         if s.task is not None and s.task.task_id.startswith(TELEOP_TASK_PREFIX):
             # W00c5c:人工遥控优先于一切自动任务 —— 狗那头会回 busy,这里先挑开(事件派遣去找别的狗)。
             raise DispatchRefused(f"{robot_id} 正在遥控")
+
+    @staticmethod
+    def _loc_unconfirmed(c: DispatchClient) -> str:
+        """狗遥测里报的「位置可疑、等人确认」(用户 11-27);没有、老狗不报是空串。"""
+        t = getattr(c, "telemetry", None)
+        loc = t.loc if t is not None else None
+        why = loc.get("unconfirmed") if isinstance(loc, dict) else None
+        return why if isinstance(why, str) else ""
 
     @staticmethod
     def _loaded(c: DispatchClient | None) -> tuple[str, str] | None:

@@ -39,6 +39,14 @@ describe("巡逻记录", () => {
     expect(stampText("20261120T093408Z-955734")).toMatch(/^2026-11-20 \d\d:\d\d$/);
   });
 
+  it("用户 11-27:回原点、回待命点跑完写「按机器人自己的定位」到了;别的照旧「完成」", () => {
+    expect(runResult({ id: 1, robot_id: "A", finished: true, result: "done", mission: "standby-home-edc3c720b9a2" }))
+      .toEqual({ text: "Arrived (by its own position estimate)", bad: false });
+    expect(runResult({ id: 1, robot_id: "A", finished: true, result: "done", kind: "standby", mission: "standby-1" }).text)
+      .toBe("Arrived (by its own position estimate)");
+    expect(runResult({ id: 1, robot_id: "A", finished: true, result: "done", mission: "r1" }).text).toBe("Completed");
+  });
+
   it("默认看今天;有异常的标出来;选一趟看每张照片、判读、原图链接", async () => {
     const { container: c } = render(<PatrolsPage role="guard" robots={["C40221"]} />);
     await waitFor(() => expect(c.querySelector('[data-run="157"]')).not.toBeNull());
