@@ -129,8 +129,10 @@ def test_W40_只开左边聚光灯_挑警灯颜色_狗上照做(站点):
                     {"output": "strobe", "on": True, "max_s": 30, "color": "yellow"}, token=gina)
     assert code == 200 and d["ack"]["result"] == "accepted", d
     assert s.dog.deter_color == "yellow"
+    # 操作记录在回完请求之后才写(满负荷时晚一点):等它
+    _等(lambda: any(r["detail"].get("color") == "yellow" for r in s.api.audit.list()
+                   if r["action"] == "POST /api/robots/A/deter"))
     rows = [r for r in s.api.audit.list() if r["action"] == "POST /api/robots/A/deter"]
-    assert any(r["detail"].get("color") == "yellow" for r in rows)
     assert any(r["detail"].get("side") == "left" for r in rows)
 
 
