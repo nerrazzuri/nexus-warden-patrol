@@ -193,6 +193,8 @@ BATTERY_FLOOR_PCT = 15.0
 #: W55:要空闲才做、做的时候不接新任务的远程运维命令(外审 W55-1 第 8、16 条)。
 _OPS_HOLD = frozenset({"ops_reboot", "cert_install", "ops_restart"})
 _AUTONOMOUS_KINDS = frozenset({"goto", "patrol", "standoff", "dock", "follow"})
+#: 会让狗动的任务:控制权不在手上时不收(11-27 C40221,遥控也算 —— 手持遥控器拿着时 App 遥控也动不了)。
+_CONTROL_KINDS = _AUTONOMOUS_KINDS | {"teleop"}
 #: 放了、过期的监护会话留多久(秒):挡同一会话里迟到的旧心跳(站点的命令有效期 30 s,再多留一点)。
 _SESSION_MEMORY_S = 60.0
 
@@ -528,6 +530,11 @@ class AgentRuntime:
         self._link_down_at: float | None = None
         self._reclaim_left = 0                           # 重连后还要再拿几次控制权
         self._reclaim_at = 0.0
+        #: 运动控制权在不在手上(每拍按 HAL 健康更新;None = 还没起来)。11-27 C40221:
+        #: 起来时手持遥控器拿着控制权,原来整个代理起不来、站点看着离线;
+        #: 现在照常上线,只是不收会让狗动的任务。
+        self._control_held: bool | None = None
+        self._await_control = False                      # 起来时没拿到:一直等到拿到为止
         self.processor.admit_hook = self._admit
         #: 地图(W00c5d 第二部分):正在用的那一张(``MapKeeper``)、录包与重建(``MappingService``)。
         self.maps = maps
@@ -805,6 +812,10 @@ class AgentRuntime:
         事件派遣的 ``goto``、遥控不拍照、不产生文件,照接。正在换图时不接自动任务(遥控照接)。"""
         if self._restarting:
             return "restarting"
+        if cmd.kind in _CONTROL_KINDS and self._control_held is False:
+            # 11-27:在线但控制权在手持遥控器(或别的程序)那儿:站点也会拦,
+            # 这里兜底(站点拿到的状态可能是旧的)
+            return "no_control: 未就绪:控制权不在站点(手柄或别的程序在控制):交还之后再派"
         if cmd.kind in _AUTONOMOUS_KINDS and self.autonomy == "supervised" \
                 and not self._supervised_now():
             return "unsupervised"                 # W00c6i:没人现场监护,真狗不自己动
@@ -2788,6 +2799,23 @@ class AgentRuntime:
                             FIRST_CONNECT_RETRY_S, FIRST_CONNECT_WAIT_S)
                 await asyncio.sleep(FIRST_CONNECT_RETRY_S)
 
+    async def _first_control(self) -> None:
+        """起来时拿运动控制权。**拿不到不致命**(11-27 C40221:手持遥控器拿着时 SDK 回
+        「another master exists」,原来代理退出、systemd 拉起来又退,站点一直看着离线):照常上线、
+        发遥测,状态里的「控制权」是 false,站点和代理都不派、不收会让狗动的任务;
+        :meth:`_watch_link` 每 :data:`HAL_RETRY_S` 秒再拿,拿到为止(真狗上是旁路进程自己重抢,
+        这里只是核对)。不会去抢人手上的控制权:厂商 SDK 不许。"""
+        try:
+            await self.hal.acquire_control()
+        except Exception as exc:  # noqa: BLE001 - 哪种失败都一样:先上线,过一阵再拿
+            log.warning("起来时没拿到运动控制权(%s):照常上线,不收会让机器人动的任务;"
+                        "每 %g 秒再拿", exc, HAL_RETRY_S)
+            self._control_held = False
+            self._await_control = True
+            self._reclaim_at = self._mono() + HAL_RETRY_S
+            return
+        self._control_held = True
+
     async def start(self) -> None:
         """起不来就回滚:``close()`` 把已经拿到的控制权放掉、链路关掉,再把异常抛给调用方。"""
         try:
@@ -2839,11 +2867,11 @@ class AgentRuntime:
                 log.exception("录像起不来")
                 self.events.emit("recording_failed",
                                  {"camera": "*", "reason": f"起不来:{exc}"[:300]})
-        # HAL 的生死归代理(总设计 §2.2「谁连 SDK」):先连上、拿到厂商控制权,再对站点亮相。
+        # HAL 的生死归代理(总设计 §2.2「谁连 SDK」):先连上、核对厂商控制权,再对站点亮相。
         self._closed = False
         self._hal_touched = True
         await self._connect_hal()
-        await self.hal.acquire_control()
+        await self._first_control()
         if self.parts is not None:
             # 头尾方向(W11a)先读一次:不然导航桥走第一拍之前进来的 goto 会被当成「不知道」拒掉
             try:
@@ -3459,8 +3487,17 @@ class AgentRuntime:
         except Exception:  # noqa: BLE001 - 健康都读不出:这一拍不判
             return
         ok, now = h.link_ok, self._mono()
+        self._control_held = bool(ok and h.control)
         if ok:
             self._link_down_at = None
+            if self._await_control and now >= self._reclaim_at:
+                self._reclaim_at = now + HAL_RETRY_S
+                if h.control:
+                    self._await_control = False
+                    log.warning("运动控制权回来了:开始收会让机器人动的任务")
+                    return
+                self._link_job = asyncio.get_running_loop().create_task(self._reclaim())
+                return
             if self._reclaim_left > 0 and now >= self._reclaim_at:
                 if h.control:
                     self._reclaim_left = 0
@@ -3495,11 +3532,19 @@ class AgentRuntime:
         try:
             await self.hal.acquire_control()
         except Exception as exc:  # noqa: BLE001 - 这次没拿成:过一阵再拿
+            if self._await_control:
+                log.debug("还没拿到运动控制权:%s", exc)  # 起来时记过一次;人拿着遥控器时不刷屏
+                return
             left = self._reclaim_left
             log.warning("重连后拿控制权没成:%s(%s)", exc,
                         f"{HAL_RETRY_S:g} 秒后再拿,还剩 {left} 次" if left else "不再拿了")
             return
         self._reclaim_left = 0
+        if self._await_control:
+            self._await_control = False
+            self._control_held = True
+            log.warning("拿到运动控制权了:开始收会让机器人动的任务")
+            return
         log.warning("重连后拿回控制权了")
 
     async def _feed_trail(self) -> None:
