@@ -43,6 +43,18 @@ from nexwar_site.temporal import GATED, temporal_class
 
 log = logging.getLogger(__name__)
 
+#: 控制权交还以后(手持遥控器、别的程序拿过,状态里「控制权」从 false 变回 true),站点自己发起的
+#: 让狗动的任务等这么久再派(用户 11-27「等2分钟」):人可能还站在机器人旁边。人手动派的不受限。
+MANUAL_HOLD_MS = 120_000
+#: 站点自己发起的任务的 ``issued_by``(冒号前那一段);别的(账号名)算人派的。
+AUTO_ISSUERS = frozenset({"guard", "standby", "charge", "deterrence", "weather", "site", "force",
+                          "incident", "schedule"})
+
+
+def auto_issuer(by: str) -> bool:
+    """这条是不是站点自己发起的(值守、排程、回充、事件、驱离、雷暴、自动回待命点……)。"""
+    return str(by).split(":", 1)[0] in AUTO_ISSUERS
+
 #: 只落库、不推给事件流和回调的事件:装版本的进度(真机 11-25 进度条;一次装十几条,
 #: 进事件列表就刷屏了)。
 QUIET_EVENTS = ("release_progress",)
@@ -299,6 +311,15 @@ class Dispatcher:
                            | errcodes.wire(name))
             else:
                 log.info("机器人 %s 现在%s", robot_id, "在线" if s.online else "离线")
+        if s.online:
+            held = bool(s.ready.control)
+            ctl = self.__dict__.setdefault("_control_seen", {})
+            if held and ctl.get(robot_id) is False:
+                # 控制权回来了:站点自己发起的任务等 MANUAL_HOLD_MS(:meth:`manual_hold_left`)
+                self.__dict__.setdefault("_control_back", {})[robot_id] = self._now()
+                log.warning("机器人 %s 控制权交还了:站点自己发起的任务 %d 秒后才派", robot_id,
+                            MANUAL_HOLD_MS // 1000)
+            ctl[robot_id] = held
         with self.db.tx() as c:
             c.execute("INSERT INTO robot_state(robot_id, status, updated_at) VALUES (?,?,?) "
                       "ON CONFLICT(robot_id) DO UPDATE SET status=excluded.status, "
@@ -520,8 +541,15 @@ class Dispatcher:
         if h is not None:
             raise DispatchRefused(f"{robot_id} 被 {h['by']} 叫停了:先点「恢复」再派")
 
-    def _check_dispatchable(self, robot_id: str, c: DispatchClient, kind: str) -> None:
-        """派遣条件(总设计 §3.1):在线、新鲜、就绪、支持这种任务;**没被叫停**(W00c5e)。"""
+    def manual_hold_left(self, robot_id: str) -> int:
+        """控制权交还以后,站点自己发起的任务还要等几毫秒(0 = 不用等)。"""
+        at = self.__dict__.get("_control_back", {}).get(robot_id)
+        return 0 if at is None else max(0, at + MANUAL_HOLD_MS - self._now())
+
+    def _check_dispatchable(self, robot_id: str, c: DispatchClient, kind: str, *,
+                            auto: bool = False) -> None:
+        """派遣条件(总设计 §3.1):在线、新鲜、就绪、支持这种任务;**没被叫停**(W00c5e)。
+        ``auto``(站点自己发起的):控制权刚交还的 :data:`MANUAL_HOLD_MS` 内不派。"""
         self._check_held(robot_id)
         s = c.status
         if s is None or not s.online:
@@ -533,6 +561,11 @@ class Dispatcher:
         if not_ready:
             from nexwar_site.refusals import not_ready_text
             raise DispatchRefused(not_ready_text(robot_id, not_ready))
+        left = self.manual_hold_left(robot_id) if auto else 0
+        if left > 0:
+            raise DispatchRefused(f"{robot_id} 刚交还控制权(手持遥控器或别的程序用过):"
+                                  f"站点自己发起的任务 {-(-left // 1000)} 秒后才派,"
+                                  "人手动派的不受限")
         if c.capabilities is not None and kind not in c.capabilities.tasks:
             raise DispatchRefused(f"{robot_id} 不支持 {kind}")
         self._check_skew(robot_id)
@@ -809,10 +842,11 @@ class Dispatcher:
         if temporal_class(kind, payload) == GATED:
             self._check_skew(robot_id, ttl_ms)
 
-    def dispatchable(self, robot_id: str, kind: str) -> str:
-        """能不能给它派这种任务:能 → 空串;不能 → 理由。排程执行器选狗用。"""
+    def dispatchable(self, robot_id: str, kind: str, *, auto: bool = False) -> str:
+        """能不能给它派这种任务:能 → 空串;不能 → 理由。排程执行器选狗用(``auto``:站点自己发起的,
+        见 :meth:`_check_dispatchable`)。"""
         try:
-            self._check_dispatchable(robot_id, self._client_for(robot_id), kind)
+            self._check_dispatchable(robot_id, self._client_for(robot_id), kind, auto=auto)
         except DispatchRefused as exc:
             return str(exc)
         return ""
@@ -835,7 +869,7 @@ class Dispatcher:
         ``photo``:到了拍一张(相机名,W17)。狗没报能用这个相机拍(``goto_photo``,老代理)就不带:
         老代理不看这个键,照走不拍,带上只会让人以为有照片。"""
         c = self._client_for(robot_id)
-        self._check_dispatchable(robot_id, c, "goto")
+        self._check_dispatchable(robot_id, c, "goto", auto=auto_issuer(issued_by))
         try:
             pose = MapPose.from_wire(target)
         except ContractError as exc:
@@ -863,7 +897,7 @@ class Dispatcher:
         一模一样;命令里的 ``map_version`` 是**任务的**(以前填的是狗自己的,狗的核对就空转了)。没绑
         版本的任务(老任务包、升级前导入的)不派 —— 绝不拿狗现在用的那一版去补。"""
         c = self._client_for(robot_id)
-        self._check_dispatchable(robot_id, c, "patrol")
+        self._check_dispatchable(robot_id, c, "patrol", auto=auto_issuer(issued_by))
         try:
             m = parse_mission(mission)
         except (MissionError, ValueError) as exc:
@@ -927,7 +961,7 @@ class Dispatcher:
         """对桩、充电、出桩(W13)。站点回充编排派;优先级是回充那一档。"""
         from nexwar_contract.charging import CHARGE_PRIORITY
         c = self._client_for(robot_id)
-        self._check_dispatchable(robot_id, c, "dock")
+        self._check_dispatchable(robot_id, c, "dock", auto=True)
         return await self._send(c, robot_id, "dock", req.to_payload(), issued_by=issued_by,
                                 priority=CHARGE_PRIORITY, task_id=task_id)
 
@@ -936,7 +970,7 @@ class Dispatcher:
         """保持距离(W25):驱离开场派、狗没在守就补派。优先级最低(谁来都抢得走)。"""
         from nexwar_contract.standoff import STANDOFF_PRIORITY
         c = self._client_for(robot_id)
-        self._check_dispatchable(robot_id, c, "standoff")
+        self._check_dispatchable(robot_id, c, "standoff", auto=True)
         return await self._send(c, robot_id, "standoff", req.to_payload(), issued_by=issued_by,
                                 priority=STANDOFF_PRIORITY, task_id=task_id)
 
@@ -945,7 +979,7 @@ class Dispatcher:
         """跟人(W74 二期):值守看见人停下以后派;跟报警出动同一档优先级。"""
         from nexwar_contract.follow import FOLLOW_PRIORITY
         c = self._client_for(robot_id)
-        self._check_dispatchable(robot_id, c, "follow")
+        self._check_dispatchable(robot_id, c, "follow", auto=True)
         return await self._send(c, robot_id, "follow", req.to_payload(), issued_by=issued_by,
                                 priority=FOLLOW_PRIORITY, task_id=task_id)
 

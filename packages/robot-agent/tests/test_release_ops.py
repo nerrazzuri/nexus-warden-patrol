@@ -81,11 +81,14 @@ def test_装_切_起来提交(ops, tmp_path):
     assert o.ready(NEW) and built == [(NEW, NEW)]
     assert not any((tmp_path / "work").iterdir()), "下载、解开的临时东西收掉"
     assert o.current() == OLD, "装不等于切"
+    assert not o.upgrading()
     got = o.activate(NEW)
     assert o.current() == NEW and restarts == [1]
     assert got["pending"]["to"] == NEW and rel.read_pending(layout) is not None
+    assert o.upgrading(), "新版试跑:连不上运控照旧退出,让守卫数"
     assert o.commit_if_pending() == NEW, "代理起来、连上站点:提交"
     assert rel.read_pending(layout) is None and o.commit_if_pending() is None
+    assert not o.upgrading()
     o.install(ref)                                          # 再装一遍:已经好了,不重下
     assert built == [(NEW, NEW)]
 

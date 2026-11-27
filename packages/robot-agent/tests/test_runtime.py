@@ -767,7 +767,14 @@ async def test_真机1125_旁路刚起_第一帧没到_也在进程里等(台子
     await rt.close()
 
 
-async def test_真机1123_旁路一直不在听_等够了照旧退出_让守卫数(台子, monkeypatch):
+class 新版试跑:
+    """升级还没提交、新版这次起来(``ReleaseOps.upgrading``)。"""
+
+    def upgrading(self) -> bool:
+        return True
+
+
+async def test_真机1123_旁路一直不在听_新版试跑时_等够了照旧退出_让守卫数(台子, monkeypatch):
     import nexwar_agent.runtime as RT
     from nexwar_patrol.backends.base import DeviceBackendError
     monkeypatch.setattr(RT, "HAL_CONNECT_RETRY_S", 0.01)
@@ -780,11 +787,53 @@ async def test_真机1123_旁路一直不在听_等够了照旧退出_让守卫�
         except OSError as exc:
             raise DeviceBackendError("无法连接运控旁路进程") from exc
     monkeypatch.setattr(rt.hal, "connect", 一直被拒)
+    rt.releases = 新版试跑()
     with pytest.raises(DeviceBackendError):
         await rt.start()
 
 
-async def test_真机1123_旁路的真错_比如协议版本不对_不等马上退出(台子, monkeypatch):
+async def test_用户1127_旁路没起来_不是新版试跑_照常上线_连上以后收任务(台子, monkeypatch):
+    """原来旁路没在听等 60 s 就退出、systemd 拉起来再等,站点一直看着离线。"""
+    import nexwar_agent.runtime as RT
+    from nexwar_agent.runtime import HAL_RETRY_S
+    from nexwar_patrol.backends.base import DeviceBackendError
+    monkeypatch.setattr(RT, "HAL_CONNECT_RETRY_S", 0.01)
+    monkeypatch.setattr(RT, "HAL_CONNECT_WAIT_S", 0.05)
+    broker, c, r, ears, rt, site = 台子
+    real = r.connect
+    旁路 = [False]
+
+    async def 连(*a, **k):
+        if not 旁路[0]:
+            try:
+                raise ConnectionRefusedError(111, "Connection refused")
+            except OSError as exc:
+                raise DeviceBackendError("无法连接运控旁路进程") from exc
+        await real()
+    monkeypatch.setattr(rt.hal, "connect", 连)
+    await rt.start()
+    await broker.drain()
+    st = Status.from_wire(ears.by_topic["status"][-1])
+    assert st.online and not st.ready.control, "照常上线,控制权 false"
+    await site.publish(T.cmd, _goto(c, "g1"))
+    await broker.drain()
+    ack = ears.by_topic["cmd/ack"][-1]
+    assert ack["result"] == "rejected" and ack["reason"].startswith("no_control"), ack
+    旁路[0] = True                                      # 旁路起来了
+    for _ in range(int(2 * HAL_RETRY_S / 0.5) + 4):
+        c.advance(0.5)
+        await rt.step(0.5)
+        await asyncio.sleep(0)
+    h = await r.health()
+    assert h.link_ok and h.control, "自己连上、拿到控制权"
+    await broker.drain()
+    assert Status.from_wire(ears.by_topic["status"][-1]).ready.control
+    await site.publish(T.cmd, _goto(c, "g2"))
+    await broker.drain()
+    assert ears.by_topic["cmd/ack"][-1]["result"] == "accepted"
+
+
+async def test_真机1123_旁路的真错_比如协议版本不对_新版试跑时不等马上退出(台子, monkeypatch):
     import nexwar_agent.runtime as RT
     from nexwar_patrol.backends.base import DeviceBackendError
     monkeypatch.setattr(RT, "HAL_CONNECT_RETRY_S", 0.01)
@@ -795,6 +844,7 @@ async def test_真机1123_旁路的真错_比如协议版本不对_不等马上�
         n[0] += 1
         raise DeviceBackendError("协议版本不匹配: 旁路进程 3")
     monkeypatch.setattr(rt.hal, "connect", 协议不对)
+    rt.releases = 新版试跑()
     with pytest.raises(DeviceBackendError):
         await rt.start()
     assert n[0] == 1, "不是「没在听」的错不重试"
