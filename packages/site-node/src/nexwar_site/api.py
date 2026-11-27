@@ -2256,8 +2256,15 @@ class _Handler(TlsHandlerMixin):
             name = d.get("name") if isinstance(d, dict) else None
             if name is not None and (not isinstance(name, str) or not SAFE_ID.match(name)):
                 raise HttpError(400, f"名字只许 ASCII 字母、数字、. _ -:{name!r}")
-            result = self.site.dispatch(lambda: stb.return_to(robot_id, issued_by=str(user),
-                                                              name=name))
+            abort = d.get("abort", False) if isinstance(d, dict) else False
+            if not isinstance(abort, bool):
+                raise HttpError(400, "abort 要是 true/false")
+            if abort:
+                self._audit_detail = {"abort": True}
+            # 易用性 37 用户 11-27 轮 P2-1:带 abort 先中止正在跑的那一趟(跟回原点一样多等一会儿)
+            result = self.site.dispatch(
+                lambda: stb.return_to(robot_id, issued_by=str(user), name=name, abort=abort),
+                timeout_s=self.site.dispatcher.ack_timeout_s * 2 + 25 if abort else None)
             return self._send_json(200, result)
         if method == "GET":
             return self._send_json(200, {"points": stb.list(robot_id),

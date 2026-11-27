@@ -177,7 +177,11 @@ export function RobotControl(props: {
                   onClick={() => void abort()}>{t("rcStop")}</button>}
                 {dispatch && <button type="button" class="btn" disabled={busy || off || r.standby_set === false}
                   title={r.standby_set === false ? t("rdNoStandby") : undefined}
-                  onClick={() => void send(post("standby/return"), t("rdSent", { id: name, what: t("rdReturn") }))}>{t("rdReturn")}</button>}
+                  onClick={() => task
+                    // 易用性 37 用户 11-27 轮 P2-1:有任务时机器人拒(busy)—— 先问,确认了先中止这一趟再回
+                    ? setAsk({ text: t("rdReturnAbortAsk", { id: name, what: taskWhat(r.task_what) }), yes: t("rdReturn"),
+                        run: () => void send(post("standby/return", { abort: true }), t("rdSent", { id: name, what: t("rdReturn") })) })
+                    : void send(post("standby/return"), t("rdSent", { id: name, what: t("rdReturn") }))}>{t("rdReturn")}</button>}
               </div>
             )}
             {dispatch && (

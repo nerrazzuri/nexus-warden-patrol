@@ -145,6 +145,34 @@ void main() {
     await t.pumpWidget(Container());
   });
 
+  testWidgets('用户 11-27 轮 P2-2、P2-3：换电池这类设备 P1 不算「安全事件」，进设备与运营；有 P1 时没回去的提醒照样在，卡片上写出来', (t) async {
+    _size(t, const Size(390, 2400));
+    Map<String, dynamic> dev(String key, String kind, String aud) =>
+        <String, dynamic>{..._p1(key), 'kind': kind, 'audience': aud, 'title': '换电池'};
+    final api = FakeApi('guard')
+      ..alertRows = [dev('A/swap_needed#1', 'swap_needed', 'help'), dev('A/swap_needed#2', 'swap_needed', 'help'),
+        dev('A/swap_overdue#1', 'swap_overdue', 'owner')]
+      ..robotsOverride = [<String, dynamic>{..._robot('A'), 'stranded': {'key': 'k', 'title': '回原点失败', 'detail': '', 'at_ms': 1}}];
+    await _show(t, api);
+    expect(find.byKey(NowPage.multiKey), findsNothing);
+    expect(find.textContaining('安全事件'), findsNothing);
+    expect(find.byKey(NowPage.p1Key('A/swap_needed#1')), findsNothing);
+    expect(find.byKey(NowPage.attnKey), findsOneWidget);
+    expect(find.byKey(NowPage.tileAttnKey('A')), findsOneWidget);
+    await _scrollTo(t, NowPage.opsKey);
+    expect(find.byKey(NowPage.opsRowKey('A/swap_needed#1')), findsOneWidget);
+    expect(find.byKey(NowPage.opsRowKey('A/swap_overdue#1')), findsNothing, reason: '给经理的，跟网页一样不列给保安');
+    await t.pumpWidget(Container());
+
+    final sec = FakeApi('guard')
+      ..alertRows = [<String, dynamic>{..._p1('A/intrusion#1'), 'audience': 'intrusion'}]
+      ..robotsOverride = [<String, dynamic>{..._robot('A'), 'home_bad': true}];
+    await _show(t, sec);
+    expect(find.byKey(NowPage.p1Key('A/intrusion#1')), findsOneWidget);
+    expect(find.byKey(NowPage.attnKey), findsOneWidget, reason: '以前有 P1 就被盖住');
+    await t.pumpWidget(Container());
+  });
+
   testWidgets('外审 App-V2-3 I4：报警结案了驱离还在 —— 不说「全场正常」，一条红框写驱离到第几级，保安点进驱离页', (t) async {
     _size(t, const Size(390, 2000));
     final healthy = [

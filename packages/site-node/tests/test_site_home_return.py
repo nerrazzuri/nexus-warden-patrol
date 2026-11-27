@@ -65,8 +65,9 @@ def test_回原点_有任务在跑要先中止_带abort就先停再去(站点):
     assert code == 200 and d["ack"]["result"] == "accepted", d
     assert d["task_id"].startswith("standby-") and d["aborted"] == tid, d
     _等(lambda: _任务(s) == d["task_id"])
-    rows = [r for r in s.api.audit.list() if r["action"] == "POST /api/robots/A/home/return"]
-    assert any(r["detail"].get("abort") is True for r in rows)
+    # 操作记录在回完请求之后才写:等它
+    _等(lambda: any(r["detail"].get("abort") is True for r in s.api.audit.list()
+                   if r["action"] == "POST /api/robots/A/home/return"))
 
 
 def test_没任务_直接回原点(站点):
@@ -96,3 +97,20 @@ def test_外审r1_中止后停车没确认_不派回原点(站点):
     assert code == 409 and "停车没确认" in d["error"], d
     assert not any(c["kind"] == "goto" and c["task_id"].startswith("standby-")
                    for c in s.disp.commands("A", 50)), "没派回原点"
+
+
+def test_用户1127_回待命点_有任务在跑_带abort先停再去(站点):
+    """易用性 37 用户 11-27 轮 P2-1:值守、临时巡逻跑着时点「回待命点」,机器人回 busy、接着跑。"""
+    s = 站点
+    alice, gina = _登(s, "alice"), _登(s, "gina")
+    _备好(s)
+    assert s.req("POST", "/api/robots/A/standby/here", {"name": "lobby"}, token=alice)[0] == 200
+    assert s.req("POST", "/api/robots/A/standby/return", {"abort": 1}, token=gina)[0] == 400
+    tid = _去远处(s, gina)
+    code, d = s.req("POST", "/api/robots/A/standby/return", {"abort": True}, token=gina)
+    assert code == 200 and d["ack"]["result"] == "accepted", d
+    assert d["task_id"].startswith("standby-") and d["aborted"] == tid, d
+    _等(lambda: _任务(s) == d["task_id"])
+    # 操作记录在回完请求之后才写:等它
+    _等(lambda: any(r["detail"].get("abort") is True for r in s.api.audit.list()
+                   if r["action"] == "POST /api/robots/A/standby/return"))
