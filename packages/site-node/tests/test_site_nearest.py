@@ -96,6 +96,21 @@ def test_第3轮_duty_N3_临时路线_机器人从现在的位置走不到第1�
     assert h._reach_first("X", "house", "wide", [{"x": 6.5, "y": 2.0}]) == []
 
 
+def test_去这里先查走不走得到_站点没有规划栅格_查不了不拦(台, tmp_path):  # noqa: F811
+    """CI 集成测试 W00c1(goto 带上图号版本以后):这一版没有 floor.pgm,以前当成「走不到」拒派。"""
+    from types import SimpleNamespace as NS
+
+    from test_site_maps import _files
+
+    from nexwar_site.api import _Handler
+    src = _files(tmp_path / "vendor", **{"house.pgm": b"P5\n1 1\n255\n\x00", "house.yaml": b"x"})
+    台.cat.import_dir(src, map_id="house", version="vendor")
+    h = _Handler.__new__(_Handler)
+    h.site = NS(incidents=NS(reach=台.reach), dispatcher=NS(clients={"B": NS(telemetry=NS(
+        pose=NS(map_id="house", map_version="vendor", x=0.0, y=0.0)))}))
+    assert h._reach_first("B", "house", "vendor", [{"x": 0.5, "y": 0.0}]) == []
+
+
 def test_minor20_有能派的但都走不到那个点_说走不到_不说没有机器人(台):  # noqa: F811
     """liang-d5 W7-02:去看看一个走不到的点(墙里、窄门那边),提示「没有可用机器人」。"""
     from nexwar_site.nearest import why_none
