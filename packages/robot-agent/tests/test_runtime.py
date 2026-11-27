@@ -800,6 +800,56 @@ async def test_真机1123_旁路的真错_比如协议版本不对_不等马上�
     assert n[0] == 1, "不是「没在听」的错不重试"
 
 
+def _goto(c, cid: str) -> bytes:
+    return json.dumps({"schema": "1.0", "command_id": cid, "task_id": "t-" + cid, "kind": "goto",
+                       "issued_at": c(), "expires_at": c() + 60_000, "control_epoch": 1,
+                       "priority": 0, "offline_policy": "default", "precondition": None,
+                       "payload": {"target": {"schema": "1.0", "map_id": "m", "map_version": "1",
+                                              "frame_id": "map", "x": 3.0, "y": 0.0,
+                                              "yaw": 0.0}}}).encode()
+
+
+async def test_现场1127_拿着遥控器起代理_照常上线_不收要动的任务_松手后收(台子, monkeypatch):
+    """11-27 C40221:手持遥控器拿着控制权,``acquire_control`` 抛「another master exists」,
+    原来代理退出、systemd 拉了 131 次,站点一直看着离线。"""
+    from nexwar_agent.runtime import HAL_RETRY_S
+    from nexwar_patrol.backends.base import DeviceBackendError
+    broker, c, r, ears, rt, site = 台子
+    real = r.acquire_control
+    遥控器 = [True]
+
+    async def 抢(*a, **k):
+        if 遥控器[0]:
+            raise DeviceBackendError("hold 被旁路进程拒绝: Failed to take control, "
+                                     "another master exists.")
+        await real()
+    monkeypatch.setattr(r, "acquire_control", 抢)
+    await rt.start()
+    await broker.drain()
+    st = Status.from_wire(ears.by_topic["status"][-1])
+    assert st.online and not st.ready.control, "照常上线,状态里控制权是 false"
+    await site.publish(T.cmd, _goto(c, "g1"))
+    await broker.drain()
+    ack = ears.by_topic["cmd/ack"][-1]
+    assert ack["result"] == "rejected" and ack["reason"].startswith("no_control"), ack
+    for _ in range(int(HAL_RETRY_S / 0.5) + 2):        # 拿着不放:一直等,不退出
+        c.advance(0.5)
+        await rt.step(0.5)
+        await asyncio.sleep(0)
+    assert not (await r.health()).control
+    遥控器[0] = False                                   # 人松手
+    for _ in range(int(HAL_RETRY_S / 0.5) + 4):
+        c.advance(0.5)
+        await rt.step(0.5)
+        await asyncio.sleep(0)
+    assert (await r.health()).control, "松手后一个周期内拿到"
+    await broker.drain()
+    assert Status.from_wire(ears.by_topic["status"][-1]).ready.control
+    await site.publish(T.cmd, _goto(c, "g2"))
+    await broker.drain()
+    assert ears.by_topic["cmd/ack"][-1]["result"] == "accepted"
+
+
 async def test_现场1104_跟运控断了_过几秒自己重连_拿回控制权(台子):
     """以前只在起来时连一次运控:旁路进程重启以后代理一直断着,只能人重启代理。"""
     from nexwar_agent.runtime import HAL_RETRY_S
