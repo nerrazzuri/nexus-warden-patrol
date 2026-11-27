@@ -210,7 +210,9 @@ const RULES: Rule[] = [
   [/^整站撤防[:：]排程巡逻暂停$/, () => "Site disarmed: scheduled patrols paused"],   // 用户 11-27
   [/^整站已经撤防了[,，]不用再临时撤防[:：]要恢复就切到「布防」或「留守」$/,
     () => "The whole site is already disarmed, so a temporary disarm isn't needed. To restore, switch to Armed or Stay."],
-  // 第十六轮 P2:回原点失败的说明
+  // 第十六轮 P2:回原点失败的说明;用户 11-27 改成先回待命点、再重标原点(老的那句留着,老告警还在)
+  [/^原点离墙、障碍或禁行区太近,机器人规划不出到那里的路[:：]现在先点「回待命点」[;；]再把机器人开到开阔处[(（]离墙 1 m 左右[)）],重新标原点[;；]原文[:：]([\s\S]*)$/,
+    (m) => `The home point is too close to a wall, obstacle or no-go zone, so the robot can't plan a path there: tap Return to standby for now, then drive the robot about 1 m into open floor and mark the home point again. Original: ${tr(m[1])}`],
   [/^原点在障碍里或离墙太近[:：]去「布置」把原点挪开一点,再叫它回原点[;；]原文[:：]([\s\S]*)$/,
     (m) => `The home point is inside an obstacle or too close to a wall: move it a little in Site layout, then send the robot home again. Original: ${tr(m[1])}`],
   [/^看详情里的原因[;；]机器人停在原地等[;；]原文[:：]([\s\S]*)$/, (m) => `The robot is waiting where it is. Reason: ${tr(m[1])}`],

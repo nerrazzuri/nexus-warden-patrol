@@ -288,9 +288,11 @@ class FakeApi implements SiteApi {
   Map<String, dynamic> alertTestMode = <String, dynamic>{'active': false};
   @override
   Future<Map<String, dynamic>> alertTest() async => alertTestMode;
+  Completer<void>? homeGate;
   @override
   Future<Map<String, dynamic>> returnHome(String robotId, {bool abort = false}) async {
     calls.add(abort ? 'home $robotId abort' : 'home $robotId');
+    if (homeGate != null) await homeGate!.future;
     return {'ack': {'result': 'accepted'}};
   }
   @override
@@ -1314,6 +1316,41 @@ void main() {
     await t.tap(find.byKey(const Key('home-abort-confirm')));
     await t.pumpAndSettle();
     expect(busy.calls, ['home A abort']);
+  });
+
+  // 用户 11-27（新人易用性报告 C、D、E、A）
+  testWidgets('中止并回原点：等站点回话时写「正在停车…」按不动；回完恢复；两个「回去」有说明', (t) async {
+    final busy = FakeApi('guard', robotView: busyView())..homeGate = Completer<void>();
+    await openRobot(t, busy);
+    expect(find.textContaining('回原点：回到机器人上标的原点'), findsOneWidget);
+    await t.ensureVisible(find.byKey(const Key('btn-home-abort')));
+    await t.pump();
+    await t.tap(find.byKey(const Key('btn-home-abort')));
+    await t.pumpAndSettle();
+    await t.tap(find.byKey(const Key('home-abort-confirm')));
+    await t.pump();
+    expect(find.byKey(const Key('btn-home-stopping')), findsOneWidget);
+    expect(find.byKey(const Key('btn-home-abort')), findsNothing);
+    expect(t.widget<ButtonStyleButton>(find.descendant(
+        of: find.byKey(const Key('btn-home-stopping')), matching: find.byWidgetPredicate((w) => w is ButtonStyleButton),
+        matchRoot: true)).onPressed, isNull);
+    busy.homeGate!.complete();
+    await t.pumpAndSettle();
+    expect(find.byKey(const Key('btn-home-stopping')), findsNothing);
+    expect(busy.calls, ['home A abort']);
+  });
+
+  testWidgets('没回到原点（开着的 standby_failed）、原点离墙太近：机器人页一直写着', (t) async {
+    final v = jsonDecode(jsonEncode(busyView())) as Map<String, dynamic>;
+    (v['status'] as Map)['task'] = null;
+    v['stranded'] = {'key': 'k', 'title': '回原点失败', 'detail': '看详情里的原因;机器人停在原地等;原文:x', 'at_ms': 1};
+    v['home_set'] = true;
+    v['home_bad'] = true;
+    await openRobot(t, FakeApi('guard', robotView: v));
+    expect(find.byKey(SiteRobotPage.strandedKey), findsOneWidget);
+    expect(find.textContaining('回原点失败：机器人停在原地等'), findsOneWidget);
+    expect(find.byKey(SiteRobotPage.homeBadKey), findsOneWidget);
+    expect(find.textContaining('原点离墙、障碍或禁行区太近'), findsOneWidget);
   });
 
   // 易用性第 7 轮 A7-01（用户 11-11 定）：蹲着、趴着时站点不让开遥控，保安在 App 里没法让它站起来

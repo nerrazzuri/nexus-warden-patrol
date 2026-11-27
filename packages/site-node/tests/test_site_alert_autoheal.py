@@ -195,7 +195,8 @@ def test_第十六轮_撤防回原点被拒_报P2回原点失败_不是P1回待�
     assert _of(desk, "run_abort") == [], "不报 P1"
     [a] = _of(desk, "standby_failed")
     assert a.level.value == "P2" and a.title == "回原点失败"
-    assert "离墙太近" in a.detail and "布置" in a.detail
+    assert "离墙、障碍或禁行区太近" in a.detail and "先点「回待命点」" in a.detail
+    assert "重新标原点" in a.detail
     src.on_event("A", _ev("task_done", task_id="standby-home-def"))      # 挪了原点、回成了
     assert _of(desk, "standby_failed")[0].resolved_by == "site:standby_reached"
 

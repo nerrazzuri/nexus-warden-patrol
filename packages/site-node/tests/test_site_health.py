@@ -369,3 +369,46 @@ def test_第4轮_config_N7_客户端断开记INFO_不记ERROR(tmp_path, monkeypa
         assert mine and all(r.levelno == logging.INFO and r.exc_info is None for r in mine)
     finally:
         s.close()
+
+
+def test_用户1127_老原点离墙太近_体检和机器人页都写出来_没回去的也标出来(台):
+    from nexwar_site.robot_overview import home_bad, keep_out_polys, stranded
+    t = 台
+    with t.db.tx() as c:
+        c.execute("INSERT INTO homes(robot_id, map_id, map_version, name, x, y, yaw, marked_at_ms) "
+                  "VALUES ('A','m','1','home',2.62,-0.70,0,1), ('B','m','1','home',5.0,1.0,0,1), "
+                  "('B','m','0','home',2.62,-0.70,0,1)")
+    caps = SimpleNamespace(tasks={"patrol": {"map_id": "m", "map_version": "1"}})
+    seen = []
+
+    def goal(mid, ver, x, y, keep_out=()):
+        seen.append(keep_out)
+        return "离墙只有 0.10 m" if (x, y) == (2.62, -0.70) else ""
+    nogo = SimpleNamespace(polygon=((0.0, 0.0), (1.0, 0.0), (1.0, 1.0)))
+    zones = SimpleNamespace(effective=lambda mid, ver: SimpleNamespace(nogo=lambda: (nogo,)))
+    maps = SimpleNamespace(reach_problem=lambda *a: "", goal_problem=goal)
+    t.h.dispatcher = SimpleNamespace(clients={"A": SimpleNamespace(capabilities=caps, status=None),
+                                              "B": SimpleNamespace(capabilities=caps, status=None)},
+                                     maps=maps, zones=zones)
+    c = t.h.checks()
+    assert c["home"]["ok"] is False and "A" in c["home"]["detail"], c["home"]
+    assert "B" not in c["home"]["detail"].split(":")[1], "B 的老图上那个不算"
+    assert "Localization" in c["home"]["detail_en"]
+    assert seen[0] == (((0.0, 0.0), (1.0, 0.0), (1.0, 1.0)),), "禁行区也算"
+    assert home_bad(t.db, maps, zones, "B", caps) is False
+    assert home_bad(t.db, maps, zones, "C", caps) is False, "没标原点不说离墙近"
+    assert home_bad(t.db, SimpleNamespace(), zones, "A", caps) is False, "老的 maps 不查"
+    bad_zones = SimpleNamespace(effective=lambda mid, ver: 1 / 0)
+    assert keep_out_polys(bad_zones, "m", "1") == ()
+    assert t.h.healthz()[0] is True
+    # 开着的「回原点失败」:机器人页、App 现在页要看得见;关了就没了
+    assert stranded(t.db, "A") is None
+    with t.db.tx() as c:
+        c.execute("INSERT INTO alerts(key, level, kind, robot, title, detail, first_ms, last_ms, "
+                  "count, acked_by, resolved_by, escalated) VALUES "
+                  "('k1','P2','standby_failed','A','回原点失败','原点离墙…',1,5,1,'','',0)")
+    assert stranded(t.db, "A") == {"key": "k1", "title": "回原点失败", "detail": "原点离墙…",
+                                   "at_ms": 5}
+    with t.db.tx() as c:
+        c.execute("UPDATE alerts SET resolved_ms=9, resolved_by='site:standby_reached'")
+    assert stranded(t.db, "A") is None

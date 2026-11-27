@@ -56,6 +56,16 @@ void main() {
     expect(markRefusalText(SiteError(409, '机器人标记失败:A 现在站的地方不能当待命点(原点):离墙、障碍或禁行区只有 0.12 m,附近 0.35 m 内也没有离开 0.57 m 的空地:机器人规划不出到这里的路(回原点、回待命点会被拒)。往开阔处开 1 m 左右再标')), contains('too close to a wall'));
   });
 
+  test('用户 11-27：任务没走成的原因中文也说人话、回头补一样的只说一遍', () {
+    const one = '导航拒了: goto 被设备拒绝: 规划失败(goal_blocked):终点在障碍、禁行区里或贴得太近';
+    appLang.value = AppLang.zh;
+    expect(taskFailText('$one;回头补也没到:$one'), '要去的点离墙、障碍或禁行区太近，机器人规划不出到那里的路');
+    expect(taskFailText('导航拒了: goto 被设备拒绝: 规划失败(no_path):x'), contains('被墙或禁行区隔开'));
+    expect(taskFailText('导航拒了:别的原因'), '别的原因');
+    appLang.value = AppLang.en;
+    expect(taskFailText('$one;回头补也没到:$one'), isNot(contains('回头补')));
+  });
+
   test('易用性 37 复测第四轮：标原点被拒英文（ackReasonText 兜底也翻）；回头补同一句不重复', () {
     expect(ackReasonText('A 现在站的地方不能当待命点:这里 在图上不是可通行的地方(墙、障碍或未扫到)。往开阔、扫到过的地方开 1 m 左右再标'),
         startsWith("A can't use this spot as its standby point"));
@@ -171,6 +181,7 @@ void main() {
     expect(alertTitle('standby_failed', '未返回待命点'), isNot(contains('home point')));
     for (final s in [
       '原点在障碍里或离墙太近:去「布置」把原点挪开一点,再叫它回原点;原文:导航拒了',
+      '原点离墙、障碍或禁行区太近,机器人规划不出到那里的路:现在先点「回待命点」;再把机器人开到开阔处(离墙 1 m 左右),重新标原点;原文:导航拒了',
       '整站已经撤防了,不用再临时撤防:要恢复就切到「布防」或「留守」',
       '整站撤防:排程巡逻暂停',
     ]) {

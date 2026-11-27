@@ -128,6 +128,8 @@ class SiteRobotPage extends StatefulWidget {
   static const Key menuKey = Key('robot-menu');
   static const Key deterBannerKey = Key('robot-deter-banner');
   static const Key estopKey = Key('robot-estop');
+  static const Key strandedKey = Key('robot-stranded');
+  static const Key homeBadKey = Key('robot-home-bad');
   static const Key tonightKey = Key('robot-tonight');
   static const Key lieKey = Key('btn-posture-lie');
   static const Key lieConfirmKey = Key('lie-confirm');
@@ -155,6 +157,11 @@ class _SiteRobotPageState extends State<SiteRobotPage> with NwAsk {
 
   /// 就地确认（不弹窗）：'stand' / 'lie' / 'home-abort' / 'unbind' / 'name'。
   String? _ask;
+  /// 用户 11-27（新人易用性报告 D）：「中止并回原点」发出去到站点回话（最多等它停稳 15 秒）这段时间
+  /// 按钮写「正在停车…」、按不动；原来确认框一收什么都不显示，按钮还能再按。
+  bool _stopping = false;
+  /// 就地确认展开后滚到它那里（页面往下滑过、屏幕矮的时候原来看不到）。
+  final GlobalKey _askAnchor = GlobalKey();
   final TextEditingController _name = TextEditingController();
   final TextEditingController _pw = TextEditingController();
 
@@ -227,14 +234,24 @@ class _SiteRobotPageState extends State<SiteRobotPage> with NwAsk {
     final tid = d is Map ? '${d['task_id'] ?? ''}' : '';
     final why = d is Map ? '${d['reason'] ?? ''}' : '';
     final code = navCodeText(d is Map ? d['code'] : null);
+    final homeBlocked = tid.startsWith('standby-home-') && why.contains('goal_blocked');
     final fix = why.contains('未标原点')
         ? tr(' Drive the robot to the dock, set its position, then tap "Mark origin here".',
             '把机器人开到充电桩前，设好位置后点「在这儿标原点」。')
-        : code != null
-            ? tr(' ${code.$2}.', '${code.$2}。')
-            : '';
-    // 手机 App 测试 M14：不给人看任务号
-    _say(tr('${tid.isEmpty ? 'The task' : taskKindText(tid)} did not run: $why.$fix', '${tid.isEmpty ? '任务' : taskKindText(tid)}没走成：$why。$fix'));
+        : homeBlocked
+            // 用户 11-27（新人易用性报告 C）：给出口，不只报原文
+            ? tr(' Tap "Return to standby" for now; then drive it into open floor and mark the origin again (Settings → Origin → Set here).',
+                '现在先点「回待命点」；之后把机器人开到开阔处，重新标原点（设置 → 原点 → 在这儿标）。')
+            : code != null
+                ? tr(' ${code.$2}.', '${code.$2}。')
+                : '';
+    // 手机 App 测试 M14：不给人看任务号；用户 11-27：原因说人话、「回头补」一样的只说一遍
+    final reason = homeBlocked
+        ? tr('the origin is too close to a wall, obstacle or no-go zone, so the robot cannot plan a path there',
+            '原点离墙、障碍或禁行区太近，机器人规划不出到那里的路')
+        : taskFailText(why);
+    _say(tr('${tid.isEmpty ? 'The task' : taskKindText(tid)} did not run: $reason.$fix',
+        '${tid.isEmpty ? '任务' : taskKindText(tid)}没走成：$reason。$fix'));
     unawaited(_reload());
   }
 
@@ -392,11 +409,30 @@ class _SiteRobotPageState extends State<SiteRobotPage> with NwAsk {
   }
 
   /// 中止并回原点（App V2 不弹窗）：就地确认。
-  void _abortHome() => setState(() => _ask = 'home-abort');
+  void _abortHome() {
+    setState(() => _ask = 'home-abort');
+    _showAsk();
+  }
+
+  /// 就地确认展开后滚到它那里。
+  void _showAsk() => WidgetsBinding.instance.addPostFrameCallback((_) {
+        final ctx = _askAnchor.currentContext;
+        if (ctx != null && mounted) {
+          unawaited(Scrollable.ensureVisible(ctx,
+              duration: const Duration(milliseconds: 200), alignmentPolicy: ScrollPositionAlignmentPolicy.keepVisibleAtEnd));
+        }
+      });
 
   Future<void> _abortHomeGo() async {
-    setState(() => _ask = null);
-    await _do(() => widget.api.returnHome(widget.robotId, abort: true), tr('Abort and return to origin', '中止并回原点'));
+    setState(() {
+      _ask = null;
+      _stopping = true;
+    });
+    try {
+      await _do(() => widget.api.returnHome(widget.robotId, abort: true), tr('Abort and return to origin', '中止并回原点'));
+    } finally {
+      if (mounted) setState(() => _stopping = false);
+    }
   }
 
   Future<void> _rename() async {
@@ -688,6 +724,41 @@ class _SiteRobotPageState extends State<SiteRobotPage> with NwAsk {
   }
 
   /// 就地确认那一条（不弹窗）：一句话 + 「确认」「取消」一排等宽。
+  /// 用户 11-27（新人易用性报告 C）：开着的「没回到原点 / 待命点」一直写在这里（原来只弹一条会消失的提示）。
+  Widget? _strandedCard(NwColors c, Map<String, dynamic>? v) {
+    final s = v?['stranded'];
+    if (s is! Map) return null;
+    final title = alertTitle('standby_failed', '${s['title'] ?? ''}');
+    final detail = siteText('${s['detail'] ?? ''}');
+    return Padding(
+        padding: const EdgeInsets.fromLTRB(Nw.s16, 0, Nw.s16, 12),
+        child: NwCard(
+            key: SiteRobotPage.strandedKey,
+            tone: NwTone.warning,
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(tr('$title: it is waiting where it is', '$title：机器人停在原地等'),
+                  style: NwText.titleSmall.copyWith(color: c.text)),
+              if (detail.isNotEmpty) ...[
+                const SizedBox(height: Nw.s4),
+                Text(detail, style: NwText.bodySmall.copyWith(color: c.textSecondary)),
+              ],
+            ])));
+  }
+
+  /// 用户 11-27（新人易用性报告 A）：老原点离墙太近 —— 回原点、撤防回原点都会被拒，先说。
+  Widget? _homeBadCard(NwColors c, Map<String, dynamic>? v) {
+    if (v?['home_bad'] != true) return null;
+    return Padding(
+        padding: const EdgeInsets.fromLTRB(Nw.s16, 0, Nw.s16, 12),
+        child: NwCard(
+            key: SiteRobotPage.homeBadKey,
+            tone: NwTone.warning,
+            child: Text(
+                tr("The origin is too close to a wall, obstacle or no-go zone, so the robot can't plan a path to it: Return to origin and the disarm return will be refused. Drive it about 1 m into open floor and mark the origin again (Settings → Origin → Set here).",
+                    '原点离墙、障碍或禁行区太近，机器人规划不出到那里的路：回原点、撤防回原点都会被拒。把机器人开到开阔处（离墙 1 m 左右），重新标原点（设置 → 原点 → 在这儿标）。'),
+                style: NwText.bodySmall.copyWith(color: c.text))));
+  }
+
   Widget _confirm(NwColors c, String text, Key goKey, String go, VoidCallback onGo) => Container(
       margin: const EdgeInsets.only(top: Nw.s8),
       padding: const EdgeInsets.all(12),
@@ -937,11 +1008,13 @@ class _SiteRobotPageState extends State<SiteRobotPage> with NwAsk {
       if (dispatch)
         nwOpButton(c, const Key('btn-standby'), tr('Return to standby', '回待命点'),
             () => _do(() => widget.api.returnToStandby(widget.robotId), tr('Return to standby', '回待命点'))),
-      // 回原点（POC）：没任务直接回；有任务只给「中止并回原点」（要确认）
-      if (dispatch && !busy)
+      // 回原点（POC）：没任务直接回；有任务只给「中止并回原点」（要确认）；正在停车时按不动
+      if (dispatch && _stopping)
+        nwOpButton(c, const Key('btn-home-stopping'), tr('Stopping…', '正在停车…'), null),
+      if (dispatch && !busy && !_stopping)
         nwOpButton(c, const Key('btn-home'), tr('Return to origin', '回原点'),
             () => _do(() => widget.api.returnHome(widget.robotId), tr('Return to origin', '回原点'))),
-      if (dispatch && busy)
+      if (dispatch && busy && !_stopping)
         nwOpButton(c, const Key('btn-home-abort'), tr('Abort and return to origin…', '中止并回原点…'), _abortHome),
     ];
     return [
@@ -951,8 +1024,12 @@ class _SiteRobotPageState extends State<SiteRobotPage> with NwAsk {
           child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Container(width: 14, height: 14, margin: const EdgeInsets.only(top: 5), color: dot),
             const SizedBox(width: 10),
+            // 用户 11-27（新人易用性报告 D）：巡逻结束那一刻状态从一行变两行，整块往下挪，按钮点空 ——
+            // 先留出两行的高度
             Expanded(
-                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                child: ConstrainedBox(
+                    constraints: const BoxConstraints(minHeight: 46),
+                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Text(v == null ? tr('Loading…', '加载中…') : robotStatusLine(v),
                   key: const Key('robot-status'), style: NwText.titleMedium.copyWith(color: c.text, fontWeight: FontWeight.w700)),
               if (facts.isNotEmpty)
@@ -960,8 +1037,10 @@ class _SiteRobotPageState extends State<SiteRobotPage> with NwAsk {
               if (v?['nav'] is Map && navText((v!['nav'] as Map).cast<String, dynamic>()).isNotEmpty)
                 Text(navText((v['nav'] as Map).cast<String, dynamic>()),
                     key: const Key('robot-nav'), style: NwText.bodySmall.copyWith(color: c.warning)),
-            ])),
+            ]))),
           ])),
+      ?_strandedCard(c, v),
+      ?_homeBadCard(c, v),
       ?_wifiChange(c, v, s?.canManageRobots ?? false),
       // 叫停之后站点不再派它（W00c5e）：说清楚，给能派单的人一个「恢复」。
       if (v?['held'] is Map)
@@ -1026,11 +1105,19 @@ class _SiteRobotPageState extends State<SiteRobotPage> with NwAsk {
           child: nwOpButton(c, const Key('btn-recordings'), tr('Recordings', '录像'),
               () => go(() => SiteRecordingsPage(api: widget.api, robotId: widget.robotId)), icon: Icons.videocam_outlined)),
       if (tasks.isNotEmpty)
-        nwRobotSection(c, tr('Tasks', '任务'), key: const Key('robot-tasks'), [
+        nwRobotSection(c, tr('Tasks', '任务'), key: const Key('robot-tasks'),
+            // 用户 11-27（新人易用性报告 E）：两个「回去」分不清
+            note: dispatch
+                ? tr('Return to standby: go to the standby point the site set and wait. Return to origin: go to the home point marked on the robot (where it lives and charges).',
+                    '回待命点：去站点设的待命点等着。回原点：回到机器人上标的原点（它回家、充电的地方）。')
+                : '',
+            [
           nwButtonRows(tasks, per: 2),
           if (_ask == 'home-abort')
-            _confirm(c, tr('Stop the current task, then go back to the origin?', '中止当前任务，然后回原点？'),
-                const Key('home-abort-confirm'), tr('Abort and return', '中止并回原点'), () => unawaited(_abortHomeGo())),
+            KeyedSubtree(
+                key: _askAnchor,
+                child: _confirm(c, tr('Stop the current task, then go back to the origin?', '中止当前任务，然后回原点？'),
+                    const Key('home-abort-confirm'), tr('Abort and return', '中止并回原点'), () => unawaited(_abortHomeGo()))),
         ]),
       if (teleop)
         nwRobotSection(c, tr('Remote control & posture', '遥控与姿态'), key: const Key('robot-teleop'),
@@ -1173,6 +1260,7 @@ class _SiteRobotPageState extends State<SiteRobotPage> with NwAsk {
               c,
               tr('Origin', '原点'),
               switch (v?['home_set']) {
+                true when v?['home_bad'] == true => tr('Too close to a wall: mark it again', '离墙太近：要重新标'),
                 true => tr('Set', '已标'),
                 false => tr('Not set', '没标'),
                 _ => tr('Unknown: no site map yet', '不知道：站点上还没有这张图'),

@@ -511,6 +511,19 @@ class MapCatalog:
         地方(planned_nav ``_snap_goal``),都没有就 ``goal_blocked`` 拒单 —— 第十六轮演示站点原点贴墙,
         撤防回原点被拒。这里按同一个规矩量;不行回一句给人看的原因,行回 ``""``。没有规划栅格的
         老版本、站点不认识的版本不查。``keep_out``:在生效的禁行区(抹掉区)多边形。"""
+        key = (map_id, version, round(float(x), 3), round(float(y), 3), tuple(keep_out))
+        cache = self.__dict__.setdefault("_goal_cache", {})
+        if key in cache:
+            return cache[key]
+        got = self._goal_problem(map_id, version, x, y, keep_out)
+        with self._preview_lock:
+            cache[key] = got
+            while len(cache) > 256:
+                cache.pop(next(iter(cache)))
+        return got
+
+    def _goal_problem(self, map_id: str, version: str, x: float, y: float,
+                      keep_out: tuple[tuple[tuple[float, float], ...], ...]) -> str:
         from nexwar_contract.zones import distance_to_polygon, point_in_polygon
         if self._reach(map_id, version) is None:
             return ""

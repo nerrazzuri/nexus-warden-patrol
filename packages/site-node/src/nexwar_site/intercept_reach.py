@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import math
 import threading
 from dataclasses import dataclass
 from typing import Any
@@ -62,6 +63,55 @@ def snap(cm: Any, cell: tuple[int, int] | None) -> tuple[int, int] | None:
     if d2[j] > k * k:
         return None
     return (int(rr[j] + ra), int(cc[j] + ca))
+
+
+#: 用户 11-27(新人易用性报告 B):机器人自己起步时起点被挡(贴墙、定位落在墙边那一格),会直线挪
+#: 最多这么远到最近能站的点再规划(robot-agent ``planned_nav.START_ESCAPE_M``)。站点原来起点只挪
+#: :data:`SNAP_M`,机器人停在墙边时「派去看一眼」紧挨着它的点也判「走不到」,机器人其实走得了。
+START_ESCAPE_M = 1.0
+
+
+def start_cell(cm: Any, x: float, y: float) -> tuple[int, int] | None:
+    """机器人此刻在 ``(x, y)``,规划从哪一格起:不在致命带里就是这一格;不然跟机器人一样,
+    :data:`START_ESCAPE_M` 以内最近的不致命、不硬挡的格,从这里直线过去不穿墙、禁行区(起点自己
+    落在墙格里的那一小段不算);都没有回 None。出图回 None。"""
+    import numpy as np
+    cell = cm.cell_of(x, y)
+    if cell is None:
+        return None
+    if not cm.lethal[cell] and not cm.hard[cell]:
+        return cell
+    res = float(cm.res)
+    k = int(math.ceil(START_ESCAPE_M / res))
+    r0, c0 = cell
+    h, w = cm.shape
+    ra, rb, ca, cb = max(0, r0 - k), min(h, r0 + k + 1), max(0, c0 - k), min(w, c0 + k + 1)
+    ok = ~cm.lethal[ra:rb, ca:cb] & ~cm.hard[ra:rb, ca:cb]
+    rr, cc = np.nonzero(ok)
+    cands = []
+    for r, c in zip((rr + ra).tolist(), (cc + ca).tolist(), strict=True):
+        cx, cy = cm.center(r, c)
+        d = math.hypot(cx - x, cy - y)
+        if d <= START_ESCAPE_M:
+            cands.append((d, r, c, cx, cy))
+    for d, r, c, cx, cy in sorted(cands):
+        n = max(1, int(math.ceil(d / (res / 2))))
+        left = not cm.hard[cell]
+        clear = True
+        for i in range(1, n + 1):
+            q = cm.cell_of(x + (cx - x) * i / n, y + (cy - y) * i / n)
+            if q is None:
+                clear = False
+                break
+            if cm.hard[q]:
+                if left:
+                    clear = False
+                    break
+            else:
+                left = True
+        if clear:
+            return (r, c)
+    return None
 
 
 class InterceptReach:
@@ -150,7 +200,7 @@ class InterceptReach:
             return None
         if cm is None:
             return None
-        s, g = snap(cm, cm.cell_of(*start)), snap(cm, cm.cell_of(*goal))
+        s, g = start_cell(cm, *start), snap(cm, cm.cell_of(*goal))
         if s is None or g is None:
             return None
         h, w = cm.shape
@@ -196,7 +246,7 @@ class InterceptReach:
         why = []
         timed_out = False
         for sname, sx, sy in starts:
-            s = snap(cm, cm.cell_of(sx, sy)) or cm.cell_of(sx, sy)
+            s = start_cell(cm, sx, sy) or cm.cell_of(sx, sy)
             if s is None:
                 why.append(f"待命点 {sname} 在规划栅格外")
                 continue

@@ -61,18 +61,24 @@ Future<void> setAppLang(AppLang lang, {LangStore? store}) async {
   }
 }
 
-/// 语言选了哪种存在哪儿。只存这一项；文件坏了、没有，都当没选过（英文）。
+/// 用户 11-27（新人易用性报告 I）：没选过语言就跟手机（系统）语言走 —— 系统首选是中文就中文，别的都英文。
+AppLang systemLang(Iterable<String> languageCodes) =>
+    languageCodes.isNotEmpty && languageCodes.first.toLowerCase() == 'zh' ? AppLang.zh : AppLang.en;
+
+/// 语言选了哪种存在哪儿。只存这一项；文件坏了、没有，都当没选过（[fallback]，App 开机时给系统语言）。
 class LangStore {
   final File file;
   const LangStore(this.file);
 
-  Future<AppLang> load() async {
+  Future<AppLang> load({AppLang fallback = AppLang.en}) async {
     try {
-      if (!await file.exists()) return AppLang.en;
+      if (!await file.exists()) return fallback;
       final raw = jsonDecode(await file.readAsString());
-      return raw is Map && raw['lang'] == 'zh' ? AppLang.zh : AppLang.en;
+      if (raw is Map && raw['lang'] == 'zh') return AppLang.zh;
+      if (raw is Map && raw['lang'] == 'en') return AppLang.en;
+      return fallback;
     } catch (_) {
-      return AppLang.en;
+      return fallback;
     }
   }
 
