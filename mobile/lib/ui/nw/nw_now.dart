@@ -61,6 +61,7 @@ class NowPage extends StatefulWidget {
   static const Key attnKey = Key('now-attn');
   static const Key attnStandbyKey = Key('now-attn-standby');
   static Key p1Key(String key) => Key('now-p1-$key');
+  static Key tileAttnKey(String id) => Key('now-tile-attn-$id');
   static Key ackKey(String key) => Key('now-ack-$key');
   static Key openKey(String key) => Key('now-open-$key');
   static const Key multiKey = Key('now-multi');
@@ -859,7 +860,12 @@ class _NowPageState extends State<NowPage> with EstopMissReveal {
                       maxLines: 1, overflow: TextOverflow.ellipsis, style: NwText.labelLarge.copyWith(color: c.text, fontWeight: FontWeight.w600))),
             ]),
             const SizedBox(height: 2),
-            Text(_tileNote(r), maxLines: 1, overflow: TextOverflow.ellipsis, style: NwText.bodySmall.copyWith(color: c.textSecondary)),
+            // 易用性 37 用户 11-27 轮 P2-3：没回去、原点 / 待命点不好 —— 卡片上也写出来（以前绿着「待命 · 空闲」）
+            if (_stranded(r) || _homeBad(r) || _standbyBad(r))
+              Text(_attnWord(r), key: NowPage.tileAttnKey(id), maxLines: 2, overflow: TextOverflow.ellipsis,
+                  style: NwText.bodySmall.copyWith(color: c.warning, fontWeight: FontWeight.w600))
+            else
+              Text(_tileNote(r), maxLines: 1, overflow: TextOverflow.ellipsis, style: NwText.bodySmall.copyWith(color: c.textSecondary)),
             if (!_viewer) ...[
               const SizedBox(height: 6),
               InkWell(
@@ -973,9 +979,11 @@ class _NowPageState extends State<NowPage> with EstopMissReveal {
       );
 
   Widget _ops(NwColors c) {
-    final rows = _alerts.where((a) => a.level != 'P1' && alertNeedsAttention(a)).toList();
+    // 易用性 37 用户 11-27 轮 P2-2：设备类的 P1（换电池……）也列在这里，不算顶上的安全事件
+    final rows = _alerts.where((a) => (a.level != 'P1' || !alertIsSecurity(a)) && alertNeedsAttention(a)).toList()
+      ..sort((x, y) => x.level.compareTo(y.level));
     // 易用性 37 第十一轮 P2：P1（比如「整趟中止」）开着时这里写「没有要处理的」像是全没事 —— P1 在最上面
-    final p1 = _alerts.any((a) => a.level == 'P1' && a.resolvedMs == null);
+    final p1 = _alerts.any((a) => a.level == 'P1' && a.resolvedMs == null && alertIsSecurity(a));
     return _section(
         c,
         rows.isEmpty ? tr('Equipment & operations', '设备与运营') : tr('Equipment & operations ${rows.length}', '设备与运营 ${rows.length}'),
@@ -998,7 +1006,7 @@ class _NowPageState extends State<NowPage> with EstopMissReveal {
                       child: Row(children: [
                         SizedBox(
                             width: 22,
-                            child: a.level == 'P2'
+                            child: a.level == 'P1' || a.level == 'P2'
                                 ? Container(width: 13, height: 13, decoration: BoxDecoration(shape: BoxShape.circle, border: Border.all(color: c.error, width: 3)))
                                 : CustomPaint(size: const Size(13, 11), painter: _TriPainter(c.warning))),
                         const SizedBox(width: Nw.s8),
@@ -1091,7 +1099,8 @@ class _NowPageState extends State<NowPage> with EstopMissReveal {
   @override
   Widget build(BuildContext context) {
     final c = Nw.of(context);
-    final p1 = _alerts.where((a) => a.level == 'P1' && a.resolvedMs == null).toList();
+    // 易用性 37 用户 11-27 轮 P2-2：顶上只放安全事件（入侵、起火、求助）；设备 P1 在「设备与运营」
+    final p1 = _alerts.where((a) => a.level == 'P1' && a.resolvedMs == null && alertIsSecurity(a)).toList();
     final held = _heldIds();
     final attn = _needAttention();
     final hasRobot = _sel != null && _selRobot != null;
@@ -1159,8 +1168,11 @@ class _NowPageState extends State<NowPage> with EstopMissReveal {
               for (final e in _deter.entries) _deterStrip(c, e.key, e.value),
               ?noMap,
               // 外审 App-V2-5 M1：驱离时机身急停、离线照样提示
-              if (p1.isEmpty && held.isEmpty && _robotsKnown && (attn.isNotEmpty || _deter.isEmpty))
-                if (attn.isEmpty) _okStrip(c) else _attnStrip(c, attn)
+              // 易用性 37 用户 11-27 轮 P2-3：有 P1 时也照样提醒没回去、原点不好（以前被盖住）
+              if (_robotsKnown && attn.isNotEmpty)
+                _attnStrip(c, attn)
+              else if (p1.isEmpty && held.isEmpty && _robotsKnown && _deter.isEmpty)
+                _okStrip(c)
               else if (p1.isNotEmpty || held.isNotEmpty || _deter.isNotEmpty)
                 const SizedBox(height: 12),
             ])),

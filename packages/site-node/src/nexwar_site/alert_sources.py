@@ -640,6 +640,10 @@ class SiteAlertSources:
             if str(tid).startswith(STANDBY_PREFIX):
                 # 用户 11-27:后来回到待命点(原点)了,「未返回待命点」自己关
                 self.desk.resolve_all(rid, "standby_failed", who="site:standby_reached")
+            elif not _teleop(tid):
+                # 易用性 37 用户 11-27 轮 P2-3:后来又跑完了别的任务(值守的一圈、临时巡逻)—— 已经不是
+                # 「停在原地等」了,也关(以前一直挂着,机器人页的卡片也一直在)
+                self.desk.resolve_all(rid, "standby_failed", who="site:moved_on")
         elif e.kind == "payload_button":
             self._payload_button(rid, str(d.get("button", "")))
         elif e.kind == "task_failed":

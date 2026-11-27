@@ -208,6 +208,11 @@ const Set<String> routineAlertKinds = {
 /// 别的（`owner`：存储不足、排程派不了……）是管理员的待处理事项，不算报警。
 bool alertForGuard(Alert a) => const {'', 'intrusion', 'fire', 'help', 'offline'}.contains(a.audience);
 
+/// 易用性 37 用户 11-27 轮 P2-2：安全事件（跟网页 `isSecurity` 一样）—— 有人闯入、起火，上装的求助按钮。
+/// 换电池、机器人故障这些 P1 是设备告警，不算「安全事件」。老站点没有 audience：照旧都算（宁可多报）。
+bool alertIsSecurity(Alert a) =>
+    a.audience.isEmpty || a.audience == 'intrusion' || a.audience == 'fire' || a.kind == 'payload_sos';
+
 /// 算不算一条要人处理的报警（还开着、不是日常记录、不是 P3 记录、是给保安的）。
 bool alertNeedsAttention(Alert a) =>
     a.resolvedMs == null && a.level != 'P3' && !routineAlertKinds.contains(a.kind) && alertForGuard(a);

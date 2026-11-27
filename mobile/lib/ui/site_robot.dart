@@ -155,7 +155,7 @@ class _SiteRobotPageState extends State<SiteRobotPage> with NwAsk {
   /// 「设置」页签（浅色页才有两页签）。
   late bool _settings = widget.settings;
 
-  /// 就地确认（不弹窗）：'stand' / 'lie' / 'home-abort' / 'unbind' / 'name'。
+  /// 就地确认（不弹窗）：'stand' / 'lie' / 'home-abort' / 'standby-abort' / 'unbind' / 'name'。
   String? _ask;
   /// 用户 11-27（新人易用性报告 D）：「中止并回原点」发出去到站点回话（最多等它停稳 15 秒）这段时间
   /// 按钮写「正在停车…」、按不动；原来确认框一收什么都不显示，按钮还能再按。
@@ -1005,9 +1005,15 @@ class _SiteRobotPageState extends State<SiteRobotPage> with NwAsk {
       if ((s?.canAbort ?? false) && _hasSound(v))
         nwOpButton(c, const Key('btn-mute'), v?['muted'] != null ? tr('Unmute', '取消静音') : tr('Mute', '静音'),
             _toggleMute, icon: v?['muted'] != null ? Icons.volume_up_rounded : Icons.volume_off_rounded),
-      if (dispatch)
+      // 易用性 37 用户 11-27 轮 P2-1：有任务时机器人拒（busy）—— 就地确认，确认了先中止这一趟再回
+      if (dispatch && !busy)
         nwOpButton(c, const Key('btn-standby'), tr('Return to standby', '回待命点'),
             () => _do(() => widget.api.returnToStandby(widget.robotId), tr('Return to standby', '回待命点'))),
+      if (dispatch && busy)
+        nwOpButton(c, const Key('btn-standby'), tr('Return to standby…', '回待命点…'), () {
+          setState(() => _ask = 'standby-abort');
+          _showAsk();
+        }),
       // 回原点（POC）：没任务直接回；有任务只给「中止并回原点」（要确认）；正在停车时按不动
       if (dispatch && _stopping)
         nwOpButton(c, const Key('btn-home-stopping'), tr('Stopping…', '正在停车…'), null),
@@ -1113,6 +1119,15 @@ class _SiteRobotPageState extends State<SiteRobotPage> with NwAsk {
                 : '',
             [
           nwButtonRows(tasks, per: 2),
+          if (_ask == 'standby-abort')
+            KeyedSubtree(
+                key: _askAnchor,
+                child: _confirm(c, tr('Stop the current task, then go to the standby point?', '中止当前任务，然后回待命点？'),
+                    const Key('standby-abort-confirm'), tr('Abort and return', '中止并回待命点'), () {
+                  setState(() => _ask = null);
+                  unawaited(_do(() => widget.api.returnToStandby(widget.robotId, abort: true),
+                      tr('Return to standby', '回待命点')));
+                })),
           if (_ask == 'home-abort')
             KeyedSubtree(
                 key: _askAnchor,
