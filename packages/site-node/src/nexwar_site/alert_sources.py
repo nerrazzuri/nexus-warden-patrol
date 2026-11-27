@@ -661,7 +661,10 @@ class SiteAlertSources:
                 # P2「回原点失败」(以前 P1「回待命点失败,停在半路」还升级推送,
                 # 其实一步没动、去的是原点)
                 blocked = "goal_blocked" in reason or "终点在障碍" in reason
-                why = ("原点在障碍里或离墙太近:去「布置」把原点挪开一点,再叫它回原点"
+                # 用户 11-27(新人易用性报告 A):写出口 —— 先回待命点,再重标原点(原点是机器人站着标的,
+                # 布置页挪不了)
+                why = ("原点离墙、障碍或禁行区太近,机器人规划不出到那里的路:现在先点「回待命点」;"
+                       "再把机器人开到开阔处(离墙 1 m 左右),重新标原点"
                        if blocked else "看详情里的原因;机器人停在原地等")
                 self.desk.raise_alert(kind="standby_failed", robot=rid, title="回原点失败",
                                       detail=f"{why};原文:{reason}"[:400],

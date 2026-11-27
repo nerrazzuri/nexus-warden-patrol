@@ -194,6 +194,21 @@ void main() {
       expect(await LangStore(f).load(), AppLang.en);
     });
 
+    test('用户 11-27：没选过语言跟系统走（系统首选中文就中文）；选过的照选过的', () async {
+      expect(systemLang(['zh', 'en']), AppLang.zh);
+      expect(systemLang(['en', 'zh']), AppLang.en);
+      expect(systemLang(['ms']), AppLang.en);
+      expect(systemLang(const []), AppLang.en);
+      final dir = Directory.systemTemp.createTempSync('nexwar_lang');
+      addTearDown(() => dir.deleteSync(recursive: true));
+      final f = File('${dir.path}/lang.json');
+      expect(await LangStore(f).load(fallback: AppLang.zh), AppLang.zh, reason: '没选过');
+      f.writeAsStringSync('{');
+      expect(await LangStore(f).load(fallback: AppLang.zh), AppLang.zh, reason: '文件坏了当没选过');
+      await LangStore(f).save(AppLang.en);
+      expect(await LangStore(f).load(fallback: AppLang.zh), AppLang.en, reason: '选过英文就英文');
+    });
+
     test('存在站点上的区域缺省名（中文）：英文界面翻过来，人自己起的名字原样', () {
       expect(zoneLabelText('禁行区'), '禁行区');
       _english();

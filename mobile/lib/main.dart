@@ -53,7 +53,9 @@ Future<void> main() async {
   });
   final langStore = await openLangStore();
   langStoreRef = langStore;
-  appLang.value = await langStore.load();
+  // 用户 11-27：没选过语言就跟系统语言
+  appLang.value = await langStore.load(
+      fallback: systemLang([for (final l in PlatformDispatcher.instance.locales) l.languageCode]));
   await loadTeleopTier(await teleopTierFilePath()); // POC 速度档：上次选的那一档
   await loadDataSaver(await dataSaverFilePath()); // 第四档 #45 省流量：上次的选择
   await initRingChannel(); // App V2 来报警全屏页：后台值守的全屏通知拉起来的那一条
