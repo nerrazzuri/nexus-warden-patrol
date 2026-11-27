@@ -158,6 +158,22 @@ def test_W41_自动找位置_狗报了才发_不是true_400(站点):
         "能力是测试里硬改的,机器人其实没配:机器人拒,回执原样回"
 
 
+def test_用户1127_确认位置_转成命令_不带坐标_不是true_400(站点):
+    s = 站点
+    gina, olga = _登(s, "gina"), _登(s, "olga")
+    _能设(s)
+    assert s.req("POST", "/api/robots/A/relocalize", {"confirm": True}, token=olga)[0] == 403
+    assert s.req("POST", "/api/robots/A/relocalize", {"confirm": 1}, token=gina)[0] == 400
+    code, d = s.req("POST", "/api/robots/A/relocalize", {"confirm": True}, token=gina)
+    assert code == 200 and d["ack"]["result"] == "accepted", d
+    assert d["ack"]["data"] == {"confirmed": False}, "本来就不可疑:照收"
+    [cmd] = [c for c in s.disp.commands("A") if c["kind"] == "relocalize"]
+    assert cmd["payload"] == {"confirm": True} and cmd["issued_by"] == "gina"
+    audit = s.req("GET", "/api/audit", token=_登(s, "alice"))[1]["audit"]
+    hit = [a for a in audit if "relocalize" in str(a.get("action", ""))]
+    assert hit[0]["detail"]["confirm"] is True, hit[0]
+
+
 def test_用户1127_机器人没接受的_操作记录写明_不算成功(站点):
     """C40221 11-26 11:03:48:回待命点站点回 200、机器人回 busy 拒了 —— 记录里只看得出 200。"""
     s = 站点

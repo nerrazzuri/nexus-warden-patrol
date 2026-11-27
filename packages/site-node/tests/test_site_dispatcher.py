@@ -145,6 +145,22 @@ async def test_用户1127_控制权交还后_站点自己发起的等2分钟_人
     assert t.site.dispatchable("A", "goto", auto=True) == "", "2 分钟后照常"
 
 
+async def test_用户1127_狗报位置可疑_站点不派要走的任务_说清楚(台):
+    """自动找到的位置图上另一处也很像(C40221 11-26 中止回原点停错地方):狗报 ``loc.unconfirmed``,
+    站点派单前就拒,原话带上狗说的;不让狗动的(叫停等)照常。"""
+    from types import SimpleNamespace
+    t = 台
+    await t.run(3)
+    c = t.site.clients["A"]
+    c.telemetry = SimpleNamespace(loc={"unconfirmed": "位置是自动找的,图上另一处也很像"})
+    why = t.site.dispatchable("A", "goto")
+    assert why.startswith("A 位置可疑:位置是自动找的"), why
+    with pytest.raises(DispatchRefused, match="位置可疑"):
+        await t.send(t.site.goto("A", target(1.0), 0.8, issued_by="alice"))
+    from nexwar_site.refusals import reason_code
+    assert reason_code(why)[0] == "loc_unconfirmed"
+
+
 async def test_abort中途停下(台):
     t = 台
     r = await t.send(t.site.goto("A", target(6.0), 0.8, issued_by="alice"))

@@ -107,6 +107,10 @@ const Map<String, String> _lateZh = {'这一轮不跑了': 'skip', '已报警': 
 const String _afterNote = '; recorded afterwards because the site was not running then';
 
 final List<_Rule> _rules = [
+  // 用户 11-27：自动找到的位置可疑（站点的拒绝、机器人的拒绝回执）
+  (RegExp(r'^(?:(\S+) 位置可疑[:：]|loc_unconfirmed: )?位置是自动找的[,，]图上另一处 [(（]([-\d.]+), ([-\d.]+)[)）] 也很像[\s\S]*$'),
+      (m) => '${m[1] != null ? '${m[1]}: ' : ''}the robot found its position by itself, but another spot on the map '
+          '(${m[2]}, ${m[3]}) looks almost the same. Check the camera and confirm the position, or set it on the map.'),
   // 用户 11-27：整站撤防时到点的排程巡逻（今天的巡逻里写原因）
   (RegExp(r'^整站撤防[:：]排程巡逻暂停$'), (_) => 'Site disarmed: scheduled patrols paused'),
   (RegExp(r'^整站已经撤防了[,，]不用再临时撤防[:：]要恢复就切到「布防」或「留守」$'),

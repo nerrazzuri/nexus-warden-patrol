@@ -476,3 +476,121 @@ async def test_真机1124_贴合度够的_不标精配(台):
     await t.rt._on_cmd(_cmd("relocalize", {"global": True}, "r1", t.c))
     await t.拍(3)
     assert "refine" not in _ack(t.ears)["data"] and not t.rt._soft_check
+
+
+# -------------------------------------------- 用户 11-27:另一处也很像 → 可疑、等人确认
+
+def _另一处也很像(t, gap=0.15, far=(8.0, 3.0)):
+    """套图结果:真位置第一,远处另一处只差 ``gap``(C40221 11-26:两处相隔 21 m,挑了错的那处)。"""
+    from nexwar_agent.globalloc import Candidate
+    real = t.rt.globalloc.locate
+
+    async def locate(pts):
+        got = await real(pts)
+        best = got[0]
+        return [best, Candidate(far[0], far[1], 0.0, best.fit - gap)] + got[1:]
+    t.rt.globalloc.locate = locate
+
+
+async def test_用户1127_自动找到的位置另一处也很像_照用_标可疑_不收要走的任务_人确认后收(台):
+    t = 台
+    await t.连()
+    _另一处也很像(t)                                    # 过了 MIN_GAP(认了),但没过 RIVAL_GAP
+    await t.rt._on_cmd(_cmd("relocalize", {"global": True}, "r1", t.c))
+    await t.拍(3)
+    a = _ack(t.ears)
+    assert a["result"] == "accepted" and a["data"]["rival"]["x"] == pytest.approx(8.0), a
+    assert t.loc.relocs, "位置照用:请定位器按它重定位"
+    ev = _事件(t.ears, "relocalized")[-1]
+    assert ev["rival"]["x"] == pytest.approx(8.0)
+    await t.拍(20)
+    loc = _遥测(t.ears).loc
+    assert "另一处 (8.0, 3.0) 也很像" in loc["unconfirmed"]
+    assert loc["rival"]["x"] == pytest.approx(8.0)
+    await t.rt._on_cmd(_goto(4.0, 3.0, "g1", t.c))
+    await t.拍(1)
+    a = _ack(t.ears)
+    assert a["result"] == "rejected", a
+    assert a["reason"].startswith("loc_unconfirmed: 位置是自动找的"), a
+    await t.rt._on_cmd(_cmd("relocalize", {"confirm": True}, "c1", t.c))
+    await t.拍(1)
+    a = _ack(t.ears)
+    assert a["result"] == "accepted" and a["data"] == {"confirmed": True}, a
+    await t.拍(2)
+    assert "unconfirmed" not in _遥测(t.ears).loc
+    await t.rt._on_cmd(_goto(4.0, 3.0, "g2", t.c))
+    await t.拍(1)
+    assert _ack(t.ears)["result"] == "accepted"
+    # 再点一次确认:本来就不可疑,照收、不报错
+    await t.rt._on_cmd(_cmd("relocalize", {"confirm": True}, "c2", t.c))
+    await t.拍(1)
+    assert _ack(t.ears)["data"] == {"confirmed": False}
+    await t.rt._on_cmd(_cmd("relocalize", {"confirm": 1}, "c3", t.c))
+    await t.拍(1)
+    assert "confirm 只能是 true" in _ack(t.ears)["reason"]
+
+
+async def test_用户1127_可疑的时候人设位置_就不可疑了_自动的重定位不清(台):
+    t = 台
+    await t.连()
+    _另一处也很像(t)
+    await t.rt._on_cmd(_cmd("relocalize", {"global": True}, "r1", t.c))
+    await t.拍(3)
+    loc = t.rt.parts.nav.anchor
+    assert loc.unconfirmed
+    # 自动的(丢定位后的重置、点云核对)不清
+    assert not await loc.relocalize(("m", "1"), TRUE, 0.3, human=False)
+    assert loc.unconfirmed
+    await t.rt._on_cmd(_cmd("relocalize", {"x": TRUE[0], "y": TRUE[1], "yaw": TRUE[2]}, "r2", t.c))
+    await t.拍(3)
+    assert _ack(t.ears)["result"] == "accepted"
+    assert not loc.unconfirmed and loc.rival is None
+
+
+async def test_用户1127_另一处差得多_不算可疑(台):
+    t = 台
+    await t.连()
+    _另一处也很像(t, gap=0.3)
+    await t.rt._on_cmd(_cmd("relocalize", {"global": True}, "r1", t.c))
+    await t.拍(3)
+    a = _ack(t.ears)
+    assert a["result"] == "accepted" and "rival" not in a["data"], a
+    assert not t.rt.parts.nav.anchor.unconfirmed
+
+
+async def test_用户1127_换图_可疑跟着清(台):
+    t = 台
+    await t.连()
+    _另一处也很像(t)
+    await t.rt._on_cmd(_cmd("relocalize", {"global": True}, "r1", t.c))
+    await t.拍(3)
+    loc = t.rt.parts.nav.anchor
+    assert loc.unconfirmed
+    loc.on_map(("m", "2"))
+    assert not loc.unconfirmed and loc.rival is None
+
+
+async def test_用户1127_停着的那一趟_找回来的位置可疑_中止不接着走(台):
+    from nexwar_agent.engine.machine import RunState
+    t = 台
+    await t.连()
+    await t.rt._on_cmd(_goto(6.0, 3.0, "g1", t.c))
+    await t.拍(5)
+    assert _ack(t.ears)["result"] == "accepted"
+    await t.rt.parts.engine.pause()                   # 丢定位停着(引擎在 PAUSED 才收设位置)
+    for _ in range(50):
+        await t.拍(1)
+        if t.rt.parts.engine.state is RunState.PAUSED:
+            break
+    assert t.rt.parts.engine.state is RunState.PAUSED
+    for _ in range(50):
+        await t.拍(1)
+        if await t.rt.hal.stopped():
+            break
+    _另一处也很像(t)
+    await t.rt._on_cmd(_cmd("relocalize", {"global": True}, "r1", t.c))
+    await t.拍(20)
+    assert _ack(t.ears)["result"] == "accepted", _ack(t.ears)["reason"]
+    ended = _事件(t.ears, "task_aborted") + _事件(t.ears, "task_failed")
+    assert ended and ended[-1]["task_id"] == "goto-g1", ended
+    assert "loc_unconfirmed" in ended[-1]["reason"], ended
