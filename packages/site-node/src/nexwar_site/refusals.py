@@ -32,6 +32,10 @@ CODES: tuple[tuple[str, re.Pattern[str], str], ...] = tuple(
          "sitting or lying down). Make it stand up, then dispatch again."),
         ("not_ready", r"未就绪", "This robot isn't ready yet (still starting up, charging or "
          "standing up)."),
+        # 用户 11-27:控制权交还后站点自己发起的任务等 2 分钟
+        ("control_returned", r"刚交还控制权", "Control of this robot was just handed back "
+         "(handheld remote or another program). Automatic tasks wait 2 minutes; you can still "
+         "send it yourself."),
         ("map_mismatch", r"加载的是|加载的地图|地图版本|重建过|未上报已加载的地图",
          "This route was drawn on a different map (or an older version) than the one the robot "
          "has loaded."),

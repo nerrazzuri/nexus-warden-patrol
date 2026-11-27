@@ -110,7 +110,7 @@ def test_布防值守中的机器人_到点的巡逻不派_说在布防值守(tm
             status=SimpleNamespace(task=None),
             capabilities=SimpleNamespace(tasks={"patrol": {"map_id": "m"}}))},
         registry=SimpleNamespace(list=lambda: [SimpleNamespace(robot_id="A", revoked=False)]),
-        dispatchable=lambda rid, kind: "", autonomy=lambda rid: "autonomous",
+        dispatchable=lambda rid, kind, **k: "", autonomy=lambda rid: "autonomous",
         on_event=lambda cb: None, on_ack=lambda cb: None)
     d.busy = lambda rid: Dispatcher.busy(d, rid)
     sched = SiteScheduler(db, d, now_ms=lambda: now)

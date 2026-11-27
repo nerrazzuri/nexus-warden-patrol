@@ -398,7 +398,7 @@ class SiteScheduler:
             if rid in claimed:               # 这一拍刚派给了更优先的(它此刻已经报忙了)
                 taken.append(rid)
                 continue
-            reason, kind = self.dispatcher.dispatchable(rid, "patrol"), "other"
+            reason, kind = self.dispatcher.dispatchable(rid, "patrol", auto=True), "other"
             if not reason and self.dispatcher.autonomy(rid) != "autonomous":
                 # W00c6i:避障真机验收之前真狗要人监护 —— 排程是没人在场时也会到点的东西,不派。
                 # W33:站点设成只许手动派的也不派。

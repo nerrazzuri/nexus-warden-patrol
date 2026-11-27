@@ -128,7 +128,7 @@ entries:
 async def test_短暂派不出去_宽限期里恢复了_不说(站, monkeypatch):
     t = 站
     real = t.site.dispatchable
-    monkeypatch.setattr(t.site, "dispatchable", lambda rid, kind: f"{rid} 不在线")
+    monkeypatch.setattr(t.site, "dispatchable", lambda rid, kind, **k: f"{rid} 不在线")
     t.clock.ms = 毫秒(22, 0, 30)
     await t.run(2)
     await _拍(t)
@@ -608,7 +608,7 @@ async def test_W902_迟到也跑_没就绪先说在等_补跑起来了说起跑�
     _换排程(t, tmp_path, 排程.replace("window_min: 30", "window_min: 2")
             .replace("on_missed: skip", "on_missed: run_late"))
     real = t.site.dispatchable
-    monkeypatch.setattr(t.site, "dispatchable", lambda rid, kind: f"{rid} 没站起来")
+    monkeypatch.setattr(t.site, "dispatchable", lambda rid, kind, **k: f"{rid} 没站起来")
     await _拍(t, 22, 0, 10)
     await _拍(t, 22, 1, 20)
     assert _去向(t) == [("nightly", None, "late_waiting")], "迟到也跑:不说没跑,说在等"
@@ -626,7 +626,7 @@ async def test_W902_迟到也跑_没就绪先说在等_补跑起来了说起跑�
 async def test_W902_迟到也跑_一整轮都没就绪_下一轮到了才报错过(站, tmp_path, monkeypatch):
     t = 站
     _换排程(t, tmp_path, _夜里每小时.format(on_missed="run_late"))
-    monkeypatch.setattr(t.site, "dispatchable", lambda rid, kind: f"{rid} 没站起来")
+    monkeypatch.setattr(t.site, "dispatchable", lambda rid, kind, **k: f"{rid} 没站起来")
     await _拍(t, 22, 0, 10)
     await _拍(t, 22, 6)
     assert [o for _, _, o in _去向(t)] == ["late_waiting"]
@@ -638,7 +638,7 @@ async def test_W902_迟到也跑_一整轮都没就绪_下一轮到了才报错�
 
 async def test_W902_不是迟到也跑的_照旧报没跑(站, monkeypatch):
     t = 站
-    monkeypatch.setattr(t.site, "dispatchable", lambda rid, kind: f"{rid} 没站起来")
+    monkeypatch.setattr(t.site, "dispatchable", lambda rid, kind, **k: f"{rid} 没站起来")
     await _拍(t, 22, 0, 30)
     await _拍(t, 22, 6)
     assert _去向(t) == [("nightly", None, "no_robot")]

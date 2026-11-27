@@ -336,7 +336,7 @@ class IncidentDesk:
             rid = r.robot_id
             if r.revoked:
                 continue
-            reason = self.dispatcher.dispatchable(rid, "goto")
+            reason = self.dispatcher.dispatchable(rid, "goto", auto=True)
             c = self.dispatcher.clients.get(rid)
             if not reason and self.dispatcher.autonomy(rid) != "autonomous":
                 # W00c6i:事件多半在夜里、没人在场;要人监护的真狗不派。W33:只许手动派的也不派

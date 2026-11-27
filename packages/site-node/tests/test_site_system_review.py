@@ -83,7 +83,7 @@ def test_S05_排程不抢在驱离的狗_选狗和发之前都看(tmp_path):
             status=SimpleNamespace(task=None),
             capabilities=SimpleNamespace(tasks={"patrol": {"map_id": "m"}, "deter": {}}))},
         registry=SimpleNamespace(list=lambda: [SimpleNamespace(robot_id="A", revoked=False)]),
-        dispatchable=lambda rid, kind: "", autonomy=lambda rid: "autonomous",
+        dispatchable=lambda rid, kind, **k: "", autonomy=lambda rid: "autonomous",
         on_event=lambda cb: None, on_ack=lambda cb: None)
     d.busy = lambda rid: Dispatcher.busy(d, rid)
     s = Session(robot_id="A", incident_id=1, zone="z", task_id="incident-x", level=2,
