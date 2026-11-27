@@ -36,6 +36,10 @@ CODES: tuple[tuple[str, re.Pattern[str], str], ...] = tuple(
         ("control_returned", r"刚交还控制权", "Control of this robot was just handed back "
          "(handheld remote or another program). Automatic tasks wait 2 minutes; you can still "
          "send it yourself."),
+        # 用户 11-27:自动找到的位置可疑(图上另一处也很像),人确认之前不自己走
+        ("loc_unconfirmed", r"位置可疑", "This robot found its position by itself, but another "
+         "spot on the map looks almost the same. Check the camera and confirm the position, or "
+         "set its position on the map."),
         ("map_mismatch", r"加载的是|加载的地图|地图版本|重建过|未上报已加载的地图",
          "This route was drawn on a different map (or an older version) than the one the robot "
          "has loaded."),

@@ -287,6 +287,12 @@ class BridgeLocalizer:
         #: 开机自动找位置(W68)没找到的结论(写给人看,代理写):不可信的时候放在原因前面;下一次请
         #: 重定位、换图时清掉,可信了代理清掉。不单独决定信不信。
         self.find_note = ""
+        #: 用户 11-27(C40221 11-26 中止回原点停错地方):自动找到的位置图上另有一处离得远、又差不多像
+        #: (:func:`globalloc.rival`)—— 位置照用(定位、遥控、看画面都照常),但人确认之前不收会自己走的
+        #: 任务(代理写、代理看)。人设位置、人确认、换图时清掉;自动的重定位不清。
+        self.unconfirmed = ""
+        #: 那另一处(``Candidate.to_wire()``),给人看:说不准是哪一处。
+        self.rival: dict[str, float] | None = None
         #: 最近一次「变差了」(对账 S6):(时刻, 原因)。
         self._degraded: tuple[float, str] | None = None
         self._settle = 0
@@ -421,6 +427,7 @@ class BridgeLocalizer:
             self.rtk_disagree = ""
             self.scan_disagree = ""
             self.find_note = ""
+            self.unconfirmed, self.rival = "", None
             kept, self._kept = self._kept, None
             if kept is not None and map_ref is not None and kept[0] == map_ref:
                 # 代理重启前记下的锚(同一次开机、同一张图):只拿来核(对账 S1)
@@ -588,6 +595,11 @@ class BridgeLocalizer:
         degraded = self.degraded(odom_ok)
         if degraded:
             out["degraded"] = degraded                   # 对账 S6:自动走限着速(老站点不认,不碍事)
+        if self.unconfirmed:
+            # 用户 11-27:位置可疑、等人确认(老站点不认,不碍事)
+            out["unconfirmed"] = self.unconfirmed
+            if self.rival is not None:
+                out["rival"] = self.rival
         return out
 
     def health(self) -> Any:
@@ -633,6 +645,8 @@ class BridgeLocalizer:
             self._off_why = ""
             self.scan_disagree = ""                  # 新请了一次:点云套图的结论等它稳下来再核
             self.find_note = ""
+            if human:
+                self.unconfirmed, self.rival = "", None   # 用户 11-27:人给了位置就不再可疑
             self._save_keep()
             return Relocalize(req=req, map_id=map_ref[0], map_version=map_ref[1], x=pose[0],
                               y=pose[1], yaw=pose[2], sigma_xy=sigma_xy, human=human)

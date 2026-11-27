@@ -130,6 +130,9 @@ class SiteRobotPage extends StatefulWidget {
   static const Key estopKey = Key('robot-estop');
   static const Key strandedKey = Key('robot-stranded');
   static const Key homeBadKey = Key('robot-home-bad');
+  static const Key locUnconfirmedKey = Key('robot-loc-unconfirmed');
+  static const Key locConfirmKey = Key('btn-loc-confirm');
+  static const Key locConfirmGoKey = Key('loc-confirm-go');
   static const Key tonightKey = Key('robot-tonight');
   static const Key lieKey = Key('btn-posture-lie');
   static const Key lieConfirmKey = Key('lie-confirm');
@@ -745,6 +748,48 @@ class _SiteRobotPageState extends State<SiteRobotPage> with NwAsk {
             ])));
   }
 
+  /// 用户 11-27（C40221 11-26 中止回原点停错地方）：自动找到的位置图上另一处也很像 —— 有人确认之前
+  /// 它不自己走。看画面确认（能派单的人），或者在地图上设位置。
+  Widget? _locUnconfirmedCard(NwColors c, Map<String, dynamic>? v, bool dispatch) {
+    final loc = v?['loc'];
+    if (loc is! Map || '${loc['unconfirmed'] ?? ''}'.isEmpty) return null;
+    final r = loc['rival'];
+    final xy = r is Map && r['x'] is num && r['y'] is num
+        ? '${(r['x'] as num).toStringAsFixed(1)}, ${(r['y'] as num).toStringAsFixed(1)}'
+        : '';
+    final at = xy.isEmpty ? '' : tr(' ($xy)', '（$xy）');
+    return Padding(
+        padding: const EdgeInsets.fromLTRB(Nw.s16, 0, Nw.s16, 12),
+        child: NwCard(
+            key: SiteRobotPage.locUnconfirmedKey,
+            tone: NwTone.warning,
+            child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+              Text(
+                  tr("The robot found its position by itself, but another spot on the map$at looks almost the same. It won't go anywhere on its own until someone checks: look at the camera, then confirm, or set its position on the map.",
+                      '位置是机器人自己找的，但图上另一处$at也很像。有人确认之前它不会自己走：看画面确认位置没错，或者在地图上给它设位置。'),
+                  style: NwText.bodySmall.copyWith(color: c.text)),
+              if (dispatch) ...[
+                const SizedBox(height: Nw.s8),
+                nwButtonRows([
+                  nwOpButton(c, SiteRobotPage.locConfirmKey, tr('Position is right', '位置没错'),
+                      () => setState(() => _ask = 'loc-confirm')),
+                ]),
+                if (_ask == 'loc-confirm')
+                  _confirm(
+                      c,
+                      tr('Check the camera: is ${widget.robotId} really where the map shows it? If you are not sure, set its position on the map instead.',
+                          '看画面：${widget.robotId} 真的在地图上显示的位置吗？拿不准就改在地图上给它设位置。'),
+                      SiteRobotPage.locConfirmGoKey,
+                      tr('Position is right', '位置没错'),
+                      () {
+                        setState(() => _ask = null);
+                        unawaited(_do(() => widget.api.relocalize(widget.robotId, confirm: true),
+                            tr('Confirm position', '确认位置')));
+                      }),
+              ],
+            ])));
+  }
+
   /// 用户 11-27（新人易用性报告 A）：老原点离墙太近 —— 回原点、撤防回原点都会被拒，先说。
   Widget? _homeBadCard(NwColors c, Map<String, dynamic>? v) {
     if (v?['home_bad'] != true) return null;
@@ -1040,6 +1085,7 @@ class _SiteRobotPageState extends State<SiteRobotPage> with NwAsk {
             ]))),
           ])),
       ?_strandedCard(c, v),
+      ?_locUnconfirmedCard(c, v, dispatch),
       ?_homeBadCard(c, v),
       ?_wifiChange(c, v, s?.canManageRobots ?? false),
       // 叫停之后站点不再派它（W00c5e）：说清楚，给能派单的人一个「恢复」。
