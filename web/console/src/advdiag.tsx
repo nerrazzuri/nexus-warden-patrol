@@ -16,7 +16,7 @@ type DevRobot = Robot & { devices?: { items: { id: string; state: string; detail
 const CHECK: Record<string, Key> = {
   db: "diagDb", loop: "diagLoop", broker: "diagBroker", disk: "diagDisk", certs: "diagCerts", lanes: "diagLanes",
   keys: "diagKeys", backup: "diagBackup", push: "diagPush", robots: "diagRobots",
-  standby: "diagStandby",
+  standby: "diagStandby", home: "diagHome",
 };
 
 /** 设备编号说人话:camera:front → 前摄像头有画面;link:router → 连得上路由器;认不得的原样。 */

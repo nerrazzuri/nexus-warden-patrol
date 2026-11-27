@@ -3882,15 +3882,8 @@ class _Handler(TlsHandlerMixin):
                                     "floor and mark again."})
 
     def _keep_out(self, map_id: str, version: str) -> tuple[tuple[tuple[float, float], ...], ...]:
-        """这一版图上在生效的禁行区、抹掉区多边形(机器人规划当硬挡的);拿不到回空。"""
-        zones = getattr(self.site.dispatcher, "zones", None)
-        if zones is None:
-            return ()
-        try:
-            return tuple(tuple(z.polygon) for z in zones.effective(map_id, version).nogo())
-        except Exception:                  # 读不出禁行区:只按墙查
-            log.warning("%s:%s 的禁行区读不出,原点只按墙查", map_id, version, exc_info=True)
-            return ()
+        from nexwar_site.robot_overview import keep_out_polys
+        return keep_out_polys(getattr(self.site.dispatcher, "zones", None), map_id, version)
 
     def _here_pose(self, robot_id: str, user, name: str) -> dict:
         """狗此刻锚定后的地图位姿(``mark_home {target: standby}``:检查同标原点,狗上什么都不改)。

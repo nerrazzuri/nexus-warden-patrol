@@ -30,7 +30,7 @@ export interface RobotCard {
   wifi?: Wifi | null;
   /** W72 详情:老站点没有这些。 */
   /** 第 2 轮 N2:当前地图那一版有没有原点(没报地图 = null)、有没有默认待命点。老站点没有。 */
-  home_set?: boolean | null; standby_set?: boolean; standby_bad?: boolean;
+  home_set?: boolean | null; standby_set?: boolean; standby_bad?: boolean; home_bad?: boolean;
   patrols_7d?: number; aborts_7d?: number; last_patrol_ms?: number | null; last_seen_ms?: number | null; ever_seen?: boolean;
   storage?: { used_ratio: number; backlog_files: number | null; oldest_backlog_s: number | null } | null;
   map?: { id: string; version: string | null; match: boolean | null } | null;
@@ -362,8 +362,10 @@ function RobotSettings({ r, u, now, say, onChanged, onCode }: {
     ...((r.devices?.length ?? 0) > 0 ? [{ k: "devs", group: "hw" as const, sign: (badDevs.length ? "warn" : "ok") as Check["sign"], label: "roDevices" as Key,
       value: badDevs.length ? badDevs.map((x) => `${devName(x.id)} ${t(`dev_${x.state}` as Key)}`).join(" · ") : t("roDevicesOk"),
       sub: (r.devices ?? []).map((x) => devName(x.id)).join(" · ") }] : []),
-    ...(r.home_set != null ? [{ k: "home", group: "setup" as const, sign: (r.home_set ? "ok" : "warn") as Check["sign"], label: "roOrigin" as Key,
-      value: r.home_set ? t("roSet") : t("rdNoHome"), act: r.home_set ? undefined : <a class="btn" href="#/admin/localization">{t("rdNoHomeGo")}</a> }] : []),
+    // 用户 11-27:老原点离墙太近(回原点会被拒)也写出来
+    ...(r.home_set != null ? [{ k: "home", group: "setup" as const, sign: (r.home_set && !r.home_bad ? "ok" : "warn") as Check["sign"], label: "roOrigin" as Key,
+      value: !r.home_set ? t("rdNoHome") : r.home_bad ? t("rdHomeBad") : t("roSet"),
+      act: r.home_set && !r.home_bad ? undefined : <a class="btn" href="#/admin/localization">{t(r.home_bad ? "rdHomeBadGo" : "rdNoHomeGo")}</a> }] : []),
     // 易用性 37 复测 P1-7:默认待命点在图上走不了 —— 回待命点、值守都派不了,写出来
     ...(r.standby_set != null ? [{ k: "standby", group: "setup" as const, sign: (r.standby_set && !r.standby_bad ? "ok" : "warn") as Check["sign"], label: "roStandby" as Key,
       value: !r.standby_set ? t("rdNoStandby") : r.standby_bad ? t("rdStandbyBad") : t("roSet"),

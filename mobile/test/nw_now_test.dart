@@ -128,6 +128,23 @@ void main() {
     await t.pumpWidget(Container());
   });
 
+  testWidgets('用户 11-27：没回到原点停在原地、原点离墙太近 —— 不写全场正常，写哪台怎么了', (t) async {
+    _size(t, const Size(390, 2000));
+    final api = FakeApi('guard')
+      ..alertRows = <Map<String, dynamic>>[]
+      ..robotsOverride = [
+        <String, dynamic>{..._robot('A'), 'stranded': {'key': 'k', 'title': '回原点失败', 'detail': '', 'at_ms': 1}},
+        <String, dynamic>{..._robot('B'), 'home_bad': true},
+      ];
+    await _show(t, api);
+    expect(find.byKey(NowPage.okKey), findsNothing);
+    final txt = t.widgetList<Text>(find.descendant(of: find.byKey(NowPage.attnKey), matching: find.byType(Text))).map((w) => w.data).join(' ');
+    expect(txt, contains('2 台机器人要看一下'));
+    expect(txt, contains('没回去，停在原地等'));
+    expect(txt, contains('原点离墙太近'));
+    await t.pumpWidget(Container());
+  });
+
   testWidgets('外审 App-V2-3 I4：报警结案了驱离还在 —— 不说「全场正常」，一条红框写驱离到第几级，保安点进驱离页', (t) async {
     _size(t, const Size(390, 2000));
     final healthy = [

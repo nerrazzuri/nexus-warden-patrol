@@ -8,6 +8,7 @@
 
 from __future__ import annotations
 
+import logging
 import re
 from datetime import tzinfo
 from typing import Any
@@ -16,6 +17,8 @@ from nexwar_contract.binding import wifi_view
 from nexwar_site.alert_audience import audience
 from nexwar_site.dispatcher import battery_pct, map_on_site
 from nexwar_site.sitetime import local_day_start
+
+log = logging.getLogger(__name__)
 
 PROBLEM_AUDIENCES = ("help", "offline")
 RECENT_DAYS = 30
@@ -98,7 +101,8 @@ def overview(dispatcher: Any, db: Any, *, now_ms: int, tz: tzinfo) -> list[dict[
                     "deter": _deter(caps) if fresh else None,
                     "task_what": task_what(db, rid, _task(c)),
                     "manual_note": (reg.manual_only(rid) or {}).get("note", ""),
-                    **_return_targets(db, rid, caps, getattr(dispatcher, "maps", None)),
+                    **_return_targets(db, rid, caps, getattr(dispatcher, "maps", None),
+                                      getattr(dispatcher, "zones", None)),
                     # 真机 11-25:遥控放租后倒数回待命点(没在倒数是 None)
                     "standby_countdown": getattr(dispatcher, "standby_countdown", {}).get(rid)})
     return out
@@ -132,7 +136,51 @@ def standby_bad(db: Any, maps: Any, rid: str, caps: Any) -> bool:
         return False
 
 
-def _return_targets(db: Any, rid: str, caps: Any, maps: Any = None) -> dict[str, Any]:
+def keep_out_polys(zones: Any, map_id: str,
+                   version: str) -> tuple[tuple[tuple[float, float], ...], ...]:
+    """这一版图上在生效的禁行区、抹掉区多边形(机器人规划当硬挡的);拿不到回空(只按墙查)。"""
+    if zones is None:
+        return ()
+    try:
+        return tuple(tuple(z.polygon) for z in zones.effective(map_id, version).nogo())
+    except Exception:                  # 读不出禁行区:只按墙查
+        log.warning("%s:%s 的禁行区读不出,原点只按墙查", map_id, version, exc_info=True)
+        return ()
+
+
+def home_bad(db: Any, maps: Any, zones: Any, rid: str, caps: Any) -> bool:
+    """用户 11-27(新人易用性报告 A):当前这版图上的原点机器人规划不出终点(离墙、障碍、禁行区
+    太近)—— 回原点、撤防回原点都会被拒。778dfb27 只拦新标的,老原点这里补上提示。站点不认识的图、
+    没有规划栅格的老图不查(回 False)。"""
+    patrol = ((getattr(caps, "tasks", None) or {}).get("patrol") or {}) if caps is not None else {}
+    mid, ver = patrol.get("map_id"), patrol.get("map_version")
+    if maps is None or mid is None or not hasattr(maps, "goal_problem"):
+        return False
+    rows = db.query("SELECT x, y FROM homes WHERE robot_id=? AND map_id=? AND map_version=?",
+                    (rid, mid, ver))
+    if not rows:
+        return False
+    try:
+        polys = keep_out_polys(zones, mid, ver)
+        return any(maps.goal_problem(mid, ver, r["x"], r["y"], keep_out=polys) for r in rows)
+    except Exception:  # noqa: BLE001 —— 图读不了不在这里报(地图页有)
+        return False
+
+
+def stranded(db: Any, rid: str) -> dict[str, Any] | None:
+    """用户 11-27(新人易用性报告 C):这台有没开着的「回原点 / 回待命点失败」—— 机器人停在半路,
+    App 现在页、机器人页要看得见(原来只弹一条会消失的提示,首页照样「全场正常」)。"""
+    rows = db.query("SELECT key, title, detail, last_ms FROM alerts WHERE robot=? AND "
+                    "kind='standby_failed' AND resolved_ms IS NULL ORDER BY last_ms DESC LIMIT 1",
+                    (rid,))
+    if not rows:
+        return None
+    r = rows[0]
+    return {"key": r["key"], "title": r["title"], "detail": r["detail"], "at_ms": r["last_ms"]}
+
+
+def _return_targets(db: Any, rid: str, caps: Any, maps: Any = None,
+                    zones: Any = None) -> dict[str, Any]:
     """网页易用性第 2 轮 N2:回原点、回待命点能不能派(站点派的时候同样这么查,见 standby.py)。
     ``home_set``:狗当前地图那一版上有没有原点(没报地图 = ``None``,不知道);
     ``standby_set``:有没有默认待命点。"""
@@ -146,7 +194,9 @@ def _return_targets(db: Any, rid: str, caps: Any, maps: Any = None) -> dict[str,
     standby = bool(db.query("SELECT 1 FROM standby_points WHERE robot_id=? AND is_default=1",
                             (rid,)))
     return {"home_set": home, "standby_set": standby,
-            "standby_bad": standby_bad(db, maps, rid, caps)}
+            "standby_bad": standby_bad(db, maps, rid, caps),
+            "home_bad": bool(home) and home_bad(db, maps, zones, rid, caps),
+            "stranded": stranded(db, rid)}
 
 
 def _week(db: Any, rid: str, now_ms: int) -> dict[str, Any]:

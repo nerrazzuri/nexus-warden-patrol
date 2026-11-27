@@ -442,8 +442,18 @@ class _NowPageState extends State<NowPage> with EstopMissReveal {
   /// 急停、离线、吊销的机器人(被人叫停的走上面的急停卡)。有这些就不能说「全场正常」。
   List<Map<String, dynamic>> _needAttention() => [
         for (final r in _robots)
-          if (const {RobotPhase.estop, RobotPhase.offline, RobotPhase.revoked}.contains(_phaseOf(r)) || _standbyBad(r)) r,
+          if (const {RobotPhase.estop, RobotPhase.offline, RobotPhase.revoked}.contains(_phaseOf(r)) ||
+              _standbyBad(r) ||
+              _stranded(r) ||
+              _homeBad(r))
+            r,
       ];
+
+  /// 用户 11-27（新人易用性报告 C）：没回到原点 / 待命点、停在半路 —— 原来首页照样「全场正常」。
+  static bool _stranded(Map<String, dynamic> r) => r['stranded'] is Map;
+
+  /// 用户 11-27（新人易用性报告 A）：原点离墙太近，回原点会被拒。
+  static bool _homeBad(Map<String, dynamic> r) => r['home_bad'] == true;
 
   /// 易用性 37 复测 P1-7：默认待命点在图上走不了 —— 回待命点、值守都派不了，不能说「全场正常」。
   static bool _standbyBad(Map<String, dynamic> r) => r['standby_bad'] == true;
@@ -451,7 +461,11 @@ class _NowPageState extends State<NowPage> with EstopMissReveal {
   String _attnWord(Map<String, dynamic> r) {
     final p = _phaseOf(r);
     if (const {RobotPhase.estop, RobotPhase.offline, RobotPhase.revoked}.contains(p)) return _phaseWord(p);
-    return tr('default standby point not walkable: tap to make a good one default', '默认待命点走不了：点这里把好的点设为默认');
+    if (_stranded(r)) return tr('did not get back, waiting where it is', '没回去，停在原地等');
+    if (_standbyBad(r)) {
+      return tr('default standby point not walkable: tap to make a good one default', '默认待命点走不了：点这里把好的点设为默认');
+    }
+    return tr('origin too close to a wall: mark it again', '原点离墙太近：要重新标');
   }
 
   /// 截图核对 11-15:有机器人急停 / 离线时顶上一条琥珀「要看一下」,写清是哪台、什么状态。

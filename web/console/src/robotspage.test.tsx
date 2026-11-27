@@ -218,6 +218,17 @@ describe("机器人页 · 设置", () => {
     await waitFor(() => expect(posted.at(-1)).toEqual({ url: "/api/robots/A/wifi", body: { id: "0a1b2c3d4e5f", approve: true } }));
   });
 
+  it("用户 11-27:老原点离墙太近 —— 原点那一项要处理,写重新标,链到定位页", async () => {
+    robots = [card({ home_set: true, home_bad: true, standby_set: true })];
+    const { container: c } = page();
+    await waitFor(() => cardOf(c, "A"));
+    const d = await settings(c, "A");
+    const need = Array.from(d.querySelectorAll(".rb-checks"))[0];
+    const home = need.querySelector('[data-check="home"]')!;
+    expect(home.textContent).toContain("原点离墙、障碍或禁行区太近");
+    expect(home.querySelector('a[href="#/admin/localization"]')!.textContent).toBe("去重新标原点");
+  });
+
   it("W72 详情:设备、手动原因、登记日期都在", async () => {
     robots[0] = card({ devices: [{ id: "lidar", state: "online" }, { id: "camera:thermal", state: "error" }], enrolled_at: NOW - 86_400_000 * 10,
       manual_only: true, manual_note: "先试跑" });

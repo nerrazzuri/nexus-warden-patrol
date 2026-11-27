@@ -111,7 +111,9 @@ final List<_Rule> _rules = [
   (RegExp(r'^整站撤防[:：]排程巡逻暂停$'), (_) => 'Site disarmed: scheduled patrols paused'),
   (RegExp(r'^整站已经撤防了[,，]不用再临时撤防[:：]要恢复就切到「布防」或「留守」$'),
       (_) => "The whole site is already disarmed, so a temporary disarm isn't needed. To restore, switch to Armed or Stay."),
-  // 第十六轮 P2：回原点失败的说明
+  // 第十六轮 P2：回原点失败的说明；用户 11-27 改成先回待命点、再重标原点（老的那句留着，老告警还在）
+  (RegExp(r'^原点离墙、障碍或禁行区太近,机器人规划不出到那里的路[:：]现在先点「回待命点」[;；]再把机器人开到开阔处[(（]离墙 1 m 左右[)）],重新标原点[;；]原文[:：]([\s\S]*)$'),
+      (m) => "The home point is too close to a wall, obstacle or no-go zone, so the robot can't plan a path there: tap Return to standby for now, then drive the robot about 1 m into open floor and mark the home point again. Original: ${_en(m[1]!)}"),
   (RegExp(r'^原点在障碍里或离墙太近[:：]去「布置」把原点挪开一点,再叫它回原点[;；]原文[:：]([\s\S]*)$'),
       (m) => 'The home point is inside an obstacle or too close to a wall: move it a little in Site layout, '
           'then send the robot home again. Original: ${_en(m[1]!)}'),
@@ -496,4 +498,22 @@ String? guardStuckTitleEn(String title) {
   final swapped = m[3]!.startsWith('已换');
   return '${m[1]} stuck for ${m[2]} s: '
       '${swapped ? 'another robot took over' : 'no other robot took over (the plan names it)'}';
+}
+
+
+/// 用户 11-27（新人易用性报告 C）：机器人「任务没走成」的原因说人话。英文照 [siteText]；中文原来直接给
+/// 站点原话（goto、goal_blocked、规划失败…，「回头补也没到」后面一样的再说一遍）。
+String taskFailText(String why) {
+  if (appLang.value == AppLang.en) return siteText(why);
+  var s = why.trim();
+  final twice = RegExp(r'^([\s\S]+?)[;；]回头补也没到[:：]\s*([\s\S]*)$').firstMatch(s);
+  if (twice != null && twice[1]!.trim() == twice[2]!.trim()) s = twice[1]!.trim();
+  final plan = RegExp(r'规划失败[(（](goal_blocked|start_blocked|no_path|outside)[)）]').firstMatch(s);
+  return switch (plan?[1]) {
+    'goal_blocked' => '要去的点离墙、障碍或禁行区太近，机器人规划不出到那里的路',
+    'start_blocked' => '机器人贴着障碍，走不出来',
+    'no_path' => '到不了那里（被墙或禁行区隔开）',
+    'outside' => '要去的点在地图外面',
+    _ => s.replaceFirst(RegExp(r'^导航拒了[:：]\s*'), ''),
+  };
 }

@@ -404,6 +404,8 @@ class Dispatcher:
                "home_set": self._home_set(robot_id, c),
                # 易用性 37 复测 P1-7:默认待命点在当前图上走不了(App 现在页写「要看一下」)
                "standby_bad": self._standby_bad(robot_id, c),
+               # 用户 11-27:原点离墙太近(回原点会被拒)、开着的「没回到原点 / 待命点」
+               **self._home_view(robot_id, c),
                "running": self.running_view(c),
                # W76:正在跑几圈的巡逻 → 第几圈 / 共几圈(0 = 一直巡逻);跟机器人卡片一个算法
                "lap": _lap_of(self.db, robot_id, c),
@@ -427,6 +429,13 @@ class Dispatcher:
         from nexwar_site.robot_overview import standby_bad
         return standby_bad(self.db, getattr(self, "maps", None), robot_id,
                            c.capabilities if c is not None else None)
+
+    def _home_view(self, robot_id: str, c: DispatchClient | None) -> dict[str, Any]:
+        from nexwar_site.robot_overview import home_bad, stranded
+        caps = c.capabilities if c is not None else None
+        return {"home_bad": home_bad(self.db, getattr(self, "maps", None), self.zones, robot_id,
+                                     caps),
+                "stranded": stranded(self.db, robot_id)}
 
     def _home_set(self, robot_id: str, c: DispatchClient | None) -> bool | None:
         m = self._loaded(c)

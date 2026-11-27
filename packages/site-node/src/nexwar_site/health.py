@@ -294,6 +294,20 @@ class HealthDesk:
                                             "guard rounds. Make another standby point on open "
                                             "floor the default, or add one there") if bad_sb
                               else "Standby points are on walkable floor"}
+            # 用户 11-27(新人易用性报告 A):老原点离墙太近 —— 回原点、撤防回原点都会被拒
+            from nexwar_site.robot_overview import home_bad
+            zones = getattr(self.dispatcher, "zones", None)
+            bad_h = [rid for rid, c in list(getattr(self.dispatcher, "clients", {}).items())
+                     if home_bad(self.db, self.dispatcher.maps, zones, rid, c.capabilities)]
+            out["home"] = {"ok": not bad_h,
+                           "detail": ("原点离墙、障碍或禁行区太近,回原点会被拒:" + "、".join(bad_h)
+                                      + "。把机器人开到开阔处,在「定位」页重新标原点")
+                           if bad_h else "原点都在机器人规划得到的地方",
+                           "detail_en": ("Home point too close to a wall, obstacle or no-go zone "
+                                         "(returning home will be refused): " + ", ".join(bad_h)
+                                         + ". Drive the robot into open floor and mark the home "
+                                         "point again on the Localization page") if bad_h
+                           else "Home points are where robots can plan to"}
         lanes = self._lanes() if self._lanes is not None else {}
         stuck = [n for n, t0 in lanes.items() if self._mono() - t0 > LANE_STUCK_S]
         out["lanes"] = {"ok": not stuck,
