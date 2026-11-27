@@ -12,7 +12,7 @@ import { hm, nameOf, mapName } from "./data";
 import { refusalText, t, type Key } from "./i18n";
 import { locText, type UnitInfo } from "./live";
 import { lapText, LoopsSelect } from "./loops";
-import { canDispatch, canFindPose, canPatrol, canTeleop, forGuard, isOwnerLike, robotCams, robotMap, type Alert } from "./model";
+import { canDisarm, canDispatch, canFindPose, canPatrol, canTeleop, forGuard, isOwnerLike, robotCams, robotMap, type Alert } from "./model";
 import { MapCanvas } from "./mapcanvas";
 import { type PreviewMeta } from "./mapview";
 import { recentActivity } from "./shifttl";
@@ -53,7 +53,11 @@ export function RobotControl(props: {
   const r: RobotCard = { ...cardFromUnit(props.u), ...(ov ?? {}), ...liveOf(props.u) };
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-  const [ask, setAsk] = useState<{ text: string; yes: string; run: () => void } | null>(null);
+  // 用户 11-27:「中止并回原点」当场选回到原点后怎么办(布防值守跟着办):马上出发 / 等几分钟 / 撤防
+  type After = { after: "go" | "wait" | "disarm"; min: number };
+  const [ask, setAsk] = useState<{ text: string; yes: string; run: (o: After) => void; after?: boolean } | null>(null);
+  const [after, setAfter] = useState<After["after"]>("wait");
+  const [afterMin, setAfterMin] = useState(10);
   const load = () => api<{ robots: RobotCard[] }>("GET", "/api/robots/overview")
     .then((d) => setOv((d.robots ?? []).find((x) => x.robot_id === id) ?? null)).catch(() => setOv(null));
   useEffect(() => {
@@ -187,8 +191,9 @@ export function RobotControl(props: {
             {dispatch && (
               task ? (
                 <div class="rc-row"><button type="button" class="btn" disabled={busy || off}
-                  onClick={() => setAsk({ text: t("rdAbortHomeAsk", { id: name, what: taskWhat(r.task_what) }), yes: t("rdAbortHome"),
-                    run: () => void send(post("home/return", { abort: true }), t("rdSent", { id: name, what: t("rdAbortHome") })) })}>{t("rdAbortHome")}</button></div>
+                  onClick={() => { setAfter("wait"); setAfterMin(10); setAsk({ text: t("rdAbortHomeAsk", { id: name, what: taskWhat(r.task_what) }), yes: t("rdAbortHome"), after: true,
+                    run: (o) => void send(post("home/return", { abort: true, after: o.after, ...(o.after === "wait" ? { wait_min: o.min } : {}) }),
+                      t("rdSent", { id: name, what: t("rdAbortHome") })) }); }}>{t("rdAbortHome")}</button></div>
               ) : (
                 <div class="rc-row"><button type="button" class="btn" disabled={busy || off || r.home_set === false}
                   title={r.home_set === false ? t("rdNoHome") : undefined}
@@ -231,8 +236,19 @@ export function RobotControl(props: {
           {ask && (
             <div class="rc-ask" role="group">
               <p>{ask.text}</p>
+              {ask.after && (
+                <fieldset class="rc-after" data-after-home>
+                  <legend class="small">{t("rdAfterHome")}</legend>
+                  <label><input type="radio" name="after" checked={after === "go"} onChange={() => setAfter("go")} /> {t("rdAfterGo")}</label>
+                  <label><input type="radio" name="after" checked={after === "wait"} onChange={() => setAfter("wait")} /> {t("rdAfterWaitA")}{" "}
+                    <input type="number" name="after_min" min={1} max={240} value={afterMin} disabled={after !== "wait"}
+                      onInput={(e) => setAfterMin(Math.max(1, Math.min(240, Math.round(Number((e.target as HTMLInputElement).value) || 1))))} />{" "}{t("rdAfterWaitB")}</label>
+                  {canDisarm(props.role) && <label><input type="radio" name="after" checked={after === "disarm"} onChange={() => setAfter("disarm")} /> {t("rdAfterDisarm")}</label>}
+                  <p class="muted small">{t("rdAfterNote")}</p>
+                </fieldset>
+              )}
               <div class="rc-row">
-                <button type="button" class="btn primary" onClick={() => { const a = ask; setAsk(null); a.run(); }}>{ask.yes}</button>
+                <button type="button" class="btn primary" onClick={() => { const a = ask; setAsk(null); a.run({ after, min: afterMin }); }}>{ask.yes}</button>
                 <button type="button" class="btn" onClick={() => setAsk(null)}>{t("cancel")}</button>
               </div>
             </div>

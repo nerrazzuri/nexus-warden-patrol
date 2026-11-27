@@ -290,8 +290,9 @@ class FakeApi implements SiteApi {
   Future<Map<String, dynamic>> alertTest() async => alertTestMode;
   Completer<void>? homeGate;
   @override
-  Future<Map<String, dynamic>> returnHome(String robotId, {bool abort = false}) async {
-    calls.add(abort ? 'home $robotId abort' : 'home $robotId');
+  Future<Map<String, dynamic>> returnHome(String robotId, {bool abort = false, String? after, int? waitMin}) async {
+    calls.add((abort ? 'home $robotId abort' : 'home $robotId') +
+        (after == null ? '' : ' $after') + (after == 'wait' ? ' ${waitMin ?? 10}' : ''));
     if (homeGate != null) await homeGate!.future;
     return {'ack': {'result': 'accepted'}};
   }
@@ -1315,7 +1316,37 @@ void main() {
     expect(busy.calls, isEmpty, reason: '先确认');
     await t.tap(find.byKey(const Key('home-abort-confirm')));
     await t.pumpAndSettle();
-    expect(busy.calls, ['home A abort']);
+    expect(busy.calls, ['home A abort wait 10']);
+  });
+
+  testWidgets('用户 11-27：中止并回原点当场选回到后怎么办 —— 缺省等 10 分钟、可加减；马上出发；保安有撤防', (t) async {
+    final busy = FakeApi('guard', robotView: busyView());
+    await openRobot(t, busy);
+    Future<void> open() async {
+      await t.ensureVisible(find.byKey(const Key('btn-home-abort')));
+      await t.pump();
+      await t.tap(find.byKey(const Key('btn-home-abort')));
+      await t.pumpAndSettle();
+    }
+    Future<void> tap(Key k) async {
+      await t.ensureVisible(find.byKey(k));
+      await t.tap(find.byKey(k));
+      await t.pumpAndSettle();
+    }
+    await open();
+    expect(find.text('回到原点以后'), findsOneWidget);
+    expect(find.byKey(homeAfterDisarmKey), findsOneWidget);
+    await tap(homeMinPlusKey);
+    await tap(const Key('home-abort-confirm'));
+    expect(busy.calls.last, 'home A abort wait 15');
+    await open();
+    await tap(homeAfterGoKey);
+    await tap(const Key('home-abort-confirm'));
+    expect(busy.calls.last, 'home A abort go');
+    await open();
+    await tap(homeAfterDisarmKey);
+    await tap(const Key('home-abort-confirm'));
+    expect(busy.calls.last, 'home A abort disarm');
   });
 
   testWidgets('用户 11-27 轮 P2-1：有任务时点「回待命点」先就地确认，确认了带 abort（先中止这一趟）；没任务直接回', (t) async {
@@ -1363,7 +1394,7 @@ void main() {
     busy.homeGate!.complete();
     await t.pumpAndSettle();
     expect(find.byKey(const Key('btn-home-stopping')), findsNothing);
-    expect(busy.calls, ['home A abort']);
+    expect(busy.calls, ['home A abort wait 10']);
   });
 
   testWidgets('没回到原点（开着的 standby_failed）、原点离墙太近：机器人页一直写着', (t) async {

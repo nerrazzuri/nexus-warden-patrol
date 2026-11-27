@@ -114,3 +114,29 @@ def test_用户1127_回待命点_有任务在跑_带abort先停再去(站点):
     # 操作记录在回完请求之后才写:等它
     _等(lambda: any(r["detail"].get("abort") is True for r in s.api.audit.list()
                    if r["action"] == "POST /api/robots/A/standby/return"))
+
+
+def test_用户1127_中止并回原点_回到后怎么办_参数不对400_撤防要权限_撤防了站点就是撤防(站点):
+    from nexwar_site.modes import ArmingDesk
+    s = 站点
+    alice, gina = _登(s, "alice"), _登(s, "gina")
+    _备好(s)
+    assert s.req("POST", "/api/robots/A/home/here", {"name": "dock"}, token=alice)[0] == 200
+    for bad in ({"abort": True, "after": "later"}, {"abort": True, "after": "wait", "wait_min": 0},
+                {"abort": True, "after": "wait", "wait_min": 241},
+                {"abort": True, "after": "wait", "wait_min": "5"}):
+        assert s.req("POST", "/api/robots/A/home/return", bad, token=gina)[0] == 400, bad
+    code, d = s.req("POST", "/api/robots/A/home/return", {"abort": True, "after": "disarm"},
+                    token=gina)
+    assert code == 409 and "布防模式" in d["error"], d
+    s.api.arming = ArmingDesk(s.db, now_ms=s.disp._now)
+    tid = _去远处(s, gina)
+    code, d = s.req("POST", "/api/robots/A/home/return", {"abort": True, "after": "disarm"},
+                    token=gina)
+    assert code == 200 and d["aborted"] == tid, d
+    assert s.api.arming.disarmed(), "撤防了"
+    _等(lambda: any(r["detail"].get("after") == "disarm" for r in s.api.audit.list()
+                   if r["action"] == "POST /api/robots/A/home/return"))
+    code, d = s.req("POST", "/api/robots/A/home/return",
+                    {"abort": True, "after": "wait", "wait_min": 5}, token=gina)
+    assert code == 200, d

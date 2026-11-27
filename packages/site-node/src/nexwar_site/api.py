@@ -2220,8 +2220,12 @@ class _Handler(TlsHandlerMixin):
         return self._send_json(200, got)
 
     def _home_return(self, robot_id: str, user: str) -> None:
-        """回原点、中止并回原点(POC):``{"abort"?: bool}``。``dispatch`` 权限;
-        要人监护的狗没人监护不派。"""
+        """回原点、中止并回原点(POC):``{"abort"?: bool, "after"?: "go" | "wait" | "disarm",
+        "wait_min"?: int}``。``dispatch`` 权限;要人监护的狗没人监护不派。
+
+        ``after``(用户 11-27:中止并回原点让点的人当场选,布防值守跟着办):``go`` 回到原点马上接着巡;
+        ``wait`` 回到原点等 ``wait_min``(1–240,缺省 10)分钟再出发;``disarm`` 整站撤防(要
+        ``set_mode`` 权限),机器人回原点等。不带 = 老样子(值守歇 10 分钟)。"""
         stb = self.site.standby
         if stb is None:
             raise HttpError(404, "此站点未启用待命点")
@@ -2233,12 +2237,44 @@ class _Handler(TlsHandlerMixin):
         abort = d.get("abort", False) if isinstance(d, dict) else None
         if not isinstance(abort, bool):
             raise HttpError(400, "abort 要是 true/false")
-        self._audit_detail = {"abort": abort}
+        after = d.get("after") if isinstance(d, dict) else None
+        if after not in (None, "go", "wait", "disarm"):
+            raise HttpError(400, "after 只能是 go、wait、disarm")
+        wait_min = d.get("wait_min", 10) if after == "wait" else 0
+        if after == "wait" and (isinstance(wait_min, bool) or not isinstance(wait_min, int)
+                                or not 1 <= wait_min <= 240):
+            raise HttpError(400, "wait_min 要是 1–240 的整数(分钟)")
+        if after == "disarm":
+            self._need(user, SET_MODE)
+            if self.site.arming is None:
+                raise HttpError(409, "此站点未启用布防模式:没法撤防")
+        self._audit_detail = {"abort": abort} | ({"after": after} if after else {}) | (
+            {"wait_min": wait_min} if after == "wait" else {})
         # 带中止的要多等一会儿:中止回执 + 等上一趟停下(最多 15 s) + 去原点的回执
-        result = self.site.dispatch(lambda: stb.return_home(robot_id, issued_by=str(user),
-                                                            abort=abort),
+        result = self.site.dispatch(lambda: self._guard_paused(
+            robot_id, f"{user} 叫它回原点", stb.return_home(robot_id, issued_by=str(user),
+                                                           abort=abort),
+            after=after, wait_min=wait_min, by=str(user)),
                                     timeout_s=self.site.dispatcher.ack_timeout_s * 2 + 25)
         return self._send_json(200, result)
+
+    async def _guard_paused(self, robot_id: str, why: str, go: Any, *, after: str | None = None,
+                            wait_min: int = 0, by: str = "") -> Any:
+        """易用性 37 用户 11-27 轮 P2:人叫回待命点 / 回原点 —— 先让这台的布防值守歇 ``PAUSE_MS``
+        (在站点的事件循环里),再派;不然叫回去的那一趟刚派出去就被值守下一圈抢掉。
+
+        ``after``(用户 11-27,只回原点带):派成了以后 ``go`` / ``wait`` 交给值守(回到原点马上 /
+        等 ``wait_min`` 分钟再出发);``disarm`` 整站撤防(机器人接着回原点,值守收队)。"""
+        g = getattr(self.site, "guard", None)
+        if g is not None:
+            g.pause_robot(robot_id, why)
+        r = await go
+        tid = r.get("task_id") if isinstance(r, dict) else None
+        if after == "disarm":
+            self.site.arming.set_mode("disarmed", by=by)
+        elif after in ("go", "wait") and g is not None and tid:
+            g.after_home(robot_id, str(tid), wait_min if after == "wait" else 0)
+        return r
 
     def _standby(self, method: str, robot_id: str, action: str, user: str) -> None:
         from nexwar_site.standby import StandbyError
@@ -2263,7 +2299,8 @@ class _Handler(TlsHandlerMixin):
                 self._audit_detail = {"abort": True}
             # 易用性 37 用户 11-27 轮 P2-1:带 abort 先中止正在跑的那一趟(跟回原点一样多等一会儿)
             result = self.site.dispatch(
-                lambda: stb.return_to(robot_id, issued_by=str(user), name=name, abort=abort),
+                lambda: self._guard_paused(robot_id, f"{user} 叫它回待命点", stb.return_to(
+                    robot_id, issued_by=str(user), name=name, abort=abort)),
                 timeout_s=self.site.dispatcher.ack_timeout_s * 2 + 25 if abort else None)
             return self._send_json(200, result)
         if method == "GET":

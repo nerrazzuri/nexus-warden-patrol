@@ -766,7 +766,8 @@ abstract class SiteApi {
   Future<Map<String, dynamic>> mute(String id, bool on);
   /// 回原点（POC）：当前地图上的原点。[abort] 为真先中止正在跑的任务再回（没原点、有任务没带 abort
   /// 站点 409，原因在 [SiteError]）。保安、管理员。
-  Future<Map<String, dynamic>> returnHome(String robotId, {bool abort = false});
+  /// [after]（用户 11-27，中止并回原点时选）：`go` 回到马上接着布防巡逻、`wait` 等 [waitMin] 分钟、`disarm` 撤防。
+  Future<Map<String, dynamic>> returnHome(String robotId, {bool abort = false, String? after, int? waitMin});
   /// 换姿态（POC）：`stand` / `lie` / `crawl`。保安、管理员、工程师（跟遥控同一个权限）。
   /// 机器人做完才回，所以多等一会儿；有任务在跑、急停时机器人拒，原因在 [SiteError]。
   Future<Map<String, dynamic>> posture(String robotId, String mode);
@@ -1470,8 +1471,12 @@ class SiteClient implements SiteApi {
       await _send('POST', '/api/robots/${Uri.encodeComponent(id)}/standby/cancel', <String, dynamic>{}));
 
   @override
-  Future<Map<String, dynamic>> returnHome(String robotId, {bool abort = false}) async => _map(await _send(
-      'POST', '/api/robots/${Uri.encodeComponent(robotId)}/home/return', <String, dynamic>{'abort': abort},
+  Future<Map<String, dynamic>> returnHome(String robotId, {bool abort = false, String? after, int? waitMin}) async =>
+      _map(await _send('POST', '/api/robots/${Uri.encodeComponent(robotId)}/home/return', <String, dynamic>{
+        'abort': abort,
+        'after': ?after,
+        if (after == 'wait') 'wait_min': waitMin ?? 10,
+      },
       const Duration(seconds: 50)));
 
   @override
