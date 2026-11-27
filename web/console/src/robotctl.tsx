@@ -55,7 +55,11 @@ export function RobotControl(props: {
   const [err, setErr] = useState<string | null>(null);
   // 用户 11-27:「中止并回原点」当场选回到原点后怎么办(布防值守跟着办):马上出发 / 等几分钟 / 撤防
   type After = { after: "go" | "wait" | "disarm"; min: number };
-  const [ask, setAsk] = useState<{ text: string; yes: string; run: (o: After) => void; after?: boolean } | null>(null);
+  // 新人 11-28 第二轮 P2:确认框以前画在右栏最下面(调度、姿态之后),不滚到底看不见,以为一点就执行了 ——
+  // 现在画在点的那个按钮所在的区块里(at: "state" = 姿态那块,别的 = 当前任务那块),出来时滚到看得见
+  const [ask, setAsk] = useState<{ text: string; yes: string; run: (o: After) => void; after?: boolean; at?: "state" } | null>(null);
+  const askRef = useRef<HTMLDivElement>(null);
+  useEffect(() => { if (ask) askRef.current?.scrollIntoView?.({ block: "nearest" }); }, [ask]);
   const [after, setAfter] = useState<After["after"]>("wait");
   const [afterMin, setAfterMin] = useState(10);
   const load = () => api<{ robots: RobotCard[] }>("GET", "/api/robots/overview")
@@ -119,6 +123,27 @@ export function RobotControl(props: {
   const task = r.task ?? null;
   const offWhy = t(r.ever_seen === false ? "rdNeverNoCtl" : "rdOfflineNoCtl");
   const today = recentActivity(props.alerts.filter((a) => a.robot === id && forGuard(a)), props.patrols.filter((p) => p.robot === id), props.since, props.now).slice(0, 8);
+
+  const askBox = ask && (
+    <div class="rc-ask" role="group" ref={askRef}>
+      <p>{ask.text}</p>
+      {ask.after && (
+        <fieldset class="rc-after" data-after-home>
+          <legend class="small">{t("rdAfterHome")}</legend>
+          <label><input type="radio" name="after" checked={after === "go"} onChange={() => setAfter("go")} /> {t("rdAfterGo")}</label>
+          <label><input type="radio" name="after" checked={after === "wait"} onChange={() => setAfter("wait")} /> {t("rdAfterWaitA")}{" "}
+            <input type="number" name="after_min" min={1} max={240} value={afterMin} disabled={after !== "wait"}
+              onInput={(e) => setAfterMin(Math.max(1, Math.min(240, Math.round(Number((e.target as HTMLInputElement).value) || 1))))} />{" "}{t("rdAfterWaitB")}</label>
+          {canDisarm(props.role) && <label><input type="radio" name="after" checked={after === "disarm"} onChange={() => setAfter("disarm")} /> {t("rdAfterDisarm")}</label>}
+          <p class="muted small">{t("rdAfterNote")}</p>
+        </fieldset>
+      )}
+      <div class="rc-row">
+        <button type="button" class="btn primary" onClick={() => { const a = ask; setAsk(null); a.run({ after, min: afterMin }); }}>{ask.yes}</button>
+        <button type="button" class="btn" onClick={() => setAsk(null)}>{t("cancel")}</button>
+      </div>
+    </div>
+  );
 
   return (
     <div class="rc" data-robot={id} ref={root} tabIndex={-1}>
@@ -200,6 +225,8 @@ export function RobotControl(props: {
                   onClick={() => void send(post("home/return"), t("rdSent", { id: name, what: t("rdHome") }))}>{t("rdHome")}</button></div>
               )
             )}
+            {ask?.at !== "state" && askBox}
+            {err && <p class="error small rc-err" role="alert">{err}</p>}
             {(patrol || dispatch) && <p class="muted small">{t(dispatch ? "rcTaskHint" : "rcTaskHintMgr")}</p>}
             {/* 第 2 轮 N2(老机器人页):没原点、没待命点 —— 写为什么灰着,管理员给去处理的链接 */}
             {dispatch && !off && (r.home_set === false || r.standby_set === false) && (
@@ -219,7 +246,7 @@ export function RobotControl(props: {
                   {canTeleop(props.role) && (r.postures ?? []).filter((m) => !(m === "stand" && u.robot.status?.ready?.motion !== false)).map((m: Posture) => (
                     <button key={m} type="button" class="btn" disabled={busy || off || !!task || !!r.held}
                       title={task ? t("rdPostureBusy", { id: name, what: taskWhat(r.task_what) }) : r.held ? t("rdPostureHeld") : undefined}
-                      onClick={() => setAsk({ text: t("rdPostureAsk", { id: name, what: t(POSTURE_KEY[m]) }), yes: t(POSTURE_KEY[m]),
+                      onClick={() => setAsk({ text: t("rdPostureAsk", { id: name, what: t(POSTURE_KEY[m]) }), yes: t(POSTURE_KEY[m]), at: "state",
                         run: () => void send(post("posture", { mode: m }), t("rdPostureDone", { id: name, what: t(POSTURE_KEY[m]) })) })}>{t(POSTURE_KEY[m])}</button>
                   ))}
                 </div>
@@ -231,29 +258,9 @@ export function RobotControl(props: {
                   onClick={() => void send(post("relocalize", { global: true }), t("rdSent", { id: name, what: t("rcReloc") }))}>{t("rcReloc")}</button>}
                 {dispatch && props.onFind && <button type="button" class="btn" data-find="1" disabled={off} onClick={() => props.onFind!(id)}>{t("dutyFindPose")}</button>}
               </div>
+              {ask?.at === "state" && askBox}
             </section>
           ) : null}
-          {ask && (
-            <div class="rc-ask" role="group">
-              <p>{ask.text}</p>
-              {ask.after && (
-                <fieldset class="rc-after" data-after-home>
-                  <legend class="small">{t("rdAfterHome")}</legend>
-                  <label><input type="radio" name="after" checked={after === "go"} onChange={() => setAfter("go")} /> {t("rdAfterGo")}</label>
-                  <label><input type="radio" name="after" checked={after === "wait"} onChange={() => setAfter("wait")} /> {t("rdAfterWaitA")}{" "}
-                    <input type="number" name="after_min" min={1} max={240} value={afterMin} disabled={after !== "wait"}
-                      onInput={(e) => setAfterMin(Math.max(1, Math.min(240, Math.round(Number((e.target as HTMLInputElement).value) || 1))))} />{" "}{t("rdAfterWaitB")}</label>
-                  {canDisarm(props.role) && <label><input type="radio" name="after" checked={after === "disarm"} onChange={() => setAfter("disarm")} /> {t("rdAfterDisarm")}</label>}
-                  <p class="muted small">{t("rdAfterNote")}</p>
-                </fieldset>
-              )}
-              <div class="rc-row">
-                <button type="button" class="btn primary" onClick={() => { const a = ask; setAsk(null); a.run({ after, min: afterMin }); }}>{ask.yes}</button>
-                <button type="button" class="btn" onClick={() => setAsk(null)}>{t("cancel")}</button>
-              </div>
-            </div>
-          )}
-          {err && <p class="error small rc-err" role="alert">{err}</p>}
           <section class="rc-sec rc-today">
             <h3 class="lbl">{t("rcToday")}</h3>
             {today.length === 0 ? <p class="muted small">{t("rcNothingToday")}</p> : (

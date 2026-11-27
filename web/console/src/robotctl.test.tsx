@@ -153,6 +153,8 @@ describe("单台机器人控制 · 保安", () => {
     await press(c, "Stop and return home");
     expect(c.querySelector(".modal")).toBeNull();
     expect(c.querySelector(".rc-ask")!.textContent).toContain("go back to the home point");
+    // 新人 11-28 第二轮 P2:确认框画在「当前任务」那块里(按钮下面),不在右栏最下面
+    expect(c.querySelector(".rc-task .rc-ask")).not.toBeNull();
     // 用户 11-27:当场选回到原点后怎么办 —— 缺省等 10 分钟;改成 5 分钟
     expect(c.querySelector("[data-after-home]")!.textContent).toContain("After it gets home");
     fireEvent.input(c.querySelector("input[name=after_min]")!, { target: { value: "5" } });

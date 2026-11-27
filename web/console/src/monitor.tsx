@@ -446,6 +446,8 @@ export function MonitorPage(props: {
       </aside>
 
       <nav class="mon-rail" aria-label={t("monRobots")}>
+        {/* 新人 11-28 第二轮 P2:窄屏(1099 以下)这一条横在最上面,前面写「机器人」—— 点它开控制 */}
+        <span class="mon-rail-lbl">{t("monRobots")}</span>
         {ranked.map((u) => {
           const id = u.robot.robot_id;
           const low = u.battery != null && u.battery < 30;
