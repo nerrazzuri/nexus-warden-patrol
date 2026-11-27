@@ -208,9 +208,6 @@ const RULES: Rule[] = [
   [/^站点的钟跟 (\S+) 差 (\d+) 秒$/, (m) => `The site clock is ${m[2]} s off from ${m[1]}`],
   [/^雷暴[:：]排程巡检暂停$/, () => "Thunderstorm: scheduled patrols paused"],
   [/^整站撤防[:：]排程巡逻暂停$/, () => "Site disarmed: scheduled patrols paused"],   // 用户 11-27
-  // 用户 11-27:自动找到的位置可疑(站点的拒绝、机器人的拒绝回执、遥测里那句)
-  [/^(?:(\S+) 位置可疑[:：]|loc_unconfirmed: )?位置是自动找的[,，]图上另一处 [(（]([-\d.]+), ([-\d.]+)[)）] 也很像[\s\S]*$/,
-    (m) => `${m[1] ? `${m[1]}: ` : ""}the robot found its position by itself, but another spot on the map (${m[2]}, ${m[3]}) looks almost the same. Check the camera and confirm the position, or set it on the map.`],
   [/^整站已经撤防了[,，]不用再临时撤防[:：]要恢复就切到「布防」或「留守」$/,
     () => "The whole site is already disarmed, so a temporary disarm isn't needed. To restore, switch to Armed or Stay."],
   // 第十六轮 P2:回原点失败的说明;用户 11-27 改成先回待命点、再重标原点(老的那句留着,老告警还在)

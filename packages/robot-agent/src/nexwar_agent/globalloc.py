@@ -251,25 +251,6 @@ def decide(cands: list[Candidate], *, soft: bool = False) -> tuple[Candidate | N
     return best, ""
 
 
-#: 用户 11-27(C40221 11-26:自动找位置在两处很像的地方挑了一处,中止回原点按错的位置走、停在别处):
-#: 认下的那处之外,图上另有一处离它 :data:`RIVAL_FAR_M` 以上、贴合度又差不到 :data:`RIVAL_GAP` ——
-#: 位置照认(过了 :data:`MIN_GAP`),但标「位置可疑」,人确认之前不收会自己走的任务。
-#: 门槛待现场数据定(11-17–27 的自动找位置记录,笔记本在查),先按这个。
-RIVAL_FAR_M = 3.0
-RIVAL_GAP = 0.2
-
-
-def rival(cands: list[Candidate], best: Candidate) -> Candidate | None:
-    """``best`` 之外最像的、离得远的那一处(:data:`RIVAL_FAR_M`、:data:`RIVAL_GAP`);
-    没有是 ``None``。"""
-    for c in cands:
-        if c is best or c == best:
-            continue
-        if math.hypot(c.x - best.x, c.y - best.y) >= RIVAL_FAR_M and best.fit - c.fit < RIVAL_GAP:
-            return c
-    return None
-
-
 # ------------------------------------------------------------ 核对定位器给的位置
 
 #: 定位器给的位置贴合度到这么多就算对得上(现场对的位置 0.71–0.78;MOLA 锁错的那一次 0.44)。
