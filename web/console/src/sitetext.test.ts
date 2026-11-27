@@ -351,4 +351,12 @@ describe("第十六轮 P2:回原点失败、撤防时临时撤防的拒绝", () 
       expect(siteText(s).text, s).not.toMatch(/[一-鿿]/);
     }
   });
+
+describe("用户 11-27:位置可疑", () => {
+  it("站点的拒绝、机器人的拒绝回执都翻成英文,带上另一处的坐标", () => {
+    const why = "位置是自动找的,图上另一处 (17.0, -23.1) 也很像(贴合度 0.70 对 0.62),说不准是哪一处:看画面确认位置没错,或者在地图上给它设位置";
+    expect(siteText(`A 位置可疑:${why}`).text).toBe("A: the robot found its position by itself, but another spot on the map (17.0, -23.1) looks almost the same. Check the camera and confirm the position, or set it on the map.");
+    expect(siteText(`loc_unconfirmed: ${why}`).text).toBe("the robot found its position by itself, but another spot on the map (17.0, -23.1) looks almost the same. Check the camera and confirm the position, or set it on the map.");
+  });
+});
 });

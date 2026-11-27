@@ -822,6 +822,9 @@ class AgentRuntime:
             return "unsupervised"                 # W00c6i:没人现场监护,真狗不自己动
         if cmd.kind in ("goto", "patrol", "follow") and self._map_busy():
             return "map_switching"
+        if cmd.kind in _AUTONOMOUS_KINDS and self._loc_unconfirmed():
+            # 用户 11-27:自动找到的位置可疑(图上另一处也很像),人确认之前不自己走
+            return f"loc_unconfirmed: {self._loc_unconfirmed()}"[:200]
         if cmd.kind in _AUTONOMOUS_KINDS and self.parts is not None and self._head_key()[1]:
             return "head_not_forward"             # W11a、W09i:头尾不知道,或狗尾为前但后面看不清
         if cmd.kind in ("goto", "patrol", "standoff", "follow"):
@@ -1749,6 +1752,8 @@ class AgentRuntime:
             return "busy: 在换图"                 # 给的是这张图上的位置,换完就作废(W09a 内审应修 2)
         found: dict[str, Any] | None = None
         scan_ref: Any = None
+        if "confirm" in p:
+            return self._confirm_loc(p)
         if "global" in p:
             # W41:自动找位置 —— 拿此刻看到的墙那一层在整张图上套
             if p.get("global") is not True:
@@ -1813,6 +1818,8 @@ class AgentRuntime:
                 return why
             self._scan_relocs = 0
             self._soft_check = bool(found and found.get("refine"))
+            if found is not None and isinstance(found.get("rival"), dict):
+                await self._mark_unconfirmed(loc, found)
             if not auto:
                 # 人给的位置:RTK 核对之前的结论作废、一阵子不按 RTK 自动请(W09e 内审应修 4)
                 self._rtk_check.human_override(self._mono())
@@ -1830,6 +1837,35 @@ class AgentRuntime:
         if found is not None:
             return "", found
         return ""
+
+    async def _mark_unconfirmed(self, loc: Any, found: dict[str, Any]) -> None:
+        """用户 11-27:自动找到的位置图上另有一处也很像 —— 照用,但标可疑、等人确认。丢定位停着的
+        那一趟(goto、巡检……)不接着走:中止,机器人原地停着,人确认了再派。"""
+        r = found["rival"]
+        loc.rival = r
+        loc.unconfirmed = (f"位置是自动找的,图上另一处 ({r['x']:.1f}, {r['y']:.1f}) 也很像"
+                           f"(贴合度 {found['fit']:.2f} 对 {r['fit']:.2f}),说不准是哪一处:"
+                           "看画面确认位置没错,或者在地图上给它设位置")
+        log.warning("自动找位置:%s", loc.unconfirmed)
+        if await self.processor.abort_kinds(_AUTONOMOUS_KINDS, "loc_unconfirmed"):
+            log.warning("位置可疑:中止正在跑(丢定位停着)的那一趟")
+
+    def _confirm_loc(self, p: dict[str, Any]) -> str | tuple[str, dict[str, Any]]:
+        """用户 11-27:人看了画面,确认自动找到的位置没错(``{"confirm": true}``):不再可疑。
+        本来就不可疑也收(回 ``confirmed: false``),重复点不报错。"""
+        if p.get("confirm") is not True:
+            return "payload: confirm 只能是 true"
+        loc = self.parts.nav.anchor
+        was = bool(getattr(loc, "unconfirmed", ""))
+        if was:
+            log.warning("人确认了自动找到的位置:%s", loc.unconfirmed)
+            loc.unconfirmed, loc.rival = "", None
+        return "", {"confirmed": was}
+
+    def _loc_unconfirmed(self) -> str:
+        if self.parts is None:
+            return ""
+        return str(getattr(self.parts.nav.anchor, "unconfirmed", "") or "")
 
     def _global_ok(self) -> bool:
         return (self.globalloc is not None and self.globalloc.ready and self.parts is not None
@@ -1941,6 +1977,7 @@ class AgentRuntime:
 
     async def _global_find(self) -> str | tuple[tuple[float, float, float], dict[str, Any], Any]:
         """自动找位置(W41):→ 拒收原因,或者 (位姿, 回执里带的东西)。"""
+        from nexwar_agent import globalloc as G
         from nexwar_agent.globalloc import GlobalLocError, decide
         self._find_kind = ""
         try:
@@ -1963,6 +2000,9 @@ class AgentRuntime:
             self._find_kind = "off_map" if not cands or cands[0].fit < SOFT_FIT else "ambiguous"
             return f"not_found: {why}"[:200]
         got = {"fit": round(best.fit, 3), "candidates": top}
+        r = G.rival(cands, best)
+        if r is not None:
+            got["rival"] = r.to_wire()            # 用户 11-27:另一处也很像,认了也标可疑
         if best.fit < MIN_FIT:
             got["refine"] = True                  # 先认的:定位器精配完复核(_scan_check)
         return (best.x, best.y, best.yaw), got, ref

@@ -491,4 +491,16 @@ describe("第 10 轮 W10-04:活动日志写具体", () => {
     expect(sb).not.toContain("成功");
     expect(line({ action: "POST /api/mode", target: "armed" })).toContain("成功");
   });
+
+describe("用户 11-27:站点发出去了、机器人没接受", () => {
+  it("操作记录不写「成功」,写「机器人没接受」和原因", () => {
+    lang.value = "zh";
+    const c = render(<ul><AuditLine r={{ id: 3, at: 0, actor: "liang", action: "POST /api/robots/A/standby/return",
+      target: "A", status: 200, detail: { ack: "rejected", ack_reason: "busy", source: "app" } }} /></ul>).container;
+    expect(c.querySelector("[data-result=not-accepted]")!.textContent).toBe("机器人没接受");
+    expect(c.querySelector("[data-result=ok]")).toBeNull();
+    expect(c.querySelector("li")!.className).toBe("bad");
+    expect(c.querySelector("[data-why]")!.textContent).toContain("busy");
+  });
+});
 });

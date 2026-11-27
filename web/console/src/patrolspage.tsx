@@ -50,6 +50,9 @@ export function runResult(r: RunRow): { text: string; bad: boolean } {
   if (!r.finished) return { text: t("ptUnfinished"), bad: true };
   if (r.result === "aborted" || r.result === "abort") return { text: t("ptStopped"), bad: true };
   if (r.result === "failed") return { text: t("ptFailed"), bad: true };
+  // 用户 11-27(C40221 11-26:按错的位置「回到了」原点,其实停在别处):回原点 / 待命点的「到了」是按机器人自己的定位算的
+  const m = r.mission ?? "";
+  if (r.kind === "home" || r.kind === "standby" || /^(standby-|home-)/.test(m)) return { text: t("ptArrivedOwn"), bad: false };
   return { text: t("ptDone"), bad: false };
 }
 

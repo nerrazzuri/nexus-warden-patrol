@@ -1199,12 +1199,15 @@ class FakeApi implements SiteApi {
   Future<Map<String, dynamic>> relocalize(String robotId,
       {bool atHome = false,
       bool global = false,
+      bool confirm = false,
       double x = 0,
       double y = 0,
       double yaw = 0,
       String? mapId,
       String? version}) async {
-    calls.add(global
+    calls.add(confirm
+        ? 'relocalize $robotId confirm'
+        : global
         ? 'relocalize $robotId global'
         : atHome
         ? 'relocalize $robotId home'
@@ -1351,6 +1354,42 @@ void main() {
     expect(find.textContaining('回原点失败：机器人停在原地等'), findsOneWidget);
     expect(find.byKey(SiteRobotPage.homeBadKey), findsOneWidget);
     expect(find.textContaining('原点离墙、障碍或禁行区太近'), findsOneWidget);
+  });
+
+  testWidgets('用户 11-27：位置可疑（另一处也很像）—— 写明另一处、不自己走；保安确认要当场再点一次，发 confirm；经理只看', (t) async {
+    Map<String, dynamic> view() {
+      final v = jsonDecode(jsonEncode(busyView())) as Map<String, dynamic>;
+      (v['status'] as Map)['task'] = null;
+      v['loc'] = {
+        'anchored': true,
+        'localizer': 'bridge',
+        'reason': '',
+        'unconfirmed': '位置是自动找的,图上另一处 (17.0, -23.1) 也很像',
+        'rival': {'x': 17.04, 'y': -23.12},
+      };
+      return v;
+    }
+
+    final api = FakeApi('guard', robotView: view());
+    await openRobot(t, api);
+    expect(find.byKey(SiteRobotPage.locUnconfirmedKey), findsOneWidget);
+    expect(find.textContaining('图上另一处（17.0, -23.1）也很像'), findsOneWidget);
+    expect(find.textContaining('有人确认之前它不会自己走'), findsOneWidget);
+    expect(find.textContaining('定位：待确认'), findsOneWidget);
+    await t.ensureVisible(find.byKey(SiteRobotPage.locConfirmKey));
+    await t.tap(find.byKey(SiteRobotPage.locConfirmKey));
+    await t.pumpAndSettle();
+    expect(api.calls.where((c) => c.startsWith('relocalize')), isEmpty);
+    expect(find.textContaining('真的在地图上显示的位置吗'), findsOneWidget);
+    await t.ensureVisible(find.byKey(SiteRobotPage.locConfirmGoKey));
+    await t.tap(find.byKey(SiteRobotPage.locConfirmGoKey));
+    await t.pumpAndSettle();
+    expect(api.calls, contains('relocalize A confirm'));
+
+    await t.pumpWidget(const SizedBox());
+    await openRobot(t, FakeApi('manager', robotView: view()));
+    expect(find.byKey(SiteRobotPage.locUnconfirmedKey), findsOneWidget);
+    expect(find.byKey(SiteRobotPage.locConfirmKey), findsNothing);
   });
 
   // 易用性第 7 轮 A7-01（用户 11-11 定）：蹲着、趴着时站点不让开遥控，保安在 App 里没法让它站起来
