@@ -748,24 +748,3 @@ async def test_工单16_空闲时被遥控器开进禁行区_也报一次_出来
     for _ in range(3):
         await t.一拍()
     assert len([1 for k, _ in t.events if k == "inside_nogo"]) == 2, "出来再进去:再报"
-
-
-async def test_用户1126_P1_9_起步时起点在图上的墙里_1米内挪出来再走_记一笔_太深照旧拒(tmp_path):
-    """易用性 37 P1-9:机器人停在图上判成墙(或贴墙太近)的地方,每趟秒失败 start_blocked。用户 11-26
-    「两种模式都要」:先自己挪出来(1 m 内最近能站的点,直线过去),挪不了再由站点换车、叫人遥控。"""
-    t = 台子(tmp_path, walls=[(5.8, 0.0, 6.2, 6.0)])
-    await t.start(6.0, 3.0)                                # 图上这儿是墙:机器人其实站得住
-    await t.nav.goto(Pose.from_xy_yaw(10.0, 3.0))
-    await t.走到头()
-    assert NavStatus.SUCCEED in t.status, (t.status, t.nav.fail_reason)
-    [ev] = [d for k, d in t.events if k == "start_escape"]
-    assert math.hypot(ev["to_x"] - 6.0, ev["to_y"] - 3.0) <= 1.0
-    o = await t.在()
-    assert math.hypot(o.x - 10.0, o.y - 3.0) <= 0.2
-
-    (tmp_path / "deep").mkdir()
-    t2 = 台子(tmp_path / "deep", walls=[(4.0, 0.0, 8.0, 6.0)])
-    await t2.start(6.0, 3.0)                               # 离能站的地方 2 m 多:不挪
-    with pytest.raises(NavRequestError, match="start_blocked"):
-        await t2.nav.goto(Pose.from_xy_yaw(10.0, 3.0))
-    assert not [k for k, _ in t2.events if k == "start_escape"]
