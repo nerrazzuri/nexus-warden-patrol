@@ -222,17 +222,6 @@ export function RobotControl(props: {
                   onClick={() => void send(post("relocalize", { global: true }), t("rdSent", { id: name, what: t("rcReloc") }))}>{t("rcReloc")}</button>}
                 {dispatch && props.onFind && <button type="button" class="btn" data-find="1" disabled={off} onClick={() => props.onFind!(id)}>{t("dutyFindPose")}</button>}
               </div>
-              {/* 用户 11-27(C40221 11-26 中止回原点停错地方):自动找到的位置图上另一处也很像 —— 看画面确认,或在地图上设位置 */}
-              {u.robot.loc?.unconfirmed && (
-                <div class="rc-loc-warn" data-loc-unconfirmed="1" role="status">
-                  <p class="small"><Sign kind="warn" />{u.robot.loc.rival
-                    ? t("rcLocUnconfirmedAt", { x: u.robot.loc.rival.x.toFixed(1), y: u.robot.loc.rival.y.toFixed(1) })
-                    : t("rcLocUnconfirmed")}</p>
-                  {dispatch && <button type="button" class="btn" data-loc-confirm="1" disabled={busy || off}
-                    onClick={() => setAsk({ text: t("rcLocConfirmAsk", { id: name }), yes: t("rcLocConfirm"),
-                      run: () => void send(post("relocalize", { confirm: true }), t("rcLocConfirmed", { id: name })) })}>{t("rcLocConfirm")}</button>}
-                </div>
-              )}
             </section>
           ) : null}
           {ask && (

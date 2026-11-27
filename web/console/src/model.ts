@@ -82,9 +82,6 @@ export interface Robot {
     reason?: string;
     degraded?: string;
     localizer?: string;
-    /** 用户 11-27:自动找到的位置可疑(图上另一处也很像),人确认之前不自己走;那另一处。 */
-    unconfirmed?: string;
-    rival?: { x: number; y: number; yaw?: number; fit?: number } | null;
   } | null;
   /** 被挡 / 重规划的状态(站点 runviz;没被挡、没重规划就没有这个键)。 */
   nav?: {

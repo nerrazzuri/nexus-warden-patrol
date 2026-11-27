@@ -407,8 +407,6 @@ String _ackReasonText(String reason) => switch (reason) {
 /// 定位状态的人话（W00c6e，里程锚定）：单狗视图里的 `loc`（站点从狗的遥测取的）。没有就是空串。
 String locText(Map<String, dynamic>? loc) {
   if (loc == null) return '';
-  // 用户 11-27：自动找到的位置可疑（图上另一处也很像），人确认之前不自己走
-  if ('${loc['unconfirmed'] ?? ''}'.isNotEmpty) return tr('Localization: unconfirmed', '定位：待确认');
   final reason = '${loc['reason'] ?? ''}';
   if (loc['localizer'] == 'bridge') return _bridgeLocText(loc, reason);
   if (loc['anchored'] != true) {
@@ -926,11 +924,9 @@ abstract class SiteApi {
   /// 设位置（W00c6e，里程锚定）：[atHome] 狗在原点；否则 [x]、[y]（米）、[yaw]（弧度），地图坐标。保安、管理员。
   /// [mapId]、[version]：在哪张图上点的（外审 W39-I2；给了站点核对，跟狗加载的不一样 409）。
   /// [global]：让狗拿看到的墙在整张图上自己找（W41；狗报了 `relocalize.global` 才给）。
-  /// [confirm]：用户 11-27 —— 自动找到的位置可疑（图上另一处也很像），人看了画面确认没错。
   Future<Map<String, dynamic>> relocalize(String robotId,
       {bool atHome = false,
       bool global = false,
-      bool confirm = false,
       double x = 0,
       double y = 0,
       double yaw = 0,
@@ -2242,16 +2238,13 @@ class SiteClient implements SiteApi {
   Future<Map<String, dynamic>> relocalize(String robotId,
           {bool atHome = false,
           bool global = false,
-          bool confirm = false,
           double x = 0,
           double y = 0,
           double yaw = 0,
           String? mapId,
           String? version}) async =>
       _map(await _send('POST', '/api/robots/${Uri.encodeComponent(robotId)}/relocalize',
-          confirm
-              ? <String, dynamic>{'confirm': true}
-              : global
+          global
               ? <String, dynamic>{'global': true}
               : atHome
               ? <String, dynamic>{'at_home': true}

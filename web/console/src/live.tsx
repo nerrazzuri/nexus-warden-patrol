@@ -37,7 +37,6 @@ export function stateShape(s: RobotState): ShapeKind | null {
 export function locText(u: UnitInfo | undefined): Key | null {
   const l = u?.robot.loc;
   if (!u || u.stale || !l) return null;
-  if (l.unconfirmed) return "locUnconfirmed";          // 用户 11-27
   if (l.degraded || l.reason) return "locPoor";
   if (l.anchored === false || !l.pose) return "locNone";
   return "locGood";
