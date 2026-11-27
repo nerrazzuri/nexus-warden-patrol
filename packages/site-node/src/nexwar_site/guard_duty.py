@@ -178,6 +178,10 @@ class GuardDuty:
         #: min: 回到后等几分钟(0 = 马上), until: 回到了以后算出的出发时刻}。只在内存里(站点重启
         #: 退回老样子:歇 PAUSE_MS)
         self._after_home: dict[str, dict[str, Any]] = {}
+        #: 新人 11-28 第三轮:人叫回原点 / 回待命点时这台正在跑一圈 → 记到几点前别接着派。
+        #: 这一圈不管以什么结束(中止跟跑完撞上时机器人报的是跑完),都歇着,
+        #: 不马上派下一圈把回去的那一趟抢掉
+        self._human_hold: dict[str, int] = {}
         self._no_standby: set[tuple[int, str, str, str]] = set()
         self._waiting: dict[int, str] = {}
         self._route_cache: dict[tuple, dict[str, Any]] = {}
@@ -418,6 +422,10 @@ class GuardDuty:
         去 / 站值守位的先歇下,免得叫回去的那一趟一派出去就被下一圈抢掉。回歇下了几条。"""
         now, n = self._now(), 0
         for eid, run in self._runs().items():
+            if run["robot_id"] == robot_id and run["state"] == "lap":
+                self._human_hold[robot_id] = now + PAUSE_MS   # 这一圈结束时按它办(_lap_state)
+                n += 1
+                continue
             if run["robot_id"] != robot_id \
                     or run["state"] not in ("resume", "post", "wait", "watch"):
                 continue
@@ -1745,6 +1753,7 @@ class GuardDuty:
                 self._set_run(eid, state="resume", until_ms=now)
             return
         kind, data = term
+        hold = self._human_hold.pop(rid, 0)
         if kind == "task_done":
             self._dog_need.pop(rid, None)
             self._log("lap_done", robot=rid, entry=eid,
@@ -1752,6 +1761,13 @@ class GuardDuty:
                              f"{(now - run['lap_started_ms']) // 1000} 秒")
             if run["fails"] and self.alerts is not None:
                 self.alerts.resolve_all(rid, "guard_stuck", who="site:guard_lap_done")
+        if kind in ("task_done", "task_preempted") and hold > now:
+            # 新人 11-28 第三轮:人刚叫它回去(中止跟这一圈跑完撞在一起):歇着,不接着派
+            self._log("aborted", robot=rid, entry=eid,
+                      detail=f"人叫它回去了:歇 {PAUSE_MS // 60_000} 分钟再接着跑")
+            self._set_run(eid, state="paused", until_ms=hold)
+            return
+        if kind == "task_done":
             if not e["robot"] and rid in self._reserved:
                 # 外审 r2 #6:「任意一台」跑完这一圈,机器人让给指定它的方案,不再接着跑下一圈
                 await self._stand_down(run, f"{rid} 让给指定它的值守方案")
