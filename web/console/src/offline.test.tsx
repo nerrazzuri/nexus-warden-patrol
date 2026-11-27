@@ -59,6 +59,20 @@ describe("地图面板:站点上没有这张图", () => {
   });
 });
 
+describe("地图面板:还在读", () => {
+  it("新人 11-28 第二轮:知道是哪张图、预览还没回来 —— 写「加载中」,不写「尚无地图」", async () => {
+    setFetch((async (url: unknown) => {
+      const u = String(url);
+      if (u.endsWith("/preview") || u.endsWith("/areas")) return new Promise<Response>(() => {});
+      return json({ episodes: [], cameras: [], robots: {} });
+    }) as never);
+    const r = render(<SiteMap units={[unit("A")] as never} p1={[]} now={0} selected={null} onSelect={() => {}} retryMs={20} />);
+    await waitFor(() => expect(r.container.textContent).toContain("加载中"));
+    expect(r.container.textContent).not.toContain("尚无地图");
+    cleanup();
+  });
+});
+
 describe("今晚巡逻:值守巡逻", () => {
   it("易用性 37 场景测试:布防后机器人在跑值守巡逻 —— 值班页列出来,不写「今天没有巡逻」", async () => {
     setFetch((async (url: unknown) => {

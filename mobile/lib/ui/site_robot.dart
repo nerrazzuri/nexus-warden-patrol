@@ -826,7 +826,8 @@ class _SiteRobotPageState extends State<SiteRobotPage> with NwAsk {
           opt(homeAfterGoKey, 'go', tr('Go out on guard again right away', '马上接着布防巡逻')),
           opt(homeAfterWaitKey, 'wait', tr('Wait $_homeMin min, then go out again', '等 $_homeMin 分钟再出发'), tail: minutes),
           if (widget.api.session?.canSetMode ?? false)
-            opt(homeAfterDisarmKey, 'disarm', tr('Disarm the site (robots go home and stay)', '撤防（机器人回原点待着）')),
+            opt(homeAfterDisarmKey, 'disarm', tr("Disarm the site: robots go back to the origin and wait there (one that can't get there stops where it is)",
+                '撤防：机器人回原点等着（回不去的就停在原地）')),
           Text(tr('Only matters while the site is armed. A person seen in the meantime is still reported and handled.',
                   '只在布防时有用。这段时间看见人照样报警、照样处理。'),
               style: NwText.bodySmall.copyWith(color: c.textSecondary)),

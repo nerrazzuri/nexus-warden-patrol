@@ -2298,6 +2298,16 @@ class _Handler(TlsHandlerMixin):
                 raise HttpError(400, "abort 要是 true/false")
             if abort:
                 self._audit_detail = {"abort": True}
+            else:
+                # 新人 11-28 第二轮 P2:页面上刚显示空闲,值守的下一圈已经出发 —— 以前发给
+                # 机器人、回来一句「rejected busy」;现在站点先说清楚,页面刷新后按钮变成先停再回
+                c = self.site.dispatcher.clients.get(robot_id)
+                cur = c.status.task if c is not None and c.status is not None else None
+                if cur is not None:
+                    from nexwar_site.refusals import extra_for
+                    why = (f"{robot_id} 正在执行任务(可能刚出发):要回待命点,"
+                           "再点一次「回待命点」(会先停下这一趟)")
+                    raise HttpError(409, why, extra=extra_for(why))
             # 易用性 37 用户 11-27 轮 P2-1:带 abort 先中止正在跑的那一趟(跟回原点一样多等一会儿)
             result = self.site.dispatch(
                 lambda: self._guard_paused(robot_id, f"{user} 叫它回待命点", stb.return_to(

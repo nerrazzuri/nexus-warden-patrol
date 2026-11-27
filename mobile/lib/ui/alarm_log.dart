@@ -23,6 +23,7 @@ class AlarmLogPage extends StatefulWidget {
 
   static Key rowKey(String key) => Key('alarm-log-$key');
   static Key filterKey(String id) => Key('alarm-filter-$id');
+  static Key kindKey(String key) => Key('alarm-kind-$key');
   static Key stateKey(String key) => Key('alarm-state-$key');
   static const Key todoKey = Key('alarm-log-todo');
   static Key todoRowKey(String key) => Key('alarm-log-todo-$key');
@@ -65,7 +66,8 @@ class _AlarmLogPageState extends State<AlarmLogPage> {
 
   Timer? _poll;
 
-  /// 筛选（稿 S-alarms 顶上一排）：all 全部、open 没结的、p1。
+  /// 筛选（稿 S-alarms 顶上一排）：all 全部、security 安全事件、device 设备与运行、open 没结的、p1。
+  /// 新人 11-28 第二轮 P2：有人闯入和换电池超时都是红 P1，只能读标题分 —— 跟网页一样分两类。
   String _filter = 'all';
 
   @override
@@ -148,7 +150,10 @@ class _AlarmLogPageState extends State<AlarmLogPage> {
     final all = _rows;
     final open = all?.where((a) => a.resolvedMs == null).length ?? 0;
     final p1 = all?.where((a) => a.level == 'P1').length ?? 0;
+    final sec = all?.where(alertIsSecurity).length ?? 0;
     final rows = all?.where((a) => switch (_filter) {
+          'security' => alertIsSecurity(a),
+          'device' => !alertIsSecurity(a),
           'open' => a.resolvedMs == null,
           'p1' => a.level == 'P1',
           _ => true,
@@ -215,6 +220,8 @@ class _AlarmLogPageState extends State<AlarmLogPage> {
               scrollDirection: Axis.horizontal,
               child: Row(children: [
                 chip('all', tr('All ${all!.length}', '全部 ${all.length}')),
+                chip('security', tr('Security $sec', '安全事件 $sec')),
+                chip('device', tr('Equipment ${all.length - sec}', '设备与运行 ${all.length - sec}')),
                 chip('open', tr('Open $open', '未处理 $open')),
                 chip('p1', tr('P1 $p1', 'P1 $p1')),
               ])),
@@ -240,6 +247,9 @@ class _AlarmLogPageState extends State<AlarmLogPage> {
               child: Row(children: [
                 NwLevelBox(level: a.level, size: 28),
                 const SizedBox(width: Nw.s8),
+                Icon(alertIsSecurity(a) ? Icons.shield_outlined : Icons.build_outlined,
+                    key: AlarmLogPage.kindKey(a.key), size: 18, color: c.textSecondary),
+                const SizedBox(width: Nw.s8),
                 Expanded(
                     child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                   Text(alertLine(a.robot, a.kind, a.title),
@@ -248,6 +258,7 @@ class _AlarmLogPageState extends State<AlarmLogPage> {
                       style: NwText.bodyMedium.copyWith(color: c.text, fontWeight: FontWeight.w700)),
                   Text(
                       [
+                        alertIsSecurity(a) ? tr('Security', '安全事件') : tr('Equipment', '设备与运行'),
                         _day(a.firstMs),
                         if ('${a.context['zone'] ?? ''}'.isNotEmpty) '${a.context['zone']}',
                         if (a.ackedBy.isNotEmpty) personName(a.ackedBy),

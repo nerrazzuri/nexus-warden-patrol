@@ -337,6 +337,7 @@ REFUSAL: dict[str, str] = {
     "zones_sync": "dispatch.zones_sync", "deterring": "dispatch.deterring",
     "manual_only": "dispatch.manual_only", "heading": "dispatch.heading",
     "unreachable": "dispatch.unreachable", "busy": "dispatch.busy", "stop_first": "dispatch.busy",
+    "busy_return": "dispatch.busy",
     "unregistered": "dispatch.unregistered", "bad_mission": "dispatch.bad_mission",
     "unsupported": "dispatch.refused",
 }

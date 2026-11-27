@@ -184,7 +184,8 @@ export function SiteMap(props: {
     <div class="mapbox" {...pose.wrapProps}>
         {!which || !meta ? (
           <p class={loadFailed || (!which && props.stale) ? "empty warn" : "empty"} role="status">
-            {t(loadFailed || (!which && props.stale) ? "loadRetry" : "noMap")}</p>
+            {/* 新人 11-28 第二轮:知道是哪张图、还在读 → 写「载入中」(以前读的这一会儿写「站点还没有地图」) */}
+            {t(loadFailed || (!which && props.stale) ? "loadRetry" : which && !(got.key === key && got.missing) ? "loading" : "noMap")}</p>
         ) : (
           <MapCanvas meta={meta} raster={`/api/maps/${enc(which.map_id)}/${enc(which.version)}/preview.png`} label={t("mapAria")}
             areas={mapAreas(meta, areas).map((a) => {

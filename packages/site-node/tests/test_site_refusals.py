@@ -30,6 +30,7 @@ SRC = (Path(__file__).resolve().parents[1] / "src" / "nexwar_site")
     "unreachable": "第 2 个点无法到达",
     "stop_first": "A 正在执行任务 guard-1:先「原地停下」再趴下",
     "busy": "A 正在执行别的任务",
+    "busy_return": "A 正在执行任务(可能刚出发):要回待命点,再点一次「回待命点」(会先停下这一趟)",
     "unsupported": "A 不支持 release_install",
     "unregistered": "没有登记过 Z",
     "bad_mission": "任务定义不成形: x",

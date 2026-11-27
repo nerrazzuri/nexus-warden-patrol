@@ -1,3 +1,5 @@
+import 'dart:async';
+
 // 「现在」页（App V2 第 2 期）：全场正常 / P1 事件条 / 急停后 / 没有地图；画面、机器人格、小地图、今晚巡逻、
 // 设备与运营、上一班留言、最新活动；只读没有按钮；各尺寸不溢出。
 import 'package:nexwar_patrol/l10n.dart';
@@ -49,6 +51,20 @@ Future<void> _scrollTo(WidgetTester t, Key key) async {
 }
 
 void main() {
+  testWidgets('新人 11-28 第二轮：「现在」页读到之前只转圈，不先写「没有巡逻」「没有要处理的」', (t) async {
+    _size(t, const Size(390, 2000));
+    final api = FakeApi('guard')..robotsGate = Completer<void>();
+    await t.pumpWidget(MaterialApp(theme: nwTheme(Brightness.dark), home: Scaffold(body: NowPage(api: api))));
+    await t.pump();
+    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+    expect(find.byKey(NowPage.tonightKey), findsNothing);
+    expect(find.byKey(NowPage.opsEmptyKey), findsNothing);
+    api.robotsGate!.complete();
+    await t.pumpAndSettle();
+    expect(find.byKey(NowPage.tonightKey), findsOneWidget);
+    await t.pumpWidget(Container());
+  });
+
   testWidgets('易用性 37 第十一轮 P2：P1 开着时设备与运营不写「没有要处理的」，说 P1 在最上面', (t) async {
     _size(t, const Size(390, 2000));
     final api = FakeApi('guard')..alertRows = [_p1('k1')];

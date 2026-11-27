@@ -283,6 +283,17 @@ describe("单台机器人控制 · 从老机器人页搬过来的(第六期)", (
     expect(g.querySelector("[data-setup-why] a")).toBeNull();
   });
 
+  it("新人 11-28 第二轮 P2:原点标坏了、待命点走不了 —— 保安(读不到概况)也看到为什么回不去", async () => {
+    card = null;
+    const u = idle();
+    Object.assign(u.robot, { home_set: true, home_bad: true, standby_bad: true });
+    const c = show("guard", u);
+    await waitFor(() => expect(c.querySelector("[data-home-bad]")).not.toBeNull());
+    expect(c.querySelector("[data-home-bad]")!.textContent).toContain("too close to a wall");
+    expect(c.querySelector("[data-standby-bad]")).not.toBeNull();
+    expect(c.querySelector("[data-setup-why] a")).toBeNull();
+  });
+
   it("嵌在现场设置 → 机器人里:没有自己的页头、没有「派去看一眼」,右栏末尾接别的内容", async () => {
     const c = render(<RobotControl u={idle()} role="admin" now={NOW} alerts={[]} patrols={[]} since={NOW - 3_600_000} say={vi.fn()}
       refresh={vi.fn(async () => {})} onBack={() => {}} embedded sideExtra={<p data-extra="1">x</p>} />).container;

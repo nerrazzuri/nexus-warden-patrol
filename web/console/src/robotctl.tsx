@@ -229,9 +229,11 @@ export function RobotControl(props: {
             {err && <p class="error small rc-err" role="alert">{err}</p>}
             {(patrol || dispatch) && <p class="muted small">{t(dispatch ? "rcTaskHint" : "rcTaskHintMgr")}</p>}
             {/* 第 2 轮 N2(老机器人页):没原点、没待命点 —— 写为什么灰着,管理员给去处理的链接 */}
-            {dispatch && !off && (r.home_set === false || r.standby_set === false) && (
+            {dispatch && !off && (r.home_set === false || r.standby_set === false || r.home_bad || r.standby_bad) && (
               <ul class="plain rd-why small muted" data-setup-why="1">
                 {r.home_set === false && <li>{t("rdNoHome")} {isOwnerLike(props.role) && <a href="#/admin/localization">{t("rdNoHomeGo")}</a>}</li>}
+                {r.home_set !== false && r.home_bad && <li data-home-bad="1">{t("rdHomeBad")} {isOwnerLike(props.role) && <a href="#/admin/localization">{t("rdHomeBadGo")}</a>}</li>}
+                {r.standby_set !== false && r.standby_bad && <li data-standby-bad="1">{t("rdStandbyBad")} {isOwnerLike(props.role) && <a href="#/admin/layout?tab=standby">{t("rdStandbyBadGo")}</a>}</li>}
                 {r.standby_set === false && <li>{t("rdNoStandby")} {isOwnerLike(props.role) && <a href="#/admin/layout?tab=standby">{t("rdNoStandbyGo")}</a>}</li>}
               </ul>
             )}
@@ -310,7 +312,8 @@ function RobotMiniMap({ u }: { u: UnitInfo }) {
 
 /** 从实时数据(``/api/robots`` 的一台)推出控制要用的:在线、叫停、任务号、原点、第几圈、地图、能换的姿态、警示能力。 */
 export function cardFromUnit(u: UnitInfo): RobotCard {
-  const rb = u.robot as UnitInfo["robot"] & { lap?: RobotCard["lap"]; running?: { map_id?: string | null; map_version?: string | null } | null };
+  const rb = u.robot as UnitInfo["robot"] & { lap?: RobotCard["lap"]; running?: { map_id?: string | null; map_version?: string | null } | null;
+    home_bad?: boolean; standby_bad?: boolean };
   const tasks = (rb.capabilities?.tasks ?? {}) as Record<string, unknown>;
   const fresh = u.state !== "offline";
   const d = tasks.deter as { outputs?: unknown[]; max_s?: number; tts?: boolean; clips?: unknown[]; tts_langs?: unknown[] } | undefined;
@@ -322,6 +325,8 @@ export function cardFromUnit(u: UnitInfo): RobotCard {
     robot_id: rb.robot_id, name: rb.name ?? "", revoked: rb.revoked, expires_at: 0, battery_pct: u.battery,
     patrols_today: 0, problems: [], recent_problems: [], agent: null, compat: "", manual_only: false,
     home_set: rb.home_set, lap: rb.lap ?? null, deter,
+    // 新人 11-28 第二轮 P2:原点标坏了、默认待命点走不了 —— 保安读不到概况,从实时数据带上
+    ...(rb.home_bad ? { home_bad: true } : {}), ...(rb.standby_bad ? { standby_bad: true } : {}),
     postures: fresh && Array.isArray(modes) ? modes.map(String) as Posture[] : [],
     map: rb.running?.map_id ? { id: rb.running.map_id, version: rb.running.map_version ?? null, match: null } : null,
     ...liveOf(u),

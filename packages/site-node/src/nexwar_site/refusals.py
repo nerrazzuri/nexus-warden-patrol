@@ -52,6 +52,10 @@ CODES: tuple[tuple[str, re.Pattern[str], str], ...] = tuple(
         # 易用性 37 复测 P2-16:巡逻、去某点时不让趴下(dispatcher.posture)—— 说先点哪个
         ("stop_first", r"先「原地停下」再", "This robot is on a task. Press \"Stop in place\" "
          "first, then change its posture."),
+        # 新人 11-28 第二轮:人点回待命点 / 回原点时它手上有任务(多半值守刚出发下一圈)
+        ("busy_return", r"正在执行任务.*(中止并回原点|再点一次)", "This robot is on a task (it "
+         "may have just started one). Press the button again: it stops that task first, then "
+         "goes back."),
         ("busy", r"正在执行", "This robot is busy with another task."),
         # 易用性 37 复测:「下载到机器人」被拒只写 The site refused this right now
         ("unsupported", r"不支持", "This robot's software can't do this (simulated robots and "
