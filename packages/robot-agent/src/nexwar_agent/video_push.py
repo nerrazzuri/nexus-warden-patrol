@@ -51,7 +51,10 @@ def load_cameras(path: Path) -> dict[str, dict[str, Any]]:
     地址。``{"thermal": {"url": "rtsp://用户:口令@192.168.10.64:554/Streaming/Channels/101",
     "record": false}}``。文件里有口令:装机时 ``0640 root:robot``。没有这个文件 = 只有自带两路。
 
-    ``record``:``--record auto`` 时录不录这一路(缺省不录:热像 24 小时录要占盘)。"""
+    ``record``:``--record auto`` 时录不录这一路(缺省不录:热像 24 小时录要占盘)。
+
+    1.1-6 ``thermometry``(只给热像,可选;写了才测温):``{"path"?, "port"?, "hot_c"?, "fire_c"?}``
+    —— 热像 ISAPI 的温度接口路径、HTTP 端口,高温线、起火线(°C)。"""
     from nexwar_contract.video import CAMERAS
     try:
         d = json.loads(path.read_text(encoding="utf-8"))
@@ -71,6 +74,24 @@ def load_cameras(path: Path) -> dict[str, dict[str, Any]]:
         if not isinstance(v.get("record", False), bool):
             raise CameraConfigError(f"{name}.record 要是 true/false")
         out[name] = {"url": v["url"], "record": v.get("record", False)}
+        t = v.get("thermometry")
+        if t is not None:
+            if name != "thermal" or not isinstance(t, dict) \
+                    or set(t) - {"path", "port", "hot_c", "fire_c"}:
+                raise CameraConfigError("thermometry 只给热像,只认 path、port、hot_c、fire_c")
+            path_ = t.get("path", "/ISAPI/Thermal/channels/2/thermometry/1/rulesTemperatureInfo"
+                                  "?format=json")
+            port, hot, fire = t.get("port", 80), t.get("hot_c", 70.0), t.get("fire_c", 150.0)
+            if not isinstance(path_, str) or not path_.startswith("/ISAPI/") \
+                    or any(ch.isspace() for ch in path_):
+                raise CameraConfigError("thermometry.path 要是 /ISAPI/ 开头的路径")
+            if isinstance(port, bool) or not isinstance(port, int) or not 0 < port < 65536:
+                raise CameraConfigError("thermometry.port 要是端口号")
+            if not all(isinstance(x, (int, float)) and not isinstance(x, bool)
+                       for x in (hot, fire)) or not 0 < hot < fire <= 1000:
+                raise CameraConfigError("thermometry 的 hot_c 要大于 0、小于 fire_c(°C)")
+            out[name]["thermometry"] = {"path": path_, "port": port, "hot_c": float(hot),
+                                        "fire_c": float(fire)}
     return out
 
 

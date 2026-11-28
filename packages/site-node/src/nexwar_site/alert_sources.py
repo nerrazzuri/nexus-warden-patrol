@@ -812,6 +812,34 @@ class SiteAlertSources:
             # W72:凉下来了,「温度偏高 / 降负载」只留记录;「严重过热」(机器人结束了任务回去)
             # 多半是风扇坏了、进风口堵了,人去看过再关
             self.desk.resolve_all(rid, "board_hot", who="site:board_ok")
+        elif e.kind == "thermal_hot":
+            # 1.1-6:热像量到起火线 → P1(保安的「起火、过热」);高温线 → P2。人看过画面再关
+            c, lvl = d.get("max_c", "?"), d.get("level")
+            if lvl == "fire":
+                self.desk.raise_alert(
+                    kind="thermal_fire", robot=rid, title=f"热像发现疑似起火({c} °C)",
+                    detail=f"热像最高温度 {c} °C,过了起火线 {d.get('fire_c', '?')} °C;"
+                           "马上看热像画面,真起火按消防流程报警、叫人,不要等机器人",
+                    context={"max_c": c, "fire_c": d.get("fire_c")})
+            else:
+                self.desk.raise_alert(
+                    kind="thermal_overheat", robot=rid, title=f"热像发现高温点({c} °C)",
+                    detail=f"热像最高温度 {c} °C,过了高温线 {d.get('hot_c', '?')} °C;看热像画面,"
+                           "派人去看是什么在发热(电箱、机器、明火)",
+                    context={"max_c": c, "hot_c": d.get("hot_c")})
+        elif e.kind == "thermal_normal":
+            # 1.1-6:温度降回去了 —— 不自己关(起火、过热要人看过),现场记一笔
+            for kind in ("thermal_fire", "thermal_overheat"):
+                self.desk.amend_open(rid, kind, context={"cooled_c": d.get("max_c"),
+                                                         "peak_c": d.get("peak_c"),
+                                                         "cooled_ms": self._now()})
+        elif e.kind == "thermometry_failed":
+            self.desk.raise_alert(kind="thermometry_failed", robot=rid,
+                                  title="热像量不了温度,看不出起火、过热",
+                                  detail=f"{str(d.get('reason', ''))[:200]};"
+                                         "看热像网页上的全画面测温规则、账号口令(跟录像那一路同一套)")
+        elif e.kind == "thermometry_ok":
+            self.desk.resolve_all(rid, "thermometry_failed", who="site:thermometry_ok")
         elif e.kind == "thermal_lens_clear":
             self.desk.resolve_all(rid, "lens_blocked", who="site:lens_clear")      # W72
         elif e.kind == "recording_ok":

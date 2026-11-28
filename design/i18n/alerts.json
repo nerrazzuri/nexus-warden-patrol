@@ -110,7 +110,19 @@
   },
   "alarm_input_lost": {
     "en": "Alarm input lost",
-    "zh": "报警输入断了"
+    "zh": "报警输入中断"
+  },
+  "thermal_fire": {
+    "en": "Possible fire (thermal camera)",
+    "zh": "热像发现疑似起火"
+  },
+  "thermal_overheat": {
+    "en": "Hot spot (thermal camera)",
+    "zh": "热像发现高温点"
+  },
+  "thermometry_failed": {
+    "en": "Thermal camera not reporting temperature",
+    "zh": "热像量不了温度"
   },
   "notify_failed": {
     "en": "Alerts not reaching WhatsApp / Telegram / email",

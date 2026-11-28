@@ -520,6 +520,9 @@ class AgentRuntime:
         self._shedding = False
         #: 热像镜头被挡(W46;装机入口 :meth:`attach_lens` 接上)。
         self.lens: Any = None
+        #: 1.1-6 热像测温(``thermo.ThermoWatch``);没配是 None。
+        self.thermo: Any = None
+        self._thermo_task: asyncio.Task | None = None
         self._lens_task: asyncio.Task | None = None
         #: W74 四期:被遮挡检测(:class:`~nexwar_agent.cover.CoverWatch`);被遮挡了欠一次撤任务、停车。
         self.cover: Any = None
@@ -850,6 +853,19 @@ class AgentRuntime:
         lens.emit = self.events.emit
         if self.devices is not None:
             self.devices.lens = lens
+
+    def attach_thermo(self, thermo: Any) -> None:
+        """1.1-6 接上热像测温:起火、高温、量不了温度的事件进事件簿。"""
+        self.thermo = thermo
+        thermo.emit = self.events.emit
+
+    async def _thermo_check(self) -> None:
+        try:
+            await self.thermo.step()
+        except asyncio.CancelledError:
+            raise
+        except Exception:                         # 测温出毛病不许带走代理
+            log.exception("热像测温这一次炸了")
 
     def attach_cover(self, cover: Any) -> None:
         """接上被遮挡检测(W74 四期):事件进事件簿;被遮挡了撤会动的任务、停车、不收新的。"""
@@ -3045,6 +3061,8 @@ class AgentRuntime:
             await _step("停录像", _rec_off)
         if self._lens_task is not None and not self._lens_task.done():
             self._lens_task.cancel()
+        if self._thermo_task is not None and not self._thermo_task.done():
+            self._thermo_task.cancel()
         if self._cover_task is not None and not self._cover_task.done():
             self._cover_task.cancel()
         if self._link_job is not None and not self._link_job.done():
@@ -3508,6 +3526,10 @@ class AgentRuntime:
                 and (self._lens_task is None or self._lens_task.done()):
             # 取一帧要起 ffmpeg、最长等 15 s:放后台,不卡这一拍(遥测、导航照走)
             self._lens_task = asyncio.get_running_loop().create_task(self._lens_check())
+        if self.thermo is not None and self.thermo.due() \
+                and (self._thermo_task is None or self._thermo_task.done()):
+            # 1.1-6:问热像一次最高温度(HTTP,最长 4 s):放后台
+            self._thermo_task = asyncio.get_running_loop().create_task(self._thermo_check())
         await self._watch_faults()
         await self._watch_link()
         await self._flush_events()

@@ -37,6 +37,7 @@ _HELP = ("stuck", "nav_blocked", "fallen", "force_flipped", "deter_cornered", "b
          "swap_soon", "swap_needed", "guard_prep",   # W73 第四期:保安换电池 / 布防前先补能
          "swap_stuck")                         # 外审 r3:拔着电池还在走
 _OFFLINE = ("robot_offline", "robot_offline_idle", "cctv_offline")
+_FIRE = ("thermal_fire", "thermal_overheat")    # 1.1-6 热像量到的起火、高温
 _OWNER = ("agent_args_skipped", "preflight_refused", "agent_too_old", "archive_failed",
           "backup_stale", "board_hot",
           "bind_request", "wifi_change",
@@ -52,7 +53,7 @@ _OWNER = ("agent_args_skipped", "preflight_refused", "agent_too_old", "archive_f
           "force_bump", "force_config_bad", "incident_flood", "lane_stuck", "loc_degraded",
           "map_failed", "map_integrity",
           "map_ready", "payload_amp", "purged_incoming_stuck", "push_failed",
-          "notify_failed", "alarm_input_lost",
+          "notify_failed", "alarm_input_lost", "thermometry_failed",
           "recording_delete_failed", "recording_dropped", "recording_failed", "recording_trimmed",
           "release_failed", "rtk", "run_done", "run_start", "schedule_blocked", "schedule_died",
           "schedule_interrupted", "schedule_skipped", "site_disk_low",
@@ -63,6 +64,7 @@ AUDIENCE_OF: dict[str, Audience] = {
     **{k: "intrusion" for k in _INTRUSION},
     **{k: "help" for k in _HELP},
     **{k: "offline" for k in _OFFLINE},
+    **{k: "fire" for k in _FIRE},
     **{k: "owner" for k in _OWNER},
 }
 
