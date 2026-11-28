@@ -38,6 +38,7 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from email.message import EmailMessage
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 from nexwar_site.alert_sources import SITE
@@ -208,6 +209,9 @@ def _dog_conn(base: type, dog: _Watchdog) -> Callable[..., Any]:
         def connect(self) -> None:
             dog.watch(self)
             super().connect()
+            # 第 8 轮 #1:urllib 拿到回头以后把连接上的 sock 清掉,正文从响应文件接着读 ——
+            # 看门狗另外记住这个套接字本身(HTTPS 是包了 TLS 的那个),读正文时到点也掐得到
+            dog.watch(SimpleNamespace(sock=self.sock))
             dog.check()
     return Conn
 

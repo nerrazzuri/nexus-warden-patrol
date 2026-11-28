@@ -538,3 +538,29 @@ def test_外审1_1_第7轮_2_一个模块读炸了_别的模块照读_一分钟�
     t.clock.advance(61)
     t.rx.poll_once()
     assert _开着(t, "alarm_input_lost") and "index" in t.rx.status["bad-1"]["error"]
+
+
+def test_外审1_1_第8轮_2_几个模块掉线等超时_正常模块照样每拍读到(核):
+    import time as _t
+    t = 核
+    good = 假模块()
+
+    def read(host, port, unit, n):
+        if host.startswith("10.0.1."):
+            _t.sleep(1.0)                                 # 掉线:等超时
+            raise OSError("timed out")
+        return good.read(host, port, unit, n)
+    t.rx._read = read
+    for i in range(5):
+        _门磁(t, f"off-{i}", link={"via": "modbus", "host": f"10.0.1.{i}", "port": 502,
+                                  "unit": 1, "input": 0, "nc": False})
+    _门磁(t, "pir-3", link={"via": "modbus", "host": "10.0.0.9", "port": 502, "unit": 1,
+                          "input": 0, "nc": False})
+    good.bits[0] = True
+    t0 = _t.monotonic()
+    t.rx.poll_once()
+    t.rx.poll_once()
+    took = _t.monotonic() - t0
+    assert [s for s, _ in t.fired] == ["dev-pir-3"], "两拍就读到两次,去抖过了就报"
+    assert took < 1.5, f"不等掉线的五个模块一个个超时:{took:.2f}"
+    t.rx.stop()

@@ -33,6 +33,7 @@ import threading
 import time
 import uuid
 from collections.abc import Callable
+from concurrent.futures import Future, ThreadPoolExecutor, wait
 from typing import Any
 
 log = logging.getLogger(__name__)
@@ -42,6 +43,8 @@ POLL_S = 0.5
 #: IO 模块连着多久读不到报 P2(毫秒)。
 LOST_MS = 60_000
 TIMEOUT_S = 2.0
+#: 外审 1.1 第 8 轮 #2:几个 IO 模块一起读(各读各的,掉线模块的超时不拖慢正常模块),最多几个。
+MAX_IO_PARALLEL = 32
 #: SIA 入侵类事件码;Contact ID 入侵类(新事件 qualifier 1)。
 SIA_CODES = frozenset({"BA", "BV", "PA", "HA", "TA"})
 CID_CODES = frozenset({*range(120, 140), 144, 145})
@@ -215,6 +218,9 @@ class AlarmInputs:
         self._sia: socketserver.ThreadingTCPServer | None = None
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
+        self._pool: ThreadPoolExecutor | None = None
+        #: 外审 1.1 第 8 轮 #2:还在读的模块(掉线的等超时,不挡别的模块下一轮)
+        self._inflight: dict[tuple[str, int, int], Future[list[bool]]] = {}
 
     def _devices(self, via: str) -> list[dict[str, Any]]:
         import json
@@ -306,41 +312,60 @@ class AlarmInputs:
     # ------------------------------------------------------------ Modbus
 
     def poll_once(self) -> None:
-        """每个 IO 模块读一次;报警态连着两次才算(去抖);回到正常再报警才再算一次。"""
+        """每个 IO 模块读一次;报警态连着两次才算(去抖);回到正常再报警才再算一次。
+
+        外审 1.1 第 8 轮 #2:各模块一起读(线程池),这一拍最多等 :data:`POLL_S`;没读完的(掉线、
+        等超时)留着下一拍再收,不拖慢别的模块 —— 正常模块照样每拍都读到。"""
         groups: dict[tuple[str, int, int], list[dict[str, Any]]] = {}
         for d in self._devices("modbus"):
             groups.setdefault((d["host"], d["port"], d["unit"]), []).append(d)
-        now = self._now()
+        if groups and self._pool is None:
+            self._pool = ThreadPoolExecutor(max_workers=MAX_IO_PARALLEL,
+                                            thread_name_prefix="alarm-io-read")
         for key, devs in groups.items():
-            n = max(d["input"] for d in devs) + 1
-            try:
-                bits = self._read(key[0], key[1], key[2], n)
-                if len(bits) < n:
-                    raise OSError("IO 模块回的路数不够")
-            except Exception as exc:  # noqa: BLE001 - 外审 1.1 第 7 轮 #2:一个模块坏不挡别的模块
+            if key not in self._inflight:
+                n = max(d["input"] for d in devs) + 1
+                self._inflight[key] = self._pool.submit(self._read, key[0], key[1], key[2], n)
+        fresh = [f for k, f in self._inflight.items() if k in groups]
+        if fresh:
+            wait(fresh, timeout=POLL_S)                   # 没读完的(掉线等超时)下一拍再收
+        for key in [k for k, f in self._inflight.items() if f.done()]:
+            fut = self._inflight.pop(key)
+            if key in groups:
+                self._apply(key, groups[key], fut)
+        known = {g for g in groups}
+        for key in [k for k in self._lost if k not in known]:
+            self._lost.pop(key, None)
+
+    def _apply(self, key: tuple[str, int, int], devs: list[dict[str, Any]],
+               fut: Future[list[bool]]) -> None:
+        now = self._now()
+        n = max(d["input"] for d in devs) + 1
+        try:
+            bits = fut.result()
+            if len(bits) < n:
+                raise OSError("IO 模块回的路数不够")
+        except Exception as exc:  # noqa: BLE001 - 外审 1.1 第 7 轮 #2:一个模块坏不挡别的模块
                 first = self._lost.setdefault(key, now)
                 for d in devs:
                     self.status.setdefault(d["id"], {})["error"] = str(exc)[:200]
                 if now - first >= LOST_MS:
                     self._raise_lost(key, str(exc))
-                continue
-            if self._lost.pop(key, None) is not None:
-                self._resolve_lost(key)
-            for d in devs:
-                on = bits[d["input"]] != d["nc"]            # 常闭:断开(0)= 报警
-                st = self.status.setdefault(d["id"], {})
-                st.update(error="", state="alarm" if on else "normal")
-                m = self._modbus.setdefault(d["id"], {"streak": 0, "fired": False})
-                m["streak"] = m["streak"] + 1 if on else 0
-                if not on:
-                    m["fired"] = False
-                elif m["streak"] >= 2 and not m["fired"]:
-                    m["fired"] = True
-                    self.trigger(d["id"], via="modbus",
-                                 what=f"IO 模块 {key[0]} 输入 {d['input']}")
-        known = {g for g in groups}
-        for key in [k for k in self._lost if k not in known]:
-            self._lost.pop(key, None)
+                return
+        if self._lost.pop(key, None) is not None:
+            self._resolve_lost(key)
+        for d in devs:
+            on = bits[d["input"]] != d["nc"]            # 常闭:断开(0)= 报警
+            st = self.status.setdefault(d["id"], {})
+            st.update(error="", state="alarm" if on else "normal")
+            m = self._modbus.setdefault(d["id"], {"streak": 0, "fired": False})
+            m["streak"] = m["streak"] + 1 if on else 0
+            if not on:
+                m["fired"] = False
+            elif m["streak"] >= 2 and not m["fired"]:
+                m["fired"] = True
+                self.trigger(d["id"], via="modbus",
+                             what=f"IO 模块 {key[0]} 输入 {d['input']}")
 
     def _raise_lost(self, key: tuple[str, int, int], why: str) -> None:
         if self.alerts is None:
@@ -370,6 +395,8 @@ class AlarmInputs:
 
     def stop(self) -> None:
         self._stop.set()
+        if self._pool is not None:
+            self._pool.shutdown(wait=False, cancel_futures=True)
         if self._sia is not None:
             self._sia.shutdown()
             self._sia.server_close()

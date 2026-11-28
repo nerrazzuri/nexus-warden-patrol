@@ -574,3 +574,22 @@ def test_外审1_1_第7轮_1_HTTP回头零零碎碎地传_到点就断():
                           deadline=_t.monotonic() + 0.4)
     srv.close()
     assert _t.monotonic() - t0 < 1.2
+
+
+@pytest.mark.parametrize("status", [200, 503])
+def test_外审1_1_第8轮_1_HTTP回头很快_正文慢慢传_到点就断(status):
+    import time as _t
+
+    def reply(conn):
+        conn.recv(4096)
+        conn.sendall(f"HTTP/1.1 {status} X\r\nContent-Length: 1000\r\n\r\n".encode())
+        for _ in range(200):                              # 正文一个字节一个字节地慢慢给
+            _t.sleep(0.05)
+            conn.sendall(b"x")
+    srv, port = _慢服务器(reply)
+    t0 = _t.monotonic()
+    with pytest.raises(SendError):
+        notify._post_json(f"http://127.0.0.1:{port}/hook", {"a": 1}, timeout=5,
+                          deadline=_t.monotonic() + 0.3)
+    srv.close()
+    assert _t.monotonic() - t0 < 1.0, "读正文时到点也要掐断"
