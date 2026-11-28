@@ -587,6 +587,8 @@ CREATE TABLE IF NOT EXISTS notify_outbox (
     sent_ms    INTEGER,
     dropped    TEXT NOT NULL DEFAULT '',
     error      TEXT NOT NULL DEFAULT '',
+    done       TEXT NOT NULL DEFAULT '',
+    first_sent_ms INTEGER,
     UNIQUE (alert_key, tier, channel_id)
 );
 -- 商业化 B1c:名单第一版 —— 时段 / 人员授权。
@@ -1146,6 +1148,8 @@ _ADDED_COLUMNS = (
     ("routes", "title", "TEXT NOT NULL DEFAULT ''"),
     ("route_schedules", "title", "TEXT NOT NULL DEFAULT ''"),
     ("retired_ids", "definition", "TEXT NOT NULL DEFAULT ''"),           # 库 77 第 13 轮 W13-01
+    ("notify_outbox", "done", "TEXT NOT NULL DEFAULT ''"),          # 外审 1.1 #6:已发到的收件人
+    ("notify_outbox", "first_sent_ms", "INTEGER"),                   # 外审 1.1 #6:算一小时上限
 )
 
 

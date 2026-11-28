@@ -42,6 +42,9 @@ class DeterDesk:
         self._sound: tuple[int, float] | None = None
         #: 外审:喇叭的仲裁(看优先级 → 起播 / 关 → 记下)一把锁做完,自动播报和手动喊话、关喇叭不交错
         self._speaker_lock = asyncio.Lock()
+        #: 外审 1.1 #10:喇叭指令的代次。录音下载慢、后台放的,下完了代次变了(后来有人关了喇叭、
+        #: 放了别的)就不放了。
+        self._speak_gen = 0
         #: 1.1-4:跟站点搬录音(``talk.TalkLink``);没接(没有狗专用口)就不认 ``talk:``、``mic``。
         self.talk: Any = None
         #: 本体灯开着到点关(``max_s``):哪一路 → 关灯的那个任务
@@ -133,6 +136,7 @@ class DeterDesk:
             cur = self.playing()
             if cur is not None and cur[0] >= priority:
                 return False
+            self._speak_gen += 1
             try:
                 await self.hal.sound(clip, max_s)
             except Exception as exc:                 # noqa: BLE001 - 自己放的没放成:记日志,不打断别的
@@ -192,7 +196,7 @@ class DeterDesk:
         if req.on and req.clip.startswith("talk:"):
             if self.talk is None:
                 raise HalUnsupported("这台机器人放不了站点的录音(没接机器人专用口)")
-            t = asyncio.ensure_future(self._talk_play(req))   # 1.1-4:先从站点拉下来
+            t = asyncio.ensure_future(self._talk_play(req, self._speak_gen))  # 1.1-4:先拉下来
         else:
             t = asyncio.ensure_future(self.hal.sound(req.clip if req.on else "", req.max_s))
         try:
@@ -212,8 +216,12 @@ class DeterDesk:
                                  "ended": "failed", "reason": str(f.exception())[:200]})
         t.add_done_callback(done)
 
-    async def _talk_play(self, req: Any) -> None:
+    async def _talk_play(self, req: Any, gen: int) -> None:
         path = await self.talk.fetch(req.clip)
+        if gen != self._speak_gen:
+            # 下载期间有人关了喇叭、放了别的(可能优先级更高):这段不放了。检查和起播之间没有 await
+            log.info("录音 %s 下完时已经被后来的喇叭指令取代,不放", req.clip)
+            return
         await self.hal.sound(f"talk:{path}", req.max_s)
 
     async def _listen(self, cmd: Command, req: Any) -> None:
@@ -234,6 +242,8 @@ class DeterDesk:
             cur = self.playing()
             if cur is not None and req.priority < cur[0]:
                 return "busy"
+        if req.output == "speaker":
+            self._speak_gen += 1
         try:
             if req.output == "strobe":
                 await self.hal.strobe(req.color or "warn", "flash" if req.on else "off",

@@ -226,3 +226,62 @@ def test_接口_管理员加改测删_保安不行_令牌不出来_审计不记�
     assert s.req("POST", "/api/notify/999/test", token=alice)[0] == 404
     rows = [r for r in s.api.audit.list() if "/api/notify" in r["action"]]
     assert rows and "sekret" not in json.dumps([dict(r) for r in rows], ensure_ascii=False)
+
+
+def test_外审1_1_第6条_部分收件人失败_只重发没发到的_上限按发出去过算(台, monkeypatch):
+    desk, n, f, clock, db = 台
+    got, bad = [], {"-2"}
+
+    def post(url, body, headers=None):
+        if body["chat_id"] in bad:
+            raise SendError("HTTP 502:bad gateway")
+        got.append(body["chat_id"])
+    monkeypatch.setattr(notify, "_post_json", post)
+    n.sender = notify.Sender()
+    _tg(n, targets=["-1", "-2", "-3"])
+    desk.raise_alert(kind="stuck", robot="R1", title="卡住")
+    n.tick()
+    assert got == ["-1"]
+    row = _队(db)[0]
+    assert row["done"] == "-1" and row["first_sent_ms"] == NOW and row["sent_ms"] is None
+    bad.clear()
+    clock[0] += 3600_000
+    n.tick()
+    assert got == ["-1", "-2", "-3"], "-1 不再收第二遍"
+    assert _队(db)[0]["sent_ms"] is not None
+
+
+def test_外审1_1_第6条_发到一半的也算进每小时上限(台, monkeypatch):
+    desk, n, f, clock, db = 台
+    monkeypatch.setattr(notify, "HOURLY_CAP", 1)
+
+    def post(url, body, headers=None):
+        if body["chat_id"] == "-2":
+            raise SendError("HTTP 502")
+    monkeypatch.setattr(notify, "_post_json", post)
+    n.sender = notify.Sender()
+    _tg(n, targets=["-1", "-2"])
+    desk.raise_alert(kind="stuck", robot="R1", title="卡住")
+    n.tick()
+    desk.raise_alert(kind="stuck", robot="R2", title="卡住")
+    n.tick()
+    assert "一小时已发 1 条" in _队(db)[1]["dropped"]
+
+
+def test_外审1_1_第7条_对方回的错误里的令牌抹掉(台, monkeypatch):
+    desk, n, f, clock, db = 台
+    tok = "123456:ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdef"
+
+    def post(url, body, headers=None):
+        raise SendError(f"HTTP 404:no route {url} access_token=xyz Bearer {tok}")
+    monkeypatch.setattr(notify, "_post_json", post)
+    n.sender = notify.Sender()
+    ch = _tg(n, secret=tok)
+    desk.raise_alert(kind="stuck", robot="R1", title="卡住")
+    n.tick()
+    r = n.send_test(ch["id"])
+    rows = _队(db)
+    for text in (rows[0]["error"], r["error"], n.channels()[0]["last_error"]):
+        assert tok not in text and "xyz" not in text and "***" in text, text
+    assert notify.scrub("https://api.telegram.org/bot9:" + "a" * 30 + "/send") \
+        == "https://api.telegram.org/***/send"

@@ -181,3 +181,41 @@ def test_机器人只拉得到发给自己的_回话只收在等的那条_一天
     now[0] += talk_mod.KEEP_MS + 1
     assert desk.prune() == 2
     assert desk.list("A") == [] and list((tmp_path / "talk").iterdir()) == []
+
+
+def test_外审1_1_第5条_文件删不掉_记录留着下次再删(tmp_path, monkeypatch):
+    from pathlib import Path
+
+    from nexwar_site.db import SiteDB
+    now = [1_000_000]
+    desk = TalkDesk(SiteDB(tmp_path / "s.db"), tmp_path / "talk", now_ms=lambda: now[0])
+    out = desk.save_out("A", "gina", b"x" * 10, "audio/webm")
+    now[0] += talk_mod.KEEP_MS + 1
+    real = Path.unlink
+
+    def no(self, missing_ok=False):
+        raise PermissionError("只读")
+    monkeypatch.setattr(Path, "unlink", no)
+    assert desk.prune() == 0 and desk.get(out["id"])
+    monkeypatch.setattr(Path, "unlink", real)
+    assert desk.prune() == 1 and list((tmp_path / "talk").iterdir()) == []
+
+
+def test_外审1_1_第11条_听回话没成标失败_等太久也标失败(tmp_path):
+    from nexwar_contract.messages import Event
+    from nexwar_site.db import SiteDB
+    now = [1_000_000]
+    desk = TalkDesk(SiteDB(tmp_path / "s.db"), tmp_path / "talk", now_ms=lambda: now[0])
+    a, b = desk.want_reply("A", "gina"), desk.want_reply("A", "gina")
+
+    def ev(clip, robot_ok=True):
+        return Event(event_id=f"e-{clip}", seq=1, boot_id="b", stamp=1, kind="deter",
+                     data={"output": "mic", "on": False, "ended": "failed",
+                           "reason": "麦克风忙", "clip": f"talk:{clip}"})
+    desk.on_event("B", ev(a["id"]))
+    assert desk.get(a["id"])["state"] == "waiting", "别的机器人的事件不算"
+    desk.on_event("A", ev(a["id"]))
+    assert (desk.get(a["id"])["state"], desk.get(a["id"])["error"]) == ("failed", "麦克风忙")
+    now[0] += talk_mod.REPLY_TIMEOUT_MS + 1
+    [_, x] = sorted(desk.list("A"), key=lambda r: r["id"] != a["id"])
+    assert x["id"] == b["id"] and x["state"] == "failed" and "超时" in x["error"]

@@ -19,7 +19,7 @@ export function canRecord(): boolean {
 
 function stateText(r: TalkRow): string {
   if (r.state === "refused") return t("tkRefused", { why: r.error || "" });
-  if (r.direction === "in") return r.state === "recorded" ? t("tkReply") : t("tkWaiting");
+  if (r.direction === "in") return r.state === "recorded" ? t("tkReply") : r.state === "failed" ? t("tkReplyFailed", { why: r.error || "" }) : t("tkWaiting");
   return r.state === "fetched" ? t("tkPlayed") : t("tkSent");
 }
 
@@ -32,6 +32,9 @@ export function TalkPanel({ robot, name, listen, disabled, say }: {
   const [asking, setAsking] = useState(false);
   const media = useRef<{ r: MediaRecorder; stream: MediaStream; chunks: Blob[]; timer: number; tick: number; t0: number } | null>(null);
   const live = useRef(true);
+  // 外审 1.1 #12:手还按着没有。要麦克风权限、开设备要等;等的时候松了手就不录
+  const held = useRef(false);
+  const starting = useRef(false);
   const ok = canRecord();
 
   const load = () => api<{ talks: TalkRow[] }>("GET", `/api/robots/${enc(robot)}/talks`)
@@ -49,6 +52,16 @@ export function TalkPanel({ robot, name, listen, disabled, say }: {
     return () => window.clearInterval(h);
   }, [waiting, robot]);
 
+  function press() {
+    held.current = true;
+    void start();
+  }
+
+  function release() {
+    held.current = false;
+    finish();
+  }
+
   function stopTracks() {
     const m = media.current;
     if (!m) return;
@@ -58,12 +71,19 @@ export function TalkPanel({ robot, name, listen, disabled, say }: {
   }
 
   async function start() {
-    if (rec !== "idle" || disabled) return;
+    if (rec !== "idle" || disabled || starting.current) return;
     let stream: MediaStream;
+    starting.current = true;
     try {
       stream = await navigator.mediaDevices.getUserMedia({ audio: true });
     } catch {
       say(t("tkNoMic"));
+      return;
+    } finally {
+      starting.current = false;
+    }
+    if (!held.current || !live.current) {               // 等权限的时候松了手、离开了页面:不录
+      stream.getTracks().forEach((x) => x.stop());
       return;
     }
     const r = new MediaRecorder(stream);
@@ -128,10 +148,10 @@ export function TalkPanel({ robot, name, listen, disabled, say }: {
         <button type="button" class={`btn tk-hold${rec === "rec" ? " is-rec" : ""}`} data-talk-hold="1"
           disabled={disabled || !ok || rec === "send"} title={!ok ? t("tkNeedHttps") : undefined}
           aria-pressed={rec === "rec"}
-          onPointerDown={(e) => { e.preventDefault(); void start(); }}
-          onPointerUp={() => finish()} onPointerLeave={() => finish()} onPointerCancel={() => finish()}
-          onKeyDown={(e) => { if ((e.key === " " || e.key === "Enter") && !e.repeat) { e.preventDefault(); void start(); } }}
-          onKeyUp={(e) => { if (e.key === " " || e.key === "Enter") finish(); }}>
+          onPointerDown={(e) => { e.preventDefault(); press(); }}
+          onPointerUp={() => release()} onPointerLeave={() => release()} onPointerCancel={() => release()}
+          onKeyDown={(e) => { if ((e.key === " " || e.key === "Enter") && !e.repeat) { e.preventDefault(); press(); } }}
+          onKeyUp={(e) => { if (e.key === " " || e.key === "Enter") release(); }}>
           {label}
         </button>
         {listen && (

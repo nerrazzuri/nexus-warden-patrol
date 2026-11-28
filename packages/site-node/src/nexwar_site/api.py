@@ -2716,7 +2716,7 @@ class _Handler(TlsHandlerMixin):
 
     def _guard_passes(self, method: str, user) -> None:
         """1.1-1 第 4 步 ``GET /api/guard-passes?since=&until=&account=``:保安经过的记录。
-        管理员、经理(``manage``)看所有人;别的人只看自己的。看了进审计(个人数据)。"""
+        管理员、经理看所有人(``guardpass.SUPERVISOR_ROLES``);别的人只看自己的。看了进审计。"""
         gp = self.site.guard_passes
         if gp is None:
             raise HttpError(404, "此站点未启用认出保安")
@@ -2734,7 +2734,8 @@ class _Handler(TlsHandlerMixin):
             raise HttpError(400, "时间段要在 31 天以内")
         me = str(user)
         acc = (query.get("account", [""])[0] or "").strip()[:64] or None
-        if not allowed(getattr(user, "role", ""), MANAGE):
+        from nexwar_site.guardpass import SUPERVISOR_ROLES
+        if getattr(user, "role", "") not in SUPERVISOR_ROLES:
             if acc not in (None, me):
                 raise HttpError(403, "只能看自己的经过记录")
             acc = me

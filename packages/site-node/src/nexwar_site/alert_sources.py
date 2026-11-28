@@ -19,6 +19,7 @@ from __future__ import annotations
 import json
 import logging
 import re
+import sqlite3
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
@@ -1227,10 +1228,33 @@ class SiteAlertSources:
                                   detail=f"{robot} 没到 {row.get('intercept') or '查看点'}"[:300],
                                   context={"zone": zone})
         for a in self.desk.book.open():
-            if a.kind == "intrusion_verifying" and a.robot == robot:
-                self.desk.resolve(a.key, who="site:verify",
-                                  verdict="false_alarm" if verdict == "clear" else "",
-                                  note=note)
+            if a.kind != "intrusion_verifying" or a.robot != robot:
+                continue
+            # 外审 1.1 #9:这台机器人的「去核实」可能合了好几条报警(同一机器人同一种并成一条)。
+            # 还有别的没下结论:先不关,只记一笔;都下了才关;其中有看见人、没核实成的不算误报
+            pending, bad = self._verify_group(robot, a.first_ms, int(row.get("id") or 0))
+            if pending:
+                self.desk.amend(a.key, context={"verify_note": note})
+                continue
+            clear = verdict == "clear" and not bad
+            self.desk.resolve(a.key, who="site:verify",
+                              verdict="false_alarm" if clear else "", note=note)
+
+    def _verify_group(self, robot: str, since: int, this: int) -> tuple[int, int]:
+        """这台机器人从 ``since`` 起「先核实」的报警:还没下结论的几条、结论是有人 / 没核实成的几条
+        (不算 ``this`` 这条)。站点没有报警事件表(测试)回 (0, 0)。"""
+        db = getattr(self.desk, "db", None)
+        if db is None:
+            return 0, 0
+        q = ("SELECT i.verdict FROM incidents i LEFT JOIN incidents l ON l.id=i.merged_into "
+             "WHERE i.verify=1 AND i.id<>? AND i.received_at>=? "
+             "AND i.outcome IN ('dispatched', 'merged') AND COALESCE(l.robot_id, i.robot_id)=?")
+        try:
+            rows = db.query(q, (this, since, robot))
+        except sqlite3.Error:                        # 表没有(老库、测试):按没有别的算
+            return 0, 0
+        return (sum(1 for r in rows if not r["verdict"]),
+                sum(1 for r in rows if r["verdict"] in ("person", "unverified")))
 
     def on_incident_throttled(self, source: str) -> None:
         """事件源一分钟超了上限被限流(W16):摄像头抽风,或者密钥漏了被人刷。"""

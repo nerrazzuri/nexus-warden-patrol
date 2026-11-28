@@ -768,3 +768,30 @@ async def test_1_1_4_拉不下来回设备的错_传不上记一条失败(tmp_pa
     [e] = [e for e in _事件(ears) if e.get("ended") == "failed" and e["output"] == "mic"]
     assert "HTTP 404" in e["reason"]
     await rt.close()
+
+
+async def test_外审1_1_第10条_录音下得慢_期间放了别的_下完不再放(monkeypatch, tmp_path):
+    from nexwar_agent import deter as dm
+    from nexwar_agent.deter import DeterDesk
+    monkeypatch.setattr(dm, "SPEAK_ACK_S", 0.05)
+    gate = asyncio.Event()
+
+    class 慢链路(_假链路):
+        async def fetch(self, clip):
+            await gate.wait()
+            return await super().fetch(clip)
+
+    class 喇叭(_有回调的喇叭):
+        async def sound(self, clip, max_s):
+            self.clips.append(clip)
+    hal, ev = 喇叭(), []
+    desk = DeterDesk(hal, emit=lambda k, d: ev.append((k, d)))
+    desk.talk = 慢链路(tmp_path)
+    assert await desk.handle(_喇叭命令("talk:0123456789abcdef", 60, "t1")) == ""
+    assert hal.clips == [], "还在下"
+    assert await desk.handle(_喇叭命令("warn-zh", 90, "t2")) == ""
+    assert hal.clips == ["warn-zh"]
+    gate.set()
+    for _ in range(5):
+        await asyncio.sleep(0)
+    assert hal.clips == ["warn-zh"], "下完了也不放:已经被后来的喇叭指令取代"

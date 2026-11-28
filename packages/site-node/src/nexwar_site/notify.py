@@ -69,7 +69,29 @@ class NotifyError(ValueError):
 
 
 class SendError(Exception):
-    """这一次没发出去(网络、密钥、对方拒了)。"""
+    """这一次没发出去(网络、密钥、对方拒了)。``sent``:失败之前已经发到的收件人(外审 1.1 #6:
+    重试只发没发到的)。"""
+
+    def __init__(self, text: str, sent: list[str] | None = None) -> None:
+        super().__init__(text)
+        self.sent = list(sent or [])
+
+
+_TOKENISH = (re.compile(r"bot\d+:[A-Za-z0-9_-]{20,}"), re.compile(r"(?i)bearer\s+\S+"),
+             re.compile(r"(?i)(access_token|token|key|password|secret)=[^&\s\"']+"))
+
+
+def scrub(text: str, secret: str | None = None) -> str:
+    """外审 1.1 #7:对方回的错误正文可能带着请求地址(Telegram 的令牌就在路径里)、口令。
+    进日志、库、接口回包之前抹掉。"""
+    out = str(text)
+    if secret:
+        for s in {secret, urllib.parse.quote(secret, safe=""), urllib.parse.quote(secret)}:
+            if s:
+                out = out.replace(s, "***")
+    for r in _TOKENISH:
+        out = r.sub(lambda m: (m.group(1) + "=***") if m.lastindex else "***", out)
+    return out
 
 
 # ---------------------------------------------------------------- 正文
@@ -140,25 +162,34 @@ class Sender:
     def send(self, ch: dict[str, Any], msg: dict[str, str], alert: dict[str, Any]) -> None:
         getattr(self, f"_{ch['kind']}")(ch, msg, alert)
 
+    @staticmethod
+    def _each(targets: list[str], one: Callable[[str], Any]) -> None:
+        """一个一个发;中途失败带上已经发到的那几个。"""
+        sent: list[str] = []
+        for t in targets:
+            try:
+                one(t)
+            except SendError as exc:
+                raise SendError(str(exc), sent) from exc
+            sent.append(t)
+
     def _telegram(self, ch: dict[str, Any], msg: dict[str, str], alert: dict[str, Any]) -> None:
         url = TELEGRAM_URL.format(token=ch["secret"])
-        for chat in ch["targets"]:
-            _post_json(url, {"chat_id": chat, "text": msg["body"],
-                             "disable_web_page_preview": True})
+        self._each(ch["targets"], lambda chat: _post_json(
+            url, {"chat_id": chat, "text": msg["body"], "disable_web_page_preview": True}))
 
     def _whatsapp(self, ch: dict[str, Any], msg: dict[str, str], alert: dict[str, Any]) -> None:
         # 主动发给人要用 Meta 批过的模板(三个参数:站点 · 级别:告警、机器人、时间)
         cfg = ch["config"]
         url = WHATSAPP_URL.format(phone_id=cfg["phone_number_id"])
         params = [msg["head"], alert.get("robot") or "-", msg["when"] or "-"]
-        for to in ch["targets"]:
-            _post_json(url, {
+        self._each(ch["targets"], lambda to: _post_json(url, {
                 "messaging_product": "whatsapp", "to": to.lstrip("+"), "type": "template",
                 "template": {"name": cfg["template"], "language": {"code": cfg.get("template_lang")
                                                                     or "en"},
                              "components": [{"type": "body", "parameters": [
                                  {"type": "text", "text": p[:200]} for p in params]}]}},
-                headers={"Authorization": f"Bearer {ch['secret']}"})
+                headers={"Authorization": f"Bearer {ch['secret']}"}))
 
     def _email(self, ch: dict[str, Any], msg: dict[str, str], alert: dict[str, Any]) -> None:
         cfg = ch["config"]
@@ -195,8 +226,7 @@ class Sender:
             raw = json.dumps(body, ensure_ascii=False).encode()
             sig = hmac.new(ch["secret"].encode(), raw, hashlib.sha256).hexdigest()
             headers["X-Nexwar-Signature"] = sig
-        for url in ch["targets"]:
-            _post_json(url, body, headers)
+        self._each(ch["targets"], lambda url: _post_json(url, body, headers))
 
 
 # ---------------------------------------------------------------- 排队
@@ -410,8 +440,9 @@ class NotifyDesk:
                                        "kind": "notify_test", "robot": "", "ms": self._now(),
                                        "tier": 0})
         except SendError as exc:
-            self._mark(cid, error=str(exc)[:300])
-            return {"ok": False, "error": str(exc)[:300]}
+            err = scrub(str(exc), ch.get("secret"))[:300]
+            self._mark(cid, error=err)
+            return {"ok": False, "error": err}
         self._mark(cid, ok=True)
         return {"ok": True, "error": ""}
 
@@ -456,9 +487,11 @@ class NotifyDesk:
             if ch is None or not ch["enabled"]:
                 self._drop(row["id"], "渠道已删除或停用")
                 continue
+            # 外审 1.1 #6:上限按「发出去过」算(发到一半的也算一条);发到一半的不再拦
             sent = self.db.query("SELECT COUNT(*) AS n FROM notify_outbox WHERE channel_id=? "
-                                 "AND sent_ms>?", (ch["id"], now - 3600_000))[0]["n"]
-            if sent >= HOURLY_CAP:
+                                 "AND first_sent_ms>?", (ch["id"], now - 3600_000))[0]["n"]
+            done = [t for t in (row.get("done") or "").split("\n") if t]
+            if not done and sent >= HOURLY_CAP:
                 self._drop(row["id"], f"这个渠道一小时已发 {HOURLY_CAP} 条,这条不发")
                 continue
             a = self.db.query("SELECT * FROM alerts WHERE key=?", (row["alert_key"],))
@@ -469,23 +502,29 @@ class NotifyDesk:
             msg = message(site=self.site_name, level=al["level"], kind=al["kind"],
                           title=al["title"], robot=self._robot_name(al["robot"]),
                           ms=al["first_ms"], tz=self._tzinfo(), tier=row["tier"], lang=ch["lang"])
+            todo = dict(ch, targets=[t for t in ch["targets"] if t not in done]) \
+                if ch["kind"] != "email" else ch
             try:
-                self.sender.send(ch, msg, {"site": self.site_name, "key": al["key"],
+                self.sender.send(todo, msg, {"site": self.site_name, "key": al["key"],
                                            "level": al["level"], "kind": al["kind"],
                                            "robot": self._robot_name(al["robot"]),
                                            "ms": al["first_ms"], "tier": row["tier"]})
             except SendError as exc:
-                err = str(exc)[:300]
+                err = scrub(str(exc), ch.get("secret"))[:300]
                 wait = min(BACKOFF_MAX_S, BACKOFF_BASE_S * 2 ** min(row["attempts"], 10))
+                got = done + [t for t in getattr(exc, "sent", []) if t not in done]
                 with self.db.tx() as c:
-                    c.execute("UPDATE notify_outbox SET attempts=attempts+1, next_ms=?, error=? "
-                              "WHERE id=?", (now + wait * 1000, err, row["id"]))
+                    c.execute("UPDATE notify_outbox SET attempts=attempts+1, next_ms=?, error=?, "
+                              "done=?, first_sent_ms=COALESCE(first_sent_ms, ?) WHERE id=?",
+                              (now + wait * 1000, err, "\n".join(got),
+                               now if got else None, row["id"]))
                 self._mark(ch["id"], error=err)
                 log.warning("告警外发(%s)没发出去,%s 秒后再试:%s", ch["name"], wait, err)
                 continue
             with self.db.tx() as c:
-                c.execute("UPDATE notify_outbox SET sent_ms=?, error='' WHERE id=?",
-                          (self._now(), row["id"]))
+                c.execute("UPDATE notify_outbox SET sent_ms=?, error='', "
+                          "first_sent_ms=COALESCE(first_sent_ms, ?) WHERE id=?",
+                          (self._now(), self._now(), row["id"]))
             self._mark(ch["id"], ok=True)
             log.info("告警外发(%s)发出去了:%s", ch["name"], row["alert_key"])
         self._stuck(self._now())

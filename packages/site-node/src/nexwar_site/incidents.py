@@ -732,7 +732,9 @@ class IncidentDesk:
             result, done_ms = lead.get("result"), lead.get("result_ms")
             if seen:
                 verdict = "person"
-            elif result == "done" and done_ms is not None and now - done_ms >= VERIFY_HOLD_MS:
+            elif result == "done" and done_ms is not None \
+                    and now - max(done_ms, row["received_at"]) >= VERIFY_HOLD_MS:
+                # 外审 1.1 #8:并进来的报警,机器人在它之前就到了 —— 从这条报警起再看满一段才算没人
                 verdict = "clear"
             elif result in ("failed", "aborted", "preempted") \
                     or (result is None and now - row["received_at"] >= VERIFY_TIMEOUT_MS):

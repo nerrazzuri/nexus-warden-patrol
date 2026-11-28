@@ -90,4 +90,29 @@ describe("远程喊话", () => {
     expect(hold(c).disabled).toBe(true);
     expect(c.textContent).toContain("HTTPS");
   });
+  it("外审 1.1 #12:等麦克风权限的时候松了手 —— 不录、不发,麦克风关掉", async () => {
+    let grant: (v: unknown) => void = () => {};
+    let stopped = 0;
+    (navigator.mediaDevices.getUserMedia as ReturnType<typeof vi.fn>).mockImplementation(
+      () => new Promise((r) => { grant = r; }));
+    假录音.last = null;
+    const { container: c } = render(<TalkPanel robot="A" name="Robot A" listen={true} disabled={false} say={() => {}} />);
+    await waitFor(() => expect(hold(c)).not.toBeNull());
+    fireEvent.pointerDown(hold(c));
+    fireEvent.pointerUp(hold(c));
+    grant({ getTracks: () => [{ stop() { stopped++; } }] });
+    await new Promise((r) => setTimeout(r, 20));
+    expect(假录音.last).toBeNull();
+    expect(stopped).toBe(1);
+    expect(hold(c).getAttribute("aria-pressed")).toBe("false");
+    expect(calls.some((x) => x.url.endsWith("/talk"))).toBe(false);
+  });
+
+  it("外审 1.1 #11:回话没录到写原因", async () => {
+    talks = [{ id: "1111222233334444", direction: "in", account: "gina", created_ms: Date.now(), state: "failed", error: "麦克风忙", bytes: 0 }];
+    const { container: c } = render(<TalkPanel robot="A" name="Robot A" listen={true} disabled={false} say={() => {}} />);
+    await waitFor(() => expect(c.querySelector('[data-talk-row="1111222233334444"]')).not.toBeNull());
+    expect(c.querySelector('[data-talk-row="1111222233334444"]')!.textContent).toContain("No reply recorded: 麦克风忙");
+    expect(c.querySelector<HTMLButtonElement>("[data-talk-listen]")!.disabled).toBe(false);
+  });
 });

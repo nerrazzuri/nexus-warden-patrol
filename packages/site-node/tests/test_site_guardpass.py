@@ -44,7 +44,8 @@ def test_认出来记一笔出P3_五分钟内并成一笔_换防区另记(记):
     gp, desk, now, zone = 记
     assert gp.faces_seen("A", [{"feat": _脸(3), "dist_m": 2.4}, {"feat": _脸(50)}]) == ["gina"]
     [a] = desk.raised
-    assert a["kind"] == "guard_passed" and a["title"] == "保安 gina 经过 B区"
+    assert a["kind"] == "guard_passed" and a["title"] == "登记过的保安经过 B区"
+    assert "gina" not in repr(a), "外审 1.1 #2:P3 谁都看得见,不写是谁"
     assert "人脸认出,约 2.4 m" in a["detail"] and a["context"]["zone"] == "B区"
     assert a["record"] == "site:guard_passed", "只记一笔,不推送"
     now[0] += MERGE_MS - 1000
@@ -52,7 +53,7 @@ def test_认出来记一笔出P3_五分钟内并成一笔_换防区另记(记):
     assert len(desk.raised) == 1, "5 分钟内并成一笔"
     zone["z"] = "C区"
     gp.faces_seen("A", [{"feat": _脸(3)}, {"feat": _脸(7)}])
-    assert [r["title"] for r in desk.raised[1:]] == ["保安 gina 经过 C区", "保安 hugo 经过 C区"]
+    assert [r["title"] for r in desk.raised[1:]] == ["登记过的保安经过 C区"] * 2
     got = gp.list(since=0, until=now[0] + 1)["passes"]
     b = [p for p in got if p["zone"] == "B区"][0]
     assert b["n"] == 2 and b["account"] == "gina" and b["how"] == "face"
@@ -66,6 +67,28 @@ def test_格式不对_认不出_不记(记):
                 [{"feat": [True] * 128}], [{"feat": _脸(60)}]):
         assert gp.faces_seen("A", bad) == []
     assert desk.raised == []
+
+
+def test_外审1_1_第4条_到期不靠下一次认人_读的时候也不给(记):
+    gp, desk, now, _ = 记
+    gp.faces_seen("A", [{"feat": _脸(3)}])
+    now[0] += KEEP_MS + 1
+    assert gp.list(since=0, until=now[0] + 1)["passes"] == []
+    gp._pruned = 0
+    gp.tick()
+    assert gp.db.query("SELECT COUNT(*) AS n FROM guard_passes")[0]["n"] == 0
+
+
+def test_外审1_1_第1条_人脸特征值不落事件表_不进事件流_回调拿到原样():
+    from nexwar_contract.messages import Event
+    from nexwar_site.dispatcher import private_view
+    e = Event(event_id="f1", seq=1, boot_id="b", stamp=1, kind="face_seen",
+              data={"faces": [{"feat": _脸(3), "dist_m": 2.0}, {"feat": _脸(4)}]})
+    v = private_view(e)
+    assert v.data == {"faces": 2, "dist_m": [2.0, None], "redacted": True}
+    assert "feat" not in str(v.to_wire()) and e.data["faces"][0]["feat"] == _脸(3)
+    other = Event(event_id="x", seq=2, boot_id="b", stamp=1, kind="deter", data={"a": 1})
+    assert private_view(other) is other
 
 
 def test_留90天_撤销同意一起删(记):
@@ -86,6 +109,7 @@ def 站点(tmp_path):
     s.api.guard_passes = GuardPasses(s.db, now_ms=lambda: 1_800_000_000_000, faces=s.api.faces)
     s.accounts.add("gina", PW, role="guard")
     s.accounts.add("hugo", PW, role="guard")
+    s.accounts.add("olly", PW, role="owner")
     yield s
     s.close()
 
@@ -107,7 +131,7 @@ def test_真告警台_两个保安各记一笔_当场算已解决(tmp_path):
     gp = GuardPasses(db, now_ms=lambda: 1_800_000_000_000, faces=faces, desk=desk)
     gp.faces_seen("A", [{"feat": _脸(3)}, {"feat": _脸(7)}])
     got = [a for a in desk.book.all() if a.kind == "guard_passed"]
-    assert sorted(a.title for a in got) == ["保安 gina 经过", "保安 hugo 经过"]
+    assert [a.title for a in got] == ["登记过的保安经过"] * 2
     assert all(a.resolved_ms is not None and a.level.name == "P3" for a in got)
     assert not [a for a in desk.book.open() if a.kind == "guard_passed"]
 
@@ -122,6 +146,8 @@ def test_接口_管理员看所有人_保安只看自己_进审计_撤销一起�
     q = "/api/guard-passes?since=1799999000000&until=1800000001000"
     code, d = s.req("GET", q, token=alice)
     assert code == 200 and sorted(p["account"] for p in d["passes"]) == ["gina", "hugo"], d
+    code, d = s.req("GET", q, token=_登(s, "olly"))
+    assert code == 200 and len(d["passes"]) == 2, "外审 1.1 #14:经理看所有人"
     code, d = s.req("GET", q, token=gina)
     assert code == 200 and [p["account"] for p in d["passes"]] == ["gina"]
     assert s.req("GET", q + "&account=hugo", token=gina)[0] == 403

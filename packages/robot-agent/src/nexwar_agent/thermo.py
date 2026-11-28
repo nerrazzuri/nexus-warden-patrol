@@ -142,6 +142,9 @@ class ThermoWatch:
         try:
             c = await self._read()
         except Exception as exc:                     # noqa: BLE001 - 问不到:数着,够了报一次
+            # 外审 1.1 #15:中间断过就不算「连着」:升级、回落都从头数
+            self._up = {"hot": 0, "fire": 0}
+            self._down = 0
             self._fails += 1
             self.error = str(exc)[:200]
             if self._fails >= FAIL_N and not self.failed:

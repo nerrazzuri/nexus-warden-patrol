@@ -245,3 +245,23 @@ def test_接入方式写错的拒(核):
                 {"via": "modbus", "host": ""}, {"via": "modbus", "host": "h", "input": 999}):
         with pytest.raises(DeviceError):
             _门磁(t, link=bad)
+
+
+async def test_外审1_1_第8_9条_并进来的报警从它起再看满_合并的告警都下结论才关(核):
+    t = 核
+    await t.run(12)
+    _门磁(t)
+    t.desk.merge_window_ms = 10 ** 9
+    await _触发(t)
+    await t.run(200)
+    assert t.desk.list()[0]["result"] == "done"
+    t.clock.advance(VERIFY_HOLD_MS / 1000 + 1)
+    r2 = await _触发(t)
+    assert r2["outcome"] == "merged"
+    [v] = _开着(t, "intrusion_verifying")
+    assert t.desk.verify_tick() == 1, "第一条下结论;第二条刚报,机器人还没在它之后看满"
+    assert _开着(t, "intrusion_verifying"), "第二条还没结论:合并的告警先不关"
+    t.clock.advance(VERIFY_HOLD_MS / 1000 + 1)
+    assert t.desk.verify_tick() == 1
+    assert not _开着(t, "intrusion_verifying")
+    assert t.alerts.book.get(v.key).verdict == "false_alarm"

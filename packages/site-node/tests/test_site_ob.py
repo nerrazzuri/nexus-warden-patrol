@@ -154,3 +154,22 @@ def test_事件报告带那段时间的照片_嵌进页面(tmp_path):
     assert "Last raised (2 times)" in page
     with pytest.raises(KeyError):
         incident_report(db, "nope", lang="en")
+
+
+def test_外审1_1_第13条_更正跟着原来那条的报警_报告标出更正_更正过的不能再更正(tmp_path):
+    db = SiteDB(tmp_path / "s.db")
+    now = [10 * 86_400_000]
+    with db.tx() as c:
+        c.execute("INSERT INTO alerts(key, level, kind, robot, title, detail, first_ms, last_ms,"
+                  " count, acked_by, acked_ms, resolved_by, resolved_ms, escalated, context,"
+                  " verdict) VALUES ('k1','P1','intrusion','A','闯入','',?,?,1,'',NULL,'',NULL,0,"
+                  "'{}','')", (now[0] - 5000, now[0] - 5000))
+    ob = OccurrenceBook(db, now_ms=lambda: now[0])
+    a = ob.add("gina", {"category": "incident", "text": "是狗", "alert": "k1", "robot": "A"})
+    b = ob.add("gina", {"category": "incident", "text": "是猫", "corrects": a["id"]})
+    assert (b["alert_key"], b["robot"]) == ("k1", "A"), "不带 alert 也跟着原来那条"
+    with pytest.raises(ObError, match="已经更正过了"):
+        ob.add("gina", {"category": "incident", "text": "是鸟", "corrects": a["id"]})
+    steps = [s[2] for s in incident_report(db, "k1", lang="zh")["steps"]]
+    assert any(f"#{a['id']} " in x and "是狗" in x and f"已由 #{b['id']} 更正" in x for x in steps)
+    assert any(f"#{b['id']} 更正 #{a['id']}" in x and "是猫" in x for x in steps)

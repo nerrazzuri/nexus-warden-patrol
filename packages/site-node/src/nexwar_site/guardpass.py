@@ -8,7 +8,9 @@
 
 - 进 ``guard_passes`` 表(谁、哪台机器人、哪个防区、怎么认的、第一次和最后一次、几次、最高分);
 - 出一条 P3 ``guard_passed``,只记一笔(``record``:当场算已解决,不响、不推送,
-  两个保安各一条不合并),报警记录和值班簿里看得到。
+  两个保安各一条不合并),报警记录和值班簿里看得到。**P3 里不写是谁**(外审 1.1 #2、#3):
+  报警记录、值班簿、事件报告谁都能看,写了名字就绕过了「别人只看自己的」;是谁只在
+  ``guard_passes`` 里(按人过滤、到期删、撤销同意删),P3 只带那一笔的编号。
 - 同一个保安、同一台机器人、同一个防区,:data:`MERGE_MS` 之内又认出来:并进上一笔,不另出 P3。
 
 认不出的脸这里**不管**:看见人报不报 P1 还是原来的规矩(第 2 步上真机以后再按设计改)。
@@ -34,6 +36,8 @@ KEEP_MS = 90 * 86_400_000
 PRUNE_EVERY_MS = 3_600_000
 LIST_MAX = 1000
 HOWS = ("face", "phone_confirmed")
+#: 能看所有人的经过记录的角色(外审 1.1 #14):管理员、经理。工程师临时账号不给(个人数据)。
+SUPERVISOR_ROLES = ("admin", "owner")
 
 
 class GuardPasses:
@@ -115,11 +119,10 @@ class GuardPasses:
             where = f"经过 {zone}" if zone else "经过"
             by = "人脸认出" if how == "face" else "手机靠近、本人确认"
             self.desk.raise_alert(
-                kind="guard_passed", robot=rid, title=f"保安 {account} {where}",
+                kind="guard_passed", robot=rid, title=f"登记过的保安{where}",
                 detail=f"{by}" + (f",约 {dist_m:.1f} m" if dist_m is not None else "")
-                       + ";是登记过的保安,不报警",
-                context={"guard": account, "how": how, "pass_id": pid,
-                         **({"zone": zone} if zone else {})},
+                       + f";不报警。是谁看「保安经过」第 {pid} 笔",
+                context={"how": how, "pass_id": pid, **({"zone": zone} if zone else {})},
                 record="site:guard_passed")      # 只记一笔:当场算已解决,不推送、不合并
         self.prune()
         return pid
@@ -127,8 +130,10 @@ class GuardPasses:
     # ------------------------------------------------------------------ 看
 
     def list(self, *, since: int, until: int, account: str | None = None) -> dict[str, Any]:
-        q = "SELECT * FROM guard_passes WHERE last_ms>=? AND first_ms<?"
-        args: list[Any] = [since, until]
+        self.prune()
+        # 外审 1.1 #4:到期的读的时候也不给(清理没赶上也不露)
+        q = "SELECT * FROM guard_passes WHERE last_ms>=? AND first_ms<? AND last_ms>=?"
+        args: list[Any] = [since, until, self._now() - KEEP_MS]
         if account:
             q += " AND account=?"
             args.append(account)
@@ -144,9 +149,13 @@ class GuardPasses:
         with self.db.tx() as c:
             return c.execute("DELETE FROM guard_passes WHERE account=?", (account,)).rowcount
 
+    def tick(self) -> None:
+        """站点后台每拍调(外审 1.1 #4):到期删不靠下一次认出人。"""
+        self.prune()
+
     def prune(self) -> int:
         now = self._now()
-        if now - self._pruned < PRUNE_EVERY_MS:
+        if self._pruned and now - self._pruned < PRUNE_EVERY_MS:
             return 0
         self._pruned = now
         with self.db.tx() as c:

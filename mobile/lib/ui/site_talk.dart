@@ -83,6 +83,8 @@ enum _Rec { idle, rec, send }
 class _SiteTalkState extends State<SiteTalk> {
   late final TalkRecorder _rec = makeTalkRecorder();
   _Rec _state = _Rec.idle;
+  // 外审 1.1 #12：手还按着没有；要权限、开设备要等，等的时候松了手就不录
+  bool _held = false, _starting = false;
   DateTime? _t0;
   Timer? _limit, _tick, _poll;
   int _secs = 0;
@@ -126,18 +128,32 @@ class _SiteTalkState extends State<SiteTalk> {
   }
 
   Future<void> _start() async {
-    if (_state != _Rec.idle) return;
-    if (!await _rec.permitted()) {
-      _say(tr('Microphone not allowed. Allow it in the phone settings.', '没有麦克风权限。请在手机设置里允许。'));
-      return;
-    }
-    final dir = await talkTempDir();
-    final path = '${dir.path}/talk-out-${DateTime.now().millisecondsSinceEpoch}.m4a';
+    if (_state != _Rec.idle || _starting) return;
+    _starting = true;
     try {
-      await _rec.start(path);
-    } catch (e) {
-      _say(tr('Cannot record: $e', '录不了音：$e'));
-      return;
+      if (!await _rec.permitted()) {
+        _say(tr('Microphone not allowed. Allow it in the phone settings.', '没有麦克风权限。请在手机设置里允许。'));
+        return;
+      }
+      if (!_held || !mounted) return;
+      final dir = await talkTempDir();
+      final path = '${dir.path}/talk-out-${DateTime.now().millisecondsSinceEpoch}.m4a';
+      try {
+        await _rec.start(path);
+      } catch (e) {
+        _say(tr('Cannot record: $e', '录不了音：$e'));
+        return;
+      }
+      if (!_held || !mounted) {
+        // 开设备的时候已经松手了：停下、丢掉，不发
+        try {
+          final p = await _rec.stop();
+          if (p != null) File(p).deleteSync();
+        } catch (_) {}
+        return;
+      }
+    } finally {
+      _starting = false;
     }
     _t0 = DateTime.now();
     _limit = Timer(const Duration(seconds: talkMaxSeconds), () => unawaited(_finish()));
@@ -201,7 +217,10 @@ class _SiteTalkState extends State<SiteTalk> {
       _poll = Timer.periodic(const Duration(seconds: 2), (t) {
         n++;
         unawaited(_load());
-        final waiting = _rows.any((r) => r['direction'] == 'in' && r['state'] == 'waiting');
+        // 外审 1.1 #11：等太久（站点也会标失败）不再挡着按钮
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final waiting = _rows.any((r) =>
+        r['direction'] == 'in' && r['state'] == 'waiting' && now - ((r['created_ms'] as num?)?.toInt() ?? 0) < 90000);
         if (!waiting || n > (listenSeconds + 20) ~/ 2) t.cancel();
       });
     } on SiteError catch (e) {
@@ -225,7 +244,10 @@ class _SiteTalkState extends State<SiteTalk> {
   String _rowState(Map<String, dynamic> r) {
     final st = '${r['state']}';
     if (st == 'refused') return tr('Not played', '没放出来');
-    if (r['direction'] == 'in') return st == 'recorded' ? tr('Reply recorded', '回话已录好') : tr('Waiting…', '等回话…');
+    if (r['direction'] == 'in') {
+      if (st == 'failed') return tr('No reply recorded', '没录到回话');
+      return st == 'recorded' ? tr('Reply recorded', '回话已录好') : tr('Waiting…', '等回话…');
+    }
     return st == 'fetched' ? tr('Played', '已放') : tr('Sent', '已发');
   }
 
@@ -241,9 +263,18 @@ class _SiteTalkState extends State<SiteTalk> {
     final waiting = _rows.any((r) => r['direction'] == 'in' && r['state'] == 'waiting');
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
       Listener(
-        onPointerDown: (_) => unawaited(_start()),
-        onPointerUp: (_) => unawaited(_finish()),
-        onPointerCancel: (_) => unawaited(_finish()),
+        onPointerDown: (_) {
+          _held = true;
+          unawaited(_start());
+        },
+        onPointerUp: (_) {
+          _held = false;
+          unawaited(_finish());
+        },
+        onPointerCancel: (_) {
+          _held = false;
+          unawaited(_finish());
+        },
         child: Container(
           key: SiteTalk.holdKey,
           height: 56,

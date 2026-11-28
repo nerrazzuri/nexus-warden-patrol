@@ -1,3 +1,4 @@
+import 'dart:async';
 // 1.1-4 远程喊话：机器人报了 `talk` 才有「按住说话」；按住录、松开把录音传给站点（m4a）；点一下就松开的不发；
 // 报了 `mic` 才有「听回话」，点了请机器人录 10 秒；最近的对讲能点开听。竖屏 390×1400。
 import 'dart:io';
@@ -12,15 +13,20 @@ import 'site_page_test.dart' show FakeApi;
 class _FakeRecorder implements TalkRecorder {
   bool allow = true;
   String? path;
+  Completer<bool>? gate;
+  int stops = 0;
   @override
-  Future<bool> permitted() async => allow;
+  Future<bool> permitted() async => gate != null ? gate!.future : allow;
   @override
   Future<void> start(String p) async {
     path = p;
     File(p).writeAsBytesSync(List<int>.filled(4000, 7));
   }
   @override
-  Future<String?> stop() async => path;
+  Future<String?> stop() async {
+    stops++;
+    return path;
+  }
   @override
   Future<void> dispose() async {}
 }
@@ -114,5 +120,21 @@ void main() {
     await t.pumpWidget(const SizedBox());
     await open(t, FakeApi('guard'), caps: <String, dynamic>{..._caps, 'talk': false});
     expect(find.byKey(SiteTalk.holdKey), findsNothing, reason: '老机器人没有按住说话');
+  });
+
+  testWidgets('外审 1.1 #12：等麦克风权限的时候松了手 —— 不录、不发', (t) async {
+    final api = FakeApi('guard');
+    rec.gate = Completer<bool>();
+    await open(t, api);
+    final g = await t.startGesture(t.getCenter(find.byKey(SiteTalk.holdKey)));
+    await t.pump();
+    await g.up();
+    await t.pump();
+    rec.gate!.complete(true);
+    await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
+    await t.pumpAndSettle();
+    expect(rec.path, isNull, reason: '松手以后不开始录');
+    expect(api.talked, isEmpty);
+    expect(find.textContaining('松开就发'), findsNothing);
   });
 }

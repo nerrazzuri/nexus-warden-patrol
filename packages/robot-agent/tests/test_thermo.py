@@ -133,3 +133,18 @@ def test_cameras_json的thermometry(tmp_path):
     p.write_text(json.dumps({"front": {"url": "rtsp://10.0.0.6/x", "thermometry": {}}}))
     with pytest.raises(CameraConfigError, match="只给热像"):
         load_cameras(p)
+
+
+async def test_外审1_1_第15条_中间问不到_连着从头数():
+    mono = [0.0]
+    w, ev, box = _表(mono)
+
+    async def feed(*cs):
+        for c in cs:
+            box["c"] = c
+            await w.step()
+            mono[0] += w.every_s
+    await feed(200, ThermoError("超时"), 200)
+    assert ev == [], "断过一次:不算连着两次"
+    await feed(200)
+    assert ev[-1][1]["level"] == "fire"

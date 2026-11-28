@@ -92,9 +92,16 @@ class OccurrenceBook:
             raise ObError("robot、alert 写错了")
         corrects = body.get("corrects")
         if corrects is not None:
-            if isinstance(corrects, bool) or not isinstance(corrects, int) \
-                    or not self.db.query("SELECT 1 FROM ob_entries WHERE id=?", (corrects,)):
+            old = self.db.query("SELECT robot, alert_key FROM ob_entries WHERE id=?",
+                                (corrects,)) \
+                if not isinstance(corrects, bool) and isinstance(corrects, int) else []
+            if not old:
                 raise ObError("要更正的那条没有")
+            if self.db.query("SELECT 1 FROM ob_entries WHERE corrects=?", (corrects,)):
+                raise ObError("这条已经更正过了:要改就更正最新的那条")
+            # 外审 1.1 #13:更正跟着原来那条走(哪台机器人、哪条报警),事件报告里才对得上
+            robot = robot or old[0]["robot"]
+            alert = alert or old[0]["alert_key"]
         with self.db.tx() as c:
             cur = c.execute(
                 "INSERT INTO ob_entries(at_ms, written_ms, author, category, text, robot,"
@@ -298,9 +305,18 @@ def incident_report(db: Any, key: str, *, lang: str, photos: Callable[[str, int,
             steps.append((wv["at_ms"], str(wv.get("by") or ""),
                           (f"{wv.get('robot', '')} 开 {wv.get('output', '')}" if zh
                            else f"{wv.get('robot', '')} {wv.get('output', '')} on")))
-    for r in db.query("SELECT * FROM ob_entries WHERE alert_key=? ORDER BY at_ms", (key,)):
-        steps.append((r["at_ms"], r["author"], f"{cat_name(r['category'], lang)}:{r['text']}"
-                      if zh else f"{cat_name(r['category'], lang)}: {r['text']}"))
+    obs = db.query("SELECT * FROM ob_entries WHERE alert_key=? ORDER BY at_ms", (key,))
+    fixed = {int(r["corrects"]): int(r["id"]) for r in obs if r["corrects"] is not None}
+    for r in obs:
+        # 外审 1.1 #13:写错了的那条标「已由 #n 更正」,更正的标「更正 #n」
+        txt = f"{cat_name(r['category'], lang)}:{r['text']}" if zh \
+            else f"{cat_name(r['category'], lang)}: {r['text']}"
+        if r["corrects"] is not None:
+            txt = (f"更正 #{r['corrects']}:" if zh else f"Correction to #{r['corrects']}: ") + txt
+        if int(r["id"]) in fixed:
+            n = fixed[int(r["id"])]
+            txt += f"(已由 #{n} 更正)" if zh else f" (corrected by #{n})"
+        steps.append((r["at_ms"], r["author"], f"#{r['id']} " + txt))
     if a["resolved_ms"] is not None:
         v = _VERDICT.get(a.get("verdict") or "")
         steps.append((a["resolved_ms"], a["resolved_by"], ("关闭" if zh else "Closed")
