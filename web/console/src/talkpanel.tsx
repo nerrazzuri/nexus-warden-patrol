@@ -33,19 +33,29 @@ export function TalkPanel({ robot, name, listen, disabled, say }: {
   const [rec, setRec] = useState<"idle" | "rec" | "send">("idle");
   const [secs, setSecs] = useState(0);
   const [asking, setAsking] = useState(false);
-  const media = useRef<{ r: MediaRecorder; stream: MediaStream; chunks: Blob[]; timer: number; tick: number; t0: number } | null>(null);
-  const live = useRef(true);
+  // 外审 1.1 第 5 轮 #4:每段录音绑定开录时的机器人和「这一次」的代次;切了机器人、关了面板,代次一变,
+  // 在等权限的不录、在录的丢掉、没传的不传 —— 不会把话发给原来那台
+  type Rec = { r: MediaRecorder; stream: MediaStream; chunks: Blob[]; timer: number; tick: number; t0: number;
+    robot: string; name: string; gen: number; drop: boolean };
+  const media = useRef<Rec | null>(null);
+  const life = useRef(0);
   // 外审 1.1 #12:手还按着没有。要麦克风权限、开设备要等;等的时候松了手就不录
   const held = useRef(false);
   const starting = useRef(false);
   const ok = canRecord();
 
-  const load = () => api<{ talks: TalkRow[] }>("GET", `/api/robots/${enc(robot)}/talks`)
-    .then((d) => live.current && setRows(d.talks ?? [])).catch(() => live.current && setRows(null));
+  const load = () => {
+    const g = life.current;
+    return api<{ talks: TalkRow[] }>("GET", `/api/robots/${enc(robot)}/talks`)
+      .then((d) => g === life.current && setRows(d.talks ?? [])).catch(() => g === life.current && setRows(null));
+  };
   useEffect(() => {
-    live.current = true;
+    setRec("idle");
+    setSecs(0);
+    setAsking(false);
+    setRows(null);
     void load();
-    return () => { live.current = false; stopTracks(); };
+    return () => { life.current++; held.current = false; drop(); };
   }, [robot]);
   // 等回话的时候每 2 秒看一眼(最多等录音时长 + 20 秒)
   // 外审 1.1 第 2 轮 #11:一直问到站点给结论(站点 90 秒没等到标「没录到」),多 10 秒余量
@@ -66,34 +76,44 @@ export function TalkPanel({ robot, name, listen, disabled, say }: {
     finish();
   }
 
-  function stopTracks() {
-    const m = media.current;
-    if (!m) return;
+  function stopTracks(m: Rec) {
     window.clearTimeout(m.timer);
     window.clearInterval(m.tick);
     m.stream.getTracks().forEach((x) => x.stop());
   }
 
+  /** 切机器人、关面板:正在录的这段丢掉,不传。 */
+  function drop() {
+    const m = media.current;
+    media.current = null;
+    if (!m) return;
+    m.drop = true;
+    stopTracks(m);
+    if (m.r.state !== "inactive") m.r.stop();
+  }
+
   async function start() {
     if (rec !== "idle" || disabled || starting.current) return;
+    const gen = life.current;
+    const target = { robot, name };
     let stream: MediaStream;
     starting.current = true;
     try {
       stream = await navigator.mediaDevices.getUserMedia({ audio: true });
     } catch {
-      say(t("tkNoMic"));
+      if (gen === life.current) say(t("tkNoMic"));
       return;
     } finally {
       starting.current = false;
     }
-    if (!held.current || !live.current) {               // 等权限的时候松了手、离开了页面:不录
+    if (!held.current || gen !== life.current) {        // 等权限的时候松了手、切了机器人、离开了页面:不录
       stream.getTracks().forEach((x) => x.stop());
       return;
     }
     const r = new MediaRecorder(stream);
-    const m = { r, stream, chunks: [] as Blob[], timer: 0, tick: 0, t0: Date.now() };
+    const m: Rec = { r, stream, chunks: [], timer: 0, tick: 0, t0: Date.now(), ...target, gen, drop: false };
     r.ondataavailable = (e) => { if (e.data.size > 0) m.chunks.push(e.data); };
-    r.onstop = () => void send(m.chunks, r.mimeType || "audio/webm", Date.now() - m.t0);
+    r.onstop = () => { if (!m.drop && m.gen === life.current) void send(m, r.mimeType || "audio/webm", Date.now() - m.t0); };
     media.current = m;
     m.timer = window.setTimeout(() => finish(), TALK_MAX_S * 1000);
     m.tick = window.setInterval(() => setSecs(Math.floor((Date.now() - m.t0) / 1000)), 250);
@@ -105,33 +125,37 @@ export function TalkPanel({ robot, name, listen, disabled, say }: {
   function finish() {
     const m = media.current;
     if (!m || m.r.state !== "recording") return;
-    stopTracks();
+    stopTracks(m);
     m.r.stop();
   }
 
-  async function send(chunks: Blob[], mime: string, ms: number) {
-    media.current = null;
-    if (ms < 600 || chunks.length === 0) {               // 点一下就松开:不发
+  async function send(m: Rec, mime: string, ms: number) {
+    if (media.current === m) media.current = null;
+    if (ms < 600 || m.chunks.length === 0) {             // 点一下就松开:不发
       setRec("idle");
       say(t("tkTooShort"));
       return;
     }
+    if (m.drop || m.gen !== life.current) return;        // 发之前再看一眼:还是这台、这一次
     setRec("send");
     try {
-      const blob = new Blob(chunks, { type: mime });
+      const blob = new Blob(m.chunks, { type: mime });
       const d = await apiUpload<{ ack?: { result?: string; reason?: string } }>(
-        `/api/robots/${enc(robot)}/talk`, blob, { "Content-Type": mime.split(";")[0] });
+        `/api/robots/${enc(m.robot)}/talk`, blob, { "Content-Type": mime.split(";")[0] });
       const res = d.ack?.result;
-      say(res === "accepted" || res === "duplicate" ? t("tkSentTo", { id: name }) : t("tkRefused", { why: d.ack?.reason ?? "" }));
+      say(res === "accepted" || res === "duplicate" ? t("tkSentTo", { id: m.name }) : t("tkRefused", { why: d.ack?.reason ?? "" }));
     } catch (e) {
       say(e instanceof ApiError ? e.message : String(e));
     } finally {
-      if (live.current) setRec("idle");
-      void load();
+      if (m.gen === life.current) {
+        setRec("idle");
+        void load();
+      }
     }
   }
 
   async function ask() {
+    const gen = life.current;
     setAsking(true);
     try {
       const d = await api<{ ack?: { result?: string; reason?: string } }>("POST", `/api/robots/${enc(robot)}/listen`, { seconds: LISTEN_S });
@@ -140,8 +164,10 @@ export function TalkPanel({ robot, name, listen, disabled, say }: {
     } catch (e) {
       say(e instanceof ApiError ? e.message : String(e));
     } finally {
-      if (live.current) setAsking(false);
-      void load();
+      if (gen === life.current) {
+        setAsking(false);
+        void load();
+      }
     }
   }
 

@@ -161,7 +161,7 @@ def test_站点没配密钥_不收要令牌的渠道(tmp_path):
 
 def test_真发的报文(monkeypatch):
     got = []
-    monkeypatch.setattr(notify, "_post_json", lambda url, body, headers=None:
+    monkeypatch.setattr(notify, "_post_json", lambda url, body, headers=None, timeout=None:
                         got.append((url, body, headers or {})))
     s = notify.Sender()
     msg = notify.message(site="S", level="P1", kind="fallen", title="摔倒", robot="R1", ms=NOW,
@@ -232,7 +232,7 @@ def test_外审1_1_第6条_部分收件人失败_只重发没发到的_上限按
     desk, n, f, clock, db = 台
     got, bad = [], {"-2"}
 
-    def post(url, body, headers=None):
+    def post(url, body, headers=None, timeout=None):
         if body["chat_id"] in bad:
             raise SendError("HTTP 502:bad gateway")
         got.append(body["chat_id"])
@@ -255,7 +255,7 @@ def test_外审1_1_第6条_发到一半的也算进每小时上限(台, monkeypa
     desk, n, f, clock, db = 台
     monkeypatch.setattr(notify, "HOURLY_CAP", 1)
 
-    def post(url, body, headers=None):
+    def post(url, body, headers=None, timeout=None):
         if body["chat_id"] == "-2":
             raise SendError("HTTP 502")
     monkeypatch.setattr(notify, "_post_json", post)
@@ -272,7 +272,7 @@ def test_外审1_1_第7条_对方回的错误里的令牌抹掉(台, monkeypatch
     desk, n, f, clock, db = 台
     tok = "123456:ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdef"
 
-    def post(url, body, headers=None):
+    def post(url, body, headers=None, timeout=None):
         raise SendError(f"HTTP 404:no route {url} access_token=xyz Bearer {tok}")
     monkeypatch.setattr(notify, "_post_json", post)
     n.sender = notify.Sender()
@@ -339,7 +339,7 @@ def test_外审1_1_第2轮_9_别的异常不带令牌_密钥不收控制字符(�
     desk, n, f, clock, db = 台
     tok = "123456:ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdef"
 
-    def post(url, body, headers=None):
+    def post(url, body, headers=None, timeout=None):
         raise ValueError(f"URL can't contain control characters. {url!r}")
     monkeypatch.setattr(notify, "_post_json", post)
     n.sender = notify.Sender()
@@ -379,3 +379,54 @@ def test_外审1_1_第4轮_3_坏渠道不拖好渠道(台, monkeypatch):
     assert all(t - t0 < 0.4 for _, t in got), "没排在坏渠道后面"
     bad = [r for r in _队(db) if r["sent_ms"] is None]
     assert bad and len([r for r in bad if r["attempts"] > 0]) <= 1, "坏渠道这一拍只试到预算为止"
+
+
+def test_外审1_1_第5轮_1_坏渠道积压再多_好渠道照样取得到(台, monkeypatch):
+    desk, n, f, clock, db = 台
+    monkeypatch.setattr(notify, "CHANNEL_BUDGET_S", 0.2)
+    got: list = []
+
+    class 发:
+        def send(self, ch, msg, alert):
+            if ch["name"] == "坏":
+                raise SendError("连不上:timeout")
+            got.append(ch["name"])
+    n.sender = 发()
+    bad = _tg(n, name="坏", targets=["-9"], levels=["P1", "P2"])
+    _tg(n, name="好", targets=["-1"])
+    desk.raise_alert(kind="evidence_plain", robot="A", title="机器人上未加密")   # 只进「坏」
+    key = db.query("SELECT alert_key FROM notify_outbox")[0]["alert_key"]
+    with db.tx() as c:                                   # 坏渠道积压 600 条(比以前的全局 500 多)
+        for i in range(600):
+            c.execute("INSERT INTO notify_outbox (alert_key, tier, channel_id, created_ms, "
+                      "next_ms) VALUES (?,?,?,?,?)", (key, 100 + i, bad["id"], NOW, NOW))
+    desk.raise_alert(kind="stuck", robot="R1", title="卡住")                  # 好渠道的新消息排最后
+    n.tick()
+    assert got == ["好"], "好渠道的消息不被坏渠道的积压挤出这一拍"
+
+
+def test_外审1_1_第5轮_1_预算传到每个收件人_时间到了发到的记下_不退避(台, monkeypatch):
+    import time as _t
+    desk, n, f, clock, db = 台
+    monkeypatch.setattr(notify, "CHANNEL_BUDGET_S", 0.25)
+    calls: list = []
+
+    def 慢(url, body, headers=None, timeout=None):
+        calls.append((url, timeout))
+        _t.sleep(0.1)
+    monkeypatch.setattr(notify, "_post_json", 慢)
+    n.sender = notify.Sender()
+    n.save({"kind": "webhook", "name": "钩", "targets": [f"https://h/{i}" for i in range(10)]})
+    desk.raise_alert(kind="stuck", robot="R1", title="卡住")
+    t0 = _t.monotonic()
+    n.tick()
+    assert _t.monotonic() - t0 < 0.6, "十个慢收件人不能拖过这一拍的预算"
+    assert 1 <= len(calls) < 10 and all(t is not None and t <= notify.TIMEOUT_S for _, t in calls)
+    r = _队(db)[0]
+    assert r["sent_ms"] is None and r["attempts"] == 0 and r["error"] == "", "时间到不算失败"
+    assert len(r["done"].split("\n")) == len(calls), "发到的记下了"
+    n.tick()
+    n.tick()
+    n.tick()
+    assert _队(db)[0]["sent_ms"] is not None, "下几拍接着把剩下的发完"
+    assert len(calls) == 10, "发到过的不重发"

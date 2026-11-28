@@ -199,9 +199,12 @@ class _FaceEnrolPageState extends State<FaceEnrolPage> {
           if (v != null && !engine)
             Text(tr('Face recognition is not installed on this site. Ask your administrator.', '这个站点没装人脸识别模块，请问管理员。'),
                 style: NwText.bodyMedium.copyWith(color: c.warning)),
-          if (v != null && engine) ...[
+          // 外审 1.1 第 5 轮 #5：已登记的张数和「删掉」不看人脸模块装没装 —— 模块坏了也能撤销同意；
+          // 模块不可用只是不能再加照片
+          if (v != null && (engine || _n > 0))
             Text(tr('Enrolled photos: $_n / $_max', '已登记照片：$_n / $_max'),
                 key: FaceEnrolPage.countKey, style: NwText.titleSmall.copyWith(color: c.text, fontWeight: FontWeight.w700)),
+          if (v != null && engine) ...[
             const SizedBox(height: Nw.s8),
             CheckboxListTile(
                 key: FaceEnrolPage.consentKey,
@@ -222,23 +225,23 @@ class _FaceEnrolPageState extends State<FaceEnrolPage> {
             const SizedBox(height: Nw.s4),
             Text(tr('Face the camera in good light, only you in the picture.', '正对镜头、光线亮一点，画面里只有你自己。'),
                 style: NwText.bodySmall.copyWith(color: c.textSecondary)),
-            if (_n > 0) ...[
-              const SizedBox(height: Nw.s16),
-              OutlinedButton(
-                  key: FaceEnrolPage.removeKey,
-                  style: OutlinedButton.styleFrom(minimumSize: const Size(48, 48), shape: shape),
-                  onPressed: _busy ? null : () => setState(() => _askRemove = !_askRemove),
-                  child: Text(tr('Delete my face data', '删掉我的人脸资料'))),
-              if (_askRemove) ...[
-                const SizedBox(height: Nw.s8),
-                Text(tr('Delete all $_n photos\' data? The robot will no longer recognise you.', '删掉全部 $_n 张的资料？删了机器人就认不出你了。'), style: body),
-                const SizedBox(height: Nw.s8),
-                FilledButton(
-                    key: FaceEnrolPage.removeYesKey,
-                    style: FilledButton.styleFrom(minimumSize: const Size(48, 48), shape: shape),
-                    onPressed: _busy ? null : _remove,
-                    child: Text(tr('Delete', '删掉'))),
-              ],
+          ],
+          if (v != null && _n > 0) ...[
+            const SizedBox(height: Nw.s16),
+            OutlinedButton(
+                key: FaceEnrolPage.removeKey,
+                style: OutlinedButton.styleFrom(minimumSize: const Size(48, 48), shape: shape),
+                onPressed: _busy ? null : () => setState(() => _askRemove = !_askRemove),
+                child: Text(tr('Delete my face data', '删掉我的人脸资料'))),
+            if (_askRemove) ...[
+              const SizedBox(height: Nw.s8),
+              Text(tr('Delete all $_n photos\' data? The robot will no longer recognise you.', '删掉全部 $_n 张的资料？删了机器人就认不出你了。'), style: body),
+              const SizedBox(height: Nw.s8),
+              FilledButton(
+                  key: FaceEnrolPage.removeYesKey,
+                  style: FilledButton.styleFrom(minimumSize: const Size(48, 48), shape: shape),
+                  onPressed: _busy ? null : _remove,
+                  child: Text(tr('Delete', '删掉'))),
             ],
           ],
           if (_passes != null && (_passes!.isNotEmpty || _n > 0)) ...[

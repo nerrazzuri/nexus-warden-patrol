@@ -859,3 +859,35 @@ async def test_外审1_1_第4轮_4_起播慢_期间关了喇叭_最后是关的(
     for _ in range(10):
         await asyncio.sleep(0)
     assert hal.clips[-1] == "warn-zh", hal.clips
+
+
+async def test_外审1_1_第5轮_3_旧的一段放完_不清掉已接受还在下载的手动喊话(monkeypatch, tmp_path):
+    from nexwar_agent import deter as dm
+    from nexwar_agent.deter import DeterDesk
+    monkeypatch.setattr(dm, "SPEAK_ACK_S", 0.05)
+    gate = asyncio.Event()
+
+    class 慢链路(_假链路):
+        async def fetch(self, clip):
+            await gate.wait()
+            return await super().fetch(clip)
+
+    class 喇叭(_有回调的喇叭):
+        def sound_clips(self):
+            return ("hello-zh", "warn-zh")
+    hal, ev = 喇叭(), []
+    desk = DeterDesk(hal, emit=lambda k, d: ev.append((k, d)))
+    desk.talk = 慢链路(tmp_path)
+    assert await desk.handle(_喇叭命令("warn-zh", 30, "t0")) == ""
+    assert hal.clips == ["warn-zh"]
+    assert await desk.handle(_喇叭命令("talk:0123456789abcdef", 60, "t1")) == ""
+    hal.listener(True, "放完了")                    # 旧的 warn-zh 自然放完
+    assert desk.playing() is not None and desk.playing()[0] == 60, "手动那条的占用还在"
+    assert await desk.auto_sound("hello-zh", priority=40, max_s=10, why="person") is False
+    gate.set()
+    for _ in range(10):
+        await asyncio.sleep(0)
+    assert hal.clips[-1].startswith("talk:"), f"手动录音照样放出来:{hal.clips}"
+    hal.listener(True, "放完了")                    # 这回是它自己放完
+    assert desk.playing() is None
+    assert ev[-1][1].get("ended") == "done"

@@ -2532,6 +2532,7 @@ class _Handler(TlsHandlerMixin):
                 acc.remove(name)
             except AuthError as exc:
                 raise HttpError(404 if "没有账号" in str(exc) else 400, str(exc)) from exc
+            self._audit_detail = self._forget_person(name)
             return self._send_json(200, {"accounts": acc.list()})
         if path == "/api/accounts":
             if method == "GET":
@@ -2547,6 +2548,8 @@ class _Handler(TlsHandlerMixin):
                         display_name=d.get("display_name", ""))
             except AuthError as exc:
                 raise HttpError(400, str(exc)) from exc
+            # 外审 1.1 第 5 轮 #2:同名的旧账号以前删掉时留下的(升级前删的),新人不能继承
+            self._forget_person(str(d.get("name")))
             return self._send_json(200, {"accounts": acc.list()})
         if method != "POST":
             raise HttpError(405, "只支持 POST")
@@ -2679,6 +2682,18 @@ class _Handler(TlsHandlerMixin):
             except AuthzError as exc:
                 raise HttpError(400, str(exc)) from exc
         return self._send_json(200, {"authorizations": book.list(with_active=True)})
+
+    def _forget_person(self, name: str) -> dict[str, Any]:
+        """外审 1.1 第 5 轮 #2:账号删了,这个人的人脸特征值、比对缓存、还没写完的登记(撤销代次)
+        和经过记录一起删 —— 不然同名的新账号会继承前人的资料。"""
+        out: dict[str, Any] = {}
+        if self.site.faces is not None and self.site.faces.remove(name):
+            out["faces_deleted"] = True
+        if self.site.guard_passes is not None:
+            n = self.site.guard_passes.forget(name)
+            if n:
+                out["passes_deleted"] = n
+        return out
 
     def _faces(self, method: str, who: str | None, action: str | None, user) -> None:
         """1.1-1 人脸登记:``GET /api/faces`` 名单(``manage``);``GET /api/faces/me`` 自己的;

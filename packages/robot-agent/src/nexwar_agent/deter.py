@@ -48,6 +48,11 @@ class DeterDesk:
         #: 外审 1.1 第 4 轮 #4:真正叫 HAL 起播 / 关的那一步排队(等功放、起播放器可能要好几秒);
         #: 排到的时候代次已经变了的不做 —— 最后生效的总是最新那条指令
         self._hal_lock = asyncio.Lock()
+        #: 外审 1.1 第 5 轮 #3:``_sound`` 记的是哪一代指令的占用;HAL 上真正起播的是哪一代。
+        #: HAL 回调「放完了」说的是正在放的那段 —— 后来已接受、还没起播(在下载、等功放)的那条的
+        #: 占用不能被它清掉
+        self._sound_gen = 0
+        self._started_gen = 0
         #: 1.1-4:跟站点搬录音(``talk.TalkLink``);没接(没有狗专用口)就不认 ``talk:``、``mic``。
         self.talk: Any = None
         #: 本体灯开着到点关(``max_s``):哪一路 → 关灯的那个任务
@@ -67,6 +72,10 @@ class DeterDesk:
             buttons(pressed)
 
     def _sound_ended(self, ok: bool, why: str) -> None:
+        if self._sound is not None and self._sound_gen != self._started_gen:
+            # 外审 1.1 第 5 轮 #3:放完的是旧的一段,后来接受的那条还没起播:它的优先级照样占着
+            log.info("旧的一段放完了(%s);后来接受的喇叭指令还没起播,优先级不放开", why)
+            return
         self._sound = None
         self._emit("deter", {"output": "speaker", "on": False,
                              "ended": "done" if ok else "failed", "reason": why[:200]})
@@ -146,6 +155,7 @@ class DeterDesk:
                 log.warning("自动放 %s 没放成: %s", clip, exc)
                 return False
             self._sound = (priority, self._mono() + max_s)
+            self._sound_gen = self._speak_gen
         self._emit("deter", {"output": "speaker", "on": True, "max_s": max_s, "clip": clip,
                              "priority": priority, "auto": why})
         return True
@@ -238,6 +248,7 @@ class DeterDesk:
                 log.info("喇叭指令 %r 排到时已被后来的指令取代,不做", clip or "关")
                 return
             await self.hal.sound(clip, max_s)
+            self._started_gen = gen
 
     async def _listen(self, cmd: Command, req: Any) -> None:
         """1.1-4 听回话:录 ``max_s`` 秒、传回站点;成没成都记一条 ``deter`` 事件。"""
@@ -288,6 +299,7 @@ class DeterDesk:
             return f"device: {str(exc)[:200]}"
         if req.output == "speaker":
             self._sound = (req.priority, self._mono() + req.max_s) if req.on else None
+            self._sound_gen = self._speak_gen
         data: dict[str, Any] = {"task_id": cmd.task_id, "output": req.output, "on": req.on}
         if req.output == "ptz":
             data |= {"pan": req.pan, "tilt": req.tilt}

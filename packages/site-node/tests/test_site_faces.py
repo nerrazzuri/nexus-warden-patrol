@@ -132,3 +132,41 @@ def test_接口_管理员看名单_删别人的_本人撤销_都进审计(站点
     assert code == 200 and d["photos"] == 0
     rows = [(r["actor"], r["target"]) for r in s.api.audit.list() if "/api/faces" in r["action"]]
     assert ("alice", "faces/hugo") in rows and ("gina", "faces/gina") in rows
+
+
+def test_外审1_1_第5轮_2_删账号连人脸和经过记录一起删_同名新账号不继承(站点):
+    from nexwar_site.guardpass import GuardPasses
+    s = 站点
+    s.api.guard_passes = GuardPasses(s.db, now_ms=lambda: 5, faces=s.api.faces)
+    gina, alice = _登(s, "gina"), _登(s, "alice")
+    assert s.req("POST", "/api/faces/me/photo", {"consent": True, "jpeg_b64": _照("face:1")},
+                 token=gina)[0] == 200
+    assert s.api.guard_passes.seen("R1", "gina", how="face", score=0.9) > 0
+    me = [0.0] * 128
+    me[1] = 1.0
+    assert s.api.faces.match(me)[0] == "gina"
+    code, d = s.req("POST", "/api/accounts/gina/remove", token=alice)
+    assert code == 200, d
+    assert s.api.faces.match(me) is None, "缓存也失效:旧人脸不再认到这个账号名"
+    assert not s.db.query("SELECT 1 FROM face_book WHERE account='gina'")
+    assert not s.db.query("SELECT 1 FROM guard_passes WHERE account='gina'")
+    code, _ = s.req("POST", "/api/accounts", {"name": "gina", "password": PW, "role": "viewer"},
+                    token=alice)
+    assert code == 200
+    gina2 = _登(s, "gina")
+    code, d = s.req("GET", "/api/faces/me", token=gina2)
+    assert code == 200 and d["photos"] == 0, "同名新账号没有前人的登记"
+
+
+def test_外审1_1_第5轮_2_建同名账号时清掉以前删账号留下的(站点):
+    from nexwar_site.guardpass import GuardPasses
+    s = 站点
+    s.api.guard_passes = GuardPasses(s.db, now_ms=lambda: 5, faces=s.api.faces)
+    alice = _登(s, "alice")
+    s.api.faces.add_photo("zed", consent=True, jpeg_b64=_照("face:6"))      # 升级前删账号留下的
+    s.api.guard_passes.seen("R1", "zed", how="face", score=0.9)
+    code, _ = s.req("POST", "/api/accounts", {"name": "zed", "password": PW, "role": "guard"},
+                    token=alice)
+    assert code == 200
+    assert not s.db.query("SELECT 1 FROM face_book WHERE account='zed'")
+    assert not s.db.query("SELECT 1 FROM guard_passes WHERE account='zed'")

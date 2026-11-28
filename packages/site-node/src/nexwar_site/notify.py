@@ -56,7 +56,9 @@ STUCK_MS = 10 * 60_000
 HOURLY_CAP = 30
 #: 外审 1.1 第 4 轮 #3:一个渠道一拍最多发多久(坏渠道不拖别人);几个渠道一起发,最多几个。
 CHANNEL_BUDGET_S = 20.0
-MAX_PARALLEL = 8
+#: 外审 1.1 第 5 轮 #1:每个渠道各取各的(不让一个渠道的积压占满全局的前 N 条),每渠道一拍最多取几条。
+CHANNEL_BATCH = 100
+MAX_PARALLEL = MAX_CHANNELS
 BACKOFF_BASE_S, BACKOFF_MAX_S = 10, 300
 TIMEOUT_S = 10
 TELEGRAM_URL = "https://api.telegram.org/bot{token}/sendMessage"
@@ -147,12 +149,13 @@ def test_message(site: str, lang: str) -> dict[str, str]:
 # ---------------------------------------------------------------- 渠道
 
 
-def _post_json(url: str, body: dict[str, Any], headers: dict[str, str] | None = None) -> bytes:
+def _post_json(url: str, body: dict[str, Any], headers: dict[str, str] | None = None,
+               timeout: float = TIMEOUT_S) -> bytes:
     raw = json.dumps(body, ensure_ascii=False).encode()
     req = urllib.request.Request(url, data=raw, method="POST",
                                  headers={"Content-Type": "application/json", **(headers or {})})
     try:
-        with urllib.request.urlopen(req, timeout=TIMEOUT_S) as r: 
+        with urllib.request.urlopen(req, timeout=timeout) as r: 
             return r.read(4096)
     except urllib.error.HTTPError as exc:
         detail = exc.read(300).decode("utf-8", "replace")
@@ -161,8 +164,22 @@ def _post_json(url: str, body: dict[str, Any], headers: dict[str, str] | None = 
         raise SendError(f"连不上:{exc}") from exc
 
 
+class OutOfTime(SendError):
+    """外审 1.1 第 5 轮 #1:这一拍给这个渠道的时间用完了 —— 发到的记下,没轮到的下一拍接着
+    (不算失败、不退避)。"""
+
+
+def _timeout(ch: dict[str, Any]) -> float:
+    """一次网络调用最多等多久:不超过 :data:`TIMEOUT_S`,也不超过这一拍剩下的时间(至少 1 秒)。"""
+    dl = ch.get("_deadline")
+    if dl is None:
+        return TIMEOUT_S
+    return max(1.0, min(float(TIMEOUT_S), dl - time.monotonic()))
+
+
 class Sender:
-    """真去发的那一层(测试换成假的)。``ch``:渠道的配置 + 打开了的密钥。"""
+    """真去发的那一层(测试换成假的)。``ch``:渠道的配置 + 打开了的密钥;
+    ``ch["_deadline"]``(可没有):这一拍到哪个 ``time.monotonic()`` 为止。"""
 
     def send(self, ch: dict[str, Any], msg: dict[str, str], alert: dict[str, Any]) -> None:
         try:
@@ -173,11 +190,17 @@ class Sender:
             raise SendError(f"发不出去({type(exc).__name__})") from None
 
     @staticmethod
-    def _each(targets: list[str], one: Callable[[str], Any]) -> None:
-        """每个都试一遍(外审 1.1 第 2 轮 #7:前面坏一个不挡后面的);有没发到的带上发到了的。"""
+    def _each(targets: list[str], one: Callable[[str], Any],
+              deadline: float | None = None) -> None:
+        """每个都试一遍(外审 1.1 第 2 轮 #7:前面坏一个不挡后面的);有没发到的带上发到了的。
+        外审 1.1 第 5 轮 #1:到了 ``deadline`` 就停,没轮到的下一拍接着。"""
         sent: list[str] = []
         errs: list[str] = []
-        for t in targets:
+        for i, t in enumerate(targets):
+            if i and deadline is not None and time.monotonic() >= deadline:
+                if errs:
+                    break
+                raise OutOfTime("这一拍时间用完,剩下的下一拍发", sent)
             try:
                 one(t)
             except SendError as exc:
@@ -194,7 +217,8 @@ class Sender:
     def _telegram(self, ch: dict[str, Any], msg: dict[str, str], alert: dict[str, Any]) -> None:
         url = TELEGRAM_URL.format(token=ch["secret"])
         self._each(ch["targets"], lambda chat: _post_json(
-            url, {"chat_id": chat, "text": msg["body"], "disable_web_page_preview": True}))
+            url, {"chat_id": chat, "text": msg["body"], "disable_web_page_preview": True},
+            timeout=_timeout(ch)), ch.get("_deadline"))
 
     def _whatsapp(self, ch: dict[str, Any], msg: dict[str, str], alert: dict[str, Any]) -> None:
         # 主动发给人要用 Meta 批过的模板(三个参数:站点 · 级别:告警、机器人、时间)
@@ -207,7 +231,8 @@ class Sender:
                                                                     or "en"},
                              "components": [{"type": "body", "parameters": [
                                  {"type": "text", "text": p[:200]} for p in params]}]}},
-                headers={"Authorization": f"Bearer {ch['secret']}"}))
+                headers={"Authorization": f"Bearer {ch['secret']}"}, timeout=_timeout(ch)),
+                   ch.get("_deadline"))
 
     def _email(self, ch: dict[str, Any], msg: dict[str, str], alert: dict[str, Any]) -> None:
         cfg = ch["config"]
@@ -220,10 +245,10 @@ class Sender:
         sec = cfg.get("security") or "starttls"
         try:
             if sec == "ssl":
-                s: smtplib.SMTP = smtplib.SMTP_SSL(host, port, timeout=TIMEOUT_S,
+                s: smtplib.SMTP = smtplib.SMTP_SSL(host, port, timeout=_timeout(ch),
                                                    context=ssl.create_default_context())
             else:
-                s = smtplib.SMTP(host, port, timeout=TIMEOUT_S)
+                s = smtplib.SMTP(host, port, timeout=_timeout(ch))
             with s:
                 if sec == "starttls":
                     s.starttls(context=ssl.create_default_context())
@@ -250,7 +275,9 @@ class Sender:
             raw = json.dumps(body, ensure_ascii=False).encode()
             sig = hmac.new(ch["secret"].encode(), raw, hashlib.sha256).hexdigest()
             headers["X-Nexwar-Signature"] = sig
-        self._each(ch["targets"], lambda url: _post_json(url, body, headers))
+        self._each(ch["targets"], lambda url: _post_json(url, body, headers,
+                                                          timeout=_timeout(ch)),
+                   ch.get("_deadline"))
 
 
 # ---------------------------------------------------------------- 排队
@@ -498,22 +525,27 @@ class NotifyDesk:
 
         外审 1.1 第 4 轮 #3:各渠道各发各的(几个渠道一起发),每个渠道这一拍最多发
         :data:`CHANNEL_BUDGET_S` 秒,剩下的下一拍接着 —— 坏掉的渠道(一直超时)只拖它自己,
-        不挡别的渠道,也不会让别的渠道的告警排到过期。"""
+        不挡别的渠道,也不会让别的渠道的告警排到过期。
+
+        外审 1.1 第 5 轮 #1:按渠道各取各的队列(坏渠道积压再多,也占不掉别的渠道的名额);
+        预算一路传到每个收件人和每次网络调用,一条消息的多个超时收件人也不能拖过预算。"""
         now = self._now()
-        rows = [dict(r) for r in self.db.query(
-            "SELECT * FROM notify_outbox WHERE sent_ms IS NULL AND dropped='' AND next_ms<=? "
-            "ORDER BY id LIMIT 500", (now,))]
+        due = "sent_ms IS NULL AND dropped='' AND next_ms<=?"
         by: dict[int, list[dict[str, Any]]] = {}
-        for row in rows:
-            by.setdefault(int(row["channel_id"]), []).append(row)
+        for r in self.db.query(f"SELECT DISTINCT channel_id FROM notify_outbox WHERE {due}",
+                               (now,)):
+            cid = int(r["channel_id"])
+            by[cid] = [dict(x) for x in self.db.query(
+                f"SELECT * FROM notify_outbox WHERE {due} AND channel_id=? "
+                "ORDER BY id LIMIT ?", (now, cid, CHANNEL_BATCH))]
 
         def run(queue: list[dict[str, Any]]) -> None:
-            t0 = time.monotonic()
+            deadline = time.monotonic() + CHANNEL_BUDGET_S
             for row in queue:
-                if time.monotonic() - t0 >= CHANNEL_BUDGET_S:
+                if time.monotonic() >= deadline:
                     break
                 try:
-                    self._send_row(row)
+                    self._send_row(row, deadline)
                 except Exception:
                     log.exception("告警外发一条没处理成(下一拍再来)")
 
@@ -526,7 +558,7 @@ class NotifyDesk:
                 list(ex.map(run, by.values()))
         self._stuck(self._now())
 
-    def _send_row(self, row: dict[str, Any]) -> None:
+    def _send_row(self, row: dict[str, Any], deadline: float | None = None) -> None:
         now = self._now()
         why = self._skip(row, now)
         if why:
@@ -556,11 +588,20 @@ class NotifyDesk:
                       title=al["title"], robot=self._robot_name(al["robot"]),
                       ms=al["first_ms"], tz=self._tzinfo(), tier=row["tier"], lang=ch["lang"])
         todo = dict(ch, targets=[t for t in ch["targets"] if t not in done])
+        if deadline is not None:
+            todo["_deadline"] = deadline
         try:
             self.sender.send(todo, msg, {"site": self.site_name, "key": al["key"],
                                        "level": al["level"], "kind": al["kind"],
                                        "robot": self._robot_name(al["robot"]),
                                        "ms": al["first_ms"], "tier": row["tier"]})
+        except OutOfTime as exc:                     # 时间用完:发到的记下,下一拍接着,不退避
+            got = done + [t for t in exc.sent if t not in done]
+            with self.db.tx() as c:
+                c.execute("UPDATE notify_outbox SET done=?, "
+                          "first_sent_ms=COALESCE(first_sent_ms, ?) WHERE id=?",
+                          ("\n".join(got), now if got else None, row["id"]))
+            return
         except SendError as exc:
             err = scrub(str(exc), ch.get("secret"))[:300]
             wait = min(BACKOFF_MAX_S, BACKOFF_BASE_S * 2 ** min(row["attempts"], 10))

@@ -115,4 +115,44 @@ describe("远程喊话", () => {
     expect(c.querySelector('[data-talk-row="1111222233334444"]')!.textContent).toContain("No reply recorded: 麦克风忙");
     expect(c.querySelector<HTMLButtonElement>("[data-talk-listen]")!.disabled).toBe(false);
   });
+
+  it("外审 1.1 第 5 轮 #4:等权限的时候切了机器人 —— 授权以后不录,不发给原来那台", async () => {
+    let grant: (v: unknown) => void = () => {};
+    let stopped = 0;
+    (navigator.mediaDevices.getUserMedia as ReturnType<typeof vi.fn>).mockImplementation(
+      () => new Promise((r) => { grant = r; }));
+    假录音.last = null;
+    const { container: c, rerender } = render(<TalkPanel robot="A" name="Robot A" listen={true} disabled={false} say={() => {}} />);
+    fireEvent.pointerDown(hold(c));
+    rerender(<TalkPanel robot="B" name="Robot B" listen={true} disabled={false} say={() => {}} />);
+    grant({ getTracks: () => [{ stop() { stopped++; } }] });
+    await new Promise((r) => setTimeout(r, 20));
+    expect(假录音.last).toBeNull();
+    expect(stopped).toBe(1);
+    expect(calls.some((x) => x.url.endsWith("/talk"))).toBe(false);
+  });
+
+  it("外审 1.1 第 5 轮 #4:录到一半切了机器人、关了面板 —— 这段丢掉,哪台都不发", async () => {
+    const t0 = Date.now();
+    const now = vi.spyOn(Date, "now");
+    now.mockReturnValue(t0);
+    const { container: c, rerender, unmount } = render(<TalkPanel robot="A" name="Robot A" listen={true} disabled={false} say={() => {}} />);
+    fireEvent.pointerDown(hold(c));
+    await waitFor(() => expect(hold(c).getAttribute("aria-pressed")).toBe("true"));
+    now.mockReturnValue(t0 + 2500);
+    rerender(<TalkPanel robot="B" name="Robot B" listen={true} disabled={false} say={() => {}} />);
+    await waitFor(() => expect(hold(c).getAttribute("aria-pressed")).toBe("false"));
+    fireEvent.pointerUp(hold(c));
+    await new Promise((r) => setTimeout(r, 20));
+    expect(calls.some((x) => x.url.endsWith("/talk"))).toBe(false);
+    // 在 B 上重新按住说话、录到一半关掉面板
+    now.mockReturnValue(t0 + 5000);
+    fireEvent.pointerDown(hold(c));
+    await waitFor(() => expect(hold(c).getAttribute("aria-pressed")).toBe("true"));
+    now.mockReturnValue(t0 + 8000);
+    unmount();
+    await new Promise((r) => setTimeout(r, 20));
+    expect(calls.some((x) => x.url.endsWith("/talk"))).toBe(false);
+    now.mockRestore();
+  });
 });

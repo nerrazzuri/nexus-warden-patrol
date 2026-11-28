@@ -1818,6 +1818,22 @@ void main() {
     expect(find.byKey(FaceEnrolPage.takeKey), findsNothing);
   });
 
+  testWidgets('外审 1.1 第 5 轮 #5：人脸模块坏了、已有登记 —— 照样能删掉（撤销同意），只是不能再拍', (t) async {
+    final api = FakeApi('guard')..faces = <String, dynamic>{'photos': 2, 'max_photos': 5, 'engine': false};
+    await t.pumpWidget(MaterialApp(home: FaceEnrolPage(api: api, take: () async => null)));
+    await t.pumpAndSettle();
+    expect(find.textContaining('没装人脸识别模块'), findsOneWidget);
+    expect(find.byKey(FaceEnrolPage.takeKey), findsNothing);
+    expect(find.textContaining('2 / 5'), findsOneWidget);
+    await t.ensureVisible(find.byKey(FaceEnrolPage.removeKey));
+    await t.tap(find.byKey(FaceEnrolPage.removeKey));
+    await t.pumpAndSettle();
+    await t.ensureVisible(find.byKey(FaceEnrolPage.removeYesKey));
+    await t.tap(find.byKey(FaceEnrolPage.removeYesKey));
+    await t.pumpAndSettle();
+    expect(api.calls, contains('face-remove'));
+  });
+
   testWidgets('真机 11-25：有喇叭的机器人有「静音」，静音着变「取消静音」', (t) async {
     final v = Map<String, dynamic>.of(siteFixture('site_robot'));
     final caps = Map<String, dynamic>.of((v['capabilities'] as Map).cast<String, dynamic>());
