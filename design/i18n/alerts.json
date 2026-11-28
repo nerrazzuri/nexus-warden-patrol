@@ -120,6 +120,10 @@
     "en": "Hot spot (thermal camera)",
     "zh": "热像发现高温点"
   },
+  "guard_passed": {
+    "en": "Registered guard passed",
+    "zh": "登记过的保安经过"
+  },
   "thermometry_failed": {
     "en": "Thermal camera not reporting temperature",
     "zh": "热像量不了温度"

@@ -393,6 +393,7 @@ class SiteApi:
         self.areas: Any = None
         self.authz: Any = None
         self.faces: Any = None                            # 1.1-1 认出保安
+        self.guard_passes: Any = None                     # 1.1-1 第 4 步 保安经过
         self.notify: Any = None                           # 1.1-2 告警外发
         self.alarm_in: Any = None                         # 1.1-3 报警输入
         self.talk: Any = None                             # 1.1-4 远程喊话
@@ -901,6 +902,8 @@ class _Handler(TlsHandlerMixin):
             if m is not None:
                 return self._notify(method, int(m.group(1)) if m.group(1) else None,
                                     m.group(2), user)
+            if path == "/api/guard-passes":
+                return self._guard_passes(method, user)
             m = _FACES.match(path)
             if m is not None:
                 return self._faces(method, unquote(m.group(1)) if m.group(1) else None,
@@ -2707,7 +2710,36 @@ class _Handler(TlsHandlerMixin):
         self._audit_target = f"faces/{acc}"
         if not book.remove(acc):
             raise HttpError(404, "这个人没登记过")
+        if self.site.guard_passes is not None:       # 撤销同意:经过记录一起删
+            self._audit_detail = {"passes_deleted": self.site.guard_passes.forget(acc)}
         return self._send_json(200, book.view(acc) if acc == me else {"faces": book.list()})
+
+    def _guard_passes(self, method: str, user) -> None:
+        """1.1-1 第 4 步 ``GET /api/guard-passes?since=&until=&account=``:保安经过的记录。
+        管理员、经理(``manage``)看所有人;别的人只看自己的。看了进审计(个人数据)。"""
+        gp = self.site.guard_passes
+        if gp is None:
+            raise HttpError(404, "此站点未启用认出保安")
+        if method != "GET":
+            raise HttpError(405, "只支持 GET")
+        self._need(user, VIEW)
+        query = parse_qs(self.path.split("?", 1)[1] if "?" in self.path else "")
+        now = self.site._now()
+        try:
+            until = int(query.get("until", [now])[0])
+            since = int(query.get("since", [until - 86_400_000])[0])
+        except (TypeError, ValueError) as exc:
+            raise HttpError(400, "since / until 要是毫秒") from exc
+        if not 0 <= since < until or until - since > 31 * 86_400_000:
+            raise HttpError(400, "时间段要在 31 天以内")
+        me = str(user)
+        acc = (query.get("account", [""])[0] or "").strip()[:64] or None
+        if not allowed(getattr(user, "role", ""), MANAGE):
+            if acc not in (None, me):
+                raise HttpError(403, "只能看自己的经过记录")
+            acc = me
+        self._audit_view(f"guard-passes/{acc or '*'}")
+        return self._send_json(200, gp.list(since=since, until=until, account=acc))
 
     def _notify(self, method: str, cid: int | None, action: str | None, user) -> None:
         """1.1-2 告警外发渠道(``manage``):``GET /api/notify`` 渠道和最近发的;``POST /api/notify``

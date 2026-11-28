@@ -32,6 +32,7 @@ const Map<String, (String, String)> alertTitles = <String, (String, String)>{
   'alarm_input_lost': ('Alarm input lost', '报警输入中断'),
   'thermal_fire': ('Possible fire (thermal camera)', '热像发现疑似起火'),
   'thermal_overheat': ('Hot spot (thermal camera)', '热像发现高温点'),
+  'guard_passed': ('Registered guard passed', '登记过的保安经过'),
   'thermometry_failed': ('Thermal camera not reporting temperature', '热像量不了温度'),
   'notify_failed': ('Alerts not reaching WhatsApp / Telegram / email', '告警外发发送失败'),
   'cert_expiring': ('Certificate expiring soon', '证书即将到期'),

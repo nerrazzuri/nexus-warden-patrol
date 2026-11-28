@@ -242,6 +242,7 @@ LEVEL_OF: dict[str, Level] = {
     "battery_swap": Level.P3,
     # B1c:授权在场(名单)——狗看见人,但人在授权的防区和时段里:不报 P1,留一条记录
     "authorized_person": Level.P3,
+    "guard_passed": Level.P3,                  # 1.1-1 第 4 步:认出来的保安经过
     # W53:有人手动派了临时巡逻(告诉经理、管理员);排队的那一趟起跑了、作废了(告诉派的人)。
     "adhoc_patrol": Level.P3,
     "backup_requested": Level.P3,     # redesign 第 8 期:保安请求支援(推经理、管理员;只记录)

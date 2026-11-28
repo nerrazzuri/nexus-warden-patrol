@@ -33,6 +33,7 @@ class FaceEnrolPage extends StatefulWidget {
   static const removeYesKey = Key('face-remove-yes');
   static const countKey = Key('face-count');
   static const msgKey = Key('face-msg');
+  static const passesKey = Key('face-passes');
 
   @override
   State<FaceEnrolPage> createState() => _FaceEnrolPageState();
@@ -40,6 +41,7 @@ class FaceEnrolPage extends StatefulWidget {
 
 class _FaceEnrolPageState extends State<FaceEnrolPage> {
   Map<String, dynamic>? _v;
+  List<Map<String, dynamic>>? _passes;
   bool _consent = false, _busy = false, _askRemove = false, _ok = false;
   String _msg = '';
 
@@ -56,6 +58,24 @@ class _FaceEnrolPageState extends State<FaceEnrolPage> {
     } on SiteError catch (e) {
       if (mounted) setState(() => _msg = refusalText(e));
     }
+    await _loadPasses();
+  }
+
+  /// 1.1-1 第 4 步：最近 7 天机器人认出我的记录（老站点没有就不显示）。
+  Future<void> _loadPasses() async {
+    final now = DateTime.now().millisecondsSinceEpoch;
+    try {
+      final p = await widget.api.guardPasses(now - 7 * 86400000, now + 60000);
+      if (mounted) setState(() => _passes = p);
+    } on SiteError {
+      if (mounted) setState(() => _passes = null);
+    }
+  }
+
+  String _when(Object? ms) {
+    final t = DateTime.fromMillisecondsSinceEpoch((ms as num?)?.toInt() ?? 0);
+    String two(int n) => n.toString().padLeft(2, '0');
+    return '${two(t.month)}-${two(t.day)} ${two(t.hour)}:${two(t.minute)}';
   }
 
   int get _n => (_v?['photos'] as num?)?.toInt() ?? 0;
@@ -110,8 +130,9 @@ class _FaceEnrolPageState extends State<FaceEnrolPage> {
           _v = v;
           _consent = false;
           _ok = true;
-          _msg = tr('Your face data has been deleted from the site.', '你的人脸资料已经从站点上删掉了。');
+          _msg = tr('Your face data and recognition records have been deleted from the site.', '你的人脸资料和认出记录已经从站点上删掉了。');
         });
+        await _loadPasses();
       }
     } on SiteError catch (e) {
       if (mounted) setState(() => _msg = refusalText(e));
@@ -185,6 +206,24 @@ class _FaceEnrolPageState extends State<FaceEnrolPage> {
                     child: Text(tr('Delete', '删掉'))),
               ],
             ],
+          ],
+          if (_passes != null && (_passes!.isNotEmpty || _n > 0)) ...[
+            const SizedBox(height: Nw.s24),
+            Text(tr('Recognised by robots (last 7 days)', '最近 7 天机器人认出的记录'),
+                key: FaceEnrolPage.passesKey, style: NwText.titleSmall.copyWith(color: c.text, fontWeight: FontWeight.w700)),
+            const SizedBox(height: Nw.s4),
+            if (_passes!.isEmpty)
+              Text(tr('None yet.', '还没有。'), style: NwText.bodySmall.copyWith(color: c.textSecondary)),
+            for (final p in _passes!.take(50))
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: Nw.s4),
+                child: Text(
+                    '${_when(p['first_ms'])}  ${p['account'] ?? ''}  ${'${p['zone'] ?? ''}'.isEmpty ? '' : '${p['zone']} · '}${p['robot'] ?? ''}'
+                    '${((p['n'] as num?)?.toInt() ?? 1) > 1 ? '  ×${p['n']}' : ''}',
+                    style: body),
+              ),
+            Text(tr('Kept 90 days; deleted together with your face data.', '留 90 天；删人脸资料时一起删。'),
+                style: NwText.bodySmall.copyWith(color: c.textSecondary)),
           ],
           if (_msg.isNotEmpty) ...[
             const SizedBox(height: Nw.s16),

@@ -7,6 +7,8 @@ import { hm, siteDown } from "./data";
 import { Confirm } from "./dialogs";
 import { Sign } from "./signs";
 import { t, type Key, joinList } from "./i18n";
+import { dayRange } from "./obpage";
+import { dateInput } from "./recordings";
 
 type Say = (s: string) => void;
 export interface Authz {
@@ -123,6 +125,7 @@ export function AccessPage({ say, now }: { say: Say; now: number }) {
             </table>
           </section>
           <FaceRoster say={say} />
+          <GuardPasses now={now} />
         </div>
         <aside class="sp-side ac-side">
           <AddAuthz key={zones.join("|")} zones={zones} say={say} onDone={() => { void load(); say(t("authzAddedMsg")); }} />
@@ -323,6 +326,54 @@ export function FaceRoster({ say }: { say: Say }) {
         <Confirm text={t("fcDeleteAsk", { name: removing.account })} yes={t("fcDelete")} danger
           onNo={() => setRemoving(null)} onYes={() => { const r = removing; setRemoving(null); void remove(r); }} />
       )}
+    </section>
+  );
+}
+
+export interface GuardPass { id: number; account: string; robot: string; zone: string; how: string; first_ms: number; last_ms: number; n: number }
+
+/** 1.1-1 第 4 步:保安经过的记录(机器人认出登记过的保安)。按天看、按人筛。读不到(没权限、没启用)不显示。 */
+export function GuardPasses({ now }: { now: number }) {
+  const today = dateInput(now);
+  const [day, setDay] = useState(today);
+  const [who, setWho] = useState("");
+  const [rows, setRows] = useState<GuardPass[] | null>(null);
+  const [hidden, setHidden] = useState(false);
+  const r = dayRange(day);
+  useEffect(() => {
+    api<{ passes: GuardPass[] }>("GET", `/api/guard-passes?since=${r.since}&until=${r.until}`)
+      .then((d) => { setRows(d.passes ?? []); setHidden(false); })
+      .catch(() => setHidden(true));
+  }, [day]);
+  if (hidden) return null;
+  const people = [...new Set((rows ?? []).map((x) => x.account))].sort();
+  const shown = (rows ?? []).filter((x) => !who || x.account === who);
+  return (
+    <section class="sp-sec acc-passes" data-passes>
+      <h2 class="sp-h"><span>{t("gpTitle")}</span><small>{t("gpHint")}</small></h2>
+      <div class="gp-tools">
+        <input type="date" name="gp-day" aria-label={t("obDay")} value={day} max={today} onInput={(e) => e.currentTarget.value && setDay(e.currentTarget.value)} />
+        <select name="gp-who" aria-label={t("gpWho")} value={who} onChange={(e) => setWho(e.currentTarget.value)}>
+          <option value="">{t("gpEveryone")}</option>
+          {people.map((p) => <option key={p} value={p}>{p}</option>)}
+        </select>
+      </div>
+      <table class="sp-table">
+        <thead><tr><th>{t("obColTime")}</th><th>{t("fcColWho")}</th><th>{t("gpColZone")}</th><th>{t("obColRobot")}</th><th>{t("gpColHow")}</th></tr></thead>
+        <tbody>
+          {rows === null && <tr><td colSpan={5} class="muted">{t("loading")}</td></tr>}
+          {rows !== null && shown.length === 0 && <tr><td colSpan={5} class="muted">{t("gpNone")}</td></tr>}
+          {shown.map((x) => (
+            <tr key={x.id} data-pass={x.id}>
+              <td class="mono">{hm(x.first_ms)}{x.last_ms - x.first_ms >= 60_000 ? `–${hm(x.last_ms)}` : ""}</td>
+              <td><b>{x.account}</b></td>
+              <td>{x.zone || "—"}</td>
+              <td>{x.robot}</td>
+              <td>{t(x.how === "face" ? "gpByFace" : "gpByPhone")}{x.n > 1 ? ` ×${x.n}` : ""}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </section>
   );
 }

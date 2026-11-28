@@ -258,6 +258,7 @@ _T: tuple[tuple[int, str, str, str, str, str, str, str], ...] = (
      "看热像画面，派人去看", "Check the thermal view and send someone"),
     (0x0810, "sense.thermometry_failed", "warn", "engineer", "热像量不了温度", "Thermal camera not reporting temperature",
      "看热像的测温规则和账号", "Check the camera's temperature rule and login"),
+    (0x0811, "sense.guard_passed", "info", "user", "登记过的保安经过", "Registered guard passed", "", ""),
     # ---- 0x09 升级与配置
     (0x0901, "update.release_failed", "warn", "engineer", "机器人升级失败", "Robot upgrade failed", "看升级页的原因", "See the reason on the Upgrades page"),
     (0x0902, "update.agent_too_old", "warn", "engineer", "机器人软件比站点旧", "Robot software older than the site", "升级机器人", "Upgrade the robot"),
@@ -291,7 +292,7 @@ ALERT: dict[str, str] = {
     "intrusion_unanswered": "sense.intrusion_unanswered", "intrusion_person": "sense.intrusion_person",
     "intrusion_verifying": "sense.intrusion_verifying", "alarm_input_lost": "sense.alarm_input_lost",
     "thermal_fire": "sense.thermal_fire", "thermal_overheat": "sense.thermal_overheat",
-    "thermometry_failed": "sense.thermometry_failed",
+    "thermometry_failed": "sense.thermometry_failed", "guard_passed": "sense.guard_passed",
     "deter_cornered": "sense.deter_cornered", "battery_abort": "robot.battery_abort",
     "preflight_refused": "dispatch.preflight_refused", "run_abort": "dispatch.run_abort",
     "archive_failed": "evidence.archive_failed", "fallen": "robot.fallen",

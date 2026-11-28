@@ -938,6 +938,11 @@ class Server:
         self.sightings = PersonWatch(self.db, self.dispatcher, now_ms=wall_ms, arming=self.arming,
                                      deterrence=self.deterrence)
         self.sightings.alerts = self.alerts
+        # 1.1-1 第 4 步:机器人报的脸在人脸登记里认出来 → 记「保安经过」(P3);认不出的不在这里判
+        from nexwar_site.guardpass import GuardPasses
+        self.guard_passes = GuardPasses(self.db, now_ms=wall_ms, faces=self.faces, desk=self.alerts,
+                                        zone_of=self.sightings._zone)
+        self.guard_passes.attach(self.dispatcher)
         from nexwar_site.force import ForceWatch
         #: 狗翻倒、被抱起来(W26,决策 52):按狗能力里的状态对账报 P1,布防时被抱起来响警笛。
         self.force = ForceWatch(self.db, self.dispatcher, now_ms=wall_ms, arming=self.arming)
@@ -1099,6 +1104,7 @@ class Server:
         self.api.mapbuilds = self.mapbuilds                          # W75
         self.api.areas, self.api.authz = self.areas, self.authz      # B1c
         self.api.faces = self.faces                                    # 1.1-1
+        self.api.guard_passes = self.guard_passes                      # 1.1-1 第 4 步
         self.sightings.areas = self.areas
         self.sightings.where_of = self.alert_sources.where_of   # W74 二期:人最后在哪
         self.force.armed_for = self.sightings.armed_now          # W44 外审 R2

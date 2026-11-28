@@ -745,6 +745,9 @@ abstract class SiteApi {
   /// 1.1-1：删掉自己的人脸资料（撤销同意）。
   Future<Map<String, dynamic>> removeMyFaces();
 
+  /// 1.1-1 第 4 步：保安经过的记录（管理员、经理看所有人，别的人只看自己的）。老站点 404。
+  Future<List<Map<String, dynamic>>> guardPasses(int since, int until);
+
   /// 批准（要再输一次自己的密码；[role] 默认只看）、拒绝。
   Future<Map<String, dynamic>> approveAccount(String id, String role, String password);
   Future<void> rejectAccount(String id);
@@ -2163,6 +2166,15 @@ class SiteClient implements SiteApi {
 
   @override
   Future<Map<String, dynamic>> removeMyFaces() async => _map(await _send('POST', '/api/faces/me/remove'));
+
+  @override
+  Future<List<Map<String, dynamic>>> guardPasses(int since, int until) async {
+    final d = _map(await _send('GET', '/api/guard-passes?since=$since&until=$until'));
+    return <Map<String, dynamic>>[
+      for (final e in (d['passes'] as List?) ?? const <dynamic>[])
+        if (e is Map) e.cast<String, dynamic>(),
+    ];
+  }
 
   @override
   Future<List<Map<String, dynamic>>> accounts() async {

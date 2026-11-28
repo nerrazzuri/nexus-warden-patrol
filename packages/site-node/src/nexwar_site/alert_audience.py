@@ -23,7 +23,8 @@ _INTRUSION = ("intrusion", "intrusion_unanswered", "intrusion_person", "intrusio
               "person_left",             # W74 三期:被跟的人越过出口线
               "force_lifted",            # 被抱起来了:可能有人偷机器人
               "force_covered",           # W74 四期:被人罩住了
-              "authorized_person")       # 授权的人在场(P3,只记进报警记录,不弹横幅)
+              "authorized_person",       # 授权的人在场(P3,只记进报警记录,不弹横幅)
+              "guard_passed")            # 1.1-1:认出来的保安经过(P3,同上)
 _HELP = ("stuck", "nav_blocked", "fallen", "force_flipped", "deter_cornered", "battery_abort",
          "waypoint_skipped",                    # 用户 11-26:点位跳过(P3,只记一笔)
          "run_abort", "charge_failed", "dock_stuck", "loc_lost_paused", "loc_lost_idle",

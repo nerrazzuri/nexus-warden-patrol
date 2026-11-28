@@ -2269,6 +2269,8 @@ input[type="checkbox"], input[type="radio"] { width: 18px; height: 18px; }
 .ob-head { display: flex; flex-wrap: wrap; gap: var(--sp-3); justify-content: space-between; align-items: flex-end; }
 .ob-tools { display: flex; flex-wrap: wrap; gap: var(--sp-2); align-items: center; }
 .ob-tools input[type=date] { min-height: 36px; }
+.gp-tools { display: flex; flex-wrap: wrap; gap: var(--sp-2); align-items: center; margin-bottom: var(--sp-2); }
+.gp-tools input[type=date], .gp-tools select { min-height: 36px; }
 .ob-table { width: 100%; border-collapse: collapse; }
 .ob-table th, .ob-table td { text-align: left; vertical-align: top; padding: 8px 12px; border-bottom: 1px solid var(--c-outline); }
 .ob-table th { font-size: 13px; color: var(--c-textSecondary); font-weight: 600; }

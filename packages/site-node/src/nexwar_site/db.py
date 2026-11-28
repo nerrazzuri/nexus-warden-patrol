@@ -520,6 +520,21 @@ CREATE TABLE IF NOT EXISTS face_book (
     n          INTEGER NOT NULL,
     updated_ms INTEGER NOT NULL
 );
+-- 1.1-1 第 4 步:认出来的保安经过(同一人、同一台、同一防区 5 分钟内并成一笔;留 90 天)。
+CREATE TABLE IF NOT EXISTS guard_passes (
+    id       INTEGER PRIMARY KEY AUTOINCREMENT,
+    account  TEXT NOT NULL,
+    robot    TEXT NOT NULL,
+    zone     TEXT NOT NULL DEFAULT '',
+    how      TEXT NOT NULL,
+    first_ms INTEGER NOT NULL,
+    last_ms  INTEGER NOT NULL,
+    n        INTEGER NOT NULL,
+    score    REAL,
+    dist_m   REAL
+);
+CREATE INDEX IF NOT EXISTS guard_passes_at ON guard_passes(first_ms);
+CREATE INDEX IF NOT EXISTS guard_passes_who ON guard_passes(account, last_ms);
 -- 1.1-5 电子值班簿:保安手写的,只追加(写错了另写一条 corrects 指向被更正的)。
 CREATE TABLE IF NOT EXISTS ob_entries (
     id         INTEGER PRIMARY KEY AUTOINCREMENT,

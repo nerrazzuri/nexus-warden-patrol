@@ -1090,7 +1090,15 @@ class FakeApi implements SiteApi {
   @override
   Future<Map<String, dynamic>> removeMyFaces() async {
     calls.add('face-remove');
+    passList = <Map<String, dynamic>>[];
     return faces = <String, dynamic>{...faces, 'photos': 0};
+  }
+
+  List<Map<String, dynamic>> passList = <Map<String, dynamic>>[];
+  @override
+  Future<List<Map<String, dynamic>>> guardPasses(int since, int until) async {
+    calls.add('passes ${until - since}');
+    return passList;
   }
 
   @override
@@ -1778,6 +1786,28 @@ void main() {
     await t.pumpAndSettle();
     expect(api.calls, contains('face-remove'));
     expect(find.textContaining('0 / 5'), findsOneWidget);
+  });
+
+  testWidgets('1.1-1 第 4 步：人脸登记页列最近 7 天机器人认出我的记录；删了人脸资料一起没了', (t) async {
+    final api = FakeApi('guard')
+      ..faces = <String, dynamic>{'photos': 2, 'max_photos': 5, 'engine': true}
+      ..passList = <Map<String, dynamic>>[
+        <String, dynamic>{'id': 1, 'account': 'gina', 'robot': 'A', 'zone': 'B区', 'how': 'face',
+          'first_ms': DateTime(2026, 11, 28, 9, 5).millisecondsSinceEpoch, 'last_ms': 0, 'n': 3},
+      ];
+    await t.pumpWidget(MaterialApp(home: FaceEnrolPage(api: api, take: () async => null)));
+    await t.pumpAndSettle();
+    expect(api.calls, contains('passes ${7 * 86400000 + 60000}'));
+    await t.ensureVisible(find.byKey(FaceEnrolPage.passesKey));
+    expect(find.text('11-28 09:05  gina  B区 · A  ×3'), findsOneWidget);
+    await t.ensureVisible(find.byKey(FaceEnrolPage.removeKey));
+    await t.tap(find.byKey(FaceEnrolPage.removeKey));
+    await t.pumpAndSettle();
+    await t.ensureVisible(find.byKey(FaceEnrolPage.removeYesKey));
+    await t.tap(find.byKey(FaceEnrolPage.removeYesKey));
+    await t.pumpAndSettle();
+    expect(find.textContaining('B区 · A'), findsNothing);
+    expect(find.textContaining('认出记录已经从站点上删掉了'), findsOneWidget);
   });
 
   testWidgets('1.1-1 人脸登记：站点没装人脸模块 —— 说清楚，没有拍照按钮', (t) async {
