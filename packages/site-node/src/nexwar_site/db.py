@@ -509,6 +509,14 @@ CREATE TABLE IF NOT EXISTS zone_areas (
     updated_ms  INTEGER NOT NULL,
     PRIMARY KEY (map_id, map_version, zone)
 );
+-- 1.1-1 认出保安:人脸登记(本人同意;特征值整串加密,不存照片)。
+CREATE TABLE IF NOT EXISTS face_book (
+    account    TEXT PRIMARY KEY,
+    consent_ms INTEGER NOT NULL,
+    feats      TEXT NOT NULL,
+    n          INTEGER NOT NULL,
+    updated_ms INTEGER NOT NULL
+);
 -- 商业化 B1c:名单第一版 —— 时段 / 人员授权。
 CREATE TABLE IF NOT EXISTS authorizations (
     id         INTEGER PRIMARY KEY AUTOINCREMENT,

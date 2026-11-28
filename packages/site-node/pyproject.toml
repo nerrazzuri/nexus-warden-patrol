@@ -10,6 +10,11 @@ requires-python = ">=3.10"
 # 只依赖契约包;不依赖根包 nexwar_patrol —— 老 HTTP 面归 W00c4 退役。
 dependencies = ["nexwar_contract[mqtt,planning]"]
 
+[project.optional-dependencies]
+# 1.1-1 认出保安:人脸登记算特征值(YuNet + SFace 模型另放 /opt/nexwar/models/faces)。
+# 没装也照常起,只是不能登记人脸。
+faces = ["opencv-python-headless>=4.8"]
+
 [project.scripts]
 nexwar_site = "nexwar_site.main:main"
 

@@ -916,6 +916,9 @@ class Server:
             return self.map_display.region_at(m, v, x, y) or self.areas.zone_at(m, v, x, y)
         self.alert_sources.where_of = _where
         self.authz = AuthzBook(self.db, now_ms=wall_ms)
+        # 1.1-1 认出保安:人脸登记(没装 OpenCV / 模型 → 引擎是 None,只是不能登记)
+        from nexwar_site.faces import FaceBook, load_engine
+        self.faces = FaceBook(self.db, now_ms=wall_ms, engine=load_engine())
         self.arming.authz = self.authz
         self.incidents.arming = self.arming
         # W22:分级驱离。到了拦截点由它接管(开声光、自动升级、回程)。
@@ -1094,6 +1097,7 @@ class Server:
         self.api.arming = self.arming
         self.api.mapbuilds = self.mapbuilds                          # W75
         self.api.areas, self.api.authz = self.areas, self.authz      # B1c
+        self.api.faces = self.faces                                    # 1.1-1
         self.sightings.areas = self.areas
         self.sightings.where_of = self.alert_sources.where_of   # W74 二期:人最后在哪
         self.force.armed_for = self.sightings.armed_now          # W44 外审 R2

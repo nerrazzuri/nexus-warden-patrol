@@ -131,6 +131,8 @@ _AREAS = re.compile(r"^/api/maps/([^/]{1,64})/([^/]{1,32})/areas$")
 _HIST = re.compile(r"^/api/layout/history(?:/(\d{1,12})/restore)?$")
 _ARM_EX = re.compile(r"^/api/arming/exceptions/(\d{1,9})/remove$")
 _AUTHZ = re.compile(r"^/api/lists/authorizations(?:/(\d{1,9})/(remove|end))?$")
+#: 1.1-1 认出保安:人脸登记(``me`` = 自己;别人的账号名只能删)
+_FACES = re.compile(r"^/api/faces(?:/([^/]{1,64})(?:/(photo|remove))?)?$")
 #: 网页上登记 / 出开通码 / 吊销机器狗(商业化 B1b,管理员)。
 _ADMIN_ROBOT = re.compile(r"^/api/admin/robots(?:/([^/]{1,64})/(code|revoke|name))?$")
 #: W42:机器人轮询自己的绑定申请;站点上的人批准 / 拒绝。
@@ -381,6 +383,7 @@ class SiteApi:
         #: 防区多边形、名单(商业化 B1c;站点主程序接上)。
         self.areas: Any = None
         self.authz: Any = None
+        self.faces: Any = None                            # 1.1-1 认出保安
         #: W73:防区的查看点、值守位(``guard_plan.ZonePosts``;第一次用时按防区、路线库的规划现建)。
         self._zone_posts: Any = None
         self._marks: Any = None
@@ -872,6 +875,10 @@ class _Handler(TlsHandlerMixin):
             m = _AUTHZ.match(path)
             if m is not None:
                 return self._authz(method, m.group(1), user, m.group(2))
+            m = _FACES.match(path)
+            if m is not None:
+                return self._faces(method, unquote(m.group(1)) if m.group(1) else None,
+                                   m.group(2), user)
             m = _ADMIN_ROBOT.match(path)
             if m is not None:
                 self._need(user, MANAGE)
@@ -2543,6 +2550,46 @@ class _Handler(TlsHandlerMixin):
             except AuthzError as exc:
                 raise HttpError(400, str(exc)) from exc
         return self._send_json(200, {"authorizations": book.list(with_active=True)})
+
+    def _faces(self, method: str, who: str | None, action: str | None, user) -> None:
+        """1.1-1 人脸登记:``GET /api/faces`` 名单(``manage``);``GET /api/faces/me`` 自己的;
+        ``POST /api/faces/me/photo`` 本人加一张(带 ``consent: true``、``jpeg_b64``);
+        ``POST /api/faces/me/remove`` 本人撤销;``POST /api/faces/{账号}/remove`` 管理员删。
+        不能替别人登记。"""
+        from nexwar_site.faces import FaceError
+        book = self.site.faces
+        if book is None:
+            raise HttpError(404, "此站点未启用人脸登记")
+        me = str(user)
+        if who is None:
+            if method != "GET":
+                raise HttpError(405, "只支持 GET")
+            self._need(user, MANAGE)
+            return self._send_json(200, {"faces": book.list(), "engine": book.engine is not None})
+        if who == "me" and action is None:
+            if method != "GET":
+                raise HttpError(405, "只支持 GET")
+            return self._send_json(200, book.view(me))
+        if method != "POST" or action is None:
+            raise HttpError(405, "只支持 POST")
+        if action == "photo":
+            if who != "me":
+                raise HttpError(403, "只能本人登记自己的脸")
+            d = self._body()
+            self._audit_target = f"faces/{me}"
+            try:
+                v = book.add_photo(me, consent=d.get("consent"), jpeg_b64=d.get("jpeg_b64"))
+            except FaceError as exc:
+                raise HttpError(400, str(exc)) from exc
+            self._audit_detail = {"photos": v["photos"]}
+            return self._send_json(200, v)
+        acc = me if who == "me" else who
+        if acc != me:
+            self._need(user, MANAGE)
+        self._audit_target = f"faces/{acc}"
+        if not book.remove(acc):
+            raise HttpError(404, "这个人没登记过")
+        return self._send_json(200, book.view(acc) if acc == me else {"faces": book.list()})
 
     def _pairing_addresses(self) -> None:
         """手机可能连得上的站点地址(POC):手配的主机名 + 主机网卡的局域网 IPv4,端口是这个接口的端口。
