@@ -352,3 +352,30 @@ def test_外审1_1_第2轮_9_别的异常不带令牌_密钥不收控制字符(�
         notify.Sender().send({"kind": "nope", "targets": [], "config": {}, "secret": tok},
                              {}, {})
     assert e.value.__cause__ is None and e.value.__suppress_context__
+
+
+def test_外审1_1_第4轮_3_坏渠道不拖好渠道(台, monkeypatch):
+    import threading
+    import time as _t
+    desk, n, f, clock, db = 台
+    monkeypatch.setattr(notify, "CHANNEL_BUDGET_S", 0.3)
+    stuck = threading.Event()
+    got: list = []
+
+    class 发:
+        def send(self, ch, msg, alert):
+            if ch["name"] == "坏":
+                stuck.wait(0.5)                      # 坏渠道一条要等半秒(超时)
+                raise SendError("连不上:timeout")
+            got.append((ch["name"], _t.monotonic()))
+    n.sender = 发()
+    _tg(n, name="坏", targets=["-9"])
+    _tg(n, name="好", targets=["-1"])
+    for i in range(5):
+        desk.raise_alert(kind="stuck", robot=f"R{i}", title="卡住")
+    t0 = _t.monotonic()
+    n.tick()
+    assert len([g for g in got if g[0] == "好"]) == 5, "好渠道这一拍都发出去了"
+    assert all(t - t0 < 0.4 for _, t in got), "没排在坏渠道后面"
+    bad = [r for r in _队(db) if r["sent_ms"] is None]
+    assert bad and len([r for r in bad if r["attempts"] > 0]) <= 1, "坏渠道这一拍只试到预算为止"

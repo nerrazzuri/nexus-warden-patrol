@@ -4,6 +4,7 @@
 // 特征值加密存在站点上。最多 5 张；随时能删（= 撤销同意）。管理员不能替别人登记。
 
 import 'dart:convert';
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -19,7 +20,40 @@ typedef SelfieTaker = Future<Uint8List?> Function();
 Future<Uint8List?> takeSelfie() async {
   final x = await ImagePicker().pickImage(
       source: ImageSource.camera, preferredCameraDevice: CameraDevice.front, maxWidth: 480, maxHeight: 480, imageQuality: 80);
-  return x?.readAsBytes();
+  return x == null ? null : readAndForget(x.path);
+}
+
+/// 外审 1.1 第 4 轮 #5：拍照插件把照片写在 App 缓存里 —— 读出来就删掉（成没成都删），
+/// 同一个目录里插件留下的原图、缩图（`image_picker*`、`scaled_*`）一起删。照片不留在手机上。
+Future<Uint8List> readAndForget(String path) async {
+  final f = File(path);
+  try {
+    return await f.readAsBytes();
+  } finally {
+    await _forget(f);
+  }
+}
+
+Future<void> _forget(File f) async {
+  try {
+    if (await f.exists()) await f.delete();
+  } on FileSystemException {
+    // 删不掉也不挡登记；下面再扫一遍
+  }
+  try {
+    await for (final e in f.parent.list()) {
+      final name = e.uri.pathSegments.isEmpty ? '' : e.uri.pathSegments.last;
+      if (e is File && (name.startsWith('image_picker') || name.startsWith('scaled_'))) {
+        try {
+          await e.delete();
+        } on FileSystemException {
+          // 下次再删
+        }
+      }
+    }
+  } on FileSystemException {
+    // 目录读不了：只删得了上面那一张
+  }
 }
 
 class FaceEnrolPage extends StatefulWidget {

@@ -101,6 +101,9 @@ class IncidentDesk:
         self._telling: set[int] = set()                # 正在报的(接口线程与事件循环都会报)
         #: 1.1-3:「先核实」的那条有了结论(:meth:`verify_tick`):``(这一条的账 + verdict)``。
         self.on_verdict: Callable[[dict[str, Any]], None] | None = None
+        #: 外审 1.1 第 4 轮 #2:首条派失败、并进来的改派或不派了 ——
+        #: 原来挂在旧机器人名下的「去核实」告警号
+        self.on_verify_moved: Callable[[list[str]], None] | None = None
         #: 事件源被限流了(W16):``(事件源名)``。
         self.on_throttled: Callable[[str], None] | None = None
         #: 布防模式(W20,``modes.ArmingDesk``)。没接(老测试、命令行)就当全布防。
@@ -591,6 +594,13 @@ class IncidentDesk:
                             "outcome='merged' ORDER BY id LIMIT 1", (failed,)).fetchone()
             if nxt is None:
                 return
+            # 外审 1.1 第 4 轮 #2:并进来的报警原来已经报成了旧机器人的「去核实」—— 摘下来,
+            # 改派的按新机器人重报(told_ms 清掉,补报那一拍报),旧的那条没人挂了就关
+            moved = sorted({r["verify_alert"] for r in c.execute(
+                "SELECT verify_alert FROM incidents WHERE merged_into=? AND outcome='merged' "
+                "AND verify_alert<>''", (failed,)).fetchall()})
+            c.execute("UPDATE incidents SET verify_alert='', told_ms=NULL WHERE merged_into=? "
+                      "AND outcome='merged' AND verify=1", (failed,))
             on, mode = self.arming.armed(nxt["zone"]) if self.arming is not None else (True, "")
             point = self.intercept(nxt["intercept"])
             stop: tuple[str, str] | None = None
@@ -615,6 +625,11 @@ class IncidentDesk:
                 c.execute("UPDATE incidents SET merged_into=? WHERE merged_into=? AND "
                           "outcome='merged' AND id<>?", (nxt["id"], failed, nxt["id"]))
                 c.execute("UPDATE incidents SET merged_into=NULL WHERE id=?", (nxt["id"],))
+        if moved and self.on_verify_moved is not None:
+            try:
+                self.on_verify_moved(moved)
+            except Exception:
+                log.exception("改派后旧的「去核实」告警没关成")
         if disarmed:
             for i in disarmed:
                 self._publish(self._row(i))

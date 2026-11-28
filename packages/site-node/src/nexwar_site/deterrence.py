@@ -608,7 +608,11 @@ class DeterrenceDesk:
             return await self._end(rid, s.ending[0], go_back=s.ending[1])
         calm = self._stand_down.pop(rid, None)
         if calm is not None and calm[0] == s.task_id and not s.seen_person:
-            return await self._end(rid, calm[1], go_back=True)
+            # 第 4 轮 #1:机器人已经在做别的了就只收这一场,不派回待命点(不打断别的任务)
+            c = self.dispatcher.clients.get(rid)
+            cur = c.status.task if c is not None and c.status is not None else None
+            here = cur is None or cur.task_id in (s.task_id, _standoff_id(s))
+            return await self._end(rid, calm[1], go_back=here)
         now = self._now()
         if now - max(s.started_ms, s.human_ms) >= CAP_S * 1000:
             return await self._end(rid, f"到 {CAP_S // 60} 分钟自动收", go_back=True)

@@ -898,6 +898,7 @@ class Server:
         self.incidents.on_outcome = self.alert_sources.on_incident
         self.incidents.on_throttled = self.alert_sources.on_incident_throttled
         self.incidents.on_verdict = self._on_verdict                     # 1.1-3 报警核实
+        self.incidents.on_verify_moved = self.alert_sources.on_verify_moved
         # W20:布防模式。撤防的防区来了入侵只记账、不派狗、不报告警。
         from nexwar_site.modes import ArmingDesk
         self.arming = ArmingDesk(self.db, now_ms=wall_ms, publish=self.dispatcher.feed.publish)
@@ -1462,12 +1463,15 @@ class Server:
         (外审 1.1 第 2 轮 #2:不然照旧升档、开警笛)。"""
         self.alert_sources.on_verdict(row)
         task = str(row.get("task_id") or "")
-        # 第 3 轮 #4:同一趟上还有别的报警没下结论(或看见人、真入侵)就先不收
-        if row.get("verdict") == "clear" and getattr(self, "deterrence", None) is not None \
+        # 第 3 轮 #4:同一趟上还有别的报警没下结论(或看见人、真入侵)就先不收。
+        # 第 4 轮 #1:最后一条是「没核实成」也一样:整趟都没人 / 没核实成了就收
+        if row.get("verdict") in ("clear", "unverified") \
+                and getattr(self, "deterrence", None) is not None \
                 and task and self.incidents.task_settled(task, int(row.get("id") or 0)):
-            self.deterrence.stand_down(str(row.get("robot_id") or ""),
-                                       str(row.get("task_id") or ""),
-                                       "报警核实:机器人到了现场,没看见人")
+            self.deterrence.stand_down(str(row.get("robot_id") or ""), task,
+                                       "报警核实:机器人到了现场,没看见人"
+                                       if row.get("verdict") == "clear"
+                                       else "报警核实没核实成:收掉这一趟的驱离,已报 P1 叫人")
 
     async def _alert_loop(self) -> None:
         """告警:每几秒看一次掉线、让 P1 未确认的升档。一拍炸了记下来、下一拍照走。

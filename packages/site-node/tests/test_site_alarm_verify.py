@@ -450,3 +450,32 @@ async def test_外审1_1_第3轮_5_告警号记在报警上_不限条数(核):
     n = t.db.query("SELECT COUNT(*) AS n FROM incidents WHERE verify_alert=?", (v.key,))[0]["n"]
     assert n == 61
     assert t.src._members(v.key)[0] == t.db.query("SELECT MIN(id) AS m FROM incidents")[0]["m"]
+
+
+def test_外审1_1_第4轮_2_旧机器人的去核实没报警挂着了就关(核):
+    t = 核
+    a = t.alerts.raise_alert(kind="intrusion_verifying", robot="A", title="报警器报警:A 去核实")
+    t.src.on_verify_moved([a.key])
+    got = t.alerts.book.get(a.key)
+    assert got.resolved_ms is not None and "改派" in got.context["note"]
+
+
+def test_外审1_1_第4轮_1_最后一条没核实成_整趟都定了也收驱离(核):
+    from types import SimpleNamespace
+
+    from nexwar_site.main import Server
+    t = 核
+    with t.db.tx() as c:
+        for i, verdict in ((1, "clear"), (2, "unverified")):
+            c.execute("INSERT INTO incidents (id, source, event_id, type, zone, received_at, "
+                      "outcome, robot_id, task_id, verify, verdict) VALUES "
+                      "(?, 'dev-door-1', ?, 'intrusion', 'Z1', 1, 'dispatched', 'A', "
+                      "'inc-1', 1, ?)",
+                      (i, f"e{i}", verdict))
+    downs: list = []
+    me = SimpleNamespace(alert_sources=SimpleNamespace(on_verdict=lambda r: None),
+                         incidents=t.desk,
+                         deterrence=SimpleNamespace(stand_down=lambda *a: downs.append(a)))
+    Server._on_verdict(me, {"id": 2, "verdict": "unverified", "robot_id": "A",
+                            "task_id": "inc-1"})
+    assert downs and downs[0][:2] == ("A", "inc-1") and "没核实成" in downs[0][2]

@@ -45,6 +45,9 @@ class DeterDesk:
         #: 外审 1.1 #10:喇叭指令的代次。录音下载慢、后台放的,下完了代次变了(后来有人关了喇叭、
         #: 放了别的)就不放了。
         self._speak_gen = 0
+        #: 外审 1.1 第 4 轮 #4:真正叫 HAL 起播 / 关的那一步排队(等功放、起播放器可能要好几秒);
+        #: 排到的时候代次已经变了的不做 —— 最后生效的总是最新那条指令
+        self._hal_lock = asyncio.Lock()
         #: 1.1-4:跟站点搬录音(``talk.TalkLink``);没接(没有狗专用口)就不认 ``talk:``、``mic``。
         self.talk: Any = None
         #: 本体灯开着到点关(``max_s``):哪一路 → 关灯的那个任务
@@ -138,7 +141,7 @@ class DeterDesk:
                 return False
             self._speak_gen += 1
             try:
-                await self.hal.sound(clip, max_s)
+                await self._hal_sound(clip, max_s, self._speak_gen)
             except Exception as exc:                 # noqa: BLE001 - 自己放的没放成:记日志,不打断别的
                 log.warning("自动放 %s 没放成: %s", clip, exc)
                 return False
@@ -199,7 +202,7 @@ class DeterDesk:
                 raise HalUnsupported("这台机器人放不了站点的录音(没接机器人专用口)")
             t = asyncio.ensure_future(self._talk_play(req, gen))  # 1.1-4:先拉下来
         else:
-            t = asyncio.ensure_future(self.hal.sound(req.clip if req.on else "", req.max_s))
+            t = asyncio.ensure_future(self._hal_sound(req.clip if req.on else "", req.max_s, gen))
         try:
             await asyncio.wait_for(asyncio.shield(t), SPEAK_ACK_S)
             return
@@ -226,7 +229,15 @@ class DeterDesk:
             # 下载期间有人关了喇叭、放了别的(可能优先级更高):这段不放了。检查和起播之间没有 await
             log.info("录音 %s 下完时已经被后来的喇叭指令取代,不放", req.clip)
             return
-        await self.hal.sound(f"talk:{path}", req.max_s)
+        await self._hal_sound(f"talk:{path}", req.max_s, gen)
+
+    async def _hal_sound(self, clip: str, max_s: float, gen: int) -> None:
+        """叫 HAL 放 / 关(排队);排到时已经有更新的喇叭指令就不做。"""
+        async with self._hal_lock:
+            if gen != self._speak_gen:
+                log.info("喇叭指令 %r 排到时已被后来的指令取代,不做", clip or "关")
+                return
+            await self.hal.sound(clip, max_s)
 
     async def _listen(self, cmd: Command, req: Any) -> None:
         """1.1-4 听回话:录 ``max_s`` 秒、传回站点;成没成都记一条 ``deter`` 事件。"""

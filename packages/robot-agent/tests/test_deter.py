@@ -822,3 +822,40 @@ async def test_外审1_1_第2轮_10_旧录音下载失败_不清掉后来在放�
     assert desk.playing() is not None and desk.playing()[0] == 90, "90 那段还在放"
     assert await desk.handle(_喇叭命令("hello-zh", 50, "t3")) == "busy"
     assert not [d for k, d in ev if d.get("task_id") == "t1" and d.get("ended") == "failed"]
+
+
+async def test_外审1_1_第4轮_4_起播慢_期间关了喇叭_最后是关的(monkeypatch, tmp_path):
+    from nexwar_agent import deter as dm
+    from nexwar_agent.deter import DeterDesk
+    monkeypatch.setattr(dm, "SPEAK_ACK_S", 0.05)
+    gate = asyncio.Event()
+
+    class 慢喇叭(_有回调的喇叭):
+        async def sound(self, clip, max_s):
+            if clip.startswith("talk:"):
+                await gate.wait()                     # 等功放、起播放器
+            self.clips.append(clip)
+    hal, ev = 慢喇叭(), []
+    desk = DeterDesk(hal, emit=lambda k, d: ev.append((k, d)))
+    desk.talk = _假链路(tmp_path)
+    assert await desk.handle(_喇叭命令("talk:0123456789abcdef", 60, "t1")) == ""
+    for _ in range(5):
+        await asyncio.sleep(0)
+    from nexwar_contract.messages import Command
+    off = asyncio.ensure_future(desk.handle(Command(
+        command_id="t2", task_id="deter-t2", kind="deter", issued_at=1, expires_at=2,
+        control_epoch=1, payload={"output": "speaker", "on": False, "priority": 60})))
+    await asyncio.sleep(0.1)
+    gate.set()
+    await off
+    for _ in range(5):
+        await asyncio.sleep(0)
+    assert hal.clips[-1] == "", f"最后生效的是关:{hal.clips}"
+    # 还没起播就被取代的:排到时不做
+    gate.clear()
+    assert await desk.handle(_喇叭命令("talk:fedcba9876543210", 60, "t3")) == ""
+    assert await desk.handle(_喇叭命令("warn-zh", 90, "t4")) == ""
+    gate.set()
+    for _ in range(10):
+        await asyncio.sleep(0)
+    assert hal.clips[-1] == "warn-zh", hal.clips

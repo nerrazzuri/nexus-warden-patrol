@@ -1249,6 +1249,17 @@ class SiteAlertSources:
             self.desk.resolve(a.key, who="site:verify",
                               verdict="false_alarm" if clear else "", note=note)
 
+    def on_verify_moved(self, keys: list[str]) -> None:
+        """外审 1.1 第 4 轮 #2:首条派失败,并进来的报警改派别的机器人(或不派了):原来那台的「去核实」
+        告警没有报警挂着了就关掉(改派的按新机器人另报一条)。"""
+        for k in keys:
+            if self._members(k):
+                continue
+            a = self.desk.book.get(k)
+            if a is not None and a.resolved_ms is None:
+                self.desk.resolve(k, who="site:verify",
+                                  note="这台机器人没接单:报警已改派或不再派,这条作废")
+
     def _members(self, key: str) -> list[int]:
         """合进这条「去核实」告警的报警(老告警没记的回空)。"""
         db = getattr(self.desk, "db", None)

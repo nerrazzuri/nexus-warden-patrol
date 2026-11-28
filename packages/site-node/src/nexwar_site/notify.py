@@ -26,10 +26,12 @@ import logging
 import re
 import smtplib
 import ssl
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
 from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from email.message import EmailMessage
 from pathlib import Path
@@ -52,6 +54,9 @@ EXPIRE_MS = 3600_000
 STUCK_MS = 10 * 60_000
 #: 每个渠道每小时最多发几条。
 HOURLY_CAP = 30
+#: 外审 1.1 第 4 轮 #3:一个渠道一拍最多发多久(坏渠道不拖别人);几个渠道一起发,最多几个。
+CHANNEL_BUDGET_S = 20.0
+MAX_PARALLEL = 8
 BACKOFF_BASE_S, BACKOFF_MAX_S = 10, 300
 TIMEOUT_S = 10
 TELEGRAM_URL = "https://api.telegram.org/bot{token}/sendMessage"
@@ -489,65 +494,91 @@ class NotifyDesk:
             c.execute("UPDATE notify_outbox SET dropped=? WHERE id=?", (why, oid))
 
     def tick(self) -> None:
-        """要发的都发出去(要等网络:站点主程序放在线程里跑)。"""
+        """要发的都发出去(要等网络:站点主程序放在线程里跑)。
+
+        外审 1.1 第 4 轮 #3:各渠道各发各的(几个渠道一起发),每个渠道这一拍最多发
+        :data:`CHANNEL_BUDGET_S` 秒,剩下的下一拍接着 —— 坏掉的渠道(一直超时)只拖它自己,
+        不挡别的渠道,也不会让别的渠道的告警排到过期。"""
         now = self._now()
         rows = [dict(r) for r in self.db.query(
             "SELECT * FROM notify_outbox WHERE sent_ms IS NULL AND dropped='' AND next_ms<=? "
-            "ORDER BY id LIMIT 50", (now,))]
+            "ORDER BY id LIMIT 500", (now,))]
+        by: dict[int, list[dict[str, Any]]] = {}
         for row in rows:
-            now = self._now()
-            why = self._skip(row, now)
-            if why:
-                self._drop(row["id"], why)
-                continue
-            try:
-                ch = self._channel(row["channel_id"])
-            except Exception as exc:  # noqa: BLE001 - 密钥打不开:这一条发不了,记原因
-                self._drop(row["id"], f"渠道的密钥打不开:{exc}"[:300])
-                continue
-            if ch is None or not ch["enabled"]:
-                self._drop(row["id"], "渠道已删除或停用")
-                continue
-            # 外审 1.1 #6:上限按「发出去过」算(发到一半的也算一条);发到一半的不再拦
-            sent = self.db.query("SELECT COUNT(*) AS n FROM notify_outbox WHERE channel_id=? "
-                                 "AND first_sent_ms>?", (ch["id"], now - 3600_000))[0]["n"]
-            done = [t for t in (row.get("done") or "").split("\n") if t]
-            if not done and sent >= HOURLY_CAP:
-                self._drop(row["id"], f"这个渠道一小时已发 {HOURLY_CAP} 条,这条不发")
-                continue
-            a = self.db.query("SELECT * FROM alerts WHERE key=?", (row["alert_key"],))
-            if not a:
-                self._drop(row["id"], "告警不在了")
-                continue
-            al = a[0]
-            msg = message(site=self.site_name, level=al["level"], kind=al["kind"],
-                          title=al["title"], robot=self._robot_name(al["robot"]),
-                          ms=al["first_ms"], tz=self._tzinfo(), tier=row["tier"], lang=ch["lang"])
-            todo = dict(ch, targets=[t for t in ch["targets"] if t not in done])
-            try:
-                self.sender.send(todo, msg, {"site": self.site_name, "key": al["key"],
-                                           "level": al["level"], "kind": al["kind"],
-                                           "robot": self._robot_name(al["robot"]),
-                                           "ms": al["first_ms"], "tier": row["tier"]})
-            except SendError as exc:
-                err = scrub(str(exc), ch.get("secret"))[:300]
-                wait = min(BACKOFF_MAX_S, BACKOFF_BASE_S * 2 ** min(row["attempts"], 10))
-                got = done + [t for t in getattr(exc, "sent", []) if t not in done]
-                with self.db.tx() as c:
-                    c.execute("UPDATE notify_outbox SET attempts=attempts+1, next_ms=?, error=?, "
-                              "done=?, first_sent_ms=COALESCE(first_sent_ms, ?) WHERE id=?",
-                              (now + wait * 1000, err, "\n".join(got),
-                               now if got else None, row["id"]))
-                self._mark(ch["id"], error=err)
-                log.warning("告警外发(%s)没发出去,%s 秒后再试:%s", ch["name"], wait, err)
-                continue
-            with self.db.tx() as c:
-                c.execute("UPDATE notify_outbox SET sent_ms=?, error='', "
-                          "first_sent_ms=COALESCE(first_sent_ms, ?) WHERE id=?",
-                          (self._now(), self._now(), row["id"]))
-            self._mark(ch["id"], ok=True)
-            log.info("告警外发(%s)发出去了:%s", ch["name"], row["alert_key"])
+            by.setdefault(int(row["channel_id"]), []).append(row)
+
+        def run(queue: list[dict[str, Any]]) -> None:
+            t0 = time.monotonic()
+            for row in queue:
+                if time.monotonic() - t0 >= CHANNEL_BUDGET_S:
+                    break
+                try:
+                    self._send_row(row)
+                except Exception:
+                    log.exception("告警外发一条没处理成(下一拍再来)")
+
+        if len(by) <= 1:
+            for q in by.values():
+                run(q)
+        else:
+            with ThreadPoolExecutor(max_workers=min(MAX_PARALLEL, len(by)),
+                                    thread_name_prefix="notify") as ex:
+                list(ex.map(run, by.values()))
         self._stuck(self._now())
+
+    def _send_row(self, row: dict[str, Any]) -> None:
+        now = self._now()
+        why = self._skip(row, now)
+        if why:
+            self._drop(row["id"], why)
+            return
+        try:
+            ch = self._channel(row["channel_id"])
+        except Exception as exc:  # noqa: BLE001 - 密钥打不开:这一条发不了,记原因
+            self._drop(row["id"], f"渠道的密钥打不开:{exc}"[:300])
+            return
+        if ch is None or not ch["enabled"]:
+            self._drop(row["id"], "渠道已删除或停用")
+            return
+        # 外审 1.1 #6:上限按「发出去过」算(发到一半的也算一条);发到一半的不再拦
+        sent = self.db.query("SELECT COUNT(*) AS n FROM notify_outbox WHERE channel_id=? "
+                             "AND first_sent_ms>?", (ch["id"], now - 3600_000))[0]["n"]
+        done = [t for t in (row.get("done") or "").split("\n") if t]
+        if not done and sent >= HOURLY_CAP:
+            self._drop(row["id"], f"这个渠道一小时已发 {HOURLY_CAP} 条,这条不发")
+            return
+        a = self.db.query("SELECT * FROM alerts WHERE key=?", (row["alert_key"],))
+        if not a:
+            self._drop(row["id"], "告警不在了")
+            return
+        al = a[0]
+        msg = message(site=self.site_name, level=al["level"], kind=al["kind"],
+                      title=al["title"], robot=self._robot_name(al["robot"]),
+                      ms=al["first_ms"], tz=self._tzinfo(), tier=row["tier"], lang=ch["lang"])
+        todo = dict(ch, targets=[t for t in ch["targets"] if t not in done])
+        try:
+            self.sender.send(todo, msg, {"site": self.site_name, "key": al["key"],
+                                       "level": al["level"], "kind": al["kind"],
+                                       "robot": self._robot_name(al["robot"]),
+                                       "ms": al["first_ms"], "tier": row["tier"]})
+        except SendError as exc:
+            err = scrub(str(exc), ch.get("secret"))[:300]
+            wait = min(BACKOFF_MAX_S, BACKOFF_BASE_S * 2 ** min(row["attempts"], 10))
+            got = done + [t for t in getattr(exc, "sent", []) if t not in done]
+            with self.db.tx() as c:
+                c.execute("UPDATE notify_outbox SET attempts=attempts+1, next_ms=?, error=?, "
+                          "done=?, first_sent_ms=COALESCE(first_sent_ms, ?) WHERE id=?",
+                          (now + wait * 1000, err, "\n".join(got),
+                           now if got else None, row["id"]))
+            self._mark(ch["id"], error=err)
+            log.warning("告警外发(%s)没发出去,%s 秒后再试:%s", ch["name"], wait, err)
+            return
+        with self.db.tx() as c:
+            c.execute("UPDATE notify_outbox SET sent_ms=?, error='', "
+                      "first_sent_ms=COALESCE(first_sent_ms, ?) WHERE id=?",
+                      (self._now(), self._now(), row["id"]))
+        self._mark(ch["id"], ok=True)
+        log.info("告警外发(%s)发出去了:%s", ch["name"], row["alert_key"])
 
     def _stuck(self, now: int) -> None:
         if self.alerts is None:

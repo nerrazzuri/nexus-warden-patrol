@@ -1442,3 +1442,13 @@ async def test_外审1_1_第2轮_2_核实说没人_这一趟的驱离下一拍�
     await t.desk.tick()
     assert "A" not in t.desk.sessions and t.disp.on() == set() and t.stb.back == ["A"]
     assert "没看见人" in t.disp.pushed[-1]["ended"]
+
+
+async def test_外审1_1_第4轮_1_机器人已经在做别的_收这一场_不派回待命点(台):
+    t = 台
+    _到了(t.disp)
+    t.disp.clients["A"].status.task = SimpleNamespace(task_id="adhoc-x",
+                                                       state=SimpleNamespace(value="done"))
+    t.desk.stand_down("A", "incident-abc", "报警核实没核实成")
+    await t.desk.tick()
+    assert "A" not in t.desk.sessions and t.disp.on() == set() and t.stb.back == []
