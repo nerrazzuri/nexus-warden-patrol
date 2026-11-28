@@ -137,4 +137,40 @@ void main() {
     expect(api.talked, isEmpty);
     expect(find.textContaining('松开就发'), findsNothing);
   });
+
+  testWidgets('外审 1.1 第 2 轮 #11：听回话一直问到站点标了结论（超过 32 秒也问）；过了 90 秒不再挡按钮', (t) async {
+    final api = FakeApi('guard');
+    await open(t, api);
+    api.talkList = <Map<String, dynamic>>[
+      <String, dynamic>{'id': 'aaaabbbbccccdddd', 'direction': 'in', 'account': 'gina',
+        'created_ms': DateTime.now().millisecondsSinceEpoch, 'state': 'waiting', 'bytes': 0},
+    ];
+    await t.tap(find.byKey(SiteTalk.listenKey));
+    await t.pump();
+    await t.pump(const Duration(seconds: 2));
+    await t.pump();
+    expect(t.widget<ButtonStyleButton>(find.byKey(SiteTalk.listenKey)).onPressed, isNull,
+        reason: '等回话的时候不能再按');
+    await t.pump(const Duration(seconds: 40));
+    api.talkList = <Map<String, dynamic>>[
+      <String, dynamic>{..._first(api), 'state': 'failed', 'error': '超时'},
+    ];
+    await t.pump(const Duration(seconds: 2));
+    await t.pump();
+    expect(find.textContaining('没录到回话'), findsOneWidget);
+    expect(t.widget<ButtonStyleButton>(find.byKey(SiteTalk.listenKey)).onPressed, isNotNull,
+        reason: '站点标了没录到：按钮回来');
+    // 站点没标、手机这边过了 90 秒：也不再挡
+    api.talkList = <Map<String, dynamic>>[
+      <String, dynamic>{..._first(api), 'state': 'waiting',
+        'created_ms': DateTime.now().millisecondsSinceEpoch - 100000},
+    ];
+    await t.pump(const Duration(seconds: 2));
+    await t.pumpWidget(const SizedBox());
+    await open(t, api);
+    expect(find.textContaining('没录到回话'), findsOneWidget);
+    await t.pump(const Duration(seconds: 120));
+  });
 }
+
+Map<String, dynamic> _first(FakeApi api) => api.talkList.first;

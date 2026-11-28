@@ -173,3 +173,36 @@ def test_外审1_1_第13条_更正跟着原来那条的报警_报告标出更正
     steps = [s[2] for s in incident_report(db, "k1", lang="zh")["steps"]]
     assert any(f"#{a['id']} " in x and "是狗" in x and f"已由 #{b['id']} 更正" in x for x in steps)
     assert any(f"#{b['id']} 更正 #{a['id']}" in x and "是猫" in x for x in steps)
+
+
+def test_外审1_1_第2轮_12_13_两人同时更正只成一个_更正不能改挂别的报警(tmp_path):
+    import threading
+    db = SiteDB(tmp_path / "s.db")
+    now = [10 * 86_400_000]
+    ob = OccurrenceBook(db, now_ms=lambda: now[0])
+    a = ob.add("gina", {"category": "incident", "text": "原文", "alert": "k1", "robot": "A"})
+    with pytest.raises(ObError, match="不能改挂"):
+        ob.add("gina", {"category": "incident", "text": "改", "corrects": a["id"], "alert": "k2"})
+    with pytest.raises(ObError, match="不能改挂"):
+        ob.add("gina", {"category": "incident", "text": "改", "corrects": a["id"], "robot": "B"})
+    ok = ob.add("gina", {"category": "incident", "text": "改", "corrects": a["id"], "alert": "k1"})
+    assert ok["alert_key"] == "k1", "跟原来一样的照收"
+    c = ob.add("gina", {"category": "incident", "text": "再一条", "robot": "A"})
+    go = threading.Barrier(8)
+    res: list = []
+
+    def one(i):
+        go.wait()
+        try:
+            res.append(ob.add(f"g{i}", {"category": "incident", "text": f"更{i}",
+                                        "corrects": c["id"]})["id"])
+        except ObError as exc:
+            res.append(str(exc))
+    ts = [threading.Thread(target=one, args=(i,)) for i in range(8)]
+    for t in ts:
+        t.start()
+    for t in ts:
+        t.join(10)
+    assert sum(isinstance(r, int) for r in res) == 1, res
+    assert len(db.query("SELECT 1 FROM ob_entries WHERE corrects=?", (c["id"],))) == 1
+    db.close()

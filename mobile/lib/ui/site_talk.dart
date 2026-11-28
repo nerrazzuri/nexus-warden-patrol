@@ -20,6 +20,9 @@ import 'nw/nw_theme.dart';
 const int talkMaxSeconds = 30;
 const int listenSeconds = 10;
 
+/// 站点等回话的时限（site talk.py REPLY_TIMEOUT_MS = 90 s）：过了站点标「没录到」。
+const int replyTimeoutSeconds = 90;
+
 /// 录音（测试换成假的）。
 abstract class TalkRecorder {
   Future<bool> permitted();
@@ -214,14 +217,16 @@ class _SiteTalkState extends State<SiteTalk> {
           '${widget.robotId} 正在录 $listenSeconds 秒现场声音。')));
       _poll?.cancel();
       var n = 0;
-      _poll = Timer.periodic(const Duration(seconds: 2), (t) {
+      _poll = Timer.periodic(const Duration(seconds: 2), (t) async {
         n++;
-        unawaited(_load());
-        // 外审 1.1 #11：等太久（站点也会标失败）不再挡着按钮
-    final now = DateTime.now().millisecondsSinceEpoch;
-    final waiting = _rows.any((r) =>
-        r['direction'] == 'in' && r['state'] == 'waiting' && now - ((r['created_ms'] as num?)?.toInt() ?? 0) < 90000);
-        if (!waiting || n > (listenSeconds + 20) ~/ 2) t.cancel();
+        await _load();                       // 取回来再判（不拿上一回的旧列表判）
+        if (!mounted) {
+          t.cancel();
+          return;
+        }
+        // 外审 1.1 #11、第 2 轮 #11：一直问到站点给了结论（录好 / 没录到）；站点 90 秒没等到会标没录到，
+        // 所以问满这么久（多 10 秒余量）再停
+        if (!_rows.any(_isWaiting) || n * 2 > replyTimeoutSeconds + 10) t.cancel();
       });
     } on SiteError catch (e) {
       _say(tr('Failed: $e', '失败：$e'));
@@ -241,11 +246,20 @@ class _SiteTalkState extends State<SiteTalk> {
     }
   }
 
+  /// 还在等机器人传回话的：站点 [replyTimeoutSeconds] 秒没等到会标没录到；超过的这边也不再算等。
+  bool _isWaiting(Map<String, dynamic> r) {
+    if (r['direction'] != 'in' || r['state'] != 'waiting') return false;
+    final at = (r['created_ms'] as num?)?.toInt() ?? 0;
+    return DateTime.now().millisecondsSinceEpoch - at < replyTimeoutSeconds * 1000;
+  }
+
   String _rowState(Map<String, dynamic> r) {
     final st = '${r['state']}';
     if (st == 'refused') return tr('Not played', '没放出来');
     if (r['direction'] == 'in') {
-      if (st == 'failed') return tr('No reply recorded', '没录到回话');
+      if (st == 'failed' || (st == 'waiting' && !_isWaiting(r))) {
+        return tr('No reply recorded', '没录到回话');
+      }
       return st == 'recorded' ? tr('Reply recorded', '回话已录好') : tr('Waiting…', '等回话…');
     }
     return st == 'fetched' ? tr('Played', '已放') : tr('Sent', '已发');
@@ -260,7 +274,7 @@ class _SiteTalkState extends State<SiteTalk> {
       _Rec.send => tr('Sending…', '正在发…'),
       _Rec.idle => tr('Hold to talk', '按住说话'),
     };
-    final waiting = _rows.any((r) => r['direction'] == 'in' && r['state'] == 'waiting');
+    final waiting = _rows.any(_isWaiting);
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
       Listener(
         onPointerDown: (_) {

@@ -193,10 +193,11 @@ class DeterDesk:
         """喇叭:``SPEAK_ACK_S`` 内做完(或当场出错)照常;没做完 —— 合成、连竞品主控、ssh 慢 —— 先回执
         收下,后台接着做,后台没做成发 ``ended: failed``(站点出「喊话没放出来」)。
         真机 11-20:喊话回执超过 10 s,站点等不到回 504,人以为没发出去。"""
+        gen = self._speak_gen
         if req.on and req.clip.startswith("talk:"):
             if self.talk is None:
                 raise HalUnsupported("这台机器人放不了站点的录音(没接机器人专用口)")
-            t = asyncio.ensure_future(self._talk_play(req, self._speak_gen))  # 1.1-4:先拉下来
+            t = asyncio.ensure_future(self._talk_play(req, gen))  # 1.1-4:先拉下来
         else:
             t = asyncio.ensure_future(self.hal.sound(req.clip if req.on else "", req.max_s))
         try:
@@ -210,6 +211,9 @@ class DeterDesk:
             if f.cancelled() or f.exception() is None:
                 return
             log.warning("喊话后台没做成: %s", f.exception())
+            if gen != self._speak_gen:
+                # 外审 1.1 第 2 轮 #10:后来又有喇叭指令(可能优先级更高、正在放):不动它的状态
+                return
             if req.on:
                 self._sound = None
             self._emit("deter", {"task_id": cmd.task_id, "output": "speaker", "on": False,

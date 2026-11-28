@@ -117,6 +117,8 @@ class IncidentDesk:
         self.zone_point: Callable[[str], dict[str, Any] | None] | None = None
         #: 拦截点走不走得到(W23,``intercept_reach.InterceptReach``)。没接(命令行、老测试)就不查。
         self.reach: Any = None
+        #: 外审 1.1 第 2 轮 #1:核实观察中断过(离线、人员检测不可用、被派走)的报警 → 重新能看的时刻
+        self._watch_from: dict[int, int | None] = {}
         #: 每个事件源最近一分钟收过的时刻。接口是多线程的:「清掉一分钟前的、判断、
         #: 记一笔」得在一把锁里
         #: 一次做完(W16 外审:不加锁 40 个并发请求全放行)。
@@ -730,12 +732,25 @@ class IncidentDesk:
                 "SELECT 1 FROM alerts WHERE robot=? AND kind='dog_sees_person' AND last_ms>=? "
                 "LIMIT 1", (rid, row["received_at"]))
             result, done_ms = lead.get("result"), lead.get("result_ms")
+            why = ""
             if seen:
                 verdict = "person"
-            elif result == "done" and done_ms is not None \
-                    and now - max(done_ms, row["received_at"]) >= VERIFY_HOLD_MS:
-                # 外审 1.1 #8:并进来的报警,机器人在它之前就到了 —— 从这条报警起再看满一段才算没人
-                verdict = "clear"
+            elif result == "done" and done_ms is not None:
+                # 外审 1.1 #8:并进来的报警,机器人在它之前就到了 —— 从这条报警起再看满一段才算没人。
+                # 第 2 轮 #1:这一段里机器人要一直在线、人员检测在看、没被派走;断过就从恢复起重新数
+                why = self._cant_watch(rid, lead.get("task_id"))
+                if why:
+                    self._watch_from[row["id"]] = None
+                    if now - row["received_at"] < VERIFY_TIMEOUT_MS:
+                        continue
+                    verdict = "unverified"
+                else:
+                    if row["id"] in self._watch_from and self._watch_from[row["id"]] is None:
+                        self._watch_from[row["id"]] = now
+                    since = self._watch_from.get(row["id"]) or 0
+                    if now - max(done_ms, row["received_at"], since) < VERIFY_HOLD_MS:
+                        continue
+                    verdict = "clear"
             elif result in ("failed", "aborted", "preempted") \
                     or (result is None and now - row["received_at"] >= VERIFY_TIMEOUT_MS):
                 verdict = "unverified"
@@ -743,12 +758,29 @@ class IncidentDesk:
                 continue
             try:
                 self.on_verdict(row | {"robot_id": rid, "task_id": lead.get("task_id"),
-                                       "verdict": verdict})
+                                       "verdict": verdict, "why": why})
             except Exception:
                 log.exception("入侵 %s 的核实结论报不出去:下一拍再报", row["id"])
                 continue
+            self._watch_from.pop(row["id"], None)
             with self.db.tx() as c:
                 c.execute("UPDATE incidents SET verdict=? WHERE id=?", (verdict, row["id"]))
             self._publish(self._row(row["id"]))
             n += 1
         return n
+
+    def _cant_watch(self, rid: str, task_id: Any) -> str:
+        """核实观察这会儿能不能算数:空 = 能;否则说为什么不能(外审 1.1 第 2 轮 #1)。"""
+        d = self.dispatcher
+        c = d.clients.get(rid) if d is not None else None
+        fresh = getattr(d, "_fresh", None)
+        if c is None or c.status is None or not c.status.online \
+                or (callable(fresh) and not fresh(c)):
+            return "机器人离线"
+        p = c.capabilities.tasks.get("persons") if c.capabilities is not None else None
+        if not isinstance(p, dict) or p.get("state") != "ok":
+            return "机器人的人员检测不可用"
+        t = c.status.task
+        if t is not None and t.task_id != task_id and t.state.value in ("pending", "running"):
+            return "机器人被派去做别的了"
+        return ""

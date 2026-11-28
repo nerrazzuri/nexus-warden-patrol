@@ -795,3 +795,30 @@ async def test_外审1_1_第10条_录音下得慢_期间放了别的_下完不�
     for _ in range(5):
         await asyncio.sleep(0)
     assert hal.clips == ["warn-zh"], "下完了也不放:已经被后来的喇叭指令取代"
+
+
+async def test_外审1_1_第2轮_10_旧录音下载失败_不清掉后来在放的高优先级(monkeypatch, tmp_path):
+    from nexwar_agent import deter as dm
+    from nexwar_agent.deter import DeterDesk
+    monkeypatch.setattr(dm, "SPEAK_ACK_S", 0.05)
+    gate = asyncio.Event()
+
+    class 坏链路(_假链路):
+        async def fetch(self, clip):
+            await gate.wait()
+            raise OSError("下载超时")
+
+    class 喇叭(_有回调的喇叭):
+        async def sound(self, clip, max_s):
+            self.clips.append(clip)
+    hal, ev = 喇叭(), []
+    desk = DeterDesk(hal, emit=lambda k, d: ev.append((k, d)))
+    desk.talk = 坏链路(tmp_path)
+    assert await desk.handle(_喇叭命令("talk:0123456789abcdef", 60, "t1")) == ""
+    assert await desk.handle(_喇叭命令("warn-zh", 90, "t2")) == ""
+    gate.set()
+    for _ in range(5):
+        await asyncio.sleep(0)
+    assert desk.playing() is not None and desk.playing()[0] == 90, "90 那段还在放"
+    assert await desk.handle(_喇叭命令("hello-zh", 50, "t3")) == "busy"
+    assert not [d for k, d in ev if d.get("task_id") == "t1" and d.get("ended") == "failed"]

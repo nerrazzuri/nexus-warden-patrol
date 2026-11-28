@@ -79,14 +79,14 @@ class GuardPasses:
             dist = f.get("dist_m")
             dist = float(dist) if isinstance(dist, (int, float)) and not isinstance(dist, bool) \
                 and math.isfinite(dist) else None
-            if acc not in got:
+            if acc not in got and self.seen(rid, acc, how="face", score=score, dist_m=dist):
                 got.append(acc)
-                self.seen(rid, acc, how="face", score=score, dist_m=dist)
         return got
 
     def seen(self, rid: str, account: str, *, how: str, score: float | None = None,
              dist_m: float | None = None) -> int:
-        """记一笔(并进 :data:`MERGE_MS` 之内的上一笔)。回那一笔的 id。"""
+        """记一笔(并进 :data:`MERGE_MS` 之内的上一笔)。回那一笔的 id;
+        人脸认的、这人已撤销同意的回 0。"""
         if how not in HOWS:
             raise ValueError(f"how 只认 {HOWS}")
         now = self._now()
@@ -98,6 +98,10 @@ class GuardPasses:
                 log.exception("%s 在哪个防区算不出来", rid)
         sc = round(float(score), 3) if score is not None else None
         with self.db.tx() as c:
+            if how == "face" and c.execute("SELECT 1 FROM face_book WHERE account=?",
+                                           (account,)).fetchone() is None:
+                # 外审 1.1 第 2 轮 #4:认的时候刚好撤销了 —— 不记(撤销那头已经删过经过记录)
+                return 0
             row = c.execute(
                 "SELECT id, score FROM guard_passes WHERE account=? AND robot=? AND zone=? "
                 "AND last_ms>=? ORDER BY last_ms DESC LIMIT 1",

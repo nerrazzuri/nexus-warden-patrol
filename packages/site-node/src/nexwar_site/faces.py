@@ -19,6 +19,7 @@ import binascii
 import json
 import logging
 import math
+import threading
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any, Protocol
@@ -104,6 +105,8 @@ class FaceBook:
         self._now = now_ms
         self.engine = engine
         self._cache: dict[str, list[list[float]]] | None = None
+        #: 外审 1.1 第 2 轮 #4:建缓存和撤销 / 加照片排队(不然撤销清掉的缓存会被正在建的旧缓存盖回去)
+        self._lock = threading.Lock()
 
     # ---------------------------------------------------------------- 存取
 
@@ -157,25 +160,33 @@ class FaceBook:
                       "VALUES (?,?,?,?,?) ON CONFLICT(account) DO UPDATE SET "
                       "feats=excluded.feats, n=excluded.n, updated_ms=excluded.updated_ms",
                       (account, now, box.seal(json.dumps(feats)), len(feats), now))
-        self._cache = None
+        with self._lock:
+            self._cache = None
         return self.view(account)
 
     def remove(self, account: str) -> bool:
         """撤销同意 / 管理员删:这个人的特征值全删。"""
-        with self.db.tx() as c:
-            n = c.execute("DELETE FROM face_book WHERE account=?", (account,)).rowcount
-        self._cache = None
+        with self._lock:
+            with self.db.tx() as c:
+                n = c.execute("DELETE FROM face_book WHERE account=?", (account,)).rowcount
+            self._cache = None
         return bool(n)
+
+    def consented(self, account: str) -> bool:
+        """这个人此刻还在登记表里(没撤销)。"""
+        return bool(self.db.query("SELECT 1 FROM face_book WHERE account=?", (account,)))
 
     # ---------------------------------------------------------------- 认
 
     def match(self, feat: list[float]) -> tuple[str, float] | None:
         """第 2 步:机器人拍到的一张脸 → 最像的那个人和分数;都不过门槛 ``None``。"""
-        if self._cache is None:
-            self._cache = {r["account"]: self._feats(r["account"])
-                           for r in self.db.query("SELECT account FROM face_book")}
+        with self._lock:
+            if self._cache is None:
+                self._cache = {r["account"]: self._feats(r["account"])
+                               for r in self.db.query("SELECT account FROM face_book")}
+            cache = self._cache
         best: tuple[str, float] | None = None
-        for acc, fs in self._cache.items():
+        for acc, fs in cache.items():
             for f in fs:
                 s = _cos(feat, f)
                 if s >= MATCH_COSINE and (best is None or s > best[1]):

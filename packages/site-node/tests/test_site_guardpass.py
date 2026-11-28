@@ -158,3 +158,33 @@ def test_接口_管理员看所有人_保安只看自己_进审计_撤销一起�
     assert s.req("POST", "/api/faces/me/remove", token=gina)[0] == 200
     code, d = s.req("GET", q, token=alice)
     assert [p["account"] for p in d["passes"]] == ["hugo"], "撤销同意:经过记录一起删"
+
+
+def test_外审1_1_第2轮_4_撤销跟建缓存撞上_撤销以后认不出_不再记(记):
+    import threading
+    gp, desk, now, _ = 记
+    faces = gp.faces
+    in_build, go = threading.Event(), threading.Event()
+    real = faces._feats
+
+    def slow(acc):
+        in_build.set()
+        go.wait(5)
+        return real(acc)
+    faces._cache = None
+    faces._feats = slow
+    got: list = []
+    t1 = threading.Thread(target=lambda: got.append(faces.match(_脸(3))))
+    t1.start()
+    assert in_build.wait(5)
+    t2 = threading.Thread(target=lambda: faces.remove("gina"))
+    t2.start()
+    t2.join(0.2)
+    assert t2.is_alive(), "撤销要等正在建的缓存建完"
+    go.set()
+    t1.join(5)
+    t2.join(5)
+    faces._feats = real
+    assert faces.match(_脸(3)) is None, "撤销以后旧缓存不许盖回来"
+    assert gp.seen("A", "gina", how="face", score=0.9) == 0, "认到一半撤销了:不记"
+    assert not [p for p in gp.list(since=0, until=now[0] + 1)["passes"] if p["account"] == "gina"]

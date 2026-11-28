@@ -135,6 +135,12 @@ _AUTHZ = re.compile(r"^/api/lists/authorizations(?:/(\d{1,9})/(remove|end))?$")
 _FACES = re.compile(r"^/api/faces(?:/([^/]{1,64})(?:/(photo|remove))?)?$")
 #: 1.1-3 触发网址(口令 32 位十六进制)。
 _ALARM_IN = re.compile(r"^/api/alarm-in/([0-9a-f]{32})$")
+_ALARM_IN_ANY = re.compile(r"(/api/alarm-in/)[0-9A-Fa-f]{8,}")
+
+
+def _mask_path(text: str) -> str:
+    """外审 1.1 第 2 轮 #5:报警输入的触发网址里那段口令不进审计、日志。"""
+    return _ALARM_IN_ANY.sub(r"\1***", text)
 #: 1.1-2 告警外发渠道。
 _NOTIFY = re.compile(r"^/api/notify(?:/([0-9]{1,9})(?:/(test|remove))?)?$")
 #: 网页上登记 / 出开通码 / 吊销机器狗(商业化 B1b,管理员)。
@@ -620,7 +626,7 @@ class _Handler(TlsHandlerMixin):
         code = str(args[1]) if len(args) > 1 else ""
         quiet = line.startswith(("GET ", "HEAD ")) and code[:1] in ("1", "2", "3")
         from nexwar_site.health import redact_text  # 外审 POC I8:网址里的凭证不进日志
-        log.info("%s %s", self.address_string(), redact_text(fmt % args),
+        log.info("%s %s", self.address_string(), _mask_path(redact_text(fmt % args)),
                  extra={"access": quiet})
 
     # ------------------------------------------------------------ 输入输出
@@ -770,7 +776,8 @@ class _Handler(TlsHandlerMixin):
                     from nexwar_site.audit import redact
                     detail.setdefault("request", redact(self._req_body))
                 try:
-                    self.site.audit.record(actor=self._actor, action=f"{method} {path}",
+                    self.site.audit.record(actor=self._actor,
+                                           action=f"{method} {_mask_path(path)}",
                                            target=target, status=self._status,
                                            detail=detail, remote=self.client_address[0])
                 except Exception:
@@ -778,7 +785,7 @@ class _Handler(TlsHandlerMixin):
                 if self._status >= 400:
                     # 日志设计 第 3 条:被拒的写请求进站点日志,带原因、谁、从哪来(原来只有状态码)
                     log.warning("拒绝 %s %s status=%d code=%s actor=%s remote=%s target=%s why=%s",
-                                method, path, self._status,
+                                method, _mask_path(path), self._status,
                                 errcodes.tag(self._resp.get("err_name")), self._actor,
                                 self.client_address[0], target,
                                 str(self._resp.get("error", ""))[:300])
@@ -1173,9 +1180,10 @@ class _Handler(TlsHandlerMixin):
         except (BrokenPipeError, ConnectionResetError, ssl.SSLEOFError) as exc:
             # 第 4 轮 config N7:浏览器关页面、切页面断开了连接,不是站点出错 —— 记一行 INFO,不带栈
             self.close_connection = True
-            log.info("客户端断开了 %s %s(%s)", method, self.path, type(exc).__name__)
+            log.info("客户端断开了 %s %s(%s)", method, _mask_path(self.path),
+                     type(exc).__name__)
         except Exception:                                    # 最后一道:别把栈回给客户端
-            log.exception("站点 API 处理 %s %s 出错", method, self.path)
+            log.exception("站点 API 处理 %s %s 出错", method, _mask_path(self.path))
             self._send_json(500, {"error": "站点内部错误"})
 
     def do_GET(self) -> None:
@@ -2963,6 +2971,7 @@ class _Handler(TlsHandlerMixin):
             log.warning("触发网址口令对不上(%s)", self.client_address[0])
             raise HttpError(404, "没有这个网址")
         self._actor = f"source:dev-{dev}"
+        self._audit_target = f"dev-{dev}"
         if not self._desk().allow(f"dev-{dev}"):
             raise HttpError(429, "此设备一分钟内报得太多,超出的不收")
         import uuid

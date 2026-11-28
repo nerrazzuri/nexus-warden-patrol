@@ -9,6 +9,7 @@
 
 from __future__ import annotations
 
+import json
 import socket
 import struct
 import threading
@@ -53,6 +54,12 @@ async def _触发(t, dev="door-1"):
     return await t.send(t.desk.handle(f"dev-{dev}", body))
 
 
+def _能看(t, rid="A", state="ok"):
+    """模拟机器人没有人员检测:核实要它「在看」才算数(外审 1.1 第 2 轮 #1),测试里给它补上。"""
+    t.desk.dispatcher.clients[rid].capabilities.tasks["persons"] = {"state": state,
+                                                                    "present": False}
+
+
 def _开着(t, kind):
     return [a for a in t.alerts.book.open() if a.kind == kind]
 
@@ -71,6 +78,7 @@ async def test_门磁默认先核实_报P2不报P1_到了没看见人_关掉标�
     assert not _开着(t, "intrusion")
     await t.run(200)                                     # 走到了
     assert t.desk.list()[0]["result"] == "done"
+    _能看(t)
     assert t.desk.verify_tick() == 0, "到了还要再看 30 秒"
     t.clock.advance(VERIFY_HOLD_MS / 1000 + 1)
     assert t.desk.verify_tick() == 1
@@ -255,6 +263,7 @@ async def test_外审1_1_第8_9条_并进来的报警从它起再看满_合并�
     await _触发(t)
     await t.run(200)
     assert t.desk.list()[0]["result"] == "done"
+    _能看(t)
     t.clock.advance(VERIFY_HOLD_MS / 1000 + 1)
     r2 = await _触发(t)
     assert r2["outcome"] == "merged"
@@ -265,3 +274,92 @@ async def test_外审1_1_第8_9条_并进来的报警从它起再看满_合并�
     assert t.desk.verify_tick() == 1
     assert not _开着(t, "intrusion_verifying")
     assert t.alerts.book.get(v.key).verdict == "false_alarm"
+
+
+def test_外审1_1_第2轮_5_触发网址的口令不进审计_不进日志(tmp_path, caplog):
+    import logging
+
+    from test_site_api import 站 as 真站
+
+    from nexwar_site.api import _mask_path
+    tok = "0123456789abcdef0123456789abcdef"
+    assert _mask_path(f"POST /api/alarm-in/{tok} HTTP/1.1") == "POST /api/alarm-in/*** HTTP/1.1"
+    s = 真站(tmp_path)
+    try:
+        class 假报警输入:
+            status: dict = {}
+
+            def by_token(self, t):
+                return "door-1" if t == tok else None
+        s.api.alarm_in = 假报警输入()
+        caplog.set_level(logging.DEBUG)
+        code, _ = s.req("POST", f"/api/alarm-in/{tok}", {})
+        assert code == 404                       # 这个夹具没开事件派遣:口令对上了、后面 404
+        code, _ = s.req("POST", "/api/alarm-in/" + "f" * 32, {})
+        assert code == 404
+        rows = s.api.audit.list(limit=20)
+        mine = [r for r in rows if "alarm-in" in r["action"]]
+        assert mine and all(tok not in json.dumps(r, ensure_ascii=False) for r in rows)
+        assert mine[0]["action"] == "POST /api/alarm-in/***" and mine[0]["target"] == "dev-door-1"
+        assert tok not in caplog.text and "f" * 32 not in caplog.text
+    finally:
+        s.close()
+
+
+async def test_外审1_1_第2轮_1_看的时候断了_从恢复起重新数_一直看不了算没核实成(核):
+    t = 核
+    await t.run(12)
+    _门磁(t)
+    await _触发(t)
+    await t.run(200)
+    assert t.desk.list()[0]["result"] == "done"
+    _能看(t, state="lost")                                # 人员检测断了
+    t.clock.advance(VERIFY_HOLD_MS / 1000 + 1)
+    assert t.desk.verify_tick() == 0, "看不了的这段不算"
+    _能看(t)
+    assert t.desk.verify_tick() == 0, "恢复了:从这时重新数"
+    t.clock.advance(VERIFY_HOLD_MS / 1000 + 1)
+    assert t.desk.verify_tick() == 1
+    assert t.desk.list()[0]["verdict"] == "clear"
+
+
+async def test_外审1_1_第2轮_1_到了一直看不了_到超时算没核实成_报P1写原因(核):
+    from nexwar_site.incidents import VERIFY_TIMEOUT_MS
+    t = 核
+    await t.run(12)
+    _门磁(t)
+    await _触发(t)
+    await t.run(200)
+    _能看(t, state="lost")
+    t.clock.advance(VERIFY_HOLD_MS / 1000 + 1)
+    assert t.desk.verify_tick() == 0
+    t.clock.advance(VERIFY_TIMEOUT_MS / 1000)
+    t.desk.dispatcher._fresh = lambda c: True            # 钟拨了十分钟:状态照算新鲜,只看检测
+    assert t.desk.verify_tick() == 1
+    assert t.desk.list()[0]["verdict"] == "unverified"
+    [p1] = _开着(t, "intrusion_unanswered")
+    assert "人员检测不可用" in p1.title
+    assert not _开着(t, "intrusion_verifying")
+
+
+def test_外审1_1_第2轮_3_合并的告警按记下的报警下结论_有人的不标误报(核):
+    t = 核
+    src = t.src
+    base = {"outcome": "dispatched", "robot_id": "A", "verify": 1, "zone": "Z1",
+            "source": "dev-door-1", "task_id": "inc-1"}
+    with t.db.tx() as c:
+        for i in (1, 2):
+            c.execute("INSERT INTO incidents (id, source, event_id, type, zone, received_at, "
+                      "outcome, robot_id, task_id, verify, verdict) VALUES "
+                      "(?, 'dev-door-1', ?, 'intrusion', 'Z1', ?, 'dispatched', 'A', "
+                      "'inc-1', 1, '')",
+                      (i, f"e{i}", t.clock() - 1000))
+    src.on_incident(base | {"id": 1})
+    src.on_incident(base | {"id": 2, "outcome": "merged"})
+    [v] = _开着(t, "intrusion_verifying")
+    assert v.context["incidents"] == [1, 2]
+    with t.db.tx() as c:
+        c.execute("UPDATE incidents SET verdict='person' WHERE id=1")
+    src.on_verdict(base | {"id": 2, "verdict": "clear"})
+    got = t.alerts.book.get(v.key)
+    assert got.resolved_ms is not None and got.verdict != "false_alarm", "有一条看见人:不算误报"

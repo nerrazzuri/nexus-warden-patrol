@@ -1430,3 +1430,15 @@ async def test_喇叭放不出来_也不算开着(台):
     t.disp.reject = {"speaker"}
     await t.desk.tick()
     assert "speaker" not in t.desk.view()[0]["active"]
+
+
+async def test_外审1_1_第2轮_2_核实说没人_这一趟的驱离下一拍收掉_回待命点(台):
+    t = 台
+    _到了(t.disp)
+    t.desk.stand_down("A", "incident-other", "别的报警")
+    await t.desk.tick()
+    assert "A" in t.desk.sessions, "不是这一趟的结论不动"
+    t.desk.stand_down("A", "incident-abc", "报警核实:机器人到了现场,没看见人")
+    await t.desk.tick()
+    assert "A" not in t.desk.sessions and t.disp.on() == set() and t.stb.back == ["A"]
+    assert "没看见人" in t.disp.pushed[-1]["ended"]

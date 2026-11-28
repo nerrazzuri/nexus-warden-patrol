@@ -897,7 +897,7 @@ class Server:
         # W16:入侵有了去向(派出去了、没狗去)、事件源被限流,告诉值守的人。
         self.incidents.on_outcome = self.alert_sources.on_incident
         self.incidents.on_throttled = self.alert_sources.on_incident_throttled
-        self.incidents.on_verdict = self.alert_sources.on_verdict      # 1.1-3 报警核实
+        self.incidents.on_verdict = self._on_verdict                     # 1.1-3 报警核实
         # W20:布防模式。撤防的防区来了入侵只记账、不派狗、不报告警。
         from nexwar_site.modes import ArmingDesk
         self.arming = ArmingDesk(self.db, now_ms=wall_ms, publish=self.dispatcher.feed.publish)
@@ -1456,6 +1456,15 @@ class Server:
 
     def _pose_track_tick(self) -> None:
         self.pose_track.tick(wall_ms())
+
+    def _on_verdict(self, row: dict) -> None:
+        """1.1-3 报警核实有了结论:告警那头关 P2 / 报 P1;「没人」的,这一趟到场开的驱离收掉
+        (外审 1.1 第 2 轮 #2:不然照旧升档、开警笛)。"""
+        self.alert_sources.on_verdict(row)
+        if row.get("verdict") == "clear" and getattr(self, "deterrence", None) is not None:
+            self.deterrence.stand_down(str(row.get("robot_id") or ""),
+                                       str(row.get("task_id") or ""),
+                                       "报警核实:机器人到了现场,没看见人")
 
     async def _alert_loop(self) -> None:
         """告警:每几秒看一次掉线、让 P1 未确认的升档。一拍炸了记下来、下一拍照走。

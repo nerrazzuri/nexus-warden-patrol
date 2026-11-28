@@ -241,13 +241,13 @@ def test_外审1_1_第6条_部分收件人失败_只重发没发到的_上限按
     _tg(n, targets=["-1", "-2", "-3"])
     desk.raise_alert(kind="stuck", robot="R1", title="卡住")
     n.tick()
-    assert got == ["-1"]
+    assert got == ["-1", "-3"], "坏的那个不挡后面的(外审 1.1 第 2 轮 #7)"
     row = _队(db)[0]
-    assert row["done"] == "-1" and row["first_sent_ms"] == NOW and row["sent_ms"] is None
+    assert row["done"] == "-1\n-3" and row["first_sent_ms"] == NOW and row["sent_ms"] is None
     bad.clear()
     clock[0] += 3600_000
     n.tick()
-    assert got == ["-1", "-2", "-3"], "-1 不再收第二遍"
+    assert got == ["-1", "-3", "-2"], "发到了的不再收第二遍"
     assert _队(db)[0]["sent_ms"] is not None
 
 
@@ -285,3 +285,70 @@ def test_外审1_1_第7条_对方回的错误里的令牌抹掉(台, monkeypatch
         assert tok not in text and "xyz" not in text and "***" in text, text
     assert notify.scrub("https://api.telegram.org/bot9:" + "a" * 30 + "/send") \
         == "https://api.telegram.org/***/send"
+
+
+def test_外审1_1_第2轮_6_邮件拒了一部分_只重发拒了的(台, monkeypatch):
+    desk, n, f, clock, db = 台
+    sent = []
+    refuse = {"b@x.my": (450, b"mailbox busy")}
+
+    class 假SMTP:
+        def __init__(self, *a, **k): pass
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+        def starttls(self, **k): pass
+        def login(self, *a): pass
+        def send_message(self, m):
+            sent.append(m["To"])
+            return dict(refuse)
+    monkeypatch.setattr(notify.smtplib, "SMTP", 假SMTP)
+    n.sender = notify.Sender()
+    n.save({"kind": "email", "name": "邮件", "targets": ["a@x.my", "b@x.my"], "secret": "pw",
+            "config": {"host": "smtp.x.my", "user": "u@x.my"}})
+    desk.raise_alert(kind="stuck", robot="R1", title="卡住")
+    n.tick()
+    row = _队(db)[0]
+    assert row["sent_ms"] is None and row["done"] == "a@x.my" and "被拒" in row["error"]
+    refuse.clear()
+    clock[0] += 3600_000
+    n.tick()
+    assert sent == ["a@x.my, b@x.my", "b@x.my"]
+    assert _队(db)[0]["sent_ms"] is not None
+
+
+def test_外审1_1_第2轮_8_积压过期作废_不算渠道恢复(台):
+    desk, n, f, clock, db = 台
+    _tg(n)
+    desk.raise_alert(kind="fallen", robot="A", title="摔倒")
+    f.fail = "连不上:no route"
+    n.tick()
+    clock[0] += 11 * 60_000
+    n.tick()
+    assert [a for a in desk.book.open() if a.kind == "notify_failed"]
+    clock[0] += 3600_000                        # 一小时没发出去:作废了,渠道还是坏的
+    n.tick()
+    assert _队(db)[0]["dropped"]
+    assert [a for a in desk.book.open() if a.kind == "notify_failed"], "过期作废不等于恢复"
+    f.fail = None
+    n.send_test(n.channels()[0]["id"])           # 真发成了一次
+    n.tick()
+    assert not [a for a in desk.book.open() if a.kind == "notify_failed"]
+
+
+def test_外审1_1_第2轮_9_别的异常不带令牌_密钥不收控制字符(台, monkeypatch):
+    desk, n, f, clock, db = 台
+    tok = "123456:ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdef"
+
+    def post(url, body, headers=None):
+        raise ValueError(f"URL can't contain control characters. {url!r}")
+    monkeypatch.setattr(notify, "_post_json", post)
+    n.sender = notify.Sender()
+    ch = _tg(n, secret=tok)
+    r = n.send_test(ch["id"])
+    assert not r["ok"] and tok not in r["error"] and "ValueError" in r["error"]
+    with pytest.raises(NotifyError, match="控制字符"):
+        _tg(n, name="坏", secret=tok + "\n备注")
+    with pytest.raises(SendError) as e:
+        notify.Sender().send({"kind": "nope", "targets": [], "config": {}, "secret": tok},
+                             {}, {})
+    assert e.value.__cause__ is None and e.value.__suppress_context__

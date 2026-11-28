@@ -178,6 +178,9 @@ class DeterrenceDesk:
         self.alerts: Any = None
         self.sessions: dict[str, Session] = {}
         self._locks: dict[str, asyncio.Lock] = {}
+        #: 外审 1.1 第 2 轮 #2:报警核实下了「没人」的结论,这一趟的驱离下一拍收掉
+        #: (机器人 → 任务、为什么)
+        self._stand_down: dict[str, tuple[str, str]] = {}
         for r in db.query("SELECT * FROM deter_sessions"):
             s = Session(robot_id=r["robot_id"], incident_id=r["incident_id"], zone=r["zone"],
                         task_id=r["task_id"], level=r["level"], started_ms=r["started_ms"],
@@ -593,10 +596,19 @@ class DeterrenceDesk:
             except Exception:
                 log.exception("%s 的驱离这一拍没办成", rid)
 
+    def stand_down(self, robot_id: str, task_id: str, why: str) -> None:
+        """报警核实说「到了没看见人」:这一趟到场开的驱离下一拍收掉、机器人回待命点。
+        不是这一趟开的(别的报警、就地驱离)不动。"""
+        if robot_id and task_id:
+            self._stand_down[robot_id] = (task_id, why)
+
     async def _tick_one(self, rid: str) -> None:
         s = self.sessions[rid]
         if s.ending is not None:
             return await self._end(rid, s.ending[0], go_back=s.ending[1])
+        calm = self._stand_down.pop(rid, None)
+        if calm is not None and calm[0] == s.task_id and not s.seen_person:
+            return await self._end(rid, calm[1], go_back=True)
         now = self._now()
         if now - max(s.started_ms, s.human_ms) >= CAP_S * 1000:
             return await self._end(rid, f"到 {CAP_S // 60} 分钟自动收", go_back=True)

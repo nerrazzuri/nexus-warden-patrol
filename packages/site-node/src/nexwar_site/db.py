@@ -548,6 +548,8 @@ CREATE TABLE IF NOT EXISTS ob_entries (
     corrects   INTEGER
 );
 CREATE INDEX IF NOT EXISTS ob_at ON ob_entries(at_ms);
+-- 外审 1.1 第 2 轮 #12:一条只能有一个更正(两个人同时更正,后到的那个被拒)
+CREATE UNIQUE INDEX IF NOT EXISTS ob_corrects ON ob_entries(corrects) WHERE corrects IS NOT NULL;
 -- 1.1-4 远程喊话:按住说话(out)、听回话(in)的录音;文件在 <home>/talk/,留一天。
 CREATE TABLE IF NOT EXISTS talk_clips (
     id         TEXT PRIMARY KEY,

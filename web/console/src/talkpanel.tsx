@@ -17,6 +17,9 @@ export function canRecord(): boolean {
     && !!navigator.mediaDevices?.getUserMedia && (window.isSecureContext ?? true);
 }
 
+/** 站点等回话的时限(site talk.py REPLY_TIMEOUT_MS)。 */
+const REPLY_TIMEOUT_S = 90;
+
 function stateText(r: TalkRow): string {
   if (r.state === "refused") return t("tkRefused", { why: r.error || "" });
   if (r.direction === "in") return r.state === "recorded" ? t("tkReply") : r.state === "failed" ? t("tkReplyFailed", { why: r.error || "" }) : t("tkWaiting");
@@ -45,7 +48,8 @@ export function TalkPanel({ robot, name, listen, disabled, say }: {
     return () => { live.current = false; stopTracks(); };
   }, [robot]);
   // 等回话的时候每 2 秒看一眼(最多等录音时长 + 20 秒)
-  const waiting = rows?.some((r) => r.direction === "in" && r.state === "waiting" && Date.now() - r.created_ms < (LISTEN_S + 20) * 1000);
+  // 外审 1.1 第 2 轮 #11:一直问到站点给结论(站点 90 秒没等到标「没录到」),多 10 秒余量
+  const waiting = rows?.some((r) => r.direction === "in" && r.state === "waiting" && Date.now() - r.created_ms < (REPLY_TIMEOUT_S + 10) * 1000);
   useEffect(() => {
     if (!waiting) return;
     const h = window.setInterval(() => void load(), 2000);

@@ -160,18 +160,31 @@ class Sender:
     """真去发的那一层(测试换成假的)。``ch``:渠道的配置 + 打开了的密钥。"""
 
     def send(self, ch: dict[str, Any], msg: dict[str, str], alert: dict[str, Any]) -> None:
-        getattr(self, f"_{ch['kind']}")(ch, msg, alert)
+        try:
+            getattr(self, f"_{ch['kind']}")(ch, msg, alert)
+        except SendError:
+            raise
+        except Exception as exc:  # noqa: BLE001 - 外审 1.1 第 2 轮 #9:别的异常里可能带着令牌地址
+            raise SendError(f"发不出去({type(exc).__name__})") from None
 
     @staticmethod
     def _each(targets: list[str], one: Callable[[str], Any]) -> None:
-        """一个一个发;中途失败带上已经发到的那几个。"""
+        """每个都试一遍(外审 1.1 第 2 轮 #7:前面坏一个不挡后面的);有没发到的带上发到了的。"""
         sent: list[str] = []
+        errs: list[str] = []
         for t in targets:
             try:
                 one(t)
             except SendError as exc:
-                raise SendError(str(exc), sent) from exc
+                errs.append(str(exc))
+                continue
+            except Exception as exc:  # noqa: BLE001 - 原样的异常里可能带着令牌地址
+                errs.append(f"发不出去({type(exc).__name__})")
+                continue
             sent.append(t)
+        if errs:
+            more = f"(共 {len(errs)} 个没发到)" if len(errs) > 1 else ""
+            raise SendError(errs[0] + more, sent)
 
     def _telegram(self, ch: dict[str, Any], msg: dict[str, str], alert: dict[str, Any]) -> None:
         url = TELEGRAM_URL.format(token=ch["secret"])
@@ -211,9 +224,15 @@ class Sender:
                     s.starttls(context=ssl.create_default_context())
                 if cfg.get("user"):
                     s.login(cfg["user"], ch["secret"])
-                s.send_message(m)
+                refused = s.send_message(m) or {}
+        except smtplib.SMTPRecipientsRefused as exc:
+            raise SendError(f"邮件收件人都被拒:{len(exc.recipients)} 个") from None
         except (smtplib.SMTPException, OSError, TimeoutError) as exc:
-            raise SendError(f"邮件发不出去:{exc}") from exc
+            raise SendError(f"邮件发不出去:{exc}") from None
+        if refused:                                  # 外审 1.1 第 2 轮 #6:拒了一部分的,只重发拒了的
+            bad = {str(k).lower() for k in refused}
+            raise SendError(f"邮件有 {len(refused)} 个收件人被拒",
+                            [t for t in ch["targets"] if t.lower() not in bad])
 
     def _webhook(self, ch: dict[str, Any], msg: dict[str, str], alert: dict[str, Any]) -> None:
         body = {"site": alert.get("site", ""), "alert_key": alert.get("key", ""),
@@ -373,6 +392,8 @@ class NotifyDesk:
         if secret:
             if len(secret) > 1000:
                 raise NotifyError("密钥太长")
+            if any(ord(ch_) < 32 or ord(ch_) == 127 for ch_ in secret.strip()):
+                raise NotifyError("密钥里有换行或控制字符,只粘贴令牌 / 口令本身")
             sealed = self._box().seal(secret.strip())
         if kind in ("telegram", "whatsapp") and not sealed:
             raise NotifyError("要填" + ("Telegram 机器人令牌(bot token)" if kind == "telegram"
@@ -502,8 +523,7 @@ class NotifyDesk:
             msg = message(site=self.site_name, level=al["level"], kind=al["kind"],
                           title=al["title"], robot=self._robot_name(al["robot"]),
                           ms=al["first_ms"], tz=self._tzinfo(), tier=row["tier"], lang=ch["lang"])
-            todo = dict(ch, targets=[t for t in ch["targets"] if t not in done]) \
-                if ch["kind"] != "email" else ch
+            todo = dict(ch, targets=[t for t in ch["targets"] if t not in done])
             try:
                 self.sender.send(todo, msg, {"site": self.site_name, "key": al["key"],
                                            "level": al["level"], "kind": al["kind"],
@@ -544,5 +564,9 @@ class NotifyDesk:
                                     title="告警外发发不出去:WhatsApp / Telegram / 邮件收不到",
                                     detail=detail[:250] + ";看站点能不能上外网、渠道的令牌是否正确")
         elif not stuck and oldest is None and open_:
-            self.alerts.resolve_all(SITE, "notify_failed", who="site:notify_ok")
+            # 外审 1.1 第 2 轮 #8:积压的过期作废不算恢复;开着的渠道最近一次都发成了才算
+            bad = self.db.query("SELECT 1 FROM notify_channels WHERE enabled=1 AND "
+                                "last_error!='' LIMIT 1")
+            if not bad:
+                self.alerts.resolve_all(SITE, "notify_failed", who="site:notify_ok")
 

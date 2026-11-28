@@ -91,18 +91,22 @@ class OccurrenceBook:
                 or len(alert) > 256:
             raise ObError("robot、alert 写错了")
         corrects = body.get("corrects")
-        if corrects is not None:
-            old = self.db.query("SELECT robot, alert_key FROM ob_entries WHERE id=?",
-                                (corrects,)) \
-                if not isinstance(corrects, bool) and isinstance(corrects, int) else []
-            if not old:
-                raise ObError("要更正的那条没有")
-            if self.db.query("SELECT 1 FROM ob_entries WHERE corrects=?", (corrects,)):
-                raise ObError("这条已经更正过了:要改就更正最新的那条")
-            # 外审 1.1 #13:更正跟着原来那条走(哪台机器人、哪条报警),事件报告里才对得上
-            robot = robot or old[0]["robot"]
-            alert = alert or old[0]["alert_key"]
+        if corrects is not None and (isinstance(corrects, bool) or not isinstance(corrects, int)):
+            raise ObError("要更正的那条没有")
         with self.db.tx() as c:
+            # 外审 1.1 第 2 轮 #12:查和写在同一个事务里(两个人同时更正同一条,后到的被拒)
+            if corrects is not None:
+                old = c.execute("SELECT robot, alert_key FROM ob_entries WHERE id=?",
+                                (corrects,)).fetchone()
+                if old is None:
+                    raise ObError("要更正的那条没有")
+                if c.execute("SELECT 1 FROM ob_entries WHERE corrects=?",
+                             (corrects,)).fetchone():
+                    raise ObError("这条已经更正过了:要改就更正最新的那条")
+                # 外审 1.1 #13、第 2 轮 #13:更正跟着原来那条走(哪台机器人、哪条报警),不许改挂
+                if (robot and robot != old["robot"]) or (alert and alert != old["alert_key"]):
+                    raise ObError("更正跟着原来那条的机器人和报警,不能改挂到别的上")
+                robot, alert = old["robot"], old["alert_key"]
             cur = c.execute(
                 "INSERT INTO ob_entries(at_ms, written_ms, author, category, text, robot,"
                 " alert_key, corrects) VALUES (?,?,?,?,?,?,?,?)",
