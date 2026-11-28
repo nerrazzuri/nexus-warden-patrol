@@ -209,15 +209,14 @@ MAX_DNS_HUNG = 8
 _DNS_SLOTS = threading.BoundedSemaphore(MAX_DNS_HUNG)
 
 
-def _resolve(host: str, port: int, deadline: float | None) -> str:
+def _resolve(host: str, port: int, deadline: float) -> list[Any]:
     """外审 1.1 第 13 轮 #2:查域名也算进这一拍的截止时间。``getaddrinfo`` 掐不断、那时还没有套接字给
-    看门狗掐 —— 放到单独的线程里查,最多等到截止;到点没查到抛 ``socket.timeout``(算没发成)。
-    卡着的线程最多 :data:`MAX_DNS_HUNG` 个,满了的直接算超时。没截止时间、本来就是 IP 的照旧。"""
-    if deadline is None:
-        return host
+    看门狗掐 —— 放到单独的线程里查,最多等到截止;到点没查到抛 ``TimeoutError``(算没发成)。
+    卡着的线程最多 :data:`MAX_DNS_HUNG` 个,满了的直接算超时。
+    第 14 轮 #1:回**全部**地址(``getaddrinfo`` 的结果),建连时一个个试。"""
     try:
         socket.inet_pton(socket.AF_INET6 if ":" in host else socket.AF_INET, host)
-        return host
+        return socket.getaddrinfo(host, port, type=socket.SOCK_STREAM)  # IP:不查 DNS
     except OSError:
         pass
     if deadline - time.monotonic() <= 0 or not _DNS_SLOTS.acquire(blocking=False):
@@ -240,7 +239,45 @@ def _resolve(host: str, port: int, deadline: float | None) -> str:
         raise box["e"]
     if not box["r"]:
         raise socket.gaierror(f"查不到 {host}")
-    return str(box["r"][0][4][0])
+    return list(box["r"])
+
+
+def _connect(host: str, port: int, deadline: float | None, timeout: Any,
+             source_address: Any = None) -> socket.socket:
+    """外审 1.1 第 14 轮 #1、#3:照 ``socket.create_connection`` 的做法建连 —— 查到的地址一个个试
+    (第一个连不上接着试下一个),但每试一个都按**那一刻**剩下的时间限(不超过 ``timeout``);
+    时间用完就停。没截止时间的照旧走标准库。"""
+    if deadline is None:
+        return socket.create_connection((host, port), timeout, source_address)
+    last: BaseException | None = None
+    for af, kind, proto, _canon, sa in _resolve(host, port, deadline):
+        left = deadline - time.monotonic()
+        if left <= 0:
+            break
+        sock = socket.socket(af, kind, proto)
+        try:
+            lim = left if not isinstance(timeout, (int, float)) else min(float(timeout), left)
+            sock.settimeout(lim)
+            if source_address:
+                sock.bind(source_address)
+            sock.connect(sa)
+            return sock
+        except OSError as exc:
+            last = exc
+            sock.close()
+    if last is not None and deadline - time.monotonic() > 0:
+        raise last
+    raise TimeoutError(f"连 {host}:{port} 超时(这一拍时间用完)") from last
+
+
+def _local_name() -> str:
+    """外审 1.1 第 14 轮 #2:SMTP 的 EHLO 名字。不给的话标准库要 ``getfqdn()`` 查本机名(DNS,掐不断、
+    不受截止时间管)。``gethostname()`` 只读本机配置、不查 DNS;拿不到就用 ``localhost``。"""
+    try:
+        name = socket.gethostname().strip()
+    except OSError:
+        name = ""
+    return name if re.fullmatch(r"[A-Za-z0-9.-]{1,253}", name or "") else "localhost"
 
 
 def _dog_conn(base: type, dog: _Watchdog) -> Callable[..., Any]:
@@ -249,10 +286,8 @@ def _dog_conn(base: type, dog: _Watchdog) -> Callable[..., Any]:
     class Conn(base):  # type: ignore[valid-type,misc]
         def connect(self) -> None:
             dog.watch(self)
-            orig = self._create_connection
-
-            def create(addr: Any, *a: Any, **kw: Any) -> Any:
-                return orig((_resolve(addr[0], addr[1], dog.deadline), addr[1]), *a, **kw)
+            def create(addr: Any, timeout: Any = None, source_address: Any = None) -> Any:
+                return _connect(addr[0], addr[1], dog.deadline, timeout, source_address)
             self._create_connection = create
             super().connect()
             # 第 8 轮 #1:urllib 拿到回头以后把连接上的 sock 清掉,正文从响应文件接着读 ——
@@ -343,9 +378,15 @@ class _DeadlineSMTP:
             sock.settimeout(min(float(TIMEOUT_S), left))
 
     def _get_socket(self, host: str, port: int, timeout: float) -> Any:
-        # 外审 1.1 第 13 轮 #2:查域名按截止时间;TLS 的证书、SNI 用的是 self._host(域名),不受影响
-        return super()._get_socket(_resolve(host, port, self._deadline), port,  # type: ignore[misc]
-                                   timeout)
+        # 外审 1.1 第 13、14 轮:查域名、建连都按截止时间(全部地址一个个试);
+        # TLS 的证书、SNI 用 self._host(域名)
+        if self._deadline is None:
+            return super()._get_socket(host, port, timeout)  # type: ignore[misc]
+        sock = _connect(host, port, self._deadline, timeout,
+                        getattr(self, "source_address", None))
+        if isinstance(self, smtplib.SMTP_SSL):
+            sock = self.context.wrap_socket(sock, server_hostname=self._host)
+        return sock
 
     def send(self, s: Any) -> None:
         self._left()
@@ -370,6 +411,7 @@ class _DeadlineSMTP:
 
 class _SMTP(_DeadlineSMTP, smtplib.SMTP):
     def __init__(self, *a: Any, deadline: float | None = None, **kw: Any) -> None:
+        kw.setdefault("local_hostname", _local_name())     # 第 14 轮 #2:不查 DNS
         self._arm(deadline)
         try:
             super().__init__(*a, **kw)
@@ -380,6 +422,7 @@ class _SMTP(_DeadlineSMTP, smtplib.SMTP):
 
 class _SMTP_SSL(_DeadlineSMTP, smtplib.SMTP_SSL):
     def __init__(self, *a: Any, deadline: float | None = None, **kw: Any) -> None:
+        kw.setdefault("local_hostname", _local_name())     # 第 14 轮 #2:不查 DNS
         self._arm(deadline)
         try:
             super().__init__(*a, **kw)

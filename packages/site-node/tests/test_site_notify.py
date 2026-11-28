@@ -633,7 +633,74 @@ def test_外审1_1_第13轮_2_查域名卡着_HTTP和邮件都到点就断_不�
         with pytest.raises(OSError, match="查域名"):
             notify._SMTP("slow.invalid", 9, timeout=5, deadline=_t.monotonic() + 0.3)
         assert _t.monotonic() - t0 < 1.0, "邮件:查域名也按截止时间"
-        assert notify._resolve("127.0.0.1", 9, _t.monotonic() + 1) == "127.0.0.1", "IP 不查"
-        assert notify._resolve("slow.invalid", 9, None) == "slow.invalid", "没截止时间照旧"
+        got = notify._resolve("127.0.0.1", 9, _t.monotonic() + 1)
+        assert got[0][4][0] == "127.0.0.1", "IP 不查"
     finally:
         gate.set()
+
+
+def test_外审1_1_第14轮_1_查到几个地址_第一个连不上接着试下一个(monkeypatch):
+    import socket as _s
+    import time as _t
+
+    def reply(conn):
+        conn.recv(4096)
+        conn.sendall(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok")
+    srv, port = _慢服务器(reply)                            # 只听 127.0.0.1
+    real = _s.getaddrinfo
+
+    def 两个地址(host, p, *a, **kw):
+        if host == "multi.invalid":                        # 第一个地址 127.0.0.2 上没人听:被拒
+            return [(_s.AF_INET, _s.SOCK_STREAM, 6, "", ("127.0.0.2", p)),
+                    (_s.AF_INET, _s.SOCK_STREAM, 6, "", ("127.0.0.1", p))]
+        return real(host, p, *a, **kw)
+    monkeypatch.setattr(_s, "getaddrinfo", 两个地址)
+    assert notify._post_json(f"http://multi.invalid:{port}/hook", {"a": 1}, timeout=5,
+                             deadline=_t.monotonic() + 3) == b"ok"
+    srv.close()
+
+
+def test_外审1_1_第14轮_3_查完域名_建连只用剩下的时间(monkeypatch):
+    import socket as _s
+    import time as _t
+    used = []
+    real_sock = _s.socket
+
+    class 连不上(real_sock):
+        def connect(self, sa):
+            used.append(self.gettimeout())
+            _t.sleep(self.gettimeout())
+            raise TimeoutError("timed out")
+
+    def 慢查(host, p, *a, **kw):
+        _t.sleep(0.25)
+        return [(_s.AF_INET, _s.SOCK_STREAM, 6, "", ("192.0.2.1", p))]
+    monkeypatch.setattr(_s, "getaddrinfo", 慢查)
+    monkeypatch.setattr(_s, "socket", 连不上)
+    t0 = _t.monotonic()
+    with pytest.raises(SendError):
+        notify._post_json("http://slow2.invalid:9/hook", {"a": 1}, timeout=5,
+                          deadline=_t.monotonic() + 0.4)
+    assert _t.monotonic() - t0 < 0.8 and used and used[0] <= 0.2, used
+    used.clear()
+    t0 = _t.monotonic()
+    with pytest.raises(OSError):
+        notify._SMTP("slow2.invalid", 9, timeout=5, deadline=_t.monotonic() + 0.4)
+    assert _t.monotonic() - t0 < 0.8 and used and used[0] <= 0.2, used
+
+
+def test_外审1_1_第14轮_2_邮件不查本机名(monkeypatch):
+    import socket as _s
+
+    def reply(conn):
+        conn.sendall(b"220 hi\r\n")
+        conn.recv(4096)
+    srv, port = _慢服务器(reply)
+
+    def 不许查(*a, **kw):
+        raise AssertionError("getfqdn 会查 DNS,掐不断")
+    monkeypatch.setattr(_s, "getfqdn", 不许查)
+    s = notify._SMTP("127.0.0.1", port, timeout=5, deadline=__import__("time").monotonic() + 3)
+    assert s.local_hostname and s.local_hostname == notify._local_name()
+    s.close()
+    srv.close()
