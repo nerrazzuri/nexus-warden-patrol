@@ -2126,6 +2126,7 @@ input[type="checkbox"], input[type="radio"] { width: 18px; height: 18px; }
 .rc-kv .btn + .btn { grid-column: 2; }
 .rc-held { padding: 8px 10px; border-left: 3px solid var(--c-error); background: var(--c-errorSoft); display: flex; flex-direction: column; gap: var(--sp-2); }
 .rc-held p, .rc-ask p { margin: 0; }
+.rc-wait { margin: 0; font-weight: 600; }
 .rc-ask { margin: 0; padding: 10px 12px; border: 1px solid var(--c-primary); display: flex; flex-direction: column; gap: var(--sp-2); }
 /* 用户 11-27:中止并回原点 —— 回到原点以后怎么办 */
 .rc-after { border: 0; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--sp-1); }

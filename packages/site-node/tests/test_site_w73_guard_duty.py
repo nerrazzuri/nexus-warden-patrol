@@ -378,6 +378,8 @@ async def test_新人1128第三轮_跑圈时人叫回原点_中止跟这一圈�
     assert len(_patrols(t)) == n, "不马上派下一圈"
     assert t.duty.status()["runs"][0]["state"] == "paused"
     assert any("人叫它回去了" in (r.get("detail") or "") for r in _log(t, "aborted"))
+    assert (t.duty.wait_view("A") or {}).get("kind") == "paused"
+    assert t.duty.wait_view("B") is None
     t.box["run"] = None
     t.clock.advance(601)
     await _跑(t, 5)
@@ -398,8 +400,12 @@ async def test_新人1128第三轮_选等10分钟_这一圈刚好跑完_回原�
     t.box["run"] = "standby-home-x"                      # 这一圈报跑完,接着在回原点
     await _跑(t, 3)
     assert len(_patrols(t)) == n, "回原点的路上不派下一圈"
+    assert t.duty.wait_view("A") is None, "还在回原点的路上:不知道几点到,不写倒数"
     t.box["run"] = ""                                    # 到原点了
     await _跑(t, 2)
+    w = t.duty.wait_view("A")                            # 新人 11-28 第四轮:卡片写还要等多久
+    assert w is not None and w["kind"] == "after_home"
+    assert 9 * 60_000 < w["until_ms"] - t.clock() <= 10 * 60_000
     t.clock.advance(9 * 60)
     await _跑(t, 2)
     assert len(_patrols(t)) == n, "没等够 10 分钟"
@@ -407,6 +413,20 @@ async def test_新人1128第三轮_选等10分钟_这一圈刚好跑完_回原�
     t.box["run"] = None
     await _跑(t, 5)
     assert len(_patrols(t)) == n + 1, "等够了接着巡"
+    assert t.duty.wait_view("A") is None, "在跑了:不再写等"
+
+
+async def test_新人1128第四轮_两圈之间站值守位_卡片写下一圈几点出发(站):
+    t = 站
+    _方案(t, gap_min=10)
+    assert t.duty.wait_view("A") is None
+    await _跑(t, 20)
+    for _ in range(60):
+        if t.duty.watching("A"):
+            break
+        await _跑(t, .5)
+    w = t.duty.wait_view("A")
+    assert w is not None and w["kind"] == "gap" and w["until_ms"] > t.clock()
 
 
 async def test_新人1128第三轮_没人叫_跑完照常接着下一圈(站):

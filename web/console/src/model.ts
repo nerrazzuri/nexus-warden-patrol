@@ -57,6 +57,15 @@ export interface Alert {
   };
 }
 
+export interface GuardWait { kind: "after_home" | "paused" | "gap"; until_ms: number }
+
+/** 新人 11-28 第四轮:「约 X 分钟后接着巡」那一行要的 i18n 键和分钟数(至少 1)。 */
+export function guardWaitOf(w: GuardWait | null | undefined, now: number): { key: "gwAfterHome" | "gwPaused" | "gwGap"; m: number } | null {
+  if (!w || !(w.until_ms > now)) return null;
+  const key = w.kind === "after_home" ? "gwAfterHome" : w.kind === "paused" ? "gwPaused" : "gwGap";
+  return { key, m: Math.max(1, Math.ceil((w.until_ms - now) / 60_000)) };
+}
+
 export interface Robot {
   robot_id: string;
   /** 管理员起的名字(W44 第二期);没起是空串、老站点没有。 */
@@ -67,6 +76,8 @@ export interface Robot {
   held: unknown;
   /** 真机 11-25:遥控松手后「N 秒后回待命点」(站点倒数,能取消);没在倒数 / 老站点没有。 */
   standby_countdown?: { after: string; due_ms: number } | null;
+  /** 新人 11-28 第四轮:值守在等(回原点后等 N 分钟 / 歇着 / 两圈之间)→ 到几点;没在等 / 老站点没有。 */
+  guard_wait?: GuardWait | null;
   /** 真机 11-25:谁点的静音(停喇叭警笛、见人只开灯,到下次布防);没静音 / 老站点没有。 */
   muted?: string | null;
   /** 易用性第 6 轮 W6-01:当前那版图上有没有原点(没有就出不了发;没报地图 / 老站点 = 不知道)。 */

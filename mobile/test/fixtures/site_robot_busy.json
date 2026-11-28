@@ -145,6 +145,7 @@
   ],
   "expires_at": 1796744032359,
   "fresh": true,
+  "guard_wait": null,
   "held": null,
   "home_bad": false,
   "home_set": null,

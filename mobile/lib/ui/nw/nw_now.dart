@@ -29,7 +29,7 @@ import '../robot_events.dart';
 import '../site_alert_scene.dart';
 import '../site_deterrence.dart' show SiteDeterrencePage, deterSessionText;
 import '../site_duty_page.dart' show DutyTargets, dutyOrder, robotLabel, kSiteDownGrace;
-import '../site_robot.dart' show SiteRobotPage, robotStatusLine;
+import '../site_robot.dart' show SiteRobotPage, guardWaitText, robotStatusLine;
 import '../site_standby.dart' show SiteStandbyPage;
 import '../site_video.dart';
 import 'nw_button.dart';
@@ -823,6 +823,7 @@ class _NowPageState extends State<NowPage> with EstopMissReveal {
     }
     if (r['held'] is Map) return tr('Stopped by ${personName((r['held'] as Map)['by'])}', '${personName((r['held'] as Map)['by'])} 叫停的');
     if (r['manual_only'] is Map) return tr('Manual only', '仅限手动');
+    if (guardWaitText(r, short: true) case final w?) return w;          // 新人 11-28 第四轮：在等，写还要多久
     final line = robotStatusLine(r);
     // 「在线 · 」是格子上牌子已经说了的
     return line.replaceFirst('${tr('Online', '在线')} · ', '');

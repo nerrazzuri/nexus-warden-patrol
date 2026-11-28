@@ -104,7 +104,9 @@ def overview(dispatcher: Any, db: Any, *, now_ms: int, tz: tzinfo) -> list[dict[
                     **_return_targets(db, rid, caps, getattr(dispatcher, "maps", None),
                                       getattr(dispatcher, "zones", None)),
                     # 真机 11-25:遥控放租后倒数回待命点(没在倒数是 None)
-                    "standby_countdown": getattr(dispatcher, "standby_countdown", {}).get(rid)})
+                    "standby_countdown": getattr(dispatcher, "standby_countdown", {}).get(rid),
+                    # 新人 11-28 第四轮:值守在等 → 到几点(没在等是 None)
+                    "guard_wait": _guard_wait(dispatcher, rid)})
     return out
 
 
@@ -146,6 +148,11 @@ def keep_out_polys(zones: Any, map_id: str,
     except Exception:                  # 读不出禁行区:只按墙查
         log.warning("%s:%s 的禁行区读不出,原点只按墙查", map_id, version, exc_info=True)
         return ()
+
+
+def _guard_wait(dispatcher: Any, rid: str) -> dict[str, Any] | None:
+    f = getattr(dispatcher, "guard_wait", None)
+    return f(rid) if callable(f) else None
 
 
 def home_bad(db: Any, maps: Any, zones: Any, rid: str, caps: Any) -> bool:

@@ -12,7 +12,7 @@ import { hm, nameOf, mapName } from "./data";
 import { refusalText, t, type Key } from "./i18n";
 import { locText, type UnitInfo } from "./live";
 import { lapText, LoopsSelect } from "./loops";
-import { canDisarm, canDispatch, canFindPose, canPatrol, canTeleop, forGuard, isOwnerLike, robotCams, robotMap, type Alert } from "./model";
+import { canDisarm, canDispatch, canFindPose, canPatrol, canTeleop, forGuard, guardWaitOf, isOwnerLike, robotCams, robotMap, type Alert } from "./model";
 import { MapCanvas } from "./mapcanvas";
 import { type PreviewMeta } from "./mapview";
 import { recentActivity } from "./shifttl";
@@ -118,7 +118,10 @@ export function RobotControl(props: {
   const loc = locText(u);
   const seen = u.robot.status?.last_seen;
   const lastContact = seen ? Math.max(0, Math.round((props.now - seen * 1000) / 1000)) : null;
-  const sub = [u.task, u.battery != null ? `${Math.round(u.battery)}%` : "", loc ? t(loc) : "",
+  // 新人 11-28 第四轮:值守在等 —— 写「约 X 分钟后接着巡」(以前只写空闲,分不清在等还是卡住)
+  const gw = off ? null : guardWaitOf(r.guard_wait, props.now);
+  const gwText = gw ? t(gw.key, { m: gw.m }) : "";
+  const sub = [u.task, gwText, u.battery != null ? `${Math.round(u.battery)}%` : "", loc ? t(loc) : "",
     lastContact != null && !off ? t("rcLastContact", { s: lastContact }) : ""].filter(Boolean).join(" · ");
   const task = r.task ?? null;
   const offWhy = t(r.ever_seen === false ? "rdNeverNoCtl" : "rdOfflineNoCtl");
@@ -174,6 +177,7 @@ export function RobotControl(props: {
                   onClick={() => void send(post("resume"), t("rdSent", { id: name, what: t("rdResume") }))}>{t("rdResume")}</button>}
               </div>
             )}
+            {gwText && <p class="rc-wait" data-guard-wait={r.guard_wait?.kind}>{gwText}</p>}
             {/* 真机 11-25:遥控松手后站点倒数再派回待命点 —— 写明它要自己走、还剩几秒,能取消 */}
             {r.standby_countdown && (
               <div class="rc-held warn" data-standby-countdown={id}>
@@ -334,10 +338,11 @@ export function cardFromUnit(u: UnitInfo): RobotCard {
 }
 
 /** 跟着实时数据走、不等概况的那几样。 */
-function liveOf(u: UnitInfo): Pick<RobotCard, "online" | "held" | "task" | "standby_countdown" | "muted"> {
+function liveOf(u: UnitInfo): Pick<RobotCard, "online" | "held" | "task" | "standby_countdown" | "muted" | "guard_wait"> {
   const st = u.robot.status as { task?: { task_id?: string } | null } | null | undefined;
   return { online: u.state !== "offline", held: (u.robot.held as RobotCard["held"]) ?? null, task: st?.task?.task_id ?? null,
-    standby_countdown: u.robot.standby_countdown ?? null, muted: u.robot.muted ?? null };
+    standby_countdown: u.robot.standby_countdown ?? null, muted: u.robot.muted ?? null,
+    guard_wait: u.robot.guard_wait ?? null };
 }
 
 interface Plan { estimate_s?: number | null; start_ms?: number; queued?: boolean; because?: string; utc_offset_min?: number; forever?: boolean; return_pct?: number }

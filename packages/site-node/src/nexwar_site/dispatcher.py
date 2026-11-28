@@ -419,6 +419,8 @@ class Dispatcher:
                "manual_only": self.registry.manual_only(robot_id),
                # 真机 11-25:遥控放租后倒数回待命点(standby.py 写;没在倒数是 None)
                "standby_countdown": getattr(self, "standby_countdown", {}).get(robot_id),
+               # 新人 11-28 第四轮:值守在等(回原点后等 N 分钟、歇着、两圈之间)→ 到几点
+               "guard_wait": _guard_wait(self, robot_id),
                # 真机 11-25:静音了没有(谁点的;没静音是 None)
                "muted": getattr(self, "voice_muted", {}).get(robot_id),
                # 易用性第 6 轮 W6-01:当前这版图上有没有原点(没有就出不了发;没报地图 = None 不知道)
@@ -1301,6 +1303,11 @@ class Dispatcher:
                 cb(ack)
             except Exception:
                 log.exception("回执回调炸了(%s),其余照常", ack.command_id)
+
+
+def _guard_wait(dispatcher: Any, robot_id: str) -> dict[str, Any] | None:
+    f = getattr(dispatcher, "guard_wait", None)
+    return f(robot_id) if callable(f) else None
 
 
 def _lap_of(db: Any, robot_id: str, c: Any) -> dict[str, int] | None:

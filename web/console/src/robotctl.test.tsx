@@ -283,6 +283,21 @@ describe("单台机器人控制 · 从老机器人页搬过来的(第六期)", (
     expect(g.querySelector("[data-setup-why] a")).toBeNull();
   });
 
+  it("新人 11-28 第四轮:值守在等 —— 写约几分钟后接着巡(页头、任务栏都有),不只写空闲", async () => {
+    const u = idle();
+    Object.assign(u.robot, { guard_wait: { kind: "after_home", until_ms: NOW + 4 * 60_000 + 10_000 } });
+    const c = show("guard", u);
+    await waitFor(() => expect(c.querySelector('[data-guard-wait="after_home"]')).not.toBeNull());
+    expect(c.querySelector("[data-guard-wait]")!.textContent).toBe("Waiting at the origin: back on patrol in about 5 min");
+    expect(c.querySelector(".rc-sub")!.textContent).toContain("about 5 min");
+    cleanup();
+    const v = idle();
+    Object.assign(v.robot, { guard_wait: { kind: "gap", until_ms: NOW - 1 } });   // 已经过点:不写
+    const d = show("guard", v);
+    await waitFor(() => expect(d.querySelector(".rc-task")).not.toBeNull());
+    expect(d.querySelector("[data-guard-wait]")).toBeNull();
+  });
+
   it("新人 11-28 第二轮 P2:原点标坏了、待命点走不了 —— 保安(读不到概况)也看到为什么回不去", async () => {
     card = null;
     const u = idle();
