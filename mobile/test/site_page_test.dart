@@ -1695,6 +1695,24 @@ void main() {
     expect(returnCountdownS(v, now: DateTime.fromMillisecondsSinceEpoch(due - 9100)), 10);
   });
 
+  testWidgets('新人 11-28 第四轮：值守在等 —— 机器人页写约几分钟后接着巡；过点了、没在等不写', (t) async {
+    final v = Map<String, dynamic>.of(siteFixture('site_robot'))
+      ..['guard_wait'] = <String, dynamic>{
+        'kind': 'after_home',
+        'until_ms': DateTime.now().millisecondsSinceEpoch + 4 * 60000 + 30000,
+      };
+    await openRobot(t, FakeApi('guard', robotView: v));
+    expect(find.byKey(const Key('robot-guard-wait')), findsOneWidget);
+    expect(find.textContaining('约 5 分钟后接着巡逻'), findsOneWidget);
+    final now = DateTime.fromMillisecondsSinceEpoch(1000000);
+    Map<String, dynamic> w(String kind, int until) => {'guard_wait': {'kind': kind, 'until_ms': until}};
+    expect(guardWaitText(w('gap', 1000000 + 60000), now: now, short: true), contains('1'));
+    expect(guardWaitText(w('gap', 1000000 + 60000), now: now, short: true), contains('下一圈'));
+    expect(guardWaitText(w('paused', 1000000 + 61000), now: now), contains('约 2 分钟'));
+    expect(guardWaitText(w('paused', 1000000 - 1), now: now), isNull);
+    expect(guardWaitText(<String, dynamic>{}, now: now), isNull);
+  });
+
   testWidgets('真机 11-25：有喇叭的机器人有「静音」，静音着变「取消静音」', (t) async {
     final v = Map<String, dynamic>.of(siteFixture('site_robot'));
     final caps = Map<String, dynamic>.of((v['capabilities'] as Map).cast<String, dynamic>());

@@ -12,7 +12,7 @@ import { ConfirmPassword } from "./confirmpw";
 import { hm, robotNames, siteDown, mapName } from "./data";
 import { Modal } from "./dialogs";
 import { alertTitle, lang, t, type Key } from "./i18n";
-import { autoResolved, type Alert } from "./model";
+import { autoResolved, type Alert, type GuardWait } from "./model";
 import { locText, type UnitInfo } from "./live";
 import { RobotControl } from "./robotctl";
 import { RobotOps } from "./remoteops";
@@ -48,6 +48,8 @@ export interface RobotCard {
   lap?: { n: number; of: number } | null;
   /** 真机 11-25:遥控松手后倒数回待命点。 */
   standby_countdown?: { after: string; due_ms: number } | null;
+  /** 新人 11-28 第四轮:值守在等 → 到几点。 */
+  guard_wait?: GuardWait | null;
   /** 真机 11-25:谁点的静音。 */
   muted?: string | null;
 }

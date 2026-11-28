@@ -465,6 +465,28 @@ class GuardDuty:
         self._set_run(eid, state="resume", until_ms=now)
         return False
 
+    def wait_view(self, robot_id: str) -> dict[str, Any] | None:
+        """新人 11-28 第四轮:这台的值守在等 → 等什么、到几点(机器人卡片、App 现在页写「约 X 分钟后
+        接着巡」;以前只写「空闲」,分不清在等还是卡住了)。不在等 → ``None``。
+
+        ``kind``:``after_home`` = 人选了「回到原点等 N 分钟」;``paused`` = 人叫停 / 叫回去以后
+        歇着;``gap`` = 两圈之间的间隔。回原点那一趟还在路上(还不知道几点到)不给。"""
+        now = self._now()
+        for run in self._runs().values():
+            if run["robot_id"] != robot_id:
+                continue
+            st, until, kind = run["state"], None, ""
+            if st == "paused":
+                ah = self._after_home.get(robot_id)
+                if ah is not None and ah["until"] is None:
+                    return None
+                until, kind = run["until_ms"], "after_home" if ah is not None else "paused"
+            elif st in ("wait", "watch", "post"):             # post = 站在值守位上等下一圈
+                until, kind = run["next_lap_ms"], "gap"
+            if until and until > now:
+                return {"kind": kind, "until_ms": int(until)}
+        return None
+
     def watching(self, robot_id: str) -> str | None:
         """这台此刻站在哪个防区的值守位上盯着(看见人按这个防区判,设计 §5.4);不在值守位上 ``None``。
         """

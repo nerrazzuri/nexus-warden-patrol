@@ -1117,6 +1117,7 @@ class Server:
         self.guard.standby = self.standby
         self.guard.reach = getattr(self.api.routes, "reach", None)
         self.api.guard = self.guard
+        self.dispatcher.guard_wait = self.guard.wait_view    # 新人 11-28 第四轮:卡片写还要等多久
         self.sightings.watching = self.guard.watching
         _hold = self.standby.hold
         self.standby.hold = lambda rid, tid: _hold(rid, tid) or self.guard.holds(rid, tid)

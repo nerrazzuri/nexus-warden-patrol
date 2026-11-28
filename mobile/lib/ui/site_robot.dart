@@ -112,6 +112,27 @@ int returnCountdownS(Map<String, dynamic> v, {DateTime? now}) {
   return left <= 0 ? 0 : left.ceil();
 }
 
+/// 新人 11-28 第四轮：值守在等（回原点后等 N 分钟 / 歇着 / 两圈之间）→「约 X 分钟后接着巡」；
+/// 没在等、已经过点、老站点 → `null`。以前只写「空闲」，分不清在等还是卡住了。
+/// `short`：现在页格子只有一行，写短的。
+String? guardWaitText(Map<String, dynamic>? v, {DateTime? now, bool short = false}) {
+  final w = v?['guard_wait'];
+  final until = w is Map ? w['until_ms'] : null;
+  if (until is! num) return null;
+  final left = until - (now ?? DateTime.now()).millisecondsSinceEpoch;
+  if (left <= 0) return null;
+  final m = (left / 60000).ceil().clamp(1, 1 << 20);
+  final kind = '${(w as Map)['kind']}';
+  if (short) {
+    return kind == 'gap' ? tr('Next lap in ~$m min', '约 $m 分钟后下一圈') : tr('Back on patrol in ~$m min', '约 $m 分钟后接着巡');
+  }
+  return switch (kind) {
+    'after_home' => tr('Waiting at the origin: back on patrol in about $m min', '在原点等着：约 $m 分钟后接着巡逻'),
+    'paused' => tr('Guard duty on hold: back on patrol in about $m min', '值守歇着：约 $m 分钟后接着巡逻'),
+    _ => tr('Next guard lap in about $m min', '约 $m 分钟后跑下一圈值守'),
+  };
+}
+
 class SiteRobotPage extends StatefulWidget {
   final SiteApi api;
   final String robotId;
@@ -1147,6 +1168,10 @@ class _SiteRobotPageState extends State<SiteRobotPage> with NwAsk {
             )),
       // 真机 11-25：遥控松手后站点倒数再派回待命点 —— 写明它要自己走、大约还剩几秒，能取消
       if (v?['standby_countdown'] is Map) _returnCountdown(c, v!, s?.canAbort ?? false),
+      if (guardWaitText(v) case final w?)
+        Padding(
+            padding: const EdgeInsets.fromLTRB(Nw.s16, 0, Nw.s16, 12),
+            child: Text(w, key: const Key('robot-guard-wait'), style: NwText.bodyMedium.copyWith(color: c.text, fontWeight: FontWeight.w600))),
       if (teleop && needsStand(v))
         Padding(
             padding: const EdgeInsets.fromLTRB(Nw.s16, 0, Nw.s16, 12),
