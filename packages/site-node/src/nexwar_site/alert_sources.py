@@ -19,7 +19,6 @@ from __future__ import annotations
 import json
 import logging
 import re
-import sqlite3
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
@@ -1249,10 +1248,9 @@ class SiteAlertSources:
         q = ("SELECT i.verdict FROM incidents i LEFT JOIN incidents l ON l.id=i.merged_into "
              "WHERE i.verify=1 AND i.id<>? AND i.received_at>=? "
              "AND i.outcome IN ('dispatched', 'merged') AND COALESCE(l.robot_id, i.robot_id)=?")
-        try:
-            rows = db.query(q, (this, since, robot))
-        except sqlite3.Error:                        # 表没有(老库、测试):按没有别的算
-            return 0, 0
+        if not db.query("SELECT 1 FROM sqlite_master WHERE type='table' AND name='incidents'"):
+            return 0, 0                              # 没有报警事件表(测试):按没有别的算
+        rows = db.query(q, (this, since, robot))
         return (sum(1 for r in rows if not r["verdict"]),
                 sum(1 for r in rows if r["verdict"] in ("person", "unverified")))
 
