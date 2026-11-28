@@ -243,6 +243,9 @@ export function IncidentView(props: {
   // ---- 经过 ----
   const log = incidentLog(a);
 
+  // 1.1-5:事件报告(站点出能打印的一页,照片嵌在里面;浏览器里存 PDF)
+  const report = <a class="btn" data-report="1" href={`/api/alerts/${enc(a.key)}/report?lang=${lang.value === "zh" ? "zh" : "en"}`}
+    target="_blank" rel="noopener">{t("incReport")}</a>;
   return (
     <div class="inc" data-key={a.key} data-level={a.level}>
       <header class={`inc-head ${a.level === "P1" ? "p1" : "p2"}`}>
@@ -268,6 +271,7 @@ export function IncidentView(props: {
             <LayoutSeg layouts={layouts} v={layout} on={props.onLayout} />
             <span class="push" />
             {!site && <a class="btn" href={recordingLink(a)}>{t("incReplay")}</a>}
+            {report}
             <button type="button" class="btn" onClick={props.onSite}>{t("incSiteMap")}</button>
           </div>
           <LiveWall units={props.units} alerts={props.alerts} now={props.now} onZoom={props.onZoom} />
@@ -279,6 +283,7 @@ export function IncidentView(props: {
               <LayoutSeg layouts={layouts} v={layout} on={props.onLayout} />
               <span class="push" />
               {!site && <a class="btn" href={recordingLink(a)}>{t("incReplay")}</a>}
+              {report}
             </div>
             <div class={`mon-tiles ${layout === "multi" ? "many" : layout}${seeCam ? " has-hero" : ""}`}>
               {tiles.length === 0 && <p class="muted">{t("incNoVideo")}</p>}

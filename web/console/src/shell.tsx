@@ -15,7 +15,7 @@ import { lang, setLang, t, type Key } from "./i18n";
 import { Icon, Shape } from "./icons";
 import { canArm, canDispatch, isOwnerLike, type Mode } from "./model";
 
-export type GuardPage = "duty" | "live" | "map" | "recordings" | "patrols" | "alarms" | "notes";
+export type GuardPage = "duty" | "live" | "map" | "recordings" | "patrols" | "alarms" | "notes" | "ob";
 /** 「管理」各页(W44 第二期,设计 §5):常用 = 现场概况、布防时间、授权和临时撤防、用户、机器人、报表;
  *  布置、高级两组先挂现有页面(第三、四期重做)。 */
 export type AdminPage =
@@ -26,7 +26,7 @@ export type AdminPage =
 export type Page = GuardPage | AdminPage;
 
 /** 「实时画面」「地图」两页并进了值班页(redesign 第二轮):老地址跳值班。 */
-export const GUARD_PAGES: GuardPage[] = ["duty", "recordings", "patrols", "alarms", "notes"];
+export const GUARD_PAGES: GuardPage[] = ["duty", "recordings", "patrols", "alarms", "notes", "ob"];
 
 /** 顶栏的三个大块(redesign 第二轮,design/console-v2/HANDOFF.md):值班 / 记录与录像 / 现场设置。 */
 export type Section = "monitor" | "events" | "setup";
@@ -52,7 +52,7 @@ export const SETUP_NAV: SetupGroup[] = [
 ];
 /** 一个大块(或现场设置的一项)里的几页,页头下面一排小标签切换。 */
 export const SUBPAGES: { pages: Page[]; keys: Key[] }[] = [
-  { pages: ["alarms", "recordings", "patrols", "notes"], keys: ["subEvents", "subRecordings", "subPatrols", "subNotes"] },
+  { pages: ["alarms", "recordings", "patrols", "notes", "ob"], keys: ["subEvents", "subRecordings", "subPatrols", "subNotes", "subOb"] },
   { pages: ["admin/reports", "admin/activity"], keys: ["tabReports", "subAudit"] },
   { pages: ["admin/system", "admin/upgrade", "admin/maps", "admin/localization", "admin/diag"],
     keys: ["subSite", "tabUpgrade", "tabMapMgmt", "tabLocalization", "tabDiag"] },
@@ -60,7 +60,7 @@ export const SUBPAGES: { pages: Page[]; keys: Key[] }[] = [
 const ADMIN_PAGES: AdminPage[] = SETUP_NAV.flatMap((g) => g.items.flatMap((x) => [x.id, ...(x.also ?? [])]));
 
 export function sectionOf(p: Page): Section {
-  if (p === "alarms" || p === "recordings" || p === "patrols" || p === "notes") return "events";
+  if (p === "alarms" || p === "recordings" || p === "patrols" || p === "notes" || p === "ob") return "events";
   return isAdminPage(p) ? "setup" : "monitor";
 }
 

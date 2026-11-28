@@ -520,6 +520,19 @@ CREATE TABLE IF NOT EXISTS face_book (
     n          INTEGER NOT NULL,
     updated_ms INTEGER NOT NULL
 );
+-- 1.1-5 电子值班簿:保安手写的,只追加(写错了另写一条 corrects 指向被更正的)。
+CREATE TABLE IF NOT EXISTS ob_entries (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    at_ms      INTEGER NOT NULL,
+    written_ms INTEGER NOT NULL,
+    author     TEXT NOT NULL,
+    category   TEXT NOT NULL,
+    text       TEXT NOT NULL,
+    robot      TEXT NOT NULL DEFAULT '',
+    alert_key  TEXT NOT NULL DEFAULT '',
+    corrects   INTEGER
+);
+CREATE INDEX IF NOT EXISTS ob_at ON ob_entries(at_ms);
 -- 1.1-4 远程喊话:按住说话(out)、听回话(in)的录音;文件在 <home>/talk/,留一天。
 CREATE TABLE IF NOT EXISTS talk_clips (
     id         TEXT PRIMARY KEY,

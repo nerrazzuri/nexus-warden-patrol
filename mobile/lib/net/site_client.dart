@@ -856,6 +856,13 @@ abstract class SiteApi {
   /// 交班留言(App V2 现场 → 记录):最近 N 条,新的在前;写一条。跟网页同一个接口。
   Future<List<Map<String, dynamic>>> shiftNotes({int recent = 50});
   Future<void> postShiftNote(String text);
+  /// 1.1-5 值班簿：`[since, until)` 的一本（手写的 + 站点记的），每条 `{at_ms, source, category, text,
+  /// author, robot, id?, corrects?, corrected_by?}`。老站点 404。
+  Future<List<Map<String, dynamic>>> occurrenceBook(int since, int until);
+  /// 1.1-5 写一条值班簿（只追加；[corrects] = 更正第几条）。回写好的那条。
+  Future<Map<String, dynamic>> addOccurrence(String category, String text, {int? atMs, int? corrects, String? alert});
+  /// 1.1-5 一条报警的事件报告（能打印的网页，照片嵌在里面）。
+  Future<Uint8List> incidentReport(String alertKey);
   /// 布防向导（用户 11-13）：布防时机器人会不会自己巡逻、缺哪样。`{map_id, map_version, zones, routes,
   /// robots: [{id, code, why}], missing: [zones|route|plan|robot]}`；站点按机器人在用的那张图查。老站点 404。
   Future<Map<String, dynamic>> guardReadiness();
@@ -1561,6 +1568,34 @@ class SiteClient implements SiteApi {
   Future<void> postShiftNote(String text) async {
     await _send('POST', '/api/shift-notes', <String, dynamic>{'text': text});
   }
+
+  String get _lang => appLang.value == AppLang.zh ? 'zh' : 'en';
+
+  @override
+  Future<List<Map<String, dynamic>>> occurrenceBook(int since, int until) async {
+    final d = _map(await _send('GET', '/api/ob?since=$since&until=$until&lang=$_lang'));
+    return <Map<String, dynamic>>[
+      for (final e in (d['entries'] as List?) ?? const <dynamic>[])
+        if (e is Map) e.cast<String, dynamic>(),
+    ];
+  }
+
+  @override
+  Future<Map<String, dynamic>> addOccurrence(String category, String text, {int? atMs, int? corrects, String? alert}) async {
+    final d = _map(await _send('POST', '/api/ob', <String, dynamic>{
+      'category': category,
+      'text': text,
+      'at_ms': ?atMs,
+      'corrects': ?corrects,
+      'alert': ?alert,
+    }));
+    final e = d['entry'];
+    return e is Map ? e.cast<String, dynamic>() : <String, dynamic>{};
+  }
+
+  @override
+  Future<Uint8List> incidentReport(String alertKey) =>
+      _bytes('/api/alerts/${Uri.encodeComponent(alertKey)}/report?lang=$_lang', 40 * 1024 * 1024, tr('Report', '事件报告'));
 
   @override
   Future<Map<String, dynamic>> guardReadiness() async => _map(await _send('GET', '/api/guard/readiness'));

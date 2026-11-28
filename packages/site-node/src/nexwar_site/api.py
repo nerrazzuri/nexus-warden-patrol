@@ -176,6 +176,8 @@ def _range_args(q: dict[str, list[str]], *, limit_max: int) -> tuple[int, int, i
 #: 告警键 ``robot/kind#seq`` 里有 ``/`` 与 ``#``:客户端整个键编码成一段(``%2F``、``%23``)。
 _ALERT = re.compile(r"^/api/alerts/([^/]{1,256})/"
                     r"(ack|arrive|resolve|reopen|shelve|unshelve|backup)$")
+#: 1.1-5:一条报警的事件报告(能打印的网页)。
+_ALERT_REPORT = re.compile(r"^/api/alerts/([^/]{1,256})/report$")
 #: W00c5c:``/api/robots/<id>/teleop``(WebSocket)与 ``/api/robots/<id>/halt``。
 _TELEOP = re.compile(r"^/api/robots/([^/]{1,64})/"
                      r"(teleop|halt|resume|supervise|relocalize|home/here|deter|service|posture"
@@ -422,6 +424,10 @@ class SiteApi:
         from nexwar_site.shift_notes import ShiftNotes
         self.shift_notes = (ShiftNotes(dispatcher.db, now_ms=self._now)
                             if dispatcher is not None else None)
+        #: 1.1-5:电子值班簿 + 事件报告。
+        from nexwar_site.ob import OccurrenceBook
+        self.ob = (OccurrenceBook(dispatcher.db, now_ms=self._now)
+                   if dispatcher is not None else None)
         #: W44 第二期:站点的零散设置(交班时间、多久没巡过)。
         from nexwar_site.site_settings import SiteSettings
         self.settings = SiteSettings(dispatcher.db) if dispatcher is not None else None
@@ -1012,6 +1018,11 @@ class _Handler(TlsHandlerMixin):
                 return self._adhoc_cancel(method, unquote(m.group(1)), user)
             if path == "/api/shift-notes":
                 return self._shift_notes(method, user)
+            if path in ("/api/ob", "/api/ob/print"):
+                return self._ob(method, path, user)               # 1.1-5 值班簿
+            m = _ALERT_REPORT.match(path)
+            if m is not None and method == "GET":
+                return self._alert_report(unquote(m.group(1)), user)   # 1.1-5 事件报告
             if path == "/api/duty-settings":
                 return self._duty_settings(method, user)
             if path == "/api/voice-presets":
@@ -1456,6 +1467,91 @@ class _Handler(TlsHandlerMixin):
             raise HttpError(400, str(exc)) from exc
         self._audit_detail = {"chars": len(note["text"])}
         return self._send_json(200, {"note": note})
+
+    def _ob_lang(self, q: dict[str, list[str]]) -> str:
+        return "zh" if (q.get("lang") or ["en"])[0] == "zh" else "en"
+
+    def _ob(self, method: str, path: str, user) -> None:
+        """1.1-5 值班簿:``GET /api/ob?since=&until=&lang=``(``view``)一本(手写的 + 自动的);
+        ``GET /api/ob/print?…`` 同一本、能打印的网页;``POST /api/ob``
+        ``{category, text, at_ms?, robot?, alert?, corrects?}`` 写一条(``handle_alerts``,作者取登录
+        账号;只追加,写错了另写一条更正)。"""
+        from nexwar_site.ob import ObError, book_html
+        from nexwar_site.sitetime import site_tz
+        ob = self.site.ob
+        if ob is None:
+            raise HttpError(404, "此站点未启用值班簿")
+        if method == "POST" and path == "/api/ob":
+            self._need(user, HANDLE_ALERTS)
+            try:
+                e = ob.add(str(user), self._body())
+            except ObError as exc:
+                raise HttpError(400, str(exc)) from exc
+            self._audit_detail = {"id": e["id"], "category": e["category"],
+                                  "chars": len(e["text"])}
+            return self._send_json(200, {"entry": e})
+        if method != "GET":
+            raise HttpError(405, "只支持 GET/POST")
+        self._need(user, VIEW)
+        q = parse_qs(self.path.split("?", 1)[1] if "?" in self.path else "")
+        try:
+            since, until = int(q["since"][0]), int(q["until"][0])
+        except (KeyError, ValueError) as exc:
+            raise HttpError(400, "要 since、until(毫秒)") from exc
+        lang = self._ob_lang(q)
+        try:
+            book = ob.book(since, until, lang=lang)
+        except ObError as exc:
+            raise HttpError(400, str(exc)) from exc
+        if path == "/api/ob":
+            return self._send_json(200, book)
+        self._audit_view(f"ob/{since}-{until}")
+        page = book_html(book, site=self.site.site_name, tz=site_tz(self.site.dispatcher.db),
+                         lang=lang)
+        return self._send_bytes(page.encode(), "text/html; charset=utf-8")
+
+    def _report_photos(self, robot: str, since: int, until: int) -> list[tuple[str, bytes]]:
+        """报告里的照片:这台机器人那段时间里传上来的(新的在后),每张 ≤ 2 MB。"""
+        from nexwar_site.sitetime import site_tz
+        runs = self.site.runs
+        if runs is None:
+            return []
+        tz = site_tz(self.site.dispatcher.db)
+        out: list[tuple[str, bytes]] = []
+        for r in self.site.dispatcher.db.query(
+                "SELECT p.run_id, p.name, p.done_ms, r.mission FROM run_photos p "
+                "JOIN runs r ON r.id=p.run_id WHERE r.robot_id=? AND p.done_ms>=? AND p.done_ms<? "
+                "AND p.name LIKE '%.jpg' ORDER BY p.done_ms LIMIT 32", (robot, since, until)):
+            try:
+                path = runs.photo(int(r["run_id"]), r["name"])
+                if path.stat().st_size > 2 * 1024 * 1024:
+                    continue
+                data = path.read_bytes()
+            except Exception:                        # noqa: BLE001 - 读不到的那张不放
+                continue
+            from datetime import datetime
+            when = datetime.fromtimestamp(r["done_ms"] / 1000, tz).strftime("%H:%M:%S")
+            out.append((f"{when} · {r['mission']} · {r['name']}", data))
+        return out
+
+    def _alert_report(self, key: str, user) -> None:
+        """1.1-5 ``GET /api/alerts/<key>/report?lang=``:一条报警的事件报告
+        (能打印的网页,照片嵌在里面)。
+        ``view``;进审计。"""
+        from nexwar_site.ob import incident_report, report_html
+        from nexwar_site.sitetime import site_tz
+        self._need(user, VIEW)
+        q = parse_qs(self.path.split("?", 1)[1] if "?" in self.path else "")
+        lang = self._ob_lang(q)
+        try:
+            rep = incident_report(self.site.dispatcher.db, key, lang=lang,
+                                  photos=self._report_photos)
+        except KeyError as exc:
+            raise HttpError(404, f"没有这条报警: {key}") from exc
+        self._audit_view(f"alert/{key}/report")
+        page = report_html(rep, site=self.site.site_name, tz=site_tz(self.site.dispatcher.db),
+                           lang=lang)
+        return self._send_bytes(page.encode(), "text/html; charset=utf-8")
 
     # ------------------------------------------------------------ 布置的历史版本(W44 第三期)
 

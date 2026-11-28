@@ -33,6 +33,7 @@ import 'nw/nw_theme.dart';
 import 'nw/nw_shell.dart' show EstopSquare;
 import 'site_tabs.dart' show AccountsPage;
 import 'site_mapping.dart';
+import 'site_ob.dart' show shareIncidentReport, writeOccurrence;
 import 'site_deter.dart' show deterAckFailure, deterQuietFirst;
 import 'site_deterrence.dart' show deterSessionText;
 import 'site_recordings.dart';
@@ -111,6 +112,8 @@ class SiteAlertScenePage extends StatefulWidget {
   static const Key deterLevelKey = Key('scene-deter-level');
   static const Key notifyKey = Key('scene-notify');
   static const Key backupKey = Key('scene-backup');
+  static const Key reportKey = Key('scene-report');
+  static const Key obKey = Key('scene-ob');
   static const Key arrivedDoneKey = Key('scene-arrived-done');
   static const Key backupDoneKey = Key('scene-backup-done');
   static const Key backupSentKey = Key('scene-backup-sent');
@@ -523,6 +526,18 @@ class _SiteAlertScenePageState extends State<SiteAlertScenePage> with EstopMissR
       unawaited(_refresh());
     } on SiteError catch (e) {
       if (mounted && gen == _gen) setState(() => _msg = tr('Not reopened: $e', '没能重新打开：$e'));
+    }
+  }
+
+  Future<void> _report() async {
+    final msg = await shareIncidentReport(widget.api, _a.key);
+    if (mounted) setState(() => _msg = msg);
+  }
+
+  Future<void> _toBook() async {
+    final got = await writeOccurrence(context, widget.api, category: 'incident', alert: _a.key);
+    if (got != null && mounted) {
+      setState(() => _msg = tr('Written in the occurrence book (#${got['id']}).', '已写进值班簿（#${got['id']}）。'));
     }
   }
 
@@ -1541,6 +1556,15 @@ class _SiteAlertScenePageState extends State<SiteAlertScenePage> with EstopMissR
                       const SizedBox(height: 8),
                       if (detail.isNotEmpty) Text(detail, style: NwText.bodySmall.copyWith(color: c.textSecondary)),
                       ..._facts(c),
+                      // 1.1-5：事件报告（分享出去用浏览器存 PDF）、写进值班簿
+                      const SizedBox(height: 8),
+                      _row([
+                        _act(SiteAlertScenePage.reportKey, tr('Share report', '分享事件报告'), () => unawaited(_report()),
+                            icon: Icons.ios_share_rounded),
+                        if (widget.api.session?.canHandleAlerts ?? false)
+                          _act(SiteAlertScenePage.obKey, tr('Add to book', '写进值班簿'), () => unawaited(_toBook()),
+                              icon: Icons.menu_book_outlined),
+                      ]),
                     ]),
                   ],
                 ),

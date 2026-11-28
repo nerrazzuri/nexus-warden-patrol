@@ -427,6 +427,20 @@ class FakeApi implements SiteApi {
   }
   /// 上装（W21）：记在 [calls] 里；[deterAck] 是狗回的回执。
   Map<String, dynamic> deterAck = <String, dynamic>{'result': 'accepted'};
+  /// 1.1-5 值班簿：[obList] 是站点回的一本；写的记在 [calls]。
+  List<Map<String, dynamic>> obList = <Map<String, dynamic>>[];
+  @override
+  Future<List<Map<String, dynamic>>> occurrenceBook(int since, int until) async => obList;
+  @override
+  Future<Map<String, dynamic>> addOccurrence(String category, String text, {int? atMs, int? corrects, String? alert}) async {
+    calls.add('ob $category $text ${atMs ?? '-'} ${corrects ?? '-'} ${alert ?? '-'}');
+    return <String, dynamic>{'id': 99, 'category': category, 'text': text};
+  }
+  @override
+  Future<Uint8List> incidentReport(String alertKey) async {
+    calls.add('report $alertKey');
+    return Uint8List.fromList(utf8.encode('<!doctype html><title>r</title>'));
+  }
   /// 1.1-4 按住说话：传上来的录音（字节数、格式）；最近的对讲。
   final List<(int, String)> talked = <(int, String)>[];
   List<Map<String, dynamic>> talkList = <Map<String, dynamic>>[];

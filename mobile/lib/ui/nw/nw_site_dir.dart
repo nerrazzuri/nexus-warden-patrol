@@ -22,13 +22,14 @@ import '../site_incidents.dart';
 import '../site_mode.dart';
 import '../site_recordings.dart';
 import '../site_releases.dart';
+import '../site_ob.dart';
 import '../site_runs.dart';
 import '../site_tabs.dart' show AccountsPage, leaveConfirmKey;
 import 'nw_layout_hub.dart';
 import 'nw_theme.dart';
 
 /// 目录里一行要去哪。
-enum SiteDest { overview, robots, users, layout, arming, alarms, events, recordings, runs, notes, maps, health, updates, settings, help, report }
+enum SiteDest { overview, robots, users, layout, arming, alarms, events, recordings, runs, notes, ob, maps, health, updates, settings, help, report }
 
 class SiteDirectory extends StatelessWidget {
   final SiteApi api;
@@ -117,6 +118,10 @@ class SiteDirectory extends StatelessWidget {
       if (!readOnly)
         _Row(SiteDest.notes, Icons.sticky_note_2_outlined, tr('Handover notes', '交班留言'), tr('Latest note and history', '最近一条和历史'),
             () => _push(context, ShiftNotesPage(api: api))),
+      // 1.1-5 电子值班簿：只读账号也能看
+      _Row(SiteDest.ob, Icons.menu_book_outlined, tr('Occurrence book', '值班簿'),
+          readOnly ? tr('View only', '只看') : tr('Write entries; alarms and patrols added by the site', '自己写的，加上站点记的报警、巡检'),
+          () => _push(context, OccurrenceBookPage(api: api))),
     ]));
     if (manage) {
       groups.add((tr('Advanced', '高级'), [
