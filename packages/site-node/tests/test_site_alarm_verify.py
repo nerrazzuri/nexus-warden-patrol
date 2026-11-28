@@ -39,7 +39,7 @@ def 核(设备):  # noqa: F811
         fired.append((source, body))
         return {"outcome": "noted"}
     t.fired = fired
-    t.rx = AlarmInputs(t.db, fire=fire, now_ms=t.clock)
+    t.rx = AlarmInputs(t.db, fire=fire, now_ms=t.clock, background=False)
     return t
 
 
@@ -564,3 +564,38 @@ def test_外审1_1_第8轮_2_几个模块掉线等超时_正常模块照样每�
     assert [s for s, _ in t.fired] == ["dev-pir-3"], "两拍就读到两次,去抖过了就报"
     assert took < 1.5, f"不等掉线的五个模块一个个超时:{took:.2f}"
     t.rx.stop()
+
+
+def test_外审1_1_第9轮_1_派单等回执的时候_照样每拍读IO模块_不漏别的输入(核):
+    import threading
+    import time as _t
+    t = 核
+    gate = threading.Event()
+    fired: list = []
+
+    def 慢派(source, body):                               # 等机器人回执(最长 10 秒)
+        fired.append(source)
+        gate.wait(5)
+        return {"outcome": "dispatched"}
+    m = 假模块()
+    rx = AlarmInputs(t.db, fire=慢派, now_ms=t.clock, read=m.read)
+    _门磁(t, "pir-a", link={"via": "modbus", "host": "10.0.0.9", "port": 502, "unit": 1,
+                          "input": 0, "nc": False})
+    _门磁(t, "pir-b", link={"via": "modbus", "host": "10.0.0.9", "port": 502, "unit": 1,
+                          "input": 1, "nc": False})
+    m.bits[0] = True
+    t0 = _t.monotonic()
+    rx.poll_once()
+    rx.poll_once()                                        # pir-a 报警,派单卡着等回执
+    m.bits[1] = True
+    rx.poll_once()
+    rx.poll_once()                                        # 这期间 pir-b 报警也照样读到、排上
+    assert _t.monotonic() - t0 < 1.0, "读 IO 模块不跟着等回执"
+    assert rx.status["pir-b"]["state"] == "alarm"
+    gate.set()
+    for _ in range(50):
+        if fired == ["dev-pir-a", "dev-pir-b"]:
+            break
+        _t.sleep(0.02)
+    assert fired == ["dev-pir-a", "dev-pir-b"], "两条都派了,按先后"
+    rx.stop()

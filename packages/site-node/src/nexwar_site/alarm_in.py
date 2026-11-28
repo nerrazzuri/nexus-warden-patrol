@@ -45,6 +45,9 @@ LOST_MS = 60_000
 TIMEOUT_S = 2.0
 #: 外审 1.1 第 8 轮 #2:几个 IO 模块一起读(各读各的,掉线模块的超时不拖慢正常模块),最多几个。
 MAX_IO_PARALLEL = 32
+#: 外审 1.1 第 9 轮 #1:报警交给后台一条一条派(派单要等机器人回执,
+#: 别让读 IO 模块、回 SIA 的 ACK 跟着等);排着没派的最多这么多条,再多的记日志不收。
+MAX_FIRE_QUEUE = 100
 #: SIA 入侵类事件码;Contact ID 入侵类(新事件 qualifier 1)。
 SIA_CODES = frozenset({"BA", "BV", "PA", "HA", "TA"})
 CID_CODES = frozenset({*range(120, 140), 144, 145})
@@ -203,8 +206,13 @@ class AlarmInputs:
 
     def __init__(self, db: Any, *, fire: Callable[[str, dict[str, Any]], Any],
                  allow: Callable[[str], bool] | None = None,
-                 now_ms: Callable[[], int], read: Callable[..., list[bool]] = read_inputs) -> None:
+                 now_ms: Callable[[], int], read: Callable[..., list[bool]] = read_inputs,
+                 background: bool = True) -> None:
         self.db = db
+        self._background = background
+        self._fireq: ThreadPoolExecutor | None = None
+        self._queued = 0
+        self._qlock = threading.Lock()
         self._fire = fire
         self._allow = allow
         self._now = now_ms
@@ -245,6 +253,28 @@ class AlarmInputs:
         body = {"event_id": f"{via}-{uuid.uuid4().hex[:16]}", "type": "intrusion",
                 "zone": "-", "detail": {"via": via, "what": what[:200]}}
         log.info("报警输入:设备 %s(%s)%s", dev_id, via, what)
+        if not self._background:
+            return self._fire_one(dev_id, source, body)
+        with self._qlock:
+            if self._queued >= MAX_FIRE_QUEUE:
+                log.error("报警输入排着没派的已有 %d 条:设备 %s 这次不收(%s)", self._queued,
+                          dev_id, what)
+                return None
+            self._queued += 1
+            if self._fireq is None:
+                self._fireq = ThreadPoolExecutor(max_workers=1, thread_name_prefix="alarm-in-fire")
+            q = self._fireq
+
+        def run() -> None:
+            try:
+                self._fire_one(dev_id, source, body)
+            finally:
+                with self._qlock:
+                    self._queued -= 1
+        q.submit(run)
+        return {"outcome": "queued"}
+
+    def _fire_one(self, dev_id: str, source: str, body: dict[str, Any]) -> dict[str, Any] | None:
         try:
             return self._fire(source, body)
         except Exception:
@@ -397,6 +427,8 @@ class AlarmInputs:
         self._stop.set()
         if self._pool is not None:
             self._pool.shutdown(wait=False, cancel_futures=True)
+        if self._fireq is not None:
+            self._fireq.shutdown(wait=False)
         if self._sia is not None:
             self._sia.shutdown()
             self._sia.server_close()
