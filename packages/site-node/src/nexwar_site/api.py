@@ -133,6 +133,8 @@ _ARM_EX = re.compile(r"^/api/arming/exceptions/(\d{1,9})/remove$")
 _AUTHZ = re.compile(r"^/api/lists/authorizations(?:/(\d{1,9})/(remove|end))?$")
 #: 1.1-1 认出保安:人脸登记(``me`` = 自己;别人的账号名只能删)
 _FACES = re.compile(r"^/api/faces(?:/([^/]{1,64})(?:/(photo|remove))?)?$")
+#: 1.1-3 触发网址(口令 32 位十六进制)。
+_ALARM_IN = re.compile(r"^/api/alarm-in/([0-9a-f]{32})$")
 #: 1.1-2 告警外发渠道。
 _NOTIFY = re.compile(r"^/api/notify(?:/([0-9]{1,9})(?:/(test|remove))?)?$")
 #: 网页上登记 / 出开通码 / 吊销机器狗(商业化 B1b,管理员)。
@@ -387,6 +389,7 @@ class SiteApi:
         self.authz: Any = None
         self.faces: Any = None                            # 1.1-1 认出保安
         self.notify: Any = None                           # 1.1-2 告警外发
+        self.alarm_in: Any = None                         # 1.1-3 报警输入
         #: W73:防区的查看点、值守位(``guard_plan.ZonePosts``;第一次用时按防区、路线库的规划现建)。
         self._zone_posts: Any = None
         self._marks: Any = None
@@ -804,6 +807,9 @@ class _Handler(TlsHandlerMixin):
                 return self._problem_bundle(_PROBLEM_BUNDLE.match(path).group(1), None)
             if method == "POST" and path == "/api/incidents":
                 return self._incident_in()          # 摄像头不登录:验签
+            m = _ALARM_IN.match(path)
+            if m is not None and method in ("GET", "POST"):
+                return self._alarm_in(m.group(1))   # 1.1-3:不会签名的报警设备,网址里带口令
             if method == "POST" and path == "/api/logout":
                 # A 阶段外审 I2:令牌闲置过期了也能退出(连同这次登录登记的手机一起不推);
                 # 拿得出令牌就是那部手机,不用它还有效
@@ -2810,6 +2816,26 @@ class _Handler(TlsHandlerMixin):
         row = self.site.dispatch(lambda: desk.handle(source, body))
         self._send_json(200, row)
 
+    def _alarm_in(self, token: str) -> None:
+        """1.1-3 ``GET|POST /api/alarm-in/<口令>``:设备一触发就调它(不用登录、不用签名;
+        口令只在生成时给一次)。口令对不上一律 404(不让人探)。"""
+        desk = self.site.alarm_in
+        dev = desk.by_token(token) if desk is not None else None
+        if dev is None:
+            log.warning("触发网址口令对不上(%s)", self.client_address[0])
+            raise HttpError(404, "没有这个网址")
+        self._actor = f"source:dev-{dev}"
+        if not self._desk().allow(f"dev-{dev}"):
+            raise HttpError(429, "此设备一分钟内报得太多,超出的不收")
+        import uuid
+        body = {"event_id": f"url-{uuid.uuid4().hex[:16]}", "type": "intrusion", "zone": "-",
+                "detail": {"via": "url"}}
+        desk_i = self._desk()
+        row = self.site.dispatch(lambda: desk_i.handle(f"dev-{dev}", body))
+        desk.status.setdefault(dev, {}).update(last_ms=self.site._now(), what="触发网址")
+        self._send_json(200, {"ok": True, "outcome": row.get("outcome"),
+                              "incident": row.get("id")})
+
     def _deterrence(self, method: str, path: str, user) -> None:
         """分级驱离(W22)。看:``view``;就地开一场(W33,``start``)、跳级、往回退:``dispatch``(保安、管理员);解除:``abort``
         (保安、管理员、经理,同「叫停」)。"""
@@ -3471,7 +3497,11 @@ class _Handler(TlsHandlerMixin):
         if book is None:
             raise HttpError(404, "此站点未启用外部设备登记")
         if method == "GET":
-            return self._send_json(200, {"devices": book.list()})
+            rx = self.site.alarm_in
+            sia = getattr(getattr(rx, "_sia", None), "server_address", None)
+            return self._send_json(200, {"devices": book.list(),
+                                         "status": dict(rx.status) if rx is not None else {},
+                                         "sia_port": sia[1] if sia else None})
         if method != "POST":
             raise HttpError(405, "只支持 GET/POST")
         d = self._body()

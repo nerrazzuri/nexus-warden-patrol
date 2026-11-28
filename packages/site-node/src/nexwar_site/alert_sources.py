@@ -1146,7 +1146,11 @@ class SiteAlertSources:
         同一个 kind 合成一条,标题列上合进来的每个防区(同排程)。"""
         zone = str(row.get("zone") or "?")
         outcome = row.get("outcome")
-        if outcome in ("dispatched", "merged") and row.get("robot_id"):
+        if outcome in ("dispatched", "merged") and row.get("robot_id") and row.get("verify"):
+            # 1.1-3:报警器报的、设备勾了「先核实」:先报 P2「去核实」,机器人看见人才是 P1
+            kind, robot = "intrusion_verifying", str(row["robot_id"])
+            what = f"{robot} 去核实"
+        elif outcome in ("dispatched", "merged") and row.get("robot_id"):
             kind, robot = "intrusion", str(row["robot_id"])
             what = f"{robot} 已出动去 {row.get('intercept') or '拦截点'}"
             if self.weather is not None and self.weather.storm():
@@ -1163,6 +1167,7 @@ class SiteAlertSources:
             zones.append(zone)
         names = "、".join(zones[:5]) + (f" 等 {len(zones)} 个防区" if len(zones) > 5 else "")
         title = (f"防区 {names} 有入侵:{what}" if kind == "intrusion"
+                 else f"防区 {names} 报警器报警:{what}" if kind == "intrusion_verifying"
                  else f"防区 {names} 有入侵,无机器人去:{what}")
         # 给保安看的说明(演示站点实测记下):谁报的、怎么回事,不写事件源编号、事件类型这些技术用语
         src = str(row.get("source") or "?")
@@ -1171,13 +1176,33 @@ class SiteAlertSources:
         ctx: dict = {"zone": zone}
         if row.get("intercept_pose"):
             ctx["intercept"] = row["intercept_pose"]
-        if kind == "intrusion" and row.get("task_id"):
+        if kind in ("intrusion", "intrusion_verifying") and row.get("task_id"):
             ctx["task_id"] = row["task_id"]                # 到了拍的照片在这一趟的记录里
         a = self.desk.raise_alert(kind=kind, robot=robot, title=title[:200], detail=detail[:300],
                                   context=ctx)
         self._incident_zones[a.key] = zones
         while len(self._incident_zones) > 200:
             self._incident_zones.pop(next(iter(self._incident_zones)))
+
+    def on_verdict(self, row: dict) -> None:
+        """1.1-3:「去核实」那条有了结论 —— 看见人了(P1 已经由「机器人看见人」报了)、
+        到了没看见人,关掉 P2 并写明;没到现场(没核实成)另报 P1「有入侵,无机器人去」叫人。"""
+        robot, verdict = str(row.get("robot_id") or ""), row.get("verdict")
+        zone = str(row.get("zone") or "?")
+        note = {"person": "核实:机器人看见人了,已报 P1「机器人看见人」",
+                "clear": "核实:机器人到了现场,没看见人(照片在这一趟的记录里)",
+                "unverified": "没核实成:机器人没到现场,已报 P1 叫人"}.get(str(verdict), "")
+        if verdict == "unverified":
+            self.desk.raise_alert(kind="intrusion_unanswered", robot=SITE,
+                                  title=f"防区 {zone} 报警器报警,无机器人去:"
+                                        "机器人没到现场,没核实成",
+                                  detail=f"{robot} 没到 {row.get('intercept') or '查看点'}"[:300],
+                                  context={"zone": zone})
+        for a in self.desk.book.open():
+            if a.kind == "intrusion_verifying" and a.robot == robot:
+                self.desk.resolve(a.key, who="site:verify",
+                                  verdict="false_alarm" if verdict == "clear" else "",
+                                  note=note)
 
     def on_incident_throttled(self, source: str) -> None:
         """事件源一分钟超了上限被限流(W16):摄像头抽风,或者密钥漏了被人刷。"""

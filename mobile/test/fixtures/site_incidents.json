@@ -11,11 +11,14 @@
       "outcome": "dispatched",
       "received_at": 1795696101552,
       "result": "failed",
+      "result_ms": 1795696101552,
       "robot_id": "A",
       "source": "nvr",
       "task_id": "incident-5007379c51ed",
       "told_ms": null,
       "type": "intrusion",
+      "verdict": "",
+      "verify": 0,
       "zone": "yard"
     }
   ]

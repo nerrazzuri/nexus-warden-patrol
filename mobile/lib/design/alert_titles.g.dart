@@ -28,6 +28,8 @@ const Map<String, (String, String)> alertTitles = <String, (String, String)>{
   'purged_incoming_stuck': ('Deleted evidence could not be removed', '已删除的证据未能清除'),
   'backup_verify_failed': ('Site backup failed verification', '站点备份校验失败'),
   'push_failed': ('P1 push notifications failing', 'P1 推送发送失败'),
+  'intrusion_verifying': ('Alarm triggered, robot verifying', '报警器报警，机器人去核实'),
+  'alarm_input_lost': ('Alarm input lost', '报警输入断了'),
   'notify_failed': ('Alerts not reaching WhatsApp / Telegram / email', '告警外发发送失败'),
   'cert_expiring': ('Certificate expiring soon', '证书即将到期'),
   'site_disk_low': ('Site disk almost full', '站点磁盘空间不足'),

@@ -18,7 +18,8 @@ Audience = Literal["intrusion", "fire", "help", "offline", "owner"]
 
 GUARD_AUDIENCES: frozenset[str] = frozenset({"intrusion", "fire", "help", "offline"})
 
-_INTRUSION = ("intrusion", "intrusion_unanswered", "intrusion_person", "dog_sees_person",
+_INTRUSION = ("intrusion", "intrusion_unanswered", "intrusion_person", "intrusion_verifying",
+              "dog_sees_person",
               "person_left",             # W74 三期:被跟的人越过出口线
               "force_lifted",            # 被抱起来了:可能有人偷机器人
               "force_covered",           # W74 四期:被人罩住了
@@ -51,7 +52,7 @@ _OWNER = ("agent_args_skipped", "preflight_refused", "agent_too_old", "archive_f
           "force_bump", "force_config_bad", "incident_flood", "lane_stuck", "loc_degraded",
           "map_failed", "map_integrity",
           "map_ready", "payload_amp", "purged_incoming_stuck", "push_failed",
-          "notify_failed",
+          "notify_failed", "alarm_input_lost",
           "recording_delete_failed", "recording_dropped", "recording_failed", "recording_trimmed",
           "release_failed", "rtk", "run_done", "run_start", "schedule_blocked", "schedule_died",
           "schedule_interrupted", "schedule_skipped", "site_disk_low",

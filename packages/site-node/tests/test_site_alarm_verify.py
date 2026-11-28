@@ -1,0 +1,247 @@
+"""1.1-3 现有报警器一响 → 派机器人去核实。
+
+- 门磁、报警主机登记时默认「先核实」:报警先报 P2「报警器报警:机器人去核实」,不是 P1。
+- 机器人看见人(``dog_sees_person``)→ 关 P2,写「看见人了」;到了 30 秒没看见人 → 关 P2、标误报;
+  没到现场 → 另报 P1「无机器人去」。
+- 不会签名的设备:触发网址(口令只给一次、只存哈希)、报警主机 SIA DC-09、IO 模块干接点(Modbus TCP,
+  去抖、常闭、读不到报 P2)。
+"""
+
+from __future__ import annotations
+
+import socket
+import struct
+import threading
+
+import pytest
+from test_site_incidents import 站, 签  # noqa: F401  (夹具)
+from test_site_w73_devices import MAP, 设备  # noqa: F401  (夹具)
+
+from nexwar_site import alarm_in
+from nexwar_site.alarm_in import AlarmInputs, crc16, frame, parse_sia, read_inputs
+from nexwar_site.alert_sources import SiteAlertSources
+from nexwar_site.alert_store import AlertDesk
+from nexwar_site.devices import DeviceError
+from nexwar_site.incidents import VERIFY_HOLD_MS
+
+
+@pytest.fixture
+def 核(设备):  # noqa: F811
+    t = 设备
+    t.alerts = AlertDesk(t.db, now_ms=t.clock)
+    t.src = SiteAlertSources(t.alerts, now_ms=t.clock)
+    t.desk.on_outcome = t.src.on_incident
+    t.desk.on_verdict = t.src.on_verdict
+    fired = []
+
+    def fire(source, body):
+        fired.append((source, body))
+        return {"outcome": "noted"}
+    t.fired = fired
+    t.rx = AlarmInputs(t.db, fire=fire, now_ms=t.clock)
+    return t
+
+
+def _门磁(t, dev="door-1", **kw):
+    return t.book.put(dev, {"kind": "contact", "map_id": MAP[0], "map_version": MAP[1],
+                            "x": 3.0, "y": 1.0, **kw}, by="alice")
+
+
+async def _触发(t, dev="door-1"):
+    body = t.desk.prepare(f"dev-{dev}", {"event_id": f"e{t.clock()}", "type": "intrusion",
+                                         "zone": "-"})
+    return await t.send(t.desk.handle(f"dev-{dev}", body))
+
+
+def _开着(t, kind):
+    return [a for a in t.alerts.book.open() if a.kind == kind]
+
+
+async def test_门磁默认先核实_报P2不报P1_到了没看见人_关掉标误报(核):
+    t = 核
+    await t.run(12)
+    assert _门磁(t)["device"]["verify_first"] is True
+    cam = t.book.put("cam-1", {"kind": "camera", "map_id": MAP[0], "map_version": MAP[1],
+                               "x": 0.0, "y": 0.0}, by="alice")["device"]
+    assert cam["verify_first"] is False, "摄像头(AI 判过的)照旧直接 P1"
+    r = await _触发(t)
+    assert r["outcome"] == "dispatched" and r["verify"] == 1
+    [v] = _开着(t, "intrusion_verifying")
+    assert v.level.name == "P2" and "报警器报警:A 去核实" in v.title
+    assert not _开着(t, "intrusion")
+    await t.run(200)                                     # 走到了
+    assert t.desk.list()[0]["result"] == "done"
+    assert t.desk.verify_tick() == 0, "到了还要再看 30 秒"
+    t.clock.advance(VERIFY_HOLD_MS / 1000 + 1)
+    assert t.desk.verify_tick() == 1
+    assert not _开着(t, "intrusion_verifying")
+    done = t.alerts.book.get(v.key)
+    assert done.verdict == "false_alarm" and done.resolved_by == "site:verify"
+    assert t.desk.list()[0]["verdict"] == "clear"
+    assert t.desk.verify_tick() == 0, "下过结论的不再下"
+
+
+async def test_核实时看见人_关P2写看见人了_不另报(核):
+    t = 核
+    await t.run(12)
+    _门磁(t)
+    await _触发(t)
+    t.alerts.raise_alert(kind="dog_sees_person", robot="A", title="机器人看见人了")
+    assert t.desk.verify_tick() == 1
+    assert not _开着(t, "intrusion_verifying") and _开着(t, "dog_sees_person")
+    assert t.desk.list()[0]["verdict"] == "person"
+
+
+async def test_机器人没到现场_另报P1无机器人去(核):
+    t = 核
+    await t.run(12)
+    _门磁(t)
+    r = await _触发(t)
+    with t.db.tx() as c:
+        c.execute("UPDATE incidents SET result='aborted', result_ms=? WHERE id=?",
+                  (t.clock(), r["id"]))
+    assert t.desk.verify_tick() == 1
+    [p1] = _开着(t, "intrusion_unanswered")
+    assert p1.level.name == "P1" and "没核实成" in p1.title
+    assert not _开着(t, "intrusion_verifying")
+
+
+async def test_关掉先核实_照旧直接P1(核):
+    t = 核
+    await t.run(12)
+    _门磁(t, verify_first=False)
+    await _触发(t)
+    assert _开着(t, "intrusion") and not _开着(t, "intrusion_verifying")
+
+
+def test_触发网址_口令只给一次_只存哈希_对得上才认(核):
+    t = 核
+    got = _门磁(t, link={"via": "url"})
+    tok = got["token"]
+    assert len(tok) == 32
+    raw = t.db.query("SELECT token_hash FROM ext_devices")[0]["token_hash"]
+    assert tok not in raw and raw == alarm_in.token_hash(tok)
+    assert "token_hash" not in got["device"]
+    assert t.rx.by_token(tok) == "door-1"
+    assert t.rx.by_token("0" * 32) is None and t.rx.by_token("x") is None
+    again = _门磁(t, link={"via": "url"})
+    assert again["token"] is None and t.rx.by_token(tok) == "door-1", "改别的不换口令"
+    new = _门磁(t, link={"via": "url", "new_token": True})["token"]
+    assert new != tok and t.rx.by_token(tok) is None and t.rx.by_token(new) == "door-1"
+    _门磁(t, link={"via": "signed"})
+    assert t.rx.by_token(new) is None, "改回签名回调:网址作废"
+
+
+def _sia(body: bytes) -> bytes:
+    return frame(body)
+
+
+def test_SIA_入侵类派_恢复和心跳只回ACK_对到设备_坏帧NAK(核):
+    t = 核
+    _门磁(t, "pir-5", link={"via": "sia", "account": "1234", "zone": "5"})
+    _门磁(t, "panel", link={"via": "sia", "account": "ABCD", "zone": ""})
+    with pytest.raises(DeviceError, match="已经接在"):
+        _门磁(t, "pir-5b", link={"via": "sia", "account": "1234", "zone": "5"})
+    ack = t.rx.on_sia(_sia(b'"SIA-DCS"0007R0L0#1234[#1234|Nri1/BA005]_10:00:00,11-28-2026'))
+    assert b'"ACK"0007R0L0#1234[]' in ack
+    assert [s for s, _ in t.fired] == ["dev-pir-5"]
+    t.rx.on_sia(_sia(b'"ADM-CID"0008L0#ABCD[#ABCD|1130 01 015]'))
+    assert [s for s, _ in t.fired][-1] == "dev-panel", "空防区 = 这台主机的所有防区"
+    n = len(t.fired)
+    t.rx.on_sia(_sia(b'"ADM-CID"0009L0#ABCD[#ABCD|3130 01 015]'))       # 恢复
+    t.rx.on_sia(_sia(b'"SIA-DCS"0010L0#1234[#1234|NOP001]'))             # 撤防
+    t.rx.on_sia(_sia(b'"NULL"0011L0#1234[]'))                            # 心跳
+    assert len(t.fired) == n
+    bad = _sia(b'"SIA-DCS"0012L0#1234[#1234|NBA005]').replace(b'BA005', b'BA006')
+    assert b'"NAK"' in t.rx.on_sia(bad), "CRC 对不上"
+    assert b'"NAK"' in t.rx.on_sia(_sia(b'"*SIA-DCS"0013L0#1234[abc]')), "加密的不收"
+    assert len(t.fired) == n
+
+
+def test_SIA_报文格式():
+    assert crc16(b"123456789") == 0xBB3D
+    f = frame(b'"NULL"0000R0L0#1234[]')
+    assert f.startswith(b"\n") and f.endswith(b"\r") and f[5:9] == b"0015"
+    ack, hits = parse_sia(f)
+    assert hits == [] and b'"ACK"0000R0L0#1234[]' in ack
+
+
+class 假模块:
+    def __init__(self):
+        self.bits = [False] * 8
+        self.down = False
+
+    def read(self, host, port, unit, n):
+        if self.down:
+            raise OSError("连不上")
+        return self.bits[:n]
+
+
+def test_IO模块干接点_去抖_常闭_回正常才再报_读不到一分钟报P2(核, monkeypatch):
+    t = 核
+    m = 假模块()
+    t.rx._read = m.read
+    t.rx.alerts = t.alerts
+    _门磁(t, "pir-1", link={"via": "modbus", "host": "10.0.0.9", "port": 502, "unit": 1,
+                          "input": 0, "nc": False})
+    _门磁(t, "door-nc", link={"via": "modbus", "host": "10.0.0.9", "port": 502, "unit": 1,
+                            "input": 3, "nc": True})
+    m.bits[3] = True                                      # 常闭的门关着 = 1
+    t.rx.poll_once()
+    assert t.fired == []
+    m.bits[0] = True
+    t.rx.poll_once()
+    assert t.fired == [], "一次不算(去抖)"
+    t.rx.poll_once()
+    t.rx.poll_once()
+    assert [s for s, _ in t.fired] == ["dev-pir-1"], "连着两次才算,一直报警只算一次"
+    m.bits[0] = False
+    t.rx.poll_once()
+    m.bits[0] = True
+    t.rx.poll_once()
+    t.rx.poll_once()
+    assert [s for s, _ in t.fired].count("dev-pir-1") == 2, "回正常再报警才再算"
+    m.bits[3] = False                                     # 常闭断开 = 报警
+    t.rx.poll_once()
+    t.rx.poll_once()
+    assert t.fired[-1][0] == "dev-door-nc"
+    m.down = True
+    t.rx.poll_once()
+    assert not _开着(t, "alarm_input_lost")
+    t.clock.advance(61)
+    t.rx.poll_once()
+    assert _开着(t, "alarm_input_lost") and t.rx.status["pir-1"]["error"] == "连不上"
+    m.down = False
+    t.rx.poll_once()
+    assert not _开着(t, "alarm_input_lost")
+
+
+def test_modbus报文_真的读一回():
+    """一个最小的假 IO 模块(TCP):回功能码 02 的位。"""
+    srv = socket.socket()
+    srv.bind(("127.0.0.1", 0))
+    srv.listen(1)
+    port = srv.getsockname()[1]
+
+    def serve():
+        c, _ = srv.accept()
+        req = c.recv(12)
+        tid, _p, _l, unit, fc, start, n = struct.unpack(">HHHBBHH", req)
+        assert fc == 2 and start == 0 and n == 10
+        c.sendall(struct.pack(">HHHBBB", tid, 0, 5, unit, 2, 2) + bytes([0b00000101, 0b10]))
+        c.close()
+    th = threading.Thread(target=serve)
+    th.start()
+    bits = read_inputs("127.0.0.1", port, 1, 10)
+    th.join()
+    srv.close()
+    assert [i for i, b in enumerate(bits) if b] == [0, 2, 9]
+
+
+def test_接入方式写错的拒(核):
+    t = 核
+    for bad in ({"via": "x"}, {"via": "sia", "account": "zz"}, {"via": "sia", "account": "1234",
+                                                                "zone": "abc"},
+                {"via": "modbus", "host": ""}, {"via": "modbus", "host": "h", "input": 999}):
+        with pytest.raises(DeviceError):
+            _门磁(t, link=bad)

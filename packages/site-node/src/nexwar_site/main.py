@@ -897,6 +897,7 @@ class Server:
         # W16:入侵有了去向(派出去了、没狗去)、事件源被限流,告诉值守的人。
         self.incidents.on_outcome = self.alert_sources.on_incident
         self.incidents.on_throttled = self.alert_sources.on_incident_throttled
+        self.incidents.on_verdict = self.alert_sources.on_verdict      # 1.1-3 报警核实
         # W20:布防模式。撤防的防区来了入侵只记账、不派狗、不报告警。
         from nexwar_site.modes import ArmingDesk
         self.arming = ArmingDesk(self.db, now_ms=wall_ms, publish=self.dispatcher.feed.publish)
@@ -1167,6 +1168,16 @@ class Server:
                                   areas=self.areas, now_ms=wall_ms)
         self.incidents.devices = self.devices
         self.api.devices = self.devices
+        # 1.1-3:不会签名的报警设备 —— 触发网址、报警主机(SIA DC-09)、IO 模块干接点(Modbus TCP)
+        from nexwar_site.alarm_in import AlarmInputs
+        self.alarm_in = AlarmInputs(
+            self.db, now_ms=wall_ms, allow=self.incidents.allow,
+            fire=lambda src, body: self.loop.call(lambda: self.incidents.handle(src, body),
+                                                  timeout_s=self.dispatcher.ack_timeout_s + 5))
+        self.alarm_in.alerts = self._loop_alerts
+        self._alarm_rx = cfg.get("alarm_receiver") if isinstance(cfg.get("alarm_receiver"),
+                                                                  dict) else {}
+        self.api.alarm_in = self.alarm_in
 
         def _zone_point(zone: str) -> dict[str, Any] | None:
             latest = self.incidents._latest_versions()
@@ -1297,6 +1308,13 @@ class Server:
         self.api.start()
         self.intake.start()
         self._chores.start()
+        self.alarm_in.start_polling()                  # 1.1-3:IO 模块干接点
+        port = self._alarm_rx.get("sia_port")
+        if isinstance(port, int) and not isinstance(port, bool) and 0 < port < 65536:
+            try:
+                self.alarm_in.start_sia(port)          # 1.1-3:报警主机(SIA DC-09)
+            except OSError:
+                log.exception("报警主机接收端口 %s 开不了", port)
         try:
             self.cctv.sync()                       # 起来就连摄像头,不等第一拍杂事
         except Exception:
@@ -1443,6 +1461,7 @@ class Server:
                                      ("定位历史", "loc_history", "tick"),
                                      ("轨迹清过期", "_pose_track_tick", "__call__"),  # W44
                                      ("入侵告警补报", "incidents", "retell"),    # W16 外审
+                                     ("报警核实", "incidents", "verify_tick"),   # 1.1-3
                                      ("看见人", "sightings", "tick"),            # W33
                                      ("受力", "force", "reconcile"),             # W26
                                      ("证据没封", "evidence_watch", "tick"),     # W30b
@@ -1537,6 +1556,7 @@ class Server:
         self._stop.set()
         if self.rtk is not None:
             self.rtk.close()
+        self.alarm_in.stop()
         for what, fn in (("遥控", self.teleop.close_all), ("API", self.api.stop),
                          ("接收口", self.intake.stop),
                          ("视频", self.video.close),

@@ -36,7 +36,7 @@ describe("外部设备面板", () => {
       fireEvent.input(c.querySelector(`input[name=${n}]`)!, { target: { value: v } });
     fireEvent.click(Array.from(c.querySelectorAll("button")).find((b) => b.textContent === "登记 / 更新")!);
     await waitFor(() => expect(c.textContent).toContain("防区 东区"));
-    expect(posted[0]).toEqual({ id: "door-1", kind: "contact", map_id: "shop", map_version: "1", x: 3, y: 1 });
+    expect(posted[0]).toEqual({ id: "door-1", kind: "contact", map_id: "shop", map_version: "1", x: 3, y: 1, verify_first: true, link: { via: "signed" } });
     expect(c.querySelector(".device-secret")?.textContent).toContain("dev-door-1");
     fireEvent.click(Array.from(c.querySelectorAll("button")).find((b) => b.textContent === "删除")!);
     await waitFor(() => expect(c.textContent).toContain("还没有登记设备"));
@@ -45,10 +45,30 @@ describe("外部设备面板", () => {
   it("UIUX-026:每一格都有看得见的标签(填了字也知道这格是什么)", async () => {
     const { getByLabelText, container: c } = render(<DevicesPanel canEdit say={() => {}} />);
     await waitFor(() => expect(c.querySelector(".device-form")).not.toBeNull());
-    for (const [label, name] of [["设备编号", "dev-id"], ["类型", "dev-kind"], ["地图", "dev-map"], ["版本", "dev-ver"], ["x（米）", "dev-x"], ["y（米）", "dev-y"]]) {
+    for (const [label, name] of [["设备编号", "dev-id"], ["类型", "dev-kind"], ["地图", "dev-map"], ["版本", "dev-ver"], ["x（米）", "dev-x"], ["y（米）", "dev-y"], ["接入方式", "dev-via"]]) {
       expect(getByLabelText(label).getAttribute("name")).toBe(name);
     }
-    expect(c.querySelectorAll(".device-form label.field").length).toBe(6);
+    expect(c.querySelectorAll(".device-form label.field").length).toBe(7);
+  });
+
+  it("1.1-3:接报警主机(SIA)带用户号、防区号;触发网址只显示一次;先核实默认勾、可关", async () => {
+    const { container: c } = render(<DevicesPanel canEdit say={() => {}} />);
+    await waitFor(() => expect(c.querySelector(".device-form")).not.toBeNull());
+    expect(c.querySelector("[data-sia-port]")!.textContent).toContain("没开");
+    for (const [n, v] of [["dev-id", "pir-5"], ["dev-map", "shop"], ["dev-ver", "1"], ["dev-x", "3"], ["dev-y", "1"]])
+      fireEvent.input(c.querySelector(`input[name=${n}]`)!, { target: { value: v } });
+    fireEvent.change(c.querySelector("select[name=dev-via]")!, { target: { value: "sia" } });
+    fireEvent.input(c.querySelector("input[name=dev-account]")!, { target: { value: "1234" } });
+    fireEvent.input(c.querySelector("input[name=dev-zone]")!, { target: { value: "5" } });
+    fireEvent.click(c.querySelector("input[name=dev-verify]")!);
+    fireEvent.click(Array.from(c.querySelectorAll("button")).find((b) => b.textContent === "登记 / 更新")!);
+    await waitFor(() => expect(posted.length).toBe(1));
+    expect(posted[0]).toMatchObject({ verify_first: false, link: { via: "sia", account: "1234", zone: "5" } });
+    expect(c.querySelector(".device-secret")).toBeNull();
+    fireEvent.change(c.querySelector("select[name=dev-via]")!, { target: { value: "url" } });
+    fireEvent.click(Array.from(c.querySelectorAll("button")).find((b) => b.textContent === "登记 / 更新")!);
+    await waitFor(() => expect(posted.length).toBe(2));
+    expect(posted[1]).toMatchObject({ link: { via: "url" } });
   });
 
   it("没开这一项的站点不显示;没权限的看不到表单", async () => {

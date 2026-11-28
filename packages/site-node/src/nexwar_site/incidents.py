@@ -62,6 +62,10 @@ ALERT_OUTCOMES = frozenset({"dispatched", "merged", "no_robot", "unmapped", "dis
 RATE_PER_MIN = 30
 #: 狗到了拦截点拍一张,用哪个相机(W17:现场照片挂在告警上)。狗没报能拍就不拍。
 ARRIVAL_CAMERA = "front"
+#: 1.1-3:机器人到了现场再看这么久没看见人,才算「核实无人」(毫秒)。
+VERIFY_HOLD_MS = 30_000
+#: 1.1-3:报警以后这么久机器人还没到,算没核实成(毫秒)。
+VERIFY_TIMEOUT_MS = 10 * 60_000
 #: 告警没报成的入侵,补报多久以内的(W16 外审)。
 RETELL_MS = 24 * 3600_000
 _TERMINAL = {"task_done": "done", "task_failed": "failed", "task_aborted": "aborted",
@@ -92,6 +96,8 @@ class IncidentDesk:
         self.on_outcome: Callable[[dict[str, Any]], None] | None = None
         self._tell_lock = threading.Lock()
         self._telling: set[int] = set()                # 正在报的(接口线程与事件循环都会报)
+        #: 1.1-3:「先核实」的那条有了结论(:meth:`verify_tick`):``(这一条的账 + verdict)``。
+        self.on_verdict: Callable[[dict[str, Any]], None] | None = None
         #: 事件源被限流了(W16):``(事件源名)``。
         self.on_throttled: Callable[[str], None] | None = None
         #: 布防模式(W20,``modes.ArmingDesk``)。没接(老测试、命令行)就当全布防。
@@ -456,6 +462,7 @@ class IncidentDesk:
         dev = self.devices.by_source(source) if self.devices is not None else None
         if dev is not None:
             ev["_intercept"] = dev["intercept"]
+            ev["_verify"] = bool(dev.get("verify_first"))      # 1.1-3:先核实再报警
         got = self._claim(source, ev)
         if isinstance(got, dict):
             return got
@@ -469,10 +476,11 @@ class IncidentDesk:
             try:
                 iid = c.execute(
                     "INSERT INTO incidents(source, event_id, type, zone, received_at, occurred_at, "
-                    "outcome, note, detail, told_ms) VALUES (?,?,?,?,?,?,?,?,?,NULL)",
+                    "outcome, note, detail, told_ms, verify) VALUES (?,?,?,?,?,?,?,?,?,NULL,?)",
                     (source, ev["event_id"], ev["type"], ev["zone"], self._now(),
                      ev.get("occurred_at"), "received", "",
-                     json.dumps(ev.get("detail") or {}, ensure_ascii=False))).lastrowid
+                     json.dumps(ev.get("detail") or {}, ensure_ascii=False),
+                     int(bool(ev.get("_verify"))))).lastrowid
             except sqlite3.IntegrityError:
                 first = c.execute("SELECT * FROM incidents WHERE source=? AND event_id=?",
                                   (source, ev["event_id"])).fetchone()
@@ -683,10 +691,62 @@ class IncidentDesk:
         task_id = e.data.get("task_id") if isinstance(e.data, dict) else None
         if result and task_id and task_id.startswith(INCIDENT_PREFIX):
             with self.db.tx() as c:
-                c.execute("UPDATE incidents SET result=? WHERE task_id=?", (result, task_id))
+                c.execute("UPDATE incidents SET result=?, result_ms=? WHERE task_id=?",
+                          (result, self._now(), task_id))
             for r in self.db.query("SELECT id FROM incidents WHERE task_id=?", (task_id,)):
                 self._publish(self._row(r["id"]))
 
     def list(self, limit: int = 100) -> list[dict[str, Any]]:
         return [dict(r) for r in self.db.query("SELECT * FROM incidents ORDER BY id DESC LIMIT ?",
                                                (limit,))]
+
+    # ------------------------------------------------------------ 1.1-3 核实
+
+    def verify_tick(self) -> int:
+        """「先核实」的那几条(报了 P2「去核实」的)下结论:
+
+        - ``person``:派去的机器人从报警起看见了人(``dog_sees_person``,P1 已经由那一路报了);
+        - ``clear``:机器人到了(任务 ``done``)、又过了 :data:`VERIFY_HOLD_MS` 还没看见人;
+        - ``unverified``:机器人没到(任务失败、中止、被抢)或 :data:`VERIFY_TIMEOUT_MS` 还没到
+          —— 没核实成,要报 P1 叫人。
+
+        结论交给 ``on_verdict``(告警那头关 P2、报 P1),报成了才记 ``verdict``(报不出去下一拍再来)。
+        站点告警循环每拍调。回下了几条结论。"""
+        if self.on_verdict is None:
+            return 0
+        now = self._now()
+        n = 0
+        for r in self.db.query(
+                "SELECT * FROM incidents WHERE verify=1 AND verdict='' AND told_ms IS NOT NULL "
+                "AND outcome IN ('dispatched', 'merged') AND received_at>=? ORDER BY id",
+                (now - RETELL_MS,)):
+            row = dict(r)
+            lead = self._row(row["merged_into"]) if row["outcome"] == "merged" \
+                and row.get("merged_into") is not None else row
+            rid = lead.get("robot_id")
+            if not rid:
+                continue
+            seen = self.db.query(
+                "SELECT 1 FROM alerts WHERE robot=? AND kind='dog_sees_person' AND last_ms>=? "
+                "LIMIT 1", (rid, row["received_at"]))
+            result, done_ms = lead.get("result"), lead.get("result_ms")
+            if seen:
+                verdict = "person"
+            elif result == "done" and done_ms is not None and now - done_ms >= VERIFY_HOLD_MS:
+                verdict = "clear"
+            elif result in ("failed", "aborted", "preempted") \
+                    or (result is None and now - row["received_at"] >= VERIFY_TIMEOUT_MS):
+                verdict = "unverified"
+            else:
+                continue
+            try:
+                self.on_verdict(row | {"robot_id": rid, "task_id": lead.get("task_id"),
+                                       "verdict": verdict})
+            except Exception:
+                log.exception("入侵 %s 的核实结论报不出去:下一拍再报", row["id"])
+                continue
+            with self.db.tx() as c:
+                c.execute("UPDATE incidents SET verdict=? WHERE id=?", (verdict, row["id"]))
+            self._publish(self._row(row["id"]))
+            n += 1
+        return n

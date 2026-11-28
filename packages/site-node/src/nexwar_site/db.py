@@ -189,6 +189,9 @@ CREATE TABLE IF NOT EXISTS incidents (
     note         TEXT NOT NULL DEFAULT '',
     detail       TEXT NOT NULL DEFAULT '{}',
     told_ms      INTEGER DEFAULT 0,
+    verify       INTEGER NOT NULL DEFAULT 0,
+    verdict      TEXT NOT NULL DEFAULT '',
+    result_ms    INTEGER,
     UNIQUE (source, event_id)
 );
 CREATE INDEX IF NOT EXISTS incidents_task ON incidents(task_id);
@@ -970,7 +973,10 @@ CREATE TABLE IF NOT EXISTS ext_devices (
     zone        TEXT NOT NULL DEFAULT '',
     note        TEXT NOT NULL DEFAULT '',
     updated_ms  INTEGER NOT NULL,
-    updated_by  TEXT NOT NULL DEFAULT ''
+    updated_by  TEXT NOT NULL DEFAULT '',
+    verify_first INTEGER NOT NULL DEFAULT 0,
+    link        TEXT NOT NULL DEFAULT '{"via": "signed"}',
+    token_hash  TEXT NOT NULL DEFAULT ''
 );
 -- W63(库 70):设备身份。每个序列号第一次核过时的设备公钥(以后换了钥匙 = 仿冒,拒)。attest.py。
 CREATE TABLE IF NOT EXISTS device_ids (
@@ -1014,6 +1020,15 @@ _ADDED_COLUMNS = (
     # W16 外审:这条入侵的告警报成了没有。老库里的行当说过了(0,升级不把历史入侵全报一遍),新记的行写
     # NULL。
     ("incidents", "told_ms", "INTEGER DEFAULT 0"),
+    # 1.1-3 报警核实:这条要先核实(设备勾了「先核实」)、核实结论、机器人到了 / 没到的时刻
+    ("incidents", "verify", "INTEGER NOT NULL DEFAULT 0"),
+    ("incidents", "verdict", "TEXT NOT NULL DEFAULT ''"),
+    ("incidents", "result_ms", "INTEGER"),
+    # 1.1-3:外部设备「先核实再报警」、接入方式(签名回调 / 触发网址 / 报警主机 / IO 模块)、
+    # 触发口令哈希
+    ("ext_devices", "verify_first", "INTEGER NOT NULL DEFAULT 0"),
+    ("ext_devices", "link", "TEXT NOT NULL DEFAULT '{\"via\": \"signed\"}'"),
+    ("ext_devices", "token_hash", "TEXT NOT NULL DEFAULT ''"),
     # W17:告警带现场(狗在哪、哪一趟、拦截点),JSON。老行没有。
     ("alerts", "context", "TEXT NOT NULL DEFAULT '{}'"),
     # W17:会话的用途,'' 普通、'watch' 值守令牌(只能看告警、30 天)。老行都是普通会话。

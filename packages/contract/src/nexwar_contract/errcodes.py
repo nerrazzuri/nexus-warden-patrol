@@ -248,6 +248,10 @@ _T: tuple[tuple[int, str, str, str, str, str, str, str], ...] = (
     (0x0809, "sense.cctv_offline", "warn", "engineer", "摄像头连不上", "Camera unreachable", "检查摄像头电源和网线", "Check camera power and cable"),
     (0x080A, "sense.lens_blocked", "warn", "user", "相机镜头被挡", "Camera lens blocked", "擦镜头", "Clean the lens"),
     (0x080B, "sense.finding", "warn", "user", "巡逻发现异常", "Patrol finding", "看照片", "See the photo"),
+    (0x080C, "sense.intrusion_verifying", "warn", "user", "报警器报警，机器人去核实", "Alarm triggered; robot going to verify",
+     "看机器人到了现场的画面", "Watch the robot's view when it arrives"),
+    (0x080D, "sense.alarm_input_lost", "warn", "engineer", "报警输入断了（IO 模块读不到）", "Alarm input lost (I/O module unreachable)",
+     "看 IO 模块的电源和网线", "Check the I/O module's power and network cable"),
     # ---- 0x09 升级与配置
     (0x0901, "update.release_failed", "warn", "engineer", "机器人升级失败", "Robot upgrade failed", "看升级页的原因", "See the reason on the Upgrades page"),
     (0x0902, "update.agent_too_old", "warn", "engineer", "机器人软件比站点旧", "Robot software older than the site", "升级机器人", "Upgrade the robot"),
@@ -279,6 +283,7 @@ ALERT: dict[str, str] = {
     "payload_sos": "robot.payload_sos", "payload_estop": "robot.payload_estop",
     "deter_failed": "robot.deter_failed",
     "intrusion_unanswered": "sense.intrusion_unanswered", "intrusion_person": "sense.intrusion_person",
+    "intrusion_verifying": "sense.intrusion_verifying", "alarm_input_lost": "sense.alarm_input_lost",
     "deter_cornered": "sense.deter_cornered", "battery_abort": "robot.battery_abort",
     "preflight_refused": "dispatch.preflight_refused", "run_abort": "dispatch.run_abort",
     "archive_failed": "evidence.archive_failed", "fallen": "robot.fallen",

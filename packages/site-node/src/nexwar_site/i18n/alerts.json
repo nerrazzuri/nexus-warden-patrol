@@ -104,6 +104,14 @@
     "en": "P1 push notifications failing",
     "zh": "P1 推送发送失败"
   },
+  "intrusion_verifying": {
+    "en": "Alarm triggered, robot verifying",
+    "zh": "报警器报警，机器人去核实"
+  },
+  "alarm_input_lost": {
+    "en": "Alarm input lost",
+    "zh": "报警输入断了"
+  },
   "notify_failed": {
     "en": "Alerts not reaching WhatsApp / Telegram / email",
     "zh": "告警外发发送失败"
