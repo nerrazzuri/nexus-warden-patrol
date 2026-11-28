@@ -406,7 +406,7 @@ describe("布防向导", () => {
     await waitFor(() => expect(box.checked).toBe(false));
     fireEvent.click(r.getByText("下一步"));
     await waitFor(() => expect(posted.some((p) => p.url === "/api/guard/plan")).toBe(true));
-    expect(posted.find((p) => p.url === "/api/guard/plan")!.body.entries[0].shuffle).toBe(false);
+    expect((posted.find((p) => p.url === "/api/guard/plan")!.body as { entries: { shuffle: boolean }[] }).entries[0].shuffle).toBe(false);
   });
 
   it("用户 11-15:值守方案里已有别的,换之前列出来问;确认了方案只剩这一条", async () => {
